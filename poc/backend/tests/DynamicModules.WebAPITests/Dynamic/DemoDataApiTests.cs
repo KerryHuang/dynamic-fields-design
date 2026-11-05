@@ -157,9 +157,8 @@ public sealed class DemoDataApiTests
     [Fact]
     public async Task WhileGenerating_OtherRequest_SeesOwnIdentityAndRealTime()
     {
-        using var app = new DemoApp();
+        using var app = new DemoApp(fileDatabase: true); // in-memory 共用快取會在產生中鎖住 Dynamic_AppUser，其他請求讀不到
         app.AddUsers("guest01"); // 產生器自己會建 sales01，產生中還看不到，探針用先建好的帳號
-        (await app.AsUser("guest01").GetAsync(DemoApp.ProbePath)).EnsureSuccessStatusCode(); // 產生前先認得帳號
         app.Gate.When = _ => ActingScope.Now is not null; // 時間線第一步：身分與時間都被覆寫
         var admin = app.AsUser();
 
@@ -199,7 +198,7 @@ public sealed class DemoDataApiTests
     {
         public const string ProbePath = "/test/acting";
 
-        public DemoApp() : base(seedDemoPeople: false) { }
+        public DemoApp(bool fileDatabase = false) : base(seedDemoPeople: false, fileDatabase: fileDatabase) { }
 
         /// <summary>示範人員由產生器建立，需要非 admin 身分的測試自己補帳號。</summary>
         public void AddUsers(params string[] ids)
@@ -269,6 +268,7 @@ public sealed class DemoDataApiTests
     {
         public Action<IApplicationBuilder> Configure(Action<IApplicationBuilder> next) => app =>
         {
+            app.UseAuthentication(); // 探針在 Program 的 pipeline 之前，自己先解析身分
             app.Map(DemoApp.ProbePath, a => a.Run(async ctx =>
             {
                 var user = ctx.RequestServices.GetRequiredService<ICurrentUser>();

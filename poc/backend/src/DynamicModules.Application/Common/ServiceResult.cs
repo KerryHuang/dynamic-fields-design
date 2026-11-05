@@ -11,6 +11,7 @@ public sealed class ServiceResult
     public bool IsNotFound { get; private init; }
     public bool IsConflict { get; private init; }
     public bool IsForbidden { get; private init; }
+    public bool IsUnauthorized { get; private init; }
     public string? Message { get; private init; }
     public object? Data { get; private init; }
     public IReadOnlyDictionary<string, string[]> Errors { get; private init; } = NoErrors;
@@ -28,6 +29,8 @@ public sealed class ServiceResult
         new() { IsConflict = true, Message = message, Data = data };
 
     public static ServiceResult Forbidden() => new() { IsForbidden = true, Message = "沒有權限執行此操作" };
+
+    public static ServiceResult Unauthorized(string message) => new() { IsUnauthorized = true, Message = message };
 
     public static ServiceResult Invalid(IDictionary<string, string[]> errors) =>
         new() { Errors = new Dictionary<string, string[]>(errors) };

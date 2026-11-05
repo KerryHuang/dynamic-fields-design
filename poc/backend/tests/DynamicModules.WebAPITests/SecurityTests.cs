@@ -16,14 +16,7 @@ public class SecurityTests(TestApp app) : IClassFixture<TestApp>
         var res = await app.AsUser(user).GetAsync($"{Base}/menu");
 
         res.StatusCode.Should().Be(HttpStatusCode.Unauthorized);
-        (await res.Content.ReadFromJsonAsync<Dictionary<string, string>>())!["message"].Should().Be("請先選擇使用者");
-    }
-
-    [Fact]
-    public async Task UsersEndpointIsAnonymous()
-    {
-        var res = await app.AsUser(null).GetAsync($"{Base}/users");
-        res.StatusCode.Should().Be(HttpStatusCode.OK);
+        (await res.Content.ReadFromJsonAsync<Dictionary<string, string>>())!["message"].Should().Be("請先登入");
     }
 
     [Fact]

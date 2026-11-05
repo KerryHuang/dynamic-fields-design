@@ -1,5 +1,8 @@
 using DynamicModules.Domain.Entities.Dynamic;
 using DynamicModules.Domain.Data;
+using Microsoft.AspNetCore.Authentication;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging;
 using DynamicModules.Application.Common.Acting;
 using DynamicModules.Application.Common.Time;
 using Microsoft.AspNetCore.Hosting;
@@ -16,18 +19,28 @@ namespace DynamicModules.WebAPITests;
 public class TestApp : WebApplicationFactory<Program>
 {
     private readonly SqliteConnection _keepAlive;
-    private readonly string _connectionString = $"Data Source=file:test{Guid.NewGuid():N}?mode=memory&cache=shared";
+    private readonly string _connectionString;
+    private readonly string? _databaseFile;
 
     private readonly bool _seedDemoPeople;
+    private readonly bool _realAuth;
 
-    /// <param name="seedDemoPeople">host 建好後補上示範人員（sales01 等）；Demo 產生器的測試要設 false，否則會衝突。</param>
-    /// <param name="realAuth">Task 2 才有作用。</param>
     public TestApp() : this(true) { }
 
     // internal：xUnit 的 class fixture 只認 public 建構函式，不會拿它去解析參數
-    internal TestApp(bool seedDemoPeople, bool realAuth = false)
+    /// <param name="seedDemoPeople">host 建好後補上示範人員（sales01 等）；Demo 產生器的測試要設 false，否則會衝突。</param>
+    /// <param name="realAuth">true 走真實 cookie 登入；false 以 X-User 標頭驗證（TestAuthHandler），並解除 admin 的強制改密碼。</param>
+    /// <param name="fileDatabase">改用暫存檔 SQLite（Dispose 時刪除）。共用快取的 in-memory 資料庫在寫入交易進行中會讓其他連線讀同一張表時噴 table is locked，檔案模式才是正式站的行為。</param>
+    internal TestApp(bool seedDemoPeople = true, bool realAuth = false, bool fileDatabase = false)
     {
+        if (fileDatabase)
+        {
+            _databaseFile = Path.Combine(Path.GetTempPath(), $"dm-test-{Guid.NewGuid():N}.db");
+            _connectionString = $"Data Source={_databaseFile}";
+        }
+        else _connectionString = $"Data Source=file:test{Guid.NewGuid():N}?mode=memory&cache=shared";
         _seedDemoPeople = seedDemoPeople;
+        _realAuth = realAuth;
         _keepAlive = new SqliteConnection(_connectionString);
         _keepAlive.Open();
     }
@@ -35,11 +48,31 @@ public class TestApp : WebApplicationFactory<Program>
     /// <summary>可設定的假時鐘；預設是真實時間，測試需要固定日期時再指定 Now。</summary>
     public FakeBusinessTime Clock { get; } = new();
 
+    /// <summary>鎖定判斷用的假時鐘（TimeProvider）；與 Clock（業務時間）無關。</summary>
+    internal FakeTimeProvider Time { get; } = new();
+
+    /// <summary>啟動時的 Auth:InitialAdminPassword；設成 null 代表沒設環境變數。須在 host 啟動前指定。</summary>
+    internal string? InitialAdminPassword { get; set; } = "initial-pass-1";
+
+    internal TestLogSink Logs { get; } = new();
+
     protected override void ConfigureWebHost(IWebHostBuilder builder)
     {
         builder.UseSetting("ConnectionStrings:Dynamic", _connectionString);
+        // 空字串覆蓋 appsettings.Development.json 的開發用密碼，代表「沒設」
+        builder.UseSetting("Auth:InitialAdminPassword", InitialAdminPassword ?? "");
+        builder.ConfigureLogging(l => l.AddProvider(Logs));
         builder.ConfigureServices(s =>
         {
+            s.RemoveAll<TimeProvider>();
+            s.AddSingleton<TimeProvider>(Time);
+            if (!_realAuth)
+            {
+                // 啟動引導的 admin 一開始必須改密碼；X-User 模式的測試不走登入，在啟動完成前（背景產生器開始前）解除
+                s.AddHostedService<ClearMustChangePassword>();
+                s.AddAuthentication(o => o.DefaultScheme = TestAuthHandler.SchemeName)
+                    .AddScheme<AuthenticationSchemeOptions, TestAuthHandler>(TestAuthHandler.SchemeName, _ => { });
+            }
             s.RemoveAll<IBusinessTime>();
             // RemoveAll 也拿掉了 Program 註冊的 Acting 裝飾器，這裡補回去
             s.AddSingleton<IBusinessTime>(new ActingBusinessTime(Clock));
@@ -87,7 +120,12 @@ public class TestApp : WebApplicationFactory<Program>
     protected override void Dispose(bool disposing)
     {
         base.Dispose(disposing);
-        if (disposing) _keepAlive.Dispose();
+        if (!disposing) return;
+        _keepAlive.Dispose();
+        if (_databaseFile is null) return;
+        SqliteConnection.ClearAllPools();
+        foreach (var f in Directory.GetFiles(Path.GetDirectoryName(_databaseFile)!, Path.GetFileName(_databaseFile) + "*"))
+            File.Delete(f);
     }
 }
 
@@ -96,4 +134,48 @@ public sealed class FakeBusinessTime : IBusinessTime
     public DateTime? Fixed { get; set; }
     public DateTime Now => Fixed ?? DateTime.Now;
     public DateOnly Today => DateOnly.FromDateTime(Now);
+}
+
+internal sealed class ClearMustChangePassword(IServiceScopeFactory scopes) : IHostedService
+{
+    public async Task StartAsync(CancellationToken ct)
+    {
+        using var scope = scopes.CreateScope();
+        await scope.ServiceProvider.GetRequiredService<DynamicDbContext>().Set<AppUser>()
+            .ExecuteUpdateAsync(s => s.SetProperty(u => u.MustChangePassword, false), ct);
+    }
+
+    public Task StopAsync(CancellationToken ct) => Task.CompletedTask;
+}
+
+/// <summary>可手動快轉的 TimeProvider，起點是真實時間。</summary>
+public sealed class FakeTimeProvider : TimeProvider
+{
+    private DateTimeOffset _now = DateTimeOffset.UtcNow;
+
+    public override DateTimeOffset GetUtcNow() => _now;
+
+    public void Advance(TimeSpan by) => _now += by;
+}
+
+/// <summary>收集 log，供斷言啟動時印出的訊息。</summary>
+public sealed class TestLogSink : ILoggerProvider
+{
+    private readonly System.Collections.Concurrent.ConcurrentQueue<(LogLevel Level, string Message)> _entries = new();
+
+    public IReadOnlyList<(LogLevel Level, string Message)> Entries => _entries.ToArray();
+
+    public ILogger CreateLogger(string categoryName) => new Sink(_entries);
+
+    public void Dispose() { }
+
+    private sealed class Sink(System.Collections.Concurrent.ConcurrentQueue<(LogLevel, string)> entries) : ILogger
+    {
+        public IDisposable? BeginScope<TState>(TState state) where TState : notnull => null;
+
+        public bool IsEnabled(LogLevel logLevel) => true;
+
+        public void Log<TState>(LogLevel logLevel, EventId eventId, TState state, Exception? exception,
+            Func<TState, Exception?, string> formatter) => entries.Enqueue((logLevel, formatter(state, exception)));
+    }
 }

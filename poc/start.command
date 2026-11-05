@@ -4,7 +4,7 @@ cd "$(dirname "$0")" || exit 1
 
 [ -d frontend/node_modules ] || (cd frontend && bun install) || exit 1
 
-dotnet run --project backend/src/DynamicModules.WebAPI &
+ASPNETCORE_ENVIRONMENT=Development dotnet run --project backend/src/DynamicModules.WebAPI &
 BACKEND=$!
 (cd frontend && exec bunx quasar dev) &
 FRONTEND=$!

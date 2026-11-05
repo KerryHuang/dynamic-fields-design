@@ -9,6 +9,7 @@ public static class ServiceResultExtensions
     public static IActionResult ToActionResult(
         this ServiceResult r, ControllerBase c, string? createdAtAction = null, object? routeValues = null)
     {
+        if (r.IsUnauthorized) return c.Unauthorized(new { message = r.Message });
         if (r.IsForbidden) return c.StatusCode(StatusCodes.Status403Forbidden, new { message = r.Message });
         if (r.IsNotFound) return c.NotFound(new { message = r.Message });
         if (r.IsConflict) return c.Conflict(r.Data is null ? new { message = r.Message } : ConflictBody(r));

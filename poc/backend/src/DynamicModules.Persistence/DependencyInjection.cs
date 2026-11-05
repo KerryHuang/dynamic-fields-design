@@ -22,7 +22,6 @@ public static class DependencyInjection
             configuration.GetConnectionString("Dynamic"),
             b => b.MigrationsAssembly(typeof(DependencyInjection).Assembly.FullName)));
         services.AddScoped<ITransactionManager, EfTransactionManager>();
-        services.AddSingleton<IKnownUsers, DbKnownUsers>();
         return services.AddPersistenceRepositories();
     }
 
@@ -33,6 +32,7 @@ public static class DependencyInjection
         services.AddScoped<IProgramRepository, ProgramRepository>();
         services.AddScoped<IListViewRepository, ListViewRepository>();
         services.AddScoped<IPermissionRepository, PermissionRepository>();
+        services.AddScoped<IAccountRepository, AccountRepository>();
         services.AddScoped<IRecordRepository, RecordRepository>();
         services.AddScoped<INumberSequenceRepository, NumberSequenceRepository>();
         services.AddScoped<IRecordHistoryRepository, RecordHistoryRepository>();

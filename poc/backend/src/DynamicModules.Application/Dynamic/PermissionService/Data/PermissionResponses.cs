@@ -36,7 +36,8 @@ public record UserResponse(string UserId, string DisplayName);
 public record DesignerActionsResponse(bool Read, bool Add, bool Edit, bool Delete);
 
 public record MeResponse(
-    string UserId, string DisplayName, bool IsSystemAdmin, List<GroupBriefResponse> Groups, DesignerActionsResponse Designer);
+    string UserId, string DisplayName, bool IsSystemAdmin, bool MustChangePassword,
+    List<GroupBriefResponse> Groups, DesignerActionsResponse Designer);
 
 public static class PermissionMapping
 {

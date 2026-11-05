@@ -163,7 +163,7 @@ public class Phase3AcceptanceTests : IClassFixture<TestApp>
         // 9. 沒帶 X-User 呼叫 GET /menu 回 401；sales01 呼叫 POST /modules 回 403
         var anon = await _app.AsUser(null).GetAsync($"{Base}/menu");
         anon.StatusCode.Should().Be(HttpStatusCode.Unauthorized);
-        (await JsonOf(anon)).GetProperty("message").GetString().Should().Be("請先選擇使用者");
+        (await JsonOf(anon)).GetProperty("message").GetString().Should().Be("請先登入");
         var forbidden = await sales01.PostAsJsonAsync($"{Base}/modules", new { key = "nope", name = Zh("不該建") });
         forbidden.StatusCode.Should().Be(HttpStatusCode.Forbidden);
         (await JsonOf(forbidden)).GetProperty("message").GetString().Should().Be("沒有權限執行此操作");

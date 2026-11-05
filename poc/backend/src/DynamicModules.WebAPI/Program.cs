@@ -13,6 +13,9 @@ using DynamicModules.Persistence.Seed;
 using DynamicModules.WebAPI.Demo;
 using DynamicModules.WebAPI.Security;
 using DynamicModules.WebAPI.Time;
+using Microsoft.AspNetCore.Authentication.Cookies;
+using Microsoft.AspNetCore.DataProtection;
+using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.EntityFrameworkCore;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -28,11 +31,39 @@ builder.Services.Configure<RouteOptions>(o => o.LowercaseUrls = true);
 builder.Services.AddApplication();
 builder.Services.AddHttpContextAccessor();
 builder.Services.AddPersistence(builder.Configuration);
-builder.Services.AddScoped<ICurrentUser, HeaderCurrentUser>();
+builder.Services.AddScoped<ICurrentUser, ClaimsCurrentUser>();
+builder.Services.AddSingleton<IPasswordService, PasswordService>();
+// 鎖定判斷用真實時間；IBusinessTime 會被 ActingScope 覆寫，不能用
+builder.Services.AddSingleton(TimeProvider.System);
 builder.Services.AddSingleton<IBusinessTime, TaipeiBusinessTime>();
 // 須在 ICurrentUser、IBusinessTime 註冊之後：Demo 資料產生器靠它在範圍內切換身分與時間
 builder.Services.AddActingOverrides();
 builder.Services.AddSingleton<IDemoDataRunner, DemoDataRunner>();
+builder.Services.AddAuthentication(CookieAuthenticationDefaults.AuthenticationScheme)
+    .AddCookie(o =>
+    {
+        o.Cookie.HttpOnly = true;
+        o.Cookie.SameSite = SameSiteMode.Lax;
+        o.Cookie.SecurePolicy = CookieSecurePolicy.SameAsRequest;
+        o.SlidingExpiration = true;
+        o.ExpireTimeSpan = TimeSpan.FromHours(8);
+        o.Events.OnRedirectToLogin = ctx => { ctx.Response.StatusCode = StatusCodes.Status401Unauthorized; return Task.CompletedTask; };
+        o.Events.OnRedirectToAccessDenied = ctx => { ctx.Response.StatusCode = StatusCodes.Status403Forbidden; return Task.CompletedTask; };
+    });
+// 站台在反向代理後面（Render）時才信任 X-Forwarded-Proto，否則 Secure cookie 不會生效
+var trustForwardedHeaders = builder.Configuration.GetValue<bool>("Auth:TrustForwardedHeaders");
+if (trustForwardedHeaders)
+    builder.Services.Configure<ForwardedHeadersOptions>(o =>
+    {
+        o.ForwardedHeaders = ForwardedHeaders.XForwardedProto;
+        o.KnownNetworks.Clear();
+        o.KnownProxies.Clear();
+    });
+// 資料庫是檔案時，DataProtection 金鑰放在同一個目錄，重開站台後登入狀態不失效
+var dataSource = new Microsoft.Data.Sqlite.SqliteConnectionStringBuilder(dynamicConnection).DataSource;
+if (Path.IsPathRooted(dataSource))
+    builder.Services.AddDataProtection()
+        .PersistKeysToFileSystem(new DirectoryInfo(Path.Combine(Path.GetDirectoryName(dataSource)!, "keys")));
 builder.Services.AddControllers().AddJsonOptions(o =>
 {
     o.JsonSerializerOptions.PropertyNamingPolicy = JsonNamingPolicy.CamelCase;
@@ -55,8 +86,10 @@ await InitializeDatabaseAsync(app, dynamicConnection);
 if (app.Configuration.GetValue<bool>("Demo:SeedOnStartup"))
     app.Lifetime.ApplicationStarted.Register(() => app.Services.GetRequiredService<IDemoDataRunner>().TryStart(startup: true));
 
+if (trustForwardedHeaders) app.UseForwardedHeaders();
 app.UseExceptionHandler();
-app.UseMiddleware<IdentityMiddleware>();
+app.UseAuthentication();
+app.UseMiddleware<SessionMiddleware>();
 app.UseSwagger();
 app.UseSwaggerUI();
 
@@ -85,6 +118,8 @@ static async Task InitializeDatabaseAsync(WebApplication app, string dynamicConn
     var db = scope.ServiceProvider.GetRequiredService<DynamicDbContext>();
     await db.Database.MigrateAsync();
     await SeedData.EnsureSeededAsync(db);
+    await AdminBootstrap.EnsureAsync(db, scope.ServiceProvider.GetRequiredService<IPasswordService>(), app.Configuration,
+        app.Services.GetRequiredService<ILoggerFactory>().CreateLogger(nameof(AdminBootstrap)));
 }
 
 public partial class Program { }
