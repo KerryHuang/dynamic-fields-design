@@ -112,12 +112,12 @@ public class ImportPlanner(
     private static string Cell(CsvRow row, int index) => index < row.Cells.Count ? row.Cells[index] : "";
 
     /// <summary>
-    /// UserId 對自己一定收；DisplayName 只收唯一的——兩人同名時用名字對應不明確，
+    /// 只收啟用中的帳號（停用者不能被新指派）。UserId 對自己一定收；DisplayName 只收唯一的——兩人同名時用名字對應不明確，
     /// 該名字查不到（回「找不到使用者」），改填 UserId 即可。
     /// </summary>
     private async Task<IReadOnlyDictionary<string, string>> UsersAsync(CancellationToken ct)
     {
-        var users = await permissions.ListUsersAsync(ct);
+        var users = (await permissions.ListUsersAsync(ct)).Where(u => u.IsActive).ToList();
         var map = users.ToDictionary(u => u.UserId, u => u.UserId);
         foreach (var g in users.GroupBy(u => u.DisplayName).Where(g => g.Count() == 1))
             map.TryAdd(g.Key, g.Single().UserId);

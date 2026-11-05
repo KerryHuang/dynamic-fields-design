@@ -9,4 +9,17 @@ public interface IAccountRepository
 
     /// <summary>Demo 一鍵登入清單：啟用中的 admin 排第一，其後是啟用中的示範帳號（依帳號排序）；唯讀。</summary>
     Task<IReadOnlyList<AppUser>> ListDemoLoginAccountsAsync(CancellationToken ct);
+
+    void AddUser(AppUser user);
+
+    Task<bool> UserExistsAsync(string userId, CancellationToken ct);
+
+    /// <summary>啟用中的系統管理員人數；在交易內呼叫，判斷「最後一位」才不會被並行請求繞過。</summary>
+    Task<int> CountActiveAdminsAsync(CancellationToken ct);
+
+    /// <summary>把使用者的群組成員關係整組換成 groupIds；寫入由 IUnitOfWork 提交。</summary>
+    Task SetMembershipsAsync(string userId, IReadOnlyCollection<long> groupIds, CancellationToken ct);
+
+    /// <summary>groupIds 全部都是存在的群組。</summary>
+    Task<bool> GroupsExistAsync(IReadOnlyCollection<long> groupIds, CancellationToken ct);
 }

@@ -8,6 +8,6 @@ namespace DynamicModules.Application.Dynamic.PermissionService.Queries.GetUsers;
 public class GetUsersHandler(IPermissionRepository permissions) : IRequestHandler<GetUsersRequest, ServiceResult>
 {
     public async Task<ServiceResult> Handle(GetUsersRequest request, CancellationToken ct) =>
-        ServiceResult.Success((await permissions.ListUsersAsync(ct))
+        ServiceResult.Success((await permissions.ListUsersAsync(ct)).Where(u => u.IsActive)
             .Select(u => new UserResponse(u.UserId, u.DisplayName)).ToList());
 }

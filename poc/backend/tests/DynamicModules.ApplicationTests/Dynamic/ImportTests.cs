@@ -371,6 +371,22 @@ public class ImportTests : DesignerTestBase
     }
 
     [Fact]
+    public async Task Preview_InactiveUser_RowError()
+    {
+        await NewModule("memo");
+        var who = await MustAdd("memo", FieldType.User, label: "負責人");
+        (await Send(new ActivateModuleRequest("memo"))).IsSuccess.Should().BeTrue();
+        (await Db.Context.Set<AppUser>().SingleAsync(u => u.UserId == "sales02")).IsActive = false;
+        await Db.Context.SaveChangesAsync();
+        var title = await TitleKey("memo");
+
+        var p = await Preview("memo", Csv($"{title},負責人", "a,sales02", "b,業務二", "c,sales01"));
+
+        p.Errors.Select(e => e.Line).Should().Equal(2, 3);
+        p.Errors[0].Errors[who.Key].Should().Equal("找不到使用者「sales02」");
+    }
+
+    [Fact]
     public async Task RoundTrip_ExportThenImport_SameValues()
     {
         var tgt = await NewModule("tgt", activate: true);
