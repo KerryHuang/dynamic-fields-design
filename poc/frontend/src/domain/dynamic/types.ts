@@ -249,6 +249,18 @@ export interface AuthOptions {
   demoAccounts: User[];
 }
 
+export interface AdminUser {
+  userId: string;
+  displayName: string;
+  isActive: boolean;
+  isSystemAdmin: boolean;
+  isDemoAccount: boolean;
+  isLocked: boolean;
+  groupIds: number[];
+}
+export interface AdminUserUpdate { displayName: string; groupIds: number[]; isSystemAdmin: boolean }
+export interface AdminUserCreate extends AdminUserUpdate { userId: string; password: string }
+
 export interface Me {
   userId: string;
   displayName: string;

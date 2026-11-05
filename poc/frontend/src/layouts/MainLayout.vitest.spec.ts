@@ -25,6 +25,7 @@ const me = (designerRead: boolean) => ({
   userId: 'admin', displayName: 'admin', isSystemAdmin: false, groups: [],
   designer: { read: designerRead, add: false, edit: false, delete: false },
 });
+const adminMe = (isSystemAdmin: boolean) => ({ ...me(false), isSystemAdmin });
 
 describe('MainLayout menu', () => {
   beforeEach(() => {
@@ -135,6 +136,30 @@ describe('MainLayout menu', () => {
     expect(api.getViews).toHaveBeenCalledTimes(2);
     expect(w.text()).toContain('view-sales01');
     expect(w.text()).not.toContain('view-admin');
+  });
+
+  it('users menu follows isSystemAdmin and disappears when me is refetched without it', async () => {
+    const pinia = createPinia();
+    setActivePinia(pinia);
+    let isAdmin = true;
+    http.defaults.adapter = async (config) => ({
+      data: config.url === '/me' ? adminMe(isAdmin) : config.url === '/users' ? USERS : [], status: 200, statusText: 'OK', headers: {}, config,
+    });
+    const router = createRouter({ history: createMemoryHistory(), routes: [{ path: '/', component: { template: '<i/>' } }] });
+    const i18n = createI18n({ legacy: false, locale: 'zh-TW', messages: { 'zh-TW': zhTW } });
+    const queryClient = new QueryClient();
+    const w = mount(MainLayout, {
+      global: { plugins: [[quasar.Quasar, { components: quasar }], pinia, router, i18n, [VueQueryPlugin, { queryClient }]] },
+    });
+    await flushPromises();
+    expect(w.find('[data-testid="users-menu"]').exists()).toBe(true);
+    expect(w.find('[data-testid="designer-menu"]').exists()).toBe(false);
+    expect(w.text()).toContain(zhTW.menu.system);
+    isAdmin = false;
+    await queryClient.invalidateQueries({ queryKey: ['me'] });
+    await flushPromises();
+    expect(w.find('[data-testid="users-menu"]').exists()).toBe(false);
+    expect(w.text()).not.toContain(zhTW.menu.system);
   });
 
   it('MainLayout hides the designer menu without designer read', async () => {

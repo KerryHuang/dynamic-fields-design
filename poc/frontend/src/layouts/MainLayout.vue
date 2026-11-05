@@ -24,15 +24,20 @@
           </q-item>
         </template>
 
-        <template v-if="me?.designer.read">
+        <template v-if="me?.designer.read || me?.isSystemAdmin">
           <q-separator class="q-my-sm" />
           <q-item-label header>{{ t('menu.system') }}</q-item-label>
-          <q-item clickable to="/system/dynamic-modules" data-testid="designer-menu">
-            <q-item-section>{{ t('menu.dynamicModules') }}</q-item-section>
+          <q-item v-if="me.isSystemAdmin" clickable to="/system/users" data-testid="users-menu">
+            <q-item-section>{{ t('menu.users') }}</q-item-section>
           </q-item>
-          <q-item clickable to="/system/demo-data" data-testid="demo-data-menu">
-            <q-item-section>{{ t('menu.demoData') }}</q-item-section>
-          </q-item>
+          <template v-if="me.designer.read">
+            <q-item clickable to="/system/dynamic-modules" data-testid="designer-menu">
+              <q-item-section>{{ t('menu.dynamicModules') }}</q-item-section>
+            </q-item>
+            <q-item clickable to="/system/demo-data" data-testid="demo-data-menu">
+              <q-item-section>{{ t('menu.demoData') }}</q-item-section>
+            </q-item>
+          </template>
         </template>
       </q-list>
     </q-drawer>

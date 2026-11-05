@@ -1,5 +1,5 @@
 import type {
-  AuthOptions, AuthUser, ConditionNode, DesignerField, DetailRowPayload, DynamicRecord, EntitySummary, FieldConfig, FieldType, Group, I18nText, LightPage, ListView, Me, MenuItem, ModuleDetail, ModulePermissions, ModuleSchema,
+  AdminUser, AdminUserCreate, AdminUserUpdate, AuthOptions, AuthUser, ConditionNode, DesignerField, DetailRowPayload, DynamicRecord, EntitySummary, FieldConfig, FieldType, Group, I18nText, LightPage, ListView, Me, MenuItem, ModuleDetail, ModulePermissions, ModuleSchema,
   ImportPreview, ImportResult, PagedResponse, RecordHistoryEntry, RelatedTab, Rule, RollupSource, User, ViewSort,
 } from 'src/domain/dynamic/types';
 import { http, toApiError } from './http';
@@ -127,6 +127,13 @@ export const dynamicApi = {
   getPreviewSchema: (key: string) => http.get<ModuleSchema>(`/modules/${key}/schema/preview`).then(data),
   getUsers: () => http.get<User[]>('/users').then(data),
   getGroups: () => http.get<Group[]>('/groups').then(data),
+  getAdminUsers: () => http.get<AdminUser[]>('/admin/users').then(data),
+  createUser: (body: AdminUserCreate) => http.post('/admin/users', body).then(data),
+  updateUser: (id: string, body: AdminUserUpdate) => http.put(`/admin/users/${encodeURIComponent(id)}`, body).then(data),
+  resetUserPassword: (id: string, password: string) =>
+    http.post(`/admin/users/${encodeURIComponent(id)}/reset-password`, { password }).then(data),
+  setUserActive: (id: string, active: boolean) =>
+    http.post(`/admin/users/${encodeURIComponent(id)}/${active ? 'activate' : 'deactivate'}`).then(data),
   getModulePermissions: (key: string) => http.get<ModulePermissions>(`/modules/${key}/permissions`).then(data),
   saveModulePermissions: (key: string, body: ModulePermissions) =>
     http.put<ModulePermissions>(`/modules/${key}/permissions`, body).then(data),
