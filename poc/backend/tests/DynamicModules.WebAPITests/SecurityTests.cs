@@ -39,4 +39,18 @@ public class SecurityTests(TestApp app) : IClassFixture<TestApp>
         res.StatusCode.Should().Be(HttpStatusCode.Forbidden);
         (await res.Content.ReadFromJsonAsync<Dictionary<string, string>>())!["message"].Should().Be("沒有權限執行此操作");
     }
+
+    [Theory]
+    [InlineData("maint01")]
+    [InlineData("qa01")]
+    [InlineData("floor02")]
+    public async Task SeededDemoUsers_AcceptedAsXUser(string userId)
+    {
+        using var fresh = new TestApp();
+
+        var res = await fresh.AsUser(userId).GetAsync($"{Base}/me");
+
+        res.StatusCode.Should().Be(HttpStatusCode.OK);
+        (await res.Content.ReadFromJsonAsync<System.Text.Json.JsonElement>()).GetProperty("userId").GetString().Should().Be(userId);
+    }
 }

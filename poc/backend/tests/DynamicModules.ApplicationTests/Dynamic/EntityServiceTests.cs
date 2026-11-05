@@ -62,8 +62,9 @@ public class EntityServiceTests : IAsyncLifetime
         byName.Items.Should().ContainSingle().Which.Should().Be(new LightItem("M-0001", "M-0001 外殼上蓋模"));
 
         var byNo = await Light("M-000");
-        byNo.Total.Should().Be(5);
-        byNo.Items.Select(i => i.Key).Should().Equal("M-0001", "M-0002", "M-0003", "M-0004", "M-0005");
+        byNo.Total.Should().Be(9);
+        byNo.Items.Select(i => i.Key).Should().Equal("M-0001", "M-0002", "M-0003", "M-0004", "M-0005",
+            "M-0006", "M-0007", "M-0008", "M-0009");
     }
 
     [Fact]
@@ -72,7 +73,7 @@ public class EntityServiceTests : IAsyncLifetime
         (await _db.Context.Set<MockMold>().SingleAsync(m => m.MoldNo == "M-0003")).DeleteFlag = true;
         await _db.Context.SaveChangesAsync();
 
-        (await Light("M-000")).Total.Should().Be(4);
+        (await Light("M-000")).Total.Should().Be(8);
     }
 
     [Fact]

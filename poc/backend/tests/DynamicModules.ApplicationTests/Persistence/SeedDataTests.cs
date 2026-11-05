@@ -1,5 +1,6 @@
 using DynamicModules.Domain.Data;
 using DynamicModules.Domain.Entities.Dynamic;
+using DynamicModules.Domain.Entities.Mock;
 using DynamicModules.Domain.ValueObjects;
 using DynamicModules.Persistence.Seed;
 using FluentAssertions;
@@ -33,7 +34,7 @@ public class SeedDataTests
         await SeedData.EnsureSeededAsync(db.Context);
 
         var groups = await db.Context.Set<PermissionGroup>().ToListAsync();
-        groups.Select(g => g.Key).Should().BeEquivalentTo("mis", "sales", "sales-manager", "floor");
+        groups.Select(g => g.Key).Should().BeEquivalentTo("mis", "sales", "sales-manager", "floor", "maint", "qa");
         groups.Single(g => g.Key == "mis").NameI18n.Values["zh-TW"].Should().Be("MIS");
         var members = await db.Context.Set<UserGroupMapping>().ToListAsync();
         string[] Of(string key) => members.Where(m => m.GroupId == groups.Single(g => g.Key == key).Id)
@@ -41,9 +42,86 @@ public class SeedDataTests
         Of("mis").Should().Equal("admin");
         Of("sales").Should().Equal("sales01", "sales02");
         Of("sales-manager").Should().Equal("manager01");
-        Of("floor").Should().Equal("floor01");
+        Of("floor").Should().Equal("floor01", "floor02");
+        Of("maint").Should().Equal("maint01");
+        Of("qa").Should().Equal("qa01");
         (await db.Context.Set<AppUser>().SingleAsync(u => u.UserId == "admin")).IsSystemAdmin.Should().BeTrue();
         (await db.Context.Set<AppUser>().CountAsync(u => u.IsSystemAdmin)).Should().Be(1);
+    }
+
+    [Fact]
+    public async Task Seed_CreatesDemoUsersAndGroups()
+    {
+        await using var db = await SqliteTestDb.CreateAsync();
+
+        await SeedData.EnsureSeededAsync(db.Context);
+
+        var groups = await db.Context.Set<PermissionGroup>().AsNoTracking().ToListAsync();
+        groups.Select(g => g.Key).Should().BeEquivalentTo("mis", "sales", "sales-manager", "floor", "maint", "qa");
+        var members = await db.Context.Set<UserGroupMapping>().AsNoTracking().ToListAsync();
+        string[] Of(string key) => members.Where(m => m.GroupId == groups.Single(g => g.Key == key).Id)
+            .Select(m => m.UserId).Order().ToArray();
+        Of("floor").Should().Equal("floor01", "floor02");
+        Of("maint").Should().Equal("maint01");
+        Of("qa").Should().Equal("qa01");
+        (await db.Context.Set<AppUser>().AsNoTracking().Select(u => u.UserId).ToListAsync())
+            .Should().Contain(["maint01", "qa01", "floor02"]);
+    }
+
+    [Fact]
+    public async Task Seed_MockEntities_12Molds_8Customers()
+    {
+        await using var db = await SqliteTestDb.CreateAsync();
+
+        await SeedData.EnsureSeededAsync(db.Context);
+
+        var molds = await db.Context.Set<MockMold>().AsNoTracking().Select(m => m.MoldNo).ToListAsync();
+        molds.Should().BeEquivalentTo(Enumerable.Range(1, 12).Select(i => $"M-{i:D4}"));
+        var customers = await db.Context.Set<MockCustomer>().AsNoTracking().Select(c => c.CustomerNo).ToListAsync();
+        customers.Should().BeEquivalentTo(Enumerable.Range(1, 8).Select(i => $"C-{i:D3}"));
+    }
+
+    [Fact]
+    public async Task Seed_ExistingDbWithFourGroups_AddsOnlyMissing()
+    {
+        await using var db = await SqliteTestDb.CreateAsync();
+        await AddModuleAsync(db.Context, "order", "DYN00001", ModuleStatus.Active);
+        // 舊版資料：4 群組、5 使用者
+        foreach (var id in new[] { "admin", "sales01", "sales02", "manager01", "floor01" })
+            db.Context.Set<AppUser>().Add(new AppUser { UserId = id, DisplayName = id });
+        var old = new[] { "mis", "sales", "sales-manager", "floor" }
+            .Select(k => new PermissionGroup { Key = k, NameI18n = new I18nText([KeyValuePair.Create("zh-TW", k)]) }).ToList();
+        db.Context.Set<PermissionGroup>().AddRange(old);
+        await db.Context.SaveChangesAsync();
+        db.Context.Set<UserGroupMapping>().Add(new UserGroupMapping { GroupId = old[3].Id, UserId = "floor01" });
+        db.Context.Set<GroupProgramPrivilege>().Add(new GroupProgramPrivilege { GroupId = old[1].Id, ProgramCode = "DYN00001", CanRead = true });
+        await db.Context.SaveChangesAsync();
+        var oldIds = old.ToDictionary(g => g.Key, g => g.Id);
+
+        await SeedData.EnsureSeededAsync(db.Context);
+
+        var groups = await db.Context.Set<PermissionGroup>().AsNoTracking().ToListAsync();
+        groups.Select(g => g.Key).Should().BeEquivalentTo("mis", "sales", "sales-manager", "floor", "maint", "qa");
+        foreach (var (key, id) in oldIds) groups.Single(g => g.Key == key).Id.Should().Be(id);
+        (await db.Context.Set<GroupProgramPrivilege>().CountAsync()).Should().Be(1, "新群組不在非首次升級拿到權限");
+        var members = await db.Context.Set<UserGroupMapping>().AsNoTracking().ToListAsync();
+        members.Should().Contain(m => m.GroupId == groups.Single(g => g.Key == "maint").Id && m.UserId == "maint01");
+        members.Should().Contain(m => m.GroupId == groups.Single(g => g.Key == "qa").Id && m.UserId == "qa01");
+        members.Should().Contain(m => m.GroupId == oldIds["floor"] && m.UserId == "floor02");
+    }
+
+    [Fact]
+    public async Task Seed_DoesNotOverwriteExistingNames()
+    {
+        await using var db = await SqliteTestDb.CreateAsync();
+        db.Context.Set<MockMold>().Add(new MockMold { MoldNo = "M-0006", Name = "自訂名稱" });
+        db.Context.Set<AppUser>().Add(new AppUser { UserId = "qa01", DisplayName = "自訂" });
+        await db.Context.SaveChangesAsync();
+
+        await SeedData.EnsureSeededAsync(db.Context);
+
+        (await db.Context.Set<MockMold>().AsNoTracking().SingleAsync(m => m.MoldNo == "M-0006")).Name.Should().Be("自訂名稱");
+        (await db.Context.Set<AppUser>().AsNoTracking().SingleAsync(u => u.UserId == "qa01")).DisplayName.Should().Be("自訂");
     }
 
     [Fact]
@@ -55,8 +133,8 @@ public class SeedDataTests
         await SeedData.EnsureSeededAsync(db.Context);
         await SeedData.EnsureSeededAsync(db.Context);
 
-        (await db.Context.Set<PermissionGroup>().CountAsync()).Should().Be(4);
-        (await db.Context.Set<UserGroupMapping>().CountAsync()).Should().Be(5);
+        (await db.Context.Set<PermissionGroup>().CountAsync()).Should().Be(6);
+        (await db.Context.Set<UserGroupMapping>().CountAsync()).Should().Be(8);
         (await db.Context.Set<GroupProgramPrivilege>().CountAsync()).Should().Be(3);
     }
 

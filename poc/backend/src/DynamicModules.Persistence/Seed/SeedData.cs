@@ -11,7 +11,8 @@ public static class SeedData
     private static readonly (string Id, string Name)[] Users =
     [
         ("admin", "系統管理員"), ("sales01", "業務一"), ("sales02", "業務二"),
-        ("manager01", "業務主管"), ("floor01", "現場人員")
+        ("manager01", "業務主管"), ("floor01", "現場人員"),
+        ("floor02", "現場人員二"), ("maint01", "保養人員"), ("qa01", "品保人員")
     ];
 
     private static readonly (string Key, string Name, string[] Members)[] Groups =
@@ -19,7 +20,9 @@ public static class SeedData
         ("mis", "MIS", ["admin"]),
         ("sales", "業務", ["sales01", "sales02"]),
         ("sales-manager", "業務主管", ["manager01"]),
-        ("floor", "現場人員", ["floor01"])
+        ("floor", "現場人員", ["floor01", "floor02"]),
+        ("maint", "保養", ["maint01"]),
+        ("qa", "品保", ["qa01"])
     ];
 
     /// <summary>第一次升級時，既有模組授權給這三個群組（Read/Add/Edit/Delete/PrintExport/Pricing）。</summary>
@@ -69,11 +72,16 @@ public static class SeedData
 
     private static readonly (string No, string Name)[] Molds =
     [
-        ("M-0001", "外殼上蓋模"), ("M-0002", "外殼下蓋模"), ("M-0003", "按鍵模"), ("M-0004", "電池蓋模"), ("M-0005", "支架模")
+        ("M-0001", "外殼上蓋模"), ("M-0002", "外殼下蓋模"), ("M-0003", "按鍵模"), ("M-0004", "電池蓋模"), ("M-0005", "支架模"),
+        ("M-0006", "射出模"), ("M-0007", "側蓋模"), ("M-0008", "旋鈕模"), ("M-0009", "面板模"),
+        ("M-0010", "底座模"), ("M-0011", "導光板模"), ("M-0012", "連接器模")
     ];
 
     private static readonly (string No, string Name)[] Customers =
-        [("C-001", "台灣精密"), ("C-002", "宏達機械"), ("C-003", "永豐電子")];
+        [
+            ("C-001", "台灣精密"), ("C-002", "宏達機械"), ("C-003", "永豐電子"),
+            ("C-004", "大同精機"), ("C-005", "聯發塑膠"), ("C-006", "華新零件"), ("C-007", "東元模具"), ("C-008", "新光電機")
+        ];
 
     /// <summary>mock 既有實體：依主鍵存在與否新增，不覆寫既有資料。</summary>
     private static async Task SeedMockEntitiesAsync(DynamicDbContext db, CancellationToken ct)
