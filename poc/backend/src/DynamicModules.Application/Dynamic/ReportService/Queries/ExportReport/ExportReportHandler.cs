@@ -19,6 +19,8 @@ public class ExportReportHandler(ReportAccess access, ReportModuleLoader loader,
 {
     private const string XlsxType = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
     private const string TotalLabel = "合計";
+    // spec §6.3：有合併且彙總了主模組欄位時必須說明，使用者接受去重的代價
+    private const string DedupedText = "主模組欄位的數字每筆主記錄只算一次，明細列相加不等於合計。";
 
     public async Task<ServiceResult> Handle(ExportReportRequest request, CancellationToken ct)
     {
@@ -34,6 +36,18 @@ public class ExportReportHandler(ReportAccess access, ReportModuleLoader loader,
             return ServiceResult.Invalid(new Dictionary<string, string[]> { ["report"] = [result.Message ?? result.State] });
 
         var (header, rows) = result.DetailRows is not null ? Detail(result) : Grouped(result);
+        // 明細表沒有位置放量值，合計接在明細下方，每個量值一列
+        if (result.DetailRows is not null && result.Total is { Count: > 0 } total)
+        {
+            rows.Add([]);
+            foreach (var m in result.Columns.Where(c => c.Role == "measure"))
+                rows.Add([m.Label, Measure(m, total.GetValueOrDefault(m.Key))]);
+        }
+        if (result.DedupedNote)
+        {
+            rows.Add([]);
+            rows.Add([DedupedText]);
+        }
         var content = XlsxWriter.Write(report.Name, header, rows);
         return ServiceResult.Success(new ExportFile($"report-{report.Id}-{time.Now:yyyyMMdd-HHmm}.xlsx", XlsxType, content));
     }
@@ -49,10 +63,7 @@ public class ExportReportHandler(ReportAccess access, ReportModuleLoader loader,
     {
         var columns = r.Columns.Where(c => c.Role is "group" or "measure").ToList();
         var measures = columns.Where(c => c.Role == "measure").ToList();
-        object Value(ReportColumn c, IReadOnlyDictionary<string, decimal?> values) =>
-            values.GetValueOrDefault(c.Key) is { } v
-                ? c.ValueType == "dayNumber" ? DateOnly.FromDayNumber((int)v).ToString("yyyy-MM-dd", CultureInfo.InvariantCulture) : v
-                : "";
+        object Value(ReportColumn c, IReadOnlyDictionary<string, decimal?> values) => Measure(c, values.GetValueOrDefault(c.Key));
 
         var rows = new List<IReadOnlyList<object>>();
         foreach (var g in r.Groups ?? [])
@@ -63,6 +74,11 @@ public class ExportReportHandler(ReportAccess access, ReportModuleLoader loader,
             .Concat(measures.Select(m => Value(m, total))).ToList());
         return (columns.Select(c => c.Label).ToList(), rows);
     }
+
+    private static object Measure(ReportColumn c, decimal? v) =>
+        v is { } n
+            ? c.ValueType == "dayNumber" ? DateOnly.FromDayNumber((int)n).ToString("yyyy-MM-dd", CultureInfo.InvariantCulture) : n
+            : "";
 
     private static object Cell(object? v) => v switch
     {

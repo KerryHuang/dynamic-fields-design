@@ -26,6 +26,6 @@ public class CreateReportHandler(
         report.StampCreated(user.UserId, time.Now);
         reports.Add(report);
         await uow.CommitAsync(ct);
-        return ServiceResult.Created(report.ToDetail(await access.ViewerAsync(ct), await access.UserNamesAsync(ct)));
+        return ServiceResult.Created(await access.DetailAsync(report, await access.ViewerAsync(ct), ct));
     }
 }

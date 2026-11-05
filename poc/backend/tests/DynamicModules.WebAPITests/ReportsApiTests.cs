@@ -6,6 +6,7 @@ using DynamicModules.Application.Dynamic.ReportService;
 using DynamicModules.Domain.Data;
 using DynamicModules.Domain.Entities.Dynamic;
 using FluentAssertions;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using static DynamicModules.WebAPITests.Dynamic.ApiTestKit;
 
@@ -200,7 +201,7 @@ public class ReportsApiTests
         copy.GetProperty("id").GetInt64().Should().NotBe(id);
         copy.GetProperty("isOwner").GetBoolean().Should().BeTrue();
         copy.GetProperty("name").GetString().Should().Be("月報");
-        (copy.TryGetProperty("sharedGroupIds", out var shared) ? shared.GetArrayLength() : 0).Should().Be(0);
+        copy.GetProperty("sharedGroupIds").GetArrayLength().Should().Be(0);
         var original = await JsonOf(await admin.GetAsync($"{Reports}/{id}"));
         original.GetProperty("sharedGroupIds").GetArrayLength().Should().Be(1);
         original.GetProperty("isOwner").GetBoolean().Should().BeTrue();
@@ -368,7 +369,7 @@ public class ReportsApiTests
         "name-empty", "name-too-long", "version", "missing-lists", "null-list-item", "duplicate-measure-id", "sum-on-date", "avg-on-date",
         "sum-on-enum", "range-n-zero", "range-n-negative", "range-unknown-kind", "op-not-allowed", "op-unknown", "value-wrong-type",
         "value-missing", "in-empty", "between-one", "bad-enum-option", "bad-date", "two-buckets", "bucket-on-number", "nothing-selected",
-        "unknown-module", "unknown-field", "child-source-without-child", "bad-viz", "ratio-without-condition"
+        "range-without-primary", "unknown-module", "unknown-field", "child-source-without-child", "bad-viz", "ratio-without-condition"
     };
 
     private static (string? Name, Dictionary<string, object?> Def) InvalidCase(string name, World w)
@@ -389,6 +390,7 @@ public class ReportsApiTests
             case "sum-on-enum": d["measures"] = new[] { Sum("s", w.Status) }; break;
             case "range-n-zero": d["primaryDateField"] = Ref(w.Due); d["dateRange"] = new { kind = "lastDays", n = 0 }; break;
             case "range-n-negative": d["primaryDateField"] = Ref(w.Due); d["dateRange"] = new { kind = "lastMonths", n = -3 }; break;
+            case "range-without-primary": d["dateRange"] = new { kind = "today" }; break;
             case "range-unknown-kind": d["primaryDateField"] = Ref(w.Due); d["dateRange"] = new { kind = "someday" }; break;
             case "op-not-allowed": d["filters"] = new[] { Filter("contains", "1") }; break;
             case "op-unknown": d["filters"] = new[] { Filter("roughly", 1) }; break;
@@ -719,5 +721,262 @@ public class ReportsApiTests
         item.GetProperty("isOwner").GetBoolean().Should().BeTrue();
         item.GetProperty("mainModuleKey").GetString().Should().Be(w.Main);
         item.GetProperty("sharedGroupIds").GetArrayLength().Should().Be(0);
+    }
+
+    // ---- 審查修正 ----
+
+    private static JsonElement Filters(JsonElement detail) => detail.GetProperty("definition").GetProperty("filters");
+
+    [Fact]
+    public async Task Get_MasksConditionValues_ViewerCannotSeeField_OwnerIncluded_ControlStillSeesValues()
+    {
+        using var app = new TestApp();
+        var w = await MakeWorld(app);
+        var sales = GroupId(app, "sales");
+        var admin = app.AsUser();
+        var owner = app.AsUser("sales01");
+        var def = Def(w.Main, columns: [Ref(w.Status)],
+            filters: [new { field = Ref(w.Amount), op = "gt", value = 12345 }, new { field = Ref(w.Status), op = "eq", value = w.Options[0] }],
+            measures: [new { id = "r", kind = "ratio", field = (object?)null, condition = (object)new { field = Ref(w.Amount), op = "gt", value = 98765 } }]);
+        var id = await Create(owner, def);
+        await Share(owner, id, sales, GroupId(app, "floor"));
+        // 業務之後看不到金額欄位；現場完全沒有模組權限
+        await Grant(app, w.Main, [new { fieldId = w.Amount, groupId = sales, access = "hidden" }], ("mis", true, "all"), ("sales", true, "all"));
+
+        var hiddenForOwner = await owner.GetStringAsync($"{Reports}/{id}");
+        var hiddenForFloor = await app.AsUser("floor01").GetStringAsync($"{Reports}/{id}");
+        var seen = await admin.GetStringAsync($"{Reports}/{id}");
+
+        foreach (var text in new[] { hiddenForOwner, hiddenForFloor })
+            text.Should().NotContain("12345").And.NotContain("98765");
+        var masked = JsonDocument.Parse(hiddenForOwner).RootElement;
+        Filters(masked)[0].GetProperty("hidden").GetBoolean().Should().BeTrue();
+        masked.GetProperty("definition").GetProperty("measures")[0].GetProperty("condition").GetProperty("hidden").GetBoolean().Should().BeTrue();
+        // 看得到的欄位照舊
+        Filters(masked)[1].GetProperty("value").GetString().Should().Be(w.Options[0]);
+        // 完全沒有模組 Read：所有值都遮蔽
+        Filters(JsonDocument.Parse(hiddenForFloor).RootElement).EnumerateArray().Should().OnlyContain(f => f.GetProperty("hidden").GetBoolean());
+        seen.Should().Contain("12345").And.Contain("98765");
+        Filters(JsonDocument.Parse(seen).RootElement)[0].TryGetProperty("hidden", out _).Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task Copy_ViewerSeesWholeDefinition_Allowed_OtherwiseRejectedWithoutLeakingFields()
+    {
+        using var app = new TestApp();
+        var w = await MakeWorld(app);
+        var sales = GroupId(app, "sales");
+        var admin = app.AsUser();
+        var id = await Create(admin, Def(w.Main, columns: [Ref(w.Amount)]));
+        await Share(admin, id, sales, GroupId(app, "floor"));
+        await Grant(app, w.Main, [new { fieldId = w.Amount, groupId = sales, access = "hidden" }], ("mis", true, "all"), ("sales", true, "all"));
+        await Grant(app, w.Main, null, ("mis", true, "all"), ("sales", true, "all"));
+        // 重新授權後業務看得到全部
+        (await app.AsUser("sales01").PostAsync($"{Reports}/{id}/copy", null)).StatusCode.Should().Be(HttpStatusCode.Created);
+
+        await Grant(app, w.Main, [new { fieldId = w.Amount, groupId = sales, access = "hidden" }], ("mis", true, "all"), ("sales", true, "all"));
+        var rejected = await app.AsUser("sales01").PostAsync($"{Reports}/{id}/copy", null);
+        var noRead = await app.AsUser("floor01").PostAsync($"{Reports}/{id}/copy", null);
+
+        rejected.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+        (await rejected.Content.ReadAsStringAsync()).Should().NotContain($"欄位 {w.Amount}").And.Contain("看不到");
+        noRead.StatusCode.Should().Be(HttpStatusCode.Forbidden);
+        (await JsonOf(await app.AsUser("sales01").GetAsync(Reports))).GetArrayLength().Should().Be(2); // 分享來的與先前複製成功的那份
+    }
+
+    private sealed record Customer(string Key, long Title, long Back, long Cust, string CustKey);
+
+    /// <summary>客戶模組（有指回主模組的參照）與主模組上指向客戶的參照欄位。</summary>
+    private static async Task<Customer> AddCustomer(TestApp app, World w)
+    {
+        var admin = app.AsUser();
+        var k = await CreateModule(admin);
+        var back = await AddField(admin, k, "reference", new { refTarget = new { kind = "module", key = w.Main } });
+        await Activate(admin, k);
+        app.GrantBusinessGroups(k);
+        var cust = await AddField(admin, w.Main, "reference", new { refTarget = new { kind = "module", key = k } });
+        var title = long.Parse((await TitleKey(admin, k))[2..]);
+        return new Customer(k, title, back.Id, cust.Id, cust.Key);
+    }
+
+    [Theory]
+    [InlineData("direct-column")]
+    [InlineData("direct-group")]
+    [InlineData("direct-filter")]
+    [InlineData("via")]
+    public async Task Export_ReferenceTargetNeedsPrintExport(string position)
+    {
+        using var app = new TestApp();
+        var w = await MakeWorld(app);
+        var k = await AddCustomer(app, w);
+        var def = position switch
+        {
+            "direct-column" => Def(w.Main, columns: [Ref(k.Cust)]),
+            "direct-group" => Def(w.Main, groups: [new { field = Ref(k.Cust), bucket = (string?)null }], measures: [Count()]),
+            "direct-filter" => Def(w.Main, columns: [Ref(w.Amount)], filters: [new { field = Ref(k.Cust), op = "isEmpty", value = (object?)null }]),
+            _ => Def(w.Main, columns: [Ref(k.Title, via: k.Cust)]),
+        };
+        await Grant(app, w.Main, null, ("mis", true, "all"), ("sales", true, "all"));
+        await Grant(app, k.Key, null, ("mis", true, "all"), ("sales", false, "all"));
+        var admin = app.AsUser();
+        var id = await Create(admin, def);
+        await Share(admin, id, GroupId(app, "sales"));
+        var sales = app.AsUser("sales01");
+
+        (await sales.GetAsync($"{Reports}/{id}/export")).StatusCode.Should().Be(HttpStatusCode.Forbidden);
+
+        await Grant(app, k.Key, null, ("mis", true, "all"), ("sales", true, "all"));
+        (await sales.GetAsync($"{Reports}/{id}/export")).StatusCode.Should().Be(HttpStatusCode.OK);
+    }
+
+    [Fact]
+    public async Task Save_ViaTargetFieldThatIsReference_400()
+    {
+        using var app = new TestApp();
+        var w = await MakeWorld(app);
+        var k = await AddCustomer(app, w);
+        var admin = app.AsUser();
+
+        (await admin.PostAsJsonAsync(Reports, new { name = "x", definition = Def(w.Main, columns: [Ref(k.Back, via: k.Cust)]) }))
+            .StatusCode.Should().Be(HttpStatusCode.BadRequest);
+        (await admin.PostAsJsonAsync($"{Reports}/preview", Def(w.Main, columns: [Ref(k.Back, via: k.Cust)]))).StatusCode.Should().Be(HttpStatusCode.BadRequest);
+        (await admin.PostAsJsonAsync(Reports, new { name = "x", definition = Def(w.Main, columns: [Ref(k.Title, via: k.Cust)]) }))
+            .StatusCode.Should().Be(HttpStatusCode.Created);
+    }
+
+    [Fact]
+    public async Task Locale_EnUS_AppliesToRunDrillPreviewAndExport()
+    {
+        using var app = new TestApp();
+        var w = await MakeWorld(app);
+        var admin = app.AsUser();
+        var blockId = (await JsonOf(await admin.GetAsync($"{Base}/modules/{w.Main}"))).GetProperty("blocks")[0].GetProperty("id").GetInt64();
+        (await admin.PutAsJsonAsync($"{Base}/fields/{w.Status}", new
+        {
+            type = "enum", label = new Dictionary<string, string> { ["zh-TW"] = "狀態", ["en-US"] = "Status" }, config = new { }, blockId
+        })).EnsureSuccessStatusCode();
+        (await admin.PutAsJsonAsync($"{Base}/options/{w.Options[0][4..]}", new
+        {
+            label = new Dictionary<string, string> { ["zh-TW"] = "新單", ["en-US"] = "New" }, color = "#fff", active = true
+        })).EnsureSuccessStatusCode();
+        (await admin.PutAsJsonAsync($"{Base}/fields/{w.Amount}", new
+        {
+            type = "decimal", label = new Dictionary<string, string> { ["zh-TW"] = "金額", ["en-US"] = "Amount" }, config = new { scale = 0 }, blockId
+        })).EnsureSuccessStatusCode();
+        await AddRecord(admin, w, 10, w.Options[0]);
+        var def = Def(w.Main, columns: [Ref(w.Amount)], groups: [new { field = Ref(w.Status), bucket = (string?)null }], measures: [Count()]);
+        var id = await Create(admin, def);
+
+        var run = await JsonOf(await admin.PostAsJsonAsync($"{Reports}/{id}/run?locale=en-US", new { }));
+        var preview = await JsonOf(await admin.PostAsJsonAsync($"{Reports}/preview?locale=en-US", def));
+        var drill = await JsonOf(await admin.PostAsJsonAsync($"{Reports}/{id}/drill?locale=en-US", new { groupKeys = new[] { w.Options[0] } }));
+        var export = await admin.GetAsync($"{Reports}/{id}/export?locale=en-US");
+
+        foreach (var r in new[] { run, preview })
+        {
+            r.GetProperty("columns")[0].GetProperty("label").GetString().Should().Be("Status");
+            r.GetProperty("groups")[0].GetProperty("groupLabels")[0].GetString().Should().Be("New");
+        }
+        drill.GetProperty("columns")[0].GetProperty("label").GetString().Should().Be("Amount");
+        using var wb = new XLWorkbook(await export.Content.ReadAsStreamAsync());
+        wb.Worksheet(1).Cell(1, 1).GetString().Should().Be("Status");
+        wb.Worksheet(1).Cell(2, 1).GetString().Should().Be("New");
+    }
+
+    [Fact]
+    public async Task Save_MeasureConditionValue_IsNormalized_AndBadOneRejected()
+    {
+        using var app = new TestApp();
+        var w = await MakeWorld(app);
+        var admin = app.AsUser();
+        var raw = w.Options[0].Replace("opt_", "opt_0");
+        object Ratio(object? value) => new { id = "r", kind = "ratio", field = (object?)null, condition = (object)new { field = Ref(w.Status), op = "eq", value } };
+
+        var id = await Create(admin, Def(w.Main, measures: [Ratio(raw)]));
+
+        var stored = (await JsonOf(await admin.GetAsync($"{Reports}/{id}"))).GetProperty("definition").GetProperty("measures")[0];
+        stored.GetProperty("condition").GetProperty("value").GetString().Should().Be(w.Options[0]);
+        (await admin.PostAsJsonAsync(Reports, new { name = "x", definition = Def(w.Main, measures: [Ratio("opt_999999")]) })).StatusCode.Should().Be(HttpStatusCode.BadRequest);
+    }
+
+    [Fact]
+    public async Task SetShares_RenewsRowVersion()
+    {
+        using var app = new TestApp();
+        var w = await MakeWorld(app);
+        var admin = app.AsUser();
+        var id = await Create(admin, ByStatus(w));
+        string Version()
+        {
+            using var scope = app.Services.CreateScope();
+            return scope.ServiceProvider.GetRequiredService<DynamicDbContext>().Set<Report>().AsNoTracking().Single(r => r.Id == id).RowVersion;
+        }
+        var before = Version();
+
+        await Share(admin, id, GroupId(app, "sales"));
+
+        Version().Should().NotBe(before);
+    }
+
+    [Fact]
+    public async Task Export_PrintExportButFieldHidden_NoFile()
+    {
+        using var app = new TestApp();
+        var w = await MakeWorld(app);
+        var sales = GroupId(app, "sales");
+        await Grant(app, w.Main, [new { fieldId = w.Amount, groupId = sales, access = "hidden" }], ("mis", true, "all"), ("sales", true, "all"));
+        var admin = app.AsUser();
+        var id = await Create(admin, ByStatus(w));
+        await Share(admin, id, sales);
+
+        var res = await app.AsUser("sales01").GetAsync($"{Reports}/{id}/export");
+
+        res.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+        res.Content.Headers.ContentType!.MediaType.Should().NotContain("spreadsheet");
+    }
+
+    [Fact]
+    public async Task Export_ColumnsWithMeasures_IncludeTotals_AndDedupedNote()
+    {
+        using var app = new TestApp();
+        var w = await MakeWorld(app, withChild: true);
+        var admin = app.AsUser();
+        await AddRecord(admin, w, 100, w.Options[0]);
+        var plain = await Create(admin, Def(w.Main, columns: [Ref(w.Amount)], measures: [Sum("s", w.Amount)]));
+        var merged = await Create(admin, Def(w.Main, groups: [new { field = Ref(w.Status), bucket = (string?)null }], measures: [Sum("s", w.Amount)],
+            child: new { moduleKey = w.Child, linkFieldId = w.ChildLink }));
+
+        using var totals = new XLWorkbook(await (await admin.GetAsync($"{Reports}/{plain}/export")).Content.ReadAsStreamAsync());
+        using var note = new XLWorkbook(await (await admin.GetAsync($"{Reports}/{merged}/export")).Content.ReadAsStreamAsync());
+
+        var label = totals.Worksheet(1).CellsUsed().Single(c => c.GetString().EndsWith("加總"));
+        label.CellRight().GetDouble().Should().Be(100);
+        note.Worksheet(1).CellsUsed().Should().Contain(c => c.GetString().Contains("只算一次"));
+        totals.Worksheet(1).CellsUsed().Should().NotContain(c => c.GetString().Contains("只算一次"));
+    }
+
+    [Fact]
+    public async Task Run_StoredConditionValueNoLongerMatchesFieldType_NoMatchNot500()
+    {
+        using var app = new TestApp();
+        var w = await MakeWorld(app);
+        var admin = app.AsUser();
+        var blockId = (await JsonOf(await admin.GetAsync($"{Base}/modules/{w.Main}"))).GetProperty("blocks")[0].GetProperty("id").GetInt64();
+        var f = await AddField(admin, w.Main, "formula", new { formula = $"{{{w.Amount}}} * 2", resultType = "number", scale = 0 });
+        (await admin.PostAsJsonAsync($"{Base}/modules/{w.Main}/records", new
+        {
+            values = new Dictionary<string, object> { [w.TitleKey] = "t", [w.AmountKey] = 10, [$"f_{w.Due}"] = "2026-11-05" }
+        })).EnsureSuccessStatusCode();
+        var def = Def(w.Main, columns: [Ref(w.Amount)], filters: [new { field = Ref(f.Id), op = "gt", value = 5 }]);
+        var id = await Create(admin, def);
+        (await Run(admin, id)).GetProperty("state").GetString().Should().Be("ok");
+
+        (await admin.PutAsJsonAsync($"{Base}/fields/{f.Id}", new
+        {
+            type = "formula", label = new Dictionary<string, string> { ["zh-TW"] = "公式" }, blockId,
+            config = new { formula = $"{{{w.Due}}}", resultType = "date" }
+        })).StatusCode.Should().Be(HttpStatusCode.OK);
+
+        (await Run(admin, id)).GetProperty("state").GetString().Should().Be("empty");
     }
 }

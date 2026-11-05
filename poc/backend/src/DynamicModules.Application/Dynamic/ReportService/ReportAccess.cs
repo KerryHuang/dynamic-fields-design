@@ -1,4 +1,6 @@
 using DynamicModules.Application.Common.Security;
+using DynamicModules.Application.Dynamic.ReportService.Data;
+using DynamicModules.Domain.Reports;
 using DynamicModules.Domain.Entities.Dynamic;
 using DynamicModules.Domain.Repositories.Dynamic;
 
@@ -7,7 +9,7 @@ namespace DynamicModules.Application.Dynamic.ReportService;
 /// <summary>目前使用者與其群組；分享只決定看不看得到報表定義，不授予資料權限（spec §7）。</summary>
 public sealed record ReportViewer(string UserId, bool IsAdmin, IReadOnlySet<long> GroupIds);
 
-public class ReportAccess(IReportRepository reports, IPermissionRepository permissions, ICurrentUser user)
+public class ReportAccess(IReportRepository reports, IPermissionRepository permissions, ICurrentUser user, ReportModuleLoader loader)
 {
     public async Task<ReportViewer> ViewerAsync(CancellationToken ct)
     {
@@ -29,5 +31,13 @@ public class ReportAccess(IReportRepository reports, IPermissionRepository permi
         var viewer = await ViewerAsync(ct);
         var report = await reports.GetAsync(id, ct);
         return (report is not null && CanView(report, viewer) ? report : null, viewer);
+    }
+
+    /// <summary>回應用的詳情：條件值依觀看者遮蔽，擁有者也一樣。</summary>
+    public async Task<ReportDetail> DetailAsync(Report report, ReportViewer viewer, CancellationToken ct)
+    {
+        var definition = ReportDefinition.Parse(report.DefinitionJson);
+        var (set, _) = await loader.LoadAsync(definition, PermissionAction.Read, ct, lenient: true);
+        return report.ToDetail(viewer, await UserNamesAsync(ct), ReportMasking.Mask(report.DefinitionJson, definition, set!));
     }
 }

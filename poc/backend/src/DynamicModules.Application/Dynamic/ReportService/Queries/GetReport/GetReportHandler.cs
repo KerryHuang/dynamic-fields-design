@@ -11,6 +11,6 @@ public class GetReportHandler(ReportAccess access) : IRequestHandler<GetReportRe
         var (report, viewer) = await access.FindAsync(request.Id, ct);
         return report is null
             ? ServiceResult.NotFound(ReportRules.ReportNotFound)
-            : ServiceResult.Success(report.ToDetail(viewer, await access.UserNamesAsync(ct)));
+            : ServiceResult.Success(await access.DetailAsync(report, viewer, ct));
     }
 }

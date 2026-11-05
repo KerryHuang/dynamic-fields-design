@@ -45,11 +45,11 @@ public static class ReportMapper
         new(r.Id, r.Name, names.GetValueOrDefault(r.OwnerUserId, r.OwnerUserId), r.OwnerUserId == viewer.UserId,
             r.Shares.Select(s => s.GroupId).Order().ToList(), MainKeyOf(r));
 
-    public static ReportDetail ToDetail(this Report r, ReportViewer viewer, IReadOnlyDictionary<string, string> names)
+    /// <param name="definition">依觀看者遮蔽後的定義（<see cref="ReportMasking.Mask"/>）。</param>
+    public static ReportDetail ToDetail(this Report r, ReportViewer viewer, IReadOnlyDictionary<string, string> names, JsonElement definition)
     {
         var item = r.ToItem(viewer, names);
-        return new(item.Id, item.Name, item.OwnerName, item.IsOwner, item.SharedGroupIds, item.MainModuleKey,
-            JsonSerializer.Deserialize<JsonElement>(r.DefinitionJson));
+        return new(item.Id, item.Name, item.OwnerName, item.IsOwner, item.SharedGroupIds, item.MainModuleKey, definition);
     }
 
     private static string MainKeyOf(Report r)

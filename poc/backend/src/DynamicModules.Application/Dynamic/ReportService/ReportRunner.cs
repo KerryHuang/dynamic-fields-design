@@ -453,6 +453,13 @@ public class ReportRunner(
         if (c.State == Empty) return op is FilterOperator.Ne or FilterOperator.NotIn;
 
         var v = f.Value ?? throw new ArgumentException($"運算子 {f.Op} 需要條件值");
+        // 存檔後欄位型別可能變（例如公式結果型別由數字改日期），舊條件值的形狀對不上時視為不符合，不丟例外
+        try { return MatchValue(f, op, v, c, basis); }
+        catch (Exception e) when (e is InvalidOperationException or FormatException) { return false; }
+    }
+
+    private static bool MatchValue(ReportFilter f, FilterOperator op, JsonElement v, ReportCell c, DateOnly basis)
+    {
         if (c.Date is { } date) return MatchDate(op, v, c is TimedCell t ? t.At : date.ToDateTime(TimeOnly.MinValue), basis);
         if (c.Number is { } number) return MatchNumber(op, v, number);
 
@@ -525,7 +532,7 @@ public class ReportRunner(
         var s = v.GetString() ?? throw new ArgumentException("日期條件值必須是文字");
         if (DateOnly.TryParseExact(s, "yyyy-MM-dd", CultureInfo.InvariantCulture, DateTimeStyles.None, out var d))
             return (d.ToDateTime(TimeOnly.MinValue), d.AddDays(1).ToDateTime(TimeOnly.MinValue));
-        if (!TryWallClock(s, out var at)) throw new ArgumentException($"日期條件值格式錯誤：{s}");
+        if (!TryWallClock(s, out var at)) throw new FormatException($"日期條件值格式錯誤：{s}");
         return (at, at.AddTicks(1));
     }
 

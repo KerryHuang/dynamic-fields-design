@@ -88,6 +88,7 @@ public static class ReportRules
             errors.Add("同一欄位不可用兩種分桶分組");
 
         if (CheckRange(d.DateRange) is { } rangeError) errors.Add(rangeError);
+        if (d.DateRange is not null && d.PrimaryDateField is null) errors.Add("設定日期區間需要選主要日期欄位");
         return errors;
     }
 
@@ -131,6 +132,8 @@ public static class ReportRules
                 else { errors.Add("帶出的目標模組不存在或未啟用"); return null; }
             }
             if (field is null || !owner.Perms.CanSee(field)) { errors.Add($"欄位 {r.FieldId} 不存在、未啟用或無權限"); return null; }
+            // 帶出只走一層：目標模組的欄位不能再是參照欄位
+            if (field is { Type: FieldType.Reference } && owner != side) { errors.Add($"帶出的欄位 {r.FieldId} 不能再是參照欄位"); return null; }
             if (IsExcluded(owner.Module, field)) { errors.Add($"欄位 {r.FieldId} 不能用於報表（彙總欄位或引用彙總的公式）"); return null; }
             return field;
         }

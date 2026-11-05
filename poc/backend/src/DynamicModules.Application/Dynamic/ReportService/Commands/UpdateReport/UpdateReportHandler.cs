@@ -25,6 +25,6 @@ public class UpdateReportHandler(
         report.RowVersion = Guid.NewGuid().ToString();
         report.StampModified(viewer.UserId, time.Now);
         await uow.CommitAsync(ct);
-        return ServiceResult.Success(report.ToDetail(viewer, await access.UserNamesAsync(ct)));
+        return ServiceResult.Success(await access.DetailAsync(report, viewer, ct));
     }
 }

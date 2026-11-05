@@ -24,8 +24,9 @@ public class SetReportSharesHandler(IAccountRepository accounts, IUnitOfWork uow
         report.Shares.RemoveAll(s => !groupIds.Contains(s.GroupId));
         foreach (var id in groupIds.Where(id => report.Shares.All(s => s.GroupId != id)))
             report.Shares.Add(new ReportShare { ReportId = report.Id, GroupId = id });
+        report.RowVersion = Guid.NewGuid().ToString();
         report.StampModified(viewer.UserId, time.Now);
         await uow.CommitAsync(ct);
-        return ServiceResult.Success(report.ToDetail(viewer, await access.UserNamesAsync(ct)));
+        return ServiceResult.Success(await access.DetailAsync(report, viewer, ct));
     }
 }

@@ -17,16 +17,21 @@ public sealed record ReportModuleSet(ReportSide? Main, ReportSide? Child, IReadO
 /// <summary>載入報表涉及的模組並逐一授權（與 <see cref="ReportRunner"/> 同一套路徑：明細子模組走表頭授權）。</summary>
 public class ReportModuleLoader(IModuleRepository modules, IDynamicAccessGuard guard)
 {
-    /// <summary>任何涉及的模組沒有 <paramref name="action"/> 權限就回 Denied。</summary>
-    public async Task<(ReportModuleSet? Set, ServiceResult? Denied)> LoadAsync(ReportDefinition d, PermissionAction action, CancellationToken ct)
+    /// <summary>
+    /// 任何涉及的模組沒有 <paramref name="action"/> 權限就回 Denied。<paramref name="lenient"/> 時改為逐模組判斷：沒權限的模組不放進結果，
+    /// 且一併載入直接參照欄位的目標（用於依觀看者遮蔽定義）。匯出時直接參照欄位的目標同樣要有 PrintExport，否則報表會繞過匯出權限。
+    /// </summary>
+    public async Task<(ReportModuleSet? Set, ServiceResult? Denied)> LoadAsync(
+        ReportDefinition d, PermissionAction action, CancellationToken ct, bool lenient = false)
     {
+        var withReferenceTargets = lenient || action == PermissionAction.PrintExport;
         var main = await ActiveAsync(d.MainModuleKey, ct);
         ReportSide? mainSide = null;
         if (main is not null)
         {
             var access = await guard.AuthorizeAsync(main, action, ct);
-            if (access.Permissions is null) return (null, access.Denied);
-            mainSide = new ReportSide(main, access.Permissions);
+            if (access.Permissions is null && !lenient) return (null, access.Denied);
+            if (access.Permissions is not null) mainSide = new ReportSide(main, access.Permissions);
         }
 
         Module? child = d.Child is null ? null : await ActiveAsync(d.Child.ModuleKey, ct);
@@ -41,22 +46,36 @@ public class ReportModuleLoader(IModuleRepository modules, IDynamicAccessGuard g
                 var access = parent is null
                     ? await guard.AuthorizeAsync(child, action, ct)
                     : await guard.AuthorizeDetailAsync(parent, child, action, ct);
-                if (access.Permissions is null) return (null, access.Denied);
-                childSide = new ReportSide(child, access.Permissions);
+                if (access.Permissions is null && !lenient) return (null, access.Denied);
+                if (access.Permissions is not null) childSide = new ReportSide(child, access.Permissions);
             }
         }
 
         var targets = new Dictionary<string, ReportSide>();
-        foreach (var r in ReportRunner.AllRefs(d).Where(r => r.ViaFieldId is not null))
+        async Task<ServiceResult?> AddTargetAsync(string key)
+        {
+            if (targets.ContainsKey(key) || await ActiveAsync(key, ct) is not { } module) return null;
+            var access = await guard.AuthorizeAsync(module, action, ct);
+            if (access.Permissions is not null) targets[key] = new ReportSide(module, access.Permissions);
+            return access.Permissions is null && !lenient ? access.Denied : null;
+        }
+
+        var refs = ReportRunner.AllRefs(d);
+        foreach (var r in refs.Where(r => r.ViaFieldId is not null))
         {
             var source = r.Source == "main" ? main : r.Source == "child" ? child : null;
             var via = source?.Blocks.SelectMany(b => b.Fields).FirstOrDefault(f => f.Id == r.ViaFieldId && f.Status == FieldStatus.Active);
-            if (via?.Config.RefTarget is not { Kind: ReferenceTarget.ModuleKind } target || targets.ContainsKey(target.Key)) continue;
-            if (await ActiveAsync(target.Key, ct) is not { } module) continue;
-            var access = await guard.AuthorizeAsync(module, action, ct);
-            if (access.Permissions is null) return (null, access.Denied);
-            targets[target.Key] = new ReportSide(module, access.Permissions);
+            if (via?.Config.RefTarget is not { Kind: ReferenceTarget.ModuleKind } target) continue;
+            if (await AddTargetAsync(target.Key) is { } denied) return (null, denied);
         }
+        if (withReferenceTargets)
+            foreach (var r in refs.Where(r => r.ViaFieldId is null))
+            {
+                var source = r.Source == "main" ? main : r.Source == "child" ? child : null;
+                var field = source?.Blocks.SelectMany(b => b.Fields).FirstOrDefault(f => f.Id == r.FieldId && f.Status == FieldStatus.Active);
+                if (field is not { Type: FieldType.Reference, Config.RefTarget: { Kind: ReferenceTarget.ModuleKind } target }) continue;
+                if (await AddTargetAsync(target.Key) is { } denied) return (null, denied);
+            }
         return (new ReportModuleSet(mainSide, childSide, targets), null);
     }
 
