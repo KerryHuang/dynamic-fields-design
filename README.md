@@ -56,6 +56,8 @@ cd poc/frontend && bunx vitest run && bunx vue-tsc --noEmit    # 前端：單元
 
 限制：免費方案閒置 15 分鐘會休眠，下次開啟要等約 1 分鐘；沒有永久磁碟，休眠或重新部署後資料回到種子資料。POC 沒有登入，拿到網址的人都能切成管理員，網址不要公開散布。
 
+啟動時自動產生 Demo 資料：設定環境變數 `Demo__SeedOnStartup=true`，站台會在背景產生訂單、故障報修、模具保養、品質異常四組模組與範例記錄；`render.yaml` 已開啟，本機預設關閉。也可以由系統管理員在「系統管理 → Demo 資料」手動產生。各情境怎麼示範見 [Demo 腳本](docs/demo.md)。
+
 本機試跑容器：`cd poc && docker build -t dynamic-modules . && docker run -p 8080:8080 dynamic-modules`，開 `http://localhost:8080`。
 
 ## 目錄
@@ -73,6 +75,7 @@ cd poc/frontend && bunx vitest run && bunx vue-tsc --noEmit    # 前端：單元
 | 文件 | 內容 |
 |---|---|
 | [`docs/manual.md`](docs/manual.md) | 操作手冊：設計器、模組範本、公式、規則、權限、列表與表單、歷程與匯出匯入 |
+| [`docs/demo.md`](docs/demo.md) | Demo 腳本：每個情境用哪個身分、開哪個畫面、示範哪項能力 |
 | [`docs/superpowers/specs/2026-11-03-dynamic-modules-design.md`](docs/superpowers/specs/2026-11-03-dynamic-modules-design.md) | 設計文件 |
 | [`docs/superpowers/plans/2026-11-03-phase1-foundation.md`](docs/superpowers/plans/2026-11-03-phase1-foundation.md) | POC 第 1 階段實作計畫：基礎 CRUD |
 | [`docs/superpowers/plans/2026-11-03-phase1-rulings.md`](docs/superpowers/plans/2026-11-03-phase1-rulings.md) | 第 1 階段實作裁決（計畫的補充與修正） |
@@ -90,6 +93,8 @@ cd poc/frontend && bunx vitest run && bunx vue-tsc --noEmit    # 前端：單元
 | [`docs/superpowers/plans/2026-11-04-phase7-rulings.md`](docs/superpowers/plans/2026-11-04-phase7-rulings.md) | 第 7 階段實作裁決 |
 | [`docs/superpowers/plans/2026-11-05-phase8-templates.md`](docs/superpowers/plans/2026-11-05-phase8-templates.md) | POC 第 8 階段實作計畫：模組範本 |
 | [`docs/superpowers/plans/2026-11-05-phase8-rulings.md`](docs/superpowers/plans/2026-11-05-phase8-rulings.md) | 第 8 階段實作裁決 |
+| [`docs/superpowers/plans/2026-11-05-demo-data.md`](docs/superpowers/plans/2026-11-05-demo-data.md) | Demo 資料實作計畫：四個情境、背景產生、系統管理頁 |
+| [`docs/superpowers/plans/2026-11-05-demo-data-rulings.md`](docs/superpowers/plans/2026-11-05-demo-data-rulings.md) | Demo 資料實作裁決 |
 | [`docs/research/vtiger-dynamic-fields.md`](docs/research/vtiger-dynamic-fields.md) | vtiger CRM 7.4 研究 |
 
 設計文件涵蓋資料模型、型別系統、規則引擎、關聯、權限、前後端設計、POC 做法、POC 到正式產品的對應與風險；§15 列出上線前要確認的風險。vtiger 研究涵蓋 metadata 表、建模組流程、畫面自動產生的 fallback 機制與欄位生命週期。
