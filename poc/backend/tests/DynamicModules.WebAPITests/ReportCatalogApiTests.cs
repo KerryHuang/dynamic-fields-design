@@ -20,14 +20,16 @@ public class ReportCatalogApiTests
     }
 
     /// <summary>整組換掉模組授權；每個項目是群組鍵，皆給完整動作。</summary>
-    private static async Task Grant(TestApp app, string module, object[]? fields = null, params string[] groups)
+    private static async Task Grant(TestApp app, string module, object[]? fields = null, params string[] groups) => await Grant(app, module, fields, pricing: true, groups);
+
+    private static async Task Grant(TestApp app, string module, object[]? fields, bool pricing, params string[] groups)
     {
         var res = await app.AsUser().PutAsJsonAsync($"{Base}/modules/{module}/permissions", new
         {
             groups = groups.Select(g => new
             {
                 groupId = GroupId(app, g),
-                privileges = new { read = true, add = true, edit = true, delete = true, printExport = true, pricing = true, approve = false },
+                privileges = new { read = true, add = true, edit = true, delete = true, printExport = true, pricing, approve = false },
                 scope = "all"
             }).ToArray(),
             users = Array.Empty<object>(), fields = fields ?? [], options = Array.Empty<object>()
@@ -193,5 +195,98 @@ public class ReportCatalogApiTests
         fields[0].GetProperty("id").GetInt64().Should().Be(0);
         fields[0].GetProperty("canGroup").GetBoolean().Should().BeTrue();
         fields[0].GetProperty("canSum").GetBoolean().Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task Catalog_DirectReferenceToUnreadableTarget_NotListed()
+    {
+        using var app = new TestApp();
+        var target = await NewActive(app);
+        var main = await CreateModule(app.AsUser());
+        var link = await AddField(app.AsUser(), main, "reference", new { refTarget = new { kind = "module", key = target } });
+        var plain = await AddField(app.AsUser(), main, "decimal", new { scale = 0 });
+        await Activate(app.AsUser(), main);
+        app.GrantBusinessGroups(main);
+        await Grant(app, target, null, "mis");
+
+        var json = await JsonOf(await app.AsUser("sales01").GetAsync($"{Catalog}/{main}"));
+
+        Ids(json.GetProperty("fields")).Should().Contain(plain.Id).And.NotContain(link.Id);
+    }
+
+    [Fact]
+    public async Task Catalog_ChildWithoutRead_OrHiddenField_NotListed()
+    {
+        using var app = new TestApp();
+        var admin = app.AsUser();
+        var main = await CreateModule(admin);
+        var noRead = await CreateModule(admin);
+        var shown = await CreateModule(admin);
+        await AddField(admin, noRead, "reference", new { refTarget = new { kind = "module", key = main } });
+        var shownLink = await AddField(admin, shown, "reference", new { refTarget = new { kind = "module", key = main } });
+        var shownQty = await AddField(admin, shown, "decimal", new { scale = 0 });
+        var hiddenQty = await AddField(admin, shown, "decimal", new { scale = 0 });
+        foreach (var m in new[] { main, noRead, shown }) { await Activate(admin, m); app.GrantBusinessGroups(m); }
+        await Grant(app, noRead, null, "mis");
+        await Grant(app, shown, [new { fieldId = hiddenQty.Id, groupId = GroupId(app, "sales"), access = "hidden" }], "mis", "sales");
+
+        var json = await JsonOf(await app.AsUser("sales01").GetAsync($"{Catalog}/{main}"));
+
+        var child = json.GetProperty("children").EnumerateArray().Single();
+        child.GetProperty("moduleKey").GetString().Should().Be(shown);
+        child.GetProperty("linkFieldId").GetInt64().Should().Be(shownLink.Id);
+        Ids(child.GetProperty("fields")).Should().Contain(shownQty.Id).And.NotContain(hiddenQty.Id);
+    }
+
+    [Fact]
+    public async Task Catalog_EnumOptions_KeepInactiveWithFlag_HiddenFieldHasNone()
+    {
+        using var app = new TestApp();
+        var admin = app.AsUser();
+        var main = await CreateModule(admin);
+        var status = await AddField(admin, main, "enum", new { });
+        var secret = await AddField(admin, main, "enum", new { });
+        var live = await AddOpt(admin, status.Id, "新單");
+        var old = await AddOpt(admin, status.Id, "舊單");
+        await AddOpt(admin, secret.Id, "機密");
+        (await admin.PutAsJsonAsync($"{Base}/options/{old}", new { label = new Dictionary<string, string> { ["zh-TW"] = "舊單" }, active = false }))
+            .StatusCode.Should().Be(HttpStatusCode.OK);
+        await Activate(admin, main);
+        app.GrantBusinessGroups(main);
+        await Grant(app, main, [new { fieldId = secret.Id, groupId = GroupId(app, "sales"), access = "hidden" }], "mis", "sales");
+
+        var json = await JsonOf(await app.AsUser("sales01").GetAsync($"{Catalog}/{main}"));
+
+        var options = json.GetProperty("fields").EnumerateArray().Single(f => f.GetProperty("id").GetInt64() == status.Id)
+            .GetProperty("options").EnumerateArray().ToDictionary(o => o.GetProperty("id").GetString()!, o => o.GetProperty("active").GetBoolean());
+        options.Should().Contain(new KeyValuePair<string, bool>($"opt_{live}", true)).And.Contain(new KeyValuePair<string, bool>($"opt_{old}", false));
+        Ids(json.GetProperty("fields")).Should().NotContain(secret.Id);
+        json.ToString().Should().NotContain("機密");
+    }
+
+    private static async Task<long> AddOpt(HttpClient c, long fieldId, string label)
+    {
+        var res = await c.PostAsJsonAsync($"{Base}/fields/{fieldId}/options", new { label = new Dictionary<string, string> { ["zh-TW"] = label } });
+        res.EnsureSuccessStatusCode();
+        return (await JsonOf(res)).GetProperty("id").GetInt64();
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task Catalog_CurrencyField_FollowsPricing(bool pricing)
+    {
+        using var app = new TestApp();
+        var admin = app.AsUser();
+        var main = await CreateModule(admin);
+        var price = await AddField(admin, main, "currency", new { });
+        await Activate(admin, main);
+        app.GrantBusinessGroups(main);
+        await Grant(app, main, null, pricing, "mis", "sales");
+
+        var json = await JsonOf(await app.AsUser("sales01").GetAsync($"{Catalog}/{main}"));
+
+        if (pricing) Ids(json.GetProperty("fields")).Should().Contain(price.Id);
+        else Ids(json.GetProperty("fields")).Should().NotContain(price.Id);
     }
 }

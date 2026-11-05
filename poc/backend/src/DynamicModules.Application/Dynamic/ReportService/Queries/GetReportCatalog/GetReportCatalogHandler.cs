@@ -9,7 +9,8 @@ using MediatR;
 
 namespace DynamicModules.Application.Dynamic.ReportService.Queries.GetReportCatalog;
 
-public record CatalogOption(string Id, string Label);
+/// <summary>停用的選項也列出（Active = false），已存的篩選仍顯示得出來；前端負責標示並禁止新選。</summary>
+public record CatalogOption(string Id, string Label, bool Active);
 
 public record CatalogField(
     long Id, string Label, FieldType Type, bool CanGroup, bool CanSum, bool CanMinMax, bool IsDate, List<CatalogOption>? Options);
@@ -65,7 +66,7 @@ public class GetReportCatalogHandler(IModuleRepository modules, IDynamicAccessGu
                     via.Add(new CatalogVia(f.Id, f.LabelI18n.Resolve(locale), target.Key, [EntityTitle()]));
                     continue;
                 }
-                // 目標模組不可讀（或未啟用）時，存檔會被擋下，所以直接參照與帶出都不列
+                // 目標模組不可讀（或未啟用）時存檔其實允許，但每個值都會是（無權限）、分組只有一組，放進條件還會整張擋下，選了沒有意義，所以直接參照與帶出都不列
                 if (await TargetAsync(target.Key) is not { } t) continue;
                 fields.Add(ToField(f, locale));
                 // 帶出只走一層：目標模組的參照欄位不列
@@ -83,6 +84,7 @@ public class GetReportCatalogHandler(IModuleRepository modules, IDynamicAccessGu
         foreach (var (source, link) in await modules.ListIncomingReferenceFieldsAsync(main.Key, ct))
         {
             var isDetail = detailKeys.Contains(source.Key);
+            // 刻意略過：別人的明細透過一般參照指回主模組時不列（與 RelatedTabs 同一套，明細只經表頭呈現）
             if (source.Status != ModuleStatus.Active || (!isDetail && ModuleRelations.IsDetail(source))) continue;
             var child = await modules.GetByKeyAsync(source.Key, includeChildren: true, ct);
             if (child is null) continue;
@@ -110,6 +112,6 @@ public class GetReportCatalogHandler(IModuleRepository modules, IDynamicAccessGu
             ReportFieldEligibility.CanMinMax(f),
             f.Type is FieldType.Date or FieldType.DateTime || (f.Type == FieldType.Formula && f.Config.ResultType == "date"),
             f.Type is FieldType.Enum or FieldType.MultiEnum
-                ? f.Options.Where(o => o.Active).OrderBy(o => o.Sequence).Select(o => new CatalogOption($"opt_{o.Id}", o.LabelI18n.Resolve(locale))).ToList()
+                ? f.Options.OrderBy(o => o.Sequence).Select(o => new CatalogOption($"opt_{o.Id}", o.LabelI18n.Resolve(locale), o.Active)).ToList()
                 : null);
 }
