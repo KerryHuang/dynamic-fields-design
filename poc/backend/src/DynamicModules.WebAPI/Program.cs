@@ -10,10 +10,10 @@ using DynamicModules.Domain.Data;
 using DynamicModules.Domain.Entities.Dynamic;
 using DynamicModules.Persistence;
 using DynamicModules.Persistence.Seed;
-using Microsoft.EntityFrameworkCore;
 using DynamicModules.WebAPI.Demo;
 using DynamicModules.WebAPI.Security;
 using DynamicModules.WebAPI.Time;
+using Microsoft.EntityFrameworkCore;
 
 var builder = WebApplication.CreateBuilder(args);
 

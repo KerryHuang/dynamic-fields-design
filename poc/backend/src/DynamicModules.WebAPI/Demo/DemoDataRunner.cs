@@ -68,6 +68,11 @@ public sealed class DemoDataRunner(
                 log.LogError("Demo 資料產生失敗：{Message}", message);
             }
         }
+        catch (Exception ex) when (life.ApplicationStopping.IsCancellationRequested)
+        {
+            Finish(DemoRunState.Failed, [], ex.Message);
+            log.LogWarning(ex, "Demo 資料產生因服務關閉而中斷");
+        }
         catch (Exception ex)
         {
             Finish(DemoRunState.Failed, [], ex.Message);

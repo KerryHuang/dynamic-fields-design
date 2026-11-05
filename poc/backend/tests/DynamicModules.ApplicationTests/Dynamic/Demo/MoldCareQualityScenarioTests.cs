@@ -41,6 +41,18 @@ public class MoldCareQualityScenarioTests(DemoGeneratedFixture fx)
     }
 
     [Fact]
+    public async Task CustomerInfo_EmailPerCustomer_Distinct()
+    {
+        fx.Generated();
+
+        var customers = await fx.Records("customer-info");
+        var email = await fx.Key("customer-info", "聯絡 Email");
+        var emails = customers.Select(c => DemoGeneratedFixture.Text(c, email)).ToList();
+        emails.Should().OnlyHaveUniqueItems().And.HaveCount(8);
+        DemoGeneratedFixture.Text(customers.Single(c => c.HostKey == "C-001"), email).Should().Be("purchase@c001.example.com");
+    }
+
+    [Fact]
     public async Task Care_30To80_AtLeast2PerMold_NextDateSpread()
     {
         fx.Generated();

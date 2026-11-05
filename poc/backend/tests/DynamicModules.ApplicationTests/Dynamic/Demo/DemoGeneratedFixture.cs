@@ -1,4 +1,3 @@
-using System.Diagnostics;
 using System.Text.Json;
 using DynamicModules.Application.Common;
 using DynamicModules.Application.Common.Acting;
@@ -26,18 +25,13 @@ public sealed class DemoGeneratedFixture : IAsyncLifetime
 
     public ServiceResult Result { get; private set; } = null!;
 
-    /// <summary>產生一次的耗時（不含建測試庫與種子）。</summary>
-    public TimeSpan Elapsed { get; private set; }
-
     /// <summary>產生時每次回報的（完成數、總數）。</summary>
     public List<(int Done, int Total)> Progress { get; } = [];
 
     public async Task InitializeAsync()
     {
         Host = await DemoTestHost.CreateAsync();
-        var watch = Stopwatch.StartNew();
         Result = await Host.Send(new GenerateDemoDataRequest(DemoTestHost.Today, new SyncProgress(Progress)));
-        Elapsed = watch.Elapsed;
     }
 
     /// <summary>Progress&lt;T&gt; 會丟到同步內容非同步回報，這裡用同步版。</summary>

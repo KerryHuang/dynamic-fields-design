@@ -51,11 +51,13 @@ public sealed class MoldCareScenario : IDemoScenario
             var rep = c % 2 == 1 ? "sales01" : "sales02";
             var terms = PaymentTerms[rnd.Next(PaymentTerms.Length)];
             var phone = $"04-23{rnd.Next(10, 100)}-{rnd.Next(1000, 10000)}";
+            var email = $"purchase@c{c:000}.example.com";
+            var site = $"https://c{c:000}.example.com";
             plan.Create("customer", plan.At(start), Manager, $"客戶資料 {code} 建立", ctx => new CreateRecordRequest(
                 ctx.Ids.ModuleKeys["customer"],
                 ctx.Values("customer",
                     ("creditLevel", ctx.Opt("customer", credit)), ("paymentTerms", terms), ("accountRep", rep),
-                    ("email", $"purchase@c{c:000}.example.com"), ("phone", phone), ("website", $"https://c{c:000}.example.com")),
+                    ("email", email), ("phone", phone), ("website", site)),
                 HostKey: code));
         }
 

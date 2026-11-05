@@ -99,7 +99,7 @@ public class TemplateValidatorTests
     [Fact]
     public void Catalog_LoadsFourBuiltIns() =>
         TemplateCatalog.Load(TemplateCatalog.DefaultDirectory).BuiltIns.Select(t => t.Key)
-            .Should().BeEquivalentTo("order", "repair", "mold-care", "quality");
+            .Should().Equal("mold-care", "order", "quality", "repair");
 
     [Fact]
     public void BlockColumns_MissingMeansTwo()
