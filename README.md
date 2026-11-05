@@ -47,6 +47,17 @@ cd poc/frontend && bunx vitest run && bunx vue-tsc --noEmit    # 前端：單元
 
 規則的判斷語意以 `poc/shared/rule-cases.json` 為準，前後端的測試都跑這份案例，兩邊結果必須一致。列表篩選的運算子表在 `poc/shared/filter-operators.json`，也是前後端共用。
 
+## Demo 部署（Render 免費方案）
+
+`poc/Dockerfile` 把前端建置結果和後端打包成一個容器，API 與畫面在同一個網址；`render.yaml` 是 Render 的 Blueprint。
+
+1. 在 [Render](https://render.com) 用 GitHub 登入，New → Blueprint，選這個 repo，Render 會讀 `render.yaml` 建立 `dynamic-modules-demo`。
+2. 之後每次推上 `main` 都會自動重新部署。
+
+限制：免費方案閒置 15 分鐘會休眠，下次開啟要等約 1 分鐘；沒有永久磁碟，休眠或重新部署後資料回到種子資料。POC 沒有登入，拿到網址的人都能切成管理員，網址不要公開散布。
+
+本機試跑容器：`cd poc && docker build -t dynamic-modules . && docker run -p 8080:8080 dynamic-modules`，開 `http://localhost:8080`。
+
 ## 目錄
 
 | 路徑 | 內容 |

@@ -18,7 +18,9 @@ var builder = WebApplication.CreateBuilder(args);
 var dynamicConnection = SqliteConnectionStrings.ResolveDataSource(
     builder.Configuration.GetConnectionString("Dynamic")!, builder.Environment.ContentRootPath);
 builder.Configuration["ConnectionStrings:Dynamic"] = dynamicConnection;
-builder.WebHost.UseUrls("http://127.0.0.1:5180");
+// 雲端主機（如 Render）用 PORT 指定埠並要求聽所有介面；本機開發維持 127.0.0.1:5180。
+var port = Environment.GetEnvironmentVariable("PORT");
+builder.WebHost.UseUrls(port is null ? "http://127.0.0.1:5180" : $"http://0.0.0.0:{port}");
 builder.Services.Configure<RouteOptions>(o => o.LowercaseUrls = true);
 builder.Services.AddApplication();
 builder.Services.AddHttpContextAccessor();
@@ -51,6 +53,16 @@ app.UseSwaggerUI();
 
 app.MapControllers();
 app.MapGet("/api/health", () => Results.Json(new { status = "ok" }));
+
+// 部署時前端建置結果放在 wwwroot（Dockerfile），由同一個站台提供；本機開發沒有 wwwroot，前端走 quasar dev。
+if (Directory.Exists(Path.Combine(app.Environment.ContentRootPath, "wwwroot")))
+{
+    app.UseDefaultFiles();
+    app.UseStaticFiles();
+    // 不存在的 API 照樣回 404，其餘路徑交給前端的 history 路由
+    app.Map("/api/{**rest}", () => Results.NotFound());
+    app.MapFallbackToFile("index.html");
+}
 
 app.Run();
 

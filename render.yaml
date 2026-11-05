@@ -1,0 +1,11 @@
+# Render Blueprint：Demo 站台（免費方案，閒置 15 分鐘休眠，重啟後資料回到種子資料）
+services:
+  - type: web
+    name: dynamic-modules-demo
+    runtime: docker
+    plan: free
+    rootDir: poc
+    dockerfilePath: ./Dockerfile
+    dockerContext: .
+    healthCheckPath: /api/health
+    autoDeploy: true
