@@ -25,6 +25,13 @@
           </q-item>
         </template>
 
+        <q-separator class="q-my-sm" />
+        <q-item-label header>{{ t('menu.reports') }}</q-item-label>
+        <q-item clickable to="/reports" data-testid="reports-menu">
+          <q-item-section avatar><q-icon name="bar_chart" /></q-item-section>
+          <q-item-section>{{ t('menu.myReports') }}</q-item-section>
+        </q-item>
+
         <template v-if="me?.designer.read || me?.isSystemAdmin">
           <q-separator class="q-my-sm" />
           <q-item-label header>{{ t('menu.system') }}</q-item-label>

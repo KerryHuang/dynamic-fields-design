@@ -269,6 +269,8 @@ export interface GroupImpact {
   fieldPermissionCount: number;
   dataScopeCount: number;
   blockingOptions: BlockingOption[];
+  /** 分享給這個群組的報表名稱（刪除群組會一併移除分享）。 */
+  reports: string[];
 }
 
 export interface Me {

@@ -78,6 +78,22 @@ describe('MainLayout menu', () => {
     expect(w.find('[data-testid="demo-data-menu"]').exists()).toBe(read);
   });
 
+  it('menu shows reports to every signed-in user, without designer or admin rights', async () => {
+    const pinia = createPinia();
+    setActivePinia(pinia);
+    http.defaults.adapter = async (config) => ({
+      data: config.url === '/me' ? me(false) : config.url === '/users' ? USERS : [], status: 200, statusText: 'OK', headers: {}, config,
+    });
+    const router = createRouter({ history: createMemoryHistory(), routes: [{ path: '/', component: { template: '<i/>' } }] });
+    const i18n = createI18n({ legacy: false, locale: 'zh-TW', messages: { 'zh-TW': zhTW } });
+    const w = mount(MainLayout, {
+      global: { plugins: [[quasar.Quasar, { components: quasar }], pinia, router, i18n, [VueQueryPlugin, { queryClient: new QueryClient() }]] },
+    });
+    await flushPromises();
+    expect(w.find('[data-testid="reports-menu"]').exists()).toBe(true);
+    expect(w.find('[data-testid="reports-menu"]').text()).toContain('我的報表');
+  });
+
   it('groups menu items by section, unsectioned under 自訂功能 first, sections sorted by name', async () => {
     const pinia = createPinia();
     setActivePinia(pinia);
@@ -97,7 +113,7 @@ describe('MainLayout menu', () => {
     const order = ['自訂功能', 'item-b', 'item-e', 'Alpha', 'item-c', 'Zeta', 'item-a', 'item-d'].map((s) => text.indexOf(s));
     expect(order.every((i) => i >= 0)).toBe(true);
     expect(order).toEqual([...order].sort((x, y) => x - y));
-    expect(w.findAll('.q-item__label--header').map((h) => h.text())).toEqual(['自訂功能', 'Alpha', 'Zeta']);
+    expect(w.findAll('.q-item__label--header').map((h) => h.text())).toEqual(['自訂功能', 'Alpha', 'Zeta', '報表']);
   });
 
   it('refetches views and re-picks the default view after the session changes user', async () => {

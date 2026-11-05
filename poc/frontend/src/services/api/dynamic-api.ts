@@ -2,6 +2,7 @@ import type {
   AdminGroup, AdminUser, AdminUserCreate, AdminUserUpdate, AuthOptions, AuthUser, ConditionNode, DesignerField, DetailRowPayload, DynamicRecord, EntitySummary, FieldConfig, FieldType, Group, GroupImpact, I18nText, LightPage, ListView, Me, MenuItem, ModuleDetail, ModulePermissions, ModuleSchema,
   ImportPreview, ImportResult, PagedResponse, RecordHistoryEntry, RelatedTab, Rule, RollupSource, User, ViewSort,
 } from 'src/domain/dynamic/types';
+import type { DrillResult, ReportDateRange, ReportDetail, ReportItem, ReportResult } from 'src/domain/dynamic/report-types';
 import { handleAuthFailure, http, toApiError } from './http';
 
 export interface ModuleSummary {
@@ -209,6 +210,27 @@ export const dynamicApi = {
       throw err;
     }
     return { blob: r.data, fileName: dispositionFileName(r.headers['content-disposition']) ?? `${key}.${format}` };
+  },
+  getReports: () => http.get<ReportItem[]>('/reports').then(data),
+  getReport: (id: number) => http.get<ReportDetail>(`/reports/${id}`).then(data),
+  runReport: (id: number, range: ReportDateRange | null, locale: string) =>
+    http.post<ReportResult>(`/reports/${id}/run`, { range }, { params: { locale } }).then(data),
+  drillReport: (id: number, groupKeys: string[], range: ReportDateRange | null, locale: string) =>
+    http.post<DrillResult>(`/reports/${id}/drill`, { groupKeys, range }, { params: { locale } }).then(data),
+  copyReport: (id: number) => http.post<ReportDetail>(`/reports/${id}/copy`).then(data),
+  deleteReport: (id: number) => http.delete(`/reports/${id}`).then(data),
+  setReportShares: (id: number, groupIds: number[]) => http.put(`/reports/${id}/shares`, { groupIds }).then(data),
+  /** 同 exportRecords：validateStatus 繞過 interceptor，錯誤本文（Blob）在這裡解析。 */
+  exportReport: async (id: number, locale: string) => {
+    const r = await http.get<Blob>(`/reports/${id}/export`, { params: { locale }, responseType: 'blob', validateStatus: () => true });
+    if (r.status >= 400) {
+      let body: unknown;
+      try { body = JSON.parse(await r.data.text()); } catch { body = undefined; }
+      const err = toApiError({ response: { status: r.status, data: body } });
+      handleAuthFailure(err);
+      throw err;
+    }
+    return { blob: r.data, fileName: dispositionFileName(r.headers['content-disposition']) ?? `report-${id}.xlsx` };
   },
   getDemoDataStatus: () => http.get<DemoDataStatus>('/demo-data').then(data),
   generateDemoData: () => http.post<DemoDataStatus>('/demo-data/generate').then(data),

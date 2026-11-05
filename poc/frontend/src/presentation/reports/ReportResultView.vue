@@ -1,0 +1,94 @@
+<script setup lang="ts">
+import { computed } from 'vue';
+import { useI18n } from 'vue-i18n';
+import type { ReportColumn, ReportResult } from 'src/domain/dynamic/report-types';
+import ReportChart from './ReportChart.vue';
+import { columnLabel, formatValue, groupName } from './report-format';
+
+const props = defineProps<{ result: ReportResult; viz: string }>();
+const emit = defineEmits<{ drill: [groupKeys: string[]] }>();
+const { t, locale } = useI18n();
+
+const STATE_KEYS = { empty: 'reports.state.empty', restricted: 'reports.state.restricted', fieldMissing: 'reports.state.fieldMissing',
+  moduleDisabled: 'reports.state.moduleDisabled', tooMany: 'reports.state.tooMany' } as const;
+// restricted 與 fieldMissing 的後端訊息帶了具體原因（例如欄位名稱），優先顯示
+const stateText = computed(() => {
+  const s = props.result.state;
+  if (s === 'ok') return '';
+  const key = STATE_KEYS[s];
+  return (s === 'restricted' || s === 'fieldMissing') && props.result.message ? props.result.message : t(key);
+});
+
+const label = (c: ReportColumn) => columnLabel(c, t('reports.titleField'));
+const groupCols = computed(() => props.result.columns.filter((c) => c.role === 'group'));
+const measureCols = computed(() => props.result.columns.filter((c) => c.role === 'measure'));
+const fieldCols = computed(() => props.result.columns.filter((c) => c.role === 'field'));
+const groups = computed(() => props.result.groups ?? []);
+const hasGroups = computed(() => groups.value.length > 0);
+const hasDetail = computed(() => !!props.result.detailRows?.length);
+const chartViz = computed(() => (['line', 'bar', 'donut'] as const).find((v) => v === props.viz));
+const showChart = computed(() => !!chartViz.value && hasGroups.value && measureCols.value.length > 0);
+// 指標卡，或沒有分組也沒有明細時只剩總計可看
+const showIndicator = computed(() => measureCols.value.length > 0 && (props.viz === 'indicator' || (!hasGroups.value && !hasDetail.value)));
+const showGroupTable = computed(() => hasGroups.value && !showChart.value && !showIndicator.value);
+const fmt = (v: string | number | null | undefined, c: ReportColumn) => formatValue(v, c.valueType, locale.value);
+const range = computed(() => props.result.appliedRange);
+</script>
+
+<template>
+  <div class="column q-gutter-y-sm" data-testid="report-result">
+    <div v-if="result.state !== 'ok' && result.state !== 'empty'" class="text-negative" :data-testid="`state-${result.state}`">
+      {{ stateText }}
+    </div>
+    <template v-else>
+      <div class="text-caption text-grey-8">
+        <span v-if="range" data-testid="applied-range">{{ t('reports.appliedRange', { from: range.from, to: range.to }) }}</span>
+        <span v-if="result.rowMeaning" class="q-ml-sm" data-testid="row-meaning">{{ t('reports.rowMeaning', { text: result.rowMeaning }) }}</span>
+      </div>
+      <div v-if="result.state === 'empty'" data-testid="state-empty">{{ stateText }}</div>
+      <template v-else>
+        <div v-if="showIndicator" class="row q-gutter-md" data-testid="report-indicator">
+          <q-card v-for="m in measureCols" :key="m.key" flat bordered class="q-pa-md">
+            <div class="text-caption">{{ label(m) }}</div>
+            <div class="text-h4">{{ fmt(result.total?.[m.key], m) }}</div>
+          </q-card>
+        </div>
+        <ReportChart
+          v-else-if="showChart" :viz="chartViz!" :groups="groups" :measures="measureCols"
+          @pick="(i: number) => emit('drill', groups[i]!.groupKeys)"
+        />
+        <q-markup-table v-else-if="showGroupTable" flat bordered dense data-testid="report-group-table">
+          <thead>
+            <tr>
+              <th v-for="c in [...groupCols, ...measureCols]" :key="c.key" class="text-left">{{ label(c) }}</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr
+              v-for="(g, i) in groups" :key="i" class="cursor-pointer" :data-testid="`group-row-${i}`"
+              @click="emit('drill', g.groupKeys)"
+            >
+              <td v-for="(c, ci) in groupCols" :key="c.key">{{ g.groupLabels[ci] }}</td>
+              <td v-for="m in measureCols" :key="m.key">{{ fmt(g.values[m.key], m) }}</td>
+            </tr>
+            <tr v-if="result.total" class="text-weight-bold" data-testid="total-row">
+              <td :colspan="Math.max(groupCols.length, 1)">{{ t('reports.total') }}</td>
+              <td v-for="m in measureCols" :key="m.key">{{ fmt(result.total[m.key], m) }}</td>
+            </tr>
+          </tbody>
+        </q-markup-table>
+        <q-markup-table v-if="hasDetail" flat bordered dense data-testid="report-detail-table">
+          <thead>
+            <tr><th v-for="c in fieldCols" :key="c.key" class="text-left">{{ label(c) }}</th></tr>
+          </thead>
+          <tbody>
+            <tr v-for="(row, ri) in result.detailRows" :key="ri">
+              <td v-for="(c, ci) in fieldCols" :key="c.key">{{ fmt(row[ci], c) }}</td>
+            </tr>
+          </tbody>
+        </q-markup-table>
+      </template>
+      <div v-if="result.dedupedNote" class="text-caption text-warning" data-testid="deduped-note">{{ t('reports.dedupedNote') }}</div>
+    </template>
+  </div>
+</template>
