@@ -1,6 +1,8 @@
 using DynamicModules.Application.Dynamic.AccountService.Commands.ChangePassword;
+using DynamicModules.Application.Dynamic.AccountService.Commands.DemoLogin;
 using DynamicModules.Application.Dynamic.AccountService.Commands.Login;
 using DynamicModules.Application.Dynamic.AccountService.Data;
+using DynamicModules.Application.Dynamic.AccountService.Queries.GetAuthOptions;
 using DynamicModules.WebAPI.Security;
 using MediatR;
 using Microsoft.AspNetCore.Mvc;
@@ -13,11 +15,20 @@ public class AuthController(IMediator mediator) : ControllerBase
 {
     public record LoginBody(string? UserId, string? Password);
 
+    public record DemoLoginBody(string? UserId);
+
     public record ChangePasswordBody(string? OldPassword, string? NewPassword);
 
     [HttpPost("login")]
     public async Task<IActionResult> Login(LoginBody body) =>
         await SignInOnSuccess(await mediator.Send(new LoginRequest(body.UserId ?? "", body.Password ?? "")));
+
+    [HttpGet("options")]
+    public async Task<IActionResult> Options() => (await mediator.Send(new GetAuthOptionsRequest())).ToActionResult(this);
+
+    [HttpPost("demo-login")]
+    public async Task<IActionResult> DemoLogin(DemoLoginBody body) =>
+        await SignInOnSuccess(await mediator.Send(new DemoLoginRequest(body.UserId ?? "")));
 
     [HttpPost("logout")]
     public async Task<IActionResult> Logout()

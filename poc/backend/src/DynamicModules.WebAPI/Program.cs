@@ -33,6 +33,7 @@ builder.Services.AddHttpContextAccessor();
 builder.Services.AddPersistence(builder.Configuration);
 builder.Services.AddScoped<ICurrentUser, ClaimsCurrentUser>();
 builder.Services.AddSingleton<IPasswordService, PasswordService>();
+builder.Services.AddSingleton(new AuthSettings(builder.Configuration.GetValue<bool>("Demo:LoginEnabled")));
 // 鎖定判斷用真實時間；IBusinessTime 會被 ActingScope 覆寫，不能用
 builder.Services.AddSingleton(TimeProvider.System);
 builder.Services.AddSingleton<IBusinessTime, TaipeiBusinessTime>();
@@ -85,6 +86,9 @@ await InitializeDatabaseAsync(app, dynamicConnection);
 // Demo 站台（Render）啟動後在背景產生 Demo 資料；結果只記 log，不擋啟動也不擋 /api/health
 if (app.Configuration.GetValue<bool>("Demo:SeedOnStartup"))
     app.Lifetime.ApplicationStarted.Register(() => app.Services.GetRequiredService<IDemoDataRunner>().TryStart(startup: true));
+
+if (app.Services.GetRequiredService<AuthSettings>().DemoLoginEnabled)
+    app.Logger.LogWarning("Demo:LoginEnabled 已開啟：任何人都能不輸入密碼以示範帳號或 admin 登入，只能用在公開的 Demo 站");
 
 if (trustForwardedHeaders) app.UseForwardedHeaders();
 app.UseExceptionHandler();

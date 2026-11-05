@@ -12,3 +12,7 @@ services:
     envVars:
       - key: Demo__SeedOnStartup
         value: "true"
+      - key: Demo__LoginEnabled
+        value: "true"
+      - key: Auth__TrustForwardedHeaders
+        value: "true"
