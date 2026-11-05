@@ -1,6 +1,7 @@
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using DynamicModules.Application;
+using DynamicModules.Application.Common.Acting;
 using DynamicModules.Application.Common.Security;
 using DynamicModules.Application.Common.Time;
 using DynamicModules.Application.Dynamic.TemplateService;
@@ -27,6 +28,8 @@ builder.Services.AddHttpContextAccessor();
 builder.Services.AddPersistence(builder.Configuration);
 builder.Services.AddScoped<ICurrentUser, HeaderCurrentUser>();
 builder.Services.AddSingleton<IBusinessTime, TaipeiBusinessTime>();
+// 須在 ICurrentUser、IBusinessTime 註冊之後：Demo 資料產生器靠它在範圍內切換身分與時間
+builder.Services.AddActingOverrides();
 builder.Services.AddControllers().AddJsonOptions(o =>
 {
     o.JsonSerializerOptions.PropertyNamingPolicy = JsonNamingPolicy.CamelCase;

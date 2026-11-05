@@ -1,5 +1,6 @@
 using DynamicModules.Domain.Entities.Dynamic;
 using DynamicModules.Domain.Data;
+using DynamicModules.Application.Common.Acting;
 using DynamicModules.Application.Common.Time;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
@@ -30,7 +31,8 @@ public class TestApp : WebApplicationFactory<Program>
         builder.ConfigureServices(s =>
         {
             s.RemoveAll<IBusinessTime>();
-            s.AddSingleton<IBusinessTime>(Clock);
+            // RemoveAll 也拿掉了 Program 註冊的 Acting 裝飾器，這裡補回去
+            s.AddSingleton<IBusinessTime>(new ActingBusinessTime(Clock));
         });
     }
 
