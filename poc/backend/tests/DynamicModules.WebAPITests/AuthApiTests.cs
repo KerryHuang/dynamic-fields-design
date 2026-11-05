@@ -2,12 +2,16 @@ using System.Net;
 using System.Net.Http.Json;
 using System.Text.Json;
 using System.Text.RegularExpressions;
+using DynamicModules.Application.Common.Security;
 using DynamicModules.Domain.Data;
+using DynamicModules.WebAPI.Security;
 using DynamicModules.Domain.Entities.Dynamic;
 using FluentAssertions;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.AspNetCore.Hosting;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Logging;
 
 namespace DynamicModules.WebAPITests;
@@ -226,5 +230,128 @@ public class AuthApiTests
         var generated = Regex.Match(warning.Message, @"：(\S+)$").Groups[1].Value;
         generated.Should().HaveLength(16);
         (await PostLogin(app.CreateClient(), "admin", generated)).StatusCode.Should().Be(HttpStatusCode.OK);
+    }
+
+    [Fact]
+    public async Task Login_ParallelWrongPasswords_CannotExceedFiveTries()
+    {
+        using var app = NewApp();
+        AddUser(app, "alice");
+
+        var results = await Task.WhenAll(Enumerable.Range(0, 20)
+            .Select(_ => PostLogin(app.CreateClient(), "alice", "wrong-pass-1")));
+
+        results.Should().OnlyContain(r => r.StatusCode == HttpStatusCode.Unauthorized);
+        (await PostLogin(app.CreateClient(), "alice", UserPassword)).StatusCode.Should().Be(HttpStatusCode.Unauthorized);
+        using var scope = app.Services.CreateScope();
+        var user = await scope.ServiceProvider.GetRequiredService<DynamicDbContext>().Set<AppUser>().AsNoTracking()
+            .SingleAsync(u => u.UserId == "alice");
+        user.FailedLoginCount.Should().Be(5, "鎖定後不再累加，序列化後恰好第 5 次鎖");
+        user.LockedUntil.Should().NotBeNull();
+    }
+
+    [Fact]
+    public async Task Login_AfterLockExpires_OneWrongPasswordDoesNotRelock()
+    {
+        using var app = NewApp();
+        AddUser(app, "alice");
+        for (var i = 0; i < 5; i++) await PostLogin(app.CreateClient(), "alice", "wrong-pass-1");
+        app.Time.Advance(TimeSpan.FromMinutes(15));
+
+        (await PostLogin(app.CreateClient(), "alice", "wrong-pass-1")).StatusCode.Should().Be(HttpStatusCode.Unauthorized);
+
+        (await PostLogin(app.CreateClient(), "alice", UserPassword)).StatusCode.Should().Be(HttpStatusCode.OK);
+    }
+
+    [Fact]
+    public async Task Login_UnusableAccounts_StillRunOneVerify()
+    {
+        using var app = NewApp();
+        AddUser(app, "disabled", active: false);
+        AddUser(app, "locked", lockedUntil: app.Time.GetUtcNow().AddMinutes(10));
+        AddUser(app, "nopass", password: null);
+        var counting = new CountingPasswordService(new PasswordService());
+        using var factory = app.WithWebHostBuilder(b => b.ConfigureServices(s =>
+        {
+            s.RemoveAll<IPasswordService>();
+            s.AddSingleton<IPasswordService>(counting);
+        }));
+
+        foreach (var user in new[] { "ghost", "disabled", "locked", "nopass" })
+        {
+            var before = counting.VerifyCalls;
+            (await PostLogin(factory.CreateClient(), user, UserPassword)).StatusCode.Should().Be(HttpStatusCode.Unauthorized);
+            (counting.VerifyCalls - before).Should().Be(1, user);
+        }
+    }
+
+    [Fact]
+    public async Task Bootstrap_ResetAdminPassword_RestoresLockedOutSoleAdmin()
+    {
+        using var app = NewApp();
+        var oldSession = await LoggedIn(app, "admin", AdminPassword);
+        using (var scope = app.Services.CreateScope())
+            await scope.ServiceProvider.GetRequiredService<DynamicDbContext>().Set<AppUser>()
+                .ExecuteUpdateAsync(s => s.SetProperty(u => u.IsActive, false).SetProperty(u => u.FailedLoginCount, 5)
+                    .SetProperty(u => u.LockedUntil, app.Time.GetUtcNow().AddMinutes(10)));
+        using var restarted = app.WithWebHostBuilder(b => b.UseSetting("Auth:ResetAdminPassword", "reset-pass-99"));
+
+        var res = await PostLogin(restarted.CreateClient(), "admin", "reset-pass-99");
+
+        res.StatusCode.Should().Be(HttpStatusCode.OK);
+        (await Json(res)).GetProperty("mustChangePassword").GetBoolean().Should().BeTrue();
+        (await PostLogin(restarted.CreateClient(), "admin", AdminPassword)).StatusCode.Should().Be(HttpStatusCode.Unauthorized);
+        (await oldSession.GetAsync($"{Base}/me")).StatusCode.Should().Be(HttpStatusCode.Unauthorized);
+        app.Logs.Entries.Should().Contain(e => e.Level == LogLevel.Warning && e.Message.Contains("Auth:ResetAdminPassword")
+            && !e.Message.Contains("reset-pass-99"));
+    }
+
+    [Fact]
+    public void Bootstrap_ResetAdminPassword_TooShort_FailsStartup()
+    {
+        using var app = NewApp();
+        _ = app.Services;
+        using var restarted = app.WithWebHostBuilder(b => b.UseSetting("Auth:ResetAdminPassword", "short"));
+
+        FluentActions.Invoking(() => restarted.CreateClient()).Should().Throw<Exception>()
+            .Where(e => e.ToString().Contains("Auth:ResetAdminPassword"));
+    }
+
+    [Fact]
+    public async Task Swagger_NotExposedOutsideDevelopment()
+    {
+        using var app = NewApp();
+        using var production = app.WithWebHostBuilder(b => b.UseEnvironment("Production"));
+
+        var res = await production.CreateClient().GetAsync("/swagger/v1/swagger.json");
+
+        res.Content.Headers.ContentType?.MediaType.Should().NotBe("application/json");
+        res.StatusCode.Should().NotBe(HttpStatusCode.OK);
+    }
+
+    [Fact]
+    public async Task DoubleSlashPrefix_Anonymous_DoesNotLeakUsers()
+    {
+        using var app = NewApp();
+
+        var res = await app.CreateClient().GetAsync(new Uri("http://localhost//api/v3/dynamic/users"));
+
+        res.StatusCode.Should().NotBe(HttpStatusCode.OK);
+        (await res.Content.ReadAsStringAsync()).Should().NotContain("admin");
+    }
+}
+
+internal sealed class CountingPasswordService(IPasswordService inner) : IPasswordService
+{
+    private int _verifyCalls;
+
+    public int VerifyCalls => _verifyCalls;
+
+    public string Hash(string password) => inner.Hash(password);
+
+    public bool Verify(string hash, string password)
+    {
+        Interlocked.Increment(ref _verifyCalls);
+        return inner.Verify(hash, password);
     }
 }
