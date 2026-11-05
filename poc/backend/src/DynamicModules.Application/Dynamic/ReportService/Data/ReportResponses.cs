@@ -1,3 +1,5 @@
+using System.Text.Json;
+using DynamicModules.Domain.Entities.Dynamic;
 using DynamicModules.Domain.Reports;
 
 namespace DynamicModules.Application.Dynamic.ReportService.Data;
@@ -22,3 +24,37 @@ public record ReportColumn(string Key, string Label, string Role, string ValueTy
 
 /// <summary>實際套用的日期區間（含頭含尾）與它的來源設定。</summary>
 public record ReportAppliedRange(DateOnly From, DateOnly To, string Kind, int? N);
+
+/// <summary>報表清單一筆；SharedGroupIds 對非擁有者也照實回傳。</summary>
+public record ReportItem(long Id, string Name, string OwnerName, bool IsOwner, List<long> SharedGroupIds, string MainModuleKey);
+
+/// <summary>單張報表；Definition 是儲存的定義原樣（被分享者唯讀）。</summary>
+public record ReportDetail(
+    long Id, string Name, string OwnerName, bool IsOwner, List<long> SharedGroupIds, string MainModuleKey, JsonElement Definition);
+
+/// <summary>下鑽結果：同 <see cref="ReportResult"/>，明細最多 <see cref="ReportRules.DrillLimit"/> 列，超過時 Truncated 為 true。</summary>
+public sealed record DrillResult : ReportResult
+{
+    public DrillResult(ReportResult result, bool truncated) : base(result) => Truncated = truncated;
+    public bool Truncated { get; }
+}
+
+public static class ReportMapper
+{
+    public static ReportItem ToItem(this Report r, ReportViewer viewer, IReadOnlyDictionary<string, string> names) =>
+        new(r.Id, r.Name, names.GetValueOrDefault(r.OwnerUserId, r.OwnerUserId), r.OwnerUserId == viewer.UserId,
+            r.Shares.Select(s => s.GroupId).Order().ToList(), MainKeyOf(r));
+
+    public static ReportDetail ToDetail(this Report r, ReportViewer viewer, IReadOnlyDictionary<string, string> names)
+    {
+        var item = r.ToItem(viewer, names);
+        return new(item.Id, item.Name, item.OwnerName, item.IsOwner, item.SharedGroupIds, item.MainModuleKey,
+            JsonSerializer.Deserialize<JsonElement>(r.DefinitionJson));
+    }
+
+    private static string MainKeyOf(Report r)
+    {
+        try { return ReportDefinition.Parse(r.DefinitionJson).MainModuleKey ?? ""; }
+        catch (JsonException) { return ""; }
+    }
+}

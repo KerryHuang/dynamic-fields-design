@@ -35,6 +35,9 @@ public static class DependencyInjection
         services.AddSingleton<Dynamic.ExportService.ExportOptions>();
         services.AddSingleton<Dynamic.ReportService.ReportOptions>();
         services.AddScoped<Dynamic.ReportService.ReportRunner>();
+        services.AddScoped<Dynamic.ReportService.ReportModuleLoader>();
+        services.AddScoped<Dynamic.ReportService.ReportAccess>();
+        services.AddScoped<Dynamic.ReportService.ReportDefinitionValidator>();
         services.AddSingleton(_ => Dynamic.TemplateService.TemplateCatalog.Load(Dynamic.TemplateService.TemplateCatalog.DefaultDirectory));
         services.AddScoped<Dynamic.TemplateService.ITemplateSource, Dynamic.TemplateService.TemplateSource>();
         services.AddScoped<Dynamic.TemplateService.TemplateInstantiator>();

@@ -8,6 +8,8 @@ public interface IReportRepository
     Task<Report?> GetAsync(long id, CancellationToken ct);
     /// <summary>該使用者擁有，或分享給 groupIds 任一群組的報表（含 Shares，依 Id、不追蹤）。</summary>
     Task<List<Report>> ListVisibleAsync(string userId, IReadOnlyCollection<long> groupIds, CancellationToken ct);
+    /// <summary>所有至少分享給一個群組的報表（含 Shares，依 Id、不追蹤），系統管理員用。</summary>
+    Task<List<Report>> ListSharedAsync(CancellationToken ct);
     void Add(Report report);
     void Remove(Report report);
 }
