@@ -25,6 +25,8 @@ export interface FieldConfig {
   showInList: boolean;
   isFilterable: boolean;
   isSortable: boolean;
+  /** 表單上佔滿整列；未設定時依型別預設（textarea 佔滿）。 */
+  fullWidth?: boolean;
   /** reference: the target is fixed at creation. */
   refTarget?: { kind: 'module' | 'entity'; key: string };
   onDelete?: 'restrict' | 'setNull' | 'cascade';
@@ -71,6 +73,8 @@ export interface SchemaBlock {
   id: number;
   label: I18nText;
   collapsed: boolean;
+  /** 表單每列欄數 1 到 3。 */
+  columns: number;
   fields: SchemaField[];
 }
 
@@ -269,6 +273,7 @@ export interface DesignerBlock {
   label: I18nText;
   sequence: number;
   collapsed: boolean;
+  columns: number;
   fields: DesignerField[];
 }
 

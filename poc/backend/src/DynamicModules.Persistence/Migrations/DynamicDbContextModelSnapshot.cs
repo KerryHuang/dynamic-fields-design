@@ -47,6 +47,11 @@ namespace DynamicModules.Persistence.Migrations
                     b.Property<bool>("Collapsed")
                         .HasColumnType("INTEGER");
 
+                    b.Property<int>("Columns")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("INTEGER")
+                        .HasDefaultValue(2);
+
                     b.Property<DateTime>("CreatedTime")
                         .HasColumnType("TEXT");
 

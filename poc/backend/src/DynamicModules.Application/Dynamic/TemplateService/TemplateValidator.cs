@@ -76,6 +76,7 @@ public static partial class TemplateValidator
             if (!Code().IsMatch(b.Code ?? "")) errors.Add($"{mc}: 區塊代號 {b.Code} 格式錯誤");
             else if (!blockCodes.Add(b.Code!)) errors.Add($"{mc}: 區塊代號重複 {b.Code}");
             if (!HasZhTw(b.Label)) errors.Add($"{mc}: 區塊 {b.Code} 的名稱必須有繁體中文");
+            if (b.Columns is < 1 or > 3) errors.Add($"{mc}: 區塊 {b.Code} 的每列欄數必須是 1 到 3");
 
             foreach (var f in b.Fields)
             {

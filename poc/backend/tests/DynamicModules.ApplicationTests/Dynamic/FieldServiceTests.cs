@@ -443,6 +443,40 @@ public class FieldServiceTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task AddBlock_DefaultsToTwoColumns()
+    {
+        var m = await CreateModule();
+
+        var block = (BlockResponse)(await Send(new AddBlockRequest(m.Key, Text("明細")))).Data!;
+
+        block.Columns.Should().Be(2);
+        (await Detail()).Blocks.Should().AllSatisfy(b => b.Columns.Should().Be(2));
+    }
+
+    [Fact]
+    public async Task UpdateBlock_Columns_SavesAndNullKeepsValue()
+    {
+        var m = await CreateModule();
+        var blockId = m.Blocks[0].Id;
+
+        (await Send(new UpdateBlockRequest(blockId, Text("基本"), false, 3))).IsSuccess.Should().BeTrue();
+        (await Detail()).Blocks[0].Columns.Should().Be(3);
+
+        (await Send(new UpdateBlockRequest(blockId, Text("基本二"), false))).IsSuccess.Should().BeTrue();
+        (await Detail()).Blocks[0].Columns.Should().Be(3);
+    }
+
+    [Fact]
+    public async Task UpdateBlock_ColumnsOutOfRange_ReturnsValidationError()
+    {
+        var m = await CreateModule();
+
+        var r = await Send(new UpdateBlockRequest(m.Blocks[0].Id, Text("基本"), false, 4));
+
+        r.Errors["Columns"].Should().Contain("每列欄數必須是 1 到 3");
+    }
+
+    [Fact]
     public async Task ReorderFields_MismatchedIds_ReturnsValidationError()
     {
         var m = await CreateModule();

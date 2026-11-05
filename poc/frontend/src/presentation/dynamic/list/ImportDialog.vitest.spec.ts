@@ -13,7 +13,7 @@ const api = vi.mocked(dynamicApi);
 
 const schema = {
   key: 'm', name: { 'zh-TW': '模組' },
-  blocks: [{ id: 1, label: { 'zh-TW': '區' }, collapsed: false, fields: [
+  blocks: [{ id: 1, label: { 'zh-TW': '區' }, collapsed: false, columns: 2, fields: [
     { id: 1, key: 'f_1', type: 'text', label: { 'zh-TW': '標題' }, options: [], config: {} },
     { id: 2, key: 'f_2', type: 'integer', label: { 'zh-TW': '數量' }, options: [], config: {} },
   ] }],

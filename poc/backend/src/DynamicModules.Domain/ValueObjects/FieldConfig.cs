@@ -18,6 +18,9 @@ public record FieldConfig
     /// <summary>明細模組的欄位：新增列沒提供值時，帶表頭這個欄位（Field.Id）這次存檔後的值。</summary>
     public long? ParentDefaultFieldId { get; init; }
 
+    /// <summary>表單上佔滿整列；null 依型別預設（textarea 佔滿，其他不佔滿）。</summary>
+    public bool? FullWidth { get; init; }
+
     public bool ShowInList { get; init; }
     public bool IsFilterable { get; init; }
     public bool IsSortable { get; init; }

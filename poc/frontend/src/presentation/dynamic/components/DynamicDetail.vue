@@ -4,6 +4,7 @@ import { useI18n } from 'vue-i18n';
 import { resolveI18n } from 'src/domain/dynamic/i18n-text';
 import type { DynamicRecord, ModuleSchema, SchemaField } from 'src/domain/dynamic/types';
 import { fieldTypeRegistry } from 'src/presentation/dynamic/field-type-registry';
+import { fieldColClass, isFullWidth } from 'src/presentation/dynamic/form-layout';
 import { referenceView } from 'src/presentation/dynamic/reference-display';
 import { ruleStateOf } from 'src/presentation/dynamic/rule-state';
 
@@ -23,8 +24,8 @@ const visibleBlocks = computed(() => props.schema.blocks
     <q-card v-for="block in visibleBlocks" :key="block.id" flat bordered>
       <q-card-section class="text-subtitle1">{{ resolveI18n(block.label, locale) }}</q-card-section>
       <q-separator />
-      <q-list>
-        <q-item v-for="f in block.fields" :key="f.key">
+      <q-list class="row">
+        <q-item v-for="f in block.fields" :key="f.key" :class="fieldColClass(block.columns, isFullWidth(f))">
           <q-item-section side class="text-grey-8" style="min-width: 10rem">{{ resolveI18n(f.label, locale) }}</q-item-section>
           <q-item-section :data-testid="f.key">
             <template v-if="refOf(f)">

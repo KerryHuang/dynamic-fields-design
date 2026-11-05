@@ -13,7 +13,7 @@ const field = (id: number, label: string, sortable = true): SchemaField => ({
 });
 const schema: ModuleSchema = {
   key: 'm', programCode: 'DYN_M', name: { 'zh-TW': '模組' }, titleFieldKey: 'f_1', version: 1, rules: [], permissions: { read: true, add: true, edit: true, delete: true, printExport: true, pricing: true },
-  blocks: [{ id: 1, label: { 'zh-TW': '區塊' }, collapsed: false, fields: [field(1, 'A'), field(2, 'B'), field(3, 'C'), field(4, 'D'), field(5, 'E', false)] }],
+  blocks: [{ id: 1, label: { 'zh-TW': '區塊' }, collapsed: false, columns: 2, fields: [field(1, 'A'), field(2, 'B'), field(3, 'C'), field(4, 'D'), field(5, 'E', false)] }],
 };
 
 function mountEditor(modelValue: ViewSort[]) {

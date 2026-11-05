@@ -20,7 +20,7 @@ const fld = (id: number, label: string): DesignerField => ({
 });
 const mod: ModuleDetail = {
   id: 1, key: 'a', programCode: 'DYN_A', name: { 'zh-TW': 'A' }, status: 'Active', version: 1,
-  blocks: [{ id: 1, label: { 'zh-TW': '區塊' }, sequence: 1, collapsed: false, fields: [fld(1, '數量'), fld(2, '上限')] }],
+  blocks: [{ id: 1, label: { 'zh-TW': '區塊' }, sequence: 1, collapsed: false, columns: 2, fields: [fld(1, '數量'), fld(2, '上限')] }],
 };
 const rules: Rule[] = [
   { id: 1, kind: 'required', condition: { all: [{ field: 1, op: 'gt', value: 5 }] }, targets: ['field:2'], optionIds: [], active: true },

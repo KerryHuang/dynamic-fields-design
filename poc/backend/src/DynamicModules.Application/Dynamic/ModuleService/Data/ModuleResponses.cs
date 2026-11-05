@@ -13,7 +13,7 @@ public record ModuleDetailResponse(
     long? TitleFieldId, string Status, int Version, List<BlockResponse> Blocks,
     ModuleKind Kind, string? HostEntityKey, string? DetailOf = null);
 
-public record BlockResponse(long Id, I18nText Label, int Sequence, bool Collapsed, List<FieldResponse> Fields);
+public record BlockResponse(long Id, I18nText Label, int Sequence, bool Collapsed, int Columns, List<FieldResponse> Fields);
 
 public record FieldResponse(
     long Id, string Key, FieldType Type, I18nText Label, FieldConfig Config, long BlockId,
@@ -35,7 +35,7 @@ public static class ModuleMapper
             ModuleRelations.ParentKeyOf(m));
 
     public static BlockResponse ToResponse(this Block b) =>
-        new(b.Id, b.LabelI18n, b.Sequence, b.Collapsed,
+        new(b.Id, b.LabelI18n, b.Sequence, b.Collapsed, b.Columns,
             b.Fields.OrderBy(f => f.Sequence).ThenBy(f => f.Id).Select(ToResponse).ToList());
 
     public static FieldResponse ToResponse(this Field f) =>

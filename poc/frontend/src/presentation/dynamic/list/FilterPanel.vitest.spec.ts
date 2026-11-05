@@ -16,7 +16,7 @@ const field = (id: number, type: SchemaField['type'], label: string, filterable 
 const schema: ModuleSchema = {
   key: 'm', programCode: 'DYN_M', name: { 'zh-TW': '模組' }, titleFieldKey: 'f_1', version: 1, rules: [], permissions: { read: true, add: true, edit: true, delete: true, printExport: true, pricing: true },
   blocks: [{
-    id: 1, label: { 'zh-TW': '區塊' }, collapsed: false,
+    id: 1, label: { 'zh-TW': '區塊' }, collapsed: false, columns: 2,
     fields: [field(1, 'text', '名稱'), field(2, 'decimal', '金額'), field(3, 'text', '備註', false), field(4, 'autonumber', '編號')],
   }],
 };
@@ -103,7 +103,7 @@ describe('FilterPanel', () => {
   it('multienum isEmpty uses the plain operator label', () => {
     const multi: ModuleSchema = {
       ...schema,
-      blocks: [{ id: 1, label: { 'zh-TW': '區塊' }, collapsed: false, fields: [field(4, 'multienum', '標籤')] }],
+      blocks: [{ id: 1, label: { 'zh-TW': '區塊' }, collapsed: false, columns: 2, fields: [field(4, 'multienum', '標籤')] }],
     };
     const i18n = createI18n({ legacy: false, locale: 'zh-TW', messages: { 'zh-TW': zhTW } });
     const w = mount(FilterPanel, {

@@ -49,7 +49,7 @@ public class ModuleSchemaBuilder(IModuleRepository modules, FieldTypeRegistry re
         var references = await ReferencesOfAsync(module, p, ct);
         var blocks = module.Blocks
             .OrderBy(b => b.Sequence).ThenBy(b => b.Id)
-            .Select(b => new SchemaBlock(b.Id, b.LabelI18n, b.Collapsed,
+            .Select(b => new SchemaBlock(b.Id, b.LabelI18n, b.Collapsed, b.Columns,
                 b.Fields.Where(f => f.Status == FieldStatus.Active && f.Id != excludeFieldId && p.CanSee(f))
                     .OrderBy(f => f.Sequence).ThenBy(f => f.Id)
                     .Select(f => ToSchemaField(f, p, references.GetValueOrDefault(f.Id))).ToList()))

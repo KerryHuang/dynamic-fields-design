@@ -80,8 +80,8 @@ public sealed class TemplateInstantiator(
                     if ((failed = Fail(added, m.Code, $"{m.Code}.")) is not null) return failed;
                     map.Blocks[$"{m.Code}.{b.Code}"] = ((BlockResponse)added.Data!).Id;
                 }
-                if (i > 0 && !b.Collapsed) continue;
-                var r = await sender.Send(new UpdateBlockRequest(map.Blocks[$"{m.Code}.{b.Code}"], b.Label, b.Collapsed), ct);
+                if (i > 0 && !b.Collapsed && b.Columns == 2) continue;
+                var r = await sender.Send(new UpdateBlockRequest(map.Blocks[$"{m.Code}.{b.Code}"], b.Label, b.Collapsed, b.Columns), ct);
                 if ((failed = Fail(r, m.Code, $"{m.Code}.")) is not null) return failed;
             }
 

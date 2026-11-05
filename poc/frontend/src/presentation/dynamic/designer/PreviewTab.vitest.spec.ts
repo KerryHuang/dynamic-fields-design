@@ -18,7 +18,7 @@ const text = (l: string) => ({ 'zh-TW': l });
 const schema = (label: string): ModuleSchema => ({
   key: 'm', programCode: 'DYN_M', name: text('模組'), titleFieldKey: 'f_1', version: 1, rules: [],
   permissions: { read: true, add: true, edit: true, delete: true, printExport: true, pricing: true },
-  blocks: [{ id: 1, label: text('區'), collapsed: false, fields: [{
+  blocks: [{ id: 1, label: text('區'), collapsed: false, columns: 2, fields: [{
     id: 1, key: 'f_1', type: 'text' as const, label: text(label), options: [],
     config: { required: false, readOnly: false, showInList: true, isFilterable: true, isSortable: true },
   }] }],

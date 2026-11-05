@@ -100,7 +100,7 @@ export const dynamicApi = {
   deactivateModule: (key: string) => http.post<void>(`/modules/${key}/deactivate`).then(data),
 
   addBlock: (key: string, label: I18nText) => http.post(`/modules/${key}/blocks`, { label }).then(data),
-  updateBlock: (id: number, body: { label: I18nText; collapsed: boolean }) => http.put(`/blocks/${id}`, body).then(data),
+  updateBlock: (id: number, body: { label: I18nText; collapsed: boolean; columns: number }) => http.put(`/blocks/${id}`, body).then(data),
   addField: (key: string, body: { blockId: number; type: FieldType; label: I18nText; config: FieldConfig }) =>
     http.post<DesignerField>(`/modules/${key}/fields`, body).then(data),
   updateField: (id: number, body: { type: FieldType; label: I18nText; config: FieldConfig; blockId: number }) =>

@@ -7,6 +7,7 @@ import { resolveI18n } from 'src/domain/dynamic/i18n-text';
 import type { DetailRowPayload, DynamicRecord, ModuleSchema, ReferenceInfo, SchemaField } from 'src/domain/dynamic/types';
 import { buildZodSchema } from 'src/presentation/dynamic/build-zod-schema';
 import DetailGrid from 'src/presentation/dynamic/details/DetailGrid.vue';
+import { fieldColClass, isFullWidth } from 'src/presentation/dynamic/form-layout';
 import { buildDetailPayload, rowErrors, toRowStates, validateRows, type DetailRowState } from 'src/presentation/dynamic/details/detail-rows';
 import { defaultValueOf } from 'src/presentation/dynamic/field-type-registry';
 import { isWritable, ruleStateOf } from 'src/presentation/dynamic/rule-state';
@@ -159,14 +160,18 @@ watch(() => props.record, () => {
       v-for="block in visibleBlocks" :key="block.id" :default-opened="!block.collapsed"
       :label="resolveI18n(block.label, locale)" header-class="text-subtitle1" bordered expand-separator
     >
-      <div class="q-pa-md q-gutter-y-md">
-        <template v-for="f in block.fields" :key="f.key">
-          <DynamicField
-            v-if="!hiddenField(f)" :field="f" :readonly="!isWritable(f, ruleState)"
-            :required="ruleState.required.has(f.id) && isWritable(f, ruleState)" :allowed-options="ruleState.allowedOptions.get(f.id)"
-            :reference="(record?.references ?? references)?.[f.key]"
-          />
-        </template>
+      <div class="q-pa-md">
+        <div class="row q-col-gutter-md">
+          <template v-for="f in block.fields" :key="f.key">
+            <div v-if="!hiddenField(f)" :class="fieldColClass(block.columns, isFullWidth(f))">
+              <DynamicField
+                :field="f" :readonly="!isWritable(f, ruleState)"
+                :required="ruleState.required.has(f.id) && isWritable(f, ruleState)" :allowed-options="ruleState.allowedOptions.get(f.id)"
+                :reference="(record?.references ?? references)?.[f.key]"
+              />
+            </div>
+          </template>
+        </div>
       </div>
     </q-expansion-item>
     <DetailGrid

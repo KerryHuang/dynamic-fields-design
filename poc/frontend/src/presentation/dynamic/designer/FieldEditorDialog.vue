@@ -9,6 +9,7 @@ import { resolveI18n } from 'src/domain/dynamic/i18n-text';
 import { supportsFilter, supportsSort } from 'src/domain/dynamic/field-capabilities';
 import type { ConditionNode, DesignerField, FieldConfig, FieldType, I18nText, SchemaField } from 'src/domain/dynamic/types';
 import ConditionEditor from 'src/presentation/dynamic/list/ConditionEditor.vue';
+import { isFullWidth } from 'src/presentation/dynamic/form-layout';
 import { fieldTypeRegistry } from 'src/presentation/dynamic/field-type-registry';
 import { dynamicApi } from 'src/services/api/dynamic-api';
 import type { ApiError } from 'src/services/api/http';
@@ -37,6 +38,7 @@ const form = reactive({
   required: false,
   readOnly: false,
   showInList: false,
+  fullWidth: false,
   isFilterable: false,
   isSortable: false,
   maxLength: null as number | string | null,
@@ -85,6 +87,7 @@ watch(() => [props.modelValue, props.field?.id] as const, ([open]) => {
     required: f?.config.required ?? false,
     readOnly: f?.config.readOnly ?? false,
     showInList: f?.config.showInList ?? false,
+    fullWidth: f ? isFullWidth(f) : false,
     isFilterable: f?.config.isFilterable ?? false,
     isSortable: f?.config.isSortable ?? false,
     maxLength: f?.config.maxLength ?? null,
@@ -109,7 +112,8 @@ watch(() => [props.modelValue, props.field?.id] as const, ([open]) => {
 // A different type invalidates the type-specific settings.
 watch(() => form.type, () => {
   if (isEdit.value) return;
-  Object.assign(form, { isFilterable: false, isSortable: false, maxLength: null, scale: null, formula: '', resultType: 'number', format: '', defaultValue: null, defaultToday: false, parentDefault: null, refKind: 'module', refKey: null, onDelete: 'restrict',
+  // 新建多行文字預設佔滿整列
+  Object.assign(form, { fullWidth: form.type === 'textarea', isFilterable: false, isSortable: false, maxLength: null, scale: null, formula: '', resultType: 'number', format: '', defaultValue: null, defaultToday: false, parentDefault: null, refKind: 'module', refKey: null, onDelete: 'restrict',
     relation: 'lookup', scopeParent: false, rollupSource: null, rollupFunction: 'sum', rollupAggregate: null, rollupCondition: undefined });
 });
 watch(() => form.refKind, () => { if (!isEdit.value) { form.refKey = null; form.relation = 'lookup'; } });
@@ -249,6 +253,7 @@ function buildConfig(): FieldConfig {
     required: isDetailRef.value || (!isComputed.value && form.required),
     readOnly: !isComputed.value && form.readOnly,
     showInList: form.showInList,
+    fullWidth: form.fullWidth,
     isFilterable: canFilter.value && form.isFilterable,
     isSortable: canSort.value && form.isSortable,
     ...(hasMaxLength.value && num(form.maxLength) !== undefined ? { maxLength: num(form.maxLength) } : {}),
@@ -324,6 +329,7 @@ const saving = computed(() => create.isPending.value || update.isPending.value);
           />
           <q-toggle v-if="!isComputed" v-model="form.readOnly" data-testid="readonly-toggle" :label="t('designer.readOnly')" />
           <q-toggle v-model="form.showInList" :label="t('designer.showInList')" />
+          <q-toggle v-model="form.fullWidth" data-testid="fullwidth-toggle" :label="t('designer.fullWidth')" />
         </div>
         <div class="row q-gutter-md">
           <div>

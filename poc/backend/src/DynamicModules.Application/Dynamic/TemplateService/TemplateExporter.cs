@@ -32,7 +32,7 @@ public sealed partial class TemplateExporter(IModuleRepository modules, IPermiss
             var blocks = Blocks(m).Select(b => new TemplateBlock($"b_{b.Id}", b.LabelI18n, b.Collapsed,
                 ActiveFields(b).Where(f => ctx.Exported.Contains(f.Id))
                     .Select(f => new TemplateField(f.Key, f.Type, f.LabelI18n, ctx.Config(f), ActiveOptions(f)
-                        .Select(o => new TemplateOption($"o_{o.Id}", o.LabelI18n, o.Color)).ToList())).ToList())).ToList();
+                        .Select(o => new TemplateOption($"o_{o.Id}", o.LabelI18n, o.Color)).ToList())).ToList(), b.Columns)).ToList();
             var rules = m.Rules.OrderBy(r => r.Sequence).Select((r, i) => ctx.Rule(m, r, i)).OfType<TemplateRule>().ToList();
             var shared = (await views.ListByScopeAsync(m.Id, null, ct)).OrderBy(v => v.Id).Select(ctx.View).ToList();
             var title = m.TitleFieldId is { } t && ctx.Exported.Contains(t) ? ctx.Fields[t].Key : null;

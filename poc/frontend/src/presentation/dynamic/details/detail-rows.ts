@@ -90,7 +90,7 @@ function asSchema(detail: SchemaDetail): ModuleSchema {
   return {
     key: detail.moduleKey, programCode: '', name: detail.name, titleFieldKey: detail.titleFieldKey, version: 0,
     permissions: { read: true, add: true, edit: true, delete: true, printExport: true, pricing: true },
-    blocks: [{ id: 0, label: {}, collapsed: false, fields: detail.fields }], rules: detail.rules,
+    blocks: [{ id: 0, label: {}, collapsed: false, columns: 1, fields: detail.fields }], rules: detail.rules,
   };
 }
 

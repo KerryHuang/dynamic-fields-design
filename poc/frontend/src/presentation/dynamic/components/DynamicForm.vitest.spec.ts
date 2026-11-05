@@ -16,8 +16,8 @@ const field = (id: number, type: SchemaField['type'], label: string, required = 
 const schema: ModuleSchema = {
   key: 'm', programCode: 'DYN_M', name: { 'zh-TW': '模組' }, titleFieldKey: 'f_1', version: 1, rules: [], permissions: { read: true, add: true, edit: true, delete: true, printExport: true, pricing: true },
   blocks: [
-    { id: 1, label: { 'zh-TW': '基本資料' }, collapsed: false, fields: [field(1, 'text', '名稱', true), field(2, 'decimal', '金額')] },
-    { id: 2, label: { 'zh-TW': '備註區' }, collapsed: true, fields: [field(3, 'text', '備註')] },
+    { id: 1, label: { 'zh-TW': '基本資料' }, collapsed: false, columns: 2, fields: [field(1, 'text', '名稱', true), field(2, 'decimal', '金額')] },
+    { id: 2, label: { 'zh-TW': '備註區' }, collapsed: true, columns: 2, fields: [field(3, 'text', '備註')] },
   ],
 };
 
@@ -56,6 +56,16 @@ describe('DynamicForm', () => {
     expect(items[1]!.classes()).toContain('q-expansion-item--collapsed');
   });
 
+  it('lays fields out by the block columns; textarea takes the whole row', () => {
+    const s: ModuleSchema = { ...schema, blocks: [{ id: 1, label: { 'zh-TW': 'b' }, collapsed: false, columns: 3,
+      fields: [field(1, 'text', '名稱'), field(2, 'textarea', '說明'), field(3, 'decimal', '金額')] }] };
+    const w = mountForm({ schema: s });
+    const cells = w.findAll('.row.q-col-gutter-md > div');
+    expect(cells.map((c) => c.classes().filter((x) => x.startsWith('col')).join(' '))).toEqual([
+      'col-12 col-sm-6 col-md-4', 'col-12', 'col-12 col-sm-6 col-md-4',
+    ]);
+  });
+
   it('submits only changed values in edit mode', async () => {
     const w = mountForm({ mode: 'edit', record });
     await flushPromises();
@@ -81,7 +91,7 @@ describe('DynamicForm', () => {
     const multi: SchemaField = {
       ...field(5, 'multienum', '標籤'), options: [opt(1, false), opt(2, true)], config: { required: false, readOnly: false, showInList: false, isFilterable: false, isSortable: false, defaultValue: ['opt_1', 'opt_2'] },
     };
-    const s: ModuleSchema = { ...schema, blocks: [{ id: 1, label: { 'zh-TW': 'b' }, collapsed: false, fields: [field(1, 'text', '名稱', true), en, multi] }] };
+    const s: ModuleSchema = { ...schema, blocks: [{ id: 1, label: { 'zh-TW': 'b' }, collapsed: false, columns: 2, fields: [field(1, 'text', '名稱', true), en, multi] }] };
     const w = mountForm({ schema: s });
     await flushPromises();
     await w.findAll('input')[0]!.setValue('abc');
@@ -99,7 +109,7 @@ describe('DynamicForm', () => {
     });
     const rulesSchema = (rules: SchemaRule[], extra: SchemaField[] = [field(2, 'text', '甲')]): ModuleSchema => ({
       ...schema, rules,
-      blocks: [{ id: 1, label: { 'zh-TW': '區' }, collapsed: false, fields: [field(1, 'text', '名稱'), ...extra] }],
+      blocks: [{ id: 1, label: { 'zh-TW': '區' }, collapsed: false, columns: 2, fields: [field(1, 'text', '名稱'), ...extra] }],
     });
     const submit = async (w: ReturnType<typeof mountForm>) => {
       await w.find('form').trigger('submit');
@@ -118,7 +128,7 @@ describe('DynamicForm', () => {
 
     it('hides a block whose fields are all hidden', async () => {
       const s = rulesSchema([rule({ kind: 'visibility', targets: ['block:2'] })]);
-      s.blocks.push({ id: 2, label: { 'zh-TW': '第二區' }, collapsed: false, fields: [field(3, 'text', '丙')] });
+      s.blocks.push({ id: 2, label: { 'zh-TW': '第二區' }, collapsed: false, columns: 2, fields: [field(3, 'text', '丙')] });
       const w = mountForm({ schema: s });
       await flushPromises();
       expect(w.text()).not.toContain('第二區');

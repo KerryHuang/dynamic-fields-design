@@ -25,7 +25,7 @@ const field = (id: number, label: string, readOnly = false): SchemaField => ({
 const all: SchemaPermissions = { read: true, add: true, edit: true, delete: true, printExport: true, pricing: true };
 const schema = (permissions: SchemaPermissions, fields: SchemaField[] = [field(1, '標題'), field(2, '甲')]): ModuleSchema => ({
   key: 'm', programCode: 'DYN_M', name: { 'zh-TW': '模組' }, titleFieldKey: 'f_1', version: 1, rules: [], permissions,
-  blocks: [{ id: 1, label: { 'zh-TW': '區' }, collapsed: false, fields }],
+  blocks: [{ id: 1, label: { 'zh-TW': '區' }, collapsed: false, columns: 2, fields }],
 });
 const record = { id: 5, moduleKey: 'm', title: 'r', values: { f_1: 'r', f_2: 'x' }, ownerUserId: 'a', createdUserId: 'a', createdTime: '', modifiedUserId: 'a', modifiedTime: '', rowVersion: 'v', references: {}, hostKey: null };
 

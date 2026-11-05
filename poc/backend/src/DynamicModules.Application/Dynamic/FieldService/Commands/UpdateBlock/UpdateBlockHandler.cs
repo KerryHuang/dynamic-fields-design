@@ -19,6 +19,7 @@ public class UpdateBlockHandler(IModuleRepository modules, IUnitOfWork uow, ICur
         var block = module.Blocks.Single(b => b.Id == request.BlockId);
         block.LabelI18n = request.Label;
         block.Collapsed = request.Collapsed;
+        if (request.Columns is { } columns) block.Columns = columns;
         block.StampModified(user.UserId, now);
         module.TouchVersion(user.UserId, now);
         await uow.CommitAsync(ct);

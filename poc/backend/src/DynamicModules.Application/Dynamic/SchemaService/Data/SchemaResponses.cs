@@ -26,7 +26,7 @@ public record SchemaDetail(
     string ModuleKey, I18nText Name, long ParentFieldId, string ParentFieldKey, string? TitleFieldKey,
     List<SchemaField> Fields, List<SchemaRule> Rules);
 
-public record SchemaBlock(long Id, I18nText Label, bool Collapsed, List<SchemaField> Fields);
+public record SchemaBlock(long Id, I18nText Label, bool Collapsed, int Columns, List<SchemaField> Fields);
 
 public record SchemaField(
     long Id, string Key, FieldType Type, I18nText Label, FieldConfig Config, List<SchemaOption> Options,

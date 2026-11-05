@@ -11,6 +11,7 @@ public class BlockConfiguration : IEntityTypeConfiguration<Block>
         b.ToTable("Dynamic_Block");
         b.HasKey(x => x.Id);
         b.Property(x => x.LabelI18n).HasJsonConversion();
+        b.Property(x => x.Columns).HasDefaultValue(2);
         b.ConfigureAudit();
         b.HasMany(x => x.Fields).WithOne().HasForeignKey(x => x.BlockId).OnDelete(DeleteBehavior.Cascade);
     }

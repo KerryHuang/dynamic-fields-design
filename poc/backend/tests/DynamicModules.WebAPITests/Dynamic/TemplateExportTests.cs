@@ -188,10 +188,12 @@ public sealed partial class TemplateExportTests : IDisposable
             type = "enum", label = Zh("狀態"), config = new { isFilterable = true, defaultValue = $"opt_{draft}" }, blockId = orderBlock
         }));
         var rate = await AddField(Order, orderBlock, "percent", "稅率", new { defaultValue = 5 });
+        await AddField(Order, orderBlock, "textarea", "說明", new { fullWidth = false });
+        await AddField(Order, orderBlock, "text", "地址", new { fullWidth = true });
         var blockRes = await _admin.PostAsJsonAsync($"{Base}/modules/{Order}/blocks", new { label = Zh("金額") });
         blockRes.StatusCode.Should().Be(HttpStatusCode.Created);
         var amountBlock = (await JsonOf(blockRes)).GetProperty("id").GetInt64();
-        await Ok(_admin.PutAsJsonAsync($"{Base}/blocks/{amountBlock}", new { label = Zh("金額"), collapsed = true }));
+        await Ok(_admin.PutAsJsonAsync($"{Base}/blocks/{amountBlock}", new { label = Zh("金額"), collapsed = true, columns = 3 }));
 
         var (lineBlock, _) = await NewModule(Line, "訂單明細", "品名");
         var parentRef = await AddField(Line, lineBlock, "reference", "訂單",
@@ -254,6 +256,9 @@ public sealed partial class TemplateExportTests : IDisposable
         var order = first.Modules[0];
         order.Blocks.Should().HaveCount(2);
         order.Blocks[1].Collapsed.Should().BeTrue();
+        (order.Blocks[0].Columns, order.Blocks[1].Columns).Should().Be((2, 3));
+        Field(order, "說明").Config.GetProperty("fullWidth").GetBoolean().Should().BeFalse();
+        Field(order, "地址").Config.GetProperty("fullWidth").GetBoolean().Should().BeTrue();
         order.Rules.Should().HaveCount(4);
         order.Rules[2].Active.Should().BeFalse();
         order.Rules[2].Targets.Should().Equal($"block:{order.Blocks[1].Code}");

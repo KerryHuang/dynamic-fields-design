@@ -23,7 +23,7 @@ public class ModulesController(IMediator mediator) : ControllerBase
         ModuleKind Kind = ModuleKind.Standalone, string? HostEntityKey = null);
     public record UpdateModuleBody(I18nText Name, string? Icon, string? Section, long? TitleFieldId);
     public record AddBlockBody(I18nText Label);
-    public record UpdateBlockBody(I18nText Label, bool Collapsed);
+    public record UpdateBlockBody(I18nText Label, bool Collapsed, int? Columns);
     public record AddFieldBody(long BlockId, FieldType Type, I18nText Label, FieldConfig Config);
 
     [HttpGet("modules")]
@@ -61,7 +61,7 @@ public class ModulesController(IMediator mediator) : ControllerBase
 
     [HttpPut("blocks/{id:long}")]
     public async Task<IActionResult> UpdateBlock(long id, UpdateBlockBody body) =>
-        (await mediator.Send(new UpdateBlockRequest(id, body.Label, body.Collapsed))).ToActionResult(this);
+        (await mediator.Send(new UpdateBlockRequest(id, body.Label, body.Collapsed, body.Columns))).ToActionResult(this);
 
     [HttpPost("modules/{key}/fields")]
     public async Task<IActionResult> AddField(string key, AddFieldBody body) =>

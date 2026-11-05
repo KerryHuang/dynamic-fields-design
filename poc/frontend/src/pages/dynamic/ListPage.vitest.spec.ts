@@ -30,7 +30,7 @@ const field = (id: number, label: string, o: { sortable?: boolean; showInList?: 
 });
 const schema: ModuleSchema = {
   key: 'm', programCode: 'DYN_M', name: { 'zh-TW': '模組' }, titleFieldKey: 'f_1', version: 1, rules: [], permissions: { read: true, add: true, edit: true, delete: true, printExport: true, pricing: true },
-  blocks: [{ id: 1, label: { 'zh-TW': '區' }, collapsed: false, fields: [field(1, '標題'), field(2, '甲'), field(3, '乙')] }],
+  blocks: [{ id: 1, label: { 'zh-TW': '區' }, collapsed: false, columns: 2, fields: [field(1, '標題'), field(2, '甲'), field(3, '乙')] }],
 };
 const view = (p: Partial<ListView>): ListView => ({
   id: 9, name: { 'zh-TW': '我的檢視' }, shared: false, isOwner: true, columns: [2], sort: [], isDefault: false, staleFieldIds: [], ...p,
@@ -224,7 +224,7 @@ describe('ListPage', () => {
       ...field(4, '客戶'), type: 'reference',
       reference: { kind: 'module', key: 'cust', name: { 'zh-TW': 'x' }, lightUrl: '/x' },
     };
-    schemaPatch = { blocks: [{ id: 1, label: { 'zh-TW': '區' }, collapsed: false, fields: [field(1, '標題'), refField] }] };
+    schemaPatch = { blocks: [{ id: 1, label: { 'zh-TW': '區' }, collapsed: false, columns: 2, fields: [field(1, '標題'), refField] }] };
     const w = await mountPage([view({ isDefault: true, columns: [4] })]);
     api.getPagedRecords.mockResolvedValue({
       items: [

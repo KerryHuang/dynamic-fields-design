@@ -10,7 +10,7 @@ const field = (id: number, key: string, type: SchemaField['type']): SchemaField 
 const schema = (rules: ModuleSchema['rules']): ModuleSchema => ({
   key: 'm', programCode: 'M', name: { 'zh-TW': 'M' }, titleFieldKey: null, version: 1,
   permissions: { read: true, add: true, edit: true, delete: true, printExport: true, pricing: true },
-  blocks: [{ id: 1, label: { 'zh-TW': 'b' }, collapsed: false, fields: [field(1, 'name', 'text'), field(2, 'total', 'rollup'), field(3, 'note', 'text')] }],
+  blocks: [{ id: 1, label: { 'zh-TW': 'b' }, collapsed: false, columns: 2, fields: [field(1, 'name', 'text'), field(2, 'total', 'rollup'), field(3, 'note', 'text')] }],
   rules,
 });
 

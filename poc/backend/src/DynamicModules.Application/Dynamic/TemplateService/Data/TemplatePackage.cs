@@ -27,7 +27,8 @@ public record TemplateModule(
     public List<TemplatePermission> Permissions { get; init; } = Permissions ?? [];
 }
 
-public record TemplateBlock(string Code, I18nText Label, bool Collapsed, List<TemplateField> Fields)
+/// <summary>Columns 在 JSON 缺漏時用參數預設值 2。</summary>
+public record TemplateBlock(string Code, I18nText Label, bool Collapsed, List<TemplateField> Fields, int Columns = 2)
 {
     public List<TemplateField> Fields { get; init; } = Fields ?? [];
 }

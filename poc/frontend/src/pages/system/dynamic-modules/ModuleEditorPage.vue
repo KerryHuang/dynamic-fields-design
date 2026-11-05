@@ -61,27 +61,27 @@ watch(mod, (m) => {
 const block = computed(() => mod.value?.blocks.find((b) => b.id === selectedBlockId.value));
 
 const blockDialog = ref(false);
-const blockForm = ref<{ id?: number; label: I18nText; collapsed: boolean }>({ label: {}, collapsed: false });
+const blockForm = ref<{ id?: number; label: I18nText; collapsed: boolean; columns: number }>({ label: {}, collapsed: false, columns: 2 });
 const blockError = ref<ApiError | null>(null);
 const blockInput = ref<{ validate(): Promise<boolean> } | null>(null);
 const addBlock = mutation((label: I18nText) => dynamicApi.addBlock(moduleKey.value, label));
-const updateBlock = mutation((v: { id: number; label: I18nText; collapsed: boolean }) =>
-  dynamicApi.updateBlock(v.id, { label: v.label, collapsed: v.collapsed }));
+const updateBlock = mutation((v: { id: number; label: I18nText; collapsed: boolean; columns: number }) =>
+  dynamicApi.updateBlock(v.id, { label: v.label, collapsed: v.collapsed, columns: v.columns }));
 
 function openBlock(b?: DesignerBlock) {
-  blockForm.value = b ? { id: b.id, label: { ...b.label }, collapsed: b.collapsed } : { label: {}, collapsed: false };
+  blockForm.value = b ? { id: b.id, label: { ...b.label }, collapsed: b.collapsed, columns: b.columns } : { label: {}, collapsed: false, columns: 2 };
   blockError.value = null;
   blockDialog.value = true;
 }
 async function submitBlock() {
   if (!(await blockInput.value?.validate())) return;
-  const { id, label, collapsed } = blockForm.value;
+  const { id, label, collapsed, columns } = blockForm.value;
   const opts = {
     onSuccess: () => { blockDialog.value = false; },
     onError: (e: unknown) => { blockError.value = e as ApiError; fail(e, ['Label']); },
   };
   if (id === undefined) addBlock.mutate(label, opts);
-  else updateBlock.mutate({ id, label, collapsed }, opts);
+  else updateBlock.mutate({ id, label, collapsed, columns }, opts);
 }
 
 // ---- fields ----
@@ -259,6 +259,13 @@ function saveSection() {
           <q-card-section class="q-gutter-md">
             <I18nTextInput ref="blockInput" v-model="blockForm.label" :label="t('designer.blockLabel')" :error="errorFor(blockError, 'Label')" />
             <q-toggle v-if="blockForm.id !== undefined" v-model="blockForm.collapsed" :label="t('designer.collapsed')" />
+            <div v-if="blockForm.id !== undefined">
+              <div class="text-caption text-grey-8">{{ t('designer.columns') }}</div>
+              <q-btn-toggle
+                v-model="blockForm.columns" data-testid="block-columns" no-caps unelevated toggle-color="primary"
+                :options="[1, 2, 3].map((n) => ({ label: String(n), value: n }))"
+              />
+            </div>
           </q-card-section>
           <q-card-actions align="right">
             <q-btn flat :label="t('designer.close')" @click="blockDialog = false" />

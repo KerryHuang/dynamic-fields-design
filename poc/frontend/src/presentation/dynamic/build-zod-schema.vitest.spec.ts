@@ -12,7 +12,7 @@ function field(key: string, type: FieldType, over: Partial<Omit<SchemaField, 'co
   };
 }
 function schemaOf(...fields: SchemaField[]): ModuleSchema {
-  return { key: 'm', programCode: 'P', name: {}, titleFieldKey: fields[0].key, version: 1, rules: [], permissions: { read: true, add: true, edit: true, delete: true, printExport: true, pricing: true }, blocks: [{ id: 1, label: {}, collapsed: false, fields }] };
+  return { key: 'm', programCode: 'P', name: {}, titleFieldKey: fields[0].key, version: 1, rules: [], permissions: { read: true, add: true, edit: true, delete: true, printExport: true, pricing: true }, blocks: [{ id: 1, label: {}, collapsed: false, columns: 2, fields }] };
 }
 const msg = (r: { success: boolean; error?: { issues: { message: string }[] } }) => r.error?.issues[0]?.message;
 

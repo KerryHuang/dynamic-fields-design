@@ -88,6 +88,22 @@ public class TemplateValidatorTests
     }
 
     [Fact]
+    public void BlockColumns_MissingMeansTwo()
+    {
+        var (package, error) = TemplateJson.Parse(Base().ToJsonString());
+        error.Should().BeNull();
+        package!.Modules[0].Blocks[0].Columns.Should().Be(2);
+    }
+
+    [Fact]
+    public void BlockColumns_OutOfRange()
+    {
+        var p = Base();
+        Head(p)["blocks"]![0]!["columns"] = 5;
+        Validate(p).Should().ContainSingle().Which.Should().Be("head: 區塊 main 的每列欄數必須是 1 到 3");
+    }
+
+    [Fact]
     public void FormatVersion_Not1()
     {
         var p = Base();

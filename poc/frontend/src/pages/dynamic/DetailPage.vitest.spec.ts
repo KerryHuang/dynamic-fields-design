@@ -23,7 +23,7 @@ const field = (id: number, label: string): SchemaField => ({
 const all: SchemaPermissions = { read: true, add: true, edit: true, delete: true, printExport: true, pricing: true };
 const schema = (p: Partial<ModuleSchema>): ModuleSchema => ({
   key: 'm', programCode: 'DYN_M', name: { 'zh-TW': '模組' }, titleFieldKey: 'f_1', version: 1, rules: [], permissions: all,
-  blocks: [{ id: 1, label: { 'zh-TW': '區' }, collapsed: false, fields: [field(1, '標題'), field(2, '甲')] }], ...p,
+  blocks: [{ id: 1, label: { 'zh-TW': '區' }, collapsed: false, columns: 2, fields: [field(1, '標題'), field(2, '甲')] }], ...p,
 });
 const record: DynamicRecord = { id: 5, moduleKey: 'm', title: '記錄五', values: { f_1: '記錄五', f_2: 'x' } as Record<string, unknown>, ownerUserId: 'a', createdUserId: 'a', createdTime: '', modifiedUserId: 'a', modifiedTime: '', rowVersion: 'v', references: {}, hostKey: null };
 
@@ -67,7 +67,7 @@ describe('DetailPage', () => {
   });
 
   it('renders without a heading when titleFieldKey is null', async () => {
-    const w = await mountPage(schema({ titleFieldKey: null, blocks: [{ id: 1, label: { 'zh-TW': '區' }, collapsed: false, fields: [field(2, '甲')] }] }));
+    const w = await mountPage(schema({ titleFieldKey: null, blocks: [{ id: 1, label: { 'zh-TW': '區' }, collapsed: false, columns: 2, fields: [field(2, '甲')] }] }));
     expect(w.text()).toContain('甲');
     expect(w.text()).not.toContain('記錄五');
   });
@@ -82,7 +82,7 @@ describe('DetailPage', () => {
   it('still applies a Visibility rule on a formula field (stored values carry server-computed formulas)', async () => {
     const total: SchemaField = { ...field(3, '合計'), type: 'formula' };
     const hide = { kind: 'visibility' as const, condition: { field: 3, op: 'lte' as const, value: 100 }, targets: ['field:2'], options: [] };
-    const s = schema({ rules: [hide], blocks: [{ id: 1, label: { 'zh-TW': '區' }, collapsed: false, fields: [field(1, '標題'), field(2, '甲'), total] }] });
+    const s = schema({ rules: [hide], blocks: [{ id: 1, label: { 'zh-TW': '區' }, collapsed: false, columns: 2, fields: [field(1, '標題'), field(2, '甲'), total] }] });
     const base = record.values;
     record.values = { ...base, f_3: 500 }; // mountPage serves the shared `record`
     const w = await mountPage(s);
@@ -136,7 +136,7 @@ describe('DetailPage', () => {
       reference: { kind, key: kind === 'module' ? 'cust' : 'design.mold', name: { 'zh-TW': 'x' }, lightUrl: '/x' },
     });
     const withRefs = (fields: SchemaField[], values: Record<string, unknown>, references: Record<string, unknown>, extra: Partial<ModuleSchema> = {}) =>
-      [schema({ blocks: [{ id: 1, label: { 'zh-TW': '區' }, collapsed: false, fields: [field(1, '標題'), ...fields] }], ...extra }),
+      [schema({ blocks: [{ id: 1, label: { 'zh-TW': '區' }, collapsed: false, columns: 2, fields: [field(1, '標題'), ...fields] }], ...extra }),
         { ...record, values: { f_1: 'a', ...values }, references } as DynamicRecord] as const;
 
     it('reference ok renders link to target record', async () => {

@@ -87,6 +87,39 @@ describe('FieldEditorDialog', () => {
     w.unmount();
   });
 
+  it('new textarea defaults to full width; other types do not', async () => {
+    const spy = vi.spyOn(dynamicApi, 'addField').mockResolvedValue({ id: 9 } as never);
+    const w = mountDialog({});
+    await flushPromises();
+    const isOn = () => toggle('fullwidth-toggle').getAttribute('aria-checked') === 'true';
+    expect(isOn()).toBe(false);
+    await w.findComponent({ name: 'QSelect' }).vm.$emit('update:modelValue', 'textarea');
+    await flushPromises();
+    expect(isOn()).toBe(true);
+    await w.findComponent({ name: 'I18nTextInput' }).vm.$emit('update:modelValue', { 'zh-TW': '說明' });
+    await flushPromises();
+    [...document.body.querySelectorAll('button')].find((b) => b.textContent?.includes('儲存'))!.click();
+    await flushPromises();
+    expect(spy.mock.calls[0]![1].config).toMatchObject({ fullWidth: true });
+    spy.mockRestore();
+    w.unmount();
+  });
+
+  it('edit keeps an explicit fullWidth and resolves an unset one from the type', async () => {
+    const spy = vi.spyOn(dynamicApi, 'updateField').mockResolvedValue(undefined);
+    const f = field('textarea');
+    const w = mountDialog({ field: f });
+    await flushPromises();
+    expect(toggle('fullwidth-toggle').getAttribute('aria-checked')).toBe('true');
+    toggle('fullwidth-toggle').click();
+    await flushPromises();
+    [...document.body.querySelectorAll('button')].find((b) => b.textContent?.includes('儲存'))!.click();
+    await flushPromises();
+    expect(spy.mock.calls[0]![1].config).toMatchObject({ fullWidth: false });
+    spy.mockRestore();
+    w.unmount();
+  });
+
   it('type selector is locked in edit mode', async () => {
     const w = mountDialog({ field: field('text') });
     await flushPromises();
@@ -164,7 +197,7 @@ describe('FieldEditorDialog', () => {
     const detail = {
       id: 1, key: 'm', programCode: 'P', name: {}, status: 'Draft', version: 1,
       blocks: [{
-        id: 1, label: {}, sequence: 1, collapsed: false,
+        id: 1, label: {}, sequence: 1, collapsed: false, columns: 2,
         fields: [
           { ...field('currency'), id: 7, label: { 'zh-TW': '單價' } },
           { ...field('text'), id: 8, label: { 'zh-TW': '備註' } },
@@ -517,7 +550,7 @@ describe('FieldEditorDialog', () => {
       ({ ...field(type), id, key: `f_${id}`, label: ZH(label), config: { ...field(type).config, ...config } });
     const moduleOf = (key: string, fields: DesignerField[], extra: Record<string, unknown> = {}) => ({
       id: 1, key, programCode: 'P', name: ZH(key), status: 'Draft', version: 1,
-      blocks: [{ id: 1, label: {}, sequence: 1, collapsed: false, fields }], ...extra,
+      blocks: [{ id: 1, label: {}, sequence: 1, collapsed: false, columns: 2, fields }], ...extra,
     }) as unknown as ModuleDetail;
     const sourceFields = [
       mk(31, 'integer', '數量'), mk(32, 'currency', '金額'), mk(33, 'text', '備註'), mk(34, 'date', '日期'),

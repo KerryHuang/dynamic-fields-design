@@ -90,7 +90,7 @@ describe('MainLayout menu', () => {
     const text = (label: string) => ({ 'zh-TW': label });
     api.getModuleSchema.mockResolvedValue({
       key: 'm', programCode: 'DYN_M', name: text('模組'), titleFieldKey: 'f_1', version: 1, rules: [], permissions: { read: true, add: true, edit: true, delete: true, printExport: true, pricing: true },
-      blocks: [{ id: 1, label: text('區'), collapsed: false, fields: ['標題', '甲'].map((l, i) => ({
+      blocks: [{ id: 1, label: text('區'), collapsed: false, columns: 2, fields: ['標題', '甲'].map((l, i) => ({
         id: i + 1, key: `f_${i + 1}`, type: 'text' as const, label: text(l), options: [],
         config: { required: false, readOnly: false, showInList: true, isFilterable: true, isSortable: true },
       })) }],
