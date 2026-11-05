@@ -32,7 +32,7 @@ describe('PopupSelect', () => {
   beforeEach(() => {
     vi.stubGlobal('ResizeObserver', class { observe() {} unobserve() {} disconnect() {} });
     light.mockReset();
-    light.mockResolvedValue({ items: [{ key: '1', title: '台灣精密' }, { key: '2', title: '恆川機械' }], total: 2 });
+    light.mockResolvedValue({ items: [{ key: '1', title: '嵐岳精密' }, { key: '2', title: '恆川機械' }], total: 2 });
   });
   afterEach(() => { vi.useRealTimers(); document.body.innerHTML = ''; });
 
@@ -41,7 +41,7 @@ describe('PopupSelect', () => {
     expect(light).not.toHaveBeenCalled();
     await openDialog(w);
     expect(light).toHaveBeenCalledWith(URL, { keyword: '', page: 1, size: 10 });
-    expect(items().map((i) => i.textContent?.trim())).toEqual(['台灣精密', '恆川機械']);
+    expect(items().map((i) => i.textContent?.trim())).toEqual(['嵐岳精密', '恆川機械']);
     w.unmount();
   });
 
@@ -50,14 +50,14 @@ describe('PopupSelect', () => {
     await openDialog(w);
     vi.useFakeTimers();
     const input = document.body.querySelector('[data-testid="popup-keyword"]') as HTMLInputElement;
-    input.value = '宏';
+    input.value = '恆';
     input.dispatchEvent(new Event('input'));
     await vi.advanceTimersByTimeAsync(299);
     expect(light).toHaveBeenCalledTimes(1);
     await vi.advanceTimersByTimeAsync(1);
     vi.useRealTimers();
     await flushPromises();
-    expect(light).toHaveBeenLastCalledWith(URL, { keyword: '宏', page: 1, size: 10 });
+    expect(light).toHaveBeenLastCalledWith(URL, { keyword: '恆', page: 1, size: 10 });
     w.unmount();
   });
 
