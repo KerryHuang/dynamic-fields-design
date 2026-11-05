@@ -93,8 +93,10 @@ public sealed class TemplateInstantiator(
             var r = await sender.Send(new AddFieldRequest(map.Key(m.Code), map.Blocks[$"{m.Code}.{b.Code}"], f.Type, f.Label,
                 map.Config(m.Code, f, withDefaults: false)), ct);
             if ((failed = Fail(r, m.Code, $"{m.Code}.{f.Code}.")) is not null) return failed;
-            var fieldId = ((FieldResponse)r.Data!).Id;
+            var field = (FieldResponse)r.Data!;
+            var fieldId = field.Id;
             map.Fields[TemplateGraph.Qualify(m.Code, f.Code)] = fieldId;
+            map.FieldKeys[TemplateGraph.Qualify(m.Code, f.Code)] = field.Key;
             foreach (var option in f.Options)
             {
                 var added = await sender.Send(new AddOptionRequest(fieldId, option.Label, option.Color), ct);
@@ -157,7 +159,8 @@ public sealed class TemplateInstantiator(
         }
 
         return ServiceResult.Created(new InstantiateTemplateResponse(
-            p.Modules.Select(m => new InstantiatedModule(m.Code, map.Key(m.Code), map.Modules[m.Code].Id)).ToList(), warnings));
+            p.Modules.Select(m => new InstantiatedModule(m.Code, map.Key(m.Code), map.Modules[m.Code].Id)).ToList(), warnings,
+            new TemplateIdMap(map.Fields, map.FieldKeys, map.Options, map.Blocks, map.Modules.ToDictionary(x => x.Key, x => x.Value.Key))));
     }
 
     /// <summary>
@@ -252,6 +255,8 @@ public sealed class TemplateInstantiator(
 
         public Dictionary<string, (long Id, string Key)> Modules { get; } = new();
         public Dictionary<string, long> Fields { get; } = new();
+        /// <summary>欄位限定名對 Field.Key（記錄值的鍵）。</summary>
+        public Dictionary<string, string> FieldKeys { get; } = new();
         public Dictionary<string, long> Options { get; } = new();
         public Dictionary<string, long> Blocks { get; } = new();
 

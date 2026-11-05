@@ -226,6 +226,15 @@ public sealed class TemplateInstantiateTests : IDisposable
     }
 
     [Fact]
+    public async Task Instantiate_ResponseIds_NotSerialized()
+    {
+        var res = await Instantiate("order");
+        res.StatusCode.Should().Be(HttpStatusCode.Created);
+        var body = await JsonOf(res);
+        body.EnumerateObject().Select(p => p.Name).Should().NotContain(n => n.Equals("ids", StringComparison.OrdinalIgnoreCase));
+    }
+
+    [Fact]
     public async Task Instantiate_Order_ThenActivateBoth_Succeeds()
     {
         (await Instantiate("order")).StatusCode.Should().Be(HttpStatusCode.Created);
