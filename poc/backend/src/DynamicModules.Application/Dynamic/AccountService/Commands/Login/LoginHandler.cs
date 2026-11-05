@@ -67,8 +67,12 @@ public class LoginHandler(
             return Fail(userId, "密碼錯誤");
         }
 
-        // 平常登入不寫資料庫（Demo 產生器的寫入交易會鎖表）
-        if (user.FailedLoginCount != 0 || lockExpired) await uow.CommitAsync(ct);
+        // 平常登入不寫資料庫（Demo 產生器的寫入交易會鎖表）；有失敗紀錄時才歸零並寫入
+        if (user.FailedLoginCount != 0 || lockExpired)
+        {
+            user.FailedLoginCount = 0;
+            await uow.CommitAsync(ct);
+        }
         logger.LogInformation("帳號 {UserId} 登入成功", userId);
         return ServiceResult.Success(new AuthUserResponse(user.UserId, user.DisplayName, user.MustChangePassword, user.SecurityStamp));
     }

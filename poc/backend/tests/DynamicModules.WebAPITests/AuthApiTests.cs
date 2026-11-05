@@ -251,6 +251,25 @@ public class AuthApiTests
     }
 
     [Fact]
+    public async Task Login_Success_ResetsFailedCount()
+    {
+        using var app = NewApp();
+        AddUser(app, "alice");
+        for (var i = 0; i < 4; i++) await PostLogin(app.CreateClient(), "alice", "wrong-pass-1");
+
+        (await PostLogin(app.CreateClient(), "alice", UserPassword)).StatusCode.Should().Be(HttpStatusCode.OK);
+
+        using (var scope = app.Services.CreateScope())
+        {
+            var user = await scope.ServiceProvider.GetRequiredService<DynamicDbContext>().Set<AppUser>().AsNoTracking()
+                .SingleAsync(u => u.UserId == "alice");
+            user.FailedLoginCount.Should().Be(0);
+        }
+        (await PostLogin(app.CreateClient(), "alice", "wrong-pass-1")).StatusCode.Should().Be(HttpStatusCode.Unauthorized);
+        (await PostLogin(app.CreateClient(), "alice", UserPassword)).StatusCode.Should().Be(HttpStatusCode.OK);
+    }
+
+    [Fact]
     public async Task Login_AfterLockExpires_OneWrongPasswordDoesNotRelock()
     {
         using var app = NewApp();

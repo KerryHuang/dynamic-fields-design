@@ -72,7 +72,7 @@ cd poc/frontend && bunx vitest run && bunx vue-tsc --noEmit    # 前端：單元
 
 登入失敗計數用程序內的鎖保護，假設每家客戶只跑一個後端 instance。Docker 部署要把資料庫目錄（`/app/data`）掛成 volume，登入金鑰才會保留。
 
-本機試跑容器：`cd poc && docker build -t dynamic-modules . && docker run -p 8080:8080 dynamic-modules`，開 `http://localhost:8080`。
+本機試跑容器（容器以 Production 環境執行，`admin` 沒有預設密碼：請加 `-e Auth__InitialAdminPassword=...`，或從啟動 log 找隨機密碼）：`cd poc && docker build -t dynamic-modules . && docker run -p 8080:8080 dynamic-modules`，開 `http://localhost:8080`。
 
 ## 目錄
 
