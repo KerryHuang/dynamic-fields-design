@@ -2,7 +2,6 @@ using DynamicModules.Application.Dynamic.DemoService;
 using DynamicModules.Application.Dynamic.DemoService.Commands.GenerateDemoData;
 using DynamicModules.Application.Dynamic.ModuleService.Commands.CreateModule;
 using DynamicModules.Application.Dynamic.ModuleService.Data;
-using DynamicModules.Application.Dynamic.ModuleService.Queries.GetModule;
 using DynamicModules.Application.Dynamic.PermissionService.Data;
 using DynamicModules.Application.Dynamic.PermissionService.Queries.GetModulePermissions;
 using DynamicModules.Domain.Entities.Dynamic;
@@ -13,30 +12,19 @@ using Microsoft.Extensions.DependencyInjection;
 
 namespace DynamicModules.ApplicationTests.Dynamic.Demo;
 
-public class DemoStructureTests : IAsyncLifetime
+/// <summary>產生後的結構用共用的產生結果；衝突與「產生前」的檢查各自建新庫（不產生）。</summary>
+[Collection(DemoGeneratedCollection.Name)]
+public class DemoStructureTests(DemoGeneratedFixture fx)
 {
-    private DemoTestHost _host = null!;
-
-    public async Task InitializeAsync() => _host = await DemoTestHost.CreateAsync();
-
-    public async Task DisposeAsync() => await _host.DisposeAsync();
-
     private static I18nText Text(string zh) => new([KeyValuePair.Create("zh-TW", zh)]);
 
-    private async Task Generate()
-    {
-        var r = await _host.Send(new GenerateDemoDataRequest(DemoTestHost.Today));
-        r.IsSuccess.Should().BeTrue(r.Message + string.Join(";", r.Errors.Select(e => $"{e.Key}:{string.Join(",", e.Value)}")));
-    }
-
-    private async Task<ModuleDetailResponse> Module(string key) =>
-        (ModuleDetailResponse)(await _host.Send(new GetModuleRequest(key))).Data!;
+    private Task<ModuleDetailResponse> Module(string key) => fx.Module(key);
 
     private async Task<ModulePermissionsResponse> Permissions(string key) =>
-        (ModulePermissionsResponse)(await _host.Send(new GetModulePermissionsRequest(key))).Data!;
+        (ModulePermissionsResponse)(await fx.Host.Send(new GetModulePermissionsRequest(key))).Data!;
 
     private async Task<Dictionary<string, long>> GroupIds() =>
-        await _host.Db.Context.Set<PermissionGroup>().AsNoTracking().ToDictionaryAsync(g => g.Key, g => g.Id);
+        await fx.Host.Db.Context.Set<PermissionGroup>().AsNoTracking().ToDictionaryAsync(g => g.Key, g => g.Id);
 
     private static FieldResponse Field(ModuleDetailResponse m, string label) =>
         m.Blocks.SelectMany(b => b.Fields).Single(f => f.Label.Resolve("zh-TW") == label);
@@ -44,7 +32,7 @@ public class DemoStructureTests : IAsyncLifetime
     [Fact]
     public async Task Generate_BuildsAllModulesActive()
     {
-        await Generate();
+        fx.Generated();
 
         foreach (var key in DemoCatalog.ActivationOrder)
             (await Module(key)).Status.Should().Be("Active", key);
@@ -59,7 +47,7 @@ public class DemoStructureTests : IAsyncLifetime
     [Fact]
     public async Task Generate_SupplementsPermissions()
     {
-        await Generate();
+        fx.Generated();
         var groups = await GroupIds();
 
         var quality = await Module("quality");
@@ -83,13 +71,14 @@ public class DemoStructureTests : IAsyncLifetime
     [Fact]
     public async Task Generate_ExistingOrderModule_Conflict_NothingChanged()
     {
-        (await _host.Send(new CreateModuleRequest("order", Text("自建訂單"), null, null))).IsSuccess.Should().BeTrue();
-        var db = _host.Db.Context;
+        await using var host = await DemoTestHost.CreateAsync();
+        (await host.Send(new CreateModuleRequest("order", Text("自建訂單"), null, null))).IsSuccess.Should().BeTrue();
+        var db = host.Db.Context;
         var modules = await db.Set<Module>().AsNoTracking().CountAsync();
         var sequences = await db.Set<NumberSequence>().AsNoTracking().CountAsync();
         var privileges = await db.Set<GroupProgramPrivilege>().AsNoTracking().CountAsync();
 
-        var r = await _host.Send(new GenerateDemoDataRequest(DemoTestHost.Today));
+        var r = await host.Send(new GenerateDemoDataRequest(DemoTestHost.Today));
 
         r.IsConflict.Should().BeTrue();
         r.Message.Should().Be("已有同代碼的模組，未產生 Demo 資料");
@@ -102,24 +91,32 @@ public class DemoStructureTests : IAsyncLifetime
     [Fact]
     public async Task Generate_ExistingCustomerExtension_Conflict()
     {
-        (await _host.Send(new CreateModuleRequest("cust-x", Text("客戶擴充"), null, null, ModuleKind.Extension, "sales.customer")))
+        await using var host = await DemoTestHost.CreateAsync();
+        (await host.Send(new CreateModuleRequest("cust-x", Text("客戶擴充"), null, null, ModuleKind.Extension, "sales.customer")))
             .IsSuccess.Should().BeTrue();
 
-        var r = await _host.Send(new GenerateDemoDataRequest(DemoTestHost.Today));
+        var r = await host.Send(new GenerateDemoDataRequest(DemoTestHost.Today));
 
         r.IsConflict.Should().BeTrue();
         ((DemoConflicts)r.Data!).Items.Should().Contain("既有實體 sales.customer 已有擴充模組");
-        (await _host.Db.Context.Set<Module>().AsNoTracking().AnyAsync(m => m.Key == "order")).Should().BeFalse();
+        (await host.Db.Context.Set<Module>().AsNoTracking().AnyAsync(m => m.Key == "order")).Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task Preflight_NothingBeforeGenerate()
+    {
+        await using var host = await DemoTestHost.CreateAsync();
+        var preflight = host.Services.GetRequiredService<DemoPreflight>();
+
+        (await preflight.AllPresentAsync(CancellationToken.None)).Should().BeFalse();
+        (await preflight.ConflictsAsync(CancellationToken.None)).Should().BeEmpty();
     }
 
     [Fact]
     public async Task Preflight_AllPresent_AfterGenerate()
     {
-        var preflight = _host.Services.GetRequiredService<DemoPreflight>();
-        (await preflight.AllPresentAsync(CancellationToken.None)).Should().BeFalse();
-        (await preflight.ConflictsAsync(CancellationToken.None)).Should().BeEmpty();
-
-        await Generate();
+        fx.Generated();
+        var preflight = fx.Host.Services.GetRequiredService<DemoPreflight>();
 
         (await preflight.ConflictsAsync(CancellationToken.None)).Count.Should().BeGreaterThanOrEqualTo(8);
         (await preflight.AllPresentAsync(CancellationToken.None)).Should().BeTrue();

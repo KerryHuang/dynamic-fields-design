@@ -36,6 +36,21 @@ public class DemoTimelineTests
     }
 
     [Fact]
+    public void At_AfterOnLaterDay_IsAfterAfter()
+    {
+        var plan = new DemoPlan(Today, new Random(1), new Dictionary<string, IReadOnlyList<DemoRecord>>());
+        var date = Today.AddDays(-10);
+
+        for (var i = 0; i < 200; i++)
+        {
+            var after = date.AddDays(2).ToDateTime(new TimeOnly(8 + i % 10, i % 60));
+            var at = plan.At(date, after);
+            at.Should().BeAfter(after);
+            at.Hour.Should().BeInRange(8, 17);
+        }
+    }
+
+    [Fact]
     public async Task Run_SortsByTimeThenInsertion()
     {
         var day = Today.AddDays(-3);

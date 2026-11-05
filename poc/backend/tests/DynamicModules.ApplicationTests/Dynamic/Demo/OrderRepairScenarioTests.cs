@@ -11,14 +11,14 @@ using FluentAssertions;
 
 namespace DynamicModules.ApplicationTests.Dynamic.Demo;
 
-public class OrderRepairScenarioTests(DemoGeneratedFixture fx) : IClassFixture<DemoGeneratedFixture>
+[Collection(DemoGeneratedCollection.Name)]
+public class OrderRepairScenarioTests(DemoGeneratedFixture fx)
 {
     private static readonly DateOnly Today = DemoTestHost.Today;
 
     private static DateOnly Date(string? s) => DateOnly.ParseExact(s!, "yyyy-MM-dd", CultureInfo.InvariantCulture);
 
-    private void Generated() => fx.Result.IsSuccess.Should().BeTrue(
-        fx.Result.Message + string.Join(";", fx.Result.Errors.Select(e => $"{e.Key}:{string.Join(",", e.Value)}")));
+    private void Generated() => fx.Generated();
 
     private async Task<DynamicRecordResponse> Get(long id) => (DynamicRecordResponse)(await fx.Host.Send(new GetRecordRequest(id))).Data!;
 

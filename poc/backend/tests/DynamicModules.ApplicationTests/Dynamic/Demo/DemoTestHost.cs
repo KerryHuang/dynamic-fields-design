@@ -27,13 +27,14 @@ public sealed class DemoTestHost : IAsyncDisposable
 
     public sealed class FakeUser : ICurrentUser { public string UserId { get; set; } = "admin"; }
 
-    private sealed class FakeTime : IBusinessTime
+    private sealed class FakeTime(DateOnly today) : IBusinessTime
     {
-        public DateTime Now => Today.ToDateTime(new TimeOnly(9, 0));
+        public DateTime Now => today.ToDateTime(new TimeOnly(10, 0));
         DateOnly IBusinessTime.Today => DateOnly.FromDateTime(Now);
     }
 
-    public static async Task<DemoTestHost> CreateAsync()
+    /// <param name="today">營運時間的今天（10:00）；預設 <see cref="Today"/>。</param>
+    public static async Task<DemoTestHost> CreateAsync(DateOnly? today = null)
     {
         var host = new DemoTestHost { _db = await SqliteTestDb.CreateAsync() };
         await SeedData.EnsureSeededAsync(host._db.Context);
@@ -43,7 +44,7 @@ public sealed class DemoTestHost : IAsyncDisposable
         services.AddScoped(_ => host._db.Context);
         services.AddScoped<ITransactionManager, EfTransactionManager>();
         services.AddSingleton<ICurrentUser>(host.User);
-        services.AddSingleton<IBusinessTime, FakeTime>();
+        services.AddSingleton<IBusinessTime>(new FakeTime(today ?? Today));
         services.AddActingOverrides();
         host._sp = services.BuildServiceProvider();
         return host;

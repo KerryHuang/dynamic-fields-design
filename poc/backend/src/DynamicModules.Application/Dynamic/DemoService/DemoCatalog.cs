@@ -13,5 +13,6 @@ public static class DemoCatalog
         ["order", "order-line", "repair", "mold-info", "customer-info", "mold-care", "mold-care-part", "quality"];
 
     /// <summary>情境的規劃順序（也是同一時刻步驟的執行順序）。</summary>
-    public static IReadOnlyList<IDemoScenario> Scenarios { get; } = [new OrderScenario(), new RepairScenario()];
+    public static IReadOnlyList<IDemoScenario> Scenarios { get; } =
+        [new OrderScenario(), new RepairScenario(), new MoldCareScenario(), new QualityScenario()];
 }

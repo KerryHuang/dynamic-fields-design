@@ -4,6 +4,7 @@ using DynamicModules.Application.Dynamic.DemoService.Scenarios;
 using DynamicModules.Application.Dynamic.RecordService.Commands.CreateRecord;
 using DynamicModules.Application.Dynamic.RecordService.Commands.UpdateRecord;
 using DynamicModules.Application.Dynamic.RecordService.Data;
+using DynamicModules.Application.Dynamic.RecordService.Queries.GetRecord;
 
 namespace DynamicModules.Application.Dynamic.DemoService;
 
@@ -40,12 +41,18 @@ public sealed class DemoPlan(DateOnly today, Random random, IReadOnlyDictionary<
     public void Update(DemoRecord r, DateTime at, string userId, string label, Func<DemoContext, DemoRecord, UpdateRecordRequest> build) =>
         Add(at, userId, label, async (ctx, ct) => Fill(r, await ctx.Sender.Send(build(ctx, r), ct)));
 
+    /// <summary>重讀記錄、回填 RowVersion：別的記錄寫入觸發彙總重算（會換這筆的 RowVersion）之後，這筆還要再改時用。</summary>
+    public void Refresh(DemoRecord r, DateTime at, string userId, string label) =>
+        Add(at, userId, label, async (ctx, ct) => Fill(r, await ctx.Sender.Send(new GetRecordRequest(r.Id), ct)));
+
     /// <summary>同一天依種子取 08:00–17:59 的時刻（分鐘為單位）。</summary>
     public DateTime At(DateOnly date) => date.ToDateTime(new TimeOnly(8, 0)).AddMinutes(Random.Next(WorkMinutes));
 
-    /// <summary>同 At(date)，但保證晚於 after；同一天已經沒有空檔就挪到隔天。</summary>
+    /// <summary>同 At(date)，但保證晚於 after：date 早於 after 當天就改用 after 當天；同一天已經沒有空檔就挪到隔天。</summary>
     public DateTime At(DateOnly date, DateTime after)
     {
+        var afterDay = DateOnly.FromDateTime(after);
+        if (date < afterDay) date = afterDay;
         var start = date.ToDateTime(new TimeOnly(8, 0));
         if (after < start) return At(date);
         var from = (int)(after - start).TotalMinutes + 1;
