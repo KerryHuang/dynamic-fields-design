@@ -6,7 +6,7 @@ namespace DynamicModules.Application.Dynamic.AccountService.Commands.CreateUser;
 public class CreateUserValidator : AbstractValidator<CreateUserRequest>
 {
     /// <summary>帳號存小寫；比對前先轉小寫，所以輸入 Ann.Lee 合法，含空白或中文不合法。</summary>
-    public static readonly System.Text.RegularExpressions.Regex IdPattern = new("^[a-z0-9._-]{2,50}$");
+    public static readonly System.Text.RegularExpressions.Regex IdPattern = new(@"^[a-z0-9._-]{2,50}\z");
 
     public CreateUserValidator()
     {

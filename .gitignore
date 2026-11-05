@@ -2,6 +2,7 @@ bin/
 obj/
 node_modules/
 poc/backend/data/*.db*
+poc/backend/data/keys/
 dist/
 .quasar/
 *.user

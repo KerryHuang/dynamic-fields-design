@@ -1,3 +1,4 @@
+using DynamicModules.Application.Common;
 using DynamicModules.Application.Dynamic.AccountService.Commands.CreateUser;
 using DynamicModules.Application.Dynamic.AccountService.Commands.ResetPassword;
 using DynamicModules.Application.Dynamic.AccountService.Commands.SetUserActive;
@@ -15,7 +16,7 @@ public class AdminUsersController(IMediator mediator) : ControllerBase
 {
     public record CreateBody(string? UserId, string? DisplayName, string? Password, List<long>? GroupIds, bool IsSystemAdmin);
 
-    public record UpdateBody(string? DisplayName, List<long>? GroupIds, bool IsSystemAdmin);
+    public record UpdateBody(string? DisplayName, List<long>? GroupIds, bool? IsSystemAdmin);
 
     public record ResetBody(string? Password);
 
@@ -28,8 +29,15 @@ public class AdminUsersController(IMediator mediator) : ControllerBase
             body.UserId ?? "", body.DisplayName ?? "", body.Password ?? "", body.GroupIds, body.IsSystemAdmin))).ToActionResult(this);
 
     [HttpPut("{id}")]
-    public async Task<IActionResult> Update(string id, UpdateBody body) =>
-        (await mediator.Send(new UpdateUserRequest(id, body.DisplayName ?? "", body.GroupIds, body.IsSystemAdmin))).ToActionResult(this);
+    public async Task<IActionResult> Update(string id, UpdateBody body)
+    {
+        // PUT 是整筆取代：缺欄位不能默默當成「清空群組」或「降為一般使用者」
+        var missing = new Dictionary<string, string[]>();
+        if (body.GroupIds is null) missing["groupIds"] = ["必填"];
+        if (body.IsSystemAdmin is null) missing["isSystemAdmin"] = ["必填"];
+        if (missing.Count > 0) return ServiceResult.Invalid(missing).ToActionResult(this);
+        return (await mediator.Send(new UpdateUserRequest(id, body.DisplayName ?? "", body.GroupIds!, body.IsSystemAdmin!.Value))).ToActionResult(this);
+    }
 
     [HttpPost("{id}/reset-password")]
     public async Task<IActionResult> ResetPassword(string id, ResetBody body) =>

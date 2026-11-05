@@ -136,6 +136,17 @@ public class DemoLoginApiTests
     }
 
     [Fact]
+    public async Task DemoLogin_UnknownAccount_LogsFixedMessageNeverTheInput()
+    {
+        using var app = new LoginApp();
+
+        (await DemoLogin(app.CreateClient(), "Secret-typed-here\nforged")).StatusCode.Should().Be(HttpStatusCode.Unauthorized);
+
+        string.Join("\n", app.Logs.Entries.Select(e => e.Message)).Should().NotContain("Secret-typed").And.NotContain("forged");
+        app.Logs.Entries.Should().Contain(e => e.Message.Contains("一鍵登入失敗") && e.Message.Contains("帳號不存在"));
+    }
+
+    [Fact]
     public async Task DemoLogin_NonDemoAccount_401()
     {
         using var app = new LoginApp();

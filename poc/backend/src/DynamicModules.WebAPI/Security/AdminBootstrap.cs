@@ -29,6 +29,8 @@ public static class AdminBootstrap
 
         var password = config["Auth:InitialAdminPassword"];
         var generated = string.IsNullOrWhiteSpace(password);
+        if (!generated && password!.Length < MinPasswordLength)
+            throw new InvalidOperationException($"Auth:InitialAdminPassword 至少需要 {MinPasswordLength} 個字元");
         if (generated) password = RandomNumberGenerator.GetString(PasswordChars, 16);
 
         var admin = await db.Set<AppUser>().SingleOrDefaultAsync(u => u.UserId == "admin", ct);

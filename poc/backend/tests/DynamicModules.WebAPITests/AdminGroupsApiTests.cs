@@ -145,6 +145,19 @@ public class AdminGroupsApiTests
     }
 
     [Fact]
+    public async Task SetMembers_MissingUserIds_400_AndMembersKept()
+    {
+        using var app = new TestApp();
+        var id = await CreateGroup(app, "稽核組");
+        var c = app.AsUser();
+        await c.PutAsJsonAsync($"{AdminGroups}/{id}/members", new { userIds = new[] { "sales01" } });
+
+        (await c.PutAsJsonAsync($"{AdminGroups}/{id}/members", new { })).StatusCode.Should().Be(HttpStatusCode.BadRequest);
+
+        Db(app, db => db.Set<UserGroupMapping>().Where(m => m.GroupId == id).Select(m => m.UserId).ToList()).Should().BeEquivalentTo(["sales01"]);
+    }
+
+    [Fact]
     public async Task SetMembers_UnknownUser_400_NothingChanged()
     {
         using var app = new TestApp();

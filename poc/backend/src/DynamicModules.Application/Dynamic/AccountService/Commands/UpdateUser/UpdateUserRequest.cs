@@ -4,5 +4,5 @@ using MediatR;
 
 namespace DynamicModules.Application.Dynamic.AccountService.Commands.UpdateUser;
 
-public record UpdateUserRequest(string UserId, string DisplayName, List<long>? GroupIds, bool IsSystemAdmin)
+public record UpdateUserRequest(string UserId, string DisplayName, List<long> GroupIds, bool IsSystemAdmin)
     : IRequest<ServiceResult>, ITransactionalRequest, ISystemAdminRequest;

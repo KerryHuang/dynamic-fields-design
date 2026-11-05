@@ -62,7 +62,7 @@ cd poc/frontend && bunx vitest run && bunx vue-tsc --noEmit    # 前端：單元
 
 | 變數 | 用途 |
 |---|---|
-| `Auth__InitialAdminPassword` | 全新安裝時 `admin` 的初始密碼；沒設就產生隨機密碼，印在啟動 log |
+| `Auth__InitialAdminPassword` | 全新安裝時 `admin` 的初始密碼（至少 8 碼）；沒設就產生隨機密碼，印在啟動 log |
 | `Auth__ResetAdminPassword` | 緊急救援：啟動時重設 `admin` |
 | `Auth__TrustForwardedHeaders` | 在反向代理後面時設 `true`，cookie 才會加 `Secure` |
 | `Demo__LoginEnabled` | 登入頁列出 Demo 帳號一鍵登入 |

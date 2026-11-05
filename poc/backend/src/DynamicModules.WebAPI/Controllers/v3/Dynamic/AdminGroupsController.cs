@@ -1,3 +1,4 @@
+using DynamicModules.Application.Common;
 using DynamicModules.Application.Dynamic.AccountService.Commands.CreateGroup;
 using DynamicModules.Application.Dynamic.AccountService.Commands.DeleteGroup;
 using DynamicModules.Application.Dynamic.AccountService.Commands.RenameGroup;
@@ -31,7 +32,9 @@ public class AdminGroupsController(IMediator mediator) : ControllerBase
 
     [HttpPut("{id:long}/members")]
     public async Task<IActionResult> SetMembers(long id, MembersBody body) =>
-        (await mediator.Send(new SetGroupMembersRequest(id, body.UserIds ?? []))).ToActionResult(this);
+        body.UserIds is null
+            ? ServiceResult.Invalid(new Dictionary<string, string[]> { ["userIds"] = ["必填"] }).ToActionResult(this)
+            : (await mediator.Send(new SetGroupMembersRequest(id, body.UserIds))).ToActionResult(this);
 
     [HttpGet("{id:long}/impact")]
     public async Task<IActionResult> Impact(long id) => (await mediator.Send(new GetGroupImpactRequest(id))).ToActionResult(this);

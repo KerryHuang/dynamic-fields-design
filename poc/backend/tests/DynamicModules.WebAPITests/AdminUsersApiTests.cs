@@ -90,11 +90,39 @@ public class AdminUsersApiTests
     [InlineData("a")]
     [InlineData("a b")]
     [InlineData("王小明")]
+    [InlineData("abc\n")]
     public async Task CreateUser_InvalidId_400(string id)
     {
         using var app = new TestApp();
 
         (await app.AsUser().PostAsJsonAsync(Admin, NewUser(id))).StatusCode.Should().Be(HttpStatusCode.BadRequest);
+    }
+
+    [Fact]
+    public async Task UpdateUser_MissingGroupIds_400_AndMembershipsKept()
+    {
+        using var app = new TestApp();
+        var c = app.AsUser();
+        var before = Db(app, db => db.Set<UserGroupMapping>().Count(m => m.UserId == "sales01"));
+        before.Should().BeGreaterThan(0);
+
+        var res = await c.PutAsJsonAsync($"{Admin}/sales01", new { displayName = "x", isSystemAdmin = false });
+
+        res.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+        Db(app, db => db.Set<UserGroupMapping>().Count(m => m.UserId == "sales01")).Should().Be(before);
+    }
+
+    [Fact]
+    public async Task UpdateUser_MissingIsSystemAdmin_400_AndAdminKept()
+    {
+        using var app = new TestApp();
+        var c = app.AsUser();
+        (await c.PostAsJsonAsync(Admin, NewUser("boss2", admin: true))).StatusCode.Should().Be(HttpStatusCode.Created);
+
+        var res = await c.PutAsJsonAsync($"{Admin}/boss2", new { displayName = "x", groupIds = Array.Empty<long>() });
+
+        res.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+        Db(app, db => db.Set<AppUser>().Single(u => u.UserId == "boss2").IsSystemAdmin).Should().BeTrue();
     }
 
     [Fact]

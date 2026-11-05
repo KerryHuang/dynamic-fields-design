@@ -115,6 +115,42 @@ public class AuthApiTests
     }
 
     [Fact]
+    public async Task Login_UnknownAccount_LogsFixedMessageNeverTheInput()
+    {
+        using var app = NewApp();
+        AddUser(app, "alice");
+        var typedPassword = "Secret-typed-in-account-field\nforged line " + new string('x', 200_000);
+
+        (await PostLogin(app.CreateClient(), typedPassword, "whatever-1")).StatusCode.Should().Be(HttpStatusCode.Unauthorized);
+        (await PostLogin(app.CreateClient(), "ghost.user", "whatever-1")).StatusCode.Should().Be(HttpStatusCode.Unauthorized);
+
+        var all = string.Join("\n", app.Logs.Entries.Select(e => e.Message));
+        all.Should().NotContain("Secret-typed").And.NotContain("forged line").And.NotContain("ghost.user");
+        app.Logs.Entries.Should().Contain(e => e.Level == LogLevel.Warning && e.Message.Contains("登入失敗") && e.Message.Contains("帳號不存在"));
+    }
+
+    [Fact]
+    public async Task Login_ExistingAccountFailure_LogsStoredUserId()
+    {
+        using var app = NewApp();
+        AddUser(app, "alice");
+
+        await PostLogin(app.CreateClient(), " ALICE ", "wrong-pass-1");
+
+        app.Logs.Entries.Should().Contain(e => e.Level == LogLevel.Warning && e.Message.Contains("帳號 alice 登入失敗"));
+    }
+
+    [Fact]
+    public void Bootstrap_InitialAdminPassword_TooShort_FailsStartup()
+    {
+        using var app = NewApp();
+        app.InitialAdminPassword = "short";
+
+        FluentActions.Invoking(() => app.CreateClient()).Should().Throw<Exception>()
+            .Where(e => e.ToString().Contains("Auth:InitialAdminPassword"));
+    }
+
+    [Fact]
     public async Task Login_FiveFailures_Locks15Minutes()
     {
         using var app = NewApp();

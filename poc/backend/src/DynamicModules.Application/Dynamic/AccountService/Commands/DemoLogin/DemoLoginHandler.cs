@@ -23,7 +23,9 @@ public class DemoLoginHandler(AuthSettings settings, IAccountRepository accounts
         var user = await accounts.GetTrackedAsync(userId, ct);
         if (user is null || !user.IsActive || !(user.IsDemoAccount || user.UserId == "admin"))
         {
-            logger.LogWarning("帳號 {UserId} 一鍵登入失敗", userId);
+            // 帳號不存在時不記錄匿名輸入
+            if (user is null) logger.LogWarning("一鍵登入失敗：帳號不存在（不記錄輸入）");
+            else logger.LogWarning("帳號 {UserId} 一鍵登入失敗", user.UserId);
             return ServiceResult.Unauthorized(LoginHandler.FailureMessage);
         }
 
@@ -33,7 +35,7 @@ public class DemoLoginHandler(AuthSettings settings, IAccountRepository accounts
             await uow.CommitAsync(ct);
         }
 
-        logger.LogInformation("帳號 {UserId} 一鍵登入成功", userId);
+        logger.LogInformation("帳號 {UserId} 一鍵登入成功", user.UserId);
         return ServiceResult.Success(new AuthUserResponse(user.UserId, user.DisplayName, false, user.SecurityStamp));
     }
 }

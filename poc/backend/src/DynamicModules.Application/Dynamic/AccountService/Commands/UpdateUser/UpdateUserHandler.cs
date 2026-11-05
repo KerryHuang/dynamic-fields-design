@@ -11,7 +11,7 @@ public class UpdateUserHandler(IAccountRepository accounts, IUnitOfWork uow) : I
     {
         var user = await accounts.GetTrackedAsync(request.UserId, ct);
         if (user is null) return ServiceResult.NotFound("使用者不存在");
-        var groupIds = request.GroupIds ?? [];
+        var groupIds = request.GroupIds;
         if (!await accounts.GroupsExistAsync(groupIds, ct))
             return ServiceResult.Invalid(new Dictionary<string, string[]> { ["groupIds"] = ["群組不存在"] });
         if (user is { IsActive: true, IsSystemAdmin: true } && !request.IsSystemAdmin && await accounts.CountActiveAdminsAsync(ct) <= 1)

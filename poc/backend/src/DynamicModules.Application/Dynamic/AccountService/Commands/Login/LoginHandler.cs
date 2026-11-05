@@ -40,12 +40,12 @@ public class LoginHandler(
     private async Task<ServiceResult> LoginAsync(string userId, string password, CancellationToken ct)
     {
         var user = await accounts.GetTrackedAsync(userId, ct);
-        if (user is null) return Fail(userId, "帳號不存在", password);
-        if (!user.IsActive) return Fail(userId, "帳號已停用", password);
+        if (user is null) return Fail(null, "帳號不存在", password);
+        if (!user.IsActive) return Fail(user.UserId, "帳號已停用", password);
 
         var now = time.GetUtcNow();
-        if (user.LockedUntil is { } until && until > now) return Fail(userId, "帳號鎖定中", password);
-        if (user.PasswordHash is null) return Fail(userId, "帳號尚未設定密碼", password);
+        if (user.LockedUntil is { } until && until > now) return Fail(user.UserId, "帳號鎖定中", password);
+        if (user.PasswordHash is null) return Fail(user.UserId, "帳號尚未設定密碼", password);
 
         // 鎖定已到期：先歸零，之後輸錯一次不該立刻再鎖
         var lockExpired = user.LockedUntil is not null;
@@ -61,10 +61,10 @@ public class LoginHandler(
             if (user.FailedLoginCount >= MaxFailures)
             {
                 user.LockedUntil = now + LockDuration;
-                logger.LogWarning("帳號 {UserId} 連續輸錯 {Count} 次，鎖定到 {Until}", userId, user.FailedLoginCount, user.LockedUntil);
+                logger.LogWarning("帳號 {UserId} 連續輸錯 {Count} 次，鎖定到 {Until}", user.UserId, user.FailedLoginCount, user.LockedUntil);
             }
             await uow.CommitAsync(ct);
-            return Fail(userId, "密碼錯誤");
+            return Fail(user.UserId, "密碼錯誤");
         }
 
         // 平常登入不寫資料庫（Demo 產生器的寫入交易會鎖表）；有失敗紀錄時才歸零並寫入
@@ -73,7 +73,7 @@ public class LoginHandler(
             user.FailedLoginCount = 0;
             await uow.CommitAsync(ct);
         }
-        logger.LogInformation("帳號 {UserId} 登入成功", userId);
+        logger.LogInformation("帳號 {UserId} 登入成功", user.UserId);
         return ServiceResult.Success(new AuthUserResponse(user.UserId, user.DisplayName, user.MustChangePassword, user.SecurityStamp));
     }
 
@@ -84,11 +84,13 @@ public class LoginHandler(
         return (int)(hash % (uint)Locks.Length);
     }
 
-    private ServiceResult Fail(string userId, string reason, string? passwordToBurn = null)
+    /// <param name="storedUserId">資料庫裡查到的帳號；帳號不存在時為 null，此時絕不記錄輸入（匿名輸入可能是誤打的密碼、超長或含換行的字串）。</param>
+    private ServiceResult Fail(string? storedUserId, string reason, string? passwordToBurn = null)
     {
         if (passwordToBurn is not null)
             passwords.Verify(_dummyHash ??= passwords.Hash("dummy-password-for-timing"), passwordToBurn);
-        logger.LogWarning("帳號 {UserId} 登入失敗：{Reason}", userId, reason);
+        if (storedUserId is null) logger.LogWarning("登入失敗：{Reason}（帳號不存在，不記錄輸入）", reason);
+        else logger.LogWarning("帳號 {UserId} 登入失敗：{Reason}", storedUserId, reason);
         return ServiceResult.Unauthorized(FailureMessage);
     }
 }
