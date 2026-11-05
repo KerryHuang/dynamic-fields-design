@@ -133,6 +133,21 @@ describe('dynamicApi export and import', () => {
   });
 });
 
+describe('dynamicApi demo data', () => {
+  it('getDemoDataStatus GETs /demo-data; generateDemoData POSTs /demo-data/generate', async () => {
+    const seen: { method?: string; url?: string } = {};
+    http.defaults.adapter = async (config) => {
+      seen.method = config.method;
+      seen.url = http.getUri(config);
+      return { data: { state: 'notGenerated', conflicts: [], done: 0, total: 0 }, status: 200, statusText: 'OK', headers: {}, config };
+    };
+    expect(await dynamicApi.getDemoDataStatus()).toMatchObject({ state: 'notGenerated' });
+    expect([seen.method, seen.url]).toEqual(['get', '/api/v3/dynamic/demo-data']);
+    await dynamicApi.generateDemoData();
+    expect([seen.method, seen.url]).toEqual(['post', '/api/v3/dynamic/demo-data/generate']);
+  });
+});
+
 describe('dynamicApi templates', () => {
   const capture = () => {
     const seen: { method?: string; url?: string; data?: unknown; ct?: unknown } = {};

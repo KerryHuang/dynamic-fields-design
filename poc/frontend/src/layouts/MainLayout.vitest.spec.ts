@@ -59,6 +59,21 @@ describe('MainLayout menu', () => {
     expect(w.text()).toContain('menu-sales01');
   });
 
+  it.each([[true], [false]])('demo-data menu follows designer.read (%s)', async (read) => {
+    const pinia = createPinia();
+    setActivePinia(pinia);
+    http.defaults.adapter = async (config) => ({
+      data: config.url === '/me' ? me(read) : config.url === '/users' ? USERS : [], status: 200, statusText: 'OK', headers: {}, config,
+    });
+    const router = createRouter({ history: createMemoryHistory(), routes: [{ path: '/', component: { template: '<i/>' } }] });
+    const i18n = createI18n({ legacy: false, locale: 'zh-TW', messages: { 'zh-TW': zhTW } });
+    const w = mount(MainLayout, {
+      global: { plugins: [[quasar.Quasar, { components: quasar }], pinia, router, i18n, [VueQueryPlugin, { queryClient: new QueryClient() }]] },
+    });
+    await flushPromises();
+    expect(w.find('[data-testid="demo-data-menu"]').exists()).toBe(read);
+  });
+
   it('groups menu items by section, unsectioned under 自訂功能 first, sections sorted by name', async () => {
     const pinia = createPinia();
     setActivePinia(pinia);

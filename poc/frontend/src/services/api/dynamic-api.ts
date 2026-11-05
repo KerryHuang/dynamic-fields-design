@@ -50,6 +50,16 @@ export interface InstantiateResult {
   warnings: string[];
 }
 
+export interface DemoDataStatus {
+  state: 'notGenerated' | 'running' | 'generated' | 'conflict' | 'failed';
+  conflicts: string[];
+  message?: string;
+  startedAt?: string;
+  finishedAt?: string;
+  done: number;
+  total: number;
+}
+
 export interface PagedRecordsQuery {
   currentPage: number;
   pagesSize: number;
@@ -179,6 +189,8 @@ export const dynamicApi = {
     }
     return { blob: r.data, fileName: dispositionFileName(r.headers['content-disposition']) ?? `${key}.${format}` };
   },
+  getDemoDataStatus: () => http.get<DemoDataStatus>('/demo-data').then(data),
+  generateDemoData: () => http.post<DemoDataStatus>('/demo-data/generate').then(data),
   getTemplates: () => http.get<TemplateSummary[]>('/templates').then(data),
   instantiateTemplate: (key: string, body: InstantiateBody) =>
     http.post<InstantiateResult>(`/templates/${encodeURIComponent(key)}/instantiate`, body).then(data),

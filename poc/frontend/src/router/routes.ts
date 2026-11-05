@@ -12,6 +12,7 @@ export const routes: RouteRecordRaw[] = [
       { path: 'dynamic/:moduleKey/:id(\\d+)/edit', component: () => import('src/pages/dynamic/FormPage.vue') },
       { path: 'system/dynamic-modules', component: () => import('src/pages/system/dynamic-modules/ModuleListPage.vue') },
       { path: 'system/dynamic-modules/:moduleKey', component: () => import('src/pages/system/dynamic-modules/ModuleEditorPage.vue') },
+      { path: 'system/demo-data', component: () => import('src/pages/system/DemoDataPage.vue') },
     ],
   },
 ];

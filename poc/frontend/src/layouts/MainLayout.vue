@@ -48,6 +48,9 @@
           <q-item clickable to="/system/dynamic-modules" data-testid="designer-menu">
             <q-item-section>{{ t('menu.dynamicModules') }}</q-item-section>
           </q-item>
+          <q-item clickable to="/system/demo-data" data-testid="demo-data-menu">
+            <q-item-section>{{ t('menu.demoData') }}</q-item-section>
+          </q-item>
         </template>
       </q-list>
     </q-drawer>
