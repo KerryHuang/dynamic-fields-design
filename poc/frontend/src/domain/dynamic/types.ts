@@ -237,9 +237,22 @@ export interface User {
   displayName: string;
 }
 
+export interface AuthUser {
+  userId: string;
+  displayName: string;
+  mustChangePassword: boolean;
+}
+
+export interface AuthOptions {
+  demoLoginEnabled: boolean;
+  demoGenerating: boolean;
+  demoAccounts: User[];
+}
+
 export interface Me {
   userId: string;
   displayName: string;
+  mustChangePassword: boolean;
   isSystemAdmin: boolean;
   groups: { id: number; key: string; name: I18nText }[];
   designer: { read: boolean; add: boolean; edit: boolean; delete: boolean };

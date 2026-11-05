@@ -24,7 +24,7 @@ const permsFor = (scope: 'own' | null): ModulePermissions => ({
   options: [{ optionId: 4, groupIds: [1] }],
 });
 const me = (edit: boolean): Me => ({
-  userId: 'a', displayName: 'A', isSystemAdmin: false, groups: [], designer: { read: true, add: true, edit, delete: false },
+  userId: 'a', displayName: 'A', isSystemAdmin: false, mustChangePassword: false, groups: [], designer: { read: true, add: true, edit, delete: false },
 });
 
 function mountTab(canEdit = true, perms?: ModulePermissions, extraProps: Record<string, unknown> = {}) {

@@ -28,16 +28,17 @@ const me = (designerRead: boolean) => ({
 
 describe('MainLayout menu', () => {
   beforeEach(() => {
-    localStorage.clear();
+    setActivePinia(createPinia());
     vi.stubGlobal('ResizeObserver', class { observe() {} unobserve() {} disconnect() {} });
   });
 
-  it('refetches the menu after switching identity', async () => {
+  it('refetches the menu after the session changes user', async () => {
     const pinia = createPinia();
     setActivePinia(pinia);
+    useIdentityStore().setSession('admin');
     const seen: string[] = [];
     http.defaults.adapter = async (config) => {
-      const user = config.headers.get('X-User') as string;
+      const user = useIdentityStore().userId;
       let data: unknown = [];
       if (config.url === '/users') data = USERS;
       else if (config.url === '/me') data = me(true);
@@ -46,14 +47,16 @@ describe('MainLayout menu', () => {
     };
     const router = createRouter({ history: createMemoryHistory(), routes: [{ path: '/', component: { template: '<i/>' } }] });
     const i18n = createI18n({ legacy: false, locale: 'zh-TW', messages: { 'zh-TW': zhTW } });
+    const queryClient = new QueryClient();
     const w = mount(MainLayout, {
-      global: { plugins: [[quasar.Quasar, { components: quasar }], pinia, router, i18n, [VueQueryPlugin, { queryClient: new QueryClient() }]] },
+      global: { plugins: [[quasar.Quasar, { components: quasar }], pinia, router, i18n, [VueQueryPlugin, { queryClient }]] },
     });
     await flushPromises();
     expect(seen).toEqual(['admin']);
     expect(w.text()).toContain('menu-admin');
 
-    (w.vm as unknown as { switchUser: (id: string) => void }).switchUser('sales01');
+    useIdentityStore().setSession('sales01');
+    queryClient.clear();
     await flushPromises();
     expect(seen).toEqual(['admin', 'sales01']);
     expect(w.text()).toContain('menu-sales01');
@@ -96,9 +99,10 @@ describe('MainLayout menu', () => {
     expect(w.findAll('.q-item__label--header').map((h) => h.text())).toEqual(['自訂功能', 'Alpha', 'Zeta']);
   });
 
-  it('refetches views and re-picks the default view after switching identity', async () => {
+  it('refetches views and re-picks the default view after the session changes user', async () => {
     const pinia = createPinia();
     setActivePinia(pinia);
+    useIdentityStore().setSession('admin');
     http.defaults.adapter = async (config) => ({
       data: config.url === '/me' ? me(true) : [], status: 200, statusText: 'OK', headers: {}, config,
     });
@@ -118,13 +122,15 @@ describe('MainLayout menu', () => {
     const router = createRouter({ history: createMemoryHistory(), routes: [{ path: '/dynamic/:moduleKey', component: ListPage }] });
     await router.push('/dynamic/m');
     const i18n = createI18n({ legacy: false, locale: 'zh-TW', messages: { 'zh-TW': zhTW } });
+    const queryClient = new QueryClient();
     const w = mount(MainLayout, {
-      global: { plugins: [[quasar.Quasar, { components: quasar, directives: quasar }], pinia, router, i18n, [VueQueryPlugin, { queryClient: new QueryClient() }]] },
+      global: { plugins: [[quasar.Quasar, { components: quasar, directives: quasar }], pinia, router, i18n, [VueQueryPlugin, { queryClient }]] },
     });
     await flushPromises();
     expect(w.text()).toContain('view-admin');
 
-    (w.vm as unknown as { switchUser: (id: string) => void }).switchUser('sales01');
+    useIdentityStore().setSession('sales01');
+    queryClient.clear();
     await flushPromises();
     expect(api.getViews).toHaveBeenCalledTimes(2);
     expect(w.text()).toContain('view-sales01');
@@ -157,22 +163,59 @@ describe('MainLayout menu', () => {
     expect(shown.text()).toContain(zhTW.menu.system);
   });
 
-  it('clears the query cache when the stored identity falls back to the first API user', async () => {
-    localStorage.setItem('dynamic.userId', 'ghost');
-    const pinia = createPinia();
-    setActivePinia(pinia);
-    http.defaults.adapter = async (config) => ({
-      data: config.url === '/me' ? me(true) : config.url === '/users' ? USERS : [], status: 200, statusText: 'OK', headers: {}, config,
+  describe('account area', () => {
+    const logoutSetup = async () => {
+      const pinia = createPinia();
+      setActivePinia(pinia);
+      useIdentityStore().setSession('admin');
+      const calls: string[] = [];
+      http.defaults.adapter = async (config) => {
+        calls.push(`${config.method} ${config.url}`);
+        const data = config.url === '/me' ? { ...me(false), displayName: '管理員小明' } : config.url === '/users' ? USERS : [];
+        return { data, status: 200, statusText: 'OK', headers: {}, config };
+      };
+      const router = createRouter({
+        history: createMemoryHistory(),
+        routes: [{ path: '/', component: { template: '<i/>' } }, { path: '/login', component: { template: '<i/>' } }, { path: '/change-password', component: { template: '<i/>' } }],
+      });
+      await router.push('/');
+      const i18n = createI18n({ legacy: false, locale: 'zh-TW', messages: { 'zh-TW': zhTW } });
+      const queryClient = new QueryClient();
+      const w = mount(MainLayout, {
+        attachTo: document.body,
+        global: { plugins: [[quasar.Quasar, { components: quasar, directives: quasar }], pinia, router, i18n, [VueQueryPlugin, { queryClient }]] },
+      });
+      await flushPromises();
+      return { w, router, queryClient, calls };
+    };
+
+    it('has no identity select; shows the user name, change-password and logout', async () => {
+      const { w } = await logoutSetup();
+      expect(w.find('[data-testid="identity-select"]').exists()).toBe(false);
+      expect(w.find('[data-testid="current-user"]').text()).toContain('管理員小明');
+      expect(w.find('[data-testid="change-password-link"]').exists()).toBe(true);
+      expect(w.find('[data-testid="logout"]').exists()).toBe(true);
+      w.unmount();
     });
-    const router = createRouter({ history: createMemoryHistory(), routes: [{ path: '/', component: { template: '<i/>' } }] });
-    const i18n = createI18n({ legacy: false, locale: 'zh-TW', messages: { 'zh-TW': zhTW } });
-    const queryClient = new QueryClient();
-    queryClient.setQueryData(['schema', 'stale'], { stale: true });
-    mount(MainLayout, {
-      global: { plugins: [[quasar.Quasar, { components: quasar }], pinia, router, i18n, [VueQueryPlugin, { queryClient }]] },
+
+    it('change-password link goes to /change-password', async () => {
+      const { w, router } = await logoutSetup();
+      await w.find('[data-testid="change-password-link"]').trigger('click');
+      await flushPromises();
+      expect(router.currentRoute.value.path).toBe('/change-password');
+      w.unmount();
     });
-    await flushPromises();
-    expect(useIdentityStore().userId).toBe('admin');
-    expect(queryClient.getQueryData(['schema', 'stale'])).toBeUndefined();
+
+    it('logout calls the API, clears cache and store, and goes to /login', async () => {
+      const { w, router, queryClient, calls } = await logoutSetup();
+      queryClient.setQueryData(['stale'], 1);
+      await w.find('[data-testid="logout"]').trigger('click');
+      await flushPromises();
+      expect(calls).toContain('post /auth/logout');
+      expect(queryClient.getQueryData(['stale'])).toBeUndefined();
+      expect(useIdentityStore().userId).toBe('');
+      expect(router.currentRoute.value.path).toBe('/login');
+      w.unmount();
+    });
   });
 });

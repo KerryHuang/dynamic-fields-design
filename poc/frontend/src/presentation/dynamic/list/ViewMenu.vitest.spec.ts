@@ -12,7 +12,7 @@ import ViewMenu from './ViewMenu.vue';
 
 vi.mock('src/services/api/dynamic-api', () => ({ dynamicApi: { getMe: vi.fn() } }));
 const designer = (edit: boolean) => ({
-  userId: 'u', displayName: 'U', isSystemAdmin: false, groups: [], designer: { read: true, add: edit, edit, delete: edit },
+  userId: 'u', displayName: 'U', isSystemAdmin: false, mustChangePassword: false, groups: [], designer: { read: true, add: edit, edit, delete: edit },
 });
 let canEditDesigner = true;
 

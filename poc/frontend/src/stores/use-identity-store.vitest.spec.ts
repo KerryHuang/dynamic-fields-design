@@ -1,5 +1,5 @@
 import { createPinia, setActivePinia } from 'pinia';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it } from 'vitest';
 import { useIdentityStore } from './use-identity-store';
 
 describe('identity store', () => {
@@ -7,41 +7,29 @@ describe('identity store', () => {
     localStorage.clear();
     setActivePinia(createPinia());
   });
-  afterEach(() => vi.unstubAllGlobals());
 
-  it('defaults to admin', () => {
-    expect(useIdentityStore().userId).toBe('admin');
+  it('starts logged out', () => {
+    const s = useIdentityStore();
+    expect(s.userId).toBe('');
+    expect(s.users).toEqual([]);
+    expect(s.mustChangePassword).toBe(false);
   });
 
-  it('identity store falls back to the first API user when the stored id is unknown', () => {
-    localStorage.setItem('dynamic.userId', 'ghost');
-    const list = [{ userId: 'floor01', displayName: 'F' }, { userId: 'sales01', displayName: 'S' }];
+  it('setSession / setUsers / clear', () => {
     const s = useIdentityStore();
-    expect(s.syncUsers(list)).toBe(true);
-    expect(s.userId).toBe('floor01');
-    expect(localStorage.getItem('dynamic.userId')).toBe('floor01');
-    expect(s.syncUsers(list)).toBe(false);
-    expect(s.userId).toBe('floor01');
-    s.setUser('sales01');
-    expect(s.syncUsers(list)).toBe(false);
+    s.setSession('sales01', true);
+    s.setUsers([{ userId: 'sales01', displayName: 'S' }]);
     expect(s.userId).toBe('sales01');
+    expect(s.mustChangePassword).toBe(true);
+    expect(s.users).toHaveLength(1);
+    s.clear();
+    expect(s.userId).toBe('');
+    expect(s.mustChangePassword).toBe(false);
+    expect(s.users).toEqual([]);
   });
 
-  it('persists userId and survives storage errors', () => {
-    useIdentityStore().setUser('sales01');
-    expect(localStorage.getItem('dynamic.userId')).toBe('sales01');
-    setActivePinia(createPinia());
-    expect(useIdentityStore().userId).toBe('sales01');
-
-    const boom = {
-      getItem: () => { throw new Error('denied'); },
-      setItem: () => { throw new Error('denied'); },
-    };
-    vi.stubGlobal('localStorage', boom);
-    setActivePinia(createPinia());
-    const s = useIdentityStore();
-    expect(s.userId).toBe('admin');
-    expect(() => s.setUser('floor01')).not.toThrow();
-    expect(s.userId).toBe('floor01');
+  it('does not persist the session in localStorage', () => {
+    useIdentityStore().setSession('sales01');
+    expect(localStorage.length).toBe(0);
   });
 });

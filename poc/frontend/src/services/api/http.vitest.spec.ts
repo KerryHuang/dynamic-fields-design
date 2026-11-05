@@ -1,23 +1,58 @@
 import { createPinia, setActivePinia } from 'pinia';
-import { beforeEach, describe, expect, it } from 'vitest';
-import { useIdentityStore } from 'src/stores/use-identity-store';
-import { http, toApiError } from './http';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { http, setAuthHandlers, toApiError } from './http';
 
 describe('http', () => {
   beforeEach(() => setActivePinia(createPinia()));
 
-  it('adds X-User and normalizes errors', async () => {
-    useIdentityStore().setUser('sales02');
-    let seen = '';
+  it('does not send X-User and normalizes errors', async () => {
+    let seen: unknown = 'unset';
     http.defaults.adapter = async (config) => {
-      seen = config.headers.get('X-User') as string;
+      seen = config.headers.get('X-User');
       return Promise.reject({
         config,
         response: { status: 400, data: { traceId: 't', errors: { name: ['bad'] } } },
       });
     };
     await expect(http.get('/x')).rejects.toEqual({ status: 400, errors: { name: ['bad'] } });
-    expect(seen).toBe('sales02');
+    expect(seen).toBeFalsy();
+  });
+
+  describe('auth handlers', () => {
+    const onUnauthorized = vi.fn();
+    const onPasswordChangeRequired = vi.fn();
+    const fail = (status: number, data: unknown) => {
+      http.defaults.adapter = async (config) => Promise.reject({ config, response: { status, data } });
+    };
+    beforeEach(() => {
+      vi.clearAllMocks();
+      setAuthHandlers({ onUnauthorized, onPasswordChangeRequired });
+    });
+
+    it('calls onUnauthorized on a 401 from a normal request', async () => {
+      fail(401, { message: '請先登入' });
+      await expect(http.get('/modules')).rejects.toEqual({ status: 401, message: '請先登入' });
+      expect(onUnauthorized).toHaveBeenCalledTimes(1);
+    });
+
+    it('does not call onUnauthorized for a 401 from /auth/ endpoints (wrong password)', async () => {
+      fail(401, { message: '帳號或密碼錯誤，或帳號暫時無法登入' });
+      await expect(http.post('/auth/login', {})).rejects.toMatchObject({ status: 401 });
+      expect(onUnauthorized).not.toHaveBeenCalled();
+    });
+
+    it('calls onPasswordChangeRequired on 403 passwordChangeRequired and exposes code', async () => {
+      fail(403, { message: '請先變更密碼', code: 'passwordChangeRequired' });
+      await expect(http.get('/menu')).rejects.toEqual({ status: 403, message: '請先變更密碼', code: 'passwordChangeRequired' });
+      expect(onPasswordChangeRequired).toHaveBeenCalledTimes(1);
+    });
+
+    it('ignores other 403s', async () => {
+      fail(403, { message: '沒有權限' });
+      await expect(http.get('/menu')).rejects.toMatchObject({ status: 403 });
+      expect(onPasswordChangeRequired).not.toHaveBeenCalled();
+      expect(onUnauthorized).not.toHaveBeenCalled();
+    });
   });
 
   it('maps 409/404 message and network errors', () => {

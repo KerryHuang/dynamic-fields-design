@@ -1,6 +1,8 @@
 import type { RouteRecordRaw } from 'vue-router';
 
 export const routes: RouteRecordRaw[] = [
+  { path: '/login', component: () => import('src/pages/auth/LoginPage.vue'), meta: { public: true } },
+  { path: '/change-password', component: () => import('src/pages/auth/ChangePasswordPage.vue') },
   {
     path: '/',
     component: () => import('src/layouts/MainLayout.vue'),

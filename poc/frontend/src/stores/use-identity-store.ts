@@ -2,37 +2,27 @@ import { defineStore } from 'pinia';
 import { ref } from 'vue';
 import type { User } from 'src/domain/dynamic/types';
 
-const STORAGE_KEY = 'dynamic.userId';
-
-function load(): string {
-  try {
-    return localStorage.getItem(STORAGE_KEY) || 'admin';
-  } catch {
-    return 'admin';
-  }
-}
-
+/** Session identity. The cookie is the real session; this only mirrors who is signed in ('' = signed out). */
 export const useIdentityStore = defineStore('identity', () => {
-  const userId = ref(load());
-  /** Users from GET /users, filled by syncUsers. */
+  const userId = ref('');
+  const mustChangePassword = ref(false);
+  /** Users from GET /users, filled by MainLayout. */
   const users = ref<User[]>([]);
 
-  function setUser(id: string) {
+  function setSession(id: string, mustChange = false) {
     userId.value = id;
-    try {
-      localStorage.setItem(STORAGE_KEY, id);
-    } catch {
-      /* storage unavailable: keep in-memory only */
-    }
+    mustChangePassword.value = mustChange;
   }
 
-  /** The user list comes from the API; a stored id that is not in it falls back to the first user. Returns whether userId changed. */
-  function syncUsers(list: User[]): boolean {
+  function setUsers(list: User[]) {
     users.value = list;
-    if (!list.length || list.some((u) => u.userId === userId.value)) return false;
-    setUser(list[0]!.userId);
-    return true;
   }
 
-  return { userId, users, setUser, syncUsers };
+  function clear() {
+    userId.value = '';
+    mustChangePassword.value = false;
+    users.value = [];
+  }
+
+  return { userId, mustChangePassword, users, setSession, setUsers, clear };
 });

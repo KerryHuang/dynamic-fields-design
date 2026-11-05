@@ -3,27 +3,9 @@
     <q-header elevated>
       <q-toolbar>
         <q-toolbar-title>Dynamic Modules POC</q-toolbar-title>
-        <span class="q-mr-sm">{{ t('identity.user') }}</span>
-        <q-select :model-value="identity.userId"
-          :options="userSel.filtered.value"
-          use-input
-          input-debounce="0"
-          fill-input
-          hide-selected
-          @filter="userSel.onFilter"
-          @popup-hide="userSel.reset"
-          option-value="userId"
-          option-label="displayName"
-          emit-value
-          map-options
-          dense
-          dark
-          borderless
-          options-dense
-          data-testid="identity-select"
-          @update:model-value="switchUser">
-          <template #no-option><SelectNoOption /></template>
-        </q-select>
+        <span class="q-mr-sm" data-testid="current-user">{{ me?.displayName }}</span>
+        <q-btn flat dense no-caps class="q-mr-sm" :label="t('auth.changePassword')" to="/change-password" data-testid="change-password-link" />
+        <q-btn flat dense no-caps :label="t('auth.logout')" data-testid="logout" @click="logout" />
       </q-toolbar>
     </q-header>
 
@@ -56,27 +38,26 @@
     </q-drawer>
 
     <q-page-container>
-      <!-- keyed by user: switching identity remounts the page, so it refetches and re-initialises -->
+      <!-- keyed by user: a new session remounts the page, so it refetches and re-initialises -->
       <router-view :key="identity.userId" />
     </q-page-container>
   </q-layout>
 </template>
 
 <script setup lang="ts">
-import { useQueryClient } from '@tanstack/vue-query';
 import { computed, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
+import { useRouter } from 'vue-router';
+import { useLogout } from 'src/application/dynamic/queries/auth-queries';
 import { useMenu } from 'src/application/dynamic/queries/modules-queries';
 import { useMe, useUsers } from 'src/application/dynamic/queries/permissions-queries';
 import { resolveI18n } from 'src/domain/dynamic/i18n-text';
-import SelectNoOption from 'src/components/framework/SelectNoOption.vue';
-import { useSelectFilter } from 'src/components/framework/useSelectFilter';
 import { useIdentityStore } from 'src/stores/use-identity-store';
 
 const { t, locale } = useI18n();
 const identity = useIdentityStore();
-const userSel = useSelectFilter(() => identity.users, (u) => u.displayName);
-const queryClient = useQueryClient();
+const router = useRouter();
+const logoutMutation = useLogout();
 
 const { data: menu } = useMenu();
 // Unsectioned items form the leading 自訂功能 group (title undefined); sections follow by name; /menu order holds inside a group.
@@ -92,11 +73,9 @@ const menuGroups = computed(() => {
 });
 const { data: me } = useMe();
 const { data: users } = useUsers();
-// A fallback identity change must reset the cache just like switchUser does.
-watch(users, (list) => { if (list && identity.syncUsers(list)) queryClient.clear(); }, { immediate: true });
+watch(users, (list) => { if (list) identity.setUsers(list); }, { immediate: true });
 
-function switchUser(id: string) {
-  identity.setUser(id);
-  queryClient.clear();
+function logout() {
+  logoutMutation.mutate(undefined, { onSettled: () => { void router.replace('/login'); } });
 }
 </script>

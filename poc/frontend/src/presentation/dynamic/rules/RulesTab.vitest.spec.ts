@@ -27,7 +27,7 @@ const rules: Rule[] = [
   { id: 2, kind: 'readOnly', condition: { all: [] }, targets: ['*'], optionIds: [], active: true },
 ];
 const me = (edit: boolean): Me => ({
-  userId: 'a', displayName: 'A', isSystemAdmin: false, groups: [], designer: { read: true, add: true, edit, delete: false },
+  userId: 'a', displayName: 'A', isSystemAdmin: false, mustChangePassword: false, groups: [], designer: { read: true, add: true, edit, delete: false },
 });
 
 function mountTab(canEdit = true) {

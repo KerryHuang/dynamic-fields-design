@@ -1,0 +1,116 @@
+import { QueryClient, VueQueryPlugin } from '@tanstack/vue-query';
+import { flushPromises, mount } from '@vue/test-utils';
+import { createPinia, setActivePinia } from 'pinia';
+import * as quasar from 'quasar';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { createI18n } from 'vue-i18n';
+import { createMemoryHistory, createRouter } from 'vue-router';
+import zhTW from 'src/i18n/zh-TW.json';
+import { dynamicApi } from 'src/services/api/dynamic-api';
+import { useIdentityStore } from 'src/stores/use-identity-store';
+import LoginPage from './LoginPage.vue';
+
+vi.mock('src/services/api/dynamic-api', () => ({
+  dynamicApi: { getAuthOptions: vi.fn(), login: vi.fn(), demoLogin: vi.fn() },
+}));
+const api = vi.mocked(dynamicApi);
+
+let mounted: ReturnType<typeof mount> | undefined;
+
+async function mountPage(options: unknown, redirect?: string) {
+  setActivePinia(createPinia());
+  api.getAuthOptions.mockResolvedValue(options as never);
+  const router = createRouter({
+    history: createMemoryHistory(),
+    routes: [{ path: '/login', component: LoginPage }, { path: '/:p(.*)*', component: { template: '<i/>' } }],
+  });
+  await router.push(redirect ? { path: '/login', query: { redirect } } : '/login');
+  const i18n = createI18n({ legacy: false, locale: 'zh-TW', messages: { 'zh-TW': zhTW } });
+  const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  queryClient.setQueryData(['stale'], 1);
+  const w = mount(LoginPage, {
+    attachTo: document.body,
+    global: { plugins: [[quasar.Quasar, { components: quasar, directives: quasar }], i18n, router, [VueQueryPlugin, { queryClient }]] },
+  });
+  await flushPromises();
+  mounted = w;
+  return { w, router, queryClient };
+}
+const q = (id: string) => document.body.querySelector(`[data-testid="${id}"]`) as HTMLElement | null;
+async function fill(id: string, value: string) {
+  const el = q(id) as HTMLInputElement;
+  el.value = value;
+  el.dispatchEvent(new Event('input'));
+  await flushPromises();
+}
+async function submit(user = 'Admin', pw = 'secret-pw') {
+  await fill('login-user', user);
+  await fill('login-password', pw);
+  q('login-submit')!.click();
+  await flushPromises();
+}
+
+const off = { demoLoginEnabled: false, demoGenerating: false, demoAccounts: [] };
+const on = { demoLoginEnabled: true, demoGenerating: false, demoAccounts: [{ userId: 'sales01', displayName: '業務一' }, { userId: 'floor01', displayName: '現場一' }] };
+
+describe('LoginPage', () => {
+  beforeEach(() => { vi.clearAllMocks(); });
+  afterEach(() => mounted?.unmount());
+
+  it('failure shows the backend message and stays on the page', async () => {
+    const { router } = await mountPage(off, '/dynamic/order');
+    api.login.mockRejectedValue({ status: 401, message: '帳號或密碼錯誤，或帳號暫時無法登入' });
+    await submit();
+    expect(q('login-error')!.textContent).toContain('帳號或密碼錯誤，或帳號暫時無法登入');
+    expect(router.currentRoute.value.path).toBe('/login');
+    expect(useIdentityStore().userId).toBe('');
+  });
+
+  it('success clears the cache, sets the session and goes to redirect', async () => {
+    const { router, queryClient } = await mountPage(off, '/dynamic/order');
+    api.login.mockResolvedValue({ userId: 'admin', displayName: 'A', mustChangePassword: false });
+    await submit();
+    expect(api.login).toHaveBeenCalledWith({ userId: 'Admin', password: 'secret-pw' });
+    expect(useIdentityStore().userId).toBe('admin');
+    expect(queryClient.getQueryData(['stale'])).toBeUndefined();
+    expect(router.currentRoute.value.fullPath).toBe('/dynamic/order');
+  });
+
+  it('an external redirect is ignored', async () => {
+    const { router } = await mountPage(off, '//evil.example');
+    api.login.mockResolvedValue({ userId: 'admin', displayName: 'A', mustChangePassword: false });
+    await submit();
+    expect(router.currentRoute.value.fullPath).toBe('/');
+  });
+
+  it('mustChangePassword goes to /change-password', async () => {
+    const { router } = await mountPage(off, '/dynamic/order');
+    api.login.mockResolvedValue({ userId: 'admin', displayName: 'A', mustChangePassword: true });
+    await submit();
+    expect(useIdentityStore().mustChangePassword).toBe(true);
+    expect(router.currentRoute.value.path).toBe('/change-password');
+  });
+
+  it('demo mode lists accounts and one click calls demo-login', async () => {
+    const { router } = await mountPage(on);
+    api.demoLogin.mockResolvedValue({ userId: 'sales01', displayName: '業務一', mustChangePassword: false });
+    expect(q('demo-account-sales01')!.textContent).toContain('業務一');
+    expect(q('demo-account-floor01')).not.toBeNull();
+    q('demo-account-sales01')!.click();
+    await flushPromises();
+    expect(api.demoLogin).toHaveBeenCalledWith('sales01');
+    expect(useIdentityStore().userId).toBe('sales01');
+    expect(router.currentRoute.value.path).toBe('/');
+  });
+
+  it('demoGenerating shows the generating hint', async () => {
+    await mountPage({ ...on, demoGenerating: true, demoAccounts: [] });
+    expect(q('demo-generating')!.textContent).toContain(zhTW.auth.demoGenerating);
+  });
+
+  it('demo disabled shows no account list', async () => {
+    await mountPage(off);
+    expect(q('demo-accounts')).toBeNull();
+    expect(q('demo-generating')).toBeNull();
+  });
+});

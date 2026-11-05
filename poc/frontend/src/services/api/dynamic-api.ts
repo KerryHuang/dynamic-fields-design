@@ -1,5 +1,5 @@
 import type {
-  ConditionNode, DesignerField, DetailRowPayload, DynamicRecord, EntitySummary, FieldConfig, FieldType, Group, I18nText, LightPage, ListView, Me, MenuItem, ModuleDetail, ModulePermissions, ModuleSchema,
+  AuthOptions, AuthUser, ConditionNode, DesignerField, DetailRowPayload, DynamicRecord, EntitySummary, FieldConfig, FieldType, Group, I18nText, LightPage, ListView, Me, MenuItem, ModuleDetail, ModulePermissions, ModuleSchema,
   ImportPreview, ImportResult, PagedResponse, RecordHistoryEntry, RelatedTab, Rule, RollupSource, User, ViewSort,
 } from 'src/domain/dynamic/types';
 import { http, toApiError } from './http';
@@ -132,6 +132,12 @@ export const dynamicApi = {
     http.put<ModulePermissions>(`/modules/${key}/permissions`, body).then(data),
   getRules: (key: string) => http.get<Rule[]>(`/modules/${key}/rules`).then(data),
   putRules: (key: string, rules: Rule[]) => http.put<Rule[]>(`/modules/${key}/rules`, { rules }).then(data),
+  getAuthOptions: () => http.get<AuthOptions>('/auth/options').then(data),
+  login: (body: { userId: string; password: string }) => http.post<AuthUser>('/auth/login', body).then(data),
+  demoLogin: (userId: string) => http.post<AuthUser>('/auth/demo-login', { userId }).then(data),
+  logout: () => http.post('/auth/logout').then(data),
+  changePassword: (body: { oldPassword: string; newPassword: string }) =>
+    http.post<AuthUser>('/auth/change-password', body).then(data),
   getMe: () => http.get<Me>('/me').then(data),
   getMenu: () => http.get<MenuItem[]>('/menu').then(data),
 
