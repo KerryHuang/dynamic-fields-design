@@ -3,7 +3,7 @@ using MediatR;
 
 namespace DynamicModules.Application.Dynamic.DemoService.Commands.GenerateDemoData;
 
-/// <summary>衝突檢查（交易已由 TransactionBehavior 開始）→ 建結構。記錄步驟由後續接上。</summary>
+/// <summary>衝突檢查（交易已由 TransactionBehavior 開始）→ 建結構 → 規劃各情境的步驟 → 依模擬時間排序執行。</summary>
 public class GenerateDemoDataHandler(DemoPreflight preflight, DemoStructure structure)
     : IRequestHandler<GenerateDemoDataRequest, ServiceResult>
 {
@@ -13,8 +13,12 @@ public class GenerateDemoDataHandler(DemoPreflight preflight, DemoStructure stru
         if (conflicts.Count > 0)
             return ServiceResult.ConflictWith("已有同代碼的模組，未產生 Demo 資料", new DemoConflicts([.. conflicts]));
 
-        var (_, failed) = await structure.BuildAsync(request.Today, ct);
+        var (context, failed) = await structure.BuildAsync(request.Today, ct);
         if (failed is not null) return failed;
-        return ServiceResult.Success(new DemoGenerateResult(0));
+
+        var steps = DemoTimeline.Plan(request.Today, DemoCatalog.Scenarios);
+        failed = await DemoTimeline.RunAsync(context!, steps, request.Progress, ct);
+        if (failed is not null) return failed;
+        return ServiceResult.Success(new DemoGenerateResult(steps.Count));
     }
 }
