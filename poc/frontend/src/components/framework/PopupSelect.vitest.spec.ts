@@ -32,7 +32,7 @@ describe('PopupSelect', () => {
   beforeEach(() => {
     vi.stubGlobal('ResizeObserver', class { observe() {} unobserve() {} disconnect() {} });
     light.mockReset();
-    light.mockResolvedValue({ items: [{ key: '1', title: '台灣精密' }, { key: '2', title: '宏達機械' }], total: 2 });
+    light.mockResolvedValue({ items: [{ key: '1', title: '台灣精密' }, { key: '2', title: '恆川機械' }], total: 2 });
   });
   afterEach(() => { vi.useRealTimers(); document.body.innerHTML = ''; });
 
@@ -41,7 +41,7 @@ describe('PopupSelect', () => {
     expect(light).not.toHaveBeenCalled();
     await openDialog(w);
     expect(light).toHaveBeenCalledWith(URL, { keyword: '', page: 1, size: 10 });
-    expect(items().map((i) => i.textContent?.trim())).toEqual(['台灣精密', '宏達機械']);
+    expect(items().map((i) => i.textContent?.trim())).toEqual(['台灣精密', '恆川機械']);
     w.unmount();
   });
 
@@ -81,19 +81,19 @@ describe('PopupSelect', () => {
   });
 
   it('shows displayTitle for the current value', () => {
-    const w = mountSelect({ modelValue: 7, reference: { key: '7', title: '永豐電子', state: 'ok' } });
-    expect((w.get('input').element as HTMLInputElement).value).toBe('永豐電子');
+    const w = mountSelect({ modelValue: 7, reference: { key: '7', title: '曜陽電子', state: 'ok' } });
+    expect((w.get('input').element as HTMLInputElement).value).toBe('曜陽電子');
     w.unmount();
   });
 
   it('a freshly picked title wins over the stored reference title', async () => {
-    light.mockResolvedValue({ items: [{ key: '8', title: '宏達機械' }], total: 1 });
-    const w = mountSelect({ modelValue: 7, reference: { key: '7', title: '永豐電子', state: 'ok' } });
+    light.mockResolvedValue({ items: [{ key: '8', title: '恆川機械' }], total: 1 });
+    const w = mountSelect({ modelValue: 7, reference: { key: '7', title: '曜陽電子', state: 'ok' } });
     await openDialog(w);
     items()[0]!.click();
     await flushPromises();
     await w.setProps({ modelValue: 8 });
-    expect((w.get('input').element as HTMLInputElement).value).toBe('宏達機械');
+    expect((w.get('input').element as HTMLInputElement).value).toBe('恆川機械');
     w.unmount();
   });
 

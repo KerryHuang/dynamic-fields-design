@@ -108,7 +108,7 @@
    - `Mock_Customer`：`CustomerNo` nvarchar(20) PK、`Name` nvarchar(100)、`DeleteFlag` bool。
    - 種子（`SeedData`，冪等）：
      - 模具：`M-0001` 外殼上蓋模、`M-0002` 外殼下蓋模、`M-0003` 按鍵模、`M-0004` 電池蓋模、`M-0005` 支架模。
-     - 客戶：`C-001` 台灣精密、`C-002` 宏達機械、`C-003` 永豐電子。
+     - 客戶：`C-001` 台灣精密、`C-002` 恆川機械、`C-003` 曜陽電子。
    - 標題格式：`{編號} {名稱}`，例如 `M-0001 外殼上蓋模`。`DeleteFlag = true` 的資料 light 查不到、`TitlesAsync` 不回（顯示為 missing）。
    - 實體名稱：`design.mold` → 模具；`sales.customer` → 客戶（I18nText，四語系）。
 10. **擴充模組**：
