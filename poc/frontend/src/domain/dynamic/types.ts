@@ -261,6 +261,16 @@ export interface AdminUser {
 export interface AdminUserUpdate { displayName: string; groupIds: number[]; isSystemAdmin: boolean }
 export interface AdminUserCreate extends AdminUserUpdate { userId: string; password: string }
 
+export interface AdminGroup { id: number; key: string; nameI18n: I18nText; memberUserIds: string[] }
+export interface BlockingOption { module: string; field: string; option: string }
+export interface GroupImpact {
+  memberCount: number;
+  modules: string[];
+  fieldPermissionCount: number;
+  dataScopeCount: number;
+  blockingOptions: BlockingOption[];
+}
+
 export interface Me {
   userId: string;
   displayName: string;

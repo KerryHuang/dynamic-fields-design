@@ -16,6 +16,7 @@ export const routes: RouteRecordRaw[] = [
       { path: 'system/dynamic-modules', component: () => import('src/pages/system/dynamic-modules/ModuleListPage.vue') },
       { path: 'system/dynamic-modules/:moduleKey', component: () => import('src/pages/system/dynamic-modules/ModuleEditorPage.vue') },
       { path: 'system/users', component: () => import('src/pages/system/UsersPage.vue') },
+      { path: 'system/groups', component: () => import('src/pages/system/GroupsPage.vue') },
       { path: 'system/demo-data', component: () => import('src/pages/system/DemoDataPage.vue') },
     ],
   },

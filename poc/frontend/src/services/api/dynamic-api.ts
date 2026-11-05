@@ -1,5 +1,5 @@
 import type {
-  AdminUser, AdminUserCreate, AdminUserUpdate, AuthOptions, AuthUser, ConditionNode, DesignerField, DetailRowPayload, DynamicRecord, EntitySummary, FieldConfig, FieldType, Group, I18nText, LightPage, ListView, Me, MenuItem, ModuleDetail, ModulePermissions, ModuleSchema,
+  AdminGroup, AdminUser, AdminUserCreate, AdminUserUpdate, AuthOptions, AuthUser, ConditionNode, DesignerField, DetailRowPayload, DynamicRecord, EntitySummary, FieldConfig, FieldType, Group, GroupImpact, I18nText, LightPage, ListView, Me, MenuItem, ModuleDetail, ModulePermissions, ModuleSchema,
   ImportPreview, ImportResult, PagedResponse, RecordHistoryEntry, RelatedTab, Rule, RollupSource, User, ViewSort,
 } from 'src/domain/dynamic/types';
 import { http, toApiError } from './http';
@@ -134,6 +134,12 @@ export const dynamicApi = {
     http.post(`/admin/users/${encodeURIComponent(id)}/reset-password`, { password }).then(data),
   setUserActive: (id: string, active: boolean) =>
     http.post(`/admin/users/${encodeURIComponent(id)}/${active ? 'activate' : 'deactivate'}`).then(data),
+  getAdminGroups: () => http.get<AdminGroup[]>('/admin/groups').then(data),
+  createGroup: (body: { name: string; locale: string }) => http.post<AdminGroup>('/admin/groups', body).then(data),
+  renameGroup: (id: number, body: { name: string; locale: string }) => http.put<AdminGroup>(`/admin/groups/${id}`, body).then(data),
+  setGroupMembers: (id: number, body: { userIds: string[] }) => http.put(`/admin/groups/${id}/members`, body).then(data),
+  getGroupImpact: (id: number) => http.get<GroupImpact>(`/admin/groups/${id}/impact`).then(data),
+  deleteGroup: (id: number) => http.delete(`/admin/groups/${id}`).then(data),
   getModulePermissions: (key: string) => http.get<ModulePermissions>(`/modules/${key}/permissions`).then(data),
   saveModulePermissions: (key: string, body: ModulePermissions) =>
     http.put<ModulePermissions>(`/modules/${key}/permissions`, body).then(data),
