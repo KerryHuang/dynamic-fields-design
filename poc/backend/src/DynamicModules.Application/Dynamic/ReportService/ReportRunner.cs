@@ -4,6 +4,7 @@ using DynamicModules.Application.Common.Security;
 using DynamicModules.Application.Common.Time;
 using DynamicModules.Application.Dynamic.Display;
 using DynamicModules.Application.Dynamic.RecordService;
+using DynamicModules.Application.Dynamic.RecordService.Data;
 using DynamicModules.Application.Dynamic.References;
 using DynamicModules.Application.Dynamic.ReportService.Data;
 using DynamicModules.Domain.Entities.Dynamic;
@@ -131,12 +132,23 @@ public class ReportRunner(
         foreach (var b in bound.Values)
             if (UnusableMessage(b, locale) is { } message) return Fail(Restricted, message);
 
-        // 條件類位置用到不可讀模組的帶出欄位，結果會是假的 empty 或 0%，整張擋下（spec §7、§13.2）；
+        // 條件與量值用到不可讀模組的帶出欄位，結果會是假的 empty、0% 或 null，整張擋下（spec §7、§13.2）；
         // 欄位與分組位置照常，值標無權限。範圍內單筆看不到的目標仍是逐列不符合，見 Matches。
-        var conditionRefs = d.Filters.Select(f => f.Field).Concat(d.Measures.Where(m => m.Condition is not null).Select(m => m.Condition!.Field));
-        if (d.PrimaryDateField is not null) conditionRefs = conditionRefs.Append(d.PrimaryDateField);
-        if (conditionRefs.Any(r => bound[ReportCalculator.KeyOf(r)].Target is { Perms: null }))
+        var conditionRefs = d.Filters.Select(f => f.Field).Concat(d.Measures.Where(m => m.Condition is not null).Select(m => m.Condition!.Field)).ToList();
+        var computedRefs = conditionRefs.Concat(d.Measures.Where(m => m.Field is not null).Select(m => m.Field!));
+        if (d.PrimaryDateField is not null) computedRefs = computedRefs.Append(d.PrimaryDateField);
+        if (computedRefs.Any(r => bound[ReportCalculator.KeyOf(r)].Target is { Perms: null }))
             return Fail(Restricted, $"無權限檢視：{HiddenFieldName}");
+
+        // 參照欄位本身放在條件裡同理：目標整個看不到時每一格都是 restricted，條件永遠不符合
+        foreach (var f in conditionRefs.Select(r => bound[ReportCalculator.KeyOf(r)].Field).Where(f => f.Type == FieldType.Reference).DistinctBy(f => f.Id))
+        {
+            if (f.Config.RefTarget is not { Kind: ReferenceTarget.ModuleKind } refTarget) continue;
+            var target = await ActiveModuleAsync(refTarget.Key, ct);
+            if (target is null) return disabled();
+            if ((await guard.AuthorizeAsync(target, PermissionAction.Read, ct)).Permissions is not { } perms || !target.TitleVisibleTo(perms))
+                return Fail(Restricted, $"無權限檢視：{HiddenFieldName}");
+        }
 
         // 權限都過了才檢查運算子，錯誤不會洩漏欄位資訊
         foreach (var f in d.Filters.Concat(d.Measures.Where(m => m.Condition is not null).Select(m => m.Condition!)))

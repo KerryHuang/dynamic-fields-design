@@ -8,8 +8,8 @@
 
 | 指令 | 結果 |
 |---|---|
-| `dotnet test poc/backend/tests/DynamicModules.ApplicationTests --filter "ReportRunner\|ReportPermissionMatrix"` | 通過（136/136） |
-| `dotnet test poc/backend --filter "Category!=Benchmark"` | 通過：DomainTests 745、ApplicationTests 846、WebAPITests 242，失敗 0 |
+| `dotnet test poc/backend/tests/DynamicModules.ApplicationTests --filter "ReportRunner\|ReportPermissionMatrix"` | 通過（147/147） |
+| `dotnet test poc/backend --filter "Category!=Benchmark"` | 通過：DomainTests 745、ApplicationTests 857、WebAPITests 242，失敗 0 |
 
 ## 效能基準
 
@@ -20,8 +20,8 @@
 | 項目 | 結果 |
 |---|---|
 | 目標（spec §5） | 中位數 < 1000 ms |
-| 5 次（ms） | 480、344、399、352、343 |
-| 中位數 | 352 ms，達標 |
+| 5 次（ms） | 459、344、396、286、286 |
+| 中位數 | 344 ms，達標 |
 
 ## 權限
 
@@ -31,7 +31,8 @@
 - 沒有 Pricing 時，金額欄位、金額結果公式、引用金額的數字公式放在欄位、分組、加總、條件、排序、比率六個位置都回 `restricted`，序列化結果不含數值；條件猜中與猜錯的回應完全相同。明細金額跟著表頭的 Pricing，帶出金額跟著目標模組的 Pricing。
 - 本人與全部範圍的數字不同；明細繼承表頭範圍；子模組無讀取權限、彙總欄位與間接引用彙總的公式、模組無讀取權限。
 - 同群組範圍只算群組成員的記錄；下鑽走同一套檢查，隱藏欄位與金額欄位在下鑽時同樣回 `restricted` 且結果不含數值。
-- 不可讀模組的帶出欄位放在條件、比率條件、主要日期時整張回 `restricted`；放在欄位與分組時值標「（無權限）」。
+- 不可讀模組的帶出欄位放在條件、比率條件、主要日期、量值時整張回 `restricted`；放在欄位與分組時值標「（無權限）」。
+- 參照欄位本身放在條件或比率條件時，目標模組不可讀或標題看不到也整張回 `restricted`；目標模組停用回 `moduleDisabled`。目標模組可讀、只是單筆記錄不在範圍內時，是逐列不符合。
 
 ## 已知限制
 

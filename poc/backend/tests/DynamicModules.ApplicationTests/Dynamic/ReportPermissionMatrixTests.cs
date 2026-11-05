@@ -1,5 +1,6 @@
 using System.Text.Json;
 using DynamicModules.Application.Dynamic.ModuleService.Commands.ActivateModule;
+using DynamicModules.Application.Dynamic.ModuleService.Commands.DeactivateModule;
 using DynamicModules.Application.Dynamic.ModuleService.Data;
 using DynamicModules.Application.Dynamic.ReportService.Data;
 using DynamicModules.Domain.Entities.Dynamic;
@@ -99,6 +100,101 @@ public class ReportPermissionMatrixTests : ReportTestBase
         await Insert("order", "sales01", (Amount, 1m));
         As("sales01");
         ShouldBeRestricted(await Run(Def(measures: [M("n", "countMain")], primary: new ReportFieldRef(Main, since.Id, CustomerRef.Id))));
+    }
+
+    [Theory]
+    [InlineData("sum")]
+    [InlineData("avg")]
+    [InlineData("min")]
+    [InlineData("max")]
+    public async Task UnreadableViaField_InMeasure_RestrictsWholeReport(string kind)
+    {
+        await Arrange(salesReadCustomer: false);
+        var score = await MustAdd("customer", FieldType.Decimal, label: "客戶評分");
+        var c = await Insert("customer", "admin", (score, 4242m));
+        await Insert("order", "sales01", (CustomerRef, c));
+        var d = Def(measures: [M("m", kind, new ReportFieldRef(Main, score.Id, CustomerRef.Id))]);
+
+        As("admin");
+        (await Run(d)).Total!["m"].Should().Be(4242m);
+
+        As("sales01");
+        var r = await Run(d);
+        ShouldBeRestricted(r, "客戶評分", "customer");
+        JsonSerializer.Serialize(r).Should().NotContain("4242");
+    }
+
+    public static TheoryData<string> DirectRefConditionPositions => new() { "filter", "ratio" };
+
+    private ReportDefinition DirectRefAt(string position, long key) => position switch
+    {
+        "filter" => Def(measures: [M("n", "countMain")], filters: [F(MainF(CustomerRef), "eq", key)]),
+        "ratio" => Def(measures: [M("r", "ratio", cond: F(MainF(CustomerRef), "eq", key))]),
+        _ => throw new ArgumentException(position),
+    };
+
+    [Theory, MemberData(nameof(DirectRefConditionPositions))]
+    public async Task DirectReference_TargetUnreadable_InCondition_RestrictsWholeReport(string position)
+    {
+        await Arrange(salesReadCustomer: false);
+        var c = await Insert("customer", "admin", (Region, "北區"));
+        await Insert("order", "sales01", (CustomerRef, c));
+        var d = DirectRefAt(position, c);
+
+        As("admin");
+        (await Run(d)).State.Should().Be("ok");
+
+        As("sales01");
+        ShouldBeRestricted(await Run(d), "customer");
+    }
+
+    [Theory, MemberData(nameof(DirectRefConditionPositions))]
+    public async Task DirectReference_TargetTitleHidden_InCondition_RestrictsWholeReport(string position)
+    {
+        await Arrange();
+        var customer = await Detail("customer");
+        await HideForSales(customer.Blocks[0].Fields.Single(f => f.Id == customer.TitleFieldId));
+        var c = await Insert("customer", "sales01", (Region, "北區"));
+        await Insert("order", "sales01", (CustomerRef, c));
+        As("sales01");
+        ShouldBeRestricted(await Run(DirectRefAt(position, c)));
+    }
+
+    [Fact]
+    public async Task DirectReference_TargetModuleDisabled_InCondition_ModuleDisabled()
+    {
+        await Arrange();
+        var c = await Insert("customer", "admin", (Region, "北區"));
+        await Insert("order", "admin", (CustomerRef, c));
+        (await Send(new DeactivateModuleRequest("customer"))).IsSuccess.Should().BeTrue();
+        (await Run(DirectRefAt("filter", c))).State.Should().Be("moduleDisabled");
+    }
+
+    [Fact]
+    public async Task DirectReference_TargetUnreadable_ColumnAndGroup_StayLabeled()
+    {
+        await Arrange(salesReadCustomer: false);
+        var c = await Insert("customer", "admin", (Region, "北區"));
+        await Insert("order", "sales01", (CustomerRef, c), (Amount, 5m));
+        As("sales01");
+        var r = await Run(Def(groups: [G(MainF(CustomerRef))], measures: [M("s", "sum", MainF(Amount))]));
+        r.State.Should().Be("ok");
+        GroupOf(r, "（無權限）").Values["s"].Should().Be(5m);
+        (await Run(Def(columns: [MainF(CustomerRef)]))).DetailRows![0].Should().Equal("（無權限）");
+    }
+
+    [Fact]
+    public async Task DirectReference_SingleRecordOutOfScope_InFilter_StaysRowLevel()
+    {
+        await Arrange();
+        var mine = await Insert("customer", "sales01", (Region, "北"));
+        var other = await Insert("customer", "sales02", (Region, "南"));
+        await Insert("order", "sales01", (CustomerRef, mine));
+        await Insert("order", "sales01", (CustomerRef, other));
+        As("sales01");
+        (await Run(DirectRefAt("filter", mine))).Total!["n"].Should().Be(1m);
+        var guess = await Run(DirectRefAt("filter", other)); // 目標模組可讀，只是這筆不在範圍內：逐列不符合
+        guess.State.Should().Be("empty");
     }
 
     [Fact]
