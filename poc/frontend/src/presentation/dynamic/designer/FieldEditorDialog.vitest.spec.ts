@@ -105,7 +105,16 @@ describe('FieldEditorDialog', () => {
     w.unmount();
   });
 
-  it('edit keeps an explicit fullWidth and resolves an unset one from the type', async () => {
+  it('edit keeps an explicit fullWidth=true on a text field', async () => {
+    const f = field('text');
+    f.config.fullWidth = true;
+    const w = mountDialog({ field: f });
+    await flushPromises();
+    expect(toggle('fullwidth-toggle').getAttribute('aria-checked')).toBe('true');
+    w.unmount();
+  });
+
+  it('edit resolves an unset fullWidth from the type and lets it be switched off', async () => {
     const spy = vi.spyOn(dynamicApi, 'updateField').mockResolvedValue(undefined);
     const f = field('textarea');
     const w = mountDialog({ field: f });

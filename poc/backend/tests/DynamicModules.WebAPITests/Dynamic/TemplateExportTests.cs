@@ -194,6 +194,12 @@ public sealed partial class TemplateExportTests : IDisposable
         blockRes.StatusCode.Should().Be(HttpStatusCode.Created);
         var amountBlock = (await JsonOf(blockRes)).GetProperty("id").GetInt64();
         await Ok(_admin.PutAsJsonAsync($"{Base}/blocks/{amountBlock}", new { label = Zh("金額"), collapsed = true, columns = 3 }));
+        // 非第一個、未收合、非預設欄數（1）的區塊：套用時必須再更新，否則欄數會退回預設
+        var noteRes = await _admin.PostAsJsonAsync($"{Base}/modules/{Order}/blocks", new { label = Zh("附註") });
+        noteRes.StatusCode.Should().Be(HttpStatusCode.Created);
+        var noteBlock = (await JsonOf(noteRes)).GetProperty("id").GetInt64();
+        await Ok(_admin.PutAsJsonAsync($"{Base}/blocks/{noteBlock}", new { label = Zh("附註"), collapsed = false, columns = 1 }));
+        await AddField(Order, noteBlock, "text", "附註內容", new { });
 
         var (lineBlock, _) = await NewModule(Line, "訂單明細", "品名");
         var parentRef = await AddField(Line, lineBlock, "reference", "訂單",
@@ -254,9 +260,10 @@ public sealed partial class TemplateExportTests : IDisposable
         first.Warnings.Should().BeNullOrEmpty();
         first.Modules.Select(m => m.Code).Should().Equal(Order, Line);
         var order = first.Modules[0];
-        order.Blocks.Should().HaveCount(2);
+        order.Blocks.Should().HaveCount(3);
         order.Blocks[1].Collapsed.Should().BeTrue();
-        (order.Blocks[0].Columns, order.Blocks[1].Columns).Should().Be((2, 3));
+        order.Blocks[2].Collapsed.Should().BeFalse();
+        (order.Blocks[0].Columns, order.Blocks[1].Columns, order.Blocks[2].Columns).Should().Be((2, 3, 1));
         Field(order, "說明").Config.GetProperty("fullWidth").GetBoolean().Should().BeFalse();
         Field(order, "地址").Config.GetProperty("fullWidth").GetBoolean().Should().BeTrue();
         order.Rules.Should().HaveCount(4);
