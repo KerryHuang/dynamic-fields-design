@@ -32,13 +32,16 @@ export function useDemoLogin() {
   return useMutation({ mutationFn: (userId: string) => dynamicApi.demoLogin(userId), onSuccess: start });
 }
 
-/** Signs out locally even when the API call fails: the cookie then expires on its own. */
+/**
+ * Clears the local session only after the server confirmed the logout. On a failure (network down) the cookie is still valid,
+ * and a reload would return to the same account, so the caller keeps the page and shows an error.
+ */
 export function useLogout() {
   const qc = useQueryClient();
   const identity = useIdentityStore();
   return useMutation({
     mutationFn: () => dynamicApi.logout(),
-    onSettled: () => {
+    onSuccess: () => {
       qc.clear();
       identity.clear();
     },

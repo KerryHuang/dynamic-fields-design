@@ -5,7 +5,8 @@
         <q-toolbar-title>Dynamic Modules POC</q-toolbar-title>
         <span class="q-mr-sm" data-testid="current-user">{{ me?.displayName }}</span>
         <q-btn flat dense no-caps class="q-mr-sm" :label="t('auth.changePassword')" to="/change-password" data-testid="change-password-link" />
-        <q-btn flat dense no-caps :label="t('auth.logout')" data-testid="logout" @click="logout" />
+        <span v-if="logoutError" class="q-mr-sm bg-negative text-white q-px-sm rounded-borders" data-testid="logout-error">{{ t('auth.logoutFailed') }}</span>
+        <q-btn flat dense no-caps :label="t('auth.logout')" :loading="logoutMutation.isPending.value" data-testid="logout" @click="logout" />
       </q-toolbar>
     </q-header>
 
@@ -53,7 +54,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, watch } from 'vue';
+import { computed, ref, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { useRouter } from 'vue-router';
 import { useLogout } from 'src/application/dynamic/queries/auth-queries';
@@ -83,7 +84,12 @@ const { data: me } = useMe();
 const { data: users } = useUsers();
 watch(users, (list) => { if (list) identity.setUsers(list); }, { immediate: true });
 
+const logoutError = ref(false);
 function logout() {
-  logoutMutation.mutate(undefined, { onSettled: () => { void router.replace('/login'); } });
+  logoutError.value = false;
+  logoutMutation.mutate(undefined, {
+    onSuccess: () => { void router.replace('/login'); },
+    onError: () => { logoutError.value = true; },
+  });
 }
 </script>

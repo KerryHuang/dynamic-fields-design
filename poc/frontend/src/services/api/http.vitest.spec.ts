@@ -41,6 +41,21 @@ describe('http', () => {
       expect(onUnauthorized).not.toHaveBeenCalled();
     });
 
+    it('calls onUnauthorized for a 401 from other /auth/ endpoints (logout, change-password, options)', async () => {
+      fail(401, { message: '請先登入' });
+      for (const url of ['/auth/logout', '/auth/change-password', '/auth/options']) {
+        onUnauthorized.mockClear();
+        await expect(http.post(url, {})).rejects.toMatchObject({ status: 401 });
+        expect(onUnauthorized, url).toHaveBeenCalledTimes(1);
+      }
+    });
+
+    it('does not call onUnauthorized for a failed demo login either', async () => {
+      fail(401, { message: '帳號或密碼錯誤，或帳號暫時無法登入' });
+      await expect(http.post('/auth/demo-login', {})).rejects.toMatchObject({ status: 401 });
+      expect(onUnauthorized).not.toHaveBeenCalled();
+    });
+
     it('calls onPasswordChangeRequired on 403 passwordChangeRequired and exposes code', async () => {
       fail(403, { message: '請先變更密碼', code: 'passwordChangeRequired' });
       await expect(http.get('/menu')).rejects.toEqual({ status: 403, message: '請先變更密碼', code: 'passwordChangeRequired' });

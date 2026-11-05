@@ -36,10 +36,17 @@ export function toApiError(e: unknown): ApiError {
   return status === 409 && data?.references ? { ...base, references: data.references, total: data.total } : base;
 }
 
+// Only a failed sign-in attempt is a plain 401; elsewhere under /auth/ (logout, change-password, options) a 401 means the session expired.
+const SIGN_IN_URLS = ['/auth/login', '/auth/demo-login'];
+
+/** Session-level reactions to a failed response. Requests that bypass the interceptor (validateStatus) call this themselves. */
+export function handleAuthFailure(err: ApiError, url?: string) {
+  if (err.status === 401 && !SIGN_IN_URLS.includes(url ?? '')) authHandlers?.onUnauthorized();
+  else if (err.status === 403 && err.code === 'passwordChangeRequired') authHandlers?.onPasswordChangeRequired();
+}
+
 http.interceptors.response.use((r) => r, (e) => {
   const err = toApiError(e);
-  // A 401 from /auth/* is a failed login, not an expired session.
-  if (err.status === 401 && !(e as AxiosError)?.config?.url?.startsWith('/auth/')) authHandlers?.onUnauthorized();
-  else if (err.status === 403 && err.code === 'passwordChangeRequired') authHandlers?.onPasswordChangeRequired();
+  handleAuthFailure(err, (e as AxiosError)?.config?.url);
   return Promise.reject(err);
 });

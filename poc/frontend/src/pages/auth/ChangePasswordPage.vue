@@ -2,7 +2,7 @@
 import { ref } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { useRouter } from 'vue-router';
-import { useChangePassword } from 'src/application/dynamic/queries/auth-queries';
+import { useChangePassword, useLogout } from 'src/application/dynamic/queries/auth-queries';
 import { leftoverMessages } from 'src/presentation/dynamic/designer/api-error';
 import type { ApiError } from 'src/services/api/http';
 import { useIdentityStore } from 'src/stores/use-identity-store';
@@ -11,6 +11,7 @@ const { t } = useI18n();
 const router = useRouter();
 const identity = useIdentityStore();
 const change = useChangePassword();
+const logoutMutation = useLogout();
 
 const MIN_LENGTH = 8;
 const oldPassword = ref('');
@@ -25,6 +26,14 @@ const submit = () => {
   change.mutate({ oldPassword: oldPassword.value, newPassword: newPassword.value }, {
     onSuccess: () => { void router.replace('/'); },
     onError: (e) => { error.value = leftoverMessages(e as unknown as ApiError, []).join('、') || t('auth.changeFailed'); },
+  });
+};
+
+const logout = () => {
+  error.value = '';
+  logoutMutation.mutate(undefined, {
+    onSuccess: () => { void router.replace('/login'); },
+    onError: () => { error.value = t('auth.logoutFailed'); },
   });
 };
 </script>
@@ -43,6 +52,11 @@ const submit = () => {
           <q-btn type="submit" color="primary" class="full-width" :label="t('auth.changePassword')" :loading="change.isPending.value" data-testid="cp-submit" />
         </q-card-section>
       </q-form>
+      <q-card-actions>
+        <q-btn v-if="!identity.mustChangePassword" flat no-caps :label="t('auth.backToApp')" data-testid="cp-back" @click="router.push('/')" />
+        <q-space />
+        <q-btn flat no-caps :label="t('auth.logout')" :loading="logoutMutation.isPending.value" data-testid="cp-logout" @click="logout" />
+      </q-card-actions>
     </q-card>
   </div>
 </template>

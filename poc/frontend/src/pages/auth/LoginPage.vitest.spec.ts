@@ -103,9 +103,10 @@ describe('LoginPage', () => {
     expect(router.currentRoute.value.path).toBe('/');
   });
 
-  it('demoGenerating shows the generating hint', async () => {
-    await mountPage({ ...on, demoGenerating: true, demoAccounts: [] });
+  it('demoGenerating shows the hint together with the admin account the backend still lists', async () => {
+    await mountPage({ ...on, demoGenerating: true, demoAccounts: [{ userId: 'admin', displayName: '系統管理員' }] });
     expect(q('demo-generating')!.textContent).toContain(zhTW.auth.demoGenerating);
+    expect(q('demo-account-admin')!.textContent).toContain('系統管理員');
   });
 
   it('demo disabled shows no account list', async () => {

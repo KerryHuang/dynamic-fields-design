@@ -51,7 +51,7 @@ const pickDemo = (id: string) => {
         <q-card-section>
           <div class="text-subtitle2 q-mb-sm">{{ t('auth.demoTitle') }}</div>
           <div v-if="options.data.value.demoGenerating" class="text-caption" data-testid="demo-generating">{{ t('auth.demoGenerating') }}</div>
-          <div v-else class="q-gutter-xs" data-testid="demo-accounts">
+          <div class="q-gutter-xs" data-testid="demo-accounts">
             <q-btn
               v-for="a in options.data.value.demoAccounts"
               :key="a.userId"

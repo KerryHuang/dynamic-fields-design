@@ -10,17 +10,17 @@ import { dynamicApi } from 'src/services/api/dynamic-api';
 import { useIdentityStore } from 'src/stores/use-identity-store';
 import ChangePasswordPage from './ChangePasswordPage.vue';
 
-vi.mock('src/services/api/dynamic-api', () => ({ dynamicApi: { changePassword: vi.fn() } }));
+vi.mock('src/services/api/dynamic-api', () => ({ dynamicApi: { changePassword: vi.fn(), logout: vi.fn() } }));
 const api = vi.mocked(dynamicApi);
 
 let mounted: ReturnType<typeof mount> | undefined;
 
-async function mountPage() {
+async function mountPage(forced = true) {
   setActivePinia(createPinia());
-  useIdentityStore().setSession('admin', true);
+  useIdentityStore().setSession('admin', forced);
   const router = createRouter({
     history: createMemoryHistory(),
-    routes: [{ path: '/change-password', component: ChangePasswordPage }, { path: '/', component: { template: '<i/>' } }],
+    routes: [{ path: '/change-password', component: ChangePasswordPage }, { path: '/login', component: { template: '<i/>' } }, { path: '/', component: { template: '<i/>' } }],
   });
   await router.push('/change-password');
   const i18n = createI18n({ legacy: false, locale: 'zh-TW', messages: { 'zh-TW': zhTW } });
@@ -80,5 +80,34 @@ describe('ChangePasswordPage', () => {
     await submit('wrong-password', 'new-password-1', 'new-password-1');
     expect(q('cp-error')!.textContent).toContain('目前密碼不正確');
     expect(router.currentRoute.value.path).toBe('/change-password');
+  });
+
+  it('forced change: logout button signs out and returns to /login; no way back to the app', async () => {
+    const router = await mountPage(true);
+    api.logout.mockResolvedValue(undefined as never);
+    expect(q('cp-back')).toBeNull();
+    q('cp-logout')!.click();
+    await flushPromises();
+    expect(api.logout).toHaveBeenCalledTimes(1);
+    expect(useIdentityStore().userId).toBe('');
+    expect(router.currentRoute.value.path).toBe('/login');
+  });
+
+  it('logout failure keeps the session and the page, and shows an error', async () => {
+    const router = await mountPage(true);
+    api.logout.mockRejectedValue({ status: 0, message: 'Network Error' });
+    q('cp-logout')!.click();
+    await flushPromises();
+    expect(useIdentityStore().userId).toBe('admin');
+    expect(router.currentRoute.value.path).toBe('/change-password');
+    expect(q('cp-error')!.textContent).toContain(zhTW.auth.logoutFailed);
+  });
+
+  it('voluntary change: offers a way back to the app', async () => {
+    const router = await mountPage(false);
+    expect(q('cp-required')).toBeNull();
+    q('cp-back')!.click();
+    await flushPromises();
+    expect(router.currentRoute.value.path).toBe('/');
   });
 });

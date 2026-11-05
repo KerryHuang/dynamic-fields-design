@@ -2,7 +2,7 @@ import type {
   AdminGroup, AdminUser, AdminUserCreate, AdminUserUpdate, AuthOptions, AuthUser, ConditionNode, DesignerField, DetailRowPayload, DynamicRecord, EntitySummary, FieldConfig, FieldType, Group, GroupImpact, I18nText, LightPage, ListView, Me, MenuItem, ModuleDetail, ModulePermissions, ModuleSchema,
   ImportPreview, ImportResult, PagedResponse, RecordHistoryEntry, RelatedTab, Rule, RollupSource, User, ViewSort,
 } from 'src/domain/dynamic/types';
-import { http, toApiError } from './http';
+import { handleAuthFailure, http, toApiError } from './http';
 
 export interface ModuleSummary {
   id: number;
@@ -189,7 +189,7 @@ export const dynamicApi = {
   recordByHost: (moduleKey: string, hostKey: string) =>
     http.get<DynamicRecord>(`/modules/${moduleKey}/records/by-host/${encodeURIComponent(hostKey)}`).then(data),
   deleteRecord: (id: number, rowVersion: string) => http.delete<void>(`/records/${id}`, { params: { rowVersion } }).then(data),
-  /** Blob download through axios so X-User is sent; an error body arrives as a Blob, so it is parsed before building the ApiError. */
+  /** Blob download through axios (session cookie, base URL); validateStatus bypasses the interceptor, so the error body (a Blob) is parsed here and passed to handleAuthFailure by hand. */
   exportRecords: async (key: string, format: 'csv' | 'xlsx', { filter, sort, q }: ExportQuery, locale: string) => {
     const r = await http.get<Blob>(`/modules/${key}/export`, {
       params: {
@@ -204,7 +204,9 @@ export const dynamicApi = {
     if (r.status >= 400) {
       let body: unknown;
       try { body = JSON.parse(await r.data.text()); } catch { body = undefined; }
-      throw toApiError({ response: { status: r.status, data: body } });
+      const err = toApiError({ response: { status: r.status, data: body } });
+      handleAuthFailure(err);
+      throw err;
     }
     return { blob: r.data, fileName: dispositionFileName(r.headers['content-disposition']) ?? `${key}.${format}` };
   },
@@ -221,7 +223,9 @@ export const dynamicApi = {
     if (r.status >= 400) {
       let body: unknown;
       try { body = JSON.parse(await r.data.text()); } catch { body = undefined; }
-      throw toApiError({ response: { status: r.status, data: body } });
+      const err = toApiError({ response: { status: r.status, data: body } });
+      handleAuthFailure(err);
+      throw err;
     }
     return { blob: r.data, fileName: dispositionFileName(r.headers['content-disposition']) ?? `${key}.template.json` };
   },

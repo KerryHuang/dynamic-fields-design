@@ -1,7 +1,7 @@
 import { createPinia, setActivePinia } from 'pinia';
-import { beforeEach, describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { dynamicApi } from './dynamic-api';
-import { http } from './http';
+import { http, setAuthHandlers } from './http';
 
 describe('dynamicApi.getPagedRecords', () => {
   beforeEach(() => setActivePinia(createPinia()));
@@ -109,6 +109,27 @@ describe('dynamicApi export and import', () => {
     expect((await dynamicApi.exportRecords('crm', 'xlsx', {}, 'zh-TW')).fileName).toBe('crm-1.xlsx');
     reply(200, new Blob(['x']));
     expect((await dynamicApi.exportRecords('crm', 'xlsx', {}, 'zh-TW')).fileName).toBe('crm.xlsx');
+  });
+
+  it('exportRecords and exportTemplate route 401 and passwordChangeRequired through the auth handlers', async () => {
+    const onUnauthorized = vi.fn();
+    const onPasswordChangeRequired = vi.fn();
+    setAuthHandlers({ onUnauthorized, onPasswordChangeRequired });
+    const calls = [
+      () => dynamicApi.exportRecords('crm', 'csv', {}, 'zh-TW'),
+      () => dynamicApi.exportTemplate('crm'),
+    ];
+    for (const call of calls) {
+      onUnauthorized.mockClear();
+      onPasswordChangeRequired.mockClear();
+      reply(401, new Blob([JSON.stringify({ message: '請先登入' })]));
+      await expect(call()).rejects.toMatchObject({ status: 401 });
+      expect(onUnauthorized).toHaveBeenCalledTimes(1);
+      reply(403, new Blob([JSON.stringify({ message: '請先變更密碼', code: 'passwordChangeRequired' })]));
+      await expect(call()).rejects.toMatchObject({ status: 403, code: 'passwordChangeRequired' });
+      expect(onPasswordChangeRequired).toHaveBeenCalledTimes(1);
+      expect(onUnauthorized).toHaveBeenCalledTimes(1);
+    }
   });
 
   it('exportRecords parses a Blob error body so the 400 message is kept', async () => {

@@ -263,5 +263,22 @@ describe('MainLayout menu', () => {
       expect(router.currentRoute.value.path).toBe('/login');
       w.unmount();
     });
+
+    it('logout failure keeps the session, the cache and the page, and shows an error', async () => {
+      const { w, router, queryClient } = await logoutSetup();
+      const ok = http.defaults.adapter as (c: never) => Promise<unknown>;
+      http.defaults.adapter = (async (config: { url?: string }) => {
+        if (config.url === '/auth/logout') return Promise.reject({ config, message: 'Network Error' });
+        return ok(config as never);
+      }) as never;
+      queryClient.setQueryData(['stale'], 1);
+      await w.find('[data-testid="logout"]').trigger('click');
+      await flushPromises();
+      expect(useIdentityStore().userId).toBe('admin');
+      expect(queryClient.getQueryData(['stale'])).toBe(1);
+      expect(router.currentRoute.value.path).toBe('/');
+      expect(w.find('[data-testid="logout-error"]').text()).toContain(zhTW.auth.logoutFailed);
+      w.unmount();
+    });
   });
 });
