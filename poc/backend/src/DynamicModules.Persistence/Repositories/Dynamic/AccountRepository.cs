@@ -83,7 +83,9 @@ public class AccountRepository(DynamicDbContext db) : IAccountRepository
                           select new { Module = m.NameI18n, Field = f.LabelI18n, Option = o.LabelI18n })
             .AsNoTracking().ToListAsync(ct);
         var blocking = rows.Select(r => new BlockingOption(r.Module.Resolve(locale), r.Field.Resolve(locale), r.Option.Resolve(locale))).ToList();
-        return new GroupImpact(members, modules, fieldPerms, scopes, blocking);
+        var reports = await db.Set<Report>().AsNoTracking()
+            .Where(r => r.Shares.Any(s => s.GroupId == groupId)).OrderBy(r => r.Id).Select(r => r.Name).ToListAsync(ct);
+        return new GroupImpact(members, modules, fieldPerms, scopes, blocking, reports);
     }
 
     public async Task DeleteGroupAsync(PermissionGroup group, CancellationToken ct)
@@ -94,6 +96,7 @@ public class AccountRepository(DynamicDbContext db) : IAccountRepository
         db.Set<FieldPermission>().RemoveRange(await db.Set<FieldPermission>().Where(x => x.GroupId == id).ToListAsync(ct));
         db.Set<ModuleDataScope>().RemoveRange(await db.Set<ModuleDataScope>().Where(x => x.GroupId == id).ToListAsync(ct));
         db.Set<FieldOptionScope>().RemoveRange(await db.Set<FieldOptionScope>().Where(x => x.GroupId == id).ToListAsync(ct));
+        db.Set<ReportShare>().RemoveRange(await db.Set<ReportShare>().Where(x => x.GroupId == id).ToListAsync(ct));
         db.Set<PermissionGroup>().Remove(group);
     }
 }
