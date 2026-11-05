@@ -1,0 +1,107 @@
+{
+  "formatVersion": 1,
+  "key": "quality",
+  "name": { "zh-TW": "品質異常", "en-US": "Quality issue" },
+  "description": { "zh-TW": "依異常類型限制不良原因，結案後整張唯讀；需要庫裡已有訂單模組（order）", "en-US": "Defect causes filtered by issue type, read-only once closed; requires an existing order module (order)" },
+  "modules": [
+    {
+      "code": "quality", "key": "quality", "name": { "zh-TW": "品質異常", "en-US": "Quality issue" },
+      "icon": "report_problem", "section": "品質",
+      "kind": "standalone", "hostEntityKey": null,
+      "titleField": "no",
+      "blocks": [
+        { "code": "main", "label": { "zh-TW": "異常", "en-US": "Issue" }, "collapsed": false,
+          "fields": [
+            { "code": "no", "type": "autonumber", "label": { "zh-TW": "異常單號", "en-US": "Issue no." },
+              "config": { "format": "QA-{yyyyMM}-{0000}", "showInList": true, "isSortable": true } },
+            { "code": "order", "type": "reference", "label": { "zh-TW": "訂單", "en-US": "Sales order" },
+              "config": { "refTarget": { "kind": "module", "key": "order" }, "showInList": true } },
+            { "code": "reportDate", "type": "date", "label": { "zh-TW": "發現日期", "en-US": "Found on" },
+              "config": { "defaultToday": true, "required": true, "showInList": true, "isSortable": true } },
+            { "code": "kind", "type": "enum", "label": { "zh-TW": "異常類型", "en-US": "Issue type" },
+              "options": [
+                { "code": "appearance", "label": { "zh-TW": "外觀", "en-US": "Appearance" }, "color": null },
+                { "code": "dimension", "label": { "zh-TW": "尺寸", "en-US": "Dimension" }, "color": null },
+                { "code": "function", "label": { "zh-TW": "功能", "en-US": "Function" }, "color": null }
+              ],
+              "config": { "required": true, "isFilterable": true } },
+            { "code": "cause", "type": "enum", "label": { "zh-TW": "不良原因", "en-US": "Defect cause" },
+              "options": [
+                { "code": "scratch", "label": { "zh-TW": "刮傷", "en-US": "Scratch" }, "color": null },
+                { "code": "stain", "label": { "zh-TW": "髒污", "en-US": "Stain" }, "color": null },
+                { "code": "burr", "label": { "zh-TW": "毛邊", "en-US": "Burr" }, "color": null },
+                { "code": "oversize", "label": { "zh-TW": "尺寸過大", "en-US": "Oversize" }, "color": null },
+                { "code": "undersize", "label": { "zh-TW": "尺寸過小", "en-US": "Undersize" }, "color": null },
+                { "code": "warp", "label": { "zh-TW": "變形", "en-US": "Warp" }, "color": null },
+                { "code": "no-power", "label": { "zh-TW": "無法開機", "en-US": "No power" }, "color": null },
+                { "code": "short", "label": { "zh-TW": "短路", "en-US": "Short circuit" }, "color": null }
+              ] },
+            { "code": "severity", "type": "enum", "label": { "zh-TW": "嚴重度", "en-US": "Severity" },
+              "options": [
+                { "code": "minor", "label": { "zh-TW": "輕微", "en-US": "Minor" }, "color": "#21ba45" },
+                { "code": "normal", "label": { "zh-TW": "一般", "en-US": "Normal" }, "color": "#f2c037" },
+                { "code": "critical", "label": { "zh-TW": "重大", "en-US": "Critical" }, "color": "#c10015" }
+              ],
+              "config": { "required": true, "showInList": true, "isFilterable": true } },
+            { "code": "status", "type": "enum", "label": { "zh-TW": "狀態", "en-US": "Status" },
+              "options": [
+                { "code": "open", "label": { "zh-TW": "開立", "en-US": "Open" }, "color": null },
+                { "code": "handling", "label": { "zh-TW": "處置中", "en-US": "Handling" }, "color": null },
+                { "code": "closed", "label": { "zh-TW": "結案", "en-US": "Closed" }, "color": null }
+              ],
+              "config": { "defaultValue": "opt_open", "required": true, "showInList": true, "isFilterable": true } }
+          ] },
+        { "code": "disposal", "label": { "zh-TW": "處置", "en-US": "Disposal" }, "collapsed": false,
+          "fields": [
+            { "code": "actions", "type": "multienum", "label": { "zh-TW": "處置方式", "en-US": "Actions" },
+              "options": [
+                { "code": "rework", "label": { "zh-TW": "重工", "en-US": "Rework" }, "color": null },
+                { "code": "scrap", "label": { "zh-TW": "報廢", "en-US": "Scrap" }, "color": null },
+                { "code": "sort", "label": { "zh-TW": "篩選", "en-US": "Sorting" }, "color": null },
+                { "code": "concession", "label": { "zh-TW": "特採", "en-US": "Concession" }, "color": null },
+                { "code": "return", "label": { "zh-TW": "退貨", "en-US": "Return" }, "color": null }
+              ] },
+            { "code": "defectRate", "type": "percent", "label": { "zh-TW": "不良率", "en-US": "Defect rate" },
+              "config": { "scale": 1 } },
+            { "code": "responsibleUnit", "type": "text", "label": { "zh-TW": "責任單位", "en-US": "Responsible unit" } }
+          ] }
+      ],
+      "rules": [
+        { "kind": "optionFilter", "targets": ["field:cause"], "active": true, "options": ["scratch", "stain", "burr"], "message": null,
+          "condition": { "field": "kind", "op": "eq", "value": "opt_appearance" } },
+        { "kind": "optionFilter", "targets": ["field:cause"], "active": true, "options": ["oversize", "undersize", "warp"], "message": null,
+          "condition": { "field": "kind", "op": "eq", "value": "opt_dimension" } },
+        { "kind": "optionFilter", "targets": ["field:cause"], "active": true, "options": ["no-power", "short"], "message": null,
+          "condition": { "field": "kind", "op": "eq", "value": "opt_function" } },
+        { "kind": "readOnly", "targets": ["*"], "active": true, "options": [], "message": null,
+          "condition": { "field": "status", "op": "eq", "value": "opt_closed" } }
+      ],
+      "views": [
+        { "name": { "zh-TW": "全部品質異常", "en-US": "All quality issues" },
+          "columns": ["no", "order", "reportDate", "kind", "severity", "status"], "filter": null,
+          "sort": [ { "field": "reportDate", "order": "desc" } ], "isDefault": true },
+        { "name": { "zh-TW": "未結案的重大異常", "en-US": "Open critical issues" },
+          "columns": ["no", "order", "reportDate", "kind", "severity", "status"],
+          "filter": { "all": [
+            { "field": "severity", "op": "eq", "value": "opt_critical" },
+            { "field": "status", "op": "in", "value": ["opt_open", "opt_handling"] }
+          ] },
+          "sort": [ { "field": "reportDate", "order": "asc" } ], "isDefault": false }
+      ],
+      "permissions": [
+        { "group": "qa", "scope": "all",
+          "privileges": { "read": true, "add": true, "edit": true, "delete": true,
+                          "printExport": true, "pricing": false, "approve": false } },
+        { "group": "floor", "scope": "group",
+          "privileges": { "read": true, "add": true, "edit": false, "delete": false,
+                          "printExport": false, "pricing": false, "approve": false } },
+        { "group": "sales", "scope": "all",
+          "privileges": { "read": true, "add": false, "edit": true, "delete": false,
+                          "printExport": false, "pricing": false, "approve": false } },
+        { "group": "sales-manager", "scope": "all",
+          "privileges": { "read": true, "add": false, "edit": false, "delete": false,
+                          "printExport": false, "pricing": false, "approve": false } }
+      ]
+    }
+  ]
+}

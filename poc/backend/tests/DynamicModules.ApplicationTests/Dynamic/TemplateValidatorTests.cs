@@ -87,6 +87,20 @@ public class TemplateValidatorTests
         TemplateValidator.Validate(package!).Should().BeEmpty();
     }
 
+    [Theory, InlineData("repair"), InlineData("mold-care"), InlineData("quality")]
+    public void BuiltIn_IsValid(string key)
+    {
+        var (package, error) = TemplateJson.Parse(File.ReadAllText(OrderTemplate.PathOf(key)));
+        error.Should().BeNull();
+        package!.Key.Should().Be(key);
+        TemplateValidator.Validate(package).Should().BeEmpty();
+    }
+
+    [Fact]
+    public void Catalog_LoadsFourBuiltIns() =>
+        TemplateCatalog.Load(TemplateCatalog.DefaultDirectory).BuiltIns.Select(t => t.Key)
+            .Should().BeEquivalentTo("order", "repair", "mold-care", "quality");
+
     [Fact]
     public void BlockColumns_MissingMeansTwo()
     {
@@ -299,8 +313,10 @@ public class TemplateValidatorTests
     }
 }
 
-/// <summary>內建訂單範本的路徑：由 csproj 複製到測試輸出目錄的 templates/。</summary>
+/// <summary>內建範本的路徑：由 csproj 複製到測試輸出目錄的 templates/。</summary>
 internal static class OrderTemplate
 {
-    public static string Path => System.IO.Path.Combine(AppContext.BaseDirectory, "templates", "order.json");
+    public static string Path => PathOf("order");
+
+    public static string PathOf(string key) => System.IO.Path.Combine(AppContext.BaseDirectory, "templates", $"{key}.json");
 }

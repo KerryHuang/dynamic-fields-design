@@ -1,0 +1,98 @@
+{
+  "formatVersion": 1,
+  "key": "repair",
+  "name": { "zh-TW": "故障報修", "en-US": "Repair request" },
+  "description": { "zh-TW": "模具故障提報、處理與結案驗收，含停機時數", "en-US": "Report, handle and close mold breakdowns, with downtime hours" },
+  "modules": [
+    {
+      "code": "repair", "key": "repair", "name": { "zh-TW": "故障報修", "en-US": "Repair request" },
+      "icon": "build", "section": "設備",
+      "kind": "standalone", "hostEntityKey": null,
+      "titleField": "no",
+      "blocks": [
+        { "code": "main", "label": { "zh-TW": "報修資料", "en-US": "Request" }, "collapsed": false,
+          "fields": [
+            { "code": "no", "type": "autonumber", "label": { "zh-TW": "報修單號", "en-US": "Request no." },
+              "config": { "format": "REP-{yyyyMM}-{0000}", "showInList": true, "isSortable": true } },
+            { "code": "mold", "type": "reference", "label": { "zh-TW": "模具", "en-US": "Mold" },
+              "config": { "refTarget": { "kind": "entity", "key": "design.mold" },
+                          "required": true, "showInList": true, "isFilterable": true } },
+            { "code": "requester", "type": "user", "label": { "zh-TW": "申請人", "en-US": "Requester" },
+              "config": { "required": true, "showInList": true } },
+            { "code": "reportDate", "type": "date", "label": { "zh-TW": "報修日期", "en-US": "Report date" },
+              "config": { "defaultToday": true, "required": true, "showInList": true, "isFilterable": true, "isSortable": true } },
+            { "code": "occurredAt", "type": "datetime", "label": { "zh-TW": "故障發生時間", "en-US": "Occurred at" } },
+            { "code": "urgent", "type": "boolean", "label": { "zh-TW": "緊急", "en-US": "Urgent" },
+              "config": { "showInList": true, "isFilterable": true } },
+            { "code": "category", "type": "enum", "label": { "zh-TW": "故障類別", "en-US": "Fault category" },
+              "options": [
+                { "code": "leak", "label": { "zh-TW": "漏水", "en-US": "Leak" }, "color": null },
+                { "code": "crack", "label": { "zh-TW": "裂模", "en-US": "Crack" }, "color": null },
+                { "code": "wear", "label": { "zh-TW": "磨耗", "en-US": "Wear" }, "color": null },
+                { "code": "stuck", "label": { "zh-TW": "卡模", "en-US": "Stuck" }, "color": null },
+                { "code": "other", "label": { "zh-TW": "其他", "en-US": "Other" }, "color": null }
+              ],
+              "config": { "isFilterable": true } },
+            { "code": "otherNote", "type": "text", "label": { "zh-TW": "其他說明", "en-US": "Other details" } },
+            { "code": "status", "type": "enum", "label": { "zh-TW": "狀態", "en-US": "Status" },
+              "options": [
+                { "code": "pending", "label": { "zh-TW": "待處理", "en-US": "Pending" }, "color": "#9e9e9e" },
+                { "code": "working", "label": { "zh-TW": "處理中", "en-US": "In progress" }, "color": "#1976d2" },
+                { "code": "verify", "label": { "zh-TW": "待驗收", "en-US": "To verify" }, "color": "#f2c037" },
+                { "code": "closed", "label": { "zh-TW": "結案", "en-US": "Closed" }, "color": "#21ba45" }
+              ],
+              "config": { "defaultValue": "opt_pending", "required": true, "showInList": true, "isFilterable": true } },
+            { "code": "description", "type": "textarea", "label": { "zh-TW": "故障說明", "en-US": "Description" },
+              "config": { "required": true } },
+            { "code": "relatedRepair", "type": "reference", "label": { "zh-TW": "關聯報修單", "en-US": "Related request" },
+              "config": { "refTarget": { "kind": "module", "key": "repair" }, "onDelete": "setNull" } }
+          ] },
+        { "code": "handling", "label": { "zh-TW": "處理", "en-US": "Handling" }, "collapsed": false,
+          "fields": [
+            { "code": "handler", "type": "user", "label": { "zh-TW": "處理人", "en-US": "Handler" },
+              "config": { "showInList": true, "isFilterable": true } },
+            { "code": "resolution", "type": "textarea", "label": { "zh-TW": "處理說明", "en-US": "Resolution" } },
+            { "code": "finishDate", "type": "date", "label": { "zh-TW": "完成日期", "en-US": "Finish date" },
+              "config": { "showInList": true, "isFilterable": true, "isSortable": true } },
+            { "code": "downtime", "type": "decimal", "label": { "zh-TW": "停機時數", "en-US": "Downtime (hours)" },
+              "config": { "scale": 1 } }
+          ] }
+      ],
+      "rules": [
+        { "kind": "visibility", "targets": ["field:otherNote"], "active": true, "options": [], "message": null,
+          "condition": { "field": "category", "op": "eq", "value": "opt_other" } },
+        { "kind": "required", "targets": ["field:resolution", "field:finishDate"], "active": true, "options": [], "message": null,
+          "condition": { "field": "status", "op": "eq", "value": "opt_closed" } },
+        { "kind": "readOnly", "targets": ["*"], "active": true, "options": [], "message": null,
+          "condition": { "field": "status", "op": "eq", "value": "opt_closed" } },
+        { "kind": "validation", "targets": ["field:finishDate"], "active": true, "options": [],
+          "message": { "zh-TW": "完成日期不得早於報修日期", "en-US": "Finish date cannot be earlier than the report date" },
+          "condition": { "any": [
+            { "field": "finishDate", "op": "isEmpty" },
+            { "field": "finishDate", "op": "gte", "value": { "fieldRef": "reportDate" } }
+          ] } }
+      ],
+      "views": [
+        { "name": { "zh-TW": "未結案報修", "en-US": "Open requests" },
+          "columns": ["no", "mold", "reportDate", "category", "status", "handler"],
+          "filter": { "field": "status", "op": "in", "value": ["opt_pending", "opt_working", "opt_verify"] },
+          "sort": [ { "field": "reportDate", "order": "asc" } ], "isDefault": true },
+        { "name": { "zh-TW": "近 30 天結案", "en-US": "Closed in the last 30 days" },
+          "columns": ["no", "mold", "reportDate", "category", "status", "handler", "finishDate"],
+          "filter": { "all": [
+            { "field": "status", "op": "eq", "value": "opt_closed" },
+            { "field": "finishDate", "op": "withinLastDays", "value": 30 }
+          ] },
+          "sort": [ { "field": "finishDate", "order": "desc" } ], "isDefault": false }
+      ],
+      "permissions": [
+        { "group": "floor", "scope": "group",
+          "privileges": { "read": true, "add": true, "edit": true, "delete": false,
+                          "printExport": false, "pricing": false, "approve": false } },
+        { "group": "maint", "scope": "all",
+          "privileges": { "read": true, "add": true, "edit": true, "delete": true,
+                          "printExport": true, "pricing": false, "approve": false } }
+      ]
+    }
+  ]
+}

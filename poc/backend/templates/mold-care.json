@@ -1,0 +1,149 @@
+{
+  "formatVersion": 1,
+  "key": "mold-care",
+  "name": { "zh-TW": "模具保養＋客戶擴充", "en-US": "Mold care and customer extension" },
+  "description": { "zh-TW": "擴充既有的模具與客戶資料，加上保養紀錄與更換零件", "en-US": "Extends existing molds and customers, with care records and replaced parts" },
+  "modules": [
+    {
+      "code": "mold", "key": "mold-info", "name": { "zh-TW": "模具資料", "en-US": "Mold information" },
+      "icon": "precision_manufacturing", "section": "設備",
+      "kind": "extension", "hostEntityKey": "design.mold",
+      "titleField": null,
+      "blocks": [
+        { "code": "main", "label": { "zh-TW": "保養資訊", "en-US": "Care information" }, "collapsed": false,
+          "fields": [
+            { "code": "lastCareDate", "type": "date", "label": { "zh-TW": "上次保養日", "en-US": "Last care date" },
+              "config": { "showInList": true } },
+            { "code": "cycleDays", "type": "integer", "label": { "zh-TW": "保養週期（天）", "en-US": "Care cycle (days)" },
+              "config": { "required": true } },
+            { "code": "shotCount", "type": "integer", "label": { "zh-TW": "累計射出數", "en-US": "Total shots" },
+              "config": { "showInList": true } }
+          ] }
+      ],
+      "rules": [],
+      "views": [],
+      "permissions": [
+        { "group": "maint", "scope": "all",
+          "privileges": { "read": true, "add": true, "edit": true, "delete": false,
+                          "printExport": false, "pricing": false, "approve": false } },
+        { "group": "floor", "scope": "all",
+          "privileges": { "read": true, "add": false, "edit": false, "delete": false,
+                          "printExport": false, "pricing": false, "approve": false } }
+      ]
+    },
+    {
+      "code": "customer", "key": "customer-info", "name": { "zh-TW": "客戶資料", "en-US": "Customer information" },
+      "icon": "business", "section": "業務",
+      "kind": "extension", "hostEntityKey": "sales.customer",
+      "titleField": null,
+      "blocks": [
+        { "code": "main", "label": { "zh-TW": "往來資訊", "en-US": "Account information" }, "collapsed": false,
+          "fields": [
+            { "code": "creditLevel", "type": "enum", "label": { "zh-TW": "信用等級", "en-US": "Credit level" },
+              "options": [
+                { "code": "a", "label": { "zh-TW": "A", "en-US": "A" }, "color": "#21ba45" },
+                { "code": "b", "label": { "zh-TW": "B", "en-US": "B" }, "color": "#f2c037" },
+                { "code": "c", "label": { "zh-TW": "C", "en-US": "C" }, "color": "#c10015" }
+              ],
+              "config": { "showInList": true } },
+            { "code": "paymentTerms", "type": "text", "label": { "zh-TW": "付款條件", "en-US": "Payment terms" } },
+            { "code": "accountRep", "type": "user", "label": { "zh-TW": "業務窗口", "en-US": "Account rep" },
+              "config": { "showInList": true } },
+            { "code": "email", "type": "email", "label": { "zh-TW": "聯絡 Email", "en-US": "Contact email" } },
+            { "code": "phone", "type": "phone", "label": { "zh-TW": "聯絡電話", "en-US": "Contact phone" } },
+            { "code": "website", "type": "url", "label": { "zh-TW": "網站", "en-US": "Website" } }
+          ] }
+      ],
+      "rules": [],
+      "views": [],
+      "permissions": [
+        { "group": "sales", "scope": "all",
+          "privileges": { "read": true, "add": false, "edit": true, "delete": false,
+                          "printExport": false, "pricing": false, "approve": false } },
+        { "group": "sales-manager", "scope": "all",
+          "privileges": { "read": true, "add": true, "edit": true, "delete": true,
+                          "printExport": false, "pricing": false, "approve": false } }
+      ]
+    },
+    {
+      "code": "care", "key": "mold-care", "name": { "zh-TW": "模具保養紀錄", "en-US": "Mold care records" },
+      "icon": "handyman", "section": "設備",
+      "kind": "standalone", "hostEntityKey": null,
+      "titleField": "no",
+      "blocks": [
+        { "code": "main", "label": { "zh-TW": "保養", "en-US": "Care" }, "collapsed": false,
+          "fields": [
+            { "code": "no", "type": "autonumber", "label": { "zh-TW": "保養單號", "en-US": "Care no." },
+              "config": { "format": "MC-{yyyyMM}-{0000}", "showInList": true, "isSortable": true } },
+            { "code": "mold", "type": "reference", "label": { "zh-TW": "模具", "en-US": "Mold" },
+              "config": { "refTarget": { "kind": "entity", "key": "design.mold" },
+                          "required": true, "showInList": true, "isFilterable": true } },
+            { "code": "categories", "type": "multienum", "label": { "zh-TW": "保養類別", "en-US": "Care categories" },
+              "options": [
+                { "code": "clean", "label": { "zh-TW": "清潔", "en-US": "Cleaning" }, "color": null },
+                { "code": "parts", "label": { "zh-TW": "更換零件", "en-US": "Part replacement" }, "color": null },
+                { "code": "calibrate", "label": { "zh-TW": "校正", "en-US": "Calibration" }, "color": null },
+                { "code": "lubricate", "label": { "zh-TW": "潤滑", "en-US": "Lubrication" }, "color": null },
+                { "code": "polish", "label": { "zh-TW": "拋光", "en-US": "Polishing" }, "color": null }
+              ],
+              "config": { "showInList": true, "isFilterable": true } },
+            { "code": "technician", "type": "user", "label": { "zh-TW": "保養人員", "en-US": "Technician" },
+              "config": { "showInList": true } },
+            { "code": "careDate", "type": "date", "label": { "zh-TW": "保養日期", "en-US": "Care date" },
+              "config": { "defaultToday": true, "required": true, "showInList": true, "isSortable": true } },
+            { "code": "startTime", "type": "time", "label": { "zh-TW": "開始時間", "en-US": "Start time" } },
+            { "code": "cycleDays", "type": "integer", "label": { "zh-TW": "保養週期（天）", "en-US": "Care cycle (days)" },
+              "config": { "required": true } },
+            { "code": "nextDate", "type": "formula", "label": { "zh-TW": "下次保養日", "en-US": "Next care date" },
+              "config": { "formula": "DATEADD({careDate}, {cycleDays})", "resultType": "date", "showInList": true } },
+            { "code": "cost", "type": "currency", "label": { "zh-TW": "費用", "en-US": "Cost" },
+              "config": { "scale": 0, "showInList": true } },
+            { "code": "note", "type": "textarea", "label": { "zh-TW": "備註", "en-US": "Note" } }
+          ] }
+      ],
+      "rules": [],
+      "views": [
+        { "name": { "zh-TW": "全部保養紀錄", "en-US": "All care records" },
+          "columns": ["no", "mold", "careDate", "categories", "technician", "nextDate", "cost"], "filter": null,
+          "sort": [ { "field": "careDate", "order": "desc" } ], "isDefault": true }
+      ],
+      "permissions": [
+        { "group": "maint", "scope": "all",
+          "privileges": { "read": true, "add": true, "edit": true, "delete": true,
+                          "printExport": true, "pricing": true, "approve": false } },
+        { "group": "floor", "scope": "all",
+          "privileges": { "read": true, "add": false, "edit": false, "delete": false,
+                          "printExport": false, "pricing": false, "approve": false } }
+      ]
+    },
+    {
+      "code": "part", "key": "mold-care-part", "name": { "zh-TW": "更換零件", "en-US": "Replaced parts" },
+      "icon": null, "section": null,
+      "kind": "standalone", "hostEntityKey": null,
+      "titleField": "partName",
+      "blocks": [
+        { "code": "main", "label": { "zh-TW": "零件", "en-US": "Part" }, "collapsed": false,
+          "fields": [
+            { "code": "care", "type": "reference", "label": { "zh-TW": "保養紀錄", "en-US": "Care record" },
+              "config": { "refTarget": { "kind": "module", "key": "care" }, "relation": "lookup", "onDelete": "cascade",
+                          "required": true, "showInList": true } },
+            { "code": "partName", "type": "text", "label": { "zh-TW": "零件名稱", "en-US": "Part name" },
+              "config": { "required": true } },
+            { "code": "qty", "type": "integer", "label": { "zh-TW": "數量", "en-US": "Quantity" } },
+            { "code": "unitCost", "type": "currency", "label": { "zh-TW": "單價", "en-US": "Unit cost" },
+              "config": { "scale": 0 } }
+          ] }
+      ],
+      "rules": [],
+      "views": [],
+      "permissions": [
+        { "group": "maint", "scope": "all",
+          "privileges": { "read": true, "add": true, "edit": true, "delete": true,
+                          "printExport": true, "pricing": true, "approve": false } },
+        { "group": "floor", "scope": "all",
+          "privileges": { "read": true, "add": false, "edit": false, "delete": false,
+                          "printExport": false, "pricing": false, "approve": false } }
+      ]
+    }
+  ]
+}
