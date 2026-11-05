@@ -91,7 +91,7 @@ public sealed class DemoDataApiTests
 
         res.StatusCode.Should().Be(HttpStatusCode.Conflict);
         var body = await JsonOf(res);
-        body.GetProperty("message").GetString().Should().Be("已有同代碼的模組，未產生 Demo 資料");
+        body.GetProperty("message").GetString().Should().Be("已有相同的資料，未產生 Demo 資料");
         body.GetProperty("items").EnumerateArray().Select(i => i.GetString()).Should().Contain("模組代碼 order 已存在");
     }
 
@@ -99,18 +99,19 @@ public sealed class DemoDataApiTests
     public async Task Generate_NeedsDesignerAddAndEdit()
     {
         using var app = new DemoApp();
-        (await app.AsUser("sales01").PostAsync(Generate, null)).StatusCode.Should().Be(HttpStatusCode.Forbidden);
+        app.AddUsers("viewer01", "adder01"); // 不用 sales01 等示範帳號名，否則 Preflight 會回報衝突
+        (await app.AsUser("viewer01").PostAsync(Generate, null)).StatusCode.Should().Be(HttpStatusCode.Forbidden);
 
         using (var scope = app.Services.CreateScope())
         {
             var db = scope.ServiceProvider.GetRequiredService<DynamicDbContext>();
             db.Set<UserProgramPrivilege>().Add(new UserProgramPrivilege
             {
-                UserId = "sales02", ProgramCode = "DYN00000", CanRead = true, CanAdd = true
+                UserId = "adder01", ProgramCode = "DYN00000", CanRead = true, CanAdd = true
             });
             db.SaveChanges();
         }
-        var addOnly = app.AsUser("sales02");
+        var addOnly = app.AsUser("adder01");
         (await addOnly.GetAsync(Status)).StatusCode.Should().Be(HttpStatusCode.OK);
         (await addOnly.PostAsync(Generate, null)).StatusCode.Should().Be(HttpStatusCode.Forbidden);
         (await JsonOf(await addOnly.GetAsync(Status))).GetProperty("state").GetString().Should().Be("notGenerated");
@@ -120,6 +121,7 @@ public sealed class DemoDataApiTests
     public async Task Status_NonDesigner_403()
     {
         using var app = new DemoApp();
+        app.AddUsers("sales01");
 
         (await app.AsUser("sales01").GetAsync(Status)).StatusCode.Should().Be(HttpStatusCode.Forbidden);
     }
@@ -156,6 +158,8 @@ public sealed class DemoDataApiTests
     public async Task WhileGenerating_OtherRequest_SeesOwnIdentityAndRealTime()
     {
         using var app = new DemoApp();
+        app.AddUsers("guest01"); // 產生器自己會建 sales01，產生中還看不到，探針用先建好的帳號
+        (await app.AsUser("guest01").GetAsync(DemoApp.ProbePath)).EnsureSuccessStatusCode(); // 產生前先認得帳號
         app.Gate.When = _ => ActingScope.Now is not null; // 時間線第一步：身分與時間都被覆寫
         var admin = app.AsUser();
 
@@ -167,8 +171,8 @@ public sealed class DemoDataApiTests
         inside.HasHttpContext.Should().BeFalse("背景流程不該帶著觸發它的 HTTP 請求");
         inside.RequestMarker.Should().BeNull("觸發端的 AsyncLocal 不該流進背景流程（ExecutionContext.SuppressFlow）");
 
-        var probe = await JsonOf(await app.AsUser("sales01").GetAsync(DemoApp.ProbePath));
-        probe.GetProperty("userId").GetString().Should().Be("sales01");
+        var probe = await JsonOf(await app.AsUser("guest01").GetAsync(DemoApp.ProbePath));
+        probe.GetProperty("userId").GetString().Should().Be("guest01");
         probe.GetProperty("now").GetDateTime().Should().BeCloseTo(DateTime.Now, TimeSpan.FromMinutes(1));
 
         app.Gate.Release.SetResult();
@@ -194,6 +198,17 @@ public sealed class DemoDataApiTests
     private sealed class DemoApp : TestApp
     {
         public const string ProbePath = "/test/acting";
+
+        public DemoApp() : base(seedDemoPeople: false) { }
+
+        /// <summary>示範人員由產生器建立，需要非 admin 身分的測試自己補帳號。</summary>
+        public void AddUsers(params string[] ids)
+        {
+            using var scope = Services.CreateScope();
+            var db = scope.ServiceProvider.GetRequiredService<DynamicDbContext>();
+            foreach (var id in ids) db.Set<AppUser>().Add(new AppUser { UserId = id, DisplayName = id });
+            db.SaveChanges();
+        }
 
         public bool SeedOnStartup { get; init; }
         public DemoGate Gate { get; } = new();

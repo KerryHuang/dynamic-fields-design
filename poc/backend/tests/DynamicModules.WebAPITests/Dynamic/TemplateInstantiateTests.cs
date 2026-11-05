@@ -355,6 +355,19 @@ public sealed class TemplateInstantiateTests : IDisposable
     }
 
     [Fact]
+    public async Task Template_MissingGroups_WarnsAndSkips()
+    {
+        using var app = new TestApp(seedDemoPeople: false);
+
+        var res = await app.AsUser().PostAsJsonAsync($"{Base}/templates/order/instantiate",
+            new { modules = Array.Empty<object>(), excludeFields = Array.Empty<string>() });
+
+        res.StatusCode.Should().Be(HttpStatusCode.Created, await res.Content.ReadAsStringAsync());
+        var warnings = (await JsonOf(res)).GetProperty("warnings").EnumerateArray().Select(w => w.GetString());
+        warnings.Should().Contain("群組「sales-manager」不存在，已略過它的權限建議");
+    }
+
+    [Fact]
     public async Task Instantiate_NonDesigner_403()
     {
         (await Instantiate("order", c: _app.AsUser("sales01"))).StatusCode.Should().Be(HttpStatusCode.Forbidden);

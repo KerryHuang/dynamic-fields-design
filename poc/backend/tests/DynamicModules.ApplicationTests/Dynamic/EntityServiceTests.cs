@@ -32,6 +32,7 @@ public class EntityServiceTests : IAsyncLifetime
     {
         _db = await SqliteTestDb.CreateAsync();
         await SeedData.EnsureSeededAsync(_db.Context);
+        await DemoPeople.EnsureAsync(_db.Context);
         var services = new ServiceCollection();
         services.AddApplication();
         services.AddPersistenceRepositories();

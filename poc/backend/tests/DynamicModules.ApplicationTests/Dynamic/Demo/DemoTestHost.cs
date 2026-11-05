@@ -34,7 +34,8 @@ public sealed class DemoTestHost : IAsyncDisposable
     }
 
     /// <param name="today">營運時間的今天（10:00）；預設 <see cref="Today"/>。</param>
-    public static async Task<DemoTestHost> CreateAsync(DateOnly? today = null)
+    /// <param name="configure">在 SP 建好前追加／覆寫註冊（最後註冊者勝出）。</param>
+    public static async Task<DemoTestHost> CreateAsync(DateOnly? today = null, Action<IServiceCollection>? configure = null)
     {
         var host = new DemoTestHost { _db = await SqliteTestDb.CreateAsync() };
         await SeedData.EnsureSeededAsync(host._db.Context);
@@ -46,6 +47,7 @@ public sealed class DemoTestHost : IAsyncDisposable
         services.AddSingleton<ICurrentUser>(host.User);
         services.AddSingleton<IBusinessTime>(new FakeTime(today ?? Today));
         services.AddActingOverrides();
+        configure?.Invoke(services);
         host._sp = services.BuildServiceProvider();
         return host;
     }

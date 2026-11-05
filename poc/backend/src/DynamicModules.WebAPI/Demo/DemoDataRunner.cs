@@ -59,7 +59,7 @@ public sealed class DemoDataRunner(
                 var conflicts = result.Data is DemoConflicts c ? c.Items : [];
                 Finish(DemoRunState.Conflict, conflicts, result.Message);
                 if (startup) log.LogInformation("已有 Demo 資料或同代碼模組，略過自動產生");
-                else log.LogWarning("已有同代碼的模組，未產生 Demo 資料：{Conflicts}", string.Join("；", conflicts));
+                else log.LogWarning("已有相同的資料，未產生 Demo 資料：{Conflicts}", string.Join("；", conflicts));
             }
             else
             {

@@ -19,7 +19,7 @@ public class StartDemoDataHandler(IDynamicAccessGuard guard, DemoPreflight prefl
 
         var conflicts = await preflight.ConflictsAsync(ct);
         if (conflicts.Count > 0)
-            return ServiceResult.ConflictWith("已有同代碼的模組，未產生 Demo 資料", new DemoConflicts([.. conflicts]));
+            return ServiceResult.ConflictWith("已有相同的資料，未產生 Demo 資料", new DemoConflicts([.. conflicts]));
 
         if (!runner.TryStart()) return ServiceResult.Conflict("Demo 資料產生中，請稍候");
         return ServiceResult.Success(DemoDataStatus.Of(runner.Current, "running"));

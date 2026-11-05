@@ -45,6 +45,7 @@ public abstract class DesignerTestBase : IAsyncLifetime
     {
         Db = await SqliteTestDb.CreateAsync();
         await SeedData.EnsureSeededAsync(Db.Context);
+        await DemoPeople.EnsureAsync(Db.Context);
         var services = new ServiceCollection();
         services.AddApplication();
         services.AddPersistenceRepositories();

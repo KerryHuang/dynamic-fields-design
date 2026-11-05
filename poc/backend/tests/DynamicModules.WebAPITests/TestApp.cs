@@ -5,8 +5,10 @@ using DynamicModules.Application.Common.Time;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.Data.Sqlite;
+using DynamicModules.Persistence.Seed;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
+using Microsoft.Extensions.Hosting;
 
 namespace DynamicModules.WebAPITests;
 
@@ -16,8 +18,16 @@ public class TestApp : WebApplicationFactory<Program>
     private readonly SqliteConnection _keepAlive;
     private readonly string _connectionString = $"Data Source=file:test{Guid.NewGuid():N}?mode=memory&cache=shared";
 
-    public TestApp()
+    private readonly bool _seedDemoPeople;
+
+    /// <param name="seedDemoPeople">host 建好後補上示範人員（sales01 等）；Demo 產生器的測試要設 false，否則會衝突。</param>
+    /// <param name="realAuth">Task 2 才有作用。</param>
+    public TestApp() : this(true) { }
+
+    // internal：xUnit 的 class fixture 只認 public 建構函式，不會拿它去解析參數
+    internal TestApp(bool seedDemoPeople, bool realAuth = false)
     {
+        _seedDemoPeople = seedDemoPeople;
         _keepAlive = new SqliteConnection(_connectionString);
         _keepAlive.Open();
     }
@@ -34,6 +44,17 @@ public class TestApp : WebApplicationFactory<Program>
             // RemoveAll 也拿掉了 Program 註冊的 Acting 裝飾器，這裡補回去
             s.AddSingleton<IBusinessTime>(new ActingBusinessTime(Clock));
         });
+    }
+
+    protected override IHost CreateHost(IHostBuilder builder)
+    {
+        var host = base.CreateHost(builder);
+        if (_seedDemoPeople)
+        {
+            using var scope = host.Services.CreateScope();
+            DemoPeople.EnsureAsync(scope.ServiceProvider.GetRequiredService<DynamicDbContext>()).GetAwaiter().GetResult();
+        }
+        return host;
     }
 
     /// <summary>預設以 admin 身分；傳 null 則完全不帶 X-User。</summary>

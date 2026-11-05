@@ -1,10 +1,12 @@
 using DynamicModules.Application.Common;
 using DynamicModules.Application.Common.Security;
+using DynamicModules.Application.Dynamic.DemoService;
 using DynamicModules.Application.Dynamic.References;
 using DynamicModules.Domain.Data;
 using DynamicModules.Domain.Repositories.Dynamic;
 using DynamicModules.Persistence.Dynamic.Dialects;
 using DynamicModules.Persistence.References;
+using DynamicModules.Persistence.Seed;
 using DynamicModules.Persistence.Repositories.Dynamic;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
@@ -38,6 +40,7 @@ public static class DependencyInjection
         services.AddScoped<IReferenceProvider, MockMoldProvider>();
         services.AddScoped<IReferenceProvider, MockCustomerProvider>();
         services.AddScoped<ReferenceProviderRegistry>();
+        services.AddScoped<IDemoPeople, DemoPeopleSeeder>();
         services.AddScoped<IUnitOfWork, UnitOfWork>();
         return services;
     }

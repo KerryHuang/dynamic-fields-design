@@ -4,8 +4,8 @@ using DynamicModules.Domain.Repositories.Dynamic;
 
 namespace DynamicModules.Application.Dynamic.DemoService;
 
-/// <summary>產生前的衝突檢查：四個範本的模組代碼、擴充模組的既有實體，清單從 TemplateCatalog 讀。</summary>
-public sealed class DemoPreflight(TemplateCatalog catalog, IModuleRepository modules)
+/// <summary>產生前的衝突檢查：四個範本的模組代碼、擴充模組的既有實體、示範人員與實體，清單從 TemplateCatalog 讀。</summary>
+public sealed class DemoPreflight(TemplateCatalog catalog, IModuleRepository modules, IDemoPeople people)
 {
     /// <summary>每一項衝突一則訊息；空清單表示可以產生。</summary>
     public async Task<IReadOnlyList<string>> ConflictsAsync(CancellationToken ct)
@@ -17,6 +17,7 @@ public sealed class DemoPreflight(TemplateCatalog catalog, IModuleRepository mod
             if (m.HostEntityKey is { } host && await modules.HostEntityExistsAsync(host, ct))
                 conflicts.Add($"既有實體 {host} 已有擴充模組");
         }
+        conflicts.AddRange(await people.ConflictsAsync(ct));
         return conflicts;
     }
 

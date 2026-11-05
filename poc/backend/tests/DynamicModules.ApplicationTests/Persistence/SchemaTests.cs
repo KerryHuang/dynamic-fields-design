@@ -92,7 +92,7 @@ public class SchemaTests
         await SeedData.EnsureSeededAsync(db.Context);
         await SeedData.EnsureSeededAsync(db.Context);
 
-        (await db.Context.Set<DynamicModules.Domain.Entities.Dynamic.AppUser>().CountAsync()).Should().Be(8);
+        (await db.Context.Set<DynamicModules.Domain.Entities.Dynamic.AppUser>().CountAsync()).Should().Be(1);
         (await db.Context.Set<DynamicModules.Domain.Entities.Dynamic.DynamicProgram>()
             .CountAsync(p => p.ProgramCode == "DYN00000")).Should().Be(1);
     }

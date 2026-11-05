@@ -27,98 +27,82 @@ public class SeedDataTests
     }
 
     [Fact]
-    public async Task Seed_CreatesGroupsAndMembers()
+    public async Task FreshDatabase_HasOnlyAdmin()
     {
         await using var db = await SqliteTestDb.CreateAsync();
 
         await SeedData.EnsureSeededAsync(db.Context);
 
-        var groups = await db.Context.Set<PermissionGroup>().ToListAsync();
+        var users = await db.Context.Set<AppUser>().AsNoTracking().ToListAsync();
+        users.Should().ContainSingle().Which.UserId.Should().Be("admin");
+        users[0].IsSystemAdmin.Should().BeTrue();
+        (await db.Context.Set<PermissionGroup>().CountAsync()).Should().Be(0);
+        (await db.Context.Set<MockMold>().CountAsync()).Should().Be(0);
+        (await db.Context.Set<MockCustomer>().CountAsync()).Should().Be(0);
+    }
+
+    [Fact]
+    public async Task Reseed_DoesNotRestoreRemovedMembers()
+    {
+        await using var db = await SqliteTestDb.CreateAsync();
+        await SeedData.EnsureSeededAsync(db.Context);
+        await DemoPeople.EnsureAsync(db.Context);
+        await db.Context.Set<UserGroupMapping>().Where(m => m.UserId == "sales01").ExecuteDeleteAsync();
+
+        await SeedData.EnsureSeededAsync(db.Context);
+
+        (await db.Context.Set<UserGroupMapping>().AnyAsync(m => m.UserId == "sales01")).Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task Reseed_DoesNotForceAdminFlag()
+    {
+        await using var db = await SqliteTestDb.CreateAsync();
+        await SeedData.EnsureSeededAsync(db.Context);
+        db.Context.Set<AppUser>().Add(new AppUser { UserId = "boss", DisplayName = "boss", IsSystemAdmin = true });
+        (await db.Context.Set<AppUser>().SingleAsync(u => u.UserId == "admin")).IsSystemAdmin = false;
+        await db.Context.SaveChangesAsync();
+
+        await SeedData.EnsureSeededAsync(db.Context);
+
+        (await db.Context.Set<AppUser>().AsNoTracking().SingleAsync(u => u.UserId == "admin")).IsSystemAdmin.Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task DemoPeople_CreatesGroupsMembersMoldsCustomers()
+    {
+        await using var db = await SqliteTestDb.CreateAsync();
+        await SeedData.EnsureSeededAsync(db.Context);
+
+        await DemoPeople.EnsureAsync(db.Context);
+        await DemoPeople.EnsureAsync(db.Context);
+
+        var groups = await db.Context.Set<PermissionGroup>().AsNoTracking().ToListAsync();
         groups.Select(g => g.Key).Should().BeEquivalentTo("mis", "sales", "sales-manager", "floor", "maint", "qa");
-        groups.Single(g => g.Key == "mis").NameI18n.Values["zh-TW"].Should().Be("MIS");
-        var members = await db.Context.Set<UserGroupMapping>().ToListAsync();
+        var members = await db.Context.Set<UserGroupMapping>().AsNoTracking().ToListAsync();
         string[] Of(string key) => members.Where(m => m.GroupId == groups.Single(g => g.Key == key).Id)
             .Select(m => m.UserId).Order().ToArray();
         Of("mis").Should().Equal("admin");
         Of("sales").Should().Equal("sales01", "sales02");
-        Of("sales-manager").Should().Equal("manager01");
         Of("floor").Should().Equal("floor01", "floor02");
-        Of("maint").Should().Equal("maint01");
-        Of("qa").Should().Equal("qa01");
-        (await db.Context.Set<AppUser>().SingleAsync(u => u.UserId == "admin")).IsSystemAdmin.Should().BeTrue();
-        (await db.Context.Set<AppUser>().CountAsync(u => u.IsSystemAdmin)).Should().Be(1);
+        (await db.Context.Set<AppUser>().CountAsync()).Should().Be(8);
+        (await db.Context.Set<AppUser>().Where(u => u.UserId != "admin").AllAsync(u => u.IsDemoAccount && u.PasswordHash == null))
+            .Should().BeTrue();
+        (await db.Context.Set<MockMold>().Select(m => m.MoldNo).ToListAsync())
+            .Should().BeEquivalentTo(Enumerable.Range(1, 12).Select(i => $"M-{i:D4}"));
+        (await db.Context.Set<MockCustomer>().Select(c => c.CustomerNo).ToListAsync())
+            .Should().BeEquivalentTo(Enumerable.Range(1, 8).Select(i => $"C-{i:D3}"));
     }
 
     [Fact]
-    public async Task Seed_CreatesDemoUsersAndGroups()
-    {
-        await using var db = await SqliteTestDb.CreateAsync();
-
-        await SeedData.EnsureSeededAsync(db.Context);
-
-        var groups = await db.Context.Set<PermissionGroup>().AsNoTracking().ToListAsync();
-        groups.Select(g => g.Key).Should().BeEquivalentTo("mis", "sales", "sales-manager", "floor", "maint", "qa");
-        var members = await db.Context.Set<UserGroupMapping>().AsNoTracking().ToListAsync();
-        string[] Of(string key) => members.Where(m => m.GroupId == groups.Single(g => g.Key == key).Id)
-            .Select(m => m.UserId).Order().ToArray();
-        Of("floor").Should().Equal("floor01", "floor02");
-        Of("maint").Should().Equal("maint01");
-        Of("qa").Should().Equal("qa01");
-        (await db.Context.Set<AppUser>().AsNoTracking().Select(u => u.UserId).ToListAsync())
-            .Should().Contain(["maint01", "qa01", "floor02"]);
-    }
-
-    [Fact]
-    public async Task Seed_MockEntities_12Molds_8Customers()
-    {
-        await using var db = await SqliteTestDb.CreateAsync();
-
-        await SeedData.EnsureSeededAsync(db.Context);
-
-        var molds = await db.Context.Set<MockMold>().AsNoTracking().Select(m => m.MoldNo).ToListAsync();
-        molds.Should().BeEquivalentTo(Enumerable.Range(1, 12).Select(i => $"M-{i:D4}"));
-        var customers = await db.Context.Set<MockCustomer>().AsNoTracking().Select(c => c.CustomerNo).ToListAsync();
-        customers.Should().BeEquivalentTo(Enumerable.Range(1, 8).Select(i => $"C-{i:D3}"));
-    }
-
-    [Fact]
-    public async Task Seed_ExistingDbWithFourGroups_AddsOnlyMissing()
-    {
-        await using var db = await SqliteTestDb.CreateAsync();
-        await AddModuleAsync(db.Context, "order", "DYN00001", ModuleStatus.Active);
-        // 舊版資料：4 群組、5 使用者
-        foreach (var id in new[] { "admin", "sales01", "sales02", "manager01", "floor01" })
-            db.Context.Set<AppUser>().Add(new AppUser { UserId = id, DisplayName = id });
-        var old = new[] { "mis", "sales", "sales-manager", "floor" }
-            .Select(k => new PermissionGroup { Key = k, NameI18n = new I18nText([KeyValuePair.Create("zh-TW", k)]) }).ToList();
-        db.Context.Set<PermissionGroup>().AddRange(old);
-        await db.Context.SaveChangesAsync();
-        db.Context.Set<UserGroupMapping>().Add(new UserGroupMapping { GroupId = old[3].Id, UserId = "floor01" });
-        db.Context.Set<GroupProgramPrivilege>().Add(new GroupProgramPrivilege { GroupId = old[1].Id, ProgramCode = "DYN00001", CanRead = true });
-        await db.Context.SaveChangesAsync();
-        var oldIds = old.ToDictionary(g => g.Key, g => g.Id);
-
-        await SeedData.EnsureSeededAsync(db.Context);
-
-        var groups = await db.Context.Set<PermissionGroup>().AsNoTracking().ToListAsync();
-        groups.Select(g => g.Key).Should().BeEquivalentTo("mis", "sales", "sales-manager", "floor", "maint", "qa");
-        foreach (var (key, id) in oldIds) groups.Single(g => g.Key == key).Id.Should().Be(id);
-        (await db.Context.Set<GroupProgramPrivilege>().CountAsync()).Should().Be(1, "新群組不在非首次升級拿到權限");
-        var members = await db.Context.Set<UserGroupMapping>().AsNoTracking().ToListAsync();
-        members.Should().Contain(m => m.GroupId == groups.Single(g => g.Key == "maint").Id && m.UserId == "maint01");
-        members.Should().Contain(m => m.GroupId == groups.Single(g => g.Key == "qa").Id && m.UserId == "qa01");
-        members.Should().Contain(m => m.GroupId == oldIds["floor"] && m.UserId == "floor02");
-    }
-
-    [Fact]
-    public async Task Seed_DoesNotOverwriteExistingNames()
+    public async Task DemoPeople_DoesNotOverwriteExisting()
     {
         await using var db = await SqliteTestDb.CreateAsync();
         db.Context.Set<MockMold>().Add(new MockMold { MoldNo = "M-0006", Name = "自訂名稱" });
         db.Context.Set<AppUser>().Add(new AppUser { UserId = "qa01", DisplayName = "自訂" });
         await db.Context.SaveChangesAsync();
 
-        await SeedData.EnsureSeededAsync(db.Context);
+        await DemoPeople.EnsureAsync(db.Context);
 
         (await db.Context.Set<MockMold>().AsNoTracking().SingleAsync(m => m.MoldNo == "M-0006")).Name.Should().Be("自訂名稱");
         (await db.Context.Set<AppUser>().AsNoTracking().SingleAsync(u => u.UserId == "qa01")).DisplayName.Should().Be("自訂");
@@ -133,55 +117,7 @@ public class SeedDataTests
         await SeedData.EnsureSeededAsync(db.Context);
         await SeedData.EnsureSeededAsync(db.Context);
 
-        (await db.Context.Set<PermissionGroup>().CountAsync()).Should().Be(6);
-        (await db.Context.Set<UserGroupMapping>().CountAsync()).Should().Be(8);
-        (await db.Context.Set<GroupProgramPrivilege>().CountAsync()).Should().Be(3);
-    }
-
-    [Fact]
-    public async Task Seed_FirstUpgrade_GrantsExistingModules()
-    {
-        await using var db = await SqliteTestDb.CreateAsync();
-        await AddModuleAsync(db.Context, "order", "DYN00001", ModuleStatus.Active);
-
-        await SeedData.EnsureSeededAsync(db.Context);
-
-        var keys = await db.Context.Set<PermissionGroup>().ToDictionaryAsync(g => g.Id, g => g.Key);
-        var rows = await db.Context.Set<GroupProgramPrivilege>().ToListAsync();
-        rows.Select(r => keys[r.GroupId]).Should().BeEquivalentTo("sales", "sales-manager", "floor");
-        rows.Should().OnlyContain(r => r.ProgramCode == "DYN00001" && r.CanRead && r.CanAdd && r.CanEdit
-            && r.CanDelete && r.CanPrint && r.CanAmt && !r.CanApprove);
-
-        await AddModuleAsync(db.Context, "contract", "DYN00002", ModuleStatus.Active);
-        await SeedData.EnsureSeededAsync(db.Context);
-
-        (await db.Context.Set<GroupProgramPrivilege>().CountAsync(r => r.ProgramCode == "DYN00002")).Should().Be(0);
-    }
-
-    [Fact]
-    public async Task Seed_FreshDbThenModulesCreated_RestartDoesNotGrant()
-    {
-        await using var db = await SqliteTestDb.CreateAsync();
-        await SeedData.EnsureSeededAsync(db.Context);
-        await AddModuleAsync(db.Context, "order", "DYN00001", ModuleStatus.Active);
-
-        await SeedData.EnsureSeededAsync(db.Context);
-
-        (await db.Context.Set<GroupProgramPrivilege>().CountAsync()).Should().Be(0);
-    }
-
-    [Fact]
-    public async Task Seed_GrantsClearedLater_NotRegranted()
-    {
-        await using var db = await SqliteTestDb.CreateAsync();
-        await AddModuleAsync(db.Context, "order", "DYN00001", ModuleStatus.Active);
-        await SeedData.EnsureSeededAsync(db.Context);
-        (await db.Context.Set<GroupProgramPrivilege>().CountAsync()).Should().Be(3);
-        db.Context.Set<GroupProgramPrivilege>().RemoveRange(db.Context.Set<GroupProgramPrivilege>());
-        await db.Context.SaveChangesAsync();
-
-        await SeedData.EnsureSeededAsync(db.Context);
-
+        (await db.Context.Set<AppUser>().CountAsync()).Should().Be(1);
         (await db.Context.Set<GroupProgramPrivilege>().CountAsync()).Should().Be(0);
     }
 
@@ -190,6 +126,7 @@ public class SeedDataTests
     {
         await using var db = await SqliteTestDb.CreateAsync();
         var module = await AddModuleAsync(db.Context, "order", "DYN00001", ModuleStatus.Active);
+        await DemoPeople.EnsureAsync(db.Context);
         db.Context.Set<Record>().AddRange(
             NewRecord(module.Id, "anonymous"), NewRecord(module.Id, "sales01"));
         await db.Context.SaveChangesAsync();

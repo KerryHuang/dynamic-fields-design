@@ -172,6 +172,7 @@ public class ActingScopeTests
     {
         await using var db = await SqliteTestDb.CreateAsync();
         await SeedData.EnsureSeededAsync(db.Context);
+        await DemoPeople.EnsureAsync(db.Context);
         var services = new ServiceCollection();
         services.AddApplication();
         services.AddPersistenceRepositories();

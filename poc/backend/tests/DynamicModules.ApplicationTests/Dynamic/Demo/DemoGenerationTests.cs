@@ -94,10 +94,8 @@ public class DemoGenerationTests
     [Fact]
     public async Task Generate_FailsMidway_RollsBackEverything()
     {
-        await using var host = await DemoTestHost.CreateAsync();
+        await using var host = await DemoTestHost.CreateAsync(configure: DemoPeopleTests.WithoutMaintenanceUser);
         var db = host.Db.Context;
-        await db.Set<UserGroupMapping>().Where(m => m.UserId == "maint01").ExecuteDeleteAsync();
-        await db.Set<AppUser>().Where(u => u.UserId == "maint01").ExecuteDeleteAsync();
         var modules = await db.Set<Module>().AsNoTracking().CountAsync();
         var records = await db.Set<Record>().AsNoTracking().CountAsync();
         var sequences = await db.Set<NumberSequence>().AsNoTracking().CountAsync();

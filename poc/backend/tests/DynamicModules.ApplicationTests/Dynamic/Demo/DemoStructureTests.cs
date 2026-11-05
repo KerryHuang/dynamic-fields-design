@@ -81,7 +81,7 @@ public class DemoStructureTests(DemoGeneratedFixture fx)
         var r = await host.Send(new GenerateDemoDataRequest(DemoTestHost.Today));
 
         r.IsConflict.Should().BeTrue();
-        r.Message.Should().Be("已有同代碼的模組，未產生 Demo 資料");
+        r.Message.Should().Be("已有相同的資料，未產生 Demo 資料");
         ((DemoConflicts)r.Data!).Items.Should().Contain("模組代碼 order 已存在");
         (await db.Set<Module>().AsNoTracking().CountAsync()).Should().Be(modules);
         (await db.Set<NumberSequence>().AsNoTracking().CountAsync()).Should().Be(sequences);
