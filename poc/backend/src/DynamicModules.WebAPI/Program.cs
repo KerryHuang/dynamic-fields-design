@@ -83,6 +83,16 @@ var app = builder.Build();
 // 內建範本有錯就拒絕啟動（spec §13.1）：在碰資料庫之前先解析 singleton
 app.Services.GetRequiredService<TemplateCatalog>();
 await InitializeDatabaseAsync(app, dynamicConnection);
+// 建置 Demo 映像時用（Dockerfile.demo）：產生完 Demo 資料就結束，失敗回非 0 讓建置失敗
+if (args.Contains("--generate-demo-data"))
+{
+    var runner = app.Services.GetRequiredService<IDemoDataRunner>();
+    runner.TryStart();
+    while (runner.Current.State == DemoRunState.Running) await Task.Delay(200);
+    if (runner.Current.State == DemoRunState.Succeeded) return 0;
+    app.Logger.LogError("Demo 資料產生失敗：{State} {Message}", runner.Current.State, runner.Current.Message);
+    return 1;
+}
 // Demo 站台（Render）啟動後在背景產生 Demo 資料；結果只記 log，不擋啟動也不擋 /api/health
 if (app.Configuration.GetValue<bool>("Demo:SeedOnStartup"))
     app.Lifetime.ApplicationStarted.Register(() => app.Services.GetRequiredService<IDemoDataRunner>().TryStart(startup: true));
@@ -114,6 +124,7 @@ if (Directory.Exists(Path.Combine(app.Environment.ContentRootPath, "wwwroot")))
 }
 
 app.Run();
+return 0;
 
 static async Task InitializeDatabaseAsync(WebApplication app, string dynamicConnection)
 {

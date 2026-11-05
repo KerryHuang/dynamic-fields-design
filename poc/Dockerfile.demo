@@ -1,0 +1,30 @@
+# Render Demo 站專用：建置時就產生好 Demo 資料，休眠喚醒後不必等。客戶部署用 Dockerfile，不含示範資料。
+# 代價：資料日期停在建置那天，重新部署才會更新。
+# 建置內容：poc/（在 poc/ 目錄執行 docker build -f Dockerfile.demo .）。
+
+FROM oven/bun:1.4.0 AS frontend
+# 保留 poc/ 的相對位置：前端以 ../../../../shared 引用前後端共用的 JSON
+WORKDIR /poc/frontend
+COPY frontend/package.json frontend/bun.lock ./
+RUN bun install --frozen-lockfile --ignore-scripts
+COPY shared/ /poc/shared/
+COPY frontend/ ./
+RUN bunx quasar prepare && bunx quasar build
+
+FROM mcr.microsoft.com/dotnet/sdk:8.0 AS backend
+WORKDIR /src
+COPY backend/ ./
+RUN dotnet publish src/DynamicModules.WebAPI/DynamicModules.WebAPI.csproj -c Release -o /app
+
+FROM mcr.microsoft.com/dotnet/aspnet:8.0
+WORKDIR /app
+COPY --from=backend /app ./
+COPY --from=frontend /poc/frontend/dist/spa ./wwwroot
+ENV ConnectionStrings__Dynamic="Data Source=/app/data/poc.db" \
+    ASPNETCORE_ENVIRONMENT=Production \
+    Demo__LoginEnabled=true \
+    PORT=8080
+# 金鑰不留在映像裡：執行時會重新產生
+RUN dotnet DynamicModules.WebAPI.dll --generate-demo-data && rm -rf /app/data/keys
+EXPOSE 8080
+ENTRYPOINT ["dotnet", "DynamicModules.WebAPI.dll"]

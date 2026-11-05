@@ -1,17 +1,15 @@
-# Render Blueprint：Demo 站台（免費方案，閒置 15 分鐘休眠，重啟後資料回到種子資料）
+# Render Blueprint：Demo 站台（免費方案，閒置 15 分鐘休眠，重啟後資料回到映像建置時的 Demo 資料）
 services:
   - type: web
     name: dynamic-modules-demo
     runtime: docker
     plan: free
     rootDir: poc
-    dockerfilePath: ./Dockerfile
+    dockerfilePath: ./Dockerfile.demo
     dockerContext: .
     healthCheckPath: /api/health
     autoDeploy: true
     envVars:
-      - key: Demo__SeedOnStartup
-        value: "true"
       - key: Demo__LoginEnabled
         value: "true"
       - key: Auth__TrustForwardedHeaders
