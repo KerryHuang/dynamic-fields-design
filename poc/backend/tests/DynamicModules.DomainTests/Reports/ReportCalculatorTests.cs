@@ -176,6 +176,22 @@ public class ReportCalculatorTests
     }
 
     [Fact]
+    public void GroupByNumber_SameValueDifferentScale_OneGroup()
+    {
+        var rows = new List<ReportRow>
+        {
+            Row(1, null, (Qty, Num(100m))),
+            Row(2, null, (Qty, Num(100.00m))),
+            Row(3, null, (Qty, Num(100.0m))),
+            Row(4, null, (Qty, Num(-1.50m))),
+            Row(5, null, (Qty, Num(0.00001m))),
+        };
+        var r = Calc(rows, [new(Qty, null)], [M("countMain", null)], merged: false);
+        r.Groups.Select(g => g.GroupKeys[0]).Should().Equal("100", "-1.5", "0.00001");
+        r.Groups[0].Values["countMain"].Should().Be(3m);
+    }
+
+    [Fact]
     public void Decimal_NoFloatDrift()
     {
         var rows = new List<ReportRow>

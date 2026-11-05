@@ -69,7 +69,7 @@ public static class ReportCalculator
             case "ok":
                 if (cell.Multi is { Count: > 0 }) return cell.Multi.Distinct().ToList();
                 if (cell.Text is not null) return [cell.Text];
-                if (cell.Number is not null) return [cell.Number.Value.ToString(CultureInfo.InvariantCulture)];
+                if (cell.Number is not null) return [cell.Number.Value.ToString("0.############################", CultureInfo.InvariantCulture)];
                 if (cell.Date is not null) return [cell.Date.Value.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture)];
                 return [""];
             default: return [""];
