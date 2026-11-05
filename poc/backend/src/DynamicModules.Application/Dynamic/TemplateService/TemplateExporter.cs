@@ -1,0 +1,259 @@
+using System.Text.Json;
+using System.Text.Json.Nodes;
+using System.Text.RegularExpressions;
+using DynamicModules.Application.Dynamic.PermissionService.Data;
+using DynamicModules.Application.Dynamic.TemplateService.Data;
+using DynamicModules.Domain.Entities.Dynamic;
+using DynamicModules.Domain.Repositories.Dynamic;
+using DynamicModules.Domain.Rules;
+using DynamicModules.Domain.ValueObjects;
+
+namespace DynamicModules.Application.Dynamic.TemplateService;
+
+/// <summary>
+/// 匯出範本（決策 6）：模組加上以它為表頭的明細模組，id 換成代號（模組＝鍵、欄位＝Field.Key、區塊 b_&lt;id&gt;、選項 o_&lt;id&gt;），
+/// 是 TemplateInstantiator 代號→id 替換的反向。表達不了的引用不匯出，記在 warnings。
+/// </summary>
+public sealed partial class TemplateExporter(IModuleRepository modules, IPermissionRepository permissions, IListViewRepository views)
+{
+    /// <summary>module 要含子層（GetByKeyAsync includeChildren）。</summary>
+    public async Task<TemplatePackage> ExportAsync(Module module, CancellationToken ct)
+    {
+        var members = new List<Module> { module };
+        foreach (var (child, _) in await modules.ListDetailModulesAsync(module.Key, ct))
+            if (members.All(m => m.Key != child.Key) && await modules.GetByKeyAsync(child.Key, includeChildren: true, ct) is { } full)
+                members.Add(full);
+
+        var ctx = new Context(members);
+        var groups = (await permissions.ListGroupsAsync(ct)).OrderBy(g => g.Id).ToList();
+        var result = new List<TemplateModule>();
+        foreach (var m in members)
+        {
+            var blocks = Blocks(m).Select(b => new TemplateBlock($"b_{b.Id}", b.LabelI18n, b.Collapsed,
+                ActiveFields(b).Where(f => ctx.Exported.Contains(f.Id))
+                    .Select(f => new TemplateField(f.Key, f.Type, f.LabelI18n, ctx.Config(f), ActiveOptions(f)
+                        .Select(o => new TemplateOption($"o_{o.Id}", o.LabelI18n, o.Color)).ToList())).ToList())).ToList();
+            var rules = m.Rules.OrderBy(r => r.Sequence).Select((r, i) => ctx.Rule(m, r, i)).OfType<TemplateRule>().ToList();
+            var shared = (await views.ListByScopeAsync(m.Id, null, ct)).OrderBy(v => v.Id).Select(ctx.View).ToList();
+            var title = m.TitleFieldId is { } t && ctx.Exported.Contains(t) ? ctx.Fields[t].Key : null;
+            result.Add(new TemplateModule(m.Key, m.Key, m.NameI18n, m.Icon, m.Section, m.Kind, m.HostEntityKey, title,
+                blocks, rules, shared, IsDetail(m) ? [] : await PermissionsAsync(m, groups, ct)));
+        }
+        return new TemplatePackage(1, module.Key, module.NameI18n, null, result, ctx.Warnings.Count > 0 ? ctx.Warnings : null);
+    }
+
+    /// <summary>只有群組層的動作權限與資料範圍；個人、欄位層、選項範圍不匯出。</summary>
+    private async Task<List<TemplatePermission>> PermissionsAsync(Module m, List<PermissionGroup> groups, CancellationToken ct)
+    {
+        var rows = await permissions.LoadModuleRowsAsync(m, ct);
+        var none = new PrivilegesDto(false, false, false, false, false, false, false);
+        return groups
+            .Select(g => (g.Key, Privileges: rows.GroupPrivileges.FirstOrDefault(p => p.GroupId == g.Id)?.ToDto() ?? none,
+                rows.Scopes.FirstOrDefault(s => s.GroupId == g.Id)?.Scope))
+            .Where(x => !x.Privileges.IsEmpty || x.Scope is not null)
+            .Select(x => new TemplatePermission(x.Key, x.Privileges, x.Scope)).ToList();
+    }
+
+    private static bool IsDetail(Module m) =>
+        m.Blocks.SelectMany(b => b.Fields).Any(f => f is { Type: FieldType.Reference, Status: FieldStatus.Active }
+            && f.Config.Relation == ReferenceRelation.Detail);
+
+    private static IEnumerable<Block> Blocks(Module m) => m.Blocks.OrderBy(b => b.Sequence).ThenBy(b => b.Id);
+
+    private static IEnumerable<Field> ActiveFields(Block b) =>
+        b.Fields.Where(f => f.Status == FieldStatus.Active).OrderBy(f => f.Sequence).ThenBy(f => f.Id);
+
+    private static IEnumerable<FieldOption> ActiveOptions(Field f) => f.Options.Where(o => o.Active).OrderBy(o => o.Sequence).ThenBy(o => o.Id);
+
+    [GeneratedRegex(@"\{(\d+)\}")]
+    private static partial Regex FormulaReference();
+
+    [GeneratedRegex(@"^opt_(\d+)$")]
+    private static partial Regex OptionReference();
+
+    private sealed class Context
+    {
+        private readonly HashSet<long> _allFieldIds;
+        private readonly Dictionary<long, Module> _moduleOf = new();
+        private readonly HashSet<long> _options;
+        private readonly HashSet<long> _blocks;
+
+        /// <summary>套件內啟用中的欄位。</summary>
+        public Dictionary<long, Field> Fields { get; } = new();
+
+        /// <summary>實際匯出的欄位：啟用中，且沒有因為無法表達的引用被略過。</summary>
+        public HashSet<long> Exported { get; }
+
+        public List<string> Warnings { get; } = [];
+
+        public Context(List<Module> members)
+        {
+            var all = members.SelectMany(m => m.Blocks.SelectMany(b => b.Fields).Select(f => (m, f))).ToList();
+            _allFieldIds = all.Select(x => x.f.Id).ToHashSet();
+            foreach (var (m, f) in all.Where(x => x.f.Status == FieldStatus.Active))
+            {
+                Fields[f.Id] = f;
+                _moduleOf[f.Id] = m;
+            }
+            _options = Fields.Values.SelectMany(ActiveOptions).Select(o => o.Id).ToHashSet();
+            _blocks = members.SelectMany(m => m.Blocks).Select(b => b.Id).ToHashSet();
+            Exported = Fields.Keys.ToHashSet();
+
+            // 略過一個欄位可能讓依賴它的欄位也表達不了，重複到穩定
+            var ordered = members.SelectMany(m => Blocks(m).SelectMany(ActiveFields)).ToList();
+            for (var changed = true; changed;)
+            {
+                changed = false;
+                foreach (var f in ordered.Where(f => Exported.Contains(f.Id)))
+                    if (WhyOmit(f) is { } reason)
+                    {
+                        Exported.Remove(f.Id);
+                        Warnings.Add(reason);
+                        changed = true;
+                    }
+            }
+        }
+
+        private string Label(Field f) => f.LabelI18n.Resolve(I18nText.FallbackLocale);
+
+        private string Code(long fieldId) => Fields[fieldId].Key;
+
+        private string Qualified(long fieldId) => $"{_moduleOf[fieldId].Key}.{Fields[fieldId].Key}";
+
+        private string? WhyOmit(Field f)
+        {
+            var unresolved = $"「{Label(f)}」引用了停用或未匯出的欄位，未匯出";
+            if (f.Config.Formula is { } formula
+                && FormulaReference().Matches(formula).Any(x => !Exported.Contains(long.Parse(x.Groups[1].Value))))
+                return unresolved;
+            if (f.Type == FieldType.Rollup && f.Config.Rollup is { } rollup)
+            {
+                if (!_allFieldIds.Contains(rollup.SourceFieldId)) return $"「{Label(f)}」彙總了範本外的模組，未匯出";
+                if (!Exported.Contains(rollup.SourceFieldId)
+                    || rollup.AggregateFieldId is { } agg && !Exported.Contains(agg)
+                    || rollup.Condition is { ValueKind: JsonValueKind.Object } c && Condition(c) is null)
+                    return unresolved;
+            }
+            return null;
+        }
+
+        /// <summary>FieldConfig 的 JSON，id 換成代號：formula、下拉欄位的 defaultValue、rollup、parentDefaultFieldId。</summary>
+        public JsonElement Config(Field f)
+        {
+            var node = JsonSerializer.SerializeToNode(f.Config, TemplateJson.Options)!.AsObject();
+            if (f.Config.Formula is { } formula)
+                node["formula"] = FormulaReference().Replace(formula, x => $"{{{Code(long.Parse(x.Groups[1].Value))}}}");
+            if (node["defaultValue"] is { } dv && IsOptionField(f))
+            {
+                if (OptionValue(dv) is { } converted) node["defaultValue"] = converted;
+                else
+                {
+                    node.Remove("defaultValue");
+                    Warnings.Add($"「{Label(f)}」的預設值是停用的選項，未匯出這個設定");
+                }
+            }
+            if (f.Config.Rollup is { } rollup)
+            {
+                var converted = new JsonObject
+                {
+                    ["sourceField"] = Qualified(rollup.SourceFieldId),
+                    ["function"] = node["rollup"]!["function"]!.DeepClone()
+                };
+                if (rollup.AggregateFieldId is { } agg) converted["aggregateField"] = Qualified(agg);
+                if (rollup.Condition is { ValueKind: JsonValueKind.Object } condition) converted["condition"] = Condition(condition);
+                node["rollup"] = converted;
+            }
+            if (f.Config.ParentDefaultFieldId is { } parent)
+            {
+                node.Remove("parentDefaultFieldId");
+                if (Exported.Contains(parent)) node["parentDefaultField"] = Qualified(parent);
+                else Warnings.Add($"「{Label(f)}」帶入的表頭欄位在範本外，未匯出這個設定");
+            }
+            return JsonSerializer.SerializeToElement(node);
+        }
+
+        /// <summary>引用停用或未匯出的欄位、區塊、選項時回 null（整條不匯出）。</summary>
+        public TemplateRule? Rule(Module m, Rule r, int index)
+        {
+            var targets = new List<string>();
+            var ok = true;
+            foreach (var t in r.Targets)
+            {
+                if (t.StartsWith("field:") && long.TryParse(t["field:".Length..], out var fid) && Exported.Contains(fid))
+                    targets.Add($"field:{Code(fid)}");
+                else if (t.StartsWith("block:") && long.TryParse(t["block:".Length..], out var bid) && _blocks.Contains(bid))
+                    targets.Add($"block:b_{bid}");
+                else if (t == "*") targets.Add(t);
+                else ok = false;
+            }
+            ok &= r.OptionIds.All(_options.Contains);
+            var condition = r.Condition.ValueKind == JsonValueKind.Object
+                ? Condition(r.Condition)
+                : new JsonObject { ["all"] = new JsonArray() };
+            if (!ok || condition is null)
+            {
+                Warnings.Add($"模組「{m.Key}」的規則 {index + 1} 引用了停用或未匯出的欄位，未匯出");
+                return null;
+            }
+            return new TemplateRule(r.Kind, targets, JsonSerializer.SerializeToElement(condition),
+                r.OptionIds.Select(o => $"o_{o}").ToList(), r.MessageI18n, r.Active);
+        }
+
+        /// <summary>只留匯出的欄與排序；篩選引用到沒匯出的欄位就拿掉篩選。</summary>
+        public TemplateView View(ListView v)
+        {
+            var columns = v.Columns.Where(Exported.Contains).Select(Code).ToList();
+            var sort = v.Sort.Where(s => Exported.Contains(s.Field)).Select(s => new TemplateSort(Code(s.Field), s.Order)).ToList();
+            var filter = v.Filter is { ValueKind: JsonValueKind.Object } raw ? Condition(raw) : null;
+            var filterLost = v.Filter is { ValueKind: JsonValueKind.Object } && filter is null;
+            if (columns.Count < v.Columns.Count || sort.Count < v.Sort.Count || filterLost)
+                Warnings.Add($"檢視「{v.NameI18n.Resolve(I18nText.FallbackLocale)}」引用了停用或未匯出的欄位，已略過");
+            return new TemplateView(v.NameI18n, columns, filter is null ? null : JsonSerializer.SerializeToElement(filter), sort, v.IsDefault);
+        }
+
+        /// <summary>條件的 field、fieldRef 換成欄位代號，下拉欄位的 opt_&lt;id&gt; 換成 opt_o_&lt;id&gt;；有解析不了的引用回 null。</summary>
+        private JsonNode? Condition(JsonElement el)
+        {
+            var props = el.EnumerateObject().ToList();
+            if (props is [{ Name: "all" or "any", Value.ValueKind: JsonValueKind.Array } group])
+            {
+                var children = group.Value.EnumerateArray().Select(c => c.ValueKind == JsonValueKind.Object ? Condition(c) : null).ToList();
+                return children.Any(c => c is null) ? null : new JsonObject { [group.Name] = new JsonArray([.. children]) };
+            }
+
+            var leaf = JsonNode.Parse(el.GetRawText())!.AsObject();
+            if (!el.TryGetProperty("field", out var fieldEl) || fieldEl.ValueKind != JsonValueKind.Number || !fieldEl.TryGetInt64(out var id) || !Exported.Contains(id)) return null;
+            leaf["field"] = Code(id);
+            if (!el.TryGetProperty("value", out var value)) return leaf;
+            if (value.ValueKind == JsonValueKind.Object && value.TryGetProperty("fieldRef", out var r))
+            {
+                if (r.ValueKind != JsonValueKind.Number || !r.TryGetInt64(out var refId) || !Exported.Contains(refId)) return null;
+                leaf["value"] = new JsonObject { ["fieldRef"] = Code(refId) };
+            }
+            else if (value.ValueKind != JsonValueKind.Null && IsOptionField(Fields[id]))
+            {
+                if (OptionValue(leaf["value"]) is not { } converted) return null;
+                leaf["value"] = converted;
+            }
+            return leaf;
+        }
+
+        /// <summary>opt_&lt;id&gt; → opt_o_&lt;id&gt;（陣列逐一）；選項停用或不在套件裡回 null。</summary>
+        private JsonNode? OptionValue(JsonNode? node)
+        {
+            switch (node)
+            {
+                case JsonArray array:
+                    var items = array.Select(OptionValue).ToList();
+                    return items.Any(i => i is null) ? null : new JsonArray([.. items]);
+                case JsonValue v when v.TryGetValue<string>(out var s) && OptionReference().Match(s) is { Success: true } match:
+                    var optionId = long.Parse(match.Groups[1].Value);
+                    return _options.Contains(optionId) ? JsonValue.Create($"opt_o_{optionId}") : null;
+                default:
+                    return node?.DeepClone();
+            }
+        }
+
+        private static bool IsOptionField(Field f) => f.Type is FieldType.Enum or FieldType.MultiEnum;
+    }
+}

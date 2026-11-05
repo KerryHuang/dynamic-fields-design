@@ -1,0 +1,62 @@
+using System.Text.Json;
+using DynamicModules.Application.Dynamic.PermissionService.Data;
+using DynamicModules.Domain.Entities.Dynamic;
+using DynamicModules.Domain.ValueObjects;
+
+namespace DynamicModules.Application.Dynamic.TemplateService.Data;
+
+// 第 8 階段決策 1 的範本格式（formatVersion 1）。範本內以代號互相引用，套用時才配發 id。
+// 集合屬性在 JSON 缺漏時視為空清單；Config 缺漏時視為空物件。
+
+public record TemplatePackage(
+    int FormatVersion, string Key, I18nText Name, I18nText? Description,
+    List<TemplateModule> Modules, List<string>? Warnings)
+{
+    public List<TemplateModule> Modules { get; init; } = Modules ?? [];
+}
+
+/// <summary>TitleField 只有擴充模組可以是 null（標題取自既有資料）。</summary>
+public record TemplateModule(
+    string Code, string Key, I18nText Name, string? Icon, string? Section, ModuleKind Kind,
+    string? HostEntityKey, string? TitleField, List<TemplateBlock> Blocks, List<TemplateRule> Rules,
+    List<TemplateView> Views, List<TemplatePermission> Permissions)
+{
+    public List<TemplateBlock> Blocks { get; init; } = Blocks ?? [];
+    public List<TemplateRule> Rules { get; init; } = Rules ?? [];
+    public List<TemplateView> Views { get; init; } = Views ?? [];
+    public List<TemplatePermission> Permissions { get; init; } = Permissions ?? [];
+}
+
+public record TemplateBlock(string Code, I18nText Label, bool Collapsed, List<TemplateField> Fields)
+{
+    public List<TemplateField> Fields { get; init; } = Fields ?? [];
+}
+
+/// <summary>Config 是 FieldConfig 的 JSON，但 formula、選項、rollup、parentDefaultField 用代號；替換在套用時做。</summary>
+public record TemplateField(string Code, FieldType Type, I18nText Label, JsonElement Config, List<TemplateOption> Options)
+{
+    private static readonly JsonElement EmptyObject = JsonDocument.Parse("{}").RootElement.Clone();
+
+    public JsonElement Config { get; init; } = Config.ValueKind is JsonValueKind.Undefined or JsonValueKind.Null ? EmptyObject : Config;
+    public List<TemplateOption> Options { get; init; } = Options ?? [];
+}
+
+public record TemplateOption(string Code, I18nText Label, string? Color);
+
+/// <summary>Targets 是 field:代號、block:代號 或 *；Options 是選項代號（選項限制用）。</summary>
+public record TemplateRule(RuleKind Kind, List<string> Targets, JsonElement Condition, List<string> Options, I18nText? Message, bool Active)
+{
+    public List<string> Targets { get; init; } = Targets ?? [];
+    public List<string> Options { get; init; } = Options ?? [];
+}
+
+public record TemplateView(I18nText Name, List<string> Columns, JsonElement? Filter, List<TemplateSort> Sort, bool IsDefault)
+{
+    public List<string> Columns { get; init; } = Columns ?? [];
+    public List<TemplateSort> Sort { get; init; } = Sort ?? [];
+}
+
+public record TemplateSort(string Field, string Order);
+
+/// <summary>Group 是權限群組的 Key（如 sales）。</summary>
+public record TemplatePermission(string Group, PrivilegesDto Privileges, DataScope? Scope);

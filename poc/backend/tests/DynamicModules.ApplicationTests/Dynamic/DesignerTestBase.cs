@@ -1,0 +1,116 @@
+using System.Text.Json;
+using DynamicModules.Application;
+using DynamicModules.Application.Common;
+using DynamicModules.Application.Common.Security;
+using DynamicModules.Application.Common.Time;
+using DynamicModules.Application.Dynamic.FieldService.Commands.AddField;
+using DynamicModules.Application.Dynamic.FieldService.Commands.SetFieldStatus;
+using DynamicModules.Application.Dynamic.FieldService.Commands.UpdateField;
+using DynamicModules.Application.Dynamic.ModuleService.Commands.ActivateModule;
+using DynamicModules.Application.Dynamic.ModuleService.Commands.CreateModule;
+using DynamicModules.Application.Dynamic.ModuleService.Data;
+using DynamicModules.Application.Dynamic.ModuleService.Queries.GetModule;
+using DynamicModules.Application.Dynamic.RecordService.Commands.CreateRecord;
+using DynamicModules.ApplicationTests.Persistence;
+using DynamicModules.Domain.Entities.Dynamic;
+using DynamicModules.Domain.ValueObjects;
+using DynamicModules.Persistence;
+using DynamicModules.Persistence.Seed;
+using FluentAssertions;
+using MediatR;
+using Microsoft.Extensions.DependencyInjection;
+
+namespace DynamicModules.ApplicationTests.Dynamic;
+
+/// <summary>設計器驗證測試共用：SQLite、MediatR、建模組與欄位的小工具。</summary>
+public abstract class DesignerTestBase : IAsyncLifetime
+{
+    protected SqliteTestDb Db = null!;
+    private ServiceProvider _sp = null!;
+
+    private sealed class FakeUser : ICurrentUser { public string UserId { get; set; } = "admin"; }
+
+    private readonly FakeUser _user = new();
+
+    /// <summary>切換目前使用者（預設 admin）。</summary>
+    protected void As(string userId) => _user.UserId = userId;
+
+    private sealed class FakeTime : IBusinessTime
+    {
+        public DateTime Now => new(2026, 11, 4, 9, 0, 0);
+        public DateOnly Today => DateOnly.FromDateTime(Now);
+    }
+
+    public async Task InitializeAsync()
+    {
+        Db = await SqliteTestDb.CreateAsync();
+        await SeedData.EnsureSeededAsync(Db.Context);
+        var services = new ServiceCollection();
+        services.AddApplication();
+        services.AddPersistenceRepositories();
+        services.AddScoped(_ => Db.Context);
+        services.AddScoped<ITransactionManager, EfTransactionManager>();
+        services.AddSingleton<ICurrentUser>(_user);
+        services.AddSingleton<IBusinessTime, FakeTime>();
+        _sp = services.BuildServiceProvider();
+    }
+
+    public async Task DisposeAsync()
+    {
+        await _sp.DisposeAsync();
+        await Db.DisposeAsync();
+    }
+
+    protected T Svc<T>() where T : notnull => _sp.GetRequiredService<T>();
+
+    protected Task<TRes> Send<TRes>(IRequest<TRes> request) => _sp.GetRequiredService<IMediator>().Send(request);
+
+    protected static I18nText Text(string zh) => new([KeyValuePair.Create("zh-TW", zh)]);
+
+    protected static JsonElement J(string json) => JsonDocument.Parse(json).RootElement.Clone();
+
+    protected static string Err(ServiceResult r, string key) => r.Errors[key][0];
+
+    protected async Task<ModuleDetailResponse> Detail(string key) =>
+        (ModuleDetailResponse)(await Send(new GetModuleRequest(key))).Data!;
+
+    /// <summary>建立模組（自帶標題欄位）；activate 時一併啟用。</summary>
+    protected async Task<string> NewModule(string key, bool activate = false, ModuleKind kind = ModuleKind.Standalone, string? host = null)
+    {
+        var r = await Send(new CreateModuleRequest(key, Text(key), null, null, kind, host));
+        r.IsCreated.Should().BeTrue(r.Message + string.Join(";", r.Errors.Select(e => e.Key + e.Value[0])));
+        if (activate) (await Send(new ActivateModuleRequest(key))).IsSuccess.Should().BeTrue();
+        return key;
+    }
+
+    protected async Task<ServiceResult> AddField(string module, FieldType type, FieldConfig? config = null, string label = "欄位")
+    {
+        var m = await Detail(module);
+        return await Send(new AddFieldRequest(module, m.Blocks[0].Id, type, Text(label), config ?? new FieldConfig()));
+    }
+
+    /// <summary>新增並要求成功，回傳欄位回應。</summary>
+    protected async Task<FieldResponse> MustAdd(string module, FieldType type, FieldConfig? config = null, string label = "欄位")
+    {
+        var r = await AddField(module, type, config, label);
+        r.IsCreated.Should().BeTrue(r.Message + string.Join(";", r.Errors.Select(e => e.Key + e.Value[0])));
+        return (FieldResponse)r.Data!;
+    }
+
+    protected Task<ServiceResult> Update(FieldResponse f, FieldConfig config) =>
+        Send(new UpdateFieldRequest(f.Id, f.Type, f.Label, config, f.BlockId));
+
+    protected Task<ServiceResult> Deactivate(long fieldId) => Send(new SetFieldStatusRequest(fieldId, FieldStatus.Inactive));
+
+    protected static FieldConfig RefTo(string moduleKey, ReferenceRelation? relation = null, ReferenceOnDelete? onDelete = null) =>
+        new() { RefTarget = new ReferenceTarget(ReferenceTarget.ModuleKind, moduleKey), Relation = relation, OnDelete = onDelete };
+
+    protected async Task<string> CreateRecord(string module)
+    {
+        var m = await Detail(module);
+        var r = await Send(new CreateRecordRequest(module,
+            new Dictionary<string, JsonElement?> { [$"f_{m.TitleFieldId}"] = J("\"x\"") }));
+        r.IsCreated.Should().BeTrue(r.Message + string.Join(";", r.Errors.Select(e => e.Key + e.Value[0])));
+        return module;
+    }
+}

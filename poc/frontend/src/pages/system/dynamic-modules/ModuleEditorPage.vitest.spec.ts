@@ -1,0 +1,105 @@
+import { QueryClient, VueQueryPlugin } from '@tanstack/vue-query';
+import { flushPromises, mount } from '@vue/test-utils';
+import * as quasar from 'quasar';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { h } from 'vue';
+import { createI18n } from 'vue-i18n';
+import { createMemoryHistory, createRouter } from 'vue-router';
+import type { ModuleDetail } from 'src/domain/dynamic/types';
+import zhTW from 'src/i18n/zh-TW.json';
+import IconSelect from 'src/presentation/dynamic/designer/IconSelect.vue';
+import { dynamicApi } from 'src/services/api/dynamic-api';
+import ModuleEditorPage from './ModuleEditorPage.vue';
+
+vi.mock('src/services/api/dynamic-api', () => ({ dynamicApi: { getModule: vi.fn(), updateModule: vi.fn(), entities: vi.fn(), getPreviewSchema: vi.fn(), exportTemplate: vi.fn() } }));
+const api = vi.mocked(dynamicApi);
+
+const detail: ModuleDetail = {
+  id: 1, key: 'm', programCode: 'DYN00001', name: { 'zh-TW': '模組' }, section: 's', titleFieldId: 5,
+  status: 'Active', version: 3, blocks: [],
+};
+
+async function mountPage(d: ModuleDetail = detail) {
+  api.getModule.mockResolvedValue(d);
+  api.entities.mockResolvedValue([{ key: 'design.mold', name: { 'zh-TW': '模具' } }]);
+  api.updateModule.mockResolvedValue({} as never);
+  const router = createRouter({ history: createMemoryHistory(), routes: [{ path: '/m/:moduleKey', component: ModuleEditorPage }] });
+  await router.push('/m/m');
+  const i18n = createI18n({ legacy: false, locale: 'zh-TW', messages: { 'zh-TW': zhTW } });
+  const Host = { render: () => h(quasar.QLayout, null, () => h(quasar.QPageContainer, null, () => h(ModuleEditorPage))) };
+  const w = mount(Host, {
+    global: {
+      plugins: [[quasar.Quasar, { components: quasar, plugins: { Notify: quasar.Notify } }], router, i18n,
+        [VueQueryPlugin, { queryClient: new QueryClient({ defaultOptions: { queries: { retry: false } } }) }]],
+    },
+  });
+  await flushPromises();
+  return w;
+}
+
+describe('ModuleEditorPage', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.stubGlobal('ResizeObserver', class { observe() {} unobserve() {} disconnect() {} });
+  });
+
+  it('picking an icon saves it and keeps the other module settings', async () => {
+    const w = await mountPage();
+    w.getComponent(IconSelect).vm.$emit('update:modelValue', 'factory');
+    await flushPromises();
+    expect(api.updateModule).toHaveBeenCalledWith('m', { name: detail.name, icon: 'factory', section: 's', titleFieldId: 5 });
+  });
+
+  it('saves the menu section with the module settings; emptying it clears the section', async () => {
+    const w = await mountPage();
+    const input = w.find('input[data-testid="module-section"]');
+    expect((input.element as HTMLInputElement).value).toBe('s');
+    expect(input.attributes('maxlength')).toBe('100');
+    await input.setValue('  銷售 ');
+    await input.trigger('change');
+    await flushPromises();
+    expect(api.updateModule).toHaveBeenLastCalledWith('m', { name: detail.name, icon: undefined, section: '銷售', titleFieldId: 5 });
+    await input.setValue('  ');
+    await input.trigger('change');
+    await flushPromises();
+    expect(api.updateModule).toHaveBeenLastCalledWith('m', { name: detail.name, icon: undefined, section: undefined, titleFieldId: 5 });
+  });
+
+  it('has a preview tab', async () => {
+    api.getPreviewSchema.mockResolvedValue({ key: 'm', blocks: [], rules: [], permissions: {} } as never);
+    const w = await mountPage();
+    const tab = w.find('[data-testid="tab-preview"]');
+    expect(tab.exists()).toBe(true);
+    expect(tab.text()).toContain('預覽');
+    await tab.trigger('click');
+    await flushPromises();
+    expect(api.getPreviewSchema).toHaveBeenCalledWith('m');
+    expect(w.text()).toContain('預覽使用目前的草稿設定，不會存檔');
+  });
+
+  it('extension module hides the title field and shows the host entity read-only', async () => {
+    const w = await mountPage({ ...detail, titleFieldId: undefined, kind: 'extension', hostEntityKey: 'design.mold' });
+    expect(w.find('[data-testid="title-field"]').exists()).toBe(false);
+    const host = w.find('input[data-testid="host-entity"]').element as HTMLInputElement;
+    expect(host.value).toBe('模具');
+    expect(host.readOnly).toBe(true);
+  });
+
+  it('export template downloads the file and revokes the url after 1000 ms', async () => {
+    vi.useFakeTimers({ toFake: ['setTimeout'] });
+    const w = await mountPage();
+    const blob = new Blob(['{}']);
+    api.exportTemplate.mockResolvedValue({ blob, fileName: 'm.template.json' });
+    URL.createObjectURL = vi.fn(() => 'blob:x');
+    URL.revokeObjectURL = vi.fn();
+    const click = vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => {});
+    (w.get('[data-testid="export-template"]').element as HTMLElement).click();
+    await vi.waitFor(() => expect(click).toHaveBeenCalled());
+    expect(api.exportTemplate).toHaveBeenCalledWith('m');
+    expect(URL.revokeObjectURL).not.toHaveBeenCalled();
+    vi.advanceTimersByTime(1000);
+    expect(URL.revokeObjectURL).toHaveBeenCalledWith('blob:x');
+    vi.useRealTimers();
+    click.mockRestore();
+  });
+});

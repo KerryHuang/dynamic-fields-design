@@ -1,0 +1,8 @@
+{
+  "extends": "./.quasar/tsconfig.json",
+  "compilerOptions": {
+    "strict": true,
+    "paths": { "src/*": ["./src/*"], "app/*": ["./*"] }
+  },
+  "include": ["src/**/*", "*.ts", ".quasar/*.d.ts"]
+}

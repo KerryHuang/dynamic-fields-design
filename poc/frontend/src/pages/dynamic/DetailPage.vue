@@ -1,0 +1,91 @@
+<script setup lang="ts">
+import { useQuasar } from 'quasar';
+import { computed, ref } from 'vue';
+import { useI18n } from 'vue-i18n';
+import { useRoute, useRouter } from 'vue-router';
+import { useDeleteRecord, useRecord } from 'src/application/dynamic/queries/records-queries';
+import { useModuleSchema } from 'src/application/dynamic/queries/schema-queries';
+import DynamicDetail from 'src/presentation/dynamic/components/DynamicDetail.vue';
+import DetailTables from 'src/presentation/dynamic/details/DetailTables.vue';
+import DeleteBlockedDialog from 'src/presentation/dynamic/related/DeleteBlockedDialog.vue';
+import RecordHistory from 'src/presentation/dynamic/history/RecordHistory.vue';
+import RelatedTabs from 'src/presentation/dynamic/related/RelatedTabs.vue';
+import ForbiddenNotice from 'src/components/framework/ForbiddenNotice.vue';
+import type { DeleteBlocked } from 'src/domain/dynamic/types';
+import { SERVER_STALE_MESSAGE } from 'src/presentation/dynamic/designer/api-error';
+import { isForbidden, type ApiError } from 'src/services/api/http';
+
+const { t } = useI18n();
+const $q = useQuasar();
+const route = useRoute();
+const router = useRouter();
+const moduleKey = computed(() => String(route.params.moduleKey));
+const recordId = computed(() => Number(route.params.id));
+
+const schemaQuery = useModuleSchema(moduleKey);
+const recordQuery = useRecord(recordId);
+const del = useDeleteRecord();
+const confirming = ref(false);
+const blocked = ref<DeleteBlocked | null>(null);
+
+const status = (e: unknown) => (e as ApiError | null)?.status;
+const schemaMissing = computed(() => status(schemaQuery.error.value) === 404);
+const recordMissing = computed(() => status(recordQuery.error.value) === 404
+  || (!!recordQuery.data.value && recordQuery.data.value.moduleKey !== moduleKey.value));
+const forbidden = computed(() => isForbidden(schemaQuery.error.value) || isForbidden(recordQuery.error.value));
+const failed = computed(() => !forbidden.value && !schemaMissing.value && !recordMissing.value
+  && (!!schemaQuery.error.value || !!recordQuery.error.value));
+
+async function onDelete() {
+  try {
+    await del.mutateAsync({ moduleKey: moduleKey.value, id: recordId.value, rowVersion: recordQuery.data.value!.rowVersion });
+    await router.push(`/dynamic/${moduleKey.value}`);
+  } catch (e) {
+    const err = e as ApiError;
+    if (err.status === 409 && err.references) {
+      blocked.value = { message: err.message ?? '', references: err.references, total: err.total ?? err.references.length };
+    } else if (err.status === 409 && err.message && err.message !== SERVER_STALE_MESSAGE) {
+      $q.notify({ type: 'warning', message: err.message });
+    } else if (err.status === 409) {
+      $q.notify({
+        type: 'warning', message: t('dynamic.stale'),
+        actions: [{ label: t('dynamic.reload'), color: 'white', handler: () => void recordQuery.refetch() }],
+      });
+    } else $q.notify({ type: 'negative', message: err.message ?? String(err.status) });
+  } finally {
+    confirming.value = false;
+  }
+}
+</script>
+
+<template>
+  <q-page padding>
+    <ForbiddenNotice v-if="forbidden" />
+    <div v-else-if="schemaMissing" class="text-negative">{{ t('dynamic.moduleNotFound') }}</div>
+    <div v-else-if="recordMissing" class="text-negative">{{ t('dynamic.recordNotFound') }}</div>
+    <div v-else-if="failed" class="text-negative">{{ t('dynamic.loadFailed') }}</div>
+    <template v-else-if="schemaQuery.data.value && recordQuery.data.value">
+      <div class="row items-center q-mb-md q-gutter-sm">
+        <q-btn flat icon="arrow_back" :label="t('dynamic.back')" :to="`/dynamic/${moduleKey}`" />
+        <div v-if="schemaQuery.data.value.titleFieldKey || schemaQuery.data.value.kind === 'extension'" class="text-h6">{{ recordQuery.data.value.title }}</div>
+        <q-space />
+        <q-btn v-if="schemaQuery.data.value.permissions.edit" color="primary" :label="t('dynamic.edit')" :to="`/dynamic/${moduleKey}/${recordId}/edit`" />
+        <q-btn v-if="schemaQuery.data.value.permissions.delete" color="negative" outline :label="t('dynamic.delete')" @click="confirming = true" />
+      </div>
+      <DynamicDetail :schema="schemaQuery.data.value" :record="recordQuery.data.value" />
+      <DetailTables v-if="schemaQuery.data.value.details?.length" class="q-mt-md" :details="schemaQuery.data.value.details" :rows="recordQuery.data.value.details ?? {}" />
+      <RelatedTabs :record-id="recordId" />
+      <RecordHistory :record-id="recordId" />
+      <DeleteBlockedDialog v-if="blocked" :model-value="true" :blocked="blocked" @update:model-value="blocked = null" />
+      <q-dialog v-model="confirming">
+        <q-card>
+          <q-card-section>{{ t('dynamic.confirmDelete') }}</q-card-section>
+          <q-card-actions align="right">
+            <q-btn flat :label="t('dynamic.cancel')" v-close-popup />
+            <q-btn color="negative" :label="t('dynamic.delete')" :loading="del.isPending.value" @click="onDelete" />
+          </q-card-actions>
+        </q-card>
+      </q-dialog>
+    </template>
+  </q-page>
+</template>

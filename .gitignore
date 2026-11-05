@@ -1,0 +1,11 @@
+bin/
+obj/
+node_modules/
+poc/backend/data/*.db*
+dist/
+.quasar/
+*.user
+.superpowers/
+
+# 本機研究筆記，不進版控
+docs/research/*-survey.md

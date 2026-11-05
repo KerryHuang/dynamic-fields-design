@@ -1,0 +1,129 @@
+{
+  "formatVersion": 1,
+  "key": "order",
+  "name": { "zh-TW": "訂單", "en-US": "Sales order" },
+  "description": { "zh-TW": "表頭＋明細，含合計、稅額、狀態控管", "en-US": "Header and lines with totals, tax and status control" },
+  "modules": [
+    {
+      "code": "order", "key": "order", "name": { "zh-TW": "訂單", "en-US": "Sales order" },
+      "icon": "receipt_long", "section": "業務",
+      "kind": "standalone", "hostEntityKey": null,
+      "titleField": "no",
+      "blocks": [
+        { "code": "main", "label": { "zh-TW": "基本資料", "en-US": "Basic information" }, "collapsed": false,
+          "fields": [
+            { "code": "no", "type": "autonumber", "label": { "zh-TW": "訂單編號", "en-US": "Order no." },
+              "config": { "format": "SO-{yyyyMM}-{0000}", "showInList": true, "isSortable": true } },
+            { "code": "customer", "type": "reference", "label": { "zh-TW": "客戶", "en-US": "Customer" },
+              "config": { "refTarget": { "kind": "entity", "key": "sales.customer" },
+                          "required": true, "showInList": true, "isFilterable": true } },
+            { "code": "orderDate", "type": "date", "label": { "zh-TW": "訂單日期", "en-US": "Order date" },
+              "config": { "defaultToday": true, "required": true, "showInList": true, "isFilterable": true, "isSortable": true } },
+            { "code": "dueDate", "type": "date", "label": { "zh-TW": "交期", "en-US": "Due date" },
+              "config": { "showInList": true, "isFilterable": true, "isSortable": true } },
+            { "code": "status", "type": "enum", "label": { "zh-TW": "狀態", "en-US": "Status" },
+              "options": [
+                { "code": "draft", "label": { "zh-TW": "草稿", "en-US": "Draft" }, "color": null },
+                { "code": "confirmed", "label": { "zh-TW": "已確認", "en-US": "Confirmed" }, "color": null },
+                { "code": "shipping", "label": { "zh-TW": "出貨中", "en-US": "Shipping" }, "color": null },
+                { "code": "closed", "label": { "zh-TW": "已結案", "en-US": "Closed" }, "color": null },
+                { "code": "cancel", "label": { "zh-TW": "取消", "en-US": "Cancelled" }, "color": null }
+              ],
+              "config": { "defaultValue": "opt_draft", "required": true, "showInList": true, "isFilterable": true } },
+            { "code": "salesRep", "type": "user", "label": { "zh-TW": "業務員", "en-US": "Sales rep" },
+              "config": { "showInList": true, "isFilterable": true } },
+            { "code": "currency", "type": "enum", "label": { "zh-TW": "幣別", "en-US": "Currency" },
+              "options": [
+                { "code": "twd", "label": { "zh-TW": "TWD", "en-US": "TWD" }, "color": null },
+                { "code": "usd", "label": { "zh-TW": "USD", "en-US": "USD" }, "color": null },
+                { "code": "jpy", "label": { "zh-TW": "JPY", "en-US": "JPY" }, "color": null }
+              ],
+              "config": { "defaultValue": "opt_twd" } }
+          ] },
+        { "code": "amounts", "label": { "zh-TW": "金額", "en-US": "Amounts" }, "collapsed": false,
+          "fields": [
+            { "code": "subtotal", "type": "rollup", "label": { "zh-TW": "未稅合計", "en-US": "Subtotal" },
+              "config": { "rollup": { "sourceField": "line.order", "function": "sum", "aggregateField": "line.amount" } } },
+            { "code": "taxRate", "type": "percent", "label": { "zh-TW": "稅率", "en-US": "Tax rate" },
+              "config": { "scale": 0, "defaultValue": 5 } },
+            { "code": "tax", "type": "formula", "label": { "zh-TW": "稅額", "en-US": "Tax" },
+              "config": { "formula": "ROUND({subtotal} * {taxRate}, 0)", "resultType": "currency", "scale": 0 } },
+            { "code": "total", "type": "formula", "label": { "zh-TW": "含稅總額", "en-US": "Total" },
+              "config": { "formula": "{subtotal} + {tax}", "resultType": "currency", "scale": 0, "showInList": true } },
+            { "code": "lineCount", "type": "rollup", "label": { "zh-TW": "明細筆數", "en-US": "Line count" },
+              "config": { "rollup": { "sourceField": "line.order", "function": "count" } } }
+          ] },
+        { "code": "remarks", "label": { "zh-TW": "備註", "en-US": "Remarks" }, "collapsed": false,
+          "fields": [
+            { "code": "remark", "type": "textarea", "label": { "zh-TW": "備註", "en-US": "Remark" } },
+            { "code": "cancelReason", "type": "textarea", "label": { "zh-TW": "取消原因", "en-US": "Cancellation reason" } }
+          ] }
+      ],
+      "rules": [
+        { "kind": "validation", "targets": ["field:dueDate"], "active": true, "options": [],
+          "message": { "zh-TW": "交期不得早於訂單日期", "en-US": "Due date cannot be earlier than the order date" },
+          "condition": { "any": [
+            { "field": "dueDate", "op": "isEmpty" },
+            { "field": "dueDate", "op": "gte", "value": { "fieldRef": "orderDate" } }
+          ] } },
+        { "kind": "visibility", "targets": ["field:cancelReason"], "active": true, "options": [], "message": null,
+          "condition": { "field": "status", "op": "eq", "value": "opt_cancel" } },
+        { "kind": "required", "targets": ["field:cancelReason"], "active": true, "options": [], "message": null,
+          "condition": { "field": "status", "op": "eq", "value": "opt_cancel" } },
+        { "kind": "readOnly", "targets": ["*"], "active": true, "options": [], "message": null,
+          "condition": { "field": "status", "op": "in", "value": ["opt_closed", "opt_cancel"] } }
+      ],
+      "views": [
+        { "name": { "zh-TW": "全部訂單", "en-US": "All orders" },
+          "columns": ["no", "customer", "orderDate", "dueDate", "status", "total"], "filter": null,
+          "sort": [ { "field": "orderDate", "order": "desc" } ], "isDefault": true }
+      ],
+      "permissions": [
+        { "group": "sales", "scope": "own",
+          "privileges": { "read": true, "add": true, "edit": true, "delete": false,
+                          "printExport": false, "pricing": true, "approve": false } },
+        { "group": "sales-manager", "scope": "all",
+          "privileges": { "read": true, "add": true, "edit": true, "delete": true,
+                          "printExport": true, "pricing": true, "approve": false } },
+        { "group": "floor", "scope": "all",
+          "privileges": { "read": true, "add": false, "edit": false, "delete": false,
+                          "printExport": false, "pricing": false, "approve": false } }
+      ]
+    },
+    {
+      "code": "line", "key": "order-line", "name": { "zh-TW": "訂單明細", "en-US": "Order lines" },
+      "icon": null, "section": null,
+      "kind": "standalone", "hostEntityKey": null,
+      "titleField": "itemName",
+      "blocks": [
+        { "code": "main", "label": { "zh-TW": "明細", "en-US": "Lines" }, "collapsed": false,
+          "fields": [
+            { "code": "order", "type": "reference", "label": { "zh-TW": "訂單", "en-US": "Order" },
+              "config": { "refTarget": { "kind": "module", "key": "order" }, "relation": "detail" } },
+            { "code": "seq", "type": "autonumber", "label": { "zh-TW": "項次", "en-US": "Line no." },
+              "config": { "format": "{0}", "scope": "parent" } },
+            { "code": "itemNo", "type": "text", "label": { "zh-TW": "品號", "en-US": "Item no." } },
+            { "code": "itemName", "type": "text", "label": { "zh-TW": "品名", "en-US": "Item name" },
+              "config": { "required": true } },
+            { "code": "qty", "type": "decimal", "label": { "zh-TW": "數量", "en-US": "Quantity" },
+              "config": { "scale": 2, "required": true } },
+            { "code": "unit", "type": "enum", "label": { "zh-TW": "單位", "en-US": "Unit" },
+              "options": [
+                { "code": "pcs", "label": { "zh-TW": "個", "en-US": "pcs" }, "color": null },
+                { "code": "set", "label": { "zh-TW": "組", "en-US": "set" }, "color": null },
+                { "code": "kg", "label": { "zh-TW": "公斤", "en-US": "kg" }, "color": null }
+              ] },
+            { "code": "price", "type": "currency", "label": { "zh-TW": "單價", "en-US": "Unit price" },
+              "config": { "scale": 0 } },
+            { "code": "amount", "type": "formula", "label": { "zh-TW": "金額", "en-US": "Amount" },
+              "config": { "formula": "{qty} * {price}", "resultType": "currency", "scale": 0 } },
+            { "code": "dueDate", "type": "date", "label": { "zh-TW": "交期", "en-US": "Due date" },
+              "config": { "parentDefaultField": "order.dueDate" } }
+          ] }
+      ],
+      "rules": [],
+      "views": [],
+      "permissions": []
+    }
+  ]
+}

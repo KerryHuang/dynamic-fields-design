@@ -1,0 +1,101 @@
+using System.Text.Json;
+using System.Text.RegularExpressions;
+
+namespace DynamicModules.Domain.FieldTypes.Handlers;
+
+internal static class HandlerHelpers
+{
+    public static bool IsNull(JsonElement? input) =>
+        input is null || input.Value.ValueKind is JsonValueKind.Null or JsonValueKind.Undefined;
+
+    public static JsonElement ToElement<T>(T value) => JsonSerializer.SerializeToElement(value);
+
+    public static FieldValueResult NormalizeText(JsonElement? input, int maxLength)
+    {
+        if (IsNull(input)) return FieldValueResult.Ok(null);
+        if (input!.Value.ValueKind != JsonValueKind.String) return FieldValueResult.Fail("必須是文字");
+        var text = input.Value.GetString()!.Trim();
+        if (text.Length == 0) return FieldValueResult.Ok(null);
+        return text.Length > maxLength
+            ? FieldValueResult.Fail($"超過 {maxLength} 個字元")
+            : FieldValueResult.Ok(ToElement(text));
+    }
+
+    public static FieldValueResult NormalizeDecimal(JsonElement? input, int scale)
+    {
+        if (IsNull(input)) return FieldValueResult.Ok(null);
+        if (input!.Value.ValueKind != JsonValueKind.Number || !input.Value.TryGetDecimal(out var d))
+            return FieldValueResult.Fail("必須是數字");
+        d /= 1.0000000000000000000000000000m; // 去除尾端的 0
+        var actualScale = (decimal.GetBits(d)[3] >> 16) & 0xFF;
+        return actualScale > scale
+            ? FieldValueResult.Fail($"小數最多 {scale} 位")
+            : FieldValueResult.Ok(ToElement(d));
+    }
+
+    /// <summary>字串欄位以正則驗證；不符回 error。</summary>
+    public static FieldValueResult NormalizePattern(JsonElement? input, Regex pattern, string error)
+    {
+        if (IsNull(input)) return FieldValueResult.Ok(null);
+        if (input!.Value.ValueKind != JsonValueKind.String) return FieldValueResult.Fail(error);
+        var s = input.Value.GetString()!;
+        return pattern.IsMatch(s) ? FieldValueResult.Ok(ToElement(s)) : FieldValueResult.Fail(error);
+    }
+
+    public const int MaxIndexTextLength = 440;
+
+    private static readonly FilterOperator[] Empties = [FilterOperator.IsEmpty, FilterOperator.IsNotEmpty];
+
+    public static readonly IReadOnlyList<FilterOperator> TextOperators =
+    [
+        FilterOperator.Eq, FilterOperator.Ne, FilterOperator.In, FilterOperator.NotIn,
+        FilterOperator.Contains, FilterOperator.StartsWith, .. Empties
+    ];
+
+    public static readonly IReadOnlyList<FilterOperator> NumberOperators =
+    [
+        FilterOperator.Eq, FilterOperator.Ne, FilterOperator.Gt, FilterOperator.Gte,
+        FilterOperator.Lt, FilterOperator.Lte, FilterOperator.Between, .. Empties
+    ];
+
+    public static readonly IReadOnlyList<FilterOperator> DateOperators =
+    [
+        FilterOperator.Eq, FilterOperator.Ne, FilterOperator.Gt, FilterOperator.Gte,
+        FilterOperator.Lt, FilterOperator.Lte, FilterOperator.Between,
+        FilterOperator.WithinNextDays, FilterOperator.WithinLastDays, .. Empties
+    ];
+
+    public static readonly IReadOnlyList<FilterOperator> DateTimeOperators =
+    [
+        FilterOperator.Gt, FilterOperator.Gte, FilterOperator.Lt, FilterOperator.Lte, FilterOperator.Between,
+        FilterOperator.WithinNextDays, FilterOperator.WithinLastDays, .. Empties
+    ];
+
+    public static readonly IReadOnlyList<FilterOperator> BooleanOperators = [FilterOperator.Eq, .. Empties];
+
+    public static readonly IReadOnlyList<FilterOperator> PickOperators =
+    [
+        FilterOperator.Eq, FilterOperator.Ne, FilterOperator.In, FilterOperator.NotIn, .. Empties
+    ];
+
+    public static readonly IReadOnlyList<FilterOperator> MultiPickOperators =
+        [FilterOperator.In, FilterOperator.NotIn, .. Empties];
+
+    public static readonly IReadOnlyList<FilterOperator> NoOperators = [];
+    public static readonly IReadOnlyList<IndexValue> NoIndex = [];
+
+    /// <summary>超過 440 字元截取前段，不切斷 surrogate pair。</summary>
+    public static string TruncateIndexText(string s)
+    {
+        if (s.Length <= MaxIndexTextLength) return s;
+        var cut = char.IsHighSurrogate(s[MaxIndexTextLength - 1]) ? MaxIndexTextLength - 1 : MaxIndexTextLength;
+        return s[..cut];
+    }
+
+    public static IReadOnlyList<IndexValue> SingleText(JsonElement value) =>
+        [new(0, TruncateIndexText(value.GetString()!), null, null, null)];
+
+    public static IReadOnlyList<IndexValue> SingleNumber(double number) => [new(0, null, number, null, null)];
+
+    public static IReadOnlyList<IndexValue> SingleDate(DateTime date) => [new(0, null, null, date, null)];
+}
