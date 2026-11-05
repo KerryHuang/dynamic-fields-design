@@ -88,7 +88,7 @@
 - Create: `poc/backend/src/DynamicModules.Domain/Repositories/Dynamic/IAccountRepository.cs`、`poc/backend/src/DynamicModules.Persistence/Repositories/Dynamic/AccountRepository.cs`
 - Create: `poc/backend/src/DynamicModules.WebAPI/Security/{ClaimsCurrentUser,SessionMiddleware,PasswordService,AdminBootstrap,AuthCookies}.cs`
 - Create: `poc/backend/src/DynamicModules.WebAPI/Controllers/v3/Dynamic/AuthController.cs`
-- Modify: `Program.cs`、`appsettings.Development.json`、`PermissionService/Data/PermissionResponses.cs`、`GetMeHandler.cs`
+- Modify: `Program.cs`、`appsettings.Development.json`、`poc/start.command`、`PermissionService/Data/PermissionResponses.cs`、`GetMeHandler.cs`
 - Delete: `WebAPI/Security/HeaderCurrentUser.cs`、`IdentityMiddleware.cs`、`Persistence/DbKnownUsers.cs`、`IKnownUsers`
 - Modify: `tests/DynamicModules.WebAPITests/TestApp.cs`，刪除 `HeaderCurrentUserTests.cs`（行為改由下面的測試涵蓋）
 - Create: `tests/DynamicModules.WebAPITests/TestAuthHandler.cs`、`AuthApiTests.cs`
@@ -129,7 +129,7 @@
   - `AdminBootstrap.EnsureAsync`：在 `InitializeDatabaseAsync` 的 `EnsureSeededAsync` 之後呼叫。沒有「`IsActive && IsSystemAdmin && PasswordHash != null`」的使用者時，取得或建立 `admin`，設 `IsActive`、`IsSystemAdmin`、密碼、`MustChangePassword = !Demo:LoginEnabled`。密碼來自 `Auth:InitialAdminPassword`，否則用 `RandomNumberGenerator` 產生並以 Warning 印出。
   - 改密碼成功時更新 `SecurityStamp`，controller 用新 stamp 重發 cookie。登入成功時，`FailedLoginCount` 不為 0 才寫入，平常登入不寫資料庫。
   - log 登入成功、失敗（含真實原因）、鎖定。
-  - `appsettings.Development.json` 加 `Auth:InitialAdminPassword`，值為 `admin1234`，讓本機開發不用翻 log；確認 `start.command` 走 Development 環境，不是的話在 `start.command` 設 `ASPNETCORE_ENVIRONMENT=Development`。
+  - `appsettings.Development.json` 加 `Auth:InitialAdminPassword`，值為 `admin1234`，讓本機開發不用翻 log；專案沒有 `launchSettings.json`，所以在 `poc/start.command` 的 `dotnet run` 前設 `ASPNETCORE_ENVIRONMENT=Development`。Dockerfile 維持預設的 Production，不會讀到這個值。
   - 註冊 `TimeProvider.System` 為 singleton，`LoginHandler` 用它判斷鎖定。
 - [ ] **Step 4: 實作測試 scheme。** `TestAuthHandler`：讀 `X-User`，從 `DynamicDbContext` 查使用者，有就發和真實 cookie 相同的 `NameIdentifier`、`stamp` claim，沒有就 `NoResult`。`realAuth: false` 時 `TestApp` 把它設為預設 scheme，`SessionMiddleware` 不做任何特例。`realAuth: true` 不註冊它，並可用 `TestApp.Time` 控制 `TimeProvider`。
 - [ ] **Step 5: 跑全部後端測試**：`dotnet test poc/backend`，預期全過。斷言舊訊息「請先選擇使用者」的測試改成「請先登入」。
@@ -187,7 +187,7 @@
   - `PUT /admin/users/{id} { displayName, groupIds, isSystemAdmin }`。
   - `POST /admin/users/{id}/reset-password { password }`。
   - `POST /admin/users/{id}/deactivate`、`POST /admin/users/{id}/activate`。
-  - `IAccountRepository` 新增：`AddUser(AppUser)`、`Task<bool> UserExistsAsync(string, CancellationToken)`、`Task<int> CountActiveAdminsAsync(CancellationToken)`、`Task SetMembershipsAsync(string userId, IReadOnlyCollection<int> groupIds, CancellationToken)`、`Task<bool> GroupsExistAsync(IReadOnlyCollection<int>, CancellationToken)`。群組主鍵型別以 `PermissionGroup.Id` 為準。
+  - `IAccountRepository` 新增：`AddUser(AppUser)`、`Task<bool> UserExistsAsync(string, CancellationToken)`、`Task<int> CountActiveAdminsAsync(CancellationToken)`、`Task SetMembershipsAsync(string userId, IReadOnlyCollection<long> groupIds, CancellationToken)`、`Task<bool> GroupsExistAsync(IReadOnlyCollection<long>, CancellationToken)`。
 
 - [ ] **Step 1: 寫失敗的測試**
   - `AdminEndpoints_NonAdmin_403`：以 `sales01` 打全部 6 個端點，都是 403。
