@@ -9,3 +9,6 @@ services:
     dockerContext: .
     healthCheckPath: /api/health
     autoDeploy: true
+    envVars:
+      - key: Demo__SeedOnStartup
+        value: "true"

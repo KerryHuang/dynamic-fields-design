@@ -4,12 +4,14 @@ using DynamicModules.Application;
 using DynamicModules.Application.Common.Acting;
 using DynamicModules.Application.Common.Security;
 using DynamicModules.Application.Common.Time;
+using DynamicModules.Application.Dynamic.DemoService;
 using DynamicModules.Application.Dynamic.TemplateService;
 using DynamicModules.Domain.Data;
 using DynamicModules.Domain.Entities.Dynamic;
 using DynamicModules.Persistence;
 using DynamicModules.Persistence.Seed;
 using Microsoft.EntityFrameworkCore;
+using DynamicModules.WebAPI.Demo;
 using DynamicModules.WebAPI.Security;
 using DynamicModules.WebAPI.Time;
 
@@ -30,6 +32,7 @@ builder.Services.AddScoped<ICurrentUser, HeaderCurrentUser>();
 builder.Services.AddSingleton<IBusinessTime, TaipeiBusinessTime>();
 // 須在 ICurrentUser、IBusinessTime 註冊之後：Demo 資料產生器靠它在範圍內切換身分與時間
 builder.Services.AddActingOverrides();
+builder.Services.AddSingleton<IDemoDataRunner, DemoDataRunner>();
 builder.Services.AddControllers().AddJsonOptions(o =>
 {
     o.JsonSerializerOptions.PropertyNamingPolicy = JsonNamingPolicy.CamelCase;
@@ -48,6 +51,9 @@ var app = builder.Build();
 // 內建範本有錯就拒絕啟動（spec §13.1）：在碰資料庫之前先解析 singleton
 app.Services.GetRequiredService<TemplateCatalog>();
 await InitializeDatabaseAsync(app, dynamicConnection);
+// Demo 站台（Render）啟動後在背景產生 Demo 資料；結果只記 log，不擋啟動也不擋 /api/health
+if (app.Configuration.GetValue<bool>("Demo:SeedOnStartup"))
+    app.Lifetime.ApplicationStarted.Register(() => app.Services.GetRequiredService<IDemoDataRunner>().TryStart(startup: true));
 
 app.UseExceptionHandler();
 app.UseMiddleware<IdentityMiddleware>();
