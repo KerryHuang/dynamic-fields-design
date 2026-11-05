@@ -11,6 +11,7 @@ const routes = [
   { path: '/', component: page },
   { path: '/login', component: page, meta: { public: true } },
   { path: '/change-password', component: page },
+  { path: '/service-unavailable', component: page, meta: { public: true } },
   { path: '/dynamic/:moduleKey', component: page },
 ];
 
@@ -73,6 +74,31 @@ describe('auth guard', () => {
     expect(router.currentRoute.value.path).toBe('/change-password');
     await router.push('/change-password');
     expect(router.currentRoute.value.path).toBe('/change-password');
+  });
+
+  it('a /me failure other than 401 shows service-unavailable, keeps the store, and probes again later', async () => {
+    const router = setup();
+    useIdentityStore().setSession('admin');
+    meResponse = { status: 500, data: { title: 'boom' } };
+    await router.push('/dynamic/order?q=1');
+    expect(router.currentRoute.value.path).toBe('/service-unavailable');
+    expect(router.currentRoute.value.query.redirect).toBe('/dynamic/order?q=1');
+    expect(useIdentityStore().userId).toBe('admin');
+    expect(meCalls).toBe(1);
+
+    meResponse = { status: 200, data: { userId: 'admin', mustChangePassword: false } };
+    await router.push('/dynamic/order?q=1');
+    expect(router.currentRoute.value.fullPath).toBe('/dynamic/order?q=1');
+    expect(meCalls).toBe(2);
+  });
+
+  it('a network error also shows service-unavailable, and the page itself does not probe', async () => {
+    const router = setup();
+    meResponse = { status: 0, data: null };
+    http.defaults.adapter = async () => Promise.reject(new Error('Network Error'));
+    await router.push('/');
+    expect(router.currentRoute.value.path).toBe('/service-unavailable');
+    expect(meCalls).toBe(0);
   });
 
   it('anonymous visitor may open /login', async () => {

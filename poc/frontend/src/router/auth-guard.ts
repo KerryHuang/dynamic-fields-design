@@ -1,6 +1,7 @@
 import type { QueryClient } from '@tanstack/vue-query';
 import type { Router } from 'vue-router';
 import { dynamicApi } from 'src/services/api/dynamic-api';
+import type { ApiError } from 'src/services/api/http';
 import { useIdentityStore } from 'src/stores/use-identity-store';
 
 /** Only same-origin absolute paths: starts with a single '/', never '//' or '/\' (both are protocol-relative to a browser). */
@@ -10,18 +11,28 @@ export function safeRedirect(path: string | undefined): string {
 
 const loginLocation = (redirect: string) => ({ path: '/login', query: redirect === '/' ? {} : { redirect } });
 
-/** First navigation loads the session from GET /me (a 401 means signed out); afterwards the store is the source of truth. */
+const SERVICE_UNAVAILABLE = '/service-unavailable';
+
+/**
+ * First navigation loads the session from GET /me. Only a 401 means signed out; any other failure (500, network) says nothing
+ * about the cookie, so keep the store, probe again next time and show the retry page.
+ */
 export function installAuthGuard(router: Router) {
   let sessionLoaded = false;
   router.beforeEach(async (to) => {
+    if (to.path === SERVICE_UNAVAILABLE) return true;
     const identity = useIdentityStore();
     if (!sessionLoaded) {
-      sessionLoaded = true;
       try {
         const me = await dynamicApi.getMe();
         identity.setSession(me.userId, me.mustChangePassword);
-      } catch {
+        sessionLoaded = true;
+      } catch (e) {
+        if ((e as ApiError | null)?.status !== 401) {
+          return { path: SERVICE_UNAVAILABLE, query: to.fullPath === '/' ? {} : { redirect: to.fullPath } };
+        }
         identity.clear();
+        sessionLoaded = true;
       }
     }
     if (!identity.userId) return to.meta.public ? true : loginLocation(to.fullPath);
