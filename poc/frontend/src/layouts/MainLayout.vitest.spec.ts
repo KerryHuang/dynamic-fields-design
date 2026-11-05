@@ -162,6 +162,27 @@ describe('MainLayout menu', () => {
     expect(w.text()).not.toContain(zhTW.menu.system);
   });
 
+  it('identity.users follows /users after invalidating ["users"]', async () => {
+    const pinia = createPinia();
+    setActivePinia(pinia);
+    let list = USERS;
+    http.defaults.adapter = async (config) => ({
+      data: config.url === '/me' ? me(false) : config.url === '/users' ? list : [], status: 200, statusText: 'OK', headers: {}, config,
+    });
+    const router = createRouter({ history: createMemoryHistory(), routes: [{ path: '/', component: { template: '<i/>' } }] });
+    const i18n = createI18n({ legacy: false, locale: 'zh-TW', messages: { 'zh-TW': zhTW } });
+    const queryClient = new QueryClient();
+    mount(MainLayout, {
+      global: { plugins: [[quasar.Quasar, { components: quasar }], pinia, router, i18n, [VueQueryPlugin, { queryClient }]] },
+    });
+    await flushPromises();
+    expect(useIdentityStore().users.map((u) => u.userId)).toEqual(['admin', 'sales01']);
+    list = [...USERS, { userId: 'new01', displayName: 'new01' }];
+    await queryClient.invalidateQueries({ queryKey: ['users'] });
+    await flushPromises();
+    expect(useIdentityStore().users.map((u) => u.userId)).toEqual(['admin', 'sales01', 'new01']);
+  });
+
   it('MainLayout hides the designer menu without designer read', async () => {
     const pinia = createPinia();
     setActivePinia(pinia);

@@ -164,4 +164,54 @@ describe('UsersPage', () => {
     expect(api.updateUser).toHaveBeenCalledWith('admin', { displayName: '名-admin', groupIds: [], isSystemAdmin: false });
     expect(invalidate.mock.calls.map(([f]) => (f as { queryKey: unknown[] }).queryKey)).toEqual(expect.arrayContaining([['admin-users'], ['users'], ['me']]));
   });
+
+  describe('passwords do not outlive their dialog', () => {
+    const state = (w: Awaited<ReturnType<typeof mountPage>>) =>
+      w.findComponent(UsersPage).vm as unknown as { form: { password: string }; resetPassword: string };
+    const settled = async () => { await new Promise((r) => setTimeout(r, 400)); await flushPromises(); };
+
+    it('create dialog: cleared after cancel and after a successful save', async () => {
+      api.createUser.mockResolvedValue(user('new01'));
+      const w = await mountPage();
+      await click('user-create');
+      await fill('user-password', 'password-1');
+      expect(state(w).form.password).toBe('password-1');
+      await click('user-cancel');
+      await settled();
+      expect(state(w).form.password).toBe('');
+
+      await click('user-create');
+      await fill('user-id', 'new01');
+      await fill('user-name', '新人');
+      await fill('user-password', 'password-2');
+      await click('user-save');
+      await settled();
+      expect(api.createUser).toHaveBeenCalledTimes(1);
+      expect(state(w).form.password).toBe('');
+    });
+
+    it('reset dialog: cleared after cancel, after the dialog asks to close (backdrop/Escape) and after success', async () => {
+      api.resetUserPassword.mockResolvedValue(undefined as never);
+      const w = await mountPage();
+      await click('user-reset-sales01');
+      await fill('user-reset-password', 'password-1');
+      await click('user-reset-cancel');
+      await settled();
+      expect(state(w).resetPassword).toBe('');
+
+      await click('user-reset-sales01');
+      await fill('user-reset-password', 'password-2');
+      // Backdrop click and Escape both end in QDialog's update:model-value(false)
+      w.findAllComponents(quasar.QDialog).find((d) => d.props('modelValue'))!.vm.$emit('update:model-value', false);
+      await settled();
+      expect(state(w).resetPassword).toBe('');
+
+      await click('user-reset-sales01');
+      await fill('user-reset-password', 'password-3');
+      await click('user-reset-submit');
+      await settled();
+      expect(api.resetUserPassword).toHaveBeenCalledTimes(1);
+      expect(state(w).resetPassword).toBe('');
+    });
+  });
 });

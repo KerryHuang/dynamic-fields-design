@@ -131,7 +131,7 @@ function runSetActive(u: AdminUser, active: boolean) {
         </template>
       </q-table>
 
-      <q-dialog v-model="dialog">
+      <q-dialog v-model="dialog" @hide="form.password = ''">
         <q-card style="width: 640px; max-width: 95vw">
           <q-card-section class="text-h6">{{ editingId ? t('users.edit') : t('users.create') }}</q-card-section>
           <q-card-section class="row q-col-gutter-md">
@@ -156,13 +156,13 @@ function runSetActive(u: AdminUser, active: boolean) {
             <div v-if="error" class="col-12 text-negative" data-testid="user-error">{{ error }}</div>
           </q-card-section>
           <q-card-actions align="right">
-            <q-btn flat :label="t('users.cancel')" @click="dialog = false" />
+            <q-btn flat :label="t('users.cancel')" data-testid="user-cancel" @click="dialog = false" />
             <q-btn color="primary" :label="t('users.save')" :loading="saving" data-testid="user-save" @click="save" />
           </q-card-actions>
         </q-card>
       </q-dialog>
 
-      <q-dialog :model-value="resetTarget !== null" @update:model-value="resetTarget = null">
+      <q-dialog :model-value="resetTarget !== null" @update:model-value="resetTarget = null" @hide="resetPassword = ''">
         <q-card style="width: 400px; max-width: 95vw">
           <q-card-section class="text-h6">{{ t('users.resetPassword') }}：{{ resetTarget }}</q-card-section>
           <q-card-section>
@@ -172,7 +172,7 @@ function runSetActive(u: AdminUser, active: boolean) {
             />
           </q-card-section>
           <q-card-actions align="right">
-            <q-btn flat :label="t('users.cancel')" @click="resetTarget = null" />
+            <q-btn flat :label="t('users.cancel')" data-testid="user-reset-cancel" @click="resetTarget = null" />
             <q-btn color="primary" :label="t('users.save')" :loading="reset.isPending.value" data-testid="user-reset-submit" @click="submitReset" />
           </q-card-actions>
         </q-card>
