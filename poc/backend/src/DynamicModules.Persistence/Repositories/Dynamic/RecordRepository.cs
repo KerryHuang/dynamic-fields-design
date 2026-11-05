@@ -25,6 +25,17 @@ public class RecordRepository(DynamicDbContext db, ISqlDialect dialect) : IRecor
 
     public void Add(Record r) => db.Set<Record>().Add(r);
 
+    public async Task<IReadOnlyList<Record>> ListForReportAsync(
+        long moduleId, IReadOnlyCollection<string>? ownerUserIds, int limit, CancellationToken ct)
+    {
+        var query = db.Set<Record>().AsNoTracking().Where(r => r.ModuleId == moduleId && !r.DeleteFlag);
+        if (ownerUserIds is not null) query = query.Where(r => ownerUserIds.Contains(r.OwnerUserId));
+        return await query.OrderBy(r => r.Id).Take(limit).ToListAsync(ct);
+    }
+
+    public async Task<IReadOnlyList<Record>> ListByIdsAsync(long moduleId, IReadOnlyCollection<long> ids, CancellationToken ct) =>
+        await db.Set<Record>().AsNoTracking().Where(r => r.ModuleId == moduleId && !r.DeleteFlag && ids.Contains(r.Id)).ToListAsync(ct);
+
     public async Task<IReadOnlySet<long>> ListVisibleIdsAsync(
         long moduleId, IReadOnlyCollection<long> ids, IReadOnlyCollection<string>? ownerUserIds, CancellationToken ct)
     {

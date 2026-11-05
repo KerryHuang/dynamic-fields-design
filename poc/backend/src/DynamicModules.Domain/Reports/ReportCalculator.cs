@@ -59,7 +59,8 @@ public static class ReportCalculator
         return combos;
     }
 
-    private static List<string> KeysOf(ReportCell? cell)
+    /// <summary>一格落在哪些分組 key；下鑽用它判斷一列是否屬於某分組。</summary>
+    public static List<string> KeysOf(ReportCell? cell)
     {
         if (cell is null) return [""];
         switch (cell.State)
