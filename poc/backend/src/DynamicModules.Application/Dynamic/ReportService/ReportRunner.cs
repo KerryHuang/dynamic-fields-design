@@ -71,7 +71,8 @@ public class ReportRunner(
 
         // 1. 模組存在且啟用；明細模組不能當主模組（它的權限來自表頭，單獨跑會繞過表頭範圍）
         var main = await ActiveModuleAsync(d.MainModuleKey, ct);
-        if (main is null || ModuleRelations.IsDetail(main)) return disabled();
+        if (main is null) return disabled();
+        if (ModuleRelations.IsDetail(main)) return Fail(ModuleDisabledState, "明細模組不能當主模組");
         Module? child = null;
         if (d.Child is not null && (child = await ActiveModuleAsync(d.Child.ModuleKey, ct)) is null) return disabled();
         Module? childParent = null;
@@ -129,6 +130,13 @@ public class ReportRunner(
         if (link is not null && !childSide!.Perms!.CanSee(link)) return Fail(Restricted, $"無權限檢視：{HiddenFieldName}");
         foreach (var b in bound.Values)
             if (UnusableMessage(b, locale) is { } message) return Fail(Restricted, message);
+
+        // 條件類位置用到不可讀模組的帶出欄位，結果會是假的 empty 或 0%，整張擋下（spec §7、§13.2）；
+        // 欄位與分組位置照常，值標無權限。範圍內單筆看不到的目標仍是逐列不符合，見 Matches。
+        var conditionRefs = d.Filters.Select(f => f.Field).Concat(d.Measures.Where(m => m.Condition is not null).Select(m => m.Condition!.Field));
+        if (d.PrimaryDateField is not null) conditionRefs = conditionRefs.Append(d.PrimaryDateField);
+        if (conditionRefs.Any(r => bound[ReportCalculator.KeyOf(r)].Target is { Perms: null }))
+            return Fail(Restricted, $"無權限檢視：{HiddenFieldName}");
 
         // 權限都過了才檢查運算子，錯誤不會洩漏欄位資訊
         foreach (var f in d.Filters.Concat(d.Measures.Where(m => m.Condition is not null).Select(m => m.Condition!)))
@@ -404,12 +412,18 @@ public class ReportRunner(
             ? new ReportCell(Ok, null, null, d, null)
             : EmptyCell;
 
-    /// <summary>值可能以任何時區偏移存放，一律換成台北牆上時間（FieldDisplay.BusinessOffset，與 IBusinessTime 同一時區）。</summary>
+    /// <summary>
+    /// 帶偏移的值換成台北牆上時間（FieldDisplay.BusinessOffset，與 IBusinessTime 同一時區）；
+    /// 不帶偏移的值本身就是台北牆上時間（spec §6.4）。
+    /// </summary>
     private static bool TryWallClock(string s, out DateTime at)
     {
-        var ok = DateTimeOffset.TryParse(s, CultureInfo.InvariantCulture, DateTimeStyles.AssumeUniversal, out var dto);
-        at = ok ? dto.ToOffset(FieldDisplay.BusinessOffset).DateTime : default;
-        return ok;
+        at = default;
+        // AssumeUniversal 讓解析不經過主機時區；Kind 只用來分辨字串有沒有帶偏移
+        if (!DateTimeOffset.TryParse(s, CultureInfo.InvariantCulture, DateTimeStyles.AssumeUniversal, out var dto)
+            || !DateTime.TryParse(s, CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind, out var parsed)) return false;
+        at = parsed.Kind == DateTimeKind.Unspecified ? dto.DateTime : dto.ToOffset(FieldDisplay.BusinessOffset).DateTime;
+        return true;
     }
 
     // ---- 條件 ----
@@ -439,6 +453,12 @@ public class ReportRunner(
             FilterOperator.NotIn => !v.EnumerateArray().Any(e => texts.Contains(Scalar(e))),
             FilterOperator.Contains => texts.Any(x => x.Contains(Scalar(v), StringComparison.OrdinalIgnoreCase)),
             FilterOperator.StartsWith => texts.Any(x => x.StartsWith(Scalar(v), StringComparison.OrdinalIgnoreCase)),
+            // 只有時間型別的文字值走到比較類（EnsureOperator 已擋其他型別）：HH:mm 字典序即時間序
+            FilterOperator.Gt => string.CompareOrdinal(c.Text, Scalar(v)) > 0,
+            FilterOperator.Gte => string.CompareOrdinal(c.Text, Scalar(v)) >= 0,
+            FilterOperator.Lt => string.CompareOrdinal(c.Text, Scalar(v)) < 0,
+            FilterOperator.Lte => string.CompareOrdinal(c.Text, Scalar(v)) <= 0,
+            FilterOperator.Between => string.CompareOrdinal(c.Text, Scalar(v[0])) >= 0 && string.CompareOrdinal(c.Text, Scalar(v[1])) <= 0,
             _ => throw new ArgumentException($"文字值不支援運算子 {f.Op}"),
         };
     }

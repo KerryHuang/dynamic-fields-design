@@ -53,6 +53,54 @@ public class ReportPermissionMatrixTests : ReportTestBase
         r.Message.Should().Contain("隱藏欄位");
     }
 
+    [Theory, MemberData(nameof(Positions))]
+    public async Task HiddenField_AnyPosition_Drill_Restricted_NoValues(string position)
+    {
+        await Arrange();
+        await Insert("order", "sales01", (Secret, "機密值"), (Note, "n"), (SecretNum, 4242m), (SecretDate, "2026-11-04"));
+        As("sales01");
+        var r = await Run(HiddenAt(position), drill: position == "group" ? ["機密值"] : []);
+        ShouldBeRestricted(r, "機密備註", "機密成本", "機密日期", "客戶機密");
+        JsonSerializer.Serialize(r).Should().NotContain("4242").And.NotContain("機密值");
+    }
+
+    public static TheoryData<string> UnreadableViaPositions => new() { "filter", "ratio", "primaryDate" };
+
+    /// <summary>條件類位置用到不可讀模組的帶出欄位：回 empty 或 0% 會是假數字，要整張擋下（spec §7、§13.2）。</summary>
+    [Theory, MemberData(nameof(UnreadableViaPositions))]
+    public async Task UnreadableViaField_InConditionPosition_RestrictsWholeReport(string position)
+    {
+        await Arrange(salesReadCustomer: false);
+        var since = await MustAdd("customer", FieldType.Date, label: "往來起日");
+        var viaDate = new ReportFieldRef(Main, since.Id, CustomerRef.Id);
+        var c = await Insert("customer", "admin", (Region, "北區"), (since, "2026-11-04"));
+        await Insert("order", "sales01", (Amount, 1m), (CustomerRef, c));
+        await Insert("order", "sales01", (Amount, 2m));
+        var d = position switch
+        {
+            "filter" => Def(measures: [M("n", "countMain")], filters: [F(RegionVia, "eq", "北區")]),
+            "ratio" => Def(measures: [M("r", "ratio", cond: F(RegionVia, "eq", "北區"))]),
+            "primaryDate" => Def(measures: [M("n", "countMain")], primary: viaDate, range: new ReportDateRange("today", null)),
+            _ => throw new ArgumentException(position),
+        };
+
+        As("admin");
+        (await Run(d)).State.Should().Be("ok");
+
+        As("sales01");
+        ShouldBeRestricted(await Run(d), "地區", "往來起日", "customer");
+    }
+
+    [Fact]
+    public async Task UnreadableViaField_PrimaryDateWithoutRange_RestrictsToo()
+    {
+        await Arrange(salesReadCustomer: false);
+        var since = await MustAdd("customer", FieldType.Date, label: "往來起日");
+        await Insert("order", "sales01", (Amount, 1m));
+        As("sales01");
+        ShouldBeRestricted(await Run(Def(measures: [M("n", "countMain")], primary: new ReportFieldRef(Main, since.Id, CustomerRef.Id))));
+    }
+
     [Fact]
     public async Task HiddenViaReferenceField_Restricted()
     {
@@ -102,6 +150,25 @@ public class ReportPermissionMatrixTests : ReportTestBase
         (await Run(d)).Total!["sum"].Should().Be(900m);
         As("manager01");
         (await Run(d)).Total!["sum"].Should().Be(1000m);
+    }
+
+    [Fact]
+    public async Task Scope_Group_CountsGroupMatesOnly()
+    {
+        await Arrange();
+        var orderId = (await Detail("order")).Id;
+        var scope = Db.Context.Set<ModuleDataScope>().Single(x => x.ModuleId == orderId && x.GroupId == SalesGroupId);
+        scope.Scope = DataScope.Group;
+        await Db.Context.SaveChangesAsync();
+        await Insert("order", "sales01", (Amount, 100m));
+        await Insert("order", "sales02", (Amount, 900m));
+        await Insert("order", "manager01", (Amount, 5000m));
+        var d = Def(measures: [M("sum", "sum", MainF(Amount))]);
+
+        As("sales01");
+        (await Run(d)).Total!["sum"].Should().Be(1000m);
+        As("manager01");
+        (await Run(d)).Total!["sum"].Should().Be(6000m);
     }
 
     [Fact]
@@ -212,6 +279,28 @@ public class ReportPermissionMatrixTests : ReportTestBase
         ShouldBeRestricted(r, "牌價", "金額結果公式", "引用牌價的數字公式");
         var json = JsonSerializer.Serialize(r);
         json.Should().NotContain("4242").And.NotContain("8484");
+    }
+
+    [Theory]
+    [InlineData("currency")]
+    [InlineData("formulaCurrency")]
+    [InlineData("formulaFromPrice")]
+    public async Task Pricing_Missing_Drill_Restricted_NoValues(string fieldName)
+    {
+        await Arrange(salesPricing: false);
+        await Insert("order", "sales01", (Price, 4242m), (FormulaCurrency, 4242m), (FormulaFromPrice, 4242m));
+        var f = Priced(fieldName);
+        var d = Def(columns: [MainF(f)], groups: [G(MainF(f))], measures: [M("s", "sum", MainF(f))]);
+
+        As("manager01"); // 對照組：有 Pricing 的人下鑽看得到數值，證明這個斷言抓得到外洩
+        var seen = await Run(d, drill: ["4242"]);
+        seen.State.Should().Be("ok");
+        JsonSerializer.Serialize(seen).Should().Contain("4242");
+
+        As("sales01");
+        var r = await Run(d, drill: ["4242"]);
+        ShouldBeRestricted(r, "牌價", "金額結果公式", "引用牌價的數字公式");
+        JsonSerializer.Serialize(r).Should().NotContain("4242");
     }
 
     [Fact]

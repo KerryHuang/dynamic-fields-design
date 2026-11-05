@@ -508,7 +508,9 @@ public class ReportRunnerTests : ReportTestBase
     public async Task Run_DetailModuleAsMain_ReturnsModuleDisabled()
     {
         await Arrange();
-        (await Run(Def(columns: [MainF(Qty)], main: "shipment"))).State.Should().Be("moduleDisabled");
+        var r = await Run(Def(columns: [MainF(Qty)], main: "shipment"));
+        r.State.Should().Be("moduleDisabled");
+        r.Message.Should().Be("明細模組不能當主模組");
     }
 
     [Fact]
@@ -709,6 +711,41 @@ public class ReportRunnerTests : ReportTestBase
     }
 
     [Fact]
+    public async Task DateTime_FilterValueWithoutOffset_IsTaipeiWallClock()
+    {
+        await Arrange();
+        await Insert("order", "admin", (At, "2026-11-04T15:00:00+08:00"), (Amount, 1m));
+        await Insert("order", "admin", (At, "2026-11-04T09:00:00+08:00"), (Amount, 2m));
+        var r = await Run(Def(measures: [M("sum", "sum", MainF(Amount))], filters: [F(MainF(At), "gte", "2026-11-04T12:00:00")]));
+        r.Total!["sum"].Should().Be(1m);
+    }
+
+    [Fact]
+    public async Task DateTime_StoredWithoutOffset_IsTaipeiWallClock()
+    {
+        await Arrange();
+        await Insert("order", "admin", (At, "2026-11-04T23:00:00"));
+        var r = await Run(Def(measures: [M("n", "countMain")], primary: MainF(At), range: new ReportDateRange("today", null)));
+        r.Total!["n"].Should().Be(1m);
+    }
+
+    public static TheoryData<string, object, int> TimeOps => new()
+    {
+        { "gt", "09:00", 2 }, { "gte", "09:00", 3 }, { "lt", "17:30", 2 }, { "lte", "17:30", 3 },
+        { "between", new[] { "09:30", "17:30" }, 2 }, { "eq", "09:00", 1 }, { "ne", "09:00", 2 },
+    };
+
+    [Theory, MemberData(nameof(TimeOps))]
+    public async Task Run_TimeOperators_CompareAsTimeOfDay(string op, object value, int expected)
+    {
+        await Arrange();
+        var time = await MustAdd("order", FieldType.Time, label: "到貨時間");
+        foreach (var t in new[] { "09:00", "12:00", "17:30" }) await Insert("order", "admin", (time, t));
+        var r = await Run(Def(measures: [M("n", "countMain")], filters: [F(MainF(time), op, value)]));
+        r.Total!["n"].Should().Be(expected);
+    }
+
+    [Fact]
     public async Task WithinLastDays_UsesBasisDate()
     {
         await Arrange();
@@ -780,6 +817,35 @@ public class ReportRunnerTests : ReportTestBase
         await TwoOrders();
         var r = await Run(Def(Shipments, measures: [M("r", "ratio", cond: F(ChildF(Warehouse), "eq", "Y"))]));
         r.Total!["r"].Should().Be(2m / 3);
+    }
+
+    [Fact]
+    public async Task Ratio_Merged_DedupesByMain_InTotalAndInGroup()
+    {
+        await Arrange();
+        await TwoOrders();
+        var r = await Run(Def(Shipments, groups: [G(ChildF(Warehouse))],
+            measures: [M("r", "ratio", cond: F(MainF(Amount), "gte", 100))]));
+        r.Total!["r"].Should().Be(0.5m);
+        GroupOf(r, "X").Values["r"].Should().Be(1m);
+        GroupOf(r, "Y").Values["r"].Should().Be(1m);
+        GroupOf(r, "（空白）").Values["r"].Should().Be(0m);
+    }
+
+    [Fact]
+    public async Task Group_WithChildFilter_OnlySurvivingChildrenFormGroups_MainStillDeduped()
+    {
+        await Arrange();
+        await TwoOrders();
+        var r = await Run(Def(Shipments, groups: [G(ChildF(Warehouse))],
+            measures: [M("sum", "sum", MainF(Amount)), M("kids", "countChild"), M("r", "ratio", cond: F(MainF(Amount), "gte", 100))],
+            filters: [F(ChildF(Qty), "gte", 2)]));
+        var g = r.Groups!.Should().ContainSingle().Subject; // X 的數量 1 被篩掉；B 沒有子記錄也被子條件排除
+        g.GroupLabels[0].Should().Be("Y");
+        g.Values["sum"].Should().Be(100m);
+        g.Values["kids"].Should().Be(2m);
+        g.Values["r"].Should().Be(1m);
+        r.Total!["sum"].Should().Be(100m);
     }
 
     // ---- 明細與下鑽 ----
