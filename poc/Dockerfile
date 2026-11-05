@@ -2,9 +2,11 @@
 # 建置內容：poc/（在 poc/ 目錄執行 docker build）。
 
 FROM oven/bun:1.4.0 AS frontend
-WORKDIR /src
+# 保留 poc/ 的相對位置：前端以 ../../../../shared 引用前後端共用的 JSON
+WORKDIR /poc/frontend
 COPY frontend/package.json frontend/bun.lock ./
 RUN bun install --frozen-lockfile --ignore-scripts
+COPY shared/ /poc/shared/
 COPY frontend/ ./
 RUN bunx quasar prepare && bunx quasar build
 
@@ -16,7 +18,7 @@ RUN dotnet publish src/DynamicModules.WebAPI/DynamicModules.WebAPI.csproj -c Rel
 FROM mcr.microsoft.com/dotnet/aspnet:8.0
 WORKDIR /app
 COPY --from=backend /app ./
-COPY --from=frontend /src/dist/spa ./wwwroot
+COPY --from=frontend /poc/frontend/dist/spa ./wwwroot
 # SQLite 放容器內：免費方案沒有永久磁碟，重啟後回到種子資料
 ENV ConnectionStrings__Dynamic="Data Source=/app/data/poc.db" \
     ASPNETCORE_ENVIRONMENT=Production \
