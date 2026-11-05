@@ -11,3 +11,6 @@ public record AuthOptionsResponse(bool DemoLoginEnabled, bool DemoGenerating, Li
 /// <summary>系統管理 → 使用者的一列；不含密碼雜湊與 SecurityStamp。</summary>
 public record AdminUserResponse(
     string UserId, string DisplayName, bool IsActive, bool IsSystemAdmin, bool IsDemoAccount, bool IsLocked, List<long> GroupIds);
+
+/// <summary>系統管理 → 群組的一列。</summary>
+public record AdminGroupResponse(long Id, string Key, DynamicModules.Domain.ValueObjects.I18nText NameI18n, List<string> MemberUserIds);

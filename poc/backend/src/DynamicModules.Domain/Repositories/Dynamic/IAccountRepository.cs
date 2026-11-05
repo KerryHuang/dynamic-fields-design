@@ -22,4 +22,29 @@ public interface IAccountRepository
 
     /// <summary>groupIds 全部都是存在的群組。</summary>
     Task<bool> GroupsExistAsync(IReadOnlyCollection<long> groupIds, CancellationToken ct);
+
+    /// <summary>以追蹤模式載入群組；不存在回 null。</summary>
+    Task<PermissionGroup?> GetGroupTrackedAsync(long groupId, CancellationToken ct);
+
+    void AddGroup(PermissionGroup group);
+
+    /// <summary>該語系已有群組用同名（忽略大小寫）；excludeId 排除自己（改名用）。</summary>
+    Task<bool> GroupNameExistsAsync(string locale, string name, long? excludeId, CancellationToken ct);
+
+    /// <summary>userIds 全部都是存在的使用者。</summary>
+    Task<bool> UsersExistAsync(IReadOnlyCollection<string> userIds, CancellationToken ct);
+
+    /// <summary>把群組的成員整組換成 userIds；寫入由 IUnitOfWork 提交。</summary>
+    Task SetGroupMembersAsync(long groupId, IReadOnlyCollection<string> userIds, CancellationToken ct);
+
+    /// <summary>刪除群組前的影響統計；名稱以 I18nText.FallbackLocale 解析。</summary>
+    Task<GroupImpact> GetGroupImpactAsync(long groupId, CancellationToken ct);
+
+    /// <summary>明確刪除成員對應、模組授權、欄位例外、資料範圍、選項範圍與群組本身（無 FK cascade）；寫入由 IUnitOfWork 提交。</summary>
+    Task DeleteGroupAsync(PermissionGroup group, CancellationToken ct);
 }
+
+public record BlockingOption(string Module, string Field, string Option);
+
+public record GroupImpact(
+    int MemberCount, List<string> Modules, int FieldPermissionCount, int DataScopeCount, List<BlockingOption> BlockingOptions);
