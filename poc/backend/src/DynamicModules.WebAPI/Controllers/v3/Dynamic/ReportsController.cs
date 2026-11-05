@@ -9,6 +9,7 @@ using DynamicModules.Application.Dynamic.ReportService.Commands.UpdateReport;
 using DynamicModules.Application.Dynamic.ReportService.Queries.DrillReport;
 using DynamicModules.Application.Dynamic.ReportService.Queries.ExportReport;
 using DynamicModules.Application.Dynamic.ReportService.Queries.GetReport;
+using DynamicModules.Application.Dynamic.ReportService.Queries.GetReportCatalog;
 using DynamicModules.Application.Dynamic.ReportService.Queries.GetReports;
 using DynamicModules.Application.Dynamic.ReportService.Queries.PreviewReport;
 using DynamicModules.Application.Dynamic.ReportService.Queries.RunReport;
@@ -43,6 +44,14 @@ public class ReportsController(IMediator mediator) : ControllerBase
 
     [HttpGet]
     public async Task<IActionResult> List() => (await mediator.Send(new GetReportsRequest())).ToActionResult(this);
+
+    [HttpGet("catalog")]
+    public async Task<IActionResult> Catalog([FromQuery] string locale = "zh-TW") =>
+        (await mediator.Send(new GetReportMainModulesRequest(locale))).ToActionResult(this);
+
+    [HttpGet("catalog/{moduleKey}")]
+    public async Task<IActionResult> ModuleCatalog(string moduleKey, [FromQuery] string locale = "zh-TW") =>
+        (await mediator.Send(new GetReportCatalogRequest(moduleKey, locale))).ToActionResult(this);
 
     [HttpGet("{id:long}")]
     public async Task<IActionResult> Get(long id) => (await mediator.Send(new GetReportRequest(id))).ToActionResult(this);
