@@ -84,6 +84,14 @@ describe('ReportResultView', () => {
     expect(has(w, 'group-row-0').exists()).toBe(false);
   });
 
+  it('chart mode still shows the totals so the dedupe note has a number to point at', () => {
+    const w = mountView({ ...OK, dedupedNote: true }, 'bar');
+    expect(has(w, 'chart-stub').exists()).toBe(true);
+    expect(has(w, 'chart-total').text()).toContain('訂單金額');
+    expect(has(w, 'chart-total').text()).toContain('1,234.5');
+    expect(has(w, 'deduped-note').exists()).toBe(true);
+  });
+
   it('bar viz with groups renders the chart; without groups falls back to totals', () => {
     expect(has(mountView(OK, 'bar'), 'chart-stub').exists()).toBe(true);
     const w = mountView({ ...OK, groups: [] }, 'bar');

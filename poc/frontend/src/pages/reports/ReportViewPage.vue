@@ -2,6 +2,7 @@
 import { computed, ref } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { useRoute, useRouter } from 'vue-router';
+import { useMe } from 'src/application/dynamic/queries/permissions-queries';
 import { useCopyReport, useDeleteReport, useReport, useRunReport } from 'src/application/dynamic/queries/reports-queries';
 import ForbiddenNotice from 'src/components/framework/ForbiddenNotice.vue';
 import type { ReportFilter } from 'src/domain/dynamic/report-types';
@@ -20,6 +21,9 @@ const run = useRunReport(id, locale);
 const forbidden = computed(() => isForbidden(report.error.value));
 const notFound = computed(() => (report.error.value as ApiError | null)?.status === 404);
 const detail = computed(() => report.data.value);
+const me = useMe();
+// 系統管理員可刪所有共用報表（spec §7）；編輯與分享仍限擁有者
+const canDelete = computed(() => !!detail.value && (detail.value.isOwner || !!me.data.value?.isSystemAdmin));
 
 // 條件：被遮蔽的只知道有條件，看不到內容
 const filters = computed<ReportFilter[]>(() => [
@@ -59,7 +63,7 @@ function saveAsCopy() {
   copyError.value = '';
   copy.mutate(id.value, {
     onSuccess: (d) => { void router.push(`/reports/${d.id}`); },
-    onError: (e) => { copyError.value = (e as unknown as ApiError).status === 400 ? t('reports.copyUnseeable') : t('reports.saveFailed'); },
+    onError: (e) => { copyError.value = [400, 403].includes((e as unknown as ApiError).status) ? t('reports.copyUnseeable') : t('reports.saveFailed'); },
   });
 }
 
@@ -93,7 +97,7 @@ function doDelete() {
           data-testid="report-copy" @click="saveAsCopy"
         />
         <q-btn outline dense no-caps icon="download" :label="t('reports.exportExcel')" :loading="exporting" data-testid="report-export" @click="exportXlsx" />
-        <q-btn v-if="detail.isOwner" outline dense no-caps color="negative" :label="t('reports.delete')" data-testid="report-delete" @click="confirmDelete = true" />
+        <q-btn v-if="canDelete" outline dense no-caps color="negative" :label="t('reports.delete')" data-testid="report-delete" @click="confirmDelete = true" />
       </div>
       <div v-if="copyError" class="text-negative q-mb-sm" data-testid="copy-error">{{ copyError }}</div>
       <div v-if="exportError" class="text-negative q-mb-sm" data-testid="export-error">{{ exportError }}</div>

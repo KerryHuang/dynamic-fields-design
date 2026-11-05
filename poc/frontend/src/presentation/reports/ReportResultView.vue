@@ -53,10 +53,15 @@ const range = computed(() => props.result.appliedRange);
             <div class="text-h4">{{ fmt(result.total?.[m.key], m) }}</div>
           </q-card>
         </div>
-        <ReportChart
-          v-else-if="showChart" :viz="chartViz!" :groups="groups" :measures="measureCols"
-          @pick="(i: number) => emit('drill', groups[i]!.groupKeys)"
-        />
+        <template v-else-if="showChart">
+          <ReportChart
+            :viz="chartViz!" :groups="groups" :measures="measureCols" :locale="locale"
+            @pick="(i: number) => emit('drill', groups[i]!.groupKeys)"
+          />
+          <div v-if="result.total" class="row q-gutter-md text-weight-bold" data-testid="chart-total">
+            <span v-for="m in measureCols" :key="m.key">{{ t('reports.total') }} {{ label(m) }}：{{ fmt(result.total[m.key], m) }}</span>
+          </div>
+        </template>
         <q-markup-table v-else-if="showGroupTable" flat bordered dense data-testid="report-group-table">
           <thead>
             <tr>

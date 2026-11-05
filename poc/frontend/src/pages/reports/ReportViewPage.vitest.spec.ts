@@ -2,6 +2,7 @@ import { QueryClient, VueQueryPlugin } from '@tanstack/vue-query';
 import { flushPromises, mount } from '@vue/test-utils';
 import * as quasar from 'quasar';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { createPinia } from 'pinia';
 import { createI18n } from 'vue-i18n';
 import { createMemoryHistory, createRouter } from 'vue-router';
 import type { ReportDetail, ReportResult } from 'src/domain/dynamic/report-types';
@@ -12,7 +13,7 @@ import ReportViewPage from './ReportViewPage.vue';
 vi.mock('src/services/api/dynamic-api', () => ({
   dynamicApi: {
     getReport: vi.fn(), runReport: vi.fn(), drillReport: vi.fn(), copyReport: vi.fn(), deleteReport: vi.fn(),
-    exportReport: vi.fn(), setReportShares: vi.fn(), getGroups: vi.fn(),
+    exportReport: vi.fn(), setReportShares: vi.fn(), getGroups: vi.fn(), getMe: vi.fn(),
   },
 }));
 vi.mock('./../../presentation/reports/ReportChart.vue', () => ({ default: { template: '<i />' } }));
@@ -41,7 +42,8 @@ const q = (id: string) => document.body.querySelector(`[data-testid="${id}"]`) a
 let mounted: ReturnType<typeof mount> | undefined;
 let router: ReturnType<typeof createRouter>;
 
-async function mountPage(detail: ReportDetail) {
+async function mountPage(detail: ReportDetail, isSystemAdmin = false) {
+  api.getMe.mockResolvedValue({ userId: 'u', displayName: 'u', isSystemAdmin, mustChangePassword: false, groups: [], designer: { read: false, add: false, edit: false, delete: false } });
   api.getReport.mockResolvedValue(detail);
   api.runReport.mockResolvedValue(RESULT);
   router = createRouter({
@@ -53,7 +55,7 @@ async function mountPage(detail: ReportDetail) {
   mounted = mount({ template: '<q-layout><q-page-container><router-view /></q-page-container></q-layout>' }, {
     attachTo: document.body,
     global: {
-      plugins: [[quasar.Quasar, { components: quasar, plugins: { Notify: quasar.Notify } }], i18n, router,
+      plugins: [[quasar.Quasar, { components: quasar, plugins: { Notify: quasar.Notify } }], i18n, router, createPinia(),
         [VueQueryPlugin, { queryClient: new QueryClient({ defaultOptions: { queries: { retry: false } } }) }]],
     },
   });
@@ -82,6 +84,21 @@ describe('ReportViewPage', () => {
     expect(q('report-share')).toBeNull();
     expect(q('report-delete')).toBeNull();
     expect(q('report-copy')).not.toBeNull();
+  });
+
+  it('system admin who is not the owner can delete but not edit or share', async () => {
+    await mountPage(DETAIL(false), true);
+    expect(q('report-delete')).not.toBeNull();
+    expect(q('report-edit')).toBeNull();
+    expect(q('report-share')).toBeNull();
+  });
+
+  it('copy 403 explains the same as 400', async () => {
+    await mountPage(DETAIL(false));
+    api.copyReport.mockRejectedValue({ status: 403 });
+    q('report-copy')!.click();
+    await flushPromises();
+    expect(q('copy-error')!.textContent).toBe('這張報表用到你看不到的欄位，無法另存');
   });
 
   it('save as copy goes to the new report', async () => {
@@ -119,6 +136,7 @@ describe('ReportViewPage', () => {
   });
 
   it('a failed run shows a retry, not a number', async () => {
+    api.getMe.mockResolvedValue({ userId: 'u', displayName: 'u', isSystemAdmin: false, mustChangePassword: false, groups: [], designer: { read: false, add: false, edit: false, delete: false } });
     api.getReport.mockResolvedValue(DETAIL(true));
     api.runReport.mockRejectedValue({ status: 500 });
     router = createRouter({ history: createMemoryHistory(), routes: [{ path: '/reports/:id(\\d+)', component: ReportViewPage }] });
@@ -126,7 +144,7 @@ describe('ReportViewPage', () => {
     const i18n = createI18n({ legacy: false, locale: 'zh-TW', messages: { 'zh-TW': zhTW } });
     mounted = mount({ template: '<q-layout><q-page-container><router-view /></q-page-container></q-layout>' }, {
       attachTo: document.body,
-      global: { plugins: [[quasar.Quasar, { components: quasar }], i18n, router, [VueQueryPlugin, { queryClient: new QueryClient({ defaultOptions: { queries: { retry: false } } }) }]] },
+      global: { plugins: [[quasar.Quasar, { components: quasar }], i18n, router, createPinia(), [VueQueryPlugin, { queryClient: new QueryClient({ defaultOptions: { queries: { retry: false } } }) }]] },
     });
     await flushPromises();
     expect(q('run-error')).not.toBeNull();
