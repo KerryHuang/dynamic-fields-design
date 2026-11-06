@@ -27,7 +27,7 @@
             clickable
             :to="`/dynamic/${m.key}`"
           >
-            <q-item-section v-if="m.icon" avatar><q-icon :name="m.icon" /></q-item-section>
+            <q-item-section avatar><q-icon :name="m.icon || 'apps'" /></q-item-section>
             <q-item-section>{{ resolveI18n(m.name, locale) }}</q-item-section>
           </q-item>
         </template>
@@ -43,6 +43,7 @@
           <q-separator class="q-my-sm" />
           <q-item-label header>{{ t('menu.system') }}</q-item-label>
           <q-item v-for="l in links" :key="l.to" clickable :to="l.to" :data-testid="l.testid">
+            <q-item-section avatar><q-icon :name="l.icon" /></q-item-section>
             <q-item-section>{{ t(l.label) }}</q-item-section>
           </q-item>
         </template>
