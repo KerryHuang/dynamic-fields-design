@@ -22,6 +22,8 @@ export interface DashboardCard {
   w: number;
   h: number;
   options: CardOptions;
+  /** 伺服器決定、前端只原樣送回（送什麼都不影響結果）：個人版上這張卡片的報表來自指派版，不需要另外分享。 */
+  fromAssigned?: boolean;
 }
 export interface DashboardLayout { cards: DashboardCard[] }
 

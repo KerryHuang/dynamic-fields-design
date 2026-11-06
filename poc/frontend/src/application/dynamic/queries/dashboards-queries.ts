@@ -58,7 +58,8 @@ function useStoreDetail() {
 export function useSaveDashboardLayout() {
   const store = useStoreDetail();
   return useMutation({
-    mutationFn: (v: { id: number; layout: DashboardLayout; name?: string }) => dynamicApi.saveDashboardLayout(v.id, v.layout, v.name),
+    mutationFn: (v: { id: number; layout: DashboardLayout; name?: string; version?: number }) =>
+      dynamicApi.saveDashboardLayout(v.id, v.layout, v.name, v.version),
     onSuccess: store,
   });
 }

@@ -113,6 +113,17 @@ describe('DashboardPage', () => {
     expect(q('dashboard-adjusted')).not.toBeNull();
   });
 
+  it('saving sends the version the screen loaded, so a later admin update is not swallowed', async () => {
+    const w0 = world();
+    w0.details[1] = detail(1, { name: '業務儀表板', version: 3, layout: { cards: [card('c1'), card('c2', 2, { x: 6 })] }, reportNames: { 1: 'a', 2: 'b' } });
+    const { w, calls } = await mountDash(w0);
+    await click('dashboard-edit-toggle');
+    w.findComponent(DashboardGrid).vm.$emit('change', [{ i: 'c1', x: 3, y: 0, w: 6, h: 4 }, { i: 'c2', x: 6, y: 0, w: 6, h: 4 }]);
+    await flushPromises();
+    const put = calls.find((c) => c.method === 'PUT' && c.url === '/dashboards/1/layout');
+    expect((put!.body as { version: number }).version).toBe(3);
+  });
+
   it('does not save when a drag ends where it started', async () => {
     const { w, calls } = await mountDash();
     await click('dashboard-edit-toggle');

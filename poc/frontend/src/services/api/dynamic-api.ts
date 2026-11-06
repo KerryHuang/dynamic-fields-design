@@ -222,8 +222,9 @@ export const dynamicApi = {
   getDashboard: (id: number) => http.get<DashboardDetail>(`/dashboards/${id}`).then(data),
   createDashboard: (name: string, layout: DashboardLayout) => http.post<DashboardDetail>('/dashboards', { name, layout }).then(data),
   deleteDashboard: (id: number) => http.delete(`/dashboards/${id}`).then(data),
-  saveDashboardLayout: (id: number, layout: DashboardLayout, name?: string) =>
-    http.put<DashboardDetail>(`/dashboards/${id}/layout`, { name, layout }).then(data),
+  /** version 是畫面載入時的指派版版本：第一次另存個人版時當基準，這樣之後的管理員更新才不會被漏掉。 */
+  saveDashboardLayout: (id: number, layout: DashboardLayout, name?: string, version?: number) =>
+    http.put<DashboardDetail>(`/dashboards/${id}/layout`, { name, layout, version }).then(data),
   restoreDashboard: (id: number) => http.post<DashboardDetail>(`/dashboards/${id}/restore`).then(data),
   runCard: (id: number, cardId: string, filterRange: ReportDateRange | null, locale: string) =>
     http.post<CardResult>(`/dashboards/${id}/cards/${encodeURIComponent(cardId)}/run`, { filterRange }, { params: { locale } }).then(data),

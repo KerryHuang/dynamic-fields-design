@@ -40,11 +40,13 @@ const editing = ref(false);
 const saveError = ref(false);
 let chain: Promise<unknown> = Promise.resolve();
 function persist(next: DashboardLayout, name?: string) {
+  // 送出當下畫面上的版本：第一次另存個人版時伺服器拿它當基準，管理員在這之後的更新才會顯示「已更新」
+  const loadedVersion = detail.value?.version;
   layout.value = next;
   saveError.value = false;
   inFlight++;
   chain = chain
-    .then(() => save.mutateAsync({ id: props.dashboardId, layout: next, name }))
+    .then(() => save.mutateAsync({ id: props.dashboardId, layout: next, name, version: loadedVersion }))
     .catch(() => { saveError.value = true; })
     .finally(() => {
       inFlight--;
