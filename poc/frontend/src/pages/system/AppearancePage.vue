@@ -40,7 +40,6 @@ function submit() {
 <template>
   <q-page padding>
     <ForbiddenNotice v-if="me.data.value && !me.data.value.isSystemAdmin" />
-    <div v-else-if="me.isError.value" class="text-negative" data-testid="appearance-load-error">{{ t('theme.adminLoadFailed') }}</div>
     <template v-else-if="draft">
       <div class="text-h6 q-mb-xs">{{ t('theme.adminTitle') }}</div>
       <div class="text-muted q-mb-md">{{ t('theme.adminHint') }}</div>
@@ -48,7 +47,7 @@ function submit() {
         {{ t('theme.adminDemoReadOnly') }}
       </q-banner>
       <ThemeChooser
-        :mode="draft.mode" :selected-style="draft.style" :defaults="draft" :allow-follow="false" :disabled="readOnly"
+        :mode="draft.mode" :selected-style="draft.style" :defaults="draft" :allow-follow="false" :disabled="readOnly || save.isPending.value"
         @update:mode="(v) => v && (draft = { ...draft!, mode: v })" @update:style="(v) => v && (draft = { ...draft!, style: v })"
       />
       <div v-if="error" class="text-negative q-mt-md" data-testid="appearance-error">{{ error }}</div>
@@ -57,5 +56,7 @@ function submit() {
         :loading="save.isPending.value" data-testid="appearance-save" @click="submit"
       />
     </template>
+    <!-- 放在 draft 之後：已有資料時，背景重取失敗不能蓋掉整頁 -->
+    <div v-else-if="me.isError.value" class="text-negative" data-testid="appearance-load-error">{{ t('theme.adminLoadFailed') }}</div>
   </q-page>
 </template>

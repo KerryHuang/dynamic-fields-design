@@ -99,6 +99,41 @@ describe('AppearancePage', () => {
     expect(checked('style-enterprise')).toBe('true');
   });
 
+  it('儲存期間不能再改草稿，否則成功訊息會對不上伺服器存的值', async () => {
+    let finish: (v: { mode: 'light'; style: 'industrial' }) => void = () => {};
+    api.saveSiteTheme.mockReturnValue(new Promise((r) => { finish = r; }));
+    await mountPage();
+    q('style-industrial')!.click();
+    await flushPromises();
+    q('appearance-save')!.click();
+    await flushPromises();
+    q('style-airy')!.click();
+    await flushPromises();
+    expect(checked('style-industrial')).toBe('true');
+    expect(checked('style-airy')).toBe('false');
+    finish({ mode: 'light', style: 'industrial' });
+    await flushPromises();
+    expect(checked('style-industrial')).toBe('true');
+  });
+
+  it('儲存成功後即使重新取得 /me 失敗，下一次儲存失敗仍回到伺服器已確認的值', async () => {
+    api.saveSiteTheme.mockResolvedValueOnce({ mode: 'light', style: 'industrial' });
+    await mountPage();
+    api.getMe.mockRejectedValue({ status: 500 });
+    q('style-industrial')!.click();
+    await flushPromises();
+    q('appearance-save')!.click();
+    await flushPromises();
+    expect(q('appearance-load-error')).toBeNull(); // 已有資料時，背景重取失敗不能蓋掉整頁
+    api.saveSiteTheme.mockRejectedValueOnce(new Error('500'));
+    q('style-airy')!.click();
+    await flushPromises();
+    q('appearance-save')!.click();
+    await flushPromises();
+    expect(checked('style-industrial')).toBe('true'); // 不是舊的 enterprise
+    expect(checked('style-enterprise')).toBe('false');
+  });
+
   it('Demo 站唯讀、說明原因，沒有儲存鈕', async () => {
     await mountPage({ theme: { canSave: false } });
     expect(q('appearance-demo-readonly')?.textContent).toContain(zhTW.theme.adminDemoReadOnly);

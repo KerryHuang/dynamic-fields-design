@@ -90,6 +90,16 @@ export function useSaveSiteTheme() {
   const qc = useQueryClient();
   return useMutation<ThemeDefaults, ApiError, ThemeDefaults>({
     mutationFn: (d) => dynamicApi.saveSiteTheme(d),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['me'] }),
+    onSuccess: (res) => {
+      // 先用回應更新已確認的值：之後重新取得 /me 即使失敗，畫面與失敗還原都不會停在舊設定
+      qc.setQueriesData<Me>({ queryKey: ['me'] }, (old) => old && {
+        ...old,
+        theme: {
+          ...old.theme, defaultMode: res.mode, defaultStyle: res.style,
+          effectiveMode: old.theme.mode ?? res.mode, effectiveStyle: old.theme.style ?? res.style,
+        },
+      });
+      return qc.invalidateQueries({ queryKey: ['me'] });
+    },
   });
 }
