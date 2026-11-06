@@ -27,11 +27,23 @@ internal static class HandlerHelpers
         if (input!.Value.ValueKind != JsonValueKind.Number || !input.Value.TryGetDecimal(out var d))
             return FieldValueResult.Fail("必須是數字");
         d /= 1.0000000000000000000000000000m; // 去除尾端的 0
-        var actualScale = (decimal.GetBits(d)[3] >> 16) & 0xFF;
-        return actualScale > scale
-            ? FieldValueResult.Fail($"小數最多 {scale} 位")
+        var bits = decimal.GetBits(d);
+        var actualScale = (bits[3] >> 16) & 0xFF;
+        if (actualScale > scale) return FieldValueResult.Fail($"小數最多 {scale} 位");
+        var mantissa = ((UInt128)(uint)bits[2] << 64) | ((UInt128)(uint)bits[1] << 32) | (uint)bits[0];
+        return mantissa.ToString().Length > MaxSignificantDigits
+            ? FieldValueResult.Fail($"有效數字最多 {MaxSignificantDigits} 位")
             : FieldValueResult.Ok(ToElement(d));
     }
+
+    /// <summary>
+    /// 篩選與排序用的索引欄是 double，只有 15 位有效數字內才與 decimal 的記錄值一一對應（超過會讓不同的金額變成同一個索引值）；
+    /// 所以寫入時就擋在這個範圍內。
+    /// </summary>
+    public const int MaxSignificantDigits = 15;
+
+    /// <summary>整數的上限：2^53 − 1，double 能精確表示的最大連續整數。</summary>
+    public const long MaxExactInteger = 9_007_199_254_740_991;
 
     /// <summary>字串欄位以正則驗證；不符回 error。</summary>
     public static FieldValueResult NormalizePattern(JsonElement? input, Regex pattern, string error)
