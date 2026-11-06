@@ -13,7 +13,8 @@ internal static class DashboardTestKit
     public const string Dashboards = Base + "/dashboards";
     public const string AdminDashboards = Base + "/admin/dashboards";
 
-    internal sealed record World(string Main, string TitleKey, long Amount, string AmountKey, long Status, string StatusKey, long Due);
+    internal sealed record World(
+        string Main, string TitleKey, long Amount, string AmountKey, long Status, string StatusKey, long Due, string DueKey, string[] Options);
 
     public static async Task<World> MakeWorld(TestApp app)
     {
@@ -21,12 +22,17 @@ internal static class DashboardTestKit
         var main = await CreateModule(admin);
         var amount = await AddField(admin, main, "decimal", new { scale = 0 });
         var status = await AddField(admin, main, "enum", new { });
-        foreach (var label in new[] { "新單", "結案" })
-            (await admin.PostAsJsonAsync($"{Base}/fields/{status.Id}/options", new { label = new Dictionary<string, string> { ["zh-TW"] = label } })).EnsureSuccessStatusCode();
+        var options = new List<string>();
+        foreach (var label in new[] { "新單", "處理中", "結案" })
+        {
+            var res = await admin.PostAsJsonAsync($"{Base}/fields/{status.Id}/options", new { label = new Dictionary<string, string> { ["zh-TW"] = label } });
+            res.EnsureSuccessStatusCode();
+            options.Add($"opt_{(await JsonOf(res)).GetProperty("id").GetInt64()}");
+        }
         var due = await AddField(admin, main, "date", new { });
         await Activate(admin, main);
         app.GrantBusinessGroups(main);
-        return new World(main, await TitleKey(admin, main), amount.Id, amount.Key, status.Id, status.Key, due.Id);
+        return new World(main, await TitleKey(admin, main), amount.Id, amount.Key, status.Id, status.Key, due.Id, due.Key, [.. options]);
     }
 
     public static object Ref(long field) => new { source = "main", fieldId = field, viaFieldId = (long?)null };
@@ -44,6 +50,39 @@ internal static class DashboardTestKit
         ["filters"] = Array.Empty<object>(), ["primaryDateField"] = Ref(w.Due), ["dateRange"] = null,
         ["sort"] = Array.Empty<object>(), ["viz"] = viz
     };
+
+    public static async Task AddRecord(HttpClient c, World w, decimal amount, int status, DateOnly due)
+    {
+        var values = new Dictionary<string, object>
+            { [w.TitleKey] = "t", [w.AmountKey] = amount, [w.StatusKey] = w.Options[status], [w.DueKey] = due.ToString("yyyy-MM-dd") };
+        (await c.PostAsJsonAsync($"{Base}/modules/{w.Main}/records", new { values })).EnsureSuccessStatusCode();
+    }
+
+    /// <summary>整組換掉模組授權；每個項目是 (群組鍵, 匯出, 範圍)，範圍是 all|own。</summary>
+    public static async Task Grant(TestApp app, string module, params (string Group, string Scope)[] groups)
+    {
+        var res = await app.AsUser().PutAsJsonAsync($"{Base}/modules/{module}/permissions", new
+        {
+            groups = groups.Select(g => new
+            {
+                groupId = GroupId(app, g.Group),
+                privileges = new { read = true, add = true, edit = true, delete = true, printExport = true, pricing = true, approve = false },
+                scope = g.Scope
+            }).ToArray(),
+            users = Array.Empty<object>(), fields = Array.Empty<object>(), options = Array.Empty<object>()
+        });
+        res.EnsureSuccessStatusCode();
+    }
+
+    public static async Task<JsonElement> RunCard(HttpClient c, long dashboard, string card, object? filterRange = null)
+    {
+        var res = await c.PostAsJsonAsync($"{Dashboards}/{dashboard}/cards/{card}/run", new { filterRange });
+        res.EnsureSuccessStatusCode();
+        return await JsonOf(res);
+    }
+
+    public static decimal? TotalOf(JsonElement result, string measure) =>
+        result.GetProperty("total").TryGetProperty(measure, out var v) && v.ValueKind == JsonValueKind.Number ? v.GetDecimal() : null;
 
     public static async Task<long> CreateReport(HttpClient c, object definition, string name = "報表")
     {

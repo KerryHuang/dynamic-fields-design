@@ -72,6 +72,8 @@ public partial class ReportRunner(
 
     public async Task<ReportResult> RunAsync(ReportDefinition d, ReportRunOptions o, CancellationToken ct)
     {
+        // 卡片自己的排序取代報表的；排序鍵也走 AllRefs，用到看不到的欄位照樣整張擋下
+        if (o.SortKey is not null) d = d with { Sort = [new ReportSort(o.SortKey, o.SortDesc)] };
         var basis = await BasisDateAsync(ct);
         var frozen = basis != time.Today;
         var locale = string.IsNullOrEmpty(o.Locale) ? I18nText.FallbackLocale : o.Locale;
@@ -188,7 +190,9 @@ public partial class ReportRunner(
 
         // 6. 條件先套主模組與其帶出欄位，再過濾子記錄（spec §6.2）；日期區間作用在主要日期欄位那一邊
         var range = (o.RangeOverride ?? d.DateRange) is { } rangeDef && d.PrimaryDateField is not null ? rangeDef : null;
-        var resolved = range is null ? ((DateOnly, DateOnly)?)null : ReportDates.Resolve(range, basis);
+        (DateOnly, DateOnly)? resolved = d.PrimaryDateField is null ? null
+            : o.Window is { } fixedWindow ? fixedWindow
+            : range is null ? null : ReportDates.Resolve(range, basis);
         bool Passes(string source, IReadOnlyDictionary<string, ReportCell> cells) =>
             d.Filters.Where(f => f.Field.Source == source).All(f => Matches(f, cells[ReportCalculator.KeyOf(f.Field)], basis))
             && (resolved is not { } window || d.PrimaryDateField!.Source != source

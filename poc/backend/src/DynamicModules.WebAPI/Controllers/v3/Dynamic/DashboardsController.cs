@@ -4,8 +4,10 @@ using DynamicModules.Application.Dynamic.DashboardService.Commands.CreateDashboa
 using DynamicModules.Application.Dynamic.DashboardService.Commands.DeleteDashboard;
 using DynamicModules.Application.Dynamic.DashboardService.Commands.RestoreDashboard;
 using DynamicModules.Application.Dynamic.DashboardService.Commands.SaveDashboardLayout;
+using DynamicModules.Application.Dynamic.DashboardService.Queries.DrillCard;
 using DynamicModules.Application.Dynamic.DashboardService.Queries.GetDashboard;
 using DynamicModules.Application.Dynamic.DashboardService.Queries.GetDashboards;
+using DynamicModules.Application.Dynamic.DashboardService.Queries.RunCard;
 using DynamicModules.Domain.Reports;
 using MediatR;
 using Microsoft.AspNetCore.Mvc;
@@ -20,6 +22,10 @@ public class DashboardsController(IMediator mediator) : ControllerBase
     public record CreateBody(string? Name, JsonElement? Layout);
 
     public record SaveBody(string? Name, JsonElement? Layout);
+
+    public record RunBody(ReportDateRange? FilterRange);
+
+    public record DrillBody(List<string>? GroupKeys, ReportDateRange? FilterRange);
 
     internal static IActionResult Bad(ControllerBase c, string key, string message) =>
         ServiceResult.Invalid(new Dictionary<string, string[]> { [key] = [message] }).ToActionResult(c);
@@ -54,4 +60,15 @@ public class DashboardsController(IMediator mediator) : ControllerBase
 
     [HttpPost("{id:long}/restore")]
     public async Task<IActionResult> Restore(long id) => (await mediator.Send(new RestoreDashboardRequest(id))).ToActionResult(this);
+
+    /// <summary>卡片查詢：先驗儀表板與卡片，再以觀看者的權限計算；不接受任意報表 id。</summary>
+    [HttpPost("{id:long}/cards/{cardId}/run")]
+    public async Task<IActionResult> RunCard(long id, string cardId, RunBody body, [FromQuery] string locale = "zh-TW") =>
+        (await mediator.Send(new RunCardRequest(id, cardId, body.FilterRange, locale))).ToActionResult(this);
+
+    [HttpPost("{id:long}/cards/{cardId}/drill")]
+    public async Task<IActionResult> DrillCard(long id, string cardId, DrillBody body, [FromQuery] string locale = "zh-TW") =>
+        body.GroupKeys is null
+            ? Bad(this, "groupKeys", "必填")
+            : (await mediator.Send(new DrillCardRequest(id, cardId, body.GroupKeys, body.FilterRange, locale))).ToActionResult(this);
 }

@@ -5,19 +5,31 @@ using DynamicModules.Domain.ValueObjects;
 
 namespace DynamicModules.Application.Dynamic.ReportService.Data;
 
-/// <summary>Locale 為 null 時用 zh-TW。</summary>
-public record ReportRunOptions(ReportDateRange? RangeOverride, IReadOnlyList<string>? DrillGroupKeys, string? Locale = null);
+/// <summary>
+/// Locale 為 null 時用 zh-TW。後面幾項是儀表板卡片選項（只有 <see cref="ReportRunner.RunCardAsync"/> 看）：
+/// TopN 只留排序後前 N 組（總計不變、不併「其他」）；SortKey／SortDesc 取代報表的排序；Cumulative 加累計占比；
+/// ComparePeriods 加與前 N 期平均的比較。Window 直接指定日期範圍（含頭含尾），取代 RangeOverride 與報表的區間，期間比較內部用。
+/// </summary>
+public record ReportRunOptions(
+    ReportDateRange? RangeOverride, IReadOnlyList<string>? DrillGroupKeys, string? Locale = null,
+    int? TopN = null, string? SortKey = null, bool SortDesc = false, bool Cumulative = false, int? ComparePeriods = null,
+    (DateOnly From, DateOnly ToInclusive)? Window = null);
 
 /// <summary>
 /// 報表執行結果。State 是 ok|empty|restricted|fieldMissing|moduleDisabled|tooMany，HTTP 一律 200；ok、empty 以外不帶任何數字。
 /// BasisDate 與後端的今天不同時 BasisIsFrozen 為 true（Demo 資料日期停在產生那天），前端據此標示資料基準日。
+/// Cumulative 對齊 Groups，是第一個量值的累計占比（百分比）。IgnoresDateFilter 表示畫面送了日期篩選但這張卡片沒有採用（沒有主要日期欄位，或卡片有自己的區間）。
 /// DetailRows 每列的順序對齊 Columns 中 Role 為 field 的欄。DetailTotal 是明細全部的列數；DetailTruncated 表示畫面上限截掉了部分列（<see cref="ReportRules.CapDetail"/>），Total 不受影響。
 /// </summary>
 public record ReportResult(
     string State, string? Message, string RowMeaning, IReadOnlyList<ReportColumn> Columns,
     IReadOnlyList<ReportGroupResult>? Groups, IReadOnlyDictionary<string, decimal?>? Total,
     IReadOnlyList<IReadOnlyList<object?>>? DetailRows, bool DedupedNote, DateOnly BasisDate, ReportAppliedRange? AppliedRange, bool BasisIsFrozen = false,
-    int? DetailTotal = null, bool DetailTruncated = false);
+    int? DetailTotal = null, bool DetailTruncated = false,
+    IReadOnlyList<decimal?>? Cumulative = null, ReportCompare? Compare = null, bool IgnoresDateFilter = false);
+
+/// <summary>與前幾期平均的比較：PreviousAverage 是前 N 期第一個量值的平均，DeltaPercent 是目前值相對它的百分比（平均為 0 時為 null）。</summary>
+public record ReportCompare(decimal? PreviousAverage, decimal? DeltaPercent);
 
 /// <summary>
 /// Key：group、field 是 ReportCalculator.KeyOf，measure 是量值 Id；ReportSort.Key 用同一套鍵。Role 是 group|measure|field。
