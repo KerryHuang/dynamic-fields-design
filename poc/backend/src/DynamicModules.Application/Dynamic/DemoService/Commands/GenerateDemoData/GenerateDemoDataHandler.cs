@@ -1,10 +1,14 @@
+using System.Globalization;
 using DynamicModules.Application.Common;
+using DynamicModules.Domain.Entities.Dynamic;
+using DynamicModules.Domain.Repositories.Dynamic;
 using MediatR;
 
 namespace DynamicModules.Application.Dynamic.DemoService.Commands.GenerateDemoData;
 
 /// <summary>衝突檢查（交易已由 TransactionBehavior 開始）→ 建示範人員 → 建結構 → 規劃各情境的步驟 → 依模擬時間排序執行。</summary>
-public class GenerateDemoDataHandler(DemoPreflight preflight, IDemoPeople people, DemoStructure structure)
+public class GenerateDemoDataHandler(DemoPreflight preflight, IDemoPeople people, DemoStructure structure,
+    ISystemSettingRepository settings, IUnitOfWork uow)
     : IRequestHandler<GenerateDemoDataRequest, ServiceResult>
 {
     public async Task<ServiceResult> Handle(GenerateDemoDataRequest request, CancellationToken ct)
@@ -21,6 +25,9 @@ public class GenerateDemoDataHandler(DemoPreflight preflight, IDemoPeople people
         var steps = DemoTimeline.Plan(request.Today, DemoCatalog.Scenarios);
         failed = await DemoTimeline.RunAsync(context!, steps, request.Progress, ct);
         if (failed is not null) return failed;
+        // 資料日期停在這天；Demo 登入開啟時報表以它為基準日
+        await settings.SetAsync(SystemSetting.DemoGeneratedOn, request.Today.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture), ct);
+        await uow.CommitAsync(ct);
         return ServiceResult.Success(new DemoGenerateResult(steps.Count));
     }
 }

@@ -2,7 +2,10 @@ using ClosedXML.Excel;
 
 namespace DynamicModules.Application.Dynamic.ExportService;
 
-/// <summary>xlsx：一個工作表；Cell 為 decimal 的寫成數字儲存格，其餘寫文字。</summary>
+/// <summary>百分比儲存格的值：0.125 顯示成 12.50%。</summary>
+public readonly record struct XlsxPercent(decimal Value);
+
+/// <summary>xlsx：一個工作表；Cell 為 decimal 的寫成數字儲存格，<see cref="XlsxPercent"/> 寫成百分比格式，其餘寫文字。</summary>
 public static class XlsxWriter
 {
     public static byte[] Write(string sheetName, IReadOnlyList<string> header, IEnumerable<IReadOnlyList<object>> rows)
@@ -18,6 +21,11 @@ public static class XlsxWriter
             {
                 var cell = ws.Cell(r, c + 1);
                 if (row[c] is decimal d) cell.Value = d;
+                else if (row[c] is XlsxPercent p)
+                {
+                    cell.Value = p.Value;
+                    cell.Style.NumberFormat.Format = "0.00%";
+                }
                 else cell.Value = (string)row[c]; // 文字儲存格不會被 Excel 當公式
             }
             r++;

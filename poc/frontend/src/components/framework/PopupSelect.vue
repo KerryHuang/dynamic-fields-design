@@ -15,6 +15,8 @@ const props = defineProps<{
   valueKind: 'number' | 'string';
   /** The record's reference info for the current single value; used only while its key still matches the value. */
   reference?: ReferenceInfo;
+  /** 已知的標題（鍵為值的字串）；還沒開過挑選視窗時，已存的值靠這個顯示標題。 */
+  knownTitles?: Record<string, string>;
   multiple?: boolean;
   label?: string;
   error?: string;
@@ -50,7 +52,7 @@ watch(items, (list) => list.forEach((i) => titles.value.set(i.key, i.title)));
 
 const toValue = (key: string): Key => (props.valueKind === 'number' ? Number(key) : key);
 const current = computed<Key[]>(() => [props.modelValue ?? []].flat());
-const titleOf = (v: Key) => titles.value.get(String(v)) ?? String(v);
+const titleOf = (v: Key) => titles.value.get(String(v)) ?? props.knownTitles?.[String(v)] ?? String(v);
 const display = computed(() => {
   if (props.multiple) return current.value.map(titleOf).join('、');
   const v = current.value[0];

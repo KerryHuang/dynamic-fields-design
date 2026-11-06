@@ -320,6 +320,34 @@ public class AdminGroupsApiTests
     }
 
     [Fact]
+    public async Task DeleteGroup_RemovesReportShares_AndImpactCountsThem()
+    {
+        using var app = new TestApp();
+        var admin = app.AsUser();
+        var id = await CreateGroup(app, "稽核組");
+        var other = await CreateGroup(app, "其他組");
+        var reportId = Db(app, db =>
+        {
+            var report = new Report
+            {
+                OwnerUserId = "sales01", Name = "月營收", DefinitionJson = "{}", RowVersion = Guid.NewGuid().ToString(),
+                Shares = [new ReportShare { GroupId = id }, new ReportShare { GroupId = other }]
+            };
+            db.Set<Report>().Add(report);
+            db.SaveChanges();
+            return report.Id;
+        });
+
+        var impact = await JsonOf(await admin.GetAsync($"{AdminGroups}/{id}/impact"));
+
+        impact.GetProperty("reports").EnumerateArray().Select(x => x.GetString()).Should().BeEquivalentTo(["月營收"]);
+        (await admin.DeleteAsync($"{AdminGroups}/{id}")).StatusCode.Should().Be(HttpStatusCode.OK);
+        Db(app, db => db.Set<ReportShare>().Count(x => x.GroupId == id)).Should().Be(0);
+        Db(app, db => db.Set<ReportShare>().Count(x => x.GroupId == other)).Should().Be(1);
+        Db(app, db => db.Set<Report>().Any(r => r.Id == reportId)).Should().BeTrue();
+    }
+
+    [Fact]
     public async Task SavePermissions_DeletedGroupId_400()
     {
         using var app = new TestApp();

@@ -40,7 +40,7 @@ public sealed class DemoDataApiTests
     [Fact]
     public async Task Generate_ThenPollUntilGenerated()
     {
-        using var app = new DemoApp();
+        using var app = new DemoApp(fileDatabase: true);
         var admin = app.AsUser();
 
         var res = await admin.PostAsync(Generate, null);
@@ -60,7 +60,7 @@ public sealed class DemoDataApiTests
     [Fact]
     public async Task Generate_WhileRunning_409()
     {
-        using var app = new DemoApp();
+        using var app = new DemoApp(fileDatabase: true);
         app.Gate.When = r => r is GenerateDemoDataRequest; // 交易開始、還沒寫入就停住
         var admin = app.AsUser();
 
@@ -82,7 +82,7 @@ public sealed class DemoDataApiTests
     [Fact]
     public async Task Generate_AfterGenerated_409WithConflicts()
     {
-        using var app = new DemoApp();
+        using var app = new DemoApp(fileDatabase: true);
         var admin = app.AsUser();
         (await admin.PostAsync(Generate, null)).EnsureSuccessStatusCode();
         (await PollUntilDone(admin)).GetProperty("state").GetString().Should().Be("generated");
@@ -129,7 +129,7 @@ public sealed class DemoDataApiTests
     [Fact]
     public async Task SeedOnStartup_True_GeneratesInBackground()
     {
-        using var app = new DemoApp { SeedOnStartup = true };
+        using var app = new DemoApp(fileDatabase: true) { SeedOnStartup = true };
         app.Gate.When = r => r is GenerateDemoDataRequest;
         var admin = app.AsUser();
 

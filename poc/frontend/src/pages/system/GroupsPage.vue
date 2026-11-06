@@ -167,6 +167,9 @@ function confirmDelete() {
             </div>
             <div data-testid="impact-fields">{{ t('groups.impactFields', { n: impact.data.value.fieldPermissionCount }) }}</div>
             <div data-testid="impact-scopes">{{ t('groups.impactScopes', { n: impact.data.value.dataScopeCount }) }}</div>
+            <div data-testid="impact-reports">
+              {{ t('groups.impactReports', { list: impact.data.value.reports.join('、') || t('groups.impactNone') }) }}
+            </div>
             <div class="text-warning" data-testid="impact-warning">{{ t('groups.loseWarning') }}</div>
             <div v-if="blocking.length" class="text-negative" data-testid="impact-blocking">
               <div>{{ t('groups.blocking') }}</div>

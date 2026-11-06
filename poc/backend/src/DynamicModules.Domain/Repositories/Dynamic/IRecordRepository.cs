@@ -13,6 +13,10 @@ public interface IRecordRepository
     /// <summary>擴充模組中、host 鍵為 hostKey 的未刪除記錄。</summary>
     Task<Record?> GetByHostAsync(long moduleId, string hostKey, CancellationToken ct);
     void Add(Record r);
+    /// <summary>報表用：未刪除、在 ownerUserIds 範圍內（null 不限）的記錄，依 Id 遞增、不追蹤、不分頁，最多 limit 筆。</summary>
+    Task<IReadOnlyList<Record>> ListForReportAsync(long moduleId, IReadOnlyCollection<string>? ownerUserIds, int limit, CancellationToken ct);
+    /// <summary>ids 中屬於該模組且未刪除的記錄（不追蹤、不看資料範圍），供報表帶出參照目標的欄位。</summary>
+    Task<IReadOnlyList<Record>> ListByIdsAsync(long moduleId, IReadOnlyCollection<long> ids, CancellationToken ct);
     /// <summary>ids 中屬於該模組、未刪除、且在 ownerUserIds 範圍內（null 不限）的記錄 Id。</summary>
     Task<IReadOnlySet<long>> ListVisibleIdsAsync(long moduleId, IReadOnlyCollection<long> ids, IReadOnlyCollection<string>? ownerUserIds, CancellationToken ct);
     /// <summary>ids 中屬於該模組且未刪除的記錄（不看資料範圍），供判斷參照是 missing 還是 restricted。</summary>

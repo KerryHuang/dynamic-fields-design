@@ -53,6 +53,7 @@ public abstract class DesignerTestBase : IAsyncLifetime
         services.AddScoped<ITransactionManager, EfTransactionManager>();
         services.AddSingleton<ICurrentUser>(_user);
         services.AddSingleton<IBusinessTime, FakeTime>();
+        services.AddSingleton(new AuthSettings(false));
         _sp = services.BuildServiceProvider();
     }
 

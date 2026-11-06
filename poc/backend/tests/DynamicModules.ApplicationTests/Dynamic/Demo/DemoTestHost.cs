@@ -46,6 +46,7 @@ public sealed class DemoTestHost : IAsyncDisposable
         services.AddScoped<ITransactionManager, EfTransactionManager>();
         services.AddSingleton<ICurrentUser>(host.User);
         services.AddSingleton<IBusinessTime>(new FakeTime(today ?? Today));
+        services.AddSingleton(new AuthSettings(false));
         services.AddActingOverrides();
         configure?.Invoke(services);
         host._sp = services.BuildServiceProvider();

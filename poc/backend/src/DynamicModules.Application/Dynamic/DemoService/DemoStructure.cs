@@ -5,6 +5,9 @@ using DynamicModules.Application.Dynamic.ModuleService.Commands.ActivateModule;
 using DynamicModules.Application.Dynamic.PermissionService.Commands.SaveModulePermissions;
 using DynamicModules.Application.Dynamic.PermissionService.Data;
 using DynamicModules.Application.Dynamic.PermissionService.Queries.GetModulePermissions;
+using DynamicModules.Application.Dynamic.ReportService.Commands.CreateReport;
+using DynamicModules.Application.Dynamic.ReportService.Commands.SetReportShares;
+using DynamicModules.Application.Dynamic.ReportService.Data;
 using DynamicModules.Application.Dynamic.TemplateService.Commands.InstantiateTemplate;
 using DynamicModules.Application.Dynamic.TemplateService.Data;
 using DynamicModules.Domain.Entities.Dynamic;
@@ -15,7 +18,7 @@ using MediatR;
 namespace DynamicModules.Application.Dynamic.DemoService;
 
 /// <summary>
-/// 建 Demo 的結構（一律以 admin）：套用四個範本、在訂單加「品質異常筆數」、依序啟用、補範本帶不了的權限。
+/// 建 Demo 的結構（一律以 admin）：套用四個範本、在訂單加「品質異常筆數」、依序啟用、補範本帶不了的權限、建示範報表。
 /// 呼叫端要在交易內；任何一步失敗就回 Failed（訊息前面加步驟名），由外層回滾。
 /// </summary>
 public sealed class DemoStructure(ISender sender, IPermissionRepository permissions)
@@ -76,7 +79,24 @@ public sealed class DemoStructure(ISender sender, IPermissionRepository permissi
         }, ct);
         if (failed is not null) return (null, failed);
 
+        failed = await CreateReportsAsync(ids, groupIds, ct);
+        if (failed is not null) return (null, failed);
+
         return (new DemoContext(today, sender, ids, groupIds), null);
+    }
+
+    /// <summary>5. 建示範報表並分享給各情境的主管群組（擁有者是 admin）。</summary>
+    private async Task<ServiceResult?> CreateReportsAsync(TemplateIdMap ids, IReadOnlyDictionary<string, long> groupIds, CancellationToken ct)
+    {
+        foreach (var spec in DemoReports.All)
+        {
+            var step = $"建報表 {spec.Name}";
+            var created = await sender.Send(new CreateReportRequest(spec.Name, spec.Build(ids)), ct);
+            if (!created.IsSuccess) return Fail(step, created);
+            var shared = await sender.Send(new SetReportSharesRequest(((ReportDetail)created.Data!).Id, [.. spec.GroupKeys.Select(k => groupIds[k])]), ct);
+            if (!shared.IsSuccess) return Fail(step, shared);
+        }
+        return null;
     }
 
     private async Task<ServiceResult?> SupplementAsync(

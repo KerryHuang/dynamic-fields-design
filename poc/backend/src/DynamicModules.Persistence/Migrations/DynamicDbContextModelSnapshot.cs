@@ -681,6 +681,69 @@ namespace DynamicModules.Persistence.Migrations
                     b.ToTable("Dynamic_RecordIndex", (string)null);
                 });
 
+            modelBuilder.Entity("DynamicModules.Domain.Entities.Dynamic.Report", b =>
+                {
+                    b.Property<long>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("INTEGER");
+
+                    b.Property<DateTime>("CreatedTime")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("CreatedUserId")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("DefinitionJson")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTime?>("ModifiedTime")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("ModifiedUserId")
+                        .HasMaxLength(50)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("OwnerUserId")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("RowVersion")
+                        .IsConcurrencyToken()
+                        .IsRequired()
+                        .HasMaxLength(36)
+                        .HasColumnType("TEXT");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("OwnerUserId");
+
+                    b.ToTable("Dynamic_Report", (string)null);
+                });
+
+            modelBuilder.Entity("DynamicModules.Domain.Entities.Dynamic.ReportShare", b =>
+                {
+                    b.Property<long>("ReportId")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<long>("GroupId")
+                        .HasColumnType("INTEGER");
+
+                    b.HasKey("ReportId", "GroupId");
+
+                    b.HasIndex("GroupId");
+
+                    b.ToTable("Dynamic_ReportShare", (string)null);
+                });
+
             modelBuilder.Entity("DynamicModules.Domain.Entities.Dynamic.Rule", b =>
                 {
                     b.Property<long>("Id")
@@ -736,6 +799,22 @@ namespace DynamicModules.Persistence.Migrations
                     b.HasIndex("ModuleId", "Sequence");
 
                     b.ToTable("Dynamic_Rule", (string)null);
+                });
+
+            modelBuilder.Entity("DynamicModules.Domain.Entities.Dynamic.SystemSetting", b =>
+                {
+                    b.Property<string>("Key")
+                        .HasMaxLength(100)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Value")
+                        .IsRequired()
+                        .HasMaxLength(500)
+                        .HasColumnType("TEXT");
+
+                    b.HasKey("Key");
+
+                    b.ToTable("Dynamic_SystemSetting", (string)null);
                 });
 
             modelBuilder.Entity("DynamicModules.Domain.Entities.Dynamic.UserGroupMapping", b =>
@@ -908,6 +987,15 @@ namespace DynamicModules.Persistence.Migrations
                         .IsRequired();
                 });
 
+            modelBuilder.Entity("DynamicModules.Domain.Entities.Dynamic.ReportShare", b =>
+                {
+                    b.HasOne("DynamicModules.Domain.Entities.Dynamic.Report", null)
+                        .WithMany("Shares")
+                        .HasForeignKey("ReportId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
             modelBuilder.Entity("DynamicModules.Domain.Entities.Dynamic.Rule", b =>
                 {
                     b.HasOne("DynamicModules.Domain.Entities.Dynamic.Module", null)
@@ -937,6 +1025,11 @@ namespace DynamicModules.Persistence.Migrations
             modelBuilder.Entity("DynamicModules.Domain.Entities.Dynamic.Record", b =>
                 {
                     b.Navigation("Index");
+                });
+
+            modelBuilder.Entity("DynamicModules.Domain.Entities.Dynamic.Report", b =>
+                {
+                    b.Navigation("Shares");
                 });
 #pragma warning restore 612, 618
         }
