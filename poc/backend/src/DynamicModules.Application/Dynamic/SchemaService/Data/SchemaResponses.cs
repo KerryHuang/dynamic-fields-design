@@ -5,10 +5,11 @@ using DynamicModules.Domain.ValueObjects;
 
 namespace DynamicModules.Application.Dynamic.SchemaService.Data;
 
+/// <summary>ReadOnly：模組所屬應用程式已關閉。Permissions 的新增、修改、刪除同時被壓成 false，前端照權限就會藏起按鈕。</summary>
 public record ModuleSchemaResponse(
     string Key, string ProgramCode, I18nText Name, string? Icon, string? TitleFieldKey, int Version, List<SchemaBlock> Blocks,
     SchemaPermissions Permissions, List<SchemaRule> Rules,
-    ModuleKind Kind, string? HostEntityKey, List<SchemaDetail>? Details = null)
+    ModuleKind Kind, string? HostEntityKey, List<SchemaDetail>? Details = null, bool ReadOnly = false)
 {
     /// <summary>ETag 用的版本：表頭 Version 接上每個明細模組的 Version（依 Key 排序），以 . 串接；不序列化。</summary>
     [JsonIgnore]
@@ -40,7 +41,8 @@ public record SchemaRule(RuleKind Kind, JsonElement Condition, List<string> Targ
 
 public record SchemaOption(string Value, I18nText Label, string? Color, bool Active);
 
-public record MenuItem(string Key, I18nText Name, string? Icon, string? Section);
+/// <summary>Closed：所屬應用程式已關閉，仍可進入查閱，前端放在「已關閉的應用程式」分組。</summary>
+public record MenuItem(string Key, I18nText Name, string? Icon, string? Section, bool Closed = false);
 
 public static class SchemaETag
 {

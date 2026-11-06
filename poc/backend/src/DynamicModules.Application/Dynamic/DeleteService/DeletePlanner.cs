@@ -80,7 +80,7 @@ public class DeletePlanner(IDeletionRepository data)
         Module module, IReadOnlyList<Field> fields, List<Module> all, List<Report> reports, List<DashboardLayoutSource> dashboards,
         List<DeleteBlocker> blockers, CancellationToken ct)
     {
-        if (module.Status == ModuleStatus.Active)
+        if (module.Status is ModuleStatus.Active or ModuleStatus.Closed)
             blockers.Add(new(DeleteBlockerKind.ModuleActive, module.Key, module.Id, Name(module.NameI18n, module.Key)));
         var live = await data.CountRecordsAsync(module.Id, deleted: false, ct);
         if (live > 0)

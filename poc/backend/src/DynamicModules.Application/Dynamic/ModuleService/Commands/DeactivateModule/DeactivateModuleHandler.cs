@@ -11,10 +11,13 @@ public class DeactivateModuleHandler(
     IModuleRepository modules, IProgramRepository programs, IUnitOfWork uow, ICurrentUser user, IBusinessTime time)
     : IRequestHandler<DeactivateModuleRequest, ServiceResult>
 {
+    private const string ClosedMessage = "請由應用程式重新開啟或關閉";
+
     public async Task<ServiceResult> Handle(DeactivateModuleRequest request, CancellationToken ct)
     {
         var module = await modules.GetByKeyAsync(request.Key, includeChildren: false, ct);
         if (module is null) return ServiceResult.NotFound("找不到模組");
+        if (module.Status == ModuleStatus.Closed) return ServiceResult.Conflict(ClosedMessage);
 
         module.Status = ModuleStatus.Inactive;
         var program = await programs.GetAsync(module.ProgramCode, ct);

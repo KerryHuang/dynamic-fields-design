@@ -31,11 +31,12 @@ public class ModuleSchemaBuilder(IModuleRepository modules, FieldTypeRegistry re
 
         var (details, etagVersion, permHash) = await DetailsAsync(module, p, detailPermissions, ct);
 
+        var closed = module.Status == ModuleStatus.Closed;
         return new ModuleSchemaResponse(
             module.Key, module.ProgramCode, module.NameI18n, module.Icon, titleKey, module.Version, blocks,
-            new SchemaPermissions(p.Can(PermissionAction.Read), p.Can(PermissionAction.Add), p.Can(PermissionAction.Edit),
-                p.Can(PermissionAction.Delete), p.Can(PermissionAction.PrintExport), p.Can(PermissionAction.Pricing)), rules, module.Kind, module.HostEntityKey,
-            details)
+            new SchemaPermissions(p.Can(PermissionAction.Read), !closed && p.Can(PermissionAction.Add), !closed && p.Can(PermissionAction.Edit),
+                !closed && p.Can(PermissionAction.Delete), p.Can(PermissionAction.PrintExport), p.Can(PermissionAction.Pricing)), rules, module.Kind, module.HostEntityKey,
+            details, closed)
         { PermHash = permHash, ETagVersion = etagVersion };
     }
 
@@ -71,7 +72,7 @@ public class ModuleSchemaBuilder(IModuleRepository modules, FieldTypeRegistry re
         var details = new List<SchemaDetail>();
         foreach (var (listed, parentField) in (await modules.ListDetailModulesAsync(parent.Key, ct)).OrderBy(x => x.Child.Key, StringComparer.Ordinal))
         {
-            if (listed.Status != ModuleStatus.Active) continue;
+            if (!listed.IsReadable()) continue;
             var child = (await modules.GetByIdAsync(listed.Id, includeChildren: true, ct))!;
             if (await detailPermissions(child) is not { } p) continue;
 

@@ -28,5 +28,6 @@ public interface IModuleRepository
     /// <summary>移除模組；區塊、欄位、選項、規則由級聯刪除，需先載入子層（includeChildren）。</summary>
     void Remove(Module m);
     Task<List<Module>> ListAsync(CancellationToken ct);
-    Task<List<Module>> ListActiveAsync(CancellationToken ct);
+    /// <summary>Active 或 Closed（能查閱）的模組，含區塊與欄位。</summary>
+    Task<List<Module>> ListReadableAsync(CancellationToken ct);
 }

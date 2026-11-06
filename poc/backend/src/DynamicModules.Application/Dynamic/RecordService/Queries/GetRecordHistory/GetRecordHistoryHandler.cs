@@ -28,7 +28,7 @@ public class GetRecordHistoryHandler(
         var record = await records.GetAsync(request.Id, ct);
         if (record is null) return ServiceResult.NotFound(RecordMapper.RecordNotFound);
         var module = await modules.GetByIdAsync(record.ModuleId, includeChildren: true, ct);
-        if (module is not { Status: ModuleStatus.Active }) return ServiceResult.NotFound(RecordMapper.ModuleNotFound);
+        if (!module.IsReadable()) return ServiceResult.NotFound(RecordMapper.ModuleNotFound);
         if (ModuleRelations.IsDetail(module)) return ServiceResult.NotFound(RecordMapper.RecordNotFound);
         var access = await guard.AuthorizeAsync(module, PermissionAction.Read, ct);
         if (access.Permissions is not { } p) return access.Denied!;
@@ -37,7 +37,7 @@ public class GetRecordHistoryHandler(
 
         // 記錄 Id → 來源；明細列以索引找，不看 DeleteFlag
         var sourceOf = new Dictionary<long, Source> { [record.Id] = new(module, p, false) };
-        foreach (var child in await DetailWriter.ActiveDetailModulesAsync(modules, module, ct))
+        foreach (var child in await DetailWriter.ReadableDetailModulesAsync(modules, module, ct))
         {
             var childAccess = await guard.AuthorizeDetailAsync(module, child, PermissionAction.Read, ct);
             if (childAccess.Permissions is not { } cp) continue;

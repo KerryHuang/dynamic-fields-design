@@ -11,6 +11,7 @@ public class DynamicAccessGuard(
 
     public async Task<AccessResult> AuthorizeAsync(Module module, PermissionAction action, CancellationToken ct)
     {
+        if (ClosedBlocks(module, action)) return Deny();
         var program = await programs.GetAsync(module.ProgramCode, ct);
         if (program is not { Active: true }) return Deny();
 
@@ -23,6 +24,7 @@ public class DynamicAccessGuard(
 
     public async Task<AccessResult> AuthorizeDetailAsync(Module parent, Module child, PermissionAction action, CancellationToken ct)
     {
+        if (ClosedBlocks(parent, action) || ClosedBlocks(child, action)) return Deny();
         var program = await programs.GetAsync(parent.ProgramCode, ct);
         if (program is not { Active: true }) return Deny();
 
@@ -34,6 +36,13 @@ public class DynamicAccessGuard(
         var effective = PermissionResolver.Resolve(child, DetailInputs(parentInputs, childInputs), parent);
         return effective.Can(action) ? new AccessResult(effective, null) : Deny();
     }
+
+    /// <summary>
+    /// 已關閉的模組只剩讀取與匯出。必須在 Resolve 之前、不看使用者身分判斷：PermissionResolver 對系統管理員回傳所有動作，
+    /// 放在結果之後檢查就擋不到管理員。這是各 handler 檢查之外的第二道防線。
+    /// </summary>
+    private static bool ClosedBlocks(Module module, PermissionAction action) =>
+        module.Status == ModuleStatus.Closed && action is not (PermissionAction.Read or PermissionAction.PrintExport);
 
     private static PermissionInputs DetailInputs(PermissionInputs parentInputs, PermissionInputs childInputs) =>
         parentInputs with { FieldPermissions = childInputs.FieldPermissions, OptionScopes = childInputs.OptionScopes };

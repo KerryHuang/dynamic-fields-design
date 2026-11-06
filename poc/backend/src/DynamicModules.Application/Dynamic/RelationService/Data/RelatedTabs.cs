@@ -21,7 +21,7 @@ public static class RelatedTabs
         var record = await records.GetAsync(recordId, ct);
         if (record is null) return (null, ServiceResult.NotFound(RecordMapper.RecordNotFound));
         var module = await modules.GetByIdAsync(record.ModuleId, includeChildren: true, ct);
-        if (module is not { Status: ModuleStatus.Active }) return (null, ServiceResult.NotFound(RecordMapper.ModuleNotFound));
+        if (!module.IsReadable()) return (null, ServiceResult.NotFound(RecordMapper.ModuleNotFound));
         if (ModuleRelations.IsDetail(module)) return (null, ServiceResult.NotFound(RecordMapper.RecordNotFound));
         var access = await guard.AuthorizeAsync(module, PermissionAction.Read, ct);
         if (access.Permissions is not { } p) return (null, access.Denied!);
@@ -38,7 +38,7 @@ public static class RelatedTabs
         foreach (var (source, field) in await modules.ListIncomingReferenceFieldsAsync(targetModuleKey, ct))
         {
             // 明細欄位與明細模組不列為反向關聯，明細改由表格呈現
-            if (source.Status != ModuleStatus.Active || ModuleRelations.IsDetail(source)) continue;
+            if (!source.IsReadable() || ModuleRelations.IsDetail(source)) continue;
             var access = await guard.AuthorizeAsync(source, PermissionAction.Read, ct);
             if (access.Permissions is not { } p || !p.CanSee(field)) continue;
             result.Add((source, field, p));

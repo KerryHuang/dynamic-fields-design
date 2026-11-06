@@ -251,7 +251,7 @@ public partial class ReportRunner(
     }
 
     private async Task<Module?> ActiveModuleAsync(string key, CancellationToken ct) =>
-        await modules.GetByKeyAsync(key, includeChildren: true, ct) is { Status: ModuleStatus.Active } m ? m : null;
+        await modules.GetByKeyAsync(key, includeChildren: true, ct) is { } m && m.IsReadable() ? m : null;
 
     /// <summary>定義裡所有位置的欄位引用，權限判斷只看這份清單，新增位置要加在這裡。</summary>
     internal static List<ReportFieldRef> AllRefs(ReportDefinition d)

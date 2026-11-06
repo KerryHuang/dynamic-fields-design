@@ -19,7 +19,7 @@ public class GetLightRecordsHandler(IModuleRepository modules, IRecordRepository
     public async Task<ServiceResult> Handle(GetLightRecordsRequest request, CancellationToken ct)
     {
         var module = await modules.GetByKeyAsync(request.ModuleKey, includeChildren: true, ct);
-        if (module is not { Status: ModuleStatus.Active } || ModuleRelations.IsDetail(module))
+        if (!module.IsWritable() || ModuleRelations.IsDetail(module))
             return ServiceResult.NotFound(RecordMapper.ModuleNotFound);
         var access = await guard.AuthorizeAsync(module, PermissionAction.Read, ct);
         if (access.Permissions is not { } perms) return access.Denied!;

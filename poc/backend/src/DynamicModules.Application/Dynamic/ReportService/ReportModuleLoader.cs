@@ -80,5 +80,5 @@ public class ReportModuleLoader(IModuleRepository modules, IDynamicAccessGuard g
     }
 
     private async Task<Module?> ActiveAsync(string key, CancellationToken ct) =>
-        await modules.GetByKeyAsync(key, includeChildren: true, ct) is { Status: ModuleStatus.Active } m ? m : null;
+        await modules.GetByKeyAsync(key, includeChildren: true, ct) is { } m && m.IsReadable() ? m : null;
 }

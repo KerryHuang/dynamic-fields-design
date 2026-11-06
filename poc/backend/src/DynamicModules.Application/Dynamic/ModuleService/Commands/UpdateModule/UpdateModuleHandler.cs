@@ -33,7 +33,7 @@ public class UpdateModuleHandler(
                     .Any(p => p.FieldId == titleId && p.Access == FieldAccess.Hidden))
                 return TitleInvalid("記錄標題欄位不能是有隱藏例外的欄位");
         }
-        else if (module.Status == ModuleStatus.Active)
+        else if (module.Status is ModuleStatus.Active or ModuleStatus.Closed)
             return TitleInvalid("啟用中的模組必須有記錄標題欄位");
 
         module.NameI18n = request.Name;

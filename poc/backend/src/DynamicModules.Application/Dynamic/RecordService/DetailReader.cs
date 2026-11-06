@@ -14,7 +14,7 @@ public class DetailReader(IModuleRepository modules, IRecordRepository records, 
     public async Task<IReadOnlyDictionary<string, IReadOnlyList<DynamicRecordResponse>>?> ReadAsync(
         Module parent, Record parentRecord, PermissionAction action, CancellationToken ct)
     {
-        var children = await DetailWriter.ActiveDetailModulesAsync(modules, parent, ct);
+        var children = await DetailWriter.ReadableDetailModulesAsync(modules, parent, ct);
         if (children.Count == 0) return null;
         var result = new Dictionary<string, IReadOnlyList<DynamicRecordResponse>>();
         foreach (var child in children)

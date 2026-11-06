@@ -19,8 +19,9 @@ public class DeleteViewHandler(
         if (view is null || (view.OwnerUserId is { } owner && owner != user.UserId))
             return ServiceResult.NotFound(ViewRules.ViewNotFound);
         var module = await modules.GetByIdAsync(view.ModuleId, includeChildren: true, ct);
-        if (module is not { Status: ModuleStatus.Active }) return ServiceResult.NotFound(RecordMapper.ModuleNotFound);
+        if (module is null) return ServiceResult.NotFound(RecordMapper.ModuleNotFound);
         if (ModuleRelations.IsDetail(module)) return ServiceResult.NotFound(ViewRules.ViewNotFound);
+        if (await ModuleGate.RejectUnwritableAsync(module, guard, ct) is { } blocked) return blocked;
 
         var access = await guard.AuthorizeAsync(module, PermissionAction.Read, ct);
         if (access.Permissions is null) return access.Denied!;

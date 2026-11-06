@@ -101,7 +101,7 @@ public class ModuleRepository(DynamicDbContext db) : IModuleRepository
     public Task<List<Module>> ListAsync(CancellationToken ct) =>
         db.Set<Module>().AsNoTracking().OrderBy(m => m.Id).ToListAsync(ct);
 
-    public Task<List<Module>> ListActiveAsync(CancellationToken ct) =>
+    public Task<List<Module>> ListReadableAsync(CancellationToken ct) =>
         db.Set<Module>().AsNoTracking().Include(m => m.Blocks).ThenInclude(b => b.Fields)
-            .Where(m => m.Status == ModuleStatus.Active).OrderBy(m => m.Id).ToListAsync(ct);
+            .Where(m => m.Status == ModuleStatus.Active || m.Status == ModuleStatus.Closed).OrderBy(m => m.Id).ToListAsync(ct);
 }

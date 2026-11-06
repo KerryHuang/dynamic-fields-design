@@ -18,7 +18,7 @@ public class GetRecordHandler(IModuleRepository modules, IRecordRepository recor
         var record = await records.GetAsync(request.Id, ct);
         if (record is null) return ServiceResult.NotFound(RecordMapper.RecordNotFound);
         var module = await modules.GetByIdAsync(record.ModuleId, includeChildren: true, ct);
-        if (module is not { Status: ModuleStatus.Active }) return ServiceResult.NotFound(RecordMapper.ModuleNotFound);
+        if (!module.IsReadable()) return ServiceResult.NotFound(RecordMapper.ModuleNotFound);
         if (ModuleRelations.IsDetail(module)) return ServiceResult.NotFound(RecordMapper.RecordNotFound);
         var access = await guard.AuthorizeAsync(module, PermissionAction.Read, ct);
         if (access.Permissions is not { } p) return access.Denied!;
