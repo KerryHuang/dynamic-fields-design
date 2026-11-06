@@ -1,5 +1,6 @@
 using DynamicModules.Application.Common.Acting;
 using DynamicModules.Application.Common.Security;
+using DynamicModules.Application.Common.Time;
 using DynamicModules.Application.Dynamic.DemoService;
 using DynamicModules.Application.Dynamic.DemoService.Commands.GenerateDemoData;
 using DynamicModules.Application.Dynamic.ReportService;
@@ -33,16 +34,16 @@ public class DemoReportsTests(DemoGeneratedFixture fx)
         var reports = await StoredReports();
         var groups = await fx.Host.Db.Context.Set<PermissionGroup>().AsNoTracking().ToDictionaryAsync(g => g.Id, g => g.Key);
         reports.Select(r => r.Name).Should().BeEquivalentTo(DemoReports.Names);
-        DemoReports.All.GroupBy(s => s.GroupKey).Should().OnlyContain(g => g.Count() >= 2);
+        DemoReports.All.GroupBy(s => s.GroupKeys[0]).Should().OnlyContain(g => g.Count() >= 2);
 
         foreach (var spec in DemoReports.All)
         {
             var report = reports.Single(r => r.Name == spec.Name);
-            report.Shares.Select(s => groups[s.GroupId]).Should().Equal([spec.GroupKey], spec.Name);
+            report.Shares.Select(s => groups[s.GroupId]).Should().BeEquivalentTo(spec.GroupKeys, spec.Name);
 
             // 定義本身通過存檔驗證的結構規則，並以主管身分實際執行
             ReportRules.CheckShape(ReportDefinition.Parse(report.DefinitionJson)).Should().BeEmpty(spec.Name);
-            var run = (ReportResult)(await fx.As(Managers[spec.GroupKey], new RunReportRequest(report.Id, null, "zh-TW"))).Data!;
+            var run = (ReportResult)(await fx.As(Managers[spec.GroupKeys[0]], new RunReportRequest(report.Id, null, "zh-TW"))).Data!;
             run.State.Should().Be("ok", $"{spec.Name}：{run.Message}");
         }
     }
@@ -71,14 +72,9 @@ public class DemoReportsTests(DemoGeneratedFixture fx)
     {
         fx.Generated();
         var report = (await StoredReports()).Single(r => r.Name == "近 90 天訂單狀態分布");
-        var definition = ReportDefinition.Parse(report.DefinitionJson);
-        var runner = fx.Host.Services.GetRequiredService<ReportRunner>();
 
-        async Task<ReportResult> RunAs(string user)
-        {
-            using var _ = ActingScope.Begin(user);
-            return await runner.RunAsync(definition, new ReportRunOptions(null, null, "zh-TW"), CancellationToken.None);
-        }
+        async Task<ReportResult> RunAs(string user) =>
+            (ReportResult)(await fx.As(user, new RunReportRequest(report.Id, null, "zh-TW"))).Data!;
 
         var manager = await RunAs("manager01");
         var sales = await RunAs("sales01");
@@ -86,6 +82,36 @@ public class DemoReportsTests(DemoGeneratedFixture fx)
         sales.State.Should().Be("ok");
         manager.Total!["count"].Should().Be(40);
         sales.Total!["count"].Should().BeLessThan(manager.Total["count"]!.Value).And.BeGreaterThan(0);
+        manager.BasisIsFrozen.Should().BeFalse();
+    }
+
+    [Theory]
+    [InlineData(true, "ok", true)]
+    [InlineData(false, "empty", false)]
+    public async Task Run_120DaysAfterGeneration_DemoLoginDecidesBasis(bool demoLogin, string state, bool frozen)
+    {
+        var clock = new MutableTime(DemoTestHost.Today);
+        await using var host = await DemoTestHost.CreateAsync(configure: s =>
+        {
+            s.AddSingleton<IBusinessTime>(clock);
+            s.AddSingleton(new AuthSettings(demoLogin));
+        });
+        (await host.Send(new GenerateDemoDataRequest(DemoTestHost.Today))).IsSuccess.Should().BeTrue();
+        var report = await host.Db.Context.Set<Report>().AsNoTracking().SingleAsync(r => r.Name == "近 90 天訂單狀態分布");
+
+        clock.Today = DemoTestHost.Today.AddDays(120);
+        using var _ = ActingScope.Begin("manager01");
+        var result = (ReportResult)(await host.Send(new RunReportRequest(report.Id, null, "zh-TW"))).Data!;
+
+        result.State.Should().Be(state);
+        result.BasisDate.Should().Be(demoLogin ? DemoTestHost.Today : clock.Today);
+        result.BasisIsFrozen.Should().Be(frozen);
+    }
+
+    private sealed class MutableTime(DateOnly today) : IBusinessTime
+    {
+        public DateOnly Today { get; set; } = today;
+        public DateTime Now => Today.ToDateTime(new TimeOnly(10, 0));
     }
 
     [Fact]

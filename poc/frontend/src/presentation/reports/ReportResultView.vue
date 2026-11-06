@@ -44,6 +44,7 @@ const range = computed(() => props.result.appliedRange);
       <div class="text-caption text-grey-8">
         <span v-if="range" data-testid="applied-range">{{ t('reports.appliedRange', { from: range.from, to: range.to }) }}</span>
         <span v-if="result.rowMeaning" class="q-ml-sm" data-testid="row-meaning">{{ t('reports.rowMeaning', { text: result.rowMeaning }) }}</span>
+        <span v-if="result.basisIsFrozen" class="q-ml-sm" data-testid="basis-date">{{ t('reports.basisDate', { date: result.basisDate }) }}</span>
       </div>
       <div v-if="result.state === 'empty'" data-testid="state-empty">{{ stateText }}</div>
       <template v-else>

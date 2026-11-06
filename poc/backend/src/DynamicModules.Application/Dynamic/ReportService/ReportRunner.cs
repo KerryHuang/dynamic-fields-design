@@ -75,8 +75,9 @@ public class ReportRunner(
     public async Task<ReportResult> RunAsync(ReportDefinition d, ReportRunOptions o, CancellationToken ct)
     {
         var basis = await BasisDateAsync(ct);
+        var frozen = basis != time.Today;
         var locale = string.IsNullOrEmpty(o.Locale) ? I18nText.FallbackLocale : o.Locale;
-        ReportResult Fail(string state, string message) => new(state, message, "", [], null, null, null, false, basis, null);
+        ReportResult Fail(string state, string message) => new(state, message, "", [], null, null, null, false, basis, null, frozen);
         var disabled = () => Fail(ModuleDisabledState, "模組已停用");
 
         // 1. 模組存在且啟用；明細模組不能當主模組（它的權限來自表頭，單獨跑會繞過表頭範圍）
@@ -240,7 +241,7 @@ public class ReportRunner(
         IReadOnlyList<IReadOnlyList<object?>>? detail = fieldColumns.Count == 0 ? null : DetailRows(rows, fieldColumns, d, bound, ctx);
         ReportAppliedRange? applied = range is null ? null : new ReportAppliedRange(resolved!.Value.Item1, resolved.Value.Item2, range.Kind, range.N);
         return new ReportResult(rows.Count == 0 ? Empty : Ok, null, $"一筆{rowModule.NameI18n.Resolve(locale)}", columns,
-            groups, calc.Total, detail, calc.DedupedNote, basis, applied);
+            groups, calc.Total, detail, calc.DedupedNote, basis, applied, frozen);
     }
 
     private async Task<Module?> ActiveModuleAsync(string key, CancellationToken ct) =>

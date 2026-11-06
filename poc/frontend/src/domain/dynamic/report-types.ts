@@ -20,6 +20,8 @@ export interface ReportResult {
   detailRows?: (string | number | null)[][] | null;
   dedupedNote: boolean;
   basisDate: string;
+  /** basisDate 與後端的今天不同（Demo 資料日期停在產生那天）。 */
+  basisIsFrozen?: boolean;
   appliedRange?: ReportAppliedRange | null;
 }
 export interface DrillResult extends ReportResult { truncated: boolean }

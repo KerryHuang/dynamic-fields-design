@@ -93,7 +93,7 @@ public sealed class DemoStructure(ISender sender, IPermissionRepository permissi
             var step = $"建報表 {spec.Name}";
             var created = await sender.Send(new CreateReportRequest(spec.Name, spec.Build(ids)), ct);
             if (!created.IsSuccess) return Fail(step, created);
-            var shared = await sender.Send(new SetReportSharesRequest(((ReportDetail)created.Data!).Id, [groupIds[spec.GroupKey]]), ct);
+            var shared = await sender.Send(new SetReportSharesRequest(((ReportDetail)created.Data!).Id, [.. spec.GroupKeys.Select(k => groupIds[k])]), ct);
             if (!shared.IsSuccess) return Fail(step, shared);
         }
         return null;

@@ -53,6 +53,19 @@ describe('ReportResultView', () => {
     expect(has(w, 'total-row').text()).toContain('1,234.5');
   });
 
+  it('shows the basis date only when the backend says it differs from today', () => {
+    const frozen = mountView({ ...OK, basisDate: '2026-10-01', basisIsFrozen: true });
+    expect(has(frozen, 'basis-date').text()).toBe('資料基準日 2026-10-01');
+    expect(has(mountView({ ...OK, basisIsFrozen: true }, 'table', 'en-US'), 'basis-date').text()).toBe('Data as of 2026-11-05');
+    expect(has(mountView({ ...OK, basisIsFrozen: false }), 'basis-date').exists()).toBe(false);
+    expect(has(mountView(OK), 'basis-date').exists()).toBe(false);
+  });
+
+  it('shows the basis date on an empty result too', () => {
+    const w = mountView({ ...OK, state: 'empty', groups: [], basisIsFrozen: true });
+    expect(has(w, 'basis-date').exists()).toBe(true);
+  });
+
   it('clicking a group row emits drill with its group keys', async () => {
     const w = mountView(OK);
     await has(w, 'group-row-1').trigger('click');
