@@ -223,6 +223,7 @@ describe('MainLayout menu', () => {
     const shown = await mountIt();
     expect(shown.text()).toContain(zhTW.menu.dynamicModules);
     expect(shown.text()).toContain(zhTW.menu.system);
+    expect(shown.find('.q-toolbar__title').text()).toBe('Formwright');
   });
 
   describe('account area', () => {

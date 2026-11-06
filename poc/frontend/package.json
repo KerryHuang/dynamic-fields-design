@@ -1,5 +1,6 @@
 {
   "name": "dynamic-modules-poc-frontend",
+  "productName": "Formwright 表匠",
   "private": true,
   "version": "0.0.1",
   "type": "module",
