@@ -29,6 +29,7 @@ function clear() {
 <template>
   <FilterContainer :title="t('dynamic.filter.title')" :apply-label="t('dynamic.filter.apply')" :clear-label="t('dynamic.filter.clear')" @apply="apply" @clear="clear">
     <div v-if="complex" class="text-muted" data-testid="complex-notice">{{ t('dynamic.filter.complex') }}</div>
+    <div v-else-if="fields.length === 0" class="text-muted" data-testid="no-filter-fields">{{ t('dynamic.filter.noFields') }}</div>
     <ConditionEditor v-else v-model="draft" :fields="fields" />
   </FilterContainer>
 </template>
