@@ -15,40 +15,65 @@ public sealed class LoginThrottle(TimeProvider time)
     private readonly Dictionary<string, DateTimeOffset> _lastAttempt = new();
     private DateTimeOffset _lastPrune;
 
-    /// <summary>可以嘗試時回傳 true，並登記這次嘗試（供帳號層級的 10 秒間隔判斷）。</summary>
+    private readonly Dictionary<string, int> _inFlight = new();
+
+    /// <summary>
+    /// 可以嘗試時回傳 true，並保留一個進行中的名額（計入帳號＋IP、IP、帳號三層），呼叫端必須接著呼叫 <see cref="Complete"/> 或 <see cref="Release"/>。
+    /// 保留讓檢查與計數是同一個原子步驟，同一 IP 並行送出的請求不會一起超過額度。
+    /// </summary>
     public bool TryBegin(string userId, string ip)
     {
         var now = time.GetUtcNow();
         lock (_gate)
         {
             Prune(now);
-            if (Count("p|" + userId + "|" + ip, now - ShortWindow) >= PairMax) return false;
-            if (Count("i|" + ip, now - ShortWindow) >= IpMax) return false;
-            if (Count("a|" + userId, now - AccountWindow) >= AccountMax)
+            if (Used("p|" + userId + "|" + ip, now - ShortWindow) >= PairMax) return false;
+            if (Used("i|" + ip, now - ShortWindow) >= IpMax) return false;
+            if (Used("a|" + userId, now - AccountWindow) >= AccountMax)
             {
                 if (_lastAttempt.TryGetValue(userId, out var last) && now - last < SlowInterval) return false;
                 _lastAttempt[userId] = now;
             }
+            foreach (var key in Keys(userId, ip)) _inFlight[key] = _inFlight.GetValueOrDefault(key) + 1;
             return true;
         }
     }
 
-    public void RecordFailure(string userId, string ip)
+    /// <summary>結算 <see cref="TryBegin"/> 保留的名額：失敗記入三層計數；成功只清掉這組帳號＋IP（不讓攻擊者拿自己的帳號洗掉 IP 額度）。</summary>
+    public void Complete(string userId, string ip, bool success)
     {
         var now = time.GetUtcNow();
         lock (_gate)
-            foreach (var key in new[] { "p|" + userId + "|" + ip, "i|" + ip, "a|" + userId })
+        {
+            ReleaseLocked(userId, ip);
+            if (success) { _failures.Remove("p|" + userId + "|" + ip); return; }
+            foreach (var key in Keys(userId, ip))
             {
                 if (!_failures.TryGetValue(key, out var list)) _failures[key] = list = [];
                 list.Add(now);
             }
+        }
     }
 
-    /// <summary>登入成功：只清掉這組帳號＋IP，不動 IP 與帳號層級的計數（避免攻擊者拿自己的帳號洗掉 IP 額度）。</summary>
-    public void RecordSuccess(string userId, string ip)
+    /// <summary>嘗試沒有結果（例外）時歸還名額，不算失敗。</summary>
+    public void Release(string userId, string ip)
     {
-        lock (_gate) _failures.Remove("p|" + userId + "|" + ip);
+        lock (_gate) ReleaseLocked(userId, ip);
     }
+
+    private static string[] Keys(string userId, string ip) => ["p|" + userId + "|" + ip, "i|" + ip, "a|" + userId];
+
+    private void ReleaseLocked(string userId, string ip)
+    {
+        foreach (var key in Keys(userId, ip))
+            if (_inFlight.TryGetValue(key, out var n))
+            {
+                if (n <= 1) _inFlight.Remove(key);
+                else _inFlight[key] = n - 1;
+            }
+    }
+
+    private int Used(string key, DateTimeOffset since) => Count(key, since) + _inFlight.GetValueOrDefault(key);
 
     private int Count(string key, DateTimeOffset since) =>
         _failures.TryGetValue(key, out var list) ? list.Count(t => t > since) : 0;

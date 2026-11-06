@@ -16,9 +16,13 @@ export function useAuthOptions() {
 function useStartSession() {
   const qc = useQueryClient();
   const identity = useIdentityStore();
-  return (u: AuthUser) => {
+  return async (u: AuthUser) => {
     qc.clear();
     identity.setSession(u.userId, u.mustChangePassword);
+    // 登入回應沒有 isDemoAccount；導頁前先從 /me 補齊，守衛才擋得住 Demo 帳號進改密碼頁。失敗時留 false，下次載入由守衛補。
+    try {
+      identity.setDemoAccount((await dynamicApi.getMe()).isDemoAccount === true);
+    } catch { /* keep false */ }
   };
 }
 

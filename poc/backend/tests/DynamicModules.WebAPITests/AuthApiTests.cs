@@ -335,7 +335,7 @@ public class AuthApiTests
     }
 
     [Fact]
-    public async Task Login_ParallelWrongPasswords_CannotExceedFiveTries()
+    public async Task Login_ParallelWrongPasswords_AllRejected_AndNeverRecordedOnTheAccount()
     {
         using var app = NewApp();
         AddUser(app, "alice");

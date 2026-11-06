@@ -37,8 +37,9 @@ export function installAuthGuard(router: Router) {
       }
     }
     if (!identity.userId) return to.meta.public ? true : loginLocation(to.fullPath);
-    if (identity.isDemoAccount && to.path === '/change-password') return '/';
+    // 強制改密碼優先（Demo 帳號被管理員重設密碼後會同時成立）；只在非強制時擋 Demo 的改密碼入口
     if (identity.mustChangePassword) return to.path === '/change-password' ? true : '/change-password';
+    if (identity.isDemoAccount && to.path === '/change-password') return '/';
     return to.meta.public ? '/' : true;
   });
 }

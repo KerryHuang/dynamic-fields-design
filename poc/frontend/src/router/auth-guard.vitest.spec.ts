@@ -83,6 +83,15 @@ describe('auth guard', () => {
     expect(router.currentRoute.value.path).toBe('/');
   });
 
+  it('a demo account with a forced password change goes to /change-password without looping', async () => {
+    meResponse = { status: 200, data: { userId: 'sales01', mustChangePassword: true, isDemoAccount: true } };
+    const router = setup();
+    await router.push('/dynamic/order');
+    expect(router.currentRoute.value.path).toBe('/change-password');
+    await router.push('/change-password');
+    expect(router.currentRoute.value.path).toBe('/change-password');
+  });
+
   it('a /me failure other than 401 shows service-unavailable, keeps the store, and probes again later', async () => {
     const router = setup();
     useIdentityStore().setSession('admin');

@@ -11,7 +11,7 @@ import { useIdentityStore } from 'src/stores/use-identity-store';
 import LoginPage from './LoginPage.vue';
 
 vi.mock('src/services/api/dynamic-api', () => ({
-  dynamicApi: { getAuthOptions: vi.fn(), login: vi.fn(), demoLogin: vi.fn() },
+  dynamicApi: { getAuthOptions: vi.fn(), login: vi.fn(), demoLogin: vi.fn(), getMe: vi.fn() },
 }));
 const api = vi.mocked(dynamicApi);
 
@@ -101,6 +101,17 @@ describe('LoginPage', () => {
     expect(api.demoLogin).toHaveBeenCalledWith('sales01');
     expect(useIdentityStore().userId).toBe('sales01');
     expect(router.currentRoute.value.path).toBe('/');
+  });
+
+  it('demo login syncs isDemoAccount from /me before navigating away', async () => {
+    const { router } = await mountPage(on, '/change-password');
+    api.demoLogin.mockResolvedValue({ userId: 'sales01', displayName: '業務一', mustChangePassword: false });
+    api.getMe.mockResolvedValue({ userId: 'sales01', isDemoAccount: true } as never);
+    let flagWhenLeaving: boolean | undefined;
+    router.beforeEach((to) => { if (to.path !== '/login') flagWhenLeaving = useIdentityStore().isDemoAccount; });
+    q('demo-account-sales01')!.click();
+    await flushPromises();
+    expect(flagWhenLeaving).toBe(true);
   });
 
   it('demoGenerating shows the hint together with the admin account the backend still lists', async () => {

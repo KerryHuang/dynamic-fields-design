@@ -32,9 +32,17 @@ public class LoginHandler(
             var key = userId.Length > 128 ? userId[..128] : userId;
             if (!throttle.TryBegin(key, ip))
                 return Fail(null, "來源或帳號嘗試過於頻繁", request.Password ?? "");
-            var result = await LoginAsync(userId, request.Password ?? "", ct);
-            if (result.Data is AuthUserResponse) throttle.RecordSuccess(key, ip);
-            else throttle.RecordFailure(key, ip);
+            ServiceResult result;
+            try
+            {
+                result = await LoginAsync(userId, request.Password ?? "", ct);
+            }
+            catch
+            {
+                throttle.Release(key, ip); // 例外不算失敗，歸還名額
+                throw;
+            }
+            throttle.Complete(key, ip, result.Data is AuthUserResponse);
             return result;
         }
         finally
