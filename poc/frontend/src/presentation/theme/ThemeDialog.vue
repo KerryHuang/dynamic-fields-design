@@ -28,7 +28,7 @@ function save(mode: ThemeMode | null, style: ThemeStyle | null) {
       <q-card-section>
         <div v-if="!theme.canSave" class="q-mb-md text-muted" data-testid="theme-demo-hint">{{ t('theme.demoLocalHint') }}</div>
         <ThemeChooser
-          :mode="theme.choice.mode" :style="theme.choice.style" :defaults="theme.defaults" allow-follow
+          :mode="theme.choice.mode" :selected-style="theme.choice.style" :defaults="theme.defaults" allow-follow
           @update:mode="save($event, theme.choice.style)" @update:style="save(theme.choice.mode, $event)"
         />
       </q-card-section>

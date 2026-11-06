@@ -9,7 +9,7 @@ import ThemeChooser from './ThemeChooser.vue';
 function make(props: Record<string, unknown> = {}) {
   const i18n = createI18n({ legacy: false, locale: 'zh-TW', messages: { 'zh-TW': zhTW } });
   return mount(ThemeChooser, {
-    props: { mode: 'dark', style: 'airy', allowFollow: true, defaults: { mode: 'light', style: 'enterprise' }, ...props },
+    props: { mode: 'dark', selectedStyle: 'airy', allowFollow: true, defaults: { mode: 'light', style: 'enterprise' }, ...props },
     global: { plugins: [[quasar.Quasar, { components: quasar }], i18n] },
   });
 }

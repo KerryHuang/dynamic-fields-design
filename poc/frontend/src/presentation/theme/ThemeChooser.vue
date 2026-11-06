@@ -9,7 +9,8 @@ const FOLLOW = 'follow';
 
 const props = defineProps<{
   mode: ThemeMode | null;
-  style: ThemeStyle | null;
+  /** 不能叫 style：Vue 編譯器會把 :style 當成 CSS style 處理 */
+  selectedStyle: ThemeStyle | null;
   /** 個人設定可選「跟隨全站預設」；全站預設本身不行。 */
   allowFollow: boolean;
   disabled?: boolean;
@@ -26,7 +27,7 @@ const modeOptions = computed(() => [
   ...THEME_MODES.map((m) => ({ value: m, label: t(`theme.modes.${m}`) })),
 ]);
 const modeValue = computed(() => props.mode ?? (props.allowFollow ? FOLLOW : current.value.mode));
-const styleValue = computed(() => props.style ?? (props.allowFollow ? FOLLOW : current.value.style));
+const styleValue = computed(() => props.selectedStyle ?? (props.allowFollow ? FOLLOW : current.value.style));
 
 function pickMode(v: string) {
   emit('update:mode', v === FOLLOW ? null : parseMode(v));
