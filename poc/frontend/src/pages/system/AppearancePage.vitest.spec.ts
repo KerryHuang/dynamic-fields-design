@@ -45,6 +45,21 @@ describe('AppearancePage', () => {
   });
   afterEach(() => { mounted?.unmount(); document.body.innerHTML = ''; });
 
+  it('/me 載入失敗時顯示錯誤訊息，不是整頁空白', async () => {
+    api.getMe.mockRejectedValue({ status: 500 });
+    const i18n = createI18n({ legacy: false, locale: 'zh-TW', messages: { 'zh-TW': zhTW } });
+    const Host = { render: () => h(quasar.QLayout, null, () => h(quasar.QPageContainer, null, () => h(AppearancePage))) };
+    mounted = mount(Host, {
+      attachTo: document.body,
+      global: {
+        plugins: [[quasar.Quasar, { components: quasar }], i18n, createPinia(),
+          [VueQueryPlugin, { queryClient: new QueryClient({ defaultOptions: { queries: { retry: false } } }) }]],
+      },
+    });
+    await flushPromises();
+    expect(q('appearance-load-error')?.textContent).toContain(zhTW.theme.adminLoadFailed);
+  });
+
   it('非管理員看到 ForbiddenNotice', async () => {
     await mountPage({ isSystemAdmin: false });
     expect(q('forbidden')).not.toBeNull();

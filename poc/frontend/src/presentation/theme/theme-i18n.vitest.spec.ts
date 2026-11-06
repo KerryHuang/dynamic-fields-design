@@ -15,7 +15,7 @@ const en = leaves(enUS.theme);
 describe('theme 文案', () => {
   it('zh-TW 涵蓋計畫列出的所有鍵', () => {
     expect(Object.keys(zh).sort()).toEqual([
-      'adminDemoReadOnly', 'adminHint', 'adminMenu', 'adminSave', 'adminSaved', 'adminTitle', 'demoLocalHint', 'follow',
+      'adminDemoReadOnly', 'adminHint', 'adminLoadFailed', 'adminMenu', 'adminSave', 'adminSaved', 'adminTitle', 'demoLocalHint', 'follow',
       'mode', 'modes.dark', 'modes.light', 'modes.system', 'sampleText', 'saveFailed',
       'style', 'styles.airy.desc', 'styles.airy.name', 'styles.enterprise.desc', 'styles.enterprise.name',
       'styles.industrial.desc', 'styles.industrial.name', 'styles.workbench.desc', 'styles.workbench.name', 'title',
