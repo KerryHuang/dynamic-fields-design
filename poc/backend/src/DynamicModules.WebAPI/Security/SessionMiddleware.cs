@@ -51,6 +51,7 @@ public class SessionMiddleware(RequestDelegate next)
     private static bool IsAnonymous(string method, string path) =>
         (HttpMethods.IsPost(method) && path.Equals(AuthPrefix + "login", StringComparison.OrdinalIgnoreCase))
         || (HttpMethods.IsGet(method) && path.Equals(AuthPrefix + "options", StringComparison.OrdinalIgnoreCase))
+        || (HttpMethods.IsGet(method) && path.Equals(Prefix + "/theme", StringComparison.OrdinalIgnoreCase))
         || (HttpMethods.IsPost(method) && path.Equals(AuthPrefix + "demo-login", StringComparison.OrdinalIgnoreCase));
 
     private static bool IsAllowedWhileMustChange(string method, string path) =>

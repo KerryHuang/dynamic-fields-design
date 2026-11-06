@@ -1,12 +1,16 @@
 using DynamicModules.Application.Common;
 using DynamicModules.Application.Common.Security;
 using DynamicModules.Application.Dynamic.PermissionService.Data;
+using DynamicModules.Application.Dynamic.ThemeService;
+using DynamicModules.Application.Dynamic.ThemeService.Data;
 using DynamicModules.Domain.Repositories.Dynamic;
 using MediatR;
 
 namespace DynamicModules.Application.Dynamic.PermissionService.Queries.GetMe;
 
-public class GetMeHandler(ICurrentUser current, IPermissionRepository permissions, IDynamicAccessGuard guard)
+public class GetMeHandler(
+    ICurrentUser current, IPermissionRepository permissions, IDynamicAccessGuard guard,
+    ISystemSettingRepository settings, AuthSettings auth)
     : IRequestHandler<GetMeRequest, ServiceResult>
 {
     public async Task<ServiceResult> Handle(GetMeRequest request, CancellationToken ct)
@@ -21,6 +25,7 @@ public class GetMeHandler(ICurrentUser current, IPermissionRepository permission
         var designer = new DesignerActionsResponse(
             actions.Contains(PermissionAction.Read), actions.Contains(PermissionAction.Add),
             actions.Contains(PermissionAction.Edit), actions.Contains(PermissionAction.Delete));
-        return ServiceResult.Success(new MeResponse(user.UserId, user.DisplayName, user.IsSystemAdmin, user.MustChangePassword, groups, designer, user.IsDemoAccount));
+        return ServiceResult.Success(new MeResponse(user.UserId, user.DisplayName, user.IsSystemAdmin, user.MustChangePassword, groups, designer, user.IsDemoAccount,
+            ThemeResolver.ForUser(user, await ThemeResolver.ReadDefaultsAsync(settings, ct), auth.DemoLoginEnabled)));
     }
 }

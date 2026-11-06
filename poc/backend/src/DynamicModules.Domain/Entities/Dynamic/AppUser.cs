@@ -13,4 +13,8 @@ public class AppUser
     public int FailedLoginCount { get; set; }
     public DateTimeOffset? LockedUntil { get; set; }
     public string SecurityStamp { get; set; } = Guid.NewGuid().ToString("N");
+    /// <summary>個人外觀模式（light／dark／system）；null 代表跟隨全站預設。</summary>
+    public string? ThemeMode { get; set; }
+    /// <summary>個人外觀風格（workbench／airy／enterprise／industrial）；null 代表跟隨全站預設。</summary>
+    public string? ThemeStyle { get; set; }
 }

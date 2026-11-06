@@ -1,3 +1,4 @@
+using DynamicModules.Application.Dynamic.ThemeService.Data;
 using DynamicModules.Domain.Entities.Dynamic;
 using DynamicModules.Domain.Repositories.Dynamic;
 using DynamicModules.Domain.ValueObjects;
@@ -37,7 +38,7 @@ public record DesignerActionsResponse(bool Read, bool Add, bool Edit, bool Delet
 
 public record MeResponse(
     string UserId, string DisplayName, bool IsSystemAdmin, bool MustChangePassword,
-    List<GroupBriefResponse> Groups, DesignerActionsResponse Designer, bool IsDemoAccount = false);
+    List<GroupBriefResponse> Groups, DesignerActionsResponse Designer, bool IsDemoAccount, MeThemeResponse Theme);
 
 public static class PermissionMapping
 {

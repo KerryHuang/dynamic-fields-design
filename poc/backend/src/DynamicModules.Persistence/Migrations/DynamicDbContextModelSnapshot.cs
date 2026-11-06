@@ -66,6 +66,14 @@ namespace DynamicModules.Persistence.Migrations
                         .HasColumnType("TEXT")
                         .HasDefaultValue("initial");
 
+                    b.Property<string>("ThemeMode")
+                        .HasMaxLength(20)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("ThemeStyle")
+                        .HasMaxLength(20)
+                        .HasColumnType("TEXT");
+
                     b.HasKey("UserId");
 
                     b.ToTable("Dynamic_AppUser", (string)null);

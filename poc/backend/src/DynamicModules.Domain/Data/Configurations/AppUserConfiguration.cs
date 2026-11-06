@@ -19,6 +19,8 @@ public class AppUserConfiguration : IEntityTypeConfiguration<AppUser>
         b.Property(x => x.IsActive).HasDefaultValue(true).ValueGeneratedNever();
         b.Property(x => x.IsDemoAccount).HasDefaultValue(false);
         b.Property(x => x.FailedLoginCount).HasDefaultValue(0);
+        b.Property(x => x.ThemeMode).HasMaxLength(20);
+        b.Property(x => x.ThemeStyle).HasMaxLength(20);
         b.Property(x => x.SecurityStamp).HasMaxLength(50).IsRequired().HasDefaultValue("initial");
     }
 }
