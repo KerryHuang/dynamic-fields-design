@@ -35,6 +35,7 @@ export function systemLinks(me: Pick<Me, 'isSystemAdmin' | 'designer'> | undefin
   if (me.designer.read) {
     links.push(
       { to: '/system/dynamic-modules', label: 'menu.dynamicModules', icon: 'design_services', testid: 'designer-menu' },
+      { to: '/system/conversions', label: 'menu.conversions', icon: 'swap_horiz', testid: 'conversions-menu' },
       { to: '/system/demo-data', label: 'menu.demoData', icon: 'dataset', testid: 'demo-data-menu' },
     );
   }

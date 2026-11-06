@@ -1,11 +1,13 @@
 <script setup lang="ts">
-import { computed } from 'vue';
+import { computed, nextTick } from 'vue';
 import { useI18n } from 'vue-i18n';
 import InlineEditableDataTable from 'src/components/framework/InlineEditableDataTable.vue';
+import { fillPatch, fillReferenceInfos, lockedFillKeys } from 'src/domain/dynamic/fill';
 import { resolveI18n } from 'src/domain/dynamic/i18n-text';
-import type { SchemaDetail, SchemaField } from 'src/domain/dynamic/types';
+import type { DynamicRecord, SchemaDetail, SchemaField } from 'src/domain/dynamic/types';
 import { fieldTypeRegistry } from 'src/presentation/dynamic/field-type-registry';
 import { isWritable } from 'src/presentation/dynamic/rule-state';
+import { dynamicApi } from 'src/services/api/dynamic-api';
 import { newRowState, rowRuleState, type DetailRowState } from './detail-rows';
 
 const props = defineProps<{
@@ -27,6 +29,7 @@ const visibleRows = computed(() => props.modelValue.filter((r) => !r.deleted));
 const states = computed(() => new Map(visibleRows.value.map((r) => [r.uid, rowRuleState(props.detail, r)])));
 const stateOf = (r: DetailRowState) => states.value.get(r.uid)!;
 const rowLocked = (r: DetailRowState) => props.readonly || stateOf(r).readOnlyAll;
+const lockedKeys = computed(() => lockedFillKeys(fields.value));
 const hiddenCell = (f: SchemaField, r: DetailRowState) => stateOf(r).hidden.has(f.id);
 
 // Same binding as DynamicField, per row: the header row carries the labels.
@@ -40,7 +43,7 @@ function cellProps(f: SchemaField, r: DetailRowState) {
     label: '',
     // Per row (rules can require it); the column header marks only config.required.
     required: !props.readonly && state.required.has(f.id) && isWritable(f, state),
-    readonly: props.readonly || !isWritable(f, state),
+    readonly: props.readonly || !isWritable(f, state) || lockedKeys.value.has(f.key),
     ...(f.type === 'reference' && { reference: r.references?.[f.key] }),
     ...(options && allowed && { options: options.filter((o) => allowed.has(o.value)) }),
     error: props.errors.get(r.uid)?.[f.key],
@@ -66,6 +69,23 @@ const deletedLines = computed(() => props.modelValue.filter((r) => r.deleted).fl
 function setCell(r: DetailRowState, key: string, value: unknown) {
   emit('update:modelValue', props.modelValue.map((x) => (x.uid === r.uid ? { ...x, values: { ...x.values, [key]: value } } : x)));
   emit('edit-cell', r.uid, key);
+  const f = fields.value.find((x) => x.key === key);
+  if (f?.type === 'reference' && f.reference?.kind === 'module' && f.config.fill?.map.length) void fillRow(r.uid, f, value ?? null);
+}
+
+/** Picking (or clearing) the reference copies the picked record's values into the row (a preview; the server recomputes on save). */
+async function fillRow(uid: string, f: SchemaField, value: unknown) {
+  let source: DynamicRecord | undefined;
+  if (value !== null) {
+    try { source = await dynamicApi.getRecord(Number(value)); } catch { return; }
+  }
+  await nextTick();
+  const row = props.modelValue.find((x) => x.uid === uid);
+  if (!row || (row.values[f.key] ?? null) !== value) return; // the user changed it again while loading
+  const fill = f.config.fill!;
+  const patch = fillPatch(fill, source?.values, row.values, row.original);
+  emit('update:modelValue', props.modelValue.map((x) => (x.uid === uid
+    ? { ...x, values: { ...x.values, ...patch }, references: { ...x.references, ...fillReferenceInfos(fill, patch, source?.references) } } : x)));
 }
 const addRow = () => emit('update:modelValue', [...props.modelValue, newRowState(props.detail, props.headerValues, props.headerFields)]);
 const removeRow = (r: DetailRowState) => emit('update:modelValue', r.id === undefined

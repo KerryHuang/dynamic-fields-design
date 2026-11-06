@@ -5,6 +5,7 @@ import { useI18n } from 'vue-i18n';
 import { useRoute, useRouter } from 'vue-router';
 import { useDeleteRecord, useRecord } from 'src/application/dynamic/queries/records-queries';
 import { useModuleSchema } from 'src/application/dynamic/queries/schema-queries';
+import RecordConversions from 'src/presentation/dynamic/conversions/RecordConversions.vue';
 import DynamicDetail from 'src/presentation/dynamic/components/DynamicDetail.vue';
 import DetailTables from 'src/presentation/dynamic/details/DetailTables.vue';
 import DeleteBlockedDialog from 'src/presentation/dynamic/related/DeleteBlockedDialog.vue';
@@ -12,6 +13,7 @@ import RecordHistory from 'src/presentation/dynamic/history/RecordHistory.vue';
 import RelatedTabs from 'src/presentation/dynamic/related/RelatedTabs.vue';
 import ForbiddenNotice from 'src/components/framework/ForbiddenNotice.vue';
 import type { DeleteBlocked } from 'src/domain/dynamic/types';
+import { canAdvance, isReadOnlyState } from 'src/domain/dynamic/workflow';
 import { SERVER_STALE_MESSAGE } from 'src/presentation/dynamic/designer/api-error';
 import { isForbidden, type ApiError } from 'src/services/api/http';
 
@@ -35,6 +37,13 @@ const recordMissing = computed(() => status(recordQuery.error.value) === 404
 const forbidden = computed(() => isForbidden(schemaQuery.error.value) || isForbidden(recordQuery.error.value));
 const failed = computed(() => !forbidden.value && !schemaMissing.value && !recordMissing.value
   && (!!schemaQuery.error.value || !!recordQuery.error.value));
+
+// A read-only workflow state locks the record: no delete, and edit only while the user can still move the status.
+const workflow = computed(() => schemaQuery.data.value?.workflow);
+const currentState = computed(() => (workflow.value ? recordQuery.data.value?.values[workflow.value.statusFieldKey] : undefined));
+const stateLocked = computed(() => isReadOnlyState(workflow.value, currentState.value));
+const canEdit = computed(() => !!schemaQuery.data.value?.permissions.edit && (!stateLocked.value || canAdvance(workflow.value, currentState.value)));
+const canDelete = computed(() => !!schemaQuery.data.value?.permissions.delete && !stateLocked.value);
 
 async function onDelete() {
   try {
@@ -69,9 +78,10 @@ async function onDelete() {
         <q-btn flat icon="arrow_back" :label="t('dynamic.back')" :to="`/dynamic/${moduleKey}`" />
         <div v-if="schemaQuery.data.value.titleFieldKey || schemaQuery.data.value.kind === 'extension'" class="text-h6">{{ recordQuery.data.value.title }}</div>
         <q-space />
-        <q-btn v-if="schemaQuery.data.value.permissions.edit" color="primary" :label="t('dynamic.edit')" :to="`/dynamic/${moduleKey}/${recordId}/edit`" />
-        <q-btn v-if="schemaQuery.data.value.permissions.delete" color="negative" outline :label="t('dynamic.delete')" @click="confirming = true" />
+        <q-btn v-if="canEdit" color="primary" :label="t('dynamic.edit')" :to="`/dynamic/${moduleKey}/${recordId}/edit`" />
+        <q-btn v-if="canDelete" color="negative" outline :label="t('dynamic.delete')" @click="confirming = true" />
       </div>
+      <RecordConversions :record-id="recordId" :row-version="recordQuery.data.value.rowVersion" />
       <DynamicDetail :schema="schemaQuery.data.value" :record="recordQuery.data.value" />
       <DetailTables v-if="schemaQuery.data.value.details?.length" class="q-mt-md" :details="schemaQuery.data.value.details" :rows="recordQuery.data.value.details ?? {}" />
       <RelatedTabs :record-id="recordId" />

@@ -17,6 +17,7 @@ import IconSelect from 'src/presentation/dynamic/designer/IconSelect.vue';
 import RulesTab from 'src/presentation/dynamic/rules/RulesTab.vue';
 import PreviewTab from 'src/presentation/dynamic/designer/PreviewTab.vue';
 import PermissionsTab from 'src/presentation/dynamic/permissions/PermissionsTab.vue';
+import WorkflowTab from 'src/presentation/dynamic/workflow/WorkflowTab.vue';
 import { dynamicApi } from 'src/services/api/dynamic-api';
 import ForbiddenNotice from 'src/components/framework/ForbiddenNotice.vue';
 import SelectNoOption from 'src/components/framework/SelectNoOption.vue';
@@ -30,7 +31,7 @@ const router = useRouter();
 const qc = useQueryClient();
 const { data: useMeData } = useMe();
 const moduleKey = computed(() => String(route.params.moduleKey));
-const tab = ref<'fields' | 'rules' | 'permissions' | 'preview'>('fields');
+const tab = ref<'fields' | 'rules' | 'workflow' | 'permissions' | 'preview'>('fields');
 const query = useModuleDetail(moduleKey);
 const mod = computed(() => query.data.value);
 const forbidden = computed(() => isForbidden(query.error.value));
@@ -213,6 +214,7 @@ function saveSection() {
       <q-tabs v-model="tab" dense align="left" class="q-mb-md" data-testid="designer-tabs">
         <q-tab name="fields" :label="t('designer.fieldsTab')" />
         <q-tab name="rules" :label="t('designer.rules.tab')" data-testid="tab-rules" />
+        <q-tab name="workflow" :label="t('docflow.workflow.tab')" data-testid="tab-workflow" />
         <q-tab name="permissions" :label="t('designer.permissions.tab')" data-testid="tab-permissions" />
         <q-tab name="preview" :label="t('designer.preview.tab')" data-testid="tab-preview" />
       </q-tabs>
@@ -285,6 +287,9 @@ function saveSection() {
         </q-tab-panel>
         <q-tab-panel name="rules" class="q-pa-none">
           <RulesTab :module="mod" />
+        </q-tab-panel>
+        <q-tab-panel name="workflow" class="q-pa-none">
+          <WorkflowTab :module="mod" />
         </q-tab-panel>
         <q-tab-panel name="permissions" class="q-pa-none">
           <PermissionsTab :module-key="moduleKey" :fields="mod?.blocks.flatMap((b) => b.fields) ?? []" :title-field-id="mod?.titleFieldId" :detail-of="mod?.detailOf" />

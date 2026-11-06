@@ -36,6 +36,8 @@ export interface FieldConfig {
   relation?: 'lookup' | 'detail';
   /** autonumber: `parent` numbers within the header record (detail modules only). */
   scope?: 'parent';
+  /** reference (module target): copies values of the picked record into this record. */
+  fill?: FillConfig;
   /** rollup: aggregates child records; resultType and scale are derived by the server. */
   rollup?: {
     sourceFieldId: number;
@@ -44,6 +46,10 @@ export interface FieldConfig {
     condition?: ConditionNode;
   };
 }
+
+/** `from` is a field Id of the referenced module, `to` a field Id of this module. */
+export interface FillMap { from: number; to: number }
+export interface FillConfig { mode: 'lock' | 'default'; map: FillMap[] }
 
 export interface SchemaOption {
   /** opt_<id> */
@@ -120,6 +126,14 @@ export interface SchemaDetail {
   rules: SchemaRule[];
 }
 
+/** State values are opt_<id>; transitions are already filtered to what the current user may do. */
+export interface SchemaWorkflow {
+  statusFieldKey: string;
+  initialState: string;
+  states: { value: string; readOnly: boolean }[];
+  transitions: { from: string; to: string }[];
+}
+
 export interface ModuleSchema {
   key: string;
   programCode: string;
@@ -136,6 +150,8 @@ export interface ModuleSchema {
   rules: SchemaRule[];
   /** Active detail modules of this header; absent when there are none. */
   details?: SchemaDetail[];
+  /** Absent when the module has no workflow. */
+  workflow?: SchemaWorkflow;
 }
 
 export interface ReferenceInfo {
@@ -410,7 +426,7 @@ export type DeleteTargetRef = { kind: 'module'; key: string } | { kind: 'field' 
 
 export type DeleteBlockerKind =
   | 'moduleActive' | 'liveRecords' | 'fieldActive' | 'fieldData' | 'titleField' | 'lastBlock' | 'referenceField'
-  | 'rollup' | 'formula' | 'parentDefault' | 'rule' | 'view' | 'report' | 'dashboard' | 'personalDashboard';
+  | 'rollup' | 'formula' | 'parentDefault' | 'fill' | 'workflow' | 'conversion' | 'rule' | 'view' | 'report' | 'dashboard' | 'personalDashboard';
 
 /** 擋下刪除的原因或引用來源；count 只用於 liveRecords 與 fieldData。 */
 export interface DeleteBlocker {
@@ -426,4 +442,64 @@ export interface DeleteCheck {
   canDelete: boolean;
   blockers: DeleteBlocker[];
   purge: { records: number; indexRows: number; historyRows: number };
+}
+
+/** Designer-side workflow (PUT /modules/{key}/workflow); ids are Field.Id / Option.Id, empty `groupIds` means anyone with Edit. */
+export interface Workflow {
+  statusFieldId: number;
+  initialOptionId: number;
+  states: { optionId: number; readOnly: boolean }[];
+  transitions: { from: number; to: number; groupIds: number[] }[];
+}
+
+export interface ConversionLines {
+  sourceModuleKey: string;
+  targetModuleKey: string;
+  sourceLineFieldId: number;
+  quantity: { from: number; to: number };
+  copy: FillMap[];
+}
+
+export interface ConversionDefinition {
+  /** Option ids of the source status field; empty means any state. */
+  sourceStates: number[];
+  header: { sourceFieldId: number; copy: FillMap[] };
+  lines?: ConversionLines;
+}
+
+export interface Conversion {
+  key: string;
+  name: I18nText;
+  sourceModuleKey: string;
+  targetModuleKey: string;
+  active: boolean;
+  definition: ConversionDefinition;
+}
+
+export interface ConversionLineStatus {
+  lineId: number;
+  title: string;
+  quantity: number;
+  converted: number;
+  remaining: number;
+}
+
+export interface ConvertedTarget { id: number; title: string; moduleKey: string }
+
+/** One conversion as it applies to one source record (GET /records/{id}/conversions); `lines` absent means a header conversion. */
+export interface RecordConversion {
+  key: string;
+  name: I18nText;
+  targetModuleKey: string;
+  targetName: I18nText;
+  allowed: boolean;
+  reason?: string;
+  lines?: ConversionLineStatus[];
+  targets: ConvertedTarget[];
+}
+
+export interface ConvertBody {
+  rowVersion?: string;
+  values?: Record<string, unknown>;
+  lines?: { sourceLineId: number; quantity: number }[];
 }

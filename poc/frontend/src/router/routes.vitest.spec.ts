@@ -22,3 +22,9 @@ describe('appearance route', () => {
     expect(loaderOf('/system/appearance').source).toContain('AppearancePage');
   });
 });
+
+describe('conversions route', () => {
+  it('/system/conversions opens ConversionsPage', () => {
+    expect(loaderOf('/system/conversions').source).toContain('ConversionsPage');
+  });
+});

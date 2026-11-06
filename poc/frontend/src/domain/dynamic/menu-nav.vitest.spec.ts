@@ -20,9 +20,9 @@ describe('systemLinks', () => {
     expect(systemLinks(me(false, false))).toEqual([]);
     expect(systemLinks(undefined)).toEqual([]);
   });
-  it('system admins get users, groups, dashboards, appearance; designer readers get designer and demo data', () => {
+  it('system admins get users, groups, dashboards, appearance; designer readers get designer, conversions and demo data', () => {
     expect(systemLinks(me(true, false)).map((l) => l.to)).toEqual(['/system/users', '/system/groups', '/system/dashboards', '/system/appearance']);
-    expect(systemLinks(me(false, true)).map((l) => l.to)).toEqual(['/system/dynamic-modules', '/system/demo-data']);
-    expect(systemLinks(me(true, true))).toHaveLength(6);
+    expect(systemLinks(me(false, true)).map((l) => l.to)).toEqual(['/system/dynamic-modules', '/system/conversions', '/system/demo-data']);
+    expect(systemLinks(me(true, true))).toHaveLength(7);
   });
 });

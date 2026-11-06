@@ -95,7 +95,7 @@ describe('HomePage', () => {
     expect(await links(me())).toEqual([]);
     expect((await run({ menu: [mod('a')] })).w.find('[data-testid="home-system"]').exists()).toBe(false);
     expect(await links(me({ admin: true }))).toEqual(['/system/users', '/system/groups', '/system/dashboards', '/system/appearance']);
-    expect(await links(me({ designerRead: true }))).toEqual(['/system/dynamic-modules', '/system/demo-data']);
+    expect(await links(me({ designerRead: true }))).toEqual(['/system/dynamic-modules', '/system/conversions', '/system/demo-data']);
   });
 
   it('shows a friendly empty state without modules, but not while the menu is still loading', async () => {

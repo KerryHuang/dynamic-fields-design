@@ -4,6 +4,8 @@ import { computed, nextTick, reactive, ref, toRef, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { useDesignerMutation, useModuleDetail, useModules, useRollupSources } from 'src/application/dynamic/queries/modules-queries';
 import { useEntities } from 'src/application/dynamic/queries/relation-queries';
+import { completeMap } from 'src/domain/dynamic/fill';
+import type { MapRow } from 'src/domain/dynamic/conversion';
 import { pruneCondition } from 'src/domain/dynamic/condition';
 import { resolveI18n } from 'src/domain/dynamic/i18n-text';
 import { supportsFilter, supportsSort } from 'src/domain/dynamic/field-capabilities';
@@ -17,6 +19,8 @@ import SelectNoOption from 'src/components/framework/SelectNoOption.vue';
 import TextareaInput from 'src/components/framework/TextareaInput.vue';
 import { useSelectFilter } from 'src/components/framework/useSelectFilter';
 import { errorFor, notifyApiError } from './api-error';
+import FieldMapEditor from './FieldMapEditor.vue';
+import { copySource, copyTarget, fieldOptions } from './field-options';
 import I18nTextInput from './I18nTextInput.vue';
 import OptionEditor from './OptionEditor.vue';
 import { rollupTainted, toSchemaFields } from './schema-fields';
@@ -58,6 +62,8 @@ const form = reactive({
   rollupFunction: 'sum' as NonNullable<FieldConfig['rollup']>['function'],
   rollupAggregate: null as number | null,
   rollupCondition: undefined as ConditionNode | undefined,
+  fillMode: 'default' as NonNullable<FieldConfig['fill']>['mode'],
+  fillRows: [] as MapRow[],
 });
 const error = ref<ApiError | null>(null);
 const labelInput = ref<{ validate(): Promise<boolean> } | null>(null);
@@ -107,6 +113,8 @@ watch(() => [props.modelValue, props.field?.id] as const, ([open]) => {
     rollupFunction: f?.config.rollup?.function ?? 'sum',
     rollupAggregate: f?.config.rollup?.aggregateFieldId ?? null,
     rollupCondition: f?.config.rollup?.condition ? JSON.parse(JSON.stringify(f.config.rollup.condition)) : undefined,
+    fillMode: f?.config.fill?.mode ?? 'default',
+    fillRows: (f?.config.fill?.map ?? []).map((m) => ({ ...m })),
   });
 }, { immediate: true });
 // A different type invalidates the type-specific settings.
@@ -114,9 +122,10 @@ watch(() => form.type, () => {
   if (isEdit.value) return;
   // 新建多行文字預設佔滿整列
   Object.assign(form, { fullWidth: form.type === 'textarea', isFilterable: false, isSortable: false, maxLength: null, scale: null, formula: '', resultType: 'number', format: '', defaultValue: null, defaultToday: false, parentDefault: null, refKind: 'module', refKey: null, onDelete: 'restrict',
-    relation: 'lookup', scopeParent: false, rollupSource: null, rollupFunction: 'sum', rollupAggregate: null, rollupCondition: undefined });
+    relation: 'lookup', scopeParent: false, rollupSource: null, rollupFunction: 'sum', rollupAggregate: null, rollupCondition: undefined, fillMode: 'default', fillRows: [] });
 });
 watch(() => form.refKind, () => { if (!isEdit.value) { form.refKey = null; form.relation = 'lookup'; } });
+watch(() => form.refKey, () => { if (!isEdit.value) form.fillRows = []; });
 watch(() => form.rollupFunction, (fn) => { if (fn === 'count') form.rollupAggregate = null; });
 // The aggregate field and the condition are written against the source module's fields; only a user change clears them
 // (a watcher would also fire when the dialog is reopened for another field).
@@ -199,6 +208,13 @@ const ON_DELETE = [['restrict', 'Restrict'], ['setNull', 'SetNull'], ['cascade',
 const onDeleteOptions = computed(() => ON_DELETE.map(([value, name]) => ({
   value, label: t(`designer.reference.onDelete${name}`), hint: t(`designer.reference.onDelete${name}Hint`),
 })));
+// Fill: copy values of the picked record (a module target) into this record; `from` lists the target's fields, `to` this module's.
+const hasFill = computed(() => isReference.value && form.refKind === 'module' && !!form.refKey && !isDetailRef.value);
+const fillTargetDetail = useModuleDetail(computed(() => (hasFill.value ? form.refKey! : '')));
+const fillFromOptions = computed(() => fieldOptions(fillTargetDetail.data.value, locale.value, copySource));
+const fillToOptions = computed(() => fieldOptions(moduleDetail.data.value, locale.value, (f) => copyTarget(f) && f.id !== props.field?.id));
+const fillModeOptions = computed(() => (['lock', 'default'] as const)
+  .map((v) => ({ value: v, label: t(v === 'lock' ? 'docflow.fill.modeLock' : 'docflow.fill.modeDefault') })));
 const typeSel = useSelectFilter(typeOptions);
 const parentSel = useSelectFilter(parentOptions);
 const insertSel = useSelectFilter(referable);
@@ -265,13 +281,14 @@ function buildConfig(): FieldConfig {
     ...(isReference.value && form.refKey ? { refTarget: { kind: form.refKind, key: form.refKey } } : {}),
     ...(isReference.value && form.refKind === 'module' ? { onDelete: isDetailRef.value ? 'cascade' as const : form.onDelete } : {}),
     ...(isDetailRef.value ? { relation: 'detail' as const } : {}),
+    ...(hasFill.value && completeMap(form.fillRows).length ? { fill: { mode: form.fillMode, map: completeMap(form.fillRows) } } : {}),
     ...(!noDefault.value && !defaultDisabled.value && !defaultValueLocked.value && hasDefaultValue.value ? { defaultValue: dv } : {}),
     ...(!noDefault.value && todayOn.value ? { defaultToday: true } : {}),
     ...(!noDefault.value && hasParentDefault.value ? { parentDefaultFieldId: form.parentDefault! } : {}),
   };
 }
 
-const SHOWN = ['Label', 'Config.MaxLength', 'Config.Scale', 'Config.DefaultValue', 'Config.DefaultToday', 'Config.ParentDefaultFieldId', 'Config.Formula', 'Config.ResultType', 'Config.Format', 'Config.RefTarget', 'Config.OnDelete', 'Config.Rollup', 'Config.Relation', 'Config.Scope'];
+const SHOWN = ['Label', 'Config.MaxLength', 'Config.Scale', 'Config.DefaultValue', 'Config.DefaultToday', 'Config.ParentDefaultFieldId', 'Config.Formula', 'Config.ResultType', 'Config.Format', 'Config.RefTarget', 'Config.OnDelete', 'Config.Rollup', 'Config.Relation', 'Config.Scope', 'Config.Fill'];
 const onError = (e: unknown) => {
   const err = e as ApiError;
   error.value = err;
@@ -441,6 +458,19 @@ const saving = computed(() => create.isPending.value || update.isPending.value);
               </template>
             </q-select>
           </div>
+        </div>
+
+        <div v-if="hasFill" class="q-gutter-sm" data-testid="fill-settings">
+          <div class="text-subtitle2">{{ t('docflow.fill.title') }}</div>
+          <div class="text-caption text-muted">{{ t('docflow.fill.hint') }}</div>
+          <q-btn-toggle
+            v-model="form.fillMode" data-testid="fill-mode" no-caps unelevated toggle-color="primary" :options="fillModeOptions"
+          />
+          <div class="text-caption text-muted">{{ t(form.fillMode === 'lock' ? 'docflow.fill.modeLockHint' : 'docflow.fill.modeDefaultHint') }}</div>
+          <FieldMapEditor
+            v-model="form.fillRows" :from-options="fillFromOptions" :to-options="fillToOptions"
+            :from-label="t('docflow.fill.from')" :to-label="t('docflow.fill.to')" :error="errorFor(error, 'Config.Fill')"
+          />
         </div>
 
         <div v-if="hasMaxLength" data-testid="maxlength-input">

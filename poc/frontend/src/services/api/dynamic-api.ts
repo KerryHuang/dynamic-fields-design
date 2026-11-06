@@ -1,6 +1,6 @@
 import type {
-  AdminGroup, AdminUser, DeleteCheck, DeleteTargetRef, AdminUserCreate, AdminUserUpdate, AuthOptions, AuthUser, ConditionNode, DesignerField, DetailRowPayload, DynamicRecord, EntitySummary, FieldConfig, FieldType, Group, GroupImpact, I18nText, LightPage, ListView, Me, MenuItem, ModuleDetail, ModulePermissions, ModuleSchema,
-  ImportPreview, ImportResult, PagedResponse, RecordHistoryEntry, RelatedTab, Rule, RollupSource, User, ViewSort,
+  AdminGroup, AdminUser, DeleteCheck, DeleteTargetRef, AdminUserCreate, AdminUserUpdate, AuthOptions, AuthUser, ConditionNode, ConvertBody, Conversion, DesignerField, DetailRowPayload, DynamicRecord, EntitySummary, FieldConfig, FieldType, Group, GroupImpact, I18nText, LightPage, ListView, Me, MenuItem, ModuleDetail, ModulePermissions, ModuleSchema, RecordConversion,
+  ImportPreview, ImportResult, PagedResponse, RecordHistoryEntry, RelatedTab, Rule, RollupSource, User, ViewSort, Workflow,
 } from 'src/domain/dynamic/types';
 import type {
   AdminDashboardDetail, AdminDashboardItem, CardResult, DashboardDetail, DashboardLayout, DashboardList,
@@ -156,6 +156,16 @@ export const dynamicApi = {
     http.put<ModulePermissions>(`/modules/${key}/permissions`, body).then(data),
   getRules: (key: string) => http.get<Rule[]>(`/modules/${key}/rules`).then(data),
   putRules: (key: string, rules: Rule[]) => http.put<Rule[]>(`/modules/${key}/rules`, { rules }).then(data),
+  getWorkflow: (key: string) => http.get<Workflow>(`/modules/${key}/workflow`).then(data),
+  putWorkflow: (key: string, body: Workflow) => http.put<Workflow>(`/modules/${key}/workflow`, body).then(data),
+  deleteWorkflow: (key: string) => http.delete(`/modules/${key}/workflow`).then(data),
+  getConversions: () => http.get<Conversion[]>('/conversions').then(data),
+  createConversion: (body: Conversion) => http.post<Conversion>('/conversions', body).then(data),
+  updateConversion: (key: string, body: Conversion) => http.put<Conversion>(`/conversions/${encodeURIComponent(key)}`, body).then(data),
+  deleteConversion: (key: string) => http.delete(`/conversions/${encodeURIComponent(key)}`).then(data),
+  getRecordConversions: (id: number) => http.get<RecordConversion[]>(`/records/${id}/conversions`).then(data),
+  convertRecord: (id: number, key: string, body: ConvertBody) =>
+    http.post<DynamicRecord>(`/records/${id}/conversions/${encodeURIComponent(key)}/convert`, body).then(data),
   getAuthOptions: () => http.get<AuthOptions>('/auth/options').then(data),
   login: (body: { userId: string; password: string }) => http.post<AuthUser>('/auth/login', body).then(data),
   demoLogin: (userId: string) => http.post<AuthUser>('/auth/demo-login', { userId }).then(data),

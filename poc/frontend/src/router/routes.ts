@@ -21,6 +21,7 @@ export const routes: RouteRecordRaw[] = [
       { path: 'system/dashboards', component: () => import('src/pages/system/DashboardsAdminPage.vue') },
       { path: 'system/dynamic-modules', component: () => import('src/pages/system/dynamic-modules/ModuleListPage.vue') },
       { path: 'system/dynamic-modules/:moduleKey', component: () => import('src/pages/system/dynamic-modules/ModuleEditorPage.vue') },
+      { path: 'system/conversions', component: () => import('src/pages/system/ConversionsPage.vue') },
       { path: 'system/users', component: () => import('src/pages/system/UsersPage.vue') },
       { path: 'system/groups', component: () => import('src/pages/system/GroupsPage.vue') },
       { path: 'system/appearance', component: () => import('src/pages/system/AppearancePage.vue') },

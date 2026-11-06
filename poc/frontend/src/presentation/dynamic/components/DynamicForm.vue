@@ -1,9 +1,11 @@
 <script setup lang="ts">
 import { toTypedSchema } from '@vee-validate/zod';
 import { useForm } from 'vee-validate';
-import { computed, ref, watch } from 'vue';
+import { computed, onMounted, ref, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
+import { fillPatch, fillReferenceInfos, lockedFillKeys } from 'src/domain/dynamic/fill';
 import { resolveI18n } from 'src/domain/dynamic/i18n-text';
+import { canAdvance, intersectAllowed, isReadOnlyState, selectableStates } from 'src/domain/dynamic/workflow';
 import type { DetailRowPayload, DynamicRecord, ModuleSchema, ReferenceInfo, SchemaField } from 'src/domain/dynamic/types';
 import { buildZodSchema } from 'src/presentation/dynamic/build-zod-schema';
 import DetailGrid from 'src/presentation/dynamic/details/DetailGrid.vue';
@@ -11,6 +13,7 @@ import { fieldColClass, isFullWidth } from 'src/presentation/dynamic/form-layout
 import { buildDetailPayload, rowErrors, toRowStates, validateRows, type DetailRowState } from 'src/presentation/dynamic/details/detail-rows';
 import { defaultValueOf } from 'src/presentation/dynamic/field-type-registry';
 import { isWritable, ruleStateOf } from 'src/presentation/dynamic/rule-state';
+import { dynamicApi } from 'src/services/api/dynamic-api';
 import DynamicField from './DynamicField.vue';
 
 const props = defineProps<{
@@ -31,10 +34,15 @@ const { t, locale } = useI18n();
 
 const fields = computed(() => props.schema.blocks.flatMap((b) => b.fields));
 
+// Workflow: the status field starts at the initial state on create; later the options and the form follow the stored state.
+const workflow = computed(() => props.schema.workflow);
+const statusKey = computed(() => workflow.value?.statusFieldKey);
+
 function initialValues(): Record<string, unknown> {
   return Object.fromEntries(fields.value.map((f) => [
     f.key,
-    (props.mode === 'edit' ? props.record?.values[f.key] : (props.initial?.[f.key] ?? defaultValueOf(f))) ?? null,
+    (props.mode === 'edit' ? props.record?.values[f.key]
+      : (f.key === props.schema.workflow?.statusFieldKey ? props.schema.workflow.initialState : (props.initial?.[f.key] ?? defaultValueOf(f)))) ?? null,
   ]));
 }
 
@@ -81,7 +89,7 @@ const stored = computed(() => (props.mode === 'edit' ? props.record?.values : un
 const ruleState = computed(() => ruleStateOf(props.schema, formValues.value, stored.value, { skipComputed: true }));
 const storedRuleState = computed(() => stored.value && ruleStateOf(props.schema, stored.value, stored.value, { skipComputed: true }));
 
-const { handleSubmit, values, errors, setErrors, resetForm } = useForm({
+const { handleSubmit, values, errors, setErrors, setFieldValue, resetForm } = useForm({
   // Identity `cast`: vee-validate would otherwise rewrite the model with zod-normalized values (e.g. trimmed text).
   validationSchema: computed(() => ({
     ...toTypedSchema(buildZodSchema(props.schema, props.mode, props.record, ruleState.value, {
@@ -95,9 +103,43 @@ const { handleSubmit, values, errors, setErrors, resetForm } = useForm({
 });
 watch(values, (v) => { formValues.value = v as Record<string, unknown>; }, { deep: true, immediate: true });
 
+const storedStatus = computed(() => (props.mode === 'edit' && statusKey.value ? props.record?.values[statusKey.value] : undefined));
+const statusAllowed = computed(() => selectableStates(workflow.value, props.mode, storedStatus.value));
+// A read-only state locks everything but the status field (and it only matters when the user can still advance it).
+const workflowLocked = computed(() => props.mode === 'edit' && isReadOnlyState(workflow.value, storedStatus.value));
+const allowedFor = (f: SchemaField) => {
+  const byRules = ruleState.value.allowedOptions.get(f.id);
+  return f.key === statusKey.value ? intersectAllowed(byRules, statusAllowed.value) : byRules;
+};
+
+// Fill: after a reference with a `fill` config changes, copy values of the picked record into the form (a preview; the server recomputes).
+const lockedKeys = computed(() => lockedFillKeys(fields.value));
+const fillFields = computed(() => fields.value.filter((f) => f.type === 'reference' && f.reference?.kind === 'module' && f.config.fill?.map.length));
+const appliedRef: Record<string, unknown> = Object.fromEntries(fillFields.value.map((f) => [f.key, (props.mode === 'edit' ? snapshot[f.key] : null) ?? null]));
+const fillReferences = ref<Record<string, ReferenceInfo>>({});
+async function syncFill() {
+  for (const f of fillFields.value) {
+    const now = values[f.key] ?? null;
+    if (JSON.stringify(now) === JSON.stringify(appliedRef[f.key])) continue;
+    appliedRef[f.key] = now;
+    let source: DynamicRecord | undefined;
+    if (now !== null) {
+      try { source = await dynamicApi.getRecord(Number(now)); } catch { continue; } // the server judges on save
+      if (JSON.stringify(values[f.key] ?? null) !== JSON.stringify(now)) continue; // the user picked another one meanwhile
+    }
+    const patch = fillPatch(f.config.fill!, source?.values, values as Record<string, unknown>, props.mode === 'edit' ? snapshot : undefined);
+    for (const [key, value] of Object.entries(patch)) setFieldValue(key, value);
+    fillReferences.value = { ...fillReferences.value, ...fillReferenceInfos(f.config.fill!, patch, source?.references) };
+  }
+}
+watch(() => fillFields.value.map((f) => values[f.key] ?? null), syncFill);
+onMounted(syncFill); // a prefilled reference on create
+
 const hiddenField = (f: SchemaField) => ruleState.value.hidden.has(f.id);
+const fieldReadonly = (f: SchemaField) => !isWritable(f, ruleState.value) || lockedKeys.value.has(f.key) || (workflowLocked.value && f.key !== statusKey.value);
 const visibleBlocks = computed(() => props.schema.blocks.filter((b) => b.fields.some((f) => !hiddenField(f))));
 const readOnlyForm = computed(() => ruleState.value.readOnlyAll);
+const canSave = computed(() => !readOnlyForm.value && (!workflowLocked.value || canAdvance(workflow.value, storedStatus.value)));
 // Errors nobody can see inline (record-level, or keyed to a field that is not rendered) go to the top banner.
 const bannerLines = computed(() => {
   const shown = new Set(visibleBlocks.value.flatMap((b) => b.fields.filter((f) => !hiddenField(f)).map((f) => f.key)));
@@ -142,6 +184,7 @@ watch(() => props.serverErrors, (errs) => {
 // A reloaded record (e.g. after a 409) replaces the form's values and the change-detection baseline.
 watch(() => props.record, () => {
   snapshot = initialValues();
+  for (const f of fillFields.value) appliedRef[f.key] = snapshot[f.key] ?? null; // a reload is not a user pick
   resetForm({ values: snapshot });
   detailRows.value = initialRows();
   uidAt.value = {};
@@ -153,6 +196,7 @@ watch(() => props.record, () => {
 <template>
   <form class="q-gutter-md" @submit.prevent="onSubmit">
     <div v-if="readOnlyForm" class="text-warning" data-testid="record-readonly">{{ t('dynamic.recordReadOnly') }}</div>
+    <div v-if="workflowLocked" class="text-warning" data-testid="workflow-readonly">{{ t('docflow.readOnlyState') }}</div>
     <div v-if="bannerLines.length" class="text-negative" data-testid="record-error">
       <div v-for="line in bannerLines" :key="line">{{ line }}</div>
     </div>
@@ -165,9 +209,9 @@ watch(() => props.record, () => {
           <template v-for="f in block.fields" :key="f.key">
             <div v-if="!hiddenField(f)" :class="fieldColClass(block.columns, isFullWidth(f))">
               <DynamicField
-                :field="f" :readonly="!isWritable(f, ruleState)"
-                :required="ruleState.required.has(f.id) && isWritable(f, ruleState)" :allowed-options="ruleState.allowedOptions.get(f.id)"
-                :reference="(record?.references ?? references)?.[f.key]"
+                :field="f" :readonly="fieldReadonly(f)"
+                :required="ruleState.required.has(f.id) && !fieldReadonly(f)" :allowed-options="allowedFor(f)"
+                :reference="fillReferences[f.key] ?? (record?.references ?? references)?.[f.key]"
               />
             </div>
           </template>
@@ -176,9 +220,9 @@ watch(() => props.record, () => {
     </q-expansion-item>
     <DetailGrid
       v-for="d in schema.details ?? []" :key="d.moduleKey" :detail="d" :model-value="detailRows[d.moduleKey] ?? []"
-      :readonly="readOnlyForm" :errors="gridErrors(d.moduleKey)" :header-values="formValues" :header-fields="fields" @update:model-value="(rows) => (detailRows[d.moduleKey] = rows)"
+      :readonly="readOnlyForm || workflowLocked" :errors="gridErrors(d.moduleKey)" :header-values="formValues" :header-fields="fields" @update:model-value="(rows) => (detailRows[d.moduleKey] = rows)"
       @edit-cell="(uid, key) => clearServerCell(d.moduleKey, uid, key)"
     />
-    <q-btn v-if="!readOnlyForm" type="submit" color="primary" :label="t('dynamic.save')" :loading="saving" />
+    <q-btn v-if="canSave" type="submit" color="primary" :label="t('dynamic.save')" :loading="saving" />
   </form>
 </template>
