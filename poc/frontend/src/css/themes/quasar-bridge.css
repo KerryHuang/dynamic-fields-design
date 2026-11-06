@@ -1,0 +1,235 @@
+/* 把 --t-* token 接到 Quasar。顏色一律來自 token，不寫顏色字面值（列印的白底黑字在 print.css）。
+   quasar.config.ts 的 css 清單排在 tokens／風格檔之後；Quasar 自己的 CSS 先載入，所以這裡能覆蓋它。 */
+
+/* 品牌色與狀態色 */
+[data-style][data-mode] {
+  --q-primary: var(--t-primary);
+  --q-secondary: var(--t-primary);
+  --q-accent: var(--t-primary);
+  --q-negative: var(--t-negative);
+  --q-positive: var(--t-positive);
+  --q-warning: var(--t-warning);
+  --q-info: var(--t-info);
+  --q-dark: var(--t-panel);
+  --q-dark-page: var(--t-bg);
+}
+
+/* 讓捲軸與原生控制項跟著變 */
+[data-mode='light'] {
+  color-scheme: light;
+}
+
+[data-mode='dark'] {
+  color-scheme: dark;
+}
+
+[data-style] body {
+  background: var(--t-bg);
+  color: var(--t-text);
+  font-size: var(--t-font-size);
+  font-family: var(--t-font-family);
+}
+
+/* Quasar 的 color="primary" 會產生 bg-primary text-white，text-white 帶 !important；
+   深色與現場工業的主色、深色的錯誤色配白字對比不足，由這裡覆寫。 */
+.text-primary {
+  color: var(--t-primary-text) !important;
+}
+
+.bg-primary.text-white {
+  color: var(--t-on-primary) !important;
+}
+
+.bg-negative.text-white {
+  color: var(--t-on-negative) !important;
+}
+
+.bg-positive.text-white {
+  color: var(--t-on-positive) !important;
+}
+
+.bg-warning.text-white,
+.bg-warning.text-dark {
+  color: var(--t-on-warning) !important;
+}
+
+.bg-info.text-white {
+  color: var(--t-on-info) !important;
+}
+
+/* 語意 class（取代 text-grey 等調色盤 class） */
+.text-muted {
+  color: var(--t-muted) !important;
+}
+
+.bg-muted {
+  background: var(--t-muted);
+}
+
+.bg-muted.text-white {
+  color: var(--t-panel) !important;
+}
+
+.bg-negative-soft {
+  background: var(--t-negative-soft);
+  color: var(--t-text);
+}
+
+.bg-info-soft {
+  background: var(--t-info-soft);
+  color: var(--t-text);
+}
+
+.text-h6 {
+  font-size: var(--t-title-size);
+}
+
+.text-stat {
+  font-size: var(--t-stat-size);
+  font-weight: var(--t-stat-weight);
+  font-variant-numeric: tabular-nums;
+}
+
+/* 頂列與邊欄 */
+[data-style] .q-layout__section--marginal,
+[data-style] .q-header {
+  background: var(--t-topbar-bg);
+  color: var(--t-topbar-fg);
+}
+
+[data-style] .q-toolbar {
+  min-height: var(--t-topbar-height);
+}
+
+[data-style] .q-drawer {
+  background: var(--t-sidebar-bg);
+  color: var(--t-sidebar-fg);
+}
+
+[data-style] .q-drawer .q-item__label--header {
+  color: var(--t-sidebar-muted);
+}
+
+[data-style] .q-drawer .q-router-link--active {
+  background: var(--t-selected-bg);
+  color: var(--t-selected-fg);
+  border-left: var(--t-selected-marker) solid var(--t-primary);
+}
+
+[data-style] .q-item.q-router-link--active,
+[data-style] .q-item--active {
+  color: var(--t-primary-text);
+}
+
+/* 面板類元件 */
+[data-style] .q-card,
+[data-style] .q-table__card,
+[data-style] .q-menu,
+[data-style] .q-banner {
+  background: var(--t-panel);
+  color: var(--t-text);
+  border-radius: var(--t-radius);
+}
+
+[data-style] .q-card {
+  border: var(--t-card-border) solid var(--t-border);
+  box-shadow: var(--t-card-shadow);
+}
+
+[data-style] .q-card__section--vert {
+  padding: var(--t-panel-padding);
+}
+
+/* 表格；dense 另有規則，連 .q-table--dense 一起蓋 */
+[data-style] .q-table th,
+[data-style] .q-table td,
+[data-style] .q-table--dense th,
+[data-style] .q-table--dense td {
+  padding: var(--t-cell-padding);
+}
+
+[data-style] .q-table thead tr,
+[data-style] .q-table tbody td,
+[data-style] .q-table--dense thead tr,
+[data-style] .q-table--dense tbody td {
+  height: auto;
+}
+
+[data-style] .q-table th {
+  font-weight: var(--t-th-weight);
+  border-bottom: var(--t-th-border-bottom) solid var(--t-border);
+}
+
+[data-style] .q-table tbody td {
+  font-variant-numeric: tabular-nums;
+}
+
+/* 分隔線、輸入框、次要文字 */
+[data-style] .q-separator {
+  background: var(--t-border);
+}
+
+[data-style] .q-field__label,
+[data-style] .q-field__bottom,
+[data-style] .q-item__label--caption {
+  color: var(--t-muted);
+}
+
+[data-style] .q-field--outlined .q-field__control:before {
+  border-color: var(--t-border);
+}
+
+[data-style] .q-checkbox__svg {
+  color: var(--t-panel);
+}
+
+/* 鍵盤焦點：輸入框排除，由 Quasar 的主色邊框表示 */
+:focus-visible {
+  outline: 2px solid var(--t-text);
+  outline-offset: 2px;
+}
+
+.q-header :focus-visible {
+  outline-color: var(--t-topbar-fg);
+}
+
+.q-drawer :focus-visible {
+  outline-color: var(--t-sidebar-fg);
+}
+
+.q-field :focus-visible,
+input:focus-visible,
+textarea:focus-visible {
+  outline: none;
+}
+
+/* 外觀設定的小樣本：任何元素加上 data-style／data-mode 都能呈現該風格，不必另做縮圖 */
+.theme-sample {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 120px;
+  overflow: hidden;
+  background: var(--t-bg);
+  color: var(--t-text);
+  border: 1px solid var(--t-border);
+  border-radius: var(--t-radius);
+  font-family: var(--t-font-family);
+  font-size: var(--t-font-size);
+}
+
+.theme-sample__bar {
+  height: 10px;
+  background: var(--t-topbar-bg);
+}
+
+.theme-sample__text {
+  padding: 0 8px;
+}
+
+.theme-sample__chip {
+  height: 12px;
+  margin: 0 8px 8px;
+  border-radius: var(--t-radius);
+  background: var(--t-primary);
+}

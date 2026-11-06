@@ -1,0 +1,21 @@
+/* 列印不跟隨深色主題：把會影響底色與文字的 token 都改成白底黑字。
+   Quasar 的深色 class 與圖表由 use-theme-store 的 beforeprint 暫時切成淺色處理。 */
+@media print {
+  [data-style][data-mode] {
+    --t-bg: #fff;
+    --t-panel: #fff;
+    --t-text: #000;
+    --t-muted: #333;
+    --t-border: #999;
+    --t-topbar-bg: #fff;
+    --t-topbar-fg: #000;
+    --t-sidebar-bg: #fff;
+    --t-sidebar-fg: #000;
+    --t-sidebar-muted: #333;
+  }
+
+  body {
+    background: #fff;
+    color: #000;
+  }
+}

@@ -3,7 +3,7 @@ import { defineConfig } from '@quasar/app-vite/wrappers';
 
 export default defineConfig(() => ({
   boot: ['pinia', 'theme', 'i18n', 'tanstack-query', 'axios'],
-  css: ['themes/tokens.css', 'themes/workbench.css', 'themes/airy.css', 'themes/enterprise.css', 'themes/industrial.css'],
+  css: ['themes/tokens.css', 'themes/workbench.css', 'themes/airy.css', 'themes/enterprise.css', 'themes/industrial.css', 'themes/quasar-bridge.css', 'themes/print.css'],
   extras: ['material-icons'],
   build: {
     target: { browser: ['es2022'], node: 'node20' },
