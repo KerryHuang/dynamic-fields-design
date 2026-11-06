@@ -342,7 +342,7 @@
 
 - [ ] **Step 1: 更新文件。** 手冊已知限制要寫：沒有寄信重設密碼；沒有公司帳號登入；舊資料庫的使用者要重設密碼才能登入；列表的使用者欄位仍顯示帳號；`Demo__LoginEnabled` 絕不能在正式站開啟；Docker 部署要把資料庫目錄掛成 volume，金鑰才會保留。
 - [ ] **Step 2: 跑全部測試**：`dotnet test poc/backend`；`cd poc/frontend && bunx vitest run && bunx vue-tsc --noEmit && bunx quasar build`。
-- [ ] **Step 3: 確認公司資訊與示範資料沒有外洩到全新安裝**：`git diff main -- . | grep -inE "[已移除]|[已移除]"` 沒有新增結果；全新資料庫啟動後 `GET /admin/users` 只有 `admin`。
+- [ ] **Step 3: 確認公司資訊與示範資料沒有外洩到全新安裝**：掃新增行沒有公司相關字串（清單不進 repo）；全新資料庫啟動後 `GET /admin/users` 只有 `admin`。
 - [ ] **Step 4: 實機走查正式模式**（chrome-devtools，先 `list_pages`，有頁面就用；`poc.db` 先移開，結束後放回）：全新資料庫 → 用 `admin` 登入 → 被導到改密碼 → 建群組 → 建使用者並加入兩個群組 → 模組權限授權 → 登出 → 新使用者登入、改密碼、看到授權的模組 → 管理員停用他 → 他的下一個操作被導回登入頁。重開後端，確認成員和密碼都還在。
 - [ ] **Step 5: 實機走查 Demo 模式**：`Demo__SeedOnStartup=true Demo__LoginEnabled=true` 啟動 → 登入頁顯示「Demo 資料產生中」和 admin → 產生完成後列出所有 Demo 帳號 → 一鍵登入 `sales01` 只看到自己的訂單 → 登出換 `manager01` 看到金額 → 照 `docs/demo.md` 每節走一次。走不到的標「未實機驗證」，Render 上的行為標「未驗證」。
 - [ ] **Step 6: Commit** `docs: 登入、使用者與群組的手冊和 Demo 腳本`
