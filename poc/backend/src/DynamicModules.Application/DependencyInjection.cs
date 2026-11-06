@@ -27,6 +27,8 @@ public static class DependencyInjection
         services.AddScoped<Dynamic.References.ReferenceResolver>();
         services.AddScoped<Dynamic.References.ReferenceFill>();
         services.AddScoped<Dynamic.WorkflowService.WorkflowEnforcer>();
+        services.AddScoped<Dynamic.ConversionService.ConversionLedger>();
+        services.AddScoped<Dynamic.ConversionService.ConversionValidator>();
         services.AddScoped<Dynamic.References.ReferenceDeletePlanner>();
         services.AddScoped<Dynamic.RecordService.DetailWriter>();
         services.AddScoped<Dynamic.RecordService.DetailReader>();

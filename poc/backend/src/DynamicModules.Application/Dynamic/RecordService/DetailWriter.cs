@@ -140,8 +140,9 @@ public class DetailWriter(
             input[parentKey] = JsonSerializer.SerializeToElement(parentId);
             validRefKeys[set.ParentField.Id] = new HashSet<string> { parentId.ToString() };
         }
-        var systemKeys = await fill.ApplyAsync(set.Child, input, previous, validRefKeys,
-            RecordValueProcessor.WritablePredicate(set.Child, previous, set.Permissions, registry, userIds, time.Today), ct);
+        var systemKeys = new HashSet<string>(await fill.ApplyAsync(set.Child, input, previous, validRefKeys,
+            RecordValueProcessor.WritablePredicate(set.Child, previous, set.Permissions, registry, userIds, time.Today), ct));
+        if (row.SystemKeys is not null) systemKeys.UnionWith(row.SystemKeys);
         var (values, rowErrors) = RecordValueProcessor.Process(
             set.Child, input, previous, userIds, registry, set.Permissions, new RuleContext(time.Today), validRefKeys,
             parentValues: parentValues, systemKeys: systemKeys);

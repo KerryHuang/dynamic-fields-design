@@ -11,5 +11,7 @@ public record UpdateRecordRequest(
     : IRequest<ServiceResult>, ITransactionalRequest;
 
 /// <summary>明細列：沒有 Id 是新增；有 Id 而 Delete 為 false 是修改（Values 只帶改動的欄位）；有 Id 而 Delete 為 true 是軟刪除。</summary>
+/// <param name="SystemKeys">值由系統填入（單據轉換）的欄位鍵，不受唯讀限制。只供內部使用：JsonIgnore，用戶端送的不會被採用。</param>
 public record DetailRowInput(
-    long? Id, Dictionary<string, JsonElement?>? Values, string? RowVersion, [property: JsonPropertyName("_delete")] bool Delete = false);
+    long? Id, Dictionary<string, JsonElement?>? Values, string? RowVersion, [property: JsonPropertyName("_delete")] bool Delete = false,
+    [property: JsonIgnore] IReadOnlySet<string>? SystemKeys = null);

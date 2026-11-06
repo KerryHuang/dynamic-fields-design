@@ -21,7 +21,7 @@ public class RecordCreator(
     /// <param name="rollupValues">這次存檔在記憶體算好的彙總值（明細彙總）；沒給的一般參照彙總取空集合的值（第 6 階段 R13）。</param>
     public async Task<(Dictionary<string, JsonElement?> Values, Dictionary<string, string[]> Errors)> ValidateAsync(
         Module module, EffectivePermissions perms, IReadOnlyDictionary<string, JsonElement?> input,
-        IReadOnlyDictionary<string, JsonElement?>? rollupValues, CancellationToken ct)
+        IReadOnlyDictionary<string, JsonElement?>? rollupValues, CancellationToken ct, IReadOnlySet<string>? extraSystemKeys = null)
     {
         // 一般參照的彙總：新記錄還沒有子記錄，取空集合的值
         var allRollups = rollupValues is null ? [] : new Dictionary<string, JsonElement?>(rollupValues);
@@ -31,6 +31,7 @@ public class RecordCreator(
         var filled = new Dictionary<string, JsonElement?>(input);
         var systemKeys = new HashSet<string>(await fill.ApplyAsync(
             module, filled, null, validRefKeys, RecordValueProcessor.WritablePredicate(module, null, perms, registry, userIds, time.Today), ct));
+        if (extraSystemKeys is not null) systemKeys.UnionWith(extraSystemKeys);
         WorkflowEnforcer.SeedInitial(module, filled, systemKeys);
         var result = RecordValueProcessor.Process(
             module, filled, null, userIds, registry, perms, new RuleContext(time.Today), validRefKeys, allRollups, systemKeys: systemKeys);

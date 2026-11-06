@@ -1,0 +1,126 @@
+using System.Text.RegularExpressions;
+using DynamicModules.Application.Common;
+using DynamicModules.Application.Dynamic.FieldService.Data;
+using DynamicModules.Application.Dynamic.ConversionService.Data;
+using DynamicModules.Application.Dynamic.ModuleService.Data;
+using DynamicModules.Domain.Entities.Dynamic;
+using DynamicModules.Domain.Modules;
+using DynamicModules.Domain.Repositories.Dynamic;
+using DynamicModules.Domain.ValueObjects;
+
+namespace DynamicModules.Application.Dynamic.ConversionService;
+
+/// <summary>轉換定義的結構驗證（設計器儲存時）；錯誤鍵用 definition.* 路徑。</summary>
+public class ConversionValidator(IModuleRepository modules)
+{
+    public const string BadKey = "轉換代碼只能用小寫英文、數字、連字號，2 到 40 字，英文開頭";
+
+    public async Task<ServiceResult?> ValidateAsync(ConversionInput input, CancellationToken ct)
+    {
+        var errors = new Dictionary<string, string[]>();
+        void Err(string key, string message) => errors.TryAdd(key, [message]);
+
+        if (!Regex.IsMatch(input.Key ?? "", ModuleRules.ModuleKeyPattern)) Err("key", BadKey);
+        if (input.Name is null || !input.Name.IsValid(out _)) Err("name", "名稱必須有繁體中文");
+        if (input.Definition is null) return ServiceResult.Invalid(new Dictionary<string, string[]> { ["definition"] = ["缺少轉換定義"] });
+
+        var source = await modules.GetByKeyAsync(input.SourceModuleKey, includeChildren: true, ct);
+        var target = await modules.GetByKeyAsync(input.TargetModuleKey, includeChildren: true, ct);
+        if (source is null || target is null) Err("sourceModuleKey", "來源或目標模組不存在");
+        else if (!IsDocument(source) || !IsDocument(target) || source.Id == target.Id)
+            Err("targetModuleKey", "來源與目標必須是不同的獨立模組，且不是明細模組");
+        if (errors.Count > 0 || source is null || target is null) return ServiceResult.Invalid(errors);
+
+        var def = input.Definition;
+        if (def.SourceStates is { Count: > 0 })
+        {
+            var states = source.Workflow?.States.Select(s => s.OptionId).ToHashSet() ?? [];
+            if (def.SourceStates.Any(s => !states.Contains(s))) Err("definition.sourceStates", "來源狀態必須是來源模組狀態機裡的狀態");
+        }
+
+        var sourceFields = ActiveFields(source);
+        var targetFields = ActiveFields(target);
+        var traceKeys = new HashSet<long>();
+
+        // 表頭：目標表頭上指向來源的唯讀參照欄位
+        var header = def.Header;
+        if (header is null) return ServiceResult.Invalid(new Dictionary<string, string[]> { ["definition.header"] = ["缺少表頭設定"] });
+        var trace = targetFields.GetValueOrDefault(header.SourceFieldId);
+        if (trace is not { Type: FieldType.Reference } || trace.Config.RefTarget is not { Kind: ReferenceTarget.ModuleKind } rt || rt.Key != source.Key
+            || trace.Config.Relation == ReferenceRelation.Detail || !trace.Config.ReadOnly)
+            Err("definition.header.sourceFieldId", "必須是目標表頭上、指向來源模組、設為唯讀的參照欄位");
+        else traceKeys.Add(trace.Id);
+        CheckCopy(header.Copy, sourceFields, targetFields, traceKeys, "definition.header.copy", errors);
+
+        if (def.Lines is { } lines) await CheckLinesAsync(lines, source, target, traceKeys, errors, ct);
+
+        return errors.Count > 0 ? ServiceResult.Invalid(errors) : null;
+    }
+
+    public async Task<(Module Source, Module Target)> ModulesOfAsync(ConversionInput input, CancellationToken ct) =>
+        ((await modules.GetByKeyAsync(input.SourceModuleKey, includeChildren: false, ct))!,
+         (await modules.GetByKeyAsync(input.TargetModuleKey, includeChildren: false, ct))!);
+
+    private async Task CheckLinesAsync(ConversionLines lines, Module source, Module target, HashSet<long> traceKeys, Dictionary<string, string[]> errors, CancellationToken ct)
+    {
+        void Err(string key, string message) => errors.TryAdd(key, [message]);
+        var sourceLine = await modules.GetByKeyAsync(lines.SourceModuleKey ?? "", includeChildren: true, ct);
+        var targetLine = await modules.GetByKeyAsync(lines.TargetModuleKey ?? "", includeChildren: true, ct);
+        if (sourceLine is null || ModuleRelations.ParentKeyOf(sourceLine) != source.Key)
+        {
+            Err("definition.lines.sourceModuleKey", "必須是來源模組的明細模組");
+            return;
+        }
+        if (targetLine is null || ModuleRelations.ParentKeyOf(targetLine) != target.Key)
+        {
+            Err("definition.lines.targetModuleKey", "必須是目標模組的明細模組");
+            return;
+        }
+        var from = ActiveFields(sourceLine);
+        var to = ActiveFields(targetLine);
+
+        var trace = to.GetValueOrDefault(lines.SourceLineFieldId);
+        if (trace is not { Type: FieldType.Integer } || !trace.Config.ReadOnly)
+            Err("definition.lines.sourceLineFieldId", "必須是目標明細上、設為唯讀的整數欄位（存來源明細列的 Id）");
+        else traceKeys.Add(trace.Id);
+
+        var qty = lines.Quantity;
+        if (qty is null || !from.TryGetValue(qty.From, out var qf) || !to.TryGetValue(qty.To, out var qt)
+            || qf.Type is not (FieldType.Integer or FieldType.Decimal) || qt.Type is not (FieldType.Integer or FieldType.Decimal))
+            Err("definition.lines.quantity", "數量欄位兩邊都必須是整數或小數欄位");
+        else traceKeys.Add(qt.Id);
+
+        CheckCopy(lines.Copy, from, to, traceKeys, "definition.lines.copy", errors);
+    }
+
+    private static void CheckCopy(
+        List<FillMapping>? copy, Dictionary<long, Field> from, Dictionary<long, Field> to, HashSet<long> protectedTargets,
+        string path, Dictionary<string, string[]> errors)
+    {
+        if (copy is null) return;
+        var seen = new HashSet<long>();
+        foreach (var m in copy)
+        {
+            if (!from.TryGetValue(m.From, out var src) || !to.TryGetValue(m.To, out var dst))
+            {
+                errors.TryAdd(path, ["欄位對應的來源或目的欄位不存在，或未啟用"]);
+                return;
+            }
+            if (!seen.Add(m.To) || protectedTargets.Contains(m.To) || FieldRules.IsComputed(dst.Type))
+            {
+                errors.TryAdd(path, ["目的欄位不能重複，也不能是追溯欄位、數量欄位或系統計算欄位"]);
+                return;
+            }
+            if (!FieldRules.CopyCompatible(src, dst, allowReference: true))
+            {
+                errors.TryAdd(path, ["來源與目的欄位型別不相容"]);
+                return;
+            }
+        }
+    }
+
+    private static bool IsDocument(Module m) => m.Kind == ModuleKind.Standalone && !ModuleRelations.IsDetail(m);
+
+    private static Dictionary<long, Field> ActiveFields(Module m) =>
+        m.Blocks.SelectMany(b => b.Fields).Where(f => f.Status == FieldStatus.Active).ToDictionary(f => f.Id);
+}

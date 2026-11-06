@@ -283,16 +283,18 @@ public static class FieldRules
                 return Invalid(FillKey, "目的欄位不屬於本模組、未啟用，或是參照欄位自己");
             if (!seen.Add(m.To)) return Invalid(FillKey, "同一個目的欄位不能有兩筆對應");
             if (IsComputed(dst.Type) || dst.Type == FieldType.Reference) return Invalid(FillKey, "目的欄位不能是系統計算欄位或參照欄位");
-            if (!FillCompatible(src, dst)) return Invalid(FillKey, "來源與目的欄位型別不相容");
+            if (!CopyCompatible(src, dst)) return Invalid(FillKey, "來源與目的欄位型別不相容");
             if (fill.Mode == FillConfig.Lock && !dst.Config.ReadOnly)
                 return Invalid(FillKey, $"鎖定帶值的目的欄位必須先設為唯讀：{dst.LabelI18n.Resolve(I18nText.FallbackLocale)}");
         }
         return null;
     }
 
-    /// <summary>兩邊型別相同；自動編號可帶進文字；公式、彙總依結果型別帶進同類欄位。選項與參照不能帶（選項 Id 每個模組不同）。</summary>
-    private static bool FillCompatible(Field from, Field to)
+    /// <summary>兩邊型別相同；自動編號可帶進文字；公式、彙總依結果型別帶進同類欄位。選項不能帶（選項 Id 每個模組不同）；參照只有轉換可以帶（目標相同）。</summary>
+    public static bool CopyCompatible(Field from, Field to, bool allowReference = false)
     {
+        if (from.Type == FieldType.Reference)
+            return allowReference && to.Type == FieldType.Reference && from.Config.RefTarget == to.Config.RefTarget;
         if (ParentDefaultTypes.Contains(from.Type)) return from.Type == to.Type;
         return from.Type switch
         {

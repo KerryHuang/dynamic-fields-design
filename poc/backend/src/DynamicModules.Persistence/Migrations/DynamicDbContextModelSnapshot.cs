@@ -125,6 +125,61 @@ namespace DynamicModules.Persistence.Migrations
                     b.ToTable("Dynamic_Block", (string)null);
                 });
 
+            modelBuilder.Entity("DynamicModules.Domain.Entities.Dynamic.Conversion", b =>
+                {
+                    b.Property<long>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("INTEGER");
+
+                    b.Property<bool>("Active")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<DateTime>("CreatedTime")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("CreatedUserId")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Definition")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Key")
+                        .IsRequired()
+                        .HasMaxLength(40)
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTime?>("ModifiedTime")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("ModifiedUserId")
+                        .HasMaxLength(50)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("NameI18n")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<long>("SourceModuleId")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<long>("TargetModuleId")
+                        .HasColumnType("INTEGER");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("Key")
+                        .IsUnique();
+
+                    b.HasIndex("SourceModuleId");
+
+                    b.HasIndex("TargetModuleId");
+
+                    b.ToTable("Dynamic_Conversion", (string)null);
+                });
+
             modelBuilder.Entity("DynamicModules.Domain.Entities.Dynamic.Dashboard", b =>
                 {
                     b.Property<long>("Id")
@@ -1050,6 +1105,21 @@ namespace DynamicModules.Persistence.Migrations
                         .WithMany("Blocks")
                         .HasForeignKey("ModuleId")
                         .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("DynamicModules.Domain.Entities.Dynamic.Conversion", b =>
+                {
+                    b.HasOne("DynamicModules.Domain.Entities.Dynamic.Module", null)
+                        .WithMany()
+                        .HasForeignKey("SourceModuleId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("DynamicModules.Domain.Entities.Dynamic.Module", null)
+                        .WithMany()
+                        .HasForeignKey("TargetModuleId")
+                        .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
                 });
 
