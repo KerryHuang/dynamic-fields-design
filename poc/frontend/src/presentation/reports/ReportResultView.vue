@@ -11,12 +11,12 @@ const { t, locale } = useI18n();
 
 const STATE_KEYS = { empty: 'reports.state.empty', restricted: 'reports.state.restricted', fieldMissing: 'reports.state.fieldMissing',
   moduleDisabled: 'reports.state.moduleDisabled', tooMany: 'reports.state.tooMany' } as const;
-// restricted 與 fieldMissing 的後端訊息帶了具體原因（例如欄位名稱），優先顯示
+// 這幾種狀態的後端訊息帶了具體原因（欄位名稱、哪一個上限），優先顯示
 const stateText = computed(() => {
   const s = props.result.state;
   if (s === 'ok') return '';
   const key = STATE_KEYS[s];
-  return (s === 'restricted' || s === 'fieldMissing') && props.result.message ? props.result.message : t(key);
+  return (s === 'restricted' || s === 'fieldMissing' || s === 'tooMany') && props.result.message ? props.result.message : t(key);
 });
 
 const label = (c: ReportColumn) => columnLabel(c, t('reports.titleField'));

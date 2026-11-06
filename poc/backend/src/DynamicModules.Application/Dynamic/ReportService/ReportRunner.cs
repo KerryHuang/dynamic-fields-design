@@ -164,15 +164,15 @@ public class ReportRunner(
         if (FieldWithChangedType(d, bound) is { } changed)
             return Fail(FieldMissingState, $"欄位型別已變更：{ColumnLabel(changed, locale)}");
 
-        // 5. 載入：多取一筆才分得出是否超過上限；超過就不回部分結果
-        var tooMany = () => Fail(TooManyState, "資料太多，請縮小條件");
-        var mainRows = await records.ListForReportAsync(main.Id, mainSide.Perms!.OwnerUserIds, options.MaxRows + 1, ct);
-        if (mainRows.Count > options.MaxRows) return tooMany();
+        // 5. 載入：多取一筆才分得出是否超過上限；超過就不回部分結果。條件要載入後才能套用，所以這個上限縮小條件也過不了，訊息要照實說
+        var tooManyToLoad = () => Fail(TooManyState, "來源資料超過系統的載入上限，縮小條件也無法改善，請聯絡管理員");
+        var mainRows = await records.ListForReportAsync(main.Id, mainSide.Perms!.OwnerUserIds, options.MaxLoadRows + 1, ct);
+        if (mainRows.Count > options.MaxLoadRows) return tooManyToLoad();
         IReadOnlyList<Record> childRows = [];
         if (childSide is not null)
         {
-            childRows = await records.ListForReportAsync(childSide.Module.Id, childSide.Perms!.OwnerUserIds, options.MaxRows + 1, ct);
-            if (childRows.Count > options.MaxRows) return tooMany();
+            childRows = await records.ListForReportAsync(childSide.Module.Id, childSide.Perms!.OwnerUserIds, options.MaxLoadRows + 1, ct);
+            if (childRows.Count > options.MaxLoadRows) return tooManyToLoad();
         }
 
         var userNames = bound.Values.Any(b => b.Field.Type == FieldType.User)
@@ -212,7 +212,8 @@ public class ReportRunner(
             if (kids.Count == 0 && !childConditioned) rows.Add(new ReportRow(m.Id, null, Merge(cells, blankChild)));
             foreach (var kid in kids) rows.Add(new ReportRow(m.Id, kid.Id, Merge(cells, childCells[kid.Id])));
         }
-        if (rows.Count > options.MaxRows) return tooMany();
+        // 合併且套用條件後的列數才是 spec §5 的上限，這裡縮小條件有用
+        if (rows.Count > options.MaxRows) return Fail(TooManyState, "資料太多，請縮小條件");
 
         // 7. 下鑽只留該分組的列；各欄位值的 key 判斷與分組相同
         var drilling = o.DrillGroupKeys is not null;

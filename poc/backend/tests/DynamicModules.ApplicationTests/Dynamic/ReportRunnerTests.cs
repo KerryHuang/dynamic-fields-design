@@ -495,6 +495,66 @@ public class ReportRunnerTests : ReportTestBase
     }
 
     [Fact]
+    public async Task Run_SourceOverMaxRows_ConditionNarrowsIt_RunsNormally()
+    {
+        await Arrange();
+        Svc<ReportOptions>().MaxRows = 2;
+        foreach (var a in new[] { 1m, 2m, 3m }) await Insert("order", "admin", (Amount, a));
+
+        var r = await Run(Def(measures: [M("sum", "sum", MainF(Amount))], filters: [F(MainF(Amount), "gte", 2)]));
+
+        r.State.Should().Be("ok");
+        r.Total!["sum"].Should().Be(5m);
+    }
+
+    [Fact]
+    public async Task Run_ChildSourceOverMaxRows_ConditionNarrowsIt_RunsNormally()
+    {
+        await Arrange();
+        Svc<ReportOptions>().MaxRows = 2;
+        var a = await Insert("order", "admin", (Amount, 1m));
+        foreach (var q in new[] { 1, 2, 3 }) await Insert("shipment", "admin", (LinkField, a), (Qty, q));
+
+        var r = await Run(Def(Shipments, measures: [M("qty", "sum", ChildF(Qty))], filters: [F(ChildF(Qty), "gte", 2)]));
+
+        r.State.Should().Be("ok");
+        r.Total!["qty"].Should().Be(5m);
+    }
+
+    [Fact]
+    public async Task Run_OverMaxRowsAfterConditions_MessageSaysNarrowConditions()
+    {
+        await Arrange();
+        Svc<ReportOptions>().MaxRows = 1;
+        foreach (var a in new[] { 1m, 2m }) await Insert("order", "admin", (Amount, a));
+
+        var r = await Run(Def(measures: [M("sum", "sum", MainF(Amount))]));
+
+        r.State.Should().Be("tooMany");
+        r.Message.Should().Be("資料太多，請縮小條件");
+    }
+
+    [Fact]
+    public async Task Run_OverMaxLoadRows_TooManyEvenWithNarrowCondition_MessageDoesNotSayNarrow()
+    {
+        await Arrange();
+        Svc<ReportOptions>().MaxLoadRows = 2;
+        foreach (var a in new[] { 1m, 2m, 3m }) await Insert("order", "admin", (Amount, a));
+
+        var main = await Run(Def(measures: [M("sum", "sum", MainF(Amount))], filters: [F(MainF(Amount), "gte", 3)]));
+
+        main.State.Should().Be("tooMany");
+        main.Total.Should().BeNull();
+        main.Message.Should().Contain("載入上限").And.NotContain("請縮小條件");
+
+        Svc<ReportOptions>().MaxLoadRows = 3;
+        foreach (var q in new[] { 1, 2, 3, 4 }) await Insert("shipment", "admin", (Qty, q));
+        var child = await Run(Def(Shipments, measures: [M("n", "countChild")]));
+        child.State.Should().Be("tooMany");
+        child.Message.Should().Contain("載入上限");
+    }
+
+    [Fact]
     public async Task Run_MergedRowsOverLimit_ReturnsTooMany()
     {
         await Arrange();

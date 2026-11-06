@@ -78,6 +78,7 @@ describe('ReportResultView', () => {
     ['fieldMissing', '欄位已不存在：金額', '欄位已不存在：金額'],
     ['moduleDisabled', null, '模組已停用'],
     ['tooMany', null, '資料太多，請縮小條件'],
+    ['tooMany', '來源資料超過系統的載入上限', '來源資料超過系統的載入上限'],
   ] as const)('state %s shows its message and no numbers', (state, message, text) => {
     const w = mountView({ ...OK, state, message, groups: null, total: null });
     expect(has(w, `state-${state}`).text()).toBe(text);

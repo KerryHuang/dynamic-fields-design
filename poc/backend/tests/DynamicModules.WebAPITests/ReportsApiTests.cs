@@ -771,6 +771,17 @@ public class ReportsApiTests
     }
 
     [Fact]
+    public void ReportsMaxLoadRows_IsBoundFromConfiguration()
+    {
+        using var app = new TestApp();
+        app.Services.GetRequiredService<ReportOptions>().MaxLoadRows.Should().Be(200_000);
+
+        using var limited = app.WithWebHostBuilder(b => b.UseSetting("Reports:MaxLoadRows", "456"));
+
+        limited.Services.GetRequiredService<ReportOptions>().MaxLoadRows.Should().Be(456);
+    }
+
+    [Fact]
     public async Task List_FreshInstall_Empty_AndCreateThenListShowsOwnerFields()
     {
         using var app = new TestApp();
