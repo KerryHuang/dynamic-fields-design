@@ -30,6 +30,9 @@ public class DeleteRecordHandler(
             return ServiceResult.NotFound(RecordMapper.RecordNotFound);
         if (record.RowVersion != request.RowVersion) return ServiceResult.Conflict(RecordMapper.Stale);
 
+        if (module.Workflow is { } wf && wf.IsLocked(RecordValueProcessor.Parse(record.ValuesJson)))
+            return ServiceResult.Conflict(WorkflowService.WorkflowEnforcer.LockedDeleteMessage);
+
         var plan = await planner.PlanAsync(record, module, ct);
         if (plan.DepthExceeded) return ServiceResult.Conflict(TooDeep); // 提早停止時 Blocking 不完整，先判深度
         if (plan.Blocking.Count > 0)

@@ -37,6 +37,9 @@ public class UpdateFieldHandler(
             module, field, config, await FieldRules.ParentOfAsync(module, modules, ct));
         if (badDynamic is not null) return badDynamic;
 
+        if (config.ReadOnly && module.Workflow?.StatusFieldId == field.Id)
+            return FieldRules.Invalid("Config.ReadOnly", "狀態機的狀態欄位不能設為唯讀");
+
         var badFill = await FieldRules.CheckFillAsync(module, field, field.Id, config, modules, ct);
         if (badFill is not null) return badFill;
 

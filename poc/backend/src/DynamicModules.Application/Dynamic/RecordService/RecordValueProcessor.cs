@@ -55,10 +55,10 @@ public static class RecordValueProcessor
             return (values, errors);
         }
 
-        // 無權寫入（權限、Config.ReadOnly、規則唯讀）：忽略輸入、保留舊值、新增只套預設值、不檢查必填
-        bool Writable(Field f) => !FieldRules.IsComputed(f.Type)
-            && (systemKeys?.Contains(f.Key) == true
-                || (permissions.CanWrite(f) && !f.Config.ReadOnly && stored?.ReadOnlyFieldIds.Contains(f.Id) != true));
+        // 無權寫入（權限、Config.ReadOnly、規則唯讀、狀態機唯讀狀態）：忽略輸入、保留舊值、新增只套預設值、不檢查必填
+        var userWritable = BuildWritable(permissions, stored);
+        bool Writable(Field f) => !FieldRules.IsComputed(f.Type) && !IsWorkflowLocked(module, previous, f)
+            && (systemKeys?.Contains(f.Key) == true || userWritable(f));
 
         foreach (var field in fields.Where(f => !FieldRules.IsComputed(f.Type)))
         {
@@ -122,6 +122,23 @@ public static class RecordValueProcessor
 
         return (values, errors);
     }
+
+    /// <summary>使用者自己能寫的欄位（不含系統填入）：權限、Config.ReadOnly、規則唯讀、狀態機唯讀狀態。</summary>
+    public static Func<Field, bool> WritablePredicate(
+        Module module, IReadOnlyDictionary<string, JsonElement?>? previous, EffectivePermissions permissions,
+        FieldTypeRegistry registry, IReadOnlySet<string> userIds, DateOnly today)
+    {
+        var stored = previous is null ? null : RuleEngine.Evaluate(module, previous, previous, registry, userIds, today);
+        var writable = BuildWritable(permissions, stored);
+        return f => !FieldRules.IsComputed(f.Type) && !IsWorkflowLocked(module, previous, f) && writable(f);
+    }
+
+    private static Func<Field, bool> BuildWritable(EffectivePermissions permissions, RuleOutcome? stored) =>
+        f => permissions.CanWrite(f) && !f.Config.ReadOnly && stored?.ReadOnlyFieldIds.Contains(f.Id) != true;
+
+    /// <summary>修改一筆處於狀態機唯讀狀態的記錄：除了狀態欄位以外都不能寫。</summary>
+    private static bool IsWorkflowLocked(Module module, IReadOnlyDictionary<string, JsonElement?>? previous, Field f) =>
+        module.Workflow is { } wf && previous is not null && f.Id != wf.StatusFieldId && wf.IsLocked(previous);
 
     /// <summary>新增時沒提供值要帶的預設值：DefaultValue、DefaultToday、ParentDefaultFieldId 三者互斥；沒有（或表頭欄位無值）回 null。</summary>
     private static JsonElement? DynamicDefaultOf(Field field, DateOnly today, IReadOnlyDictionary<string, JsonElement?>? parentValues)

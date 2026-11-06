@@ -9,12 +9,14 @@ namespace DynamicModules.Persistence.Repositories.Dynamic;
 
 public class ModuleRepository(DynamicDbContext db) : IModuleRepository
 {
+    public void RemoveWorkflow(Workflow w) => db.Set<Workflow>().Remove(w);
+
     public Task<Module?> GetByKeyAsync(string key, bool includeChildren, CancellationToken ct)
     {
         IQueryable<Module> query = db.Set<Module>();
         if (includeChildren)
             query = query.Include(m => m.Blocks).ThenInclude(b => b.Fields).ThenInclude(f => f.Options)
-                .Include(m => m.Rules.OrderBy(r => r.Sequence));
+                .Include(m => m.Rules.OrderBy(r => r.Sequence)).Include(m => m.Workflow);
         return query.FirstOrDefaultAsync(m => m.Key == key, ct);
     }
 
@@ -23,13 +25,13 @@ public class ModuleRepository(DynamicDbContext db) : IModuleRepository
         IQueryable<Module> query = db.Set<Module>();
         if (includeChildren)
             query = query.Include(m => m.Blocks).ThenInclude(b => b.Fields).ThenInclude(f => f.Options)
-                .Include(m => m.Rules.OrderBy(r => r.Sequence));
+                .Include(m => m.Rules.OrderBy(r => r.Sequence)).Include(m => m.Workflow);
         return query.FirstOrDefaultAsync(m => m.Id == id, ct);
     }
 
     private IQueryable<Module> WithChildren() =>
         db.Set<Module>().Include(m => m.Blocks).ThenInclude(b => b.Fields).ThenInclude(f => f.Options)
-            .Include(m => m.Rules.OrderBy(r => r.Sequence));
+            .Include(m => m.Rules.OrderBy(r => r.Sequence)).Include(m => m.Workflow);
 
     public Task<Module?> GetByBlockIdAsync(long blockId, CancellationToken ct) =>
         WithChildren().FirstOrDefaultAsync(m => m.Blocks.Any(b => b.Id == blockId), ct);

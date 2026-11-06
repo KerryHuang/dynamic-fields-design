@@ -27,6 +27,9 @@ public class SetFieldStatusHandler(IModuleRepository modules, IRecordRepository 
         if (request.Status == FieldStatus.Inactive && module.TitleFieldId == request.FieldId)
             return FieldRules.Invalid("Status", "記錄標題欄位不能停用");
 
+        if (request.Status == FieldStatus.Inactive && module.Workflow?.StatusFieldId == request.FieldId)
+            return FieldRules.Invalid("Status", "這是狀態機的狀態欄位，請先移除狀態機");
+
         var field = module.Blocks.SelectMany(b => b.Fields).Single(f => f.Id == request.FieldId);
         if (request.Status == FieldStatus.Inactive && field is { Type: FieldType.Reference, Config.Relation: ReferenceRelation.Detail })
             return FieldRules.Invalid("Status", "明細的表頭欄位不能停用");

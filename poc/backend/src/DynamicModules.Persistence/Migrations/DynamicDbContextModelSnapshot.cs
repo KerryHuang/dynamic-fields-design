@@ -960,6 +960,52 @@ namespace DynamicModules.Persistence.Migrations
                     b.ToTable("Dynamic_UserProgramPrivilege", (string)null);
                 });
 
+            modelBuilder.Entity("DynamicModules.Domain.Entities.Dynamic.Workflow", b =>
+                {
+                    b.Property<long>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("INTEGER");
+
+                    b.Property<DateTime>("CreatedTime")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("CreatedUserId")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("TEXT");
+
+                    b.Property<long>("InitialOptionId")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<DateTime?>("ModifiedTime")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("ModifiedUserId")
+                        .HasMaxLength(50)
+                        .HasColumnType("TEXT");
+
+                    b.Property<long>("ModuleId")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("States")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<long>("StatusFieldId")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("Transitions")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ModuleId")
+                        .IsUnique();
+
+                    b.ToTable("Dynamic_Workflow", (string)null);
+                });
+
             modelBuilder.Entity("DynamicModules.Domain.Entities.Mock.MockCustomer", b =>
                 {
                     b.Property<string>("CustomerNo")
@@ -1116,6 +1162,15 @@ namespace DynamicModules.Persistence.Migrations
                         .IsRequired();
                 });
 
+            modelBuilder.Entity("DynamicModules.Domain.Entities.Dynamic.Workflow", b =>
+                {
+                    b.HasOne("DynamicModules.Domain.Entities.Dynamic.Module", null)
+                        .WithOne("Workflow")
+                        .HasForeignKey("DynamicModules.Domain.Entities.Dynamic.Workflow", "ModuleId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
             modelBuilder.Entity("DynamicModules.Domain.Entities.Dynamic.Block", b =>
                 {
                     b.Navigation("Fields");
@@ -1136,6 +1191,8 @@ namespace DynamicModules.Persistence.Migrations
                     b.Navigation("Blocks");
 
                     b.Navigation("Rules");
+
+                    b.Navigation("Workflow");
                 });
 
             modelBuilder.Entity("DynamicModules.Domain.Entities.Dynamic.Record", b =>

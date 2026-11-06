@@ -18,6 +18,8 @@ public class Module : AuditableEntity
     public int Version { get; set; }
     public List<Block> Blocks { get; set; } = [];
     public List<Rule> Rules { get; set; } = [];
+    /// <summary>狀態機；沒有就是 null。includeChildren 時載入。</summary>
+    public Workflow? Workflow { get; set; }
 
     /// <summary>metadata 異動時呼叫：版本加一並更新修改稽核。</summary>
     public void TouchVersion(string userId, DateTime now)

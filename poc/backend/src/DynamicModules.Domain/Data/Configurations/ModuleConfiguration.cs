@@ -22,6 +22,7 @@ public class ModuleConfiguration : IEntityTypeConfiguration<Module>
         b.HasIndex(x => x.HostEntityKey).IsUnique().HasFilter("\"HostEntityKey\" IS NOT NULL");
         b.ConfigureAudit();
         b.HasMany(x => x.Blocks).WithOne().HasForeignKey(x => x.ModuleId).OnDelete(DeleteBehavior.Cascade);
+        b.HasOne(x => x.Workflow).WithOne().HasForeignKey<Workflow>(w => w.ModuleId).OnDelete(DeleteBehavior.Cascade);
         b.HasMany(x => x.Rules).WithOne().HasForeignKey(x => x.ModuleId).OnDelete(DeleteBehavior.Cascade);
     }
 }

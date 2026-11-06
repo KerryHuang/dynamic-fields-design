@@ -8,7 +8,7 @@ namespace DynamicModules.Application.Dynamic.SchemaService.Data;
 public record ModuleSchemaResponse(
     string Key, string ProgramCode, I18nText Name, string? Icon, string? TitleFieldKey, int Version, List<SchemaBlock> Blocks,
     SchemaPermissions Permissions, List<SchemaRule> Rules,
-    ModuleKind Kind, string? HostEntityKey, List<SchemaDetail>? Details = null)
+    ModuleKind Kind, string? HostEntityKey, List<SchemaDetail>? Details = null, SchemaWorkflow? Workflow = null)
 {
     /// <summary>ETag 用的版本：表頭 Version 接上每個明細模組的 Version（依 Key 排序），以 . 串接；不序列化。</summary>
     [JsonIgnore]
@@ -18,6 +18,13 @@ public record ModuleSchemaResponse(
     [JsonIgnore]
     public string PermHash { get; init; } = "";
 }
+
+/// <summary>狀態機：狀態值是 opt_&lt;id&gt;；Transitions 只列目前使用者能做的轉移（預覽為全部）。前端只用來縮小選項，後端另外強制。</summary>
+public record SchemaWorkflow(string StatusFieldKey, string InitialState, List<SchemaWorkflowState> States, List<SchemaWorkflowTransition> Transitions);
+
+public record SchemaWorkflowState(string Value, bool ReadOnly);
+
+public record SchemaWorkflowTransition(string From, string To);
 
 public record SchemaPermissions(bool Read, bool Add, bool Edit, bool Delete, bool PrintExport, bool Pricing);
 

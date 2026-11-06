@@ -16,10 +16,11 @@ namespace DynamicModules.Application.Dynamic.References;
 public class ReferenceFill(IModuleRepository modules, IRecordRepository records, IDynamicAccessGuard guard)
 {
     /// <param name="input">呼叫端持有的可變副本；lock 欄位的使用者輸入一律移除，換成帶入的值。</param>
+    /// <param name="userCanWrite">使用者自己能不能寫該欄位；參照欄位本身寫不進去（唯讀、唯讀狀態）時不帶值，但 lock 欄位的輸入仍然移除。</param>
     /// <param name="validRefKeys">ReferenceValidator 的結果：有變動且使用者可讀的參照鍵。</param>
     public async Task<IReadOnlySet<string>> ApplyAsync(
         Module module, Dictionary<string, JsonElement?> input, IReadOnlyDictionary<string, JsonElement?>? previous,
-        IReadOnlyDictionary<long, IReadOnlySet<string>> validRefKeys, CancellationToken ct)
+        IReadOnlyDictionary<long, IReadOnlySet<string>> validRefKeys, Func<Field, bool> userCanWrite, CancellationToken ct)
     {
         var systemKeys = new HashSet<string>();
         var fields = module.Blocks.SelectMany(b => b.Fields).Where(f => f.Status == FieldStatus.Active).ToList();
@@ -36,8 +37,9 @@ public class ReferenceFill(IModuleRepository modules, IRecordRepository records,
             EffectivePermissions? sourcePerms = null;
             var changed = false;
             var cleared = false;
+            var refWritable = userCanWrite(reference);
 
-            if (validRefKeys.TryGetValue(reference.Id, out var valid)
+            if (refWritable && validRefKeys.TryGetValue(reference.Id, out var valid)
                 && input.TryGetValue(reference.Key, out var raw) && raw is { } rawValue && ReferenceHandler.KeyOf(rawValue) is { } key && valid.Contains(key)
                 && long.TryParse(key, out var sourceId))
             {
@@ -54,7 +56,7 @@ public class ReferenceFill(IModuleRepository modules, IRecordRepository records,
                     }
                 }
             }
-            else if (input.TryGetValue(reference.Key, out var after) && IsEmpty(after)
+            else if (refWritable && input.TryGetValue(reference.Key, out var after) && IsEmpty(after)
                      && previous is not null && previous.TryGetValue(reference.Key, out var before) && !IsEmpty(before))
                 cleared = true;
 

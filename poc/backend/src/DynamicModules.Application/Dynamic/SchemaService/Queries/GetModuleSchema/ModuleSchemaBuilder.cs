@@ -23,20 +23,37 @@ namespace DynamicModules.Application.Dynamic.SchemaService.Queries.GetModuleSche
 public class ModuleSchemaBuilder(IModuleRepository modules, FieldTypeRegistry registry, ReferenceProviderRegistry providers)
 {
     /// <param name="detailPermissions">明細模組對目前呼叫端的權限；null 表示略過該明細。</param>
+    /// <param name="permittedTransitions">使用者能做的狀態轉移；null 表示全部（設計器預覽）。</param>
     public async Task<ModuleSchemaResponse> BuildAsync(
-        Module module, EffectivePermissions p, Func<Module, Task<EffectivePermissions?>> detailPermissions, CancellationToken ct)
+        Module module, EffectivePermissions p, Func<Module, Task<EffectivePermissions?>> detailPermissions, CancellationToken ct,
+        IReadOnlyCollection<WorkflowTransition>? permittedTransitions = null)
     {
         var (titleKey, blocks) = await BuildAsync(module, p, excludeFieldId: null, ct);
         var rules = await ToSchemaRulesAsync(module, blocks, ct);
 
         var (details, etagVersion, permHash) = await DetailsAsync(module, p, detailPermissions, ct);
+        var workflow = WorkflowOf(module, blocks, permittedTransitions);
+        if (workflow is not null)
+            permHash = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(
+                permHash + "|" + string.Join(",", workflow.Transitions.Select(t => $"{t.From}>{t.To}"))))) [..8].ToLowerInvariant();
 
         return new ModuleSchemaResponse(
             module.Key, module.ProgramCode, module.NameI18n, module.Icon, titleKey, module.Version, blocks,
             new SchemaPermissions(p.Can(PermissionAction.Read), p.Can(PermissionAction.Add), p.Can(PermissionAction.Edit),
                 p.Can(PermissionAction.Delete), p.Can(PermissionAction.PrintExport), p.Can(PermissionAction.Pricing)), rules, module.Kind, module.HostEntityKey,
-            details)
+            details, workflow)
         { PermHash = permHash, ETagVersion = etagVersion };
+    }
+
+    /// <summary>狀態欄位對我隱藏時不外露狀態機。</summary>
+    private static SchemaWorkflow? WorkflowOf(
+        Module module, List<SchemaBlock> visibleBlocks, IReadOnlyCollection<WorkflowTransition>? permitted)
+    {
+        if (module.Workflow is not { } wf || !visibleBlocks.SelectMany(b => b.Fields).Any(f => f.Id == wf.StatusFieldId)) return null;
+        var allowed = permitted ?? wf.Transitions;
+        return new SchemaWorkflow(wf.StatusFieldKey, $"opt_{wf.InitialOptionId}",
+            wf.States.Select(s => new SchemaWorkflowState($"opt_{s.OptionId}", s.ReadOnly)).ToList(),
+            allowed.Select(t => new SchemaWorkflowTransition($"opt_{t.From}", $"opt_{t.To}")).ToList());
     }
 
     /// <summary>表頭與明細共用：我看得到的標題欄位 key 與區塊／欄位（excludeFieldId 是明細的表頭欄位）。</summary>

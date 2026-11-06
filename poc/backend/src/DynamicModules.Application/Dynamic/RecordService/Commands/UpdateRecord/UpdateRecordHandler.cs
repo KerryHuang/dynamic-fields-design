@@ -5,6 +5,7 @@ using DynamicModules.Application.Common.Time;
 using DynamicModules.Application.Dynamic.RecordService.Data;
 using DynamicModules.Application.Dynamic.References;
 using DynamicModules.Application.Dynamic.Rollups;
+using DynamicModules.Application.Dynamic.WorkflowService;
 using DynamicModules.Domain.Entities.Dynamic;
 using DynamicModules.Domain.FieldTypes;
 using DynamicModules.Domain.Repositories.Dynamic;
@@ -17,7 +18,7 @@ namespace DynamicModules.Application.Dynamic.RecordService.Commands.UpdateRecord
 public class UpdateRecordHandler(
     IModuleRepository modules, IRecordRepository records, FieldTypeRegistry registry,
     ICurrentUser user, IBusinessTime time, IDynamicAccessGuard guard, ReferenceValidator refs, ReferenceFill fill, ReferenceResolver resolver,
-    DetailWriter details, DetailReader detailReader, RollupRecalc rollups, RecordHistoryWriter history)
+    DetailWriter details, DetailReader detailReader, RollupRecalc rollups, RecordHistoryWriter history, WorkflowEnforcer workflow)
     : IRequestHandler<UpdateRecordRequest, ServiceResult>
 {
     public async Task<ServiceResult> Handle(UpdateRecordRequest request, CancellationToken ct)
@@ -42,9 +43,17 @@ public class UpdateRecordHandler(
                 [RecordValueProcessor.RecordErrorKey] = [RecordValueProcessor.ReadOnlyRecordMessage]
             });
 
+        // 狀態機的唯讀狀態：除了狀態欄位，明細也不能動（表頭欄位由 Process 忽略）
+        if (module.Workflow is { } wf && wf.IsLocked(previous) && request.Details?.Values.Any(rows => rows.Count > 0) == true)
+            return ServiceResult.Invalid(new Dictionary<string, string[]>
+            {
+                [RecordValueProcessor.RecordErrorKey] = [WorkflowEnforcer.LockedDetailsMessage]
+            });
+
         var validRefKeys = await refs.ValidKeysAsync(module, request.Values, previous, ct);
         var input = new Dictionary<string, JsonElement?>(request.Values);
-        var systemKeys = await fill.ApplyAsync(module, input, previous, validRefKeys, ct);
+        var systemKeys = await fill.ApplyAsync(module, input, previous, validRefKeys,
+            RecordValueProcessor.WritablePredicate(module, previous, perms, registry, userIds, time.Today), ct);
         var plan = await details.PrepareAsync(module, record, PermissionAction.Edit, request.Details, ct,
             () => Task.FromResult<IReadOnlyDictionary<string, JsonElement?>>(RecordValueProcessor.Process(
                 module, input, previous, userIds, registry, perms, new RuleContext(time.Today), validRefKeys, systemKeys: systemKeys).values));
@@ -52,6 +61,8 @@ public class UpdateRecordHandler(
         var (values, errors) = RecordValueProcessor.Process(
             module, input, previous, userIds, registry, perms, new RuleContext(time.Today), validRefKeys, plan.RollupValues, systemKeys: systemKeys);
         foreach (var (key, messages) in plan.Errors) errors[key] = messages;
+        if (errors.Count == 0)
+            foreach (var (key, messages) in await workflow.CheckAsync(module, previous, values, ct)) errors[key] = messages;
         if (errors.Count > 0) return ServiceResult.Invalid(errors);
 
         if (module.Kind != ModuleKind.Extension) record.Title = RecordValueProcessor.TitleOf(module, values);
