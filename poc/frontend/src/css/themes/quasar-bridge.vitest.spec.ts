@@ -55,6 +55,23 @@ describe('quasar-bridge.css', () => {
     expect(bodiesOf(bridge, '.q-drawer :focus-visible').join(';')).toContain('--t-sidebar-fg');
   });
 
+  it('邊欄選取項的前景排在一般作用中文字之後，否則 industrial 的選取底（主色）會配上主色文字', () => {
+    const generic = bridge.indexOf('[data-style] .q-item--active');
+    const drawer = bridge.indexOf('[data-style] .q-drawer .q-router-link--active');
+    expect(generic).toBeGreaterThan(-1);
+    expect(drawer).toBeGreaterThan(generic);
+  });
+
+  it('q-badge 的文字色隨底色換成對應的 on-* token', () => {
+    expect(bodiesOf(bridge, '.q-badge').join(';')).toContain('var(--t-on-primary)');
+    expect(bodiesOf(bridge, '.q-badge.bg-primary').join(';')).toContain('var(--t-on-primary)');
+    expect(bodiesOf(bridge, '.q-badge.bg-negative').join(';')).toContain('var(--t-on-negative)');
+  });
+
+  it('Quasar 內部的灰字 class 改用 muted', () => {
+    expect(bodiesOf(bridge, '.text-grey-8').join(';')).toMatch(/color:\s*var\(--t-muted\)\s*!important/);
+  });
+
   it('頂列上的麵包屑不用主色，改繼承頂列前景色', () => {
     expect(bodiesOf(bridge, '.theme-breadcrumb .text-primary').join(';')).toMatch(/color:\s*inherit\s*!important/);
   });

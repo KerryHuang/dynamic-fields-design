@@ -57,8 +57,46 @@
   color: var(--t-on-info) !important;
 }
 
+/* q-badge 的白字來自 .q-badge 本身而不是 text-white，上面的覆寫抓不到；沒指定 color 時 Quasar 的底就是主色 */
+.q-badge {
+  color: var(--t-on-primary);
+}
+
+.q-badge.bg-primary {
+  color: var(--t-on-primary);
+}
+
+.q-badge.bg-negative {
+  color: var(--t-on-negative);
+}
+
+.q-badge.bg-positive {
+  color: var(--t-on-positive);
+}
+
+.q-badge.bg-warning {
+  color: var(--t-on-warning);
+}
+
+.q-badge.bg-info {
+  color: var(--t-on-info);
+}
+
+.q-badge.bg-muted {
+  color: var(--t-panel);
+}
+
 /* 語意 class（取代 text-grey 等調色盤 class） */
 .text-muted {
+  color: var(--t-muted) !important;
+}
+
+/* Quasar 元件內部自己帶的灰字（例如表格分頁按鈕的 text-grey-8），深色下對比不足 */
+.text-grey,
+.text-grey-5,
+.text-grey-6,
+.text-grey-7,
+.text-grey-8 {
   color: var(--t-muted) !important;
 }
 
@@ -110,15 +148,16 @@
   color: var(--t-sidebar-muted);
 }
 
+/* 一般選單項目的作用中文字用主色；邊欄內另有選取底與前景，必須排在它後面才蓋得過（industrial 的選取底就是主色） */
+[data-style] .q-item.q-router-link--active,
+[data-style] .q-item--active {
+  color: var(--t-primary-text);
+}
+
 [data-style] .q-drawer .q-router-link--active {
   background: var(--t-selected-bg);
   color: var(--t-selected-fg);
   border-left: var(--t-selected-marker) solid var(--t-primary);
-}
-
-[data-style] .q-item.q-router-link--active,
-[data-style] .q-item--active {
-  color: var(--t-primary-text);
 }
 
 /* 面板類元件 */
