@@ -91,15 +91,17 @@ describe('ReportDesignerPage', () => {
     expect(q('fields-child')!.textContent).toContain('出貨．數量');
   });
 
-  it('dedupe note appears at the group step when merged and main sum', async () => {
-    await mountAt('/reports/edit-less'.replace('edit-less', 'new'));
+  it('the dedupe note comes only from the backend preview, the designer has no rule of its own', async () => {
+    await mountAt('/reports/new');
+    api.previewReport.mockResolvedValue({ ...RESULT, dedupedNote: true });
     await pick('main-module', 'orders');
     await pick('child-module', 'shipments:20');
     for (let i = 0; i < 3; i++) await click('designer-next');
-    expect(q('dedupe-note')).toBeNull();
     await pick('measure-field', 'main:2:');
     await click('measure-add');
-    expect(q('dedupe-note')).not.toBeNull();
+    expect(q('deduped-note')).toBeNull();
+    await click('designer-next');
+    expect(q('deduped-note')).not.toBeNull();
   });
 
   it('measure fields follow the backend canSum flag', async () => {

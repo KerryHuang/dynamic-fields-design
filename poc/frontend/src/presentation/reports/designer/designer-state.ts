@@ -109,11 +109,6 @@ export function removeMeasure(s: DesignerState, index: number) {
   if (m) dropSort(s, m.id);
 }
 
-/** 合併了子模組又彙總主模組欄位時，主模組的數字每筆只算一次（spec §6.3），要對使用者說明。 */
-export function hasDedupeNote(s: DesignerState): boolean {
-  return !!s.child && s.measures.some((m) => ['sum', 'avg', 'min', 'max'].includes(m.kind) && m.field?.source === 'main');
-}
-
 const filled = (v: unknown) => v !== undefined && v !== null && v !== '';
 function filterComplete(f: ReportFilter): boolean {
   const v = f.value;

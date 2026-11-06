@@ -331,6 +331,59 @@ public class ReportRunnerTests : ReportTestBase
         (await Run(Def(columns: [ChildF(Qty)]))).State.Should().Be("fieldMissing");
     }
 
+    // ---- 去重說明：列相加或下鑽列數對不上總計時都要說明 ----
+
+    [Fact]
+    public async Task Note_MergedCountMain_ShownAndKeptOnDrill()
+    {
+        await Arrange();
+        await TwoOrders();
+        var d = Def(Shipments, groups: [G(ChildF(Warehouse))], measures: [M("n", "countMain")]);
+        var r = await Run(d);
+        r.DedupedNote.Should().BeTrue();
+        GroupOf(r, "Y").Values["n"].Should().Be(1m); // 下鑽有 2 列
+        var drill = await Run(d, drill: ["Y"]);
+        drill.DetailRows!.Should().HaveCount(2);
+        drill.DedupedNote.Should().BeTrue();
+    }
+
+    [Fact]
+    public async Task Note_NotMerged_GroupByMultiSelect_GroupsAddUpToMoreThanTotal()
+    {
+        await Arrange();
+        await Insert("order", "admin", (Amount, 100m), (Tags, new[] { TagA, TagB }));
+        var d = Def(groups: [G(MainF(Tags))], measures: [M("s", "sum", MainF(Amount))]);
+        var r = await Run(d);
+        r.Groups!.Sum(g => g.Values["s"]).Should().Be(200m);
+        r.Total!["s"].Should().Be(100m);
+        r.DedupedNote.Should().BeTrue();
+        (await Run(d, drill: [TagA])).DedupedNote.Should().BeTrue();
+    }
+
+    [Fact]
+    public async Task Note_GroupByMainMultiSelect_ChildMeasure()
+    {
+        await Arrange();
+        var a = await Insert("order", "admin", (Amount, 100m), (Tags, new[] { TagA, TagB }));
+        await Insert("shipment", "admin", (LinkField, a), (Qty, 3));
+        var r = await Run(Def(Shipments, groups: [G(MainF(Tags))], measures: [M("q", "sum", ChildF(Qty))]));
+        r.Groups!.Sum(g => g.Values["q"]).Should().Be(6m);
+        r.Total!["q"].Should().Be(3m);
+        r.DedupedNote.Should().BeTrue();
+    }
+
+    [Fact]
+    public async Task Note_NotShown_WhenRowsAddUpOrMeasureIsNotAdditive()
+    {
+        await Arrange();
+        var a = await Insert("order", "admin", (Amount, 100m), (Status, OptOpen), (Tags, new[] { TagA, TagB }));
+        await Insert("shipment", "admin", (LinkField, a), (Qty, 3));
+        (await Run(Def(groups: [G(MainF(Status))], measures: [M("s", "sum", MainF(Amount))]))).DedupedNote.Should().BeFalse();
+        (await Run(Def(Shipments, groups: [G(ChildF(Warehouse))], measures: [M("q", "sum", ChildF(Qty))]))).DedupedNote.Should().BeFalse();
+        (await Run(Def(Shipments, measures: [M("m", "max", MainF(Amount))]))).DedupedNote.Should().BeFalse();
+        (await Run(Def(groups: [G(MainF(Tags))], measures: [M("m", "min", MainF(Amount))]))).DedupedNote.Should().BeFalse();
+    }
+
     // ---- 子條件與左合併 ----
 
     [Fact]

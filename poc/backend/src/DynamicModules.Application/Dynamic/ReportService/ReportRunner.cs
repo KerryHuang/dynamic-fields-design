@@ -222,7 +222,8 @@ public class ReportRunner(
                 ? []
                 : rows.Where(r => d.Groups.Select((g, i) => ReportCalculator.KeysOf(r.Cells[ReportCalculator.KeyOf(g.Field)]).Contains(drill[i])).All(x => x)).ToList();
 
-        var calc = ReportCalculator.Calculate(rows, drilling ? [] : d.Groups, d.Measures, d.Child is not null, (f, c) => Matches(f, c, basis));
+        var multiGroup = d.Groups.Any(g => bound[ReportCalculator.KeyOf(g.Field)].Field.Type == FieldType.MultiEnum);
+        var calc = ReportCalculator.Calculate(rows, drilling ? [] : d.Groups, d.Measures, d.Child is not null, (f, c) => Matches(f, c, basis), multiGroup);
 
         var rowModule = childSide?.Module ?? main;
         var fieldColumns = FieldColumnsFor(d, drilling).Select(r => bound[ReportCalculator.KeyOf(r)]).ToList();

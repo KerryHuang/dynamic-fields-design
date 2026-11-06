@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { ModuleCatalog, ReportDefinition } from 'src/domain/dynamic/report-types';
 import {
-  addMeasure, canAdvance, canSave, emptyState, fromDefinition, hasContent, hasDedupeNote, LAST_RANGE_KINDS, operatorsOf, removeColumn, removeGroup, removeMeasure, setChild, setMainModule, setPrimaryDate, toDefinition, unavailableRefs,
+  addMeasure, canAdvance, canSave, emptyState, fromDefinition, hasContent, LAST_RANGE_KINDS, operatorsOf, removeColumn, removeGroup, removeMeasure, setChild, setMainModule, setPrimaryDate, toDefinition, unavailableRefs,
 } from './designer-state';
 
 const F = (id: number, label: string, o: Partial<ModuleCatalog['fields'][number]> = {}) => ({
@@ -51,13 +51,6 @@ describe('designer-state', () => {
     expect(operatorsOf(F(1, 'a', { type: 'boolean' }))).toEqual(['eq', 'isEmpty', 'isNotEmpty']);
     expect(operatorsOf(F(1, 'a', { type: 'formula', isDate: true }))).toContain('withinNextDays');
     expect(operatorsOf(F(1, 'a', { type: 'formula' }))).not.toContain('withinNextDays');
-  });
-
-  it('dedupe note appears at group step when merged and main sum', () => {
-    expect(hasDedupeNote(fromDefinition(DEF, 'x'))).toBe(true);
-    expect(hasDedupeNote(fromDefinition({ ...DEF, child: null }, 'x'))).toBe(false);
-    const childOnly = fromDefinition({ ...DEF, measures: [{ id: 'm1', kind: 'sum', field: { source: 'child', fieldId: 21, viaFieldId: null } }] }, 'x');
-    expect(hasDedupeNote(childOnly)).toBe(false);
   });
 
   it('date range needs a primary date field and clearing the field clears the range', () => {

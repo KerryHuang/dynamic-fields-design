@@ -36,7 +36,7 @@ const has = (w: ReturnType<typeof mount>, id: string) => w.find(`[data-testid="$
 describe('ReportResultView', () => {
   it('shows dedupe note when dedupedNote', () => {
     const w = mountView({ ...OK, dedupedNote: true });
-    expect(has(w, 'deduped-note').text()).toBe('主模組的金額等欄位每筆只算一次，明細列相加不等於這個數字');
+    expect(has(w, 'deduped-note').text()).toBe('總計每筆記錄只算一次；同一筆可能出現在多列或多個分組，所以各列相加不一定等於總計');
     expect(has(mountView(OK), 'deduped-note').exists()).toBe(false);
   });
 

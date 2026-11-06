@@ -19,8 +19,8 @@ public class ExportReportHandler(ReportAccess access, ReportModuleLoader loader,
 {
     private const string XlsxType = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
     private const string TotalLabel = "合計";
-    // spec §6.3：有合併且彙總了主模組欄位時必須說明，使用者接受去重的代價
-    private const string DedupedText = "主模組欄位的數字每筆主記錄只算一次，明細列相加不等於合計。";
+    // spec §6.3：列相加對不上總計時必須說明，使用者接受去重的代價
+    private const string DedupedText = "總計每筆記錄只算一次；同一筆可能出現在多列或多個分組，所以各列相加不一定等於總計。";
 
     public async Task<ServiceResult> Handle(ExportReportRequest request, CancellationToken ct)
     {

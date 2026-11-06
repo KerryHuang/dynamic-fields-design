@@ -3,7 +3,7 @@ import { computed, ref } from 'vue';
 import { useI18n } from 'vue-i18n';
 import type { ModuleCatalog, ReportFieldRef } from 'src/domain/dynamic/report-types';
 import { findEntry, listFields, refKey, valueText } from '../report-catalog';
-import { addMeasure, hasDedupeNote, operatorsOf, removeGroup, removeMeasure, type DesignerState, type Unavailable } from './designer-state';
+import { addMeasure, operatorsOf, removeGroup, removeMeasure, type DesignerState, type Unavailable } from './designer-state';
 import FilterRow from './FilterRow.vue';
 
 const props = defineProps<{ state: DesignerState; catalog: ModuleCatalog; unavailable: Unavailable }>();
@@ -100,7 +100,6 @@ const measureText = (i: number) => {
       />
       <q-btn outline no-caps :label="t('reports.designer.addMeasure')" :disable="!canAddMeasure" data-testid="measure-add" @click="add" />
     </div>
-    <div v-if="hasDedupeNote(s)" class="text-caption text-warning" data-testid="dedupe-note">{{ t('reports.dedupedNote') }}</div>
 
     <div v-if="unavailable.sort.length" data-testid="sort-unavailable">
       <div class="text-subtitle2 text-negative">{{ t('reports.designer.unavailableSort') }}</div>

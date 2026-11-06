@@ -11,6 +11,7 @@ public static class ReportCalculator
     public static string KeyOf(ReportFieldRef f) => $"{f.Source}:{f.FieldId}:{f.ViaFieldId?.ToString(CultureInfo.InvariantCulture)}";
 
     /// <param name="merged">報表是否合併了子模組；只影響 DedupedNote。</param>
+    /// <param name="multiGroup">定義是否依多選欄位分組；只影響 DedupedNote。下鑽時 groups 是空的，所以要另外傳。</param>
     /// <param name="matches">ratio 量值判斷一格是否符合條件；有 ratio 量值時必須提供，運算子由欄位型別層實作。</param>
     /// <remarks>
     /// 分組依第一次出現的順序，排序由呼叫端做。沒有分組時 Groups 為空，數字都在 Total。
@@ -19,7 +20,7 @@ public static class ReportCalculator
     /// </remarks>
     public static ReportCalcResult Calculate(
         IReadOnlyList<ReportRow> rows, IReadOnlyList<ReportGroup> groups, IReadOnlyList<ReportMeasure> measures, bool merged,
-        Func<ReportFilter, ReportCell, bool>? matches = null)
+        Func<ReportFilter, ReportCell, bool>? matches = null, bool multiGroup = false)
     {
         if (matches is null && measures.Any(m => m.Kind == "ratio"))
             throw new ArgumentException("ratio 量值需要提供條件判斷函式 matches。", nameof(matches));
@@ -43,9 +44,16 @@ public static class ReportCalculator
         }
 
         var results = buckets.Select(b => new ReportGroupResult(b.Keys, b.Keys, Measure(b.Rows, measures, matches))).ToList();
-        var dedupedNote = merged && measures.Any(m => m.Kind is "sum" or "avg" && m.Field?.Source == "main");
-        return new ReportCalcResult(results, Measure(rows, measures, matches), dedupedNote, rows.Count);
+        return new ReportCalcResult(results, Measure(rows, measures, matches), NeedsDedupedNote(measures, merged, multiGroup), rows.Count);
     }
+
+    /// <summary>
+    /// 列相加或下鑽列數對不上總計時要說明（spec §6.3、§13.1）。合併時主模組的數字每筆只算一次；
+    /// 依多選欄位分組時一筆落在多組，任何相加型量值都會加超過總計。最小、最大與條件占比不是相加出來的，不需要說明。
+    /// </summary>
+    private static bool NeedsDedupedNote(IReadOnlyList<ReportMeasure> measures, bool merged, bool multiGroup) =>
+        (merged && measures.Any(m => m.Kind == "countMain" || (m.Kind is "sum" or "avg" && m.Field?.Source == "main")))
+        || (multiGroup && measures.Any(m => m.Kind is "sum" or "avg" or "countMain" or "countChild"));
 
     /// <summary>一列在各分組欄位的 key 組合；多選每個選項一組，所以一列可能落在多個分組。</summary>
     private static IEnumerable<List<string>> GroupKeysOf(ReportRow row, IReadOnlyList<ReportGroup> groups)

@@ -164,6 +164,41 @@ public class ReportCalculatorTests
         r.Groups.Select(g => g.Values["sum"]).Should().Equal(1m, 2m, 4m, 8m);
     }
 
+    [Theory]
+    [InlineData("countMain", false, true)]  // 合併：主記錄筆數對不上下鑽列數
+    [InlineData("countChild", false, false)]
+    [InlineData("min", false, false)]       // 最小、最大不是相加出來的
+    [InlineData("max", false, false)]
+    [InlineData("ratio", false, false)]
+    public void DedupedNote_Merged_ByKind(string kind, bool multiGroup, bool expected)
+    {
+        var field = kind is "min" or "max" ? Amount : null;
+        var cond = kind == "ratio" ? new ReportFilter(Amount, "gt", null) : null;
+        var m = new ReportMeasure(kind, kind, field, cond);
+        ReportCalculator.Calculate(TwoOrders(), [], [m], true, (_, _) => true, multiGroup).DedupedNote.Should().Be(expected);
+    }
+
+    [Theory]
+    [InlineData("sum", true)]
+    [InlineData("avg", true)]
+    [InlineData("countMain", true)]
+    [InlineData("min", false)]
+    [InlineData("max", false)]
+    public void DedupedNote_NotMerged_MultiSelectGroup(string kind, bool expected)
+    {
+        var field = kind == "countMain" ? null : Amount;
+        var m = new ReportMeasure(kind, kind, field, null);
+        ReportCalculator.Calculate(TwoOrders(), [], [m], false, Matches, multiGroup: true).DedupedNote.Should().Be(expected);
+        ReportCalculator.Calculate(TwoOrders(), [], [m], false, Matches).DedupedNote.Should().BeFalse();
+    }
+
+    [Fact]
+    public void DedupedNote_MultiSelectGroup_ChildMeasureToo()
+    {
+        ReportCalculator.Calculate(TwoOrders(), [], [M("sum", Qty)], true, Matches, multiGroup: true).DedupedNote.Should().BeTrue();
+        ReportCalculator.Calculate(TwoOrders(), [], [M("countChild", null)], true, Matches, multiGroup: true).DedupedNote.Should().BeTrue();
+    }
+
     [Fact]
     public void DedupedNote_TrueOnlyWhenMergedAndMainSumOrAvg()
     {
