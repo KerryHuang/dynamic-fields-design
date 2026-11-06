@@ -111,7 +111,7 @@
 - Consumes: Task 2、3；第一段 `ReportResultView`。
 - Produces: 路由 `/dashboards/:id(\d+)?`；選單 `data-testid="dashboards-menu"`；localStorage 鍵 `dashboard.last.<userId>`，讀寫都包 try/catch。
 
-左側清單分「指派給我」「我的」「分享給我」的報表（點報表開 `/reports/:id`）；個人版標「已調整」，`hasUpdate` 時顯示「儀表板已更新」與「還原成最新版」。`DashboardCardView` 各自查詢、各自顯示 spec §9 的狀態，標示實際套用的區間與「不受日期篩選影響」。首頁：有儀表板就開上次的，否則第一張；沒有就維持現有導向。
+左側清單分「指派給我」「我的」「分享給我」的報表（點報表開 `/reports/:id`）；個人版標「已調整」，`hasUpdate` 時顯示「儀表板已更新」與「還原成最新版」。`DashboardCardView` 各自查詢、各自顯示 spec §9 的狀態，標示實際套用的區間與「不受日期篩選影響」。首頁：有儀表板就開上次的，否則第一張；沒有就顯示一般首頁（`HomePage.vue` 的歡迎區、最近開過、我的應用與捷徑），不再自動導向；有儀表板時在首頁接上。
 
 - [ ] **Step 1: 寫失敗測試。** `one failing card does not affect others`；`drag saves layout and marks adjusted`；`temporary date filter does not save`；`has update shows restore`；`restore confirms then reloads`；`card shows applied range and ignores-filter note`；`under 600px single column no drag`；`home opens last dashboard`、`home falls back to first`、`home keeps redirect when none`；`last dashboard key is per user`；`localStorage throws still renders`；`link hidden when target not visible`。
 - [ ] **Step 2: 跑測試確認失敗。**
