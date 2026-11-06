@@ -27,7 +27,7 @@ public class AdminUpdateDashboardHandler(IDashboardRepository dashboards, IUnitO
         if (errors.Count > 0) return ServiceResult.Invalid(ReportRules.ToErrors("layout", errors));
 
         d.Name = request.Name.Trim();
-        d.LayoutJson = DashboardLayout.Serialize(request.Layout);
+        d.LayoutJson = DashboardLayout.Serialize(request.Layout.WithoutFromAssigned());
         d.Version++;
         d.StampModified(viewer.UserId, time.Now);
         await uow.CommitAsync(ct);

@@ -15,6 +15,15 @@ public sealed record DashboardScope(Dashboard Dashboard, DashboardPersonalVersio
 
     public bool HasUpdate => Personal is not null && Personal.BaseVersion < Dashboard.Version;
 
+    /// <summary>目前指派版面裡的報表 id；自己的儀表板是空的。</summary>
+    public IReadOnlySet<long> AssignedReportIds() => IsAssigned ? DashboardLayout.Parse(Dashboard.LayoutJson).ReportIds() : new HashSet<long>();
+
+    /// <summary>
+    /// 這張卡片的報表是否算「指派版給的」（不需另外分享）：在目前指派版面內，或個人版上已由伺服器標過 <see cref="DashboardCard.FromAssigned"/>。
+    /// 只有指派版適用；自己的儀表板一律要看得到定義。
+    /// </summary>
+    public bool IsFromAssigned(DashboardCard card, IReadOnlySet<long> assignedIds) =>
+        IsAssigned && (card.FromAssigned || assignedIds.Contains(card.ReportId));
 }
 
 public class DashboardAccess(IDashboardRepository dashboards, IReportRepository reports)
@@ -36,7 +45,8 @@ public class DashboardAccess(IDashboardRepository dashboards, IReportRepository 
     public async Task<DashboardDetail> DetailAsync(DashboardScope scope, ReportViewer viewer, CancellationToken ct)
     {
         var layout = scope.EffectiveLayout;
-        var fromAssigned = scope.IsAssigned ? DashboardLayout.Parse(scope.Dashboard.LayoutJson).ReportIds() : new HashSet<long>();
+        var assigned = scope.AssignedReportIds();
+        var fromAssigned = layout.Cards.Where(c => scope.IsFromAssigned(c, assigned)).Select(c => c.ReportId).ToHashSet();
         var names = new Dictionary<long, string>();
         foreach (var id in layout.ReportIds())
             if (await reports.GetAsync(id, ct) is { } r && (fromAssigned.Contains(id) || ReportAccess.CanView(r, viewer)))

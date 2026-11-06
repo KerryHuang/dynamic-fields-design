@@ -24,7 +24,7 @@ public class CreateDashboardHandler(IDashboardRepository dashboards, IUnitOfWork
 
         var dashboard = new Dashboard
         {
-            OwnerUserId = viewer.UserId, Name = request.Name.Trim(), LayoutJson = DashboardLayout.Serialize(request.Layout)
+            OwnerUserId = viewer.UserId, Name = request.Name.Trim(), LayoutJson = DashboardLayout.Serialize(request.Layout.WithoutFromAssigned())
         };
         dashboard.StampCreated(viewer.UserId, time.Now);
         dashboards.Add(dashboard);

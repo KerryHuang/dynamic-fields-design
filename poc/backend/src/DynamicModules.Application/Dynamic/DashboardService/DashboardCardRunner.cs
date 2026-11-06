@@ -29,8 +29,8 @@ public class DashboardCardRunner(DashboardAccess access, ReportAccess reportAcce
         ReportResult Fail(string state, string key) => new(state, ReportText.Get(locale, key), "", [], null, null, null, false, basis, null);
         var report = await reports.GetAsync(card.ReportId, ct);
         if (report is null) return Result(drill, Fail(ReportGoneState, ReportText.ReportGone));
-        // 指派版的卡片（管理員放上的）不看分享；其他卡片要這個人現在還看得到定義
-        var fromAssigned = scope.IsAssigned && DashboardLayout.Parse(scope.Dashboard.LayoutJson).ReportIds().Contains(card.ReportId);
+        // 指派版給的卡片（在目前指派版面內，或個人版上伺服器標過來源）不看分享；其他卡片要這個人現在還看得到定義
+        var fromAssigned = scope.IsFromAssigned(card, scope.AssignedReportIds());
         if (!fromAssigned && !ReportAccess.CanView(report, viewer)) return Result(drill, Fail(UnsharedState, ReportText.Unshared));
 
         var definition = ReportDefinition.Parse(report.DefinitionJson);

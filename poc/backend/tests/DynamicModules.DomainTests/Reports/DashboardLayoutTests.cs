@@ -32,6 +32,21 @@ public class DashboardLayoutTests
     }
 
     [Fact]
+    public void FromAssigned_DefaultsToFalse_AndIsServerOverwritable()
+    {
+        // 舊資料沒有這個欄位：視為 false
+        var legacy = DashboardLayout.Parse("""{"cards":[{"id":"a","reportId":1,"viz":"table","x":0,"y":0,"w":3,"h":2}]}""").Cards.Single();
+        legacy.FromAssigned.Should().BeFalse();
+
+        // client 送 true 也能解析，但伺服器存檔前會整批覆寫
+        var forged = DashboardLayout.Parse("""{"cards":[{"id":"a","reportId":1,"viz":"table","x":0,"y":0,"w":3,"h":2,"fromAssigned":true},{"id":"b","reportId":2,"viz":"table","x":3,"y":0,"w":3,"h":2,"fromAssigned":true}]}""");
+        forged.Cards.Should().OnlyContain(c => c.FromAssigned);
+        forged.WithFromAssigned(c => c.ReportId == 2).Cards.Select(c => c.FromAssigned).Should().Equal(false, true);
+        forged.WithoutFromAssigned().Cards.Should().OnlyContain(c => !c.FromAssigned);
+        DashboardLayout.Parse(DashboardLayout.Serialize(forged)).Cards.Should().OnlyContain(c => c.FromAssigned);
+    }
+
+    [Fact]
     public void ReportIds_ListsDistinctReports()
     {
         var layout = new DashboardLayout(

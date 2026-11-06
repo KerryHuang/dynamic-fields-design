@@ -21,7 +21,7 @@ public class DashboardsController(IMediator mediator) : ControllerBase
 {
     public record CreateBody(string? Name, JsonElement? Layout);
 
-    public record SaveBody(string? Name, JsonElement? Layout);
+    public record SaveBody(string? Name, JsonElement? Layout, int? Version);
 
     public record RunBody(ReportDateRange? FilterRange);
 
@@ -56,7 +56,7 @@ public class DashboardsController(IMediator mediator) : ControllerBase
     public async Task<IActionResult> SaveLayout(long id, SaveBody body) =>
         ParseLayout(body.Layout) is not { } layout
             ? Bad(this, "layout", "版面格式錯誤")
-            : (await mediator.Send(new SaveDashboardLayoutRequest(id, body.Name, layout))).ToActionResult(this);
+            : (await mediator.Send(new SaveDashboardLayoutRequest(id, body.Name, layout, body.Version))).ToActionResult(this);
 
     [HttpPost("{id:long}/restore")]
     public async Task<IActionResult> Restore(long id) => (await mediator.Send(new RestoreDashboardRequest(id))).ToActionResult(this);

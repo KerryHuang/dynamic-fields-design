@@ -24,7 +24,7 @@ public class AdminCreateDashboardHandler(IDashboardRepository dashboards, IUnitO
 
         var dashboard = new Dashboard
         {
-            OwnerUserId = null, Name = request.Name.Trim(), LayoutJson = DashboardLayout.Serialize(request.Layout),
+            OwnerUserId = null, Name = request.Name.Trim(), LayoutJson = DashboardLayout.Serialize(request.Layout.WithoutFromAssigned()),
             Version = 1, Sequence = await dashboards.MaxSequenceAsync(ct) + 1
         };
         dashboard.StampCreated(viewer.UserId, time.Now);

@@ -6,7 +6,7 @@ namespace DynamicModules.Application.Dynamic.DashboardService.Data;
 /// <summary>儀表板版面的存檔驗證（結構，不碰資料庫）。報表可見性由 <see cref="DashboardAccess"/> 檢查。</summary>
 public static class DashboardRules
 {
-    public const string NotFound = "儀表板不存在";
+    public const string NotFound = "儀表板不存在", BadVersion = "版本不正確，請重新載入後再改";
     public const int Columns = 12, MaxCards = 40, MaxHeight = 40, MaxTitleLength = 100;
 
     private static readonly string[] Vizs = ["table", "indicator", "line", "bar", "donut"];

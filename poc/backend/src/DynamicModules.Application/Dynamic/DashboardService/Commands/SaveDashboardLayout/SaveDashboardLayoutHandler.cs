@@ -29,8 +29,17 @@ public class SaveDashboardLayoutHandler(IDashboardRepository dashboards, IUnitOf
         }
         if (errors.Count > 0) return ServiceResult.Invalid(ReportRules.ToErrors("layout", errors));
 
-        var json = DashboardLayout.Serialize(request.Layout);
         var d = scope.Dashboard;
+        // 第一次另存個人版才用載入時的版本當基準；超出 1 到目前版本就是畫面與伺服器對不上
+        if (scope.IsAssigned && scope.Personal is null && request.Version is { } loaded && (loaded < 1 || loaded > d.Version))
+            return ServiceResult.Invalid(new Dictionary<string, string[]> { ["version"] = [DashboardRules.BadVersion] });
+
+        // 來源旗標只由伺服器決定：報表在目前指派版面內，或既有個人版已帶旗標才是 true，client 送的值一律覆寫
+        var trusted = scope.AssignedReportIds().Union(
+            scope.IsAssigned && scope.Personal is not null
+                ? DashboardLayout.Parse(scope.Personal.LayoutJson).Cards.Where(c => c.FromAssigned).Select(c => c.ReportId)
+                : []).ToHashSet();
+        var json = DashboardLayout.Serialize(scope.IsAssigned ? request.Layout.WithFromAssigned(c => trusted.Contains(c.ReportId)) : request.Layout.WithoutFromAssigned());
         if (!scope.IsAssigned)
         {
             d.LayoutJson = json;
@@ -43,7 +52,7 @@ public class SaveDashboardLayoutHandler(IDashboardRepository dashboards, IUnitOf
         var personal = scope.Personal;
         if (personal is null)
         {
-            personal = new DashboardPersonalVersion { DashboardId = d.Id, UserId = viewer.UserId, BaseVersion = d.Version };
+            personal = new DashboardPersonalVersion { DashboardId = d.Id, UserId = viewer.UserId, BaseVersion = request.Version ?? d.Version };
             dashboards.AddPersonal(personal);
         }
         personal.LayoutJson = json;

@@ -26,9 +26,19 @@ public record DashboardLayout(List<DashboardCard> Cards)
     public IReadOnlySet<long> ReportIds() => Cards.Select(c => c.ReportId).ToHashSet();
 
     public DashboardLayout WithoutReport(long reportId) => new(Cards.Where(c => c.ReportId != reportId).ToList());
+
+    /// <summary>重設每張卡片的 <see cref="DashboardCard.FromAssigned"/>；client 送來的值一律不採用，由伺服器依來源決定。</summary>
+    public DashboardLayout WithFromAssigned(Func<DashboardCard, bool> decide) => new(Cards.Select(c => c with { FromAssigned = decide(c) }).ToList());
+
+    public DashboardLayout WithoutFromAssigned() => WithFromAssigned(_ => false);
 }
 
-public record DashboardCard(string Id, long ReportId, string? Title, string Viz, int X, int Y, int W, int H, CardOptions Options);
+/// <summary>
+/// FromAssigned 只由伺服器決定（spec §7）：個人版上這張卡片的報表來自指派版（放上時在指派版面內，或之前已帶此旗標），
+/// 所以指派版後來移除這張報表，個人版保留的卡片仍可載入，不需要另外分享。使用者自己靠分享加入的卡片永遠是 false。
+/// 存檔時一律由伺服器覆寫，client 送的值無效。
+/// </summary>
+public record DashboardCard(string Id, long ReportId, string? Title, string Viz, int X, int Y, int W, int H, CardOptions Options, bool FromAssigned = false);
 
 /// <summary>
 /// 卡片自己的選項（spec §4）。Range 是卡片自己的日期區間；TopN 不併「其他」；Cumulative 只限長條；ComparePeriods 只限指標卡且報表要有主要日期欄位；
