@@ -9,10 +9,11 @@ import type { ListView } from 'src/domain/dynamic/types';
 import zhTW from 'src/i18n/zh-TW.json';
 import { dynamicApi } from 'src/services/api/dynamic-api';
 import ViewMenu from './ViewMenu.vue';
+import { FACTORY_ME_THEME } from 'src/domain/theme/theme-fixtures';
 
 vi.mock('src/services/api/dynamic-api', () => ({ dynamicApi: { getMe: vi.fn() } }));
 const designer = (edit: boolean) => ({
-  userId: 'u', displayName: 'U', isSystemAdmin: false, mustChangePassword: false, groups: [], designer: { read: true, add: edit, edit, delete: edit },
+  userId: 'u', displayName: 'U', isSystemAdmin: false, mustChangePassword: false, groups: [], designer: { read: true, add: edit, edit, delete: edit }, theme: FACTORY_ME_THEME,
 });
 let canEditDesigner = true;
 

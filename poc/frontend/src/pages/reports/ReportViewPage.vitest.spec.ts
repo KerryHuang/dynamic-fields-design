@@ -9,6 +9,7 @@ import type { ModuleCatalog, ReportDetail, ReportResult } from 'src/domain/dynam
 import zhTW from 'src/i18n/zh-TW.json';
 import { dynamicApi } from 'src/services/api/dynamic-api';
 import ReportViewPage from './ReportViewPage.vue';
+import { FACTORY_ME_THEME } from 'src/domain/theme/theme-fixtures';
 
 vi.mock('src/services/api/dynamic-api', () => ({
   dynamicApi: {
@@ -51,7 +52,7 @@ let mounted: ReturnType<typeof mount> | undefined;
 let router: ReturnType<typeof createRouter>;
 
 async function mountPage(detail: ReportDetail, isSystemAdmin = false) {
-  api.getMe.mockResolvedValue({ userId: 'u', displayName: 'u', isSystemAdmin, mustChangePassword: false, groups: [], designer: { read: false, add: false, edit: false, delete: false } });
+  api.getMe.mockResolvedValue({ userId: 'u', displayName: 'u', isSystemAdmin, mustChangePassword: false, groups: [], designer: { read: false, add: false, edit: false, delete: false }, theme: FACTORY_ME_THEME });
   api.getReport.mockResolvedValue(detail);
   api.getReportCatalog.mockResolvedValue(CATALOG);
   api.runReport.mockResolvedValue(RESULT);
@@ -153,7 +154,7 @@ describe('ReportViewPage', () => {
   });
 
   it('a failed run shows a retry, not a number', async () => {
-    api.getMe.mockResolvedValue({ userId: 'u', displayName: 'u', isSystemAdmin: false, mustChangePassword: false, groups: [], designer: { read: false, add: false, edit: false, delete: false } });
+    api.getMe.mockResolvedValue({ userId: 'u', displayName: 'u', isSystemAdmin: false, mustChangePassword: false, groups: [], designer: { read: false, add: false, edit: false, delete: false }, theme: FACTORY_ME_THEME });
     api.getReport.mockResolvedValue(DETAIL(true));
     api.runReport.mockRejectedValue({ status: 500 });
     router = createRouter({ history: createMemoryHistory(), routes: [{ path: '/reports/:id(\\d+)', component: ReportViewPage }] });

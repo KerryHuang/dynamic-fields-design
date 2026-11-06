@@ -1,3 +1,5 @@
+import type { MeTheme } from 'src/domain/theme/theme-model';
+
 export type Locale = 'zh-TW' | 'en-US' | 'th' | 'vi';
 export type I18nText = Partial<Record<Locale, string>>;
 
@@ -282,6 +284,7 @@ export interface Me {
   isDemoAccount?: boolean;
   groups: { id: number; key: string; name: I18nText }[];
   designer: { read: boolean; add: boolean; edit: boolean; delete: boolean };
+  theme: MeTheme;
 }
 
 /** GetModule response: every status of field and option, for the designer. */

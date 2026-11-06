@@ -3,6 +3,7 @@ import type {
   ImportPreview, ImportResult, PagedResponse, RecordHistoryEntry, RelatedTab, Rule, RollupSource, User, ViewSort,
 } from 'src/domain/dynamic/types';
 import type { CatalogModule, DrillResult, ModuleCatalog, ReportDateRange, ReportDefinition, ReportDetail, ReportItem, ReportResult, ReportShareTarget } from 'src/domain/dynamic/report-types';
+import type { MeTheme, ThemeChoice, ThemeDefaults } from 'src/domain/theme/theme-model';
 import { handleAuthFailure, http, toApiError } from './http';
 
 export interface ModuleSummary {
@@ -154,6 +155,9 @@ export const dynamicApi = {
     http.post<AuthUser>('/auth/change-password', body).then(data),
   getMe: () => http.get<Me>('/me').then(data),
   getMenu: () => http.get<MenuItem[]>('/menu').then(data),
+  getThemeDefaults: () => http.get<ThemeDefaults>('/theme').then(data),
+  saveMyTheme: (c: ThemeChoice) => http.put<MeTheme>('/me/theme', c).then(data),
+  saveSiteTheme: (d: ThemeDefaults) => http.put<ThemeDefaults>('/system/theme', d).then(data),
 
   getPagedRecords: (key: string, { currentPage, pagesSize, filter, sort, q }: PagedRecordsQuery) =>
     http.get<PagedResponse<DynamicRecord>>(`/modules/${key}/records/paged`, {

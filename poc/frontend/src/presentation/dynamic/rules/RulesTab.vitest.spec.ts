@@ -8,6 +8,7 @@ import type { DesignerField, Me, ModuleDetail, Rule } from 'src/domain/dynamic/t
 import zhTW from 'src/i18n/zh-TW.json';
 import { dynamicApi } from 'src/services/api/dynamic-api';
 import RulesTab from './RulesTab.vue';
+import { FACTORY_ME_THEME } from 'src/domain/theme/theme-fixtures';
 
 vi.mock('src/services/api/dynamic-api', () => ({
   dynamicApi: { getRules: vi.fn(), putRules: vi.fn(), getMe: vi.fn() },
@@ -27,7 +28,7 @@ const rules: Rule[] = [
   { id: 2, kind: 'readOnly', condition: { all: [] }, targets: ['*'], optionIds: [], active: true },
 ];
 const me = (edit: boolean): Me => ({
-  userId: 'a', displayName: 'A', isSystemAdmin: false, mustChangePassword: false, groups: [], designer: { read: true, add: true, edit, delete: false },
+  userId: 'a', displayName: 'A', isSystemAdmin: false, mustChangePassword: false, groups: [], designer: { read: true, add: true, edit, delete: false }, theme: FACTORY_ME_THEME,
 });
 
 function mountTab(canEdit = true) {

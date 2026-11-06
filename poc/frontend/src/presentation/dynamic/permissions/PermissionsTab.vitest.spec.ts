@@ -8,6 +8,7 @@ import type { Me, ModulePermissions, Privileges } from 'src/domain/dynamic/types
 import zhTW from 'src/i18n/zh-TW.json';
 import { dynamicApi } from 'src/services/api/dynamic-api';
 import PermissionsTab from './PermissionsTab.vue';
+import { FACTORY_ME_THEME } from 'src/domain/theme/theme-fixtures';
 
 vi.mock('src/services/api/dynamic-api', () => ({
   dynamicApi: {
@@ -24,7 +25,7 @@ const permsFor = (scope: 'own' | null): ModulePermissions => ({
   options: [{ optionId: 4, groupIds: [1] }],
 });
 const me = (edit: boolean): Me => ({
-  userId: 'a', displayName: 'A', isSystemAdmin: false, mustChangePassword: false, groups: [], designer: { read: true, add: true, edit, delete: false },
+  userId: 'a', displayName: 'A', isSystemAdmin: false, mustChangePassword: false, groups: [], designer: { read: true, add: true, edit, delete: false }, theme: FACTORY_ME_THEME,
 });
 
 function mountTab(canEdit = true, perms?: ModulePermissions, extraProps: Record<string, unknown> = {}) {
