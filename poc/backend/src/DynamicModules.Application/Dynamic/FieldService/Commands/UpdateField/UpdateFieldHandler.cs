@@ -74,6 +74,19 @@ public class UpdateFieldHandler(
         var (badDependent, rederived) = await RecheckDependentRollupsAsync(module, field, config, ct);
         if (badDependent is not null) return badDependent;
 
+        // 下面的重算會把值寫回記錄：公式變了 → 本模組與以它為來源的彙總父模組；彙總變了 → 本模組；
+        // 依賴它的彙總重推了型別或小數位 → 那些父模組。任何一個是 Closed 都擋（資料唯讀），純改標籤等不重算的變更不受影響
+        var formulaChanged = field.Type == FieldType.Formula
+            && (field.Config.Formula != config.Formula || field.Config.Scale != config.Scale || field.Config.ResultType != config.ResultType);
+        if (formulaChanged && await ClosedDataGuard.RejectFormulaRecalcAsync(module, modules, ct) is { } closedFormula) return closedFormula;
+        if (!formulaChanged
+            && field is { Type: FieldType.Rollup, Status: FieldStatus.Active } && RollupChanged(field.Config.Rollup, config.Rollup)
+            && ClosedDataGuard.Reject(module) is { } closedRollup)
+            return closedRollup;
+        foreach (var parentId in rederived.Select(r => r.ParentId).Distinct())
+            if (await modules.GetByIdAsync(parentId, includeChildren: false, ct) is { } parent && ClosedDataGuard.Reject(parent) is { } closedParent)
+                return closedParent;
+
         var now = time.Now;
         if (newBlock.Id != oldBlock.Id)
         {
