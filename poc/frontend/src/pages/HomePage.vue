@@ -59,7 +59,7 @@ const recent = computed(() => {
               <q-card flat bordered>
                 <q-item clickable :to="`/dynamic/${m.key}`" data-testid="home-app-card">
                   <q-item-section avatar><q-icon :name="m.icon || 'apps'" /></q-item-section>
-                  <q-item-section class="home-card-name">{{ resolveI18n(m.name, locale) }}</q-item-section>
+                  <q-item-section>{{ resolveI18n(m.name, locale) }}</q-item-section>
                 </q-item>
               </q-card>
             </div>
