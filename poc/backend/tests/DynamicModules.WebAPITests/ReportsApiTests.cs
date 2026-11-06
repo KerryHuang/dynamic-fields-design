@@ -1059,11 +1059,13 @@ public class ReportsApiTests
             .StatusCode.Should().Be(HttpStatusCode.BadRequest);
     }
 
+    /// <summary>公式結果由數字改成日期後，已存的量值與條件對不上欄位：回 fieldMissing，不回假的 empty、0% 或日期序號加總。</summary>
     [Fact]
-    public async Task Run_StoredConditionValueNoLongerMatchesFieldType_NoMatchNot500()
+    public async Task Run_FormulaResultTypeChanged_FieldMissingWithVisibleName()
     {
         using var app = new TestApp();
         var w = await MakeWorld(app);
+        var sales = GroupId(app, "sales");
         var admin = app.AsUser();
         var blockId = (await JsonOf(await admin.GetAsync($"{Base}/modules/{w.Main}"))).GetProperty("blocks")[0].GetProperty("id").GetInt64();
         var f = await AddField(admin, w.Main, "formula", new { formula = $"{{{w.Amount}}} * 2", resultType = "number", scale = 0 });
@@ -1071,16 +1073,61 @@ public class ReportsApiTests
         {
             values = new Dictionary<string, object> { [w.TitleKey] = "t", [w.AmountKey] = 10, [$"f_{w.Due}"] = "2026-11-05" }
         })).EnsureSuccessStatusCode();
-        var def = Def(w.Main, columns: [Ref(w.Amount)], filters: [new { field = Ref(f.Id), op = "gt", value = 5 }]);
-        var id = await Create(admin, def);
-        (await Run(admin, id)).GetProperty("state").GetString().Should().Be("ok");
+        object Condition(string op, object value) => new { field = Ref(f.Id), op, value };
+        var filter = await Create(admin, Def(w.Main, columns: [Ref(w.Amount)], filters: [Condition("gt", 5)]));
+        var sum = await Create(admin, Def(w.Main, measures: [Sum("s", f.Id)]));
+        var avg = await Create(admin, Def(w.Main, measures: [new { id = "a", kind = "avg", field = Ref(f.Id), condition = (object?)null }]));
+        var ratio = await Create(admin, Def(w.Main, measures: [new { id = "r", kind = "ratio", field = (object?)null, condition = Condition("gt", 5) }]));
+        var min = await Create(admin, Def(w.Main, measures: [new { id = "m", kind = "min", field = Ref(f.Id), condition = (object?)null }]));
+        await Share(admin, filter, sales);
+        foreach (var id in new[] { filter, sum, avg, ratio, min })
+            (await Run(admin, id)).GetProperty("state").GetString().Should().Be("ok");
 
         (await admin.PutAsJsonAsync($"{Base}/fields/{f.Id}", new
         {
-            type = "formula", label = new Dictionary<string, string> { ["zh-TW"] = "公式" }, blockId,
+            type = "formula", label = new Dictionary<string, string> { ["zh-TW"] = "公式甲" }, blockId,
             config = new { formula = $"{{{w.Due}}}", resultType = "date" }
         })).StatusCode.Should().Be(HttpStatusCode.OK);
 
-        (await Run(admin, id)).GetProperty("state").GetString().Should().Be("empty");
+        foreach (var id in new[] { filter, sum, avg, ratio })
+        {
+            var run = await Run(admin, id);
+            run.GetProperty("state").GetString().Should().Be("fieldMissing");
+            run.GetProperty("message").GetString().Should().Be("欄位型別已變更：公式甲");
+        }
+        // 日期也能取最小，這張報表沒有對不上
+        (await Run(admin, min)).GetProperty("state").GetString().Should().Be("ok");
+
+        // 看不到欄位的人仍是無權限，訊息不帶名稱
+        await Grant(app, w.Main, [new { fieldId = f.Id, groupId = sales, access = "hidden" }], ("mis", true, "all"), ("sales", true, "all"));
+        var hidden = await Run(app.AsUser("sales01"), filter);
+        hidden.GetProperty("state").GetString().Should().Be("restricted");
+        hidden.GetProperty("message").GetString().Should().NotContain("公式甲");
+    }
+
+    [Fact]
+    public async Task Run_FormulaChangedFromDateToNumber_DateConditionAndPrimaryDateFieldMissing()
+    {
+        using var app = new TestApp();
+        var w = await MakeWorld(app);
+        var admin = app.AsUser();
+        var blockId = (await JsonOf(await admin.GetAsync($"{Base}/modules/{w.Main}"))).GetProperty("blocks")[0].GetProperty("id").GetInt64();
+        var f = await AddField(admin, w.Main, "formula", new { formula = $"{{{w.Due}}}", resultType = "date" });
+        var condition = await Create(admin, Def(w.Main, measures: [Count()], filters: [new { field = Ref(f.Id), op = "eq", value = "2026-11-05" }]));
+        var primary = await Create(admin, Def(w.Main, measures: [Count()], primaryDate: Ref(f.Id), dateRange: new { kind = "thisYear" }));
+        var within = await Create(admin, Def(w.Main, measures: [Count()], filters: [new { field = Ref(f.Id), op = "withinLastDays", value = 7 }]));
+
+        (await admin.PutAsJsonAsync($"{Base}/fields/{f.Id}", new
+        {
+            type = "formula", label = new Dictionary<string, string> { ["zh-TW"] = "公式乙" }, blockId,
+            config = new { formula = $"{{{w.Amount}}} * 2", resultType = "number", scale = 0 }
+        })).StatusCode.Should().Be(HttpStatusCode.OK);
+
+        foreach (var id in new[] { condition, primary, within })
+        {
+            var run = await Run(admin, id);
+            run.GetProperty("state").GetString().Should().Be("fieldMissing");
+            run.GetProperty("message").GetString().Should().Be("欄位型別已變更：公式乙");
+        }
     }
 }

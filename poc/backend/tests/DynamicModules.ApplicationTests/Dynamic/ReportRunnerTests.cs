@@ -425,11 +425,54 @@ public class ReportRunnerTests : ReportTestBase
     }
 
     [Fact]
-    public async Task Run_OperatorNotSupportedByField_Throws()
+    public async Task Run_OperatorNoLongerFitsField_FieldMissing()
     {
         await Arrange();
-        var act = () => Run(Def(measures: [M("n", "countMain")], filters: [F(MainF(Amount), "contains", "1")]));
-        await act.Should().ThrowAsync<ArgumentException>();
+        await Insert("order", "admin", (Amount, 1m));
+        var r = await Run(Def(measures: [M("n", "countMain")], filters: [F(MainF(Amount), "contains", "1")]));
+        r.State.Should().Be("fieldMissing");
+        r.Message.Should().Be("欄位型別已變更：訂單金額");
+    }
+
+    public static TheoryData<string, object?> BadShapes => new()
+    {
+        { "eq", "abc" }, { "eq", null }, { "gt", new[] { 1, 2 } }, { "between", 5 }, { "between", new[] { 1 } }, { "between", new[] { "a", "b" } },
+    };
+
+    [Theory, MemberData(nameof(BadShapes))]
+    public async Task Run_ConditionValueShapeNoLongerFits_FieldMissing_NotFalseEmpty(string op, object? value)
+    {
+        await Arrange();
+        await Insert("order", "admin", (Amount, 1m));
+        var filter = await Run(Def(measures: [M("n", "countMain")], filters: [F(MainF(Amount), op, value)]));
+        var ratio = await Run(Def(measures: [M("r", "ratio", null, F(MainF(Amount), op, value))]));
+        foreach (var r in new[] { filter, ratio })
+        {
+            r.State.Should().Be("fieldMissing");
+            r.Message.Should().Be("欄位型別已變更：訂單金額");
+        }
+    }
+
+    [Fact]
+    public async Task Run_DateConditionValueNotADate_FieldMissing()
+    {
+        await Arrange();
+        await Insert("order", "admin", (Due, "2026-11-01"));
+        (await Run(Def(measures: [M("n", "countMain")], filters: [F(MainF(Due), "eq", 20261101)]))).State.Should().Be("fieldMissing");
+        (await Run(Def(measures: [M("n", "countMain")], filters: [F(MainF(Due), "eq", "不是日期")]))).State.Should().Be("fieldMissing");
+        (await Run(Def(measures: [M("n", "countMain")], filters: [F(MainF(Due), "withinLastDays", "七")]))).State.Should().Be("fieldMissing");
+        (await Run(Def(measures: [M("n", "countMain")], filters: [F(MainF(Due), "eq", "2026-11-01")]))).Total!["n"].Should().Be(1m);
+    }
+
+    [Fact]
+    public async Task Run_SumOnFieldThatCannotSum_FieldMissing_MinMaxStillChecked()
+    {
+        await Arrange();
+        await Insert("order", "admin", (Due, "2026-11-01"), (Note, "x"));
+        (await Run(Def(measures: [M("s", "sum", MainF(Due))]))).State.Should().Be("fieldMissing");
+        (await Run(Def(measures: [M("s", "avg", MainF(Due))]))).State.Should().Be("fieldMissing");
+        (await Run(Def(measures: [M("s", "min", MainF(Note))]))).State.Should().Be("fieldMissing");
+        (await Run(Def(measures: [M("s", "min", MainF(Due))]))).State.Should().Be("ok");
     }
 
     // ---- 狀態 ----

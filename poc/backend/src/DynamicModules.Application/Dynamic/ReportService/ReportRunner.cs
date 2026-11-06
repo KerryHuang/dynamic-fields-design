@@ -160,9 +160,9 @@ public class ReportRunner(
                 return Fail(Restricted, $"無權限檢視：{HiddenFieldName}");
         }
 
-        // 權限都過了才檢查運算子，錯誤不會洩漏欄位資訊
-        foreach (var f in d.Filters.Concat(d.Measures.Where(m => m.Condition is not null).Select(m => m.Condition!)))
-            EnsureOperator(f, bound[ReportCalculator.KeyOf(f.Field)]);
+        // 權限都過了才重驗型別，訊息只會帶看得到的名稱；公式的結果型別在存檔後可能變，對不上就明講，不回假的 empty、0% 或日期序號加總
+        if (FieldWithChangedType(d, bound) is { } changed)
+            return Fail(FieldMissingState, $"欄位型別已變更：{ColumnLabel(changed, locale)}");
 
         // 5. 載入：多取一筆才分得出是否超過上限；超過就不回部分結果
         var tooMany = () => Fail(TooManyState, "資料太多，請縮小條件");
@@ -310,11 +310,53 @@ public class ReportRunner(
         return b.Target.Perms is null ? hidden : $"這個欄位不能用於報表：{b.Field.LabelI18n.Resolve(locale)}";
     }
 
-    /// <summary>運算子沿用欄位型別允許的清單（與列表篩選相同）；定義不合法是存檔驗證的缺口，不回傳假數字。</summary>
-    private void EnsureOperator(ReportFilter f, Bound b)
+    /// <summary>定義裡第一個對不上欄位目前型別的位置：量值種類、主要日期、條件的運算子與值形狀。全部對得上回 null。</summary>
+    private Bound? FieldWithChangedType(ReportDefinition d, IReadOnlyDictionary<string, Bound> bound)
     {
-        if (!Operators.TryGetValue(f.Op, out var op) || !registry.Get(b.Field.Type).OperatorsFor(b.Field).Contains(op))
-            throw new ArgumentException($"欄位 {b.Field.Id} 不支援運算子 {f.Op}");
+        Bound Of(ReportFieldRef r) => bound[ReportCalculator.KeyOf(r)];
+        foreach (var m in d.Measures.Where(m => m.Field is not null))
+        {
+            var b = Of(m.Field!);
+            if ((m.Kind is "sum" or "avg" && !ReportFieldEligibility.CanSum(b.Field))
+                || (m.Kind is "min" or "max" && !ReportFieldEligibility.CanMinMax(b.Field))) return b;
+        }
+        if (d.PrimaryDateField is not null && !ReportRules.IsDateLike(Of(d.PrimaryDateField).Field)) return Of(d.PrimaryDateField);
+        foreach (var f in d.Filters.Concat(d.Measures.Where(m => m.Condition is not null).Select(m => m.Condition!)))
+            if (!ConditionFits(f, Of(f.Field).Field)) return Of(f.Field);
+        return null;
+    }
+
+    /// <summary>只看形狀，不看內容：已停用或刪除的選項、已刪除的使用者仍算對得上，比對時只是不符合。通過後 <see cref="Matches"/> 不會因值的形狀丟例外。</summary>
+    private bool ConditionFits(ReportFilter f, Field field)
+    {
+        if (!Operators.TryGetValue(f.Op, out var op) || !registry.Get(field.Type).OperatorsFor(field).Contains(op)) return false;
+        var value = f.Value is { ValueKind: JsonValueKind.Null or JsonValueKind.Undefined } ? null : f.Value;
+        switch (op)
+        {
+            case FilterOperator.IsEmpty or FilterOperator.IsNotEmpty:
+                return true;
+            case FilterOperator.WithinNextDays or FilterOperator.WithinLastDays:
+                return value is { ValueKind: JsonValueKind.Number } days && days.TryGetInt32(out _);
+            case FilterOperator.Contains or FilterOperator.StartsWith:
+                return value is { ValueKind: JsonValueKind.String };
+            case FilterOperator.In or FilterOperator.NotIn:
+                return value is { ValueKind: JsonValueKind.Array } list && list.EnumerateArray().All(e => ScalarFits(field, e));
+            case FilterOperator.Between:
+                return value is { ValueKind: JsonValueKind.Array } pair && pair.GetArrayLength() == 2 && pair.EnumerateArray().All(e => ScalarFits(field, e));
+            default:
+                return value is { } v && ScalarFits(field, v);
+        }
+    }
+
+    /// <summary>值的形狀要對得上 <see cref="ValueCell"/> 給這個欄位的格子：日期、數字，其餘是可比對的純量。</summary>
+    private static bool ScalarFits(Field field, JsonElement v)
+    {
+        if (ReportRules.IsDateLike(field))
+            return v.ValueKind == JsonValueKind.String
+                && (DateOnly.TryParseExact(v.GetString(), "yyyy-MM-dd", CultureInfo.InvariantCulture, DateTimeStyles.None, out _) || TryWallClock(v.GetString()!, out _));
+        if (field.Type is FieldType.Integer or FieldType.Decimal or FieldType.Currency or FieldType.Percent or FieldType.Formula or FieldType.Rollup)
+            return v.ValueKind == JsonValueKind.Number && v.TryGetDecimal(out _);
+        return v.ValueKind is JsonValueKind.String or JsonValueKind.Number or JsonValueKind.True or JsonValueKind.False;
     }
 
     private static long? LinkIdOf(Record child, Field link) =>
@@ -463,13 +505,6 @@ public class ReportRunner(
         if (c.State == Empty) return op is FilterOperator.Ne or FilterOperator.NotIn;
 
         var v = f.Value ?? throw new ArgumentException($"運算子 {f.Op} 需要條件值");
-        // 存檔後欄位型別可能變（例如公式結果型別由數字改日期），舊條件值的形狀對不上時視為不符合，不丟例外
-        try { return MatchValue(f, op, v, c, basis); }
-        catch (Exception e) when (e is InvalidOperationException or FormatException) { return false; }
-    }
-
-    private static bool MatchValue(ReportFilter f, FilterOperator op, JsonElement v, ReportCell c, DateOnly basis)
-    {
         if (c.Date is { } date) return MatchDate(op, v, c is TimedCell t ? t.At : date.ToDateTime(TimeOnly.MinValue), basis);
         if (c.Number is { } number) return MatchNumber(op, v, number);
 

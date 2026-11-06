@@ -184,7 +184,7 @@ public static class ReportRules
     private static Field? Active(Module m, long id) =>
         m.Blocks.SelectMany(b => b.Fields).FirstOrDefault(f => f.Id == id && f.Status == FieldStatus.Active);
 
-    private static bool IsDateLike(Field f) =>
+    internal static bool IsDateLike(Field f) =>
         f.Type is FieldType.Date or FieldType.DateTime || (f.Type == FieldType.Formula && f.Config.ResultType == "date");
 
     /// <summary>回傳 null 代表格式錯誤；有效但無值（isEmpty）回 (null)。結構與 <c>ConditionParser.ParseValue</c> 相同。</summary>
