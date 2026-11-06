@@ -45,6 +45,7 @@ public static class DependencyInjection
         services.AddScoped<Dynamic.TemplateService.TemplateExporter>();
         services.AddScoped<Dynamic.DemoService.DemoPreflight>();
         services.AddScoped<Dynamic.DemoService.DemoStructure>();
+        services.AddScoped<Dynamic.DeleteService.DeletePlanner>();
         return services;
     }
 }

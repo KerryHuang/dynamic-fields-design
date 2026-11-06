@@ -36,6 +36,7 @@ public static class DependencyInjection
         services.AddScoped<IPermissionRepository, PermissionRepository>();
         services.AddScoped<IAccountRepository, AccountRepository>();
         services.AddScoped<IRecordRepository, RecordRepository>();
+        services.AddScoped<IDeletionRepository, DeletionRepository>();
         services.AddScoped<INumberSequenceRepository, NumberSequenceRepository>();
         services.AddScoped<IRecordHistoryRepository, RecordHistoryRepository>();
         services.AddScoped<IModuleTemplateRepository, ModuleTemplateRepository>();

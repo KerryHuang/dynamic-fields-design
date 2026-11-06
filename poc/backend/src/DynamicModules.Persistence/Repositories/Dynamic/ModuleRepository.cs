@@ -96,6 +96,8 @@ public class ModuleRepository(DynamicDbContext db) : IModuleRepository
 
     public void Add(Module m) => db.Set<Module>().Add(m);
 
+    public void Remove(Module m) => db.Set<Module>().Remove(m);
+
     public Task<List<Module>> ListAsync(CancellationToken ct) =>
         db.Set<Module>().AsNoTracking().OrderBy(m => m.Id).ToListAsync(ct);
 

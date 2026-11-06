@@ -25,6 +25,8 @@ public interface IModuleRepository
     /// <summary>該既有實體是否已有擴充模組。</summary>
     Task<bool> HostEntityExistsAsync(string hostEntityKey, CancellationToken ct);
     void Add(Module m);
+    /// <summary>移除模組；區塊、欄位、選項、規則由級聯刪除，需先載入子層（includeChildren）。</summary>
+    void Remove(Module m);
     Task<List<Module>> ListAsync(CancellationToken ct);
     Task<List<Module>> ListActiveAsync(CancellationToken ct);
 }
