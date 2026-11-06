@@ -2,77 +2,115 @@ import { QueryClient, VueQueryPlugin } from '@tanstack/vue-query';
 import { flushPromises, mount } from '@vue/test-utils';
 import { createPinia, setActivePinia } from 'pinia';
 import * as quasar from 'quasar';
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { h } from 'vue';
 import { createI18n } from 'vue-i18n';
 import { createMemoryHistory, createRouter, RouterView } from 'vue-router';
 import zhTW from 'src/i18n/zh-TW.json';
 import { http } from 'src/services/api/http';
+import { useIdentityStore } from 'src/stores/use-identity-store';
 import HomePage from './HomePage.vue';
 
-const me = (designerRead: boolean) => ({
-  userId: 'u', displayName: 'u', isSystemAdmin: false, groups: [],
-  designer: { read: designerRead, add: false, edit: false, delete: false },
+const me = (o: { designerRead?: boolean; admin?: boolean } = {}) => ({
+  userId: 'u', displayName: 'Alice', isSystemAdmin: o.admin ?? false, groups: [],
+  designer: { read: o.designerRead ?? false, add: false, edit: false, delete: false },
 });
+const mod = (key: string, section?: string, icon?: string) => ({ key, name: { 'zh-TW': `name-${key}` }, section, icon });
 
 vi.stubGlobal('ResizeObserver', class { observe() {} unobserve() {} disconnect() {} });
+afterEach(() => localStorage.clear());
 
-async function run(designerRead: boolean, menu: unknown[]) {
+async function run(opts: { me?: ReturnType<typeof me>; menu?: unknown[]; recent?: string[]; gate?: Promise<void>; menuStatus?: number } = {}) {
   setActivePinia(createPinia());
-  http.defaults.adapter = async (config) => ({
-    data: config.url === '/me' ? me(designerRead) : menu, status: 200, statusText: 'OK', headers: {}, config,
-  });
+  useIdentityStore().setSession('u');
+  if (opts.recent) localStorage.setItem('formwright:recent-modules:u', JSON.stringify(opts.recent));
+  http.defaults.adapter = async (config) => {
+    if (config.url === '/me') return { data: opts.me ?? me(), status: 200, statusText: 'OK', headers: {}, config };
+    if (opts.gate) await opts.gate;
+    if (opts.menuStatus) return Promise.reject({ status: opts.menuStatus });
+    return { data: opts.menu ?? [], status: 200, statusText: 'OK', headers: {}, config };
+  };
   const stub = { template: '<i/>' };
   const router = createRouter({
     history: createMemoryHistory(),
     routes: [
       { path: '/', component: HomePage },
-      { path: '/system/dynamic-modules', component: stub },
+      { path: '/reports', component: stub },
+      { path: '/system/:rest(.*)', component: stub },
       { path: '/dynamic/:moduleKey', component: stub },
     ],
   });
   await router.push('/');
   const i18n = createI18n({ legacy: false, locale: 'zh-TW', messages: { 'zh-TW': zhTW } });
   const w = mount({ render: () => h(quasar.QLayout, null, () => h(quasar.QPageContainer, null, () => h(RouterView))) }, {
-    global: { plugins: [[quasar.Quasar, { components: quasar }], router, i18n, [VueQueryPlugin, { queryClient: new QueryClient() }]] },
+    global: { plugins: [[quasar.Quasar, { components: quasar }], router, i18n, [VueQueryPlugin, { queryClient: new QueryClient({ defaultOptions: { queries: { retry: false } } }) }]] },
   });
   await flushPromises();
   return { router, w };
 }
 
 describe('HomePage', () => {
-  it('HomePage redirects to the designer when allowed, else to the first menu module, else shows forbidden', async () => {
-    const menu = [{ key: 'orders', name: { 'zh-TW': 'o' } }, { key: 'b', name: { 'zh-TW': 'b' } }];
-    expect((await run(true, menu)).router.currentRoute.value.path).toBe('/system/dynamic-modules');
-    expect((await run(false, menu)).router.currentRoute.value.path).toBe('/dynamic/orders');
-    const none = await run(false, []);
-    expect(none.router.currentRoute.value.path).toBe('/');
-    expect(none.w.text()).toContain(zhTW.dynamic.forbidden);
+  it('stays on the home page for everyone and greets the user by name', async () => {
+    for (const m of [me({ designerRead: true }), me()]) {
+      const { router, w } = await run({ me: m, menu: [mod('orders')] });
+      expect(router.currentRoute.value.path).toBe('/');
+      expect(w.get('[data-testid="home-welcome"]').text()).toContain('Alice');
+      expect(w.get('[data-testid="home-welcome"]').text()).toContain('Formwright');
+    }
   });
 
-  it('does not flash forbidden while the menu is pending after me errored, then redirects', async () => {
-    setActivePinia(createPinia());
-    let releaseMenu!: () => void;
-    const gate = new Promise<void>((r) => { releaseMenu = r; });
-    http.defaults.adapter = async (config) => {
-      if (config.url === '/me') return Promise.reject({ status: 401 });
-      await gate;
-      return { data: [{ key: 'orders', name: { 'zh-TW': 'o' } }], status: 200, statusText: 'OK', headers: {}, config };
-    };
-    const stub = { template: '<i/>' };
-    const router = createRouter({
-      history: createMemoryHistory(),
-      routes: [{ path: '/', component: HomePage }, { path: '/dynamic/:moduleKey', component: stub }],
-    });
-    await router.push('/');
-    const i18n = createI18n({ legacy: false, locale: 'zh-TW', messages: { 'zh-TW': zhTW } });
-    const w = mount({ render: () => h(quasar.QLayout, null, () => h(quasar.QPageContainer, null, () => h(RouterView))) }, {
-      global: { plugins: [[quasar.Quasar, { components: quasar }], router, i18n, [VueQueryPlugin, { queryClient: new QueryClient({ defaultOptions: { queries: { retry: false } } }) }]] },
-    });
+  it('shows module cards grouped by menu section, linking to the module', async () => {
+    const { w } = await run({ menu: [mod('orders'), mod('crm1', '業務', 'people'), mod('crm2', '業務')] });
+    const groups = w.findAll('[data-testid="home-app-group"]');
+    expect(groups.map((g) => g.get('[data-testid="home-group-title"]').text())).toEqual([zhTW.menu.custom, '業務']);
+    const cards = w.findAll('[data-testid="home-app-card"]');
+    expect(cards.map((c) => c.get('.q-item__section--main').text())).toEqual(['name-orders', 'name-crm1', 'name-crm2']);
+    expect(cards.map((c) => c.attributes('href'))).toEqual(['/dynamic/orders', '/dynamic/crm1', '/dynamic/crm2']);
+  });
+
+  it('lists recent modules (max 5, only ones still in the menu), most recent first', async () => {
+    const menu = ['a', 'b', 'c', 'd', 'e', 'f'].map((k) => mod(k));
+    const { w } = await run({ menu, recent: ['f', 'gone', 'e', 'd', 'c', 'b', 'a'] });
+    const hrefs = w.findAll('[data-testid="home-recent-item"]').map((c) => c.attributes('href'));
+    expect(hrefs).toEqual(['/dynamic/f', '/dynamic/e', '/dynamic/d', '/dynamic/c', '/dynamic/b']);
+  });
+
+  it('hides the recent section when nothing was opened or storage is unavailable', async () => {
+    expect((await run({ menu: [mod('a')] })).w.find('[data-testid="home-recent"]').exists()).toBe(false);
+    const spy = vi.spyOn(Storage.prototype, 'getItem').mockImplementation(() => { throw new Error('blocked'); });
+    const { w } = await run({ menu: [mod('a')], recent: ['a'] });
+    spy.mockRestore();
+    expect(w.find('[data-testid="home-recent"]').exists()).toBe(false);
+    expect(w.findAll('[data-testid="home-app-card"]')).toHaveLength(1);
+  });
+
+  it('links to my reports', async () => {
+    const { w } = await run({ menu: [mod('a')] });
+    expect(w.get('[data-testid="home-reports"]').attributes('href')).toBe('/reports');
+  });
+
+  it('shows system shortcuts only to people with the matching permission', async () => {
+    const links = async (m: ReturnType<typeof me>) =>
+      (await run({ me: m, menu: [mod('a')] })).w.findAll('[data-testid="home-system-link"]').map((l) => l.attributes('href'));
+    expect(await links(me())).toEqual([]);
+    expect((await run({ menu: [mod('a')] })).w.find('[data-testid="home-system"]').exists()).toBe(false);
+    expect(await links(me({ admin: true }))).toEqual(['/system/users', '/system/groups', '/system/appearance']);
+    expect(await links(me({ designerRead: true }))).toEqual(['/system/dynamic-modules', '/system/demo-data']);
+  });
+
+  it('shows a friendly empty state without modules, but not while the menu is still loading', async () => {
+    let release!: () => void;
+    const gate = new Promise<void>((r) => { release = r; });
+    const pending = await run({ gate, menu: [] });
+    expect(pending.w.find('[data-testid="home-empty"]').exists()).toBe(false);
+    release();
     await flushPromises();
-    expect(w.text()).not.toContain(zhTW.dynamic.forbidden);
-    releaseMenu();
-    await flushPromises();
-    expect(router.currentRoute.value.path).toBe('/dynamic/orders');
+    expect(pending.w.get('[data-testid="home-empty"]').text()).toContain(zhTW.home.noModules);
+    expect(pending.w.find('[data-testid="home-reports"]').exists()).toBe(true);
+  });
+
+  it('shows the forbidden notice when the menu cannot be loaded', async () => {
+    const { w } = await run({ menuStatus: 500 });
+    expect(w.text()).toContain(zhTW.dynamic.forbidden);
   });
 });

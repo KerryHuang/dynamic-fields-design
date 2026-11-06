@@ -2,7 +2,7 @@
   <q-layout view="hHh Lpr lFf">
     <q-header elevated>
       <q-toolbar>
-        <q-toolbar-title>Formwright</q-toolbar-title>
+        <q-toolbar-title><router-link to="/" class="brand-link" data-testid="brand">Formwright</router-link></q-toolbar-title>
         <span class="q-mr-sm" data-testid="current-user">{{ me?.displayName }}</span>
         <q-btn flat dense no-caps class="q-mr-sm" icon="palette" :label="t('theme.title')" data-testid="theme-open" @click="themeOpen = true" />
         <q-btn v-if="!identity.isDemoAccount" flat dense no-caps class="q-mr-sm" :label="t('auth.changePassword')" to="/change-password" data-testid="change-password-link" />
@@ -14,6 +14,11 @@
 
     <q-drawer :model-value="true" show-if-above bordered :width="theme.sidebarWidth">
       <q-list>
+        <q-item clickable exact to="/" data-testid="home-menu">
+          <q-item-section avatar><q-icon name="home" /></q-item-section>
+          <q-item-section>{{ t('menu.home') }}</q-item-section>
+        </q-item>
+
         <template v-for="g in menuGroups" :key="g.title ?? ''">
           <q-item-label header>{{ g.title ?? t('menu.custom') }}</q-item-label>
           <q-item
@@ -34,26 +39,12 @@
           <q-item-section>{{ t('menu.myReports') }}</q-item-section>
         </q-item>
 
-        <template v-if="me?.designer.read || me?.isSystemAdmin">
+        <template v-if="links.length">
           <q-separator class="q-my-sm" />
           <q-item-label header>{{ t('menu.system') }}</q-item-label>
-          <q-item v-if="me.isSystemAdmin" clickable to="/system/users" data-testid="users-menu">
-            <q-item-section>{{ t('menu.users') }}</q-item-section>
+          <q-item v-for="l in links" :key="l.to" clickable :to="l.to" :data-testid="l.testid">
+            <q-item-section>{{ t(l.label) }}</q-item-section>
           </q-item>
-          <q-item v-if="me.isSystemAdmin" clickable to="/system/groups" data-testid="groups-menu">
-            <q-item-section>{{ t('menu.groups') }}</q-item-section>
-          </q-item>
-          <q-item v-if="me.isSystemAdmin" clickable to="/system/appearance" data-testid="appearance-menu">
-            <q-item-section>{{ t('theme.adminMenu') }}</q-item-section>
-          </q-item>
-          <template v-if="me.designer.read">
-            <q-item clickable to="/system/dynamic-modules" data-testid="designer-menu">
-              <q-item-section>{{ t('menu.dynamicModules') }}</q-item-section>
-            </q-item>
-            <q-item clickable to="/system/demo-data" data-testid="demo-data-menu">
-              <q-item-section>{{ t('menu.demoData') }}</q-item-section>
-            </q-item>
-          </template>
         </template>
       </q-list>
     </q-drawer>
@@ -70,11 +61,13 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
-import { useRouter } from 'vue-router';
+import { useRoute, useRouter } from 'vue-router';
 import { useLogout } from 'src/application/dynamic/queries/auth-queries';
 import { useMenu } from 'src/application/dynamic/queries/modules-queries';
 import { useMe, useUsers } from 'src/application/dynamic/queries/permissions-queries';
+import { recordRecent } from 'src/application/dynamic/recent-modules';
 import { resolveI18n } from 'src/domain/dynamic/i18n-text';
+import { groupMenu, systemLinks } from 'src/domain/dynamic/menu-nav';
 import AppBreadcrumb from 'src/presentation/theme/AppBreadcrumb.vue';
 import ThemeDialog from 'src/presentation/theme/ThemeDialog.vue';
 import { useIdentityStore } from 'src/stores/use-identity-store';
@@ -88,18 +81,16 @@ const router = useRouter();
 const logoutMutation = useLogout();
 
 const { data: menu } = useMenu();
-// Unsectioned items form the leading 自訂功能 group (title undefined); sections follow by name; /menu order holds inside a group.
-const menuGroups = computed(() => {
-  const groups = new Map<string | undefined, NonNullable<typeof menu.value>>();
-  for (const m of menu.value ?? []) {
-    const g = groups.get(m.section || undefined);
-    if (g) g.push(m); else groups.set(m.section || undefined, [m]);
-  }
-  return [...groups.entries()]
-    .map(([title, items]) => ({ title, items }))
-    .sort((a, b) => (a.title === undefined ? -1 : b.title === undefined ? 1 : a.title.localeCompare(b.title)));
-});
+const menuGroups = computed(() => groupMenu(menu.value ?? []));
 const { data: me } = useMe();
+const links = computed(() => systemLinks(me.value));
+// 首頁的「最近開過」：每次進到某個模組就記一筆
+const route = useRoute();
+watch(
+  () => [identity.userId, route.params.moduleKey] as const,
+  ([userId, key]) => { if (typeof key === 'string') recordRecent(userId, key); },
+  { immediate: true },
+);
 const { data: users } = useUsers();
 watch(me, (m) => { if (m) identity.setDemoAccount(m.isDemoAccount === true); }, { immediate: true });
 watch(users, (list) => { if (list) identity.setUsers(list); }, { immediate: true });
@@ -113,3 +104,10 @@ function logout() {
   });
 }
 </script>
+
+<style scoped>
+.brand-link {
+  color: inherit;
+  text-decoration: none;
+}
+</style>

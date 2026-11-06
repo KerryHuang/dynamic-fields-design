@@ -117,6 +117,55 @@ describe('MainLayout menu', () => {
     expect(w.findAll('.q-item__label--header').map((h) => h.text())).toEqual(['自訂功能', 'Alpha', 'Zeta', '報表']);
   });
 
+  describe('首頁入口', () => {
+    async function mountAt(path: string) {
+      const pinia = createPinia();
+      setActivePinia(pinia);
+      useIdentityStore().setSession('admin');
+      http.defaults.adapter = async (config) => ({
+        data: config.url === '/me' ? me(false) : config.url === '/users' ? USERS : [], status: 200, statusText: 'OK', headers: {}, config,
+      });
+      const stub = { template: '<i/>' };
+      const router = createRouter({
+        history: createMemoryHistory(),
+        routes: [{ path: '/', component: stub }, { path: '/dynamic/:moduleKey', component: stub }, { path: '/reports', component: stub }],
+      });
+      await router.push(path);
+      const i18n = createI18n({ legacy: false, locale: 'zh-TW', messages: { 'zh-TW': zhTW } });
+      const w = mount(MainLayout, {
+        global: { plugins: [[quasar.Quasar, { components: quasar }], pinia, router, i18n, [VueQueryPlugin, { queryClient: new QueryClient() }]] },
+      });
+      await flushPromises();
+      return { w, router };
+    }
+
+    it('側邊選單最上方是首頁，產品名也連回首頁', async () => {
+      const { w } = await mountAt('/');
+      const first = w.find('.q-drawer .q-item');
+      expect(first.attributes('data-testid')).toBe('home-menu');
+      expect(first.text()).toContain(zhTW.menu.home);
+      expect(first.attributes('href')).toBe('/');
+      expect(w.find('[data-testid="brand"]').attributes('href')).toBe('/');
+    });
+
+    it('只有在首頁時首頁項目是作用中，進模組後不是', async () => {
+      const { w, router } = await mountAt('/');
+      expect(w.find('[data-testid="home-menu"]').classes()).toContain('q-router-link--active');
+      await router.push('/reports');
+      await flushPromises();
+      expect(w.find('[data-testid="home-menu"]').classes()).not.toContain('q-router-link--active');
+    });
+
+    it('打開模組時記下最近開過（依使用者區分）', async () => {
+      localStorage.clear();
+      const { router } = await mountAt('/dynamic/orders');
+      await router.push('/dynamic/crm');
+      await flushPromises();
+      expect(JSON.parse(localStorage.getItem('formwright:recent-modules:admin') ?? '[]')).toEqual(['crm', 'orders']);
+      localStorage.clear();
+    });
+  });
+
   it('refetches views and re-picks the default view after the session changes user', async () => {
     const pinia = createPinia();
     setActivePinia(pinia);
