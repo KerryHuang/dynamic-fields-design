@@ -567,6 +567,15 @@ public class ReportRunnerTests : ReportTestBase
         (await Run(Def(measures: [M("s", "min", MainF(Due))]))).State.Should().Be("ok");
     }
 
+    [Fact]
+    public async Task Run_BucketOnFieldNoLongerDate_FieldMissing()
+    {
+        await Arrange();
+        await Insert("order", "admin", (Due, "2026-11-01"), (Note, "x"));
+        (await Run(Def(measures: [M("n", "countMain")], groups: [G(MainF(Note), "month")]))).State.Should().Be("fieldMissing");
+        (await Run(Def(measures: [M("n", "countMain")], groups: [G(MainF(Due), "month")]))).State.Should().Be("ok");
+    }
+
     // ---- 狀態 ----
 
     [Fact]

@@ -1,6 +1,6 @@
 import type { CatalogChild, CatalogField, ModuleCatalog, ReportChild, ReportFieldRef } from 'src/domain/dynamic/report-types';
 
-/** 實體標題欄位（引用目標是既有實體時可帶出）的 id 固定為 0，後端目錄寫死「標題」，由前端翻譯。 */
+/** 實體標題欄位（引用目標是既有實體時可帶出）的 id 固定為 0。 */
 export const ENTITY_TITLE_FIELD_ID = 0;
 
 /** 與後端 ReportCalculator.KeyOf 同一格式。 */

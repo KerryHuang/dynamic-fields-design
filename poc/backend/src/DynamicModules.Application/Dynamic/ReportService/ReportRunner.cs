@@ -316,7 +316,7 @@ public class ReportRunner(
         return b.Target.Perms is null ? hidden : NotUsable();
     }
 
-    /// <summary>定義裡第一個對不上欄位目前型別的位置：量值種類、主要日期、條件的運算子與值形狀。全部對得上回 null。</summary>
+    /// <summary>定義裡第一個對不上欄位目前型別的位置：量值種類、主要日期、分桶、條件的運算子與值形狀。全部對得上回 null。</summary>
     private Bound? FieldWithChangedType(ReportDefinition d, IReadOnlyDictionary<string, Bound> bound)
     {
         Bound Of(ReportFieldRef r) => bound[ReportCalculator.KeyOf(r)];
@@ -327,6 +327,8 @@ public class ReportRunner(
                 || (m.Kind is "min" or "max" && !ReportFieldEligibility.CanMinMax(b.Field))) return b;
         }
         if (d.PrimaryDateField is not null && !ReportRules.IsDateLike(Of(d.PrimaryDateField).Field)) return Of(d.PrimaryDateField);
+        foreach (var g in d.Groups.Where(g => g.Bucket is not null))
+            if (!ReportRules.IsDateLike(Of(g.Field).Field)) return Of(g.Field);
         foreach (var f in d.Filters.Concat(d.Measures.Where(m => m.Condition is not null).Select(m => m.Condition!)))
             if (!ConditionFits(f, Of(f.Field).Field)) return Of(f.Field);
         return null;
@@ -523,7 +525,7 @@ public class ReportRunner(
             FilterOperator.NotIn => !v.EnumerateArray().Any(e => texts.Contains(Scalar(e))),
             FilterOperator.Contains => texts.Any(x => x.Contains(Scalar(v), StringComparison.OrdinalIgnoreCase)),
             FilterOperator.StartsWith => texts.Any(x => x.StartsWith(Scalar(v), StringComparison.OrdinalIgnoreCase)),
-            // 只有時間型別的文字值走到比較類（EnsureOperator 已擋其他型別）：HH:mm 字典序即時間序
+            // 只有時間型別的文字值走到比較類（ConditionFits 已擋其他型別）：HH:mm 字典序即時間序
             FilterOperator.Gt => string.CompareOrdinal(c.Text, Scalar(v)) > 0,
             FilterOperator.Gte => string.CompareOrdinal(c.Text, Scalar(v)) >= 0,
             FilterOperator.Lt => string.CompareOrdinal(c.Text, Scalar(v)) < 0,

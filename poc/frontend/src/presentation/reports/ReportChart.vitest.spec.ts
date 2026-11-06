@@ -33,6 +33,14 @@ describe('ReportChart', () => {
     expect(opt.yAxis[1].axisLabel.formatter(0.5)).toBe('50%');
   });
 
+  it('percent 排第一時，金額不能共用百分比刻度', () => {
+    const percent = { key: 'p', label: '毛利率', role: 'measure' as const, valueType: 'percent' };
+    mount(ReportChart, { props: { viz: 'bar', groups: mixedGroups, measures: [percent, ...measures], locale: 'zh-TW' } });
+    const opt = chart.setOption.mock.calls[0]![0];
+    expect(opt.yAxis).toHaveLength(2);
+    expect(opt.yAxis[1].axisLabel.formatter(1000000)).not.toContain('%');
+  });
+
   it('dayNumber measures show dates on the tooltip and the axis', () => {
     mount(ReportChart, { props: { viz: 'line', groups: mixedGroups, measures: [day], locale: 'zh-TW' } });
     const opt = chart.setOption.mock.calls[0]![0];

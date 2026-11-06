@@ -16,8 +16,8 @@ let chart: echarts.ECharts | undefined;
 let observer: ResizeObserver | undefined;
 
 const fmt = (m: ReportColumn) => (v: unknown) => formatValue(v as number | null, m.valueType, props.locale);
-// 比例、日期、其他數值的尺度不同，各用一條 y 軸；刻度與 tooltip 都用表格同一套格式
-const axisKind = (m: ReportColumn) => (m.valueType === 'ratio' || m.valueType === 'dayNumber' ? m.valueType : 'other');
+// 比例、百分比、日期、其他數值的尺度不同，各用一條 y 軸；刻度與 tooltip 都用表格同一套格式
+const axisKind = (m: ReportColumn) => (m.valueType === 'ratio' || m.valueType === 'percent' || m.valueType === 'dayNumber' ? m.valueType : 'other');
 
 function option() {
   const names = props.groups.map(groupName);
