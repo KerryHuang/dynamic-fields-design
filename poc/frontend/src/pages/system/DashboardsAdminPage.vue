@@ -152,9 +152,9 @@ function doRemove() {
           <div v-if="error" class="text-negative q-mb-sm" data-testid="admin-error">{{ error }}</div>
 
           <div class="text-subtitle2 q-mb-xs">{{ t('dashboards.admin.assignTo') }}</div>
-          <div class="row items-center q-mb-md">
+          <div class="q-mb-md">
             <q-option-group v-model="groupIds" type="checkbox" inline :options="(groups.data.value ?? []).map((g) => ({ value: g.id, label: groupName(g) }))" data-testid="admin-groups" />
-            <q-btn outline no-caps :label="t('dashboards.admin.saveAssign')" :loading="assign.isPending.value" data-testid="admin-save-assign" @click="saveAssignments" />
+            <q-btn class="q-mt-sm" outline no-caps :label="t('dashboards.admin.saveAssign')" :loading="assign.isPending.value" data-testid="admin-save-assign" @click="saveAssignments" />
           </div>
           <div v-if="!groupIds.length" class="text-caption text-muted q-mb-md" data-testid="admin-unassigned">{{ t('dashboards.admin.unassigned') }}</div>
 
