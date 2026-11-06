@@ -77,11 +77,13 @@ const setPair = (i: 0 | 1, v: unknown) => emit('update:modelValue', i === 0 ? [s
 
 <template>
   <div v-if="need !== 'none'" class="row items-center q-gutter-x-sm no-wrap" data-testid="filter-value">
-    <PopupSelect
-      v-if="kind === 'reference'" class="col" :model-value="(modelValue as string | number | (string | number)[] | null | undefined)" :light-url="lightUrl"
-      :value-kind="field.refKind === 'entity' ? 'string' : 'number'" :multiple="need === 'list'" :known-titles="knownTitles"
-      @update:model-value="emit('update:modelValue', $event)"
-    />
+    <div v-if="kind === 'reference'" class="col">
+      <PopupSelect
+        :model-value="(modelValue as string | number | (string | number)[] | null | undefined)" :light-url="lightUrl"
+        :value-kind="field.refKind === 'entity' ? 'string' : 'number'" :multiple="need === 'list'" :known-titles="knownTitles"
+        @update:model-value="emit('update:modelValue', $event)"
+      />
+    </div>
     <template v-else-if="need === 'pair'">
       <q-select
         v-if="isChoice" dense outlined emit-value map-options :options="optionChoices" :model-value="pair[0]" class="col"

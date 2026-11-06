@@ -334,6 +334,37 @@ describe('ReportDesignerPage review fixes', () => {
     expect(q('main-change-confirm')).toBeNull();
   });
 
+  it('deleting a middle condition row keeps the remaining rows in step with state', async () => {
+    const eq = (v: string) => ({ field: MAIN(1), op: 'eq', value: v });
+    api.getReport.mockResolvedValue(detail({ ...DEF, filters: [eq('A'), eq('B'), eq('C')] }));
+    api.updateReport.mockResolvedValue(detail(DEF));
+    await mountAt('/reports/7/edit');
+    await goTo(2);
+    const values = () => [...document.body.querySelectorAll<HTMLInputElement>('[data-testid="filter-value"] input')].map((i) => i.value);
+    expect(values()).toEqual(['A', 'B', 'C']);
+    await click('filter-1-remove');
+    expect(values()).toEqual(['A', 'C']);
+    expect(q('filter-2')).toBeNull();
+    const last = document.body.querySelectorAll<HTMLInputElement>('[data-testid="filter-value"] input')[1]!;
+    last.value = 'D';
+    last.dispatchEvent(new Event('input'));
+    await flushPromises();
+    await goTo(2);
+    await click('designer-save');
+    expect(api.updateReport.mock.calls[0]![2].filters).toEqual([eq('A'), eq('D')]);
+  });
+
+  it('the reference picker renders without attribute fallthrough warnings', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    api.getReport.mockResolvedValue(detail({ ...DEF, filters: [{ field: MAIN(7), op: 'eq', value: 5 }] }));
+    api.getRecord.mockResolvedValue({ id: 5, title: 'ACME' } as never);
+    await mountAt('/reports/7/edit', CAT2);
+    await goTo(2);
+    expect(q('filter-value')!.firstElementChild!.className).toContain('col');
+    expect(warn.mock.calls.filter((c) => String(c[0]).includes('Extraneous non-props'))).toEqual([]);
+    warn.mockRestore();
+  });
+
   it('saving a loaded report untouched sends exactly the loaded definition', async () => {
     const loaded: ReportDefinition = {
       version: 1, mainModuleKey: 'orders', child: { moduleKey: 'shipments', linkFieldId: 20 },

@@ -8,14 +8,15 @@ import { operatorsOf } from './designer-state';
 import FilterValueInput from './FilterValueInput.vue';
 
 /** 單列條件編輯：條件步驟與條件占比量值共用。filter 直接修改。 */
-const props = defineProps<{ filter: ReportFilter; entries: FieldEntry[]; tid: string; removable?: boolean }>();
+// Boolean prop 沒傳時 Vue 會當成 false，所以預設值要明講
+const props = withDefaults(defineProps<{ filter: ReportFilter; entries: FieldEntry[]; tid: string; removable?: boolean }>(), { removable: true });
 const emit = defineEmits<{ remove: [] }>();
 const { t } = useI18n();
-const f = props.filter;
-const entry = computed(() => findEntry(props.entries, f.field));
+// 列以索引當 key，刪除中間列時元件實例會換 prop，所以一律讀 props.filter，不擷取
+const entry = computed(() => findEntry(props.entries, props.filter.field));
 function setOp(op: string) {
-  f.op = op;
-  f.value = undefined;
+  props.filter.op = op;
+  props.filter.value = undefined;
 }
 </script>
 
@@ -24,15 +25,15 @@ function setOp(op: string) {
     <template v-if="entry">
       <div class="col-3 q-pt-sm">{{ entry.label }}</div>
       <q-select
-        dense outlined emit-value map-options class="col-2" :model-value="f.op" :data-testid="`${tid}-op`"
+        dense outlined emit-value map-options class="col-2" :model-value="filter.op" :data-testid="`${tid}-op`"
         :options="operatorsOf(entry.field).map((o: FilterOperator) => ({ value: o, label: t(`dynamic.op.${o}`) }))"
         @update:model-value="setOp"
       />
-      <FilterValueInput class="col" :field="entry.field" :op="f.op" :model-value="f.value" @update:model-value="f.value = $event" />
+      <FilterValueInput class="col" :field="entry.field" :op="filter.op" :model-value="filter.value" @update:model-value="filter.value = $event" />
     </template>
     <div v-else class="col text-negative" :data-testid="`${tid}-unavailable`">
-      {{ t('reports.fieldNo', { id: f.field.fieldId }) }}{{ t('reports.unavailableMark') }}
+      {{ t('reports.fieldNo', { id: filter.field.fieldId }) }}{{ t('reports.unavailableMark') }}
     </div>
-    <q-btn v-if="removable !== false" flat dense round icon="close" :aria-label="t('reports.designer.remove')" :data-testid="`${tid}-remove`" @click="emit('remove')" />
+    <q-btn v-if="removable" flat dense round icon="close" :aria-label="t('reports.designer.remove')" :data-testid="`${tid}-remove`" @click="emit('remove')" />
   </div>
 </template>
