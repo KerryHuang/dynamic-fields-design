@@ -26,7 +26,7 @@ const GROUPS: AdminGroup[] = [
   { id: 1, key: 'sales', nameI18n: { 'zh-TW': '業務群組', 'en-US': 'Sales' }, memberUserIds: ['a01', 'old01'] },
   { id: 2, key: 'g-abc', nameI18n: { 'zh-TW': '空群組' }, memberUserIds: [] },
 ];
-const IMPACT: GroupImpact = { memberCount: 2, modules: ['訂單', '客戶'], fieldPermissionCount: 3, dataScopeCount: 1, blockingOptions: [], reports: ['月報', '客戶分析'] };
+const IMPACT: GroupImpact = { memberCount: 2, modules: ['訂單', '客戶'], fieldPermissionCount: 3, dataScopeCount: 1, blockingOptions: [], reports: ['月報', '客戶分析'], dashboards: ['業務儀表板'] };
 
 let mounted: ReturnType<typeof mount> | undefined;
 
@@ -131,6 +131,7 @@ describe('GroupsPage', () => {
     expect(q('impact-scopes')!.textContent).toContain('1');
     expect(q('impact-reports')!.textContent).toContain('月報');
     expect(q('impact-reports')!.textContent).toContain('客戶分析');
+    expect(q('impact-dashboards')!.textContent).toContain('業務儀表板');
     expect(q('impact-warning')!.textContent).toContain('成員會失去這個群組的授權與限制');
     expect(api.deleteGroup).not.toHaveBeenCalled();
     api.deleteGroup.mockResolvedValue(undefined as never);
@@ -139,10 +140,11 @@ describe('GroupsPage', () => {
   });
 
   it('delete dialog says none when no report is shared with the group', async () => {
-    api.getGroupImpact.mockResolvedValue({ ...IMPACT, reports: [] });
+    api.getGroupImpact.mockResolvedValue({ ...IMPACT, reports: [], dashboards: [] });
     await mountPage();
     await click('group-delete-1');
     expect(q('impact-reports')!.textContent).toContain('無');
+    expect(q('impact-dashboards')!.textContent).toContain('無');
   });
 
   it('blockingOptions are listed and the delete button is disabled', async () => {

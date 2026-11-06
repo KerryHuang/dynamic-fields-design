@@ -34,6 +34,10 @@
 
         <q-separator class="q-my-sm" />
         <q-item-label header>{{ t('menu.reports') }}</q-item-label>
+        <q-item clickable to="/dashboards" data-testid="dashboards-menu">
+          <q-item-section avatar><q-icon name="dashboard" /></q-item-section>
+          <q-item-section>{{ t('menu.dashboards') }}</q-item-section>
+        </q-item>
         <q-item clickable to="/reports" data-testid="reports-menu">
           <q-item-section avatar><q-icon name="bar_chart" /></q-item-section>
           <q-item-section>{{ t('menu.myReports') }}</q-item-section>

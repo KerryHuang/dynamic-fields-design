@@ -1,18 +1,32 @@
 <script setup lang="ts">
-import { computed } from 'vue';
+import { computed, ref } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { useMenu } from 'src/application/dynamic/queries/modules-queries';
+import { pickDashboard, readLastDashboard, writeLastDashboard } from 'src/application/dynamic/last-dashboard';
+import { useDashboards } from 'src/application/dynamic/queries/dashboards-queries';
 import { useMe } from 'src/application/dynamic/queries/permissions-queries';
 import { readRecent, RECENT_SHOWN } from 'src/application/dynamic/recent-modules';
 import { groupMenu, systemLinks } from 'src/domain/dynamic/menu-nav';
 import { resolveI18n } from 'src/domain/dynamic/i18n-text';
 import ForbiddenNotice from 'src/components/framework/ForbiddenNotice.vue';
+import DashboardView from 'src/presentation/dashboards/DashboardView.vue';
 import { useIdentityStore } from 'src/stores/use-identity-store';
 
 const { t, locale } = useI18n();
 const identity = useIdentityStore();
 const me = useMe();
 const menu = useMenu();
+
+// 有儀表板就顯示在歡迎區下方（上次看的，沒有就第一張）；沒有或載入失敗時首頁維持原樣
+const dashboards = useDashboards();
+const dashList = computed(() => [...(dashboards.data.value?.assigned ?? []), ...(dashboards.data.value?.mine ?? [])]);
+const picked = ref<number | null>(null);
+const dashId = computed(() => {
+  const ids = dashList.value.map((d) => d.id);
+  if (picked.value !== null && ids.includes(picked.value)) return picked.value;
+  return pickDashboard(ids, readLastDashboard(identity.userId));
+});
+function pickDash(id: number) { picked.value = id; writeLastDashboard(identity.userId, id); }
 
 const groups = computed(() => groupMenu(menu.data.value ?? []));
 const links = computed(() => systemLinks(me.data.value));
@@ -29,6 +43,16 @@ const recent = computed(() => {
       <div class="text-h5">Formwright</div>
       <div v-if="me.data.value" class="text-muted">{{ t('home.welcome', { name: me.data.value.displayName }) }}</div>
     </div>
+
+    <section v-if="dashId !== null" class="q-mb-lg" data-testid="home-dashboard">
+      <q-select
+        v-if="dashList.length > 1" :model-value="dashId" :options="dashList" option-value="id" option-label="name" emit-value map-options
+        dense outlined class="q-mb-sm" style="max-width: 320px" :label="t('dashboards.title')" data-testid="home-dashboard-select"
+        @update:model-value="pickDash"
+      />
+      <DashboardView :key="dashId" :dashboard-id="dashId" :allow-edit="false" :linkable="dashList" />
+      <q-btn flat no-caps dense color="primary" icon="open_in_new" :label="t('dashboards.openFull')" :to="`/dashboards/${dashId}`" data-testid="home-dashboard-open" />
+    </section>
 
     <ForbiddenNotice v-if="menu.isError.value" />
 
