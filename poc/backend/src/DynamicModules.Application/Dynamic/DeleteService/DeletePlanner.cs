@@ -33,6 +33,7 @@ public class DeletePlanner(IDeletionRepository data)
         var views = await data.ListViewsAsync(ct);
         var reports = await data.ListReportsAsync(ct);
         var dashboards = await data.ListDashboardLayoutsAsync(ct);
+        var conversions = await data.ListConversionsAsync(ct);
         IReadOnlyList<Field> fields;
         IReadOnlyList<Block> blocks;
         switch (target)
@@ -40,12 +41,12 @@ public class DeletePlanner(IDeletionRepository data)
             case DeleteTarget.Module:
                 fields = module.Blocks.SelectMany(b => b.Fields).ToList();
                 blocks = module.Blocks;
-                await ModuleBlockersAsync(module, fields, all, reports, dashboards, blockers, ct);
+                await ModuleBlockersAsync(module, fields, all, reports, dashboards, conversions, blockers, ct);
                 break;
             case DeleteTarget.Field:
                 fields = module.Blocks.SelectMany(b => b.Fields).Where(f => f.Id == id).ToList();
                 blocks = [];
-                await FieldBlockersAsync(module, fields, [], all, views, reports, dashboards, blockers, ct);
+                await FieldBlockersAsync(module, fields, [], all, views, reports, dashboards, conversions, blockers, ct);
                 break;
             default:
                 var block = module.Blocks.Single(b => b.Id == id);
@@ -53,7 +54,7 @@ public class DeletePlanner(IDeletionRepository data)
                 blocks = [block];
                 if (module.Blocks.Count == 1)
                     blockers.Add(new(DeleteBlockerKind.LastBlock, module.Key, block.Id, Name(block.LabelI18n, $"#{block.Id}")));
-                await FieldBlockersAsync(module, fields, [block.Id], all, views, reports, dashboards, blockers, ct);
+                await FieldBlockersAsync(module, fields, [block.Id], all, views, reports, dashboards, conversions, blockers, ct);
                 break;
         }
 
@@ -78,7 +79,7 @@ public class DeletePlanner(IDeletionRepository data)
 
     private async Task ModuleBlockersAsync(
         Module module, IReadOnlyList<Field> fields, List<Module> all, List<Report> reports, List<DashboardLayoutSource> dashboards,
-        List<DeleteBlocker> blockers, CancellationToken ct)
+        List<Conversion> conversions, List<DeleteBlocker> blockers, CancellationToken ct)
     {
         if (module.Status == ModuleStatus.Active)
             blockers.Add(new(DeleteBlockerKind.ModuleActive, module.Key, module.Id, Name(module.NameI18n, module.Key)));
@@ -97,12 +98,14 @@ public class DeletePlanner(IDeletionRepository data)
 
         AddReportBlockers(reports, ownIds, [module.Key], blockers);
         AddDashboardBlockers(dashboards, ownIds, blockers);
+        AddConversionBlockers(conversions, all, ownIds, [module.Id], [module.Key], blockers);
     }
 
     /// <summary>刪欄位或區塊：targetFields 是要刪的欄位，blockIds 是要刪的區塊（欄位刪除時為空）。</summary>
     private async Task FieldBlockersAsync(
         Module module, IReadOnlyList<Field> targetFields, IReadOnlyCollection<long> blockIds, List<Module> all,
-        List<ListView> views, List<Report> reports, List<DashboardLayoutSource> dashboards, List<DeleteBlocker> blockers, CancellationToken ct)
+        List<ListView> views, List<Report> reports, List<DashboardLayoutSource> dashboards, List<Conversion> conversions,
+        List<DeleteBlocker> blockers, CancellationToken ct)
     {
         var ids = targetFields.Select(f => f.Id).ToHashSet();
         foreach (var f in targetFields)
@@ -140,6 +143,9 @@ public class DeletePlanner(IDeletionRepository data)
         }
         AddReportBlockers(reports, ids, [], blockers);
         AddDashboardBlockers(dashboards, ids, blockers);
+        AddConversionBlockers(conversions, all, ids, [], [], blockers);
+        foreach (var m in all.Where(m => m.Workflow is { } w && ids.Contains(w.StatusFieldId)))
+            blockers.Add(new(DeleteBlockerKind.Workflow, m.Key, m.Workflow!.Id, Name(m.NameI18n, m.Key)));
     }
 
     /// <summary>f 是否是公式、彙總或預設帶值設定，引用了 targetIds 裡的欄位。</summary>
@@ -151,6 +157,27 @@ public class DeletePlanner(IDeletionRepository data)
             blockers.Add(FieldBlocker(DeleteBlockerKind.Rollup, owner, f));
         if (f.Config.ParentDefaultFieldId is { } p && targetIds.Contains(p))
             blockers.Add(FieldBlocker(DeleteBlockerKind.ParentDefault, owner, f));
+        if (f.Config.Fill is { } fill && fill.Map.Any(m => targetIds.Contains(m.From) || targetIds.Contains(m.To)))
+            blockers.Add(FieldBlocker(DeleteBlockerKind.Fill, owner, f));
+    }
+
+    /// <summary>轉換定義引用了這些欄位（對應、追溯、數量欄位），或引用了這些模組（來源、目標、明細模組）。</summary>
+    private static void AddConversionBlockers(
+        List<Conversion> conversions, List<Module> all, IReadOnlySet<long> fieldIds, IReadOnlyCollection<long> moduleIds,
+        IReadOnlyCollection<string> moduleKeys, List<DeleteBlocker> blockers)
+    {
+        foreach (var c in conversions)
+        {
+            var d = c.Definition;
+            var refs = d.Header.Copy.SelectMany(m => new[] { m.From, m.To }).Append(d.Header.SourceFieldId).ToList();
+            if (d.Lines is { } l)
+                refs.AddRange(l.Copy.SelectMany(m => new[] { m.From, m.To }).Concat([l.Quantity.From, l.Quantity.To, l.SourceLineFieldId]));
+            var hitsModule = moduleIds.Contains(c.SourceModuleId) || moduleIds.Contains(c.TargetModuleId)
+                             || (d.Lines is { } lines && (moduleKeys.Contains(lines.SourceModuleKey) || moduleKeys.Contains(lines.TargetModuleKey)));
+            // 刪模組時，被刪模組自己的欄位出現在定義裡也算引用（定義是屬於這個模組關係的）
+            if (hitsModule || refs.Any(fieldIds.Contains))
+                blockers.Add(new(DeleteBlockerKind.Conversion, all.FirstOrDefault(m => m.Id == c.SourceModuleId)?.Key, c.Id, Name(c.NameI18n, c.Key)));
+        }
     }
 
     private static void AddReportBlockers(List<Report> reports, IReadOnlySet<long> fieldIds, IReadOnlyCollection<string> moduleKeys, List<DeleteBlocker> blockers)

@@ -22,6 +22,9 @@ public static class DeleteBlockerKind
     public const string Rollup = "rollup";
     public const string Formula = "formula";
     public const string ParentDefault = "parentDefault";
+    public const string Fill = "fill";
+    public const string Workflow = "workflow";
+    public const string Conversion = "conversion";
     public const string Rule = "rule";
     public const string View = "view";
     public const string Report = "report";

@@ -10,13 +10,16 @@ public class DeletionRepository(DynamicDbContext db) : IDeletionRepository
 {
     public Task<List<Module>> ListModulesAsync(CancellationToken ct) =>
         db.Set<Module>().AsNoTracking().Include(m => m.Blocks).ThenInclude(b => b.Fields).ThenInclude(f => f.Options)
-            .Include(m => m.Rules).OrderBy(m => m.Id).ToListAsync(ct);
+            .Include(m => m.Rules).Include(m => m.Workflow).OrderBy(m => m.Id).ToListAsync(ct);
 
     public Task<List<ListView>> ListViewsAsync(CancellationToken ct) =>
         db.Set<ListView>().AsNoTracking().OrderBy(v => v.Id).ToListAsync(ct);
 
     public Task<List<Report>> ListReportsAsync(CancellationToken ct) =>
         db.Set<Report>().AsNoTracking().OrderBy(r => r.Id).ToListAsync(ct);
+
+    public Task<List<Conversion>> ListConversionsAsync(CancellationToken ct) =>
+        db.Set<Conversion>().AsNoTracking().OrderBy(c => c.Id).ToListAsync(ct);
 
     public async Task<List<DashboardLayoutSource>> ListDashboardLayoutsAsync(CancellationToken ct)
     {
