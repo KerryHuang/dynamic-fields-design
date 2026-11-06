@@ -1,0 +1,59 @@
+/* 現場工業（industrial）：版面特徵與淺色、深色兩組顏色。顏色一律十六進位字面值，對比測試直接解析。 */
+[data-style='industrial'] {
+  --t-font-family: system-ui, -apple-system, 'Segoe UI', 'Noto Sans', 'PingFang TC', 'Microsoft JhengHei', sans-serif;
+  --t-font-size: 15px;
+  --t-radius: 0;
+  --t-panel-padding: 18px;
+  --t-cell-padding: 9px 12px;
+  --t-topbar-height: 52px;
+  --t-th-weight: 700;
+  --t-th-border-bottom: 2px;
+  --t-selected-marker: 0;
+  --t-title-size: 18px;
+  --t-stat-size: 40px;
+  --t-stat-weight: 700;
+  --t-card-border: 2px;
+  --t-card-shadow: none;
+}
+
+[data-style='industrial'][data-mode='light'] {
+  --t-bg: #ecebe6;
+  --t-panel: #f8f7f3;
+  --t-text: #191a1c;
+  --t-muted: #55575c;
+  --t-border: #c2c1ba;
+  --t-primary: #d98400;
+  --t-on-primary: #191a1c;
+  --t-primary-text: #8a5200;
+  --t-negative: #b3200f;
+  --t-on-negative: #ffffff;
+  --t-topbar-bg: #191a1c;
+  --t-topbar-fg: #f8f7f3;
+  --t-sidebar-bg: #22242a;
+  --t-sidebar-fg: #f0efe9;
+  --t-sidebar-muted: #a6a7a9;
+  --t-selected-bg: #d98400;
+  --t-selected-fg: #191a1c;
+  --t-chart-1: #b06a00;
+}
+
+[data-style='industrial'][data-mode='dark'] {
+  --t-bg: #121315;
+  --t-panel: #1b1c1f;
+  --t-text: #f0efe9;
+  --t-muted: #a6a7a9;
+  --t-border: #34363a;
+  --t-primary: #f5a623;
+  --t-on-primary: #191a1c;
+  --t-primary-text: #f5a623;
+  --t-negative: #ff8a75;
+  --t-on-negative: #2b0a07;
+  --t-topbar-bg: #000000;
+  --t-topbar-fg: #f0efe9;
+  --t-sidebar-bg: #191a1d;
+  --t-sidebar-fg: #f0efe9;
+  --t-sidebar-muted: #a6a7a9;
+  --t-selected-bg: #f5a623;
+  --t-selected-fg: #191a1c;
+  --t-chart-1: #f5a623;
+}

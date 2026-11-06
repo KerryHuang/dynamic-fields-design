@@ -1,0 +1,59 @@
+/* 資料工作台（workbench）：版面特徵與淺色、深色兩組顏色。顏色一律十六進位字面值，對比測試直接解析。 */
+[data-style='workbench'] {
+  --t-font-family: system-ui, -apple-system, 'Segoe UI', 'Noto Sans', 'PingFang TC', 'Microsoft JhengHei', sans-serif;
+  --t-font-size: 13px;
+  --t-radius: 3px;
+  --t-panel-padding: 12px;
+  --t-cell-padding: 4px 10px;
+  --t-topbar-height: 40px;
+  --t-th-weight: 700;
+  --t-th-border-bottom: 1px;
+  --t-selected-marker: 0;
+  --t-title-size: 16px;
+  --t-stat-size: 28px;
+  --t-stat-weight: 600;
+  --t-card-border: 1px;
+  --t-card-shadow: none;
+}
+
+[data-style='workbench'][data-mode='light'] {
+  --t-bg: #f4f6f8;
+  --t-panel: #ffffff;
+  --t-text: #1d2733;
+  --t-muted: #5b6876;
+  --t-border: #d3d9e0;
+  --t-primary: #1f6f8b;
+  --t-on-primary: #ffffff;
+  --t-primary-text: #1f6f8b;
+  --t-negative: #b3261e;
+  --t-on-negative: #ffffff;
+  --t-topbar-bg: #ffffff;
+  --t-topbar-fg: #1d2733;
+  --t-sidebar-bg: #ebeff3;
+  --t-sidebar-fg: #1d2733;
+  --t-sidebar-muted: #5b6876;
+  --t-selected-bg: #d5e6ec;
+  --t-selected-fg: #134e63;
+  --t-chart-1: #1f6f8b;
+}
+
+[data-style='workbench'][data-mode='dark'] {
+  --t-bg: #12181e;
+  --t-panel: #192129;
+  --t-text: #dfe6ec;
+  --t-muted: #92a0ae;
+  --t-border: #2b343d;
+  --t-primary: #4fb0cf;
+  --t-on-primary: #06222c;
+  --t-primary-text: #4fb0cf;
+  --t-negative: #f08a82;
+  --t-on-negative: #2b0a07;
+  --t-topbar-bg: #192129;
+  --t-topbar-fg: #dfe6ec;
+  --t-sidebar-bg: #151c23;
+  --t-sidebar-fg: #dfe6ec;
+  --t-sidebar-muted: #92a0ae;
+  --t-selected-bg: #1f3a46;
+  --t-selected-fg: #9cd8ec;
+  --t-chart-1: #4fb0cf;
+}

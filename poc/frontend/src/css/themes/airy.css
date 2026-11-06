@@ -1,0 +1,61 @@
+/* 簡潔留白（airy）：版面特徵與淺色、深色兩組顏色。顏色一律十六進位字面值，對比測試直接解析。 */
+[data-style='airy'] {
+  --t-font-family: system-ui, -apple-system, 'Segoe UI', 'Noto Sans', 'PingFang TC', 'Microsoft JhengHei', sans-serif;
+  --t-font-size: 14px;
+  --t-radius: 10px;
+  --t-panel-padding: 28px;
+  --t-cell-padding: 12px 16px;
+  --t-topbar-height: 56px;
+  --t-th-weight: 500;
+  --t-th-border-bottom: 1px;
+  --t-selected-marker: 0;
+  --t-title-size: 20px;
+  --t-stat-size: 36px;
+  --t-stat-weight: 500;
+}
+
+[data-style='airy'][data-mode='light'] {
+  --t-bg: #fafafc;
+  --t-panel: #ffffff;
+  --t-text: #1c1c2b;
+  --t-muted: #6c6c80;
+  --t-border: #e6e6ef;
+  --t-primary: #5b4bd6;
+  --t-on-primary: #ffffff;
+  --t-primary-text: #5b4bd6;
+  --t-negative: #c02a4d;
+  --t-on-negative: #ffffff;
+  --t-topbar-bg: #fafafc;
+  --t-topbar-fg: #1c1c2b;
+  --t-sidebar-bg: #fafafc;
+  --t-sidebar-fg: #1c1c2b;
+  --t-sidebar-muted: #6c6c80;
+  --t-selected-bg: #eeecfc;
+  --t-selected-fg: #4334b8;
+  --t-chart-1: #5b4bd6;
+  --t-card-border: 0;
+  --t-card-shadow: 0 2px 12px rgba(28, 28, 43, 0.08);
+}
+
+[data-style='airy'][data-mode='dark'] {
+  --t-bg: #121218;
+  --t-panel: #1a1a22;
+  --t-text: #ececf3;
+  --t-muted: #9a9aae;
+  --t-border: #2a2a35;
+  --t-primary: #9d92f2;
+  --t-on-primary: #15122e;
+  --t-primary-text: #9d92f2;
+  --t-negative: #f28ba3;
+  --t-on-negative: #2b0a07;
+  --t-topbar-bg: #121218;
+  --t-topbar-fg: #ececf3;
+  --t-sidebar-bg: #121218;
+  --t-sidebar-fg: #ececf3;
+  --t-sidebar-muted: #9a9aae;
+  --t-selected-bg: #28254a;
+  --t-selected-fg: #c9c3fa;
+  --t-chart-1: #9d92f2;
+  --t-card-border: 1px;
+  --t-card-shadow: none;
+}

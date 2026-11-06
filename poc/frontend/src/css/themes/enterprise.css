@@ -1,0 +1,59 @@
+/* 正式企業（enterprise）：版面特徵與淺色、深色兩組顏色。顏色一律十六進位字面值，對比測試直接解析。 */
+[data-style='enterprise'] {
+  --t-font-family: system-ui, -apple-system, 'Segoe UI', 'Noto Sans', 'PingFang TC', 'Microsoft JhengHei', sans-serif;
+  --t-font-size: 14px;
+  --t-radius: 2px;
+  --t-panel-padding: 18px;
+  --t-cell-padding: 8px 12px;
+  --t-topbar-height: 46px;
+  --t-th-weight: 600;
+  --t-th-border-bottom: 2px;
+  --t-selected-marker: 3px;
+  --t-title-size: 17px;
+  --t-stat-size: 30px;
+  --t-stat-weight: 600;
+  --t-card-border: 1px;
+  --t-card-shadow: none;
+}
+
+[data-style='enterprise'][data-mode='light'] {
+  --t-bg: #f2f4f7;
+  --t-panel: #ffffff;
+  --t-text: #1a2433;
+  --t-muted: #596579;
+  --t-border: #cfd6e0;
+  --t-primary: #0f4c9c;
+  --t-on-primary: #ffffff;
+  --t-primary-text: #0f4c9c;
+  --t-negative: #b4231a;
+  --t-on-negative: #ffffff;
+  --t-topbar-bg: #0f3a75;
+  --t-topbar-fg: #ffffff;
+  --t-sidebar-bg: #ffffff;
+  --t-sidebar-fg: #1a2433;
+  --t-sidebar-muted: #596579;
+  --t-selected-bg: #e6eef9;
+  --t-selected-fg: #0f4c9c;
+  --t-chart-1: #0f4c9c;
+}
+
+[data-style='enterprise'][data-mode='dark'] {
+  --t-bg: #11161e;
+  --t-panel: #19202b;
+  --t-text: #e2e8f1;
+  --t-muted: #98a4b6;
+  --t-border: #2d3644;
+  --t-primary: #6ea6f0;
+  --t-on-primary: #0a1e3a;
+  --t-primary-text: #6ea6f0;
+  --t-negative: #f19088;
+  --t-on-negative: #2b0a07;
+  --t-topbar-bg: #0c1a30;
+  --t-topbar-fg: #e2e8f1;
+  --t-sidebar-bg: #19202b;
+  --t-sidebar-fg: #e2e8f1;
+  --t-sidebar-muted: #98a4b6;
+  --t-selected-bg: #1f3350;
+  --t-selected-fg: #a9cbf7;
+  --t-chart-1: #6ea6f0;
+}

@@ -1,0 +1,82 @@
+/* 語意 token。--t-* 掛在屬性選擇器上、不限定 html，任何元素加上 data-style／data-mode 都能呈現該風格（外觀設定的小樣本靠這點）。 */
+/* :root 是 workbench 淺色的同一組值：內嵌 script 萬一沒跑，畫面也不會失去樣式。 */
+:root {
+  --t-bg: #f4f6f8;
+  --t-panel: #ffffff;
+  --t-text: #1d2733;
+  --t-muted: #5b6876;
+  --t-border: #d3d9e0;
+  --t-primary: #1f6f8b;
+  --t-on-primary: #ffffff;
+  --t-primary-text: #1f6f8b;
+  --t-negative: #b3261e;
+  --t-on-negative: #ffffff;
+  --t-topbar-bg: #ffffff;
+  --t-topbar-fg: #1d2733;
+  --t-sidebar-bg: #ebeff3;
+  --t-sidebar-fg: #1d2733;
+  --t-sidebar-muted: #5b6876;
+  --t-selected-bg: #d5e6ec;
+  --t-selected-fg: #134e63;
+  --t-chart-1: #1f6f8b;
+  --t-font-family: system-ui, -apple-system, 'Segoe UI', 'Noto Sans', 'PingFang TC', 'Microsoft JhengHei', sans-serif;
+  --t-font-size: 13px;
+  --t-radius: 3px;
+  --t-panel-padding: 12px;
+  --t-cell-padding: 4px 10px;
+  --t-topbar-height: 40px;
+  --t-th-weight: 700;
+  --t-th-border-bottom: 1px;
+  --t-selected-marker: 0;
+  --t-title-size: 16px;
+  --t-stat-size: 28px;
+  --t-stat-weight: 600;
+  --t-card-border: 1px;
+  --t-card-shadow: none;
+  --t-positive: #1b6e36;
+  --t-on-positive: #ffffff;
+  --t-warning: #8a5a00;
+  --t-on-warning: #ffffff;
+  --t-info: #0b5cad;
+  --t-on-info: #ffffff;
+  --t-negative-soft: #fbe4e2;
+  --t-info-soft: #e1edf9;
+  --t-chart-2: #c2571a;
+  --t-chart-3: #2e7d5b;
+  --t-chart-4: #8a4fb0;
+  --t-chart-5: #8f6a00;
+  --t-chart-6: #2f6fb7;
+}
+
+/* 依模式共用：狀態色、柔和底色與圖表色 2～6（圖表色 1 是各風格的主色）。 */
+[data-mode='light'] {
+  --t-positive: #1b6e36;
+  --t-on-positive: #ffffff;
+  --t-warning: #8a5a00;
+  --t-on-warning: #ffffff;
+  --t-info: #0b5cad;
+  --t-on-info: #ffffff;
+  --t-negative-soft: #fbe4e2;
+  --t-info-soft: #e1edf9;
+  --t-chart-2: #c2571a;
+  --t-chart-3: #2e7d5b;
+  --t-chart-4: #8a4fb0;
+  --t-chart-5: #8f6a00;
+  --t-chart-6: #2f6fb7;
+}
+
+[data-mode='dark'] {
+  --t-positive: #6fd08c;
+  --t-on-positive: #0c1a10;
+  --t-warning: #e3b341;
+  --t-on-warning: #191a1c;
+  --t-info: #7cb7f0;
+  --t-on-info: #0a1e3a;
+  --t-negative-soft: #3a1c1a;
+  --t-info-soft: #16293d;
+  --t-chart-2: #f0a36b;
+  --t-chart-3: #6fd08c;
+  --t-chart-4: #c79bf0;
+  --t-chart-5: #e3c341;
+  --t-chart-6: #7cb7f0;
+}
