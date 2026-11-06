@@ -54,7 +54,7 @@ public class ExportReportHandler(ReportAccess access, ReportModuleLoader loader,
     {
         var columns = r.Columns.Where(c => c.Role == "field").ToList();
         return (columns.Select(c => c.Label).ToList(),
-            r.DetailRows!.Select(row => (IReadOnlyList<object>)row.Select(Cell).ToList()).ToList());
+            r.DetailRows!.Select(row => (IReadOnlyList<object>)row.Select((v, i) => Cell(columns[i], v)).ToList()).ToList());
     }
 
     private static (List<string>, List<IReadOnlyList<object>>) Grouped(ReportResult r, string totalLabel)
@@ -73,15 +73,25 @@ public class ExportReportHandler(ReportAccess access, ReportModuleLoader loader,
         return (columns.Select(c => c.Label).ToList(), rows);
     }
 
-    private static object Measure(ReportColumn c, decimal? v) =>
-        v is { } n
-            ? c.ValueType == "dayNumber" ? DateOnly.FromDayNumber((int)n).ToString("yyyy-MM-dd", CultureInfo.InvariantCulture) : n
-            : "";
-
-    private static object Cell(object? v) => v switch
+    private static object Measure(ReportColumn c, decimal? v) => v switch
     {
         null => "",
-        decimal d => d,
+        { } n when c.ValueType == "dayNumber" => DateOnly.FromDayNumber((int)n).ToString("yyyy-MM-dd", CultureInfo.InvariantCulture),
+        { } n => Number(c, n),
+    };
+
+    /// <summary>ratio 是 0 到 1；percent 欄位存 12.5 代表 12.5%，Excel 的百分比格式要 0.125。</summary>
+    private static object Number(ReportColumn c, decimal n) => c.ValueType switch
+    {
+        "ratio" => new XlsxPercent(n),
+        "percent" => new XlsxPercent(n / 100),
+        _ => n,
+    };
+
+    private static object Cell(ReportColumn c, object? v) => v switch
+    {
+        null => "",
+        decimal d => Number(c, d),
         _ => Convert.ToString(v, CultureInfo.InvariantCulture) ?? "",
     };
 }

@@ -315,6 +315,32 @@ public class ReportPermissionMatrixTests : ReportTestBase
             ShouldBeRestricted(await Run(Def(measures: [M("s", "sum", MainF(f))])));
     }
 
+    [Fact]
+    public async Task RollupOnViaTarget_RestrictedInEveryPosition()
+    {
+        await Arrange();
+        As("admin");
+        // customer 上的彙總：來源是新的子模組（指回 customer 的明細）
+        await NewModule("visit");
+        var visitLink = await MustAdd("visit", FieldType.Reference, RefTo("customer", ReferenceRelation.Detail), "所屬客戶");
+        var hours = await MustAdd("visit", FieldType.Integer, label: "時數");
+        (await Send(new DynamicModules.Application.Dynamic.ModuleService.Commands.ActivateModule.ActivateModuleRequest("visit"))).IsSuccess.Should().BeTrue();
+        var rollup = await MustAdd("customer", FieldType.Rollup,
+            new FieldConfig { Rollup = new RollupConfig(visitLink.Id, RollupFunction.Sum, hours.Id, null) }, "彙總時數");
+        var indirect = await MustAdd("customer", FieldType.Formula,
+            new FieldConfig { Formula = $"{{{rollup.Id}}}*2", ResultType = "number" }, "間接公式");
+        await Insert("order", "admin", (Amount, 1m));
+
+        foreach (var f in new[] { rollup, indirect })
+        {
+            var via = new ReportFieldRef(Main, f.Id, CustomerRef.Id);
+            ShouldBeRestricted(await Run(Def(columns: [via])));
+            ShouldBeRestricted(await Run(Def(groups: [G(via)], measures: [M("n", "countMain")])));
+            ShouldBeRestricted(await Run(Def(measures: [M("s", "sum", via)])));
+            ShouldBeRestricted(await Run(Def(measures: [M("n", "countMain")], filters: [F(via, "gt", 1)])));
+        }
+    }
+
     private async Task<(FieldResponse Rollup, FieldResponse Indirect)> AddRollupToDraft()
     {
         var total = await MustAdd("order", FieldType.Rollup,

@@ -39,7 +39,9 @@ public class ReportAccess(IReportRepository reports, IPermissionRepository permi
         var definition = ReportDefinition.Parse(report.DefinitionJson);
         var (set, _) = await loader.LoadAsync(definition, PermissionAction.Read, ct, lenient: true);
         // 與 ExportReportHandler 同一個載入與授權路徑：任何涉及的模組沒有 PrintExport 就不能匯出
-        var (_, exportDenied) = await loader.LoadAsync(definition, PermissionAction.PrintExport, ct);
-        return report.ToDetail(viewer, await UserNamesAsync(ct), ReportMasking.Mask(report.DefinitionJson, definition, set!), exportDenied is null);
+        var (exportSet, _) = await loader.LoadAsync(definition, PermissionAction.PrintExport, ct);
+        // 停用的模組不在 set 裡也不算拒絕，但這時匯出會失敗，按鈕要停用
+        var canExport = exportSet is { Main: not null } && (definition.Child is null || exportSet.Child is not null);
+        return report.ToDetail(viewer, await UserNamesAsync(ct), ReportMasking.Mask(report.DefinitionJson, definition, set!), canExport);
     }
 }

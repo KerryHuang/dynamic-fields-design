@@ -39,7 +39,8 @@ public static class ReportMasking
     {
         var side = r.Source == "main" ? set.Main : r.Source == "child" ? set.Child : null;
         if (side is null) return false;
-        Field? Find(Module m, long id) => m.Blocks.SelectMany(b => b.Fields).FirstOrDefault(f => f.Id == id && f.Status == FieldStatus.Active);
+        // 不篩啟用狀態：欄位或 via 停用後權限仍在，停用不能讓隱藏欄位上的條件值外洩
+        Field? Find(Module m, long id) => m.Blocks.SelectMany(b => b.Fields).FirstOrDefault(f => f.Id == id);
 
         if (r.ViaFieldId is null) return FieldVisible(Find(side.Module, r.FieldId), side, set);
         var via = Find(side.Module, r.ViaFieldId.Value);

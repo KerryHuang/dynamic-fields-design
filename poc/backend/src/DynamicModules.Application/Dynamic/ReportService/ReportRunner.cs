@@ -627,7 +627,8 @@ public class ReportRunner(
             "countChild" => (ReportText.Get(locale, ReportText.Count, (child ?? main).Module.NameI18n.Resolve(locale)), "number"),
             "ratio" => (ReportText.Get(locale, ReportText.Ratio, m.Condition is null ? "" : FieldLabel(m.Condition.Field)), "ratio"),
             _ => (ReportText.Get(locale, m.Kind switch { "sum" => ReportText.Sum, "avg" => ReportText.Avg, "min" => ReportText.Min, _ => ReportText.Max }, m.Field is null ? "" : FieldLabel(m.Field)),
-                m.Field is not null && m.Kind is "min" or "max" && ValueTypeOf(bound[ReportCalculator.KeyOf(m.Field!)].Field) is "date" or "dateTime" ? "dayNumber" : "number"),
+                m.Field is not null && m.Kind is "min" or "max" && ValueTypeOf(bound[ReportCalculator.KeyOf(m.Field!)].Field) is "date" or "dateTime" ? "dayNumber"
+                : m.Field is not null && ValueTypeOf(bound[ReportCalculator.KeyOf(m.Field)].Field) == "percent" ? "percent" : "number"),
         };
         return new ReportColumn(m.Id, label, "measure", type);
     }

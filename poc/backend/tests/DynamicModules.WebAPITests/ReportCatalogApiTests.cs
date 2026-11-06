@@ -177,6 +177,32 @@ public class ReportCatalogApiTests
     }
 
     [Fact]
+    public async Task Catalog_ViaTarget_ExcludesRollupAndFormulaUsingIt()
+    {
+        using var app = new TestApp();
+        var admin = app.AsUser();
+        var line = await CreateModule(admin);
+        var target = await CreateModule(admin);
+        var parentRef = await AddField(admin, line, "reference", new { refTarget = new { kind = "module", key = target }, relation = "detail" });
+        var qty = await AddField(admin, line, "decimal", new { scale = 0 });
+        var plain = await AddField(admin, target, "decimal", new { scale = 0 });
+        var rollup = await AddField(admin, target, "rollup", new { rollup = new { sourceFieldId = parentRef.Id, function = "sum", aggregateFieldId = qty.Id } });
+        var formula = await AddField(admin, target, "formula", new { formula = $"{{{rollup.Id}}} + 1", resultType = "number", scale = 0 });
+        await Activate(admin, target);
+        await Activate(admin, line);
+        app.GrantBusinessGroups(target);
+        var main = await CreateModule(admin);
+        var link = await AddField(admin, main, "reference", new { refTarget = new { kind = "module", key = target } });
+        await Activate(admin, main);
+        app.GrantBusinessGroups(main);
+
+        var json = await JsonOf(await admin.GetAsync($"{Catalog}/{main}"));
+
+        var via = json.GetProperty("via").EnumerateArray().Single(v => v.GetProperty("fieldId").GetInt64() == link.Id);
+        Ids(via.GetProperty("fields")).Should().Contain(plain.Id).And.NotContain([rollup.Id, formula.Id]);
+    }
+
+    [Fact]
     public async Task Catalog_EntityTarget_TitleOnly()
     {
         using var app = new TestApp();

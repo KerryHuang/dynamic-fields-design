@@ -54,4 +54,24 @@ describe('ShareDialog', () => {
     expect(document.body.textContent).not.toContain(zhTW.reports.noGroups);
     expect((q('share-save') as HTMLButtonElement).disabled).toBe(true);
   });
+
+  it('retry after a load failure refetches and shows the groups', async () => {
+    api.getReportShareTargets.mockRejectedValueOnce(new Error('boom'));
+    const i18n = createI18n({ legacy: false, locale: 'zh-TW', messages: { 'zh-TW': zhTW } });
+    mounted = mount(ShareDialog, {
+      props: { reportId: 9, open: true, groupIds: [1] },
+      attachTo: document.body,
+      global: { plugins: [[quasar.Quasar, { components: quasar, plugins: { Notify: quasar.Notify } }], i18n, [VueQueryPlugin, { queryClient: new QueryClient({ defaultOptions: { queries: { retry: false } } }) }]] },
+    });
+    await flushPromises();
+    expect(q('share-load-error')).not.toBeNull();
+
+    q('share-retry')!.click();
+    await flushPromises();
+
+    expect(api.getReportShareTargets).toHaveBeenCalledTimes(2);
+    expect(q('share-load-error')).toBeNull();
+    expect(q('share-group-2')).not.toBeNull();
+    expect((q('share-save') as HTMLButtonElement).disabled).toBe(false);
+  });
 });

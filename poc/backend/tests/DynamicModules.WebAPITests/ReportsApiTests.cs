@@ -1131,6 +1131,178 @@ public class ReportsApiTests
         drill.GetProperty("detailTruncated").GetBoolean().Should().BeFalse();
     }
 
+    // ---- 最終審查補的測試缺口 ----
+
+    private static async Task Disable(HttpClient c, long fieldId) =>
+        (await c.PutAsJsonAsync($"{Base}/fields/{fieldId}/status", new { status = "inactive" })).EnsureSuccessStatusCode();
+
+    [Fact]
+    public async Task Get_DisabledHiddenField_ConditionValueStillMasked_VisibleOneStaysVisible()
+    {
+        using var app = new TestApp();
+        var w = await MakeWorld(app);
+        var sales = GroupId(app, "sales");
+        var admin = app.AsUser();
+        var id = await Create(admin, Def(w.Main, columns: [Ref(w.Status)], filters: [new { field = Ref(w.Amount), op = "gt", value = 12345 }]));
+        await Share(admin, id, sales);
+        await Grant(app, w.Main, [new { fieldId = w.Amount, groupId = sales, access = "hidden" }], ("mis", true, "all"), ("sales", true, "all"));
+
+        await Disable(admin, w.Amount);
+
+        (await app.AsUser("sales01").GetStringAsync($"{Reports}/{id}")).Should().NotContain("12345");
+        // 看得到的人仍看得到值，設計器才能標「不可用」讓擁有者移除
+        (await admin.GetStringAsync($"{Reports}/{id}")).Should().Contain("12345");
+    }
+
+    [Fact]
+    public async Task Get_DisabledViaField_ConditionValueStillMaskedByViaAndTargetField()
+    {
+        using var app = new TestApp();
+        var w = await MakeWorld(app);
+        var k = await AddCustomer(app, w);
+        var admin = app.AsUser();
+        var region = await AddField(admin, k.Key, "text", new { });
+        var sales = GroupId(app, "sales");
+        var floor = GroupId(app, "floor");
+        var id = await Create(admin, Def(w.Main, columns: [Ref(w.Status)], filters: [new { field = Ref(region.Id, via: k.Cust), op = "eq", value = "北區機密" }]));
+        await Share(admin, id, sales, floor);
+        // 業務看不到參照欄位；現場看得到參照欄位，但看不到目標欄位
+        await Grant(app, w.Main, [new { fieldId = k.Cust, groupId = sales, access = "hidden" }], ("mis", true, "all"), ("sales", true, "all"), ("floor", true, "all"));
+        await Grant(app, k.Key, [new { fieldId = region.Id, groupId = floor, access = "hidden" }], ("mis", true, "all"), ("sales", true, "all"), ("floor", true, "all"));
+
+        await Disable(admin, k.Cust);
+
+        (await app.AsUser("sales01").GetStringAsync($"{Reports}/{id}")).Should().NotContain("北區機密");
+        (await app.AsUser("floor01").GetStringAsync($"{Reports}/{id}")).Should().NotContain("北區機密");
+        (await admin.GetStringAsync($"{Reports}/{id}")).Should().Contain("北區機密");
+    }
+
+    [Fact]
+    public async Task Get_CanExport_FalseWhenMainDisabledOrNoRead()
+    {
+        using var app = new TestApp();
+        var w = await MakeWorld(app);
+        var admin = app.AsUser();
+        var id = await Create(admin, ByStatus(w));
+        await Share(admin, id, GroupId(app, "floor"));
+        await Grant(app, w.Main, null, ("mis", true, "all"));
+        (await JsonOf(await admin.GetAsync($"{Reports}/{id}"))).GetProperty("canExport").GetBoolean().Should().BeTrue();
+
+        // 現場完全沒有這個模組的 Read
+        (await JsonOf(await app.AsUser("floor01").GetAsync($"{Reports}/{id}"))).GetProperty("canExport").GetBoolean().Should().BeFalse();
+
+        (await admin.PostAsync($"{Base}/modules/{w.Main}/deactivate", null)).EnsureSuccessStatusCode();
+        (await JsonOf(await admin.GetAsync($"{Reports}/{id}"))).GetProperty("canExport").GetBoolean().Should().BeFalse();
+        (await admin.GetAsync($"{Reports}/{id}/export")).StatusCode.Should().NotBe(HttpStatusCode.OK);
+    }
+
+    [Fact]
+    public async Task Get_CanExport_FalseWhenChildDisabled()
+    {
+        using var app = new TestApp();
+        var w = await MakeWorld(app, withChild: true);
+        var admin = app.AsUser();
+        var id = await Create(admin, Def(w.Main, measures: [Count()], child: new { moduleKey = w.Child, linkFieldId = w.ChildLink }));
+        (await admin.PostAsync($"{Base}/modules/{w.Child}/deactivate", null)).EnsureSuccessStatusCode();
+
+        (await JsonOf(await admin.GetAsync($"{Reports}/{id}"))).GetProperty("canExport").GetBoolean().Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task OwnerPutsBackMaskedDefinition_400_DatabaseUnchanged_NoValueOperatorKeptAsIs()
+    {
+        using var app = new TestApp();
+        var w = await MakeWorld(app);
+        var sales = GroupId(app, "sales");
+        var owner = app.AsUser("sales01");
+        var id = await Create(owner, Def(w.Main, columns: [Ref(w.Status)], filters:
+        [
+            new { field = Ref(w.Amount), op = "gt", value = (object?)12345 },
+            new { field = Ref(w.Due), op = "isEmpty", value = (object?)null },
+        ]));
+        await Grant(app, w.Main,
+            [new { fieldId = w.Amount, groupId = sales, access = "hidden" }, new { fieldId = w.Due, groupId = sales, access = "hidden" }],
+            ("mis", true, "all"), ("sales", true, "all"));
+        string Stored()
+        {
+            using var scope = app.Services.CreateScope();
+            return scope.ServiceProvider.GetRequiredService<DynamicDbContext>().Set<Report>().AsNoTracking().Single(r => r.Id == id).DefinitionJson;
+        }
+        var before = Stored();
+
+        var masked = await JsonOf(await owner.GetAsync($"{Reports}/{id}"));
+        var filters = Filters(masked);
+        filters[0].GetProperty("hidden").GetBoolean().Should().BeTrue();
+        filters[0].TryGetProperty("value", out _).Should().BeFalse();
+        filters[1].GetProperty("op").GetString().Should().Be("isEmpty");
+        filters[1].GetProperty("hidden").GetBoolean().Should().BeTrue();
+        filters[1].TryGetProperty("value", out _).Should().BeFalse();
+
+        var put = await owner.PutAsJsonAsync($"{Reports}/{id}", new { name = "改名", definition = masked.GetProperty("definition") });
+
+        put.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+        Stored().Should().Be(before);
+        (await JsonOf(await owner.GetAsync($"{Reports}/{id}"))).GetProperty("name").GetString().Should().Be("月報");
+    }
+
+    [Fact]
+    public async Task ShareTargets_Anonymous_401()
+    {
+        using var app = new TestApp();
+        (await app.CreateClient().GetAsync($"{Reports}/share-targets")).StatusCode.Should().Be(HttpStatusCode.Unauthorized);
+    }
+
+    [Fact]
+    public async Task Drill_MergedMainSum_KeepsDedupedNote()
+    {
+        using var app = new TestApp();
+        var w = await MakeWorld(app, withChild: true);
+        var admin = app.AsUser();
+        await AddRecord(admin, w, 100, w.Options[0]);
+        var id = await Create(admin, Def(w.Main, groups: [new { field = Ref(w.Status), bucket = (string?)null }], measures: [Sum("s", w.Amount)],
+            child: new { moduleKey = w.Child, linkFieldId = w.ChildLink }));
+
+        var drill = await JsonOf(await admin.PostAsJsonAsync($"{Reports}/{id}/drill", new { groupKeys = new[] { w.Options[0] } }));
+
+        drill.GetProperty("dedupedNote").GetBoolean().Should().BeTrue();
+    }
+
+    [Fact]
+    public async Task Export_RatioAndPercent_UsePercentFormat()
+    {
+        using var app = new TestApp();
+        var w = await MakeWorld(app);
+        var admin = app.AsUser();
+        var rate = await AddField(admin, w.Main, "percent", new { scale = 2 });
+        foreach (var (amount, pct) in new[] { (10, 12.5m), (20, 25m) })
+            (await admin.PostAsJsonAsync($"{Base}/modules/{w.Main}/records", new
+            {
+                values = new Dictionary<string, object> { [w.TitleKey] = "t", [w.AmountKey] = amount, [rate.Key] = pct }
+            })).EnsureSuccessStatusCode();
+        var grouped = await Create(admin, Def(w.Main, groups: [new { field = Ref(w.Status), bucket = (string?)null }], measures:
+        [
+            new { id = "avg", kind = "avg", field = Ref(rate.Id), condition = (object?)null },
+            new { id = "r", kind = "ratio", field = (object?)null, condition = (object)new { field = Ref(w.Amount), op = "gt", value = 15 } },
+            Sum("s", w.Amount),
+        ]));
+        var detail = await Create(admin, Def(w.Main, columns: [Ref(rate.Id)]));
+
+        using var g = new XLWorkbook(await (await admin.GetAsync($"{Reports}/{grouped}/export")).Content.ReadAsStreamAsync());
+        using var d = new XLWorkbook(await (await admin.GetAsync($"{Reports}/{detail}/export")).Content.ReadAsStreamAsync());
+
+        // 百分比欄位存 12.5 代表 12.5%，Excel 的百分比格式要 0.125；比例本來就是 0 到 1
+        var total = g.Worksheet(1).Row(3);
+        total.Cell(1).GetString().Should().Be("總計");
+        total.Cell(2).GetDouble().Should().BeApproximately(0.1875, 1e-9);
+        total.Cell(2).Style.NumberFormat.Format.Should().Contain("%");
+        total.Cell(3).GetDouble().Should().BeApproximately(0.5, 1e-9);
+        total.Cell(3).Style.NumberFormat.Format.Should().Contain("%");
+        total.Cell(4).GetDouble().Should().Be(30);
+        total.Cell(4).Style.NumberFormat.Format.Should().NotContain("%");
+        d.Worksheet(1).Cell(2, 1).GetDouble().Should().BeApproximately(0.125, 1e-9);
+        d.Worksheet(1).Cell(2, 1).Style.NumberFormat.Format.Should().Contain("%");
+    }
+
     /// <summary>中文字與全形標點；語系字典的漏網之魚會落在這裡。</summary>
     private static readonly System.Text.RegularExpressions.Regex Chinese = new(@"[\u3000-\u303F\u4E00-\u9FFF\uFF00-\uFFEF]");
 

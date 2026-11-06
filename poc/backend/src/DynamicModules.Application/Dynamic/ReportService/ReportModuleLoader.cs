@@ -19,7 +19,7 @@ public class ReportModuleLoader(IModuleRepository modules, IDynamicAccessGuard g
 {
     /// <summary>
     /// 任何涉及的模組沒有 <paramref name="action"/> 權限就回 Denied。<paramref name="lenient"/> 時改為逐模組判斷：沒權限的模組不放進結果，
-    /// 且一併載入直接參照欄位的目標（用於依觀看者遮蔽定義）。匯出時直接參照欄位的目標同樣要有 PrintExport，否則報表會繞過匯出權限。
+    /// 一併載入直接參照欄位的目標，且停用欄位的目標也載入（用於依觀看者遮蔽定義：停用不改變看得到什麼）。匯出時直接參照欄位的目標同樣要有 PrintExport，否則報表會繞過匯出權限。
     /// </summary>
     public async Task<(ReportModuleSet? Set, ServiceResult? Denied)> LoadAsync(
         ReportDefinition d, PermissionAction action, CancellationToken ct, bool lenient = false)
@@ -64,7 +64,7 @@ public class ReportModuleLoader(IModuleRepository modules, IDynamicAccessGuard g
         foreach (var r in refs.Where(r => r.ViaFieldId is not null))
         {
             var source = r.Source == "main" ? main : r.Source == "child" ? child : null;
-            var via = source?.Blocks.SelectMany(b => b.Fields).FirstOrDefault(f => f.Id == r.ViaFieldId && f.Status == FieldStatus.Active);
+            var via = source?.Blocks.SelectMany(b => b.Fields).FirstOrDefault(f => f.Id == r.ViaFieldId && (lenient || f.Status == FieldStatus.Active));
             if (via?.Config.RefTarget is not { Kind: ReferenceTarget.ModuleKind } target) continue;
             if (await AddTargetAsync(target.Key) is { } denied) return (null, denied);
         }
@@ -72,7 +72,7 @@ public class ReportModuleLoader(IModuleRepository modules, IDynamicAccessGuard g
             foreach (var r in refs.Where(r => r.ViaFieldId is null))
             {
                 var source = r.Source == "main" ? main : r.Source == "child" ? child : null;
-                var field = source?.Blocks.SelectMany(b => b.Fields).FirstOrDefault(f => f.Id == r.FieldId && f.Status == FieldStatus.Active);
+                var field = source?.Blocks.SelectMany(b => b.Fields).FirstOrDefault(f => f.Id == r.FieldId && (lenient || f.Status == FieldStatus.Active));
                 if (field is not { Type: FieldType.Reference, Config.RefTarget: { Kind: ReferenceTarget.ModuleKind } target }) continue;
                 if (await AddTargetAsync(target.Key) is { } denied) return (null, denied);
             }
