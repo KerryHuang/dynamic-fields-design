@@ -40,7 +40,7 @@ public sealed class DetailPlan
 /// <summary>表頭存檔裡的明細（已定決策 3、4）：Prepare 收集錯誤並算出彙總，不寫入任何東西；Apply 在表頭有 Id 之後寫入。</summary>
 public class DetailWriter(
     IModuleRepository modules, IRecordRepository records, INumberSequenceRepository sequences, FieldTypeRegistry registry,
-    IDynamicAccessGuard guard, ReferenceValidator refs, ICurrentUser user, IBusinessTime time, RecordHistoryWriter history)
+    IDynamicAccessGuard guard, ReferenceValidator refs, ReferenceFill fill, ICurrentUser user, IBusinessTime time, RecordHistoryWriter history)
 {
     public const string UnknownDetail = "明細模組不存在或未啟用";
     public const string RowNotFound = "明細不存在";
@@ -140,9 +140,10 @@ public class DetailWriter(
             input[parentKey] = JsonSerializer.SerializeToElement(parentId);
             validRefKeys[set.ParentField.Id] = new HashSet<string> { parentId.ToString() };
         }
+        var systemKeys = await fill.ApplyAsync(set.Child, input, previous, validRefKeys, ct);
         var (values, rowErrors) = RecordValueProcessor.Process(
             set.Child, input, previous, userIds, registry, set.Permissions, new RuleContext(time.Today), validRefKeys,
-            parentValues: parentValues);
+            parentValues: parentValues, systemKeys: systemKeys);
         foreach (var (key, messages) in rowErrors) errors[prefix + key] = messages;
         set.Changes.Add(new DetailRowChange(record, previous, values));
         return false;

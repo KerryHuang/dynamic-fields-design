@@ -48,7 +48,20 @@ public record FieldConfig
 
     /// <summary>rollup：彙總設定。</summary>
     public RollupConfig? Rollup { get; init; }
+
+    /// <summary>reference：選了目標記錄後，把目標的欄位值帶進本筆（快照，之後不跟著目標變）。</summary>
+    public FillConfig? Fill { get; init; }
 }
+
+/// <summary>帶值設定。Mode 為 lock（系統填、使用者不能改）或 default（只在欄位空白時填，使用者可以改）。</summary>
+public record FillConfig(string Mode, List<FillMapping> Map)
+{
+    public const string Lock = "lock";
+    public const string Default = "default";
+}
+
+/// <summary>From：被參照模組的欄位 Id；To：本模組的欄位 Id。</summary>
+public record FillMapping(long From, long To);
 
 /// <summary>彙總欄位設定：來源參照欄位、函數、被彙總欄位（count 不需要）與子記錄條件。</summary>
 public record RollupConfig(long SourceFieldId, RollupFunction Function, long? AggregateFieldId, JsonElement? Condition);

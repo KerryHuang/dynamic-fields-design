@@ -33,6 +33,9 @@ public class AddFieldHandler(
             module, field, config, await FieldRules.ParentOfAsync(module, modules, ct));
         if (badDynamic is not null) return badDynamic;
 
+        var badFill = await FieldRules.CheckFillAsync(module, field, 0, config, modules, ct);
+        if (badFill is not null) return badFill;
+
         if (request.Type == FieldType.Reference)
         {
             if (config.Relation == ReferenceRelation.Detail)

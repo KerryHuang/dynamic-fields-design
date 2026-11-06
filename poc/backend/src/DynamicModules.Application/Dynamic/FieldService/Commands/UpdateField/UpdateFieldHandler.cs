@@ -37,6 +37,9 @@ public class UpdateFieldHandler(
             module, field, config, await FieldRules.ParentOfAsync(module, modules, ct));
         if (badDynamic is not null) return badDynamic;
 
+        var badFill = await FieldRules.CheckFillAsync(module, field, field.Id, config, modules, ct);
+        if (badFill is not null) return badFill;
+
         if (field.Type == FieldType.Reference)
         {
             if (config.RefTarget != field.Config.RefTarget)

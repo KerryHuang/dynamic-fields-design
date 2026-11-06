@@ -16,7 +16,7 @@ namespace DynamicModules.Application.Dynamic.RecordService.Commands.UpdateRecord
 
 public class UpdateRecordHandler(
     IModuleRepository modules, IRecordRepository records, FieldTypeRegistry registry,
-    ICurrentUser user, IBusinessTime time, IDynamicAccessGuard guard, ReferenceValidator refs, ReferenceResolver resolver,
+    ICurrentUser user, IBusinessTime time, IDynamicAccessGuard guard, ReferenceValidator refs, ReferenceFill fill, ReferenceResolver resolver,
     DetailWriter details, DetailReader detailReader, RollupRecalc rollups, RecordHistoryWriter history)
     : IRequestHandler<UpdateRecordRequest, ServiceResult>
 {
@@ -43,12 +43,14 @@ public class UpdateRecordHandler(
             });
 
         var validRefKeys = await refs.ValidKeysAsync(module, request.Values, previous, ct);
+        var input = new Dictionary<string, JsonElement?>(request.Values);
+        var systemKeys = await fill.ApplyAsync(module, input, previous, validRefKeys, ct);
         var plan = await details.PrepareAsync(module, record, PermissionAction.Edit, request.Details, ct,
             () => Task.FromResult<IReadOnlyDictionary<string, JsonElement?>>(RecordValueProcessor.Process(
-                module, request.Values, previous, userIds, registry, perms, new RuleContext(time.Today), validRefKeys).values));
+                module, input, previous, userIds, registry, perms, new RuleContext(time.Today), validRefKeys, systemKeys: systemKeys).values));
         if (plan.Failure is { } failure) return failure;
         var (values, errors) = RecordValueProcessor.Process(
-            module, request.Values, previous, userIds, registry, perms, new RuleContext(time.Today), validRefKeys, plan.RollupValues);
+            module, input, previous, userIds, registry, perms, new RuleContext(time.Today), validRefKeys, plan.RollupValues, systemKeys: systemKeys);
         foreach (var (key, messages) in plan.Errors) errors[key] = messages;
         if (errors.Count > 0) return ServiceResult.Invalid(errors);
 

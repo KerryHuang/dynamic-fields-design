@@ -15,7 +15,7 @@ namespace DynamicModules.Application.Dynamic.RecordService;
 /// </summary>
 public class RecordCreator(
     IModuleRepository modules, IRecordRepository records, INumberSequenceRepository sequences, FieldTypeRegistry registry,
-    ICurrentUser user, IBusinessTime time, ReferenceValidator refs, RollupRecalc rollups, RecordHistoryWriter history)
+    ICurrentUser user, IBusinessTime time, ReferenceValidator refs, ReferenceFill fill, RollupRecalc rollups, RecordHistoryWriter history)
 {
     /// <param name="rollupValues">這次存檔在記憶體算好的彙總值（明細彙總）；沒給的一般參照彙總取空集合的值（第 6 階段 R13）。</param>
     public async Task<(Dictionary<string, JsonElement?> Values, Dictionary<string, string[]> Errors)> ValidateAsync(
@@ -27,8 +27,10 @@ public class RecordCreator(
         foreach (var (key, value) in await rollups.EmptyValuesAsync(module, time.Today, ct)) allRollups.TryAdd(key, value);
         var userIds = await modules.ListUserIdsAsync(ct);
         var validRefKeys = await refs.ValidKeysAsync(module, input, null, ct);
+        var filled = new Dictionary<string, JsonElement?>(input);
+        var systemKeys = await fill.ApplyAsync(module, filled, null, validRefKeys, ct);
         return RecordValueProcessor.Process(
-            module, input, null, userIds, registry, perms, new RuleContext(time.Today), validRefKeys, allRollups);
+            module, filled, null, userIds, registry, perms, new RuleContext(time.Today), validRefKeys, allRollups, systemKeys: systemKeys);
     }
 
     /// <summary>取自動編號、建記錄與索引、寫歷程 Create；擁有者是目前使用者。不 commit。</summary>

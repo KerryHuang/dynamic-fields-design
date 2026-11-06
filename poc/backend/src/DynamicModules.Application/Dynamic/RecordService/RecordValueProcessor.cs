@@ -29,6 +29,7 @@ public static class RecordValueProcessor
     /// </summary>
     /// <param name="previous">null 表示新增；有值表示修改（沒帶的鍵保留舊值）。</param>
     /// <param name="parentValues">明細列新增時，表頭這次存檔後啟用中欄位的值（Field.Key → 值）；ParentDefaultFieldId 從這裡取。</param>
+    /// <param name="systemKeys">值由系統填入（帶值、單據轉換）的欄位鍵：不受欄位唯讀、唯讀權限與規則唯讀限制，仍照型別正規化。</param>
     /// <param name="rollupValues">這次存檔在記憶體算好的彙總值（null 值表示移除），在公式之前寫入，公式與規則看得到新值；沒給的彙總欄位保留舊值。</param>
     public static (Dictionary<string, JsonElement?> values, Dictionary<string, string[]> errors) Process(
         Module module,
@@ -40,7 +41,8 @@ public static class RecordValueProcessor
         RuleContext rules,
         IReadOnlyDictionary<long, IReadOnlySet<string>>? validRefKeys = null,
         IReadOnlyDictionary<string, JsonElement?>? rollupValues = null,
-        IReadOnlyDictionary<string, JsonElement?>? parentValues = null)
+        IReadOnlyDictionary<string, JsonElement?>? parentValues = null,
+        IReadOnlySet<string>? systemKeys = null)
     {
         var values = previous is null ? [] : new Dictionary<string, JsonElement?>(previous);
         var errors = new Dictionary<string, string[]>();
@@ -54,8 +56,9 @@ public static class RecordValueProcessor
         }
 
         // 無權寫入（權限、Config.ReadOnly、規則唯讀）：忽略輸入、保留舊值、新增只套預設值、不檢查必填
-        bool Writable(Field f) => !FieldRules.IsComputed(f.Type) && permissions.CanWrite(f) && !f.Config.ReadOnly
-            && stored?.ReadOnlyFieldIds.Contains(f.Id) != true;
+        bool Writable(Field f) => !FieldRules.IsComputed(f.Type)
+            && (systemKeys?.Contains(f.Key) == true
+                || (permissions.CanWrite(f) && !f.Config.ReadOnly && stored?.ReadOnlyFieldIds.Contains(f.Id) != true));
 
         foreach (var field in fields.Where(f => !FieldRules.IsComputed(f.Type)))
         {

@@ -256,6 +256,58 @@ public static class FieldRules
         return null;
     }
 
+    public const string FillKey = "Config.Fill";
+
+    /// <summary>
+    /// 帶值設定（Config.Fill）：本欄必須是參照動態模組的欄位；每筆對應的來源欄位屬於目標模組、目的欄位屬於本模組，
+    /// 型別相容、目的欄位不重複也不是系統計算欄位；lock 模式的目的欄位必須是唯讀。fieldId 為 0 表示新欄位。
+    /// </summary>
+    public static async Task<ServiceResult?> CheckFillAsync(
+        Module module, Field field, long fieldId, FieldConfig config, IModuleRepository modules, CancellationToken ct)
+    {
+        if (config.Fill is not { } fill) return null;
+        if (field.Type != FieldType.Reference || config.RefTarget is not { Kind: ReferenceTarget.ModuleKind } target)
+            return Invalid(FillKey, "只有參照動態模組的欄位可以設定帶值");
+        if (fill.Mode is not (FillConfig.Lock or FillConfig.Default)) return Invalid(FillKey, "帶值方式只能是 lock 或 default");
+        if (fill.Map is not { Count: > 0 and <= 30 }) return Invalid(FillKey, "帶值至少要有一筆對應，最多 30 筆");
+        var source = await modules.GetByKeyAsync(target.Key, includeChildren: true, ct);
+        if (source is null) return Invalid(FillKey, "找不到參照目標模組");
+
+        var from = source.Blocks.SelectMany(b => b.Fields).Where(f => f.Status == FieldStatus.Active).ToDictionary(f => f.Id);
+        var to = module.Blocks.SelectMany(b => b.Fields).Where(f => f.Status == FieldStatus.Active).ToDictionary(f => f.Id);
+        var seen = new HashSet<long>();
+        foreach (var m in fill.Map)
+        {
+            if (!from.TryGetValue(m.From, out var src)) return Invalid(FillKey, "來源欄位不屬於參照目標模組，或未啟用");
+            if (!to.TryGetValue(m.To, out var dst) || (fieldId != 0 && dst.Id == fieldId))
+                return Invalid(FillKey, "目的欄位不屬於本模組、未啟用，或是參照欄位自己");
+            if (!seen.Add(m.To)) return Invalid(FillKey, "同一個目的欄位不能有兩筆對應");
+            if (IsComputed(dst.Type) || dst.Type == FieldType.Reference) return Invalid(FillKey, "目的欄位不能是系統計算欄位或參照欄位");
+            if (!FillCompatible(src, dst)) return Invalid(FillKey, "來源與目的欄位型別不相容");
+            if (fill.Mode == FillConfig.Lock && !dst.Config.ReadOnly)
+                return Invalid(FillKey, $"鎖定帶值的目的欄位必須先設為唯讀：{dst.LabelI18n.Resolve(I18nText.FallbackLocale)}");
+        }
+        return null;
+    }
+
+    /// <summary>兩邊型別相同；自動編號可帶進文字；公式、彙總依結果型別帶進同類欄位。選項與參照不能帶（選項 Id 每個模組不同）。</summary>
+    private static bool FillCompatible(Field from, Field to)
+    {
+        if (ParentDefaultTypes.Contains(from.Type)) return from.Type == to.Type;
+        return from.Type switch
+        {
+            FieldType.AutoNumber => to.Type == FieldType.Text,
+            FieldType.Formula or FieldType.Rollup => from.Config.ResultType switch
+            {
+                "date" => to.Type == FieldType.Date,
+                "currency" => to.Type == FieldType.Currency,
+                "number" => to.Type is FieldType.Integer or FieldType.Decimal or FieldType.Percent,
+                _ => false
+            },
+            _ => false
+        };
+    }
+
     /// <summary>公式欄位：解析、結果型別、循環引用依序檢查；module 需是已有 Id 的已存檔模組。</summary>
     public static ServiceResult? CheckFormula(Module module, long fieldId, FieldConfig config)
     {
