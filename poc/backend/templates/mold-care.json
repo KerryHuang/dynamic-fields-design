@@ -13,11 +13,11 @@
         { "code": "main", "label": { "zh-TW": "保養資訊", "en-US": "Care information" }, "collapsed": false,
           "fields": [
             { "code": "lastCareDate", "type": "date", "label": { "zh-TW": "上次保養日", "en-US": "Last care date" },
-              "config": { "showInList": true } },
+              "config": { "showInList": true, "isFilterable": true } },
             { "code": "cycleDays", "type": "integer", "label": { "zh-TW": "保養週期（天）", "en-US": "Care cycle (days)" },
               "config": { "required": true } },
             { "code": "shotCount", "type": "integer", "label": { "zh-TW": "累計射出數", "en-US": "Total shots" },
-              "config": { "showInList": true } }
+              "config": { "showInList": true, "isFilterable": true } }
           ] }
       ],
       "rules": [],
@@ -45,10 +45,10 @@
                 { "code": "b", "label": { "zh-TW": "B", "en-US": "B" }, "color": "#f2c037" },
                 { "code": "c", "label": { "zh-TW": "C", "en-US": "C" }, "color": "#c10015" }
               ],
-              "config": { "showInList": true } },
+              "config": { "showInList": true, "isFilterable": true } },
             { "code": "paymentTerms", "type": "text", "label": { "zh-TW": "付款條件", "en-US": "Payment terms" } },
             { "code": "accountRep", "type": "user", "label": { "zh-TW": "業務窗口", "en-US": "Account rep" },
-              "config": { "showInList": true } },
+              "config": { "showInList": true, "isFilterable": true } },
             { "code": "email", "type": "email", "label": { "zh-TW": "聯絡 Email", "en-US": "Contact email" } },
             { "code": "phone", "type": "phone", "label": { "zh-TW": "聯絡電話", "en-US": "Contact phone" } },
             { "code": "website", "type": "url", "label": { "zh-TW": "網站", "en-US": "Website" } }
@@ -126,9 +126,9 @@
           "fields": [
             { "code": "care", "type": "reference", "label": { "zh-TW": "保養紀錄", "en-US": "Care record" },
               "config": { "refTarget": { "kind": "module", "key": "care" }, "relation": "lookup", "onDelete": "cascade",
-                          "required": true, "showInList": true } },
+                          "required": true, "showInList": true, "isFilterable": true } },
             { "code": "partName", "type": "text", "label": { "zh-TW": "零件名稱", "en-US": "Part name" },
-              "config": { "required": true } },
+              "config": { "required": true, "isFilterable": true } },
             { "code": "qty", "type": "integer", "label": { "zh-TW": "數量", "en-US": "Quantity" } },
             { "code": "unitCost", "type": "currency", "label": { "zh-TW": "單價", "en-US": "Unit cost" },
               "config": { "scale": 0 } }
