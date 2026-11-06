@@ -27,6 +27,21 @@ describe('ReportChart', () => {
     setActivePinia(createPinia());
   });
 
+  it('compact (dashboard cards) trims the default 60px grid margins and puts the legend at the bottom', () => {
+    mount(ReportChart, { props: { viz: 'bar', groups, measures, locale: 'zh-TW', height: '200px', compact: true } });
+    const opt = chart.setOption.mock.calls[0]![0];
+    expect(opt.grid.top).toBeLessThanOrEqual(16);
+    expect(opt.grid.bottom).toBeLessThanOrEqual(40);
+    expect(opt.legend.bottom).toBe(0);
+  });
+
+  it('the report page keeps the default chart layout', () => {
+    mount(ReportChart, { props: { viz: 'bar', groups, measures, locale: 'zh-TW' } });
+    const opt = chart.setOption.mock.calls[0]![0];
+    expect(opt.grid).toEqual({ containLabel: true });
+    expect(opt.legend.bottom).toBeUndefined();
+  });
+
   it('ratio keeps the raw value, formats the tooltip as percent and sits on its own axis next to amounts', () => {
     mount(ReportChart, { props: { viz: 'bar', groups: mixedGroups, measures: [...measures, ratio], locale: 'zh-TW' } });
     const opt = chart.setOption.mock.calls[0]![0];

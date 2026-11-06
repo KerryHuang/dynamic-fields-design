@@ -6,7 +6,7 @@ import type { ReportColumn, ReportResult } from 'src/domain/dynamic/report-types
 import ReportChart from './ReportChart.vue';
 import { formatValue } from './report-format';
 
-const props = withDefaults(defineProps<{ result: ReportResult; viz: string; chartHeight?: string }>(), { chartHeight: '360px' });
+const props = defineProps<{ result: ReportResult; viz: string; chartHeight?: string }>();
 const emit = defineEmits<{ drill: [groupKeys: string[]] }>();
 const { t, locale } = useI18n();
 
@@ -60,7 +60,7 @@ const countText = (n: number | null | undefined) => (n ?? 0).toLocaleString(loca
         </div>
         <template v-else-if="showChart">
           <ReportChart
-            :viz="chartViz!" :groups="groups" :measures="measureCols" :locale="locale" :height="chartHeight"
+            :viz="chartViz!" :groups="groups" :measures="measureCols" :locale="locale" :height="chartHeight ?? '360px'" :compact="chartHeight !== undefined"
             :cumulative="cumulative" :cumulative-label="t('dashboards.card.cumulative')"
             @pick="(i: number) => emit('drill', groups[i]!.groupKeys)"
           />
