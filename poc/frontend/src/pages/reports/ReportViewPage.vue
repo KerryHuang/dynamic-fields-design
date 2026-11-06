@@ -103,7 +103,13 @@ function doDelete() {
           v-if="!detail.isOwner" outline dense no-caps :label="t('reports.saveAsCopy')" :loading="copy.isPending.value"
           data-testid="report-copy" @click="saveAsCopy"
         />
-        <q-btn outline dense no-caps icon="download" :label="t('reports.exportExcel')" :loading="exporting" data-testid="report-export" @click="exportXlsx" />
+        <span>
+          <q-btn
+            outline dense no-caps icon="download" :label="t('reports.exportExcel')" :loading="exporting"
+            :disable="!detail.canExport" data-testid="report-export" @click="exportXlsx"
+          />
+          <q-tooltip v-if="!detail.canExport">{{ t('reports.exportNoPermission') }}</q-tooltip>
+        </span>
         <q-btn v-if="canDelete" outline dense no-caps color="negative" :label="t('reports.delete')" data-testid="report-delete" @click="confirmDelete = true" />
       </div>
       <div v-if="copyError" class="text-negative q-mb-sm" data-testid="copy-error">{{ copyError }}</div>

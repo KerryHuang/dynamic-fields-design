@@ -38,6 +38,8 @@ public class ReportAccess(IReportRepository reports, IPermissionRepository permi
     {
         var definition = ReportDefinition.Parse(report.DefinitionJson);
         var (set, _) = await loader.LoadAsync(definition, PermissionAction.Read, ct, lenient: true);
-        return report.ToDetail(viewer, await UserNamesAsync(ct), ReportMasking.Mask(report.DefinitionJson, definition, set!));
+        // 與 ExportReportHandler 同一個載入與授權路徑：任何涉及的模組沒有 PrintExport 就不能匯出
+        var (_, exportDenied) = await loader.LoadAsync(definition, PermissionAction.PrintExport, ct);
+        return report.ToDetail(viewer, await UserNamesAsync(ct), ReportMasking.Mask(report.DefinitionJson, definition, set!), exportDenied is null);
     }
 }

@@ -1,3 +1,4 @@
+import type { I18nText } from './types';
 /** 對應後端 ReportService/Data/ReportResponses.cs 與 Domain/Reports/ReportDefinition.cs。 */
 
 export type ReportState = 'ok' | 'empty' | 'restricted' | 'fieldMissing' | 'moduleDisabled' | 'tooMany';
@@ -54,7 +55,10 @@ export interface ReportDefinition {
   sort?: ReportSort[];
   viz: ReportViz;
 }
-export interface ReportDetail extends ReportItem { definition: ReportDefinition }
+export interface ReportDetail extends ReportItem { definition: ReportDefinition; canExport: boolean }
+
+/** 分享對話框的目標群組：只有 id 與名稱（對應後端 ReportShareTarget）。 */
+export interface ReportShareTarget { id: number; name: I18nText }
 
 /** 對應後端 GetReportCatalogHandler 的回應；旗標由後端決定，前端不重算。 */
 export interface CatalogOption { id: string; label: string; active: boolean }

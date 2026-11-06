@@ -2,8 +2,7 @@
 import { Notify } from 'quasar';
 import { ref, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
-import { useSetReportShares } from 'src/application/dynamic/queries/reports-queries';
-import { useGroups } from 'src/application/dynamic/queries/permissions-queries';
+import { useReportShareTargets, useSetReportShares } from 'src/application/dynamic/queries/reports-queries';
 import { resolveI18n } from 'src/domain/dynamic/i18n-text';
 import { leftoverMessages } from 'src/presentation/dynamic/designer/api-error';
 import type { ApiError } from 'src/services/api/http';
@@ -11,7 +10,7 @@ import type { ApiError } from 'src/services/api/http';
 const props = defineProps<{ reportId: number; open: boolean; groupIds: number[] }>();
 const emit = defineEmits<{ close: [] }>();
 const { t, locale } = useI18n();
-const groups = useGroups();
+const groups = useReportShareTargets();
 const save = useSetReportShares();
 const selected = ref<number[]>([]);
 const error = ref('');
@@ -32,6 +31,10 @@ function submit() {
     <q-card style="width: 480px; max-width: 95vw">
       <q-card-section class="text-h6">{{ t('reports.shareTitle') }}</q-card-section>
       <q-card-section class="column">
+        <div v-if="groups.isError.value" class="text-negative" data-testid="share-load-error">
+          {{ t('reports.shareLoadFailed') }}
+          <q-btn flat dense no-caps color="primary" :label="t('reports.shareRetry')" data-testid="share-retry" @click="groups.refetch()" />
+        </div>
         <q-checkbox
           v-for="g in groups.data.value ?? []" :key="g.id" v-model="selected" :val="g.id" dense
           :label="resolveI18n(g.name, locale)" :data-testid="`share-group-${g.id}`"
@@ -41,7 +44,7 @@ function submit() {
       </q-card-section>
       <q-card-actions align="right">
         <q-btn flat :label="t('reports.cancel')" data-testid="share-cancel" @click="emit('close')" />
-        <q-btn color="primary" :label="t('reports.save')" :loading="save.isPending.value" data-testid="share-save" @click="submit" />
+        <q-btn color="primary" :label="t('reports.save')" :loading="save.isPending.value" :disable="!groups.data.value" data-testid="share-save" @click="submit" />
       </q-card-actions>
     </q-card>
   </q-dialog>

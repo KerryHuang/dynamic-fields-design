@@ -10,6 +10,7 @@ using DynamicModules.Application.Dynamic.ReportService.Queries.DrillReport;
 using DynamicModules.Application.Dynamic.ReportService.Queries.ExportReport;
 using DynamicModules.Application.Dynamic.ReportService.Queries.GetReport;
 using DynamicModules.Application.Dynamic.ReportService.Queries.GetReportCatalog;
+using DynamicModules.Application.Dynamic.ReportService.Queries.GetReportShareTargets;
 using DynamicModules.Application.Dynamic.ReportService.Queries.GetReports;
 using DynamicModules.Application.Dynamic.ReportService.Queries.PreviewReport;
 using DynamicModules.Application.Dynamic.ReportService.Queries.RunReport;
@@ -44,6 +45,10 @@ public class ReportsController(IMediator mediator) : ControllerBase
 
     [HttpGet]
     public async Task<IActionResult> List() => (await mediator.Send(new GetReportsRequest())).ToActionResult(this);
+
+    /// <summary>分享對話框的群組選項（只有 id 與名稱）；任何登入者可讀。</summary>
+    [HttpGet("share-targets")]
+    public async Task<IActionResult> ShareTargets() => (await mediator.Send(new GetReportShareTargetsRequest())).ToActionResult(this);
 
     [HttpGet("catalog")]
     public async Task<IActionResult> Catalog([FromQuery] string locale = "zh-TW") =>

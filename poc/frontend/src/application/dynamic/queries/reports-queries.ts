@@ -51,6 +51,10 @@ export function useDeleteReport() {
   });
 }
 
+export function useReportShareTargets() {
+  return useQuery({ queryKey: ['report-share-targets'], queryFn: () => dynamicApi.getReportShareTargets() });
+}
+
 export function useSetReportShares() {
   const qc = useQueryClient();
   return useMutation({

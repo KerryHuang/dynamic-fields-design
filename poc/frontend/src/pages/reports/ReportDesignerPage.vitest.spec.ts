@@ -35,7 +35,7 @@ const DEF: ReportDefinition = {
   primaryDateField: null, dateRange: null, sort: [], viz: 'table',
 };
 const RESULT: ReportResult = { state: 'ok', rowMeaning: '一張訂單', basisDate: '2026-11-05', dedupedNote: false, columns: [], groups: [], total: {} };
-const detail = (def: ReportDefinition, isOwner = true): ReportDetail => ({ id: 7, name: '月報', ownerName: '我', isOwner, sharedGroupIds: [], mainModuleKey: 'orders', definition: def });
+const detail = (def: ReportDefinition, isOwner = true): ReportDetail => ({ id: 7, name: '月報', ownerName: '我', isOwner, sharedGroupIds: [], mainModuleKey: 'orders', definition: def, canExport: true });
 
 const q = (id: string) => document.body.querySelector(`[data-testid="${id}"]`) as HTMLElement | null;
 let mounted: ReturnType<typeof mount> | undefined;

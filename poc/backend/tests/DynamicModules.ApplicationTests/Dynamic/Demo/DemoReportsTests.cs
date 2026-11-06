@@ -60,6 +60,23 @@ public class DemoReportsTests(DemoGeneratedFixture fx)
     }
 
     [Fact]
+    public async Task FloorStaff_OpenAmountReport_SeesRestricted()
+    {
+        fx.Generated();
+        var report = (await StoredReports()).Single(r => r.Name == "近 90 天各客戶訂單金額");
+        var groups = await fx.Host.Db.Context.Set<PermissionGroup>().AsNoTracking().ToDictionaryAsync(g => g.Id, g => g.Key);
+        report.Shares.Select(s => groups[s.GroupId]).Should().Contain("floor");
+
+        // 現場人員沒有金額權限：整張無權限、不帶數字；業務主管同一張是 ok
+        var floor = (ReportResult)(await fx.As("floor01", new RunReportRequest(report.Id, null, "zh-TW"))).Data!;
+        floor.State.Should().Be("restricted");
+        floor.Groups.Should().BeNull();
+        floor.Total.Should().BeNull();
+        var manager = (ReportResult)(await fx.As("manager01", new RunReportRequest(report.Id, null, "zh-TW"))).Data!;
+        manager.State.Should().Be("ok");
+    }
+
+    [Fact]
     public async Task Generate_RecordsGeneratedOn()
     {
         fx.Generated();

@@ -2,7 +2,7 @@ import type {
   AdminGroup, AdminUser, AdminUserCreate, AdminUserUpdate, AuthOptions, AuthUser, ConditionNode, DesignerField, DetailRowPayload, DynamicRecord, EntitySummary, FieldConfig, FieldType, Group, GroupImpact, I18nText, LightPage, ListView, Me, MenuItem, ModuleDetail, ModulePermissions, ModuleSchema,
   ImportPreview, ImportResult, PagedResponse, RecordHistoryEntry, RelatedTab, Rule, RollupSource, User, ViewSort,
 } from 'src/domain/dynamic/types';
-import type { CatalogModule, DrillResult, ModuleCatalog, ReportDateRange, ReportDefinition, ReportDetail, ReportItem, ReportResult } from 'src/domain/dynamic/report-types';
+import type { CatalogModule, DrillResult, ModuleCatalog, ReportDateRange, ReportDefinition, ReportDetail, ReportItem, ReportResult, ReportShareTarget } from 'src/domain/dynamic/report-types';
 import { handleAuthFailure, http, toApiError } from './http';
 
 export interface ModuleSummary {
@@ -211,6 +211,7 @@ export const dynamicApi = {
     }
     return { blob: r.data, fileName: dispositionFileName(r.headers['content-disposition']) ?? `${key}.${format}` };
   },
+  getReportShareTargets: () => http.get<ReportShareTarget[]>('/reports/share-targets').then(data),
   getReports: () => http.get<ReportItem[]>('/reports').then(data),
   getReport: (id: number) => http.get<ReportDetail>(`/reports/${id}`).then(data),
   runReport: (id: number, range: ReportDateRange | null, locale: string) =>

@@ -7,7 +7,7 @@ import zhTW from 'src/i18n/zh-TW.json';
 import { dynamicApi } from 'src/services/api/dynamic-api';
 import ShareDialog from './ShareDialog.vue';
 
-vi.mock('src/services/api/dynamic-api', () => ({ dynamicApi: { getGroups: vi.fn(), setReportShares: vi.fn() } }));
+vi.mock('src/services/api/dynamic-api', () => ({ dynamicApi: { getReportShareTargets: vi.fn(), setReportShares: vi.fn() } }));
 const api = vi.mocked(dynamicApi);
 const q = (id: string) => document.body.querySelector(`[data-testid="${id}"]`) as HTMLElement | null;
 let mounted: ReturnType<typeof mount> | undefined;
@@ -15,9 +15,9 @@ let mounted: ReturnType<typeof mount> | undefined;
 describe('ShareDialog', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    api.getGroups.mockResolvedValue([
-      { id: 1, key: 'sales', name: { 'zh-TW': '業務' }, members: [] },
-      { id: 2, key: 'ops', name: { 'zh-TW': '營運' }, members: [] },
+    api.getReportShareTargets.mockResolvedValue([
+      { id: 1, name: { 'zh-TW': '業務' } },
+      { id: 2, name: { 'zh-TW': '營運' } },
     ]);
   });
   afterEach(() => { mounted?.unmount(); document.body.innerHTML = ''; });
@@ -38,5 +38,20 @@ describe('ShareDialog', () => {
     q('share-save')!.click();
     await flushPromises();
     expect(api.setReportShares).toHaveBeenCalledWith(9, [2]);
+  });
+
+  it('load failure shows an error instead of an empty dialog, and cannot save', async () => {
+    api.getReportShareTargets.mockRejectedValue(new Error('boom'));
+    const i18n = createI18n({ legacy: false, locale: 'zh-TW', messages: { 'zh-TW': zhTW } });
+    mounted = mount(ShareDialog, {
+      props: { reportId: 9, open: true, groupIds: [1] },
+      attachTo: document.body,
+      global: { plugins: [[quasar.Quasar, { components: quasar, plugins: { Notify: quasar.Notify } }], i18n, [VueQueryPlugin, { queryClient: new QueryClient({ defaultOptions: { queries: { retry: false } } }) }]] },
+    });
+    await flushPromises();
+    expect(q('share-load-error')).not.toBeNull();
+    expect(q('share-group-1')).toBeNull();
+    expect(document.body.textContent).not.toContain(zhTW.reports.noGroups);
+    expect((q('share-save') as HTMLButtonElement).disabled).toBe(true);
   });
 });

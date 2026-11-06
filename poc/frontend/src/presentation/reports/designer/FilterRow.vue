@@ -21,15 +21,15 @@ function setOp(op: string) {
 </script>
 
 <template>
-  <div class="row items-start q-gutter-x-sm no-wrap" :data-testid="tid">
+  <div class="row items-start q-col-gutter-x-sm" :data-testid="tid">
     <template v-if="entry">
-      <div class="col-3 q-pt-sm">{{ entry.label }}</div>
+      <div class="col-12 col-sm-3 q-pt-sm">{{ entry.label }}</div>
       <q-select
-        dense outlined emit-value map-options class="col-2" :model-value="filter.op" :data-testid="`${tid}-op`"
+        dense outlined emit-value map-options class="col-5 col-sm-2" style="min-width: 96px" :model-value="filter.op" :data-testid="`${tid}-op`"
         :options="operatorsOf(entry.field).map((o: FilterOperator) => ({ value: o, label: t(`dynamic.op.${o}`) }))"
         @update:model-value="setOp"
       />
-      <FilterValueInput class="col" :field="entry.field" :op="filter.op" :model-value="filter.value" @update:model-value="filter.value = $event" />
+      <FilterValueInput class="col-7 col-sm" :field="entry.field" :op="filter.op" :model-value="filter.value" @update:model-value="filter.value = $event" />
     </template>
     <div v-else class="col text-negative" :data-testid="`${tid}-unavailable`">
       {{ t('reports.fieldNo', { id: filter.field.fieldId }) }}{{ t('reports.unavailableMark') }}

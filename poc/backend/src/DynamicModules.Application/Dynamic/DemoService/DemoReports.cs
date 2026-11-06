@@ -4,7 +4,7 @@ using DynamicModules.Domain.Reports;
 namespace DynamicModules.Application.Dynamic.DemoService;
 
 /// <summary>
-/// Demo 的示範報表定義：每個情境至少兩張，分享給該情境的主管群組；訂單狀態分布另分享給業務，示範同一張報表依權限數字不同。名稱是衝突檢查的依據（<see cref="DemoPreflight"/>）。
+/// Demo 的示範報表定義：每個情境至少兩張，分享給該情境的主管群組；訂單狀態分布另分享給業務，示範同一張報表依權限數字不同；各客戶訂單金額另分享給現場人員，示範沒有金額權限時整張無權限。名稱是衝突檢查的依據（<see cref="DemoPreflight"/>）。
 /// module 參數與欄位引用用範本的模組代號（不是 Module.Key）。日期區間的天數涵蓋各情境產生的資料跨度（訂單 79 天、報修 90 天、保養 180 天、品質異常 60 天）。
 /// </summary>
 public static class DemoReports
@@ -17,8 +17,8 @@ public static class DemoReports
         new("近 90 天訂單狀態分布", ["sales-manager", "sales"], ids => Def(ids, "order", "bar",
             groups: [Group(Main(ids, "order.status"))],
             measures: [Count()], primary: Main(ids, "order.orderDate"), range: Last(90))),
-        // 合併訂單明細，依客戶（帶出參照欄位的標題）分組；明細欄位供下鑽
-        new("近 90 天各客戶訂單金額", ["sales-manager"], ids => Def(ids, "order", "table",
+        // 用到金額，現場人員沒有金額權限，開啟時看到無權限。合併訂單明細，依客戶（帶出參照欄位的標題）分組；明細欄位供下鑽
+        new("近 90 天各客戶訂單金額", ["sales-manager", "floor"], ids => Def(ids, "order", "table",
             child: new ReportChild(ids.ModuleKeys["line"], ids.FieldIds["line.order"]),
             columns: [Child(ids, "line.itemName"), Child(ids, "line.qty")],
             groups: [Group(new ReportFieldRef("main", 0, ids.FieldIds["order.customer"]))],

@@ -1,6 +1,7 @@
 using System.Text.Json;
 using DynamicModules.Domain.Entities.Dynamic;
 using DynamicModules.Domain.Reports;
+using DynamicModules.Domain.ValueObjects;
 
 namespace DynamicModules.Application.Dynamic.ReportService.Data;
 
@@ -29,9 +30,13 @@ public record ReportAppliedRange(DateOnly From, DateOnly To, string Kind, int? N
 /// <summary>報表清單一筆；SharedGroupIds 對非擁有者也照實回傳。</summary>
 public record ReportItem(long Id, string Name, string OwnerName, bool IsOwner, List<long> SharedGroupIds, string MainModuleKey);
 
-/// <summary>單張報表；Definition 是儲存的定義原樣（被分享者唯讀）。</summary>
+/// <summary>分享對話框的群組選項。</summary>
+public record ReportShareTarget(long Id, I18nText Name);
+
+/// <summary>單張報表；Definition 是儲存的定義原樣（被分享者唯讀）。CanExport 與匯出同一套判斷：涉及的模組都有 PrintExport。</summary>
 public record ReportDetail(
-    long Id, string Name, string OwnerName, bool IsOwner, List<long> SharedGroupIds, string MainModuleKey, JsonElement Definition);
+    long Id, string Name, string OwnerName, bool IsOwner, List<long> SharedGroupIds, string MainModuleKey, JsonElement Definition,
+    bool CanExport);
 
 /// <summary>下鑽結果：同 <see cref="ReportResult"/>，明細最多 <see cref="ReportRules.DrillLimit"/> 列，超過時 Truncated 為 true。</summary>
 public sealed record DrillResult : ReportResult
@@ -47,10 +52,10 @@ public static class ReportMapper
             r.Shares.Select(s => s.GroupId).Order().ToList(), MainKeyOf(r));
 
     /// <param name="definition">依觀看者遮蔽後的定義（<see cref="ReportMasking.Mask"/>）。</param>
-    public static ReportDetail ToDetail(this Report r, ReportViewer viewer, IReadOnlyDictionary<string, string> names, JsonElement definition)
+    public static ReportDetail ToDetail(this Report r, ReportViewer viewer, IReadOnlyDictionary<string, string> names, JsonElement definition, bool canExport)
     {
         var item = r.ToItem(viewer, names);
-        return new(item.Id, item.Name, item.OwnerName, item.IsOwner, item.SharedGroupIds, item.MainModuleKey, definition);
+        return new(item.Id, item.Name, item.OwnerName, item.IsOwner, item.SharedGroupIds, item.MainModuleKey, definition, canExport);
     }
 
     private static string MainKeyOf(Report r)

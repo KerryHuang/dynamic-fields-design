@@ -28,7 +28,7 @@ const DEF: ReportDetail['definition'] = {
   ],
 };
 const DETAIL = (isOwner: boolean): ReportDetail => ({
-  id: 7, name: '月報', ownerName: '小王', isOwner, sharedGroupIds: [], mainModuleKey: 'orders', definition: DEF,
+  id: 7, name: '月報', ownerName: '小王', isOwner, sharedGroupIds: [], mainModuleKey: 'orders', definition: DEF, canExport: true,
 });
 const RESULT: ReportResult = {
   state: 'ok', rowMeaning: '一張訂單', basisDate: '2026-11-05', dedupedNote: false,
@@ -133,6 +133,14 @@ describe('ReportViewPage', () => {
     q('report-export')!.click();
     await flushPromises();
     expect(q('export-error')!.textContent).toBe('沒有匯出權限');
+  });
+
+  it('export button is disabled when the backend says canExport is false', async () => {
+    await mountPage({ ...DETAIL(true), canExport: false });
+    expect(q('report-export')!.hasAttribute('disabled') || q('report-export')!.classList.contains('disabled')).toBe(true);
+    q('report-export')!.click();
+    await flushPromises();
+    expect(api.exportReport).not.toHaveBeenCalled();
   });
 
   it('masked conditions show as hidden condition without a value', async () => {

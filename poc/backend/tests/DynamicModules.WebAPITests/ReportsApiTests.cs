@@ -657,6 +657,71 @@ public class ReportsApiTests
         (await app.AsUser("sales01").GetAsync($"{Reports}/{plain}/export")).StatusCode.Should().Be(HttpStatusCode.OK);
     }
 
+    // ---- 可分享的群組清單：一般使用者不用設計器權限也能分享 ----
+
+    [Fact]
+    public async Task ShareTargets_NonAdminCanRead_OnlyIdAndName_AndCanShare()
+    {
+        using var app = new TestApp();
+        var w = await MakeWorld(app);
+        var manager = app.AsUser("manager01");
+
+        // 現有的群組清單要設計器權限，業務主管讀不到（維持原樣）
+        (await manager.GetAsync($"{Base}/groups")).StatusCode.Should().Be(HttpStatusCode.Forbidden);
+        var res = await manager.GetAsync($"{Reports}/share-targets");
+        res.StatusCode.Should().Be(HttpStatusCode.OK);
+        var groups = (await JsonOf(res)).EnumerateArray().ToList();
+        groups.Should().NotBeEmpty();
+        groups.Should().OnlyContain(g => g.EnumerateObject().Select(p => p.Name).Order().SequenceEqual(new[] { "id", "name" }));
+        groups.Select(g => g.GetProperty("id").GetInt64()).Should().Contain(GroupId(app, "sales"));
+
+        // 業務主管自己建的報表，實際分享成功，對方看得到
+        var id = await Create(manager, ByStatus(w));
+        (await Share(manager, id, GroupId(app, "sales"))).StatusCode.Should().Be(HttpStatusCode.OK);
+        (await app.AsUser("sales01").GetAsync($"{Reports}/{id}")).StatusCode.Should().Be(HttpStatusCode.OK);
+    }
+
+    // ---- 匯出旗標：與匯出同一套判斷，前端據此停用按鈕 ----
+
+    [Fact]
+    public async Task Detail_CanExport_FollowsPrintExportOnChild()
+    {
+        using var app = new TestApp();
+        var w = await MakeWorld(app, withChild: true);
+        await Grant(app, w.Main, null, ("mis", true, "all"), ("sales", true, "all"));
+        await Grant(app, w.Child!, null, ("mis", true, "all"), ("sales", false, "all"));
+        var admin = app.AsUser();
+        var merged = await Create(admin, Def(w.Main, groups: [new { field = Ref(w.Status), bucket = (string?)null }], measures: [Count()],
+            child: new { moduleKey = w.Child, linkFieldId = w.ChildLink }));
+        var plain = await Create(admin, ByStatus(w), "單模組");
+        await Share(admin, merged, GroupId(app, "sales"));
+        await Share(admin, plain, GroupId(app, "sales"));
+        var sales = app.AsUser("sales01");
+
+        async Task<bool> CanExport(HttpClient c, long id) => (await JsonOf(await c.GetAsync($"{Reports}/{id}"))).GetProperty("canExport").GetBoolean();
+        (await CanExport(sales, merged)).Should().BeFalse();
+        (await CanExport(sales, plain)).Should().BeTrue();
+        (await CanExport(admin, merged)).Should().BeTrue();
+    }
+
+    [Fact]
+    public async Task Detail_CanExport_FollowsPrintExportOnReferenceTarget()
+    {
+        using var app = new TestApp();
+        var w = await MakeWorld(app);
+        var k = await AddCustomer(app, w);
+        await Grant(app, w.Main, null, ("mis", true, "all"), ("sales", true, "all"));
+        await Grant(app, k.Key, null, ("mis", true, "all"), ("sales", false, "all"));
+        var admin = app.AsUser();
+        var id = await Create(admin, Def(w.Main, columns: [Ref(k.Title, via: k.Cust)]));
+        await Share(admin, id, GroupId(app, "sales"));
+        var sales = app.AsUser("sales01");
+
+        (await JsonOf(await sales.GetAsync($"{Reports}/{id}"))).GetProperty("canExport").GetBoolean().Should().BeFalse();
+        await Grant(app, k.Key, null, ("mis", true, "all"), ("sales", true, "all"));
+        (await JsonOf(await sales.GetAsync($"{Reports}/{id}"))).GetProperty("canExport").GetBoolean().Should().BeTrue();
+    }
+
     [Fact]
     public async Task Export_NumbersMatchRun()
     {
