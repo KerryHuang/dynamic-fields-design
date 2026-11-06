@@ -11,9 +11,9 @@ import { http } from 'src/services/api/http';
 import { useIdentityStore } from 'src/stores/use-identity-store';
 import HomePage from './HomePage.vue';
 
-const me = (o: { designerRead?: boolean; admin?: boolean } = {}) => ({
+const me = (o: { designerRead?: boolean; designerAdd?: boolean; admin?: boolean } = {}) => ({
   userId: 'u', displayName: 'Alice', isSystemAdmin: o.admin ?? false, groups: [],
-  designer: { read: o.designerRead ?? false, add: false, edit: false, delete: false },
+  designer: { read: o.designerRead ?? false, add: o.designerAdd ?? false, edit: false, delete: false },
 });
 const mod = (key: string, section?: string, icon?: string) => ({ key, name: { 'zh-TW': `name-${key}` }, section, icon });
 
@@ -107,6 +107,14 @@ describe('HomePage', () => {
     await flushPromises();
     expect(pending.w.get('[data-testid="home-empty"]').text()).toContain(zhTW.home.noModules);
     expect(pending.w.find('[data-testid="home-reports"]').exists()).toBe(true);
+  });
+
+  it('an empty system points whoever can add modules to the designer instead of telling them to ask an admin', async () => {
+    const { w } = await run({ me: me({ designerRead: true, designerAdd: true }), menu: [] });
+    const empty = w.get('[data-testid="home-empty"]');
+    expect(empty.text()).toContain(zhTW.home.noModulesDesigner);
+    expect(empty.text()).not.toContain('請聯絡系統管理員');
+    expect(w.get('[data-testid="home-empty-designer-link"]').attributes('href')).toBe('/system/dynamic-modules');
   });
 
   it('shows the forbidden notice when the menu cannot be loaded', async () => {

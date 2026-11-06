@@ -5,6 +5,7 @@ import { computed, ref, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { useRoute, useRouter } from 'vue-router';
 import { useDesignerMutation, useModuleDetail } from 'src/application/dynamic/queries/modules-queries';
+import { useMe } from 'src/application/dynamic/queries/permissions-queries';
 import { useEntities } from 'src/application/dynamic/queries/relation-queries';
 import { resolveI18n } from 'src/domain/dynamic/i18n-text';
 import type { DeleteTargetRef, DesignerBlock, DesignerField, I18nText } from 'src/domain/dynamic/types';
@@ -27,6 +28,7 @@ const $q = useQuasar();
 const route = useRoute();
 const router = useRouter();
 const qc = useQueryClient();
+const { data: useMeData } = useMe();
 const moduleKey = computed(() => String(route.params.moduleKey));
 const tab = ref<'fields' | 'rules' | 'permissions' | 'preview'>('fields');
 const query = useModuleDetail(moduleKey);
@@ -58,6 +60,8 @@ const fail = (e: unknown, shown: string[] = []) =>
 const mutation = <V, R>(fn: (v: V) => Promise<R>) => useDesignerMutation(fn, () => moduleKey.value);
 
 // ---- delete (module / block / field) ----
+// 沒有設計器 Delete 權限就不顯示入口（後端仍會擋，這裡只是不放一個按了只會 403 的按鈕）
+const canDelete = computed(() => !!useMeData.value?.designer.delete);
 const deleteDialog = ref(false);
 const deleteTarget = ref<DeleteTargetRef | null>(null);
 const deleteName = ref('');
@@ -188,7 +192,7 @@ function saveSection() {
         <q-space />
         <q-btn outline dense icon="download" :label="t('designer.template.export')" :loading="exporting" data-testid="export-template" @click="exportTemplate" />
         <q-btn
-          v-if="mod.status !== 'Active'" outline dense color="negative" icon="delete" :label="t('designer.delete.module')" data-testid="delete-module"
+          v-if="canDelete && mod.status !== 'Active'" outline dense color="negative" icon="delete" :label="t('designer.delete.module')" data-testid="delete-module"
           @click="askDelete({ kind: 'module', key: mod.key }, resolveI18n(mod.name, locale))"
         />
         <IconSelect :model-value="mod.icon ?? ''" :label="t('designer.icon')" style="min-width: 220px" @update:model-value="setIcon" />
@@ -229,7 +233,7 @@ function saveSection() {
                   <div class="row no-wrap items-center">
                     <q-btn flat dense round icon="edit" :title="t('designer.editBlock')" @click.stop="openBlock(b)" />
                     <q-btn
-                      flat dense round color="negative" icon="delete" :title="t('designer.delete.action')" :data-testid="`delete-block-${b.id}`"
+                      v-if="canDelete" flat dense round color="negative" icon="delete" :title="t('designer.delete.action')" :data-testid="`delete-block-${b.id}`"
                       @click.stop="askDelete({ kind: 'block', id: b.id }, resolveI18n(b.label, locale))"
                     />
                   </div>
@@ -269,7 +273,7 @@ function saveSection() {
                       @click="setStatus.mutate({ id: f.id, status: 'active' }, { onError: (e) => fail(e) })"
                     />
                     <q-btn
-                      v-if="f.status === 'Inactive'" flat dense round color="negative" icon="delete" :title="t('designer.delete.action')"
+                      v-if="canDelete && f.status === 'Inactive'" flat dense round color="negative" icon="delete" :title="t('designer.delete.action')"
                       :data-testid="`delete-field-${f.id}`" @click="askDelete({ kind: 'field', id: f.id }, resolveI18n(f.label, locale))"
                     />
                   </div>

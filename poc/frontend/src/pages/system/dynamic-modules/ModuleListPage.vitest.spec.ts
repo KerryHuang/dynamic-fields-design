@@ -59,6 +59,13 @@ describe('ModuleListPage create dialog', () => {
     vi.stubGlobal('ResizeObserver', class { observe() {} unobserve() {} disconnect() {} });
   });
 
+  it('an empty table says so in the UI language, not in Quasar\'s English default', async () => {
+    const w = await mountPage([]);
+    expect(w.text()).toContain(zhTW.designer.noModules);
+    expect(w.text()).not.toContain('No data available');
+    w.unmount();
+  });
+
   it('create dialog with extension kind requires host entity', async () => {
     const w = await mountPage();
     await fillExtension(w);

@@ -125,7 +125,7 @@ async function submit() {
     </div>
     <q-table
       v-if="!forbidden" flat bordered row-key="id" :rows="modules.data.value ?? []" :columns="columns" :loading="modules.isFetching.value"
-      :rows-per-page-options="[0]" hide-pagination @row-click="(_e, row) => router.push(`/system/dynamic-modules/${row.key}`)"
+      :rows-per-page-options="[0]" hide-pagination :no-data-label="t('designer.noModules')" @row-click="(_e, row) => router.push(`/system/dynamic-modules/${row.key}`)"
     >
       <template #body-cell-name="{ row, value }">
         <q-td>

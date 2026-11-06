@@ -1,5 +1,6 @@
 import { QueryClient, VueQueryPlugin } from '@tanstack/vue-query';
 import { flushPromises, mount } from '@vue/test-utils';
+import { createPinia } from 'pinia';
 import * as quasar from 'quasar';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { h } from 'vue';
@@ -11,7 +12,7 @@ import IconSelect from 'src/presentation/dynamic/designer/IconSelect.vue';
 import { dynamicApi } from 'src/services/api/dynamic-api';
 import ModuleEditorPage from './ModuleEditorPage.vue';
 
-vi.mock('src/services/api/dynamic-api', () => ({ dynamicApi: { getModule: vi.fn(), updateModule: vi.fn(), entities: vi.fn(), getPreviewSchema: vi.fn(), exportTemplate: vi.fn(), deleteCheck: vi.fn(), deleteTarget: vi.fn() } }));
+vi.mock('src/services/api/dynamic-api', () => ({ dynamicApi: { getModule: vi.fn(), updateModule: vi.fn(), entities: vi.fn(), getPreviewSchema: vi.fn(), exportTemplate: vi.fn(), deleteCheck: vi.fn(), deleteTarget: vi.fn(), getMe: vi.fn() } }));
 const api = vi.mocked(dynamicApi);
 
 const detail: ModuleDetail = {
@@ -19,8 +20,9 @@ const detail: ModuleDetail = {
   status: 'Active', version: 3, blocks: [],
 };
 
-async function mountPage(d: ModuleDetail = detail) {
+async function mountPage(d: ModuleDetail = detail, canDelete = true) {
   api.getModule.mockResolvedValue(d);
+  api.getMe.mockResolvedValue({ designer: { read: true, add: true, edit: true, delete: canDelete } } as never);
   api.entities.mockResolvedValue([{ key: 'design.mold', name: { 'zh-TW': '模具' } }]);
   api.updateModule.mockResolvedValue({} as never);
   const router = createRouter({ history: createMemoryHistory(), routes: [{ path: '/m/:moduleKey', component: ModuleEditorPage }] });
@@ -29,7 +31,7 @@ async function mountPage(d: ModuleDetail = detail) {
   const Host = { render: () => h(quasar.QLayout, null, () => h(quasar.QPageContainer, null, () => h(ModuleEditorPage))) };
   const w = mount(Host, {
     global: {
-      plugins: [[quasar.Quasar, { components: quasar, plugins: { Notify: quasar.Notify } }], router, i18n,
+      plugins: [createPinia(), [quasar.Quasar, { components: quasar, plugins: { Notify: quasar.Notify } }], router, i18n,
         [VueQueryPlugin, { queryClient: new QueryClient({ defaultOptions: { queries: { retry: false } } }) }]],
     },
   });
@@ -116,6 +118,13 @@ describe('ModuleEditorPage', () => {
       expect((await mountPage(withBlock('Active'))).find('[data-testid="delete-module"]').exists()).toBe(false);
       expect((await mountPage(withBlock('Inactive'))).find('[data-testid="delete-module"]').exists()).toBe(true);
       expect((await mountPage(withBlock('Draft'))).find('[data-testid="delete-module"]').exists()).toBe(true);
+    });
+
+    it('without the designer Delete permission no delete entry is shown at all', async () => {
+      const w = await mountPage(withBlock('Draft'), false);
+      expect(w.find('[data-testid="delete-module"]').exists()).toBe(false);
+      expect(w.find('[data-testid="delete-block-9"]').exists()).toBe(false);
+      expect(w.find('[data-testid="delete-field-2"]').exists()).toBe(false);
     });
 
     it('only inactive fields get a delete button; clicking it runs the field delete check', async () => {

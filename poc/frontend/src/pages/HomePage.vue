@@ -51,7 +51,13 @@ const recent = computed(() => {
 
       <section class="q-mb-lg">
         <div class="text-subtitle1 q-mb-sm">{{ t('home.apps') }}</div>
-        <div v-if="!groups.length" class="text-muted" data-testid="home-empty">{{ t('home.noModules') }}</div>
+        <div v-if="!groups.length" class="text-muted" data-testid="home-empty">
+          <template v-if="me.data.value?.designer.add">
+            {{ t('home.noModulesDesigner') }}
+            <q-btn flat dense no-caps color="primary" icon="design_services" :label="t('home.noModulesDesignerLink')" to="/system/dynamic-modules" data-testid="home-empty-designer-link" />
+          </template>
+          <template v-else>{{ t('home.noModules') }}</template>
+        </div>
         <div v-for="g in groups" :key="g.title ?? ''" class="q-mb-md" data-testid="home-app-group">
           <div class="text-caption text-muted q-mb-xs" data-testid="home-group-title">{{ g.title ?? t('menu.custom') }}</div>
           <div class="row q-col-gutter-sm">
