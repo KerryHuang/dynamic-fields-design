@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { groupMenu, systemLinks } from './menu-nav';
 
-const item = (key: string, section?: string) => ({ key, name: { 'zh-TW': key }, section });
+const item = (key: string, section?: string, closed?: boolean) => ({ key, name: { 'zh-TW': key }, section, closed });
 
 describe('groupMenu', () => {
   it('puts unsectioned items first (title undefined), then sections by name, keeping /menu order inside a group', () => {
@@ -10,6 +10,13 @@ describe('groupMenu', () => {
     expect(g[0].items.map((i) => i.key)).toEqual(['x', 'y']);
     expect(g[1].items.map((i) => i.key)).toEqual(['a1', 'a2']);
   });
+  it('pulls closed-app items into one trailing group, whatever their section', () => {
+    const g = groupMenu([item('c1', 'A', true), item('x'), item('a1', 'A'), item('c2', undefined, true)]);
+    expect(g.map((x) => x.closed ?? false)).toEqual([false, false, true]);
+    expect(g[2].items.map((i) => i.key)).toEqual(['c1', 'c2']);
+    expect(g[1].items.map((i) => i.key)).toEqual(['a1']);
+  });
+  it('has no closed group when every app is open', () => expect(groupMenu([item('a')]).some((x) => x.closed)).toBe(false));
   it('is empty for no items', () => expect(groupMenu([])).toEqual([]));
 });
 
@@ -22,7 +29,9 @@ describe('systemLinks', () => {
   });
   it('system admins get users, groups, dashboards, appearance; designer readers get designer and demo data', () => {
     expect(systemLinks(me(true, false)).map((l) => l.to)).toEqual(['/system/users', '/system/groups', '/system/dashboards', '/system/appearance']);
+    expect(systemLinks(me(true, true)).map((l) => l.to)).toContain('/system/apps');
+    expect(systemLinks(me(false, true)).map((l) => l.to)).not.toContain('/system/apps');
     expect(systemLinks(me(false, true)).map((l) => l.to)).toEqual(['/system/dynamic-modules', '/system/demo-data']);
-    expect(systemLinks(me(true, true))).toHaveLength(6);
+    expect(systemLinks(me(true, true))).toHaveLength(7);
   });
 });

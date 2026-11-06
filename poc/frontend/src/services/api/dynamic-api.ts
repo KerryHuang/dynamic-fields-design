@@ -49,6 +49,54 @@ export interface TemplateSummary {
   source: 'builtIn' | 'imported';
   modules: TemplateModuleSummary[];
 }
+export interface AppRequirement { app: string; modules: string[]; entities: string[] }
+export interface AppPackageSummary {
+  id: string;
+  version: string;
+  name: I18nText;
+  description?: I18nText;
+  icon?: string;
+  vendor?: string;
+  source: 'builtIn' | 'imported';
+  requires: { apps: AppRequirement[] };
+  groups: { code: string; name: I18nText }[];
+  modules: TemplateModuleSummary[];
+  /** Status of the opened app made from this package; null when never opened. */
+  status: 'Open' | 'Closed' | null;
+}
+export interface AppModuleInfo { code: string; key: string; id: number; name: I18nText; status: string }
+export interface AppInfo {
+  key: string;
+  name: I18nText;
+  icon?: string;
+  packageVersion: string;
+  status: 'Open' | 'Closed';
+  rowVersion: string;
+  modules: AppModuleInfo[];
+  /** Open apps that depend on it. */
+  dependents: string[];
+  /** Self-built modules whose fields reference it (warning only). */
+  unaffiliatedReferrers: string[];
+  warnings: string[];
+}
+export interface CloseAppResult { app: AppInfo; closed: string[]; warnings: string[] }
+export interface MissingDependency { kind: string; appId?: string; moduleCode?: string; entity?: string; reason: string }
+export interface OpenPreview {
+  errors: string[];
+  keyConflicts: { moduleCode: string; key: string }[];
+  hostEntityConflicts: string[];
+  missingDependencies: MissingDependency[];
+  groups: { code: string; name: I18nText; suggestion: 'map' | 'create' | 'skip'; suggestedGroupId?: number }[];
+  warnings: string[];
+  canOpen: boolean;
+}
+export interface OpenAppBody {
+  moduleKeys?: Record<string, string>;
+  excludeFields?: string[];
+  groupMap?: Record<string, { mode: 'map' | 'create' | 'skip'; groupId?: number }>;
+  locale?: string;
+}
+
 export interface InstantiateBody {
   modules: { code: string; key?: string; name?: I18nText }[];
   excludeFields: string[];
@@ -277,6 +325,17 @@ export const dynamicApi = {
   },
   getDemoDataStatus: () => http.get<DemoDataStatus>('/demo-data').then(data),
   generateDemoData: () => http.post<DemoDataStatus>('/demo-data/generate').then(data),
+  getAppPackages: () => http.get<AppPackageSummary[]>('/apps/packages').then(data),
+  importAppPackage: (json: string) =>
+    http.post<AppPackageSummary>('/apps/packages/import', json, { headers: { 'Content-Type': 'application/json' } }).then(data),
+  previewOpenApp: (id: string, body: OpenAppBody) =>
+    http.post<OpenPreview>(`/apps/packages/${encodeURIComponent(id)}/preview`, body).then(data),
+  openApp: (id: string, body: OpenAppBody) =>
+    http.post<AppInfo>(`/apps/packages/${encodeURIComponent(id)}/open`, body).then(data),
+  getApps: () => http.get<AppInfo[]>('/apps').then(data),
+  closeApp: (key: string, cascade: boolean) =>
+    http.post<CloseAppResult>(`/apps/${encodeURIComponent(key)}/close`, { cascade }).then(data),
+  reopenApp: (key: string) => http.post<AppInfo>(`/apps/${encodeURIComponent(key)}/reopen`).then(data),
   getTemplates: () => http.get<TemplateSummary[]>('/templates').then(data),
   instantiateTemplate: (key: string, body: InstantiateBody) =>
     http.post<InstantiateResult>(`/templates/${encodeURIComponent(key)}/instantiate`, body).then(data),

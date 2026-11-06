@@ -82,8 +82,8 @@ const recent = computed(() => {
           </template>
           <template v-else>{{ t('home.noModules') }}</template>
         </div>
-        <div v-for="g in groups" :key="g.title ?? ''" class="q-mb-md" data-testid="home-app-group">
-          <div class="text-caption text-muted q-mb-xs" data-testid="home-group-title">{{ g.title ?? t('menu.custom') }}</div>
+        <div v-for="g in groups" :key="g.closed ? '__closed' : (g.title ?? '')" class="q-mb-md" data-testid="home-app-group">
+          <div class="text-caption text-muted q-mb-xs" data-testid="home-group-title">{{ g.closed ? t('menu.closedApps') : (g.title ?? t('menu.custom')) }}</div>
           <div class="row q-col-gutter-sm">
             <div v-for="m in g.items" :key="m.key" class="col-12 col-sm-6 col-md-4 col-lg-3">
               <q-card flat bordered>

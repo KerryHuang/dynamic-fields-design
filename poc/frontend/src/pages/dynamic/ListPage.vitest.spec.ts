@@ -128,6 +128,14 @@ describe('ListPage', () => {
     expect(w2.find('[data-testid="new-btn"]').exists()).toBe(false);
   });
 
+  it('ListPage shows the closed-app banner only when the schema is readOnly', async () => {
+    expect((await mountPage()).find('[data-testid="closed-banner"]').exists()).toBe(false);
+    schemaPatch = { readOnly: true, permissions: { ...schema.permissions, add: false, edit: false, delete: false } };
+    const w = await mountPage();
+    expect(w.find('[data-testid="closed-banner"]').text()).toContain(zhTW.dynamic.closedBanner);
+    expect(w.find('[data-testid="new-btn"]').exists()).toBe(false);
+  });
+
   it('ListPage shows the import button only with add, and opens the import dialog', async () => {
     const w = await mountPage();
     expect(w.findComponent(ImportDialog).props('modelValue')).toBe(false);

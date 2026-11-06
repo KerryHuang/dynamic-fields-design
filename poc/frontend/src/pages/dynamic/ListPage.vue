@@ -217,6 +217,10 @@ function removeCurrent() {
         <q-btn v-if="canImport" outline icon="upload" data-testid="import-btn" :label="t('dynamic.import.title')" @click="importing = true" />
         <ExportMenu :schema="schema" :query="exportQuery" />
       </div>
+      <div v-if="schema.readOnly" class="row items-center no-wrap q-mb-sm text-muted" data-testid="closed-banner">
+        <q-icon name="lock" class="q-mr-sm" />
+        <span>{{ t('dynamic.closedBanner') }}</span>
+      </div>
       <div class="row items-center q-mb-sm q-gutter-sm">
         <ViewMenu
           :views="views" :current="currentView" :modified="modified"
