@@ -32,6 +32,7 @@ public class DeletePlanner(IDeletionRepository data)
         var blockers = new List<DeleteBlocker>();
         var views = await data.ListViewsAsync(ct);
         var reports = await data.ListReportsAsync(ct);
+        var dashboards = await data.ListDashboardLayoutsAsync(ct);
         IReadOnlyList<Field> fields;
         IReadOnlyList<Block> blocks;
         switch (target)
@@ -39,12 +40,12 @@ public class DeletePlanner(IDeletionRepository data)
             case DeleteTarget.Module:
                 fields = module.Blocks.SelectMany(b => b.Fields).ToList();
                 blocks = module.Blocks;
-                await ModuleBlockersAsync(module, fields, all, reports, blockers, ct);
+                await ModuleBlockersAsync(module, fields, all, reports, dashboards, blockers, ct);
                 break;
             case DeleteTarget.Field:
                 fields = module.Blocks.SelectMany(b => b.Fields).Where(f => f.Id == id).ToList();
                 blocks = [];
-                await FieldBlockersAsync(module, fields, [], all, views, reports, blockers, ct);
+                await FieldBlockersAsync(module, fields, [], all, views, reports, dashboards, blockers, ct);
                 break;
             default:
                 var block = module.Blocks.Single(b => b.Id == id);
@@ -52,7 +53,7 @@ public class DeletePlanner(IDeletionRepository data)
                 blocks = [block];
                 if (module.Blocks.Count == 1)
                     blockers.Add(new(DeleteBlockerKind.LastBlock, module.Key, block.Id, Name(block.LabelI18n, $"#{block.Id}")));
-                await FieldBlockersAsync(module, fields, [block.Id], all, views, reports, blockers, ct);
+                await FieldBlockersAsync(module, fields, [block.Id], all, views, reports, dashboards, blockers, ct);
                 break;
         }
 
@@ -76,7 +77,8 @@ public class DeletePlanner(IDeletionRepository data)
     }
 
     private async Task ModuleBlockersAsync(
-        Module module, IReadOnlyList<Field> fields, List<Module> all, List<Report> reports, List<DeleteBlocker> blockers, CancellationToken ct)
+        Module module, IReadOnlyList<Field> fields, List<Module> all, List<Report> reports, List<DashboardLayoutSource> dashboards,
+        List<DeleteBlocker> blockers, CancellationToken ct)
     {
         if (module.Status == ModuleStatus.Active)
             blockers.Add(new(DeleteBlockerKind.ModuleActive, module.Key, module.Id, Name(module.NameI18n, module.Key)));
@@ -94,12 +96,13 @@ public class DeletePlanner(IDeletionRepository data)
             }
 
         AddReportBlockers(reports, ownIds, [module.Key], blockers);
+        AddDashboardBlockers(dashboards, ownIds, blockers);
     }
 
     /// <summary>刪欄位或區塊：targetFields 是要刪的欄位，blockIds 是要刪的區塊（欄位刪除時為空）。</summary>
     private async Task FieldBlockersAsync(
         Module module, IReadOnlyList<Field> targetFields, IReadOnlyCollection<long> blockIds, List<Module> all,
-        List<ListView> views, List<Report> reports, List<DeleteBlocker> blockers, CancellationToken ct)
+        List<ListView> views, List<Report> reports, List<DashboardLayoutSource> dashboards, List<DeleteBlocker> blockers, CancellationToken ct)
     {
         var ids = targetFields.Select(f => f.Id).ToHashSet();
         foreach (var f in targetFields)
@@ -136,6 +139,7 @@ public class DeletePlanner(IDeletionRepository data)
                 blockers.Add(new(DeleteBlockerKind.View, all.FirstOrDefault(m => m.Id == v.ModuleId)?.Key, v.Id, Name(v.NameI18n, $"#{v.Id}")));
         }
         AddReportBlockers(reports, ids, [], blockers);
+        AddDashboardBlockers(dashboards, ids, blockers);
     }
 
     /// <summary>f 是否是公式、彙總或預設帶值設定，引用了 targetIds 裡的欄位。</summary>
@@ -157,6 +161,17 @@ public class DeletePlanner(IDeletionRepository data)
             // 定義讀不出來時無法證明沒引用，視為引用（fail-closed）
             if (refs is null || refs.FieldIds.Overlaps(fieldIds) || moduleKeys.Any(refs.ModuleKeys.Contains))
                 blockers.Add(new(DeleteBlockerKind.Report, null, r.Id, r.Name));
+        }
+    }
+
+    /// <summary>儀表板卡片的排序鍵可指向欄位；指派版、自己的儀表板、個人版都算。版面讀不出來時視為引用（fail-closed）。</summary>
+    private static void AddDashboardBlockers(List<DashboardLayoutSource> dashboards, IReadOnlySet<long> fieldIds, List<DeleteBlocker> blockers)
+    {
+        foreach (var d in dashboards)
+        {
+            var refs = DashboardReferences.TryFieldIdsOf(d.LayoutJson);
+            if (refs is null || refs.Overlaps(fieldIds))
+                blockers.Add(new(d.IsPersonal ? DeleteBlockerKind.PersonalDashboard : DeleteBlockerKind.Dashboard, null, d.Id, d.Name));
         }
     }
 

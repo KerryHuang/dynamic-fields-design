@@ -410,7 +410,7 @@ export type DeleteTargetRef = { kind: 'module'; key: string } | { kind: 'field' 
 
 export type DeleteBlockerKind =
   | 'moduleActive' | 'liveRecords' | 'fieldActive' | 'fieldData' | 'titleField' | 'lastBlock' | 'referenceField'
-  | 'rollup' | 'formula' | 'parentDefault' | 'rule' | 'view' | 'report';
+  | 'rollup' | 'formula' | 'parentDefault' | 'rule' | 'view' | 'report' | 'dashboard' | 'personalDashboard';
 
 /** 擋下刪除的原因或引用來源；count 只用於 liveRecords 與 fieldData。 */
 export interface DeleteBlocker {

@@ -21,7 +21,7 @@ internal static class HandlerHelpers
             : FieldValueResult.Ok(ToElement(text));
     }
 
-    public static FieldValueResult NormalizeDecimal(JsonElement? input, int scale)
+    public static FieldValueResult NormalizeDecimal(JsonElement? input, int scale, bool enforceWriteLimits = true)
     {
         if (IsNull(input)) return FieldValueResult.Ok(null);
         if (input!.Value.ValueKind != JsonValueKind.Number || !input.Value.TryGetDecimal(out var d))
@@ -31,14 +31,16 @@ internal static class HandlerHelpers
         var actualScale = (bits[3] >> 16) & 0xFF;
         if (actualScale > scale) return FieldValueResult.Fail($"小數最多 {scale} 位");
         var mantissa = ((UInt128)(uint)bits[2] << 64) | ((UInt128)(uint)bits[1] << 32) | (uint)bits[0];
-        return mantissa.ToString().Length > MaxSignificantDigits
+        // 尾端的零不是有效數字（1e15 只有一位）；只改計數，存的值與小數位數不變
+        while (mantissa != 0 && mantissa % 10 == 0) mantissa /= 10;
+        return enforceWriteLimits && mantissa.ToString().Length > MaxSignificantDigits
             ? FieldValueResult.Fail($"有效數字最多 {MaxSignificantDigits} 位")
             : FieldValueResult.Ok(ToElement(d));
     }
 
     /// <summary>
     /// 篩選與排序用的索引欄是 double，只有 15 位有效數字內才與 decimal 的記錄值一一對應（超過會讓不同的金額變成同一個索引值）；
-    /// 所以寫入時就擋在這個範圍內。
+    /// 所以記錄寫入時就擋在這個範圍內（<see cref="FieldTypeContext.EnforceWriteLimits"/>；報表與篩選的條件值不套用）。
     /// </summary>
     public const int MaxSignificantDigits = 15;
 

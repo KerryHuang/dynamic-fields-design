@@ -192,7 +192,7 @@ public static class ConditionParser
     {
         var ids = field.Options.Select(o => o.Id).ToHashSet();
         var seq = field.Options.ToDictionary(o => o.Id, o => o.Sequence);
-        var result = NormalizerFor(field, handler, ctx).Normalize(value, field, new FieldTypeContext(ids, ids, seq, null, ctx.UserIds));
+        var result = NormalizerFor(field, handler, ctx).Normalize(value, field, new FieldTypeContext(ids, ids, seq, null, ctx.UserIds, EnforceWriteLimits: false));
         if (!result.IsValid || result.Value is null) throw bad;
         return handler.ToIndex(result.Value.Value, field).FirstOrDefault() ?? throw bad;
     }

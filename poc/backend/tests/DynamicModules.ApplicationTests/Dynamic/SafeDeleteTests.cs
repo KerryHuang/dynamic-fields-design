@@ -460,6 +460,115 @@ public class SafeDeleteTests : DesignerTestBase
     }
 
     [Fact]
+    public async Task Field_UsedOnlyAsReportSortKey_ListsReport()
+    {
+        var (name, _) = await CustWithFields();
+        // 欄位只出現在排序鍵（來源:欄位Id:經由欄位Id 的格式），沒有出現在欄、分組、量值或條件
+        var def = new ReportDefinition(1, "cust", null, [], [], [new ReportMeasure("n", "countMain", null, null)], [], null, null,
+            [new ReportSort($"main:{name.Id}:", true)], "table");
+        var report = new Report { OwnerUserId = "admin", Name = "依名稱排序", DefinitionJson = ReportDefinition.Serialize(def), RowVersion = "x" };
+        Ctx.Set<Report>().Add(report);
+        await Ctx.SaveChangesAsync();
+        await Deactivate(name.Id);
+
+        var r = await Send(new DeleteFieldRequest(name.Id, 0));
+
+        r.IsConflict.Should().BeTrue();
+        Blocker(r, "report").Id.Should().Be(report.Id);
+        (await Ctx.Set<Field>().AnyAsync(f => f.Id == name.Id)).Should().BeTrue();
+    }
+
+    [Fact]
+    public async Task Field_SortKeyThatIsAMeasureId_DoesNotBlock()
+    {
+        var (name, _) = await CustWithFields();
+        var def = new ReportDefinition(1, "cust", null, [], [], [new ReportMeasure("n", "countMain", null, null)], [], null, null,
+            [new ReportSort("n", true)], "table");
+        Ctx.Set<Report>().Add(new Report { OwnerUserId = "admin", Name = "依筆數排序", DefinitionJson = ReportDefinition.Serialize(def), RowVersion = "x" });
+        await Ctx.SaveChangesAsync();
+        await Deactivate(name.Id);
+
+        (await Send(new DeleteFieldRequest(name.Id, 0))).IsSuccess.Should().BeTrue();
+    }
+
+    private static string LayoutSortedBy(string? sortKey) => DashboardLayout.Serialize(new DashboardLayout(
+        [new DashboardCard("c1", 1, null, "bar", 0, 0, 6, 4, CardOptions.None with { SortKey = sortKey })]));
+
+    [Fact]
+    public async Task Field_UsedAsAssignedDashboardCardSortKey_ListsDashboard()
+    {
+        var (name, _) = await CustWithFields();
+        var dashboard = new Dashboard { OwnerUserId = null, Name = "營運總覽", LayoutJson = LayoutSortedBy($"main:{name.Id}:") };
+        Ctx.Set<Dashboard>().Add(dashboard);
+        await Ctx.SaveChangesAsync();
+        await Deactivate(name.Id);
+
+        var r = await Send(new DeleteFieldRequest(name.Id, 0));
+
+        r.IsConflict.Should().BeTrue();
+        var b = Blocker(r, "dashboard");
+        b.Id.Should().Be(dashboard.Id);
+        b.Name.Should().Be("營運總覽");
+    }
+
+    [Fact]
+    public async Task Field_UsedAsUsersOwnDashboardCardSortKey_ListsDashboard()
+    {
+        var (name, _) = await CustWithFields();
+        var dashboard = new Dashboard { OwnerUserId = "sales01", Name = "我的看板", LayoutJson = LayoutSortedBy($"child:5:{name.Id}") };
+        Ctx.Set<Dashboard>().Add(dashboard);
+        await Ctx.SaveChangesAsync();
+        await Deactivate(name.Id);
+
+        Blocker(await Send(new DeleteFieldRequest(name.Id, 0)), "dashboard").Id.Should().Be(dashboard.Id);
+    }
+
+    [Fact]
+    public async Task Field_UsedInAPersonalVersionOfAnAssignedDashboard_ListsPersonalDashboard()
+    {
+        var (name, _) = await CustWithFields();
+        var assigned = new Dashboard { OwnerUserId = null, Name = "營運總覽", LayoutJson = LayoutSortedBy(null) };
+        Ctx.Set<Dashboard>().Add(assigned);
+        await Ctx.SaveChangesAsync();
+        Ctx.Set<DashboardPersonalVersion>().Add(new DashboardPersonalVersion
+            { DashboardId = assigned.Id, UserId = "sales01", LayoutJson = LayoutSortedBy($"main:{name.Id}:"), BaseVersion = 1 });
+        await Ctx.SaveChangesAsync();
+        await Deactivate(name.Id);
+
+        var r = await Send(new DeleteFieldRequest(name.Id, 0));
+
+        r.IsConflict.Should().BeTrue();
+        Blocker(r, "personalDashboard").Id.Should().Be(assigned.Id);
+        CheckOf(r).Blockers.Should().NotContain(b => b.Kind == "dashboard", "指派版本身沒有引用，只有個人版引用");
+    }
+
+    [Fact]
+    public async Task Field_DashboardLayoutThatCannotBeParsed_BlocksFailClosed()
+    {
+        var (name, _) = await CustWithFields();
+        Ctx.Set<Dashboard>().Add(new Dashboard { OwnerUserId = null, Name = "壞掉的版面", LayoutJson = "{ not json" });
+        await Ctx.SaveChangesAsync();
+        await Deactivate(name.Id);
+
+        Blocker(await Send(new DeleteFieldRequest(name.Id, 0)), "dashboard");
+    }
+
+    [Fact]
+    public async Task Module_FieldUsedAsDashboardCardSortKey_ListsDashboardAndKeepsModule()
+    {
+        await NewModule("cust");
+        var name = await MustAdd("cust", FieldType.Text, new FieldConfig { IsFilterable = true }, "名稱");
+        Ctx.Set<Dashboard>().Add(new Dashboard { OwnerUserId = null, Name = "營運總覽", LayoutJson = LayoutSortedBy($"main:{name.Id}:") });
+        await Ctx.SaveChangesAsync();
+
+        var r = await Send(new DeleteModuleRequest("cust", 0));
+
+        r.IsConflict.Should().BeTrue();
+        Blocker(r, "dashboard");
+        (await ModuleExists("cust")).Should().BeTrue();
+    }
+
+    [Fact]
     public async Task Field_ReferencedByRollup_ListsRollup()
     {
         await NewModule("req");

@@ -263,17 +263,8 @@ public partial class ReportRunner(
         refs.AddRange(d.Filters.Select(f => f.Field));
         if (d.PrimaryDateField is not null) refs.Add(d.PrimaryDateField);
         refs.AddRange(d.Sort.Where(s => d.Measures.All(m => m.Id != s.Key))
-            .Select(s => ParseFieldKey(s.Key)).Where(r => r is not null).Select(r => r!));
+            .Select(s => ReportFieldKeys.TryParse(s.Key)).Where(r => r is not null).Select(r => r!));
         return refs;
-    }
-
-    /// <summary>ReportSort.Key 不是量值 Id 時是 ReportCalculator.KeyOf 的格式；其他字串不對應任何欄位，排序時忽略。</summary>
-    private static ReportFieldRef? ParseFieldKey(string key)
-    {
-        var parts = key.Split(':');
-        if (parts.Length != 3 || !long.TryParse(parts[1], CultureInfo.InvariantCulture, out var id)) return null;
-        if (parts[2].Length == 0) return new ReportFieldRef(parts[0], id, null);
-        return long.TryParse(parts[2], CultureInfo.InvariantCulture, out var via) ? new ReportFieldRef(parts[0], id, via) : null;
     }
 
     private static (Bound?, string?) Bind(

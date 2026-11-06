@@ -267,4 +267,10 @@ public class ConditionParserTests
     [Fact]
     public void Parse_AutoNumber_Contains_Allowed() =>
         PComputed("{\"field\":23,\"op\":\"eq\",\"value\":\"REP-1\"}").Node.Should().NotBeNull();
+
+    [Fact]
+    public void Value_BeyondRecordWriteLimits_IsStillAcceptedAsACondition()
+    {
+        P("""{"all":[{"field":2,"op":"gte","value":9007199254740993}]}""").Error.Should().BeNull();
+    }
 }

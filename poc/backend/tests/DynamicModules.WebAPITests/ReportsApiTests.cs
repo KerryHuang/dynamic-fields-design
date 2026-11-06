@@ -187,6 +187,39 @@ public class ReportsApiTests
     }
 
     [Fact]
+    public async Task ReportWithOutOfRangeCondition_CanStillBeRenamedAndCopied_ButRecordWritesAreStillRejected()
+    {
+        using var app = new TestApp();
+        var w = await MakeWorld(app);
+        var admin = app.AsUser();
+        // 既有報表：金額篩選值超過 15 位有效數字（記錄寫入上限）；直接寫進資料庫，模擬上限上線前就存在的報表
+        var def = Def(w.Main, measures: [Count()], filters: [new { field = Ref(w.Amount), op = "gt", value = 12345678901234567L }]);
+        long id;
+        using (var scope = app.Services.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<DynamicDbContext>();
+            var report = new Report
+            {
+                OwnerUserId = "admin", Name = "大額", RowVersion = "x",
+                DefinitionJson = JsonSerializer.Serialize(def, new JsonSerializerOptions(JsonSerializerDefaults.Web))
+            };
+            db.Set<Report>().Add(report);
+            await db.SaveChangesAsync();
+            id = report.Id;
+        }
+
+        var rename = await admin.PutAsJsonAsync($"{Reports}/{id}", new { name = "大額（改名）", definition = def });
+        rename.StatusCode.Should().Be(HttpStatusCode.OK, await rename.Content.ReadAsStringAsync());
+        var copy = await admin.PostAsync($"{Reports}/{id}/copy", null);
+        copy.StatusCode.Should().Be(HttpStatusCode.Created, await copy.Content.ReadAsStringAsync());
+
+        // 新限制只管記錄寫入：同一個超界數值寫成記錄仍被拒
+        var write = await admin.PostAsJsonAsync($"{Base}/modules/{w.Main}/records",
+            new { values = new Dictionary<string, object> { [w.TitleKey] = "t", [w.AmountKey] = 12345678901234567L } });
+        write.StatusCode.Should().Be(HttpStatusCode.BadRequest, await write.Content.ReadAsStringAsync());
+    }
+
+    [Fact]
     public async Task Copy_NewOwner_NoShares()
     {
         using var app = new TestApp();

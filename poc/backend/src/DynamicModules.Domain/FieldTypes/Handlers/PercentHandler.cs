@@ -15,5 +15,5 @@ public sealed class PercentHandler : IFieldTypeHandler
         HandlerHelpers.SingleNumber(value.GetDouble());
 
     public FieldValueResult Normalize(JsonElement? input, Field field, FieldTypeContext ctx) =>
-        HandlerHelpers.NormalizeDecimal(input, field.Config.Scale ?? 2);
+        HandlerHelpers.NormalizeDecimal(input, field.Config.Scale ?? 2, ctx.EnforceWriteLimits);
 }

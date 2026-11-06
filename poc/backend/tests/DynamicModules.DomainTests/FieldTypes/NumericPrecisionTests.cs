@@ -95,4 +95,44 @@ public class NumericPrecisionTests(ITestOutputHelper output)
         Run(FieldType.Integer, "9007199254740992").IsValid.Should().BeFalse();
         Run(FieldType.Integer, "-9007199254740992").IsValid.Should().BeFalse();
     }
+
+    [Theory]
+    [InlineData(FieldType.Currency)]
+    [InlineData(FieldType.Decimal)]
+    [InlineData(FieldType.Percent)]
+    public void Decimals_TrailingZerosAreNotSignificantDigits(FieldType type)
+    {
+        Run(type, "1000000000000000").IsValid.Should().BeTrue("1e15 只有一位有效數字");
+        Run(type, "100000000000000000000").IsValid.Should().BeTrue("1e20 只有一位有效數字");
+        Run(type, "123456789012345000000").IsValid.Should().BeTrue("15 位有效數字後面補零");
+        Run(type, "1234567890123456000").IsValid.Should().BeFalse("16 位有效數字");
+        Run(type, "1000000000000000").Value!.Value.GetRawText().Should().Be("1000000000000000", "保留原值");
+    }
+
+    [Fact]
+    public void IndexedNumber_WithTrailingZeros_RoundTripsAndKeepsOrder()
+    {
+        var registry = FieldTypeRegistry.CreateDefault();
+        double Idx(decimal d) => registry.Get(FieldType.Decimal).ToIndex(J(d.ToString(CultureInfo.InvariantCulture)), F(FieldType.Decimal)).Single().NumberValue!.Value;
+        var values = RandomDecimals(20_000, 15, 31).Select(d => Math.Truncate(d) * 100_000m).Where(d => d != 0).Distinct().Order().ToList();
+        double? previous = null;
+        foreach (var d in values)
+        {
+            ((decimal)Idx(d)).Should().Be(d);
+            if (previous is { } p) Idx(d).Should().BeGreaterThan(p);
+            previous = Idx(d);
+        }
+    }
+
+    /// <summary>上限只管記錄寫入；報表與篩選的條件值要能接受既有的超界值，否則含這種條件的報表連改名、另存都會被擋。</summary>
+    [Theory]
+    [InlineData(FieldType.Currency, "12345678901234567.89")]
+    [InlineData(FieldType.Integer, "9007199254740993")]
+    public void ConditionNormalization_DoesNotApplyTheRecordWriteLimits(FieldType type, string json)
+    {
+        var handler = FieldTypeRegistry.CreateDefault().Get(type);
+        var ctx = Ctx() with { EnforceWriteLimits = false };
+        handler.Normalize(J(json), F(type, new() { Scale = 2 }), ctx).IsValid.Should().BeTrue();
+        handler.Normalize(J(json), F(type, new() { Scale = 2 }), Ctx()).IsValid.Should().BeFalse("記錄寫入仍然擋");
+    }
 }

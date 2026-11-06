@@ -19,7 +19,7 @@ public sealed class IntegerHandler : IFieldTypeHandler
         if (HandlerHelpers.IsNull(input)) return FieldValueResult.Ok(null);
         const string error = "必須是整數";
         if (input!.Value.ValueKind != JsonValueKind.Number || !input.Value.TryGetDecimal(out var d)
-            || d != decimal.Truncate(d) || Math.Abs(d) > HandlerHelpers.MaxExactInteger)
+            || d != decimal.Truncate(d) || (ctx.EnforceWriteLimits ? Math.Abs(d) > HandlerHelpers.MaxExactInteger : d < long.MinValue || d > long.MaxValue))
             return FieldValueResult.Fail(error);
         return FieldValueResult.Ok(HandlerHelpers.ToElement((long)d));
     }

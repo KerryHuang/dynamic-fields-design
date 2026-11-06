@@ -32,4 +32,5 @@ public sealed record FieldTypeContext(
     IReadOnlyDictionary<long, int> OptionSequence,
     JsonElement? PreviousValue,
     IReadOnlySet<string> UserIds,
-    IReadOnlySet<string>? ValidRefKeys = null);
+    IReadOnlySet<string>? ValidRefKeys = null,
+    bool EnforceWriteLimits = true);

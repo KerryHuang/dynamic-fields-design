@@ -35,7 +35,10 @@
 | 記錄標題 | `Module.TitleFieldId` | 該欄位 |
 | 規則 | 條件裡的欄位（含 `fieldRef`）、`field:<id>` 與 `block:<id>` 目標（`RuleReferences`） | 被引用的欄位、區塊 |
 | 檢視 | `ListView.Columns`、`Filter`、`Sort` 裡的欄位 | 被引用的欄位 |
-| 報表 | `Report.DefinitionJson`：主模組、子模組、連結欄位、欄、分組、量值、篩選、日期欄位、經參照欄位帶出的欄位（`ViaFieldId`） | 被引用的模組與欄位 |
+| 報表 | `Report.DefinitionJson`：主模組、子模組、連結欄位、欄、分組、量值、篩選、日期欄位、排序鍵、經參照欄位帶出的欄位（`ViaFieldId`） | 被引用的模組與欄位 |
+| 儀表板 | `Dashboard.LayoutJson`（指派版與使用者自己的儀表板）與 `DashboardPersonalVersion.LayoutJson`（個人版）：每張卡片的 `Options.SortKey`，取其 `FieldId` 與 `ViaFieldId` | 被引用的欄位 |
+
+排序鍵（報表 `Sort.Key`、卡片 `SortKey`）是量值 Id 或 `來源:欄位Id:經由欄位Id` 欄位鍵，由共用的 `ReportFieldKeys.TryParse` 解析；兩者都不是的字串排序時會被忽略，不算引用。儀表板的其他內容檢查過：卡片 `ReportId` 指向報表、`LinkDashboardId` 指向儀表板、`Range` 只是日期區間種類、版面座標與標題是純文字，都不指向欄位或模組（欄位與模組只會經由報表被間接引用，而報表已盤點）。版面讀不出來時視為引用（fail-closed）。來源名稱用儀表板名稱，與報表一樣，會列出其他使用者自己的儀表板名稱。
 
 自身模組的內部引用（本模組的欄位互相指向、本模組的檢視與規則）在**刪除整個模組**時不算被引用，因為會一起消失；刪除單一欄位或區塊時，其他欄位、規則、檢視引用它仍然擋下。
 
@@ -85,7 +88,7 @@
 }
 ```
 
-`kind` 的值：`moduleActive`、`liveRecords`（`count` = 筆數）、`fieldActive`、`fieldData`（`count` = 有值的記錄數）、`titleField`、`lastBlock`、`referenceField`、`rollup`、`formula`、`parentDefault`、`rule`、`view`、`report`。`moduleKey` 是來源所在的模組（報表為主模組），`name` 是來源的顯示名稱（欄位標籤、規則訊息、檢視名稱、報表名稱）。
+`kind` 的值：`moduleActive`、`liveRecords`（`count` = 筆數）、`fieldActive`、`fieldData`（`count` = 有值的記錄數）、`titleField`、`lastBlock`、`referenceField`、`rollup`、`formula`、`parentDefault`、`rule`、`view`、`report`、`dashboard`（指派版或自己的儀表板，`id` 是儀表板 Id）、`personalDashboard`（個人版，`id` 是被個人化的儀表板 Id）。`moduleKey` 是來源所在的模組（報表為主模組），`name` 是來源的顯示名稱（欄位標籤、規則訊息、檢視名稱、報表名稱）。
 
 - 找不到目標回 404。
 - 被擋回 409，內容同上；這是裁決的「擋下時列出被誰引用」。

@@ -18,6 +18,21 @@ public class DeletionRepository(DynamicDbContext db) : IDeletionRepository
     public Task<List<Report>> ListReportsAsync(CancellationToken ct) =>
         db.Set<Report>().AsNoTracking().OrderBy(r => r.Id).ToListAsync(ct);
 
+    public async Task<List<DashboardLayoutSource>> ListDashboardLayoutsAsync(CancellationToken ct)
+    {
+        var dashboards = await db.Set<Dashboard>().AsNoTracking().OrderBy(d => d.Id)
+            .Select(d => new { d.Id, d.Name, d.OwnerUserId, d.LayoutJson }).ToListAsync(ct);
+        var personal = await db.Set<DashboardPersonalVersion>().AsNoTracking()
+            .OrderBy(p => p.DashboardId).ThenBy(p => p.UserId)
+            .Select(p => new { p.DashboardId, p.UserId, p.LayoutJson }).ToListAsync(ct);
+        var names = dashboards.ToDictionary(d => d.Id, d => d.Name);
+        return
+        [
+            .. dashboards.Select(d => new DashboardLayoutSource(d.Id, d.Name, d.OwnerUserId, false, d.LayoutJson)),
+            .. personal.Select(p => new DashboardLayoutSource(p.DashboardId, names.GetValueOrDefault(p.DashboardId, $"#{p.DashboardId}"), p.UserId, true, p.LayoutJson)),
+        ];
+    }
+
     public Task<int> CountRecordsAsync(long moduleId, bool deleted, CancellationToken ct) =>
         db.Set<Record>().CountAsync(r => r.ModuleId == moduleId && r.DeleteFlag == deleted, ct);
 

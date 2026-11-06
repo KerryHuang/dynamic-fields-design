@@ -246,7 +246,7 @@ public static class ReportRules
         };
         var ids = field.Options.Select(o => o.Id).ToHashSet();
         var seq = field.Options.ToDictionary(o => o.Id, o => o.Sequence);
-        var result = normalizer.Normalize(value, field, new FieldTypeContext(ids, ids, seq, null, userIds));
+        var result = normalizer.Normalize(value, field, new FieldTypeContext(ids, ids, seq, null, userIds, EnforceWriteLimits: false));
         return result is { IsValid: true, Value: { } v } ? v : null;
     }
 }

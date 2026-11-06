@@ -42,6 +42,9 @@ public static class ReportReferences
         }
         foreach (var f in d.Filters ?? []) Add(f.Field);
         Add(d.PrimaryDateField);
+        // 排序鍵不是量值 Id 時是欄位鍵（與 ReportRunner.AllRefs 同一套判斷）
+        foreach (var s in d.Sort ?? [])
+            if ((d.Measures ?? []).All(m => m.Id != s.Key)) Add(ReportFieldKeys.TryParse(s.Key));
         return new ReportRefs(modules, fields);
     }
 }
