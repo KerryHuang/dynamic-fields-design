@@ -331,6 +331,45 @@ public class ReportRunnerTests : ReportTestBase
         (await Run(Def(columns: [ChildF(Qty)]))).State.Should().Be("fieldMissing");
     }
 
+    // ---- 語系 ----
+
+    [Theory]
+    [InlineData("en-US", "(Blank)", "(Deleted)", "(No permission)", " sum", "One ")]
+    [InlineData("th", "(ว่าง)", "(ถูกลบแล้ว)", "(ไม่มีสิทธิ์)", "ผลรวม ", " หนึ่งรายการ")]
+    [InlineData("vi", "(Trống)", "(Đã xóa)", "(Không có quyền)", "Tổng ", "Một ")]
+    [InlineData("zh-TW", "（空白）", "（已刪除）", "（無權限）", " 加總", "一筆")]
+    public async Task Run_SystemWordsFollowLocale(string locale, string blank, string deleted, string noPermission, string sumWord, string rowWord)
+    {
+        await Arrange();
+        As("sales01");
+        var mine = await Insert("customer", "sales01", (Region, "北區"));
+        var others = await Insert("customer", "admin", (Region, "南區"));
+        await Insert("order", "sales01", (Amount, 1m));
+        await Insert("order", "sales01", (Amount, 1m), (CustomerRef, mine));
+        await Insert("order", "sales01", (Amount, 1m), (CustomerRef, others));
+        await Insert("order", "sales01", (Amount, 1m), (CustomerRef, 999_999));
+
+        var r = await Run(Def(groups: [G(MainF(CustomerRef))], measures: [M("s", "sum", MainF(Amount))]), locale: locale);
+
+        r.Groups!.Select(g => g.GroupLabels[0]).Should().Contain([blank, deleted, noPermission]);
+        r.Columns.Single(c => c.Role == "measure").Label.Should().Contain(sumWord);
+        r.RowMeaning.Should().Contain(rowWord);
+    }
+
+    [Theory]
+    [InlineData("en-US", "Hidden field")]
+    [InlineData("th", "ฟิลด์ที่ถูกซ่อน")]
+    [InlineData("vi", "Trường bị ẩn")]
+    public async Task Run_RestrictedMessage_FollowsLocale(string locale, string hidden)
+    {
+        await Arrange();
+        As("sales01");
+        var r = await Run(Def(columns: [MainF(Secret)]), locale: locale);
+        r.State.Should().Be("restricted");
+        r.Message.Should().Contain(hidden);
+        r.Message.Should().NotContain("無權限").And.NotContain("隱藏");
+    }
+
     // ---- 去重說明：列相加或下鑽列數對不上總計時都要說明 ----
 
     [Fact]

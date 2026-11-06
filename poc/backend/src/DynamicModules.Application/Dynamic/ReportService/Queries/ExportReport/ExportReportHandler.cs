@@ -12,15 +12,12 @@ namespace DynamicModules.Application.Dynamic.ReportService.Queries.ExportReport;
 
 /// <summary>
 /// 匯出 xlsx：要有所有涉及模組的 PrintExport，否則報表會變成繞過匯出權限的路（spec §7）。數字取自 runner，與畫面一致。
-/// 有明細欄位就匯出明細，否則匯出分組表（最後一列合計）。
+/// 有明細欄位就匯出明細，否則匯出分組表（最後一列總計）。
 /// </summary>
 public class ExportReportHandler(ReportAccess access, ReportModuleLoader loader, ReportRunner runner, IBusinessTime time)
     : IRequestHandler<ExportReportRequest, ServiceResult>
 {
     private const string XlsxType = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
-    private const string TotalLabel = "合計";
-    // spec §6.3：列相加對不上總計時必須說明，使用者接受去重的代價
-    private const string DedupedText = "總計每筆記錄只算一次；同一筆可能出現在多列或多個分組，所以各列相加不一定等於總計。";
 
     public async Task<ServiceResult> Handle(ExportReportRequest request, CancellationToken ct)
     {
@@ -35,8 +32,8 @@ public class ExportReportHandler(ReportAccess access, ReportModuleLoader loader,
         if (result.State is not ("ok" or "empty"))
             return ServiceResult.Invalid(new Dictionary<string, string[]> { ["report"] = [result.Message ?? result.State] });
 
-        var (header, rows) = result.DetailRows is not null ? Detail(result) : Grouped(result);
-        // 明細表沒有位置放量值，合計接在明細下方，每個量值一列
+        var (header, rows) = result.DetailRows is not null ? Detail(result) : Grouped(result, ReportText.Get(request.Locale, ReportText.ExportTotal));
+        // 明細表沒有位置放量值，總計接在明細下方，每個量值一列
         if (result.DetailRows is not null && result.Total is { Count: > 0 } total)
         {
             rows.Add([]);
@@ -45,8 +42,9 @@ public class ExportReportHandler(ReportAccess access, ReportModuleLoader loader,
         }
         if (result.DedupedNote)
         {
+            // spec §6.3：列相加對不上總計時必須說明，使用者接受去重的代價
             rows.Add([]);
-            rows.Add([DedupedText]);
+            rows.Add([ReportText.Get(request.Locale, ReportText.DedupedNote)]);
         }
         var content = XlsxWriter.Write(report.Name, header, rows);
         return ServiceResult.Success(new ExportFile($"report-{report.Id}-{time.Now:yyyyMMdd-HHmm}.xlsx", XlsxType, content));
@@ -59,7 +57,7 @@ public class ExportReportHandler(ReportAccess access, ReportModuleLoader loader,
             r.DetailRows!.Select(row => (IReadOnlyList<object>)row.Select(Cell).ToList()).ToList());
     }
 
-    private static (List<string>, List<IReadOnlyList<object>>) Grouped(ReportResult r)
+    private static (List<string>, List<IReadOnlyList<object>>) Grouped(ReportResult r, string totalLabel)
     {
         var columns = r.Columns.Where(c => c.Role is "group" or "measure").ToList();
         var measures = columns.Where(c => c.Role == "measure").ToList();
@@ -70,7 +68,7 @@ public class ExportReportHandler(ReportAccess access, ReportModuleLoader loader,
             rows.Add(g.GroupLabels.Select(l => (object)l).Concat(measures.Select(m => Value(m, g.Values))).ToList());
         var groupCount = columns.Count - measures.Count;
         var total = r.Total ?? new Dictionary<string, decimal?>();
-        rows.Add(Enumerable.Range(0, groupCount).Select(i => (object)(i == 0 ? TotalLabel : ""))
+        rows.Add(Enumerable.Range(0, groupCount).Select(i => (object)(i == 0 ? totalLabel : ""))
             .Concat(measures.Select(m => Value(m, total))).ToList());
         return (columns.Select(c => c.Label).ToList(), rows);
     }

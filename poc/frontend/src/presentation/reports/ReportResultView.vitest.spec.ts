@@ -137,9 +137,17 @@ describe('ReportResultView', () => {
     expect(has(mountView({ ...rows, detailTruncated: false }), 'detail-truncated').exists()).toBe(false);
   });
 
-  it('translates the entity title column label by locale', () => {
-    const result = { ...OK, groups: null, total: null, columns: [{ key: 'main:0:7', label: '客戶．標題', role: 'field' as const, valueType: 'text' }], detailRows: [['甲']] };
-    expect(has(mountView(result, 'table', 'en-US'), 'report-detail-table').text()).toContain('客戶．Title');
+  it('a detail report with measures also shows the totals, which cover every row', () => {
+    const columns = [{ key: 'main:1:', label: '客戶', role: 'field' as const, valueType: 'text' }, COLS[1]!];
+    const w = mountView({ ...OK, columns, groups: null, detailRows: [['甲']], detailTotal: 1001, detailTruncated: true, total: { m1: 2002 } }, 'table', 'en-US');
+    expect(has(w, 'detail-total').text()).toBe('Total 訂單金額: 2,002');
+    expect(has(w, 'report-detail-table').exists()).toBe(true);
+    expect(has(mountView({ ...OK, columns: [columns[0]!], groups: null, detailRows: [['甲']], total: {} }), 'detail-total').exists()).toBe(false);
+  });
+
+  it('shows the column label as the backend sent it; the backend translates by locale', () => {
+    const result = { ...OK, groups: null, total: null, columns: [{ key: 'main:0:7', label: 'Customer.Title', role: 'field' as const, valueType: 'text' }], detailRows: [['甲']] };
+    expect(has(mountView(result, 'table', 'en-US'), 'report-detail-table').text()).toContain('Customer.Title');
   });
 });
 

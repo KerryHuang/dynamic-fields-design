@@ -3,7 +3,7 @@ import { computed } from 'vue';
 import { useI18n } from 'vue-i18n';
 import type { ReportColumn, ReportResult } from 'src/domain/dynamic/report-types';
 import ReportChart from './ReportChart.vue';
-import { columnLabel, formatValue, groupName } from './report-format';
+import { formatValue } from './report-format';
 
 const props = defineProps<{ result: ReportResult; viz: string }>();
 const emit = defineEmits<{ drill: [groupKeys: string[]] }>();
@@ -19,7 +19,6 @@ const stateText = computed(() => {
   return (s === 'restricted' || s === 'fieldMissing' || s === 'tooMany') && props.result.message ? props.result.message : t(key);
 });
 
-const label = (c: ReportColumn) => columnLabel(c, t('reports.titleField'));
 const groupCols = computed(() => props.result.columns.filter((c) => c.role === 'group'));
 const measureCols = computed(() => props.result.columns.filter((c) => c.role === 'measure'));
 const fieldCols = computed(() => props.result.columns.filter((c) => c.role === 'field'));
@@ -51,7 +50,7 @@ const countText = (n: number | null | undefined) => (n ?? 0).toLocaleString(loca
       <template v-else>
         <div v-if="showIndicator" class="row q-gutter-md" data-testid="report-indicator">
           <q-card v-for="m in measureCols" :key="m.key" flat bordered class="q-pa-md">
-            <div class="text-caption">{{ label(m) }}</div>
+            <div class="text-caption">{{ m.label }}</div>
             <div class="text-h4">{{ fmt(result.total?.[m.key], m) }}</div>
           </q-card>
         </div>
@@ -61,13 +60,13 @@ const countText = (n: number | null | undefined) => (n ?? 0).toLocaleString(loca
             @pick="(i: number) => emit('drill', groups[i]!.groupKeys)"
           />
           <div v-if="result.total" class="row q-gutter-md text-weight-bold" data-testid="chart-total">
-            <span v-for="m in measureCols" :key="m.key">{{ t('reports.total') }} {{ label(m) }}：{{ fmt(result.total[m.key], m) }}</span>
+            <span v-for="m in measureCols" :key="m.key">{{ t('reports.total') }} {{ m.label }}: {{ fmt(result.total[m.key], m) }}</span>
           </div>
         </template>
         <q-markup-table v-else-if="showGroupTable" flat bordered dense data-testid="report-group-table">
           <thead>
             <tr>
-              <th v-for="c in [...groupCols, ...measureCols]" :key="c.key" class="text-left">{{ label(c) }}</th>
+              <th v-for="c in [...groupCols, ...measureCols]" :key="c.key" class="text-left">{{ c.label }}</th>
             </tr>
           </thead>
           <tbody>
@@ -89,7 +88,7 @@ const countText = (n: number | null | undefined) => (n ?? 0).toLocaleString(loca
         </div>
         <q-markup-table v-if="hasDetail" flat bordered dense data-testid="report-detail-table">
           <thead>
-            <tr><th v-for="c in fieldCols" :key="c.key" class="text-left">{{ label(c) }}</th></tr>
+            <tr><th v-for="c in fieldCols" :key="c.key" class="text-left">{{ c.label }}</th></tr>
           </thead>
           <tbody>
             <tr v-for="(row, ri) in result.detailRows" :key="ri">
@@ -97,6 +96,9 @@ const countText = (n: number | null | undefined) => (n ?? 0).toLocaleString(loca
             </tr>
           </tbody>
         </q-markup-table>
+        <div v-if="hasDetail && !showIndicator && measureCols.length && result.total" class="row q-gutter-md text-weight-bold" data-testid="detail-total">
+          <span v-for="m in measureCols" :key="m.key">{{ t('reports.total') }} {{ m.label }}: {{ fmt(result.total[m.key], m) }}</span>
+        </div>
       </template>
       <div v-if="result.dedupedNote" class="text-caption text-warning" data-testid="deduped-note">{{ t('reports.dedupedNote') }}</div>
     </template>

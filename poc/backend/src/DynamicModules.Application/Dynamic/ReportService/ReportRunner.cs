@@ -30,8 +30,6 @@ public class ReportRunner(
 
     private const string Ok = "ok", Empty = "empty", Missing = "missing", Restricted = "restricted";
     private const string FieldMissingState = "fieldMissing", ModuleDisabledState = "moduleDisabled", TooManyState = "tooMany";
-    private const string HiddenFieldName = "隱藏欄位";
-    private const string DeletedLabel = "（已刪除）", RestrictedLabel = "（無權限）", BlankLabel = "（空白）";
 
     private static readonly ReportCell EmptyCell = new(Empty, null, null, null, null);
     private static readonly ReportCell MissingCell = new(Missing, null, null, null, null);
@@ -78,12 +76,14 @@ public class ReportRunner(
         var frozen = basis != time.Today;
         var locale = string.IsNullOrEmpty(o.Locale) ? I18nText.FallbackLocale : o.Locale;
         ReportResult Fail(string state, string message) => new(state, message, "", [], null, null, null, false, basis, null, frozen);
-        var disabled = () => Fail(ModuleDisabledState, "模組已停用");
+        string T(string key, params object[] args) => ReportText.Get(locale, key, args);
+        var disabled = () => Fail(ModuleDisabledState, T(ReportText.ModuleDisabled));
+        var hiddenField = () => Fail(Restricted, HiddenMessage(locale));
 
         // 1. 模組存在且啟用；明細模組不能當主模組（它的權限來自表頭，單獨跑會繞過表頭範圍）
         var main = await ActiveModuleAsync(d.MainModuleKey, ct);
         if (main is null) return disabled();
-        if (ModuleRelations.IsDetail(main)) return Fail(ModuleDisabledState, "明細模組不能當主模組");
+        if (ModuleRelations.IsDetail(main)) return Fail(ModuleDisabledState, T(ReportText.DetailAsMain));
         Module? child = null;
         if (d.Child is not null && (child = await ActiveModuleAsync(d.Child.ModuleKey, ct)) is null) return disabled();
         Module? childParent = null;
@@ -107,7 +107,7 @@ public class ReportRunner(
 
         // 2. 模組 Read
         var mainAccess = await guard.AuthorizeAsync(main, PermissionAction.Read, ct);
-        if (mainAccess.Permissions is null) return Fail(Restricted, "無權限檢視這個模組");
+        if (mainAccess.Permissions is null) return Fail(Restricted, T(ReportText.NoModuleRead));
         var mainSide = new Side(main, mainAccess.Permissions);
         Side? childSide = null;
         if (child is not null)
@@ -115,7 +115,7 @@ public class ReportRunner(
             var access = childParent is not null
                 ? await guard.AuthorizeDetailAsync(childParent, child, PermissionAction.Read, ct)
                 : await guard.AuthorizeAsync(child, PermissionAction.Read, ct);
-            if (access.Permissions is null) return Fail(Restricted, "無權限檢視合併的子模組");
+            if (access.Permissions is null) return Fail(Restricted, T(ReportText.NoChildRead));
             childSide = new Side(child, access.Permissions);
         }
         var targetSides = new Dictionary<string, Side>();
@@ -138,7 +138,7 @@ public class ReportRunner(
         }
 
         // 4. 看不到或不能用的欄位：任何位置都整張擋下，訊息只寫看得到的名稱
-        if (link is not null && !childSide!.Perms!.CanSee(link)) return Fail(Restricted, $"無權限檢視：{HiddenFieldName}");
+        if (link is not null && !childSide!.Perms!.CanSee(link)) return hiddenField();
         foreach (var b in bound.Values)
             if (UnusableMessage(b, locale) is { } message) return Fail(Restricted, message);
 
@@ -148,7 +148,7 @@ public class ReportRunner(
         var computedRefs = conditionRefs.Concat(d.Measures.Where(m => m.Field is not null).Select(m => m.Field!));
         if (d.PrimaryDateField is not null) computedRefs = computedRefs.Append(d.PrimaryDateField);
         if (computedRefs.Any(r => bound[ReportCalculator.KeyOf(r)].Target is { Perms: null }))
-            return Fail(Restricted, $"無權限檢視：{HiddenFieldName}");
+            return hiddenField();
 
         // 參照欄位本身放在條件裡同理：目標整個看不到時每一格都是 restricted，條件永遠不符合
         foreach (var f in conditionRefs.Select(r => bound[ReportCalculator.KeyOf(r)].Field).Where(f => f.Type == FieldType.Reference).DistinctBy(f => f.Id))
@@ -157,15 +157,15 @@ public class ReportRunner(
             var target = await ActiveModuleAsync(refTarget.Key, ct);
             if (target is null) return disabled();
             if ((await guard.AuthorizeAsync(target, PermissionAction.Read, ct)).Permissions is not { } perms || !target.TitleVisibleTo(perms))
-                return Fail(Restricted, $"無權限檢視：{HiddenFieldName}");
+                return hiddenField();
         }
 
         // 權限都過了才重驗型別，訊息只會帶看得到的名稱；公式的結果型別在存檔後可能變，對不上就明講，不回假的 empty、0% 或日期序號加總
         if (FieldWithChangedType(d, bound) is { } changed)
-            return Fail(FieldMissingState, $"欄位型別已變更：{ColumnLabel(changed, locale)}");
+            return Fail(FieldMissingState, T(ReportText.TypeChanged, ColumnLabel(changed, locale)));
 
         // 5. 載入：多取一筆才分得出是否超過上限；超過就不回部分結果。條件要載入後才能套用，所以這個上限縮小條件也過不了，訊息要照實說
-        var tooManyToLoad = () => Fail(TooManyState, "來源資料超過系統的載入上限，縮小條件也無法改善，請聯絡管理員");
+        var tooManyToLoad = () => Fail(TooManyState, T(ReportText.TooManyToLoad));
         var mainRows = await records.ListForReportAsync(main.Id, mainSide.Perms!.OwnerUserIds, options.MaxLoadRows + 1, ct);
         if (mainRows.Count > options.MaxLoadRows) return tooManyToLoad();
         IReadOnlyList<Record> childRows = [];
@@ -213,7 +213,7 @@ public class ReportRunner(
             foreach (var kid in kids) rows.Add(new ReportRow(m.Id, kid.Id, Merge(cells, childCells[kid.Id])));
         }
         // 合併且套用條件後的列數才是 spec §5 的上限，這裡縮小條件有用
-        if (rows.Count > options.MaxRows) return Fail(TooManyState, "資料太多，請縮小條件");
+        if (rows.Count > options.MaxRows) return Fail(TooManyState, T(ReportText.TooMany));
 
         // 7. 下鑽只留該分組的列；各欄位值的 key 判斷與分組相同
         var drilling = o.DrillGroupKeys is not null;
@@ -242,7 +242,7 @@ public class ReportRunner(
         IReadOnlyList<ReportGroupResult>? groups = drilling ? null : LabeledGroups(calc.Groups, d, bound, ctx);
         IReadOnlyList<IReadOnlyList<object?>>? detail = fieldColumns.Count == 0 ? null : DetailRows(rows, fieldColumns, d, bound, ctx);
         ReportAppliedRange? applied = range is null ? null : new ReportAppliedRange(resolved!.Value.Item1, resolved.Value.Item2, range.Kind, range.N);
-        return new ReportResult(rows.Count == 0 ? Empty : Ok, null, $"一筆{rowModule.NameI18n.Resolve(locale)}", columns,
+        return new ReportResult(rows.Count == 0 ? Empty : Ok, null, T(ReportText.RowMeaning, rowModule.NameI18n.Resolve(locale)), columns,
             groups, calc.Total, detail, calc.DedupedNote, basis, applied, frozen, detail?.Count);
     }
 
@@ -276,7 +276,7 @@ public class ReportRunner(
         ReportFieldRef r, string key, Side main, Side? child, IReadOnlyDictionary<string, Side> targets, string locale)
     {
         var source = r.Source == "main" ? main : r.Source == "child" ? child : null;
-        if (source is null) return (null, "欄位已不存在");
+        if (source is null) return (null, ReportText.Get(locale, ReportText.FieldGone));
         if (r.ViaFieldId is null)
             return source.Active(r.FieldId) is { } direct
                 ? (new Bound(r, key, source, direct, null, null), null)
@@ -285,7 +285,7 @@ public class ReportRunner(
         if (source.Active(r.ViaFieldId) is not { Type: FieldType.Reference, Config.RefTarget: { } refTarget } via)
             return (null, MissingMessage(source, r.ViaFieldId.Value, locale));
         if (refTarget.Kind == ReferenceTarget.EntityKind)
-            return r.FieldId == EntityTitleFieldId ? (new Bound(r, key, source, via, null, null), null) : (null, "欄位已不存在");
+            return r.FieldId == EntityTitleFieldId ? (new Bound(r, key, source, via, null, null), null) : (null, ReportText.Get(locale, ReportText.FieldGone));
         var target = targets[refTarget.Key];
         return target.Active(r.FieldId) is { } field
             ? (new Bound(r, key, source, field, via, target), null)
@@ -294,22 +294,26 @@ public class ReportRunner(
 
     private static string MissingMessage(Side side, long fieldId, string locale) =>
         side.Perms is { } p && side.Fields.TryGetValue(fieldId, out var f) && p.CanSee(f)
-            ? $"欄位已不存在：{f.LabelI18n.Resolve(locale)}"
-            : "欄位已不存在";
+            ? ReportText.Get(locale, ReportText.FieldGoneNamed, f.LabelI18n.Resolve(locale))
+            : ReportText.Get(locale, ReportText.FieldGone);
+
+    private static string HiddenMessage(string locale) =>
+        ReportText.Get(locale, ReportText.NoPermissionTo, ReportText.Get(locale, ReportText.HiddenField));
 
     private static string? UnusableMessage(Bound b, string locale)
     {
-        var hidden = $"無權限檢視：{HiddenFieldName}";
+        var hidden = HiddenMessage(locale);
+        string NotUsable() => ReportText.Get(locale, ReportText.NotUsable, b.Field.LabelI18n.Resolve(locale));
         var sourcePerms = b.Source.Perms!;
         if (b.Target is null)
         {
             if (!sourcePerms.CanSee(b.Field)) return hidden;
-            return b.Source.Excluded.Contains(b.Field.Id) ? $"這個欄位不能用於報表：{b.Field.LabelI18n.Resolve(locale)}" : null;
+            return b.Source.Excluded.Contains(b.Field.Id) ? NotUsable() : null;
         }
         if (!sourcePerms.CanSee(b.Via!)) return hidden;
         if (b.Target.Perms is { } targetPerms && !targetPerms.CanSee(b.Field)) return hidden;
         if (!b.Target.Excluded.Contains(b.Field.Id)) return null;
-        return b.Target.Perms is null ? hidden : $"這個欄位不能用於報表：{b.Field.LabelI18n.Resolve(locale)}";
+        return b.Target.Perms is null ? hidden : NotUsable();
     }
 
     /// <summary>定義裡第一個對不上欄位目前型別的位置：量值種類、主要日期、條件的運算子與值形狀。全部對得上回 null。</summary>
@@ -596,8 +600,11 @@ public class ReportRunner(
     private static string ColumnLabel(Bound b, string locale)
     {
         var field = b.Field.LabelI18n.Resolve(locale);
-        if (b.Via is not null) return b.Target!.Perms is null ? HiddenFieldName : $"{b.Via.LabelI18n.Resolve(locale)}．{field}";
-        return b.Ref.ViaFieldId is not null ? $"{field}．標題" : field;
+        if (b.Via is not null)
+            return b.Target!.Perms is null
+                ? ReportText.Get(locale, ReportText.HiddenField)
+                : ReportText.Get(locale, ReportText.FieldPath, b.Via.LabelI18n.Resolve(locale), field);
+        return b.Ref.ViaFieldId is not null ? ReportText.Get(locale, ReportText.FieldPath, field, ReportText.Get(locale, ReportText.Title)) : field;
     }
 
     private static string ValueTypeOf(Field f) => f.Type switch
@@ -616,10 +623,10 @@ public class ReportRunner(
         string FieldLabel(ReportFieldRef r) => ColumnLabel(bound[ReportCalculator.KeyOf(r)], locale);
         var (label, type) = m.Kind switch
         {
-            "countMain" => ($"{main.Module.NameI18n.Resolve(locale)}筆數", "number"),
-            "countChild" => ($"{(child ?? main).Module.NameI18n.Resolve(locale)}筆數", "number"),
-            "ratio" => ($"{(m.Condition is null ? "" : FieldLabel(m.Condition.Field))} 條件占比", "ratio"),
-            _ => ($"{(m.Field is null ? "" : FieldLabel(m.Field))} {m.Kind switch { "sum" => "加總", "avg" => "平均", "min" => "最小", "max" => "最大", _ => m.Kind }}",
+            "countMain" => (ReportText.Get(locale, ReportText.Count, main.Module.NameI18n.Resolve(locale)), "number"),
+            "countChild" => (ReportText.Get(locale, ReportText.Count, (child ?? main).Module.NameI18n.Resolve(locale)), "number"),
+            "ratio" => (ReportText.Get(locale, ReportText.Ratio, m.Condition is null ? "" : FieldLabel(m.Condition.Field)), "ratio"),
+            _ => (ReportText.Get(locale, m.Kind switch { "sum" => ReportText.Sum, "avg" => ReportText.Avg, "min" => ReportText.Min, _ => ReportText.Max }, m.Field is null ? "" : FieldLabel(m.Field)),
                 m.Field is not null && m.Kind is "min" or "max" && ValueTypeOf(bound[ReportCalculator.KeyOf(m.Field!)].Field) is "date" or "dateTime" ? "dayNumber" : "number"),
         };
         return new ReportColumn(m.Id, label, "measure", type);
@@ -692,9 +699,9 @@ public class ReportRunner(
 
     private static string GroupLabel(Bound b, string key, RunContext ctx)
     {
-        if (key.Length == 0) return BlankLabel;
-        if (b.MayBeUnavailable && key == ReportCalculator.MissingKey) return DeletedLabel;
-        if (b.MayBeUnavailable && key == ReportCalculator.RestrictedKey) return RestrictedLabel;
+        if (key.Length == 0) return ReportText.Get(ctx.Locale, ReportText.Blank);
+        if (b.MayBeUnavailable && key == ReportCalculator.MissingKey) return ReportText.Get(ctx.Locale, ReportText.Deleted);
+        if (b.MayBeUnavailable && key == ReportCalculator.RestrictedKey) return ReportText.Get(ctx.Locale, ReportText.NoPermission);
         return ValueLabel(b, key, ctx);
     }
 
@@ -747,8 +754,8 @@ public class ReportRunner(
     {
         switch (c.State)
         {
-            case Restricted: return RestrictedLabel;
-            case Missing: return DeletedLabel;
+            case Restricted: return ReportText.Get(ctx.Locale, ReportText.NoPermission);
+            case Missing: return ReportText.Get(ctx.Locale, ReportText.Deleted);
             case Empty: return null;
         }
         if (c.Number is { } n) return n;

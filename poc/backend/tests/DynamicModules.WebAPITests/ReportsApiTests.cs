@@ -5,6 +5,7 @@ using ClosedXML.Excel;
 using DynamicModules.Application.Dynamic.ReportService;
 using DynamicModules.Domain.Data;
 using DynamicModules.Domain.Entities.Dynamic;
+using DynamicModules.Domain.ValueObjects;
 using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
@@ -751,7 +752,7 @@ public class ReportsApiTests
             ws.Cell(r + 2, 3).GetDouble().Should().Be(groups[r].GetProperty("values").GetProperty("s").GetDouble());
         }
         var total = groups.Count + 2;
-        ws.Cell(total, 1).GetString().Should().Be("合計");
+        ws.Cell(total, 1).GetString().Should().Be("總計");
         ws.Cell(total, 2).GetDouble().Should().Be((double)TotalOf(run, "n"));
         ws.Cell(total, 3).GetDouble().Should().Be((double)TotalOf(run, "s"));
         TotalOf(run, "s").Should().Be(390);
@@ -1128,6 +1129,127 @@ public class ReportsApiTests
         drill.GetProperty("detailRows").GetArrayLength().Should().Be(500);
         drill.GetProperty("truncated").GetBoolean().Should().BeTrue();
         drill.GetProperty("detailTruncated").GetBoolean().Should().BeFalse();
+    }
+
+    /// <summary>中文字與全形標點；語系字典的漏網之魚會落在這裡。</summary>
+    private static readonly System.Text.RegularExpressions.Regex Chinese = new(@"[\u3000-\u303F\u4E00-\u9FFF\uFF00-\uFFEF]");
+
+    /// <summary>把模組名稱、欄位標籤、選項標籤都補上英文，回應裡剩下的中文只可能來自系統字串。</summary>
+    private static void AddEnglishLabels(TestApp app, params string[] moduleKeys)
+    {
+        using var scope = app.Services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<DynamicDbContext>();
+        I18nText En(string en) => new([KeyValuePair.Create("zh-TW", "中文"), KeyValuePair.Create("en-US", en)]);
+        foreach (var key in moduleKeys)
+        {
+            var m = db.Set<Module>().Single(x => x.Key == key);
+            m.NameI18n = En("Order");
+            foreach (var f in db.Set<Field>().Where(x => db.Set<Block>().Any(b => b.Id == x.BlockId && b.ModuleId == m.Id)).ToList())
+            {
+                f.LabelI18n = En($"Field{f.Id}");
+                foreach (var o in db.Set<FieldOption>().Where(o => o.FieldId == f.Id).ToList()) o.LabelI18n = En($"Option{o.Id}");
+            }
+        }
+        db.SaveChanges();
+    }
+
+    private static void AssertNoChinese(string text) =>
+        Chinese.IsMatch(text).Should().BeFalse($"回應不該有中文：{text}");
+
+    [Fact]
+    public async Task EnUS_ResultsAndExport_HaveNoChinese()
+    {
+        using var app = new TestApp();
+        var w = await MakeWorld(app, withChild: true);
+        var admin = app.AsUser();
+        var customer = await AddField(admin, w.Main, "reference", new { refTarget = new { kind = "entity", key = "sales.customer" } });
+        var first = await AddRecord(admin, w, 10, w.Options[0]);
+        await AddRecord(admin, w, 20); // 沒有狀態：空白分組
+        (await admin.PostAsJsonAsync($"{Base}/modules/{w.Child}/records", new
+        {
+            values = new Dictionary<string, object> { [await TitleKey(admin, w.Child!)] = "x", [w.ChildLinkKey] = first, [w.ChildQtyKey] = 3 }
+        })).EnsureSuccessStatusCode();
+        AddEnglishLabels(app, w.Main, w.Child!);
+        var viaTitle = Ref(0, via: customer.Id);
+        object Kind(string id, string kind, object? field) => new { id, kind, field, condition = (object?)null };
+        var def = Def(w.Main, child: new { moduleKey = w.Child, linkFieldId = w.ChildLink },
+            groups: [new { field = Ref(w.Status), bucket = (string?)null }, new { field = viaTitle, bucket = (string?)null }],
+            measures:
+            [
+                Sum("s", w.Amount), Kind("a", "avg", Ref(w.Amount)), Kind("mi", "min", Ref(w.Amount)), Kind("ma", "max", Ref(w.Amount)),
+                Kind("cm", "countMain", null), Kind("cc", "countChild", null),
+                new { id = "r", kind = "ratio", field = (object?)null, condition = (object)new { field = Ref(w.Amount), op = "gt", value = 5 } }
+            ]);
+        var id = await Create(admin, def);
+
+        var run = await admin.PostAsJsonAsync($"{Reports}/{id}/run?locale=en-US", new { });
+        var preview = await admin.PostAsJsonAsync($"{Reports}/preview?locale=en-US", def);
+        var drill = await admin.PostAsJsonAsync($"{Reports}/{id}/drill?locale=en-US", new { groupKeys = new[] { "", "" } });
+        var catalog = await admin.GetAsync($"{Reports}/catalog/{w.Main}?locale=en-US");
+
+        foreach (var res in new[] { run, preview, drill, catalog })
+        {
+            res.StatusCode.Should().Be(HttpStatusCode.OK);
+            AssertNoChinese(await res.Content.ReadAsStringAsync());
+        }
+        var runJson = await JsonOf(run);
+        runJson.GetProperty("dedupedNote").GetBoolean().Should().BeTrue();
+        runJson.GetProperty("columns")[1].GetProperty("label").GetString().Should().Be($"Field{customer.Id}.Title");
+
+        using var wb = new XLWorkbook(await (await admin.GetAsync($"{Reports}/{id}/export?locale=en-US")).Content.ReadAsStreamAsync());
+        var cells = wb.Worksheet(1).CellsUsed().Select(c => c.GetFormattedString()).ToList();
+        cells.Should().Contain("Total");
+        cells.Should().Contain(c => c.StartsWith("The total counts each record once"));
+        foreach (var c in cells) AssertNoChinese(c);
+    }
+
+    [Fact]
+    public async Task EnUS_FailureMessages_HaveNoChinese()
+    {
+        using var app = new TestApp();
+        var w = await MakeWorld(app);
+        var sales = GroupId(app, "sales");
+        var admin = app.AsUser();
+        await AddRecord(admin, w, 10, w.Options[0]);
+        var blockId = (await JsonOf(await admin.GetAsync($"{Base}/modules/{w.Main}"))).GetProperty("blocks")[0].GetProperty("id").GetInt64();
+        var f = await AddField(admin, w.Main, "formula", new { formula = $"{{{w.Amount}}} * 2", resultType = "number", scale = 0 });
+        var hiddenFor = await Create(admin, ByStatus(w));
+        var changed = await Create(admin, Def(w.Main, measures: [Sum("s", f.Id)]));
+        await Share(admin, hiddenFor, sales, GroupId(app, "floor"));
+        await Grant(app, w.Main, [new { fieldId = w.Amount, groupId = sales, access = "hidden" }], ("mis", true, "all"), ("sales", true, "all"));
+        (await admin.PutAsJsonAsync($"{Base}/fields/{f.Id}", new
+        {
+            type = "formula", label = new Dictionary<string, string> { ["zh-TW"] = "公式" }, blockId, config = new { formula = $"{{{w.Due}}}", resultType = "date" }
+        })).EnsureSuccessStatusCode();
+        AddEnglishLabels(app, w.Main);
+        async Task<(string State, string Raw)> RunEn(HttpClient c, long report)
+        {
+            var res = await c.PostAsJsonAsync($"{Reports}/{report}/run?locale=en-US", new { });
+            var raw = await res.Content.ReadAsStringAsync();
+            return (JsonDocument.Parse(raw).RootElement.GetProperty("state").GetString()!, raw);
+        }
+
+        var restricted = await RunEn(app.AsUser("sales01"), hiddenFor);
+        var noRead = await RunEn(app.AsUser("floor01"), hiddenFor);
+        var typeChanged = await RunEn(admin, changed);
+        var options = app.Services.GetRequiredService<ReportOptions>();
+        options.MaxRows = 0;
+        var tooMany = await RunEn(admin, hiddenFor);
+        options.MaxRows = 50_000;
+        options.MaxLoadRows = 0;
+        var tooManyToLoad = await RunEn(admin, hiddenFor);
+        options.MaxLoadRows = 200_000;
+        (await admin.PostAsync($"{Base}/modules/{w.Main}/deactivate", null)).EnsureSuccessStatusCode();
+        var disabled = await RunEn(admin, hiddenFor);
+
+        restricted.State.Should().Be("restricted");
+        noRead.State.Should().Be("restricted");
+        typeChanged.State.Should().Be("fieldMissing");
+        tooMany.State.Should().Be("tooMany");
+        tooManyToLoad.State.Should().Be("tooMany");
+        disabled.State.Should().Be("moduleDisabled");
+        foreach (var r in new[] { restricted, noRead, typeChanged, tooMany, tooManyToLoad, disabled }) AssertNoChinese(r.Raw);
+        tooManyToLoad.Raw.Should().NotBe(tooMany.Raw);
     }
 
     /// <summary>公式結果由數字改成日期後，已存的量值與條件對不上欄位：回 fieldMissing，不回假的 empty、0% 或日期序號加總。</summary>

@@ -19,10 +19,5 @@ export function formatValue(v: string | number | null | undefined, valueType: st
   }
 }
 
-/** 實體標題欄位的 id 固定為 0（鍵為 source:fieldId:via），後端 label 寫死「標題」，依語系翻譯。 */
-export function columnLabel(c: ReportColumn, titleLabel: string): string {
-  return c.key.split(':')[1] === '0' && c.label.endsWith('標題') ? c.label.slice(0, -2) + titleLabel : c.label;
-}
-
 /** 多個分組欄位的標籤合成一個類別名稱。 */
 export const groupName = (g: ReportGroupResult) => g.groupLabels.join(' / ');

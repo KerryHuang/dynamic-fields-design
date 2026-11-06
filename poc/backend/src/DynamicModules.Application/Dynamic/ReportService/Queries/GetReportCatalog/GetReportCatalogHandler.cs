@@ -1,5 +1,6 @@
 using DynamicModules.Application.Common;
 using DynamicModules.Application.Common.Security;
+using DynamicModules.Application.Dynamic.ReportService.Data;
 using DynamicModules.Domain.Entities.Dynamic;
 using DynamicModules.Domain.Modules;
 using DynamicModules.Domain.Reports;
@@ -64,7 +65,7 @@ public class GetReportCatalogHandler(IModuleRepository modules, IDynamicAccessGu
                 if (target.Kind == ReferenceTarget.EntityKind)
                 {
                     fields.Add(ToField(f, locale));
-                    via.Add(new CatalogVia(f.Id, f.LabelI18n.Resolve(locale), target.Key, [EntityTitle(target.Key)]));
+                    via.Add(new CatalogVia(f.Id, f.LabelI18n.Resolve(locale), target.Key, [EntityTitle(target.Key, locale)]));
                     continue;
                 }
                 // 目標模組不可讀（或未啟用）時存檔其實允許，但每個值都會是（無權限）、分組只有一組，放進條件還會整張擋下，選了沒有意義，所以直接參照與帶出都不列
@@ -108,8 +109,8 @@ public class GetReportCatalogHandler(IModuleRepository modules, IDynamicAccessGu
     /// 既有實體目標只有標題可帶，FieldId 固定為 <see cref="ReportRunner.EntityTitleFieldId"/>。
     /// 顯示的是標題，但存的與比對的是鍵，所以標成參照：設計器用記錄挑選器，運算子與條件值都是鍵。
     /// </summary>
-    private static CatalogField EntityTitle(string entityKey) =>
-        new(ReportRunner.EntityTitleFieldId, "標題", FieldType.Reference, true, false, false, false, null, ReferenceTarget.EntityKind, entityKey);
+    private static CatalogField EntityTitle(string entityKey, string locale) =>
+        new(ReportRunner.EntityTitleFieldId, ReportText.Get(locale, ReportText.Title), FieldType.Reference, true, false, false, false, null, ReferenceTarget.EntityKind, entityKey);
 
     private static CatalogField ToField(Field f, string locale) =>
         new(f.Id, f.LabelI18n.Resolve(locale), f.Type, ReportFieldEligibility.CanGroup(f), ReportFieldEligibility.CanSum(f),
