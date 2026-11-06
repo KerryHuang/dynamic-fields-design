@@ -62,6 +62,15 @@ describe('quasar-bridge.css', () => {
     expect(drawer).toBeGreaterThan(generic);
   });
 
+  it('outline 的 q-badge 文字與框線用 primary-text，不能沿用實心底的 on-primary', () => {
+    expect(bodiesOf(bridge, '.q-badge--outline').join(';')).toContain('var(--t-primary-text)');
+  });
+
+  it('欄位內可聚焦的按鈕（如 clearable）保留焦點框，只有輸入元素關掉', () => {
+    expect(bodiesOf(bridge, '.q-field :focus-visible')).toEqual([]);
+    expect(bodiesOf(bridge, '.q-field__native:focus-visible').join(';')).toContain('outline: none');
+  });
+
   it('q-badge 的文字色隨底色換成對應的 on-* token', () => {
     expect(bodiesOf(bridge, '.q-badge').join(';')).toContain('var(--t-on-primary)');
     expect(bodiesOf(bridge, '.q-badge.bg-primary').join(';')).toContain('var(--t-on-primary)');

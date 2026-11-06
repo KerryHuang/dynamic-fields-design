@@ -62,6 +62,10 @@
   color: var(--t-on-primary);
 }
 
+.q-badge--outline {
+  color: var(--t-primary-text);
+}
+
 .q-badge.bg-primary {
   color: var(--t-on-primary);
 }
@@ -236,7 +240,7 @@
   outline-color: var(--t-sidebar-fg);
 }
 
-.q-field :focus-visible,
+.q-field__native:focus-visible,
 input:focus-visible,
 textarea:focus-visible {
   outline: none;
