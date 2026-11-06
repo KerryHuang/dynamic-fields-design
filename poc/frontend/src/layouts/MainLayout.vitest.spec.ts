@@ -227,14 +227,14 @@ describe('MainLayout menu', () => {
   });
 
   describe('account area', () => {
-    const logoutSetup = async () => {
+    const logoutSetup = async (meExtra: Record<string, unknown> = {}) => {
       const pinia = createPinia();
       setActivePinia(pinia);
       useIdentityStore().setSession('admin');
       const calls: string[] = [];
       http.defaults.adapter = async (config) => {
         calls.push(`${config.method} ${config.url}`);
-        const data = config.url === '/me' ? { ...me(false), displayName: '管理員小明' } : config.url === '/users' ? USERS : [];
+        const data = config.url === '/me' ? { ...me(false), displayName: '管理員小明', ...meExtra } : config.url === '/users' ? USERS : [];
         return { data, status: 200, statusText: 'OK', headers: {}, config };
       };
       const router = createRouter({
@@ -258,6 +258,13 @@ describe('MainLayout menu', () => {
       expect(w.find('[data-testid="current-user"]').text()).toContain('管理員小明');
       expect(w.find('[data-testid="change-password-link"]').exists()).toBe(true);
       expect(w.find('[data-testid="logout"]').exists()).toBe(true);
+      w.unmount();
+    });
+
+    it('hides the change-password link for demo accounts', async () => {
+      const { w } = await logoutSetup({ isDemoAccount: true });
+      expect(w.find('[data-testid="logout"]').exists()).toBe(true);
+      expect(w.find('[data-testid="change-password-link"]').exists()).toBe(false);
       w.unmount();
     });
 

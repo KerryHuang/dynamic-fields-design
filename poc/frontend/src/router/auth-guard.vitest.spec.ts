@@ -76,6 +76,13 @@ describe('auth guard', () => {
     expect(router.currentRoute.value.path).toBe('/change-password');
   });
 
+  it('demo accounts cannot enter /change-password directly', async () => {
+    meResponse = { status: 200, data: { userId: 'sales01', mustChangePassword: false, isDemoAccount: true } };
+    const router = setup();
+    await router.push('/change-password');
+    expect(router.currentRoute.value.path).toBe('/');
+  });
+
   it('a /me failure other than 401 shows service-unavailable, keeps the store, and probes again later', async () => {
     const router = setup();
     useIdentityStore().setSession('admin');

@@ -26,6 +26,7 @@ export function installAuthGuard(router: Router) {
       try {
         const me = await dynamicApi.getMe();
         identity.setSession(me.userId, me.mustChangePassword);
+        identity.setDemoAccount(me.isDemoAccount === true);
         sessionLoaded = true;
       } catch (e) {
         if ((e as ApiError | null)?.status !== 401) {
@@ -36,6 +37,7 @@ export function installAuthGuard(router: Router) {
       }
     }
     if (!identity.userId) return to.meta.public ? true : loginLocation(to.fullPath);
+    if (identity.isDemoAccount && to.path === '/change-password') return '/';
     if (identity.mustChangePassword) return to.path === '/change-password' ? true : '/change-password';
     return to.meta.public ? '/' : true;
   });

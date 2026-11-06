@@ -4,7 +4,7 @@
       <q-toolbar>
         <q-toolbar-title>Formwright</q-toolbar-title>
         <span class="q-mr-sm" data-testid="current-user">{{ me?.displayName }}</span>
-        <q-btn flat dense no-caps class="q-mr-sm" :label="t('auth.changePassword')" to="/change-password" data-testid="change-password-link" />
+        <q-btn v-if="!identity.isDemoAccount" flat dense no-caps class="q-mr-sm" :label="t('auth.changePassword')" to="/change-password" data-testid="change-password-link" />
         <span v-if="logoutError" class="q-mr-sm bg-negative text-white q-px-sm rounded-borders" data-testid="logout-error">{{ t('auth.logoutFailed') }}</span>
         <q-btn flat dense no-caps :label="t('auth.logout')" :loading="logoutMutation.isPending.value" data-testid="logout" @click="logout" />
       </q-toolbar>
@@ -89,6 +89,7 @@ const menuGroups = computed(() => {
 });
 const { data: me } = useMe();
 const { data: users } = useUsers();
+watch(me, (m) => { if (m) identity.setDemoAccount(m.isDemoAccount === true); }, { immediate: true });
 watch(users, (list) => { if (list) identity.setUsers(list); }, { immediate: true });
 
 const logoutError = ref(false);

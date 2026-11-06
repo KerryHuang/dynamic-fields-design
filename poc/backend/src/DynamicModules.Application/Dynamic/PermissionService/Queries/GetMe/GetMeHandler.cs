@@ -21,6 +21,6 @@ public class GetMeHandler(ICurrentUser current, IPermissionRepository permission
         var designer = new DesignerActionsResponse(
             actions.Contains(PermissionAction.Read), actions.Contains(PermissionAction.Add),
             actions.Contains(PermissionAction.Edit), actions.Contains(PermissionAction.Delete));
-        return ServiceResult.Success(new MeResponse(user.UserId, user.DisplayName, user.IsSystemAdmin, user.MustChangePassword, groups, designer));
+        return ServiceResult.Success(new MeResponse(user.UserId, user.DisplayName, user.IsSystemAdmin, user.MustChangePassword, groups, designer, user.IsDemoAccount));
     }
 }

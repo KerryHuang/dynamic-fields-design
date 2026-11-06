@@ -143,6 +143,15 @@ public class AdminUsersApiTests
     }
 
     [Fact]
+    public async Task Me_ReportsWhetherAccountIsDemo()
+    {
+        using var app = new TestApp();
+
+        (await Json(await app.AsUser("sales01").GetAsync($"{Base}/me"))).GetProperty("isDemoAccount").GetBoolean().Should().BeTrue();
+        (await Json(await app.AsUser().GetAsync($"{Base}/me"))).GetProperty("isDemoAccount").GetBoolean().Should().BeFalse();
+    }
+
+    [Fact]
     public async Task CreateUser_MultipleGroups_AppearInMeAndList()
     {
         using var app = new TestApp();

@@ -6,12 +6,18 @@ import type { User } from 'src/domain/dynamic/types';
 export const useIdentityStore = defineStore('identity', () => {
   const userId = ref('');
   const mustChangePassword = ref(false);
+  /** Demo accounts have no password; the change-password link and page are unavailable to them. */
+  const isDemoAccount = ref(false);
   /** Users from GET /users, filled by MainLayout. */
   const users = ref<User[]>([]);
 
   function setSession(id: string, mustChange = false) {
     userId.value = id;
     mustChangePassword.value = mustChange;
+  }
+
+  function setDemoAccount(v: boolean) {
+    isDemoAccount.value = v;
   }
 
   function setUsers(list: User[]) {
@@ -21,8 +27,9 @@ export const useIdentityStore = defineStore('identity', () => {
   function clear() {
     userId.value = '';
     mustChangePassword.value = false;
+    isDemoAccount.value = false;
     users.value = [];
   }
 
-  return { userId, mustChangePassword, users, setSession, setUsers, clear };
+  return { userId, mustChangePassword, isDemoAccount, users, setSession, setDemoAccount, setUsers, clear };
 });

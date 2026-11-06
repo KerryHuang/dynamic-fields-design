@@ -278,6 +278,8 @@ export interface Me {
   displayName: string;
   mustChangePassword: boolean;
   isSystemAdmin: boolean;
+  /** Demo accounts have no password, so changing it always fails. */
+  isDemoAccount?: boolean;
   groups: { id: number; key: string; name: I18nText }[];
   designer: { read: boolean; add: boolean; edit: boolean; delete: boolean };
 }
