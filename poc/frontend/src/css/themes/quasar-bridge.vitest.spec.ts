@@ -62,6 +62,10 @@ describe('quasar-bridge.css', () => {
     expect(drawer).toBeGreaterThan(generic);
   });
 
+  it('單獨的 text-dark 用主文字色，不跟著 --q-dark 變成面板色', () => {
+    expect(bodiesOf(bridge, '.text-dark').join(';')).toMatch(/color:\s*var\(--t-text\)\s*!important/);
+  });
+
   it('outline 的 q-badge 文字與框線用 primary-text，不能沿用實心底的 on-primary', () => {
     expect(bodiesOf(bridge, '.q-badge--outline').join(';')).toContain('var(--t-primary-text)');
   });

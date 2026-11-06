@@ -62,6 +62,10 @@
   color: var(--t-on-primary);
 }
 
+.text-dark {
+  color: var(--t-text) !important;
+}
+
 .q-badge--outline {
   color: var(--t-primary-text);
 }
