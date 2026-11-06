@@ -236,6 +236,28 @@ public class DashboardsApiTests
     }
 
     [Fact]
+    public async Task Detail_ReportNames_OnlyForReportsViewerMaySee()
+    {
+        using var app = new TestApp();
+        var w = await MakeWorld(app);
+        var admin = app.AsUser();
+        var shared = await CreateReport(admin, ByStatus(w), "共用報表");
+        var unshared = await CreateReport(admin, ByStatus(w), "未分享報表");
+        await ShareReport(admin, shared, GroupId(app, "sales"));
+        var id = await CreateAssigned(admin, "業務總覽", Layout(Card("a", shared), Card("b", unshared)), GroupId(app, "sales"));
+        var sales01 = app.AsUser("sales01");
+        await sales01.PutAsJsonAsync($"{Dashboards}/{id}/layout", new { layout = Layout(Card("a", shared), Card("b", unshared)) });
+        var own = (await JsonOf(await sales01.PostAsJsonAsync(Dashboards, new { name = "我的", layout = Layout(Card("a", shared)) }))).GetProperty("id").GetInt64();
+        await ShareReport(admin, shared); // 取消分享：靠分享才看得到的卡片不再給名稱，指派版放上的卡片不受影響
+
+        var names = (await GetDashboard(sales01, id)).GetProperty("reportNames");
+
+        names.GetProperty(shared.ToString()).GetString().Should().Be("共用報表");   // 指派版放上的卡片
+        names.GetProperty(unshared.ToString()).GetString().Should().Be("未分享報表"); // 指派版放上的卡片，雖然沒分享
+        (await GetDashboard(sales01, own)).GetProperty("reportNames").EnumerateObject().Should().BeEmpty();
+    }
+
+    [Fact]
     public async Task SharedReports_ListedForViewer_NotOwn()
     {
         using var app = new TestApp();

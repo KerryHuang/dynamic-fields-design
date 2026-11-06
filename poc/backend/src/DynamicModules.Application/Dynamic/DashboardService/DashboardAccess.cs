@@ -15,8 +15,6 @@ public sealed record DashboardScope(Dashboard Dashboard, DashboardPersonalVersio
 
     public bool HasUpdate => Personal is not null && Personal.BaseVersion < Dashboard.Version;
 
-    public DashboardDetail ToDetail() =>
-        new(Dashboard.Id, Dashboard.Name, IsAssigned ? "assigned" : "mine", Dashboard.Version, Personal is not null, HasUpdate, EffectiveLayout);
 }
 
 public class DashboardAccess(IDashboardRepository dashboards, IReportRepository reports)
@@ -32,6 +30,19 @@ public class DashboardAccess(IDashboardRepository dashboards, IReportRepository 
             return new DashboardScope(dashboard, await dashboards.GetPersonalAsync(id, viewer.UserId, ct));
         }
         return dashboard.OwnerUserId == viewer.UserId ? new DashboardScope(dashboard, null) : null;
+    }
+
+    /// <summary>回應用的詳情：版面加上卡片引用、且觀看者看得到定義的報表名稱（指派版管理員放上的卡片也算看得到）。</summary>
+    public async Task<DashboardDetail> DetailAsync(DashboardScope scope, ReportViewer viewer, CancellationToken ct)
+    {
+        var layout = scope.EffectiveLayout;
+        var fromAssigned = scope.IsAssigned ? DashboardLayout.Parse(scope.Dashboard.LayoutJson).ReportIds() : new HashSet<long>();
+        var names = new Dictionary<long, string>();
+        foreach (var id in layout.ReportIds())
+            if (await reports.GetAsync(id, ct) is { } r && (fromAssigned.Contains(id) || ReportAccess.CanView(r, viewer)))
+                names[id] = r.Name;
+        var d = scope.Dashboard;
+        return new DashboardDetail(d.Id, d.Name, scope.IsAssigned ? "assigned" : "mine", d.Version, scope.Personal is not null, scope.HasUpdate, layout, names);
     }
 
     /// <summary>觀看者看得到定義的報表 id：自己的、分享給他的群組的；管理員另含所有有分享的。</summary>

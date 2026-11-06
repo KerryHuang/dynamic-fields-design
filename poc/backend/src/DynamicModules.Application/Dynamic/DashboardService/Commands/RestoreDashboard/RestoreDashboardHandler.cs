@@ -12,13 +12,14 @@ public class RestoreDashboardHandler(IDashboardRepository dashboards, IUnitOfWor
 {
     public async Task<ServiceResult> Handle(RestoreDashboardRequest request, CancellationToken ct)
     {
-        var scope = await access.FindAsync(request.Id, await reportAccess.ViewerAsync(ct), ct);
+        var viewer = await reportAccess.ViewerAsync(ct);
+        var scope = await access.FindAsync(request.Id, viewer, ct);
         if (scope is not { IsAssigned: true }) return ServiceResult.NotFound(DashboardRules.NotFound);
         if (scope.Personal is not null)
         {
             dashboards.RemovePersonal(scope.Personal);
             await uow.CommitAsync(ct);
         }
-        return ServiceResult.Success((scope with { Personal = null }).ToDetail());
+        return ServiceResult.Success(await access.DetailAsync(scope with { Personal = null }, viewer, ct));
     }
 }

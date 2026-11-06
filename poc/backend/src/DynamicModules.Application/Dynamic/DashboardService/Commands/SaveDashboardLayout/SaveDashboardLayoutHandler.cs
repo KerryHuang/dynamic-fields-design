@@ -37,7 +37,7 @@ public class SaveDashboardLayoutHandler(IDashboardRepository dashboards, IUnitOf
             if (request.Name is not null) d.Name = request.Name.Trim();
             d.StampModified(viewer.UserId, time.Now);
             await uow.CommitAsync(ct);
-            return ServiceResult.Success(scope.ToDetail());
+            return ServiceResult.Success(await access.DetailAsync(scope, viewer, ct));
         }
 
         var personal = scope.Personal;
@@ -48,6 +48,6 @@ public class SaveDashboardLayoutHandler(IDashboardRepository dashboards, IUnitOf
         }
         personal.LayoutJson = json;
         await uow.CommitAsync(ct);
-        return ServiceResult.Success((scope with { Personal = personal }).ToDetail());
+        return ServiceResult.Success(await access.DetailAsync(scope with { Personal = personal }, viewer, ct));
     }
 }

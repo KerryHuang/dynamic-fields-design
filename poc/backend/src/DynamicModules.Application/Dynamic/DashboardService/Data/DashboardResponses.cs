@@ -12,8 +12,13 @@ public record SharedReportItem(long Id, string Name, string OwnerName);
 
 public record DashboardList(List<DashboardListItem> Assigned, List<MyDashboardItem> Mine, List<SharedReportItem> SharedReports);
 
-/// <summary>Kind 是 assigned|mine；Layout 是對這位觀看者生效的版面（有個人版就是個人版）。</summary>
-public record DashboardDetail(long Id, string Name, string Kind, int Version, bool Adjusted, bool HasUpdate, DashboardLayout Layout);
+/// <summary>
+/// Kind 是 assigned|mine；Layout 是對這位觀看者生效的版面（有個人版就是個人版）。
+/// ReportNames 是卡片引用的報表名稱（key 是報表 id），只含觀看者看得到定義的報表，看不到的不洩漏名稱。
+/// </summary>
+public record DashboardDetail(
+    long Id, string Name, string Kind, int Version, bool Adjusted, bool HasUpdate, DashboardLayout Layout,
+    IReadOnlyDictionary<long, string> ReportNames);
 
 public record AdminDashboardItem(long Id, string Name, int Version, int Sequence, List<long> GroupIds, int CardCount);
 

@@ -29,6 +29,6 @@ public class CreateDashboardHandler(IDashboardRepository dashboards, IUnitOfWork
         dashboard.StampCreated(viewer.UserId, time.Now);
         dashboards.Add(dashboard);
         await uow.CommitAsync(ct);
-        return ServiceResult.Created(new DashboardScope(dashboard, null).ToDetail());
+        return ServiceResult.Created(await access.DetailAsync(new DashboardScope(dashboard, null), viewer, ct));
     }
 }

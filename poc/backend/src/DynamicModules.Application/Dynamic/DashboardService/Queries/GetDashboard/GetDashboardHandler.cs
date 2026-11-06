@@ -7,8 +7,11 @@ namespace DynamicModules.Application.Dynamic.DashboardService.Queries.GetDashboa
 
 public class GetDashboardHandler(DashboardAccess access, ReportAccess reportAccess) : IRequestHandler<GetDashboardRequest, ServiceResult>
 {
-    public async Task<ServiceResult> Handle(GetDashboardRequest request, CancellationToken ct) =>
-        await access.FindAsync(request.Id, await reportAccess.ViewerAsync(ct), ct) is { } scope
-            ? ServiceResult.Success(scope.ToDetail())
+    public async Task<ServiceResult> Handle(GetDashboardRequest request, CancellationToken ct)
+    {
+        var viewer = await reportAccess.ViewerAsync(ct);
+        return await access.FindAsync(request.Id, viewer, ct) is { } scope
+            ? ServiceResult.Success(await access.DetailAsync(scope, viewer, ct))
             : ServiceResult.NotFound(DashboardRules.NotFound);
+    }
 }
