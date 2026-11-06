@@ -83,7 +83,11 @@ describe('AppsPage', () => {
     api.openApp.mockResolvedValue(app('a', 'Open'));
     await mountPage([pkg('a', null)], []);
     await click('app-open');
-    expect(api.previewOpenApp).toHaveBeenCalledWith('a', { locale: 'zh-TW' });
+    expect(api.previewOpenApp).toHaveBeenNthCalledWith(1, 'a', { locale: 'zh-TW' });
+    // 警告要看套用建議後的結果，所以第二次預覽帶著建議的對應
+    expect(api.previewOpenApp).toHaveBeenNthCalledWith(2, 'a', {
+      groupMap: { sales: { mode: 'map', groupId: 7 }, ops: { mode: 'create' } }, locale: 'zh-TW',
+    });
     await click('open-confirm');
     expect(api.openApp).toHaveBeenCalledWith('a', {
       groupMap: { sales: { mode: 'map', groupId: 7 }, ops: { mode: 'create' } }, locale: 'zh-TW',

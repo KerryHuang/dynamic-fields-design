@@ -47,19 +47,21 @@ async function onFile(ev: Event) {
 const opening = ref<AppPackageSummary | null>(null);
 const result = ref<OpenPreview | null>(null);
 // 預設照伺服器建議：找得到同名群組就對應，否則建立
-const openBody = computed<OpenAppBody>(() => ({
-  groupMap: Object.fromEntries((result.value?.groups ?? []).map((g) => [
-    g.code, g.suggestion === 'map' ? { mode: 'map' as const, groupId: g.suggestedGroupId } : { mode: g.suggestion },
-  ])),
-  locale: locale.value,
-}));
+const groupMapOf = (groups: OpenPreview['groups']): OpenAppBody['groupMap'] => Object.fromEntries(groups.map((g) => [
+  g.code, g.suggestion === 'map' ? { mode: 'map' as const, groupId: g.suggestedGroupId } : { mode: g.suggestion },
+]));
+const openBody = computed<OpenAppBody>(() => ({ groupMap: groupMapOf(result.value?.groups ?? []), locale: locale.value }));
 
 function startOpen(p: AppPackageSummary) {
   opening.value = p;
   result.value = null;
+  const failed = (e: unknown) => { opening.value = null; fail(e, t('apps.previewFailed')); };
+  // 第一次不帶對應只為取得建議；警告要以「套用建議後」的結果為準，所以再預覽一次
   preview.mutate({ id: p.id, body: { locale: locale.value } }, {
-    onSuccess: (r) => { result.value = r; },
-    onError: (e) => { opening.value = null; fail(e, t('apps.previewFailed')); },
+    onError: failed,
+    onSuccess: (first) => preview.mutate(
+      { id: p.id, body: { groupMap: groupMapOf(first.groups), locale: locale.value } },
+      { onSuccess: (r) => { result.value = r; }, onError: failed }),
   });
 }
 const blockers = computed(() => {
