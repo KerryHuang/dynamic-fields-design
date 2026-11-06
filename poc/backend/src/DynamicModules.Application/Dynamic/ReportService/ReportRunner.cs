@@ -23,7 +23,8 @@ namespace DynamicModules.Application.Dynamic.ReportService;
 /// </summary>
 public class ReportRunner(
     IModuleRepository modules, IRecordRepository records, IPermissionRepository permissions, IDynamicAccessGuard guard,
-    ReferenceResolver resolver, FieldTypeRegistry registry, IBusinessTime time, ReportOptions options)
+    ReferenceResolver resolver, FieldTypeRegistry registry, IBusinessTime time, ReportOptions options,
+    AuthSettings auth, ISystemSettingRepository settings)
 {
     public const long EntityTitleFieldId = 0;
 
@@ -61,7 +62,15 @@ public class ReportRunner(
         string Locale, IReadOnlyDictionary<string, string> UserNames, Dictionary<(string, string), string> Titles,
         IReadOnlyDictionary<string, string> Buckets);
 
-    public Task<DateOnly> BasisDateAsync(CancellationToken ct) => Task.FromResult(time.Today);
+    /// <summary>報表的基準日：Demo 登入開啟且產生器留有產生日期時用它（Demo 資料日期停在建置那天），否則是今天。</summary>
+    public async Task<DateOnly> BasisDateAsync(CancellationToken ct)
+    {
+        if (auth.DemoLoginEnabled
+            && await settings.GetValueAsync(SystemSetting.DemoGeneratedOn, ct) is { } value
+            && DateOnly.TryParseExact(value, "yyyy-MM-dd", CultureInfo.InvariantCulture, DateTimeStyles.None, out var generatedOn))
+            return generatedOn;
+        return time.Today;
+    }
 
     public async Task<ReportResult> RunAsync(ReportDefinition d, ReportRunOptions o, CancellationToken ct)
     {

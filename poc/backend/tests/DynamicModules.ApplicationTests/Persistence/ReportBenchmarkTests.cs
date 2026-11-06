@@ -58,6 +58,7 @@ public class ReportBenchmarkTests(ITestOutputHelper output)
         services.AddScoped<ITransactionManager, EfTransactionManager>();
         services.AddSingleton<ICurrentUser, FakeUser>();
         services.AddSingleton<IBusinessTime, FakeTime>();
+        services.AddSingleton(new AuthSettings(false));
         await using var sp = services.BuildServiceProvider();
         var mediator = sp.GetRequiredService<IMediator>();
 

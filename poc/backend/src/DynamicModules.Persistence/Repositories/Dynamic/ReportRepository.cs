@@ -19,6 +19,9 @@ public class ReportRepository(DynamicDbContext db) : IReportRepository
     public Task<List<Report>> ListSharedAsync(CancellationToken ct) =>
         db.Set<Report>().AsNoTracking().Include(r => r.Shares).Where(r => r.Shares.Any()).OrderBy(r => r.Id).ToListAsync(ct);
 
+    public Task<bool> NameExistsAsync(string name, CancellationToken ct) =>
+        db.Set<Report>().AnyAsync(r => r.Name == name, ct);
+
     public void Add(Report report) => db.Set<Report>().Add(report);
 
     public void Remove(Report report) => db.Set<Report>().Remove(report);
