@@ -244,6 +244,25 @@
   outline-color: var(--t-sidebar-fg);
 }
 
+/* q-btn 等元件帶 .no-outline（outline: 0 !important），要同樣用 !important 才蓋得過 */
+.no-outline:focus-visible {
+  outline: 2px solid var(--t-text) !important;
+  outline-offset: 2px;
+}
+
+.q-header .no-outline:focus-visible {
+  outline-color: var(--t-topbar-fg) !important;
+}
+
+.q-drawer .no-outline:focus-visible {
+  outline-color: var(--t-sidebar-fg) !important;
+}
+
+.q-field__focusable-action:focus-visible {
+  outline: 2px solid var(--t-text) !important;
+  outline-offset: 2px;
+}
+
 .q-field__native:focus-visible,
 input:focus-visible,
 textarea:focus-visible {

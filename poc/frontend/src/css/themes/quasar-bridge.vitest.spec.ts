@@ -62,6 +62,17 @@ describe('quasar-bridge.css', () => {
     expect(drawer).toBeGreaterThan(generic);
   });
 
+  it('Quasar 的 .no-outline（q-btn 等都帶）不能吃掉鍵盤焦點框，頂欄與側欄用各自的前景色', () => {
+    const all = (sel: string) => bodiesOf(bridge, sel).join(';');
+    expect(all('.no-outline:focus-visible')).toMatch(/outline:\s*2px solid var\(--t-text\)\s*!important/);
+    expect(all('.q-header .no-outline:focus-visible')).toMatch(/outline-color:\s*var\(--t-topbar-fg\)\s*!important/);
+    expect(all('.q-drawer .no-outline:focus-visible')).toMatch(/outline-color:\s*var\(--t-sidebar-fg\)\s*!important/);
+  });
+
+  it('欄位內的清除圖示（q-field__focusable-action）自己有焦點框，不吃 Quasar 的 outline: 0', () => {
+    expect(bodiesOf(bridge, '.q-field__focusable-action:focus-visible').join(';')).toMatch(/outline:\s*2px solid var\(--t-text\)\s*!important/);
+  });
+
   it('單獨的 text-dark 用主文字色，不跟著 --q-dark 變成面板色', () => {
     expect(bodiesOf(bridge, '.text-dark').join(';')).toMatch(/color:\s*var\(--t-text\)\s*!important/);
   });
