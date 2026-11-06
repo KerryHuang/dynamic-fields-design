@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/vue-query';
 import { toValue, type MaybeRef } from 'vue';
-import type { ReportDateRange } from 'src/domain/dynamic/report-types';
+import type { ReportDateRange, ReportDefinition } from 'src/domain/dynamic/report-types';
 import { dynamicApi } from 'src/services/api/dynamic-api';
 
 export function useReports() {
@@ -8,7 +8,8 @@ export function useReports() {
 }
 
 export function useReport(id: MaybeRef<number>) {
-  return useQuery({ queryKey: ['report', id], queryFn: () => dynamicApi.getReport(toValue(id)) });
+  // 新增報表沒有 id（NaN）時不查
+  return useQuery({ queryKey: ['report', id], queryFn: () => dynamicApi.getReport(toValue(id)), enabled: () => !Number.isNaN(toValue(id)) });
 }
 
 /** 結果每次進頁都重算：報表依賴的記錄隨時在變，不吃快取。 */
@@ -55,5 +56,33 @@ export function useSetReportShares() {
   return useMutation({
     mutationFn: (v: { id: number; groupIds: number[] }) => dynamicApi.setReportShares(v.id, v.groupIds),
     onSuccess: (_d, v) => Promise.all([qc.invalidateQueries({ queryKey: ['reports'] }), qc.invalidateQueries({ queryKey: ['report', v.id] })]),
+  });
+}
+
+export function useReportCatalogModules(locale: MaybeRef<string>) {
+  return useQuery({ queryKey: ['report-catalog-modules', locale], queryFn: () => dynamicApi.getReportCatalogModules(toValue(locale)) });
+}
+
+/** moduleKey 為空時不查；欄位目錄隨模組設計變動，設計器每次進頁重取。 */
+export function useReportCatalog(moduleKey: MaybeRef<string | null | undefined>, locale: MaybeRef<string>) {
+  return useQuery({
+    queryKey: ['report-catalog', moduleKey, locale],
+    queryFn: () => dynamicApi.getReportCatalog(toValue(moduleKey)!, toValue(locale)),
+    enabled: () => !!toValue(moduleKey),
+    staleTime: 0,
+    retry: false,
+  });
+}
+
+export function usePreviewReport() {
+  return useMutation({ mutationFn: (v: { definition: ReportDefinition; locale: string }) => dynamicApi.previewReport(v.definition, v.locale) });
+}
+
+export function useSaveReport() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (v: { id: number | null; name: string; definition: ReportDefinition }) =>
+      v.id === null ? dynamicApi.createReport(v.name, v.definition) : dynamicApi.updateReport(v.id, v.name, v.definition),
+    onSuccess: (d) => Promise.all([qc.invalidateQueries({ queryKey: ['reports'] }), qc.invalidateQueries({ queryKey: ['report', d.id] })]),
   });
 }

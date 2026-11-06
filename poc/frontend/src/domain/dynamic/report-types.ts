@@ -37,15 +37,32 @@ export interface ReportFieldRef { source: string; fieldId: number; viaFieldId?: 
 /** hidden 為 true 時觀看者看不到條件值（後端遮蔽），沒有 value。 */
 export interface ReportFilter { field: ReportFieldRef; op: string; value?: unknown; hidden?: boolean }
 export interface ReportMeasure { id: string; kind: string; field?: ReportFieldRef | null; condition?: ReportFilter | null }
+export interface ReportChild { moduleKey: string; linkFieldId: number }
+export interface ReportSort { key: string; desc: boolean }
 export interface ReportDefinition {
   version: number;
   mainModuleKey: string;
+  child?: ReportChild | null;
   columns: ReportFieldRef[];
   groups: { field: ReportFieldRef; bucket?: string | null }[];
   measures: ReportMeasure[];
   filters: ReportFilter[];
   primaryDateField?: ReportFieldRef | null;
   dateRange?: ReportDateRange | null;
+  sort?: ReportSort[];
   viz: ReportViz;
 }
 export interface ReportDetail extends ReportItem { definition: ReportDefinition }
+
+/** 對應後端 GetReportCatalogHandler 的回應；旗標由後端決定，前端不重算。 */
+export interface CatalogOption { id: string; label: string; active: boolean }
+export interface CatalogField {
+  id: number; label: string; type: string; canGroup: boolean; canSum: boolean; canMinMax: boolean; isDate: boolean;
+  options?: CatalogOption[] | null;
+}
+export interface CatalogVia { fieldId: number; label: string; targetKey: string; fields: CatalogField[] }
+export interface CatalogChild {
+  moduleKey: string; name: string; linkFieldId: number; linkLabel: string; isDetail: boolean; fields: CatalogField[]; via: CatalogVia[];
+}
+export interface ModuleCatalog { fields: CatalogField[]; via: CatalogVia[]; children: CatalogChild[] }
+export interface CatalogModule { key: string; name: string }

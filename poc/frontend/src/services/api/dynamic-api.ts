@@ -2,7 +2,7 @@ import type {
   AdminGroup, AdminUser, AdminUserCreate, AdminUserUpdate, AuthOptions, AuthUser, ConditionNode, DesignerField, DetailRowPayload, DynamicRecord, EntitySummary, FieldConfig, FieldType, Group, GroupImpact, I18nText, LightPage, ListView, Me, MenuItem, ModuleDetail, ModulePermissions, ModuleSchema,
   ImportPreview, ImportResult, PagedResponse, RecordHistoryEntry, RelatedTab, Rule, RollupSource, User, ViewSort,
 } from 'src/domain/dynamic/types';
-import type { DrillResult, ReportDateRange, ReportDetail, ReportItem, ReportResult } from 'src/domain/dynamic/report-types';
+import type { CatalogModule, DrillResult, ModuleCatalog, ReportDateRange, ReportDefinition, ReportDetail, ReportItem, ReportResult } from 'src/domain/dynamic/report-types';
 import { handleAuthFailure, http, toApiError } from './http';
 
 export interface ModuleSummary {
@@ -217,6 +217,14 @@ export const dynamicApi = {
     http.post<ReportResult>(`/reports/${id}/run`, { range }, { params: { locale } }).then(data),
   drillReport: (id: number, groupKeys: string[], range: ReportDateRange | null, locale: string) =>
     http.post<DrillResult>(`/reports/${id}/drill`, { groupKeys, range }, { params: { locale } }).then(data),
+  getReportCatalogModules: (locale: string) => http.get<CatalogModule[]>('/reports/catalog', { params: { locale } }).then(data),
+  getReportCatalog: (moduleKey: string, locale: string) =>
+    http.get<ModuleCatalog>(`/reports/catalog/${encodeURIComponent(moduleKey)}`, { params: { locale } }).then(data),
+  previewReport: (definition: ReportDefinition, locale: string) =>
+    http.post<ReportResult>('/reports/preview', definition, { params: { locale } }).then(data),
+  createReport: (name: string, definition: ReportDefinition) => http.post<ReportDetail>('/reports', { name, definition }).then(data),
+  updateReport: (id: number, name: string, definition: ReportDefinition) =>
+    http.put<ReportDetail>(`/reports/${id}`, { name, definition }).then(data),
   copyReport: (id: number) => http.post<ReportDetail>(`/reports/${id}/copy`).then(data),
   deleteReport: (id: number) => http.delete(`/reports/${id}`).then(data),
   setReportShares: (id: number, groupIds: number[]) => http.put(`/reports/${id}/shares`, { groupIds }).then(data),

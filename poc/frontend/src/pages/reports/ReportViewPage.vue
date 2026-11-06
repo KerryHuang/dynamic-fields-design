@@ -3,13 +3,14 @@ import { computed, ref } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { useRoute, useRouter } from 'vue-router';
 import { useMe } from 'src/application/dynamic/queries/permissions-queries';
-import { useCopyReport, useDeleteReport, useReport, useRunReport } from 'src/application/dynamic/queries/reports-queries';
+import { useCopyReport, useDeleteReport, useReport, useReportCatalog, useRunReport } from 'src/application/dynamic/queries/reports-queries';
 import ForbiddenNotice from 'src/components/framework/ForbiddenNotice.vue';
 import type { ReportFilter } from 'src/domain/dynamic/report-types';
 import { dynamicApi } from 'src/services/api/dynamic-api';
 import { isForbidden, type ApiError } from 'src/services/api/http';
 import DrillDialog from 'src/presentation/reports/DrillDialog.vue';
 import ReportResultView from 'src/presentation/reports/ReportResultView.vue';
+import { findEntry, listFields, valueText } from 'src/presentation/reports/report-catalog';
 import ShareDialog from 'src/presentation/reports/ShareDialog.vue';
 
 const { t, locale } = useI18n();
@@ -31,7 +32,13 @@ const filters = computed<ReportFilter[]>(() => [
   ...(detail.value?.definition.measures.flatMap((m) => (m.condition ? [m.condition] : [])) ?? []),
 ]);
 const opText = (op: string) => t(`dynamic.op.${op}`, op);
-const filterText = (f: ReportFilter) => `${t('reports.fieldNo', { id: f.field.fieldId })} ${opText(f.op)} ${f.value === undefined || f.value === null ? '' : JSON.stringify(f.value)}`.trim();
+// 欄位名稱與選項標籤取自欄位目錄；目錄沒有的欄位（被刪、不可讀）退回 #id
+const catalog = useReportCatalog(computed(() => detail.value?.definition.mainModuleKey), locale);
+const entries = computed(() => (catalog.data.value ? listFields(catalog.data.value, detail.value?.definition.child, t('reports.titleField')) : []));
+const filterText = (f: ReportFilter) => {
+  const e = findEntry(entries.value, f.field);
+  return `${e ? e.label : t('reports.fieldNo', { id: f.field.fieldId })} ${opText(f.op)} ${valueText(f.value, e?.field, t('reports.inactiveMark'))}`.trim();
+};
 
 const drillKeys = ref<string[] | null>(null);
 const shareOpen = ref(false);
