@@ -1021,6 +1021,45 @@ public class ReportsApiTests
     }
 
     [Fact]
+    public async Task ViaEntityTitle_EndToEnd_CatalogMarksReference_EqNeAndRatioCompareKeys()
+    {
+        using var app = new TestApp();
+        var w = await MakeWorld(app);
+        var admin = app.AsUser();
+        var customer = await AddField(admin, w.Main, "reference", new { refTarget = new { kind = "entity", key = "sales.customer" } });
+        foreach (var key in new[] { "C-001", "C-001", "C-003" })
+            (await admin.PostAsJsonAsync($"{Base}/modules/{w.Main}/records", new
+            {
+                values = new Dictionary<string, object> { [w.TitleKey] = "t", [w.AmountKey] = 10, [customer.Key] = key }
+            })).EnsureSuccessStatusCode();
+        await AddRecord(admin, w, 10); // 沒有客戶：ne 與列表篩選相同，包含空值
+
+        var catalog = await JsonOf(await admin.GetAsync($"{Reports}/catalog/{w.Main}"));
+        var title = catalog.GetProperty("via").EnumerateArray().Single(v => v.GetProperty("fieldId").GetInt64() == customer.Id)
+            .GetProperty("fields").EnumerateArray().Single();
+        title.GetProperty("type").GetString().Should().Be("reference");
+        title.GetProperty("refKind").GetString().Should().Be("entity");
+
+        var via = Ref(title.GetProperty("id").GetInt64(), via: customer.Id);
+        async Task<decimal> CountWhere(string op, object value)
+        {
+            var id = await Create(admin, Def(w.Main, measures: [Count()], filters: [new { field = via, op, value }]));
+            return TotalOf(await Run(admin, id), "n");
+        }
+
+        (await CountWhere("eq", "C-003")).Should().Be(1);
+        (await CountWhere("ne", "C-003")).Should().Be(3);
+        (await CountWhere("in", new[] { "C-001" })).Should().Be(2);
+
+        var ratio = await Create(admin, Def(w.Main, measures: [new { id = "r", kind = "ratio", field = (object?)null, condition = (object)new { field = via, op = "eq", value = "C-001" } }]));
+        TotalOf(await Run(admin, ratio), "r").Should().Be(0.5m);
+
+        // 文字運算子對鍵沒有意義，存檔就擋下
+        (await admin.PostAsJsonAsync(Reports, new { name = "x", definition = Def(w.Main, measures: [Count()], filters: [new { field = via, op = "contains", value = "C-" }]) }))
+            .StatusCode.Should().Be(HttpStatusCode.BadRequest);
+    }
+
+    [Fact]
     public async Task Run_StoredConditionValueNoLongerMatchesFieldType_NoMatchNot500()
     {
         using var app = new TestApp();

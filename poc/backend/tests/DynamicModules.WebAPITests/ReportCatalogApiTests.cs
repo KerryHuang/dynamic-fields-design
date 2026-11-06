@@ -195,6 +195,10 @@ public class ReportCatalogApiTests
         fields[0].GetProperty("id").GetInt64().Should().Be(0);
         fields[0].GetProperty("canGroup").GetBoolean().Should().BeTrue();
         fields[0].GetProperty("canSum").GetBoolean().Should().BeFalse();
+        // 條件比對的是鍵，不是標題文字：目錄要讓設計器用記錄挑選器，運算子也跟參照欄位相同
+        fields[0].GetProperty("type").GetString().Should().Be("reference");
+        fields[0].GetProperty("refKind").GetString().Should().Be("entity");
+        fields[0].GetProperty("refKey").GetString().Should().Be("sales.customer");
     }
 
     [Fact]
