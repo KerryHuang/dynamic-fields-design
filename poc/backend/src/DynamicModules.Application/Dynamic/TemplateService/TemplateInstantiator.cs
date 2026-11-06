@@ -38,9 +38,10 @@ public sealed class TemplateInstantiator(
 {
     private const string ExcludeKey = "excludeFields";
 
+    /// <param name="app">應用程式開啟時的額外輸入：群組對應、跨應用程式的模組對應、欄位例外與選項範圍；單模組範本傳 null。</param>
     public async Task<ServiceResult> InstantiateAsync(
         TemplatePackage p, IReadOnlyDictionary<string, InstantiateModuleInput> overrides, IReadOnlySet<string> exclude,
-        CancellationToken ct)
+        CancellationToken ct, AppInstantiation? app = null)
     {
         var unknownModule = overrides.Keys.FirstOrDefault(c => p.Modules.All(m => m.Code != c));
         if (unknownModule is not null) return Invalid("modules", $"範本沒有模組「{unknownModule}」");
@@ -48,7 +49,7 @@ public sealed class TemplateInstantiator(
         var excludeErrors = CheckExclude(p, graph, exclude);
         if (excludeErrors.Count > 0) return ServiceResult.Invalid(new Dictionary<string, string[]> { [ExcludeKey] = [.. excludeErrors] });
 
-        var map = new IdMap(p);
+        var map = new IdMap(p, app?.ExternalModuleKeys);
         var kept = p.Modules.ToDictionary(m => m.Code, m => m.Blocks.ToDictionary(b => b.Code,
             b => b.Fields.Where(f => !exclude.Contains(TemplateGraph.Qualify(m.Code, f.Code))).ToList()));
         IEnumerable<(TemplateModule M, TemplateBlock B, TemplateField F)> KeptFields() =>
@@ -144,17 +145,40 @@ public sealed class TemplateInstantiator(
             foreach (var v in m.Views)
                 if ((failed = await CreateViewAsync(m, v, exclude, map, ct)) is not null) return failed;
 
-        // 10. 權限建議（目標庫沒有的群組略過並警告）
+        // 10. 權限建議（目標庫沒有的群組略過並警告）。應用程式開啟時群組由 app.GroupIds 解析（代號 → 群組 id），
+        //     並一起帶入欄位例外與選項範圍；SaveModulePermissions 是整份取代，所以每個模組只呼叫一次
         var warnings = new List<string>();
-        var groupIds = (await permissions.ListGroupsAsync(ct)).ToDictionary(g => g.Key, g => g.Id);
-        foreach (var m in p.Modules.Where(m => m.Permissions.Count > 0))
+        var groupIds = app is null
+            ? (await permissions.ListGroupsAsync(ct)).ToDictionary(g => g.Key, g => g.Id)
+            : app.GroupIds;
+        foreach (var m in p.Modules)
         {
             var groups = new List<GroupPermissionDto>();
             foreach (var perm in m.Permissions)
                 if (groupIds.TryGetValue(perm.Group, out var id)) groups.Add(new GroupPermissionDto(id, perm.Privileges, perm.Scope));
                 else warnings.Add($"群組「{perm.Group}」不存在，已略過它的權限建議");
-            if (groups.Count == 0) continue;
-            var r = await sender.Send(new SaveModulePermissionsRequest(map.Key(m.Code), new ModulePermissionsDto(groups, [], [], [])), ct);
+            var fieldAccess = new List<FieldPermissionDto>();
+            var optionScopes = new List<OptionScopeDto>();
+            if (app is not null)
+            {
+                foreach (var a in app.FieldAccess.Where(a => TemplateGraph.SplitQualified(a.Field)?.Module == m.Code))
+                {
+                    if (!map.Fields.TryGetValue(a.Field, out var fieldId)) continue; // 欄位被排除
+                    if (groupIds.TryGetValue(a.Group, out var gid)) fieldAccess.Add(new FieldPermissionDto(fieldId, gid, a.Access));
+                    else warnings.Add($"群組「{a.Group}」不存在，已略過欄位「{a.Field}」的存取限制");
+                }
+                foreach (var scope in app.OptionScopes.Where(o => TemplateGraph.SplitQualified(o.Option)?.Module == m.Code))
+                {
+                    if (!map.Options.TryGetValue(scope.Option, out var optionId)) continue;
+                    var ids = scope.Groups.Where(groupIds.ContainsKey).Select(g => groupIds[g]).Distinct().ToList();
+                    // 全部群組都沒對應就不建：建了一個空範圍等於沒人能選，改成不限制會比較寬鬆，所以兩邊都不做並警告
+                    if (ids.Count == 0) warnings.Add($"選項「{scope.Option}」的限定群組都沒有對應，已略過選項範圍");
+                    else optionScopes.Add(new OptionScopeDto(optionId, ids));
+                }
+            }
+            if (groups.Count == 0 && fieldAccess.Count == 0 && optionScopes.Count == 0) continue;
+            var r = await sender.Send(new SaveModulePermissionsRequest(map.Key(m.Code),
+                new ModulePermissionsDto(groups, [], fieldAccess, optionScopes)), ct);
             if ((failed = Fail(r, m.Code, $"{m.Code}.")) is not null) return failed;
         }
 
@@ -249,7 +273,7 @@ public sealed class TemplateInstantiator(
         ServiceResult.Invalid(new Dictionary<string, string[]> { [key] = [message] });
 
     /// <summary>範本代號對剛配發的 id；欄位一律用限定名，選項、區塊用「模組代號.代號」（選項代號在模組內唯一）。</summary>
-    private sealed class IdMap(TemplatePackage p)
+    private sealed class IdMap(TemplatePackage p, IReadOnlyDictionary<string, string>? externalModules)
     {
         private readonly Dictionary<string, TemplateField> _templateFields = TemplateGraph.AllFields(p);
 
@@ -282,8 +306,17 @@ public sealed class TemplateInstantiator(
                 node["formula"] = TemplateGraph.FormulaReference().Replace(formula, x => $"{{{Fields[TemplateGraph.Qualify(m, x.Groups[1].Value)]}}}");
             if (node["defaultValue"] is { } dv && TemplateGraph.IsOptionField(f)) node["defaultValue"] = OptionValue(m, dv);
             if (node["refTarget"] is JsonObject target && Str(target["kind"]) == ReferenceTarget.ModuleKind
-                && Str(target["key"]) is { } targetKey && Modules.TryGetValue(targetKey, out var targetModule))
-                target["key"] = targetModule.Key;
+                && Str(target["key"]) is { } targetKey)
+            {
+                // 有 app：另一個應用程式的模組，key 換成它實際的 Module.Key；沒有 app：本套件的模組代號
+                if (Str(target["app"]) is { } targetApp)
+                {
+                    target.Remove("app");
+                    if (externalModules is not null && externalModules.TryGetValue($"{targetApp}/{targetKey}", out var externalKey))
+                        target["key"] = externalKey;
+                }
+                else if (Modules.TryGetValue(targetKey, out var targetModule)) target["key"] = targetModule.Key;
+            }
             if (TemplateGraph.RollupOf(f) is not null && node["rollup"] is JsonObject rollup && Str(rollup["sourceField"]) is { } source)
             {
                 var converted = new JsonObject { ["sourceFieldId"] = Fields[source], ["function"] = rollup["function"]?.DeepClone() };

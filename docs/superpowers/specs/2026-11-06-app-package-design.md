@@ -45,7 +45,7 @@
 | 欄位隱藏與唯讀、選項範圍 | `Dynamic_FieldPermission`、`Dynamic_FieldOptionScope` | 同上 | `fieldAccess[]`、`optionScopes[]` | 有，範本沒帶 |
 | 群組（角色） | `Dynamic_PermissionGroup` | `/admin/groups` | `groups[]` | 有 |
 | 選單 | `Module.Section`、`Module.Icon` | `GET /menu` | 模組的 `section`、`icon` | 有，沒有排序 |
-| 首頁、儀表板 | 目前分支沒有；計畫見 `2026-11-05-reports-stage2.md` | 計畫中的 `/dashboards` | `dashboards[]`（保留） | 無 |
+| 首頁、儀表板 | 階段 1a 實作時的分支已有（`/dashboards`、`/system/dashboards`、首頁儀表板），2026-11-06 實作時更正 | `/dashboards` | `dashboards[]`（保留，格式 2 不收） | 無 |
 | 流程、狀態機、單據轉換 | 無 | 無 | `workflows[]`、`conversions[]`（保留） | 階段 1 才有 |
 | 事件 | 無 | 無 | `events[]`（保留） | 階段 2 才有 |
 | 列印範本 | 無 | 無 | `printTemplates[]`（保留） | 階段 1 才有 |
@@ -462,7 +462,7 @@
 
 **異動**
 
-- `ModuleStatus` 列舉新增 `Closed`。`Module.Status` 是字串欄位（`HasConversion<string>`，長度 20），新增值不需要 schema 變更，但仍要產生 migration 讓 model snapshot 與程式一致。
+- `ModuleStatus` 列舉新增 `Closed`。`Module.Status` 是字串欄位（`HasConversion<string>`，長度 20），新增值不需要 schema 變更，**也不需要為它單獨產生 migration**（snapshot 不記列舉值；實作時確認過）。階段 1a 的 migration `AppPackages` 只為新表而產生。
 - `ModuleSchemaResponse` 新增 `readOnly`（`Status == Closed`）；`MenuItem` 新增 `closed`。這兩個是 API 回應的新增欄位，不是資料表欄位。
 - `DynamicProgram.Active`：關閉的模組**保持 true**（§6.3），所以 `SeedData` 啟動時的同步規則要改（§10）。
 
@@ -552,12 +552,13 @@
 - 既有報表的執行、下鑽、匯出；報表目錄仍列出 `Closed` 模組（可以用歷史資料做分析，建立新報表也行）。
 - 既有引用的顯示：別的模組的參照欄位繼續顯示標題，不會變成「無權限」（現況對非 `Active` 目標就是這樣，見 §14 第 1 點，所以要改）。
 - 權限設定仍可修改（收回權限是安全動作）；設計器對欄位、規則的編輯與現在 `Inactive` 模組相同，不另設限制。
+- **例外（實作時補，見 §15 第 6 點）：** 會連帶改寫既有記錄值的設計器變更在 `Closed` 一律擋（409），系統管理員也一樣：換記錄標題欄位、新增或改動公式與彙總（觸發重算）、重新啟用公式或彙總欄位、刪除仍有值的欄位或區塊。其餘定義修改照上一條放行。
 
 **怎麼落實**（階段 1 要改的程式，逐項在 §10）：
 
 - **集中的判定。** 新增 `ModuleStatusExtensions`：`IsReadable`（`Active` 或 `Closed`）、`IsWritable`（只有 `Active`）。現有 `Status: ModuleStatus.Active` 的每一處改成其中之一：
-  - 改 `IsReadable`：`GetRecordHandler`、`GetPagedRecordsHandler`、`GetRecordByHostHandler`、`GetRecordHistoryHandler`、`ExportRecordsHandler`、`RelatedTabs`（兩處）、`GetModuleSchemaHandler`、`ModuleSchemaBuilder`、`ReferenceResolver`、`ReportRunner`、`ReportModuleLoader`、`GetReportCatalogHandler`（三處）、`GetViewsHandler`。
-  - 維持只有 `Active`：`CreateRecordHandler`、`UpdateRecordHandler`、`DeleteRecordHandler`、`DetailWriter`、`GetLightRecordsHandler`、`ReferenceValidator`、`ImportPlanner`（兩處）、`CreateViewHandler`、`UpdateViewHandler`、`DeleteViewHandler`。其中寫入類處理器遇到 `Closed` 改回 409「應用程式已關閉，資料唯讀」，而不是 404。
+  - 改 `IsReadable`：`GetRecordHandler`、`GetPagedRecordsHandler`、`GetRecordByHostHandler`、`GetRecordHistoryHandler`、`ExportRecordsHandler`、`RelatedTabs`（兩處）、`GetModuleSchemaHandler`、`ModuleSchemaBuilder`、`ReferenceResolver`、`ReportRunner`、`ReportModuleLoader`、`GetReportCatalogHandler`（三處）、`GetViewsHandler`；另有 `GetMenu`、`GetReportMainModules` 走的 `IModuleRepository.ListActiveAsync`，實作時改名為 `ListReadableAsync`（原清單漏了）。
+  - 維持只有 `Active`：`CreateRecordHandler`、`UpdateRecordHandler`、`DeleteRecordHandler`、`DetailWriter`（只對寫入端；讀取端改成 `ReadableDetailModulesAsync`）、`GetLightRecordsHandler`、`ReferenceValidator`、`ImportPlanner`（模組本身改用 `ModuleGate`；查參照標題那處維持 `Active`）、`CreateViewHandler`、`UpdateViewHandler`、`DeleteViewHandler`。其中寫入類處理器遇到 `Closed` 改回 409「應用程式已關閉，資料唯讀」，而不是 404。
   - `UpdateModuleHandler` 的「啟用中必須有標題欄位」判斷把 `Closed` 也算進去。
 - **守門員。** `DynamicAccessGuard.AuthorizeAsync` 與 `AuthorizeDetailAsync` 在 `Resolve` 之前先判斷：`module.Status == Closed` 且動作不是 `Read` 或 `PrintExport` 就 `Deny`。必須在 `Resolve` 之前、而且不看使用者身分，因為 `PermissionResolver` 對系統管理員回傳所有動作；放在結果之後檢查就擋不到管理員。這是 handler 檢查之外的第二道防線。
 - **`SeedData`。** 啟動時同步 `Program.Active` 的規則（`program.Active = 有 Active 模組`）改成「有 `Active` 或 `Closed` 模組」，否則重開機後關閉中應用程式的 `Program.Active` 會被設回 false，守門員會連讀取都拒絕。
@@ -844,3 +845,26 @@
 8. **兩個內建範本的模組 `key` 與 `code` 不同**（`order` 範本的 `line` 模組 key 是 `order-line`），`TemplateExporter` 目前匯出時代號等於 `Module.Key`；若不加 `AppModule.Code` 的對應，匯出後再匯入的應用程式模組代號會改變，別的套件靠代號引用就會對不上（§10 `TemplateExporter` 修改項）。
 9. **唯一索引衝突目前會變成 500。** 核心設計 §15 第 11 條已記錄；應用程式開啟會同時建立多個唯一鍵（`Dynamic_App.Key`、各模組 `Key`），上線前這條必須處理，POC 靠 SQLite 序列化寫入才不會出事。
 10. **`TemplateInstantiator` 建出來的模組是 `Draft`，`CreateViewRequest` 又只接受 `Active` 模組**，所以它自己重做了一份檢視驗證直接寫入（`CreateViewAsync`）。應用程式開啟沿用這段，不需要先啟用再建檢視；但這表示啟用步驟必須排在步驟 9 之後（§6.2 步驟 5）。
+
+## 15. 實作更正與未做項目（階段 1a，2026-11-06）
+
+階段 1a 對照程式碼實作時，這份設計有下列出入；以此節為準，上文未逐處改寫的以此節覆蓋。
+
+**更正**
+
+1. **儀表板已存在。** §3 表格原寫「目前分支沒有」，實際已有 `/dashboards`、`/system/dashboards` 與首頁儀表板。格式 2 的 `dashboards` 仍是保留 section（只收空陣列），所以對封裝沒有影響，但刪除應用程式時「被儀表板引用的報表」要等報表納入封裝後才會碰到。
+2. **`Closed` 不需要自己的 migration**（見 §5）。
+3. **§6.3 的清單漏了 `IModuleRepository.ListActiveAsync` 的呼叫端**（`GetMenu`、`GetReportMainModules`）。若不改，關閉的模組會從選單消失、報表主模組選不到。
+4. **§4.10 範例含 `reports` 項目，但階段 1a 沒有實作 `reports`**；`reports` 與 `AppReport` 一併留待之後，格式 2 目前遇到非空 `reports` 與保留 section 一樣整份拒絕。測試套件用的是去掉 `reports` 的版本。
+6. **「設計器編輯與 Inactive 模組相同」漏了會改寫既有記錄值的路徑。** 換標題欄位會重寫全部記錄的 `Title`；公式與彙總的新增、變更、重新啟用會重算並寫回記錄值（還會連帶重算以它為來源的彙總父模組，父模組若是 `Closed` 也算）；刪除仍有值的欄位或區塊會從記錄、索引與歷程拿掉值。這些在 `Closed` 擋下（`ClosedDataGuard`）。權限、規則、區塊、選項、欄位標籤與一般設定的修改，以及沒有值要清的刪除，照規格放行。
+5. **`ModuleSchemaResponse.readOnly` 之外，`permissions.add／edit／delete` 在 Closed 時由後端直接給 `false`**，前端只要照 `permissions` 隱藏按鈕，`readOnly` 只用來顯示「已關閉」提示。
+
+**未做（階段 1a 範圍外或未到）**
+
+- `ExportApp`、`TemplateExporter` 一般化（應用程式匯出，§10）。
+- `reports[]`、`AppReport`、`AppReportCodec`（見上第 4 點）。
+- 內建的 CRM 應用程式內容（本階段只做機制，目錄 `apps/` 沒有任何內建套件）。
+- `apps/app.schema.json` 只涵蓋最上層結構，模組內部仍以 `TemplateValidator` 與 `AppPackageValidator` 為準。
+- 應用程式管理頁只做到匯入、開啟（先預覽）、關閉（含連帶）、重新開啟；沒有刪除、群組對應的手動調整、模組鍵改名的介面（API 都支援）。
+
+**§13 三個待裁決項，階段 1a 先代為決定**（使用者可推翻）：客戶沒有更新入口（維持文件設計）、內建四個範本不升級成內建應用程式（測試用小套件替代）、關閉被依賴的應用程式時自建模組的參照只警告。

@@ -146,6 +146,8 @@ export interface ModuleSchema {
   kind?: 'standalone' | 'extension';
   hostEntityKey?: string;
   permissions: SchemaPermissions;
+  /** The module's app is closed; add/edit/delete are already false. */
+  readOnly?: boolean;
   blocks: SchemaBlock[];
   rules: SchemaRule[];
   /** Active detail modules of this header; absent when there are none. */
@@ -248,6 +250,8 @@ export interface MenuItem {
   name: I18nText;
   icon?: string;
   section?: string;
+  /** The owning app is closed: data stays readable, nothing can be written. */
+  closed?: boolean;
 }
 
 export interface User {

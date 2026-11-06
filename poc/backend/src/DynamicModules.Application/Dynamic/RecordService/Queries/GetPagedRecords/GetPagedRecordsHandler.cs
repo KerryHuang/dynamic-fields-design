@@ -21,7 +21,7 @@ public class GetPagedRecordsHandler(
     public async Task<ServiceResult> Handle(GetPagedRecordsRequest request, CancellationToken ct)
     {
         var module = await modules.GetByKeyAsync(request.ModuleKey, includeChildren: true, ct);
-        if (module is not { Status: ModuleStatus.Active } || ModuleRelations.IsDetail(module))
+        if (!module.IsReadable() || ModuleRelations.IsDetail(module))
             return ServiceResult.NotFound(RecordMapper.ModuleNotFound);
 
         var access = await guard.AuthorizeAsync(module, PermissionAction.Read, ct);

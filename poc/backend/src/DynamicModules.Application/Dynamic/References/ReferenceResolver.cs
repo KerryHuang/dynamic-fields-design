@@ -68,7 +68,7 @@ public class ReferenceResolver(
     {
         var restricted = keys.ToDictionary(k => k, k => new ReferenceInfo(k, null, ReferenceInfo.Restricted));
         var target = await modules.GetByKeyAsync(moduleKey, includeChildren: true, ct);
-        if (target is not { Status: ModuleStatus.Active }) return restricted;
+        if (!target.IsReadable()) return restricted;
         var access = await guard.AuthorizeAsync(target, PermissionAction.Read, ct);
         if (access.Permissions is not { } perms || !target.TitleVisibleTo(perms)) return restricted;
 

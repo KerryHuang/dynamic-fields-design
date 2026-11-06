@@ -17,7 +17,7 @@ public class GetRelatedTabsHandler(IModuleRepository modules, IRecordRepository 
         var tabs = new List<RelatedTab>();
         foreach (var (source, field, perms) in await RelatedTabs.VisibleAsync(target.Key, modules, guard, ct))
             tabs.Add(new RelatedTab(field.Id, field.Key, field.LabelI18n, source.Key, source.NameI18n,
-                perms.Can(PermissionAction.Add) && perms.CanWrite(field) && !field.Config.ReadOnly));
+                source.IsWritable() && perms.Can(PermissionAction.Add) && perms.CanWrite(field) && !field.Config.ReadOnly));
         return ServiceResult.Success(tabs);
     }
 }

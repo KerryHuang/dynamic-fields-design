@@ -39,7 +39,7 @@ public class ReferenceValidator(
         }
 
         var targetModule = await modules.GetByKeyAsync(target.Key, includeChildren: true, ct);
-        if (targetModule is not { Status: ModuleStatus.Active } || !value.TryGetInt64(out var id)) return new HashSet<string>();
+        if (!targetModule.IsWritable() || !value.TryGetInt64(out var id)) return new HashSet<string>();
         var access = await guard.AuthorizeAsync(targetModule, PermissionAction.Read, ct);
         if (access.Permissions is not { } perms) return new HashSet<string>();
         var visible = await records.ListVisibleIdsAsync(targetModule.Id, [id], perms.OwnerUserIds, ct);

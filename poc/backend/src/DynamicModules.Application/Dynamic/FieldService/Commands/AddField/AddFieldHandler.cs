@@ -24,6 +24,11 @@ public class AddFieldHandler(
         var block = module.Blocks.FirstOrDefault(b => b.Id == request.BlockId);
         if (block is null) return ServiceResult.NotFound("找不到區塊");
 
+        // 新增公式或彙總欄位會替既有記錄算值並寫回；Closed 的資料唯讀
+        if (request.Type == FieldType.Formula && await ClosedDataGuard.RejectFormulaRecalcAsync(module, modules, ct) is { } closedFormula)
+            return closedFormula;
+        if (request.Type == FieldType.Rollup && ClosedDataGuard.Reject(module) is { } closedRollup) return closedRollup;
+
         // 新增當下還沒有選項，下拉欄位的預設值要等加完選項後用 UpdateField 設定。
         var field = new Field { ModuleId = module.Id, BlockId = block.Id, Type = request.Type };
         var invalid = FieldRules.CheckDefault(registry, field, request.Config, await modules.ListUserIdsAsync(ct), out var config);

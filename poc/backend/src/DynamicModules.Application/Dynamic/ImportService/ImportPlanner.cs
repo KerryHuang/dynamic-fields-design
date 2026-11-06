@@ -37,8 +37,9 @@ public class ImportPlanner(
     public async Task<(ImportPlan? Plan, ServiceResult? Failure)> PlanAsync(string moduleKey, byte[] content, CancellationToken ct)
     {
         var module = await modules.GetByKeyAsync(moduleKey, includeChildren: true, ct);
-        if (module is not { Status: ModuleStatus.Active } || ModuleRelations.IsDetail(module))
+        if (module is null || ModuleRelations.IsDetail(module))
             return (null, ServiceResult.NotFound(RecordMapper.ModuleNotFound));
+        if (await ModuleGate.RejectUnwritableAsync(module, guard, ct) is { } blocked) return (null, blocked);
         var access = await guard.AuthorizeAsync(module, PermissionAction.Add, ct);
         if (access.Permissions is not { } perms) return (null, access.Denied);
         if (module.Kind == ModuleKind.Extension) return FileError("擴充模組不支援匯入");
@@ -160,7 +161,7 @@ public class ImportPlanner(
 
         // 讀者對目標模組沒有 Read 或看不到標題：每個標題都當作找不到，不洩漏資料
         var targetModule = await modules.GetByKeyAsync(target.Key, includeChildren: true, ct);
-        if (targetModule is not { Status: ModuleStatus.Active }) return map;
+        if (!targetModule.IsWritable()) return map;
         var access = await guard.AuthorizeAsync(targetModule, PermissionAction.Read, ct);
         if (access.Permissions is not { } perms || !targetModule.TitleVisibleTo(perms)) return map;
         foreach (var title in titles)

@@ -19,8 +19,8 @@
           <q-item-section>{{ t('menu.home') }}</q-item-section>
         </q-item>
 
-        <template v-for="g in menuGroups" :key="g.title ?? ''">
-          <q-item-label header>{{ g.title ?? t('menu.custom') }}</q-item-label>
+        <template v-for="g in menuGroups" :key="g.closed ? '__closed' : (g.title ?? '')">
+          <q-item-label header :data-testid="g.closed ? 'closed-apps-group' : undefined">{{ g.closed ? t('menu.closedApps') : (g.title ?? t('menu.custom')) }}</q-item-label>
           <q-item
             v-for="m in g.items"
             :key="m.key"

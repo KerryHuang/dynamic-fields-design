@@ -66,6 +66,13 @@ describe('DetailPage', () => {
     expect(noDelete.text()).not.toContain(zhTW.dynamic.delete);
   });
 
+  it('DetailPage shows the closed-app banner and no edit/delete when readOnly', async () => {
+    expect((await mountPage(schema({}))).find('[data-testid="closed-banner"]').exists()).toBe(false);
+    const w = await mountPage(schema({ readOnly: true, permissions: { ...all, edit: false, delete: false } }));
+    expect(w.find('[data-testid="closed-banner"]').text()).toContain(zhTW.dynamic.closedBanner);
+    expect(w.text()).not.toContain(zhTW.dynamic.edit);
+  });
+
   it('renders without a heading when titleFieldKey is null', async () => {
     const w = await mountPage(schema({ titleFieldKey: null, blocks: [{ id: 1, label: { 'zh-TW': '區' }, collapsed: false, columns: 2, fields: [field(2, '甲')] }] }));
     expect(w.text()).toContain('甲');

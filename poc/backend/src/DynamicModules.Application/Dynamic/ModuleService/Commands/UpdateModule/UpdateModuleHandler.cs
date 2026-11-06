@@ -18,6 +18,9 @@ public class UpdateModuleHandler(
         var module = await modules.GetByKeyAsync(request.Key, includeChildren: true, ct);
         if (module is null) return ServiceResult.NotFound("找不到模組");
 
+        // 換標題欄位會重寫全部既有記錄的 Title；Closed 的資料唯讀，其餘欄位（名稱、圖示、區段）照常可改
+        if (module.TitleFieldId != request.TitleFieldId && ClosedDataGuard.Reject(module) is { } closed) return closed;
+
         if (module.Kind == ModuleKind.Extension)
         {
             if (request.TitleFieldId is not null) return TitleInvalid("擴充模組的標題取自既有資料");
@@ -33,7 +36,7 @@ public class UpdateModuleHandler(
                     .Any(p => p.FieldId == titleId && p.Access == FieldAccess.Hidden))
                 return TitleInvalid("記錄標題欄位不能是有隱藏例外的欄位");
         }
-        else if (module.Status == ModuleStatus.Active)
+        else if (module.Status is ModuleStatus.Active or ModuleStatus.Closed)
             return TitleInvalid("啟用中的模組必須有記錄標題欄位");
 
         module.NameI18n = request.Name;

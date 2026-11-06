@@ -81,6 +81,10 @@ async function onDelete() {
         <q-btn v-if="canEdit" color="primary" :label="t('dynamic.edit')" :to="`/dynamic/${moduleKey}/${recordId}/edit`" />
         <q-btn v-if="canDelete" color="negative" outline :label="t('dynamic.delete')" @click="confirming = true" />
       </div>
+      <div v-if="schemaQuery.data.value.readOnly" class="row items-center no-wrap q-mb-sm text-muted" data-testid="closed-banner">
+        <q-icon name="lock" class="q-mr-sm" />
+        <span>{{ t('dynamic.closedBanner') }}</span>
+      </div>
       <RecordConversions :record-id="recordId" :row-version="recordQuery.data.value.rowVersion" />
       <DynamicDetail :schema="schemaQuery.data.value" :record="recordQuery.data.value" />
       <DetailTables v-if="schemaQuery.data.value.details?.length" class="q-mt-md" :details="schemaQuery.data.value.details" :rows="recordQuery.data.value.details ?? {}" />

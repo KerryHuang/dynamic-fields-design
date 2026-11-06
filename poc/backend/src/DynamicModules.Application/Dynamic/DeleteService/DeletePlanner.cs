@@ -18,7 +18,12 @@ public record DeletePlan(DeleteCheckResponse Check, long ModuleId, IReadOnlyList
 /// </summary>
 public class DeletePlanner(IDeletionRepository data)
 {
-    public async Task<DeletePlan?> PlanAsync(DeleteTarget target, string? key, long id, CancellationToken ct)
+    /// <param name="alsoDeleting">
+    /// 同一個動作一起刪除的模組鍵（刪除整個應用程式時是全部成員）。集合內的模組彼此的引用不算被引用，
+    /// 模組本身的狀態也不另擋（應用程式已先確認是關閉的）；其餘規則不變。只對 <see cref="DeleteTarget.Module"/> 有意義。
+    /// </param>
+    public async Task<DeletePlan?> PlanAsync(
+        DeleteTarget target, string? key, long id, CancellationToken ct, IReadOnlySet<string>? alsoDeleting = null)
     {
         var all = await data.ListModulesAsync(ct);
         var module = target switch
@@ -41,7 +46,7 @@ public class DeletePlanner(IDeletionRepository data)
             case DeleteTarget.Module:
                 fields = module.Blocks.SelectMany(b => b.Fields).ToList();
                 blocks = module.Blocks;
-                await ModuleBlockersAsync(module, fields, all, reports, dashboards, conversions, blockers, ct);
+                await ModuleBlockersAsync(module, fields, all, reports, dashboards, conversions, blockers, alsoDeleting, ct);
                 break;
             case DeleteTarget.Field:
                 fields = module.Blocks.SelectMany(b => b.Fields).Where(f => f.Id == id).ToList();
@@ -79,16 +84,16 @@ public class DeletePlanner(IDeletionRepository data)
 
     private async Task ModuleBlockersAsync(
         Module module, IReadOnlyList<Field> fields, List<Module> all, List<Report> reports, List<DashboardLayoutSource> dashboards,
-        List<Conversion> conversions, List<DeleteBlocker> blockers, CancellationToken ct)
+        List<Conversion> conversions, List<DeleteBlocker> blockers, IReadOnlySet<string>? alsoDeleting, CancellationToken ct)
     {
-        if (module.Status == ModuleStatus.Active)
+        if (alsoDeleting is null && module.Status is ModuleStatus.Active or ModuleStatus.Closed)
             blockers.Add(new(DeleteBlockerKind.ModuleActive, module.Key, module.Id, Name(module.NameI18n, module.Key)));
         var live = await data.CountRecordsAsync(module.Id, deleted: false, ct);
         if (live > 0)
             blockers.Add(new(DeleteBlockerKind.LiveRecords, module.Key, module.Id, Name(module.NameI18n, module.Key), live));
 
         var ownIds = fields.Select(f => f.Id).ToHashSet();
-        foreach (var other in all.Where(m => m.Id != module.Id))
+        foreach (var other in all.Where(m => m.Id != module.Id && alsoDeleting?.Contains(m.Key) != true))
             foreach (var f in other.Blocks.SelectMany(b => b.Fields))
             {
                 if (f is { Type: FieldType.Reference, Config.RefTarget: { Kind: ReferenceTarget.ModuleKind } t } && t.Key == module.Key)
@@ -98,7 +103,20 @@ public class DeletePlanner(IDeletionRepository data)
 
         AddReportBlockers(reports, ownIds, [module.Key], blockers);
         AddDashboardBlockers(dashboards, ownIds, blockers);
-        AddConversionBlockers(conversions, all, ownIds, [module.Id], [module.Key], blockers);
+        // 轉換定義的來源、目標與明細模組全在這次一起刪除的集合內：定義跟著應用程式一起移除（ModuleRemover），不算引用
+        var outside = alsoDeleting is null ? conversions : conversions.Where(c => !InsideSet(c, all, alsoDeleting)).ToList();
+        AddConversionBlockers(outside, all, ownIds, [module.Id], [module.Key], blockers);
+    }
+
+    private static bool InsideSet(Conversion c, List<Module> all, IReadOnlySet<string> keys)
+    {
+        var d = c.Definition;
+        var moduleKeys = new List<string?>
+        {
+            all.FirstOrDefault(m => m.Id == c.SourceModuleId)?.Key, all.FirstOrDefault(m => m.Id == c.TargetModuleId)?.Key,
+            d.Lines?.SourceModuleKey, d.Lines?.TargetModuleKey
+        };
+        return moduleKeys.Where(k => k is not null).All(k => keys.Contains(k!));
     }
 
     /// <summary>刪欄位或區塊：targetFields 是要刪的欄位，blockIds 是要刪的區塊（欄位刪除時為空）。</summary>

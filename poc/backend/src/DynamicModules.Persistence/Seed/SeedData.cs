@@ -37,7 +37,7 @@ public static class SeedData
         var modules = await db.Set<Module>().Select(m => new { m.ProgramCode, m.Status }).ToListAsync(ct);
         var programs = await db.Set<DynamicProgram>().Where(p => p.ProgramCode != "DYN00000").ToListAsync(ct);
         foreach (var program in programs)
-            program.Active = modules.Any(m => m.ProgramCode == program.ProgramCode && m.Status == ModuleStatus.Active);
+            program.Active = modules.Any(m => m.ProgramCode == program.ProgramCode && m.Status is ModuleStatus.Active or ModuleStatus.Closed);
 
         await db.SaveChangesAsync(ct);
     }

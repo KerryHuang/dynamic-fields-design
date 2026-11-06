@@ -54,8 +54,13 @@ public class SetFieldStatusHandler(IModuleRepository modules, IRecordRepository 
             field.Config = derived;
         }
 
-        var now = time.Now;
         var reactivated = field.Status == FieldStatus.Inactive && request.Status == FieldStatus.Active;
+        // 重新啟用公式或彙總欄位會整批重算並寫回記錄值；Closed 的資料唯讀。停用本身不動資料，照常放行
+        if (reactivated && field.Type == FieldType.Formula && await ClosedDataGuard.RejectFormulaRecalcAsync(module, modules, ct) is { } closedFormula)
+            return closedFormula;
+        if (reactivated && field.Type == FieldType.Rollup && ClosedDataGuard.Reject(module) is { } closedRollup) return closedRollup;
+
+        var now = time.Now;
         field.Status = request.Status;
         // 停用期間存檔不寫此欄索引列，重新啟用時補回；公式欄位停用期間值也沒更新，改整批重算（同時重建索引）
         if (reactivated && field.Type == FieldType.Formula)

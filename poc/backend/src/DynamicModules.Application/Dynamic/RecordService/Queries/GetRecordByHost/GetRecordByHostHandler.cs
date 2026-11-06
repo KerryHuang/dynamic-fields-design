@@ -16,7 +16,7 @@ public class GetRecordByHostHandler(IModuleRepository modules, IRecordRepository
     public async Task<ServiceResult> Handle(GetRecordByHostRequest request, CancellationToken ct)
     {
         var module = await modules.GetByKeyAsync(request.ModuleKey, includeChildren: true, ct);
-        if (module is not { Status: ModuleStatus.Active } || ModuleRelations.IsDetail(module))
+        if (!module.IsReadable() || ModuleRelations.IsDetail(module))
             return ServiceResult.NotFound(RecordMapper.ModuleNotFound);
         var access = await guard.AuthorizeAsync(module, PermissionAction.Read, ct);
         if (access.Permissions is not { } p) return access.Denied!;

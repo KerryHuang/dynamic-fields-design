@@ -36,7 +36,7 @@ public class GetReportCatalogHandler(IModuleRepository modules, IDynamicAccessGu
     public async Task<ServiceResult> Handle(GetReportCatalogRequest request, CancellationToken ct)
     {
         var main = await modules.GetByKeyAsync(request.ModuleKey, includeChildren: true, ct);
-        if (main is not { Status: ModuleStatus.Active } || ModuleRelations.IsDetail(main))
+        if (!main.IsReadable() || ModuleRelations.IsDetail(main))
             return ServiceResult.NotFound("模組不存在或不能當報表主模組");
         var access = await guard.AuthorizeAsync(main, PermissionAction.Read, ct);
         if (access.Permissions is not { } perms) return access.Denied!;
@@ -47,7 +47,7 @@ public class GetReportCatalogHandler(IModuleRepository modules, IDynamicAccessGu
         {
             if (targets.TryGetValue(key, out var cached)) return cached;
             Side? side = null;
-            if (await modules.GetByKeyAsync(key, includeChildren: true, ct) is { Status: ModuleStatus.Active } m
+            if (await modules.GetByKeyAsync(key, includeChildren: true, ct) is { } m && m.IsReadable()
                 && (await guard.AuthorizeAsync(m, PermissionAction.Read, ct)).Permissions is { } p)
                 side = new Side(m, p);
             return targets[key] = side;
@@ -87,7 +87,7 @@ public class GetReportCatalogHandler(IModuleRepository modules, IDynamicAccessGu
         {
             var isDetail = detailKeys.Contains(source.Key);
             // 刻意略過：別人的明細透過一般參照指回主模組時不列（與 RelatedTabs 同一套，明細只經表頭呈現）
-            if (source.Status != ModuleStatus.Active || (!isDetail && ModuleRelations.IsDetail(source))) continue;
+            if (!source.IsReadable() || (!isDetail && ModuleRelations.IsDetail(source))) continue;
             var child = await modules.GetByKeyAsync(source.Key, includeChildren: true, ct);
             if (child is null) continue;
             // 明細模組走表頭授權，與 ReportModuleLoader 同一套

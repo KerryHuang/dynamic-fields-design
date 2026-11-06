@@ -56,7 +56,8 @@ public class DetailWriter(
         Func<Task<IReadOnlyDictionary<string, JsonElement?>>>? headerValues = null)
     {
         var plan = new DetailPlan();
-        var children = await ActiveDetailModulesAsync(modules, parent, ct);
+        // 寫入只認 Active 的明細模組；Closed 的明細（不會與 Active 表頭並存）一律當成不存在
+        var children = (await ReadableDetailModulesAsync(modules, parent, ct)).Where(c => c.IsWritable()).ToList();
         foreach (var key in (details?.Keys ?? Enumerable.Empty<string>()).Where(k => children.All(c => c.Key != k)))
             plan.Errors[$"details.{key}"] = [UnknownDetail];
 
@@ -91,12 +92,12 @@ public class DetailWriter(
         return plan;
     }
 
-    /// <summary>以 parent 為表頭、啟用中的明細模組（含區塊、欄位、規則），依 Key 排序。</summary>
-    internal static async Task<List<Module>> ActiveDetailModulesAsync(IModuleRepository modules, Module parent, CancellationToken ct)
+    /// <summary>以 parent 為表頭、可查閱（Active 或 Closed）的明細模組（含區塊、欄位、規則），依 Key 排序。</summary>
+    internal static async Task<List<Module>> ReadableDetailModulesAsync(IModuleRepository modules, Module parent, CancellationToken ct)
     {
         var result = new List<Module>();
         foreach (var (listed, _) in await modules.ListDetailModulesAsync(parent.Key, ct))
-            if (listed.Status == ModuleStatus.Active)
+            if (listed.IsReadable())
                 result.Add((await modules.GetByIdAsync(listed.Id, includeChildren: true, ct))!);
         return result.OrderBy(m => m.Key, StringComparer.Ordinal).ToList();
     }

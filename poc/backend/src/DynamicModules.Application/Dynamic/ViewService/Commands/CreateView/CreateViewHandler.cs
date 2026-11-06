@@ -18,8 +18,8 @@ public class CreateViewHandler(
     public async Task<ServiceResult> Handle(CreateViewRequest request, CancellationToken ct)
     {
         var module = await modules.GetByKeyAsync(request.ModuleKey, includeChildren: true, ct);
-        if (module is not { Status: ModuleStatus.Active } || ModuleRelations.IsDetail(module))
-            return ServiceResult.NotFound(RecordMapper.ModuleNotFound);
+        if (module is null || ModuleRelations.IsDetail(module)) return ServiceResult.NotFound(RecordMapper.ModuleNotFound);
+        if (await ModuleGate.RejectUnwritableAsync(module, guard, ct) is { } blocked) return blocked;
 
         var access = await guard.AuthorizeAsync(module, PermissionAction.Read, ct);
         if (access.Permissions is not { } p) return access.Denied!;

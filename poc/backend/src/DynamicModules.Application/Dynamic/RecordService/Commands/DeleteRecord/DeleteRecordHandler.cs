@@ -22,8 +22,9 @@ public class DeleteRecordHandler(
         var record = await records.GetAsync(request.Id, ct);
         if (record is null) return ServiceResult.NotFound(RecordMapper.RecordNotFound);
         var module = await modules.GetByIdAsync(record.ModuleId, includeChildren: true, ct);
-        if (module is not { Status: ModuleStatus.Active }) return ServiceResult.NotFound(RecordMapper.ModuleNotFound);
+        if (module is null) return ServiceResult.NotFound(RecordMapper.ModuleNotFound);
         if (ModuleRelations.IsDetail(module)) return ServiceResult.NotFound(RecordMapper.RecordNotFound);
+        if (await ModuleGate.RejectUnwritableAsync(module, guard, ct) is { } blocked) return blocked;
         var access = await guard.AuthorizeAsync(module, PermissionAction.Delete, ct);
         if (access.Permissions is not { } perms) return access.Denied!;
         if (perms.OwnerUserIds is not null && !perms.OwnerUserIds.Contains(record.OwnerUserId))

@@ -5,8 +5,7 @@ using MediatR;
 
 namespace DynamicModules.Application.Dynamic.DeleteService.Commands.DeleteModule;
 
-public class DeleteModuleHandler(
-    DeletePlanner planner, IModuleRepository modules, IRecordRepository records, IDeletionRepository deletion, IUnitOfWork uow)
+public class DeleteModuleHandler(DeletePlanner planner, ModuleRemover remover)
     : IRequestHandler<DeleteModuleRequest, ServiceResult>
 {
     public async Task<ServiceResult> Handle(DeleteModuleRequest request, CancellationToken ct)
@@ -17,13 +16,7 @@ public class DeleteModuleHandler(
         if (plan.Check.Purge.Records != request.Purged) return ServiceResult.ConflictWith(DeleteMessages.PurgedMismatch, plan.Check);
 
         // 交易由 TransactionBehavior 包住：清除與刪除定義一起提交或回滾
-        var module = (await modules.GetByIdAsync(plan.ModuleId, includeChildren: true, ct))!;
-        await deletion.PurgeModuleAsync(module, ct);
-        modules.Remove(module);
-        await uow.CommitAsync(ct);
-        // 事後條件：不可留下任何記錄列（讀已提交的資料庫上，檢查與清除之間可能有人寫入）
-        if (await records.AnyByModuleAsync(plan.ModuleId, ct))
-            throw new InvalidOperationException("刪除模組後仍有記錄，已回滾");
+        await remover.RemoveAsync(plan.ModuleId, ct);
         return ServiceResult.Success();
     }
 }

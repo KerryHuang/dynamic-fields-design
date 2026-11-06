@@ -11,10 +11,13 @@ public class ActivateModuleHandler(
     IModuleRepository modules, IProgramRepository programs, IUnitOfWork uow, ICurrentUser user, IBusinessTime time)
     : IRequestHandler<ActivateModuleRequest, ServiceResult>
 {
+    private const string ClosedMessage = "請由應用程式重新開啟或關閉";
+
     public async Task<ServiceResult> Handle(ActivateModuleRequest request, CancellationToken ct)
     {
         var module = await modules.GetByKeyAsync(request.Key, includeChildren: true, ct);
         if (module is null) return ServiceResult.NotFound("找不到模組");
+        if (module.Status == ModuleStatus.Closed) return ServiceResult.Conflict(ClosedMessage);
 
         var title = module.Blocks.SelectMany(b => b.Fields).FirstOrDefault(f => f.Id == module.TitleFieldId);
         if (module.Kind != ModuleKind.Extension && title is not { Status: FieldStatus.Active, Type: FieldType.Text or FieldType.AutoNumber })
