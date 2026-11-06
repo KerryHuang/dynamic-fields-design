@@ -4,6 +4,29 @@
     <title><%= productName %></title>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <script data-theme-bootstrap>
+      // Vue 啟動前先套用快取主題，避免換色閃爍。只讀快取鍵（不讀 Demo 鍵）；任何錯誤都退回 workbench + 依系統。
+      (function () {
+        var mode = 'system';
+        var style = 'workbench';
+        try {
+          var c = JSON.parse(localStorage.getItem('formwright.theme.cache'));
+          if (c && typeof c === 'object') {
+            if (c.mode === 'light' || c.mode === 'dark' || c.mode === 'system') mode = c.mode;
+            if (c.style === 'workbench' || c.style === 'airy' || c.style === 'enterprise' || c.style === 'industrial') style = c.style;
+          }
+        } catch (e) {}
+        var dark = false;
+        if (mode === 'system') {
+          try {
+            dark = !!(window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches);
+          } catch (e) {}
+        } else dark = mode === 'dark';
+        var root = document.documentElement;
+        root.setAttribute('data-style', style);
+        root.setAttribute('data-mode', dark ? 'dark' : 'light');
+      })();
+    </script>
   </head>
   <body>
     <!-- quasar:entry-point -->
