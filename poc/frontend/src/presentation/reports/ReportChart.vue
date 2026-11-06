@@ -37,6 +37,8 @@ function option() {
     xAxis: { type: 'category', data: names },
     yAxis: kinds.map((k, i) => ({
       type: 'value', position: i === 0 ? 'left' : 'right', offset: i > 1 ? 60 * (i - 1) : 0,
+      // 日期的天數從 0 起算會得到西元 1 年的刻度，只有日期軸改成依資料範圍
+      ...(k === 'dayNumber' ? { scale: true } : {}),
       axisLabel: { formatter: fmt(props.measures.find((m) => axisKind(m) === k)!) },
     })),
     series: props.measures.map((m) => ({

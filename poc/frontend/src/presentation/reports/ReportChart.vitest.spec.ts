@@ -40,6 +40,11 @@ describe('ReportChart', () => {
     expect(opt.yAxis[0].axisLabel.formatter(739000)).toBe('2024-04-25');
   });
 
+  it('日期軸不從 0 起算，否則刻度成了西元 1 年且各組長條看不出差別（實機走查發現）', () => {
+    mount(ReportChart, { props: { viz: 'bar', groups: mixedGroups, measures: [day], locale: 'zh-TW' } });
+    expect(chart.setOption.mock.calls[0]![0].yAxis[0].scale).toBe(true);
+  });
+
   it('donut tooltip formats the first measure', () => {
     mount(ReportChart, { props: { viz: 'donut', groups: mixedGroups, measures: [ratio], locale: 'zh-TW' } });
     expect(chart.setOption.mock.calls[0]![0].tooltip.valueFormatter(0.07)).toBe('7%');

@@ -16,6 +16,7 @@
 | 6 | 表頭與明細（明細模組、表頭內編號、表單逐列編輯）、彙總欄位（明細與一般參照）、下拉選單打字篩選 | 完成，[驗收](docs/acceptance/phase6.md) |
 | 7 | 記錄歷程、匯出 CSV／Excel、CSV 匯入（預覽與確認）、設計器預覽、選單分區 | 完成，[驗收](docs/acceptance/phase7.md) |
 | 8 | 模組範本：內建「訂單」範本、從範本建立、匯出與匯入範本；欄位預設今天、明細帶表頭的值 | 完成，[驗收](docs/acceptance/phase8.md) |
+| 報表（第一段） | 查詢引擎在應用層算（合併、去重、彙總）、五步驟設計器、表格與四種圖表、下鑽、匯出、分享、Demo 示範報表 | 完成，[驗收](docs/acceptance/reports.md)；第二段儀表板另計 |
 
 ## 啟動
 
@@ -42,6 +43,8 @@ poc\start.cmd
 dotnet test poc/backend                                        # 後端：Domain、Application、WebAPI
 cd poc/frontend && bunx vitest run && bunx vue-tsc --noEmit    # 前端：單元測試與型別檢查
 ```
+
+報表第一段的路線圖：幣別綁定（金額欄位指定幣別欄位）、結果快取。
 
 效能基準另外跑，預設不含：`dotnet test poc/backend --filter Category=Benchmark`。
 
@@ -112,6 +115,9 @@ cd poc/frontend && bunx vitest run && bunx vue-tsc --noEmit    # 前端：單元
 | [`docs/superpowers/specs/2026-11-05-users-groups-design.md`](docs/superpowers/specs/2026-11-05-users-groups-design.md) | 使用者與群組設計文件：登入、使用者與群組管理 |
 | [`docs/superpowers/plans/2026-11-05-users-groups.md`](docs/superpowers/plans/2026-11-05-users-groups.md) | 使用者與群組實作計畫 |
 | [`docs/superpowers/plans/2026-11-05-users-groups-rulings.md`](docs/superpowers/plans/2026-11-05-users-groups-rulings.md) | 使用者與群組實作裁決 |
+| [`docs/superpowers/specs/2026-11-05-reports-design.md`](docs/superpowers/specs/2026-11-05-reports-design.md) | 報表與儀表板設計文件 |
+| [`docs/superpowers/plans/2026-11-05-reports-stage1.md`](docs/superpowers/plans/2026-11-05-reports-stage1.md) | 報表第一段實作計畫 |
+| [`docs/superpowers/plans/2026-11-05-reports-rulings.md`](docs/superpowers/plans/2026-11-05-reports-rulings.md) | 報表第一段實作裁決 |
 | [`docs/research/vtiger-dynamic-fields.md`](docs/research/vtiger-dynamic-fields.md) | vtiger CRM 7.4 研究 |
 
 設計文件涵蓋資料模型、型別系統、規則引擎、關聯、權限、前後端設計、POC 做法、POC 到正式產品的對應與風險；§15 列出上線前要確認的風險。vtiger 研究涵蓋 metadata 表、建模組流程、畫面自動產生的 fallback 機制與欄位生命週期。
