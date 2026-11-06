@@ -17,6 +17,7 @@
     "@vee-validate/zod": "^4.15.1",
     "axios": "^1.21.0",
     "echarts": "6.0.0",
+    "grid-layout-plus": "1.1.1",
     "pinia": "^3",
     "quasar": "^2.18",
     "vee-validate": "^4",

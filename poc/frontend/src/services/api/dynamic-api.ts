@@ -2,6 +2,9 @@ import type {
   AdminGroup, AdminUser, AdminUserCreate, AdminUserUpdate, AuthOptions, AuthUser, ConditionNode, DesignerField, DetailRowPayload, DynamicRecord, EntitySummary, FieldConfig, FieldType, Group, GroupImpact, I18nText, LightPage, ListView, Me, MenuItem, ModuleDetail, ModulePermissions, ModuleSchema,
   ImportPreview, ImportResult, PagedResponse, RecordHistoryEntry, RelatedTab, Rule, RollupSource, User, ViewSort,
 } from 'src/domain/dynamic/types';
+import type {
+  AdminDashboardDetail, AdminDashboardItem, CardResult, DashboardDetail, DashboardLayout, DashboardList,
+} from 'src/domain/dynamic/dashboard-types';
 import type { CatalogModule, DrillResult, ModuleCatalog, ReportDateRange, ReportDefinition, ReportDetail, ReportItem, ReportResult, ReportShareTarget } from 'src/domain/dynamic/report-types';
 import type { MeTheme, ThemeChoice, ThemeDefaults } from 'src/domain/theme/theme-model';
 import { handleAuthFailure, http, toApiError } from './http';
@@ -215,6 +218,26 @@ export const dynamicApi = {
     }
     return { blob: r.data, fileName: dispositionFileName(r.headers['content-disposition']) ?? `${key}.${format}` };
   },
+  getDashboards: () => http.get<DashboardList>('/dashboards').then(data),
+  getDashboard: (id: number) => http.get<DashboardDetail>(`/dashboards/${id}`).then(data),
+  createDashboard: (name: string, layout: DashboardLayout) => http.post<DashboardDetail>('/dashboards', { name, layout }).then(data),
+  deleteDashboard: (id: number) => http.delete(`/dashboards/${id}`).then(data),
+  saveDashboardLayout: (id: number, layout: DashboardLayout, name?: string) =>
+    http.put<DashboardDetail>(`/dashboards/${id}/layout`, { name, layout }).then(data),
+  restoreDashboard: (id: number) => http.post<DashboardDetail>(`/dashboards/${id}/restore`).then(data),
+  runCard: (id: number, cardId: string, filterRange: ReportDateRange | null, locale: string) =>
+    http.post<CardResult>(`/dashboards/${id}/cards/${encodeURIComponent(cardId)}/run`, { filterRange }, { params: { locale } }).then(data),
+  drillCard: (id: number, cardId: string, groupKeys: string[], filterRange: ReportDateRange | null, locale: string) =>
+    http.post<DrillResult>(`/dashboards/${id}/cards/${encodeURIComponent(cardId)}/drill`, { groupKeys, filterRange }, { params: { locale } }).then(data),
+  adminGetDashboards: () => http.get<AdminDashboardItem[]>('/admin/dashboards').then(data),
+  adminGetDashboard: (id: number) => http.get<AdminDashboardDetail>(`/admin/dashboards/${id}`).then(data),
+  adminCreateDashboard: (name: string, layout: DashboardLayout) => http.post<AdminDashboardDetail>('/admin/dashboards', { name, layout }).then(data),
+  adminUpdateDashboard: (id: number, name: string, layout: DashboardLayout, version: number) =>
+    http.put<AdminDashboardDetail>(`/admin/dashboards/${id}`, { name, layout, version }).then(data),
+  adminDeleteDashboard: (id: number) => http.delete(`/admin/dashboards/${id}`).then(data),
+  adminSetDashboardAssignments: (id: number, groupIds: number[]) =>
+    http.put<AdminDashboardDetail>(`/admin/dashboards/${id}/assignments`, { groupIds }).then(data),
+  adminReorderDashboards: (ids: number[]) => http.put('/admin/dashboards/order', { ids }).then(data),
   getReportShareTargets: () => http.get<ReportShareTarget[]>('/reports/share-targets').then(data),
   getReports: () => http.get<ReportItem[]>('/reports').then(data),
   getReport: (id: number) => http.get<ReportDetail>(`/reports/${id}`).then(data),
