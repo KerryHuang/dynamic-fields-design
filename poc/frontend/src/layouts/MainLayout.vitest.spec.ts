@@ -10,6 +10,7 @@ import ListPage from 'src/pages/dynamic/ListPage.vue';
 import { dynamicApi } from 'src/services/api/dynamic-api';
 import { http } from 'src/services/api/http';
 import { useIdentityStore } from 'src/stores/use-identity-store';
+import { useThemeStore } from 'src/stores/use-theme-store';
 import MainLayout from './MainLayout.vue';
 
 vi.mock('src/services/api/dynamic-api', async (importOriginal) => ({
@@ -303,6 +304,45 @@ describe('MainLayout menu', () => {
       expect(router.currentRoute.value.path).toBe('/');
       expect(w.find('[data-testid="logout-error"]').text()).toContain(zhTW.auth.logoutFailed);
       w.unmount();
+    });
+  });
+  describe('外觀', () => {
+    function mountLayout() {
+      const pinia = createPinia();
+      setActivePinia(pinia);
+      http.defaults.adapter = async (config) => ({
+        data: config.url === '/me' ? me(false) : config.url === '/users' ? USERS : [], status: 200, statusText: 'OK', headers: {}, config,
+      });
+      const router = createRouter({ history: createMemoryHistory(), routes: [{ path: '/', component: { template: '<i/>' } }] });
+      const i18n = createI18n({ legacy: false, locale: 'zh-TW', messages: { 'zh-TW': zhTW } });
+      return mount(MainLayout, {
+        attachTo: document.body,
+        global: { plugins: [[quasar.Quasar, { components: quasar, directives: quasar }], pinia, router, i18n, [VueQueryPlugin, { queryClient: new QueryClient() }]] },
+      });
+    }
+
+    it('右上角有外觀入口，點了開啟對話框', async () => {
+      const w = mountLayout();
+      await flushPromises();
+      expect(w.find('[data-testid="theme-open"]').text()).toContain('外觀');
+      expect(document.body.querySelector('[data-testid="theme-close"]')).toBeNull();
+      await w.find('[data-testid="theme-open"]').trigger('click');
+      await flushPromises();
+      expect(document.body.querySelector('[data-testid="theme-close"]')).not.toBeNull();
+      w.unmount();
+      document.body.innerHTML = '';
+    });
+
+    it('邊欄寬度跟著風格變', async () => {
+      const w = mountLayout();
+      await flushPromises();
+      const width = () => (w.find('.q-drawer').element as HTMLElement).style.getPropertyValue('--q-drawer-width');
+      expect(width()).toBe('172px');
+      useThemeStore().applyAnonymous({ mode: 'light', style: 'industrial' });
+      await flushPromises();
+      expect(width()).toBe('186px');
+      w.unmount();
+      document.body.innerHTML = '';
     });
   });
 });

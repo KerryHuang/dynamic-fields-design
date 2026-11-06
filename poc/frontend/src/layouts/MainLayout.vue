@@ -4,13 +4,14 @@
       <q-toolbar>
         <q-toolbar-title>Formwright</q-toolbar-title>
         <span class="q-mr-sm" data-testid="current-user">{{ me?.displayName }}</span>
+        <q-btn flat dense no-caps class="q-mr-sm" icon="palette" :label="t('theme.title')" data-testid="theme-open" @click="themeOpen = true" />
         <q-btn v-if="!identity.isDemoAccount" flat dense no-caps class="q-mr-sm" :label="t('auth.changePassword')" to="/change-password" data-testid="change-password-link" />
         <span v-if="logoutError" class="q-mr-sm bg-negative text-white q-px-sm rounded-borders" data-testid="logout-error">{{ t('auth.logoutFailed') }}</span>
         <q-btn flat dense no-caps :label="t('auth.logout')" :loading="logoutMutation.isPending.value" data-testid="logout" @click="logout" />
       </q-toolbar>
     </q-header>
 
-    <q-drawer :model-value="true" show-if-above bordered :width="240">
+    <q-drawer :model-value="true" show-if-above bordered :width="theme.sidebarWidth">
       <q-list>
         <template v-for="g in menuGroups" :key="g.title ?? ''">
           <q-item-label header>{{ g.title ?? t('menu.custom') }}</q-item-label>
@@ -57,6 +58,8 @@
       <!-- keyed by user: a new session remounts the page, so it refetches and re-initialises -->
       <router-view :key="identity.userId" />
     </q-page-container>
+
+    <ThemeDialog v-model="themeOpen" />
   </q-layout>
 </template>
 
@@ -68,10 +71,14 @@ import { useLogout } from 'src/application/dynamic/queries/auth-queries';
 import { useMenu } from 'src/application/dynamic/queries/modules-queries';
 import { useMe, useUsers } from 'src/application/dynamic/queries/permissions-queries';
 import { resolveI18n } from 'src/domain/dynamic/i18n-text';
+import ThemeDialog from 'src/presentation/theme/ThemeDialog.vue';
 import { useIdentityStore } from 'src/stores/use-identity-store';
+import { useThemeStore } from 'src/stores/use-theme-store';
 
 const { t, locale } = useI18n();
 const identity = useIdentityStore();
+const theme = useThemeStore();
+const themeOpen = ref(false);
 const router = useRouter();
 const logoutMutation = useLogout();
 
