@@ -89,7 +89,7 @@ export function useSelectTheme(): (choice: ThemeChoice, onError: () => void) => 
 export function useSaveSiteTheme() {
   const qc = useQueryClient();
   return useMutation<ThemeDefaults, ApiError, ThemeDefaults>({
-    mutationFn: dynamicApi.saveSiteTheme,
+    mutationFn: (d) => dynamicApi.saveSiteTheme(d),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['me'] }),
   });
 }

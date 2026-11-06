@@ -42,6 +42,9 @@
           <q-item v-if="me.isSystemAdmin" clickable to="/system/groups" data-testid="groups-menu">
             <q-item-section>{{ t('menu.groups') }}</q-item-section>
           </q-item>
+          <q-item v-if="me.isSystemAdmin" clickable to="/system/appearance" data-testid="appearance-menu">
+            <q-item-section>{{ t('theme.adminMenu') }}</q-item-section>
+          </q-item>
           <template v-if="me.designer.read">
             <q-item clickable to="/system/dynamic-modules" data-testid="designer-menu">
               <q-item-section>{{ t('menu.dynamicModules') }}</q-item-section>

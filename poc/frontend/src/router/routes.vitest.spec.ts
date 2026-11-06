@@ -16,3 +16,9 @@ describe('report routes', () => {
     expect(loaderOf('/reports/7/edit').leaf.path).toContain(':id');
   });
 });
+
+describe('appearance route', () => {
+  it('/system/appearance 開啟 AppearancePage', () => {
+    expect(loaderOf('/system/appearance').source).toContain('AppearancePage');
+  });
+});

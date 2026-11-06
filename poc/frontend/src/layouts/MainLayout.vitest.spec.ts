@@ -307,6 +307,22 @@ describe('MainLayout menu', () => {
     });
   });
   describe('外觀', () => {
+    it.each([[true], [false]])('外觀預設選單只有系統管理員看得到（%s）', async (isAdmin) => {
+      const pinia = createPinia();
+      setActivePinia(pinia);
+      http.defaults.adapter = async (config) => ({
+        data: config.url === '/me' ? adminMe(isAdmin) : config.url === '/users' ? USERS : [], status: 200, statusText: 'OK', headers: {}, config,
+      });
+      const router = createRouter({ history: createMemoryHistory(), routes: [{ path: '/', component: { template: '<i/>' } }] });
+      const i18n = createI18n({ legacy: false, locale: 'zh-TW', messages: { 'zh-TW': zhTW } });
+      const w = mount(MainLayout, {
+        global: { plugins: [[quasar.Quasar, { components: quasar }], pinia, router, i18n, [VueQueryPlugin, { queryClient: new QueryClient() }]] },
+      });
+      await flushPromises();
+      expect(w.find('[data-testid="appearance-menu"]').exists()).toBe(isAdmin);
+      if (isAdmin) expect(w.find('[data-testid="appearance-menu"]').text()).toContain('外觀預設');
+    });
+
     function mountLayout() {
       const pinia = createPinia();
       setActivePinia(pinia);
