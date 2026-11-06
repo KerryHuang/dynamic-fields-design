@@ -4,6 +4,7 @@ import { beforeEach, describe, expect, it } from 'vitest';
 import { createMemoryHistory, createRouter, type Router } from 'vue-router';
 import { http } from 'src/services/api/http';
 import { useIdentityStore } from 'src/stores/use-identity-store';
+import { useThemeStore } from 'src/stores/use-theme-store';
 import { handleUnauthorized, installAuthGuard, safeRedirect } from './auth-guard';
 
 const page = { template: '<i/>' };
@@ -48,6 +49,13 @@ describe('auth guard', () => {
     const router = setup();
     await router.push('/dynamic/order?q=a');
     expect(router.currentRoute.value.query.redirect).toBe('/dynamic/order?q=a');
+  });
+
+  it('feeds the theme from /me so a demo visitor cannot hit the save API before the layout loads', async () => {
+    meResponse = { status: 200, data: { userId: 'demo', mustChangePassword: false, theme: { canSave: false, mode: null, style: null, defaultMode: 'system', defaultStyle: 'workbench', effectiveMode: 'system', effectiveStyle: 'workbench' } } };
+    const router = setup();
+    await router.push('/');
+    expect(useThemeStore().canSave).toBe(false);
   });
 
   it('loads the session from /me once and lets a logged-in user through', async () => {

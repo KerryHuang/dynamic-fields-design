@@ -3,6 +3,7 @@ import type { Router } from 'vue-router';
 import { dynamicApi } from 'src/services/api/dynamic-api';
 import type { ApiError } from 'src/services/api/http';
 import { useIdentityStore } from 'src/stores/use-identity-store';
+import { useThemeStore } from 'src/stores/use-theme-store';
 
 /** Only same-origin absolute paths: starts with a single '/', never '//' or '/\' (both are protocol-relative to a browser). */
 export function safeRedirect(path: string | undefined): string {
@@ -27,6 +28,8 @@ export function installAuthGuard(router: Router) {
         const me = await dynamicApi.getMe();
         identity.setSession(me.userId, me.mustChangePassword);
         identity.setDemoAccount(me.isDemoAccount === true);
+        // 版面載入前就知道能不能存，Demo 訪客不會在空窗內打到儲存 API
+        if (me.theme) useThemeStore().applyMe(me.theme);
         sessionLoaded = true;
       } catch (e) {
         if ((e as ApiError | null)?.status !== 401) {
