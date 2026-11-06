@@ -11,7 +11,7 @@ import IconSelect from 'src/presentation/dynamic/designer/IconSelect.vue';
 import { dynamicApi } from 'src/services/api/dynamic-api';
 import ModuleEditorPage from './ModuleEditorPage.vue';
 
-vi.mock('src/services/api/dynamic-api', () => ({ dynamicApi: { getModule: vi.fn(), updateModule: vi.fn(), entities: vi.fn(), getPreviewSchema: vi.fn(), exportTemplate: vi.fn() } }));
+vi.mock('src/services/api/dynamic-api', () => ({ dynamicApi: { getModule: vi.fn(), updateModule: vi.fn(), entities: vi.fn(), getPreviewSchema: vi.fn(), exportTemplate: vi.fn(), deleteCheck: vi.fn(), deleteTarget: vi.fn() } }));
 const api = vi.mocked(dynamicApi);
 
 const detail: ModuleDetail = {
@@ -101,5 +101,46 @@ describe('ModuleEditorPage', () => {
     expect(URL.revokeObjectURL).toHaveBeenCalledWith('blob:x');
     vi.useRealTimers();
     click.mockRestore();
+  });
+  describe('delete entry points', () => {
+    const field = (id: number, status: 'Active' | 'Inactive') => ({
+      id, key: `f_${id}`, type: 'text' as const, label: { 'zh-TW': `欄${id}` }, blockId: 9, sequence: id, status, options: [],
+      config: { required: false, readOnly: false, showInList: false, isFilterable: false, isSortable: false },
+    });
+    const withBlock = (status: ModuleDetail['status']): ModuleDetail => ({
+      ...detail, status, blocks: [{ id: 9, label: { 'zh-TW': '區塊' }, sequence: 1, collapsed: false, columns: 2, fields: [field(1, 'Active'), field(2, 'Inactive')] }],
+    });
+    const q = (id: string) => document.body.querySelector(`[data-testid="${id}"]`) as HTMLElement | null;
+
+    it('an active module has no delete-module button; a draft or inactive one does', async () => {
+      expect((await mountPage(withBlock('Active'))).find('[data-testid="delete-module"]').exists()).toBe(false);
+      expect((await mountPage(withBlock('Inactive'))).find('[data-testid="delete-module"]').exists()).toBe(true);
+      expect((await mountPage(withBlock('Draft'))).find('[data-testid="delete-module"]').exists()).toBe(true);
+    });
+
+    it('only inactive fields get a delete button; clicking it runs the field delete check', async () => {
+      api.deleteCheck.mockResolvedValue({ canDelete: true, blockers: [], purge: { records: 0, indexRows: 0, historyRows: 0 } });
+      const w = await mountPage(withBlock('Draft'));
+      expect(w.find('[data-testid="delete-field-1"]').exists()).toBe(false);
+      await w.get('[data-testid="delete-field-2"]').trigger('click');
+      await flushPromises();
+      expect(api.deleteCheck).toHaveBeenCalledWith({ kind: 'field', id: 2 });
+      expect(q('delete-dialog')).not.toBeNull();
+      w.unmount();
+    });
+
+    it('the block row delete button runs the block delete check; the module button the module one', async () => {
+      api.deleteCheck.mockResolvedValue({ canDelete: false, blockers: [], purge: { records: 0, indexRows: 0, historyRows: 0 } });
+      const w = await mountPage(withBlock('Draft'));
+      await w.get('[data-testid="delete-block-9"]').trigger('click');
+      await flushPromises();
+      expect(api.deleteCheck).toHaveBeenCalledWith({ kind: 'block', id: 9 });
+      w.unmount();
+      const w2 = await mountPage(withBlock('Draft'));
+      await w2.get('[data-testid="delete-module"]').trigger('click');
+      await flushPromises();
+      expect(api.deleteCheck).toHaveBeenCalledWith({ kind: 'module', key: 'm' });
+      w2.unmount();
+    });
   });
 });

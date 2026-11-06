@@ -1,10 +1,13 @@
 import type {
-  AdminGroup, AdminUser, AdminUserCreate, AdminUserUpdate, AuthOptions, AuthUser, ConditionNode, DesignerField, DetailRowPayload, DynamicRecord, EntitySummary, FieldConfig, FieldType, Group, GroupImpact, I18nText, LightPage, ListView, Me, MenuItem, ModuleDetail, ModulePermissions, ModuleSchema,
+  AdminGroup, AdminUser, DeleteCheck, DeleteTargetRef, AdminUserCreate, AdminUserUpdate, AuthOptions, AuthUser, ConditionNode, DesignerField, DetailRowPayload, DynamicRecord, EntitySummary, FieldConfig, FieldType, Group, GroupImpact, I18nText, LightPage, ListView, Me, MenuItem, ModuleDetail, ModulePermissions, ModuleSchema,
   ImportPreview, ImportResult, PagedResponse, RecordHistoryEntry, RelatedTab, Rule, RollupSource, User, ViewSort,
 } from 'src/domain/dynamic/types';
 import type { CatalogModule, DrillResult, ModuleCatalog, ReportDateRange, ReportDefinition, ReportDetail, ReportItem, ReportResult, ReportShareTarget } from 'src/domain/dynamic/report-types';
 import type { MeTheme, ThemeChoice, ThemeDefaults } from 'src/domain/theme/theme-model';
 import { handleAuthFailure, http, toApiError } from './http';
+
+const deletePath = (t: DeleteTargetRef) =>
+  t.kind === 'module' ? `/modules/${encodeURIComponent(t.key)}` : `/${t.kind}s/${t.id}`;
 
 export interface ModuleSummary {
   id: number;
@@ -111,6 +114,9 @@ export const dynamicApi = {
   activateModule: (key: string) => http.post<void>(`/modules/${key}/activate`).then(data),
   deactivateModule: (key: string) => http.post<void>(`/modules/${key}/deactivate`).then(data),
 
+  deleteCheck: (t: DeleteTargetRef) => http.get<DeleteCheck>(`${deletePath(t)}/delete-check`).then(data),
+  /** purged：預檢回報、使用者已確認的軟刪除記錄筆數；與交易內重算的不符時後端回 409。 */
+  deleteTarget: (t: DeleteTargetRef, purged: number) => http.delete(deletePath(t), { params: { purged } }).then(data),
   addBlock: (key: string, label: I18nText) => http.post(`/modules/${key}/blocks`, { label }).then(data),
   updateBlock: (id: number, body: { label: I18nText; collapsed: boolean; columns: number }) => http.put(`/blocks/${id}`, body).then(data),
   addField: (key: string, body: { blockId: number; type: FieldType; label: I18nText; config: FieldConfig }) =>

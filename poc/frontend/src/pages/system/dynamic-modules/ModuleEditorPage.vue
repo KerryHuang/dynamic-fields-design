@@ -1,13 +1,15 @@
 <script setup lang="ts">
+import { useQueryClient } from '@tanstack/vue-query';
 import { useQuasar } from 'quasar';
 import { computed, ref, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
-import { useRoute } from 'vue-router';
+import { useRoute, useRouter } from 'vue-router';
 import { useDesignerMutation, useModuleDetail } from 'src/application/dynamic/queries/modules-queries';
 import { useEntities } from 'src/application/dynamic/queries/relation-queries';
 import { resolveI18n } from 'src/domain/dynamic/i18n-text';
-import type { DesignerBlock, DesignerField, I18nText } from 'src/domain/dynamic/types';
+import type { DeleteTargetRef, DesignerBlock, DesignerField, I18nText } from 'src/domain/dynamic/types';
 import { errorFor, notifyApiError } from 'src/presentation/dynamic/designer/api-error';
+import DeleteDialog from 'src/presentation/dynamic/designer/DeleteDialog.vue';
 import FieldEditorDialog from 'src/presentation/dynamic/designer/FieldEditorDialog.vue';
 import I18nTextInput from 'src/presentation/dynamic/designer/I18nTextInput.vue';
 import IconSelect from 'src/presentation/dynamic/designer/IconSelect.vue';
@@ -23,6 +25,8 @@ import { isForbidden, type ApiError } from 'src/services/api/http';
 const { t, locale } = useI18n();
 const $q = useQuasar();
 const route = useRoute();
+const router = useRouter();
+const qc = useQueryClient();
 const moduleKey = computed(() => String(route.params.moduleKey));
 const tab = ref<'fields' | 'rules' | 'permissions' | 'preview'>('fields');
 const query = useModuleDetail(moduleKey);
@@ -52,6 +56,25 @@ async function exportTemplate() {
 const fail = (e: unknown, shown: string[] = []) =>
   notifyApiError((o) => $q.notify(o), e as ApiError, shown, t('designer.saveFailed'));
 const mutation = <V, R>(fn: (v: V) => Promise<R>) => useDesignerMutation(fn, () => moduleKey.value);
+
+// ---- delete (module / block / field) ----
+const deleteDialog = ref(false);
+const deleteTarget = ref<DeleteTargetRef | null>(null);
+const deleteName = ref('');
+function askDelete(target: DeleteTargetRef, name: string) {
+  deleteTarget.value = target;
+  deleteName.value = name;
+  deleteDialog.value = true;
+}
+async function onDeleted() {
+  if (deleteTarget.value?.kind === 'module') {
+    qc.removeQueries({ queryKey: ['module', moduleKey.value] });
+    await Promise.all([qc.invalidateQueries({ queryKey: ['modules'] }), qc.invalidateQueries({ queryKey: ['menu'] })]);
+    await router.push('/system/dynamic-modules');
+    return;
+  }
+  await Promise.all(['module', 'schema', 'views', 'records', 'modules', 'rollup-sources'].map((k) => qc.invalidateQueries({ queryKey: [k] })));
+}
 
 // ---- blocks ----
 const selectedBlockId = ref<number | null>(null);
@@ -164,6 +187,10 @@ function saveSection() {
         <q-badge>{{ t(`designer.moduleStatus.${mod.status}`) }}</q-badge>
         <q-space />
         <q-btn outline dense icon="download" :label="t('designer.template.export')" :loading="exporting" data-testid="export-template" @click="exportTemplate" />
+        <q-btn
+          v-if="mod.status !== 'Active'" outline dense color="negative" icon="delete" :label="t('designer.delete.module')" data-testid="delete-module"
+          @click="askDelete({ kind: 'module', key: mod.key }, resolveI18n(mod.name, locale))"
+        />
         <IconSelect :model-value="mod.icon ?? ''" :label="t('designer.icon')" style="min-width: 220px" @update:model-value="setIcon" />
         <q-input v-model="sectionDraft" :label="t('designer.section')" :hint="t('designer.sectionHint')" maxlength="100" outlined dense
           style="min-width: 220px" data-testid="module-section" @change="saveSection" />
@@ -199,7 +226,13 @@ function saveSection() {
               <q-item v-for="b in mod.blocks" :key="b.id" clickable :active="b.id === selectedBlockId" @click="selectedBlockId = b.id">
                 <q-item-section>{{ resolveI18n(b.label, locale) }}</q-item-section>
                 <q-item-section side>
-                  <q-btn flat dense round icon="edit" :title="t('designer.editBlock')" @click.stop="openBlock(b)" />
+                  <div class="row no-wrap items-center">
+                    <q-btn flat dense round icon="edit" :title="t('designer.editBlock')" @click.stop="openBlock(b)" />
+                    <q-btn
+                      flat dense round color="negative" icon="delete" :title="t('designer.delete.action')" :data-testid="`delete-block-${b.id}`"
+                      @click.stop="askDelete({ kind: 'block', id: b.id }, resolveI18n(b.label, locale))"
+                    />
+                  </div>
                 </q-item-section>
               </q-item>
             </q-list>
@@ -234,6 +267,10 @@ function saveSection() {
                     <q-btn
                       v-else flat dense color="primary" :label="t('designer.reactivate')"
                       @click="setStatus.mutate({ id: f.id, status: 'active' }, { onError: (e) => fail(e) })"
+                    />
+                    <q-btn
+                      v-if="f.status === 'Inactive'" flat dense round color="negative" icon="delete" :title="t('designer.delete.action')"
+                      :data-testid="`delete-field-${f.id}`" @click="askDelete({ kind: 'field', id: f.id }, resolveI18n(f.label, locale))"
                     />
                   </div>
                 </q-item-section>
@@ -273,6 +310,8 @@ function saveSection() {
           </q-card-actions>
         </q-card>
       </q-dialog>
+
+      <DeleteDialog v-model="deleteDialog" :target="deleteTarget" :name="deleteName" @deleted="onDeleted" />
 
       <FieldEditorDialog
         v-if="block" v-model="fieldDialog" :module-key="moduleKey" :block-id="block.id" :field="editingField" @created="onCreated"

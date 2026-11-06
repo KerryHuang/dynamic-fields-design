@@ -402,3 +402,26 @@ export interface ImportColumn { header: string; fieldKey?: string; ignoredReason
 export interface ImportRowError { line: number; errors: Record<string, string[]> }
 export interface ImportPreview { columns: ImportColumn[]; total: number; valid: number; errors: ImportRowError[] }
 export interface ImportResult { created: number }
+
+/** 安全刪除的目標：模組用 key，欄位與區塊用 id。 */
+export type DeleteTargetRef = { kind: 'module'; key: string } | { kind: 'field' | 'block'; id: number };
+
+export type DeleteBlockerKind =
+  | 'moduleActive' | 'liveRecords' | 'fieldActive' | 'fieldData' | 'titleField' | 'lastBlock' | 'referenceField'
+  | 'rollup' | 'formula' | 'parentDefault' | 'rule' | 'view' | 'report';
+
+/** 擋下刪除的原因或引用來源；count 只用於 liveRecords 與 fieldData。 */
+export interface DeleteBlocker {
+  kind: DeleteBlockerKind;
+  moduleKey?: string | null;
+  id?: number | null;
+  name: string;
+  count?: number | null;
+}
+
+/** 刪除預檢；purge 是刪除會永久清除的軟刪除記錄與其索引、歷程筆數。 */
+export interface DeleteCheck {
+  canDelete: boolean;
+  blockers: DeleteBlocker[];
+  purge: { records: number; indexRows: number; historyRows: number };
+}
