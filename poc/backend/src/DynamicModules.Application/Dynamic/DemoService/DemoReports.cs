@@ -50,13 +50,30 @@ public static class DemoReports
             measures: [Count()],
             filters: [new ReportFilter(Main(ids, "quality.severity"), "eq", Json(ids, "quality.critical"))],
             primary: Main(ids, "quality.reportDate"), range: Last(60))),
+
+        // 以下幾張主要給儀表板卡片用：沒有自己的日期區間時由卡片指定（指標卡的期間比較、前 N 名與累計占比）
+        new("訂單筆數", ["sales-manager", "sales"], ids => Def(ids, "order", "indicator",
+            groups: [], measures: [Count()], primary: Main(ids, "order.orderDate"), range: null)),
+        new("近 6 個月訂單筆數趨勢", ["sales-manager", "sales"], ids => Def(ids, "order", "line",
+            groups: [Group(Main(ids, "order.orderDate"), "month")],
+            measures: [Count()], primary: Main(ids, "order.orderDate"), range: new ReportDateRange("lastMonths", 6))),
+        new("近 90 天各客戶訂單筆數", ["sales-manager", "sales"], ids => Def(ids, "order", "bar",
+            groups: [Group(new ReportFieldRef("main", 0, ids.FieldIds["order.customer"]))],
+            measures: [Count()], primary: Main(ids, "order.orderDate"), range: Last(90))),
+        new("報修筆數", ["maint", "floor"], ids => Def(ids, "repair", "indicator",
+            groups: [], measures: [Count()], primary: Main(ids, "repair.reportDate"), range: null)),
+        new("品質異常筆數", ["qa"], ids => Def(ids, "quality", "indicator",
+            groups: [], measures: [Count()], primary: Main(ids, "quality.reportDate"), range: null)),
+        new("近 3 個月品質異常筆數趨勢", ["qa"], ids => Def(ids, "quality", "line",
+            groups: [Group(Main(ids, "quality.reportDate"), "month")],
+            measures: [Count()], primary: Main(ids, "quality.reportDate"), range: new ReportDateRange("lastMonths", 3))),
     ];
 
     public static IReadOnlyList<string> Names { get; } = [.. All.Select(s => s.Name)];
 
     private static ReportDefinition Def(
         TemplateIdMap ids, string module, string viz, List<ReportGroup> groups, List<ReportMeasure> measures,
-        ReportFieldRef primary, ReportDateRange range, ReportChild? child = null,
+        ReportFieldRef primary, ReportDateRange? range, ReportChild? child = null,
         List<ReportFieldRef>? columns = null, List<ReportFilter>? filters = null) =>
         new(ReportDefinition.CurrentVersion, ids.ModuleKeys[module], child, columns ?? [], groups, measures,
             filters ?? [], primary, range, [], viz);
