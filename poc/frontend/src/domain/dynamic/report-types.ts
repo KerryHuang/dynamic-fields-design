@@ -19,6 +19,10 @@ export interface ReportResult {
   total?: Record<string, number | null> | null;
   /** 每列順序對齊 columns 中 role 為 field 的欄。 */
   detailRows?: (string | number | null)[][] | null;
+  /** 明細的總列數，含沒有回傳的列。 */
+  detailTotal?: number | null;
+  /** 明細超過畫面上限，detailRows 只有前面幾列；總計仍依全部列計算。下鑽另看 truncated。 */
+  detailTruncated?: boolean;
   dedupedNote: boolean;
   basisDate: string;
   /** basisDate 與後端的今天不同（Demo 資料日期停在產生那天）。 */

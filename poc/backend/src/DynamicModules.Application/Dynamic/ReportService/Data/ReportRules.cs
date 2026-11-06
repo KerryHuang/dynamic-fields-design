@@ -15,6 +15,7 @@ public static class ReportRules
     public const string ReportNotFound = "報表不存在";
     public const int MaxNameLength = 100;
     public const int DrillLimit = 500;
+    public const int DetailLimit = 1000;
 
     private const int MaxDays = 3650, MaxListItems = 50, MaxTextLength = 440;
 
@@ -29,6 +30,10 @@ public static class ReportRules
         Enum.GetValues<FilterOperator>().ToDictionary(o => JsonNamingPolicy.CamelCase.ConvertName(o.ToString()));
 
     private static readonly Regex NoOffsetDateTime = new(@"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(:\d{2}(\.\d+)?)?$", RegexOptions.CultureInvariant);
+
+    /// <summary>畫面上的明細最多 <see cref="DetailLimit"/> 列，幾萬列的 DOM 打不開；總計與 DetailTotal 仍是全部列，要看全部用匯出。</summary>
+    public static ReportResult CapDetail(ReportResult r) =>
+        r.DetailRows is { Count: > DetailLimit } rows ? r with { DetailRows = rows.Take(DetailLimit).ToList(), DetailTruncated = true } : r;
 
     public static Dictionary<string, string[]> ToErrors(string key, IReadOnlyList<string> messages) =>
         new() { [key] = messages.ToArray() };

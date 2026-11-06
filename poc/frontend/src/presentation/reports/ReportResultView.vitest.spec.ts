@@ -129,6 +129,14 @@ describe('ReportResultView', () => {
     expect(t.text()).toContain('12.5%');
   });
 
+  it('tells the viewer only the first rows are shown and that export has them all', () => {
+    const fields = [{ key: 'main:1:', label: '客戶', role: 'field' as const, valueType: 'text' }];
+    const rows = { ...OK, columns: fields, groups: null, detailRows: [['甲']], detailTotal: 1234567 };
+    const w = mountView({ ...rows, detailTruncated: true }, 'table', 'en-US');
+    expect(has(w, 'detail-truncated').text()).toBe('Showing the first 1 of 1,234,567 rows. Use Export Excel to get them all');
+    expect(has(mountView({ ...rows, detailTruncated: false }), 'detail-truncated').exists()).toBe(false);
+  });
+
   it('translates the entity title column label by locale', () => {
     const result = { ...OK, groups: null, total: null, columns: [{ key: 'main:0:7', label: '客戶．標題', role: 'field' as const, valueType: 'text' }], detailRows: [['甲']] };
     expect(has(mountView(result, 'table', 'en-US'), 'report-detail-table').text()).toContain('客戶．Title');

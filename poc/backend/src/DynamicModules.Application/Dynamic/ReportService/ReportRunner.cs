@@ -243,7 +243,7 @@ public class ReportRunner(
         IReadOnlyList<IReadOnlyList<object?>>? detail = fieldColumns.Count == 0 ? null : DetailRows(rows, fieldColumns, d, bound, ctx);
         ReportAppliedRange? applied = range is null ? null : new ReportAppliedRange(resolved!.Value.Item1, resolved.Value.Item2, range.Kind, range.N);
         return new ReportResult(rows.Count == 0 ? Empty : Ok, null, $"一筆{rowModule.NameI18n.Resolve(locale)}", columns,
-            groups, calc.Total, detail, calc.DedupedNote, basis, applied, frozen);
+            groups, calc.Total, detail, calc.DedupedNote, basis, applied, frozen, detail?.Count);
     }
 
     private async Task<Module?> ActiveModuleAsync(string key, CancellationToken ct) =>

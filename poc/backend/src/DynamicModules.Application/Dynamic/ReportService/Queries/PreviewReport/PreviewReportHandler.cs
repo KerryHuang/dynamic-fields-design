@@ -11,6 +11,6 @@ public class PreviewReportHandler(ReportDefinitionValidator validator, ReportRun
     {
         var (definition, failure) = await validator.ValidateAsync(null, request.Definition, ct);
         if (definition is null) return failure!;
-        return ServiceResult.Success(await runner.RunAsync(definition, new ReportRunOptions(null, null, request.Locale), ct));
+        return ServiceResult.Success(ReportRules.CapDetail(await runner.RunAsync(definition, new ReportRunOptions(null, null, request.Locale), ct)));
     }
 }

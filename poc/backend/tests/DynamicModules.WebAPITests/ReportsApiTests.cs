@@ -1070,6 +1070,66 @@ public class ReportsApiTests
             .StatusCode.Should().Be(HttpStatusCode.BadRequest);
     }
 
+    private static void InsertRows(TestApp app, World w, int count, decimal amount, string status)
+    {
+        using var scope = app.Services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<DynamicDbContext>();
+        var moduleId = db.Set<Module>().Single(m => m.Key == w.Main).Id;
+        var json = JsonSerializer.Serialize(new Dictionary<string, object> { [w.AmountKey] = amount, [w.StatusKey] = status });
+        for (var i = 0; i < count; i++)
+        {
+            var row = new DynamicModules.Domain.Entities.Dynamic.Record { ModuleId = moduleId, Title = "row", OwnerUserId = "admin", ValuesJson = json, RowVersion = "v1" };
+            row.StampCreated("admin", new DateTime(2026, 11, 4));
+            db.Add(row);
+        }
+        db.SaveChanges();
+    }
+
+    [Fact]
+    public async Task DetailReport_Over1000Rows_RunAndPreviewCapOnScreen_TotalsAndExportUseAll()
+    {
+        using var app = new TestApp();
+        var w = await MakeWorld(app);
+        InsertRows(app, w, 1001, 2, w.Options[0]);
+        var admin = app.AsUser();
+        var def = Def(w.Main, columns: [Ref(w.Amount)], measures: [Sum("s", w.Amount)]);
+        var id = await Create(admin, def);
+
+        var run = await Run(admin, id);
+        var preview = await JsonOf(await admin.PostAsJsonAsync($"{Reports}/preview", def));
+
+        foreach (var r in new[] { run, preview })
+        {
+            r.GetProperty("detailRows").GetArrayLength().Should().Be(1000);
+            r.GetProperty("detailTotal").GetInt32().Should().Be(1001);
+            r.GetProperty("detailTruncated").GetBoolean().Should().BeTrue();
+            TotalOf(r, "s").Should().Be(2002);
+        }
+        using var wb = new XLWorkbook(await (await admin.GetAsync($"{Reports}/{id}/export")).Content.ReadAsStreamAsync());
+        wb.Worksheet(1).Column(1).CellsUsed().Count(c => c.DataType == XLDataType.Number).Should().Be(1001);
+    }
+
+    [Fact]
+    public async Task DetailReport_Exactly1000Rows_NotTruncated_DrillKeeps500()
+    {
+        using var app = new TestApp();
+        var w = await MakeWorld(app);
+        InsertRows(app, w, 1000, 2, w.Options[0]);
+        var admin = app.AsUser();
+        var detail = await Create(admin, Def(w.Main, columns: [Ref(w.Amount)]));
+        var grouped = await Create(admin, ByStatus(w));
+
+        var run = await Run(admin, detail);
+        var drill = await JsonOf(await admin.PostAsJsonAsync($"{Reports}/{grouped}/drill", new { groupKeys = new[] { w.Options[0] } }));
+
+        run.GetProperty("detailRows").GetArrayLength().Should().Be(1000);
+        run.GetProperty("detailTotal").GetInt32().Should().Be(1000);
+        run.GetProperty("detailTruncated").GetBoolean().Should().BeFalse();
+        drill.GetProperty("detailRows").GetArrayLength().Should().Be(500);
+        drill.GetProperty("truncated").GetBoolean().Should().BeTrue();
+        drill.GetProperty("detailTruncated").GetBoolean().Should().BeFalse();
+    }
+
     /// <summary>公式結果由數字改成日期後，已存的量值與條件對不上欄位：回 fieldMissing，不回假的 empty、0% 或日期序號加總。</summary>
     [Fact]
     public async Task Run_FormulaResultTypeChanged_FieldMissingWithVisibleName()

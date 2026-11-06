@@ -33,6 +33,7 @@ const showIndicator = computed(() => measureCols.value.length > 0 && (props.viz 
 const showGroupTable = computed(() => hasGroups.value && !showChart.value && !showIndicator.value);
 const fmt = (v: string | number | null | undefined, c: ReportColumn) => formatValue(v, c.valueType, locale.value);
 const range = computed(() => props.result.appliedRange);
+const countText = (n: number | null | undefined) => (n ?? 0).toLocaleString(locale.value);
 </script>
 
 <template>
@@ -83,6 +84,9 @@ const range = computed(() => props.result.appliedRange);
             </tr>
           </tbody>
         </q-markup-table>
+        <div v-if="result.detailTruncated" class="text-warning" data-testid="detail-truncated">
+          {{ t('reports.detailTruncated', { shown: countText(result.detailRows?.length), total: countText(result.detailTotal) }) }}
+        </div>
         <q-markup-table v-if="hasDetail" flat bordered dense data-testid="report-detail-table">
           <thead>
             <tr><th v-for="c in fieldCols" :key="c.key" class="text-left">{{ label(c) }}</th></tr>

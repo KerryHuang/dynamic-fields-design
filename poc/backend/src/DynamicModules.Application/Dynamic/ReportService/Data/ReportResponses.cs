@@ -11,12 +11,13 @@ public record ReportRunOptions(ReportDateRange? RangeOverride, IReadOnlyList<str
 /// <summary>
 /// 報表執行結果。State 是 ok|empty|restricted|fieldMissing|moduleDisabled|tooMany，HTTP 一律 200；ok、empty 以外不帶任何數字。
 /// BasisDate 與後端的今天不同時 BasisIsFrozen 為 true（Demo 資料日期停在產生那天），前端據此標示資料基準日。
-/// DetailRows 每列的順序對齊 Columns 中 Role 為 field 的欄。
+/// DetailRows 每列的順序對齊 Columns 中 Role 為 field 的欄。DetailTotal 是明細全部的列數；DetailTruncated 表示畫面上限截掉了部分列（<see cref="ReportRules.CapDetail"/>），Total 不受影響。
 /// </summary>
 public record ReportResult(
     string State, string? Message, string RowMeaning, IReadOnlyList<ReportColumn> Columns,
     IReadOnlyList<ReportGroupResult>? Groups, IReadOnlyDictionary<string, decimal?>? Total,
-    IReadOnlyList<IReadOnlyList<object?>>? DetailRows, bool DedupedNote, DateOnly BasisDate, ReportAppliedRange? AppliedRange, bool BasisIsFrozen = false);
+    IReadOnlyList<IReadOnlyList<object?>>? DetailRows, bool DedupedNote, DateOnly BasisDate, ReportAppliedRange? AppliedRange, bool BasisIsFrozen = false,
+    int? DetailTotal = null, bool DetailTruncated = false);
 
 /// <summary>
 /// Key：group、field 是 ReportCalculator.KeyOf，measure 是量值 Id；ReportSort.Key 用同一套鍵。Role 是 group|measure|field。

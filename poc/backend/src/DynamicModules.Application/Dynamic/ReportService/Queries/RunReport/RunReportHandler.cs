@@ -16,6 +16,6 @@ public class RunReportHandler(ReportAccess access, ReportRunner runner) : IReque
             return ServiceResult.Invalid(ReportRules.ToErrors("range", [error]));
 
         var result = await runner.RunAsync(ReportDefinition.Parse(report.DefinitionJson), new ReportRunOptions(request.Range, null, request.Locale), ct);
-        return ServiceResult.Success(result);
+        return ServiceResult.Success(ReportRules.CapDetail(result));
     }
 }
