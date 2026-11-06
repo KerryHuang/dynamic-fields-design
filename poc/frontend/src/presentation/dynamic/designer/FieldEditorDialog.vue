@@ -319,7 +319,7 @@ const saving = computed(() => create.isPending.value || update.isPending.value);
             :readonly="isEdit" outlined dense use-input input-debounce="0" fill-input hide-selected @filter="typeSel.onFilter" @popup-hide="typeSel.reset">
             <template #no-option><SelectNoOption /></template>
           </q-select>
-          <div v-if="isEdit" class="text-caption text-grey-7 q-mt-xs">{{ t('designer.typeLocked') }}</div>
+          <div v-if="isEdit" class="text-caption text-muted q-mt-xs">{{ t('designer.typeLocked') }}</div>
         </div>
 
         <div class="row q-gutter-md">
@@ -334,11 +334,11 @@ const saving = computed(() => create.isPending.value || update.isPending.value);
         <div class="row q-gutter-md">
           <div>
             <q-toggle v-model="form.isFilterable" data-testid="filterable-toggle" :disable="!canFilter" :label="t('designer.filterable')" />
-            <div v-if="!canFilter" class="text-caption text-grey-7">{{ t('designer.filterUnsupported') }}</div>
+            <div v-if="!canFilter" class="text-caption text-muted">{{ t('designer.filterUnsupported') }}</div>
           </div>
           <div>
             <q-toggle v-if="!isReference" v-model="form.isSortable" data-testid="sortable-toggle" :disable="!canSort" :label="t('designer.sortable')" />
-            <div v-if="!canSort && !isReference" class="text-caption text-grey-7">{{ t('designer.sortUnsupported') }}</div>
+            <div v-if="!canSort && !isReference" class="text-caption text-muted">{{ t('designer.sortUnsupported') }}</div>
           </div>
         </div>
 
@@ -347,7 +347,7 @@ const saving = computed(() => create.isPending.value || update.isPending.value);
             <TextareaInput
               v-model="form.formula" :label="t('designer.formula.expression')" :error="errorFor(error, 'Config.Formula')"
             />
-            <div class="text-caption text-grey-7 q-mt-xs">{{ t('designer.formula.hint') }}</div>
+            <div class="text-caption text-muted q-mt-xs">{{ t('designer.formula.hint') }}</div>
           </div>
           <q-select data-testid="insert-field" :model-value="null" :options="insertSel.filtered.value" :label="t('designer.formula.insertField')"
             emit-value map-options outlined dense @update:model-value="insertField" use-input input-debounce="0" @filter="insertSel.onFilter" @popup-hide="insertSel.reset" ref="insertSelEl">
@@ -369,10 +369,10 @@ const saving = computed(() => create.isPending.value || update.isPending.value);
           <div class="text-caption q-mt-xs" data-testid="autonumber-example">
             {{ t('designer.autonumber.example') }}：{{ formatExample }}
           </div>
-          <div class="text-caption text-grey-7">{{ t('designer.autonumber.hint') }}</div>
+          <div class="text-caption text-muted">{{ t('designer.autonumber.hint') }}</div>
           <div v-if="isDetailModule" data-testid="autonumber-scope">
             <q-toggle v-model="form.scopeParent" :label="t('designer.autonumber.scopeParent')" :disable="isEdit" />
-            <div class="text-caption text-grey-7">{{ t('designer.autonumber.scopeParentHint') }}</div>
+            <div class="text-caption text-muted">{{ t('designer.autonumber.scopeParentHint') }}</div>
             <div v-if="errorFor(error, 'Config.Scope')" class="text-caption text-negative">{{ errorFor(error, 'Config.Scope') }}</div>
           </div>
         </div>
@@ -397,10 +397,10 @@ const saving = computed(() => create.isPending.value || update.isPending.value);
             </q-select>
           </div>
           <div v-if="form.rollupSource != null" data-testid="rollup-condition">
-            <div class="text-caption text-grey-7">{{ t('designer.rollup.condition') }}</div>
+            <div class="text-caption text-muted">{{ t('designer.rollup.condition') }}</div>
             <ConditionEditor v-model="form.rollupCondition" :fields="sourceFields" />
           </div>
-          <div class="text-caption text-grey-7">{{ t('designer.rollup.hint') }}</div>
+          <div class="text-caption text-muted">{{ t('designer.rollup.hint') }}</div>
           <div v-if="errorFor(error, 'Config.Rollup')" class="text-caption text-negative">{{ errorFor(error, 'Config.Rollup') }}</div>
         </div>
 
@@ -457,7 +457,7 @@ const saving = computed(() => create.isPending.value || update.isPending.value);
         </div>
 
         <div v-if="!noDefault" data-testid="default-value">
-          <div v-if="defaultDisabled" class="text-caption text-grey-7">
+          <div v-if="defaultDisabled" class="text-caption text-muted">
             {{ t('designer.defaultValue') }}：{{ t('designer.defaultAfterOptions') }}
           </div>
           <div v-else class="row items-start no-wrap q-gutter-sm">

@@ -45,7 +45,7 @@ const tabLabel = (x: { moduleName: Record<string, string | undefined>; fieldLabe
         <q-item-section side>{{ date.formatDate(new Date(r.modifiedTime), 'YYYY-MM-DD HH:mm') }}</q-item-section>
       </q-item>
       <q-item v-if="items.length === 0 && !pagedQuery.isFetching.value">
-        <q-item-section class="text-grey">{{ t('dynamic.related.empty') }}</q-item-section>
+        <q-item-section class="text-muted">{{ t('dynamic.related.empty') }}</q-item-section>
       </q-item>
     </q-list>
     <div v-if="pageCount > 1" class="flex flex-center q-pa-sm">

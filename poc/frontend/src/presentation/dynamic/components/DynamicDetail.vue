@@ -26,7 +26,7 @@ const visibleBlocks = computed(() => props.schema.blocks
       <q-separator />
       <q-list class="row">
         <q-item v-for="f in block.fields" :key="f.key" :class="fieldColClass(block.columns, isFullWidth(f))">
-          <q-item-section side class="text-grey-8" style="min-width: 10rem">{{ resolveI18n(f.label, locale) }}</q-item-section>
+          <q-item-section side class="text-muted" style="min-width: 10rem">{{ resolveI18n(f.label, locale) }}</q-item-section>
           <q-item-section :data-testid="f.key">
             <template v-if="refOf(f)">
               <router-link v-if="refOf(f)!.to" :to="refOf(f)!.to!">{{ refOf(f)!.text }}</router-link>

@@ -56,9 +56,9 @@ function submit() {
 
 <template>
   <div v-if="permsQuery.isError.value" class="text-negative">{{ t('dynamic.loadFailed') }}</div>
-  <div v-else-if="!ready" class="text-grey">{{ t('designer.loading') }}</div>
+  <div v-else-if="!ready" class="text-muted">{{ t('designer.loading') }}</div>
   <div v-else>
-    <div v-if="detailOf" class="text-body2 text-grey-8" data-testid="detail-inherited">{{ t('designer.permissions.detailInherited') }}</div>
+    <div v-if="detailOf" class="text-body2 text-muted" data-testid="detail-inherited">{{ t('designer.permissions.detailInherited') }}</div>
     <PrivilegeEditor v-else v-model="draftModel" :groups="groups.data.value!" :users="users.data.value!" :readonly="readonly" :errors="errors" />
     <FieldPermissionEditor
       v-model="draftModel" class="q-mt-lg" :fields="fields" :groups="groups.data.value!" :title-field-id="titleFieldId"

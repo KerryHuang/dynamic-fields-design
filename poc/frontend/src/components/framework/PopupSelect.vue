@@ -112,7 +112,7 @@ const isPicked = (item: LightItem) => (props.multiple ? picked.value : current.v
           <q-item-section v-if="isPicked(i)" side><q-icon name="check" /></q-item-section>
         </q-item>
         <q-item v-if="!items.length">
-          <q-item-section class="text-grey">{{ isError ? t('dynamic.reference.restricted') : t('dynamic.reference.empty') }}</q-item-section>
+          <q-item-section class="text-muted">{{ isError ? t('dynamic.reference.restricted') : t('dynamic.reference.empty') }}</q-item-section>
         </q-item>
       </q-list>
       <q-card-section v-if="pageCount > 1" class="flex flex-center">

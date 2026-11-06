@@ -156,7 +156,7 @@ function saveSection() {
     <ForbiddenNotice v-if="forbidden" />
     <div v-else-if="notFound" class="text-negative">{{ t('designer.notFound') }}</div>
     <div v-else-if="query.isError.value" class="text-negative">{{ t('dynamic.loadFailed') }}</div>
-    <div v-else-if="!mod" class="text-grey">{{ t('designer.loading') }}</div>
+    <div v-else-if="!mod" class="text-muted">{{ t('designer.loading') }}</div>
     <template v-else>
       <div class="row items-center q-gutter-md q-mb-md">
         <q-btn flat dense icon="arrow_back" to="/system/dynamic-modules" />
@@ -195,7 +195,7 @@ function saveSection() {
               <q-btn dense color="primary" icon="add" :label="t('designer.addBlock')" data-testid="add-block" @click="openBlock()" />
             </div>
             <q-list bordered separator>
-              <q-item v-if="!mod.blocks.length"><q-item-section class="text-grey">{{ t('designer.noBlocks') }}</q-item-section></q-item>
+              <q-item v-if="!mod.blocks.length"><q-item-section class="text-muted">{{ t('designer.noBlocks') }}</q-item-section></q-item>
               <q-item v-for="b in mod.blocks" :key="b.id" clickable :active="b.id === selectedBlockId" @click="selectedBlockId = b.id">
                 <q-item-section>{{ resolveI18n(b.label, locale) }}</q-item-section>
                 <q-item-section side>
@@ -211,14 +211,14 @@ function saveSection() {
               <q-space />
               <q-btn dense color="primary" icon="add" :label="t('designer.addField')" :disable="!block" data-testid="add-field" @click="openField()" />
             </div>
-            <div v-if="!block" class="text-grey">{{ t('designer.selectBlock') }}</div>
+            <div v-if="!block" class="text-muted">{{ t('designer.selectBlock') }}</div>
             <q-list v-else bordered separator>
-              <q-item v-if="!block.fields.length"><q-item-section class="text-grey">{{ t('designer.noFields') }}</q-item-section></q-item>
-              <q-item v-for="(f, i) in block.fields" :key="f.id" :class="{ 'text-grey': f.status === 'Inactive' }" :data-testid="`field-${f.id}`">
+              <q-item v-if="!block.fields.length"><q-item-section class="text-muted">{{ t('designer.noFields') }}</q-item-section></q-item>
+              <q-item v-for="(f, i) in block.fields" :key="f.id" :class="{ 'text-muted': f.status === 'Inactive' }" :data-testid="`field-${f.id}`">
                 <q-item-section>
                   <q-item-label>
                     {{ resolveI18n(f.label, locale) }}
-                    <q-badge v-if="f.status === 'Inactive'" color="grey" class="q-ml-sm">{{ t('designer.fieldInactive') }}</q-badge>
+                    <q-badge v-if="f.status === 'Inactive'" color="muted" class="q-ml-sm">{{ t('designer.fieldInactive') }}</q-badge>
                   </q-item-label>
                   <q-item-label caption>{{ typeLabel(f) }} · {{ f.key }}</q-item-label>
                 </q-item-section>
@@ -260,7 +260,7 @@ function saveSection() {
             <I18nTextInput ref="blockInput" v-model="blockForm.label" :label="t('designer.blockLabel')" :error="errorFor(blockError, 'Label')" />
             <q-toggle v-if="blockForm.id !== undefined" v-model="blockForm.collapsed" :label="t('designer.collapsed')" />
             <div v-if="blockForm.id !== undefined">
-              <div class="text-caption text-grey-8">{{ t('designer.columns') }}</div>
+              <div class="text-caption text-muted">{{ t('designer.columns') }}</div>
               <q-btn-toggle
                 v-model="blockForm.columns" data-testid="block-columns" no-caps unelevated toggle-color="primary"
                 :options="[1, 2, 3].map((n) => ({ label: String(n), value: n }))"

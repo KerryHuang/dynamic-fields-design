@@ -152,7 +152,7 @@ function setJson(v: string | null) {
 
 <template>
   <div v-if="complex" class="column q-gutter-sm">
-    <div class="text-grey-8" data-testid="complex-notice">{{ t('designer.rules.jsonHint') }}</div>
+    <div class="text-muted" data-testid="complex-notice">{{ t('designer.rules.jsonHint') }}</div>
     <TextareaInput :model-value="json" :label="t('designer.rules.conditionJson')" data-testid="condition-json" @update:model-value="setJson" />
     <div v-if="jsonError" class="text-negative text-caption" data-testid="condition-json-error">{{ t('designer.rules.jsonInvalid') }}</div>
   </div>

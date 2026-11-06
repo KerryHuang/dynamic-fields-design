@@ -89,7 +89,7 @@ function submit() {
             </q-item-section>
           </q-item>
           <q-item v-if="templates.isSuccess.value && !templates.data.value?.length">
-            <q-item-section class="text-grey">{{ t('designer.template.noTemplates') }}</q-item-section>
+            <q-item-section class="text-muted">{{ t('designer.template.noTemplates') }}</q-item-section>
           </q-item>
         </q-list>
       </q-card-section>
@@ -103,7 +103,7 @@ function submit() {
             </div>
             <q-input v-model="forms[m.code]!.key" :label="t('designer.key')" outlined dense :data-testid="`module-key-${m.code}`" />
             <I18nTextInput v-model="forms[m.code]!.name" :label="t('designer.name')" />
-            <div class="text-caption text-grey-7">{{ t('designer.template.fields') }}</div>
+            <div class="text-caption text-muted">{{ t('designer.template.fields') }}</div>
             <div v-for="f in m.fields" :key="f.code">
               <q-checkbox
                 dense :model-value="selected.has(`${m.code}.${f.code}`)" :disable="f.locked"

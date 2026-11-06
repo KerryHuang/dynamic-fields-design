@@ -116,7 +116,7 @@ function submit() {
 
 <template>
   <div v-if="rulesQuery.isError.value" class="text-negative">{{ t('dynamic.loadFailed') }}</div>
-  <div v-else-if="!ready" class="text-grey">{{ t('designer.loading') }}</div>
+  <div v-else-if="!ready" class="text-muted">{{ t('designer.loading') }}</div>
   <div v-else>
     <div class="row items-center q-mb-sm">
       <q-space />
@@ -129,15 +129,15 @@ function submit() {
     </div>
 
     <q-list bordered separator>
-      <q-item v-if="!draft!.length"><q-item-section class="text-grey">{{ t('designer.rules.empty') }}</q-item-section></q-item>
+      <q-item v-if="!draft!.length"><q-item-section class="text-muted">{{ t('designer.rules.empty') }}</q-item-section></q-item>
       <q-item
-        v-for="(r, i) in draft" :key="i" :class="{ 'text-grey': !r.active, 'rule-row--error': !!rowError(i) }"
+        v-for="(r, i) in draft" :key="i" :class="{ 'text-muted': !r.active, 'rule-row--error': !!rowError(i) }"
         :data-testid="`rule-row-${i}`"
       >
         <q-item-section>
           <q-item-label>
             <q-badge :label="t(`designer.rules.kinds.${r.kind}`)" />
-            <q-badge v-if="!r.active" color="grey" class="q-ml-sm">{{ t('designer.rules.inactive') }}</q-badge>
+            <q-badge v-if="!r.active" color="muted" class="q-ml-sm">{{ t('designer.rules.inactive') }}</q-badge>
           </q-item-label>
           <q-item-label caption>{{ t('designer.rules.condition') }}：{{ summary(r.condition) }}</q-item-label>
           <q-item-label caption>{{ t('designer.rules.targets') }}：{{ r.targets.map(targetText).join('、') }}</q-item-label>

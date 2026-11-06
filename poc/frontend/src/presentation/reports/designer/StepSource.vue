@@ -43,7 +43,7 @@ function pickChild(v: string) {
         dense outlined emit-value map-options :label="t('reports.designer.child')" :options="childOptions"
         :model-value="state.child ? childKey(state.child) : ''" data-testid="child-module" @update:model-value="pickChild"
       />
-      <div class="text-caption text-grey-7">{{ t('reports.designer.childHint') }}</div>
+      <div class="text-caption text-muted">{{ t('reports.designer.childHint') }}</div>
     </template>
     <div v-if="unavailable.child" class="text-negative" data-testid="child-unavailable">
       {{ t('reports.designer.childUnavailable', { name: state.child?.moduleKey }) }}

@@ -60,7 +60,7 @@ const measureText = (i: number) => {
 <template>
   <div class="column q-gutter-y-md" data-testid="designer-step-3">
     <div class="text-subtitle2">{{ t('reports.designer.groups') }}</div>
-    <div class="text-caption text-grey-7">{{ t('reports.designer.groupsHint') }}</div>
+    <div class="text-caption text-muted">{{ t('reports.designer.groupsHint') }}</div>
     <div v-for="(g, i) in s.groups" :key="i" class="row items-center q-gutter-x-sm" :data-testid="`group-row-${i}`">
       <template v-if="findEntry(entries, g.field)">
         <span>{{ findEntry(entries, g.field)!.label }}</span>

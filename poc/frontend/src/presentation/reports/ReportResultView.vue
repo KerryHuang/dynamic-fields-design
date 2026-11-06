@@ -41,7 +41,7 @@ const countText = (n: number | null | undefined) => (n ?? 0).toLocaleString(loca
       {{ stateText }}
     </div>
     <template v-else>
-      <div class="text-caption text-grey-8">
+      <div class="text-caption text-muted">
         <span v-if="range" data-testid="applied-range">{{ t('reports.appliedRange', { from: range.from, to: range.to }) }}</span>
         <span v-if="result.rowMeaning" class="q-ml-sm" data-testid="row-meaning">{{ t('reports.rowMeaning', { text: result.rowMeaning }) }}</span>
         <span v-if="result.basisIsFrozen" class="q-ml-sm" data-testid="basis-date">{{ t('reports.basisDate', { date: result.basisDate }) }}</span>
@@ -51,7 +51,7 @@ const countText = (n: number | null | undefined) => (n ?? 0).toLocaleString(loca
         <div v-if="showIndicator" class="row q-gutter-md" data-testid="report-indicator">
           <q-card v-for="m in measureCols" :key="m.key" flat bordered class="q-pa-md">
             <div class="text-caption">{{ m.label }}</div>
-            <div class="text-h4">{{ fmt(result.total?.[m.key], m) }}</div>
+            <div class="text-stat">{{ fmt(result.total?.[m.key], m) }}</div>
           </q-card>
         </div>
         <template v-else-if="showChart">

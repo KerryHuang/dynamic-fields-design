@@ -88,7 +88,7 @@ function toggleUser(userId: string, axis: keyof Privileges, value: boolean) {
           </tr>
         </thead>
         <tbody>
-          <tr v-for="g in groups" :key="g.id" :class="{ 'bg-red-1': rowErrors('groups', groupIndex(g.id)) }" :data-testid="`group-row-${g.id}`">
+          <tr v-for="g in groups" :key="g.id" :class="{ 'bg-negative-soft': rowErrors('groups', groupIndex(g.id)) }" :data-testid="`group-row-${g.id}`">
             <td class="text-left">
               {{ resolveI18n(g.name, locale) }}
               <div v-if="rowErrors('groups', groupIndex(g.id))" class="text-negative text-caption" :data-testid="`group-error-${g.id}`">
@@ -130,7 +130,7 @@ function toggleUser(userId: string, axis: keyof Privileges, value: boolean) {
           </tr>
         </thead>
         <tbody>
-          <tr v-for="(u, i) in modelValue.users" :key="u.userId" :class="{ 'bg-red-1': rowErrors('users', i) }" :data-testid="`user-row-${u.userId}`">
+          <tr v-for="(u, i) in modelValue.users" :key="u.userId" :class="{ 'bg-negative-soft': rowErrors('users', i) }" :data-testid="`user-row-${u.userId}`">
             <td class="text-left">
               {{ userName(u.userId) }}
               <div v-if="rowErrors('users', i)" class="text-negative text-caption" :data-testid="`user-error-${u.userId}`">{{ rowErrors('users', i) }}</div>

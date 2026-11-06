@@ -114,7 +114,7 @@ async function submit() {
         <div>
           <div class="text-subtitle2 q-mb-xs">{{ t('designer.rules.condition') }}</div>
           <ConditionEditor v-model="condition" :fields="fields" allow-field-ref />
-          <div v-if="kind === 'validation'" class="text-grey-8 text-caption q-mt-xs">{{ t('designer.rules.validationHint') }}</div>
+          <div v-if="kind === 'validation'" class="text-muted text-caption q-mt-xs">{{ t('designer.rules.validationHint') }}</div>
           <div v-if="usesComputed" class="text-warning q-mt-xs" data-testid="rule-computed-hint">{{ t('designer.rules.computedHint') }}</div>
         </div>
 
@@ -125,7 +125,7 @@ async function submit() {
           />
           <div v-if="optionField">
             <div class="text-subtitle2">{{ t('designer.rules.options') }}</div>
-            <div v-if="!optionField.options.length" class="text-grey">{{ t('designer.rules.noOptions') }}</div>
+            <div v-if="!optionField.options.length" class="text-muted">{{ t('designer.rules.noOptions') }}</div>
             <q-checkbox
               v-for="o in optionField.options" :key="o.value" :model-value="optionIds.includes(optionId(o.value))"
               :label="resolveI18n(o.label, locale) + (o.active ? '' : ` (${t('designer.rules.inactive')})`)" :data-testid="`rule-opt-${o.value}`"

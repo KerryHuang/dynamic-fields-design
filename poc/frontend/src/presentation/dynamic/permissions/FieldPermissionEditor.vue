@@ -75,7 +75,7 @@ const optionError = (optionId: number) => {
   <div class="q-gutter-y-lg">
     <section>
       <div class="text-subtitle1">{{ t('designer.permissions.fields') }}</div>
-      <div class="text-caption text-grey q-mb-sm">{{ t('designer.permissions.pricingHint') }}</div>
+      <div class="text-caption text-muted q-mb-sm">{{ t('designer.permissions.pricingHint') }}</div>
       <q-markup-table flat bordered dense>
         <thead>
           <tr>
@@ -86,7 +86,7 @@ const optionError = (optionId: number) => {
         <tbody>
           <tr v-for="f in activeFields" :key="f.id">
             <td class="text-left">{{ resolveI18n(f.label, locale) }}</td>
-            <td v-for="g in groups" :key="g.id" :class="{ 'bg-red-1': cellError(f.id, g.id) }" style="min-width: 120px">
+            <td v-for="g in groups" :key="g.id" :class="{ 'bg-negative-soft': cellError(f.id, g.id) }" style="min-width: 120px">
               <q-select :model-value="accessOf(f.id, g.id)" :options="accessSel.filterBy(accessOptions(f, g.id))" :disable="readonly" emit-value map-options
                 dense outlined :data-testid="`fp-${f.id}-${g.id}`" @update:model-value="setAccess(f.id, g.id, $event)" use-input input-debounce="0" fill-input hide-selected @filter="accessSel.onFilter" @popup-hide="accessSel.reset">
                 <template #no-option><SelectNoOption /></template>
@@ -102,14 +102,14 @@ const optionError = (optionId: number) => {
 
     <section>
       <div class="text-subtitle1">{{ t('designer.permissions.options') }}</div>
-      <div class="text-caption text-grey q-mb-sm">{{ t('designer.permissions.optionsHint') }}</div>
+      <div class="text-caption text-muted q-mb-sm">{{ t('designer.permissions.optionsHint') }}</div>
       <q-markup-table flat bordered dense>
         <tbody>
           <template v-for="f in optionFields" :key="f.id">
             <tr>
               <th colspan="2" class="text-left">{{ resolveI18n(f.label, locale) }}</th>
             </tr>
-            <tr v-for="o in f.options" :key="o.id" :class="{ 'bg-red-1': optionError(o.id) }">
+            <tr v-for="o in f.options" :key="o.id" :class="{ 'bg-negative-soft': optionError(o.id) }">
               <td class="text-left">{{ resolveI18n(o.label, locale) }}</td>
               <td style="min-width: 260px">
                 <q-select :ref="(el) => scopeEls.set(o.id, el as QSelect | null)" :model-value="scopeOf(o.id)" :options="scopeSel.filtered.value" :disable="readonly" multiple use-chips emit-value map-options

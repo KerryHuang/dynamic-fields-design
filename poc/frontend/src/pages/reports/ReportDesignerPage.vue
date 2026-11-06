@@ -95,7 +95,7 @@ function doSave() {
       <template v-else>
         <div class="row q-gutter-x-md q-mb-md">
           <span
-            v-for="(k, i) in STEPS" :key="k" :class="i === step ? 'text-weight-bold text-primary' : 'text-grey-7'" :data-testid="`step-label-${i}`"
+            v-for="(k, i) in STEPS" :key="k" :class="i === step ? 'text-weight-bold text-primary' : 'text-muted'" :data-testid="`step-label-${i}`"
           >{{ i + 1 }}. {{ t(`reports.designer.steps.${k}`) }}</span>
         </div>
         <div v-if="unavailable.any" class="text-negative q-mb-md" data-testid="designer-unavailable">{{ t('reports.designer.unavailableBanner') }}</div>

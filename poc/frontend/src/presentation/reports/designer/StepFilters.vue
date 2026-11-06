@@ -61,6 +61,6 @@ function pickRange(kind: string) {
         :model-value="s.dateRange.n ?? ''" data-testid="date-range-n" @update:model-value="s.dateRange!.n = $event === '' || $event === null ? null : Number($event)"
       />
     </div>
-    <div v-if="!s.primaryDateField" class="text-caption text-grey-7">{{ t('reports.designer.rangeNeedsPrimary') }}</div>
+    <div v-if="!s.primaryDateField" class="text-caption text-muted">{{ t('reports.designer.rangeNeedsPrimary') }}</div>
   </div>
 </template>

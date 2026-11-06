@@ -168,7 +168,7 @@ async function submit() {
           <q-input v-model="form.section" :label="t('designer.section')" :hint="t('designer.sectionHint')" maxlength="100" outlined dense
             data-testid="module-section" :error="!!errorFor(error, 'Section') || undefined" :error-message="errorFor(error, 'Section')" />
           <div data-testid="module-kind">
-            <div class="text-caption text-grey-7">{{ t('designer.extension.kind') }}</div>
+            <div class="text-caption text-muted">{{ t('designer.extension.kind') }}</div>
             <q-option-group v-model="form.kind" :options="kindOptions" inline dense />
           </div>
           <div v-if="form.kind === 'extension'" data-testid="host-entity">

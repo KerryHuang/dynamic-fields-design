@@ -39,7 +39,7 @@ function submit() {
           v-for="g in groups.data.value ?? []" :key="g.id" v-model="selected" :val="g.id" dense
           :label="resolveI18n(g.name, locale)" :data-testid="`share-group-${g.id}`"
         />
-        <div v-if="groups.data.value && groups.data.value.length === 0" class="text-grey-7">{{ t('reports.noGroups') }}</div>
+        <div v-if="groups.data.value && groups.data.value.length === 0" class="text-muted">{{ t('reports.noGroups') }}</div>
         <div v-if="error" class="text-negative q-mt-sm" data-testid="share-error">{{ error }}</div>
       </q-card-section>
       <q-card-actions align="right">

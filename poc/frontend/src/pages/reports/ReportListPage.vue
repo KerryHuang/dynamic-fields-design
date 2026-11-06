@@ -39,7 +39,7 @@ const columns = computed<QTableColumn<ReportItem>[]>(() => [
           <q-tr class="cursor-pointer" :data-testid="`report-row-${row.id}`" @click="router.push(`/reports/${row.id}`)">
             <q-td v-for="c in cols" :key="c.name" :align="c.align">
               {{ c.value }}
-              <q-badge v-if="c.name === 'name' && row.isOwner && row.sharedGroupIds.length" class="q-ml-sm" color="grey-6" :label="t('reports.shared')" />
+              <q-badge v-if="c.name === 'name' && row.isOwner && row.sharedGroupIds.length" class="q-ml-sm" color="muted" :label="t('reports.shared')" />
             </q-td>
           </q-tr>
         </template>

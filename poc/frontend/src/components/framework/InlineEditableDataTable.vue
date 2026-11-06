@@ -23,7 +23,7 @@ const { t } = useI18n();
           <td v-if="$slots['row-actions']"><slot name="row-actions" :row="row" :index="index" /></td>
         </tr>
         <tr v-if="!rows.length">
-          <td :colspan="columns.length + 1" class="text-grey">{{ t('dynamic.noData') }}</td>
+          <td :colspan="columns.length + 1" class="text-muted">{{ t('dynamic.noData') }}</td>
         </tr>
       </tbody>
     </q-markup-table>

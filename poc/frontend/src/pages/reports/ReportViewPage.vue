@@ -95,7 +95,7 @@ function doDelete() {
       <div class="row items-center q-mb-md q-gutter-x-sm">
         <q-btn flat dense icon="arrow_back" to="/reports" :aria-label="t('reports.back')" />
         <div class="text-h6" data-testid="report-name">{{ detail.name }}</div>
-        <span v-if="!detail.isOwner" class="text-caption text-grey-7" data-testid="report-owner">{{ t('reports.ownedBy', { name: detail.ownerName }) }}</span>
+        <span v-if="!detail.isOwner" class="text-caption text-muted" data-testid="report-owner">{{ t('reports.ownedBy', { name: detail.ownerName }) }}</span>
         <q-space />
         <q-btn v-if="detail.isOwner" outline dense no-caps :label="t('reports.edit')" :to="`/reports/${detail.id}/edit`" data-testid="report-edit" />
         <q-btn v-if="detail.isOwner" outline dense no-caps :label="t('reports.share')" data-testid="report-share" @click="shareOpen = true" />

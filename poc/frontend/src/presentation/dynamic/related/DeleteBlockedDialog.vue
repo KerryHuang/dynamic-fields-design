@@ -22,7 +22,7 @@ const remaining = computed(() => Math.max(0, props.blocked.total - props.blocked
           </q-item-section>
         </q-item>
       </q-list>
-      <q-card-section v-if="remaining > 0" class="text-grey" data-testid="blocked-remaining">{{ t('dynamic.deleteBlocked.remaining', { n: remaining }) }}</q-card-section>
+      <q-card-section v-if="remaining > 0" class="text-muted" data-testid="blocked-remaining">{{ t('dynamic.deleteBlocked.remaining', { n: remaining }) }}</q-card-section>
       <q-card-actions align="right">
         <q-btn flat :label="t('dynamic.deleteBlocked.close')" v-close-popup />
       </q-card-actions>
