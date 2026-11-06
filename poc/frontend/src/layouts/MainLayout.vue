@@ -9,6 +9,7 @@
         <span v-if="logoutError" class="q-mr-sm bg-negative text-white q-px-sm rounded-borders" data-testid="logout-error">{{ t('auth.logoutFailed') }}</span>
         <q-btn flat dense no-caps :label="t('auth.logout')" :loading="logoutMutation.isPending.value" data-testid="logout" @click="logout" />
       </q-toolbar>
+      <AppBreadcrumb v-if="theme.effective.style === 'enterprise'" :menu="menu ?? []" />
     </q-header>
 
     <q-drawer :model-value="true" show-if-above bordered :width="theme.sidebarWidth">
@@ -74,6 +75,7 @@ import { useLogout } from 'src/application/dynamic/queries/auth-queries';
 import { useMenu } from 'src/application/dynamic/queries/modules-queries';
 import { useMe, useUsers } from 'src/application/dynamic/queries/permissions-queries';
 import { resolveI18n } from 'src/domain/dynamic/i18n-text';
+import AppBreadcrumb from 'src/presentation/theme/AppBreadcrumb.vue';
 import ThemeDialog from 'src/presentation/theme/ThemeDialog.vue';
 import { useIdentityStore } from 'src/stores/use-identity-store';
 import { useThemeStore } from 'src/stores/use-theme-store';

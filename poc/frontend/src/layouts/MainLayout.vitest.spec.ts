@@ -329,7 +329,10 @@ describe('MainLayout menu', () => {
       http.defaults.adapter = async (config) => ({
         data: config.url === '/me' ? me(false) : config.url === '/users' ? USERS : [], status: 200, statusText: 'OK', headers: {}, config,
       });
-      const router = createRouter({ history: createMemoryHistory(), routes: [{ path: '/', component: { template: '<i/>' } }] });
+      const router = createRouter({
+        history: createMemoryHistory(),
+        routes: [{ path: '/', component: { template: '<i/>' } }, { path: '/system/users', component: { template: '<i/>' } }],
+      });
       const i18n = createI18n({ legacy: false, locale: 'zh-TW', messages: { 'zh-TW': zhTW } });
       return mount(MainLayout, {
         attachTo: document.body,
@@ -345,6 +348,22 @@ describe('MainLayout menu', () => {
       await w.find('[data-testid="theme-open"]').trigger('click');
       await flushPromises();
       expect(document.body.querySelector('[data-testid="theme-close"]')).not.toBeNull();
+      w.unmount();
+      document.body.innerHTML = '';
+    });
+
+    it('只有 enterprise 顯示麵包屑', async () => {
+      const w = mountLayout();
+      await w.vm.$router.push('/system/users');
+      await flushPromises();
+      useThemeStore().applyAnonymous({ mode: 'light', style: 'workbench' });
+      await flushPromises();
+      expect(w.find('[data-testid="breadcrumb"]').exists()).toBe(false);
+      useThemeStore().applyAnonymous({ mode: 'light', style: 'enterprise' });
+      await flushPromises();
+      expect(w.find('[data-testid="breadcrumb"]').text()).toContain('系統管理');
+      expect(w.find('[data-testid="breadcrumb"]').text()).toContain('使用者');
+      expect(w.find('[data-testid="breadcrumb"] a').exists()).toBe(false);
       w.unmount();
       document.body.innerHTML = '';
     });

@@ -55,6 +55,10 @@ describe('quasar-bridge.css', () => {
     expect(bodiesOf(bridge, '.q-drawer :focus-visible').join(';')).toContain('--t-sidebar-fg');
   });
 
+  it('頂列上的麵包屑不用主色，改繼承頂列前景色', () => {
+    expect(bodiesOf(bridge, '.theme-breadcrumb .text-primary').join(';')).toMatch(/color:\s*inherit\s*!important/);
+  });
+
   it('html 上有 color-scheme', () => {
     expect(bodiesOf(bridge, "[data-mode='dark']").join(';')).toContain('color-scheme: dark');
     expect(bodiesOf(bridge, "[data-mode='light']").join(';')).toContain('color-scheme: light');

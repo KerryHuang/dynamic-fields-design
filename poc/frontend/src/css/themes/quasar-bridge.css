@@ -203,6 +203,12 @@ textarea:focus-visible {
   outline: none;
 }
 
+/* 麵包屑在頂列上：Quasar 預設用主色標示目前這一層，主色放在深藍頂列上對比不足，改成繼承頂列的前景色 */
+.theme-breadcrumb .text-primary {
+  color: inherit !important;
+  font-weight: 600;
+}
+
 /* 外觀設定的小樣本：任何元素加上 data-style／data-mode 都能呈現該風格，不必另做縮圖 */
 .theme-sample {
   display: flex;
