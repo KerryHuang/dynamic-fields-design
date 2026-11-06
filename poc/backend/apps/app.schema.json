@@ -1,0 +1,64 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "required": ["format", "formatVersion", "manifest", "modules"],
+  "additionalProperties": false,
+  "patternProperties": { "^x-": {} },
+  "properties": {
+    "format": { "const": "formwright-app" },
+    "formatVersion": { "const": 2 },
+    "manifest": { "$ref": "#/$defs/manifest" },
+    "groups": { "type": "array", "maxItems": 20, "items": { "$ref": "#/$defs/group" } },
+    "modules": { "type": "array", "minItems": 1, "maxItems": 30 },
+    "fieldAccess": { "type": "array", "maxItems": 2000 },
+    "optionScopes": { "type": "array", "maxItems": 2000 },
+    "reports": { "type": "array", "maxItems": 50 },
+    "dashboards": { "type": "array", "maxItems": 0 },
+    "workflows": { "type": "array", "maxItems": 0 },
+    "conversions": { "type": "array", "maxItems": 0 },
+    "events": { "type": "array", "maxItems": 0 },
+    "printTemplates": { "type": "array", "maxItems": 0 }
+  },
+  "$defs": {
+    "code": { "type": "string", "pattern": "^[a-z][a-zA-Z0-9_]{0,39}$" },
+    "appId": { "type": "string", "pattern": "^[a-z][a-z0-9-]{1,39}$" },
+    "i18n": {
+      "type": "object",
+      "required": ["zh-TW"],
+      "propertyNames": { "enum": ["zh-TW", "en-US", "th", "vi"] },
+      "additionalProperties": { "type": "string", "minLength": 1, "maxLength": 200 }
+    },
+    "manifest": {
+      "type": "object",
+      "required": ["id", "version", "name"],
+      "additionalProperties": false,
+      "patternProperties": { "^x-": {} },
+      "properties": {
+        "id": { "$ref": "#/$defs/appId" },
+        "version": { "type": "string", "pattern": "^(0|[1-9]\\d*)\\.(0|[1-9]\\d*)\\.(0|[1-9]\\d*)$" },
+        "name": { "$ref": "#/$defs/i18n" },
+        "description": { "$ref": "#/$defs/i18n" },
+        "icon": { "type": "string", "maxLength": 100 },
+        "vendor": { "type": "string", "maxLength": 100 },
+        "requires": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "apps": { "type": "array", "maxItems": 10, "items": {
+              "type": "object", "required": ["id", "modules"], "additionalProperties": false,
+              "properties": {
+                "id": { "$ref": "#/$defs/appId" },
+                "modules": { "type": "array", "minItems": 1, "items": { "$ref": "#/$defs/appId" } } } } },
+            "entities": { "type": "array", "maxItems": 20, "items": { "type": "string", "maxLength": 100 } }
+          }
+        }
+      }
+    },
+    "group": {
+      "type": "object",
+      "required": ["code", "name"],
+      "additionalProperties": false,
+      "properties": { "code": { "$ref": "#/$defs/code" }, "name": { "$ref": "#/$defs/i18n" } }
+    }
+  }
+}

@@ -88,6 +88,7 @@ var app = builder.Build();
 
 // 內建範本有錯就拒絕啟動（spec §13.1）：在碰資料庫之前先解析 singleton
 app.Services.GetRequiredService<TemplateCatalog>();
+app.Services.GetRequiredService<DynamicModules.Application.Dynamic.AppService.AppCatalog>();
 await InitializeDatabaseAsync(app, dynamicConnection);
 // 建置 Demo 映像時用（Dockerfile.demo）：產生完 Demo 資料就結束，失敗回非 0 讓建置失敗
 if (args.Contains("--generate-demo-data"))

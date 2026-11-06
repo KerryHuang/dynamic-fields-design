@@ -18,6 +18,8 @@
   <ItemGroup>
     <!-- 內建範本（poc/backend/templates）複製到輸出目錄的 templates/ -->
     <None Include="..\..\templates\*.json" Link="templates\%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
+    <!-- 內建應用程式套件（poc/backend/apps/*.app.json）複製到輸出目錄的 apps/；目前沒有內建套件，目錄可以是空的 -->
+    <None Include="..\..\apps\*.app.json" Link="apps\%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
 </Project>

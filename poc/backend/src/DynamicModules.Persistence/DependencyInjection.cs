@@ -41,6 +41,8 @@ public static class DependencyInjection
         services.AddScoped<INumberSequenceRepository, NumberSequenceRepository>();
         services.AddScoped<IRecordHistoryRepository, RecordHistoryRepository>();
         services.AddScoped<IModuleTemplateRepository, ModuleTemplateRepository>();
+        services.AddScoped<IAppRepository, AppRepository>();
+        services.AddScoped<IAppPackageRepository, AppPackageRepository>();
         services.AddScoped<IReferenceProvider, MockMoldProvider>();
         services.AddScoped<IReferenceProvider, MockCustomerProvider>();
         services.AddScoped<ReferenceProviderRegistry>();

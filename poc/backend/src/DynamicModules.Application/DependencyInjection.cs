@@ -45,9 +45,15 @@ public static class DependencyInjection
         services.AddScoped<Dynamic.TemplateService.ITemplateSource, Dynamic.TemplateService.TemplateSource>();
         services.AddScoped<Dynamic.TemplateService.TemplateInstantiator>();
         services.AddScoped<Dynamic.TemplateService.TemplateExporter>();
+        services.AddSingleton(_ => Dynamic.AppService.AppCatalog.Load(Dynamic.AppService.AppCatalog.DefaultDirectory));
+        services.AddScoped<Dynamic.AppService.AppPackageSource>();
+        services.AddScoped<Dynamic.AppService.AppDependencyChecker>();
+        services.AddScoped<Dynamic.AppService.AppOpenPlanner>();
+        services.AddScoped<Dynamic.AppService.AppResponseBuilder>();
         services.AddScoped<Dynamic.DemoService.DemoPreflight>();
         services.AddScoped<Dynamic.DemoService.DemoStructure>();
         services.AddScoped<Dynamic.DeleteService.DeletePlanner>();
+        services.AddScoped<Dynamic.DeleteService.ModuleRemover>();
         return services;
     }
 }

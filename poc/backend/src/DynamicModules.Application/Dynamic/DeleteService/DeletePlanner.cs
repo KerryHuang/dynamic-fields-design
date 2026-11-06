@@ -18,7 +18,12 @@ public record DeletePlan(DeleteCheckResponse Check, long ModuleId, IReadOnlyList
 /// </summary>
 public class DeletePlanner(IDeletionRepository data)
 {
-    public async Task<DeletePlan?> PlanAsync(DeleteTarget target, string? key, long id, CancellationToken ct)
+    /// <param name="alsoDeleting">
+    /// 同一個動作一起刪除的模組鍵（刪除整個應用程式時是全部成員）。集合內的模組彼此的引用不算被引用，
+    /// 模組本身的狀態也不另擋（應用程式已先確認是關閉的）；其餘規則不變。只對 <see cref="DeleteTarget.Module"/> 有意義。
+    /// </param>
+    public async Task<DeletePlan?> PlanAsync(
+        DeleteTarget target, string? key, long id, CancellationToken ct, IReadOnlySet<string>? alsoDeleting = null)
     {
         var all = await data.ListModulesAsync(ct);
         var module = target switch
@@ -40,7 +45,7 @@ public class DeletePlanner(IDeletionRepository data)
             case DeleteTarget.Module:
                 fields = module.Blocks.SelectMany(b => b.Fields).ToList();
                 blocks = module.Blocks;
-                await ModuleBlockersAsync(module, fields, all, reports, dashboards, blockers, ct);
+                await ModuleBlockersAsync(module, fields, all, reports, dashboards, blockers, alsoDeleting, ct);
                 break;
             case DeleteTarget.Field:
                 fields = module.Blocks.SelectMany(b => b.Fields).Where(f => f.Id == id).ToList();
@@ -78,16 +83,16 @@ public class DeletePlanner(IDeletionRepository data)
 
     private async Task ModuleBlockersAsync(
         Module module, IReadOnlyList<Field> fields, List<Module> all, List<Report> reports, List<DashboardLayoutSource> dashboards,
-        List<DeleteBlocker> blockers, CancellationToken ct)
+        List<DeleteBlocker> blockers, IReadOnlySet<string>? alsoDeleting, CancellationToken ct)
     {
-        if (module.Status is ModuleStatus.Active or ModuleStatus.Closed)
+        if (alsoDeleting is null && module.Status is ModuleStatus.Active or ModuleStatus.Closed)
             blockers.Add(new(DeleteBlockerKind.ModuleActive, module.Key, module.Id, Name(module.NameI18n, module.Key)));
         var live = await data.CountRecordsAsync(module.Id, deleted: false, ct);
         if (live > 0)
             blockers.Add(new(DeleteBlockerKind.LiveRecords, module.Key, module.Id, Name(module.NameI18n, module.Key), live));
 
         var ownIds = fields.Select(f => f.Id).ToHashSet();
-        foreach (var other in all.Where(m => m.Id != module.Id))
+        foreach (var other in all.Where(m => m.Id != module.Id && alsoDeleting?.Contains(m.Key) != true))
             foreach (var f in other.Blocks.SelectMany(b => b.Fields))
             {
                 if (f is { Type: FieldType.Reference, Config.RefTarget: { Kind: ReferenceTarget.ModuleKind } t } && t.Key == module.Key)
