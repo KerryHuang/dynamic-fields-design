@@ -1,4 +1,6 @@
+import { createPinia, setActivePinia } from 'pinia';
 import { describe, expect, it } from 'vitest';
+import { useIdentityStore } from 'src/stores/use-identity-store';
 import sharedOperators from '../../../../shared/filter-operators.json';
 import enUS from 'src/i18n/en-US.json';
 import th from 'src/i18n/th.json';
@@ -159,6 +161,14 @@ describe('fieldTypeRegistry', () => {
   it('format renders currency with thousands separator', () => {
     expect(fieldTypeRegistry.currency.format(1234567.5, f('currency', 2), 'zh-TW')).toBe('1,234,567.50');
     expect(fieldTypeRegistry.currency.format(1234, f('currency'), 'zh-TW')).toBe('1,234.00');
+  });
+
+  it('user format shows the display name, falling back to the id for unknown users', () => {
+    setActivePinia(createPinia());
+    useIdentityStore().setUsers([{ userId: 'sales01', displayName: '王小明' }]);
+    expect(fieldTypeRegistry.user.format('sales01', f('user'), 'zh-TW')).toBe('王小明');
+    expect(fieldTypeRegistry.user.format('gone', f('user'), 'zh-TW')).toBe('gone');
+    setActivePinia(undefined);
   });
 
   it('format handles the remaining types', () => {

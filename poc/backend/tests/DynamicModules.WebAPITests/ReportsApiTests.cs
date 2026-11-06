@@ -961,6 +961,26 @@ public class ReportsApiTests
     }
 
     [Fact]
+    public async Task UserField_InColumnsAndGroups_ShowsDisplayNameNotId()
+    {
+        using var app = new TestApp();
+        var w = await MakeWorld(app);
+        var admin = app.AsUser();
+        var owner = await AddField(admin, w.Main, "user", new { });
+        var res = await admin.PostAsJsonAsync($"{Base}/modules/{w.Main}/records",
+            new { values = new Dictionary<string, object> { [w.TitleKey] = "t", [w.AmountKey] = 5, [owner.Key] = "admin" } });
+        res.StatusCode.Should().Be(HttpStatusCode.Created, await res.Content.ReadAsStringAsync());
+        var def = Def(w.Main, columns: [Ref(w.Amount), Ref(owner.Id)], groups: [new { field = Ref(owner.Id), bucket = (string?)null }], measures: [Count()]);
+        var id = await Create(admin, def);
+
+        var run = await JsonOf(await admin.PostAsJsonAsync($"{Reports}/{id}/run", new { }));
+        var drill = await JsonOf(await admin.PostAsJsonAsync($"{Reports}/{id}/drill", new { groupKeys = new[] { "admin" } }));
+
+        run.GetProperty("groups")[0].GetProperty("groupLabels")[0].GetString().Should().Be("系統管理員");
+        drill.GetRawText().Should().Contain("系統管理員").And.NotContain("\"admin\"");
+    }
+
+    [Fact]
     public async Task Save_MeasureConditionValue_IsNormalized_AndBadOneRejected()
     {
         using var app = new TestApp();

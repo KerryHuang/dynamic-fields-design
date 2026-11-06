@@ -1,4 +1,5 @@
 import type { Component } from 'vue';
+import { getActivePinia } from 'pinia';
 import { z, type ZodTypeAny } from 'zod';
 import DateSelect from 'src/components/framework/DateSelect.vue';
 import GenericSelect from 'src/components/framework/GenericSelect.vue';
@@ -305,5 +306,9 @@ export const fieldTypeRegistry: Record<FieldType, FieldTypeEntry> = {
       multiple: false,
       options: useIdentityStore().users.map((u) => ({ value: u.userId, label: u.displayName })),
     }),
+  }, (v) => {
+    const id = asText(v);
+    // 清單與明細顯示名稱；使用者清單還沒載入或已不存在時退回 id
+    return (getActivePinia() ? useIdentityStore().users.find((u) => u.userId === id)?.displayName : undefined) ?? id;
   }),
 };
