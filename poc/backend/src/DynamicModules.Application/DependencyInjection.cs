@@ -20,6 +20,7 @@ public static class DependencyInjection
             cfg.AddOpenBehavior(typeof(TransactionBehavior<,>));
         });
         services.AddValidatorsFromAssembly(assembly);
+        services.AddSingleton<Common.Security.LoginThrottle>();
         services.AddScoped<IDynamicAccessGuard, DynamicAccessGuard>();
         services.AddScoped<Dynamic.SchemaService.Queries.GetModuleSchema.ModuleSchemaBuilder>();
         services.AddScoped<Dynamic.References.ReferenceValidator>();

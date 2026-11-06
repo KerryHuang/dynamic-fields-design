@@ -8,12 +8,10 @@ using Microsoft.Extensions.Logging;
 namespace DynamicModules.Application.Dynamic.AccountService.Commands.Login;
 
 public class LoginHandler(
-    IAccountRepository accounts, IPasswordService passwords, IUnitOfWork uow, TimeProvider time, ILogger<LoginHandler> logger)
+    IAccountRepository accounts, IPasswordService passwords, IUnitOfWork uow, TimeProvider time, LoginThrottle throttle, ILogger<LoginHandler> logger)
     : IRequestHandler<LoginRequest, ServiceResult>
 {
     public const string FailureMessage = "帳號或密碼錯誤，或帳號暫時無法登入";
-    private const int MaxFailures = 5;
-    private static readonly TimeSpan LockDuration = TimeSpan.FromMinutes(15);
 
     // 同一帳號的登入序列化：失敗計數是「讀、驗 PBKDF2、寫」，並行猜測會互相覆蓋而超過 5 次。
     // 只在單一站台實例內有效（假設只有一個程序服務這個資料庫；多實例要改用資料庫層的原子更新）。
@@ -29,7 +27,15 @@ public class LoginHandler(
         await gate.WaitAsync(ct);
         try
         {
-            return await LoginAsync(userId, request.Password ?? "", ct);
+            var ip = string.IsNullOrEmpty(request.ClientIp) ? "unknown" : request.ClientIp;
+            // 超長輸入不進限流表（避免匿名者灌爆記憶體）；截斷不影響比對，反正帳號也不會存在
+            var key = userId.Length > 128 ? userId[..128] : userId;
+            if (!throttle.TryBegin(key, ip))
+                return Fail(null, "來源或帳號嘗試過於頻繁", request.Password ?? "");
+            var result = await LoginAsync(userId, request.Password ?? "", ct);
+            if (result.Data is AuthUserResponse) throttle.RecordSuccess(key, ip);
+            else throttle.RecordFailure(key, ip);
+            return result;
         }
         finally
         {
@@ -57,13 +63,8 @@ public class LoginHandler(
 
         if (!passwords.Verify(user.PasswordHash, password))
         {
-            user.FailedLoginCount++;
-            if (user.FailedLoginCount >= MaxFailures)
-            {
-                user.LockedUntil = now + LockDuration;
-                logger.LogWarning("帳號 {UserId} 連續輸錯 {Count} 次，鎖定到 {Until}", user.UserId, user.FailedLoginCount, user.LockedUntil);
-            }
-            await uow.CommitAsync(ct);
+            // 失敗次數改由 LoginThrottle 依來源計算，不再寫入帳號（否則匿名者能鎖住任何人）
+            if (lockExpired) await uow.CommitAsync(ct);
             return Fail(user.UserId, "密碼錯誤");
         }
 

@@ -14,3 +14,6 @@ services:
         value: "true"
       - key: Auth__TrustForwardedHeaders
         value: "true"
+      # 登入限流用的來源 IP 標頭（Render 經 Cloudflare 時由前端代理填入；上線後須實測確認，見 README）
+      - key: Auth__ClientIpHeader
+        value: True-Client-IP

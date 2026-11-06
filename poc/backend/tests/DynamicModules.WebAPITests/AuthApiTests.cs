@@ -10,6 +10,7 @@ using FluentAssertions;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.AspNetCore.Hosting;
+using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Logging;
@@ -151,7 +152,7 @@ public class AuthApiTests
     }
 
     [Fact]
-    public async Task Login_FiveFailures_Locks15Minutes()
+    public async Task Login_FiveFailuresFromSameIp_BlocksThatIpFor15Minutes()
     {
         using var app = NewApp();
         AddUser(app, "alice");
@@ -162,11 +163,76 @@ public class AuthApiTests
         app.Time.Advance(TimeSpan.FromMinutes(15));
 
         (await PostLogin(app.CreateClient(), "alice", UserPassword)).StatusCode.Should().Be(HttpStatusCode.OK);
-        using var scope = app.Services.CreateScope();
-        var user = await scope.ServiceProvider.GetRequiredService<DynamicDbContext>().Set<AppUser>().AsNoTracking()
-            .SingleAsync(u => u.UserId == "alice");
-        user.FailedLoginCount.Should().Be(0);
-        user.LockedUntil.Should().BeNull();
+    }
+
+    private const string IpHeader = "X-Test-Client-Ip";
+
+    private static async Task<HttpResponseMessage> PostLoginFrom(WebApplicationFactory<Program> f, string ip, string user, string password)
+    {
+        var client = f.CreateClient();
+        client.DefaultRequestHeaders.Add(IpHeader, ip);
+        return await PostLogin(client, user, password);
+    }
+
+    private static WebApplicationFactory<Program> WithIpHeader(TestApp app) =>
+        app.WithWebHostBuilder(b => b.UseSetting("Auth:ClientIpHeader", IpHeader));
+
+    [Fact]
+    public async Task Login_AnonymousFailuresFromOtherIp_CannotLockOutTheRealUser()
+    {
+        using var app = NewApp();
+        using var f = WithIpHeader(app);
+        for (var i = 0; i < 10; i++)
+            (await PostLoginFrom(f, "203.0.113.9", "admin", "wrong-pass-1")).StatusCode.Should().Be(HttpStatusCode.Unauthorized);
+
+        (await PostLoginFrom(f, "198.51.100.7", "admin", AdminPassword)).StatusCode.Should().Be(HttpStatusCode.OK);
+        (await PostLoginFrom(f, "203.0.113.9", "admin", AdminPassword)).StatusCode.Should().Be(HttpStatusCode.Unauthorized);
+    }
+
+    [Fact]
+    public async Task Login_OneIpSprayingManyAccounts_IsBlockedAfter20Failures()
+    {
+        using var app = NewApp();
+        using var f = WithIpHeader(app);
+        AddUser(app, "alice");
+        for (var i = 0; i < 20; i++)
+            await PostLoginFrom(f, "203.0.113.9", $"ghost{i}", "wrong-pass-1");
+
+        (await PostLoginFrom(f, "203.0.113.9", "alice", UserPassword)).StatusCode.Should().Be(HttpStatusCode.Unauthorized);
+        (await PostLoginFrom(f, "198.51.100.7", "alice", UserPassword)).StatusCode.Should().Be(HttpStatusCode.OK);
+    }
+
+    [Fact]
+    public async Task Login_ManyIpsGuessingOneAccount_SlowsThatAccountButDoesNotLockIt()
+    {
+        using var app = NewApp();
+        using var f = WithIpHeader(app);
+        AddUser(app, "alice");
+        for (var i = 0; i < 50; i++)
+            await PostLoginFrom(f, $"192.0.2.{i / 4}", "alice", "wrong-pass-1");
+
+        (await PostLoginFrom(f, "198.51.100.7", "alice", UserPassword)).StatusCode.Should().Be(HttpStatusCode.OK);
+        (await PostLoginFrom(f, "198.51.100.8", "alice", UserPassword)).StatusCode.Should().Be(HttpStatusCode.Unauthorized, "高門檻保底：同帳號 10 秒內只放行一次嘗試");
+        app.Time.Advance(TimeSpan.FromSeconds(10));
+        (await PostLoginFrom(f, "198.51.100.8", "alice", UserPassword)).StatusCode.Should().Be(HttpStatusCode.OK);
+    }
+
+    [Fact]
+    public async Task Login_ClientIpHeaderNotConfigured_IgnoresSpoofedHeader()
+    {
+        using var app = NewApp();
+        AddUser(app, "alice");
+        var client = app.CreateClient();
+        for (var i = 0; i < 5; i++)
+        {
+            client.DefaultRequestHeaders.Remove(IpHeader);
+            client.DefaultRequestHeaders.Add(IpHeader, $"192.0.2.{i}");
+            await PostLogin(client, "alice", "wrong-pass-1");
+        }
+
+        client.DefaultRequestHeaders.Remove(IpHeader);
+        client.DefaultRequestHeaders.Add(IpHeader, "192.0.2.99");
+        (await PostLogin(client, "alice", UserPassword)).StatusCode.Should().Be(HttpStatusCode.Unauthorized, "沒設定 header 時偽造值不得換到新額度");
     }
 
     [Fact]
@@ -282,8 +348,8 @@ public class AuthApiTests
         using var scope = app.Services.CreateScope();
         var user = await scope.ServiceProvider.GetRequiredService<DynamicDbContext>().Set<AppUser>().AsNoTracking()
             .SingleAsync(u => u.UserId == "alice");
-        user.FailedLoginCount.Should().Be(5, "鎖定後不再累加，序列化後恰好第 5 次鎖");
-        user.LockedUntil.Should().NotBeNull();
+        user.FailedLoginCount.Should().Be(0, "不再累計帳號層級的失敗，也就不會被外人鎖住");
+        user.LockedUntil.Should().BeNull();
     }
 
     [Fact]

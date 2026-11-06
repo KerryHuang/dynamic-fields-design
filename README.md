@@ -67,6 +67,7 @@ cd poc/frontend && bunx vitest run && bunx vue-tsc --noEmit    # 前端：單元
 |---|---|
 | `Auth__InitialAdminPassword` | 全新安裝時 `admin` 的初始密碼（至少 8 碼）；沒設就產生隨機密碼，印在啟動 log |
 | `Auth__ResetAdminPassword` | 緊急救援：啟動時重設 `admin` |
+| `Auth__ClientIpHeader` | 反向代理後面時，登入限流改讀這個標頭的來源 IP（須是代理自己填、不接受客戶端帶入的標頭，如 `True-Client-IP`）；沒設就用連線來源，所有人會共用一個額度 |
 | `Auth__TrustForwardedHeaders` | 在反向代理後面時設 `true`，cookie 才會加 `Secure` |
 | `Demo__LoginEnabled` | 登入頁列出 Demo 帳號一鍵登入 |
 | `Demo__SeedOnStartup` | 啟動時背景產生 Demo 資料 |
