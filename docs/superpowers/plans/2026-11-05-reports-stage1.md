@@ -283,5 +283,5 @@
 - [ ] **Step 1: 手冊新增報表章節。** 寫明列的定義、合併與去重（含明細列加不等於總計的原因）、權限與「無權限」卡片、分享、匯出權限、5 萬列上限、**混用幣別要依幣別分組或篩選**、金額權限只管金額型別、彙總欄位不能用時改合併子模組。路線圖加：幣別綁定、結果快取。
 - [ ] **Step 2: `docs/demo.md` 加走法。** 含業務一與業務主管看同一張報表數字不同、現場人員看到無權限。
 - [ ] **Step 3: 實機走查（chrome-devtools，Demo 模式全新資料庫）。** 組一張「訂單合併明細、依客戶地區分組」的報表，對照手算；分享給群組；換人看數字不同；下鑽；匯出數字一致；切五種呈現；刪掉欄位後看提示。沒走到的標「未實機驗證」，Render 上的標「未驗證」。
-- [ ] **Step 4: 跑完整測試。** `dotnet test poc/backend`；`cd poc/frontend && bunx vitest run && bunx vue-tsc --noEmit && bunx quasar build`。掃新增行沒有 `[已移除]`、`[已移除]` 等字串。
+- [ ] **Step 4: 跑完整測試。** `dotnet test poc/backend`；`cd poc/frontend && bunx vitest run && bunx vue-tsc --noEmit && bunx quasar build`。掃新增行沒有公司相關字串（清單不進 repo）。
 - [ ] **Step 5: Commit。** `docs: 報表手冊與 Demo 腳本`

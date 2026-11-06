@@ -147,5 +147,5 @@
 - [ ] **Step 2: 跑測試確認失敗。**
 - [ ] **Step 3: 實作，並更新手冊與 Demo 腳本。** 手冊含個人版、指派、日期優先順序。
 - [ ] **Step 4: 實機走查（chrome-devtools，Demo 模式全新資料庫）。** 業務一與業務主管看同一張儀表板數字不同；現場人員看到無權限卡片其他卡片正常；拖放後重新載入版面不變；管理員更新後個人版提示、還原；手機寬度。沒走到的標「未實機驗證」。
-- [ ] **Step 5: 跑完整測試。** `dotnet test poc/backend`；`cd poc/frontend && bunx vitest run && bunx vue-tsc --noEmit && bunx quasar build`；掃新增行沒有 `[已移除]`、`[已移除]` 等字串。
+- [ ] **Step 5: 跑完整測試。** `dotnet test poc/backend`；`cd poc/frontend && bunx vitest run && bunx vue-tsc --noEmit && bunx quasar build`；掃新增行沒有公司相關字串（清單不進 repo）。
 - [ ] **Step 6: Commit。** `feat(dashboards): Demo 指派版與文件`

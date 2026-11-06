@@ -18,6 +18,8 @@
 | 8 | 模組範本：內建「訂單」範本、從範本建立、匯出與匯入範本；欄位預設今天、明細帶表頭的值 | 完成，[驗收](docs/acceptance/phase8.md) |
 | 報表（第一段） | 查詢引擎在應用層算（合併、去重、彙總）、五步驟設計器、表格與四種圖表、下鑽、匯出、分享、Demo 示範報表 | 完成，[驗收](docs/acceptance/reports.md)；第二段儀表板另計 |
 
+報表第一段的路線圖：幣別綁定（金額欄位指定幣別欄位）、結果快取。
+
 ## 啟動
 
 需要 .NET 8 SDK、Bun 1.4 以上。
@@ -43,8 +45,6 @@ poc\start.cmd
 dotnet test poc/backend                                        # 後端：Domain、Application、WebAPI
 cd poc/frontend && bunx vitest run && bunx vue-tsc --noEmit    # 前端：單元測試與型別檢查
 ```
-
-報表第一段的路線圖：幣別綁定（金額欄位指定幣別欄位）、結果快取。
 
 效能基準另外跑，預設不含：`dotnet test poc/backend --filter Category=Benchmark`。
 
