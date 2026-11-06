@@ -3,7 +3,7 @@ import { computed } from 'vue';
 import { useI18n } from 'vue-i18n';
 import type { ModuleCatalog } from 'src/domain/dynamic/report-types';
 import { listFields, refKey, type FieldSection } from '../report-catalog';
-import type { DesignerState, Unavailable } from './designer-state';
+import { removeColumn, type DesignerState, type Unavailable } from './designer-state';
 
 const props = defineProps<{ state: DesignerState; catalog: ModuleCatalog; unavailable: Unavailable }>();
 const { t } = useI18n();
@@ -16,7 +16,8 @@ const sections = computed(() => (['main', 'via', 'child'] as FieldSection[])
 const selected = computed(() => new Set(s.columns.map(refKey)));
 function toggle(e: (typeof entries.value)[number], on: boolean) {
   const k = refKey(e.ref);
-  s.columns = on ? [...s.columns, e.ref] : s.columns.filter((c) => refKey(c) !== k);
+  if (on) s.columns.push(e.ref);
+  else if (s.columns.some((c) => refKey(c) === k)) removeColumn(s, s.columns.findIndex((c) => refKey(c) === k));
 }
 </script>
 
@@ -35,7 +36,7 @@ function toggle(e: (typeof entries.value)[number], on: boolean) {
       <div class="text-subtitle2 text-negative">{{ t('reports.designer.unavailableTitle') }}</div>
       <div v-for="i in unavailable.columns" :key="i" class="row items-center">
         <span class="text-negative">{{ t('reports.fieldNo', { id: s.columns[i]!.fieldId }) }}{{ t('reports.unavailableMark') }}</span>
-        <q-btn flat dense no-caps color="primary" :label="t('reports.designer.remove')" :data-testid="`column-remove-${i}`" @click="s.columns.splice(i, 1)" />
+        <q-btn flat dense no-caps color="primary" :label="t('reports.designer.remove')" :data-testid="`column-remove-${i}`" @click="removeColumn(s, i)" />
       </div>
     </div>
   </div>

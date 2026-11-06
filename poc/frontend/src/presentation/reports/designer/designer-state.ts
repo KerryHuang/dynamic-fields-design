@@ -66,11 +66,17 @@ export function setMainModule(s: DesignerState, key: string | null) {
   Object.assign(s, { ...emptyState(), name: s.name, viz: s.viz, mainModuleKey: key });
 }
 
+/** 有設定內容（改主模組會清掉）。 */
+export function hasContent(s: DesignerState): boolean {
+  return !!s.child || s.columns.length + s.groups.length + s.measures.length + s.filters.length > 0 || !!s.primaryDateField || !!s.dateRange;
+}
+
 export function setChild(s: DesignerState, child: ReportChild | null) {
+  if (s.child?.moduleKey === child?.moduleKey && s.child?.linkFieldId === child?.linkFieldId) return;
   s.child = child;
-  s.columns = s.columns.filter((c) => !isChild(c));
-  s.groups = s.groups.filter((g) => !isChild(g.field));
-  s.measures = s.measures.filter((m) => !measureUsesChild(m));
+  for (let i = s.columns.length - 1; i >= 0; i--) if (isChild(s.columns[i])) removeColumn(s, i);
+  for (let i = s.groups.length - 1; i >= 0; i--) if (isChild(s.groups[i]!.field)) removeGroup(s, i);
+  for (let i = s.measures.length - 1; i >= 0; i--) if (measureUsesChild(s.measures[i]!)) removeMeasure(s, i);
   s.filters = s.filters.filter((f) => !isChild(f.field));
   if (isChild(s.primaryDateField)) setPrimaryDate(s, null);
 }
@@ -81,9 +87,26 @@ export function setPrimaryDate(s: DesignerState, ref: ReportFieldRef | null) {
   if (!ref) s.dateRange = null;
 }
 
-export function addMeasure(s: DesignerState, kind: string, field: ReportFieldRef | null) {
-  const next = Math.max(0, ...s.measures.map((m) => Number(/^m(\d+)$/.exec(m.id)?.[1] ?? 0))) + 1;
-  s.measures.push({ id: `m${next}`, kind, field, condition: null });
+/** 量值 Id 取比現有量值與 sort 提到的都大的號碼，避免新量值繼承舊量值留下的排序。 */
+export function addMeasure(s: DesignerState, kind: string, field: ReportFieldRef | null, condition: ReportFilter | null = null) {
+  const ids = [...s.measures.map((m) => m.id), ...s.sort.map((x) => x.key)];
+  const next = Math.max(0, ...ids.map((id) => Number(/^m(\d+)$/.exec(id)?.[1] ?? 0))) + 1;
+  s.measures.push({ id: `m${next}`, kind, field, condition });
+}
+
+const dropSort = (s: DesignerState, key: string) => { s.sort = s.sort.filter((x) => x.key !== key); };
+const stillUsed = (s: DesignerState, key: string) => [...s.columns, ...s.groups.map((g) => g.field)].some((r) => refKey(r) === key);
+export function removeColumn(s: DesignerState, index: number) {
+  const [r] = s.columns.splice(index, 1);
+  if (r && !stillUsed(s, refKey(r))) dropSort(s, refKey(r));
+}
+export function removeGroup(s: DesignerState, index: number) {
+  const [g] = s.groups.splice(index, 1);
+  if (g && !stillUsed(s, refKey(g.field))) dropSort(s, refKey(g.field));
+}
+export function removeMeasure(s: DesignerState, index: number) {
+  const [m] = s.measures.splice(index, 1);
+  if (m) dropSort(s, m.id);
 }
 
 /** 合併了子模組又彙總主模組欄位時，主模組的數字每筆只算一次（spec §6.3），要對使用者說明。 */
@@ -102,7 +125,9 @@ function filterComplete(f: ReportFilter): boolean {
     default: return filled(v);
   }
 }
-const needsN = (r: ReportDateRange) => r.kind.startsWith('last');
+/** 需要 N 的區間種類，與後端 ReportRules.LastKinds 相同；其他 last* 開頭的（lastWeek 等）不需要。 */
+export const LAST_RANGE_KINDS = ['lastDays', 'lastWeeks', 'lastMonths'];
+export const needsN = (r: Pick<ReportDateRange, 'kind'>) => LAST_RANGE_KINDS.includes(r.kind);
 
 export function canAdvance(s: DesignerState, step: DesignerStep): boolean {
   switch (step) {
@@ -113,13 +138,13 @@ export function canAdvance(s: DesignerState, step: DesignerStep): boolean {
         && (!s.dateRange || (!!s.primaryDateField && (!needsN(s.dateRange) || (s.dateRange.n ?? 0) >= 1)));
     case 3:
       return s.columns.length + s.measures.length > 0 && (s.groups.length === 0 || s.measures.length > 0)
-        && s.measures.every((m) => (['sum', 'avg', 'min', 'max'].includes(m.kind) ? !!m.field : true));
+        && s.measures.every((m) => (['sum', 'avg', 'min', 'max'].includes(m.kind) ? !!m.field : m.kind === 'ratio' ? !!m.condition && filterComplete(m.condition) : true));
     default: return false;
   }
 }
 
 export interface Unavailable {
-  columns: number[]; groups: number[]; measures: number[]; filters: number[]; primaryDate: boolean; child: boolean; any: boolean;
+  columns: number[]; groups: number[]; measures: number[]; filters: number[]; sort: number[]; primaryDate: boolean; child: boolean; any: boolean;
 }
 
 /** 已存的設定用到目錄沒有的欄位（被刪、停用，或目標模組不可讀）：標為不可用，使用者移除前不能存。 */
@@ -133,10 +158,12 @@ export function unavailableRefs(s: DesignerState, catalog: ModuleCatalog): Unava
     groups: idx(s.groups, (g) => missing(g.field)),
     measures: idx(s.measures, (m) => missing(m.field) || missing(m.condition?.field) || (m.kind === 'countChild' && !findChild(catalog, s.child))),
     filters: idx(s.filters, (f) => missing(f.field)),
+    // sort 的鍵不是量值 Id 時是欄位鍵（source:fieldId:via）；其他字串後端忽略
+    sort: idx(s.sort, (x) => !s.measures.some((m) => m.id === x.key) && /^\w+:\d+:\d*$/.test(x.key) && !known.has(x.key)),
     primaryDate: missing(s.primaryDateField),
     any: false,
   };
-  u.any = u.child || u.primaryDate || [u.columns, u.groups, u.measures, u.filters].some((l) => l.length > 0);
+  u.any = u.child || u.primaryDate || [u.columns, u.groups, u.measures, u.filters, u.sort].some((l) => l.length > 0);
   return u;
 }
 

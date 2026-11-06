@@ -13,7 +13,8 @@ namespace DynamicModules.Application.Dynamic.ReportService.Queries.GetReportCata
 public record CatalogOption(string Id, string Label, bool Active);
 
 public record CatalogField(
-    long Id, string Label, FieldType Type, bool CanGroup, bool CanSum, bool CanMinMax, bool IsDate, List<CatalogOption>? Options);
+    long Id, string Label, FieldType Type, bool CanGroup, bool CanSum, bool CanMinMax, bool IsDate, List<CatalogOption>? Options,
+    string? RefKind = null, string? RefKey = null);
 
 public record CatalogVia(long FieldId, string Label, string TargetKey, List<CatalogField> Fields);
 
@@ -113,5 +114,7 @@ public class GetReportCatalogHandler(IModuleRepository modules, IDynamicAccessGu
             f.Type is FieldType.Date or FieldType.DateTime || (f.Type == FieldType.Formula && f.Config.ResultType == "date"),
             f.Type is FieldType.Enum or FieldType.MultiEnum
                 ? f.Options.OrderBy(o => o.Sequence).Select(o => new CatalogOption($"opt_{o.Id}", o.LabelI18n.Resolve(locale), o.Active)).ToList()
-                : null);
+                : null,
+            f.Type == FieldType.Reference ? f.Config.RefTarget?.Kind : null,
+            f.Type == FieldType.Reference ? f.Config.RefTarget?.Key : null);
 }

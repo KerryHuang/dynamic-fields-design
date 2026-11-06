@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { ModuleCatalog, ReportDefinition } from 'src/domain/dynamic/report-types';
 import {
-  canAdvance, canSave, emptyState, fromDefinition, hasDedupeNote, operatorsOf, setChild, setMainModule, setPrimaryDate, toDefinition, unavailableRefs,
+  addMeasure, canAdvance, canSave, emptyState, fromDefinition, hasContent, hasDedupeNote, LAST_RANGE_KINDS, operatorsOf, removeColumn, removeGroup, removeMeasure, setChild, setMainModule, setPrimaryDate, toDefinition, unavailableRefs,
 } from './designer-state';
 
 const F = (id: number, label: string, o: Partial<ModuleCatalog['fields'][number]> = {}) => ({
@@ -97,5 +97,66 @@ describe('designer-state', () => {
     expect(canSave(s, CATALOG)).toBe(false);
     const m = fromDefinition({ ...DEF, measures: [{ id: 'm1', kind: 'ratio', field: null, condition: { field: MAIN(2), op: 'gt', hidden: true } }] }, 'x');
     expect(m.hasHidden).toBe(true);
+  });
+
+  it('only the last-N range kinds need N', () => {
+    expect(LAST_RANGE_KINDS).toEqual(['lastDays', 'lastWeeks', 'lastMonths']);
+    for (const kind of ['lastWeek', 'lastMonth', 'lastYear', 'thisMonth']) {
+      expect(canAdvance(fromDefinition({ ...DEF, dateRange: { kind, n: null } }, 'x'), 2)).toBe(true);
+    }
+    expect(canAdvance(fromDefinition({ ...DEF, dateRange: { kind: 'lastDays', n: null } }, 'x'), 2)).toBe(false);
+    expect(canAdvance(fromDefinition({ ...DEF, dateRange: { kind: 'lastDays', n: 7 } }, 'x'), 2)).toBe(true);
+  });
+
+  it('a ratio measure needs a complete condition', () => {
+    const s = fromDefinition({ ...DEF, measures: [] }, 'x');
+    addMeasure(s, 'ratio', null, { field: MAIN(2), op: 'gt', value: undefined });
+    expect(s.measures[0]).toMatchObject({ kind: 'ratio', condition: { op: 'gt' } });
+    expect(canAdvance(s, 3)).toBe(false);
+    s.measures[0]!.condition!.value = 5;
+    expect(canAdvance(s, 3)).toBe(true);
+    s.measures[0]!.condition = null;
+    expect(canAdvance(s, 3)).toBe(false);
+  });
+
+  it('unavailableRefs covers sort keys that point at missing fields but ignores measure ids', () => {
+    const s = fromDefinition({ ...DEF, sort: [{ key: 'm1', desc: true }, { key: 'main:99:', desc: false }, { key: 'main:3:', desc: false }, { key: 'junk', desc: false }] }, 'x');
+    expect(unavailableRefs(s, CATALOG)).toMatchObject({ sort: [1], any: true });
+    expect(canSave(s, CATALOG)).toBe(false);
+  });
+
+  it('removing a column, group or measure drops the sort entries pointing at it', () => {
+    const s = fromDefinition({ ...DEF, sort: [{ key: 'm1', desc: true }, { key: 'main:3:', desc: false }, { key: 'main:10:1', desc: false }] }, 'x');
+    removeColumn(s, 0);
+    expect(s.sort.map((x) => x.key)).toEqual(['m1', 'main:10:1']);
+    removeGroup(s, 0);
+    expect(s.sort.map((x) => x.key)).toEqual(['m1']);
+    removeMeasure(s, 0);
+    expect(s.sort).toEqual([]);
+  });
+
+  it('a column still used by a group keeps its sort entry', () => {
+    const s = fromDefinition({ ...DEF, columns: [MAIN(10, 1)], sort: [{ key: 'main:10:1', desc: false }] }, 'x');
+    removeColumn(s, 0);
+    expect(s.sort).toHaveLength(1);
+    const t = fromDefinition({ ...DEF, columns: [MAIN(10, 1)], sort: [{ key: 'main:10:1', desc: false }] }, 'x');
+    removeGroup(t, 0);
+    expect(t.sort).toHaveLength(1);
+    removeColumn(t, 0);
+    expect(t.sort).toEqual([]);
+  });
+
+  it('a new measure id never reuses an id that sort still names', () => {
+    const s = fromDefinition({ ...DEF, sort: [{ key: 'm2', desc: true }] }, 'x');
+    addMeasure(s, 'countMain', null);
+    expect(s.measures.map((m) => m.id)).toEqual(['m1', 'm3']);
+  });
+
+  it('choosing the same child again keeps child settings, hasContent reports settings', () => {
+    const s = fromDefinition({ ...DEF, columns: [MAIN(3), { source: 'child', fieldId: 21, viaFieldId: null }] }, 'x');
+    setChild(s, { moduleKey: 'shipments', linkFieldId: 20 });
+    expect(s.columns).toHaveLength(2);
+    expect(hasContent(s)).toBe(true);
+    expect(hasContent(emptyState())).toBe(false);
   });
 });

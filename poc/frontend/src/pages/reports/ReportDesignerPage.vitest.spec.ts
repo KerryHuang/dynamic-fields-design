@@ -8,13 +8,14 @@ import { createMemoryHistory, createRouter } from 'vue-router';
 import type { ModuleCatalog, ReportDefinition, ReportDetail, ReportResult } from 'src/domain/dynamic/report-types';
 import zhTW from 'src/i18n/zh-TW.json';
 import { dynamicApi } from 'src/services/api/dynamic-api';
+import PopupSelect from 'src/components/framework/PopupSelect.vue';
 import FilterValueInput from 'src/presentation/reports/designer/FilterValueInput.vue';
 import ReportDesignerPage from './ReportDesignerPage.vue';
 
 vi.mock('src/services/api/dynamic-api', () => ({
   dynamicApi: {
     getReportCatalogModules: vi.fn(), getReportCatalog: vi.fn(), previewReport: vi.fn(), createReport: vi.fn(), updateReport: vi.fn(),
-    getReport: vi.fn(), getUsers: vi.fn(),
+    getReport: vi.fn(), getUsers: vi.fn(), getRecord: vi.fn(),
   },
 }));
 vi.mock('src/presentation/reports/ReportChart.vue', () => ({ default: { template: '<i />' } }));
@@ -40,9 +41,9 @@ const q = (id: string) => document.body.querySelector(`[data-testid="${id}"]`) a
 let mounted: ReturnType<typeof mount> | undefined;
 let router: ReturnType<typeof createRouter>;
 
-async function mountAt(path: string) {
+async function mountAt(path: string, catalog: ModuleCatalog = CATALOG) {
   api.getReportCatalogModules.mockResolvedValue([{ key: 'orders', name: '訂單' }]);
-  api.getReportCatalog.mockResolvedValue(CATALOG);
+  api.getReportCatalog.mockResolvedValue(catalog);
   api.getUsers.mockResolvedValue([]);
   api.previewReport.mockResolvedValue(RESULT);
   router = createRouter({
@@ -189,6 +190,174 @@ describe('ReportDesignerPage', () => {
   });
 });
 
+
+const CAT2: ModuleCatalog = {
+  fields: [
+    ...CATALOG.fields,
+    F(4, '狀態', { type: 'enum', options: [{ id: 'opt_1', label: '進行中', active: true }] }),
+    F(7, '客戶', { type: 'reference', refKind: 'module', refKey: 'customers' }),
+  ],
+  via: [{ fieldId: 7, label: '客戶', targetKey: 'customers', fields: [F(10, '地區')] }],
+  children: CATALOG.children,
+};
+const goTo = async (step: number) => { for (let i = 0; i < step; i++) await click('designer-next'); };
+const keys = (list: { key: string }[]) => list.map((x) => x.key);
+
+describe('ReportDesignerPage review fixes', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.stubGlobal('ResizeObserver', class { observe() {} unobserve() {} disconnect() {} });
+  });
+  afterEach(() => { mounted?.unmount(); document.body.innerHTML = ''; });
+
+  it('a saved lastMonth range can advance and save without N', async () => {
+    api.getReport.mockResolvedValue(detail({ ...DEF, primaryDateField: MAIN(3), dateRange: { kind: 'lastMonth', n: null } }));
+    api.updateReport.mockResolvedValue(detail(DEF));
+    await mountAt('/reports/7/edit');
+    await goTo(4);
+    expect((q('designer-save') as HTMLButtonElement).disabled).toBe(false);
+    await click('designer-save');
+    expect(api.updateReport.mock.calls[0]![2]).toMatchObject({ dateRange: { kind: 'lastMonth', n: null } });
+  });
+
+  it('ratio measures can be added, need a complete condition, and show the condition text', async () => {
+    await mountAt('/reports/new', CAT2);
+    await pick('main-module', 'orders');
+    await goTo(3);
+    await pick('measure-kind', 'ratio');
+    await pick('ratio-field', 'main:2:');
+    await click('measure-add');
+    expect(q('measure-text-0')!.textContent).toContain('條件占比');
+    expect(q('measure-text-0')!.textContent).toContain('金額');
+    expect(q('measure-cond-0')).not.toBeNull();
+    expect((q('designer-next') as HTMLButtonElement).disabled).toBe(true);
+  });
+
+  it('a saved ratio measure shows its condition value', async () => {
+    api.getReport.mockResolvedValue(detail({ ...DEF, measures: [{ id: 'm1', kind: 'ratio', field: null, condition: { field: MAIN(4), op: 'in', value: ['opt_1'] } }] }));
+    await mountAt('/reports/7/edit', CAT2);
+    await goTo(3);
+    expect(q('measure-text-0')!.textContent).toBe('條件占比 狀態 是其中之一 進行中');
+  });
+
+  it('reference conditions use the record picker with the target light url and show stored titles', async () => {
+    api.getReport.mockResolvedValue(detail({ ...DEF, filters: [{ field: MAIN(7), op: 'in', value: [5, 6, 8] }] }));
+    api.getRecord.mockImplementation(async (id: number) => {
+      if (id === 5) return { id, title: 'ACME' } as never;
+      throw { status: id === 6 ? 404 : 403 };
+    });
+    await mountAt('/reports/7/edit', CAT2);
+    await goTo(2);
+    const popup = mounted!.findComponent(PopupSelect);
+    expect(popup.props()).toMatchObject({ lightUrl: '/modules/customers/records/light', valueKind: 'number', multiple: true });
+    expect((q('popup-input') as HTMLInputElement).value).toBe('ACME、已失效、無權限檢視');
+  });
+
+  it('an entity reference uses the entity light url with string keys', async () => {
+    const cat: ModuleCatalog = { ...CAT2, fields: [...CAT2.fields, F(8, '實體', { type: 'reference', refKind: 'entity', refKey: 'sales.customer' })] };
+    api.getReport.mockResolvedValue(detail({ ...DEF, filters: [{ field: MAIN(8), op: 'eq', value: 'C001' }] }));
+    await mountAt('/reports/7/edit', cat);
+    await goTo(2);
+    expect(mounted!.findComponent(PopupSelect).props()).toMatchObject({ lightUrl: '/entities/sales.customer/light', valueKind: 'string' });
+    expect(api.getRecord).not.toHaveBeenCalled();
+  });
+
+  it('a saved sort key pointing at a missing field blocks until removed in the group step', async () => {
+    api.getReport.mockResolvedValue(detail({ ...DEF, sort: [{ key: 'main:99:', desc: false }] }));
+    api.updateReport.mockResolvedValue(detail(DEF));
+    await mountAt('/reports/7/edit');
+    expect(q('designer-unavailable')).not.toBeNull();
+    await goTo(3);
+    expect(q('sort-unavailable')).not.toBeNull();
+    expect((q('designer-next') as HTMLButtonElement).disabled).toBe(true);
+    await click('sort-remove-0');
+    expect(q('designer-unavailable')).toBeNull();
+    await goTo(1);
+    await click('designer-save');
+    expect(api.updateReport.mock.calls[0]![2]).toMatchObject({ sort: [] });
+  });
+
+  it('unchecking a column drops the sort entry that points at it', async () => {
+    api.getReport.mockResolvedValue(detail({ ...DEF, columns: [MAIN(1), MAIN(3)], sort: [{ key: 'main:3:', desc: true }] }));
+    api.updateReport.mockResolvedValue(detail(DEF));
+    await mountAt('/reports/7/edit');
+    await goTo(1);
+    await click('field-main:3:');
+    await goTo(3);
+    await click('designer-save');
+    expect(api.updateReport.mock.calls[0]![2]).toMatchObject({ columns: [MAIN(1)], sort: [] });
+  });
+
+  it('a saved date group with no bucket shows no bucket, a new date group stores month, and a field is grouped once', async () => {
+    api.getReport.mockResolvedValue(detail({ ...DEF, groups: [{ field: MAIN(3), bucket: null }], measures: [{ id: 'm1', kind: 'countMain', field: null, condition: null }] }));
+    await mountAt('/reports/7/edit', { ...CATALOG, fields: [...CATALOG.fields, F(9, '交期', { type: 'date', isDate: true })] });
+    await goTo(3);
+    expect((comp('group-bucket-0').props() as unknown as { modelValue: string }).modelValue).toBe('');
+    const options = () => (comp('group-add').props() as unknown as { options: { value: string }[] }).options.map((o) => o.value);
+    expect(options()).not.toContain('main:3:');
+    await pick('group-add', 'main:9:');
+    expect((comp('group-bucket-1').props() as unknown as { modelValue: string }).modelValue).toBe('month');
+    expect(options()).not.toContain('main:9:');
+  });
+
+  it('switching the report in the route reloads the designer state', async () => {
+    api.getReport.mockImplementation(async (id: number) => ({ ...detail({ ...DEF, columns: [id === 5 ? MAIN(1) : MAIN(3)] }), id, name: `報表${id}` }));
+    api.updateReport.mockResolvedValue(detail(DEF));
+    await mountAt('/reports/5/edit');
+    await router.push('/reports/6/edit');
+    await flushPromises();
+    await goTo(4);
+    expect((comp('report-name-input').props() as unknown as { modelValue: string }).modelValue).toBe('報表6');
+    await click('designer-save');
+    expect(api.updateReport).toHaveBeenCalledWith(6, '報表6', expect.objectContaining({ columns: [MAIN(3)] }));
+  });
+
+  it('changing the main module asks first when there are settings, and keeps them on cancel', async () => {
+    api.getReport.mockResolvedValue(detail({ ...DEF, columns: [MAIN(1)] }));
+    api.getReportCatalogModules.mockResolvedValue([{ key: 'orders', name: '訂單' }, { key: 'tickets', name: '工單' }]);
+    await mountAt('/reports/7/edit');
+    api.getReportCatalogModules.mockResolvedValue([{ key: 'orders', name: '訂單' }, { key: 'tickets', name: '工單' }]);
+    await pick('main-module', 'tickets');
+    expect(q('main-change-confirm')).not.toBeNull();
+    await click('main-change-cancel');
+    await goTo(1);
+    expect(q('field-main:1:')).not.toBeNull();
+    await click('designer-prev');
+    await pick('main-module', 'tickets');
+    await click('main-change-confirm');
+    expect(api.getReportCatalog).toHaveBeenLastCalledWith('tickets', 'zh-TW');
+  });
+
+  it('choosing a main module on an empty designer does not ask', async () => {
+    await mountAt('/reports/new');
+    await pick('main-module', 'orders');
+    expect(q('main-change-confirm')).toBeNull();
+  });
+
+  it('saving a loaded report untouched sends exactly the loaded definition', async () => {
+    const loaded: ReportDefinition = {
+      version: 1, mainModuleKey: 'orders', child: { moduleKey: 'shipments', linkFieldId: 20 },
+      columns: [MAIN(3), { source: 'main', fieldId: 10, viaFieldId: 7 }, { source: 'child', fieldId: 21, viaFieldId: null }],
+      groups: [{ field: MAIN(3), bucket: 'month' }, { field: { source: 'main', fieldId: 10, viaFieldId: 7 }, bucket: null }],
+      measures: [
+        { id: 'm1', kind: 'sum', field: MAIN(2), condition: null },
+        { id: 'm3', kind: 'ratio', field: null, condition: { field: MAIN(4), op: 'in', value: ['opt_1'] } },
+      ],
+      filters: [{ field: MAIN(2), op: 'between', value: [1, 9] }, { field: MAIN(7), op: 'eq', value: 5 }],
+      primaryDateField: MAIN(3), dateRange: { kind: 'lastMonth', n: null },
+      sort: [{ key: 'm1', desc: true }, { key: 'main:3:', desc: false }], viz: 'bar',
+    };
+    api.getReport.mockResolvedValue(detail(loaded));
+    api.getRecord.mockResolvedValue({ id: 5, title: 'ACME' } as never);
+    api.updateReport.mockResolvedValue(detail(loaded));
+    await mountAt('/reports/7/edit', CAT2);
+    await goTo(4);
+    await click('designer-save');
+    expect(api.updateReport).toHaveBeenCalledTimes(1);
+    expect(api.updateReport.mock.calls[0]![2]).toEqual(loaded);
+  });
+});
+
 describe('FilterValueInput', () => {
   afterEach(() => { mounted?.unmount(); document.body.innerHTML = ''; });
   it('inactive options are marked and cannot be newly picked, but stay selectable-as-shown', async () => {
@@ -203,5 +372,23 @@ describe('FilterValueInput', () => {
     expect(opts.find((o) => o.value === 'opt_2')).toMatchObject({ label: '舊狀態（已停用）', disable: true });
     expect(opts.find((o) => o.value === 'opt_1')!.disable).toBe(false);
     w.unmount();
+  });
+
+  it('datetime conditions show Taipei wall time for stored +08:00 and other offsets', async () => {
+    api.getUsers.mockResolvedValue([]);
+    const i18n = createI18n({ legacy: false, locale: 'zh-TW', messages: { 'zh-TW': zhTW } });
+    const show = (value: unknown) => {
+      const w = mount(FilterValueInput, {
+        props: { field: F(6, '時間', { type: 'datetime' }), op: 'gt', modelValue: value },
+        global: { plugins: [[quasar.Quasar, { components: quasar }], i18n, createPinia(), [VueQueryPlugin, { queryClient: new QueryClient() }]] },
+      });
+      const v = w.find('input').element.value;
+      w.unmount();
+      return v;
+    };
+    expect(show('2026-11-01T08:30:00+08:00')).toBe('2026-11-01T08:30');
+    expect(show('2026-11-01T00:30:00Z')).toBe('2026-11-01T08:30');
+    expect(show('2026-11-01T08:30')).toBe('2026-11-01T08:30');
+    expect(show('2026-11-01')).toBe('2026-11-01T00:00');
   });
 });

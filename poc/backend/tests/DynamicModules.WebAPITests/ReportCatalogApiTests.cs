@@ -198,6 +198,29 @@ public class ReportCatalogApiTests
     }
 
     [Fact]
+    public async Task Catalog_ReferenceField_ExposesTargetForThePicker()
+    {
+        using var app = new TestApp();
+        var target = await NewActive(app);
+        var main = await CreateModule(app.AsUser());
+        var toModule = await AddField(app.AsUser(), main, "reference", new { refTarget = new { kind = "module", key = target } });
+        var toEntity = await AddField(app.AsUser(), main, "reference", new { refTarget = new { kind = "entity", key = "sales.customer" } });
+        var plain = await AddField(app.AsUser(), main, "decimal", new { scale = 0 });
+        await Activate(app.AsUser(), main);
+        app.GrantBusinessGroups(main);
+
+        var json = await JsonOf(await app.AsUser("sales01").GetAsync($"{Catalog}/{main}"));
+
+        JsonElement Field(long id) => json.GetProperty("fields").EnumerateArray().Single(f => f.GetProperty("id").GetInt64() == id);
+        Field(toModule.Id).GetProperty("refKind").GetString().Should().Be("module");
+        Field(toModule.Id).GetProperty("refKey").GetString().Should().Be(target);
+        Field(toEntity.Id).GetProperty("refKind").GetString().Should().Be("entity");
+        Field(toEntity.Id).GetProperty("refKey").GetString().Should().Be("sales.customer");
+        // 伺服器省略 null 屬性：非參照欄位沒有 refKey
+        Field(plain.Id).TryGetProperty("refKey", out _).Should().BeFalse();
+    }
+
+    [Fact]
     public async Task Catalog_DirectReferenceToUnreadableTarget_NotListed()
     {
         using var app = new TestApp();

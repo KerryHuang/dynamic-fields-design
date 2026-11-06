@@ -20,10 +20,22 @@ const isEdit = computed(() => !Number.isNaN(reportId.value));
 
 const state = reactive(emptyState());
 const step = ref<DesignerStep>(0);
+const preview = usePreviewReport();
+const previewErrors = ref<string[]>([]);
+const saveErrors = ref<string[]>([]);
 
 // 編輯：載入一次，之後以設計器裡的狀態為準
 const report = useReport(reportId);
 const loaded = ref(false);
+// 同一頁換成另一張報表（/reports/5/edit 到 /reports/6/edit）時從頭來，不能把 5 的內容存進 6
+watch(reportId, () => {
+  loaded.value = false;
+  Object.assign(state, emptyState());
+  step.value = 0;
+  previewErrors.value = [];
+  saveErrors.value = [];
+  preview.reset();
+}, { flush: 'sync' });
 watch(() => report.data.value, (d) => {
   if (!d || loaded.value) return;
   loaded.value = true;
@@ -48,8 +60,6 @@ const messages = (e: unknown) => {
   return list.length ? list : [t('reports.saveFailed')];
 };
 
-const preview = usePreviewReport();
-const previewErrors = ref<string[]>([]);
 function runPreview() {
   previewErrors.value = [];
   preview.mutate({ definition: toDefinition(state), locale: locale.value }, { onError: (e) => { previewErrors.value = messages(e); } });
@@ -60,7 +70,6 @@ function go(to: DesignerStep) {
 }
 
 const save = useSaveReport();
-const saveErrors = ref<string[]>([]);
 const savable = computed(() => !!catalog.value && canSave(state, catalog.value));
 function doSave() {
   saveErrors.value = [];

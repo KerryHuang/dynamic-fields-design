@@ -59,6 +59,8 @@ export interface CatalogOption { id: string; label: string; active: boolean }
 export interface CatalogField {
   id: number; label: string; type: string; canGroup: boolean; canSum: boolean; canMinMax: boolean; isDate: boolean;
   options?: CatalogOption[] | null;
+  /** 參照欄位的目標（module 或 entity）與鍵，挑選器據此決定 light 網址；非參照欄位沒有。 */
+  refKind?: string | null; refKey?: string | null;
 }
 export interface CatalogVia { fieldId: number; label: string; targetKey: string; fields: CatalogField[] }
 export interface CatalogChild {
