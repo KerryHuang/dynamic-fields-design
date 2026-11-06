@@ -125,6 +125,91 @@ namespace DynamicModules.Persistence.Migrations
                     b.ToTable("Dynamic_Block", (string)null);
                 });
 
+            modelBuilder.Entity("DynamicModules.Domain.Entities.Dynamic.Dashboard", b =>
+                {
+                    b.Property<long>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("INTEGER");
+
+                    b.Property<DateTime>("CreatedTime")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("CreatedUserId")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("LayoutJson")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTime?>("ModifiedTime")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("ModifiedUserId")
+                        .HasMaxLength(50)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("OwnerUserId")
+                        .HasMaxLength(50)
+                        .HasColumnType("TEXT");
+
+                    b.Property<int>("Sequence")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int>("Version")
+                        .HasColumnType("INTEGER");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("OwnerUserId");
+
+                    b.ToTable("Dynamic_Dashboard", (string)null);
+                });
+
+            modelBuilder.Entity("DynamicModules.Domain.Entities.Dynamic.DashboardAssignment", b =>
+                {
+                    b.Property<long>("DashboardId")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<long>("GroupId")
+                        .HasColumnType("INTEGER");
+
+                    b.HasKey("DashboardId", "GroupId");
+
+                    b.HasIndex("GroupId");
+
+                    b.ToTable("Dynamic_DashboardAssignment", (string)null);
+                });
+
+            modelBuilder.Entity("DynamicModules.Domain.Entities.Dynamic.DashboardPersonalVersion", b =>
+                {
+                    b.Property<long>("DashboardId")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("UserId")
+                        .HasMaxLength(50)
+                        .HasColumnType("TEXT");
+
+                    b.Property<int>("BaseVersion")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("LayoutJson")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.HasKey("DashboardId", "UserId");
+
+                    b.HasIndex("UserId");
+
+                    b.ToTable("Dynamic_DashboardPersonalVersion", (string)null);
+                });
+
             modelBuilder.Entity("DynamicModules.Domain.Entities.Dynamic.DynamicProgram", b =>
                 {
                     b.Property<string>("ProgramCode")
@@ -922,6 +1007,24 @@ namespace DynamicModules.Persistence.Migrations
                         .IsRequired();
                 });
 
+            modelBuilder.Entity("DynamicModules.Domain.Entities.Dynamic.DashboardAssignment", b =>
+                {
+                    b.HasOne("DynamicModules.Domain.Entities.Dynamic.Dashboard", null)
+                        .WithMany("Assignments")
+                        .HasForeignKey("DashboardId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("DynamicModules.Domain.Entities.Dynamic.DashboardPersonalVersion", b =>
+                {
+                    b.HasOne("DynamicModules.Domain.Entities.Dynamic.Dashboard", null)
+                        .WithMany()
+                        .HasForeignKey("DashboardId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
             modelBuilder.Entity("DynamicModules.Domain.Entities.Dynamic.Field", b =>
                 {
                     b.HasOne("DynamicModules.Domain.Entities.Dynamic.Block", null)
@@ -1016,6 +1119,11 @@ namespace DynamicModules.Persistence.Migrations
             modelBuilder.Entity("DynamicModules.Domain.Entities.Dynamic.Block", b =>
                 {
                     b.Navigation("Fields");
+                });
+
+            modelBuilder.Entity("DynamicModules.Domain.Entities.Dynamic.Dashboard", b =>
+                {
+                    b.Navigation("Assignments");
                 });
 
             modelBuilder.Entity("DynamicModules.Domain.Entities.Dynamic.Field", b =>

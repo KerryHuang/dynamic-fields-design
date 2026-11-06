@@ -170,6 +170,9 @@ function confirmDelete() {
             <div data-testid="impact-reports">
               {{ t('groups.impactReports', { list: impact.data.value.reports.join('、') || t('groups.impactNone') }) }}
             </div>
+            <div data-testid="impact-dashboards">
+              {{ t('groups.impactDashboards', { list: impact.data.value.dashboards.join('、') || t('groups.impactNone') }) }}
+            </div>
             <div class="text-warning" data-testid="impact-warning">{{ t('groups.loseWarning') }}</div>
             <div v-if="blocking.length" class="text-negative" data-testid="impact-blocking">
               <div>{{ t('groups.blocking') }}</div>

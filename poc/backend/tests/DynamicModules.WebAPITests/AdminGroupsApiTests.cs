@@ -348,6 +348,33 @@ public class AdminGroupsApiTests
     }
 
     [Fact]
+    public async Task DeleteGroup_RemovesAssignments_ImpactListsThem()
+    {
+        using var app = new TestApp();
+        var admin = app.AsUser();
+        var id = await CreateGroup(app, "稽核組");
+        var other = await CreateGroup(app, "其他組");
+        var dashboardId = Db(app, db =>
+        {
+            var dashboard = new Dashboard
+            {
+                Name = "業務總覽", Assignments = [new DashboardAssignment { GroupId = id }, new DashboardAssignment { GroupId = other }]
+            };
+            db.Set<Dashboard>().Add(dashboard);
+            db.SaveChanges();
+            return dashboard.Id;
+        });
+
+        var impact = await JsonOf(await admin.GetAsync($"{AdminGroups}/{id}/impact"));
+
+        impact.GetProperty("dashboards").EnumerateArray().Select(x => x.GetString()).Should().BeEquivalentTo(["業務總覽"]);
+        (await admin.DeleteAsync($"{AdminGroups}/{id}")).StatusCode.Should().Be(HttpStatusCode.OK);
+        Db(app, db => db.Set<DashboardAssignment>().Count(x => x.GroupId == id)).Should().Be(0);
+        Db(app, db => db.Set<DashboardAssignment>().Count(x => x.GroupId == other)).Should().Be(1);
+        Db(app, db => db.Set<Dashboard>().Any(d => d.Id == dashboardId)).Should().BeTrue();
+    }
+
+    [Fact]
     public async Task SavePermissions_DeletedGroupId_400()
     {
         using var app = new TestApp();

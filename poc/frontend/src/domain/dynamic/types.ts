@@ -273,6 +273,8 @@ export interface GroupImpact {
   blockingOptions: BlockingOption[];
   /** 分享給這個群組的報表名稱（刪除群組會一併移除分享）。 */
   reports: string[];
+  /** 指派給這個群組的儀表板名稱（刪除群組會一併移除指派）。 */
+  dashboards: string[];
 }
 
 export interface Me {

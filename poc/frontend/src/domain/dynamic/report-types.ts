@@ -1,7 +1,8 @@
 import type { I18nText } from './types';
 /** 對應後端 ReportService/Data/ReportResponses.cs 與 Domain/Reports/ReportDefinition.cs。 */
 
-export type ReportState = 'ok' | 'empty' | 'restricted' | 'fieldMissing' | 'moduleDisabled' | 'tooMany';
+/** unshared（卡片的報表已不再分享給他）與 reportGone（報表已不存在）只會出現在儀表板卡片。 */
+export type ReportState = 'ok' | 'empty' | 'restricted' | 'fieldMissing' | 'moduleDisabled' | 'tooMany' | 'unshared' | 'reportGone';
 export type ReportViz = 'table' | 'indicator' | 'line' | 'bar' | 'donut';
 
 /** Role: group|measure|field；ValueType: text|number|percent|date|dateTime|ratio|dayNumber（DayNumber 為 DateOnly.DayNumber）。 */

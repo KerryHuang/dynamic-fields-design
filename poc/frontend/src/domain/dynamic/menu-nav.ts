@@ -28,6 +28,7 @@ export function systemLinks(me: Pick<Me, 'isSystemAdmin' | 'designer'> | undefin
     links.push(
       { to: '/system/users', label: 'menu.users', icon: 'person', testid: 'users-menu' },
       { to: '/system/groups', label: 'menu.groups', icon: 'groups', testid: 'groups-menu' },
+      { to: '/system/dashboards', label: 'menu.dashboardsAdmin', icon: 'space_dashboard', testid: 'dashboards-admin-menu' },
       { to: '/system/appearance', label: 'theme.adminMenu', icon: 'palette', testid: 'appearance-menu' },
     );
   }

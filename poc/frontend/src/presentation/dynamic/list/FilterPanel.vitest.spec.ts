@@ -21,10 +21,10 @@ const schema: ModuleSchema = {
   }],
 };
 
-function mountPanel(modelValue?: ConditionNode) {
+function mountPanel(modelValue?: ConditionNode, panelSchema: ModuleSchema = schema) {
   const i18n = createI18n({ legacy: false, locale: 'zh-TW', messages: { 'zh-TW': zhTW } });
   return mount(FilterPanel, {
-    props: { schema, modelValue },
+    props: { schema: panelSchema, modelValue },
     global: { plugins: [[quasar.Quasar, { components: quasar }], createPinia(), i18n] },
   });
 }
@@ -32,6 +32,13 @@ function mountPanel(modelValue?: ConditionNode) {
 describe('FilterPanel', () => {
   beforeEach(() => {
     vi.stubGlobal('ResizeObserver', class { observe() {} unobserve() {} disconnect() {} });
+  });
+
+  it('explains instead of offering conditions when no field is filterable', () => {
+    const none: ModuleSchema = { ...schema, blocks: [{ ...schema.blocks[0]!, fields: [field(3, 'text', '備註', false)] }] };
+    const w = mountPanel(undefined, none);
+    expect(w.find('[data-testid="no-filter-fields"]').text()).toContain('可篩選');
+    expect(w.findComponent({ name: 'ConditionEditor' }).exists()).toBe(false);
   });
 
   it('lists only filterable fields', () => {

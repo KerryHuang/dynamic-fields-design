@@ -5,6 +5,7 @@ using ClosedXML.Excel;
 using DynamicModules.Application.Dynamic.ReportService;
 using DynamicModules.Domain.Data;
 using DynamicModules.Domain.Entities.Dynamic;
+using DynamicModules.Domain.Reports;
 using DynamicModules.Domain.ValueObjects;
 using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
@@ -590,6 +591,94 @@ public class ReportsApiTests
 
         (await admin.DeleteAsync($"{Reports}/{shared}")).StatusCode.Should().Be(HttpStatusCode.OK);
         (await sales.GetAsync($"{Reports}/{shared}")).StatusCode.Should().Be(HttpStatusCode.NotFound);
+    }
+
+    private static string LayoutOf(params long[] reportIds) => DashboardLayout.Serialize(new DashboardLayout(
+        [.. reportIds.Select((id, i) => new DashboardCard($"c{i}", id, null, "table", 0, i * 2, 4, 2, CardOptions.None))]));
+
+    private static long SeedDashboard(TestApp app, string? owner, string name, string layoutJson, params long[] groupIds)
+    {
+        using var scope = app.Services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<DynamicDbContext>();
+        var d = new Dashboard { OwnerUserId = owner, Name = name, LayoutJson = layoutJson, Assignments = [.. groupIds.Select(g => new DashboardAssignment { GroupId = g })] };
+        db.Set<Dashboard>().Add(d);
+        db.SaveChanges();
+        return d.Id;
+    }
+
+    [Fact]
+    public async Task DeleteReport_ReferencedByOthersDashboard_409_ListsReferences()
+    {
+        using var app = new TestApp();
+        var w = await MakeWorld(app);
+        var admin = app.AsUser();
+        var id = await Create(admin, ByStatus(w));
+        await Share(admin, id, GroupId(app, "sales"));
+        SeedDashboard(app, "sales01", "我的看板", LayoutOf(id));
+
+        var res = await admin.DeleteAsync($"{Reports}/{id}");
+
+        res.StatusCode.Should().Be(HttpStatusCode.Conflict);
+        var body = await JsonOf(res);
+        var reference = body.GetProperty("references").EnumerateArray().Single();
+        reference.GetProperty("dashboardName").GetString().Should().Be("我的看板");
+        reference.GetProperty("ownerName").GetString().Should().Be("業務一");
+        (await admin.GetAsync($"{Reports}/{id}")).StatusCode.Should().Be(HttpStatusCode.OK);
+    }
+
+    [Fact]
+    public async Task DeleteReport_ReferencedByAssignedDashboard_409()
+    {
+        using var app = new TestApp();
+        var w = await MakeWorld(app);
+        var admin = app.AsUser();
+        var id = await Create(admin, ByStatus(w));
+        SeedDashboard(app, null, "業務總覽", LayoutOf(id), GroupId(app, "sales"));
+
+        var res = await admin.DeleteAsync($"{Reports}/{id}");
+
+        res.StatusCode.Should().Be(HttpStatusCode.Conflict);
+        (await JsonOf(res)).GetProperty("references").EnumerateArray().Single().GetProperty("dashboardName").GetString().Should().Be("業務總覽");
+    }
+
+    [Fact]
+    public async Task DeleteReport_ReferencedByPersonalVersionOfOtherUser_409()
+    {
+        using var app = new TestApp();
+        var w = await MakeWorld(app);
+        var admin = app.AsUser();
+        var id = await Create(admin, ByStatus(w));
+        var assigned = SeedDashboard(app, null, "業務總覽", LayoutOf(), GroupId(app, "sales"));
+        using (var scope = app.Services.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<DynamicDbContext>();
+            db.Set<DashboardPersonalVersion>().Add(new DashboardPersonalVersion { DashboardId = assigned, UserId = "sales01", LayoutJson = LayoutOf(id), BaseVersion = 1 });
+            db.SaveChanges();
+        }
+
+        (await admin.DeleteAsync($"{Reports}/{id}")).StatusCode.Should().Be(HttpStatusCode.Conflict);
+    }
+
+    [Fact]
+    public async Task DeleteReport_OnlyOwnDashboardRefs_Allowed_RemovesCards()
+    {
+        using var app = new TestApp();
+        var w = await MakeWorld(app);
+        var admin = app.AsUser();
+        var id = await Create(admin, ByStatus(w), "刪除我");
+        var keep = await Create(admin, ByStatus(w), "保留");
+        var own = SeedDashboard(app, "admin", "我的看板", LayoutOf(id, keep));
+
+        (await admin.DeleteAsync($"{Reports}/{id}")).StatusCode.Should().Be(HttpStatusCode.OK);
+
+        var layout = DashboardLayout.Parse(await AppDbAsync(app, db => db.Set<Dashboard>().Single(d => d.Id == own).LayoutJson));
+        layout.Cards.Select(c => c.ReportId).Should().Equal(keep);
+    }
+
+    private static Task<T> AppDbAsync<T>(TestApp app, Func<DynamicDbContext, T> read)
+    {
+        using var scope = app.Services.CreateScope();
+        return Task.FromResult(read(scope.ServiceProvider.GetRequiredService<DynamicDbContext>()));
     }
 
     [Fact]

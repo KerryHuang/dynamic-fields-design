@@ -40,11 +40,12 @@ public interface IAccountRepository
     /// <summary>刪除群組前的影響統計；名稱以 I18nText.FallbackLocale 解析。</summary>
     Task<GroupImpact> GetGroupImpactAsync(long groupId, CancellationToken ct);
 
-    /// <summary>明確刪除成員對應、模組授權、欄位例外、資料範圍、選項範圍、報表分享與群組本身（無 FK cascade）；寫入由 IUnitOfWork 提交。</summary>
+    /// <summary>明確刪除成員對應、模組授權、欄位例外、資料範圍、選項範圍、報表分享、儀表板指派與群組本身（無 FK cascade）；寫入由 IUnitOfWork 提交。</summary>
     Task DeleteGroupAsync(PermissionGroup group, CancellationToken ct);
 }
 
 public record BlockingOption(string Module, string Field, string Option);
 
 public record GroupImpact(
-    int MemberCount, List<string> Modules, int FieldPermissionCount, int DataScopeCount, List<BlockingOption> BlockingOptions, List<string> Reports);
+    int MemberCount, List<string> Modules, int FieldPermissionCount, int DataScopeCount, List<BlockingOption> BlockingOptions, List<string> Reports,
+    List<string> Dashboards);

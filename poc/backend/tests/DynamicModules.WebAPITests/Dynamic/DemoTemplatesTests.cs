@@ -119,6 +119,19 @@ public sealed class DemoTemplatesTests : IDisposable
             .Should().Be($"DATEADD({{{Id("保養日期")}}}, {{{Id("保養週期（天）")}}})");
     }
 
+    [Theory]
+    [InlineData("mold-info", "上次保養日", "累計射出數")]
+    [InlineData("customer-info", "信用等級", "業務窗口")]
+    [InlineData("mold-care-part", "保養紀錄", "零件名稱")]
+    public async Task Instantiate_MoldCare_MenuModulesHaveFilterableFields(string module, params string[] labels)
+    {
+        await InstantiateAndActivate("mold-care", "mold-info", "customer-info", "mold-care", "mold-care-part");
+
+        var layout = await LayoutOf(module);
+        foreach (var label in labels)
+            layout.Field(label).GetProperty("config").GetProperty("isFilterable").GetBoolean().Should().BeTrue(label);
+    }
+
     [Fact]
     public async Task Instantiate_Quality_WithoutOrderModule_400()
     {

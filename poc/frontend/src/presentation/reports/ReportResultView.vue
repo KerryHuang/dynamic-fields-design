@@ -1,16 +1,18 @@
 <script setup lang="ts">
 import { computed } from 'vue';
 import { useI18n } from 'vue-i18n';
+import type { CardResult } from 'src/domain/dynamic/dashboard-types';
 import type { ReportColumn, ReportResult } from 'src/domain/dynamic/report-types';
 import ReportChart from './ReportChart.vue';
 import { formatValue } from './report-format';
 
-const props = defineProps<{ result: ReportResult; viz: string }>();
+const props = defineProps<{ result: ReportResult; viz: string; chartHeight?: string }>();
 const emit = defineEmits<{ drill: [groupKeys: string[]] }>();
 const { t, locale } = useI18n();
 
 const STATE_KEYS = { empty: 'reports.state.empty', restricted: 'reports.state.restricted', fieldMissing: 'reports.state.fieldMissing',
-  moduleDisabled: 'reports.state.moduleDisabled', tooMany: 'reports.state.tooMany' } as const;
+  moduleDisabled: 'reports.state.moduleDisabled', tooMany: 'reports.state.tooMany', unshared: 'reports.state.unshared',
+  reportGone: 'reports.state.reportGone' } as const;
 // 這幾種狀態的後端訊息帶了具體原因（欄位名稱、哪一個上限），優先顯示
 const stateText = computed(() => {
   const s = props.result.state;
@@ -32,6 +34,8 @@ const showIndicator = computed(() => measureCols.value.length > 0 && (props.viz 
 const showGroupTable = computed(() => hasGroups.value && !showChart.value && !showIndicator.value);
 const fmt = (v: string | number | null | undefined, c: ReportColumn) => formatValue(v, c.valueType, locale.value);
 const range = computed(() => props.result.appliedRange);
+// 儀表板卡片才有累計占比
+const cumulative = computed(() => (props.result as CardResult).cumulative ?? null);
 const countText = (n: number | null | undefined) => (n ?? 0).toLocaleString(locale.value);
 </script>
 
@@ -56,7 +60,8 @@ const countText = (n: number | null | undefined) => (n ?? 0).toLocaleString(loca
         </div>
         <template v-else-if="showChart">
           <ReportChart
-            :viz="chartViz!" :groups="groups" :measures="measureCols" :locale="locale"
+            :viz="chartViz!" :groups="groups" :measures="measureCols" :locale="locale" :height="chartHeight ?? '360px'" :compact="chartHeight !== undefined"
+            :cumulative="cumulative" :cumulative-label="t('dashboards.card.cumulative')"
             @pick="(i: number) => emit('drill', groups[i]!.groupKeys)"
           />
           <div v-if="result.total" class="row q-gutter-md text-weight-bold" data-testid="chart-total">
