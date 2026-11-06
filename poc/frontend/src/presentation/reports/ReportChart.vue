@@ -5,12 +5,15 @@ import * as echarts from 'echarts/core';
 import { CanvasRenderer } from 'echarts/renderers';
 import { onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import type { ReportColumn, ReportGroupResult } from 'src/domain/dynamic/report-types';
+import { themedChartOption } from 'src/presentation/theme/chart-theme';
+import { useThemeStore } from 'src/stores/use-theme-store';
 import { formatValue, groupName } from './report-format';
 
 echarts.use([BarChart, LineChart, PieChart, GridComponent, TooltipComponent, LegendComponent, CanvasRenderer]);
 
 const props = defineProps<{ viz: 'line' | 'bar' | 'donut'; groups: ReportGroupResult[]; measures: ReportColumn[]; locale: string }>();
 const emit = defineEmits<{ pick: [index: number] }>();
+const theme = useThemeStore();
 const el = ref<HTMLElement>();
 let chart: echarts.ECharts | undefined;
 let observer: ResizeObserver | undefined;
@@ -51,7 +54,7 @@ function option() {
 function render() {
   if (!el.value) return;
   chart ??= echarts.init(el.value);
-  chart.setOption(option(), true);
+  chart.setOption(themedChartOption(option()), true);
   chart.off('click');
   chart.on('click', (p) => { if (typeof p.dataIndex === 'number') emit('pick', p.dataIndex); });
 }
@@ -64,6 +67,8 @@ onMounted(() => {
   }
 });
 watch(() => [props.viz, props.groups, props.measures], render, { deep: true });
+// 換主題或列印切換時只重新套色，不重新查詢；sync 讓 beforeprint 當下就重畫
+watch(() => theme.appliedKey, render, { flush: 'sync' });
 onBeforeUnmount(() => { observer?.disconnect(); chart?.dispose(); });
 </script>
 

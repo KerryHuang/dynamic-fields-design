@@ -1,4 +1,5 @@
 import { mount } from '@vue/test-utils';
+import { createPinia, setActivePinia } from 'pinia';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const chart = vi.hoisted(() => ({ setOption: vi.fn(), on: vi.fn(), off: vi.fn(), dispose: vi.fn() }));
@@ -7,6 +8,7 @@ vi.mock('echarts/charts', () => ({ BarChart: {}, LineChart: {}, PieChart: {} }))
 vi.mock('echarts/components', () => ({ GridComponent: {}, LegendComponent: {}, TooltipComponent: {} }));
 vi.mock('echarts/renderers', () => ({ CanvasRenderer: {} }));
 
+import { useThemeStore } from 'src/stores/use-theme-store';
 import ReportChart from './ReportChart.vue';
 
 const measures = [{ key: 'm1', label: '金額', role: 'measure' as const, valueType: 'number' }];
@@ -20,7 +22,10 @@ const day = { key: 'd', label: '最晚交期', role: 'measure' as const, valueTy
 const mixedGroups = [{ groupKeys: ['a'], groupLabels: ['甲'], values: { m1: 10, r: 0.07, d: 739000 } }];
 
 describe('ReportChart', () => {
-  beforeEach(() => vi.clearAllMocks());
+  beforeEach(() => {
+    vi.clearAllMocks();
+    setActivePinia(createPinia());
+  });
 
   it('ratio keeps the raw value, formats the tooltip as percent and sits on its own axis next to amounts', () => {
     mount(ReportChart, { props: { viz: 'bar', groups: mixedGroups, measures: [...measures, ratio], locale: 'zh-TW' } });
@@ -89,5 +94,30 @@ describe('ReportChart', () => {
   it('disposes the chart on unmount', () => {
     mount(ReportChart, { props: { viz: 'line', groups, measures, locale: 'zh-TW' } }).unmount();
     expect(chart.dispose).toHaveBeenCalled();
+  });
+  it('初次繪製就帶主題色', () => {
+    mount(ReportChart, { props: { viz: 'bar', groups, measures, locale: 'zh-TW' } });
+    const opt = chart.setOption.mock.calls[0]![0];
+    expect(opt.color).toHaveLength(6);
+    expect(opt.backgroundColor).toBe('transparent');
+    expect(opt.xAxis.axisLabel.color).toBeDefined();
+  });
+
+  it('主題變更時重新 setOption 套色，資料相同且不觸發查詢', () => {
+    const root = document.documentElement;
+    root.style.setProperty('--t-chart-1', '#111111');
+    const store = useThemeStore();
+    store.applyAnonymous({ mode: 'light', style: 'workbench' });
+    mount(ReportChart, { props: { viz: 'bar', groups, measures, locale: 'zh-TW' } });
+    expect(chart.setOption).toHaveBeenCalledTimes(1);
+    expect(chart.setOption.mock.calls[0]![0].color[0]).toBe('#111111');
+
+    root.style.setProperty('--t-chart-1', '#222222');
+    store.setChoice({ mode: 'dark', style: 'airy' });
+    expect(chart.setOption).toHaveBeenCalledTimes(2);
+    const [first, second] = chart.setOption.mock.calls.map((c) => c[0]);
+    expect(second.color[0]).toBe('#222222');
+    expect(second.series[0].data).toEqual(first.series[0].data);
+    root.style.removeProperty('--t-chart-1');
   });
 });

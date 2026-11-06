@@ -28,7 +28,9 @@ export const useThemeStore = defineStore('theme', () => {
     const m = effective.value.mode;
     return m === 'system' ? (systemDark.value ? 'dark' : 'light') : m;
   });
-  const appliedKey = computed(() => `${effective.value.style}:${resolvedMode.value}`);
+  const key = () => `${effective.value.style}:${resolvedMode.value}`;
+  /** 在 apply() 寫完 DOM 之後才更新，所以 flush: 'sync' 的監看者（圖表）讀到的 token 一定是新的。 */
+  const appliedKey = ref(key());
   const sidebarWidth = computed(() => SIDEBAR_WIDTH[effective.value.style]);
 
   /** 同步寫入 DOM，讀 appliedKey 的圖表才能立刻讀到新 token。 */
@@ -37,6 +39,7 @@ export const useThemeStore = defineStore('theme', () => {
     root.setAttribute('data-style', effective.value.style);
     root.setAttribute('data-mode', resolvedMode.value);
     Dark.set(resolvedMode.value === 'dark');
+    appliedKey.value = key();
     if (persist) writeThemeCache(effective.value);
   }
 
