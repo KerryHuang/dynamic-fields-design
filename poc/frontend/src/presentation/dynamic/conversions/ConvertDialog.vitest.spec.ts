@@ -10,6 +10,18 @@ import zhTW from 'src/i18n/zh-TW.json';
 import { dynamicApi } from 'src/services/api/dynamic-api';
 import ConvertDialog from './ConvertDialog.vue';
 
+// 通知容器只在第一次通知時建立，跨測試不穩：改記錄 $q.notify 的呼叫來驗證
+const notified = vi.hoisted(() => vi.fn());
+vi.mock('quasar', async (orig) => {
+  const actual = await orig<typeof import('quasar')>();
+  return {
+    ...actual,
+    useQuasar: () => {
+      const q = actual.useQuasar();
+      return Object.create(q, { notify: { value: (o: unknown) => { notified(o); return (q.notify as (o: unknown) => unknown)(o); } } });
+    },
+  };
+});
 vi.mock('src/services/api/dynamic-api', () => ({
   dynamicApi: { convertRecord: vi.fn(), getConversionInputs: vi.fn(), getModuleSchema: vi.fn() },
 }));
@@ -150,7 +162,6 @@ describe('ConvertDialog', () => {
       const field = document.body.querySelector('[data-testid="convert-input-f_8"]');
       expect(field).not.toBeNull();
       expect(field!.textContent).toContain('此欄位必填');
-      expect(submitBtn().disabled).toBe(true);
       const box = field!.querySelector('input') as HTMLInputElement;
       box.value = '補上';
       box.dispatchEvent(new Event('input'));
@@ -159,6 +170,57 @@ describe('ConvertDialog', () => {
       submitBtn().click();
       await flushPromises();
       expect(api.convertRecord).toHaveBeenLastCalledWith(5, 'q2o', { rowVersion: 'rv1', values: { f_8: '補上' } });
+      w.unmount();
+    });
+
+    it('a field added by a 400 is shown and sent when filled, but an empty one does not block convert (it may be optional)', async () => {
+      api.getConversionInputs.mockResolvedValue([]);
+      api.getModuleSchema.mockResolvedValue(schema as never);
+      api.convertRecord.mockRejectedValueOnce({ status: 400, errors: { f_8: ['請確認這個欄位'] } });
+      api.convertRecord.mockResolvedValue({ id: 99, moduleKey: 'quote' } as never);
+      const { w } = await mountDialog(conversion({ lines: undefined }));
+      submitBtn().click();
+      await flushPromises();
+
+      const field = document.body.querySelector('[data-testid="convert-input-f_8"]')!;
+      expect(field.textContent).toContain('請確認這個欄位');
+      expect(submitBtn().disabled).toBe(false); // 選填欄位留空不擋按鈕
+      const box = field.querySelector('input') as HTMLInputElement;
+      box.value = '改好了';
+      box.dispatchEvent(new Event('input'));
+      await flushPromises();
+      submitBtn().click();
+      await flushPromises();
+      expect(api.convertRecord).toHaveBeenLastCalledWith(5, 'q2o', { rowVersion: 'rv1', values: { f_8: '改好了' } });
+      w.unmount();
+    });
+
+    it('a quantity-only 400 does not fetch the schema, so a user who cannot read the target is never locked out', async () => {
+      api.getConversionInputs.mockResolvedValue([]);
+      api.getModuleSchema.mockRejectedValue({ status: 403 });
+      api.convertRecord.mockRejectedValue({ status: 400, errors: { 'lines[0].quantity': ['超過剩餘量'] } });
+      const { w } = await mountDialog(conversion());
+      submitBtn().click();
+      await flushPromises();
+
+      expect(api.getModuleSchema).not.toHaveBeenCalled();
+      expect(document.body.querySelector('[data-testid="convert-inputs-failed"]')).toBeNull();
+      await type(1, '3');
+      expect(submitBtn().disabled).toBe(false);
+      w.unmount();
+    });
+
+    it('a field error whose schema cannot be read goes to the notification and leaves convert enabled', async () => {
+      api.getConversionInputs.mockResolvedValue([]);
+      api.getModuleSchema.mockRejectedValue({ status: 403 });
+      api.convertRecord.mockRejectedValue({ status: 400, errors: { f_9: ['這個欄位有問題'] } });
+      const { w } = await mountDialog(conversion({ lines: undefined }));
+      submitBtn().click();
+      await flushPromises();
+
+      expect(notified).toHaveBeenCalledWith(expect.objectContaining({ type: 'negative', message: '這個欄位有問題' }));
+      expect(document.body.querySelector('[data-testid="convert-inputs-failed"]')).toBeNull();
+      expect(submitBtn().disabled).toBe(false);
       w.unmount();
     });
 

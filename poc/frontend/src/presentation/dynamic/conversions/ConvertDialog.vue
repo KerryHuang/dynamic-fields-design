@@ -22,6 +22,7 @@ const router = useRouter();
 const qc = useQueryClient();
 const convert = useConvertRecord();
 
+const QUANTITY_KEY = /^lines\[\d+\]\.quantity$/;
 const lines = computed(() => props.conversion.lines);
 
 // Required target header fields the copy cannot supply: the user fills them here (sent as `values`, under their own write permission).
@@ -36,11 +37,14 @@ const inputFields = computed(() => {
   return (schemaQuery.data.value?.blocks ?? []).flatMap((b) => b.fields).filter((f) => keys.has(f.key));
 });
 // The user may add but not read the target (schema is 403): say so instead of loading forever.
-const loadFailed = computed(() => inputsQuery.isError.value || schemaQuery.isError.value);
+// The schema only matters when there is something to render: a failed schema fetch (cache shared with showServerFieldErrors) must not lock the dialog otherwise.
+const loadFailed = computed(() => inputsQuery.isError.value || (inputKeys.value.length > 0 && schemaQuery.isError.value));
 const { values: formValues, setErrors, resetForm } = useForm<Record<string, unknown>>();
 const isBlank = (v: unknown) => v === undefined || v === null || v === '' || (Array.isArray(v) && v.length === 0);
 const inputsReady = computed(() => !loadFailed.value && !inputsQuery.isPending.value && (!inputKeys.value.length || inputFields.value.length === inputKeys.value.length));
-const inputsFilled = computed(() => inputFields.value.every((f) => !isBlank(formValues[f.key])));
+// Only what the inputs endpoint called required blocks convert; a field added by a 400 may be optional (the server says again if it is not).
+const requiredKeys = computed(() => new Set(inputsQuery.data.value ?? []));
+const inputsFilled = computed(() => inputFields.value.every((f) => !requiredKeys.value.has(f.key) || !isBlank(formValues[f.key])));
 const quantities = reactive<Record<number, number | null>>({});
 const serverErrors = ref(new Map<number, string>());
 watch(() => [props.modelValue, props.conversion] as const, ([open]) => {
@@ -75,9 +79,11 @@ function reload() {
 
 /** Puts server errors on the fields they belong to; a target field not asked for yet is added to the list first. */
 async function showServerFieldErrors(errors: Record<string, string[]>) {
+  const candidates = Object.keys(errors).filter((k) => !QUANTITY_KEY.test(k));
+  if (!candidates.length) return; // quantity errors belong to the lines table; no schema needed
   const schema = await fetchModuleSchema(qc, props.conversion.targetModuleKey).catch(() => undefined);
   const known = new Set((schema?.blocks ?? []).flatMap((b) => b.fields).map((f) => f.key));
-  const added = Object.keys(errors).filter((k) => known.has(k) && !inputKeys.value.includes(k));
+  const added = candidates.filter((k) => known.has(k) && !inputKeys.value.includes(k));
   if (added.length) extraKeys.value = [...extraKeys.value, ...added];
   await nextTick();
   await nextTick();
@@ -88,8 +94,8 @@ async function showServerFieldErrors(errors: Record<string, string[]>) {
 async function submit() {
   serverErrors.value = new Map();
   const sent = lines.value ? convertLines(lines.value, quantities as Record<number, number>) : undefined;
-  const filled = Object.fromEntries(inputFields.value.map((f) => [f.key, formValues[f.key]]));
-  const body: ConvertBody = { rowVersion: props.rowVersion, ...(inputFields.value.length && { values: filled }), ...(sent && { lines: sent }) };
+  const filled = Object.fromEntries(inputFields.value.filter((f) => !isBlank(formValues[f.key])).map((f) => [f.key, formValues[f.key]]));
+  const body: ConvertBody = { rowVersion: props.rowVersion, ...(Object.keys(filled).length && { values: filled }), ...(sent && { lines: sent }) };
   try {
     const rec = await convert.mutateAsync({ id: props.recordId, key: props.conversion.key, body });
     emit('update:modelValue', false);
@@ -101,7 +107,7 @@ async function submit() {
       serverErrors.value = serverQuantityErrors(err.errors, sent ?? []);
       await showServerFieldErrors(err.errors);
       const fieldKeys = inputFields.value.map((f) => f.key);
-      const rest = messagesOutside(err.errors, [...fieldKeys, ...Object.keys(err.errors).filter((k) => /^lines\[\d+\]\.quantity$/.test(k))]);
+      const rest = messagesOutside(err.errors, [...fieldKeys, ...Object.keys(err.errors).filter((k) => QUANTITY_KEY.test(k))]);
       if (rest.length) $q.notify({ type: 'negative', message: rest.join('、') });
     } else if (err.status === 409) {
       $q.notify({
@@ -123,7 +129,7 @@ async function submit() {
         <div class="q-mb-sm">{{ t('docflow.convert.fillRequired') }}</div>
         <div class="column q-gutter-y-sm">
           <div v-for="f in inputFields" :key="f.key" :data-testid="`convert-input-${f.key}`">
-            <DynamicField :field="f" :required="true" />
+            <DynamicField :field="f" :required="requiredKeys.has(f.key)" />
           </div>
         </div>
       </q-card-section>
