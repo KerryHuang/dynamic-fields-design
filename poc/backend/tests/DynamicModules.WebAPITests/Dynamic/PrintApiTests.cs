@@ -185,7 +185,7 @@ public class PrintApiTests : IDisposable
     // ---- 列印 ----
 
     [Fact]
-    public async Task Print_FillsHeaderAndDetailLoop_WithExistingFormatting()
+    public async Task Print_FillsHeaderAndDetailLoop_WithScreenNumberFormatting()
     {
         var w = await MakeWorld();
         await Create(_admin, w.Parent, "quote", FullBody(w));
@@ -196,8 +196,9 @@ public class PrintApiTests : IDisposable
         res.Headers.GetValues("X-Content-Type-Options").Should().ContainSingle().Which.Should().Be("nosniff");
         res.Headers.GetValues("Content-Security-Policy").Single().Should().Contain("default-src 'none'");
         var html = await res.Content.ReadAsStringAsync();
-        html.Should().Contain("<h1>Q-001</h1>").And.Contain("<p>備註內容</p>").And.Contain("金額 1234.50");
-        html.Should().Contain("<tr><td>1</td><td>螺絲</td><td>2.50</td></tr>").And.Contain("<tr><td>2</td><td>墊片</td><td>10.00</td></tr>");
+        html.Should().Contain("<h1>Q-001</h1>").And.Contain("<p>備註內容</p>").And.Contain("金額 1,234.50");
+        // 數字照畫面的規則：金額有千分位並補到欄位小數位數，一般數量不補多餘的零
+        html.Should().Contain("<tr><td>1</td><td>螺絲</td><td>2.5</td></tr>").And.Contain("<tr><td>2</td><td>墊片</td><td>10</td></tr>");
         html.ToLowerInvariant().Should().NotContain("<script");
     }
 
@@ -249,9 +250,9 @@ public class PrintApiTests : IDisposable
         var w = await MakeWorld();
         await Create(_admin, w.Parent, "quote", FullBody(w));
         await SetSalesPermissions(w, printExport: true, pricing: false);
-        (await PrintOk(_sales, w)).Should().NotContain("1234").And.Contain("金額 </p>");
+        (await PrintOk(_sales, w)).Should().NotContain("1,234").And.Contain("金額 </p>");
         await SetSalesPermissions(w, printExport: true, pricing: true);
-        (await PrintOk(_sales, w)).Should().Contain("金額 1234.50");
+        (await PrintOk(_sales, w)).Should().Contain("金額 1,234.50");
     }
 
     [Fact]

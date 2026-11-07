@@ -206,7 +206,7 @@ public class AppV3Tests : IDisposable
         var printed = await admin2.GetAsync($"{Base}/records/{created.GetProperty("id").GetInt64()}/print/quote-sheet");
         printed.StatusCode.Should().Be(HttpStatusCode.OK, await printed.Content.ReadAsStringAsync());
         var html = await printed.Content.ReadAsStringAsync();
-        html.Should().Contain("<p>乙公司</p>").And.Contain("<td>墊片</td><td>3.00</td>");
+        html.Should().Contain("<p>乙公司</p>").And.Contain("<td>墊片</td><td>3</td>");
     }
 
     [Fact]

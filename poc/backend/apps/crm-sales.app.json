@@ -271,6 +271,7 @@
         }
       ],
       "icon": "person_search",
+      "section": "客戶關係",
       "permissions": [
         {
           "group": "sales",
@@ -476,6 +477,7 @@
         }
       ],
       "icon": "business",
+      "section": "客戶關係",
       "permissions": [
         {
           "group": "sales",
@@ -601,6 +603,7 @@
         }
       ],
       "icon": "contacts",
+      "section": "客戶關係",
       "permissions": [
         {
           "group": "sales",
@@ -728,6 +731,7 @@
         }
       ],
       "icon": "inventory_2",
+      "section": "銷售",
       "permissions": [
         {
           "group": "sales",
@@ -969,6 +973,7 @@
         }
       ],
       "icon": "trending_up",
+      "section": "銷售",
       "permissions": [
         {
           "group": "sales",
@@ -1182,6 +1187,7 @@
         }
       ],
       "icon": "event_note",
+      "section": "客戶關係",
       "permissions": [
         {
           "group": "sales",
@@ -1535,6 +1541,7 @@
         }
       ],
       "icon": "request_quote",
+      "section": "銷售",
       "permissions": [
         {
           "group": "sales",
@@ -1573,6 +1580,7 @@
         "th": "รายการใบเสนอราคา",
         "vi": "Chi tiết báo giá"
       },
+      "section": "銷售",
       "kind": "standalone",
       "titleField": "productName",
       "blocks": [
@@ -1970,6 +1978,7 @@
         }
       ],
       "icon": "receipt_long",
+      "section": "銷售",
       "permissions": [
         {
           "group": "sales",
@@ -2008,6 +2017,7 @@
         "th": "รายการคำสั่งซื้อ",
         "vi": "Chi tiết đơn hàng"
       },
+      "section": "銷售",
       "kind": "standalone",
       "titleField": "productName",
       "blocks": [

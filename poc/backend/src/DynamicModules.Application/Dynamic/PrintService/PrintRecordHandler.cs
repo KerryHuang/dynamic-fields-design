@@ -97,7 +97,7 @@ public class PrintRecordHandler(
         Dictionary<string, Field> visible, string key, IReadOnlyDictionary<string, System.Text.Json.JsonElement?> values,
         IReadOnlyDictionary<string, ReferenceInfo>? refs, string locale, IReadOnlyDictionary<string, string> userNames) =>
         visible.TryGetValue(key, out var field)
-            ? FieldDisplay.Format(field, values.GetValueOrDefault(key), locale, refs?.GetValueOrDefault(key), userNames)
+            ? PrintValueFormat.Format(field, values.GetValueOrDefault(key), locale, refs?.GetValueOrDefault(key), userNames)
             : null;
 }
 

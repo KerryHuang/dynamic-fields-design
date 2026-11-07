@@ -326,6 +326,17 @@ public class CrmSalesAppTests : IDisposable
     }
 
     [Fact]
+    public async Task Modules_AreGroupedInSections_SoNamesLikeCustomerAndOrderStayDistinguishable()
+    {
+        await OpenCrm();
+        async Task<string> Section(string key) =>
+            (await JsonOf(await _admin.GetAsync($"{Base}/modules/{key}"))).GetProperty("section").GetString() ?? "";
+
+        foreach (var key in new[] { "crm-lead", "crm-customer", "crm-contact", "crm-activity" }) (await Section(key)).Should().Be("客戶關係", key);
+        foreach (var key in new[] { "crm-product", "crm-opportunity", "crm-quote", "crm-order" }) (await Section(key)).Should().Be("銷售", key);
+    }
+
+    [Fact]
     public async Task Quote_Prints_WithCustomerLinesAndTotals_AndValuesAreEscaped()
     {
         var app = await OpenCrm();
@@ -341,8 +352,10 @@ public class CrmSalesAppTests : IDisposable
         html.Should().Contain("感測器").And.Contain("控制器");
         html.Should().Contain("QT-");
         html.Should().NotContain("<script>alert(1)</script>").And.Contain("&lt;script&gt;");
-        // 小計 10×1200 + 10×5000 = 62000，稅 3100，總計 65100（沿用既有的金額格式）
-        html.Should().Contain("65100");
+        // 小計 10×1200 + 10×5000 = 62000，稅 3100，總計 65100；金額與畫面一樣有千分位，數量是 10 不是 10.00
+        html.Should().Contain("未稅小計：62,000").And.Contain("稅額：3,100").And.Contain("含稅總計：65,100");
+        html.Should().Contain(">1,200<").And.Contain(">5,000<").And.Contain(">12,000<").And.Contain(">50,000<");
+        html.Should().Contain("<td align=\"right\">10</td>").And.NotContain("10.00").And.NotContain("65100");
     }
 
     [Fact]
