@@ -729,6 +729,11 @@ textarea:focus-visible {
     font-size: 40px;
   }
 
+  [data-style='bento'] .tile-grid > :first-child:nth-last-child(n + 4) .q-item,
+  [data-style='bento'] .tile-grid > :first-child:nth-last-child(n + 4) .q-icon {
+    color: var(--t-on-primary);
+  }
+
   [data-style='bento'] .tile-grid > :first-child:nth-last-child(n + 4) .q-card,
   [data-style='bento'] .stat-tiles > :first-child {
     background: var(--t-primary);
