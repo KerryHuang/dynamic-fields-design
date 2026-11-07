@@ -192,6 +192,12 @@ describe('列印不受新風格影響', () => {
   it('標題字型在列印時回到系統字型（植感活力的襯線只用在螢幕）', () => {
     expect(bodiesOf(print, '[data-style][data-mode]').join(';')).toMatch(/--t-heading-font:\s*system-ui/);
   });
+
+  it('數字字型與卡片陰影在列印時也不跟隨風格', () => {
+    const block = bodiesOf(print, '[data-style][data-mode]').join(';');
+    expect(block).toMatch(/--t-num-font:\s*system-ui/);
+    expect(block).toMatch(/--t-card-shadow:\s*none/);
+  });
 });
 
 describe('print.css', () => {
