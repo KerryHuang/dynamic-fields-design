@@ -325,6 +325,91 @@ public class CrmSalesAppTests : IDisposable
         attempt.StatusCode.Should().Be(HttpStatusCode.BadRequest, "只有業務主管能核准");
     }
 
+    // ---- 轉換時補目標的必填表頭欄位（沒填客戶的商機轉報價）----
+
+    private record NoCustomerOpportunity(JsonElement App, JsonElement Opportunity, string QuoteModule, Dictionary<string, string> QuoteKeys);
+
+    /// <summary>已到「提案報價」階段、但沒有填客戶的商機。</summary>
+    private async Task<NoCustomerOpportunity> OpportunityWithoutCustomer()
+    {
+        var app = await OpenCrm();
+        string opportunity = Key(app, "opportunity"), quote = Key(app, "quote");
+        var op = await FieldKeys(_admin, opportunity);
+        var opp = await PostOk(_admin, $"{Base}/modules/{opportunity}/records", new { values = new Dictionary<string, object> { [op["名稱"]] = "無客戶商機" } });
+        var qual = await Transition(_admin, opp, op["階段"], await OptionValue(_admin, opportunity, "階段", "需求確認"));
+        var prop = await Transition(_admin, qual, op["階段"], await OptionValue(_admin, opportunity, "階段", "提案報價"));
+        return new(app, prop, quote, await FieldKeys(_admin, quote));
+    }
+
+    private static string InputsUrl(JsonElement source, string conversion) =>
+        $"{Base}/records/{source.GetProperty("id").GetInt64()}/conversions/{conversion}/inputs";
+
+    private async Task<long> NewCustomer(JsonElement app, string name)
+    {
+        var customer = Key(app, "customer");
+        var cu = await FieldKeys(_admin, customer);
+        var c = await PostOk(_admin, $"{Base}/modules/{customer}/records", new { values = new Dictionary<string, object> { [cu["名稱"]] = name } });
+        return c.GetProperty("id").GetInt64();
+    }
+
+    [Fact]
+    public async Task ConvertInputs_ListOnlyTheRequiredTargetFieldsTheCopyCannotSupply()
+    {
+        var t = await OpportunityWithoutCustomer();
+
+        var res = await _admin.GetAsync(InputsUrl(t.Opportunity, "crm-opportunity-to-quote"));
+
+        res.StatusCode.Should().Be(HttpStatusCode.OK, await res.Content.ReadAsStringAsync());
+        var inputs = (await JsonOf(res)).EnumerateArray().ToList();
+        inputs.Select(i => i.GetString()).Should().Equal(t.QuoteKeys["客戶"]);
+    }
+
+    [Fact]
+    public async Task ConvertInputs_AreEmpty_WhenTheCopyAlreadySuppliesEverything()
+    {
+        var t = await OpportunityWithoutCustomer();
+        var op = await FieldKeys(_admin, Key(t.App, "opportunity"));
+        var put = await _admin.PutAsJsonAsync($"{Base}/records/{t.Opportunity.GetProperty("id").GetInt64()}", new
+        {
+            values = new Dictionary<string, object> { [op["客戶"]] = await NewCustomer(t.App, "宏達科技") },
+            rowVersion = t.Opportunity.GetProperty("rowVersion").GetString()
+        });
+        put.StatusCode.Should().Be(HttpStatusCode.OK, await put.Content.ReadAsStringAsync());
+
+        var res = await _admin.GetAsync(InputsUrl(await JsonOf(put), "crm-opportunity-to-quote"));
+
+        (await JsonOf(res)).GetArrayLength().Should().Be(0);
+    }
+
+    [Fact]
+    public async Task OpportunityWithoutCustomer_ConvertsOnceTheCustomerIsFilledInTheDialog()
+    {
+        var t = await OpportunityWithoutCustomer();
+        var customerId = await NewCustomer(t.App, "宏達科技");
+
+        var q = await PostOk(_admin, ConvertUrl(t.Opportunity, "crm-opportunity-to-quote"), new
+        {
+            rowVersion = t.Opportunity.GetProperty("rowVersion").GetString(),
+            values = new Dictionary<string, object> { [t.QuoteKeys["客戶"]] = customerId }
+        });
+
+        q.GetProperty("values").GetProperty(t.QuoteKeys["客戶"]).GetInt64().Should().Be(customerId);
+        Str(q, t.QuoteKeys["客戶名稱"]).Should().Be("宏達科技", "補上客戶後仍照帶值規則由系統帶入客戶資料");
+    }
+
+    [Fact]
+    public async Task OpportunityWithoutCustomer_NotFilled_Is400_AndNothingIsCreated()
+    {
+        var t = await OpportunityWithoutCustomer();
+
+        var res = await _admin.PostAsJsonAsync(ConvertUrl(t.Opportunity, "crm-opportunity-to-quote"),
+            new { rowVersion = t.Opportunity.GetProperty("rowVersion").GetString() });
+
+        res.StatusCode.Should().Be(HttpStatusCode.BadRequest, await res.Content.ReadAsStringAsync());
+        var list = await JsonOf(await _admin.GetAsync($"{Base}/modules/{t.QuoteModule}/records/paged?page=1&size=5"));
+        list.GetProperty("items").GetArrayLength().Should().Be(0);
+    }
+
     [Fact]
     public async Task Modules_AreGroupedInSections_SoNamesLikeCustomerAndOrderStayDistinguishable()
     {

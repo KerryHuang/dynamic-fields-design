@@ -2,10 +2,11 @@ import { useQuery } from '@tanstack/vue-query';
 import type { Ref } from 'vue';
 import { dynamicApi } from 'src/services/api/dynamic-api';
 
-export function useModuleSchema(key: Ref<string>) {
+export function useModuleSchema(key: Ref<string>, enabled?: Ref<boolean>) {
   return useQuery({
     queryKey: ['schema', key],
     queryFn: () => dynamicApi.getModuleSchema(key.value),
+    ...(enabled && { enabled }),
     staleTime: 10 * 60 * 1000,
   });
 }

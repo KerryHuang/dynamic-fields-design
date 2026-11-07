@@ -212,6 +212,9 @@ export const dynamicApi = {
   updateConversion: (key: string, body: Conversion) => http.put<Conversion>(`/conversions/${encodeURIComponent(key)}`, body).then(data),
   deleteConversion: (key: string) => http.delete(`/conversions/${encodeURIComponent(key)}`).then(data),
   getRecordConversions: (id: number) => http.get<RecordConversion[]>(`/records/${id}/conversions`).then(data),
+  /** Keys of the target's required header fields that the conversion's copy cannot fill; the user fills them in the dialog. */
+  getConversionInputs: (id: number, key: string) =>
+    http.get<string[]>(`/records/${id}/conversions/${encodeURIComponent(key)}/inputs`).then(data),
   convertRecord: (id: number, key: string, body: ConvertBody) =>
     http.post<DynamicRecord>(`/records/${id}/conversions/${encodeURIComponent(key)}/convert`, body).then(data),
   getAuthOptions: () => http.get<AuthOptions>('/auth/options').then(data),

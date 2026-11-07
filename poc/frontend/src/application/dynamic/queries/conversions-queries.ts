@@ -40,6 +40,17 @@ export function useRecordConversions(id: Ref<number>) {
   });
 }
 
+/** Required target fields the user must fill before converting; asked each time the dialog opens, since the source may have changed. */
+export function useConversionInputs(id: Ref<number>, key: Ref<string>, enabled: Ref<boolean>) {
+  return useQuery({
+    queryKey: ['conversion-inputs', id, key],
+    queryFn: () => dynamicApi.getConversionInputs(id.value, key.value),
+    enabled,
+    staleTime: 0,
+    gcTime: 0,
+  });
+}
+
 /** Converting changes the source (RowVersion, remaining) and creates a record in the target module. */
 export function useConvertRecord() {
   const qc = useQueryClient();

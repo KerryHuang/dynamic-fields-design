@@ -3,6 +3,7 @@ using DynamicModules.Application.Dynamic.ConversionService.Commands.DeleteConver
 using DynamicModules.Application.Dynamic.ConversionService.Commands.SaveConversion;
 using DynamicModules.Application.Dynamic.ConversionService.Data;
 using DynamicModules.Application.Dynamic.ConversionService.Queries.GetConversions;
+using DynamicModules.Application.Dynamic.ConversionService.Queries.GetConversionInputs;
 using DynamicModules.Application.Dynamic.ConversionService.Queries.GetRecordConversions;
 using MediatR;
 using Microsoft.AspNetCore.Mvc;
@@ -36,6 +37,10 @@ public class ConversionsController(IMediator mediator) : ControllerBase
     [HttpGet("records/{id:long}/conversions")]
     public async Task<IActionResult> ForRecord(long id) =>
         (await mediator.Send(new GetRecordConversionsRequest(id))).ToActionResult(this);
+
+    [HttpGet("records/{id:long}/conversions/{key}/inputs")]
+    public async Task<IActionResult> Inputs(long id, string key) =>
+        (await mediator.Send(new GetConversionInputsRequest(id, key))).ToActionResult(this);
 
     public record ConvertBody(string? RowVersion, Dictionary<string, System.Text.Json.JsonElement?>? Values, List<ConvertLineInput>? Lines);
 

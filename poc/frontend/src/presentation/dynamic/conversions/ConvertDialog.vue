@@ -1,13 +1,16 @@
 <script setup lang="ts">
 import { useQueryClient } from '@tanstack/vue-query';
 import { useQuasar } from 'quasar';
+import { useForm } from 'vee-validate';
 import { computed, reactive, ref, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { useRouter } from 'vue-router';
-import { useConvertRecord } from 'src/application/dynamic/queries/conversions-queries';
+import { useConversionInputs, useConvertRecord } from 'src/application/dynamic/queries/conversions-queries';
+import { useModuleSchema } from 'src/application/dynamic/queries/schema-queries';
 import { canConvert, convertLines, defaultQuantities, quantityErrors, serverQuantityErrors } from 'src/domain/dynamic/conversion';
 import { resolveI18n } from 'src/domain/dynamic/i18n-text';
 import type { ConvertBody, RecordConversion } from 'src/domain/dynamic/types';
+import DynamicField from 'src/presentation/dynamic/components/DynamicField.vue';
 import { messagesOutside } from 'src/presentation/dynamic/designer/api-error';
 import type { ApiError } from 'src/services/api/http';
 
@@ -20,11 +23,25 @@ const qc = useQueryClient();
 const convert = useConvertRecord();
 
 const lines = computed(() => props.conversion.lines);
+
+// Required target header fields the copy cannot supply: the user fills them here (sent as `values`, under their own write permission).
+const inputsQuery = useConversionInputs(computed(() => props.recordId), computed(() => props.conversion.key), computed(() => props.modelValue));
+const inputKeys = computed(() => inputsQuery.data.value ?? []);
+const schemaQuery = useModuleSchema(computed(() => props.conversion.targetModuleKey), computed(() => inputKeys.value.length > 0));
+const inputFields = computed(() => {
+  const keys = new Set(inputKeys.value);
+  return (schemaQuery.data.value?.blocks ?? []).flatMap((b) => b.fields).filter((f) => keys.has(f.key));
+});
+const { values: formValues, setErrors, resetForm } = useForm<Record<string, unknown>>();
+const isBlank = (v: unknown) => v === undefined || v === null || v === '' || (Array.isArray(v) && v.length === 0);
+const inputsReady = computed(() => !inputsQuery.isPending.value && (!inputKeys.value.length || inputFields.value.length === inputKeys.value.length));
+const inputsFilled = computed(() => inputFields.value.every((f) => !isBlank(formValues[f.key])));
 const quantities = reactive<Record<number, number | null>>({});
 const serverErrors = ref(new Map<number, string>());
 watch(() => [props.modelValue, props.conversion] as const, ([open]) => {
   if (!open) return;
   serverErrors.value = new Map();
+  resetForm({ values: {} });
   for (const k of Object.keys(quantities)) delete quantities[Number(k)];
   Object.assign(quantities, defaultQuantities(lines.value ?? []));
 }, { immediate: true });
@@ -35,7 +52,7 @@ const errorText = (lineId: number) => {
   return e ? t(`docflow.convert.error.${e}`) : serverErrors.value.get(lineId);
 };
 // A header conversion has no lines to check; a line conversion needs at least one line above 0.
-const valid = computed(() => (lines.value ? canConvert(lines.value, quantities) : true));
+const valid = computed(() => (lines.value ? canConvert(lines.value, quantities) : true) && inputsReady.value && inputsFilled.value);
 
 const setQuantity = (lineId: number, v: string | number | null) => {
   serverErrors.value.delete(lineId);
@@ -53,7 +70,8 @@ function reload() {
 async function submit() {
   serverErrors.value = new Map();
   const sent = lines.value ? convertLines(lines.value, quantities as Record<number, number>) : undefined;
-  const body: ConvertBody = { rowVersion: props.rowVersion, ...(sent && { lines: sent }) };
+  const filled = Object.fromEntries(inputFields.value.map((f) => [f.key, formValues[f.key]]));
+  const body: ConvertBody = { rowVersion: props.rowVersion, ...(inputFields.value.length && { values: filled }), ...(sent && { lines: sent }) };
   try {
     const rec = await convert.mutateAsync({ id: props.recordId, key: props.conversion.key, body });
     emit('update:modelValue', false);
@@ -63,7 +81,9 @@ async function submit() {
     const err = e as ApiError;
     if (err.status === 400 && err.errors) {
       serverErrors.value = serverQuantityErrors(err.errors, sent ?? []);
-      const rest = messagesOutside(err.errors, Object.keys(err.errors).filter((k) => /^lines\[\d+\]\.quantity$/.test(k)));
+      const fieldKeys = inputFields.value.map((f) => f.key);
+      setErrors(Object.fromEntries(fieldKeys.filter((k) => err.errors![k]).map((k) => [k, err.errors![k]![0]])));
+      const rest = messagesOutside(err.errors, [...fieldKeys, ...Object.keys(err.errors).filter((k) => /^lines\[\d+\]\.quantity$/.test(k))]);
       if (rest.length) $q.notify({ type: 'negative', message: rest.join('、') });
     } else if (err.status === 409) {
       $q.notify({
@@ -79,6 +99,15 @@ async function submit() {
   <q-dialog :model-value="modelValue" persistent @update:model-value="(v) => emit('update:modelValue', v)">
     <q-card style="min-width: 640px; max-width: 95vw" data-testid="convert-dialog">
       <q-card-section class="text-h6">{{ t('docflow.convert.title', { name: resolveI18n(conversion.targetName, locale) }) }}</q-card-section>
+      <q-card-section v-if="!inputsReady" class="text-muted" data-testid="convert-inputs-loading">{{ t('docflow.convert.loadingInputs') }}</q-card-section>
+      <q-card-section v-else-if="inputFields.length" data-testid="convert-inputs">
+        <div class="q-mb-sm">{{ t('docflow.convert.fillRequired') }}</div>
+        <div class="column q-gutter-y-sm">
+          <div v-for="f in inputFields" :key="f.key" :data-testid="`convert-input-${f.key}`">
+            <DynamicField :field="f" :required="true" />
+          </div>
+        </div>
+      </q-card-section>
       <q-card-section v-if="lines">
         <div v-if="!lines.length" class="text-muted">{{ t('docflow.convert.noLines') }}</div>
         <q-markup-table v-else flat bordered dense>

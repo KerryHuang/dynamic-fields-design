@@ -10,7 +10,9 @@ import zhTW from 'src/i18n/zh-TW.json';
 import { dynamicApi } from 'src/services/api/dynamic-api';
 import ConvertDialog from './ConvertDialog.vue';
 
-vi.mock('src/services/api/dynamic-api', () => ({ dynamicApi: { convertRecord: vi.fn() } }));
+vi.mock('src/services/api/dynamic-api', () => ({
+  dynamicApi: { convertRecord: vi.fn(), getConversionInputs: vi.fn(), getModuleSchema: vi.fn() },
+}));
 const api = vi.mocked(dynamicApi);
 
 const line = (lineId: number, quantity: number, converted: number) => ({ lineId, title: `品項${lineId}`, quantity, converted, remaining: quantity - converted });
@@ -38,6 +40,7 @@ const type = async (lineId: number, v: string) => { input(lineId).value = v; inp
 describe('ConvertDialog', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    api.getConversionInputs.mockResolvedValue([]);
     vi.stubGlobal('ResizeObserver', class { observe() {} unobserve() {} disconnect() {} });
   });
   afterEach(() => { document.body.innerHTML = ''; });
@@ -92,5 +95,57 @@ describe('ConvertDialog', () => {
     await flushPromises();
     expect(api.convertRecord).toHaveBeenCalledWith(5, 'q2o', { rowVersion: 'rv1' });
     w.unmount();
+  });
+  describe('required target fields the copy cannot fill', () => {
+    const schema = {
+      key: 'quote', blocks: [{ columns: 1, fields: [
+        { id: 7, key: 'f_7', type: 'text', label: { 'zh-TW': '客戶備註' }, config: {}, options: [] },
+        { id: 8, key: 'f_8', type: 'text', label: { 'zh-TW': '其他欄位' }, config: {}, options: [] },
+      ] }],
+    };
+    const fieldInput = () => document.body.querySelector('[data-testid="convert-input-f_7"] input') as HTMLInputElement;
+    const typeField = async (v: string) => { fieldInput().value = v; fieldInput().dispatchEvent(new Event('input')); await flushPromises(); };
+
+    it('shows only the fields the server asked for, and asks nothing when there are none', async () => {
+      api.getConversionInputs.mockResolvedValue(['f_7']);
+      api.getModuleSchema.mockResolvedValue(schema as never);
+      const { w } = await mountDialog(conversion({ lines: undefined }));
+      expect(fieldInput()).not.toBeNull();
+      expect(document.body.querySelector('[data-testid="convert-input-f_8"]')).toBeNull();
+      expect(api.getConversionInputs).toHaveBeenCalledWith(5, 'q2o');
+      w.unmount();
+      document.body.innerHTML = '';
+      api.getConversionInputs.mockResolvedValue([]);
+      const empty = await mountDialog(conversion({ lines: undefined }));
+      expect(document.body.querySelector('[data-testid="convert-inputs"]')).toBeNull();
+      expect(submitBtn().disabled).toBe(false);
+      empty.w.unmount();
+    });
+
+    it('keeps convert disabled until filled, then sends the value with the request', async () => {
+      api.getConversionInputs.mockResolvedValue(['f_7']);
+      api.getModuleSchema.mockResolvedValue(schema as never);
+      api.convertRecord.mockResolvedValue({ id: 99, moduleKey: 'quote' } as never);
+      const { w } = await mountDialog(conversion({ lines: undefined }));
+      expect(submitBtn().disabled).toBe(true);
+      await typeField('急件');
+      expect(submitBtn().disabled).toBe(false);
+      submitBtn().click();
+      await flushPromises();
+      expect(api.convertRecord).toHaveBeenCalledWith(5, 'q2o', { rowVersion: 'rv1', values: { f_7: '急件' } });
+      w.unmount();
+    });
+
+    it('puts a server error for the field on the field itself', async () => {
+      api.getConversionInputs.mockResolvedValue(['f_7']);
+      api.getModuleSchema.mockResolvedValue(schema as never);
+      api.convertRecord.mockRejectedValue({ status: 400, errors: { f_7: ['不合法的值'] } });
+      const { w } = await mountDialog(conversion({ lines: undefined }));
+      await typeField('x');
+      submitBtn().click();
+      await flushPromises();
+      expect(document.body.textContent).toContain('不合法的值');
+      w.unmount();
+    });
   });
 });

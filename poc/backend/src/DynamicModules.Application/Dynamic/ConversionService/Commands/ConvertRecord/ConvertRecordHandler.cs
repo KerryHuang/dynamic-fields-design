@@ -185,7 +185,7 @@ public class ConvertRecordHandler(
     /// 系統填入只略過「欄位設定為唯讀」這一層，權限層照舊：使用者不能寫（看不到或唯讀權限）的目的欄位不複製，
     /// 否則可先改來源、再轉換，把值寫進自己無權寫入的欄位。只有「沒被覆寫」的複製欄位才算系統填入；被覆寫的欄位照使用者自己的寫入權限處理。
     /// </summary>
-    private static (Dictionary<string, JsonElement?> Values, HashSet<string> SystemKeys) CopyValues(
+    internal static (Dictionary<string, JsonElement?> Values, HashSet<string> SystemKeys) CopyValues(
         List<DynamicModules.Domain.ValueObjects.FillMapping> copy, IReadOnlyDictionary<long, Field> sourceFields, EffectivePermissions perms,
         IReadOnlyDictionary<long, Field> targetFields, EffectivePermissions targetPerms,
         IReadOnlyDictionary<string, JsonElement?> sourceValues, IReadOnlyDictionary<string, JsonElement?> overrides)
