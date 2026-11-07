@@ -20,6 +20,19 @@ public static partial class PrintTemplateEngine
     [GeneratedRegex(@"\{\{\s*([A-Za-z0-9_]+)\s*\}\}")]
     private static partial Regex Slot();
 
+    [GeneratedRegex(@"<[^>]*>")]
+    private static partial Regex Tag();
+
+    public const string LoopMarkerInTagMessage = "迴圈標記 {{#each}}、{{/each}} 不能放在標籤或屬性裡";
+
+    /// <summary>
+    /// 已淨化的範本裡，迴圈標記是否落在標籤內（含屬性值）。迴圈展開是純文字取代，標記若跨過標籤邊界，
+    /// 展開後會把前後兩段拼成原本不存在的標籤或屬性，繞過先淨化再展開的順序。
+    /// 淨化後的標籤一定良構，屬性值裡的 &lt; &gt; 都已跳脫，所以 &lt;…&gt; 之間就是整個標籤。
+    /// </summary>
+    public static bool HasLoopMarkerInsideTag(string sanitizedBody) =>
+        Tag().Matches(sanitizedBody).Any(m => m.Value.Contains("{{#each", StringComparison.Ordinal) || m.Value.Contains("{{/each", StringComparison.Ordinal));
+
     [GeneratedRegex(@"\{\{#each\s+([A-Za-z0-9_-]+)\s*\}\}|\{\{(/each)\}\}|\{\{\s*([A-Za-z0-9_]+)\s*\}\}")]
     private static partial Regex Token();
 

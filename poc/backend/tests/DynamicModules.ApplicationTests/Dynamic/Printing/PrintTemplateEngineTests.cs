@@ -73,4 +73,12 @@ public class PrintTemplateEngineTests
     [InlineData("stray {{/each}}")]
     [InlineData("{{#each a}}{{#each b}}x{{/each}}{{/each}}")]
     public void Placeholders_ReportsBrokenLoops(string body) => PrintTemplateEngine.Placeholders(body).Error.Should().NotBeNull();
+
+    [Theory]
+    [InlineData("<a title=\"{{#each d}}\">x</a><p>{{/each}}</p>", true)]
+    [InlineData("<p class=\"{{#each d}}\">x</p>", true)]
+    [InlineData("<table>{{#each d}}<tr><td>{{f_1}}</td></tr>{{/each}}</table>", false)]
+    [InlineData("<p>{{f_1}}</p>", false)]
+    public void HasLoopMarkerInsideTag_OnlyForMarkersInsideTags(string body, bool expected) =>
+        PrintTemplateEngine.HasLoopMarkerInsideTag(PrintTemplateSanitizer.Sanitize(body)).Should().Be(expected);
 }

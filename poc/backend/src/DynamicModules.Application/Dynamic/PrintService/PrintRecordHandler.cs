@@ -30,8 +30,11 @@ public class PrintRecordHandler(
         if (record is null) return ServiceResult.NotFound(RecordMapper.RecordNotFound);
         var module = await modules.GetByIdAsync(record.ModuleId, includeChildren: true, ct);
         if (!module.IsReadable() || ModuleRelations.IsDetail(module)) return ServiceResult.NotFound(RecordMapper.RecordNotFound);
-        var access = await guard.AuthorizeAsync(module!, PermissionAction.PrintExport, ct);
+        // 資料範圍與欄位權限以 Read 為準；PrintExport 另外要有，兩者缺一不可（被撤銷 Read 就不能靠列印取得資料）
+        var access = await guard.AuthorizeAsync(module!, PermissionAction.Read, ct);
         if (access.Permissions is not { } perms) return access.Denied!;
+        var printAccess = await guard.AuthorizeAsync(module!, PermissionAction.PrintExport, ct);
+        if (printAccess.Permissions is null) return printAccess.Denied!;
         if (perms.OwnerUserIds is not null && !perms.OwnerUserIds.Contains(record.OwnerUserId))
             return ServiceResult.NotFound(RecordMapper.RecordNotFound);
 
@@ -40,6 +43,9 @@ public class PrintRecordHandler(
 
         var locale = string.IsNullOrEmpty(request.Locale) ? "zh-TW" : request.Locale;
         var body = PrintTemplateSanitizer.Sanitize(template.Body);
+        // 舊資料或繞過儲存驗證寫入的範本：迴圈標記跨標籤會在展開後拼出未淨化的標籤，直接拒絕
+        if (PrintTemplateEngine.HasLoopMarkerInsideTag(body))
+            return ServiceResult.Invalid(new Dictionary<string, string[]> { ["body"] = [PrintTemplateEngine.LoopMarkerInTagMessage] });
         var placeholders = PrintTemplateEngine.Placeholders(body);
         var userNames = (await permissions.ListUsersAsync(ct)).ToDictionary(u => u.UserId, u => u.DisplayName);
 
@@ -78,7 +84,8 @@ public class PrintRecordHandler(
             }
         }
 
-        var html = PrintTemplateEngine.Render(body, Header, key => loops.GetValueOrDefault(key) ?? []);
+        // 以最終輸出為準：展開後再淨化一次（縱深防禦，即使展開拼出了奇怪的結構也只會輸出白名單內的東西）
+        var html = PrintTemplateSanitizer.Sanitize(PrintTemplateEngine.Render(body, Header, key => loops.GetValueOrDefault(key) ?? []));
         var title = WebUtility.HtmlEncode(template.NameI18n.Resolve(locale));
         return ServiceResult.Success(new PrintedDocument(PrintDocument.Wrap(title, html, locale)));
     }
@@ -94,7 +101,7 @@ public class PrintRecordHandler(
             : null;
 }
 
-/// <summary>列印用的外殼文件：只有內嵌樣式，沒有腳本與外部資源。</summary>
+/// <summary>列印用的外殼文件：只有內嵌樣式，沒有腳本與外部資源；用 srcdoc 顯示時不承接 API 的 CSP，所以文件自帶一份。</summary>
 internal static class PrintDocument
 {
     public static string Wrap(string encodedTitle, string body, string locale) => $$"""
@@ -102,6 +109,7 @@ internal static class PrintDocument
         <html lang="{{WebUtility.HtmlEncode(locale)}}">
         <head>
         <meta charset="utf-8">
+        <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; img-src data:">
         <title>{{encodedTitle}}</title>
         <style>
         @page { size: A4; margin: 12mm; }

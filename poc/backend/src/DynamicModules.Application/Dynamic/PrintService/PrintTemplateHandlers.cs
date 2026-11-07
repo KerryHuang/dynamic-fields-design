@@ -98,6 +98,8 @@ public class GetPrintTemplatesHandler(IModuleRepository modules, IPrintTemplateR
     {
         var module = await modules.GetByKeyAsync(request.ModuleKey, includeChildren: true, ct);
         if (!module.IsReadable() || ModuleRelations.IsDetail(module)) return ServiceResult.NotFound(RecordMapper.ModuleNotFound);
+        var readAccess = await guard.AuthorizeAsync(module, PermissionAction.Read, ct);
+        if (readAccess.Permissions is null) return readAccess.Denied!;
         var access = await guard.AuthorizeAsync(module, PermissionAction.PrintExport, ct);
         if (access.Permissions is null) return access.Denied!;
         var active = (await templates.ListByModuleAsync(module!.Id, ct)).Where(t => t.Active).Select(t => new PrintTemplateOption(t.Key, t.NameI18n));

@@ -25,6 +25,7 @@ public class PrintTemplateValidator(IModuleRepository modules)
         var placeholders = PrintTemplateEngine.Placeholders(body);
         var problems = new List<string>();
         if (placeholders.Error is not null) problems.Add(placeholders.Error);
+        if (PrintTemplateEngine.HasLoopMarkerInsideTag(body)) problems.Add(PrintTemplateEngine.LoopMarkerInTagMessage);
 
         var fieldKeys = module.Blocks.SelectMany(b => b.Fields).Select(f => f.Key).ToHashSet();
         problems.AddRange(placeholders.Header.Where(k => !fieldKeys.Contains(k)).Select(k => $"找不到欄位 {k}"));
