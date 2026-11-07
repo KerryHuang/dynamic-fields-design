@@ -6,11 +6,15 @@
     "version": "1.0.0",
     "name": {
       "zh-TW": "CRM 與銷售",
-      "en-US": "CRM and Sales"
+      "en-US": "CRM and Sales",
+      "th": "CRM และการขาย",
+      "vi": "CRM và Bán hàng"
     },
     "description": {
       "zh-TW": "潛在客戶、客戶、商機、報價與訂單的完整銷售流程",
-      "en-US": "Leads, customers, opportunities, quotes and orders in one sales flow"
+      "en-US": "Leads, customers, opportunities, quotes and orders in one sales flow",
+      "th": "กระบวนการขายครบวงจร ตั้งแต่ลูกค้าเป้าหมาย ลูกค้า โอกาสการขาย ใบเสนอราคา ไปจนถึงคำสั่งซื้อ",
+      "vi": "Quy trình bán hàng trọn vẹn từ khách hàng tiềm năng, khách hàng, cơ hội, báo giá đến đơn hàng"
     },
     "icon": "handshake"
   },
@@ -19,14 +23,18 @@
       "code": "sales",
       "name": {
         "zh-TW": "CRM 業務",
-        "en-US": "CRM sales"
+        "en-US": "CRM sales",
+        "th": "พนักงานขาย CRM",
+        "vi": "Nhân viên kinh doanh CRM"
       }
     },
     {
       "code": "manager",
       "name": {
         "zh-TW": "CRM 業務主管",
-        "en-US": "CRM sales manager"
+        "en-US": "CRM sales manager",
+        "th": "ผู้จัดการฝ่ายขาย CRM",
+        "vi": "Quản lý kinh doanh CRM"
       }
     }
   ],
@@ -36,7 +44,9 @@
       "key": "crm-lead",
       "name": {
         "zh-TW": "潛在客戶",
-        "en-US": "Leads"
+        "en-US": "Leads",
+        "th": "ลูกค้าเป้าหมาย",
+        "vi": "Khách hàng tiềm năng"
       },
       "kind": "standalone",
       "titleField": "name",
@@ -45,7 +55,9 @@
           "code": "main",
           "label": {
             "zh-TW": "基本資料",
-            "en-US": "Details"
+            "en-US": "Details",
+            "th": "ข้อมูลพื้นฐาน",
+            "vi": "Thông tin cơ bản"
           },
           "collapsed": false,
           "columns": 2,
@@ -55,7 +67,9 @@
               "type": "autonumber",
               "label": {
                 "zh-TW": "編號",
-                "en-US": "No."
+                "en-US": "No.",
+                "th": "เลขที่",
+                "vi": "Số"
               },
               "config": {
                 "format": "L-{0000}",
@@ -67,7 +81,9 @@
               "type": "text",
               "label": {
                 "zh-TW": "姓名",
-                "en-US": "Name"
+                "en-US": "Name",
+                "th": "ชื่อ",
+                "vi": "Tên"
               },
               "config": {
                 "required": true,
@@ -80,7 +96,9 @@
               "type": "text",
               "label": {
                 "zh-TW": "公司",
-                "en-US": "Company"
+                "en-US": "Company",
+                "th": "บริษัท",
+                "vi": "Công ty"
               },
               "config": {
                 "required": true,
@@ -93,7 +111,9 @@
               "type": "phone",
               "label": {
                 "zh-TW": "電話",
-                "en-US": "Phone"
+                "en-US": "Phone",
+                "th": "โทรศัพท์",
+                "vi": "Điện thoại"
               },
               "config": {}
             },
@@ -102,7 +122,9 @@
               "type": "email",
               "label": {
                 "zh-TW": "Email",
-                "en-US": "Email"
+                "en-US": "Email",
+                "th": "อีเมล",
+                "vi": "Email"
               },
               "config": {}
             },
@@ -111,7 +133,9 @@
               "type": "enum",
               "label": {
                 "zh-TW": "來源",
-                "en-US": "Source"
+                "en-US": "Source",
+                "th": "แหล่งที่มา",
+                "vi": "Nguồn"
               },
               "config": {
                 "showInList": true,
@@ -122,7 +146,9 @@
                   "code": "web",
                   "label": {
                     "zh-TW": "官網",
-                    "en-US": "Website"
+                    "en-US": "Website",
+                    "th": "เว็บไซต์",
+                    "vi": "Website"
                   },
                   "color": null
                 },
@@ -130,7 +156,9 @@
                   "code": "referral",
                   "label": {
                     "zh-TW": "轉介",
-                    "en-US": "Referral"
+                    "en-US": "Referral",
+                    "th": "การแนะนำ",
+                    "vi": "Giới thiệu"
                   },
                   "color": null
                 },
@@ -138,7 +166,9 @@
                   "code": "exhibition",
                   "label": {
                     "zh-TW": "展覽",
-                    "en-US": "Exhibition"
+                    "en-US": "Exhibition",
+                    "th": "งานแสดงสินค้า",
+                    "vi": "Triển lãm"
                   },
                   "color": null
                 },
@@ -146,7 +176,9 @@
                   "code": "coldcall",
                   "label": {
                     "zh-TW": "陌生開發",
-                    "en-US": "Cold call"
+                    "en-US": "Cold call",
+                    "th": "โทรหาลูกค้าใหม่",
+                    "vi": "Gọi điện chào hàng"
                   },
                   "color": null
                 }
@@ -157,7 +189,9 @@
               "type": "enum",
               "label": {
                 "zh-TW": "狀態",
-                "en-US": "Status"
+                "en-US": "Status",
+                "th": "สถานะ",
+                "vi": "Trạng thái"
               },
               "config": {
                 "required": true,
@@ -170,7 +204,9 @@
                   "code": "new",
                   "label": {
                     "zh-TW": "新線索",
-                    "en-US": "New"
+                    "en-US": "New",
+                    "th": "ใหม่",
+                    "vi": "Mới"
                   },
                   "color": "grey"
                 },
@@ -178,7 +214,9 @@
                   "code": "contacted",
                   "label": {
                     "zh-TW": "已聯繫",
-                    "en-US": "Contacted"
+                    "en-US": "Contacted",
+                    "th": "ติดต่อแล้ว",
+                    "vi": "Đã liên hệ"
                   },
                   "color": "blue"
                 },
@@ -186,7 +224,9 @@
                   "code": "qualified",
                   "label": {
                     "zh-TW": "已確認",
-                    "en-US": "Qualified"
+                    "en-US": "Qualified",
+                    "th": "ผ่านเกณฑ์",
+                    "vi": "Đủ điều kiện"
                   },
                   "color": "green"
                 },
@@ -194,7 +234,9 @@
                   "code": "lost",
                   "label": {
                     "zh-TW": "流失",
-                    "en-US": "Lost"
+                    "en-US": "Lost",
+                    "th": "ไม่สำเร็จ",
+                    "vi": "Thất bại"
                   },
                   "color": "red"
                 }
@@ -205,7 +247,9 @@
               "type": "user",
               "label": {
                 "zh-TW": "負責業務",
-                "en-US": "Owner"
+                "en-US": "Owner",
+                "th": "ผู้รับผิดชอบ",
+                "vi": "Người phụ trách"
               },
               "config": {
                 "showInList": true,
@@ -217,7 +261,9 @@
               "type": "textarea",
               "label": {
                 "zh-TW": "備註",
-                "en-US": "Note"
+                "en-US": "Note",
+                "th": "บันทึก",
+                "vi": "Nội dung ghi chú"
               },
               "config": {}
             }
@@ -259,7 +305,9 @@
       "key": "crm-customer",
       "name": {
         "zh-TW": "客戶",
-        "en-US": "Customers"
+        "en-US": "Customers",
+        "th": "ลูกค้า",
+        "vi": "Khách hàng"
       },
       "kind": "standalone",
       "titleField": "name",
@@ -268,7 +316,9 @@
           "code": "main",
           "label": {
             "zh-TW": "基本資料",
-            "en-US": "Details"
+            "en-US": "Details",
+            "th": "ข้อมูลพื้นฐาน",
+            "vi": "Thông tin cơ bản"
           },
           "collapsed": false,
           "columns": 2,
@@ -278,7 +328,9 @@
               "type": "autonumber",
               "label": {
                 "zh-TW": "編號",
-                "en-US": "No."
+                "en-US": "No.",
+                "th": "เลขที่",
+                "vi": "Số"
               },
               "config": {
                 "format": "C-{0000}",
@@ -290,7 +342,9 @@
               "type": "text",
               "label": {
                 "zh-TW": "名稱",
-                "en-US": "Name"
+                "en-US": "Name",
+                "th": "ชื่อ",
+                "vi": "Tên"
               },
               "config": {
                 "required": true,
@@ -303,7 +357,9 @@
               "type": "enum",
               "label": {
                 "zh-TW": "產業",
-                "en-US": "Industry"
+                "en-US": "Industry",
+                "th": "อุตสาหกรรม",
+                "vi": "Ngành nghề"
               },
               "config": {
                 "showInList": true,
@@ -314,7 +370,9 @@
                   "code": "manufacturing",
                   "label": {
                     "zh-TW": "製造",
-                    "en-US": "Manufacturing"
+                    "en-US": "Manufacturing",
+                    "th": "การผลิต",
+                    "vi": "Sản xuất"
                   },
                   "color": null
                 },
@@ -322,7 +380,9 @@
                   "code": "retail",
                   "label": {
                     "zh-TW": "零售",
-                    "en-US": "Retail"
+                    "en-US": "Retail",
+                    "th": "ค้าปลีก",
+                    "vi": "Bán lẻ"
                   },
                   "color": null
                 },
@@ -330,7 +390,9 @@
                   "code": "service",
                   "label": {
                     "zh-TW": "服務",
-                    "en-US": "Services"
+                    "en-US": "Services",
+                    "th": "บริการ",
+                    "vi": "Dịch vụ"
                   },
                   "color": null
                 },
@@ -338,7 +400,9 @@
                   "code": "tech",
                   "label": {
                     "zh-TW": "資訊",
-                    "en-US": "Technology"
+                    "en-US": "Technology",
+                    "th": "เทคโนโลยี",
+                    "vi": "Công nghệ"
                   },
                   "color": null
                 }
@@ -349,7 +413,9 @@
               "type": "phone",
               "label": {
                 "zh-TW": "電話",
-                "en-US": "Phone"
+                "en-US": "Phone",
+                "th": "โทรศัพท์",
+                "vi": "Điện thoại"
               },
               "config": {}
             },
@@ -358,7 +424,9 @@
               "type": "email",
               "label": {
                 "zh-TW": "Email",
-                "en-US": "Email"
+                "en-US": "Email",
+                "th": "อีเมล",
+                "vi": "Email"
               },
               "config": {}
             },
@@ -367,7 +435,9 @@
               "type": "text",
               "label": {
                 "zh-TW": "地址",
-                "en-US": "Address"
+                "en-US": "Address",
+                "th": "ที่อยู่",
+                "vi": "Địa chỉ"
               },
               "config": {}
             },
@@ -376,7 +446,9 @@
               "type": "user",
               "label": {
                 "zh-TW": "負責業務",
-                "en-US": "Owner"
+                "en-US": "Owner",
+                "th": "ผู้รับผิดชอบ",
+                "vi": "Người phụ trách"
               },
               "config": {
                 "showInList": true,
@@ -388,7 +460,9 @@
               "type": "reference",
               "label": {
                 "zh-TW": "來源潛在客戶",
-                "en-US": "Source lead"
+                "en-US": "Source lead",
+                "th": "ลูกค้าเป้าหมายต้นทาง",
+                "vi": "Khách hàng tiềm năng nguồn"
               },
               "config": {
                 "readOnly": true,
@@ -436,7 +510,9 @@
       "key": "crm-contact",
       "name": {
         "zh-TW": "聯絡人",
-        "en-US": "Contacts"
+        "en-US": "Contacts",
+        "th": "ผู้ติดต่อ",
+        "vi": "Người liên hệ"
       },
       "kind": "standalone",
       "titleField": "name",
@@ -445,7 +521,9 @@
           "code": "main",
           "label": {
             "zh-TW": "基本資料",
-            "en-US": "Details"
+            "en-US": "Details",
+            "th": "ข้อมูลพื้นฐาน",
+            "vi": "Thông tin cơ bản"
           },
           "collapsed": false,
           "columns": 2,
@@ -455,7 +533,9 @@
               "type": "text",
               "label": {
                 "zh-TW": "姓名",
-                "en-US": "Name"
+                "en-US": "Name",
+                "th": "ชื่อ",
+                "vi": "Tên"
               },
               "config": {
                 "required": true,
@@ -468,7 +548,9 @@
               "type": "reference",
               "label": {
                 "zh-TW": "客戶",
-                "en-US": "Customer"
+                "en-US": "Customer",
+                "th": "ลูกค้า",
+                "vi": "Khách hàng"
               },
               "config": {
                 "required": true,
@@ -485,7 +567,9 @@
               "type": "text",
               "label": {
                 "zh-TW": "職稱",
-                "en-US": "Job title"
+                "en-US": "Job title",
+                "th": "ตำแหน่ง",
+                "vi": "Chức danh"
               },
               "config": {
                 "showInList": true
@@ -496,7 +580,9 @@
               "type": "phone",
               "label": {
                 "zh-TW": "電話",
-                "en-US": "Phone"
+                "en-US": "Phone",
+                "th": "โทรศัพท์",
+                "vi": "Điện thoại"
               },
               "config": {}
             },
@@ -505,7 +591,9 @@
               "type": "email",
               "label": {
                 "zh-TW": "Email",
-                "en-US": "Email"
+                "en-US": "Email",
+                "th": "อีเมล",
+                "vi": "Email"
               },
               "config": {}
             }
@@ -547,7 +635,9 @@
       "key": "crm-product",
       "name": {
         "zh-TW": "產品",
-        "en-US": "Products"
+        "en-US": "Products",
+        "th": "สินค้า",
+        "vi": "Sản phẩm"
       },
       "kind": "standalone",
       "titleField": "name",
@@ -556,7 +646,9 @@
           "code": "main",
           "label": {
             "zh-TW": "基本資料",
-            "en-US": "Details"
+            "en-US": "Details",
+            "th": "ข้อมูลพื้นฐาน",
+            "vi": "Thông tin cơ bản"
           },
           "collapsed": false,
           "columns": 2,
@@ -566,7 +658,9 @@
               "type": "text",
               "label": {
                 "zh-TW": "料號",
-                "en-US": "SKU"
+                "en-US": "SKU",
+                "th": "SKU",
+                "vi": "SKU"
               },
               "config": {
                 "required": true,
@@ -579,7 +673,9 @@
               "type": "text",
               "label": {
                 "zh-TW": "名稱",
-                "en-US": "Name"
+                "en-US": "Name",
+                "th": "ชื่อ",
+                "vi": "Tên"
               },
               "config": {
                 "required": true,
@@ -592,7 +688,9 @@
               "type": "text",
               "label": {
                 "zh-TW": "單位",
-                "en-US": "Unit"
+                "en-US": "Unit",
+                "th": "หน่วย",
+                "vi": "Đơn vị"
               },
               "config": {
                 "showInList": true
@@ -603,7 +701,9 @@
               "type": "currency",
               "label": {
                 "zh-TW": "標準單價",
-                "en-US": "List price"
+                "en-US": "List price",
+                "th": "ราคาตามรายการ",
+                "vi": "Giá niêm yết"
               },
               "config": {
                 "scale": 0,
@@ -615,7 +715,9 @@
               "type": "boolean",
               "label": {
                 "zh-TW": "上架中",
-                "en-US": "Active"
+                "en-US": "Active",
+                "th": "เปิดขาย",
+                "vi": "Đang bán"
               },
               "config": {
                 "defaultValue": true,
@@ -660,7 +762,9 @@
       "key": "crm-opportunity",
       "name": {
         "zh-TW": "商機",
-        "en-US": "Opportunities"
+        "en-US": "Opportunities",
+        "th": "โอกาสการขาย",
+        "vi": "Cơ hội bán hàng"
       },
       "kind": "standalone",
       "titleField": "name",
@@ -669,7 +773,9 @@
           "code": "main",
           "label": {
             "zh-TW": "基本資料",
-            "en-US": "Details"
+            "en-US": "Details",
+            "th": "ข้อมูลพื้นฐาน",
+            "vi": "Thông tin cơ bản"
           },
           "collapsed": false,
           "columns": 2,
@@ -679,7 +785,9 @@
               "type": "autonumber",
               "label": {
                 "zh-TW": "編號",
-                "en-US": "No."
+                "en-US": "No.",
+                "th": "เลขที่",
+                "vi": "Số"
               },
               "config": {
                 "format": "OP-{0000}",
@@ -691,7 +799,9 @@
               "type": "text",
               "label": {
                 "zh-TW": "名稱",
-                "en-US": "Name"
+                "en-US": "Name",
+                "th": "ชื่อ",
+                "vi": "Tên"
               },
               "config": {
                 "required": true,
@@ -704,7 +814,9 @@
               "type": "reference",
               "label": {
                 "zh-TW": "客戶",
-                "en-US": "Customer"
+                "en-US": "Customer",
+                "th": "ลูกค้า",
+                "vi": "Khách hàng"
               },
               "config": {
                 "showInList": true,
@@ -720,7 +832,9 @@
               "type": "reference",
               "label": {
                 "zh-TW": "來源潛在客戶",
-                "en-US": "Source lead"
+                "en-US": "Source lead",
+                "th": "ลูกค้าเป้าหมายต้นทาง",
+                "vi": "Khách hàng tiềm năng nguồn"
               },
               "config": {
                 "readOnly": true,
@@ -735,7 +849,9 @@
               "type": "enum",
               "label": {
                 "zh-TW": "階段",
-                "en-US": "Stage"
+                "en-US": "Stage",
+                "th": "ขั้นตอน",
+                "vi": "Giai đoạn"
               },
               "config": {
                 "required": true,
@@ -748,7 +864,9 @@
                   "code": "prospecting",
                   "label": {
                     "zh-TW": "初步接觸",
-                    "en-US": "Prospecting"
+                    "en-US": "Prospecting",
+                    "th": "การเข้าหาเบื้องต้น",
+                    "vi": "Tiếp cận ban đầu"
                   },
                   "color": "grey"
                 },
@@ -756,7 +874,9 @@
                   "code": "qualification",
                   "label": {
                     "zh-TW": "需求確認",
-                    "en-US": "Qualification"
+                    "en-US": "Qualification",
+                    "th": "ยืนยันความต้องการ",
+                    "vi": "Xác nhận nhu cầu"
                   },
                   "color": "blue"
                 },
@@ -764,7 +884,9 @@
                   "code": "proposal",
                   "label": {
                     "zh-TW": "提案報價",
-                    "en-US": "Proposal"
+                    "en-US": "Proposal",
+                    "th": "เสนอราคา",
+                    "vi": "Đề xuất báo giá"
                   },
                   "color": "orange"
                 },
@@ -772,7 +894,9 @@
                   "code": "negotiation",
                   "label": {
                     "zh-TW": "議價",
-                    "en-US": "Negotiation"
+                    "en-US": "Negotiation",
+                    "th": "เจรจาต่อรอง",
+                    "vi": "Thương lượng giá"
                   },
                   "color": "purple"
                 },
@@ -780,7 +904,9 @@
                   "code": "won",
                   "label": {
                     "zh-TW": "成交",
-                    "en-US": "Won"
+                    "en-US": "Won",
+                    "th": "ปิดการขายสำเร็จ",
+                    "vi": "Chốt thành công"
                   },
                   "color": "green"
                 },
@@ -788,7 +914,9 @@
                   "code": "lost",
                   "label": {
                     "zh-TW": "失敗",
-                    "en-US": "Lost"
+                    "en-US": "Lost",
+                    "th": "ไม่สำเร็จ",
+                    "vi": "Thất bại"
                   },
                   "color": "red"
                 }
@@ -799,7 +927,9 @@
               "type": "currency",
               "label": {
                 "zh-TW": "預估金額",
-                "en-US": "Expected amount"
+                "en-US": "Expected amount",
+                "th": "มูลค่าที่คาดการณ์",
+                "vi": "Giá trị dự kiến"
               },
               "config": {
                 "scale": 0,
@@ -811,7 +941,9 @@
               "type": "date",
               "label": {
                 "zh-TW": "預計成交日",
-                "en-US": "Expected close"
+                "en-US": "Expected close",
+                "th": "วันปิดการขายที่คาดไว้",
+                "vi": "Ngày chốt dự kiến"
               },
               "config": {
                 "showInList": true,
@@ -824,7 +956,9 @@
               "type": "user",
               "label": {
                 "zh-TW": "負責業務",
-                "en-US": "Owner"
+                "en-US": "Owner",
+                "th": "ผู้รับผิดชอบ",
+                "vi": "Người phụ trách"
               },
               "config": {
                 "showInList": true,
@@ -869,7 +1003,9 @@
       "key": "crm-activity",
       "name": {
         "zh-TW": "活動",
-        "en-US": "Activities"
+        "en-US": "Activities",
+        "th": "กิจกรรม",
+        "vi": "Hoạt động"
       },
       "kind": "standalone",
       "titleField": "subject",
@@ -878,7 +1014,9 @@
           "code": "main",
           "label": {
             "zh-TW": "基本資料",
-            "en-US": "Details"
+            "en-US": "Details",
+            "th": "ข้อมูลพื้นฐาน",
+            "vi": "Thông tin cơ bản"
           },
           "collapsed": false,
           "columns": 2,
@@ -888,7 +1026,9 @@
               "type": "text",
               "label": {
                 "zh-TW": "主旨",
-                "en-US": "Subject"
+                "en-US": "Subject",
+                "th": "หัวข้อ",
+                "vi": "Chủ đề"
               },
               "config": {
                 "required": true,
@@ -900,7 +1040,9 @@
               "type": "enum",
               "label": {
                 "zh-TW": "類型",
-                "en-US": "Type"
+                "en-US": "Type",
+                "th": "ประเภท",
+                "vi": "Loại"
               },
               "config": {
                 "showInList": true,
@@ -911,7 +1053,9 @@
                   "code": "call",
                   "label": {
                     "zh-TW": "電話",
-                    "en-US": "Call"
+                    "en-US": "Call",
+                    "th": "โทรศัพท์",
+                    "vi": "Cuộc gọi"
                   },
                   "color": null
                 },
@@ -919,7 +1063,9 @@
                   "code": "visit",
                   "label": {
                     "zh-TW": "拜訪",
-                    "en-US": "Visit"
+                    "en-US": "Visit",
+                    "th": "เข้าพบ",
+                    "vi": "Thăm khách hàng"
                   },
                   "color": null
                 },
@@ -927,7 +1073,9 @@
                   "code": "email",
                   "label": {
                     "zh-TW": "郵件",
-                    "en-US": "Email"
+                    "en-US": "Email",
+                    "th": "อีเมล",
+                    "vi": "Email"
                   },
                   "color": null
                 },
@@ -935,7 +1083,9 @@
                   "code": "meeting",
                   "label": {
                     "zh-TW": "會議",
-                    "en-US": "Meeting"
+                    "en-US": "Meeting",
+                    "th": "ประชุม",
+                    "vi": "Cuộc họp"
                   },
                   "color": null
                 }
@@ -946,7 +1096,9 @@
               "type": "date",
               "label": {
                 "zh-TW": "日期",
-                "en-US": "Date"
+                "en-US": "Date",
+                "th": "วันที่",
+                "vi": "Ngày"
               },
               "config": {
                 "defaultToday": true,
@@ -960,7 +1112,9 @@
               "type": "reference",
               "label": {
                 "zh-TW": "客戶",
-                "en-US": "Customer"
+                "en-US": "Customer",
+                "th": "ลูกค้า",
+                "vi": "Khách hàng"
               },
               "config": {
                 "showInList": true,
@@ -975,7 +1129,9 @@
               "type": "reference",
               "label": {
                 "zh-TW": "商機",
-                "en-US": "Opportunity"
+                "en-US": "Opportunity",
+                "th": "โอกาสการขาย",
+                "vi": "Cơ hội bán hàng"
               },
               "config": {
                 "refTarget": {
@@ -989,7 +1145,9 @@
               "type": "user",
               "label": {
                 "zh-TW": "負責業務",
-                "en-US": "Owner"
+                "en-US": "Owner",
+                "th": "ผู้รับผิดชอบ",
+                "vi": "Người phụ trách"
               },
               "config": {
                 "showInList": true,
@@ -1001,7 +1159,9 @@
               "type": "boolean",
               "label": {
                 "zh-TW": "已完成",
-                "en-US": "Done"
+                "en-US": "Done",
+                "th": "เสร็จแล้ว",
+                "vi": "Đã xong"
               },
               "config": {
                 "showInList": true
@@ -1012,7 +1172,9 @@
               "type": "textarea",
               "label": {
                 "zh-TW": "內容",
-                "en-US": "Note"
+                "en-US": "Note",
+                "th": "บันทึก",
+                "vi": "Nội dung ghi chú"
               },
               "config": {}
             }
@@ -1054,7 +1216,9 @@
       "key": "crm-quote",
       "name": {
         "zh-TW": "報價單",
-        "en-US": "Quotes"
+        "en-US": "Quotes",
+        "th": "ใบเสนอราคา",
+        "vi": "Báo giá"
       },
       "kind": "standalone",
       "titleField": "no",
@@ -1063,7 +1227,9 @@
           "code": "main",
           "label": {
             "zh-TW": "基本資料",
-            "en-US": "Details"
+            "en-US": "Details",
+            "th": "ข้อมูลพื้นฐาน",
+            "vi": "Thông tin cơ bản"
           },
           "collapsed": false,
           "columns": 2,
@@ -1073,7 +1239,9 @@
               "type": "autonumber",
               "label": {
                 "zh-TW": "報價單號",
-                "en-US": "Quote no."
+                "en-US": "Quote no.",
+                "th": "เลขที่ใบเสนอราคา",
+                "vi": "Số báo giá"
               },
               "config": {
                 "format": "QT-{yyyyMM}-{0000}",
@@ -1085,7 +1253,9 @@
               "type": "reference",
               "label": {
                 "zh-TW": "客戶",
-                "en-US": "Customer"
+                "en-US": "Customer",
+                "th": "ลูกค้า",
+                "vi": "Khách hàng"
               },
               "config": {
                 "required": true,
@@ -1123,7 +1293,9 @@
               "type": "text",
               "label": {
                 "zh-TW": "客戶名稱",
-                "en-US": "Customer name"
+                "en-US": "Customer name",
+                "th": "ชื่อลูกค้า",
+                "vi": "Tên khách hàng"
               },
               "config": {
                 "readOnly": true
@@ -1134,7 +1306,9 @@
               "type": "phone",
               "label": {
                 "zh-TW": "客戶電話",
-                "en-US": "Customer phone"
+                "en-US": "Customer phone",
+                "th": "โทรศัพท์ลูกค้า",
+                "vi": "Điện thoại khách hàng"
               },
               "config": {
                 "readOnly": true
@@ -1145,7 +1319,9 @@
               "type": "email",
               "label": {
                 "zh-TW": "客戶 Email",
-                "en-US": "Customer email"
+                "en-US": "Customer email",
+                "th": "อีเมลลูกค้า",
+                "vi": "Email khách hàng"
               },
               "config": {
                 "readOnly": true
@@ -1156,7 +1332,9 @@
               "type": "text",
               "label": {
                 "zh-TW": "客戶地址",
-                "en-US": "Customer address"
+                "en-US": "Customer address",
+                "th": "ที่อยู่ลูกค้า",
+                "vi": "Địa chỉ khách hàng"
               },
               "config": {
                 "readOnly": true
@@ -1167,7 +1345,9 @@
               "type": "reference",
               "label": {
                 "zh-TW": "來源商機",
-                "en-US": "Source opportunity"
+                "en-US": "Source opportunity",
+                "th": "โอกาสการขายต้นทาง",
+                "vi": "Cơ hội bán hàng nguồn"
               },
               "config": {
                 "readOnly": true,
@@ -1183,7 +1363,9 @@
               "type": "date",
               "label": {
                 "zh-TW": "報價日期",
-                "en-US": "Quote date"
+                "en-US": "Quote date",
+                "th": "วันที่เสนอราคา",
+                "vi": "Ngày báo giá"
               },
               "config": {
                 "defaultToday": true,
@@ -1198,7 +1380,9 @@
               "type": "date",
               "label": {
                 "zh-TW": "有效期限",
-                "en-US": "Valid until"
+                "en-US": "Valid until",
+                "th": "มีผลถึง",
+                "vi": "Hiệu lực đến"
               },
               "config": {}
             },
@@ -1207,7 +1391,9 @@
               "type": "enum",
               "label": {
                 "zh-TW": "狀態",
-                "en-US": "Status"
+                "en-US": "Status",
+                "th": "สถานะ",
+                "vi": "Trạng thái"
               },
               "config": {
                 "required": true,
@@ -1220,7 +1406,9 @@
                   "code": "draft",
                   "label": {
                     "zh-TW": "草稿",
-                    "en-US": "Draft"
+                    "en-US": "Draft",
+                    "th": "ฉบับร่าง",
+                    "vi": "Bản nháp"
                   },
                   "color": "grey"
                 },
@@ -1228,7 +1416,9 @@
                   "code": "pending",
                   "label": {
                     "zh-TW": "待核准",
-                    "en-US": "Pending approval"
+                    "en-US": "Pending approval",
+                    "th": "รออนุมัติ",
+                    "vi": "Chờ phê duyệt"
                   },
                   "color": "orange"
                 },
@@ -1236,7 +1426,9 @@
                   "code": "approved",
                   "label": {
                     "zh-TW": "已核准",
-                    "en-US": "Approved"
+                    "en-US": "Approved",
+                    "th": "อนุมัติแล้ว",
+                    "vi": "Đã phê duyệt"
                   },
                   "color": "green"
                 },
@@ -1244,7 +1436,9 @@
                   "code": "rejected",
                   "label": {
                     "zh-TW": "已退回",
-                    "en-US": "Rejected"
+                    "en-US": "Rejected",
+                    "th": "ส่งกลับแล้ว",
+                    "vi": "Đã trả lại"
                   },
                   "color": "red"
                 }
@@ -1255,7 +1449,9 @@
               "type": "user",
               "label": {
                 "zh-TW": "負責業務",
-                "en-US": "Owner"
+                "en-US": "Owner",
+                "th": "ผู้รับผิดชอบ",
+                "vi": "Người phụ trách"
               },
               "config": {
                 "showInList": true,
@@ -1267,7 +1463,9 @@
               "type": "rollup",
               "label": {
                 "zh-TW": "未稅小計",
-                "en-US": "Subtotal"
+                "en-US": "Subtotal",
+                "th": "ยอดรวมก่อนภาษี",
+                "vi": "Tạm tính chưa thuế"
               },
               "config": {
                 "rollup": {
@@ -1282,7 +1480,9 @@
               "type": "percent",
               "label": {
                 "zh-TW": "稅率",
-                "en-US": "Tax rate"
+                "en-US": "Tax rate",
+                "th": "อัตราภาษี",
+                "vi": "Thuế suất"
               },
               "config": {
                 "scale": 0,
@@ -1294,7 +1494,9 @@
               "type": "formula",
               "label": {
                 "zh-TW": "稅額",
-                "en-US": "Tax"
+                "en-US": "Tax",
+                "th": "ภาษี",
+                "vi": "Thuế"
               },
               "config": {
                 "formula": "ROUND({subtotal} * {taxRate}, 0)",
@@ -1307,7 +1509,9 @@
               "type": "formula",
               "label": {
                 "zh-TW": "含稅總計",
-                "en-US": "Total"
+                "en-US": "Total",
+                "th": "ยอดรวมสุทธิ",
+                "vi": "Tổng cộng (gồm thuế)"
               },
               "config": {
                 "formula": "{subtotal} + {tax}",
@@ -1321,7 +1525,9 @@
               "type": "textarea",
               "label": {
                 "zh-TW": "備註",
-                "en-US": "Remark"
+                "en-US": "Remark",
+                "th": "หมายเหตุ",
+                "vi": "Ghi chú"
               },
               "config": {}
             }
@@ -1363,7 +1569,9 @@
       "key": "crm-quote-line",
       "name": {
         "zh-TW": "報價明細",
-        "en-US": "Quote lines"
+        "en-US": "Quote lines",
+        "th": "รายการใบเสนอราคา",
+        "vi": "Chi tiết báo giá"
       },
       "kind": "standalone",
       "titleField": "productName",
@@ -1372,7 +1580,9 @@
           "code": "main",
           "label": {
             "zh-TW": "基本資料",
-            "en-US": "Details"
+            "en-US": "Details",
+            "th": "ข้อมูลพื้นฐาน",
+            "vi": "Thông tin cơ bản"
           },
           "collapsed": false,
           "columns": 2,
@@ -1382,7 +1592,9 @@
               "type": "reference",
               "label": {
                 "zh-TW": "報價單",
-                "en-US": "Quote"
+                "en-US": "Quote",
+                "th": "ใบเสนอราคา",
+                "vi": "Báo giá"
               },
               "config": {
                 "relation": "detail",
@@ -1397,7 +1609,9 @@
               "type": "autonumber",
               "label": {
                 "zh-TW": "項次",
-                "en-US": "Line"
+                "en-US": "Line",
+                "th": "ลำดับ",
+                "vi": "STT"
               },
               "config": {
                 "format": "{0}",
@@ -1409,7 +1623,9 @@
               "type": "reference",
               "label": {
                 "zh-TW": "產品",
-                "en-US": "Product"
+                "en-US": "Product",
+                "th": "สินค้า",
+                "vi": "Sản phẩm"
               },
               "config": {
                 "required": true,
@@ -1441,7 +1657,9 @@
               "type": "text",
               "label": {
                 "zh-TW": "品名",
-                "en-US": "Product name"
+                "en-US": "Product name",
+                "th": "ชื่อสินค้า",
+                "vi": "Tên sản phẩm"
               },
               "config": {}
             },
@@ -1450,7 +1668,9 @@
               "type": "text",
               "label": {
                 "zh-TW": "單位",
-                "en-US": "Unit"
+                "en-US": "Unit",
+                "th": "หน่วย",
+                "vi": "Đơn vị"
               },
               "config": {}
             },
@@ -1459,7 +1679,9 @@
               "type": "decimal",
               "label": {
                 "zh-TW": "數量",
-                "en-US": "Quantity"
+                "en-US": "Quantity",
+                "th": "จำนวน",
+                "vi": "Số lượng"
               },
               "config": {
                 "scale": 2,
@@ -1471,7 +1693,9 @@
               "type": "currency",
               "label": {
                 "zh-TW": "單價",
-                "en-US": "Unit price"
+                "en-US": "Unit price",
+                "th": "ราคาต่อหน่วย",
+                "vi": "Đơn giá"
               },
               "config": {
                 "scale": 0
@@ -1482,7 +1706,9 @@
               "type": "formula",
               "label": {
                 "zh-TW": "金額",
-                "en-US": "Amount"
+                "en-US": "Amount",
+                "th": "จำนวนเงิน",
+                "vi": "Thành tiền"
               },
               "config": {
                 "formula": "{qty} * {price}",
@@ -1499,7 +1725,9 @@
       "key": "crm-order",
       "name": {
         "zh-TW": "訂單",
-        "en-US": "Orders"
+        "en-US": "Orders",
+        "th": "คำสั่งซื้อ",
+        "vi": "Đơn hàng"
       },
       "kind": "standalone",
       "titleField": "no",
@@ -1508,7 +1736,9 @@
           "code": "main",
           "label": {
             "zh-TW": "基本資料",
-            "en-US": "Details"
+            "en-US": "Details",
+            "th": "ข้อมูลพื้นฐาน",
+            "vi": "Thông tin cơ bản"
           },
           "collapsed": false,
           "columns": 2,
@@ -1518,7 +1748,9 @@
               "type": "autonumber",
               "label": {
                 "zh-TW": "訂單號",
-                "en-US": "Order no."
+                "en-US": "Order no.",
+                "th": "เลขที่คำสั่งซื้อ",
+                "vi": "Số đơn hàng"
               },
               "config": {
                 "format": "SO-{yyyyMM}-{0000}",
@@ -1530,7 +1762,9 @@
               "type": "reference",
               "label": {
                 "zh-TW": "來源報價單",
-                "en-US": "Source quote"
+                "en-US": "Source quote",
+                "th": "ใบเสนอราคาต้นทาง",
+                "vi": "Báo giá nguồn"
               },
               "config": {
                 "readOnly": true,
@@ -1546,7 +1780,9 @@
               "type": "reference",
               "label": {
                 "zh-TW": "客戶",
-                "en-US": "Customer"
+                "en-US": "Customer",
+                "th": "ลูกค้า",
+                "vi": "Khách hàng"
               },
               "config": {
                 "showInList": true,
@@ -1562,7 +1798,9 @@
               "type": "text",
               "label": {
                 "zh-TW": "客戶名稱",
-                "en-US": "Customer name"
+                "en-US": "Customer name",
+                "th": "ชื่อลูกค้า",
+                "vi": "Tên khách hàng"
               },
               "config": {}
             },
@@ -1571,7 +1809,9 @@
               "type": "date",
               "label": {
                 "zh-TW": "訂單日期",
-                "en-US": "Order date"
+                "en-US": "Order date",
+                "th": "วันที่สั่งซื้อ",
+                "vi": "Ngày đặt hàng"
               },
               "config": {
                 "defaultToday": true,
@@ -1586,7 +1826,9 @@
               "type": "enum",
               "label": {
                 "zh-TW": "狀態",
-                "en-US": "Status"
+                "en-US": "Status",
+                "th": "สถานะ",
+                "vi": "Trạng thái"
               },
               "config": {
                 "required": true,
@@ -1599,7 +1841,9 @@
                   "code": "confirmed",
                   "label": {
                     "zh-TW": "已確認",
-                    "en-US": "Confirmed"
+                    "en-US": "Confirmed",
+                    "th": "ยืนยันแล้ว",
+                    "vi": "Đã xác nhận"
                   },
                   "color": "blue"
                 },
@@ -1607,7 +1851,9 @@
                   "code": "shipped",
                   "label": {
                     "zh-TW": "已出貨",
-                    "en-US": "Shipped"
+                    "en-US": "Shipped",
+                    "th": "จัดส่งแล้ว",
+                    "vi": "Đã giao hàng"
                   },
                   "color": "orange"
                 },
@@ -1615,7 +1861,9 @@
                   "code": "completed",
                   "label": {
                     "zh-TW": "已完成",
-                    "en-US": "Completed"
+                    "en-US": "Completed",
+                    "th": "เสร็จสมบูรณ์",
+                    "vi": "Đã hoàn tất"
                   },
                   "color": "green"
                 },
@@ -1623,7 +1871,9 @@
                   "code": "cancelled",
                   "label": {
                     "zh-TW": "已取消",
-                    "en-US": "Cancelled"
+                    "en-US": "Cancelled",
+                    "th": "ยกเลิกแล้ว",
+                    "vi": "Đã hủy"
                   },
                   "color": "red"
                 }
@@ -1634,7 +1884,9 @@
               "type": "user",
               "label": {
                 "zh-TW": "負責業務",
-                "en-US": "Owner"
+                "en-US": "Owner",
+                "th": "ผู้รับผิดชอบ",
+                "vi": "Người phụ trách"
               },
               "config": {
                 "showInList": true,
@@ -1646,7 +1898,9 @@
               "type": "rollup",
               "label": {
                 "zh-TW": "未稅小計",
-                "en-US": "Subtotal"
+                "en-US": "Subtotal",
+                "th": "ยอดรวมก่อนภาษี",
+                "vi": "Tạm tính chưa thuế"
               },
               "config": {
                 "rollup": {
@@ -1661,7 +1915,9 @@
               "type": "percent",
               "label": {
                 "zh-TW": "稅率",
-                "en-US": "Tax rate"
+                "en-US": "Tax rate",
+                "th": "อัตราภาษี",
+                "vi": "Thuế suất"
               },
               "config": {
                 "scale": 0,
@@ -1673,7 +1929,9 @@
               "type": "formula",
               "label": {
                 "zh-TW": "稅額",
-                "en-US": "Tax"
+                "en-US": "Tax",
+                "th": "ภาษี",
+                "vi": "Thuế"
               },
               "config": {
                 "formula": "ROUND({subtotal} * {taxRate}, 0)",
@@ -1686,7 +1944,9 @@
               "type": "formula",
               "label": {
                 "zh-TW": "含稅總計",
-                "en-US": "Total"
+                "en-US": "Total",
+                "th": "ยอดรวมสุทธิ",
+                "vi": "Tổng cộng (gồm thuế)"
               },
               "config": {
                 "formula": "{subtotal} + {tax}",
@@ -1700,7 +1960,9 @@
               "type": "textarea",
               "label": {
                 "zh-TW": "備註",
-                "en-US": "Remark"
+                "en-US": "Remark",
+                "th": "หมายเหตุ",
+                "vi": "Ghi chú"
               },
               "config": {}
             }
@@ -1742,7 +2004,9 @@
       "key": "crm-order-line",
       "name": {
         "zh-TW": "訂單明細",
-        "en-US": "Order lines"
+        "en-US": "Order lines",
+        "th": "รายการคำสั่งซื้อ",
+        "vi": "Chi tiết đơn hàng"
       },
       "kind": "standalone",
       "titleField": "productName",
@@ -1751,7 +2015,9 @@
           "code": "main",
           "label": {
             "zh-TW": "基本資料",
-            "en-US": "Details"
+            "en-US": "Details",
+            "th": "ข้อมูลพื้นฐาน",
+            "vi": "Thông tin cơ bản"
           },
           "collapsed": false,
           "columns": 2,
@@ -1761,7 +2027,9 @@
               "type": "reference",
               "label": {
                 "zh-TW": "訂單",
-                "en-US": "Order"
+                "en-US": "Order",
+                "th": "คำสั่งซื้อ",
+                "vi": "Đơn hàng"
               },
               "config": {
                 "relation": "detail",
@@ -1776,7 +2044,9 @@
               "type": "autonumber",
               "label": {
                 "zh-TW": "項次",
-                "en-US": "Line"
+                "en-US": "Line",
+                "th": "ลำดับ",
+                "vi": "STT"
               },
               "config": {
                 "format": "{0}",
@@ -1788,7 +2058,9 @@
               "type": "reference",
               "label": {
                 "zh-TW": "產品",
-                "en-US": "Product"
+                "en-US": "Product",
+                "th": "สินค้า",
+                "vi": "Sản phẩm"
               },
               "config": {
                 "refTarget": {
@@ -1802,7 +2074,9 @@
               "type": "text",
               "label": {
                 "zh-TW": "品名",
-                "en-US": "Product name"
+                "en-US": "Product name",
+                "th": "ชื่อสินค้า",
+                "vi": "Tên sản phẩm"
               },
               "config": {}
             },
@@ -1811,7 +2085,9 @@
               "type": "text",
               "label": {
                 "zh-TW": "單位",
-                "en-US": "Unit"
+                "en-US": "Unit",
+                "th": "หน่วย",
+                "vi": "Đơn vị"
               },
               "config": {}
             },
@@ -1820,7 +2096,9 @@
               "type": "decimal",
               "label": {
                 "zh-TW": "數量",
-                "en-US": "Quantity"
+                "en-US": "Quantity",
+                "th": "จำนวน",
+                "vi": "Số lượng"
               },
               "config": {
                 "scale": 2,
@@ -1832,7 +2110,9 @@
               "type": "currency",
               "label": {
                 "zh-TW": "單價",
-                "en-US": "Unit price"
+                "en-US": "Unit price",
+                "th": "ราคาต่อหน่วย",
+                "vi": "Đơn giá"
               },
               "config": {
                 "scale": 0
@@ -1843,7 +2123,9 @@
               "type": "formula",
               "label": {
                 "zh-TW": "金額",
-                "en-US": "Amount"
+                "en-US": "Amount",
+                "th": "จำนวนเงิน",
+                "vi": "Thành tiền"
               },
               "config": {
                 "formula": "{qty} * {price}",
@@ -1856,7 +2138,9 @@
               "type": "integer",
               "label": {
                 "zh-TW": "來源報價列",
-                "en-US": "Source quote line"
+                "en-US": "Source quote line",
+                "th": "รายการใบเสนอราคาต้นทาง",
+                "vi": "Dòng báo giá nguồn"
               },
               "config": {
                 "readOnly": true
@@ -2085,7 +2369,9 @@
       "code": "crm-lead-to-customer",
       "name": {
         "zh-TW": "潛在客戶轉客戶",
-        "en-US": "Lead to customer"
+        "en-US": "Lead to customer",
+        "th": "แปลงลูกค้าเป้าหมายเป็นลูกค้า",
+        "vi": "Chuyển khách hàng tiềm năng thành khách hàng"
       },
       "active": true,
       "source": "lead",
@@ -2119,7 +2405,9 @@
       "code": "crm-lead-to-opportunity",
       "name": {
         "zh-TW": "潛在客戶轉商機",
-        "en-US": "Lead to opportunity"
+        "en-US": "Lead to opportunity",
+        "th": "แปลงลูกค้าเป้าหมายเป็นโอกาสการขาย",
+        "vi": "Chuyển khách hàng tiềm năng thành cơ hội"
       },
       "active": true,
       "source": "lead",
@@ -2145,7 +2433,9 @@
       "code": "crm-opportunity-to-quote",
       "name": {
         "zh-TW": "商機轉報價單",
-        "en-US": "Opportunity to quote"
+        "en-US": "Opportunity to quote",
+        "th": "แปลงโอกาสการขายเป็นใบเสนอราคา",
+        "vi": "Chuyển cơ hội thành báo giá"
       },
       "active": true,
       "source": "opportunity",
@@ -2172,7 +2462,9 @@
       "code": "crm-quote-to-order",
       "name": {
         "zh-TW": "報價單轉訂單",
-        "en-US": "Quote to order"
+        "en-US": "Quote to order",
+        "th": "แปลงใบเสนอราคาเป็นคำสั่งซื้อ",
+        "vi": "Chuyển báo giá thành đơn hàng"
       },
       "active": true,
       "source": "quote",
@@ -2319,7 +2611,9 @@
       "code": "quote-sheet",
       "name": {
         "zh-TW": "報價單",
-        "en-US": "Quote"
+        "en-US": "Quote",
+        "th": "ใบเสนอราคา",
+        "vi": "Báo giá"
       },
       "active": true,
       "body": "<h1 align=\"center\">報價單 {{no}}</h1><table width=\"100%\" cellpadding=\"4\"><tr><td>客戶：{{customerName}}</td><td align=\"right\">報價日期：{{quoteDate}}</td></tr><tr><td>電話：{{customerPhone}}</td><td align=\"right\">有效期限：{{validUntil}}</td></tr><tr><td colspan=\"2\">Email：{{customerEmail}}　地址：{{customerAddress}}</td></tr></table><table width=\"100%\" border=\"1\" cellpadding=\"4\" style=\"border-collapse:collapse\"><thead><tr><th>項次</th><th>品名</th><th>單位</th><th align=\"right\">數量</th><th align=\"right\">單價</th><th align=\"right\">金額</th></tr></thead><tbody>{{#each quote-line}}<tr><td>{{seq}}</td><td>{{productName}}</td><td>{{unit}}</td><td align=\"right\">{{qty}}</td><td align=\"right\">{{price}}</td><td align=\"right\">{{amount}}</td></tr>{{/each}}</tbody></table><p align=\"right\">未稅小計：{{subtotal}}<br>稅額：{{tax}}<br><strong>含稅總計：{{total}}</strong></p><p>備註：{{remark}}</p>"
