@@ -1,0 +1,76 @@
+/* 指令台（command）：低彩度、細線、等寬數字，密度是八種裡最高的。狀態徽章改成小圓點在 quasar-bridge.css。
+   間距 md 與工作台同為 8px（themes.vitest.spec 規定沒有風格可以比工作台更緊），
+   更密的部分來自列高、欄位高、字級與內距。 */
+[data-style='command'] {
+  --t-space-xs: 2px;
+  --t-space-sm: 4px;
+  --t-space-md: 8px;
+  --t-space-lg: 10px;
+  --t-space-xl: 16px;
+  --t-field-height: 30px;
+  --t-row-height: 26px;
+  --t-font-family: system-ui, -apple-system, 'Segoe UI', 'Noto Sans', 'PingFang TC', 'Microsoft JhengHei', sans-serif;
+  --t-font-size: 12.5px;
+  --t-radius: 4px;
+  --t-panel-padding: 6px;
+  --t-cell-padding: 2px 8px;
+  --t-topbar-height: 36px;
+  --t-th-weight: 600;
+  --t-th-border-bottom: 1px;
+  --t-selected-marker: 2px;
+  --t-title-size: 15px;
+  --t-stat-size: 22px;
+  --t-stat-weight: 600;
+  --t-heading-font: system-ui, -apple-system, 'Segoe UI', 'Noto Sans', 'PingFang TC', 'Microsoft JhengHei', sans-serif;
+  --t-heading-weight: 600;
+  --t-num-font: ui-monospace, 'SF Mono', 'Cascadia Mono', 'Roboto Mono', Menlo, Consolas, 'Courier New', monospace;
+  --t-bg-image: none;
+  --t-chrome-opacity: 100%;
+  --t-chrome-blur: 0px;
+  --t-panel-opacity: 100%;
+  --t-chrome-inset: 0px;
+  --t-card-border: 1px;
+  --t-card-shadow: none;
+}
+
+[data-style='command'][data-mode='light'] {
+  --t-bg: #f7f7fa;
+  --t-panel: #ffffff;
+  --t-text: #1f2230;
+  --t-muted: #5d6275;
+  --t-border: #d9dae3;
+  --t-primary: #5a4cc2;
+  --t-on-primary: #ffffff;
+  --t-primary-text: #5a4cc2;
+  --t-negative: #b3261e;
+  --t-on-negative: #ffffff;
+  --t-topbar-bg: #eeeef3;
+  --t-topbar-fg: #1f2230;
+  --t-sidebar-bg: #eeeef3;
+  --t-sidebar-fg: #33364a;
+  --t-sidebar-muted: #5d6275;
+  --t-selected-bg: #dedcf3;
+  --t-selected-fg: #3b2f8f;
+  --t-chart-1: #5a4cc2;
+}
+
+[data-style='command'][data-mode='dark'] {
+  --t-bg: #14151c;
+  --t-panel: #1b1c26;
+  --t-text: #e4e5ee;
+  --t-muted: #989db2;
+  --t-border: #2d2f3d;
+  --t-primary: #a99ff0;
+  --t-on-primary: #16132f;
+  --t-primary-text: #a99ff0;
+  --t-negative: #f28b82;
+  --t-on-negative: #2b0a07;
+  --t-topbar-bg: #191a23;
+  --t-topbar-fg: #e4e5ee;
+  --t-sidebar-bg: #191a23;
+  --t-sidebar-fg: #c6c8d8;
+  --t-sidebar-muted: #989db2;
+  --t-selected-bg: #2d2a55;
+  --t-selected-fg: #cfc9ff;
+  --t-chart-1: #a99ff0;
+}

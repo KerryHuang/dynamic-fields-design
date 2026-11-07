@@ -1,0 +1,74 @@
+/* 植感活力（botanical）：深綠選單、淡綠底、扶桑紅主色、襯線標題。襯線字用系統字（宋體／新細明體／Noto Serif／Georgia），不打包字型。 */
+[data-style='botanical'] {
+  --t-space-xs: 3px;
+  --t-space-sm: 5px;
+  --t-space-md: 10px;
+  --t-space-lg: 14px;
+  --t-space-xl: 24px;
+  --t-field-height: 38px;
+  --t-row-height: 34px;
+  --t-font-family: system-ui, -apple-system, 'Segoe UI', 'Noto Sans', 'PingFang TC', 'Microsoft JhengHei', sans-serif;
+  --t-font-size: 13.5px;
+  --t-radius: 8px;
+  --t-panel-padding: 10px;
+  --t-cell-padding: 4px 10px;
+  --t-topbar-height: 46px;
+  --t-th-weight: 700;
+  --t-th-border-bottom: 1px;
+  --t-selected-marker: 0;
+  --t-title-size: 20px;
+  --t-stat-size: 30px;
+  --t-stat-weight: 900;
+  --t-heading-font: 'Songti TC', 'PMingLiU', 'Noto Serif TC', 'Noto Serif CJK TC', 'Source Han Serif TC', Georgia, 'Times New Roman', serif;
+  --t-heading-weight: 900;
+  --t-num-font: system-ui, -apple-system, 'Segoe UI', 'Noto Sans', 'PingFang TC', 'Microsoft JhengHei', sans-serif;
+  --t-bg-image: none;
+  --t-chrome-opacity: 100%;
+  --t-chrome-blur: 0px;
+  --t-panel-opacity: 100%;
+  --t-chrome-inset: 0px;
+  --t-card-border: 1px;
+  --t-card-shadow: none;
+}
+
+[data-style='botanical'][data-mode='light'] {
+  --t-bg: #e9f0d8;
+  --t-panel: #fbfcf4;
+  --t-text: #1d2a1f;
+  --t-muted: #4f5e50;
+  --t-border: #bccaa0;
+  --t-primary: #b3123f;
+  --t-on-primary: #ffffff;
+  --t-primary-text: #b3123f;
+  --t-negative: #a8280c;
+  --t-on-negative: #ffffff;
+  --t-topbar-bg: #fbfcf4;
+  --t-topbar-fg: #1d2a1f;
+  --t-sidebar-bg: #1f3d2c;
+  --t-sidebar-fg: #eaf3df;
+  --t-sidebar-muted: #b9cdb0;
+  --t-selected-bg: #eaf58f;
+  --t-selected-fg: #1f3d2c;
+  --t-chart-1: #b3123f;
+}
+
+[data-style='botanical'][data-mode='dark'] {
+  --t-bg: #141c15;
+  --t-panel: #1e2a20;
+  --t-text: #e8f0dc;
+  --t-muted: #aebba4;
+  --t-border: #39493a;
+  --t-primary: #ff7fa0;
+  --t-on-primary: #3d0619;
+  --t-primary-text: #ff7fa0;
+  --t-negative: #ffa08a;
+  --t-on-negative: #2b0a07;
+  --t-topbar-bg: #1e2a20;
+  --t-topbar-fg: #e8f0dc;
+  --t-sidebar-bg: #0e2418;
+  --t-sidebar-fg: #dbe9cd;
+  --t-sidebar-muted: #a9bd9f;
+  --t-selected-bg: #eaf58f;
+  --t-selected-fg: #1f3d2c;
+  --t-chart-1: #ff7fa0;
+}

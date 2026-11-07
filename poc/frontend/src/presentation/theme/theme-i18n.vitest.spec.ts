@@ -19,6 +19,8 @@ describe('theme 文案', () => {
       'mode', 'modes.dark', 'modes.light', 'modes.system', 'sampleText', 'saveFailed',
       'style', 'styles.airy.desc', 'styles.airy.name', 'styles.enterprise.desc', 'styles.enterprise.name',
       'styles.industrial.desc', 'styles.industrial.name', 'styles.workbench.desc', 'styles.workbench.name', 'title',
+      'styles.glass.desc', 'styles.glass.name', 'styles.bento.desc', 'styles.bento.name',
+      'styles.command.desc', 'styles.command.name', 'styles.botanical.desc', 'styles.botanical.name',
     ].sort());
   });
 
@@ -32,6 +34,10 @@ describe('theme 文案', () => {
       expect(v, k).not.toBe(en[k]);
       expect(v.trim(), k).not.toBe('');
     }
+  });
+
+  it.each([['zh-TW', zhTW], ['en-US', enUS], ['th', th], ['vi', vi]])('%s 不承諾沒有的命令列功能（文案不出現 ⌘K）', (_n, msgs) => {
+    expect(JSON.stringify(msgs)).not.toMatch(/⌘|Ctrl\+K|Cmd\+K/i);
   });
 
   it.each([['zh-TW', zhTW], ['en-US', enUS], ['th', th], ['vi', vi]])('%s 的 follow 帶 {value} 佔位', (_n, msgs) => {

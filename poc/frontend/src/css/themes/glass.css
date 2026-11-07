@@ -1,0 +1,77 @@
+/* 霧面玻璃（glass）：頂列、邊欄與選單是半透明霧面，背景有柔和色塊；資料面板幾乎不透明。
+   --t-sidebar-bg 等仍是實心十六進位值：不支援 backdrop-filter 或使用者要求降低透明度時，就直接用它們。 */
+[data-style='glass'] {
+  --t-space-xs: 3px;
+  --t-space-sm: 5px;
+  --t-space-md: 10px;
+  --t-space-lg: 14px;
+  --t-space-xl: 24px;
+  --t-field-height: 38px;
+  --t-row-height: 34px;
+  --t-font-family: system-ui, -apple-system, 'Segoe UI', 'Noto Sans', 'PingFang TC', 'Microsoft JhengHei', sans-serif;
+  --t-font-size: 13px;
+  --t-radius: 10px;
+  --t-panel-padding: 10px;
+  --t-cell-padding: 4px 10px;
+  --t-topbar-height: 44px;
+  --t-th-weight: 600;
+  --t-th-border-bottom: 1px;
+  --t-selected-marker: 0;
+  --t-title-size: 17px;
+  --t-stat-size: 30px;
+  --t-stat-weight: 600;
+  --t-heading-font: system-ui, -apple-system, 'Segoe UI', 'Noto Sans', 'PingFang TC', 'Microsoft JhengHei', sans-serif;
+  --t-heading-weight: 600;
+  --t-num-font: system-ui, -apple-system, 'Segoe UI', 'Noto Sans', 'PingFang TC', 'Microsoft JhengHei', sans-serif;
+  --t-chrome-opacity: 68%;
+  --t-chrome-blur: 14px;
+  --t-panel-opacity: 94%;
+  --t-chrome-inset: 0px;
+  --t-card-border: 1px;
+}
+
+[data-style='glass'][data-mode='light'] {
+  --t-bg: #eef3f4;
+  --t-panel: #ffffff;
+  --t-text: #14272e;
+  --t-muted: #4b5f67;
+  --t-border: #c3d2d6;
+  --t-primary: #0f6e7c;
+  --t-on-primary: #ffffff;
+  --t-primary-text: #0f6e7c;
+  --t-negative: #b3261e;
+  --t-on-negative: #ffffff;
+  --t-topbar-bg: #eef5f6;
+  --t-topbar-fg: #14272e;
+  --t-sidebar-bg: #eef5f6;
+  --t-sidebar-fg: #14272e;
+  --t-sidebar-muted: #4b5f67;
+  --t-selected-bg: #cce1e4;
+  --t-selected-fg: #0a4f5a;
+  --t-chart-1: #0f6e7c;
+  --t-bg-image: radial-gradient(520px 340px at 6% 0%, #a9dfe0, transparent), radial-gradient(640px 380px at 94% 6%, #d4ccf2, transparent), radial-gradient(620px 380px at 58% 108%, #f6d5c5, transparent);
+  --t-card-shadow: 0 1px 2px rgba(10, 40, 50, 0.08);
+}
+
+[data-style='glass'][data-mode='dark'] {
+  --t-bg: #10171a;
+  --t-panel: #162024;
+  --t-text: #e6f1f3;
+  --t-muted: #a4b7bd;
+  --t-border: #36474c;
+  --t-primary: #72d3df;
+  --t-on-primary: #06292f;
+  --t-primary-text: #72d3df;
+  --t-negative: #f28b82;
+  --t-on-negative: #2b0a07;
+  --t-topbar-bg: #18272b;
+  --t-topbar-fg: #e6f1f3;
+  --t-sidebar-bg: #18272b;
+  --t-sidebar-fg: #e6f1f3;
+  --t-sidebar-muted: #a4b7bd;
+  --t-selected-bg: #2b4a50;
+  --t-selected-fg: #bff0f6;
+  --t-chart-1: #72d3df;
+  --t-bg-image: radial-gradient(520px 340px at 6% 0%, #14515a, transparent), radial-gradient(640px 380px at 94% 6%, #3b2f6d, transparent), radial-gradient(620px 380px at 58% 108%, #5a2f27, transparent);
+  --t-card-shadow: none;
+}

@@ -11,7 +11,7 @@ import {
 } from 'src/application/dynamic/queries/views-queries';
 import { pruneCondition, serializeFilter } from 'src/domain/dynamic/condition';
 import { resolveI18n } from 'src/domain/dynamic/i18n-text';
-import type { ConditionNode, DynamicRecord, I18nText, ListView, PagedResponse, ViewSort } from 'src/domain/dynamic/types';
+import type { ConditionNode, DynamicRecord, FieldType, I18nText, ListView, PagedResponse, ViewSort } from 'src/domain/dynamic/types';
 import { referenceView } from 'src/presentation/dynamic/reference-display';
 import { fieldTypeRegistry } from 'src/presentation/dynamic/field-type-registry';
 import ColumnChooser from 'src/presentation/dynamic/list/ColumnChooser.vue';
@@ -117,6 +117,18 @@ function notifyViewError(e: unknown) {
   else notifyApiError(e);
 }
 
+/** 編號與數值欄加 cell-code：指令台風格用等寬字對齊，其他風格不受影響。 */
+const CODE_TYPES = new Set<FieldType>(['autonumber', 'integer', 'decimal', 'currency', 'percent', 'rollup']);
+
+/** 工作流程狀態欄的小圓點（指令台風格才顯示）：起始狀態＝草稿、唯讀狀態＝完成、其餘＝進行中。 */
+function stateDot(row: DynamicRecord): string {
+  const w = schema.value?.workflow;
+  const v = w ? row.values[w.statusFieldKey] : undefined;
+  if (!w || v === undefined || v === null) return '';
+  if (w.states.find((x) => x.value === v)?.readOnly) return 'status-dot--done';
+  return v === w.initialState ? 'status-dot--draft' : 'status-dot--active';
+}
+
 const columns = computed<QTableColumn<DynamicRecord>[]>(() => {
   const s = schema.value;
   if (!s) return [];
@@ -131,10 +143,11 @@ const columns = computed<QTableColumn<DynamicRecord>[]>(() => {
     }] : []),
     ...(s.titleFieldKey ? [{
       name: title?.key ?? 'title', label: resolveI18n(title?.label, locale.value), align: 'left' as const, sortable: title?.config.isSortable,
-      field: (r: DynamicRecord) => r.title,
+      field: (r: DynamicRecord) => r.title, classes: title && CODE_TYPES.has(title.type) ? 'cell-code' : undefined,
     }] : []),
     ...listed.map<QTableColumn<DynamicRecord>>((f) => ({
       name: f.key, label: resolveI18n(f.label, locale.value), align: 'left', sortable: f.config.isSortable,
+      classes: CODE_TYPES.has(f.type) ? 'cell-code' : undefined,
       field: (r) => (f.type === 'reference' && referenceView(r, f, t)?.text) || fieldTypeRegistry[f.type].format(r.values[f.key], f, locale.value),
     })),
     {
@@ -250,7 +263,11 @@ function removeCurrent() {
         @request="(p) => onPagination(p.pagination)"
         @update:pagination="onPagination"
         @row-click="(_e, row) => router.push(`/dynamic/${moduleKey}/${row.id}`)"
-      />
+      >
+        <template v-if="schema.workflow" #[`body-cell-${schema.workflow.statusFieldKey}`]="cell">
+          <q-td :props="cell"><span class="status-dot" :class="stateDot(cell.row)" aria-hidden="true" />{{ cell.value }}</q-td>
+        </template>
+      </q-table>
       <ImportDialog v-if="canImport" v-model="importing" :schema="schema" />
     </template>
   </q-page>

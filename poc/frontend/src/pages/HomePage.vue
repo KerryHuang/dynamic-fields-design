@@ -84,7 +84,7 @@ const recent = computed(() => {
         </div>
         <div v-for="g in groups" :key="g.closed ? '__closed' : (g.title ?? '')" class="q-mb-md" data-testid="home-app-group">
           <div class="text-caption text-muted q-mb-xs" data-testid="home-group-title">{{ g.closed ? t('menu.closedApps') : (g.title ?? t('menu.custom')) }}</div>
-          <div class="row q-col-gutter-sm">
+          <div class="row q-col-gutter-sm tile-grid">
             <div v-for="m in g.items" :key="m.key" class="col-12 col-sm-6 col-md-4 col-lg-3">
               <q-card flat bordered>
                 <q-item clickable :to="`/dynamic/${m.key}`" data-testid="home-app-card">
@@ -114,7 +114,7 @@ const recent = computed(() => {
 
     <section v-if="links.length" class="q-mb-lg" data-testid="home-system">
       <div class="text-subtitle1 q-mb-sm">{{ t('home.system') }}</div>
-      <div class="row q-col-gutter-sm">
+      <div class="row q-col-gutter-sm tile-grid">
         <div v-for="l in links" :key="l.to" class="col-12 col-sm-6 col-md-4 col-lg-3">
           <q-card flat bordered>
             <q-item clickable :to="l.to" data-testid="home-system-link">

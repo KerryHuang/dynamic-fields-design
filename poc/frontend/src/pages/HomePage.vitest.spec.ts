@@ -68,6 +68,11 @@ describe('HomePage', () => {
     expect(cards.map((c) => c.attributes('href'))).toEqual(['/dynamic/orders', '/dynamic/crm1', '/dynamic/crm2']);
   });
 
+  it('each module group is a tile-grid, so the bento style can size the tiles', async () => {
+    const { w } = await run({ menu: [mod('orders'), mod('crm1', '業務', 'people')] });
+    for (const g of w.findAll('[data-testid="home-app-group"]')) expect(g.find('.tile-grid').exists()).toBe(true);
+  });
+
   it('lists recent modules (max 5, only ones still in the menu), most recent first', async () => {
     const menu = ['a', 'b', 'c', 'd', 'e', 'f'].map((k) => mod(k));
     const { w } = await run({ menu, recent: ['f', 'gone', 'e', 'd', 'c', 'b', 'a'] });

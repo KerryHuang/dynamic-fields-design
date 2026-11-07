@@ -12,6 +12,10 @@
     --t-sidebar-bg: #fff;
     --t-sidebar-fg: #000;
     --t-sidebar-muted: #333;
+    --t-bg-image: none;
+    --t-chrome-opacity: 100%;
+    --t-panel-opacity: 100%;
+    --t-chrome-blur: 0px;
   }
 
   body {

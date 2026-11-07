@@ -19,6 +19,14 @@
   --t-title-size: 16px;
   --t-stat-size: 28px;
   --t-stat-weight: 600;
+  --t-heading-font: system-ui, -apple-system, 'Segoe UI', 'Noto Sans', 'PingFang TC', 'Microsoft JhengHei', sans-serif;
+  --t-heading-weight: 500;
+  --t-num-font: system-ui, -apple-system, 'Segoe UI', 'Noto Sans', 'PingFang TC', 'Microsoft JhengHei', sans-serif;
+  --t-bg-image: none;
+  --t-chrome-opacity: 100%;
+  --t-chrome-blur: 0px;
+  --t-panel-opacity: 100%;
+  --t-chrome-inset: 0px;
   --t-card-border: 1px;
   --t-card-shadow: none;
 }

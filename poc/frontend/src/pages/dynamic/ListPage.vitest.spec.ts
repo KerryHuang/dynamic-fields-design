@@ -256,4 +256,45 @@ describe('ListPage', () => {
     await flushPromises();
     expect(w.find('tbody tr').text()).toContain('M-0001 外殼上蓋模');
   });
+  it('workflow status column carries a state dot (shown by the command style only): initial = draft, read-only = done, else active', async () => {
+    const status: SchemaField = { ...field(5, '狀態'), key: 'status', type: 'enum' };
+    schemaPatch = {
+      blocks: [{ id: 1, label: { 'zh-TW': '區' }, collapsed: false, columns: 2, fields: [field(1, '標題'), status] }],
+      workflow: {
+        statusFieldKey: 'status', initialState: 'draft',
+        states: [{ value: 'draft', readOnly: false }, { value: 'review', readOnly: false }, { value: 'done', readOnly: true }],
+        transitions: [],
+      },
+    };
+    const w = await mountPage([view({ isDefault: true, columns: [5] })]);
+    api.getPagedRecords.mockResolvedValue({
+      items: ['draft', 'review', 'done'].map((v, i) => ({ ...row, id: i + 1, values: { status: v } })),
+      totalCount: 3, currentPage: 1, pagesSize: 20,
+    });
+    w.findComponent(FilterPanel).vm.$emit('update:modelValue', undefined);
+    await w.findComponent(quasar.QTable).vm.$emit('update:pagination', { page: 1, rowsPerPage: 20, sortBy: 'status', descending: false });
+    await flushPromises();
+    const dots = w.findAll('tbody .status-dot').map((d) => d.classes());
+    expect(dots[0]).toContain('status-dot--draft');
+    expect(dots[1]).toContain('status-dot--active');
+    expect(dots[2]).toContain('status-dot--done');
+    expect(w.find('tbody .status-dot').attributes('aria-hidden')).toBe('true');
+  });
+
+  it('no workflow, no dot; autonumber and numeric columns get cell-code, text columns do not', async () => {
+    const code: SchemaField = { ...field(6, '單號'), key: 'no', type: 'autonumber' };
+    const amount: SchemaField = { ...field(7, '金額'), key: 'amt', type: 'currency' };
+    schemaPatch = { blocks: [{ id: 1, label: { 'zh-TW': '區' }, collapsed: false, columns: 2, fields: [field(1, '標題'), field(2, '甲'), code, amount] }] };
+    const w = await mountPage([view({ isDefault: true, columns: [2, 6, 7] })]);
+    api.getPagedRecords.mockResolvedValue({ items: [{ ...row, values: { f_2: 'x', no: 'A-1', amt: 10 } }], totalCount: 1, currentPage: 1, pagesSize: 20 });
+    w.findComponent(FilterPanel).vm.$emit('update:modelValue', undefined);
+    await w.findComponent(quasar.QTable).vm.$emit('update:pagination', { page: 1, rowsPerPage: 20, sortBy: 'f_2', descending: false });
+    await flushPromises();
+    expect(w.find('.status-dot').exists()).toBe(false);
+    const tds = w.findAll('tbody tr:first-child td');
+    const byText = (t: string) => tds.find((td) => td.text().includes(t))!;
+    expect(byText('A-1').classes()).toContain('cell-code');
+    expect(byText('10').classes()).toContain('cell-code');
+    expect(byText('x').classes()).not.toContain('cell-code');
+  });
 });

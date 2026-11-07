@@ -52,7 +52,7 @@ const countText = (n: number | null | undefined) => (n ?? 0).toLocaleString(loca
       </div>
       <div v-if="result.state === 'empty'" data-testid="state-empty">{{ stateText }}</div>
       <template v-else>
-        <div v-if="showIndicator" class="row q-gutter-md" data-testid="report-indicator">
+        <div v-if="showIndicator" class="row q-gutter-md stat-tiles" data-testid="report-indicator">
           <q-card v-for="m in measureCols" :key="m.key" flat bordered class="q-pa-md">
             <div class="text-caption">{{ m.label }}</div>
             <div class="text-stat">{{ fmt(result.total?.[m.key], m) }}</div>

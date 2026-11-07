@@ -24,7 +24,9 @@
 }
 
 [data-style] body {
-  background: var(--t-bg);
+  background-color: var(--t-bg);
+  background-image: var(--t-bg-image);
+  background-attachment: fixed;
   color: var(--t-text);
   font-size: var(--t-font-size);
   font-family: var(--t-font-family);
@@ -128,6 +130,26 @@
 
 .text-h6 {
   font-size: var(--t-title-size);
+}
+
+/* 標題字型與字重走 token：舊四種風格的值和內文字型相同（字重 500 也是 Quasar 的 h6 預設），外觀不變 */
+.text-h4,
+.text-h5,
+.text-h6,
+.text-subtitle1,
+.q-toolbar__title {
+  font-family: var(--t-heading-font);
+}
+
+:is([data-style='glass'], [data-style='bento'], [data-style='command'], [data-style='botanical']) :is(.text-h4, .text-h5, .text-h6) {
+  font-weight: var(--t-heading-weight);
+}
+
+/* 數字靠右的欄（金額、數量）與統計數字用數字字型；指令台是等寬，其餘風格和內文相同 */
+[data-style] .q-table td.text-right,
+[data-style] .q-table td.cell-code,
+.text-stat {
+  font-family: var(--t-num-font);
 }
 
 .text-stat {
@@ -282,7 +304,8 @@ textarea:focus-visible {
   gap: 4px;
   min-width: 120px;
   overflow: hidden;
-  background: var(--t-bg);
+  background-color: var(--t-bg);
+  background-image: var(--t-bg-image);
   color: var(--t-text);
   border: 1px solid var(--t-border);
   border-radius: var(--t-radius);
@@ -290,13 +313,16 @@ textarea:focus-visible {
   font-size: var(--t-font-size);
 }
 
+/* 左段是邊欄色、右段是頂列色，一眼看出這個風格的選單長相 */
 .theme-sample__bar {
   height: 10px;
-  background: var(--t-topbar-bg);
+  background: linear-gradient(to right, var(--t-sidebar-bg) 30%, var(--t-topbar-bg) 30%);
 }
 
 .theme-sample__text {
   padding: 0 8px;
+  font-family: var(--t-heading-font);
+  font-weight: var(--t-heading-weight);
 }
 
 .theme-sample__chip {
@@ -557,4 +583,252 @@ textarea:focus-visible {
     background: var(--t-panel);
     border-top: 1px solid var(--t-border);
   }
+}
+
+/* ===== 進階風格：霧面玻璃、便當格、指令台、植感活力 =====
+   舊四種風格的相關 token 都是中性值（100% 不透明、0 模糊、無背景圖），下面的規則對它們沒有效果。 */
+
+/* 降低透明度：使用者要求，或瀏覽器不支援 backdrop-filter 時，退回實心，不能變得難讀 */
+@media (prefers-reduced-transparency: reduce) {
+  [data-style][data-mode] {
+    --t-chrome-opacity: 100%;
+    --t-panel-opacity: 100%;
+    --t-chrome-blur: 0px;
+  }
+}
+
+@supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+  [data-style][data-mode] {
+    --t-chrome-opacity: 100%;
+    --t-panel-opacity: 100%;
+    --t-chrome-blur: 0px;
+  }
+}
+
+/* 手機：模糊半徑縮小，減少捲動時的重繪成本 */
+@media (max-width: 599.98px) {
+  [data-style='glass'] {
+    --t-chrome-blur: 8px;
+  }
+}
+
+/* 半透明用 color-mix 把實心 token 混進透明；不支援 color-mix 的瀏覽器維持上面的實心底 */
+@supports (color: color-mix(in srgb, red 50%, transparent)) {
+  [data-style] .q-header {
+    background: color-mix(in srgb, var(--t-topbar-bg) var(--t-chrome-opacity), transparent);
+  }
+
+  [data-style] .q-card,
+  [data-style] .q-table__card,
+  [data-style] .q-menu {
+    background: color-mix(in srgb, var(--t-panel) var(--t-panel-opacity), transparent);
+  }
+}
+
+/* 玻璃的模糊只加在 glass 上：backdrop-filter 即使是 blur(0) 也會建立新的堆疊脈絡，舊風格不碰 */
+[data-style='glass'] .q-header,
+[data-style='glass'] .q-menu {
+  -webkit-backdrop-filter: blur(var(--t-chrome-blur)) saturate(1.4);
+  backdrop-filter: blur(var(--t-chrome-blur)) saturate(1.4);
+}
+
+[data-style='glass'] .q-header {
+  border-bottom: 1px solid var(--t-border);
+}
+
+/* 邊欄在筆電以上常駐，才做霧面；手機與平板是覆蓋式抽屜，維持實心（也省掉整面模糊的重繪） */
+@media (min-width: 1024px) {
+  @supports (color: color-mix(in srgb, red 50%, transparent)) {
+    [data-style] .q-drawer {
+      background: color-mix(in srgb, var(--t-sidebar-bg) var(--t-chrome-opacity), transparent);
+    }
+  }
+
+  [data-style='glass'] .q-drawer {
+    -webkit-backdrop-filter: blur(var(--t-chrome-blur)) saturate(1.4);
+    backdrop-filter: blur(var(--t-chrome-blur)) saturate(1.4);
+  }
+}
+
+/* 便當格 ------------------------------------------------------------ */
+[data-style='bento'] {
+  --tile-tint: 16%;
+}
+
+/* 筆電以上，邊欄是浮在底色上的一塊圓角方塊 */
+@media (min-width: 1024px) {
+  [data-style='bento'] .q-drawer {
+    background: transparent;
+    border-right: 0;
+  }
+
+  [data-style='bento'] .q-drawer__content {
+    margin: var(--t-chrome-inset);
+    height: calc(100% - 2 * var(--t-chrome-inset));
+    border-radius: var(--t-radius);
+    background: var(--t-sidebar-bg);
+  }
+}
+
+[data-style='bento'] .q-header {
+  border-bottom: 0;
+  box-shadow: none;
+}
+
+/* 首頁的 app 方塊：第一塊 2×2 最大，之後每五塊有一塊橫向加寬，其餘 1×1，顏色依序循環 */
+[data-style='bento'] .tile-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  grid-auto-flow: dense;
+  gap: var(--t-space-md);
+  margin: 0;
+}
+
+[data-style='bento'] .tile-grid > * {
+  width: auto;
+  max-width: none;
+  padding: 0;
+}
+
+[data-style='bento'] .tile-grid > :first-child {
+  grid-column: span 2;
+  grid-row: span 2;
+}
+
+[data-style='bento'] .tile-grid > :nth-child(5n + 4) {
+  grid-column: span 2;
+}
+
+[data-style='bento'] .tile-grid .q-card {
+  height: 100%;
+}
+
+[data-style='bento'] .tile-grid .q-item {
+  height: 100%;
+  align-items: center;
+}
+
+[data-style='bento'] .tile-grid > :first-child .q-item {
+  flex-direction: column;
+  justify-content: center;
+  text-align: center;
+  font-size: calc(var(--t-font-size) * 1.25);
+  font-weight: var(--t-heading-weight);
+}
+
+[data-style='bento'] .tile-grid > :first-child .q-icon {
+  font-size: 40px;
+}
+
+[data-style='bento'] .tile-grid > :first-child .q-card,
+[data-style='bento'] .stat-tiles > :first-child {
+  background: var(--t-primary);
+  color: var(--t-on-primary);
+}
+
+[data-style='bento'] .tile-grid > :nth-child(4n + 2) .q-card,
+[data-style='bento'] .stat-tiles > :nth-child(4n + 2) {
+  background: color-mix(in srgb, var(--t-positive) var(--tile-tint), var(--t-panel));
+}
+
+[data-style='bento'] .tile-grid > :nth-child(4n + 3) .q-card,
+[data-style='bento'] .stat-tiles > :nth-child(4n + 3) {
+  background: color-mix(in srgb, var(--t-warning) var(--tile-tint), var(--t-panel));
+}
+
+[data-style='bento'] .tile-grid > :nth-child(4n + 4) .q-card,
+[data-style='bento'] .stat-tiles > :nth-child(4n + 4) {
+  background: color-mix(in srgb, var(--t-info) var(--tile-tint), var(--t-panel));
+}
+
+/* 統計卡片：第一張最寬、數字最大；用 flex 換行，卡片窄時自己退成單欄，不會溢出 */
+[data-style='bento'] .stat-tiles {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--t-space-md);
+  margin: 0;
+}
+
+[data-style='bento'] .stat-tiles > * {
+  flex: 1 1 120px;
+  margin: 0;
+}
+
+[data-style='bento'] .stat-tiles > :first-child {
+  flex: 2 1 220px;
+}
+
+[data-style='bento'] .stat-tiles > :first-child .text-stat {
+  font-size: calc(var(--t-stat-size) * 1.6);
+  line-height: 1.1;
+}
+
+[data-style='bento'] .stat-tiles .text-caption {
+  color: inherit;
+  opacity: 0.85;
+}
+
+/* 指令台 ------------------------------------------------------------ */
+/* 狀態徽章改成小圓點加文字：顏色用各自的語意色（在面板上的對比已由 themes 測試涵蓋） */
+[data-style='command'] .q-badge {
+  background: transparent !important;
+  padding: 0;
+  color: var(--t-primary-text);
+  font-weight: 500;
+}
+
+[data-style='command'] .q-badge::before {
+  content: '';
+  display: inline-block;
+  width: 7px;
+  height: 7px;
+  margin-right: 5px;
+  border-radius: 50%;
+  background: currentColor;
+}
+
+[data-style='command'] .q-badge--outline {
+  border: 0;
+}
+
+[data-style='command'] .q-badge.bg-positive {
+  color: var(--t-positive);
+}
+
+[data-style='command'] .q-badge.bg-warning {
+  color: var(--t-warning);
+}
+
+[data-style='command'] .q-badge.bg-info {
+  color: var(--t-info);
+}
+
+[data-style='command'] .q-badge.bg-negative {
+  color: var(--t-negative);
+}
+
+[data-style='command'] .q-badge.bg-muted {
+  color: var(--t-muted);
+}
+
+/* 工作流程狀態欄的小圓點：只有指令台顯示 */
+.status-dot {
+  display: none;
+}
+
+[data-style='command'] .status-dot {
+  display: inline-block;
+  width: 7px;
+  height: 7px;
+  margin-right: 5px;
+  border-radius: 50%;
+  background: var(--t-muted);
+}
+
+[data-style='command'] .status-dot--done {
+  background: var(--t-positive);
+}
+
+[data-style='command'] .status-dot--active {
+  background: var(--t-warning);
 }

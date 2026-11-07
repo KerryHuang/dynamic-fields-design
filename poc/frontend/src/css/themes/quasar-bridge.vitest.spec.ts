@@ -112,7 +112,50 @@ describe('quasar-bridge.css', () => {
   });
 });
 
+describe('新四種風格的橋接', () => {
+  const config = readFileSync(resolve(process.cwd(), 'quasar.config.ts'), 'utf8');
+  const raw = readFileSync(resolve(process.cwd(), 'src/css/themes/quasar-bridge.css'), 'utf8');
+
+  it('quasar.config 載入每個風格檔，且排在 bridge 之前', () => {
+    for (const s of ['workbench', 'airy', 'enterprise', 'industrial', 'glass', 'bento', 'command', 'botanical']) {
+      expect(config, s).toContain(`themes/${s}.css`);
+      expect(config.indexOf(`themes/${s}.css`), s).toBeLessThan(config.indexOf('themes/quasar-bridge.css'));
+    }
+  });
+
+  it('玻璃效果由 token 驅動，並有 prefers-reduced-transparency 與不支援 backdrop-filter 的實心退路', () => {
+    expect(bridge).toMatch(/backdrop-filter:\s*blur\(var\(--t-chrome-blur\)\)/);
+    expect(bridge).toMatch(/color-mix\(in srgb, var\(--t-sidebar-bg\) var\(--t-chrome-opacity\)/);
+    expect(raw).toMatch(/@media \(prefers-reduced-transparency: reduce\)[^@]*--t-chrome-opacity:\s*100%/);
+    expect(raw).toMatch(/@supports not \(\(backdrop-filter: blur\(1px\)\) or \(-webkit-backdrop-filter: blur\(1px\)\)\)[^@]*--t-chrome-opacity:\s*100%/);
+  });
+
+  it('背景圖與標題字型走 token', () => {
+    expect(bodiesOf(bridge, '[data-style] body').join(';')).toContain('var(--t-bg-image)');
+    expect(bridge).toMatch(/\.text-h6[^{]*\{[^}]*font-family:\s*var\(--t-heading-font\)/);
+  });
+
+  it('指令台：狀態徽章改成小圓點，不再是色塊', () => {
+    expect(bodiesOf(bridge, "[data-style='command'] .q-badge::before").join(';')).toMatch(/border-radius:\s*50%/);
+    expect(bodiesOf(bridge, "[data-style='command'] .q-badge").join(';')).toMatch(/background:\s*transparent\s*!important/);
+  });
+
+  it('便當格：統計卡片與首頁方塊有大小不一的格線，第一塊最大', () => {
+    expect(bodiesOf(bridge, "[data-style='bento'] .tile-grid").join(';')).toContain('display: grid');
+    expect(bodiesOf(bridge, "[data-style='bento'] .tile-grid > :first-child").join(';')).toMatch(/grid-column:\s*span 2/);
+    expect(bodiesOf(bridge, "[data-style='bento'] .stat-tiles > :first-child .text-stat").join(';')).toMatch(/font-size:\s*calc\(var\(--t-stat-size\)/);
+  });
+});
+
 describe('print.css', () => {
+  it('列印不受風格影響：背景圖、半透明與模糊都關掉', () => {
+    const block = bodiesOf(print, '[data-style][data-mode]').join(';');
+    expect(block).toMatch(/--t-bg-image:\s*none/);
+    expect(block).toMatch(/--t-chrome-opacity:\s*100%/);
+    expect(block).toMatch(/--t-panel-opacity:\s*100%/);
+    expect(block).toMatch(/--t-chrome-blur:\s*0px/);
+  });
+
   it('在 @media print 內強制白底黑字', () => {
     expect(print).toContain('@media print');
     const body = bodiesOf(print, 'body').join(';');

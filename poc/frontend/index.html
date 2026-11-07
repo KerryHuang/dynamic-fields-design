@@ -13,7 +13,8 @@
           var c = JSON.parse(localStorage.getItem('formwright.theme.cache'));
           if (c && typeof c === 'object') {
             if (c.mode === 'light' || c.mode === 'dark' || c.mode === 'system') mode = c.mode;
-            if (c.style === 'workbench' || c.style === 'airy' || c.style === 'enterprise' || c.style === 'industrial') style = c.style;
+            if (c.style === 'workbench' || c.style === 'airy' || c.style === 'enterprise' || c.style === 'industrial' ||
+              c.style === 'glass' || c.style === 'bento' || c.style === 'command' || c.style === 'botanical') style = c.style;
           }
         } catch (e) {}
         var dark = false;

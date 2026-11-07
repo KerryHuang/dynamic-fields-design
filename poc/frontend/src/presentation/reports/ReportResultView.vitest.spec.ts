@@ -95,6 +95,7 @@ describe('ReportResultView', () => {
   it('indicator viz shows totals as cards', () => {
     const w = mountView(OK, 'indicator');
     expect(has(w, 'report-indicator').text()).toContain('1,234.5');
+    expect(has(w, 'report-indicator').classes()).toContain('stat-tiles');
     expect(has(w, 'group-row-0').exists()).toBe(false);
   });
 

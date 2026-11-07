@@ -1,6 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { THEME_STYLES } from 'src/domain/theme/theme-model';
 import { THEME_CACHE_KEY, THEME_DEMO_KEY } from 'src/services/theme/theme-storage';
 
 const html = readFileSync(resolve(process.cwd(), 'index.html'), 'utf8');
@@ -37,6 +38,10 @@ describe('index.html 內嵌主題 script', () => {
     ['沒有快取，瀏覽器偏好深色', null, true, 'dark', 'workbench'],
     ['JSON 損毀', '{oops', true, 'dark', 'workbench'],
     ['快取是 null', 'null', false, 'light', 'workbench'],
+    ['快取 glass', '{"mode":"light","style":"glass"}', false, 'light', 'glass'],
+    ['快取 bento', '{"mode":"dark","style":"bento"}', false, 'dark', 'bento'],
+    ['快取 command', '{"mode":"light","style":"command"}', false, 'light', 'command'],
+    ['快取 botanical', '{"mode":"dark","style":"botanical"}', false, 'dark', 'botanical'],
     ['style 未知', '{"mode":"light","style":"neon"}', false, 'light', 'workbench'],
     ['mode 大小寫不符', '{"mode":"Dark","style":"airy"}', false, 'light', 'airy'],
   ])('%s', (_name, cache, prefersDark, mode, style) => {
@@ -44,6 +49,13 @@ describe('index.html 內嵌主題 script', () => {
     if (cache !== null) localStorage.setItem(THEME_CACHE_KEY, cache);
     run();
     expect(root.getAttribute('data-mode')).toBe(mode);
+    expect(root.getAttribute('data-style')).toBe(style);
+  });
+
+  it.each(THEME_STYLES)('內嵌 script 認得 THEME_STYLES 裡的 %s', (style) => {
+    stubPrefersDark(false);
+    localStorage.setItem(THEME_CACHE_KEY, JSON.stringify({ mode: 'light', style }));
+    run();
     expect(root.getAttribute('data-style')).toBe(style);
   });
 

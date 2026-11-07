@@ -1,0 +1,74 @@
+/* 便當格（bento）：色塊分區、大圓角。版面（大小不一的方塊、最大的重要數字）在 quasar-bridge.css 的 .tile-grid 與 .stat-tiles。 */
+[data-style='bento'] {
+  --t-space-xs: 3px;
+  --t-space-sm: 6px;
+  --t-space-md: 10px;
+  --t-space-lg: 14px;
+  --t-space-xl: 24px;
+  --t-field-height: 38px;
+  --t-row-height: 34px;
+  --t-font-family: system-ui, -apple-system, 'Segoe UI', 'Noto Sans', 'PingFang TC', 'Microsoft JhengHei', sans-serif;
+  --t-font-size: 13.5px;
+  --t-radius: 14px;
+  --t-panel-padding: 12px;
+  --t-cell-padding: 4px 10px;
+  --t-topbar-height: 44px;
+  --t-th-weight: 700;
+  --t-th-border-bottom: 1px;
+  --t-selected-marker: 0;
+  --t-title-size: 18px;
+  --t-stat-size: 32px;
+  --t-stat-weight: 900;
+  --t-heading-font: system-ui, -apple-system, 'Segoe UI', 'Noto Sans', 'PingFang TC', 'Microsoft JhengHei', sans-serif;
+  --t-heading-weight: 800;
+  --t-num-font: system-ui, -apple-system, 'Segoe UI', 'Noto Sans', 'PingFang TC', 'Microsoft JhengHei', sans-serif;
+  --t-bg-image: none;
+  --t-chrome-opacity: 100%;
+  --t-chrome-blur: 0px;
+  --t-panel-opacity: 100%;
+  --t-chrome-inset: 8px;
+  --t-card-border: 0;
+  --t-card-shadow: none;
+}
+
+[data-style='bento'][data-mode='light'] {
+  --t-bg: #e4e8f1;
+  --t-panel: #ffffff;
+  --t-text: #14203a;
+  --t-muted: #515d78;
+  --t-border: #c5cde0;
+  --t-primary: #12408c;
+  --t-on-primary: #ffffff;
+  --t-primary-text: #12408c;
+  --t-negative: #b3261e;
+  --t-on-negative: #ffffff;
+  --t-topbar-bg: #ffffff;
+  --t-topbar-fg: #14203a;
+  --t-sidebar-bg: #ffffff;
+  --t-sidebar-fg: #14203a;
+  --t-sidebar-muted: #515d78;
+  --t-selected-bg: #12408c;
+  --t-selected-fg: #ffffff;
+  --t-chart-1: #12408c;
+}
+
+[data-style='bento'][data-mode='dark'] {
+  --t-bg: #0e1422;
+  --t-panel: #1a2336;
+  --t-text: #e8edf8;
+  --t-muted: #a8b3cb;
+  --t-border: #34405a;
+  --t-primary: #8fb3f3;
+  --t-on-primary: #0d1a33;
+  --t-primary-text: #8fb3f3;
+  --t-negative: #f28b82;
+  --t-on-negative: #2b0a07;
+  --t-topbar-bg: #1a2336;
+  --t-topbar-fg: #e8edf8;
+  --t-sidebar-bg: #1a2336;
+  --t-sidebar-fg: #e8edf8;
+  --t-sidebar-muted: #a8b3cb;
+  --t-selected-bg: #8fb3f3;
+  --t-selected-fg: #0d1a33;
+  --t-chart-1: #8fb3f3;
+}

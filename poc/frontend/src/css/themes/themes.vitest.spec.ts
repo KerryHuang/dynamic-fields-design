@@ -3,7 +3,8 @@ import { resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
 
 const DIR = resolve(process.cwd(), 'src/css/themes');
-const STYLES = ['workbench', 'airy', 'enterprise', 'industrial'] as const;
+const STYLES = ['workbench', 'airy', 'enterprise', 'industrial', 'glass', 'bento', 'command', 'botanical'] as const;
+const OLD_STYLES = ['workbench', 'airy', 'enterprise', 'industrial'] as const;
 const MODES = ['light', 'dark', 'system'] as const;
 const read = (f: string) => readFileSync(resolve(DIR, f), 'utf8');
 
@@ -42,6 +43,15 @@ function luminance(hex: string): number {
   });
   return 0.2126 * r + 0.7152 * g + 0.0722 * b;
 }
+/** 把 front 以 alpha 疊在 back 上（sRGB 直接混合，和 CSS color-mix 的預設一致）。 */
+function mix(front: string, back: string, alpha: number): string {
+  const f = parseInt(front.slice(1), 16);
+  const b = parseInt(back.slice(1), 16);
+  const ch = (shift: number) => Math.round(((f >> shift) & 255) * alpha + ((b >> shift) & 255) * (1 - alpha));
+  return `#${[16, 8, 0].map((sh) => ch(sh).toString(16).padStart(2, '0')).join('')}`;
+}
+/** 便當格色塊：狀態色占的比例，要和 quasar-bridge.css 的 --tile-tint 一致。 */
+const TILE_TINT = 0.16;
 function contrast(a: string, b: string): number {
   const [hi, lo] = [luminance(a), luminance(b)].sort((x, y) => y - x);
   return (hi + 0.05) / (lo + 0.05);
@@ -62,6 +72,8 @@ const LAYOUT = new Set([
   '--t-font-family', '--t-font-size', '--t-radius', '--t-panel-padding', '--t-cell-padding', '--t-topbar-height', '--t-th-weight',
   '--t-th-border-bottom', '--t-selected-marker', '--t-title-size', '--t-stat-size', '--t-stat-weight', '--t-card-border', '--t-card-shadow',
   '--t-space-xs', '--t-space-sm', '--t-space-md', '--t-space-lg', '--t-space-xl', '--t-field-height', '--t-row-height',
+  '--t-heading-font', '--t-heading-weight', '--t-num-font', '--t-bg-image', '--t-chrome-opacity', '--t-chrome-blur', '--t-panel-opacity',
+  '--t-chrome-inset',
 ]);
 const combinations = STYLES.flatMap((s) => MODES.map((m) => [s, m] as const));
 /** system 在瀏覽器偏好淺色與深色時各解析成一種 palette，兩種都要過。 */
@@ -69,8 +81,8 @@ const palettesOf = (s: (typeof STYLES)[number], m: (typeof MODES)[number]) =>
   (m === 'system' ? (['light', 'dark'] as const) : [m]).map((x) => palette(s, x));
 
 describe('主題 token', () => {
-  it('有 4 種風格 × 3 種模式共 12 種組合', () => {
-    expect(combinations).toHaveLength(12);
+  it('有 8 種風格 × 3 種模式共 24 種組合', () => {
+    expect(combinations).toHaveLength(24);
   });
 
   it.each(combinations)('%s %s 內文對比至少 4.5', (style, mode) => {
@@ -97,7 +109,7 @@ describe('主題 token', () => {
     // airy 的框線與陰影隨模式改變，寫在模式區塊，所以比較合併後的結果
     const keys = (s: (typeof STYLES)[number], m: 'light' | 'dark') => Object.keys(palette(s, m)).sort();
     const first = keys('workbench', 'light');
-    expect(first).toHaveLength(52);
+    expect(first).toHaveLength(60);
     expect(keys('workbench', 'dark')).toEqual(first);
     for (const s of STYLES) for (const m of ['light', 'dark'] as const) expect(keys(s, m)).toEqual(first);
   });
@@ -137,6 +149,79 @@ describe('主題 token', () => {
       expect(ff).toContain('system-ui');
       expect(ff).toContain("'Microsoft JhengHei'");
       expect(ff.endsWith('sans-serif')).toBe(true);
+    }
+  });
+
+  it('標題與數字字型也只用系統字，並且有通用字族當退路', () => {
+    for (const s of STYLES) {
+      const t = files[s].get(`[data-style='${s}']`)!;
+      for (const k of ['--t-heading-font', '--t-num-font']) {
+        expect(t[k], `${s} ${k}`).toMatch(/(sans-serif|serif|monospace)$/);
+      }
+    }
+    const botanical = files.botanical.get("[data-style='botanical']")!;
+    expect(botanical['--t-heading-font']).toMatch(/serif$/);
+    expect(botanical['--t-heading-font']).toContain("'PMingLiU'");
+    const command = files.command.get("[data-style='command']")!;
+    expect(command['--t-num-font']).toMatch(/monospace$/);
+    expect(command['--t-num-font']).toContain('ui-monospace');
+  });
+
+  it('舊四種風格的新 token 都是中性值，外觀維持原樣', () => {
+    for (const s of OLD_STYLES) {
+      const t = files[s].get(`[data-style='${s}']`)!;
+      expect(t['--t-heading-font'], s).toBe(t['--t-font-family']);
+      expect(t['--t-num-font'], s).toBe(t['--t-font-family']);
+      expect(t['--t-heading-weight'], s).toBe('500');
+      expect(t['--t-bg-image'], s).toBe('none');
+      expect(t['--t-chrome-opacity'], s).toBe('100%');
+      expect(t['--t-panel-opacity'], s).toBe('100%');
+      expect(t['--t-chrome-blur'], s).toBe('0px');
+      expect(t['--t-chrome-inset'], s).toBe('0px');
+    }
+  });
+
+  it('指令台是八種裡最密的：列高、欄位高、字級都最小，間距不比其他風格鬆', () => {
+    const px = (v: string) => Number.parseFloat(v);
+    const cmd = files.command.get("[data-style='command']")!;
+    for (const s of STYLES.filter((x) => x !== 'command')) {
+      const t = files[s].get(`[data-style='${s}']`)!;
+      for (const k of ['--t-row-height', '--t-field-height', '--t-font-size', '--t-topbar-height', '--t-panel-padding']) {
+        expect(px(cmd[k]), `${k} 比 ${s} 小`).toBeLessThan(px(t[k]));
+      }
+      for (const k of ['--t-space-xs', '--t-space-sm', '--t-space-md', '--t-space-lg', '--t-space-xl']) {
+        expect(px(cmd[k]), `${k} 不比 ${s} 鬆`).toBeLessThanOrEqual(px(t[k]));
+      }
+    }
+  });
+
+  it('玻璃：只有外框半透明，內建退路讓實心底也讀得清楚', () => {
+    const glass = { ...palette('glass', 'light'), ...files.glass.get("[data-style='glass']") };
+    expect(palette('glass', 'dark')['--t-bg-image']).toMatch(/radial-gradient/);
+    expect(glass['--t-chrome-blur']).not.toBe('0px');
+    expect(Number.parseFloat(glass['--t-chrome-opacity'])).toBeGreaterThanOrEqual(60);
+    expect(Number.parseFloat(glass['--t-chrome-opacity'])).toBeLessThan(100);
+    expect(Number.parseFloat(glass['--t-panel-opacity'])).toBeGreaterThanOrEqual(90);
+    expect(glass['--t-bg-image']).toMatch(/radial-gradient/);
+  });
+
+  it.each(['light', 'dark'] as const)('玻璃 %s：半透明的邊欄與頂列疊在背景色塊上，文字對比仍至少 4.5', (mode) => {
+    const p = palette('glass', mode);
+    const alpha = Number.parseFloat(p['--t-chrome-opacity']) / 100;
+    const blobs = [...p['--t-bg-image'].matchAll(/#[0-9a-f]{6}\b/gi)].map((m) => m[0]);
+    expect(blobs.length).toBeGreaterThan(1);
+    for (const behind of [...blobs, p['--t-bg']]) {
+      for (const [fg, bg] of [['--t-sidebar-fg', '--t-sidebar-bg'], ['--t-sidebar-muted', '--t-sidebar-bg'], ['--t-topbar-fg', '--t-topbar-bg']]) {
+        expect(contrast(p[fg], mix(p[bg], behind, alpha)), `${fg} 在 ${behind} 上`).toBeGreaterThanOrEqual(4.5);
+      }
+    }
+  });
+
+  it.each(['light', 'dark'] as const)('便當格 %s：色塊底（狀態色混入面板）上的文字對比至少 4.5', (mode) => {
+    const p = palette('bento', mode);
+    for (const tint of ['--t-positive', '--t-warning', '--t-info', '--t-negative']) {
+      expect(contrast(p['--t-text'], mix(p[tint], p['--t-panel'], TILE_TINT)), `text on ${tint} tile`).toBeGreaterThanOrEqual(4.5);
+      expect(contrast(p['--t-muted'], mix(p[tint], p['--t-panel'], TILE_TINT)), `muted on ${tint} tile`).toBeGreaterThanOrEqual(4.5);
     }
   });
 
