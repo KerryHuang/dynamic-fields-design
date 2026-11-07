@@ -1,5 +1,5 @@
 import type {
-  AdminGroup, AdminUser, DeleteCheck, DeleteTargetRef, AdminUserCreate, AdminUserUpdate, AuthOptions, AuthUser, ConditionNode, ConvertBody, Conversion, DesignerField, DetailRowPayload, DynamicRecord, EntitySummary, FieldConfig, FieldType, Group, GroupImpact, I18nText, LightPage, ListView, Me, MenuItem, ModuleDetail, ModulePermissions, ModuleSchema, RecordConversion,
+  AdminGroup, AdminUser, AttachmentSettings, UploadedAttachment, DeleteCheck, DeleteTargetRef, AdminUserCreate, AdminUserUpdate, AuthOptions, AuthUser, ConditionNode, ConvertBody, Conversion, DesignerField, DetailRowPayload, DynamicRecord, EntitySummary, FieldConfig, FieldType, Group, GroupImpact, I18nText, LightPage, ListView, Me, MenuItem, ModuleDetail, ModulePermissions, ModuleSchema, RecordConversion,
   ImportPreview, ImportResult, PagedResponse, RecordHistoryEntry, RelatedTab, Rule, RollupSource, User, ViewSort, Workflow,
 } from 'src/domain/dynamic/types';
 import type {
@@ -367,4 +367,22 @@ export const dynamicApi = {
     http.post<ImportPreview>(`/modules/${key}/import`, importForm(file), { params: { commit: false } }).then(data),
   commitImport: (key: string, file: File) =>
     http.post<ImportResult>(`/modules/${key}/import`, importForm(file), { params: { commit: true } }).then(data),
+  getAttachmentSettings: () => http.get<AttachmentSettings>('/attachments/settings').then(data),
+  uploadAttachment: (recordId: number, fieldId: number, file: File) => {
+    const body = new FormData();
+    body.append('file', file);
+    return http.post<UploadedAttachment>(`/records/${recordId}/attachments/${fieldId}`, body).then(data);
+  },
+  /** The blob and the suggested file name; errors (404/403/401) go through the usual ApiError path. */
+  downloadAttachment: async (recordId: number, fieldId: number, fileId: string) => {
+    const r = await http.get<Blob>(`/records/${recordId}/attachments/${fieldId}/${fileId}`, { responseType: 'blob', validateStatus: () => true });
+    if (r.status >= 400) {
+      let body: unknown;
+      try { body = JSON.parse(await r.data.text()); } catch { body = undefined; }
+      const err = toApiError({ response: { status: r.status, data: body } });
+      handleAuthFailure(err);
+      throw err;
+    }
+    return r.data;
+  },
 };

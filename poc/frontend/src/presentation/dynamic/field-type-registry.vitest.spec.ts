@@ -9,7 +9,7 @@ import zhTW from 'src/i18n/zh-TW.json';
 import type { FieldType, SchemaField } from 'src/domain/dynamic/types';
 import { defaultValueOf, fieldTypeRegistry, operatorsFor } from './field-type-registry';
 
-const ALL: FieldType[] = ['text', 'textarea', 'integer', 'decimal', 'currency', 'percent', 'date', 'datetime', 'time', 'boolean', 'email', 'phone', 'url', 'enum', 'multienum', 'user', 'formula', 'autonumber', 'reference', 'rollup'];
+const ALL: FieldType[] = ['text', 'textarea', 'integer', 'decimal', 'currency', 'percent', 'date', 'datetime', 'time', 'boolean', 'email', 'phone', 'url', 'enum', 'multienum', 'user', 'formula', 'autonumber', 'reference', 'rollup', 'attachment'];
 
 function f(type: FieldType, scale?: number, options: SchemaField['options'] = []): SchemaField {
   return { id: 1, key: 'k', type, label: { 'zh-TW': '欄' }, options, config: { required: false, readOnly: false, showInList: true, isFilterable: true, isSortable: true, scale } };

@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { useQuasar } from 'quasar';
-import { computed, ref } from 'vue';
+import { computed, ref, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { useRoute, useRouter } from 'vue-router';
 import { useRecord, useSaveRecord } from 'src/application/dynamic/queries/records-queries';
@@ -27,6 +27,9 @@ const save = useSaveRecord();
 const serverErrors = ref<Record<string, string[]>>();
 const detailErrors = ref<Record<string, string[]>>();
 const form = ref<InstanceType<typeof DynamicForm>>();
+// Set by an attachment upload (it bumps the stored rowVersion); a reloaded record supersedes it.
+const uploadedRowVersion = ref<string>();
+watch(() => recordQuery.data.value?.rowVersion, () => { uploadedRowVersion.value = undefined; });
 
 const isExtensionNew = computed(() => !isEdit.value && schemaQuery.data.value?.kind === 'extension');
 const hostKey = ref<string | null>(null);
@@ -96,7 +99,7 @@ async function onSubmit(values: Record<string, unknown>, details: Record<string,
   }
   try {
     const rec = isEdit.value
-      ? await save.mutateAsync({ moduleKey: moduleKey.value, id: recordId.value, values, rowVersion: recordQuery.data.value!.rowVersion, details: sentDetails })
+      ? await save.mutateAsync({ moduleKey: moduleKey.value, id: recordId.value, values, rowVersion: uploadedRowVersion.value ?? recordQuery.data.value!.rowVersion, details: sentDetails })
       : await save.mutateAsync({ moduleKey: moduleKey.value, values, ...(isExtensionNew.value && { hostKey: hostKey.value! }), details: sentDetails });
     await router.push(`/dynamic/${moduleKey.value}/${rec.id}`);
   } catch (e) {
@@ -147,7 +150,7 @@ async function onSubmit(values: Record<string, unknown>, details: Record<string,
       />
       <DynamicForm
         ref="form" :schema="schemaQuery.data.value!" :mode="isEdit ? 'edit' : 'create'" :record="isEdit ? recordQuery.data.value : undefined" :initial="prefill" :references="prefillReferences"
-        :server-errors="serverErrors" :detail-errors="detailErrors" :saving="save.isPending.value" @submit="onSubmit"
+        :server-errors="serverErrors" :detail-errors="detailErrors" :saving="save.isPending.value" @submit="onSubmit" @row-version="(v) => (uploadedRowVersion = v)"
       />
     </template>
   </q-page>

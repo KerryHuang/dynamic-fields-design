@@ -42,6 +42,7 @@ public static class FieldImportParser
             FieldType.MultiEnum => MultiEnum(field, StripInjectionApostrophe(text)),
             FieldType.User => User(StripInjectionApostrophe(text), lookups),
             FieldType.Reference => Reference(field, StripInjectionApostrophe(text), lookups),
+            FieldType.Attachment => (null, "附件欄位不支援匯入"),
             _ => (null, "系統計算的欄位"),
         };
     }

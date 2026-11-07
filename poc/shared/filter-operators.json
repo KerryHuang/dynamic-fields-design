@@ -15,6 +15,7 @@
   "user": ["eq", "ne", "in", "notIn", "isEmpty", "isNotEmpty"],
   "multienum": ["in", "notIn", "isEmpty", "isNotEmpty"],
   "textarea": [],
+  "attachment": [],
   "formula": ["eq", "ne", "gt", "gte", "lt", "lte", "between", "isEmpty", "isNotEmpty"],
   "rollup": ["eq", "ne", "gt", "gte", "lt", "lte", "between", "isEmpty", "isNotEmpty"],
   "formula:date": ["eq", "ne", "gt", "gte", "lt", "lte", "between", "withinNextDays", "withinLastDays", "isEmpty", "isNotEmpty"],

@@ -2,7 +2,8 @@
 import { computed } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { resolveI18n } from 'src/domain/dynamic/i18n-text';
-import type { DynamicRecord, ModuleSchema, SchemaField } from 'src/domain/dynamic/types';
+import type { AttachmentFile, DynamicRecord, ModuleSchema, SchemaField } from 'src/domain/dynamic/types';
+import AttachmentInput from 'src/components/framework/AttachmentInput.vue';
 import { fieldTypeRegistry } from 'src/presentation/dynamic/field-type-registry';
 import { fieldColClass, isFullWidth } from 'src/presentation/dynamic/form-layout';
 import { referenceView } from 'src/presentation/dynamic/reference-display';
@@ -32,6 +33,10 @@ const visibleBlocks = computed(() => props.schema.blocks
               <router-link v-if="refOf(f)!.to" :to="refOf(f)!.to!">{{ refOf(f)!.text }}</router-link>
               <template v-else>{{ refOf(f)!.text }}</template>
             </template>
+            <AttachmentInput
+              v-else-if="f.type === 'attachment'" :model-value="(record.values[f.key] as AttachmentFile[] | undefined)"
+              :label="resolveI18n(f.label, locale)" :field-id="f.id" :record-id="record.id" readonly
+            />
             <template v-else>{{ fieldTypeRegistry[f.type].format(record.values[f.key], f, locale) }}</template>
           </q-item-section>
         </q-item>

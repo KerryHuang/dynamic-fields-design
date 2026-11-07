@@ -51,6 +51,8 @@ public static class FieldRules
         rule.Must(n => n is not null && n.IsValid(out _)).WithMessage("名稱必須有繁體中文");
 
     /// <summary>系統計算欄位：公式、自動編號與彙總，值由系統產生、不接受輸入。</summary>
+    public const string AttachmentInDetailError = "明細模組不支援附件欄位，請放在表頭模組";
+
     public static bool IsComputed(FieldType type) => type is FieldType.Formula or FieldType.AutoNumber or FieldType.Rollup;
 
     /// <summary>依型別檢查 MaxLength、Scale、IsFilterable、IsSortable；DefaultValue 需要選項與使用者，留給 handler。</summary>

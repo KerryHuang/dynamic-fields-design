@@ -6,7 +6,28 @@ export type I18nText = Partial<Record<Locale, string>>;
 export type FieldType =
   | 'text' | 'textarea' | 'integer' | 'decimal' | 'currency' | 'percent'
   | 'date' | 'datetime' | 'time' | 'boolean' | 'email' | 'phone' | 'url'
-  | 'enum' | 'multienum' | 'user' | 'formula' | 'autonumber' | 'reference' | 'rollup';
+  | 'enum' | 'multienum' | 'user' | 'formula' | 'autonumber' | 'reference' | 'rollup' | 'attachment';
+
+/** One file in an attachment field's value; the server owns id, name and size. */
+export interface AttachmentFile {
+  id: string;
+  name: string;
+  size: number;
+}
+
+export interface AttachmentSettings {
+  uploadEnabled: boolean;
+  /** Why uploads are off, when the operator gave a reason; the UI falls back to a generic localized text. */
+  disabledReason?: string;
+  maxBytes: number;
+  allowedExtensions: string[];
+  maxFilesPerField: number;
+}
+
+export interface UploadedAttachment extends AttachmentFile {
+  /** The record's new rowVersion: an upload is saved on its own and bumps it. */
+  rowVersion: string;
+}
 
 export interface FieldConfig {
   required: boolean;

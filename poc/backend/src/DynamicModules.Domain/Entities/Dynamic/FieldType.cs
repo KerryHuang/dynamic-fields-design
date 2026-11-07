@@ -9,7 +9,7 @@ public enum FieldType
 {
     Text, Textarea, Integer, Decimal, Currency, Percent, Date, DateTime, Time,
     Boolean, Email, Phone, Url, Enum, MultiEnum, User,
-    Formula, AutoNumber, Reference, Rollup
+    Formula, AutoNumber, Reference, Rollup, Attachment
 }
 
 public sealed class LowercaseEnumConverter<T> : JsonConverter<T> where T : struct, Enum

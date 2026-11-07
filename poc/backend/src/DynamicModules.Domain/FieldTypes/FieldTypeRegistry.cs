@@ -22,7 +22,7 @@ public sealed class FieldTypeRegistry
         new CurrencyHandler(), new PercentHandler(), new DateHandler(), new DateTimeHandler(),
         new TimeHandler(), new BooleanHandler(), new EmailHandler(), new PhoneHandler(),
         new UrlHandler(), new EnumHandler(), new MultiEnumHandler(), new UserHandler(),
-        new FormulaHandler(), new AutoNumberHandler(), new ReferenceHandler(), new RollupHandler()
+        new FormulaHandler(), new AutoNumberHandler(), new ReferenceHandler(), new RollupHandler(), new AttachmentHandler()
     ]);
 
     public IFieldTypeHandler Get(FieldType type) =>

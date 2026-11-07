@@ -45,6 +45,12 @@ public class TestApp : WebApplicationFactory<Program>
         _keepAlive.Open();
     }
 
+    /// <summary>附件的本機儲存根目錄（每個 TestApp 一個，Dispose 時刪除），測試可直接檢查磁碟上有什麼。</summary>
+    internal string AttachmentRoot { get; } = Path.Combine(Path.GetTempPath(), $"dm-att-{Guid.NewGuid():N}");
+
+    /// <summary>額外的設定值（如 Attachments:MaxBytes）；須在 host 啟動前指定。</summary>
+    internal Dictionary<string, string?> Settings { get; } = new();
+
     /// <summary>可設定的假時鐘；預設是真實時間，測試需要固定日期時再指定 Now。</summary>
     public FakeBusinessTime Clock { get; } = new();
 
@@ -59,6 +65,8 @@ public class TestApp : WebApplicationFactory<Program>
     protected override void ConfigureWebHost(IWebHostBuilder builder)
     {
         builder.UseSetting("ConnectionStrings:Dynamic", _connectionString);
+        builder.UseSetting("Attachments:Root", AttachmentRoot);
+        foreach (var (key, value) in Settings) builder.UseSetting(key, value);
         // 空字串覆蓋 appsettings.Development.json 的開發用密碼，代表「沒設」
         builder.UseSetting("Auth:InitialAdminPassword", InitialAdminPassword ?? "");
         builder.ConfigureLogging(l => l.AddProvider(Logs));
@@ -122,6 +130,7 @@ public class TestApp : WebApplicationFactory<Program>
         base.Dispose(disposing);
         if (!disposing) return;
         _keepAlive.Dispose();
+        if (Directory.Exists(AttachmentRoot)) Directory.Delete(AttachmentRoot, recursive: true);
         if (_databaseFile is null) return;
         SqliteConnection.ClearAllPools();
         foreach (var f in Directory.GetFiles(Path.GetDirectoryName(_databaseFile)!, Path.GetFileName(_databaseFile) + "*"))

@@ -6,10 +6,11 @@ namespace DynamicModules.Domain.Reports;
 /// <summary>報表可用欄位的資格判斷：哪些不能進報表、哪些能分組／加總／取最小最大。</summary>
 public static class ReportFieldEligibility
 {
-    /// <summary>彙總欄位，加上直接或間接引用彙總欄位的公式（彙總值不在記錄上，報表無法取得）。</summary>
+    /// <summary>彙總與附件欄位，加上直接或間接引用彙總欄位的公式（彙總值不在記錄上，報表無法取得）。</summary>
     public static IReadOnlySet<long> ExcludedFieldIds(Module m)
     {
-        var excluded = m.Blocks.SelectMany(b => b.Fields).Where(f => f.Type == FieldType.Rollup).Select(f => f.Id).ToHashSet();
+        // 附件的值是檔案描述陣列，不是可分組、統計的值，也不進報表
+        var excluded = m.Blocks.SelectMany(b => b.Fields).Where(f => f.Type is FieldType.Rollup or FieldType.Attachment).Select(f => f.Id).ToHashSet();
         // EvaluationOrder 被引用者在前，單趟就能傳遞排除
         foreach (var f in FormulaGraph.EvaluationOrder(m))
             if (FormulaGraph.RefsOf(f).Any(excluded.Contains)) excluded.Add(f.Id);

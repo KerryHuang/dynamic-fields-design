@@ -8,6 +8,7 @@ using DynamicModules.Application.Dynamic.Rollups;
 using DynamicModules.Domain.Entities.Dynamic;
 using DynamicModules.Domain.FieldTypes;
 using DynamicModules.Domain.Repositories.Dynamic;
+using DynamicModules.Domain.Modules;
 using MediatR;
 
 namespace DynamicModules.Application.Dynamic.FieldService.Commands.AddField;
@@ -59,6 +60,9 @@ public class AddFieldHandler(
             var bad = FieldRules.CheckFormula(module, 0, config);
             if (bad is not null) return bad;
         }
+
+        if (request.Type == FieldType.Attachment && ModuleRelations.IsDetail(module))
+            return ServiceResult.Invalid(new Dictionary<string, string[]> { ["Type"] = [FieldRules.AttachmentInDetailError] });
 
         var badScope = FieldRules.CheckScope(module, request.Type, config);
         if (badScope is not null) return badScope;

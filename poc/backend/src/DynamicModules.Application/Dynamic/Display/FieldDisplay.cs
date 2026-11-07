@@ -2,6 +2,7 @@ using System.Globalization;
 using System.Text.Json;
 using DynamicModules.Application.Dynamic.References;
 using DynamicModules.Domain.Entities.Dynamic;
+using DynamicModules.Domain.FieldTypes;
 using DynamicModules.Domain.FieldTypes.Handlers;
 
 namespace DynamicModules.Application.Dynamic.Display;
@@ -29,6 +30,7 @@ public static class FieldDisplay
             FieldType.User => userNames.GetValueOrDefault(v.GetString()!, v.GetString()!),
             FieldType.Reference => ReferenceText(ReferenceHandler.KeyOf(v) ?? v.GetRawText(), reference),
             FieldType.Formula or FieldType.Rollup => Computed(field, v),
+            FieldType.Attachment => string.Join("; ", AttachmentValue.Parse(v).Select(f => f.Name)),
             _ => v.GetString() ?? v.GetRawText(),
         };
     }

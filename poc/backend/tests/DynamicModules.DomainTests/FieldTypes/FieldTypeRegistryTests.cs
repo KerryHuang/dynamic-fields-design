@@ -8,11 +8,11 @@ namespace DynamicModules.DomainTests.FieldTypes;
 public class FieldTypeRegistryTests
 {
     [Fact]
-    public void Registry_AllTwentyTypesRegistered()
+    public void Registry_AllTypesRegistered()
     {
         var registry = FieldTypeRegistry.CreateDefault();
         var all = Enum.GetValues<FieldType>();
-        all.Should().HaveCount(20);
+        all.Should().HaveCount(21);
         foreach (var type in all)
             registry.Get(type).Type.Should().Be(type);
     }

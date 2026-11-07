@@ -1,6 +1,7 @@
 import type { Component } from 'vue';
 import { getActivePinia } from 'pinia';
 import { z, type ZodTypeAny } from 'zod';
+import AttachmentInput from 'src/components/framework/AttachmentInput.vue';
 import DateSelect from 'src/components/framework/DateSelect.vue';
 import GenericSelect from 'src/components/framework/GenericSelect.vue';
 import MoneyNumberInput from 'src/components/framework/MoneyNumberInput.vue';
@@ -83,6 +84,8 @@ const checks: Record<FieldType, Check> = {
   rollup: () => null,
   autonumber: () => null,
   // Module targets store the record id (number), entity targets the entity key (string); existence is checked by the backend.
+  // Files enter only through the upload endpoint; the backend rejects ids it does not already hold.
+  attachment: (v) => (Array.isArray(v) ? null : '附件的值必須是檔案清單'),
   reference: (v) => (isNum(v) || (typeof v === 'string' && v !== '') ? null : '參照的資料不存在或無權選取'),
 };
 
@@ -205,6 +208,7 @@ const OPERATORS: Record<FieldType, FilterOperator[]> = {
   rollup: ['eq', 'ne', 'gt', 'gte', 'lt', 'lte', 'between', 'isEmpty', 'isNotEmpty'],
   autonumber: ['eq', 'ne', 'in', 'notIn', 'contains', 'startsWith', 'isEmpty', 'isNotEmpty'],
   reference: ['eq', 'ne', 'in', 'notIn', 'isEmpty', 'isNotEmpty'],
+  attachment: [],
 };
 const FORMULA_DATE_OPERATORS: FilterOperator[] = OPERATORS.date;
 
@@ -294,6 +298,11 @@ export const fieldTypeRegistry: Record<FieldType, FieldTypeEntry> = {
     filterInput: formulaFilterInput,
   },
   autonumber: entry('autonumber', readOnlyText),
+  attachment: entry(
+    'attachment',
+    plain(AttachmentInput, (f) => ({ fieldId: f.id })),
+    (v) => (v as { name: string }[]).map((x) => x.name).join('、'),
+  ),
   // format shows the key: it has no access to record.references; list/detail pages render the title.
   reference: {
     ...entry('reference', plain(PopupSelect, popupProps)),

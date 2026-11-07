@@ -32,7 +32,7 @@ const $q = useQuasar();
 
 const TYPES: FieldType[] = [
   'text', 'textarea', 'integer', 'decimal', 'currency', 'percent', 'date', 'datetime', 'time',
-  'boolean', 'email', 'phone', 'url', 'enum', 'multienum', 'user', 'formula', 'autonumber', 'reference', 'rollup',
+  'boolean', 'email', 'phone', 'url', 'enum', 'multienum', 'user', 'formula', 'autonumber', 'reference', 'rollup', 'attachment',
 ];
 const typeOptions = computed(() => TYPES.map((v) => ({ value: v, label: t(`designer.types.${v}`) })));
 

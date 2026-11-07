@@ -118,8 +118,11 @@ public class DemoGenerationTests
 [Collection(DemoGeneratedCollection.Name)]
 public class DemoGenerationSharedTests(DemoGeneratedFixture fx)
 {
+    /// <summary>附件的值只能經上傳端點產生（產生器不寫檔案），舊的八個 Demo 模組也沒有附件欄位。</summary>
+    private static readonly FieldType[] RecordValueTypes = [.. Enum.GetValues<FieldType>().Where(t => t != FieldType.Attachment)];
+
     [Fact]
-    public async Task Generate_CoversAllTwentyFieldTypes()
+    public async Task Generate_CoversAllRecordValueFieldTypes()
     {
         fx.Generated();
         var db = fx.Host.Db.Context;
@@ -128,12 +131,12 @@ public class DemoGenerationSharedTests(DemoGeneratedFixture fx)
         moduleIds.Should().HaveCount(8);
         var fields = await db.Set<Field>().AsNoTracking()
             .Where(f => moduleIds.Contains(f.ModuleId) && f.Status == FieldStatus.Active).ToListAsync();
-        fields.Select(f => f.Type).Distinct().Should().BeEquivalentTo(Enum.GetValues<FieldType>());
+        fields.Select(f => f.Type).Distinct().Should().BeEquivalentTo(RecordValueTypes);
 
         var filled = (await db.Set<Record>().AsNoTracking().Where(r => moduleIds.Contains(r.ModuleId)).ToListAsync())
             .SelectMany(r => JsonDocument.Parse(r.ValuesJson).RootElement.EnumerateObject())
             .Where(p => p.Value.ValueKind != JsonValueKind.Null).Select(p => p.Name).ToHashSet();
-        foreach (var type in Enum.GetValues<FieldType>())
+        foreach (var type in RecordValueTypes)
             fields.Should().Contain(f => f.Type == type && filled.Contains(f.Key), $"{type} 要有欄位在某筆記錄有值");
     }
 

@@ -4,13 +4,16 @@ using DynamicModules.Application;
 using DynamicModules.Application.Common.Acting;
 using DynamicModules.Application.Common.Security;
 using DynamicModules.Application.Common.Time;
+using DynamicModules.Application.Dynamic.AttachmentService;
 using DynamicModules.Application.Dynamic.DemoService;
 using DynamicModules.Application.Dynamic.ReportService;
 using DynamicModules.Application.Dynamic.TemplateService;
 using DynamicModules.Domain.Data;
 using DynamicModules.Domain.Entities.Dynamic;
 using DynamicModules.Persistence;
+using DynamicModules.Persistence.Files;
 using DynamicModules.Persistence.Seed;
+using DynamicModules.WebAPI.Attachments;
 using DynamicModules.WebAPI.Demo;
 using DynamicModules.WebAPI.Security;
 using DynamicModules.WebAPI.Time;
@@ -40,6 +43,10 @@ builder.Services.AddPersistence(builder.Configuration);
 builder.Services.AddScoped<ICurrentUser, ClaimsCurrentUser>();
 builder.Services.AddSingleton<IPasswordService, PasswordService>();
 builder.Services.AddSingleton(new AuthSettings(builder.Configuration.GetValue<bool>("Demo:LoginEnabled")));
+// 附件：預設放在資料庫旁的 attachments 目錄（記憶體資料庫則放暫存目錄）。Demo 登入開啟時預設不開放上傳，可用 Attachments:UploadEnabled 明確覆寫。
+var attachmentSettings = AttachmentSettingsFactory.Create(builder.Configuration, dynamicConnection);
+builder.Services.AddSingleton(attachmentSettings);
+builder.Services.AddSingleton<IAttachmentStore>(new LocalAttachmentStore(attachmentSettings.Root));
 // 鎖定判斷用真實時間；IBusinessTime 會被 ActingScope 覆寫，不能用
 builder.Services.AddSingleton(TimeProvider.System);
 builder.Services.AddSingleton<IBusinessTime, TaipeiBusinessTime>();

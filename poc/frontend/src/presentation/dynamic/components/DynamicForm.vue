@@ -1,12 +1,13 @@
 <script setup lang="ts">
 import { toTypedSchema } from '@vee-validate/zod';
 import { useForm } from 'vee-validate';
-import { computed, onMounted, ref, watch } from 'vue';
+import { computed, onMounted, provide, ref, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { fillPatch, fillReferenceInfos, lockedFillKeys } from 'src/domain/dynamic/fill';
 import { resolveI18n } from 'src/domain/dynamic/i18n-text';
 import { canAdvance, intersectAllowed, isReadOnlyState, selectableStates } from 'src/domain/dynamic/workflow';
 import type { DetailRowPayload, DynamicRecord, ModuleSchema, ReferenceInfo, SchemaField } from 'src/domain/dynamic/types';
+import { attachmentContextKey } from 'src/presentation/dynamic/attachment-context';
 import { buildZodSchema } from 'src/presentation/dynamic/build-zod-schema';
 import DetailGrid from 'src/presentation/dynamic/details/DetailGrid.vue';
 import { fieldColClass, isFullWidth } from 'src/presentation/dynamic/form-layout';
@@ -29,7 +30,16 @@ const props = defineProps<{
   detailErrors?: Record<string, string[]>;
   saving?: boolean;
 }>();
-const emit = defineEmits<{ submit: [values: Record<string, unknown>, details: Record<string, DetailRowPayload[]>] }>();
+const emit = defineEmits<{
+  submit: [values: Record<string, unknown>, details: Record<string, DetailRowPayload[]>];
+  /** An attachment upload saved the record on its own; the page must send this rowVersion with the next save. */
+  rowVersion: [rowVersion: string];
+}>();
+// Attachments can only be uploaded to a saved record, so the context exists only in edit mode.
+provide(attachmentContextKey, {
+  get recordId() { return props.mode === 'edit' ? (props.record?.id ?? null) : null; },
+  onUploaded: (rowVersion) => emit('rowVersion', rowVersion),
+});
 const { t, locale } = useI18n();
 
 const fields = computed(() => props.schema.blocks.flatMap((b) => b.fields));
