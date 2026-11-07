@@ -17,6 +17,11 @@ const complex = computed(() => isNestedCondition(props.modelValue));
 const draft = ref<ConditionNode | undefined>(props.modelValue);
 watch(() => props.modelValue, (v) => { draft.value = v; });
 
+// 沒有任何條件時預設收合，把空間讓給清單；有條件（含稍後才載入的檢視）或使用者手動展開才展開。
+const hasCondition = computed(() => !!pruneCondition(props.modelValue));
+const open = ref(hasCondition.value);
+watch(hasCondition, (has) => { if (has) open.value = true; });
+
 function apply() {
   emit('update:modelValue', pruneCondition(complex.value ? props.modelValue : draft.value));
 }
@@ -27,7 +32,7 @@ function clear() {
 </script>
 
 <template>
-  <FilterContainer :title="t('dynamic.filter.title')" :apply-label="t('dynamic.filter.apply')" :clear-label="t('dynamic.filter.clear')" @apply="apply" @clear="clear">
+  <FilterContainer v-model:open="open" :title="t('dynamic.filter.title')" :apply-label="t('dynamic.filter.apply')" :clear-label="t('dynamic.filter.clear')" @apply="apply" @clear="clear">
     <div v-if="complex" class="text-muted" data-testid="complex-notice">{{ t('dynamic.filter.complex') }}</div>
     <div v-else-if="fields.length === 0" class="text-muted" data-testid="no-filter-fields">{{ t('dynamic.filter.noFields') }}</div>
     <ConditionEditor v-else v-model="draft" :fields="fields" />

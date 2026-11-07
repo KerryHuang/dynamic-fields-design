@@ -41,6 +41,39 @@ describe('FilterPanel', () => {
     expect(w.findComponent({ name: 'ConditionEditor' }).exists()).toBe(false);
   });
 
+  describe('collapsed by default when there are no conditions', () => {
+    const applyShown = (w: ReturnType<typeof mountPanel>) => w.find('[data-testid="apply"]').exists();
+
+    it('is collapsed with no condition, and an empty group counts as no condition', () => {
+      expect(applyShown(mountPanel())).toBe(false);
+      expect(applyShown(mountPanel({ all: [] }))).toBe(false);
+      expect(applyShown(mountPanel({ all: [{ field: 0, op: 'eq' }] }))).toBe(false);
+    });
+
+    it('is expanded when a condition is already set', () => {
+      expect(applyShown(mountPanel({ all: [{ field: 1, op: 'eq', value: 'x' }] }))).toBe(true);
+    });
+
+    it('expands when the user opens it by hand', async () => {
+      const w = mountPanel();
+      await w.get('.q-item').trigger('click');
+      expect(applyShown(w)).toBe(true);
+    });
+
+    it('expands when a condition arrives later (saved view loads after mount)', async () => {
+      const w = mountPanel();
+      await w.setProps({ modelValue: { all: [{ field: 1, op: 'eq', value: 'x' }] } });
+      expect(applyShown(w)).toBe(true);
+    });
+
+    it('stays open after the conditions are cleared, so the user keeps their place', async () => {
+      const w = mountPanel({ all: [{ field: 1, op: 'eq', value: 'x' }] });
+      await w.get('[data-testid="clear"]').trigger('click');
+      await w.setProps({ modelValue: undefined });
+      expect(applyShown(w)).toBe(true);
+    });
+  });
+
   it('lists only filterable fields', () => {
     const w = mountPanel({ all: [{ field: 1, op: 'eq', value: 'x' }] });
     const options = w.findAllComponents(GenericSelect)[1]!.props('options') as { value: string; label: string }[];

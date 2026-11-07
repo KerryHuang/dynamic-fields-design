@@ -1,13 +1,13 @@
 <script setup lang="ts">
-import { ref } from 'vue';
 
 defineProps<{ title: string; applyLabel: string; clearLabel: string }>();
 defineEmits<{ apply: []; clear: [] }>();
-const open = ref(true);
+/** 展開狀態由使用者或父層控制；沒人管時預設展開。 */
+const open = defineModel<boolean>('open', { default: true });
 </script>
 
 <template>
-  <q-expansion-item v-model="open" :label="title" icon="filter_list" default-opened dense class="filter-container">
+  <q-expansion-item v-model="open" :label="title" icon="filter_list" dense class="filter-container">
     <!-- 清除與套用放在標題列（展開時），條件列才不必再多占一整列 -->
     <template #header>
       <q-item-section avatar><q-icon name="filter_list" /></q-item-section>
