@@ -18,9 +18,15 @@ public static class DependencyInjection
 {
     public static IServiceCollection AddPersistence(this IServiceCollection services, IConfiguration configuration)
     {
-        services.AddDbContext<DynamicDbContext>(o => o.UseSqlite(
-            configuration.GetConnectionString("Dynamic"),
-            b => b.MigrationsAssembly(typeof(DependencyInjection).Assembly.FullName)));
+        // Sqlite:MmapSizeMb（MB，預設 0＝關閉）：每條連線的記憶體對映大小，只在 SQLite 時套用，見 README 的設定說明
+        var mmapBytes = long.TryParse(configuration["Sqlite:MmapSizeMb"], out var mmapMb) ? mmapMb * 1024 * 1024 : 0;
+        services.AddDbContext<DynamicDbContext>(o =>
+        {
+            o.UseSqlite(
+                configuration.GetConnectionString("Dynamic"),
+                b => b.MigrationsAssembly(typeof(DependencyInjection).Assembly.FullName));
+            if (mmapBytes > 0) o.AddInterceptors(new SqliteMmapInterceptor(mmapBytes));
+        });
         services.AddScoped<ITransactionManager, EfTransactionManager>();
         return services.AddPersistenceRepositories();
     }
