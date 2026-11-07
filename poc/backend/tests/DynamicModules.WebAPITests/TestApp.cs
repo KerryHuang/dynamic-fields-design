@@ -23,6 +23,9 @@ public class TestApp : WebApplicationFactory<Program>
     private readonly string _connectionString;
     private readonly string? _databaseFile;
 
+    /// <summary>fileDatabase 模式的資料庫檔路徑；否則為 null。</summary>
+    internal string? DatabaseFile => _databaseFile;
+
     private readonly bool _seedDemoPeople;
     private readonly bool _realAuth;
 

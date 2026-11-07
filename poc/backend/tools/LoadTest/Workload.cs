@@ -168,6 +168,7 @@ public sealed class Workload(IServiceProvider sp, SeedInfo seed)
         var rec = new Recorder();
         var total = ops.Sum(o => o.Weight);
         var done = 0;
+        var perUser = new int[users];
         var sw = Stopwatch.StartNew();
         var tasks = Enumerable.Range(0, users).Select(u => Task.Run(async () =>
         {
@@ -179,10 +180,14 @@ public sealed class Workload(IServiceProvider sp, SeedInfo seed)
                 var op = ops.First(o => (pick -= o.Weight) < 0);
                 await Execute(op, rnd, rec);
                 Interlocked.Increment(ref done);
+                perUser[u]++;
                 if (thinkMs.Max > 0) await Task.Delay(rnd.Next(thinkMs.Min, thinkMs.Max + 1));
             }
         })).ToArray();
         await Task.WhenAll(tasks);
+        // 公平性：每個使用者完成的操作數。排隊公平時彼此接近；少數人獨占鎖時差距極大
+        var sorted = perUser.OrderBy(x => x).ToArray();
+        Console.WriteLine($"  每人完成次數：最少 {sorted[0]}、中位 {sorted[sorted.Length / 2]}、最多 {sorted[^1]}");
         return new PhaseResult(name, users, sw.Elapsed.TotalSeconds, done / sw.Elapsed.TotalSeconds, rec.Summarize());
     }
 }
