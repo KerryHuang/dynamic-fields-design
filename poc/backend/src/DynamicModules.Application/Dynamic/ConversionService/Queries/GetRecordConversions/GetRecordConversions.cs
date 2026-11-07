@@ -14,7 +14,8 @@ public record GetRecordConversionsRequest(long RecordId) : IRequest<ServiceResul
 
 /// <summary>這張來源記錄可以做的轉換（只列啟用中的定義）、每個來源明細列的已轉量與剩餘量，以及已轉出的目標單據。</summary>
 public class GetRecordConversionsHandler(
-    IConversionRepository conversions, IModuleRepository modules, IRecordRepository records, IDynamicAccessGuard guard, ConversionLedger ledger)
+    IConversionRepository conversions, IModuleRepository modules, IRecordRepository records, IDynamicAccessGuard guard, ConversionLedger ledger,
+    ConversionValidator validator)
     : IRequestHandler<GetRecordConversionsRequest, ServiceResult>
 {
     public const string TargetAddDenied = "沒有目標模組的新增權限";
@@ -40,18 +41,21 @@ public class GetRecordConversionsHandler(
 
             string? reason = source.IsWritable() && target.IsWritable() ? null : ModuleGate.ClosedMessage;
             var def = conversion.Definition;
+            // 定義已失效（追溯欄位被停用、被帶值佔用…）：不能轉，也不去算剩餘量（欄位可能已不在）
+            var valid = await validator.IsDefinitionValidAsync(source, target, def, ct);
+            if (reason is null && !valid) reason = Commands.ConvertRecord.ConvertRecordHandler.DefinitionInvalid;
             if (reason is null && def.SourceStates.Count > 0 && (source.Workflow?.StateOf(sourceValues) is not { } state || !def.SourceStates.Contains(state)))
                 reason = Commands.ConvertRecord.ConvertRecordHandler.SourceStateMessage;
             var add = await guard.AuthorizeAsync(target, PermissionAction.Add, ct);
             if (reason is null && add.Permissions is null) reason = TargetAddDenied;
 
             List<ConversionLineStatus>? lines = null;
-            if (def.Lines is { } cfg)
+            if (def.Lines is { } cfg && valid)
             {
                 (lines, var hidden) = await LinesAsync(conversion, source, target, record, ct);
                 if (reason is null && hidden) reason = QuantityHidden;
             }
-            else if (reason is null && (await ledger.TargetsOfAsync(conversion, record.Id, ct)).Count > 0)
+            else if (def.Lines is null && reason is null && (await ledger.TargetsOfAsync(conversion, record.Id, ct)).Count > 0)
                 reason = Commands.ConvertRecord.ConvertRecordHandler.AlreadyConverted;
 
             var targetRead = await guard.AuthorizeAsync(target, PermissionAction.Read, ct);

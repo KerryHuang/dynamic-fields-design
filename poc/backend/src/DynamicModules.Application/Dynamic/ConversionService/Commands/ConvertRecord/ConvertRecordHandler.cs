@@ -21,7 +21,7 @@ namespace DynamicModules.Application.Dynamic.ConversionService.Commands.ConvertR
 /// </summary>
 public class ConvertRecordHandler(
     IConversionRepository conversions, IModuleRepository modules, IRecordRepository records, IDynamicAccessGuard guard,
-    IUnitOfWork uow, ConversionLedger ledger, IRequestHandler<CreateRecordRequest, ServiceResult> create)
+    IUnitOfWork uow, ConversionLedger ledger, ConversionValidator validator, IRequestHandler<CreateRecordRequest, ServiceResult> create)
     : IRequestHandler<ConvertRecordRequest, ServiceResult>
 {
     public const string NotFound = "轉換定義不存在或已停用";
@@ -30,6 +30,8 @@ public class ConvertRecordHandler(
     public const string NeedLines = "至少要選一列明細來轉換";
     public const string LineNotOfSource = "這一列不屬於這張來源單據";
     public const string OverRemaining = "轉換數量超過剩餘量";
+    public const string DefinitionInvalid = "轉換定義已失效，請聯絡管理者檢查設定";
+    public const string StoredMismatch = "目標單據存下的追溯值或數量與轉換不一致，已取消轉換";
 
     public async Task<ServiceResult> Handle(ConvertRecordRequest request, CancellationToken ct)
     {
@@ -58,7 +60,10 @@ public class ConvertRecordHandler(
 
         // 先確認使用者有目標模組的新增權限，免得白白搶鎖
         var addAccess = await guard.AuthorizeAsync(target, PermissionAction.Add, ct);
-        if (addAccess.Permissions is null) return addAccess.Denied!;
+        if (addAccess.Permissions is not { } addPerms) return addAccess.Denied!;
+
+        // 取互斥權之前重驗定義：設計器存檔後追溯欄位可能被停用、或被帶值設定佔用，那樣轉出去的單據會丟掉追溯值、已轉量算不到而反覆超轉
+        if (!await validator.IsDefinitionValidAsync(source, target, def, ct)) return ServiceResult.Conflict(DefinitionInvalid);
 
         // 取得互斥權：條件更新來源記錄的 RowVersion；之後的剩餘量檢查與建立都在這把鎖之下
         record.RowVersion = Guid.NewGuid().ToString();
@@ -73,7 +78,8 @@ public class ConvertRecordHandler(
 
         var sourceFields = source.Blocks.SelectMany(b => b.Fields).ToDictionary(f => f.Id);
         var overrides = request.Values ?? [];
-        var (headerValues, systemKeys) = CopyValues(def.Header.Copy, sourceFields, perms, sourceValues, overrides);
+        var targetFields = target.Blocks.SelectMany(b => b.Fields).ToDictionary(f => f.Id);
+        var (headerValues, systemKeys) = CopyValues(def.Header.Copy, sourceFields, perms, targetFields, addPerms, sourceValues, overrides);
         var traceKey = $"f_{def.Header.SourceFieldId}";
         headerValues[traceKey] = JsonSerializer.SerializeToElement(record.Id);
         systemKeys.Add(traceKey);
@@ -90,7 +96,33 @@ public class ConvertRecordHandler(
             details = new Dictionary<string, List<DetailRowInput>> { [def.Lines.TargetModuleKey] = built.Rows! };
         }
 
-        return await create.Handle(new CreateRecordRequest(target.Key, headerValues, null, details, systemKeys), ct);
+        var created = await create.Handle(new CreateRecordRequest(target.Key, headerValues, null, details, systemKeys), ct);
+        if (!created.IsCreated) return created;
+        return await VerifyStoredAsync(conversion, target, record.Id, (DynamicRecordResponse)created.Data!, details, ct) ? created : ServiceResult.Conflict(StoredMismatch);
+    }
+
+    /// <summary>
+    /// 最後一道防線：目標表頭與每一列實際存下的追溯值、數量必須等於系統給的值（已轉量完全由它們算出來）。
+    /// 讀資料庫的值，不讀回應——回應會依使用者的欄位權限遮蔽。回 false 時整筆交易回滾。
+    /// </summary>
+    private async Task<bool> VerifyStoredAsync(
+        Conversion conversion, Module target, long sourceId, DynamicRecordResponse created,
+        Dictionary<string, List<DetailRowInput>>? details, CancellationToken ct)
+    {
+        await uow.CommitAsync(ct);
+        var def = conversion.Definition;
+        var header = await records.GetAsync(created.Id, ct);
+        if (header is null || ConversionLedger.NumberOf(RecordValueProcessor.Parse(header.ValuesJson), $"f_{def.Header.SourceFieldId}") != sourceId) return false;
+        if (def.Lines is not { } lines) return true;
+
+        var targetLine = await modules.GetByKeyAsync(lines.TargetModuleKey, includeChildren: true, ct);
+        var stored = (await records.ListByRefAsync(ModuleRelations.DetailFieldOf(targetLine!)!.Id, header.Id.ToString(), ct))
+            .Select(r => RecordValueProcessor.Parse(r.ValuesJson)).ToList();
+        var (fromKey, qtyKey) = ($"f_{lines.SourceLineFieldId}", $"f_{lines.Quantity.To}");
+        var expected = details![lines.TargetModuleKey]
+            .Select(r => (ConversionLedger.NumberOf(r.Values!, fromKey), ConversionLedger.NumberOf(r.Values!, qtyKey))).OrderBy(x => x.Item1).ThenBy(x => x.Item2).ToList();
+        var actual = stored.Select(v => (ConversionLedger.NumberOf(v, fromKey), ConversionLedger.NumberOf(v, qtyKey))).OrderBy(x => x.Item1).ThenBy(x => x.Item2).ToList();
+        return expected.SequenceEqual(actual);
     }
 
     private async Task<(ServiceResult? Failure, List<DetailRowInput>? Rows)> BuildLinesAsync(
@@ -103,6 +135,9 @@ public class ConvertRecordHandler(
             return (ServiceResult.NotFound(RecordMapper.ModuleNotFound), null);
         var lineAccess = await guard.AuthorizeDetailAsync(source, sourceLineModule, PermissionAction.Read, ct);
         if (lineAccess.Permissions is not { } linePerms) return (lineAccess.Denied, null);
+        var targetLineAccess = await guard.AuthorizeDetailAsync(target, targetLineModule, PermissionAction.Add, ct);
+        if (targetLineAccess.Permissions is not { } targetLinePerms) return (targetLineAccess.Denied, null);
+        var targetLineFields = targetLineModule.Blocks.SelectMany(b => b.Fields).ToDictionary(f => f.Id);
 
         var parentField = ModuleRelations.DetailFieldOf(sourceLineModule)!;
         var fields = sourceLineModule.Blocks.SelectMany(b => b.Fields).ToDictionary(f => f.Id);
@@ -133,7 +168,7 @@ public class ConvertRecordHandler(
             }
             takenInRequest[lineId] = takenInRequest.GetValueOrDefault(lineId) + quantity;
 
-            var (rowValues, keys) = CopyValues(lines.Copy, fields, linePerms, values!, new Dictionary<string, JsonElement?>());
+            var (rowValues, keys) = CopyValues(lines.Copy, fields, linePerms, targetLineFields, targetLinePerms, values!, new Dictionary<string, JsonElement?>());
             var qtyKey = $"f_{lines.Quantity.To}";
             var traceKey = $"f_{lines.SourceLineFieldId}";
             rowValues[qtyKey] = JsonSerializer.SerializeToElement(quantity);
@@ -146,18 +181,21 @@ public class ConvertRecordHandler(
     }
 
     /// <summary>
-    /// 依對應複製來源值（看不到的來源欄位不複製、沒有值的略過），再套上使用者給的覆寫值。
-    /// 只有「沒被覆寫」的複製欄位才算系統填入；被覆寫的欄位照使用者自己的寫入權限處理。
+    /// 依對應複製來源值（看不到的來源欄位不複製、使用者對目標寫不進去的目的欄位也不複製、沒有值的略過），再套上使用者給的覆寫值。
+    /// 系統填入只略過「欄位設定為唯讀」這一層，權限層照舊：使用者不能寫（看不到或唯讀權限）的目的欄位不複製，
+    /// 否則可先改來源、再轉換，把值寫進自己無權寫入的欄位。只有「沒被覆寫」的複製欄位才算系統填入；被覆寫的欄位照使用者自己的寫入權限處理。
     /// </summary>
     private static (Dictionary<string, JsonElement?> Values, HashSet<string> SystemKeys) CopyValues(
-        List<DynamicModules.Domain.ValueObjects.FillMapping> copy, IReadOnlyDictionary<long, Field> sourceFields,
-        EffectivePermissions perms, IReadOnlyDictionary<string, JsonElement?> sourceValues, IReadOnlyDictionary<string, JsonElement?> overrides)
+        List<DynamicModules.Domain.ValueObjects.FillMapping> copy, IReadOnlyDictionary<long, Field> sourceFields, EffectivePermissions perms,
+        IReadOnlyDictionary<long, Field> targetFields, EffectivePermissions targetPerms,
+        IReadOnlyDictionary<string, JsonElement?> sourceValues, IReadOnlyDictionary<string, JsonElement?> overrides)
     {
         var values = new Dictionary<string, JsonElement?>();
         var system = new HashSet<string>();
         foreach (var m in copy)
         {
             if (!sourceFields.TryGetValue(m.From, out var from) || !perms.CanSee(from)) continue;
+            if (!targetFields.TryGetValue(m.To, out var to) || !targetPerms.CanWrite(to)) continue;
             if (!sourceValues.TryGetValue(from.Key, out var v) || v is not { ValueKind: not JsonValueKind.Null }) continue;
             values[$"f_{m.To}"] = v;
             system.Add($"f_{m.To}");

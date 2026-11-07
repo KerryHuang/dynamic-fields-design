@@ -39,6 +39,9 @@ public class DeleteRecordHandler(
         if (plan.Blocking.Count > 0)
             return ServiceResult.ConflictWith(Referenced, new DeleteBlockedResponse(await WithTitlesAsync(plan.Blocking.Take(MaxListed), ct), plan.BlockingTotal));
 
+        // 連帶刪除（Cascade）或清空參照（SetNull）的記錄也要守狀態機的唯讀：在任何寫入之前檢查，有一筆被鎖就整個不做
+        if (await TouchesLockedRecordAsync(plan, ct)) return ServiceResult.Conflict(LockedReferencedMessage);
+
         // 交易由 TransactionBehavior 包住（ITransactionalRequest）：軟刪、清空、索引、彙總重算一起提交或回滾。
         var now = time.Now;
         var deleted = plan.ToDelete.Prepend(record).ToList();
@@ -77,7 +80,22 @@ public class DeleteRecordHandler(
         return ServiceResult.Success();
     }
 
+    /// <summary>連帶刪除或清空的記錄（去重，清空的排除已在刪除清單的）裡，有沒有處於狀態機唯讀狀態的；每個模組只載入一次。</summary>
+    private async Task<bool> TouchesLockedRecordAsync(DeletePlan plan, CancellationToken ct)
+    {
+        var deletedIds = plan.ToDelete.Select(r => r.Id).ToHashSet();
+        var affected = plan.ToDelete.Concat(plan.ToClear.Select(c => c.Record).Where(r => !deletedIds.Contains(r.Id))).DistinctBy(r => r.Id);
+        var byModule = new Dictionary<long, Module?>();
+        foreach (var r in affected)
+        {
+            if (!byModule.TryGetValue(r.ModuleId, out var m)) byModule[r.ModuleId] = m = await modules.GetByIdAsync(r.ModuleId, includeChildren: true, ct);
+            if (m?.Workflow is { } wf && wf.IsLocked(RecordValueProcessor.Parse(r.ValuesJson))) return true;
+        }
+        return false;
+    }
+
     public const string Referenced = "還有其他資料參照這筆記錄，不能刪除";
+    public const string LockedReferencedMessage = "有處於唯讀狀態的單據參照這筆記錄，不能刪除";
     public const string TooDeep = "連帶刪除超過 5 層，請先手動刪除下層資料";
     private const int MaxListed = 10;
 

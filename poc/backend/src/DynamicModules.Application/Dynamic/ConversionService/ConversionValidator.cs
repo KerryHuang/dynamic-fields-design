@@ -31,7 +31,25 @@ public class ConversionValidator(IModuleRepository modules)
             Err("targetModuleKey", "來源與目標必須是不同的獨立模組，且不是明細模組");
         if (errors.Count > 0 || source is null || target is null) return ServiceResult.Invalid(errors);
 
-        var def = input.Definition;
+        await CheckDefinitionAsync(source, target, input.Definition, errors, ct);
+        return errors.Count > 0 ? ServiceResult.Invalid(errors) : null;
+    }
+
+    /// <summary>
+    /// 執行轉換前重驗已存的定義（設計器存檔之後，追溯欄位可能被停用、或被別的設定佔用）：與存檔時同一套判斷，不複製規則。
+    /// 傳入的來源與目標要已載入區塊與欄位。
+    /// </summary>
+    public async Task<bool> IsDefinitionValidAsync(Module source, Module target, ConversionDefinition definition, CancellationToken ct)
+    {
+        if (!IsDocument(source) || !IsDocument(target) || source.Id == target.Id) return false;
+        var errors = new Dictionary<string, string[]>();
+        await CheckDefinitionAsync(source, target, definition, errors, ct);
+        return errors.Count == 0;
+    }
+
+    private async Task CheckDefinitionAsync(Module source, Module target, ConversionDefinition def, Dictionary<string, string[]> errors, CancellationToken ct)
+    {
+        void Err(string key, string message) => errors.TryAdd(key, [message]);
         if (def.SourceStates is { Count: > 0 })
         {
             var states = source.Workflow?.States.Select(s => s.OptionId).ToHashSet() ?? [];
@@ -44,17 +62,19 @@ public class ConversionValidator(IModuleRepository modules)
 
         // 表頭：目標表頭上指向來源的唯讀參照欄位
         var header = def.Header;
-        if (header is null) return ServiceResult.Invalid(new Dictionary<string, string[]> { ["definition.header"] = ["缺少表頭設定"] });
+        if (header is null)
+        {
+            Err("definition.header", "缺少表頭設定");
+            return;
+        }
         var trace = targetFields.GetValueOrDefault(header.SourceFieldId);
         if (trace is not { Type: FieldType.Reference } || trace.Config.RefTarget is not { Kind: ReferenceTarget.ModuleKind } rt || rt.Key != source.Key
             || trace.Config.Relation == ReferenceRelation.Detail || !trace.Config.ReadOnly)
             Err("definition.header.sourceFieldId", "必須是目標表頭上、指向來源模組、設為唯讀的參照欄位");
-        else traceKeys.Add(trace.Id);
+        else traceKeys.Add(trace.Id); // 表頭追溯欄位是參照欄位，設計器本來就不允許它當帶值的目的欄位
         CheckCopy(header.Copy, sourceFields, targetFields, traceKeys, "definition.header.copy", errors);
 
         if (def.Lines is { } lines) await CheckLinesAsync(lines, source, target, traceKeys, errors, ct);
-
-        return errors.Count > 0 ? ServiceResult.Invalid(errors) : null;
     }
 
     public async Task<(Module Source, Module Target)> ModulesOfAsync(ConversionInput input, CancellationToken ct) =>
@@ -79,15 +99,22 @@ public class ConversionValidator(IModuleRepository modules)
         var from = ActiveFields(sourceLine);
         var to = ActiveFields(targetLine);
 
+        var fillTargets = FillTargets(targetLine);
         var trace = to.GetValueOrDefault(lines.SourceLineFieldId);
         if (trace is not { Type: FieldType.Integer } || !trace.Config.ReadOnly)
             Err("definition.lines.sourceLineFieldId", "必須是目標明細上、設為唯讀的整數欄位（存來源明細列的 Id）");
+        else if (fillTargets.Contains(trace.Id))
+            Err("definition.lines.sourceLineFieldId", FillTargetMessage);
         else traceKeys.Add(trace.Id);
 
         var qty = lines.Quantity;
         if (qty is null || !from.TryGetValue(qty.From, out var qf) || !to.TryGetValue(qty.To, out var qt)
             || qf.Type is not (FieldType.Integer or FieldType.Decimal) || qt.Type is not (FieldType.Integer or FieldType.Decimal))
             Err("definition.lines.quantity", "數量欄位兩邊都必須是整數或小數欄位");
+        else if (qt.Id == lines.SourceLineFieldId)
+            Err("definition.lines.quantity", "數量欄位不能和追溯欄位是同一欄");
+        else if (fillTargets.Contains(qt.Id))
+            Err("definition.lines.quantity", FillTargetMessage);
         else traceKeys.Add(qt.Id);
 
         CheckCopy(lines.Copy, from, to, traceKeys, "definition.lines.copy", errors);
@@ -118,6 +145,13 @@ public class ConversionValidator(IModuleRepository modules)
             }
         }
     }
+
+    public const string FillTargetMessage = "追溯欄位與數量欄位不能是參照欄位帶值的目的欄位（帶值會蓋掉轉換填的值）";
+
+    /// <summary>啟用中的參照欄位所設定的帶值（任何模式）的目的欄位。</summary>
+    private static HashSet<long> FillTargets(Module m) => m.Blocks.SelectMany(b => b.Fields)
+        .Where(f => f is { Type: FieldType.Reference, Status: FieldStatus.Active, Config.Fill: not null })
+        .SelectMany(f => f.Config.Fill!.Map.Select(x => x.To)).ToHashSet();
 
     private static bool IsDocument(Module m) => m.Kind == ModuleKind.Standalone && !ModuleRelations.IsDetail(m);
 
