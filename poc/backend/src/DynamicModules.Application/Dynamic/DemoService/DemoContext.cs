@@ -12,6 +12,9 @@ public sealed class DemoContext(DateOnly today, ISender sender, TemplateIdMap id
     public TemplateIdMap Ids { get; } = ids;
     public IReadOnlyDictionary<string, long> GroupIds { get; } = groupIds;
 
+    /// <summary>「CRM 與銷售」應用程式的對照（它的模組代碼 order 等與四個範本重名，所以另放一份）；沒有開啟時是 null。</summary>
+    public DemoContext? Crm { get; set; }
+
     /// <summary>限定名 &lt;模組代號&gt;.&lt;欄位代號&gt; → Field.Key。</summary>
     public string Key(string qualified) => Ids.FieldKeys[qualified];
 

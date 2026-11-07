@@ -56,6 +56,7 @@ public static class DependencyInjection
         services.AddScoped<Dynamic.AppService.AppOpenPlanner>();
         services.AddScoped<Dynamic.AppService.AppResponseBuilder>();
         services.AddScoped<Dynamic.AppService.AppFlowInstaller>();
+        services.AddScoped<Dynamic.AppService.Commands.AppOpener>();
         services.AddScoped<Dynamic.AppService.AppExporter>();
         services.AddScoped<Dynamic.DemoService.DemoPreflight>();
         services.AddScoped<Dynamic.DemoService.DemoStructure>();

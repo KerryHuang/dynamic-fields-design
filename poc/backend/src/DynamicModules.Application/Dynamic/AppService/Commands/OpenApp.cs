@@ -21,13 +21,36 @@ public record OpenAppRequest(string PackageId, OpenAppBody Body)
     public PermissionAction RequiredDesignerAction => PermissionAction.Add;
 }
 
-public class OpenAppHandler(
-    AppOpenPlanner planner, TemplateInstantiator instantiator, ISender sender, IAppRepository apps,
-    AppResponseBuilder builder, AppFlowInstaller flows, IUnitOfWork uow, ICurrentUser user, IBusinessTime time) : IRequestHandler<OpenAppRequest, ServiceResult>
+public class OpenAppHandler(AppOpener opener) : IRequestHandler<OpenAppRequest, ServiceResult>
 {
-    public async Task<ServiceResult> Handle(OpenAppRequest request, CancellationToken ct)
+    public async Task<ServiceResult> Handle(OpenAppRequest request, CancellationToken ct) =>
+        (await opener.OpenAsync(request.PackageId, request.Body, ct)).Result;
+
+    /// <summary>模組代號依「被本套件內其他模組參照的先啟用」排序；循環時照宣告順序。</summary>
+    internal static IReadOnlyList<string> ActivationOrder(AppPackageData package) => AppOpener.ActivationOrder(package);
+}
+
+/// <summary>開啟的結果。Ids 是代號到實際 id／鍵的對照（成功才有），給需要依代號找欄位的呼叫端（Demo 產生器）用。</summary>
+public sealed record AppOpenOutcome(ServiceResult Result, TemplateIdMap? Ids);
+
+/// <summary>
+/// 開啟應用程式的實作，從 <see cref="OpenAppHandler"/> 抽出來，讓 Demo 產生器在已經是系統管理員的交易內直接開啟，
+/// 並拿到欄位、選項的對照。呼叫端負責權限檢查（HTTP 路徑由 <see cref="OpenAppRequest"/> 的 pipeline 檢查）。
+/// </summary>
+public class AppOpener(
+    AppOpenPlanner planner, TemplateInstantiator instantiator, ISender sender, IAppRepository apps,
+    AppResponseBuilder builder, AppFlowInstaller flows, IUnitOfWork uow, ICurrentUser user, IBusinessTime time)
+{
+    public async Task<AppOpenOutcome> OpenAsync(string packageId, OpenAppBody body, CancellationToken ct)
     {
-        var plan = await planner.PlanAsync(request.PackageId, request.Body, ct);
+        TemplateIdMap? ids = null;
+        var result = await OpenCoreAsync(packageId, body, i => ids = i, ct);
+        return new AppOpenOutcome(result, result.IsSuccess ? ids : null);
+    }
+
+    private async Task<ServiceResult> OpenCoreAsync(string packageId, OpenAppBody body, Action<TemplateIdMap> onIds, CancellationToken ct)
+    {
+        var plan = await planner.PlanAsync(packageId, body, ct);
         if (plan.Failure is { } failure) return failure;
         var preview = plan.Preview;
         if (preview.Errors.Count > 0)
@@ -35,7 +58,6 @@ public class OpenAppHandler(
         if (!preview.CanOpen) return ServiceResult.ConflictWith("無法開啟應用程式", preview);
 
         var package = plan.Source!.Package;
-        var body = request.Body;
         var warnings = new List<string>(preview.Warnings);
 
         // 群組：map 用既有的、create 建新的（Key 由 CreateGroup 自動產生）、skip 與未列出的一律不給權限
@@ -55,6 +77,7 @@ public class OpenAppHandler(
             new AppInstantiation(groupIds, plan.ExternalModuleKeys, package.FieldAccess, package.OptionScopes));
         if (!instantiated.IsSuccess) return instantiated;
         var result = (InstantiateTemplateResponse)instantiated.Data!;
+        onIds(result.Ids!);
         warnings.AddRange(result.Warnings);
 
         // 啟用：被參照的先啟用。套件的模組開啟後直接是 Active，沒有開了但還是草稿的中間狀態；

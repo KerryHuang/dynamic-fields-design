@@ -1,5 +1,6 @@
 using DynamicModules.Application.Common;
 using DynamicModules.Application.Common.Acting;
+using DynamicModules.Application.Dynamic.ConversionService.Commands.ConvertRecord;
 using DynamicModules.Application.Dynamic.DemoService.Scenarios;
 using DynamicModules.Application.Dynamic.RecordService.Commands.CreateRecord;
 using DynamicModules.Application.Dynamic.RecordService.Commands.UpdateRecord;
@@ -31,6 +32,15 @@ public sealed class DemoPlan(DateOnly today, Random random, IReadOnlyDictionary<
     public IReadOnlyList<DemoRecord> Created => _created;
 
     public DemoRecord Create(string moduleCode, DateTime at, string userId, string label, Func<DemoContext, CreateRecordRequest> build)
+    {
+        var record = new DemoRecord(moduleCode, DateOnly.FromDateTime(at));
+        if (Add(at, userId, label, async (ctx, ct) => Fill(record, await ctx.Sender.Send(build(ctx), ct))))
+            _created.Add(record);
+        return record;
+    }
+
+    /// <summary>單據轉換：產生的目標記錄回填到回傳的 DemoRecord，後面的步驟可以接著更新它。</summary>
+    public DemoRecord Convert(string moduleCode, DateTime at, string userId, string label, Func<DemoContext, ConvertRecordRequest> build)
     {
         var record = new DemoRecord(moduleCode, DateOnly.FromDateTime(at));
         if (Add(at, userId, label, async (ctx, ct) => Fill(record, await ctx.Sender.Send(build(ctx), ct))))

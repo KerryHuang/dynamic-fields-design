@@ -10,7 +10,7 @@ namespace DynamicModules.Application.Dynamic.DemoService;
 /// </summary>
 public static class DemoDashboards
 {
-    public const string Sales = "業務儀表板", Equipment = "設備與保養儀表板", Quality = "品質儀表板";
+    public const string Sales = "業務儀表板", Equipment = "設備與保養儀表板", Quality = "品質儀表板", Crm = "CRM 儀表板";
 
     /// <param name="ReportName">引用的示範報表名稱（<see cref="DemoReports.Spec.Name"/>）。</param>
     public sealed record CardSpec(string ReportName, string Viz, int X, int Y, int W, int H, CardOptions Options, string? Title = null);
@@ -50,6 +50,12 @@ public static class DemoDashboards
             new("近 60 天品質異常嚴重度", "donut", 4, 0, 4, 4, Plain, null),
             new("近 60 天重大異常（依類型）", "bar", 8, 0, 4, 4, Plain, null),
             new("近 3 個月品質異常筆數趨勢", "line", 0, 2, 4, 4, Plain, null),
+        ]),
+        // 引用「CRM 與銷售」套件自帶的兩份報表（名稱以套件為準）
+        new(Crm, ["sales-manager", "sales", "mis"],
+        [
+            new("商機階段分布", "donut", 0, 0, 5, 4, Plain, null),
+            new("各業務訂單金額（未稅）", "bar", 5, 0, 7, 4, Plain, null),
         ]),
     ];
 

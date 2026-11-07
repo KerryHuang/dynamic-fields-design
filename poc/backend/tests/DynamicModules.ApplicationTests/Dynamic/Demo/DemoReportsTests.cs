@@ -33,7 +33,8 @@ public class DemoReportsTests(DemoGeneratedFixture fx)
         fx.Generated();
         var reports = await StoredReports();
         var groups = await fx.Host.Db.Context.Set<PermissionGroup>().AsNoTracking().ToDictionaryAsync(g => g.Id, g => g.Key);
-        reports.Select(r => r.Name).Should().BeEquivalentTo(DemoReports.Names);
+        // 示範報表之外，再加上「CRM 與銷售」套件自帶的兩份
+        reports.Select(r => r.Name).Should().BeEquivalentTo([.. DemoReports.Names, "商機階段分布", "各業務訂單金額（未稅）"]);
         DemoReports.All.GroupBy(s => s.GroupKeys[0]).Should().OnlyContain(g => g.Count() >= 2);
 
         foreach (var spec in DemoReports.All)

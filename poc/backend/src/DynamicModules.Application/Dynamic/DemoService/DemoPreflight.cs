@@ -6,7 +6,7 @@ namespace DynamicModules.Application.Dynamic.DemoService;
 
 /// <summary>產生前的衝突檢查：四個範本的模組代碼、擴充模組的既有實體、示範報表與儀表板名稱、示範人員與實體，清單從 TemplateCatalog 讀。</summary>
 public sealed class DemoPreflight(TemplateCatalog catalog, IModuleRepository modules, IDemoPeople people, IReportRepository reports,
-    IDashboardRepository dashboards)
+    IDashboardRepository dashboards, IAppRepository apps)
 {
     /// <summary>每一項衝突一則訊息；空清單表示可以產生。</summary>
     public async Task<IReadOnlyList<string>> ConflictsAsync(CancellationToken ct)
@@ -22,6 +22,7 @@ public sealed class DemoPreflight(TemplateCatalog catalog, IModuleRepository mod
             if (await reports.NameExistsAsync(name, ct)) conflicts.Add($"報表「{name}」已存在");
         foreach (var name in DemoDashboards.Names)
             if (await dashboards.AssignedNameExistsAsync(name, ct)) conflicts.Add($"儀表板「{name}」已存在");
+        if (await apps.GetByKeyAsync(DemoStructure.CrmAppId, ct) is not null) conflicts.Add($"應用程式 {DemoStructure.CrmAppId} 已開啟");
         conflicts.AddRange(await people.ConflictsAsync(ct));
         return conflicts;
     }

@@ -40,7 +40,7 @@ public class DemoDashboardsTests(DemoGeneratedFixture fx)
             var dashboard = stored.Single(d => d.Name == spec.Name);
             dashboard.Assignments.Select(a => groups[a.GroupId]).Should().BeEquivalentTo(spec.GroupKeys, spec.Name);
             var layout = DashboardLayout.Parse(dashboard.LayoutJson);
-            layout.Cards.Should().HaveCountGreaterThanOrEqualTo(4, spec.Name);
+            layout.Cards.Should().HaveCountGreaterThanOrEqualTo(spec.Name == DemoDashboards.Crm ? 2 : 4, spec.Name);
             DashboardRules.CheckLayout(layout).Should().BeEmpty(spec.Name);
             layout.Cards.Select(c => c.ReportId).Should().OnlyContain(id => reports.ContainsValue(id));
         }

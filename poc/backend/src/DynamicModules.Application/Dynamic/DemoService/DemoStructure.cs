@@ -1,5 +1,7 @@
 using DynamicModules.Application.Common;
 using DynamicModules.Application.Common.Acting;
+using DynamicModules.Application.Dynamic.AppService.Commands;
+using DynamicModules.Application.Dynamic.AppService.Data;
 using DynamicModules.Application.Dynamic.DashboardService.Commands.AdminCreateDashboard;
 using DynamicModules.Application.Dynamic.DashboardService.Commands.AdminSetDashboardAssignments;
 using DynamicModules.Application.Dynamic.DashboardService.Data;
@@ -25,8 +27,11 @@ namespace DynamicModules.Application.Dynamic.DemoService;
 /// 建 Demo 的結構（一律以 admin）：套用四個範本、在訂單加「品質異常筆數」、依序啟用、補範本帶不了的權限、建示範報表與預設儀表板。
 /// 呼叫端要在交易內；任何一步失敗就回 Failed（訊息前面加步驟名），由外層回滾。
 /// </summary>
-public sealed class DemoStructure(ISender sender, IPermissionRepository permissions)
+public sealed class DemoStructure(
+    ISender sender, IPermissionRepository permissions, AppOpener appOpener, IAppRepository apps, IReportRepository reports)
 {
+    public const string CrmAppId = "crm-sales";
+
     public async Task<(DemoContext? Context, ServiceResult? Failed)> BuildAsync(DateOnly today, CancellationToken ct)
     {
         using var _ = ActingScope.Begin("admin");
@@ -83,13 +88,24 @@ public sealed class DemoStructure(ISender sender, IPermissionRepository permissi
         }, ct);
         if (failed is not null) return (null, failed);
 
+        // 5. 開啟內建的「CRM 與銷售」：套件的「業務」「業務主管」群組對應到 Demo 既有的 sales、sales-manager，
+        //    所以 sales01、sales02、manager01 一登入就有權限走完整條流程
+        var crm = await appOpener.OpenAsync(CrmAppId, new OpenAppBody(null, null, new()
+        {
+            ["sales"] = new GroupMapEntry("map", groupIds["sales"]),
+            ["manager"] = new GroupMapEntry("map", groupIds["sales-manager"])
+        }, null), ct);
+        if (!crm.Result.IsSuccess) return (null, Fail($"開啟應用程式 {CrmAppId}", crm.Result));
+
         var (reportIds, reportFailure) = await CreateReportsAsync(ids, groupIds, ct);
         if (reportFailure is not null) return (null, reportFailure);
+        foreach (var report in (await apps.GetByKeyAsync(CrmAppId, ct))!.Reports)
+            reportIds[(await reports.GetAsync(report.ReportId, ct))!.Name] = report.ReportId;
 
         failed = await CreateDashboardsAsync(reportIds, groupIds, ct);
         if (failed is not null) return (null, failed);
 
-        return (new DemoContext(today, sender, ids, groupIds), null);
+        return (new DemoContext(today, sender, ids, groupIds) { Crm = new DemoContext(today, sender, crm.Ids!, groupIds) }, null);
     }
 
     /// <summary>5. 建示範報表並分享給各情境的主管群組（擁有者是 admin）。回報表名稱對應的 id，儀表板卡片用。</summary>
