@@ -232,6 +232,70 @@ public class CrmSalesAppTests : IDisposable
     }
 
     [Fact]
+    public async Task OnlyRequiredFields_LeadToCustomerAndOpportunity_ToQuote_ToOrder_Completes()
+    {
+        var app = await OpenCrm();
+        string lead = Key(app, "lead"), customer = Key(app, "customer"), opportunity = Key(app, "opportunity"),
+            quote = Key(app, "quote"), quoteLine = Key(app, "quote-line"), product = Key(app, "product"), order = Key(app, "order");
+        var l = await FieldKeys(_admin, lead);
+        var op = await FieldKeys(_admin, opportunity);
+        var pk = await FieldKeys(_admin, product);
+        var qlk = await FieldKeys(_admin, quoteLine);
+        var qk = await FieldKeys(_admin, quote);
+
+        // 潛在客戶：只填必填欄位。公司會被帶進客戶名稱（客戶名稱必填），所以公司也必須是必填
+        var requiredOfLead = (await JsonOf(await _admin.GetAsync($"{Base}/modules/{lead}"))).GetProperty("blocks").EnumerateArray()
+            .SelectMany(b => b.GetProperty("fields").EnumerateArray())
+            .Where(f => f.GetProperty("config").TryGetProperty("required", out var r) && r.GetBoolean())
+            .Select(f => f.GetProperty("label").GetProperty("zh-TW").GetString()).ToList();
+        requiredOfLead.Should().Contain("公司");
+
+        var missingCompany = await _admin.PostAsJsonAsync($"{Base}/modules/{lead}/records",
+            new { values = new Dictionary<string, object> { [l["姓名"]] = "只有姓名" } });
+        missingCompany.StatusCode.Should().Be(HttpStatusCode.BadRequest, "沒有公司的潛在客戶根本建不起來，也就不會卡在轉客戶");
+
+        var newLead = await PostOk(_admin, $"{Base}/modules/{lead}/records",
+            new { values = new Dictionary<string, object> { [l["姓名"]] = "李小華", [l["公司"]] = "最小公司" } });
+        var contacted = await Transition(_admin, newLead, l["狀態"], await OptionValue(_admin, lead, "狀態", "已聯繫"));
+        var qualified = await Transition(_admin, contacted, l["狀態"], await OptionValue(_admin, lead, "狀態", "已確認"));
+
+        var newCustomer = await PostOk(_admin, ConvertUrl(qualified, "crm-lead-to-customer"), new { });
+        Str(newCustomer, (await FieldKeys(_admin, customer))["名稱"]).Should().Be("最小公司");
+        var opp = await PostOk(_admin, ConvertUrl(qualified, "crm-lead-to-opportunity"), new { });
+
+        // 商機：只有名稱與階段是必填；轉報價單需要客戶，所以先補上客戶（不是欄位必填，是轉換的前提）
+        var withCustomer = await JsonOf(await _admin.PutAsJsonAsync($"{Base}/records/{opp.GetProperty("id").GetInt64()}", new
+        {
+            values = new Dictionary<string, object> { [op["客戶"]] = newCustomer.GetProperty("id").GetInt64() },
+            rowVersion = opp.GetProperty("rowVersion").GetString()
+        }));
+        var qual = await Transition(_admin, withCustomer, op["階段"], await OptionValue(_admin, opportunity, "階段", "需求確認"));
+        var prop = await Transition(_admin, qual, op["階段"], await OptionValue(_admin, opportunity, "階段", "提案報價"));
+        var q = await PostOk(_admin, ConvertUrl(prop, "crm-opportunity-to-quote"), new { });
+
+        var prod = await PostOk(_admin, $"{Base}/modules/{product}/records", new
+        {
+            values = new Dictionary<string, object> { [pk["料號"]] = "P-1", [pk["名稱"]] = "最小品" }
+        });
+        var put = await _admin.PutAsJsonAsync($"{Base}/records/{q.GetProperty("id").GetInt64()}", new
+        {
+            values = new Dictionary<string, object>(), rowVersion = q.GetProperty("rowVersion").GetString(),
+            details = new Dictionary<string, object[]>
+            {
+                [quoteLine] = [new { values = new Dictionary<string, object> { [qlk["產品"]] = prod.GetProperty("id").GetInt64(), [qlk["數量"]] = 1 } }]
+            }
+        });
+        put.StatusCode.Should().Be(HttpStatusCode.OK, await put.Content.ReadAsStringAsync());
+        var fresh = await JsonOf(await _admin.GetAsync($"{Base}/records/{q.GetProperty("id").GetInt64()}"));
+        var pending = await Transition(_admin, fresh, qk["狀態"], await OptionValue(_admin, quote, "狀態", "待核准"));
+        var approved = await Transition(_admin, pending, qk["狀態"], await OptionValue(_admin, quote, "狀態", "已核准"));
+        var lineId = fresh.GetProperty("details").GetProperty(quoteLine)[0].GetProperty("id").GetInt64();
+        var created = await PostOk(_admin, ConvertUrl(approved, "crm-quote-to-order"), new { lines = new[] { new { sourceLineId = lineId, quantity = 1 } } });
+        created.GetProperty("id").GetInt64().Should().BePositive();
+        _ = order;
+    }
+
+    [Fact]
     public async Task ApprovalNeedsTheManagerGroup_ASalesUserCannotApprove()
     {
         var app = await OpenCrm();

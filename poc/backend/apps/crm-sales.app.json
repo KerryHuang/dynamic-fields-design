@@ -83,6 +83,7 @@
                 "en-US": "Company"
               },
               "config": {
+                "required": true,
                 "showInList": true,
                 "isFilterable": true
               }
