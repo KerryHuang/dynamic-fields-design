@@ -210,18 +210,9 @@ function removeCurrent() {
     <div v-else-if="notFound" class="text-negative">{{ t('dynamic.moduleNotFound') }}</div>
     <div v-else-if="failed" class="text-negative">{{ t('dynamic.loadFailed') }}</div>
     <template v-else-if="schema">
-      <div class="row items-center q-mb-md q-gutter-sm">
-        <div class="text-h6">{{ resolveI18n(schema.name, locale) }}</div>
-        <q-space />
-        <q-btn v-if="schema.permissions.add" color="primary" icon="add" data-testid="new-btn" :label="t('dynamic.new')" :to="`/dynamic/${moduleKey}/new`" />
-        <q-btn v-if="canImport" outline icon="upload" data-testid="import-btn" :label="t('dynamic.import.title')" @click="importing = true" />
-        <ExportMenu :schema="schema" :query="exportQuery" />
-      </div>
-      <div v-if="schema.readOnly" class="row items-center no-wrap q-mb-sm text-muted" data-testid="closed-banner">
-        <q-icon name="lock" class="q-mr-sm" />
-        <span>{{ t('dynamic.closedBanner') }}</span>
-      </div>
+      <!-- 標題、檢視、搜尋與新增／匯入／匯出併成一列，窄螢幕自動換行 -->
       <div class="row items-center q-mb-sm q-gutter-sm">
+        <div class="text-h6">{{ resolveI18n(schema.name, locale) }}</div>
         <ViewMenu
           :views="views" :current="currentView" :modified="modified"
           @select="(id) => applyView(views.find((v) => v.id === id))"
@@ -233,6 +224,14 @@ function removeCurrent() {
         >
           <template #prepend><q-icon name="search" /></template>
         </q-input>
+        <q-space />
+        <q-btn v-if="schema.permissions.add" color="primary" icon="add" data-testid="new-btn" :label="t('dynamic.new')" :to="`/dynamic/${moduleKey}/new`" />
+        <q-btn v-if="canImport" outline icon="upload" data-testid="import-btn" :label="t('dynamic.import.title')" @click="importing = true" />
+        <ExportMenu :schema="schema" :query="exportQuery" />
+      </div>
+      <div v-if="schema.readOnly" class="row items-center no-wrap q-mb-sm text-muted" data-testid="closed-banner">
+        <q-icon name="lock" class="q-mr-sm" />
+        <span>{{ t('dynamic.closedBanner') }}</span>
       </div>
       <div v-if="currentView?.staleFieldIds.length" class="text-warning q-mb-sm" data-testid="stale-notice">
         {{ t('dynamic.view.stale', { n: currentView.staleFieldIds.length }) }}

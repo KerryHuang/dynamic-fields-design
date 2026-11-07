@@ -1,10 +1,17 @@
 /* 正式企業（enterprise）：版面特徵與淺色、深色兩組顏色。顏色一律十六進位字面值，對比測試直接解析。 */
 [data-style='enterprise'] {
+  --t-space-xs: 3px;
+  --t-space-sm: 6px;
+  --t-space-md: 10px;
+  --t-space-lg: 16px;
+  --t-space-xl: 28px;
+  --t-field-height: 38px;
+  --t-row-height: 36px;
   --t-font-family: system-ui, -apple-system, 'Segoe UI', 'Noto Sans', 'PingFang TC', 'Microsoft JhengHei', sans-serif;
   --t-font-size: 14px;
   --t-radius: 2px;
-  --t-panel-padding: 18px;
-  --t-cell-padding: 8px 12px;
+  --t-panel-padding: 12px;
+  --t-cell-padding: 6px 10px;
   --t-topbar-height: 46px;
   --t-th-weight: 600;
   --t-th-border-bottom: 2px;

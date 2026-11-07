@@ -306,6 +306,231 @@ textarea:focus-visible {
   background: var(--t-primary);
 }
 
+/* ===== 密度與響應式 =====
+   Quasar 的間距工具類（q-pa-md、q-mb-sm、q-gutter-md…）值是固定的像素；這裡改接 --t-space-* token，
+   四種風格各有一組（工作台最緊、簡潔留白較鬆但都比原本緊），全站一次生效，頁面不必逐頁調整。 */
+
+.q-pa-xs { padding: var(--t-space-xs); }
+.q-pl-xs { padding-left: var(--t-space-xs); }
+.q-pr-xs { padding-right: var(--t-space-xs); }
+.q-pt-xs { padding-top: var(--t-space-xs); }
+.q-pb-xs { padding-bottom: var(--t-space-xs); }
+.q-px-xs { padding-left: var(--t-space-xs); padding-right: var(--t-space-xs); }
+.q-py-xs { padding-top: var(--t-space-xs); padding-bottom: var(--t-space-xs); }
+.q-ma-xs { margin: var(--t-space-xs); }
+.q-ml-xs { margin-left: var(--t-space-xs); }
+.q-mr-xs { margin-right: var(--t-space-xs); }
+.q-mt-xs { margin-top: var(--t-space-xs); }
+.q-mb-xs { margin-bottom: var(--t-space-xs); }
+.q-mx-xs { margin-left: var(--t-space-xs); margin-right: var(--t-space-xs); }
+.q-my-xs { margin-top: var(--t-space-xs); margin-bottom: var(--t-space-xs); }
+.q-gutter-xs { margin-top: calc(-1 * var(--t-space-xs)); margin-left: calc(-1 * var(--t-space-xs)); }
+.q-gutter-xs > * { margin-top: var(--t-space-xs); margin-left: var(--t-space-xs); }
+.q-gutter-x-xs { margin-left: calc(-1 * var(--t-space-xs)); }
+.q-gutter-x-xs > * { margin-left: var(--t-space-xs); }
+.q-gutter-y-xs { margin-top: calc(-1 * var(--t-space-xs)); }
+.q-gutter-y-xs > * { margin-top: var(--t-space-xs); }
+.q-col-gutter-xs { margin-top: calc(-1 * var(--t-space-xs)); margin-left: calc(-1 * var(--t-space-xs)); }
+.q-col-gutter-xs > * { padding-top: var(--t-space-xs); padding-left: var(--t-space-xs); }
+.q-col-gutter-x-xs { margin-left: calc(-1 * var(--t-space-xs)); }
+.q-col-gutter-x-xs > * { padding-left: var(--t-space-xs); }
+.q-col-gutter-y-xs { margin-top: calc(-1 * var(--t-space-xs)); }
+.q-col-gutter-y-xs > * { padding-top: var(--t-space-xs); }
+.q-pa-sm { padding: var(--t-space-sm); }
+.q-pl-sm { padding-left: var(--t-space-sm); }
+.q-pr-sm { padding-right: var(--t-space-sm); }
+.q-pt-sm { padding-top: var(--t-space-sm); }
+.q-pb-sm { padding-bottom: var(--t-space-sm); }
+.q-px-sm { padding-left: var(--t-space-sm); padding-right: var(--t-space-sm); }
+.q-py-sm { padding-top: var(--t-space-sm); padding-bottom: var(--t-space-sm); }
+.q-ma-sm { margin: var(--t-space-sm); }
+.q-ml-sm { margin-left: var(--t-space-sm); }
+.q-mr-sm { margin-right: var(--t-space-sm); }
+.q-mt-sm { margin-top: var(--t-space-sm); }
+.q-mb-sm { margin-bottom: var(--t-space-sm); }
+.q-mx-sm { margin-left: var(--t-space-sm); margin-right: var(--t-space-sm); }
+.q-my-sm { margin-top: var(--t-space-sm); margin-bottom: var(--t-space-sm); }
+.q-gutter-sm { margin-top: calc(-1 * var(--t-space-sm)); margin-left: calc(-1 * var(--t-space-sm)); }
+.q-gutter-sm > * { margin-top: var(--t-space-sm); margin-left: var(--t-space-sm); }
+.q-gutter-x-sm { margin-left: calc(-1 * var(--t-space-sm)); }
+.q-gutter-x-sm > * { margin-left: var(--t-space-sm); }
+.q-gutter-y-sm { margin-top: calc(-1 * var(--t-space-sm)); }
+.q-gutter-y-sm > * { margin-top: var(--t-space-sm); }
+.q-col-gutter-sm { margin-top: calc(-1 * var(--t-space-sm)); margin-left: calc(-1 * var(--t-space-sm)); }
+.q-col-gutter-sm > * { padding-top: var(--t-space-sm); padding-left: var(--t-space-sm); }
+.q-col-gutter-x-sm { margin-left: calc(-1 * var(--t-space-sm)); }
+.q-col-gutter-x-sm > * { padding-left: var(--t-space-sm); }
+.q-col-gutter-y-sm { margin-top: calc(-1 * var(--t-space-sm)); }
+.q-col-gutter-y-sm > * { padding-top: var(--t-space-sm); }
+.q-pa-md { padding: var(--t-space-md); }
+.q-pl-md { padding-left: var(--t-space-md); }
+.q-pr-md { padding-right: var(--t-space-md); }
+.q-pt-md { padding-top: var(--t-space-md); }
+.q-pb-md { padding-bottom: var(--t-space-md); }
+.q-px-md { padding-left: var(--t-space-md); padding-right: var(--t-space-md); }
+.q-py-md { padding-top: var(--t-space-md); padding-bottom: var(--t-space-md); }
+.q-ma-md { margin: var(--t-space-md); }
+.q-ml-md { margin-left: var(--t-space-md); }
+.q-mr-md { margin-right: var(--t-space-md); }
+.q-mt-md { margin-top: var(--t-space-md); }
+.q-mb-md { margin-bottom: var(--t-space-md); }
+.q-mx-md { margin-left: var(--t-space-md); margin-right: var(--t-space-md); }
+.q-my-md { margin-top: var(--t-space-md); margin-bottom: var(--t-space-md); }
+.q-gutter-md { margin-top: calc(-1 * var(--t-space-md)); margin-left: calc(-1 * var(--t-space-md)); }
+.q-gutter-md > * { margin-top: var(--t-space-md); margin-left: var(--t-space-md); }
+.q-gutter-x-md { margin-left: calc(-1 * var(--t-space-md)); }
+.q-gutter-x-md > * { margin-left: var(--t-space-md); }
+.q-gutter-y-md { margin-top: calc(-1 * var(--t-space-md)); }
+.q-gutter-y-md > * { margin-top: var(--t-space-md); }
+.q-col-gutter-md { margin-top: calc(-1 * var(--t-space-md)); margin-left: calc(-1 * var(--t-space-md)); }
+.q-col-gutter-md > * { padding-top: var(--t-space-md); padding-left: var(--t-space-md); }
+.q-col-gutter-x-md { margin-left: calc(-1 * var(--t-space-md)); }
+.q-col-gutter-x-md > * { padding-left: var(--t-space-md); }
+.q-col-gutter-y-md { margin-top: calc(-1 * var(--t-space-md)); }
+.q-col-gutter-y-md > * { padding-top: var(--t-space-md); }
+.q-pa-lg { padding: var(--t-space-lg); }
+.q-pl-lg { padding-left: var(--t-space-lg); }
+.q-pr-lg { padding-right: var(--t-space-lg); }
+.q-pt-lg { padding-top: var(--t-space-lg); }
+.q-pb-lg { padding-bottom: var(--t-space-lg); }
+.q-px-lg { padding-left: var(--t-space-lg); padding-right: var(--t-space-lg); }
+.q-py-lg { padding-top: var(--t-space-lg); padding-bottom: var(--t-space-lg); }
+.q-ma-lg { margin: var(--t-space-lg); }
+.q-ml-lg { margin-left: var(--t-space-lg); }
+.q-mr-lg { margin-right: var(--t-space-lg); }
+.q-mt-lg { margin-top: var(--t-space-lg); }
+.q-mb-lg { margin-bottom: var(--t-space-lg); }
+.q-mx-lg { margin-left: var(--t-space-lg); margin-right: var(--t-space-lg); }
+.q-my-lg { margin-top: var(--t-space-lg); margin-bottom: var(--t-space-lg); }
+.q-gutter-lg { margin-top: calc(-1 * var(--t-space-lg)); margin-left: calc(-1 * var(--t-space-lg)); }
+.q-gutter-lg > * { margin-top: var(--t-space-lg); margin-left: var(--t-space-lg); }
+.q-gutter-x-lg { margin-left: calc(-1 * var(--t-space-lg)); }
+.q-gutter-x-lg > * { margin-left: var(--t-space-lg); }
+.q-gutter-y-lg { margin-top: calc(-1 * var(--t-space-lg)); }
+.q-gutter-y-lg > * { margin-top: var(--t-space-lg); }
+.q-col-gutter-lg { margin-top: calc(-1 * var(--t-space-lg)); margin-left: calc(-1 * var(--t-space-lg)); }
+.q-col-gutter-lg > * { padding-top: var(--t-space-lg); padding-left: var(--t-space-lg); }
+.q-col-gutter-x-lg { margin-left: calc(-1 * var(--t-space-lg)); }
+.q-col-gutter-x-lg > * { padding-left: var(--t-space-lg); }
+.q-col-gutter-y-lg { margin-top: calc(-1 * var(--t-space-lg)); }
+.q-col-gutter-y-lg > * { padding-top: var(--t-space-lg); }
+.q-pa-xl { padding: var(--t-space-xl); }
+.q-pl-xl { padding-left: var(--t-space-xl); }
+.q-pr-xl { padding-right: var(--t-space-xl); }
+.q-pt-xl { padding-top: var(--t-space-xl); }
+.q-pb-xl { padding-bottom: var(--t-space-xl); }
+.q-px-xl { padding-left: var(--t-space-xl); padding-right: var(--t-space-xl); }
+.q-py-xl { padding-top: var(--t-space-xl); padding-bottom: var(--t-space-xl); }
+.q-ma-xl { margin: var(--t-space-xl); }
+.q-ml-xl { margin-left: var(--t-space-xl); }
+.q-mr-xl { margin-right: var(--t-space-xl); }
+.q-mt-xl { margin-top: var(--t-space-xl); }
+.q-mb-xl { margin-bottom: var(--t-space-xl); }
+.q-mx-xl { margin-left: var(--t-space-xl); margin-right: var(--t-space-xl); }
+.q-my-xl { margin-top: var(--t-space-xl); margin-bottom: var(--t-space-xl); }
+.q-gutter-xl { margin-top: calc(-1 * var(--t-space-xl)); margin-left: calc(-1 * var(--t-space-xl)); }
+.q-gutter-xl > * { margin-top: var(--t-space-xl); margin-left: var(--t-space-xl); }
+.q-gutter-x-xl { margin-left: calc(-1 * var(--t-space-xl)); }
+.q-gutter-x-xl > * { margin-left: var(--t-space-xl); }
+.q-gutter-y-xl { margin-top: calc(-1 * var(--t-space-xl)); }
+.q-gutter-y-xl > * { margin-top: var(--t-space-xl); }
+.q-col-gutter-xl { margin-top: calc(-1 * var(--t-space-xl)); margin-left: calc(-1 * var(--t-space-xl)); }
+.q-col-gutter-xl > * { padding-top: var(--t-space-xl); padding-left: var(--t-space-xl); }
+.q-col-gutter-x-xl { margin-left: calc(-1 * var(--t-space-xl)); }
+.q-col-gutter-x-xl > * { padding-left: var(--t-space-xl); }
+.q-col-gutter-y-xl { margin-top: calc(-1 * var(--t-space-xl)); }
+.q-col-gutter-y-xl > * { padding-top: var(--t-space-xl); }
+
+/* 欄位：dense 欄位高度走 token；Quasar 為錯誤訊息保留的底部空間 20px 縮成 14px（訊息仍放得下一行） */
+[data-style] .q-field--dense .q-field__control,
+[data-style] .q-field--dense .q-field__marginal {
+  height: var(--t-field-height);
+}
+
+/* q-select 等 auto-height 欄位另有 min-height: 40px，要一起蓋；欄位底部的訊息列（.q-field__bottom）已在欄位內占位，
+   Quasar 再為 .q-field--with-bottom 多留的 padding 等於重複保留一次，去掉 */
+[data-style] .q-field--auto-height.q-field--dense .q-field__control {
+  min-height: var(--t-field-height);
+}
+
+[data-style] .q-field--with-bottom {
+  padding-bottom: 0;
+}
+
+[data-style] .q-field__bottom {
+  min-height: 14px;
+  padding-top: 2px;
+  font-size: 11px;
+}
+
+/* 條件列沒有欄位驗證訊息，不為它保留底部空間（每個欄位省 14px） */
+.condition-editor .q-field__bottom {
+  display: none;
+}
+
+/* 一列一列的元件：清單項目（含詳情頁的欄位列）、側邊選單、展開面板標題、按鈕、分頁列 */
+[data-style] .q-item {
+  min-height: var(--t-row-height);
+  padding-top: var(--t-space-xs);
+  padding-bottom: var(--t-space-xs);
+}
+
+[data-style] .q-drawer .q-item,
+[data-style] .q-expansion-item__container > .q-item {
+  min-height: var(--t-row-height);
+  padding-top: 0;
+  padding-bottom: 0;
+}
+
+[data-style] .q-drawer .q-item {
+  padding-left: var(--t-space-md);
+  padding-right: var(--t-space-md);
+}
+
+[data-style] .q-drawer .q-item__section--avatar {
+  min-width: 32px;
+}
+
+[data-style] .q-drawer .q-item__label--header {
+  padding: var(--t-space-md) var(--t-space-md) var(--t-space-xs);
+}
+
+[data-style] .q-btn--rectangle:not(.q-btn--dense) {
+  min-height: var(--t-field-height);
+}
+
+[data-style] .q-card__actions {
+  padding: var(--t-space-sm);
+}
+
+[data-style] .q-table__bottom {
+  min-height: var(--t-row-height);
+  padding-top: 0;
+  padding-bottom: 0;
+}
+
+/* 觸控裝置：可點擊目標至少 44px，不因為密度縮小而難按（現場工業本來就 44px） */
+@media (pointer: coarse) {
+  [data-style] .q-field--dense .q-field__control,
+  [data-style] .q-field--dense .q-field__marginal {
+    height: max(var(--t-field-height), 44px);
+  }
+
+  [data-style] .q-field--auto-height.q-field--dense .q-field__control {
+    min-height: max(var(--t-field-height), 44px);
+  }
+
+  [data-style] .q-item,
+  [data-style] .q-drawer .q-item,
+  [data-style] .q-expansion-item__container > .q-item {
+    min-height: max(var(--t-row-height), 44px);
+  }
+
+  [data-style] .q-btn--rectangle:not(.q-btn--dense) {
+    min-height: 44px;
+  }
+}
+
 /* 對話框：窄螢幕不得比視窗寬（多數對話框用 min-width 固定寬度，會把按鈕擠出畫面）；
    手機接近全螢幕、內容可捲動、按鈕列固定在底部看得到 */
 @media (max-width: 700px) {

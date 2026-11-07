@@ -22,8 +22,15 @@
   --t-font-family: system-ui, -apple-system, 'Segoe UI', 'Noto Sans', 'PingFang TC', 'Microsoft JhengHei', sans-serif;
   --t-font-size: 13px;
   --t-radius: 3px;
-  --t-panel-padding: 12px;
-  --t-cell-padding: 4px 10px;
+  --t-panel-padding: 8px;
+  --t-cell-padding: 3px 8px;
+  --t-space-xs: 2px;
+  --t-space-sm: 4px;
+  --t-space-md: 8px;
+  --t-space-lg: 12px;
+  --t-space-xl: 20px;
+  --t-field-height: 36px;
+  --t-row-height: 32px;
   --t-topbar-height: 40px;
   --t-th-weight: 700;
   --t-th-border-bottom: 1px;

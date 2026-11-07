@@ -61,6 +61,7 @@ const LARGE = ['--t-chart-1', '--t-chart-2', '--t-chart-3', '--t-chart-4', '--t-
 const LAYOUT = new Set([
   '--t-font-family', '--t-font-size', '--t-radius', '--t-panel-padding', '--t-cell-padding', '--t-topbar-height', '--t-th-weight',
   '--t-th-border-bottom', '--t-selected-marker', '--t-title-size', '--t-stat-size', '--t-stat-weight', '--t-card-border', '--t-card-shadow',
+  '--t-space-xs', '--t-space-sm', '--t-space-md', '--t-space-lg', '--t-space-xl', '--t-field-height', '--t-row-height',
 ]);
 const combinations = STYLES.flatMap((s) => MODES.map((m) => [s, m] as const));
 /** system 在瀏覽器偏好淺色與深色時各解析成一種 palette，兩種都要過。 */
@@ -96,7 +97,7 @@ describe('主題 token', () => {
     // airy 的框線與陰影隨模式改變，寫在模式區塊，所以比較合併後的結果
     const keys = (s: (typeof STYLES)[number], m: 'light' | 'dark') => Object.keys(palette(s, m)).sort();
     const first = keys('workbench', 'light');
-    expect(first).toHaveLength(45);
+    expect(first).toHaveLength(52);
     expect(keys('workbench', 'dark')).toEqual(first);
     for (const s of STYLES) for (const m of ['light', 'dark'] as const) expect(keys(s, m)).toEqual(first);
   });
@@ -105,6 +106,23 @@ describe('主題 token', () => {
     const root = shared.get(':root') ?? {};
     const expected = { ...palette('workbench', 'light'), ...files.workbench.get("[data-style='workbench']") };
     expect(root).toEqual(expected);
+  });
+
+  it('密度：每種風格的間距都比 Quasar 預設（md 16px）緊，現場工業的欄位高度維持觸控尺寸', () => {
+    const px = (v: string) => Number.parseFloat(v);
+    for (const s of STYLES) {
+      const t = files[s].get(`[data-style='${s}']`) ?? {};
+      const steps = ['xs', 'sm', 'md', 'lg', 'xl'].map((k) => px(t[`--t-space-${k}`]));
+      expect(steps.every((n) => Number.isFinite(n)), `${s} 缺間距 token`).toBe(true);
+      expect(steps, `${s} 間距要由小到大`).toEqual([...steps].sort((a, b) => a - b));
+      expect(px(t['--t-space-md']), `${s} md 間距`).toBeLessThanOrEqual(12);
+      expect(px(t['--t-space-sm']), `${s} sm 間距`).toBeLessThanOrEqual(6);
+    }
+    expect(px(files.industrial.get("[data-style='industrial']")!['--t-field-height'])).toBeGreaterThanOrEqual(44);
+    const workbench = px(files.workbench.get("[data-style='workbench']")!['--t-space-md']);
+    for (const s of STYLES) {
+      expect(px(files[s].get(`[data-style='${s}']`)!['--t-space-md']), `${s} 不得比工作台更緊`).toBeGreaterThanOrEqual(workbench);
+    }
   });
 
   it('CSS 不引用外部字型或資源', () => {

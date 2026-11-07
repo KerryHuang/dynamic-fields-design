@@ -121,8 +121,24 @@ describe('print.css', () => {
     for (const t of ['--t-bg', '--t-panel', '--t-text', '--t-topbar-bg', '--t-sidebar-bg']) expect(print).toContain(t);
   });
 
+  it('Quasar 的間距工具類改接 --t-space-* token，不是固定像素', () => {
+    for (const size of ['xs', 'sm', 'md', 'lg', 'xl']) {
+      const v = `var\\(--t-space-${size}\\)`;
+      expect(bodiesOf(bridge, `.q-pa-${size}`).join(';')).toMatch(new RegExp(`padding:\\s*${v}`));
+      expect(bodiesOf(bridge, `.q-mb-${size}`).join(';')).toMatch(new RegExp(`margin-bottom:\\s*${v}`));
+      expect(bodiesOf(bridge, `.q-gutter-${size} > *`).join(';')).toMatch(new RegExp(`margin-top:\\s*${v}`));
+      expect(bodiesOf(bridge, `.q-col-gutter-${size} > *`).join(';')).toMatch(new RegExp(`padding-left:\\s*${v}`));
+    }
+  });
+
   it('窄螢幕的對話框不得比視窗寬：min-width 被蓋掉，手機的按鈕列固定在底部', () => {
     expect(bridge).toMatch(/@media \(max-width: 700px\)\s*\{[^@]*\.q-dialog__inner--minimized > \.q-card\s*\{[^}]*min-width:\s*0\s*!important/);
     expect(bridge).toMatch(/@media \(max-width: 599\.98px\)[\s\S]*\.q-card__actions\s*\{[^}]*position:\s*sticky/);
+  });
+
+  it('觸控裝置的可點擊目標至少 44px', () => {
+    const coarse = bridge.slice(bridge.indexOf('@media (pointer: coarse)'));
+    expect(coarse).toMatch(/\.q-btn--rectangle[^{]*\{[^}]*min-height:\s*44px/);
+    expect(coarse).toMatch(/\.q-field--dense \.q-field__control[^{]*\{[^}]*max\(var\(--t-field-height\), 44px\)/);
   });
 });

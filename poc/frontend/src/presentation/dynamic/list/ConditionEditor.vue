@@ -156,11 +156,14 @@ function setJson(v: string | null) {
     <TextareaInput :model-value="json" :label="t('designer.rules.conditionJson')" data-testid="condition-json" @update:model-value="setJson" />
     <div v-if="jsonError" class="text-negative text-caption" data-testid="condition-json-error">{{ t('designer.rules.jsonInvalid') }}</div>
   </div>
-  <div v-else class="column q-gutter-sm">
-    <GenericSelect
-      :model-value="mode" :label="t('dynamic.filter.title')" :options="modeOptions" required style="max-width: 12rem"
-      @update:model-value="(v) => { mode = v === 'any' ? 'any' : 'all'; publish(); }"
-    />
+  <div v-else class="column q-gutter-sm condition-editor">
+    <div class="row items-start no-wrap q-gutter-x-sm">
+      <GenericSelect
+        :model-value="mode" :label="t('dynamic.filter.title')" :options="modeOptions" required style="width: 12rem"
+        @update:model-value="(v) => { mode = v === 'any' ? 'any' : 'all'; publish(); }"
+      />
+      <q-btn flat icon="add" no-caps :label="t('dynamic.filter.addCondition')" @click="addRow" />
+    </div>
     <div v-for="(row, i) in rows" :key="i" class="row q-gutter-sm items-start no-wrap">
       <GenericSelect
         :model-value="row.cond.field ? String(row.cond.field) : null" :label="t('dynamic.filter.field')"
@@ -209,6 +212,5 @@ function setJson(v: string | null) {
       </template>
       <q-btn flat round dense icon="close" :aria-label="t('dynamic.filter.removeCondition')" @click="removeRow(i)" />
     </div>
-    <div><q-btn flat icon="add" :label="t('dynamic.filter.addCondition')" @click="addRow" /></div>
   </div>
 </template>

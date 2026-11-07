@@ -1,10 +1,17 @@
 /* 現場工業（industrial）：版面特徵與淺色、深色兩組顏色。顏色一律十六進位字面值，對比測試直接解析。 */
 [data-style='industrial'] {
+  --t-space-xs: 4px;
+  --t-space-sm: 6px;
+  --t-space-md: 12px;
+  --t-space-lg: 18px;
+  --t-space-xl: 32px;
+  --t-field-height: 44px;
+  --t-row-height: 44px;
   --t-font-family: system-ui, -apple-system, 'Segoe UI', 'Noto Sans', 'PingFang TC', 'Microsoft JhengHei', sans-serif;
   --t-font-size: 15px;
   --t-radius: 0;
-  --t-panel-padding: 18px;
-  --t-cell-padding: 9px 12px;
+  --t-panel-padding: 14px;
+  --t-cell-padding: 8px 10px;
   --t-topbar-height: 52px;
   --t-th-weight: 700;
   --t-th-border-bottom: 2px;
