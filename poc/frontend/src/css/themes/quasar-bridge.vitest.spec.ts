@@ -195,8 +195,9 @@ describe('列印不受新風格影響', () => {
 
   it('便當格主色大方塊的內容用主色上的文字色（Quasar 深色項目預設白字）', () => {
     const big = "[data-style='bento'] .tile-grid > :first-child:nth-last-child(n + 4)";
-    expect(bridge).toContain(`${big} .q-item`);
-    expect(bodiesOf(bridge, `${big} .q-item,\n  ${big} .q-icon`).join(';')).toContain('color: var(--t-on-primary)');
+    for (const part of ['.q-item', '.q-icon']) {
+      expect(bodiesOf(bridge, `${big} ${part}`).join(';')).toContain('color: var(--t-on-primary)');
+    }
   });
 
   it('數字字型與卡片陰影在列印時也不跟隨風格', () => {
