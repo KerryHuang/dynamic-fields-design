@@ -19,44 +19,76 @@ public sealed class GetAttachmentSettingsHandler(AttachmentSettings settings) : 
         Task.FromResult(ServiceResult.Success(AttachmentSettingsResponse.From(settings)));
 }
 
+/// <summary>上傳前的資格檢查結果：通過時帶著後面要用的記錄、模組、欄位與目前的值。</summary>
+public sealed record UploadTarget(
+    Record Record, Module Module, Field Field, Dictionary<string, JsonElement?> Previous);
+
 /// <summary>
-/// 上傳：權限、資料範圍、欄位可寫（含規則唯讀與狀態機唯讀狀態）、Closed 模組擋下，再驗環境開關、檔名、副檔名白名單、大小與數量，
-/// 最後把檔案描述寫進記錄的值（走歷程與 RowVersion）。檔案先寫、值後寫：值寫入失敗時刪除剛寫的檔案。
+/// 上傳資格：權限、資料範圍、欄位可寫（含規則唯讀與狀態機唯讀狀態）、Closed 模組、環境開關。
+/// 不讀請求主體，所以控制器可以在 model binding 收進檔案之前先跑一次；實際上傳時處理器會再跑一次（以最新資料為準）。
 /// </summary>
-public sealed class UploadAttachmentHandler(
+public sealed class AttachmentUploadGate(
     IModuleRepository modules, IRecordRepository records, IDynamicAccessGuard guard, FieldTypeRegistry registry,
-    IAttachmentStore store, AttachmentSettings settings, RecordHistoryWriter history, IUnitOfWork uow,
-    ICurrentUser user, IBusinessTime time) : IRequestHandler<UploadAttachmentRequest, ServiceResult>
+    AttachmentSettings settings, IBusinessTime time)
 {
-    public async Task<ServiceResult> Handle(UploadAttachmentRequest request, CancellationToken ct)
+    public async Task<(ServiceResult? Rejected, UploadTarget? Target)> CheckAsync(long recordId, long fieldId, CancellationToken ct)
     {
-        var record = await records.GetAsync(request.RecordId, ct);
-        if (record is null) return ServiceResult.NotFound(RecordMapper.RecordNotFound);
+        var record = await records.GetAsync(recordId, ct);
+        if (record is null) return (ServiceResult.NotFound(RecordMapper.RecordNotFound), null);
         var module = await modules.GetByIdAsync(record.ModuleId, includeChildren: true, ct);
-        if (module is null || ModuleRelations.IsDetail(module)) return ServiceResult.NotFound(RecordMapper.RecordNotFound);
-        if (await ModuleGate.RejectUnwritableAsync(module, guard, ct) is { } blocked) return blocked;
+        if (module is null || ModuleRelations.IsDetail(module)) return (ServiceResult.NotFound(RecordMapper.RecordNotFound), null);
+        if (await ModuleGate.RejectUnwritableAsync(module, guard, ct) is { } blocked) return (blocked, null);
         var access = await guard.AuthorizeAsync(module, PermissionAction.Edit, ct);
-        if (access.Permissions is not { } perms) return access.Denied!;
+        if (access.Permissions is not { } perms) return (access.Denied!, null);
         if (perms.OwnerUserIds is not null && !perms.OwnerUserIds.Contains(record.OwnerUserId))
-            return ServiceResult.NotFound(RecordMapper.RecordNotFound);
+            return (ServiceResult.NotFound(RecordMapper.RecordNotFound), null);
 
         var field = module.Blocks.SelectMany(b => b.Fields)
-            .FirstOrDefault(f => f.Id == request.FieldId && f.Status == FieldStatus.Active && f.Type == FieldType.Attachment);
-        if (field is null || !perms.CanSee(field)) return ServiceResult.NotFound("找不到附件欄位");
+            .FirstOrDefault(f => f.Id == fieldId && f.Status == FieldStatus.Active && f.Type == FieldType.Attachment);
+        if (field is null || !perms.CanSee(field)) return (ServiceResult.NotFound("找不到附件欄位"), null);
 
         var userIds = await modules.ListUserIdsAsync(ct);
         var previous = RecordValueProcessor.Parse(record.ValuesJson);
         var today = time.Today;
         if (RuleEngine.Evaluate(module, previous, previous, registry, userIds, today).ReadOnlyAll)
-            return Invalid(RecordValueProcessor.RecordErrorKey, RecordValueProcessor.ReadOnlyRecordMessage);
+            return (Invalid(RecordValueProcessor.RecordErrorKey, RecordValueProcessor.ReadOnlyRecordMessage), null);
         if (module.Workflow is { } wf && wf.IsLocked(previous))
-            return Invalid(RecordValueProcessor.RecordErrorKey, RecordValueProcessor.ReadOnlyRecordMessage);
+            return (Invalid(RecordValueProcessor.RecordErrorKey, RecordValueProcessor.ReadOnlyRecordMessage), null);
         if (!RecordValueProcessor.WritablePredicate(module, previous, perms, registry, userIds, today)(field))
-            return Invalid(field.Key, "此欄位目前不可修改");
+            return (Invalid(field.Key, "此欄位目前不可修改"), null);
 
-        if (!settings.UploadEnabled)
-            return ServiceResult.Conflict(settings.DisabledReason is { Length: > 0 } reason
-                ? $"{AttachmentRules.UploadDisabledPrefix}：{reason}" : AttachmentRules.UploadDisabledPrefix);
+        if (!settings.UploadEnabled) return (UploadDisabled(settings), null);
+        return (null, new UploadTarget(record, module, field, previous));
+    }
+
+    public static ServiceResult UploadDisabled(AttachmentSettings settings) =>
+        ServiceResult.Conflict(settings.DisabledReason is { Length: > 0 } reason
+            ? $"{AttachmentRules.UploadDisabledPrefix}：{reason}" : AttachmentRules.UploadDisabledPrefix);
+
+    private static ServiceResult Invalid(string key, string message) =>
+        ServiceResult.Invalid(new Dictionary<string, string[]> { [key] = [message] });
+}
+
+/// <summary>控制器在收進請求主體之前先問：這個人現在能不能對這個欄位上傳？只做檢查，不寫入。</summary>
+public sealed class CheckAttachmentUploadHandler(AttachmentUploadGate gate) : IRequestHandler<CheckAttachmentUploadRequest, ServiceResult>
+{
+    public async Task<ServiceResult> Handle(CheckAttachmentUploadRequest request, CancellationToken ct) =>
+        (await gate.CheckAsync(request.RecordId, request.FieldId, ct)).Rejected ?? ServiceResult.Success();
+}
+
+/// <summary>
+/// 上傳：先過資格檢查（<see cref="AttachmentUploadGate"/>），再驗檔名、副檔名白名單、大小與數量，
+/// 最後把檔案描述寫進記錄的值（走歷程與 RowVersion）。檔案先寫、值後寫：值寫入失敗時刪除剛寫的檔案。
+/// </summary>
+public sealed class UploadAttachmentHandler(
+    AttachmentUploadGate gate, IAttachmentStore store, AttachmentSettings settings, RecordHistoryWriter history, IUnitOfWork uow,
+    ICurrentUser user, IBusinessTime time) : IRequestHandler<UploadAttachmentRequest, ServiceResult>
+{
+    public async Task<ServiceResult> Handle(UploadAttachmentRequest request, CancellationToken ct)
+    {
+        var (rejected, target) = await gate.CheckAsync(request.RecordId, request.FieldId, ct);
+        if (rejected is not null) return rejected;
+        var (record, module, field, previous) = target!;
 
         var name = AttachmentRules.CleanName(request.FileName);
         if (name is null) return Invalid(field.Key, AttachmentRules.NameRequired);

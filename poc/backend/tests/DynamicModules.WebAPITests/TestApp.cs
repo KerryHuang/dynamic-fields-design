@@ -1,3 +1,4 @@
+using Microsoft.AspNetCore.Builder;
 using DynamicModules.Domain.Entities.Dynamic;
 using DynamicModules.Domain.Data;
 using Microsoft.AspNetCore.Authentication;
@@ -62,6 +63,50 @@ public class TestApp : WebApplicationFactory<Program>
 
     internal TestLogSink Logs { get; } = new();
 
+    private long _bodyBytesRead;
+
+    /// <summary>自上次 <see cref="ResetBodyCount"/> 起，伺服器從請求主體讀走的位元組數（用來證明被拒絕的請求沒有被整個收進來）。</summary>
+    internal long BodyBytesRead => Interlocked.Read(ref _bodyBytesRead);
+
+    internal void ResetBodyCount() => Interlocked.Exchange(ref _bodyBytesRead, 0);
+
+    private void AddBodyCounter(long n) => Interlocked.Add(ref _bodyBytesRead, n);
+
+    private sealed class CountingBodyFilter(TestApp app) : IStartupFilter
+    {
+        public Action<IApplicationBuilder> Configure(Action<IApplicationBuilder> next) => builder =>
+        {
+            builder.Use(async (context, nextMiddleware) =>
+            {
+                context.Request.Body = new CountingStream(context.Request.Body, app.AddBodyCounter);
+                await nextMiddleware();
+            });
+            next(builder);
+        };
+    }
+
+    private sealed class CountingStream(Stream inner, Action<long> onRead) : Stream
+    {
+        public override bool CanRead => true;
+        public override bool CanSeek => false;
+        public override bool CanWrite => false;
+        public override long Length => throw new NotSupportedException();
+        public override long Position { get => throw new NotSupportedException(); set => throw new NotSupportedException(); }
+        public override void Flush() { }
+        public override int Read(byte[] buffer, int offset, int count) { var n = inner.Read(buffer, offset, count); onRead(n); return n; }
+        public override async ValueTask<int> ReadAsync(Memory<byte> buffer, CancellationToken ct = default)
+        {
+            var n = await inner.ReadAsync(buffer, ct);
+            onRead(n);
+            return n;
+        }
+        public override Task<int> ReadAsync(byte[] buffer, int offset, int count, CancellationToken ct) =>
+            ReadAsync(buffer.AsMemory(offset, count), ct).AsTask();
+        public override long Seek(long offset, SeekOrigin origin) => throw new NotSupportedException();
+        public override void SetLength(long value) => throw new NotSupportedException();
+        public override void Write(byte[] buffer, int offset, int count) => throw new NotSupportedException();
+    }
+
     protected override void ConfigureWebHost(IWebHostBuilder builder)
     {
         builder.UseSetting("ConnectionStrings:Dynamic", _connectionString);
@@ -72,6 +117,7 @@ public class TestApp : WebApplicationFactory<Program>
         builder.ConfigureLogging(l => l.AddProvider(Logs));
         builder.ConfigureServices(s =>
         {
+            s.AddSingleton<IStartupFilter>(new CountingBodyFilter(this));
             s.RemoveAll<TimeProvider>();
             s.AddSingleton<TimeProvider>(Time);
             if (!_realAuth)

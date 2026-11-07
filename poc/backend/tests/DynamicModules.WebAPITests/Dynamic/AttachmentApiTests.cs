@@ -25,12 +25,12 @@ public class AttachmentApiTests : IDisposable
     private sealed record World(string Module, long FieldId, string FieldKey, string TitleKey, long RecordId, string RowVersion);
 
     /// <summary>啟用的模組：標題欄位加一個附件欄位，並已有一筆記錄。</summary>
-    private async Task<World> MakeWorld()
+    private async Task<World> MakeWorld(bool grant = true)
     {
         var module = await CreateModule(Admin);
         var field = await AddField(Admin, module, "attachment");
         await Activate(Admin, module);
-        _app.GrantBusinessGroups(module);
+        if (grant) _app.GrantBusinessGroups(module);
         var title = await TitleKey(Admin, module);
         var created = await JsonOf(await Admin.PostAsJsonAsync($"{Base}/modules/{module}/records",
             new { values = new Dictionary<string, object> { [title] = "t" } }));
@@ -326,6 +326,115 @@ public class AttachmentApiTests : IDisposable
 
         (await Download(Admin, w, id)).StatusCode.Should().Be(HttpStatusCode.OK);
         (await Upload(Admin, w, "late.txt")).StatusCode.Should().Be(HttpStatusCode.Conflict);
+    }
+
+    // ---- 請求主體在檢查之前不被吞進來（fix-1 #3）----
+
+    /// <summary>送出 length 位元組的假 multipart 主體，記錄實際被寫出去（也就是被伺服器讀走）多少。</summary>
+    private sealed class ProbeContent : HttpContent
+    {
+        private readonly long _length;
+        public long Written;
+
+        public ProbeContent(long length)
+        {
+            _length = length;
+            Headers.ContentType = MediaTypeHeaderValue.Parse("multipart/form-data; boundary=probe");
+        }
+
+        protected override async Task SerializeToStreamAsync(Stream stream, TransportContext? context)
+        {
+            var buffer = new byte[16 * 1024];
+            while (Written < _length)
+            {
+                var n = (int)Math.Min(buffer.Length, _length - Written);
+                await stream.WriteAsync(buffer.AsMemory(0, n));
+                Written += n;
+            }
+        }
+
+        protected override bool TryComputeLength(out long length)
+        {
+            length = _length;
+            return true;
+        }
+    }
+
+    private const long ProbeSize = 8L * 1024 * 1024;
+
+    private async Task<(HttpResponseMessage Response, ProbeContent Body)> UploadProbe(HttpClient c, World w, long size = ProbeSize)
+    {
+        var body = new ProbeContent(size);
+        _app.ResetBodyCount();
+        var res = await c.PostAsync($"{Base}/records/{w.RecordId}/attachments/{w.FieldId}", body);
+        return (res, body);
+    }
+
+    [Fact]
+    public async Task Upload_Disabled_RejectsWithoutReadingTheBody()
+    {
+        _app.Settings["Attachments:UploadEnabled"] = "false";
+        var w = await MakeWorld();
+        var (res, _) = await UploadProbe(Admin, w);
+        res.StatusCode.Should().Be(HttpStatusCode.Conflict);
+        _app.BodyBytesRead.Should().BeLessThan(ProbeSize / 4, "上傳關閉時不該把整個請求收進來");
+    }
+
+    [Fact]
+    public async Task Upload_ContentLengthOverTheLimit_413WithoutReadingTheBody()
+    {
+        _app.Settings["Attachments:MaxBytes"] = "1000";
+        var w = await MakeWorld();
+        var (res, _) = await UploadProbe(Admin, w);
+        res.StatusCode.Should().Be(HttpStatusCode.RequestEntityTooLarge);
+        _app.BodyBytesRead.Should().BeLessThan(ProbeSize / 4);
+    }
+
+    [Fact]
+    public async Task Upload_WithoutEditPermission_RejectedBeforeTheBodyIsRead()
+    {
+        var w = await MakeWorld(grant: false); // 業務群組沒有這個模組的任何權限
+        var (res, _) = await UploadProbe(_app.AsUser("sales01"), w);
+        res.StatusCode.Should().Be(HttpStatusCode.Forbidden);
+        _app.BodyBytesRead.Should().BeLessThan(ProbeSize / 4);
+    }
+
+    [Fact]
+    public async Task Upload_UnknownRecord_404WithoutReadingTheBody()
+    {
+        var w = await MakeWorld();
+        var body = new ProbeContent(ProbeSize);
+        _app.ResetBodyCount();
+        var res = await Admin.PostAsync($"{Base}/records/987654/attachments/{w.FieldId}", body);
+        res.StatusCode.Should().Be(HttpStatusCode.NotFound);
+        _app.BodyBytesRead.Should().BeLessThan(ProbeSize / 4);
+    }
+
+    [Fact]
+    public async Task Upload_JustUnderTheLimit_StillWorks()
+    {
+        _app.Settings["Attachments:MaxBytes"] = "200000";
+        var w = await MakeWorld();
+        (await Upload(Admin, w, "big.txt", new byte[200000])).StatusCode.Should().Be(HttpStatusCode.Created);
+    }
+
+    [Fact]
+    public void UploadGuard_SetsTheBodySizeFeature_ForChunkedRequestsToo()
+    {
+        var feature = new FakeBodySizeFeature();
+        var http = new Microsoft.AspNetCore.Http.DefaultHttpContext();
+        http.Features.Set<Microsoft.AspNetCore.Http.Features.IHttpMaxRequestBodySizeFeature>(feature); // 沒有 Content-Length
+        var settings = new DynamicModules.Application.Dynamic.AttachmentService.AttachmentSettings("x", 1000, ["txt"], 5, true, null);
+
+        DynamicModules.WebAPI.Controllers.v3.Dynamic.UploadGuard.ApplyBodyLimit(http, settings).Should().BeNull();
+
+        feature.MaxRequestBodySize.Should().BeInRange(1000, 1000 + 256 * 1024);
+    }
+
+    private sealed class FakeBodySizeFeature : Microsoft.AspNetCore.Http.Features.IHttpMaxRequestBodySizeFeature
+    {
+        public bool IsReadOnly => false;
+        public long? MaxRequestBodySize { get; set; } = 64L * 1024 * 1024;
     }
 
     // ---- Demo / 環境開關 ----

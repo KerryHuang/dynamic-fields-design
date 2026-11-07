@@ -8,6 +8,9 @@ namespace DynamicModules.Application.Dynamic.AttachmentService;
 public sealed record UploadAttachmentRequest(long RecordId, long FieldId, Stream Content, string? FileName)
     : IRequest<ServiceResult>, ITransactionalRequest;
 
+/// <summary>只檢查上傳資格（權限、可寫、環境開關），不讀檔案；給控制器在收進請求主體前先擋。</summary>
+public sealed record CheckAttachmentUploadRequest(long RecordId, long FieldId) : IRequest<ServiceResult>;
+
 public sealed record UploadedAttachment(string Id, string Name, long Size, string RowVersion);
 
 public sealed record DownloadAttachmentRequest(long RecordId, long FieldId, string FileId) : IRequest<ServiceResult>;

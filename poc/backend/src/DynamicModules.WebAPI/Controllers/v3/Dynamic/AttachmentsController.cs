@@ -16,9 +16,9 @@ public class AttachmentsController(IMediator mediator) : ControllerBase
     [HttpGet("attachments/settings")]
     public async Task<IActionResult> Settings() => (await mediator.Send(new GetAttachmentSettingsRequest())).ToActionResult(this);
 
-    /// <summary>multipart 的 file 欄位；大小上限同時在這裡用 Content-Length 先擋一次，實際寫入時再逐位元組檢查。</summary>
+    /// <summary>multipart 的 file 欄位。<see cref="UploadGuardFilter"/> 在收進主體之前先擋（關閉、過大、無權限）；實際寫入時再逐位元組檢查大小。</summary>
     [HttpPost("records/{recordId:long}/attachments/{fieldId:long}")]
-    [RequestSizeLimit(AttachmentLimits.RequestCeiling)]
+    [TypeFilter(typeof(UploadGuardFilter))]
     public async Task<IActionResult> Upload(long recordId, long fieldId, IFormFile? file, CancellationToken ct)
     {
         if (file is null || file.Length == 0)
@@ -43,10 +43,4 @@ public class AttachmentsController(IMediator mediator) : ControllerBase
     [HttpPost("attachments/sweep")]
     public async Task<IActionResult> Sweep([FromQuery] int graceMinutes = 60, CancellationToken ct = default) =>
         (await mediator.Send(new SweepAttachmentsRequest(TimeSpan.FromMinutes(Math.Max(0, graceMinutes))), ct)).ToActionResult(this);
-}
-
-public static class AttachmentLimits
-{
-    /// <summary>Kestrel／表單層的硬上限（含 multipart 開銷）；實際的檔案大小上限由設定決定，這只是防止超大請求被整個吞進來。</summary>
-    public const long RequestCeiling = 64L * 1024 * 1024;
 }
