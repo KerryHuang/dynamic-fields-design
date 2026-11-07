@@ -12,6 +12,7 @@
     --t-sidebar-bg: #fff;
     --t-sidebar-fg: #000;
     --t-sidebar-muted: #333;
+    --t-heading-font: system-ui, -apple-system, 'Segoe UI', 'Noto Sans', 'PingFang TC', 'Microsoft JhengHei', sans-serif;
     --t-bg-image: none;
     --t-chrome-opacity: 100%;
     --t-panel-opacity: 100%;

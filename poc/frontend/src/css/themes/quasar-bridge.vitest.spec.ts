@@ -178,7 +178,8 @@ describe('列印不受新風格影響', () => {
 
   it('新風格專屬的色塊、徽章與玻璃效果都包在 @media screen 內，列印時不會出現', () => {
     for (const s of NEW_STYLES) expect(rest, `[data-style='${s}'] 不得在 @media screen 之外`).not.toContain(`[data-style='${s}']`);
-    expect(rest).not.toContain('backdrop-filter');
+    // 只抓「宣告」；@supports not ((backdrop-filter: …)) 是特性偵測，不是效果
+    expect(rest).not.toMatch(/[\s;{](-webkit-)?backdrop-filter\s*:/);
   });
 
   it('@media screen 內確實有那些規則（避免上一條因為整段被刪而空過）', () => {
