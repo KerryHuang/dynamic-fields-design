@@ -6,7 +6,7 @@ public static class ThemeOptions
     public const string FactoryMode = "system", FactoryStyle = "workbench";
 
     private static readonly string[] Modes = ["light", "dark", "system"];
-    private static readonly string[] Styles = ["workbench", "airy", "enterprise", "industrial"];
+    private static readonly string[] Styles = ["workbench", "airy", "enterprise", "industrial", "glass", "bento", "command", "botanical"];
 
     /// <summary>不在允許值就回 null。</summary>
     public static string? NormalizeMode(string? value) => value is not null && Modes.Contains(value) ? value : null;
