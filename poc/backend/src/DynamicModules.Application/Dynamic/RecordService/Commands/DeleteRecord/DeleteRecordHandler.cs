@@ -40,7 +40,7 @@ public class DeleteRecordHandler(
             return ServiceResult.ConflictWith(Referenced, new DeleteBlockedResponse(await WithTitlesAsync(plan.Blocking.Take(MaxListed), ct), plan.BlockingTotal));
 
         // 連帶刪除（Cascade）或清空參照（SetNull）的記錄也要守狀態機的唯讀：在任何寫入之前檢查，有一筆被鎖就整個不做
-        if (await TouchesLockedRecordAsync(plan, ct)) return ServiceResult.Conflict(LockedReferencedMessage);
+        if (await TouchesLockedRecordAsync(plan, record, ct)) return ServiceResult.Conflict(LockedReferencedMessage);
 
         // 交易由 TransactionBehavior 包住（ITransactionalRequest）：軟刪、清空、索引、彙總重算一起提交或回滾。
         var now = time.Now;
@@ -80,16 +80,38 @@ public class DeleteRecordHandler(
         return ServiceResult.Success();
     }
 
-    /// <summary>連帶刪除或清空的記錄（去重，清空的排除已在刪除清單的）裡，有沒有處於狀態機唯讀狀態的；每個模組只載入一次。</summary>
-    private async Task<bool> TouchesLockedRecordAsync(DeletePlan plan, CancellationToken ct)
+    /// <summary>
+    /// 連帶刪除或清空的記錄（去重，清空的排除已在刪除清單的）裡，有沒有處於狀態機唯讀狀態的；每個模組只載入一次。
+    /// 明細列沒有自己的狀態機，要看表頭單據：往上找到表頭記錄，用表頭模組的狀態機判斷（核心只支援一層明細）。
+    /// 表頭已在刪除清單或就是被刪的根記錄時不重複查（它們本來就會被檢查）；找不到或已刪除的表頭略過。
+    /// </summary>
+    private async Task<bool> TouchesLockedRecordAsync(DeletePlan plan, Record root, CancellationToken ct)
     {
-        var deletedIds = plan.ToDelete.Select(r => r.Id).ToHashSet();
-        var affected = plan.ToDelete.Concat(plan.ToClear.Select(c => c.Record).Where(r => !deletedIds.Contains(r.Id))).DistinctBy(r => r.Id);
+        var checkedIds = plan.ToDelete.Select(r => r.Id).Append(root.Id).ToHashSet();
+        var affected = plan.ToDelete.Concat(plan.ToClear.Select(c => c.Record).Where(r => !checkedIds.Contains(r.Id))).DistinctBy(r => r.Id);
         var byModule = new Dictionary<long, Module?>();
+        async Task<Module?> ModuleOf(long id)
+        {
+            if (!byModule.TryGetValue(id, out var m)) byModule[id] = m = await modules.GetByIdAsync(id, includeChildren: true, ct);
+            return m;
+        }
+        var seenHeaders = new HashSet<long>();
         foreach (var r in affected)
         {
-            if (!byModule.TryGetValue(r.ModuleId, out var m)) byModule[r.ModuleId] = m = await modules.GetByIdAsync(r.ModuleId, includeChildren: true, ct);
-            if (m?.Workflow is { } wf && wf.IsLocked(RecordValueProcessor.Parse(r.ValuesJson))) return true;
+            var m = await ModuleOf(r.ModuleId);
+            if (m is null) continue;
+            if (!ModuleRelations.IsDetail(m))
+            {
+                if (m.Workflow is { } wf && wf.IsLocked(RecordValueProcessor.Parse(r.ValuesJson))) return true;
+                continue;
+            }
+            var parentField = ModuleRelations.DetailFieldOf(m);
+            if (parentField is null || !RecordValueProcessor.Parse(r.ValuesJson).TryGetValue(parentField.Key, out var raw)
+                || raw is not { ValueKind: JsonValueKind.Number } n || !n.TryGetInt64(out var headerId)
+                || checkedIds.Contains(headerId) || !seenHeaders.Add(headerId)) continue;
+            var header = await records.GetAsync(headerId, ct);
+            if (header is null || header.DeleteFlag) continue;
+            if ((await ModuleOf(header.ModuleId))?.Workflow is { } hwf && hwf.IsLocked(RecordValueProcessor.Parse(header.ValuesJson))) return true;
         }
         return false;
     }
