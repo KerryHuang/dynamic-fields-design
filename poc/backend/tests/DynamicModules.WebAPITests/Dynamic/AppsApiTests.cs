@@ -82,7 +82,9 @@ public class AppsApiTests : IDisposable
     public async Task FreshInstall_NoApps_ListsAreEmptyAndPlatformWorks()
     {
         (await JsonOf(await _admin.GetAsync(Apps))).GetArrayLength().Should().Be(0);
-        (await JsonOf(await _admin.GetAsync($"{Apps}/packages"))).GetArrayLength().Should().Be(0);
+        // 唯一出貨的內建套件是 CRM，只是「可開啟」，沒開之前不產生任何模組或選單
+        var packages = await JsonOf(await _admin.GetAsync($"{Apps}/packages"));
+        packages.EnumerateArray().Select(p => p.GetProperty("id").GetString()).Should().Equal("crm-sales");
         (await JsonOf(await _admin.GetAsync($"{Base}/menu"))).GetArrayLength().Should().Be(0);
         (await _admin.GetAsync($"{Base}/reports/catalog")).StatusCode.Should().Be(HttpStatusCode.OK);
         (await _admin.GetAsync($"{Base}/modules")).StatusCode.Should().Be(HttpStatusCode.OK);

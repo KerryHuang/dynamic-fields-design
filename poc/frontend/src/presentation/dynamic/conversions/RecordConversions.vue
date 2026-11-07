@@ -6,7 +6,7 @@ import { resolveI18n } from 'src/domain/dynamic/i18n-text';
 import type { RecordConversion } from 'src/domain/dynamic/types';
 import ConvertDialog from './ConvertDialog.vue';
 
-const props = defineProps<{ recordId: number; rowVersion: string }>();
+const props = defineProps<{ recordId: number; rowVersion: string; closed?: boolean }>();
 const { t, locale } = useI18n();
 const query = useRecordConversions(toRef(props, 'recordId'));
 const conversions = computed(() => query.data.value ?? []);
@@ -26,7 +26,8 @@ const targetNameOf = (c: RecordConversion) => resolveI18n(c.targetName, locale.v
           v-if="c.allowed" outline color="primary" icon="swap_horiz" :label="t('docflow.convert.button', { name: targetNameOf(c) })"
           :data-testid="`convert-open-${c.key}`" @click="openKey = c.key"
         />
-        <div v-else class="text-muted" :data-testid="`convert-reason-${c.key}`">{{ nameOf(c) }}：{{ c.reason }}</div>
+        <!-- A closed app is already announced by the page banner; repeating it per conversion only adds noise. -->
+        <div v-else-if="!closed" class="text-muted" :data-testid="`convert-reason-${c.key}`">{{ nameOf(c) }}：{{ c.reason }}</div>
       </div>
       <div v-if="c.targets.length" class="q-mt-xs" :data-testid="`convert-targets-${c.key}`">
         <span class="text-caption text-muted">{{ t('docflow.convert.targets', { name: targetNameOf(c) }) }}：</span>

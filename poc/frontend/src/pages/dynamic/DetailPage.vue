@@ -87,7 +87,7 @@ async function onDelete() {
         <q-icon name="lock" class="q-mr-sm" />
         <span>{{ t('dynamic.closedBanner') }}</span>
       </div>
-      <RecordConversions :record-id="recordId" :row-version="recordQuery.data.value.rowVersion" />
+      <RecordConversions :record-id="recordId" :row-version="recordQuery.data.value.rowVersion" :closed="schemaQuery.data.value.readOnly" />
       <DynamicDetail :schema="schemaQuery.data.value" :record="recordQuery.data.value" />
       <DetailTables v-if="schemaQuery.data.value.details?.length" class="q-mt-md" :details="schemaQuery.data.value.details" :rows="recordQuery.data.value.details ?? {}" />
       <RelatedTabs :record-id="recordId" />

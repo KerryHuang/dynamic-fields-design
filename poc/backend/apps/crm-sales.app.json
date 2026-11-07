@@ -1,0 +1,2327 @@
+{
+  "format": "formwright-app",
+  "formatVersion": 3,
+  "manifest": {
+    "id": "crm-sales",
+    "version": "1.0.0",
+    "name": {
+      "zh-TW": "CRM 與銷售",
+      "en-US": "CRM and Sales"
+    },
+    "description": {
+      "zh-TW": "潛在客戶、客戶、商機、報價與訂單的完整銷售流程",
+      "en-US": "Leads, customers, opportunities, quotes and orders in one sales flow"
+    },
+    "icon": "handshake"
+  },
+  "groups": [
+    {
+      "code": "sales",
+      "name": {
+        "zh-TW": "CRM 業務",
+        "en-US": "CRM sales"
+      }
+    },
+    {
+      "code": "manager",
+      "name": {
+        "zh-TW": "CRM 業務主管",
+        "en-US": "CRM sales manager"
+      }
+    }
+  ],
+  "modules": [
+    {
+      "code": "lead",
+      "key": "crm-lead",
+      "name": {
+        "zh-TW": "潛在客戶",
+        "en-US": "Leads"
+      },
+      "kind": "standalone",
+      "titleField": "name",
+      "blocks": [
+        {
+          "code": "main",
+          "label": {
+            "zh-TW": "基本資料",
+            "en-US": "Details"
+          },
+          "collapsed": false,
+          "columns": 2,
+          "fields": [
+            {
+              "code": "no",
+              "type": "autonumber",
+              "label": {
+                "zh-TW": "編號",
+                "en-US": "No."
+              },
+              "config": {
+                "format": "L-{0000}",
+                "showInList": true
+              }
+            },
+            {
+              "code": "name",
+              "type": "text",
+              "label": {
+                "zh-TW": "姓名",
+                "en-US": "Name"
+              },
+              "config": {
+                "required": true,
+                "showInList": true,
+                "isFilterable": true
+              }
+            },
+            {
+              "code": "company",
+              "type": "text",
+              "label": {
+                "zh-TW": "公司",
+                "en-US": "Company"
+              },
+              "config": {
+                "showInList": true,
+                "isFilterable": true
+              }
+            },
+            {
+              "code": "phone",
+              "type": "phone",
+              "label": {
+                "zh-TW": "電話",
+                "en-US": "Phone"
+              },
+              "config": {}
+            },
+            {
+              "code": "email",
+              "type": "email",
+              "label": {
+                "zh-TW": "Email",
+                "en-US": "Email"
+              },
+              "config": {}
+            },
+            {
+              "code": "source",
+              "type": "enum",
+              "label": {
+                "zh-TW": "來源",
+                "en-US": "Source"
+              },
+              "config": {
+                "showInList": true,
+                "isFilterable": true
+              },
+              "options": [
+                {
+                  "code": "web",
+                  "label": {
+                    "zh-TW": "官網",
+                    "en-US": "Website"
+                  },
+                  "color": null
+                },
+                {
+                  "code": "referral",
+                  "label": {
+                    "zh-TW": "轉介",
+                    "en-US": "Referral"
+                  },
+                  "color": null
+                },
+                {
+                  "code": "exhibition",
+                  "label": {
+                    "zh-TW": "展覽",
+                    "en-US": "Exhibition"
+                  },
+                  "color": null
+                },
+                {
+                  "code": "coldcall",
+                  "label": {
+                    "zh-TW": "陌生開發",
+                    "en-US": "Cold call"
+                  },
+                  "color": null
+                }
+              ]
+            },
+            {
+              "code": "status",
+              "type": "enum",
+              "label": {
+                "zh-TW": "狀態",
+                "en-US": "Status"
+              },
+              "config": {
+                "required": true,
+                "defaultValue": "opt_new",
+                "showInList": true,
+                "isFilterable": true
+              },
+              "options": [
+                {
+                  "code": "new",
+                  "label": {
+                    "zh-TW": "新線索",
+                    "en-US": "New"
+                  },
+                  "color": "grey"
+                },
+                {
+                  "code": "contacted",
+                  "label": {
+                    "zh-TW": "已聯繫",
+                    "en-US": "Contacted"
+                  },
+                  "color": "blue"
+                },
+                {
+                  "code": "qualified",
+                  "label": {
+                    "zh-TW": "已確認",
+                    "en-US": "Qualified"
+                  },
+                  "color": "green"
+                },
+                {
+                  "code": "lost",
+                  "label": {
+                    "zh-TW": "流失",
+                    "en-US": "Lost"
+                  },
+                  "color": "red"
+                }
+              ]
+            },
+            {
+              "code": "owner",
+              "type": "user",
+              "label": {
+                "zh-TW": "負責業務",
+                "en-US": "Owner"
+              },
+              "config": {
+                "showInList": true,
+                "isFilterable": true
+              }
+            },
+            {
+              "code": "note",
+              "type": "textarea",
+              "label": {
+                "zh-TW": "備註",
+                "en-US": "Note"
+              },
+              "config": {}
+            }
+          ]
+        }
+      ],
+      "icon": "person_search",
+      "permissions": [
+        {
+          "group": "sales",
+          "scope": "all",
+          "privileges": {
+            "read": true,
+            "add": true,
+            "edit": true,
+            "delete": false,
+            "printExport": true,
+            "pricing": true,
+            "approve": false
+          }
+        },
+        {
+          "group": "manager",
+          "scope": "all",
+          "privileges": {
+            "read": true,
+            "add": true,
+            "edit": true,
+            "delete": true,
+            "printExport": true,
+            "pricing": true,
+            "approve": true
+          }
+        }
+      ]
+    },
+    {
+      "code": "customer",
+      "key": "crm-customer",
+      "name": {
+        "zh-TW": "客戶",
+        "en-US": "Customers"
+      },
+      "kind": "standalone",
+      "titleField": "name",
+      "blocks": [
+        {
+          "code": "main",
+          "label": {
+            "zh-TW": "基本資料",
+            "en-US": "Details"
+          },
+          "collapsed": false,
+          "columns": 2,
+          "fields": [
+            {
+              "code": "no",
+              "type": "autonumber",
+              "label": {
+                "zh-TW": "編號",
+                "en-US": "No."
+              },
+              "config": {
+                "format": "C-{0000}",
+                "showInList": true
+              }
+            },
+            {
+              "code": "name",
+              "type": "text",
+              "label": {
+                "zh-TW": "名稱",
+                "en-US": "Name"
+              },
+              "config": {
+                "required": true,
+                "showInList": true,
+                "isFilterable": true
+              }
+            },
+            {
+              "code": "industry",
+              "type": "enum",
+              "label": {
+                "zh-TW": "產業",
+                "en-US": "Industry"
+              },
+              "config": {
+                "showInList": true,
+                "isFilterable": true
+              },
+              "options": [
+                {
+                  "code": "manufacturing",
+                  "label": {
+                    "zh-TW": "製造",
+                    "en-US": "Manufacturing"
+                  },
+                  "color": null
+                },
+                {
+                  "code": "retail",
+                  "label": {
+                    "zh-TW": "零售",
+                    "en-US": "Retail"
+                  },
+                  "color": null
+                },
+                {
+                  "code": "service",
+                  "label": {
+                    "zh-TW": "服務",
+                    "en-US": "Services"
+                  },
+                  "color": null
+                },
+                {
+                  "code": "tech",
+                  "label": {
+                    "zh-TW": "資訊",
+                    "en-US": "Technology"
+                  },
+                  "color": null
+                }
+              ]
+            },
+            {
+              "code": "phone",
+              "type": "phone",
+              "label": {
+                "zh-TW": "電話",
+                "en-US": "Phone"
+              },
+              "config": {}
+            },
+            {
+              "code": "email",
+              "type": "email",
+              "label": {
+                "zh-TW": "Email",
+                "en-US": "Email"
+              },
+              "config": {}
+            },
+            {
+              "code": "address",
+              "type": "text",
+              "label": {
+                "zh-TW": "地址",
+                "en-US": "Address"
+              },
+              "config": {}
+            },
+            {
+              "code": "owner",
+              "type": "user",
+              "label": {
+                "zh-TW": "負責業務",
+                "en-US": "Owner"
+              },
+              "config": {
+                "showInList": true,
+                "isFilterable": true
+              }
+            },
+            {
+              "code": "fromLead",
+              "type": "reference",
+              "label": {
+                "zh-TW": "來源潛在客戶",
+                "en-US": "Source lead"
+              },
+              "config": {
+                "readOnly": true,
+                "refTarget": {
+                  "kind": "module",
+                  "key": "lead"
+                }
+              }
+            }
+          ]
+        }
+      ],
+      "icon": "business",
+      "permissions": [
+        {
+          "group": "sales",
+          "scope": "all",
+          "privileges": {
+            "read": true,
+            "add": true,
+            "edit": true,
+            "delete": false,
+            "printExport": true,
+            "pricing": true,
+            "approve": false
+          }
+        },
+        {
+          "group": "manager",
+          "scope": "all",
+          "privileges": {
+            "read": true,
+            "add": true,
+            "edit": true,
+            "delete": true,
+            "printExport": true,
+            "pricing": true,
+            "approve": true
+          }
+        }
+      ]
+    },
+    {
+      "code": "contact",
+      "key": "crm-contact",
+      "name": {
+        "zh-TW": "聯絡人",
+        "en-US": "Contacts"
+      },
+      "kind": "standalone",
+      "titleField": "name",
+      "blocks": [
+        {
+          "code": "main",
+          "label": {
+            "zh-TW": "基本資料",
+            "en-US": "Details"
+          },
+          "collapsed": false,
+          "columns": 2,
+          "fields": [
+            {
+              "code": "name",
+              "type": "text",
+              "label": {
+                "zh-TW": "姓名",
+                "en-US": "Name"
+              },
+              "config": {
+                "required": true,
+                "showInList": true,
+                "isFilterable": true
+              }
+            },
+            {
+              "code": "customer",
+              "type": "reference",
+              "label": {
+                "zh-TW": "客戶",
+                "en-US": "Customer"
+              },
+              "config": {
+                "required": true,
+                "showInList": true,
+                "isFilterable": true,
+                "refTarget": {
+                  "kind": "module",
+                  "key": "customer"
+                }
+              }
+            },
+            {
+              "code": "title",
+              "type": "text",
+              "label": {
+                "zh-TW": "職稱",
+                "en-US": "Job title"
+              },
+              "config": {
+                "showInList": true
+              }
+            },
+            {
+              "code": "phone",
+              "type": "phone",
+              "label": {
+                "zh-TW": "電話",
+                "en-US": "Phone"
+              },
+              "config": {}
+            },
+            {
+              "code": "email",
+              "type": "email",
+              "label": {
+                "zh-TW": "Email",
+                "en-US": "Email"
+              },
+              "config": {}
+            }
+          ]
+        }
+      ],
+      "icon": "contacts",
+      "permissions": [
+        {
+          "group": "sales",
+          "scope": "all",
+          "privileges": {
+            "read": true,
+            "add": true,
+            "edit": true,
+            "delete": false,
+            "printExport": true,
+            "pricing": true,
+            "approve": false
+          }
+        },
+        {
+          "group": "manager",
+          "scope": "all",
+          "privileges": {
+            "read": true,
+            "add": true,
+            "edit": true,
+            "delete": true,
+            "printExport": true,
+            "pricing": true,
+            "approve": true
+          }
+        }
+      ]
+    },
+    {
+      "code": "product",
+      "key": "crm-product",
+      "name": {
+        "zh-TW": "產品",
+        "en-US": "Products"
+      },
+      "kind": "standalone",
+      "titleField": "name",
+      "blocks": [
+        {
+          "code": "main",
+          "label": {
+            "zh-TW": "基本資料",
+            "en-US": "Details"
+          },
+          "collapsed": false,
+          "columns": 2,
+          "fields": [
+            {
+              "code": "sku",
+              "type": "text",
+              "label": {
+                "zh-TW": "料號",
+                "en-US": "SKU"
+              },
+              "config": {
+                "required": true,
+                "showInList": true,
+                "isFilterable": true
+              }
+            },
+            {
+              "code": "name",
+              "type": "text",
+              "label": {
+                "zh-TW": "名稱",
+                "en-US": "Name"
+              },
+              "config": {
+                "required": true,
+                "showInList": true,
+                "isFilterable": true
+              }
+            },
+            {
+              "code": "unit",
+              "type": "text",
+              "label": {
+                "zh-TW": "單位",
+                "en-US": "Unit"
+              },
+              "config": {
+                "showInList": true
+              }
+            },
+            {
+              "code": "price",
+              "type": "currency",
+              "label": {
+                "zh-TW": "標準單價",
+                "en-US": "List price"
+              },
+              "config": {
+                "scale": 0,
+                "showInList": true
+              }
+            },
+            {
+              "code": "active",
+              "type": "boolean",
+              "label": {
+                "zh-TW": "上架中",
+                "en-US": "Active"
+              },
+              "config": {
+                "defaultValue": true,
+                "showInList": true
+              }
+            }
+          ]
+        }
+      ],
+      "icon": "inventory_2",
+      "permissions": [
+        {
+          "group": "sales",
+          "scope": "all",
+          "privileges": {
+            "read": true,
+            "add": false,
+            "edit": false,
+            "delete": false,
+            "printExport": false,
+            "pricing": true,
+            "approve": false
+          }
+        },
+        {
+          "group": "manager",
+          "scope": "all",
+          "privileges": {
+            "read": true,
+            "add": true,
+            "edit": true,
+            "delete": true,
+            "printExport": true,
+            "pricing": true,
+            "approve": true
+          }
+        }
+      ]
+    },
+    {
+      "code": "opportunity",
+      "key": "crm-opportunity",
+      "name": {
+        "zh-TW": "商機",
+        "en-US": "Opportunities"
+      },
+      "kind": "standalone",
+      "titleField": "name",
+      "blocks": [
+        {
+          "code": "main",
+          "label": {
+            "zh-TW": "基本資料",
+            "en-US": "Details"
+          },
+          "collapsed": false,
+          "columns": 2,
+          "fields": [
+            {
+              "code": "no",
+              "type": "autonumber",
+              "label": {
+                "zh-TW": "編號",
+                "en-US": "No."
+              },
+              "config": {
+                "format": "OP-{0000}",
+                "showInList": true
+              }
+            },
+            {
+              "code": "name",
+              "type": "text",
+              "label": {
+                "zh-TW": "名稱",
+                "en-US": "Name"
+              },
+              "config": {
+                "required": true,
+                "showInList": true,
+                "isFilterable": true
+              }
+            },
+            {
+              "code": "customer",
+              "type": "reference",
+              "label": {
+                "zh-TW": "客戶",
+                "en-US": "Customer"
+              },
+              "config": {
+                "showInList": true,
+                "isFilterable": true,
+                "refTarget": {
+                  "kind": "module",
+                  "key": "customer"
+                }
+              }
+            },
+            {
+              "code": "fromLead",
+              "type": "reference",
+              "label": {
+                "zh-TW": "來源潛在客戶",
+                "en-US": "Source lead"
+              },
+              "config": {
+                "readOnly": true,
+                "refTarget": {
+                  "kind": "module",
+                  "key": "lead"
+                }
+              }
+            },
+            {
+              "code": "stage",
+              "type": "enum",
+              "label": {
+                "zh-TW": "階段",
+                "en-US": "Stage"
+              },
+              "config": {
+                "required": true,
+                "defaultValue": "opt_prospecting",
+                "showInList": true,
+                "isFilterable": true
+              },
+              "options": [
+                {
+                  "code": "prospecting",
+                  "label": {
+                    "zh-TW": "初步接觸",
+                    "en-US": "Prospecting"
+                  },
+                  "color": "grey"
+                },
+                {
+                  "code": "qualification",
+                  "label": {
+                    "zh-TW": "需求確認",
+                    "en-US": "Qualification"
+                  },
+                  "color": "blue"
+                },
+                {
+                  "code": "proposal",
+                  "label": {
+                    "zh-TW": "提案報價",
+                    "en-US": "Proposal"
+                  },
+                  "color": "orange"
+                },
+                {
+                  "code": "negotiation",
+                  "label": {
+                    "zh-TW": "議價",
+                    "en-US": "Negotiation"
+                  },
+                  "color": "purple"
+                },
+                {
+                  "code": "won",
+                  "label": {
+                    "zh-TW": "成交",
+                    "en-US": "Won"
+                  },
+                  "color": "green"
+                },
+                {
+                  "code": "lost",
+                  "label": {
+                    "zh-TW": "失敗",
+                    "en-US": "Lost"
+                  },
+                  "color": "red"
+                }
+              ]
+            },
+            {
+              "code": "amount",
+              "type": "currency",
+              "label": {
+                "zh-TW": "預估金額",
+                "en-US": "Expected amount"
+              },
+              "config": {
+                "scale": 0,
+                "showInList": true
+              }
+            },
+            {
+              "code": "closeDate",
+              "type": "date",
+              "label": {
+                "zh-TW": "預計成交日",
+                "en-US": "Expected close"
+              },
+              "config": {
+                "showInList": true,
+                "isFilterable": true,
+                "isSortable": true
+              }
+            },
+            {
+              "code": "owner",
+              "type": "user",
+              "label": {
+                "zh-TW": "負責業務",
+                "en-US": "Owner"
+              },
+              "config": {
+                "showInList": true,
+                "isFilterable": true
+              }
+            }
+          ]
+        }
+      ],
+      "icon": "trending_up",
+      "permissions": [
+        {
+          "group": "sales",
+          "scope": "all",
+          "privileges": {
+            "read": true,
+            "add": true,
+            "edit": true,
+            "delete": false,
+            "printExport": true,
+            "pricing": true,
+            "approve": false
+          }
+        },
+        {
+          "group": "manager",
+          "scope": "all",
+          "privileges": {
+            "read": true,
+            "add": true,
+            "edit": true,
+            "delete": true,
+            "printExport": true,
+            "pricing": true,
+            "approve": true
+          }
+        }
+      ]
+    },
+    {
+      "code": "activity",
+      "key": "crm-activity",
+      "name": {
+        "zh-TW": "活動",
+        "en-US": "Activities"
+      },
+      "kind": "standalone",
+      "titleField": "subject",
+      "blocks": [
+        {
+          "code": "main",
+          "label": {
+            "zh-TW": "基本資料",
+            "en-US": "Details"
+          },
+          "collapsed": false,
+          "columns": 2,
+          "fields": [
+            {
+              "code": "subject",
+              "type": "text",
+              "label": {
+                "zh-TW": "主旨",
+                "en-US": "Subject"
+              },
+              "config": {
+                "required": true,
+                "showInList": true
+              }
+            },
+            {
+              "code": "kind",
+              "type": "enum",
+              "label": {
+                "zh-TW": "類型",
+                "en-US": "Type"
+              },
+              "config": {
+                "showInList": true,
+                "isFilterable": true
+              },
+              "options": [
+                {
+                  "code": "call",
+                  "label": {
+                    "zh-TW": "電話",
+                    "en-US": "Call"
+                  },
+                  "color": null
+                },
+                {
+                  "code": "visit",
+                  "label": {
+                    "zh-TW": "拜訪",
+                    "en-US": "Visit"
+                  },
+                  "color": null
+                },
+                {
+                  "code": "email",
+                  "label": {
+                    "zh-TW": "郵件",
+                    "en-US": "Email"
+                  },
+                  "color": null
+                },
+                {
+                  "code": "meeting",
+                  "label": {
+                    "zh-TW": "會議",
+                    "en-US": "Meeting"
+                  },
+                  "color": null
+                }
+              ]
+            },
+            {
+              "code": "date",
+              "type": "date",
+              "label": {
+                "zh-TW": "日期",
+                "en-US": "Date"
+              },
+              "config": {
+                "defaultToday": true,
+                "showInList": true,
+                "isFilterable": true,
+                "isSortable": true
+              }
+            },
+            {
+              "code": "customer",
+              "type": "reference",
+              "label": {
+                "zh-TW": "客戶",
+                "en-US": "Customer"
+              },
+              "config": {
+                "showInList": true,
+                "refTarget": {
+                  "kind": "module",
+                  "key": "customer"
+                }
+              }
+            },
+            {
+              "code": "opportunity",
+              "type": "reference",
+              "label": {
+                "zh-TW": "商機",
+                "en-US": "Opportunity"
+              },
+              "config": {
+                "refTarget": {
+                  "kind": "module",
+                  "key": "opportunity"
+                }
+              }
+            },
+            {
+              "code": "owner",
+              "type": "user",
+              "label": {
+                "zh-TW": "負責業務",
+                "en-US": "Owner"
+              },
+              "config": {
+                "showInList": true,
+                "isFilterable": true
+              }
+            },
+            {
+              "code": "done",
+              "type": "boolean",
+              "label": {
+                "zh-TW": "已完成",
+                "en-US": "Done"
+              },
+              "config": {
+                "showInList": true
+              }
+            },
+            {
+              "code": "note",
+              "type": "textarea",
+              "label": {
+                "zh-TW": "內容",
+                "en-US": "Note"
+              },
+              "config": {}
+            }
+          ]
+        }
+      ],
+      "icon": "event_note",
+      "permissions": [
+        {
+          "group": "sales",
+          "scope": "all",
+          "privileges": {
+            "read": true,
+            "add": true,
+            "edit": true,
+            "delete": false,
+            "printExport": true,
+            "pricing": true,
+            "approve": false
+          }
+        },
+        {
+          "group": "manager",
+          "scope": "all",
+          "privileges": {
+            "read": true,
+            "add": true,
+            "edit": true,
+            "delete": true,
+            "printExport": true,
+            "pricing": true,
+            "approve": true
+          }
+        }
+      ]
+    },
+    {
+      "code": "quote",
+      "key": "crm-quote",
+      "name": {
+        "zh-TW": "報價單",
+        "en-US": "Quotes"
+      },
+      "kind": "standalone",
+      "titleField": "no",
+      "blocks": [
+        {
+          "code": "main",
+          "label": {
+            "zh-TW": "基本資料",
+            "en-US": "Details"
+          },
+          "collapsed": false,
+          "columns": 2,
+          "fields": [
+            {
+              "code": "no",
+              "type": "autonumber",
+              "label": {
+                "zh-TW": "報價單號",
+                "en-US": "Quote no."
+              },
+              "config": {
+                "format": "QT-{yyyyMM}-{0000}",
+                "showInList": true
+              }
+            },
+            {
+              "code": "customer",
+              "type": "reference",
+              "label": {
+                "zh-TW": "客戶",
+                "en-US": "Customer"
+              },
+              "config": {
+                "required": true,
+                "showInList": true,
+                "isFilterable": true,
+                "fill": {
+                  "mode": "lock",
+                  "map": [
+                    {
+                      "from": "customer.name",
+                      "to": "customerName"
+                    },
+                    {
+                      "from": "customer.phone",
+                      "to": "customerPhone"
+                    },
+                    {
+                      "from": "customer.email",
+                      "to": "customerEmail"
+                    },
+                    {
+                      "from": "customer.address",
+                      "to": "customerAddress"
+                    }
+                  ]
+                },
+                "refTarget": {
+                  "kind": "module",
+                  "key": "customer"
+                }
+              }
+            },
+            {
+              "code": "customerName",
+              "type": "text",
+              "label": {
+                "zh-TW": "客戶名稱",
+                "en-US": "Customer name"
+              },
+              "config": {
+                "readOnly": true
+              }
+            },
+            {
+              "code": "customerPhone",
+              "type": "phone",
+              "label": {
+                "zh-TW": "客戶電話",
+                "en-US": "Customer phone"
+              },
+              "config": {
+                "readOnly": true
+              }
+            },
+            {
+              "code": "customerEmail",
+              "type": "email",
+              "label": {
+                "zh-TW": "客戶 Email",
+                "en-US": "Customer email"
+              },
+              "config": {
+                "readOnly": true
+              }
+            },
+            {
+              "code": "customerAddress",
+              "type": "text",
+              "label": {
+                "zh-TW": "客戶地址",
+                "en-US": "Customer address"
+              },
+              "config": {
+                "readOnly": true
+              }
+            },
+            {
+              "code": "fromOpportunity",
+              "type": "reference",
+              "label": {
+                "zh-TW": "來源商機",
+                "en-US": "Source opportunity"
+              },
+              "config": {
+                "readOnly": true,
+                "showInList": true,
+                "refTarget": {
+                  "kind": "module",
+                  "key": "opportunity"
+                }
+              }
+            },
+            {
+              "code": "quoteDate",
+              "type": "date",
+              "label": {
+                "zh-TW": "報價日期",
+                "en-US": "Quote date"
+              },
+              "config": {
+                "defaultToday": true,
+                "required": true,
+                "showInList": true,
+                "isFilterable": true,
+                "isSortable": true
+              }
+            },
+            {
+              "code": "validUntil",
+              "type": "date",
+              "label": {
+                "zh-TW": "有效期限",
+                "en-US": "Valid until"
+              },
+              "config": {}
+            },
+            {
+              "code": "status",
+              "type": "enum",
+              "label": {
+                "zh-TW": "狀態",
+                "en-US": "Status"
+              },
+              "config": {
+                "required": true,
+                "defaultValue": "opt_draft",
+                "showInList": true,
+                "isFilterable": true
+              },
+              "options": [
+                {
+                  "code": "draft",
+                  "label": {
+                    "zh-TW": "草稿",
+                    "en-US": "Draft"
+                  },
+                  "color": "grey"
+                },
+                {
+                  "code": "pending",
+                  "label": {
+                    "zh-TW": "待核准",
+                    "en-US": "Pending approval"
+                  },
+                  "color": "orange"
+                },
+                {
+                  "code": "approved",
+                  "label": {
+                    "zh-TW": "已核准",
+                    "en-US": "Approved"
+                  },
+                  "color": "green"
+                },
+                {
+                  "code": "rejected",
+                  "label": {
+                    "zh-TW": "已退回",
+                    "en-US": "Rejected"
+                  },
+                  "color": "red"
+                }
+              ]
+            },
+            {
+              "code": "owner",
+              "type": "user",
+              "label": {
+                "zh-TW": "負責業務",
+                "en-US": "Owner"
+              },
+              "config": {
+                "showInList": true,
+                "isFilterable": true
+              }
+            },
+            {
+              "code": "subtotal",
+              "type": "rollup",
+              "label": {
+                "zh-TW": "未稅小計",
+                "en-US": "Subtotal"
+              },
+              "config": {
+                "rollup": {
+                  "sourceField": "quote-line.quote",
+                  "function": "sum",
+                  "aggregateField": "quote-line.amount"
+                }
+              }
+            },
+            {
+              "code": "taxRate",
+              "type": "percent",
+              "label": {
+                "zh-TW": "稅率",
+                "en-US": "Tax rate"
+              },
+              "config": {
+                "scale": 0,
+                "defaultValue": 5
+              }
+            },
+            {
+              "code": "tax",
+              "type": "formula",
+              "label": {
+                "zh-TW": "稅額",
+                "en-US": "Tax"
+              },
+              "config": {
+                "formula": "ROUND({subtotal} * {taxRate}, 0)",
+                "resultType": "currency",
+                "scale": 0
+              }
+            },
+            {
+              "code": "total",
+              "type": "formula",
+              "label": {
+                "zh-TW": "含稅總計",
+                "en-US": "Total"
+              },
+              "config": {
+                "formula": "{subtotal} + {tax}",
+                "resultType": "currency",
+                "scale": 0,
+                "showInList": true
+              }
+            },
+            {
+              "code": "remark",
+              "type": "textarea",
+              "label": {
+                "zh-TW": "備註",
+                "en-US": "Remark"
+              },
+              "config": {}
+            }
+          ]
+        }
+      ],
+      "icon": "request_quote",
+      "permissions": [
+        {
+          "group": "sales",
+          "scope": "all",
+          "privileges": {
+            "read": true,
+            "add": true,
+            "edit": true,
+            "delete": false,
+            "printExport": true,
+            "pricing": true,
+            "approve": false
+          }
+        },
+        {
+          "group": "manager",
+          "scope": "all",
+          "privileges": {
+            "read": true,
+            "add": true,
+            "edit": true,
+            "delete": true,
+            "printExport": true,
+            "pricing": true,
+            "approve": true
+          }
+        }
+      ]
+    },
+    {
+      "code": "quote-line",
+      "key": "crm-quote-line",
+      "name": {
+        "zh-TW": "報價明細",
+        "en-US": "Quote lines"
+      },
+      "kind": "standalone",
+      "titleField": "productName",
+      "blocks": [
+        {
+          "code": "main",
+          "label": {
+            "zh-TW": "基本資料",
+            "en-US": "Details"
+          },
+          "collapsed": false,
+          "columns": 2,
+          "fields": [
+            {
+              "code": "quote",
+              "type": "reference",
+              "label": {
+                "zh-TW": "報價單",
+                "en-US": "Quote"
+              },
+              "config": {
+                "relation": "detail",
+                "refTarget": {
+                  "kind": "module",
+                  "key": "quote"
+                }
+              }
+            },
+            {
+              "code": "seq",
+              "type": "autonumber",
+              "label": {
+                "zh-TW": "項次",
+                "en-US": "Line"
+              },
+              "config": {
+                "format": "{0}",
+                "scope": "parent"
+              }
+            },
+            {
+              "code": "product",
+              "type": "reference",
+              "label": {
+                "zh-TW": "產品",
+                "en-US": "Product"
+              },
+              "config": {
+                "required": true,
+                "fill": {
+                  "mode": "default",
+                  "map": [
+                    {
+                      "from": "product.name",
+                      "to": "productName"
+                    },
+                    {
+                      "from": "product.unit",
+                      "to": "unit"
+                    },
+                    {
+                      "from": "product.price",
+                      "to": "price"
+                    }
+                  ]
+                },
+                "refTarget": {
+                  "kind": "module",
+                  "key": "product"
+                }
+              }
+            },
+            {
+              "code": "productName",
+              "type": "text",
+              "label": {
+                "zh-TW": "品名",
+                "en-US": "Product name"
+              },
+              "config": {}
+            },
+            {
+              "code": "unit",
+              "type": "text",
+              "label": {
+                "zh-TW": "單位",
+                "en-US": "Unit"
+              },
+              "config": {}
+            },
+            {
+              "code": "qty",
+              "type": "decimal",
+              "label": {
+                "zh-TW": "數量",
+                "en-US": "Quantity"
+              },
+              "config": {
+                "scale": 2,
+                "required": true
+              }
+            },
+            {
+              "code": "price",
+              "type": "currency",
+              "label": {
+                "zh-TW": "單價",
+                "en-US": "Unit price"
+              },
+              "config": {
+                "scale": 0
+              }
+            },
+            {
+              "code": "amount",
+              "type": "formula",
+              "label": {
+                "zh-TW": "金額",
+                "en-US": "Amount"
+              },
+              "config": {
+                "formula": "{qty} * {price}",
+                "resultType": "currency",
+                "scale": 0
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "code": "order",
+      "key": "crm-order",
+      "name": {
+        "zh-TW": "訂單",
+        "en-US": "Orders"
+      },
+      "kind": "standalone",
+      "titleField": "no",
+      "blocks": [
+        {
+          "code": "main",
+          "label": {
+            "zh-TW": "基本資料",
+            "en-US": "Details"
+          },
+          "collapsed": false,
+          "columns": 2,
+          "fields": [
+            {
+              "code": "no",
+              "type": "autonumber",
+              "label": {
+                "zh-TW": "訂單號",
+                "en-US": "Order no."
+              },
+              "config": {
+                "format": "SO-{yyyyMM}-{0000}",
+                "showInList": true
+              }
+            },
+            {
+              "code": "fromQuote",
+              "type": "reference",
+              "label": {
+                "zh-TW": "來源報價單",
+                "en-US": "Source quote"
+              },
+              "config": {
+                "readOnly": true,
+                "showInList": true,
+                "refTarget": {
+                  "kind": "module",
+                  "key": "quote"
+                }
+              }
+            },
+            {
+              "code": "customer",
+              "type": "reference",
+              "label": {
+                "zh-TW": "客戶",
+                "en-US": "Customer"
+              },
+              "config": {
+                "showInList": true,
+                "isFilterable": true,
+                "refTarget": {
+                  "kind": "module",
+                  "key": "customer"
+                }
+              }
+            },
+            {
+              "code": "customerName",
+              "type": "text",
+              "label": {
+                "zh-TW": "客戶名稱",
+                "en-US": "Customer name"
+              },
+              "config": {}
+            },
+            {
+              "code": "orderDate",
+              "type": "date",
+              "label": {
+                "zh-TW": "訂單日期",
+                "en-US": "Order date"
+              },
+              "config": {
+                "defaultToday": true,
+                "required": true,
+                "showInList": true,
+                "isFilterable": true,
+                "isSortable": true
+              }
+            },
+            {
+              "code": "status",
+              "type": "enum",
+              "label": {
+                "zh-TW": "狀態",
+                "en-US": "Status"
+              },
+              "config": {
+                "required": true,
+                "defaultValue": "opt_confirmed",
+                "showInList": true,
+                "isFilterable": true
+              },
+              "options": [
+                {
+                  "code": "confirmed",
+                  "label": {
+                    "zh-TW": "已確認",
+                    "en-US": "Confirmed"
+                  },
+                  "color": "blue"
+                },
+                {
+                  "code": "shipped",
+                  "label": {
+                    "zh-TW": "已出貨",
+                    "en-US": "Shipped"
+                  },
+                  "color": "orange"
+                },
+                {
+                  "code": "completed",
+                  "label": {
+                    "zh-TW": "已完成",
+                    "en-US": "Completed"
+                  },
+                  "color": "green"
+                },
+                {
+                  "code": "cancelled",
+                  "label": {
+                    "zh-TW": "已取消",
+                    "en-US": "Cancelled"
+                  },
+                  "color": "red"
+                }
+              ]
+            },
+            {
+              "code": "owner",
+              "type": "user",
+              "label": {
+                "zh-TW": "負責業務",
+                "en-US": "Owner"
+              },
+              "config": {
+                "showInList": true,
+                "isFilterable": true
+              }
+            },
+            {
+              "code": "subtotal",
+              "type": "rollup",
+              "label": {
+                "zh-TW": "未稅小計",
+                "en-US": "Subtotal"
+              },
+              "config": {
+                "rollup": {
+                  "sourceField": "order-line.order",
+                  "function": "sum",
+                  "aggregateField": "order-line.amount"
+                }
+              }
+            },
+            {
+              "code": "taxRate",
+              "type": "percent",
+              "label": {
+                "zh-TW": "稅率",
+                "en-US": "Tax rate"
+              },
+              "config": {
+                "scale": 0,
+                "defaultValue": 5
+              }
+            },
+            {
+              "code": "tax",
+              "type": "formula",
+              "label": {
+                "zh-TW": "稅額",
+                "en-US": "Tax"
+              },
+              "config": {
+                "formula": "ROUND({subtotal} * {taxRate}, 0)",
+                "resultType": "currency",
+                "scale": 0
+              }
+            },
+            {
+              "code": "total",
+              "type": "formula",
+              "label": {
+                "zh-TW": "含稅總計",
+                "en-US": "Total"
+              },
+              "config": {
+                "formula": "{subtotal} + {tax}",
+                "resultType": "currency",
+                "scale": 0,
+                "showInList": true
+              }
+            },
+            {
+              "code": "remark",
+              "type": "textarea",
+              "label": {
+                "zh-TW": "備註",
+                "en-US": "Remark"
+              },
+              "config": {}
+            }
+          ]
+        }
+      ],
+      "icon": "receipt_long",
+      "permissions": [
+        {
+          "group": "sales",
+          "scope": "all",
+          "privileges": {
+            "read": true,
+            "add": true,
+            "edit": true,
+            "delete": false,
+            "printExport": true,
+            "pricing": true,
+            "approve": false
+          }
+        },
+        {
+          "group": "manager",
+          "scope": "all",
+          "privileges": {
+            "read": true,
+            "add": true,
+            "edit": true,
+            "delete": true,
+            "printExport": true,
+            "pricing": true,
+            "approve": true
+          }
+        }
+      ]
+    },
+    {
+      "code": "order-line",
+      "key": "crm-order-line",
+      "name": {
+        "zh-TW": "訂單明細",
+        "en-US": "Order lines"
+      },
+      "kind": "standalone",
+      "titleField": "productName",
+      "blocks": [
+        {
+          "code": "main",
+          "label": {
+            "zh-TW": "基本資料",
+            "en-US": "Details"
+          },
+          "collapsed": false,
+          "columns": 2,
+          "fields": [
+            {
+              "code": "order",
+              "type": "reference",
+              "label": {
+                "zh-TW": "訂單",
+                "en-US": "Order"
+              },
+              "config": {
+                "relation": "detail",
+                "refTarget": {
+                  "kind": "module",
+                  "key": "order"
+                }
+              }
+            },
+            {
+              "code": "seq",
+              "type": "autonumber",
+              "label": {
+                "zh-TW": "項次",
+                "en-US": "Line"
+              },
+              "config": {
+                "format": "{0}",
+                "scope": "parent"
+              }
+            },
+            {
+              "code": "product",
+              "type": "reference",
+              "label": {
+                "zh-TW": "產品",
+                "en-US": "Product"
+              },
+              "config": {
+                "refTarget": {
+                  "kind": "module",
+                  "key": "product"
+                }
+              }
+            },
+            {
+              "code": "productName",
+              "type": "text",
+              "label": {
+                "zh-TW": "品名",
+                "en-US": "Product name"
+              },
+              "config": {}
+            },
+            {
+              "code": "unit",
+              "type": "text",
+              "label": {
+                "zh-TW": "單位",
+                "en-US": "Unit"
+              },
+              "config": {}
+            },
+            {
+              "code": "qty",
+              "type": "decimal",
+              "label": {
+                "zh-TW": "數量",
+                "en-US": "Quantity"
+              },
+              "config": {
+                "scale": 2,
+                "required": true
+              }
+            },
+            {
+              "code": "price",
+              "type": "currency",
+              "label": {
+                "zh-TW": "單價",
+                "en-US": "Unit price"
+              },
+              "config": {
+                "scale": 0
+              }
+            },
+            {
+              "code": "amount",
+              "type": "formula",
+              "label": {
+                "zh-TW": "金額",
+                "en-US": "Amount"
+              },
+              "config": {
+                "formula": "{qty} * {price}",
+                "resultType": "currency",
+                "scale": 0
+              }
+            },
+            {
+              "code": "fromLine",
+              "type": "integer",
+              "label": {
+                "zh-TW": "來源報價列",
+                "en-US": "Source quote line"
+              },
+              "config": {
+                "readOnly": true
+              }
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "workflows": [
+    {
+      "module": "lead",
+      "statusField": "status",
+      "initial": "new",
+      "states": [
+        {
+          "option": "new"
+        },
+        {
+          "option": "contacted"
+        },
+        {
+          "option": "qualified"
+        },
+        {
+          "option": "lost"
+        }
+      ],
+      "transitions": [
+        {
+          "from": "new",
+          "to": "contacted",
+          "groups": []
+        },
+        {
+          "from": "contacted",
+          "to": "qualified",
+          "groups": []
+        },
+        {
+          "from": "new",
+          "to": "lost",
+          "groups": []
+        },
+        {
+          "from": "contacted",
+          "to": "lost",
+          "groups": []
+        },
+        {
+          "from": "qualified",
+          "to": "lost",
+          "groups": []
+        },
+        {
+          "from": "lost",
+          "to": "new",
+          "groups": []
+        }
+      ]
+    },
+    {
+      "module": "opportunity",
+      "statusField": "stage",
+      "initial": "prospecting",
+      "states": [
+        {
+          "option": "prospecting"
+        },
+        {
+          "option": "qualification"
+        },
+        {
+          "option": "proposal"
+        },
+        {
+          "option": "negotiation"
+        },
+        {
+          "option": "won"
+        },
+        {
+          "option": "lost"
+        }
+      ],
+      "transitions": [
+        {
+          "from": "prospecting",
+          "to": "qualification",
+          "groups": []
+        },
+        {
+          "from": "qualification",
+          "to": "proposal",
+          "groups": []
+        },
+        {
+          "from": "proposal",
+          "to": "negotiation",
+          "groups": []
+        },
+        {
+          "from": "negotiation",
+          "to": "won",
+          "groups": []
+        },
+        {
+          "from": "prospecting",
+          "to": "lost",
+          "groups": []
+        },
+        {
+          "from": "qualification",
+          "to": "lost",
+          "groups": []
+        },
+        {
+          "from": "proposal",
+          "to": "lost",
+          "groups": []
+        },
+        {
+          "from": "negotiation",
+          "to": "lost",
+          "groups": []
+        }
+      ]
+    },
+    {
+      "module": "quote",
+      "statusField": "status",
+      "initial": "draft",
+      "states": [
+        {
+          "option": "draft"
+        },
+        {
+          "option": "pending"
+        },
+        {
+          "option": "approved",
+          "readOnly": true
+        },
+        {
+          "option": "rejected"
+        }
+      ],
+      "transitions": [
+        {
+          "from": "draft",
+          "to": "pending",
+          "groups": []
+        },
+        {
+          "from": "pending",
+          "to": "approved",
+          "groups": [
+            "manager"
+          ]
+        },
+        {
+          "from": "pending",
+          "to": "rejected",
+          "groups": [
+            "manager"
+          ]
+        },
+        {
+          "from": "pending",
+          "to": "draft",
+          "groups": [
+            "manager"
+          ]
+        },
+        {
+          "from": "rejected",
+          "to": "draft",
+          "groups": []
+        }
+      ]
+    },
+    {
+      "module": "order",
+      "statusField": "status",
+      "initial": "confirmed",
+      "states": [
+        {
+          "option": "confirmed"
+        },
+        {
+          "option": "shipped"
+        },
+        {
+          "option": "completed",
+          "readOnly": true
+        },
+        {
+          "option": "cancelled",
+          "readOnly": true
+        }
+      ],
+      "transitions": [
+        {
+          "from": "confirmed",
+          "to": "shipped",
+          "groups": []
+        },
+        {
+          "from": "shipped",
+          "to": "completed",
+          "groups": []
+        },
+        {
+          "from": "confirmed",
+          "to": "cancelled",
+          "groups": [
+            "manager"
+          ]
+        }
+      ]
+    }
+  ],
+  "conversions": [
+    {
+      "code": "crm-lead-to-customer",
+      "name": {
+        "zh-TW": "潛在客戶轉客戶",
+        "en-US": "Lead to customer"
+      },
+      "active": true,
+      "source": "lead",
+      "target": "customer",
+      "sourceStates": [
+        "qualified"
+      ],
+      "header": {
+        "sourceField": "customer.fromLead",
+        "copy": [
+          {
+            "from": "lead.company",
+            "to": "customer.name"
+          },
+          {
+            "from": "lead.phone",
+            "to": "customer.phone"
+          },
+          {
+            "from": "lead.email",
+            "to": "customer.email"
+          },
+          {
+            "from": "lead.owner",
+            "to": "customer.owner"
+          }
+        ]
+      }
+    },
+    {
+      "code": "crm-lead-to-opportunity",
+      "name": {
+        "zh-TW": "潛在客戶轉商機",
+        "en-US": "Lead to opportunity"
+      },
+      "active": true,
+      "source": "lead",
+      "target": "opportunity",
+      "sourceStates": [
+        "qualified"
+      ],
+      "header": {
+        "sourceField": "opportunity.fromLead",
+        "copy": [
+          {
+            "from": "lead.name",
+            "to": "opportunity.name"
+          },
+          {
+            "from": "lead.owner",
+            "to": "opportunity.owner"
+          }
+        ]
+      }
+    },
+    {
+      "code": "crm-opportunity-to-quote",
+      "name": {
+        "zh-TW": "商機轉報價單",
+        "en-US": "Opportunity to quote"
+      },
+      "active": true,
+      "source": "opportunity",
+      "target": "quote",
+      "sourceStates": [
+        "proposal",
+        "negotiation"
+      ],
+      "header": {
+        "sourceField": "quote.fromOpportunity",
+        "copy": [
+          {
+            "from": "opportunity.customer",
+            "to": "quote.customer"
+          },
+          {
+            "from": "opportunity.owner",
+            "to": "quote.owner"
+          }
+        ]
+      }
+    },
+    {
+      "code": "crm-quote-to-order",
+      "name": {
+        "zh-TW": "報價單轉訂單",
+        "en-US": "Quote to order"
+      },
+      "active": true,
+      "source": "quote",
+      "target": "order",
+      "sourceStates": [
+        "approved"
+      ],
+      "header": {
+        "sourceField": "order.fromQuote",
+        "copy": [
+          {
+            "from": "quote.customer",
+            "to": "order.customer"
+          },
+          {
+            "from": "quote.customerName",
+            "to": "order.customerName"
+          },
+          {
+            "from": "quote.owner",
+            "to": "order.owner"
+          },
+          {
+            "from": "quote.taxRate",
+            "to": "order.taxRate"
+          }
+        ]
+      },
+      "lines": {
+        "sourceModule": "quote-line",
+        "targetModule": "order-line",
+        "sourceLineField": "order-line.fromLine",
+        "quantity": {
+          "from": "quote-line.qty",
+          "to": "order-line.qty"
+        },
+        "copy": [
+          {
+            "from": "quote-line.product",
+            "to": "order-line.product"
+          },
+          {
+            "from": "quote-line.productName",
+            "to": "order-line.productName"
+          },
+          {
+            "from": "quote-line.unit",
+            "to": "order-line.unit"
+          },
+          {
+            "from": "quote-line.price",
+            "to": "order-line.price"
+          }
+        ]
+      }
+    }
+  ],
+  "reports": [
+    {
+      "code": "opportunityByStage",
+      "name": "商機階段分布",
+      "shareWith": [
+        "sales",
+        "manager"
+      ],
+      "definition": {
+        "version": 1,
+        "mainModule": "opportunity",
+        "child": null,
+        "columns": [],
+        "groups": [
+          {
+            "field": {
+              "source": "main",
+              "field": "opportunity.stage",
+              "via": null
+            },
+            "bucket": null
+          }
+        ],
+        "measures": [
+          {
+            "id": "n",
+            "kind": "countMain",
+            "field": null,
+            "condition": null
+          }
+        ],
+        "filters": [],
+        "primaryDateField": null,
+        "dateRange": null,
+        "sort": [],
+        "viz": "donut"
+      }
+    },
+    {
+      "code": "orderAmountBySales",
+      "name": "各業務訂單金額（未稅）",
+      "shareWith": [
+        "sales",
+        "manager"
+      ],
+      "definition": {
+        "version": 1,
+        "mainModule": "order",
+        "child": {
+          "module": "order-line",
+          "linkField": "order-line.order"
+        },
+        "columns": [],
+        "groups": [
+          {
+            "field": {
+              "source": "main",
+              "field": "order.owner",
+              "via": null
+            },
+            "bucket": null
+          }
+        ],
+        "measures": [
+          {
+            "id": "amount",
+            "kind": "sum",
+            "field": {
+              "source": "child",
+              "field": "order-line.amount",
+              "via": null
+            },
+            "condition": null
+          }
+        ],
+        "filters": [],
+        "primaryDateField": null,
+        "dateRange": null,
+        "sort": [],
+        "viz": "bar"
+      }
+    }
+  ],
+  "printTemplates": [
+    {
+      "module": "quote",
+      "code": "quote-sheet",
+      "name": {
+        "zh-TW": "報價單",
+        "en-US": "Quote"
+      },
+      "active": true,
+      "body": "<h1 align=\"center\">報價單 {{no}}</h1><table width=\"100%\" cellpadding=\"4\"><tr><td>客戶：{{customerName}}</td><td align=\"right\">報價日期：{{quoteDate}}</td></tr><tr><td>電話：{{customerPhone}}</td><td align=\"right\">有效期限：{{validUntil}}</td></tr><tr><td colspan=\"2\">Email：{{customerEmail}}　地址：{{customerAddress}}</td></tr></table><table width=\"100%\" border=\"1\" cellpadding=\"4\" style=\"border-collapse:collapse\"><thead><tr><th>項次</th><th>品名</th><th>單位</th><th align=\"right\">數量</th><th align=\"right\">單價</th><th align=\"right\">金額</th></tr></thead><tbody>{{#each quote-line}}<tr><td>{{seq}}</td><td>{{productName}}</td><td>{{unit}}</td><td align=\"right\">{{qty}}</td><td align=\"right\">{{price}}</td><td align=\"right\">{{amount}}</td></tr>{{/each}}</tbody></table><p align=\"right\">未稅小計：{{subtotal}}<br>稅額：{{tax}}<br><strong>含稅總計：{{total}}</strong></p><p>備註：{{remark}}</p>"
+    }
+  ]
+}
