@@ -2,6 +2,7 @@ using DynamicModules.Application.Common;
 using DynamicModules.Application.Dynamic.AppService.Data;
 using DynamicModules.Application.Dynamic.ConversionService.Commands.SaveConversion;
 using DynamicModules.Application.Dynamic.ConversionService.Data;
+using DynamicModules.Application.Dynamic.PrintService;
 using DynamicModules.Application.Dynamic.ReportService.Commands.CreateReport;
 using DynamicModules.Application.Dynamic.ReportService.Commands.SetReportShares;
 using DynamicModules.Application.Dynamic.ReportService.Data;
@@ -68,6 +69,21 @@ public sealed class AppFlowInstaller(ISender sender)
             }
             var created = await sender.Send(new CreateConversionRequest(input), ct);
             if (!created.IsSuccess) return new Result(Prefixed(created, $"conversions.{c.Code}"), reports, warnings);
+        }
+
+        foreach (var t in p.PrintTemplates)
+        {
+            var converted = AppPrintCodec.ToDatabase(t.Body, t.Module,
+                code => ids.ModuleKeys.GetValueOrDefault(code), name => ids.FieldIds.TryGetValue(name, out var id) ? id : null);
+            if (converted.Body is null || !ids.ModuleKeys.TryGetValue(t.Module, out var moduleKey))
+            {
+                warnings.Add($"列印範本「{t.Module}.{t.Code}」引用了被排除的模組，已略過");
+                continue;
+            }
+            foreach (var field in converted.Dropped.Distinct())
+                warnings.Add($"列印範本「{t.Module}.{t.Code}」引用了被排除的欄位 {field}，該處將印空白");
+            var created = await sender.Send(new CreatePrintTemplateRequest(moduleKey, new PrintTemplateInput(t.Code, t.Name, converted.Body, t.Active)), ct);
+            if (!created.IsSuccess) return new Result(Prefixed(created, $"printTemplates.{t.Module}.{t.Code}"), reports, warnings);
         }
 
         foreach (var r in p.Reports)

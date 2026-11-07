@@ -8,6 +8,18 @@ export type FieldType =
   | 'date' | 'datetime' | 'time' | 'boolean' | 'email' | 'phone' | 'url'
   | 'enum' | 'multienum' | 'user' | 'formula' | 'autonumber' | 'reference' | 'rollup' | 'attachment';
 
+/** What a user picks from when printing a record; the body stays with the designer. */
+export interface PrintTemplateOption {
+  key: string;
+  name: I18nText;
+}
+
+export interface PrintTemplateDefinition extends PrintTemplateOption {
+  /** Sanitized HTML with `{{f_12}}` placeholders and `{{#each detail-module-key}}…{{/each}}` loops. */
+  body: string;
+  active: boolean;
+}
+
 /** One file in an attachment field's value; the server owns id, name and size. */
 export interface AttachmentFile {
   id: string;

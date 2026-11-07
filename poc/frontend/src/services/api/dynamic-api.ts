@@ -1,5 +1,5 @@
 import type {
-  AdminGroup, AdminUser, AttachmentSettings, UploadedAttachment, DeleteCheck, DeleteTargetRef, AdminUserCreate, AdminUserUpdate, AuthOptions, AuthUser, ConditionNode, ConvertBody, Conversion, DesignerField, DetailRowPayload, DynamicRecord, EntitySummary, FieldConfig, FieldType, Group, GroupImpact, I18nText, LightPage, ListView, Me, MenuItem, ModuleDetail, ModulePermissions, ModuleSchema, RecordConversion,
+  AdminGroup, AdminUser, AttachmentSettings, PrintTemplateDefinition, PrintTemplateOption, UploadedAttachment, DeleteCheck, DeleteTargetRef, AdminUserCreate, AdminUserUpdate, AuthOptions, AuthUser, ConditionNode, ConvertBody, Conversion, DesignerField, DetailRowPayload, DynamicRecord, EntitySummary, FieldConfig, FieldType, Group, GroupImpact, I18nText, LightPage, ListView, Me, MenuItem, ModuleDetail, ModulePermissions, ModuleSchema, RecordConversion,
   ImportPreview, ImportResult, PagedResponse, RecordHistoryEntry, RelatedTab, Rule, RollupSource, User, ViewSort, Workflow,
 } from 'src/domain/dynamic/types';
 import type {
@@ -367,6 +367,17 @@ export const dynamicApi = {
     http.post<ImportPreview>(`/modules/${key}/import`, importForm(file), { params: { commit: false } }).then(data),
   commitImport: (key: string, file: File) =>
     http.post<ImportResult>(`/modules/${key}/import`, importForm(file), { params: { commit: true } }).then(data),
+  getPrintTemplates: (moduleKey: string) => http.get<PrintTemplateOption[]>(`/modules/${moduleKey}/print-templates`).then(data),
+  getPrintTemplateDefinitions: (moduleKey: string) =>
+    http.get<PrintTemplateDefinition[]>(`/modules/${moduleKey}/print-templates/definitions`).then(data),
+  createPrintTemplate: (moduleKey: string, body: PrintTemplateDefinition) =>
+    http.post<PrintTemplateDefinition>(`/modules/${moduleKey}/print-templates`, body).then(data),
+  updatePrintTemplate: (moduleKey: string, body: PrintTemplateDefinition) =>
+    http.put<PrintTemplateDefinition>(`/modules/${moduleKey}/print-templates/${body.key}`, body).then(data),
+  deletePrintTemplate: (moduleKey: string, key: string) => http.delete(`/modules/${moduleKey}/print-templates/${key}`).then(data),
+  /** The finished HTML document for one record; shown in a script-less sandbox and printed by the browser. */
+  printRecord: (recordId: number, templateKey: string, locale: string) =>
+    http.get<string>(`/records/${recordId}/print/${templateKey}`, { params: { locale }, responseType: 'text', transformResponse: (d) => d as string }).then(data),
   getAttachmentSettings: () => http.get<AttachmentSettings>('/attachments/settings').then(data),
   uploadAttachment: (recordId: number, fieldId: number, file: File) => {
     const body = new FormData();

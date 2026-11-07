@@ -101,7 +101,6 @@ public class AppPackageFormatTests
     // workflows、conversions、reports 在格式 3 已有型別，格式 2 帶它們被拒的測試見 AppV3Tests
     [InlineData("dashboards")]
     [InlineData("events")]
-    [InlineData("printTemplates")]
     public void Structure_ReservedSectionNonEmpty_IsRejected(string section)
     {
         var json = AppTestPackages.Procure.Replace("\"groups\"", $"\"{section}\": [ {{ \"x\": 1 }} ], \"groups\"");

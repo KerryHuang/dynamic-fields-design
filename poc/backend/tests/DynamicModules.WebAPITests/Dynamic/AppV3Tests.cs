@@ -171,6 +171,14 @@ public class AppV3Tests : IDisposable
         exported.GetProperty("conversions").GetArrayLength().Should().Be(1);
         exported.GetProperty("reports").GetArrayLength().Should().Be(1);
         exported.GetRawText().Should().Contain("\"fill\"");
+        // 列印範本匯出時：迴圈換回模組代號，不留資料庫的模組鍵；欄位佔位符用匯出的欄位代號（開啟後欄位代號就是 f_<Id>），
+        // 和同一份套件裡的欄位一致，由重新匯入後能列印來證明
+        var exportedTemplate = exported.GetProperty("printTemplates").EnumerateArray().Single();
+        exportedTemplate.GetProperty("module").GetString().Should().Be("quote");
+        exportedTemplate.GetProperty("code").GetString().Should().Be("quote-sheet");
+        var exportedBody = exportedTemplate.GetProperty("body").GetString()!;
+        exportedBody.Should().Contain("{{#each quote-line}}").And.NotContain("sales-flow-");
+        exportedBody.Should().MatchRegex(@"^<h1>\{\{f_\d+\}\}</h1><p>\{\{f_\d+\}\}</p>");
 
         using var fresh = new TestApp();
         var admin2 = fresh.AsUser();
@@ -181,6 +189,69 @@ public class AppV3Tests : IDisposable
                     .ToDictionary(g => g.GetProperty("code").GetString()!, g => (object)new { mode = "create" })
             });
         await DriveSalesFlow(admin2, reopened);
+
+        // 重新匯入的應用程式：範本在，而且真的印得出來
+        var quote = KeyOf(reopened, "quote");
+        var line = KeyOf(reopened, "quote-line");
+        var customer = KeyOf(reopened, "customer");
+        var c = await PostOk(admin2, $"{Base}/modules/{customer}/records",
+            new { values = new Dictionary<string, object> { [(await FieldKeys(admin2, customer))["name"]] = "乙公司" } });
+        var q = await FieldKeys(admin2, quote);
+        var ql = await FieldKeys(admin2, line);
+        var created = await PostOk(admin2, $"{Base}/modules/{quote}/records", new
+        {
+            values = new Dictionary<string, object> { [q["customer"]] = c.GetProperty("id").GetInt64() },
+            details = new Dictionary<string, object[]> { [line] = [new { values = new Dictionary<string, object> { [ql["item"]] = "墊片", [ql["qty"]] = 3 } }] }
+        });
+        var printed = await admin2.GetAsync($"{Base}/records/{created.GetProperty("id").GetInt64()}/print/quote-sheet");
+        printed.StatusCode.Should().Be(HttpStatusCode.OK, await printed.Content.ReadAsStringAsync());
+        var html = await printed.Content.ReadAsStringAsync();
+        html.Should().Contain("<p>乙公司</p>").And.Contain("<td>墊片</td><td>3.00</td>");
+    }
+
+    [Fact]
+    public async Task OpenWithPrintTemplate_StoresDatabaseKeysAndSanitizedBody()
+    {
+        var nasty = """[ { "module": "quote", "code": "quote-sheet", "name": { "zh-TW": "報價單" }, "active": true, "body": "<script>alert(1)</script><p onclick=\"x()\">{{no}}</p>" } ]""";
+        await ImportAndOpen(_admin, AppTestPackagesV3.Sales(printTemplates: nasty), "sales-flow");
+        var body = Db(db => db.Set<PrintTemplate>().Single().Body);
+        body.Should().MatchRegex("^<p>\\{\\{f_\\d+\\}\\}</p>$");
+    }
+
+    [Theory]
+    [InlineData("""[ { "module": "nope", "code": "quote-sheet", "name": { "zh-TW": "x" }, "active": true, "body": "<p>x</p>" } ]""")]
+    [InlineData("""[ { "module": "quote", "code": "Bad Code", "name": { "zh-TW": "x" }, "active": true, "body": "<p>x</p>" } ]""")]
+    [InlineData("""[ { "module": "quote", "code": "quote-sheet", "name": { "zh-TW": "x" }, "active": true, "body": "<p>{{noSuchField}}</p>" } ]""")]
+    [InlineData("""[ { "module": "quote", "code": "quote-sheet", "name": { "zh-TW": "x" }, "active": true, "body": "{{#each order-line}}x{{/each}}" } ]""")]
+    [InlineData("""[ { "module": "quote", "code": "quote-sheet", "name": { "zh-TW": "x" }, "active": true, "body": "{{#each quote-line}}{{noSuch}}{{/each}}" } ]""")]
+    [InlineData("""[ { "module": "quote", "code": "quote-sheet", "name": { "zh-TW": "x" }, "active": true, "body": "{{#each quote-line}}never closed" } ]""")]
+    [InlineData("""[ { "module": "quote", "code": "quote-sheet", "name": { "zh-TW": "x" }, "active": true, "body": "" } ]""")]
+    [InlineData("""[ { "module": "quote", "code": "a-1", "name": { "zh-TW": "x" }, "active": true, "body": "<p>1</p>" }, { "module": "quote", "code": "a-1", "name": { "zh-TW": "y" }, "active": true, "body": "<p>2</p>" } ]""")]
+    public async Task PackageWithBadPrintTemplate_IsRejected(string printTemplates)
+    {
+        var res = await _admin.PostAsync($"{Apps}/packages/import", Body(AppTestPackagesV3.Sales(printTemplates: printTemplates)));
+        res.StatusCode.Should().Be(HttpStatusCode.BadRequest, await res.Content.ReadAsStringAsync());
+        (await res.Content.ReadAsStringAsync()).Should().Contain("printTemplates");
+    }
+
+    [Fact]
+    public async Task V2Package_WithPrintTemplates_IsRejected()
+    {
+        var json = AppTestPackagesV3.Sales(formatVersion: 2, workflows: "[]", conversions: "[]", reports: "[]", fill: "")
+            .Replace("\"reports\"", "\"printTemplates\": [ { \"module\": \"quote\", \"code\": \"quote-sheet\", \"name\": { \"zh-TW\": \"x\" }, \"active\": true, \"body\": \"<p>x</p>\" } ], \"reports\"");
+        var res = await _admin.PostAsync($"{Apps}/packages/import", Body(json));
+        res.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+        (await res.Content.ReadAsStringAsync()).Should().Contain("printTemplates");
+    }
+
+    [Fact]
+    public async Task Delete_RemovesPrintTemplates()
+    {
+        await ImportAndOpen(_admin, AppTestPackagesV3.Sales(), "sales-flow");
+        Db(db => db.Set<PrintTemplate>().Count()).Should().Be(1);
+        (await _admin.PostAsJsonAsync($"{Apps}/sales-flow/close", new { cascade = false })).StatusCode.Should().Be(HttpStatusCode.OK);
+        (await _admin.DeleteAsync($"{Apps}/sales-flow?purged=0")).IsSuccessStatusCode.Should().BeTrue();
+        Db(db => db.Set<PrintTemplate>().Count()).Should().Be(0);
     }
 
     [Fact]

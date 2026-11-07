@@ -113,3 +113,23 @@
 ### 3.7 驗收
 
 後端 WebAPI 測試涵蓋：往返與回應標頭、路徑穿越檔名、副檔名白名單（含雙副檔名、無副檔名）、大小與數量上限且不留殘檔、偽造 id 被拒與保留／移除正常、下載的權限與別筆記錄的 id、軟刪除、永久清除後清掃（含寬限）、清掃需系統管理員、Closed、上傳關閉的 409 與設定端點、Demo 預設關閉與明確覆寫、明細模組禁建、匯出與匯入與報表不 500。前端有 `AttachmentInput` 元件測試。
+
+## 4. 第 3 段：列印範本
+
+### 4.1 資料模型
+`Dynamic_PrintTemplate`（ModuleId、Key、NameI18n、Body、Active），(ModuleId, Key) 唯一，隨模組級聯刪除。一個模組可有多份範本；明細模組沒有自己的範本，由表頭範本的 `{{#each 明細模組鍵}}` 迴圈列印。
+
+### 4.2 語法與引擎
+純文字 HTML。`{{f_12}}` 取欄位值，`{{_title}}`、`{{_printedAt}}` 是系統值，`{{#each 明細模組鍵}}…{{/each}}` 對每列重複（不可巢狀，迴圈內 `{{_index}}` 為列號）。引擎只掃描範本一次，替換進去的值不會再被當成占位符。後端算值：先過有效欄位權限（隱藏欄位、無 pricing 的金額欄位印空白），再用既有格式（數字、日期、金額）轉字串，最後 HTML 跳脫。缺範本回 404、欄位被停用或不存在印空白，不丟 500。
+
+### 4.3 安全
+- 儲存時 `PrintTemplateSanitizer` 以白名單重建標籤（不是用 regex 刪字）：移除 script／style／iframe 等、所有 `on*` 事件屬性、`javascript:` 等非白名單協定的連結。
+- 輸出時所有值再跳脫一次（第二層）。
+- 前端預覽用 `sandbox="allow-same-origin allow-modals"` 的 iframe（無 `allow-scripts`）以 `srcdoc` 載入，由瀏覽器列印；不引入 PDF 函式庫。
+- 列印前先檢查讀取權限與資料範圍（own／all），與詳情頁一致。
+
+### 4.4 套件
+格式 3 的 `printTemplates` 區段（module、code、name、active、body）。body 內欄位以 `<模組代號>.<欄位代號>` 寫，開啟時換成 `f_<id>`、匯出時換回代號；引用被排除的欄位時警告並印空白。格式 2 帶 `printTemplates` 仍拒收。
+
+### 4.5 驗收
+Application 單元測試 62（sanitizer、引擎）、WebAPI 測試 29（權限、XSS、缺範本、停用欄位、明細迴圈）、套件往返與刪除清理；前端 PrintTab／i18n spec。

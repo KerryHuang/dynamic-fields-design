@@ -13,10 +13,10 @@ public record AppPackageData(
     string Format, int FormatVersion, AppManifest Manifest, List<AppGroup>? Groups, List<TemplateModule> Modules,
     List<AppFieldAccess>? FieldAccess, List<AppOptionScope>? OptionScopes,
     List<AppPackageReport>? Reports, List<JsonElement>? Dashboards, List<AppWorkflow>? Workflows,
-    List<AppConversion>? Conversions, List<JsonElement>? Events, List<JsonElement>? PrintTemplates)
+    List<AppConversion>? Conversions, List<JsonElement>? Events, List<AppPrintTemplate>? PrintTemplates)
 {
     public const string FormatName = "formwright-app";
-    /// <summary>3：workflows、conversions、reports 與 config.fill 可用（2 的檔案這些必須是空的）。</summary>
+    /// <summary>3：workflows、conversions、reports、printTemplates 與 config.fill 可用（2 的檔案這些必須是空的）。</summary>
     public const int CurrentFormatVersion = 3;
     public const int MinFormatVersion = 2;
 
@@ -27,13 +27,13 @@ public record AppPackageData(
     public List<AppPackageReport> Reports { get; init; } = Reports ?? [];
     public List<AppWorkflow> Workflows { get; init; } = Workflows ?? [];
     public List<AppConversion> Conversions { get; init; } = Conversions ?? [];
+    public List<AppPrintTemplate> PrintTemplates { get; init; } = PrintTemplates ?? [];
 
     /// <summary>名稱與非空的保留 section；有值就代表這份套件需要這個版本讀不懂的功能。</summary>
     public IEnumerable<string> UnsupportedSections()
     {
         if (Dashboards is { Count: > 0 }) yield return "dashboards";
         if (Events is { Count: > 0 }) yield return "events";
-        if (PrintTemplates is { Count: > 0 }) yield return "printTemplates";
     }
 }
 
@@ -104,6 +104,12 @@ public record AppConversionLines(string SourceModule, string TargetModule, strin
 {
     public List<AppCopy> Copy { get; init; } = Copy ?? [];
 }
+
+/// <summary>
+/// 列印範本。Module 是模組代號；Body 的佔位符用<b>欄位代號</b>（不是資料庫鍵）：表頭欄位 <c>{{amount}}</c>，
+/// <c>{{#each 明細模組代號}}…{{/each}}</c> 裡的 <c>{{item}}</c> 指明細模組的欄位。系統值 <c>_title</c>、<c>_printedAt</c>、<c>_index</c> 照舊。
+/// </summary>
+public record AppPrintTemplate(string Module, string Code, I18nText Name, bool Active, string Body);
 
 /// <summary>From、To 都是限定欄位名。</summary>
 public record AppCopy(string From, string To);

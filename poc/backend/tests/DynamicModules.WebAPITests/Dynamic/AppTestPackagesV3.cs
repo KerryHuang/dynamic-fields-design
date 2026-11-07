@@ -16,7 +16,7 @@ internal static class AppTestPackagesV3
     /// <summary>modules 區段；fill 與保留 section 由呼叫端決定，方便造出各種壞套件。</summary>
     public static string Sales(
         int formatVersion = 3, string? workflows = null, string? conversions = null, string? reports = null,
-        string? fill = null, string appId = "sales-flow", string conversionCode = "sales-quote-to-order")
+        string? fill = null, string appId = "sales-flow", string conversionCode = "sales-quote-to-order", string? printTemplates = null)
     {
         fill ??= """, "fill": { "mode": "lock", "map": [ { "from": "customer.name", "to": "customerName" } ] }""";
         workflows ??= """
@@ -39,8 +39,12 @@ internal static class AppTestPackagesV3
                   "measures": [ { "id": "n", "kind": "countMain", "field": null, "condition": null } ],
                   "filters": [], "primaryDateField": null, "dateRange": null, "sort": [], "viz": "donut" } } ]
             """;
+        printTemplates ??= """
+            [ { "module": "quote", "code": "quote-sheet", "name": { "zh-TW": "報價單" }, "active": true,
+                "body": "<h1>{{no}}</h1><p>{{customerName}}</p><table><tbody>{{#each quote-line}}<tr><td>{{_index}}</td><td>{{item}}</td><td>{{qty}}</td></tr>{{/each}}</tbody></table>" } ]
+            """;
         var sections = formatVersion >= 2
-            ? $$""", "workflows": {{workflows}}, "conversions": {{conversions}}, "reports": {{reports}}"""
+            ? $$""", "workflows": {{workflows}}, "conversions": {{conversions}}, "reports": {{reports}}, "printTemplates": {{printTemplates}}"""
             : "";
         return $$"""
         {

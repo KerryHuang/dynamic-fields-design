@@ -18,3 +18,12 @@ describe('document flow i18n', () => {
     }
   });
 });
+
+describe('print i18n', () => {
+  it('has the same non-empty print keys in all four locales', () => {
+    const base = keys(zhTW.print).sort();
+    expect(base.length).toBeGreaterThan(20);
+    for (const messages of [enUS, th, vi]) expect(keys(messages.print).sort()).toEqual(base);
+    for (const messages of [zhTW, enUS, th, vi]) for (const k of base) expect(k.split('.').reduce<unknown>((o, p) => (o as Record<string, unknown>)[p], messages.print)).toBeTruthy();
+  });
+});

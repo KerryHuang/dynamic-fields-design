@@ -5,6 +5,7 @@ import { useI18n } from 'vue-i18n';
 import { useRoute, useRouter } from 'vue-router';
 import { useDeleteRecord, useRecord } from 'src/application/dynamic/queries/records-queries';
 import { useModuleSchema } from 'src/application/dynamic/queries/schema-queries';
+import PrintMenu from 'src/presentation/dynamic/print/PrintMenu.vue';
 import RecordConversions from 'src/presentation/dynamic/conversions/RecordConversions.vue';
 import DynamicDetail from 'src/presentation/dynamic/components/DynamicDetail.vue';
 import DetailTables from 'src/presentation/dynamic/details/DetailTables.vue';
@@ -78,6 +79,7 @@ async function onDelete() {
         <q-btn flat icon="arrow_back" :label="t('dynamic.back')" :to="`/dynamic/${moduleKey}`" />
         <div v-if="schemaQuery.data.value.titleFieldKey || schemaQuery.data.value.kind === 'extension'" class="text-h6">{{ recordQuery.data.value.title }}</div>
         <q-space />
+        <PrintMenu :module-key="moduleKey" :record-id="recordId" />
         <q-btn v-if="canEdit" color="primary" :label="t('dynamic.edit')" :to="`/dynamic/${moduleKey}/${recordId}/edit`" />
         <q-btn v-if="canDelete" color="negative" outline :label="t('dynamic.delete')" @click="confirming = true" />
       </div>

@@ -20,7 +20,7 @@ public record AppValidation(IReadOnlyList<string> Errors, IReadOnlyList<string> 
 public static partial class AppPackageValidator
 {
     public const int MaxGroups = 20, MaxModules = 30, MaxFieldsPerModule = 300, MaxOptionsPerField = 200;
-    public const int MaxConversions = 50, MaxReports = 50;
+    public const int MaxConversions = 50, MaxReports = 50, MaxPrintTemplates = 100;
     public const int MaxRulesPerModule = 100, MaxViewsPerModule = 20, MaxAccessEntries = 2000;
 
     [GeneratedRegex("^[a-z][a-zA-Z0-9_]{0,39}$")]
@@ -68,10 +68,12 @@ public static partial class AppPackageValidator
             if (p.Workflows.Count > 0) errors.Add("workflows: formatVersion 3 才支援 workflows");
             if (p.Conversions.Count > 0) errors.Add("conversions: formatVersion 3 才支援 conversions");
             if (p.Reports.Count > 0) errors.Add("reports: formatVersion 3 才支援 reports");
+            if (p.PrintTemplates.Count > 0) errors.Add("printTemplates: formatVersion 3 才支援 printTemplates");
         }
         if (p.Workflows.Count > MaxModules) errors.Add($"workflows: 最多 {MaxModules} 個");
         if (p.Conversions.Count > MaxConversions) errors.Add($"conversions: 最多 {MaxConversions} 個");
         if (p.Reports.Count > MaxReports) errors.Add($"reports: 最多 {MaxReports} 個");
+        if (p.PrintTemplates.Count > MaxPrintTemplates) errors.Add($"printTemplates: 最多 {MaxPrintTemplates} 個");
 
         var m = p.Manifest;
         if (!AppId().IsMatch(m.Id ?? "")) errors.Add($"manifest.id: 格式錯誤（小寫英文、數字、連字號，2 到 40 字，英文開頭）");
@@ -268,6 +270,7 @@ public static partial class AppPackageValidator
             if (!seenScopes.Add(s.Option ?? "")) errors.Add($"{at}: {s.Option} 重複設定");
         }
         V3References(p, fieldNames, groupCodes, errors);
+        PrintTemplateReferences(p, fieldNames, errors);
         return errors;
     }
 }

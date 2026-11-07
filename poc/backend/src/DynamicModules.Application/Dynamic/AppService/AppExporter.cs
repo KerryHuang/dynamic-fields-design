@@ -15,7 +15,7 @@ namespace DynamicModules.Application.Dynamic.AppService;
 /// </summary>
 public sealed partial class AppExporter(
     TemplateExporter templates, IModuleRepository modules, IAppRepository apps, IPermissionRepository permissions,
-    IConversionRepository conversions, IReportRepository reports)
+    IConversionRepository conversions, IReportRepository reports, IPrintTemplateRepository printTemplates)
 {
     [GeneratedRegex("[^a-zA-Z0-9_]")]
     private static partial Regex NotCode();
@@ -95,6 +95,7 @@ public sealed partial class AppExporter(
         var workflows = ExportWorkflows(members, codeOfModule, names, GroupCode, warnings);
         var conversionList = await ExportConversionsAsync(members, codeOfModule, names, warnings, ct);
         var reportList = await ExportReportsAsync(app, names, GroupCode, warnings, ct);
+        var printList = await ExportPrintTemplatesAsync(members, codeOfModule, keyToCode, names, warnings, ct);
 
         var entities = exported.Modules.Where(m => m.HostEntityKey is not null).Select(m => m.HostEntityKey!)
             .Concat(exported.Modules.SelectMany(m => m.Blocks).SelectMany(b => b.Fields)
@@ -113,9 +114,33 @@ public sealed partial class AppExporter(
         var package = new AppPackageData(
             AppPackageData.FormatName, AppPackageData.CurrentFormatVersion,
             new AppManifest(app.Key, app.PackageVersion, app.NameI18n, null, app.Icon, null, requires),
-            groups, moduleList, fieldAccess, optionScopes, reportList, null, workflows, conversionList, null, null);
+            groups, moduleList, fieldAccess, optionScopes, reportList, null, workflows, conversionList, null, printList);
         // groups 在上面各步驟用到才加進 codeOfGroup，最後才組出來
         return new Exported(package, warnings);
+    }
+
+    private async Task<List<AppPrintTemplate>> ExportPrintTemplatesAsync(
+        List<Module> members, Dictionary<long, string> codeOfModule, Dictionary<string, string> keyToCode,
+        AppReportCodec.Names names, List<string> warnings, CancellationToken ct)
+    {
+        var result = new List<AppPrintTemplate>();
+        foreach (var m in members.Where(m => !DynamicModules.Domain.Modules.ModuleRelations.IsDetail(m)))
+        {
+            var module = codeOfModule[m.Id];
+            foreach (var t in await printTemplates.ListByModuleAsync(m.Id, ct))
+            {
+                var converted = AppPrintCodec.ToPackage(t.Body, module, key => keyToCode.GetValueOrDefault(key), names.Field);
+                if (converted.Body is null)
+                {
+                    warnings.Add($"列印範本「{module}.{t.Key}」引用了套件外的明細模組，未匯出");
+                    continue;
+                }
+                foreach (var field in converted.Dropped.Distinct())
+                    warnings.Add($"列印範本「{module}.{t.Key}」引用了停用或未匯出的欄位 {field}，匯出時已拿掉");
+                result.Add(new AppPrintTemplate(module, t.Key, t.NameI18n, t.Active, converted.Body));
+            }
+        }
+        return result;
     }
 
     private static List<AppWorkflow> ExportWorkflows(
