@@ -48,7 +48,7 @@ public class GetConversionInputsHandler(
         systemKeys.Add(traceKey);
 
         var (_, errors) = await creator.ValidateAsync(target, addPerms, values, null, ct, systemKeys);
-        var keys = target.Blocks.SelectMany(b => b.Fields).Where(f => errors.TryGetValue(f.Key, out var m) && m is [RecordValueProcessor.RequiredMessage])
+        var keys = target.Blocks.SelectMany(b => b.Fields).Where(f => errors.TryGetValue(f.Key, out var m) && m.Contains(RecordValueProcessor.RequiredMessage))
             .Select(f => f.Key).ToList();
         return ServiceResult.Success(keys);
     }

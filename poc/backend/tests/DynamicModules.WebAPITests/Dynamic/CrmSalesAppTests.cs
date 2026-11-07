@@ -382,6 +382,32 @@ public class CrmSalesAppTests : IDisposable
     }
 
     [Fact]
+    public async Task ConvertInputs_StillListARequiredField_WhenAnotherValidationRuleAlsoFailsOnTheEmptyValue()
+    {
+        var t = await OpportunityWithoutCustomer();
+        // 客戶除了必填，還有一條「客戶不可為空」的驗證規則：空值會同時產生兩則訊息（必填＋規則訊息）
+        var customerId = long.Parse(t.QuoteKeys["客戶"][2..]);
+        var put = await _admin.PutAsJsonAsync($"{Base}/modules/{t.QuoteModule}/rules", new
+        {
+            rules = new object[]
+            {
+                new
+                {
+                    kind = "validation", targets = new[] { $"field:{customerId}" }, active = true,
+                    message = new Dictionary<string, string> { ["zh-TW"] = "客戶要先建立" },
+                    condition = new { field = customerId, op = "isNotEmpty" }
+                }
+            }
+        });
+        put.StatusCode.Should().Be(HttpStatusCode.OK, await put.Content.ReadAsStringAsync());
+
+        var res = await _admin.GetAsync(InputsUrl(t.Opportunity, "crm-opportunity-to-quote"));
+
+        res.StatusCode.Should().Be(HttpStatusCode.OK, await res.Content.ReadAsStringAsync());
+        (await JsonOf(res)).EnumerateArray().Select(i => i.GetString()).Should().Equal(t.QuoteKeys["客戶"]);
+    }
+
+    [Fact]
     public async Task OpportunityWithoutCustomer_ConvertsOnceTheCustomerIsFilledInTheDialog()
     {
         var t = await OpportunityWithoutCustomer();
