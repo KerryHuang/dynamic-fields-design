@@ -142,7 +142,7 @@ describe('新四種風格的橋接', () => {
 
   it('便當格：統計卡片與首頁方塊有大小不一的格線，第一塊最大', () => {
     expect(bodiesOf(bridge, "[data-style='bento'] .tile-grid").join(';')).toContain('display: grid');
-    expect(bodiesOf(bridge, "[data-style='bento'] .tile-grid > :first-child").join(';')).toMatch(/grid-column:\s*span 2/);
+    expect(bodiesOf(bridge, "[data-style='bento'] .tile-grid > :first-child:nth-last-child(n + 4)").join(';')).toMatch(/grid-column:\s*span 2/);
     expect(bodiesOf(bridge, "[data-style='bento'] .stat-tiles > :first-child .text-stat").join(';')).toMatch(/font-size:\s*calc\(var\(--t-stat-size\)/);
   });
 });

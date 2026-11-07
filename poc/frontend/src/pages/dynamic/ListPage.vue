@@ -118,7 +118,7 @@ function notifyViewError(e: unknown) {
 }
 
 /** 編號與數值欄加 cell-code：指令台風格用等寬字對齊，其他風格不受影響。 */
-const CODE_TYPES = new Set<FieldType>(['autonumber', 'integer', 'decimal', 'currency', 'percent', 'rollup']);
+const CODE_TYPES = new Set<FieldType>(['autonumber', 'integer', 'decimal', 'currency', 'percent', 'rollup', 'formula']);
 
 /** 工作流程狀態欄的小圓點（指令台風格才顯示）：起始狀態＝草稿、唯讀狀態＝完成、其餘＝進行中。 */
 function stateDot(row: DynamicRecord): string {

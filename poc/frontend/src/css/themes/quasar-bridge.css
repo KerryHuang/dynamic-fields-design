@@ -675,7 +675,8 @@ textarea:focus-visible {
   box-shadow: none;
 }
 
-/* 首頁的 app 方塊：第一塊 2×2 最大，之後每五塊有一塊橫向加寬，其餘 1×1，顏色依序循環 */
+/* 首頁的 app 方塊：同一組有四個以上時，第一塊是 2×2 的最大方塊；之後每五塊有一塊橫向加寬，其餘 1×1，顏色依序循環。
+   少於四個時不放大，避免只有一個項目卻占掉一大塊。 */
 [data-style='bento'] .tile-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
@@ -690,7 +691,7 @@ textarea:focus-visible {
   padding: 0;
 }
 
-[data-style='bento'] .tile-grid > :first-child {
+[data-style='bento'] .tile-grid > :first-child:nth-last-child(n + 4) {
   grid-column: span 2;
   grid-row: span 2;
 }
@@ -708,7 +709,7 @@ textarea:focus-visible {
   align-items: center;
 }
 
-[data-style='bento'] .tile-grid > :first-child .q-item {
+[data-style='bento'] .tile-grid > :first-child:nth-last-child(n + 4) .q-item {
   flex-direction: column;
   justify-content: center;
   text-align: center;
@@ -716,11 +717,11 @@ textarea:focus-visible {
   font-weight: var(--t-heading-weight);
 }
 
-[data-style='bento'] .tile-grid > :first-child .q-icon {
+[data-style='bento'] .tile-grid > :first-child:nth-last-child(n + 4) .q-icon {
   font-size: 40px;
 }
 
-[data-style='bento'] .tile-grid > :first-child .q-card,
+[data-style='bento'] .tile-grid > :first-child:nth-last-child(n + 4) .q-card,
 [data-style='bento'] .stat-tiles > :first-child {
   background: var(--t-primary);
   color: var(--t-on-primary);
