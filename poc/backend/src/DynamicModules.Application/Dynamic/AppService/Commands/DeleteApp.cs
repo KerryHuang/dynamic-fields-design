@@ -21,11 +21,11 @@ public record DeleteAppCheck(bool CanDelete, IReadOnlyList<DeleteBlocker> Blocke
 /// <summary>
 /// 刪除整個應用程式：必須先關閉（兩步是刻意的）。逐一用安全刪除的 DeletePlanner 重新判斷每個成員模組
 /// （沒有未軟刪除的記錄、沒有被應用程式外部引用；成員之間互相引用視為內部），再加上沒有開啟中的應用程式依賴它。
-/// 任一不成立整個回 409 並列出原因，什麼都不刪。不刪套件開啟時新建的群組（它們可能已有成員與其他授權）。
+/// 它的報表若還在儀表板卡片上也不行。任一不成立整個回 409 並列出原因，什麼都不刪。不刪套件開啟時新建的群組（它們可能已有成員與其他授權）。
 /// </summary>
 public class DeleteAppHandler(
     IAppRepository apps, IModuleRepository modules, DeletePlanner planner, ModuleRemover remover,
-    AppDependencyChecker dependencies, IReportRepository reports, IUnitOfWork uow) : IRequestHandler<DeleteAppRequest, ServiceResult>
+    AppDependencyChecker dependencies, IReportRepository reports, IDashboardRepository dashboards, IUnitOfWork uow) : IRequestHandler<DeleteAppRequest, ServiceResult>
 {
     public const string DependentKind = "appDependent";
     public const string NotClosedKind = "appNotClosed";
@@ -58,6 +58,12 @@ public class DeleteAppHandler(
             indexRows += plan.Check.Purge.IndexRows;
             historyRows += plan.Check.Purge.HistoryRows;
         }
+        // 應用程式自己的報表若還在任何儀表板（指派版、自己的、個人版）的卡片上，刪掉會留下「報表已不存在」的卡片：
+        // 不論卡片有沒有指到欄位（SortKey）一律擋下，要先把卡片移掉
+        foreach (var reportId in ownReportIds)
+            foreach (var reference in await dashboards.ListReferencesAsync(reportId, ct))
+                blockers.Add(new(reference.IsPersonalVersion ? DeleteBlockerKind.PersonalDashboard : DeleteBlockerKind.Dashboard,
+                    null, reference.DashboardId, reference.DashboardName));
         foreach (var dependent in (await dependencies.DependentsOfAsync(app, ct)).Apps)
             blockers.Add(new(DependentKind, null, null, dependent.Key));
 

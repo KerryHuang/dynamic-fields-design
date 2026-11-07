@@ -85,8 +85,10 @@ public sealed partial class AppExporter(
             foreach (var scope in rows.OptionScopes.GroupBy(o => o.OptionId))
             {
                 var module = codeOfModule[m.Id];
-                var option = m.Blocks.SelectMany(b => b.Fields).SelectMany(f => f.Options).FirstOrDefault(o => o.Id == scope.Key && o.Active);
-                if (option is null) continue;
+                // 選項所屬欄位必須實際匯出（沒停用、沒被省略），否則 optionScopes 會指到檔案裡不存在的選項，重新匯入時被拒
+                var owner = m.Blocks.SelectMany(b => b.Fields).FirstOrDefault(f => f.Options.Any(o => o.Id == scope.Key && o.Active));
+                var option = owner?.Options.First(o => o.Id == scope.Key);
+                if (owner is null || option is null || names.Option(owner.Id, option.Id) is null || names.Field(owner.Id) is null) continue;
                 optionScopes.Add(new AppOptionScope($"{module}.o_{option.Id}",
                     scope.Select(s => s.GroupId).Distinct().Where(id => groupList.Any(g => g.Id == id)).Select(GroupCode).ToList()));
             }
@@ -221,7 +223,7 @@ public sealed partial class AppExporter(
             var (converted, errors) = AppReportCodec.ToPackage(definition, names);
             if (converted is null)
             {
-                warnings.Add($"報表「{report.Name}」引用了套件外或已停用的項目，未匯出（{string.Join("；", errors)}）");
+                warnings.Add($"報表「{report.Name}」未匯出（{string.Join("；", errors)}）");
                 continue;
             }
             result.Add(new AppPackageReport(link.Code, report.Name, report.Shares.Select(s => groupCode(s.GroupId)).ToList(), converted));

@@ -371,6 +371,121 @@ public class AppV3Tests : IDisposable
     }
 
     [Fact]
+    public async Task Delete_AppReportOnADashboardCard_IsBlocked_AndSucceedsOnceTheCardIsGone()
+    {
+        await ImportAndOpen(_admin, AppTestPackagesV3.Sales(), "sales-flow");
+        var reportId = Db(db => db.Set<AppReport>().Select(a => a.ReportId).First());
+        // 卡片不設 SortKey（不指向任何欄位），只引用報表；儀表板是指派版（不屬於刪除者）
+        var dashboard = await DashboardTestKit.CreateAssigned(_admin, "業務看板",
+            DashboardTestKit.Layout(DashboardTestKit.Card("a", reportId)), Db(db => db.Set<PermissionGroup>().First().Id));
+        (await _admin.PostAsJsonAsync($"{Apps}/sales-flow/close", new { cascade = false })).StatusCode.Should().Be(HttpStatusCode.OK);
+
+        var blocked = await _admin.DeleteAsync($"{Apps}/sales-flow?purged=0");
+        blocked.StatusCode.Should().Be(HttpStatusCode.Conflict, await blocked.Content.ReadAsStringAsync());
+        (await blocked.Content.ReadAsStringAsync()).Should().Contain("業務看板");
+        Db(db => db.Set<Report>().Count()).Should().BeGreaterThan(0);
+
+        (await _admin.DeleteAsync($"{DashboardTestKit.AdminDashboards}/{dashboard}")).EnsureSuccessStatusCode();
+        var ok = await _admin.DeleteAsync($"{Apps}/sales-flow?purged=0");
+        ok.IsSuccessStatusCode.Should().BeTrue(await ok.Content.ReadAsStringAsync());
+    }
+
+    // ---- 報表條件的編碼（fix-1 #5 #6 #7）----
+
+    private static string ReportWithFilter(string filterJson) => $$"""
+        [ { "code": "r1", "name": "測試報表", "shareWith": [],
+            "definition": { "version": 1, "mainModule": "quote", "child": null, "columns": [],
+              "groups": [ { "field": { "source": "main", "field": "quote.status", "via": null }, "bucket": null } ],
+              "measures": [ { "id": "n", "kind": "countMain", "field": null, "condition": null } ],
+              "filters": [ {{filterJson}} ], "primaryDateField": null, "dateRange": null, "sort": [], "viz": "donut" } } ]
+        """;
+
+    [Fact]
+    public async Task Import_TextFieldFilterValueThatLooksLikeAnOption_IsNotRewritten()
+    {
+        var filter = """{ "field": { "source": "main", "field": "quote.customerName", "via": null }, "op": "eq", "value": "opt_approved" }""";
+        await ImportAndOpen(_admin, AppTestPackagesV3.Sales(reports: ReportWithFilter(filter)), "sales-flow");
+        var definition = Db(db => db.Set<Report>().Select(r => r.DefinitionJson).Single());
+        definition.Should().Contain("\"opt_approved\"").And.NotMatchRegex("opt_\\d");
+    }
+
+    [Fact]
+    public async Task Import_EnumFieldFilterValue_IsStillMappedToTheOptionId()
+    {
+        var filter = """{ "field": { "source": "main", "field": "quote.status", "via": null }, "op": "eq", "value": "opt_approved" }""";
+        await ImportAndOpen(_admin, AppTestPackagesV3.Sales(reports: ReportWithFilter(filter)), "sales-flow");
+        Db(db => db.Set<Report>().Select(r => r.DefinitionJson).Single()).Should().MatchRegex("\"opt_\\d+\"");
+    }
+
+    [Theory]
+    [InlineData("eq", "123")]
+    [InlineData("in", "[1, 2]")]
+    public async Task Import_ReportConditionOnAConcreteRecord_IsRejected(string op, string value)
+    {
+        var filter = $$"""{ "field": { "source": "main", "field": "quote.customer", "via": null }, "op": "{{op}}", "value": {{value}} }""";
+        var res = await _admin.PostAsync($"{Apps}/packages/import", Body(AppTestPackagesV3.Sales(reports: ReportWithFilter(filter))));
+        res.StatusCode.Should().Be(HttpStatusCode.BadRequest, await res.Content.ReadAsStringAsync());
+        (await res.Content.ReadAsStringAsync()).Should().Contain("具體記錄");
+    }
+
+    [Fact]
+    public async Task Import_ReferenceFilterWithoutAValue_IsAccepted()
+    {
+        var filter = """{ "field": { "source": "main", "field": "quote.customer", "via": null }, "op": "isNotEmpty", "value": null }""";
+        await ImportAndOpen(_admin, AppTestPackagesV3.Sales(reports: ReportWithFilter(filter)), "sales-flow");
+    }
+
+    [Fact]
+    public async Task Export_ReportConditionOnAConcreteRecord_IsNotExported_AndTheUserIsTold()
+    {
+        await ImportAndOpen(_admin, AppTestPackagesV3.Sales(), "sales-flow");
+        var quote = Db(db => db.Set<Module>().Include(m => m.Blocks).ThenInclude(b => b.Fields).Single(m => m.Key == "sales-flow-quote"));
+        var customerField = quote.Blocks.SelectMany(b => b.Fields).Single(f => f.Type == FieldType.Reference).Id;
+        Db(db =>
+        {
+            var report = db.Set<Report>().Single();
+            var node = System.Text.Json.Nodes.JsonNode.Parse(report.DefinitionJson)!;
+            node["filters"] = System.Text.Json.Nodes.JsonNode.Parse(
+                $$"""[ { "field": { "source": "main", "fieldId": {{customerField}}, "viaFieldId": null }, "op": "eq", "value": 123 } ]""");
+            report.DefinitionJson = node.ToJsonString();
+            db.SaveChanges();
+            return 0;
+        });
+
+        var res = await _admin.GetAsync($"{Apps}/sales-flow/export");
+        res.StatusCode.Should().Be(HttpStatusCode.OK);
+        var warnings = Uri.UnescapeDataString(string.Join('|', res.Headers.GetValues("X-Export-Warnings")));
+        warnings.Should().Contain("報價狀態分布").And.Contain("具體記錄");
+        (await JsonOf(res)).GetProperty("reports").GetArrayLength().Should().Be(0);
+    }
+
+    [Fact]
+    public async Task Export_OptionScopeOfADeactivatedEnumField_IsDropped_SoTheFileCanBeReimported()
+    {
+        await ImportAndOpen(_admin, AppTestPackagesV3.Sales(), "sales-flow");
+        // 一個沒有被規則或狀態機引用的普通 enum 欄位，其中一個選項設了群組範圍，然後欄位被停用
+        var field = await AddField(_admin, "sales-flow-customer", "enum");
+        var optionRes = await _admin.PostAsJsonAsync($"{Base}/fields/{field.Id}/options",
+            new { label = new Dictionary<string, string> { ["zh-TW"] = "外包" } });
+        optionRes.EnsureSuccessStatusCode();
+        var option = (await JsonOf(optionRes)).GetProperty("id").GetInt64();
+        var groupId = Db(db => db.Set<PermissionGroup>().First().Id);
+        (await _admin.PutAsJsonAsync($"{Base}/modules/sales-flow-customer/permissions", new
+        {
+            groups = Array.Empty<object>(), users = Array.Empty<object>(), fields = Array.Empty<object>(),
+            options = new[] { new { optionId = option, groupIds = new[] { groupId } } }
+        })).StatusCode.Should().Be(HttpStatusCode.OK);
+        Db(db => db.Set<FieldOptionScope>().Count()).Should().Be(1);
+        (await _admin.PutAsJsonAsync($"{Base}/fields/{field.Id}/status", new { status = "Inactive" })).StatusCode.Should().Be(HttpStatusCode.OK);
+
+        var exported = await ExportOk("sales-flow");
+        exported.GetProperty("optionScopes").GetArrayLength().Should().Be(0);
+
+        using var fresh = new TestApp();
+        await ImportAndOpen(fresh.AsUser(), exported.GetRawText(), "sales-flow", new { });
+    }
+
+    [Fact]
     public async Task Export_CrossAppReference_BecomesRequiresAndAppTarget_AndRoundTrips()
     {
         await ImportAndOpen(_admin, AppTestPackages.Crm, "crm-lite",

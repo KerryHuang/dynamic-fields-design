@@ -122,7 +122,8 @@ public static partial class AppPackageValidator
         var lookups = new AppReportCodec.Lookups(
             code => modules.ContainsKey(code) ? code : null,
             name => Field(name) ? 1 : null,
-            name => optionOwner.ContainsKey(name) ? 1 : null);
+            name => optionOwner.ContainsKey(name) ? 1 : null,
+            AppReportCodec.TypesOf(p.Modules));
         for (var i = 0; i < p.Reports.Count; i++)
         {
             var r = p.Reports[i];

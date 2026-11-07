@@ -91,7 +91,8 @@ public sealed class AppFlowInstaller(ISender sender)
             var lookups = new AppReportCodec.Lookups(
                 code => ids.ModuleKeys.GetValueOrDefault(code),
                 name => ids.FieldIds.TryGetValue(name, out var id) ? id : null,
-                name => ids.OptionIds.TryGetValue(name, out var id) ? id : null);
+                name => ids.OptionIds.TryGetValue(name, out var id) ? id : null,
+                AppReportCodec.TypesOf(p.Modules));
             var (definition, errors) = AppReportCodec.ToDefinition(r.Definition, lookups);
             if (definition is null)
             {
