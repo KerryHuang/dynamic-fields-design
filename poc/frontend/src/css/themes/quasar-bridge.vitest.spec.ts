@@ -147,6 +147,52 @@ describe('新四種風格的橋接', () => {
   });
 });
 
+/** 移除所有最外層的 `@media screen { … }`（含巢狀大括號），回傳其餘 CSS 與被移除的內容。 */
+function splitScreen(css: string): { rest: string; screen: string } {
+  let rest = '';
+  let screen = '';
+  let i = 0;
+  while (i < css.length) {
+    const at = css.indexOf('@media screen', i);
+    if (at === -1) {
+      rest += css.slice(i);
+      break;
+    }
+    rest += css.slice(i, at);
+    let depth = 0;
+    let j = css.indexOf('{', at);
+    const start = j + 1;
+    for (; j < css.length; j++) {
+      if (css[j] === '{') depth++;
+      else if (css[j] === '}' && --depth === 0) break;
+    }
+    screen += css.slice(start, j);
+    i = j + 1;
+  }
+  return { rest, screen };
+}
+
+describe('列印不受新風格影響', () => {
+  const { rest, screen } = splitScreen(bridge);
+  const NEW_STYLES = ['glass', 'bento', 'command', 'botanical'];
+
+  it('新風格專屬的色塊、徽章與玻璃效果都包在 @media screen 內，列印時不會出現', () => {
+    for (const s of NEW_STYLES) expect(rest, `[data-style='${s}'] 不得在 @media screen 之外`).not.toContain(`[data-style='${s}']`);
+    expect(rest).not.toContain('backdrop-filter');
+  });
+
+  it('@media screen 內確實有那些規則（避免上一條因為整段被刪而空過）', () => {
+    expect(screen).toContain("[data-style='bento'] .stat-tiles > :first-child");
+    expect(screen).toContain("[data-style='command'] .q-badge");
+    expect(screen).toContain("[data-style='glass'] .q-header");
+    expect(screen).toContain('backdrop-filter');
+  });
+
+  it('標題字型在列印時回到系統字型（植感活力的襯線只用在螢幕）', () => {
+    expect(bodiesOf(print, '[data-style][data-mode]').join(';')).toMatch(/--t-heading-font:\s*system-ui/);
+  });
+});
+
 describe('print.css', () => {
   it('列印不受風格影響：背景圖、半透明與模糊都關掉', () => {
     const block = bodiesOf(print, '[data-style][data-mode]').join(';');
