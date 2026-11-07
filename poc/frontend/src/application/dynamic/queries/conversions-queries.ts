@@ -1,6 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/vue-query';
 import { computed, type Ref } from 'vue';
 import type { Conversion, ConvertBody } from 'src/domain/dynamic/types';
+import { retryUnlessClientError } from 'src/application/dynamic/queries/schema-queries';
 import { dynamicApi } from 'src/services/api/dynamic-api';
 
 export function useConversions() {
@@ -48,6 +49,7 @@ export function useConversionInputs(id: Ref<number>, key: Ref<string>, enabled: 
     enabled,
     staleTime: 0,
     gcTime: 0,
+    retry: retryUnlessClientError,
   });
 }
 

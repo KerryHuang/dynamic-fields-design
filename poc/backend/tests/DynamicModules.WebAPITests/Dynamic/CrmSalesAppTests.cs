@@ -408,6 +408,33 @@ public class CrmSalesAppTests : IDisposable
     }
 
     [Fact]
+    public async Task UserWithAddButNoReadOnTheTarget_CanGetInputs_ButNotTheTargetSchema()
+    {
+        // 前端對話框要靠目標 schema 才畫得出欄位；沒有目標讀取權限時 schema 是 403，inputs（只要求新增權限）卻是 200
+        var t = await OpportunityWithoutCustomer();
+        var groups = await JsonOf(await _admin.GetAsync($"{Base}/groups"));
+        var salesId = groups.EnumerateArray().Single(g => g.GetProperty("key").GetString() == "sales").GetProperty("id").GetInt64();
+        async Task Grant(string module, bool read, bool add)
+        {
+            var res = await _admin.PutAsJsonAsync($"{Base}/modules/{module}/permissions", new
+            {
+                groups = new[] { new { groupId = salesId, scope = "all", privileges = new { read, add, edit = false, delete = false, printExport = false, pricing = false, approve = false } } },
+                users = Array.Empty<object>(), fields = Array.Empty<object>(), options = Array.Empty<object>()
+            });
+            res.StatusCode.Should().Be(HttpStatusCode.OK, await res.Content.ReadAsStringAsync());
+        }
+        await Grant(Key(t.App, "opportunity"), read: true, add: false);
+        await Grant(t.QuoteModule, read: false, add: true);
+        var sales = _app.AsUser("sales01");
+
+        var inputs = await sales.GetAsync(InputsUrl(t.Opportunity, "crm-opportunity-to-quote"));
+        var schema = await sales.GetAsync($"{Base}/modules/{t.QuoteModule}/schema");
+
+        inputs.StatusCode.Should().Be(HttpStatusCode.OK, await inputs.Content.ReadAsStringAsync());
+        schema.StatusCode.Should().Be(HttpStatusCode.Forbidden);
+    }
+
+    [Fact]
     public async Task OpportunityWithoutCustomer_ConvertsOnceTheCustomerIsFilledInTheDialog()
     {
         var t = await OpportunityWithoutCustomer();

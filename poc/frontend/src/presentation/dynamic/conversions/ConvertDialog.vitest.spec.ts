@@ -136,6 +136,42 @@ describe('ConvertDialog', () => {
       w.unmount();
     });
 
+    it('adds a field the rules made required only after the first attempt, shows its error and sends it on the retry', async () => {
+      api.getConversionInputs.mockResolvedValue([]); // 一開始沒有要補的欄位
+      api.getModuleSchema.mockResolvedValue(schema as never);
+      api.convertRecord.mockRejectedValueOnce({ status: 400, errors: { f_8: ['此欄位必填'], 'lines[0].quantity': ['x'] } });
+      api.convertRecord.mockResolvedValue({ id: 99, moduleKey: 'quote' } as never);
+      const { w } = await mountDialog(conversion({ lines: undefined }));
+      expect(document.body.querySelector('[data-testid="convert-input-f_8"]')).toBeNull();
+
+      submitBtn().click();
+      await flushPromises();
+
+      const field = document.body.querySelector('[data-testid="convert-input-f_8"]');
+      expect(field).not.toBeNull();
+      expect(field!.textContent).toContain('此欄位必填');
+      expect(submitBtn().disabled).toBe(true);
+      const box = field!.querySelector('input') as HTMLInputElement;
+      box.value = '補上';
+      box.dispatchEvent(new Event('input'));
+      await flushPromises();
+      expect(submitBtn().disabled).toBe(false);
+      submitBtn().click();
+      await flushPromises();
+      expect(api.convertRecord).toHaveBeenLastCalledWith(5, 'q2o', { rowVersion: 'rv1', values: { f_8: '補上' } });
+      w.unmount();
+    });
+
+    it('says so, stops loading and keeps convert disabled when the target schema cannot be read', async () => {
+      api.getConversionInputs.mockResolvedValue(['f_7']);
+      api.getModuleSchema.mockRejectedValue({ status: 403 }); // 有新增權限、沒有讀取權限
+      const { w } = await mountDialog(conversion({ lines: undefined }));
+      expect(document.body.querySelector('[data-testid="convert-inputs-loading"]')).toBeNull();
+      expect(document.body.querySelector('[data-testid="convert-inputs-failed"]')!.textContent).toContain(zhTW.docflow.convert.inputsFailed);
+      expect(submitBtn().disabled).toBe(true);
+      w.unmount();
+    });
+
     it('puts a server error for the field on the field itself', async () => {
       api.getConversionInputs.mockResolvedValue(['f_7']);
       api.getModuleSchema.mockResolvedValue(schema as never);
