@@ -73,7 +73,7 @@ public static class AppJson
             return template is null ? Fail(error ?? "範本格式錯誤") : new AppParseResult(1, null, template, []);
         }
         if (version > AppPackageData.CurrentFormatVersion) return Fail("這個套件需要較新版本的 Formwright");
-        if (version != AppPackageData.CurrentFormatVersion) return Fail($"不支援的 formatVersion：{version}");
+        if (version < AppPackageData.MinFormatVersion) return Fail($"不支援的 formatVersion：{version}");
 
         DropExtensionProperties(obj);
         if (obj["manifest"] is JsonObject manifest) DropExtensionProperties(manifest);

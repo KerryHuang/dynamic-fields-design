@@ -20,6 +20,7 @@ public class AppConfiguration : IEntityTypeConfiguration<App>
         b.Property(x => x.Requires).HasJsonConversion();
         b.Property(x => x.RowVersion).HasMaxLength(36).IsRequired().IsConcurrencyToken();
         b.HasMany(x => x.Modules).WithOne().HasForeignKey(x => x.AppId).OnDelete(DeleteBehavior.Cascade);
+        b.HasMany(x => x.Reports).WithOne().HasForeignKey(x => x.AppId).OnDelete(DeleteBehavior.Cascade);
         b.ConfigureAudit();
     }
 }
@@ -34,6 +35,18 @@ public class AppModuleConfiguration : IEntityTypeConfiguration<AppModule>
         // 一個模組最多屬於一個應用程式
         b.HasIndex(x => x.ModuleId).IsUnique();
         b.HasOne<Module>().WithMany().HasForeignKey(x => x.ModuleId).OnDelete(DeleteBehavior.Cascade);
+    }
+}
+
+public class AppReportConfiguration : IEntityTypeConfiguration<AppReport>
+{
+    public void Configure(EntityTypeBuilder<AppReport> b)
+    {
+        b.ToTable("Dynamic_AppReport");
+        b.HasKey(x => new { x.AppId, x.ReportId });
+        b.Property(x => x.Code).HasMaxLength(40).IsRequired();
+        b.HasIndex(x => new { x.AppId, x.Code }).IsUnique();
+        b.HasOne<Report>().WithMany().HasForeignKey(x => x.ReportId).OnDelete(DeleteBehavior.Cascade);
     }
 }
 

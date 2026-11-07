@@ -13,7 +13,7 @@ namespace DynamicModules.Application.Dynamic.AppService;
 /// </summary>
 public sealed partial class AppOpenPlanner(
     AppPackageSource packages, IAppRepository apps, IModuleRepository modules, IPermissionRepository permissions,
-    IAccountRepository accounts, AppDependencyChecker dependencies)
+    IAccountRepository accounts, AppDependencyChecker dependencies, IConversionRepository conversions)
 {
     [GeneratedRegex(ModuleRules.ModuleKeyPattern)]
     private static partial Regex ModuleKey();
@@ -55,6 +55,10 @@ public sealed partial class AppOpenPlanner(
             if (!ModuleKey().IsMatch(key)) errors.Add($"moduleKeys.{m.Code}: 模組代碼 {key} 格式錯誤");
             else if (!taken.Add(key) || await modules.KeyExistsAsync(key, ct)) conflicts.Add(new KeyConflict(m.Code, key));
         }
+
+        // 轉換代碼全站唯一；不自動改名（已轉出的單據靠它追溯）
+        foreach (var c in package.Conversions)
+            if (await conversions.GetByKeyAsync(c.Code, ct) is not null) errors.Add($"conversions.{c.Code}: 轉換代碼已被使用");
 
         var hostConflicts = new List<string>();
         foreach (var m in package.Modules.Where(m => m.HostEntityKey is not null))

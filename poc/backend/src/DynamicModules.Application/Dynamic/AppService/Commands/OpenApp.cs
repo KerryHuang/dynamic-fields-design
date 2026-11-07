@@ -23,7 +23,7 @@ public record OpenAppRequest(string PackageId, OpenAppBody Body)
 
 public class OpenAppHandler(
     AppOpenPlanner planner, TemplateInstantiator instantiator, ISender sender, IAppRepository apps,
-    AppResponseBuilder builder, IUnitOfWork uow, ICurrentUser user, IBusinessTime time) : IRequestHandler<OpenAppRequest, ServiceResult>
+    AppResponseBuilder builder, AppFlowInstaller flows, IUnitOfWork uow, ICurrentUser user, IBusinessTime time) : IRequestHandler<OpenAppRequest, ServiceResult>
 {
     public async Task<ServiceResult> Handle(OpenAppRequest request, CancellationToken ct)
     {
@@ -66,12 +66,18 @@ public class OpenAppHandler(
             if (!activated.IsSuccess) return activated;
         }
 
+        // 單據能力：狀態機、轉換、報表（群組代號用上面解析好的 id）
+        var installed = await flows.InstallAsync(package, result.Ids!, groupIds, ct);
+        if (installed.Failure is { } flowFailure) return flowFailure;
+        warnings.AddRange(installed.Warnings);
+
         var app = new App
         {
             Key = package.Manifest.Id, NameI18n = package.Manifest.Name, Icon = package.Manifest.Icon,
             PackageVersion = package.Manifest.Version, FormatVersion = package.FormatVersion, Source = plan.Source.Source,
             Status = AppStatus.Open, Requires = AppOpenPlanner.RequiresOf(package),
-            Modules = result.Modules.Select(m => new AppModule { Code = m.Code, ModuleId = m.Id }).ToList()
+            Modules = result.Modules.Select(m => new AppModule { Code = m.Code, ModuleId = m.Id }).ToList(),
+            Reports = installed.Reports
         };
         app.TouchRowVersion();
         app.StampCreated(user.UserId, time.Now);

@@ -1,6 +1,9 @@
 using DynamicModules.Application.Common;
 using DynamicModules.Application.Common.Security;
 using DynamicModules.Application.Dynamic.AppService.Data;
+using System.Text.Json;
+using DynamicModules.Application.Dynamic.ExportService.Queries.ExportRecords;
+using DynamicModules.Application.Dynamic.TemplateService;
 using DynamicModules.Domain.Repositories.Dynamic;
 using MediatR;
 
@@ -80,5 +83,27 @@ public class PreviewOpenAppHandler(AppOpenPlanner planner) : IRequestHandler<Pre
     {
         var plan = await planner.PlanAsync(request.PackageId, request.Body, ct);
         return plan.Failure ?? ServiceResult.Success(plan.Preview);
+    }
+}
+
+/// <summary>匯出結果：檔案本身保持乾淨，warnings（表達不了而略過的項目）由控制器放在回應標頭。</summary>
+public record AppExportResult(ExportFile File, IReadOnlyList<string> Warnings);
+
+/// <summary>由目前的成員模組重新產生套件檔；成功時 Data 是 AppExportResult。</summary>
+public record ExportAppRequest(string Key) : IRequest<ServiceResult>, IDesignerRequest
+{
+    public PermissionAction RequiredDesignerAction => PermissionAction.Read;
+}
+
+public class ExportAppHandler(IAppRepository apps, AppExporter exporter) : IRequestHandler<ExportAppRequest, ServiceResult>
+{
+    public async Task<ServiceResult> Handle(ExportAppRequest request, CancellationToken ct)
+    {
+        var app = await apps.GetByKeyAsync(request.Key, ct);
+        if (app is null) return ServiceResult.NotFound(AppMessages.NotFound);
+        var exported = await exporter.ExportAsync(app, ct);
+        return ServiceResult.Success(new AppExportResult(new ExportFile(
+            $"{app.Key}.app.json", "application/json", JsonSerializer.SerializeToUtf8Bytes(exported.Package, TemplateJson.Options)),
+            exported.Warnings));
     }
 }

@@ -1,6 +1,7 @@
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using System.Text.RegularExpressions;
+using DynamicModules.Application.Dynamic.AppService;
 using DynamicModules.Application.Dynamic.PermissionService.Data;
 using DynamicModules.Application.Dynamic.TemplateService.Data;
 using DynamicModules.Domain.Entities.Dynamic;
@@ -24,7 +25,20 @@ public sealed partial class TemplateExporter(IModuleRepository modules, IPermiss
             if (members.All(m => m.Key != child.Key) && await modules.GetByKeyAsync(child.Key, includeChildren: true, ct) is { } full)
                 members.Add(full);
 
-        var ctx = new Context(members);
+        var exported = await ExportMembersAsync(members, m => m.Key, null, ct);
+        return new TemplatePackage(1, module.Key, module.NameI18n, null, exported.Modules,
+            exported.Warnings.Count > 0 ? exported.Warnings : null);
+    }
+
+    /// <summary>
+    /// 匯出一組模組。codeOf：模組在套件內的代號（範本用 Module.Key，應用程式用 AppModule.Code）。
+    /// refTargets：參照目標的模組 Key → 套件內的 (代號, 應用程式) ；null 代表照範本的老做法保留 Module.Key，
+    /// 回傳 null 代表表達不了（該欄位不匯出）。
+    /// </summary>
+    public async Task<ExportedModules> ExportMembersAsync(
+        List<Module> members, Func<Module, string> codeOf, Func<string, (string Code, string? App)?>? refTargets, CancellationToken ct)
+    {
+        var ctx = new Context(members, codeOf, refTargets);
         var groups = (await permissions.ListGroupsAsync(ct)).OrderBy(g => g.Id).ToList();
         var result = new List<TemplateModule>();
         foreach (var m in members)
@@ -36,10 +50,10 @@ public sealed partial class TemplateExporter(IModuleRepository modules, IPermiss
             var rules = m.Rules.OrderBy(r => r.Sequence).Select((r, i) => ctx.Rule(m, r, i)).OfType<TemplateRule>().ToList();
             var shared = (await views.ListByScopeAsync(m.Id, null, ct)).OrderBy(v => v.Id).Select(ctx.View).ToList();
             var title = m.TitleFieldId is { } t && ctx.Exported.Contains(t) ? ctx.Fields[t].Key : null;
-            result.Add(new TemplateModule(m.Key, m.Key, m.NameI18n, m.Icon, m.Section, m.Kind, m.HostEntityKey, title,
+            result.Add(new TemplateModule(codeOf(m), m.Key, m.NameI18n, m.Icon, m.Section, m.Kind, m.HostEntityKey, title,
                 blocks, rules, shared, IsDetail(m) ? [] : await PermissionsAsync(m, groups, ct)));
         }
-        return new TemplatePackage(1, module.Key, module.NameI18n, null, result, ctx.Warnings.Count > 0 ? ctx.Warnings : null);
+        return new ExportedModules(result, ctx.Warnings, ctx.Names());
     }
 
     /// <summary>只有群組層的動作權限與資料範圍；個人、欄位層、選項範圍不匯出。</summary>
@@ -52,6 +66,12 @@ public sealed partial class TemplateExporter(IModuleRepository modules, IPermiss
                 rows.Scopes.FirstOrDefault(s => s.GroupId == g.Id)?.Scope))
             .Where(x => !x.Privileges.IsEmpty || x.Scope is not null)
             .Select(x => new TemplatePermission(x.Key, x.Privileges, x.Scope)).ToList();
+    }
+
+    public sealed record ExportedModules(List<TemplateModule> Modules, List<string> Warnings, AppReportCodec.Names Names)
+    {
+        /// <summary>欄位 Id → 限定欄位名（只含實際匯出的）。</summary>
+        public Func<long, string?> Field => Names.Field;
     }
 
     private static bool IsDetail(Module m) =>
@@ -86,8 +106,15 @@ public sealed partial class TemplateExporter(IModuleRepository modules, IPermiss
 
         public List<string> Warnings { get; } = [];
 
-        public Context(List<Module> members)
+        private readonly Func<Module, string> _codeOf;
+        private readonly Func<string, (string Code, string? App)?>? _refTargets;
+        private readonly Dictionary<long, Field> _allFields = new();
+        private readonly Dictionary<long, long> _optionOwner = new();
+
+        public Context(List<Module> members, Func<Module, string> codeOf, Func<string, (string Code, string? App)?>? refTargets)
         {
+            _codeOf = codeOf;
+            _refTargets = refTargets;
             var all = members.SelectMany(m => m.Blocks.SelectMany(b => b.Fields).Select(f => (m, f))).ToList();
             _allFieldIds = all.Select(x => x.f.Id).ToHashSet();
             foreach (var (m, f) in all.Where(x => x.f.Status == FieldStatus.Active))
@@ -96,6 +123,8 @@ public sealed partial class TemplateExporter(IModuleRepository modules, IPermiss
                 _moduleOf[f.Id] = m;
             }
             _options = Fields.Values.SelectMany(ActiveOptions).Select(o => o.Id).ToHashSet();
+            foreach (var f in Fields.Values)
+                foreach (var o in ActiveOptions(f)) _optionOwner[o.Id] = f.Id;
             _blocks = members.SelectMany(m => m.Blocks).Select(b => b.Id).ToHashSet();
             Exported = Fields.Keys.ToHashSet();
 
@@ -118,11 +147,23 @@ public sealed partial class TemplateExporter(IModuleRepository modules, IPermiss
 
         private string Code(long fieldId) => Fields[fieldId].Key;
 
-        private string Qualified(long fieldId) => $"{_moduleOf[fieldId].Key}.{Fields[fieldId].Key}";
+        private string Qualified(long fieldId) => $"{_codeOf(_moduleOf[fieldId])}.{Fields[fieldId].Key}";
+
+        /// <summary>報表、狀態機、轉換用的 Id → 代號查表；只認實際匯出的欄位。</summary>
+        public AppReportCodec.Names Names() => new(
+            key => _moduleOf.Values.FirstOrDefault(m => m.Key == key) is { } m ? _codeOf(m) : null,
+            id => Exported.Contains(id) ? Qualified(id) : null,
+            (fieldId, optionId) => _optionOwner.TryGetValue(optionId, out var owner) && owner == fieldId ? $"o_{optionId}" : null,
+            id => Fields.TryGetValue(id, out var f) && IsOptionField(f));
+
+        public string? OptionCode(long optionId) => _options.Contains(optionId) ? $"o_{optionId}" : null;
 
         private string? WhyOmit(Field f)
         {
             var unresolved = $"「{Label(f)}」引用了停用或未匯出的欄位，未匯出";
+            if (_refTargets is not null && f.Type == FieldType.Reference && f.Config.RefTarget is { Kind: ReferenceTarget.ModuleKind } target
+                && _refTargets(target.Key) is null)
+                return $"「{Label(f)}」指向不屬於任何應用程式的模組，未匯出";
             if (f.Config.Formula is { } formula
                 && FormulaReference().Matches(formula).Any(x => !Exported.Contains(long.Parse(x.Groups[1].Value))))
                 return unresolved;
@@ -162,6 +203,26 @@ public sealed partial class TemplateExporter(IModuleRepository modules, IPermiss
                 if (rollup.AggregateFieldId is { } agg) converted["aggregateField"] = Qualified(agg);
                 if (rollup.Condition is { ValueKind: JsonValueKind.Object } condition) converted["condition"] = Condition(condition);
                 node["rollup"] = converted;
+            }
+            if (_refTargets is not null && node["refTarget"] is JsonObject refTarget
+                && refTarget["kind"]?.GetValue<string>() == ReferenceTarget.ModuleKind && refTarget["key"]?.GetValue<string>() is { } targetKey
+                && _refTargets(targetKey) is { } resolved)
+            {
+                refTarget["key"] = resolved.Code;
+                if (resolved.App is not null) refTarget["app"] = resolved.App;
+            }
+            if (f.Config.Fill is { } fill)
+            {
+                var map = new JsonArray();
+                foreach (var entry in fill.Map)
+                    if (Exported.Contains(entry.From) && Exported.Contains(entry.To) && _moduleOf[entry.To] == _moduleOf[f.Id])
+                        map.Add(new JsonObject { ["from"] = Qualified(entry.From), ["to"] = Code(entry.To) });
+                if (map.Count == fill.Map.Count) node["fill"] = new JsonObject { ["mode"] = fill.Mode, ["map"] = map };
+                else
+                {
+                    node.Remove("fill");
+                    Warnings.Add($"「{Label(f)}」的帶值引用了停用、未匯出或套件外的欄位，未匯出這個設定");
+                }
             }
             if (f.Config.ParentDefaultFieldId is { } parent)
             {

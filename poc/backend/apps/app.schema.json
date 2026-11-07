@@ -6,7 +6,7 @@
   "patternProperties": { "^x-": {} },
   "properties": {
     "format": { "const": "formwright-app" },
-    "formatVersion": { "const": 2 },
+    "formatVersion": { "enum": [2, 3] },
     "manifest": { "$ref": "#/$defs/manifest" },
     "groups": { "type": "array", "maxItems": 20, "items": { "$ref": "#/$defs/group" } },
     "modules": { "type": "array", "minItems": 1, "maxItems": 30 },
@@ -14,8 +14,8 @@
     "optionScopes": { "type": "array", "maxItems": 2000 },
     "reports": { "type": "array", "maxItems": 50 },
     "dashboards": { "type": "array", "maxItems": 0 },
-    "workflows": { "type": "array", "maxItems": 0 },
-    "conversions": { "type": "array", "maxItems": 0 },
+    "workflows": { "type": "array", "maxItems": 30 },
+    "conversions": { "type": "array", "maxItems": 50 },
     "events": { "type": "array", "maxItems": 0 },
     "printTemplates": { "type": "array", "maxItems": 0 }
   },

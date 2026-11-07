@@ -1,0 +1,132 @@
+using DynamicModules.Application.Common;
+using DynamicModules.Application.Dynamic.AppService.Data;
+using DynamicModules.Application.Dynamic.ConversionService.Commands.SaveConversion;
+using DynamicModules.Application.Dynamic.ConversionService.Data;
+using DynamicModules.Application.Dynamic.ReportService.Commands.CreateReport;
+using DynamicModules.Application.Dynamic.ReportService.Commands.SetReportShares;
+using DynamicModules.Application.Dynamic.ReportService.Data;
+using DynamicModules.Application.Dynamic.TemplateService.Data;
+using DynamicModules.Application.Dynamic.WorkflowService.Commands.SaveWorkflow;
+using DynamicModules.Application.Dynamic.WorkflowService.Data;
+using DynamicModules.Domain.Entities.Dynamic;
+using DynamicModules.Domain.ValueObjects;
+using MediatR;
+using static DynamicModules.Application.Dynamic.TemplateService.TemplateGraph;
+
+namespace DynamicModules.Application.Dynamic.AppService;
+
+/// <summary>
+/// 開啟應用程式時安裝單據能力：狀態機、轉換、報表。全部走既有的設計器與報表指令（驗證照跑），
+/// 代號用實例化回傳的 id 對照換成 id。呼叫端在交易內，任一步失敗回傳失敗，由外層回滾。
+/// 欄位被使用者取消勾選（沒有 id）的項目整個略過並警告，不是失敗。
+/// </summary>
+public sealed class AppFlowInstaller(ISender sender)
+{
+    public sealed record Result(ServiceResult? Failure, List<AppReport> Reports, List<string> Warnings);
+
+    public async Task<Result> InstallAsync(
+        AppPackageData p, TemplateIdMap ids, IReadOnlyDictionary<string, long> groupIds, CancellationToken ct)
+    {
+        var warnings = new List<string>();
+        var reports = new List<AppReport>();
+
+        foreach (var w in p.Workflows)
+        {
+            if (!ids.FieldIds.TryGetValue(Qualify(w.Module, w.StatusField), out var statusId)
+                || w.States.Any(s => !ids.OptionIds.ContainsKey($"{w.Module}.{s.Option}")))
+            {
+                warnings.Add($"模組「{w.Module}」的狀態欄位或狀態被排除，已略過它的狀態機");
+                continue;
+            }
+            long Option(string code) => ids.OptionIds[$"{w.Module}.{code}"];
+            var transitions = new List<WorkflowTransition>();
+            foreach (var t in w.Transitions)
+            {
+                var mapped = t.Groups.Where(groupIds.ContainsKey).Select(g => groupIds[g]).Distinct().ToList();
+                // 空群組代表「有 Edit 權限的人都可以」：群組都沒對應時不能退化成空清單，那會放寬權限，整條轉移不建
+                if (t.Groups.Count > 0 && mapped.Count == 0)
+                {
+                    warnings.Add($"模組「{w.Module}」的轉移 {t.From} → {t.To} 的群組都沒有對應，已略過這條轉移");
+                    continue;
+                }
+                if (mapped.Count < t.Groups.Distinct().Count())
+                    warnings.Add($"模組「{w.Module}」的轉移 {t.From} → {t.To} 有群組沒有對應，只開放給有對應的群組");
+                transitions.Add(new WorkflowTransition(Option(t.From), Option(t.To), mapped));
+            }
+            var input = new WorkflowInput(statusId, Option(w.Initial),
+                w.States.Select(s => new WorkflowState(Option(s.Option), s.ReadOnly)).ToList(), transitions);
+            var saved = await sender.Send(new SaveWorkflowRequest(ids.ModuleKeys[w.Module], input), ct);
+            if (!saved.IsSuccess) return new Result(Prefixed(saved, $"{w.Module}.workflow"), reports, warnings);
+        }
+
+        foreach (var c in p.Conversions)
+        {
+            if (ConversionInputOf(c, ids) is not { } input)
+            {
+                warnings.Add($"轉換「{c.Code}」引用了被排除的欄位，已略過");
+                continue;
+            }
+            var created = await sender.Send(new CreateConversionRequest(input), ct);
+            if (!created.IsSuccess) return new Result(Prefixed(created, $"conversions.{c.Code}"), reports, warnings);
+        }
+
+        foreach (var r in p.Reports)
+        {
+            var lookups = new AppReportCodec.Lookups(
+                code => ids.ModuleKeys.GetValueOrDefault(code),
+                name => ids.FieldIds.TryGetValue(name, out var id) ? id : null,
+                name => ids.OptionIds.TryGetValue(name, out var id) ? id : null);
+            var (definition, errors) = AppReportCodec.ToDefinition(r.Definition, lookups);
+            if (definition is null)
+            {
+                warnings.Add($"報表「{r.Name}」引用了被排除的欄位，已略過（{string.Join("；", errors)}）");
+                continue;
+            }
+            var created = await sender.Send(new CreateReportRequest(r.Name, definition), ct);
+            if (!created.IsSuccess) return new Result(Prefixed(created, $"reports.{r.Code}"), reports, warnings);
+            var reportId = ((ReportDetail)created.Data!).Id;
+            var shares = r.ShareWith.Where(groupIds.ContainsKey).Select(g => groupIds[g]).Distinct().ToList();
+            if (r.ShareWith.Count > shares.Count) warnings.Add($"報表「{r.Name}」有分享群組沒有對應，已略過");
+            if (shares.Count > 0)
+            {
+                var shared = await sender.Send(new SetReportSharesRequest(reportId, shares), ct);
+                if (!shared.IsSuccess) return new Result(Prefixed(shared, $"reports.{r.Code}"), reports, warnings);
+            }
+            reports.Add(new AppReport { Code = r.Code, ReportId = reportId });
+        }
+        return new Result(null, reports, warnings);
+    }
+
+    /// <summary>任何一個欄位或選項被排除就回 null。</summary>
+    private static ConversionInput? ConversionInputOf(AppConversion c, TemplateIdMap ids)
+    {
+        bool Missing(params string?[] names) => names.Any(n => n is null || !ids.FieldIds.ContainsKey(n));
+        long Id(string name) => ids.FieldIds[name];
+        FillMapping Map(AppCopy x) => new(Id(x.From), Id(x.To));
+
+        var names = new List<string?> { c.Header.SourceField };
+        names.AddRange(c.Header.Copy.SelectMany(x => new[] { x.From, x.To }));
+        if (c.Lines is { } l)
+        {
+            names.AddRange([l.SourceLineField, l.Quantity.From, l.Quantity.To]);
+            names.AddRange(l.Copy.SelectMany(x => new[] { x.From, x.To }));
+        }
+        if (Missing([.. names])) return null;
+        if (c.SourceStates.Any(s => !ids.OptionIds.ContainsKey($"{c.Source}.{s}"))) return null;
+
+        var lines = c.Lines is { } ln
+            ? new ConversionLines(ids.ModuleKeys[ln.SourceModule], ids.ModuleKeys[ln.TargetModule], Id(ln.SourceLineField),
+                Map(ln.Quantity), ln.Copy.Select(Map).ToList())
+            : null;
+        var definition = new ConversionDefinition(
+            c.SourceStates.Select(s => ids.OptionIds[$"{c.Source}.{s}"]).ToList(),
+            new ConversionHeader(Id(c.Header.SourceField), c.Header.Copy.Select(Map).ToList()), lines);
+        return new ConversionInput(c.Code, c.Name, ids.ModuleKeys[c.Source], ids.ModuleKeys[c.Target], c.Active, definition);
+    }
+
+    /// <summary>驗證錯誤的鍵加上來源前綴，讓使用者看得出是套件的哪一項；其他種類原樣回傳。</summary>
+    private static ServiceResult Prefixed(ServiceResult r, string prefix) =>
+        r.IsForbidden || r.IsNotFound || r.IsConflict || r.Errors.Count == 0
+            ? r
+            : ServiceResult.Invalid(r.Errors.ToDictionary(e => $"{prefix}.{e.Key}", e => e.Value));
+}

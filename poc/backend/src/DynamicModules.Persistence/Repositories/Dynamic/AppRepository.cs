@@ -8,15 +8,15 @@ namespace DynamicModules.Persistence.Repositories.Dynamic;
 public class AppRepository(DynamicDbContext db) : IAppRepository
 {
     public Task<List<App>> ListAsync(CancellationToken ct) =>
-        db.Set<App>().Include(a => a.Modules).OrderBy(a => a.Key).ToListAsync(ct);
+        db.Set<App>().Include(a => a.Modules).Include(a => a.Reports).OrderBy(a => a.Key).ToListAsync(ct);
 
     public Task<App?> GetByKeyAsync(string key, CancellationToken ct) =>
-        db.Set<App>().Include(a => a.Modules).FirstOrDefaultAsync(a => a.Key == key, ct);
+        db.Set<App>().Include(a => a.Modules).Include(a => a.Reports).FirstOrDefaultAsync(a => a.Key == key, ct);
 
     public async Task<App?> FindByModuleIdAsync(long moduleId, CancellationToken ct)
     {
         var appId = await db.Set<AppModule>().Where(m => m.ModuleId == moduleId).Select(m => (long?)m.AppId).FirstOrDefaultAsync(ct);
-        return appId is null ? null : await db.Set<App>().Include(a => a.Modules).FirstAsync(a => a.Id == appId, ct);
+        return appId is null ? null : await db.Set<App>().Include(a => a.Modules).Include(a => a.Reports).FirstAsync(a => a.Id == appId, ct);
     }
 
     public void Add(App app) => db.Set<App>().Add(app);

@@ -2,6 +2,7 @@ using DynamicModules.Application.Dynamic.AppService;
 using DynamicModules.Application.Dynamic.AppService.Commands;
 using DynamicModules.Application.Dynamic.AppService.Data;
 using DynamicModules.Application.Dynamic.AppService.Queries;
+using DynamicModules.Application.Dynamic.ExportService.Queries.ExportRecords;
 using MediatR;
 using Microsoft.AspNetCore.Mvc;
 
@@ -54,4 +55,15 @@ public class AppsController(IMediator mediator) : ControllerBase
     [HttpDelete("apps/{key}")]
     public async Task<IActionResult> Delete(string key, [FromQuery] int? purged) =>
         (await mediator.Send(new DeleteAppRequest(key, purged))).ToActionResult(this);
+
+    /// <summary>由目前的成員模組重新產生套件檔；表達不了而略過的項目放在 X-Export-Warnings 標頭（URL 編碼、| 分隔）。</summary>
+    [HttpGet("apps/{key}/export")]
+    public async Task<IActionResult> Export(string key)
+    {
+        var result = await mediator.Send(new ExportAppRequest(key));
+        if (!result.IsSuccess || result.Data is not AppExportResult export) return result.ToActionResult(this);
+        if (export.Warnings.Count > 0)
+            Response.Headers["X-Export-Warnings"] = string.Join('|', export.Warnings.Select(Uri.EscapeDataString));
+        return File(export.File.Content, export.File.ContentType, export.File.FileName);
+    }
 }

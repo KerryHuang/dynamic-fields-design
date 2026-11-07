@@ -20,6 +20,7 @@ public record AppValidation(IReadOnlyList<string> Errors, IReadOnlyList<string> 
 public static partial class AppPackageValidator
 {
     public const int MaxGroups = 20, MaxModules = 30, MaxFieldsPerModule = 300, MaxOptionsPerField = 200;
+    public const int MaxConversions = 50, MaxReports = 50;
     public const int MaxRulesPerModule = 100, MaxViewsPerModule = 20, MaxAccessEntries = 2000;
 
     [GeneratedRegex("^[a-z][a-zA-Z0-9_]{0,39}$")]
@@ -35,10 +36,12 @@ public static partial class AppPackageValidator
     {
         "required", "readOnly", "maxLength", "precision", "scale", "defaultValue", "defaultToday", "parentDefaultField",
         "fullWidth", "showInList", "isFilterable", "isSortable", "formula", "resultType", "format", "refTarget", "onDelete",
-        "relation", "scope", "rollup"
+        "relation", "scope", "rollup", "fill"
     };
 
     private static readonly HashSet<string> RefTargetKeys = new(StringComparer.Ordinal) { "kind", "key", "app" };
+    private static readonly HashSet<string> FillKeys = new(StringComparer.Ordinal) { "mode", "map" };
+    private static readonly HashSet<string> FillMapKeys = new(StringComparer.Ordinal) { "from", "to" };
     private static readonly HashSet<string> RollupKeys = new(StringComparer.Ordinal) { "sourceField", "function", "aggregateField", "condition" };
 
     public static AppValidation Validate(AppPackageData p)
@@ -56,8 +59,19 @@ public static partial class AppPackageValidator
     {
         var errors = new List<string>();
         if (p.Format != AppPackageData.FormatName) errors.Add($"format: 必須是 \"{AppPackageData.FormatName}\"");
-        if (p.FormatVersion != AppPackageData.CurrentFormatVersion) errors.Add($"formatVersion: 必須是 {AppPackageData.CurrentFormatVersion}");
+        if (p.FormatVersion is < AppPackageData.MinFormatVersion or > AppPackageData.CurrentFormatVersion)
+            errors.Add($"formatVersion: 必須是 {AppPackageData.MinFormatVersion} 或 {AppPackageData.CurrentFormatVersion}");
         foreach (var section in p.UnsupportedSections()) errors.Add($"{section}: 此版本不支援 {section}");
+        // 格式 2 的讀取器對這幾個 section 一律 fail-closed：靜默略過 workflows 會讓客戶開出缺了控管的單據流程
+        if (p.FormatVersion < 3)
+        {
+            if (p.Workflows.Count > 0) errors.Add("workflows: formatVersion 3 才支援 workflows");
+            if (p.Conversions.Count > 0) errors.Add("conversions: formatVersion 3 才支援 conversions");
+            if (p.Reports.Count > 0) errors.Add("reports: formatVersion 3 才支援 reports");
+        }
+        if (p.Workflows.Count > MaxModules) errors.Add($"workflows: 最多 {MaxModules} 個");
+        if (p.Conversions.Count > MaxConversions) errors.Add($"conversions: 最多 {MaxConversions} 個");
+        if (p.Reports.Count > MaxReports) errors.Add($"reports: 最多 {MaxReports} 個");
 
         var m = p.Manifest;
         if (!AppId().IsMatch(m.Id ?? "")) errors.Add($"manifest.id: 格式錯誤（小寫英文、數字、連字號，2 到 40 字，英文開頭）");
@@ -105,7 +119,7 @@ public static partial class AppPackageValidator
                 CheckText(f.Label, $"{at}.{f.Code}.label", errors);
                 if (f.Options.Count > MaxOptionsPerField) errors.Add($"{at}.{f.Code}: 選項最多 {MaxOptionsPerField} 個");
                 foreach (var o in f.Options.Where(o => o is not null)) CheckText(o.Label, $"{at}.{f.Code}.options.{o.Code}", errors);
-                CheckConfigKeys(at, f, errors);
+                CheckConfigKeys(at, f, p.FormatVersion, errors);
             }
             foreach (var v in mod.Views.Where(v => v is not null)) CheckText(v.Name, $"{at}.views", errors);
         }
@@ -122,13 +136,26 @@ public static partial class AppPackageValidator
     }
 
     /// <summary>v1 的 FieldConfig 反序列化會靜默忽略未知鍵，reqired: true 這類拼錯不會被發現；v2 拒絕。</summary>
-    private static void CheckConfigKeys(string module, TemplateField f, List<string> errors)
+    private static void CheckConfigKeys(string module, TemplateField f, int formatVersion, List<string> errors)
     {
         var at = $"{module}.{f.Code}";
         if (f.Config.ValueKind != JsonValueKind.Object) return;
         foreach (var prop in f.Config.EnumerateObject())
         {
             if (!ConfigKeys.Contains(prop.Name)) { errors.Add($"{at}: config 不認得 \"{prop.Name}\""); continue; }
+            if (prop.Name == "fill")
+            {
+                if (formatVersion < 3) { errors.Add($"{at}: config.fill 要 formatVersion 3"); continue; }
+                if (prop.Value.ValueKind == JsonValueKind.Object)
+                {
+                    foreach (var inner in prop.Value.EnumerateObject().Where(x => !FillKeys.Contains(x.Name)))
+                        errors.Add($"{at}: config.fill 不認得 \"{inner.Name}\"");
+                    if (prop.Value.TryGetProperty("map", out var map) && map.ValueKind == JsonValueKind.Array)
+                        foreach (var entry in map.EnumerateArray().Where(e => e.ValueKind == JsonValueKind.Object))
+                            foreach (var inner in entry.EnumerateObject().Where(x => !FillMapKeys.Contains(x.Name)))
+                                errors.Add($"{at}: config.fill.map 不認得 \"{inner.Name}\"");
+                }
+            }
             if (prop.Name == "refTarget" && prop.Value.ValueKind == JsonValueKind.Object)
                 foreach (var inner in prop.Value.EnumerateObject().Where(x => !RefTargetKeys.Contains(x.Name)))
                     errors.Add($"{at}: config.refTarget 不認得 \"{inner.Name}\"");
@@ -240,6 +267,7 @@ public static partial class AppPackageValidator
             foreach (var g in s.Groups) CheckGroup(g, $"{at}.groups");
             if (!seenScopes.Add(s.Option ?? "")) errors.Add($"{at}: {s.Option} 重複設定");
         }
+        V3References(p, fieldNames, groupCodes, errors);
         return errors;
     }
 }

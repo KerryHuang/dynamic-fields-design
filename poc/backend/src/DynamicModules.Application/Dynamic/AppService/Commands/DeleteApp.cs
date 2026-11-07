@@ -25,7 +25,7 @@ public record DeleteAppCheck(bool CanDelete, IReadOnlyList<DeleteBlocker> Blocke
 /// </summary>
 public class DeleteAppHandler(
     IAppRepository apps, IModuleRepository modules, DeletePlanner planner, ModuleRemover remover,
-    AppDependencyChecker dependencies, IUnitOfWork uow) : IRequestHandler<DeleteAppRequest, ServiceResult>
+    AppDependencyChecker dependencies, IReportRepository reports, IUnitOfWork uow) : IRequestHandler<DeleteAppRequest, ServiceResult>
 {
     public const string DependentKind = "appDependent";
     public const string NotClosedKind = "appNotClosed";
@@ -44,6 +44,8 @@ public class DeleteAppHandler(
             if (await modules.GetByIdAsync(member.ModuleId, includeChildren: false, ct) is { } m) members.Add(m);
         var keys = members.Select(m => m.Key).ToHashSet();
 
+        // 應用程式自己的報表（AppReport）不算外部引用：它們跟著一起刪
+        var ownReportIds = app.Reports.Select(r => r.ReportId).ToHashSet();
         var records = 0;
         var indexRows = 0;
         var historyRows = 0;
@@ -51,7 +53,7 @@ public class DeleteAppHandler(
         {
             var plan = await planner.PlanAsync(DeleteTarget.Module, m.Key, 0, ct, keys);
             if (plan is null) continue;
-            blockers.AddRange(plan.Check.Blockers);
+            blockers.AddRange(plan.Check.Blockers.Where(b => !(b.Kind == DeleteBlockerKind.Report && b.Id is { } id && ownReportIds.Contains(id))));
             records += plan.Check.Purge.Records;
             indexRows += plan.Check.Purge.IndexRows;
             historyRows += plan.Check.Purge.HistoryRows;
@@ -68,6 +70,8 @@ public class DeleteAppHandler(
 
         // 先移除應用程式（連帶它的 AppModule 列），再移除模組：反過來的話模組的級聯刪除會先把 AppModule 列刪掉，EF 再刪一次就會失敗
         var moduleIds = members.Select(m => m.Id).ToList();
+        foreach (var reportId in ownReportIds)
+            if (await reports.GetAsync(reportId, ct) is { } report) reports.Remove(report);
         apps.Remove(app);
         await uow.CommitAsync(ct);
         foreach (var id in moduleIds) await remover.RemoveAsync(id, ct);

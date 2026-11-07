@@ -1,0 +1,151 @@
+using DynamicModules.Application.Dynamic.AppService.Data;
+using DynamicModules.Application.Dynamic.TemplateService.Data;
+using DynamicModules.Domain.Entities.Dynamic;
+using static DynamicModules.Application.Dynamic.TemplateService.TemplateGraph;
+
+namespace DynamicModules.Application.Dynamic.AppService;
+
+// 格式 3 的引用層：workflows、conversions、reports、config.fill 的代號都要在套件內找得到。
+// 這裡只做「存在」的檢查（純函式）；欄位型別、群組權限這類要看資料庫的檢查，開啟時由既有的設計器指令負責，失敗整批回滾。
+public static partial class AppPackageValidator
+{
+    private static void V3References(
+        AppPackageData p, Dictionary<string, TemplateField> fields, HashSet<string> groupCodes, List<string> errors)
+    {
+        var modules = p.Modules.ToDictionary(m => m.Code, m => m);
+        // 「模組代號.選項代號」→ 擁有它的欄位限定名（選項代號在模組內唯一）
+        var optionOwner = p.Modules.SelectMany(m => m.Blocks.SelectMany(b => b.Fields)
+                .SelectMany(f => f.Options.Select(o => (Key: $"{m.Code}.{o.Code}", Owner: Qualify(m.Code, f.Code)))))
+            .DistinctBy(x => x.Key).ToDictionary(x => x.Key, x => x.Owner);
+
+        bool Field(string? name, string? inModule = null) =>
+            name is not null && fields.ContainsKey(name) && (inModule is null || SplitQualified(name)!.Value.Module == inModule);
+
+        // ---- workflows ----
+        var workflowOf = new Dictionary<string, AppWorkflow>();
+        for (var i = 0; i < p.Workflows.Count; i++)
+        {
+            var w = p.Workflows[i];
+            var at = $"workflows[{i}]";
+            if (w is null) { errors.Add($"{at}: 不能是 null"); continue; }
+            if (w.Module is null || !modules.TryGetValue(w.Module, out var module)) { errors.Add($"{at}.module: 模組 {w.Module} 不在套件內"); continue; }
+            if (!workflowOf.TryAdd(w.Module, w)) { errors.Add($"{at}: 模組 {w.Module} 已有狀態機"); continue; }
+            var status = Qualify(w.Module, w.StatusField);
+            if (!Field(status) || fields[status].Type != FieldType.Enum) { errors.Add($"{at}.statusField: {status} 必須是本模組的單選下拉欄位"); continue; }
+            var options = fields[status].Options.Select(o => o.Code).ToHashSet();
+            if (!options.Contains(w.Initial ?? "")) errors.Add($"{at}.initial: 選項 {w.Initial} 不是 {status} 的選項");
+            var states = w.States.Select(s => s?.Option ?? "").ToList();
+            foreach (var s in states.Where(s => !options.Contains(s))) errors.Add($"{at}.states: 選項 {s} 不是 {status} 的選項");
+            if (states.Distinct().Count() != states.Count) errors.Add($"{at}.states: 狀態重複");
+            if (!states.Contains(w.Initial ?? "")) errors.Add($"{at}.initial: 起始狀態必須在 states 內");
+            foreach (var t in w.Transitions)
+            {
+                if (t is null) { errors.Add($"{at}.transitions: 不能有 null"); continue; }
+                if (!states.Contains(t.From ?? "") || !states.Contains(t.To ?? "") || t.From == t.To)
+                    errors.Add($"{at}.transitions: {t.From} → {t.To} 的兩端必須是 states 內不同的狀態");
+                foreach (var g in t.Groups)
+                    if (!groupCodes.Contains(g)) errors.Add($"{at}.transitions: 群組 {g} 沒有在 groups 宣告");
+            }
+            _ = module;
+        }
+
+        // ---- conversions ----
+        var conversionCodes = new HashSet<string>();
+        for (var i = 0; i < p.Conversions.Count; i++)
+        {
+            var c = p.Conversions[i];
+            var at = $"conversions[{i}]";
+            if (c is null) { errors.Add($"{at}: 不能是 null"); continue; }
+            if (!AppId().IsMatch(c.Code ?? "")) errors.Add($"{at}.code: 格式錯誤（小寫英文、數字、連字號，2 到 40 字，英文開頭）");
+            else if (!conversionCodes.Add(c.Code!)) errors.Add($"{at}.code: 轉換代碼重複 {c.Code}");
+            CheckText(c.Name, $"{at}.name", errors);
+            if (!modules.ContainsKey(c.Source ?? "") || !modules.ContainsKey(c.Target ?? "")) { errors.Add($"{at}: 來源或目標模組不在套件內"); continue; }
+            if (c.SourceStates.Count > 0)
+            {
+                if (!workflowOf.TryGetValue(c.Source!, out var wf)) errors.Add($"{at}.sourceStates: 來源模組 {c.Source} 沒有狀態機");
+                else
+                {
+                    var owner = Qualify(c.Source, wf.StatusField);
+                    foreach (var s in c.SourceStates.Where(s => !wf.States.Any(x => x.Option == s)))
+                        errors.Add($"{at}.sourceStates: {s} 不是 {c.Source} 狀態機裡的狀態 (欄位 {owner})");
+                }
+            }
+            if (c.Header is null) { errors.Add($"{at}.header: 缺少表頭設定"); continue; }
+            if (!Field(c.Header.SourceField, c.Target)) errors.Add($"{at}.header.sourceField: {c.Header.SourceField} 必須是目標模組 {c.Target} 的欄位");
+            CheckCopies(c.Header.Copy, c.Source, c.Target, $"{at}.header.copy", Field, errors);
+            if (c.Lines is { } lines)
+            {
+                if (!modules.ContainsKey(lines.SourceModule ?? "") || !modules.ContainsKey(lines.TargetModule ?? ""))
+                    errors.Add($"{at}.lines: 來源或目標明細模組不在套件內");
+                else
+                {
+                    if (!Field(lines.SourceLineField, lines.TargetModule))
+                        errors.Add($"{at}.lines.sourceLineField: {lines.SourceLineField} 必須是目標明細模組 {lines.TargetModule} 的欄位");
+                    if (lines.Quantity is null || !Field(lines.Quantity.From, lines.SourceModule) || !Field(lines.Quantity.To, lines.TargetModule))
+                        errors.Add($"{at}.lines.quantity: 數量欄位必須分別是來源與目標明細模組的欄位");
+                    CheckCopies(lines.Copy, lines.SourceModule, lines.TargetModule, $"{at}.lines.copy", Field, errors);
+                }
+            }
+        }
+
+        // ---- config.fill ----
+        foreach (var m in p.Modules)
+            foreach (var f in m.Blocks.SelectMany(b => b.Fields).Where(f => f.Type == FieldType.Reference))
+            {
+                if (ConfigObject(f.Config, "fill") is not { } fill) continue;
+                var at = $"{m.Code}.{f.Code}.fill";
+                var mode = ConfigString(fill, "mode");
+                if (mode is not ("lock" or "default")) errors.Add($"{at}.mode: 必須是 lock 或 default");
+                var target = ConfigObject(f.Config, "refTarget") is { } rt && ConfigString(rt, "app") is null
+                    && ConfigString(rt, "kind") == "module" ? ConfigString(rt, "key") : null;
+                if (target is null || !modules.ContainsKey(target))
+                {
+                    errors.Add($"{at}: 帶值只能用在指向本套件模組的參照欄位");
+                    continue;
+                }
+                if (!fill.TryGetProperty("map", out var map) || map.ValueKind != System.Text.Json.JsonValueKind.Array || map.GetArrayLength() == 0)
+                {
+                    errors.Add($"{at}.map: 至少要有一組對應");
+                    continue;
+                }
+                foreach (var entry in map.EnumerateArray())
+                {
+                    var from = ConfigString(entry, "from");
+                    var to = ConfigString(entry, "to");
+                    if (!Field(from, target)) errors.Add($"{at}.map: 來源欄位 {from} 必須是 {target} 的欄位（<模組代號>.<欄位代號>）");
+                    if (!Field(Qualify(m.Code, to))) errors.Add($"{at}.map: 目的欄位 {to} 不在 {m.Code}");
+                }
+            }
+
+        // ---- reports ----
+        var reportCodes = new HashSet<string>();
+        var lookups = new AppReportCodec.Lookups(
+            code => modules.ContainsKey(code) ? code : null,
+            name => Field(name) ? 1 : null,
+            name => optionOwner.ContainsKey(name) ? 1 : null);
+        for (var i = 0; i < p.Reports.Count; i++)
+        {
+            var r = p.Reports[i];
+            var at = $"reports[{i}]";
+            if (r is null) { errors.Add($"{at}: 不能是 null"); continue; }
+            if (!Code().IsMatch(r.Code ?? "")) errors.Add($"{at}.code: 格式錯誤");
+            else if (!reportCodes.Add(r.Code!)) errors.Add($"{at}.code: 報表代號重複 {r.Code}");
+            if (string.IsNullOrWhiteSpace(r.Name) || r.Name.Length > 200) errors.Add($"{at}.name: 必須是 1 到 200 字");
+            foreach (var g in r.ShareWith)
+                if (!groupCodes.Contains(g)) errors.Add($"{at}.shareWith: 群組 {g} 沒有在 groups 宣告");
+            if (r.Definition is null) { errors.Add($"{at}.definition: 缺少報表定義"); continue; }
+            foreach (var e in AppReportCodec.ToDefinition(r.Definition, lookups).Errors) errors.Add($"{at}.definition: {e}");
+        }
+    }
+
+    private static void CheckCopies(
+        List<AppCopy> copies, string? sourceModule, string? targetModule, string at, Func<string?, string?, bool> field, List<string> errors)
+    {
+        foreach (var copy in copies)
+        {
+            if (copy is null) { errors.Add($"{at}: 不能有 null"); continue; }
+            if (!field(copy.From, sourceModule)) errors.Add($"{at}: 來源欄位 {copy.From} 必須是 {sourceModule} 的欄位");
+            if (!field(copy.To, targetModule)) errors.Add($"{at}: 目的欄位 {copy.To} 必須是 {targetModule} 的欄位");
+        }
+    }
+}

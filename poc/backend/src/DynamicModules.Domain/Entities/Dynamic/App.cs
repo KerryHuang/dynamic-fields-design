@@ -26,6 +26,7 @@ public class App : AuditableEntity
     /// <summary>GUID 字串，每次寫入換新值，避免兩位管理員同時開關。</summary>
     public string RowVersion { get; set; } = "";
     public List<AppModule> Modules { get; set; } = [];
+    public List<AppReport> Reports { get; set; } = [];
 
     public void TouchRowVersion() => RowVersion = Guid.NewGuid().ToString();
 }
@@ -49,6 +50,14 @@ public class AppModule
     public long AppId { get; set; }
     public string Code { get; set; } = "";
     public long ModuleId { get; set; }
+}
+
+/// <summary>套件內報表代號對實際報表；匯出重建 reports[]，刪除應用程式時一併刪除報表。</summary>
+public class AppReport
+{
+    public long AppId { get; set; }
+    public long ReportId { get; set; }
+    public string Code { get; set; } = "";
 }
 
 /// <summary>匯入的套件；Json 是收到的原文（每次讀取才升級，不回寫）。</summary>

@@ -256,7 +256,8 @@ public sealed class TemplateInstantiator(
     private static bool HasDefaults(TemplateField f) =>
         f.Config.ValueKind == JsonValueKind.Object
         && (f.Config.TryGetProperty("defaultValue", out var d) && d.ValueKind != JsonValueKind.Null
-            || TemplateGraph.ConfigString(f.Config, "parentDefaultField") is not null);
+            || TemplateGraph.ConfigString(f.Config, "parentDefaultField") is not null
+            || TemplateGraph.ConfigObject(f.Config, "fill") is not null);
 
     /// <summary>內層指令失敗：400 的鍵加前綴，404／409 的訊息前面加模組代號，其他原樣。</summary>
     private static ServiceResult? Fail(ServiceResult r, string moduleCode, string keyPrefix)
@@ -300,7 +301,9 @@ public sealed class TemplateInstantiator(
             {
                 node.Remove("defaultValue");
                 node.Remove("parentDefaultField");
+                node.Remove("fill"); // 帶值引用其他欄位，等所有欄位都建好才寫入
             }
+            else if (node["fill"] is JsonObject fill) node["fill"] = Fill(m, fill);
             // formula、rollup 只在公式、彙總欄位才是引用（TemplateGraph 的定義）
             if (TemplateGraph.FormulaOf(f) is not null && Str(node["formula"]) is { } formula)
                 node["formula"] = TemplateGraph.FormulaReference().Replace(formula, x => $"{{{Fields[TemplateGraph.Qualify(m, x.Groups[1].Value)]}}}");
@@ -331,6 +334,17 @@ public sealed class TemplateInstantiator(
                 node["parentDefaultFieldId"] = Fields[parent];
             }
             return node.Deserialize<FieldConfig>(TemplateJson.Options)!;
+        }
+
+        /// <summary>帶值：from 是限定欄位名、to 是本模組的欄位代號，換成 id；任一端被排除（沒有 id）的對應整組丟掉，全丟光就不帶值。</summary>
+        private JsonNode? Fill(string m, JsonObject fill)
+        {
+            var map = new JsonArray();
+            foreach (var entry in fill["map"] as JsonArray ?? [])
+                if (Str(entry?["from"]) is { } from && Str(entry?["to"]) is { } to
+                    && Fields.TryGetValue(from, out var fromId) && Fields.TryGetValue(TemplateGraph.Qualify(m, to), out var toId))
+                    map.Add(new JsonObject { ["from"] = fromId, ["to"] = toId });
+            return map.Count == 0 ? null : new JsonObject { ["mode"] = fill["mode"]?.DeepClone(), ["map"] = map };
         }
 
         public RuleInput Rule(string m, TemplateRule r)

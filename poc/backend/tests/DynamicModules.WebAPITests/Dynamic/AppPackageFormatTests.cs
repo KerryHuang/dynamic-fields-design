@@ -39,9 +39,9 @@ public class AppPackageFormatTests
     // ---- 檔案層 ----
 
     [Fact]
-    public void File_UnknownFormatVersion3_IsRejectedWithUpgradeHint()
+    public void File_UnknownFormatVersion4_IsRejectedWithUpgradeHint()
     {
-        var json = AppTestPackages.Crm.Replace("\"formatVersion\": 2", "\"formatVersion\": 3");
+        var json = AppTestPackages.Crm.Replace("\"formatVersion\": 2", "\"formatVersion\": 4");
         ParseErrors(Encoding.UTF8.GetBytes(json)).Should().ContainSingle().Which.Should().Contain("較新版本");
     }
 
@@ -98,12 +98,10 @@ public class AppPackageFormatTests
     }
 
     [Theory]
-    [InlineData("workflows")]
-    [InlineData("conversions")]
+    // workflows、conversions、reports 在格式 3 已有型別，格式 2 帶它們被拒的測試見 AppV3Tests
     [InlineData("dashboards")]
     [InlineData("events")]
     [InlineData("printTemplates")]
-    [InlineData("reports")]
     public void Structure_ReservedSectionNonEmpty_IsRejected(string section)
     {
         var json = AppTestPackages.Procure.Replace("\"groups\"", $"\"{section}\": [ {{ \"x\": 1 }} ], \"groups\"");

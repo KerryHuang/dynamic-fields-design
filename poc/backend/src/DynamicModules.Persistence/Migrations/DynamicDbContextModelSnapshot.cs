@@ -150,6 +150,29 @@ namespace DynamicModules.Persistence.Migrations
                     b.ToTable("Dynamic_AppPackage", (string)null);
                 });
 
+            modelBuilder.Entity("DynamicModules.Domain.Entities.Dynamic.AppReport", b =>
+                {
+                    b.Property<long>("AppId")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<long>("ReportId")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("Code")
+                        .IsRequired()
+                        .HasMaxLength(40)
+                        .HasColumnType("TEXT");
+
+                    b.HasKey("AppId", "ReportId");
+
+                    b.HasIndex("ReportId");
+
+                    b.HasIndex("AppId", "Code")
+                        .IsUnique();
+
+                    b.ToTable("Dynamic_AppReport", (string)null);
+                });
+
             modelBuilder.Entity("DynamicModules.Domain.Entities.Dynamic.AppUser", b =>
                 {
                     b.Property<string>("UserId")
@@ -1247,6 +1270,21 @@ namespace DynamicModules.Persistence.Migrations
                         .IsRequired();
                 });
 
+            modelBuilder.Entity("DynamicModules.Domain.Entities.Dynamic.AppReport", b =>
+                {
+                    b.HasOne("DynamicModules.Domain.Entities.Dynamic.App", null)
+                        .WithMany("Reports")
+                        .HasForeignKey("AppId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("DynamicModules.Domain.Entities.Dynamic.Report", null)
+                        .WithMany()
+                        .HasForeignKey("ReportId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
             modelBuilder.Entity("DynamicModules.Domain.Entities.Dynamic.Block", b =>
                 {
                     b.HasOne("DynamicModules.Domain.Entities.Dynamic.Module", null)
@@ -1392,6 +1430,8 @@ namespace DynamicModules.Persistence.Migrations
             modelBuilder.Entity("DynamicModules.Domain.Entities.Dynamic.App", b =>
                 {
                     b.Navigation("Modules");
+
+                    b.Navigation("Reports");
                 });
 
             modelBuilder.Entity("DynamicModules.Domain.Entities.Dynamic.Block", b =>
