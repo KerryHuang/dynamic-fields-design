@@ -3,7 +3,7 @@ import type {
   ImportPreview, ImportResult, PagedResponse, RecordHistoryEntry, RelatedTab, Rule, RollupSource, User, ViewSort, Workflow,
 } from 'src/domain/dynamic/types';
 import type {
-  AdminDashboardDetail, AdminDashboardItem, CardResult, DashboardDetail, DashboardLayout, DashboardList,
+  AdminDashboardDetail, AdminDashboardItem, CardResult, DashboardCard, DashboardDetail, DashboardLayout, DashboardList,
 } from 'src/domain/dynamic/dashboard-types';
 import type { CatalogModule, DrillResult, ModuleCatalog, ReportDateRange, ReportDefinition, ReportDetail, ReportItem, ReportResult, ReportShareTarget } from 'src/domain/dynamic/report-types';
 import type { MeTheme, ThemeChoice, ThemeDefaults } from 'src/domain/theme/theme-model';
@@ -299,6 +299,9 @@ export const dynamicApi = {
   adminCreateDashboard: (name: string, layout: DashboardLayout) => http.post<AdminDashboardDetail>('/admin/dashboards', { name, layout }).then(data),
   adminUpdateDashboard: (id: number, name: string, layout: DashboardLayout, version: number) =>
     http.put<AdminDashboardDetail>(`/admin/dashboards/${id}`, { name, layout, version }).then(data),
+  /** 編輯中的卡片（可能還沒存檔）以管理員自己的權限預覽；結果形狀與一般卡片查詢相同。 */
+  adminPreviewCard: (card: DashboardCard, locale: string) =>
+    http.post<CardResult>('/admin/dashboards/preview-card', { card }, { params: { locale } }).then(data),
   adminDeleteDashboard: (id: number) => http.delete(`/admin/dashboards/${id}`).then(data),
   adminSetDashboardAssignments: (id: number, groupIds: number[]) =>
     http.put<AdminDashboardDetail>(`/admin/dashboards/${id}/assignments`, { groupIds }).then(data),

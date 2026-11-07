@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/vue-query';
-import { toValue, type MaybeRef } from 'vue';
-import type { DashboardDetail, DashboardLayout } from 'src/domain/dynamic/dashboard-types';
+import { computed, toValue, type MaybeRef } from 'vue';
+import type { DashboardCard, DashboardDetail, DashboardLayout } from 'src/domain/dynamic/dashboard-types';
 import type { ReportDateRange } from 'src/domain/dynamic/report-types';
 import { dynamicApi } from 'src/services/api/dynamic-api';
 
@@ -27,6 +27,18 @@ export function useRunCard(
   return useQuery({
     queryKey: ['dashboard-card', dashboardId, cardId, filterRange, locale, signature],
     queryFn: () => dynamicApi.runCard(toValue(dashboardId), toValue(cardId), toValue(filterRange), toValue(locale)),
+    staleTime: 0,
+    gcTime: 0,
+    retry: false,
+  });
+}
+
+/** 指派版編輯時的卡片預覽：卡片設定變了（含呈現方式）就重查，不吃快取。 */
+export function usePreviewCard(card: MaybeRef<DashboardCard>, locale: MaybeRef<string>) {
+  const signature = computed(() => JSON.stringify(toValue(card)));
+  return useQuery({
+    queryKey: ['dashboard-admin-preview', signature, locale],
+    queryFn: () => dynamicApi.adminPreviewCard(toValue(card), toValue(locale)),
     staleTime: 0,
     gcTime: 0,
     retry: false,

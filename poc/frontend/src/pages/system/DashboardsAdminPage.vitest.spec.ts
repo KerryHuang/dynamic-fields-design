@@ -1,7 +1,7 @@
 import { flushPromises } from '@vue/test-utils';
 import { afterEach, describe, expect, it } from 'vitest';
 import { systemLinks } from 'src/domain/dynamic/menu-nav';
-import { card, click, mountPage, meOf, q, type World } from '../dashboards/dashboard-test-kit';
+import { card, click, mountPage, meOf, okResult, q, type World } from '../dashboards/dashboard-test-kit';
 import DashboardsAdminPage from './DashboardsAdminPage.vue';
 
 const ITEMS = [
@@ -95,5 +95,35 @@ describe('DashboardsAdminPage', () => {
     await mountAdmin(world({ 'GET /admin/dashboards/1': { ...DETAIL, groupIds: [] } }));
     await click('admin-dashboard-1');
     expect(q('admin-unassigned')).not.toBeNull();
+  });
+  describe('卡片預覽（真實數字，用管理員自己的權限）', () => {
+    const PREVIEW = 'POST /admin/dashboards/preview-card';
+
+    it('每張卡片用編輯中的卡片設定向後端要預覽，畫面顯示真實數字與說明', async () => {
+      const { calls } = await mountAdmin(world({ [PREVIEW]: okResult() }));
+      await click('admin-dashboard-1');
+      await flushPromises();
+      const post = calls.find((c) => c.method === 'POST' && c.url === '/admin/dashboards/preview-card');
+      expect(post!.body).toMatchObject({ card: { id: 'c1', reportId: 5, viz: 'table' } });
+      expect(q('admin-card-c1')!.textContent).toContain('進行中');
+      expect(q('admin-preview-notice')!.textContent).toContain('你自己的權限');
+    });
+
+    it('預覽沒有權限或看不到定義的卡片顯示「無法預覽」，不顯示任何數字', async () => {
+      await mountAdmin(world({ [PREVIEW]: okResult({ state: 'unshared', message: '', groups: undefined, total: undefined }) }));
+      await click('admin-dashboard-1');
+      await flushPromises();
+      expect(q('admin-preview-unavailable-c1')!.textContent).toContain('無法預覽');
+      expect(q('admin-card-c1')!.textContent).not.toContain('進行中');
+    });
+
+    it('預覽失敗也是「無法預覽」，不影響移除與儲存', async () => {
+      const { calls } = await mountAdmin(world({ [PREVIEW]: { __status: 500 }, 'PUT /admin/dashboards/1': DETAIL }));
+      await click('admin-dashboard-1');
+      await flushPromises();
+      expect(q('admin-preview-unavailable-c1')).not.toBeNull();
+      await click('admin-save-layout');
+      expect(calls.some((c) => c.method === 'PUT' && c.url === '/admin/dashboards/1')).toBe(true);
+    });
   });
 });

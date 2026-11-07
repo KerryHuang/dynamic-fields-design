@@ -33,6 +33,29 @@ public class DashboardCardRunner(DashboardAccess access, ReportAccess reportAcce
         var fromAssigned = scope.IsFromAssigned(card, scope.AssignedReportIds());
         if (!fromAssigned && !ReportAccess.CanView(report, viewer)) return Result(drill, Fail(UnsharedState, ReportText.Unshared));
 
+        return Result(drill, await ExecuteAsync(report, card, filter, drill, locale, ct));
+    }
+
+    /// <summary>
+    /// 指派版編輯時的卡片預覽：卡片可能還沒存檔，所以不查儀表板；報表可見性與資料權限都用管理員自己的視角
+    /// （和他自己開報表一樣，看不到定義回 unshared、沒有資料權限回 restricted），不因為是管理員就放行。
+    /// </summary>
+    public async Task<ServiceResult> PreviewAsync(DashboardCard card, ReportDateRange? filter, string locale, CancellationToken ct)
+    {
+        if (ReportRules.CheckRange(filter) is { } rangeError) return ServiceResult.Invalid(ReportRules.ToErrors("filterRange", [rangeError]));
+        var viewer = await reportAccess.ViewerAsync(ct);
+        var report = await reports.GetAsync(card.ReportId, ct);
+        if (report is null) return Result(null, await FailAsync(ReportGoneState, ReportText.ReportGone, locale, ct));
+        if (!ReportAccess.CanView(report, viewer)) return Result(null, await FailAsync(UnsharedState, ReportText.Unshared, locale, ct));
+        return Result(null, await ExecuteAsync(report, card, filter, null, locale, ct));
+    }
+
+    private async Task<ReportResult> FailAsync(string state, string key, string locale, CancellationToken ct) =>
+        new(state, ReportText.Get(locale, key), "", [], null, null, null, false, await runner.BasisDateAsync(ct), null);
+
+    private async Task<ReportResult> ExecuteAsync(
+        Domain.Entities.Dynamic.Report report, DashboardCard card, ReportDateRange? filter, IReadOnlyList<string>? drill, string locale, CancellationToken ct)
+    {
         var definition = ReportDefinition.Parse(report.DefinitionJson);
         var o = card.Options;
         // 區間優先順序：卡片自己的 > 儀表板暫時篩選 > 報表的（不取交集）
@@ -47,7 +70,7 @@ public class DashboardCardRunner(DashboardAccess access, ReportAccess reportAcce
 
         // 畫面送了篩選但沒採用：卡片有自己的區間，或報表沒有主要日期欄位（篩選無從作用）
         var ignored = filter is not null && (o.Range is not null || definition.PrimaryDateField is null);
-        return Result(drill, result with { IgnoresDateFilter = ignored });
+        return result with { IgnoresDateFilter = ignored };
     }
 
     private static ServiceResult Result(IReadOnlyList<string>? drill, ReportResult result)

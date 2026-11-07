@@ -7,6 +7,8 @@ using DynamicModules.Application.Dynamic.DashboardService.Commands.AdminSetDashb
 using DynamicModules.Application.Dynamic.DashboardService.Commands.AdminUpdateDashboard;
 using DynamicModules.Application.Dynamic.DashboardService.Queries.AdminGetDashboard;
 using DynamicModules.Application.Dynamic.DashboardService.Queries.AdminGetDashboards;
+using DynamicModules.Application.Dynamic.DashboardService.Queries.AdminPreviewCard;
+using DynamicModules.Domain.Reports;
 using MediatR;
 using Microsoft.AspNetCore.Mvc;
 
@@ -24,6 +26,8 @@ public class AdminDashboardsController(IMediator mediator) : ControllerBase
     public record AssignmentsBody(List<long>? GroupIds);
 
     public record OrderBody(List<long>? Ids);
+
+    public record PreviewBody(DashboardCard? Card, ReportDateRange? FilterRange);
 
     [HttpGet]
     public async Task<IActionResult> List() => (await mediator.Send(new AdminGetDashboardsRequest())).ToActionResult(this);
@@ -59,4 +63,11 @@ public class AdminDashboardsController(IMediator mediator) : ControllerBase
         body.Ids is null
             ? DashboardsController.Bad(this, "ids", "必填")
             : (await mediator.Send(new AdminReorderDashboardsRequest(body.Ids))).ToActionResult(this);
+
+    /// <summary>編輯版面時預覽卡片：卡片可能還沒存檔，用管理員自己的權限算，所以放在管理端而不是一般的卡片查詢。</summary>
+    [HttpPost("preview-card")]
+    public async Task<IActionResult> PreviewCard(PreviewBody body, [FromQuery] string locale = "zh-TW") =>
+        body.Card is null || (object?)body.Card.Options is null
+            ? DashboardsController.Bad(this, "card", "必填")
+            : (await mediator.Send(new AdminPreviewCardRequest(body.Card, body.FilterRange, locale))).ToActionResult(this);
 }

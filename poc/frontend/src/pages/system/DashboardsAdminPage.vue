@@ -14,12 +14,13 @@ import type { DashboardLayout } from 'src/domain/dynamic/dashboard-types';
 import { resolveI18n } from 'src/domain/dynamic/i18n-text';
 import type { ReportViz } from 'src/domain/dynamic/report-types';
 import AddCardDialog from 'src/presentation/dashboards/AddCardDialog.vue';
+import AdminCardPreview from 'src/presentation/dashboards/AdminCardPreview.vue';
 import DashboardGrid from 'src/presentation/dashboards/DashboardGrid.vue';
 import { isForbidden, type ApiError } from 'src/services/api/http';
 
 /**
  * 指派版管理：新增、改名、刪除、上下移排序、勾選群組、編輯版面。
- * 這裡的卡片只顯示報表名稱與呈現方式，不執行查詢（管理員不一定看得到那些資料）。
+ * 卡片內顯示預覽：後端以管理員自己的權限計算真實數字（不繞過權限，看不到的卡片顯示「無法預覽」），畫面上明講這一點。
  */
 const { t, locale } = useI18n();
 const $q = useQuasar();
@@ -158,16 +159,18 @@ function doRemove() {
           </div>
           <div v-if="!groupIds.length" class="text-caption text-muted q-mb-md" data-testid="admin-unassigned">{{ t('dashboards.admin.unassigned') }}</div>
 
+          <div v-if="layout.cards.length" class="text-caption text-muted q-mb-sm" data-testid="admin-preview-notice">{{ t('dashboards.admin.previewNotice') }}</div>
           <div v-if="!layout.cards.length" class="text-muted" data-testid="admin-layout-empty">{{ t('dashboards.emptyEditable') }}</div>
           <DashboardGrid v-else :cards="layout.cards" :editable="!narrow" :narrow="narrow" @change="onMove">
             <template #card="{ card }">
-              <q-card flat bordered class="full-height" :data-testid="`admin-card-${card.id}`">
+              <q-card flat bordered class="full-height column no-wrap" :data-testid="`admin-card-${card.id}`">
                 <q-card-section class="row items-center no-wrap q-py-sm">
                   <q-icon name="drag_indicator" class="card-drag-handle cursor-move q-mr-xs" />
                   <div class="col ellipsis">{{ card.title || reportName(card.reportId) }}</div>
                   <q-badge outline color="primary" :label="t(`reports.designer.vizName.${card.viz}`)" class="q-mx-sm" />
                   <q-btn flat dense round size="sm" icon="close" :aria-label="t('dashboards.card.remove')" :data-testid="`admin-remove-${card.id}`" @click="layout = removeCard(layout, card.id)" />
                 </q-card-section>
+                <AdminCardPreview class="col" :card="card" />
               </q-card>
             </template>
           </DashboardGrid>
