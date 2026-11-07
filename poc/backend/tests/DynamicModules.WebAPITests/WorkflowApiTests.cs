@@ -109,4 +109,28 @@ public class WorkflowApiTests : IClassFixture<TestApp>
         forManager.GetProperty("workflow").GetProperty("transitions").GetArrayLength().Should().Be(1);
         forManager.GetProperty("workflow").GetProperty("statusFieldKey").GetString().Should().Be(d.Status);
     }
+
+    [Fact]
+    public async Task DirectApiCall_CannotClearTheStatus_OnCreateOrUpdate()
+    {
+        var d = await Setup();
+        var sales = As(_app, "sales01");
+
+        // 新增時清空（null）：補上起始狀態，不會出現沒有狀態的記錄
+        var created = await JsonOf(await sales.PostAsJsonAsync($"{Base}/modules/{d.Key}/records",
+            new { values = new Dictionary<string, object?> { [d.Title] = "t", [d.Status] = null } }));
+        created.GetProperty("values").GetProperty(d.Status).GetString().Should().Be($"opt_{d.Draft}");
+        var id = created.GetProperty("id").GetInt64();
+        var version = created.GetProperty("rowVersion").GetString();
+
+        // 修改時清空：400，狀態不變
+        foreach (var cleared in new object?[] { null, "" })
+        {
+            var res = await sales.PutAsJsonAsync($"{Base}/records/{id}",
+                new { values = new Dictionary<string, object?> { [d.Status] = cleared }, rowVersion = version });
+            res.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+        }
+        (await JsonOf(await sales.GetAsync($"{Base}/records/{id}"))).GetProperty("values").GetProperty(d.Status).GetString()
+            .Should().Be($"opt_{d.Draft}");
+    }
 }

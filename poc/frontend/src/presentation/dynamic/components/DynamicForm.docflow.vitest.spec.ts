@@ -90,10 +90,20 @@ describe('DynamicForm workflow', () => {
     expect(w.find('button[type="submit"]').exists()).toBe(false);
   });
 
+  it('the status field cannot be cleared: it is required, so the select shows no clear button', async () => {
+    const w = mountForm({ schema: schema({ workflow }), mode: 'edit', record: record('opt_11') });
+    await flushPromises();
+    expect(fieldProps(w, 'f_5').required).toBe(true);
+    expect(fieldProps(w, 'f_1').required).toBe(false);
+    const select = w.findAllComponents(DynamicField).find((c) => c.props('field').key === 'f_5')!.findComponent(quasar.QSelect);
+    expect(select.props('clearable')).toBe(false);
+  });
+
   it('without a workflow nothing changes', async () => {
     const w = mountForm({ mode: 'edit', record: record('opt_11') });
     await flushPromises();
     expect(fieldProps(w, 'f_5').allowedOptions).toBeUndefined();
+    expect(fieldProps(w, 'f_5').required).toBe(false);
     expect(fieldProps(w, 'f_1').readonly).toBe(false);
   });
 });

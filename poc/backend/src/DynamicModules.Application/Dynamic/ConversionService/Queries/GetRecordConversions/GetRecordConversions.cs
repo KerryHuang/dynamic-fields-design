@@ -25,7 +25,7 @@ public class GetRecordConversionsHandler(
         var record = await records.GetAsync(request.RecordId, ct);
         if (record is null) return ServiceResult.NotFound(RecordMapper.RecordNotFound);
         var source = await modules.GetByIdAsync(record.ModuleId, includeChildren: true, ct);
-        if (source is not { Status: ModuleStatus.Active } || ModuleRelations.IsDetail(source)) return ServiceResult.NotFound(RecordMapper.ModuleNotFound);
+        if (!source.IsReadable() || ModuleRelations.IsDetail(source)) return ServiceResult.NotFound(RecordMapper.ModuleNotFound);
         var access = await guard.AuthorizeAsync(source, PermissionAction.Read, ct);
         if (access.Permissions is not { } perms) return access.Denied!;
         if (perms.OwnerUserIds is not null && !perms.OwnerUserIds.Contains(record.OwnerUserId))
@@ -36,11 +36,11 @@ public class GetRecordConversionsHandler(
         foreach (var conversion in (await conversions.ListBySourceAsync(source.Id, ct)).Where(c => c.Active))
         {
             var target = await modules.GetByIdAsync(conversion.TargetModuleId, includeChildren: true, ct);
-            if (target is not { Status: ModuleStatus.Active }) continue;
+            if (!target.IsReadable()) continue;
 
-            string? reason = null;
+            string? reason = source.IsWritable() && target.IsWritable() ? null : ModuleGate.ClosedMessage;
             var def = conversion.Definition;
-            if (def.SourceStates.Count > 0 && (source.Workflow?.StateOf(sourceValues) is not { } state || !def.SourceStates.Contains(state)))
+            if (reason is null && def.SourceStates.Count > 0 && (source.Workflow?.StateOf(sourceValues) is not { } state || !def.SourceStates.Contains(state)))
                 reason = Commands.ConvertRecord.ConvertRecordHandler.SourceStateMessage;
             var add = await guard.AuthorizeAsync(target, PermissionAction.Add, ct);
             if (reason is null && add.Permissions is null) reason = TargetAddDenied;
@@ -73,7 +73,7 @@ public class GetRecordConversionsHandler(
         var cfg = conversion.Definition.Lines!;
         var sourceLine = await modules.GetByKeyAsync(cfg.SourceModuleKey, includeChildren: true, ct);
         var targetLine = await modules.GetByKeyAsync(cfg.TargetModuleKey, includeChildren: true, ct);
-        if (sourceLine is not { Status: ModuleStatus.Active } || targetLine is not { Status: ModuleStatus.Active }) return (null, false);
+        if (!sourceLine.IsReadable() || !targetLine.IsReadable()) return (null, false);
         var access = await guard.AuthorizeDetailAsync(source, sourceLine, PermissionAction.Read, ct);
         var qtyField = sourceLine.Blocks.SelectMany(b => b.Fields).First(f => f.Id == cfg.Quantity.From);
         if (access.Permissions is not { } p || !p.CanSee(qtyField)) return (null, true);

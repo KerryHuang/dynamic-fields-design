@@ -210,7 +210,7 @@ watch(() => props.record, () => {
             <div v-if="!hiddenField(f)" :class="fieldColClass(block.columns, isFullWidth(f))">
               <DynamicField
                 :field="f" :readonly="fieldReadonly(f)"
-                :required="ruleState.required.has(f.id) && !fieldReadonly(f)" :allowed-options="allowedFor(f)"
+                :required="(ruleState.required.has(f.id) || f.key === statusKey) && !fieldReadonly(f)" :allowed-options="allowedFor(f)"
                 :reference="fillReferences[f.key] ?? (record?.references ?? references)?.[f.key]"
               />
             </div>

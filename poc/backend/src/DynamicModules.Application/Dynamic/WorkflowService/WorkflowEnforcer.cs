@@ -17,11 +17,31 @@ public class WorkflowEnforcer(IPermissionRepository permissions, ICurrentUser us
     public const string LockedDetailsMessage = "此狀態的單據不可修改明細";
     public const string LockedDeleteMessage = "此狀態的單據不可刪除";
 
-    /// <summary>新增時沒有帶狀態就補上起始狀態（系統填入，不受欄位唯讀影響）。</summary>
+    private static bool HasState(JsonElement? v) =>
+        v is { ValueKind: not JsonValueKind.Null } s && !(s.ValueKind == JsonValueKind.String && string.IsNullOrEmpty(s.GetString()));
+
+    /// <summary>新增時沒有帶狀態（沒送、null、空字串）就補上起始狀態（系統填入，不受欄位唯讀影響）。</summary>
     public static void SeedInitial(Module module, Dictionary<string, JsonElement?> input, HashSet<string> systemKeys)
     {
         if (module.Workflow is not { } wf) return;
-        if (input.TryGetValue(wf.StatusFieldKey, out var v) && v is { ValueKind: not JsonValueKind.Null }) return;
+        if (input.TryGetValue(wf.StatusFieldKey, out var v) && HasState(v)) return;
+        Seed(wf, input, systemKeys);
+    }
+
+    /// <summary>
+    /// 修改時，狀態機是後來才設定的既有記錄（沒有狀態）在這次存檔補上起始狀態，不留沒有狀態的記錄；
+    /// 這次請求自己帶了狀態就照請求的處理（之後由 <see cref="CheckAsync"/> 判斷轉移）。
+    /// </summary>
+    public static void SeedMissingState(
+        Module module, IReadOnlyDictionary<string, JsonElement?> previous, Dictionary<string, JsonElement?> input, HashSet<string> systemKeys)
+    {
+        if (module.Workflow is not { } wf || wf.StateOf(previous) is not null) return;
+        if (input.TryGetValue(wf.StatusFieldKey, out var v) && HasState(v)) return;
+        Seed(wf, input, systemKeys);
+    }
+
+    private static void Seed(Workflow wf, Dictionary<string, JsonElement?> input, HashSet<string> systemKeys)
+    {
         input[wf.StatusFieldKey] = JsonSerializer.SerializeToElement($"opt_{wf.InitialOptionId}");
         systemKeys.Add(wf.StatusFieldKey);
     }

@@ -14,7 +14,7 @@ public class ModuleRemover(
         var module = (await modules.GetByIdAsync(moduleId, includeChildren: true, ct))!;
         await deletion.PurgeModuleAsync(module, ct);
         // 轉換定義對來源、目標模組的外鍵是 Restrict；走到這裡代表盤點已確認沒有應用程式外的引用，定義一起移除
-        foreach (var c in (await conversions.ListAsync(ct)).Where(c => c.SourceModuleId == moduleId || c.TargetModuleId == moduleId))
+        foreach (var c in await conversions.ListTouchingAsync(moduleId, ct))
             conversions.Remove(c);
         modules.Remove(module);
         await uow.CommitAsync(ct);

@@ -39,8 +39,10 @@ public class ConvertRecordHandler(
         if (record is null || record.ModuleId != conversion.SourceModuleId) return ServiceResult.NotFound(RecordMapper.RecordNotFound);
         var source = await modules.GetByIdAsync(conversion.SourceModuleId, includeChildren: true, ct);
         var target = await modules.GetByIdAsync(conversion.TargetModuleId, includeChildren: true, ct);
-        if (source is not { Status: ModuleStatus.Active } || target is not { Status: ModuleStatus.Active })
-            return ServiceResult.NotFound(RecordMapper.ModuleNotFound);
+        if (!source.IsReadable() || !target.IsReadable()) return ServiceResult.NotFound(RecordMapper.ModuleNotFound);
+        // Closed（應用程式關閉）的來源或目標都不能轉：轉換會寫目標，也會動來源記錄的版本號，兩邊都違反「資料唯讀」
+        if (await ModuleGate.RejectUnwritableAsync(source, guard, ct) is { } sourceRejected) return sourceRejected;
+        if (await ModuleGate.RejectUnwritableAsync(target, guard, ct) is { } targetRejected) return targetRejected;
 
         var access = await guard.AuthorizeAsync(source, PermissionAction.Read, ct);
         if (access.Permissions is not { } perms) return access.Denied!;
@@ -97,7 +99,7 @@ public class ConvertRecordHandler(
         var lines = conversion.Definition.Lines!;
         var sourceLineModule = await modules.GetByKeyAsync(lines.SourceModuleKey, includeChildren: true, ct);
         var targetLineModule = await modules.GetByKeyAsync(lines.TargetModuleKey, includeChildren: true, ct);
-        if (sourceLineModule is not { Status: ModuleStatus.Active } || targetLineModule is not { Status: ModuleStatus.Active })
+        if (!sourceLineModule.IsWritable() || !targetLineModule.IsWritable())
             return (ServiceResult.NotFound(RecordMapper.ModuleNotFound), null);
         var lineAccess = await guard.AuthorizeDetailAsync(source, sourceLineModule, PermissionAction.Read, ct);
         if (lineAccess.Permissions is not { } linePerms) return (lineAccess.Denied, null);

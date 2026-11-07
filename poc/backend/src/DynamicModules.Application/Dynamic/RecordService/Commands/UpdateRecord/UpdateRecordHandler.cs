@@ -53,8 +53,9 @@ public class UpdateRecordHandler(
 
         var validRefKeys = await refs.ValidKeysAsync(module, request.Values, previous, ct);
         var input = new Dictionary<string, JsonElement?>(request.Values);
-        var systemKeys = await fill.ApplyAsync(module, input, previous, validRefKeys,
-            RecordValueProcessor.WritablePredicate(module, previous, perms, registry, userIds, time.Today), ct);
+        var systemKeys = new HashSet<string>(await fill.ApplyAsync(module, input, previous, validRefKeys,
+            RecordValueProcessor.WritablePredicate(module, previous, perms, registry, userIds, time.Today), ct));
+        WorkflowEnforcer.SeedMissingState(module, previous, input, systemKeys);
         var plan = await details.PrepareAsync(module, record, PermissionAction.Edit, request.Details, ct,
             () => Task.FromResult<IReadOnlyDictionary<string, JsonElement?>>(RecordValueProcessor.Process(
                 module, input, previous, userIds, registry, perms, new RuleContext(time.Today), validRefKeys, systemKeys: systemKeys).values));
