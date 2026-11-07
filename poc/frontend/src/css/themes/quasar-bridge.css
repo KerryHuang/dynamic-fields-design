@@ -305,3 +305,31 @@ textarea:focus-visible {
   border-radius: var(--t-radius);
   background: var(--t-primary);
 }
+
+/* 對話框：窄螢幕不得比視窗寬（多數對話框用 min-width 固定寬度，會把按鈕擠出畫面）；
+   手機接近全螢幕、內容可捲動、按鈕列固定在底部看得到 */
+@media (max-width: 700px) {
+  .q-dialog__inner--minimized > .q-card {
+    min-width: 0 !important;
+    width: calc(100vw - 16px) !important;
+    max-width: calc(100vw - 16px) !important;
+  }
+}
+
+@media (max-width: 599.98px) {
+  .q-dialog__inner--minimized {
+    padding: 8px;
+  }
+
+  .q-dialog__inner--minimized > .q-card {
+    max-height: calc(100dvh - 16px);
+  }
+
+  .q-dialog__inner--minimized > .q-card > .q-card__actions {
+    position: sticky;
+    bottom: 0;
+    z-index: 1;
+    background: var(--t-panel);
+    border-top: 1px solid var(--t-border);
+  }
+}

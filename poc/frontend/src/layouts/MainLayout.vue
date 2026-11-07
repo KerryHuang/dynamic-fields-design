@@ -2,9 +2,17 @@
   <q-layout view="hHh Lpr lFf">
     <q-header elevated>
       <q-toolbar>
+        <!-- 手機與平板（Quasar md 斷點以下）選單是覆蓋式抽屜，要有開關；筆電以上常駐，不需要 -->
+        <q-btn
+          v-if="$q.screen.lt.md" flat dense round icon="menu" class="q-mr-xs" :aria-label="t('menu.toggle')"
+          :aria-expanded="drawerOpen" data-testid="menu-toggle" @click="drawerOpen = !drawerOpen"
+        />
         <q-toolbar-title><router-link to="/" class="brand-link" data-testid="brand">Formwright</router-link></q-toolbar-title>
-        <span class="q-mr-sm" data-testid="current-user">{{ me?.displayName }}</span>
-        <q-btn flat dense no-caps class="q-mr-sm" icon="palette" :label="t('theme.title')" data-testid="theme-open" @click="themeOpen = true" />
+        <span class="q-mr-sm gt-xs" data-testid="current-user">{{ me?.displayName }}</span>
+        <q-btn
+          flat dense no-caps class="q-mr-sm" icon="palette" :label="$q.screen.gt.xs ? t('theme.title') : undefined" :aria-label="t('theme.title')"
+          data-testid="theme-open" @click="themeOpen = true"
+        />
         <q-btn v-if="!identity.isDemoAccount" flat dense no-caps class="q-mr-sm" :label="t('auth.changePassword')" to="/change-password" data-testid="change-password-link" />
         <span v-if="logoutError" class="q-mr-sm bg-negative text-white q-px-sm rounded-borders" data-testid="logout-error">{{ t('auth.logoutFailed') }}</span>
         <q-btn flat dense no-caps :label="t('auth.logout')" :loading="logoutMutation.isPending.value" data-testid="logout" @click="logout" />
@@ -12,8 +20,8 @@
       <AppBreadcrumb v-if="theme.effective.style === 'enterprise'" :menu="menu ?? []" />
     </q-header>
 
-    <q-drawer :model-value="true" show-if-above bordered :width="theme.sidebarWidth">
-      <q-list>
+    <q-drawer v-model="drawerOpen" show-if-above bordered :width="theme.sidebarWidth" :breakpoint="1024">
+      <q-list @click="closeWhenOverlay">
         <q-item clickable exact to="/" data-testid="home-menu">
           <q-item-section avatar><q-icon name="home" /></q-item-section>
           <q-item-section>{{ t('menu.home') }}</q-item-section>
@@ -64,7 +72,8 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue';
+import { useQuasar } from 'quasar';
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { useRoute, useRouter } from 'vue-router';
 import { useLogout } from 'src/application/dynamic/queries/auth-queries';
@@ -82,6 +91,15 @@ const { t, locale } = useI18n();
 const identity = useIdentityStore();
 const theme = useThemeStore();
 const themeOpen = ref(false);
+const $q = useQuasar();
+// 寬螢幕常駐（show-if-above 啟動時展開）；手機與平板是覆蓋式抽屜，預設收合
+const drawerOpen = ref(false);
+const overlayMode = computed(() => $q.screen.lt.md);
+/** 覆蓋式抽屜擋住內容：點選單內任何項目（含目前所在頁，路由不會變）、點遮罩、按 Esc 都關閉。 */
+function closeWhenOverlay() { if (overlayMode.value) drawerOpen.value = false; }
+function onEscape(e: KeyboardEvent) { if (e.key === 'Escape' && overlayMode.value && drawerOpen.value) drawerOpen.value = false; }
+onMounted(() => window.addEventListener('keydown', onEscape));
+onBeforeUnmount(() => window.removeEventListener('keydown', onEscape));
 const router = useRouter();
 const logoutMutation = useLogout();
 

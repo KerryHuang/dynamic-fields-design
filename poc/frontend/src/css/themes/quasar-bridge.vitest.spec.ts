@@ -120,4 +120,9 @@ describe('print.css', () => {
     expect(body).toMatch(/color:\s*#000/);
     for (const t of ['--t-bg', '--t-panel', '--t-text', '--t-topbar-bg', '--t-sidebar-bg']) expect(print).toContain(t);
   });
+
+  it('窄螢幕的對話框不得比視窗寬：min-width 被蓋掉，手機的按鈕列固定在底部', () => {
+    expect(bridge).toMatch(/@media \(max-width: 700px\)\s*\{[^@]*\.q-dialog__inner--minimized > \.q-card\s*\{[^}]*min-width:\s*0\s*!important/);
+    expect(bridge).toMatch(/@media \(max-width: 599\.98px\)[\s\S]*\.q-card__actions\s*\{[^}]*position:\s*sticky/);
+  });
 });
