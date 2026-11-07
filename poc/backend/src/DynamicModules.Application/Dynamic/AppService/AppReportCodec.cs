@@ -19,7 +19,7 @@ public static partial class AppReportCodec
 
     /// <summary>
     /// 代號 → Id 所需的查表。ModuleKey：模組代號 → Module.Key；FieldId：限定欄位名 → 欄位 Id；OptionId：「模組代號.選項代號」→ 選項 Id；
-    /// TypeOf：限定欄位名 → 欄位型別（只有選項型欄位才做 opt_ 對應，只有參照型欄位的條件值可能是具體記錄）。
+    /// TypeOf：限定欄位名 → 欄位型別（只有選項型欄位才做 opt_ 對應；參照型與使用者型欄位的條件值是這個資料庫專屬的記錄 Id／帳號）。
     /// </summary>
     public sealed record Lookups(
         Func<string, string?> ModuleKey, Func<string, long?> FieldId, Func<string, long?> OptionId, Func<string, FieldType?> TypeOf);
@@ -34,11 +34,19 @@ public static partial class AppReportCodec
 
     private static bool IsOptionType(FieldType? type) => type is FieldType.Enum or FieldType.MultiEnum;
 
-    /// <summary>指定哪一筆記錄的條件（參照欄位 = / ≠ / 屬於 某個 Id）：換一個資料庫 Id 會指到別的記錄，套件不收。</summary>
+    /// <summary>
+    /// 指定哪一筆記錄或哪個帳號的條件（參照欄位 = / ≠ / 屬於 某個 Id，使用者欄位 = / ≠ / 屬於 某個帳號）：
+    /// 換一個資料庫 Id 會指到別的記錄、帳號在另一個資料庫不存在（還會把真實帳號寫進公開的套件），套件不收。
+    /// </summary>
     private static bool PicksConcreteRecord(string op, JsonElement? value) =>
         op is "eq" or "ne" or "in" or "notIn" && value is { ValueKind: not (JsonValueKind.Null or JsonValueKind.Undefined) };
 
     public const string ConcreteRecordMessage = "報表條件指定了具體記錄，換一個資料庫會指到別的記錄，套件不收這種條件";
+    public const string ConcreteUserMessage = "報表條件指定了具體的使用者帳號，帳號屬於這個資料庫，套件不收這種條件";
+
+    private static bool IsIdentityType(FieldType? type) => type is FieldType.Reference or FieldType.User;
+
+    private static string MessageFor(FieldType? type) => type == FieldType.User ? ConcreteUserMessage : ConcreteRecordMessage;
 
     public static (ReportDefinition? Definition, List<string> Errors) ToDefinition(AppReportDefinition d, Lookups l)
     {
@@ -68,7 +76,7 @@ public static partial class AppReportCodec
             if (field is null) return null;
             // 值裡的 opt_<選項代號> 換成 opt_<選項 Id>：只有選項型欄位才換（文字欄位剛好填了 opt_paid 就是字面值）；欄位來源模組由限定名決定
             var type = f.Field.Field is { } name ? l.TypeOf(name) : null;
-            if (type == FieldType.Reference && PicksConcreteRecord(f.Op, f.Value)) errors.Add($"{ConcreteRecordMessage}（{f.Field.Field}）");
+            if (IsIdentityType(type) && PicksConcreteRecord(f.Op, f.Value)) errors.Add($"{MessageFor(type)}（{f.Field.Field}）");
             var module = IsOptionType(type) && f.Field.Field is { } q && TemplateQualified.ModuleOf(q) is { } m ? m : null;
             return new ReportFilter(field, f.Op, f.Value is { } v ? ConvertValue(v, module, l.OptionId) : null);
         }
@@ -112,7 +120,7 @@ public static partial class AppReportCodec
     /// <summary>Id → 代號所需的查表。Module：Module.Key → 模組代號；Field：欄位 Id → 限定欄位名；Option：選項 Id → 選項代號（只收該欄位的選項）。</summary>
     public sealed record Names(
         Func<string, string?> Module, Func<long, string?> Field, Func<long, long, string?> Option, Func<long, bool> IsOptionField,
-        Func<long, bool> IsReferenceField);
+        Func<long, FieldType?> IdentityTypeOf);
 
     public static (AppReportDefinition? Definition, List<string> Errors) ToPackage(ReportDefinition d, Names n)
     {
@@ -140,8 +148,8 @@ public static partial class AppReportCodec
             if (f is null) return null;
             var field = Ref(f.Field);
             if (field is null) return null;
-            if (f.Field.FieldId != 0 && n.IsReferenceField(f.Field.FieldId) && PicksConcreteRecord(f.Op, f.Value))
-                errors.Add($"{ConcreteRecordMessage}（{field.Field}）");
+            if (f.Field.FieldId != 0 && n.IdentityTypeOf(f.Field.FieldId) is { } identity && PicksConcreteRecord(f.Op, f.Value))
+                errors.Add($"{MessageFor(identity)}（{field.Field}）");
             return new AppReportFilter(field, f.Op, f.Value is { } v ? ExportValue(v, f.Field.FieldId, n) : null);
         }
 

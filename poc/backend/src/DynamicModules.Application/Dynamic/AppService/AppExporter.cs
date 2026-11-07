@@ -89,8 +89,14 @@ public sealed partial class AppExporter(
                 var owner = m.Blocks.SelectMany(b => b.Fields).FirstOrDefault(f => f.Options.Any(o => o.Id == scope.Key && o.Active));
                 var option = owner?.Options.First(o => o.Id == scope.Key);
                 if (owner is null || option is null || names.Option(owner.Id, option.Id) is null || names.Field(owner.Id) is null) continue;
-                optionScopes.Add(new AppOptionScope($"{module}.o_{option.Id}",
-                    scope.Select(s => s.GroupId).Distinct().Where(id => groupList.Any(g => g.Id == id)).Select(GroupCode).ToList()));
+                var scopeGroups = scope.Select(s => s.GroupId).Distinct().Where(id => groupList.Any(g => g.Id == id)).Select(GroupCode).ToList();
+                // 範圍指向的群組都已不存在（殘留資料）：匯出空範圍會被匯入驗證退回，所以不匯出並告知
+                if (scopeGroups.Count == 0)
+                {
+                    warnings.Add($"選項「{module}.o_{option.Id}」的限定群組都已不存在，選項範圍未匯出");
+                    continue;
+                }
+                optionScopes.Add(new AppOptionScope($"{module}.o_{option.Id}", scopeGroups));
             }
         }
 

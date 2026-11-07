@@ -155,7 +155,7 @@ public sealed partial class TemplateExporter(IModuleRepository modules, IPermiss
             id => Exported.Contains(id) ? Qualified(id) : null,
             (fieldId, optionId) => _optionOwner.TryGetValue(optionId, out var owner) && owner == fieldId ? $"o_{optionId}" : null,
             id => Fields.TryGetValue(id, out var f) && IsOptionField(f),
-            id => Fields.TryGetValue(id, out var f) && f.Type == FieldType.Reference);
+            id => Fields.TryGetValue(id, out var f) && f.Type is FieldType.Reference or FieldType.User ? f.Type : null);
 
         public string? OptionCode(long optionId) => _options.Contains(optionId) ? $"o_{optionId}" : null;
 

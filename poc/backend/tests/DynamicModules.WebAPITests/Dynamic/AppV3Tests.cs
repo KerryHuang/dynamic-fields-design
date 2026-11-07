@@ -508,4 +508,109 @@ public class AppV3Tests : IDisposable
         var reopened = await ImportAndOpen(admin2, exported.GetRawText(), "quote-lite", new { });
         reopened.GetProperty("modules").GetArrayLength().Should().Be(1);
     }
+    // ---- 套件邊界（階段 2 前小修包）：報表條件不得帶資料庫專屬的值，兩個套件之間的引用要明確失敗 ----
+
+    /// <summary>在已開啟的 sales-flow 報表上換掉篩選（直接寫定義 JSON，模擬使用者在畫面上存的條件）。</summary>
+    private void SetReportFilters(string filtersJson) => Db(db =>
+    {
+        var report = db.Set<Report>().Single();
+        var node = System.Text.Json.Nodes.JsonNode.Parse(report.DefinitionJson)!;
+        node["filters"] = System.Text.Json.Nodes.JsonNode.Parse(filtersJson);
+        report.DefinitionJson = node.ToJsonString();
+        db.SaveChanges();
+        return 0;
+    });
+
+    [Theory]
+    [InlineData("eq", "\"sales01\"")]
+    [InlineData("in", "[\"sales01\", \"sales02\"]")]
+    public async Task Export_ReportConditionOnAUser_IsNotExported_BecauseAccountsBelongToThisDatabase(string op, string value)
+    {
+        await ImportAndOpen(_admin, AppTestPackagesV3.Sales(), "sales-flow");
+        var owner = await AddField(_admin, "sales-flow-quote", "user");
+        SetReportFilters($$"""[ { "field": { "source": "main", "fieldId": {{owner.Id}}, "viaFieldId": null }, "op": "{{op}}", "value": {{value}} } ]""");
+
+        var res = await _admin.GetAsync($"{Apps}/sales-flow/export");
+        res.StatusCode.Should().Be(HttpStatusCode.OK);
+        var warnings = Uri.UnescapeDataString(string.Join('|', res.Headers.GetValues("X-Export-Warnings")));
+        warnings.Should().Contain("報價狀態分布").And.Contain("具體");
+        var body = await res.Content.ReadAsStringAsync();
+        body.Should().NotContain("sales01");
+        System.Text.Json.JsonDocument.Parse(body).RootElement.GetProperty("reports").GetArrayLength().Should().Be(0);
+    }
+
+    [Fact]
+    public async Task Export_ReportConditionOnAUser_WithoutAValue_IsStillExported()
+    {
+        await ImportAndOpen(_admin, AppTestPackagesV3.Sales(), "sales-flow");
+        var owner = await AddField(_admin, "sales-flow-quote", "user");
+        SetReportFilters($$"""[ { "field": { "source": "main", "fieldId": {{owner.Id}}, "viaFieldId": null }, "op": "isEmpty", "value": null } ]""");
+
+        (await ExportOk("sales-flow")).GetProperty("reports").GetArrayLength().Should().Be(1);
+    }
+
+    [Fact]
+    public async Task Import_ReportConditionOnAUser_IsRejected()
+    {
+        var package = AppTestPackagesV3.Sales(reports: ReportWithFilter(
+            """{ "field": { "source": "main", "field": "quote.owner", "via": null }, "op": "eq", "value": "sales01" }"""))
+            .Replace("""{ "code": "customerName", "type": "text", "label": { "zh-TW": "customerName" }, "config": { "readOnly": true } },""",
+                     """{ "code": "customerName", "type": "text", "label": { "zh-TW": "customerName" }, "config": { "readOnly": true } }, { "code": "owner", "type": "user", "label": { "zh-TW": "owner" }, "config": {} },""");
+
+        var res = await _admin.PostAsync($"{Apps}/packages/import", Body(package));
+
+        res.StatusCode.Should().Be(HttpStatusCode.BadRequest, await res.Content.ReadAsStringAsync());
+        (await res.Content.ReadAsStringAsync()).Should().Contain("具體");
+    }
+
+    [Fact]
+    public async Task Import_ReportReferencingAModuleOfAnotherPackage_IsRejected_NotGuessed()
+    {
+        // 套件裡的報表只能引用套件自己的模組；別的應用程式的模組與欄位（含它們的選項、參照型欄位）解不了，要明確失敗
+        var filter = """{ "field": { "source": "main", "field": "customer-of-another-app.grade", "via": null }, "op": "eq", "value": "opt_gold" }""";
+        var res = await _admin.PostAsync($"{Apps}/packages/import", Body(AppTestPackagesV3.Sales(reports: ReportWithFilter(filter))));
+
+        res.StatusCode.Should().Be(HttpStatusCode.BadRequest, await res.Content.ReadAsStringAsync());
+        (await res.Content.ReadAsStringAsync()).Should().Contain("customer-of-another-app.grade");
+    }
+
+    [Fact]
+    public async Task Export_ReportReferencingAnotherAppsField_IsNotExported_AndTheUserIsTold()
+    {
+        await ImportAndOpen(_admin, AppTestPackages.Crm, "crm-lite",
+            new { groupMap = new Dictionary<string, object> { ["sales"] = new { mode = "create" }, ["salesLead"] = new { mode = "create" } } });
+        await ImportAndOpen(_admin, AppTestPackagesV3.Sales(), "sales-flow");
+        var crmCustomerStatus = Db(db => db.Set<Module>().Include(m => m.Blocks).ThenInclude(b => b.Fields)
+            .Single(m => m.Key == "crm-customer").Blocks.SelectMany(b => b.Fields).First(f => f.Type == FieldType.Enum).Id);
+        SetReportFilters($$"""[ { "field": { "source": "main", "fieldId": {{crmCustomerStatus}}, "viaFieldId": null }, "op": "eq", "value": "opt_1" } ]""");
+
+        var res = await _admin.GetAsync($"{Apps}/sales-flow/export");
+        res.StatusCode.Should().Be(HttpStatusCode.OK);
+        Uri.UnescapeDataString(string.Join('|', res.Headers.GetValues("X-Export-Warnings"))).Should().Contain("報價狀態分布");
+        (await JsonOf(res)).GetProperty("reports").GetArrayLength().Should().Be(0);
+    }
+
+    [Fact]
+    public async Task Export_OptionScopeWhoseGroupsAreGone_IsDropped_SoTheFileCanBeReimported()
+    {
+        await ImportAndOpen(_admin, AppTestPackagesV3.Sales(), "sales-flow");
+        var field = await AddField(_admin, "sales-flow-customer", "enum");
+        var optionRes = await _admin.PostAsJsonAsync($"{Base}/fields/{field.Id}/options",
+            new { label = new Dictionary<string, string> { ["zh-TW"] = "外包" } });
+        optionRes.EnsureSuccessStatusCode();
+        var option = (await JsonOf(optionRes)).GetProperty("id").GetInt64();
+        // 範圍指向一個已不存在的群組（資料庫直接寫入，模擬殘留資料）
+        Db(db =>
+        {
+            db.Set<FieldOptionScope>().Add(new FieldOptionScope { OptionId = option, GroupId = 987_654 });
+            db.SaveChanges();
+            return 0;
+        });
+
+        var exported = await ExportOk("sales-flow");
+        exported.GetProperty("optionScopes").GetArrayLength().Should().Be(0);
+
+        using var fresh = new TestApp();
+        await ImportAndOpen(fresh.AsUser(), exported.GetRawText(), "sales-flow", new { });
+    }
 }
