@@ -36,11 +36,12 @@ public static partial class AppPackageValidator
     {
         "required", "readOnly", "maxLength", "precision", "scale", "defaultValue", "defaultToday", "parentDefaultField",
         "fullWidth", "showInList", "isFilterable", "isSortable", "formula", "resultType", "format", "refTarget", "onDelete",
-        "relation", "scope", "rollup", "fill"
+        "relation", "scope", "rollup", "fill", "refGuard"
     };
 
     private static readonly HashSet<string> RefTargetKeys = new(StringComparer.Ordinal) { "kind", "key", "app" };
     private static readonly HashSet<string> FillKeys = new(StringComparer.Ordinal) { "mode", "map" };
+    private static readonly HashSet<string> RefGuardKeys = new(StringComparer.Ordinal) { "field", "in" };
     private static readonly HashSet<string> FillMapKeys = new(StringComparer.Ordinal) { "from", "to" };
     private static readonly HashSet<string> RollupKeys = new(StringComparer.Ordinal) { "sourceField", "function", "aggregateField", "condition" };
 
@@ -165,6 +166,13 @@ public static partial class AppPackageValidator
                             foreach (var inner in entry.EnumerateObject().Where(x => !FillMapKeys.Contains(x.Name)))
                                 errors.Add($"{at}: config.fill.map 不認得 \"{inner.Name}\"");
                 }
+            }
+            if (prop.Name == "refGuard")
+            {
+                if (formatVersion < 5) { errors.Add($"{at}: config.refGuard 要 formatVersion 5"); continue; }
+                if (prop.Value.ValueKind == JsonValueKind.Object)
+                    foreach (var inner in prop.Value.EnumerateObject().Where(x => !RefGuardKeys.Contains(x.Name)))
+                        errors.Add($"{at}: config.refGuard 不認得 \"{inner.Name}\"");
             }
             if (prop.Name == "refTarget" && prop.Value.ValueKind == JsonValueKind.Object)
                 foreach (var inner in prop.Value.EnumerateObject().Where(x => !RefTargetKeys.Contains(x.Name)))

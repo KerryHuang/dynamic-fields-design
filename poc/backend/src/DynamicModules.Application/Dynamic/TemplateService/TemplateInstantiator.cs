@@ -257,7 +257,8 @@ public sealed class TemplateInstantiator(
         f.Config.ValueKind == JsonValueKind.Object
         && (f.Config.TryGetProperty("defaultValue", out var d) && d.ValueKind != JsonValueKind.Null
             || TemplateGraph.ConfigString(f.Config, "parentDefaultField") is not null
-            || TemplateGraph.ConfigObject(f.Config, "fill") is not null);
+            || TemplateGraph.ConfigObject(f.Config, "fill") is not null
+            || TemplateGraph.ConfigObject(f.Config, "refGuard") is not null);
 
     /// <summary>內層指令失敗：400 的鍵加前綴，404／409 的訊息前面加模組代號，其他原樣。</summary>
     private static ServiceResult? Fail(ServiceResult r, string moduleCode, string keyPrefix)
@@ -302,8 +303,13 @@ public sealed class TemplateInstantiator(
                 node.Remove("defaultValue");
                 node.Remove("parentDefaultField");
                 node.Remove("fill"); // 帶值引用其他欄位，等所有欄位都建好才寫入
+                node.Remove("refGuard"); // 守衛引用目標模組的欄位與選項，同樣等全部建好
             }
-            else if (node["fill"] is JsonObject fill) node["fill"] = Fill(m, fill);
+            else
+            {
+                if (node["fill"] is JsonObject fill) node["fill"] = Fill(m, fill);
+                if (node["refGuard"] is JsonObject guard) node["refGuard"] = RefGuard(guard);
+            }
             // formula、rollup 只在公式、彙總欄位才是引用（TemplateGraph 的定義）
             if (TemplateGraph.FormulaOf(f) is not null && Str(node["formula"]) is { } formula)
                 node["formula"] = TemplateGraph.FormulaReference().Replace(formula, x => $"{{{Fields[TemplateGraph.Qualify(m, x.Groups[1].Value)]}}}");
@@ -334,6 +340,19 @@ public sealed class TemplateInstantiator(
                 node["parentDefaultFieldId"] = Fields[parent];
             }
             return node.Deserialize<FieldConfig>(TemplateJson.Options)!;
+        }
+
+        /// <summary>目標狀態守衛：field 是限定欄位名、in 是該模組的選項代號，換成 id。解析不了就整個失敗（守衛不能默默放寬），由欄位建立時的驗證回錯。</summary>
+        private JsonNode? RefGuard(JsonObject guard)
+        {
+            var field = Str(guard["field"]);
+            var split = TemplateGraph.SplitQualified(field);
+            var options = new JsonArray();
+            foreach (var code in guard["in"] as JsonArray ?? [])
+                if (split is not null && Str(code) is { } o && Options.TryGetValue($"{split.Value.Module}.{o}", out var optionId)) options.Add(optionId);
+            return field is not null && Fields.TryGetValue(field, out var fieldId)
+                ? new JsonObject { ["fieldId"] = fieldId, ["optionIds"] = options }
+                : new JsonObject { ["fieldId"] = 0, ["optionIds"] = new JsonArray() };
         }
 
         /// <summary>帶值：from 是限定欄位名、to 是本模組的欄位代號，換成 id；任一端被排除（沒有 id）的對應整組丟掉，全丟光就不帶值。</summary>

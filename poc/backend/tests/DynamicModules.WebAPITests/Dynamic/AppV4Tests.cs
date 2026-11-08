@@ -131,7 +131,7 @@ public class AppV4Tests : IDisposable
     {
         await ImportAndOpen(_admin, AppTestPackagesV4.Flow(), "ledger-flow");
         var exported = await ExportOk("ledger-flow");
-        exported.GetProperty("formatVersion").GetInt32().Should().Be(4);
+        exported.GetProperty("formatVersion").GetInt32().Should().Be(5);
         exported.GetProperty("events").GetArrayLength().Should().Be(1);
         exported.GetProperty("checks").GetArrayLength().Should().Be(1);
         exported.GetProperty("ledgers").GetArrayLength().Should().Be(1);

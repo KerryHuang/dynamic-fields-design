@@ -19,8 +19,9 @@ public record AppPackageData(
     /// <summary>
     /// 3：workflows、conversions、reports、printTemplates 與 config.fill 可用（2 的檔案這些必須是空的）。
     /// 4：events、checks、ledgers 可用（3 以下的檔案這些必須是空的）。
+    /// 5：integrations 與 config.refGuard 可用（4 以下的檔案這些必須是空的／不存在）。
     /// </summary>
-    public const int CurrentFormatVersion = 4;
+    public const int CurrentFormatVersion = 5;
     public const int MinFormatVersion = 2;
 
     public List<AppGroup> Groups { get; init; } = Groups ?? [];

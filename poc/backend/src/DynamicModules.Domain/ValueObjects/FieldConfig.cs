@@ -51,7 +51,13 @@ public record FieldConfig
 
     /// <summary>reference：選了目標記錄後，把目標的欄位值帶進本筆（快照，之後不跟著目標變）。</summary>
     public FillConfig? Fill { get; init; }
+
+    /// <summary>reference：目標記錄的狀態欄位必須屬於指定選項，才能在建立或改選時填入（只擋有變動的值，不擋目標之後的狀態變化）。</summary>
+    public RefGuardConfig? RefGuard { get; init; }
 }
+
+/// <summary>FieldId：目標模組的下拉欄位 Id；OptionIds：允許的選項 Id（至少一個）。</summary>
+public record RefGuardConfig(long FieldId, List<long> OptionIds);
 
 /// <summary>帶值設定。Mode 為 lock（系統填、使用者不能改）或 default（只在欄位空白時填，使用者可以改）。</summary>
 public record FillConfig(string Mode, List<FillMapping> Map)

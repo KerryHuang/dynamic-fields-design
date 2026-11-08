@@ -44,6 +44,9 @@ public class UpdateFieldHandler(
         var badFill = await FieldRules.CheckFillAsync(module, field, field.Id, config, modules, ct);
         if (badFill is not null) return badFill;
 
+        var badGuard = await FieldRules.CheckRefGuardAsync(field, config, modules, ct);
+        if (badGuard is not null) return badGuard;
+
         if (field.Type == FieldType.Reference)
         {
             if (config.RefTarget != field.Config.RefTarget)

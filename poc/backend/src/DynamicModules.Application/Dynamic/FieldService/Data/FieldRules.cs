@@ -292,6 +292,29 @@ public static class FieldRules
         return null;
     }
 
+    public const string RefGuardKey = "Config.RefGuard";
+
+    /// <summary>
+    /// 參照目標狀態守衛（Config.RefGuard）：只能設在參照動態模組的欄位；FieldId 是目標模組啟用中的下拉欄位，
+    /// OptionIds 至少一個，且都屬於該欄位。
+    /// </summary>
+    public static async Task<ServiceResult?> CheckRefGuardAsync(Field field, FieldConfig config, IModuleRepository modules, CancellationToken ct)
+    {
+        if (config.RefGuard is not { } guard) return null;
+        if (field.Type != FieldType.Reference || config.RefTarget is not { Kind: ReferenceTarget.ModuleKind } target)
+            return Invalid(RefGuardKey, "只有參照動態模組的欄位可以設定目標狀態守衛");
+        if (guard.OptionIds is not { Count: > 0 and <= 50 } || guard.OptionIds.Distinct().Count() != guard.OptionIds.Count)
+            return Invalid(RefGuardKey, "允許的狀態至少一個、至多 50 個，不能重複");
+        var targetModule = await modules.GetByKeyAsync(target.Key, includeChildren: true, ct);
+        if (targetModule is null) return Invalid(RefGuardKey, "找不到參照目標模組");
+        var status = targetModule.Blocks.SelectMany(b => b.Fields)
+            .FirstOrDefault(f => f.Id == guard.FieldId && f.Status == FieldStatus.Active && f.Type == FieldType.Enum);
+        if (status is null) return Invalid(RefGuardKey, "守衛欄位必須是目標模組啟用中的下拉欄位");
+        if (guard.OptionIds.Any(id => status.Options.All(o => o.Id != id)))
+            return Invalid(RefGuardKey, "允許的狀態必須是守衛欄位的選項");
+        return null;
+    }
+
     /// <summary>兩邊型別相同；自動編號可帶進文字；公式、彙總依結果型別帶進同類欄位。選項不能帶（選項 Id 每個模組不同）；參照只有轉換可以帶（目標相同）。</summary>
     public static bool CopyCompatible(Field from, Field to, bool allowReference = false)
     {

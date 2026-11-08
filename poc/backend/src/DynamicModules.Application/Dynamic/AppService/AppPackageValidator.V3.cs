@@ -117,6 +117,31 @@ public static partial class AppPackageValidator
                 }
             }
 
+        // ---- config.refGuard ----
+        foreach (var m in p.Modules)
+            foreach (var f in m.Blocks.SelectMany(b => b.Fields).Where(f => ConfigObject(f.Config, "refGuard") is not null))
+            {
+                var at = $"{m.Code}.{f.Code}.refGuard";
+                var guard = ConfigObject(f.Config, "refGuard")!.Value;
+                var target = f.Type == FieldType.Reference && ConfigObject(f.Config, "refTarget") is { } rt && ConfigString(rt, "kind") == "module"
+                    ? ConfigString(rt, "key") : null;
+                if (target is null) { errors.Add($"{at}: 目標狀態守衛只能用在指向動態模組的參照欄位"); continue; }
+                var statusField = ConfigString(guard, "field");
+                var split = SplitQualified(statusField);
+                var statusType = split is null ? null : modules.GetValueOrDefault(split.Value.Module)?.Blocks.SelectMany(b => b.Fields)
+                    .FirstOrDefault(x => x.Code == split.Value.Field)?.Type;
+                var external = ConfigString(ConfigObject(f.Config, "refTarget")!.Value, "app") is not null;
+                if (external) { errors.Add($"{at}: 目標狀態守衛目前只能用在指向本套件模組的參照欄位"); continue; }
+                if (split is null || split.Value.Module != target || statusType != FieldType.Enum)
+                    errors.Add($"{at}.field: 必須是 {target} 的下拉欄位（<模組代號>.<欄位代號>）");
+                if (!guard.TryGetProperty("in", out var allowed) || allowed.ValueKind != System.Text.Json.JsonValueKind.Array || allowed.GetArrayLength() == 0)
+                    errors.Add($"{at}.in: 至少要列一個允許的狀態（選項代號）");
+                else if (split is not null)
+                    foreach (var option in allowed.EnumerateArray())
+                        if (option.ValueKind != System.Text.Json.JsonValueKind.String || !(optionOwner.TryGetValue($"{split.Value.Module}.{option.GetString()}", out var owner) && owner == statusField))
+                            errors.Add($"{at}.in: 狀態 {option} 不是 {target} 的選項代號");
+            }
+
         // ---- reports ----
         var reportCodes = new HashSet<string>();
         var lookups = new AppReportCodec.Lookups(

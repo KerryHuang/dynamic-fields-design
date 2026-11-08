@@ -210,6 +210,9 @@ public class DeletePlanner(IDeletionRepository data)
             blockers.Add(FieldBlocker(DeleteBlockerKind.ParentDefault, owner, f));
         if (f.Config.Fill is { } fill && fill.Map.Any(m => targetIds.Contains(m.From) || targetIds.Contains(m.To)))
             blockers.Add(FieldBlocker(DeleteBlockerKind.Fill, owner, f));
+        // 目標狀態守衛引用的狀態欄位：沿用「帶值」這個阻擋類型（都是參照欄位的設定引用了別的欄位）
+        else if (f.Config.RefGuard is { } guard && targetIds.Contains(guard.FieldId))
+            blockers.Add(FieldBlocker(DeleteBlockerKind.Fill, owner, f));
     }
 
     /// <summary>轉換定義引用了這些欄位（對應、追溯、數量欄位），或引用了這些模組（來源、目標、明細模組）。</summary>

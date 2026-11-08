@@ -1,6 +1,6 @@
 {
  "format": "formwright-app",
- "formatVersion": 4,
+ "formatVersion": 5,
  "x-translation": "th、vi 標籤為機器翻譯，待母語者校對",
  "manifest": {
   "id": "mes-mold",
@@ -2869,6 +2869,12 @@
            "to": "doneQty"
           }
          ]
+        },
+        "refGuard": {
+         "field": "workorder.status",
+         "in": [
+          "done"
+         ]
         }
        }
       },
@@ -5592,67 +5598,6 @@
       {
        "to": "workorder.lastReportDate",
        "const": "today"
-      }
-     ]
-    }
-   ]
-  },
-  {
-   "code": "mes-shipment-close-wo",
-   "name": {
-    "zh-TW": "出貨確認工令完工",
-    "en-US": "Shipment confirms the work order is done",
-    "th": "การจัดส่งยืนยันว่าใบสั่งผลิตเสร็จสิ้น",
-    "vi": "Giao hàng xác nhận lệnh sản xuất đã hoàn thành"
-   },
-   "active": true,
-   "source": "shipment",
-   "trigger": {
-    "on": "create"
-   },
-   "when": null,
-   "effects": [
-    {
-     "code": "close",
-     "kind": "update",
-     "target": "workorder",
-     "via": "shipment.workOrder",
-     "set": [
-      {
-       "to": "workorder.status",
-       "const": "opt_done"
-      }
-     ]
-    }
-   ]
-  },
-  {
-   "code": "mes-shipment-repoint-wo",
-   "name": {
-    "zh-TW": "出貨單改選工令時確認新工令完工",
-    "en-US": "Re-pointing a shipment confirms the new work order is done",
-    "th": "การเปลี่ยนใบสั่งผลิตของใบจัดส่งต้องยืนยันว่าใบสั่งผลิตใหม่เสร็จสิ้น",
-    "vi": "Đổi lệnh sản xuất của phiếu giao hàng phải xác nhận lệnh mới đã hoàn thành"
-   },
-   "active": true,
-   "source": "shipment",
-   "trigger": {
-    "on": "update",
-    "watch": [
-     "shipment.workOrder"
-    ]
-   },
-   "when": null,
-   "effects": [
-    {
-     "code": "close",
-     "kind": "update",
-     "target": "workorder",
-     "via": "shipment.workOrder",
-     "set": [
-      {
-       "to": "workorder.status",
-       "const": "opt_done"
       }
      ]
     }

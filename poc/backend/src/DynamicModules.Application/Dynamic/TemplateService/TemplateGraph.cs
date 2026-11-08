@@ -49,6 +49,8 @@ public sealed partial class TemplateGraph
             {
                 var name = Qualify(module.Code, field.Code);
                 if (IsDetailReference(field)) locked.Add(name);
+                // 參照目標狀態守衛的狀態欄位不能取消勾選（取消會讓守衛失效，放寬控管）
+                if (ConfigObject(field.Config, "refGuard") is { } guard && ConfigString(guard, "field") is { } guardField) locked.Add(guardField);
                 var deps = new List<string>();
                 void Add(string q) { if (fields.ContainsKey(q) && !deps.Contains(q)) deps.Add(q); }
 

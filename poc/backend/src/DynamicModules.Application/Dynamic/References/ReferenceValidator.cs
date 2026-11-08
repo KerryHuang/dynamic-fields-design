@@ -25,12 +25,12 @@ public class ReferenceValidator(
             var key = ReferenceHandler.KeyOf(value);
             if (key is null) continue; // 型別不對，由 ReferenceHandler 回錯
             if (previous is not null && previous.TryGetValue(field.Key, out var prev) && prev is { } p && ReferenceHandler.KeyOf(p) == key) continue;
-            result[field.Id] = await ResolveAsync(field.Config.RefTarget!, key, value, ct);
+            result[field.Id] = await ResolveAsync(field.Config.RefTarget!, field.Config.RefGuard, key, value, ct);
         }
         return result;
     }
 
-    private async Task<IReadOnlySet<string>> ResolveAsync(ReferenceTarget target, string key, JsonElement value, CancellationToken ct)
+    private async Task<IReadOnlySet<string>> ResolveAsync(ReferenceTarget target, RefGuardConfig? refGuard, string key, JsonElement value, CancellationToken ct)
     {
         if (target.Kind == ReferenceTarget.EntityKind)
         {
@@ -43,6 +43,19 @@ public class ReferenceValidator(
         var access = await guard.AuthorizeAsync(targetModule, PermissionAction.Read, ct);
         if (access.Permissions is not { } perms) return new HashSet<string>();
         var visible = await records.ListVisibleIdsAsync(targetModule.Id, [id], perms.OwnerUserIds, ct);
+        if (refGuard is not null && visible.Count > 0 && !await InAllowedStateAsync(targetModule, refGuard, id, ct)) return new HashSet<string>();
         return visible.Select(v => v.ToString()).ToHashSet();
+    }
+
+    /// <summary>目標記錄的守衛欄位值是否在允許的選項內；守衛欄位已不存在或停用時一律不允許（fail closed）。</summary>
+    private async Task<bool> InAllowedStateAsync(Module targetModule, RefGuardConfig guard, long id, CancellationToken ct)
+    {
+        var status = targetModule.Blocks.SelectMany(b => b.Fields).FirstOrDefault(f => f.Id == guard.FieldId && f.Status == FieldStatus.Active);
+        if (status is null) return false;
+        var rows = await records.ListByIdsAsync(targetModule.Id, [id], ct);
+        if (rows.Count == 0) return false;
+        using var doc = JsonDocument.Parse(rows[0].ValuesJson);
+        if (!doc.RootElement.TryGetProperty(status.Key, out var v) || v.ValueKind != JsonValueKind.String) return false;
+        return guard.OptionIds.Any(o => v.GetString() == $"opt_{o}");
     }
 }
