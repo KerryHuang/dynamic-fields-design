@@ -89,7 +89,7 @@ public class DemoGenerationTests
         var mold = await DemoDb.FieldKey(db, "mes-mold-care", "模具");
         var careDate = await DemoDb.FieldKey(db, "mes-mold-care", "保養日期");
         var next = await DemoDb.FieldKey(db, "mes-mold-care", "下次保養日");
-        (await DemoDb.Records(db, "mes-mold-care")).GroupBy(c => DemoDb.Text(c, mold))
+        (await DemoDb.Records(db, "mes-mold-care")).GroupBy(c => JsonDocument.Parse(c.ValuesJson).RootElement.GetProperty(mold).GetInt64())
             .Select(g => DemoDb.Date(DemoDb.Text(g.MaxBy(c => DemoDb.Date(DemoDb.Text(c, careDate)))!, next)))
             .Count(d => d >= today && d <= today.AddDays(6)).Should().BeGreaterThanOrEqualTo(2);
     }

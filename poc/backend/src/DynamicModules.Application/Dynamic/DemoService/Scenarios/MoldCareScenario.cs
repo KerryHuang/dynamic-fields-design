@@ -6,8 +6,9 @@ using DynamicModules.Application.Dynamic.RecordService.Commands.UpdateRecord;
 namespace DynamicModules.Application.Dynamic.DemoService.Scenarios;
 
 /// <summary>
-/// 今天前 180 天：maint01 建 12 支模具的擴充資料、manager01 建 8 家客戶的擴充資料。
+/// 今天前 180 天：maint01 在 MES 的模具資料建 12 支模具、manager01 建 8 家客戶的擴充資料。
 /// 之後每支模具每隔一個保養週期一筆保養紀錄（含更換零件），每筆保養後 maint01 更新模具的上次保養日與累計射出數。
+/// 規劃順序排在報修之前：報修要參照這裡建的模具記錄。
 /// </summary>
 public sealed class MoldCareScenario : IDemoScenario
 {
@@ -20,6 +21,14 @@ public sealed class MoldCareScenario : IDemoScenario
 
     /// <summary>第 n 支模具最後一筆保養的下次保養日 = 今天 + δ。</summary>
     private static readonly int[] Deltas = [-10, -3, 0, 2, 4, 6, 9, 15, 20, 25, 30, 40];
+
+    /// <summary>12 支模具（虛構），依序對應 <see cref="Deltas"/>。</summary>
+    public static readonly (string No, string Name)[] Molds =
+    [
+        ("M-0001", "外殼上蓋模"), ("M-0002", "外殼下蓋模"), ("M-0003", "按鍵模"), ("M-0004", "電池蓋模"), ("M-0005", "支架模"),
+        ("M-0006", "射出模"), ("M-0007", "側蓋模"), ("M-0008", "旋鈕模"), ("M-0009", "面板模"),
+        ("M-0010", "底座模"), ("M-0011", "導光板模"), ("M-0012", "連接器模")
+    ];
 
     /// <summary>
     /// 週期依序輪流。最後一筆保養日 = 今天 + δ − 週期，要 ≤ 昨天，所以週期必須大於 δ；
@@ -63,15 +72,14 @@ public sealed class MoldCareScenario : IDemoScenario
 
         for (var m = 0; m < Deltas.Length; m++)
         {
-            var code = $"M-{m + 1:0000}";
+            var (code, name) = Molds[m];
             var cycle = Cycles[m % Cycles.Length];
             var shots = rnd.Next(10_000, 200_001);
             var initialShots = shots;
             var createdAt = plan.At(start);
             var info = plan.Create("mold", createdAt, Maint, $"模具資料 {code} 建立", ctx => new CreateRecordRequest(
                 ctx.Ids.ModuleKeys["mold"],
-                ctx.Values("mold", ("cycleDays", cycle), ("shotCount", initialShots)),
-                HostKey: code));
+                ctx.Values("mold", ("no", code), ("name", name), ("cycleDays", cycle), ("shotCount", initialShots))));
 
             // 最後一筆往前每隔一個週期一筆，不早於今天前 180 天；由舊到新規劃
             var dates = new List<DateOnly>();
@@ -92,7 +100,7 @@ public sealed class MoldCareScenario : IDemoScenario
                 var care = plan.Create("care", at, Maint, label, ctx =>
                 {
                     var values = ctx.Values("care",
-                        ("mold", code), ("categories", ctx.Opts("care", categories)), ("technician", Maint),
+                        ("mold", info.Id), ("categories", ctx.Opts("care", categories)), ("technician", Maint),
                         ("careDate", Iso(careDate)), ("startTime", startTime), ("cycleDays", cycle), ("cost", (decimal)cost));
                     if (note is not null) values[ctx.Key("care.note")] = JsonSerializer.SerializeToElement(note);
                     return new CreateRecordRequest(ctx.Ids.ModuleKeys["care"], values);

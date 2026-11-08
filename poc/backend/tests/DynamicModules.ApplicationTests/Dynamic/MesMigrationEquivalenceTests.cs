@@ -39,11 +39,12 @@ public class MesMigrationEquivalenceTests
     // 白名單（設計 §4.2）：這些欄位的型別／設定允許不同，或套件多出來的欄位／規則／權限
     private static readonly HashSet<string> ChangedFields =
         ["line.unit",                                                                             // 下拉改文字：轉換不能複製下拉
-         "repair.mold", "care.mold"];                                                             // 舊範本的既有實體改指測試用實體 test.entity（s2d-0）
-    // 舊範本的模具擴充模組，宿主改指測試用實體 test.entity（s2d-0），宿主實體不再與套件相同
-    private static readonly HashSet<string> ChangedHosts = ["mold"];
+         "repair.mold", "care.mold"];                                                             // 模具參照改指 MES 自己的模組 mold（s2d-0）
+    // 模具從核心實體的擴充模組改為 MES 自己的模組（s2d-0）：代碼、型態、宿主、標題欄位與區塊都不同，欄位逐一比對
+    private static readonly HashSet<string> RehomedModules = ["mold"];
     private static readonly HashSet<string> AddedFields =
-        ["order.fromQuote", "order.qualityCount", "line.sourceLine", "quality.workOrder"];      // 追溯、彙總、掛工令
+        ["order.fromQuote", "order.qualityCount", "line.sourceLine", "quality.workOrder",      // 追溯、彙總、掛工令
+         "mold.no", "mold.name"];                                                                // 模具自己的編號與名稱（s2d-0）
     private static readonly Dictionary<string, string[]> AddedPermissionGroups =
         new() { ["order"] = ["planner", "qa"], ["quality"] = ["planner"] };                      // 原本 Demo 用指令補的權限、生管可讀
     private static readonly HashSet<string> DroppedRules = ["order:readOnly:*"];                 // 整單唯讀規則改由狀態機的唯讀狀態達成
@@ -63,21 +64,24 @@ public class MesMigrationEquivalenceTests
             var code = (string)old["code"]!;
             var now = MesModule(code);
 
-            ((string)now["key"]!).Should().Be("mes-" + (string)old["key"]!, code);
-            foreach (var prop in new[] { "name", "icon", "section", "kind", "hostEntityKey", "titleField" })
-            {
-                if (prop == "hostEntityKey" && ChangedHosts.Contains(code)) continue;
+            var rehomed = RehomedModules.Contains(code);
+            if (!rehomed) ((string)now["key"]!).Should().Be("mes-" + (string)old["key"]!, code);
+            foreach (var prop in rehomed ? new[] { "name", "icon", "section" } : new[] { "name", "icon", "section", "kind", "hostEntityKey", "titleField" })
                 Same(old[prop], now[prop]).Should().BeTrue($"{code}.{prop}");
-            }
 
             // 區塊與欄位
             var nowBlocks = now["blocks"]!.AsArray().ToDictionary(b => (string)b!["code"]!);
-            foreach (var oldBlock in old["blocks"]!.AsArray())
+            foreach (var oldBlock in old["blocks"]!.AsArray().Select(b => b!))
             {
-                var nowBlock = nowBlocks[(string)oldBlock!["code"]!];
-                Same(oldBlock["label"], nowBlock!["label"]).Should().BeTrue($"{code} 區塊 {oldBlock["code"]} 標籤");
-                ((int?)oldBlock["columns"]).Should().Be((int?)nowBlock!["columns"], $"{code} 區塊欄數");
-                var nowFields = nowBlock!["fields"]!.AsArray().ToDictionary(f => (string)f!["code"]!);
+                var nowFields = rehomed
+                    ? now["blocks"]!.AsArray().SelectMany(b => b!["fields"]!.AsArray()).ToDictionary(f => (string)f!["code"]!)
+                    : nowBlocks[(string)oldBlock["code"]!]!["fields"]!.AsArray().ToDictionary(f => (string)f!["code"]!);
+                if (!rehomed)
+                {
+                    var nowBlock = nowBlocks[(string)oldBlock["code"]!];
+                    Same(oldBlock["label"], nowBlock!["label"]).Should().BeTrue($"{code} 區塊 {oldBlock["code"]} 標籤");
+                    ((int?)oldBlock["columns"]).Should().Be((int?)nowBlock!["columns"], $"{code} 區塊欄數");
+                }
                 foreach (var oldField in oldBlock["fields"]!.AsArray())
                 {
                     var fieldCode = (string)oldField!["code"]!;

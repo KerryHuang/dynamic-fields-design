@@ -21,7 +21,6 @@
   "requires": {
    "apps": [],
    "entities": [
-    "design.mold",
     "sales.customer"
    ]
   }
@@ -3170,8 +3169,8 @@
        },
        "config": {
         "refTarget": {
-         "kind": "entity",
-         "key": "design.mold"
+         "kind": "module",
+         "key": "mold"
         },
         "required": true,
         "showInList": true,
@@ -3641,7 +3640,7 @@
   },
   {
    "code": "mold",
-   "key": "mes-mold-info",
+   "key": "mes-mold",
    "name": {
     "zh-TW": "模具資料",
     "en-US": "Mold information",
@@ -3650,17 +3649,60 @@
    },
    "icon": "precision_manufacturing",
    "section": "設備",
-   "kind": "extension",
-   "hostEntityKey": "design.mold",
-   "titleField": null,
+   "kind": "standalone",
+   "hostEntityKey": null,
+   "titleField": "name",
    "blocks": [
     {
      "code": "main",
      "label": {
-      "zh-TW": "保養資訊",
-      "en-US": "Care information",
-      "th": "ข้อมูลการบำรุงรักษา",
-      "vi": "Thông tin bảo dưỡng"
+      "zh-TW": "基本資料",
+      "en-US": "Basic information",
+      "th": "ข้อมูลพื้นฐาน",
+      "vi": "Thông tin cơ bản"
+     },
+     "collapsed": false,
+     "fields": [
+      {
+       "code": "no",
+       "type": "text",
+       "label": {
+        "zh-TW": "模具編號",
+        "en-US": "Mold no.",
+        "th": "เลขที่แม่พิมพ์",
+        "vi": "Số khuôn"
+       },
+       "config": {
+        "required": true,
+        "showInList": true,
+        "isFilterable": true,
+        "isSortable": true
+       }
+      },
+      {
+       "code": "name",
+       "type": "text",
+       "label": {
+        "zh-TW": "名稱",
+        "en-US": "Name",
+        "th": "ชื่อ",
+        "vi": "Tên"
+       },
+       "config": {
+        "required": true,
+        "showInList": true,
+        "isFilterable": true
+       }
+      }
+     ]
+    },
+    {
+     "code": "care",
+     "label": {
+      "zh-TW": "維護",
+      "en-US": "Maintenance",
+      "th": "การบำรุงรักษา",
+      "vi": "Bảo trì"
      },
      "collapsed": false,
      "fields": [
@@ -3949,8 +3991,8 @@
        },
        "config": {
         "refTarget": {
-         "kind": "entity",
-         "key": "design.mold"
+         "kind": "module",
+         "key": "mold"
         },
         "required": true,
         "showInList": true,

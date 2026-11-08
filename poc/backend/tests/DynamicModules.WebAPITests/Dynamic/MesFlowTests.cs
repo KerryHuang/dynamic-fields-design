@@ -259,18 +259,53 @@ public class MesFlowTests : IDisposable
     }
 
     [Fact]
-    public async Task Open_WhenAMoldExtensionModuleAlreadyExists_Is409_AndNothingIsLeftBehind()
+    public async Task MesAlone_MoldIsItsOwnModule_RepairAndCarePickMoldRecords()
     {
-        // 模具擴充（宿主實體 design.mold）每個實體只能有一個；舊範本建過就不能開 MES（審查第一輪 #9）
+        // s2d-0：模具歸 MES 自己的模組 mes-mold，報修與保養的模具參照指向它
+        await OpenMes();
+        Key("mold").Should().Be("mes-mold");
+        var maint = _app.AsUser("maint01"); var floor = _app.AsUser("floor01");
+        var (m, _) = await Layout("mold");
+        var mold = await Create(maint, "mold", new() { [m["模具編號"]] = "MD-01", [m["名稱"]] = "測試上蓋模", [m["保養週期（天）"]] = 30 });
+        (await TryCreate(maint, "mold", new() { [m["名稱"]] = "缺編號", [m["保養週期（天）"]] = 30 })).StatusCode.Should().Be(HttpStatusCode.BadRequest);
+
+        foreach (var (module, user) in new[] { ("repair", floor), ("care", maint) })
+        {
+            var schema = await JsonOf(await user.GetAsync($"{Base}/modules/{Key(module)}/schema"));
+            var reference = schema.GetProperty("blocks").EnumerateArray().SelectMany(b => b.GetProperty("fields").EnumerateArray())
+                .Single(f => f.GetProperty("label").GetProperty("zh-TW").GetString() == "模具").GetProperty("reference");
+            reference.GetProperty("kind").GetString().Should().Be("module");
+            reference.GetProperty("key").GetString().Should().Be("mes-mold");
+            var light = await JsonOf(await user.GetAsync($"{Base}{reference.GetProperty("lightUrl").GetString()}?keyword=上蓋"));
+            light.GetProperty("items").EnumerateArray().Select(i => i.GetProperty("key").GetString()).Should().Equal(Id(mold).ToString());
+        }
+
+        var (r, _) = await Layout("repair");
+        var repair = await Create(floor, "repair", new() { [r["模具"]] = Id(mold), [r["申請人"]] = "floor01", [r["故障說明"]] = "冷卻水路漏水" });
+        var info = (await JsonOf(await floor.GetAsync($"{Base}/records/{Id(repair)}"))).GetProperty("references").GetProperty(r["模具"]);
+        info.GetProperty("title").GetString().Should().Be("測試上蓋模");
+        var (c, _) = await Layout("care");
+        await Create(maint, "care", new() { [c["模具"]] = Id(mold), [c["保養日期"]] = "2026-11-01", [c["保養週期（天）"]] = 30 });
+
+        // 被報修參照的模具不能刪（參照預設 restrict）
+        var current = await JsonOf(await _admin.GetAsync($"{Base}/records/{Id(mold)}"));
+        (await _admin.SendAsync(new HttpRequestMessage(HttpMethod.Delete, $"{Base}/records/{Id(mold)}?rowVersion={Uri.EscapeDataString(current.GetProperty("rowVersion").GetString()!)}")))
+            .StatusCode.Should().Be(HttpStatusCode.Conflict);
+    }
+
+    [Fact]
+    public async Task Open_WhenACustomerExtensionModuleAlreadyExists_Is409_AndNothingIsLeftBehind()
+    {
+        // 客戶擴充（宿主實體 sales.customer）每個實體只能有一個；舊範本建過就不能開 MES（審查第一輪 #9）
         var res = await _admin.PostAsJsonAsync($"{Base}/modules", new
         {
-            key = "my-mold-ext", kind = "extension", hostEntityKey = "design.mold", name = new Dictionary<string, string> { ["zh-TW"] = "自建模具擴充" }
+            key = "my-customer-ext", kind = "extension", hostEntityKey = "sales.customer", name = new Dictionary<string, string> { ["zh-TW"] = "自建客戶擴充" }
         });
         res.StatusCode.Should().Be(HttpStatusCode.Created, await res.Content.ReadAsStringAsync());
 
         var opened = await _admin.PostAsJsonAsync($"{Apps}/packages/mes-mold/open", new { groupMap = new Dictionary<string, object>() });
         opened.StatusCode.Should().Be(HttpStatusCode.Conflict);
-        (await JsonOf(opened)).GetProperty("hostEntityConflicts").EnumerateArray().Select(e => e.GetString()).Should().Contain("mold");
+        (await JsonOf(opened)).GetProperty("hostEntityConflicts").EnumerateArray().Select(e => e.GetString()).Should().Equal("customer");
         (await _admin.GetAsync($"{Base}/modules/mes-workorder")).StatusCode.Should().Be(HttpStatusCode.NotFound);
         (await JsonOf(await _admin.GetAsync(Apps))).GetArrayLength().Should().Be(0);
     }

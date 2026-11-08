@@ -41,7 +41,8 @@ public sealed class RepairScenario : IDemoScenario
     {
         var today = plan.Today;
         var rnd = plan.Random;
-        var planned = new List<(int N, string Creator, string Mold, DemoRecord Record)>();
+        var molds = plan.Records["mold"];
+        var planned = new List<(int N, string Creator, DemoRecord Mold, DemoRecord Record)>();
         var toggle = false;
 
         for (var n = 1; n <= Count; n++)
@@ -49,7 +50,7 @@ public sealed class RepairScenario : IDemoScenario
             var date = today.AddDays(-(90 - (int)Math.Round((n - 1) * 89.0 / (Count - 1))));
             var days = today.DayNumber - date.DayNumber;
             var creator = n % 10 == 0 ? Maint : n % 2 == 1 ? "floor01" : "floor02";
-            var mold = $"M-{rnd.Next(1, 13):0000}";
+            var mold = molds[rnd.Next(1, 13) - 1];
             DemoRecord? related = null;
             if (Related.Contains(n))
             {
@@ -76,7 +77,7 @@ public sealed class RepairScenario : IDemoScenario
             var record = plan.Create("repair", createdAt, creator, $"{label} 提報", ctx =>
             {
                 var values = ctx.Values("repair",
-                    ("mold", mold), ("requester", creator), ("reportDate", Iso(date)), ("occurredAt", occurredAt),
+                    ("mold", mold.Id), ("requester", creator), ("reportDate", Iso(date)), ("occurredAt", occurredAt),
                     ("urgent", urgent), ("category", ctx.Opt("repair", category)),
                     ("status", ctx.Opt("repair", "pending")), ("description", description));
                 if (otherNote is not null) values[ctx.Key("repair.otherNote")] = Json(otherNote);
@@ -84,7 +85,6 @@ public sealed class RepairScenario : IDemoScenario
                 return new CreateRecordRequest(ctx.Ids.ModuleKeys["repair"], values);
             });
             record.Facts["status"] = status;
-            record.Facts["mold"] = mold;
             planned.Add((n, creator, mold, record));
 
             if (status == "pending") continue;

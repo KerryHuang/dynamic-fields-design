@@ -26,12 +26,15 @@ public class MoldCareQualityScenarioTests(DemoGeneratedFixture fx)
         (ModuleSchemaResponse)(await fx.As(userId, new GetModuleSchemaRequest(module))).Data!;
 
     [Fact]
-    public async Task MoldInfo_12_CustomerInfo_8()
+    public async Task Molds_12_CustomerInfo_8()
     {
         fx.Generated();
 
-        (await fx.Records("mes-mold-info")).Select(r => r.HostKey).Should()
-            .BeEquivalentTo(Enumerable.Range(1, 12).Select(i => $"M-{i:0000}"));
+        // 模具是 MES 自己的模組（s2d-0），不是核心實體的擴充資料
+        var no = await fx.Key("mes-mold", "模具編號");
+        var molds = await fx.Records("mes-mold");
+        molds.Select(r => DemoGeneratedFixture.Text(r, no)).Should().BeEquivalentTo(Enumerable.Range(1, 12).Select(i => $"M-{i:0000}"));
+        molds.Should().OnlyContain(r => r.HostKey == null);
         var customers = await fx.Records("mes-customer-info");
         customers.Select(r => r.HostKey).Should().BeEquivalentTo(Enumerable.Range(1, 8).Select(i => $"C-{i:000}"));
         var credit = await fx.Key("mes-customer-info", "信用等級");
@@ -62,7 +65,9 @@ public class MoldCareQualityScenarioTests(DemoGeneratedFixture fx)
         var cares = await fx.Records("mes-mold-care");
 
         cares.Count.Should().BeInRange(30, 80);
-        var byMold = cares.GroupBy(c => DemoGeneratedFixture.Text(c, mold)).ToList();
+        var moldIds = (await fx.Records("mes-mold")).Select(r => r.Id).ToHashSet();
+        cares.Should().OnlyContain(c => moldIds.Contains(Id(c, mold) ?? 0));
+        var byMold = cares.GroupBy(c => Id(c, mold)).ToList();
         byMold.Should().HaveCount(12).And.OnlyContain(g => g.Count() >= 2 && g.Count() <= 6);
         cares.Should().OnlyContain(c => Date(DemoGeneratedFixture.Text(c, careDate)) < Today
                                         && Date(DemoGeneratedFixture.Text(c, careDate)) >= Today.AddDays(-180));
@@ -85,18 +90,18 @@ public class MoldCareQualityScenarioTests(DemoGeneratedFixture fx)
     }
 
     [Fact]
-    public async Task MoldInfo_LastCareDate_MatchesLatestCare()
+    public async Task Mold_LastCareDate_MatchesLatestCare()
     {
         fx.Generated();
         var mold = await fx.Key("mes-mold-care", "模具");
         var careDate = await fx.Key("mes-mold-care", "保養日期");
-        var last = await fx.Key("mes-mold-info", "上次保養日");
-        var latest = (await fx.Records("mes-mold-care")).GroupBy(c => DemoGeneratedFixture.Text(c, mold)!)
+        var last = await fx.Key("mes-mold", "上次保養日");
+        var latest = (await fx.Records("mes-mold-care")).GroupBy(c => Id(c, mold)!.Value)
             .ToDictionary(g => g.Key, g => g.Max(c => Date(DemoGeneratedFixture.Text(c, careDate))));
 
-        foreach (var info in await fx.Records("mes-mold-info"))
+        foreach (var info in await fx.Records("mes-mold"))
         {
-            Date(DemoGeneratedFixture.Text(info, last)).Should().Be(latest[info.HostKey!], info.HostKey);
+            Date(DemoGeneratedFixture.Text(info, last)).Should().Be(latest[info.Id], info.Title);
             (await History(info.Id)).Should().Contain(h => h.Operation == "update" && h.ChangedUserId == "maint01"
                                                            && h.FieldLabel!.Resolve("zh-TW") == "上次保養日");
         }

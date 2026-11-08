@@ -170,7 +170,7 @@ public class OrderRepairScenarioTests(DemoGeneratedFixture fx)
         foreach (var r in linked)
         {
             var target = repairs[r.Values[related]!.Value.GetInt64()];
-            DemoGeneratedFixture.Text(target, mold).Should().Be(DemoGeneratedFixture.Text(r, mold));
+            target.Values[mold]!.Value.GetInt64().Should().Be(r.Values[mold]!.Value.GetInt64());
             target.CreatedTime.Should().BeBefore(r.CreatedTime);
         }
     }

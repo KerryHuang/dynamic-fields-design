@@ -1,5 +1,6 @@
 using DynamicModules.Application.Dynamic.AppService;
 using DynamicModules.Application.Dynamic.AppService.Data;
+using DynamicModules.Domain.Entities.Dynamic;
 using DynamicModules.Domain.ValueObjects;
 using FluentAssertions;
 
@@ -54,5 +55,35 @@ public class MesPackageTests
 
         foreach (var (where, text) in texts)
             text.Values.Keys.Should().BeEquivalentTo(I18nText.SupportedLocales, where);
+    }
+
+    [Fact]
+    public void Mold_IsMesOwnModule_NotAnExtensionOfACoreEntity()
+    {
+        // s2d-0：模具歸 MES 自己的模組，核心不再有模擬實體 design.mold
+        var p = Package.Value;
+        p.Manifest.Requires.Entities.Should().NotContain("design.mold");
+        var mold = p.Modules.Single(m => m.Code == "mold");
+        mold.Key.Should().Be("mes-mold");
+        mold.Kind.Should().Be(ModuleKind.Standalone);
+        mold.HostEntityKey.Should().BeNull();
+        mold.TitleField.Should().Be("name");
+        var fields = mold.Blocks.SelectMany(b => b.Fields).ToDictionary(f => f.Code);
+        fields.Keys.Should().BeEquivalentTo("no", "name", "lastCareDate", "cycleDays", "shotCount");
+        fields["no"].Type.Should().Be(FieldType.Text);
+        fields["no"].Config.GetProperty("required").GetBoolean().Should().BeTrue();
+        fields["name"].Config.GetProperty("required").GetBoolean().Should().BeTrue();
+        mold.Blocks.Single(b => b.Code == "care").Fields.Select(f => f.Code).Should().Equal("lastCareDate", "cycleDays", "shotCount");
+    }
+
+    [Theory]
+    [InlineData("repair")]
+    [InlineData("care")]
+    public void RepairAndCare_ReferToTheMoldModule(string module)
+    {
+        var field = Package.Value.Modules.Single(m => m.Code == module).Blocks.SelectMany(b => b.Fields).Single(f => f.Code == "mold");
+        var target = field.Config.GetProperty("refTarget");
+        target.GetProperty("kind").GetString().Should().Be("module");
+        target.GetProperty("key").GetString().Should().Be("mold");
     }
 }
