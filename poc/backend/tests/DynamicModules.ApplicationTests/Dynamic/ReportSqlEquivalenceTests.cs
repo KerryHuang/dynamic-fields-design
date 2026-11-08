@@ -327,4 +327,29 @@ public class ReportSqlEquivalenceTests : ReportTestBase
         var outcome = await Svc<IReportQueryRepository>().AggregateAsync(query, CancellationToken.None);
         outcome.FallbackReason.Should().Be($"configChanged:{Amount.Id}");
     }
+
+    [Fact]
+    public async Task IndexBackfillJob_RepairsLegacyRows_RunsOnce_AndOpensTheSqlPath()
+    {
+        await Prepare();
+        var a = new string('a', 440) + "b";
+        var id = await Seed("order", "admin", (Amount, 1.23m), (Note, a));
+        // 還原成升級前的索引：ScaledValue 是四捨五入的舊值、沒有截斷標記，回填版本也還沒寫
+        await Db.Context.Set<RecordIndex>().Where(i => i.RecordId == id && i.FieldId == Amount.Id).ExecuteUpdateAsync(u => u.SetProperty(i => i.ScaledValue, 12L));
+        await Db.Context.Set<RecordIndex>().Where(i => i.RecordId == id && i.FieldId == Note.Id).ExecuteUpdateAsync(u => u.SetProperty(i => i.TextTruncated, false));
+        await Db.Context.Set<SystemSetting>().ExecuteDeleteAsync();
+        Db.Context.ChangeTracker.Clear();
+
+        var def = Def(groups: [G(MainF(Note))], measures: [M("s", "sum", MainF(Amount))]);
+        Svc<ReportOptions>().Engine = ReportEngineMode.Auto;
+        (await Run(def)).FallbackReasons.Should().Contain("indexBackfillPending");
+
+        (await Svc<IndexBackfillJob>().RunAsync(CancellationToken.None)).Should().BeTrue();
+        (await Svc<IndexBackfillJob>().RunAsync(CancellationToken.None)).Should().BeFalse("版本已達標，不重跑");
+        (await ScaledValues(Amount.Id)).Should().Equal(123L);
+        (await Db.Context.Set<RecordIndex>().AsNoTracking().SingleAsync(i => i.RecordId == id && i.FieldId == Note.Id)).TextTruncated.Should().BeTrue();
+        (await Svc<ISystemSettingRepository>().GetValueAsync(SystemSetting.IndexBackfillVersion, CancellationToken.None)).Should().Be(RecordIndexer.BackfillVersion);
+        // 截斷的文字仍要退回記憶體，但原因已經不是「回填未完成」
+        (await Run(def)).FallbackReasons.Should().Contain(r => r.StartsWith("textTruncated"));
+    }
 }

@@ -51,6 +51,7 @@ public static class DependencyInjection
         services.AddScoped<Common.Behaviors.IWriteStage>(sp => sp.GetRequiredService<Dynamic.AppService.Integrations.IntegrationGuardStage>());
         services.AddScoped<Dynamic.CheckService.CheckEvaluator>();
         services.AddScoped<Dynamic.CheckService.CheckIndexer>();
+        services.AddScoped<Dynamic.RecordService.IndexBackfillJob>();
         services.AddScoped<Dynamic.CheckService.CheckFieldGuard>();
         services.AddScoped<Dynamic.CheckService.CheckStage>();
         services.AddScoped<Common.Behaviors.IWriteStage>(sp => sp.GetRequiredService<Dynamic.CheckService.CheckStage>());

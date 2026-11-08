@@ -6,6 +6,7 @@ using DynamicModules.Application.Common.Security;
 using DynamicModules.Application.Common.Time;
 using DynamicModules.Application.Dynamic.AttachmentService;
 using DynamicModules.Application.Dynamic.DemoService;
+using DynamicModules.Application.Dynamic.RecordService;
 using DynamicModules.Application.Dynamic.ReportService;
 using DynamicModules.Application.Dynamic.TemplateService;
 using DynamicModules.Domain.Data;
@@ -156,6 +157,9 @@ static async Task InitializeDatabaseAsync(WebApplication app, string dynamicConn
     await SeedData.EnsureSeededAsync(db);
     await AdminBootstrap.EnsureAsync(db, scope.ServiceProvider.GetRequiredService<IPasswordService>(), app.Configuration,
         app.Services.GetRequiredService<ILoggerFactory>().CreateLogger(nameof(AdminBootstrap)));
+    // 升級前的索引補上精確換算與截斷標記；版本達標就是空操作。完成前報表走記憶體路徑，結果仍正確
+    if (await scope.ServiceProvider.GetRequiredService<IndexBackfillJob>().RunAsync(CancellationToken.None))
+        app.Logger.LogInformation("索引回填完成（版本 {Version}）", RecordIndexer.BackfillVersion);
 }
 
 public partial class Program { }
