@@ -102,7 +102,7 @@ DesignerAccess → SystemAdmin → Validation → Transaction（WriteGate 排隊
     { "code": "post", "kind": "create", "targetModuleKey": "stock-move", "each": "ship-line",
       "set": [
         { "to": 71, "from":    { "side": "line",   "fieldId": 41 } },
-        { "to": 72, "formula": { "side": "line",   "expr": "-{qty}" } },
+        { "to": 72, "formula": { "side": "line",   "expr": "-{41}" } },
         { "to": 73, "from":    { "side": "header", "fieldId": 22 } },
         { "to": 74, "const": "opt_55" }
       ] },
@@ -131,7 +131,7 @@ DesignerAccess → SystemAdmin → Validation → Transaction（WriteGate 排隊
 | `reverse` | 沖銷先前由 `ofEvent` 的 `ofEffect` 為這筆來源記錄新增的分錄（§6.5）；已經沖銷過的略過，全部都沖銷過就不做事 |
 | `custom` | 擴充點，見 §4.9 |
 
-`set[]` 每項的值來源三擇一：`from`（複製來源欄位值，`side` 為 `header` 或 `line`，`line` 只能用在有 `each` 的 `create`）、`const`（常數；下拉用 `opt_<選項 Id>`；日期欄位可用字串 `"today"` 代表業務日）、`formula`（沿用公式語法 `{欄位代號}`，對 `side` 指定的那一邊的模組求值，例如明細的 `-{qty}`）。目的欄位 `to` 必須是目標模組啟用中、非公式、非彙總、非自動編號的欄位；型別相容規則同帶值（單據能力設計 §2.4）。
+`set[]` 每項的值來源三擇一：`from`（複製來源欄位值，`side` 為 `header` 或 `line`，`line` 只能用在有 `each` 的 `create`）、`const`（常數；下拉用 `opt_<選項 Id>`；日期欄位可用字串 `"today"` 代表業務日）、`formula`（沿用公式語法，欄位以 Id 引用，如 `{41}`；對 `side` 指定的那一邊的模組求值，例如明細數量欄位的負值 `-{41}`）。目的欄位 `to` 必須是目標模組啟用中、非公式、非彙總、非自動編號的欄位；型別相容規則同帶值（單據能力設計 §2.4）。
 
 ### 4.2 值的寫法與權限語意
 
@@ -494,7 +494,7 @@ public interface IEffectHandler
       { "code": "post", "kind": "create", "target": "stockMove", "each": "shipLine",
         "set": [
           { "to": "stockMove.item", "from": { "side": "line", "field": "shipLine.item" } },
-          { "to": "stockMove.qty",  "formula": { "side": "line", "expr": "-{qty}" } },
+          { "to": "stockMove.qty",  "formula": { "side": "line", "expr": "-{41}" } },
           { "to": "stockMove.kind", "const": "opt_out" } ] } ] } ],
   "checks": [ {
     "code": "noNegativeStock", "name": { "zh-TW": "庫存不可為負" }, "active": true, "module": "stockMove",

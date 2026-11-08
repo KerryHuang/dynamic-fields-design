@@ -8,7 +8,7 @@ using MediatR;
 namespace DynamicModules.Application.Dynamic.PermissionService.Commands.SaveModulePermissions;
 
 public class SaveModulePermissionsHandler(
-    IModuleRepository modules, IPermissionRepository permissions, IUnitOfWork uow)
+    IModuleRepository modules, IPermissionRepository permissions, IUnitOfWork uow, EventService.EventHiddenGuard hiddenGuard)
     : IRequestHandler<SaveModulePermissionsRequest, ServiceResult>
 {
     public async Task<ServiceResult> Handle(SaveModulePermissionsRequest request, CancellationToken ct)
@@ -72,6 +72,11 @@ public class SaveModulePermissionsHandler(
         }
 
         if (errors.Count > 0) return ServiceResult.Invalid(errors);
+
+        // 事後隱藏：被連動事件複製的來源欄位，沒有明確允許就不能設為隱藏
+        var hiding = body.Fields.Where(f => f.Access == FieldAccess.Hidden).Select(f => f.FieldId).ToHashSet();
+        if (await hiddenGuard.FindViolationAsync(module, hiding, ct) is { } violation)
+            return ServiceResult.Invalid(new Dictionary<string, string[]> { ["fields"] = [violation] });
 
         var rows = new ModulePermissionRows(
             body.Groups.Where(g => !g.Privileges.IsEmpty).Select(g => Fill(new GroupProgramPrivilege { GroupId = g.GroupId }, module, g.Privileges)).ToList(),

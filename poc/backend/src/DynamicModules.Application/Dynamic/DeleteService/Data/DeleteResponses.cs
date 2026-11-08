@@ -25,6 +25,9 @@ public static class DeleteBlockerKind
     public const string Fill = "fill";
     public const string Workflow = "workflow";
     public const string Conversion = "conversion";
+    public const string Event = "event";
+    public const string Check = "check";
+    public const string Ledger = "ledger";
     public const string Rule = "rule";
     public const string View = "view";
     public const string Report = "report";

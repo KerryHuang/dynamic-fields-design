@@ -1,4 +1,5 @@
 using DynamicModules.Application.Dynamic.DeleteService.Data;
+using DynamicModules.Application.Dynamic.EventService;
 using DynamicModules.Domain.Entities.Dynamic;
 using DynamicModules.Domain.Formulas;
 using DynamicModules.Domain.Modules;
@@ -63,6 +64,8 @@ public class DeletePlanner(IDeletionRepository data)
                 break;
         }
 
+        await AddEffectBlockersAsync(target, module, fields, all, alsoDeleting, blockers, ct);
+
         var fieldIds = fields.Select(f => f.Id).ToList();
         var purge = target == DeleteTarget.Module
             ? new PurgeCounts(await data.CountRecordsAsync(module.Id, deleted: true, ct),
@@ -106,6 +109,36 @@ public class DeletePlanner(IDeletionRepository data)
         // 轉換定義的來源、目標與明細模組全在這次一起刪除的集合內：定義跟著應用程式一起移除（ModuleRemover），不算引用
         var outside = alsoDeleting is null ? conversions : conversions.Where(c => !InsideSet(c, all, alsoDeleting)).ToList();
         AddConversionBlockers(outside, all, ownIds, [module.Id], [module.Key], blockers);
+    }
+
+    /// <summary>事件、跨記錄檢查、分錄設定引用了要刪的模組或欄位。同一個動作一起刪除的集合內的引用不算（ModuleRemover 會一起移除）。</summary>
+    private async Task AddEffectBlockersAsync(
+        DeleteTarget target, Module module, IReadOnlyList<Field> fields, List<Module> all,
+        IReadOnlySet<string>? alsoDeleting, List<DeleteBlocker> blockers, CancellationToken ct)
+    {
+        var ids = fields.Select(f => f.Id).ToHashSet();
+        var isModule = target == DeleteTarget.Module;
+        bool Inside(IEnumerable<string> keys) => alsoDeleting is not null && keys.All(alsoDeleting.Contains);
+        string? KeyOf(long moduleId) => all.FirstOrDefault(m => m.Id == moduleId)?.Key;
+
+        foreach (var e in await data.ListEventsAsync(ct))
+        {
+            var refs = EffectReferences.Of(e, KeyOf(e.SourceModuleId) ?? "");
+            if ((isModule && refs.ModuleKeys.Contains(module.Key) || refs.FieldIds.Overlaps(ids)) && !(isModule && Inside(refs.ModuleKeys)))
+                blockers.Add(new(DeleteBlockerKind.Event, KeyOf(e.SourceModuleId), e.Id, Name(e.NameI18n, e.Key)));
+        }
+        foreach (var c in await data.ListChecksAsync(ct))
+        {
+            var key = KeyOf(c.ModuleId);
+            if ((isModule && c.ModuleId == module.Id || EffectReferences.Of(c).Overlaps(ids)) && !(isModule && key is not null && Inside([key])))
+                blockers.Add(new(DeleteBlockerKind.Check, key, c.Id, Name(c.NameI18n, c.Key)));
+        }
+        foreach (var l in await data.ListLedgersAsync(ct))
+        {
+            var key = KeyOf(l.ModuleId);
+            if ((isModule && l.ModuleId == module.Id || EffectReferences.Of(l).Overlaps(ids)) && !(isModule && key is not null && Inside([key])))
+                blockers.Add(new(DeleteBlockerKind.Ledger, key, l.Id, key ?? ""));
+        }
     }
 
     private static bool InsideSet(Conversion c, List<Module> all, IReadOnlySet<string> keys)

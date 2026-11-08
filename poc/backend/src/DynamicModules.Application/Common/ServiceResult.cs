@@ -16,6 +16,9 @@ public sealed class ServiceResult
     public object? Data { get; private init; }
     public IReadOnlyDictionary<string, string[]> Errors { get; private init; } = NoErrors;
 
+    /// <summary>驗證失敗（400）：沒有其他狀態旗標，但帶有欄位錯誤。</summary>
+    public bool IsInvalid => Errors.Count > 0;
+
     public static ServiceResult Success(object? data = null) => new() { IsSuccess = true, Data = data };
 
     public static ServiceResult Created(object data) => new() { IsSuccess = true, IsCreated = true, Data = data };
