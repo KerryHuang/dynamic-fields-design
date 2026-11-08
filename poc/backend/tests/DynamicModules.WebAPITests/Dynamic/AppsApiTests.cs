@@ -84,7 +84,7 @@ public class AppsApiTests : IDisposable
         (await JsonOf(await _admin.GetAsync(Apps))).GetArrayLength().Should().Be(0);
         // 出貨的內建套件（CRM、進銷存）只是「可開啟」，沒開之前不產生任何模組或選單
         var packages = await JsonOf(await _admin.GetAsync($"{Apps}/packages"));
-        packages.EnumerateArray().Select(p => p.GetProperty("id").GetString()).Should().Equal("crm-sales", "inventory");
+        packages.EnumerateArray().Select(p => p.GetProperty("id").GetString()).Should().Equal("crm-sales", "inventory", "mes-mold");
         (await JsonOf(await _admin.GetAsync($"{Base}/menu"))).GetArrayLength().Should().Be(0);
         (await _admin.GetAsync($"{Base}/reports/catalog")).StatusCode.Should().Be(HttpStatusCode.OK);
         (await _admin.GetAsync($"{Base}/modules")).StatusCode.Should().Be(HttpStatusCode.OK);
