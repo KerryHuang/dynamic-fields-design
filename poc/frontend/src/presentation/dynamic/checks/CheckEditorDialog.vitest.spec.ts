@@ -25,7 +25,7 @@ const mod = (key: string, fields: DesignerField[]): ModuleDetail => ({
   blocks: [{ id: 1, label: { 'zh-TW': 'b' }, sequence: 1, collapsed: false, columns: 2, fields }],
 });
 const move = mod('move', [
-  field(51, 'reference', { refTarget: { kind: 'module', key: 'item' } }), field(52, 'text'), field(53, 'decimal'), field(55, 'integer'), field(56, 'currency'),
+  field(51, 'reference', { refTarget: { kind: 'module', key: 'item' } }), field(52, 'text'), field(53, 'decimal'), field(55, 'integer'), field(56, 'currency'), field(57, 'autonumber'),
 ]);
 const saved: ModuleCheck = {
   key: 'stock', name: { 'zh-TW': '庫存' }, moduleKey: 'move', active: true,
@@ -98,7 +98,7 @@ describe('CheckEditorDialog', () => {
   it('only offers indexable fields for grouping and number fields for the sum', async () => {
     const w = await open();
     const group = comp(w, 'check-group-by').props('options') as { value: number }[];
-    expect(group.map((o) => o.value)).toEqual([51, 52, 55]);
+    expect(group.map((o) => o.value)).toEqual([51, 52, 55, 57]);
     const sum = comp(w, 'check-field').props('options') as { value: number }[];
     expect(sum.map((o) => o.value)).toEqual([53, 55, 56]);
   });

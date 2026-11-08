@@ -17,7 +17,7 @@ import ConditionEditor from 'src/presentation/dynamic/list/ConditionEditor.vue';
 import type { ApiError } from 'src/services/api/http';
 
 /** Group keys must be indexed types; sums read number fields. */
-const GROUP_TYPES = ['reference', 'enum', 'text', 'integer', 'date'];
+const GROUP_TYPES = ['reference', 'enum', 'text', 'integer', 'date', 'autonumber'];
 const NUMBER_TYPES = ['integer', 'decimal', 'currency'];
 const OPS: CheckOp[] = ['gte', 'gt', 'lte', 'lt', 'eq'];
 
