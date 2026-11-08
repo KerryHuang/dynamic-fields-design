@@ -9,7 +9,7 @@ public record DynamicRecordResponse(
     long Id, string ModuleKey, string Title, Dictionary<string, JsonElement?> Values, string OwnerUserId,
     string CreatedUserId, DateTime CreatedTime, string ModifiedUserId, DateTime ModifiedTime, string RowVersion,
     IReadOnlyDictionary<string, ReferenceInfo> References, string? HostKey,
-    IReadOnlyDictionary<string, IReadOnlyList<DynamicRecordResponse>>? Details = null);
+    IReadOnlyDictionary<string, IReadOnlyList<DynamicRecordResponse>>? Details = null, bool FrozenByEffects = false);
 
 public static class RecordMapper
 {

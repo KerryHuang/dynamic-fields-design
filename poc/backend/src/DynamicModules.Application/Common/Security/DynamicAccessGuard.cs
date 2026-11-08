@@ -4,14 +4,20 @@ using DynamicModules.Domain.Repositories.Dynamic;
 namespace DynamicModules.Application.Common.Security;
 
 public class DynamicAccessGuard(
-    ICurrentUser user, IProgramRepository programs, IPermissionRepository permissions, IModuleRepository modules)
+    ICurrentUser user, IProgramRepository programs, IPermissionRepository permissions, IModuleRepository modules, ISystemIdentity system)
     : IDynamicAccessGuard
 {
     public const string DesignerProgramCode = "DYN00000";
 
+    /// <summary>事件效果的系統身分：所有動作、不限資料範圍、沒有隱藏或唯讀欄位（設計 §4.2）。</summary>
+    private static readonly EffectivePermissions SystemPermissions = new(
+        Enum.GetValues<PermissionAction>().ToHashSet(), DataScope.All, null,
+        new HashSet<long>(), new HashSet<long>(), new HashSet<long>(), "system");
+
     public async Task<AccessResult> AuthorizeAsync(Module module, PermissionAction action, CancellationToken ct)
     {
         if (ClosedBlocks(module, action)) return Deny();
+        if (system.Active) return new AccessResult(SystemPermissions, null);
         var program = await programs.GetAsync(module.ProgramCode, ct);
         if (program is not { Active: true }) return Deny();
 
@@ -25,6 +31,7 @@ public class DynamicAccessGuard(
     public async Task<AccessResult> AuthorizeDetailAsync(Module parent, Module child, PermissionAction action, CancellationToken ct)
     {
         if (ClosedBlocks(parent, action) || ClosedBlocks(child, action)) return Deny();
+        if (system.Active) return new AccessResult(SystemPermissions, null);
         var program = await programs.GetAsync(parent.ProgramCode, ct);
         if (program is not { Active: true }) return Deny();
 

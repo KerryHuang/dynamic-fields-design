@@ -16,7 +16,7 @@ namespace DynamicModules.Application.Dynamic.RecordService;
 /// </summary>
 public class RecordCreator(
     IModuleRepository modules, IRecordRepository records, INumberSequenceRepository sequences, FieldTypeRegistry registry,
-    ICurrentUser user, IBusinessTime time, ReferenceValidator refs, ReferenceFill fill, WorkflowEnforcer workflow, RollupRecalc rollups, RecordHistoryWriter history)
+    ICurrentUser user, ISystemIdentity system, IBusinessTime time, ReferenceValidator refs, ReferenceFill fill, WorkflowEnforcer workflow, RollupRecalc rollups, RecordHistoryWriter history)
 {
     /// <param name="rollupValues">這次存檔在記憶體算好的彙總值（明細彙總）；沒給的一般參照彙總取空集合的值（第 6 階段 R13）。</param>
     public async Task<(Dictionary<string, JsonElement?> Values, Dictionary<string, string[]> Errors)> ValidateAsync(
@@ -49,7 +49,7 @@ public class RecordCreator(
             ModuleId = module.Id,
             Title = hostTitle ?? RecordValueProcessor.TitleOf(module, values),
             HostKey = hostKey,
-            OwnerUserId = user.UserId,
+            OwnerUserId = system.OwnerUserId ?? user.UserId,
             ValuesJson = RecordValueProcessor.Serialize(values),
             RowVersion = Guid.NewGuid().ToString()
         };

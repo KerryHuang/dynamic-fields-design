@@ -5,6 +5,33 @@ using Microsoft.EntityFrameworkCore;
 
 namespace DynamicModules.Persistence.Repositories.Dynamic;
 
+public class EventFactRepository(DynamicDbContext db) : IEventFactRepository
+{
+    public Task<EventFact?> FindAsync(string eventKey, string effectCode, long sourceRecordId, long itemKey, CancellationToken ct) =>
+        db.Set<EventFact>().AsNoTracking().FirstOrDefaultAsync(
+            f => f.EventKey == eventKey && f.EffectCode == effectCode && f.SourceRecordId == sourceRecordId && f.ItemKey == itemKey, ct);
+
+    public Task<List<EventFact>> ListByEffectAsync(string eventKey, string effectCode, long sourceRecordId, CancellationToken ct) =>
+        db.Set<EventFact>().AsNoTracking()
+            .Where(f => f.EventKey == eventKey && f.EffectCode == effectCode && f.SourceRecordId == sourceRecordId).OrderBy(f => f.Id).ToListAsync(ct);
+
+    public Task<List<EventFact>> ListBySourceAsync(long sourceRecordId, CancellationToken ct) =>
+        db.Set<EventFact>().AsNoTracking().Where(f => f.SourceRecordId == sourceRecordId).OrderBy(f => f.Id).ToListAsync(ct);
+
+    public Task<bool> AnyBySourceAsync(long sourceRecordId, CancellationToken ct) =>
+        db.Set<EventFact>().AsNoTracking().AnyAsync(f => f.SourceRecordId == sourceRecordId, ct);
+
+    public async Task<HashSet<long>> ListFrozenBeforeAsync(IReadOnlyCollection<long> sourceRecordIds, string operationId, CancellationToken ct) =>
+        (await db.Set<EventFact>().AsNoTracking()
+            .Where(f => sourceRecordIds.Contains(f.SourceRecordId) && f.OperationId != operationId)
+            .Select(f => f.SourceRecordId).Distinct().ToListAsync(ct)).ToHashSet();
+
+    public Task<List<EventFact>> ListByTargetAsync(long targetRecordId, CancellationToken ct) =>
+        db.Set<EventFact>().AsNoTracking().Where(f => f.TargetRecordId == targetRecordId).OrderBy(f => f.Id).ToListAsync(ct);
+
+    public void Add(EventFact fact) => db.Set<EventFact>().Add(fact);
+}
+
 public class EventRepository(DynamicDbContext db) : IEventRepository
 {
     public Task<ModuleEvent?> GetByKeyAsync(string key, CancellationToken ct) =>

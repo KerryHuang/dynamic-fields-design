@@ -39,6 +39,7 @@ public static class DependencyInjection
         services.AddScoped<IListViewRepository, ListViewRepository>();
         services.AddScoped<IConversionRepository, ConversionRepository>();
         services.AddScoped<IEventRepository, EventRepository>();
+        services.AddScoped<IEventFactRepository, EventFactRepository>();
         services.AddScoped<ICheckRepository, CheckRepository>();
         services.AddScoped<ILedgerRepository, LedgerRepository>();
         services.AddScoped<IOperationRepository, OperationRepository>();

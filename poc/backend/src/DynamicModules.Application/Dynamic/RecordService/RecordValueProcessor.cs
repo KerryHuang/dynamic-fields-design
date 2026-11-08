@@ -30,6 +30,7 @@ public static class RecordValueProcessor
     /// <param name="previous">null 表示新增；有值表示修改（沒帶的鍵保留舊值）。</param>
     /// <param name="parentValues">明細列新增時，表頭這次存檔後啟用中欄位的值（Field.Key → 值）；ParentDefaultFieldId 從這裡取。</param>
     /// <param name="systemKeys">值由系統填入（帶值、單據轉換）的欄位鍵：不受欄位唯讀、唯讀權限與規則唯讀限制，仍照型別正規化。</param>
+    /// <param name="frozen">這筆記錄已有事件事實（已記帳，設計 §4.7）：除狀態欄位外不能寫，公式不重算、保留記帳當時的值。</param>
     /// <param name="rollupValues">這次存檔在記憶體算好的彙總值（null 值表示移除），在公式之前寫入，公式與規則看得到新值；沒給的彙總欄位保留舊值。</param>
     public static (Dictionary<string, JsonElement?> values, Dictionary<string, string[]> errors) Process(
         Module module,
@@ -42,7 +43,8 @@ public static class RecordValueProcessor
         IReadOnlyDictionary<long, IReadOnlySet<string>>? validRefKeys = null,
         IReadOnlyDictionary<string, JsonElement?>? rollupValues = null,
         IReadOnlyDictionary<string, JsonElement?>? parentValues = null,
-        IReadOnlySet<string>? systemKeys = null)
+        IReadOnlySet<string>? systemKeys = null,
+        bool frozen = false)
     {
         var values = previous is null ? [] : new Dictionary<string, JsonElement?>(previous);
         var errors = new Dictionary<string, string[]>();
@@ -57,7 +59,7 @@ public static class RecordValueProcessor
 
         // 無權寫入（權限、Config.ReadOnly、規則唯讀、狀態機唯讀狀態）：忽略輸入、保留舊值、新增只套預設值、不檢查必填
         var userWritable = BuildWritable(permissions, stored);
-        bool Writable(Field f) => !FieldRules.IsComputed(f.Type) && !IsWorkflowLocked(module, previous, f)
+        bool Writable(Field f) => !FieldRules.IsComputed(f.Type) && !IsWorkflowLocked(module, previous, f, frozen)
             && (systemKeys?.Contains(f.Key) == true || userWritable(f));
 
         foreach (var field in fields.Where(f => !FieldRules.IsComputed(f.Type)))
@@ -93,7 +95,7 @@ public static class RecordValueProcessor
         foreach (var (key, value) in rollupValues ?? new Dictionary<string, JsonElement?>())
             if (value is null) values.Remove(key);
             else values[key] = value;
-        ApplyFormulas(module, values, rules.Today);
+        if (!frozen) ApplyFormulas(module, values, rules.Today);
         var outcome = RuleEngine.Evaluate(module, values, previous, registry, userIds, rules.Today);
 
         foreach (var field in fields.Where(f => outcome.RequiredFieldIds.Contains(f.Id) && Writable(f)))
@@ -137,8 +139,8 @@ public static class RecordValueProcessor
         f => permissions.CanWrite(f) && !f.Config.ReadOnly && stored?.ReadOnlyFieldIds.Contains(f.Id) != true;
 
     /// <summary>修改一筆處於狀態機唯讀狀態的記錄：除了狀態欄位以外都不能寫。</summary>
-    private static bool IsWorkflowLocked(Module module, IReadOnlyDictionary<string, JsonElement?>? previous, Field f) =>
-        module.Workflow is { } wf && previous is not null && f.Id != wf.StatusFieldId && wf.IsLocked(previous);
+    private static bool IsWorkflowLocked(Module module, IReadOnlyDictionary<string, JsonElement?>? previous, Field f, bool frozen = false) =>
+        previous is not null && f.Id != module.Workflow?.StatusFieldId && (frozen || module.Workflow is { } wf && wf.IsLocked(previous));
 
     /// <summary>新增時沒提供值要帶的預設值：DefaultValue、DefaultToday、ParentDefaultFieldId 三者互斥；沒有（或表頭欄位無值）回 null。</summary>
     private static JsonElement? DynamicDefaultOf(Field field, DateOnly today, IReadOnlyDictionary<string, JsonElement?>? parentValues)

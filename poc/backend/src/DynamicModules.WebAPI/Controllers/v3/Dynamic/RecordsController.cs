@@ -45,6 +45,10 @@ public class RecordsController(IMediator mediator) : ControllerBase
     public async Task<IActionResult> Get(long id) =>
         (await mediator.Send(new GetRecordRequest(id))).ToActionResult(this);
 
+    [HttpGet("records/{id:long}/effects")]
+    public async Task<IActionResult> Effects(long id) =>
+        (await mediator.Send(new DynamicModules.Application.Dynamic.EventService.GetRecordEffectsRequest(id))).ToActionResult(this);
+
     [HttpGet("records/{id:long}/history")]
     public async Task<IActionResult> History(
         long id, [FromQuery] int currentPage = 1, [FromQuery] int pagesSize = 20, [FromQuery] string locale = "zh-TW") =>

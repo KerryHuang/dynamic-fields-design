@@ -41,6 +41,9 @@ public abstract class DesignerTestBase : IAsyncLifetime
         public DateOnly Today => DateOnly.FromDateTime(Now);
     }
 
+    /// <summary>子類別追加或覆寫服務（例如註冊測試用的假外掛）。</summary>
+    protected virtual void ConfigureServices(IServiceCollection services) { }
+
     public async Task InitializeAsync()
     {
         Db = await SqliteTestDb.CreateAsync();
@@ -49,11 +52,12 @@ public abstract class DesignerTestBase : IAsyncLifetime
         var services = new ServiceCollection();
         services.AddApplication();
         services.AddPersistenceRepositories();
-        services.AddScoped(_ => Db.Context);
+        services.AddSingleton(Db.Context);   // 執行個體註冊：scope 結束時容器不會把共用的 DbContext 釋放掉
         services.AddScoped<ITransactionManager, EfTransactionManager>();
         services.AddSingleton<ICurrentUser>(_user);
         services.AddSingleton<IBusinessTime, FakeTime>();
         services.AddSingleton(new AuthSettings(false));
+        ConfigureServices(services);
         _sp = services.BuildServiceProvider();
     }
 
@@ -65,7 +69,15 @@ public abstract class DesignerTestBase : IAsyncLifetime
 
     protected T Svc<T>() where T : notnull => _sp.GetRequiredService<T>();
 
-    protected Task<TRes> Send<TRes>(IRequest<TRes> request) => _sp.GetRequiredService<IMediator>().Send(request);
+    /// <summary>每個請求自己一個 DI scope（寫入日誌、操作識別碼都是每個請求一份，與正式環境一致）；預設共用根 scope。</summary>
+    protected virtual bool ScopePerRequest => false;
+
+    protected async Task<TRes> Send<TRes>(IRequest<TRes> request)
+    {
+        if (!ScopePerRequest) return await _sp.GetRequiredService<IMediator>().Send(request);
+        using var scope = _sp.CreateScope();
+        return await scope.ServiceProvider.GetRequiredService<IMediator>().Send(request);
+    }
 
     protected static I18nText Text(string zh) => new([KeyValuePair.Create("zh-TW", zh)]);
 

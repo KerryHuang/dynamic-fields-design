@@ -14,7 +14,7 @@ namespace DynamicModules.Application.Dynamic.Rollups;
 /// 值有變才寫入並換 RowVersion，不蓋稽核欄位、不跑規則、不遞迴。呼叫端在同一個交易內。
 /// </summary>
 public class RollupRecalc(
-    IModuleRepository modules, IRecordRepository records, IUnitOfWork uow, FieldTypeRegistry registry, IBusinessTime time)
+    IModuleRepository modules, IRecordRepository records, IUnitOfWork uow, FieldTypeRegistry registry, IBusinessTime time, IWriteJournal journal)
 {
     /// <summary>寫入前後來源欄位指向的父記錄；改指向時新舊兩筆都算，null 忽略。</summary>
     public static IReadOnlySet<(long ParentModuleId, long ParentRecordId)> CollectParents(
@@ -133,6 +133,7 @@ public class RollupRecalc(
         if (json == record.ValuesJson) return;
         record.ValuesJson = json;
         record.RowVersion = Guid.NewGuid().ToString();
+        journal.MarkSilent(record);   // 彙總重算的寫入不觸發事件（設計 §4.5），但仍列入驗證
         await records.ReplaceIndexAsync(record, RecordIndexer.Build(parent, values, registry), ct);
     }
 }

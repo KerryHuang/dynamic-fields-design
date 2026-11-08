@@ -10,7 +10,7 @@ using MediatR;
 namespace DynamicModules.Application.Dynamic.RecordService.Queries.GetRecord;
 
 public class GetRecordHandler(IModuleRepository modules, IRecordRepository records, IDynamicAccessGuard guard,
-    ReferenceResolver resolver, DetailReader details)
+    ReferenceResolver resolver, DetailReader details, Dynamic.EventService.EventFactLock factLock)
     : IRequestHandler<GetRecordRequest, ServiceResult>
 {
     public async Task<ServiceResult> Handle(GetRecordRequest request, CancellationToken ct)
@@ -27,6 +27,6 @@ public class GetRecordHandler(IModuleRepository modules, IRecordRepository recor
             return ServiceResult.NotFound(RecordMapper.RecordNotFound);
         var refs = await resolver.ResolveAsync(module, p, [record], ct);
         return ServiceResult.Success(record.ToResponse(module.Key, p, module, refs.GetValueOrDefault(record.Id))
-            with { Details = await details.ReadAsync(module, record, PermissionAction.Read, ct) });
+            with { Details = await details.ReadAsync(module, record, PermissionAction.Read, ct), FrozenByEffects = await factLock.IsFrozenAsync(record.Id, ct) });
     }
 }

@@ -26,6 +26,7 @@ public static class DependencyInjection
         services.AddSingleton<Common.Security.LoginThrottle>();
         services.AddScoped<Common.IWriteJournal, Common.WriteJournal>();
         services.AddScoped<Common.IOperationContext, Common.OperationContext>();
+        services.AddScoped<ISystemIdentity, SystemIdentity>();
         services.AddScoped<IDynamicAccessGuard, DynamicAccessGuard>();
         services.AddScoped<Dynamic.SchemaService.Queries.GetModuleSchema.ModuleSchemaBuilder>();
         services.AddScoped<Dynamic.References.ReferenceValidator>();
@@ -38,6 +39,14 @@ public static class DependencyInjection
         services.AddScoped<Dynamic.EventService.EventHiddenGuard>();
         services.AddScoped<Dynamic.CheckService.CheckValidator>();
         services.AddScoped<Dynamic.LedgerService.LedgerValidator>();
+        services.AddScoped<Dynamic.EventService.EventFactLock>();
+        services.AddScoped<Dynamic.EventService.EffectBudget>();
+        services.AddScoped<Dynamic.EventService.EffectWriter>();
+        services.AddScoped<Dynamic.EventService.EffectApplier>();
+        services.AddScoped<Dynamic.EventService.EventStage>();
+        services.AddScoped<Dynamic.EventService.FactBackstopStage>();
+        services.AddScoped<Common.Behaviors.IWriteStage>(sp => sp.GetRequiredService<Dynamic.EventService.FactBackstopStage>());
+        services.AddScoped<Common.Behaviors.IWriteStage>(sp => sp.GetRequiredService<Dynamic.EventService.EventStage>());
         services.AddScoped<Dynamic.CheckService.CheckEvaluator>();
         services.AddScoped<Dynamic.CheckService.CheckIndexer>();
         services.AddScoped<Dynamic.CheckService.CheckFieldGuard>();

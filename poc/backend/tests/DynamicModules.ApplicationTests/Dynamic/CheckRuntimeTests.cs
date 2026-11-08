@@ -19,6 +19,8 @@ namespace DynamicModules.ApplicationTests.Dynamic;
 /// </summary>
 public class CheckRuntimeTests : EffectsTestBase
 {
+    protected override bool ScopePerRequest => true;
+
     private static Dictionary<string, JsonElement?> Vals(params (long Field, string Json)[] v) =>
         v.ToDictionary(x => K(x.Field), x => (JsonElement?)J(x.Json));
 

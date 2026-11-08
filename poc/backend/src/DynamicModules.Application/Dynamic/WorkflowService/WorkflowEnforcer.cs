@@ -9,7 +9,7 @@ namespace DynamicModules.Application.Dynamic.WorkflowService;
 /// 狀態機的後端強制（前端只是縮小選項）：新增只能從起始狀態開始；修改時狀態有變就必須有 from → to 的定義，
 /// 而且使用者在該轉移的群組內（系統管理員可做任何已定義的轉移；沒有定義的轉移任何人都不行）。
 /// </summary>
-public class WorkflowEnforcer(IPermissionRepository permissions, ICurrentUser user)
+public class WorkflowEnforcer(IPermissionRepository permissions, ICurrentUser user, ISystemIdentity system)
 {
     public const string NotInitialMessage = "新增時只能使用起始狀態";
     public const string NotAllowedMessage = "不允許這個狀態轉移";
@@ -82,7 +82,7 @@ public class WorkflowEnforcer(IPermissionRepository permissions, ICurrentUser us
             errors[key] = [NotAllowedMessage];
             return errors;
         }
-        if (transition.GroupIds.Count == 0) return errors;
+        if (transition.GroupIds.Count == 0 || system.Active) return errors;   // 事件效果的轉移必須是已定義的，但不檢查群組
 
         var inputs = await permissions.LoadInputsAsync(user.UserId, module, ct);
         var permitted = inputs is not null && (inputs.User.IsSystemAdmin || inputs.GroupIds.Any(transition.GroupIds.Contains));
