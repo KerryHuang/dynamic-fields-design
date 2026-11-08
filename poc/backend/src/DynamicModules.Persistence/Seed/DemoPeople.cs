@@ -13,7 +13,8 @@ public static class DemoPeople
     [
         ("sales01", "業務一"), ("sales02", "業務二"),
         ("manager01", "業務主管"), ("floor01", "現場人員"),
-        ("floor02", "現場人員二"), ("maint01", "保養人員"), ("qa01", "品保人員")
+        ("floor02", "現場人員二"), ("maint01", "保養人員"), ("qa01", "品保人員"),
+        ("planner01", "生管人員"), ("buyer01", "採購人員"), ("keeper01", "倉管人員"), ("ops01", "進銷存主管")
     ];
 
     public static readonly (string Key, string Name, string[] Members)[] Groups =
@@ -23,7 +24,11 @@ public static class DemoPeople
         ("sales-manager", "業務主管", ["manager01"]),
         ("floor", "現場人員", ["floor01", "floor02"]),
         ("maint", "保養", ["maint01"]),
-        ("qa", "品保", ["qa01"])
+        ("qa", "品保", ["qa01"]),
+        ("planner", "生管", ["planner01"]),
+        ("purchasing", "採購", ["buyer01"]),
+        ("warehouse", "倉管", ["keeper01"]),
+        ("ops-manager", "進銷存主管", ["ops01"])
     ];
 
     public static readonly (string No, string Name)[] Molds =
