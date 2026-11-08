@@ -185,7 +185,7 @@ public class EffectApplier(
         }
         catch (DbUpdateException e) when (e.InnerException?.Message.Contains("UNIQUE", StringComparison.OrdinalIgnoreCase) == true)
         {
-            throw new InvalidOperationException("連動事件的事實重複（同一個事件對同一筆來源已經記過帳）", e);
+            throw new InvalidOperationException("連動事件的事實重複（同一個事件對同一筆來源已經產生過連動記錄）", e);
         }
     }
 }

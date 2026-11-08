@@ -6,7 +6,7 @@ namespace DynamicModules.Application.Dynamic.EventService;
 
 /// <summary>
 /// 事件事實鎖（設計 §4.7）：一筆來源記錄只要產生過事實就是「已記帳」，除狀態欄位外不能修改、不能刪除。
-/// 一律查事實表，不看模組現在有沒有事件定義：鎖的是資料（這筆已經記過帳），不是定義。
+/// 一律查事實表，不看模組現在有沒有事件定義：鎖的是資料（這筆已經產生連動記錄），不是定義。
 /// </summary>
 public class EventFactLock(IEventFactRepository facts)
 {

@@ -159,4 +159,28 @@ public class EffectsRuntimeApiTests : IClassFixture<TestApp>
         (await CountAsync(r.Doc)).Should().Be(0);
         (await CountAsync(r.Move)).Should().Be(0);
     }
+
+    [Fact]
+    public async Task Ten_concurrent_reversals_of_one_ledger_record_succeed_exactly_once()
+    {
+        var module = await CreateModule(_admin);
+        var qty = await AddField(_admin, module, "decimal", new { });
+        var reversal = await AddField(_admin, module, "reference", new { readOnly = true, refTarget = new { kind = "module", key = module } });
+        await Activate(_admin, module);
+        var title = await TitleKey(_admin, module);
+        var ledger = await _admin.PutAsJsonAsync($"{Base}/modules/{module}/ledger",
+            new { reversalFieldId = reversal.Id, negate = new[] { qty.Id }, swap = Array.Empty<long[]>(), confirmFreeze = false });
+        ledger.StatusCode.Should().Be(HttpStatusCode.OK, await ledger.Content.ReadAsStringAsync());
+        var created = await _admin.PostAsJsonAsync($"{Base}/modules/{module}/records",
+            new { values = new Dictionary<string, object> { [title] = "原始", [qty.Key] = 5 } });
+        created.StatusCode.Should().Be(HttpStatusCode.Created, await created.Content.ReadAsStringAsync());
+        var id = (await JsonOf(created)).GetProperty("id").GetInt64();
+
+        var responses = await Task.WhenAll(Enumerable.Range(0, 10)
+            .Select(_ => _admin.PostAsJsonAsync($"{Base}/records/{id}/reverse", new { values = new Dictionary<string, object>() })));
+
+        responses.Count(r => r.StatusCode == HttpStatusCode.Created).Should().Be(1);
+        responses.Where(r => r.StatusCode != HttpStatusCode.Created).Select(r => r.StatusCode).Should().OnlyContain(c => c == HttpStatusCode.Conflict);
+        (await CountAsync(module)).Should().Be(2);
+    }
 }

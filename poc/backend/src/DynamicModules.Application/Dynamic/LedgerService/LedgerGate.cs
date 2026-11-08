@@ -25,7 +25,7 @@ public class LedgerGate(ILedgerRepository ledgers, IModuleRepository modules)
 
 /// <summary>
 /// 設計器的定義變更遇到分錄模組（設計 §10.3）：會改寫既有記錄值的操作（換標題欄位、新增或變更公式與彙總、刪除仍有值的欄位或區塊）
-/// 在模組已有記錄時回 409，保證已過帳的資料不隨定義改變。不改寫值的操作照常放行。
+/// 在模組已有記錄時回 409，保證已寫入的資料不隨定義改變。不改寫值的操作照常放行。
 /// </summary>
 public class ImmutableDataGuard(LedgerGate gate, IRecordRepository records)
 {
