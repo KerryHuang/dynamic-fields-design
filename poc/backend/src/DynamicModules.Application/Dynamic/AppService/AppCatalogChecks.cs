@@ -1,4 +1,6 @@
+using System.Text.Json;
 using DynamicModules.Application.Dynamic.AppService.Data;
+using DynamicModules.Domain.Entities.Dynamic;
 
 namespace DynamicModules.Application.Dynamic.AppService;
 
@@ -10,12 +12,35 @@ public static class AppCatalogChecks
 {
     public static List<string> Run(IReadOnlyList<AppPackageData> packages) => [.. PartnerSymbols(packages), .. EventCycles(packages)];
 
-    /// <summary>整合事件寫入或讀取的夥伴欄位（&lt;appId&gt;/模組.欄位）要在夥伴套件裡找得到；夥伴不在目錄就略過。</summary>
+    /// <summary>
+    /// 整合引用的夥伴東西要在夥伴套件裡找得到：with[].modules、欄位 refTarget.key 指向的模組、事件寫入或讀取的欄位（&lt;appId&gt;/模組.欄位），
+    /// 以及寫入夥伴下拉欄位的選項常數（opt_代號）。夥伴不在目錄就略過。
+    /// </summary>
     private static IEnumerable<string> PartnerSymbols(IReadOnlyList<AppPackageData> packages)
     {
         var byId = packages.ToDictionary(p => p.Manifest.Id);
         foreach (var owner in packages)
             foreach (var integration in owner.Integrations)
+            {
+                var prefix = $"{owner.Manifest.Id} 的整合 {integration.Code}";
+                foreach (var w in integration.With)
+                    if (byId.TryGetValue(w.Id, out var withPartner))
+                        foreach (var m in w.Modules.Where(m => withPartner.Modules.All(x => x.Code != m)))
+                            yield return $"{prefix} 的 with 列了 {w.Id} 沒有的模組：{w.Id}/{m}";
+                foreach (var f in integration.Fields)
+                    if (RefTargetOf(f) is { } rt && byId.TryGetValue(rt.App, out var refPartner) && refPartner.Modules.All(m => m.Code != rt.Key))
+                        yield return $"{prefix} 的欄位 {f.Module}.{f.Code} 參照了 {rt.App} 沒有的模組：{rt.App}/{rt.Key}";
+                foreach (var set in integration.Events.SelectMany(e => e.Effects).SelectMany(x => x.Set))
+                {
+                    if (set.Const is not { ValueKind: JsonValueKind.String } c || c.GetString() is not { } value || !value.StartsWith("opt_")) continue;
+                    if (AppPackageValidator.SplitPartner(set.To) is not { } to || !byId.TryGetValue(to.App, out var optPartner)) continue;
+                    var parts = to.Remainder.Split('.');
+                    var target = parts.Length == 2
+                        ? optPartner.Modules.FirstOrDefault(m => m.Code == parts[0])?.Blocks.SelectMany(b => b.Fields).FirstOrDefault(x => x.Code == parts[1])
+                        : null;
+                    if (target is { Type: FieldType.Enum or FieldType.MultiEnum } && target.Options.All(o => $"opt_{o.Code}" != value))
+                        yield return $"{prefix} 寫入 {set.To} 的選項常數 {value} 是 {to.App} 沒有的選項";
+                }
                 foreach (var symbol in Symbols(integration).Distinct())
                 {
                     if (AppPackageValidator.SplitPartner(symbol) is not { } split || !byId.TryGetValue(split.App, out var partner)) continue;
@@ -28,7 +53,15 @@ public static class AppCatalogChecks
                     else if (field is not null && !found.Blocks.SelectMany(b => b.Fields).Any(f => f.Code == field))
                         yield return $"{owner.Manifest.Id} 的整合 {integration.Code} 引用了 {split.App} 沒有的欄位：{symbol}";
                 }
+            }
     }
+
+    private static (string App, string Key)? RefTargetOf(AppIntegrationField f) =>
+        f.Config.ValueKind == JsonValueKind.Object && f.Config.TryGetProperty("refTarget", out var t) && t.ValueKind == JsonValueKind.Object
+        && t.TryGetProperty("app", out var app) && app.ValueKind == JsonValueKind.String
+        && t.TryGetProperty("key", out var key) && key.ValueKind == JsonValueKind.String
+            ? (app.GetString()!, key.GetString()!)
+            : null;
 
     private static IEnumerable<string> Symbols(AppIntegrationDecl integration)
     {
