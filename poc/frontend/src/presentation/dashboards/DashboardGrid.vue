@@ -41,7 +41,9 @@ function done() { emit('change', items.value.map(({ i, x, y, w, h }) => ({ i, x,
 </template>
 
 <style scoped>
+/* Quasar 的 .column 會換行，換行的 flex 直欄裡項目寬度取最寬內容；限制最大寬度，寬表格才會在卡片內捲動而不是撐寬整頁。 */
 .dashboard-narrow-card {
   min-height: 160px;
+  max-width: 100%;
 }
 </style>
