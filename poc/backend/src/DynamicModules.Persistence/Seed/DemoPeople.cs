@@ -27,8 +27,10 @@ public static class DemoPeople
         ("qa", "品保", ["qa01"]),
         ("planner", "生管組", ["planner01"]),
         ("purchasing", "採購組", ["buyer01"]),
-        ("warehouse", "倉管組", ["keeper01", "planner01"]),
-        ("ops-manager", "進銷存管理組", ["ops01"])
+        ("warehouse", "倉管組", ["keeper01"]),
+        ("ops-manager", "進銷存管理組", ["ops01"]),
+        // 只讀進銷存的品項與倉庫：MES 出貨單要選庫存品項與出庫倉（整合），出貨的生管與業務需要這份讀取權限
+        ("inv-viewer", "進銷存查詢組", ["planner01", "sales01", "sales02"])
     ];
 
     public static readonly (string No, string Name)[] Molds =

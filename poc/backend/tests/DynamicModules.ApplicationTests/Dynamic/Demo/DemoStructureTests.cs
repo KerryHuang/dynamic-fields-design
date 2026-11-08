@@ -72,6 +72,22 @@ public class DemoStructureTests(DemoGeneratedFixture fx)
     }
 
     [Fact]
+    public async Task Generate_InventoryViewers_OnlyReadItemsAndWarehouses()
+    {
+        fx.Generated();
+        var groups = await GroupIds();
+        var readOnly = new PrivilegesDto(true, false, false, false, false, false, false);
+        foreach (var key in new[] { "inv-item", "inv-warehouse" })
+            (await Permissions(key)).Groups.Single(g => g.GroupId == groups["inv-viewer"]).Privileges.Should().Be(readOnly, key);
+        foreach (var key in new[] { "inv-adjust", "inv-move", "inv-receipt", "inv-shipment", "inv-po" })
+            (await Permissions(key)).Groups.Where(g => g.GroupId == groups["inv-viewer"]).Should().OnlyContain(g => g.Privileges.IsEmpty, key);
+
+        // 生管不再是倉管組成員（倉管能過帳調整單）
+        var members = await fx.Host.Db.Context.Set<UserGroupMapping>().AsNoTracking().Where(m => m.GroupId == groups["warehouse"]).Select(m => m.UserId).ToListAsync();
+        members.Should().NotContain("planner01");
+    }
+
+    [Fact]
     public async Task Generate_ExistingOrderModule_Conflict_NothingChanged()
     {
         await using var host = await DemoTestHost.CreateAsync();

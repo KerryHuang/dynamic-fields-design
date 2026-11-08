@@ -46,6 +46,15 @@
         "th": "ผู้จัดการคลังสินค้า",
         "vi": "Quản lý kho"
       }
+    },
+    {
+      "code": "viewer",
+      "name": {
+        "zh-TW": "進銷存查詢",
+        "en-US": "Inventory viewer",
+        "th": "ผู้ดูข้อมูลคลังสินค้า",
+        "vi": "Người xem tồn kho"
+      }
     }
   ],
   "modules": [
@@ -256,6 +265,19 @@
             "pricing": true,
             "approve": false
           }
+        },
+        {
+          "group": "viewer",
+          "scope": "all",
+          "privileges": {
+            "read": true,
+            "add": false,
+            "edit": false,
+            "delete": false,
+            "printExport": false,
+            "pricing": false,
+            "approve": false
+          }
         }
       ]
     },
@@ -381,6 +403,19 @@
             "delete": true,
             "printExport": true,
             "pricing": true,
+            "approve": false
+          }
+        },
+        {
+          "group": "viewer",
+          "scope": "all",
+          "privileges": {
+            "read": true,
+            "add": false,
+            "edit": false,
+            "delete": false,
+            "printExport": false,
+            "pricing": false,
             "approve": false
           }
         }

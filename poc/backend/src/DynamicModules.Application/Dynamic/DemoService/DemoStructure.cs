@@ -36,7 +36,7 @@ public sealed class DemoStructure(
         {
             (DemoCatalog.MesAppId, [("sales", "sales"), ("salesManager", "sales-manager"), ("floor", "floor"), ("maint", "maint"), ("qa", "qa"), ("planner", "planner")]),
             (DemoCatalog.CrmAppId, [("sales", "sales"), ("manager", "sales-manager")]),
-            (DemoCatalog.InventoryAppId, [("buyer", "purchasing"), ("keeper", "warehouse"), ("manager", "ops-manager")])
+            (DemoCatalog.InventoryAppId, [("buyer", "purchasing"), ("keeper", "warehouse"), ("manager", "ops-manager"), ("viewer", "inv-viewer")])
         })
         {
             var groupMap = map.ToDictionary(m => m.Code, m => new GroupMapEntry("map", groupIds[m.Group]));
