@@ -1,3 +1,4 @@
+using System.Text.RegularExpressions;
 using DynamicModules.Domain.Entities.Dynamic;
 using DynamicModules.Domain.Formulas;
 using DynamicModules.Domain.Repositories.Dynamic;
@@ -8,8 +9,11 @@ namespace DynamicModules.Application.Dynamic.EventService;
 /// 儲存欄位權限時的守衛（設計 §4.2「事後隱藏」）：要設為隱藏的欄位若被某個事件的 from／formula 引用，
 /// 而該對應沒有 allowHiddenSource，拒絕儲存（fail-closed）。
 /// </summary>
-public class EventHiddenGuard(IEventRepository events, IModuleRepository modules)
+public partial class EventHiddenGuard(IEventRepository events, IModuleRepository modules)
 {
+    [GeneratedRegex(@"\{(\d+)\}")]
+    private static partial Regex FieldRefPattern();
+
     /// <summary>回傳第一個違規的說明；沒有回 null。</summary>
     public async Task<string?> FindViolationAsync(Module module, IReadOnlySet<long> hiding, CancellationToken ct)
     {
@@ -48,7 +52,13 @@ public class EventHiddenGuard(IEventRepository events, IModuleRepository modules
         if (module is null) return result;
         if (s.From is { } from) result.Add((module, from.FieldId));
         else if (s.Formula is { } formula)
-            foreach (var id in FormulaParser.Parse(formula.Expr, module).FieldRefs) result.Add((module, id));
+        {
+            // 公式因欄位被停用等原因解析失敗時 FieldRefs 是空的；守衛 fail-closed，一律另從原文抓 {欄位 Id}，
+            // 否則「先停用、再隱藏、再啟用」可以繞過（重新啟用後隱藏值就流進目標）。
+            var ids = FormulaParser.Parse(formula.Expr, module).FieldRefs.Concat(
+                FieldRefPattern().Matches(formula.Expr).Select(m => long.Parse(m.Groups[1].Value))).Distinct();
+            foreach (var id in ids) result.Add((module, id));
+        }
         return result;
     }
 }

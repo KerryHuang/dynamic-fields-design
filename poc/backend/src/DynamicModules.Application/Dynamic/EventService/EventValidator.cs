@@ -190,6 +190,7 @@ public class EventValidator(
                 if (fx.Kind == "update" && from.Side != "header") Err($"{sp}.from.side", "update 效果只能用 header");
                 if (!FieldRules.CopyCompatible(src, dst, allowReference: true)) Err($"{sp}.from", "來源與目的欄位型別不相容");
                 if (hidden.Contains(src.Id) && !s.AllowHiddenSource) Err($"{sp}.allowHiddenSource", HiddenMessage(src));
+                if (ModuleRelations.DependsOnRollup(from.Side == "line" ? each! : source, src)) Err($"{sp}.from.fieldId", RollupMessage(src));
             }
             else if (s.Formula is { } formula)
             {
@@ -203,8 +204,10 @@ public class EventValidator(
                     Err($"{sp}.formula", "公式結果型別與目的欄位不相容");
                 if (!s.AllowHiddenSource && parsed.FieldRefs.FirstOrDefault(hidden.Contains) is var h and not 0)
                     Err($"{sp}.allowHiddenSource", HiddenMessage(fields[h]));
+                if (parsed.FieldRefs.Where(fields.ContainsKey).Select(id => fields[id]).FirstOrDefault(f => ModuleRelations.DependsOnRollup(module, f)) is { } rolled)
+                    Err($"{sp}.formula", RollupMessage(rolled));
             }
-            else if (s.Const is { ValueKind: JsonValueKind.String } c && c.GetString() == "today" && dst.Type is not (FieldType.Date or FieldType.DateTime))
+            else if (s.Const is { ValueKind: JsonValueKind.String } c && c.GetString() == "today" && dst.Type is not FieldType.Date)
                 Err($"{sp}.const", "\"today\" 只能用在日期欄位");
         }
 
@@ -215,6 +218,9 @@ public class EventValidator(
                 warnings.Add($"效果 {fx.Code}：目標模組的必填欄位「{f.LabelI18n.Resolve("zh-TW")}」沒有對應也沒有預設值");
         }
     }
+
+    private static string RollupMessage(Field f) =>
+        $"來源欄位「{f.LabelI18n.Resolve("zh-TW")}」是彙總欄位或依賴彙總的公式；彙總會隨子記錄變動，複製後與已記帳的帳務失配，不能當來源";
 
     private static string HiddenMessage(Field f) =>
         $"來源欄位「{f.LabelI18n.Resolve("zh-TW")}」對某些群組設為隱藏；複製會把被隱藏的值帶到目標模組，必須在該對應明確允許（allowHiddenSource）";
@@ -267,8 +273,24 @@ public class EventValidator(
             if (fx.Kind is "create" or "reverse") { writes.Add(new EventGraph.Write(targetKey, true, [], false)); continue; }
             var target = await modules.GetByKeyAsync(targetKey, includeChildren: true, ct);
             var set = (fx.Set ?? []).Select(s => s.To).ToHashSet();
-            writes.Add(new EventGraph.Write(targetKey, false, set, target?.Workflow is { } wf && set.Contains(wf.StatusFieldId)));
+            // 設了公式的輸入欄位，同一筆記錄的公式欄位跟著變，監看公式欄位的 update 事件也可能被觸發
+            var changed = target is null ? set : WithDependentFormulas(target, set);
+            writes.Add(new EventGraph.Write(targetKey, false, changed, target?.Workflow is { } wf && set.Contains(wf.StatusFieldId)));
         }
         return new EventGraph.Node(key, sourceKey, def.Trigger, writes);
+    }
+
+    private static HashSet<long> WithDependentFormulas(Module target, HashSet<long> set)
+    {
+        var result = new HashSet<long>(set);
+        var formulas = target.Blocks.SelectMany(b => b.Fields).Where(f => f is { Type: FieldType.Formula, Status: FieldStatus.Active }).ToList();
+        bool grew;
+        do
+        {
+            grew = false;
+            foreach (var f in formulas)
+                if (!result.Contains(f.Id) && FormulaGraph.RefsOf(f).Any(result.Contains)) { result.Add(f.Id); grew = true; }
+        } while (grew);
+        return result;
     }
 }
