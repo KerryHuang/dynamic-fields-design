@@ -14,6 +14,7 @@ using DynamicModules.Application.Dynamic.WorkflowService.Data;
 using DynamicModules.Application.Dynamic.FieldService.Commands.AddOption;
 using DynamicModules.Application.Dynamic.ModuleService.Data;
 using DynamicModules.Domain.Entities.Dynamic;
+using DynamicModules.Domain.ValueObjects;
 using FluentAssertions;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
@@ -297,6 +298,48 @@ public class EventRuntimeTests : EffectsTestBase
 
     protected override void ConfigureServices(IServiceCollection services) =>
         services.AddSingleton<IEffectHandler, FakeWriterHandler>();
+
+    // ---- 定義變更的整批重算不動已固定的記錄（設計 §10.4） ----
+
+    private async Task<object?> FormulaOf(long id, long formulaId)
+    {
+        var values = (await Reload(id)).Values;
+        return values.TryGetValue(K(formulaId), out var v) && v is { } e ? e.GetDecimal() : null;
+    }
+
+    [Fact]
+    public async Task Adding_a_formula_skips_sources_that_already_have_facts_but_updates_drafts()
+    {
+        var ship = await BuildShipping("evh");
+        var s = ship.S;
+        await PostEvent(s);
+        var draft = await NewDoc(s, ("A", "1"));
+        var posted = await NewDoc(s, ("B", "1"));
+        (await Transition(s, posted, s.DocDone)).IsSuccess.Should().BeTrue();   // 沒有唯讀狀態，但已有事實
+        var version = (await Reload(posted.Id)).RowVersion;
+
+        var formula = await MustAdd(s.Doc, FieldType.Formula, new FieldConfig { Formula = "7", ResultType = "number" }, "常數");
+
+        (await FormulaOf(draft.Id, formula.Id)).Should().Be(7m);
+        (await FormulaOf(posted.Id, formula.Id)).Should().BeNull();
+        (await Reload(posted.Id)).RowVersion.Should().Be(version);
+    }
+
+    [Fact]
+    public async Task Adding_a_formula_skips_records_in_a_readonly_workflow_state()
+    {
+        var s = await BuildStock("evi");   // 已完成為唯讀狀態，沒有任何事件
+        var draft = await NewDoc(s, ("A", "1"));
+        var done = await NewDoc(s, ("B", "1"));
+        (await Run(new UpdateRecordRequest(done.Id, Vals((s.DocStatus, $"\"opt_{s.DocDone}\"")), done.RowVersion))).IsSuccess.Should().BeTrue();
+        var version = (await Reload(done.Id)).RowVersion;
+
+        var formula = await MustAdd(s.Doc, FieldType.Formula, new FieldConfig { Formula = "7", ResultType = "number" }, "常數");
+
+        (await FormulaOf(draft.Id, formula.Id)).Should().Be(7m);
+        (await FormulaOf(done.Id, formula.Id)).Should().BeNull();
+        (await Reload(done.Id)).RowVersion.Should().Be(version);
+    }
 }
 
 /// <summary>測試用的假外掛：args 指定要寫的模組與標題欄位；sneak 指定一個沒宣告的模組，驗證受限寫入器會擋。</summary>

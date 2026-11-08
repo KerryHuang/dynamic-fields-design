@@ -29,6 +29,11 @@ public class EventFactRepository(DynamicDbContext db) : IEventFactRepository
     public Task<List<EventFact>> ListByTargetAsync(long targetRecordId, CancellationToken ct) =>
         db.Set<EventFact>().AsNoTracking().Where(f => f.TargetRecordId == targetRecordId).OrderBy(f => f.Id).ToListAsync(ct);
 
+    public async Task<HashSet<long>> ListSourceIdsInModuleAsync(long moduleId, CancellationToken ct) =>
+        (await db.Set<EventFact>().AsNoTracking()
+            .Join(db.Set<Record>().AsNoTracking().Where(r => r.ModuleId == moduleId), f => f.SourceRecordId, r => r.Id, (f, _) => f.SourceRecordId)
+            .Distinct().ToListAsync(ct)).ToHashSet();
+
     public void Add(EventFact fact) => db.Set<EventFact>().Add(fact);
 }
 

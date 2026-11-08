@@ -6,14 +6,16 @@ using DynamicModules.Domain.Repositories.Dynamic;
 
 namespace DynamicModules.Application.Dynamic.FieldService;
 
-/// <summary>公式新增或變更後，對模組內每筆未刪除記錄重算公式、重建索引並換新 RowVersion；
+/// <summary>公式新增或變更後，對模組內每筆未刪除、未固定的記錄重算公式、重建索引並換新 RowVersion；
 /// 之後以這個模組為來源的彙總跟著重算（決策 8）。</summary>
 public static class FormulaRecalc
 {
     public static async Task RecalculateAsync(
-        Module module, IRecordRepository records, FieldTypeRegistry registry, RollupRecalc rollups, DateOnly today, CancellationToken ct)
+        Module module, IRecordRepository records, FieldTypeRegistry registry, RollupRecalc rollups, IEventFactRepository facts,
+        DateOnly today, CancellationToken ct)
     {
-        foreach (var record in (await records.ListAllByModuleAsync(module.Id, ct)).Where(r => !r.DeleteFlag))
+        var frozen = await FrozenRecords.LoadAsync(module, facts, ct);   // 已固定的記錄保留原值（設計 §10.4）
+        foreach (var record in (await records.ListAllByModuleAsync(module.Id, ct)).Where(r => !r.DeleteFlag && !frozen.Contains(r)))
         {
             var values = RecordValueProcessor.Parse(record.ValuesJson);
             RecordValueProcessor.ApplyFormulas(module, values, today);

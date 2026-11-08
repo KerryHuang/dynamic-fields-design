@@ -14,7 +14,8 @@ namespace DynamicModules.Application.Dynamic.Rollups;
 /// 值有變才寫入並換 RowVersion，不蓋稽核欄位、不跑規則、不遞迴。呼叫端在同一個交易內。
 /// </summary>
 public class RollupRecalc(
-    IModuleRepository modules, IRecordRepository records, IUnitOfWork uow, FieldTypeRegistry registry, IBusinessTime time, IWriteJournal journal)
+    IModuleRepository modules, IRecordRepository records, IUnitOfWork uow, FieldTypeRegistry registry, IBusinessTime time, IWriteJournal journal,
+    IEventFactRepository facts)
 {
     /// <summary>寫入前後來源欄位指向的父記錄；改指向時新舊兩筆都算，null 忽略。</summary>
     public static IReadOnlySet<(long ParentModuleId, long ParentRecordId)> CollectParents(
@@ -82,7 +83,8 @@ public class RollupRecalc(
         await uow.CommitAsync(ct);
         var userIds = await modules.ListUserIdsAsync(ct);
         var sources = await SourcesOfAsync(parent, ct);
-        foreach (var record in (await records.ListAllByModuleAsync(parent.Id, ct)).Where(r => !r.DeleteFlag))
+        var frozen = await FrozenRecords.LoadAsync(parent, facts, ct);   // 已固定的記錄不隨定義變更重算（設計 §10.4）
+        foreach (var record in (await records.ListAllByModuleAsync(parent.Id, ct)).Where(r => !r.DeleteFlag && !frozen.Contains(r)))
             await RecomputeAsync(parent, record, sources, userIds, today, ct);
     }
 

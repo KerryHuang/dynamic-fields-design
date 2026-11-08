@@ -16,7 +16,7 @@ using MediatR;
 namespace DynamicModules.Application.Dynamic.FieldService.Commands.SetFieldStatus;
 
 public class SetFieldStatusHandler(IModuleRepository modules, IRecordRepository records, IUnitOfWork uow, FieldTypeRegistry registry,
-    ICurrentUser user, IBusinessTime time, RollupRecalc rollups,
+    ICurrentUser user, IBusinessTime time, RollupRecalc rollups, IEventFactRepository facts,
     Dynamic.LedgerService.ImmutableDataGuard immutable)
     : IRequestHandler<SetFieldStatusRequest, ServiceResult>
 {
@@ -66,7 +66,7 @@ public class SetFieldStatusHandler(IModuleRepository modules, IRecordRepository 
         field.Status = request.Status;
         // 停用期間存檔不寫此欄索引列，重新啟用時補回；公式欄位停用期間值也沒更新，改整批重算（同時重建索引）
         if (reactivated && field.Type == FieldType.Formula)
-            await FormulaRecalc.RecalculateAsync(module, records, registry, rollups, time.Today, ct);
+            await FormulaRecalc.RecalculateAsync(module, records, registry, rollups, facts, time.Today, ct);
         else if (reactivated && field.Type == FieldType.Rollup)
         {
             // 重算只在值有變時寫索引；停用期間缺的索引列另外補回

@@ -28,6 +28,8 @@ public interface IEventFactRepository
     Task<HashSet<long>> ListFrozenBeforeAsync(IReadOnlyCollection<long> sourceRecordIds, string operationId, CancellationToken ct);
     /// <summary>事實的目標記錄 Id 為 targetRecordId 的事實（連動結果的反查）。</summary>
     Task<List<EventFact>> ListByTargetAsync(long targetRecordId, CancellationToken ct);
+    /// <summary>某模組裡有事實的來源記錄 Id（定義變更的整批重算要跳過它們，設計 §10.4）。</summary>
+    Task<HashSet<long>> ListSourceIdsInModuleAsync(long moduleId, CancellationToken ct);
     void Add(EventFact fact);
 }
 
