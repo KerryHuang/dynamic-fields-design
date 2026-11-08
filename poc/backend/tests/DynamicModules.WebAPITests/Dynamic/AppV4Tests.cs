@@ -135,11 +135,11 @@ public class AppV4Tests : IDisposable
         exported.GetProperty("events").GetArrayLength().Should().Be(1);
         exported.GetProperty("checks").GetArrayLength().Should().Be(1);
         exported.GetProperty("ledgers").GetArrayLength().Should().Be(1);
-        // 匯出的引用是代號：模組代號與（開啟後的）欄位代號 f_<Id>，不是資料庫的欄位 Id
+        // 匯出的引用是代號：模組代號與開啟時的欄位代號（保存在對照表），不是資料庫的欄位 Id
         var effect = exported.GetProperty("events")[0].GetProperty("effects")[0];
         effect.GetProperty("target").GetString().Should().Be("move");
-        effect.GetProperty("set")[0].GetProperty("from").GetProperty("field").GetString().Should().MatchRegex(@"^doc-line\.f_\d+$");
-        exported.GetProperty("checks")[0].GetProperty("groupBy")[0].GetString().Should().MatchRegex(@"^move\.f_\d+$");
+        effect.GetProperty("set")[0].GetProperty("from").GetProperty("field").GetString().Should().Be("doc-line.item");
+        exported.GetProperty("checks")[0].GetProperty("groupBy")[0].GetString().Should().Be("move.item");
 
         using var fresh = new TestApp();
         var admin2 = fresh.AsUser();
