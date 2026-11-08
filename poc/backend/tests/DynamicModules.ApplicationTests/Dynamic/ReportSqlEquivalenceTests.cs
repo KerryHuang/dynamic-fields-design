@@ -428,7 +428,7 @@ public class ReportSqlEquivalenceTests : ReportTestBase
         var plan = (await connection.QueryAsync<(int id, int parent, int notused, string detail)>("EXPLAIN QUERY PLAN " + built.Sql, built.Parameters))
             .Select(r => r.detail).ToList();
         plan.Should().NotContain(d => d.StartsWith("SCAN r") || d.StartsWith("SCAN Dynamic_Record"), string.Join(" | ", plan));
-        plan.Should().Contain(d => d.StartsWith("SEARCH r USING INTEGER PRIMARY KEY"), string.Join(" | ", plan));
+        plan.Should().Contain(d => d.StartsWith("SEARCH r USING") && d.Contains("rowid=?") || d.StartsWith("SEARCH r USING INTEGER PRIMARY KEY"), string.Join(" | ", plan));
         plan.Should().Contain(d => d.StartsWith("SEARCH di USING INDEX") && d.Contains("TextValue"), "驅動走狀態的索引：" + string.Join(" | ", plan));
         // 其他條件逐筆記錄查：必須走 (RecordId, FieldId) 的主鍵索引。若規劃器改走欄位值索引，每筆記錄都掃一遍整個日期範圍（300 萬筆時是災難）
         plan.Should().NotContain(d => d.StartsWith("SEARCH i0 USING INDEX IX_"), string.Join(" | ", plan));

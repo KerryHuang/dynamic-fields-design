@@ -115,7 +115,9 @@ public static class ReportQueryBuilder
     private static string DriverFrom(ReportSqlCondition driver, Ctx ctx)
     {
         var cmp = Compare(driver, "di", ctx);
-        return $"(SELECT DISTINCT di.RecordId FROM Dynamic_RecordIndex di WHERE di.FieldId = {ctx.Add(driver.Field.FieldId)} AND {cmp}) d CROSS JOIN Dynamic_Record r ON r.Id = d.RecordId";
+        // 單值欄位每筆記錄最多一列（Seq = 0），不會重複；只有多選才需要 DISTINCT（它在 300 萬筆時要建暫存 B 樹，約佔三分之一時間）
+        var distinct = driver.Field.Multi ? "DISTINCT " : "";
+        return $"(SELECT {distinct}di.RecordId FROM Dynamic_RecordIndex di WHERE di.FieldId = {ctx.Add(driver.Field.FieldId)} AND {cmp}) d CROSS JOIN Dynamic_Record r ON r.Id = d.RecordId";
     }
 
     /// <summary>資料狀態探測：從部分索引出發只走壞列，再回頭檢查範圍；有任何一列就回 1 列。</summary>

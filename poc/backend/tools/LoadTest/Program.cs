@@ -159,7 +159,9 @@ async Task<int> ExplainAsync()
     var range = new DynamicModules.Domain.Reports.ReportSqlCondition(date with { Bucket = null }, DynamicModules.Domain.Reports.ReportSqlOp.Range, [seed.LastDate.AddDays(-30).ToDateTime(TimeOnly.MinValue), seed.LastDate.AddDays(1).ToDateTime(TimeOnly.MinValue)]);
     var draft = new DynamicModules.Domain.Reports.ReportSqlCondition(status, DynamicModules.Domain.Reports.ReportSqlOp.Eq, [s.Statuses[1]]);
     var which = Arg("case", "month");
-    var filters = which == "selective"
+    var filters = which == "all"
+        ? [new DynamicModules.Domain.Reports.ReportSqlCondition(date with { Bucket = null }, DynamicModules.Domain.Reports.ReportSqlOp.Range, [seed.FirstDate.ToDateTime(TimeOnly.MinValue), seed.LastDate.AddDays(1).ToDateTime(TimeOnly.MinValue)])]
+        : which == "selective"
         ? new[] { new DynamicModules.Domain.Reports.ReportSqlCondition(date with { Bucket = null }, DynamicModules.Domain.Reports.ReportSqlOp.Range, [seed.FirstDate.ToDateTime(TimeOnly.MinValue), seed.LastDate.AddDays(1).ToDateTime(TimeOnly.MinValue)]), draft }
         : [range];
     var query = new DynamicModules.Domain.Reports.ReportSqlQuery(
