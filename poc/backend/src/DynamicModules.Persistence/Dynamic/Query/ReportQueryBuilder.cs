@@ -208,4 +208,27 @@ public static class ReportQueryBuilder
                 where.Append(" AND ").Append(Predicate(f, "r.Id", ctx, ref aliasCounter));
         return new Built($"SELECT r.* FROM {from} WHERE {where} ORDER BY r.Id LIMIT {ctx.Add(limit)}", ctx.Parameters);
     }
+
+    /// <summary>
+    /// 縮小後備載入子記錄用：範圍內、連結欄位的 RefKey 指向「縮小後的主記錄」。子模組自己的條件一律不用（左合併語意）。
+    /// 主記錄的子查詢與 <see cref="Narrow"/> 同一套條件，參數各自獨立。
+    /// </summary>
+    public static Built NarrowChildren(
+        ReportSqlScope mainScope, IReadOnlyList<ReportSqlCondition> filters, ReportSqlCondition? driver, int limit,
+        ReportSqlScope childScope, long linkFieldId)
+    {
+        var ctx = new Ctx();
+        var aliasCounter = 0;
+        var from = driver is null ? "Dynamic_Record r" : DriverFrom(driver, ctx);
+        var mainWhere = new StringBuilder();
+        AppendScope(mainWhere, "r", mainScope, ctx);
+        foreach (var f in filters)
+            if (!ReferenceEquals(f, driver))
+                mainWhere.Append(" AND ").Append(Predicate(f, "r.Id", ctx, ref aliasCounter));
+        var childWhere = new StringBuilder();
+        AppendScope(childWhere, "c", childScope, ctx);
+        var sql = $"SELECT c.* FROM Dynamic_Record c WHERE {childWhere} AND EXISTS (SELECT 1 FROM Dynamic_RecordIndex l WHERE l.RecordId = c.Id AND l.FieldId = {ctx.Add(linkFieldId)} "
+            + $"AND l.RefKey IN (SELECT CAST(m.Id AS TEXT) FROM (SELECT r.Id FROM {from} WHERE {mainWhere} ORDER BY r.Id LIMIT {ctx.Add(limit)}) m)) ORDER BY c.Id LIMIT {ctx.Add(limit)}";
+        return new Built(sql, ctx.Parameters);
+    }
 }

@@ -190,12 +190,17 @@ public partial class ReportRunner(
 
         // 5. 載入：多取一筆才分得出是否超過上限；超過就不回部分結果。條件要載入後才能套用，所以這個上限縮小條件也過不了，訊息要照實說
         var tooManyToLoad = () => Fail(TooManyState, T(ReportText.TooManyToLoad));
-        var mainRows = await records.ListForReportAsync(main.Id, mainSide.Perms!.OwnerUserIds, options.MaxLoadRows + 1, ct);
+        // 縮小：只載入符合主模組精確條件的記錄（設計 §8.1）；MemoryOnly 是對照用的純記憶體路徑，不縮小
+        var narrowed = options.Engine == ReportEngineMode.MemoryOnly ? null
+            : await TryNarrowAsync(d, o, bound, mainSide, childSide, link, basis, resolved, fallbackReasons, ct);
+        IReadOnlyList<Record> mainRows = narrowed?.Main
+            ?? await records.ListForReportAsync(main.Id, mainSide.Perms!.OwnerUserIds, options.MaxLoadRows + 1, ct);
         if (mainRows.Count > options.MaxLoadRows) return tooManyToLoad();
         IReadOnlyList<Record> childRows = [];
         if (childSide is not null)
         {
-            childRows = await records.ListForReportAsync(childSide.Module.Id, childSide.Perms!.OwnerUserIds, options.MaxLoadRows + 1, ct);
+            childRows = narrowed?.Child
+                ?? await records.ListForReportAsync(childSide.Module.Id, childSide.Perms!.OwnerUserIds, options.MaxLoadRows + 1, ct);
             if (childRows.Count > options.MaxLoadRows) return tooManyToLoad();
         }
 

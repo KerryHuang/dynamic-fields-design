@@ -5,6 +5,7 @@ using DynamicModules.Application.Dynamic.ReportService.Data;
 using DynamicModules.Domain.Entities.Dynamic;
 using DynamicModules.Domain.FieldTypes;
 using DynamicModules.Domain.Reports;
+using DynamicModules.Domain.Repositories.Dynamic;
 
 namespace DynamicModules.Application.Dynamic.ReportService;
 
@@ -326,6 +327,25 @@ public partial class ReportRunner
             return null;
         }
         return BuildSqlResult(d, query, outcome, bound, mainSide, childSide, ctx, basis, frozen, applied);
+    }
+
+    /// <summary>縮小後備載入：回 null 表示不縮小（沒有可用的精確條件、回填未完成或探測沒過），呼叫端載入整個模組。</summary>
+    private async Task<ReportNarrowedRecords?> TryNarrowAsync(
+        ReportDefinition d, ReportRunOptions o, IReadOnlyDictionary<string, Bound> bound, Side mainSide, Side? childSide, Field? link,
+        DateOnly basis, (DateOnly, DateOnly)? resolved, List<string> reasons, CancellationToken ct)
+    {
+        if (await settings.GetValueAsync(SystemSetting.IndexBackfillVersion, ct) != RecordIndexer.BackfillVersion) return null;
+        if (NarrowingFor(d, o, bound, basis, resolved) is not { } narrowing) return null;
+        var result = await queries.ListNarrowedAsync(
+            new ReportSqlScope(mainSide.Module.Id, mainSide.Perms!.OwnerUserIds), narrowing,
+            childSide is null ? null : new ReportSqlScope(childSide.Module.Id, childSide.Perms!.OwnerUserIds), link?.Id ?? 0,
+            options.MaxLoadRows + 1, ct);
+        if (result.FallbackReason is { } reason)
+        {
+            reasons.Add($"narrowSkipped:{reason}");
+            return null;
+        }
+        return result;
     }
 
     // ---- 結果：SQL 的原始列 → 與記憶體路徑相同的計算結果 ----

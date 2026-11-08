@@ -31,6 +31,22 @@ public class ReportQueryRepository(DynamicDbContext db, ISqlDialect dialect) : I
         return reason is null ? new ReportSqlOutcome(null, groups, total) : ReportSqlOutcome.Fallback(reason);
     }
 
+    public async Task<ReportNarrowedRecords> ListNarrowedAsync(
+        ReportSqlScope main, ReportSqlNarrowing n, ReportSqlScope? child, long linkFieldId, int limit, CancellationToken ct)
+    {
+        IReadOnlyList<DynamicModules.Domain.Entities.Dynamic.Record> mains = [], kids = [];
+        var reason = await ReportSqlSnapshot.RunAsync(db, n.Stamps, n.Checks, main, async (connection, tx) =>
+        {
+            var driver = await ChooseDriverAsync(connection, tx, n.Filters, ct);
+            var built = ReportQueryBuilder.Narrow(main, n.Filters, driver, limit);
+            mains = (await connection.QueryAsync<DynamicModules.Domain.Entities.Dynamic.Record>(new CommandDefinition(built.Sql, built.Parameters, tx, cancellationToken: ct))).ToList();
+            if (child is null) return;
+            var childBuilt = ReportQueryBuilder.NarrowChildren(main, n.Filters, driver, limit, child, linkFieldId);
+            kids = (await connection.QueryAsync<DynamicModules.Domain.Entities.Dynamic.Record>(new CommandDefinition(childBuilt.Sql, childBuilt.Parameters, tx, cancellationToken: ct))).ToList();
+        }, ct);
+        return reason is null ? new ReportNarrowedRecords(null, mains, kids) : ReportNarrowedRecords.Fallback(reason);
+    }
+
     /// <summary>依估計的命中筆數挑驅動條件（設計 §5.2）：封頂的索引區間計數，全碰頂再放大一次；沒有候選回 null（掃模組）。</summary>
     internal static async Task<ReportSqlCondition?> ChooseDriverAsync(
         System.Data.Common.DbConnection connection, System.Data.Common.DbTransaction tx, IReadOnlyList<ReportSqlCondition> filters, CancellationToken ct)

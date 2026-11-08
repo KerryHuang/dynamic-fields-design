@@ -24,7 +24,7 @@ public class ReportSqlEquivalenceTests : ReportTestBase
     {
         await Arrange();
         Done = await MustAdd("order", FieldType.Boolean, label: "已結案");
-        foreach (var module in new[] { "customer", "order" })
+        foreach (var module in new[] { "customer", "order", "shipment" })
             foreach (var f in (await Detail(module)).Blocks.SelectMany(b => b.Fields))
                 (await Update(f, f.Config with { IsFilterable = true })).IsSuccess.Should().BeTrue();
         await Svc<ISystemSettingRepository>().SetAsync(SystemSetting.IndexBackfillVersion, RecordIndexer.BackfillVersion, CancellationToken.None);
@@ -87,6 +87,7 @@ public class ReportSqlEquivalenceTests : ReportTestBase
         sql.DedupedNote.Should().Be(memory.DedupedNote, what);
         sql.AppliedRange.Should().BeEquivalentTo(memory.AppliedRange, what);
         sql.Total.Should().BeEquivalentTo(memory.Total, what);
+        System.Text.Json.JsonSerializer.Serialize(sql.DetailRows).Should().Be(System.Text.Json.JsonSerializer.Serialize(memory.DetailRows), what);
         (sql.Groups is null).Should().Be(memory.Groups is null, what);
         if (memory.Groups is null) return;
         sql.Groups!.Select(g => string.Join("\u0001", g.GroupKeys)).Should().Equal(memory.Groups.Select(g => string.Join("\u0001", g.GroupKeys)), what);
@@ -351,5 +352,49 @@ public class ReportSqlEquivalenceTests : ReportTestBase
         (await Svc<ISystemSettingRepository>().GetValueAsync(SystemSetting.IndexBackfillVersion, CancellationToken.None)).Should().Be(RecordIndexer.BackfillVersion);
         // 截斷的文字仍要退回記憶體，但原因已經不是「回填未完成」
         (await Run(def)).FallbackReasons.Should().Contain(r => r.StartsWith("textTruncated"));
+    }
+
+    // ---- 縮小後備載入（設計 §8.1）----
+
+    [Fact]
+    public async Task NarrowedFallback_LoadsOnlyMatchingMainRecords_SoTheLoadLimitDoesNotApply()
+    {
+        await Prepare();
+        for (var i = 0; i < 30; i++) await Seed("order", "admin", (Amount, 1m), (Status, OptDone));
+        for (var i = 0; i < 3; i++) await Seed("order", "admin", (Amount, 2m), (Status, OptOpen));
+        Svc<ReportOptions>().MaxLoadRows = 8;
+        // 帶出欄位的分組目前不走 SQL 聚合，但主模組條件可以縮小載入
+        var def = Def(groups: [G(MainF(Status))], measures: [M("s", "sum", MainF(Amount))],
+            filters: [F(MainF(Status), "eq", OptOpen)], columns: [MainF(Note)]);
+        var (memory, auto) = await Both(def, second: ReportEngineMode.Auto);
+        memory.State.Should().Be("tooMany", "不縮小就超過載入上限");
+        auto.State.Should().Be("ok");
+        auto.Total!["s"].Should().Be(6m);
+    }
+
+    [Fact]
+    public async Task NarrowedFallback_LeftMerge_DoesNotNarrowByChildConditions()
+    {
+        await Prepare();
+        var (a, b) = (await Seed("order", "admin", (Amount, 100m), (Status, OptOpen)), await Seed("order", "admin", (Amount, 50m), (Status, OptOpen)));
+        await Seed("shipment", "admin", (LinkField, a), (Qty, 1), (Warehouse, "X"));
+        await Seed("shipment", "admin", (LinkField, a), (Qty, 2), (Warehouse, "Y"));
+        // 下鑽「子模組分組空白」：只有沒有子記錄的 B 屬於這一組，A 的兩筆出貨都有倉庫
+        var def = Def(Shipments, groups: [G(ChildF(Warehouse))], measures: [M("n", "countMain"), M("sum", "sum", MainF(Amount))],
+            filters: [F(MainF(Status), "eq", OptOpen)]);
+        var options = Svc<ReportOptions>();
+        foreach (var drill in new[] { new[] { "" }, new[] { "X" } })
+        {
+            options.Engine = ReportEngineMode.MemoryOnly;
+            var memory = await Run(def, drill: drill);
+            options.Engine = ReportEngineMode.Auto;
+            var auto = await Run(def, drill: drill);
+            ShouldMatch(memory, auto, $"drill {drill[0]}", expectedEngine: "memory");
+        }
+        options.Engine = ReportEngineMode.Auto;
+        var blank = await Run(def, drill: [""]);
+        blank.Total!["n"].Should().Be(1m, "空白組只有沒有出貨的那一筆主記錄");
+        blank.DetailTotal.Should().Be(1);
+        b.Should().BePositive();
     }
 }
