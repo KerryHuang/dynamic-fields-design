@@ -1,5 +1,8 @@
 using DynamicModules.Application.Common;
 using DynamicModules.Application.Dynamic.AppService.Data;
+using DynamicModules.Application.Dynamic.CheckService;
+using DynamicModules.Application.Dynamic.EventService;
+using DynamicModules.Application.Dynamic.LedgerService;
 using DynamicModules.Application.Dynamic.ConversionService.Commands.SaveConversion;
 using DynamicModules.Application.Dynamic.ConversionService.Data;
 using DynamicModules.Application.Dynamic.PrintService;
@@ -60,6 +63,9 @@ public sealed class AppFlowInstaller(ISender sender)
             if (!saved.IsSuccess) return new Result(Prefixed(saved, $"{w.Module}.workflow"), reports, warnings);
         }
 
+        var failure = await InstallEffectsAsync(p, ids, warnings, ct);
+        if (failure is not null) return new Result(failure, reports, warnings);
+
         foreach (var c in p.Conversions)
         {
             if (ConversionInputOf(c, ids) is not { } input)
@@ -112,6 +118,64 @@ public sealed class AppFlowInstaller(ISender sender)
             reports.Add(new AppReport { Code = r.Code, ReportId = reportId });
         }
         return new Result(null, reports, warnings);
+    }
+
+    /// <summary>
+    /// 分錄 → 事件 → 檢查（事件的沖銷效果需要分錄，狀態轉移需要上面裝好的狀態機）。引用被排除欄位的項目整個略過並警告；
+    /// 沖銷的事件或分錄被略過時，沖銷它們的事件也略過。其餘驗證（隱藏來源、事件循環等）由既有的設計器指令負責，失敗整批回滾。
+    /// </summary>
+    private async Task<ServiceResult?> InstallEffectsAsync(AppPackageData p, TemplateIdMap ids, List<string> warnings, CancellationToken ct)
+    {
+        var lookups = new AppReportCodec.Lookups(
+            code => ids.ModuleKeys.GetValueOrDefault(code),
+            name => ids.FieldIds.TryGetValue(name, out var id) ? id : null,
+            name => ids.OptionIds.TryGetValue(name, out var id) ? id : null,
+            AppReportCodec.TypesOf(p.Modules));
+
+        var skippedLedgers = new HashSet<string>();
+        foreach (var g in p.Ledgers)
+        {
+            var (input, errors) = AppEffectsCodec.ToInput(g, lookups);
+            if (input is null)
+            {
+                skippedLedgers.Add(g.Module);
+                warnings.Add($"模組「{g.Module}」的分錄設定引用了被排除的欄位，已略過（{string.Join("；", errors)}）");
+                continue;
+            }
+            var saved = await sender.Send(new SaveLedgerRequest(ids.ModuleKeys[g.Module], input), ct);
+            if (!saved.IsSuccess) return Prefixed(saved, $"ledgers.{g.Module}");
+        }
+
+        var skippedEvents = new HashSet<string>();
+        var effectTarget = p.Events.SelectMany(e => e.Effects.Select(x => (Key: $"{e.Code}.{x.Code}", x.Target))).ToDictionary(x => x.Key, x => x.Target);
+        foreach (var e in p.Events)
+        {
+            var dependsOnSkipped = e.Effects.Any(x => x.Kind == "reverse"
+                && (skippedEvents.Contains(x.OfEvent ?? "")
+                    || effectTarget.GetValueOrDefault($"{x.OfEvent}.{x.OfEffect}") is { } target && skippedLedgers.Contains(target)));
+            var (input, errors) = dependsOnSkipped ? (null, ["沖銷的事件或分錄已略過"]) : AppEffectsCodec.ToInput(e, lookups);
+            if (input is null)
+            {
+                skippedEvents.Add(e.Code);
+                warnings.Add($"連動事件「{e.Code}」引用了被排除的欄位或模組，已略過（{string.Join("；", errors)}）");
+                continue;
+            }
+            var created = await sender.Send(new CreateEventRequest(input), ct);
+            if (!created.IsSuccess) return Prefixed(created, $"events.{e.Code}");
+        }
+
+        foreach (var c in p.Checks)
+        {
+            var (input, errors) = AppEffectsCodec.ToInput(c, lookups);
+            if (input is null)
+            {
+                warnings.Add($"跨記錄檢查「{c.Code}」引用了被排除的欄位，已略過（{string.Join("；", errors)}）");
+                continue;
+            }
+            var created = await sender.Send(new CreateCheckRequest(input), ct);
+            if (!created.IsSuccess) return Prefixed(created, $"checks.{c.Code}");
+        }
+        return null;
     }
 
     /// <summary>任何一個欄位或選項被排除就回 null。</summary>

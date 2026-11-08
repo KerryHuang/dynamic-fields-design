@@ -15,7 +15,8 @@ namespace DynamicModules.Application.Dynamic.AppService;
 /// </summary>
 public sealed partial class AppExporter(
     TemplateExporter templates, IModuleRepository modules, IAppRepository apps, IPermissionRepository permissions,
-    IConversionRepository conversions, IReportRepository reports, IPrintTemplateRepository printTemplates)
+    IConversionRepository conversions, IReportRepository reports, IPrintTemplateRepository printTemplates,
+    IEventRepository events, ICheckRepository checks, ILedgerRepository ledgers)
 {
     [GeneratedRegex("[^a-zA-Z0-9_]")]
     private static partial Regex NotCode();
@@ -104,6 +105,9 @@ public sealed partial class AppExporter(
         var conversionList = await ExportConversionsAsync(members, codeOfModule, names, warnings, ct);
         var reportList = await ExportReportsAsync(app, names, GroupCode, warnings, ct);
         var printList = await ExportPrintTemplatesAsync(members, codeOfModule, keyToCode, names, warnings, ct);
+        var ledgerList = await ExportLedgersAsync(members, codeOfModule, names, warnings, ct);
+        var eventList = await ExportEventsAsync(members, keyToCode, names, warnings, ct);
+        var checkList = await ExportChecksAsync(members, codeOfModule, names, warnings, ct);
 
         var entities = exported.Modules.Where(m => m.HostEntityKey is not null).Select(m => m.HostEntityKey!)
             .Concat(exported.Modules.SelectMany(m => m.Blocks).SelectMany(b => b.Fields)
@@ -122,9 +126,64 @@ public sealed partial class AppExporter(
         var package = new AppPackageData(
             AppPackageData.FormatName, AppPackageData.CurrentFormatVersion,
             new AppManifest(app.Key, app.PackageVersion, app.NameI18n, null, app.Icon, null, requires),
-            groups, moduleList, fieldAccess, optionScopes, reportList, null, workflows, conversionList, null, printList);
+            groups, moduleList, fieldAccess, optionScopes, reportList, null, workflows, conversionList, eventList, printList,
+            checkList, ledgerList);
         // groups 在上面各步驟用到才加進 codeOfGroup，最後才組出來
         return new Exported(package, warnings);
+    }
+
+    private async Task<List<AppLedger>> ExportLedgersAsync(
+        List<Module> members, Dictionary<long, string> codeOf, AppReportCodec.Names names, List<string> warnings, CancellationToken ct)
+    {
+        var result = new List<AppLedger>();
+        foreach (var l in (await ledgers.ListAsync(ct)).OrderBy(l => l.ModuleId))
+        {
+            if (members.FirstOrDefault(m => m.Id == l.ModuleId) is not { } module) continue;   // 不屬於這個應用程式
+            var (ledger, errors) = AppEffectsCodec.ToPackage(l, codeOf[module.Id], names);
+            if (ledger is null) warnings.Add($"模組「{codeOf[module.Id]}」的分錄設定未匯出（{string.Join("；", errors)}）");
+            else result.Add(ledger);
+        }
+        return result;
+    }
+
+    private async Task<List<AppEvent>> ExportEventsAsync(
+        List<Module> members, Dictionary<string, string> keyToCode, AppReportCodec.Names names, List<string> warnings, CancellationToken ct)
+    {
+        var result = new List<AppEvent>();
+        foreach (var e in (await events.ListAsync(ct)).OrderBy(e => e.Key, StringComparer.Ordinal))
+        {
+            if (members.FirstOrDefault(m => m.Id == e.SourceModuleId) is not { } source) continue;
+            var (package, errors) = AppEffectsCodec.ToPackage(e, source, key => keyToCode.GetValueOrDefault(key), names);
+            if (package is null) warnings.Add($"連動事件「{e.Key}」未匯出（{string.Join("；", errors)}）");
+            else result.Add(package);
+        }
+        // 沖銷效果指向的事件沒匯出時，套件重新匯入會被拒：連同它一起不匯出，直到穩定
+        for (bool changed = true; changed;)
+        {
+            changed = false;
+            var codes = result.Select(e => e.Code).ToHashSet();
+            foreach (var e in result.Where(e => e.Effects.Any(x => x.OfEvent is { } of && !codes.Contains(of))).ToList())
+            {
+                warnings.Add($"連動事件「{e.Code}」沖銷的事件未匯出，這個事件也未匯出");
+                result.Remove(e);
+                changed = true;
+            }
+        }
+        return result;
+    }
+
+    private async Task<List<AppCheck>> ExportChecksAsync(
+        List<Module> members, Dictionary<long, string> codeOf, AppReportCodec.Names names, List<string> warnings, CancellationToken ct)
+    {
+        var result = new List<AppCheck>();
+        foreach (var c in (await checks.ListAsync(ct)).OrderBy(c => c.Key, StringComparer.Ordinal))
+        {
+            if (members.FirstOrDefault(m => m.Id == c.ModuleId) is not { } module) continue;
+            var (package, errors) = AppEffectsCodec.ToPackage(c, codeOf[module.Id], names);
+            if (package is null) warnings.Add($"跨記錄檢查「{c.Key}」未匯出（{string.Join("；", errors)}）");
+            else result.Add(package);
+        }
+        return result;
     }
 
     private async Task<List<AppPrintTemplate>> ExportPrintTemplatesAsync(

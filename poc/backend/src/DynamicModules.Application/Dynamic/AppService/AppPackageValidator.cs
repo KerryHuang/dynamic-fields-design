@@ -70,6 +70,14 @@ public static partial class AppPackageValidator
             if (p.Reports.Count > 0) errors.Add("reports: formatVersion 3 才支援 reports");
             if (p.PrintTemplates.Count > 0) errors.Add("printTemplates: formatVersion 3 才支援 printTemplates");
         }
+        if (p.FormatVersion < 4)
+        {
+            if (p.Events.Count > 0) errors.Add("events: formatVersion 4 才支援 events");
+            if (p.Checks.Count > 0) errors.Add("checks: formatVersion 4 才支援 checks");
+            if (p.Ledgers.Count > 0) errors.Add("ledgers: formatVersion 4 才支援 ledgers");
+        }
+        if (p.Events.Count > MaxEvents) errors.Add($"events: 最多 {MaxEvents} 個");
+        if (p.Checks.Count > MaxChecks) errors.Add($"checks: 最多 {MaxChecks} 個");
         if (p.Workflows.Count > MaxModules) errors.Add($"workflows: 最多 {MaxModules} 個");
         if (p.Conversions.Count > MaxConversions) errors.Add($"conversions: 最多 {MaxConversions} 個");
         if (p.Reports.Count > MaxReports) errors.Add($"reports: 最多 {MaxReports} 個");
@@ -270,6 +278,7 @@ public static partial class AppPackageValidator
             if (!seenScopes.Add(s.Option ?? "")) errors.Add($"{at}: {s.Option} 重複設定");
         }
         V3References(p, fieldNames, groupCodes, errors);
+        V4References(p, fieldNames, errors);
         PrintTemplateReferences(p, fieldNames, errors);
         return errors;
     }

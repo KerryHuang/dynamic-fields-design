@@ -166,7 +166,7 @@ public class AppV3Tests : IDisposable
     {
         await ImportAndOpen(_admin, AppTestPackagesV3.Sales(), "sales-flow");
         var exported = await ExportOk("sales-flow");
-        exported.GetProperty("formatVersion").GetInt32().Should().Be(3);
+        exported.GetProperty("formatVersion").GetInt32().Should().Be(4);
         exported.GetProperty("workflows").GetArrayLength().Should().Be(1);
         exported.GetProperty("conversions").GetArrayLength().Should().Be(1);
         exported.GetProperty("reports").GetArrayLength().Should().Be(1);

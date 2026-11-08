@@ -13,7 +13,8 @@ namespace DynamicModules.Application.Dynamic.AppService;
 /// </summary>
 public sealed partial class AppOpenPlanner(
     AppPackageSource packages, IAppRepository apps, IModuleRepository modules, IPermissionRepository permissions,
-    IAccountRepository accounts, AppDependencyChecker dependencies, IConversionRepository conversions)
+    IAccountRepository accounts, AppDependencyChecker dependencies, IConversionRepository conversions,
+    IEventRepository events, ICheckRepository checks)
 {
     [GeneratedRegex(ModuleRules.ModuleKeyPattern)]
     private static partial Regex ModuleKey();
@@ -59,6 +60,12 @@ public sealed partial class AppOpenPlanner(
         // 轉換代碼全站唯一；不自動改名（已轉出的單據靠它追溯）
         foreach (var c in package.Conversions)
             if (await conversions.GetByKeyAsync(c.Code, ct) is not null) errors.Add($"conversions.{c.Code}: 轉換代碼已被使用");
+
+        // 事件與檢查的代碼同樣全站唯一（事實以事件鍵記帳，不自動改名）
+        foreach (var e in package.Events)
+            if (await events.GetByKeyAsync(e.Code, ct) is not null) errors.Add($"events.{e.Code}: 事件代碼已被使用");
+        foreach (var c in package.Checks)
+            if (await checks.GetByKeyAsync(c.Code, ct) is not null) errors.Add($"checks.{c.Code}: 檢查代碼已被使用");
 
         var hostConflicts = new List<string>();
         foreach (var m in package.Modules.Where(m => m.HostEntityKey is not null))

@@ -32,13 +32,13 @@ public static partial class AppReportCodec
         return name => types.TryGetValue(name, out var type) ? type : null;
     }
 
-    private static bool IsOptionType(FieldType? type) => type is FieldType.Enum or FieldType.MultiEnum;
+    internal static bool IsOptionType(FieldType? type) => type is FieldType.Enum or FieldType.MultiEnum;
 
     /// <summary>
     /// 指定哪一筆記錄或哪個帳號的條件（參照欄位 = / ≠ / 屬於 某個 Id，使用者欄位 = / ≠ / 屬於 某個帳號）：
     /// 換一個資料庫 Id 會指到別的記錄、帳號在另一個資料庫不存在（還會把真實帳號寫進公開的套件），套件不收。
     /// </summary>
-    private static bool PicksConcreteRecord(string op, JsonElement? value) =>
+    internal static bool PicksConcreteRecord(string op, JsonElement? value) =>
         op is "eq" or "ne" or "in" or "notIn" && value is { ValueKind: not (JsonValueKind.Null or JsonValueKind.Undefined) };
 
     public const string ConcreteRecordMessage = "報表條件指定了具體記錄，換一個資料庫會指到別的記錄，套件不收這種條件";
@@ -103,7 +103,7 @@ public static partial class AppReportCodec
         return parts[2].Length == 0 ? $"{parts[0]}:{id}:" : $"{parts[0]}:{id}:{field(parts[2])}";
     }
 
-    private static JsonElement ConvertValue(JsonElement value, string? module, Func<string, long?> optionId)
+    internal static JsonElement ConvertValue(JsonElement value, string? module, Func<string, long?> optionId)
     {
         JsonNode? Walk(JsonNode? node) => node switch
         {
@@ -174,7 +174,7 @@ public static partial class AppReportCodec
         return $"{r.Source}:{f}:{via}";
     }
 
-    private static JsonElement ExportValue(JsonElement value, long fieldId, Names n)
+    internal static JsonElement ExportValue(JsonElement value, long fieldId, Names n)
     {
         if (fieldId == 0 || !n.IsOptionField(fieldId)) return value;
         JsonNode? Walk(JsonNode? node) => node switch
