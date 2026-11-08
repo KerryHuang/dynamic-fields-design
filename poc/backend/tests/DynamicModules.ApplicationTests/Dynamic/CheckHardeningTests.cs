@@ -61,6 +61,24 @@ public class CheckHardeningTests : EffectsTestBase
     }
 
     [Fact]
+    public async Task A_stale_index_with_a_huge_scaled_value_is_still_detected_and_backfilled()
+    {
+        var s = await BuildStock("chb");
+        var qty = (await Detail(s.Move)).Blocks.SelectMany(b => b.Fields).Single(f => f.Id == s.MoveQty);
+        (await Update(qty, qty.Config with { Scale = 6 })).IsSuccess.Should().BeTrue();
+        await MustCreate(s.Move, Move(s, "A", "10000000000"));   // Scale 6：ScaledValue 是 1e16，超過 double 能精確表示的範圍
+        (await SaveCheck(s, "chb-min", SumGte0([s.MoveItem], s.MoveQty))).IsCreated.Should().BeTrue();
+        (await Send(new DeleteCheckRequest("chb-min"))).IsSuccess.Should().BeTrue();
+
+        qty = (await Detail(s.Move)).Blocks.SelectMany(b => b.Fields).Single(f => f.Id == s.MoveQty);
+        (await Update(qty, qty.Config with { Scale = 5 })).IsSuccess.Should().BeTrue();
+        (await SaveCheck(s, "chb-min", SumGte0([s.MoveItem], s.MoveQty))).IsCreated.Should().BeTrue();   // 重建要回填
+
+        // 真值 1e10 − 2e10 = −1e10；舊索引沒回填會算成 (1e16 − 2e15) / 1e5 = +8e10 而放行
+        (await Run(new CreateRecordRequest(s.Move, Move(s, "A", "-20000000000")))).IsInvalid.Should().BeTrue();
+    }
+
+    [Fact]
     public async Task A_limit_read_from_the_written_record_uses_its_new_value()
     {
         var s = await BuildStock("chl");

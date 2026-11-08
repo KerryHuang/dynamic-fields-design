@@ -155,17 +155,26 @@ public class RecordRepository(DynamicDbContext db, ISqlDialect dialect) : IRecor
     public async Task<bool> NeedsScaledBackfillAsync(long fieldId, int scale, CancellationToken ct)
     {
         if (await db.Set<RecordIndex>().AnyAsync(x => x.FieldId == fieldId && x.NumberValue != null && x.ScaledValue == null, ct)) return true;
-        var factor = (double)Math.Pow(10, scale);
-        // 逐列比對 ScaledValue 與依 NumberValue（double）重算的值；double 在 2^53 以上不精確，那一段不比，
-        // 差 1 以內視為浮點誤差。真正的舊小數位會差 10 倍以上。
+        // 逐列比對 ScaledValue 與依 NumberValue 重算的值，全程用 decimal、要求完全相等：
+        // 欄位值只有 15 位有效數字，double 轉 decimal 後正好是原值，不會像 double 乘法那樣在大數值上失準而被迫略過。
+        // 誤判（多回填一次）無害；漏判會讓舊小數位的 ScaledValue 被加總，所以不設容差、不跳過任何列。
+        var factor = 1m;
+        for (var i = 0; i < scale; i++) factor *= 10m;
         var rows = db.Set<RecordIndex>().AsNoTracking()
             .Where(x => x.FieldId == fieldId && x.NumberValue != null && x.ScaledValue != null)
             .Select(x => new { x.NumberValue, x.ScaledValue });
         await foreach (var r in rows.AsAsyncEnumerable().WithCancellation(ct))
         {
-            var expected = Math.Round(r.NumberValue!.Value * factor, MidpointRounding.AwayFromZero);
-            if (Math.Abs(expected) >= 9e15 || Math.Abs(r.ScaledValue!.Value) >= 9e15) continue;
-            if (Math.Abs(expected - r.ScaledValue.Value) > 1) return true;
+            decimal expected;
+            try
+            {
+                expected = Math.Round((decimal)r.NumberValue!.Value * factor, 0, MidpointRounding.AwayFromZero);
+            }
+            catch (OverflowException)
+            {
+                return true;   // 放大後連 decimal 都放不下，索引不可能是依這個小數位算的
+            }
+            if (expected != r.ScaledValue!.Value) return true;
         }
         return false;
     }
