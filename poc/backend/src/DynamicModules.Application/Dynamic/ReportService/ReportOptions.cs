@@ -6,8 +6,11 @@ public sealed class ReportOptions
     /// <summary>報表引擎：Auto 能走 SQL 聚合就走、否則退回記憶體路徑；MemoryOnly 與 SqlOnly 給測試與診斷用（SqlOnly 遇到不能走 SQL 的形狀直接丟例外）。</summary>
     public ReportEngineMode Engine { get; set; } = ReportEngineMode.Auto;
 
-    /// <summary>SQL 聚合的命令逾時（秒）。</summary>
-    public int SqlTimeoutSeconds { get; set; } = 30;
+    /// <summary>
+    /// SQL 路徑（聚合與縮小後備）單次執行的時間上限（秒，可帶小數）。到期時中斷正在執行的 SQLite 查詢，
+    /// 回「報表執行逾時」，不退回記憶體路徑（退回會把負載放大）。
+    /// </summary>
+    public double SqlTimeoutSeconds { get; set; } = 30;
 
     /// <summary>合併且套用條件後的列數上限（spec §5）。</summary>
     public int MaxRows { get; set; } = 50_000;

@@ -9,7 +9,7 @@ public static class ReportText
     public const string
         ModuleDisabled = nameof(ModuleDisabled), DetailAsMain = nameof(DetailAsMain), NoModuleRead = nameof(NoModuleRead), NoChildRead = nameof(NoChildRead),
         FieldGone = nameof(FieldGone), FieldGoneNamed = nameof(FieldGoneNamed), TypeChanged = nameof(TypeChanged), NoPermissionTo = nameof(NoPermissionTo),
-        HiddenField = nameof(HiddenField), NotUsable = nameof(NotUsable), TooMany = nameof(TooMany), TooManyToLoad = nameof(TooManyToLoad),
+        HiddenField = nameof(HiddenField), NotUsable = nameof(NotUsable), TooMany = nameof(TooMany), TooManyToLoad = nameof(TooManyToLoad), SqlTimeout = nameof(SqlTimeout),
         RowMeaning = nameof(RowMeaning), Count = nameof(Count), Sum = nameof(Sum), Avg = nameof(Avg), Min = nameof(Min), Max = nameof(Max), Ratio = nameof(Ratio),
         Title = nameof(Title), FieldPath = nameof(FieldPath), Deleted = nameof(Deleted), NoPermission = nameof(NoPermission), Blank = nameof(Blank),
         ExportTotal = nameof(ExportTotal), DedupedNote = nameof(DedupedNote), Unshared = nameof(Unshared), ReportGone = nameof(ReportGone);
@@ -31,6 +31,8 @@ public static class ReportText
             "The source data exceeds the system's load limit, and this report's conditions and fields cannot be processed in the database. Mark the fields it uses as filterable, or contact an administrator",
             "ข้อมูลต้นทางเกินขีดจำกัดการโหลดของระบบ และเงื่อนไขกับฟิลด์ของรายงานนี้ประมวลผลในฐานข้อมูลไม่ได้ โปรดตั้งฟิลด์ที่ใช้เป็นกรองได้ หรือติดต่อผู้ดูแลระบบ",
             "Dữ liệu nguồn vượt quá giới hạn tải của hệ thống và các điều kiện, trường của báo cáo này không thể xử lý trong cơ sở dữ liệu. Hãy đặt các trường đang dùng là có thể lọc, hoặc liên hệ quản trị viên"),
+        [SqlTimeout] = ("報表執行逾時，請加上條件縮小範圍", "The report took too long to run. Add conditions to narrow it down",
+            "รายงานใช้เวลานานเกินไป โปรดเพิ่มเงื่อนไขเพื่อจำกัดขอบเขต", "Báo cáo chạy quá thời gian, vui lòng thêm điều kiện để thu hẹp phạm vi"),
         [RowMeaning] = ("一筆{0}", "One {0}", "{0} หนึ่งรายการ", "Một {0}"),
         [Count] = ("{0}筆數", "{0} count", "จำนวน {0}", "Số {0}"),
         [Sum] = ("{0} 加總", "{0} sum", "ผลรวม {0}", "Tổng {0}"),

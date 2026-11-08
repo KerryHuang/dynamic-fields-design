@@ -17,13 +17,27 @@ namespace DynamicModules.Persistence.Dynamic.Query;
 internal static class ReportSqlSnapshot
 {
     /// <returns>放棄 SQL 的原因；成功跑完 body 回 null。</returns>
+    /// <summary>
+    /// 每執行這麼多個 VM 指令檢查一次時間上限。Microsoft.Data.Sqlite 的 CommandTimeout 只管等鎖，CancellationToken
+    /// 也中斷不了已在 sqlite3_step 裡的單一聚合語句，所以用 progress handler：回傳非 0 時 SQLite 以 SQLITE_INTERRUPT 中止該語句。
+    /// </summary>
+    private const int ProgressInstructions = 10_000;
+
+    /// <summary>SQLite 的 SQLITE_INTERRUPT。</summary>
+    public const int InterruptErrorCode = 9;
+
+    /// <param name="timeout">整段（重驗、探測、body）的時間上限；到期或 <paramref name="ct"/> 取消時中斷執行中的語句，
+    /// 呼叫端會收到 <see cref="InterruptErrorCode"/> 的 <see cref="SqliteException"/>。</param>
     public static async Task<string?> RunAsync(
         DynamicDbContext db, IReadOnlyList<ReportSqlConfigStamp> stamps, IReadOnlyList<ReportSqlCheck> checks, ReportSqlScope scope,
-        Func<SqliteConnection, DbTransaction, Task> body, CancellationToken ct)
+        TimeSpan timeout, Func<SqliteConnection, DbTransaction, Task> body, CancellationToken ct)
     {
         var connection = (SqliteConnection)db.Database.GetDbConnection();
         await db.Database.OpenConnectionAsync(ct);
         SqliteTransaction? own = null;
+        var clock = System.Diagnostics.Stopwatch.StartNew();
+        SQLitePCL.raw.sqlite3_progress_handler(connection.Handle, ProgressInstructions,
+            _ => clock.Elapsed > timeout || ct.IsCancellationRequested ? 1 : 0, null);
         try
         {
             var tx = db.Database.CurrentTransaction?.GetDbTransaction();
@@ -53,6 +67,7 @@ internal static class ReportSqlSnapshot
         }
         finally
         {
+            SQLitePCL.raw.sqlite3_progress_handler(connection.Handle, 0, null, null);
             if (own is not null)
             {
                 await db.Database.UseTransactionAsync(null, ct);

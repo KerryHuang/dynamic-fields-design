@@ -302,6 +302,46 @@ public class ReportSqlEquivalenceTests : ReportTestBase
         Logs.Should().Contain(l => l.Level == LogLevel.Warning && l.Message.Contains("IX_Dynamic_RecordIndex_NoScaled"));
     }
 
+    /// <summary>以一筆記錄為樣板，用 SQL 直接複製出大量記錄（不建索引列），讓聚合查詢跑得夠久。</summary>
+    private async Task CloneRecords(long templateId, int count) =>
+        await Db.Context.Database.ExecuteSqlRawAsync(
+            "WITH RECURSIVE n(i) AS (SELECT 1 UNION ALL SELECT i + 1 FROM n WHERE i < {0}) "
+            + "INSERT INTO Dynamic_Record (ModuleId, Title, OwnerUserId, ValuesJson, RowVersion, DeleteFlag, CreatedTime, CreatedUserId) "
+            + "SELECT r.ModuleId, r.Title, r.OwnerUserId, r.ValuesJson, r.RowVersion, r.DeleteFlag, r.CreatedTime, r.CreatedUserId FROM Dynamic_Record r, n WHERE r.Id = {1}",
+            count, templateId);
+
+    [Fact]
+    public async Task SqlTimeout_InterruptsTheQuery_AndReportsTimeout_WithoutFallingBackToMemory()
+    {
+        await Prepare();
+        var template = await Seed("order", "admin", (Amount, 1m));
+        await CloneRecords(template, 200_000);
+        var options = Svc<ReportOptions>();
+        options.Engine = ReportEngineMode.Auto;
+        options.SqlTimeoutSeconds = 0.001;
+
+        // 依沒有值的文字欄位分組：每筆記錄各查一次索引，20 萬筆遠超過 1 ms
+        var aggregate = Def(groups: [G(MainF(Note))], measures: [M("n", "countMain")]);
+        var timedOut = await Run(aggregate);
+        timedOut.State.Should().Be("tooMany");
+        timedOut.Message.Should().Be("報表執行逾時，請加上條件縮小範圍");
+        timedOut.Engine.Should().Be("sql", "逾時不退回記憶體路徑，避免把負載放大");
+        (await Run(aggregate, locale: "en-US")).Message.Should().Be("The report took too long to run. Add conditions to narrow it down");
+
+        // 縮小後備的查詢同樣受逾時限制，逾時不改成載入整個模組
+        var detail = Def(columns: [MainF(Amount)], filters: [F(MainF(Note), "isEmpty")]);
+        var narrowTimedOut = await Run(detail);
+        narrowTimedOut.State.Should().Be("tooMany");
+        narrowTimedOut.Message.Should().Be("報表執行逾時，請加上條件縮小範圍");
+
+        // 逾時只影響那一次：放寬後同一條連線照常跑完
+        options.SqlTimeoutSeconds = 30;
+        var ok = await Run(aggregate);
+        ok.State.Should().Be("ok");
+        ok.Engine.Should().Be("sql");
+        ok.Total!["n"].Should().Be(200_001m);
+    }
+
     private async Task<FieldConfig> CurrentConfig(string module, long fieldId) =>
         (await Detail(module)).Blocks.SelectMany(b => b.Fields).Single(f => f.Id == fieldId).Config;
 

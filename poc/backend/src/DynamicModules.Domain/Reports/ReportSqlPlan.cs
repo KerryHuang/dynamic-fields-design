@@ -62,6 +62,9 @@ public sealed record ReportSqlRow(IReadOnlyList<object?> Keys, long RowCount, IR
 /// <summary>FallbackReason 不為 null 時代表 SQL 路徑放棄，Groups、Total 無意義。</summary>
 public sealed record ReportSqlOutcome(string? FallbackReason, IReadOnlyList<ReportSqlRow> Groups, ReportSqlRow? Total)
 {
+    /// <summary>SQL 執行超過時間上限被中斷。呼叫端回逾時錯誤，不退回記憶體路徑。</summary>
+    public const string TimeoutReason = "sqlTimeout";
+
     public static ReportSqlOutcome Fallback(string reason) => new(reason, [], null);
 }
 

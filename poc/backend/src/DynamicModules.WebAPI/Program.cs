@@ -39,7 +39,7 @@ builder.Services.AddSingleton(new ReportOptions
     MaxRows = builder.Configuration.GetValue("Reports:MaxRows", 50_000),
     MaxLoadRows = builder.Configuration.GetValue("Reports:MaxLoadRows", 200_000),
     Engine = builder.Configuration.GetValue("Reports:Engine", ReportEngineMode.Auto),
-    SqlTimeoutSeconds = builder.Configuration.GetValue("Reports:SqlTimeoutSeconds", 30),
+    SqlTimeoutSeconds = builder.Configuration.GetValue("Reports:SqlTimeoutSeconds", 30.0),
 });
 builder.Services.AddHttpContextAccessor();
 builder.Services.AddPersistence(builder.Configuration);

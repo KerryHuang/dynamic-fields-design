@@ -1,6 +1,7 @@
 using System.Data;
 using System.Globalization;
 using Dapper;
+using DynamicModules.Application.Dynamic.ReportService;
 using DynamicModules.Domain.Data;
 using DynamicModules.Domain.Reports;
 using DynamicModules.Domain.Repositories.Dynamic;
@@ -11,19 +12,28 @@ using Microsoft.Extensions.Logging;
 
 namespace DynamicModules.Persistence.Repositories.Dynamic;
 
-public class ReportQueryRepository(DynamicDbContext db, ISqlDialect dialect, ILogger<ReportQueryRepository> logger) : IReportQueryRepository
+public class ReportQueryRepository(DynamicDbContext db, ISqlDialect dialect, ReportOptions options, ILogger<ReportQueryRepository> logger) : IReportQueryRepository
 {
     private static readonly int[] Caps = [1_000, 100_000];
+
+    private TimeSpan Timeout => TimeSpan.FromSeconds(options.SqlTimeoutSeconds);
 
     /// <summary>
     /// 探測與逐筆條件以 INDEXED BY 指定索引；實際 schema 沒有該索引（不是由 migration 建出的檔、索引改名）或規劃器用不上時，
     /// SQLite 在 prepare 就丟錯。這種情形退回記憶體路徑並記 Warning，不讓整張報表變成 500。
+    /// 超過時間上限被中斷時回 <see cref="ReportSqlOutcome.TimeoutReason"/>；請求本身被取消則照常丟 <see cref="OperationCanceledException"/>。
     /// </summary>
-    private async Task<string?> GuardIndexAsync(Func<Task<string?>> run)
+    private async Task<string?> GuardAsync(Func<Task<string?>> run, CancellationToken ct)
     {
         try
         {
             return await run();
+        }
+        catch (SqliteException e) when (e.SqliteErrorCode == ReportSqlSnapshot.InterruptErrorCode)
+        {
+            ct.ThrowIfCancellationRequested();
+            logger.LogWarning("報表 SQL 超過時間上限 {Seconds} 秒，已中斷", options.SqlTimeoutSeconds);
+            return ReportSqlOutcome.TimeoutReason;
         }
         catch (SqliteException e) when (e.Message.Contains("no such index") || e.Message.Contains("no query solution"))
         {
@@ -39,7 +49,7 @@ public class ReportQueryRepository(DynamicDbContext db, ISqlDialect dialect, ILo
     {
         IReadOnlyList<ReportSqlRow> groups = [];
         ReportSqlRow? total = null;
-        var reason = await GuardIndexAsync(() => ReportSqlSnapshot.RunAsync(db, q.Stamps, q.Checks, q.Main, async (connection, tx) =>
+        var reason = await GuardAsync(() => ReportSqlSnapshot.RunAsync(db, q.Stamps, q.Checks, q.Main, Timeout, async (connection, tx) =>
         {
             var driver = await ChooseDriverAsync(connection, tx, q.Filters, ct);
             if (q.Groups.Count > 0)
@@ -49,7 +59,7 @@ public class ReportQueryRepository(DynamicDbContext db, ISqlDialect dialect, ILo
             }
             var totalSql = ReportQueryBuilder.Aggregate(q, driver, total: true, dialect);
             total = (await ReadAsync(connection, tx, totalSql, q, hasKeys: false, ct)).Single();
-        }, ct));
+        }, ct), ct);
         return reason is null ? new ReportSqlOutcome(null, groups, total) : ReportSqlOutcome.Fallback(reason);
     }
 
@@ -57,7 +67,7 @@ public class ReportQueryRepository(DynamicDbContext db, ISqlDialect dialect, ILo
         ReportSqlScope main, ReportSqlNarrowing n, ReportSqlScope? child, long linkFieldId, int limit, CancellationToken ct)
     {
         IReadOnlyList<DynamicModules.Domain.Entities.Dynamic.Record> mains = [], kids = [];
-        var reason = await GuardIndexAsync(() => ReportSqlSnapshot.RunAsync(db, n.Stamps, n.Checks, main, async (connection, tx) =>
+        var reason = await GuardAsync(() => ReportSqlSnapshot.RunAsync(db, n.Stamps, n.Checks, main, Timeout, async (connection, tx) =>
         {
             var driver = await ChooseDriverAsync(connection, tx, n.Filters, ct);
             var built = ReportQueryBuilder.Narrow(main, n.Filters, driver, limit);
@@ -65,7 +75,7 @@ public class ReportQueryRepository(DynamicDbContext db, ISqlDialect dialect, ILo
             if (child is null) return;
             var childBuilt = ReportQueryBuilder.NarrowChildren(main, n.Filters, driver, limit, child, linkFieldId);
             kids = (await connection.QueryAsync<DynamicModules.Domain.Entities.Dynamic.Record>(new CommandDefinition(childBuilt.Sql, childBuilt.Parameters, tx, cancellationToken: ct))).ToList();
-        }, ct));
+        }, ct), ct);
         return reason is null ? new ReportNarrowedRecords(null, mains, kids) : ReportNarrowedRecords.Fallback(reason);
     }
 

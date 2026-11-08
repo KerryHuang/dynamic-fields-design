@@ -193,6 +193,7 @@ public partial class ReportRunner(
         // 縮小：只載入符合主模組精確條件的記錄（設計 §8.1）；MemoryOnly 是對照用的純記憶體路徑，不縮小
         var narrowed = options.Engine == ReportEngineMode.MemoryOnly ? null
             : await TryNarrowAsync(d, o, bound, mainSide, childSide, link, basis, resolved, fallbackReasons, ct);
+        if (narrowed?.FallbackReason == ReportSqlOutcome.TimeoutReason) return SqlTimeoutResult(locale, basis, frozen);
         IReadOnlyList<Record> mainRows = narrowed?.Main
             ?? await records.ListForReportAsync(main.Id, mainSide.Perms!.OwnerUserIds, options.MaxLoadRows + 1, ct);
         if (mainRows.Count > options.MaxLoadRows) return tooManyToLoad();

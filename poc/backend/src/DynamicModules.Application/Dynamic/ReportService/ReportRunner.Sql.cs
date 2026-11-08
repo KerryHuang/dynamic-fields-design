@@ -321,6 +321,7 @@ public partial class ReportRunner
             return null;
         }
         var outcome = await queries.AggregateAsync(query, ct);
+        if (outcome.FallbackReason == ReportSqlOutcome.TimeoutReason) return SqlTimeoutResult(ctx.Locale, basis, frozen);
         if (outcome.FallbackReason is { } reason)
         {
             reasons.Add(reason);
@@ -344,6 +345,8 @@ public partial class ReportRunner
             new ReportSqlScope(mainSide.Module.Id, mainSide.Perms!.OwnerUserIds), narrowing,
             childSide is null ? null : new ReportSqlScope(childSide.Module.Id, childSide.Perms!.OwnerUserIds), link?.Id ?? 0,
             options.MaxLoadRows + 1, ct);
+        // 逾時照原樣交回，呼叫端回逾時錯誤；改成載入整個模組只會把負載放大
+        if (result.FallbackReason == ReportSqlOutcome.TimeoutReason) return result;
         if (result.FallbackReason is { } reason)
         {
             reasons.Add($"narrowSkipped:{reason}");
@@ -351,6 +354,10 @@ public partial class ReportRunner
         }
         return result;
     }
+
+    private static ReportResult SqlTimeoutResult(string locale, DateOnly basis, bool frozen) =>
+        new(TooManyState, ReportText.Get(locale, ReportText.SqlTimeout), "", [], null, null, null, false, basis, null, frozen,
+            Engine: "sql", FallbackReasons: []);
 
     // ---- 結果：SQL 的原始列 → 與記憶體路徑相同的計算結果 ----
 
