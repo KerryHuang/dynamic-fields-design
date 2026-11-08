@@ -62,15 +62,15 @@ public class LedgerReverser(
         {
             if (FieldRulesComputed(f.Type) || f.Id == def.ReversalFieldId) continue;
             if (perms is not null && !perms.CanSee(f)) continue;
-            if (!source.TryGetValue(f.Key, out var v) || v is not { ValueKind: not JsonValueKind.Null }) continue;
+            // 互換要在「自己是空值」的判斷之前：這一邊空、另一邊有值時，這一邊要拿到另一邊的值；另一邊空則這一邊清空
             if (swapOf.TryGetValue(f.Id, out var other))
+            {
                 values[f.Key] = source.TryGetValue($"f_{other}", out var o) && o is { ValueKind: not JsonValueKind.Null } ? o : null;
-            else if (negate.Contains(f.Id)) values[f.Key] = Negated(v.Value);
-            else values[f.Key] = v;
+                continue;
+            }
+            if (!source.TryGetValue(f.Key, out var v) || v is not { ValueKind: not JsonValueKind.Null }) continue;
+            values[f.Key] = negate.Contains(f.Id) ? Negated(v.Value) : v;
         }
-        // 互換的另一邊在原分錄是空值時，這一邊要清空而不是留著
-        foreach (var (a, b) in swapOf)
-            if (fields.TryGetValue(a, out var fa) && !values.ContainsKey(fa.Key)) values[fa.Key] = null;
         values[reversalKey] = JsonDocument.Parse(original.Id.ToString(CultureInfo.InvariantCulture)).RootElement.Clone();
 
         foreach (var (key, value) in overrides ?? new Dictionary<string, JsonElement?>())
@@ -84,28 +84,39 @@ public class LedgerReverser(
         }
         if (errors.Count > 0) return new ReversalPlan([], [], errors, null);
 
-        var details = await DetailsAsync(module, original, negate, perms, ct);
+        var (details, hiddenDetail) = await DetailsAsync(module, original, negate, swapOf, perms, ct);
+        if (hiddenDetail) return new ReversalPlan([], [], new() { [RecordValueProcessor.RecordErrorKey] = [HiddenNeeded] }, null);
         if (!SelfCheck(fields, source, values, negate, swapOf)) return new ReversalPlan([], [], [], SelfCheckFailed);
         return new ReversalPlan(values, details, [], null);
     }
 
-    private async Task<Dictionary<string, List<DetailRowInput>>> DetailsAsync(
-        Module header, Record original, HashSet<long> negate, EffectivePermissions? perms, CancellationToken ct)
+    /// <summary>
+    /// 明細列同樣複製：negate 取負、swap 互換。使用者看不到（或整個明細模組沒有讀取權限）決定抵銷的 negate／swap 欄位時，
+    /// 沖銷無法精確抵銷，回 hiddenNeeded（整個請求 400），不是略過那個欄位。
+    /// </summary>
+    private async Task<(Dictionary<string, List<DetailRowInput>> Details, bool HiddenNeeded)> DetailsAsync(
+        Module header, Record original, HashSet<long> negate, Dictionary<long, long> swapOf, EffectivePermissions? perms, CancellationToken ct)
     {
         var result = new Dictionary<string, List<DetailRowInput>>();
         foreach (var (child, parentField) in await modules.ListDetailModulesAsync(header.Key, ct))
         {
             var childModule = await modules.GetByIdAsync(child.Id, includeChildren: true, ct);
             if (childModule is null || !childModule.IsWritable()) continue;
+            var fields = Active(childModule);
+            var decisive = fields.Values.Where(f => negate.Contains(f.Id) || swapOf.ContainsKey(f.Id)).ToList();
             EffectivePermissions? childPerms = null;
             if (perms is not null)
             {
                 var access = await guard.AuthorizeDetailAsync(header, childModule, PermissionAction.Read, ct);
-                if ((childPerms = access.Permissions) is null) continue;
+                if ((childPerms = access.Permissions) is null)
+                {
+                    if (decisive.Count > 0) return ([], true);
+                    continue;
+                }
+                if (decisive.Any(f => !childPerms.CanSee(f))) return ([], true);
             }
             var rows = (await records.ListByRefAsync(parentField.Id, original.Id.ToString(CultureInfo.InvariantCulture), ct))
                 .Where(r => !r.DeleteFlag).OrderBy(r => r.Id);
-            var fields = Active(childModule);
             var list = new List<DetailRowInput>();
             foreach (var row in rows)
             {
@@ -114,14 +125,20 @@ public class LedgerReverser(
                 foreach (var f in fields.Values.Where(f => !FieldRulesComputed(f.Type) && f.Id != parentField.Id))
                 {
                     if (childPerms is not null && !childPerms.CanSee(f)) continue;
+                    if (swapOf.TryGetValue(f.Id, out var other))
+                    {
+                        vals[f.Key] = src.TryGetValue($"f_{other}", out var o) && o is { ValueKind: not JsonValueKind.Null } ? o : null;
+                        continue;
+                    }
                     if (!src.TryGetValue(f.Key, out var v) || v is not { ValueKind: not JsonValueKind.Null }) continue;
                     vals[f.Key] = negate.Contains(f.Id) ? Negated(v.Value) : v;
                 }
-                list.Add(new DetailRowInput(null, vals, null));
+                // 這些值是照原分錄鏡射出來的，使用者看得到才會走到這裡；欄位對他唯讀也要照寫，不然預設值會蓋掉沖銷值
+                list.Add(new DetailRowInput(null, vals, null, SystemKeys: vals.Keys.ToHashSet()));
             }
             if (list.Count > 0) result[child.Key] = list;
         }
-        return result;
+        return (result, false);
     }
 
     /// <summary>逐一檢查：negate 欄位 = −原值、swap 欄位已互換、其餘輸入型數字欄位與原值相同；公式、彙總、自動編號不比較（照公式重算）。</summary>

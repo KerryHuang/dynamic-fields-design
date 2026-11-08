@@ -60,7 +60,9 @@ public class ReverseRecordHandler(
         if (plan.Errors.Count > 0) return ServiceResult.Invalid(plan.Errors);
 
         var created = await create.Handle(
-            new CreateRecordRequest(module.Key, plan.Values, null, plan.Details.Count > 0 ? plan.Details : null, new HashSet<string> { reversalKey }), ct);
+            // 鏡射值（含沖銷欄位）都以系統填入處理：使用者看得到才會進計畫；欄位對他唯讀時，一般新增會忽略該欄位而套預設值，
+            // 沖銷就不再是精確抵銷。使用者覆寫的說明性欄位已在計畫階段檢查過寫入權限。
+            new CreateRecordRequest(module.Key, plan.Values, null, plan.Details.Count > 0 ? plan.Details : null, plan.Values.Keys.ToHashSet()), ct);
         if (!created.IsSuccess) return created;
 
         ledgers.AddReversal(new LedgerReversal

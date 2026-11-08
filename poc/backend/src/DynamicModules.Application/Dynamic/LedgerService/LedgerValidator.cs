@@ -35,8 +35,10 @@ public class LedgerValidator(IModuleRepository modules)
             if (!all.TryGetValue(id, out var f) || !Numeric.Contains(f.Type)) { Err("negate", "取負號的欄位必須是本模組或其明細模組的整數、小數或金額欄位"); break; }
         foreach (var pair in input.Swap ?? [])
         {
-            if (pair is not { Count: 2 } || pair[0] == pair[1] || !own.TryGetValue(pair[0], out var a) || !own.TryGetValue(pair[1], out var b)
-                || a.Type != b.Type || !Numeric.Contains(a.Type))
+            // 一對必須在同一個模組：本模組，或同一個明細模組（傳票的借貸明細）
+            var home = details.Select(ActiveFields).Prepend(own).FirstOrDefault(m => pair is { Count: 2 } && m.ContainsKey(pair[0]) && m.ContainsKey(pair[1]));
+            if (pair is not { Count: 2 } || pair[0] == pair[1] || home is null
+                || home[pair[0]].Type != home[pair[1]].Type || !Numeric.Contains(home[pair[0]].Type))
             {
                 Err("swap", "互換的欄位必須是本模組內、同型別的兩個不同數字欄位");
                 break;
