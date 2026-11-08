@@ -19,6 +19,10 @@ public sealed class Workload(IServiceProvider sp, SeedInfo seed)
 {
     private readonly SchemaInfo _s = seed.Schema;
     private readonly ConcurrentBag<long> _created = [];
+    private bool _hotAccount;
+
+    /// <summary>events 階段用：所有新增都落在同一個科目，量檢查的分組加總隨組內筆數成長的成本。</summary>
+    public Workload HotAccount(bool on) { _hotAccount = on; return this; }
 
     public sealed record Op(string Name, int Weight, bool Write, Func<IMediator, Random, Task<string?>> Run);
 
@@ -107,6 +111,16 @@ public sealed class Workload(IServiceProvider sp, SeedInfo seed)
         new("create_entry", 14, true, async (m, r) =>
         {
             var res = await m.Send(new CreateRecordRequest("ledger", NewEntry(r)));
+            if (!res.IsCreated) return res.Message;
+            _created.Add(((DynamicRecordResponse)res.Data!).Id);
+            return null;
+        }),
+        // 權重 0：不進混合與壓力階段；只在 events 階段（--write-ops create_entry_events）使用，分錄新增會連動鏡射記錄與跨記錄檢查
+        new("create_entry_events", 0, true, async (m, r) =>
+        {
+            var values = NewEntry(r);
+            if (_hotAccount) values[_s.LedgerAccount] = JsonSerializer.SerializeToElement(seed.AccountFirstId);
+            var res = await m.Send(new CreateRecordRequest("ledger", values));
             if (!res.IsCreated) return res.Message;
             _created.Add(((DynamicRecordResponse)res.Data!).Id);
             return null;
