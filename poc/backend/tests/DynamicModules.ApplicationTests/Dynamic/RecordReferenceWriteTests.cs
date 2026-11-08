@@ -15,10 +15,10 @@ using DynamicModules.Application.Dynamic.RecordService.Commands.UpdateRecord;
 using DynamicModules.Application.Dynamic.RecordService.Data;
 using DynamicModules.ApplicationTests.Persistence;
 using DynamicModules.Domain.Entities.Dynamic;
-using DynamicModules.Domain.Entities.Mock;
 using DynamicModules.Domain.ValueObjects;
 using DynamicModules.Persistence;
 using DynamicModules.Persistence.Seed;
+using DynamicModules.TestSupport;
 using FluentAssertions;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
@@ -50,6 +50,7 @@ public class RecordReferenceWriteTests : IAsyncLifetime
         var services = new ServiceCollection();
         services.AddApplication();
         services.AddPersistenceRepositories();
+        services.AddTestEntities();
         services.AddScoped(_ => _db.Context);
         services.AddScoped<ITransactionManager, EfTransactionManager>();
         services.AddScoped<IWorkSavepoints, EfWorkSavepoints>();
@@ -135,11 +136,7 @@ public class RecordReferenceWriteTests : IAsyncLifetime
         return (target, source);
     }
 
-    private async Task SetMoldDeleted(string no)
-    {
-        (await _db.Context.Set<MockMold>().SingleAsync(x => x.MoldNo == no)).DeleteFlag = true;
-        await _db.Context.SaveChangesAsync();
-    }
+    private void SetEntityDeleted(string no) => _sp.GetRequiredService<TestEntityProvider>().Delete(no);
 
     [Fact]
     public async Task Create_RefToExistingRecord_Ok()
@@ -218,30 +215,30 @@ public class RecordReferenceWriteTests : IAsyncLifetime
     [Fact]
     public async Task Create_RefToEntity_Ok()
     {
-        var source = await NewModule("plan", new ReferenceTarget(ReferenceTarget.EntityKind, "design.mold"));
+        var source = await NewModule("plan", new ReferenceTarget(ReferenceTarget.EntityKind, "test.entity"));
 
-        var r = await Create("admin", source, "計畫", "M-0001");
+        var r = await Create("admin", source, "計畫", "E-0001");
 
         r.IsCreated.Should().BeTrue(r.Message);
-        ((DynamicRecordResponse)r.Data!).Values[source.RefKey]!.Value.GetString().Should().Be("M-0001");
+        ((DynamicRecordResponse)r.Data!).Values[source.RefKey]!.Value.GetString().Should().Be("E-0001");
     }
 
     [Fact]
     public async Task Create_RefToUnknownEntityKey_Rejected()
     {
-        var source = await NewModule("plan", new ReferenceTarget(ReferenceTarget.EntityKind, "design.mold"));
+        var source = await NewModule("plan", new ReferenceTarget(ReferenceTarget.EntityKind, "test.entity"));
 
-        ShouldBeRefRejected(await Create("admin", source, "計畫", "M-9999"), source);
+        ShouldBeRefRejected(await Create("admin", source, "計畫", "E-9999"), source);
     }
 
     [Fact]
     public async Task Update_StaleEntityRefUnchanged_Saves()
     {
-        var source = await NewModule("plan", new ReferenceTarget(ReferenceTarget.EntityKind, "design.mold"));
-        var rec = (DynamicRecordResponse)(await Create("admin", source, "計畫", "M-0003")).Data!;
-        await SetMoldDeleted("M-0003");
+        var source = await NewModule("plan", new ReferenceTarget(ReferenceTarget.EntityKind, "test.entity"));
+        var rec = (DynamicRecordResponse)(await Create("admin", source, "計畫", "E-0003")).Data!;
+        SetEntityDeleted("E-0003");
 
-        var r = await Send(new UpdateRecordRequest(rec.Id, Vals((source.NameKey, "改名"), (source.RefKey, "M-0003")), rec.RowVersion));
+        var r = await Send(new UpdateRecordRequest(rec.Id, Vals((source.NameKey, "改名"), (source.RefKey, "E-0003")), rec.RowVersion));
 
         r.IsSuccess.Should().BeTrue(r.Message + string.Join(";", r.Errors.Select(e => e.Key + e.Value[0])));
         ((DynamicRecordResponse)r.Data!).Title.Should().Be("改名");
@@ -250,11 +247,11 @@ public class RecordReferenceWriteTests : IAsyncLifetime
     [Fact]
     public async Task Update_ChangedToGoneEntity_Rejected()
     {
-        var source = await NewModule("plan", new ReferenceTarget(ReferenceTarget.EntityKind, "design.mold"));
-        var rec = (DynamicRecordResponse)(await Create("admin", source, "計畫", "M-0003")).Data!;
-        await SetMoldDeleted("M-0004");
+        var source = await NewModule("plan", new ReferenceTarget(ReferenceTarget.EntityKind, "test.entity"));
+        var rec = (DynamicRecordResponse)(await Create("admin", source, "計畫", "E-0003")).Data!;
+        SetEntityDeleted("E-0004");
 
-        var r = await Send(new UpdateRecordRequest(rec.Id, Vals((source.RefKey, "M-0004")), rec.RowVersion));
+        var r = await Send(new UpdateRecordRequest(rec.Id, Vals((source.RefKey, "E-0004")), rec.RowVersion));
 
         ShouldBeRefRejected(r, source);
     }
@@ -262,9 +259,9 @@ public class RecordReferenceWriteTests : IAsyncLifetime
     [Fact]
     public async Task Update_RefCleared_Ok()
     {
-        var source = await NewModule("plan", new ReferenceTarget(ReferenceTarget.EntityKind, "design.mold"));
-        var rec = (DynamicRecordResponse)(await Create("admin", source, "計畫", "M-0003")).Data!;
-        _db.Context.Set<RecordIndex>().Count(i => i.RecordId == rec.Id && i.FieldId == source.RefFieldId && i.RefKey == "M-0003").Should().Be(1);
+        var source = await NewModule("plan", new ReferenceTarget(ReferenceTarget.EntityKind, "test.entity"));
+        var rec = (DynamicRecordResponse)(await Create("admin", source, "計畫", "E-0003")).Data!;
+        _db.Context.Set<RecordIndex>().Count(i => i.RecordId == rec.Id && i.FieldId == source.RefFieldId && i.RefKey == "E-0003").Should().Be(1);
 
         var r = await Send(new UpdateRecordRequest(rec.Id, new Dictionary<string, JsonElement?> { [source.RefKey] = null }, rec.RowVersion));
 

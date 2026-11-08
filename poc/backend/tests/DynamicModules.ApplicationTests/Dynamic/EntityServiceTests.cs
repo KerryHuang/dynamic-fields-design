@@ -5,12 +5,11 @@ using DynamicModules.Application.Common.Time;
 using DynamicModules.Application.Dynamic.EntityService.Queries.GetEntityLight;
 using DynamicModules.Application.Dynamic.References;
 using DynamicModules.ApplicationTests.Persistence;
-using DynamicModules.Domain.Entities.Mock;
 using DynamicModules.Persistence;
 using DynamicModules.Persistence.Seed;
+using DynamicModules.TestSupport;
 using FluentAssertions;
 using MediatR;
-using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 
 namespace DynamicModules.ApplicationTests.Dynamic;
@@ -36,6 +35,7 @@ public class EntityServiceTests : IAsyncLifetime
         var services = new ServiceCollection();
         services.AddApplication();
         services.AddPersistenceRepositories();
+        services.AddTestEntities();
         services.AddScoped(_ => _db.Context);
         services.AddScoped<ITransactionManager, EfTransactionManager>();
         services.AddScoped<IWorkSavepoints, EfWorkSavepoints>();
@@ -50,52 +50,51 @@ public class EntityServiceTests : IAsyncLifetime
         await _db.DisposeAsync();
     }
 
+    private TestEntityProvider Entities => _sp.GetRequiredService<TestEntityProvider>();
+
     private async Task<LightPage> Light(string? keyword, int page = 1, int size = 20)
     {
-        var r = await _sp.GetRequiredService<IMediator>().Send(new GetEntityLightRequest("design.mold", keyword, page, size));
+        var r = await _sp.GetRequiredService<IMediator>().Send(new GetEntityLightRequest("test.entity", keyword, page, size));
         r.IsSuccess.Should().BeTrue();
         return (LightPage)r.Data!;
     }
 
     [Fact]
-    public async Task Light_Mold_KeywordMatchesNoOrName()
+    public async Task Light_Entity_KeywordMatchesNoOrName()
     {
-        var byName = await Light("上蓋");
-        byName.Items.Should().ContainSingle().Which.Should().Be(new LightItem("M-0001", "M-0001 外殼上蓋模"));
+        var byName = await Light("甲");
+        byName.Items.Should().ContainSingle().Which.Should().Be(new LightItem("E-0001", "E-0001 甲號"));
 
-        var byNo = await Light("M-000");
+        var byNo = await Light("E-000");
         byNo.Total.Should().Be(9);
-        byNo.Items.Select(i => i.Key).Should().Equal("M-0001", "M-0002", "M-0003", "M-0004", "M-0005",
-            "M-0006", "M-0007", "M-0008", "M-0009");
+        byNo.Items.Select(i => i.Key).Should().Equal("E-0001", "E-0002", "E-0003", "E-0004", "E-0005",
+            "E-0006", "E-0007", "E-0008", "E-0009");
     }
 
     [Fact]
-    public async Task Light_DeletedMold_Excluded()
+    public async Task Light_DeletedEntity_Excluded()
     {
-        (await _db.Context.Set<MockMold>().SingleAsync(m => m.MoldNo == "M-0003")).DeleteFlag = true;
-        await _db.Context.SaveChangesAsync();
+        Entities.Delete("E-0003");
 
-        (await Light("M-000")).Total.Should().Be(8);
+        (await Light("E-000")).Total.Should().Be(8);
     }
 
     [Fact]
     public async Task Titles_MixedKeys_OnlyExisting()
     {
-        (await _db.Context.Set<MockMold>().SingleAsync(m => m.MoldNo == "M-0003")).DeleteFlag = true;
-        await _db.Context.SaveChangesAsync();
+        Entities.Delete("E-0003");
 
-        var titles = await _sp.GetRequiredService<ReferenceProviderRegistry>().Get("design.mold")!
-            .TitlesAsync(["M-0001", "M-9999", "M-0003"], default);
+        var titles = await _sp.GetRequiredService<ReferenceProviderRegistry>().Get("test.entity")!
+            .TitlesAsync(["E-0001", "E-9999", "E-0003"], default);
 
-        titles.Should().BeEquivalentTo(new Dictionary<string, string> { ["M-0001"] = "M-0001 外殼上蓋模" });
+        titles.Should().BeEquivalentTo(new Dictionary<string, string> { ["E-0001"] = "E-0001 甲號" });
     }
 
     [Fact]
     public async Task Light_SizeCappedAt50()
     {
         for (var i = 0; i < 60; i++)
-            _db.Context.Set<MockMold>().Add(new MockMold { MoldNo = $"X-{i:000}", Name = "測試" });
-        await _db.Context.SaveChangesAsync();
+            Entities.Add($"X-{i:000}", "測試");
 
         var page = await Light("X-", size: 100);
 

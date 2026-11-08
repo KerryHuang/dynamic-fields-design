@@ -19,6 +19,7 @@ using DynamicModules.Domain.Entities.Dynamic;
 using DynamicModules.Domain.ValueObjects;
 using DynamicModules.Persistence;
 using DynamicModules.Persistence.Seed;
+using DynamicModules.TestSupport;
 using FluentAssertions;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
@@ -47,6 +48,7 @@ public class RecordIndexTests : IAsyncLifetime
         var services = new ServiceCollection();
         services.AddApplication();
         services.AddPersistenceRepositories();
+        services.AddTestEntities();
         services.AddScoped(_ => _db.Context);
         services.AddScoped<ITransactionManager, EfTransactionManager>();
         services.AddScoped<IWorkSavepoints, EfWorkSavepoints>();
@@ -245,15 +247,15 @@ public class RecordIndexTests : IAsyncLifetime
     {
         var (m, nameKey) = await Setup();
         var mold = (FieldResponse)(await Send(new AddFieldRequest("order", m.Blocks[0].Id, FieldType.Reference, Text("模具"),
-            new FieldConfig { RefTarget = new ReferenceTarget(ReferenceTarget.EntityKind, "design.mold") }))).Data!;
+            new FieldConfig { RefTarget = new ReferenceTarget(ReferenceTarget.EntityKind, "test.entity") }))).Data!;
         await Send(new ActivateModuleRequest("order"));
 
-        var rec = await Create(Vals((nameKey, "A"), (mold.Key, "M-0001")));
+        var rec = await Create(Vals((nameKey, "A"), (mold.Key, "E-0001")));
 
         var rows = await Rows();
         rows.Should().ContainSingle();
         rows[0].RecordId.Should().Be(rec.Id);
         rows[0].FieldId.Should().Be(mold.Id);
-        rows[0].RefKey.Should().Be("M-0001");
+        rows[0].RefKey.Should().Be("E-0001");
     }
 }

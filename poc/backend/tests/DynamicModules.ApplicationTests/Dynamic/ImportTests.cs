@@ -324,16 +324,16 @@ public class ImportTests : DesignerTestBase
         await NewModule("src");
         var toTgt = await MustAdd("src", FieldType.Reference, RefTo(tgt), "目標");
         var mold = await MustAdd("src", FieldType.Reference,
-            new FieldConfig { RefTarget = new ReferenceTarget(ReferenceTarget.EntityKind, "design.mold") }, "模具");
+            new FieldConfig { RefTarget = new ReferenceTarget(ReferenceTarget.EntityKind, "test.entity") }, "模具");
         (await Send(new ActivateModuleRequest("src"))).IsSuccess.Should().BeTrue();
         var title = await TitleKey("src");
 
-        var p = await Preview("src", Csv($"{title},目標,模具", "a,甲,M-0002 外殼下蓋模", "b,乙,M-0002", "c,丙,"));
+        var p = await Preview("src", Csv($"{title},目標,模具", "a,甲,E-0002 乙號", "b,乙,E-0002", "c,丙,"));
 
         p.Valid.Should().Be(1);
         p.Errors.Select(e => e.Line).Should().Equal(3, 4);
         p.Errors[0].Errors[toTgt.Key].Should().Equal("「乙」有多筆同名資料");
-        p.Errors[0].Errors[mold.Key].Should().Equal("找不到「M-0002」");
+        p.Errors[0].Errors[mold.Key].Should().Equal("找不到「E-0002」");
         p.Errors[1].Errors[toTgt.Key].Should().Equal("找不到「丙」");
     }
 
@@ -477,7 +477,7 @@ public class ImportTests : DesignerTestBase
     [Fact]
     public async Task Import_Extension_400()
     {
-        await NewModule("ext", activate: true, kind: ModuleKind.Extension, host: "design.mold");
+        await NewModule("ext", activate: true, kind: ModuleKind.Extension, host: "test.entity");
 
         var r = await Send(new ImportRecordsRequest("ext", Csv("a", "b")));
 

@@ -30,7 +30,7 @@ public class DetailFieldRulesTests : DesignerTestBase
         var child = await NewModule("line");
         var r = await AddField(child, FieldType.Reference, new FieldConfig
         {
-            RefTarget = new ReferenceTarget(ReferenceTarget.EntityKind, "design.mold"), Relation = ReferenceRelation.Detail
+            RefTarget = new ReferenceTarget(ReferenceTarget.EntityKind, "test.entity"), Relation = ReferenceRelation.Detail
         });
         Err(r, Key).Should().Be(Reason("只能參照動態模組"));
     }
@@ -38,7 +38,7 @@ public class DetailFieldRulesTests : DesignerTestBase
     [Fact]
     public async Task Detail_TargetIsExtension_Rejected()
     {
-        var ext = await NewModule("ext", kind: ModuleKind.Extension, host: "design.mold");
+        var ext = await NewModule("ext", kind: ModuleKind.Extension, host: "test.entity");
         var child = await NewModule("line");
         Err(await AddDetail(child, ext), Key).Should().Be(Reason("表頭模組不能是擴充模組或其他模組的明細"));
     }
@@ -109,7 +109,7 @@ public class DetailFieldRulesTests : DesignerTestBase
     public async Task Detail_OnExtensionModule_Rejected()
     {
         var parent = await NewModule("order");
-        var ext = await NewModule("ext", kind: ModuleKind.Extension, host: "design.mold");
+        var ext = await NewModule("ext", kind: ModuleKind.Extension, host: "test.entity");
         Err(await AddDetail(ext, parent), Key).Should().Be(Reason("擴充模組不能當明細"));
     }
 

@@ -20,6 +20,7 @@ using DynamicModules.Domain.Entities.Dynamic;
 using DynamicModules.Domain.ValueObjects;
 using DynamicModules.Persistence;
 using DynamicModules.Persistence.Seed;
+using DynamicModules.TestSupport;
 using FluentAssertions;
 using MediatR;
 using Microsoft.Extensions.DependencyInjection;
@@ -47,6 +48,7 @@ public class FieldServiceTests : IAsyncLifetime
         var services = new ServiceCollection();
         services.AddApplication();
         services.AddPersistenceRepositories();
+        services.AddTestEntities();
         services.AddScoped(_ => _db.Context);
         services.AddScoped<ITransactionManager, EfTransactionManager>();
         services.AddScoped<IWorkSavepoints, EfWorkSavepoints>();
@@ -505,7 +507,7 @@ public class FieldServiceTests : IAsyncLifetime
     private static FieldConfig ModRef(string key, ReferenceOnDelete? onDelete = null, bool required = false) =>
         new() { RefTarget = new ReferenceTarget(ReferenceTarget.ModuleKind, key), OnDelete = onDelete, Required = required };
 
-    private static FieldConfig EntRef(string key = "design.mold") =>
+    private static FieldConfig EntRef(string key = "test.entity") =>
         new() { RefTarget = new ReferenceTarget(ReferenceTarget.EntityKind, key) };
 
     private async Task<ServiceResult> TryAdd(ModuleDetailResponse m, FieldConfig config) =>

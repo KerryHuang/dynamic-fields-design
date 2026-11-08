@@ -22,6 +22,7 @@ using DynamicModules.Domain.ValueObjects;
 using DynamicModules.Persistence;
 using DynamicModules.Persistence.Seed;
 using Microsoft.EntityFrameworkCore;
+using DynamicModules.TestSupport;
 using FluentAssertions;
 using MediatR;
 using Microsoft.Extensions.DependencyInjection;
@@ -51,6 +52,7 @@ public class SchemaServiceTests : IAsyncLifetime
         var services = new ServiceCollection();
         services.AddApplication();
         services.AddPersistenceRepositories();
+        services.AddTestEntities();
         services.AddScoped(_ => _db.Context);
         services.AddScoped<ITransactionManager, EfTransactionManager>();
         services.AddScoped<IWorkSavepoints, EfWorkSavepoints>();
@@ -366,7 +368,7 @@ public class SchemaServiceTests : IAsyncLifetime
         var toModule = (FieldResponse)(await Send(new AddFieldRequest("order", m.Blocks[0].Id, FieldType.Reference, Text("客戶"),
             new FieldConfig { RefTarget = new ReferenceTarget(ReferenceTarget.ModuleKind, "customer") }))).Data!;
         var toEntity = (FieldResponse)(await Send(new AddFieldRequest("order", m.Blocks[0].Id, FieldType.Reference, Text("模具"),
-            new FieldConfig { RefTarget = new ReferenceTarget(ReferenceTarget.EntityKind, "design.mold") }))).Data!;
+            new FieldConfig { RefTarget = new ReferenceTarget(ReferenceTarget.EntityKind, "test.entity") }))).Data!;
         var plain = await AddField("order", m.Blocks[0].Id);
         await Send(new ActivateModuleRequest("order"));
 
@@ -379,8 +381,8 @@ public class SchemaServiceTests : IAsyncLifetime
         mod.Name.Resolve("zh-TW").Should().Be("客戶");
         var ent = fields[toEntity.Id].Reference!;
         ent.Kind.Should().Be("entity");
-        ent.LightUrl.Should().Be("/entities/design.mold/light");
-        ent.Name.Resolve("zh-TW").Should().Be("模具");
+        ent.LightUrl.Should().Be("/entities/test.entity/light");
+        ent.Name.Resolve("zh-TW").Should().Be("測試實體");
         fields[plain.Id].Reference.Should().BeNull();
     }
 

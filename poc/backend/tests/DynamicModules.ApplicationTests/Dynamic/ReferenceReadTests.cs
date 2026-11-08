@@ -17,10 +17,10 @@ using DynamicModules.Application.Dynamic.RecordService.Queries.GetRecord;
 using DynamicModules.Application.Dynamic.References;
 using DynamicModules.ApplicationTests.Persistence;
 using DynamicModules.Domain.Entities.Dynamic;
-using DynamicModules.Domain.Entities.Mock;
 using DynamicModules.Domain.ValueObjects;
 using DynamicModules.Persistence;
 using DynamicModules.Persistence.Seed;
+using DynamicModules.TestSupport;
 using FluentAssertions;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
@@ -51,6 +51,7 @@ public class ReferenceReadTests : IAsyncLifetime
         var services = new ServiceCollection();
         services.AddApplication();
         services.AddPersistenceRepositories();
+        services.AddTestEntities();
         services.AddScoped(_ => _db.Context);
         services.AddScoped<ITransactionManager, EfTransactionManager>();
         services.AddScoped<IWorkSavepoints, EfWorkSavepoints>();
@@ -129,11 +130,7 @@ public class ReferenceReadTests : IAsyncLifetime
         return (target, source);
     }
 
-    private async Task SetMoldDeleted(string no)
-    {
-        (await _db.Context.Set<MockMold>().SingleAsync(x => x.MoldNo == no)).DeleteFlag = true;
-        await _db.Context.SaveChangesAsync();
-    }
+    private void SetEntityDeleted(string no) => _sp.GetRequiredService<TestEntityProvider>().Delete(no);
 
     private async Task Hide(long fieldId, string group = "sales")
     {
@@ -186,10 +183,10 @@ public class ReferenceReadTests : IAsyncLifetime
     [Fact]
     public async Task Get_EntityGone_Missing()
     {
-        var source = await NewModule("plan", new ReferenceTarget(ReferenceTarget.EntityKind, "design.mold"));
-        var id = await SourceRec(source, "計畫", "M-0003");
+        var source = await NewModule("plan", new ReferenceTarget(ReferenceTarget.EntityKind, "test.entity"));
+        var id = await SourceRec(source, "計畫", "E-0003");
         (await Get("admin", id)).References[source.RefKey].State.Should().Be("ok");
-        await SetMoldDeleted("M-0003");
+        SetEntityDeleted("E-0003");
 
         var info = (await Get("admin", id)).References[source.RefKey];
 
@@ -269,7 +266,7 @@ public class ReferenceReadTests : IAsyncLifetime
         await Send(new CreateModuleRequest("ord", Text("ord"), null, null));
         var block = (await Detail("ord")).Blocks[0].Id;
         foreach (var t in new[] { new ReferenceTarget(ReferenceTarget.ModuleKind, "cust1"), new ReferenceTarget(ReferenceTarget.ModuleKind, "cust2"),
-                     new ReferenceTarget(ReferenceTarget.EntityKind, "design.mold") })
+                     new ReferenceTarget(ReferenceTarget.EntityKind, "test.entity") })
             (await Send(new AddFieldRequest("ord", block, FieldType.Reference, Text("參照"), new FieldConfig { RefTarget = t }))).IsCreated.Should().BeTrue();
         await Send(new ActivateModuleRequest("ord"));
         var detail = await Detail("ord");
@@ -277,7 +274,7 @@ public class ReferenceReadTests : IAsyncLifetime
         var refs = allFields.Where(f => f.Type == FieldType.Reference).OrderBy(f => f.Id).ToList();
         var nameKey = allFields.Single(f => f.Id == detail.TitleFieldId).Key;
         for (var i = 0; i < 20; i++)
-            (await Send(new CreateRecordRequest("ord", Vals((nameKey, $"o{i:00}"), (refs[0].Key, m1.Id), (refs[1].Key, m2.Id), (refs[2].Key, i % 2 == 0 ? "M-0001" : "M-0002")))))
+            (await Send(new CreateRecordRequest("ord", Vals((nameKey, $"o{i:00}"), (refs[0].Key, m1.Id), (refs[1].Key, m2.Id), (refs[2].Key, i % 2 == 0 ? "E-0001" : "E-0002")))))
                 .IsCreated.Should().BeTrue();
 
         _user.UserId = "admin";

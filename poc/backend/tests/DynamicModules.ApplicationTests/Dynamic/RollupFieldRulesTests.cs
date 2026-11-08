@@ -39,7 +39,7 @@ public class RollupFieldRulesTests : DesignerTestBase
         var other = await NewModule("other");
         var wrongTarget = await MustAdd(s.Child, FieldType.Reference, RefTo(other), "其他");
         var entityRef = await MustAdd(s.Child, FieldType.Reference,
-            new FieldConfig { RefTarget = new ReferenceTarget(ReferenceTarget.EntityKind, "design.mold") }, "模具");
+            new FieldConfig { RefTarget = new ReferenceTarget(ReferenceTarget.EntityKind, "test.entity") }, "模具");
         var inactive = await MustAdd(s.Child, FieldType.Reference, RefTo(s.Parent), "停用的申請");
         (await Deactivate(inactive.Id)).IsSuccess.Should().BeTrue();
 

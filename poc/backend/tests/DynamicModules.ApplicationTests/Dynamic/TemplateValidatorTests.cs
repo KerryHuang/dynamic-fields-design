@@ -292,7 +292,7 @@ public class TemplateValidatorTests
         var ext = Base();
         Line(ext)["titleField"] = null;
         Line(ext)["kind"] = "extension";
-        Line(ext)["hostEntityKey"] = "design.mold";
+        Line(ext)["hostEntityKey"] = "test.entity";
         Validate(ext).Should().BeEmpty();
     }
 

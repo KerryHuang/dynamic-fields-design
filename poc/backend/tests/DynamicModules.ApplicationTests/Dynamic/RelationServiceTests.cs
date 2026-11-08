@@ -22,7 +22,6 @@ using DynamicModules.Application.Dynamic.FieldService.Commands.SetFieldStatus;
 using DynamicModules.Application.Dynamic.References;
 using DynamicModules.ApplicationTests.Persistence;
 using DynamicModules.Domain.Entities.Dynamic;
-using DynamicModules.Domain.Entities.Mock;
 using DynamicModules.Domain.ValueObjects;
 using DynamicModules.Persistence;
 using DynamicModules.Persistence.Seed;
@@ -131,12 +130,6 @@ public class RelationServiceTests : IAsyncLifetime
         var target = await NewModule("cust");
         var source = await NewModule("ord", new ReferenceTarget(ReferenceTarget.ModuleKind, "cust"));
         return (target, source);
-    }
-
-    private async Task SetMoldDeleted(string no)
-    {
-        (await _db.Context.Set<MockMold>().SingleAsync(x => x.MoldNo == no)).DeleteFlag = true;
-        await _db.Context.SaveChangesAsync();
     }
 
     private async Task Hide(long fieldId, string group = "sales")
