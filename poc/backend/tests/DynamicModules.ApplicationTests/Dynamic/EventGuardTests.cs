@@ -108,6 +108,34 @@ public class EventGuardTests : EffectsTestBase
     }
 
     [Fact]
+    public async Task Silent_mark_from_a_rollup_does_not_hide_a_later_event_write_to_the_same_parent()
+    {
+        // 新增子記錄 → 彙總重算父記錄（靜默）→ 子記錄的事件再改父記錄的備註 → 父記錄的 update 事件仍須觸發
+        await NewModule("egs-parent", activate: false);
+        var note = await MustAdd("egs-parent", FieldType.Text, label: "備註");
+        await NewModule("egs-child");
+        var parentRef = await MustAdd("egs-child", FieldType.Reference, RefTo("egs-parent"), "父");
+        var amount = await MustAdd("egs-child", FieldType.Decimal, label: "金額");
+        await Send(new ActivateModuleRequest("egs-child"));
+        await MustAdd("egs-parent", FieldType.Rollup,
+            new FieldConfig { Rollup = new RollupConfig(parentRef.Id, RollupFunction.Sum, amount.Id, null) }, "合計");
+        await Send(new ActivateModuleRequest("egs-parent"));
+        await NewModule("egs-log", activate: true);
+        var logTitle = (await Detail("egs-log")).TitleFieldId!.Value;
+
+        (await Send(new CreateEventRequest(Event("egs-touch", "egs-child", new EventTrigger("create", null, null, null),
+            UpdateVia("touch", "egs-parent", parentRef.Id, Const(note.Id, "\"x\"")))))).IsCreated.Should().BeTrue();
+        (await Send(new CreateEventRequest(Event("egs-watch", "egs-parent", new EventTrigger("update", null, null, [note.Id]),
+            Create("log", "egs-log", null, Const(logTitle, "\"changed\"")))))).IsCreated.Should().BeTrue();
+
+        var parent = await MustCreate("egs-parent", Vals(((await Detail("egs-parent")).TitleFieldId!.Value, "\"p\"")));
+        await MustCreate("egs-child", Vals(((await Detail("egs-child")).TitleFieldId!.Value, "\"c\""), (parentRef.Id, parent.Id.ToString()), (amount.Id, "5")));
+
+        Db.Context.Set<DynamicModules.Domain.Entities.Dynamic.Record>().AsNoTracking()
+            .Count(r => r.ModuleId == Db.Context.Set<Module>().Single(m => m.Key == "egs-log").Id).Should().Be(1);
+    }
+
+    [Fact]
     public async Task Effects_query_lists_the_produced_records_and_counts_the_ones_the_user_cannot_see()
     {
         var s = await BuildStock("ege");

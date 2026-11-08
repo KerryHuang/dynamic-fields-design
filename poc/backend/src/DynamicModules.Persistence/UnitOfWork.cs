@@ -32,9 +32,12 @@ public class UnitOfWork(DynamicDbContext db, IWriteJournal journal) : IUnitOfWor
             throw new DatabaseBusyException(DatabaseBusyException.DefaultMessage, ex);
         }
         foreach (var p in pending)
+        {
+            if (p.Silent) journal.ClearSilent(p.Entity);   // 靜默只管這一次儲存；同一請求之後對同一物件的寫入要正常觸發
             journal.Add(seq => new JournalEntry(
                 seq, p.Entity.Id, p.Entity.ModuleId, p.Kind, p.BeforeValues, p.BeforeDeleted,
                 p.Entity.ValuesJson, p.Entity.DeleteFlag, p.Silent, p.Entity.OwnerUserId));
+        }
     }
 
     private sealed record Pending(Record Entity, JournalKind Kind, string? BeforeValues, bool BeforeDeleted, bool Silent);

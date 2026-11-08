@@ -25,7 +25,11 @@ public interface IWriteJournal
     /// <summary>標記這個物件的下一次寫入為「靜默」：仍列入驗證，但不觸發事件（彙總重算用，設計 §4.5）。</summary>
     void MarkSilent(object trackedRecord);
 
+    /// <summary>這個物件是否被標為靜默。只看，不消耗。</summary>
     bool IsMarkedSilent(object trackedRecord);
+
+    /// <summary>標記只管「下一次」寫入：該次儲存成功後由 UnitOfWork 呼叫，之後同一物件的寫入恢復正常觸發。</summary>
+    void ClearSilent(object trackedRecord);
 }
 
 public sealed class WriteJournal : IWriteJournal
@@ -40,6 +44,8 @@ public sealed class WriteJournal : IWriteJournal
     public void MarkSilent(object trackedRecord) => _silent.Add(trackedRecord);
 
     public bool IsMarkedSilent(object trackedRecord) => _silent.Contains(trackedRecord);
+
+    public void ClearSilent(object trackedRecord) => _silent.Remove(trackedRecord);
 }
 
 public static class JournalView
