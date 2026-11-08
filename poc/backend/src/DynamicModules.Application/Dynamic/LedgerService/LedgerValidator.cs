@@ -35,7 +35,7 @@ public class LedgerValidator(IModuleRepository modules)
             if (!all.TryGetValue(id, out var f) || !Numeric.Contains(f.Type)) { Err("negate", "取負號的欄位必須是本模組或其明細模組的整數、小數或金額欄位"); break; }
         foreach (var pair in input.Swap ?? [])
         {
-            // 一對必須在同一個模組：本模組，或同一個明細模組（傳票的借貸明細）
+            // 一對必須在同一個模組：本模組，或同一個明細模組（明細列上互為相反的一對欄位）
             var home = details.Select(ActiveFields).Prepend(own).FirstOrDefault(m => pair is { Count: 2 } && m.ContainsKey(pair[0]) && m.ContainsKey(pair[1]));
             if (pair is not { Count: 2 } || pair[0] == pair[1] || home is null
                 || home[pair[0]].Type != home[pair[1]].Type || !Numeric.Contains(home[pair[0]].Type))
