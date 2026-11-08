@@ -34,7 +34,8 @@ internal static class ApiTestKit
             label = new Dictionary<string, string> { ["zh-TW"] = "欄位" },
             config = config ?? new { }
         });
-        res.EnsureSuccessStatusCode();
+        if (!res.IsSuccessStatusCode)   // 帶回應內容，偶發的 5xx 才查得到原因
+            throw new HttpRequestException($"AddField {type} 失敗 {(int)res.StatusCode}：{await res.Content.ReadAsStringAsync()}");
         var f = await JsonOf(res);
         return (f.GetProperty("id").GetInt64(), f.GetProperty("key").GetString()!, blockId);
     }
