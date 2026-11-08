@@ -181,6 +181,8 @@ export interface ModuleSchema {
   permissions: SchemaPermissions;
   /** The module's app is closed; add/edit/delete are already false. */
   readOnly?: boolean;
+  /** Ledger module: records cannot be edited or deleted, only reversed; edit/delete are already false. */
+  ledger?: boolean;
   blocks: SchemaBlock[];
   rules: SchemaRule[];
   /** Active detail modules of this header; absent when there are none. */
@@ -238,6 +240,8 @@ export interface DynamicRecord {
   modifiedUserId: string;
   modifiedTime: string;
   rowVersion: string;
+  /** Already posted by an event: only the status field may change, and it cannot be deleted. */
+  frozenByEffects?: boolean;
   /** Detail rows by child module key; present on GET record of a header. */
   details?: Record<string, DynamicRecord[]>;
 }

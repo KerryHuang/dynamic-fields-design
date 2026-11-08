@@ -12,6 +12,7 @@ import { resolveI18n } from 'src/domain/dynamic/i18n-text';
 import type { ConvertBody, RecordConversion } from 'src/domain/dynamic/types';
 import DynamicField from 'src/presentation/dynamic/components/DynamicField.vue';
 import { messagesOutside } from 'src/presentation/dynamic/designer/api-error';
+import { newIdempotencyKey } from 'src/services/api/idempotency';
 import type { ApiError } from 'src/services/api/http';
 
 const props = defineProps<{ modelValue: boolean; recordId: number; rowVersion: string; conversion: RecordConversion }>();
@@ -47,8 +48,11 @@ const requiredKeys = computed(() => new Set(inputsQuery.data.value ?? []));
 const inputsFilled = computed(() => inputFields.value.every((f) => !requiredKeys.value.has(f.key) || !isBlank(formValues[f.key])));
 const quantities = reactive<Record<number, number | null>>({});
 const serverErrors = ref(new Map<number, string>());
+// New per opened dialog; a resend after a failure reuses it, a success or a 422 (same key, other content) replaces it.
+let idempotencyKey = newIdempotencyKey();
 watch(() => [props.modelValue, props.conversion] as const, ([open]) => {
   if (!open) return;
+  idempotencyKey = newIdempotencyKey();
   serverErrors.value = new Map();
   resetForm({ values: {} });
   extraKeys.value = [];
@@ -97,12 +101,14 @@ async function submit() {
   const filled = Object.fromEntries(inputFields.value.filter((f) => !isBlank(formValues[f.key])).map((f) => [f.key, formValues[f.key]]));
   const body: ConvertBody = { rowVersion: props.rowVersion, ...(Object.keys(filled).length && { values: filled }), ...(sent && { lines: sent }) };
   try {
-    const rec = await convert.mutateAsync({ id: props.recordId, key: props.conversion.key, body });
+    const rec = await convert.mutateAsync({ id: props.recordId, key: props.conversion.key, body, idempotencyKey });
+    idempotencyKey = newIdempotencyKey();
     emit('update:modelValue', false);
     $q.notify({ type: 'positive', message: t('docflow.convert.done') });
     await router.push(`/dynamic/${rec.moduleKey}/${rec.id}`);
   } catch (e) {
     const err = e as ApiError;
+    if (err.status === 422) idempotencyKey = newIdempotencyKey();
     if (err.status === 400 && err.errors) {
       serverErrors.value = serverQuantityErrors(err.errors, sent ?? []);
       await showServerFieldErrors(err.errors);

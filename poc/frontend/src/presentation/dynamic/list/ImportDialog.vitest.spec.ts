@@ -105,10 +105,27 @@ describe('ImportDialog', () => {
     confirmBtn().click();
     await flushPromises();
     await new Promise((r) => setTimeout(r, 50));
-    expect(api.commitImport).toHaveBeenCalledWith('m', expect.any(File));
+    expect(api.commitImport).toHaveBeenCalledWith('m', expect.any(File), expect.stringMatching(/^[A-Za-z0-9_-]{8,64}$/));
     expect(invalidate).toHaveBeenCalledWith({ queryKey: ['records', 'm'] });
     expect(document.body.textContent).toContain('已匯入 3 筆');
     expect(w.emitted('update:modelValue')?.at(-1)).toEqual([false]);
+  });
+
+  it('a confirm retried after a failure reuses the Idempotency-Key; another file gets a new one', async () => {
+    api.previewImport.mockResolvedValue(clean);
+    api.commitImport.mockRejectedValueOnce({ status: 0 }).mockResolvedValue({ created: 3 });
+    const w = await open();
+    await pickFile(w);
+    confirmBtn().click();
+    await flushPromises();
+    confirmBtn().click();
+    await flushPromises();
+    const [first, second] = api.commitImport.mock.calls.map((c) => c[2]);
+    expect(second).toBe(first);
+    await pickFile(w, file('b.csv'));
+    confirmBtn().click();
+    await flushPromises();
+    expect(api.commitImport.mock.calls[2]![2]).not.toBe(first);
   });
 
   it('shows commit rejections in the error table and stays open', async () => {

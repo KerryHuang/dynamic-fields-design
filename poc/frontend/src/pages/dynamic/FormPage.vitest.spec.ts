@@ -98,7 +98,7 @@ describe('FormPage', () => {
       expect(w.findComponent(PopupSelect).props('modelValue')).toBe(42);
       await w.find('input').setValue('t');
       await w.find('form').trigger('submit');
-      await vi.waitFor(() => expect(api.createRecord).toHaveBeenCalledWith('m', expect.objectContaining({ f_12: 42 }), undefined, undefined));
+      await vi.waitFor(() => expect(api.createRecord).toHaveBeenCalledWith('m', expect.objectContaining({ f_12: 42 }), undefined, undefined, expect.any(String)));
     });
 
     it('prefill shows the target record title', async () => {
@@ -133,7 +133,7 @@ describe('FormPage', () => {
       host.vm.$emit('update:modelValue', 'M-0001');
       await flushPromises();
       await w.find('form').trigger('submit');
-      await vi.waitFor(() => expect(api.createRecord).toHaveBeenCalledWith('m', expect.anything(), 'M-0001', undefined));
+      await vi.waitFor(() => expect(api.createRecord).toHaveBeenCalledWith('m', expect.anything(), 'M-0001', undefined, expect.any(String)));
     });
 
     it('create-mode 409 shows the server message, not the stale notice', async () => {
@@ -191,7 +191,7 @@ describe('FormPage', () => {
       await submit(w);
       expect(api.createRecord).toHaveBeenCalledWith('m', expect.objectContaining({ f_1: '單頭' }), undefined, {
         line: [{ values: { f_11: '螺絲', f_12: null } }],
-      });
+      }, expect.any(String));
     });
 
     it('edit sends only changed rows', async () => {
@@ -200,7 +200,7 @@ describe('FormPage', () => {
       await w.find('input').setValue('新標題');
       await gridRows(w)[1]!.findAll('input')[1]!.setValue('M5');
       await submit(w);
-      expect(api.updateRecord).toHaveBeenCalledWith(5, { f_1: '新標題' }, 'v', { line: [{ id: 32, rowVersion: 'v32', values: { f_12: 'M5' } }] });
+      expect(api.updateRecord).toHaveBeenCalledWith(5, { f_1: '新標題' }, 'v', { line: [{ id: 32, rowVersion: 'v32', values: { f_12: 'M5' } }] }, expect.any(String));
     });
 
     it('edit with no header change but detail change still saves', async () => {
@@ -208,7 +208,7 @@ describe('FormPage', () => {
       const w = await mountPage(detailSchema(), '/dynamic/m/5/edit', header as never);
       await w.findAll('[data-testid="delete-row"]')[0]!.trigger('click');
       await submit(w);
-      expect(api.updateRecord).toHaveBeenCalledWith(5, {}, 'v', { line: [{ id: 31, rowVersion: 'v31', _delete: true }] });
+      expect(api.updateRecord).toHaveBeenCalledWith(5, {}, 'v', { line: [{ id: 31, rowVersion: 'v31', _delete: true }] }, expect.any(String));
     });
 
     it('400 detail error keys shown on rows, not as outside notify', async () => {
@@ -234,8 +234,42 @@ describe('FormPage', () => {
       await gridRows(w)[0]!.findAll('input')[1]!.setValue('X');
       await submit(w);
       await vi.waitFor(() => expect(document.body.textContent).toContain(zhTW.dynamic.stale));
-      expect(api.updateRecord).toHaveBeenCalledWith(5, {}, 'v', { line: [{ id: 31, rowVersion: 'v31', values: { f_12: 'X' } }] });
+      expect(api.updateRecord).toHaveBeenCalledWith(5, {}, 'v', { line: [{ id: 31, rowVersion: 'v31', values: { f_12: 'X' } }] }, expect.any(String));
       expect(document.body.textContent).toContain(zhTW.dynamic.reload);
+    });
+  });
+  describe('Idempotency-Key', () => {
+    const submit = async (w: Awaited<ReturnType<typeof mountPage>>) => {
+      await w.find('form').trigger('submit');
+      await new Promise((r) => setTimeout(r, 30));
+      await flushPromises();
+    };
+    const keyOf = (fn: { mock: { calls: unknown[][] } }, call: number, arg: number) => fn.mock.calls[call]![arg];
+
+    it('a failed create is resent with the same key, a new form gets another', async () => {
+      api.createRecord.mockRejectedValueOnce({ status: 0 }).mockResolvedValue({ ...record, id: 9 } as never);
+      const w = await mountPage(schema(all), '/dynamic/m/new');
+      await w.find('input').setValue('甲');
+      await submit(w);
+      await submit(w);
+      const first = keyOf(api.createRecord, 0, 4);
+      expect(first).toMatch(/^[A-Za-z0-9_-]{8,64}$/);
+      expect(keyOf(api.createRecord, 1, 4)).toBe(first);
+      const other = await mountPage(schema(all), '/dynamic/m/new');
+      api.createRecord.mockResolvedValue({ ...record, id: 10 } as never);
+      await other.find('input').setValue('乙');
+      await submit(other);
+      expect(keyOf(api.createRecord, 2, 4)).not.toBe(first);
+    });
+
+    it('an edit carries the key too, and a 422 (same key, other content) takes a fresh key for the next try', async () => {
+      api.updateRecord.mockRejectedValueOnce({ status: 422, message: '同一個操作識別碼用在不同內容' }).mockResolvedValue({ ...record } as never);
+      const w = await mountPage(schema(all), '/dynamic/m/5/edit');
+      await w.find('input').setValue('y');
+      await submit(w);
+      await submit(w);
+      expect(keyOf(api.updateRecord, 0, 4)).toMatch(/^[A-Za-z0-9_-]{8,64}$/);
+      expect(keyOf(api.updateRecord, 1, 4)).not.toBe(keyOf(api.updateRecord, 0, 4));
     });
   });
 });

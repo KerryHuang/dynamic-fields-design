@@ -7,6 +7,7 @@ import { resolveI18n } from 'src/domain/dynamic/i18n-text';
 import type { ImportPreview, ImportRowError, ModuleSchema } from 'src/domain/dynamic/types';
 import { errorFor } from 'src/presentation/dynamic/designer/api-error';
 import { dynamicApi } from 'src/services/api/dynamic-api';
+import { newIdempotencyKey } from 'src/services/api/idempotency';
 import { isForbidden, type ApiError } from 'src/services/api/http';
 
 const props = defineProps<{ schema: ModuleSchema; modelValue: boolean }>();
@@ -22,6 +23,8 @@ const fileError = ref<string>();
 const rowErrors = ref<ImportRowError[]>([]);
 /** Only the latest selection may write results; an older, slower preview is dropped. */
 let seq = 0;
+/** Made when a file is picked: confirming it again after a failure reuses it, another file replaces it. */
+let idempotencyKey = newIdempotencyKey();
 
 function reset() {
   seq++;
@@ -40,6 +43,7 @@ async function onFile(f: File | null) {
   reset();
   file.value = f;
   if (!f) return;
+  idempotencyKey = newIdempotencyKey();
   const mine = seq;
   loading.value = true;
   try {
@@ -92,7 +96,7 @@ function rowsFromCommitErrors(errors: Record<string, string[]>): { rows: ImportR
 
 function confirm() {
   if (!file.value || !canConfirm.value) return;
-  commit.mutate({ moduleKey: props.schema.key, file: file.value }, {
+  commit.mutate({ moduleKey: props.schema.key, file: file.value, idempotencyKey }, {
     onSuccess: (r) => {
       Notify.create({ type: 'positive', message: t('dynamic.import.done', { n: r.created }) });
       emit('update:modelValue', false);

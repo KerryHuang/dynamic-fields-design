@@ -57,7 +57,8 @@ export function useConversionInputs(id: Ref<number>, key: Ref<string>, enabled: 
 export function useConvertRecord() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (v: { id: number; key: string; body: ConvertBody }) => dynamicApi.convertRecord(v.id, v.key, v.body),
+    mutationFn: (v: { id: number; key: string; body: ConvertBody; idempotencyKey?: string }) =>
+      dynamicApi.convertRecord(v.id, v.key, v.body, v.idempotencyKey),
     onSuccess: (rec, v) => Promise.all([
       qc.invalidateQueries({ queryKey: ['record-conversions', v.id] }),
       qc.invalidateQueries({ queryKey: ['record', v.id] }),

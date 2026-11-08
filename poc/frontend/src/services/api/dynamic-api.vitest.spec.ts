@@ -207,3 +207,80 @@ describe('dynamicApi templates', () => {
     expect(r.blob).toBeInstanceOf(Blob);
   });
 });
+
+describe('dynamicApi events, checks and ledger', () => {
+  const capture = (data: unknown = {}) => {
+    const seen: { method?: string; url?: string; body?: unknown; key?: unknown } = {};
+    http.defaults.adapter = async (config) => {
+      seen.method = config.method;
+      seen.url = http.getUri(config);
+      seen.body = typeof config.data === 'string' ? JSON.parse(config.data) : undefined;
+      seen.key = config.headers.get('Idempotency-Key');
+      return { data, status: 200, statusText: 'OK', headers: {}, config };
+    };
+    return seen;
+  };
+  const route = (s: { method?: string; url?: string }) => [s.method, s.url];
+
+  it('event designer endpoints', async () => {
+    const seen = capture([]);
+    await dynamicApi.getEvents('ship');
+    expect(route(seen)).toEqual(['get', '/api/v3/dynamic/events?sourceModuleKey=ship']);
+    const ev = { key: 'ship-post', name: { 'zh-TW': 'x' }, sourceModuleKey: 'ship', active: true, definition: { trigger: { on: 'create' as const }, effects: [] } };
+    await dynamicApi.createEvent(ev);
+    expect([...route(seen), seen.body]).toEqual(['post', '/api/v3/dynamic/events', ev]);
+    await dynamicApi.updateEvent('ship-post', ev);
+    expect(route(seen)).toEqual(['put', '/api/v3/dynamic/events/ship-post']);
+    await dynamicApi.deleteEvent('ship-post');
+    expect(route(seen)).toEqual(['delete', '/api/v3/dynamic/events/ship-post']);
+  });
+
+  it('check designer endpoints', async () => {
+    const seen = capture([]);
+    await dynamicApi.getChecks('move');
+    expect(route(seen)).toEqual(['get', '/api/v3/dynamic/checks?moduleKey=move']);
+    const chk = { key: 'stock', name: { 'zh-TW': 'x' }, moduleKey: 'move', active: true, definition: { groupBy: [1], function: 'count' as const, assert: { op: 'gte' as const, limit: { const: 0 } }, message: { 'zh-TW': 'm' } } };
+    await dynamicApi.createCheck(chk);
+    expect(route(seen)).toEqual(['post', '/api/v3/dynamic/checks']);
+    await dynamicApi.updateCheck('stock', chk);
+    expect(route(seen)).toEqual(['put', '/api/v3/dynamic/checks/stock']);
+    await dynamicApi.deleteModuleCheck('stock');
+    expect(route(seen)).toEqual(['delete', '/api/v3/dynamic/checks/stock']);
+  });
+
+  it('ledger endpoints', async () => {
+    const seen = capture({});
+    await dynamicApi.getLedger('journal');
+    expect(route(seen)).toEqual(['get', '/api/v3/dynamic/modules/journal/ledger']);
+    await dynamicApi.putLedger('journal', { reversalFieldId: 12, negate: [5], swap: [[6, 7]], confirmFreeze: true });
+    expect([...route(seen), seen.body]).toEqual(['put', '/api/v3/dynamic/modules/journal/ledger', { reversalFieldId: 12, negate: [5], swap: [[6, 7]], confirmFreeze: true }]);
+    await dynamicApi.deleteLedger('journal');
+    expect(route(seen)).toEqual(['delete', '/api/v3/dynamic/modules/journal/ledger']);
+  });
+
+  it('record ledger, reverse and effects endpoints', async () => {
+    const seen = capture({});
+    await dynamicApi.getRecordLedger(5);
+    expect(route(seen)).toEqual(['get', '/api/v3/dynamic/records/5/ledger']);
+    await dynamicApi.getRecordEffects(5);
+    expect(route(seen)).toEqual(['get', '/api/v3/dynamic/records/5/effects']);
+    await dynamicApi.reverseRecord(5, {}, 'key-reverse-1');
+    expect([...route(seen), seen.body, seen.key]).toEqual(['post', '/api/v3/dynamic/records/5/reverse', { values: {} }, 'key-reverse-1']);
+  });
+
+  it('write requests carry the Idempotency-Key header only when given', async () => {
+    const seen = capture({});
+    await dynamicApi.createRecord('m', {}, undefined, undefined, 'key-create-1');
+    expect(seen.key).toBe('key-create-1');
+    await dynamicApi.createRecord('m', {});
+    expect(seen.key).toBeUndefined();
+    await dynamicApi.updateRecord(5, {}, 'rv', undefined, 'key-update-1');
+    expect(seen.key).toBe('key-update-1');
+    await dynamicApi.deleteRecord(5, 'rv', 'key-delete-1');
+    expect(seen.key).toBe('key-delete-1');
+    await dynamicApi.convertRecord(5, 'q2o', { rowVersion: 'rv' }, 'key-convert-1');
+    expect(seen.key).toBe('key-convert-1');
+    await dynamicApi.commitImport('m', new File(['a'], 'a.csv'), 'key-import-1');
+    expect(seen.key).toBe('key-import-1');
+  });
+});

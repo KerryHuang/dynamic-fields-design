@@ -46,14 +46,15 @@ export function useRecordHistory(id: Ref<number>, page: Ref<number>, size: Ref<n
 }
 
 export type SaveRecordInput =
-  | { moduleKey: string; id?: undefined; values: RecordValues; hostKey?: string; details?: DetailsPayload }
-  | { moduleKey: string; id: number; values: RecordValues; rowVersion: string; details?: DetailsPayload };
+  | { moduleKey: string; id?: undefined; values: RecordValues; hostKey?: string; details?: DetailsPayload; idempotencyKey?: string }
+  | { moduleKey: string; id: number; values: RecordValues; rowVersion: string; details?: DetailsPayload; idempotencyKey?: string };
 
 export function useSaveRecord() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (i: SaveRecordInput): Promise<DynamicRecord> =>
-      i.id === undefined ? dynamicApi.createRecord(i.moduleKey, i.values, i.hostKey, i.details) : dynamicApi.updateRecord(i.id, i.values, i.rowVersion, i.details),
+      i.id === undefined ? dynamicApi.createRecord(i.moduleKey, i.values, i.hostKey, i.details, i.idempotencyKey)
+      : dynamicApi.updateRecord(i.id, i.values, i.rowVersion, i.details, i.idempotencyKey),
     onSuccess: (rec) => Promise.all([
       qc.invalidateQueries({ queryKey: ['records', rec.moduleKey] }),
       qc.invalidateQueries({ queryKey: ['record', rec.id] }),
@@ -65,7 +66,7 @@ export function useSaveRecord() {
 export function useCommitImport() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (i: { moduleKey: string; file: File }) => dynamicApi.commitImport(i.moduleKey, i.file),
+    mutationFn: (i: { moduleKey: string; file: File; idempotencyKey?: string }) => dynamicApi.commitImport(i.moduleKey, i.file, i.idempotencyKey),
     onSuccess: (_r, i) => qc.invalidateQueries({ queryKey: ['records', i.moduleKey] }),
   });
 }
@@ -73,7 +74,8 @@ export function useCommitImport() {
 export function useDeleteRecord() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (i: { moduleKey: string; id: number; rowVersion: string }) => dynamicApi.deleteRecord(i.id, i.rowVersion),
+    mutationFn: (i: { moduleKey: string; id: number; rowVersion: string; idempotencyKey?: string }) =>
+      dynamicApi.deleteRecord(i.id, i.rowVersion, i.idempotencyKey),
     onSuccess: (_d, i) => Promise.all([
       qc.invalidateQueries({ queryKey: ['records', i.moduleKey] }),
       qc.removeQueries({ queryKey: ['record', i.id] }),

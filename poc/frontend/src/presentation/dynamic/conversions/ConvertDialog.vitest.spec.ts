@@ -84,9 +84,30 @@ describe('ConvertDialog', () => {
     await type(1, '3');
     submitBtn().click();
     await flushPromises();
-    expect(api.convertRecord).toHaveBeenCalledWith(5, 'q2o', { rowVersion: 'rv1', lines: [{ sourceLineId: 1, quantity: 3 }] });
+    expect(api.convertRecord).toHaveBeenCalledWith(5, 'q2o', { rowVersion: 'rv1', lines: [{ sourceLineId: 1, quantity: 3 }] }, expect.any(String));
     expect(push).toHaveBeenCalledWith('/dynamic/order/99');
     w.unmount();
+  });
+
+  it('a retry after a failed send reuses the Idempotency-Key, and a reopened dialog gets a new one', async () => {
+    api.convertRecord.mockRejectedValueOnce({ status: 0 }).mockResolvedValue({ id: 99, moduleKey: 'order' } as never);
+    const { w } = await mountDialog(conversion());
+    await type(1, '3');
+    submitBtn().click();
+    await flushPromises();
+    submitBtn().click();
+    await flushPromises();
+    const keys = api.convertRecord.mock.calls.map((c) => c[3]);
+    expect(keys[0]).toMatch(/^[A-Za-z0-9_-]{8,64}$/);
+    expect(keys[1]).toBe(keys[0]);
+    w.unmount();
+    document.body.innerHTML = '';
+    const again = await mountDialog(conversion());
+    await type(1, '3');
+    submitBtn().click();
+    await flushPromises();
+    expect(api.convertRecord.mock.calls[2]![3]).not.toBe(keys[0]);
+    again.w.unmount();
   });
 
   it('puts a server quantity error on the line it belongs to', async () => {
@@ -105,7 +126,7 @@ describe('ConvertDialog', () => {
     expect(document.body.querySelector('table')).toBeNull();
     submitBtn().click();
     await flushPromises();
-    expect(api.convertRecord).toHaveBeenCalledWith(5, 'q2o', { rowVersion: 'rv1' });
+    expect(api.convertRecord).toHaveBeenCalledWith(5, 'q2o', { rowVersion: 'rv1' }, expect.any(String));
     w.unmount();
   });
   describe('required target fields the copy cannot fill', () => {
@@ -144,7 +165,7 @@ describe('ConvertDialog', () => {
       expect(submitBtn().disabled).toBe(false);
       submitBtn().click();
       await flushPromises();
-      expect(api.convertRecord).toHaveBeenCalledWith(5, 'q2o', { rowVersion: 'rv1', values: { f_7: '急件' } });
+      expect(api.convertRecord).toHaveBeenCalledWith(5, 'q2o', { rowVersion: 'rv1', values: { f_7: '急件' } }, expect.any(String));
       w.unmount();
     });
 
@@ -169,7 +190,7 @@ describe('ConvertDialog', () => {
       expect(submitBtn().disabled).toBe(false);
       submitBtn().click();
       await flushPromises();
-      expect(api.convertRecord).toHaveBeenLastCalledWith(5, 'q2o', { rowVersion: 'rv1', values: { f_8: '補上' } });
+      expect(api.convertRecord).toHaveBeenLastCalledWith(5, 'q2o', { rowVersion: 'rv1', values: { f_8: '補上' } }, expect.any(String));
       w.unmount();
     });
 
@@ -191,7 +212,7 @@ describe('ConvertDialog', () => {
       await flushPromises();
       submitBtn().click();
       await flushPromises();
-      expect(api.convertRecord).toHaveBeenLastCalledWith(5, 'q2o', { rowVersion: 'rv1', values: { f_8: '改好了' } });
+      expect(api.convertRecord).toHaveBeenLastCalledWith(5, 'q2o', { rowVersion: 'rv1', values: { f_8: '改好了' } }, expect.any(String));
       w.unmount();
     });
 

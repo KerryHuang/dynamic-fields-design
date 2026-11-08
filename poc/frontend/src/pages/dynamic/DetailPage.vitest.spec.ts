@@ -128,6 +128,16 @@ describe('DetailPage', () => {
       expect(document.body.textContent).not.toContain(zhTW.dynamic.stale);
     });
 
+    it('a delete retried after a failure carries the same Idempotency-Key', async () => {
+      api.deleteRecord.mockRejectedValueOnce({ status: 0 }).mockResolvedValue(undefined as never);
+      const w = await mountPage(schema({}));
+      await clickDelete(w);
+      await clickDelete(w);
+      const keys = api.deleteRecord.mock.calls.map((c) => c[2]);
+      expect(keys[0]).toMatch(/^[A-Za-z0-9_-]{8,64}$/);
+      expect(keys[1]).toBe(keys[0]);
+    });
+
     it('delete 409 stale shows stale notify with reload', async () => {
       api.deleteRecord.mockRejectedValue({ status: 409, message: '資料已被其他人修改，請重新載入' });
       const w = await mountPage(schema({}));

@@ -16,6 +16,7 @@ import ForbiddenNotice from 'src/components/framework/ForbiddenNotice.vue';
 import type { DeleteBlocked } from 'src/domain/dynamic/types';
 import { canAdvance, isReadOnlyState } from 'src/domain/dynamic/workflow';
 import { SERVER_STALE_MESSAGE } from 'src/presentation/dynamic/designer/api-error';
+import { newIdempotencyKey } from 'src/services/api/idempotency';
 import { isForbidden, type ApiError } from 'src/services/api/http';
 
 const { t } = useI18n();
@@ -30,6 +31,8 @@ const recordQuery = useRecord(recordId);
 const del = useDeleteRecord();
 const confirming = ref(false);
 const blocked = ref<DeleteBlocked | null>(null);
+// Kept across a failed attempt so a resend takes effect once; replaced after a success or a 422 (key used for other content).
+let deleteKey = newIdempotencyKey();
 
 const status = (e: unknown) => (e as ApiError | null)?.status;
 const schemaMissing = computed(() => status(schemaQuery.error.value) === 404);
@@ -48,10 +51,12 @@ const canDelete = computed(() => !!schemaQuery.data.value?.permissions.delete &&
 
 async function onDelete() {
   try {
-    await del.mutateAsync({ moduleKey: moduleKey.value, id: recordId.value, rowVersion: recordQuery.data.value!.rowVersion });
+    await del.mutateAsync({ moduleKey: moduleKey.value, id: recordId.value, rowVersion: recordQuery.data.value!.rowVersion, idempotencyKey: deleteKey });
+    deleteKey = newIdempotencyKey();
     await router.push(`/dynamic/${moduleKey.value}`);
   } catch (e) {
     const err = e as ApiError;
+    if (err.status === 422) deleteKey = newIdempotencyKey();
     if (err.status === 409 && err.references) {
       blocked.value = { message: err.message ?? '', references: err.references, total: err.total ?? err.references.length };
     } else if (err.status === 409 && err.message && err.message !== SERVER_STALE_MESSAGE) {

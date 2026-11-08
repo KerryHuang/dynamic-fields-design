@@ -11,6 +11,7 @@ import { messagesOutside, SERVER_STALE_MESSAGE } from 'src/presentation/dynamic/
 import { parseDetailKey } from 'src/presentation/dynamic/details/detail-rows';
 import type { DetailRowPayload, ReferenceInfo } from 'src/domain/dynamic/types';
 import ForbiddenNotice from 'src/components/framework/ForbiddenNotice.vue';
+import { newIdempotencyKey } from 'src/services/api/idempotency';
 import { isForbidden, type ApiError } from 'src/services/api/http';
 
 const { t } = useI18n();
@@ -27,6 +28,8 @@ const save = useSaveRecord();
 const serverErrors = ref<Record<string, string[]>>();
 const detailErrors = ref<Record<string, string[]>>();
 const form = ref<InstanceType<typeof DynamicForm>>();
+// One key per opened form: a resend after a timeout reuses it (the server then replays the first result), a success or a 422 replaces it.
+let idempotencyKey = newIdempotencyKey();
 // Set by an attachment upload (it bumps the stored rowVersion); a reloaded record supersedes it.
 const uploadedRowVersion = ref<string>();
 watch(() => recordQuery.data.value?.rowVersion, () => { uploadedRowVersion.value = undefined; });
@@ -99,11 +102,13 @@ async function onSubmit(values: Record<string, unknown>, details: Record<string,
   }
   try {
     const rec = isEdit.value
-      ? await save.mutateAsync({ moduleKey: moduleKey.value, id: recordId.value, values, rowVersion: uploadedRowVersion.value ?? recordQuery.data.value!.rowVersion, details: sentDetails })
-      : await save.mutateAsync({ moduleKey: moduleKey.value, values, ...(isExtensionNew.value && { hostKey: hostKey.value! }), details: sentDetails });
+      ? await save.mutateAsync({ moduleKey: moduleKey.value, id: recordId.value, values, rowVersion: uploadedRowVersion.value ?? recordQuery.data.value!.rowVersion, details: sentDetails, idempotencyKey })
+      : await save.mutateAsync({ moduleKey: moduleKey.value, values, ...(isExtensionNew.value && { hostKey: hostKey.value! }), details: sentDetails, idempotencyKey });
+    idempotencyKey = newIdempotencyKey();
     await router.push(`/dynamic/${moduleKey.value}/${rec.id}`);
   } catch (e) {
     const err = e as ApiError;
+    if (err.status === 422) idempotencyKey = newIdempotencyKey(); // the key was used for other content; the next send is a new request
     if (err.status === 400 && err.errors) {
       const { hostKey: hostMessages, ...fieldErrors } = err.errors;
       if (hostMessages) hostError.value = hostMessages.join('、');

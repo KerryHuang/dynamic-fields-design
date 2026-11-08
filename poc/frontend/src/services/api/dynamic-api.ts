@@ -7,7 +7,11 @@ import type {
 } from 'src/domain/dynamic/dashboard-types';
 import type { CatalogModule, DrillResult, ModuleCatalog, ReportDateRange, ReportDefinition, ReportDetail, ReportItem, ReportResult, ReportShareTarget } from 'src/domain/dynamic/report-types';
 import type { MeTheme, ThemeChoice, ThemeDefaults } from 'src/domain/theme/theme-model';
+import type { CheckDefinition, LedgerBody, LedgerConfig, ModuleCheck, ModuleEvent, RecordEffects, RecordLedger } from 'src/domain/dynamic/events-ledger';
 import { handleAuthFailure, http, toApiError } from './http';
+
+/** Request config for write calls: the key makes a retried request take effect once (server: Dynamic_Operation). */
+const idem = (key?: string) => (key ? { headers: { 'Idempotency-Key': key } } : undefined);
 
 const deletePath = (t: DeleteTargetRef) =>
   t.kind === 'module' ? `/modules/${encodeURIComponent(t.key)}` : `/${t.kind}s/${t.id}`;
@@ -215,8 +219,27 @@ export const dynamicApi = {
   /** Keys of the target's required header fields that the conversion's copy cannot fill; the user fills them in the dialog. */
   getConversionInputs: (id: number, key: string) =>
     http.get<string[]>(`/records/${id}/conversions/${encodeURIComponent(key)}/inputs`).then(data),
-  convertRecord: (id: number, key: string, body: ConvertBody) =>
-    http.post<DynamicRecord>(`/records/${id}/conversions/${encodeURIComponent(key)}/convert`, body).then(data),
+  convertRecord: (id: number, key: string, body: ConvertBody, idempotencyKey?: string) =>
+    http.post<DynamicRecord>(`/records/${id}/conversions/${encodeURIComponent(key)}/convert`, body, idem(idempotencyKey)).then(data),
+
+  getEvents: (sourceModuleKey: string) => http.get<ModuleEvent[]>('/events', { params: { sourceModuleKey } }).then(data),
+  getEvent: (key: string) => http.get<ModuleEvent>(`/events/${encodeURIComponent(key)}`).then(data),
+  createEvent: (body: ModuleEvent) => http.post<ModuleEvent>('/events', body).then(data),
+  updateEvent: (key: string, body: ModuleEvent) => http.put<ModuleEvent>(`/events/${encodeURIComponent(key)}`, body).then(data),
+  deleteEvent: (key: string) => http.delete(`/events/${encodeURIComponent(key)}`).then(data),
+  getChecks: (moduleKey: string) => http.get<ModuleCheck[]>('/checks', { params: { moduleKey } }).then(data),
+  getCheck: (key: string) => http.get<ModuleCheck>(`/checks/${encodeURIComponent(key)}`).then(data),
+  createCheck: (body: ModuleCheck) => http.post<ModuleCheck>('/checks', body).then(data),
+  updateCheck: (key: string, body: ModuleCheck) => http.put<ModuleCheck>(`/checks/${encodeURIComponent(key)}`, body).then(data),
+  deleteModuleCheck: (key: string) => http.delete(`/checks/${encodeURIComponent(key)}`).then(data),
+  getLedger: (moduleKey: string) => http.get<LedgerConfig>(`/modules/${moduleKey}/ledger`).then(data),
+  putLedger: (moduleKey: string, body: LedgerBody) => http.put<LedgerConfig>(`/modules/${moduleKey}/ledger`, body).then(data),
+  deleteLedger: (moduleKey: string) => http.delete(`/modules/${moduleKey}/ledger`).then(data),
+  getRecordLedger: (id: number) => http.get<RecordLedger>(`/records/${id}/ledger`).then(data),
+  /** Creates the reversing entry; `values` may only override descriptive fields (the server rejects the rest). */
+  reverseRecord: (id: number, values: RecordValues, idempotencyKey?: string) =>
+    http.post<DynamicRecord>(`/records/${id}/reverse`, { values }, idem(idempotencyKey)).then(data),
+  getRecordEffects: (id: number) => http.get<RecordEffects>(`/records/${id}/effects`).then(data),
   getAuthOptions: () => http.get<AuthOptions>('/auth/options').then(data),
   login: (body: { userId: string; password: string }) => http.post<AuthUser>('/auth/login', body).then(data),
   demoLogin: (userId: string) => http.post<AuthUser>('/auth/demo-login', { userId }).then(data),
@@ -238,11 +261,11 @@ export const dynamicApi = {
       },
       paramsSerializer: { indexes: null },
     }).then(data),
-  createRecord: (key: string, values: RecordValues, hostKey?: string, details?: DetailsPayload) =>
-    http.post<DynamicRecord>(`/modules/${key}/records`, { values, hostKey, details }).then(data),
+  createRecord: (key: string, values: RecordValues, hostKey?: string, details?: DetailsPayload, idempotencyKey?: string) =>
+    http.post<DynamicRecord>(`/modules/${key}/records`, { values, hostKey, details }, idem(idempotencyKey)).then(data),
   getRecord: (id: number) => http.get<DynamicRecord>(`/records/${id}`).then(data),
-  updateRecord: (id: number, values: RecordValues, rowVersion: string, details?: DetailsPayload) =>
-    http.put<DynamicRecord>(`/records/${id}`, { values, rowVersion, details }).then(data),
+  updateRecord: (id: number, values: RecordValues, rowVersion: string, details?: DetailsPayload, idempotencyKey?: string) =>
+    http.put<DynamicRecord>(`/records/${id}`, { values, rowVersion, details }, idem(idempotencyKey)).then(data),
   getViews: (key: string) => http.get<ListView[]>(`/modules/${key}/views`).then(data),
   createView: (key: string, body: ViewBody & { shared: boolean }) =>
     http.post<ListView>(`/modules/${key}/views`, body).then(data),
@@ -263,7 +286,8 @@ export const dynamicApi = {
     }).then(data),
   recordByHost: (moduleKey: string, hostKey: string) =>
     http.get<DynamicRecord>(`/modules/${moduleKey}/records/by-host/${encodeURIComponent(hostKey)}`).then(data),
-  deleteRecord: (id: number, rowVersion: string) => http.delete<void>(`/records/${id}`, { params: { rowVersion } }).then(data),
+  deleteRecord: (id: number, rowVersion: string, idempotencyKey?: string) =>
+    http.delete<void>(`/records/${id}`, { params: { rowVersion }, ...idem(idempotencyKey) }).then(data),
   /** Blob download through axios (session cookie, base URL); validateStatus bypasses the interceptor, so the error body (a Blob) is parsed here and passed to handleAuthFailure by hand. */
   exportRecords: async (key: string, format: 'csv' | 'xlsx', { filter, sort, q }: ExportQuery, locale: string) => {
     const r = await http.get<Blob>(`/modules/${key}/export`, {
@@ -371,8 +395,8 @@ export const dynamicApi = {
   },
   previewImport: (key: string, file: File) =>
     http.post<ImportPreview>(`/modules/${key}/import`, importForm(file), { params: { commit: false } }).then(data),
-  commitImport: (key: string, file: File) =>
-    http.post<ImportResult>(`/modules/${key}/import`, importForm(file), { params: { commit: true } }).then(data),
+  commitImport: (key: string, file: File, idempotencyKey?: string) =>
+    http.post<ImportResult>(`/modules/${key}/import`, importForm(file), { params: { commit: true }, ...idem(idempotencyKey) }).then(data),
   getPrintTemplates: (moduleKey: string) => http.get<PrintTemplateOption[]>(`/modules/${moduleKey}/print-templates`).then(data),
   getPrintTemplateDefinitions: (moduleKey: string) =>
     http.get<PrintTemplateDefinition[]>(`/modules/${moduleKey}/print-templates/definitions`).then(data),
