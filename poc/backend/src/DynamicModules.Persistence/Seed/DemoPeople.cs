@@ -28,7 +28,7 @@ public static class DemoPeople
         ("planner", "生管組", ["planner01"]),
         ("purchasing", "採購組", ["buyer01"]),
         ("warehouse", "倉管組", ["keeper01"]),
-        ("ops-manager", "進銷存主管", ["ops01"])
+        ("ops-manager", "進銷存管理組", ["ops01"])
     ];
 
     public static readonly (string No, string Name)[] Molds =
