@@ -961,6 +961,31 @@ public class ReportRunnerTests : ReportTestBase
     }
 
     [Fact]
+    public async Task BeforeToday_IsStrictlyBeforeBasisDate_EmptyExcluded()
+    {
+        await Arrange();
+        await Insert("order", "admin", (Due, "2026-11-03"), (At, "2026-11-03T23:59:00+08:00"), (Amount, 1m));
+        await Insert("order", "admin", (Due, "2026-11-04"), (At, "2026-11-04T00:00:00+08:00"), (Amount, 10m));
+        await Insert("order", "admin", (Due, "2026-11-05"), (At, "2026-11-05T09:00:00+08:00"), (Amount, 100m));
+        await Insert("order", "admin", (Amount, 1000m));
+
+        (await Run(Def(measures: [M("sum", "sum", MainF(Amount))], filters: [F(MainF(Due), "beforeToday")]))).Total!["sum"].Should().Be(1m);
+        (await Run(Def(measures: [M("sum", "sum", MainF(Amount))], filters: [F(MainF(At), "beforeToday")]))).Total!["sum"].Should().Be(1m);
+    }
+
+    [Fact]
+    public async Task BeforeToday_AsRatioCondition_CountsOnlyRowsBeforeBasisDate()
+    {
+        await Arrange();
+        await Insert("order", "admin", (Due, "2026-11-01"));
+        await Insert("order", "admin", (Due, "2026-11-03"));
+        await Insert("order", "admin", (Due, "2026-11-04"));
+        await Insert("order", "admin", (Amount, 1m));
+        var r = await Run(Def(measures: [M("late", "ratio", cond: F(MainF(Due), "beforeToday"))]));
+        r.Total!["late"].Should().Be(0.5m);
+    }
+
+    [Fact]
     public async Task RangeOverride_WinsOverReportRange()
     {
         await Arrange();

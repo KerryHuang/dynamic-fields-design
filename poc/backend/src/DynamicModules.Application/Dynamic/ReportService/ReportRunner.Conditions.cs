@@ -27,6 +27,8 @@ public partial class ReportRunner
         {
             case FilterOperator.IsEmpty or FilterOperator.IsNotEmpty:
                 return true;
+            case FilterOperator.BeforeToday:
+                return value is null;
             case FilterOperator.WithinNextDays or FilterOperator.WithinLastDays:
                 return value is { ValueKind: JsonValueKind.Number } days && days.TryGetInt32(out _);
             case FilterOperator.Contains or FilterOperator.StartsWith:
@@ -64,6 +66,9 @@ public partial class ReportRunner
         if (op == FilterOperator.IsEmpty) return c.State == Empty;
         if (op == FilterOperator.IsNotEmpty) return c.State != Empty;
         if (c.State == Empty) return op is FilterOperator.Ne or FilterOperator.NotIn;
+        // 嚴格早於基準日 00:00；ConditionFits 已確保只有日期類欄位走到這裡
+        if (op == FilterOperator.BeforeToday)
+            return c.Date is { } d && (c is TimedCell bt ? bt.At : d.ToDateTime(TimeOnly.MinValue)) < basis.ToDateTime(TimeOnly.MinValue);
 
         var v = f.Value ?? throw new ArgumentException($"運算子 {f.Op} 需要條件值");
         if (c.Date is { } date) return MatchDate(op, v, c is TimedCell t ? t.At : date.ToDateTime(TimeOnly.MinValue), basis);

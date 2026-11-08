@@ -199,7 +199,7 @@ public static class ReportRules
         if (value is { ValueKind: JsonValueKind.Null or JsonValueKind.Undefined }) value = null;
         switch (op)
         {
-            case FilterOperator.IsEmpty or FilterOperator.IsNotEmpty:
+            case FilterOperator.IsEmpty or FilterOperator.IsNotEmpty or FilterOperator.BeforeToday:
                 return value is null ? new Norm(null) : null;
             case FilterOperator.WithinNextDays or FilterOperator.WithinLastDays:
                 return value is { ValueKind: JsonValueKind.Number } n && n.TryGetInt32(out var days) && days is >= 0 and <= MaxDays ? new Norm(value) : null;
