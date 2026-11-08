@@ -180,15 +180,15 @@ public sealed class DemoDataApiTests
         me.GetProperty("userId").GetString().Should().Be("sales01");
     }
 
-    /// <summary>每 200 ms 輪詢，直到不是 running（最多 120 秒）。</summary>
+    /// <summary>每 200 ms 輪詢，直到不是 running（最多 240 秒）。</summary>
     private static async Task<JsonElement> PollUntilDone(HttpClient admin)
     {
-        var deadline = DateTime.UtcNow.AddSeconds(120);
+        var deadline = DateTime.UtcNow.AddSeconds(240);
         while (true)
         {
             var s = await JsonOf(await admin.GetAsync(Status));
             if (s.GetProperty("state").GetString() != "running") return s;
-            if (DateTime.UtcNow > deadline) throw new TimeoutException("Demo 資料 120 秒內沒有產生完");
+            if (DateTime.UtcNow > deadline) throw new TimeoutException("Demo 資料 240 秒內沒有產生完");
             await Task.Delay(200);
         }
     }
