@@ -75,6 +75,16 @@ public class RollupCalculatorTests
     }
 
     [Fact]
+    public void Condition_BeforeToday_CountsOnlyRowsStrictlyBeforeToday()
+    {
+        var rollup = Rollup(RollupFunction.Sum, 11, condition: """{"field":13,"op":"beforeToday"}""");
+        var r = Compute(rollup,
+            Row((11, "1"), (13, "\"2026-11-03\"")), Row((11, "10"), (13, "\"2026-11-04\"")),
+            Row((11, "100"), (13, "\"2026-11-05\"")), Row((11, "1000")), Row((11, "2"), (13, "\"2026-01-01\"")));
+        r!.Value.GetDecimal().Should().Be(3m);
+    }
+
+    [Fact]
     public void Condition_OnUserField_UsesUserIds()
     {
         var source = Mod(Fld(10, FieldType.Reference), Fld(11, FieldType.Decimal), Fld(15, FieldType.User));
