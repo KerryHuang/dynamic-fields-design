@@ -1,6 +1,7 @@
 using System.Net;
 using System.Net.Http.Json;
 using System.Text.Json;
+using System.Text.Json.Nodes;
 using DynamicModules.Application.Dynamic.AppService.Integrations;
 using DynamicModules.Domain.Data;
 using DynamicModules.Domain.Entities.Dynamic;
@@ -27,18 +28,21 @@ public class MesInventoryIntegrationTests : IDisposable
 
     // ---- 開啟與讀取 ----
 
-    private async Task OpenMes()
+    private async Task OpenMes(string package = "mes-mold", string[]? groups = null) => _mes = await OpenMesOn(_app, _admin, package, groups);
+
+    private static async Task<JsonElement> OpenMesOn(TestApp app, HttpClient admin, string package, string[]? groups = null)
     {
-        var res = await _admin.PostAsJsonAsync($"{Apps}/packages/mes-mold/open", new
+        var res = await admin.PostAsJsonAsync($"{Apps}/packages/{package}/open", new
         {
-            groupMap = new[] { "sales", "salesManager", "floor", "maint", "qa", "planner" }.ToDictionary(g => g, _ => (object)new { mode = "create" })
+            groupMap = (groups ?? ["sales", "salesManager", "floor", "maint", "qa", "planner"]).ToDictionary(g => g, _ => (object)new { mode = "create" })
         });
         res.StatusCode.Should().Be(HttpStatusCode.Created, await res.Content.ReadAsStringAsync());
-        _mes = await JsonOf(res);
-        using var scope = _app.Services.CreateScope();
+        var opened = await JsonOf(res);
+        using var scope = app.Services.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<DynamicDbContext>();
         if (!await db.Set<MockCustomer>().AnyAsync()) db.Set<MockCustomer>().Add(new MockCustomer { CustomerNo = "C-001", Name = "宏達科技" });
         await db.SaveChangesAsync();
+        return opened;
     }
 
     private async Task OpenInventory()
@@ -411,5 +415,110 @@ public class MesInventoryIntegrationTests : IDisposable
         (await user.PostAsync($"{Apps}/mes-mold/integrations/stockOut/retry", null)).StatusCode.Should().BeOneOf(HttpStatusCode.Forbidden, HttpStatusCode.Unauthorized);
         (await user.PutAsJsonAsync($"{Apps}/mes-mold/integrations/stockOut", new { enabled = false }))
             .StatusCode.Should().BeOneOf(HttpStatusCode.Forbidden, HttpStatusCode.Unauthorized);
+    }
+
+    // ---- 匯出與匯入 ----
+
+    /// <summary>另開一個資料庫，把 MES 與進銷存都開起來（整合 Active），匯出 MES 套件；回傳 JSON 與匯出前的整合內容。</summary>
+    private static async Task<JsonNode> ExportedMes()
+    {
+        using var source = new TestApp(seedDemoPeople: false, fileDatabase: true);
+        var admin = source.AsUser();
+        await OpenMesOn(source, admin, "mes-mold");
+        await InventoryRig.OpenAsync(admin, assignMembers: false);
+        var res = await admin.GetAsync($"{Apps}/mes-mold/export");
+        res.StatusCode.Should().Be(HttpStatusCode.OK);
+        return JsonNode.Parse(await res.Content.ReadAsStringAsync())!;
+    }
+
+    private async Task ImportAs(JsonNode package, string id)
+    {
+        package["manifest"]!["id"] = id;
+        var res = await _admin.PostAsync($"{Apps}/packages/import", new StringContent(package.ToJsonString(), System.Text.Encoding.UTF8, "application/json"));
+        res.StatusCode.Should().Be(HttpStatusCode.Created, await res.Content.ReadAsStringAsync());
+    }
+
+    private static string[] GroupsOf(JsonNode package) => [.. package["groups"]!.AsArray().Select(g => g!["code"]!.GetValue<string>())];
+
+    private async Task Enable()
+    {
+        var res = await _admin.PutAsJsonAsync($"{Apps}/mes-copy/integrations/stockOut", new { enabled = true });
+        res.StatusCode.Should().Be(HttpStatusCode.OK, await res.Content.ReadAsStringAsync());
+    }
+
+    [Fact]
+    public async Task Export_KeepsTheIntegrationApart_NotMixedIntoTheOwnersModulesEventsOrChecks()
+    {
+        var package = await ExportedMes();
+        package["formatVersion"]!.GetValue<int>().Should().Be(5);
+        var integration = package["integrations"]!.AsArray().Single()!;
+        integration["code"]!.GetValue<string>().Should().Be("stockOut");
+        integration["with"]![0]!["id"]!.GetValue<string>().Should().Be("inventory");
+        integration["fields"]!.AsArray().Select(f => f!["code"]!.GetValue<string>()).Should().BeEquivalentTo("stockItem", "stockWarehouse");
+        integration["events"]!.AsArray().Select(e => e!["code"]!.GetValue<string>()).Should().BeEquivalentTo("mes-stock-out", "mes-stock-out-cancel");
+
+        var shipment = package["modules"]!.AsArray().Single(m => m!["code"]!.GetValue<string>() == "shipment")!;
+        shipment["blocks"]!.AsArray().SelectMany(b => b!["fields"]!.AsArray()).Select(f => f!["code"]!.GetValue<string>())
+            .Should().NotContain(["stockItem", "stockWarehouse"]);
+        package["events"]!.AsArray().Select(e => e!["code"]!.GetValue<string>()).Should().NotContain(["mes-stock-out", "mes-stock-out-cancel"]);
+        package["checks"]!.AsArray().Select(c => c!["code"]!.GetValue<string>()).Should().NotContain("mes-stock-item-required");
+    }
+
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task ExportThenImportIntoAnEmptyDatabase_IsDisabledUntilEnabled_ThenBehavesTheSame(bool mesFirst)
+    {
+        var package = await ExportedMes();
+        await ImportAs(package, "mes-copy");
+        if (mesFirst) { await OpenMes("mes-copy", GroupsOf(package)); await OpenInventory(); }
+        else { await OpenInventory(); await OpenMes("mes-copy", GroupsOf(package)); }
+
+        // 匯入的套件不自動連動別的應用程式：要管理員啟用
+        (await StatusOfIntegration()).Should().Be(IntegrationStatus.Disabled);
+        (await ShipmentHasStockFields()).Should().BeFalse();
+        await Enable();
+        var integration = await Integration();
+        integration.Status.Should().Be(IntegrationStatus.Active, integration.Reason);
+
+        var stock = await Stocked(100);
+        var shipment = await Shipment(await DoneWorkOrder(40), 40, stock);
+        await Move(shipment, "shipment", "已出貨");
+        (await _inv!.BalanceAsync(stock.Item, stock.Warehouse)).Should().Be(60);
+        await Move(shipment, "shipment", "已取消");
+        (await _inv.BalanceAsync(stock.Item, stock.Warehouse)).Should().Be(100);
+    }
+
+    [Fact]
+    public async Task OnPartnerClosedBlock_ClosingThePartnerHoldsBothDirections_AndReopenReleases()
+    {
+        var package = await ExportedMes();
+        package["integrations"]![0]!["onPartnerClosed"] = "block";
+        await ImportAs(package, "mes-copy");
+        await OpenMes("mes-copy", GroupsOf(package));
+        await OpenInventory();
+        await Enable();
+        (await StatusOfIntegration()).Should().Be(IntegrationStatus.Active);
+        var stock = await Stocked(100);
+        var wo = await DoneWorkOrder(100);
+        var shipped = await Shipment(wo, 10, stock);
+        await Move(shipped, "shipment", "已出貨");
+        var draft = await Shipment(wo, 5, stock);   // 夥伴關閉後就選不到它的記錄，所以先備好草稿
+
+        await Close("inventory");
+        var held = await Integration();
+        held.Status.Should().Be(IntegrationStatus.Held);
+
+        // 正向（出貨）與反向（取消）都被擋，且不是默默略過
+        var forward = await TryMove(draft, "shipment", "已出貨");
+        forward.StatusCode.Should().Be(HttpStatusCode.Conflict, await forward.Content.ReadAsStringAsync());
+        var reverse = await TryMove(shipped, "shipment", "已取消");
+        reverse.StatusCode.Should().Be(HttpStatusCode.Conflict, await reverse.Content.ReadAsStringAsync());
+        (await _admin.GetAsync($"{Base}/records/{shipped}")).StatusCode.Should().Be(HttpStatusCode.OK);   // 夥伴關閉後資料仍可讀
+
+        await Reopen("inventory");
+        (await StatusOfIntegration()).Should().Be(IntegrationStatus.Active);
+        await Move(draft, "shipment", "已出貨");
+        await Move(shipped, "shipment", "已取消");
     }
 }
