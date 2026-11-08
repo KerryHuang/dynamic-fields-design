@@ -55,3 +55,14 @@ public class LedgerRepository(DynamicDbContext db) : ILedgerRepository
 
     public void Remove(ModuleLedger l) => db.Set<ModuleLedger>().Remove(l);
 }
+
+public class OperationRepository(DynamicDbContext db) : IOperationRepository
+{
+    public Task<OperationRecord?> GetAsync(string userId, string key, CancellationToken ct) =>
+        db.Set<OperationRecord>().AsNoTracking().FirstOrDefaultAsync(o => o.UserId == userId && o.Key == key, ct);
+
+    public void Add(OperationRecord record) => db.Set<OperationRecord>().Add(record);
+
+    public Task PurgeOlderThanAsync(DateTime cutoff, CancellationToken ct) =>
+        db.Set<OperationRecord>().Where(o => o.CreatedTime < cutoff).ExecuteDeleteAsync(ct);
+}

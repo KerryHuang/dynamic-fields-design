@@ -11,6 +11,7 @@ public static class ServiceResultExtensions
     {
         if (r.IsUnauthorized) return c.Unauthorized(new { message = r.Message });
         if (r.IsForbidden) return c.StatusCode(StatusCodes.Status403Forbidden, new { message = r.Message });
+        if (r.IsUnprocessable) return c.StatusCode(StatusCodes.Status422UnprocessableEntity, new { message = r.Message });
         if (r.IsNotFound) return c.NotFound(new { message = r.Message });
         if (r.IsConflict) return c.Conflict(r.Data is null ? new { message = r.Message } : ConflictBody(r));
         if (!r.IsSuccess)

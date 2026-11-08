@@ -10,4 +10,4 @@ namespace DynamicModules.Application.Dynamic.ConversionService.Commands.ConvertR
 /// <param name="Lines">要轉的來源明細列與數量；明細轉換至少一列，表頭轉換不用。</param>
 public record ConvertRecordRequest(
     long SourceId, string ConversionKey, string? RowVersion, Dictionary<string, JsonElement?>? Values, List<ConvertLineInput>? Lines)
-    : IRequest<ServiceResult>, ITransactionalRequest;
+    : IRequest<ServiceResult>, IRecordWriteRequest;

@@ -33,3 +33,11 @@ public interface ILedgerRepository
     void Add(ModuleLedger l);
     void Remove(ModuleLedger l);
 }
+
+public interface IOperationRepository
+{
+    Task<OperationRecord?> GetAsync(string userId, string key, CancellationToken ct);
+    void Add(OperationRecord record);
+    /// <summary>刪除建立時間早於 cutoff 的紀錄（單句 DELETE，CreatedTime 有索引）。</summary>
+    Task PurgeOlderThanAsync(DateTime cutoff, CancellationToken ct);
+}

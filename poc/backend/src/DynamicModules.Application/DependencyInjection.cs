@@ -18,9 +18,14 @@ public static class DependencyInjection
             cfg.AddOpenBehavior(typeof(SystemAdminBehavior<,>));
             cfg.AddOpenBehavior(typeof(ValidationBehavior<,>));
             cfg.AddOpenBehavior(typeof(TransactionBehavior<,>));
+            // 在交易之內：寫入鎖已持有，冪等查詢與寫入、事件與驗證才在同一把鎖之下（設計 §2）
+            cfg.AddOpenBehavior(typeof(IdempotencyBehavior<,>));
+            cfg.AddOpenBehavior(typeof(RecordEffectsBehavior<,>));
         });
         services.AddValidatorsFromAssembly(assembly);
         services.AddSingleton<Common.Security.LoginThrottle>();
+        services.AddScoped<Common.IWriteJournal, Common.WriteJournal>();
+        services.AddScoped<Common.IOperationContext, Common.OperationContext>();
         services.AddScoped<IDynamicAccessGuard, DynamicAccessGuard>();
         services.AddScoped<Dynamic.SchemaService.Queries.GetModuleSchema.ModuleSchemaBuilder>();
         services.AddScoped<Dynamic.References.ReferenceValidator>();

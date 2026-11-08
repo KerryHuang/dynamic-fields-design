@@ -119,6 +119,7 @@ if (trustForwardedHeaders) app.UseForwardedHeaders();
 app.UseExceptionHandler();
 app.UseAuthentication();
 app.UseMiddleware<SessionMiddleware>();
+app.UseMiddleware<IdempotencyKeyMiddleware>();
 if (app.Environment.IsDevelopment())
 {
     app.UseSwagger();

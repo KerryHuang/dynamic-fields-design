@@ -10,4 +10,4 @@ namespace DynamicModules.Application.Dynamic.RecordService.Commands.CreateRecord
 public record CreateRecordRequest(
     string ModuleKey, Dictionary<string, JsonElement?> Values, string? HostKey = null,
     Dictionary<string, List<DetailRowInput>>? Details = null, IReadOnlySet<string>? SystemKeys = null)
-    : IRequest<ServiceResult>, ITransactionalRequest;
+    : IRequest<ServiceResult>, IRecordWriteRequest;
