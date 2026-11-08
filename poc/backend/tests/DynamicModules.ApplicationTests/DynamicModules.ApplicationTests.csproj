@@ -37,4 +37,9 @@
     <None Include="..\..\apps\*.app.json" Link="apps\%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
+  <ItemGroup>
+    <!-- 只在測試專案註冊的既有實體提供者（test.entity），ApplicationTests 與 WebAPITests 共用 -->
+    <Compile Include="..\Fixtures\TestEntityProvider.cs" Link="TestSupport\TestEntityProvider.cs" />
+  </ItemGroup>
+
 </Project>
