@@ -184,7 +184,7 @@
   - 驗證規則：交期不得早於預計開工；**狀態為 done 時，已完工量須 ≥ 工令數量，或已勾短交結案**（`fieldRef` 比較）；**狀態為 running 時，`liveShipments` 必須為 0**（重開守衛，審查第二輪 #1、#2）。
 - `mes-wo-op` 製程（工令**唯一**的明細模組）：`workorder`、`seq`（工序序號，明細內自動編號）、`process` 下拉（material 備料／rough 粗加工／cnc 精加工／edm 放電／wire 線割／heat 熱處理／polish 拋光／assemble 組裝／trial 試模）、`workstation` 文字、`plannedHours` 小數、`plannedStart`、`plannedEnd`。
 - `mes-report` 報工（**分錄**，建立後不能改、不能刪，更正用沖銷，也是工令的明細）：
-  - `no` `RP-{yyyyMM}-{0000}`、`workOrder` 參照工令必填（`relation: detail`，工令的彙總靠它；帶值 `lock`：工令 `finalSeq` → 本筆 `finalSeq`）、`opSeq` 整數必填（對應製程的序號）、`process` 下拉必填、`reportDate` 預設今天、`worker` 使用者。
+  - `no` `RP-{yyyyMM}-{0000}`、`workOrder` 參照工令必填（一般參照，不是明細：事件的 `update` 經它寫工令，`EventValidator` 不收明細參照；工令的彙總也可以掛在一般參照上，同現有「品質異常筆數」；帶值 `lock`：工令 `finalSeq` → 本筆 `finalSeq`）、`opSeq` 整數必填（對應製程的序號）、`process` 下拉必填、`reportDate` 預設今天、`worker` 使用者。
   - `finalSeq` 整數唯讀（建立時由工令帶入的**末道序號快照**；工令一旦發放，`finalSeq` 在生產途中不會變，見下）。
   - `goodQty` **整數必填**（良品數，輸入欄位；檢查與完工量都用它）、`defectQty` 整數預設 0、`totalQty` 公式（`goodQty + defectQty`，僅顯示）、`finalGood` 公式（`IF({opSeq} = {finalSeq}, {goodQty}, 0)`；**只有末道工序的良品數才有值**，是工令完工量彙總的加總對象）、`defectReason` 下拉（dimension 尺寸／scratch 刮傷／burr 毛邊／crack 裂紋／material 材料／other），不良數大於 0 時顯示且必填、`hours` 小數（工時）、`remark`、`reverses` 參照報工自己（唯讀，沖銷追溯）。
   - 為什麼是分錄（審查第一輪 #12）：報工若可修改，現場可以事後把末道報工從 100 改成 50，完工量就掉到比已出貨量低，沒有檢查擋得住。分錄型不能修改、刪除，只能沖銷；沖銷是一筆 `goodQty`、`defectQty`、`hours` 取負號的新報工（`negate`），公式 `finalGood` 隨之變負，累計檢查與彙總都自然把它算進去。沖銷需要 Add 權限，現場有。沖銷分錄複製 `opSeq`、`finalSeq`（不重新帶值），所以末道判定不變。
@@ -194,7 +194,7 @@
 
 **出貨**
 
-- `mes-shipment` 出貨單：`no` `SP-{yyyyMM}-{0000}`、`workOrder` 參照工令必填（`relation: detail`；帶值 `lock`：工令已完工量 → `doneQty`）、`doneQty` 整數唯讀（建立當下的**完工量**，檢查拿它當上限，見 §4.7）、`customer` 實體參照必填（使用者自選；帶值不能寫進參照欄位，`FieldRules.cs` 的限制）、`shipDate` 預設今天、`qty` 整數必填且大於 0、`carrier` 文字、`status`（draft／shipped／cancelled）、`remark`。一張出貨單對應一張工令（分批出貨就開多張）。
+- `mes-shipment` 出貨單：`no` `SP-{yyyyMM}-{0000}`、`workOrder` 參照工令必填（一般參照；帶值 `lock`：工令已完工量 → `doneQty`）、`doneQty` 整數唯讀（建立當下的**完工量**，檢查拿它當上限，見 §4.7）、`customer` 實體參照必填（使用者自選；帶值不能寫進參照欄位，`FieldRules.cs` 的限制）、`shipDate` 預設今天、`qty` 整數必填且大於 0、`carrier` 文字、`status`（draft／shipped／cancelled）、`remark`。一張出貨單對應一張工令（分批出貨就開多張）。
 
 ### 4.4 狀態機
 
@@ -607,6 +607,6 @@ Demo（`DemoGenerationTests` 等）：
 - **沒有獨立的 short（短交結案）狀態。** 出貨靠事件把工令寫成 done，同一個事件的常數只能指向一個終態；若保留 short，對 short 的工令出貨會因為 short → done 未定義而被擋。改成工令上的 `shortClose` 布林：done 的規則是「已完工量 ≥ 工令數量，或已勾短交結案」。
 - **新增事件 `mes-shipment-close-wo`**（出貨單 `create` → 工令 `status` ← done），是用現有能力近似「參照目標處於某狀態才能建立」的守衛。副作用：出貨會順便把生產中且完工量達標的工令結案。精確版是缺口 F（§4.7），不做。
 - **工令新增彙總 `liveShipments`**（出貨單筆數，狀態不是 cancelled）與規則「running 時 `liveShipments` 必須為 0」，這是重開守衛。
-- **報工、出貨單都是工令的明細**（`relation: detail`），彙總才算得到。唯讀的工令（done）下，子記錄變動是否仍能重算彙總，由 §8 #6、#11 的測試先驗證。
+- **報工、出貨單對工令是一般參照**（不是明細），工令的彙總掛在這個參照上；事件的 `update` 要求 `via` 不是明細參照，所以這是唯一做法。唯讀的工令（done）下，子記錄變動是否仍能重算彙總，由 §8 #6、#11 的測試先驗證。
 - **Demo 調整（§10.3）：** 狀態分布沒有 short；被擋下的紀錄改為「對未完工工令建立出貨單被擋」；不再留「完工量不足，暫緩出貨」的草稿出貨單（建不起來），改留逾期未完工的工令與一般草稿。
 - §8 假設表新增 #11、#12、#13（事件寫 done 的行為、規則看彙總值、`finalGood` 公式的彙總與沖銷），實作第一步用測試驗證，備案已寫。
