@@ -1,5 +1,6 @@
 using System.Text.RegularExpressions;
 using DynamicModules.Application.Dynamic.AppService.Data;
+using DynamicModules.Application.Dynamic.AppService.Integrations;
 using DynamicModules.Application.Dynamic.TemplateService;
 using DynamicModules.Application.Dynamic.TemplateService.Data;
 using DynamicModules.Domain.Entities.Dynamic;
@@ -48,7 +49,14 @@ public sealed partial class AppExporter(
             return (ext.Code, ext.App);
         }
 
-        var exported = await templates.ExportMembersAsync(members, m => codeOfModule[m.Id], RefTarget, ct);
+        // 整合建立的欄位、事件、檢查不進一般 section（它們屬於 integrations 宣告）；其餘欄位、區塊、選項保留開啟時的代號
+        var integrationRows = (await apps.ListIntegrationsAsync(ct)).Where(r => r.AppId == app.Id).ToList();
+        var integrationItems = integrationRows.Select(r => IntegrationItems.Parse(r.ItemsJson)).ToList();
+        var excludedFields = integrationItems.SelectMany(i => i.Fields.Select(f => f.FieldId)).ToHashSet();
+        var excludedEvents = integrationItems.SelectMany(i => i.Events).ToHashSet();
+        var excludedChecks = integrationItems.SelectMany(i => i.Checks).ToHashSet();
+        var codes = ExportCodeBook(members, codeOfModule, await apps.GetBindingsAsync(app.Id, ct), excludedFields);
+        var exported = await templates.ExportMembersAsync(members, m => codeOfModule[m.Id], RefTarget, ct, codes);
         var warnings = new List<string>(exported.Warnings);
         var names = exported.Names;
 
@@ -94,10 +102,10 @@ public sealed partial class AppExporter(
                 // 範圍指向的群組都已不存在（殘留資料）：匯出空範圍會被匯入驗證退回，所以不匯出並告知
                 if (scopeGroups.Count == 0)
                 {
-                    warnings.Add($"選項「{module}.o_{option.Id}」的限定群組都已不存在，選項範圍未匯出");
+                    warnings.Add($"選項「{module}.{codes.Option(option.Id)}」的限定群組都已不存在，選項範圍未匯出");
                     continue;
                 }
-                optionScopes.Add(new AppOptionScope($"{module}.o_{option.Id}", scopeGroups));
+                optionScopes.Add(new AppOptionScope($"{module}.{codes.Option(option.Id)}", scopeGroups));
             }
         }
 
@@ -106,8 +114,8 @@ public sealed partial class AppExporter(
         var reportList = await ExportReportsAsync(app, names, GroupCode, warnings, ct);
         var printList = await ExportPrintTemplatesAsync(members, codeOfModule, keyToCode, names, warnings, ct);
         var ledgerList = await ExportLedgersAsync(members, codeOfModule, names, warnings, ct);
-        var eventList = await ExportEventsAsync(members, keyToCode, names, warnings, ct);
-        var checkList = await ExportChecksAsync(members, codeOfModule, names, warnings, ct);
+        var eventList = await ExportEventsAsync(members, keyToCode, names, warnings, excludedEvents, ct);
+        var checkList = await ExportChecksAsync(members, codeOfModule, names, warnings, excludedChecks, ct);
 
         var entities = exported.Modules.Where(m => m.HostEntityKey is not null).Select(m => m.HostEntityKey!)
             .Concat(exported.Modules.SelectMany(m => m.Blocks).SelectMany(b => b.Fields)
@@ -127,9 +135,48 @@ public sealed partial class AppExporter(
             AppPackageData.FormatName, AppPackageData.CurrentFormatVersion,
             new AppManifest(app.Key, app.PackageVersion, app.NameI18n, null, app.Icon, null, requires),
             groups, moduleList, fieldAccess, optionScopes, reportList, null, workflows, conversionList, eventList, printList,
-            checkList, ledgerList);
+            checkList, ledgerList, IntegrationDeclarations.Parse(app.IntegrationsJson));
         // groups 在上面各步驟用到才加進 codeOfGroup，最後才組出來
         return new Exported(package, warnings);
+    }
+
+    /// <summary>
+    /// 匯出用的代號：有對照列的欄位、區塊、選項用開啟時的代號；沒有的（開啟後客戶新增）退回 f_／b_／o_ 加 Id。
+    /// 每個模組只有一份避撞對照：先登記所有保留的原始代號，回退代號撞到就加 _2、_3，欄位定義與所有引用共用同一份。
+    /// </summary>
+    internal static ExportCodes ExportCodeBook(
+        List<Module> members, Dictionary<long, string> codeOfModule, AppBindings bindings, HashSet<long> excluded)
+    {
+        var fields = new Dictionary<long, string>();
+        var blocks = new Dictionary<long, string>();
+        var options = new Dictionary<long, string>();
+        foreach (var m in members)
+        {
+            var prefix = codeOfModule[m.Id] + ".";
+            string Rest(string name) => name[prefix.Length..];
+            var fieldList = m.Blocks.SelectMany(b => b.Fields).ToList();
+            var boundField = bindings.Fields.Where(x => x.Key.StartsWith(prefix, StringComparison.Ordinal)).ToDictionary(x => x.Value, x => Rest(x.Key));
+            var boundBlock = bindings.Blocks.Where(x => x.Key.StartsWith(prefix, StringComparison.Ordinal)).ToDictionary(x => x.Value, x => Rest(x.Key));
+            var boundOption = bindings.Options.Where(x => x.Key.StartsWith(prefix, StringComparison.Ordinal)).ToDictionary(x => x.Value, x => Rest(x.Key));
+
+            Assign(fieldList.Select(f => f.Id), boundField, "f_", fields);
+            Assign(m.Blocks.Select(b => b.Id), boundBlock, "b_", blocks);
+            Assign(fieldList.SelectMany(f => f.Options.Select(o => o.Id)), boundOption, "o_", options);
+        }
+        return new ExportCodes(fields, blocks, options, excluded);
+
+        static void Assign(IEnumerable<long> ids, Dictionary<long, string> bound, string fallbackPrefix, Dictionary<long, string> target)
+        {
+            var list = ids.ToList();
+            var taken = list.Where(bound.ContainsKey).Select(id => bound[id]).ToHashSet(StringComparer.Ordinal);
+            foreach (var id in list)
+            {
+                if (bound.TryGetValue(id, out var code)) { target[id] = code; continue; }
+                var candidate = $"{fallbackPrefix}{id}";
+                for (var i = 2; !taken.Add(candidate); i++) candidate = $"{fallbackPrefix}{id}_{i}";
+                target[id] = candidate;
+            }
+        }
     }
 
     private async Task<List<AppLedger>> ExportLedgersAsync(
@@ -147,11 +194,13 @@ public sealed partial class AppExporter(
     }
 
     private async Task<List<AppEvent>> ExportEventsAsync(
-        List<Module> members, Dictionary<string, string> keyToCode, AppReportCodec.Names names, List<string> warnings, CancellationToken ct)
+        List<Module> members, Dictionary<string, string> keyToCode, AppReportCodec.Names names, List<string> warnings,
+        HashSet<string> excluded, CancellationToken ct)
     {
         var result = new List<AppEvent>();
         foreach (var e in (await events.ListAsync(ct)).OrderBy(e => e.Key, StringComparer.Ordinal))
         {
+            if (excluded.Contains(e.Key)) continue;
             if (members.FirstOrDefault(m => m.Id == e.SourceModuleId) is not { } source) continue;
             var (package, errors) = AppEffectsCodec.ToPackage(e, source, key => keyToCode.GetValueOrDefault(key), names);
             if (package is null) warnings.Add($"連動事件「{e.Key}」未匯出（{string.Join("；", errors)}）");
@@ -173,11 +222,13 @@ public sealed partial class AppExporter(
     }
 
     private async Task<List<AppCheck>> ExportChecksAsync(
-        List<Module> members, Dictionary<long, string> codeOf, AppReportCodec.Names names, List<string> warnings, CancellationToken ct)
+        List<Module> members, Dictionary<long, string> codeOf, AppReportCodec.Names names, List<string> warnings,
+        HashSet<string> excluded, CancellationToken ct)
     {
         var result = new List<AppCheck>();
         foreach (var c in (await checks.ListAsync(ct)).OrderBy(c => c.Key, StringComparer.Ordinal))
         {
+            if (excluded.Contains(c.Key)) continue;
             if (members.FirstOrDefault(m => m.Id == c.ModuleId) is not { } module) continue;
             var (package, errors) = AppEffectsCodec.ToPackage(c, codeOf[module.Id], names);
             if (package is null) warnings.Add($"跨記錄檢查「{c.Key}」未匯出（{string.Join("；", errors)}）");

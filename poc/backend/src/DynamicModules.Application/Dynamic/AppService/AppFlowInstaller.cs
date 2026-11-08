@@ -182,7 +182,7 @@ public sealed class AppFlowInstaller(ISender sender)
     /// 沖銷別的事件的事件排在被沖銷的事件之後。匯出按名稱排序，沖銷者的代號可能排在前面；
     /// 設計器指令驗證 ofEvent 時被沖銷的事件必須已經存在。沒有相依的維持套件裡的原順序。
     /// </summary>
-    private static List<AppEvent> InDependencyOrder(IReadOnlyList<AppEvent> events)
+    internal static List<AppEvent> InDependencyOrder(IReadOnlyList<AppEvent> events)
     {
         var byCode = events.GroupBy(e => e.Code).ToDictionary(g => g.Key, g => g.First());
         var ordered = new List<AppEvent>();

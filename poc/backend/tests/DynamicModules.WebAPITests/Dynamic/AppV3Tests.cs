@@ -166,7 +166,7 @@ public class AppV3Tests : IDisposable
     {
         await ImportAndOpen(_admin, AppTestPackagesV3.Sales(), "sales-flow");
         var exported = await ExportOk("sales-flow");
-        exported.GetProperty("formatVersion").GetInt32().Should().Be(4);
+        exported.GetProperty("formatVersion").GetInt32().Should().Be(5);
         exported.GetProperty("workflows").GetArrayLength().Should().Be(1);
         exported.GetProperty("conversions").GetArrayLength().Should().Be(1);
         exported.GetProperty("reports").GetArrayLength().Should().Be(1);
@@ -178,7 +178,7 @@ public class AppV3Tests : IDisposable
         exportedTemplate.GetProperty("code").GetString().Should().Be("quote-sheet");
         var exportedBody = exportedTemplate.GetProperty("body").GetString()!;
         exportedBody.Should().Contain("{{#each quote-line}}").And.NotContain("sales-flow-");
-        exportedBody.Should().MatchRegex(@"^<h1>\{\{f_\d+\}\}</h1><p>\{\{f_\d+\}\}</p>");
+        exportedBody.Should().StartWith("<h1>{{no}}</h1><p>{{customerName}}</p>");
 
         using var fresh = new TestApp();
         var admin2 = fresh.AsUser();

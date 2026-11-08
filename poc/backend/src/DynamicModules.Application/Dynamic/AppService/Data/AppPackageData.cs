@@ -13,7 +13,7 @@ public record AppPackageData(
     List<AppFieldAccess>? FieldAccess, List<AppOptionScope>? OptionScopes,
     List<AppPackageReport>? Reports, List<JsonElement>? Dashboards, List<AppWorkflow>? Workflows,
     List<AppConversion>? Conversions, List<AppEvent>? Events, List<AppPrintTemplate>? PrintTemplates,
-    List<AppCheck>? Checks = null, List<AppLedger>? Ledgers = null)
+    List<AppCheck>? Checks = null, List<AppLedger>? Ledgers = null, List<AppIntegrationDecl>? Integrations = null)
 {
     public const string FormatName = "formwright-app";
     /// <summary>
@@ -35,6 +35,7 @@ public record AppPackageData(
     public List<AppEvent> Events { get; init; } = Events ?? [];
     public List<AppCheck> Checks { get; init; } = Checks ?? [];
     public List<AppLedger> Ledgers { get; init; } = Ledgers ?? [];
+    public List<AppIntegrationDecl> Integrations { get; init; } = Integrations ?? [];
 
     /// <summary>名稱與非空的保留 section；有值就代表這份套件需要這個版本讀不懂的功能。</summary>
     public IEnumerable<string> UnsupportedSections()
@@ -202,3 +203,27 @@ public record AppLedger(string Module, string ReversalField, List<string> Negate
     public List<string> Negate { get; init; } = Negate ?? [];
     public List<List<string>> Swap { get; init; } = Swap ?? [];
 }
+
+// ---- 格式 5 的 section：整合（可選相依）。擁有者只加欄位、事件、檢查，夥伴從不被修改。 ----
+
+/// <summary>
+/// 整合宣告。Code 在擁有者套件內唯一。With 是夥伴；OnPartnerClosed 是 skip（預設）或 block。
+/// 符號：擁有者的模組與欄位照舊，夥伴的以 &lt;應用程式 id&gt;/ 開頭（模組 inventory/move、欄位 inventory/move.qty）。
+/// </summary>
+public record AppIntegrationDecl(
+    string Code, I18nText Name, List<AppIntegrationPartner> With, string? OnPartnerClosed,
+    List<AppIntegrationField>? Fields, List<AppEvent>? Events, List<AppCheck>? Checks)
+{
+    public List<AppIntegrationPartner> With { get; init; } = With ?? [];
+    public List<AppIntegrationField> Fields { get; init; } = Fields ?? [];
+    public List<AppEvent> Events { get; init; } = Events ?? [];
+    public List<AppCheck> Checks { get; init; } = Checks ?? [];
+}
+
+public record AppIntegrationPartner(string Id, List<string> Modules)
+{
+    public List<string> Modules { get; init; } = Modules ?? [];
+}
+
+/// <summary>加到擁有者模組的欄位。Block 是該模組既有區塊的代號；Config 同模組欄位的 config（refTarget 可帶 app）。</summary>
+public record AppIntegrationField(string Module, string Block, string Code, FieldType Type, I18nText Label, JsonElement Config);

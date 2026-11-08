@@ -69,7 +69,7 @@ public class EventStage(
         return null;
     }
 
-    private static bool Triggers(
+    internal static bool Triggers(
         ModuleEvent ev, Module module, IReadOnlyDictionary<string, JsonElement?>? before, IReadOnlyDictionary<string, JsonElement?> after, JournalKind kind)
     {
         var t = ev.Definition.Trigger;

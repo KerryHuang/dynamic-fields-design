@@ -6,7 +6,7 @@ using DynamicModules.Domain.Repositories.Dynamic;
 namespace DynamicModules.Application.Dynamic.AppService;
 
 /// <summary>組應用程式與套件的回應；成員模組的現況（key、名稱、狀態）取自目前的 Module，不是套件原文。</summary>
-public sealed class AppResponseBuilder(IModuleRepository modules, AppDependencyChecker dependencies)
+public sealed class AppResponseBuilder(IModuleRepository modules, AppDependencyChecker dependencies, IAppRepository apps)
 {
     public async Task<AppResponse> BuildAsync(App app, bool withDependents, IEnumerable<string>? warnings, CancellationToken ct)
     {
@@ -19,12 +19,23 @@ public sealed class AppResponseBuilder(IModuleRepository modules, AppDependencyC
         var referrers = new List<string>();
         if (withDependents)
         {
-            var result = await dependencies.DependentsOfAsync(app, ct);
+            var result = await dependencies.DependentsOfAsync(app, ct, forClose: true);
             dependents = result.Apps.Select(a => a.Key).ToList();
             referrers = [.. result.UnaffiliatedReferrers];
         }
+        var integrations = new List<IntegrationResponse>();
+        if (app.IntegrationsJson is not null)
+        {
+            var rows = (await apps.ListIntegrationsAsync(ct)).Where(r => r.AppId == app.Id).ToDictionary(r => r.Code);
+            foreach (var d in Integrations.IntegrationDeclarations.Parse(app.IntegrationsJson).Where(d => rows.ContainsKey(d.Code)))
+            {
+                var row = rows[d.Code];
+                integrations.Add(new IntegrationResponse(d.Code, d.Name, row.Enabled, row.Installed, row.Status, row.Reason,
+                    d.OnPartnerClosed ?? "skip", d.With.Select(w => new AppRequirementData(w.Id, w.Modules)).ToList()));
+            }
+        }
         return new AppResponse(app.Key, app.NameI18n, app.Icon, app.PackageVersion, app.FormatVersion, app.Source,
-            AppMapper.StatusName(app.Status), app.RowVersion, app.Requires, members, dependents, referrers, [.. warnings ?? []]);
+            AppMapper.StatusName(app.Status), app.RowVersion, app.Requires, members, dependents, referrers, [.. warnings ?? []], integrations);
     }
 
     public static AppPackageSummary Summarize(SourcedPackage source, string? status)

@@ -4,6 +4,7 @@ using DynamicModules.Application.Common.Time;
 using DynamicModules.Application.Dynamic.AccountService.Commands.CreateGroup;
 using DynamicModules.Application.Dynamic.AccountService.Data;
 using DynamicModules.Application.Dynamic.AppService.Data;
+using DynamicModules.Application.Dynamic.AppService.Integrations;
 using DynamicModules.Application.Dynamic.ModuleService.Commands.ActivateModule;
 using DynamicModules.Application.Dynamic.TemplateService;
 using DynamicModules.Application.Dynamic.TemplateService.Commands.InstantiateTemplate;
@@ -39,7 +40,8 @@ public sealed record AppOpenOutcome(ServiceResult Result, TemplateIdMap? Ids);
 /// </summary>
 public class AppOpener(
     AppOpenPlanner planner, TemplateInstantiator instantiator, ISender sender, IAppRepository apps,
-    AppResponseBuilder builder, AppFlowInstaller flows, IUnitOfWork uow, ICurrentUser user, IBusinessTime time)
+    AppResponseBuilder builder, AppFlowInstaller flows, IUnitOfWork uow, ICurrentUser user, IBusinessTime time,
+    IntegrationReconciler integrations)
 {
     public async Task<AppOpenOutcome> OpenAsync(string packageId, OpenAppBody body, CancellationToken ct)
     {
@@ -100,12 +102,30 @@ public class AppOpener(
             PackageVersion = package.Manifest.Version, FormatVersion = package.FormatVersion, Source = plan.Source.Source,
             Status = AppStatus.Open, Requires = AppOpenPlanner.RequiresOf(package),
             Modules = result.Modules.Select(m => new AppModule { Code = m.Code, ModuleId = m.Id }).ToList(),
-            Reports = installed.Reports
+            Reports = installed.Reports,
+            IntegrationsJson = package.Integrations.Count == 0 ? null : IntegrationDeclarations.ToJson(package.Integrations)
         };
         app.TouchRowVersion();
         app.StampCreated(user.UserId, time.Now);
         apps.Add(app);
         await uow.CommitAsync(ct);
+
+        // 代號對照（整合靠它解析夥伴的符號，匯出靠它保留原始代號）與整合的執行狀態；內建套件的整合預設啟用，匯入的要管理員逐一啟用
+        var ids2 = result.Ids!;
+        apps.AddBindings(
+            ids2.FieldIds.Select(x => new AppField { AppId = app.Id, Name = x.Key, FieldId = x.Value }),
+            ids2.OptionIds.Select(x => new AppOption { AppId = app.Id, Name = x.Key, OptionId = x.Value }),
+            ids2.BlockIds.Select(x => new AppBlock { AppId = app.Id, Name = x.Key, BlockId = x.Value }));
+        foreach (var g in package.Integrations)
+            apps.AddIntegration(new AppIntegration
+            {
+                AppId = app.Id, Code = g.Code, Enabled = plan.Source.Source == "builtIn",
+                Status = plan.Source.Source == "builtIn" ? IntegrationStatus.Waiting : IntegrationStatus.Disabled
+            });
+        await uow.CommitAsync(ct);
+        // 調和要在自己的 SaveChanges 之後（回滾會清掉 change tracker）；整合失敗只回報，不讓開啟失敗
+        if (package.Integrations.Count > 0 || (await apps.ListIntegrationsAsync(ct)).Count > 0)
+            warnings.AddRange(await integrations.ReconcileAsync(ct));
         return ServiceResult.Created(await builder.BuildAsync(app, withDependents: false, warnings, ct));
     }
 

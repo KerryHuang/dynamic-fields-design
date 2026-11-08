@@ -77,6 +77,7 @@ public static partial class AppPackageValidator
             if (p.Checks.Count > 0) errors.Add("checks: formatVersion 4 才支援 checks");
             if (p.Ledgers.Count > 0) errors.Add("ledgers: formatVersion 4 才支援 ledgers");
         }
+        IntegrationStructure(p, errors);
         if (p.Events.Count > MaxEvents) errors.Add($"events: 最多 {MaxEvents} 個");
         if (p.Checks.Count > MaxChecks) errors.Add($"checks: 最多 {MaxChecks} 個");
         if (p.Workflows.Count > MaxModules) errors.Add($"workflows: 最多 {MaxModules} 個");
@@ -287,6 +288,7 @@ public static partial class AppPackageValidator
         }
         V3References(p, fieldNames, groupCodes, errors);
         V4References(p, fieldNames, errors);
+        V5References(p, fieldNames, errors);
         PrintTemplateReferences(p, fieldNames, errors);
         return errors;
     }

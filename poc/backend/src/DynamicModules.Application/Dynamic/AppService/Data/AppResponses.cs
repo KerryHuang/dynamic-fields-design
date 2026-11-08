@@ -15,7 +15,18 @@ public record AppModuleResponse(string Code, string Key, long Id, I18nText Name,
 public record AppResponse(
     string Key, I18nText Name, string? Icon, string PackageVersion, int FormatVersion, string Source, string Status,
     string RowVersion, AppRequires Requires, List<AppModuleResponse> Modules,
-    List<string> Dependents, List<string> UnaffiliatedReferrers, List<string> Warnings);
+    List<string> Dependents, List<string> UnaffiliatedReferrers, List<string> Warnings,
+    List<IntegrationResponse>? Integrations = null)
+{
+    public List<IntegrationResponse> Integrations { get; init; } = Integrations ?? [];
+}
+
+/// <summary>
+/// 整合的現況。Status：Disabled、Waiting、Active、Suspended、Held、Blocked；Reason 說明原因（人看的）。
+/// Partners 是夥伴應用程式 id 與用到的模組。
+/// </summary>
+public record IntegrationResponse(
+    string Code, I18nText Name, bool Enabled, bool Installed, string Status, string? Reason, string OnPartnerClosed, List<AppRequirementData> Partners);
 
 /// <summary>關閉的結果：Closed 是這次實際關閉的應用程式（含連帶關閉的依賴者，依賴者在前）。</summary>
 public record CloseAppResponse(AppResponse App, List<string> Closed, List<string> Warnings);

@@ -14,6 +14,7 @@ namespace DynamicModules.WebAPI.Controllers.v3.Dynamic;
 public class AppsController(IMediator mediator) : ControllerBase
 {
     public record CloseBody(bool Cascade);
+    public record IntegrationEnabledBody(bool Enabled);
 
     [HttpGet("apps/packages")]
     public async Task<IActionResult> Packages() => (await mediator.Send(new GetAppPackagesRequest())).ToActionResult(this);
@@ -51,6 +52,14 @@ public class AppsController(IMediator mediator) : ControllerBase
 
     [HttpPost("apps/{key}/reopen")]
     public async Task<IActionResult> Reopen(string key) => (await mediator.Send(new ReopenAppRequest(key))).ToActionResult(this);
+
+    [HttpPost("apps/{key}/integrations/{code}/retry")]
+    public async Task<IActionResult> RetryIntegration(string key, string code) =>
+        (await mediator.Send(new RetryIntegrationRequest(key, code))).ToActionResult(this);
+
+    [HttpPut("apps/{key}/integrations/{code}")]
+    public async Task<IActionResult> SetIntegrationEnabled(string key, string code, IntegrationEnabledBody body) =>
+        (await mediator.Send(new SetIntegrationEnabledRequest(key, code, body.Enabled))).ToActionResult(this);
 
     [HttpDelete("apps/{key}")]
     public async Task<IActionResult> Delete(string key, [FromQuery] int? purged) =>

@@ -47,6 +47,8 @@ public static class DependencyInjection
         services.AddScoped<Dynamic.EventService.FactBackstopStage>();
         services.AddScoped<Common.Behaviors.IWriteStage>(sp => sp.GetRequiredService<Dynamic.EventService.FactBackstopStage>());
         services.AddScoped<Common.Behaviors.IWriteStage>(sp => sp.GetRequiredService<Dynamic.EventService.EventStage>());
+        services.AddScoped<Dynamic.AppService.Integrations.IntegrationGuardStage>();
+        services.AddScoped<Common.Behaviors.IWriteStage>(sp => sp.GetRequiredService<Dynamic.AppService.Integrations.IntegrationGuardStage>());
         services.AddScoped<Dynamic.CheckService.CheckEvaluator>();
         services.AddScoped<Dynamic.CheckService.CheckIndexer>();
         services.AddScoped<Dynamic.CheckService.CheckFieldGuard>();
@@ -86,6 +88,7 @@ public static class DependencyInjection
         services.AddScoped<Dynamic.AppService.AppResponseBuilder>();
         services.AddScoped<Dynamic.AppService.AppFlowInstaller>();
         services.AddScoped<Dynamic.AppService.Commands.AppOpener>();
+        services.AddScoped<Dynamic.AppService.Integrations.IntegrationReconciler>();
         services.AddScoped<Dynamic.AttachmentService.AttachmentUploadGate>();
         services.AddScoped<Dynamic.AppService.AppExporter>();
         services.AddScoped<Dynamic.DemoService.DemoPreflight>();

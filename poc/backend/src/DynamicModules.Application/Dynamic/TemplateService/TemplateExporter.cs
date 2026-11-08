@@ -36,20 +36,21 @@ public sealed partial class TemplateExporter(IModuleRepository modules, IPermiss
     /// 回傳 null 代表表達不了（該欄位不匯出）。
     /// </summary>
     public async Task<ExportedModules> ExportMembersAsync(
-        List<Module> members, Func<Module, string> codeOf, Func<string, (string Code, string? App)?>? refTargets, CancellationToken ct)
+        List<Module> members, Func<Module, string> codeOf, Func<string, (string Code, string? App)?>? refTargets, CancellationToken ct,
+        ExportCodes? codes = null)
     {
-        var ctx = new Context(members, codeOf, refTargets);
+        var ctx = new Context(members, codeOf, refTargets, codes ?? ExportCodes.Default);
         var groups = (await permissions.ListGroupsAsync(ct)).OrderBy(g => g.Id).ToList();
         var result = new List<TemplateModule>();
         foreach (var m in members)
         {
-            var blocks = Blocks(m).Select(b => new TemplateBlock($"b_{b.Id}", b.LabelI18n, b.Collapsed,
+            var blocks = Blocks(m).Select(b => new TemplateBlock(ctx.BlockCode(b.Id), b.LabelI18n, b.Collapsed,
                 ActiveFields(b).Where(f => ctx.Exported.Contains(f.Id))
-                    .Select(f => new TemplateField(f.Key, f.Type, f.LabelI18n, ctx.Config(f), ActiveOptions(f)
-                        .Select(o => new TemplateOption($"o_{o.Id}", o.LabelI18n, o.Color)).ToList())).ToList(), b.Columns)).ToList();
+                    .Select(f => new TemplateField(ctx.FieldCode(f), f.Type, f.LabelI18n, ctx.Config(f), ActiveOptions(f)
+                        .Select(o => new TemplateOption(ctx.OptionCode(o.Id), o.LabelI18n, o.Color)).ToList())).ToList(), b.Columns)).ToList();
             var rules = m.Rules.OrderBy(r => r.Sequence).Select((r, i) => ctx.Rule(m, r, i)).OfType<TemplateRule>().ToList();
             var shared = (await views.ListByScopeAsync(m.Id, null, ct)).OrderBy(v => v.Id).Select(ctx.View).ToList();
-            var title = m.TitleFieldId is { } t && ctx.Exported.Contains(t) ? ctx.Fields[t].Key : null;
+            var title = m.TitleFieldId is { } t && ctx.Exported.Contains(t) ? ctx.FieldCode(ctx.Fields[t]) : null;
             result.Add(new TemplateModule(codeOf(m), m.Key, m.NameI18n, m.Icon, m.Section, m.Kind, m.HostEntityKey, title,
                 blocks, rules, shared, IsDetail(m) ? [] : await PermissionsAsync(m, groups, ct)));
         }
@@ -111,8 +112,15 @@ public sealed partial class TemplateExporter(IModuleRepository modules, IPermiss
         private readonly Dictionary<long, Field> _allFields = new();
         private readonly Dictionary<long, long> _optionOwner = new();
 
-        public Context(List<Module> members, Func<Module, string> codeOf, Func<string, (string Code, string? App)?>? refTargets)
+        private readonly ExportCodes _codes;
+
+        public string FieldCode(Field f) => _codes.Field(f);
+        public string BlockCode(long id) => _codes.Block(id);
+        public string OptionCode(long id) => _codes.Option(id);
+
+        public Context(List<Module> members, Func<Module, string> codeOf, Func<string, (string Code, string? App)?>? refTargets, ExportCodes codes)
         {
+            _codes = codes;
             _codeOf = codeOf;
             _refTargets = refTargets;
             var all = members.SelectMany(m => m.Blocks.SelectMany(b => b.Fields).Select(f => (m, f))).ToList();
@@ -126,7 +134,7 @@ public sealed partial class TemplateExporter(IModuleRepository modules, IPermiss
             foreach (var f in Fields.Values)
                 foreach (var o in ActiveOptions(f)) _optionOwner[o.Id] = f.Id;
             _blocks = members.SelectMany(m => m.Blocks).Select(b => b.Id).ToHashSet();
-            Exported = Fields.Keys.ToHashSet();
+            Exported = Fields.Keys.Where(id => !codes.Excluded.Contains(id)).ToHashSet();
 
             // 略過一個欄位可能讓依賴它的欄位也表達不了，重複到穩定
             var ordered = members.SelectMany(m => Blocks(m).SelectMany(ActiveFields)).ToList();
@@ -145,19 +153,19 @@ public sealed partial class TemplateExporter(IModuleRepository modules, IPermiss
 
         private string Label(Field f) => f.LabelI18n.Resolve(I18nText.FallbackLocale);
 
-        private string Code(long fieldId) => Fields[fieldId].Key;
+        private string Code(long fieldId) => _codes.Field(Fields[fieldId]);
 
-        private string Qualified(long fieldId) => $"{_codeOf(_moduleOf[fieldId])}.{Fields[fieldId].Key}";
+        private string Qualified(long fieldId) => $"{_codeOf(_moduleOf[fieldId])}.{_codes.Field(Fields[fieldId])}";
 
         /// <summary>報表、狀態機、轉換用的 Id → 代號查表；只認實際匯出的欄位。</summary>
         public AppReportCodec.Names Names() => new(
             key => _moduleOf.Values.FirstOrDefault(m => m.Key == key) is { } m ? _codeOf(m) : null,
             id => Exported.Contains(id) ? Qualified(id) : null,
-            (fieldId, optionId) => _optionOwner.TryGetValue(optionId, out var owner) && owner == fieldId ? $"o_{optionId}" : null,
+            (fieldId, optionId) => _optionOwner.TryGetValue(optionId, out var owner) && owner == fieldId ? _codes.Option(optionId) : null,
             id => Fields.TryGetValue(id, out var f) && IsOptionField(f),
             id => Fields.TryGetValue(id, out var f) && f.Type is FieldType.Reference or FieldType.User ? f.Type : null);
 
-        public string? OptionCode(long optionId) => _options.Contains(optionId) ? $"o_{optionId}" : null;
+        public string? OptionCodeOrNull(long optionId) => _options.Contains(optionId) ? _codes.Option(optionId) : null;
 
         private string? WhyOmit(Field f)
         {
@@ -252,7 +260,7 @@ public sealed partial class TemplateExporter(IModuleRepository modules, IPermiss
                 if (t.StartsWith("field:") && long.TryParse(t["field:".Length..], out var fid) && Exported.Contains(fid))
                     targets.Add($"field:{Code(fid)}");
                 else if (t.StartsWith("block:") && long.TryParse(t["block:".Length..], out var bid) && _blocks.Contains(bid))
-                    targets.Add($"block:b_{bid}");
+                    targets.Add($"block:{_codes.Block(bid)}");
                 else if (t == "*") targets.Add(t);
                 else ok = false;
             }
@@ -266,7 +274,7 @@ public sealed partial class TemplateExporter(IModuleRepository modules, IPermiss
                 return null;
             }
             return new TemplateRule(r.Kind, targets, JsonSerializer.SerializeToElement(condition),
-                r.OptionIds.Select(o => $"o_{o}").ToList(), r.MessageI18n, r.Active);
+                r.OptionIds.Select(_codes.Option).ToList(), r.MessageI18n, r.Active);
         }
 
         /// <summary>只留匯出的欄與排序；篩選引用到沒匯出的欄位就拿掉篩選。</summary>
@@ -318,7 +326,7 @@ public sealed partial class TemplateExporter(IModuleRepository modules, IPermiss
                     return items.Any(i => i is null) ? null : new JsonArray([.. items]);
                 case JsonValue v when v.TryGetValue<string>(out var s) && OptionReference().Match(s) is { Success: true } match:
                     var optionId = long.Parse(match.Groups[1].Value);
-                    return _options.Contains(optionId) ? JsonValue.Create($"opt_o_{optionId}") : null;
+                    return _options.Contains(optionId) ? JsonValue.Create($"opt_{_codes.Option(optionId)}") : null;
                 default:
                     return node?.DeepClone();
             }
@@ -326,4 +334,23 @@ public sealed partial class TemplateExporter(IModuleRepository modules, IPermiss
 
         private static bool IsOptionField(Field f) => f.Type is FieldType.Enum or FieldType.MultiEnum;
     }
+}
+
+/// <summary>
+/// 匯出時欄位、區塊、選項的代號。Fields／Blocks／Options 是 Id → 代號（沒有的退回 <c>f_&lt;id&gt;</c>／<c>b_&lt;id&gt;</c>／<c>o_&lt;id&gt;</c>，
+/// 由呼叫端建立時避開與保留代號的撞名）；Excluded 是不匯出的欄位 Id（例如整合新增的欄位）。
+/// </summary>
+public sealed class ExportCodes(
+    IReadOnlyDictionary<long, string>? fields = null, IReadOnlyDictionary<long, string>? blocks = null,
+    IReadOnlyDictionary<long, string>? options = null, IReadOnlySet<long>? excluded = null)
+{
+    public static readonly ExportCodes Default = new();
+
+    public IReadOnlySet<long> Excluded { get; } = excluded ?? new HashSet<long>();
+
+    public string Field(Field f) => fields is not null && fields.TryGetValue(f.Id, out var code) ? code : f.Key;
+
+    public string Block(long id) => blocks is not null && blocks.TryGetValue(id, out var code) ? code : $"b_{id}";
+
+    public string Option(long id) => options is not null && options.TryGetValue(id, out var code) ? code : $"o_{id}";
 }

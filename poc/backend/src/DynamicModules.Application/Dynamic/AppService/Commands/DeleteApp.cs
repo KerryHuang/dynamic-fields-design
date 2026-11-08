@@ -25,7 +25,8 @@ public record DeleteAppCheck(bool CanDelete, IReadOnlyList<DeleteBlocker> Blocke
 /// </summary>
 public class DeleteAppHandler(
     IAppRepository apps, IModuleRepository modules, DeletePlanner planner, ModuleRemover remover,
-    AppDependencyChecker dependencies, IReportRepository reports, IDashboardRepository dashboards, IUnitOfWork uow) : IRequestHandler<DeleteAppRequest, ServiceResult>
+    AppDependencyChecker dependencies, IReportRepository reports, IDashboardRepository dashboards, IUnitOfWork uow,
+    Integrations.IntegrationReconciler integrations) : IRequestHandler<DeleteAppRequest, ServiceResult>
 {
     public const string DependentKind = "appDependent";
     public const string NotClosedKind = "appNotClosed";
@@ -81,6 +82,7 @@ public class DeleteAppHandler(
         apps.Remove(app);
         await uow.CommitAsync(ct);
         foreach (var id in moduleIds) await remover.RemoveAsync(id, ct);
+        await integrations.ReconcileAsync(ct);
         return ServiceResult.Success();
     }
 }

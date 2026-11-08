@@ -2,6 +2,7 @@ using DynamicModules.Application.Common;
 using DynamicModules.Application.Common.Security;
 using DynamicModules.Application.Common.Time;
 using DynamicModules.Application.Dynamic.AppService.Data;
+using DynamicModules.Application.Dynamic.AppService.Integrations;
 using DynamicModules.Domain.Entities.Dynamic;
 using DynamicModules.Domain.Repositories.Dynamic;
 using MediatR;
@@ -20,7 +21,7 @@ public record CloseAppRequest(string Key, bool Cascade)
 /// </summary>
 public class CloseAppHandler(
     IAppRepository apps, IModuleRepository modules, AppDependencyChecker dependencies, AppResponseBuilder builder,
-    IUnitOfWork uow, ICurrentUser user, IBusinessTime time) : IRequestHandler<CloseAppRequest, ServiceResult>
+    IUnitOfWork uow, ICurrentUser user, IBusinessTime time, IntegrationReconciler integrations) : IRequestHandler<CloseAppRequest, ServiceResult>
 {
     public async Task<ServiceResult> Handle(CloseAppRequest request, CancellationToken ct)
     {
@@ -30,7 +31,7 @@ public class CloseAppHandler(
             return ServiceResult.Success(new CloseAppResponse(await builder.BuildAsync(app, true, null, ct), [], []));
 
         var warnings = new List<string>();
-        var dependents = await dependencies.DependentsOfAsync(app, ct);
+        var dependents = await dependencies.DependentsOfAsync(app, ct, forClose: true);
         if (dependents.Apps.Count > 0 && !request.Cascade)
             return ServiceResult.ConflictWith("有其他應用程式依賴它，請先關閉它們，或選擇連帶關閉",
                 new { dependents = dependents.Apps.Select(a => a.Key).ToList() });
@@ -51,6 +52,7 @@ public class CloseAppHandler(
             target.StampModified(user.UserId, time.Now);
         }
         await uow.CommitAsync(ct);
+        warnings.AddRange(await integrations.ReconcileAsync(ct));
         return ServiceResult.Success(new CloseAppResponse(await builder.BuildAsync(app, true, null, ct),
             toClose.Select(a => a.Key).ToList(), warnings));
     }
@@ -68,7 +70,7 @@ public record ReopenAppRequest(string Key)
 /// </summary>
 public class ReopenAppHandler(
     IAppRepository apps, IModuleRepository modules, IProgramRepository programs, AppDependencyChecker dependencies,
-    AppResponseBuilder builder, IUnitOfWork uow, ICurrentUser user, IBusinessTime time) : IRequestHandler<ReopenAppRequest, ServiceResult>
+    AppResponseBuilder builder, IUnitOfWork uow, ICurrentUser user, IBusinessTime time, IntegrationReconciler integrations) : IRequestHandler<ReopenAppRequest, ServiceResult>
 {
     public async Task<ServiceResult> Handle(ReopenAppRequest request, CancellationToken ct)
     {
@@ -92,6 +94,7 @@ public class ReopenAppHandler(
         app.TouchRowVersion();
         app.StampModified(user.UserId, time.Now);
         await uow.CommitAsync(ct);
-        return ServiceResult.Success(await builder.BuildAsync(app, true, null, ct));
+        var warnings = await integrations.ReconcileAsync(ct);
+        return ServiceResult.Success(await builder.BuildAsync(app, true, warnings, ct));
     }
 }

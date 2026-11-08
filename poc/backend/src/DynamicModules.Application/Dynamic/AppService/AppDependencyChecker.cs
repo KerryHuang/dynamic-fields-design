@@ -44,10 +44,14 @@ public sealed class AppDependencyChecker(IAppRepository apps, IModuleRepository 
     /// <summary>
     /// 誰依賴 <paramref name="target"/>：開啟中的其他應用程式，宣告了它（requires.apps），或有開啟狀態欄位的參照指向它的成員模組。
     /// 不屬於任何應用程式的模組若有欄位參照它，列在 UnaffiliatedReferrers（只警告，不擋）。
+    /// <paramref name="forClose"/>：關閉用。整合新增的參照欄位不算依賴（可選相依，夥伴關閉不該連帶關閉擁有者）；刪除不排除，整合欄位是真的參照。
     /// </summary>
-    public async Task<DependentsResult> DependentsOfAsync(App target, CancellationToken ct)
+    public async Task<DependentsResult> DependentsOfAsync(App target, CancellationToken ct, bool forClose = false)
     {
         var all = await apps.ListAsync(ct);
+        var integrationFields = forClose
+            ? (await apps.ListIntegrationsAsync(ct)).SelectMany(r => Integrations.IntegrationItems.Parse(r.ItemsJson).Fields.Select(f => f.FieldId)).ToHashSet()
+            : [];
         var appOfModule = all.SelectMany(a => a.Modules.Select(m => (m.ModuleId, App: a))).ToDictionary(x => x.ModuleId, x => x.App);
         var dependents = new Dictionary<string, App>();
         foreach (var other in all.Where(a => a.Key != target.Key && a.Status == AppStatus.Open))
@@ -58,8 +62,9 @@ public sealed class AppDependencyChecker(IAppRepository apps, IModuleRepository 
         {
             var module = await modules.GetByIdAsync(member.ModuleId, includeChildren: false, ct);
             if (module is null) continue;
-            foreach (var (source, _) in await modules.ListIncomingReferenceFieldsAsync(module.Key, ct))
+            foreach (var (source, field) in await modules.ListIncomingReferenceFieldsAsync(module.Key, ct))
             {
+                if (integrationFields.Contains(field.Id)) continue;
                 if (!appOfModule.TryGetValue(source.Id, out var owner)) unaffiliated.Add(source.Key);
                 else if (owner.Key != target.Key && owner.Status == AppStatus.Open) dependents[owner.Key] = owner;
             }
@@ -74,7 +79,7 @@ public sealed class AppDependencyChecker(IAppRepository apps, IModuleRepository 
         var visited = new HashSet<string> { target.Key };
         async Task VisitAsync(App app)
         {
-            foreach (var dependent in (await DependentsOfAsync(app, ct)).Apps.Where(d => visited.Add(d.Key)))
+            foreach (var dependent in (await DependentsOfAsync(app, ct, forClose: true)).Apps.Where(d => visited.Add(d.Key)))
                 await VisitAsync(dependent);
             order.Add(app);
         }
