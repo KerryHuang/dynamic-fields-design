@@ -48,8 +48,11 @@ public interface IRecordRepository
     void AddIndexRows(IReadOnlyList<RecordIndex> rows);
     /// <summary>分批回填存檔後，讓 change tracker 忘記這批記錄與它們的索引列，記憶體才不隨批次累積。</summary>
     void ReleaseTracked(IReadOnlyList<Record> batch);
-    /// <summary>該欄位是否有「有數值卻沒有 ScaledValue」的索引列（升級前建立的索引）。</summary>
-    Task<bool> HasUnscaledIndexAsync(long fieldId, CancellationToken ct);
+    /// <summary>
+    /// 該欄位的 ScaledValue 是否需要重建：有數值卻沒有 ScaledValue（升級前建立的索引），或 ScaledValue 不是依目前 scale 算的
+    /// （欄位改過小數位數；改的當下沒有檢查引用它，所以舊列沒被重算）。
+    /// </summary>
+    Task<bool> NeedsScaledBackfillAsync(long fieldId, int scale, CancellationToken ct);
     /// <summary>
     /// 跨記錄驗證的聚合（設計 §5.2）：同一模組內未刪除、符合組鍵與條件的記錄。SQLite 整數加總溢位時丟
     /// <see cref="AggregateOverflowException"/>。呼叫端要先把變更存進資料庫（同一個交易內）。

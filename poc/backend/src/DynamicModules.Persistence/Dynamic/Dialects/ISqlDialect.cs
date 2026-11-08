@@ -8,4 +8,10 @@ public interface ISqlDialect
 
     /// <summary>跳脫 LIKE 萬用字元，須搭配 ESCAPE '\'。</summary>
     string EscapeLike(string value);
+
+    /// <summary>區分大小寫的「包含」；與規則條件的記憶體求值（序數比較）一致。param 是已加上 @ 的參數名，不含萬用字元。</summary>
+    string ContainsCaseSensitive(string column, string param);
+
+    /// <summary>區分大小寫的「開頭是」。</summary>
+    string StartsWithCaseSensitive(string column, string param);
 }

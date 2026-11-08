@@ -152,8 +152,23 @@ public class RecordRepository(DynamicDbContext db, ISqlDialect dialect) : IRecor
         foreach (var r in batch) db.Entry(r).State = EntityState.Detached;
     }
 
-    public Task<bool> HasUnscaledIndexAsync(long fieldId, CancellationToken ct) =>
-        db.Set<RecordIndex>().AnyAsync(x => x.FieldId == fieldId && x.NumberValue != null && x.ScaledValue == null, ct);
+    public async Task<bool> NeedsScaledBackfillAsync(long fieldId, int scale, CancellationToken ct)
+    {
+        if (await db.Set<RecordIndex>().AnyAsync(x => x.FieldId == fieldId && x.NumberValue != null && x.ScaledValue == null, ct)) return true;
+        var factor = (double)Math.Pow(10, scale);
+        // 逐列比對 ScaledValue 與依 NumberValue（double）重算的值；double 在 2^53 以上不精確，那一段不比，
+        // 差 1 以內視為浮點誤差。真正的舊小數位會差 10 倍以上。
+        var rows = db.Set<RecordIndex>().AsNoTracking()
+            .Where(x => x.FieldId == fieldId && x.NumberValue != null && x.ScaledValue != null)
+            .Select(x => new { x.NumberValue, x.ScaledValue });
+        await foreach (var r in rows.AsAsyncEnumerable().WithCancellation(ct))
+        {
+            var expected = Math.Round(r.NumberValue!.Value * factor, MidpointRounding.AwayFromZero);
+            if (Math.Abs(expected) >= 9e15 || Math.Abs(r.ScaledValue!.Value) >= 9e15) continue;
+            if (Math.Abs(expected - r.ScaledValue.Value) > 1) return true;
+        }
+        return false;
+    }
 
     private sealed record AggregateRow(long Count, long ScaledSum, long MissingScaled);
 

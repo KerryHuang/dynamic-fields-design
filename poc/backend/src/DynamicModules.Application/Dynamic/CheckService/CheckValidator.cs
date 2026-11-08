@@ -55,7 +55,7 @@ public class CheckValidator(IModuleRepository modules, FieldTypeRegistry registr
         if (def.Where is { ValueKind: not JsonValueKind.Null } where)
         {
             if (where.ValueKind != JsonValueKind.Object) Err("definition.where", "條件格式錯誤");
-            else if (where.GetRawText().Contains("fieldRef", StringComparison.Ordinal)) Err("definition.where", "檢查的條件不支援欄位比對（fieldRef），請改用固定值");
+            else if (ContainsFieldRef(where)) Err("definition.where", "檢查的條件不支援欄位比對（fieldRef），請改用固定值");
             else
             {
                 var parsed = ConditionParser.Parse(where, module, registry, ConditionUsage.Rule, await modules.ListUserIdsAsync(ct));
@@ -94,4 +94,12 @@ public class CheckValidator(IModuleRepository modules, FieldTypeRegistry registr
         else if (limit.Field is { } own && (!fields.TryGetValue(own, out var f) || !NumericTypes.Contains(f.Type)))
             Err("上限欄位必須是本模組的整數、小數或金額欄位");
     }
+
+    /// <summary>結構上有 fieldRef 屬性（頂層或 value 物件）；文字常數剛好寫成 "fieldRef" 不算。</summary>
+    private static bool ContainsFieldRef(JsonElement e) => e.ValueKind switch
+    {
+        JsonValueKind.Object => e.EnumerateObject().Any(p => p.NameEquals("fieldRef") || ContainsFieldRef(p.Value)),
+        JsonValueKind.Array => e.EnumerateArray().Any(ContainsFieldRef),
+        _ => false
+    };
 }

@@ -16,9 +16,12 @@ public static class DynamicQueryBuilder
 {
     private const string Escape = @" ESCAPE '\'";
 
-    private sealed class Ctx(ISqlDialect dialect)
+    private sealed class Ctx(ISqlDialect dialect, bool caseSensitiveText = false)
     {
         public ISqlDialect Dialect { get; } = dialect;
+
+        /// <summary>跨記錄驗證的聚合要和規則條件的記憶體求值（序數比較）同一個結果，所以文字的包含、開頭是區分大小寫；列表篩選維持不分。</summary>
+        public bool CaseSensitiveText { get; } = caseSensitiveText;
         public DynamicParameters Parameters { get; } = new();
         public int Count { get; set; }
     }
@@ -78,7 +81,7 @@ public static class DynamicQueryBuilder
     /// </summary>
     public static (string sql, DynamicParameters parameters) BuildAggregate(AggregateQuery q, ISqlDialect dialect)
     {
-        var ctx = new Ctx(dialect);
+        var ctx = new Ctx(dialect, caseSensitiveText: true);
         ctx.Parameters.Add("m", q.ModuleId);
         var where = new StringBuilder("r.ModuleId = @m AND r.DeleteFlag = 0");
         for (var k = 0; k < q.Group.Count; k++)
@@ -135,6 +138,12 @@ public static class DynamicQueryBuilder
             case FilterOperator.Lt: return InSubquery($"{col} < {Val(0)}", false);
             case FilterOperator.Lte: return InSubquery($"{col} <= {Val(0)}", false);
             case FilterOperator.Between: return InSubquery($"{col} >= {Val(0)} AND {col} <= {Val(1)}", false);
+            case FilterOperator.Contains when ctx.CaseSensitiveText:
+                ctx.Parameters.Add($"v{n}_0", c.Values[0].TextValue!);
+                return InSubquery(ctx.Dialect.ContainsCaseSensitive(col, $"@v{n}_0"), false);
+            case FilterOperator.StartsWith when ctx.CaseSensitiveText:
+                ctx.Parameters.Add($"v{n}_0", c.Values[0].TextValue!);
+                return InSubquery(ctx.Dialect.StartsWithCaseSensitive(col, $"@v{n}_0"), false);
             case FilterOperator.Contains:
                 ctx.Parameters.Add($"v{n}_0", $"%{ctx.Dialect.EscapeLike(c.Values[0].TextValue!)}%");
                 return InSubquery($"{col} LIKE @v{n}_0{Escape}", false);

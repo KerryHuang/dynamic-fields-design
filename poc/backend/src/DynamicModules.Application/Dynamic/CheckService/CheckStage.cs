@@ -45,15 +45,21 @@ public class CheckStage(
                 if (TooLarge(prepared!, byModule) is { } big) return ServiceResult.Invalid(
                     new Dictionary<string, string[]> { [RecordValueProcessor.RecordErrorKey] = [big] });
 
+                // 寫入後的狀態先收：上限若讀自本筆記錄（field／via），以「現在」的值為準，同組的寫入前狀態不再求值
+                // （否則把上限改小時，會拿舊上限比較而放行）。同組多筆記錄的上限不同時各自求值。
                 var groups = new Dictionary<string, CheckGroup>();
+                var afterIds = new HashSet<string>();
                 foreach (var entry in byModule)
-                {
-                    if (entry.BeforeValues is not null && !entry.BeforeDeleted && entry.Kind == JournalKind.Modified
-                        && evaluator.GroupOf(prepared!, RecordValueProcessor.Parse(entry.BeforeValues)) is { } before)
-                        groups.TryAdd(before.Id, before);
                     if (!entry.AfterDeleted && evaluator.GroupOf(prepared!, RecordValueProcessor.Parse(entry.AfterValues)) is { } after)
-                        groups.TryAdd(after.Id, after);
-                }
+                    {
+                        afterIds.Add(after.Id);
+                        groups.TryAdd(after.Id + "\u0000" + LimitKey(prepared!.Check.Definition.Assert.Limit, after), after);
+                    }
+                foreach (var entry in byModule)
+                    if (entry.BeforeValues is not null && !entry.BeforeDeleted && entry.Kind == JournalKind.Modified
+                        && evaluator.GroupOf(prepared!, RecordValueProcessor.Parse(entry.BeforeValues)) is { } before
+                        && !afterIds.Contains(before.Id))
+                        groups.TryAdd(before.Id + "\u0000" + LimitKey(prepared!.Check.Definition.Assert.Limit, before), before);
                 if ((groupCount += groups.Count) > MaxGroups)
                     return ServiceResult.Conflict($"這次請求牽涉的檢查組數超過 {MaxGroups}，請分批處理");
 
@@ -68,6 +74,13 @@ public class CheckStage(
         return violations.Count == 0
             ? null
             : ServiceResult.Invalid(new Dictionary<string, string[]> { [RecordValueProcessor.RecordErrorKey] = [.. violations] });
+    }
+
+    private static string LimitKey(CheckLimit limit, CheckGroup group)
+    {
+        var field = limit.Via ?? limit.Field;
+        if (limit.Const is not null || field is not { } id) return "";
+        return group.Source.TryGetValue($"f_{id}", out var v) && v is { } e ? e.GetRawText() : "";
     }
 
     /// <summary>被加總的欄位放大後超出 64 位元整數：寫入時就擋（fail-closed），不悄悄少算。</summary>

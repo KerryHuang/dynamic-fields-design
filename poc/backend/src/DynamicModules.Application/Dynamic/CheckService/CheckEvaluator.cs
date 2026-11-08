@@ -56,7 +56,10 @@ public class CheckEvaluator(IRecordRepository records, IModuleRepository modules
             if (values.TryGetValue(field.Key, out var v) && v is { ValueKind: not JsonValueKind.Null })
                 iv = registry.Get(field.Type).ToIndex(v.Value, field).FirstOrDefault();
             keys.Add(new AggregateGroupKey(field, iv));
-            id.Append(fid).Append('=').Append(iv is null ? "∅" : $"{iv.TextValue}|{iv.NumberValue?.ToString("R", CultureInfo.InvariantCulture)}|{iv.DateValue:O}|{iv.RefKey}").Append(';');
+            // 文字值可以含任何字元，用分隔符串接會讓不同的組鍵串出同一個 Id；用 JSON 陣列編碼才無歧義
+            id.Append(JsonSerializer.Serialize(iv is null
+                ? new object?[] { fid }
+                : [fid, iv.TextValue, iv.NumberValue?.ToString("R", CultureInfo.InvariantCulture), iv.DateValue?.ToString("O", CultureInfo.InvariantCulture), iv.RefKey]));
         }
         return new CheckGroup(id.ToString(), keys, values);
     }

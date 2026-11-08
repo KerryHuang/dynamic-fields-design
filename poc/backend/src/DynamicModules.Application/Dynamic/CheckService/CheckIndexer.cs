@@ -35,37 +35,44 @@ public class CheckIndexer(
         var fields = module.Blocks.SelectMany(b => b.Fields).Where(f => f.Status == FieldStatus.Active).ToDictionary(f => f.Id);
         var used = IndexedFieldIds(def).Where(fields.ContainsKey).Select(id => fields[id]).ToList();
 
+        var whereIds = def.Where is { ValueKind: System.Text.Json.JsonValueKind.Object } w0 ? RuleReferences.ConditionFieldIdsOf(w0) : new HashSet<long>();
         var toBackfill = new List<Field>();
+        var enabled = new List<Field>();
         foreach (var field in used)
         {
             if (!FieldTypeCapabilities.SupportsFilter(field.Type))
                 return (ServiceResult.Invalid(new Dictionary<string, string[]>
                     { ["definition"] = [$"欄位「{field.LabelI18n.Resolve("zh-TW")}」的型別不支援建立索引，不能用在檢查"] }), notices);
-            if (!RecordIndexer.ShouldIndex(field))
+            var needsIndex = !RecordIndexer.ShouldIndex(field);
+            // where 走列表篩選的條件規則，欄位一定要可篩選；只可排序的欄位雖然有索引，不開可篩選的話條件之後永遠解析失敗
+            if (!field.Config.IsFilterable && (needsIndex || whereIds.Contains(field.Id)))
             {
                 field.Config = field.Config with { IsFilterable = true };
                 notices.Add($"已自動啟用欄位「{field.LabelI18n.Resolve("zh-TW")}」的可篩選");
-                toBackfill.Add(field);
+                enabled.Add(field);
+                if (needsIndex) toBackfill.Add(field);
             }
         }
-        // 加總欄位的 ScaledValue 可能是舊資料（升級前建的索引沒有這欄）：有缺才重建
+        // 加總欄位的 ScaledValue 可能是舊資料：升級前建的索引沒有這欄，或欄位在沒有檢查引用時改過小數位數
+        // （CheckFieldGuard 只在有檢查引用時才擋）。有缺或小數位不符才重建
         if (def.FieldId is { } sid && fields.TryGetValue(sid, out var sum) && !toBackfill.Contains(sum)
-            && await records.HasUnscaledIndexAsync(sum.Id, ct))
+            && await records.NeedsScaledBackfillAsync(sum.Id, ScaledNumber.ScaleOf(sum), ct))
             toBackfill.Add(sum);
 
-        if (toBackfill.Count == 0) return (null, notices);
+        if (toBackfill.Count > 0)
+        {
+            var count = await records.CountByModuleAsync(module.Id, ct);
+            if (count > MaxRecords)
+                return (ServiceResult.Conflict($"這個模組有 {count} 筆記錄，超過 {MaxRecords} 筆，一次回填索引會長時間占住寫入鎖；請在低峰時段分次處理"), notices);
 
-        var count = await records.CountByModuleAsync(module.Id, ct);
-        if (count > MaxRecords)
-            return (ServiceResult.Conflict($"這個模組有 {count} 筆記錄，超過 {MaxRecords} 筆，一次回填索引會長時間占住寫入鎖；請在低峰時段分次處理"), notices);
+            foreach (var field in toBackfill)
+                if (await BackfillAsync(module, field, def.FieldId == field.Id, ct) is { } failure)
+                    return (failure, notices);
+        }
+        foreach (var field in toBackfill.Union(enabled)) field.StampModified(user.UserId, time.Now);
+        if (toBackfill.Count + enabled.Count > 0) module.TouchVersion(user.UserId, time.Now);
 
-        foreach (var field in toBackfill)
-            if (await BackfillAsync(module, field, def.FieldId == field.Id, ct) is { } failure)
-                return (failure, notices);
-        foreach (var field in toBackfill) field.StampModified(user.UserId, time.Now);
-        module.TouchVersion(user.UserId, time.Now);
-
-        // 欄位現在可篩選了：用列表篩選的規則再驗一次 where
+        // 欄位現在可篩選了：用列表篩選的規則再驗一次 where（不論這次有沒有改欄位，執行期就是用這套規則解析）
         if (def.Where is { ValueKind: System.Text.Json.JsonValueKind.Object } where)
         {
             var parsed = ConditionParser.Parse(where, module, registry, ConditionUsage.ListFilter, await modules.ListUserIdsAsync(ct));
