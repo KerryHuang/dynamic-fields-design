@@ -284,6 +284,27 @@ public class ReportSqlEquivalenceTests : ReportTestBase
     }
 
     [Fact]
+    public async Task DateBuckets_YearBelow1000_MatchMemoryPath_AndDrillFindsTheRecord()
+    {
+        await Prepare();
+        await Seed("order", "admin", (Due, "0999-03-01"), (At, "0999-03-01T10:00:00+08:00"));
+        await Seed("order", "admin", (Due, "2026-11-04"));
+        foreach (var bucket in new[] { "day", "week", "month", "quarter", "year" })
+        {
+            var def = Def(groups: [G(MainF(Due), bucket)], measures: [M("n", "countMain")]);
+            var (memory, sql) = await Both(def);
+            ShouldMatch(memory, sql, bucket);
+            // SQL 路徑回的鍵拿去下鑽（走記憶體路徑）必須找得到那筆記錄
+            var key = sql.Groups!.First().GroupKeys[0];
+            key.Should().StartWith("0999");
+            Svc<ReportOptions>().Engine = ReportEngineMode.Auto;
+            (await Run(Def(groups: [G(MainF(Due), bucket)], measures: [M("n", "countMain")], columns: [MainF(Due)]), drill: [key])).DetailTotal.Should().Be(1, bucket);
+            var (memoryAt, sqlAt) = await Both(Def(groups: [G(MainF(At), bucket)], measures: [M("n", "countMain")]));
+            ShouldMatch(memoryAt, sqlAt, "at " + bucket);
+        }
+    }
+
+    [Fact]
     public async Task GroupCount_OverMaxRows_IsTooMany_LikeMemoryPath()
     {
         await Prepare();

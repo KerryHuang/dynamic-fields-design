@@ -25,14 +25,17 @@ public static class ReportDates
         };
     }
 
-    /// <summary>分桶鍵：day 2026-11-05、week 2026-W45、month 2026-11、quarter 2026-Q4、year 2026。</summary>
+    /// <summary>
+    /// 分桶鍵：day 2026-11-05、week 2026-W45、month 2026-11、quarter 2026-Q4、year 2026。
+    /// 年份一律補零到 4 位（0999），與 SQL 路徑的 strftime('%Y') 相同，兩條路徑的鍵與排序才一致。
+    /// </summary>
     public static string BucketKey(DateOnly d, string bucket) => bucket switch
     {
         "day" => d.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture),
-        "week" => $"{ISOWeek.GetYear(d.ToDateTime(TimeOnly.MinValue))}-W{ISOWeek.GetWeekOfYear(d.ToDateTime(TimeOnly.MinValue)):00}",
+        "week" => $"{ISOWeek.GetYear(d.ToDateTime(TimeOnly.MinValue)):0000}-W{ISOWeek.GetWeekOfYear(d.ToDateTime(TimeOnly.MinValue)):00}",
         "month" => d.ToString("yyyy-MM", CultureInfo.InvariantCulture),
-        "quarter" => $"{d.Year}-Q{(d.Month - 1) / 3 + 1}",
-        "year" => d.Year.ToString(CultureInfo.InvariantCulture),
+        "quarter" => $"{d.Year:0000}-Q{(d.Month - 1) / 3 + 1}",
+        "year" => d.Year.ToString("0000", CultureInfo.InvariantCulture),
         _ => throw new ArgumentException($"未知的分桶：{bucket}", nameof(bucket)),
     };
 

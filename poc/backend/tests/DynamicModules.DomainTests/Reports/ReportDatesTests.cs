@@ -75,5 +75,15 @@ public class ReportDatesTests
     public void BucketKey_Week_UsesIsoYear() =>
         ReportDates.BucketKey(new DateOnly(2027, 1, 1), "week").Should().Be("2026-W53");
 
+    /// <summary>年份小於 1000 時補零到 4 位，與 SQL 路徑的 strftime('%Y') 一致（否則下鑽對不上 SQL 路徑回的鍵）。</summary>
+    [Theory]
+    [InlineData("day", "0999-03-01")]
+    [InlineData("week", "0999-W09")]
+    [InlineData("month", "0999-03")]
+    [InlineData("quarter", "0999-Q1")]
+    [InlineData("year", "0999")]
+    public void BucketKey_YearBelow1000_IsZeroPadded(string bucket, string expected) =>
+        ReportDates.BucketKey(new DateOnly(999, 3, 1), bucket).Should().Be(expected);
+
     private static ReportCell Cell(DateOnly d) => new("ok", null, null, d, null);
 }
