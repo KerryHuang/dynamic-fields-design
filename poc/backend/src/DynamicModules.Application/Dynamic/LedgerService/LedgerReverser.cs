@@ -13,7 +13,7 @@ namespace DynamicModules.Application.Dynamic.LedgerService;
 
 public sealed record ReversalPlan(
     Dictionary<string, JsonElement?> Values, Dictionary<string, List<DetailRowInput>> Details,
-    Dictionary<string, string[]> Errors, string? Conflict)
+    Dictionary<string, string[]> Errors, string? Conflict, IReadOnlySet<string>? Mirrored = null)
 {
     public bool Failed => Errors.Count > 0 || Conflict is not null;
 }
@@ -72,6 +72,8 @@ public class LedgerReverser(
             values[f.Key] = negate.Contains(f.Id) ? Negated(v.Value) : v;
         }
         values[reversalKey] = JsonDocument.Parse(original.Id.ToString(CultureInfo.InvariantCulture)).RootElement.Clone();
+        // 只有照原分錄算出來的值能當系統填入；使用者覆寫的值照他自己的寫入權限走（設計 §6.3），不能進這個集合
+        var mirrored = values.Keys.ToHashSet();
 
         foreach (var (key, value) in overrides ?? new Dictionary<string, JsonElement?>())
         {
@@ -80,14 +82,14 @@ public class LedgerReverser(
             else if (guarded.Contains(field.Id) || !Descriptive.Contains(field.Type))
                 errors[$"values.{key}"] = ["沖銷必須精確抵銷原分錄，這個欄位不能覆寫；只能覆寫說明性欄位（文字、日期、布林、附件等）"];
             else if (perms is not null && !perms.CanWrite(field)) errors[$"values.{key}"] = ["沒有權限修改這個欄位"];
-            else values[key] = value;
+            else { values[key] = value; mirrored.Remove(key); }   // 覆寫過的欄位不再是鏡像值
         }
         if (errors.Count > 0) return new ReversalPlan([], [], errors, null);
 
         var (details, hiddenDetail) = await DetailsAsync(module, original, negate, swapOf, perms, ct);
         if (hiddenDetail) return new ReversalPlan([], [], new() { [RecordValueProcessor.RecordErrorKey] = [HiddenNeeded] }, null);
         if (!SelfCheck(fields, source, values, negate, swapOf)) return new ReversalPlan([], [], [], SelfCheckFailed);
-        return new ReversalPlan(values, details, [], null);
+        return new ReversalPlan(values, details, [], null, mirrored);
     }
 
     /// <summary>

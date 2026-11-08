@@ -56,6 +56,27 @@ public class LedgerHardeningTests : EffectsTestBase
     }
 
     [Fact]
+    public async Task A_user_override_of_a_readonly_descriptive_field_is_not_treated_as_system_filled()
+    {
+        await NewModule("lho");
+        var rev = await MustAdd("lho", FieldType.Reference, RefTo("lho") with { ReadOnly = true }, "沖銷自");
+        var qty = await MustAdd("lho", FieldType.Decimal, new FieldConfig { DefaultValue = J("0") }, "數量");
+        var note = await MustAdd("lho", FieldType.Text, new FieldConfig { ReadOnly = true, DefaultValue = J("\"locked\"") }, "備註");
+        await Send(new ActivateModuleRequest("lho"));
+        (await Send(new SaveLedgerRequest("lho", new LedgerInput(rev.Id, [qty.Id], [], false)))).IsSuccess.Should().BeTrue();
+        var title = (await Detail("lho")).TitleFieldId!.Value;
+        var original = await Add("lho", Vals((title, "\"x\""), (qty.Id, "10")));
+        (await Send(new SaveModulePermissionsRequest("lho", new ModulePermissionsDto([ReadAdd(SalesGroup())], [], [], [])))).IsSuccess.Should().BeTrue();
+
+        As("sales01");
+        var r = await Send(new ReverseRecordRequest(original.Id, Vals((note.Id, "\"tampered\""))));
+
+        // 欄位唯讀：使用者的輸入不能寫進去，不能因為沖銷就變成系統填入；一般新增對唯讀欄位的做法是套預設值
+        r.IsCreated.Should().BeTrue(r.Message + string.Join(";", r.Errors.Select(e => e.Key + e.Value[0])));
+        ((DynamicRecordResponse)r.Data!).Values[K(note.Id)]!.Value.GetString().Should().Be("locked");
+    }
+
+    [Fact]
     public async Task A_detail_negate_field_the_user_cannot_see_is_refused_and_does_not_use_up_the_reversal()
     {
         await NewModule("lhd-head");
