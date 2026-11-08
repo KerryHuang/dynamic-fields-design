@@ -4570,6 +4570,72 @@
     "sort": [],
     "viz": "bar"
    }
+  },
+  {
+   "code": "mesOverdueWo",
+   "name": "逾期未完工工令",
+   "shareWith": [
+    "planner",
+    "floor",
+    "salesManager"
+   ],
+   "definition": {
+    "version": 1,
+    "mainModule": "workorder",
+    "child": null,
+    "columns": [
+     {
+      "source": "main",
+      "field": "workorder.no",
+      "via": null
+     },
+     {
+      "source": "main",
+      "field": "workorder.itemName",
+      "via": null
+     },
+     {
+      "source": "main",
+      "field": "workorder.dueDate",
+      "via": null
+     },
+     {
+      "source": "main",
+      "field": "workorder.status",
+      "via": null
+     }
+    ],
+    "groups": [],
+    "measures": [],
+    "filters": [
+     {
+      "field": {
+       "source": "main",
+       "field": "workorder.dueDate",
+       "via": null
+      },
+      "op": "beforeToday",
+      "value": null
+     },
+     {
+      "field": {
+       "source": "main",
+       "field": "workorder.status",
+       "via": null
+      },
+      "op": "in",
+      "value": [
+       "opt_released",
+       "opt_running",
+       "opt_hold"
+      ]
+     }
+    ],
+    "primaryDateField": null,
+    "dateRange": null,
+    "sort": [],
+    "viz": "table"
+   }
   }
  ],
  "dashboards": [],

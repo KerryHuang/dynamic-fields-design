@@ -221,6 +221,29 @@ public class MesFlowTests : IDisposable
     }
 
     [Fact]
+    public async Task OverdueWorkOrderReport_ListsOnlyUnfinishedWorkOrdersPastTheirDueDate()
+    {
+        await OpenMes();
+        var planner = _app.AsUser("planner01");
+        var (w, _) = await Layout("workorder");
+        async Task<JsonElement> Wo(string name, string due, bool release)
+        {
+            var draft = await Create(planner, "workorder", new() { [w["品名"]] = name, [w["工令數量"]] = 5, [w["交期"]] = due, [w["末道工序序號"]] = 1 });
+            return release ? await Move(planner, draft, "workorder", "已發放") : draft;
+        }
+        await Wo("逾期導柱", "2026-01-05", release: true);
+        await Wo("未到期頂針", "2099-01-05", release: true);
+        await Wo("逾期但還是草稿", "2026-01-06", release: false);
+
+        var list = await JsonOf(await planner.GetAsync($"{Base}/reports"));
+        var report = list.EnumerateArray().Single(r => r.GetProperty("name").GetString() == "逾期未完工工令");
+        var run = await planner.PostAsJsonAsync($"{Base}/reports/{report.GetProperty("id").GetInt64()}/run", new { range = (object?)null });
+        run.StatusCode.Should().Be(HttpStatusCode.OK, await run.Content.ReadAsStringAsync());
+        var body = await run.Content.ReadAsStringAsync();
+        body.Should().Contain("逾期導柱").And.NotContain("未到期頂針").And.NotContain("逾期但還是草稿");
+    }
+
+    [Fact]
     public async Task ShipmentSheet_Prints()
     {
         await OpenMes();
