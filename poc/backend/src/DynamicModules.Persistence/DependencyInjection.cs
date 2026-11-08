@@ -28,6 +28,7 @@ public static class DependencyInjection
             if (mmapBytes > 0) o.AddInterceptors(new SqliteMmapInterceptor(mmapBytes));
         });
         services.AddScoped<ITransactionManager, EfTransactionManager>();
+        services.AddScoped<IWorkSavepoints, EfWorkSavepoints>();
         return services.AddPersistenceRepositories();
     }
 

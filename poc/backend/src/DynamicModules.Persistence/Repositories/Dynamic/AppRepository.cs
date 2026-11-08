@@ -22,6 +22,23 @@ public class AppRepository(DynamicDbContext db) : IAppRepository
     public void Add(App app) => db.Set<App>().Add(app);
 
     public void Remove(App app) => db.Set<App>().Remove(app);
+
+    public async Task<AppBindings> GetBindingsAsync(long appId, CancellationToken ct) => new(
+        await db.Set<AppField>().AsNoTracking().Where(x => x.AppId == appId).ToDictionaryAsync(x => x.Name, x => x.FieldId, ct),
+        await db.Set<AppOption>().AsNoTracking().Where(x => x.AppId == appId).ToDictionaryAsync(x => x.Name, x => x.OptionId, ct),
+        await db.Set<AppBlock>().AsNoTracking().Where(x => x.AppId == appId).ToDictionaryAsync(x => x.Name, x => x.BlockId, ct));
+
+    public void AddBindings(IEnumerable<AppField> fields, IEnumerable<AppOption> options, IEnumerable<AppBlock> blocks)
+    {
+        db.Set<AppField>().AddRange(fields);
+        db.Set<AppOption>().AddRange(options);
+        db.Set<AppBlock>().AddRange(blocks);
+    }
+
+    public Task<List<AppIntegration>> ListIntegrationsAsync(CancellationToken ct) =>
+        db.Set<AppIntegration>().OrderBy(x => x.AppId).ThenBy(x => x.Code).ToListAsync(ct);
+
+    public void AddIntegration(AppIntegration integration) => db.Set<AppIntegration>().Add(integration);
 }
 
 public class AppPackageRepository(DynamicDbContext db) : IAppPackageRepository

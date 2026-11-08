@@ -38,6 +38,9 @@ namespace DynamicModules.Persistence.Migrations
                         .HasMaxLength(100)
                         .HasColumnType("TEXT");
 
+                    b.Property<string>("IntegrationsJson")
+                        .HasColumnType("TEXT");
+
                     b.Property<string>("Key")
                         .IsRequired()
                         .HasMaxLength(40)
@@ -87,6 +90,77 @@ namespace DynamicModules.Persistence.Migrations
                     b.ToTable("Dynamic_App", (string)null);
                 });
 
+            modelBuilder.Entity("DynamicModules.Domain.Entities.Dynamic.AppBlock", b =>
+                {
+                    b.Property<long>("AppId")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("Name")
+                        .HasMaxLength(100)
+                        .HasColumnType("TEXT");
+
+                    b.Property<long>("BlockId")
+                        .HasColumnType("INTEGER");
+
+                    b.HasKey("AppId", "Name");
+
+                    b.HasIndex("BlockId");
+
+                    b.ToTable("Dynamic_AppBlock", (string)null);
+                });
+
+            modelBuilder.Entity("DynamicModules.Domain.Entities.Dynamic.AppField", b =>
+                {
+                    b.Property<long>("AppId")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("Name")
+                        .HasMaxLength(100)
+                        .HasColumnType("TEXT");
+
+                    b.Property<long>("FieldId")
+                        .HasColumnType("INTEGER");
+
+                    b.HasKey("AppId", "Name");
+
+                    b.HasIndex("FieldId");
+
+                    b.ToTable("Dynamic_AppField", (string)null);
+                });
+
+            modelBuilder.Entity("DynamicModules.Domain.Entities.Dynamic.AppIntegration", b =>
+                {
+                    b.Property<long>("AppId")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("Code")
+                        .HasMaxLength(40)
+                        .HasColumnType("TEXT");
+
+                    b.Property<bool>("Enabled")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<bool>("Installed")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("ItemsJson")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Reason")
+                        .HasMaxLength(2000)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("TEXT");
+
+                    b.HasKey("AppId", "Code");
+
+                    b.ToTable("Dynamic_AppIntegration", (string)null);
+                });
+
             modelBuilder.Entity("DynamicModules.Domain.Entities.Dynamic.AppModule", b =>
                 {
                     b.Property<long>("AppId")
@@ -105,6 +179,25 @@ namespace DynamicModules.Persistence.Migrations
                         .IsUnique();
 
                     b.ToTable("Dynamic_AppModule", (string)null);
+                });
+
+            modelBuilder.Entity("DynamicModules.Domain.Entities.Dynamic.AppOption", b =>
+                {
+                    b.Property<long>("AppId")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("Name")
+                        .HasMaxLength(100)
+                        .HasColumnType("TEXT");
+
+                    b.Property<long>("OptionId")
+                        .HasColumnType("INTEGER");
+
+                    b.HasKey("AppId", "Name");
+
+                    b.HasIndex("OptionId");
+
+                    b.ToTable("Dynamic_AppOption", (string)null);
                 });
 
             modelBuilder.Entity("DynamicModules.Domain.Entities.Dynamic.AppPackage", b =>
@@ -1538,6 +1631,45 @@ namespace DynamicModules.Persistence.Migrations
                     b.ToTable("Mock_Mold", (string)null);
                 });
 
+            modelBuilder.Entity("DynamicModules.Domain.Entities.Dynamic.AppBlock", b =>
+                {
+                    b.HasOne("DynamicModules.Domain.Entities.Dynamic.App", null)
+                        .WithMany()
+                        .HasForeignKey("AppId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("DynamicModules.Domain.Entities.Dynamic.Block", null)
+                        .WithMany()
+                        .HasForeignKey("BlockId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("DynamicModules.Domain.Entities.Dynamic.AppField", b =>
+                {
+                    b.HasOne("DynamicModules.Domain.Entities.Dynamic.App", null)
+                        .WithMany()
+                        .HasForeignKey("AppId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("DynamicModules.Domain.Entities.Dynamic.Field", null)
+                        .WithMany()
+                        .HasForeignKey("FieldId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("DynamicModules.Domain.Entities.Dynamic.AppIntegration", b =>
+                {
+                    b.HasOne("DynamicModules.Domain.Entities.Dynamic.App", null)
+                        .WithMany()
+                        .HasForeignKey("AppId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
             modelBuilder.Entity("DynamicModules.Domain.Entities.Dynamic.AppModule", b =>
                 {
                     b.HasOne("DynamicModules.Domain.Entities.Dynamic.App", null)
@@ -1549,6 +1681,21 @@ namespace DynamicModules.Persistence.Migrations
                     b.HasOne("DynamicModules.Domain.Entities.Dynamic.Module", null)
                         .WithMany()
                         .HasForeignKey("ModuleId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("DynamicModules.Domain.Entities.Dynamic.AppOption", b =>
+                {
+                    b.HasOne("DynamicModules.Domain.Entities.Dynamic.App", null)
+                        .WithMany()
+                        .HasForeignKey("AppId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("DynamicModules.Domain.Entities.Dynamic.FieldOption", null)
+                        .WithMany()
+                        .HasForeignKey("OptionId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
                 });

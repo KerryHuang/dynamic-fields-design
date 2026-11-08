@@ -27,6 +27,8 @@ public class App : AuditableEntity
     public string RowVersion { get; set; } = "";
     public List<AppModule> Modules { get; set; } = [];
     public List<AppReport> Reports { get; set; } = [];
+    /// <summary>開啟當時 integrations 的原文副本（JSON 陣列）；調和只看它，不看目錄，所以目錄換版不影響已開啟的應用程式。</summary>
+    public string? IntegrationsJson { get; set; }
 
     public void TouchRowVersion() => RowVersion = Guid.NewGuid().ToString();
 }
@@ -58,6 +60,48 @@ public class AppReport
     public long AppId { get; set; }
     public long ReportId { get; set; }
     public string Code { get; set; } = "";
+}
+
+/// <summary>
+/// 開啟時的代號對照：套件內的限定欄位名 &lt;模組代號&gt;.&lt;欄位代號&gt; 對實際欄位。外鍵 cascade，欄位被刪對照列就跟著消失，
+/// 整合靠它解析夥伴的符號，匯出靠它保留原始代號。
+/// </summary>
+public class AppField
+{
+    public long AppId { get; set; }
+    public string Name { get; set; } = "";
+    public long FieldId { get; set; }
+}
+
+/// <summary>&lt;模組代號&gt;.&lt;選項代號&gt; 對實際選項。</summary>
+public class AppOption
+{
+    public long AppId { get; set; }
+    public string Name { get; set; } = "";
+    public long OptionId { get; set; }
+}
+
+/// <summary>&lt;模組代號&gt;.&lt;區塊代號&gt; 對實際區塊；整合要把欄位加進擁有者既有的區塊。</summary>
+public class AppBlock
+{
+    public long AppId { get; set; }
+    public string Name { get; set; } = "";
+    public long BlockId { get; set; }
+}
+
+/// <summary>
+/// 應用程式宣告的一個整合（可選相依）的執行狀態。Status 只是上一次調和的結果，守衛每次重算；
+/// ItemsJson 登記整合建立的欄位、事件、檢查（見設計 §4）。
+/// </summary>
+public class AppIntegration
+{
+    public long AppId { get; set; }
+    public string Code { get; set; } = "";
+    public bool Enabled { get; set; }
+    public bool Installed { get; set; }
+    public string Status { get; set; } = "";
+    public string? Reason { get; set; }
+    public string ItemsJson { get; set; } = "{}";
 }
 
 /// <summary>匯入的套件；Json 是收到的原文（每次讀取才升級，不回寫）。</summary>

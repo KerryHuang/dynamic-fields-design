@@ -21,6 +21,7 @@ public class AppConfiguration : IEntityTypeConfiguration<App>
         b.Property(x => x.RowVersion).HasMaxLength(36).IsRequired().IsConcurrencyToken();
         b.HasMany(x => x.Modules).WithOne().HasForeignKey(x => x.AppId).OnDelete(DeleteBehavior.Cascade);
         b.HasMany(x => x.Reports).WithOne().HasForeignKey(x => x.AppId).OnDelete(DeleteBehavior.Cascade);
+        b.Property(x => x.IntegrationsJson);
         b.ConfigureAudit();
     }
 }
@@ -47,6 +48,59 @@ public class AppReportConfiguration : IEntityTypeConfiguration<AppReport>
         b.Property(x => x.Code).HasMaxLength(40).IsRequired();
         b.HasIndex(x => new { x.AppId, x.Code }).IsUnique();
         b.HasOne<Report>().WithMany().HasForeignKey(x => x.ReportId).OnDelete(DeleteBehavior.Cascade);
+    }
+}
+
+public class AppFieldConfiguration : IEntityTypeConfiguration<AppField>
+{
+    public void Configure(EntityTypeBuilder<AppField> b)
+    {
+        b.ToTable("Dynamic_AppField");
+        b.HasKey(x => new { x.AppId, x.Name });
+        b.Property(x => x.Name).HasMaxLength(100).IsRequired();
+        b.HasIndex(x => x.FieldId);
+        b.HasOne<App>().WithMany().HasForeignKey(x => x.AppId).OnDelete(DeleteBehavior.Cascade);
+        b.HasOne<Field>().WithMany().HasForeignKey(x => x.FieldId).OnDelete(DeleteBehavior.Cascade);
+    }
+}
+
+public class AppOptionConfiguration : IEntityTypeConfiguration<AppOption>
+{
+    public void Configure(EntityTypeBuilder<AppOption> b)
+    {
+        b.ToTable("Dynamic_AppOption");
+        b.HasKey(x => new { x.AppId, x.Name });
+        b.Property(x => x.Name).HasMaxLength(100).IsRequired();
+        b.HasIndex(x => x.OptionId);
+        b.HasOne<App>().WithMany().HasForeignKey(x => x.AppId).OnDelete(DeleteBehavior.Cascade);
+        b.HasOne<FieldOption>().WithMany().HasForeignKey(x => x.OptionId).OnDelete(DeleteBehavior.Cascade);
+    }
+}
+
+public class AppBlockConfiguration : IEntityTypeConfiguration<AppBlock>
+{
+    public void Configure(EntityTypeBuilder<AppBlock> b)
+    {
+        b.ToTable("Dynamic_AppBlock");
+        b.HasKey(x => new { x.AppId, x.Name });
+        b.Property(x => x.Name).HasMaxLength(100).IsRequired();
+        b.HasIndex(x => x.BlockId);
+        b.HasOne<App>().WithMany().HasForeignKey(x => x.AppId).OnDelete(DeleteBehavior.Cascade);
+        b.HasOne<Block>().WithMany().HasForeignKey(x => x.BlockId).OnDelete(DeleteBehavior.Cascade);
+    }
+}
+
+public class AppIntegrationConfiguration : IEntityTypeConfiguration<AppIntegration>
+{
+    public void Configure(EntityTypeBuilder<AppIntegration> b)
+    {
+        b.ToTable("Dynamic_AppIntegration");
+        b.HasKey(x => new { x.AppId, x.Code });
+        b.Property(x => x.Code).HasMaxLength(40).IsRequired();
+        b.Property(x => x.Status).HasMaxLength(20).IsRequired();
+        b.Property(x => x.Reason).HasMaxLength(2000);
+        b.Property(x => x.ItemsJson).IsRequired();
+        b.HasOne<App>().WithMany().HasForeignKey(x => x.AppId).OnDelete(DeleteBehavior.Cascade);
     }
 }
 
