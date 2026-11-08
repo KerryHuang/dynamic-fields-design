@@ -6,18 +6,40 @@ using DynamicModules.Domain.Reports;
 using DynamicModules.Domain.Repositories.Dynamic;
 using DynamicModules.Persistence.Dynamic.Dialects;
 using DynamicModules.Persistence.Dynamic.Query;
+using Microsoft.Data.Sqlite;
+using Microsoft.Extensions.Logging;
 
 namespace DynamicModules.Persistence.Repositories.Dynamic;
 
-public class ReportQueryRepository(DynamicDbContext db, ISqlDialect dialect) : IReportQueryRepository
+public class ReportQueryRepository(DynamicDbContext db, ISqlDialect dialect, ILogger<ReportQueryRepository> logger) : IReportQueryRepository
 {
     private static readonly int[] Caps = [1_000, 100_000];
+
+    /// <summary>
+    /// 探測與逐筆條件以 INDEXED BY 指定索引；實際 schema 沒有該索引（不是由 migration 建出的檔、索引改名）或規劃器用不上時，
+    /// SQLite 在 prepare 就丟錯。這種情形退回記憶體路徑並記 Warning，不讓整張報表變成 500。
+    /// </summary>
+    private async Task<string?> GuardIndexAsync(Func<Task<string?>> run)
+    {
+        try
+        {
+            return await run();
+        }
+        catch (SqliteException e) when (e.Message.Contains("no such index") || e.Message.Contains("no query solution"))
+        {
+            const string marker = "no such index: ";
+            var at = e.Message.IndexOf(marker, StringComparison.Ordinal);
+            var name = at < 0 ? "unknown" : e.Message[(at + marker.Length)..].TrimEnd('\'', '.', ' ');
+            logger.LogWarning(e, "報表 SQL 路徑找不到指定的索引 {Index}，改走記憶體路徑", name);
+            return $"indexMissing:{name}";
+        }
+    }
 
     public async Task<ReportSqlOutcome> AggregateAsync(ReportSqlQuery q, CancellationToken ct)
     {
         IReadOnlyList<ReportSqlRow> groups = [];
         ReportSqlRow? total = null;
-        var reason = await ReportSqlSnapshot.RunAsync(db, q.Stamps, q.Checks, q.Main, async (connection, tx) =>
+        var reason = await GuardIndexAsync(() => ReportSqlSnapshot.RunAsync(db, q.Stamps, q.Checks, q.Main, async (connection, tx) =>
         {
             var driver = await ChooseDriverAsync(connection, tx, q.Filters, ct);
             if (q.Groups.Count > 0)
@@ -27,7 +49,7 @@ public class ReportQueryRepository(DynamicDbContext db, ISqlDialect dialect) : I
             }
             var totalSql = ReportQueryBuilder.Aggregate(q, driver, total: true, dialect);
             total = (await ReadAsync(connection, tx, totalSql, q, hasKeys: false, ct)).Single();
-        }, ct);
+        }, ct));
         return reason is null ? new ReportSqlOutcome(null, groups, total) : ReportSqlOutcome.Fallback(reason);
     }
 
@@ -35,7 +57,7 @@ public class ReportQueryRepository(DynamicDbContext db, ISqlDialect dialect) : I
         ReportSqlScope main, ReportSqlNarrowing n, ReportSqlScope? child, long linkFieldId, int limit, CancellationToken ct)
     {
         IReadOnlyList<DynamicModules.Domain.Entities.Dynamic.Record> mains = [], kids = [];
-        var reason = await ReportSqlSnapshot.RunAsync(db, n.Stamps, n.Checks, main, async (connection, tx) =>
+        var reason = await GuardIndexAsync(() => ReportSqlSnapshot.RunAsync(db, n.Stamps, n.Checks, main, async (connection, tx) =>
         {
             var driver = await ChooseDriverAsync(connection, tx, n.Filters, ct);
             var built = ReportQueryBuilder.Narrow(main, n.Filters, driver, limit);
@@ -43,7 +65,7 @@ public class ReportQueryRepository(DynamicDbContext db, ISqlDialect dialect) : I
             if (child is null) return;
             var childBuilt = ReportQueryBuilder.NarrowChildren(main, n.Filters, driver, limit, child, linkFieldId);
             kids = (await connection.QueryAsync<DynamicModules.Domain.Entities.Dynamic.Record>(new CommandDefinition(childBuilt.Sql, childBuilt.Parameters, tx, cancellationToken: ct))).ToList();
-        }, ct);
+        }, ct));
         return reason is null ? new ReportNarrowedRecords(null, mains, kids) : ReportNarrowedRecords.Fallback(reason);
     }
 

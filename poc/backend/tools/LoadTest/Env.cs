@@ -65,6 +65,7 @@ public static class Env
         services.AddSingleton<ICurrentUser, AdminUser>();
         services.AddSingleton(new AuthSettings(false));
         services.AddSingleton<IBusinessTime, FixedTime>();
+        services.AddLogging();
         var sp = services.BuildServiceProvider();
         // 環境變數 LT_ENGINE（Auto|MemoryOnly|SqlOnly）切換報表引擎，預設 Auto；LT_MAX_LOAD_ROWS 調整載入上限
         if (Enum.TryParse<DynamicModules.Application.Dynamic.ReportService.ReportEngineMode>(Environment.GetEnvironmentVariable("LT_ENGINE"), out var engine))

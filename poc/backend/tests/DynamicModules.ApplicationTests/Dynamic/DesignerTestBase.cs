@@ -58,6 +58,7 @@ public abstract class DesignerTestBase : IAsyncLifetime
         services.AddSingleton<ICurrentUser>(_user);
         services.AddSingleton<IBusinessTime, FakeTime>();
         services.AddSingleton(new AuthSettings(false));
+        services.AddLogging();
         ConfigureServices(services);
         _sp = services.BuildServiceProvider();
     }

@@ -13,6 +13,8 @@ using Dapper;
 using DynamicModules.Domain.Repositories.Dynamic;
 using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
 
 namespace DynamicModules.ApplicationTests.Dynamic;
 
@@ -22,6 +24,25 @@ namespace DynamicModules.ApplicationTests.Dynamic;
 /// </summary>
 public class ReportSqlEquivalenceTests : ReportTestBase
 {
+    private sealed record LogEntry(LogLevel Level, string Message);
+
+    private readonly List<LogEntry> Logs = [];
+
+    private sealed class CapturingProvider(List<LogEntry> logs) : ILoggerProvider, ILogger
+    {
+        public ILogger CreateLogger(string categoryName) => this;
+        public void Dispose() { }
+        public IDisposable? BeginScope<TState>(TState state) where TState : notnull => null;
+        public bool IsEnabled(LogLevel logLevel) => true;
+        public void Log<TState>(LogLevel logLevel, EventId eventId, TState state, Exception? exception, Func<TState, Exception?, string> formatter)
+        {
+            lock (logs) logs.Add(new LogEntry(logLevel, formatter(state, exception)));
+        }
+    }
+
+    protected override void ConfigureServices(IServiceCollection services) =>
+        services.AddLogging(b => b.AddProvider(new CapturingProvider(Logs)));
+
     private FieldResponse Done = null!;
 
     private async Task Prepare()
@@ -257,6 +278,28 @@ public class ReportSqlEquivalenceTests : ReportTestBase
         sql.Message.Should().Be(memory.Message);
         sql.Groups.Should().BeNull();
         sql.Engine.Should().Be("sql");
+    }
+
+    [Fact]
+    public async Task MissingIndex_FallsBackToMemory_InsteadOfFailing_AndLogsAWarning()
+    {
+        await Prepare();
+        for (var i = 0; i < 5; i++) await Seed("order", "admin", (Amount, 10m + i), (Status, i < 2 ? OptOpen : OptDone), (Note, "n" + i));
+        // 例如資料庫不是由 migration 建出來、或索引被改名：INDEXED BY 指定的索引不存在時 SQLite 在 prepare 就丟錯
+        await Db.Context.Database.ExecuteSqlRawAsync("DROP INDEX IX_Dynamic_RecordIndex_NoScaled");
+
+        var aggregate = Def(groups: [G(MainF(Status))], measures: [M("s", "sum", MainF(Amount))], filters: [F(MainF(Amount), "gte", 11)]);
+        var (memory, auto) = await Both(aggregate, second: ReportEngineMode.Auto);
+        ShouldMatch(memory, auto, "aggregate", expectedEngine: "memory");
+        auto.FallbackReasons.Should().Contain("indexMissing:IX_Dynamic_RecordIndex_NoScaled");
+
+        // 縮小後備也用同一組索引：縮小失敗就載入整個模組，不能連記憶體路徑都到不了
+        var detail = Def(columns: [MainF(Note)], filters: [F(MainF(Amount), "gte", 11)]);
+        var (memoryDetail, autoDetail) = await Both(detail, second: ReportEngineMode.Auto);
+        ShouldMatch(memoryDetail, autoDetail, "narrow", expectedEngine: "memory");
+        autoDetail.FallbackReasons.Should().Contain("narrowSkipped:indexMissing:IX_Dynamic_RecordIndex_NoScaled");
+
+        Logs.Should().Contain(l => l.Level == LogLevel.Warning && l.Message.Contains("IX_Dynamic_RecordIndex_NoScaled"));
     }
 
     private async Task<FieldConfig> CurrentConfig(string module, long fieldId) =>
