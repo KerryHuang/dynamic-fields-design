@@ -51,6 +51,8 @@ describe('designer-state', () => {
     expect(operatorsOf(F(1, 'a', { type: 'boolean' }))).toEqual(['eq', 'isEmpty', 'isNotEmpty']);
     expect(operatorsOf(F(1, 'a', { type: 'formula', isDate: true }))).toContain('withinNextDays');
     expect(operatorsOf(F(1, 'a', { type: 'formula' }))).not.toContain('withinNextDays');
+    expect(operatorsOf(F(1, 'a', { type: 'formula', isDate: true }))).toContain('beforeToday');
+    expect(operatorsOf(F(1, 'a', { type: 'formula' }))).not.toContain('beforeToday');
   });
 
   it('date range needs a primary date field and clearing the field clears the range', () => {

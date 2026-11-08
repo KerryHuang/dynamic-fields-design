@@ -6,6 +6,7 @@ describe('condition', () => {
   it('operatorNeedsValue maps every operator to its value shape', () => {
     expect(operatorNeedsValue('isEmpty')).toBe('none');
     expect(operatorNeedsValue('isNotEmpty')).toBe('none');
+    expect(operatorNeedsValue('beforeToday')).toBe('none');
     expect(operatorNeedsValue('between')).toBe('pair');
     expect(operatorNeedsValue('in')).toBe('list');
     expect(operatorNeedsValue('notIn')).toBe('list');
@@ -43,6 +44,7 @@ describe('condition', () => {
       ],
     });
     expect(pruneCondition({ all: [{ field: 0, op: 'eq', value: 1 }] })).toBeUndefined();
+    expect(pruneCondition({ all: [{ field: 7, op: 'beforeToday' }] })).toEqual({ all: [{ field: 7, op: 'beforeToday' }] });
     expect(pruneCondition(undefined)).toBeUndefined();
   });
 

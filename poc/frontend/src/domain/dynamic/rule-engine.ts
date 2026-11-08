@@ -178,6 +178,7 @@ function evaluateField(
     case 'startsWith': return String(l.value).startsWith(String(operands[0].value));
     case 'withinNextDays': return withinDays(l, todayDay, todayDay + Number(c.value));
     case 'withinLastDays': return withinDays(l, todayDay - Number(c.value), todayDay);
+    case 'beforeToday': return l.kind === 'date' && Math.floor((l.value as number) / DAY_MS) < todayDay;
     default: throw new Error(`Unsupported operator ${String(c.op)}`);
   }
 }

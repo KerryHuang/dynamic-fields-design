@@ -398,7 +398,7 @@ export interface ModuleDetail {
 
 export type FilterOperator =
   | 'eq' | 'ne' | 'in' | 'notIn' | 'gt' | 'gte' | 'lt' | 'lte' | 'between'
-  | 'contains' | 'startsWith' | 'withinNextDays' | 'withinLastDays' | 'isEmpty' | 'isNotEmpty';
+  | 'contains' | 'startsWith' | 'withinNextDays' | 'withinLastDays' | 'beforeToday' | 'isEmpty' | 'isNotEmpty';
 
 /** `field` is Field.Id (0 or undefined while no field is picked in the editor). */
 export interface FieldCondition {

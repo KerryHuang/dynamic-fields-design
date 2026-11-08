@@ -5,7 +5,8 @@ export type OperatorValueKind = 'none' | 'single' | 'pair' | 'list' | 'days';
 export function operatorNeedsValue(op: FilterOperator): OperatorValueKind {
   switch (op) {
     case 'isEmpty':
-    case 'isNotEmpty': return 'none';
+    case 'isNotEmpty':
+    case 'beforeToday': return 'none';
     case 'between': return 'pair';
     case 'in':
     case 'notIn': return 'list';
