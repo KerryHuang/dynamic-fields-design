@@ -3352,7 +3352,17 @@
             "condition": null
           }
         ],
-        "filters": [],
+        "filters": [
+          {
+            "field": {
+              "source": "main",
+              "field": "shipment.status",
+              "via": null
+            },
+            "op": "eq",
+            "value": "opt_shipped"
+          }
+        ],
         "primaryDateField": null,
         "dateRange": null,
         "sort": [],

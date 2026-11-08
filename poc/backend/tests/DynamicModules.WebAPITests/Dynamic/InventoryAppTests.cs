@@ -307,6 +307,7 @@ public class InventoryAppTests : IDisposable
         Num(line, l["單價"]).Should().Be(250m, "倉管有金額權限，帶值帶得到單價");
         Num(line, l["金額"]).Should().Be(500m);
         await rig.TransitionOk(keeper, draft, "shipment", "已出貨");
+        await rig.ShipmentDraftAsync(customer, wh, item, 3, keeper);   // 草稿不計入出貨金額
 
         var reports = await JsonOf(await keeper.GetAsync($"{Base}/reports"));
         var report = reports.EnumerateArray().Single(x => x.GetProperty("name").GetString() == "各客戶出貨金額（未稅）");
