@@ -12,7 +12,8 @@ import IconSelect from 'src/presentation/dynamic/designer/IconSelect.vue';
 import { dynamicApi } from 'src/services/api/dynamic-api';
 import ModuleEditorPage from './ModuleEditorPage.vue';
 
-vi.mock('src/services/api/dynamic-api', () => ({ dynamicApi: { getModule: vi.fn(), updateModule: vi.fn(), entities: vi.fn(), getPreviewSchema: vi.fn(), exportTemplate: vi.fn(), deleteCheck: vi.fn(), deleteTarget: vi.fn(), getMe: vi.fn() } }));
+vi.mock('src/services/api/dynamic-api', () => ({ dynamicApi: { getModule: vi.fn(), updateModule: vi.fn(), entities: vi.fn(), getPreviewSchema: vi.fn(), exportTemplate: vi.fn(), deleteCheck: vi.fn(), deleteTarget: vi.fn(), getMe: vi.fn(),
+  getEvents: vi.fn(), getChecks: vi.fn(), getLedger: vi.fn(), getWorkflow: vi.fn(), getModules: vi.fn() } }));
 const api = vi.mocked(dynamicApi);
 
 const detail: ModuleDetail = {
@@ -20,9 +21,9 @@ const detail: ModuleDetail = {
   status: 'Active', version: 3, blocks: [],
 };
 
-async function mountPage(d: ModuleDetail = detail, canDelete = true) {
+async function mountPage(d: ModuleDetail = detail, canDelete = true, canRead = true) {
   api.getModule.mockResolvedValue(d);
-  api.getMe.mockResolvedValue({ designer: { read: true, add: true, edit: true, delete: canDelete } } as never);
+  api.getMe.mockResolvedValue({ designer: { read: canRead, add: true, edit: true, delete: canDelete } } as never);
   api.entities.mockResolvedValue([{ key: 'design.mold', name: { 'zh-TW': '模具' } }]);
   api.updateModule.mockResolvedValue({} as never);
   const router = createRouter({ history: createMemoryHistory(), routes: [{ path: '/m/:moduleKey', component: ModuleEditorPage }] });
@@ -65,6 +66,32 @@ describe('ModuleEditorPage', () => {
     await input.trigger('change');
     await flushPromises();
     expect(api.updateModule).toHaveBeenLastCalledWith('m', { name: detail.name, icon: undefined, section: undefined, titleFieldId: 5 });
+  });
+
+  it('has tabs for linked events, cross-record checks and the ledger, each showing its own panel', async () => {
+    api.getEvents.mockResolvedValue([]);
+    api.getChecks.mockResolvedValue([]);
+    api.getLedger.mockRejectedValue({ status: 404 });
+    api.getWorkflow.mockRejectedValue({ status: 404 });
+    api.getModules.mockResolvedValue([]);
+    const w = await mountPage();
+    for (const [name, panel] of [['events', 'events-tab'], ['checks', 'checks-tab'], ['ledger', 'ledger-tab']] as const) {
+      const tab = w.find(`[data-testid="tab-${name}"]`);
+      expect(tab.exists()).toBe(true);
+      await tab.trigger('click');
+      await flushPromises();
+      expect(w.find(`[data-testid="${panel}"]`).exists()).toBe(true);
+    }
+    expect(w.find('[data-testid="tab-events"]').text()).toContain(zhTW.events.tab);
+    expect(api.getEvents).toHaveBeenCalledWith('m');
+    expect(api.getChecks).toHaveBeenCalledWith('m');
+  });
+
+  it('hides those tabs from someone without designer access', async () => {
+    const w = await mountPage(detail, true, false);
+    expect(w.find('[data-testid="tab-events"]').exists()).toBe(false);
+    expect(w.find('[data-testid="tab-checks"]').exists()).toBe(false);
+    expect(w.find('[data-testid="tab-ledger"]').exists()).toBe(false);
   });
 
   it('has a preview tab', async () => {
