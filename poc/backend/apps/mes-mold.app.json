@@ -1,0 +1,5053 @@
+{
+ "format": "formwright-app",
+ "formatVersion": 4,
+ "manifest": {
+  "id": "mes-mold",
+  "version": "1.0.0",
+  "name": {
+   "zh-TW": "MES 模具廠",
+   "en-US": "Mold-shop MES"
+  },
+  "description": {
+   "zh-TW": "報價、訂單、工令、製程、報工與出貨，含故障報修、模具保養與品質異常",
+   "en-US": "Quotes, orders, work orders, operations, reporting and shipping, with repairs, mold care and quality issues"
+  },
+  "icon": "precision_manufacturing",
+  "requires": {
+   "apps": [],
+   "entities": [
+    "design.mold",
+    "sales.customer"
+   ]
+  }
+ },
+ "groups": [
+  {
+   "code": "sales",
+   "name": {
+    "zh-TW": "業務",
+    "en-US": "Sales"
+   }
+  },
+  {
+   "code": "salesManager",
+   "name": {
+    "zh-TW": "業務主管",
+    "en-US": "Sales manager"
+   }
+  },
+  {
+   "code": "floor",
+   "name": {
+    "zh-TW": "現場",
+    "en-US": "Shop floor"
+   }
+  },
+  {
+   "code": "maint",
+   "name": {
+    "zh-TW": "設備",
+    "en-US": "Maintenance"
+   }
+  },
+  {
+   "code": "qa",
+   "name": {
+    "zh-TW": "品保",
+    "en-US": "Quality assurance"
+   }
+  },
+  {
+   "code": "planner",
+   "name": {
+    "zh-TW": "生管",
+    "en-US": "Planner"
+   }
+  }
+ ],
+ "modules": [
+  {
+   "code": "order",
+   "key": "mes-order",
+   "name": {
+    "zh-TW": "訂單",
+    "en-US": "Sales order"
+   },
+   "icon": "receipt_long",
+   "section": "業務",
+   "kind": "standalone",
+   "hostEntityKey": null,
+   "titleField": "no",
+   "blocks": [
+    {
+     "code": "main",
+     "label": {
+      "zh-TW": "基本資料",
+      "en-US": "Basic information"
+     },
+     "collapsed": false,
+     "fields": [
+      {
+       "code": "no",
+       "type": "autonumber",
+       "label": {
+        "zh-TW": "訂單編號",
+        "en-US": "Order no."
+       },
+       "config": {
+        "format": "SO-{yyyyMM}-{0000}",
+        "showInList": true,
+        "isSortable": true
+       }
+      },
+      {
+       "code": "fromQuote",
+       "type": "reference",
+       "label": {
+        "zh-TW": "來源報價單",
+        "en-US": "Source quote"
+       },
+       "config": {
+        "refTarget": {
+         "kind": "module",
+         "key": "quote"
+        },
+        "readOnly": true,
+        "showInList": true
+       }
+      },
+      {
+       "code": "customer",
+       "type": "reference",
+       "label": {
+        "zh-TW": "客戶",
+        "en-US": "Customer"
+       },
+       "config": {
+        "refTarget": {
+         "kind": "entity",
+         "key": "sales.customer"
+        },
+        "required": true,
+        "showInList": true,
+        "isFilterable": true
+       }
+      },
+      {
+       "code": "orderDate",
+       "type": "date",
+       "label": {
+        "zh-TW": "訂單日期",
+        "en-US": "Order date"
+       },
+       "config": {
+        "defaultToday": true,
+        "required": true,
+        "showInList": true,
+        "isFilterable": true,
+        "isSortable": true
+       }
+      },
+      {
+       "code": "dueDate",
+       "type": "date",
+       "label": {
+        "zh-TW": "交期",
+        "en-US": "Due date"
+       },
+       "config": {
+        "showInList": true,
+        "isFilterable": true,
+        "isSortable": true
+       }
+      },
+      {
+       "code": "status",
+       "type": "enum",
+       "label": {
+        "zh-TW": "狀態",
+        "en-US": "Status"
+       },
+       "options": [
+        {
+         "code": "draft",
+         "label": {
+          "zh-TW": "草稿",
+          "en-US": "Draft"
+         },
+         "color": null
+        },
+        {
+         "code": "confirmed",
+         "label": {
+          "zh-TW": "已確認",
+          "en-US": "Confirmed"
+         },
+         "color": null
+        },
+        {
+         "code": "shipping",
+         "label": {
+          "zh-TW": "出貨中",
+          "en-US": "Shipping"
+         },
+         "color": null
+        },
+        {
+         "code": "closed",
+         "label": {
+          "zh-TW": "已結案",
+          "en-US": "Closed"
+         },
+         "color": null
+        },
+        {
+         "code": "cancel",
+         "label": {
+          "zh-TW": "取消",
+          "en-US": "Cancelled"
+         },
+         "color": null
+        }
+       ],
+       "config": {
+        "defaultValue": "opt_draft",
+        "required": true,
+        "showInList": true,
+        "isFilterable": true
+       }
+      },
+      {
+       "code": "salesRep",
+       "type": "user",
+       "label": {
+        "zh-TW": "業務員",
+        "en-US": "Sales rep"
+       },
+       "config": {
+        "showInList": true,
+        "isFilterable": true
+       }
+      },
+      {
+       "code": "currency",
+       "type": "enum",
+       "label": {
+        "zh-TW": "幣別",
+        "en-US": "Currency"
+       },
+       "options": [
+        {
+         "code": "twd",
+         "label": {
+          "zh-TW": "TWD",
+          "en-US": "TWD"
+         },
+         "color": null
+        },
+        {
+         "code": "usd",
+         "label": {
+          "zh-TW": "USD",
+          "en-US": "USD"
+         },
+         "color": null
+        },
+        {
+         "code": "jpy",
+         "label": {
+          "zh-TW": "JPY",
+          "en-US": "JPY"
+         },
+         "color": null
+        }
+       ],
+       "config": {
+        "defaultValue": "opt_twd"
+       }
+      }
+     ]
+    },
+    {
+     "code": "amounts",
+     "label": {
+      "zh-TW": "金額",
+      "en-US": "Amounts"
+     },
+     "collapsed": false,
+     "fields": [
+      {
+       "code": "subtotal",
+       "type": "rollup",
+       "label": {
+        "zh-TW": "未稅合計",
+        "en-US": "Subtotal"
+       },
+       "config": {
+        "rollup": {
+         "sourceField": "line.order",
+         "function": "sum",
+         "aggregateField": "line.amount"
+        }
+       }
+      },
+      {
+       "code": "taxRate",
+       "type": "percent",
+       "label": {
+        "zh-TW": "稅率",
+        "en-US": "Tax rate"
+       },
+       "config": {
+        "scale": 0,
+        "defaultValue": 5
+       }
+      },
+      {
+       "code": "tax",
+       "type": "formula",
+       "label": {
+        "zh-TW": "稅額",
+        "en-US": "Tax"
+       },
+       "config": {
+        "formula": "ROUND({subtotal} * {taxRate}, 0)",
+        "resultType": "currency",
+        "scale": 0
+       }
+      },
+      {
+       "code": "total",
+       "type": "formula",
+       "label": {
+        "zh-TW": "含稅總額",
+        "en-US": "Total"
+       },
+       "config": {
+        "formula": "{subtotal} + {tax}",
+        "resultType": "currency",
+        "scale": 0,
+        "showInList": true
+       }
+      },
+      {
+       "code": "lineCount",
+       "type": "rollup",
+       "label": {
+        "zh-TW": "明細筆數",
+        "en-US": "Line count"
+       },
+       "config": {
+        "rollup": {
+         "sourceField": "line.order",
+         "function": "count"
+        }
+       }
+      },
+      {
+       "code": "qualityCount",
+       "type": "rollup",
+       "label": {
+        "zh-TW": "品質異常筆數",
+        "en-US": "Quality issues"
+       },
+       "config": {
+        "rollup": {
+         "sourceField": "quality.order",
+         "function": "count"
+        },
+        "showInList": true
+       }
+      }
+     ]
+    },
+    {
+     "code": "remarks",
+     "label": {
+      "zh-TW": "備註",
+      "en-US": "Remarks"
+     },
+     "collapsed": false,
+     "fields": [
+      {
+       "code": "remark",
+       "type": "textarea",
+       "label": {
+        "zh-TW": "備註",
+        "en-US": "Remark"
+       }
+      },
+      {
+       "code": "cancelReason",
+       "type": "textarea",
+       "label": {
+        "zh-TW": "取消原因",
+        "en-US": "Cancellation reason"
+       }
+      }
+     ]
+    }
+   ],
+   "rules": [
+    {
+     "kind": "validation",
+     "targets": [
+      "field:dueDate"
+     ],
+     "active": true,
+     "options": [],
+     "message": {
+      "zh-TW": "交期不得早於訂單日期",
+      "en-US": "Due date cannot be earlier than the order date"
+     },
+     "condition": {
+      "any": [
+       {
+        "field": "dueDate",
+        "op": "isEmpty"
+       },
+       {
+        "field": "dueDate",
+        "op": "gte",
+        "value": {
+         "fieldRef": "orderDate"
+        }
+       }
+      ]
+     }
+    },
+    {
+     "kind": "visibility",
+     "targets": [
+      "field:cancelReason"
+     ],
+     "active": true,
+     "options": [],
+     "message": null,
+     "condition": {
+      "field": "status",
+      "op": "eq",
+      "value": "opt_cancel"
+     }
+    },
+    {
+     "kind": "required",
+     "targets": [
+      "field:cancelReason"
+     ],
+     "active": true,
+     "options": [],
+     "message": null,
+     "condition": {
+      "field": "status",
+      "op": "eq",
+      "value": "opt_cancel"
+     }
+    }
+   ],
+   "views": [
+    {
+     "name": {
+      "zh-TW": "全部訂單",
+      "en-US": "All orders"
+     },
+     "columns": [
+      "no",
+      "customer",
+      "orderDate",
+      "dueDate",
+      "status",
+      "total"
+     ],
+     "filter": null,
+     "sort": [
+      {
+       "field": "orderDate",
+       "order": "desc"
+      }
+     ],
+     "isDefault": true
+    }
+   ],
+   "permissions": [
+    {
+     "group": "sales",
+     "scope": "own",
+     "privileges": {
+      "read": true,
+      "add": true,
+      "edit": true,
+      "delete": false,
+      "printExport": false,
+      "pricing": true,
+      "approve": false
+     }
+    },
+    {
+     "group": "salesManager",
+     "scope": "all",
+     "privileges": {
+      "read": true,
+      "add": true,
+      "edit": true,
+      "delete": true,
+      "printExport": true,
+      "pricing": true,
+      "approve": false
+     }
+    },
+    {
+     "group": "floor",
+     "scope": "all",
+     "privileges": {
+      "read": true,
+      "add": false,
+      "edit": false,
+      "delete": false,
+      "printExport": false,
+      "pricing": false,
+      "approve": false
+     }
+    },
+    {
+     "group": "planner",
+     "scope": "all",
+     "privileges": {
+      "read": true,
+      "add": false,
+      "edit": false,
+      "delete": false,
+      "printExport": false,
+      "pricing": false,
+      "approve": false
+     }
+    },
+    {
+     "group": "qa",
+     "scope": "all",
+     "privileges": {
+      "read": true,
+      "add": false,
+      "edit": false,
+      "delete": false,
+      "printExport": false,
+      "pricing": false,
+      "approve": false
+     }
+    }
+   ]
+  },
+  {
+   "code": "line",
+   "key": "mes-order-line",
+   "name": {
+    "zh-TW": "訂單明細",
+    "en-US": "Order lines"
+   },
+   "icon": null,
+   "section": null,
+   "kind": "standalone",
+   "hostEntityKey": null,
+   "titleField": "itemName",
+   "blocks": [
+    {
+     "code": "main",
+     "label": {
+      "zh-TW": "明細",
+      "en-US": "Lines"
+     },
+     "collapsed": false,
+     "fields": [
+      {
+       "code": "order",
+       "type": "reference",
+       "label": {
+        "zh-TW": "訂單",
+        "en-US": "Order"
+       },
+       "config": {
+        "refTarget": {
+         "kind": "module",
+         "key": "order"
+        },
+        "relation": "detail"
+       }
+      },
+      {
+       "code": "seq",
+       "type": "autonumber",
+       "label": {
+        "zh-TW": "項次",
+        "en-US": "Line no."
+       },
+       "config": {
+        "format": "{0}",
+        "scope": "parent"
+       }
+      },
+      {
+       "code": "itemNo",
+       "type": "text",
+       "label": {
+        "zh-TW": "品號",
+        "en-US": "Item no."
+       }
+      },
+      {
+       "code": "itemName",
+       "type": "text",
+       "label": {
+        "zh-TW": "品名",
+        "en-US": "Item name"
+       },
+       "config": {
+        "required": true
+       }
+      },
+      {
+       "code": "qty",
+       "type": "decimal",
+       "label": {
+        "zh-TW": "數量",
+        "en-US": "Quantity"
+       },
+       "config": {
+        "scale": 2,
+        "required": true
+       }
+      },
+      {
+       "code": "unit",
+       "type": "text",
+       "label": {
+        "zh-TW": "單位",
+        "en-US": "Unit"
+       },
+       "config": {}
+      },
+      {
+       "code": "price",
+       "type": "currency",
+       "label": {
+        "zh-TW": "單價",
+        "en-US": "Unit price"
+       },
+       "config": {
+        "scale": 0
+       }
+      },
+      {
+       "code": "amount",
+       "type": "formula",
+       "label": {
+        "zh-TW": "金額",
+        "en-US": "Amount"
+       },
+       "config": {
+        "formula": "{qty} * {price}",
+        "resultType": "currency",
+        "scale": 0
+       }
+      },
+      {
+       "code": "dueDate",
+       "type": "date",
+       "label": {
+        "zh-TW": "交期",
+        "en-US": "Due date"
+       },
+       "config": {
+        "parentDefaultField": "order.dueDate"
+       }
+      },
+      {
+       "code": "sourceLine",
+       "type": "integer",
+       "label": {
+        "zh-TW": "來源報價明細列",
+        "en-US": "Source quote line"
+       },
+       "config": {
+        "readOnly": true
+       }
+      }
+     ]
+    }
+   ],
+   "rules": [],
+   "views": [],
+   "permissions": []
+  },
+  {
+   "code": "quote",
+   "key": "mes-quote",
+   "name": {
+    "zh-TW": "報價單",
+    "en-US": "Quotes"
+   },
+   "icon": "request_quote",
+   "section": "業務",
+   "kind": "standalone",
+   "hostEntityKey": null,
+   "titleField": "no",
+   "blocks": [
+    {
+     "code": "main",
+     "label": {
+      "zh-TW": "基本資料",
+      "en-US": "Basic information"
+     },
+     "collapsed": false,
+     "fields": [
+      {
+       "code": "no",
+       "type": "autonumber",
+       "label": {
+        "zh-TW": "報價單號",
+        "en-US": "Quote no."
+       },
+       "config": {
+        "format": "QT-{yyyyMM}-{0000}",
+        "showInList": true,
+        "isSortable": true
+       }
+      },
+      {
+       "code": "customer",
+       "type": "reference",
+       "label": {
+        "zh-TW": "客戶",
+        "en-US": "Customer"
+       },
+       "config": {
+        "refTarget": {
+         "kind": "entity",
+         "key": "sales.customer"
+        },
+        "required": true,
+        "showInList": true,
+        "isFilterable": true
+       }
+      },
+      {
+       "code": "quoteDate",
+       "type": "date",
+       "label": {
+        "zh-TW": "報價日期",
+        "en-US": "Quote date"
+       },
+       "config": {
+        "defaultToday": true,
+        "required": true,
+        "showInList": true,
+        "isFilterable": true,
+        "isSortable": true
+       }
+      },
+      {
+       "code": "validUntil",
+       "type": "date",
+       "label": {
+        "zh-TW": "有效期限",
+        "en-US": "Valid until"
+       },
+       "config": {}
+      },
+      {
+       "code": "status",
+       "type": "enum",
+       "label": {
+        "zh-TW": "狀態",
+        "en-US": "Status"
+       },
+       "config": {
+        "defaultValue": "opt_draft",
+        "required": true,
+        "showInList": true,
+        "isFilterable": true
+       },
+       "options": [
+        {
+         "code": "draft",
+         "label": {
+          "zh-TW": "草稿",
+          "en-US": "Draft"
+         },
+         "color": null
+        },
+        {
+         "code": "pending",
+         "label": {
+          "zh-TW": "待核准",
+          "en-US": "Pending approval"
+         },
+         "color": null
+        },
+        {
+         "code": "approved",
+         "label": {
+          "zh-TW": "已核准",
+          "en-US": "Approved"
+         },
+         "color": null
+        },
+        {
+         "code": "rejected",
+         "label": {
+          "zh-TW": "已退回",
+          "en-US": "Rejected"
+         },
+         "color": null
+        }
+       ]
+      },
+      {
+       "code": "owner",
+       "type": "user",
+       "label": {
+        "zh-TW": "負責業務",
+        "en-US": "Owner"
+       },
+       "config": {
+        "showInList": true,
+        "isFilterable": true
+       }
+      }
+     ]
+    },
+    {
+     "code": "amounts",
+     "label": {
+      "zh-TW": "金額",
+      "en-US": "Amounts"
+     },
+     "collapsed": false,
+     "fields": [
+      {
+       "code": "subtotal",
+       "type": "rollup",
+       "label": {
+        "zh-TW": "未稅小計",
+        "en-US": "Subtotal"
+       },
+       "config": {
+        "rollup": {
+         "sourceField": "quote-line.quote",
+         "function": "sum",
+         "aggregateField": "quote-line.amount"
+        }
+       }
+      },
+      {
+       "code": "taxRate",
+       "type": "percent",
+       "label": {
+        "zh-TW": "稅率",
+        "en-US": "Tax rate"
+       },
+       "config": {
+        "scale": 0,
+        "defaultValue": 5
+       }
+      },
+      {
+       "code": "tax",
+       "type": "formula",
+       "label": {
+        "zh-TW": "稅額",
+        "en-US": "Tax"
+       },
+       "config": {
+        "formula": "ROUND({subtotal} * {taxRate}, 0)",
+        "resultType": "currency",
+        "scale": 0
+       }
+      },
+      {
+       "code": "total",
+       "type": "formula",
+       "label": {
+        "zh-TW": "含稅總計",
+        "en-US": "Total"
+       },
+       "config": {
+        "formula": "{subtotal} + {tax}",
+        "resultType": "currency",
+        "scale": 0,
+        "showInList": true
+       }
+      }
+     ]
+    },
+    {
+     "code": "remarks",
+     "label": {
+      "zh-TW": "備註",
+      "en-US": "Remarks"
+     },
+     "collapsed": false,
+     "fields": [
+      {
+       "code": "remark",
+       "type": "textarea",
+       "label": {
+        "zh-TW": "備註",
+        "en-US": "Remark"
+       },
+       "config": {}
+      }
+     ]
+    }
+   ],
+   "rules": [
+    {
+     "kind": "validation",
+     "targets": [
+      "field:validUntil"
+     ],
+     "active": true,
+     "options": [],
+     "message": {
+      "zh-TW": "有效期限不得早於報價日期",
+      "en-US": "Valid-until date cannot be earlier than the quote date"
+     },
+     "condition": {
+      "any": [
+       {
+        "field": "validUntil",
+        "op": "isEmpty"
+       },
+       {
+        "field": "validUntil",
+        "op": "gte",
+        "value": {
+         "fieldRef": "quoteDate"
+        }
+       }
+      ]
+     }
+    }
+   ],
+   "views": [
+    {
+     "name": {
+      "zh-TW": "全部報價單",
+      "en-US": "All quotes"
+     },
+     "columns": [
+      "no",
+      "customer",
+      "quoteDate",
+      "status",
+      "total"
+     ],
+     "filter": null,
+     "sort": [
+      {
+       "field": "quoteDate",
+       "order": "desc"
+      }
+     ],
+     "isDefault": true
+    }
+   ],
+   "permissions": [
+    {
+     "group": "sales",
+     "scope": "all",
+     "privileges": {
+      "read": true,
+      "add": true,
+      "edit": true,
+      "delete": false,
+      "printExport": true,
+      "pricing": true,
+      "approve": false
+     }
+    },
+    {
+     "group": "salesManager",
+     "scope": "all",
+     "privileges": {
+      "read": true,
+      "add": true,
+      "edit": true,
+      "delete": true,
+      "printExport": true,
+      "pricing": true,
+      "approve": true
+     }
+    }
+   ]
+  },
+  {
+   "code": "quote-line",
+   "key": "mes-quote-line",
+   "name": {
+    "zh-TW": "報價明細",
+    "en-US": "Quote lines"
+   },
+   "icon": null,
+   "section": null,
+   "kind": "standalone",
+   "hostEntityKey": null,
+   "titleField": "itemName",
+   "blocks": [
+    {
+     "code": "main",
+     "label": {
+      "zh-TW": "基本資料",
+      "en-US": "Basic information"
+     },
+     "collapsed": false,
+     "fields": [
+      {
+       "code": "quote",
+       "type": "reference",
+       "label": {
+        "zh-TW": "報價單",
+        "en-US": "Quote"
+       },
+       "config": {
+        "refTarget": {
+         "kind": "module",
+         "key": "quote"
+        },
+        "relation": "detail"
+       }
+      },
+      {
+       "code": "seq",
+       "type": "autonumber",
+       "label": {
+        "zh-TW": "項次",
+        "en-US": "Line"
+       },
+       "config": {
+        "format": "{0}",
+        "scope": "parent"
+       }
+      },
+      {
+       "code": "itemNo",
+       "type": "text",
+       "label": {
+        "zh-TW": "品號",
+        "en-US": "Item no."
+       },
+       "config": {}
+      },
+      {
+       "code": "itemName",
+       "type": "text",
+       "label": {
+        "zh-TW": "品名",
+        "en-US": "Item name"
+       },
+       "config": {
+        "required": true
+       }
+      },
+      {
+       "code": "qty",
+       "type": "decimal",
+       "label": {
+        "zh-TW": "數量",
+        "en-US": "Quantity"
+       },
+       "config": {
+        "scale": 2,
+        "required": true
+       }
+      },
+      {
+       "code": "unit",
+       "type": "text",
+       "label": {
+        "zh-TW": "單位",
+        "en-US": "Unit"
+       },
+       "config": {}
+      },
+      {
+       "code": "price",
+       "type": "currency",
+       "label": {
+        "zh-TW": "單價",
+        "en-US": "Unit price"
+       },
+       "config": {
+        "scale": 0
+       }
+      },
+      {
+       "code": "amount",
+       "type": "formula",
+       "label": {
+        "zh-TW": "金額",
+        "en-US": "Amount"
+       },
+       "config": {
+        "formula": "{qty} * {price}",
+        "resultType": "currency",
+        "scale": 0
+       }
+      }
+     ]
+    }
+   ],
+   "rules": [],
+   "views": [],
+   "permissions": []
+  },
+  {
+   "code": "workorder",
+   "key": "mes-workorder",
+   "name": {
+    "zh-TW": "工令",
+    "en-US": "Work orders"
+   },
+   "icon": "precision_manufacturing",
+   "section": "生產",
+   "kind": "standalone",
+   "hostEntityKey": null,
+   "titleField": "no",
+   "blocks": [
+    {
+     "code": "main",
+     "label": {
+      "zh-TW": "基本資料",
+      "en-US": "Basic information"
+     },
+     "collapsed": false,
+     "fields": [
+      {
+       "code": "no",
+       "type": "autonumber",
+       "label": {
+        "zh-TW": "工令號",
+        "en-US": "Work order no."
+       },
+       "config": {
+        "format": "WO-{yyyyMM}-{0000}",
+        "showInList": true,
+        "isSortable": true
+       }
+      },
+      {
+       "code": "order",
+       "type": "reference",
+       "label": {
+        "zh-TW": "訂單",
+        "en-US": "Order"
+       },
+       "config": {
+        "refTarget": {
+         "kind": "module",
+         "key": "order"
+        },
+        "isFilterable": true,
+        "fill": {
+         "mode": "default",
+         "map": [
+          {
+           "from": "order.dueDate",
+           "to": "dueDate"
+          }
+         ]
+        }
+       }
+      },
+      {
+       "code": "itemNo",
+       "type": "text",
+       "label": {
+        "zh-TW": "品號",
+        "en-US": "Item no."
+       },
+       "config": {}
+      },
+      {
+       "code": "itemName",
+       "type": "text",
+       "label": {
+        "zh-TW": "品名",
+        "en-US": "Item name"
+       },
+       "config": {
+        "required": true,
+        "showInList": true
+       }
+      },
+      {
+       "code": "qty",
+       "type": "integer",
+       "label": {
+        "zh-TW": "工令數量",
+        "en-US": "Quantity"
+       },
+       "config": {
+        "required": true,
+        "showInList": true
+       }
+      },
+      {
+       "code": "unit",
+       "type": "text",
+       "label": {
+        "zh-TW": "單位",
+        "en-US": "Unit"
+       },
+       "config": {}
+      },
+      {
+       "code": "plannedStart",
+       "type": "date",
+       "label": {
+        "zh-TW": "預計開工",
+        "en-US": "Planned start"
+       },
+       "config": {
+        "isFilterable": true
+       }
+      },
+      {
+       "code": "dueDate",
+       "type": "date",
+       "label": {
+        "zh-TW": "交期",
+        "en-US": "Due date"
+       },
+       "config": {
+        "showInList": true,
+        "isFilterable": true,
+        "isSortable": true
+       }
+      },
+      {
+       "code": "priority",
+       "type": "enum",
+       "label": {
+        "zh-TW": "優先度",
+        "en-US": "Priority"
+       },
+       "config": {
+        "defaultValue": "opt_normal",
+        "showInList": true,
+        "isFilterable": true
+       },
+       "options": [
+        {
+         "code": "normal",
+         "label": {
+          "zh-TW": "一般",
+          "en-US": "Normal"
+         },
+         "color": null
+        },
+        {
+         "code": "urgent",
+         "label": {
+          "zh-TW": "急件",
+          "en-US": "Urgent"
+         },
+         "color": null
+        }
+       ]
+      },
+      {
+       "code": "status",
+       "type": "enum",
+       "label": {
+        "zh-TW": "狀態",
+        "en-US": "Status"
+       },
+       "config": {
+        "defaultValue": "opt_draft",
+        "required": true,
+        "showInList": true,
+        "isFilterable": true
+       },
+       "options": [
+        {
+         "code": "draft",
+         "label": {
+          "zh-TW": "草稿",
+          "en-US": "Draft"
+         },
+         "color": null
+        },
+        {
+         "code": "released",
+         "label": {
+          "zh-TW": "已發放",
+          "en-US": "Released"
+         },
+         "color": null
+        },
+        {
+         "code": "running",
+         "label": {
+          "zh-TW": "生產中",
+          "en-US": "In production"
+         },
+         "color": null
+        },
+        {
+         "code": "hold",
+         "label": {
+          "zh-TW": "暫停",
+          "en-US": "On hold"
+         },
+         "color": null
+        },
+        {
+         "code": "done",
+         "label": {
+          "zh-TW": "完工",
+          "en-US": "Done"
+         },
+         "color": null
+        },
+        {
+         "code": "cancelled",
+         "label": {
+          "zh-TW": "已取消",
+          "en-US": "Cancelled"
+         },
+         "color": null
+        }
+       ]
+      },
+      {
+       "code": "holdReason",
+       "type": "enum",
+       "label": {
+        "zh-TW": "暫停原因",
+        "en-US": "Hold reason"
+       },
+       "config": {
+        "isFilterable": true
+       },
+       "options": [
+        {
+         "code": "shortage",
+         "label": {
+          "zh-TW": "缺料",
+          "en-US": "Material shortage"
+         },
+         "color": null
+        },
+        {
+         "code": "equipment",
+         "label": {
+          "zh-TW": "設備",
+          "en-US": "Equipment"
+         },
+         "color": null
+        },
+        {
+         "code": "change",
+         "label": {
+          "zh-TW": "客戶變更",
+          "en-US": "Customer change"
+         },
+         "color": null
+        },
+        {
+         "code": "other",
+         "label": {
+          "zh-TW": "其他",
+          "en-US": "Other"
+         },
+         "color": null
+        }
+       ]
+      },
+      {
+       "code": "finalSeq",
+       "type": "integer",
+       "label": {
+        "zh-TW": "末道工序序號",
+        "en-US": "Final operation no."
+       },
+       "config": {}
+      },
+      {
+       "code": "shortClose",
+       "type": "boolean",
+       "label": {
+        "zh-TW": "短交結案",
+        "en-US": "Short close"
+       },
+       "config": {}
+      }
+     ]
+    },
+    {
+     "code": "progress",
+     "label": {
+      "zh-TW": "進度",
+      "en-US": "Progress"
+     },
+     "collapsed": false,
+     "fields": [
+      {
+       "code": "completedQty",
+       "type": "rollup",
+       "label": {
+        "zh-TW": "已完工量",
+        "en-US": "Completed qty"
+       },
+       "config": {
+        "rollup": {
+         "sourceField": "report.workOrder",
+         "function": "sum",
+         "aggregateField": "report.finalGood"
+        },
+        "showInList": true
+       }
+      },
+      {
+       "code": "remainingQty",
+       "type": "formula",
+       "label": {
+        "zh-TW": "剩餘量",
+        "en-US": "Remaining qty"
+       },
+       "config": {
+        "formula": "{qty} - {completedQty}",
+        "resultType": "number",
+        "scale": 0
+       }
+      },
+      {
+       "code": "defectTotal",
+       "type": "rollup",
+       "label": {
+        "zh-TW": "不良總數",
+        "en-US": "Total defects"
+       },
+       "config": {
+        "rollup": {
+         "sourceField": "report.workOrder",
+         "function": "sum",
+         "aggregateField": "report.defectQty"
+        }
+       }
+      },
+      {
+       "code": "shippedQty",
+       "type": "rollup",
+       "label": {
+        "zh-TW": "已出貨量",
+        "en-US": "Shipped qty"
+       },
+       "config": {
+        "rollup": {
+         "sourceField": "shipment.workOrder",
+         "function": "sum",
+         "aggregateField": "shipment.qty",
+         "condition": {
+          "field": "status",
+          "op": "eq",
+          "value": "opt_shipped"
+         }
+        }
+       }
+      },
+      {
+       "code": "liveShipments",
+       "type": "rollup",
+       "label": {
+        "zh-TW": "未取消出貨單",
+        "en-US": "Open shipments"
+       },
+       "config": {
+        "rollup": {
+         "sourceField": "shipment.workOrder",
+         "function": "count",
+         "condition": {
+          "field": "status",
+          "op": "ne",
+          "value": "opt_cancelled"
+         }
+        }
+       }
+      },
+      {
+       "code": "lastReportDate",
+       "type": "date",
+       "label": {
+        "zh-TW": "最後報工日",
+        "en-US": "Last report date"
+       },
+       "config": {
+        "readOnly": true
+       }
+      }
+     ]
+    },
+    {
+     "code": "remarks",
+     "label": {
+      "zh-TW": "備註",
+      "en-US": "Remarks"
+     },
+     "collapsed": false,
+     "fields": [
+      {
+       "code": "remark",
+       "type": "textarea",
+       "label": {
+        "zh-TW": "備註",
+        "en-US": "Remark"
+       },
+       "config": {}
+      }
+     ]
+    }
+   ],
+   "rules": [
+    {
+     "kind": "validation",
+     "targets": [
+      "field:dueDate"
+     ],
+     "active": true,
+     "options": [],
+     "message": {
+      "zh-TW": "交期不得早於預計開工",
+      "en-US": "Due date cannot be earlier than the planned start"
+     },
+     "condition": {
+      "any": [
+       {
+        "field": "dueDate",
+        "op": "isEmpty"
+       },
+       {
+        "field": "plannedStart",
+        "op": "isEmpty"
+       },
+       {
+        "field": "dueDate",
+        "op": "gte",
+        "value": {
+         "fieldRef": "plannedStart"
+        }
+       }
+      ]
+     }
+    },
+    {
+     "kind": "visibility",
+     "targets": [
+      "field:holdReason"
+     ],
+     "active": true,
+     "options": [],
+     "message": null,
+     "condition": {
+      "field": "status",
+      "op": "eq",
+      "value": "opt_hold"
+     }
+    },
+    {
+     "kind": "required",
+     "targets": [
+      "field:holdReason"
+     ],
+     "active": true,
+     "options": [],
+     "message": null,
+     "condition": {
+      "field": "status",
+      "op": "eq",
+      "value": "opt_hold"
+     }
+    },
+    {
+     "kind": "required",
+     "targets": [
+      "field:finalSeq"
+     ],
+     "active": true,
+     "options": [],
+     "message": null,
+     "condition": {
+      "field": "status",
+      "op": "in",
+      "value": [
+       "opt_released",
+       "opt_running",
+       "opt_hold",
+       "opt_done"
+      ]
+     }
+    },
+    {
+     "kind": "readOnly",
+     "targets": [
+      "field:finalSeq"
+     ],
+     "active": true,
+     "options": [],
+     "message": null,
+     "condition": {
+      "field": "status",
+      "op": "ne",
+      "value": "opt_draft"
+     }
+    },
+    {
+     "kind": "validation",
+     "targets": [
+      "field:status"
+     ],
+     "active": true,
+     "options": [],
+     "message": {
+      "zh-TW": "已完工量不足，不能完工；客戶同意短交請先勾選「短交結案」",
+      "en-US": "Completed quantity is short; tick \"Short close\" if the customer accepts a short delivery"
+     },
+     "condition": {
+      "any": [
+       {
+        "field": "status",
+        "op": "ne",
+        "value": "opt_done"
+       },
+       {
+        "field": "shortClose",
+        "op": "eq",
+        "value": true
+       },
+       {
+        "field": "completedQty",
+        "op": "gte",
+        "value": {
+         "fieldRef": "qty"
+        }
+       }
+      ]
+     }
+    },
+    {
+     "kind": "validation",
+     "targets": [
+      "field:status"
+     ],
+     "active": true,
+     "options": [],
+     "message": {
+      "zh-TW": "工令已有出貨單，請先取消出貨單才能重開",
+      "en-US": "This work order has shipments; cancel them before reopening"
+     },
+     "condition": {
+      "any": [
+       {
+        "field": "status",
+        "op": "ne",
+        "value": "opt_running"
+       },
+       {
+        "field": "liveShipments",
+        "op": "eq",
+        "value": 0
+       }
+      ]
+     }
+    }
+   ],
+   "views": [
+    {
+     "name": {
+      "zh-TW": "全部工令",
+      "en-US": "All work orders"
+     },
+     "columns": [
+      "no",
+      "itemName",
+      "qty",
+      "dueDate",
+      "status",
+      "completedQty"
+     ],
+     "filter": null,
+     "sort": [
+      {
+       "field": "dueDate",
+       "order": "asc"
+      }
+     ],
+     "isDefault": true
+    }
+   ],
+   "permissions": [
+    {
+     "group": "planner",
+     "scope": "all",
+     "privileges": {
+      "read": true,
+      "add": true,
+      "edit": true,
+      "delete": true,
+      "printExport": true,
+      "pricing": false,
+      "approve": false
+     }
+    },
+    {
+     "group": "floor",
+     "scope": "all",
+     "privileges": {
+      "read": true,
+      "add": false,
+      "edit": false,
+      "delete": false,
+      "printExport": false,
+      "pricing": false,
+      "approve": false
+     }
+    },
+    {
+     "group": "sales",
+     "scope": "all",
+     "privileges": {
+      "read": true,
+      "add": false,
+      "edit": false,
+      "delete": false,
+      "printExport": false,
+      "pricing": false,
+      "approve": false
+     }
+    },
+    {
+     "group": "salesManager",
+     "scope": "all",
+     "privileges": {
+      "read": true,
+      "add": false,
+      "edit": false,
+      "delete": false,
+      "printExport": false,
+      "pricing": false,
+      "approve": false
+     }
+    },
+    {
+     "group": "qa",
+     "scope": "all",
+     "privileges": {
+      "read": true,
+      "add": false,
+      "edit": false,
+      "delete": false,
+      "printExport": false,
+      "pricing": false,
+      "approve": false
+     }
+    },
+    {
+     "group": "maint",
+     "scope": "all",
+     "privileges": {
+      "read": true,
+      "add": false,
+      "edit": false,
+      "delete": false,
+      "printExport": false,
+      "pricing": false,
+      "approve": false
+     }
+    }
+   ]
+  },
+  {
+   "code": "wo-op",
+   "key": "mes-wo-op",
+   "name": {
+    "zh-TW": "製程",
+    "en-US": "Operations"
+   },
+   "icon": null,
+   "section": null,
+   "kind": "standalone",
+   "hostEntityKey": null,
+   "titleField": "seq",
+   "blocks": [
+    {
+     "code": "main",
+     "label": {
+      "zh-TW": "基本資料",
+      "en-US": "Basic information"
+     },
+     "collapsed": false,
+     "fields": [
+      {
+       "code": "workorder",
+       "type": "reference",
+       "label": {
+        "zh-TW": "工令",
+        "en-US": "Work order"
+       },
+       "config": {
+        "refTarget": {
+         "kind": "module",
+         "key": "workorder"
+        },
+        "relation": "detail"
+       }
+      },
+      {
+       "code": "seq",
+       "type": "autonumber",
+       "label": {
+        "zh-TW": "工序序號",
+        "en-US": "Operation no."
+       },
+       "config": {
+        "format": "{0}",
+        "scope": "parent"
+       }
+      },
+      {
+       "code": "process",
+       "type": "enum",
+       "label": {
+        "zh-TW": "工序",
+        "en-US": "Process"
+       },
+       "config": {
+        "required": true
+       },
+       "options": [
+        {
+         "code": "material",
+         "label": {
+          "zh-TW": "備料",
+          "en-US": "Material prep"
+         },
+         "color": null
+        },
+        {
+         "code": "rough",
+         "label": {
+          "zh-TW": "粗加工",
+          "en-US": "Rough machining"
+         },
+         "color": null
+        },
+        {
+         "code": "cnc",
+         "label": {
+          "zh-TW": "精加工",
+          "en-US": "CNC finishing"
+         },
+         "color": null
+        },
+        {
+         "code": "edm",
+         "label": {
+          "zh-TW": "放電",
+          "en-US": "EDM"
+         },
+         "color": null
+        },
+        {
+         "code": "wire",
+         "label": {
+          "zh-TW": "線割",
+          "en-US": "Wire cutting"
+         },
+         "color": null
+        },
+        {
+         "code": "heat",
+         "label": {
+          "zh-TW": "熱處理",
+          "en-US": "Heat treatment"
+         },
+         "color": null
+        },
+        {
+         "code": "polish",
+         "label": {
+          "zh-TW": "拋光",
+          "en-US": "Polishing"
+         },
+         "color": null
+        },
+        {
+         "code": "assemble",
+         "label": {
+          "zh-TW": "組裝",
+          "en-US": "Assembly"
+         },
+         "color": null
+        },
+        {
+         "code": "trial",
+         "label": {
+          "zh-TW": "試模",
+          "en-US": "Trial run"
+         },
+         "color": null
+        }
+       ]
+      },
+      {
+       "code": "workstation",
+       "type": "text",
+       "label": {
+        "zh-TW": "工作站",
+        "en-US": "Workstation"
+       },
+       "config": {}
+      },
+      {
+       "code": "plannedHours",
+       "type": "decimal",
+       "label": {
+        "zh-TW": "預計工時",
+        "en-US": "Planned hours"
+       },
+       "config": {
+        "scale": 1
+       }
+      },
+      {
+       "code": "plannedStart",
+       "type": "date",
+       "label": {
+        "zh-TW": "預計開始",
+        "en-US": "Planned start"
+       },
+       "config": {}
+      },
+      {
+       "code": "plannedEnd",
+       "type": "date",
+       "label": {
+        "zh-TW": "預計完成",
+        "en-US": "Planned end"
+       },
+       "config": {}
+      }
+     ]
+    }
+   ],
+   "rules": [
+    {
+     "kind": "validation",
+     "targets": [
+      "field:plannedEnd"
+     ],
+     "active": true,
+     "options": [],
+     "message": {
+      "zh-TW": "預計完成不得早於預計開始",
+      "en-US": "Planned end cannot be earlier than the planned start"
+     },
+     "condition": {
+      "any": [
+       {
+        "field": "plannedEnd",
+        "op": "isEmpty"
+       },
+       {
+        "field": "plannedStart",
+        "op": "isEmpty"
+       },
+       {
+        "field": "plannedEnd",
+        "op": "gte",
+        "value": {
+         "fieldRef": "plannedStart"
+        }
+       }
+      ]
+     }
+    }
+   ],
+   "views": [],
+   "permissions": []
+  },
+  {
+   "code": "report",
+   "key": "mes-report",
+   "name": {
+    "zh-TW": "報工",
+    "en-US": "Work reports"
+   },
+   "icon": "assignment_turned_in",
+   "section": "生產",
+   "kind": "standalone",
+   "hostEntityKey": null,
+   "titleField": "no",
+   "blocks": [
+    {
+     "code": "main",
+     "label": {
+      "zh-TW": "基本資料",
+      "en-US": "Basic information"
+     },
+     "collapsed": false,
+     "fields": [
+      {
+       "code": "no",
+       "type": "autonumber",
+       "label": {
+        "zh-TW": "報工單號",
+        "en-US": "Report no."
+       },
+       "config": {
+        "format": "RP-{yyyyMM}-{0000}",
+        "showInList": true
+       }
+      },
+      {
+       "code": "workOrder",
+       "type": "reference",
+       "label": {
+        "zh-TW": "工令",
+        "en-US": "Work order"
+       },
+       "config": {
+        "refTarget": {
+         "kind": "module",
+         "key": "workorder"
+        },
+        "required": true,
+        "showInList": true,
+        "isFilterable": true,
+        "fill": {
+         "mode": "lock",
+         "map": [
+          {
+           "from": "workorder.finalSeq",
+           "to": "finalSeq"
+          }
+         ]
+        }
+       }
+      },
+      {
+       "code": "opSeq",
+       "type": "integer",
+       "label": {
+        "zh-TW": "工序序號",
+        "en-US": "Operation no."
+       },
+       "config": {
+        "required": true,
+        "showInList": true,
+        "isFilterable": true
+       }
+      },
+      {
+       "code": "process",
+       "type": "enum",
+       "label": {
+        "zh-TW": "工序",
+        "en-US": "Process"
+       },
+       "config": {
+        "required": true,
+        "showInList": true,
+        "isFilterable": true
+       },
+       "options": [
+        {
+         "code": "material",
+         "label": {
+          "zh-TW": "備料",
+          "en-US": "Material prep"
+         },
+         "color": null
+        },
+        {
+         "code": "rough",
+         "label": {
+          "zh-TW": "粗加工",
+          "en-US": "Rough machining"
+         },
+         "color": null
+        },
+        {
+         "code": "cnc",
+         "label": {
+          "zh-TW": "精加工",
+          "en-US": "CNC finishing"
+         },
+         "color": null
+        },
+        {
+         "code": "edm",
+         "label": {
+          "zh-TW": "放電",
+          "en-US": "EDM"
+         },
+         "color": null
+        },
+        {
+         "code": "wire",
+         "label": {
+          "zh-TW": "線割",
+          "en-US": "Wire cutting"
+         },
+         "color": null
+        },
+        {
+         "code": "heat",
+         "label": {
+          "zh-TW": "熱處理",
+          "en-US": "Heat treatment"
+         },
+         "color": null
+        },
+        {
+         "code": "polish",
+         "label": {
+          "zh-TW": "拋光",
+          "en-US": "Polishing"
+         },
+         "color": null
+        },
+        {
+         "code": "assemble",
+         "label": {
+          "zh-TW": "組裝",
+          "en-US": "Assembly"
+         },
+         "color": null
+        },
+        {
+         "code": "trial",
+         "label": {
+          "zh-TW": "試模",
+          "en-US": "Trial run"
+         },
+         "color": null
+        }
+       ]
+      },
+      {
+       "code": "reportDate",
+       "type": "date",
+       "label": {
+        "zh-TW": "報工日期",
+        "en-US": "Report date"
+       },
+       "config": {
+        "defaultToday": true,
+        "required": true,
+        "showInList": true,
+        "isFilterable": true,
+        "isSortable": true
+       }
+      },
+      {
+       "code": "worker",
+       "type": "user",
+       "label": {
+        "zh-TW": "報工人員",
+        "en-US": "Worker"
+       },
+       "config": {
+        "isFilterable": true
+       }
+      },
+      {
+       "code": "finalSeq",
+       "type": "integer",
+       "label": {
+        "zh-TW": "末道工序序號",
+        "en-US": "Final operation no."
+       },
+       "config": {
+        "readOnly": true
+       }
+      }
+     ]
+    },
+    {
+     "code": "output",
+     "label": {
+      "zh-TW": "產出",
+      "en-US": "Output"
+     },
+     "collapsed": false,
+     "fields": [
+      {
+       "code": "goodQty",
+       "type": "integer",
+       "label": {
+        "zh-TW": "良品數",
+        "en-US": "Good qty"
+       },
+       "config": {
+        "required": true,
+        "showInList": true,
+        "isFilterable": true
+       }
+      },
+      {
+       "code": "defectQty",
+       "type": "integer",
+       "label": {
+        "zh-TW": "不良數",
+        "en-US": "Defect qty"
+       },
+       "config": {
+        "defaultValue": 0,
+        "showInList": true,
+        "isFilterable": true
+       }
+      },
+      {
+       "code": "totalQty",
+       "type": "formula",
+       "label": {
+        "zh-TW": "合計數",
+        "en-US": "Total qty"
+       },
+       "config": {
+        "formula": "{goodQty} + {defectQty}",
+        "resultType": "number",
+        "scale": 0
+       }
+      },
+      {
+       "code": "finalGood",
+       "type": "formula",
+       "label": {
+        "zh-TW": "末道良品數",
+        "en-US": "Final-operation good qty"
+       },
+       "config": {
+        "formula": "IF({opSeq} = {finalSeq}, {goodQty}, 0)",
+        "resultType": "number",
+        "scale": 0
+       }
+      },
+      {
+       "code": "defectReason",
+       "type": "enum",
+       "label": {
+        "zh-TW": "不良原因",
+        "en-US": "Defect reason"
+       },
+       "config": {
+        "isFilterable": true
+       },
+       "options": [
+        {
+         "code": "dimension",
+         "label": {
+          "zh-TW": "尺寸",
+          "en-US": "Dimension"
+         },
+         "color": null
+        },
+        {
+         "code": "scratch",
+         "label": {
+          "zh-TW": "刮傷",
+          "en-US": "Scratch"
+         },
+         "color": null
+        },
+        {
+         "code": "burr",
+         "label": {
+          "zh-TW": "毛邊",
+          "en-US": "Burr"
+         },
+         "color": null
+        },
+        {
+         "code": "crack",
+         "label": {
+          "zh-TW": "裂紋",
+          "en-US": "Crack"
+         },
+         "color": null
+        },
+        {
+         "code": "bad-material",
+         "label": {
+          "zh-TW": "材料",
+          "en-US": "Material"
+         },
+         "color": null
+        },
+        {
+         "code": "other",
+         "label": {
+          "zh-TW": "其他",
+          "en-US": "Other"
+         },
+         "color": null
+        }
+       ]
+      },
+      {
+       "code": "hours",
+       "type": "decimal",
+       "label": {
+        "zh-TW": "工時",
+        "en-US": "Hours"
+       },
+       "config": {
+        "scale": 1
+       }
+      },
+      {
+       "code": "remark",
+       "type": "textarea",
+       "label": {
+        "zh-TW": "備註",
+        "en-US": "Remark"
+       },
+       "config": {}
+      },
+      {
+       "code": "reverses",
+       "type": "reference",
+       "label": {
+        "zh-TW": "沖銷對象",
+        "en-US": "Reverses"
+       },
+       "config": {
+        "refTarget": {
+         "kind": "module",
+         "key": "report"
+        },
+        "readOnly": true
+       }
+      }
+     ]
+    }
+   ],
+   "rules": [
+    {
+     "kind": "visibility",
+     "targets": [
+      "field:defectReason"
+     ],
+     "active": true,
+     "options": [],
+     "message": null,
+     "condition": {
+      "field": "defectQty",
+      "op": "gt",
+      "value": 0
+     }
+    },
+    {
+     "kind": "required",
+     "targets": [
+      "field:defectReason"
+     ],
+     "active": true,
+     "options": [],
+     "message": null,
+     "condition": {
+      "field": "defectQty",
+      "op": "gt",
+      "value": 0
+     }
+    }
+   ],
+   "views": [
+    {
+     "name": {
+      "zh-TW": "全部報工",
+      "en-US": "All reports"
+     },
+     "columns": [
+      "no",
+      "workOrder",
+      "opSeq",
+      "process",
+      "goodQty",
+      "defectQty",
+      "reportDate"
+     ],
+     "filter": null,
+     "sort": [
+      {
+       "field": "reportDate",
+       "order": "desc"
+      }
+     ],
+     "isDefault": true
+    }
+   ],
+   "permissions": [
+    {
+     "group": "planner",
+     "scope": "all",
+     "privileges": {
+      "read": true,
+      "add": true,
+      "edit": false,
+      "delete": false,
+      "printExport": true,
+      "pricing": false,
+      "approve": false
+     }
+    },
+    {
+     "group": "floor",
+     "scope": "group",
+     "privileges": {
+      "read": true,
+      "add": true,
+      "edit": false,
+      "delete": false,
+      "printExport": false,
+      "pricing": false,
+      "approve": false
+     }
+    },
+    {
+     "group": "sales",
+     "scope": "all",
+     "privileges": {
+      "read": true,
+      "add": false,
+      "edit": false,
+      "delete": false,
+      "printExport": false,
+      "pricing": false,
+      "approve": false
+     }
+    },
+    {
+     "group": "salesManager",
+     "scope": "all",
+     "privileges": {
+      "read": true,
+      "add": false,
+      "edit": false,
+      "delete": false,
+      "printExport": false,
+      "pricing": false,
+      "approve": false
+     }
+    },
+    {
+     "group": "qa",
+     "scope": "all",
+     "privileges": {
+      "read": true,
+      "add": false,
+      "edit": false,
+      "delete": false,
+      "printExport": false,
+      "pricing": false,
+      "approve": false
+     }
+    }
+   ]
+  },
+  {
+   "code": "shipment",
+   "key": "mes-shipment",
+   "name": {
+    "zh-TW": "出貨單",
+    "en-US": "Shipments"
+   },
+   "icon": "local_shipping",
+   "section": "生產",
+   "kind": "standalone",
+   "hostEntityKey": null,
+   "titleField": "no",
+   "blocks": [
+    {
+     "code": "main",
+     "label": {
+      "zh-TW": "基本資料",
+      "en-US": "Basic information"
+     },
+     "collapsed": false,
+     "fields": [
+      {
+       "code": "no",
+       "type": "autonumber",
+       "label": {
+        "zh-TW": "出貨單號",
+        "en-US": "Shipment no."
+       },
+       "config": {
+        "format": "SP-{yyyyMM}-{0000}",
+        "showInList": true
+       }
+      },
+      {
+       "code": "workOrder",
+       "type": "reference",
+       "label": {
+        "zh-TW": "工令",
+        "en-US": "Work order"
+       },
+       "config": {
+        "refTarget": {
+         "kind": "module",
+         "key": "workorder"
+        },
+        "required": true,
+        "showInList": true,
+        "isFilterable": true,
+        "fill": {
+         "mode": "lock",
+         "map": [
+          {
+           "from": "workorder.completedQty",
+           "to": "doneQty"
+          }
+         ]
+        }
+       }
+      },
+      {
+       "code": "doneQty",
+       "type": "integer",
+       "label": {
+        "zh-TW": "工令完工量",
+        "en-US": "Completed qty"
+       },
+       "config": {
+        "readOnly": true
+       }
+      },
+      {
+       "code": "customer",
+       "type": "reference",
+       "label": {
+        "zh-TW": "客戶",
+        "en-US": "Customer"
+       },
+       "config": {
+        "refTarget": {
+         "kind": "entity",
+         "key": "sales.customer"
+        },
+        "required": true,
+        "showInList": true,
+        "isFilterable": true
+       }
+      },
+      {
+       "code": "shipDate",
+       "type": "date",
+       "label": {
+        "zh-TW": "出貨日期",
+        "en-US": "Ship date"
+       },
+       "config": {
+        "defaultToday": true,
+        "required": true,
+        "showInList": true,
+        "isFilterable": true,
+        "isSortable": true
+       }
+      },
+      {
+       "code": "qty",
+       "type": "integer",
+       "label": {
+        "zh-TW": "出貨數量",
+        "en-US": "Quantity"
+       },
+       "config": {
+        "required": true,
+        "showInList": true
+       }
+      },
+      {
+       "code": "carrier",
+       "type": "text",
+       "label": {
+        "zh-TW": "運送方式",
+        "en-US": "Carrier"
+       },
+       "config": {}
+      },
+      {
+       "code": "status",
+       "type": "enum",
+       "label": {
+        "zh-TW": "狀態",
+        "en-US": "Status"
+       },
+       "config": {
+        "defaultValue": "opt_draft",
+        "required": true,
+        "showInList": true,
+        "isFilterable": true
+       },
+       "options": [
+        {
+         "code": "draft",
+         "label": {
+          "zh-TW": "草稿",
+          "en-US": "Draft"
+         },
+         "color": null
+        },
+        {
+         "code": "shipped",
+         "label": {
+          "zh-TW": "已出貨",
+          "en-US": "Shipped"
+         },
+         "color": null
+        },
+        {
+         "code": "cancelled",
+         "label": {
+          "zh-TW": "已取消",
+          "en-US": "Cancelled"
+         },
+         "color": null
+        }
+       ]
+      },
+      {
+       "code": "remark",
+       "type": "textarea",
+       "label": {
+        "zh-TW": "備註",
+        "en-US": "Remark"
+       },
+       "config": {}
+      }
+     ]
+    }
+   ],
+   "rules": [
+    {
+     "kind": "validation",
+     "targets": [
+      "field:qty"
+     ],
+     "active": true,
+     "options": [],
+     "message": {
+      "zh-TW": "出貨數量必須大於 0",
+      "en-US": "Quantity must be greater than 0"
+     },
+     "condition": {
+      "field": "qty",
+      "op": "gt",
+      "value": 0
+     }
+    }
+   ],
+   "views": [
+    {
+     "name": {
+      "zh-TW": "全部出貨單",
+      "en-US": "All shipments"
+     },
+     "columns": [
+      "no",
+      "workOrder",
+      "customer",
+      "qty",
+      "shipDate",
+      "status"
+     ],
+     "filter": null,
+     "sort": [
+      {
+       "field": "shipDate",
+       "order": "desc"
+      }
+     ],
+     "isDefault": true
+    }
+   ],
+   "permissions": [
+    {
+     "group": "planner",
+     "scope": "all",
+     "privileges": {
+      "read": true,
+      "add": true,
+      "edit": true,
+      "delete": true,
+      "printExport": true,
+      "pricing": false,
+      "approve": false
+     }
+    },
+    {
+     "group": "sales",
+     "scope": "all",
+     "privileges": {
+      "read": true,
+      "add": true,
+      "edit": true,
+      "delete": false,
+      "printExport": false,
+      "pricing": false,
+      "approve": false
+     }
+    },
+    {
+     "group": "salesManager",
+     "scope": "all",
+     "privileges": {
+      "read": true,
+      "add": false,
+      "edit": false,
+      "delete": false,
+      "printExport": false,
+      "pricing": false,
+      "approve": false
+     }
+    },
+    {
+     "group": "floor",
+     "scope": "all",
+     "privileges": {
+      "read": true,
+      "add": false,
+      "edit": false,
+      "delete": false,
+      "printExport": false,
+      "pricing": false,
+      "approve": false
+     }
+    }
+   ]
+  },
+  {
+   "code": "repair",
+   "key": "mes-repair",
+   "name": {
+    "zh-TW": "故障報修",
+    "en-US": "Repair request"
+   },
+   "icon": "build",
+   "section": "設備",
+   "kind": "standalone",
+   "hostEntityKey": null,
+   "titleField": "no",
+   "blocks": [
+    {
+     "code": "main",
+     "label": {
+      "zh-TW": "報修資料",
+      "en-US": "Request"
+     },
+     "collapsed": false,
+     "fields": [
+      {
+       "code": "no",
+       "type": "autonumber",
+       "label": {
+        "zh-TW": "報修單號",
+        "en-US": "Request no."
+       },
+       "config": {
+        "format": "REP-{yyyyMM}-{0000}",
+        "showInList": true,
+        "isSortable": true
+       }
+      },
+      {
+       "code": "mold",
+       "type": "reference",
+       "label": {
+        "zh-TW": "模具",
+        "en-US": "Mold"
+       },
+       "config": {
+        "refTarget": {
+         "kind": "entity",
+         "key": "design.mold"
+        },
+        "required": true,
+        "showInList": true,
+        "isFilterable": true
+       }
+      },
+      {
+       "code": "requester",
+       "type": "user",
+       "label": {
+        "zh-TW": "申請人",
+        "en-US": "Requester"
+       },
+       "config": {
+        "required": true,
+        "showInList": true
+       }
+      },
+      {
+       "code": "reportDate",
+       "type": "date",
+       "label": {
+        "zh-TW": "報修日期",
+        "en-US": "Report date"
+       },
+       "config": {
+        "defaultToday": true,
+        "required": true,
+        "showInList": true,
+        "isFilterable": true,
+        "isSortable": true
+       }
+      },
+      {
+       "code": "occurredAt",
+       "type": "datetime",
+       "label": {
+        "zh-TW": "故障發生時間",
+        "en-US": "Occurred at"
+       }
+      },
+      {
+       "code": "urgent",
+       "type": "boolean",
+       "label": {
+        "zh-TW": "緊急",
+        "en-US": "Urgent"
+       },
+       "config": {
+        "showInList": true,
+        "isFilterable": true
+       }
+      },
+      {
+       "code": "category",
+       "type": "enum",
+       "label": {
+        "zh-TW": "故障類別",
+        "en-US": "Fault category"
+       },
+       "options": [
+        {
+         "code": "leak",
+         "label": {
+          "zh-TW": "漏水",
+          "en-US": "Leak"
+         },
+         "color": null
+        },
+        {
+         "code": "crack",
+         "label": {
+          "zh-TW": "裂模",
+          "en-US": "Crack"
+         },
+         "color": null
+        },
+        {
+         "code": "wear",
+         "label": {
+          "zh-TW": "磨耗",
+          "en-US": "Wear"
+         },
+         "color": null
+        },
+        {
+         "code": "stuck",
+         "label": {
+          "zh-TW": "卡模",
+          "en-US": "Stuck"
+         },
+         "color": null
+        },
+        {
+         "code": "other",
+         "label": {
+          "zh-TW": "其他",
+          "en-US": "Other"
+         },
+         "color": null
+        }
+       ],
+       "config": {
+        "isFilterable": true
+       }
+      },
+      {
+       "code": "otherNote",
+       "type": "text",
+       "label": {
+        "zh-TW": "其他說明",
+        "en-US": "Other details"
+       }
+      },
+      {
+       "code": "status",
+       "type": "enum",
+       "label": {
+        "zh-TW": "狀態",
+        "en-US": "Status"
+       },
+       "options": [
+        {
+         "code": "pending",
+         "label": {
+          "zh-TW": "待處理",
+          "en-US": "Pending"
+         },
+         "color": "#9e9e9e"
+        },
+        {
+         "code": "working",
+         "label": {
+          "zh-TW": "處理中",
+          "en-US": "In progress"
+         },
+         "color": "#1976d2"
+        },
+        {
+         "code": "verify",
+         "label": {
+          "zh-TW": "待驗收",
+          "en-US": "To verify"
+         },
+         "color": "#f2c037"
+        },
+        {
+         "code": "closed",
+         "label": {
+          "zh-TW": "結案",
+          "en-US": "Closed"
+         },
+         "color": "#21ba45"
+        }
+       ],
+       "config": {
+        "defaultValue": "opt_pending",
+        "required": true,
+        "showInList": true,
+        "isFilterable": true
+       }
+      },
+      {
+       "code": "description",
+       "type": "textarea",
+       "label": {
+        "zh-TW": "故障說明",
+        "en-US": "Description"
+       },
+       "config": {
+        "required": true
+       }
+      },
+      {
+       "code": "relatedRepair",
+       "type": "reference",
+       "label": {
+        "zh-TW": "關聯報修單",
+        "en-US": "Related request"
+       },
+       "config": {
+        "refTarget": {
+         "kind": "module",
+         "key": "repair"
+        },
+        "onDelete": "setNull"
+       }
+      }
+     ]
+    },
+    {
+     "code": "handling",
+     "label": {
+      "zh-TW": "處理",
+      "en-US": "Handling"
+     },
+     "collapsed": false,
+     "fields": [
+      {
+       "code": "handler",
+       "type": "user",
+       "label": {
+        "zh-TW": "處理人",
+        "en-US": "Handler"
+       },
+       "config": {
+        "showInList": true,
+        "isFilterable": true
+       }
+      },
+      {
+       "code": "resolution",
+       "type": "textarea",
+       "label": {
+        "zh-TW": "處理說明",
+        "en-US": "Resolution"
+       }
+      },
+      {
+       "code": "finishDate",
+       "type": "date",
+       "label": {
+        "zh-TW": "完成日期",
+        "en-US": "Finish date"
+       },
+       "config": {
+        "showInList": true,
+        "isFilterable": true,
+        "isSortable": true
+       }
+      },
+      {
+       "code": "downtime",
+       "type": "decimal",
+       "label": {
+        "zh-TW": "停機時數",
+        "en-US": "Downtime (hours)"
+       },
+       "config": {
+        "scale": 1
+       }
+      }
+     ]
+    }
+   ],
+   "rules": [
+    {
+     "kind": "visibility",
+     "targets": [
+      "field:otherNote"
+     ],
+     "active": true,
+     "options": [],
+     "message": null,
+     "condition": {
+      "field": "category",
+      "op": "eq",
+      "value": "opt_other"
+     }
+    },
+    {
+     "kind": "required",
+     "targets": [
+      "field:resolution",
+      "field:finishDate"
+     ],
+     "active": true,
+     "options": [],
+     "message": null,
+     "condition": {
+      "field": "status",
+      "op": "eq",
+      "value": "opt_closed"
+     }
+    },
+    {
+     "kind": "readOnly",
+     "targets": [
+      "*"
+     ],
+     "active": true,
+     "options": [],
+     "message": null,
+     "condition": {
+      "field": "status",
+      "op": "eq",
+      "value": "opt_closed"
+     }
+    },
+    {
+     "kind": "validation",
+     "targets": [
+      "field:finishDate"
+     ],
+     "active": true,
+     "options": [],
+     "message": {
+      "zh-TW": "完成日期不得早於報修日期",
+      "en-US": "Finish date cannot be earlier than the report date"
+     },
+     "condition": {
+      "any": [
+       {
+        "field": "finishDate",
+        "op": "isEmpty"
+       },
+       {
+        "field": "finishDate",
+        "op": "gte",
+        "value": {
+         "fieldRef": "reportDate"
+        }
+       }
+      ]
+     }
+    }
+   ],
+   "views": [
+    {
+     "name": {
+      "zh-TW": "未結案報修",
+      "en-US": "Open requests"
+     },
+     "columns": [
+      "no",
+      "mold",
+      "reportDate",
+      "category",
+      "status",
+      "handler"
+     ],
+     "filter": {
+      "field": "status",
+      "op": "in",
+      "value": [
+       "opt_pending",
+       "opt_working",
+       "opt_verify"
+      ]
+     },
+     "sort": [
+      {
+       "field": "reportDate",
+       "order": "asc"
+      }
+     ],
+     "isDefault": true
+    },
+    {
+     "name": {
+      "zh-TW": "近 30 天結案",
+      "en-US": "Closed in the last 30 days"
+     },
+     "columns": [
+      "no",
+      "mold",
+      "reportDate",
+      "category",
+      "status",
+      "handler",
+      "finishDate"
+     ],
+     "filter": {
+      "all": [
+       {
+        "field": "status",
+        "op": "eq",
+        "value": "opt_closed"
+       },
+       {
+        "field": "finishDate",
+        "op": "withinLastDays",
+        "value": 30
+       }
+      ]
+     },
+     "sort": [
+      {
+       "field": "finishDate",
+       "order": "desc"
+      }
+     ],
+     "isDefault": false
+    }
+   ],
+   "permissions": [
+    {
+     "group": "floor",
+     "scope": "group",
+     "privileges": {
+      "read": true,
+      "add": true,
+      "edit": true,
+      "delete": false,
+      "printExport": false,
+      "pricing": false,
+      "approve": false
+     }
+    },
+    {
+     "group": "maint",
+     "scope": "all",
+     "privileges": {
+      "read": true,
+      "add": true,
+      "edit": true,
+      "delete": true,
+      "printExport": true,
+      "pricing": false,
+      "approve": false
+     }
+    }
+   ]
+  },
+  {
+   "code": "mold",
+   "key": "mes-mold-info",
+   "name": {
+    "zh-TW": "模具資料",
+    "en-US": "Mold information"
+   },
+   "icon": "precision_manufacturing",
+   "section": "設備",
+   "kind": "extension",
+   "hostEntityKey": "design.mold",
+   "titleField": null,
+   "blocks": [
+    {
+     "code": "main",
+     "label": {
+      "zh-TW": "保養資訊",
+      "en-US": "Care information"
+     },
+     "collapsed": false,
+     "fields": [
+      {
+       "code": "lastCareDate",
+       "type": "date",
+       "label": {
+        "zh-TW": "上次保養日",
+        "en-US": "Last care date"
+       },
+       "config": {
+        "showInList": true,
+        "isFilterable": true
+       }
+      },
+      {
+       "code": "cycleDays",
+       "type": "integer",
+       "label": {
+        "zh-TW": "保養週期（天）",
+        "en-US": "Care cycle (days)"
+       },
+       "config": {
+        "required": true
+       }
+      },
+      {
+       "code": "shotCount",
+       "type": "integer",
+       "label": {
+        "zh-TW": "累計射出數",
+        "en-US": "Total shots"
+       },
+       "config": {
+        "showInList": true,
+        "isFilterable": true
+       }
+      }
+     ]
+    }
+   ],
+   "rules": [],
+   "views": [],
+   "permissions": [
+    {
+     "group": "maint",
+     "scope": "all",
+     "privileges": {
+      "read": true,
+      "add": true,
+      "edit": true,
+      "delete": false,
+      "printExport": false,
+      "pricing": false,
+      "approve": false
+     }
+    },
+    {
+     "group": "floor",
+     "scope": "all",
+     "privileges": {
+      "read": true,
+      "add": false,
+      "edit": false,
+      "delete": false,
+      "printExport": false,
+      "pricing": false,
+      "approve": false
+     }
+    }
+   ]
+  },
+  {
+   "code": "customer",
+   "key": "mes-customer-info",
+   "name": {
+    "zh-TW": "客戶資料",
+    "en-US": "Customer information"
+   },
+   "icon": "business",
+   "section": "業務",
+   "kind": "extension",
+   "hostEntityKey": "sales.customer",
+   "titleField": null,
+   "blocks": [
+    {
+     "code": "main",
+     "label": {
+      "zh-TW": "往來資訊",
+      "en-US": "Account information"
+     },
+     "collapsed": false,
+     "fields": [
+      {
+       "code": "creditLevel",
+       "type": "enum",
+       "label": {
+        "zh-TW": "信用等級",
+        "en-US": "Credit level"
+       },
+       "options": [
+        {
+         "code": "a",
+         "label": {
+          "zh-TW": "A",
+          "en-US": "A"
+         },
+         "color": "#21ba45"
+        },
+        {
+         "code": "b",
+         "label": {
+          "zh-TW": "B",
+          "en-US": "B"
+         },
+         "color": "#f2c037"
+        },
+        {
+         "code": "c",
+         "label": {
+          "zh-TW": "C",
+          "en-US": "C"
+         },
+         "color": "#c10015"
+        }
+       ],
+       "config": {
+        "showInList": true,
+        "isFilterable": true
+       }
+      },
+      {
+       "code": "paymentTerms",
+       "type": "text",
+       "label": {
+        "zh-TW": "付款條件",
+        "en-US": "Payment terms"
+       }
+      },
+      {
+       "code": "accountRep",
+       "type": "user",
+       "label": {
+        "zh-TW": "業務窗口",
+        "en-US": "Account rep"
+       },
+       "config": {
+        "showInList": true,
+        "isFilterable": true
+       }
+      },
+      {
+       "code": "email",
+       "type": "email",
+       "label": {
+        "zh-TW": "聯絡 Email",
+        "en-US": "Contact email"
+       }
+      },
+      {
+       "code": "phone",
+       "type": "phone",
+       "label": {
+        "zh-TW": "聯絡電話",
+        "en-US": "Contact phone"
+       }
+      },
+      {
+       "code": "website",
+       "type": "url",
+       "label": {
+        "zh-TW": "網站",
+        "en-US": "Website"
+       }
+      }
+     ]
+    }
+   ],
+   "rules": [],
+   "views": [],
+   "permissions": [
+    {
+     "group": "sales",
+     "scope": "all",
+     "privileges": {
+      "read": true,
+      "add": false,
+      "edit": true,
+      "delete": false,
+      "printExport": false,
+      "pricing": false,
+      "approve": false
+     }
+    },
+    {
+     "group": "salesManager",
+     "scope": "all",
+     "privileges": {
+      "read": true,
+      "add": true,
+      "edit": true,
+      "delete": true,
+      "printExport": false,
+      "pricing": false,
+      "approve": false
+     }
+    }
+   ]
+  },
+  {
+   "code": "care",
+   "key": "mes-mold-care",
+   "name": {
+    "zh-TW": "模具保養紀錄",
+    "en-US": "Mold care records"
+   },
+   "icon": "handyman",
+   "section": "設備",
+   "kind": "standalone",
+   "hostEntityKey": null,
+   "titleField": "no",
+   "blocks": [
+    {
+     "code": "main",
+     "label": {
+      "zh-TW": "保養",
+      "en-US": "Care"
+     },
+     "collapsed": false,
+     "fields": [
+      {
+       "code": "no",
+       "type": "autonumber",
+       "label": {
+        "zh-TW": "保養單號",
+        "en-US": "Care no."
+       },
+       "config": {
+        "format": "MC-{yyyyMM}-{0000}",
+        "showInList": true,
+        "isSortable": true
+       }
+      },
+      {
+       "code": "mold",
+       "type": "reference",
+       "label": {
+        "zh-TW": "模具",
+        "en-US": "Mold"
+       },
+       "config": {
+        "refTarget": {
+         "kind": "entity",
+         "key": "design.mold"
+        },
+        "required": true,
+        "showInList": true,
+        "isFilterable": true
+       }
+      },
+      {
+       "code": "categories",
+       "type": "multienum",
+       "label": {
+        "zh-TW": "保養類別",
+        "en-US": "Care categories"
+       },
+       "options": [
+        {
+         "code": "clean",
+         "label": {
+          "zh-TW": "清潔",
+          "en-US": "Cleaning"
+         },
+         "color": null
+        },
+        {
+         "code": "parts",
+         "label": {
+          "zh-TW": "更換零件",
+          "en-US": "Part replacement"
+         },
+         "color": null
+        },
+        {
+         "code": "calibrate",
+         "label": {
+          "zh-TW": "校正",
+          "en-US": "Calibration"
+         },
+         "color": null
+        },
+        {
+         "code": "lubricate",
+         "label": {
+          "zh-TW": "潤滑",
+          "en-US": "Lubrication"
+         },
+         "color": null
+        },
+        {
+         "code": "polish",
+         "label": {
+          "zh-TW": "拋光",
+          "en-US": "Polishing"
+         },
+         "color": null
+        }
+       ],
+       "config": {
+        "showInList": true,
+        "isFilterable": true
+       }
+      },
+      {
+       "code": "technician",
+       "type": "user",
+       "label": {
+        "zh-TW": "保養人員",
+        "en-US": "Technician"
+       },
+       "config": {
+        "showInList": true
+       }
+      },
+      {
+       "code": "careDate",
+       "type": "date",
+       "label": {
+        "zh-TW": "保養日期",
+        "en-US": "Care date"
+       },
+       "config": {
+        "defaultToday": true,
+        "required": true,
+        "showInList": true,
+        "isSortable": true
+       }
+      },
+      {
+       "code": "startTime",
+       "type": "time",
+       "label": {
+        "zh-TW": "開始時間",
+        "en-US": "Start time"
+       }
+      },
+      {
+       "code": "cycleDays",
+       "type": "integer",
+       "label": {
+        "zh-TW": "保養週期（天）",
+        "en-US": "Care cycle (days)"
+       },
+       "config": {
+        "required": true
+       }
+      },
+      {
+       "code": "nextDate",
+       "type": "formula",
+       "label": {
+        "zh-TW": "下次保養日",
+        "en-US": "Next care date"
+       },
+       "config": {
+        "formula": "DATEADD({careDate}, {cycleDays})",
+        "resultType": "date",
+        "showInList": true
+       }
+      },
+      {
+       "code": "cost",
+       "type": "currency",
+       "label": {
+        "zh-TW": "費用",
+        "en-US": "Cost"
+       },
+       "config": {
+        "scale": 0,
+        "showInList": true
+       }
+      },
+      {
+       "code": "note",
+       "type": "textarea",
+       "label": {
+        "zh-TW": "備註",
+        "en-US": "Note"
+       }
+      }
+     ]
+    }
+   ],
+   "rules": [],
+   "views": [
+    {
+     "name": {
+      "zh-TW": "全部保養紀錄",
+      "en-US": "All care records"
+     },
+     "columns": [
+      "no",
+      "mold",
+      "careDate",
+      "categories",
+      "technician",
+      "nextDate",
+      "cost"
+     ],
+     "filter": null,
+     "sort": [
+      {
+       "field": "careDate",
+       "order": "desc"
+      }
+     ],
+     "isDefault": true
+    }
+   ],
+   "permissions": [
+    {
+     "group": "maint",
+     "scope": "all",
+     "privileges": {
+      "read": true,
+      "add": true,
+      "edit": true,
+      "delete": true,
+      "printExport": true,
+      "pricing": true,
+      "approve": false
+     }
+    },
+    {
+     "group": "floor",
+     "scope": "all",
+     "privileges": {
+      "read": true,
+      "add": false,
+      "edit": false,
+      "delete": false,
+      "printExport": false,
+      "pricing": false,
+      "approve": false
+     }
+    }
+   ]
+  },
+  {
+   "code": "part",
+   "key": "mes-mold-care-part",
+   "name": {
+    "zh-TW": "更換零件",
+    "en-US": "Replaced parts"
+   },
+   "icon": null,
+   "section": null,
+   "kind": "standalone",
+   "hostEntityKey": null,
+   "titleField": "partName",
+   "blocks": [
+    {
+     "code": "main",
+     "label": {
+      "zh-TW": "零件",
+      "en-US": "Part"
+     },
+     "collapsed": false,
+     "fields": [
+      {
+       "code": "care",
+       "type": "reference",
+       "label": {
+        "zh-TW": "保養紀錄",
+        "en-US": "Care record"
+       },
+       "config": {
+        "refTarget": {
+         "kind": "module",
+         "key": "care"
+        },
+        "relation": "lookup",
+        "onDelete": "cascade",
+        "required": true,
+        "showInList": true,
+        "isFilterable": true
+       }
+      },
+      {
+       "code": "partName",
+       "type": "text",
+       "label": {
+        "zh-TW": "零件名稱",
+        "en-US": "Part name"
+       },
+       "config": {
+        "required": true,
+        "isFilterable": true
+       }
+      },
+      {
+       "code": "qty",
+       "type": "integer",
+       "label": {
+        "zh-TW": "數量",
+        "en-US": "Quantity"
+       }
+      },
+      {
+       "code": "unitCost",
+       "type": "currency",
+       "label": {
+        "zh-TW": "單價",
+        "en-US": "Unit cost"
+       },
+       "config": {
+        "scale": 0
+       }
+      }
+     ]
+    }
+   ],
+   "rules": [],
+   "views": [],
+   "permissions": [
+    {
+     "group": "maint",
+     "scope": "all",
+     "privileges": {
+      "read": true,
+      "add": true,
+      "edit": true,
+      "delete": true,
+      "printExport": true,
+      "pricing": true,
+      "approve": false
+     }
+    },
+    {
+     "group": "floor",
+     "scope": "all",
+     "privileges": {
+      "read": true,
+      "add": false,
+      "edit": false,
+      "delete": false,
+      "printExport": false,
+      "pricing": false,
+      "approve": false
+     }
+    }
+   ]
+  },
+  {
+   "code": "quality",
+   "key": "mes-quality",
+   "name": {
+    "zh-TW": "品質異常",
+    "en-US": "Quality issue"
+   },
+   "icon": "report_problem",
+   "section": "品質",
+   "kind": "standalone",
+   "hostEntityKey": null,
+   "titleField": "no",
+   "blocks": [
+    {
+     "code": "main",
+     "label": {
+      "zh-TW": "異常",
+      "en-US": "Issue"
+     },
+     "collapsed": false,
+     "fields": [
+      {
+       "code": "no",
+       "type": "autonumber",
+       "label": {
+        "zh-TW": "異常單號",
+        "en-US": "Issue no."
+       },
+       "config": {
+        "format": "QA-{yyyyMM}-{0000}",
+        "showInList": true,
+        "isSortable": true
+       }
+      },
+      {
+       "code": "order",
+       "type": "reference",
+       "label": {
+        "zh-TW": "訂單",
+        "en-US": "Sales order"
+       },
+       "config": {
+        "refTarget": {
+         "kind": "module",
+         "key": "order"
+        },
+        "showInList": true
+       }
+      },
+      {
+       "code": "workOrder",
+       "type": "reference",
+       "label": {
+        "zh-TW": "工令",
+        "en-US": "Work order"
+       },
+       "config": {
+        "refTarget": {
+         "kind": "module",
+         "key": "workorder"
+        },
+        "isFilterable": true
+       }
+      },
+      {
+       "code": "reportDate",
+       "type": "date",
+       "label": {
+        "zh-TW": "發現日期",
+        "en-US": "Found on"
+       },
+       "config": {
+        "defaultToday": true,
+        "required": true,
+        "showInList": true,
+        "isSortable": true
+       }
+      },
+      {
+       "code": "kind",
+       "type": "enum",
+       "label": {
+        "zh-TW": "異常類型",
+        "en-US": "Issue type"
+       },
+       "options": [
+        {
+         "code": "appearance",
+         "label": {
+          "zh-TW": "外觀",
+          "en-US": "Appearance"
+         },
+         "color": null
+        },
+        {
+         "code": "dimension",
+         "label": {
+          "zh-TW": "尺寸",
+          "en-US": "Dimension"
+         },
+         "color": null
+        },
+        {
+         "code": "function",
+         "label": {
+          "zh-TW": "功能",
+          "en-US": "Function"
+         },
+         "color": null
+        }
+       ],
+       "config": {
+        "required": true,
+        "isFilterable": true
+       }
+      },
+      {
+       "code": "cause",
+       "type": "enum",
+       "label": {
+        "zh-TW": "不良原因",
+        "en-US": "Defect cause"
+       },
+       "options": [
+        {
+         "code": "scratch",
+         "label": {
+          "zh-TW": "刮傷",
+          "en-US": "Scratch"
+         },
+         "color": null
+        },
+        {
+         "code": "stain",
+         "label": {
+          "zh-TW": "髒污",
+          "en-US": "Stain"
+         },
+         "color": null
+        },
+        {
+         "code": "burr",
+         "label": {
+          "zh-TW": "毛邊",
+          "en-US": "Burr"
+         },
+         "color": null
+        },
+        {
+         "code": "oversize",
+         "label": {
+          "zh-TW": "尺寸過大",
+          "en-US": "Oversize"
+         },
+         "color": null
+        },
+        {
+         "code": "undersize",
+         "label": {
+          "zh-TW": "尺寸過小",
+          "en-US": "Undersize"
+         },
+         "color": null
+        },
+        {
+         "code": "warp",
+         "label": {
+          "zh-TW": "變形",
+          "en-US": "Warp"
+         },
+         "color": null
+        },
+        {
+         "code": "no-power",
+         "label": {
+          "zh-TW": "無法開機",
+          "en-US": "No power"
+         },
+         "color": null
+        },
+        {
+         "code": "short",
+         "label": {
+          "zh-TW": "短路",
+          "en-US": "Short circuit"
+         },
+         "color": null
+        }
+       ]
+      },
+      {
+       "code": "severity",
+       "type": "enum",
+       "label": {
+        "zh-TW": "嚴重度",
+        "en-US": "Severity"
+       },
+       "options": [
+        {
+         "code": "minor",
+         "label": {
+          "zh-TW": "輕微",
+          "en-US": "Minor"
+         },
+         "color": "#21ba45"
+        },
+        {
+         "code": "normal",
+         "label": {
+          "zh-TW": "一般",
+          "en-US": "Normal"
+         },
+         "color": "#f2c037"
+        },
+        {
+         "code": "critical",
+         "label": {
+          "zh-TW": "重大",
+          "en-US": "Critical"
+         },
+         "color": "#c10015"
+        }
+       ],
+       "config": {
+        "required": true,
+        "showInList": true,
+        "isFilterable": true
+       }
+      },
+      {
+       "code": "status",
+       "type": "enum",
+       "label": {
+        "zh-TW": "狀態",
+        "en-US": "Status"
+       },
+       "options": [
+        {
+         "code": "open",
+         "label": {
+          "zh-TW": "開立",
+          "en-US": "Open"
+         },
+         "color": null
+        },
+        {
+         "code": "handling",
+         "label": {
+          "zh-TW": "處置中",
+          "en-US": "Handling"
+         },
+         "color": null
+        },
+        {
+         "code": "closed",
+         "label": {
+          "zh-TW": "結案",
+          "en-US": "Closed"
+         },
+         "color": null
+        }
+       ],
+       "config": {
+        "defaultValue": "opt_open",
+        "required": true,
+        "showInList": true,
+        "isFilterable": true
+       }
+      }
+     ]
+    },
+    {
+     "code": "disposal",
+     "label": {
+      "zh-TW": "處置",
+      "en-US": "Disposal"
+     },
+     "collapsed": false,
+     "fields": [
+      {
+       "code": "actions",
+       "type": "multienum",
+       "label": {
+        "zh-TW": "處置方式",
+        "en-US": "Actions"
+       },
+       "options": [
+        {
+         "code": "rework",
+         "label": {
+          "zh-TW": "重工",
+          "en-US": "Rework"
+         },
+         "color": null
+        },
+        {
+         "code": "scrap",
+         "label": {
+          "zh-TW": "報廢",
+          "en-US": "Scrap"
+         },
+         "color": null
+        },
+        {
+         "code": "sort",
+         "label": {
+          "zh-TW": "篩選",
+          "en-US": "Sorting"
+         },
+         "color": null
+        },
+        {
+         "code": "concession",
+         "label": {
+          "zh-TW": "特採",
+          "en-US": "Concession"
+         },
+         "color": null
+        },
+        {
+         "code": "return",
+         "label": {
+          "zh-TW": "退貨",
+          "en-US": "Return"
+         },
+         "color": null
+        }
+       ]
+      },
+      {
+       "code": "defectRate",
+       "type": "percent",
+       "label": {
+        "zh-TW": "不良率",
+        "en-US": "Defect rate"
+       },
+       "config": {
+        "scale": 1
+       }
+      },
+      {
+       "code": "responsibleUnit",
+       "type": "text",
+       "label": {
+        "zh-TW": "責任單位",
+        "en-US": "Responsible unit"
+       }
+      }
+     ]
+    }
+   ],
+   "rules": [
+    {
+     "kind": "optionFilter",
+     "targets": [
+      "field:cause"
+     ],
+     "active": true,
+     "options": [
+      "scratch",
+      "stain",
+      "burr"
+     ],
+     "message": null,
+     "condition": {
+      "field": "kind",
+      "op": "eq",
+      "value": "opt_appearance"
+     }
+    },
+    {
+     "kind": "optionFilter",
+     "targets": [
+      "field:cause"
+     ],
+     "active": true,
+     "options": [
+      "oversize",
+      "undersize",
+      "warp"
+     ],
+     "message": null,
+     "condition": {
+      "field": "kind",
+      "op": "eq",
+      "value": "opt_dimension"
+     }
+    },
+    {
+     "kind": "optionFilter",
+     "targets": [
+      "field:cause"
+     ],
+     "active": true,
+     "options": [
+      "no-power",
+      "short"
+     ],
+     "message": null,
+     "condition": {
+      "field": "kind",
+      "op": "eq",
+      "value": "opt_function"
+     }
+    },
+    {
+     "kind": "readOnly",
+     "targets": [
+      "*"
+     ],
+     "active": true,
+     "options": [],
+     "message": null,
+     "condition": {
+      "field": "status",
+      "op": "eq",
+      "value": "opt_closed"
+     }
+    }
+   ],
+   "views": [
+    {
+     "name": {
+      "zh-TW": "全部品質異常",
+      "en-US": "All quality issues"
+     },
+     "columns": [
+      "no",
+      "order",
+      "reportDate",
+      "kind",
+      "severity",
+      "status"
+     ],
+     "filter": null,
+     "sort": [
+      {
+       "field": "reportDate",
+       "order": "desc"
+      }
+     ],
+     "isDefault": true
+    },
+    {
+     "name": {
+      "zh-TW": "未結案的重大異常",
+      "en-US": "Open critical issues"
+     },
+     "columns": [
+      "no",
+      "order",
+      "reportDate",
+      "kind",
+      "severity",
+      "status"
+     ],
+     "filter": {
+      "all": [
+       {
+        "field": "severity",
+        "op": "eq",
+        "value": "opt_critical"
+       },
+       {
+        "field": "status",
+        "op": "in",
+        "value": [
+         "opt_open",
+         "opt_handling"
+        ]
+       }
+      ]
+     },
+     "sort": [
+      {
+       "field": "reportDate",
+       "order": "asc"
+      }
+     ],
+     "isDefault": false
+    }
+   ],
+   "permissions": [
+    {
+     "group": "qa",
+     "scope": "all",
+     "privileges": {
+      "read": true,
+      "add": true,
+      "edit": true,
+      "delete": true,
+      "printExport": true,
+      "pricing": false,
+      "approve": false
+     }
+    },
+    {
+     "group": "floor",
+     "scope": "group",
+     "privileges": {
+      "read": true,
+      "add": true,
+      "edit": false,
+      "delete": false,
+      "printExport": false,
+      "pricing": false,
+      "approve": false
+     }
+    },
+    {
+     "group": "sales",
+     "scope": "all",
+     "privileges": {
+      "read": true,
+      "add": false,
+      "edit": true,
+      "delete": false,
+      "printExport": false,
+      "pricing": false,
+      "approve": false
+     }
+    },
+    {
+     "group": "salesManager",
+     "scope": "all",
+     "privileges": {
+      "read": true,
+      "add": false,
+      "edit": false,
+      "delete": false,
+      "printExport": false,
+      "pricing": false,
+      "approve": false
+     }
+    },
+    {
+     "group": "planner",
+     "scope": "all",
+     "privileges": {
+      "read": true,
+      "add": false,
+      "edit": false,
+      "delete": false,
+      "printExport": false,
+      "pricing": false,
+      "approve": false
+     }
+    }
+   ]
+  }
+ ],
+ "fieldAccess": [
+  {
+   "field": "quality.responsibleUnit",
+   "group": "sales",
+   "access": "readOnly"
+  },
+  {
+   "field": "quality.defectRate",
+   "group": "floor",
+   "access": "hidden"
+  }
+ ],
+ "optionScopes": [
+  {
+   "option": "quality.critical",
+   "groups": [
+    "qa"
+   ]
+  }
+ ],
+ "reports": [
+  {
+   "code": "mesWoStatus",
+   "name": "工令狀態分布",
+   "shareWith": [
+    "planner",
+    "floor",
+    "salesManager"
+   ],
+   "definition": {
+    "version": 1,
+    "mainModule": "workorder",
+    "child": null,
+    "columns": [],
+    "groups": [
+     {
+      "field": {
+       "source": "main",
+       "field": "workorder.status",
+       "via": null
+      },
+      "bucket": null
+     }
+    ],
+    "measures": [
+     {
+      "id": "n",
+      "kind": "countMain",
+      "field": null,
+      "condition": null
+     }
+    ],
+    "filters": [],
+    "primaryDateField": null,
+    "dateRange": null,
+    "sort": [],
+    "viz": "donut"
+   }
+  },
+  {
+   "code": "mesOutputMonthly",
+   "name": "月別完工量",
+   "shareWith": [
+    "planner",
+    "floor"
+   ],
+   "definition": {
+    "version": 1,
+    "mainModule": "report",
+    "child": null,
+    "columns": [],
+    "groups": [
+     {
+      "field": {
+       "source": "main",
+       "field": "report.reportDate",
+       "via": null
+      },
+      "bucket": "month"
+     }
+    ],
+    "measures": [
+     {
+      "id": "good",
+      "kind": "sum",
+      "field": {
+       "source": "main",
+       "field": "report.finalGood",
+       "via": null
+      },
+      "condition": null
+     }
+    ],
+    "filters": [],
+    "primaryDateField": {
+     "source": "main",
+     "field": "report.reportDate",
+     "via": null
+    },
+    "dateRange": {
+     "kind": "lastMonths",
+     "n": 6
+    },
+    "sort": [],
+    "viz": "line"
+   }
+  },
+  {
+   "code": "mesDefectReason",
+   "name": "不良原因分布",
+   "shareWith": [
+    "planner",
+    "floor",
+    "qa"
+   ],
+   "definition": {
+    "version": 1,
+    "mainModule": "report",
+    "child": null,
+    "columns": [],
+    "groups": [
+     {
+      "field": {
+       "source": "main",
+       "field": "report.defectReason",
+       "via": null
+      },
+      "bucket": null
+     }
+    ],
+    "measures": [
+     {
+      "id": "defect",
+      "kind": "sum",
+      "field": {
+       "source": "main",
+       "field": "report.defectQty",
+       "via": null
+      },
+      "condition": null
+     }
+    ],
+    "filters": [],
+    "primaryDateField": null,
+    "dateRange": null,
+    "sort": [],
+    "viz": "donut"
+   }
+  },
+  {
+   "code": "mesDefectByProcess",
+   "name": "各工序良品與不良",
+   "shareWith": [
+    "planner",
+    "floor",
+    "qa"
+   ],
+   "definition": {
+    "version": 1,
+    "mainModule": "report",
+    "child": null,
+    "columns": [],
+    "groups": [
+     {
+      "field": {
+       "source": "main",
+       "field": "report.process",
+       "via": null
+      },
+      "bucket": null
+     }
+    ],
+    "measures": [
+     {
+      "id": "good",
+      "kind": "sum",
+      "field": {
+       "source": "main",
+       "field": "report.goodQty",
+       "via": null
+      },
+      "condition": null
+     },
+     {
+      "id": "defect",
+      "kind": "sum",
+      "field": {
+       "source": "main",
+       "field": "report.defectQty",
+       "via": null
+      },
+      "condition": null
+     }
+    ],
+    "filters": [],
+    "primaryDateField": null,
+    "dateRange": null,
+    "sort": [],
+    "viz": "table"
+   }
+  },
+  {
+   "code": "mesShipMonthly",
+   "name": "月別出貨量",
+   "shareWith": [
+    "planner",
+    "floor",
+    "salesManager"
+   ],
+   "definition": {
+    "version": 1,
+    "mainModule": "shipment",
+    "child": null,
+    "columns": [],
+    "groups": [
+     {
+      "field": {
+       "source": "main",
+       "field": "shipment.shipDate",
+       "via": null
+      },
+      "bucket": "month"
+     }
+    ],
+    "measures": [
+     {
+      "id": "qty",
+      "kind": "sum",
+      "field": {
+       "source": "main",
+       "field": "shipment.qty",
+       "via": null
+      },
+      "condition": null
+     }
+    ],
+    "filters": [
+     {
+      "field": {
+       "source": "main",
+       "field": "shipment.status",
+       "via": null
+      },
+      "op": "eq",
+      "value": "opt_shipped"
+     }
+    ],
+    "primaryDateField": {
+     "source": "main",
+     "field": "shipment.shipDate",
+     "via": null
+    },
+    "dateRange": {
+     "kind": "lastMonths",
+     "n": 6
+    },
+    "sort": [],
+    "viz": "bar"
+   }
+  }
+ ],
+ "dashboards": [],
+ "workflows": [
+  {
+   "module": "quote",
+   "statusField": "status",
+   "initial": "draft",
+   "states": [
+    {
+     "option": "draft"
+    },
+    {
+     "option": "pending"
+    },
+    {
+     "option": "approved",
+     "readOnly": true
+    },
+    {
+     "option": "rejected"
+    }
+   ],
+   "transitions": [
+    {
+     "from": "draft",
+     "to": "pending",
+     "groups": [
+      "sales",
+      "salesManager"
+     ]
+    },
+    {
+     "from": "pending",
+     "to": "approved",
+     "groups": [
+      "salesManager"
+     ]
+    },
+    {
+     "from": "pending",
+     "to": "rejected",
+     "groups": [
+      "salesManager"
+     ]
+    },
+    {
+     "from": "pending",
+     "to": "draft",
+     "groups": [
+      "salesManager"
+     ]
+    },
+    {
+     "from": "rejected",
+     "to": "draft",
+     "groups": [
+      "sales",
+      "salesManager"
+     ]
+    }
+   ]
+  },
+  {
+   "module": "order",
+   "statusField": "status",
+   "initial": "draft",
+   "states": [
+    {
+     "option": "draft"
+    },
+    {
+     "option": "confirmed"
+    },
+    {
+     "option": "shipping"
+    },
+    {
+     "option": "closed",
+     "readOnly": true
+    },
+    {
+     "option": "cancel",
+     "readOnly": true
+    }
+   ],
+   "transitions": [
+    {
+     "from": "draft",
+     "to": "confirmed",
+     "groups": [
+      "sales",
+      "salesManager"
+     ]
+    },
+    {
+     "from": "confirmed",
+     "to": "shipping",
+     "groups": [
+      "sales",
+      "salesManager"
+     ]
+    },
+    {
+     "from": "shipping",
+     "to": "closed",
+     "groups": [
+      "salesManager"
+     ]
+    },
+    {
+     "from": "draft",
+     "to": "cancel",
+     "groups": [
+      "salesManager"
+     ]
+    },
+    {
+     "from": "confirmed",
+     "to": "cancel",
+     "groups": [
+      "salesManager"
+     ]
+    }
+   ]
+  },
+  {
+   "module": "workorder",
+   "statusField": "status",
+   "initial": "draft",
+   "states": [
+    {
+     "option": "draft"
+    },
+    {
+     "option": "released"
+    },
+    {
+     "option": "running"
+    },
+    {
+     "option": "hold"
+    },
+    {
+     "option": "done",
+     "readOnly": true
+    },
+    {
+     "option": "cancelled",
+     "readOnly": true
+    }
+   ],
+   "transitions": [
+    {
+     "from": "draft",
+     "to": "released",
+     "groups": [
+      "planner"
+     ]
+    },
+    {
+     "from": "released",
+     "to": "running",
+     "groups": [
+      "planner"
+     ]
+    },
+    {
+     "from": "running",
+     "to": "done",
+     "groups": [
+      "planner"
+     ]
+    },
+    {
+     "from": "draft",
+     "to": "cancelled",
+     "groups": [
+      "planner"
+     ]
+    },
+    {
+     "from": "released",
+     "to": "cancelled",
+     "groups": [
+      "planner"
+     ]
+    },
+    {
+     "from": "hold",
+     "to": "cancelled",
+     "groups": [
+      "planner"
+     ]
+    },
+    {
+     "from": "released",
+     "to": "hold",
+     "groups": [
+      "planner"
+     ]
+    },
+    {
+     "from": "running",
+     "to": "hold",
+     "groups": [
+      "planner"
+     ]
+    },
+    {
+     "from": "hold",
+     "to": "released",
+     "groups": [
+      "planner"
+     ]
+    },
+    {
+     "from": "done",
+     "to": "running",
+     "groups": [
+      "planner"
+     ]
+    }
+   ]
+  },
+  {
+   "module": "shipment",
+   "statusField": "status",
+   "initial": "draft",
+   "states": [
+    {
+     "option": "draft"
+    },
+    {
+     "option": "shipped",
+     "readOnly": true
+    },
+    {
+     "option": "cancelled",
+     "readOnly": true
+    }
+   ],
+   "transitions": [
+    {
+     "from": "draft",
+     "to": "shipped",
+     "groups": [
+      "planner",
+      "sales"
+     ]
+    },
+    {
+     "from": "shipped",
+     "to": "cancelled",
+     "groups": [
+      "planner"
+     ]
+    },
+    {
+     "from": "draft",
+     "to": "cancelled",
+     "groups": [
+      "planner",
+      "sales"
+     ]
+    }
+   ]
+  }
+ ],
+ "conversions": [
+  {
+   "code": "mes-quote-to-order",
+   "name": {
+    "zh-TW": "報價單轉訂單",
+    "en-US": "Quote to order"
+   },
+   "active": true,
+   "source": "quote",
+   "target": "order",
+   "sourceStates": [
+    "approved"
+   ],
+   "header": {
+    "sourceField": "order.fromQuote",
+    "copy": [
+     {
+      "from": "quote.customer",
+      "to": "order.customer"
+     },
+     {
+      "from": "quote.owner",
+      "to": "order.salesRep"
+     },
+     {
+      "from": "quote.taxRate",
+      "to": "order.taxRate"
+     }
+    ]
+   },
+   "lines": {
+    "sourceModule": "quote-line",
+    "targetModule": "line",
+    "sourceLineField": "line.sourceLine",
+    "quantity": {
+     "from": "quote-line.qty",
+     "to": "line.qty"
+    },
+    "copy": [
+     {
+      "from": "quote-line.itemNo",
+      "to": "line.itemNo"
+     },
+     {
+      "from": "quote-line.itemName",
+      "to": "line.itemName"
+     },
+     {
+      "from": "quote-line.unit",
+      "to": "line.unit"
+     },
+     {
+      "from": "quote-line.price",
+      "to": "line.price"
+     }
+    ]
+   }
+  }
+ ],
+ "events": [
+  {
+   "code": "mes-report-progress",
+   "name": {
+    "zh-TW": "報工推進工令",
+    "en-US": "Work report advances the work order"
+   },
+   "active": true,
+   "source": "report",
+   "trigger": {
+    "on": "create"
+   },
+   "when": null,
+   "effects": [
+    {
+     "code": "touch",
+     "kind": "update",
+     "target": "workorder",
+     "via": "report.workOrder",
+     "set": [
+      {
+       "to": "workorder.status",
+       "const": "opt_running"
+      },
+      {
+       "to": "workorder.lastReportDate",
+       "const": "today"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "code": "mes-shipment-close-wo",
+   "name": {
+    "zh-TW": "出貨確認工令完工",
+    "en-US": "Shipment confirms the work order is done"
+   },
+   "active": true,
+   "source": "shipment",
+   "trigger": {
+    "on": "create"
+   },
+   "when": null,
+   "effects": [
+    {
+     "code": "close",
+     "kind": "update",
+     "target": "workorder",
+     "via": "shipment.workOrder",
+     "set": [
+      {
+       "to": "workorder.status",
+       "const": "opt_done"
+      }
+     ]
+    }
+   ]
+  }
+ ],
+ "checks": [
+  {
+   "code": "mes-report-within-wo-qty",
+   "name": {
+    "zh-TW": "工序累計良品不超過工令數量",
+    "en-US": "Cumulative good qty per operation within work order qty"
+   },
+   "active": true,
+   "module": "report",
+   "groupBy": [
+    "report.workOrder",
+    "report.opSeq"
+   ],
+   "function": "sum",
+   "field": "report.goodQty",
+   "where": null,
+   "assert": {
+    "op": "lte",
+    "limit": {
+     "via": "report.workOrder",
+     "field": "workorder.qty"
+    }
+   },
+   "message": {
+    "zh-TW": "此工序累計良品數超過工令數量",
+    "en-US": "Cumulative good quantity of this operation exceeds the work order quantity"
+   }
+  },
+  {
+   "code": "mes-shipment-within-completed",
+   "name": {
+    "zh-TW": "出貨量不超過工令完工量",
+    "en-US": "Shipped qty within completed qty"
+   },
+   "active": true,
+   "module": "shipment",
+   "groupBy": [
+    "shipment.workOrder"
+   ],
+   "function": "sum",
+   "field": "shipment.qty",
+   "where": {
+    "field": "shipment.status",
+    "op": "eq",
+    "value": "opt_shipped"
+   },
+   "assert": {
+    "op": "lte",
+    "limit": {
+     "field": "shipment.doneQty"
+    }
+   },
+   "message": {
+    "zh-TW": "出貨數量超過工令已完工量",
+    "en-US": "Shipped quantity exceeds the completed quantity of the work order"
+   }
+  }
+ ],
+ "ledgers": [
+  {
+   "module": "report",
+   "reversalField": "report.reverses",
+   "negate": [
+    "report.goodQty",
+    "report.defectQty",
+    "report.hours"
+   ],
+   "swap": []
+  }
+ ],
+ "printTemplates": [
+  {
+   "module": "workorder",
+   "code": "mes-wo-sheet",
+   "name": {
+    "zh-TW": "工令單",
+    "en-US": "Work order sheet"
+   },
+   "active": true,
+   "body": "<h1 align=\"center\">工令單 {{no}}</h1><table width=\"100%\" cellpadding=\"4\"><tr><td>品號：{{itemNo}}</td><td align=\"right\">交期：{{dueDate}}</td></tr><tr><td>品名：{{itemName}}</td><td align=\"right\">優先度：{{priority}}</td></tr><tr><td>數量：{{qty}} {{unit}}</td><td align=\"right\">預計開工：{{plannedStart}}</td></tr></table><table width=\"100%\" border=\"1\" cellpadding=\"4\" style=\"border-collapse:collapse\"><thead><tr><th>序號</th><th>工序</th><th>工作站</th><th align=\"right\">預計工時</th><th>預計開始</th><th>預計完成</th></tr></thead><tbody>{{#each wo-op}}<tr><td>{{seq}}</td><td>{{process}}</td><td>{{workstation}}</td><td align=\"right\">{{plannedHours}}</td><td>{{plannedStart}}</td><td>{{plannedEnd}}</td></tr>{{/each}}</tbody></table><p>已完工量：{{completedQty}}　不良總數：{{defectTotal}}</p><p>備註：{{remark}}</p><table width=\"100%\" cellpadding=\"12\"><tr><td>生管：＿＿＿＿＿</td><td>現場主管：＿＿＿＿＿</td><td>品保：＿＿＿＿＿</td></tr></table>"
+  },
+  {
+   "module": "shipment",
+   "code": "mes-ship-sheet",
+   "name": {
+    "zh-TW": "出貨單",
+    "en-US": "Shipment sheet"
+   },
+   "active": true,
+   "body": "<h1 align=\"center\">出貨單 {{no}}</h1><table width=\"100%\" cellpadding=\"4\"><tr><td>客戶：{{customer}}</td><td align=\"right\">出貨日期：{{shipDate}}</td></tr><tr><td>工令：{{workOrder}}</td><td align=\"right\">運送方式：{{carrier}}</td></tr></table><table width=\"100%\" border=\"1\" cellpadding=\"4\" style=\"border-collapse:collapse\"><tr><th>出貨數量</th><td align=\"right\">{{qty}}</td></tr></table><p>備註：{{remark}}</p><table width=\"100%\" cellpadding=\"12\"><tr><td>出貨人：＿＿＿＿＿</td><td>簽收人：＿＿＿＿＿</td></tr></table>"
+  }
+ ]
+}
