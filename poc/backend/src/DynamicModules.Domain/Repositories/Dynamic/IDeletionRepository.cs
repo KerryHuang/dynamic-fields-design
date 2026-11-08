@@ -13,6 +13,9 @@ public interface IDeletionRepository
     Task<List<ListView>> ListViewsAsync(CancellationToken ct);
     Task<List<Report>> ListReportsAsync(CancellationToken ct);
     Task<List<Conversion>> ListConversionsAsync(CancellationToken ct);
+    Task<List<ModuleEvent>> ListEventsAsync(CancellationToken ct);
+    Task<List<ModuleCheck>> ListChecksAsync(CancellationToken ct);
+    Task<List<ModuleLedger>> ListLedgersAsync(CancellationToken ct);
     /// <summary>所有儀表板版面：指派版、使用者自己的儀表板，以及每個個人版，不追蹤。</summary>
     Task<List<DashboardLayoutSource>> ListDashboardLayoutsAsync(CancellationToken ct);
 

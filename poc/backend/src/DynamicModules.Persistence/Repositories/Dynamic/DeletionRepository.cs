@@ -21,6 +21,15 @@ public class DeletionRepository(DynamicDbContext db) : IDeletionRepository
     public Task<List<Conversion>> ListConversionsAsync(CancellationToken ct) =>
         db.Set<Conversion>().AsNoTracking().OrderBy(c => c.Id).ToListAsync(ct);
 
+    public Task<List<ModuleEvent>> ListEventsAsync(CancellationToken ct) =>
+        db.Set<ModuleEvent>().AsNoTracking().OrderBy(e => e.Id).ToListAsync(ct);
+
+    public Task<List<ModuleCheck>> ListChecksAsync(CancellationToken ct) =>
+        db.Set<ModuleCheck>().AsNoTracking().OrderBy(c => c.Id).ToListAsync(ct);
+
+    public Task<List<ModuleLedger>> ListLedgersAsync(CancellationToken ct) =>
+        db.Set<ModuleLedger>().AsNoTracking().OrderBy(l => l.Id).ToListAsync(ct);
+
     public async Task<List<DashboardLayoutSource>> ListDashboardLayoutsAsync(CancellationToken ct)
     {
         var dashboards = await db.Set<Dashboard>().AsNoTracking().OrderBy(d => d.Id)

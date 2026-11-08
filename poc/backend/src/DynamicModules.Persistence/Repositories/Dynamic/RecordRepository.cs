@@ -20,6 +20,9 @@ public class RecordRepository(DynamicDbContext db, ISqlDialect dialect) : IRecor
     public Task<bool> AnyByModuleAsync(long moduleId, CancellationToken ct) =>
         db.Set<Record>().AnyAsync(r => r.ModuleId == moduleId, ct);
 
+    public Task<int> CountByModuleAsync(long moduleId, CancellationToken ct) =>
+        db.Set<Record>().CountAsync(r => r.ModuleId == moduleId && !r.DeleteFlag, ct);
+
     public Task<Record?> GetByHostAsync(long moduleId, string hostKey, CancellationToken ct) =>
         db.Set<Record>().FirstOrDefaultAsync(r => r.ModuleId == moduleId && r.HostKey == hostKey && !r.DeleteFlag, ct);
 

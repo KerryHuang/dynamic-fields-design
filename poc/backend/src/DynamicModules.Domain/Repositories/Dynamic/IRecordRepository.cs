@@ -10,6 +10,8 @@ public interface IRecordRepository
     Task<List<Record>> ListAllByModuleAsync(long moduleId, CancellationToken ct);
     /// <summary>模組是否有任何記錄，含已刪除的。</summary>
     Task<bool> AnyByModuleAsync(long moduleId, CancellationToken ct);
+    /// <summary>模組內未刪除記錄的筆數。</summary>
+    Task<int> CountByModuleAsync(long moduleId, CancellationToken ct);
     /// <summary>擴充模組中、host 鍵為 hostKey 的未刪除記錄。</summary>
     Task<Record?> GetByHostAsync(long moduleId, string hostKey, CancellationToken ct);
     void Add(Record r);

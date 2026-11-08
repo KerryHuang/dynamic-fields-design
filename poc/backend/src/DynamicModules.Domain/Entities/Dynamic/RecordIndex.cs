@@ -8,6 +8,8 @@ public class RecordIndex
     public int Seq { get; set; }
     public string? TextValue { get; set; }
     public double? NumberValue { get; set; }
+    /// <summary>數字型別的精確整數值：十進位值 × 10^Scale，寫索引時由 decimal 算出；跨記錄驗證的 SUM 用它（超出 long 範圍時為 null）。</summary>
+    public long? ScaledValue { get; set; }
     public DateTime? DateValue { get; set; }
     public string? RefKey { get; set; }
 }
