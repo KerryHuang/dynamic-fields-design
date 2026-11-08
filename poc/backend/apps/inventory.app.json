@@ -1,0 +1,3377 @@
+{
+  "format": "formwright-app",
+  "formatVersion": 4,
+  "x-translation": "th、vi 標籤為機器翻譯，待母語者校對",
+  "manifest": {
+    "id": "inventory",
+    "version": "1.0.0",
+    "name": {
+      "zh-TW": "進銷存",
+      "en-US": "Inventory",
+      "th": "ระบบซื้อขายและคลังสินค้า",
+      "vi": "Mua bán và tồn kho"
+    },
+    "description": {
+      "zh-TW": "品項、倉庫、採購、進貨、出貨、盤點與庫存餘額，庫存不會透支",
+      "en-US": "Items, warehouses, purchasing, receiving, shipping, stock counts and balances that never go negative",
+      "th": "สินค้า คลังสินค้า การจัดซื้อ การรับ การส่ง การตรวจนับ และยอดคงเหลือที่ไม่ติดลบ",
+      "vi": "Mặt hàng, kho, mua hàng, nhập, xuất, kiểm kê và tồn kho không bao giờ âm"
+    },
+    "icon": "inventory"
+  },
+  "groups": [
+    {
+      "code": "buyer",
+      "name": {
+        "zh-TW": "進銷存採購",
+        "en-US": "Inventory buyer",
+        "th": "ฝ่ายจัดซื้อ",
+        "vi": "Nhân viên mua hàng"
+      }
+    },
+    {
+      "code": "keeper",
+      "name": {
+        "zh-TW": "進銷存倉管",
+        "en-US": "Inventory keeper",
+        "th": "เจ้าหน้าที่คลังสินค้า",
+        "vi": "Thủ kho"
+      }
+    },
+    {
+      "code": "manager",
+      "name": {
+        "zh-TW": "進銷存主管",
+        "en-US": "Inventory manager",
+        "th": "ผู้จัดการคลังสินค้า",
+        "vi": "Quản lý kho"
+      }
+    }
+  ],
+  "modules": [
+    {
+      "code": "item",
+      "key": "inv-item",
+      "name": {
+        "zh-TW": "品項",
+        "en-US": "Items",
+        "th": "สินค้า",
+        "vi": "Mặt hàng"
+      },
+      "kind": "standalone",
+      "titleField": "name",
+      "blocks": [
+        {
+          "code": "main",
+          "label": {
+            "zh-TW": "基本資料",
+            "en-US": "Details",
+            "th": "ข้อมูลพื้นฐาน",
+            "vi": "Thông tin cơ bản"
+          },
+          "collapsed": false,
+          "columns": 2,
+          "fields": [
+            {
+              "code": "no",
+              "type": "autonumber",
+              "label": {
+                "zh-TW": "品號",
+                "en-US": "Item no.",
+                "th": "รหัสสินค้า",
+                "vi": "Mã mặt hàng"
+              },
+              "config": {
+                "format": "ITM-{0000}",
+                "showInList": true,
+                "isFilterable": true
+              }
+            },
+            {
+              "code": "name",
+              "type": "text",
+              "label": {
+                "zh-TW": "名稱",
+                "en-US": "Name",
+                "th": "ชื่อ",
+                "vi": "Tên"
+              },
+              "config": {
+                "required": true,
+                "showInList": true,
+                "isFilterable": true
+              }
+            },
+            {
+              "code": "category",
+              "type": "enum",
+              "label": {
+                "zh-TW": "類別",
+                "en-US": "Category",
+                "th": "หมวดหมู่",
+                "vi": "Loại"
+              },
+              "config": {
+                "showInList": true,
+                "isFilterable": true
+              },
+              "options": [
+                {
+                  "code": "raw",
+                  "label": {
+                    "zh-TW": "原料",
+                    "en-US": "Raw material",
+                    "th": "วัตถุดิบ",
+                    "vi": "Nguyên liệu"
+                  },
+                  "color": "orange"
+                },
+                {
+                  "code": "part",
+                  "label": {
+                    "zh-TW": "零件",
+                    "en-US": "Part",
+                    "th": "ชิ้นส่วน",
+                    "vi": "Linh kiện"
+                  },
+                  "color": "blue"
+                },
+                {
+                  "code": "finished",
+                  "label": {
+                    "zh-TW": "成品",
+                    "en-US": "Finished goods",
+                    "th": "สินค้าสำเร็จรูป",
+                    "vi": "Thành phẩm"
+                  },
+                  "color": "green"
+                },
+                {
+                  "code": "consumable",
+                  "label": {
+                    "zh-TW": "耗材",
+                    "en-US": "Consumable",
+                    "th": "วัสดุสิ้นเปลือง",
+                    "vi": "Vật tư tiêu hao"
+                  },
+                  "color": "grey"
+                }
+              ]
+            },
+            {
+              "code": "unit",
+              "type": "text",
+              "label": {
+                "zh-TW": "單位",
+                "en-US": "Unit",
+                "th": "หน่วย",
+                "vi": "Đơn vị"
+              },
+              "config": {
+                "showInList": true
+              }
+            },
+            {
+              "code": "price",
+              "type": "currency",
+              "label": {
+                "zh-TW": "參考單價",
+                "en-US": "Reference price",
+                "th": "ราคาอ้างอิง",
+                "vi": "Đơn giá tham khảo"
+              },
+              "config": {
+                "scale": 0,
+                "showInList": true
+              }
+            },
+            {
+              "code": "safetyStock",
+              "type": "decimal",
+              "label": {
+                "zh-TW": "安全庫存",
+                "en-US": "Safety stock",
+                "th": "สต็อกขั้นต่ำ",
+                "vi": "Tồn kho an toàn"
+              },
+              "config": {
+                "scale": 2
+              }
+            },
+            {
+              "code": "active",
+              "type": "boolean",
+              "label": {
+                "zh-TW": "使用中",
+                "en-US": "Active",
+                "th": "ใช้งานอยู่",
+                "vi": "Đang dùng"
+              },
+              "config": {
+                "defaultValue": true,
+                "showInList": true
+              }
+            }
+          ]
+        }
+      ],
+      "icon": "inventory_2",
+      "section": "進銷存基本資料",
+      "permissions": [
+        {
+          "group": "buyer",
+          "scope": "all",
+          "privileges": {
+            "read": true,
+            "add": true,
+            "edit": true,
+            "delete": true,
+            "printExport": true,
+            "pricing": true,
+            "approve": false
+          }
+        },
+        {
+          "group": "keeper",
+          "scope": "all",
+          "privileges": {
+            "read": true,
+            "add": false,
+            "edit": false,
+            "delete": false,
+            "printExport": true,
+            "pricing": true,
+            "approve": false
+          }
+        },
+        {
+          "group": "manager",
+          "scope": "all",
+          "privileges": {
+            "read": true,
+            "add": true,
+            "edit": true,
+            "delete": true,
+            "printExport": true,
+            "pricing": true,
+            "approve": false
+          }
+        }
+      ]
+    },
+    {
+      "code": "warehouse",
+      "key": "inv-warehouse",
+      "name": {
+        "zh-TW": "倉庫",
+        "en-US": "Warehouses",
+        "th": "คลังสินค้า",
+        "vi": "Kho"
+      },
+      "kind": "standalone",
+      "titleField": "name",
+      "blocks": [
+        {
+          "code": "main",
+          "label": {
+            "zh-TW": "基本資料",
+            "en-US": "Details",
+            "th": "ข้อมูลพื้นฐาน",
+            "vi": "Thông tin cơ bản"
+          },
+          "collapsed": false,
+          "columns": 2,
+          "fields": [
+            {
+              "code": "code",
+              "type": "text",
+              "label": {
+                "zh-TW": "倉庫代號",
+                "en-US": "Warehouse code",
+                "th": "รหัสคลัง",
+                "vi": "Mã kho"
+              },
+              "config": {
+                "required": true,
+                "showInList": true,
+                "isFilterable": true
+              }
+            },
+            {
+              "code": "name",
+              "type": "text",
+              "label": {
+                "zh-TW": "名稱",
+                "en-US": "Name",
+                "th": "ชื่อ",
+                "vi": "Tên"
+              },
+              "config": {
+                "required": true,
+                "showInList": true,
+                "isFilterable": true
+              }
+            },
+            {
+              "code": "location",
+              "type": "text",
+              "label": {
+                "zh-TW": "位置",
+                "en-US": "Location",
+                "th": "ที่ตั้ง",
+                "vi": "Vị trí"
+              },
+              "config": {
+                "showInList": true
+              }
+            },
+            {
+              "code": "active",
+              "type": "boolean",
+              "label": {
+                "zh-TW": "使用中",
+                "en-US": "Active",
+                "th": "ใช้งานอยู่",
+                "vi": "Đang dùng"
+              },
+              "config": {
+                "defaultValue": true,
+                "showInList": true
+              }
+            }
+          ]
+        }
+      ],
+      "icon": "warehouse",
+      "section": "進銷存基本資料",
+      "permissions": [
+        {
+          "group": "buyer",
+          "scope": "all",
+          "privileges": {
+            "read": true,
+            "add": true,
+            "edit": true,
+            "delete": true,
+            "printExport": true,
+            "pricing": true,
+            "approve": false
+          }
+        },
+        {
+          "group": "keeper",
+          "scope": "all",
+          "privileges": {
+            "read": true,
+            "add": false,
+            "edit": false,
+            "delete": false,
+            "printExport": true,
+            "pricing": true,
+            "approve": false
+          }
+        },
+        {
+          "group": "manager",
+          "scope": "all",
+          "privileges": {
+            "read": true,
+            "add": true,
+            "edit": true,
+            "delete": true,
+            "printExport": true,
+            "pricing": true,
+            "approve": false
+          }
+        }
+      ]
+    },
+    {
+      "code": "supplier",
+      "key": "inv-supplier",
+      "name": {
+        "zh-TW": "供應商",
+        "en-US": "Suppliers",
+        "th": "ผู้จำหน่าย",
+        "vi": "Nhà cung cấp"
+      },
+      "kind": "standalone",
+      "titleField": "name",
+      "blocks": [
+        {
+          "code": "main",
+          "label": {
+            "zh-TW": "基本資料",
+            "en-US": "Details",
+            "th": "ข้อมูลพื้นฐาน",
+            "vi": "Thông tin cơ bản"
+          },
+          "collapsed": false,
+          "columns": 2,
+          "fields": [
+            {
+              "code": "name",
+              "type": "text",
+              "label": {
+                "zh-TW": "名稱",
+                "en-US": "Name",
+                "th": "ชื่อ",
+                "vi": "Tên"
+              },
+              "config": {
+                "required": true,
+                "showInList": true,
+                "isFilterable": true
+              }
+            },
+            {
+              "code": "contact",
+              "type": "text",
+              "label": {
+                "zh-TW": "聯絡人",
+                "en-US": "Contact person",
+                "th": "ผู้ติดต่อ",
+                "vi": "Người liên hệ"
+              },
+              "config": {
+                "showInList": true
+              }
+            },
+            {
+              "code": "phone",
+              "type": "phone",
+              "label": {
+                "zh-TW": "電話",
+                "en-US": "Phone",
+                "th": "โทรศัพท์",
+                "vi": "Điện thoại"
+              },
+              "config": {
+                "showInList": true
+              }
+            },
+            {
+              "code": "email",
+              "type": "email",
+              "label": {
+                "zh-TW": "Email",
+                "en-US": "Email",
+                "th": "อีเมล",
+                "vi": "Email"
+              },
+              "config": {}
+            },
+            {
+              "code": "terms",
+              "type": "text",
+              "label": {
+                "zh-TW": "付款條件",
+                "en-US": "Payment terms",
+                "th": "เงื่อนไขการชำระเงิน",
+                "vi": "Điều khoản thanh toán"
+              },
+              "config": {}
+            }
+          ]
+        }
+      ],
+      "icon": "local_shipping",
+      "section": "進銷存基本資料",
+      "permissions": [
+        {
+          "group": "buyer",
+          "scope": "all",
+          "privileges": {
+            "read": true,
+            "add": true,
+            "edit": true,
+            "delete": true,
+            "printExport": true,
+            "pricing": true,
+            "approve": false
+          }
+        },
+        {
+          "group": "keeper",
+          "scope": "all",
+          "privileges": {
+            "read": true,
+            "add": false,
+            "edit": false,
+            "delete": false,
+            "printExport": true,
+            "pricing": true,
+            "approve": false
+          }
+        },
+        {
+          "group": "manager",
+          "scope": "all",
+          "privileges": {
+            "read": true,
+            "add": true,
+            "edit": true,
+            "delete": true,
+            "printExport": true,
+            "pricing": true,
+            "approve": false
+          }
+        }
+      ]
+    },
+    {
+      "code": "customer",
+      "key": "inv-customer",
+      "name": {
+        "zh-TW": "出貨客戶",
+        "en-US": "Customers",
+        "th": "ลูกค้า",
+        "vi": "Khách hàng"
+      },
+      "kind": "standalone",
+      "titleField": "name",
+      "blocks": [
+        {
+          "code": "main",
+          "label": {
+            "zh-TW": "基本資料",
+            "en-US": "Details",
+            "th": "ข้อมูลพื้นฐาน",
+            "vi": "Thông tin cơ bản"
+          },
+          "collapsed": false,
+          "columns": 2,
+          "fields": [
+            {
+              "code": "name",
+              "type": "text",
+              "label": {
+                "zh-TW": "名稱",
+                "en-US": "Name",
+                "th": "ชื่อ",
+                "vi": "Tên"
+              },
+              "config": {
+                "required": true,
+                "showInList": true,
+                "isFilterable": true
+              }
+            },
+            {
+              "code": "contact",
+              "type": "text",
+              "label": {
+                "zh-TW": "聯絡人",
+                "en-US": "Contact person",
+                "th": "ผู้ติดต่อ",
+                "vi": "Người liên hệ"
+              },
+              "config": {
+                "showInList": true
+              }
+            },
+            {
+              "code": "phone",
+              "type": "phone",
+              "label": {
+                "zh-TW": "電話",
+                "en-US": "Phone",
+                "th": "โทรศัพท์",
+                "vi": "Điện thoại"
+              },
+              "config": {
+                "showInList": true
+              }
+            },
+            {
+              "code": "email",
+              "type": "email",
+              "label": {
+                "zh-TW": "Email",
+                "en-US": "Email",
+                "th": "อีเมล",
+                "vi": "Email"
+              },
+              "config": {}
+            },
+            {
+              "code": "address",
+              "type": "text",
+              "label": {
+                "zh-TW": "地址",
+                "en-US": "Address",
+                "th": "ที่อยู่",
+                "vi": "Địa chỉ"
+              },
+              "config": {}
+            }
+          ]
+        }
+      ],
+      "icon": "storefront",
+      "section": "進銷存基本資料",
+      "permissions": [
+        {
+          "group": "buyer",
+          "scope": "all",
+          "privileges": {
+            "read": true,
+            "add": true,
+            "edit": true,
+            "delete": true,
+            "printExport": true,
+            "pricing": true,
+            "approve": false
+          }
+        },
+        {
+          "group": "keeper",
+          "scope": "all",
+          "privileges": {
+            "read": true,
+            "add": false,
+            "edit": false,
+            "delete": false,
+            "printExport": true,
+            "pricing": true,
+            "approve": false
+          }
+        },
+        {
+          "group": "manager",
+          "scope": "all",
+          "privileges": {
+            "read": true,
+            "add": true,
+            "edit": true,
+            "delete": true,
+            "printExport": true,
+            "pricing": true,
+            "approve": false
+          }
+        }
+      ]
+    },
+    {
+      "code": "po",
+      "key": "inv-po",
+      "name": {
+        "zh-TW": "採購單",
+        "en-US": "Purchase orders",
+        "th": "ใบสั่งซื้อ",
+        "vi": "Đơn mua hàng"
+      },
+      "kind": "standalone",
+      "titleField": "no",
+      "blocks": [
+        {
+          "code": "main",
+          "label": {
+            "zh-TW": "基本資料",
+            "en-US": "Details",
+            "th": "ข้อมูลพื้นฐาน",
+            "vi": "Thông tin cơ bản"
+          },
+          "collapsed": false,
+          "columns": 2,
+          "fields": [
+            {
+              "code": "no",
+              "type": "autonumber",
+              "label": {
+                "zh-TW": "採購單號",
+                "en-US": "PO no.",
+                "th": "เลขที่ใบสั่งซื้อ",
+                "vi": "Số đơn mua"
+              },
+              "config": {
+                "format": "PO-{yyyyMM}-{0000}",
+                "showInList": true,
+                "isFilterable": true
+              }
+            },
+            {
+              "code": "supplier",
+              "type": "reference",
+              "label": {
+                "zh-TW": "供應商",
+                "en-US": "Supplier",
+                "th": "ผู้จำหน่าย",
+                "vi": "Nhà cung cấp"
+              },
+              "config": {
+                "refTarget": {
+                  "kind": "module",
+                  "key": "supplier"
+                },
+                "required": true,
+                "showInList": true,
+                "isFilterable": true
+              }
+            },
+            {
+              "code": "warehouse",
+              "type": "reference",
+              "label": {
+                "zh-TW": "預定入庫倉",
+                "en-US": "Receiving warehouse",
+                "th": "คลังที่จะรับเข้า",
+                "vi": "Kho nhận dự kiến"
+              },
+              "config": {
+                "refTarget": {
+                  "kind": "module",
+                  "key": "warehouse"
+                },
+                "showInList": true
+              }
+            },
+            {
+              "code": "orderDate",
+              "type": "date",
+              "label": {
+                "zh-TW": "採購日期",
+                "en-US": "Order date",
+                "th": "วันที่สั่งซื้อ",
+                "vi": "Ngày đặt mua"
+              },
+              "config": {
+                "showInList": true,
+                "isFilterable": true,
+                "isSortable": true,
+                "defaultToday": true,
+                "required": true
+              }
+            },
+            {
+              "code": "expectedDate",
+              "type": "date",
+              "label": {
+                "zh-TW": "預定交期",
+                "en-US": "Expected date",
+                "th": "วันที่คาดว่าจะได้รับ",
+                "vi": "Ngày giao dự kiến"
+              },
+              "config": {
+                "showInList": true,
+                "isFilterable": true,
+                "isSortable": true
+              }
+            },
+            {
+              "code": "status",
+              "type": "enum",
+              "label": {
+                "zh-TW": "狀態",
+                "en-US": "Status",
+                "th": "สถานะ",
+                "vi": "Trạng thái"
+              },
+              "config": {
+                "required": true,
+                "defaultValue": "opt_draft",
+                "showInList": true,
+                "isFilterable": true
+              },
+              "options": [
+                {
+                  "code": "draft",
+                  "label": {
+                    "zh-TW": "草稿",
+                    "en-US": "Draft",
+                    "th": "ฉบับร่าง",
+                    "vi": "Bản nháp"
+                  },
+                  "color": "grey"
+                },
+                {
+                  "code": "confirmed",
+                  "label": {
+                    "zh-TW": "已確認",
+                    "en-US": "Confirmed",
+                    "th": "ยืนยันแล้ว",
+                    "vi": "Đã xác nhận"
+                  },
+                  "color": "blue"
+                },
+                {
+                  "code": "closed",
+                  "label": {
+                    "zh-TW": "已結案",
+                    "en-US": "Closed",
+                    "th": "ปิดแล้ว",
+                    "vi": "Đã đóng"
+                  },
+                  "color": "green"
+                },
+                {
+                  "code": "cancelled",
+                  "label": {
+                    "zh-TW": "已取消",
+                    "en-US": "Cancelled",
+                    "th": "ยกเลิกแล้ว",
+                    "vi": "Đã hủy"
+                  },
+                  "color": "red"
+                }
+              ]
+            },
+            {
+              "code": "subtotal",
+              "type": "rollup",
+              "label": {
+                "zh-TW": "未稅小計",
+                "en-US": "Subtotal",
+                "th": "ยอดรวมก่อนภาษี",
+                "vi": "Tạm tính chưa thuế"
+              },
+              "config": {
+                "rollup": {
+                  "sourceField": "po-line.po",
+                  "function": "sum",
+                  "aggregateField": "po-line.amount"
+                }
+              }
+            },
+            {
+              "code": "taxRate",
+              "type": "percent",
+              "label": {
+                "zh-TW": "稅率",
+                "en-US": "Tax rate",
+                "th": "อัตราภาษี",
+                "vi": "Thuế suất"
+              },
+              "config": {
+                "scale": 0,
+                "defaultValue": 5
+              }
+            },
+            {
+              "code": "tax",
+              "type": "formula",
+              "label": {
+                "zh-TW": "稅額",
+                "en-US": "Tax",
+                "th": "ภาษี",
+                "vi": "Thuế"
+              },
+              "config": {
+                "formula": "ROUND({subtotal} * {taxRate}, 0)",
+                "resultType": "currency",
+                "scale": 0
+              }
+            },
+            {
+              "code": "total",
+              "type": "formula",
+              "label": {
+                "zh-TW": "含稅總計",
+                "en-US": "Total",
+                "th": "ยอดรวมสุทธิ",
+                "vi": "Tổng cộng (gồm thuế)"
+              },
+              "config": {
+                "formula": "{subtotal} + {tax}",
+                "resultType": "currency",
+                "scale": 0,
+                "showInList": true
+              }
+            },
+            {
+              "code": "remark",
+              "type": "textarea",
+              "label": {
+                "zh-TW": "備註",
+                "en-US": "Remark",
+                "th": "หมายเหตุ",
+                "vi": "Ghi chú"
+              },
+              "config": {}
+            }
+          ]
+        }
+      ],
+      "icon": "shopping_cart",
+      "section": "採購",
+      "permissions": [
+        {
+          "group": "buyer",
+          "scope": "all",
+          "privileges": {
+            "read": true,
+            "add": true,
+            "edit": true,
+            "delete": true,
+            "printExport": true,
+            "pricing": true,
+            "approve": false
+          }
+        },
+        {
+          "group": "keeper",
+          "scope": "all",
+          "privileges": {
+            "read": true,
+            "add": false,
+            "edit": false,
+            "delete": false,
+            "printExport": true,
+            "pricing": true,
+            "approve": false
+          }
+        },
+        {
+          "group": "manager",
+          "scope": "all",
+          "privileges": {
+            "read": true,
+            "add": true,
+            "edit": true,
+            "delete": true,
+            "printExport": true,
+            "pricing": true,
+            "approve": false
+          }
+        }
+      ],
+      "rules": [
+        {
+          "kind": "validation",
+          "targets": [
+            "field:expectedDate"
+          ],
+          "active": true,
+          "options": [],
+          "message": {
+            "zh-TW": "預定交期不得早於採購日期",
+            "en-US": "Expected date cannot be earlier than the order date",
+            "th": "วันที่คาดว่าจะได้รับต้องไม่ก่อนวันที่สั่งซื้อ",
+            "vi": "Ngày giao dự kiến không được sớm hơn ngày đặt mua"
+          },
+          "condition": {
+            "any": [
+              {
+                "field": "expectedDate",
+                "op": "isEmpty"
+              },
+              {
+                "field": "expectedDate",
+                "op": "gte",
+                "value": {
+                  "fieldRef": "orderDate"
+                }
+              }
+            ]
+          }
+        },
+        {
+          "kind": "required",
+          "targets": [
+            "field:remark"
+          ],
+          "active": true,
+          "options": [],
+          "message": null,
+          "condition": {
+            "field": "status",
+            "op": "eq",
+            "value": "opt_cancelled"
+          }
+        }
+      ]
+    },
+    {
+      "code": "po-line",
+      "key": "inv-po-line",
+      "name": {
+        "zh-TW": "採購明細",
+        "en-US": "Purchase order lines",
+        "th": "รายการใบสั่งซื้อ",
+        "vi": "Chi tiết đơn mua"
+      },
+      "kind": "standalone",
+      "titleField": "itemName",
+      "blocks": [
+        {
+          "code": "main",
+          "label": {
+            "zh-TW": "基本資料",
+            "en-US": "Details",
+            "th": "ข้อมูลพื้นฐาน",
+            "vi": "Thông tin cơ bản"
+          },
+          "collapsed": false,
+          "columns": 2,
+          "fields": [
+            {
+              "code": "po",
+              "type": "reference",
+              "label": {
+                "zh-TW": "採購單",
+                "en-US": "Purchase order",
+                "th": "ใบสั่งซื้อ",
+                "vi": "Đơn mua hàng"
+              },
+              "config": {
+                "relation": "detail",
+                "refTarget": {
+                  "kind": "module",
+                  "key": "po"
+                }
+              }
+            },
+            {
+              "code": "seq",
+              "type": "autonumber",
+              "label": {
+                "zh-TW": "項次",
+                "en-US": "Line",
+                "th": "ลำดับ",
+                "vi": "STT"
+              },
+              "config": {
+                "format": "{0}",
+                "scope": "parent"
+              }
+            },
+            {
+              "code": "item",
+              "type": "reference",
+              "label": {
+                "zh-TW": "品項",
+                "en-US": "Item",
+                "th": "สินค้า",
+                "vi": "Mặt hàng"
+              },
+              "config": {
+                "refTarget": {
+                  "kind": "module",
+                  "key": "item"
+                },
+                "required": true,
+                "showInList": true,
+                "fill": {
+                  "mode": "default",
+                  "map": [
+                    {
+                      "from": "item.name",
+                      "to": "itemName"
+                    },
+                    {
+                      "from": "item.unit",
+                      "to": "unit"
+                    },
+                    {
+                      "from": "item.price",
+                      "to": "price"
+                    }
+                  ]
+                }
+              }
+            },
+            {
+              "code": "itemName",
+              "type": "text",
+              "label": {
+                "zh-TW": "品名",
+                "en-US": "Item name",
+                "th": "ชื่อสินค้า",
+                "vi": "Tên mặt hàng"
+              },
+              "config": {
+                "showInList": true
+              }
+            },
+            {
+              "code": "unit",
+              "type": "text",
+              "label": {
+                "zh-TW": "單位",
+                "en-US": "Unit",
+                "th": "หน่วย",
+                "vi": "Đơn vị"
+              },
+              "config": {}
+            },
+            {
+              "code": "qty",
+              "type": "decimal",
+              "label": {
+                "zh-TW": "數量",
+                "en-US": "Quantity",
+                "th": "จำนวน",
+                "vi": "Số lượng"
+              },
+              "config": {
+                "scale": 2,
+                "required": true,
+                "showInList": true
+              }
+            },
+            {
+              "code": "price",
+              "type": "currency",
+              "label": {
+                "zh-TW": "單價",
+                "en-US": "Unit price",
+                "th": "ราคาต่อหน่วย",
+                "vi": "Đơn giá"
+              },
+              "config": {
+                "scale": 0,
+                "showInList": true
+              }
+            },
+            {
+              "code": "amount",
+              "type": "formula",
+              "label": {
+                "zh-TW": "金額",
+                "en-US": "Amount",
+                "th": "จำนวนเงิน",
+                "vi": "Thành tiền"
+              },
+              "config": {
+                "formula": "{qty} * {price}",
+                "resultType": "currency",
+                "scale": 0,
+                "showInList": true
+              }
+            }
+          ]
+        }
+      ],
+      "section": "採購"
+    },
+    {
+      "code": "receipt",
+      "key": "inv-receipt",
+      "name": {
+        "zh-TW": "進貨單",
+        "en-US": "Goods receipts",
+        "th": "ใบรับสินค้า",
+        "vi": "Phiếu nhập hàng"
+      },
+      "kind": "standalone",
+      "titleField": "no",
+      "blocks": [
+        {
+          "code": "main",
+          "label": {
+            "zh-TW": "基本資料",
+            "en-US": "Details",
+            "th": "ข้อมูลพื้นฐาน",
+            "vi": "Thông tin cơ bản"
+          },
+          "collapsed": false,
+          "columns": 2,
+          "fields": [
+            {
+              "code": "no",
+              "type": "autonumber",
+              "label": {
+                "zh-TW": "進貨單號",
+                "en-US": "Receipt no.",
+                "th": "เลขที่ใบรับสินค้า",
+                "vi": "Số phiếu nhập"
+              },
+              "config": {
+                "format": "RC-{yyyyMM}-{0000}",
+                "showInList": true,
+                "isFilterable": true
+              }
+            },
+            {
+              "code": "fromPo",
+              "type": "reference",
+              "label": {
+                "zh-TW": "來源採購單",
+                "en-US": "Source PO",
+                "th": "ใบสั่งซื้อต้นทาง",
+                "vi": "Đơn mua nguồn"
+              },
+              "config": {
+                "refTarget": {
+                  "kind": "module",
+                  "key": "po"
+                },
+                "readOnly": true,
+                "showInList": true
+              }
+            },
+            {
+              "code": "supplier",
+              "type": "reference",
+              "label": {
+                "zh-TW": "供應商",
+                "en-US": "Supplier",
+                "th": "ผู้จำหน่าย",
+                "vi": "Nhà cung cấp"
+              },
+              "config": {
+                "refTarget": {
+                  "kind": "module",
+                  "key": "supplier"
+                },
+                "required": true,
+                "showInList": true,
+                "isFilterable": true
+              }
+            },
+            {
+              "code": "warehouse",
+              "type": "reference",
+              "label": {
+                "zh-TW": "入庫倉",
+                "en-US": "Warehouse",
+                "th": "คลังที่รับเข้า",
+                "vi": "Kho nhập"
+              },
+              "config": {
+                "refTarget": {
+                  "kind": "module",
+                  "key": "warehouse"
+                },
+                "required": true,
+                "showInList": true,
+                "isFilterable": true
+              }
+            },
+            {
+              "code": "receiptDate",
+              "type": "date",
+              "label": {
+                "zh-TW": "進貨日期",
+                "en-US": "Receipt date",
+                "th": "วันที่รับสินค้า",
+                "vi": "Ngày nhập hàng"
+              },
+              "config": {
+                "showInList": true,
+                "isFilterable": true,
+                "isSortable": true,
+                "defaultToday": true
+              }
+            },
+            {
+              "code": "status",
+              "type": "enum",
+              "label": {
+                "zh-TW": "狀態",
+                "en-US": "Status",
+                "th": "สถานะ",
+                "vi": "Trạng thái"
+              },
+              "config": {
+                "required": true,
+                "defaultValue": "opt_draft",
+                "showInList": true,
+                "isFilterable": true
+              },
+              "options": [
+                {
+                  "code": "draft",
+                  "label": {
+                    "zh-TW": "草稿",
+                    "en-US": "Draft",
+                    "th": "ฉบับร่าง",
+                    "vi": "Bản nháp"
+                  },
+                  "color": "grey"
+                },
+                {
+                  "code": "posted",
+                  "label": {
+                    "zh-TW": "已過帳",
+                    "en-US": "Posted",
+                    "th": "ลงบัญชีแล้ว",
+                    "vi": "Đã ghi sổ"
+                  },
+                  "color": "green"
+                },
+                {
+                  "code": "cancelled",
+                  "label": {
+                    "zh-TW": "已取消",
+                    "en-US": "Cancelled",
+                    "th": "ยกเลิกแล้ว",
+                    "vi": "Đã hủy"
+                  },
+                  "color": "red"
+                }
+              ]
+            },
+            {
+              "code": "remark",
+              "type": "textarea",
+              "label": {
+                "zh-TW": "備註",
+                "en-US": "Remark",
+                "th": "หมายเหตุ",
+                "vi": "Ghi chú"
+              },
+              "config": {}
+            }
+          ]
+        }
+      ],
+      "icon": "move_to_inbox",
+      "section": "採購",
+      "permissions": [
+        {
+          "group": "buyer",
+          "scope": "all",
+          "privileges": {
+            "read": true,
+            "add": true,
+            "edit": true,
+            "delete": false,
+            "printExport": true,
+            "pricing": true,
+            "approve": false
+          }
+        },
+        {
+          "group": "keeper",
+          "scope": "all",
+          "privileges": {
+            "read": true,
+            "add": true,
+            "edit": true,
+            "delete": false,
+            "printExport": true,
+            "pricing": true,
+            "approve": false
+          }
+        },
+        {
+          "group": "manager",
+          "scope": "all",
+          "privileges": {
+            "read": true,
+            "add": true,
+            "edit": true,
+            "delete": true,
+            "printExport": true,
+            "pricing": true,
+            "approve": false
+          }
+        }
+      ]
+    },
+    {
+      "code": "receipt-line",
+      "key": "inv-receipt-line",
+      "name": {
+        "zh-TW": "進貨明細",
+        "en-US": "Goods receipt lines",
+        "th": "รายการรับสินค้า",
+        "vi": "Chi tiết phiếu nhập"
+      },
+      "kind": "standalone",
+      "titleField": "itemName",
+      "blocks": [
+        {
+          "code": "main",
+          "label": {
+            "zh-TW": "基本資料",
+            "en-US": "Details",
+            "th": "ข้อมูลพื้นฐาน",
+            "vi": "Thông tin cơ bản"
+          },
+          "collapsed": false,
+          "columns": 2,
+          "fields": [
+            {
+              "code": "receipt",
+              "type": "reference",
+              "label": {
+                "zh-TW": "進貨單",
+                "en-US": "Goods receipt",
+                "th": "ใบรับสินค้า",
+                "vi": "Phiếu nhập hàng"
+              },
+              "config": {
+                "relation": "detail",
+                "refTarget": {
+                  "kind": "module",
+                  "key": "receipt"
+                }
+              }
+            },
+            {
+              "code": "seq",
+              "type": "autonumber",
+              "label": {
+                "zh-TW": "項次",
+                "en-US": "Line",
+                "th": "ลำดับ",
+                "vi": "STT"
+              },
+              "config": {
+                "format": "{0}",
+                "scope": "parent"
+              }
+            },
+            {
+              "code": "item",
+              "type": "reference",
+              "label": {
+                "zh-TW": "品項",
+                "en-US": "Item",
+                "th": "สินค้า",
+                "vi": "Mặt hàng"
+              },
+              "config": {
+                "refTarget": {
+                  "kind": "module",
+                  "key": "item"
+                },
+                "required": true,
+                "showInList": true,
+                "fill": {
+                  "mode": "default",
+                  "map": [
+                    {
+                      "from": "item.name",
+                      "to": "itemName"
+                    },
+                    {
+                      "from": "item.unit",
+                      "to": "unit"
+                    }
+                  ]
+                }
+              }
+            },
+            {
+              "code": "itemName",
+              "type": "text",
+              "label": {
+                "zh-TW": "品名",
+                "en-US": "Item name",
+                "th": "ชื่อสินค้า",
+                "vi": "Tên mặt hàng"
+              },
+              "config": {
+                "showInList": true
+              }
+            },
+            {
+              "code": "unit",
+              "type": "text",
+              "label": {
+                "zh-TW": "單位",
+                "en-US": "Unit",
+                "th": "หน่วย",
+                "vi": "Đơn vị"
+              },
+              "config": {}
+            },
+            {
+              "code": "qty",
+              "type": "decimal",
+              "label": {
+                "zh-TW": "數量",
+                "en-US": "Quantity",
+                "th": "จำนวน",
+                "vi": "Số lượng"
+              },
+              "config": {
+                "scale": 2,
+                "required": true,
+                "showInList": true
+              }
+            },
+            {
+              "code": "price",
+              "type": "currency",
+              "label": {
+                "zh-TW": "單價",
+                "en-US": "Unit price",
+                "th": "ราคาต่อหน่วย",
+                "vi": "Đơn giá"
+              },
+              "config": {
+                "scale": 0,
+                "showInList": true
+              }
+            },
+            {
+              "code": "amount",
+              "type": "formula",
+              "label": {
+                "zh-TW": "金額",
+                "en-US": "Amount",
+                "th": "จำนวนเงิน",
+                "vi": "Thành tiền"
+              },
+              "config": {
+                "formula": "{qty} * {price}",
+                "resultType": "currency",
+                "scale": 0,
+                "showInList": true
+              }
+            },
+            {
+              "code": "sourceLine",
+              "type": "integer",
+              "label": {
+                "zh-TW": "來源採購明細",
+                "en-US": "Source PO line",
+                "th": "รายการใบสั่งซื้อต้นทาง",
+                "vi": "Dòng đơn mua nguồn"
+              },
+              "config": {
+                "readOnly": true
+              }
+            }
+          ]
+        }
+      ],
+      "section": "採購",
+      "rules": [
+        {
+          "kind": "validation",
+          "targets": [
+            "field:qty"
+          ],
+          "active": true,
+          "options": [],
+          "message": {
+            "zh-TW": "數量必須大於 0",
+            "en-US": "Quantity must be greater than 0",
+            "th": "จำนวนต้องมากกว่า 0",
+            "vi": "Số lượng phải lớn hơn 0"
+          },
+          "condition": {
+            "field": "qty",
+            "op": "gt",
+            "value": 0
+          }
+        }
+      ]
+    },
+    {
+      "code": "shipment",
+      "key": "inv-shipment",
+      "name": {
+        "zh-TW": "出貨單",
+        "en-US": "Shipments",
+        "th": "ใบส่งสินค้า",
+        "vi": "Phiếu xuất hàng"
+      },
+      "kind": "standalone",
+      "titleField": "no",
+      "blocks": [
+        {
+          "code": "main",
+          "label": {
+            "zh-TW": "基本資料",
+            "en-US": "Details",
+            "th": "ข้อมูลพื้นฐาน",
+            "vi": "Thông tin cơ bản"
+          },
+          "collapsed": false,
+          "columns": 2,
+          "fields": [
+            {
+              "code": "no",
+              "type": "autonumber",
+              "label": {
+                "zh-TW": "出貨單號",
+                "en-US": "Shipment no.",
+                "th": "เลขที่ใบส่งสินค้า",
+                "vi": "Số phiếu xuất"
+              },
+              "config": {
+                "format": "SH-{yyyyMM}-{0000}",
+                "showInList": true,
+                "isFilterable": true
+              }
+            },
+            {
+              "code": "customer",
+              "type": "reference",
+              "label": {
+                "zh-TW": "客戶",
+                "en-US": "Customer",
+                "th": "ลูกค้า",
+                "vi": "Khách hàng"
+              },
+              "config": {
+                "refTarget": {
+                  "kind": "module",
+                  "key": "customer"
+                },
+                "required": true,
+                "showInList": true,
+                "isFilterable": true
+              }
+            },
+            {
+              "code": "warehouse",
+              "type": "reference",
+              "label": {
+                "zh-TW": "出庫倉",
+                "en-US": "Warehouse",
+                "th": "คลังที่จ่ายออก",
+                "vi": "Kho xuất"
+              },
+              "config": {
+                "refTarget": {
+                  "kind": "module",
+                  "key": "warehouse"
+                },
+                "required": true,
+                "showInList": true,
+                "isFilterable": true
+              }
+            },
+            {
+              "code": "shipDate",
+              "type": "date",
+              "label": {
+                "zh-TW": "出貨日期",
+                "en-US": "Ship date",
+                "th": "วันที่ส่งสินค้า",
+                "vi": "Ngày xuất hàng"
+              },
+              "config": {
+                "showInList": true,
+                "isFilterable": true,
+                "isSortable": true,
+                "defaultToday": true
+              }
+            },
+            {
+              "code": "status",
+              "type": "enum",
+              "label": {
+                "zh-TW": "狀態",
+                "en-US": "Status",
+                "th": "สถานะ",
+                "vi": "Trạng thái"
+              },
+              "config": {
+                "required": true,
+                "defaultValue": "opt_draft",
+                "showInList": true,
+                "isFilterable": true
+              },
+              "options": [
+                {
+                  "code": "draft",
+                  "label": {
+                    "zh-TW": "草稿",
+                    "en-US": "Draft",
+                    "th": "ฉบับร่าง",
+                    "vi": "Bản nháp"
+                  },
+                  "color": "grey"
+                },
+                {
+                  "code": "shipped",
+                  "label": {
+                    "zh-TW": "已出貨",
+                    "en-US": "Shipped",
+                    "th": "จัดส่งแล้ว",
+                    "vi": "Đã xuất hàng"
+                  },
+                  "color": "green"
+                },
+                {
+                  "code": "cancelled",
+                  "label": {
+                    "zh-TW": "已取消",
+                    "en-US": "Cancelled",
+                    "th": "ยกเลิกแล้ว",
+                    "vi": "Đã hủy"
+                  },
+                  "color": "red"
+                }
+              ]
+            },
+            {
+              "code": "subtotal",
+              "type": "rollup",
+              "label": {
+                "zh-TW": "合計（未稅）",
+                "en-US": "Total (before tax)",
+                "th": "ยอดรวม (ก่อนภาษี)",
+                "vi": "Tổng cộng (chưa thuế)"
+              },
+              "config": {
+                "showInList": true,
+                "rollup": {
+                  "sourceField": "shipment-line.shipment",
+                  "function": "sum",
+                  "aggregateField": "shipment-line.amount"
+                }
+              }
+            },
+            {
+              "code": "remark",
+              "type": "textarea",
+              "label": {
+                "zh-TW": "備註",
+                "en-US": "Remark",
+                "th": "หมายเหตุ",
+                "vi": "Ghi chú"
+              },
+              "config": {}
+            }
+          ]
+        }
+      ],
+      "icon": "outbox",
+      "section": "庫存",
+      "permissions": [
+        {
+          "group": "buyer",
+          "scope": "all",
+          "privileges": {
+            "read": true,
+            "add": false,
+            "edit": false,
+            "delete": false,
+            "printExport": true,
+            "pricing": true,
+            "approve": false
+          }
+        },
+        {
+          "group": "keeper",
+          "scope": "all",
+          "privileges": {
+            "read": true,
+            "add": true,
+            "edit": true,
+            "delete": false,
+            "printExport": true,
+            "pricing": true,
+            "approve": false
+          }
+        },
+        {
+          "group": "manager",
+          "scope": "all",
+          "privileges": {
+            "read": true,
+            "add": true,
+            "edit": true,
+            "delete": true,
+            "printExport": true,
+            "pricing": true,
+            "approve": false
+          }
+        }
+      ]
+    },
+    {
+      "code": "shipment-line",
+      "key": "inv-shipment-line",
+      "name": {
+        "zh-TW": "出貨明細",
+        "en-US": "Shipment lines",
+        "th": "รายการส่งสินค้า",
+        "vi": "Chi tiết phiếu xuất"
+      },
+      "kind": "standalone",
+      "titleField": "itemName",
+      "blocks": [
+        {
+          "code": "main",
+          "label": {
+            "zh-TW": "基本資料",
+            "en-US": "Details",
+            "th": "ข้อมูลพื้นฐาน",
+            "vi": "Thông tin cơ bản"
+          },
+          "collapsed": false,
+          "columns": 2,
+          "fields": [
+            {
+              "code": "shipment",
+              "type": "reference",
+              "label": {
+                "zh-TW": "出貨單",
+                "en-US": "Shipment",
+                "th": "ใบส่งสินค้า",
+                "vi": "Phiếu xuất hàng"
+              },
+              "config": {
+                "relation": "detail",
+                "refTarget": {
+                  "kind": "module",
+                  "key": "shipment"
+                }
+              }
+            },
+            {
+              "code": "seq",
+              "type": "autonumber",
+              "label": {
+                "zh-TW": "項次",
+                "en-US": "Line",
+                "th": "ลำดับ",
+                "vi": "STT"
+              },
+              "config": {
+                "format": "{0}",
+                "scope": "parent"
+              }
+            },
+            {
+              "code": "item",
+              "type": "reference",
+              "label": {
+                "zh-TW": "品項",
+                "en-US": "Item",
+                "th": "สินค้า",
+                "vi": "Mặt hàng"
+              },
+              "config": {
+                "refTarget": {
+                  "kind": "module",
+                  "key": "item"
+                },
+                "required": true,
+                "showInList": true,
+                "fill": {
+                  "mode": "default",
+                  "map": [
+                    {
+                      "from": "item.name",
+                      "to": "itemName"
+                    },
+                    {
+                      "from": "item.unit",
+                      "to": "unit"
+                    },
+                    {
+                      "from": "item.price",
+                      "to": "price"
+                    }
+                  ]
+                }
+              }
+            },
+            {
+              "code": "itemName",
+              "type": "text",
+              "label": {
+                "zh-TW": "品名",
+                "en-US": "Item name",
+                "th": "ชื่อสินค้า",
+                "vi": "Tên mặt hàng"
+              },
+              "config": {
+                "showInList": true
+              }
+            },
+            {
+              "code": "unit",
+              "type": "text",
+              "label": {
+                "zh-TW": "單位",
+                "en-US": "Unit",
+                "th": "หน่วย",
+                "vi": "Đơn vị"
+              },
+              "config": {}
+            },
+            {
+              "code": "qty",
+              "type": "decimal",
+              "label": {
+                "zh-TW": "數量",
+                "en-US": "Quantity",
+                "th": "จำนวน",
+                "vi": "Số lượng"
+              },
+              "config": {
+                "scale": 2,
+                "required": true,
+                "showInList": true
+              }
+            },
+            {
+              "code": "price",
+              "type": "currency",
+              "label": {
+                "zh-TW": "單價",
+                "en-US": "Unit price",
+                "th": "ราคาต่อหน่วย",
+                "vi": "Đơn giá"
+              },
+              "config": {
+                "scale": 0,
+                "showInList": true
+              }
+            },
+            {
+              "code": "amount",
+              "type": "formula",
+              "label": {
+                "zh-TW": "金額",
+                "en-US": "Amount",
+                "th": "จำนวนเงิน",
+                "vi": "Thành tiền"
+              },
+              "config": {
+                "formula": "{qty} * {price}",
+                "resultType": "currency",
+                "scale": 0,
+                "showInList": true
+              }
+            }
+          ]
+        }
+      ],
+      "section": "庫存",
+      "rules": [
+        {
+          "kind": "validation",
+          "targets": [
+            "field:qty"
+          ],
+          "active": true,
+          "options": [],
+          "message": {
+            "zh-TW": "數量必須大於 0",
+            "en-US": "Quantity must be greater than 0",
+            "th": "จำนวนต้องมากกว่า 0",
+            "vi": "Số lượng phải lớn hơn 0"
+          },
+          "condition": {
+            "field": "qty",
+            "op": "gt",
+            "value": 0
+          }
+        }
+      ]
+    },
+    {
+      "code": "adjust",
+      "key": "inv-adjust",
+      "name": {
+        "zh-TW": "盤點調整單",
+        "en-US": "Stock adjustments",
+        "th": "ใบปรับปรุงสต็อก",
+        "vi": "Phiếu điều chỉnh tồn kho"
+      },
+      "kind": "standalone",
+      "titleField": "no",
+      "blocks": [
+        {
+          "code": "main",
+          "label": {
+            "zh-TW": "基本資料",
+            "en-US": "Details",
+            "th": "ข้อมูลพื้นฐาน",
+            "vi": "Thông tin cơ bản"
+          },
+          "collapsed": false,
+          "columns": 2,
+          "fields": [
+            {
+              "code": "no",
+              "type": "autonumber",
+              "label": {
+                "zh-TW": "調整單號",
+                "en-US": "Adjustment no.",
+                "th": "เลขที่ใบปรับปรุง",
+                "vi": "Số phiếu điều chỉnh"
+              },
+              "config": {
+                "format": "AJ-{yyyyMM}-{0000}",
+                "showInList": true,
+                "isFilterable": true
+              }
+            },
+            {
+              "code": "warehouse",
+              "type": "reference",
+              "label": {
+                "zh-TW": "倉庫",
+                "en-US": "Warehouse",
+                "th": "คลังสินค้า",
+                "vi": "Kho"
+              },
+              "config": {
+                "refTarget": {
+                  "kind": "module",
+                  "key": "warehouse"
+                },
+                "required": true,
+                "showInList": true,
+                "isFilterable": true
+              }
+            },
+            {
+              "code": "adjustDate",
+              "type": "date",
+              "label": {
+                "zh-TW": "調整日期",
+                "en-US": "Adjustment date",
+                "th": "วันที่ปรับปรุง",
+                "vi": "Ngày điều chỉnh"
+              },
+              "config": {
+                "showInList": true,
+                "isFilterable": true,
+                "isSortable": true,
+                "defaultToday": true
+              }
+            },
+            {
+              "code": "reason",
+              "type": "enum",
+              "label": {
+                "zh-TW": "原因",
+                "en-US": "Reason",
+                "th": "เหตุผล",
+                "vi": "Lý do"
+              },
+              "config": {
+                "required": true,
+                "defaultValue": "opt_count",
+                "showInList": true,
+                "isFilterable": true
+              },
+              "options": [
+                {
+                  "code": "count",
+                  "label": {
+                    "zh-TW": "盤點",
+                    "en-US": "Stock count",
+                    "th": "ตรวจนับ",
+                    "vi": "Kiểm kê"
+                  },
+                  "color": "blue"
+                },
+                {
+                  "code": "damage",
+                  "label": {
+                    "zh-TW": "損耗",
+                    "en-US": "Damage",
+                    "th": "เสียหาย",
+                    "vi": "Hư hỏng"
+                  },
+                  "color": "red"
+                },
+                {
+                  "code": "opening",
+                  "label": {
+                    "zh-TW": "期初",
+                    "en-US": "Opening balance",
+                    "th": "ยอดยกมา",
+                    "vi": "Tồn đầu kỳ"
+                  },
+                  "color": "green"
+                },
+                {
+                  "code": "other",
+                  "label": {
+                    "zh-TW": "其他",
+                    "en-US": "Other",
+                    "th": "อื่น ๆ",
+                    "vi": "Khác"
+                  },
+                  "color": "grey"
+                }
+              ]
+            },
+            {
+              "code": "status",
+              "type": "enum",
+              "label": {
+                "zh-TW": "狀態",
+                "en-US": "Status",
+                "th": "สถานะ",
+                "vi": "Trạng thái"
+              },
+              "config": {
+                "required": true,
+                "defaultValue": "opt_draft",
+                "showInList": true,
+                "isFilterable": true
+              },
+              "options": [
+                {
+                  "code": "draft",
+                  "label": {
+                    "zh-TW": "草稿",
+                    "en-US": "Draft",
+                    "th": "ฉบับร่าง",
+                    "vi": "Bản nháp"
+                  },
+                  "color": "grey"
+                },
+                {
+                  "code": "posted",
+                  "label": {
+                    "zh-TW": "已過帳",
+                    "en-US": "Posted",
+                    "th": "ลงบัญชีแล้ว",
+                    "vi": "Đã ghi sổ"
+                  },
+                  "color": "green"
+                },
+                {
+                  "code": "cancelled",
+                  "label": {
+                    "zh-TW": "已取消",
+                    "en-US": "Cancelled",
+                    "th": "ยกเลิกแล้ว",
+                    "vi": "Đã hủy"
+                  },
+                  "color": "red"
+                }
+              ]
+            },
+            {
+              "code": "remark",
+              "type": "textarea",
+              "label": {
+                "zh-TW": "備註",
+                "en-US": "Remark",
+                "th": "หมายเหตุ",
+                "vi": "Ghi chú"
+              },
+              "config": {}
+            }
+          ]
+        }
+      ],
+      "icon": "fact_check",
+      "section": "庫存",
+      "permissions": [
+        {
+          "group": "buyer",
+          "scope": "all",
+          "privileges": {
+            "read": true,
+            "add": false,
+            "edit": false,
+            "delete": false,
+            "printExport": true,
+            "pricing": true,
+            "approve": false
+          }
+        },
+        {
+          "group": "keeper",
+          "scope": "all",
+          "privileges": {
+            "read": true,
+            "add": true,
+            "edit": true,
+            "delete": false,
+            "printExport": true,
+            "pricing": true,
+            "approve": false
+          }
+        },
+        {
+          "group": "manager",
+          "scope": "all",
+          "privileges": {
+            "read": true,
+            "add": true,
+            "edit": true,
+            "delete": true,
+            "printExport": true,
+            "pricing": true,
+            "approve": false
+          }
+        }
+      ]
+    },
+    {
+      "code": "adjust-line",
+      "key": "inv-adjust-line",
+      "name": {
+        "zh-TW": "調整明細",
+        "en-US": "Adjustment lines",
+        "th": "รายการปรับปรุง",
+        "vi": "Chi tiết điều chỉnh"
+      },
+      "kind": "standalone",
+      "titleField": "itemName",
+      "blocks": [
+        {
+          "code": "main",
+          "label": {
+            "zh-TW": "基本資料",
+            "en-US": "Details",
+            "th": "ข้อมูลพื้นฐาน",
+            "vi": "Thông tin cơ bản"
+          },
+          "collapsed": false,
+          "columns": 2,
+          "fields": [
+            {
+              "code": "adjust",
+              "type": "reference",
+              "label": {
+                "zh-TW": "盤點調整單",
+                "en-US": "Stock adjustment",
+                "th": "ใบปรับปรุงสต็อก",
+                "vi": "Phiếu điều chỉnh tồn kho"
+              },
+              "config": {
+                "relation": "detail",
+                "refTarget": {
+                  "kind": "module",
+                  "key": "adjust"
+                }
+              }
+            },
+            {
+              "code": "seq",
+              "type": "autonumber",
+              "label": {
+                "zh-TW": "項次",
+                "en-US": "Line",
+                "th": "ลำดับ",
+                "vi": "STT"
+              },
+              "config": {
+                "format": "{0}",
+                "scope": "parent"
+              }
+            },
+            {
+              "code": "item",
+              "type": "reference",
+              "label": {
+                "zh-TW": "品項",
+                "en-US": "Item",
+                "th": "สินค้า",
+                "vi": "Mặt hàng"
+              },
+              "config": {
+                "refTarget": {
+                  "kind": "module",
+                  "key": "item"
+                },
+                "required": true,
+                "showInList": true,
+                "fill": {
+                  "mode": "default",
+                  "map": [
+                    {
+                      "from": "item.name",
+                      "to": "itemName"
+                    }
+                  ]
+                }
+              }
+            },
+            {
+              "code": "itemName",
+              "type": "text",
+              "label": {
+                "zh-TW": "品名",
+                "en-US": "Item name",
+                "th": "ชื่อสินค้า",
+                "vi": "Tên mặt hàng"
+              },
+              "config": {
+                "showInList": true
+              }
+            },
+            {
+              "code": "qty",
+              "type": "decimal",
+              "label": {
+                "zh-TW": "調整數量",
+                "en-US": "Adjustment qty",
+                "th": "จำนวนที่ปรับ",
+                "vi": "Số lượng điều chỉnh"
+              },
+              "config": {
+                "scale": 2,
+                "required": true,
+                "showInList": true
+              }
+            },
+            {
+              "code": "note",
+              "type": "text",
+              "label": {
+                "zh-TW": "說明",
+                "en-US": "Note",
+                "th": "คำอธิบาย",
+                "vi": "Ghi chú"
+              },
+              "config": {}
+            }
+          ]
+        }
+      ],
+      "section": "庫存",
+      "rules": [
+        {
+          "kind": "validation",
+          "targets": [
+            "field:qty"
+          ],
+          "active": true,
+          "options": [],
+          "message": {
+            "zh-TW": "調整數量不可為 0（盤盈為正、盤虧為負）",
+            "en-US": "Adjustment qty cannot be 0 (gain positive, loss negative)",
+            "th": "จำนวนที่ปรับต้องไม่เป็น 0 (เพิ่มเป็นบวก ลดเป็นลบ)",
+            "vi": "Số lượng điều chỉnh không được bằng 0 (thừa dương, thiếu âm)"
+          },
+          "condition": {
+            "field": "qty",
+            "op": "ne",
+            "value": 0
+          }
+        }
+      ]
+    },
+    {
+      "code": "move",
+      "key": "inv-move",
+      "name": {
+        "zh-TW": "庫存異動",
+        "en-US": "Stock moves",
+        "th": "การเคลื่อนไหวสต็อก",
+        "vi": "Biến động tồn kho"
+      },
+      "kind": "standalone",
+      "titleField": "docNo",
+      "blocks": [
+        {
+          "code": "main",
+          "label": {
+            "zh-TW": "基本資料",
+            "en-US": "Details",
+            "th": "ข้อมูลพื้นฐาน",
+            "vi": "Thông tin cơ bản"
+          },
+          "collapsed": false,
+          "columns": 2,
+          "fields": [
+            {
+              "code": "item",
+              "type": "reference",
+              "label": {
+                "zh-TW": "品項",
+                "en-US": "Item",
+                "th": "สินค้า",
+                "vi": "Mặt hàng"
+              },
+              "config": {
+                "refTarget": {
+                  "kind": "module",
+                  "key": "item"
+                },
+                "required": true,
+                "showInList": true,
+                "isFilterable": true
+              }
+            },
+            {
+              "code": "warehouse",
+              "type": "reference",
+              "label": {
+                "zh-TW": "倉庫",
+                "en-US": "Warehouse",
+                "th": "คลังสินค้า",
+                "vi": "Kho"
+              },
+              "config": {
+                "refTarget": {
+                  "kind": "module",
+                  "key": "warehouse"
+                },
+                "required": true,
+                "showInList": true,
+                "isFilterable": true
+              }
+            },
+            {
+              "code": "qty",
+              "type": "decimal",
+              "label": {
+                "zh-TW": "數量（入正出負）",
+                "en-US": "Qty (in +, out −)",
+                "th": "จำนวน (เข้า + ออก −)",
+                "vi": "Số lượng (nhập +, xuất −)"
+              },
+              "config": {
+                "scale": 2,
+                "required": true,
+                "showInList": true,
+                "isFilterable": true
+              }
+            },
+            {
+              "code": "kind",
+              "type": "enum",
+              "label": {
+                "zh-TW": "類型",
+                "en-US": "Type",
+                "th": "ประเภท",
+                "vi": "Loại"
+              },
+              "config": {
+                "required": true,
+                "showInList": true,
+                "isFilterable": true
+              },
+              "options": [
+                {
+                  "code": "in",
+                  "label": {
+                    "zh-TW": "入庫",
+                    "en-US": "In",
+                    "th": "รับเข้า",
+                    "vi": "Nhập"
+                  },
+                  "color": "green"
+                },
+                {
+                  "code": "out",
+                  "label": {
+                    "zh-TW": "出庫",
+                    "en-US": "Out",
+                    "th": "จ่ายออก",
+                    "vi": "Xuất"
+                  },
+                  "color": "orange"
+                },
+                {
+                  "code": "adjust",
+                  "label": {
+                    "zh-TW": "調整",
+                    "en-US": "Adjustment",
+                    "th": "ปรับปรุง",
+                    "vi": "Điều chỉnh"
+                  },
+                  "color": "blue"
+                }
+              ]
+            },
+            {
+              "code": "moveDate",
+              "type": "date",
+              "label": {
+                "zh-TW": "異動日期",
+                "en-US": "Move date",
+                "th": "วันที่เคลื่อนไหว",
+                "vi": "Ngày biến động"
+              },
+              "config": {
+                "showInList": true,
+                "isFilterable": true,
+                "isSortable": true
+              }
+            },
+            {
+              "code": "docNo",
+              "type": "text",
+              "label": {
+                "zh-TW": "來源單號",
+                "en-US": "Source document",
+                "th": "เลขที่เอกสารต้นทาง",
+                "vi": "Số chứng từ nguồn"
+              },
+              "config": {
+                "showInList": true,
+                "isFilterable": true
+              }
+            },
+            {
+              "code": "reverses",
+              "type": "reference",
+              "label": {
+                "zh-TW": "沖銷的異動",
+                "en-US": "Reverses",
+                "th": "รายการที่กลับรายการ",
+                "vi": "Bút toán bị đảo"
+              },
+              "config": {
+                "refTarget": {
+                  "kind": "module",
+                  "key": "move"
+                },
+                "readOnly": true,
+                "showInList": true
+              }
+            },
+            {
+              "code": "note",
+              "type": "text",
+              "label": {
+                "zh-TW": "說明",
+                "en-US": "Note",
+                "th": "คำอธิบาย",
+                "vi": "Ghi chú"
+              },
+              "config": {}
+            }
+          ]
+        }
+      ],
+      "icon": "swap_vert",
+      "section": "庫存",
+      "permissions": [
+        {
+          "group": "buyer",
+          "scope": "all",
+          "privileges": {
+            "read": true,
+            "add": false,
+            "edit": false,
+            "delete": false,
+            "printExport": true,
+            "pricing": true,
+            "approve": false
+          }
+        },
+        {
+          "group": "keeper",
+          "scope": "all",
+          "privileges": {
+            "read": true,
+            "add": false,
+            "edit": false,
+            "delete": false,
+            "printExport": true,
+            "pricing": true,
+            "approve": false
+          }
+        },
+        {
+          "group": "manager",
+          "scope": "all",
+          "privileges": {
+            "read": true,
+            "add": false,
+            "edit": false,
+            "delete": false,
+            "printExport": true,
+            "pricing": true,
+            "approve": false
+          }
+        }
+      ]
+    }
+  ],
+  "workflows": [
+    {
+      "module": "po",
+      "statusField": "status",
+      "initial": "draft",
+      "states": [
+        {
+          "option": "draft"
+        },
+        {
+          "option": "confirmed"
+        },
+        {
+          "option": "closed",
+          "readOnly": true
+        },
+        {
+          "option": "cancelled",
+          "readOnly": true
+        }
+      ],
+      "transitions": [
+        {
+          "from": "draft",
+          "to": "confirmed",
+          "groups": [
+            "buyer",
+            "manager"
+          ]
+        },
+        {
+          "from": "confirmed",
+          "to": "closed",
+          "groups": [
+            "buyer",
+            "manager"
+          ]
+        },
+        {
+          "from": "draft",
+          "to": "cancelled",
+          "groups": [
+            "manager"
+          ]
+        },
+        {
+          "from": "confirmed",
+          "to": "cancelled",
+          "groups": [
+            "manager"
+          ]
+        }
+      ]
+    },
+    {
+      "module": "receipt",
+      "statusField": "status",
+      "initial": "draft",
+      "states": [
+        {
+          "option": "draft"
+        },
+        {
+          "option": "posted",
+          "readOnly": true
+        },
+        {
+          "option": "cancelled",
+          "readOnly": true
+        }
+      ],
+      "transitions": [
+        {
+          "from": "draft",
+          "to": "posted",
+          "groups": [
+            "keeper",
+            "manager"
+          ]
+        },
+        {
+          "from": "posted",
+          "to": "cancelled",
+          "groups": [
+            "manager"
+          ]
+        },
+        {
+          "from": "draft",
+          "to": "cancelled",
+          "groups": [
+            "keeper",
+            "manager"
+          ]
+        }
+      ]
+    },
+    {
+      "module": "shipment",
+      "statusField": "status",
+      "initial": "draft",
+      "states": [
+        {
+          "option": "draft"
+        },
+        {
+          "option": "shipped",
+          "readOnly": true
+        },
+        {
+          "option": "cancelled",
+          "readOnly": true
+        }
+      ],
+      "transitions": [
+        {
+          "from": "draft",
+          "to": "shipped",
+          "groups": [
+            "keeper",
+            "manager"
+          ]
+        },
+        {
+          "from": "shipped",
+          "to": "cancelled",
+          "groups": [
+            "manager"
+          ]
+        },
+        {
+          "from": "draft",
+          "to": "cancelled",
+          "groups": [
+            "keeper",
+            "manager"
+          ]
+        }
+      ]
+    },
+    {
+      "module": "adjust",
+      "statusField": "status",
+      "initial": "draft",
+      "states": [
+        {
+          "option": "draft"
+        },
+        {
+          "option": "posted",
+          "readOnly": true
+        },
+        {
+          "option": "cancelled",
+          "readOnly": true
+        }
+      ],
+      "transitions": [
+        {
+          "from": "draft",
+          "to": "posted",
+          "groups": [
+            "keeper",
+            "manager"
+          ]
+        },
+        {
+          "from": "posted",
+          "to": "cancelled",
+          "groups": [
+            "manager"
+          ]
+        },
+        {
+          "from": "draft",
+          "to": "cancelled",
+          "groups": [
+            "keeper",
+            "manager"
+          ]
+        }
+      ]
+    }
+  ],
+  "conversions": [
+    {
+      "code": "inv-po-to-receipt",
+      "name": {
+        "zh-TW": "採購單轉進貨單",
+        "en-US": "Purchase order to goods receipt",
+        "th": "แปลงใบสั่งซื้อเป็นใบรับสินค้า",
+        "vi": "Chuyển đơn mua thành phiếu nhập"
+      },
+      "active": true,
+      "source": "po",
+      "target": "receipt",
+      "sourceStates": [
+        "confirmed"
+      ],
+      "header": {
+        "sourceField": "receipt.fromPo",
+        "copy": [
+          {
+            "from": "po.supplier",
+            "to": "receipt.supplier"
+          },
+          {
+            "from": "po.warehouse",
+            "to": "receipt.warehouse"
+          }
+        ]
+      },
+      "lines": {
+        "sourceModule": "po-line",
+        "targetModule": "receipt-line",
+        "sourceLineField": "receipt-line.sourceLine",
+        "quantity": {
+          "from": "po-line.qty",
+          "to": "receipt-line.qty"
+        },
+        "copy": [
+          {
+            "from": "po-line.item",
+            "to": "receipt-line.item"
+          },
+          {
+            "from": "po-line.itemName",
+            "to": "receipt-line.itemName"
+          },
+          {
+            "from": "po-line.unit",
+            "to": "receipt-line.unit"
+          },
+          {
+            "from": "po-line.price",
+            "to": "receipt-line.price"
+          }
+        ]
+      }
+    }
+  ],
+  "events": [
+    {
+      "code": "inv-receipt-post",
+      "name": {
+        "zh-TW": "進貨過帳",
+        "en-US": "Post goods receipt",
+        "th": "ลงบัญชีรับสินค้า",
+        "vi": "Ghi sổ phiếu nhập"
+      },
+      "active": true,
+      "source": "receipt",
+      "trigger": {
+        "on": "transition",
+        "from": [
+          "draft"
+        ],
+        "to": "posted"
+      },
+      "when": null,
+      "effects": [
+        {
+          "code": "post",
+          "kind": "create",
+          "target": "move",
+          "each": "receipt-line",
+          "set": [
+            {
+              "to": "move.item",
+              "from": {
+                "side": "line",
+                "field": "receipt-line.item"
+              }
+            },
+            {
+              "to": "move.warehouse",
+              "from": {
+                "side": "header",
+                "field": "receipt.warehouse"
+              }
+            },
+            {
+              "to": "move.qty",
+              "from": {
+                "side": "line",
+                "field": "receipt-line.qty"
+              }
+            },
+            {
+              "to": "move.kind",
+              "const": "opt_in"
+            },
+            {
+              "to": "move.moveDate",
+              "const": "today"
+            },
+            {
+              "to": "move.docNo",
+              "from": {
+                "side": "header",
+                "field": "receipt.no"
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "code": "inv-receipt-cancel",
+      "name": {
+        "zh-TW": "取消進貨沖銷",
+        "en-US": "Reverse cancelled receipt",
+        "th": "กลับรายการเมื่อยกเลิกรับสินค้า",
+        "vi": "Đảo bút toán khi hủy phiếu nhập"
+      },
+      "active": true,
+      "source": "receipt",
+      "trigger": {
+        "on": "transition",
+        "from": [
+          "posted"
+        ],
+        "to": "cancelled"
+      },
+      "when": null,
+      "effects": [
+        {
+          "code": "undo",
+          "kind": "reverse",
+          "target": "move",
+          "ofEvent": "inv-receipt-post",
+          "ofEffect": "post"
+        }
+      ]
+    },
+    {
+      "code": "inv-shipment-post",
+      "name": {
+        "zh-TW": "出貨過帳",
+        "en-US": "Post shipment",
+        "th": "ลงบัญชีส่งสินค้า",
+        "vi": "Ghi sổ phiếu xuất"
+      },
+      "active": true,
+      "source": "shipment",
+      "trigger": {
+        "on": "transition",
+        "from": [
+          "draft"
+        ],
+        "to": "shipped"
+      },
+      "when": null,
+      "effects": [
+        {
+          "code": "post",
+          "kind": "create",
+          "target": "move",
+          "each": "shipment-line",
+          "set": [
+            {
+              "to": "move.item",
+              "from": {
+                "side": "line",
+                "field": "shipment-line.item"
+              }
+            },
+            {
+              "to": "move.warehouse",
+              "from": {
+                "side": "header",
+                "field": "shipment.warehouse"
+              }
+            },
+            {
+              "to": "move.qty",
+              "formula": {
+                "side": "line",
+                "expr": "-{shipment-line.qty}"
+              }
+            },
+            {
+              "to": "move.kind",
+              "const": "opt_out"
+            },
+            {
+              "to": "move.moveDate",
+              "const": "today"
+            },
+            {
+              "to": "move.docNo",
+              "from": {
+                "side": "header",
+                "field": "shipment.no"
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "code": "inv-shipment-cancel",
+      "name": {
+        "zh-TW": "取消出貨沖銷",
+        "en-US": "Reverse cancelled shipment",
+        "th": "กลับรายการเมื่อยกเลิกส่งสินค้า",
+        "vi": "Đảo bút toán khi hủy phiếu xuất"
+      },
+      "active": true,
+      "source": "shipment",
+      "trigger": {
+        "on": "transition",
+        "from": [
+          "shipped"
+        ],
+        "to": "cancelled"
+      },
+      "when": null,
+      "effects": [
+        {
+          "code": "undo",
+          "kind": "reverse",
+          "target": "move",
+          "ofEvent": "inv-shipment-post",
+          "ofEffect": "post"
+        }
+      ]
+    },
+    {
+      "code": "inv-adjust-post",
+      "name": {
+        "zh-TW": "盤點調整過帳",
+        "en-US": "Post stock adjustment",
+        "th": "ลงบัญชีปรับปรุงสต็อก",
+        "vi": "Ghi sổ điều chỉnh tồn kho"
+      },
+      "active": true,
+      "source": "adjust",
+      "trigger": {
+        "on": "transition",
+        "from": [
+          "draft"
+        ],
+        "to": "posted"
+      },
+      "when": null,
+      "effects": [
+        {
+          "code": "post",
+          "kind": "create",
+          "target": "move",
+          "each": "adjust-line",
+          "set": [
+            {
+              "to": "move.item",
+              "from": {
+                "side": "line",
+                "field": "adjust-line.item"
+              }
+            },
+            {
+              "to": "move.warehouse",
+              "from": {
+                "side": "header",
+                "field": "adjust.warehouse"
+              }
+            },
+            {
+              "to": "move.qty",
+              "from": {
+                "side": "line",
+                "field": "adjust-line.qty"
+              }
+            },
+            {
+              "to": "move.kind",
+              "const": "opt_adjust"
+            },
+            {
+              "to": "move.moveDate",
+              "const": "today"
+            },
+            {
+              "to": "move.docNo",
+              "from": {
+                "side": "header",
+                "field": "adjust.no"
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "code": "inv-adjust-cancel",
+      "name": {
+        "zh-TW": "取消調整沖銷",
+        "en-US": "Reverse cancelled adjustment",
+        "th": "กลับรายการเมื่อยกเลิกการปรับปรุง",
+        "vi": "Đảo bút toán khi hủy điều chỉnh"
+      },
+      "active": true,
+      "source": "adjust",
+      "trigger": {
+        "on": "transition",
+        "from": [
+          "posted"
+        ],
+        "to": "cancelled"
+      },
+      "when": null,
+      "effects": [
+        {
+          "code": "undo",
+          "kind": "reverse",
+          "target": "move",
+          "ofEvent": "inv-adjust-post",
+          "ofEffect": "post"
+        }
+      ]
+    }
+  ],
+  "checks": [
+    {
+      "code": "inv-no-negative-stock",
+      "name": {
+        "zh-TW": "庫存不可為負",
+        "en-US": "Stock cannot go negative",
+        "th": "สต็อกต้องไม่ติดลบ",
+        "vi": "Tồn kho không được âm"
+      },
+      "active": true,
+      "module": "move",
+      "groupBy": [
+        "move.item",
+        "move.warehouse"
+      ],
+      "function": "sum",
+      "field": "move.qty",
+      "where": null,
+      "assert": {
+        "op": "gte",
+        "limit": {
+          "const": 0
+        }
+      },
+      "message": {
+        "zh-TW": "庫存不足，不能出庫",
+        "en-US": "Not enough stock to issue",
+        "th": "สต็อกไม่พอ ไม่สามารถจ่ายออกได้",
+        "vi": "Không đủ tồn kho để xuất"
+      }
+    }
+  ],
+  "ledgers": [
+    {
+      "module": "move",
+      "reversalField": "move.reverses",
+      "negate": [
+        "move.qty"
+      ],
+      "swap": []
+    }
+  ],
+  "reports": [
+    {
+      "code": "invStockBalance",
+      "name": "庫存餘額（品項 × 倉庫）",
+      "shareWith": [
+        "buyer",
+        "keeper",
+        "manager"
+      ],
+      "definition": {
+        "version": 1,
+        "mainModule": "move",
+        "child": null,
+        "columns": [],
+        "groups": [
+          {
+            "field": {
+              "source": "main",
+              "field": "move.item",
+              "via": null
+            },
+            "bucket": null
+          },
+          {
+            "field": {
+              "source": "main",
+              "field": "move.warehouse",
+              "via": null
+            },
+            "bucket": null
+          }
+        ],
+        "measures": [
+          {
+            "id": "qty",
+            "kind": "sum",
+            "field": {
+              "source": "main",
+              "field": "move.qty",
+              "via": null
+            },
+            "condition": null
+          }
+        ],
+        "filters": [],
+        "primaryDateField": null,
+        "dateRange": null,
+        "sort": [],
+        "viz": "table"
+      }
+    },
+    {
+      "code": "invFlowMonthly",
+      "name": "月別進出量",
+      "shareWith": [
+        "buyer",
+        "keeper",
+        "manager"
+      ],
+      "definition": {
+        "version": 1,
+        "mainModule": "move",
+        "child": null,
+        "columns": [],
+        "groups": [
+          {
+            "field": {
+              "source": "main",
+              "field": "move.moveDate",
+              "via": null
+            },
+            "bucket": "month"
+          },
+          {
+            "field": {
+              "source": "main",
+              "field": "move.kind",
+              "via": null
+            },
+            "bucket": null
+          }
+        ],
+        "measures": [
+          {
+            "id": "qty",
+            "kind": "sum",
+            "field": {
+              "source": "main",
+              "field": "move.qty",
+              "via": null
+            },
+            "condition": null
+          }
+        ],
+        "filters": [],
+        "primaryDateField": null,
+        "dateRange": null,
+        "sort": [],
+        "viz": "bar"
+      }
+    },
+    {
+      "code": "invPoStatus",
+      "name": "採購單狀態分布",
+      "shareWith": [
+        "buyer",
+        "keeper",
+        "manager"
+      ],
+      "definition": {
+        "version": 1,
+        "mainModule": "po",
+        "child": null,
+        "columns": [],
+        "groups": [
+          {
+            "field": {
+              "source": "main",
+              "field": "po.status",
+              "via": null
+            },
+            "bucket": null
+          }
+        ],
+        "measures": [
+          {
+            "id": "n",
+            "kind": "countMain",
+            "field": null,
+            "condition": null
+          }
+        ],
+        "filters": [],
+        "primaryDateField": null,
+        "dateRange": null,
+        "sort": [],
+        "viz": "donut"
+      }
+    },
+    {
+      "code": "invPurchaseBySupplier",
+      "name": "各供應商採購金額（未稅）",
+      "shareWith": [
+        "buyer",
+        "keeper",
+        "manager"
+      ],
+      "definition": {
+        "version": 1,
+        "mainModule": "po",
+        "child": {
+          "module": "po-line",
+          "linkField": "po-line.po"
+        },
+        "columns": [],
+        "groups": [
+          {
+            "field": {
+              "source": "main",
+              "field": "po.supplier",
+              "via": null
+            },
+            "bucket": null
+          }
+        ],
+        "measures": [
+          {
+            "id": "amount",
+            "kind": "sum",
+            "field": {
+              "source": "child",
+              "field": "po-line.amount",
+              "via": null
+            },
+            "condition": null
+          }
+        ],
+        "filters": [],
+        "primaryDateField": null,
+        "dateRange": null,
+        "sort": [],
+        "viz": "bar"
+      }
+    },
+    {
+      "code": "invShipByCustomer",
+      "name": "各客戶出貨金額（未稅）",
+      "shareWith": [
+        "buyer",
+        "keeper",
+        "manager"
+      ],
+      "definition": {
+        "version": 1,
+        "mainModule": "shipment",
+        "child": {
+          "module": "shipment-line",
+          "linkField": "shipment-line.shipment"
+        },
+        "columns": [],
+        "groups": [
+          {
+            "field": {
+              "source": "main",
+              "field": "shipment.customer",
+              "via": null
+            },
+            "bucket": null
+          }
+        ],
+        "measures": [
+          {
+            "id": "amount",
+            "kind": "sum",
+            "field": {
+              "source": "child",
+              "field": "shipment-line.amount",
+              "via": null
+            },
+            "condition": null
+          }
+        ],
+        "filters": [],
+        "primaryDateField": null,
+        "dateRange": null,
+        "sort": [],
+        "viz": "bar"
+      }
+    }
+  ],
+  "printTemplates": [
+    {
+      "module": "shipment",
+      "code": "inv-ship-sheet",
+      "name": {
+        "zh-TW": "出貨單",
+        "en-US": "Shipment",
+        "th": "ใบส่งสินค้า",
+        "vi": "Phiếu xuất hàng"
+      },
+      "active": true,
+      "body": "<h1 align=\"center\">出貨單 {{no}}</h1><table width=\"100%\" cellpadding=\"4\"><tr><td>客戶：{{customer}}</td><td align=\"right\">出貨日期：{{shipDate}}</td></tr><tr><td>出庫倉：{{warehouse}}</td><td align=\"right\">狀態：{{status}}</td></tr></table><table width=\"100%\" border=\"1\" cellpadding=\"4\" style=\"border-collapse:collapse\"><thead><tr><th>項次</th><th>品名</th><th>單位</th><th align=\"right\">數量</th><th align=\"right\">單價</th><th align=\"right\">金額</th></tr></thead><tbody>{{#each shipment-line}}<tr><td>{{seq}}</td><td>{{itemName}}</td><td>{{unit}}</td><td align=\"right\">{{qty}}</td><td align=\"right\">{{price}}</td><td align=\"right\">{{amount}}</td></tr>{{/each}}</tbody></table><p align=\"right\"><strong>合計（未稅）：{{subtotal}}</strong></p><p>備註：{{remark}}</p><table width=\"100%\" cellpadding=\"12\"><tr><td>倉管：</td><td>客戶簽收：</td></tr></table>"
+    }
+  ]
+}
