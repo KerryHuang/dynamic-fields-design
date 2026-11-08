@@ -236,10 +236,10 @@ public sealed partial class TemplateExporter(IModuleRepository modules, IPermiss
             if (f.Config.RefGuard is { } guard)
             {
                 node.Remove("refGuard");
-                var codes = guard.OptionIds.Select(OptionCode).ToList();
+                var codes = guard.OptionIds.Select(OptionCodeOrNull).ToList();
                 if (Exported.Contains(guard.FieldId) && codes.All(c => c is not null))
                     node["refGuard"] = new JsonObject { ["field"] = Qualified(guard.FieldId), ["in"] = new JsonArray(codes.Select(c => (JsonNode?)JsonValue.Create(c)).ToArray()) };
-                else Warnings.Add($"「{Label(f)}」的目標狀態守衛引用了停用、未匯出或套件外的欄位，未匯出這個設定");
+                else Warnings.Add($"「{Label(f)}」的目標狀態守衛引用了停用、未匯出或套件外的欄位或選項，未匯出這個設定，匯入後不再限制目標狀態");
             }
             if (f.Config.ParentDefaultFieldId is { } parent)
             {

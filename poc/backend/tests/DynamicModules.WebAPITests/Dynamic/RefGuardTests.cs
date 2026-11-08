@@ -215,6 +215,32 @@ public class RefGuardTests : IDisposable
     }
 
     [Fact]
+    public async Task Export_GuardOnADeactivatedOption_IsDropped_WithAWarning_AndTheFileReimports()
+    {
+        await OpenPackage();
+        var (_, _, options) = await TaskKeys();
+        var ready = options["就緒"]["opt_".Length..];
+        (await _admin.PutAsJsonAsync($"{Base}/options/{ready}", new { label = new Dictionary<string, string> { ["zh-TW"] = "就緒" }, active = false }))
+            .StatusCode.Should().Be(HttpStatusCode.OK);
+
+        var res = await _admin.GetAsync($"{Apps}/gate-lite/export");
+        res.StatusCode.Should().Be(HttpStatusCode.OK);
+        var warnings = Uri.UnescapeDataString(string.Join('|', res.Headers.GetValues("X-Export-Warnings")));
+        warnings.Should().Contain("目標狀態守衛").And.Contain("匯入後不再限制目標狀態");
+        var package = await JsonOf(res);
+        package.GetProperty("modules").EnumerateArray().Single(m => m.GetProperty("code").GetString() == "note")
+            .GetProperty("blocks").EnumerateArray().SelectMany(b => b.GetProperty("fields").EnumerateArray())
+            .Single(f => f.GetProperty("type").GetString() == "reference").GetProperty("config")
+            .TryGetProperty("refGuard", out _).Should().BeFalse();
+
+        using var fresh = new TestApp();
+        var admin = fresh.AsUser();
+        (await admin.PostAsync($"{Apps}/packages/import", Body(package.GetRawText()))).StatusCode.Should().Be(HttpStatusCode.Created);
+        var opened = await admin.PostAsJsonAsync($"{Apps}/packages/gate-lite/open", new { });
+        opened.StatusCode.Should().Be(HttpStatusCode.Created, await opened.Content.ReadAsStringAsync());
+    }
+
+    [Fact]
     public async Task Export_KeepsTheGuard_AndTheRoundTripStillGuards()
     {
         await OpenPackage();
