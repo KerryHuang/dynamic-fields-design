@@ -129,7 +129,7 @@ public class PermissionServiceTests : IAsyncLifetime
         put.IsSuccess.Should().BeTrue(string.Join(";", put.Errors.Select(e => $"{e.Key}:{string.Join(",", e.Value)}")));
         var got = await Get("order");
 
-        got.Groups.Should().HaveCount(10, "列出所有群組");
+        got.Groups.Should().HaveCount(11, "列出所有群組");
         var sales = got.Groups.Single(g => g.GroupId == s.SalesId);
         sales.Privileges.Should().Be(Priv(read: true, add: true, edit: true));
         sales.Scope.Should().Be(DataScope.Own);
@@ -298,7 +298,7 @@ public class PermissionServiceTests : IAsyncLifetime
         var me = (MeResponse)(await Send(new GetMeRequest())).Data!;
         me.UserId.Should().Be("sales01");
         me.IsSystemAdmin.Should().BeFalse();
-        me.Groups.Select(g => g.Key).Should().Equal("sales");
+        me.Groups.Select(g => g.Key).Should().Equal("sales", "inv-viewer");
         me.Designer.Should().Be(new DesignerActionsResponse(false, false, false, false));
     }
 }

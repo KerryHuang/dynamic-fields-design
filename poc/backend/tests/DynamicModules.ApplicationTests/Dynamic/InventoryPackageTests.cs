@@ -49,7 +49,12 @@ public class InventoryPackageTests
         var move = p.Modules.Single(m => m.Code == "move");
         move.Permissions.Select(x => x.Group).Should().BeEquivalentTo("buyer", "keeper", "manager");
         move.Permissions.Should().OnlyContain(x => !x.Privileges.Add && !x.Privileges.Edit && !x.Privileges.Delete && x.Privileges.Read);
-        p.Modules.SelectMany(m => m.Permissions).Should().OnlyContain(x => x.Privileges.Pricing, "三個群組都有金額權限，帶值才帶得到單價");
+        p.Modules.SelectMany(m => m.Permissions).Where(x => x.Group != "viewer")
+            .Should().OnlyContain(x => x.Privileges.Pricing, "會開單的三個群組都有金額權限，帶值才帶得到單價");
+        // 查詢群組只讀品項與倉庫（夥伴整合選品項用），不開單，也不看金額
+        p.Modules.Where(m => m.Permissions.Any(x => x.Group == "viewer")).Select(m => m.Code).Should().BeEquivalentTo("item", "warehouse");
+        p.Modules.SelectMany(m => m.Permissions).Where(x => x.Group == "viewer")
+            .Should().OnlyContain(x => x.Privileges.Read && !x.Privileges.Add && !x.Privileges.Edit && !x.Privileges.Delete && !x.Privileges.Pricing);
         p.FieldAccess.Should().BeEmpty("事件來源欄位沒有被隱藏，不需要 allowHiddenSource");
     }
 
