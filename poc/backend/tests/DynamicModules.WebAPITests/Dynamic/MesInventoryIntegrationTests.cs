@@ -548,6 +548,25 @@ public class MesInventoryIntegrationTests : IDisposable
     }
 
     [Fact]
+    public async Task ABlockedIntegration_RetriedWhileThePartnerIsClosed_ResumesOnReopen_WithoutASecondRetry()
+    {
+        await OpenMes(); await OpenInventory();
+        await DisableStockItemCheck();
+        await Close("inventory");
+        await Reopen("inventory");
+        (await StatusOfIntegration()).Should().Be(IntegrationStatus.Blocked);
+        await Close("inventory");
+
+        // 夥伴關著時 retry：暫停並記下宣告為啟用的全部項目，夥伴重開就恢復，不必再 retry 一次
+        (await _admin.PostAsync($"{Apps}/mes-mold/integrations/stockOut/retry", null)).StatusCode.Should().Be(HttpStatusCode.OK);
+        (await StatusOfIntegration()).Should().Be(IntegrationStatus.Suspended);
+        await Reopen("inventory");
+        var integration = await Integration();
+        integration.Status.Should().Be(IntegrationStatus.Active, integration.Reason);
+        (await StockItemCheckActive()).Should().BeTrue();
+    }
+
+    [Fact]
     public async Task NonAdmins_CannotRetryOrToggleAnIntegration()
     {
         await OpenMes(); await OpenInventory();

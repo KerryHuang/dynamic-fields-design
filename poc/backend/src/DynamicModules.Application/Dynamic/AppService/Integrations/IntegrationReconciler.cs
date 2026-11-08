@@ -68,12 +68,12 @@ public class IntegrationReconciler(
         switch (target)
         {
             case IntegrationTarget.Disabled:
-                if (row.Installed) await SuspendAsync(row, items, decl, ct);
+                if (row.Installed) await SuspendAsync(row, items, decl, retry, ct);
                 return await SetStatusAsync(row, IntegrationStatus.Disabled, null, previous, decl, ct);
             case IntegrationTarget.Waiting:
                 return await SetStatusAsync(row, IntegrationStatus.Waiting, partners.Missing is null ? null : $"waiting: 等待 {partners.Missing}", previous, decl, ct);
             case IntegrationTarget.Suspended:
-                await SuspendAsync(row, items, decl, ct);
+                await SuspendAsync(row, items, decl, retry, ct);
                 return await SetStatusAsync(row, IntegrationStatus.Suspended,
                     owner.Status == AppStatus.Open ? $"suspended: 夥伴 {partners.Missing} 不在" : "suspended: 擁有者已關閉", previous, decl, ct);
             case IntegrationTarget.Held:
@@ -112,15 +112,27 @@ public class IntegrationReconciler(
         return (missing.Count == 0, missing.Count == 0 ? null : string.Join("、", missing));
     }
 
-    /// <summary>整合自己停用全部項目，先把當下啟用的記進 suspendedActive（與先前記的合併：已停用的重複調和不會洗掉紀錄）。</summary>
-    private async Task SuspendAsync(AppIntegration row, IntegrationItems items, AppIntegrationDecl decl, CancellationToken ct)
+    /// <summary>
+    /// 整合自己停用全部項目，先把當下啟用的記進 suspendedActive（與先前記的合併：已停用的重複調和不會洗掉紀錄）。
+    /// retry（管理員修復）時改記宣告為啟用的全部項目：被 Blocked 停用的項目此刻都是停用的，照當下狀態記會是空的，夥伴重開後又判回 Blocked。
+    /// </summary>
+    private async Task SuspendAsync(AppIntegration row, IntegrationItems items, AppIntegrationDecl decl, bool retry, CancellationToken ct)
     {
-        var activeEvents = new List<string>(items.SuspendedActive?.Events ?? []);
-        foreach (var key in items.Events)
-            if (!activeEvents.Contains(key) && await events.GetByKeyAsync(key, ct) is { Active: true }) activeEvents.Add(key);
-        var activeChecks = new List<string>(items.SuspendedActive?.Checks ?? []);
-        foreach (var key in items.Checks)
-            if (!activeChecks.Contains(key) && await checks.GetByKeyAsync(key, ct) is { Active: true }) activeChecks.Add(key);
+        List<string> activeEvents, activeChecks;
+        if (retry)
+        {
+            activeEvents = items.Events.Where(k => decl.Events.FirstOrDefault(x => x.Code == k)?.Active ?? false).ToList();
+            activeChecks = items.Checks.Where(k => decl.Checks.FirstOrDefault(x => x.Code == k)?.Active ?? false).ToList();
+        }
+        else
+        {
+            activeEvents = new List<string>(items.SuspendedActive?.Events ?? []);
+            foreach (var key in items.Events)
+                if (!activeEvents.Contains(key) && await events.GetByKeyAsync(key, ct) is { Active: true }) activeEvents.Add(key);
+            activeChecks = new List<string>(items.SuspendedActive?.Checks ?? []);
+            foreach (var key in items.Checks)
+                if (!activeChecks.Contains(key) && await checks.GetByKeyAsync(key, ct) is { Active: true }) activeChecks.Add(key);
+        }
         row.ItemsJson = (items with { SuspendedActive = new IntegrationSuspendedItems(activeEvents, activeChecks) }).ToJson();
         await SetActiveAsync(items, decl, false, ct);
     }
