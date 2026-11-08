@@ -39,6 +39,12 @@ public class EventFactRepository(DynamicDbContext db) : IEventFactRepository
             .Join(db.Set<Record>().AsNoTracking().Where(r => r.ModuleId == moduleId), f => f.SourceRecordId, r => r.Id, (f, _) => f.SourceRecordId)
             .Distinct().ToListAsync(ct)).ToHashSet();
 
+    public async Task<HashSet<long>> ListSourceIdsInModuleKeyAsync(string moduleKey, CancellationToken ct) =>
+        (await db.Set<EventFact>().AsNoTracking()
+            .Join(db.Set<Record>().AsNoTracking().Where(r => db.Set<Module>().Any(m => m.Key == moduleKey && m.Id == r.ModuleId)),
+                f => f.SourceRecordId, r => r.Id, (f, _) => f.SourceRecordId)
+            .Distinct().ToListAsync(ct)).ToHashSet();
+
     public void Add(EventFact fact)
     {
         _addedThisRequest.Add(fact);

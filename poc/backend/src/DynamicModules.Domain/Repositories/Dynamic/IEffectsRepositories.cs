@@ -29,6 +29,8 @@ public interface IEventFactRepository
     /// 經 <see cref="Add"/> 加入的事實；不用 OperationId 判斷，因為 Idempotency-Key 是客戶端給的，別的請求可以帶同一個值。
     /// </summary>
     Task<HashSet<long>> ListFrozenBeforeAsync(IReadOnlyCollection<long> sourceRecordIds, CancellationToken ct);
+    /// <summary>某模組（以代號指定）內有事實的來源記錄 Id；明細模組用它查表頭模組。</summary>
+    Task<HashSet<long>> ListSourceIdsInModuleKeyAsync(string moduleKey, CancellationToken ct);
     /// <summary>事實的目標記錄 Id 為 targetRecordId 的事實（連動結果的反查）。</summary>
     Task<List<EventFact>> ListByTargetAsync(long targetRecordId, CancellationToken ct);
     /// <summary>某模組裡有事實的來源記錄 Id（定義變更的整批重算要跳過它們，設計 §10.4）。</summary>

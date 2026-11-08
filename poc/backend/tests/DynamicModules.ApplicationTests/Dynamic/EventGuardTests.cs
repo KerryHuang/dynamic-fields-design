@@ -39,7 +39,7 @@ public class EventGuardTests : EffectsTestBase
     }
 
     [Fact]
-    public async Task A_set_null_cascade_cannot_change_a_booked_source_the_backstop_rolls_it_back()
+    public async Task A_set_null_cascade_cannot_change_a_booked_source_the_delete_is_refused_up_front()
     {
         var s = await BuildStock("egb");
         await NewModule("egb-cust", activate: true);
@@ -50,11 +50,11 @@ public class EventGuardTests : EffectsTestBase
         var cust = await MustCreate("egb-cust", Vals(((await Detail("egb-cust")).TitleFieldId!.Value, "\"c1\"")));
         var doc = await MustCreate(s.Doc, Vals(((await Detail(s.Doc)).TitleFieldId!.Value, "\"d\""), (custRef.Id, cust.Id.ToString())));
 
-        // 刪客戶 → 連帶把單據的客戶欄位清空：單據已記帳，後盾整筆回滾
+        // 刪客戶 → 連帶會把單據的客戶欄位清空：單據已記帳，刪除在寫入前就被擋下（後盾的直接測試在 FactLockHardeningTests）
         var cust2 = (DynamicRecordResponse)(await Send(new DynamicModules.Application.Dynamic.RecordService.Queries.GetRecord.GetRecordRequest(cust.Id))).Data!;
         var deleted = await Run(new DeleteRecordRequest(cust.Id, cust2.RowVersion));
         deleted.IsConflict.Should().BeTrue();
-        deleted.Message.Should().Contain("已經記帳");
+        deleted.Message.Should().Contain("已記帳");
         Db.Context.Set<DynamicModules.Domain.Entities.Dynamic.Record>().AsNoTracking().Single(r => r.Id == cust.Id).DeleteFlag.Should().BeFalse();
     }
 

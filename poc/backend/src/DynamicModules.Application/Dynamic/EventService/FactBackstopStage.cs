@@ -19,16 +19,30 @@ public class FactBackstopStage(IWriteJournal journal, IEventFactRepository facts
     {
         var candidates = JournalView.Merge(journal.Entries).Where(e => e.Kind == JournalKind.Modified && e.BeforeValues is not null).ToList();
         if (candidates.Count == 0) return null;
-        var frozen = await facts.ListFrozenBeforeAsync(candidates.Select(c => c.RecordId).ToList(), ct);
-        foreach (var entry in candidates.Where(c => frozen.Contains(c.RecordId)))
+
+        // 明細列自己沒有事實，鎖在表頭上（設計 §4.7）：把明細的表頭 Id 一併拿去查
+        var modulesById = new Dictionary<long, Module?>();
+        var headerOf = new Dictionary<long, long>();
+        foreach (var c in candidates)
         {
+            if (!modulesById.TryGetValue(c.ModuleId, out var m)) modulesById[c.ModuleId] = m = await modules.GetByIdAsync(c.ModuleId, includeChildren: true, ct);
+            if (m is not null && ModuleRelations.DetailFieldOf(m) is { } parentField
+                && RecordValueProcessor.Parse(c.BeforeValues!).TryGetValue(parentField.Key, out var raw)
+                && raw is { ValueKind: System.Text.Json.JsonValueKind.Number } n && n.TryGetInt64(out var headerId))
+                headerOf[c.RecordId] = headerId;
+        }
+        var frozen = await facts.ListFrozenBeforeAsync(candidates.Select(c => c.RecordId).Concat(headerOf.Values).Distinct().ToList(), ct);
+        foreach (var entry in candidates)
+        {
+            var viaHeader = headerOf.TryGetValue(entry.RecordId, out var header) && frozen.Contains(header);
+            if (!frozen.Contains(entry.RecordId) && !viaHeader) continue;
             var message = $"記錄 {entry.RecordId} 已經記帳（產生過連動記錄），這次請求改動了它的內容，已取消";
             if (entry.AfterDeleted) return ServiceResult.Conflict(message);
-            var module = await modules.GetByIdAsync(entry.ModuleId, includeChildren: true, ct);
+            var module = modulesById[entry.ModuleId];
             if (module is null) continue;
+            // 狀態欄位與彙總照常可變；公式不在豁免內：已記帳的來源公式保留記帳當時的值（§4.7），不隨彙總重算
             var skip = module.Blocks.SelectMany(b => b.Fields)
-                .Where(f => f.Id == module.Workflow?.StatusFieldId || f.Type == FieldType.Rollup
-                            || f.Type == FieldType.Formula && ModuleRelations.DependsOnRollup(module, f))
+                .Where(f => f.Id == module.Workflow?.StatusFieldId || f.Type == FieldType.Rollup)
                 .Select(f => f.Key).ToHashSet();
             var before = RecordValueProcessor.Parse(entry.BeforeValues!);
             var after = RecordValueProcessor.Parse(entry.AfterValues);

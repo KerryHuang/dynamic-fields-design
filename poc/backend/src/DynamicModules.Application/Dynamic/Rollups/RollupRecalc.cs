@@ -130,7 +130,8 @@ public class RollupRecalc(
             if (RollupCalculator.Compute(rollup, sourceModule, children, today, userIds) is { } v) values[rollup.Key] = v;
             else values.Remove(rollup.Key);
         }
-        RecordValueProcessor.ApplyFormulas(parent, values, today);
+        // 已記帳的來源（有事件事實）公式保留記帳當時的值，彙總本身照常更新（設計 §4.7、§10.4）
+        if (!await facts.AnyBySourceAsync(record.Id, ct)) RecordValueProcessor.ApplyFormulas(parent, values, today);
         var json = RecordValueProcessor.Serialize(values);
         if (json == record.ValuesJson) return;
         record.ValuesJson = json;

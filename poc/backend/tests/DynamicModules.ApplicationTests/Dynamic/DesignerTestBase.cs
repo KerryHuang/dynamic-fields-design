@@ -72,6 +72,9 @@ public abstract class DesignerTestBase : IAsyncLifetime
     /// <summary>每個請求自己一個 DI scope（寫入日誌、操作識別碼都是每個請求一份，與正式環境一致）；預設共用根 scope。</summary>
     protected virtual bool ScopePerRequest => false;
 
+    /// <summary>測試要直接驅動請求內部元件（例如寫入後盾）時，自己開一個請求等級的 scope。</summary>
+    protected IServiceScope NewScope() => _sp.CreateScope();
+
     /// <summary>ScopePerRequest 時，每個請求帶的 Idempotency-Key（null 為不帶）。</summary>
     protected string? ClientKey { get; set; }
 
