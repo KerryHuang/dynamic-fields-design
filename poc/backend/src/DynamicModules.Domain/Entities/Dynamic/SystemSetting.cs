@@ -4,6 +4,8 @@ namespace DynamicModules.Domain.Entities.Dynamic;
 public class SystemSetting
 {
     public const string DemoGeneratedOn = "demo.generatedOn";
+    /// <summary>索引回填（ScaledValue 精確換算、文字截斷標記）已完成的版本；未達 <c>RecordIndexer.BackfillVersion</c> 時報表不走 SQL 聚合。</summary>
+    public const string IndexBackfillVersion = "index.backfillVersion";
     public const string ThemeDefaultMode = "theme.defaultMode";
     public const string ThemeDefaultStyle = "theme.defaultStyle";
 

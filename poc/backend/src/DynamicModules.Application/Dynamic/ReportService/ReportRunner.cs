@@ -24,7 +24,7 @@ namespace DynamicModules.Application.Dynamic.ReportService;
 public partial class ReportRunner(
     IModuleRepository modules, IRecordRepository records, IPermissionRepository permissions, IDynamicAccessGuard guard,
     ReferenceResolver resolver, FieldTypeRegistry registry, IBusinessTime time, ReportOptions options,
-    AuthSettings auth, ISystemSettingRepository settings)
+    AuthSettings auth, ISystemSettingRepository settings, IReportQueryRepository queries)
 {
     public const long EntityTitleFieldId = 0;
 
@@ -166,6 +166,28 @@ public partial class ReportRunner(
         if (FieldWithChangedType(d, bound) is { } changed)
             return Fail(FieldMissingState, T(ReportText.TypeChanged, ColumnLabel(changed, locale)));
 
+        // 日期區間與執行上下文在載入前就定好：SQL 路徑與記憶體路徑共用
+        var range = (o.RangeOverride ?? d.DateRange) is { } rangeDef && d.PrimaryDateField is not null ? rangeDef : null;
+        (DateOnly, DateOnly)? resolved = d.PrimaryDateField is null ? null
+            : o.Window is { } fixedWindow ? fixedWindow
+            : range is null ? null : ReportDates.Resolve(range, basis);
+        ReportAppliedRange? applied = range is null ? null : new ReportAppliedRange(resolved!.Value.Item1, resolved.Value.Item2, range.Kind, range.N);
+        var userNames = bound.Values.Any(b => b.Field.Type == FieldType.User)
+            ? (await permissions.ListUsersAsync(ct)).ToDictionary(u => u.UserId, u => u.DisplayName)
+            : new Dictionary<string, string>();
+        var buckets = d.Groups.Where(g => g.Bucket is not null).ToDictionary(g => ReportCalculator.KeyOf(g.Field), g => g.Bucket!);
+        var ctx = new RunContext(locale, userNames, [], buckets);
+
+        // 5a. 能在資料庫端聚合就不載入記錄；不能（或證明不了與記憶體路徑相同）就帶著原因走記憶體路徑
+        var fallbackReasons = new List<string>();
+        if (options.Engine != ReportEngineMode.MemoryOnly)
+        {
+            var sqlResult = await TrySqlAsync(d, o, bound, mainSide, childSide, ctx, basis, resolved, frozen, applied, fallbackReasons, ct);
+            if (sqlResult is not null) return sqlResult;
+        }
+        if (options.Engine == ReportEngineMode.SqlOnly)
+            throw new InvalidOperationException($"SqlOnly 模式下報表無法走 SQL 路徑：{string.Join(", ", fallbackReasons)}");
+
         // 5. 載入：多取一筆才分得出是否超過上限；超過就不回部分結果。條件要載入後才能套用，所以這個上限縮小條件也過不了，訊息要照實說
         var tooManyToLoad = () => Fail(TooManyState, T(ReportText.TooManyToLoad));
         var mainRows = await records.ListForReportAsync(main.Id, mainSide.Perms!.OwnerUserIds, options.MaxLoadRows + 1, ct);
@@ -177,22 +199,12 @@ public partial class ReportRunner(
             if (childRows.Count > options.MaxLoadRows) return tooManyToLoad();
         }
 
-        var userNames = bound.Values.Any(b => b.Field.Type == FieldType.User)
-            ? (await permissions.ListUsersAsync(ct)).ToDictionary(u => u.UserId, u => u.DisplayName)
-            : new Dictionary<string, string>();
-        var buckets = d.Groups.Where(g => g.Bucket is not null).ToDictionary(g => ReportCalculator.KeyOf(g.Field), g => g.Bucket!);
-        var ctx = new RunContext(locale, userNames, [], buckets);
-
         var mainCells = await BuildCellsAsync(mainSide, mainRows, bound.Values, ctx, ct);
         var childCells = childSide is null
             ? new Dictionary<long, Dictionary<string, ReportCell>>()
             : await BuildCellsAsync(childSide, childRows, bound.Values, ctx, ct);
 
         // 6. 條件先套主模組與其帶出欄位，再過濾子記錄（spec §6.2）；日期區間作用在主要日期欄位那一邊
-        var range = (o.RangeOverride ?? d.DateRange) is { } rangeDef && d.PrimaryDateField is not null ? rangeDef : null;
-        (DateOnly, DateOnly)? resolved = d.PrimaryDateField is null ? null
-            : o.Window is { } fixedWindow ? fixedWindow
-            : range is null ? null : ReportDates.Resolve(range, basis);
         bool Passes(string source, IReadOnlyDictionary<string, ReportCell> cells) =>
             d.Filters.Where(f => f.Field.Source == source).All(f => Matches(f, cells[ReportCalculator.KeyOf(f.Field)], basis))
             && (resolved is not { } window || d.PrimaryDateField!.Source != source
@@ -245,9 +257,9 @@ public partial class ReportRunner(
 
         IReadOnlyList<ReportGroupResult>? groups = drilling ? null : LabeledGroups(calc.Groups, d, bound, ctx);
         IReadOnlyList<IReadOnlyList<object?>>? detail = fieldColumns.Count == 0 ? null : DetailRows(rows, fieldColumns, d, bound, ctx);
-        ReportAppliedRange? applied = range is null ? null : new ReportAppliedRange(resolved!.Value.Item1, resolved.Value.Item2, range.Kind, range.N);
         return new ReportResult(rows.Count == 0 ? Empty : Ok, null, T(ReportText.RowMeaning, rowModule.NameI18n.Resolve(locale)), columns,
-            groups, calc.Total, detail, calc.DedupedNote, basis, applied, frozen, detail?.Count);
+            groups, calc.Total, detail, calc.DedupedNote, basis, applied, frozen, detail?.Count,
+            Engine: "memory", FallbackReasons: fallbackReasons);
     }
 
     private async Task<Module?> ActiveModuleAsync(string key, CancellationToken ct) =>

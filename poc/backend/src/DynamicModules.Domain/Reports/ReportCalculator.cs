@@ -51,7 +51,7 @@ public static class ReportCalculator
     /// 列相加或下鑽列數對不上總計時要說明（spec §6.3、§13.1）。合併時主模組的數字每筆只算一次；
     /// 依多選欄位分組時一筆落在多組，任何相加型量值都會加超過總計。最小、最大與條件占比不是相加出來的，不需要說明。
     /// </summary>
-    private static bool NeedsDedupedNote(IReadOnlyList<ReportMeasure> measures, bool merged, bool multiGroup) =>
+    public static bool NeedsDedupedNote(IReadOnlyList<ReportMeasure> measures, bool merged, bool multiGroup) =>
         (merged && measures.Any(m => m.Kind == "countMain" || (m.Kind is "sum" or "avg" && m.Field?.Source == "main")))
         || (multiGroup && measures.Any(m => m.Kind is "sum" or "avg" or "countMain" or "countChild"));
 

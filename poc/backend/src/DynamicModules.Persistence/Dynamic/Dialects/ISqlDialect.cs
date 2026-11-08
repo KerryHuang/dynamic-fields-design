@@ -14,4 +14,11 @@ public interface ISqlDialect
 
     /// <summary>區分大小寫的「開頭是」。</summary>
     string StartsWithCaseSensitive(string column, string param);
+
+    /// <summary>
+    /// 日期欄位的分桶鍵運算式，輸出必須與 <c>ReportDates.BucketKey</c> 逐字相同：day 2026-11-05、week 2026-W45（ISO 週）、
+    /// month 2026-11、quarter 2026-Q4、year 2026。bucket 為 null 時回日期部分 yyyy-MM-dd（日期時間欄位取台北牆上日期，索引本來就存牆上時間）。
+    /// 欄位為 NULL 時運算式為 NULL，由呼叫端 COALESCE。
+    /// </summary>
+    string DateBucket(string column, string? bucket);
 }

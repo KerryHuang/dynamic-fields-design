@@ -46,6 +46,7 @@ public static class DependencyInjection
         services.AddScoped<IOperationRepository, OperationRepository>();
         services.AddScoped<IPrintTemplateRepository, PrintTemplateRepository>();
         services.AddScoped<IReportRepository, ReportRepository>();
+        services.AddScoped<IReportQueryRepository, ReportQueryRepository>();
         services.AddScoped<IDashboardRepository, DashboardRepository>();
         services.AddScoped<ISystemSettingRepository, SystemSettingRepository>();
         services.AddScoped<IPermissionRepository, PermissionRepository>();

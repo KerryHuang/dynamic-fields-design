@@ -7,6 +7,9 @@ namespace DynamicModules.Application.Dynamic.RecordService;
 /// <summary>把記錄值依欄位設定投影成 RecordIndex 列。</summary>
 public static class RecordIndexer
 {
+    /// <summary>索引回填版本（ScaledValue 精確換算、TextTruncated）；<c>SystemSetting.IndexBackfillVersion</c> 達到它之前，報表不走 SQL 聚合。</summary>
+    public const string BackfillVersion = "1";
+
     public static bool ShouldIndex(Field field) =>
         field.Status == FieldStatus.Active
         && (field.Config.IsFilterable || field.Config.IsSortable || field.Type is FieldType.MultiEnum or FieldType.Reference);

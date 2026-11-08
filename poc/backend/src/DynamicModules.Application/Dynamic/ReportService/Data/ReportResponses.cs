@@ -19,6 +19,7 @@ public record ReportRunOptions(
 /// 報表執行結果。State 是 ok|empty|restricted|fieldMissing|moduleDisabled|tooMany，HTTP 一律 200；ok、empty 以外不帶任何數字。
 /// BasisDate 與後端的今天不同時 BasisIsFrozen 為 true（Demo 資料日期停在產生那天），前端據此標示資料基準日。
 /// Cumulative 對齊 Groups，是第一個量值的累計占比（百分比）。IgnoresDateFilter 表示畫面送了日期篩選但這張卡片沒有採用（沒有主要日期欄位，或卡片有自己的區間）。
+/// Engine 是 sql|memory（這次實際走的路徑），FallbackReasons 是走記憶體路徑的原因代碼（走 SQL 時為空），例如 fieldNotIndexed:12。
 /// DetailRows 每列的順序對齊 Columns 中 Role 為 field 的欄。DetailTotal 是明細全部的列數；DetailTruncated 表示畫面上限截掉了部分列（<see cref="ReportRules.CapDetail"/>），Total 不受影響。
 /// </summary>
 public record ReportResult(
@@ -26,7 +27,8 @@ public record ReportResult(
     IReadOnlyList<ReportGroupResult>? Groups, IReadOnlyDictionary<string, decimal?>? Total,
     IReadOnlyList<IReadOnlyList<object?>>? DetailRows, bool DedupedNote, DateOnly BasisDate, ReportAppliedRange? AppliedRange, bool BasisIsFrozen = false,
     int? DetailTotal = null, bool DetailTruncated = false,
-    IReadOnlyList<decimal?>? Cumulative = null, ReportCompare? Compare = null, bool IgnoresDateFilter = false);
+    IReadOnlyList<decimal?>? Cumulative = null, ReportCompare? Compare = null, bool IgnoresDateFilter = false,
+    string? Engine = null, IReadOnlyList<string>? FallbackReasons = null);
 
 /// <summary>與前幾期平均的比較：PreviousAverage 是前 N 期第一個量值的平均，DeltaPercent 是目前值相對它的百分比（平均為 0 時為 null）。</summary>
 public record ReportCompare(decimal? PreviousAverage, decimal? DeltaPercent);
