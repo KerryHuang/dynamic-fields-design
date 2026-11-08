@@ -321,7 +321,7 @@ public class MesAppTests : IDisposable
         var released = await ReleasedWorkOrder(100);
         var notStarted = await TryShipment(released, 10);
         notStarted.StatusCode.Should().NotBe(HttpStatusCode.Created);
-        await Body(notStarted, "參照的資料");
+        await Body(notStarted, "目標記錄的狀態不符");
 
         await Report(released, 3, 60);   // 生產中，完工量不足
         var partial = await TryShipment(released, 10);
@@ -347,7 +347,7 @@ public class MesAppTests : IDisposable
         var repoint = await _admin.PutAsJsonAsync($"{Base}/records/{Id(draft)}",
             new { values = new Dictionary<string, object?> { [s["工令"]] = Id(running) }, rowVersion = current.GetProperty("rowVersion").GetString() });
         repoint.StatusCode.Should().NotBe(HttpStatusCode.OK);
-        await Body(repoint, "參照的資料");
+        await Body(repoint, "目標記錄的狀態不符");
         (await StatusOf(running, "workorder")).Should().Be("生產中");
 
         var otherDone = await DoneWorkOrder(30);
