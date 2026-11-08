@@ -20,7 +20,7 @@ namespace DynamicModules.Application.Dynamic.DemoService;
 /// 再建示範報表與預設儀表板。呼叫端要在交易內；任何一步失敗就回 Failed（訊息前面加步驟名），由外層回滾。
 /// </summary>
 public sealed class DemoStructure(
-    ISender sender, IPermissionRepository permissions, AppOpener appOpener, IAppRepository apps, IReportRepository reports,
+    ISender sender, IPermissionRepository permissions, AppOpener appOpener, IAppRepository apps, IReportRepository reports, IModuleRepository modules,
     EventService.EffectBudget budget, IWriteJournal journal)
 {
     public const string CrmAppId = DemoCatalog.CrmAppId;
@@ -45,6 +45,7 @@ public sealed class DemoStructure(
             opened[appId] = app.Ids!;
         }
 
+        opened[DemoCatalog.MesAppId] = await WithIntegrationFieldsAsync(DemoCatalog.MesAppId, opened[DemoCatalog.MesAppId], ct);
         var ids = opened[DemoCatalog.MesAppId];
         var (reportIds, reportFailure) = await CreateReportsAsync(ids, groupIds, ct);
         if (reportFailure is not null) return (null, reportFailure);
@@ -61,6 +62,25 @@ public sealed class DemoStructure(
             Crm = new DemoContext(today, sender, opened[DemoCatalog.CrmAppId], groupIds),
             Inventory = new DemoContext(today, sender, opened[DemoCatalog.InventoryAppId], groupIds)
         }, null);
+    }
+
+    /// <summary>
+    /// 整合欄位不在套件的 id 對照裡（夥伴應用程式開啟後才建），所以從整合的 ItemsJson 取欄位 id，補進 FieldKeys，
+    /// 讓情境可以用 ctx.Values("shipment", ("stockItem", ...)) 一樣的寫法填值。
+    /// </summary>
+    private async Task<TemplateIdMap> WithIntegrationFieldsAsync(string appId, TemplateIdMap ids, CancellationToken ct)
+    {
+        var app = (await apps.GetByKeyAsync(appId, ct))!;
+        var items = (await apps.ListIntegrationsAsync(ct)).Where(r => r.AppId == app.Id)
+            .SelectMany(r => AppService.Integrations.IntegrationItems.Parse(r.ItemsJson).Fields).ToList();
+        var keys = ids.FieldKeys.ToDictionary(x => x.Key, x => x.Value);
+        foreach (var item in items)
+        {
+            var module = await modules.GetByKeyAsync(ids.ModuleKeys[item.Module], true, ct);
+            var field = module?.Blocks.SelectMany(b => b.Fields).FirstOrDefault(f => f.Id == item.FieldId);
+            if (field is not null) keys[$"{item.Module}.{item.Code}"] = field.Key;
+        }
+        return ids with { FieldKeys = keys };
     }
 
     /// <summary>建示範報表並分享給各情境的主管群組（擁有者是 admin）。回報表名稱對應的 id，儀表板卡片用。</summary>

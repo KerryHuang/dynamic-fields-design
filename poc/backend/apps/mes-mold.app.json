@@ -5707,5 +5707,205 @@
    "active": true,
    "body": "<h1 align=\"center\">出貨單 {{no}}</h1><table width=\"100%\" cellpadding=\"4\"><tr><td>客戶：{{customer}}</td><td align=\"right\">出貨日期：{{shipDate}}</td></tr><tr><td>工令：{{workOrder}}</td><td align=\"right\">運送方式：{{carrier}}</td></tr></table><table width=\"100%\" border=\"1\" cellpadding=\"4\" style=\"border-collapse:collapse\"><tr><th>出貨數量</th><td align=\"right\">{{qty}}</td></tr></table><p>備註：{{remark}}</p><table width=\"100%\" cellpadding=\"12\"><tr><td>出貨人：＿＿＿＿＿</td><td>簽收人：＿＿＿＿＿</td></tr></table>"
   }
+ ],
+ "integrations": [
+  {
+   "code": "stockOut",
+   "name": {
+    "zh-TW": "出貨扣庫存",
+    "en-US": "Shipments deduct stock",
+    "th": "การส่งสินค้าตัดสต็อก",
+    "vi": "Xuất hàng trừ tồn kho"
+   },
+   "with": [
+    {
+     "id": "inventory",
+     "modules": [
+      "item",
+      "warehouse",
+      "move"
+     ]
+    }
+   ],
+   "onPartnerClosed": "skip",
+   "fields": [
+    {
+     "module": "shipment",
+     "block": "main",
+     "code": "stockItem",
+     "type": "reference",
+     "label": {
+      "zh-TW": "庫存品項",
+      "en-US": "Stock item",
+      "th": "สินค้าคงคลัง",
+      "vi": "Mặt hàng tồn kho"
+     },
+     "config": {
+      "refTarget": {
+       "kind": "module",
+       "key": "item",
+       "app": "inventory"
+      },
+      "isFilterable": true
+     }
+    },
+    {
+     "module": "shipment",
+     "block": "main",
+     "code": "stockWarehouse",
+     "type": "reference",
+     "label": {
+      "zh-TW": "出庫倉",
+      "en-US": "Issue warehouse",
+      "th": "คลังที่จ่ายออก",
+      "vi": "Kho xuất"
+     },
+     "config": {
+      "refTarget": {
+       "kind": "module",
+       "key": "warehouse",
+       "app": "inventory"
+      }
+     }
+    }
+   ],
+   "events": [
+    {
+     "code": "mes-stock-out",
+     "name": {
+      "zh-TW": "出貨過帳扣庫存",
+      "en-US": "Post shipment to stock",
+      "th": "ลงบัญชีส่งสินค้าตัดสต็อก",
+      "vi": "Ghi sổ xuất hàng trừ tồn kho"
+     },
+     "active": true,
+     "source": "shipment",
+     "trigger": {
+      "on": "transition",
+      "from": [
+       "draft"
+      ],
+      "to": "shipped"
+     },
+     "when": null,
+     "effects": [
+      {
+       "code": "post",
+       "kind": "create",
+       "target": "inventory/move",
+       "set": [
+        {
+         "to": "inventory/move.item",
+         "from": {
+          "side": "header",
+          "field": "shipment.stockItem"
+         }
+        },
+        {
+         "to": "inventory/move.warehouse",
+         "from": {
+          "side": "header",
+          "field": "shipment.stockWarehouse"
+         }
+        },
+        {
+         "to": "inventory/move.qty",
+         "formula": {
+          "side": "header",
+          "expr": "-{shipment.qty}"
+         }
+        },
+        {
+         "to": "inventory/move.kind",
+         "const": "opt_out"
+        },
+        {
+         "to": "inventory/move.moveDate",
+         "const": "today"
+        },
+        {
+         "to": "inventory/move.docNo",
+         "from": {
+          "side": "header",
+          "field": "shipment.no"
+         }
+        }
+       ]
+      }
+     ]
+    },
+    {
+     "code": "mes-stock-out-cancel",
+     "name": {
+      "zh-TW": "出貨取消沖銷庫存",
+      "en-US": "Reverse stock on cancelled shipment",
+      "th": "กลับรายการสต็อกเมื่อยกเลิกการส่ง",
+      "vi": "Đảo tồn kho khi hủy xuất hàng"
+     },
+     "active": true,
+     "source": "shipment",
+     "trigger": {
+      "on": "transition",
+      "from": [
+       "shipped"
+      ],
+      "to": "cancelled"
+     },
+     "when": null,
+     "effects": [
+      {
+       "code": "undo",
+       "kind": "reverse",
+       "target": "inventory/move",
+       "ofEvent": "mes-stock-out",
+       "ofEffect": "post"
+      }
+     ]
+    }
+   ],
+   "checks": [
+    {
+     "code": "mes-stock-item-required",
+     "name": {
+      "zh-TW": "出貨必須指定庫存品項",
+      "en-US": "Shipments need a stock item",
+      "th": "การส่งสินค้าต้องระบุสินค้าคงคลัง",
+      "vi": "Xuất hàng phải chọn mặt hàng tồn kho"
+     },
+     "active": true,
+     "module": "shipment",
+     "groupBy": [
+      "shipment.workOrder"
+     ],
+     "function": "count",
+     "field": null,
+     "where": {
+      "all": [
+       {
+        "field": "shipment.status",
+        "op": "eq",
+        "value": "opt_shipped"
+       },
+       {
+        "field": "shipment.stockItem",
+        "op": "isEmpty"
+       }
+      ]
+     },
+     "assert": {
+      "op": "lte",
+      "limit": {
+       "const": 0
+      }
+     },
+     "message": {
+      "zh-TW": "整合啟用中，已出貨的出貨單必須指定庫存品項",
+      "en-US": "While stock integration is active, shipped shipments need a stock item",
+      "th": "เมื่อเปิดการเชื่อมสต็อก การส่งสินค้าต้องระบุสินค้าคงคลัง",
+      "vi": "Khi tích hợp tồn kho đang bật, phiếu xuất phải chọn mặt hàng tồn kho"
+     }
+    }
+   ]
+  }
  ]
 }

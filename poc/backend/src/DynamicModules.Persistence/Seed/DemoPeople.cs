@@ -27,7 +27,7 @@ public static class DemoPeople
         ("qa", "品保", ["qa01"]),
         ("planner", "生管組", ["planner01"]),
         ("purchasing", "採購組", ["buyer01"]),
-        ("warehouse", "倉管組", ["keeper01"]),
+        ("warehouse", "倉管組", ["keeper01", "planner01"]),
         ("ops-manager", "進銷存管理組", ["ops01"])
     ];
 

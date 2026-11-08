@@ -15,5 +15,5 @@ public static class DemoCatalog
     /// <summary>情境的規劃順序（也是同一時刻步驟的執行順序）。</summary>
     public static IReadOnlyList<IDemoScenario> Scenarios { get; } =
         [new OrderScenario(), new RepairScenario(), new MoldCareScenario(), new QualityScenario(), new CrmScenario(),
-         new MesQuoteScenario(), new MesProductionScenario(), new InventoryScenario()];
+         new MesQuoteScenario(), new InventoryScenario(), new MesProductionScenario()];
 }

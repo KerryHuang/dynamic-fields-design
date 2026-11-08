@@ -87,7 +87,7 @@ public class SeedDataTests
         Of("floor").Should().Equal("floor01", "floor02");
         Of("planner").Should().Equal("planner01");
         Of("purchasing").Should().Equal("buyer01");
-        Of("warehouse").Should().Equal("keeper01");
+        Of("warehouse").Should().Equal("keeper01", "planner01");
         Of("ops-manager").Should().Equal("ops01");
         (await db.Context.Set<AppUser>().CountAsync()).Should().Be(12);
         (await db.Context.Set<AppUser>().Where(u => u.UserId != "admin").AllAsync(u => u.IsDemoAccount && u.PasswordHash == null))

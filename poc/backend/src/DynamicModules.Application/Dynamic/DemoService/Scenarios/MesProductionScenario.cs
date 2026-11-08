@@ -17,6 +17,8 @@ public sealed class MesProductionScenario : IDemoScenario
 
     private const string Planner = "planner01";
     private const string Floor = "floor01";
+    private const int FinishedItem = 7;      // InventoryScenario.Items 的「成品模仁」
+    private const int FinishedWarehouse = 1; // InventoryScenario.Warehouses 的「成品倉」
 
     private static readonly string[] Processes = ["material", "rough", "cnc", "edm", "polish", "assemble"];
     private static readonly string[] Stations = ["SAW-1", "MILL-2", "CNC-3", "EDM-4", "POL-1", "ASM-1"];
@@ -138,18 +140,27 @@ public sealed class MesProductionScenario : IDemoScenario
                 End.ShippedPartly => [completed * 6 / 10],
                 _ => new[] { completed }
             };
+            // 第一張工令另有一張樣品出貨單：出貨扣庫存後被生管取消（沖回庫存），所以放在正式出貨之前，不佔完工量
+            if (i == 0)
+            {
+                at = After(at, 1);
+                var sample = CreateShipment(plan, wo, customer, DateOnly.FromDateTime(at), 1, "快遞", at, $"{label} 樣品出貨單");
+                at = After(at, 0);
+                plan.Update(sample, at, Planner, $"{label} 樣品出貨", Status("shipment", "shipped"));
+                at = After(at, 1);
+                plan.Refresh(sample, at, Planner, $"{label} 樣品取消前重讀");
+                at = After(at, 0);
+                plan.Update(sample, at, Planner, $"{label} 樣品出貨取消（沖回庫存）", Status("shipment", "cancelled"));
+            }
+
             for (var b = 0; b < batches.Length; b++)
             {
                 var shipQty = batches[b];
                 at = After(at, b == 0 ? 1 : 3);
                 var shipDate = DateOnly.FromDateTime(at);
-                var shipment = plan.Create("mes-shipment", at, Planner, $"{label} 第 {b + 1} 批出貨單", ctx => new CreateRecordRequest(
-                    ctx.Ids.ModuleKeys["shipment"],
-                    ctx.Values("shipment", ("workOrder", wo.Id), ("customer", customer), ("shipDate", Iso(shipDate)), ("qty", shipQty),
-                        ("carrier", b == 0 ? "貨運" : "自取"), ("status", ctx.Opt("shipment", "draft")))));
+                var shipment = CreateShipment(plan, wo, customer, shipDate, shipQty, b == 0 ? "貨運" : "自取", at, $"{label} 第 {b + 1} 批出貨單");
                 at = After(at, 0);
-                plan.Update(shipment, at, Planner, $"{label} 第 {b + 1} 批出貨", (ctx, r) =>
-                    new UpdateRecordRequest(r.Id, ctx.Values("shipment", ("status", ctx.Opt("shipment", "shipped"))), r.RowVersion));
+                plan.Update(shipment, at, Planner, $"{label} 第 {b + 1} 批出貨", Status("shipment", "shipped"));
             }
         }
     }
@@ -161,8 +172,24 @@ public sealed class MesProductionScenario : IDemoScenario
             : ctx.Values("report", ("workOrder", wo.Id), ("opSeq", seq), ("process", ctx.Opt("report", process)), ("reportDate", Iso(date)),
                 ("worker", Floor), ("goodQty", good), ("defectQty", 0)));
 
-    private static Func<DemoContext, DemoRecord, UpdateRecordRequest> Status(string code) =>
-        (ctx, r) => new UpdateRecordRequest(r.Id, ctx.Values("workorder", ("status", ctx.Opt("workorder", code))), r.RowVersion);
+    private static Func<DemoContext, DemoRecord, UpdateRecordRequest> Status(string code) => Status("workorder", code);
+
+    private static Func<DemoContext, DemoRecord, UpdateRecordRequest> Status(string module, string code) =>
+        (ctx, r) => new UpdateRecordRequest(r.Id, ctx.Values(module, ("status", ctx.Opt(module, code))), r.RowVersion);
+
+    /// <summary>
+    /// 出貨單。進銷存同時開啟時，「出貨扣庫存」整合要求每張出貨單帶庫存品項與倉庫：一律從進銷存情境建立的「成品模仁」「成品倉」扣
+    /// （期初每品每倉 500，所有工令的出貨量加起來遠小於此）。進銷存情境排在本情境之前，所以這兩筆記錄的 Id 執行時已回填。
+    /// </summary>
+    private static DemoRecord CreateShipment(DemoPlan plan, DemoRecord wo, string customer, DateOnly date, int qty, string carrier, DateTime at, string label)
+    {
+        var stockItem = plan.Records["inv-item"][FinishedItem];
+        var stockWarehouse = plan.Records["inv-warehouse"][FinishedWarehouse];
+        return plan.Create("mes-shipment", at, Planner, label, ctx => new CreateRecordRequest(
+            ctx.Ids.ModuleKeys["shipment"],
+            ctx.Values("shipment", ("workOrder", wo.Id), ("customer", customer), ("shipDate", Iso(date)), ("qty", qty), ("carrier", carrier),
+                ("stockItem", stockItem.Id), ("stockWarehouse", stockWarehouse.Id), ("status", ctx.Opt("shipment", "draft")))));
+    }
 
     private static string Iso(DateOnly d) => d.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
 }

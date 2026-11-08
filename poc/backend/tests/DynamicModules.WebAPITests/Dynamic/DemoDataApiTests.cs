@@ -48,7 +48,7 @@ public sealed class DemoDataApiTests
         (await JsonOf(res)).GetProperty("state").GetString().Should().Be("running");
 
         var s = await PollUntilDone(admin);
-        s.GetProperty("state").GetString().Should().Be("generated");
+        s.GetProperty("state").GetString().Should().Be("generated", s.ToString());
         s.GetProperty("total").GetInt32().Should().BePositive();
         s.GetProperty("done").GetInt32().Should().Be(s.GetProperty("total").GetInt32());
 
