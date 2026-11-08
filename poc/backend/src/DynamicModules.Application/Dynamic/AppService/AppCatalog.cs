@@ -32,6 +32,7 @@ public sealed class AppCatalog(IReadOnlyList<AppPackageData> builtIns)
         }
         if (AppDependencyGraph.FindCycle(packages.Select(p => (p.Manifest.Id, (IReadOnlyList<string>)p.Manifest.Requires.Apps.Select(a => a.Id).ToList()))) is { } cycle)
             errors.Add($"內建套件的 requires 有循環：{string.Join(" → ", cycle)}");
+        errors.AddRange(AppCatalogChecks.Run(packages));
         if (errors.Count > 0)
             throw new InvalidOperationException("內建應用程式載入失敗：" + Environment.NewLine + string.Join(Environment.NewLine, errors));
         return new AppCatalog(packages);
