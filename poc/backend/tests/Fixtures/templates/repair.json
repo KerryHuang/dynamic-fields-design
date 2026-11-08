@@ -15,7 +15,7 @@
             { "code": "no", "type": "autonumber", "label": { "zh-TW": "報修單號", "en-US": "Request no." },
               "config": { "format": "REP-{yyyyMM}-{0000}", "showInList": true, "isSortable": true } },
             { "code": "mold", "type": "reference", "label": { "zh-TW": "模具", "en-US": "Mold" },
-              "config": { "refTarget": { "kind": "entity", "key": "design.mold" },
+              "config": { "refTarget": { "kind": "entity", "key": "test.entity" },
                           "required": true, "showInList": true, "isFilterable": true } },
             { "code": "requester", "type": "user", "label": { "zh-TW": "申請人", "en-US": "Requester" },
               "config": { "required": true, "showInList": true } },

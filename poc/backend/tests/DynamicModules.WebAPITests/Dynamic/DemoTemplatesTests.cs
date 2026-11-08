@@ -92,7 +92,7 @@ public sealed class DemoTemplatesTests : IDisposable
     /// <summary>報修的必填欄位：模具、申請人、故障說明（報修日期預設今天、狀態預設待處理）。</summary>
     private static Dictionary<string, object?> RepairValues(Layout r, string requester, Dictionary<string, object?>? extra = null)
     {
-        var v = new Dictionary<string, object?> { [r["模具"]] = "M-0001", [r["申請人"]] = requester, [r["故障說明"]] = "冷卻水路漏水" };
+        var v = new Dictionary<string, object?> { [r["模具"]] = "E-0001", [r["申請人"]] = requester, [r["故障說明"]] = "冷卻水路漏水" };
         foreach (var (k, x) in extra ?? []) v[k] = x;
         return v;
     }
@@ -220,7 +220,7 @@ public sealed class DemoTemplatesTests : IDisposable
         // Cascade：刪保養紀錄，它的更換零件跟著刪
         var care = await LayoutOf("mold-care");
         var part = await LayoutOf("mold-care-part");
-        var careRec = await Create(_admin, "mold-care", new() { [care["模具"]] = "M-0001", [care["保養週期（天）"]] = 90 });
+        var careRec = await Create(_admin, "mold-care", new() { [care["模具"]] = "E-0001", [care["保養週期（天）"]] = 90 });
         var partRec = await Create(_admin, "mold-care-part", new() { [part["保養紀錄"]] = IdOf(careRec), [part["零件名稱"]] = "頂針" });
         (await Delete(IdOf(careRec))).StatusCode.Should().Be(HttpStatusCode.OK);
         (await _admin.GetAsync($"{Base}/records/{IdOf(partRec)}")).StatusCode.Should().Be(HttpStatusCode.NotFound);

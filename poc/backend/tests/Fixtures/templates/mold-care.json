@@ -7,7 +7,7 @@
     {
       "code": "mold", "key": "mold-info", "name": { "zh-TW": "模具資料", "en-US": "Mold information" },
       "icon": "precision_manufacturing", "section": "設備",
-      "kind": "extension", "hostEntityKey": "design.mold",
+      "kind": "extension", "hostEntityKey": "test.entity",
       "titleField": null,
       "blocks": [
         { "code": "main", "label": { "zh-TW": "保養資訊", "en-US": "Care information" }, "collapsed": false,
@@ -76,7 +76,7 @@
             { "code": "no", "type": "autonumber", "label": { "zh-TW": "保養單號", "en-US": "Care no." },
               "config": { "format": "MC-{yyyyMM}-{0000}", "showInList": true, "isSortable": true } },
             { "code": "mold", "type": "reference", "label": { "zh-TW": "模具", "en-US": "Mold" },
-              "config": { "refTarget": { "kind": "entity", "key": "design.mold" },
+              "config": { "refTarget": { "kind": "entity", "key": "test.entity" },
                           "required": true, "showInList": true, "isFilterable": true } },
             { "code": "categories", "type": "multienum", "label": { "zh-TW": "保養類別", "en-US": "Care categories" },
               "options": [

@@ -37,7 +37,11 @@ public class MesMigrationEquivalenceTests
     private static bool Same(JsonNode? a, JsonNode? b) => JsonNode.DeepEquals(a, b);
 
     // 白名單（設計 §4.2）：這些欄位的型別／設定允許不同，或套件多出來的欄位／規則／權限
-    private static readonly HashSet<string> ChangedFields = ["line.unit"];                       // 下拉改文字：轉換不能複製下拉
+    private static readonly HashSet<string> ChangedFields =
+        ["line.unit",                                                                             // 下拉改文字：轉換不能複製下拉
+         "repair.mold", "care.mold"];                                                             // 舊範本的既有實體改指測試用實體 test.entity（s2d-0）
+    // 舊範本的模具擴充模組，宿主改指測試用實體 test.entity（s2d-0），宿主實體不再與套件相同
+    private static readonly HashSet<string> ChangedHosts = ["mold"];
     private static readonly HashSet<string> AddedFields =
         ["order.fromQuote", "order.qualityCount", "line.sourceLine", "quality.workOrder"];      // 追溯、彙總、掛工令
     private static readonly Dictionary<string, string[]> AddedPermissionGroups =
@@ -61,7 +65,10 @@ public class MesMigrationEquivalenceTests
 
             ((string)now["key"]!).Should().Be("mes-" + (string)old["key"]!, code);
             foreach (var prop in new[] { "name", "icon", "section", "kind", "hostEntityKey", "titleField" })
+            {
+                if (prop == "hostEntityKey" && ChangedHosts.Contains(code)) continue;
                 Same(old[prop], now[prop]).Should().BeTrue($"{code}.{prop}");
+            }
 
             // 區塊與欄位
             var nowBlocks = now["blocks"]!.AsArray().ToDictionary(b => (string)b!["code"]!);
