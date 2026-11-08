@@ -430,5 +430,23 @@ public class ReportSqlEquivalenceTests : ReportTestBase
         plan.Should().NotContain(d => d.StartsWith("SCAN r") || d.StartsWith("SCAN Dynamic_Record"), string.Join(" | ", plan));
         plan.Should().Contain(d => d.StartsWith("SEARCH r USING INTEGER PRIMARY KEY"), string.Join(" | ", plan));
         plan.Should().Contain(d => d.StartsWith("SEARCH di USING INDEX") && d.Contains("TextValue"), "驅動走狀態的索引：" + string.Join(" | ", plan));
+        // 其他條件逐筆記錄查：必須走 (RecordId, FieldId) 的主鍵索引。若規劃器改走欄位值索引，每筆記錄都掃一遍整個日期範圍（300 萬筆時是災難）
+        plan.Should().NotContain(d => d.StartsWith("SEARCH i0 USING INDEX IX_"), string.Join(" | ", plan));
+        plan.Should().Contain(d => d.StartsWith("SEARCH i0 USING INDEX sqlite_autoindex"), string.Join(" | ", plan));
+    }
+
+    [Theory]
+    [InlineData(ReportSqlCheckKind.Number, "IX_Dynamic_RecordIndex_NoScaled")]
+    [InlineData(ReportSqlCheckKind.Text, "IX_Dynamic_RecordIndex_Truncated")]
+    public async Task Plan_Probes_UsePartialIndexes_SoCostFollowsBadRowsNotDataVolume(ReportSqlCheckKind kind, string expectedIndex)
+    {
+        await Prepare();
+        var module = await Db.Context.Set<Module>().SingleAsync(m => m.Key == "order");
+        var probe = ReportQueryBuilder.Probe(new ReportSqlCheck(Amount.Id, kind), new ReportSqlScope(module.Id, null));
+        var connection = Db.Context.Database.GetDbConnection();
+        await Db.Context.Database.OpenConnectionAsync();
+        var plan = (await connection.QueryAsync<(int id, int parent, int notused, string detail)>("EXPLAIN QUERY PLAN " + probe.Sql, probe.Parameters))
+            .Select(r => r.detail).ToList();
+        plan.Should().Contain(d => d.StartsWith("SEARCH t USING INDEX " + expectedIndex), string.Join(" | ", plan));
     }
 }

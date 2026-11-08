@@ -120,6 +120,9 @@ public static class Seeder
         foreach (var (period, count) in monthCounts)
             Exec(conn, "INSERT INTO Dynamic_NumberSequence (FieldId, Period, ModuleId, NextValue) VALUES ($f, $p, $m, $n)", tx,
                 ("$f", noKeyId), ("$p", period), ("$m", ledger.Id), ("$n", count + 1));
+        // 直接寫入的索引已含精確的 ScaledValue 與截斷標記，等同一次性回填已完成
+        Exec(conn, "INSERT OR REPLACE INTO Dynamic_SystemSetting (Key, Value) VALUES ($k, $v)", tx,
+            ("$k", DynamicModules.Domain.Entities.Dynamic.SystemSetting.IndexBackfillVersion), ("$v", RecordIndexer.BackfillVersion));
         tx.Commit();
         Console.WriteLine($"資料寫入完成（{sw.Elapsed.TotalSeconds:F0}s），重建索引…");
 
@@ -173,8 +176,8 @@ public sealed class BulkWriter
         NextId = nextId;
         _record = Make(conn, tx, "INSERT INTO Dynamic_Record (Id, ModuleId, Title, OwnerUserId, ValuesJson, RowVersion, DeleteFlag, CreatedUserId, CreatedTime) VALUES ($id,$m,$t,'admin',$v,$rv,0,'admin',$ct)",
             "$id", "$m", "$t", "$v", "$rv", "$ct");
-        _index = Make(conn, tx, "INSERT INTO Dynamic_RecordIndex (RecordId, FieldId, Seq, TextValue, NumberValue, DateValue, RefKey) VALUES ($r,$f,$s,$tv,$nv,$dv,$rk)",
-            "$r", "$f", "$s", "$tv", "$nv", "$dv", "$rk");
+        _index = Make(conn, tx, "INSERT INTO Dynamic_RecordIndex (RecordId, FieldId, Seq, TextValue, NumberValue, DateValue, RefKey, ScaledValue, TextTruncated) VALUES ($r,$f,$s,$tv,$nv,$dv,$rk,$sv,$tt)",
+            "$r", "$f", "$s", "$tv", "$nv", "$dv", "$rk", "$sv", "$tt");
         _history = Make(conn, tx, "INSERT INTO Dynamic_RecordHistory (RecordId, FieldId, Operation, OldValue, NewValue, ChangedUserId, ChangedTime) VALUES ($r,NULL,'Create',NULL,NULL,'admin',$ct)",
             "$r", "$ct");
     }
@@ -201,6 +204,7 @@ public sealed class BulkWriter
         {
             Set(_index, "$r", id); Set(_index, "$f", ix.FieldId); Set(_index, "$s", ix.Seq);
             Set(_index, "$tv", ix.TextValue); Set(_index, "$nv", ix.NumberValue); Set(_index, "$dv", ix.DateValue); Set(_index, "$rk", ix.RefKey);
+            Set(_index, "$sv", ix.ScaledValue); Set(_index, "$tt", ix.TextTruncated ? 1 : 0);
             _index.ExecuteNonQuery();
         }
         Set(_history, "$r", id); Set(_history, "$ct", createdTime);

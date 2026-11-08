@@ -29,6 +29,9 @@ public static class ReportQueryBuilder
 
     private const long Split = 1_000_000_000;
 
+    /// <summary>Dynamic_RecordIndex 主鍵 (RecordId, FieldId, Seq) 的索引名（SQLite 為主鍵自動命名）。</summary>
+    private const string PrimaryKeyIndex = "sqlite_autoindex_Dynamic_RecordIndex_1";
+
     private static string Column(ReportSqlKind kind) => kind switch
     {
         ReportSqlKind.Text => "TextValue",
@@ -89,7 +92,8 @@ public static class ReportQueryBuilder
         }
         var alias = $"i{aliasCounter++}";
         var cmp = Compare(c, alias, ctx);
-        var exists = $"EXISTS (SELECT 1 FROM Dynamic_RecordIndex {alias} WHERE {alias}.RecordId = {recordIdExpr} AND {alias}.FieldId = {ctx.Add(c.Field.FieldId)}"
+        // 逐筆記錄查：一定要走 (RecordId, FieldId, Seq) 的主鍵索引。規劃器會被欄位值索引（日期範圍等）吸引，變成每筆記錄各掃一遍整個範圍
+        var exists = $"EXISTS (SELECT 1 FROM Dynamic_RecordIndex {alias} INDEXED BY {PrimaryKeyIndex} WHERE {alias}.RecordId = {recordIdExpr} AND {alias}.FieldId = {ctx.Add(c.Field.FieldId)}"
             + (cmp.Length == 0 ? "" : " AND " + cmp) + ")";
         var negate = c.Op == ReportSqlOp.Empty ? true : c.Op == ReportSqlOp.NotEmpty ? false : c.Negated;
         return negate ? "NOT " + exists : exists;
@@ -118,10 +122,13 @@ public static class ReportQueryBuilder
     public static Built Probe(ReportSqlCheck check, ReportSqlScope scope)
     {
         var ctx = new Ctx();
-        var bad = check.Kind == ReportSqlCheckKind.Number ? "t.ScaledValue IS NULL AND t.NumberValue IS NOT NULL" : "t.TextTruncated = 1";
+        // 部分索引只收壞列，探測成本跟壞列數成正比；規劃器會改選整個欄位的 NumberValue 索引（掃全部列），所以明確指定
+        var (bad, index) = check.Kind == ReportSqlCheckKind.Number
+            ? ("t.ScaledValue IS NULL AND t.NumberValue IS NOT NULL", "IX_Dynamic_RecordIndex_NoScaled")
+            : ("t.TextTruncated = 1", "IX_Dynamic_RecordIndex_Truncated");
         var where = new StringBuilder($"t.FieldId = {ctx.Add(check.FieldId)} AND {bad} AND ");
         AppendScope(where, "r", scope, ctx);
-        return new Built($"SELECT 1 FROM Dynamic_RecordIndex t JOIN Dynamic_Record r ON r.Id = t.RecordId WHERE {where} LIMIT 1", ctx.Parameters);
+        return new Built($"SELECT 1 FROM Dynamic_RecordIndex t INDEXED BY {index} JOIN Dynamic_Record r ON r.Id = t.RecordId WHERE {where} LIMIT 1", ctx.Parameters);
     }
 
     /// <summary>聚合查詢。total 為真時不連分組、不 GROUP BY（總計一律獨立重算，設計 §5.5）。</summary>

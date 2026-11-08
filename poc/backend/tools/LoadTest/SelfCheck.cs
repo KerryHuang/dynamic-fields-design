@@ -106,7 +106,7 @@ public static class SelfCheck
         lines.Add(string.Join(",", values));
         lines.Add(Q("select ModuleId, Title, OwnerUserId, DeleteFlag, CreatedUserId, ModifiedUserId, HostKey from Dynamic_Record where Id=$id",
             "m", "t", "o", "d", "cu", "mu", "h"));
-        lines.Add(Q("select FieldId, Seq, case when TextValue like 'JV-%' then 'no' else TextValue end, NumberValue, DateValue, RefKey from Dynamic_RecordIndex where RecordId=$id order by FieldId, Seq",
+        lines.Add(Q("select FieldId, Seq, case when TextValue like 'JV-%' then 'no' else TextValue end, NumberValue, DateValue, RefKey, ScaledValue, TextTruncated from Dynamic_RecordIndex where RecordId=$id order by FieldId, Seq",
             "f", "s", "t", "n", "d", "r"));
         lines.Add(Q("select FieldId, Operation, OldValue, NewValue, ChangedUserId from Dynamic_RecordHistory where RecordId=$id order by Id",
             "f", "o", "ov", "nv", "u"));

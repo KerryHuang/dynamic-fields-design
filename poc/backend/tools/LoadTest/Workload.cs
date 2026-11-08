@@ -67,6 +67,40 @@ public sealed class Workload(IServiceProvider sp, SeedInfo seed)
         return ReportState(await m.Send(new PreviewReportRequest(def, "zh-TW")));
     }
 
+    /// <summary>
+    /// 報表案例（<c>report-bench</c> 與 <c>report-check</c> 用）：Name 固定，定義依資料範圍決定。
+    /// account_grouped 依「參照欄位」分組，目前不走 SQL 聚合（已知限制），用來看退回時的行為。
+    /// </summary>
+    public List<(string Name, ReportDefinition Def)> ReportCases()
+    {
+        var date = new ReportFieldRef("main", _s.LedgerDateId, null);
+        var debit = new ReportFieldRef("main", _s.LedgerDebitId, null);
+        var status = new ReportFieldRef("main", _s.LedgerStatusId, null);
+        var account = new ReportFieldRef("main", _s.LedgerAccountId, null);
+        ReportMeasure[] measures = [new("n", "countMain", null, null), new("d", "sum", debit, null)];
+        ReportDefinition Ledger(IEnumerable<ReportGroup> groups, IEnumerable<ReportFilter> filters, ReportFieldRef? primary = null, ReportDateRange? range = null) =>
+            new(ReportDefinition.CurrentVersion, "ledger", null, [], [.. groups], [.. measures], [.. filters], primary, range, [], "table");
+        ReportFilter Between(DateOnly from, DateOnly to) => new(date, "between", JsonSerializer.SerializeToElement(new[] { D(from), D(to) }));
+        var last = seed.LastDate;
+        var month = new ReportGroup(date, "month");
+        var draft = JsonSerializer.SerializeToElement(_s.Statuses[1]);
+        var customerRegion = new ReportFieldRef("main", long.Parse(_s.CustomerRegion[2..]), null);
+        return
+        [
+            ("month_by_month", Ledger([month], [Between(last.AddDays(-30), last)])),
+            ("quarter_by_month", Ledger([month], [Between(last.AddDays(-90), last)])),
+            ("year_by_month", Ledger([month], [Between(last.AddDays(-365), last)])),
+            ("all_years_by_month", Ledger([month], [Between(seed.FirstDate, last)])),
+            ("status_all_rows", Ledger([new ReportGroup(status, null)], [])),
+            ("no_group_total_all_rows", Ledger([], [])),
+            ("selective_draft_full_range", Ledger([month], [Between(seed.FirstDate, last), new ReportFilter(status, "eq", draft)])),
+            ("primary_date_last_12_months", Ledger([new ReportGroup(status, null)], [], date, new ReportDateRange("lastMonths", 12))),
+            ("customers_by_region", new ReportDefinition(ReportDefinition.CurrentVersion, "customer", null, [],
+                [new ReportGroup(customerRegion, null)], [new("n", "countMain", null, null)], [], null, null, [], "table")),
+            ("account_grouped_one_month", Ledger([new ReportGroup(account, null)], [Between(last.AddDays(-30), last)])),
+        ];
+    }
+
     /// <summary>主檔報表：客戶依區域計數，來源模組筆數在報表上限之內，量這條路徑本身的成本。</summary>
     private async Task<string?> ReportCustomers(IMediator m)
     {
@@ -108,6 +142,12 @@ public sealed class Workload(IServiceProvider sp, SeedInfo seed)
         new("report_month", 5, false, (m, r) => { var (f, t) = Window(r, 30); return Report(m, f, t); }),
         new("report_quarter", 2, false, (m, r) => { var (f, t) = Window(r, 90); return Report(m, f, t); }),
         new("report_customers", 3, false, (m, r) => ReportCustomers(m)),
+        new("report_year", 1, false, (m, r) => { var (f, t) = Window(r, 365); return Report(m, f, t); }),
+        new("report_status_all", 1, false, async (m, r) =>
+        {
+            var def = ReportCases().Single(c => c.Name == "status_all_rows").Def;
+            return ReportState(await m.Send(new PreviewReportRequest(def, "zh-TW")));
+        }),
         new("create_entry", 14, true, async (m, r) =>
         {
             var res = await m.Send(new CreateRecordRequest("ledger", NewEntry(r)));

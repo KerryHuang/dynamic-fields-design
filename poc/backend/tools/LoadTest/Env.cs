@@ -61,9 +61,16 @@ public static class Env
             if (pragmas.Length > 0) o.AddInterceptors(new PragmaInterceptor(pragmas));
         });
         services.AddScoped<ITransactionManager, EfTransactionManager>();
+        services.AddScoped<IWorkSavepoints, EfWorkSavepoints>();
         services.AddSingleton<ICurrentUser, AdminUser>();
         services.AddSingleton(new AuthSettings(false));
         services.AddSingleton<IBusinessTime, FixedTime>();
-        return services.BuildServiceProvider();
+        var sp = services.BuildServiceProvider();
+        // 環境變數 LT_ENGINE（Auto|MemoryOnly|SqlOnly）切換報表引擎，預設 Auto；LT_MAX_LOAD_ROWS 調整載入上限
+        if (Enum.TryParse<DynamicModules.Application.Dynamic.ReportService.ReportEngineMode>(Environment.GetEnvironmentVariable("LT_ENGINE"), out var engine))
+            sp.GetRequiredService<DynamicModules.Application.Dynamic.ReportService.ReportOptions>().Engine = engine;
+        if (int.TryParse(Environment.GetEnvironmentVariable("LT_MAX_LOAD_ROWS"), out var maxLoad))
+            sp.GetRequiredService<DynamicModules.Application.Dynamic.ReportService.ReportOptions>().MaxLoadRows = maxLoad;
+        return sp;
     }
 }
