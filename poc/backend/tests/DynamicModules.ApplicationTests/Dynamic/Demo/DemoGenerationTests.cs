@@ -1,12 +1,14 @@
 using System.Globalization;
 using System.Text.Json;
 using DynamicModules.Application.Common;
+using DynamicModules.Application.Dynamic.AppService;
 using DynamicModules.Application.Dynamic.DemoService;
 using DynamicModules.Application.Dynamic.DemoService.Commands.GenerateDemoData;
 using DynamicModules.Domain.Entities.Dynamic;
 using DynamicModules.Domain.Data;
 using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.DependencyInjection;
 using Record = DynamicModules.Domain.Entities.Dynamic.Record;
 
 namespace DynamicModules.ApplicationTests.Dynamic.Demo;
@@ -72,21 +74,22 @@ public class DemoGenerationTests
         await using var host = await Generated(today);
         var db = host.Db.Context;
 
-        var status = await DemoDb.FieldKey(db, "order", "狀態");
-        var due = await DemoDb.FieldKey(db, "order", "交期");
-        var orderDate = await DemoDb.FieldKey(db, "order", "訂單日期");
+        var status = await DemoDb.FieldKey(db, "mes-order", "狀態");
+        var due = await DemoDb.FieldKey(db, "mes-order", "交期");
+        var orderDate = await DemoDb.FieldKey(db, "mes-order", "訂單日期");
         var open = (await db.Set<FieldOption>().AsNoTracking().ToListAsync())
             .Where(o => o.LabelI18n.Resolve("zh-TW") is "已確認" or "出貨中").Select(o => $"opt_{o.Id}").ToHashSet();
-        var orders = await DemoDb.Records(db, "order");
+        // 報價單轉出的訂單沒有交期與訂單日期，不在這個分布裡
+        var orders = (await DemoDb.Records(db, "mes-order")).Where(o => DemoDb.Text(o, orderDate) != null && DemoDb.Text(o, due) != null).ToList();
         orders.Count(o => DemoDb.Date(DemoDb.Text(o, due)) < today && open.Contains(DemoDb.Text(o, status)!))
             .Should().BeGreaterThanOrEqualTo(4);
         var december = orders.Where(o => DemoDb.Date(DemoDb.Text(o, orderDate)).Month == 12).ToList();
         december.Should().NotBeEmpty().And.OnlyContain(o => o.Title.StartsWith("SO-202612-"));
 
-        var mold = await DemoDb.FieldKey(db, "mold-care", "模具");
-        var careDate = await DemoDb.FieldKey(db, "mold-care", "保養日期");
-        var next = await DemoDb.FieldKey(db, "mold-care", "下次保養日");
-        (await DemoDb.Records(db, "mold-care")).GroupBy(c => DemoDb.Text(c, mold))
+        var mold = await DemoDb.FieldKey(db, "mes-mold-care", "模具");
+        var careDate = await DemoDb.FieldKey(db, "mes-mold-care", "保養日期");
+        var next = await DemoDb.FieldKey(db, "mes-mold-care", "下次保養日");
+        (await DemoDb.Records(db, "mes-mold-care")).GroupBy(c => DemoDb.Text(c, mold))
             .Select(g => DemoDb.Date(DemoDb.Text(g.MaxBy(c => DemoDb.Date(DemoDb.Text(c, careDate)))!, next)))
             .Count(d => d >= today && d <= today.AddDays(6)).Should().BeGreaterThanOrEqualTo(2);
     }
@@ -118,7 +121,7 @@ public class DemoGenerationTests
 [Collection(DemoGeneratedCollection.Name)]
 public class DemoGenerationSharedTests(DemoGeneratedFixture fx)
 {
-    /// <summary>附件的值只能經上傳端點產生（產生器不寫檔案），舊的八個 Demo 模組也沒有附件欄位。</summary>
+    /// <summary>附件的值只能經上傳端點產生（產生器不寫檔案），MES 套件的 Demo 模組也沒有附件欄位。</summary>
     private static readonly FieldType[] RecordValueTypes = [.. Enum.GetValues<FieldType>().Where(t => t != FieldType.Attachment)];
 
     [Fact]
@@ -126,9 +129,10 @@ public class DemoGenerationSharedTests(DemoGeneratedFixture fx)
     {
         fx.Generated();
         var db = fx.Host.Db.Context;
-        var moduleIds = await db.Set<Module>().AsNoTracking()
-            .Where(m => DemoCatalog.ActivationOrder.Contains(m.Key)).Select(m => m.Id).ToListAsync();
-        moduleIds.Should().HaveCount(8);
+        var mesKeys = fx.Host.Services.GetRequiredService<AppCatalog>().BuiltIns.Single(p => p.Manifest.Id == DemoCatalog.MesAppId)
+            .Modules.Select(m => m.Key).ToList();
+        var moduleIds = await db.Set<Module>().AsNoTracking().Where(m => mesKeys.Contains(m.Key)).Select(m => m.Id).ToListAsync();
+        moduleIds.Should().HaveCount(mesKeys.Count);
         var fields = await db.Set<Field>().AsNoTracking()
             .Where(f => moduleIds.Contains(f.ModuleId) && f.Status == FieldStatus.Active).ToListAsync();
         fields.Select(f => f.Type).Distinct().Should().BeEquivalentTo(RecordValueTypes);
@@ -150,8 +154,8 @@ public class DemoGenerationSharedTests(DemoGeneratedFixture fx)
 
         async Task<List<DateOnly>> OrderDates(DynamicDbContext db)
         {
-            var key = await DemoDb.FieldKey(db, "order", "訂單日期");
-            return (await DemoDb.Records(db, "order")).Select(o => DemoDb.Date(DemoDb.Text(o, key))).ToList();
+            var key = await DemoDb.FieldKey(db, "mes-order", "訂單日期");
+            return (await DemoDb.Records(db, "mes-order")).Where(o => DemoDb.Text(o, key) != null).Select(o => DemoDb.Date(DemoDb.Text(o, key))).ToList();
         }
         var before = await OrderDates(fx.Host.Db.Context);
         var after = await OrderDates(host.Db.Context);

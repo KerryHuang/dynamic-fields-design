@@ -1,3 +1,4 @@
+using DynamicModules.Application.Dynamic.AppService;
 using DynamicModules.Application.Dynamic.DemoService;
 using DynamicModules.Application.Dynamic.DemoService.Commands.GenerateDemoData;
 using DynamicModules.Application.Dynamic.ModuleService.Commands.CreateModule;
@@ -34,14 +35,16 @@ public class DemoStructureTests(DemoGeneratedFixture fx)
     {
         fx.Generated();
 
-        foreach (var key in DemoCatalog.ActivationOrder)
-            (await Module(key)).Status.Should().Be("Active", key);
-        var order = await Module("order");
+        var apps = fx.Host.Services.GetRequiredService<AppCatalog>();
+        foreach (var id in DemoCatalog.AppIds)
+            foreach (var module in apps.BuiltIns.Single(p => p.Manifest.Id == id).Modules)
+                (await Module(module.Key)).Status.Should().Be("Active", module.Key);
+        var order = await Module("mes-order");
         var issues = Field(order, "品質異常筆數");
         issues.Type.Should().Be(FieldType.Rollup);
         issues.Config.ShowInList.Should().BeTrue();
         issues.Config.Rollup!.Function.Should().Be(RollupFunction.Count);
-        issues.Config.Rollup.SourceFieldId.Should().Be(Field(await Module("quality"), "訂單").Id);
+        issues.Config.Rollup.SourceFieldId.Should().Be(Field(await Module("mes-quality"), "訂單").Id);
     }
 
     [Fact]
@@ -50,15 +53,15 @@ public class DemoStructureTests(DemoGeneratedFixture fx)
         fx.Generated();
         var groups = await GroupIds();
 
-        var quality = await Module("quality");
-        var qp = await Permissions("quality");
+        var quality = await Module("mes-quality");
+        var qp = await Permissions("mes-quality");
         qp.Fields.Should().Contain(new FieldPermissionDto(Field(quality, "責任單位").Id, groups["sales"], FieldAccess.ReadOnly));
         qp.Fields.Should().Contain(new FieldPermissionDto(Field(quality, "不良率").Id, groups["floor"], FieldAccess.Hidden));
         var critical = Field(quality, "嚴重度").Options.Single(o => o.Label.Resolve("zh-TW") == "重大");
         qp.Options.Single(o => o.OptionId == critical.Id).GroupIds.Should().Equal(groups["qa"]);
         qp.Groups.Single(g => g.GroupId == groups["qa"]).Privileges.Add.Should().BeTrue("範本帶的 qa 權限仍在");
 
-        var op = await Permissions("order");
+        var op = await Permissions("mes-order");
         var qa = op.Groups.Single(g => g.GroupId == groups["qa"]);
         qa.Privileges.Should().Be(new PrivilegesDto(true, false, false, false, false, false, false));
         qa.Scope.Should().Be(DataScope.All);
@@ -72,7 +75,7 @@ public class DemoStructureTests(DemoGeneratedFixture fx)
     public async Task Generate_ExistingOrderModule_Conflict_NothingChanged()
     {
         await using var host = await DemoTestHost.CreateAsync();
-        (await host.Send(new CreateModuleRequest("order", Text("自建訂單"), null, null))).IsSuccess.Should().BeTrue();
+        (await host.Send(new CreateModuleRequest("mes-order", Text("自建訂單"), null, null))).IsSuccess.Should().BeTrue();
         var db = host.Db.Context;
         var modules = await db.Set<Module>().AsNoTracking().CountAsync();
         var sequences = await db.Set<NumberSequence>().AsNoTracking().CountAsync();
@@ -82,7 +85,7 @@ public class DemoStructureTests(DemoGeneratedFixture fx)
 
         r.IsConflict.Should().BeTrue();
         r.Message.Should().Be("已有相同的資料，未產生 Demo 資料");
-        ((DemoConflicts)r.Data!).Items.Should().Contain("模組代碼 order 已存在");
+        ((DemoConflicts)r.Data!).Items.Should().Contain("模組代碼 mes-order 已存在");
         (await db.Set<Module>().AsNoTracking().CountAsync()).Should().Be(modules);
         (await db.Set<NumberSequence>().AsNoTracking().CountAsync()).Should().Be(sequences);
         (await db.Set<GroupProgramPrivilege>().AsNoTracking().CountAsync()).Should().Be(privileges);
@@ -99,7 +102,7 @@ public class DemoStructureTests(DemoGeneratedFixture fx)
 
         r.IsConflict.Should().BeTrue();
         ((DemoConflicts)r.Data!).Items.Should().Contain("既有實體 sales.customer 已有擴充模組");
-        (await host.Db.Context.Set<Module>().AsNoTracking().AnyAsync(m => m.Key == "order")).Should().BeFalse();
+        (await host.Db.Context.Set<Module>().AsNoTracking().AnyAsync(m => m.Key == "mes-order")).Should().BeFalse();
     }
 
     [Fact]

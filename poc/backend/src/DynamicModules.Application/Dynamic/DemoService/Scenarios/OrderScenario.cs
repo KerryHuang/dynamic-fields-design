@@ -64,7 +64,7 @@ public sealed class OrderScenario : IDemoScenario
                     ("status", ctx.Opt("order", "draft")), ("salesRep", creator)),
                 Details: new() { [ctx.Ids.ModuleKeys["line"]] = lines.Select(l => new DetailRowInput(null, ctx.Values("line",
                     ("itemNo", l.ItemNo), ("itemName", l.ItemName), ("qty", (decimal)l.Qty),
-                    ("unit", ctx.Opt("line", l.Unit)), ("price", (decimal)l.Price)), null)).ToList() }));
+                    ("unit", l.Unit), ("price", (decimal)l.Price)), null)).ToList() }));
             order.Facts["status"] = status;
             order.Facts["dueDate"] = due;
             order.Facts["customer"] = customer;

@@ -53,7 +53,7 @@ public sealed class DemoDataApiTests
         s.GetProperty("done").GetInt32().Should().Be(s.GetProperty("total").GetInt32());
 
         var menu = (await JsonOf(await admin.GetAsync($"{Base}/menu"))).GetRawText();
-        menu.Should().Contain("\"repair\"").And.Contain("\"quality\"");
+        menu.Should().Contain("\"mes-repair\"").And.Contain("\"mes-quality\"");
         (await app.AsUser("floor01").GetAsync($"{Base}/me")).StatusCode.Should().Be(HttpStatusCode.OK);
     }
 
@@ -76,7 +76,7 @@ public sealed class DemoDataApiTests
         (await PollUntilDone(admin)).GetProperty("state").GetString().Should().Be("generated");
         using var scope = app.Services.CreateScope();
         scope.ServiceProvider.GetRequiredService<DynamicDbContext>().Set<Module>().AsNoTracking()
-            .Count(m => m.Key == "order").Should().Be(1);
+            .Count(m => m.Key == "mes-order").Should().Be(1);
     }
 
     [Fact]
@@ -92,7 +92,7 @@ public sealed class DemoDataApiTests
         res.StatusCode.Should().Be(HttpStatusCode.Conflict);
         var body = await JsonOf(res);
         body.GetProperty("message").GetString().Should().Be("已有相同的資料，未產生 Demo 資料");
-        body.GetProperty("items").EnumerateArray().Select(i => i.GetString()).Should().Contain("模組代碼 order 已存在");
+        body.GetProperty("items").EnumerateArray().Select(i => i.GetString()).Should().Contain("模組代碼 mes-order 已存在");
     }
 
     [Fact]

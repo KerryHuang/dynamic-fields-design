@@ -20,6 +20,13 @@ public class OrderRepairScenarioTests(DemoGeneratedFixture fx)
 
     private void Generated() => fx.Generated();
 
+    /// <summary>OrderScenario 直接建立的 40 張訂單（不含由報價單轉出的）。</summary>
+    private async Task<List<DynamicRecordResponse>> StandardOrders(string userId = "admin")
+    {
+        var fromQuote = await fx.Key("mes-order", "來源報價單");
+        return [.. (await fx.Records("mes-order", userId)).Where(o => o.Values.GetValueOrDefault(fromQuote) is not { ValueKind: JsonValueKind.Number })];
+    }
+
     private async Task<DynamicRecordResponse> Get(long id) => (DynamicRecordResponse)(await fx.Host.Send(new GetRecordRequest(id))).Data!;
 
     private async Task<IReadOnlyList<RecordHistoryResponse>> History(long id) =>
@@ -30,20 +37,20 @@ public class OrderRepairScenarioTests(DemoGeneratedFixture fx)
     {
         Generated();
         ((DemoGenerateResult)fx.Result.Data!).Steps.Should().BeGreaterThan(90);
-        var orders = await fx.Records("order");
+        var orders = await StandardOrders();
 
         orders.Should().HaveCount(40);
         foreach (var o in orders)
-            (await Get(o.Id)).Details!["order-line"].Count.Should().BeInRange(1, 6);
+            (await Get(o.Id)).Details!["mes-order-line"].Count.Should().BeInRange(1, 6);
     }
 
     [Fact]
     public async Task Orders_CreatedAtSimulatedDate()
     {
         Generated();
-        var orderDate = await fx.Key("order", "訂單日期");
+        var orderDate = await fx.Key("mes-order", "訂單日期");
 
-        foreach (var o in await fx.Records("order"))
+        foreach (var o in await StandardOrders())
         {
             var date = Date(DemoGeneratedFixture.Text(o, orderDate));
             DateOnly.FromDateTime(o.CreatedTime).Should().Be(date);
@@ -57,12 +64,12 @@ public class OrderRepairScenarioTests(DemoGeneratedFixture fx)
     public async Task Orders_StatusMix_AndOverdue()
     {
         Generated();
-        var status = await fx.Key("order", "狀態");
-        var due = await fx.Key("order", "交期");
+        var status = await fx.Key("mes-order", "狀態");
+        var due = await fx.Key("mes-order", "交期");
         var labels = new[] { "草稿", "已確認", "出貨中", "已結案", "取消" };
         var opts = new Dictionary<string, string>();
-        foreach (var l in labels) opts[await fx.Opt("order", "狀態", l)] = l;
-        var orders = await fx.Records("order");
+        foreach (var l in labels) opts[await fx.Opt("mes-order", "狀態", l)] = l;
+        var orders = await StandardOrders();
 
         var byStatus = orders.Select(o => opts[DemoGeneratedFixture.Text(o, status)!]).ToList();
         byStatus.Distinct().Should().BeEquivalentTo(labels);
@@ -70,7 +77,7 @@ public class OrderRepairScenarioTests(DemoGeneratedFixture fx)
         orders.Count(o => Date(DemoGeneratedFixture.Text(o, due)) < Today
                           && opts[DemoGeneratedFixture.Text(o, status)!] is "已確認" or "出貨中")
             .Should().BeGreaterThanOrEqualTo(4);
-        var reason = await fx.Key("order", "取消原因");
+        var reason = await fx.Key("mes-order", "取消原因");
         orders.Where(o => opts[DemoGeneratedFixture.Text(o, status)!] == "取消")
             .Should().OnlyContain(o => !string.IsNullOrEmpty(DemoGeneratedFixture.Text(o, reason)));
     }
@@ -79,11 +86,11 @@ public class OrderRepairScenarioTests(DemoGeneratedFixture fx)
     public async Task Orders_ScopeAndPricing()
     {
         Generated();
-        var sales01 = await fx.Records("order", "sales01");
+        var sales01 = await StandardOrders("sales01");
         sales01.Should().HaveCount(20).And.OnlyContain(o => o.OwnerUserId == "sales01");
-        (await fx.Records("order", "manager01")).Should().HaveCount(40);
+        (await StandardOrders("manager01")).Should().HaveCount(40);
 
-        var schema = (ModuleSchemaResponse)(await fx.As("floor01", new GetModuleSchemaRequest("order"))).Data!;
+        var schema = (ModuleSchemaResponse)(await fx.As("floor01", new GetModuleSchemaRequest("mes-order"))).Data!;
         var labels = schema.Blocks.SelectMany(b => b.Fields).Concat(schema.Details!.SelectMany(d => d.Fields))
             .Select(f => f.Label.Resolve("zh-TW")).ToList();
         labels.Should().Contain("數量").And.NotContain(["單價", "金額", "未稅合計", "含稅總額"]);
@@ -95,7 +102,7 @@ public class OrderRepairScenarioTests(DemoGeneratedFixture fx)
         Generated();
         var managerUpdates = 0;
         var qtyChanges = 0;
-        foreach (var o in await fx.Records("order"))
+        foreach (var o in await StandardOrders())
         {
             var history = await History(o.Id);
             var manager = history.Where(h => h.Operation == "update" && h.ChangedUserId == "manager01").ToList();
@@ -114,16 +121,16 @@ public class OrderRepairScenarioTests(DemoGeneratedFixture fx)
     public async Task Repairs_50_AllStatuses_GroupScope()
     {
         Generated();
-        var status = await fx.Key("repair", "狀態");
+        var status = await fx.Key("mes-repair", "狀態");
         var labels = new[] { "待處理", "處理中", "待驗收", "結案" };
         var opts = new Dictionary<string, string>();
-        foreach (var l in labels) opts[await fx.Opt("repair", "狀態", l)] = l;
-        var repairs = await fx.Records("repair");
+        foreach (var l in labels) opts[await fx.Opt("mes-repair", "狀態", l)] = l;
+        var repairs = await fx.Records("mes-repair");
 
         repairs.Should().HaveCount(50);
         repairs.Select(r => opts[DemoGeneratedFixture.Text(r, status)!]).Distinct().Should().BeEquivalentTo(labels);
         repairs.Count(r => r.CreatedUserId == "maint01").Should().Be(5);
-        var floor = await fx.Records("repair", "floor01");
+        var floor = await fx.Records("mes-repair", "floor01");
         floor.Should().HaveCount(45).And.OnlyContain(r => r.CreatedUserId != "maint01");
     }
 
@@ -131,14 +138,14 @@ public class OrderRepairScenarioTests(DemoGeneratedFixture fx)
     public async Task Repairs_ClosedHaveResolutionAndFinishDate()
     {
         Generated();
-        var status = await fx.Key("repair", "狀態");
-        var closed = await fx.Opt("repair", "狀態", "結案");
-        var resolution = await fx.Key("repair", "處理說明");
-        var finish = await fx.Key("repair", "完成日期");
-        var reportDate = await fx.Key("repair", "報修日期");
-        var handler = await fx.Key("repair", "處理人");
+        var status = await fx.Key("mes-repair", "狀態");
+        var closed = await fx.Opt("mes-repair", "狀態", "結案");
+        var resolution = await fx.Key("mes-repair", "處理說明");
+        var finish = await fx.Key("mes-repair", "完成日期");
+        var reportDate = await fx.Key("mes-repair", "報修日期");
+        var handler = await fx.Key("mes-repair", "處理人");
 
-        var rows = (await fx.Records("repair")).Where(r => DemoGeneratedFixture.Text(r, status) == closed).ToList();
+        var rows = (await fx.Records("mes-repair")).Where(r => DemoGeneratedFixture.Text(r, status) == closed).ToList();
         rows.Should().NotBeEmpty();
         foreach (var r in rows)
         {
@@ -154,9 +161,9 @@ public class OrderRepairScenarioTests(DemoGeneratedFixture fx)
     public async Task Repairs_RelatedRepair_Set()
     {
         Generated();
-        var related = await fx.Key("repair", "關聯報修單");
-        var mold = await fx.Key("repair", "模具");
-        var repairs = (await fx.Records("repair")).ToDictionary(r => r.Id);
+        var related = await fx.Key("mes-repair", "關聯報修單");
+        var mold = await fx.Key("mes-repair", "模具");
+        var repairs = (await fx.Records("mes-repair")).ToDictionary(r => r.Id);
 
         var linked = repairs.Values.Where(r => r.Values.GetValueOrDefault(related) is { ValueKind: JsonValueKind.Number }).ToList();
         linked.Should().HaveCount(3);

@@ -2,6 +2,7 @@ using DynamicModules.Application.Common;
 using DynamicModules.Application.Common.Acting;
 using DynamicModules.Application.Dynamic.ConversionService.Commands.ConvertRecord;
 using DynamicModules.Application.Dynamic.DemoService.Scenarios;
+using DynamicModules.Application.Dynamic.LedgerService;
 using DynamicModules.Application.Dynamic.RecordService.Commands.CreateRecord;
 using DynamicModules.Application.Dynamic.RecordService.Commands.UpdateRecord;
 using DynamicModules.Application.Dynamic.RecordService.Data;
@@ -50,6 +51,10 @@ public sealed class DemoPlan(DateOnly today, Random random, IReadOnlyDictionary<
 
     public void Update(DemoRecord r, DateTime at, string userId, string label, Func<DemoContext, DemoRecord, UpdateRecordRequest> build) =>
         Add(at, userId, label, async (ctx, ct) => Fill(r, await ctx.Sender.Send(build(ctx, r), ct)));
+
+    /// <summary>沖銷不可改的分錄記錄（反向分錄由系統建立，不回填到 DemoRecord）。</summary>
+    public void Reverse(DemoRecord r, DateTime at, string userId, string label) =>
+        Add(at, userId, label, async (ctx, ct) => await ctx.Sender.Send(new ReverseRecordRequest(r.Id, null), ct));
 
     /// <summary>重讀記錄、回填 RowVersion：別的記錄寫入觸發彙總重算（會換這筆的 RowVersion）之後，這筆還要再改時用。</summary>
     public void Refresh(DemoRecord r, DateTime at, string userId, string label) =>
@@ -113,6 +118,7 @@ public static class DemoTimeline
         {
             var step = ordered[i];
             ServiceResult r;
+            ctx.BeginStep?.Invoke();
             using (ActingScope.Begin(step.UserId, step.At))
                 r = await step.Run(ctx, ct);
             if (!r.IsSuccess)

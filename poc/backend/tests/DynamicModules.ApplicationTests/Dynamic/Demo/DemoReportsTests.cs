@@ -1,6 +1,7 @@
 using DynamicModules.Application.Common.Acting;
 using DynamicModules.Application.Common.Security;
 using DynamicModules.Application.Common.Time;
+using DynamicModules.Application.Dynamic.AppService;
 using DynamicModules.Application.Dynamic.DemoService;
 using DynamicModules.Application.Dynamic.DemoService.Commands.GenerateDemoData;
 using DynamicModules.Application.Dynamic.ReportService;
@@ -33,8 +34,9 @@ public class DemoReportsTests(DemoGeneratedFixture fx)
         fx.Generated();
         var reports = await StoredReports();
         var groups = await fx.Host.Db.Context.Set<PermissionGroup>().AsNoTracking().ToDictionaryAsync(g => g.Id, g => g.Key);
-        // 示範報表之外，再加上「CRM 與銷售」套件自帶的兩份
-        reports.Select(r => r.Name).Should().BeEquivalentTo([.. DemoReports.Names, "商機階段分布", "各業務訂單金額（未稅）"]);
+        // 示範報表之外，再加上三個內建套件自帶的報表
+        var packageReports = fx.Host.Services.GetRequiredService<AppCatalog>().BuiltIns.SelectMany(p => p.Reports ?? []).Select(r => r.Name);
+        reports.Select(r => r.Name).Should().BeEquivalentTo([.. DemoReports.Names, .. packageReports]);
         DemoReports.All.GroupBy(s => s.GroupKeys[0]).Should().OnlyContain(g => g.Count() >= 2);
 
         foreach (var spec in DemoReports.All)
@@ -98,7 +100,7 @@ public class DemoReportsTests(DemoGeneratedFixture fx)
         var sales = await RunAs("sales01");
         manager.State.Should().Be("ok");
         sales.State.Should().Be("ok");
-        manager.Total!["count"].Should().Be(40);
+        manager.Total!["count"].Should().Be(45, "40 張直接建立的訂單加 5 張由報價單轉出的");
         sales.Total!["count"].Should().BeLessThan(manager.Total["count"]!.Value).And.BeGreaterThan(0);
         manager.BasisIsFrozen.Should().BeFalse();
     }
