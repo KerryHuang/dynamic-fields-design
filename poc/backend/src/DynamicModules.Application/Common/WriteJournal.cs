@@ -28,6 +28,9 @@ public interface IWriteJournal
     /// <summary>這個物件是否被標為靜默。只看，不消耗。</summary>
     bool IsMarkedSilent(object trackedRecord);
 
+    /// <summary>清空日誌與靜默標記：同一個 scope 連續送多個獨立請求時（Demo 產生器），每個請求開始前呼叫，後面的階段才不會重播前一個請求的項目。</summary>
+    void Clear();
+
     /// <summary>標記只管「下一次」寫入：該次儲存成功後由 UnitOfWork 呼叫，之後同一物件的寫入恢復正常觸發。</summary>
     void ClearSilent(object trackedRecord);
 }
@@ -46,6 +49,12 @@ public sealed class WriteJournal : IWriteJournal
     public bool IsMarkedSilent(object trackedRecord) => _silent.Contains(trackedRecord);
 
     public void ClearSilent(object trackedRecord) => _silent.Remove(trackedRecord);
+
+    public void Clear()
+    {
+        _entries.Clear();
+        _silent.Clear();
+    }
 }
 
 public static class JournalView

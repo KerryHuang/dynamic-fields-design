@@ -32,6 +32,36 @@ public class WriteJournalAndIdempotencyTests : DesignerTestBase
     // ---- 寫入日誌 ----
 
     [Fact]
+    public async Task Journal_Clear_forgets_entries_and_silent_marks_so_the_next_request_starts_clean()
+    {
+        var (m, t) = await Module("jr-clear");
+        var journal = Svc<IWriteJournal>();
+        (await Create(m, t, "A")).IsSuccess.Should().BeTrue();
+        var marked = new object();
+        journal.MarkSilent(marked);
+        journal.Entries.Should().NotBeEmpty();
+
+        journal.Clear();
+
+        journal.Entries.Should().BeEmpty();
+        journal.IsMarkedSilent(marked).Should().BeFalse();
+        (await Create(m, t, "B")).IsSuccess.Should().BeTrue();
+        journal.Entries.Should().ContainSingle("只剩清掉之後那次寫入");
+    }
+
+    [Fact]
+    public void EffectBudget_Reset_gives_the_full_allowance_again()
+    {
+        var budget = new DynamicModules.Application.Dynamic.EventService.EffectBudget();
+        for (var i = 0; i < DynamicModules.Application.Dynamic.EventService.EffectBudget.Max; i++) budget.TryUse().Should().BeTrue();
+        budget.TryUse().Should().BeFalse();
+
+        budget.Reset();
+
+        budget.TryUse().Should().BeTrue();
+    }
+
+    [Fact]
     public async Task Journal_records_added_modified_and_soft_deleted_records_in_order()
     {
         var (m, t) = await Module("jr-a");

@@ -10,12 +10,13 @@ using MediatR;
 
 namespace DynamicModules.Application.Dynamic.EventService;
 
-/// <summary>一次請求內事件效果寫入的記錄數（設計 §4.6 總量上限）。每個請求一份。</summary>
+/// <summary>一次請求內事件效果寫入的記錄數（設計 §4.6 總量上限）。每個請求一份；Demo 產生器在同一個範圍內連送多個請求，每步開始前歸零。</summary>
 public class EffectBudget
 {
     public const int Max = 500;
     public int Written { get; private set; }
     public bool TryUse() => ++Written <= Max;
+    public void Reset() => Written = 0;
 }
 
 /// <summary>
