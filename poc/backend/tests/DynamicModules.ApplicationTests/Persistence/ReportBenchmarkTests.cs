@@ -56,6 +56,7 @@ public class ReportBenchmarkTests(ITestOutputHelper output)
         services.AddPersistenceRepositories();
         services.AddScoped(_ => db.Context);
         services.AddScoped<ITransactionManager, EfTransactionManager>();
+        services.AddScoped<IWorkSavepoints, EfWorkSavepoints>();
         services.AddSingleton<ICurrentUser, FakeUser>();
         services.AddSingleton<IBusinessTime, FakeTime>();
         services.AddSingleton(new AuthSettings(false));

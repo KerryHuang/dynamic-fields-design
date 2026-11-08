@@ -178,6 +178,7 @@ public class ActingScopeTests
         services.AddPersistenceRepositories();
         services.AddScoped(_ => db.Context);
         services.AddScoped<ITransactionManager, EfTransactionManager>();
+        services.AddScoped<IWorkSavepoints, EfWorkSavepoints>();
         services.AddSingleton<ICurrentUser>(new FakeUser());
         services.AddSingleton<IBusinessTime, FakeTime>();
         services.AddActingOverrides();

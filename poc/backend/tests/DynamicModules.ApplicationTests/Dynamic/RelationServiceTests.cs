@@ -57,6 +57,7 @@ public class RelationServiceTests : IAsyncLifetime
         services.AddPersistenceRepositories();
         services.AddScoped(_ => _db.Context);
         services.AddScoped<ITransactionManager, EfTransactionManager>();
+        services.AddScoped<IWorkSavepoints, EfWorkSavepoints>();
         services.AddSingleton<ICurrentUser>(_user);
         services.AddSingleton<IBusinessTime, FakeTime>();
         _sp = services.BuildServiceProvider();

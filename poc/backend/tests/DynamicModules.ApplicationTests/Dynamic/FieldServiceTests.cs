@@ -49,6 +49,7 @@ public class FieldServiceTests : IAsyncLifetime
         services.AddPersistenceRepositories();
         services.AddScoped(_ => _db.Context);
         services.AddScoped<ITransactionManager, EfTransactionManager>();
+        services.AddScoped<IWorkSavepoints, EfWorkSavepoints>();
         services.AddSingleton<ICurrentUser, FakeUser>();
         services.AddSingleton<IBusinessTime, FakeTime>();
         _sp = services.BuildServiceProvider();

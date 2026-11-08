@@ -15,7 +15,7 @@ public class MesPackageTests
     public void Catalog_LoadsMes_AndTheValidatorReportsNoErrors()
     {
         var p = Package.Value;
-        p.FormatVersion.Should().Be(4);
+        p.FormatVersion.Should().Be(5);
         p.Manifest.Requires.Apps.Should().BeEmpty("三個應用程式彼此獨立");
         AppPackageValidator.Validate(p).Errors.Should().BeEmpty();
         p.Modules.Should().HaveCount(14);

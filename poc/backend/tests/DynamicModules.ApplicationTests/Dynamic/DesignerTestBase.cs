@@ -54,6 +54,7 @@ public abstract class DesignerTestBase : IAsyncLifetime
         services.AddPersistenceRepositories();
         services.AddSingleton(Db.Context);   // 執行個體註冊：scope 結束時容器不會把共用的 DbContext 釋放掉
         services.AddScoped<ITransactionManager, EfTransactionManager>();
+        services.AddScoped<IWorkSavepoints, EfWorkSavepoints>();
         services.AddSingleton<ICurrentUser>(_user);
         services.AddSingleton<IBusinessTime, FakeTime>();
         services.AddSingleton(new AuthSettings(false));

@@ -44,6 +44,7 @@ public sealed class DemoTestHost : IAsyncDisposable
         services.AddPersistenceRepositories();
         services.AddScoped(_ => host._db.Context);
         services.AddScoped<ITransactionManager, EfTransactionManager>();
+        services.AddScoped<IWorkSavepoints, EfWorkSavepoints>();
         services.AddSingleton<ICurrentUser>(host.User);
         services.AddSingleton<IBusinessTime>(new FakeTime(today ?? Today));
         services.AddSingleton(new AuthSettings(false));
