@@ -40,8 +40,38 @@ public class ReportSqlEquivalenceTests : ReportTestBase
         }
     }
 
-    protected override void ConfigureServices(IServiceCollection services) =>
+    /// <summary>IRecordRepository 每個方法被呼叫的次數（回填掃描次數的測試用）。</summary>
+    private readonly Dictionary<string, int> RecordCalls = [];
+
+    public class CountingProxy : System.Reflection.DispatchProxy
+    {
+        public object Inner = null!;
+        public Dictionary<string, int> Calls = null!;
+
+        protected override object? Invoke(System.Reflection.MethodInfo? method, object?[]? args)
+        {
+            lock (Calls) Calls[method!.Name] = Calls.GetValueOrDefault(method.Name) + 1;
+            try { return method.Invoke(Inner, args); }
+            catch (System.Reflection.TargetInvocationException e) when (e.InnerException is not null)
+            {
+                System.Runtime.ExceptionServices.ExceptionDispatchInfo.Capture(e.InnerException).Throw();
+                throw;
+            }
+        }
+    }
+
+    protected override void ConfigureServices(IServiceCollection services)
+    {
         services.AddLogging(b => b.AddProvider(new CapturingProvider(Logs)));
+        services.AddScoped<RecordRepository>();
+        services.AddScoped<IRecordRepository>(sp =>
+        {
+            var proxy = System.Reflection.DispatchProxy.Create<IRecordRepository, CountingProxy>();
+            ((CountingProxy)(object)proxy).Inner = sp.GetRequiredService<RecordRepository>();
+            ((CountingProxy)(object)proxy).Calls = RecordCalls;
+            return proxy;
+        });
+    }
 
     private FieldResponse Done = null!;
 
@@ -466,6 +496,59 @@ public class ReportSqlEquivalenceTests : ReportTestBase
         (await Svc<ISystemSettingRepository>().GetValueAsync(SystemSetting.IndexBackfillVersion, CancellationToken.None)).Should().Be(RecordIndexer.BackfillVersion);
         // 截斷的文字仍要退回記憶體，但原因已經不是「回填未完成」
         (await Run(def)).FallbackReasons.Should().Contain(r => r.StartsWith("textTruncated"));
+    }
+
+    /// <summary>升級前的狀態：索引表清空 TextTruncated、版本列刪除。</summary>
+    private async Task ResetToLegacy()
+    {
+        await Db.Context.Set<SystemSetting>().ExecuteDeleteAsync();
+        Db.Context.ChangeTracker.Clear();
+    }
+
+    [Fact]
+    public async Task IndexBackfillJob_UnindexableLegacyValue_SkipsTheRecord_AndKeepsThatFieldOnTheMemoryPath()
+    {
+        await Prepare();
+        await Seed("order", "admin", (Amount, 10m), (Note, "x"));
+        await Seed("order", "admin", (Amount, 20m), (Note, "y"));
+        // 升級前存進去、現在的型別處理器讀不了的舊值（金額存成字串）
+        await Insert("order", "admin", (Amount, "abc"), (Note, "x"));
+        await ResetToLegacy();
+
+        // 一筆讀不了的值不能讓服務起不來
+        (await Svc<IndexBackfillJob>().RunAsync(CancellationToken.None)).Should().BeTrue();
+        (await Svc<ISystemSettingRepository>().GetValueAsync(SystemSetting.IndexBackfillVersion, CancellationToken.None)).Should().Be(RecordIndexer.BackfillVersion);
+        (await ScaledValues(Amount.Id)).Should().Equal(1000L, 2000L);
+        Logs.Should().Contain(l => l.Level == LogLevel.Warning && l.Message.Contains(Amount.Id.ToString()));
+
+        // 該欄位的索引少了一筆，SQL 路徑不能把缺的那筆當成「沒有值」：用到它的報表一律走記憶體
+        Svc<ReportOptions>().Engine = ReportEngineMode.Auto;
+        var amount = await Run(Def(measures: [M("n", "countMain"), M("s", "sum", MainF(Amount))]));
+        amount.Engine.Should().Be("memory");
+        amount.FallbackReasons.Should().Contain($"indexIncomplete:{Amount.Id}");
+        // 縮小後備同理：用缺了一筆的索引縮小 isEmpty，會把那筆舊值當成「沒有值」多載入或漏載入
+        var (memoryNarrow, autoNarrow) = await Both(Def(columns: [MainF(Note)], filters: [F(MainF(Amount), "isEmpty")]), second: ReportEngineMode.Auto);
+        ShouldMatch(memoryNarrow, autoNarrow, "narrow", expectedEngine: "memory");
+        autoNarrow.FallbackReasons.Should().Contain($"narrowSkipped:indexIncomplete:{Amount.Id}");
+        // 沒有缺漏的欄位照常走 SQL
+        var note = await Run(Def(groups: [G(MainF(Note))], measures: [M("n", "countMain")]));
+        note.Engine.Should().Be("sql");
+        note.Groups!.Single(g => g.GroupKeys[0] == "x").Values["n"].Should().Be(2m);
+    }
+
+    [Fact]
+    public async Task IndexBackfillJob_ScansEachModuleOnce_ForAllItsFields()
+    {
+        await Prepare();
+        for (var i = 0; i < 3; i++) await Seed("order", "admin", (Amount, 1m + i), (Price, 2m), (Note, "n"));
+        await ResetToLegacy();
+        var modules = await Db.Context.Set<Module>().CountAsync();
+        RecordCalls.Clear();
+        (await Svc<IndexBackfillJob>().RunAsync(CancellationToken.None)).Should().BeTrue();
+        // 每個模組：一批有資料 + 一次讀到空批結束；order 有多個需要回填的欄位，也只掃一次
+        RecordCalls.GetValueOrDefault(nameof(IRecordRepository.ListBatchByModuleAsync)).Should().BeLessThanOrEqualTo(modules * 2);
+        (await ScaledValues(Amount.Id)).Should().Equal(100L, 200L, 300L);
+        (await ScaledValues(Price.Id)).Should().Equal(200L, 200L, 200L);
     }
 
     // ---- 縮小後備載入（設計 §8.1）----

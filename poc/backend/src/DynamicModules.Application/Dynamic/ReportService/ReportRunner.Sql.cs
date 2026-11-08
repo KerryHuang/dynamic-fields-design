@@ -303,6 +303,18 @@ public partial class ReportRunner
         }
     }
 
+    /// <summary>
+    /// 索引本身能不能用：升級前的資料要等一次性回填完成才確定 ScaledValue 與截斷標記可用（設計 §8.3）；
+    /// 回填時略過過記錄的欄位，索引少了記錄，SQL 會把缺的記錄當成「沒有值」。回 null 表示可用，否則回退回原因。
+    /// </summary>
+    private async Task<string?> IndexGateAsync(IReadOnlyList<ReportSqlConfigStamp> used, CancellationToken ct)
+    {
+        if (await settings.GetValueAsync(SystemSetting.IndexBackfillVersion, ct) != RecordIndexer.BackfillVersion) return "indexBackfillPending";
+        if (await settings.GetValueAsync(SystemSetting.IndexBackfillGaps, ct) is not { Length: > 0 } value) return null;
+        var gaps = value.Split(',').Select(long.Parse).ToHashSet();
+        return used.FirstOrDefault(s => gaps.Contains(s.FieldId)) is { } hit ? $"indexIncomplete:{hit.FieldId}" : null;
+    }
+
     /// <summary>SQL 聚合的入口：回 null 表示不能走 SQL（原因已加進 <paramref name="reasons"/>），由呼叫端改走記憶體路徑。</summary>
     private async Task<ReportResult?> TrySqlAsync(
         ReportDefinition d, ReportRunOptions o, IReadOnlyDictionary<string, Bound> bound, Side mainSide, Side? childSide, RunContext ctx,
@@ -314,10 +326,9 @@ public partial class ReportRunner
             reasons.AddRange(planning.Reasons);
             return null;
         }
-        // 升級前的資料要等一次性回填完成才確定 ScaledValue 與截斷標記可用（設計 §8.3）
-        if (await settings.GetValueAsync(SystemSetting.IndexBackfillVersion, ct) != RecordIndexer.BackfillVersion)
+        if (await IndexGateAsync(query.Stamps, ct) is { } gate)
         {
-            reasons.Add("indexBackfillPending");
+            reasons.Add(gate);
             return null;
         }
         var outcome = await queries.AggregateAsync(query, ct);
@@ -339,8 +350,12 @@ public partial class ReportRunner
         ReportDefinition d, ReportRunOptions o, IReadOnlyDictionary<string, Bound> bound, Side mainSide, Side? childSide, Field? link,
         DateOnly basis, (DateOnly, DateOnly)? resolved, List<string> reasons, CancellationToken ct)
     {
-        if (await settings.GetValueAsync(SystemSetting.IndexBackfillVersion, ct) != RecordIndexer.BackfillVersion) return null;
         if (NarrowingFor(d, o, bound, basis, resolved) is not { } narrowing) return null;
+        if (await IndexGateAsync(narrowing.Stamps, ct) is { } gate)
+        {
+            if (gate != "indexBackfillPending") reasons.Add($"narrowSkipped:{gate}");
+            return null;
+        }
         var result = await queries.ListNarrowedAsync(
             new ReportSqlScope(mainSide.Module.Id, mainSide.Perms!.OwnerUserIds), narrowing,
             childSide is null ? null : new ReportSqlScope(childSide.Module.Id, childSide.Perms!.OwnerUserIds), link?.Id ?? 0,
