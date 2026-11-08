@@ -479,6 +479,56 @@ public class MesInventoryIntegrationTests : IDisposable
         recovered.Status.Should().Be(IntegrationStatus.Active, recovered.Reason);
     }
 
+    /// <summary>客戶在設計器單獨停用整合裡的「出貨必須指定庫存品項」檢查。</summary>
+    private async Task DisableStockItemCheck()
+    {
+        var check = JsonNode.Parse((await JsonOf(await _admin.GetAsync($"{Base}/checks/mes-stock-item-required"))).GetRawText())!.AsObject();
+        var input = new JsonObject
+        {
+            ["key"] = "mes-stock-item-required", ["name"] = check["name"]!.DeepClone(), ["moduleKey"] = check["moduleKey"]!.DeepClone(),
+            ["active"] = false, ["definition"] = check["definition"]!.DeepClone()
+        };
+        var res = await _admin.PutAsJsonAsync($"{Base}/checks/mes-stock-item-required", input);
+        res.StatusCode.Should().Be(HttpStatusCode.OK, await Body(res));
+    }
+
+    private async Task<bool> StockItemCheckActive() =>
+        (await JsonOf(await _admin.GetAsync($"{Base}/checks/mes-stock-item-required"))).GetProperty("active").GetBoolean();
+
+    [Fact]
+    public async Task ACustomerDisabledCheck_StaysBlocked_WhenOtherAppsOpen_UntilRetry()
+    {
+        await OpenMes(); await OpenInventory();
+        await DisableStockItemCheck();
+
+        // 開其他應用程式都會調和全部整合：第一次判定 Blocked，之後的調和不得自動啟用項目或解除 Blocked
+        var crm = await _admin.PostAsJsonAsync($"{Apps}/packages/crm-sales/open",
+            new { groupMap = new Dictionary<string, object> { ["sales"] = new { mode = "skip" }, ["manager"] = new { mode = "create" } } });
+        crm.StatusCode.Should().Be(HttpStatusCode.Created, await Body(crm));
+        (await StatusOfIntegration()).Should().Be(IntegrationStatus.Blocked);
+        await Close("crm-sales");
+        await Reopen("crm-sales");
+        var integration = await Integration();
+        integration.Status.Should().Be(IntegrationStatus.Blocked, integration.Reason);
+        (await StockItemCheckActive()).Should().BeFalse();
+
+        (await _admin.PostAsync($"{Apps}/mes-mold/integrations/stockOut/retry", null)).StatusCode.Should().Be(HttpStatusCode.OK);
+        (await StatusOfIntegration()).Should().Be(IntegrationStatus.Active);
+        (await StockItemCheckActive()).Should().BeTrue();
+    }
+
+    [Fact]
+    public async Task ACustomerDisabledCheck_ClosingAndReopeningThePartner_StaysBlocked()
+    {
+        await OpenMes(); await OpenInventory();
+        await DisableStockItemCheck();
+        await Close("inventory");
+        await Reopen("inventory");
+        var integration = await Integration();
+        integration.Status.Should().Be(IntegrationStatus.Blocked, integration.Reason);
+        (await StockItemCheckActive()).Should().BeFalse();
+    }
+
     [Fact]
     public async Task NonAdmins_CannotRetryOrToggleAnIntegration()
     {

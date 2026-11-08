@@ -33,6 +33,9 @@ public sealed record IntegrationItems(List<IntegrationFieldItem>? Fields, List<s
     public List<string> Events { get; init; } = Events ?? [];
     public List<string> Checks { get; init; } = Checks ?? [];
 
+    /// <summary>整合自己停用（Suspended、Disabled）當下原本啟用的事件與檢查；恢復時只還原這些，客戶自己停用的不被打開（設計 §4）。</summary>
+    public IntegrationSuspendedItems? SuspendedActive { get; init; }
+
     public static IntegrationItems Empty => new([], [], []);
 
     public static IntegrationItems Parse(string? json) =>
@@ -41,6 +44,12 @@ public sealed record IntegrationItems(List<IntegrationFieldItem>? Fields, List<s
     public string ToJson() => JsonSerializer.Serialize(this, Options);
 
     private static readonly JsonSerializerOptions Options = new() { PropertyNamingPolicy = JsonNamingPolicy.CamelCase };
+}
+
+public sealed record IntegrationSuspendedItems(List<string>? Events, List<string>? Checks)
+{
+    public List<string> Events { get; init; } = Events ?? [];
+    public List<string> Checks { get; init; } = Checks ?? [];
 }
 
 public sealed record IntegrationFieldItem(string Module, string Code, long FieldId);

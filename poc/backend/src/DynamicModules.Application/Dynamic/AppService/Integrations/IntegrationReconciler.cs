@@ -58,23 +58,29 @@ public class IntegrationReconciler(
         var items = IntegrationItems.Parse(row.ItemsJson);
         var target = IntegrationState.Derive(row.Enabled, row.Installed, owner.Status == AppStatus.Open, partners.Present, decl.OnPartnerClosed == "block");
 
+        // 上一次已判定被阻擋（含客戶單獨停用某項）：調和不自動啟用項目、不解除阻擋，只有 retry（管理員）能修復；停用整合照常
+        if (previous == IntegrationStatus.Blocked && row.Installed && !retry && target != IntegrationTarget.Disabled)
+        {
+            await SetActiveAsync(items, decl, false, ct);
+            return null;
+        }
+
         switch (target)
         {
             case IntegrationTarget.Disabled:
-                if (row.Installed) await SetActiveAsync(items, decl, false, ct);
+                if (row.Installed) await SuspendAsync(row, items, decl, ct);
                 return await SetStatusAsync(row, IntegrationStatus.Disabled, null, previous, decl, ct);
             case IntegrationTarget.Waiting:
                 return await SetStatusAsync(row, IntegrationStatus.Waiting, partners.Missing is null ? null : $"waiting: 等待 {partners.Missing}", previous, decl, ct);
             case IntegrationTarget.Suspended:
-                await SetActiveAsync(items, decl, false, ct);
+                await SuspendAsync(row, items, decl, ct);
                 return await SetStatusAsync(row, IntegrationStatus.Suspended,
                     owner.Status == AppStatus.Open ? $"suspended: 夥伴 {partners.Missing} 不在" : "suspended: 擁有者已關閉", previous, decl, ct);
             case IntegrationTarget.Held:
                 await SetActiveAsync(items, decl, true, ct);
                 return await SetStatusAsync(row, IntegrationStatus.Held, $"held: 夥伴 {partners.Missing} 不在，來源寫入會被擋", previous, decl, ct);
             default:
-                return await EnsureInSavepointAsync(owner, row, decl, items, appList, allowCreate: target == IntegrationTarget.Install || retry,
-                    wasActive: previous == IntegrationStatus.Active, ct);
+                return await EnsureInSavepointAsync(owner, row, decl, items, appList, allowCreate: target == IntegrationTarget.Install || retry, ct);
         }
     }
 
@@ -106,6 +112,19 @@ public class IntegrationReconciler(
         return (missing.Count == 0, missing.Count == 0 ? null : string.Join("、", missing));
     }
 
+    /// <summary>整合自己停用全部項目，先把當下啟用的記進 suspendedActive（與先前記的合併：已停用的重複調和不會洗掉紀錄）。</summary>
+    private async Task SuspendAsync(AppIntegration row, IntegrationItems items, AppIntegrationDecl decl, CancellationToken ct)
+    {
+        var activeEvents = new List<string>(items.SuspendedActive?.Events ?? []);
+        foreach (var key in items.Events)
+            if (!activeEvents.Contains(key) && await events.GetByKeyAsync(key, ct) is { Active: true }) activeEvents.Add(key);
+        var activeChecks = new List<string>(items.SuspendedActive?.Checks ?? []);
+        foreach (var key in items.Checks)
+            if (!activeChecks.Contains(key) && await checks.GetByKeyAsync(key, ct) is { Active: true }) activeChecks.Add(key);
+        row.ItemsJson = (items with { SuspendedActive = new IntegrationSuspendedItems(activeEvents, activeChecks) }).ToJson();
+        await SetActiveAsync(items, decl, false, ct);
+    }
+
     /// <summary>直接切旗標、不驗證：停用永遠要做得到（來源模組可能已經 Closed）；on 時只恢復宣告為啟用的項目。</summary>
     private async Task SetActiveAsync(IntegrationItems items, AppIntegrationDecl decl, bool on, CancellationToken ct)
     {
@@ -129,7 +148,7 @@ public class IntegrationReconciler(
     }
 
     private async Task<string?> EnsureInSavepointAsync(
-        App owner, AppIntegration row, AppIntegrationDecl decl, IntegrationItems items, List<App> appList, bool allowCreate, bool wasActive, CancellationToken ct)
+        App owner, AppIntegration row, AppIntegrationDecl decl, IntegrationItems items, List<App> appList, bool allowCreate, CancellationToken ct)
     {
         await uow.CommitAsync(ct);
         var ownerId = owner.Id;
@@ -137,7 +156,7 @@ public class IntegrationReconciler(
         string? failure;
         try
         {
-            failure = await EnsureAsync(owner, row, decl, items, appList, allowCreate, wasActive, ct);
+            failure = await EnsureAsync(owner, row, decl, items, appList, allowCreate, ct);
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
@@ -160,7 +179,7 @@ public class IntegrationReconciler(
 
     /// <summary>回 null 代表成功（已寫入 ItemsJson、Installed、Status），否則是失敗原因（呼叫端負責回滾）。</summary>
     private async Task<string?> EnsureAsync(
-        App owner, AppIntegration row, AppIntegrationDecl decl, IntegrationItems old, List<App> appList, bool allowCreate, bool wasActive, CancellationToken ct)
+        App owner, AppIntegration row, AppIntegrationDecl decl, IntegrationItems old, List<App> appList, bool allowCreate, CancellationToken ct)
     {
         var (world, problem) = await IntegrationWorld.LoadAsync(owner, decl, appList, apps, modules, ct);
         if (world is null) return $"unbound: {problem}";
@@ -215,7 +234,8 @@ public class IntegrationReconciler(
                     return $"itemConflict: 事件 {e.Code} 的定義被改過；請還原成宣告的定義後重試";
                 if (!existing.Active && input.Active)
                 {
-                    if (!allowCreate && wasActive) return $"itemDisabled: 事件 {e.Code} 被停用";
+                    // 只還原整合自己停用的；客戶停用的（不在 suspendedActive）要管理員 retry
+                    if (!allowCreate && old.SuspendedActive?.Events.Contains(e.Code) != true) return $"itemDisabled: 事件 {e.Code} 被停用";
                     var enabled = await sender.Send(new UpdateEventRequest(e.Code, input), ct);
                     if (!enabled.IsSuccess) return $"事件 {e.Code}：{Describe(enabled)}";
                 }
@@ -243,7 +263,7 @@ public class IntegrationReconciler(
                 if (Serialize(existing.Definition) != Serialize(input.Definition)) return $"itemConflict: 檢查 {c.Code} 的定義被改過；請還原成宣告的定義後重試";
                 if (!existing.Active && input.Active)
                 {
-                    if (!allowCreate && wasActive) return $"itemDisabled: 檢查 {c.Code} 被停用";
+                    if (!allowCreate && old.SuspendedActive?.Checks.Contains(c.Code) != true) return $"itemDisabled: 檢查 {c.Code} 被停用";
                     var enabled = await sender.Send(new UpdateCheckRequest(c.Code, input), ct);
                     if (!enabled.IsSuccess) return $"檢查 {c.Code}：{Describe(enabled)}";
                 }
