@@ -10,11 +10,10 @@ public sealed class TemplateCatalog(IReadOnlyList<TemplatePackage> builtIns)
 
     public IReadOnlyList<TemplatePackage> BuiltIns { get; } = builtIns;
 
-    /// <summary>讀目錄下所有 *.json；任何檔案解析或驗證失敗、或範本 key 重複，丟 InvalidOperationException（含檔名與全部錯誤）。</summary>
+    /// <summary>讀目錄下所有 *.json（目錄不存在視為沒有內建範本）；任何檔案解析或驗證失敗、或範本 key 重複，丟 InvalidOperationException（含檔名與全部錯誤）。</summary>
     public static TemplateCatalog Load(string directory)
     {
-        if (!Directory.Exists(directory))
-            throw new InvalidOperationException($"內建範本載入失敗：找不到目錄 {directory}");
+        if (!Directory.Exists(directory)) return new TemplateCatalog([]);   // 沒有內建範本的部署：目錄可以不存在
 
         var packages = new List<TemplatePackage>();
         var keys = new Dictionary<string, string>();

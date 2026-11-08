@@ -54,6 +54,13 @@ public class TemplateGraphTests
     }
 
     [Fact]
+    public void Load_MissingDirectory_ReturnsEmptyCatalog()
+    {
+        var missing = System.IO.Path.Combine(System.IO.Path.GetTempPath(), "templates-missing-" + Guid.NewGuid().ToString("N"));
+        TemplateCatalog.Load(missing).BuiltIns.Should().BeEmpty();
+    }
+
+    [Fact]
     public void Load_InvalidFile_ThrowsWithFileName()
     {
         var dir = Directory.CreateTempSubdirectory("templates-").FullName;
