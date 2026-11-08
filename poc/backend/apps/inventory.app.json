@@ -1171,7 +1171,8 @@
                 "formula": "{qty} * {price}",
                 "resultType": "currency",
                 "scale": 0,
-                "showInList": true
+                "showInList": true,
+                "isFilterable": true
               }
             }
           ]
@@ -1959,7 +1960,8 @@
                 "formula": "{qty} * {price}",
                 "resultType": "currency",
                 "scale": 0,
-                "showInList": true
+                "showInList": true,
+                "isFilterable": true
               }
             }
           ]

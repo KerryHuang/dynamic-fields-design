@@ -2140,7 +2140,8 @@
               "config": {
                 "formula": "{qty} * {price}",
                 "resultType": "currency",
-                "scale": 0
+                "scale": 0,
+                "isFilterable": true
               }
             },
             {

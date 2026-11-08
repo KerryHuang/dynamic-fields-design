@@ -1351,7 +1351,8 @@
        },
        "config": {
         "required": true,
-        "showInList": true
+        "showInList": true,
+        "isFilterable": true
        }
       },
       {
@@ -2558,7 +2559,8 @@
        "config": {
         "formula": "IF({opSeq} = {finalSeq}, {goodQty}, 0)",
         "resultType": "number",
-        "scale": 0
+        "scale": 0,
+        "isFilterable": true
        }
       },
       {
@@ -2938,7 +2940,8 @@
        },
        "config": {
         "required": true,
-        "showInList": true
+        "showInList": true,
+        "isFilterable": true
        }
       },
       {
@@ -3454,7 +3457,8 @@
         "vi": "Số giờ ngừng máy"
        },
        "config": {
-        "scale": 1
+        "scale": 1,
+        "isFilterable": true
        }
       }
      ]
@@ -4097,7 +4101,8 @@
        },
        "config": {
         "scale": 0,
-        "showInList": true
+        "showInList": true,
+        "isFilterable": true
        }
       },
       {

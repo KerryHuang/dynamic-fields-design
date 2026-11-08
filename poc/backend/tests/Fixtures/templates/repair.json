@@ -55,7 +55,7 @@
             { "code": "finishDate", "type": "date", "label": { "zh-TW": "完成日期", "en-US": "Finish date" },
               "config": { "showInList": true, "isFilterable": true, "isSortable": true } },
             { "code": "downtime", "type": "decimal", "label": { "zh-TW": "停機時數", "en-US": "Downtime (hours)" },
-              "config": { "scale": 1 } }
+              "config": { "scale": 1, "isFilterable": true } }
           ] }
       ],
       "rules": [

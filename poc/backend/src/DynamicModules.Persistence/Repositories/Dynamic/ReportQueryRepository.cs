@@ -48,7 +48,7 @@ public class ReportQueryRepository(DynamicDbContext db, ISqlDialect dialect) : I
     }
 
     /// <summary>依估計的命中筆數挑驅動條件（設計 §5.2）：封頂的索引區間計數，全碰頂再放大一次；沒有候選回 null（掃模組）。</summary>
-    internal static async Task<ReportSqlCondition?> ChooseDriverAsync(
+    public static async Task<ReportSqlCondition?> ChooseDriverAsync(
         System.Data.Common.DbConnection connection, System.Data.Common.DbTransaction tx, IReadOnlyList<ReportSqlCondition> filters, CancellationToken ct)
     {
         var candidates = filters.Where(ReportQueryBuilder.CanDrive).OrderBy(c => c.Field.Kind == ReportSqlKind.Date ? 0 : 1).ToList();

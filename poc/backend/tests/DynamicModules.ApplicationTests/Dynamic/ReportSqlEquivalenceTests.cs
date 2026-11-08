@@ -6,6 +6,10 @@ using DynamicModules.Domain.Entities.Dynamic;
 using DynamicModules.Domain.FieldTypes;
 using DynamicModules.Domain.Reports;
 using DynamicModules.Domain.ValueObjects;
+using DynamicModules.Persistence.Dynamic.Dialects;
+using DynamicModules.Persistence.Dynamic.Query;
+using DynamicModules.Persistence.Repositories.Dynamic;
+using Dapper;
 using DynamicModules.Domain.Repositories.Dynamic;
 using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
@@ -396,5 +400,35 @@ public class ReportSqlEquivalenceTests : ReportTestBase
         blank.Total!["n"].Should().Be(1m, "空白組只有沒有出貨的那一筆主記錄");
         blank.DetailTotal.Should().Be(1);
         b.Should().BePositive();
+    }
+
+    // ---- 計畫形狀（設計 §5.2）：驅動條件依估計命中筆數挑，Dynamic_Record 只能用主鍵查，不能整表掃描 ----
+
+    [Fact]
+    public async Task Plan_SelectiveConditionDrives_AndRecordTableIsNeverScanned()
+    {
+        await Prepare();
+        for (var i = 0; i < 400; i++)
+            await Seed("order", "admin", (Amount, 1m), (Status, i < 3 ? OptOpen : OptDone), (Due, "2026-11-0" + (1 + i % 9)));
+        var module = await Db.Context.Set<Module>().SingleAsync(m => m.Key == "order");
+        var status = new ReportSqlField(Status.Id, ReportSqlKind.Text, 0, false, null);
+        var due = new ReportSqlField(Due.Id, ReportSqlKind.Date, 0, false, null);
+        // 日期涵蓋全部、狀態只命中 3 筆：驅動必須是狀態
+        var wideDate = new ReportSqlCondition(due, ReportSqlOp.Range, [new DateTime(2026, 1, 1), new DateTime(2027, 1, 1)]);
+        var rareStatus = new ReportSqlCondition(status, ReportSqlOp.Eq, [OptOpen]);
+        var query = new ReportSqlQuery(new ReportSqlScope(module.Id, null), [], [new ReportSqlMeasure("n", "countMain", null, null)],
+            [wideDate, rareStatus], [], []);
+
+        var connection = Db.Context.Database.GetDbConnection();
+        await Db.Context.Database.OpenConnectionAsync();
+        var driver = await ReportQueryRepository.ChooseDriverAsync(connection, null!, query.Filters, CancellationToken.None);
+        driver.Should().BeSameAs(rareStatus);
+
+        var built = ReportQueryBuilder.Aggregate(query, driver, total: true, Svc<ISqlDialect>());
+        var plan = (await connection.QueryAsync<(int id, int parent, int notused, string detail)>("EXPLAIN QUERY PLAN " + built.Sql, built.Parameters))
+            .Select(r => r.detail).ToList();
+        plan.Should().NotContain(d => d.StartsWith("SCAN r") || d.StartsWith("SCAN Dynamic_Record"), string.Join(" | ", plan));
+        plan.Should().Contain(d => d.StartsWith("SEARCH r USING INTEGER PRIMARY KEY"), string.Join(" | ", plan));
+        plan.Should().Contain(d => d.StartsWith("SEARCH di USING INDEX") && d.Contains("TextValue"), "驅動走狀態的索引：" + string.Join(" | ", plan));
     }
 }

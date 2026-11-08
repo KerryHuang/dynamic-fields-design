@@ -97,7 +97,7 @@
             { "code": "nextDate", "type": "formula", "label": { "zh-TW": "下次保養日", "en-US": "Next care date" },
               "config": { "formula": "DATEADD({careDate}, {cycleDays})", "resultType": "date", "showInList": true } },
             { "code": "cost", "type": "currency", "label": { "zh-TW": "費用", "en-US": "Cost" },
-              "config": { "scale": 0, "showInList": true } },
+              "config": { "scale": 0, "showInList": true, "isFilterable": true } },
             { "code": "note", "type": "textarea", "label": { "zh-TW": "備註", "en-US": "Note" } }
           ] }
       ],
