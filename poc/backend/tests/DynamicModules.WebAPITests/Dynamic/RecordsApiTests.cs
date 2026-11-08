@@ -235,8 +235,9 @@ public class RecordsApiTests : IClassFixture<TestApp>
         WithDb(db =>
         {
             var m = db.Set<Module>().Single(x => x.Key == module);
-            var sales = db.Set<PermissionGroup>().Single(g => g.Key == "sales");
-            db.Set<ModuleDataScope>().Add(new ModuleDataScope { ModuleId = m.Id, GroupId = sales.Id, Scope = DataScope.Own });
+            // sales01 所屬的每個群組（業務、進銷存查詢組）都限本人，否則別的群組的「全部」會放寬範圍
+            foreach (var groupId in db.Set<UserGroupMapping>().Where(x => x.UserId == "sales01").Select(x => x.GroupId).ToList())
+                db.Set<ModuleDataScope>().Add(new ModuleDataScope { ModuleId = m.Id, GroupId = groupId, Scope = DataScope.Own });
         });
 
         var res = await JsonOf(await _sales.GetAsync($"{Base}/modules/{module}/records/light"));
