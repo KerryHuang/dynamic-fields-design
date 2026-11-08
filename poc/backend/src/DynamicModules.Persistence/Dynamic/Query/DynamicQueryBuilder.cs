@@ -159,6 +159,10 @@ public static class DynamicQueryBuilder
                 ctx.Parameters.Add($"v{n}_0", start.ToDateTime(TimeOnly.MinValue));
                 ctx.Parameters.Add($"v{n}_1", end.AddDays(1).ToDateTime(TimeOnly.MinValue));
                 return InSubquery($"{col} >= @v{n}_0 AND {col} < @v{n}_1", false);
+            case FilterOperator.BeforeToday:
+                // 嚴格早於業務日：< 今天 00:00；沒有索引列（空值）自然不符合
+                ctx.Parameters.Add($"v{n}_0", today.ToDateTime(TimeOnly.MinValue));
+                return InSubquery($"{col} < @v{n}_0", false);
             case FilterOperator.IsEmpty: return InSubquery(null, true);
             case FilterOperator.IsNotEmpty: return InSubquery(null, false);
             default: throw new InvalidOperationException($"未支援的運算子 {c.Op}");

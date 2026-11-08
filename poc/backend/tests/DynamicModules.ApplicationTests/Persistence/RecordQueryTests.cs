@@ -239,6 +239,22 @@ public class RecordQueryTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task Query_BeforeTodayIsStrictlyBeforeToday()
+    {
+        var date = await AddField(FieldType.Date, "日期");
+        var at = await AddField(FieldType.DateTime, "時間");
+        await Send(new ActivateModuleRequest("order"));
+        await Create("past", (date.Key, "2026-11-02"), (at.Key, "2026-11-02T23:59:00+08:00"));
+        await Create("today", (date.Key, "2026-11-03"), (at.Key, "2026-11-03T00:00:00+08:00"));
+        await Create("future", (date.Key, "2026-11-04"), (at.Key, "2026-11-04T08:00:00+08:00"));
+        await Create("old", (date.Key, "2025-01-01"), (at.Key, "2025-01-01T00:00:00+08:00"));
+        await Create("empty");
+
+        (await Match($$"""{"field":{{date.Id}},"op":"beforeToday"}""")).Should().Equal("old", "past");
+        (await Match($$"""{"field":{{at.Id}},"op":"beforeToday"}""")).Should().Equal("old", "past");
+    }
+
+    [Fact]
     public async Task Query_SortWithTiesAndNulls_IsStableAcrossPages()
     {
         var num = await AddField(FieldType.Integer, "數字", sortable: true);
