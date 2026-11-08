@@ -164,7 +164,7 @@ function setJson(v: string | null) {
       />
       <q-btn flat icon="add" no-caps :label="t('dynamic.filter.addCondition')" @click="addRow" />
     </div>
-    <div v-for="(row, i) in rows" :key="i" class="row q-gutter-sm items-start no-wrap">
+    <div v-for="(row, i) in rows" :key="i" class="row q-gutter-sm items-start condition-row">
       <GenericSelect
         :model-value="row.cond.field ? String(row.cond.field) : null" :label="t('dynamic.filter.field')"
         :options="fieldOptions" class="col" @update:model-value="(v) => setField(row, v)"
@@ -214,3 +214,12 @@ function setJson(v: string | null) {
     </div>
   </div>
 </template>
+
+<style scoped>
+/* 桌機維持單列不換行；手機（< 600px）才換行，欄位各自至少 9rem，避免橫向捲動。 */
+.condition-row { flex-wrap: nowrap; }
+@media (max-width: 599.98px) {
+  .condition-row { flex-wrap: wrap; }
+  .condition-row > .col { flex: 1 1 9rem; min-width: 0; }
+}
+</style>

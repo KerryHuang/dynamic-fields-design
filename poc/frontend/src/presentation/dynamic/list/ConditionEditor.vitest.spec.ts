@@ -28,6 +28,13 @@ describe('ConditionEditor', () => {
     vi.stubGlobal('ResizeObserver', class { observe() {} unobserve() {} disconnect() {} });
   });
 
+  it('lets a condition row wrap on narrow screens instead of forcing no-wrap', () => {
+    const w = mountEditor({ modelValue: { all: [{ field: 1, op: 'lte', value: 5 }] } });
+    const row = w.find('.condition-row');
+    expect(row.exists()).toBe(true);
+    expect(row.classes()).not.toContain('no-wrap');
+  });
+
   it('offers no field reference unless allowFieldRef', () => {
     const w = mountEditor({ modelValue: { all: [{ field: 1, op: 'lte', value: 5 }] } });
     expect(w.findAllComponents(GenericSelect)).toHaveLength(3);
