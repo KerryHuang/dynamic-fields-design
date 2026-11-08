@@ -334,6 +334,31 @@ public class MesAppTests : IDisposable
     }
 
     [Fact]
+    public async Task Shipment_RepointingADraftToAnUnfinishedWorkOrder_IsBlocked()
+    {
+        await OpenMes();
+        var done = await DoneWorkOrder(50);
+        var draft = await Shipment(done, 50);
+        var running = await ReleasedWorkOrder(100);
+        await Report(running, 3, 50);   // 生產中，完工量 50／100
+
+        var (s, _) = await Layout("shipment");
+        var current = await Get(draft);
+        var repoint = await _admin.PutAsJsonAsync($"{Base}/records/{Id(draft)}",
+            new { values = new Dictionary<string, object?> { [s["工令"]] = Id(running) }, rowVersion = current.GetProperty("rowVersion").GetString() });
+        repoint.StatusCode.Should().NotBe(HttpStatusCode.OK);
+        await Body(repoint, "mes-shipment-repoint-wo");
+        (await StatusOf(running, "workorder")).Should().Be("生產中");
+
+        var otherDone = await DoneWorkOrder(30);
+        current = await Get(draft);
+        var ok = await _admin.PutAsJsonAsync($"{Base}/records/{Id(draft)}",
+            new { values = new Dictionary<string, object?> { [s["工令"]] = Id(otherDone), [s["出貨數量"]] = 30 }, rowVersion = current.GetProperty("rowVersion").GetString() });
+        ok.StatusCode.Should().Be(HttpStatusCode.OK, await ok.Content.ReadAsStringAsync());
+        (await Num(draft, "shipment", "工令完工量")).Should().Be(30);
+    }
+
+    [Fact]
     public async Task Shipment_CannotShipMoreThanCompleted_DraftsAreFree_CancelFreesTheQty()
     {
         await OpenMes();

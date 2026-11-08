@@ -128,7 +128,7 @@
 - `inv-flow-monthly` 月別進出量：分組 [`moveDate` 月, `kind`]，度量 `sum(qty)`，長條圖（出庫為負值）。
 - `inv-po-status` 採購單狀態分布：圓環圖。
 - `inv-purchase-by-supplier` 各供應商採購金額（未稅）：主採購單、子採購明細，分組供應商，度量 `sum(amount)`，長條圖。
-- `inv-ship-by-customer` 各客戶出貨金額（未稅）：同上，主出貨單。
+- `inv-ship-by-customer` 各客戶出貨金額（未稅）：同上，主出貨單。只算狀態為 shipped 的出貨單（實作審查：草稿與已取消不計入）。
 
 ### 3.8 列印範本
 
@@ -219,6 +219,7 @@
 |---|---|---|
 | `mes-report-progress` | 報工 `create`（含沖銷分錄） | `touch`：`update` 經 `workOrder`，工令 `status` ← running、`lastReportDate` ← today |
 | `mes-shipment-close-wo` | 出貨單 `create` | `close`：`update` 經 `workOrder`，工令 `status` ← done（**完工確認守衛**，見 §4.7） |
+| `mes-shipment-repoint-wo` | 出貨單 `update`，監看 `workOrder` | 同上，對改選後的工令再做一次完工確認（實作審查：草稿改選未完工工令可繞過只在 `create` 觸發的守衛） |
 
 說明與取捨（我的判斷）：
 
