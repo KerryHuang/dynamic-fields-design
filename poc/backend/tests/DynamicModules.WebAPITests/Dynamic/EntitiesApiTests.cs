@@ -1,4 +1,5 @@
 using System.Net;
+using DynamicModules.TestSupport;
 using FluentAssertions;
 using static DynamicModules.WebAPITests.Dynamic.ApiTestKit;
 
@@ -17,7 +18,7 @@ public class EntitiesApiTests : IClassFixture<TestApp>
 
         res.StatusCode.Should().Be(HttpStatusCode.OK);
         var items = (await JsonOf(res)).EnumerateArray().ToList();
-        items.Select(i => i.GetProperty("key").GetString()).Should().BeEquivalentTo("design.mold", "sales.customer");
+        items.Select(i => i.GetProperty("key").GetString()).Should().BeEquivalentTo("design.mold", "sales.customer", TestEntityProvider.Key);
         items.Single(i => i.GetProperty("key").GetString() == "design.mold").GetProperty("name").GetProperty("zh-TW")
             .GetString().Should().Be("模具");
         items.Single(i => i.GetProperty("key").GetString() == "sales.customer").GetProperty("name").GetProperty("zh-TW")
@@ -40,12 +41,12 @@ public class EntitiesApiTests : IClassFixture<TestApp>
     [Fact]
     public async Task Light_AnyUser_Ok()
     {
-        var res = await _app.AsUser("floor01").GetAsync($"{Base}/entities/design.mold/light?keyword=上蓋");
+        var res = await _app.AsUser("floor01").GetAsync($"{Base}/entities/test.entity/light?keyword=甲");
 
         res.StatusCode.Should().Be(HttpStatusCode.OK);
         var body = await JsonOf(res);
         body.GetProperty("total").GetInt32().Should().Be(1);
-        body.GetProperty("items")[0].GetProperty("key").GetString().Should().Be("M-0001");
-        body.GetProperty("items")[0].GetProperty("title").GetString().Should().Be("M-0001 外殼上蓋模");
+        body.GetProperty("items")[0].GetProperty("key").GetString().Should().Be("E-0001");
+        body.GetProperty("items")[0].GetProperty("title").GetString().Should().Be("E-0001 甲號");
     }
 }

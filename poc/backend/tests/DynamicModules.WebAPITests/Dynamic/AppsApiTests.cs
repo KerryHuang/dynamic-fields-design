@@ -297,7 +297,7 @@ public class AppsApiTests : IDisposable
         (await Reason()).Should().Be("moduleMissing");
     }
 
-    private static string ExtensionPackage(string id, string moduleKey, string requiredEntity = "design.mold") => $$"""
+    private static string ExtensionPackage(string id, string moduleKey, string requiredEntity = "test.entity") => $$"""
         {
           "format": "formwright-app", "formatVersion": 2,
           "manifest": { "id": "{{id}}", "version": "1.0.0", "name": { "zh-TW": "擴充" },

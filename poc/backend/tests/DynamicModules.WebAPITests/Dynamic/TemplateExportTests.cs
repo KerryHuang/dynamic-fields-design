@@ -285,7 +285,7 @@ public sealed partial class TemplateExportTests : IDisposable
     {
         // 擴充模組沒有標題欄位（標題取自既有資料），匯出的 titleField 是 null
         var create = await _admin.PostAsJsonAsync($"{Base}/modules",
-            new { key = "mold-ext", name = Zh("模具擴充"), kind = "extension", hostEntityKey = "design.mold" });
+            new { key = "mold-ext", name = Zh("模具擴充"), kind = "extension", hostEntityKey = "test.entity" });
         create.StatusCode.Should().Be(HttpStatusCode.Created, await create.Content.ReadAsStringAsync());
         var blockId = (await JsonOf(await _admin.GetAsync($"{Base}/modules/mold-ext"))).GetProperty("blocks")[0].GetProperty("id").GetInt64();
         await AddField("mold-ext", blockId, "integer", "保養週期", new { });
@@ -294,7 +294,7 @@ public sealed partial class TemplateExportTests : IDisposable
         var (first, json) = await ExportPackage("mold-ext");
         var ext = first.Modules.Should().ContainSingle().Subject;
         ext.Kind.Should().Be(Domain.Entities.Dynamic.ModuleKind.Extension);
-        ext.HostEntityKey.Should().Be("design.mold");
+        ext.HostEntityKey.Should().Be("test.entity");
         ext.TitleField.Should().BeNull();
         json.Should().NotContain("\"titleField\"");
 

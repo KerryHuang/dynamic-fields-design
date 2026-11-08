@@ -10,6 +10,7 @@ using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.Data.Sqlite;
 using DynamicModules.Persistence.Seed;
+using DynamicModules.TestSupport;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Hosting;
@@ -121,6 +122,7 @@ public class TestApp : WebApplicationFactory<Program>
         builder.ConfigureServices(s =>
         {
             s.AddSingleton<IStartupFilter>(new CountingBodyFilter(this));
+            s.AddTestEntities();
             s.RemoveAll<TimeProvider>();
             s.AddSingleton<TimeProvider>(Time);
             if (!_realAuth)

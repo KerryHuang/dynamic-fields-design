@@ -60,16 +60,16 @@ public class ModulesApiTests : IClassFixture<TestApp>
         var key = NewKey();
         var res = await _admin.PostAsJsonAsync($"{Base}/modules", new
         {
-            key, name = new Dictionary<string, string> { ["zh-TW"] = "模具擴充" }, kind = "extension", hostEntityKey = "design.mold"
+            key, name = new Dictionary<string, string> { ["zh-TW"] = "模具擴充" }, kind = "extension", hostEntityKey = "test.entity"
         });
         res.StatusCode.Should().Be(HttpStatusCode.Created);
         var created = await JsonOf(res);
         created.GetProperty("kind").GetString().Should().Be("extension");
-        created.GetProperty("hostEntityKey").GetString().Should().Be("design.mold");
+        created.GetProperty("hostEntityKey").GetString().Should().Be("test.entity");
 
         var dup = await _admin.PostAsJsonAsync($"{Base}/modules", new
         {
-            key = NewKey(), name = new Dictionary<string, string> { ["zh-TW"] = "x" }, kind = "extension", hostEntityKey = "design.mold"
+            key = NewKey(), name = new Dictionary<string, string> { ["zh-TW"] = "x" }, kind = "extension", hostEntityKey = "test.entity"
         });
         dup.StatusCode.Should().Be(HttpStatusCode.Conflict);
 
@@ -77,14 +77,14 @@ public class ModulesApiTests : IClassFixture<TestApp>
         await Activate(_admin, key);
         var schema = await JsonOf(await _admin.GetAsync($"{Base}/modules/{key}/schema"));
         schema.GetProperty("kind").GetString().Should().Be("extension");
-        schema.GetProperty("hostEntityKey").GetString().Should().Be("design.mold");
+        schema.GetProperty("hostEntityKey").GetString().Should().Be("test.entity");
 
-        (await _admin.GetAsync($"{Base}/modules/{key}/records/by-host/M-0005")).StatusCode.Should().Be(HttpStatusCode.NotFound);
+        (await _admin.GetAsync($"{Base}/modules/{key}/records/by-host/E-0005")).StatusCode.Should().Be(HttpStatusCode.NotFound);
         var rec = await _admin.PostAsJsonAsync($"{Base}/modules/{key}/records",
-            new { values = new Dictionary<string, string> { [noteKey] = "x" }, hostKey = "M-0005" });
+            new { values = new Dictionary<string, string> { [noteKey] = "x" }, hostKey = "E-0005" });
         rec.StatusCode.Should().Be(HttpStatusCode.Created);
-        var got = await JsonOf(await _admin.GetAsync($"{Base}/modules/{key}/records/by-host/M-0005"));
-        got.GetProperty("hostKey").GetString().Should().Be("M-0005");
-        got.GetProperty("title").GetString().Should().Be("M-0005 支架模");
+        var got = await JsonOf(await _admin.GetAsync($"{Base}/modules/{key}/records/by-host/E-0005"));
+        got.GetProperty("hostKey").GetString().Should().Be("E-0005");
+        got.GetProperty("title").GetString().Should().Be("E-0005 戊號");
     }
 }
