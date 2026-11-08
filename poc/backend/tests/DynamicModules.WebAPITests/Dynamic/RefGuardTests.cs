@@ -139,6 +139,17 @@ public class RefGuardTests : IDisposable
     }
 
     [Fact]
+    public async Task Create_TargetInADisallowedState_SaysTheStateDoesNotMatch()
+    {
+        await OpenPackage();
+        var draft = await CreateTask("草稿工作", "草稿");
+        var res = await CreateNote("掛草稿", draft);
+        res.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+        var body = await res.Content.ReadAsStringAsync();
+        body.Should().Contain("目標記錄的狀態不符，不能選").And.NotContain("不存在或無權選取");
+    }
+
+    [Fact]
     public async Task Repointing_IsAlsoGuarded_ButUnchangedValuesAreNot()
     {
         await OpenPackage();

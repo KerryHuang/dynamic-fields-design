@@ -8,6 +8,10 @@ namespace DynamicModules.Domain.FieldTypes.Handlers;
 public sealed class ReferenceHandler : IFieldTypeHandler
 {
     private const string NotFound = "參照的資料不存在或無權選取";
+    private const string StateMismatch = "目標記錄的狀態不符，不能選";
+
+    /// <summary>目標記錄可見但不在參照目標狀態守衛允許的狀態：合法鍵集合回這個（空的）實例，Normalize 據此回守衛訊息。</summary>
+    public static readonly IReadOnlySet<string> RejectedByGuard = new HashSet<string>();
 
     public FieldType Type => FieldType.Reference;
 
@@ -31,7 +35,7 @@ public sealed class ReferenceHandler : IFieldTypeHandler
 
         if (ctx.ValidRefKeys is { } valid && !valid.Contains(key)
             && !(ctx.PreviousValue is { } prev && KeyOf(prev) == key))
-            return FieldValueResult.Fail(NotFound);
+            return FieldValueResult.Fail(ReferenceEquals(valid, RejectedByGuard) ? StateMismatch : NotFound);
         return FieldValueResult.Ok(HandlerHelpers.ToElement(value));
     }
 

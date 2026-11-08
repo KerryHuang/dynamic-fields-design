@@ -43,7 +43,7 @@ public class ReferenceValidator(
         var access = await guard.AuthorizeAsync(targetModule, PermissionAction.Read, ct);
         if (access.Permissions is not { } perms) return new HashSet<string>();
         var visible = await records.ListVisibleIdsAsync(targetModule.Id, [id], perms.OwnerUserIds, ct);
-        if (refGuard is not null && visible.Count > 0 && !await InAllowedStateAsync(targetModule, refGuard, id, ct)) return new HashSet<string>();
+        if (refGuard is not null && visible.Count > 0 && !await InAllowedStateAsync(targetModule, refGuard, id, ct)) return ReferenceHandler.RejectedByGuard;
         return visible.Select(v => v.ToString()).ToHashSet();
     }
 
