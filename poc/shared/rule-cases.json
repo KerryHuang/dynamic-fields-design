@@ -25,7 +25,7 @@
     {"id": 21, "key": "f_21", "type": "text", "active": false},
     {"id": 22, "key": "f_22", "type": "time"},
     {"id": 23, "key": "f_23", "type": "reference", "config": {"refTarget": {"kind": "module", "key": "customer"}}},
-    {"id": 24, "key": "f_24", "type": "reference", "config": {"refTarget": {"kind": "entity", "key": "design.mold"}}}
+    {"id": 24, "key": "f_24", "type": "reference", "config": {"refTarget": {"kind": "entity", "key": "test.entity"}}}
   ],
   "blocks": [
     {"id": 100, "fieldIds": [1, 2, 3, 4]},
@@ -34,15 +34,15 @@
   ],
   "conditions": [
     {"name": "referenceEqNumber", "condition": {"field": 23, "op": "eq", "value": 42}, "values": {"f_23": 42}, "expected": true},
-    {"name": "referenceInEntity", "condition": {"field": 24, "op": "in", "value": ["M-0001", "M-0002"]}, "values": {"f_24": "M-0001"}, "expected": true},
+    {"name": "referenceInEntity", "condition": {"field": 24, "op": "in", "value": ["E-0001", "E-0002"]}, "values": {"f_24": "E-0001"}, "expected": true},
     {"name": "referenceEmpty isEmpty true", "condition": {"field": 23, "op": "isEmpty"}, "values": {}, "expected": true},
     {"name": "referenceEmpty eq false", "condition": {"field": 23, "op": "eq", "value": 42}, "values": {}, "expected": false},
     {"name": "reference eq false other number", "condition": {"field": 23, "op": "eq", "value": 43}, "values": {"f_23": 42}, "expected": false},
     {"name": "reference ne true", "condition": {"field": 23, "op": "ne", "value": 43}, "values": {"f_23": 42}, "expected": true},
     {"name": "reference ne false", "condition": {"field": 23, "op": "ne", "value": 42}, "values": {"f_23": 42}, "expected": false},
-    {"name": "reference in entity false", "condition": {"field": 24, "op": "in", "value": ["M-0001", "M-0002"]}, "values": {"f_24": "M-0003"}, "expected": false},
-    {"name": "reference notIn true", "condition": {"field": 24, "op": "notIn", "value": ["M-0001", "M-0002"]}, "values": {"f_24": "M-0003"}, "expected": true},
-    {"name": "reference notIn false", "condition": {"field": 24, "op": "notIn", "value": ["M-0001", "M-0002"]}, "values": {"f_24": "M-0001"}, "expected": false},
+    {"name": "reference in entity false", "condition": {"field": 24, "op": "in", "value": ["E-0001", "E-0002"]}, "values": {"f_24": "E-0003"}, "expected": false},
+    {"name": "reference notIn true", "condition": {"field": 24, "op": "notIn", "value": ["E-0001", "E-0002"]}, "values": {"f_24": "E-0003"}, "expected": true},
+    {"name": "reference notIn false", "condition": {"field": 24, "op": "notIn", "value": ["E-0001", "E-0002"]}, "values": {"f_24": "E-0001"}, "expected": false},
     {"name": "reference isEmpty false", "condition": {"field": 23, "op": "isEmpty"}, "values": {"f_23": 42}, "expected": false},
     {"name": "reference isNotEmpty true", "condition": {"field": 23, "op": "isNotEmpty"}, "values": {"f_23": 42}, "expected": true},
     {"name": "reference isNotEmpty false", "condition": {"field": 23, "op": "isNotEmpty"}, "values": {}, "expected": false},

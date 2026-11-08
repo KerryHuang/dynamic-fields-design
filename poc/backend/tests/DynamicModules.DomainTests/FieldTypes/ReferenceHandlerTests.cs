@@ -13,7 +13,7 @@ public class ReferenceHandlerTests
     private const string NotFound = "參照的資料不存在或無權選取";
 
     private static FieldConfig Module => new() { RefTarget = new ReferenceTarget(ReferenceTarget.ModuleKind, "customer") };
-    private static FieldConfig Entity => new() { RefTarget = new ReferenceTarget(ReferenceTarget.EntityKind, "design.mold") };
+    private static FieldConfig Entity => new() { RefTarget = new ReferenceTarget(ReferenceTarget.EntityKind, "test.entity") };
 
     [Fact]
     public void Normalize_ModuleTarget_NumberOk() =>
@@ -29,7 +29,7 @@ public class ReferenceHandlerTests
 
     [Fact]
     public void Normalize_EntityTarget_StringOk() =>
-        Run(FieldType.Reference, "\"M-0001\"", Entity).IsValid.Should().BeTrue();
+        Run(FieldType.Reference, "\"E-0001\"", Entity).IsValid.Should().BeTrue();
 
     [Fact]
     public void Normalize_Null_OkNull()
@@ -60,7 +60,7 @@ public class ReferenceHandlerTests
 
     [Theory]
     [InlineData("42", "42")]
-    [InlineData("\"M-0001\"", "M-0001")]
+    [InlineData("\"E-0001\"", "E-0001")]
     public void ToIndex_PutsStringInRefKey(string json, string expected)
     {
         var index = FieldTypeRegistry.CreateDefault().Get(FieldType.Reference).ToIndex(J(json), F(FieldType.Reference));
