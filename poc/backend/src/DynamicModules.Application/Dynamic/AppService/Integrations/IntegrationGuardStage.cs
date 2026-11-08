@@ -18,12 +18,18 @@ public class IntegrationGuardStage(
 {
     public int Order => 7;
 
-    public async Task<ServiceResult?> RunAsync(CancellationToken ct)
+    public Task<ServiceResult?> RunAsync(CancellationToken ct) => CheckAsync(JournalView.Merge(journal.Entries), ct);
+
+    /// <summary>
+    /// 對一批（已合併的）寫入日誌做守衛判定。入口（第 0 輪）由管線呼叫；事件效果寫入的後續各輪由 <see cref="EventStage"/> 在處理該輪之前呼叫，
+    /// 經事件連鎖改到的來源記錄同樣受守衛約束。
+    /// </summary>
+    public async Task<ServiceResult?> CheckAsync(IEnumerable<JournalEntry> merged, CancellationToken ct)
     {
+        var entries = merged.Where(e => !e.Silent && !e.AfterDeleted).ToList();
+        if (entries.Count == 0) return null;
         var rows = (await apps.ListIntegrationsAsync(ct)).Where(r => r.Installed).ToList();
         if (rows.Count == 0) return null;
-        var entries = JournalView.Merge(journal.Entries).Where(e => !e.Silent && !e.AfterDeleted).ToList();
-        if (entries.Count == 0) return null;
 
         var appList = await apps.ListAsync(ct);
         foreach (var row in rows)

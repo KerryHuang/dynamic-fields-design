@@ -18,7 +18,7 @@ namespace DynamicModules.Application.Dynamic.EventService;
 /// </summary>
 public class EventStage(
     IWriteJournal journal, IEventRepository events, IModuleRepository modules, FieldTypeRegistry registry, IBusinessTime time,
-    EffectApplier applier) : IWriteStage
+    EffectApplier applier, AppService.Integrations.IntegrationGuardStage integrationGuard) : IWriteStage
 {
     public const int MaxDepth = 5;
     public const string TooDeep = "連動事件串聯過深（上限 5 層）";
@@ -40,7 +40,10 @@ public class EventStage(
             var slice = journal.Entries.Skip(cursor).Take(end - cursor).ToList();
             cursor = end;
 
-            foreach (var entry in JournalView.Merge(slice))
+            var merged = JournalView.Merge(slice);
+            // 第 0 輪已由入口守衛判定過；之後每輪是事件效果寫入的記錄，同樣過一次整合守衛
+            if (round > 0 && await integrationGuard.CheckAsync(merged, ct) is { } guarded) return guarded;
+            foreach (var entry in merged)
             {
                 if (entry.Silent || entry.AfterDeleted) continue;
                 if (!eventsByModule.TryGetValue(entry.ModuleId, out var list))

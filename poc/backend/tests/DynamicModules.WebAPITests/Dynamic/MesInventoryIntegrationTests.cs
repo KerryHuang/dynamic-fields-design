@@ -310,6 +310,78 @@ public class MesInventoryIntegrationTests : IDisposable
         (await _inv!.BalanceAsync(stock.Item, stock.Warehouse)).Should().Be(100);
     }
 
+    /// <summary>
+    /// MES 之外另一個一般模組：建立記錄時，事件經參照把出貨單狀態改成 statusLabel。
+    /// 出貨單的寫入來自事件效果（第 1 輪以後的日誌），不是使用者直接寫入，入口守衛同樣要擋。
+    /// </summary>
+    private async Task<Func<long, Task<HttpResponseMessage>>> ChainedStatusChange(string statusLabel)
+    {
+        var module = await CreateModule(_admin);
+        var toShipment = await AddField(_admin, module, "reference", new { refTarget = new { kind = "module", key = MesKey("shipment") } });
+        await Activate(_admin, module);
+        var title = await TitleKey(_admin, module);
+        var (s, o) = await Layout("shipment");
+        var ev = await _admin.PostAsJsonAsync($"{Base}/events", new
+        {
+            key = "ev-" + Guid.NewGuid().ToString("N")[..8], name = new Dictionary<string, string> { ["zh-TW"] = "經參照改出貨單狀態" },
+            sourceModuleKey = module, active = true,
+            definition = new
+            {
+                trigger = new { on = "create" },
+                effects = new[]
+                {
+                    new
+                    {
+                        code = "push", kind = "update", targetModuleKey = MesKey("shipment"), via = toShipment.Id,
+                        set = new object[] { new { to = long.Parse(s["狀態"]["f_".Length..]), @const = o[$"狀態/{statusLabel}"] } }
+                    }
+                }
+            }
+        });
+        ev.StatusCode.Should().Be(HttpStatusCode.Created, await ev.Content.ReadAsStringAsync());
+        return shipment => _admin.PostAsJsonAsync($"{Base}/modules/{module}/records",
+            new { values = new Dictionary<string, object?> { [title] = "連鎖", [toShipment.Key] = shipment } });
+    }
+
+    private async Task<string?> ShipmentStatus(long shipment)
+    {
+        var (s, _) = await Layout("shipment");
+        return (await Get(shipment)).GetProperty("values").GetProperty(s["狀態"]).GetString();
+    }
+
+    [Fact]
+    public async Task Suspended_Reverse_ViaAnotherEventsEffect_Is409_StockAndShipmentUnchanged()
+    {
+        await OpenMes(); await OpenInventory();
+        var (shipment, stock) = await ShippedAndDeducted();
+        var cancelViaChain = await ChainedStatusChange("已取消");
+        await Close("inventory");
+        (await StatusOfIntegration()).Should().Be(IntegrationStatus.Suspended);
+
+        var res = await cancelViaChain(shipment);
+        res.StatusCode.Should().Be(HttpStatusCode.Conflict, await Body(res));
+        (await Body(res)).Should().Contain("出貨扣庫存");
+        (await ShipmentStatus(shipment)).Should().Be((await Layout("shipment")).Options["狀態/已出貨"]);
+
+        await Reopen("inventory");
+        (await _inv!.BalanceAsync(stock.Item, stock.Warehouse)).Should().Be(60);
+    }
+
+    [Fact]
+    public async Task Blocked_Forward_ViaAnotherEventsEffect_Is409_NothingDeducted()
+    {
+        await OpenMes(); await OpenInventory();
+        var stock = await Stocked(100);
+        var shipment = await Shipment(await DoneWorkOrder(40), 40, stock);
+        var shipViaChain = await ChainedStatusChange("已出貨");
+        (await _admin.DeleteAsync($"{Base}/events/mes-stock-out-cancel")).StatusCode.Should().Be(HttpStatusCode.OK);
+
+        var res = await shipViaChain(shipment);
+        res.StatusCode.Should().Be(HttpStatusCode.Conflict, await Body(res));
+        (await ShipmentStatus(shipment)).Should().Be((await Layout("shipment")).Options["狀態/草稿"]);
+        (await _inv!.BalanceAsync(stock.Item, stock.Warehouse)).Should().Be(100);
+    }
+
     [Fact]
     public async Task Disabled_Forward_ShipsWithoutDeducting_ButReverse_IsRejected()
     {
