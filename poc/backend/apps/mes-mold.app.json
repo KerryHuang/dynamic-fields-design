@@ -5875,7 +5875,7 @@
      "active": true,
      "module": "shipment",
      "groupBy": [
-      "shipment.workOrder"
+      "shipment.no"
      ],
      "function": "count",
      "field": null,

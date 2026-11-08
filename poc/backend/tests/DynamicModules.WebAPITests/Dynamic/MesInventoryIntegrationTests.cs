@@ -216,6 +216,24 @@ public class MesInventoryIntegrationTests : IDisposable
     }
 
     [Fact]
+    public async Task ShipmentsShippedBeforeTheIntegration_CanEachBeCancelled_AfterInventoryOpens()
+    {
+        // 只開 MES 時同一張工令出了兩張沒有庫存品項的貨；之後開進銷存，整合 Active
+        await OpenMes();
+        var wo = await DoneWorkOrder(100);
+        var s0 = await Shipment(wo, 10);
+        var s1 = await Shipment(wo, 10);
+        await Move(s0, "shipment", "已出貨");
+        await Move(s1, "shipment", "已出貨");
+        await OpenInventory();
+        (await StatusOfIntegration()).Should().Be(IntegrationStatus.Active);
+
+        // 檢查以每張出貨單自成一組：S0 仍沒有品項，不該讓 S1 永遠取消不了
+        var cancel = await TryMove(s1, "shipment", "已取消");
+        cancel.StatusCode.Should().Be(HttpStatusCode.OK, await cancel.Content.ReadAsStringAsync());
+    }
+
+    [Fact]
     public async Task Active_InsufficientStock_BlocksTheShipment_AndItStaysDraft()
     {
         await OpenMes();

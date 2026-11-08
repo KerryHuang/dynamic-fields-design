@@ -17,7 +17,7 @@ public class CheckValidator(IModuleRepository modules, FieldTypeRegistry registr
     public const string BadKey = "檢查代碼只能用小寫英文、數字、連字號，2 到 40 字，英文開頭";
 
     /// <summary>組鍵只接受索引上可靠相等比較的型別；小數、金額、公式、彙總不行（索引是 double）。</summary>
-    public static readonly FieldType[] GroupTypes = [FieldType.Reference, FieldType.Enum, FieldType.Text, FieldType.Integer, FieldType.Date];
+    public static readonly FieldType[] GroupTypes = [FieldType.Reference, FieldType.Enum, FieldType.Text, FieldType.Integer, FieldType.Date, FieldType.AutoNumber];
     public static readonly FieldType[] NumericTypes = [FieldType.Integer, FieldType.Decimal, FieldType.Currency];
     private static readonly string[] Ops = ["gte", "gt", "lte", "lt", "eq"];
 
@@ -40,7 +40,7 @@ public class CheckValidator(IModuleRepository modules, FieldTypeRegistry registr
         foreach (var id in def.GroupBy ?? [])
             if (!fields.TryGetValue(id, out var g) || !GroupTypes.Contains(g.Type))
             {
-                Err("definition.groupBy", "分組欄位必須是本模組的文字、整數、日期、下拉或參照欄位（小數、金額、公式、彙總不能當組鍵）");
+                Err("definition.groupBy", "分組欄位必須是本模組的文字、整數、日期、下拉、參照或自動編號欄位（小數、金額、公式、彙總不能當組鍵）");
                 break;
             }
         if ((def.GroupBy ?? []).Distinct().Count() != (def.GroupBy ?? []).Count) Err("definition.groupBy", "分組欄位不能重複");

@@ -83,7 +83,7 @@ s2b 另外留下四個待辦（§9 缺口 B、E、F，以及 §2.4、§15 的客
   ],
   "checks": [
     { "code": "mes-stock-item-required", "name": { "zh-TW": "出貨必須指定庫存品項" }, "active": true, "module": "shipment",
-      "groupBy": ["shipment.workOrder"], "function": "count", "field": null,
+      "groupBy": ["shipment.no"], "function": "count", "field": null,
       "where": { "all": [ { "field": "shipment.status", "op": "eq", "value": "opt_shipped" },
                           { "field": "shipment.stockItem", "op": "isEmpty" } ] },
       "assert": { "op": "lte", "limit": { "const": 0 } },
