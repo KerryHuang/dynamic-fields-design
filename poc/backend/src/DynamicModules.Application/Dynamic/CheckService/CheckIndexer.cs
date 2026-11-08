@@ -82,6 +82,18 @@ public class CheckIndexer(
         return (null, notices);
     }
 
+    /// <summary>
+    /// ScaledValue 為 NULL 有兩種原因：放大後超出 64 位元整數，或原值的小數位比欄位目前的設定多（Scale 被調低後留下的舊值）。
+    /// 四捨五入後放得下就是後者，訊息要指出真正的原因與出路。
+    /// </summary>
+    private static string NotExactMessage(long recordId, Field field, System.Text.Json.JsonElement value)
+    {
+        var label = field.LabelI18n.Resolve("zh-TW");
+        return ScaledNumber.Of(field, value) is null
+            ? $"記錄 {recordId} 的「{label}」數值太大，無法精確加總；請先修正這筆記錄"
+            : $"記錄 {recordId} 的「{label}」數值的小數位超過欄位設定（目前 {ScaledNumber.ScaleOf(field)} 位），無法精確加總；請先修正這筆記錄，或把欄位的小數位調回原值";
+    }
+
     private async Task<ServiceResult?> BackfillAsync(Module module, Field field, bool isSum, CancellationToken ct)
     {
         await records.ClearFieldIndexAsync(field.Id, ct);
@@ -97,7 +109,7 @@ public class CheckIndexer(
                 foreach (var row in RecordIndexer.BuildField(field, values, registry))
                 {
                     if (isSum && row.NumberValue is not null && row.ScaledValue is null)
-                        return ServiceResult.Conflict($"記錄 {record.Id} 的「{field.LabelI18n.Resolve("zh-TW")}」數值太大，無法精確加總；請先修正這筆記錄");
+                        return ServiceResult.Conflict(NotExactMessage(record.Id, field, values[field.Key]!.Value));
                     row.RecordId = record.Id;
                     rows.Add(row);
                 }

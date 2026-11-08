@@ -134,6 +134,24 @@ public class CheckRuntimeTests : EffectsTestBase
     }
 
     [Fact]
+    public async Task Creating_a_check_over_a_legacy_value_with_too_many_decimals_says_so_instead_of_too_large()
+    {
+        var s = await BuildStock("crs");
+        var qty = (await Detail(s.Move)).Blocks.SelectMany(b => b.Fields).Single(f => f.Id == s.MoveQty);
+        (await Update(qty, qty.Config with { Scale = 2 })).IsSuccess.Should().BeTrue();
+        await MustCreate(s.Move, Move(s, "old", "A", "1.23"));
+        // 還沒被檢查引用時把小數位調低，1.23 留著
+        qty = (await Detail(s.Move)).Blocks.SelectMany(b => b.Fields).Single(f => f.Id == s.MoveQty);
+        (await Update(qty, qty.Config with { Scale = 1 })).IsSuccess.Should().BeTrue();
+
+        var def = new CheckDefinition([s.MoveItem, s.MoveWhere], "sum", s.MoveQty, null,
+            new CheckAssert("gte", new CheckLimit(0, null, null)), Text("庫存不足"));
+        var r = await Send(new CreateCheckRequest(new CheckInput(s.Move + "-min", Text("min"), s.Move, true, def)));
+        r.IsConflict.Should().BeTrue();
+        r.Message.Should().Contain("小數位超過欄位設定").And.NotContain("數值太大");
+    }
+
+    [Fact]
     public async Task Count_function_and_default_message_without_numbers()
     {
         var s = await BuildStock("crc");
