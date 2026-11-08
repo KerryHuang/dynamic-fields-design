@@ -11,7 +11,23 @@ public class MesMigrationEquivalenceTests
 {
     private static JsonNode Load(string path) => JsonNode.Parse(File.ReadAllText(path))!;
 
-    private static readonly JsonNode Mes = Load(Path.Combine(AppContext.BaseDirectory, "apps", "mes-mold.app.json"));
+    // 白名單：舊範本只有 zh-TW、en-US，套件另外補了 th、vi（機器翻譯），這裡去掉再比
+    private static readonly JsonNode Mes = StripAddedLocales(Load(Path.Combine(AppContext.BaseDirectory, "apps", "mes-mold.app.json")));
+
+    private static JsonNode StripAddedLocales(JsonNode node)
+    {
+        switch (node)
+        {
+            case JsonObject o:
+                if (o.ContainsKey("zh-TW")) { o.Remove("th"); o.Remove("vi"); }
+                foreach (var child in o.Select(kv => kv.Value).ToList()) if (child is not null) StripAddedLocales(child);
+                break;
+            case JsonArray a:
+                foreach (var child in a) if (child is not null) StripAddedLocales(child);
+                break;
+        }
+        return node;
+    }
 
     public static IEnumerable<object[]> Templates => new[] { "order", "repair", "mold-care", "quality" }.Select(t => new object[] { t });
 

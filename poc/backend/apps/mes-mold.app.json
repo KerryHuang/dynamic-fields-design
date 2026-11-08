@@ -1,16 +1,21 @@
 {
  "format": "formwright-app",
  "formatVersion": 4,
+ "x-translation": "th、vi 標籤為機器翻譯，待母語者校對",
  "manifest": {
   "id": "mes-mold",
   "version": "1.0.0",
   "name": {
    "zh-TW": "MES 模具廠",
-   "en-US": "Mold-shop MES"
+   "en-US": "Mold-shop MES",
+   "th": "MES โรงงานแม่พิมพ์",
+   "vi": "MES xưởng khuôn mẫu"
   },
   "description": {
    "zh-TW": "報價、訂單、工令、製程、報工與出貨，含故障報修、模具保養與品質異常",
-   "en-US": "Quotes, orders, work orders, operations, reporting and shipping, with repairs, mold care and quality issues"
+   "en-US": "Quotes, orders, work orders, operations, reporting and shipping, with repairs, mold care and quality issues",
+   "th": "ใบเสนอราคา ใบสั่งขาย ใบสั่งผลิต กระบวนการ รายงานผลผลิต และการจัดส่ง รวมถึงการแจ้งซ่อม การบำรุงรักษาแม่พิมพ์ และปัญหาคุณภาพ",
+   "vi": "Báo giá, đơn hàng, lệnh sản xuất, công đoạn, báo cáo sản lượng và giao hàng, kèm báo sửa chữa, bảo dưỡng khuôn và sự cố chất lượng"
   },
   "icon": "precision_manufacturing",
   "requires": {
@@ -26,42 +31,54 @@
    "code": "sales",
    "name": {
     "zh-TW": "業務",
-    "en-US": "Sales"
+    "en-US": "Sales",
+    "th": "ฝ่ายขาย",
+    "vi": "Kinh doanh"
    }
   },
   {
    "code": "salesManager",
    "name": {
     "zh-TW": "業務主管",
-    "en-US": "Sales manager"
+    "en-US": "Sales manager",
+    "th": "ผู้จัดการฝ่ายขาย",
+    "vi": "Trưởng phòng kinh doanh"
    }
   },
   {
    "code": "floor",
    "name": {
     "zh-TW": "現場",
-    "en-US": "Shop floor"
+    "en-US": "Shop floor",
+    "th": "หน้างาน",
+    "vi": "Hiện trường"
    }
   },
   {
    "code": "maint",
    "name": {
     "zh-TW": "設備",
-    "en-US": "Maintenance"
+    "en-US": "Maintenance",
+    "th": "อุปกรณ์",
+    "vi": "Thiết bị"
    }
   },
   {
    "code": "qa",
    "name": {
     "zh-TW": "品保",
-    "en-US": "Quality assurance"
+    "en-US": "Quality assurance",
+    "th": "ประกันคุณภาพ",
+    "vi": "Đảm bảo chất lượng"
    }
   },
   {
    "code": "planner",
    "name": {
     "zh-TW": "生管",
-    "en-US": "Planner"
+    "en-US": "Planner",
+    "th": "วางแผนการผลิต",
+    "vi": "Kế hoạch sản xuất"
    }
   }
  ],
@@ -71,7 +88,9 @@
    "key": "mes-order",
    "name": {
     "zh-TW": "訂單",
-    "en-US": "Sales order"
+    "en-US": "Sales order",
+    "th": "ใบสั่งขาย",
+    "vi": "Đơn hàng bán"
    },
    "icon": "receipt_long",
    "section": "業務",
@@ -83,7 +102,9 @@
      "code": "main",
      "label": {
       "zh-TW": "基本資料",
-      "en-US": "Basic information"
+      "en-US": "Basic information",
+      "th": "ข้อมูลพื้นฐาน",
+      "vi": "Thông tin cơ bản"
      },
      "collapsed": false,
      "fields": [
@@ -92,7 +113,9 @@
        "type": "autonumber",
        "label": {
         "zh-TW": "訂單編號",
-        "en-US": "Order no."
+        "en-US": "Order no.",
+        "th": "เลขที่ใบสั่งขาย",
+        "vi": "Số đơn hàng"
        },
        "config": {
         "format": "SO-{yyyyMM}-{0000}",
@@ -105,7 +128,9 @@
        "type": "reference",
        "label": {
         "zh-TW": "來源報價單",
-        "en-US": "Source quote"
+        "en-US": "Source quote",
+        "th": "ใบเสนอราคาต้นทาง",
+        "vi": "Báo giá nguồn"
        },
        "config": {
         "refTarget": {
@@ -121,7 +146,9 @@
        "type": "reference",
        "label": {
         "zh-TW": "客戶",
-        "en-US": "Customer"
+        "en-US": "Customer",
+        "th": "ลูกค้า",
+        "vi": "Khách hàng"
        },
        "config": {
         "refTarget": {
@@ -138,7 +165,9 @@
        "type": "date",
        "label": {
         "zh-TW": "訂單日期",
-        "en-US": "Order date"
+        "en-US": "Order date",
+        "th": "วันที่สั่งซื้อ",
+        "vi": "Ngày đặt hàng"
        },
        "config": {
         "defaultToday": true,
@@ -153,7 +182,9 @@
        "type": "date",
        "label": {
         "zh-TW": "交期",
-        "en-US": "Due date"
+        "en-US": "Due date",
+        "th": "กำหนดส่ง",
+        "vi": "Hạn giao"
        },
        "config": {
         "showInList": true,
@@ -166,14 +197,18 @@
        "type": "enum",
        "label": {
         "zh-TW": "狀態",
-        "en-US": "Status"
+        "en-US": "Status",
+        "th": "สถานะ",
+        "vi": "Trạng thái"
        },
        "options": [
         {
          "code": "draft",
          "label": {
           "zh-TW": "草稿",
-          "en-US": "Draft"
+          "en-US": "Draft",
+          "th": "ฉบับร่าง",
+          "vi": "Nháp"
          },
          "color": null
         },
@@ -181,7 +216,9 @@
          "code": "confirmed",
          "label": {
           "zh-TW": "已確認",
-          "en-US": "Confirmed"
+          "en-US": "Confirmed",
+          "th": "ยืนยันแล้ว",
+          "vi": "Đã xác nhận"
          },
          "color": null
         },
@@ -189,7 +226,9 @@
          "code": "shipping",
          "label": {
           "zh-TW": "出貨中",
-          "en-US": "Shipping"
+          "en-US": "Shipping",
+          "th": "กำลังจัดส่ง",
+          "vi": "Đang giao hàng"
          },
          "color": null
         },
@@ -197,7 +236,9 @@
          "code": "closed",
          "label": {
           "zh-TW": "已結案",
-          "en-US": "Closed"
+          "en-US": "Closed",
+          "th": "ปิดงานแล้ว",
+          "vi": "Đã đóng"
          },
          "color": null
         },
@@ -205,7 +246,9 @@
          "code": "cancel",
          "label": {
           "zh-TW": "取消",
-          "en-US": "Cancelled"
+          "en-US": "Cancelled",
+          "th": "ยกเลิก",
+          "vi": "Hủy"
          },
          "color": null
         }
@@ -222,7 +265,9 @@
        "type": "user",
        "label": {
         "zh-TW": "業務員",
-        "en-US": "Sales rep"
+        "en-US": "Sales rep",
+        "th": "พนักงานขาย",
+        "vi": "Nhân viên kinh doanh"
        },
        "config": {
         "showInList": true,
@@ -234,14 +279,18 @@
        "type": "enum",
        "label": {
         "zh-TW": "幣別",
-        "en-US": "Currency"
+        "en-US": "Currency",
+        "th": "สกุลเงิน",
+        "vi": "Tiền tệ"
        },
        "options": [
         {
          "code": "twd",
          "label": {
           "zh-TW": "TWD",
-          "en-US": "TWD"
+          "en-US": "TWD",
+          "th": "TWD",
+          "vi": "TWD"
          },
          "color": null
         },
@@ -249,7 +298,9 @@
          "code": "usd",
          "label": {
           "zh-TW": "USD",
-          "en-US": "USD"
+          "en-US": "USD",
+          "th": "USD",
+          "vi": "USD"
          },
          "color": null
         },
@@ -257,7 +308,9 @@
          "code": "jpy",
          "label": {
           "zh-TW": "JPY",
-          "en-US": "JPY"
+          "en-US": "JPY",
+          "th": "JPY",
+          "vi": "JPY"
          },
          "color": null
         }
@@ -272,7 +325,9 @@
      "code": "amounts",
      "label": {
       "zh-TW": "金額",
-      "en-US": "Amounts"
+      "en-US": "Amounts",
+      "th": "จำนวนเงิน",
+      "vi": "Số tiền"
      },
      "collapsed": false,
      "fields": [
@@ -281,7 +336,9 @@
        "type": "rollup",
        "label": {
         "zh-TW": "未稅合計",
-        "en-US": "Subtotal"
+        "en-US": "Subtotal",
+        "th": "รวมก่อนภาษี",
+        "vi": "Tổng chưa thuế"
        },
        "config": {
         "rollup": {
@@ -296,7 +353,9 @@
        "type": "percent",
        "label": {
         "zh-TW": "稅率",
-        "en-US": "Tax rate"
+        "en-US": "Tax rate",
+        "th": "อัตราภาษี",
+        "vi": "Thuế suất"
        },
        "config": {
         "scale": 0,
@@ -308,7 +367,9 @@
        "type": "formula",
        "label": {
         "zh-TW": "稅額",
-        "en-US": "Tax"
+        "en-US": "Tax",
+        "th": "ภาษี",
+        "vi": "Thuế"
        },
        "config": {
         "formula": "ROUND({subtotal} * {taxRate}, 0)",
@@ -321,7 +382,9 @@
        "type": "formula",
        "label": {
         "zh-TW": "含稅總額",
-        "en-US": "Total"
+        "en-US": "Total",
+        "th": "รวมทั้งสิ้น",
+        "vi": "Tổng cộng"
        },
        "config": {
         "formula": "{subtotal} + {tax}",
@@ -335,7 +398,9 @@
        "type": "rollup",
        "label": {
         "zh-TW": "明細筆數",
-        "en-US": "Line count"
+        "en-US": "Line count",
+        "th": "จำนวนรายการ",
+        "vi": "Số dòng"
        },
        "config": {
         "rollup": {
@@ -349,7 +414,9 @@
        "type": "rollup",
        "label": {
         "zh-TW": "品質異常筆數",
-        "en-US": "Quality issues"
+        "en-US": "Quality issues",
+        "th": "จำนวนปัญหาคุณภาพ",
+        "vi": "Số sự cố chất lượng"
        },
        "config": {
         "rollup": {
@@ -365,7 +432,9 @@
      "code": "remarks",
      "label": {
       "zh-TW": "備註",
-      "en-US": "Remarks"
+      "en-US": "Remarks",
+      "th": "หมายเหตุ",
+      "vi": "Ghi chú"
      },
      "collapsed": false,
      "fields": [
@@ -374,7 +443,9 @@
        "type": "textarea",
        "label": {
         "zh-TW": "備註",
-        "en-US": "Remark"
+        "en-US": "Remark",
+        "th": "หมายเหตุ",
+        "vi": "Ghi chú"
        }
       },
       {
@@ -382,7 +453,9 @@
        "type": "textarea",
        "label": {
         "zh-TW": "取消原因",
-        "en-US": "Cancellation reason"
+        "en-US": "Cancellation reason",
+        "th": "เหตุผลที่ยกเลิก",
+        "vi": "Lý do hủy"
        }
       }
      ]
@@ -398,7 +471,9 @@
      "options": [],
      "message": {
       "zh-TW": "交期不得早於訂單日期",
-      "en-US": "Due date cannot be earlier than the order date"
+      "en-US": "Due date cannot be earlier than the order date",
+      "th": "กำหนดส่งต้องไม่เร็วกว่าวันที่สั่งซื้อ",
+      "vi": "Hạn giao không được sớm hơn ngày đặt hàng"
      },
      "condition": {
       "any": [
@@ -449,7 +524,9 @@
     {
      "name": {
       "zh-TW": "全部訂單",
-      "en-US": "All orders"
+      "en-US": "All orders",
+      "th": "ใบสั่งขายทั้งหมด",
+      "vi": "Tất cả đơn hàng"
      },
      "columns": [
       "no",
@@ -542,7 +619,9 @@
    "key": "mes-order-line",
    "name": {
     "zh-TW": "訂單明細",
-    "en-US": "Order lines"
+    "en-US": "Order lines",
+    "th": "รายการในใบสั่งขาย",
+    "vi": "Chi tiết đơn hàng"
    },
    "icon": null,
    "section": null,
@@ -554,7 +633,9 @@
      "code": "main",
      "label": {
       "zh-TW": "明細",
-      "en-US": "Lines"
+      "en-US": "Lines",
+      "th": "รายการ",
+      "vi": "Chi tiết"
      },
      "collapsed": false,
      "fields": [
@@ -563,7 +644,9 @@
        "type": "reference",
        "label": {
         "zh-TW": "訂單",
-        "en-US": "Order"
+        "en-US": "Order",
+        "th": "ใบสั่งขาย",
+        "vi": "Đơn hàng bán"
        },
        "config": {
         "refTarget": {
@@ -578,7 +661,9 @@
        "type": "autonumber",
        "label": {
         "zh-TW": "項次",
-        "en-US": "Line no."
+        "en-US": "Line no.",
+        "th": "ลำดับ",
+        "vi": "Dòng"
        },
        "config": {
         "format": "{0}",
@@ -590,7 +675,9 @@
        "type": "text",
        "label": {
         "zh-TW": "品號",
-        "en-US": "Item no."
+        "en-US": "Item no.",
+        "th": "รหัสสินค้า",
+        "vi": "Mã hàng"
        }
       },
       {
@@ -598,7 +685,9 @@
        "type": "text",
        "label": {
         "zh-TW": "品名",
-        "en-US": "Item name"
+        "en-US": "Item name",
+        "th": "ชื่อสินค้า",
+        "vi": "Tên hàng"
        },
        "config": {
         "required": true
@@ -609,7 +698,9 @@
        "type": "decimal",
        "label": {
         "zh-TW": "數量",
-        "en-US": "Quantity"
+        "en-US": "Quantity",
+        "th": "จำนวน",
+        "vi": "Số lượng"
        },
        "config": {
         "scale": 2,
@@ -621,7 +712,9 @@
        "type": "text",
        "label": {
         "zh-TW": "單位",
-        "en-US": "Unit"
+        "en-US": "Unit",
+        "th": "หน่วย",
+        "vi": "Đơn vị"
        },
        "config": {}
       },
@@ -630,7 +723,9 @@
        "type": "currency",
        "label": {
         "zh-TW": "單價",
-        "en-US": "Unit price"
+        "en-US": "Unit price",
+        "th": "ราคาต่อหน่วย",
+        "vi": "Đơn giá"
        },
        "config": {
         "scale": 0
@@ -641,7 +736,9 @@
        "type": "formula",
        "label": {
         "zh-TW": "金額",
-        "en-US": "Amount"
+        "en-US": "Amount",
+        "th": "จำนวนเงิน",
+        "vi": "Số tiền"
        },
        "config": {
         "formula": "{qty} * {price}",
@@ -654,7 +751,9 @@
        "type": "date",
        "label": {
         "zh-TW": "交期",
-        "en-US": "Due date"
+        "en-US": "Due date",
+        "th": "กำหนดส่ง",
+        "vi": "Hạn giao"
        },
        "config": {
         "parentDefaultField": "order.dueDate"
@@ -665,7 +764,9 @@
        "type": "integer",
        "label": {
         "zh-TW": "來源報價明細列",
-        "en-US": "Source quote line"
+        "en-US": "Source quote line",
+        "th": "รายการใบเสนอราคาต้นทาง",
+        "vi": "Dòng báo giá nguồn"
        },
        "config": {
         "readOnly": true
@@ -683,7 +784,9 @@
    "key": "mes-quote",
    "name": {
     "zh-TW": "報價單",
-    "en-US": "Quotes"
+    "en-US": "Quotes",
+    "th": "ใบเสนอราคา",
+    "vi": "Báo giá"
    },
    "icon": "request_quote",
    "section": "業務",
@@ -695,7 +798,9 @@
      "code": "main",
      "label": {
       "zh-TW": "基本資料",
-      "en-US": "Basic information"
+      "en-US": "Basic information",
+      "th": "ข้อมูลพื้นฐาน",
+      "vi": "Thông tin cơ bản"
      },
      "collapsed": false,
      "fields": [
@@ -704,7 +809,9 @@
        "type": "autonumber",
        "label": {
         "zh-TW": "報價單號",
-        "en-US": "Quote no."
+        "en-US": "Quote no.",
+        "th": "เลขที่ใบเสนอราคา",
+        "vi": "Số báo giá"
        },
        "config": {
         "format": "QT-{yyyyMM}-{0000}",
@@ -717,7 +824,9 @@
        "type": "reference",
        "label": {
         "zh-TW": "客戶",
-        "en-US": "Customer"
+        "en-US": "Customer",
+        "th": "ลูกค้า",
+        "vi": "Khách hàng"
        },
        "config": {
         "refTarget": {
@@ -734,7 +843,9 @@
        "type": "date",
        "label": {
         "zh-TW": "報價日期",
-        "en-US": "Quote date"
+        "en-US": "Quote date",
+        "th": "วันที่เสนอราคา",
+        "vi": "Ngày báo giá"
        },
        "config": {
         "defaultToday": true,
@@ -749,7 +860,9 @@
        "type": "date",
        "label": {
         "zh-TW": "有效期限",
-        "en-US": "Valid until"
+        "en-US": "Valid until",
+        "th": "ใช้ได้ถึงวันที่",
+        "vi": "Có hiệu lực đến"
        },
        "config": {}
       },
@@ -758,7 +871,9 @@
        "type": "enum",
        "label": {
         "zh-TW": "狀態",
-        "en-US": "Status"
+        "en-US": "Status",
+        "th": "สถานะ",
+        "vi": "Trạng thái"
        },
        "config": {
         "defaultValue": "opt_draft",
@@ -771,7 +886,9 @@
          "code": "draft",
          "label": {
           "zh-TW": "草稿",
-          "en-US": "Draft"
+          "en-US": "Draft",
+          "th": "ฉบับร่าง",
+          "vi": "Nháp"
          },
          "color": null
         },
@@ -779,7 +896,9 @@
          "code": "pending",
          "label": {
           "zh-TW": "待核准",
-          "en-US": "Pending approval"
+          "en-US": "Pending approval",
+          "th": "รออนุมัติ",
+          "vi": "Chờ duyệt"
          },
          "color": null
         },
@@ -787,7 +906,9 @@
          "code": "approved",
          "label": {
           "zh-TW": "已核准",
-          "en-US": "Approved"
+          "en-US": "Approved",
+          "th": "อนุมัติแล้ว",
+          "vi": "Đã duyệt"
          },
          "color": null
         },
@@ -795,7 +916,9 @@
          "code": "rejected",
          "label": {
           "zh-TW": "已退回",
-          "en-US": "Rejected"
+          "en-US": "Rejected",
+          "th": "ถูกส่งกลับ",
+          "vi": "Bị trả lại"
          },
          "color": null
         }
@@ -806,7 +929,9 @@
        "type": "user",
        "label": {
         "zh-TW": "負責業務",
-        "en-US": "Owner"
+        "en-US": "Owner",
+        "th": "ผู้รับผิดชอบ",
+        "vi": "Người phụ trách"
        },
        "config": {
         "showInList": true,
@@ -819,7 +944,9 @@
      "code": "amounts",
      "label": {
       "zh-TW": "金額",
-      "en-US": "Amounts"
+      "en-US": "Amounts",
+      "th": "จำนวนเงิน",
+      "vi": "Số tiền"
      },
      "collapsed": false,
      "fields": [
@@ -828,7 +955,9 @@
        "type": "rollup",
        "label": {
         "zh-TW": "未稅小計",
-        "en-US": "Subtotal"
+        "en-US": "Subtotal",
+        "th": "รวมก่อนภาษี",
+        "vi": "Tạm tính chưa thuế"
        },
        "config": {
         "rollup": {
@@ -843,7 +972,9 @@
        "type": "percent",
        "label": {
         "zh-TW": "稅率",
-        "en-US": "Tax rate"
+        "en-US": "Tax rate",
+        "th": "อัตราภาษี",
+        "vi": "Thuế suất"
        },
        "config": {
         "scale": 0,
@@ -855,7 +986,9 @@
        "type": "formula",
        "label": {
         "zh-TW": "稅額",
-        "en-US": "Tax"
+        "en-US": "Tax",
+        "th": "ภาษี",
+        "vi": "Thuế"
        },
        "config": {
         "formula": "ROUND({subtotal} * {taxRate}, 0)",
@@ -868,7 +1001,9 @@
        "type": "formula",
        "label": {
         "zh-TW": "含稅總計",
-        "en-US": "Total"
+        "en-US": "Total",
+        "th": "รวมทั้งสิ้น",
+        "vi": "Tổng cộng"
        },
        "config": {
         "formula": "{subtotal} + {tax}",
@@ -883,7 +1018,9 @@
      "code": "remarks",
      "label": {
       "zh-TW": "備註",
-      "en-US": "Remarks"
+      "en-US": "Remarks",
+      "th": "หมายเหตุ",
+      "vi": "Ghi chú"
      },
      "collapsed": false,
      "fields": [
@@ -892,7 +1029,9 @@
        "type": "textarea",
        "label": {
         "zh-TW": "備註",
-        "en-US": "Remark"
+        "en-US": "Remark",
+        "th": "หมายเหตุ",
+        "vi": "Ghi chú"
        },
        "config": {}
       }
@@ -909,7 +1048,9 @@
      "options": [],
      "message": {
       "zh-TW": "有效期限不得早於報價日期",
-      "en-US": "Valid-until date cannot be earlier than the quote date"
+      "en-US": "Valid-until date cannot be earlier than the quote date",
+      "th": "วันที่ใช้ได้ถึงต้องไม่เร็วกว่าวันที่เสนอราคา",
+      "vi": "Ngày hiệu lực không được sớm hơn ngày báo giá"
      },
      "condition": {
       "any": [
@@ -932,7 +1073,9 @@
     {
      "name": {
       "zh-TW": "全部報價單",
-      "en-US": "All quotes"
+      "en-US": "All quotes",
+      "th": "ใบเสนอราคาทั้งหมด",
+      "vi": "Tất cả báo giá"
      },
      "columns": [
       "no",
@@ -985,7 +1128,9 @@
    "key": "mes-quote-line",
    "name": {
     "zh-TW": "報價明細",
-    "en-US": "Quote lines"
+    "en-US": "Quote lines",
+    "th": "รายการเสนอราคา",
+    "vi": "Chi tiết báo giá"
    },
    "icon": null,
    "section": null,
@@ -997,7 +1142,9 @@
      "code": "main",
      "label": {
       "zh-TW": "基本資料",
-      "en-US": "Basic information"
+      "en-US": "Basic information",
+      "th": "ข้อมูลพื้นฐาน",
+      "vi": "Thông tin cơ bản"
      },
      "collapsed": false,
      "fields": [
@@ -1006,7 +1153,9 @@
        "type": "reference",
        "label": {
         "zh-TW": "報價單",
-        "en-US": "Quote"
+        "en-US": "Quote",
+        "th": "ใบเสนอราคา",
+        "vi": "Báo giá"
        },
        "config": {
         "refTarget": {
@@ -1021,7 +1170,9 @@
        "type": "autonumber",
        "label": {
         "zh-TW": "項次",
-        "en-US": "Line"
+        "en-US": "Line",
+        "th": "ลำดับ",
+        "vi": "Dòng"
        },
        "config": {
         "format": "{0}",
@@ -1033,7 +1184,9 @@
        "type": "text",
        "label": {
         "zh-TW": "品號",
-        "en-US": "Item no."
+        "en-US": "Item no.",
+        "th": "รหัสสินค้า",
+        "vi": "Mã hàng"
        },
        "config": {}
       },
@@ -1042,7 +1195,9 @@
        "type": "text",
        "label": {
         "zh-TW": "品名",
-        "en-US": "Item name"
+        "en-US": "Item name",
+        "th": "ชื่อสินค้า",
+        "vi": "Tên hàng"
        },
        "config": {
         "required": true
@@ -1053,7 +1208,9 @@
        "type": "decimal",
        "label": {
         "zh-TW": "數量",
-        "en-US": "Quantity"
+        "en-US": "Quantity",
+        "th": "จำนวน",
+        "vi": "Số lượng"
        },
        "config": {
         "scale": 2,
@@ -1065,7 +1222,9 @@
        "type": "text",
        "label": {
         "zh-TW": "單位",
-        "en-US": "Unit"
+        "en-US": "Unit",
+        "th": "หน่วย",
+        "vi": "Đơn vị"
        },
        "config": {}
       },
@@ -1074,7 +1233,9 @@
        "type": "currency",
        "label": {
         "zh-TW": "單價",
-        "en-US": "Unit price"
+        "en-US": "Unit price",
+        "th": "ราคาต่อหน่วย",
+        "vi": "Đơn giá"
        },
        "config": {
         "scale": 0
@@ -1085,7 +1246,9 @@
        "type": "formula",
        "label": {
         "zh-TW": "金額",
-        "en-US": "Amount"
+        "en-US": "Amount",
+        "th": "จำนวนเงิน",
+        "vi": "Số tiền"
        },
        "config": {
         "formula": "{qty} * {price}",
@@ -1105,7 +1268,9 @@
    "key": "mes-workorder",
    "name": {
     "zh-TW": "工令",
-    "en-US": "Work orders"
+    "en-US": "Work orders",
+    "th": "ใบสั่งผลิต",
+    "vi": "Lệnh sản xuất"
    },
    "icon": "precision_manufacturing",
    "section": "生產",
@@ -1117,7 +1282,9 @@
      "code": "main",
      "label": {
       "zh-TW": "基本資料",
-      "en-US": "Basic information"
+      "en-US": "Basic information",
+      "th": "ข้อมูลพื้นฐาน",
+      "vi": "Thông tin cơ bản"
      },
      "collapsed": false,
      "fields": [
@@ -1126,7 +1293,9 @@
        "type": "autonumber",
        "label": {
         "zh-TW": "工令號",
-        "en-US": "Work order no."
+        "en-US": "Work order no.",
+        "th": "เลขที่ใบสั่งผลิต",
+        "vi": "Số lệnh sản xuất"
        },
        "config": {
         "format": "WO-{yyyyMM}-{0000}",
@@ -1139,7 +1308,9 @@
        "type": "reference",
        "label": {
         "zh-TW": "訂單",
-        "en-US": "Order"
+        "en-US": "Order",
+        "th": "ใบสั่งขาย",
+        "vi": "Đơn hàng bán"
        },
        "config": {
         "refTarget": {
@@ -1163,7 +1334,9 @@
        "type": "text",
        "label": {
         "zh-TW": "品號",
-        "en-US": "Item no."
+        "en-US": "Item no.",
+        "th": "รหัสสินค้า",
+        "vi": "Mã hàng"
        },
        "config": {}
       },
@@ -1172,7 +1345,9 @@
        "type": "text",
        "label": {
         "zh-TW": "品名",
-        "en-US": "Item name"
+        "en-US": "Item name",
+        "th": "ชื่อสินค้า",
+        "vi": "Tên hàng"
        },
        "config": {
         "required": true,
@@ -1184,7 +1359,9 @@
        "type": "integer",
        "label": {
         "zh-TW": "工令數量",
-        "en-US": "Quantity"
+        "en-US": "Quantity",
+        "th": "จำนวนสั่งผลิต",
+        "vi": "Số lượng sản xuất"
        },
        "config": {
         "required": true,
@@ -1196,7 +1373,9 @@
        "type": "text",
        "label": {
         "zh-TW": "單位",
-        "en-US": "Unit"
+        "en-US": "Unit",
+        "th": "หน่วย",
+        "vi": "Đơn vị"
        },
        "config": {}
       },
@@ -1205,7 +1384,9 @@
        "type": "date",
        "label": {
         "zh-TW": "預計開工",
-        "en-US": "Planned start"
+        "en-US": "Planned start",
+        "th": "วันเริ่มผลิตตามแผน",
+        "vi": "Ngày bắt đầu dự kiến"
        },
        "config": {
         "isFilterable": true
@@ -1216,7 +1397,9 @@
        "type": "date",
        "label": {
         "zh-TW": "交期",
-        "en-US": "Due date"
+        "en-US": "Due date",
+        "th": "กำหนดส่ง",
+        "vi": "Hạn giao"
        },
        "config": {
         "showInList": true,
@@ -1229,7 +1412,9 @@
        "type": "enum",
        "label": {
         "zh-TW": "優先度",
-        "en-US": "Priority"
+        "en-US": "Priority",
+        "th": "ลำดับความสำคัญ",
+        "vi": "Mức ưu tiên"
        },
        "config": {
         "defaultValue": "opt_normal",
@@ -1241,7 +1426,9 @@
          "code": "normal",
          "label": {
           "zh-TW": "一般",
-          "en-US": "Normal"
+          "en-US": "Normal",
+          "th": "ปกติ",
+          "vi": "Bình thường"
          },
          "color": null
         },
@@ -1249,7 +1436,9 @@
          "code": "urgent",
          "label": {
           "zh-TW": "急件",
-          "en-US": "Urgent"
+          "en-US": "Urgent",
+          "th": "เร่งด่วน",
+          "vi": "Khẩn"
          },
          "color": null
         }
@@ -1260,7 +1449,9 @@
        "type": "enum",
        "label": {
         "zh-TW": "狀態",
-        "en-US": "Status"
+        "en-US": "Status",
+        "th": "สถานะ",
+        "vi": "Trạng thái"
        },
        "config": {
         "defaultValue": "opt_draft",
@@ -1273,7 +1464,9 @@
          "code": "draft",
          "label": {
           "zh-TW": "草稿",
-          "en-US": "Draft"
+          "en-US": "Draft",
+          "th": "ฉบับร่าง",
+          "vi": "Nháp"
          },
          "color": null
         },
@@ -1281,7 +1474,9 @@
          "code": "released",
          "label": {
           "zh-TW": "已發放",
-          "en-US": "Released"
+          "en-US": "Released",
+          "th": "ปล่อยงานแล้ว",
+          "vi": "Đã phát lệnh"
          },
          "color": null
         },
@@ -1289,7 +1484,9 @@
          "code": "running",
          "label": {
           "zh-TW": "生產中",
-          "en-US": "In production"
+          "en-US": "In production",
+          "th": "อยู่ระหว่างผลิต",
+          "vi": "Đang sản xuất"
          },
          "color": null
         },
@@ -1297,7 +1494,9 @@
          "code": "hold",
          "label": {
           "zh-TW": "暫停",
-          "en-US": "On hold"
+          "en-US": "On hold",
+          "th": "พักงาน",
+          "vi": "Tạm dừng"
          },
          "color": null
         },
@@ -1305,7 +1504,9 @@
          "code": "done",
          "label": {
           "zh-TW": "完工",
-          "en-US": "Done"
+          "en-US": "Done",
+          "th": "เสร็จสิ้น",
+          "vi": "Hoàn thành"
          },
          "color": null
         },
@@ -1313,7 +1514,9 @@
          "code": "cancelled",
          "label": {
           "zh-TW": "已取消",
-          "en-US": "Cancelled"
+          "en-US": "Cancelled",
+          "th": "ยกเลิกแล้ว",
+          "vi": "Đã hủy"
          },
          "color": null
         }
@@ -1324,7 +1527,9 @@
        "type": "enum",
        "label": {
         "zh-TW": "暫停原因",
-        "en-US": "Hold reason"
+        "en-US": "Hold reason",
+        "th": "เหตุผลที่พักงาน",
+        "vi": "Lý do tạm dừng"
        },
        "config": {
         "isFilterable": true
@@ -1334,7 +1539,9 @@
          "code": "shortage",
          "label": {
           "zh-TW": "缺料",
-          "en-US": "Material shortage"
+          "en-US": "Material shortage",
+          "th": "วัตถุดิบขาด",
+          "vi": "Thiếu vật liệu"
          },
          "color": null
         },
@@ -1342,7 +1549,9 @@
          "code": "equipment",
          "label": {
           "zh-TW": "設備",
-          "en-US": "Equipment"
+          "en-US": "Equipment",
+          "th": "อุปกรณ์",
+          "vi": "Thiết bị"
          },
          "color": null
         },
@@ -1350,7 +1559,9 @@
          "code": "change",
          "label": {
           "zh-TW": "客戶變更",
-          "en-US": "Customer change"
+          "en-US": "Customer change",
+          "th": "ลูกค้าเปลี่ยนแปลง",
+          "vi": "Khách hàng thay đổi"
          },
          "color": null
         },
@@ -1358,7 +1569,9 @@
          "code": "other",
          "label": {
           "zh-TW": "其他",
-          "en-US": "Other"
+          "en-US": "Other",
+          "th": "อื่น ๆ",
+          "vi": "Khác"
          },
          "color": null
         }
@@ -1369,7 +1582,9 @@
        "type": "integer",
        "label": {
         "zh-TW": "末道工序序號",
-        "en-US": "Final operation no."
+        "en-US": "Final operation no.",
+        "th": "ลำดับขั้นตอนสุดท้าย",
+        "vi": "Số thứ tự công đoạn cuối"
        },
        "config": {}
       },
@@ -1378,7 +1593,9 @@
        "type": "boolean",
        "label": {
         "zh-TW": "短交結案",
-        "en-US": "Short close"
+        "en-US": "Short close",
+        "th": "ปิดงานแบบส่งไม่ครบ",
+        "vi": "Đóng giao thiếu"
        },
        "config": {}
       }
@@ -1388,7 +1605,9 @@
      "code": "progress",
      "label": {
       "zh-TW": "進度",
-      "en-US": "Progress"
+      "en-US": "Progress",
+      "th": "ความคืบหน้า",
+      "vi": "Tiến độ"
      },
      "collapsed": false,
      "fields": [
@@ -1397,7 +1616,9 @@
        "type": "rollup",
        "label": {
         "zh-TW": "已完工量",
-        "en-US": "Completed qty"
+        "en-US": "Completed qty",
+        "th": "จำนวนที่ผลิตเสร็จ",
+        "vi": "Số lượng đã hoàn thành"
        },
        "config": {
         "rollup": {
@@ -1413,7 +1634,9 @@
        "type": "formula",
        "label": {
         "zh-TW": "剩餘量",
-        "en-US": "Remaining qty"
+        "en-US": "Remaining qty",
+        "th": "จำนวนคงเหลือ",
+        "vi": "Số lượng còn lại"
        },
        "config": {
         "formula": "{qty} - {completedQty}",
@@ -1426,7 +1649,9 @@
        "type": "rollup",
        "label": {
         "zh-TW": "不良總數",
-        "en-US": "Total defects"
+        "en-US": "Total defects",
+        "th": "จำนวนของเสียรวม",
+        "vi": "Tổng số phế phẩm"
        },
        "config": {
         "rollup": {
@@ -1441,7 +1666,9 @@
        "type": "rollup",
        "label": {
         "zh-TW": "已出貨量",
-        "en-US": "Shipped qty"
+        "en-US": "Shipped qty",
+        "th": "จำนวนที่จัดส่งแล้ว",
+        "vi": "Số lượng đã giao"
        },
        "config": {
         "rollup": {
@@ -1461,7 +1688,9 @@
        "type": "rollup",
        "label": {
         "zh-TW": "未取消出貨單",
-        "en-US": "Open shipments"
+        "en-US": "Open shipments",
+        "th": "ใบจัดส่งที่ยังไม่ยกเลิก",
+        "vi": "Phiếu giao hàng chưa hủy"
        },
        "config": {
         "rollup": {
@@ -1480,7 +1709,9 @@
        "type": "date",
        "label": {
         "zh-TW": "最後報工日",
-        "en-US": "Last report date"
+        "en-US": "Last report date",
+        "th": "วันที่รายงานล่าสุด",
+        "vi": "Ngày báo cáo gần nhất"
        },
        "config": {
         "readOnly": true
@@ -1492,7 +1723,9 @@
      "code": "remarks",
      "label": {
       "zh-TW": "備註",
-      "en-US": "Remarks"
+      "en-US": "Remarks",
+      "th": "หมายเหตุ",
+      "vi": "Ghi chú"
      },
      "collapsed": false,
      "fields": [
@@ -1501,7 +1734,9 @@
        "type": "textarea",
        "label": {
         "zh-TW": "備註",
-        "en-US": "Remark"
+        "en-US": "Remark",
+        "th": "หมายเหตุ",
+        "vi": "Ghi chú"
        },
        "config": {}
       }
@@ -1518,7 +1753,9 @@
      "options": [],
      "message": {
       "zh-TW": "交期不得早於預計開工",
-      "en-US": "Due date cannot be earlier than the planned start"
+      "en-US": "Due date cannot be earlier than the planned start",
+      "th": "กำหนดส่งต้องไม่เร็วกว่าวันเริ่มผลิตตามแผน",
+      "vi": "Hạn giao không được sớm hơn ngày bắt đầu dự kiến"
      },
      "condition": {
       "any": [
@@ -1610,7 +1847,9 @@
      "options": [],
      "message": {
       "zh-TW": "已完工量不足，不能完工；客戶同意短交請先勾選「短交結案」",
-      "en-US": "Completed quantity is short; tick \"Short close\" if the customer accepts a short delivery"
+      "en-US": "Completed quantity is short; tick \"Short close\" if the customer accepts a short delivery",
+      "th": "จำนวนที่ผลิตเสร็จไม่พอ จึงปิดงานไม่ได้ หากลูกค้ายอมรับการส่งไม่ครบ โปรดติ๊ก \"ปิดงานแบบส่งไม่ครบ\" ก่อน",
+      "vi": "Số lượng hoàn thành chưa đủ nên không thể hoàn thành; nếu khách hàng đồng ý giao thiếu, hãy chọn \"Đóng giao thiếu\" trước"
      },
      "condition": {
       "any": [
@@ -1643,7 +1882,9 @@
      "options": [],
      "message": {
       "zh-TW": "工令已有出貨單，請先取消出貨單才能重開",
-      "en-US": "This work order has shipments; cancel them before reopening"
+      "en-US": "This work order has shipments; cancel them before reopening",
+      "th": "ใบสั่งผลิตนี้มีใบจัดส่งแล้ว โปรดยกเลิกใบจัดส่งก่อนจึงจะเปิดใหม่ได้",
+      "vi": "Lệnh sản xuất này đã có phiếu giao hàng, hãy hủy phiếu giao hàng trước khi mở lại"
      },
      "condition": {
       "any": [
@@ -1665,7 +1906,9 @@
     {
      "name": {
       "zh-TW": "全部工令",
-      "en-US": "All work orders"
+      "en-US": "All work orders",
+      "th": "ใบสั่งผลิตทั้งหมด",
+      "vi": "Tất cả lệnh sản xuất"
      },
      "columns": [
       "no",
@@ -1771,7 +2014,9 @@
    "key": "mes-wo-op",
    "name": {
     "zh-TW": "製程",
-    "en-US": "Operations"
+    "en-US": "Operations",
+    "th": "กระบวนการ",
+    "vi": "Công đoạn"
    },
    "icon": null,
    "section": null,
@@ -1783,7 +2028,9 @@
      "code": "main",
      "label": {
       "zh-TW": "基本資料",
-      "en-US": "Basic information"
+      "en-US": "Basic information",
+      "th": "ข้อมูลพื้นฐาน",
+      "vi": "Thông tin cơ bản"
      },
      "collapsed": false,
      "fields": [
@@ -1792,7 +2039,9 @@
        "type": "reference",
        "label": {
         "zh-TW": "工令",
-        "en-US": "Work order"
+        "en-US": "Work order",
+        "th": "ใบสั่งผลิต",
+        "vi": "Lệnh sản xuất"
        },
        "config": {
         "refTarget": {
@@ -1807,7 +2056,9 @@
        "type": "autonumber",
        "label": {
         "zh-TW": "工序序號",
-        "en-US": "Operation no."
+        "en-US": "Operation no.",
+        "th": "ลำดับขั้นตอน",
+        "vi": "Số thứ tự công đoạn"
        },
        "config": {
         "format": "{0}",
@@ -1819,7 +2070,9 @@
        "type": "enum",
        "label": {
         "zh-TW": "工序",
-        "en-US": "Process"
+        "en-US": "Process",
+        "th": "ขั้นตอน",
+        "vi": "Quy trình"
        },
        "config": {
         "required": true
@@ -1829,7 +2082,9 @@
          "code": "material",
          "label": {
           "zh-TW": "備料",
-          "en-US": "Material prep"
+          "en-US": "Material prep",
+          "th": "เตรียมวัตถุดิบ",
+          "vi": "Chuẩn bị vật liệu"
          },
          "color": null
         },
@@ -1837,7 +2092,9 @@
          "code": "rough",
          "label": {
           "zh-TW": "粗加工",
-          "en-US": "Rough machining"
+          "en-US": "Rough machining",
+          "th": "กัดหยาบ",
+          "vi": "Gia công thô"
          },
          "color": null
         },
@@ -1845,7 +2102,9 @@
          "code": "cnc",
          "label": {
           "zh-TW": "精加工",
-          "en-US": "CNC finishing"
+          "en-US": "CNC finishing",
+          "th": "กัดละเอียด CNC",
+          "vi": "Gia công tinh CNC"
          },
          "color": null
         },
@@ -1853,7 +2112,9 @@
          "code": "edm",
          "label": {
           "zh-TW": "放電",
-          "en-US": "EDM"
+          "en-US": "EDM",
+          "th": "กัดไฟฟ้า (EDM)",
+          "vi": "Xung điện (EDM)"
          },
          "color": null
         },
@@ -1861,7 +2122,9 @@
          "code": "wire",
          "label": {
           "zh-TW": "線割",
-          "en-US": "Wire cutting"
+          "en-US": "Wire cutting",
+          "th": "ตัดลวด",
+          "vi": "Cắt dây"
          },
          "color": null
         },
@@ -1869,7 +2132,9 @@
          "code": "heat",
          "label": {
           "zh-TW": "熱處理",
-          "en-US": "Heat treatment"
+          "en-US": "Heat treatment",
+          "th": "อบความร้อน",
+          "vi": "Nhiệt luyện"
          },
          "color": null
         },
@@ -1877,7 +2142,9 @@
          "code": "polish",
          "label": {
           "zh-TW": "拋光",
-          "en-US": "Polishing"
+          "en-US": "Polishing",
+          "th": "ขัดเงา",
+          "vi": "Đánh bóng"
          },
          "color": null
         },
@@ -1885,7 +2152,9 @@
          "code": "assemble",
          "label": {
           "zh-TW": "組裝",
-          "en-US": "Assembly"
+          "en-US": "Assembly",
+          "th": "ประกอบ",
+          "vi": "Lắp ráp"
          },
          "color": null
         },
@@ -1893,7 +2162,9 @@
          "code": "trial",
          "label": {
           "zh-TW": "試模",
-          "en-US": "Trial run"
+          "en-US": "Trial run",
+          "th": "ทดลองฉีดแม่พิมพ์",
+          "vi": "Chạy thử khuôn"
          },
          "color": null
         }
@@ -1904,7 +2175,9 @@
        "type": "text",
        "label": {
         "zh-TW": "工作站",
-        "en-US": "Workstation"
+        "en-US": "Workstation",
+        "th": "สถานีงาน",
+        "vi": "Trạm làm việc"
        },
        "config": {}
       },
@@ -1913,7 +2186,9 @@
        "type": "decimal",
        "label": {
         "zh-TW": "預計工時",
-        "en-US": "Planned hours"
+        "en-US": "Planned hours",
+        "th": "ชั่วโมงทำงานตามแผน",
+        "vi": "Giờ công dự kiến"
        },
        "config": {
         "scale": 1
@@ -1924,7 +2199,9 @@
        "type": "date",
        "label": {
         "zh-TW": "預計開始",
-        "en-US": "Planned start"
+        "en-US": "Planned start",
+        "th": "เริ่มตามแผน",
+        "vi": "Bắt đầu dự kiến"
        },
        "config": {}
       },
@@ -1933,7 +2210,9 @@
        "type": "date",
        "label": {
         "zh-TW": "預計完成",
-        "en-US": "Planned end"
+        "en-US": "Planned end",
+        "th": "เสร็จตามแผน",
+        "vi": "Hoàn thành dự kiến"
        },
        "config": {}
       }
@@ -1950,7 +2229,9 @@
      "options": [],
      "message": {
       "zh-TW": "預計完成不得早於預計開始",
-      "en-US": "Planned end cannot be earlier than the planned start"
+      "en-US": "Planned end cannot be earlier than the planned start",
+      "th": "เวลาเสร็จตามแผนต้องไม่เร็วกว่าเวลาเริ่มตามแผน",
+      "vi": "Thời điểm hoàn thành dự kiến không được sớm hơn thời điểm bắt đầu dự kiến"
      },
      "condition": {
       "any": [
@@ -1981,7 +2262,9 @@
    "key": "mes-report",
    "name": {
     "zh-TW": "報工",
-    "en-US": "Work reports"
+    "en-US": "Work reports",
+    "th": "รายงานผลผลิต",
+    "vi": "Báo cáo sản lượng"
    },
    "icon": "assignment_turned_in",
    "section": "生產",
@@ -1993,7 +2276,9 @@
      "code": "main",
      "label": {
       "zh-TW": "基本資料",
-      "en-US": "Basic information"
+      "en-US": "Basic information",
+      "th": "ข้อมูลพื้นฐาน",
+      "vi": "Thông tin cơ bản"
      },
      "collapsed": false,
      "fields": [
@@ -2002,7 +2287,9 @@
        "type": "autonumber",
        "label": {
         "zh-TW": "報工單號",
-        "en-US": "Report no."
+        "en-US": "Report no.",
+        "th": "เลขที่รายงานผลผลิต",
+        "vi": "Số báo cáo"
        },
        "config": {
         "format": "RP-{yyyyMM}-{0000}",
@@ -2014,7 +2301,9 @@
        "type": "reference",
        "label": {
         "zh-TW": "工令",
-        "en-US": "Work order"
+        "en-US": "Work order",
+        "th": "ใบสั่งผลิต",
+        "vi": "Lệnh sản xuất"
        },
        "config": {
         "refTarget": {
@@ -2040,7 +2329,9 @@
        "type": "integer",
        "label": {
         "zh-TW": "工序序號",
-        "en-US": "Operation no."
+        "en-US": "Operation no.",
+        "th": "ลำดับขั้นตอน",
+        "vi": "Số thứ tự công đoạn"
        },
        "config": {
         "required": true,
@@ -2053,7 +2344,9 @@
        "type": "enum",
        "label": {
         "zh-TW": "工序",
-        "en-US": "Process"
+        "en-US": "Process",
+        "th": "ขั้นตอน",
+        "vi": "Quy trình"
        },
        "config": {
         "required": true,
@@ -2065,7 +2358,9 @@
          "code": "material",
          "label": {
           "zh-TW": "備料",
-          "en-US": "Material prep"
+          "en-US": "Material prep",
+          "th": "เตรียมวัตถุดิบ",
+          "vi": "Chuẩn bị vật liệu"
          },
          "color": null
         },
@@ -2073,7 +2368,9 @@
          "code": "rough",
          "label": {
           "zh-TW": "粗加工",
-          "en-US": "Rough machining"
+          "en-US": "Rough machining",
+          "th": "กัดหยาบ",
+          "vi": "Gia công thô"
          },
          "color": null
         },
@@ -2081,7 +2378,9 @@
          "code": "cnc",
          "label": {
           "zh-TW": "精加工",
-          "en-US": "CNC finishing"
+          "en-US": "CNC finishing",
+          "th": "กัดละเอียด CNC",
+          "vi": "Gia công tinh CNC"
          },
          "color": null
         },
@@ -2089,7 +2388,9 @@
          "code": "edm",
          "label": {
           "zh-TW": "放電",
-          "en-US": "EDM"
+          "en-US": "EDM",
+          "th": "กัดไฟฟ้า (EDM)",
+          "vi": "Xung điện (EDM)"
          },
          "color": null
         },
@@ -2097,7 +2398,9 @@
          "code": "wire",
          "label": {
           "zh-TW": "線割",
-          "en-US": "Wire cutting"
+          "en-US": "Wire cutting",
+          "th": "ตัดลวด",
+          "vi": "Cắt dây"
          },
          "color": null
         },
@@ -2105,7 +2408,9 @@
          "code": "heat",
          "label": {
           "zh-TW": "熱處理",
-          "en-US": "Heat treatment"
+          "en-US": "Heat treatment",
+          "th": "อบความร้อน",
+          "vi": "Nhiệt luyện"
          },
          "color": null
         },
@@ -2113,7 +2418,9 @@
          "code": "polish",
          "label": {
           "zh-TW": "拋光",
-          "en-US": "Polishing"
+          "en-US": "Polishing",
+          "th": "ขัดเงา",
+          "vi": "Đánh bóng"
          },
          "color": null
         },
@@ -2121,7 +2428,9 @@
          "code": "assemble",
          "label": {
           "zh-TW": "組裝",
-          "en-US": "Assembly"
+          "en-US": "Assembly",
+          "th": "ประกอบ",
+          "vi": "Lắp ráp"
          },
          "color": null
         },
@@ -2129,7 +2438,9 @@
          "code": "trial",
          "label": {
           "zh-TW": "試模",
-          "en-US": "Trial run"
+          "en-US": "Trial run",
+          "th": "ทดลองฉีดแม่พิมพ์",
+          "vi": "Chạy thử khuôn"
          },
          "color": null
         }
@@ -2140,7 +2451,9 @@
        "type": "date",
        "label": {
         "zh-TW": "報工日期",
-        "en-US": "Report date"
+        "en-US": "Report date",
+        "th": "วันที่รายงาน",
+        "vi": "Ngày báo cáo"
        },
        "config": {
         "defaultToday": true,
@@ -2155,7 +2468,9 @@
        "type": "user",
        "label": {
         "zh-TW": "報工人員",
-        "en-US": "Worker"
+        "en-US": "Worker",
+        "th": "ผู้รายงาน",
+        "vi": "Người báo cáo"
        },
        "config": {
         "isFilterable": true
@@ -2166,7 +2481,9 @@
        "type": "integer",
        "label": {
         "zh-TW": "末道工序序號",
-        "en-US": "Final operation no."
+        "en-US": "Final operation no.",
+        "th": "ลำดับขั้นตอนสุดท้าย",
+        "vi": "Số thứ tự công đoạn cuối"
        },
        "config": {
         "readOnly": true
@@ -2178,7 +2495,9 @@
      "code": "output",
      "label": {
       "zh-TW": "產出",
-      "en-US": "Output"
+      "en-US": "Output",
+      "th": "ผลผลิต",
+      "vi": "Sản lượng"
      },
      "collapsed": false,
      "fields": [
@@ -2187,7 +2506,9 @@
        "type": "integer",
        "label": {
         "zh-TW": "良品數",
-        "en-US": "Good qty"
+        "en-US": "Good qty",
+        "th": "จำนวนของดี",
+        "vi": "Số lượng đạt"
        },
        "config": {
         "required": true,
@@ -2200,7 +2521,9 @@
        "type": "integer",
        "label": {
         "zh-TW": "不良數",
-        "en-US": "Defect qty"
+        "en-US": "Defect qty",
+        "th": "จำนวนของเสีย",
+        "vi": "Số lượng lỗi"
        },
        "config": {
         "defaultValue": 0,
@@ -2213,7 +2536,9 @@
        "type": "formula",
        "label": {
         "zh-TW": "合計數",
-        "en-US": "Total qty"
+        "en-US": "Total qty",
+        "th": "จำนวนรวม",
+        "vi": "Tổng số lượng"
        },
        "config": {
         "formula": "{goodQty} + {defectQty}",
@@ -2226,7 +2551,9 @@
        "type": "formula",
        "label": {
         "zh-TW": "末道良品數",
-        "en-US": "Final-operation good qty"
+        "en-US": "Final-operation good qty",
+        "th": "จำนวนของดีขั้นตอนสุดท้าย",
+        "vi": "Số lượng đạt ở công đoạn cuối"
        },
        "config": {
         "formula": "IF({opSeq} = {finalSeq}, {goodQty}, 0)",
@@ -2239,7 +2566,9 @@
        "type": "enum",
        "label": {
         "zh-TW": "不良原因",
-        "en-US": "Defect reason"
+        "en-US": "Defect reason",
+        "th": "สาเหตุของเสีย",
+        "vi": "Nguyên nhân lỗi"
        },
        "config": {
         "isFilterable": true
@@ -2249,7 +2578,9 @@
          "code": "dimension",
          "label": {
           "zh-TW": "尺寸",
-          "en-US": "Dimension"
+          "en-US": "Dimension",
+          "th": "ขนาด",
+          "vi": "Kích thước"
          },
          "color": null
         },
@@ -2257,7 +2588,9 @@
          "code": "scratch",
          "label": {
           "zh-TW": "刮傷",
-          "en-US": "Scratch"
+          "en-US": "Scratch",
+          "th": "รอยขีดข่วน",
+          "vi": "Trầy xước"
          },
          "color": null
         },
@@ -2265,7 +2598,9 @@
          "code": "burr",
          "label": {
           "zh-TW": "毛邊",
-          "en-US": "Burr"
+          "en-US": "Burr",
+          "th": "ครีบ",
+          "vi": "Ba via"
          },
          "color": null
         },
@@ -2273,7 +2608,9 @@
          "code": "crack",
          "label": {
           "zh-TW": "裂紋",
-          "en-US": "Crack"
+          "en-US": "Crack",
+          "th": "รอยแตก",
+          "vi": "Nứt"
          },
          "color": null
         },
@@ -2281,7 +2618,9 @@
          "code": "bad-material",
          "label": {
           "zh-TW": "材料",
-          "en-US": "Material"
+          "en-US": "Material",
+          "th": "วัสดุ",
+          "vi": "Vật liệu"
          },
          "color": null
         },
@@ -2289,7 +2628,9 @@
          "code": "other",
          "label": {
           "zh-TW": "其他",
-          "en-US": "Other"
+          "en-US": "Other",
+          "th": "อื่น ๆ",
+          "vi": "Khác"
          },
          "color": null
         }
@@ -2300,7 +2641,9 @@
        "type": "decimal",
        "label": {
         "zh-TW": "工時",
-        "en-US": "Hours"
+        "en-US": "Hours",
+        "th": "ชั่วโมง",
+        "vi": "Giờ công"
        },
        "config": {
         "scale": 1
@@ -2311,7 +2654,9 @@
        "type": "textarea",
        "label": {
         "zh-TW": "備註",
-        "en-US": "Remark"
+        "en-US": "Remark",
+        "th": "หมายเหตุ",
+        "vi": "Ghi chú"
        },
        "config": {}
       },
@@ -2320,7 +2665,9 @@
        "type": "reference",
        "label": {
         "zh-TW": "沖銷對象",
-        "en-US": "Reverses"
+        "en-US": "Reverses",
+        "th": "รายการที่ถูกกลับรายการ",
+        "vi": "Bút toán được đảo"
        },
        "config": {
         "refTarget": {
@@ -2367,7 +2714,9 @@
     {
      "name": {
       "zh-TW": "全部報工",
-      "en-US": "All reports"
+      "en-US": "All reports",
+      "th": "รายงานผลผลิตทั้งหมด",
+      "vi": "Tất cả báo cáo sản lượng"
      },
      "columns": [
       "no",
@@ -2461,7 +2810,9 @@
    "key": "mes-shipment",
    "name": {
     "zh-TW": "出貨單",
-    "en-US": "Shipments"
+    "en-US": "Shipments",
+    "th": "ใบจัดส่ง",
+    "vi": "Phiếu giao hàng"
    },
    "icon": "local_shipping",
    "section": "生產",
@@ -2473,7 +2824,9 @@
      "code": "main",
      "label": {
       "zh-TW": "基本資料",
-      "en-US": "Basic information"
+      "en-US": "Basic information",
+      "th": "ข้อมูลพื้นฐาน",
+      "vi": "Thông tin cơ bản"
      },
      "collapsed": false,
      "fields": [
@@ -2482,7 +2835,9 @@
        "type": "autonumber",
        "label": {
         "zh-TW": "出貨單號",
-        "en-US": "Shipment no."
+        "en-US": "Shipment no.",
+        "th": "เลขที่ใบจัดส่ง",
+        "vi": "Số phiếu giao hàng"
        },
        "config": {
         "format": "SP-{yyyyMM}-{0000}",
@@ -2494,7 +2849,9 @@
        "type": "reference",
        "label": {
         "zh-TW": "工令",
-        "en-US": "Work order"
+        "en-US": "Work order",
+        "th": "ใบสั่งผลิต",
+        "vi": "Lệnh sản xuất"
        },
        "config": {
         "refTarget": {
@@ -2520,7 +2877,9 @@
        "type": "integer",
        "label": {
         "zh-TW": "工令完工量",
-        "en-US": "Completed qty"
+        "en-US": "Completed qty",
+        "th": "จำนวนที่ผลิตเสร็จของใบสั่งผลิต",
+        "vi": "Số lượng hoàn thành của lệnh sản xuất"
        },
        "config": {
         "readOnly": true
@@ -2531,7 +2890,9 @@
        "type": "reference",
        "label": {
         "zh-TW": "客戶",
-        "en-US": "Customer"
+        "en-US": "Customer",
+        "th": "ลูกค้า",
+        "vi": "Khách hàng"
        },
        "config": {
         "refTarget": {
@@ -2548,7 +2909,9 @@
        "type": "date",
        "label": {
         "zh-TW": "出貨日期",
-        "en-US": "Ship date"
+        "en-US": "Ship date",
+        "th": "วันที่จัดส่ง",
+        "vi": "Ngày giao hàng"
        },
        "config": {
         "defaultToday": true,
@@ -2563,7 +2926,9 @@
        "type": "integer",
        "label": {
         "zh-TW": "出貨數量",
-        "en-US": "Quantity"
+        "en-US": "Quantity",
+        "th": "จำนวนที่จัดส่ง",
+        "vi": "Số lượng giao"
        },
        "config": {
         "required": true,
@@ -2575,7 +2940,9 @@
        "type": "text",
        "label": {
         "zh-TW": "運送方式",
-        "en-US": "Carrier"
+        "en-US": "Carrier",
+        "th": "วิธีขนส่ง",
+        "vi": "Phương thức vận chuyển"
        },
        "config": {}
       },
@@ -2584,7 +2951,9 @@
        "type": "enum",
        "label": {
         "zh-TW": "狀態",
-        "en-US": "Status"
+        "en-US": "Status",
+        "th": "สถานะ",
+        "vi": "Trạng thái"
        },
        "config": {
         "defaultValue": "opt_draft",
@@ -2597,7 +2966,9 @@
          "code": "draft",
          "label": {
           "zh-TW": "草稿",
-          "en-US": "Draft"
+          "en-US": "Draft",
+          "th": "ฉบับร่าง",
+          "vi": "Nháp"
          },
          "color": null
         },
@@ -2605,7 +2976,9 @@
          "code": "shipped",
          "label": {
           "zh-TW": "已出貨",
-          "en-US": "Shipped"
+          "en-US": "Shipped",
+          "th": "จัดส่งแล้ว",
+          "vi": "Đã giao"
          },
          "color": null
         },
@@ -2613,7 +2986,9 @@
          "code": "cancelled",
          "label": {
           "zh-TW": "已取消",
-          "en-US": "Cancelled"
+          "en-US": "Cancelled",
+          "th": "ยกเลิกแล้ว",
+          "vi": "Đã hủy"
          },
          "color": null
         }
@@ -2624,7 +2999,9 @@
        "type": "textarea",
        "label": {
         "zh-TW": "備註",
-        "en-US": "Remark"
+        "en-US": "Remark",
+        "th": "หมายเหตุ",
+        "vi": "Ghi chú"
        },
        "config": {}
       }
@@ -2641,7 +3018,9 @@
      "options": [],
      "message": {
       "zh-TW": "出貨數量必須大於 0",
-      "en-US": "Quantity must be greater than 0"
+      "en-US": "Quantity must be greater than 0",
+      "th": "จำนวนที่จัดส่งต้องมากกว่า 0",
+      "vi": "Số lượng giao phải lớn hơn 0"
      },
      "condition": {
       "field": "qty",
@@ -2654,7 +3033,9 @@
     {
      "name": {
       "zh-TW": "全部出貨單",
-      "en-US": "All shipments"
+      "en-US": "All shipments",
+      "th": "ใบจัดส่งทั้งหมด",
+      "vi": "Tất cả phiếu giao hàng"
      },
      "columns": [
       "no",
@@ -2734,7 +3115,9 @@
    "key": "mes-repair",
    "name": {
     "zh-TW": "故障報修",
-    "en-US": "Repair request"
+    "en-US": "Repair request",
+    "th": "แจ้งซ่อมเครื่อง",
+    "vi": "Báo sửa chữa"
    },
    "icon": "build",
    "section": "設備",
@@ -2746,7 +3129,9 @@
      "code": "main",
      "label": {
       "zh-TW": "報修資料",
-      "en-US": "Request"
+      "en-US": "Request",
+      "th": "ข้อมูลการแจ้งซ่อม",
+      "vi": "Thông tin báo sửa chữa"
      },
      "collapsed": false,
      "fields": [
@@ -2755,7 +3140,9 @@
        "type": "autonumber",
        "label": {
         "zh-TW": "報修單號",
-        "en-US": "Request no."
+        "en-US": "Request no.",
+        "th": "เลขที่ใบแจ้งซ่อม",
+        "vi": "Số phiếu báo sửa chữa"
        },
        "config": {
         "format": "REP-{yyyyMM}-{0000}",
@@ -2768,7 +3155,9 @@
        "type": "reference",
        "label": {
         "zh-TW": "模具",
-        "en-US": "Mold"
+        "en-US": "Mold",
+        "th": "แม่พิมพ์",
+        "vi": "Khuôn"
        },
        "config": {
         "refTarget": {
@@ -2785,7 +3174,9 @@
        "type": "user",
        "label": {
         "zh-TW": "申請人",
-        "en-US": "Requester"
+        "en-US": "Requester",
+        "th": "ผู้แจ้ง",
+        "vi": "Người yêu cầu"
        },
        "config": {
         "required": true,
@@ -2797,7 +3188,9 @@
        "type": "date",
        "label": {
         "zh-TW": "報修日期",
-        "en-US": "Report date"
+        "en-US": "Report date",
+        "th": "วันที่แจ้งซ่อม",
+        "vi": "Ngày báo sửa chữa"
        },
        "config": {
         "defaultToday": true,
@@ -2812,7 +3205,9 @@
        "type": "datetime",
        "label": {
         "zh-TW": "故障發生時間",
-        "en-US": "Occurred at"
+        "en-US": "Occurred at",
+        "th": "เวลาที่เกิดความขัดข้อง",
+        "vi": "Thời điểm xảy ra sự cố"
        }
       },
       {
@@ -2820,7 +3215,9 @@
        "type": "boolean",
        "label": {
         "zh-TW": "緊急",
-        "en-US": "Urgent"
+        "en-US": "Urgent",
+        "th": "ด่วนมาก",
+        "vi": "Khẩn cấp"
        },
        "config": {
         "showInList": true,
@@ -2832,14 +3229,18 @@
        "type": "enum",
        "label": {
         "zh-TW": "故障類別",
-        "en-US": "Fault category"
+        "en-US": "Fault category",
+        "th": "ประเภทความขัดข้อง",
+        "vi": "Loại sự cố"
        },
        "options": [
         {
          "code": "leak",
          "label": {
           "zh-TW": "漏水",
-          "en-US": "Leak"
+          "en-US": "Leak",
+          "th": "น้ำรั่ว",
+          "vi": "Rò nước"
          },
          "color": null
         },
@@ -2847,7 +3248,9 @@
          "code": "crack",
          "label": {
           "zh-TW": "裂模",
-          "en-US": "Crack"
+          "en-US": "Crack",
+          "th": "แม่พิมพ์แตก",
+          "vi": "Nứt khuôn"
          },
          "color": null
         },
@@ -2855,7 +3258,9 @@
          "code": "wear",
          "label": {
           "zh-TW": "磨耗",
-          "en-US": "Wear"
+          "en-US": "Wear",
+          "th": "สึกหรอ",
+          "vi": "Mài mòn"
          },
          "color": null
         },
@@ -2863,7 +3268,9 @@
          "code": "stuck",
          "label": {
           "zh-TW": "卡模",
-          "en-US": "Stuck"
+          "en-US": "Stuck",
+          "th": "แม่พิมพ์ติด",
+          "vi": "Kẹt khuôn"
          },
          "color": null
         },
@@ -2871,7 +3278,9 @@
          "code": "other",
          "label": {
           "zh-TW": "其他",
-          "en-US": "Other"
+          "en-US": "Other",
+          "th": "อื่น ๆ",
+          "vi": "Khác"
          },
          "color": null
         }
@@ -2885,7 +3294,9 @@
        "type": "text",
        "label": {
         "zh-TW": "其他說明",
-        "en-US": "Other details"
+        "en-US": "Other details",
+        "th": "รายละเอียดอื่น ๆ",
+        "vi": "Mô tả khác"
        }
       },
       {
@@ -2893,14 +3304,18 @@
        "type": "enum",
        "label": {
         "zh-TW": "狀態",
-        "en-US": "Status"
+        "en-US": "Status",
+        "th": "สถานะ",
+        "vi": "Trạng thái"
        },
        "options": [
         {
          "code": "pending",
          "label": {
           "zh-TW": "待處理",
-          "en-US": "Pending"
+          "en-US": "Pending",
+          "th": "รอดำเนินการ",
+          "vi": "Chờ xử lý"
          },
          "color": "#9e9e9e"
         },
@@ -2908,7 +3323,9 @@
          "code": "working",
          "label": {
           "zh-TW": "處理中",
-          "en-US": "In progress"
+          "en-US": "In progress",
+          "th": "กำลังดำเนินการ",
+          "vi": "Đang xử lý"
          },
          "color": "#1976d2"
         },
@@ -2916,7 +3333,9 @@
          "code": "verify",
          "label": {
           "zh-TW": "待驗收",
-          "en-US": "To verify"
+          "en-US": "To verify",
+          "th": "รอตรวจรับ",
+          "vi": "Chờ nghiệm thu"
          },
          "color": "#f2c037"
         },
@@ -2924,7 +3343,9 @@
          "code": "closed",
          "label": {
           "zh-TW": "結案",
-          "en-US": "Closed"
+          "en-US": "Closed",
+          "th": "ปิดงาน",
+          "vi": "Đã đóng"
          },
          "color": "#21ba45"
         }
@@ -2941,7 +3362,9 @@
        "type": "textarea",
        "label": {
         "zh-TW": "故障說明",
-        "en-US": "Description"
+        "en-US": "Description",
+        "th": "คำอธิบายความขัดข้อง",
+        "vi": "Mô tả sự cố"
        },
        "config": {
         "required": true
@@ -2952,7 +3375,9 @@
        "type": "reference",
        "label": {
         "zh-TW": "關聯報修單",
-        "en-US": "Related request"
+        "en-US": "Related request",
+        "th": "ใบแจ้งซ่อมที่เกี่ยวข้อง",
+        "vi": "Phiếu báo sửa chữa liên quan"
        },
        "config": {
         "refTarget": {
@@ -2968,7 +3393,9 @@
      "code": "handling",
      "label": {
       "zh-TW": "處理",
-      "en-US": "Handling"
+      "en-US": "Handling",
+      "th": "การดำเนินการ",
+      "vi": "Xử lý"
      },
      "collapsed": false,
      "fields": [
@@ -2977,7 +3404,9 @@
        "type": "user",
        "label": {
         "zh-TW": "處理人",
-        "en-US": "Handler"
+        "en-US": "Handler",
+        "th": "ผู้ดำเนินการ",
+        "vi": "Người xử lý"
        },
        "config": {
         "showInList": true,
@@ -2989,7 +3418,9 @@
        "type": "textarea",
        "label": {
         "zh-TW": "處理說明",
-        "en-US": "Resolution"
+        "en-US": "Resolution",
+        "th": "รายละเอียดการแก้ไข",
+        "vi": "Nội dung xử lý"
        }
       },
       {
@@ -2997,7 +3428,9 @@
        "type": "date",
        "label": {
         "zh-TW": "完成日期",
-        "en-US": "Finish date"
+        "en-US": "Finish date",
+        "th": "วันที่เสร็จ",
+        "vi": "Ngày hoàn thành"
        },
        "config": {
         "showInList": true,
@@ -3010,7 +3443,9 @@
        "type": "decimal",
        "label": {
         "zh-TW": "停機時數",
-        "en-US": "Downtime (hours)"
+        "en-US": "Downtime (hours)",
+        "th": "ชั่วโมงที่เครื่องหยุด",
+        "vi": "Số giờ ngừng máy"
        },
        "config": {
         "scale": 1
@@ -3072,7 +3507,9 @@
      "options": [],
      "message": {
       "zh-TW": "完成日期不得早於報修日期",
-      "en-US": "Finish date cannot be earlier than the report date"
+      "en-US": "Finish date cannot be earlier than the report date",
+      "th": "วันที่เสร็จต้องไม่เร็วกว่าวันที่แจ้งซ่อม",
+      "vi": "Ngày hoàn thành không được sớm hơn ngày báo sửa chữa"
      },
      "condition": {
       "any": [
@@ -3095,7 +3532,9 @@
     {
      "name": {
       "zh-TW": "未結案報修",
-      "en-US": "Open requests"
+      "en-US": "Open requests",
+      "th": "ใบแจ้งซ่อมที่ยังไม่ปิด",
+      "vi": "Báo sửa chữa chưa đóng"
      },
      "columns": [
       "no",
@@ -3125,7 +3564,9 @@
     {
      "name": {
       "zh-TW": "近 30 天結案",
-      "en-US": "Closed in the last 30 days"
+      "en-US": "Closed in the last 30 days",
+      "th": "ปิดงานใน 30 วันที่ผ่านมา",
+      "vi": "Đã đóng trong 30 ngày qua"
      },
      "columns": [
       "no",
@@ -3193,7 +3634,9 @@
    "key": "mes-mold-info",
    "name": {
     "zh-TW": "模具資料",
-    "en-US": "Mold information"
+    "en-US": "Mold information",
+    "th": "ข้อมูลแม่พิมพ์",
+    "vi": "Thông tin khuôn"
    },
    "icon": "precision_manufacturing",
    "section": "設備",
@@ -3205,7 +3648,9 @@
      "code": "main",
      "label": {
       "zh-TW": "保養資訊",
-      "en-US": "Care information"
+      "en-US": "Care information",
+      "th": "ข้อมูลการบำรุงรักษา",
+      "vi": "Thông tin bảo dưỡng"
      },
      "collapsed": false,
      "fields": [
@@ -3214,7 +3659,9 @@
        "type": "date",
        "label": {
         "zh-TW": "上次保養日",
-        "en-US": "Last care date"
+        "en-US": "Last care date",
+        "th": "วันที่บำรุงรักษาล่าสุด",
+        "vi": "Ngày bảo dưỡng gần nhất"
        },
        "config": {
         "showInList": true,
@@ -3226,7 +3673,9 @@
        "type": "integer",
        "label": {
         "zh-TW": "保養週期（天）",
-        "en-US": "Care cycle (days)"
+        "en-US": "Care cycle (days)",
+        "th": "รอบการบำรุงรักษา (วัน)",
+        "vi": "Chu kỳ bảo dưỡng (ngày)"
        },
        "config": {
         "required": true
@@ -3237,7 +3686,9 @@
        "type": "integer",
        "label": {
         "zh-TW": "累計射出數",
-        "en-US": "Total shots"
+        "en-US": "Total shots",
+        "th": "จำนวนการฉีดสะสม",
+        "vi": "Tổng số lần ép"
        },
        "config": {
         "showInList": true,
@@ -3283,7 +3734,9 @@
    "key": "mes-customer-info",
    "name": {
     "zh-TW": "客戶資料",
-    "en-US": "Customer information"
+    "en-US": "Customer information",
+    "th": "ข้อมูลลูกค้า",
+    "vi": "Thông tin khách hàng"
    },
    "icon": "business",
    "section": "業務",
@@ -3295,7 +3748,9 @@
      "code": "main",
      "label": {
       "zh-TW": "往來資訊",
-      "en-US": "Account information"
+      "en-US": "Account information",
+      "th": "ข้อมูลการติดต่อทางธุรกิจ",
+      "vi": "Thông tin giao dịch"
      },
      "collapsed": false,
      "fields": [
@@ -3304,14 +3759,18 @@
        "type": "enum",
        "label": {
         "zh-TW": "信用等級",
-        "en-US": "Credit level"
+        "en-US": "Credit level",
+        "th": "ระดับเครดิต",
+        "vi": "Hạng tín dụng"
        },
        "options": [
         {
          "code": "a",
          "label": {
           "zh-TW": "A",
-          "en-US": "A"
+          "en-US": "A",
+          "th": "A",
+          "vi": "A"
          },
          "color": "#21ba45"
         },
@@ -3319,7 +3778,9 @@
          "code": "b",
          "label": {
           "zh-TW": "B",
-          "en-US": "B"
+          "en-US": "B",
+          "th": "B",
+          "vi": "B"
          },
          "color": "#f2c037"
         },
@@ -3327,7 +3788,9 @@
          "code": "c",
          "label": {
           "zh-TW": "C",
-          "en-US": "C"
+          "en-US": "C",
+          "th": "C",
+          "vi": "C"
          },
          "color": "#c10015"
         }
@@ -3342,7 +3805,9 @@
        "type": "text",
        "label": {
         "zh-TW": "付款條件",
-        "en-US": "Payment terms"
+        "en-US": "Payment terms",
+        "th": "เงื่อนไขการชำระเงิน",
+        "vi": "Điều khoản thanh toán"
        }
       },
       {
@@ -3350,7 +3815,9 @@
        "type": "user",
        "label": {
         "zh-TW": "業務窗口",
-        "en-US": "Account rep"
+        "en-US": "Account rep",
+        "th": "ผู้ประสานงานฝ่ายขาย",
+        "vi": "Đầu mối kinh doanh"
        },
        "config": {
         "showInList": true,
@@ -3362,7 +3829,9 @@
        "type": "email",
        "label": {
         "zh-TW": "聯絡 Email",
-        "en-US": "Contact email"
+        "en-US": "Contact email",
+        "th": "อีเมลติดต่อ",
+        "vi": "Email liên hệ"
        }
       },
       {
@@ -3370,7 +3839,9 @@
        "type": "phone",
        "label": {
         "zh-TW": "聯絡電話",
-        "en-US": "Contact phone"
+        "en-US": "Contact phone",
+        "th": "โทรศัพท์ติดต่อ",
+        "vi": "Điện thoại liên hệ"
        }
       },
       {
@@ -3378,7 +3849,9 @@
        "type": "url",
        "label": {
         "zh-TW": "網站",
-        "en-US": "Website"
+        "en-US": "Website",
+        "th": "เว็บไซต์",
+        "vi": "Trang web"
        }
       }
      ]
@@ -3420,7 +3893,9 @@
    "key": "mes-mold-care",
    "name": {
     "zh-TW": "模具保養紀錄",
-    "en-US": "Mold care records"
+    "en-US": "Mold care records",
+    "th": "บันทึกการบำรุงรักษาแม่พิมพ์",
+    "vi": "Hồ sơ bảo dưỡng khuôn"
    },
    "icon": "handyman",
    "section": "設備",
@@ -3432,7 +3907,9 @@
      "code": "main",
      "label": {
       "zh-TW": "保養",
-      "en-US": "Care"
+      "en-US": "Care",
+      "th": "บำรุงรักษา",
+      "vi": "Bảo dưỡng"
      },
      "collapsed": false,
      "fields": [
@@ -3441,7 +3918,9 @@
        "type": "autonumber",
        "label": {
         "zh-TW": "保養單號",
-        "en-US": "Care no."
+        "en-US": "Care no.",
+        "th": "เลขที่ใบบำรุงรักษา",
+        "vi": "Số phiếu bảo dưỡng"
        },
        "config": {
         "format": "MC-{yyyyMM}-{0000}",
@@ -3454,7 +3933,9 @@
        "type": "reference",
        "label": {
         "zh-TW": "模具",
-        "en-US": "Mold"
+        "en-US": "Mold",
+        "th": "แม่พิมพ์",
+        "vi": "Khuôn"
        },
        "config": {
         "refTarget": {
@@ -3471,14 +3952,18 @@
        "type": "multienum",
        "label": {
         "zh-TW": "保養類別",
-        "en-US": "Care categories"
+        "en-US": "Care categories",
+        "th": "ประเภทการบำรุงรักษา",
+        "vi": "Loại bảo dưỡng"
        },
        "options": [
         {
          "code": "clean",
          "label": {
           "zh-TW": "清潔",
-          "en-US": "Cleaning"
+          "en-US": "Cleaning",
+          "th": "ทำความสะอาด",
+          "vi": "Vệ sinh"
          },
          "color": null
         },
@@ -3486,7 +3971,9 @@
          "code": "parts",
          "label": {
           "zh-TW": "更換零件",
-          "en-US": "Part replacement"
+          "en-US": "Part replacement",
+          "th": "เปลี่ยนชิ้นส่วน",
+          "vi": "Thay linh kiện"
          },
          "color": null
         },
@@ -3494,7 +3981,9 @@
          "code": "calibrate",
          "label": {
           "zh-TW": "校正",
-          "en-US": "Calibration"
+          "en-US": "Calibration",
+          "th": "ปรับเทียบ",
+          "vi": "Hiệu chuẩn"
          },
          "color": null
         },
@@ -3502,7 +3991,9 @@
          "code": "lubricate",
          "label": {
           "zh-TW": "潤滑",
-          "en-US": "Lubrication"
+          "en-US": "Lubrication",
+          "th": "หล่อลื่น",
+          "vi": "Bôi trơn"
          },
          "color": null
         },
@@ -3510,7 +4001,9 @@
          "code": "polish",
          "label": {
           "zh-TW": "拋光",
-          "en-US": "Polishing"
+          "en-US": "Polishing",
+          "th": "ขัดเงา",
+          "vi": "Đánh bóng"
          },
          "color": null
         }
@@ -3525,7 +4018,9 @@
        "type": "user",
        "label": {
         "zh-TW": "保養人員",
-        "en-US": "Technician"
+        "en-US": "Technician",
+        "th": "ช่างเทคนิค",
+        "vi": "Kỹ thuật viên"
        },
        "config": {
         "showInList": true
@@ -3536,7 +4031,9 @@
        "type": "date",
        "label": {
         "zh-TW": "保養日期",
-        "en-US": "Care date"
+        "en-US": "Care date",
+        "th": "วันที่บำรุงรักษา",
+        "vi": "Ngày bảo dưỡng"
        },
        "config": {
         "defaultToday": true,
@@ -3550,7 +4047,9 @@
        "type": "time",
        "label": {
         "zh-TW": "開始時間",
-        "en-US": "Start time"
+        "en-US": "Start time",
+        "th": "เวลาเริ่ม",
+        "vi": "Thời gian bắt đầu"
        }
       },
       {
@@ -3558,7 +4057,9 @@
        "type": "integer",
        "label": {
         "zh-TW": "保養週期（天）",
-        "en-US": "Care cycle (days)"
+        "en-US": "Care cycle (days)",
+        "th": "รอบการบำรุงรักษา (วัน)",
+        "vi": "Chu kỳ bảo dưỡng (ngày)"
        },
        "config": {
         "required": true
@@ -3569,7 +4070,9 @@
        "type": "formula",
        "label": {
         "zh-TW": "下次保養日",
-        "en-US": "Next care date"
+        "en-US": "Next care date",
+        "th": "วันที่บำรุงรักษาครั้งถัดไป",
+        "vi": "Ngày bảo dưỡng tiếp theo"
        },
        "config": {
         "formula": "DATEADD({careDate}, {cycleDays})",
@@ -3582,7 +4085,9 @@
        "type": "currency",
        "label": {
         "zh-TW": "費用",
-        "en-US": "Cost"
+        "en-US": "Cost",
+        "th": "ค่าใช้จ่าย",
+        "vi": "Chi phí"
        },
        "config": {
         "scale": 0,
@@ -3594,7 +4099,9 @@
        "type": "textarea",
        "label": {
         "zh-TW": "備註",
-        "en-US": "Note"
+        "en-US": "Note",
+        "th": "หมายเหตุ",
+        "vi": "Ghi chú"
        }
       }
      ]
@@ -3605,7 +4112,9 @@
     {
      "name": {
       "zh-TW": "全部保養紀錄",
-      "en-US": "All care records"
+      "en-US": "All care records",
+      "th": "บันทึกการบำรุงรักษาทั้งหมด",
+      "vi": "Tất cả hồ sơ bảo dưỡng"
      },
      "columns": [
       "no",
@@ -3660,7 +4169,9 @@
    "key": "mes-mold-care-part",
    "name": {
     "zh-TW": "更換零件",
-    "en-US": "Replaced parts"
+    "en-US": "Replaced parts",
+    "th": "เปลี่ยนชิ้นส่วน",
+    "vi": "Thay linh kiện"
    },
    "icon": null,
    "section": null,
@@ -3672,7 +4183,9 @@
      "code": "main",
      "label": {
       "zh-TW": "零件",
-      "en-US": "Part"
+      "en-US": "Part",
+      "th": "ชิ้นส่วน",
+      "vi": "Linh kiện"
      },
      "collapsed": false,
      "fields": [
@@ -3681,7 +4194,9 @@
        "type": "reference",
        "label": {
         "zh-TW": "保養紀錄",
-        "en-US": "Care record"
+        "en-US": "Care record",
+        "th": "บันทึกการบำรุงรักษา",
+        "vi": "Hồ sơ bảo dưỡng"
        },
        "config": {
         "refTarget": {
@@ -3700,7 +4215,9 @@
        "type": "text",
        "label": {
         "zh-TW": "零件名稱",
-        "en-US": "Part name"
+        "en-US": "Part name",
+        "th": "ชื่อชิ้นส่วน",
+        "vi": "Tên linh kiện"
        },
        "config": {
         "required": true,
@@ -3712,7 +4229,9 @@
        "type": "integer",
        "label": {
         "zh-TW": "數量",
-        "en-US": "Quantity"
+        "en-US": "Quantity",
+        "th": "จำนวน",
+        "vi": "Số lượng"
        }
       },
       {
@@ -3720,7 +4239,9 @@
        "type": "currency",
        "label": {
         "zh-TW": "單價",
-        "en-US": "Unit cost"
+        "en-US": "Unit cost",
+        "th": "ราคาต่อหน่วย",
+        "vi": "Đơn giá"
        },
        "config": {
         "scale": 0
@@ -3765,7 +4286,9 @@
    "key": "mes-quality",
    "name": {
     "zh-TW": "品質異常",
-    "en-US": "Quality issue"
+    "en-US": "Quality issue",
+    "th": "ปัญหาคุณภาพ",
+    "vi": "Sự cố chất lượng"
    },
    "icon": "report_problem",
    "section": "品質",
@@ -3777,7 +4300,9 @@
      "code": "main",
      "label": {
       "zh-TW": "異常",
-      "en-US": "Issue"
+      "en-US": "Issue",
+      "th": "ปัญหา",
+      "vi": "Sự cố"
      },
      "collapsed": false,
      "fields": [
@@ -3786,7 +4311,9 @@
        "type": "autonumber",
        "label": {
         "zh-TW": "異常單號",
-        "en-US": "Issue no."
+        "en-US": "Issue no.",
+        "th": "เลขที่ใบปัญหา",
+        "vi": "Số phiếu sự cố"
        },
        "config": {
         "format": "QA-{yyyyMM}-{0000}",
@@ -3799,7 +4326,9 @@
        "type": "reference",
        "label": {
         "zh-TW": "訂單",
-        "en-US": "Sales order"
+        "en-US": "Sales order",
+        "th": "ใบสั่งขาย",
+        "vi": "Đơn hàng bán"
        },
        "config": {
         "refTarget": {
@@ -3814,7 +4343,9 @@
        "type": "reference",
        "label": {
         "zh-TW": "工令",
-        "en-US": "Work order"
+        "en-US": "Work order",
+        "th": "ใบสั่งผลิต",
+        "vi": "Lệnh sản xuất"
        },
        "config": {
         "refTarget": {
@@ -3829,7 +4360,9 @@
        "type": "date",
        "label": {
         "zh-TW": "發現日期",
-        "en-US": "Found on"
+        "en-US": "Found on",
+        "th": "วันที่พบ",
+        "vi": "Ngày phát hiện"
        },
        "config": {
         "defaultToday": true,
@@ -3843,14 +4376,18 @@
        "type": "enum",
        "label": {
         "zh-TW": "異常類型",
-        "en-US": "Issue type"
+        "en-US": "Issue type",
+        "th": "ประเภทปัญหา",
+        "vi": "Loại sự cố"
        },
        "options": [
         {
          "code": "appearance",
          "label": {
           "zh-TW": "外觀",
-          "en-US": "Appearance"
+          "en-US": "Appearance",
+          "th": "ภายนอก",
+          "vi": "Ngoại quan"
          },
          "color": null
         },
@@ -3858,7 +4395,9 @@
          "code": "dimension",
          "label": {
           "zh-TW": "尺寸",
-          "en-US": "Dimension"
+          "en-US": "Dimension",
+          "th": "ขนาด",
+          "vi": "Kích thước"
          },
          "color": null
         },
@@ -3866,7 +4405,9 @@
          "code": "function",
          "label": {
           "zh-TW": "功能",
-          "en-US": "Function"
+          "en-US": "Function",
+          "th": "การทำงาน",
+          "vi": "Chức năng"
          },
          "color": null
         }
@@ -3881,14 +4422,18 @@
        "type": "enum",
        "label": {
         "zh-TW": "不良原因",
-        "en-US": "Defect cause"
+        "en-US": "Defect cause",
+        "th": "สาเหตุของเสีย",
+        "vi": "Nguyên nhân lỗi"
        },
        "options": [
         {
          "code": "scratch",
          "label": {
           "zh-TW": "刮傷",
-          "en-US": "Scratch"
+          "en-US": "Scratch",
+          "th": "รอยขีดข่วน",
+          "vi": "Trầy xước"
          },
          "color": null
         },
@@ -3896,7 +4441,9 @@
          "code": "stain",
          "label": {
           "zh-TW": "髒污",
-          "en-US": "Stain"
+          "en-US": "Stain",
+          "th": "คราบสกปรก",
+          "vi": "Bẩn"
          },
          "color": null
         },
@@ -3904,7 +4451,9 @@
          "code": "burr",
          "label": {
           "zh-TW": "毛邊",
-          "en-US": "Burr"
+          "en-US": "Burr",
+          "th": "ครีบ",
+          "vi": "Ba via"
          },
          "color": null
         },
@@ -3912,7 +4461,9 @@
          "code": "oversize",
          "label": {
           "zh-TW": "尺寸過大",
-          "en-US": "Oversize"
+          "en-US": "Oversize",
+          "th": "ขนาดใหญ่เกินไป",
+          "vi": "Kích thước quá lớn"
          },
          "color": null
         },
@@ -3920,7 +4471,9 @@
          "code": "undersize",
          "label": {
           "zh-TW": "尺寸過小",
-          "en-US": "Undersize"
+          "en-US": "Undersize",
+          "th": "ขนาดเล็กเกินไป",
+          "vi": "Kích thước quá nhỏ"
          },
          "color": null
         },
@@ -3928,7 +4481,9 @@
          "code": "warp",
          "label": {
           "zh-TW": "變形",
-          "en-US": "Warp"
+          "en-US": "Warp",
+          "th": "บิดเบี้ยว",
+          "vi": "Biến dạng"
          },
          "color": null
         },
@@ -3936,7 +4491,9 @@
          "code": "no-power",
          "label": {
           "zh-TW": "無法開機",
-          "en-US": "No power"
+          "en-US": "No power",
+          "th": "เปิดเครื่องไม่ติด",
+          "vi": "Không khởi động được"
          },
          "color": null
         },
@@ -3944,7 +4501,9 @@
          "code": "short",
          "label": {
           "zh-TW": "短路",
-          "en-US": "Short circuit"
+          "en-US": "Short circuit",
+          "th": "ไฟฟ้าลัดวงจร",
+          "vi": "Chập mạch"
          },
          "color": null
         }
@@ -3955,14 +4514,18 @@
        "type": "enum",
        "label": {
         "zh-TW": "嚴重度",
-        "en-US": "Severity"
+        "en-US": "Severity",
+        "th": "ความรุนแรง",
+        "vi": "Mức độ nghiêm trọng"
        },
        "options": [
         {
          "code": "minor",
          "label": {
           "zh-TW": "輕微",
-          "en-US": "Minor"
+          "en-US": "Minor",
+          "th": "เล็กน้อย",
+          "vi": "Nhẹ"
          },
          "color": "#21ba45"
         },
@@ -3970,7 +4533,9 @@
          "code": "normal",
          "label": {
           "zh-TW": "一般",
-          "en-US": "Normal"
+          "en-US": "Normal",
+          "th": "ปกติ",
+          "vi": "Bình thường"
          },
          "color": "#f2c037"
         },
@@ -3978,7 +4543,9 @@
          "code": "critical",
          "label": {
           "zh-TW": "重大",
-          "en-US": "Critical"
+          "en-US": "Critical",
+          "th": "ร้ายแรง",
+          "vi": "Nghiêm trọng"
          },
          "color": "#c10015"
         }
@@ -3994,14 +4561,18 @@
        "type": "enum",
        "label": {
         "zh-TW": "狀態",
-        "en-US": "Status"
+        "en-US": "Status",
+        "th": "สถานะ",
+        "vi": "Trạng thái"
        },
        "options": [
         {
          "code": "open",
          "label": {
           "zh-TW": "開立",
-          "en-US": "Open"
+          "en-US": "Open",
+          "th": "เปิดเรื่อง",
+          "vi": "Mở"
          },
          "color": null
         },
@@ -4009,7 +4580,9 @@
          "code": "handling",
          "label": {
           "zh-TW": "處置中",
-          "en-US": "Handling"
+          "en-US": "Handling",
+          "th": "กำลังจัดการ",
+          "vi": "Đang xử lý"
          },
          "color": null
         },
@@ -4017,7 +4590,9 @@
          "code": "closed",
          "label": {
           "zh-TW": "結案",
-          "en-US": "Closed"
+          "en-US": "Closed",
+          "th": "ปิดงาน",
+          "vi": "Đã đóng"
          },
          "color": null
         }
@@ -4035,7 +4610,9 @@
      "code": "disposal",
      "label": {
       "zh-TW": "處置",
-      "en-US": "Disposal"
+      "en-US": "Disposal",
+      "th": "การจัดการ",
+      "vi": "Xử lý"
      },
      "collapsed": false,
      "fields": [
@@ -4044,14 +4621,18 @@
        "type": "multienum",
        "label": {
         "zh-TW": "處置方式",
-        "en-US": "Actions"
+        "en-US": "Actions",
+        "th": "วิธีจัดการ",
+        "vi": "Cách xử lý"
        },
        "options": [
         {
          "code": "rework",
          "label": {
           "zh-TW": "重工",
-          "en-US": "Rework"
+          "en-US": "Rework",
+          "th": "แก้ไขงาน",
+          "vi": "Làm lại"
          },
          "color": null
         },
@@ -4059,7 +4640,9 @@
          "code": "scrap",
          "label": {
           "zh-TW": "報廢",
-          "en-US": "Scrap"
+          "en-US": "Scrap",
+          "th": "ทิ้งเป็นของเสีย",
+          "vi": "Loại bỏ"
          },
          "color": null
         },
@@ -4067,7 +4650,9 @@
          "code": "sort",
          "label": {
           "zh-TW": "篩選",
-          "en-US": "Sorting"
+          "en-US": "Sorting",
+          "th": "คัดแยก",
+          "vi": "Phân loại"
          },
          "color": null
         },
@@ -4075,7 +4660,9 @@
          "code": "concession",
          "label": {
           "zh-TW": "特採",
-          "en-US": "Concession"
+          "en-US": "Concession",
+          "th": "ยอมรับแบบมีเงื่อนไข",
+          "vi": "Chấp nhận đặc biệt"
          },
          "color": null
         },
@@ -4083,7 +4670,9 @@
          "code": "return",
          "label": {
           "zh-TW": "退貨",
-          "en-US": "Return"
+          "en-US": "Return",
+          "th": "ส่งคืน",
+          "vi": "Trả hàng"
          },
          "color": null
         }
@@ -4094,7 +4683,9 @@
        "type": "percent",
        "label": {
         "zh-TW": "不良率",
-        "en-US": "Defect rate"
+        "en-US": "Defect rate",
+        "th": "อัตราของเสีย",
+        "vi": "Tỷ lệ lỗi"
        },
        "config": {
         "scale": 1
@@ -4105,7 +4696,9 @@
        "type": "text",
        "label": {
         "zh-TW": "責任單位",
-        "en-US": "Responsible unit"
+        "en-US": "Responsible unit",
+        "th": "หน่วยงานที่รับผิดชอบ",
+        "vi": "Đơn vị chịu trách nhiệm"
        }
       }
      ]
@@ -4184,7 +4777,9 @@
     {
      "name": {
       "zh-TW": "全部品質異常",
-      "en-US": "All quality issues"
+      "en-US": "All quality issues",
+      "th": "ปัญหาคุณภาพทั้งหมด",
+      "vi": "Tất cả sự cố chất lượng"
      },
      "columns": [
       "no",
@@ -4206,7 +4801,9 @@
     {
      "name": {
       "zh-TW": "未結案的重大異常",
-      "en-US": "Open critical issues"
+      "en-US": "Open critical issues",
+      "th": "ปัญหาร้ายแรงที่ยังไม่ปิด",
+      "vi": "Sự cố nghiêm trọng chưa đóng"
      },
      "columns": [
       "no",
@@ -4910,7 +5507,9 @@
    "code": "mes-quote-to-order",
    "name": {
     "zh-TW": "報價單轉訂單",
-    "en-US": "Quote to order"
+    "en-US": "Quote to order",
+    "th": "เปลี่ยนใบเสนอราคาเป็นใบสั่งขาย",
+    "vi": "Chuyển báo giá thành đơn hàng"
    },
    "active": true,
    "source": "quote",
@@ -4969,7 +5568,9 @@
    "code": "mes-report-progress",
    "name": {
     "zh-TW": "報工推進工令",
-    "en-US": "Work report advances the work order"
+    "en-US": "Work report advances the work order",
+    "th": "รายงานผลผลิตส่งผลให้ใบสั่งผลิตเดินหน้า",
+    "vi": "Báo cáo sản lượng thúc đẩy lệnh sản xuất"
    },
    "active": true,
    "source": "report",
@@ -5000,7 +5601,9 @@
    "code": "mes-shipment-close-wo",
    "name": {
     "zh-TW": "出貨確認工令完工",
-    "en-US": "Shipment confirms the work order is done"
+    "en-US": "Shipment confirms the work order is done",
+    "th": "การจัดส่งยืนยันว่าใบสั่งผลิตเสร็จสิ้น",
+    "vi": "Giao hàng xác nhận lệnh sản xuất đã hoàn thành"
    },
    "active": true,
    "source": "shipment",
@@ -5029,7 +5632,9 @@
    "code": "mes-report-within-wo-qty",
    "name": {
     "zh-TW": "工序累計良品不超過工令數量",
-    "en-US": "Cumulative good qty per operation within work order qty"
+    "en-US": "Cumulative good qty per operation within work order qty",
+    "th": "ยอดสะสมของดีต่อขั้นตอนไม่เกินจำนวนสั่งผลิต",
+    "vi": "Tổng số lượng đạt tích lũy của mỗi công đoạn không vượt quá số lượng lệnh sản xuất"
    },
    "active": true,
    "module": "report",
@@ -5049,14 +5654,18 @@
    },
    "message": {
     "zh-TW": "此工序累計良品數超過工令數量",
-    "en-US": "Cumulative good quantity of this operation exceeds the work order quantity"
+    "en-US": "Cumulative good quantity of this operation exceeds the work order quantity",
+    "th": "ยอดสะสมของดีของขั้นตอนนี้เกินจำนวนสั่งผลิต",
+    "vi": "Tổng số lượng đạt tích lũy của công đoạn này vượt quá số lượng lệnh sản xuất"
    }
   },
   {
    "code": "mes-shipment-within-completed",
    "name": {
     "zh-TW": "出貨量不超過工令完工量",
-    "en-US": "Shipped qty within completed qty"
+    "en-US": "Shipped qty within completed qty",
+    "th": "จำนวนที่จัดส่งไม่เกินจำนวนที่ผลิตเสร็จ",
+    "vi": "Số lượng giao không vượt quá số lượng đã hoàn thành"
    },
    "active": true,
    "module": "shipment",
@@ -5078,7 +5687,9 @@
    },
    "message": {
     "zh-TW": "出貨數量超過工令已完工量",
-    "en-US": "Shipped quantity exceeds the completed quantity of the work order"
+    "en-US": "Shipped quantity exceeds the completed quantity of the work order",
+    "th": "จำนวนที่จัดส่งเกินจำนวนที่ผลิตเสร็จของใบสั่งผลิต",
+    "vi": "Số lượng giao vượt quá số lượng đã hoàn thành của lệnh sản xuất"
    }
   }
  ],
@@ -5100,7 +5711,9 @@
    "code": "mes-wo-sheet",
    "name": {
     "zh-TW": "工令單",
-    "en-US": "Work order sheet"
+    "en-US": "Work order sheet",
+    "th": "ใบสั่งผลิต (เอกสาร)",
+    "vi": "Phiếu lệnh sản xuất"
    },
    "active": true,
    "body": "<h1 align=\"center\">工令單 {{no}}</h1><table width=\"100%\" cellpadding=\"4\"><tr><td>品號：{{itemNo}}</td><td align=\"right\">交期：{{dueDate}}</td></tr><tr><td>品名：{{itemName}}</td><td align=\"right\">優先度：{{priority}}</td></tr><tr><td>數量：{{qty}} {{unit}}</td><td align=\"right\">預計開工：{{plannedStart}}</td></tr></table><table width=\"100%\" border=\"1\" cellpadding=\"4\" style=\"border-collapse:collapse\"><thead><tr><th>序號</th><th>工序</th><th>工作站</th><th align=\"right\">預計工時</th><th>預計開始</th><th>預計完成</th></tr></thead><tbody>{{#each wo-op}}<tr><td>{{seq}}</td><td>{{process}}</td><td>{{workstation}}</td><td align=\"right\">{{plannedHours}}</td><td>{{plannedStart}}</td><td>{{plannedEnd}}</td></tr>{{/each}}</tbody></table><p>已完工量：{{completedQty}}　不良總數：{{defectTotal}}</p><p>備註：{{remark}}</p><table width=\"100%\" cellpadding=\"12\"><tr><td>生管：＿＿＿＿＿</td><td>現場主管：＿＿＿＿＿</td><td>品保：＿＿＿＿＿</td></tr></table>"
@@ -5110,7 +5723,9 @@
    "code": "mes-ship-sheet",
    "name": {
     "zh-TW": "出貨單",
-    "en-US": "Shipment sheet"
+    "en-US": "Shipment sheet",
+    "th": "ใบจัดส่ง",
+    "vi": "Phiếu giao hàng"
    },
    "active": true,
    "body": "<h1 align=\"center\">出貨單 {{no}}</h1><table width=\"100%\" cellpadding=\"4\"><tr><td>客戶：{{customer}}</td><td align=\"right\">出貨日期：{{shipDate}}</td></tr><tr><td>工令：{{workOrder}}</td><td align=\"right\">運送方式：{{carrier}}</td></tr></table><table width=\"100%\" border=\"1\" cellpadding=\"4\" style=\"border-collapse:collapse\"><tr><th>出貨數量</th><td align=\"right\">{{qty}}</td></tr></table><p>備註：{{remark}}</p><table width=\"100%\" cellpadding=\"12\"><tr><td>出貨人：＿＿＿＿＿</td><td>簽收人：＿＿＿＿＿</td></tr></table>"
