@@ -21,7 +21,11 @@ public static partial class AppEffectsCodec
     [GeneratedRegex(@"\{([^{}.\s]+\.[^{}.\s]+)\}")]
     private static partial Regex NameReference();
 
+    [GeneratedRegex(@"^opt_(.+)$")]
+    private static partial Regex OptionValue();
+
     public const string ConcreteRecordMessage = "條件指定了具體記錄或使用者帳號，換一個資料庫會指到別的對象，套件不收這種條件";
+    public const string ConstantRecordMessage = "事件對參照或使用者欄位設定了固定的記錄或帳號，換一個資料庫會指到別的對象，套件不收";
     public const string CustomMessage = "自訂效果的參數是外掛專屬的，無法轉成代號，套件不收";
 
     // ---- 匯出方向：Id → 代號 ----
@@ -55,6 +59,9 @@ public static partial class AppEffectsCodec
         foreach (var fx in d.Effects)
         {
             if (fx.Kind == "custom") { errors.Add($"{CustomMessage}（效果 {fx.Code}）"); continue; }
+            foreach (var s in fx.Set ?? [])
+                if (s.Const is { ValueKind: not (JsonValueKind.Null or JsonValueKind.Undefined) } && n.IdentityTypeOf(s.To) is not null)
+                    errors.Add($"{ConstantRecordMessage}（效果 {fx.Code}）");
             var set = (fx.Set ?? []).Select(s => new AppEventSet(
                 Field(s.To),
                 s.From is { } f ? new AppEventFrom(f.Side, Field(f.FieldId)) : null,
@@ -177,6 +184,12 @@ public static partial class AppEffectsCodec
             fx.Set.Select(s =>
             {
                 var to = Field(s.To);
+                if (s.Const is { } constant)
+                {
+                    if (AppReportCodec.IsIdentityType(l.TypeOf(s.To)) && constant.ValueKind is not (JsonValueKind.Null or JsonValueKind.Undefined))
+                        errors.Add($"{ConstantRecordMessage}（效果 {fx.Code}）");
+                    if (OptionModule(s.To, l) is { } module) CheckOptions(constant, module, l, errors);
+                }
                 return new EventSet(to,
                     s.From is { } f ? new EventFrom(f.Side, Field(f.Field)) : null,
                     s.Formula is { } fo ? new EventFormula(fo.Side, NameReference().Replace(fo.Expr ?? "", m => $"{{{Field(m.Groups[1].Value)}}}")) : null,
@@ -229,6 +242,20 @@ public static partial class AppEffectsCodec
     private static string? OptionModule(string qualifiedField, AppReportCodec.Lookups l) =>
         AppReportCodec.IsOptionType(l.TypeOf(qualifiedField)) ? TemplateQualified.ModuleOf(qualifiedField) : null;
 
+    /// <summary>選項型欄位的 opt_ 值在套件裡找不到對應選項：ConvertValue 會原樣留下，到首次觸發才 400，所以匯入時就拒絕。</summary>
+    private static void CheckOptions(JsonElement value, string module, AppReportCodec.Lookups l, List<string> errors)
+    {
+        switch (value.ValueKind)
+        {
+            case JsonValueKind.Array:
+                foreach (var item in value.EnumerateArray()) CheckOptions(item, module, l, errors);
+                break;
+            case JsonValueKind.String when OptionValue().Match(value.GetString()!) is { Success: true } m && l.OptionId($"{module}.{m.Groups[1].Value}") is null:
+                errors.Add($"引用了套件沒有的選項 {m.Groups[1].Value}（模組 {module}）");
+                break;
+        }
+    }
+
     private static JsonElement ImportCondition(JsonElement json, AppReportCodec.Lookups l, List<string> errors)
     {
         JsonNode? Walk(JsonNode? node)
@@ -251,8 +278,15 @@ public static partial class AppEffectsCodec
                         else copy[key] = Walk(value);
                     }
                     if (fieldName is not null && copy["value"] is { } raw)
-                        copy["value"] = JsonNode.Parse(AppReportCodec.ConvertValue(
-                            JsonSerializer.SerializeToElement(raw), OptionModule(fieldName, l), l.OptionId).GetRawText());
+                    {
+                        var value = JsonSerializer.SerializeToElement(raw);
+                        // 指定哪筆記錄或哪個帳號的條件：換資料庫會指到別人，匯出時就不收；匯入時也要擋，不然開了之後再匯出整條檢查消失
+                        if (AppReportCodec.IsIdentityType(l.TypeOf(fieldName)) && AppReportCodec.PicksConcreteRecord(obj["op"]?.GetValue<string>() ?? "", value))
+                            errors.Add(ConcreteRecordMessage);
+                        var optionModule = OptionModule(fieldName, l);
+                        if (optionModule is not null) CheckOptions(value, optionModule, l, errors);
+                        copy["value"] = JsonNode.Parse(AppReportCodec.ConvertValue(value, optionModule, l.OptionId).GetRawText());
+                    }
                     return copy;
                 default:
                     return node?.DeepClone();

@@ -44,7 +44,7 @@ public static partial class AppReportCodec
     public const string ConcreteRecordMessage = "報表條件指定了具體記錄，換一個資料庫會指到別的記錄，套件不收這種條件";
     public const string ConcreteUserMessage = "報表條件指定了具體的使用者帳號，帳號屬於這個資料庫，套件不收這種條件";
 
-    private static bool IsIdentityType(FieldType? type) => type is FieldType.Reference or FieldType.User;
+    internal static bool IsIdentityType(FieldType? type) => type is FieldType.Reference or FieldType.User;
 
     private static string MessageFor(FieldType? type) => type == FieldType.User ? ConcreteUserMessage : ConcreteRecordMessage;
 

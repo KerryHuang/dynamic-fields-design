@@ -148,7 +148,7 @@ public sealed class AppFlowInstaller(ISender sender)
 
         var skippedEvents = new HashSet<string>();
         var effectTarget = p.Events.SelectMany(e => e.Effects.Select(x => (Key: $"{e.Code}.{x.Code}", x.Target))).ToDictionary(x => x.Key, x => x.Target);
-        foreach (var e in p.Events)
+        foreach (var e in InDependencyOrder(p.Events))
         {
             var dependsOnSkipped = e.Effects.Any(x => x.Kind == "reverse"
                 && (skippedEvents.Contains(x.OfEvent ?? "")
@@ -176,6 +176,26 @@ public sealed class AppFlowInstaller(ISender sender)
             if (!created.IsSuccess) return Prefixed(created, $"checks.{c.Code}");
         }
         return null;
+    }
+
+    /// <summary>
+    /// 沖銷別的事件的事件排在被沖銷的事件之後。匯出按名稱排序，沖銷者的代號可能排在前面；
+    /// 設計器指令驗證 ofEvent 時被沖銷的事件必須已經存在。沒有相依的維持套件裡的原順序。
+    /// </summary>
+    private static List<AppEvent> InDependencyOrder(IReadOnlyList<AppEvent> events)
+    {
+        var byCode = events.GroupBy(e => e.Code).ToDictionary(g => g.Key, g => g.First());
+        var ordered = new List<AppEvent>();
+        var seen = new HashSet<string>();
+        void Visit(AppEvent e)
+        {
+            if (!seen.Add(e.Code)) return;
+            foreach (var x in e.Effects.Where(x => x.Kind == "reverse" && x.OfEvent is not null && x.OfEvent != e.Code && byCode.ContainsKey(x.OfEvent)))
+                Visit(byCode[x.OfEvent!]);
+            ordered.Add(e);
+        }
+        foreach (var e in events) Visit(e);
+        return ordered;
     }
 
     /// <summary>任何一個欄位或選項被排除就回 null。</summary>
