@@ -246,7 +246,7 @@ public partial class ReportRunner
 
         if (reasons.Count > 0) return new(null, reasons);
         return new(new ReportSqlQuery(new ReportSqlScope(mainSide.Module.Id, mainSide.Perms!.OwnerUserIds), groups, measures, filters,
-            [.. planner.Checks], [.. planner.Stamps]), reasons);
+            [.. planner.Checks], [.. planner.Stamps], options.MaxRows), reasons);
     }
 
     // ---- 縮小後備載入的條件（設計 §8.1）----
@@ -326,6 +326,10 @@ public partial class ReportRunner
             reasons.Add(reason);
             return null;
         }
+        // 分組數上限沿用記憶體路徑的 MaxRows，訊息相同（近乎唯一的欄位分組會產生與記錄數同量的分組）
+        if (outcome.Groups.Count > options.MaxRows)
+            return new ReportResult(TooManyState, ReportText.Get(ctx.Locale, ReportText.TooMany), "", [], null, null, null, false, basis, null, frozen,
+                Engine: "sql", FallbackReasons: []);
         return BuildSqlResult(d, query, outcome, bound, mainSide, childSide, ctx, basis, frozen, applied);
     }
 

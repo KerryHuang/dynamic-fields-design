@@ -200,7 +200,9 @@ public static class ReportQueryBuilder
                 where.Append(" AND ").Append(Predicate(f, "r.Id", ctx, ref aliasCounter));
 
         var sql = $"SELECT {string.Join(", ", select)} FROM {from}{joins} WHERE {where}"
-            + (groupBy.Count > 0 ? $" GROUP BY {string.Join(", ", groupBy)}" : "");
+            + (groupBy.Count > 0 ? $" GROUP BY {string.Join(", ", groupBy)}" : "")
+            // 分組數上限：多讀一列才分得出是否超過，超過時呼叫端回 tooMany，不把全部分組讀進記憶體
+            + (groupBy.Count > 0 && q.MaxGroups is { } max ? $" LIMIT {ctx.Add(max + 1)}" : "");
         return new Built(sql, ctx.Parameters);
     }
 

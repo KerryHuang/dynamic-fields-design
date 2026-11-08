@@ -36,10 +36,14 @@ public sealed record ReportSqlCheck(long FieldId, ReportSqlCheckKind Kind);
 /// </summary>
 public sealed record ReportSqlConfigStamp(long FieldId, string Stamp);
 
-/// <summary>聚合計畫：Filters 全部 AND（含主要日期區間）。</summary>
+/// <summary>
+/// 聚合計畫：Filters 全部 AND（含主要日期區間）。MaxGroups 是分組數上限：分組查詢最多讀 MaxGroups + 1 列，
+/// 呼叫端以「讀到的列數超過 MaxGroups」判斷過大；null 表示不設限。
+/// </summary>
 public sealed record ReportSqlQuery(
     ReportSqlScope Main, IReadOnlyList<ReportSqlField> Groups, IReadOnlyList<ReportSqlMeasure> Measures,
-    IReadOnlyList<ReportSqlCondition> Filters, IReadOnlyList<ReportSqlCheck> Checks, IReadOnlyList<ReportSqlConfigStamp> Stamps);
+    IReadOnlyList<ReportSqlCondition> Filters, IReadOnlyList<ReportSqlCheck> Checks, IReadOnlyList<ReportSqlConfigStamp> Stamps,
+    int? MaxGroups = null);
 
 /// <summary>縮小後備載入記錄用的條件（設計 §8.1）；Checks、Stamps 同 <see cref="ReportSqlQuery"/>，探測沒過就整個不縮小。</summary>
 public sealed record ReportSqlNarrowing(

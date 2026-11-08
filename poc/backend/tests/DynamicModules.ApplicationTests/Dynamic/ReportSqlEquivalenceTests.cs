@@ -232,6 +232,33 @@ public class ReportSqlEquivalenceTests : ReportTestBase
         sql.State.Should().Be("empty");
     }
 
+    [Fact]
+    public async Task GroupCount_OverMaxRows_IsTooMany_LikeMemoryPath()
+    {
+        await Prepare();
+        foreach (var note in new[] { "a", "b", "c", "d" }) await Seed("order", "admin", (Note, note), (Amount, 1m));
+        var def = Def(groups: [G(MainF(Note))], measures: [M("n", "countMain")]);
+        var options = Svc<ReportOptions>();
+
+        // 分組數剛好等於上限：照常回結果
+        options.MaxRows = 4;
+        var (memoryOk, sqlOk) = await Both(def);
+        ShouldMatch(memoryOk, sqlOk, "at limit");
+        sqlOk.Groups!.Count.Should().Be(4);
+
+        // 近乎唯一的欄位分組，分組數超過上限：不能把全部分組讀進記憶體，回 tooMany，訊息與記憶體路徑相同
+        options.MaxRows = 3;
+        options.Engine = ReportEngineMode.MemoryOnly;
+        var memory = await Run(def);
+        options.Engine = ReportEngineMode.SqlOnly;
+        var sql = await Run(def);
+        memory.State.Should().Be("tooMany");
+        sql.State.Should().Be("tooMany");
+        sql.Message.Should().Be(memory.Message);
+        sql.Groups.Should().BeNull();
+        sql.Engine.Should().Be("sql");
+    }
+
     private async Task<FieldConfig> CurrentConfig(string module, long fieldId) =>
         (await Detail(module)).Blocks.SelectMany(b => b.Fields).Single(f => f.Id == fieldId).Config;
 
