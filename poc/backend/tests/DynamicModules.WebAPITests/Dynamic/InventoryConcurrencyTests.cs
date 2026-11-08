@@ -34,6 +34,20 @@ public class InventoryConcurrencyTests : IDisposable
         return new World(rig, item, wh, customer, supplier);
     }
 
+    /// <summary>
+    /// 503（WriteGate 排隊逾時，交易根本沒開始、什麼都沒寫）照 Retry-After 的語意重送，就像真的客戶端。
+    /// 全部測試平行跑時 CPU 吃緊，30 個以上同時寫入偶爾會排超過 30 秒；其他狀態碼原樣回傳。
+    /// </summary>
+    private static async Task<HttpResponseMessage> RetryBusy(Func<Task<HttpResponseMessage>> send)
+    {
+        for (var attempt = 1; ; attempt++)
+        {
+            var res = await send();
+            if (res.StatusCode != HttpStatusCode.ServiceUnavailable || attempt == 5) return res;
+            await Task.Delay(200 * attempt);
+        }
+    }
+
     private async Task<int> CountAsync(string moduleKey) =>
         (await JsonOf(await _admin.GetAsync($"{Base}/modules/{moduleKey}/records/paged"))).GetProperty("totalCount").GetInt32();
 
@@ -44,7 +58,7 @@ public class InventoryConcurrencyTests : IDisposable
         var drafts = new List<JsonElement>();
         for (var i = 0; i < 50; i++) drafts.Add(await w.Rig.ShipmentDraftAsync(w.Customer, w.Warehouse, w.Item, 3));
 
-        var responses = await Task.WhenAll(drafts.Select(d => w.Rig.TransitionAsync(_admin, d, "shipment", "已出貨")));
+        var responses = await Task.WhenAll(drafts.Select(d => RetryBusy(() => w.Rig.TransitionAsync(_admin, d, "shipment", "已出貨"))));
 
         var codes = responses.Select(r => r.StatusCode).ToList();
         codes.Should().NotContain(HttpStatusCode.InternalServerError);
@@ -68,12 +82,12 @@ public class InventoryConcurrencyTests : IDisposable
         var w = await WorldAsync(100);
         var key = "ship-" + Guid.NewGuid().ToString("N");
 
-        var responses = await Task.WhenAll(Enumerable.Range(0, 20).Select(async _ =>
+        var responses = await Task.WhenAll(Enumerable.Range(0, 20).Select(_ => RetryBusy(async () =>
         {
             var req = await w.Rig.ShipmentRequestAsync(w.Customer, w.Warehouse, [(w.Item, 3)]);
             req.Headers.Add("Idempotency-Key", key);
             return await _admin.SendAsync(req);
-        }));
+        })));
 
         responses.Select(r => r.StatusCode).Should().OnlyContain(c => c == HttpStatusCode.Created);
         var ids = await Task.WhenAll(responses.Select(async r => Id(await JsonOf(r))));
@@ -84,7 +98,7 @@ public class InventoryConcurrencyTests : IDisposable
         var draft = await w.Rig.GetAsync(ids[0]);
         var postKey = "post-" + Guid.NewGuid().ToString("N");
         var posts = await Task.WhenAll(Enumerable.Range(0, 10)
-            .Select(_ => w.Rig.TransitionAsync(_admin, draft, "shipment", "已出貨", idempotencyKey: postKey)));
+            .Select(_ => RetryBusy(() => w.Rig.TransitionAsync(_admin, draft, "shipment", "已出貨", idempotencyKey: postKey))));
         posts.Select(r => r.StatusCode).Should().OnlyContain(c => c == HttpStatusCode.OK);
         (await w.Rig.BalanceAsync(w.Item, w.Warehouse)).Should().Be(97m);
         (await w.Rig.MovesAsync()).Should().HaveCount(2);
@@ -106,8 +120,11 @@ public class InventoryConcurrencyTests : IDisposable
         var kinds = receipts.Select(r => (Kind: "in", Record: r, Code: "receipt", To: "已過帳"))
             .Concat(shipments.Select(x => (Kind: "out", Record: x, Code: "shipment", To: "已出貨")))
             .OrderBy(_ => Guid.NewGuid()).ToList();
-        var responses = await Task.WhenAll(kinds.Select(k => w.Rig.TransitionAsync(_admin, k.Record, k.Code, k.To)));
+        var responses = await Task.WhenAll(kinds.Select(k => RetryBusy(() => w.Rig.TransitionAsync(_admin, k.Record, k.Code, k.To))));
         var results = kinds.Zip(responses, (k, r) => (k.Kind, r.StatusCode)).ToList();
+        var odd = await Task.WhenAll(responses.Where(r => r.StatusCode is not (HttpStatusCode.OK or HttpStatusCode.BadRequest))
+            .Select(async r => $"{(int)r.StatusCode} {await r.Content.ReadAsStringAsync()}"));
+        odd.Should().BeEmpty();
 
         results.Select(r => r.StatusCode).Should().NotContain(HttpStatusCode.InternalServerError);
         results.Should().OnlyContain(r => r.StatusCode == HttpStatusCode.OK || r.StatusCode == HttpStatusCode.BadRequest);
@@ -126,7 +143,7 @@ public class InventoryConcurrencyTests : IDisposable
         var move = (await w.Rig.MovesAsync()).Single();
 
         var responses = await Task.WhenAll(Enumerable.Range(0, 10)
-            .Select(_ => _admin.PostAsJsonAsync($"{Base}/records/{Id(move)}/reverse", new { values = new Dictionary<string, object>() })));
+            .Select(_ => RetryBusy(() => _admin.PostAsJsonAsync($"{Base}/records/{Id(move)}/reverse", new { values = new Dictionary<string, object>() }))));
 
         responses.Count(r => r.StatusCode == HttpStatusCode.Created).Should().Be(1);
         responses.Where(r => r.StatusCode != HttpStatusCode.Created).Select(r => r.StatusCode).Should().OnlyContain(c => c == HttpStatusCode.Conflict);
