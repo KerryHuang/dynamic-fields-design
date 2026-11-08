@@ -5,6 +5,7 @@ using DynamicModules.Application.Dynamic.ReportService.Data;
 using DynamicModules.Domain.Entities.Dynamic;
 using DynamicModules.Domain.FieldTypes;
 using DynamicModules.Domain.Reports;
+using DynamicModules.Domain.ValueObjects;
 using DynamicModules.Domain.Repositories.Dynamic;
 using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
@@ -65,20 +66,20 @@ public class ReportSqlEquivalenceTests : ReportTestBase
         }
     }
 
-    private async Task<(ReportResult Memory, ReportResult Sql)> Both(ReportDefinition d, ReportDateRange? range = null)
+    private async Task<(ReportResult Memory, ReportResult Sql)> Both(ReportDefinition d, ReportDateRange? range = null, ReportEngineMode second = ReportEngineMode.SqlOnly)
     {
         var options = Svc<ReportOptions>();
         options.Engine = ReportEngineMode.MemoryOnly;
         var memory = await Run(d, range);
-        options.Engine = ReportEngineMode.SqlOnly;
+        options.Engine = second;
         var sql = await Run(d, range);
         return (memory, sql);
     }
 
-    private static void ShouldMatch(ReportResult memory, ReportResult sql, string what)
+    private static void ShouldMatch(ReportResult memory, ReportResult sql, string what, string expectedEngine = "sql")
     {
         memory.Engine.Should().Be("memory", what);
-        sql.Engine.Should().Be("sql", what);
+        sql.Engine.Should().Be(expectedEngine, what);
         sql.State.Should().Be(memory.State, what);
         sql.Message.Should().Be(memory.Message, what);
         sql.RowMeaning.Should().Be(memory.RowMeaning, what);
@@ -224,5 +225,106 @@ public class ReportSqlEquivalenceTests : ReportTestBase
         var (memory, sql) = await Both(Def(groups: [G(MainF(Status))], measures: AmountMeasures()));
         ShouldMatch(memory, sql, "no data");
         sql.State.Should().Be("empty");
+    }
+
+    private async Task<FieldConfig> CurrentConfig(string module, long fieldId) =>
+        (await Detail(module)).Blocks.SelectMany(b => b.Fields).Single(f => f.Id == fieldId).Config;
+
+    private async Task<List<long?>> ScaledValues(long fieldId) =>
+        await Db.Context.Set<RecordIndex>().AsNoTracking().Where(i => i.FieldId == fieldId).OrderBy(i => i.RecordId).Select(i => i.ScaledValue).ToListAsync();
+
+    [Fact]
+    public async Task ScaleChange_RebuildsIndexInTheSameCommand_And_ReportsStayEqual()
+    {
+        await Prepare();
+        await Seed("order", "admin", (Amount, 1.23m));
+        await Seed("order", "admin", (Amount, 5m));
+        (await ScaledValues(Amount.Id)).Should().Equal(123L, 500L);
+
+        // 降到一位小數：1.23 無法精確表示，ScaledValue 必須是 NULL（不是四捨五入的 12），5 變成 50
+        (await Update(Amount, (await CurrentConfig("order", Amount.Id)) with { Scale = 1 })).IsSuccess.Should().BeTrue();
+        (await ScaledValues(Amount.Id)).Should().Equal(null, 50L);
+        var def = Def(measures: [M("s", "sum", MainF(Amount)), M("n", "countMain")]);
+        Svc<ReportOptions>().Engine = ReportEngineMode.Auto;
+        var lowered = await Run(def);
+        lowered.Total!["s"].Should().Be(6.23m, "記憶體路徑加總的是 1.23，不是索引的 12");
+        lowered.Engine.Should().Be("memory");
+        lowered.FallbackReasons.Should().NotBeEmpty();
+
+        // 升到三位小數：全部精確，回到 SQL 路徑
+        (await Update(Amount, (await CurrentConfig("order", Amount.Id)) with { Scale = 3 })).IsSuccess.Should().BeTrue();
+        (await ScaledValues(Amount.Id)).Should().Equal(1230L, 5000L);
+        var raised = await Run(def);
+        raised.Engine.Should().Be("sql");
+        raised.Total!["s"].Should().Be(6.23m);
+    }
+
+    // ---- 審查反例：SQL 路徑證明不了相同時必須退回記憶體，結果仍與記憶體路徑相同 ----
+
+    private async Task AssertFallsBackWithSameResult(ReportDefinition def, string reasonPrefix)
+    {
+        var (memory, auto) = await Both(def, second: ReportEngineMode.Auto);
+        ShouldMatch(memory, auto, reasonPrefix, expectedEngine: "memory");
+        auto.FallbackReasons.Should().Contain(r => r.StartsWith(reasonPrefix));
+    }
+
+    [Fact]
+    public async Task OverflowingScaledValues_GroupedTogether_FallBack()
+    {
+        await Prepare();
+        await Seed("order", "admin", (Amount, 100000000000000000000m));   // 1e20：× 100 超出 long，ScaledValue 為 NULL
+        await Seed("order", "admin", (Amount, 200000000000000000000m));
+        await AssertFallsBackWithSameResult(Def(groups: [G(MainF(Amount))], measures: [M("n", "countMain")]), "scaledUnavailable");
+    }
+
+    [Fact]
+    public async Task NumberConditions_AtPrecisionLimits_MatchMemoryPath()
+    {
+        await Prepare();
+        await Seed("order", "admin", (Amount, 999999999999999m));
+        await Seed("order", "admin", (Amount, 999999999999999.01m));
+        foreach (var (op, value) in new (string, object)[]
+        {
+            ("ne", 999999999999999m), ("eq", 999999999999999m), ("eq", 999999999999999.01m), ("gt", 999999999999999m),
+            ("gte", 999999999999999.01m), ("lt", 999999999999999.01m), ("lte", 999999999999999m),
+            ("between", new[] { 999999999999999m, 999999999999999.005m }),
+        })
+        {
+            var (memory, sql) = await Both(Def(measures: [M("n", "countMain"), M("s", "sum", MainF(Amount))], filters: [F(MainF(Amount), op, value)]));
+            ShouldMatch(memory, sql, $"{op} {value}");
+        }
+    }
+
+    [Fact]
+    public async Task TruncatedIndexText_NeAndGroup_FallBack()
+    {
+        await Prepare();
+        var a = new string('a', 440);
+        await Seed("order", "admin", (Note, a));
+        await Seed("order", "admin", (Note, a + "b"));
+        await AssertFallsBackWithSameResult(Def(groups: [G(MainF(Note))], measures: [M("n", "countMain")]), "textTruncated");
+        await AssertFallsBackWithSameResult(Def(measures: [M("n", "countMain")], filters: [F(MainF(Note), "ne", a)]), "textTruncated");
+    }
+
+    [Fact]
+    public async Task TruncatedIndexText_SurrogatePairAtTheLimit_FallsBack()
+    {
+        await Prepare();
+        var withEmoji = new string('a', 439) + "😀";     // 第 440 個 UTF-16 單位是高代理字元，索引只留 439 個
+        await Seed("order", "admin", (Note, withEmoji));
+        await Seed("order", "admin", (Note, new string('a', 439)));
+        await AssertFallsBackWithSameResult(Def(groups: [G(MainF(Note))], measures: [M("n", "countMain")]), "textTruncated");
+    }
+
+    [Fact]
+    public async Task ChangedFieldConfig_AfterPlanning_IsDetectedInsideTheReadSnapshot()
+    {
+        await Prepare();
+        await Seed("order", "admin", (Amount, 1.23m));
+        var query = new ReportSqlQuery(
+            new ReportSqlScope((await Db.Context.Set<Module>().SingleAsync(m => m.Key == "order")).Id, null),
+            [], [new ReportSqlMeasure("n", "countMain", null, null)], [], [], [new ReportSqlConfigStamp(Amount.Id, "Decimal|Active|9|||||")]);
+        var outcome = await Svc<IReportQueryRepository>().AggregateAsync(query, CancellationToken.None);
+        outcome.FallbackReason.Should().Be($"configChanged:{Amount.Id}");
     }
 }

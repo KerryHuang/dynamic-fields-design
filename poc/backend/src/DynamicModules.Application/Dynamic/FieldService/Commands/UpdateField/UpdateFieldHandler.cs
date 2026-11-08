@@ -119,7 +119,9 @@ public class UpdateFieldHandler(
         var old = field.Config;
         field.Config = config;
         var isIndexed = RecordIndexer.ShouldIndex(field);
-        if (wasIndexed != isIndexed) await RecordIndexBackfill.RebuildAsync(records, module, field, registry, ct);
+        // 小數位變了，索引的 ScaledValue 就是舊 Scale 換算的；同一個命令內重建，不留下「設定已改、索引未改」的狀態（報表 SQL 聚合只信索引）
+        var scaleChanged = isIndexed && ScaledNumber.Applies(field) && ScaledNumber.ScaleOf(field.Type, old) != ScaledNumber.ScaleOf(field);
+        if (wasIndexed != isIndexed || scaleChanged) await RecordIndexBackfill.RebuildAsync(records, module, field, registry, ct);
 
         // 彙總對象的型別或小數位變了：寫回重推的 ResultType、Scale；公式重算會連帶重算這些父模組，否則逐一重算
         var rederivedParents = new List<Module>();
