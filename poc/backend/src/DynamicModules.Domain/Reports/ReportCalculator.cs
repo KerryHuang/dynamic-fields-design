@@ -28,15 +28,15 @@ public static class ReportCalculator
         var buckets = new List<(List<string> Keys, List<ReportRow> Rows)>();
         if (groups.Count > 0)
         {
-            var index = new Dictionary<string, int>(StringComparer.Ordinal);
+            // 多欄鍵以整個序列比較相等，不串接成字串：值本身含分隔字元時串接會讓不同的鍵撞名
+            var index = new Dictionary<List<string>, int>(KeySequenceComparer.Instance);
             foreach (var row in rows)
                 foreach (var keys in GroupKeysOf(row, groups))
                 {
-                    var id = string.Join('\u001f', keys);
-                    if (!index.TryGetValue(id, out var i))
+                    if (!index.TryGetValue(keys, out var i))
                     {
                         i = buckets.Count;
-                        index[id] = i;
+                        index[keys] = i;
                         buckets.Add((keys, []));
                     }
                     buckets[i].Rows.Add(row);
@@ -54,6 +54,20 @@ public static class ReportCalculator
     private static bool NeedsDedupedNote(IReadOnlyList<ReportMeasure> measures, bool merged, bool multiGroup) =>
         (merged && measures.Any(m => m.Kind == "countMain" || (m.Kind is "sum" or "avg" && m.Field?.Source == "main")))
         || (multiGroup && measures.Any(m => m.Kind is "sum" or "avg" or "countMain" or "countChild"));
+
+    private sealed class KeySequenceComparer : IEqualityComparer<List<string>>
+    {
+        public static readonly KeySequenceComparer Instance = new();
+
+        public bool Equals(List<string>? x, List<string>? y) => x!.SequenceEqual(y!, StringComparer.Ordinal);
+
+        public int GetHashCode(List<string> keys)
+        {
+            var hash = new HashCode();
+            foreach (var k in keys) hash.Add(k, StringComparer.Ordinal);
+            return hash.ToHashCode();
+        }
+    }
 
     /// <summary>一列在各分組欄位的 key 組合；多選每個選項一組，所以一列可能落在多個分組。</summary>
     private static IEnumerable<List<string>> GroupKeysOf(ReportRow row, IReadOnlyList<ReportGroup> groups)

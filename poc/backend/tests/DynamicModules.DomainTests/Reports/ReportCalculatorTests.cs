@@ -236,4 +236,19 @@ public class ReportCalculatorTests
         };
         Calc(rows, [], [M("sum", Amount)], merged: false).Total["sum"].Should().Be(0.3m);
     }
+
+    [Fact]
+    public void Calculate_MultiColumnGroupKeys_ContainingTheOldSeparator_StayDistinct()
+    {
+        // 以前用 \u001f 串接多欄鍵：("a\u001fb", "c") 與 ("a", "b\u001fc") 會併成同一組
+        var rows = new List<ReportRow>
+        {
+            Row(1, null, (Amount, Txt("a\u001fb")), (Warehouse, Txt("c"))),
+            Row(2, null, (Amount, Txt("a")), (Warehouse, Txt("b\u001fc"))),
+        };
+        var r = Calc(rows, [new ReportGroup(Amount, null), new ReportGroup(Warehouse, null)], [M("countMain", null)], merged: false);
+        r.Groups.Should().HaveCount(2);
+        r.Groups.Select(g => g.GroupKeys.ToArray()).Should().BeEquivalentTo(
+            new[] { new[] { "a\u001fb", "c" }, new[] { "a", "b\u001fc" } });
+    }
 }
