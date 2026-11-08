@@ -26,4 +26,9 @@
     <ProjectReference Include="..\..\src\DynamicModules.WebAPI\DynamicModules.WebAPI.csproj" />
   </ItemGroup>
 
+  <ItemGroup>
+    <!-- 範本機制的測試資料（tests/Fixtures/templates）複製到輸出目錄的 templates/；產品本身沒有內建範本 -->
+    <None Include="..\Fixtures\templates\*.json" Link="templates\%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
 </Project>

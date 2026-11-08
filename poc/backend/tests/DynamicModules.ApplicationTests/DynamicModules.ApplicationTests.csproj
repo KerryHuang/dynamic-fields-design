@@ -31,8 +31,8 @@
   </ItemGroup>
 
   <ItemGroup>
-    <!-- 內建範本（poc/backend/templates）複製到輸出目錄的 templates/ -->
-    <None Include="..\..\templates\*.json" Link="templates\%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
+    <!-- 範本機制的測試資料（tests/Fixtures/templates）複製到輸出目錄的 templates/；產品本身沒有內建範本 -->
+    <None Include="..\Fixtures\templates\*.json" Link="templates\%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
     <!-- 內建應用程式套件（poc/backend/apps）複製到輸出目錄的 apps/：Demo 產生器會開啟 crm-sales -->
     <None Include="..\..\apps\*.app.json" Link="apps\%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>

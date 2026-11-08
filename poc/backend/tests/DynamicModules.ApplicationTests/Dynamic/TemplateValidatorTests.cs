@@ -97,7 +97,7 @@ public class TemplateValidatorTests
     }
 
     [Fact]
-    public void Catalog_LoadsFourBuiltIns() =>
+    public void Fixtures_LoadFourTemplates() =>
         TemplateCatalog.Load(TemplateCatalog.DefaultDirectory).BuiltIns.Select(t => t.Key)
             .Should().Equal("mold-care", "order", "quality", "repair");
 
