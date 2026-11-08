@@ -7,6 +7,8 @@ import { useDeleteRecord, useRecord } from 'src/application/dynamic/queries/reco
 import { useModuleSchema } from 'src/application/dynamic/queries/schema-queries';
 import PrintMenu from 'src/presentation/dynamic/print/PrintMenu.vue';
 import RecordConversions from 'src/presentation/dynamic/conversions/RecordConversions.vue';
+import RecordEffects from 'src/presentation/dynamic/events/RecordEffects.vue';
+import RecordLedger from 'src/presentation/dynamic/ledger/RecordLedger.vue';
 import DynamicDetail from 'src/presentation/dynamic/components/DynamicDetail.vue';
 import DetailTables from 'src/presentation/dynamic/details/DetailTables.vue';
 import DeleteBlockedDialog from 'src/presentation/dynamic/related/DeleteBlockedDialog.vue';
@@ -43,9 +45,11 @@ const failed = computed(() => !forbidden.value && !schemaMissing.value && !recor
   && (!!schemaQuery.error.value || !!recordQuery.error.value));
 
 // A read-only workflow state locks the record: no delete, and edit only while the user can still move the status.
+// A record an event has already posted is locked the same way (only the status may change: that is the cancel flow).
 const workflow = computed(() => schemaQuery.data.value?.workflow);
 const currentState = computed(() => (workflow.value ? recordQuery.data.value?.values[workflow.value.statusFieldKey] : undefined));
-const stateLocked = computed(() => isReadOnlyState(workflow.value, currentState.value));
+const frozen = computed(() => !!recordQuery.data.value?.frozenByEffects);
+const stateLocked = computed(() => isReadOnlyState(workflow.value, currentState.value) || frozen.value);
 const canEdit = computed(() => !!schemaQuery.data.value?.permissions.edit && (!stateLocked.value || canAdvance(workflow.value, currentState.value)));
 const canDelete = computed(() => !!schemaQuery.data.value?.permissions.delete && !stateLocked.value);
 
@@ -92,9 +96,15 @@ async function onDelete() {
         <q-icon name="lock" class="q-mr-sm" />
         <span>{{ t('dynamic.closedBanner') }}</span>
       </div>
+      <div v-if="frozen" class="row items-center no-wrap q-mb-sm text-muted" data-testid="frozen-notice">
+        <q-icon name="lock" class="q-mr-sm" />
+        <span>{{ t('ledger.frozen') }}</span>
+      </div>
+      <RecordLedger v-if="schemaQuery.data.value.ledger" :record-id="recordId" :module-key="moduleKey" />
       <RecordConversions :record-id="recordId" :row-version="recordQuery.data.value.rowVersion" :closed="schemaQuery.data.value.readOnly" />
       <DynamicDetail :schema="schemaQuery.data.value" :record="recordQuery.data.value" />
       <DetailTables v-if="schemaQuery.data.value.details?.length" class="q-mt-md" :details="schemaQuery.data.value.details" :rows="recordQuery.data.value.details ?? {}" />
+      <RecordEffects :record-id="recordId" />
       <RelatedTabs :record-id="recordId" />
       <RecordHistory :record-id="recordId" />
       <DeleteBlockedDialog v-if="blocked" :model-value="true" :blocked="blocked" @update:model-value="blocked = null" />

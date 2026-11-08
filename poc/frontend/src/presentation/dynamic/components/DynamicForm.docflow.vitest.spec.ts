@@ -84,6 +84,23 @@ describe('DynamicForm workflow', () => {
     expect(w.find('button[type="submit"]').exists()).toBe(true);
   });
 
+  it('a record an event already posted locks every field except the status, and says why', async () => {
+    const w = mountForm({ schema: schema({ workflow }), mode: 'edit', record: { ...record('opt_11'), frozenByEffects: true } });
+    await flushPromises();
+    expect(w.find('[data-testid="frozen-readonly"]').text()).toBe(zhTW.ledger.frozen);
+    expect(w.find('[data-testid="workflow-readonly"]').exists()).toBe(false);
+    expect(fieldProps(w, 'f_1').readonly).toBe(true);
+    expect(fieldProps(w, 'f_5').readonly).toBe(false);
+    expect(w.find('button[type="submit"]').exists()).toBe(true);
+  });
+
+  it('a posted record without a state machine has nothing to save', async () => {
+    const w = mountForm({ mode: 'edit', record: { ...record('opt_11'), frozenByEffects: true } });
+    await flushPromises();
+    expect(fieldProps(w, 'f_1').readonly).toBe(true);
+    expect(w.find('button[type="submit"]').exists()).toBe(false);
+  });
+
   it('a read-only state with no way out has nothing to save', async () => {
     const w = mountForm({ schema: schema({ workflow }), mode: 'edit', record: record('opt_13') });
     await flushPromises();

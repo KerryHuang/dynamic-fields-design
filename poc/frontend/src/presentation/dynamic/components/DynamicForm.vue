@@ -116,7 +116,9 @@ watch(values, (v) => { formValues.value = v as Record<string, unknown>; }, { dee
 const storedStatus = computed(() => (props.mode === 'edit' && statusKey.value ? props.record?.values[statusKey.value] : undefined));
 const statusAllowed = computed(() => selectableStates(workflow.value, props.mode, storedStatus.value));
 // A read-only state locks everything but the status field (and it only matters when the user can still advance it).
-const workflowLocked = computed(() => props.mode === 'edit' && isReadOnlyState(workflow.value, storedStatus.value));
+// A record an event has already posted is locked the same way: only the status may change (the cancel flow).
+const frozen = computed(() => props.mode === 'edit' && !!props.record?.frozenByEffects);
+const workflowLocked = computed(() => props.mode === 'edit' && (frozen.value || isReadOnlyState(workflow.value, storedStatus.value)));
 const allowedFor = (f: SchemaField) => {
   const byRules = ruleState.value.allowedOptions.get(f.id);
   return f.key === statusKey.value ? intersectAllowed(byRules, statusAllowed.value) : byRules;
@@ -206,7 +208,8 @@ watch(() => props.record, () => {
 <template>
   <form class="q-gutter-md" @submit.prevent="onSubmit">
     <div v-if="readOnlyForm" class="text-warning" data-testid="record-readonly">{{ t('dynamic.recordReadOnly') }}</div>
-    <div v-if="workflowLocked" class="text-warning" data-testid="workflow-readonly">{{ t('docflow.readOnlyState') }}</div>
+    <div v-if="frozen" class="text-warning" data-testid="frozen-readonly">{{ t('ledger.frozen') }}</div>
+    <div v-else-if="workflowLocked" class="text-warning" data-testid="workflow-readonly">{{ t('docflow.readOnlyState') }}</div>
     <div v-if="bannerLines.length" class="text-negative" data-testid="record-error">
       <div v-for="line in bannerLines" :key="line">{{ line }}</div>
     </div>
