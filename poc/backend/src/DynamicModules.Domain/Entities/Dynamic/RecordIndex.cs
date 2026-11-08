@@ -12,4 +12,6 @@ public class RecordIndex
     public long? ScaledValue { get; set; }
     public DateTime? DateValue { get; set; }
     public string? RefKey { get; set; }
+    /// <summary>TextValue 是原值被截斷後的前段（超過 <c>HandlerHelpers.MaxIndexTextLength</c>）；報表的 SQL 聚合遇到截斷列就退回記憶體路徑。</summary>
+    public bool TextTruncated { get; set; }
 }

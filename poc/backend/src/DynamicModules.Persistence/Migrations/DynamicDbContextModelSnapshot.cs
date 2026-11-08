@@ -1344,17 +1344,30 @@ namespace DynamicModules.Persistence.Migrations
                     b.Property<long?>("ScaledValue")
                         .HasColumnType("INTEGER");
 
+                    b.Property<bool>("TextTruncated")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("INTEGER")
+                        .HasDefaultValue(false);
+
                     b.Property<string>("TextValue")
                         .HasMaxLength(440)
                         .HasColumnType("TEXT");
 
                     b.HasKey("RecordId", "FieldId", "Seq");
 
+                    b.HasIndex("FieldId")
+                        .HasDatabaseName("IX_Dynamic_RecordIndex_NoScaled")
+                        .HasFilter("ScaledValue IS NULL AND NumberValue IS NOT NULL");
+
                     b.HasIndex("FieldId", "DateValue");
 
                     b.HasIndex("FieldId", "NumberValue");
 
                     b.HasIndex("FieldId", "RefKey");
+
+                    b.HasIndex("FieldId", "TextTruncated")
+                        .HasDatabaseName("IX_Dynamic_RecordIndex_Truncated")
+                        .HasFilter("TextTruncated = 1");
 
                     b.HasIndex("FieldId", "TextValue");
 

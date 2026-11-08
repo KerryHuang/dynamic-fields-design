@@ -21,11 +21,14 @@ public static class RecordIndexer
     {
         if (!values.TryGetValue(field.Key, out var value) || value is null || value.Value.ValueKind == JsonValueKind.Null)
             return [];
+        // 單值文字的索引值若與原值不同就是被截斷了（多選的原值是陣列，選項索引值不經截斷）
+        var original = value.Value.ValueKind == JsonValueKind.String ? value.Value.GetString() : null;
         return registry.Get(field.Type).ToIndex(value.Value, field).Select(v => new RecordIndex
         {
             FieldId = field.Id, Seq = v.Seq, TextValue = v.TextValue, NumberValue = v.NumberValue,
             DateValue = v.DateValue, RefKey = v.RefKey,
-            ScaledValue = v.NumberValue is null ? null : ScaledNumber.Of(field, value.Value)
+            ScaledValue = v.NumberValue is null ? null : ScaledNumber.OfExact(field, value.Value),
+            TextTruncated = original is not null && v.TextValue is not null && v.TextValue != original
         }).ToList();
     }
 }

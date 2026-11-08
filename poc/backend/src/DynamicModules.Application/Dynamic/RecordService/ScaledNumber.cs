@@ -18,6 +18,24 @@ public static class ScaledNumber
     public static int ScaleOf(FieldType type, DynamicModules.Domain.ValueObjects.FieldConfig config) =>
         type == FieldType.Integer ? 0 : Math.Clamp(config.Scale ?? 2, 0, 6);
 
+    /// <summary>
+    /// 索引用的精確換算：原值 × 10^Scale 不是整數（小數位數比目前 Scale 多，例如 Scale 被調低後的舊值）或超出 long 就回 null，
+    /// 不像 <see cref="Of"/> 四捨五入。報表的 SQL 聚合只信非 null 的 ScaledValue，所以非 null 即等於記錄值 × 10^Scale。
+    /// </summary>
+    public static long? OfExact(Field field, JsonElement value)
+    {
+        if (!Applies(field) || value.ValueKind != JsonValueKind.Number || !value.TryGetDecimal(out var d)) return null;
+        try
+        {
+            var scaled = d * Pow10(ScaleOf(field));
+            return scaled == decimal.Truncate(scaled) && scaled is >= long.MinValue and <= long.MaxValue ? (long)scaled : null;
+        }
+        catch (OverflowException)
+        {
+            return null;
+        }
+    }
+
     public static long? Of(Field field, JsonElement value)
     {
         if (!Applies(field) || value.ValueKind != JsonValueKind.Number || !value.TryGetDecimal(out var d)) return null;
