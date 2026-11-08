@@ -6,7 +6,7 @@ using Microsoft.EntityFrameworkCore;
 
 namespace DynamicModules.Persistence.Seed;
 
-/// <summary>示範人員與示範實體（使用者、群組、成員、模具、客戶）；Demo 產生器與測試共用同一份清單。</summary>
+/// <summary>示範人員與示範實體（使用者、群組、成員、客戶）；Demo 產生器與測試共用同一份清單。</summary>
 public static class DemoPeople
 {
     public static readonly (string Id, string Name)[] Users =
@@ -33,13 +33,6 @@ public static class DemoPeople
         ("inv-viewer", "進銷存查詢組", ["planner01", "sales01", "sales02"])
     ];
 
-    public static readonly (string No, string Name)[] Molds =
-    [
-        ("M-0001", "外殼上蓋模"), ("M-0002", "外殼下蓋模"), ("M-0003", "按鍵模"), ("M-0004", "電池蓋模"), ("M-0005", "支架模"),
-        ("M-0006", "射出模"), ("M-0007", "側蓋模"), ("M-0008", "旋鈕模"), ("M-0009", "面板模"),
-        ("M-0010", "底座模"), ("M-0011", "導光板模"), ("M-0012", "連接器模")
-    ];
-
     public static readonly (string No, string Name)[] Customers =
     [
         ("C-001", "嵐岳精密"), ("C-002", "恆川機械"), ("C-003", "曜陽電子"),
@@ -53,9 +46,6 @@ public static class DemoPeople
         foreach (var (id, name) in Users.Where(u => !users.Contains(u.Id)))
             db.Set<AppUser>().Add(new AppUser { UserId = id, DisplayName = name, IsDemoAccount = true });
 
-        var molds = await db.Set<MockMold>().Select(m => m.MoldNo).ToListAsync(ct);
-        foreach (var (no, name) in Molds.Where(m => !molds.Contains(m.No)))
-            db.Set<MockMold>().Add(new MockMold { MoldNo = no, Name = name });
         var customers = await db.Set<MockCustomer>().Select(c => c.CustomerNo).ToListAsync(ct);
         foreach (var (no, name) in Customers.Where(c => !customers.Contains(c.No)))
             db.Set<MockCustomer>().Add(new MockCustomer { CustomerNo = no, Name = name });
@@ -88,8 +78,6 @@ public static class DemoPeople
         conflicts.AddRange(Users.Where(u => users.Contains(u.Id)).Select(u => $"使用者 {u.Id} 已存在"));
         var groups = await db.Set<PermissionGroup>().Select(g => g.Key).ToListAsync(ct);
         conflicts.AddRange(Groups.Where(g => groups.Contains(g.Key)).Select(g => $"群組 {g.Key} 已存在"));
-        var molds = await db.Set<MockMold>().Select(m => m.MoldNo).ToListAsync(ct);
-        conflicts.AddRange(Molds.Where(m => molds.Contains(m.No)).Select(m => $"模具 {m.No} 已存在"));
         var customers = await db.Set<MockCustomer>().Select(c => c.CustomerNo).ToListAsync(ct);
         conflicts.AddRange(Customers.Where(c => customers.Contains(c.No)).Select(c => $"客戶 {c.No} 已存在"));
         return conflicts;

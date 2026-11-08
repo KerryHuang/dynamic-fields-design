@@ -37,8 +37,16 @@ public class SeedDataTests
         users.Should().ContainSingle().Which.UserId.Should().Be("admin");
         users[0].IsSystemAdmin.Should().BeTrue();
         (await db.Context.Set<PermissionGroup>().CountAsync()).Should().Be(0);
-        (await db.Context.Set<MockMold>().CountAsync()).Should().Be(0);
         (await db.Context.Set<MockCustomer>().CountAsync()).Should().Be(0);
+    }
+
+    [Fact]
+    public async Task Model_HasNoMockMoldTable()
+    {
+        // s2d-0：模具歸 MES 自己的模組，核心不再有模擬實體 design.mold 與它的表
+        await using var db = await SqliteTestDb.CreateAsync();
+
+        db.Context.Model.GetEntityTypes().Select(t => t.GetTableName()).Should().NotContain("Mock_Mold");
     }
 
     [Fact]
@@ -69,7 +77,7 @@ public class SeedDataTests
     }
 
     [Fact]
-    public async Task DemoPeople_CreatesGroupsMembersMoldsCustomers()
+    public async Task DemoPeople_CreatesGroupsMembersCustomers()
     {
         await using var db = await SqliteTestDb.CreateAsync();
         await SeedData.EnsureSeededAsync(db.Context);
@@ -93,8 +101,6 @@ public class SeedDataTests
         (await db.Context.Set<AppUser>().CountAsync()).Should().Be(12);
         (await db.Context.Set<AppUser>().Where(u => u.UserId != "admin").AllAsync(u => u.IsDemoAccount && u.PasswordHash == null))
             .Should().BeTrue();
-        (await db.Context.Set<MockMold>().Select(m => m.MoldNo).ToListAsync())
-            .Should().BeEquivalentTo(Enumerable.Range(1, 12).Select(i => $"M-{i:D4}"));
         (await db.Context.Set<MockCustomer>().Select(c => c.CustomerNo).ToListAsync())
             .Should().BeEquivalentTo(Enumerable.Range(1, 8).Select(i => $"C-{i:D3}"));
     }
@@ -103,13 +109,13 @@ public class SeedDataTests
     public async Task DemoPeople_DoesNotOverwriteExisting()
     {
         await using var db = await SqliteTestDb.CreateAsync();
-        db.Context.Set<MockMold>().Add(new MockMold { MoldNo = "M-0006", Name = "自訂名稱" });
+        db.Context.Set<MockCustomer>().Add(new MockCustomer { CustomerNo = "C-006", Name = "自訂名稱" });
         db.Context.Set<AppUser>().Add(new AppUser { UserId = "qa01", DisplayName = "自訂" });
         await db.Context.SaveChangesAsync();
 
         await DemoPeople.EnsureAsync(db.Context);
 
-        (await db.Context.Set<MockMold>().AsNoTracking().SingleAsync(m => m.MoldNo == "M-0006")).Name.Should().Be("自訂名稱");
+        (await db.Context.Set<MockCustomer>().AsNoTracking().SingleAsync(c => c.CustomerNo == "C-006")).Name.Should().Be("自訂名稱");
         (await db.Context.Set<AppUser>().AsNoTracking().SingleAsync(u => u.UserId == "qa01")).DisplayName.Should().Be("自訂");
     }
 

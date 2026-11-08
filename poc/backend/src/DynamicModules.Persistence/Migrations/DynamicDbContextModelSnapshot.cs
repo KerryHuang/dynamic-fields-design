@@ -1625,25 +1625,6 @@ namespace DynamicModules.Persistence.Migrations
                     b.ToTable("Mock_Customer", (string)null);
                 });
 
-            modelBuilder.Entity("DynamicModules.Domain.Entities.Mock.MockMold", b =>
-                {
-                    b.Property<string>("MoldNo")
-                        .HasMaxLength(20)
-                        .HasColumnType("TEXT");
-
-                    b.Property<bool>("DeleteFlag")
-                        .HasColumnType("INTEGER");
-
-                    b.Property<string>("Name")
-                        .IsRequired()
-                        .HasMaxLength(100)
-                        .HasColumnType("TEXT");
-
-                    b.HasKey("MoldNo");
-
-                    b.ToTable("Mock_Mold", (string)null);
-                });
-
             modelBuilder.Entity("DynamicModules.Domain.Entities.Dynamic.AppBlock", b =>
                 {
                     b.HasOne("DynamicModules.Domain.Entities.Dynamic.App", null)

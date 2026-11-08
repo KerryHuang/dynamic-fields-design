@@ -18,9 +18,8 @@ public class EntitiesApiTests : IClassFixture<TestApp>
 
         res.StatusCode.Should().Be(HttpStatusCode.OK);
         var items = (await JsonOf(res)).EnumerateArray().ToList();
-        items.Select(i => i.GetProperty("key").GetString()).Should().BeEquivalentTo("design.mold", "sales.customer", TestEntityProvider.Key);
-        items.Single(i => i.GetProperty("key").GetString() == "design.mold").GetProperty("name").GetProperty("zh-TW")
-            .GetString().Should().Be("模具");
+        // design.mold 已移除（s2d-0）；test.entity 是測試主機註冊的
+        items.Select(i => i.GetProperty("key").GetString()).Should().BeEquivalentTo("sales.customer", TestEntityProvider.Key);
         items.Single(i => i.GetProperty("key").GetString() == "sales.customer").GetProperty("name").GetProperty("zh-TW")
             .GetString().Should().Be("客戶");
     }
