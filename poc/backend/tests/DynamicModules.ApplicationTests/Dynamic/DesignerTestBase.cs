@@ -41,6 +41,12 @@ public abstract class DesignerTestBase : IAsyncLifetime
         public DateOnly Today => DateOnly.FromDateTime(Now);
     }
 
+    /// <summary>
+    /// 開啟時，經 <see cref="AddField"/> 建立的欄位一律勾「可篩選」（有索引），並在啟動時寫入索引回填版本列：
+    /// 報表測試用它讓同一組測試改走 SQL 聚合路徑再跑一次（報表資料庫端聚合設計 §7 第 1 項）。
+    /// </summary>
+    protected virtual bool FieldsFilterable => false;
+
     /// <summary>子類別追加或覆寫服務（例如註冊測試用的假外掛）。</summary>
     protected virtual void ConfigureServices(IServiceCollection services) { }
 
@@ -61,6 +67,14 @@ public abstract class DesignerTestBase : IAsyncLifetime
         services.AddLogging();
         ConfigureServices(services);
         _sp = services.BuildServiceProvider();
+        if (FieldsFilterable)
+        {
+            Db.Context.Add(new SystemSetting
+            {
+                Key = SystemSetting.IndexBackfillVersion, Value = DynamicModules.Application.Dynamic.RecordService.RecordIndexer.BackfillVersion
+            });
+            await Db.Context.SaveChangesAsync();
+        }
     }
 
     public async Task DisposeAsync()
@@ -109,7 +123,9 @@ public abstract class DesignerTestBase : IAsyncLifetime
     protected async Task<ServiceResult> AddField(string module, FieldType type, FieldConfig? config = null, string label = "欄位")
     {
         var m = await Detail(module);
-        return await Send(new AddFieldRequest(module, m.Blocks[0].Id, type, Text(label), config ?? new FieldConfig()));
+        config ??= new FieldConfig();
+        if (FieldsFilterable) config = config with { IsFilterable = true };
+        return await Send(new AddFieldRequest(module, m.Blocks[0].Id, type, Text(label), config));
     }
 
     /// <summary>新增並要求成功，回傳欄位回應。</summary>

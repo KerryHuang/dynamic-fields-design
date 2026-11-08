@@ -62,6 +62,7 @@ public class ReportSqlEquivalenceTests : ReportTestBase
 
     protected override void ConfigureServices(IServiceCollection services)
     {
+        base.ConfigureServices(services);
         services.AddLogging(b => b.AddProvider(new CapturingProvider(Logs)));
         services.AddScoped<RecordRepository>();
         services.AddScoped<IRecordRepository>(sp =>

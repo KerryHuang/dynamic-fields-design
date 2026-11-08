@@ -8,8 +8,14 @@ using DynamicModules.Application.Dynamic.ReportService.Data;
 using DynamicModules.Domain.Entities.Dynamic;
 using DynamicModules.Domain.Reports;
 using DynamicModules.Domain.ValueObjects;
+using DynamicModules.Application.Dynamic.RecordService;
+using DynamicModules.Domain.FieldTypes;
+using DynamicModules.Domain.Repositories.Dynamic;
+using DynamicModules.Persistence.Dynamic.Dialects;
+using DynamicModules.Persistence.Repositories.Dynamic;
 using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.DependencyInjection;
 
 namespace DynamicModules.ApplicationTests.Dynamic;
 
@@ -46,8 +52,49 @@ public abstract class ReportTestBase : DesignerTestBase
 
     protected static ReportGroup G(ReportFieldRef f, string? bucket = null) => new(f, bucket);
 
-    protected Task<ReportResult> Run(ReportDefinition d, ReportDateRange? range = null, IReadOnlyList<string>? drill = null, string? locale = null) =>
-        Svc<ReportRunner>().RunAsync(d, new ReportRunOptions(range, drill, locale), CancellationToken.None);
+    protected override void ConfigureServices(IServiceCollection services)
+    {
+        services.AddScoped<ReportQueryRepository>();
+        services.AddScoped<IReportQueryRepository>(sp => new ScopeCheckingReportQueries(sp.GetRequiredService<ReportQueryRepository>(), sp.GetRequiredService<ISqlDialect>()));
+    }
+
+    /// <summary>
+    /// SQL 版本的子類別（<see cref="DesignerTestBase.FieldsFilterable"/>）退回記憶體路徑時，原因只能是報表形狀或資料本身；
+    /// 這些原因代表測試環境沒把索引備妥（欄位沒勾可篩選、版本列沒寫），等於沒測到 SQL 路徑。
+    /// </summary>
+    private static readonly string[] SetupProblems = ["indexBackfillPending", "indexMissing", "indexIncomplete", "configChanged", "fieldNotIndexed", ReportSqlOutcome.TimeoutReason];
+
+    /// <summary>
+    /// 一般版本直接跑（引擎為預設的 Auto，欄位沒勾可篩選，所以走記憶體路徑）。
+    /// SQL 版本先用 SqlOnly 跑，形狀不能走 SQL 時（SqlOnly 丟例外）改用 Auto 重跑，並斷言走了記憶體路徑、退回原因不是環境問題；
+    /// 兩種情形都回傳結果，讓同一組斷言再驗一次（設計 §7 第 1 項）。
+    /// </summary>
+    protected async Task<ReportResult> Run(ReportDefinition d, ReportDateRange? range = null, IReadOnlyList<string>? drill = null, string? locale = null)
+    {
+        var runner = Svc<ReportRunner>();
+        var o = new ReportRunOptions(range, drill, locale);
+        if (!FieldsFilterable) return await runner.RunAsync(d, o, CancellationToken.None);
+
+        var options = Svc<ReportOptions>();
+        options.Engine = ReportEngineMode.SqlOnly;
+        try
+        {
+            return await runner.RunAsync(d, o, CancellationToken.None);
+        }
+        catch (InvalidOperationException e) when (e.Message.StartsWith("SqlOnly 模式"))
+        {
+            // 形狀不能走 SQL：下面改用 Auto
+        }
+        finally
+        {
+            options.Engine = ReportEngineMode.Auto;
+        }
+        var fallback = await runner.RunAsync(d, o, CancellationToken.None);
+        // 記憶體路徑在載入或組列時就失敗（tooMany 等）的結果不帶 Engine
+        fallback.Engine.Should().BeOneOf("memory", null);
+        (fallback.FallbackReasons ?? []).Should().NotContain(r => SetupProblems.Any(p => r.Contains(p)), "SQL 版本的測試環境要讓索引可用");
+        return fallback;
+    }
 
     protected async Task Arrange(bool salesPricing = true, bool salesReadCustomer = true, bool salesRead = true)
     {
@@ -90,6 +137,13 @@ public abstract class ReportTestBase : DesignerTestBase
 
         foreach (var key in new[] { "customer", "order", "shipment" })
             (await Send(new ActivateModuleRequest(key))).IsSuccess.Should().BeTrue();
+        // 模組自帶的標題欄位不經 AddField，SQL 版本要另外勾可篩選
+        if (FieldsFilterable)
+            foreach (var key in new[] { "customer", "order", "shipment" })
+            {
+                var title = (await Detail(key)).Blocks[0].Fields[0];
+                (await Update(title, title.Config with { IsFilterable = true })).IsSuccess.Should().BeTrue();
+            }
 
         var ctx = Db.Context;
         _salesGroup = (await ctx.Set<PermissionGroup>().SingleAsync(g => g.Key == "sales")).Id;
@@ -138,6 +192,15 @@ public abstract class ReportTestBase : DesignerTestBase
         row.StampCreated(owner, new DateTime(2026, 11, 4));
         Db.Context.Add(row);
         await Db.Context.SaveChangesAsync();
+        if (FieldsFilterable)
+        {
+            // 直接寫表不經 CreateRecordHandler，索引要自己補，SQL 路徑才看得到這筆
+            var withFields = (await Svc<IModuleRepository>().GetByKeyAsync(module, true, CancellationToken.None))!;
+            var rows = RecordIndexer.Build(withFields, RecordValueProcessor.Parse(json), Svc<FieldTypeRegistry>());
+            foreach (var index in rows) index.RecordId = row.Id;
+            Db.Context.AddRange(rows);
+            await Db.Context.SaveChangesAsync();
+        }
         return row.Id;
     }
 
@@ -579,7 +642,7 @@ public class ReportRunnerTests : ReportTestBase
     // ---- 狀態 ----
 
     [Fact]
-    public async Task Run_TooManyRows_ReturnsTooMany_NoPartialResult()
+    public virtual async Task Run_TooManyRows_ReturnsTooMany_NoPartialResult()
     {
         await Arrange();
         Svc<ReportOptions>().MaxRows = 2;
@@ -623,7 +686,7 @@ public class ReportRunnerTests : ReportTestBase
     }
 
     [Fact]
-    public async Task Run_OverMaxRowsAfterConditions_MessageSaysNarrowConditions()
+    public virtual async Task Run_OverMaxRowsAfterConditions_MessageSaysNarrowConditions()
     {
         await Arrange();
         Svc<ReportOptions>().MaxRows = 1;
@@ -636,7 +699,7 @@ public class ReportRunnerTests : ReportTestBase
     }
 
     [Fact]
-    public async Task Run_OverMaxLoadRows_TooManyEvenWithNarrowCondition_MessageDoesNotSayNarrow()
+    public virtual async Task Run_OverMaxLoadRows_TooManyEvenWithNarrowCondition_MessageDoesNotSayNarrow()
     {
         await Arrange();
         Svc<ReportOptions>().MaxLoadRows = 2;
@@ -1140,5 +1203,66 @@ public class ReportRunnerTests : ReportTestBase
         var r = await Run(Def(measures: [M("n", "countMain")]));
         r.Groups.Should().BeEmpty();
         r.DetailRows.Should().BeNull();
+    }
+}
+
+/// <summary>
+/// 報表資料庫端聚合設計 §7 第 1 項：同一組斷言改走 SQL 聚合路徑再跑一次。欄位一律勾可篩選、索引隨記錄建立；
+/// 能走 SQL 的形狀用 SqlOnly 跑，不能走的（合併子模組、帶出、明細、下鑽等）改用 Auto 並斷言走了記憶體路徑（見 <see cref="ReportTestBase.Run"/>）。
+/// </summary>
+public class ReportRunnerSqlTests : ReportRunnerTests
+{
+    protected override bool FieldsFilterable => true;
+
+    // ---- 記憶體路徑的上限：SQL 聚合刻意不受 MaxRows、MaxLoadRows 限制（設計 §10 第 1 項），分組數另以 MaxRows 為上限 ----
+
+    [Fact]
+    public override async Task Run_TooManyRows_ReturnsTooMany_NoPartialResult()
+    {
+        await Arrange();
+        Svc<ReportOptions>().MaxRows = 2;
+        foreach (var a in new[] { 1m, 2m, 3m }) await Insert("order", "admin", (Amount, a));
+        var r = await Run(Def(measures: [M("sum", "sum", MainF(Amount))]));
+        r.Engine.Should().Be("sql");
+        r.State.Should().Be("ok", "SQL 聚合不受來源筆數限制");
+        r.Total!["sum"].Should().Be(6m);
+
+        var grouped = await Run(Def(groups: [G(MainF(Amount))], measures: [M("sum", "sum", MainF(Amount))]));
+        grouped.State.Should().Be("tooMany", "三個分組超過上限 2");
+        grouped.Total.Should().BeNull();
+        grouped.Groups.Should().BeNull();
+        grouped.DetailRows.Should().BeNull();
+    }
+
+    [Fact]
+    public override async Task Run_OverMaxRowsAfterConditions_MessageSaysNarrowConditions()
+    {
+        await Arrange();
+        Svc<ReportOptions>().MaxRows = 1;
+        foreach (var a in new[] { 1m, 2m }) await Insert("order", "admin", (Amount, a));
+        (await Run(Def(measures: [M("sum", "sum", MainF(Amount))]))).State.Should().Be("ok");
+
+        var r = await Run(Def(groups: [G(MainF(Amount))], measures: [M("sum", "sum", MainF(Amount))]));
+        r.State.Should().Be("tooMany");
+        r.Message.Should().Be("資料太多，請縮小條件");
+    }
+
+    [Fact]
+    public override async Task Run_OverMaxLoadRows_TooManyEvenWithNarrowCondition_MessageDoesNotSayNarrow()
+    {
+        await Arrange();
+        Svc<ReportOptions>().MaxLoadRows = 2;
+        foreach (var a in new[] { 1m, 2m, 3m }) await Insert("order", "admin", (Amount, a));
+        var main = await Run(Def(measures: [M("sum", "sum", MainF(Amount))], filters: [F(MainF(Amount), "gte", 3)]));
+        main.Engine.Should().Be("sql");
+        main.State.Should().Be("ok", "SQL 聚合不載入記錄");
+        main.Total!["sum"].Should().Be(3m);
+
+        // 合併子模組仍走記憶體路徑；沒有主模組條件可縮小，照舊被載入上限擋下
+        Svc<ReportOptions>().MaxLoadRows = 3;
+        foreach (var q in new[] { 1, 2, 3, 4 }) await Insert("shipment", "admin", (Qty, q));
+        var child = await Run(Def(Shipments, measures: [M("n", "countChild")]));
+        child.State.Should().Be("tooMany");
+        child.Message.Should().Contain("載入上限");
     }
 }

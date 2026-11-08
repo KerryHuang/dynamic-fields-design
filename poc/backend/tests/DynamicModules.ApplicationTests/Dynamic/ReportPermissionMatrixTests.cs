@@ -490,3 +490,9 @@ public class ReportPermissionMatrixTests : ReportTestBase
         r.DetailRows![0].Should().Equal("（無權限）");
     }
 }
+
+/// <summary>報表資料庫端聚合設計 §6 保證方式第 3 項：權限矩陣改走 SQL 聚合路徑再跑一次（做法同 <see cref="ReportRunnerSqlTests"/>）。</summary>
+public class ReportPermissionMatrixSqlTests : ReportPermissionMatrixTests
+{
+    protected override bool FieldsFilterable => true;
+}
