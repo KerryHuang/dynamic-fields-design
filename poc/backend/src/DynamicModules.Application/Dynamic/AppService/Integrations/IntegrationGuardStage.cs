@@ -69,6 +69,10 @@ public class IntegrationGuardStage(
     private async Task<(bool Forward, bool Reverse)> TriggeredAsync(
         App owner, AppIntegration row, AppIntegrationDecl decl, List<JournalEntry> entries, CancellationToken ct)
     {
+        // 絕大多數寫入跟這個整合無關：先看有沒有任何一筆落在事件的來源模組，沒有就不載入對照表
+        var sourceModules = decl.Events.Select(e => owner.Modules.FirstOrDefault(m => m.Code == e.Source)?.ModuleId).OfType<long>().ToHashSet();
+        if (!entries.Any(x => sourceModules.Contains(x.ModuleId))) return (false, false);
+
         var bindings = await apps.GetBindingsAsync(owner.Id, ct);
         var items = IntegrationItems.Parse(row.ItemsJson);
         long? Field(string name) =>
