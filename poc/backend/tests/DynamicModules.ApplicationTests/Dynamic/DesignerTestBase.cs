@@ -72,10 +72,14 @@ public abstract class DesignerTestBase : IAsyncLifetime
     /// <summary>每個請求自己一個 DI scope（寫入日誌、操作識別碼都是每個請求一份，與正式環境一致）；預設共用根 scope。</summary>
     protected virtual bool ScopePerRequest => false;
 
+    /// <summary>ScopePerRequest 時，每個請求帶的 Idempotency-Key（null 為不帶）。</summary>
+    protected string? ClientKey { get; set; }
+
     protected async Task<TRes> Send<TRes>(IRequest<TRes> request)
     {
         if (!ScopePerRequest) return await _sp.GetRequiredService<IMediator>().Send(request);
         using var scope = _sp.CreateScope();
+        scope.ServiceProvider.GetRequiredService<IOperationContext>().ClientKey = ClientKey;
         return await scope.ServiceProvider.GetRequiredService<IMediator>().Send(request);
     }
 

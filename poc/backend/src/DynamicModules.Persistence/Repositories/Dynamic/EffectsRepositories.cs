@@ -7,6 +7,8 @@ namespace DynamicModules.Persistence.Repositories.Dynamic;
 
 public class EventFactRepository(DynamicDbContext db) : IEventFactRepository
 {
+    private readonly List<EventFact> _addedThisRequest = [];
+
     public Task<EventFact?> FindAsync(string eventKey, string effectCode, long sourceRecordId, long itemKey, CancellationToken ct) =>
         db.Set<EventFact>().AsNoTracking().FirstOrDefaultAsync(
             f => f.EventKey == eventKey && f.EffectCode == effectCode && f.SourceRecordId == sourceRecordId && f.ItemKey == itemKey, ct);
@@ -21,10 +23,13 @@ public class EventFactRepository(DynamicDbContext db) : IEventFactRepository
     public Task<bool> AnyBySourceAsync(long sourceRecordId, CancellationToken ct) =>
         db.Set<EventFact>().AsNoTracking().AnyAsync(f => f.SourceRecordId == sourceRecordId, ct);
 
-    public async Task<HashSet<long>> ListFrozenBeforeAsync(IReadOnlyCollection<long> sourceRecordIds, string operationId, CancellationToken ct) =>
-        (await db.Set<EventFact>().AsNoTracking()
-            .Where(f => sourceRecordIds.Contains(f.SourceRecordId) && f.OperationId != operationId)
+    public async Task<HashSet<long>> ListFrozenBeforeAsync(IReadOnlyCollection<long> sourceRecordIds, CancellationToken ct)
+    {
+        var mine = _addedThisRequest.Where(f => f.Id != 0).Select(f => f.Id).ToList();   // 已儲存的才有 Id；沒儲存的也不在資料庫裡
+        return (await db.Set<EventFact>().AsNoTracking()
+            .Where(f => sourceRecordIds.Contains(f.SourceRecordId) && !mine.Contains(f.Id))
             .Select(f => f.SourceRecordId).Distinct().ToListAsync(ct)).ToHashSet();
+    }
 
     public Task<List<EventFact>> ListByTargetAsync(long targetRecordId, CancellationToken ct) =>
         db.Set<EventFact>().AsNoTracking().Where(f => f.TargetRecordId == targetRecordId).OrderBy(f => f.Id).ToListAsync(ct);
@@ -34,7 +39,11 @@ public class EventFactRepository(DynamicDbContext db) : IEventFactRepository
             .Join(db.Set<Record>().AsNoTracking().Where(r => r.ModuleId == moduleId), f => f.SourceRecordId, r => r.Id, (f, _) => f.SourceRecordId)
             .Distinct().ToListAsync(ct)).ToHashSet();
 
-    public void Add(EventFact fact) => db.Set<EventFact>().Add(fact);
+    public void Add(EventFact fact)
+    {
+        _addedThisRequest.Add(fact);
+        db.Set<EventFact>().Add(fact);
+    }
 }
 
 public class EventRepository(DynamicDbContext db) : IEventRepository

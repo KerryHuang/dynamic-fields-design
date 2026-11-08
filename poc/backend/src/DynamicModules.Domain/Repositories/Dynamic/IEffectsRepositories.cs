@@ -24,8 +24,11 @@ public interface IEventFactRepository
     Task<List<EventFact>> ListBySourceAsync(long sourceRecordId, CancellationToken ct);
     /// <summary>這筆記錄是否已有事實（事實鎖，每次都查）。</summary>
     Task<bool> AnyBySourceAsync(long sourceRecordId, CancellationToken ct);
-    /// <summary>ids 之中，在 operationId 以外的請求就已經有事實的記錄 Id（寫入後盾用）。</summary>
-    Task<HashSet<long>> ListFrozenBeforeAsync(IReadOnlyCollection<long> sourceRecordIds, string operationId, CancellationToken ct);
+    /// <summary>
+    /// ids 之中，在這個請求之前就已經有事實的記錄 Id（寫入後盾用）。「這個請求」指這個 repository 實例（每請求一個 scope）
+    /// 經 <see cref="Add"/> 加入的事實；不用 OperationId 判斷，因為 Idempotency-Key 是客戶端給的，別的請求可以帶同一個值。
+    /// </summary>
+    Task<HashSet<long>> ListFrozenBeforeAsync(IReadOnlyCollection<long> sourceRecordIds, CancellationToken ct);
     /// <summary>事實的目標記錄 Id 為 targetRecordId 的事實（連動結果的反查）。</summary>
     Task<List<EventFact>> ListByTargetAsync(long targetRecordId, CancellationToken ct);
     /// <summary>某模組裡有事實的來源記錄 Id（定義變更的整批重算要跳過它們，設計 §10.4）。</summary>

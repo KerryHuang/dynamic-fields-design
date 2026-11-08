@@ -9,9 +9,9 @@ namespace DynamicModules.Application.Dynamic.EventService;
 
 /// <summary>
 /// 事實鎖的後盾（設計 §2 步驟 9、§4.7）：請求開始前就有事實的來源記錄，除狀態欄位與彙總之外的值被改（含公式重算、連帶清空）或被軟刪除，
-/// 整筆回滾 409。本次請求才剛記帳的來源不誤擋（事實的 OperationId 就是本次請求）。不依賴每個 handler 都記得擋。
+/// 整筆回滾 409。本次請求才剛記帳的來源不誤擋（以本請求自己加入的事實判斷，不看 OperationId：Idempotency-Key 是客戶端給的，別的請求可以重用）。不依賴每個 handler 都記得擋。
 /// </summary>
-public class FactBackstopStage(IWriteJournal journal, IEventFactRepository facts, IModuleRepository modules, IOperationContext operation) : IWriteStage
+public class FactBackstopStage(IWriteJournal journal, IEventFactRepository facts, IModuleRepository modules) : IWriteStage
 {
     public int Order => 9;
 
@@ -19,7 +19,7 @@ public class FactBackstopStage(IWriteJournal journal, IEventFactRepository facts
     {
         var candidates = JournalView.Merge(journal.Entries).Where(e => e.Kind == JournalKind.Modified && e.BeforeValues is not null).ToList();
         if (candidates.Count == 0) return null;
-        var frozen = await facts.ListFrozenBeforeAsync(candidates.Select(c => c.RecordId).ToList(), operation.OperationId, ct);
+        var frozen = await facts.ListFrozenBeforeAsync(candidates.Select(c => c.RecordId).ToList(), ct);
         foreach (var entry in candidates.Where(c => frozen.Contains(c.RecordId)))
         {
             var message = $"記錄 {entry.RecordId} 已經記帳（產生過連動記錄），這次請求改動了它的內容，已取消";
