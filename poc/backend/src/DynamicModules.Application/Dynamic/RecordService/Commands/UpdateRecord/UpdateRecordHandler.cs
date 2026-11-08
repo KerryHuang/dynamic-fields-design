@@ -18,7 +18,8 @@ namespace DynamicModules.Application.Dynamic.RecordService.Commands.UpdateRecord
 public class UpdateRecordHandler(
     IModuleRepository modules, IRecordRepository records, FieldTypeRegistry registry,
     ICurrentUser user, IBusinessTime time, IDynamicAccessGuard guard, ReferenceValidator refs, ReferenceFill fill, ReferenceResolver resolver,
-    DetailWriter details, DetailReader detailReader, RollupRecalc rollups, RecordHistoryWriter history, WorkflowEnforcer workflow)
+    DetailWriter details, DetailReader detailReader, RollupRecalc rollups, RecordHistoryWriter history, WorkflowEnforcer workflow,
+    Dynamic.LedgerService.LedgerGate ledgerGate)
     : IRequestHandler<UpdateRecordRequest, ServiceResult>
 {
     public async Task<ServiceResult> Handle(UpdateRecordRequest request, CancellationToken ct)
@@ -33,6 +34,7 @@ public class UpdateRecordHandler(
         if (access.Permissions is not { } perms) return access.Denied!;
         if (perms.OwnerUserIds is not null && !perms.OwnerUserIds.Contains(record.OwnerUserId))
             return ServiceResult.NotFound(RecordMapper.RecordNotFound);
+        if (await ledgerGate.RejectWriteAsync(module, ct) is { } ledgerLocked) return ledgerLocked;
         if (record.RowVersion != request.RowVersion) return ServiceResult.Conflict(RecordMapper.Stale);
 
         var userIds = await modules.ListUserIdsAsync(ct);

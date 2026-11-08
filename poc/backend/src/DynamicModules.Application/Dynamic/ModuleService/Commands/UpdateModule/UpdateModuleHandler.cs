@@ -10,7 +10,8 @@ using MediatR;
 namespace DynamicModules.Application.Dynamic.ModuleService.Commands.UpdateModule;
 
 public class UpdateModuleHandler(
-    IModuleRepository modules, IRecordRepository records, IPermissionRepository permissions, IUnitOfWork uow, ICurrentUser user, IBusinessTime time)
+    IModuleRepository modules, IRecordRepository records, IPermissionRepository permissions, IUnitOfWork uow, ICurrentUser user, IBusinessTime time,
+    Dynamic.LedgerService.ImmutableDataGuard immutable)
     : IRequestHandler<UpdateModuleRequest, ServiceResult>
 {
     public async Task<ServiceResult> Handle(UpdateModuleRequest request, CancellationToken ct)
@@ -20,6 +21,7 @@ public class UpdateModuleHandler(
 
         // 換標題欄位會重寫全部既有記錄的 Title；Closed 的資料唯讀，其餘欄位（名稱、圖示、區段）照常可改
         if (module.TitleFieldId != request.TitleFieldId && ClosedDataGuard.Reject(module) is { } closed) return closed;
+        if (module.TitleFieldId != request.TitleFieldId && await immutable.RejectAsync(module, ct) is { } ledgerFrozen) return ledgerFrozen;
 
         if (module.Kind == ModuleKind.Extension)
         {

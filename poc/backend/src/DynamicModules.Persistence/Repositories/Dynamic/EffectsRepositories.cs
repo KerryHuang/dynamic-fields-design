@@ -51,6 +51,17 @@ public class LedgerRepository(DynamicDbContext db) : ILedgerRepository
     public Task<List<ModuleLedger>> ListAsync(CancellationToken ct) =>
         db.Set<ModuleLedger>().AsNoTracking().ToListAsync(ct);
 
+    public Task<bool> IsLedgerModuleAsync(long moduleId, CancellationToken ct) =>
+        db.Set<ModuleLedger>().AnyAsync(l => l.ModuleId == moduleId, ct);
+
+    public Task<LedgerReversal?> FindReversalOfAsync(long originalRecordId, CancellationToken ct) =>
+        db.Set<LedgerReversal>().AsNoTracking().FirstOrDefaultAsync(r => r.OriginalRecordId == originalRecordId, ct);
+
+    public Task<LedgerReversal?> FindReversalByAsync(long reversalRecordId, CancellationToken ct) =>
+        db.Set<LedgerReversal>().AsNoTracking().FirstOrDefaultAsync(r => r.ReversalRecordId == reversalRecordId, ct);
+
+    public void AddReversal(LedgerReversal r) => db.Set<LedgerReversal>().Add(r);
+
     public void Add(ModuleLedger l) => db.Set<ModuleLedger>().Add(l);
 
     public void Remove(ModuleLedger l) => db.Set<ModuleLedger>().Remove(l);

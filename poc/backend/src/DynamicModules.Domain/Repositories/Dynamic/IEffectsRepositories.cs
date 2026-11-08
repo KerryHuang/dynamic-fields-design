@@ -30,6 +30,11 @@ public interface ILedgerRepository
     /// <summary>該模組的分錄設定，有追蹤。</summary>
     Task<ModuleLedger?> GetByModuleAsync(long moduleId, CancellationToken ct);
     Task<List<ModuleLedger>> ListAsync(CancellationToken ct);
+    /// <summary>該模組是否設定為分錄（不載入實體，寫入路徑每次都問）。</summary>
+    Task<bool> IsLedgerModuleAsync(long moduleId, CancellationToken ct);
+    Task<LedgerReversal?> FindReversalOfAsync(long originalRecordId, CancellationToken ct);
+    Task<LedgerReversal?> FindReversalByAsync(long reversalRecordId, CancellationToken ct);
+    void AddReversal(LedgerReversal r);
     void Add(ModuleLedger l);
     void Remove(ModuleLedger l);
 }

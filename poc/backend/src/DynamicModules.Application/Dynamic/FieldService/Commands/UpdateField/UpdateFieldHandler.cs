@@ -16,7 +16,7 @@ namespace DynamicModules.Application.Dynamic.FieldService.Commands.UpdateField;
 
 public class UpdateFieldHandler(
     IModuleRepository modules, IRecordRepository records, IUnitOfWork uow, FieldTypeRegistry registry, ICurrentUser user, IBusinessTime time,
-    RollupRecalc rollups)
+    RollupRecalc rollups, Dynamic.LedgerService.ImmutableDataGuard immutable)
     : IRequestHandler<UpdateFieldRequest, ServiceResult>
 {
     public async Task<ServiceResult> Handle(UpdateFieldRequest request, CancellationToken ct)
@@ -89,6 +89,8 @@ public class UpdateFieldHandler(
             && field is { Type: FieldType.Rollup, Status: FieldStatus.Active } && RollupChanged(field.Config.Rollup, config.Rollup)
             && ClosedDataGuard.Reject(module) is { } closedRollup)
             return closedRollup;
+        if ((formulaChanged || field is { Type: FieldType.Rollup, Status: FieldStatus.Active } && RollupChanged(field.Config.Rollup, config.Rollup))
+            && await immutable.RejectAsync(module, ct) is { } ledgerFrozen) return ledgerFrozen;
         foreach (var parentId in rederived.Select(r => r.ParentId).Distinct())
             if (await modules.GetByIdAsync(parentId, includeChildren: false, ct) is { } parent && ClosedDataGuard.Reject(parent) is { } closedParent)
                 return closedParent;

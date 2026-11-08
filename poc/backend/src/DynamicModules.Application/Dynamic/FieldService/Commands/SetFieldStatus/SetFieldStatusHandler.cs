@@ -16,7 +16,8 @@ using MediatR;
 namespace DynamicModules.Application.Dynamic.FieldService.Commands.SetFieldStatus;
 
 public class SetFieldStatusHandler(IModuleRepository modules, IRecordRepository records, IUnitOfWork uow, FieldTypeRegistry registry,
-    ICurrentUser user, IBusinessTime time, RollupRecalc rollups)
+    ICurrentUser user, IBusinessTime time, RollupRecalc rollups,
+    Dynamic.LedgerService.ImmutableDataGuard immutable)
     : IRequestHandler<SetFieldStatusRequest, ServiceResult>
 {
     public async Task<ServiceResult> Handle(SetFieldStatusRequest request, CancellationToken ct)
@@ -59,6 +60,7 @@ public class SetFieldStatusHandler(IModuleRepository modules, IRecordRepository 
         if (reactivated && field.Type == FieldType.Formula && await ClosedDataGuard.RejectFormulaRecalcAsync(module, modules, ct) is { } closedFormula)
             return closedFormula;
         if (reactivated && field.Type == FieldType.Rollup && ClosedDataGuard.Reject(module) is { } closedRollup) return closedRollup;
+        if (reactivated && field.Type is FieldType.Formula or FieldType.Rollup && await immutable.RejectAsync(module, ct) is { } ledgerFrozen) return ledgerFrozen;
 
         var now = time.Now;
         field.Status = request.Status;

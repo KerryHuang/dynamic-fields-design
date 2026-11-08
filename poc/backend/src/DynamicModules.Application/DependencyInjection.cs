@@ -38,6 +38,11 @@ public static class DependencyInjection
         services.AddScoped<Dynamic.EventService.EventHiddenGuard>();
         services.AddScoped<Dynamic.CheckService.CheckValidator>();
         services.AddScoped<Dynamic.LedgerService.LedgerValidator>();
+        services.AddScoped<Dynamic.LedgerService.LedgerGate>();
+        services.AddScoped<Dynamic.LedgerService.ImmutableDataGuard>();
+        services.AddScoped<Dynamic.LedgerService.LedgerReverser>();
+        services.AddScoped<Dynamic.LedgerService.LedgerBackstopStage>();
+        services.AddScoped<Common.Behaviors.IWriteStage>(sp => sp.GetRequiredService<Dynamic.LedgerService.LedgerBackstopStage>());
         services.AddSingleton<Dynamic.EventService.IEffectHandlerRegistry, Dynamic.EventService.EffectHandlerRegistry>();
         services.AddScoped<Dynamic.PrintService.PrintTemplateValidator>();
         services.AddScoped<Dynamic.References.ReferenceDeletePlanner>();

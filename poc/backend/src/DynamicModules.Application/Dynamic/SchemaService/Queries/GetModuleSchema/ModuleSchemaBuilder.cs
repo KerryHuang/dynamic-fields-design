@@ -20,7 +20,8 @@ namespace DynamicModules.Application.Dynamic.SchemaService.Queries.GetModuleSche
 /// 組執行期 schema，執行期（GetModuleSchemaHandler）與設計器預覽（GetPreviewSchemaHandler）共用；
 /// 權限由呼叫端傳入，這裡不做授權。
 /// </summary>
-public class ModuleSchemaBuilder(IModuleRepository modules, FieldTypeRegistry registry, ReferenceProviderRegistry providers)
+public class ModuleSchemaBuilder(
+    IModuleRepository modules, FieldTypeRegistry registry, ReferenceProviderRegistry providers, ILedgerRepository ledgers)
 {
     /// <param name="detailPermissions">明細模組對目前呼叫端的權限；null 表示略過該明細。</param>
     /// <param name="permittedTransitions">使用者能做的狀態轉移；null 表示全部（設計器預覽）。</param>
@@ -38,11 +39,12 @@ public class ModuleSchemaBuilder(IModuleRepository modules, FieldTypeRegistry re
                 permHash + "|" + string.Join(",", workflow.Transitions.Select(t => $"{t.From}>{t.To}"))))) [..8].ToLowerInvariant();
 
         var closed = module.Status == ModuleStatus.Closed;
+        var ledger = await ledgers.IsLedgerModuleAsync(module.Id, ct);
         return new ModuleSchemaResponse(
             module.Key, module.ProgramCode, module.NameI18n, module.Icon, titleKey, module.Version, blocks,
-            new SchemaPermissions(p.Can(PermissionAction.Read), !closed && p.Can(PermissionAction.Add), !closed && p.Can(PermissionAction.Edit),
-                !closed && p.Can(PermissionAction.Delete), p.Can(PermissionAction.PrintExport), p.Can(PermissionAction.Pricing)), rules, module.Kind, module.HostEntityKey,
-            details, workflow, closed)
+            new SchemaPermissions(p.Can(PermissionAction.Read), !closed && p.Can(PermissionAction.Add), !closed && !ledger && p.Can(PermissionAction.Edit),
+                !closed && !ledger && p.Can(PermissionAction.Delete), p.Can(PermissionAction.PrintExport), p.Can(PermissionAction.Pricing)), rules, module.Kind, module.HostEntityKey,
+            details, workflow, closed, ledger)
         { PermHash = permHash, ETagVersion = etagVersion };
     }
 

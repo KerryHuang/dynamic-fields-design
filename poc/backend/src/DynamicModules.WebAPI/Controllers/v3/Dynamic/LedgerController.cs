@@ -20,4 +20,14 @@ public class LedgerController(IMediator mediator) : ControllerBase
     [HttpDelete("modules/{key}/ledger")]
     public async Task<IActionResult> Delete(string key) =>
         (await mediator.Send(new DeleteLedgerRequest(key))).ToActionResult(this);
+
+    [HttpPost("records/{id:long}/reverse")]
+    public async Task<IActionResult> Reverse(long id, ReverseBody? body) =>
+        (await mediator.Send(new ReverseRecordRequest(id, body?.Values))).ToActionResult(this);
+
+    [HttpGet("records/{id:long}/ledger")]
+    public async Task<IActionResult> RecordLedger(long id) =>
+        (await mediator.Send(new GetRecordLedgerRequest(id))).ToActionResult(this);
 }
+
+public record ReverseBody(Dictionary<string, System.Text.Json.JsonElement?>? Values);
