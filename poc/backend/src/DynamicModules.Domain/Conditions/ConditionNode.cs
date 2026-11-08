@@ -10,7 +10,7 @@ public sealed record ConditionGroup(bool All, IReadOnlyList<ConditionNode> Child
 
 /// <summary>
 /// Values 是比較值經處理器 Normalize、ToIndex 後的索引值：between 兩個、in／notIn N 個、
-/// isEmpty／isNotEmpty 與 withinXxxDays 為空清單；contains／startsWith 是只填 TextValue 的一個值。
+/// isEmpty／isNotEmpty、beforeToday 與 withinXxxDays 為空清單；contains／startsWith 是只填 TextValue 的一個值。
 /// withinNextDays／withinLastDays 的天數放在 Days。規則條件的 value 可以是 fieldRef：此時 RefField 是被比較的欄位，Values 為空清單。
 /// </summary>
 public sealed record FieldCondition(

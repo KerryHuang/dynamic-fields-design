@@ -145,7 +145,7 @@ public static class ConditionParser
     {
         switch (op)
         {
-            case FilterOperator.IsEmpty or FilterOperator.IsNotEmpty:
+            case FilterOperator.IsEmpty or FilterOperator.IsNotEmpty or FilterOperator.BeforeToday:
                 return value is null ? ([], null) : throw bad;
 
             case FilterOperator.WithinNextDays or FilterOperator.WithinLastDays:

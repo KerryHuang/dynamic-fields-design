@@ -76,13 +76,13 @@ internal static class HandlerHelpers
     [
         FilterOperator.Eq, FilterOperator.Ne, FilterOperator.Gt, FilterOperator.Gte,
         FilterOperator.Lt, FilterOperator.Lte, FilterOperator.Between,
-        FilterOperator.WithinNextDays, FilterOperator.WithinLastDays, .. Empties
+        FilterOperator.WithinNextDays, FilterOperator.WithinLastDays, FilterOperator.BeforeToday, .. Empties
     ];
 
     public static readonly IReadOnlyList<FilterOperator> DateTimeOperators =
     [
         FilterOperator.Gt, FilterOperator.Gte, FilterOperator.Lt, FilterOperator.Lte, FilterOperator.Between,
-        FilterOperator.WithinNextDays, FilterOperator.WithinLastDays, .. Empties
+        FilterOperator.WithinNextDays, FilterOperator.WithinLastDays, FilterOperator.BeforeToday, .. Empties
     ];
 
     public static readonly IReadOnlyList<FilterOperator> BooleanOperators = [FilterOperator.Eq, .. Empties];

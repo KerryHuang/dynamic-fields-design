@@ -223,6 +223,26 @@ public class ConditionParserTests
     }
 
     [Fact]
+    public void Parse_BeforeToday_TakesNoValue()
+    {
+        var c = (FieldCondition)P("{\"field\":3,\"op\":\"beforeToday\"}").Node!;
+        c.Op.Should().Be(FilterOperator.BeforeToday);
+        c.Values.Should().BeEmpty();
+        c.Days.Should().BeNull();
+        P("{\"field\":3,\"op\":\"beforeToday\",\"value\":null}").Error.Should().BeNull();
+    }
+
+    [Theory]
+    [InlineData("0")]
+    [InlineData("\"2026-11-03\"")]
+    public void Parse_BeforeToday_WithValue_ReturnsValueError(string value) =>
+        Err($"{{\"field\":3,\"op\":\"beforeToday\",\"value\":{value}}}", "欄位 3 的條件值格式錯誤");
+
+    [Fact]
+    public void Parse_BeforeToday_OnNonDateField_Rejected() =>
+        Err("{\"field\":2,\"op\":\"beforeToday\"}", "欄位 2 不支援運算子 beforeToday");
+
+    [Fact]
     public void Parse_IsEmptyWithValue_ReturnsValueError() =>
         Err("{\"field\":1,\"op\":\"isEmpty\",\"value\":1}", "欄位 1 的條件值格式錯誤");
 
@@ -254,6 +274,14 @@ public class ConditionParserTests
     [Fact]
     public void Parse_DateFormula_WithinNextDays_Allowed() =>
         PComputed("{\"field\":22,\"op\":\"withinNextDays\",\"value\":7}").Error.Should().BeNull();
+
+    [Fact]
+    public void Parse_DateFormula_BeforeToday_Allowed() =>
+        PComputed("{\"field\":22,\"op\":\"beforeToday\"}").Error.Should().BeNull();
+
+    [Fact]
+    public void Parse_NumberFormula_BeforeToday_Rejected() =>
+        PComputed("{\"field\":21,\"op\":\"beforeToday\"}").Error.Should().Be("欄位 21 不支援運算子 beforeToday");
 
     [Fact]
     public void Parse_NumberFormula_WithinNextDays_Rejected() =>

@@ -55,6 +55,7 @@ public static class ConditionEvaluator
             FilterOperator.StartsWith => left[0].TextValue!.StartsWith(operands[0].TextValue!, StringComparison.Ordinal),
             FilterOperator.WithinNextDays => WithinDays(left[0], today, today.AddDays(c.Days!.Value)),
             FilterOperator.WithinLastDays => WithinDays(left[0], today.AddDays(-c.Days!.Value), today),
+            FilterOperator.BeforeToday => left[0].DateValue is { } d && DateOnly.FromDateTime(d) < today,
             _ => throw new InvalidOperationException($"規則條件不支援運算子 {c.Op}")
         };
     }

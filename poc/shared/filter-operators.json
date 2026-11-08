@@ -8,8 +8,8 @@
   "currency": ["eq", "ne", "gt", "gte", "lt", "lte", "between", "isEmpty", "isNotEmpty"],
   "percent": ["eq", "ne", "gt", "gte", "lt", "lte", "between", "isEmpty", "isNotEmpty"],
   "time": ["eq", "ne", "gt", "gte", "lt", "lte", "between", "isEmpty", "isNotEmpty"],
-  "date": ["eq", "ne", "gt", "gte", "lt", "lte", "between", "withinNextDays", "withinLastDays", "isEmpty", "isNotEmpty"],
-  "datetime": ["gt", "gte", "lt", "lte", "between", "withinNextDays", "withinLastDays", "isEmpty", "isNotEmpty"],
+  "date": ["eq", "ne", "gt", "gte", "lt", "lte", "between", "withinNextDays", "withinLastDays", "beforeToday", "isEmpty", "isNotEmpty"],
+  "datetime": ["gt", "gte", "lt", "lte", "between", "withinNextDays", "withinLastDays", "beforeToday", "isEmpty", "isNotEmpty"],
   "boolean": ["eq", "isEmpty", "isNotEmpty"],
   "enum": ["eq", "ne", "in", "notIn", "isEmpty", "isNotEmpty"],
   "user": ["eq", "ne", "in", "notIn", "isEmpty", "isNotEmpty"],
@@ -18,8 +18,8 @@
   "attachment": [],
   "formula": ["eq", "ne", "gt", "gte", "lt", "lte", "between", "isEmpty", "isNotEmpty"],
   "rollup": ["eq", "ne", "gt", "gte", "lt", "lte", "between", "isEmpty", "isNotEmpty"],
-  "formula:date": ["eq", "ne", "gt", "gte", "lt", "lte", "between", "withinNextDays", "withinLastDays", "isEmpty", "isNotEmpty"],
-  "rollup:date": ["eq", "ne", "gt", "gte", "lt", "lte", "between", "withinNextDays", "withinLastDays", "isEmpty", "isNotEmpty"],
+  "formula:date": ["eq", "ne", "gt", "gte", "lt", "lte", "between", "withinNextDays", "withinLastDays", "beforeToday", "isEmpty", "isNotEmpty"],
+  "rollup:date": ["eq", "ne", "gt", "gte", "lt", "lte", "between", "withinNextDays", "withinLastDays", "beforeToday", "isEmpty", "isNotEmpty"],
   "reference": ["eq", "ne", "in", "notIn", "isEmpty", "isNotEmpty"],
   "autonumber": ["eq", "ne", "in", "notIn", "contains", "startsWith", "isEmpty", "isNotEmpty"]
 }
