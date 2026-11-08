@@ -31,7 +31,11 @@ public class UpdateFieldHandler(
         var newBlock = module.Blocks.FirstOrDefault(b => b.Id == request.BlockId);
         if (newBlock is null) return FieldRules.Invalid("BlockId", "區塊不屬於此模組");
 
-        var invalid = FieldRules.CheckDefault(registry, field, request.Config, await modules.ListUserIdsAsync(ct), out var config);
+        // 設計器編不了 refGuard、存檔時也不帶：請求沒帶就保留原值，不讓存檔靜默拿掉守衛
+        var requested = request.Config.RefGuard is null && field.Config.RefGuard is { } kept
+            ? request.Config with { RefGuard = kept }
+            : request.Config;
+        var invalid = FieldRules.CheckDefault(registry, field, requested, await modules.ListUserIdsAsync(ct), out var config);
         if (invalid is not null) return invalid;
 
         var badDynamic = FieldRules.CheckDynamicDefaults(

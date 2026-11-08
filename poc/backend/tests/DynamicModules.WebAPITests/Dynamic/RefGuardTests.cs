@@ -182,6 +182,39 @@ public class RefGuardTests : IDisposable
     }
 
     [Fact]
+    public async Task Designer_SavingWithoutRefGuard_KeepsTheGuard()
+    {
+        await OpenPackage();
+        var note = await JsonOf(await _admin.GetAsync($"{Base}/modules/gate-note"));
+        var field = note.GetProperty("blocks").EnumerateArray().SelectMany(b => b.GetProperty("fields").EnumerateArray())
+            .Single(f => f.GetProperty("type").GetString() == "reference");
+        var fieldId = field.GetProperty("id").GetInt64();
+        var blockId = note.GetProperty("blocks")[0].GetProperty("id").GetInt64();
+
+        // 設計器存檔：只改標籤，config 不帶 refGuard（設計器編不了守衛）
+        var save = await _admin.PutAsJsonAsync($"{Base}/fields/{fieldId}", new
+        {
+            type = "reference", label = new Dictionary<string, string> { ["zh-TW"] = "所屬工作" }, blockId,
+            config = new { refTarget = new { kind = "module", key = "gate-task" } }
+        });
+        save.StatusCode.Should().Be(HttpStatusCode.OK, await save.Content.ReadAsStringAsync());
+
+        var after = (await JsonOf(await _admin.GetAsync($"{Base}/modules/gate-note"))).GetProperty("blocks").EnumerateArray()
+            .SelectMany(b => b.GetProperty("fields").EnumerateArray()).Single(f => f.GetProperty("id").GetInt64() == fieldId);
+        after.GetProperty("config").TryGetProperty("refGuard", out var guard).Should().BeTrue();
+        guard.ValueKind.Should().Be(JsonValueKind.Object);
+
+        var draft = await CreateTask("草稿工作", "草稿");
+        var text = note.GetProperty("blocks").EnumerateArray().SelectMany(b => b.GetProperty("fields").EnumerateArray())
+            .Single(f => f.GetProperty("type").GetString() == "text").GetProperty("key").GetString()!;
+        var blocked = await _admin.PostAsJsonAsync($"{Base}/modules/gate-note/records", new
+        {
+            values = new Dictionary<string, object?> { [text] = "掛草稿", [field.GetProperty("key").GetString()!] = draft }
+        });
+        blocked.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+    }
+
+    [Fact]
     public async Task Export_KeepsTheGuard_AndTheRoundTripStillGuards()
     {
         await OpenPackage();
