@@ -16,7 +16,7 @@ public class DemoDashboardsTests(DemoGeneratedFixture fx)
     /// <summary>各指派版主要對象的帳號（示範人員清單的成員）。</summary>
     private static readonly Dictionary<string, string> Owners = new()
     {
-        ["sales-manager"] = "manager01", ["maint"] = "maint01", ["qa"] = "qa01"
+        ["sales-manager"] = "manager01", ["maint"] = "maint01", ["qa"] = "qa01", ["planner"] = "planner01", ["ops-manager"] = "ops01"
     };
 
     private async Task<List<Dashboard>> Stored() =>

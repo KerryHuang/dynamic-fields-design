@@ -5,12 +5,13 @@ namespace DynamicModules.Application.Dynamic.DemoService;
 /// <summary>
 /// Demo 的預設指派版儀表板：登入後首頁就有內容。卡片全部引用 <see cref="DemoReports"/> 的示範報表（真實查詢結果），不寫死任何數字。
 /// 業務儀表板給業務主管與業務（同一張，業務只看到自己的訂單所以數字不同）；設備儀表板給保養與現場人員
-/// （保養費用卡片現場人員沒有金額權限，顯示無權限，其他卡片正常）；品質儀表板給品保。MIS（admin）三張都看得到。
+/// （保養費用卡片現場人員沒有金額權限，顯示無權限，其他卡片正常）；品質儀表板給品保，生產儀表板給生管與現場，進銷存儀表板給進銷存三個群組。MIS（admin）全部都看得到。
 /// 名稱是衝突檢查的依據（<see cref="DemoPreflight"/>）；順序就是 Sequence。
 /// </summary>
 public static class DemoDashboards
 {
-    public const string Sales = "業務儀表板", Equipment = "設備與保養儀表板", Quality = "品質儀表板", Crm = "CRM 儀表板";
+    public const string Sales = "業務儀表板", Equipment = "設備與保養儀表板", Quality = "品質儀表板", Crm = "CRM 儀表板",
+        Production = "生產儀表板", Inventory = "進銷存儀表板";
 
     /// <param name="ReportName">引用的示範報表名稱（<see cref="DemoReports.Spec.Name"/>）。</param>
     public sealed record CardSpec(string ReportName, string Viz, int X, int Y, int W, int H, CardOptions Options, string? Title = null);
@@ -56,6 +57,21 @@ public static class DemoDashboards
         [
             new("商機階段分布", "donut", 0, 0, 5, 4, Plain, null),
             new("各業務訂單金額（未稅）", "bar", 5, 0, 7, 4, Plain, null),
+        ]),
+        // 引用「MES 模具廠」「進銷存」套件自帶的報表
+        new(Production, ["planner", "floor", "mis"],
+        [
+            new("工令狀態分布", "donut", 0, 0, 4, 4, Plain, null),
+            new("月別完工量", "line", 4, 0, 8, 4, Plain, null),
+            new("逾期未完工工令", "table", 0, 4, 6, 4, Plain, null),
+            new("月別出貨量", "bar", 6, 4, 6, 4, Plain, null),
+        ]),
+        new(Inventory, ["ops-manager", "warehouse", "purchasing", "mis"],
+        [
+            new("庫存餘額（品項 × 倉庫）", "table", 0, 0, 6, 4, Plain, null),
+            new("月別進出量", "bar", 6, 0, 6, 4, Plain, null),
+            new("採購單狀態分布", "donut", 0, 4, 4, 4, Plain, null),
+            new("各供應商採購金額（未稅）", "bar", 4, 4, 8, 4, Plain, null),
         ]),
     ];
 
