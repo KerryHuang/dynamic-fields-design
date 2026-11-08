@@ -36,3 +36,13 @@ public record GetChecksRequest(string? Key = null, string? ModuleKey = null) : I
 {
     public PermissionAction RequiredDesignerAction => PermissionAction.Read;
 }
+
+/// <summary>試跑：目前已違規的組（至多 50 組），只回報不阻擋。Truncated 表示還有沒掃完的部分。</summary>
+public record CheckViolation(decimal Value, decimal? Limit, string Message);
+
+public record CheckScanResponse(IReadOnlyList<CheckViolation> Violations, bool Truncated);
+
+public record ScanCheckRequest(string Key) : IRequest<ServiceResult>, IDesignerRequest
+{
+    public PermissionAction RequiredDesignerAction => PermissionAction.Read;
+}

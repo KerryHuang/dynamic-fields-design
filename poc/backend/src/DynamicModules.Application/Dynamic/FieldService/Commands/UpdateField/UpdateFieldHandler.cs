@@ -16,7 +16,8 @@ namespace DynamicModules.Application.Dynamic.FieldService.Commands.UpdateField;
 
 public class UpdateFieldHandler(
     IModuleRepository modules, IRecordRepository records, IUnitOfWork uow, FieldTypeRegistry registry, ICurrentUser user, IBusinessTime time,
-    RollupRecalc rollups, Dynamic.LedgerService.ImmutableDataGuard immutable)
+    RollupRecalc rollups, Dynamic.LedgerService.ImmutableDataGuard immutable,
+    Dynamic.CheckService.CheckFieldGuard checkGuard)
     : IRequestHandler<UpdateFieldRequest, ServiceResult>
 {
     public async Task<ServiceResult> Handle(UpdateFieldRequest request, CancellationToken ct)
@@ -94,6 +95,8 @@ public class UpdateFieldHandler(
         foreach (var parentId in rederived.Select(r => r.ParentId).Distinct())
             if (await modules.GetByIdAsync(parentId, includeChildren: false, ct) is { } parent && ClosedDataGuard.Reject(parent) is { } closedParent)
                 return closedParent;
+
+        if (await checkGuard.RejectAsync(field, config, ct) is { } checkLocked) return checkLocked;
 
         var now = time.Now;
         if (newBlock.Id != oldBlock.Id)

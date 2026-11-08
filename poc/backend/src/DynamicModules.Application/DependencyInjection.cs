@@ -38,6 +38,11 @@ public static class DependencyInjection
         services.AddScoped<Dynamic.EventService.EventHiddenGuard>();
         services.AddScoped<Dynamic.CheckService.CheckValidator>();
         services.AddScoped<Dynamic.LedgerService.LedgerValidator>();
+        services.AddScoped<Dynamic.CheckService.CheckEvaluator>();
+        services.AddScoped<Dynamic.CheckService.CheckIndexer>();
+        services.AddScoped<Dynamic.CheckService.CheckFieldGuard>();
+        services.AddScoped<Dynamic.CheckService.CheckStage>();
+        services.AddScoped<Common.Behaviors.IWriteStage>(sp => sp.GetRequiredService<Dynamic.CheckService.CheckStage>());
         services.AddScoped<Dynamic.LedgerService.LedgerGate>();
         services.AddScoped<Dynamic.LedgerService.ImmutableDataGuard>();
         services.AddScoped<Dynamic.LedgerService.LedgerReverser>();

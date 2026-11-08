@@ -28,4 +28,8 @@ public class ChecksController(IMediator mediator) : ControllerBase
     [HttpDelete("checks/{key}")]
     public async Task<IActionResult> Delete(string key) =>
         (await mediator.Send(new DeleteCheckRequest(key))).ToActionResult(this);
+
+    [HttpPost("checks/{key}/scan")]
+    public async Task<IActionResult> Scan(string key) =>
+        (await mediator.Send(new ScanCheckRequest(key))).ToActionResult(this);
 }

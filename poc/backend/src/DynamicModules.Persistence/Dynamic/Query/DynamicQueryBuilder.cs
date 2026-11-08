@@ -73,6 +73,36 @@ public static class DynamicQueryBuilder
         return (countSql, pageSql, ctx.Parameters);
     }
 
+    /// <summary>
+    /// 跨記錄驗證的聚合 SQL（設計 §5.2）：組鍵與條件走和列表篩選相同的參數化子查詢；加總用索引時算好的 ScaledValue（精確整數）。
+    /// </summary>
+    public static (string sql, DynamicParameters parameters) BuildAggregate(AggregateQuery q, ISqlDialect dialect)
+    {
+        var ctx = new Ctx(dialect);
+        ctx.Parameters.Add("m", q.ModuleId);
+        var where = new StringBuilder("r.ModuleId = @m AND r.DeleteFlag = 0");
+        for (var k = 0; k < q.Group.Count; k++)
+        {
+            var (field, value) = (q.Group[k].Field, q.Group[k].Value);
+            ctx.Parameters.Add($"g{k}", field.Id);
+            if (value is null)
+            {
+                where.Append($" AND r.Id NOT IN (SELECT i.RecordId FROM Dynamic_RecordIndex i WHERE i.FieldId = @g{k})");
+                continue;
+            }
+            where.Append($" AND r.Id IN (SELECT i.RecordId FROM Dynamic_RecordIndex i WHERE i.FieldId = @g{k} AND i.{Column(field)} = {AddValue(ctx, $"gv{k}", field, value)})");
+        }
+        if (q.Where is not null) where.Append(" AND ").Append(Node(q.Where, ctx, q.Today));
+
+        if (q.SumField is null)
+            return ($"SELECT COUNT(*) AS Count, 0 AS ScaledSum, 0 AS MissingScaled FROM Dynamic_Record r WHERE {where}", ctx.Parameters);
+        ctx.Parameters.Add("sum", q.SumField.Id);
+        return ($"SELECT COUNT(*) AS Count, COALESCE(SUM(s.ScaledValue), 0) AS ScaledSum, "
+                + "COALESCE(SUM(CASE WHEN s.RecordId IS NOT NULL AND s.ScaledValue IS NULL THEN 1 ELSE 0 END), 0) AS MissingScaled "
+                + $"FROM Dynamic_Record r LEFT JOIN Dynamic_RecordIndex s ON s.RecordId = r.Id AND s.FieldId = @sum AND s.Seq = 0 WHERE {where}",
+            ctx.Parameters);
+    }
+
     private static string Node(ConditionNode node, Ctx ctx, DateOnly today) => node switch
     {
         ConditionGroup g => "(" + string.Join(g.All ? " AND " : " OR ", g.Children.Select(c => Node(c, ctx, today))) + ")",

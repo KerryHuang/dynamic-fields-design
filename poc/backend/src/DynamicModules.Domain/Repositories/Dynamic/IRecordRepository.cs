@@ -41,6 +41,22 @@ public interface IRecordRepository
     Task ReplaceIndexAsync(Record record, IReadOnlyList<RecordIndex> rows, CancellationToken ct);
     /// <summary>刪除某欄位的全部索引列，再加入 rows（rows 的 RecordId 須已填）。</summary>
     Task ReplaceFieldIndexAsync(long fieldId, IReadOnlyList<RecordIndex> rows, CancellationToken ct);
+    /// <summary>未刪除記錄中 Id 大於 afterId 的前 take 筆（依 Id 遞增，追蹤中），供分批回填索引。</summary>
+    Task<List<Record>> ListBatchByModuleAsync(long moduleId, long afterId, int take, CancellationToken ct);
+    /// <summary>刪除某欄位的全部索引列（一句 DELETE），並讓 change tracker 忘記已追蹤的舊列；分批回填的第一步。</summary>
+    Task ClearFieldIndexAsync(long fieldId, CancellationToken ct);
+    void AddIndexRows(IReadOnlyList<RecordIndex> rows);
+    /// <summary>分批回填存檔後，讓 change tracker 忘記這批記錄與它們的索引列，記憶體才不隨批次累積。</summary>
+    void ReleaseTracked(IReadOnlyList<Record> batch);
+    /// <summary>該欄位是否有「有數值卻沒有 ScaledValue」的索引列（升級前建立的索引）。</summary>
+    Task<bool> HasUnscaledIndexAsync(long fieldId, CancellationToken ct);
+    /// <summary>
+    /// 跨記錄驗證的聚合（設計 §5.2）：同一模組內未刪除、符合組鍵與條件的記錄。SQLite 整數加總溢位時丟
+    /// <see cref="AggregateOverflowException"/>。呼叫端要先把變更存進資料庫（同一個交易內）。
+    /// </summary>
+    Task<AggregateResult> AggregateAsync(AggregateQuery query, CancellationToken ct);
 }
+
+public sealed class AggregateOverflowException(Exception inner) : Exception("加總超出可計算範圍", inner);
 
 public record RecordStub(long Id, string Title, string OwnerUserId);

@@ -24,7 +24,8 @@ public static class RecordIndexer
         return registry.Get(field.Type).ToIndex(value.Value, field).Select(v => new RecordIndex
         {
             FieldId = field.Id, Seq = v.Seq, TextValue = v.TextValue, NumberValue = v.NumberValue,
-            DateValue = v.DateValue, RefKey = v.RefKey
+            DateValue = v.DateValue, RefKey = v.RefKey,
+            ScaledValue = v.NumberValue is null ? null : ScaledNumber.Of(field, value.Value)
         }).ToList();
     }
 }

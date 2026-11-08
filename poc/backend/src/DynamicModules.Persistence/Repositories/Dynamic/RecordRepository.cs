@@ -133,4 +133,48 @@ public class RecordRepository(DynamicDbContext db, ISqlDialect dialect) : IRecor
         foreach (var e in db.ChangeTracker.Entries<RecordIndex>().Where(e => match(e.Entity)).ToList())
             e.State = EntityState.Detached;
     }
+
+    public Task<List<Record>> ListBatchByModuleAsync(long moduleId, long afterId, int take, CancellationToken ct) =>
+        db.Set<Record>().Where(r => r.ModuleId == moduleId && !r.DeleteFlag && r.Id > afterId).OrderBy(r => r.Id).Take(take).ToListAsync(ct);
+
+    public async Task ClearFieldIndexAsync(long fieldId, CancellationToken ct)
+    {
+        await db.Set<RecordIndex>().Where(x => x.FieldId == fieldId).ExecuteDeleteAsync(ct);
+        Detach(x => x.FieldId == fieldId);
+    }
+
+    public void AddIndexRows(IReadOnlyList<RecordIndex> rows) => db.Set<RecordIndex>().AddRange(rows);
+
+    public void ReleaseTracked(IReadOnlyList<Record> batch)
+    {
+        var ids = batch.Select(r => r.Id).ToHashSet();
+        foreach (var e in db.ChangeTracker.Entries<RecordIndex>().Where(e => ids.Contains(e.Entity.RecordId)).ToList()) e.State = EntityState.Detached;
+        foreach (var r in batch) db.Entry(r).State = EntityState.Detached;
+    }
+
+    public Task<bool> HasUnscaledIndexAsync(long fieldId, CancellationToken ct) =>
+        db.Set<RecordIndex>().AnyAsync(x => x.FieldId == fieldId && x.NumberValue != null && x.ScaledValue == null, ct);
+
+    private sealed record AggregateRow(long Count, long ScaledSum, long MissingScaled);
+
+    public async Task<AggregateResult> AggregateAsync(AggregateQuery query, CancellationToken ct)
+    {
+        var (sql, parameters) = DynamicQueryBuilder.BuildAggregate(query, dialect);
+        var connection = db.Database.GetDbConnection();
+        var transaction = db.Database.CurrentTransaction?.GetDbTransaction();
+        await db.Database.OpenConnectionAsync(ct);
+        try
+        {
+            var row = await connection.QuerySingleAsync<AggregateRow>(new CommandDefinition(sql, parameters, transaction, cancellationToken: ct));
+            return new AggregateResult(row.Count, row.ScaledSum, row.MissingScaled);
+        }
+        catch (Microsoft.Data.Sqlite.SqliteException e) when (e.Message.Contains("integer overflow", StringComparison.OrdinalIgnoreCase))
+        {
+            throw new AggregateOverflowException(e);
+        }
+        finally
+        {
+            await db.Database.CloseConnectionAsync();
+        }
+    }
 }

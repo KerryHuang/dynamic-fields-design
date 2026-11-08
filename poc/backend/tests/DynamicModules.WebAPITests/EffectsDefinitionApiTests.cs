@@ -142,4 +142,39 @@ public class EffectsDefinitionApiTests : IClassFixture<TestApp>
         (await outsider.PostAsJsonAsync($"{Base}/records/{id}/reverse", new { })).StatusCode.Should().Be(HttpStatusCode.Forbidden);
         (await _admin.PostAsJsonAsync($"{Base}/records/999999999/reverse", new { })).StatusCode.Should().Be(HttpStatusCode.NotFound);
     }
+
+    [Fact]
+    public async Task Check_scan_endpoint_reports_existing_violations_and_save_returns_notices()
+    {
+        var m = await CreateModule(_admin);
+        var item = await AddField(_admin, m, "text");
+        var qty = await AddField(_admin, m, "decimal");
+        await Activate(_admin, m);
+        _app.GrantBusinessGroups(m);
+        var title = await TitleKey(_admin, m);
+        (await _admin.PostAsJsonAsync($"{Base}/modules/{m}/records",
+            new { values = new Dictionary<string, object> { [title] = "a", [item.Key] = "A", [qty.Key] = -2 } }))
+            .StatusCode.Should().Be(HttpStatusCode.Created);
+
+        var key = "scn-" + Guid.NewGuid().ToString("N")[..8];
+        var create = await _admin.PostAsJsonAsync($"{Base}/checks", new
+        {
+            key, name = Name(key), moduleKey = m, active = true,
+            definition = new
+            {
+                groupBy = new[] { item.Id }, function = "sum", fieldId = qty.Id,
+                assert = new { op = "gte", limit = new { @const = 0 } }, message = Name("不足")
+            }
+        });
+        create.StatusCode.Should().Be(HttpStatusCode.Created, await create.Content.ReadAsStringAsync());
+        (await JsonOf(create)).GetProperty("notices").GetArrayLength().Should().BeGreaterThan(0);
+
+        var scan = await JsonOf(await _admin.PostAsync($"{Base}/checks/{key}/scan", null));
+        scan.GetProperty("violations").GetArrayLength().Should().Be(1);
+        scan.GetProperty("violations")[0].GetProperty("value").GetDecimal().Should().Be(-2);
+        scan.GetProperty("truncated").GetBoolean().Should().BeFalse();
+
+        (await _app.AsUser("sales01").PostAsync($"{Base}/checks/{key}/scan", null)).StatusCode.Should().Be(HttpStatusCode.Forbidden);
+        (await _admin.PostAsync($"{Base}/checks/nope-nope/scan", null)).StatusCode.Should().Be(HttpStatusCode.NotFound);
+    }
 }
