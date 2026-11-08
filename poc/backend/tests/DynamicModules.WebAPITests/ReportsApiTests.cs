@@ -1637,4 +1637,28 @@ public class ReportsApiTests
             run.GetProperty("message").GetString().Should().Be("欄位型別已變更：公式乙");
         }
     }
+
+    [Fact]
+    public async Task BeforeToday_Filter_SavesWithoutValue_AndCountsOnlyDueBeforeBusinessToday()
+    {
+        using var app = new TestApp();
+        app.Clock.Fixed = new DateTime(2026, 11, 8, 10, 0, 0);
+        var w = await MakeWorld(app);
+        var admin = app.AsUser();
+        foreach (var (amount, due) in new (decimal, string?)[] { (1, "2026-11-07"), (10, "2026-11-08"), (100, "2026-11-09"), (1000, null) })
+        {
+            var values = new Dictionary<string, object> { [w.TitleKey] = "t", [w.AmountKey] = amount };
+            if (due is not null) values[$"f_{w.Due}"] = due;
+            (await admin.PostAsJsonAsync($"{Base}/modules/{w.Main}/records", new { values })).StatusCode.Should().Be(HttpStatusCode.Created);
+        }
+
+        var bad = await admin.PostAsJsonAsync(Reports, new
+        {
+            name = "逾期", definition = Def(w.Main, measures: [Sum("s", w.Amount)], filters: [new { field = Ref(w.Due), op = "beforeToday", value = 3 }])
+        });
+        bad.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+
+        var id = await Create(admin, Def(w.Main, measures: [Sum("s", w.Amount)], filters: [new { field = Ref(w.Due), op = "beforeToday", value = (object?)null }]));
+        TotalOf(await Run(admin, id), "s").Should().Be(1m);
+    }
 }

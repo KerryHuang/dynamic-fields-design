@@ -68,4 +68,43 @@ public class ViewsApiTests(TestApp app) : IClassFixture<TestApp>
         (await sales01.DeleteAsync($"{Base}/views/{id}")).StatusCode.Should().Be(HttpStatusCode.NotFound);
         (await sales01.GetAsync($"{Base}/modules/nope-nope/views")).StatusCode.Should().Be(HttpStatusCode.NotFound);
     }
+
+    [Fact]
+    public async Task BeforeToday_ViewFilter_ReturnsOnlyRecordsStrictlyBeforeBusinessToday()
+    {
+        app.Clock.Fixed = new DateTime(2026, 11, 8, 10, 0, 0);
+        var admin = app.AsUser();
+        var key = await CreateModule(admin);
+        var due = await AddField(admin, key, "date", new { isFilterable = true });
+        await Activate(admin, key);
+        var title = await TitleKey(admin, key);
+        foreach (var (name, date) in new (string, string?)[] { ("昨天", "2026-11-07"), ("今天", "2026-11-08"), ("明天", "2026-11-09"), ("很久以前", "2025-01-01"), ("未填", null) })
+        {
+            var values = new Dictionary<string, object?> { [title] = name, [due.Key] = date };
+            (await admin.PostAsJsonAsync($"{Base}/modules/{key}/records", new { values })).StatusCode.Should().Be(HttpStatusCode.Created, name);
+        }
+        var titleId = (await JsonOf(await admin.GetAsync($"{Base}/modules/{key}"))).GetProperty("titleFieldId").GetInt64();
+
+        var withValue = await admin.PostAsJsonAsync($"{Base}/modules/{key}/views", new
+        {
+            name = Name, shared = false, columns = new[] { titleId },
+            filter = new { all = new[] { new { field = due.Id, op = "beforeToday", value = (object)"2026-11-08" } } },
+            sort = Array.Empty<object>(), isDefault = false
+        });
+        withValue.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+
+        var create = await admin.PostAsJsonAsync($"{Base}/modules/{key}/views", new
+        {
+            name = Name, shared = false, columns = new[] { titleId },
+            filter = new { all = new[] { new { field = due.Id, op = "beforeToday" } } },
+            sort = Array.Empty<object>(), isDefault = false
+        });
+        create.StatusCode.Should().Be(HttpStatusCode.Created);
+        var filter = (await JsonOf(create)).GetProperty("filter").GetRawText();
+
+        var paged = await JsonOf(await admin.GetAsync(
+            $"{Base}/modules/{key}/records/paged?currentPage=1&pagesSize=50&filter={Uri.EscapeDataString(filter)}"));
+        paged.GetProperty("items").EnumerateArray().Select(r => r.GetProperty("title").GetString())
+            .Should().BeEquivalentTo(["昨天", "很久以前"]);
+    }
 }
