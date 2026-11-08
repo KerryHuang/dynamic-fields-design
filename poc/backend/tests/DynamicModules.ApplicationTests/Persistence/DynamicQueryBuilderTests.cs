@@ -40,6 +40,27 @@ public class DynamicQueryBuilderTests
         allCount.Should().NotContain("OwnerUserId");
     }
 
+    [Theory]
+    [InlineData(FieldType.Formula, "number", "NumberValue")]
+    [InlineData(FieldType.Formula, "currency", "NumberValue")]
+    [InlineData(FieldType.Formula, "date", "DateValue")]
+    [InlineData(FieldType.Rollup, "number", "NumberValue")]
+    [InlineData(FieldType.Rollup, "date", "DateValue")]
+    public void Build_ComputedFieldsCompareTheColumnTheirIndexRowsUse(FieldType type, string resultType, string column)
+    {
+        // 公式與彙總的索引列依 ResultType 存在 NumberValue 或 DateValue；比較與排序必須用同一欄，否則永遠比不到
+        var field = new Field { Id = 7, Type = type, Config = new() { ResultType = resultType } };
+        var value = resultType == "date" ? new IndexValue(0, null, null, new DateTime(2026, 11, 3), null) : new IndexValue(0, null, 5, null, null);
+        var filter = new FieldCondition(field, FilterOperator.Gte, [value], null);
+
+        var (countSql, pageSql, parameters) = DynamicQueryBuilder.Build(
+            Q(filter, sorts: [new RecordSort(field, true)]), new SqliteDialect());
+
+        foreach (var sql in new[] { countSql, pageSql }) sql.Should().Contain($"i.{column} >= @v0_0").And.NotContain("TextValue");
+        pageSql.Should().Contain($"s0.{column}");
+        parameters.Get<object>("v0_0").Should().NotBeNull();
+    }
+
     [Fact]
     public void Build_NeverEmbedsUserValuesInSql()
     {

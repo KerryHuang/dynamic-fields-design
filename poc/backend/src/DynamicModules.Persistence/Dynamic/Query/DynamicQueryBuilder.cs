@@ -59,7 +59,7 @@ public static class DynamicQueryBuilder
             }
             else
             {
-                expr = $"s{k}.{Column(sort.Field.Type)}";
+                expr = $"s{k}.{Column(sort.Field)}";
             }
             orderBy.Append($"CASE WHEN {expr} IS NULL THEN 1 ELSE 0 END, {expr} {(sort.Descending ? "DESC" : "ASC")}, ");
         }
@@ -83,10 +83,10 @@ public static class DynamicQueryBuilder
     private static string Condition(FieldCondition c, Ctx ctx, DateOnly today)
     {
         var n = ctx.Count++;
-        var col = $"i.{Column(c.Field.Type)}";
+        var col = $"i.{Column(c.Field)}";
         ctx.Parameters.Add($"f{n}", c.Field.Id);
 
-        string Val(int idx) => AddValue(ctx, $"v{n}_{idx}", c.Field.Type, c.Values[idx]);
+        string Val(int idx) => AddValue(ctx, $"v{n}_{idx}", c.Field, c.Values[idx]);
         // 不變式（R8）：每個條件都是非相關的 r.Id [NOT] IN (SELECT RecordId …) 子查詢；
         // 否定形式（ne、notIn、isEmpty）會包含沒有索引列的記錄；RecordId 為 NOT NULL，所以 NOT IN 不會踩到 NULL。
         string InSubquery(string? cmp, bool negate) =>
@@ -127,9 +127,9 @@ public static class DynamicQueryBuilder
     }
 
     /// <summary>依欄位型別取對應索引欄的值加入參數，回傳參數名稱（含 @）。</summary>
-    private static string AddValue(Ctx ctx, string name, FieldType type, IndexValue v)
+    private static string AddValue(Ctx ctx, string name, Field field, IndexValue v)
     {
-        object? value = Column(type) switch
+        object? value = Column(field) switch
         {
             "TextValue" => v.TextValue,
             "NumberValue" => v.NumberValue,
@@ -140,9 +140,10 @@ public static class DynamicQueryBuilder
         return "@" + name;
     }
 
-    /// <summary>型別 → 索引欄（白名單常數）；enum／multienum 比較用 TextValue（R1）。</summary>
-    private static string Column(FieldType type) => type switch
+    /// <summary>欄位 → 索引欄（白名單常數）；enum／multienum 比較用 TextValue（R1）。公式與彙總的索引列依 ResultType 存在 DateValue 或 NumberValue。</summary>
+    private static string Column(Field field) => field.Type switch
     {
+        FieldType.Formula or FieldType.Rollup => field.Config.ResultType == "date" ? "DateValue" : "NumberValue",
         FieldType.Integer or FieldType.Decimal or FieldType.Currency or FieldType.Percent or FieldType.Boolean => "NumberValue",
         FieldType.Date or FieldType.DateTime => "DateValue",
         FieldType.User or FieldType.Reference => "RefKey",
