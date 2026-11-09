@@ -1,0 +1,317 @@
+{
+  "format": "formwright-app",
+  "formatVersion": 6,
+  "manifest": {
+    "id": "partner",
+    "kind": "master",
+    "version": "1.0.0",
+    "name": {
+      "zh-TW": "往來對象",
+      "en-US": "Business partners",
+      "th": "คู่ค้า",
+      "vi": "Đối tác"
+    },
+    "description": {
+      "zh-TW": "客戶與供應商共用的公司資料，各應用程式在自己的區塊加欄位",
+      "en-US": "Companies shared as customers and suppliers; each app adds its own fields in its own section",
+      "th": "ข้อมูลบริษัทที่ใช้ร่วมกันทั้งลูกค้าและผู้ขาย แต่ละแอปเพิ่มฟิลด์ในส่วนของตัวเอง",
+      "vi": "Dữ liệu công ty dùng chung cho khách hàng và nhà cung cấp; mỗi ứng dụng thêm trường trong phần riêng"
+    },
+    "icon": "handshake"
+  },
+  "groups": [
+    {
+      "code": "steward",
+      "name": {
+        "zh-TW": "往來對象管理員",
+        "en-US": "Business partner stewards",
+        "th": "ผู้ดูแลข้อมูลคู่ค้า",
+        "vi": "Quản lý dữ liệu đối tác"
+      }
+    }
+  ],
+  "modules": [
+    {
+      "code": "partner",
+      "key": "master-partner",
+      "name": {
+        "zh-TW": "往來對象",
+        "en-US": "Business partners",
+        "th": "คู่ค้า",
+        "vi": "Đối tác"
+      },
+      "kind": "standalone",
+      "titleField": "name",
+      "section": "主檔",
+      "icon": "handshake",
+      "extensible": true,
+      "blocks": [
+        {
+          "code": "main",
+          "label": {
+            "zh-TW": "基本資料",
+            "en-US": "Details",
+            "th": "ข้อมูลพื้นฐาน",
+            "vi": "Thông tin cơ bản"
+          },
+          "collapsed": false,
+          "columns": 2,
+          "fields": [
+            {
+              "code": "no",
+              "type": "autonumber",
+              "label": {
+                "zh-TW": "編號",
+                "en-US": "No.",
+                "th": "เลขที่",
+                "vi": "Số"
+              },
+              "config": {
+                "format": "BP-{0000}",
+                "showInList": true,
+                "isSortable": true
+              }
+            },
+            {
+              "code": "name",
+              "type": "text",
+              "label": {
+                "zh-TW": "名稱",
+                "en-US": "Name",
+                "th": "ชื่อ",
+                "vi": "Tên"
+              },
+              "config": {
+                "required": true,
+                "showInList": true,
+                "isFilterable": true,
+                "isSortable": true
+              }
+            },
+            {
+              "code": "role",
+              "type": "enum",
+              "label": {
+                "zh-TW": "角色",
+                "en-US": "Role",
+                "th": "บทบาท",
+                "vi": "Vai trò"
+              },
+              "config": {
+                "showInList": true,
+                "isFilterable": true
+              },
+              "options": [
+                {
+                  "code": "customer",
+                  "label": {
+                    "zh-TW": "客戶",
+                    "en-US": "Customer",
+                    "th": "ลูกค้า",
+                    "vi": "Khách hàng"
+                  },
+                  "color": null
+                },
+                {
+                  "code": "supplier",
+                  "label": {
+                    "zh-TW": "供應商",
+                    "en-US": "Supplier",
+                    "th": "ผู้ขาย",
+                    "vi": "Nhà cung cấp"
+                  },
+                  "color": null
+                },
+                {
+                  "code": "both",
+                  "label": {
+                    "zh-TW": "客戶與供應商",
+                    "en-US": "Customer and supplier",
+                    "th": "ทั้งลูกค้าและผู้ขาย",
+                    "vi": "Khách hàng và nhà cung cấp"
+                  },
+                  "color": null
+                }
+              ]
+            },
+            {
+              "code": "taxId",
+              "type": "text",
+              "label": {
+                "zh-TW": "統一編號",
+                "en-US": "Tax ID",
+                "th": "เลขประจำตัวผู้เสียภาษี",
+                "vi": "Mã số thuế"
+              },
+              "config": {
+                "isFilterable": true
+              }
+            },
+            {
+              "code": "phone",
+              "type": "phone",
+              "label": {
+                "zh-TW": "電話",
+                "en-US": "Phone",
+                "th": "โทรศัพท์",
+                "vi": "Điện thoại"
+              },
+              "config": {}
+            },
+            {
+              "code": "email",
+              "type": "email",
+              "label": {
+                "zh-TW": "Email",
+                "en-US": "Email",
+                "th": "อีเมล",
+                "vi": "Email"
+              },
+              "config": {}
+            },
+            {
+              "code": "address",
+              "type": "text",
+              "label": {
+                "zh-TW": "地址",
+                "en-US": "Address",
+                "th": "ที่อยู่",
+                "vi": "Địa chỉ"
+              },
+              "config": {}
+            },
+            {
+              "code": "owner",
+              "type": "user",
+              "label": {
+                "zh-TW": "負責人",
+                "en-US": "Owner",
+                "th": "ผู้รับผิดชอบ",
+                "vi": "Người phụ trách"
+              },
+              "config": {
+                "showInList": true,
+                "isFilterable": true
+              }
+            },
+            {
+              "code": "salesPaymentTerms",
+              "type": "text",
+              "label": {
+                "zh-TW": "銷售付款條件",
+                "en-US": "Sales payment terms",
+                "th": "เงื่อนไขการชำระเงิน (ขาย)",
+                "vi": "Điều khoản thanh toán (bán)"
+              },
+              "config": {}
+            },
+            {
+              "code": "purchasePaymentTerms",
+              "type": "text",
+              "label": {
+                "zh-TW": "採購付款條件",
+                "en-US": "Purchase payment terms",
+                "th": "เงื่อนไขการชำระเงิน (ซื้อ)",
+                "vi": "Điều khoản thanh toán (mua)"
+              },
+              "config": {}
+            },
+            {
+              "code": "active",
+              "type": "boolean",
+              "label": {
+                "zh-TW": "啟用",
+                "en-US": "Active",
+                "th": "ใช้งาน",
+                "vi": "Đang dùng"
+              },
+              "config": {
+                "defaultValue": true,
+                "showInList": true,
+                "isFilterable": true
+              }
+            }
+          ]
+        }
+      ],
+      "rules": [],
+      "views": [
+        {
+          "name": {
+            "zh-TW": "客戶",
+            "en-US": "Customers",
+            "th": "ลูกค้า",
+            "vi": "Khách hàng"
+          },
+          "columns": [
+            "no",
+            "name",
+            "role",
+            "phone",
+            "owner"
+          ],
+          "filter": {
+            "field": "role",
+            "op": "in",
+            "value": [
+              "opt_customer",
+              "opt_both"
+            ]
+          },
+          "sort": [
+            {
+              "field": "no",
+              "order": "asc"
+            }
+          ],
+          "isDefault": false
+        },
+        {
+          "name": {
+            "zh-TW": "供應商",
+            "en-US": "Suppliers",
+            "th": "ผู้ขาย",
+            "vi": "Nhà cung cấp"
+          },
+          "columns": [
+            "no",
+            "name",
+            "role",
+            "phone",
+            "owner"
+          ],
+          "filter": {
+            "field": "role",
+            "op": "in",
+            "value": [
+              "opt_supplier",
+              "opt_both"
+            ]
+          },
+          "sort": [
+            {
+              "field": "no",
+              "order": "asc"
+            }
+          ],
+          "isDefault": false
+        }
+      ],
+      "permissions": [
+        {
+          "group": "steward",
+          "scope": "all",
+          "privileges": {
+            "read": true,
+            "add": true,
+            "edit": true,
+            "delete": true,
+            "printExport": true,
+            "pricing": true,
+            "approve": true
+          }
+        }
+      ]
+    }
+  ]
+}

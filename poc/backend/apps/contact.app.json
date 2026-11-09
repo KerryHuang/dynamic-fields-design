@@ -1,0 +1,270 @@
+{
+  "format": "formwright-app",
+  "formatVersion": 6,
+  "manifest": {
+    "id": "contact",
+    "kind": "master",
+    "version": "1.0.0",
+    "name": {
+      "zh-TW": "聯絡人",
+      "en-US": "Contacts",
+      "th": "ผู้ติดต่อ",
+      "vi": "Người liên hệ"
+    },
+    "description": {
+      "zh-TW": "往來對象底下的聯絡人，記得目前公司與待過哪些公司",
+      "en-US": "People at business partners, with their current company and where they worked before",
+      "th": "ผู้ติดต่อของคู่ค้า พร้อมบริษัทปัจจุบันและบริษัทที่เคยทำงาน",
+      "vi": "Người liên hệ tại đối tác, kèm công ty hiện tại và các công ty từng làm"
+    },
+    "icon": "contacts",
+    "requires": {
+      "masters": [
+        {
+          "id": "partner",
+          "modules": [
+            "partner"
+          ]
+        }
+      ]
+    }
+  },
+  "groups": [
+    {
+      "code": "steward",
+      "name": {
+        "zh-TW": "聯絡人管理員",
+        "en-US": "Contact stewards",
+        "th": "ผู้ดูแลข้อมูลผู้ติดต่อ",
+        "vi": "Quản lý dữ liệu người liên hệ"
+      }
+    }
+  ],
+  "modules": [
+    {
+      "code": "contact",
+      "key": "master-contact",
+      "name": {
+        "zh-TW": "聯絡人",
+        "en-US": "Contacts",
+        "th": "ผู้ติดต่อ",
+        "vi": "Người liên hệ"
+      },
+      "kind": "standalone",
+      "titleField": "name",
+      "section": "主檔",
+      "icon": "contacts",
+      "extensible": true,
+      "blocks": [
+        {
+          "code": "main",
+          "label": {
+            "zh-TW": "基本資料",
+            "en-US": "Details",
+            "th": "ข้อมูลพื้นฐาน",
+            "vi": "Thông tin cơ bản"
+          },
+          "collapsed": false,
+          "columns": 2,
+          "fields": [
+            {
+              "code": "name",
+              "type": "text",
+              "label": {
+                "zh-TW": "姓名",
+                "en-US": "Name",
+                "th": "ชื่อ",
+                "vi": "Tên"
+              },
+              "config": {
+                "required": true,
+                "showInList": true,
+                "isFilterable": true
+              }
+            },
+            {
+              "code": "partner",
+              "type": "reference",
+              "label": {
+                "zh-TW": "目前公司",
+                "en-US": "Current company",
+                "th": "บริษัทปัจจุบัน",
+                "vi": "Công ty hiện tại"
+              },
+              "config": {
+                "required": true,
+                "showInList": true,
+                "isFilterable": true,
+                "onDelete": "restrict",
+                "refTarget": {
+                  "kind": "module",
+                  "key": "partner",
+                  "app": "partner"
+                }
+              }
+            },
+            {
+              "code": "title",
+              "type": "text",
+              "label": {
+                "zh-TW": "職稱",
+                "en-US": "Job title",
+                "th": "ตำแหน่ง",
+                "vi": "Chức danh"
+              },
+              "config": {
+                "showInList": true
+              }
+            },
+            {
+              "code": "phone",
+              "type": "phone",
+              "label": {
+                "zh-TW": "電話",
+                "en-US": "Phone",
+                "th": "โทรศัพท์",
+                "vi": "Điện thoại"
+              },
+              "config": {}
+            },
+            {
+              "code": "email",
+              "type": "email",
+              "label": {
+                "zh-TW": "Email",
+                "en-US": "Email",
+                "th": "อีเมล",
+                "vi": "Email"
+              },
+              "config": {}
+            }
+          ]
+        }
+      ],
+      "rules": [],
+      "views": [],
+      "permissions": [
+        {
+          "group": "steward",
+          "scope": "all",
+          "privileges": {
+            "read": true,
+            "add": true,
+            "edit": true,
+            "delete": true,
+            "printExport": true,
+            "pricing": true,
+            "approve": true
+          }
+        }
+      ]
+    },
+    {
+      "code": "employment",
+      "key": "master-employment",
+      "name": {
+        "zh-TW": "任職經歷",
+        "en-US": "Employment history",
+        "th": "ประวัติการทำงาน",
+        "vi": "Quá trình làm việc"
+      },
+      "kind": "standalone",
+      "titleField": "title",
+      "section": "主檔",
+      "blocks": [
+        {
+          "code": "main",
+          "label": {
+            "zh-TW": "任職經歷",
+            "en-US": "Employment history",
+            "th": "ประวัติการทำงาน",
+            "vi": "Quá trình làm việc"
+          },
+          "collapsed": false,
+          "columns": 2,
+          "fields": [
+            {
+              "code": "contact",
+              "type": "reference",
+              "label": {
+                "zh-TW": "聯絡人",
+                "en-US": "Contact",
+                "th": "ผู้ติดต่อ",
+                "vi": "Người liên hệ"
+              },
+              "config": {
+                "relation": "detail",
+                "refTarget": {
+                  "kind": "module",
+                  "key": "contact"
+                }
+              }
+            },
+            {
+              "code": "partner",
+              "type": "reference",
+              "label": {
+                "zh-TW": "公司",
+                "en-US": "Company",
+                "th": "บริษัท",
+                "vi": "Công ty"
+              },
+              "config": {
+                "required": true,
+                "showInList": true,
+                "onDelete": "restrict",
+                "refTarget": {
+                  "kind": "module",
+                  "key": "partner",
+                  "app": "partner"
+                }
+              }
+            },
+            {
+              "code": "title",
+              "type": "text",
+              "label": {
+                "zh-TW": "職稱",
+                "en-US": "Job title",
+                "th": "ตำแหน่ง",
+                "vi": "Chức danh"
+              },
+              "config": {
+                "showInList": true
+              }
+            },
+            {
+              "code": "startDate",
+              "type": "date",
+              "label": {
+                "zh-TW": "到職日",
+                "en-US": "Start date",
+                "th": "วันที่เริ่มงาน",
+                "vi": "Ngày vào làm"
+              },
+              "config": {
+                "showInList": true
+              }
+            },
+            {
+              "code": "endDate",
+              "type": "date",
+              "label": {
+                "zh-TW": "離職日",
+                "en-US": "End date",
+                "th": "วันที่ลาออก",
+                "vi": "Ngày nghỉ việc"
+              },
+              "config": {
+                "showInList": true
+              }
+            }
+          ]
+        }
+      ],
+      "rules": [],
+      "views": [],
+      "permissions": []
+    }
+  ]
+}
