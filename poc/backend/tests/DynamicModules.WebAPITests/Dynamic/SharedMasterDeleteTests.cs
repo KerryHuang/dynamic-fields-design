@@ -416,6 +416,52 @@ public class SharedMasterDeleteTests : IDisposable
     }
 
     /// <summary>
+    /// 審查待決 10：必修 6 的拒絕路徑。公式「分數×2」接回時，新版把分數改成文字，重綁後的公式通不過一般的欄位驗證，
+    /// 整個開啟被拒絕，交易回滾：應用程式維持關閉、孤兒與舊欄位原封不動、沒有新欄位或半套設定。
+    /// </summary>
+    [Fact]
+    public async Task Reattaching_WhenTheRebindCannotBeValidated_RejectsTheWholeOpen_AndChangesNothing()
+    {
+        const string memo = """{ "code": "memo", "type": "text", "label": { "zh-TW": "備忘" }, "config": {} },""";
+        var crm = SharedMasterPackages.Crm.Replace(memo, memo
+            + """ { "code": "scoreX2", "type": "formula", "label": { "zh-TW": "分數兩倍" }, "config": { "formula": "{score} * 2", "resultType": "number" } },""");
+        foreach (var json in new[] { SharedMasterPackages.Bp, SharedMasterPackages.Ct, crm, SharedMasterPackages.Stock }) await _rig.ImportAsync(json);
+        await _rig.OpenOkAsync("crmx");
+        await _rig.OpenOkAsync("stk");
+        await _rig.CreateRecordAsync(_rig.Admin, Partner, new Dictionary<string, object>
+            { [Key("bp", "partner.name")] = "甲公司", [Key("crmx", "bp/partner.score")] = 3 });
+        var oldScore = _rig.FieldId("crmx", "bp/partner.score");
+        var scoreX2 = _rig.FieldId("crmx", "bp/partner.scoreX2");
+        await _rig.CloseOkAsync("crmx");
+        await DeleteOkAsync("crmx");
+
+        (List<string> Orphans, int Fields, string Formula) Snapshot() => _rig.Db(db => (
+            db.Set<AppOrphan>().Where(o => o.FormerAppKey == "crmx").AsEnumerable().Select(o => $"{o.Kind}:{o.Name}:{o.FieldId}:{o.OptionId}:{o.BlockId}").OrderBy(x => x).ToList(),
+            db.Set<Field>().Count(),
+            db.Set<Field>().Single(f => f.Id == scoreX2).Config.Formula ?? ""));
+        var before = Snapshot();
+        before.Formula.Should().Be($"{{{oldScore}}} * 2");
+
+        _rig.Db(db =>
+        {
+            var row = db.Set<AppPackage>().Single(p => p.Key == "crmx");
+            row.Json = row.Json.Replace("""{ "code": "score", "type": "integer",""", """{ "code": "score", "type": "text",""");
+            row.Json.Should().Contain("\"score\", \"type\": \"text\"");
+        });
+        var res = await _rig.OpenAsync("crmx");
+        res.IsSuccessStatusCode.Should().BeFalse(await res.Content.ReadAsStringAsync());
+        res.StatusCode.Should().NotBe(HttpStatusCode.InternalServerError, "是乾淨的驗證拒絕，不是未處理的例外");
+
+        _rig.StatusOf("crmx").Should().BeNull("開啟整個回滾，沒有留下應用程式列（刪除之後本來就沒有）");
+        var after = Snapshot();
+        after.Orphans.Should().Equal(before.Orphans, "孤兒沒被消耗");
+        after.Fields.Should().Be(before.Fields, "沒有新建欄位");
+        after.Formula.Should().Be(before.Formula, "公式設定沒被半套改寫");
+        FieldById(oldScore).Status.Should().Be(FieldStatus.Inactive);
+        await _rig.AssertIntegrityAsync();
+    }
+
+    /// <summary>
     /// 審查必修 7：第一版產業是下拉、留下 manufacturing 選項孤兒；第二版產業改成文字，另一個新下拉欄位合法重用 manufacturing。
     /// 型別不符時舊欄位的選項孤兒一併失去接回資格，填值後再刪一次不撞 (FormerAppKey, Kind, Name)。
     /// </summary>
