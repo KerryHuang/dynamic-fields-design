@@ -240,6 +240,32 @@ public class SharedMasterPermissionTests : IDisposable
         await _rig.AssertIntegrityAsync();
     }
 
+    /// <summary>
+    /// 第三輪 1：主檔模組上個人 Pricing 沒有逐動作範圍，改套用該使用者的讀取範圍；schema 回報的金額權限和實際遮罩一致。
+    /// 完全沒有 Pricing 的對照組看不到，schema 也回 false。
+    /// </summary>
+    [Fact]
+    public async Task APersonalPricingGrant_OnAMasterModule_UsesTheReadScope_AndTheSchemaAgrees()
+    {
+        await OpenSalesTwiceAsync("crmx", "stk");
+        var price = await AddField(_rig.Admin, Partner, "currency");
+        var admins = await _rig.CreateRecordAsync(_rig.Admin, Partner, new Dictionary<string, object>
+            { [_rig.FieldKey("bp", "partner.name")] = "甲公司", [price.Key] = 100 });
+        var sales01 = _rig.App.AsUser("sales01");
+
+        async Task<bool> SchemaPricingAsync() =>
+            (await JsonOf(await sales01.GetAsync($"{Base}/modules/{Partner}/schema"))).GetProperty("permissions").GetProperty("pricing").GetBoolean();
+
+        (await VisibleKeysAsync(sales01, admins)).Should().NotContain(price.Key, "沒有 Pricing");
+        (await SchemaPricingAsync()).Should().BeFalse();
+
+        var code = _rig.Db(db => db.Set<Module>().Single(m => m.Key == Partner).ProgramCode);
+        _rig.Db(db => { db.Set<UserProgramPrivilege>().Add(new UserProgramPrivilege { UserId = "sales01", ProgramCode = code, CanAmt = true }); });
+
+        (await VisibleKeysAsync(sales01, admins)).Should().Contain(price.Key, "個人 Pricing 套用群組的讀取 all");
+        (await SchemaPricingAsync()).Should().BeTrue("schema 回報和實際一致");
+    }
+
     [Fact]
     public async Task GetPermissions_OnAMasterModule_ReturnsActionScopes_ButNotOnOrdinaryModules()
     {

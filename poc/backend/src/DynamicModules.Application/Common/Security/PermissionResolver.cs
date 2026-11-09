@@ -46,8 +46,10 @@ public static class PermissionResolver
 
         // 金額遮罩是整個模組一起判斷、沒有逐筆遮罩：逐動作範圍下價格的範圍比這次動作的範圍窄（例如讀取 all、價格 own）時，
         // 解開遮罩會讓範圍外的記錄也露出金額，所以視同沒有價格權限（fail closed，審查必修 3）。一般模組沒有逐動作範圍，不受影響
+        // 個人 Pricing 沒有逐動作範圍，套用這位使用者的讀取範圍（模組層級的遮罩本來就只放行讀取範圍內的記錄），schema 回報與實際一致
+        var personalPricing = inputs.UserPrivilege is { CanAmt: true } up && up.ProgramCode == grantSource.ProgramCode;
         var pricing = actions.Contains(PermissionAction.Pricing)
-            && (actionScopes.Count == 0
+            && (actionScopes.Count == 0 || personalPricing
                 || actionScopes.Where(s => s.Action == PermissionAction.Pricing).Select(s => (DataScope?)s.Scope).Max() is { } pricingScope
                    && pricingScope >= scope);
 
