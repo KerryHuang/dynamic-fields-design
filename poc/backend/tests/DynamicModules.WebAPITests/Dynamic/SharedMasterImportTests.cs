@@ -88,16 +88,17 @@ public class SharedMasterImportTests : IDisposable
     }
 
     [Fact]
-    public async Task OpeningAPackageThatUsesSharedMasters_IsRefusedForNow()
+    public async Task OpeningAMasterDirectly_Is409_ButItsUserOpensAndBindsIt()
     {
         await ImportOk(AppTestPackagesV6.Master);
-        await ImportOk(AppTestPackagesV6.Crm);
-        foreach (var id in new[] { "partner-lite", "crm6-lite" })
-        {
-            var res = await _admin.PostAsJsonAsync($"{Apps}/packages/{id}/open", new { });
-            res.IsSuccessStatusCode.Should().BeFalse(id);
-            (await res.Content.ReadAsStringAsync()).Should().Contain("還不能開啟用到共用主檔的套件");
-        }
-        (await _admin.GetStringAsync($"{Apps}")).Should().NotContain("crm6-lite");
+        // 這份套件的停用貢獻欄位 credit 被同一份的公式引用，開啟時停用會被既有規則擋下（400）；這裡只驗開啟流程，改成啟用
+        await ImportOk(AppTestPackagesV6.Crm.Replace("\"config\": {}, \"active\": false }", "\"config\": {} }"));
+        var direct = await _admin.PostAsJsonAsync($"{Apps}/packages/partner-lite/open", new { });
+        direct.StatusCode.Should().Be(HttpStatusCode.Conflict);
+        (await direct.Content.ReadAsStringAsync()).Should().Contain("共用主檔");
+        var res = await _admin.PostAsJsonAsync($"{Apps}/packages/crm6-lite/open", new { });
+        res.StatusCode.Should().Be(HttpStatusCode.Created, await res.Content.ReadAsStringAsync());
+        var apps = await _admin.GetStringAsync($"{Apps}");
+        apps.Should().Contain("crm6-lite").And.Contain("partner-lite");
     }
 }

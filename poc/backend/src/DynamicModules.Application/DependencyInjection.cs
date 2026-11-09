@@ -90,6 +90,9 @@ public static class DependencyInjection
         services.AddScoped<Dynamic.AppService.AppResponseBuilder>();
         services.AddScoped<Dynamic.AppService.AppFlowInstaller>();
         services.AddScoped<Dynamic.AppService.Commands.AppOpener>();
+        services.AddScoped<Dynamic.AppService.SharedMasters.MasterSymbols>();
+        services.AddScoped<Dynamic.AppService.SharedMasters.MasterGrants>();
+        services.AddScoped<Dynamic.AppService.SharedMasters.MasterLifecycle>();
         services.AddScoped<Dynamic.AppService.Integrations.IntegrationReconciler>();
         services.AddScoped<Dynamic.AttachmentService.AttachmentUploadGate>();
         services.AddScoped<Dynamic.AppService.AppExporter>();

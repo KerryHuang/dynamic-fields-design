@@ -5,6 +5,7 @@ using DynamicModules.Application.Dynamic.AccountService.Commands.CreateGroup;
 using DynamicModules.Application.Dynamic.AccountService.Data;
 using DynamicModules.Application.Dynamic.AppService.Data;
 using DynamicModules.Application.Dynamic.AppService.Integrations;
+using DynamicModules.Application.Dynamic.AppService.SharedMasters;
 using DynamicModules.Application.Dynamic.ModuleService.Commands.ActivateModule;
 using DynamicModules.Application.Dynamic.TemplateService;
 using DynamicModules.Application.Dynamic.TemplateService.Commands.InstantiateTemplate;
@@ -41,18 +42,19 @@ public sealed record AppOpenOutcome(ServiceResult Result, TemplateIdMap? Ids);
 public class AppOpener(
     AppOpenPlanner planner, TemplateInstantiator instantiator, ISender sender, IAppRepository apps,
     AppResponseBuilder builder, AppFlowInstaller flows, IUnitOfWork uow, ICurrentUser user, IBusinessTime time,
-    IntegrationReconciler integrations)
+    IntegrationReconciler integrations, ISharedMasterRepository shared, IModuleRepository modules, IPermissionRepository permissions,
+    MasterSymbols symbols, MasterGrants grants, MasterLifecycle lifecycle)
 {
     public async Task<AppOpenOutcome> OpenAsync(string packageId, OpenAppBody body, CancellationToken ct)
     {
         TemplateIdMap? ids = null;
-        var result = await OpenCoreAsync(packageId, body, i => ids = i, ct);
+        var result = await OpenCoreAsync(packageId, body, asMaster: false, i => ids = i, ct);
         return new AppOpenOutcome(result, result.IsSuccess ? ids : null);
     }
 
-    private async Task<ServiceResult> OpenCoreAsync(string packageId, OpenAppBody body, Action<TemplateIdMap> onIds, CancellationToken ct)
+    private async Task<ServiceResult> OpenCoreAsync(string packageId, OpenAppBody body, bool asMaster, Action<TemplateIdMap> onIds, CancellationToken ct)
     {
-        var plan = await planner.PlanAsync(packageId, body, ct);
+        var plan = await planner.PlanAsync(packageId, body, ct, asMaster);
         if (plan.Failure is { } failure) return failure;
         var preview = plan.Preview;
         if (preview.Errors.Count > 0)
@@ -61,6 +63,30 @@ public class AppOpener(
 
         var package = plan.Source!.Package;
         var warnings = new List<string>(preview.Warnings);
+
+        // 共用主檔（§7）：依相依順序，不存在的自動開啟、已關閉的重新開啟、已開啟的直接綁定；全部在同一個交易內
+        var masters = new Dictionary<string, App>();
+        foreach (var id in plan.MasterOrder)
+        {
+            var master = await apps.GetByKeyAsync(id, ct);
+            if (master is null)
+            {
+                var opened = await OpenCoreAsync(id, new OpenAppBody(null, null, body.Masters.GetValueOrDefault(id), body.Locale, body.Masters),
+                    asMaster: true, _ => { }, ct);
+                if (!opened.IsSuccess) return opened;
+                if (opened.Data is AppResponse r) warnings.AddRange(r.Warnings.Select(w => $"共用主檔 {id}：{w}"));
+                master = (await apps.GetByKeyAsync(id, ct))!;
+            }
+            else if (master.Status == AppStatus.Closed)
+            {
+                await lifecycle.SetStatusAsync(master, AppStatus.Open, ct);
+                await uow.CommitAsync(ct);
+            }
+            masters[id] = master;
+        }
+        var direct = package.Manifest.Requires.Masters.Select(r => masters[r.Id]).ToList();
+        var seeds = await symbols.SeedsAsync(direct, ct);
+        var contributions = ContributionInputs(package, masters, seeds);
 
         // 群組：map 用既有的、create 建新的（Key 由 CreateGroup 自動產生）、skip 與未列出的一律不給權限
         var groupIds = new Dictionary<string, long>(plan.MappedGroups);
@@ -74,9 +100,11 @@ public class AppOpener(
 
         var overrides = package.Modules.ToDictionary(m => m.Code,
             m => new InstantiateModuleInput(m.Code, plan.FinalKeys[m.Code], null));
+        var external = new Dictionary<string, string>(plan.ExternalModuleKeys);
+        foreach (var (symbol, module) in seeds.Modules) external[symbol] = module.Key;
         var instantiated = await instantiator.InstantiateAsync(AppPackageAdapter.ToTemplate(package), overrides,
             body.ExcludeFields.ToHashSet(), ct,
-            new AppInstantiation(groupIds, plan.ExternalModuleKeys, package.FieldAccess, package.OptionScopes));
+            new AppInstantiation(groupIds, external, package.FieldAccess, package.OptionScopes, seeds, contributions));
         if (!instantiated.IsSuccess) return instantiated;
         var result = (InstantiateTemplateResponse)instantiated.Data!;
         onIds(result.Ids!);
@@ -98,7 +126,8 @@ public class AppOpener(
 
         var app = new App
         {
-            Key = package.Manifest.Id, NameI18n = package.Manifest.Name, Icon = package.Manifest.Icon,
+            Key = package.Manifest.Id, Kind = package.Manifest.IsMaster ? AppKind.Master : AppKind.App,
+            NameI18n = package.Manifest.Name, Icon = package.Manifest.Icon,
             PackageVersion = package.Manifest.Version, FormatVersion = package.FormatVersion, Source = plan.Source.Source,
             Status = AppStatus.Open, Requires = AppOpenPlanner.RequiresOf(package),
             Modules = result.Modules.Select(m => new AppModule { Code = m.Code, ModuleId = m.Id }).ToList(),
@@ -110,11 +139,12 @@ public class AppOpener(
         apps.Add(app);
         await uow.CommitAsync(ct);
 
-        // 代號對照（整合靠它解析夥伴的符號，匯出靠它保留原始代號）與整合的執行狀態；內建套件的整合預設啟用，匯入的要管理員逐一啟用
+        // 代號對照（整合靠它解析夥伴的符號，匯出靠它保留原始代號）與整合的執行狀態；內建套件的整合預設啟用，匯入的要管理員逐一啟用。
+        // 主檔的符號只是借來解析的（在主檔名下），不寫進本應用程式；貢獻的對照名稱含 /，記在本應用程式名下（§8）
         var ids2 = result.Ids!;
         apps.AddBindings(
-            ids2.FieldIds.Select(x => new AppField { AppId = app.Id, Name = x.Key, FieldId = x.Value }),
-            ids2.OptionIds.Select(x => new AppOption { AppId = app.Id, Name = x.Key, OptionId = x.Value }),
+            ids2.FieldIds.Where(x => !seeds.Fields.ContainsKey(x.Key)).Select(x => new AppField { AppId = app.Id, Name = x.Key, FieldId = x.Value }),
+            ids2.OptionIds.Where(x => !seeds.Options.ContainsKey(x.Key)).Select(x => new AppOption { AppId = app.Id, Name = x.Key, OptionId = x.Value }),
             ids2.BlockIds.Select(x => new AppBlock { AppId = app.Id, Name = x.Key, BlockId = x.Value }));
         foreach (var g in package.Integrations)
             apps.AddIntegration(new AppIntegration
@@ -122,11 +152,80 @@ public class AppOpener(
                 AppId = app.Id, Code = g.Code, Enabled = plan.Source.Source == "builtIn",
                 Status = plan.Source.Source == "builtIn" ? IntegrationStatus.Waiting : IntegrationStatus.Disabled
             });
+        foreach (var r in package.Manifest.Requires.Masters)
+            shared.AddUse(new AppMasterUse { AppId = app.Id, MasterAppId = masters[r.Id].Id });
         await uow.CommitAsync(ct);
+
+        await RecordGrantsAsync(package, app, result, contributions, ids2, groupIds, ct);
+        foreach (var moduleId in contributions.Select(c => seeds.Modules[c.Prefix].Id).Distinct())
+            await lifecycle.ResequenceBlocksAsync(moduleId, ct);
+        await uow.CommitAsync(ct);
+        if (!asMaster) await lifecycle.RecomputeAsync(ct);
+
         // 調和要在自己的 SaveChanges 之後（回滾會清掉 change tracker）；整合失敗只回報，不讓開啟失敗
         if (package.Integrations.Count > 0 || (await apps.ListIntegrationsAsync(ct)).Count > 0)
             warnings.AddRange(await integrations.ReconcileAsync(ct));
         return ServiceResult.Created(await builder.BuildAsync(app, withDependents: false, warnings, ct));
+    }
+
+    /// <summary>每筆貢獻對到主檔模組；同一個應用程式重開時，接回的孤兒在第五步（刪除與接回）補上。</summary>
+    private static List<ContributionInput> ContributionInputs(AppPackageData package, IReadOnlyDictionary<string, App> masters, InstantiationSeeds seeds) =>
+        package.Contributions.Select(c =>
+        {
+            var prefix = $"{c.Master}/{c.Module}";
+            return new ContributionInput(prefix, seeds.Modules[prefix].Key, c.Block.Code, c.Block.Name, c.Fields,
+                null, new Dictionary<string, long>(), new Dictionary<string, long>());
+        }).ToList();
+
+    /// <summary>
+    /// 權限來源記錄（§6）：主檔自己的模組權限記成 master 來源，貢獻的 permissions 記成 app 來源；之後由重算寫出有效值。
+    /// 貢獻欄位標「限定可見」，替貢獻者映射到的群組寫可見列；貢獻的 fieldAccess 照一般欄位例外寫入。
+    /// </summary>
+    private async Task RecordGrantsAsync(
+        AppPackageData package, App app, InstantiateTemplateResponse result, IReadOnlyList<ContributionInput> contributions,
+        TemplateIdMap ids, IReadOnlyDictionary<string, long> groupIds, CancellationToken ct)
+    {
+        if (package.Manifest.IsMaster)
+            foreach (var m in package.Modules)
+            {
+                var moduleId = result.Modules.First(x => x.Code == m.Code).Id;
+                foreach (var perm in m.Permissions.Where(p => groupIds.ContainsKey(p.Group)))
+                    await grants.GrantAsync(GrantSource.Master, app.Id, moduleId, groupIds[perm.Group], perm.Privileges, perm.Scope ?? DataScope.All, ct);
+            }
+
+        foreach (var c in package.Contributions)
+        {
+            var input = contributions.First(x => x.Prefix == $"{c.Master}/{c.Module}");
+            var module = (await modules.GetByKeyAsync(input.ModuleKey, includeChildren: true, ct))!;
+            var mapped = c.Permissions.Where(p => groupIds.ContainsKey(p.Group)).ToList();
+            foreach (var perm in mapped)
+                await grants.GrantAsync(GrantSource.App, app.Id, module.Id, groupIds[perm.Group], perm.Privileges, perm.Scope ?? DataScope.All, ct);
+
+            var fieldIds = c.Fields.Select(f => ids.FieldIds[TemplateService.TemplateGraph.Qualify(input.Prefix, f.Code)]).ToHashSet();
+            var visibleTo = mapped.Select(p => groupIds[p.Group]).Distinct().ToList();
+            var existing = await shared.ListFieldGrantsAsync(fieldIds, ct);
+            foreach (var field in module.Blocks.SelectMany(b => b.Fields).Where(f => fieldIds.Contains(f.Id)))
+            {
+                field.VisibilityRestricted = true;
+                foreach (var group in visibleTo.Where(g => !existing.Any(x => x.FieldId == field.Id && x.GroupId == g && x.AppId == app.Id)))
+                    shared.AddFieldGrant(new FieldGrant { SourceKind = GrantSource.App, FieldId = field.Id, GroupId = group, AppId = app.Id });
+            }
+            module.TouchVersion(user.UserId, time.Now);
+
+            if (c.FieldAccess.Count > 0)
+            {
+                var rows = await permissions.LoadModuleRowsAsync(module, ct);
+                var access = rows.FieldPermissions.ToList();
+                foreach (var a in c.FieldAccess.Where(a => groupIds.ContainsKey(a.Group) && ids.FieldIds.ContainsKey(a.Field)))
+                {
+                    var fieldId = ids.FieldIds[a.Field];
+                    access.RemoveAll(x => x.FieldId == fieldId && x.GroupId == groupIds[a.Group]);
+                    access.Add(new FieldPermission { FieldId = fieldId, GroupId = groupIds[a.Group], Access = a.Access });
+                }
+                await permissions.ReplaceModuleRowsAsync(module, rows with { FieldPermissions = access }, ct);
+            }
+        }
+        await uow.CommitAsync(ct);
     }
 
     /// <summary>模組代號依「被本套件內其他模組參照的先啟用」排序；循環時照宣告順序。</summary>

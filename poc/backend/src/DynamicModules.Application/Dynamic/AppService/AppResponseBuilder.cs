@@ -35,7 +35,10 @@ public sealed class AppResponseBuilder(IModuleRepository modules, AppDependencyC
             }
         }
         return new AppResponse(app.Key, app.NameI18n, app.Icon, app.PackageVersion, app.FormatVersion, app.Source,
-            AppMapper.StatusName(app.Status), app.RowVersion, app.Requires, members, dependents, referrers, [.. warnings ?? []], integrations);
+            AppMapper.StatusName(app.Status), app.RowVersion, app.Requires, members, dependents, referrers, [.. warnings ?? []], integrations)
+        {
+            Kind = app.Kind == AppKind.Master ? AppManifest.MasterKindName : AppManifest.AppKindName
+        };
     }
 
     public static AppPackageSummary Summarize(SourcedPackage source, string? status)

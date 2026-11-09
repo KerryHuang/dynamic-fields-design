@@ -3,8 +3,10 @@ using DynamicModules.Application.Common.Security;
 using DynamicModules.Application.Common.Time;
 using DynamicModules.Application.Dynamic.AppService.Data;
 using DynamicModules.Application.Dynamic.AppService.Integrations;
+using DynamicModules.Application.Dynamic.AppService.SharedMasters;
 using DynamicModules.Domain.Entities.Dynamic;
 using DynamicModules.Domain.Repositories.Dynamic;
+using DynamicModules.Domain.ValueObjects;
 using MediatR;
 
 namespace DynamicModules.Application.Dynamic.AppService.Commands;
@@ -21,12 +23,14 @@ public record CloseAppRequest(string Key, bool Cascade)
 /// </summary>
 public class CloseAppHandler(
     IAppRepository apps, IModuleRepository modules, AppDependencyChecker dependencies, AppResponseBuilder builder,
-    IUnitOfWork uow, ICurrentUser user, IBusinessTime time, IntegrationReconciler integrations) : IRequestHandler<CloseAppRequest, ServiceResult>
+    IUnitOfWork uow, ICurrentUser user, IBusinessTime time, IntegrationReconciler integrations, MasterLifecycle lifecycle)
+    : IRequestHandler<CloseAppRequest, ServiceResult>
 {
     public async Task<ServiceResult> Handle(CloseAppRequest request, CancellationToken ct)
     {
         var app = await apps.GetByKeyAsync(request.Key, ct);
         if (app is null) return ServiceResult.NotFound(AppMessages.NotFound);
+        if (app.Kind == AppKind.Master) return ServiceResult.Conflict(AppMessages.MasterManaged);
         if (app.Status == AppStatus.Closed)
             return ServiceResult.Success(new CloseAppResponse(await builder.BuildAsync(app, true, null, ct), [], []));
 
@@ -52,6 +56,9 @@ public class CloseAppHandler(
             target.StampModified(user.UserId, time.Now);
         }
         await uow.CommitAsync(ct);
+        // 共用主檔跟著使用者：沒有 Open 的使用者就一起關閉；關閉的應用程式授予的寫入動作從主檔模組收回（§6、§7）
+        foreach (var master in await lifecycle.RecomputeAsync(ct))
+            warnings.Add($"共用主檔「{master.NameI18n.Resolve(I18nText.FallbackLocale)}」已沒有開啟中的應用程式使用，一起關閉（資料唯讀保留）");
         warnings.AddRange(await integrations.ReconcileAsync(ct));
         return ServiceResult.Success(new CloseAppResponse(await builder.BuildAsync(app, true, null, ct),
             toClose.Select(a => a.Key).ToList(), warnings));
@@ -70,12 +77,14 @@ public record ReopenAppRequest(string Key)
 /// </summary>
 public class ReopenAppHandler(
     IAppRepository apps, IModuleRepository modules, IProgramRepository programs, AppDependencyChecker dependencies,
-    AppResponseBuilder builder, IUnitOfWork uow, ICurrentUser user, IBusinessTime time, IntegrationReconciler integrations) : IRequestHandler<ReopenAppRequest, ServiceResult>
+    AppResponseBuilder builder, IUnitOfWork uow, ICurrentUser user, IBusinessTime time, IntegrationReconciler integrations,
+    MasterLifecycle lifecycle) : IRequestHandler<ReopenAppRequest, ServiceResult>
 {
     public async Task<ServiceResult> Handle(ReopenAppRequest request, CancellationToken ct)
     {
         var app = await apps.GetByKeyAsync(request.Key, ct);
         if (app is null) return ServiceResult.NotFound(AppMessages.NotFound);
+        if (app.Kind == AppKind.Master) return ServiceResult.Conflict(AppMessages.MasterManaged);
         if (app.Status == AppStatus.Open) return ServiceResult.Success(await builder.BuildAsync(app, true, null, ct));
 
         var requirement = await dependencies.CheckRequirementsAsync(app.Requires, ct);
@@ -94,6 +103,8 @@ public class ReopenAppHandler(
         app.TouchRowVersion();
         app.StampModified(user.UserId, time.Now);
         await uow.CommitAsync(ct);
+        // 主檔若已關閉先重開（閉包重算），它授予的寫入動作恢復（§6、§7）
+        await lifecycle.RecomputeAsync(ct);
         var warnings = await integrations.ReconcileAsync(ct);
         return ServiceResult.Success(await builder.BuildAsync(app, true, warnings, ct));
     }

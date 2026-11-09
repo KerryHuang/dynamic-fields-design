@@ -14,21 +14,28 @@ namespace DynamicModules.Application.Dynamic.AppService;
 public sealed partial class AppOpenPlanner(
     AppPackageSource packages, IAppRepository apps, IModuleRepository modules, IPermissionRepository permissions,
     IAccountRepository accounts, AppDependencyChecker dependencies, IConversionRepository conversions,
-    IEventRepository events, ICheckRepository checks)
+    IEventRepository events, ICheckRepository checks, SharedMasters.MasterSymbols symbols)
 {
     [GeneratedRegex(ModuleRules.ModuleKeyPattern)]
     private static partial Regex ModuleKey();
 
+    /// <param name="MasterOrder">要先開啟或綁定的共用主檔 id，被依賴的在前（含經主檔間接需要的）。</param>
     public sealed record Plan(
         ServiceResult? Failure, SourcedPackage? Source, IReadOnlyDictionary<string, string> FinalKeys,
-        IReadOnlyDictionary<string, string> ExternalModuleKeys, OpenPreview Preview, IReadOnlyDictionary<string, long> MappedGroups);
+        IReadOnlyDictionary<string, string> ExternalModuleKeys, OpenPreview Preview, IReadOnlyDictionary<string, long> MappedGroups,
+        IReadOnlyList<string>? MasterOrder = null)
+    {
+        public IReadOnlyList<string> MasterOrder { get; init; } = MasterOrder ?? [];
+    }
 
     private static readonly OpenPreview Empty = new([], [], [], [], [], []);
 
-    public async Task<Plan> PlanAsync(string packageId, OpenAppBody body, CancellationToken ct)
+    /// <param name="asMaster">由使用者套件自動開啟主檔時為 true；直接開啟主檔套件一律 409（主檔由使用它的應用程式管理）。</param>
+    public async Task<Plan> PlanAsync(string packageId, OpenAppBody body, CancellationToken ct, bool asMaster = false)
     {
         var source = await packages.FindAsync(packageId, ct);
         if (source is null) return Fail(ServiceResult.NotFound(AppMessages.PackageNotFound));
+        if (source.Package.Manifest.IsMaster && !asMaster) return Fail(ServiceResult.Conflict(AppMessages.MasterManaged));
 
         var existing = await apps.GetByKeyAsync(source.Package.Manifest.Id, ct);
         if (existing is not null)
@@ -37,11 +44,12 @@ public sealed partial class AppOpenPlanner(
                 new { key = existing.Key, status = AppMapper.StatusName(existing.Status) }));
 
         var package = source.Package;
-        var validation = AppPackageValidator.Validate(package);
+        // 主檔定義：目錄與匯入套件裡的主檔；引用的主檔欄位與選項都要找得到（共用主檔 §4.6）
+        var knownMasters = (await packages.ListAsync(ct)).Where(k => k.Package.Manifest.IsMaster)
+            .GroupBy(k => k.Package.Manifest.Id).ToDictionary(g => g.Key, g => g.First().Package);
+        var validation = AppPackageValidator.Validate(package, knownMasters);
         var warnings = new List<string>(validation.Warnings);
         var errors = new List<string>(validation.Errors);
-        // 共用主檔的開啟、綁定與貢獻還沒實作（設計 §15.3 第 4 步）：先整份擋下，不能開成「看起來有主檔、其實沒有」
-        if (UsesSharedMasters(package)) errors.Add(AppMessages.SharedMastersNotYetSupported);
         if (errors.Count > 0)
             return new Plan(null, source, new Dictionary<string, string>(), new Dictionary<string, string>(), Empty with { Errors = errors }, new Dictionary<string, long>());
 
@@ -75,6 +83,8 @@ public sealed partial class AppOpenPlanner(
 
         var requires = RequiresOf(package);
         var requirement = await dependencies.CheckRequirementsAsync(requires, ct);
+        var masters = await MastersAsync(package, knownMasters, ct);
+        var unbound = await UnboundAsync(package, knownMasters, validation.Errors, ct);
 
         var existingGroups = await permissions.ListGroupsAsync(ct);
         var suggestions = package.Groups.Select(g =>
@@ -108,7 +118,70 @@ public sealed partial class AppOpenPlanner(
             warnings.Add($"群組「{g.Code}」沒有對應，已略過（不給任何人權限）");
 
         return new Plan(null, source, finalKeys, requirement.ExternalModuleKeys,
-            new OpenPreview(errors, conflicts, hostConflicts, requirement.Missing, suggestions, warnings), mapped);
+            new OpenPreview(errors, conflicts, hostConflicts, [.. requirement.Missing, .. masters.Missing], suggestions, warnings,
+                masters.Previews, unbound), mapped, masters.Order);
+    }
+
+    private sealed record MasterPlan(List<string> Order, List<MissingDependency> Missing, List<MasterPreview> Previews);
+
+    /// <summary>
+    /// requires.masters 的主檔，連同主檔自己的 requires.masters，依相依順序（被依賴的在前）。已開啟的直接綁定、已關閉的重開；
+    /// 還沒有的要在目錄或匯入套件裡找到主檔套件，否則 masterNotAvailable。
+    /// </summary>
+    private async Task<MasterPlan> MastersAsync(AppPackageData package, IReadOnlyDictionary<string, AppPackageData> known, CancellationToken ct)
+    {
+        var plan = new MasterPlan([], [], []);
+        var visiting = new HashSet<string>();
+        var existingGroups = await permissions.ListGroupsAsync(ct);
+        async Task VisitAsync(string id)
+        {
+            if (plan.Order.Contains(id) || !visiting.Add(id)) return;
+            var app = await apps.GetByKeyAsync(id, ct);
+            List<string> requires;
+            if (app is { Kind: AppKind.Master })
+            {
+                requires = app.Requires.Masters.Select(r => r.Id).ToList();
+                plan.Previews.Add(new MasterPreview(id, app.NameI18n, app.Status == AppStatus.Open ? "bind" : "reopen", []));
+            }
+            else if (app is null && known.TryGetValue(id, out var master))
+            {
+                requires = master.Manifest.Requires.Masters.Select(r => r.Id).ToList();
+                plan.Previews.Add(new MasterPreview(id, master.Manifest.Name, "open", master.Groups.Select(g =>
+                    existingGroups.FirstOrDefault(x => x.Key == g.Code) is { } hit
+                        ? new GroupSuggestion(g.Code, g.Name, "map", hit.Id)
+                        : new GroupSuggestion(g.Code, g.Name, "create", null)).ToList()));
+            }
+            else
+            {
+                plan.Missing.Add(new MissingDependency("master", id, null, null, AppMessages.MasterNotAvailable));
+                return;
+            }
+            foreach (var dep in requires) await VisitAsync(dep);
+            plan.Order.Add(id);
+        }
+        foreach (var r in package.Manifest.Requires.Masters) await VisitAsync(r.Id);
+        // 預覽依開啟順序列（被依賴的在前）
+        plan.Previews.Sort((a, b) => plan.Order.IndexOf(a.Id).CompareTo(plan.Order.IndexOf(b.Id)));
+        return plan;
+    }
+
+    /// <summary>
+    /// 已開啟的主檔被客戶改過（基本欄位被刪或改型別）時，套件引用的主檔符號對不上：用資料庫裡主檔現在的樣子再驗一次，
+    /// 多出來的錯誤就是 unbound（§4.6），列出對不上的符號。
+    /// </summary>
+    private async Task<List<string>> UnboundAsync(
+        AppPackageData package, IReadOnlyDictionary<string, AppPackageData> known, IReadOnlyList<string> baseline, CancellationToken ct)
+    {
+        var live = new Dictionary<string, AppPackageData>(known);
+        var any = false;
+        foreach (var r in package.Manifest.Requires.Masters)
+            if (await apps.GetByKeyAsync(r.Id, ct) is { Kind: AppKind.Master } app)
+            {
+                live[r.Id] = await symbols.DefinitionAsync(app, known.GetValueOrDefault(r.Id), ct);
+                any = true;
+            }
+        if (!any) return [];
+        return AppPackageValidator.Validate(package, live).Errors.Except(baseline).ToList();
     }
 
     public static AppRequires RequiresOf(AppPackageData package) => new()
@@ -117,9 +190,6 @@ public sealed partial class AppOpenPlanner(
         Entities = [.. package.Manifest.Requires.Entities],
         Masters = package.Manifest.Requires.Masters.Select(a => new AppRequirement { Id = a.Id, Modules = [.. a.Modules] }).ToList()
     };
-
-    private static bool UsesSharedMasters(AppPackageData package) =>
-        package.Manifest.IsMaster || package.Manifest.Requires.Masters.Count > 0 || package.Contributions.Count > 0;
 
     private static Plan Fail(ServiceResult failure) =>
         new(failure, null, new Dictionary<string, string>(), new Dictionary<string, string>(), Empty, new Dictionary<string, long>());

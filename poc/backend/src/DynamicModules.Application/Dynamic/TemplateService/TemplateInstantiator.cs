@@ -7,6 +7,7 @@ using DynamicModules.Application.Dynamic.FieldService.Commands.AddBlock;
 using DynamicModules.Application.Dynamic.FieldService.Commands.AddField;
 using DynamicModules.Application.Dynamic.FieldService.Commands.AddOption;
 using DynamicModules.Application.Dynamic.FieldService.Commands.ReorderFields;
+using DynamicModules.Application.Dynamic.FieldService.Commands.SetFieldStatus;
 using DynamicModules.Application.Dynamic.FieldService.Commands.UpdateBlock;
 using DynamicModules.Application.Dynamic.FieldService.Commands.UpdateField;
 using DynamicModules.Application.Dynamic.ModuleService.Commands.CreateModule;
@@ -50,6 +51,8 @@ public sealed class TemplateInstantiator(
         if (excludeErrors.Count > 0) return ServiceResult.Invalid(new Dictionary<string, string[]> { [ExcludeKey] = [.. excludeErrors] });
 
         var map = new IdMap(p, app?.ExternalModuleKeys);
+        if (app?.Seeds is { } seeds) map.Seed(seeds);
+        var contributions = app?.Contributions ?? [];
         var kept = p.Modules.ToDictionary(m => m.Code, m => m.Blocks.ToDictionary(b => b.Code,
             b => b.Fields.Where(f => !exclude.Contains(TemplateGraph.Qualify(m.Code, f.Code))).ToList()));
         IEnumerable<(TemplateModule M, TemplateBlock B, TemplateField F)> KeptFields() =>
@@ -86,6 +89,15 @@ public sealed class TemplateInstantiator(
                 if ((failed = Fail(r, m.Code, $"{m.Code}.")) is not null) return failed;
             }
 
+        // 2b. 貢獻區塊：加在主檔模組上；接回的孤兒區塊直接沿用
+        foreach (var c in contributions)
+        {
+            if (c.ReattachBlockId is { } reattached) { map.Blocks[$"{c.Prefix}.{c.BlockCode}"] = reattached; continue; }
+            var added = await sender.Send(new AddBlockRequest(c.ModuleKey, c.BlockName), ct);
+            if ((failed = Fail(added, c.Prefix, $"contributions.{c.Prefix}.")) is not null) return failed;
+            map.Blocks[$"{c.Prefix}.{c.BlockCode}"] = ((BlockResponse)added.Data!).Id;
+        }
+
         // 3. 非計算欄位與選項（先不帶預設值、表頭欄位）；4. 計算欄位依跨模組依賴排序
         var fieldsByName = KeptFields().ToDictionary(x => TemplateGraph.Qualify(x.M.Code, x.F.Code));
         var computed = graph.ComputedOrder().Where(fieldsByName.ContainsKey).Select(n => fieldsByName[n]);
@@ -106,6 +118,44 @@ public sealed class TemplateInstantiator(
             }
         }
 
+        // 3b. 貢獻欄位：非計算欄位先建，公式依彼此的引用排序；接回的孤兒欄位改回啟用、不另建
+        foreach (var c in contributions)
+        {
+            var host = (await modules.GetByKeyAsync(c.ModuleKey, includeChildren: true, ct))!;
+            foreach (var f in ContributionOrder(c))
+            {
+                var name = TemplateGraph.Qualify(c.Prefix, f.Code);
+                long fieldId;
+                if (c.ReattachFields.TryGetValue(f.Code, out var existingId))
+                {
+                    var existing = host.Blocks.SelectMany(b => b.Fields).Single(x => x.Id == existingId);
+                    existing.Status = FieldStatus.Active;
+                    existing.StampModified(user.UserId, time.Now);
+                    host.TouchVersion(user.UserId, time.Now);
+                    await uow.CommitAsync(ct);
+                    fieldId = existing.Id;
+                    map.FieldKeys[name] = existing.Key;
+                }
+                else
+                {
+                    var r = await sender.Send(new AddFieldRequest(c.ModuleKey, map.Blocks[$"{c.Prefix}.{c.BlockCode}"], f.Type, f.Label,
+                        map.Config(c.Prefix, f, withDefaults: false)), ct);
+                    if ((failed = Fail(r, c.Prefix, $"contributions.{name}.")) is not null) return failed;
+                    var field = (FieldResponse)r.Data!;
+                    fieldId = field.Id;
+                    map.FieldKeys[name] = field.Key;
+                }
+                map.Fields[name] = fieldId;
+                foreach (var option in f.Options)
+                {
+                    if (c.ReattachOptions.TryGetValue(option.Code, out var optionId)) { map.Options[$"{c.Prefix}.{option.Code}"] = optionId; continue; }
+                    var added = await sender.Send(new AddOptionRequest(fieldId, option.Label, option.Color), ct);
+                    if ((failed = Fail(added, c.Prefix, $"contributions.{name}.")) is not null) return failed;
+                    map.Options[$"{c.Prefix}.{option.Code}"] = ((OptionResponse)added.Data!).Id;
+                }
+            }
+        }
+
         // 5. 預設值與帶表頭的值
         foreach (var (m, b, f) in KeptFields().Where(x => HasDefaults(x.F)))
         {
@@ -113,6 +163,15 @@ public sealed class TemplateInstantiator(
                 map.Config(m.Code, f, withDefaults: true), map.Blocks[$"{m.Code}.{b.Code}"]), ct);
             if ((failed = Fail(r, m.Code, $"{m.Code}.{f.Code}.")) is not null) return failed;
         }
+
+        foreach (var c in contributions)
+            foreach (var f in c.Fields.Where(f => HasDefaults(f) && !c.ReattachFields.ContainsKey(f.Code)))
+            {
+                var name = TemplateGraph.Qualify(c.Prefix, f.Code);
+                var r = await sender.Send(new UpdateFieldRequest(map.Fields[name], f.Type, f.Label,
+                    map.Config(c.Prefix, f, withDefaults: true), map.Blocks[$"{c.Prefix}.{c.BlockCode}"]), ct);
+                if ((failed = Fail(r, c.Prefix, $"contributions.{name}.")) is not null) return failed;
+            }
 
         // 6. 恢復範本的欄位順序
         foreach (var m in p.Modules)
@@ -122,6 +181,13 @@ public sealed class TemplateInstantiator(
                 var r = await sender.Send(new ReorderFieldsRequest(map.Blocks[$"{m.Code}.{b.Code}"], ids), ct);
                 if ((failed = Fail(r, m.Code, $"{m.Code}.")) is not null) return failed;
             }
+
+        foreach (var c in contributions.Where(c => c.ReattachBlockId is null))
+        {
+            var ids = c.Fields.Select(f => map.Fields[TemplateGraph.Qualify(c.Prefix, f.Code)]).ToList();
+            var r = await sender.Send(new ReorderFieldsRequest(map.Blocks[$"{c.Prefix}.{c.BlockCode}"], ids), ct);
+            if ((failed = Fail(r, c.Prefix, $"contributions.{c.Prefix}.")) is not null) return failed;
+        }
 
         // 7. 標題欄位、標題樣板（代號換成欄位 Id）、圖示、分區、名稱
         foreach (var m in p.Modules)
@@ -182,6 +248,17 @@ public sealed class TemplateInstantiator(
             var r = await sender.Send(new SaveModulePermissionsRequest(map.Key(m.Code),
                 new ModulePermissionsDto(groups, [], fieldAccess, optionScopes)), ct);
             if ((failed = Fail(r, m.Code, $"{m.Code}.")) is not null) return failed;
+        }
+
+        // 11. 套件標「"active": false」的欄位（共用主檔 §4.1）：建好之後停用，跟客戶在設計器停用一樣
+        var inactive = p.Modules.SelectMany(m => m.Blocks.SelectMany(b => kept[m.Code][b.Code])
+                .Where(f => f.Active == false).Select(f => TemplateGraph.Qualify(m.Code, f.Code)))
+            .Concat(contributions.SelectMany(c => c.Fields.Where(f => f.Active == false && !c.ReattachFields.ContainsKey(f.Code))
+                .Select(f => TemplateGraph.Qualify(c.Prefix, f.Code))));
+        foreach (var name in inactive)
+        {
+            var r = await sender.Send(new SetFieldStatusRequest(map.Fields[name], FieldStatus.Inactive), ct);
+            if ((failed = Fail(r, name, $"{name}.")) is not null) return failed;
         }
 
         return ServiceResult.Created(new InstantiateTemplateResponse(
@@ -255,6 +332,25 @@ public sealed class TemplateInstantiator(
 
     private static bool IsComputed(TemplateField f) => f.Type is FieldType.Formula or FieldType.Rollup;
 
+    /// <summary>貢獻欄位的建立順序：非計算欄位照宣告，公式排在它引用的貢獻公式之後（貢獻不收彙總，循環時照宣告順序）。</summary>
+    private static IEnumerable<TemplateField> ContributionOrder(ContributionInput c)
+    {
+        var plain = c.Fields.Where(f => !IsComputed(f)).ToList();
+        var formulas = c.Fields.Where(IsComputed).ToList();
+        var codes = formulas.Select(f => f.Code).ToHashSet();
+        var done = new HashSet<string>();
+        var ordered = new List<TemplateField>();
+        while (formulas.Count > 0)
+        {
+            var next = formulas.FirstOrDefault(f => TemplateGraph.FormulaOf(f) is not { } formula
+                || TemplateGraph.FormulaCodes(formula).All(code => !codes.Contains(code) || done.Contains(code) || code == f.Code)) ?? formulas[0];
+            ordered.Add(next);
+            done.Add(next.Code);
+            formulas.Remove(next);
+        }
+        return plain.Concat(ordered);
+    }
+
     private static bool HasDefaults(TemplateField f) =>
         f.Config.ValueKind == JsonValueKind.Object
         && (f.Config.TryGetProperty("defaultValue", out var d) && d.ValueKind != JsonValueKind.Null
@@ -295,6 +391,14 @@ public sealed class TemplateInstantiator(
             .DistinctBy(x => x.Key).ToDictionary(x => x.Key, x => x.Owner);
 
         public string Key(string moduleCode) => Modules[moduleCode].Key;
+
+        public void Seed(InstantiationSeeds seeds)
+        {
+            foreach (var (k, v) in seeds.Fields) Fields[k] = v;
+            foreach (var (k, v) in seeds.FieldKeys) FieldKeys[k] = v;
+            foreach (var (k, v) in seeds.Options) Options[k] = v;
+            foreach (var (k, v) in seeds.Modules) Modules[k] = v;
+        }
 
         /// <summary>範本的 config 換成 FieldConfig；withDefaults 為 false 時拿掉 defaultValue、parentDefaultField。</summary>
         public FieldConfig Config(string m, TemplateField f, bool withDefaults)

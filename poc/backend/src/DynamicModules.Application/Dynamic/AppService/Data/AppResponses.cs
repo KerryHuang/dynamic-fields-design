@@ -19,6 +19,8 @@ public record AppResponse(
     List<IntegrationResponse>? Integrations = null)
 {
     public List<IntegrationResponse> Integrations { get; init; } = Integrations ?? [];
+    /// <summary>app 或 master（共用主檔，由使用它的應用程式管理，不能直接開關）。</summary>
+    public string Kind { get; init; } = AppManifest.AppKindName;
 }
 
 /// <summary>
@@ -33,26 +35,38 @@ public record CloseAppResponse(AppResponse App, List<string> Closed, List<string
 
 public record KeyConflict(string ModuleCode, string Key);
 
-/// <summary>Reason：notInstalled、closed、moduleMissing、moduleNotActive、entityMissing。</summary>
+/// <summary>Reason：notInstalled、closed、moduleMissing、moduleNotActive、entityMissing、masterNotAvailable（Kind = master，目錄與匯入套件都沒有這份主檔）。</summary>
 public record MissingDependency(string Kind, string? AppId, string? ModuleCode, string? Entity, string Reason);
 
 public record GroupSuggestion(string Code, I18nText Name, string Suggestion, long? SuggestedGroupId);
 
-/// <summary>開啟前的檢查結果；全部為空才能開啟。</summary>
+/// <summary>
+/// 開啟前的檢查結果；全部為空才能開啟。Masters：會一起處理的共用主檔（依相依順序）；
+/// Unbound：主檔已開啟但被客戶改過，套件引用的符號對不上（共用主檔 §4.6），整批 409。
+/// </summary>
 public record OpenPreview(
     IReadOnlyList<string> Errors, IReadOnlyList<KeyConflict> KeyConflicts, IReadOnlyList<string> HostEntityConflicts,
-    IReadOnlyList<MissingDependency> MissingDependencies, IReadOnlyList<GroupSuggestion> Groups, IReadOnlyList<string> Warnings)
+    IReadOnlyList<MissingDependency> MissingDependencies, IReadOnlyList<GroupSuggestion> Groups, IReadOnlyList<string> Warnings,
+    IReadOnlyList<MasterPreview>? Masters = null, IReadOnlyList<string>? Unbound = null)
 {
-    public bool CanOpen => Errors.Count == 0 && KeyConflicts.Count == 0 && HostEntityConflicts.Count == 0 && MissingDependencies.Count == 0;
+    public IReadOnlyList<MasterPreview> Masters { get; init; } = Masters ?? [];
+    public IReadOnlyList<string> Unbound { get; init; } = Unbound ?? [];
+    public bool CanOpen => Errors.Count == 0 && KeyConflicts.Count == 0 && HostEntityConflicts.Count == 0 && MissingDependencies.Count == 0
+                           && Unbound.Count == 0;
 }
+
+/// <summary>Action：open（還沒有，自動開啟）、bind（已開啟，直接綁定）、reopen（已關閉，重新開啟後綁定）。Groups 只在 open 時有。</summary>
+public record MasterPreview(string Id, I18nText Name, string Action, IReadOnlyList<GroupSuggestion> Groups);
 
 /// <summary>
 /// 開啟請求的內容。ModuleKeys：模組代號 → 新的 Module.Key；GroupMap：群組代號 → 對應方式；
-/// Locale：建立群組時用的語系，預設 zh-TW。
+/// Locale：建立群組時用的語系，預設 zh-TW；Masters：要自動開啟的共用主檔 id → 它的群組對應（沒列的群組略過，同 GroupMap）。
 /// </summary>
 public record OpenAppBody(
-    Dictionary<string, string>? ModuleKeys, List<string>? ExcludeFields, Dictionary<string, GroupMapEntry>? GroupMap, string? Locale)
+    Dictionary<string, string>? ModuleKeys, List<string>? ExcludeFields, Dictionary<string, GroupMapEntry>? GroupMap, string? Locale,
+    Dictionary<string, Dictionary<string, GroupMapEntry>>? Masters = null)
 {
+    public Dictionary<string, Dictionary<string, GroupMapEntry>> Masters { get; init; } = Masters ?? [];
     public Dictionary<string, string> ModuleKeys { get; init; } = ModuleKeys ?? [];
     public List<string> ExcludeFields { get; init; } = ExcludeFields ?? [];
     public Dictionary<string, GroupMapEntry> GroupMap { get; init; } = GroupMap ?? [];
@@ -68,7 +82,9 @@ public static class AppMessages
     public const string PackageNotFound = "套件不存在";
     public const string AlreadyOpen = "應用程式已開啟";
     public const string AlreadyClosedHint = "應用程式已開啟但目前是關閉狀態，請改用重新開啟";
-    public const string SharedMastersNotYetSupported = "manifest: 這個版本還不能開啟用到共用主檔的套件（主檔套件、requires.masters 或 contributions）";
+    public const string MasterManaged = "這是共用主檔，由使用它的應用程式管理，不能直接開啟、關閉或重新開啟";
+    public const string MasterNotAvailable = "masterNotAvailable";
+    public const string MasterInUse = "共用主檔還有應用程式在使用，不能刪除";
 }
 
 public static class AppMapper

@@ -19,7 +19,8 @@ public class GetAppPackagesHandler(AppPackageSource packages, IAppRepository app
     public async Task<ServiceResult> Handle(GetAppPackagesRequest request, CancellationToken ct)
     {
         var status = (await apps.ListAsync(ct)).ToDictionary(a => a.Key, a => AppMapper.StatusName(a.Status));
-        var list = (await packages.ListAsync(ct))
+        // 共用主檔不列在可開啟清單：它由使用它的應用程式自動開啟（共用主檔 §4.1）
+        var list = (await packages.ListAsync(ct)).Where(p => !p.Package.Manifest.IsMaster)
             .Select(p => AppResponseBuilder.Summarize(p, status.GetValueOrDefault(p.Package.Manifest.Id))).ToList();
         return ServiceResult.Success(list);
     }

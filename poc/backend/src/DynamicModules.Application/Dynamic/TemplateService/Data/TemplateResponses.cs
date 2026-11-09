@@ -30,7 +30,23 @@ public record TemplateFieldSummary(string Code, I18nText Label, string Type, boo
 /// <summary>
 /// 應用程式開啟時多帶給 TemplateInstantiator 的輸入。GroupIds：套件群組代號 → 群組 id（略過的群組不在裡面）；
 /// ExternalModuleKeys：「應用程式 id/模組代號」→ 實際 Module.Key；FieldAccess、OptionScopes 是套件的欄位例外與選項範圍。
+/// Seeds：共用主檔的符號（&lt;主檔 id&gt;/&lt;模組代號&gt;…）預先放進對照，參照、守衛、帶值、公式、轉換、報表都經它解析；
+/// Contributions：要加到主檔模組上的區塊與欄位（共用主檔設計 §4.3）。
 /// </summary>
 public record AppInstantiation(
     IReadOnlyDictionary<string, long> GroupIds, IReadOnlyDictionary<string, string> ExternalModuleKeys,
-    IReadOnlyList<AppFieldAccess> FieldAccess, IReadOnlyList<AppOptionScope> OptionScopes);
+    IReadOnlyList<AppFieldAccess> FieldAccess, IReadOnlyList<AppOptionScope> OptionScopes,
+    InstantiationSeeds? Seeds = null, IReadOnlyList<ContributionInput>? Contributions = null);
+
+/// <summary>預先放進對照的符號；鍵的寫法同 <see cref="TemplateIdMap"/>，Modules 的值是（Module.Id, Module.Key）。</summary>
+public record InstantiationSeeds(
+    IReadOnlyDictionary<string, long> Fields, IReadOnlyDictionary<string, string> FieldKeys,
+    IReadOnlyDictionary<string, long> Options, IReadOnlyDictionary<string, (long Id, string Key)> Modules);
+
+/// <summary>
+/// 一筆貢獻：Prefix 是主檔模組的符號 &lt;主檔 id&gt;/&lt;模組代號&gt;，欄位、選項、區塊的對照名稱都以它開頭。
+/// Reattach*：同一個應用程式重新開啟時接回的孤兒（代號 → 既有的 id），接回的不另建（設計 §7 刪除第 6 點）。
+/// </summary>
+public record ContributionInput(
+    string Prefix, string ModuleKey, string BlockCode, I18nText BlockName, IReadOnlyList<TemplateField> Fields,
+    long? ReattachBlockId, IReadOnlyDictionary<string, long> ReattachFields, IReadOnlyDictionary<string, long> ReattachOptions);

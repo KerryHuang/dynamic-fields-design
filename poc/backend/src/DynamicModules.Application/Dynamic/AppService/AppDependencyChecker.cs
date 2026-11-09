@@ -52,6 +52,8 @@ public sealed class AppDependencyChecker(IAppRepository apps, IModuleRepository 
         var integrationFields = forClose
             ? (await apps.ListIntegrationsAsync(ct)).SelectMany(r => Integrations.IntegrationItems.Parse(r.ItemsJson).Fields.Select(f => f.FieldId)).ToHashSet()
             : [];
+        // 目標自己貢獻到主檔上的欄位（對照列含 /）不算入向參照：關閉時它們凍結、刪除時一起清除，不能讓主檔變成依賴者（共用主檔 §7）
+        var ownContributions = (await apps.GetBindingsAsync(target.Id, ct)).Fields.Where(x => x.Key.Contains('/')).Select(x => x.Value).ToHashSet();
         var appOfModule = all.SelectMany(a => a.Modules.Select(m => (m.ModuleId, App: a))).ToDictionary(x => x.ModuleId, x => x.App);
         var dependents = new Dictionary<string, App>();
         foreach (var other in all.Where(a => a.Key != target.Key && a.Status == AppStatus.Open))
@@ -64,7 +66,7 @@ public sealed class AppDependencyChecker(IAppRepository apps, IModuleRepository 
             if (module is null) continue;
             foreach (var (source, field) in await modules.ListIncomingReferenceFieldsAsync(module.Key, ct))
             {
-                if (integrationFields.Contains(field.Id)) continue;
+                if (integrationFields.Contains(field.Id) || ownContributions.Contains(field.Id)) continue;
                 if (!appOfModule.TryGetValue(source.Id, out var owner)) unaffiliated.Add(source.Key);
                 else if (owner.Key != target.Key && owner.Status == AppStatus.Open) dependents[owner.Key] = owner;
             }

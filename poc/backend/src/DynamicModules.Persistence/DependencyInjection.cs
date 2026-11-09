@@ -59,6 +59,7 @@ public static class DependencyInjection
         services.AddScoped<IModuleTemplateRepository, ModuleTemplateRepository>();
         services.AddScoped<IAppRepository, AppRepository>();
         services.AddScoped<IAppPackageRepository, AppPackageRepository>();
+        services.AddScoped<ISharedMasterRepository, SharedMasterRepository>();
         services.AddScoped<IReferenceProvider, MockCustomerProvider>();
         services.AddScoped<ReferenceProviderRegistry>();
         services.AddScoped<IDemoPeople, DemoPeopleSeeder>();
