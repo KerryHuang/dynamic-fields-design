@@ -9,11 +9,12 @@ namespace DynamicModules.Application.Dynamic.ReportService.Data;
 /// Locale 為 null 時用 zh-TW。後面幾項是儀表板卡片選項（只有 <see cref="ReportRunner.RunCardAsync"/> 看）：
 /// TopN 只留排序後前 N 組（總計不變、不併「其他」）；SortKey／SortDesc 取代報表的排序；Cumulative 加累計占比；
 /// ComparePeriods 加與前 N 期平均的比較。Window 直接指定日期範圍（含頭含尾），取代 RangeOverride 與報表的區間，期間比較內部用。
+/// ForExport 是匯出：每個模組的資料範圍同時要符合 PrintExport（共用主檔的範圍逐動作不同）。
 /// </summary>
 public record ReportRunOptions(
     ReportDateRange? RangeOverride, IReadOnlyList<string>? DrillGroupKeys, string? Locale = null,
     int? TopN = null, string? SortKey = null, bool SortDesc = false, bool Cumulative = false, int? ComparePeriods = null,
-    (DateOnly From, DateOnly ToInclusive)? Window = null);
+    (DateOnly From, DateOnly ToInclusive)? Window = null, bool ForExport = false);
 
 /// <summary>
 /// 報表執行結果。State 是 ok|empty|restricted|fieldMissing|moduleDisabled|tooMany，HTTP 一律 200；ok、empty 以外不帶任何數字。

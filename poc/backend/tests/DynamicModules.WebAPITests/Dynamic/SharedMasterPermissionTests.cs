@@ -150,6 +150,63 @@ public class SharedMasterPermissionTests : IDisposable
         (await RenameAsync(sales01, own, name, "乙公司二")).StatusCode.Should().Be(HttpStatusCode.OK, "自己的記錄可以改");
     }
 
+    private async Task SetActionScopeAsync(string groupKey, string action, string scope)
+    {
+        var perms = await GetPermissionsAsync();
+        GroupNode(perms, groupKey)["actionScopes"]!.AsArray().Single(a => a!["action"]!.GetValue<string>() == action)!["scope"] = scope;
+        await SavePermissionsAsync(perms);
+    }
+
+    /// <summary>
+    /// 審查必修 2：「讀取／all、列印匯出／own」時，單筆列印、報表匯出只含自己的記錄（兩種範圍都要符合）；
+    /// 反過來「讀取／own、列印匯出／all」時，記錄匯出也不能超出讀取的範圍。
+    /// </summary>
+    [Fact]
+    public async Task PrintAndExports_StayWithinBothTheReadAndThePrintExportScope()
+    {
+        await OpenSalesTwiceAsync("crmx", "stk");
+        await SetActionScopeAsync("sales", "printExport", "own");
+        ActionScopes("sales")[PermissionAction.PrintExport].Should().Be(DataScope.Own);
+        var sales01 = _rig.App.AsUser("sales01");
+        var admins = await PartnerAsync("甲公司");
+        var own = await _rig.CreateRecordAsync(sales01, Partner, new Dictionary<string, object> { [_rig.FieldKey("bp", "partner.name")] = "乙公司" });
+
+        var template = await _rig.Admin.PostAsJsonAsync($"{Base}/modules/{Partner}/print-templates",
+            new { key = "card", name = new Dictionary<string, string> { ["zh-TW"] = "名片" }, body = "<p>{{_title}}</p>", active = true });
+        template.StatusCode.Should().Be(HttpStatusCode.Created, await template.Content.ReadAsStringAsync());
+        (await sales01.GetAsync($"{Base}/records/{admins.GetProperty("id").GetInt64()}/print/card")).StatusCode
+            .Should().Be(HttpStatusCode.NotFound, "列印匯出只有 own");
+        (await sales01.GetAsync($"{Base}/records/{own.GetProperty("id").GetInt64()}/print/card")).StatusCode.Should().Be(HttpStatusCode.OK);
+
+        var report = await _rig.Admin.PostAsJsonAsync($"{Base}/reports", new
+        {
+            name = "筆數",
+            definition = new Dictionary<string, object?>
+            {
+                ["version"] = 1, ["mainModuleKey"] = Partner, ["child"] = null, ["columns"] = Array.Empty<object>(),
+                ["groups"] = Array.Empty<object>(),
+                ["measures"] = new object[] { new { id = "n", kind = "countMain", field = (object?)null, condition = (object?)null } },
+                ["filters"] = Array.Empty<object>(), ["primaryDateField"] = null, ["dateRange"] = null,
+                ["sort"] = Array.Empty<object>(), ["viz"] = "table"
+            }
+        });
+        report.StatusCode.Should().Be(HttpStatusCode.Created, await report.Content.ReadAsStringAsync());
+        var reportId = (await JsonOf(report)).GetProperty("id").GetInt64();
+        (await _rig.Admin.PutAsJsonAsync($"{Base}/reports/{reportId}/shares", new { groupIds = new[] { _rig.GroupId("sales") } })).EnsureSuccessStatusCode();
+        var run = await JsonOf(await sales01.PostAsJsonAsync($"{Base}/reports/{reportId}/run", new { }));
+        run.GetProperty("total").GetProperty("n").GetDecimal().Should().Be(2, "畫面照讀取 all");
+        var exported = await sales01.GetAsync($"{Base}/reports/{reportId}/export");
+        exported.StatusCode.Should().Be(HttpStatusCode.OK, await exported.Content.ReadAsStringAsync());
+        using (var wb = new ClosedXML.Excel.XLWorkbook(await exported.Content.ReadAsStreamAsync()))
+            wb.Worksheet(1).Cell(2, 1).GetDouble().Should().Be(1, "匯出照列印匯出 own");
+
+        await SetActionScopeAsync("sales", "printExport", "all");
+        await SetActionScopeAsync("sales", "read", "own");
+        var csv = await sales01.GetStringAsync($"{Base}/modules/{Partner}/export?format=csv");
+        csv.Should().Contain("乙公司").And.NotContain("甲公司", "讀取只有 own，匯出不能超出");
+        await _rig.AssertIntegrityAsync();
+    }
+
     [Fact]
     public async Task GetPermissions_OnAMasterModule_ReturnsActionScopes_ButNotOnOrdinaryModules()
     {

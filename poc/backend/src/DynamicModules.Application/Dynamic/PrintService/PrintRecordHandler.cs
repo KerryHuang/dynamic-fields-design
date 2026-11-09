@@ -30,11 +30,12 @@ public class PrintRecordHandler(
         if (record is null) return ServiceResult.NotFound(RecordMapper.RecordNotFound);
         var module = await modules.GetByIdAsync(record.ModuleId, includeChildren: true, ct);
         if (!module.IsReadable() || ModuleRelations.IsDetail(module)) return ServiceResult.NotFound(RecordMapper.RecordNotFound);
-        // 資料範圍與欄位權限以 Read 為準；PrintExport 另外要有，兩者缺一不可（被撤銷 Read 就不能靠列印取得資料）
+        // Read 與 PrintExport 缺一不可（被撤銷 Read 就不能靠列印取得資料）；兩者的資料範圍可能不同（共用主檔逐動作範圍），要同時符合
         var access = await guard.AuthorizeAsync(module!, PermissionAction.Read, ct);
-        if (access.Permissions is not { } perms) return access.Denied!;
+        if (access.Permissions is not { } readPerms) return access.Denied!;
         var printAccess = await guard.AuthorizeAsync(module!, PermissionAction.PrintExport, ct);
-        if (printAccess.Permissions is null) return printAccess.Denied!;
+        if (printAccess.Permissions is not { } printPerms) return printAccess.Denied!;
+        var perms = readPerms.Within(printPerms);
         if (perms.OwnerUserIds is not null && !perms.OwnerUserIds.Contains(record.OwnerUserId))
             return ServiceResult.NotFound(RecordMapper.RecordNotFound);
 

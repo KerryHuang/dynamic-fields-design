@@ -107,22 +107,29 @@ public partial class ReportRunner(
             targets[target.Key] = module;
         }
 
-        // 2. 模組 Read
-        var mainAccess = await guard.AuthorizeAsync(main, PermissionAction.Read, ct);
-        if (mainAccess.Permissions is null) return Fail(Restricted, T(ReportText.NoModuleRead));
-        var mainSide = new Side(main, mainAccess.Permissions);
+        // 2. 模組 Read；匯出時資料範圍同時要符合 PrintExport（共用主檔逐動作範圍，審查必修 2）
+        async Task<EffectivePermissions?> ReadableAsync(Module module, Module? parent = null)
+        {
+            async Task<EffectivePermissions?> Of(PermissionAction action) => (parent is null
+                ? await guard.AuthorizeAsync(module, action, ct)
+                : await guard.AuthorizeDetailAsync(parent, module, action, ct)).Permissions;
+            var read = await Of(PermissionAction.Read);
+            if (read is null || !o.ForExport) return read;
+            return await Of(PermissionAction.PrintExport) is { } print ? read.Within(print) : null;
+        }
+        var mainPerms = await ReadableAsync(main);
+        if (mainPerms is null) return Fail(Restricted, T(ReportText.NoModuleRead));
+        var mainSide = new Side(main, mainPerms);
         Side? childSide = null;
         if (child is not null)
         {
-            var access = childParent is not null
-                ? await guard.AuthorizeDetailAsync(childParent, child, PermissionAction.Read, ct)
-                : await guard.AuthorizeAsync(child, PermissionAction.Read, ct);
-            if (access.Permissions is null) return Fail(Restricted, T(ReportText.NoChildRead));
-            childSide = new Side(child, access.Permissions);
+            var childPerms = await ReadableAsync(child, childParent);
+            if (childPerms is null) return Fail(Restricted, T(ReportText.NoChildRead));
+            childSide = new Side(child, childPerms);
         }
         var targetSides = new Dictionary<string, Side>();
         foreach (var (key, module) in targets)
-            targetSides[key] = new Side(module, (await guard.AuthorizeAsync(module, PermissionAction.Read, ct)).Permissions);
+            targetSides[key] = new Side(module, await ReadableAsync(module));
 
         // 3. 欄位存在且啟用
         var link = d.Child is null ? null : childSide!.Active(d.Child.LinkFieldId);
@@ -158,7 +165,7 @@ public partial class ReportRunner(
             if (f.Config.RefTarget is not { Kind: ReferenceTarget.ModuleKind } refTarget) continue;
             var target = await ActiveModuleAsync(refTarget.Key, ct);
             if (target is null) return disabled();
-            if ((await guard.AuthorizeAsync(target, PermissionAction.Read, ct)).Permissions is not { } perms || !target.TitleVisibleTo(perms))
+            if (await ReadableAsync(target) is not { } perms || !target.TitleVisibleTo(perms))
                 return hiddenField();
         }
 

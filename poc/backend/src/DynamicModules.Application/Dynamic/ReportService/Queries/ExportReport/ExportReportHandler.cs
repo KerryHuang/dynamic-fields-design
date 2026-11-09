@@ -28,7 +28,8 @@ public class ExportReportHandler(ReportAccess access, ReportModuleLoader loader,
         var (set, denied) = await loader.LoadAsync(definition, PermissionAction.PrintExport, ct);
         if (set is null) return denied!;
 
-        var result = await runner.RunAsync(definition, new ReportRunOptions(null, null, request.Locale), ct);
+        // 載入時只驗了有沒有 PrintExport；資料範圍交給 runner 同時套用讀取與列印匯出的範圍（審查必修 2）
+        var result = await runner.RunAsync(definition, new ReportRunOptions(null, null, request.Locale, ForExport: true), ct);
         if (result.State is not ("ok" or "empty"))
             return ServiceResult.Invalid(new Dictionary<string, string[]> { ["report"] = [result.Message ?? result.State] });
 

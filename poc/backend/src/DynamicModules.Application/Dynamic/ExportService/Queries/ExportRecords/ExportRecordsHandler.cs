@@ -29,7 +29,11 @@ public class ExportRecordsHandler(
             return ServiceResult.NotFound(RecordMapper.ModuleNotFound);
 
         var access = await guard.AuthorizeAsync(module, PermissionAction.PrintExport, ct);
-        if (access.Permissions is not { } perms) return access.Denied!;
+        if (access.Permissions is not { } printPerms) return access.Denied!;
+        // 匯出不能超出讀取的範圍（共用主檔的範圍逐動作不同，審查必修 2）；沒有 Read 同列印一樣不能匯出
+        var readAccess = await guard.AuthorizeAsync(module, PermissionAction.Read, ct);
+        if (readAccess.Permissions is not { } readPerms) return readAccess.Denied!;
+        var perms = printPerms.Within(readPerms);
 
         var errors = new Dictionary<string, string[]>();
         var isCsv = request.Format == "csv";
