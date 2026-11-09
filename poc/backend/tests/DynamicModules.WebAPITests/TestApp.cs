@@ -27,6 +27,8 @@ public class TestApp : WebApplicationFactory<Program>
     /// <summary>fileDatabase 模式的資料庫檔路徑；否則為 null。</summary>
     internal string? DatabaseFile => _databaseFile;
 
+    internal string ConnectionString => _connectionString;
+
     private readonly bool _seedDemoPeople;
     private readonly bool _realAuth;
 
@@ -36,9 +38,11 @@ public class TestApp : WebApplicationFactory<Program>
     /// <param name="seedDemoPeople">host 建好後補上示範人員（sales01 等）；Demo 產生器的測試要設 false，否則會衝突。</param>
     /// <param name="realAuth">true 走真實 cookie 登入；false 以 X-User 標頭驗證（TestAuthHandler），並解除 admin 的強制改密碼。</param>
     /// <param name="fileDatabase">改用暫存檔 SQLite（Dispose 時刪除）。共用快取的 in-memory 資料庫在寫入交易進行中會讓其他連線讀同一張表時噴 table is locked，檔案模式才是正式站的行為。</param>
-    internal TestApp(bool seedDemoPeople = true, bool realAuth = false, bool fileDatabase = false)
+    /// <param name="sharedConnectionString">接上另一個 TestApp 的 in-memory 資料庫（對方必須還活著），用來測「重新啟動」時的行為。</param>
+    internal TestApp(bool seedDemoPeople = true, bool realAuth = false, bool fileDatabase = false, string? sharedConnectionString = null)
     {
-        if (fileDatabase)
+        if (sharedConnectionString is not null) _connectionString = sharedConnectionString;
+        else if (fileDatabase)
         {
             _databaseFile = Path.Combine(Path.GetTempPath(), $"dm-test-{Guid.NewGuid():N}.db");
             _connectionString = $"Data Source={_databaseFile}";

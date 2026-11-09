@@ -4,6 +4,7 @@ using DynamicModules.Application;
 using DynamicModules.Application.Common.Acting;
 using DynamicModules.Application.Common.Security;
 using DynamicModules.Application.Common.Time;
+using DynamicModules.Application.Dynamic.AppService.SharedMasters;
 using DynamicModules.Application.Dynamic.AttachmentService;
 using DynamicModules.Application.Dynamic.DemoService;
 using DynamicModules.Application.Dynamic.RecordService;
@@ -161,6 +162,16 @@ static async Task InitializeDatabaseAsync(WebApplication app, string dynamicConn
     // 升級前的索引補上精確換算與截斷標記；版本達標就是空操作。完成前報表走記憶體路徑，結果仍正確
     if (await scope.ServiceProvider.GetRequiredService<IndexBackfillJob>().RunAsync(CancellationToken.None))
         app.Logger.LogInformation("索引回填完成（版本 {Version}）", RecordIndexer.BackfillVersion);
+    // 共用主檔完整性檢查（主檔狀態符合使用者閉包、主檔模組的權限列等於重算結果）：不一致只記 Warning，不擋啟動、不自動修
+    try
+    {
+        var problems = await scope.ServiceProvider.GetRequiredService<MasterLifecycle>().CheckAsync(CancellationToken.None);
+        foreach (var problem in problems) app.Logger.LogWarning("共用主檔完整性檢查：{Problem}", problem);
+    }
+    catch (Exception e)
+    {
+        app.Logger.LogWarning(e, "共用主檔完整性檢查沒有跑完");
+    }
 }
 
 public partial class Program { }
