@@ -40,8 +40,9 @@ public class ReferenceFill(IModuleRepository modules, IRecordRepository records,
             var refWritable = userCanWrite(reference);
 
             if (refWritable && validRefKeys.TryGetValue(reference.Id, out var valid)
-                && input.TryGetValue(reference.Key, out var raw) && raw is { } rawValue && ReferenceHandler.KeyOf(rawValue) is { } key && valid.Contains(key)
-                && long.TryParse(key, out var sourceId))
+                && input.TryGetValue(reference.Key, out var raw) && raw is { } rawValue && ReferenceHandler.KeyOf(rawValue) is { } rawKey
+                && long.TryParse(rawKey, System.Globalization.NumberStyles.None, System.Globalization.CultureInfo.InvariantCulture, out var sourceId)
+                && valid.Contains(sourceId.ToString())) // "0042" 存成 42，鍵也要用整數的正規形式比對（第三輪 2）
             {
                 sourceModule = await modules.GetByKeyAsync(reference.Config.RefTarget!.Key, includeChildren: true, ct);
                 if (sourceModule is { Status: ModuleStatus.Active })

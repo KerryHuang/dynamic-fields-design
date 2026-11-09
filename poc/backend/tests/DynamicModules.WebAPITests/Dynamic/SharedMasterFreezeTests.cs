@@ -300,6 +300,34 @@ public class SharedMasterFreezeTests : IDisposable
         same.StatusCode.Should().Be(HttpStatusCode.OK, await same.Content.ReadAsStringAsync());
     }
 
+    /// <summary>第三輪 2：前導零的字串 id（"0042"）等同 42，帶值要跟著參照走，不能因為鍵比對不到就跳過 lock 帶值。</summary>
+    [Fact]
+    public async Task AReferenceIdWithLeadingZeros_StillDrivesTheFill()
+    {
+        await _rig.ImportAllAsync();
+        await _rig.OpenOkAsync("crmx");
+        await _rig.OpenOkAsync("stk");
+        await _rig.OpenOkAsync("cx");
+        var mainContact = _rig.FieldId("crmx", "bp/partner.mainContact");
+        var memo = _rig.FieldId("crmx", "bp/partner.memo");
+        var contactName = _rig.FieldId("ct", "contact.name");
+        _rig.Db(db =>
+        {
+            var field = db.Set<Field>().Single(f => f.Id == mainContact);
+            field.Config = field.Config with { Fill = new FillConfig(FillConfig.Lock, [new FillMapping(contactName, memo)]) };
+        });
+        var first = await _rig.CreateRecordAsync(_rig.Admin, "master-ct-contact", new Dictionary<string, object> { [Key("ct", "contact.name")] = "王小明" });
+        var second = await _rig.CreateRecordAsync(_rig.Admin, "master-ct-contact", new Dictionary<string, object> { [Key("ct", "contact.name")] = "李小華" });
+        var record = await _rig.CreateRecordAsync(_rig.Admin, Partner, new Dictionary<string, object>
+            { [Key("bp", "partner.name")] = "甲公司", [Key("crmx", "bp/partner.mainContact")] = "00" + first.GetProperty("id").GetInt64() });
+        record.GetProperty("values").GetProperty(Key("crmx", "bp/partner.mainContact")).GetInt64().Should().Be(first.GetProperty("id").GetInt64());
+        record.GetProperty("values").GetProperty(Key("crmx", "bp/partner.memo")).GetString().Should().Be("王小明", "前導零的 id 也帶值");
+
+        var res = await PutAsync(record, new() { [Key("crmx", "bp/partner.mainContact")] = "0" + second.GetProperty("id").GetInt64() });
+        res.StatusCode.Should().Be(HttpStatusCode.OK, await res.Content.ReadAsStringAsync());
+        (await GetAsync(record)).GetProperty("values").GetProperty(Key("crmx", "bp/partner.memo")).GetString().Should().Be("李小華", "改成另一筆時帶值跟著走");
+    }
+
     [Fact]
     public async Task SchemaAndRecord_ShowFrozenFieldsAsReadOnlyWithTheReason_TheBlockCollapsed()
     {
