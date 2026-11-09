@@ -119,6 +119,7 @@ public sealed class TemplateInstantiator(
         }
 
         // 3b. 貢獻欄位：非計算欄位先建，公式依彼此的引用排序；接回的孤兒欄位改回啟用、不另建
+        var reattachedBlocks = new Dictionary<string, long>();
         foreach (var c in contributions)
         {
             var host = (await modules.GetByKeyAsync(c.ModuleKey, includeChildren: true, ct))!;
@@ -135,6 +136,7 @@ public sealed class TemplateInstantiator(
                     await uow.CommitAsync(ct);
                     fieldId = existing.Id;
                     map.FieldKeys[name] = existing.Key;
+                    reattachedBlocks[name] = existing.BlockId;
                 }
                 else
                 {
@@ -170,6 +172,17 @@ public sealed class TemplateInstantiator(
                 var name = TemplateGraph.Qualify(c.Prefix, f.Code);
                 var r = await sender.Send(new UpdateFieldRequest(map.Fields[name], f.Type, f.Label,
                     map.Config(c.Prefix, f, withDefaults: true), map.Blocks[$"{c.Prefix}.{c.BlockCode}"]), ct);
+                if ((failed = Fail(r, c.Prefix, $"contributions.{name}.")) is not null) return failed;
+            }
+
+        // 5b. 接回的孤兒欄位：設定照套件重新解析一次，引用（公式、帶值、守衛）重綁到這次開啟的欄位 Id，並走一般的欄位驗證；
+        //     舊設定可能還指向型別不同而另建、或隨應用程式刪掉的欄位（審查必修 6）。驗證不過整個開啟失敗、交易回滾。欄位留在原本的區塊。
+        foreach (var c in contributions)
+            foreach (var f in c.Fields.Where(f => c.ReattachFields.ContainsKey(f.Code)))
+            {
+                var name = TemplateGraph.Qualify(c.Prefix, f.Code);
+                var r = await sender.Send(new UpdateFieldRequest(map.Fields[name], f.Type, f.Label,
+                    map.Config(c.Prefix, f, withDefaults: true), reattachedBlocks[name]), ct);
                 if ((failed = Fail(r, c.Prefix, $"contributions.{name}.")) is not null) return failed;
             }
 

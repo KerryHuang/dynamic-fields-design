@@ -335,6 +335,46 @@ public class SharedMasterDeleteTests : IDisposable
     }
 
     /// <summary>
+    /// 審查必修 6：貢獻有整數分數與公式「分數×2」，兩者都有值。刪除後新版把分數改成小數：分數另建新欄位，公式接回舊欄位，
+    /// 接回時公式要重綁到新的分數，不能還引用停用的舊分數（否則下次存檔公式值被移除）。
+    /// </summary>
+    [Fact]
+    public async Task Reattaching_RebindsTheFormulaToTheNewFieldWhenADependencyChangedType()
+    {
+        const string memo = """{ "code": "memo", "type": "text", "label": { "zh-TW": "備忘" }, "config": {} },""";
+        var crm = SharedMasterPackages.Crm.Replace(memo, memo
+            + """ { "code": "scoreX2", "type": "formula", "label": { "zh-TW": "分數兩倍" }, "config": { "formula": "{score} * 2", "resultType": "number" } },""");
+        crm.Should().Contain("scoreX2");
+        foreach (var json in new[] { SharedMasterPackages.Bp, SharedMasterPackages.Ct, crm, SharedMasterPackages.Stock }) await _rig.ImportAsync(json);
+        await _rig.OpenOkAsync("crmx");
+        await _rig.OpenOkAsync("stk");
+        var partner = await _rig.CreateRecordAsync(_rig.Admin, Partner, new Dictionary<string, object>
+            { [Key("bp", "partner.name")] = "甲公司", [Key("crmx", "bp/partner.score")] = 3 });
+        partner.GetProperty("values").GetProperty(Key("crmx", "bp/partner.scoreX2")).GetDecimal().Should().Be(6);
+        var oldScore = _rig.FieldId("crmx", "bp/partner.score");
+        var scoreX2 = _rig.FieldId("crmx", "bp/partner.scoreX2");
+        await _rig.CloseOkAsync("crmx");
+        await DeleteOkAsync("crmx");
+
+        _rig.Db(db =>
+        {
+            var row = db.Set<AppPackage>().Single(p => p.Key == "crmx");
+            row.Json = row.Json.Replace("""{ "code": "score", "type": "integer",""", """{ "code": "score", "type": "decimal",""");
+            row.Json.Should().Contain("\"score\", \"type\": \"decimal\"");
+        });
+        await _rig.OpenOkAsync("crmx");
+
+        var newScore = _rig.FieldId("crmx", "bp/partner.score");
+        newScore.Should().NotBe(oldScore, "型別不同另建新欄位");
+        _rig.FieldId("crmx", "bp/partner.scoreX2").Should().Be(scoreX2, "公式接回");
+        FieldById(scoreX2).Config.Formula.Should().Be($"{{{newScore}}} * 2", "接回時重綁到新的分數");
+        await UpdateAsync(partner, new() { [Key("crmx", "bp/partner.score")] = 4.5m });
+        (await JsonOf(await _rig.Admin.GetAsync($"{Base}/records/{partner.GetProperty("id").GetInt64()}")))
+            .GetProperty("values").GetProperty($"f_{scoreX2}").GetDecimal().Should().Be(9);
+        await _rig.AssertIntegrityAsync();
+    }
+
+    /// <summary>
     /// 審查必修 7：第一版產業是下拉、留下 manufacturing 選項孤兒；第二版產業改成文字，另一個新下拉欄位合法重用 manufacturing。
     /// 型別不符時舊欄位的選項孤兒一併失去接回資格，填值後再刪一次不撞 (FormerAppKey, Kind, Name)。
     /// </summary>
