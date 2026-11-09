@@ -345,6 +345,161 @@ public class TitleTemplateApiTests(TestApp app) : IClassFixture<TestApp>
         (await PagedTitles(sales, m.Key, "")).Should().Equal("");
     }
 
+    // ---- 安全回歸（審查建議）：Closed、分錄、已記帳來源上的拒寫，以及樣板欄位被隱藏時的挑選器、匯入、報表 ----
+
+    private sealed record EnumMold(Mold M, (long Id, string Key, long BlockId) Kind, long Upper, string Template);
+
+    /// <summary>樣板 {no} {name}（{kind}）已設定的模具模組；回傳時還沒有記錄。</summary>
+    private async Task<EnumMold> EnumMoldModule(Func<string, Task>? beforeActivate = null)
+    {
+        var key = await CreateModule(_admin);
+        var nameKey = await TitleKey(_admin, key);
+        var no = await AddField(_admin, key, "text");
+        var kind = await AddField(_admin, key, "enum");
+        var upper = await Option(kind.Id, "上模");
+        if (beforeActivate is not null) await beforeActivate(key);
+        await Activate(_admin, key);
+        var m = new Mold(key, long.Parse(nameKey[2..]), nameKey, no.Id, no.Key);
+        var template = $"{{{m.NoId}}} {{{m.NameId}}}（{{{kind.Id}}}）";
+        (await PutTitle(key, m.NameId, template)).EnsureSuccessStatusCode();
+        return new EnumMold(m, kind, upper, template);
+    }
+
+    private Task<HttpResponseMessage> RenameOption(long optionId, string label) =>
+        _admin.PutAsJsonAsync($"{Base}/options/{optionId}", new { label = Zh(label), color = (string?)null, active = true });
+
+    private static async Task ShouldBeConflict(HttpResponseMessage res, string message)
+    {
+        res.StatusCode.Should().Be(HttpStatusCode.Conflict, await res.Content.ReadAsStringAsync());
+        (await res.Content.ReadAsStringAsync()).Should().Contain(message);
+    }
+
+    private async Task TemplateAndTitlesUnchanged(EnumMold e, params string[] titles)
+    {
+        var module = await ModuleOf(e.M.Key);
+        module.GetProperty("titleTemplate").GetString().Should().Be(e.Template);
+        module.GetProperty("blocks")[0].GetProperty("fields").EnumerateArray().Single(f => f.GetProperty("id").GetInt64() == e.Kind.Id)
+            .GetProperty("options").EnumerateArray().Single().GetProperty("label").GetProperty("zh-TW").GetString().Should().Be("上模");
+        (await Titles(e.M.Key)).Should().BeEquivalentTo(titles);
+    }
+
+    private void SetStatus(string moduleKey, DynamicModules.Domain.Entities.Dynamic.ModuleStatus status)
+    {
+        using var scope = app.Services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<DynamicModules.Domain.Data.DynamicDbContext>();
+        db.Set<DynamicModules.Domain.Entities.Dynamic.Module>().Single(x => x.Key == moduleKey).Status = status;
+        db.SaveChanges();
+    }
+
+    [Fact]
+    public async Task Closed_SetClearTemplateAndRenameTemplateOption_AreRefused()
+    {
+        var e = await EnumMoldModule();
+        await AddRecord(e.M.Key, new() { [e.M.NameKey] = "上蓋模", [e.M.NoKey] = "MD-01", [e.Kind.Key] = $"opt_{e.Upper}" });
+        SetStatus(e.M.Key, DynamicModules.Domain.Entities.Dynamic.ModuleStatus.Closed);
+        try
+        {
+            await ShouldBeConflict(await PutTitle(e.M.Key, e.M.NameId, $"{{{e.M.NameId}}}"), "應用程式已關閉");
+            await ShouldBeConflict(await PutTitle(e.M.Key, e.M.NameId, null), "應用程式已關閉");
+            await ShouldBeConflict(await RenameOption(e.Upper, "公模"), "應用程式已關閉");
+        }
+        finally { SetStatus(e.M.Key, DynamicModules.Domain.Entities.Dynamic.ModuleStatus.Active); }
+        await TemplateAndTitlesUnchanged(e, "MD-01 上蓋模（上模）");
+    }
+
+    [Fact]
+    public async Task Ledger_SetClearTemplateAndRenameTemplateOption_AreRefused()
+    {
+        var e = await EnumMoldModule(async key =>
+        {
+            var rev = await AddField(_admin, key, "reference", new { refTarget = new { kind = "module", key }, readOnly = true });
+            var qty = await AddField(_admin, key, "decimal");
+            await Activate(_admin, key);
+            (await _admin.PutAsJsonAsync($"{Base}/modules/{key}/ledger",
+                new { reversalFieldId = rev.Id, negate = new[] { qty.Id }, swap = Array.Empty<long[]>(), confirmFreeze = false })).EnsureSuccessStatusCode();
+        });
+        await AddRecord(e.M.Key, new() { [e.M.NameKey] = "上蓋模", [e.M.NoKey] = "MD-01", [e.Kind.Key] = $"opt_{e.Upper}" });
+
+        await ShouldBeConflict(await PutTitle(e.M.Key, e.M.NameId, $"{{{e.M.NameId}}}"), "分錄模組");
+        await ShouldBeConflict(await PutTitle(e.M.Key, e.M.NameId, null), "分錄模組");
+        await ShouldBeConflict(await RenameOption(e.Upper, "公模"), "分錄模組");
+        await TemplateAndTitlesUnchanged(e, "MD-01 上蓋模（上模）");
+    }
+
+    [Fact]
+    public async Task PostedSource_RenameTemplateOptionAndClearTemplate_AreRefused()
+    {
+        var e = await EnumMoldModule();
+        var move = await CreateModule(_admin);
+        await Activate(_admin, move);
+        var moveTitle = await TitleKey(_admin, move);
+        (await _admin.PostAsJsonAsync($"{Base}/events", new
+        {
+            key = "ev-" + Guid.NewGuid().ToString("N")[..8], name = Zh("建檔"), sourceModuleKey = e.M.Key, active = true,
+            definition = new
+            {
+                trigger = new { on = "create" },
+                effects = new[] { new { code = "log", kind = "create", targetModuleKey = move, set = new object[] { new { to = long.Parse(moveTitle[2..]), @const = "建檔" } } } }
+            }
+        })).StatusCode.Should().Be(HttpStatusCode.Created);
+        await AddRecord(e.M.Key, new() { [e.M.NameKey] = "上蓋模", [e.M.NoKey] = "MD-01", [e.Kind.Key] = $"opt_{e.Upper}" });
+
+        await ShouldBeFixedConflict(await RenameOption(e.Upper, "公模"));
+        await ShouldBeFixedConflict(await PutTitle(e.M.Key, e.M.NameId, null));
+        await TemplateAndTitlesUnchanged(e, "MD-01 上蓋模（上模）");
+    }
+
+    /// <summary>
+    /// 樣板用到的欄位對業務隱藏（設計器擋得下，這裡模擬舊資料）：標題整個看不到，挑選器 403、匯入比對不到、報表不露出組好的標題；
+    /// 看得到的人照常。
+    /// </summary>
+    [Fact]
+    public async Task HiddenTemplateField_PickerImportAndReport_DoNotRevealTheComposedTitle()
+    {
+        var m = await MoldModule();
+        (await PutTitle(m.Key, m.NameId, $"{{{m.NoId}}} {{{m.NameId}}}")).EnsureSuccessStatusCode();
+        app.GrantBusinessGroups(m.Key);
+        await AddRecord(m.Key, new() { [m.NameKey] = "上蓋模", [m.NoKey] = "MD-01" });
+        var job = await CreateModule(_admin);
+        var jobTitle = await TitleKey(_admin, job);
+        var mold = await AddField(_admin, job, "reference", new { refTarget = new { kind = "module", key = m.Key }, onDelete = "restrict" });
+        await Activate(_admin, job);
+        app.GrantBusinessGroups(job);
+        HideFromSales(m.NoId);
+        var sales = app.AsUser("sales01");
+
+        // 挑選器
+        (await sales.GetAsync($"{Base}/modules/{m.Key}/records/light?keyword=MD")).StatusCode.Should().Be(HttpStatusCode.Forbidden);
+        (await Titles(m.Key, "MD-01")).Should().Equal("MD-01 上蓋模");
+
+        // 匯入比對
+        HttpContent Csv() => new MultipartFormDataContent
+        {
+            { new ByteArrayContent(Encoding.UTF8.GetBytes($"{jobTitle},{mold.Key}\r\n工單一,MD-01 上蓋模\r\n")) { Headers = { ContentType = new MediaTypeHeaderValue("text/csv") } }, "file", "import.csv" }
+        };
+        var denied = await sales.PostAsync($"{Base}/modules/{job}/import?commit=true", Csv());
+        (await ErrorOf(denied, $"rows[2].{mold.Key}")).Should().Be("找不到「MD-01 上蓋模」");
+        (await JsonOf(await _admin.GetAsync($"{Base}/modules/{job}/records/paged?currentPage=1&pagesSize=10"))).GetProperty("totalCount").GetInt32()
+            .Should().Be(0, await denied.Content.ReadAsStringAsync());
+        (await _admin.PostAsync($"{Base}/modules/{job}/import?commit=true", Csv())).StatusCode.Should().Be(HttpStatusCode.OK);
+
+        // 報表依參照分組的標籤
+        var def = new Dictionary<string, object?>
+        {
+            ["version"] = 1, ["mainModuleKey"] = job, ["child"] = null, ["columns"] = Array.Empty<object>(),
+            ["groups"] = new object[] { new { field = new { source = "main", fieldId = mold.Id, viaFieldId = (long?)null }, bucket = (string?)null } },
+            ["measures"] = new object[] { new { id = "n", kind = "countMain", field = (object?)null, condition = (object?)null } },
+            ["filters"] = Array.Empty<object>(), ["primaryDateField"] = null, ["dateRange"] = null, ["sort"] = Array.Empty<object>(), ["viz"] = "table"
+        };
+        var forSales = await sales.PostAsJsonAsync($"{Base}/reports/preview", def);
+        forSales.StatusCode.Should().Be(HttpStatusCode.OK);
+        (await forSales.Content.ReadAsStringAsync()).Should().NotContain("MD-01").And.NotContain("上蓋模");
+        (await JsonOf(forSales)).GetProperty("groups")[0].GetProperty("groupLabels")[0].GetString().Should().Be("（無權限）");
+        var forAdmin = await _admin.PostAsJsonAsync($"{Base}/reports/preview", def);
+        forAdmin.StatusCode.Should().Be(HttpStatusCode.OK, await forAdmin.Content.ReadAsStringAsync());
+        (await forAdmin.Content.ReadAsStringAsync()).Should().Contain("MD-01 上蓋模");
+    }
+
     /// <summary>繞過設計器的防護直接寫入隱藏例外（模擬舊資料）。</summary>
     private void HideFromSales(long fieldId)
     {
