@@ -10,6 +10,13 @@ using DynamicModules.Domain.ValueObjects;
 
 namespace DynamicModules.Application.Dynamic.DeleteService;
 
+/// <summary>
+/// 刪除應用程式時的共用主檔豁免（共用主檔設計 §7 刪除第 2、4 點）：MasterModuleKeys 是它 requires.masters 的主檔模組，
+/// 擁有者在刪除集合裡的轉換、事件引用到它們時視為集合內（主檔模組本身不會被刪）；ExemptFieldIds 是它貢獻的欄位
+/// （含清除集合），它們對成員模組的參照與設定引用不構成阻擋。
+/// </summary>
+public record AppDeleteScope(IReadOnlySet<string> MasterModuleKeys, IReadOnlySet<long> ExemptFieldIds);
+
 /// <summary>刪除計畫：檢查結果，加上實際要刪的目標 Id（執行時重新載入追蹤實體）。</summary>
 public record DeletePlan(DeleteCheckResponse Check, long ModuleId, IReadOnlyList<long> FieldIds, IReadOnlyList<long> BlockIds);
 
@@ -23,8 +30,10 @@ public class DeletePlanner(IDeletionRepository data)
     /// 同一個動作一起刪除的模組鍵（刪除整個應用程式時是全部成員）。集合內的模組彼此的引用不算被引用，
     /// 模組本身的狀態也不另擋（應用程式已先確認是關閉的）；其餘規則不變。只對 <see cref="DeleteTarget.Module"/> 有意義。
     /// </param>
+    /// <param name="scope">刪除應用程式時的共用主檔豁免；其他情況為 null。</param>
     public async Task<DeletePlan?> PlanAsync(
-        DeleteTarget target, string? key, long id, CancellationToken ct, IReadOnlySet<string>? alsoDeleting = null)
+        DeleteTarget target, string? key, long id, CancellationToken ct, IReadOnlySet<string>? alsoDeleting = null,
+        AppDeleteScope? scope = null)
     {
         var all = await data.ListModulesAsync(ct);
         var module = target switch
@@ -47,7 +56,7 @@ public class DeletePlanner(IDeletionRepository data)
             case DeleteTarget.Module:
                 fields = module.Blocks.SelectMany(b => b.Fields).ToList();
                 blocks = module.Blocks;
-                await ModuleBlockersAsync(module, fields, all, reports, dashboards, conversions, blockers, alsoDeleting, ct);
+                await ModuleBlockersAsync(module, fields, all, reports, dashboards, conversions, blockers, alsoDeleting, scope, ct);
                 break;
             case DeleteTarget.Field:
                 fields = module.Blocks.SelectMany(b => b.Fields).Where(f => f.Id == id).ToList();
@@ -64,7 +73,7 @@ public class DeletePlanner(IDeletionRepository data)
                 break;
         }
 
-        await AddEffectBlockersAsync(target, module, fields, all, alsoDeleting, blockers, ct);
+        await AddEffectBlockersAsync(target, module, fields, all, alsoDeleting, scope, blockers, ct);
 
         var fieldIds = fields.Select(f => f.Id).ToList();
         var purge = target == DeleteTarget.Module
@@ -87,7 +96,7 @@ public class DeletePlanner(IDeletionRepository data)
 
     private async Task ModuleBlockersAsync(
         Module module, IReadOnlyList<Field> fields, List<Module> all, List<Report> reports, List<DashboardLayoutSource> dashboards,
-        List<Conversion> conversions, List<DeleteBlocker> blockers, IReadOnlySet<string>? alsoDeleting, CancellationToken ct)
+        List<Conversion> conversions, List<DeleteBlocker> blockers, IReadOnlySet<string>? alsoDeleting, AppDeleteScope? scope, CancellationToken ct)
     {
         if (alsoDeleting is null && module.Status is ModuleStatus.Active or ModuleStatus.Closed)
             blockers.Add(new(DeleteBlockerKind.ModuleActive, module.Key, module.Id, Name(module.NameI18n, module.Key)));
@@ -97,7 +106,7 @@ public class DeletePlanner(IDeletionRepository data)
 
         var ownIds = fields.Select(f => f.Id).ToHashSet();
         foreach (var other in all.Where(m => m.Id != module.Id && alsoDeleting?.Contains(m.Key) != true))
-            foreach (var f in other.Blocks.SelectMany(b => b.Fields))
+            foreach (var f in other.Blocks.SelectMany(b => b.Fields).Where(f => scope?.ExemptFieldIds.Contains(f.Id) != true))
             {
                 if (f is { Type: FieldType.Reference, Config.RefTarget: { Kind: ReferenceTarget.ModuleKind } t } && t.Key == module.Key)
                     blockers.Add(FieldBlocker(DeleteBlockerKind.ReferenceField, other, f));
@@ -107,24 +116,29 @@ public class DeletePlanner(IDeletionRepository data)
         AddReportBlockers(reports, ownIds, [module.Key], blockers);
         AddDashboardBlockers(dashboards, ownIds, blockers);
         // 轉換定義的來源、目標與明細模組全在這次一起刪除的集合內：定義跟著應用程式一起移除（ModuleRemover），不算引用
-        var outside = alsoDeleting is null ? conversions : conversions.Where(c => !InsideSet(c, all, alsoDeleting)).ToList();
+        var outside = alsoDeleting is null ? conversions : conversions.Where(c => !InsideSet(c, all, alsoDeleting, scope)).ToList();
         AddConversionBlockers(outside, all, ownIds, [module.Id], [module.Key], blockers);
     }
 
     /// <summary>事件、跨記錄檢查、分錄設定引用了要刪的模組或欄位。同一個動作一起刪除的集合內的引用不算（ModuleRemover 會一起移除）。</summary>
     private async Task AddEffectBlockersAsync(
         DeleteTarget target, Module module, IReadOnlyList<Field> fields, List<Module> all,
-        IReadOnlySet<string>? alsoDeleting, List<DeleteBlocker> blockers, CancellationToken ct)
+        IReadOnlySet<string>? alsoDeleting, AppDeleteScope? scope, List<DeleteBlocker> blockers, CancellationToken ct)
     {
         var ids = fields.Select(f => f.Id).ToHashSet();
         var isModule = target == DeleteTarget.Module;
         bool Inside(IEnumerable<string> keys) => alsoDeleting is not null && keys.All(alsoDeleting.Contains);
         string? KeyOf(long moduleId) => all.FirstOrDefault(m => m.Id == moduleId)?.Key;
+        // 擁有者（來源模組）在刪除集合裡、其餘引用的模組在集合或主檔模組裡：事件隨應用程式刪除
+        bool OwnedInside(string? source, IEnumerable<string> keys) =>
+            alsoDeleting is not null && source is not null && alsoDeleting.Contains(source)
+            && keys.All(k => alsoDeleting.Contains(k) || scope?.MasterModuleKeys.Contains(k) == true);
 
         foreach (var e in await data.ListEventsAsync(ct))
         {
             var refs = EffectReferences.Of(e, KeyOf(e.SourceModuleId) ?? "");
-            if ((isModule && refs.ModuleKeys.Contains(module.Key) || refs.FieldIds.Overlaps(ids)) && !(isModule && Inside(refs.ModuleKeys)))
+            if ((isModule && refs.ModuleKeys.Contains(module.Key) || refs.FieldIds.Overlaps(ids))
+                && !(isModule && (Inside(refs.ModuleKeys) || OwnedInside(KeyOf(e.SourceModuleId), refs.ModuleKeys))))
                 blockers.Add(new(DeleteBlockerKind.Event, KeyOf(e.SourceModuleId), e.Id, Name(e.NameI18n, e.Key)));
         }
         foreach (var c in await data.ListChecksAsync(ct))
@@ -141,15 +155,66 @@ public class DeletePlanner(IDeletionRepository data)
         }
     }
 
-    private static bool InsideSet(Conversion c, List<Module> all, IReadOnlySet<string> keys)
+    /// <summary>
+    /// 轉換在一起刪除的集合內：引用的模組全在集合內；或擁有者（來源模組）在集合內、其餘是主檔模組（共用主檔設計 §7 刪除第 2 點）。
+    /// </summary>
+    private static bool InsideSet(Conversion c, List<Module> all, IReadOnlySet<string> keys, AppDeleteScope? scope = null)
     {
         var d = c.Definition;
+        var source = all.FirstOrDefault(m => m.Id == c.SourceModuleId)?.Key;
         var moduleKeys = new List<string?>
         {
-            all.FirstOrDefault(m => m.Id == c.SourceModuleId)?.Key, all.FirstOrDefault(m => m.Id == c.TargetModuleId)?.Key,
+            source, all.FirstOrDefault(m => m.Id == c.TargetModuleId)?.Key,
             d.Lines?.SourceModuleKey, d.Lines?.TargetModuleKey
         };
-        return moduleKeys.Where(k => k is not null).All(k => keys.Contains(k!));
+        if (moduleKeys.Where(k => k is not null).All(k => keys.Contains(k!))) return true;
+        return scope is not null && source is not null && keys.Contains(source)
+               && moduleKeys.Where(k => k is not null).All(k => keys.Contains(k!) || scope.MasterModuleKeys.Contains(k!));
+    }
+
+    /// <summary>
+    /// 刪除應用程式時，它貢獻的欄位被應用程式以外的東西引用（客戶自己建的公式、規則、檢視、報表、儀表板、轉換、事件；共用主檔設計 §7 刪除第 1 點）。
+    /// exempt 裡的欄位（它自己的貢獻）互相引用、ownReportIds（它自己的報表）、擁有者在集合內的轉換與事件都不算。
+    /// </summary>
+    public async Task<List<DeleteBlocker>> ContributionBlockersAsync(
+        IReadOnlySet<long> contributed, IReadOnlySet<long> ownReportIds, IReadOnlySet<string> alsoDeleting, AppDeleteScope scope, CancellationToken ct)
+    {
+        var blockers = new List<DeleteBlocker>();
+        if (contributed.Count == 0) return blockers;
+        var all = await data.ListModulesAsync(ct);
+        string? KeyOf(long moduleId) => all.FirstOrDefault(m => m.Id == moduleId)?.Key;
+        foreach (var m in all.Where(m => !alsoDeleting.Contains(m.Key)))
+        {
+            foreach (var f in m.Blocks.SelectMany(b => b.Fields).Where(f => !scope.ExemptFieldIds.Contains(f.Id)))
+                AddFieldSourceBlockers(m, f, contributed, blockers);
+            if (m.TitleFieldIds().Any(contributed.Contains)) blockers.Add(new(DeleteBlockerKind.TitleField, m.Key, m.Id, Name(m.NameI18n, m.Key)));
+            foreach (var r in m.Rules.Where(r => RuleReferences.FieldIdsOf(r).Overlaps(contributed)))
+                blockers.Add(new(DeleteBlockerKind.Rule, m.Key, r.Id, Name(r.MessageI18n, $"{r.Kind} #{r.Id}")));
+            if (m.Workflow is { } w && contributed.Contains(w.StatusFieldId))
+                blockers.Add(new(DeleteBlockerKind.Workflow, m.Key, w.Id, Name(m.NameI18n, m.Key)));
+        }
+        foreach (var v in await data.ListViewsAsync(ct))
+        {
+            if (KeyOf(v.ModuleId) is { } vk && alsoDeleting.Contains(vk)) continue;
+            var refs = v.Columns.Concat(v.Sort.Select(s => s.Field)).ToHashSet();
+            if (v.Filter is { } filter) refs.UnionWith(RuleReferences.ConditionFieldIdsOf(filter));
+            if (refs.Overlaps(contributed)) blockers.Add(new(DeleteBlockerKind.View, KeyOf(v.ModuleId), v.Id, Name(v.NameI18n, $"#{v.Id}")));
+        }
+        AddReportBlockers((await data.ListReportsAsync(ct)).Where(r => !ownReportIds.Contains(r.Id)).ToList(), contributed, [], blockers);
+        AddDashboardBlockers(await data.ListDashboardLayoutsAsync(ct), contributed, blockers);
+        AddConversionBlockers((await data.ListConversionsAsync(ct)).Where(c => !InsideSet(c, all, alsoDeleting, scope)).ToList(), all, contributed, [], [], blockers);
+        foreach (var e in await data.ListEventsAsync(ct))
+        {
+            var source = KeyOf(e.SourceModuleId);
+            if (source is not null && alsoDeleting.Contains(source)) continue;
+            if (EffectReferences.Of(e, source ?? "").FieldIds.Overlaps(contributed))
+                blockers.Add(new(DeleteBlockerKind.Event, source, e.Id, Name(e.NameI18n, e.Key)));
+        }
+        foreach (var c in (await data.ListChecksAsync(ct)).Where(c => EffectReferences.Of(c).Overlaps(contributed)))
+            blockers.Add(new(DeleteBlockerKind.Check, KeyOf(c.ModuleId), c.Id, Name(c.NameI18n, c.Key)));
+        foreach (var l in (await data.ListLedgersAsync(ct)).Where(l => EffectReferences.Of(l).Overlaps(contributed)))
+            blockers.Add(new(DeleteBlockerKind.Ledger, KeyOf(l.ModuleId), l.Id, KeyOf(l.ModuleId) ?? ""));
+        return blockers.DistinctBy(b => (b.Kind, b.ModuleKey, b.Id)).ToList();
     }
 
     /// <summary>刪欄位或區塊：targetFields 是要刪的欄位，blockIds 是要刪的區塊（欄位刪除時為空）。</summary>

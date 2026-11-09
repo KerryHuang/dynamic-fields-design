@@ -15,15 +15,19 @@ public sealed class MasterLifecycle(
     MasterGrants grants, IUnitOfWork uow, ICurrentUser user, IBusinessTime time)
 {
     /// <summary>使用者閉包：從 Open 的應用程式沿「使用」的邊往上找到的主檔。主檔本身不算使用者。</summary>
-    public static HashSet<long> ShouldBeOpen(IEnumerable<App> all, IEnumerable<AppMasterUse> uses)
+    public static HashSet<long> ShouldBeOpen(IEnumerable<App> all, IEnumerable<AppMasterUse> uses) =>
+        Reachable(all.Where(a => a is { Kind: AppKind.App, Status: AppStatus.Open }).Select(a => a.Id), uses);
+
+    /// <summary>從這些應用程式（或主檔）沿「使用」的邊直接或間接用到的主檔。</summary>
+    public static HashSet<long> Reachable(IEnumerable<long> from, IEnumerable<AppMasterUse> uses)
     {
         var edges = uses.GroupBy(u => u.AppId).ToDictionary(g => g.Key, g => g.Select(u => u.MasterAppId).ToList());
-        var open = new HashSet<long>();
-        var stack = new Stack<long>(all.Where(a => a is { Kind: AppKind.App, Status: AppStatus.Open }).Select(a => a.Id));
+        var found = new HashSet<long>();
+        var stack = new Stack<long>(from);
         while (stack.Count > 0)
             foreach (var master in edges.GetValueOrDefault(stack.Pop()) ?? [])
-                if (open.Add(master)) stack.Push(master);
-        return open;
+                if (found.Add(master)) stack.Push(master);
+        return found;
     }
 
     /// <summary>重算所有主檔的狀態與主檔模組的權限；回傳狀態有變的主檔。</summary>

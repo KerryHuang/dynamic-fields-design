@@ -14,7 +14,7 @@ namespace DynamicModules.Application.Dynamic.AppService;
 public sealed partial class AppOpenPlanner(
     AppPackageSource packages, IAppRepository apps, IModuleRepository modules, IPermissionRepository permissions,
     IAccountRepository accounts, AppDependencyChecker dependencies, IConversionRepository conversions,
-    IEventRepository events, ICheckRepository checks, SharedMasters.MasterSymbols symbols)
+    IEventRepository events, ICheckRepository checks, SharedMasters.MasterSymbols symbols, SharedMasters.ContributionOrphans orphans)
 {
     [GeneratedRegex(ModuleRules.ModuleKeyPattern)]
     private static partial Regex ModuleKey();
@@ -116,6 +116,8 @@ public sealed partial class AppOpenPlanner(
         }
         foreach (var g in package.Groups.Where(g => !body.GroupMap.ContainsKey(g.Code)))
             warnings.Add($"群組「{g.Code}」沒有對應，已略過（不給任何人權限）");
+        // 同一個應用程式重開：型別不同、不會接回的孤兒欄位先在預覽警告（§7 刪除第 6 點）
+        if (package.Contributions.Count > 0) warnings.AddRange((await orphans.MatchAsync(package, ct)).Warnings);
 
         return new Plan(null, source, finalKeys, requirement.ExternalModuleKeys,
             new OpenPreview(errors, conflicts, hostConflicts, [.. requirement.Missing, .. masters.Missing], suggestions, warnings,

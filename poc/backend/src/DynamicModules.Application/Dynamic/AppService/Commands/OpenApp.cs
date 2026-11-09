@@ -43,7 +43,7 @@ public class AppOpener(
     AppOpenPlanner planner, TemplateInstantiator instantiator, ISender sender, IAppRepository apps,
     AppResponseBuilder builder, AppFlowInstaller flows, IUnitOfWork uow, ICurrentUser user, IBusinessTime time,
     IntegrationReconciler integrations, ISharedMasterRepository shared, IModuleRepository modules, IPermissionRepository permissions,
-    MasterSymbols symbols, MasterGrants grants, MasterLifecycle lifecycle)
+    MasterSymbols symbols, MasterGrants grants, MasterLifecycle lifecycle, ContributionOrphans orphans)
 {
     public async Task<AppOpenOutcome> OpenAsync(string packageId, OpenAppBody body, CancellationToken ct)
     {
@@ -86,7 +86,11 @@ public class AppOpener(
         }
         var direct = package.Manifest.Requires.Masters.Select(r => masters[r.Id]).ToList();
         var seeds = await symbols.SeedsAsync(direct, ct);
-        var contributions = ContributionInputs(package, masters, seeds);
+        // 貢獻：同一個應用程式重開時接回它留下的孤兒；型別不同的舊孤兒列刪掉（§7 刪除第 6 點）
+        var matched = await orphans.MatchAsync(package, ct);
+        var contributions = matched.Inputs;
+        warnings.AddRange(matched.Warnings.Where(w => !warnings.Contains(w)));
+        foreach (var orphan in matched.Consumed.Concat(matched.Stale)) shared.RemoveOrphan(orphan);
 
         // 群組：map 用既有的、create 建新的（Key 由 CreateGroup 自動產生）、skip 與未列出的一律不給權限
         var groupIds = new Dictionary<string, long>(plan.MappedGroups);
@@ -167,15 +171,6 @@ public class AppOpener(
             warnings.AddRange(await integrations.ReconcileAsync(ct));
         return ServiceResult.Created(await builder.BuildAsync(app, withDependents: false, warnings, ct));
     }
-
-    /// <summary>每筆貢獻對到主檔模組；同一個應用程式重開時，接回的孤兒在第五步（刪除與接回）補上。</summary>
-    private static List<ContributionInput> ContributionInputs(AppPackageData package, IReadOnlyDictionary<string, App> masters, InstantiationSeeds seeds) =>
-        package.Contributions.Select(c =>
-        {
-            var prefix = $"{c.Master}/{c.Module}";
-            return new ContributionInput(prefix, seeds.Modules[prefix].Key, c.Block.Code, c.Block.Name, c.Fields,
-                null, new Dictionary<string, long>(), new Dictionary<string, long>());
-        }).ToList();
 
     /// <summary>
     /// 權限來源記錄（§6）：主檔自己的模組權限記成 master 來源，貢獻的 permissions 記成 app 來源；之後由重算寫出有效值。
