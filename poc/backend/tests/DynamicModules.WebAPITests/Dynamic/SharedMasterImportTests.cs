@@ -35,6 +35,15 @@ public class SharedMasterImportTests : IDisposable
     }
 
     [Fact]
+    public async Task HeaderSet_OnAPlainModuleTarget_IsRejectedAtImport()
+    {
+        var res = await Import(AppTestPackagesV6.LocalSet);
+        res.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+        (await res.Content.ReadAsStringAsync()).Should().Contain("conversions[0].header.set").And.Contain("還不能執行轉換的固定值");
+        (await _admin.PostAsJsonAsync($"{Apps}/packages/set-lite/open", new { })).IsSuccessStatusCode.Should().BeFalse();
+    }
+
+    [Fact]
     public async Task User_ReferencingAFieldTheImportedMasterLacks_IsRejected()
     {
         await ImportOk(AppTestPackagesV6.Master);

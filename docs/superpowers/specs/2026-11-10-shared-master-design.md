@@ -189,6 +189,8 @@ CRM 的「潛在客戶轉客戶」現在建立 `crm-customer`。改成建立 `pa
 
 **新記錄要有角色。** 轉換只複製 `company`、`phone`、`email`，新的往來對象 `role` 會是空的，立刻被銷售單據的 `refGuard`（客戶或兩者）排除，等於轉了卻選不到。所以轉換要把 `role` 設成 `customer`：轉換標頭新增固定值 `header.set`（`[{ "to": "partner/partner.role", "option": "customer" }]`，只收選項欄位與選項代號），套件格式 6 一起加入。現行轉換只有 `copy`、沒有固定值，而且帶值與轉換不能複製下拉（進銷存設計 §3.3），所以這是新能力，標「實作前驗證」（§15.1 #15）。備案：基本欄位 `role` 設預設值 `customer`，轉換建立記錄時套用預設值（`RecordValueProcessor` 新增記錄時本來就套預設值）；代價是從其他入口新建的往來對象也預設為客戶，採購端要記得改。
 
+**目前尚未支援執行。** 格式層已經能解析並檢查 `header.set`（只收選項欄位與選項代號），但開啟流程建立轉換時還不帶固定值。在開啟流程真正支援之前，驗證層對非空的 `header.set` 一律拒絕整份套件（錯誤在 `conversions[i].header.set`），目標是一般模組或主檔模組都一樣；空陣列照常接受。
+
 **匯出時不得略過。** 現行 `AppExporter.ExportConversionsAsync` 要求來源與目標模組都是本應用程式的成員，否則當成「不屬於這個應用程式」靜默略過（`AppExporter.cs` 約 294 行）。改成：目標（或明細目標）是本應用程式 `requires.masters` 裡主檔的模組時照樣匯出，目標寫主檔符號 `partner/partner`，`header.copy`、`header.set`、`sourceField` 裡的主檔欄位與本套件貢獻欄位用主檔符號表示；匯入開啟時經合併的 `TemplateIdMap` 解析回主檔（§10）。來源仍必須是本應用程式的成員。
 
 ### 4.6 驗證（沿用四層，新增這些）

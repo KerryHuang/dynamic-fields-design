@@ -102,6 +102,7 @@ public static partial class AppPackageValidator
                 else if (def is not null && def.Type != FieldType.Enum) errors.Add($"{at}.header.set: 固定值只能寫入下拉欄位，{set.To} 不是");
                 else if (def is not null && def.Options.All(o => o.Code != set.Option)) errors.Add($"{at}.header.set: {set.Option} 不是 {set.To} 的選項代號");
             }
+            if (c.Header.Set is { Count: > 0 }) errors.Add($"{at}.header.set: {HeaderSetNotYetSupported}");
             if (c.Lines is { } lines)
             {
                 if (!modules.ContainsKey(lines.SourceModule ?? "") || !modules.ContainsKey(lines.TargetModule ?? ""))

@@ -47,7 +47,7 @@ public class AppFormat6Tests
         var p = Parse(AppTestPackagesV6.Crm);
         p.Contributions.Should().ContainSingle().Which.Fields.Select(f => f.Code).Should().Equal("industry", "fromLead", "credit", "nameLength");
         p.Manifest.Requires.Masters.Should().ContainSingle().Which.Id.Should().Be("partner-lite");
-        p.Conversions.Single().Header.Set.Should().ContainSingle().Which.Option.Should().Be("customer");
+        Parse(AppTestPackagesV6.CrmWithSet).Conversions.Single().Header.Set.Should().ContainSingle().Which.Option.Should().Be("customer");
         Parse(AppTestPackagesV6.Master).Manifest.IsMaster.Should().BeTrue();
     }
 
@@ -66,12 +66,18 @@ public class AppFormat6Tests
     [Theory]
     [InlineData("\"id\": \"crm6-lite\",", "\"id\": \"crm6-lite\", \"kind\": \"app\",", "manifest.kind")]
     [InlineData("\"masters\": [ { \"id\": \"partner-lite\", \"modules\": [\"partner\"] } ]", "\"masters\": [ { \"id\": \"partner-lite\", \"modules\": [\"partner\"] } ]", "requires.masters")]
-    [InlineData("\"set\": [", "\"set\": [", "header.set")]
     [InlineData("\"active\": false }", "\"active\": false }", "contributions")]
     public void Format5_WithFormat6Features_IsRejectedWhole(string from, string to, string feature)
     {
         var json = Crm(from, to).Replace("\"formatVersion\": 6", "\"formatVersion\": 5");
         AloneErrors(json).Should().Contain(e => e.Contains(feature) && e.Contains("formatVersion 6 才支援"));
+    }
+
+    [Fact]
+    public void Format5_WithHeaderSet_IsRejectedWhole()
+    {
+        var json = AppTestPackagesV6.CrmWithSet.Replace("\"formatVersion\": 6", "\"formatVersion\": 5");
+        AloneErrors(json).Should().Contain(e => e.Contains("header.set") && e.Contains("formatVersion 6 才支援"));
     }
 
     [Fact]
@@ -157,7 +163,7 @@ public class AppFormat6Tests
     [Fact]
     public void MasterSymbol_FirstSegmentMustBeInRequiresMasters()
     {
-        var json = Crm("\"from\": \"partner-lite/partner.phone\"", "\"from\": \"other-master/partner.phone\"")
+        var json = CrmSet("\"from\": \"partner-lite/partner.phone\"", "\"from\": \"other-master/partner.phone\"")
             .Replace("\"set\": [ { \"to\": \"partner-lite/partner.role\"", "\"set\": [ { \"to\": \"other-master/partner.role\"");
         var errors = AloneErrors(json);
         errors.Should().Contain(e => e.StartsWith("order.customer.fill.map") && e.Contains("other-master/partner.phone"));
@@ -196,13 +202,33 @@ public class AppFormat6Tests
         Errors(json).Should().Contain(e => e.StartsWith("order.customer.refGuard.in") && e.Contains("vendor"));
     }
 
+    private static string CrmSet(string from, string to)
+    {
+        AppTestPackagesV6.CrmWithSet.Should().Contain(from);
+        return AppTestPackagesV6.CrmWithSet.Replace(from, to);
+    }
+
     [Fact]
     public void HeaderSet_OnlyEnumFieldsAndTheirOptions()
     {
-        Errors(Crm("\"option\": \"customer\"", "\"option\": \"vendor\""))
+        Errors(CrmSet("\"option\": \"customer\"", "\"option\": \"vendor\""))
             .Should().Contain("conversions[0].header.set: vendor 不是 partner-lite/partner.role 的選項代號");
-        Errors(Crm("\"set\": [ { \"to\": \"partner-lite/partner.role\"", "\"set\": [ { \"to\": \"partner-lite/partner.phone\""))
+        Errors(CrmSet("\"set\": [ { \"to\": \"partner-lite/partner.role\"", "\"set\": [ { \"to\": \"partner-lite/partner.phone\""))
             .Should().Contain("conversions[0].header.set: 固定值只能寫入下拉欄位，partner-lite/partner.phone 不是");
+    }
+
+    /// <summary>開啟流程還不會寫入固定值（只傳追溯欄位與 copy），收下會讓轉出的記錄靜默少了值：非空的 header.set 一律拒絕。</summary>
+    [Fact]
+    public void HeaderSet_IsRefusedUntilOpeningSupportsIt_ForPlainAndMasterTargets()
+    {
+        var expected = $"conversions[0].header.set: {AppPackageValidator.HeaderSetNotYetSupported}";
+        var withoutSet = System.Text.RegularExpressions.Regex.Replace(AppTestPackagesV6.LocalSet, @",\s*""set"": \[[^\]]*\]", "");
+        withoutSet.Should().NotBe(AppTestPackagesV6.LocalSet);
+        AloneErrors(withoutSet).Should().BeEmpty();
+        AloneErrors(AppTestPackagesV6.LocalSet).Should().Equal(expected);
+        AloneErrors(AppTestPackagesV6.LocalSet.Replace("\"set\": [ { \"to\": \"customer.role\", \"option\": \"customer\" } ]", "\"set\": []"))
+            .Should().BeEmpty();
+        Errors(AppTestPackagesV6.CrmWithSet).Should().Equal(expected);
     }
 
     // ---- contributions（§4.3） ----

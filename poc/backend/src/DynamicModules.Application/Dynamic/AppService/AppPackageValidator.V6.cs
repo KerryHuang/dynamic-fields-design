@@ -15,6 +15,9 @@ public static partial class AppPackageValidator
     public const int MaxMasters = 5, MaxContributions = 20, MaxContributionFields = 50;
     public const string MasterModuleKeyPrefix = "master-";
 
+    /// <summary>開啟流程建立轉換時還不帶固定值（設計 §4.5 的實作在第 4 步），收下會讓轉出的記錄靜默少了值，所以先整份拒絕。</summary>
+    public const string HeaderSetNotYetSupported = "這個版本還不能執行轉換的固定值（header.set），請先拿掉";
+
     private static readonly HashSet<FieldType> ContributionFieldTypes =
     [
         FieldType.Text, FieldType.Textarea, FieldType.Email, FieldType.Phone, FieldType.Url,
