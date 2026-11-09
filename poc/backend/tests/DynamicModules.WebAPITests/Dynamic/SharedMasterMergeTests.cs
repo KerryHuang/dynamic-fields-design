@@ -196,6 +196,26 @@ public class SharedMasterMergeTests : IDisposable
         await _rig.ImportAsync(mx2);
     }
 
+    /// <summary>
+    /// 資料庫匯出的主檔不合乎主檔套件格式時（例如基本區塊有指向外部實體的參照），存檔退回定義層的合併並警告，
+    /// 不存一份之後每次再匯入都會被退回的定義（複查新問題 2）。
+    /// </summary>
+    [Fact]
+    public async Task WhenTheDatabaseMasterCannotBeAPackage_TheStoredCopyStaysValid_AndReimportKeepsWorking()
+    {
+        await _rig.ImportAllAsync();
+        await _rig.OpenOkAsync("crmx");
+        var (exported, _) = await _rig.ExportAsync("bp");
+        await _rig.AddDesignerFieldAsync(Partner, _rig.BlockId("bp", "partner.main"), "reference", "外部對象",
+            new { refTarget = new { kind = "entity", key = "test.entity" } });
+        var bp = Node(exported.GetRawText());
+        MainFields(bp).Add(Field("grade", "enum", "等級", null, ("gold", "金牌")));
+
+        var first = await _rig.ImportMergeOkAsync(bp.ToJsonString());
+        first.Should().Contain(w => w.Contains("主檔套件格式"));
+        await _rig.ImportMergeOkAsync(bp.ToJsonString());
+    }
+
     /// <summary>匯入的選項代號已是同模組另一個欄位的基本選項時不合併，但要列在警告裡，不靜默略過。</summary>
     [Fact]
     public async Task AnImportedOptionCodeTakenByAnotherBaseField_IsSkippedWithAWarning()

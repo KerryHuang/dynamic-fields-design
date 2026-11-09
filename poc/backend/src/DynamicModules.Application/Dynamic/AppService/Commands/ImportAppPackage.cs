@@ -92,7 +92,12 @@ public class ImportAppPackageHandler(
             if (await merger.MergeIntoDatabaseAsync(app, incoming, dbWarnings, ct) is { } failed) return failed;
             // 資料庫層的警告（實際補進去的結果）比定義層準；定義層只多出「沒有合併」的那幾類
             warnings = [.. dbWarnings, .. warnings.Where(w => w.Contains("沒有合併") && !dbWarnings.Contains(w))];
-            merged = (await exporter.ExportAsync(app, ct)).Package;
+            // 資料庫匯出的主檔若不合乎主檔套件格式（例如基本區塊有指向外部實體的參照），存它會讓之後每次再匯入都被退回；
+            // 這時退回存定義層的合併並警告
+            var fromDb = (await exporter.ExportAsync(app, ct)).Package;
+            var dbErrors = AppPackageValidator.Validate(fromDb, others).Errors;
+            if (dbErrors.Count == 0) merged = fromDb;
+            else warnings = [.. warnings, $"資料庫裡的主檔不合乎主檔套件格式（{dbErrors[0]}），存下的是檔案層的合併結果，之後的匯出可能與資料庫不同"];
         }
 
         var json = JsonSerializer.Serialize(merged, TemplateJson.Options);
