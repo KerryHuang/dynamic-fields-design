@@ -3,7 +3,8 @@
 # 用法：bash .claude/skills/night-run/scripts/wait-deploy.sh <commit sha>
 # 以 run_in_background 執行，等完工通知，不要輪詢。結束時最後一行是 success／failure／error／timeout。
 set -u
-SHA="$1"
+# GitHub deployments API 只認完整 sha，短 sha 永遠查不到；先展開。
+SHA=$(git rev-parse --verify "$1^{commit}") || { echo "unknown commit: $1"; exit 2; }
 REPO=$(gh repo view --json nameWithOwner --jq .nameWithOwner)
 for _ in $(seq 1 60); do
   ID=$(gh api "repos/$REPO/deployments?sha=$SHA" --jq '.[0].id' 2>/dev/null)
