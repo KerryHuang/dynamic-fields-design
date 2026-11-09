@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # 等託管平台對某個 commit 的部署結束（GitHub deployments API），最多約 30 分鐘。
-# 用法：bash .claude/skills/unattended/scripts/wait-deploy.sh <commit sha>
+# 用法：bash scripts/unattended/wait-deploy.sh <commit sha>
 # 以 run_in_background 執行，等完工通知，不要輪詢。結束時最後一行是 success／failure／error／timeout。
 set -u
 # GitHub deployments API 只認完整 sha，短 sha 永遠查不到；先展開。

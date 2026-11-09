@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # 合併前關卡：後端三個測試專案依序跑（不平行、不跑 sln），再跑前端 test／typecheck／build。
-# 用法：bash .claude/skills/unattended/scripts/gate.sh [worktree 根目錄，預設目前 repo]
+# 用法：bash scripts/unattended/gate.sh [worktree 根目錄，預設目前 repo]
 # 每一步都印 exit code；失敗時另列失敗的測試名稱（各最多數行）；任一步非 0，整支以 1 結束。
 set -u
 ROOT="${1:-$(git rev-parse --show-toplevel)}"
