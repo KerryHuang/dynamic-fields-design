@@ -40,6 +40,8 @@ public static partial class AppPackageValidator
                 grew |= restricted.Add(f.Name);
         }
         hidden.UnionWith(restricted);
+        // 貢獻內 fieldAccess 標成 hidden 的欄位（第三輪 5）；貢獻欄位本來就在 restricted 裡，這裡讓兩條規則明確一致
+        hidden.UnionWith(p.Contributions.Where(c => c is not null).SelectMany(c => c.FieldAccess).Where(a => a is { Access: FieldAccess.Hidden }).Select(a => a.Field));
 
         // ---- events ----
         var eventCodes = new HashSet<string>();

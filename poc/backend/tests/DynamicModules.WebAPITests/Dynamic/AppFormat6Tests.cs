@@ -325,6 +325,18 @@ public class AppFormat6Tests
         AloneErrors(CrmWithCopyEvent("lead.company", "")).Should().NotContain(e => e.Contains("allowHiddenSource"));
     }
 
+    /// <summary>第三輪 5：貢獻內 fieldAccess 標成 hidden 的欄位，事件複製同樣要 allowHiddenSource（貢獻欄位本來就都限定可見，這裡釘住兩條規則一致）。</summary>
+    [Fact]
+    public void Event_CopyingAContributionFieldMarkedHidden_NeedsAllowHiddenSource()
+    {
+        const string access = "\"fieldAccess\": [ { \"field\": \"partner-lite/partner.credit\", \"group\": \"sales\", \"access\": \"readOnly\" } ]";
+        var json = CrmWithCopyEvent("partner-lite/partner.credit", "").Replace(access, access.Replace("\"readOnly\"", "\"hidden\""));
+        json.Should().Contain("\"access\": \"hidden\"");
+        AloneErrors(json).Should().Contain(e => e.Contains("allowHiddenSource") && e.Contains("partner-lite/partner.credit"));
+        AloneErrors(json.Replace("\"from\": { \"side\": \"header\"", "\"allowHiddenSource\": true, \"from\": { \"side\": \"header\""))
+            .Should().NotContain(e => e.Contains("allowHiddenSource"));
+    }
+
     [Fact]
     public void Contribution_CodeAndOptionCodeCannotEqualBaseCodes()
     {
