@@ -210,7 +210,9 @@ public class DeletePlanner(IDeletionRepository data)
             if (EffectReferences.Of(e, source ?? "").FieldIds.Overlaps(contributed))
                 blockers.Add(new(DeleteBlockerKind.Event, source, e.Id, Name(e.NameI18n, e.Key)));
         }
-        foreach (var c in (await data.ListChecksAsync(ct)).Where(c => EffectReferences.Of(c).Overlaps(contributed)))
+        // 檢查所屬的模組也在刪除集合內：它隨模組一起移除，不算外部引用（審查必修 9）；主檔模組上的檢查照樣阻擋
+        foreach (var c in (await data.ListChecksAsync(ct))
+                     .Where(c => !(KeyOf(c.ModuleId) is { } ck && alsoDeleting.Contains(ck)) && EffectReferences.Of(c).Overlaps(contributed)))
             blockers.Add(new(DeleteBlockerKind.Check, KeyOf(c.ModuleId), c.Id, Name(c.NameI18n, c.Key)));
         foreach (var l in (await data.ListLedgersAsync(ct)).Where(l => EffectReferences.Of(l).Overlaps(contributed)))
             blockers.Add(new(DeleteBlockerKind.Ledger, KeyOf(l.ModuleId), l.Id, KeyOf(l.ModuleId) ?? ""));

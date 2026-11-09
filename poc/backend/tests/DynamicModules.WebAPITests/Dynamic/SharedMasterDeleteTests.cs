@@ -193,6 +193,54 @@ public class SharedMasterDeleteTests : IDisposable
         _rig.StatusOf("crmx").Should().Be(AppStatus.Closed, "什麼都沒刪");
     }
 
+    /// <summary>在 module 建一個檢查：同一個客戶的筆數不得超過該客戶的 CRM 分數（經參照取主檔上的貢獻欄位）。</summary>
+    private async Task AddScoreCheckAsync(string module, string customerField)
+    {
+        var customer = _rig.FieldId(module.Split('-')[0], customerField);
+        var res = await _rig.Admin.PostAsJsonAsync($"{Base}/checks", new
+        {
+            key = "ck-" + Guid.NewGuid().ToString("N")[..8], name = new Dictionary<string, string> { ["zh-TW"] = "額度" }, moduleKey = module, active = true,
+            definition = new
+            {
+                groupBy = new[] { customer }, function = "count", fieldId = (long?)null,
+                assert = new { op = "lte", limit = new { via = customer, field = _rig.FieldId("crmx", "bp/partner.score") } },
+                message = new Dictionary<string, string> { ["zh-TW"] = "超過額度" }
+            }
+        });
+        res.StatusCode.Should().Be(HttpStatusCode.Created, await res.Content.ReadAsStringAsync());
+    }
+
+    /// <summary>審查必修 9：CRM 訂單自己的檢查引用 CRM 貢獻的分數，隨訂單模組一起刪，不算外部引用。</summary>
+    [Fact]
+    public async Task ItsOwnCheckOnAContributedField_DoesNotBlockTheDelete()
+    {
+        await _rig.ImportAllAsync();
+        await _rig.OpenOkAsync("crmx");
+        await _rig.OpenOkAsync("stk");
+        await AddScoreCheckAsync("crmx-order", "order.customer");
+        await _rig.CloseOkAsync("crmx");
+
+        var preview = await PreviewAsync("crmx");
+        preview.GetProperty("blockers").GetArrayLength().Should().Be(0, preview.ToString());
+        await DeleteOkAsync("crmx");
+        _rig.Db(db => db.Set<ModuleCheck>().Count()).Should().Be(0, "檢查隨訂單模組移除");
+        await _rig.AssertIntegrityAsync();
+    }
+
+    [Fact]
+    public async Task AnOutsideCheckOnAContributedField_Is409()
+    {
+        await _rig.ImportAllAsync();
+        await _rig.OpenOkAsync("crmx");
+        await _rig.OpenOkAsync("stk");
+        await AddScoreCheckAsync("stk-ship", "ship.customer");
+        await _rig.CloseOkAsync("crmx");
+
+        var preview = await PreviewAsync("crmx");
+        preview.GetProperty("canDelete").GetBoolean().Should().BeFalse();
+        preview.GetProperty("blockers").EnumerateArray().Select(b => b.GetProperty("kind").GetString()).Should().Contain("check");
+    }
+
     [Fact]
     public async Task AFromLeadWithFill_DoesNotBlockTheDelete()
     {
