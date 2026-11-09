@@ -89,8 +89,8 @@ internal static class AppTestPackagesV6
                 "options": [ { "code": "manufacturing", "label": { "zh-TW": "製造" } } ] },
               { "code": "fromLead", "type": "reference", "label": { "zh-TW": "來源潛在客戶" },
                 "config": { "readOnly": true, "onDelete": "setNull", "refTarget": { "kind": "module", "key": "lead" } } },
-              { "code": "credit", "type": "currency", "label": { "zh-TW": "信用額度" }, "config": {}, "active": false },
-              { "code": "nameLength", "type": "formula", "label": { "zh-TW": "名稱長度" }, "config": { "formula": "{credit} * 2", "resultType": "number" } }
+              { "code": "credit", "type": "currency", "label": { "zh-TW": "信用額度" }, "config": {} },
+              { "code": "nameLength", "type": "formula", "label": { "zh-TW": "名稱長度" }, "config": { "formula": "{credit} * 2", "resultType": "number" }, "active": false }
             ],
             "permissions": [ { "group": "sales", "scope": "all", "privileges": {{SalesPerms}} } ],
             "fieldAccess": [ { "field": "partner-lite/partner.credit", "group": "sales", "access": "readOnly" } ]

@@ -55,6 +55,19 @@ public class SharedMasterImportTests : IDisposable
     }
 
     [Fact]
+    public async Task Contribution_AnInactiveFieldUsedByAFormula_Is400AtImport()
+    {
+        await ImportOk(AppTestPackagesV6.Master);
+        const string credit = "{ \"code\": \"credit\", \"type\": \"currency\", \"label\": { \"zh-TW\": \"信用額度\" }, \"config\": {} }";
+        var json = AppTestPackagesV6.Crm.Replace(credit, credit.Replace("\"config\": {} }", "\"config\": {}, \"active\": false }"))
+            .Replace("\"resultType\": \"number\" }, \"active\": false }", "\"resultType\": \"number\" } }");
+        json.Should().NotBe(AppTestPackagesV6.Crm);
+        var res = await Import(json);
+        res.StatusCode.Should().Be(HttpStatusCode.BadRequest, await res.Content.ReadAsStringAsync());
+        (await res.Content.ReadAsStringAsync()).Should().Contain("此欄位被公式或規則引用，不能停用");
+    }
+
+    [Fact]
     public async Task User_ReferencingAFieldTheImportedMasterLacks_IsRejected()
     {
         await ImportOk(AppTestPackagesV6.Master);
@@ -91,8 +104,7 @@ public class SharedMasterImportTests : IDisposable
     public async Task OpeningAMasterDirectly_Is409_ButItsUserOpensAndBindsIt()
     {
         await ImportOk(AppTestPackagesV6.Master);
-        // 這份套件的停用貢獻欄位 credit 被同一份的公式引用，開啟時停用會被既有規則擋下（400）；這裡只驗開啟流程，改成啟用
-        await ImportOk(AppTestPackagesV6.Crm.Replace("\"config\": {}, \"active\": false }", "\"config\": {} }"));
+        await ImportOk(AppTestPackagesV6.Crm);
         var direct = await _admin.PostAsJsonAsync($"{Apps}/packages/partner-lite/open", new { });
         direct.StatusCode.Should().Be(HttpStatusCode.Conflict);
         (await direct.Content.ReadAsStringAsync()).Should().Contain("共用主檔");

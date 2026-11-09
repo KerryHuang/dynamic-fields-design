@@ -297,6 +297,17 @@ public class AppFormat6Tests
             .Should().Contain("contributions[0].fields[nameLength]: 公式引用了 stockValue，貢獻的公式只能引用主檔的基本欄位與本貢獻的欄位");
     }
 
+    /// <summary>停用的貢獻欄位被啟用中的公式引用：開啟時停用會被設計器的規則擋下，所以匯入時就擋，訊息照設計器。</summary>
+    [Fact]
+    public void Contribution_AnInactiveFieldUsedByAnActiveFormula_IsRejected()
+    {
+        const string credit = "{ \"code\": \"credit\", \"type\": \"currency\", \"label\": { \"zh-TW\": \"信用額度\" }, \"config\": {} }";
+        var json = Crm(credit, credit.Replace("\"config\": {} }", "\"config\": {}, \"active\": false }"))
+            .Replace("\"resultType\": \"number\" }, \"active\": false }", "\"resultType\": \"number\" } }");
+        AloneErrors(json).Should().Contain("contributions[0].fields[credit].active: 此欄位被公式或規則引用，不能停用（nameLength）");
+        AloneErrors(AppTestPackagesV6.Crm).Should().BeEmpty("公式本身也停用時可以");
+    }
+
     [Fact]
     public void Contribution_CodeAndOptionCodeCannotEqualBaseCodes()
     {

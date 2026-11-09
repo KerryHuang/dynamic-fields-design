@@ -184,6 +184,11 @@ public static partial class AppPackageValidator
             foreach (var f in codes.Values)
                 ContributionFieldReferences($"{at}.fields[{f.Code}]", c, f, modules, scope, definition is not null, Local, errors);
 
+            // 停用的欄位被啟用中的公式引用：開啟時停用會被設計器的規則擋下，匯入時就擋，訊息照設計器（貢獻不收規則，只看公式）
+            foreach (var f in codes.Values.Where(f => f.Active == false))
+                if (codes.Values.FirstOrDefault(g => g.Active != false && g.Code != f.Code && FormulaOf(g) is { } fx && FormulaCodes(fx).Contains(f.Code)) is { } user)
+                    errors.Add($"{at}.fields[{f.Code}].active: 此欄位被公式或規則引用，不能停用（{user.Code}）");
+
             foreach (var perm in c.Permissions)
             {
                 if (!groupCodes.Contains(perm.Group ?? "")) errors.Add($"{at}.permissions: 群組 {perm.Group} 沒有在 groups 宣告");
