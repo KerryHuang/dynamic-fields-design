@@ -214,7 +214,9 @@ public class DeletePlanner(IDeletionRepository data)
         foreach (var c in (await data.ListChecksAsync(ct))
                      .Where(c => !(KeyOf(c.ModuleId) is { } ck && alsoDeleting.Contains(ck)) && EffectReferences.Of(c).Overlaps(contributed)))
             blockers.Add(new(DeleteBlockerKind.Check, KeyOf(c.ModuleId), c.Id, Name(c.NameI18n, c.Key)));
-        foreach (var l in (await data.ListLedgersAsync(ct)).Where(l => EffectReferences.Of(l).Overlaps(contributed)))
+        // 帳簿同理：擁有者模組在刪除集合內就隨模組移除（待決 4）
+        foreach (var l in (await data.ListLedgersAsync(ct))
+                     .Where(l => !(KeyOf(l.ModuleId) is { } lk && alsoDeleting.Contains(lk)) && EffectReferences.Of(l).Overlaps(contributed)))
             blockers.Add(new(DeleteBlockerKind.Ledger, KeyOf(l.ModuleId), l.Id, KeyOf(l.ModuleId) ?? ""));
         return blockers.DistinctBy(b => (b.Kind, b.ModuleKey, b.Id)).ToList();
     }

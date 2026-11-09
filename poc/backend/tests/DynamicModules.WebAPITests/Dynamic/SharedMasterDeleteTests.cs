@@ -241,6 +241,47 @@ public class SharedMasterDeleteTests : IDisposable
         preview.GetProperty("blockers").EnumerateArray().Select(b => b.GetProperty("kind").GetString()).Should().Contain("check");
     }
 
+    /// <summary>直接寫一筆分錄設定（驗證器只收本模組欄位，貢獻欄位走不到 API；這裡只測刪除規劃看到的引用）。</summary>
+    private void InsertLedgerOnContributedField(string module, string contributedFieldName)
+    {
+        var score = _rig.FieldId("crmx", contributedFieldName);
+        _rig.Db(db =>
+        {
+            var moduleId = db.Set<Module>().Single(m => m.Key == module).Id;
+            db.Set<ModuleLedger>().Add(new ModuleLedger { ModuleId = moduleId, Definition = new LedgerDefinition(score, [score], []) });
+        });
+    }
+
+    /// <summary>審查待決 4：帳簿的擁有者模組也在這次刪除內，隨模組一起移除，不算外部引用。</summary>
+    [Fact]
+    public async Task ItsOwnLedgerOnAContributedField_DoesNotBlockTheDelete()
+    {
+        await _rig.ImportAllAsync();
+        await _rig.OpenOkAsync("crmx");
+        await _rig.OpenOkAsync("stk");
+        InsertLedgerOnContributedField("crmx-order", "bp/partner.score");
+        await _rig.CloseOkAsync("crmx");
+
+        var preview = await PreviewAsync("crmx");
+        preview.GetProperty("blockers").GetArrayLength().Should().Be(0, preview.ToString());
+        await DeleteOkAsync("crmx");
+        _rig.Db(db => db.Set<ModuleLedger>().Count()).Should().Be(0, "帳簿隨訂單模組移除");
+    }
+
+    [Fact]
+    public async Task AnOutsideLedgerOnAContributedField_Is409()
+    {
+        await _rig.ImportAllAsync();
+        await _rig.OpenOkAsync("crmx");
+        await _rig.OpenOkAsync("stk");
+        InsertLedgerOnContributedField("stk-ship", "bp/partner.score");
+        await _rig.CloseOkAsync("crmx");
+
+        var preview = await PreviewAsync("crmx");
+        preview.GetProperty("canDelete").GetBoolean().Should().BeFalse();
+        preview.GetProperty("blockers").EnumerateArray().Select(b => b.GetProperty("kind").GetString()).Should().Contain("ledger");
+    }
+
     [Fact]
     public async Task AFromLeadWithFill_DoesNotBlockTheDelete()
     {
