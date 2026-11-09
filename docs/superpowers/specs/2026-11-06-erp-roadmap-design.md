@@ -119,7 +119,7 @@ ERP 有兩個作用：它是產品目標，也是核心的壓力測試。做不�
 **階段 2 之後的順序（2026-11-10 更新）：** s2c 整合層（設計見 `2026-11-09-app-integration-design.md`）之後，依 [ERP 資料模型](2026-11-10-erp-data-model-design.md) 的工作單元對應：
 
 1. **s2d 共用主檔：** 往來對象、聯絡人、品項全系統一份；移除模擬實體 `sales.customer`、`design.mold`，模具改為 MES 自有模組。
-2. **s2e 訂單與出貨依 ERP 慣例：** CRM 與 MES 都開時 CRM 訂單是唯一銷售訂單並建立工令；MES 與進銷存都開時完工入庫、出貨只用進銷存出貨單；改寫 s2c 的 `stockOut`。
+2. **s2e 訂單與出貨依 ERP 慣例：** CRM 與 MES 都開時 CRM 訂單是唯一銷售訂單並建立工令；MES 與進銷存都開時完工入庫、出貨只用進銷存出貨單；改寫 s2c 的 `stockOut`（設計見 `2026-11-11-order-workorder-shipment-design.md`）。
 3. **階段 3：** s3a 報表資料庫端聚合（進行中）→ s3b 期間鎖定等核心能力 → s3c 會計。
 
 ### 階段 3：會計（中）
