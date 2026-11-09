@@ -18,6 +18,9 @@ public sealed class DemoContext(DateOnly today, ISender sender, TemplateIdMap id
     /// <summary>「CRM 與銷售」應用程式的對照（它的模組代碼 order 等與 MES 重名，所以另放一份）；沒有開啟時是 null。</summary>
     public DemoContext? Crm { get; set; }
 
+    /// <summary>共用主檔往來對象與聯絡人的對照（符號 partner/partner.name 之類）；沒有任何開啟的應用程式用到主檔時是 null。</summary>
+    public DemoContext? Masters { get; set; }
+
     /// <summary>「進銷存」應用程式的對照（模組代碼 customer、shipment 等與 MES 重名，所以另放一份）；沒有開啟時是 null。</summary>
     public DemoContext? Inventory { get; set; }
 

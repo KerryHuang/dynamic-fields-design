@@ -12,8 +12,11 @@ public static class DemoCatalog
     /// <summary>Demo 開啟的內建應用程式（固定順序）。</summary>
     public static IReadOnlyList<string> AppIds { get; } = [MesAppId, CrmAppId, InventoryAppId];
 
-    /// <summary>情境的規劃順序（也是同一時刻步驟的執行順序）。模具保養排在報修之前：報修參照它建的模具記錄。</summary>
+    /// <summary>
+    /// 情境的規劃順序（也是同一時刻步驟的執行順序）。共用主檔排第一：其他情境引用它建的往來對象與聯絡人；
+    /// 模具保養排在報修之前：報修參照它建的模具記錄。
+    /// </summary>
     public static IReadOnlyList<IDemoScenario> Scenarios { get; } =
-        [new OrderScenario(), new MoldCareScenario(), new RepairScenario(), new QualityScenario(), new CrmScenario(),
+        [new MasterScenario(AppIds), new OrderScenario(), new MoldCareScenario(), new RepairScenario(), new QualityScenario(), new CrmScenario(),
          new MesQuoteScenario(), new InventoryScenario(), new MesProductionScenario()];
 }

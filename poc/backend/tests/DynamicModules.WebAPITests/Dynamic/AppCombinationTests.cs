@@ -101,7 +101,8 @@ public class AppCombinationTests : IDisposable
         var keys = new[] { crm, mes, inv }.SelectMany(a => a.GetProperty("modules").EnumerateArray().Select(m => m.GetProperty("key").GetString()!)).ToList();
         keys.Should().OnlyHaveUniqueItems("模組鍵不重複");
         var apps = await JsonOf(await _admin.GetAsync(Apps));
-        apps.EnumerateArray().Select(a => a.GetProperty("key").GetString()).Should().BeEquivalentTo("crm-sales", "mes-mold", "inventory");
+        apps.EnumerateArray().Select(a => a.GetProperty("key").GetString()).Should()
+            .BeEquivalentTo(["crm-sales", "mes-mold", "inventory", "partner", "contact"], "CRM 用到的共用主檔隨它自動開啟");
 
         // 事件、檢查、列印範本、轉換的代碼全站不重複（各套件用 mes-／inv-／crm- 前綴）
         var catalog = _app.Services.GetRequiredService<DynamicModules.Application.Dynamic.AppService.AppCatalog>();

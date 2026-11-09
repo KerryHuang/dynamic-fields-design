@@ -74,22 +74,30 @@ public class CrmSalesAppTests : IDisposable
     private static string ConvertUrl(JsonElement source, string conversion) =>
         $"{Base}/records/{source.GetProperty("id").GetInt64()}/conversions/{conversion}/convert";
 
+    /// <summary>客戶改用共用主檔往來對象（共用主檔設計 §11.1），模組鍵固定。</summary>
+    private const string Partner = BuiltInMasterTests.Partner;
+
+    /// <summary>建一個角色是客戶的往來對象（CRM 的客戶欄位只收客戶或兩者）。</summary>
+    private async Task<JsonElement> NewPartner(string name, string? phone = null, string role = "客戶")
+    {
+        var cu = await FieldKeys(_admin, Partner);
+        var values = new Dictionary<string, object> { [cu["名稱"]] = name, [cu["角色"]] = await OptionValue(_admin, Partner, "角色", role) };
+        if (phone is not null) values[cu["電話"]] = phone;
+        return await PostOk(_admin, $"{Base}/modules/{Partner}/records", new { values });
+    }
+
     private static string Key(JsonElement app, string code) =>
         app.GetProperty("modules").EnumerateArray().Single(m => m.GetProperty("code").GetString() == code).GetProperty("key").GetString()!;
 
     /// <summary>一張已核准的報價單：兩個品項，數量各 10。回傳（報價單、明細列 id、欄位對照）。</summary>
     private async Task<(JsonElement Quote, long[] LineIds, string QuoteKey, string LineKey)> ApprovedQuote(JsonElement app, string customerName = "宏達科技")
     {
-        string customer = Key(app, "customer"), product = Key(app, "product"), quote = Key(app, "quote"), quoteLine = Key(app, "quote-line");
-        var cust = await FieldKeys(_admin, customer);
+        string product = Key(app, "product"), quote = Key(app, "quote"), quoteLine = Key(app, "quote-line");
         var prod = await FieldKeys(_admin, product);
         var q = await FieldKeys(_admin, quote);
         var ql = await FieldKeys(_admin, quoteLine);
 
-        var c = await PostOk(_admin, $"{Base}/modules/{customer}/records", new
-        {
-            values = new Dictionary<string, object> { [cust["名稱"]] = customerName, [cust["電話"]] = "02-1234-5678" }
-        });
+        var c = await NewPartner(customerName, "02-1234-5678");
         var p1 = await PostOk(_admin, $"{Base}/modules/{product}/records", new
         {
             values = new Dictionary<string, object> { [prod["料號"]] = "P-001", [prod["名稱"]] = "感測器", [prod["單位"]] = "個", [prod["標準單價"]] = 1200 }
@@ -126,9 +134,10 @@ public class CrmSalesAppTests : IDisposable
         (await _admin.GetAsync($"{Base}/modules/crm-quote")).StatusCode.Should().Be(HttpStatusCode.NotFound);
 
         var app = await OpenCrm();
-        app.GetProperty("modules").GetArrayLength().Should().Be(10);
+        app.GetProperty("modules").GetArrayLength().Should().Be(8, "客戶與聯絡人改用共用主檔，不再是 CRM 自己的模組");
         app.GetProperty("modules").EnumerateArray().Select(m => m.GetProperty("key").GetString()).Should().OnlyContain(k => k!.StartsWith("crm-"));
-        (await JsonOf(await _admin.GetAsync(Apps))).GetArrayLength().Should().Be(1);
+        (await JsonOf(await _admin.GetAsync(Apps))).EnumerateArray().Select(a => a.GetProperty("key").GetString())
+            .Should().BeEquivalentTo(["crm-sales", "partner", "contact"], "開 CRM 時自動開啟它用到的共用主檔");
         (await JsonOf(await _admin.GetAsync($"{Base}/menu"))).GetArrayLength().Should().BeGreaterThan(0);
     }
 
@@ -136,7 +145,7 @@ public class CrmSalesAppTests : IDisposable
     public async Task LeadToCustomerAndOpportunity_ToQuote_ToPartialOrders_WholeFlow()
     {
         var app = await OpenCrm();
-        string lead = Key(app, "lead"), customer = Key(app, "customer"), opportunity = Key(app, "opportunity"), order = Key(app, "order"),
+        string lead = Key(app, "lead"), customer = Partner, opportunity = Key(app, "opportunity"), order = Key(app, "order"),
             orderLine = Key(app, "order-line"), quote = Key(app, "quote");
         var l = await FieldKeys(_admin, lead);
         var cu = await FieldKeys(_admin, customer);
@@ -157,6 +166,7 @@ public class CrmSalesAppTests : IDisposable
         var newCustomer = await PostOk(_admin, ConvertUrl(qualified, "crm-lead-to-customer"), new { });
         Str(newCustomer, cu["名稱"]).Should().Be("宏達科技");
         Str(newCustomer, cu["電話"]).Should().Be("02-1111-2222");
+        Str(newCustomer, cu["角色"]).Should().Be(await OptionValue(_admin, customer, "角色", "客戶"), "轉換固定把角色設為客戶");
         newCustomer.GetProperty("values").GetProperty(cu["來源潛在客戶"]).GetInt64().Should().Be(qualified.GetProperty("id").GetInt64());
         var opp = await PostOk(_admin, ConvertUrl(qualified, "crm-lead-to-opportunity"), new { });
         Str(opp, op["名稱"]).Should().Be("王小明");
@@ -232,10 +242,40 @@ public class CrmSalesAppTests : IDisposable
     }
 
     [Fact]
+    public async Task ConvertedPartner_CanBePickedInTheOrderCustomerField_ASupplierCannot()
+    {
+        var app = await OpenCrm();
+        string lead = Key(app, "lead"), order = Key(app, "order");
+        var l = await FieldKeys(_admin, lead);
+        var o = await FieldKeys(_admin, order);
+
+        var newLead = await PostOk(_admin, $"{Base}/modules/{lead}/records", new
+        {
+            values = new Dictionary<string, object> { [l["姓名"]] = "陳雅婷", [l["公司"]] = "晨曦機械" }
+        });
+        var contacted = await Transition(_admin, newLead, l["狀態"], await OptionValue(_admin, lead, "狀態", "已聯繫"));
+        var qualified = await Transition(_admin, contacted, l["狀態"], await OptionValue(_admin, lead, "狀態", "已確認"));
+        var partner = await PostOk(_admin, ConvertUrl(qualified, "crm-lead-to-customer"), new { });
+
+        async Task<HttpResponseMessage> OrderFor(long customer) => await _admin.PostAsJsonAsync($"{Base}/modules/{order}/records", new
+        {
+            values = new Dictionary<string, object>
+            {
+                [o["客戶"]] = customer, [o["訂單日期"]] = "2026-11-10", [o["狀態"]] = await OptionValue(_admin, order, "狀態", "已確認")
+            }
+        });
+        var picked = await OrderFor(partner.GetProperty("id").GetInt64());
+        picked.StatusCode.Should().Be(HttpStatusCode.Created, await picked.Content.ReadAsStringAsync());
+
+        var supplier = await NewPartner("昌盛鋼鐵", role: "供應商");
+        (await OrderFor(supplier.GetProperty("id").GetInt64())).StatusCode.Should().Be(HttpStatusCode.BadRequest, "供應商不能當訂單客戶");
+    }
+
+    [Fact]
     public async Task OnlyRequiredFields_LeadToCustomerAndOpportunity_ToQuote_ToOrder_Completes()
     {
         var app = await OpenCrm();
-        string lead = Key(app, "lead"), customer = Key(app, "customer"), opportunity = Key(app, "opportunity"),
+        string lead = Key(app, "lead"), customer = Partner, opportunity = Key(app, "opportunity"),
             quote = Key(app, "quote"), quoteLine = Key(app, "quote-line"), product = Key(app, "product"), order = Key(app, "order");
         var l = await FieldKeys(_admin, lead);
         var op = await FieldKeys(_admin, opportunity);
@@ -346,10 +386,8 @@ public class CrmSalesAppTests : IDisposable
 
     private async Task<long> NewCustomer(JsonElement app, string name)
     {
-        var customer = Key(app, "customer");
-        var cu = await FieldKeys(_admin, customer);
-        var c = await PostOk(_admin, $"{Base}/modules/{customer}/records", new { values = new Dictionary<string, object> { [cu["名稱"]] = name } });
-        return c.GetProperty("id").GetInt64();
+        _ = app;
+        return (await NewPartner(name)).GetProperty("id").GetInt64();
     }
 
     [Fact]
@@ -470,7 +508,8 @@ public class CrmSalesAppTests : IDisposable
         async Task<string> Section(string key) =>
             (await JsonOf(await _admin.GetAsync($"{Base}/modules/{key}"))).GetProperty("section").GetString() ?? "";
 
-        foreach (var key in new[] { "crm-lead", "crm-customer", "crm-contact", "crm-activity" }) (await Section(key)).Should().Be("客戶關係", key);
+        foreach (var key in new[] { "crm-lead", "crm-activity" }) (await Section(key)).Should().Be("客戶關係", key);
+        foreach (var key in new[] { Partner, BuiltInMasterTests.Contact }) (await Section(key)).Should().Be("主檔", key);
         foreach (var key in new[] { "crm-product", "crm-opportunity", "crm-quote", "crm-order" }) (await Section(key)).Should().Be("銷售", key);
     }
 

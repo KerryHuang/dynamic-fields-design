@@ -21,7 +21,7 @@ namespace DynamicModules.Application.Dynamic.DemoService;
 /// </summary>
 public sealed class DemoStructure(
     ISender sender, IPermissionRepository permissions, AppOpener appOpener, IAppRepository apps, IReportRepository reports, IModuleRepository modules,
-    EventService.EffectBudget budget, IWriteJournal journal)
+    EventService.EffectBudget budget, IWriteJournal journal, AppService.SharedMasters.MasterSymbols masterSymbols)
 {
     public const string CrmAppId = DemoCatalog.CrmAppId;
 
@@ -30,7 +30,13 @@ public sealed class DemoStructure(
         using var _ = ActingScope.Begin("admin");
         var groupIds = (await permissions.ListGroupsAsync(ct)).ToDictionary(g => g.Key, g => g.Id);
 
-        // 套件的群組代號 → Demo 既有的群組，所以示範帳號一登入就有權限走完整條流程
+        // 套件的群組代號 → Demo 既有的群組，所以示範帳號一登入就有權限走完整條流程。
+        // 共用主檔隨使用它的應用程式自動開啟，主檔的管理員群組對應到 MIS
+        var masterMap = new Dictionary<string, Dictionary<string, GroupMapEntry>>
+        {
+            ["partner"] = new() { ["steward"] = new GroupMapEntry("map", groupIds["mis"]) },
+            ["contact"] = new() { ["steward"] = new GroupMapEntry("map", groupIds["mis"]) }
+        };
         var opened = new Dictionary<string, TemplateIdMap>();
         foreach (var (appId, map) in new (string, (string Code, string Group)[])[]
         {
@@ -40,7 +46,7 @@ public sealed class DemoStructure(
         })
         {
             var groupMap = map.ToDictionary(m => m.Code, m => new GroupMapEntry("map", groupIds[m.Group]));
-            var app = await appOpener.OpenAsync(appId, new OpenAppBody(null, null, groupMap, null), ct);
+            var app = await appOpener.OpenAsync(appId, new OpenAppBody(null, null, groupMap, null, masterMap), ct);
             if (!app.Result.IsSuccess) return (null, Fail($"開啟應用程式 {appId}", app.Result));
             opened[appId] = app.Ids!;
         }
@@ -56,12 +62,26 @@ public sealed class DemoStructure(
         var failed = await CreateDashboardsAsync(reportIds, groupIds, ct);
         if (failed is not null) return (null, failed);
 
+        var masters = await MastersAsync(ct);
         return (new DemoContext(today, sender, ids, groupIds)
         {
             BeginStep = () => { journal.Clear(); budget.Reset(); },
             Crm = new DemoContext(today, sender, opened[DemoCatalog.CrmAppId], groupIds),
-            Inventory = new DemoContext(today, sender, opened[DemoCatalog.InventoryAppId], groupIds)
+            Inventory = new DemoContext(today, sender, opened[DemoCatalog.InventoryAppId], groupIds),
+            Masters = masters is null ? null : new DemoContext(today, sender, masters, groupIds)
         }, null);
+    }
+
+    /// <summary>已開啟主檔的符號對照（&lt;主檔 id&gt;/&lt;模組&gt;.&lt;欄位&gt;），給 <see cref="Scenarios.MasterScenario"/> 用；沒有主檔時是 null。</summary>
+    private async Task<TemplateIdMap?> MastersAsync(CancellationToken ct)
+    {
+        var masters = new List<Domain.Entities.Dynamic.App>();
+        foreach (var id in new[] { "partner", "contact" })
+            if (await apps.GetByKeyAsync(id, ct) is { } master) masters.Add(master);
+        if (masters.Count == 0) return null;
+        var seeds = await masterSymbols.SeedsAsync(masters, ct);
+        return new TemplateIdMap(seeds.Fields, seeds.FieldKeys, seeds.Options, new Dictionary<string, long>(),
+            seeds.Modules.ToDictionary(m => m.Key, m => m.Value.Key));
     }
 
     /// <summary>

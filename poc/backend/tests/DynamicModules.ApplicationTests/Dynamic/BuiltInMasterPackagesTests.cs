@@ -69,4 +69,34 @@ public class BuiltInMasterPackagesTests
     [Fact]
     public void TheCatalog_HasExactlyTheTwoMasters() =>
         BuiltIns.Where(p => p.Manifest.IsMaster).Select(p => p.Manifest.Id).Should().BeEquivalentTo(["partner", "contact"]);
+
+    [Fact]
+    public void Crm_UsesTheMastersInsteadOfItsOwnCustomerAndContact()
+    {
+        var crm = Package("crm-sales");
+        crm.Manifest.Requires.Masters.Select(r => r.Id).Should().Equal("partner", "contact");
+        crm.Manifest.Requires.Apps.Should().BeEmpty();
+        crm.Modules.Select(m => m.Code).Should().NotContain(["customer", "contact"]).And.Contain("product", "CRM 的產品維持原樣");
+        crm.Contributions.Select(c => $"{c.Master}/{c.Module}:{c.Block.Code}").Should().Equal("partner/partner:crm", "contact/contact:crm");
+        crm.Contributions[0].Fields.Select(f => f.Code).Should().Equal("industry", "fromLead");
+        crm.Contributions.Should().OnlyContain(c => c.Permissions.Select(p => p.Group).SequenceEqual(new[] { "sales", "manager" }));
+    }
+
+    [Fact]
+    public void ACrmSymbolThatIsNotABaseFieldOfPartner_RefusesStartup()
+    {
+        var dir = Directory.CreateTempSubdirectory("catalog-builtin-").FullName;
+        try
+        {
+            foreach (var file in Directory.GetFiles(AppCatalog.DefaultDirectory, "*.app.json"))
+                File.Copy(file, Path.Combine(dir, Path.GetFileName(file)));
+            var crm = Path.Combine(dir, "crm-sales.app.json");
+            File.WriteAllText(crm, File.ReadAllText(crm).Replace("\"partner/partner.phone\"", "\"partner/partner.fax\""));
+
+            var act = () => AppCatalog.Load(dir);
+            act.Should().Throw<InvalidOperationException>().Which.Message
+                .Should().Contain("crm-sales.app.json").And.Contain("partner/partner.fax 不是主檔 partner 的基本欄位");
+        }
+        finally { Directory.Delete(dir, recursive: true); }
+    }
 }

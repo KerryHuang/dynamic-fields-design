@@ -1,6 +1,6 @@
 {
   "format": "formwright-app",
-  "formatVersion": 3,
+  "formatVersion": 6,
   "manifest": {
     "id": "crm-sales",
     "version": "1.0.0",
@@ -16,7 +16,23 @@
       "th": "กระบวนการขายครบวงจร ตั้งแต่ลูกค้าเป้าหมาย ลูกค้า โอกาสการขาย ใบเสนอราคา ไปจนถึงคำสั่งซื้อ",
       "vi": "Quy trình bán hàng trọn vẹn từ khách hàng tiềm năng, khách hàng, cơ hội, báo giá đến đơn hàng"
     },
-    "icon": "handshake"
+    "icon": "handshake",
+    "requires": {
+      "masters": [
+        {
+          "id": "partner",
+          "modules": [
+            "partner"
+          ]
+        },
+        {
+          "id": "contact",
+          "modules": [
+            "contact"
+          ]
+        }
+      ]
+    }
   },
   "groups": [
     {
@@ -302,338 +318,6 @@
       ]
     },
     {
-      "code": "customer",
-      "key": "crm-customer",
-      "name": {
-        "zh-TW": "客戶",
-        "en-US": "Customers",
-        "th": "ลูกค้า",
-        "vi": "Khách hàng"
-      },
-      "kind": "standalone",
-      "titleField": "name",
-      "blocks": [
-        {
-          "code": "main",
-          "label": {
-            "zh-TW": "基本資料",
-            "en-US": "Details",
-            "th": "ข้อมูลพื้นฐาน",
-            "vi": "Thông tin cơ bản"
-          },
-          "collapsed": false,
-          "columns": 2,
-          "fields": [
-            {
-              "code": "no",
-              "type": "autonumber",
-              "label": {
-                "zh-TW": "編號",
-                "en-US": "No.",
-                "th": "เลขที่",
-                "vi": "Số"
-              },
-              "config": {
-                "format": "C-{0000}",
-                "showInList": true
-              }
-            },
-            {
-              "code": "name",
-              "type": "text",
-              "label": {
-                "zh-TW": "名稱",
-                "en-US": "Name",
-                "th": "ชื่อ",
-                "vi": "Tên"
-              },
-              "config": {
-                "required": true,
-                "showInList": true,
-                "isFilterable": true
-              }
-            },
-            {
-              "code": "industry",
-              "type": "enum",
-              "label": {
-                "zh-TW": "產業",
-                "en-US": "Industry",
-                "th": "อุตสาหกรรม",
-                "vi": "Ngành nghề"
-              },
-              "config": {
-                "showInList": true,
-                "isFilterable": true
-              },
-              "options": [
-                {
-                  "code": "manufacturing",
-                  "label": {
-                    "zh-TW": "製造",
-                    "en-US": "Manufacturing",
-                    "th": "การผลิต",
-                    "vi": "Sản xuất"
-                  },
-                  "color": null
-                },
-                {
-                  "code": "retail",
-                  "label": {
-                    "zh-TW": "零售",
-                    "en-US": "Retail",
-                    "th": "ค้าปลีก",
-                    "vi": "Bán lẻ"
-                  },
-                  "color": null
-                },
-                {
-                  "code": "service",
-                  "label": {
-                    "zh-TW": "服務",
-                    "en-US": "Services",
-                    "th": "บริการ",
-                    "vi": "Dịch vụ"
-                  },
-                  "color": null
-                },
-                {
-                  "code": "tech",
-                  "label": {
-                    "zh-TW": "資訊",
-                    "en-US": "Technology",
-                    "th": "เทคโนโลยี",
-                    "vi": "Công nghệ"
-                  },
-                  "color": null
-                }
-              ]
-            },
-            {
-              "code": "phone",
-              "type": "phone",
-              "label": {
-                "zh-TW": "電話",
-                "en-US": "Phone",
-                "th": "โทรศัพท์",
-                "vi": "Điện thoại"
-              },
-              "config": {}
-            },
-            {
-              "code": "email",
-              "type": "email",
-              "label": {
-                "zh-TW": "Email",
-                "en-US": "Email",
-                "th": "อีเมล",
-                "vi": "Email"
-              },
-              "config": {}
-            },
-            {
-              "code": "address",
-              "type": "text",
-              "label": {
-                "zh-TW": "地址",
-                "en-US": "Address",
-                "th": "ที่อยู่",
-                "vi": "Địa chỉ"
-              },
-              "config": {}
-            },
-            {
-              "code": "owner",
-              "type": "user",
-              "label": {
-                "zh-TW": "負責業務",
-                "en-US": "Owner",
-                "th": "ผู้รับผิดชอบ",
-                "vi": "Người phụ trách"
-              },
-              "config": {
-                "showInList": true,
-                "isFilterable": true
-              }
-            },
-            {
-              "code": "fromLead",
-              "type": "reference",
-              "label": {
-                "zh-TW": "來源潛在客戶",
-                "en-US": "Source lead",
-                "th": "ลูกค้าเป้าหมายต้นทาง",
-                "vi": "Khách hàng tiềm năng nguồn"
-              },
-              "config": {
-                "readOnly": true,
-                "refTarget": {
-                  "kind": "module",
-                  "key": "lead"
-                }
-              }
-            }
-          ]
-        }
-      ],
-      "icon": "business",
-      "section": "客戶關係",
-      "permissions": [
-        {
-          "group": "sales",
-          "scope": "all",
-          "privileges": {
-            "read": true,
-            "add": true,
-            "edit": true,
-            "delete": false,
-            "printExport": true,
-            "pricing": true,
-            "approve": false
-          }
-        },
-        {
-          "group": "manager",
-          "scope": "all",
-          "privileges": {
-            "read": true,
-            "add": true,
-            "edit": true,
-            "delete": true,
-            "printExport": true,
-            "pricing": true,
-            "approve": true
-          }
-        }
-      ]
-    },
-    {
-      "code": "contact",
-      "key": "crm-contact",
-      "name": {
-        "zh-TW": "聯絡人",
-        "en-US": "Contacts",
-        "th": "ผู้ติดต่อ",
-        "vi": "Người liên hệ"
-      },
-      "kind": "standalone",
-      "titleField": "name",
-      "blocks": [
-        {
-          "code": "main",
-          "label": {
-            "zh-TW": "基本資料",
-            "en-US": "Details",
-            "th": "ข้อมูลพื้นฐาน",
-            "vi": "Thông tin cơ bản"
-          },
-          "collapsed": false,
-          "columns": 2,
-          "fields": [
-            {
-              "code": "name",
-              "type": "text",
-              "label": {
-                "zh-TW": "姓名",
-                "en-US": "Name",
-                "th": "ชื่อ",
-                "vi": "Tên"
-              },
-              "config": {
-                "required": true,
-                "showInList": true,
-                "isFilterable": true
-              }
-            },
-            {
-              "code": "customer",
-              "type": "reference",
-              "label": {
-                "zh-TW": "客戶",
-                "en-US": "Customer",
-                "th": "ลูกค้า",
-                "vi": "Khách hàng"
-              },
-              "config": {
-                "required": true,
-                "showInList": true,
-                "isFilterable": true,
-                "refTarget": {
-                  "kind": "module",
-                  "key": "customer"
-                }
-              }
-            },
-            {
-              "code": "title",
-              "type": "text",
-              "label": {
-                "zh-TW": "職稱",
-                "en-US": "Job title",
-                "th": "ตำแหน่ง",
-                "vi": "Chức danh"
-              },
-              "config": {
-                "showInList": true
-              }
-            },
-            {
-              "code": "phone",
-              "type": "phone",
-              "label": {
-                "zh-TW": "電話",
-                "en-US": "Phone",
-                "th": "โทรศัพท์",
-                "vi": "Điện thoại"
-              },
-              "config": {}
-            },
-            {
-              "code": "email",
-              "type": "email",
-              "label": {
-                "zh-TW": "Email",
-                "en-US": "Email",
-                "th": "อีเมล",
-                "vi": "Email"
-              },
-              "config": {}
-            }
-          ]
-        }
-      ],
-      "icon": "contacts",
-      "section": "客戶關係",
-      "permissions": [
-        {
-          "group": "sales",
-          "scope": "all",
-          "privileges": {
-            "read": true,
-            "add": true,
-            "edit": true,
-            "delete": false,
-            "printExport": true,
-            "pricing": true,
-            "approve": false
-          }
-        },
-        {
-          "group": "manager",
-          "scope": "all",
-          "privileges": {
-            "read": true,
-            "add": true,
-            "edit": true,
-            "delete": true,
-            "printExport": true,
-            "pricing": true,
-            "approve": true
-          }
-        }
-      ]
-    },
-    {
       "code": "product",
       "key": "crm-product",
       "name": {
@@ -827,7 +511,15 @@
                 "isFilterable": true,
                 "refTarget": {
                   "kind": "module",
-                  "key": "customer"
+                  "key": "partner",
+                  "app": "partner"
+                },
+                "refGuard": {
+                  "field": "partner/partner.role",
+                  "in": [
+                    "customer",
+                    "both"
+                  ]
                 }
               }
             },
@@ -1125,7 +817,15 @@
                 "showInList": true,
                 "refTarget": {
                   "kind": "module",
-                  "key": "customer"
+                  "key": "partner",
+                  "app": "partner"
+                },
+                "refGuard": {
+                  "field": "partner/partner.role",
+                  "in": [
+                    "customer",
+                    "both"
+                  ]
                 }
               }
             },
@@ -1271,26 +971,34 @@
                   "mode": "lock",
                   "map": [
                     {
-                      "from": "customer.name",
+                      "from": "partner/partner.name",
                       "to": "customerName"
                     },
                     {
-                      "from": "customer.phone",
+                      "from": "partner/partner.phone",
                       "to": "customerPhone"
                     },
                     {
-                      "from": "customer.email",
+                      "from": "partner/partner.email",
                       "to": "customerEmail"
                     },
                     {
-                      "from": "customer.address",
+                      "from": "partner/partner.address",
                       "to": "customerAddress"
                     }
                   ]
                 },
                 "refTarget": {
                   "kind": "module",
-                  "key": "customer"
+                  "key": "partner",
+                  "app": "partner"
+                },
+                "refGuard": {
+                  "field": "partner/partner.role",
+                  "in": [
+                    "customer",
+                    "both"
+                  ]
                 }
               }
             },
@@ -1797,7 +1505,15 @@
                 "isFilterable": true,
                 "refTarget": {
                   "kind": "module",
-                  "key": "customer"
+                  "key": "partner",
+                  "app": "partner"
+                },
+                "refGuard": {
+                  "field": "partner/partner.role",
+                  "in": [
+                    "customer",
+                    "both"
+                  ]
                 }
               }
             },
@@ -2386,28 +2102,34 @@
       },
       "active": true,
       "source": "lead",
-      "target": "customer",
+      "target": "partner/partner",
       "sourceStates": [
         "qualified"
       ],
       "header": {
-        "sourceField": "customer.fromLead",
+        "sourceField": "partner/partner.fromLead",
         "copy": [
           {
             "from": "lead.company",
-            "to": "customer.name"
+            "to": "partner/partner.name"
           },
           {
             "from": "lead.phone",
-            "to": "customer.phone"
+            "to": "partner/partner.phone"
           },
           {
             "from": "lead.email",
-            "to": "customer.email"
+            "to": "partner/partner.email"
           },
           {
             "from": "lead.owner",
-            "to": "customer.owner"
+            "to": "partner/partner.owner"
+          }
+        ],
+        "set": [
+          {
+            "to": "partner/partner.role",
+            "option": "customer"
           }
         ]
       }
@@ -2628,6 +2350,169 @@
       },
       "active": true,
       "body": "<h1 align=\"center\">報價單 {{no}}</h1><table width=\"100%\" cellpadding=\"4\"><tr><td>客戶：{{customerName}}</td><td align=\"right\">報價日期：{{quoteDate}}</td></tr><tr><td>電話：{{customerPhone}}</td><td align=\"right\">有效期限：{{validUntil}}</td></tr><tr><td colspan=\"2\">Email：{{customerEmail}}　地址：{{customerAddress}}</td></tr></table><table width=\"100%\" border=\"1\" cellpadding=\"4\" style=\"border-collapse:collapse\"><thead><tr><th>項次</th><th>品名</th><th>單位</th><th align=\"right\">數量</th><th align=\"right\">單價</th><th align=\"right\">金額</th></tr></thead><tbody>{{#each quote-line}}<tr><td>{{seq}}</td><td>{{productName}}</td><td>{{unit}}</td><td align=\"right\">{{qty}}</td><td align=\"right\">{{price}}</td><td align=\"right\">{{amount}}</td></tr>{{/each}}</tbody></table><p align=\"right\">未稅小計：{{subtotal}}<br>稅額：{{tax}}<br><strong>含稅總計：{{total}}</strong></p><p>備註：{{remark}}</p>"
+    }
+  ],
+  "contributions": [
+    {
+      "master": "partner",
+      "module": "partner",
+      "block": {
+        "code": "crm",
+        "name": {
+          "zh-TW": "CRM",
+          "en-US": "CRM",
+          "th": "CRM",
+          "vi": "CRM"
+        }
+      },
+      "fields": [
+        {
+          "code": "industry",
+          "type": "enum",
+          "label": {
+            "zh-TW": "產業",
+            "en-US": "Industry",
+            "th": "อุตสาหกรรม",
+            "vi": "Ngành nghề"
+          },
+          "config": {
+            "showInList": true,
+            "isFilterable": true
+          },
+          "options": [
+            {
+              "code": "manufacturing",
+              "label": {
+                "zh-TW": "製造",
+                "en-US": "Manufacturing",
+                "th": "การผลิต",
+                "vi": "Sản xuất"
+              },
+              "color": null
+            },
+            {
+              "code": "retail",
+              "label": {
+                "zh-TW": "零售",
+                "en-US": "Retail",
+                "th": "ค้าปลีก",
+                "vi": "Bán lẻ"
+              },
+              "color": null
+            },
+            {
+              "code": "service",
+              "label": {
+                "zh-TW": "服務",
+                "en-US": "Services",
+                "th": "บริการ",
+                "vi": "Dịch vụ"
+              },
+              "color": null
+            },
+            {
+              "code": "tech",
+              "label": {
+                "zh-TW": "資訊",
+                "en-US": "Technology",
+                "th": "เทคโนโลยี",
+                "vi": "Công nghệ"
+              },
+              "color": null
+            }
+          ]
+        },
+        {
+          "code": "fromLead",
+          "type": "reference",
+          "label": {
+            "zh-TW": "來源潛在客戶",
+            "en-US": "Source lead",
+            "th": "ลูกค้าเป้าหมายต้นทาง",
+            "vi": "Khách hàng tiềm năng nguồn"
+          },
+          "config": {
+            "readOnly": true,
+            "refTarget": {
+              "kind": "module",
+              "key": "lead"
+            },
+            "onDelete": "setNull"
+          }
+        }
+      ],
+      "permissions": [
+        {
+          "group": "sales",
+          "scope": "all",
+          "privileges": {
+            "read": true,
+            "add": true,
+            "edit": true,
+            "delete": false,
+            "printExport": true,
+            "pricing": true,
+            "approve": false
+          }
+        },
+        {
+          "group": "manager",
+          "scope": "all",
+          "privileges": {
+            "read": true,
+            "add": true,
+            "edit": true,
+            "delete": true,
+            "printExport": true,
+            "pricing": true,
+            "approve": true
+          }
+        }
+      ],
+      "fieldAccess": []
+    },
+    {
+      "master": "contact",
+      "module": "contact",
+      "block": {
+        "code": "crm",
+        "name": {
+          "zh-TW": "CRM",
+          "en-US": "CRM",
+          "th": "CRM",
+          "vi": "CRM"
+        }
+      },
+      "fields": [],
+      "permissions": [
+        {
+          "group": "sales",
+          "scope": "all",
+          "privileges": {
+            "read": true,
+            "add": true,
+            "edit": true,
+            "delete": false,
+            "printExport": true,
+            "pricing": true,
+            "approve": false
+          }
+        },
+        {
+          "group": "manager",
+          "scope": "all",
+          "privileges": {
+            "read": true,
+            "add": true,
+            "edit": true,
+            "delete": true,
+            "printExport": true,
+            "pricing": true,
+            "approve": true
+          }
+        }
+      ],
+      "fieldAccess": []
     }
   ]
 }

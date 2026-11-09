@@ -7,7 +7,8 @@ using DynamicModules.Application.Dynamic.RecordService.Commands.UpdateRecord;
 namespace DynamicModules.Application.Dynamic.DemoService.Scenarios;
 
 /// <summary>
-/// 「CRM 與銷售」應用程式的虛構資料：8 項產品、10 家客戶、10 位聯絡人、12 筆潛在客戶（含 2 筆已轉客戶與商機）、
+/// 「CRM 與銷售」應用程式的虛構資料：8 項產品、10 家客戶的產業（客戶與聯絡人本身由 <see cref="MasterScenario"/> 建在共用主檔）、
+/// 12 筆潛在客戶（含 2 筆已轉客戶與商機）、
 /// 12 筆商機（六個階段都有）、18 筆活動、10 張報價單（草稿、待核准、已退回、已核准）與 4 張由報價轉出的訂單
 /// （有一張報價單只轉了一部分，一張分兩次轉完）。全部走一般的建立、更新、轉換指令，權限、狀態機、帶值照常生效，
 /// 步驟由 sales01、sales02 執行，核准與取消由 manager01 執行。人名、公司、電話、Email 全是虛構（Email 一律 example.com）。
@@ -36,7 +37,6 @@ public sealed class CrmScenario : IDemoScenario
 
     private static readonly string[] Surnames = ["林", "陳", "王", "張", "李", "黃", "吳", "劉", "蔡", "楊"];
     private static readonly string[] GivenNames = ["怡君", "家豪", "雅婷", "志明", "淑芬", "建宏", "佩珊", "俊傑", "美玲", "宗翰"];
-    private static readonly string[] Titles = ["採購經理", "工廠廠長", "資訊主管", "業務窗口", "財務主管"];
 
     private static readonly string[] Stages = ["prospecting", "qualification", "proposal", "negotiation", "won"];
 
@@ -57,21 +57,14 @@ public sealed class CrmScenario : IDemoScenario
                 ("sku", p.Sku), ("name", p.Name), ("unit", p.Unit), ("price", (decimal)p.Price), ("active", true))));
         }
 
-        // ---- 客戶與聯絡人 ----
-        var customers = new List<DemoRecord>();
-        for (var i = 0; i < Companies.Length; i++)
+        // ---- 客戶：共用主檔往來對象（MasterScenario 建立，角色客戶或兩者），CRM 補上自己的「產業」----
+        var customers = plan.Records[MasterScenario.PartnerModule].Where(p => (string?)p.Facts["role"] != "supplier").Take(Companies.Length).ToList();
+        for (var i = 0; i < customers.Count; i++)
         {
             var n = i;
-            var at = plan.At(today.AddDays(-70 + i));
-            customers.Add(plan.Create("crm-customer", at, Rep(i), $"客戶 {Companies[i]} 建立", ctx => Create(ctx, "customer",
-                ("name", Companies[n]), ("industry", ctx.Crm!.Opt("customer", Industries[n])), ("phone", $"02-5550-{1000 + n * 37:0000}"),
-                ("email", $"service{n + 1}@example.com"), ("address", $"示範市中山路 {100 + n * 8} 號"), ("owner", Rep(n)))));
-            var contactAt = After(at, 0);
-            var contactNo = n;
-            plan.Create("crm-contact", contactAt, Rep(i), $"聯絡人 {Surnames[i]}{GivenNames[i]} 建立", ctx => Create(ctx, "contact",
-                ("name", $"{Surnames[contactNo]}{GivenNames[contactNo]}"), ("customer", customers[contactNo].Id),
-                ("title", Titles[contactNo % Titles.Length]), ("phone", $"0912-555-{100 + contactNo * 7:000}"),
-                ("email", $"contact{contactNo + 1}@example.com")));
+            plan.Update(customers[i], plan.At(today.AddDays(-70 + i)), Rep(i), $"客戶 {Companies[i]} 設定產業", (ctx, r) =>
+                new UpdateRecordRequest(r.Id, ctx.Crm!.Values(MasterScenario.PartnerSymbol,
+                    ("industry", ctx.Crm.Opt(MasterScenario.PartnerSymbol, Industries[n]))), r.RowVersion));
         }
 
         // ---- 潛在客戶：4 新線索、3 已聯繫、3 已確認（其中 2 筆轉客戶與商機）、2 流失 ----
@@ -104,7 +97,7 @@ public sealed class CrmScenario : IDemoScenario
             {
                 var convertAt = After(at);
                 plan.Refresh(lead, convertAt, Rep(i), $"潛在客戶 {i + 1} 重讀");
-                newCustomers.Add(plan.Convert("crm-customer", After(convertAt, 0), Rep(i), $"潛在客戶 {i + 1} 轉客戶", ctx =>
+                newCustomers.Add(plan.Convert(MasterScenario.PartnerModule, After(convertAt, 0), Rep(i), $"潛在客戶 {i + 1} 轉客戶", ctx =>
                     new ConvertRecordRequest(lead.Id, "crm-lead-to-customer", null, null, null)));
                 leadOpportunities.Add(plan.Convert("crm-opportunity", After(convertAt, 0), Rep(i), $"潛在客戶 {i + 1} 轉商機", ctx =>
                     new ConvertRecordRequest(lead.Id, "crm-lead-to-opportunity", null, null, null)));
