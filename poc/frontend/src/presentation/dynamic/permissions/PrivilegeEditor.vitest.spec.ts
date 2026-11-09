@@ -67,6 +67,41 @@ describe('PrivilegeEditor', () => {
     expect(byId(w, quasar.QBtn, 'user-remove-u1').props('disable')).toBe(true);
   });
 
+  describe('shared master module: a scope per action', () => {
+    const master = (): ModulePermissions => ({
+      ...base(), sharedMaster: true,
+      groups: [{ groupId: 1, privileges: { ...none, read: true, edit: true }, scope: 'all',
+        actionScopes: [{ action: 'read', scope: 'all' }, { action: 'edit', scope: 'own' }] }],
+    });
+
+    it('replaces the single scope select with a per-action summary', () => {
+      const w = mountEditor(master());
+      expect(w.find('[data-testid="scope-1"]').exists()).toBe(false);
+      expect(w.find('[data-testid="action-scopes-1"]').text()).toContain('依動作不同');
+      const same = master();
+      same.groups[0]!.actionScopes = [{ action: 'read', scope: 'own' }, { action: 'edit', scope: 'own' }];
+      expect(mountEditor(same).find('[data-testid="action-scopes-1"]').text()).toContain('本人');
+    });
+
+    it('sets the scope of one action and keeps the others', async () => {
+      const w = mount(PrivilegeEditor, {
+        props: { modelValue: master(), groups, users, readonly: false },
+        global: { plugins: [[quasar.Quasar, { components: quasar }], createI18n({ legacy: false, locale: 'zh-TW', messages: { 'zh-TW': zhTW } })] },
+        attachTo: document.body,
+      });
+      await w.find('[data-testid="action-scopes-1"]').trigger('click');
+      await new Promise((r) => setTimeout(r, 20));
+      await flushPromises();
+      const el = document.body.querySelector('[data-testid="scope-1-edit"]')!;
+      expect(document.body.querySelector('[data-testid="scope-1-add"]')).toBeNull(); // only granted actions are listed
+      const sel = w.findAllComponents(quasar.QSelect).find((c) => c.element === el || c.element.contains(el))!;
+      expect(sel.props('modelValue')).toBe('own');
+      sel.vm.$emit('update:modelValue', 'group');
+      expect(last(w).groups[0]!.actionScopes).toEqual([{ action: 'read', scope: 'all' }, { action: 'edit', scope: 'group' }]);
+      w.unmount();
+    });
+  });
+
   it('user-add 挑完後輸入框清空，再開啟顯示全部可加入的使用者', async () => {
     const w = mount(PrivilegeEditor, {
       props: { modelValue: base(), groups, users: [...users, { userId: 'u3', displayName: '丙' }], readonly: false },

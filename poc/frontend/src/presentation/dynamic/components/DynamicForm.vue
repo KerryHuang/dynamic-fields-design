@@ -6,7 +6,7 @@ import { useI18n } from 'vue-i18n';
 import { fillPatch, fillReferenceInfos, lockedFillKeys } from 'src/domain/dynamic/fill';
 import { resolveI18n } from 'src/domain/dynamic/i18n-text';
 import { canAdvance, intersectAllowed, isReadOnlyState, selectableStates } from 'src/domain/dynamic/workflow';
-import type { DetailRowPayload, DynamicRecord, ModuleSchema, ReferenceInfo, SchemaField } from 'src/domain/dynamic/types';
+import type { DetailRowPayload, DynamicRecord, ModuleSchema, ReferenceInfo, SchemaBlock, SchemaField } from 'src/domain/dynamic/types';
 import { attachmentContextKey } from 'src/presentation/dynamic/attachment-context';
 import { buildZodSchema } from 'src/presentation/dynamic/build-zod-schema';
 import DetailGrid from 'src/presentation/dynamic/details/DetailGrid.vue';
@@ -48,10 +48,14 @@ const fields = computed(() => props.schema.blocks.flatMap((b) => b.fields));
 const workflow = computed(() => props.schema.workflow);
 const statusKey = computed(() => workflow.value?.statusFieldKey);
 
+// A contributed field whose app is closed is frozen for everyone; the server rejects any different value with 409.
+const lockOf = (f: SchemaField) => f.lockedBy ?? props.record?.lockedBy?.[f.key] ?? null;
+
 function initialValues(): Record<string, unknown> {
   return Object.fromEntries(fields.value.map((f) => [
     f.key,
     (props.mode === 'edit' ? props.record?.values[f.key]
+      : lockOf(f) ? null // a frozen field gets no default on create
       : (f.key === props.schema.workflow?.statusFieldKey ? props.schema.workflow.initialState : (props.initial?.[f.key] ?? defaultValueOf(f)))) ?? null,
   ]));
 }
@@ -148,7 +152,10 @@ watch(() => fillFields.value.map((f) => values[f.key] ?? null), syncFill);
 onMounted(syncFill); // a prefilled reference on create
 
 const hiddenField = (f: SchemaField) => ruleState.value.hidden.has(f.id);
-const fieldReadonly = (f: SchemaField) => !isWritable(f, ruleState.value) || lockedKeys.value.has(f.key) || (workflowLocked.value && f.key !== statusKey.value);
+const fieldReadonly = (f: SchemaField) => !!lockOf(f) || !isWritable(f, ruleState.value) || lockedKeys.value.has(f.key) || (workflowLocked.value && f.key !== statusKey.value);
+/** Names of the closed apps whose fields are shown in this block. */
+const blockLocks = (b: SchemaBlock) => [...new Set(b.fields.filter((f) => !hiddenField(f)).map(lockOf)
+  .filter((l) => l !== null).map((l) => resolveI18n(l.appName, locale.value)))];
 const visibleBlocks = computed(() => props.schema.blocks.filter((b) => b.fields.some((f) => !hiddenField(f))));
 const readOnlyForm = computed(() => ruleState.value.readOnlyAll);
 const canSave = computed(() => !readOnlyForm.value && (!workflowLocked.value || canAdvance(workflow.value, storedStatus.value)));
@@ -218,6 +225,9 @@ watch(() => props.record, () => {
       :label="resolveI18n(block.label, locale)" header-class="text-subtitle1" bordered expand-separator
     >
       <div class="q-pa-md">
+        <div v-for="app in blockLocks(block)" :key="app" class="text-warning text-caption q-mb-sm" data-testid="app-closed-lock">
+          {{ t('dynamic.appClosedLock', { app }) }}
+        </div>
         <div class="row q-col-gutter-md">
           <template v-for="f in block.fields" :key="f.key">
             <div v-if="!hiddenField(f)" :class="fieldColClass(block.columns, isFullWidth(f))">

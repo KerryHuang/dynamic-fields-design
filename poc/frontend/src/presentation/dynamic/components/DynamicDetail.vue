@@ -18,12 +18,20 @@ const hidden = computed(() => ruleStateOf(props.schema, props.record.values, pro
 const visibleBlocks = computed(() => props.schema.blocks
   .map((b) => ({ ...b, fields: b.fields.filter((f) => !hidden.value.has(f.id)) }))
   .filter((b) => b.fields.length > 0));
+/** Names of the closed apps whose (frozen) fields this block shows. */
+const blockLocks = (fields: SchemaField[]) => [...new Set(fields.map((f) => f.lockedBy ?? props.record.lockedBy?.[f.key] ?? null)
+  .filter((l) => l !== null).map((l) => resolveI18n(l.appName, locale.value)))];
 </script>
 
 <template>
   <div class="q-gutter-md">
     <q-card v-for="block in visibleBlocks" :key="block.id" flat bordered>
-      <q-card-section class="text-subtitle1">{{ resolveI18n(block.label, locale) }}</q-card-section>
+      <q-card-section class="text-subtitle1">
+        {{ resolveI18n(block.label, locale) }}
+        <div v-for="app in blockLocks(block.fields)" :key="app" class="text-warning text-caption" data-testid="app-closed-lock">
+          {{ t('dynamic.appClosedLock', { app }) }}
+        </div>
+      </q-card-section>
       <q-separator />
       <q-list class="row">
         <q-item v-for="f in block.fields" :key="f.key" :class="fieldColClass(block.columns, isFullWidth(f))">

@@ -102,6 +102,38 @@ describe('DynamicForm', () => {
     expect(sent.f_5).toEqual(['opt_2']);
   });
 
+  describe('frozen contributed fields (shared master)', () => {
+    const lock = { appKey: 'crm', appName: { 'zh-TW': '客戶關係' } };
+    const locked: SchemaField = { ...field(3, 'text', '備註'), lockedBy: lock, config: { ...field(3, 'text', '備註').config, defaultValue: '預設' } };
+    const s: ModuleSchema = { ...schema, blocks: [schema.blocks[0]!, { id: 2, label: { 'zh-TW': 'CRM' }, collapsed: true, columns: 2, fields: [locked] }] };
+
+    it('shows the field read-only with the closed app named in its block', async () => {
+      const w = mountForm({ schema: s, mode: 'edit', record });
+      await flushPromises();
+      expect(w.find('[data-testid="app-closed-lock"]').text()).toContain('「客戶關係」應用程式已關閉');
+      const dyn = w.findAllComponents({ name: 'DynamicField' }).find((c) => (c.props('field') as SchemaField).id === 3)!;
+      expect(dyn.props('readonly')).toBe(true);
+    });
+
+    it('a lock given only on the record also makes the field read-only', async () => {
+      const w = mountForm({ mode: 'edit', record: { ...record, lockedBy: { f_3: lock } } });
+      await flushPromises();
+      const dyn = w.findAllComponents({ name: 'DynamicField' }).find((c) => (c.props('field') as SchemaField).id === 3)!;
+      expect(dyn.props('readonly')).toBe(true);
+      expect(w.findAll('[data-testid="app-closed-lock"]')).toHaveLength(1);
+    });
+
+    it('create mode does not send a default for a frozen field (the server would 409)', async () => {
+      const w = mountForm({ schema: s });
+      await flushPromises();
+      await w.findAll('input')[0]!.setValue('abc');
+      await w.find('form').trigger('submit');
+      await vi.waitFor(() => expect(w.emitted('submit')).toBeTruthy());
+      const sent = (w.emitted('submit')![0] as [Record<string, unknown>])[0];
+      expect(sent.f_3 ?? null).toBeNull();
+    });
+  });
+
   describe('rules', () => {
     const opt = (id: number) => ({ value: `opt_${id}`, label: { 'zh-TW': `o${id}` }, active: true });
     const rule = (r: Partial<SchemaRule> & Pick<SchemaRule, 'kind' | 'targets'>): SchemaRule => ({

@@ -108,7 +108,12 @@ export interface SchemaField {
   config: FieldConfig;
   options: SchemaOption[];
   reference?: SchemaReference;
+  /** 凍結的貢獻欄位：貢獻它的應用程式已關閉，任何人都不能改（共用主檔）。 */
+  lockedBy?: FieldLock | null;
 }
+
+/** 欄位屬於哪個已關閉的應用程式。 */
+export interface FieldLock { appKey: string; appName: I18nText }
 
 export interface SchemaBlock {
   id: number;
@@ -244,6 +249,8 @@ export interface DynamicRecord {
   rowVersion: string;
   /** Already posted by an event: only the status field may change, and it cannot be deleted. */
   frozenByEffects?: boolean;
+  /** 凍結的貢獻欄位，依欄位 key。 */
+  lockedBy?: Record<string, FieldLock>;
   /** Detail rows by child module key; present on GET record of a header. */
   details?: Record<string, DynamicRecord[]>;
 }
@@ -446,7 +453,20 @@ export interface Privileges {
   approve: boolean;
 }
 
-export interface GroupPermission { groupId: number; privileges: Privileges; scope?: DataScope | null }
+export interface GroupPermission {
+  groupId: number;
+  privileges: Privileges;
+  scope?: DataScope | null;
+  /** 共用主檔模組：每個動作各自的資料範圍。 */
+  actionScopes?: ActionScope[] | null;
+}
+export interface ActionScope { action: keyof Privileges; scope: DataScope }
+/** 共用主檔上限定可見的貢獻欄位：`groupIds` 是管理員手動加的群組，`groups` 是全部可見群組與來源。 */
+export interface FieldVisibility {
+  fieldId: number;
+  groupIds: number[];
+  groups?: { groupId: number; source: 'app' | 'master' | 'manual'; appKey: string | null }[];
+}
 export interface UserPermission { userId: string; privileges: Privileges }
 export interface FieldPermission { fieldId: number; groupId: number; access: 'hidden' | 'readOnly' }
 export interface OptionScope { optionId: number; groupIds: number[] }
@@ -456,6 +476,9 @@ export interface ModulePermissions {
   users: UserPermission[];
   fields: FieldPermission[];
   options: OptionScope[];
+  /** 共用主檔模組：群組逐動作設定範圍，並可另外授予貢獻欄位的可見群組。 */
+  sharedMaster?: boolean;
+  fieldGrants?: FieldVisibility[] | null;
 }
 
 export interface Group { id: number; key: string; name: I18nText; members: string[] }

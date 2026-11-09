@@ -91,4 +91,39 @@ describe('FieldPermissionEditor', () => {
     expect(w.find('[data-testid="fp-error-10-2"]').text()).toContain('標題欄位不能設為隱藏');
     expect(w.find('[data-testid="opt-error-22"]').text()).toContain('群組不存在');
   });
+
+  describe('contributed fields on a shared master', () => {
+    const withGrants = (): ModulePermissions => ({
+      ...base(), sharedMaster: true,
+      fieldGrants: [{ fieldId: 11, groupIds: [3], groups: [{ groupId: 1, source: 'app', appKey: 'crm' }, { groupId: 3, source: 'manual', appKey: null }] }],
+    });
+    const box = (w: ReturnType<typeof mountEditor>, id: string) =>
+      w.findAllComponents(quasar.QCheckbox).find((c) => c.attributes('data-testid') === id || c.find(`[data-testid="${id}"]`).exists())!;
+
+    it('lists only restricted fields; app-given groups are ticked and locked, manual ones can be unticked', () => {
+      const w = mountEditor(withGrants());
+      expect(w.find('[data-testid="field-grants"]').text()).toContain('欄11');
+      expect(w.find('[data-testid="field-grants"]').text()).not.toContain('欄10');
+      expect(box(w, 'fg-11-1').props('modelValue')).toBe(true);
+      expect(box(w, 'fg-11-1').props('disable')).toBe(true);
+      expect(box(w, 'fg-11-1').text()).toContain('（來自 crm）');
+      expect(box(w, 'fg-11-2').props('modelValue')).toBe(false);
+      expect(box(w, 'fg-11-3').props('modelValue')).toBe(true);
+      expect(box(w, 'fg-11-3').props('disable')).toBe(false);
+    });
+
+    it('ticking and unticking a group edits only the manual group ids', async () => {
+      const w = mountEditor(withGrants());
+      box(w, 'fg-11-2').vm.$emit('update:modelValue', true);
+      expect(last(w).fieldGrants![0]!.groupIds).toEqual([3, 2]);
+      await w.setProps({ modelValue: last(w) });
+      box(w, 'fg-11-3').vm.$emit('update:modelValue', false);
+      expect(last(w).fieldGrants![0]!.groupIds).toEqual([2]);
+      expect(last(w).fieldGrants![0]!.groups!.map((g) => g.groupId)).toEqual([1, 2]);
+    });
+
+    it('has no visibility section on an ordinary module', () => {
+      expect(mountEditor().find('[data-testid="field-grants"]').exists()).toBe(false);
+    });
+  });
 });

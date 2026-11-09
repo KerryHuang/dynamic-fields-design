@@ -57,6 +57,35 @@ function setScope(optionId: number, groupIds: number[] | null) {
   });
 }
 
+// Shared master: contributed fields are visible only to the contributor's groups; the admin can add other groups here.
+// Rows given by an app can't be unticked (use Hidden above to take a field away from a group).
+const grantRows = computed(() => (props.modelValue.fieldGrants ?? [])
+  .map((v) => ({ v, field: props.fields.find((f) => f.id === v.fieldId) }))
+  .filter((r) => r.field !== undefined));
+const grantSourceOf = (fieldId: number, groupId: number) => {
+  const v = props.modelValue.fieldGrants?.find((x) => x.fieldId === fieldId);
+  return v?.groups?.find((x) => x.groupId === groupId && x.source !== 'manual') ?? null;
+};
+const isVisibleTo = (fieldId: number, groupId: number) => {
+  const v = props.modelValue.fieldGrants?.find((x) => x.fieldId === fieldId);
+  return !!v && (v.groupIds.includes(groupId) || grantSourceOf(fieldId, groupId) !== null);
+};
+function setVisible(fieldId: number, groupId: number, on: boolean) {
+  emit('update:modelValue', {
+    ...props.modelValue,
+    fieldGrants: (props.modelValue.fieldGrants ?? []).map((v) => (v.fieldId !== fieldId ? v : {
+      ...v,
+      groupIds: on ? [...v.groupIds.filter((id) => id !== groupId), groupId] : v.groupIds.filter((id) => id !== groupId),
+      groups: [...(v.groups ?? []).filter((x) => !(x.groupId === groupId && x.source === 'manual')),
+        ...(on ? [{ groupId, source: 'manual' as const, appKey: null }] : [])],
+    })),
+  });
+}
+const grantError = (fieldId: number) => {
+  const i = (props.modelValue.fieldGrants ?? []).findIndex((v) => v.fieldId === fieldId);
+  return i < 0 ? undefined : errorsAt(`fieldGrants[${i}]`);
+};
+
 function errorsAt(prefix: string): string | undefined {
   const hit = Object.entries(props.errors ?? {}).filter(([k]) => k === prefix || k.startsWith(`${prefix}.`)).flatMap(([, v]) => v);
   return hit.length ? hit.join('、') : undefined;
@@ -94,6 +123,33 @@ const optionError = (optionId: number) => {
               <div v-if="cellError(f.id, g.id)" class="text-negative text-caption" :data-testid="`fp-error-${f.id}-${g.id}`">
                 {{ cellError(f.id, g.id) }}
               </div>
+            </td>
+          </tr>
+        </tbody>
+      </q-markup-table>
+    </section>
+
+    <section v-if="grantRows.length" data-testid="field-grants">
+      <div class="text-subtitle1">{{ t('designer.permissions.fieldGrants') }}</div>
+      <div class="text-caption text-muted q-mb-sm">{{ t('designer.permissions.fieldGrantsHint') }}</div>
+      <q-markup-table flat bordered dense>
+        <tbody>
+          <tr v-for="r in grantRows" :key="r.v.fieldId" :class="{ 'bg-negative-soft': grantError(r.v.fieldId) }">
+            <td class="text-left" style="white-space: normal">
+              <div class="text-weight-medium q-mb-xs">{{ resolveI18n(r.field!.label, locale) }}</div>
+              <div class="row q-gutter-x-md">
+                <q-checkbox
+                  v-for="g in groups" :key="g.id" dense :model-value="isVisibleTo(r.v.fieldId, g.id)"
+                  :disable="readonly || grantSourceOf(r.v.fieldId, g.id) !== null" :data-testid="`fg-${r.v.fieldId}-${g.id}`"
+                  @update:model-value="setVisible(r.v.fieldId, g.id, $event)"
+                >
+                  {{ resolveI18n(g.name, locale) }}
+                  <span v-if="grantSourceOf(r.v.fieldId, g.id)" class="text-caption text-muted">
+                    {{ t('designer.permissions.grantedByApp', { app: grantSourceOf(r.v.fieldId, g.id)!.appKey ?? '' }) }}
+                  </span>
+                </q-checkbox>
+              </div>
+              <div v-if="grantError(r.v.fieldId)" class="text-negative text-caption">{{ grantError(r.v.fieldId) }}</div>
             </td>
           </tr>
         </tbody>

@@ -53,6 +53,27 @@ function setScope(groupId: number, scope: DataScope | null) {
   });
 }
 
+// Shared master module: every granted action has its own scope (the union of what each app granted, per action).
+const scopeLabel = (scope: DataScope) => scopeOptions.value.find((o) => o.value === scope)!.label;
+const actionScopeOf = (groupId: number, action: keyof Privileges): DataScope => {
+  const row = groupRow(groupId);
+  return row?.actionScopes?.find((a) => a.action === action)?.scope ?? row?.scope ?? 'all';
+};
+const grantedAxes = (groupId: number) => AXES.filter((a) => groupRow(groupId)?.privileges[a]);
+function actionScopeSummary(groupId: number): string {
+  const scopes = new Set(grantedAxes(groupId).map((a) => actionScopeOf(groupId, a)));
+  if (scopes.size === 0) return '—';
+  return scopes.size === 1 ? scopeLabel([...scopes][0]!) : t('designer.permissions.mixedScopes');
+}
+function setActionScope(groupId: number, action: keyof Privileges, scope: DataScope | null) {
+  emit('update:modelValue', {
+    ...props.modelValue,
+    groups: props.modelValue.groups.map((g) => (g.groupId === groupId ? {
+      ...g, actionScopes: [...(g.actionScopes ?? []).filter((a) => a.action !== action), { action, scope: scope ?? 'all' }],
+    } : g)),
+  });
+}
+
 const userName = (id: string) => props.users.find((u) => u.userId === id)?.displayName ?? id;
 const addable = computed(() => props.users
   .filter((u) => !props.modelValue.users.some((r) => r.userId === u.userId))
@@ -101,7 +122,26 @@ function toggleUser(userId: string, axis: keyof Privileges, value: boolean) {
                 :data-testid="`g-${g.id}-${a}`" @update:model-value="toggleGroup(g.id, a, $event)"
               />
             </td>
-            <td style="min-width: 140px">
+            <td v-if="modelValue.sharedMaster" style="min-width: 140px">
+              <q-btn flat dense no-caps icon-right="arrow_drop_down" :label="actionScopeSummary(g.id)" :disable="readonly || !grantedAxes(g.id).length"
+                :data-testid="`action-scopes-${g.id}`">
+                <q-menu>
+                  <q-list dense style="min-width: 220px">
+                    <q-item v-for="a in grantedAxes(g.id)" :key="a">
+                      <q-item-section>{{ t(`designer.permissions.axes.${a}`) }}</q-item-section>
+                      <q-item-section side>
+                        <q-select :model-value="actionScopeOf(g.id, a)" :options="scopeSel.filtered.value" emit-value map-options dense outlined
+                          style="min-width: 110px" :data-testid="`scope-${g.id}-${a}`" @update:model-value="setActionScope(g.id, a, $event)"
+                          use-input input-debounce="0" fill-input hide-selected @filter="scopeSel.onFilter" @popup-hide="scopeSel.reset">
+                          <template #no-option><SelectNoOption /></template>
+                        </q-select>
+                      </q-item-section>
+                    </q-item>
+                  </q-list>
+                </q-menu>
+              </q-btn>
+            </td>
+            <td v-else style="min-width: 140px">
               <q-select :model-value="groupRow(g.id)?.scope ?? null" :options="scopeSel.filtered.value" :disable="readonly" emit-value map-options
                 clearable dense outlined :placeholder="t('designer.permissions.scopeAll')" :data-testid="`scope-${g.id}`"
                 @update:model-value="setScope(g.id, $event)" use-input input-debounce="0" fill-input hide-selected @filter="scopeSel.onFilter" @popup-hide="scopeSel.reset">

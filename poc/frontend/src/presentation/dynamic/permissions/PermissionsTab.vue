@@ -47,7 +47,7 @@ function submit() {
     onError: (e) => {
       const err = e as unknown as ApiError;
       errors.value = err.errors ?? {};
-      const rest = leftoverMessages(err, ['groups[', 'users[', 'fields[', 'options[']);
+      const rest = leftoverMessages(err, ['groups[', 'users[', 'fields[', 'options[', 'fieldGrants[']);
       $q.notify({ type: 'negative', message: rest.length ? rest.join('、') : t('designer.saveFailed') });
     },
   });
