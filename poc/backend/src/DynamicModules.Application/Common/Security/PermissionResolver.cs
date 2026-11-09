@@ -44,12 +44,19 @@ public static class PermissionResolver
             _ => new HashSet<string> { inputs.User.UserId }
         };
 
+        // 金額遮罩是整個模組一起判斷、沒有逐筆遮罩：逐動作範圍下價格的範圍比這次動作的範圍窄（例如讀取 all、價格 own）時，
+        // 解開遮罩會讓範圍外的記錄也露出金額，所以視同沒有價格權限（fail closed，審查必修 3）。一般模組沒有逐動作範圍，不受影響
+        var pricing = actions.Contains(PermissionAction.Pricing)
+            && (actionScopes.Count == 0
+                || actionScopes.Where(s => s.Action == PermissionAction.Pricing).Select(s => (DataScope?)s.Scope).Max() is { } pricingScope
+                   && pricingScope >= scope);
+
         var access = inputs.FieldPermissions.Where(p => groups.Contains(p.GroupId)).ToList();
         var hidden = access.Where(p => p.Access == FieldAccess.Hidden).Select(p => p.FieldId).ToHashSet();
         // 限定可見的貢獻欄位：使用者的群組都不在可見列裡就隱藏（fail closed，設計 §6）；可見列只解除這一層，Hidden 仍優先
         var granted = (inputs.FieldGrants ?? []).Where(g => groups.Contains(g.GroupId)).Select(g => g.FieldId).ToHashSet();
         hidden.UnionWith(module.Blocks.SelectMany(b => b.Fields).Where(f => f.VisibilityRestricted && !granted.Contains(f.Id)).Select(f => f.Id));
-        if (!actions.Contains(PermissionAction.Pricing))
+        if (!pricing)
             hidden.UnionWith(module.Blocks.SelectMany(b => b.Fields)
                 .Where(f => f.Type == FieldType.Currency
                             || (f is { Type: FieldType.Rollup, Config.ResultType: "currency" })).Select(f => f.Id));
@@ -60,7 +67,7 @@ public static class PermissionResolver
         // 公式不洩漏看不到的值：引用任一隱藏欄位（含隱藏的公式）或金額結果但無 Pricing，就一併隱藏。
         foreach (var f in FormulaGraph.EvaluationOrder(module))
             if (FormulaGraph.RefsOf(f).Overlaps(hidden)
-                || (f.Config.ResultType == "currency" && !actions.Contains(PermissionAction.Pricing)))
+                || (f.Config.ResultType == "currency" && !pricing))
                 hidden.Add(f.Id);
         var readOnly = access.Where(p => p.Access == FieldAccess.ReadOnly).Select(p => p.FieldId)
             .Where(id => !hidden.Contains(id)).ToHashSet();

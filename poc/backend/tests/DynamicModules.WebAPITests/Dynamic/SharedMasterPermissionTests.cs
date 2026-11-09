@@ -207,6 +207,39 @@ public class SharedMasterPermissionTests : IDisposable
         await _rig.AssertIntegrityAsync();
     }
 
+    /// <summary>
+    /// 審查必修 3：「讀取／all、價格／own」時，別人記錄上的金額（與金額公式）不能因為有價格動作就整個模組解開。
+    /// 金額遮罩是整個模組一起判斷、沒有逐筆遮罩，所以價格範圍比這次動作的範圍窄時一律遮（fail closed），自己的記錄在讀取時也遮；
+    /// 價格範圍放寬到 all 才看得到。
+    /// </summary>
+    [Fact]
+    public async Task APricingScopeNarrowerThanRead_DoesNotUnmaskAmountsOnOtherPeoplesRecords()
+    {
+        await OpenSalesTwiceAsync("crmx", "stk");
+        var price = await AddField(_rig.Admin, Partner, "currency");
+        var doubled = await AddField(_rig.Admin, Partner, "formula", new { formula = $"{{{price.Id}}} * 2", resultType = "currency" });
+        var perms = await GetPermissionsAsync();
+        var sales = GroupNode(perms, "sales");
+        sales["privileges"]!["pricing"] = true;
+        sales["actionScopes"]!.AsArray().Add(new JsonObject { ["action"] = "pricing", ["scope"] = "own" });
+        await SavePermissionsAsync(perms);
+        ActionScopes("sales")[PermissionAction.Pricing].Should().Be(DataScope.Own);
+
+        var sales01 = _rig.App.AsUser("sales01");
+        var name = _rig.FieldKey("bp", "partner.name");
+        var admins = await _rig.CreateRecordAsync(_rig.Admin, Partner, new Dictionary<string, object> { [name] = "甲公司", [price.Key] = 100 });
+        var own = await _rig.CreateRecordAsync(sales01, Partner, new Dictionary<string, object> { [name] = "乙公司" });
+
+        (await VisibleKeysAsync(sales01, admins)).Should().Contain(name).And.NotContain([price.Key, doubled.Key], "別人的金額不能看");
+        (await VisibleKeysAsync(sales01, own)).Should().NotContain(price.Key, "沒有逐筆遮罩，讀取範圍比價格寬就整個遮");
+        var paged = await sales01.GetStringAsync($"{Base}/modules/{Partner}/records/paged");
+        paged.Should().Contain("甲公司").And.NotContain(price.Key);
+
+        await SetActionScopeAsync("sales", "pricing", "all");
+        (await VisibleKeysAsync(sales01, admins)).Should().Contain([price.Key, doubled.Key], "價格範圍和讀取一樣寬才解開");
+        await _rig.AssertIntegrityAsync();
+    }
+
     [Fact]
     public async Task GetPermissions_OnAMasterModule_ReturnsActionScopes_ButNotOnOrdinaryModules()
     {
