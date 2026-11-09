@@ -148,10 +148,29 @@ public static partial class AppPackageValidator
 
     // ---- 引用層 ----
 
+    /// <summary>
+    /// 套件模組（含主檔模組）的停用欄位被同模組啟用中的公式或規則引用：開啟時停用會被設計器的規則擋下，匯入時就擋，訊息和貢獻欄位相同（審查待決 8）。
+    /// </summary>
+    private static void InactiveFieldReferences(AppPackageData p, List<string> errors)
+    {
+        foreach (var m in p.Modules.Where(m => m is not null))
+        {
+            var fields = m.Blocks.SelectMany(b => b.Fields).Where(f => f is not null && f.Code is not null).ToList();
+            foreach (var f in fields.Where(f => f.Active == false))
+            {
+                var user = fields.FirstOrDefault(g => g.Active != false && g.Code != f.Code && FormulaOf(g) is { } fx && FormulaCodes(fx).Contains(f.Code))?.Code
+                    ?? (m.Rules.Any(r => r.Active && (r.Targets.Contains($"field:{f.Code}")
+                        || ConditionLeaves(r.Condition).Any(l => LeafField(l) == f.Code || LeafFieldRef(l) == f.Code))) ? "rules" : null);
+                if (user is not null) errors.Add($"modules[{m.Code}].fields[{f.Code}].active: 此欄位被公式或規則引用，不能停用（{user}）");
+            }
+        }
+    }
+
     private static void V6References(AppPackageData p, HashSet<string> groupCodes, MasterScope scope, List<string> errors)
     {
         var modules = p.Modules.ToDictionary(m => m.Code, m => m);
         var seen = new HashSet<string>();
+        InactiveFieldReferences(p, errors);
         for (var i = 0; i < p.Contributions.Count; i++)
         {
             var c = p.Contributions[i];

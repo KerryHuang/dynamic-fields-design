@@ -67,6 +67,32 @@ public class SharedMasterImportTests : IDisposable
         (await res.Content.ReadAsStringAsync()).Should().Contain("此欄位被公式或規則引用，不能停用");
     }
 
+    /// <summary>審查待決 8：主檔套件自己的模組欄位 active:false 又被公式引用，和貢獻欄位一樣在匯入時擋下。</summary>
+    [Fact]
+    public async Task Master_AnInactiveModuleFieldUsedByAFormula_Is400AtImport()
+    {
+        const string taxId = "{ \"code\": \"taxId\", \"type\": \"text\", \"label\": { \"zh-TW\": \"統一編號\" }, \"config\": {}, \"active\": false }";
+        AppTestPackagesV6.Master.Should().Contain(taxId);
+        var json = AppTestPackagesV6.Master.Replace(taxId, taxId
+            + ", { \"code\": \"taxLen\", \"type\": \"formula\", \"label\": { \"zh-TW\": \"長度\" }, \"config\": { \"formula\": \"{taxId}\", \"resultType\": \"text\" } }");
+        var res = await Import(json);
+        res.StatusCode.Should().Be(HttpStatusCode.BadRequest, await res.Content.ReadAsStringAsync());
+        (await res.Content.ReadAsStringAsync()).Should().Contain("modules[partner].fields[taxId].active: 此欄位被公式或規則引用，不能停用（taxLen）");
+        await ImportOk(AppTestPackagesV6.Master);
+    }
+
+    [Fact]
+    public async Task Master_AnInactiveModuleFieldUsedByARule_Is400AtImport()
+    {
+        const string permissions = "\"permissions\": [ { \"group\": \"steward\"";
+        var json = AppTestPackagesV6.Master.Replace(permissions,
+            "\"rules\": [ { \"kind\": \"readOnly\", \"targets\": [\"field:taxId\"], \"active\": true, \"condition\": { \"all\": [] } } ],\n            " + permissions);
+        json.Should().NotBe(AppTestPackagesV6.Master);
+        var res = await Import(json);
+        res.StatusCode.Should().Be(HttpStatusCode.BadRequest, await res.Content.ReadAsStringAsync());
+        (await res.Content.ReadAsStringAsync()).Should().Contain("modules[partner].fields[taxId].active: 此欄位被公式或規則引用，不能停用（rules）");
+    }
+
     [Fact]
     public async Task User_ReferencingAFieldTheImportedMasterLacks_IsRejected()
     {
