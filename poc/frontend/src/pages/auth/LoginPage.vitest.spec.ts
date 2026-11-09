@@ -125,4 +125,9 @@ describe('LoginPage', () => {
     expect(q('demo-accounts')).toBeNull();
     expect(q('demo-generating')).toBeNull();
   });
+
+  it('has a language switcher on the login page', async () => {
+    await mountPage(off);
+    expect(q('locale-open')).not.toBeNull();
+  });
 });

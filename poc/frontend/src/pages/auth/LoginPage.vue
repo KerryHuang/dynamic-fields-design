@@ -4,6 +4,7 @@ import { useI18n } from 'vue-i18n';
 import { useRoute, useRouter } from 'vue-router';
 import { useAuthOptions, useDemoLogin, useLogin } from 'src/application/dynamic/queries/auth-queries';
 import type { AuthUser } from 'src/domain/dynamic/types';
+import LocaleSwitcher from 'src/presentation/locale/LocaleSwitcher.vue';
 import { safeRedirect } from 'src/router/auth-guard';
 import type { ApiError } from 'src/services/api/http';
 
@@ -37,7 +38,10 @@ const pickDemo = (id: string) => {
 <template>
   <div class="row justify-center q-pa-md">
     <q-card style="width: 360px; max-width: 100%">
-      <q-card-section class="text-h6">{{ t('auth.loginTitle') }}</q-card-section>
+      <q-card-section class="row items-center no-wrap">
+        <div class="text-h6 col">{{ t('auth.loginTitle') }}</div>
+        <LocaleSwitcher />
+      </q-card-section>
       <q-form @submit.prevent="submit">
         <q-card-section class="q-gutter-sm">
           <q-input v-model="userId" :label="t('auth.userId')" autocomplete="username" autofocus dense outlined data-testid="login-user" />

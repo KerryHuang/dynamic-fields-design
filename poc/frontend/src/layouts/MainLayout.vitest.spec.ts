@@ -79,6 +79,22 @@ describe('MainLayout menu', () => {
     expect(w.find('[data-testid="demo-data-menu"]').exists()).toBe(read);
   });
 
+  it('has a language switcher in the top bar', async () => {
+    const pinia = createPinia();
+    setActivePinia(pinia);
+    http.defaults.adapter = async (config) => ({
+      data: config.url === '/me' ? me(true) : config.url === '/users' ? USERS : [],
+      status: 200, statusText: 'OK', headers: {}, config,
+    });
+    const router = createRouter({ history: createMemoryHistory(), routes: [{ path: '/', component: { template: '<i/>' } }] });
+    const i18n = createI18n({ legacy: false, locale: 'zh-TW', messages: { 'zh-TW': zhTW } });
+    const w = mount(MainLayout, {
+      global: { plugins: [[quasar.Quasar, { components: quasar }], pinia, router, i18n, [VueQueryPlugin, { queryClient: new QueryClient() }]] },
+    });
+    await flushPromises();
+    expect(w.find('[data-testid="locale-open"]').exists()).toBe(true);
+  });
+
   it('every menu entry shows an icon, including system links and modules without one', async () => {
     const pinia = createPinia();
     setActivePinia(pinia);

@@ -13,6 +13,7 @@
           flat dense no-caps class="q-mr-sm" icon="palette" :label="$q.screen.gt.xs ? t('theme.title') : undefined" :aria-label="t('theme.title')"
           data-testid="theme-open" @click="themeOpen = true"
         />
+        <LocaleSwitcher class="q-mr-sm" />
         <q-btn v-if="!identity.isDemoAccount" flat dense no-caps class="q-mr-sm" :label="t('auth.changePassword')" to="/change-password" data-testid="change-password-link" />
         <span v-if="logoutError" class="q-mr-sm bg-negative text-white q-px-sm rounded-borders" data-testid="logout-error">{{ t('auth.logoutFailed') }}</span>
         <q-btn flat dense no-caps :label="t('auth.logout')" :loading="logoutMutation.isPending.value" data-testid="logout" @click="logout" />
@@ -82,6 +83,7 @@ import { useMe, useUsers } from 'src/application/dynamic/queries/permissions-que
 import { recordRecent } from 'src/application/dynamic/recent-modules';
 import { resolveI18n } from 'src/domain/dynamic/i18n-text';
 import { groupMenu, systemLinks } from 'src/domain/dynamic/menu-nav';
+import LocaleSwitcher from 'src/presentation/locale/LocaleSwitcher.vue';
 import AppBreadcrumb from 'src/presentation/theme/AppBreadcrumb.vue';
 import ThemeDialog from 'src/presentation/theme/ThemeDialog.vue';
 import { useIdentityStore } from 'src/stores/use-identity-store';
