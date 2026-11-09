@@ -132,8 +132,10 @@ public class RollupRecalc(
         }
         // 已記帳的來源（有事件事實）公式保留記帳當時的值，彙總本身照常更新（設計 §4.7、§10.4）
         var previous = RecordValueProcessor.Parse(record.ValuesJson);
-        if (!await facts.AnyBySourceAsync(record.Id, ct)) RecordValueProcessor.ApplyFormulas(parent, values, today);
-        await locks.RestoreAsync(parent, previous, values, ct);   // 生命週期鎖第二道：凍結的貢獻欄位保持最後的值
+        // 凍結的公式求值時就跳過（同 FormulaRecalc），依賴它的公式才會用保留的值；先算再復原會留下用暫算值算出的結果（審查必修 10）
+        var frozen = await locks.FrozenAsync(parent, ct);
+        if (!await facts.AnyBySourceAsync(record.Id, ct)) RecordValueProcessor.ApplyFormulas(parent, values, today, frozen);
+        Common.Security.FieldLocks.Restore(parent, frozen, previous, values);   // 生命週期鎖第二道：凍結的貢獻欄位保持最後的值
         var json = RecordValueProcessor.Serialize(values);
         if (json == record.ValuesJson) return;
         record.ValuesJson = json;

@@ -147,6 +147,30 @@ public class SharedMasterFreezeTests : IDisposable
         (await GetAsync(record)).GetProperty("values").GetProperty(headX2).GetDecimal().Should().Be(14, "重開後下一次存檔才更新");
     }
 
+    /// <summary>
+    /// 審查必修 10：凍結公式 A＝人數×2（保留 10），客戶自建公式 B＝A＋1（11）。人數改成 7 之後，彙總重算的結果要和一般存檔一樣：
+    /// A 不暫算成 14，B 也就不會變成 15。
+    /// </summary>
+    [Fact]
+    public async Task RollupRecalc_SkipsFrozenFormulas_SoDependentFormulasMatchANormalSave()
+    {
+        var record = await OpenAndCloseCrmAsync();
+        var headX2 = Key("crmx", "bp/partner.headX2");
+        var b = await AddField(_rig.Admin, Partner, "formula", new { formula = $"{{{_rig.FieldId("crmx", "bp/partner.headX2")}}} + 1", resultType = "number" });
+        (await PutAsync(record, new() { [Key("bp", "partner.headcount")] = 7 })).StatusCode.Should().Be(HttpStatusCode.OK);
+        var saved = (await GetAsync(record)).GetProperty("values");
+        saved.GetProperty(headX2).GetDecimal().Should().Be(10);
+        saved.GetProperty(b.Key).GetDecimal().Should().Be(11, "一般存檔：A 凍結，B＝A＋1");
+
+        await AddField(_rig.Admin, Partner, "rollup", new { rollup = new { sourceFieldId = _rig.FieldId("stk", "ship.customer"), function = "count" } });
+        await _rig.CreateRecordAsync(_rig.Admin, "stk-ship", new Dictionary<string, object>
+            { [Key("stk", "ship.no")] = "SH-9", [Key("stk", "ship.customer")] = record.GetProperty("id").GetInt64() });
+
+        var after = (await GetAsync(record)).GetProperty("values");
+        after.GetProperty(headX2).GetDecimal().Should().Be(10);
+        after.GetProperty(b.Key).GetDecimal().Should().Be(11, "彙總重算不能先暫算凍結公式再復原");
+    }
+
     [Fact]
     public async Task Import_AColumnOfAFrozenField_IsRefusedWhole()
     {
