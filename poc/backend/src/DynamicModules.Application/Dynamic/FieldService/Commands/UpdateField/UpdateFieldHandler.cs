@@ -18,7 +18,8 @@ public class UpdateFieldHandler(
     IModuleRepository modules, IRecordRepository records, IUnitOfWork uow, FieldTypeRegistry registry, ICurrentUser user, IBusinessTime time,
     RollupRecalc rollups, IEventFactRepository facts, Dynamic.LedgerService.ImmutableDataGuard immutable,
     Dynamic.CheckService.CheckFieldGuard checkGuard, Common.Security.FieldLocks locks,
-    Dynamic.EventService.EventValidator eventValidator, Dynamic.EventService.EventHiddenGuard hiddenGuard)
+    Dynamic.EventService.EventValidator eventValidator, Dynamic.EventService.EventHiddenGuard hiddenGuard,
+    Dynamic.AppService.SharedMasters.MasterDesigner masterDesigner)
     : IRequestHandler<UpdateFieldRequest, ServiceResult>
 {
     public async Task<ServiceResult> Handle(UpdateFieldRequest request, CancellationToken ct)
@@ -31,6 +32,8 @@ public class UpdateFieldHandler(
         if (request.Type != field.Type) return FieldRules.Invalid("Type", "欄位型別建立後不能更改");
         var newBlock = module.Blocks.FirstOrDefault(b => b.Id == request.BlockId);
         if (newBlock is null) return FieldRules.Invalid("BlockId", "區塊不屬於此模組");
+        // 共用主檔模組：歸屬在建立時決定，跨歸屬、拖進孤兒區塊、拖出孤兒欄位都不行（共用主檔 §5.4）
+        if (await masterDesigner.RejectMoveAsync(module, field, newBlock.Id, ct) is { } moved) return moved;
 
         // 設計器編不了 refGuard、存檔時也不帶：請求沒帶就保留原值，不讓存檔靜默拿掉守衛
         var requested = request.Config.RefGuard is null && field.Config.RefGuard is { } kept

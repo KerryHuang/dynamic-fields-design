@@ -73,4 +73,27 @@ public class SharedMasterRepository(DynamicDbContext db) : ISharedMasterReposito
             select new BlockOwner(k.Id, o.FormerAppKey)).ToListAsync(ct);
         return owned.Concat(orphans).ToList();
     }
+
+    public async Task<ItemOwner> BlockOwnerAsync(long blockId, CancellationToken ct)
+    {
+        var contributor = await (from b in db.Set<AppBlock>().AsNoTracking()
+                                 where b.BlockId == blockId && b.Name.Contains("/")
+                                 join a in db.Set<App>().AsNoTracking() on b.AppId equals a.Id
+                                 select new { a.Id, a.Key }).FirstOrDefaultAsync(ct);
+        if (contributor is not null) return new ItemOwner(contributor.Id, contributor.Key, false);
+        var orphan = await db.Set<AppOrphan>().AsNoTracking().Where(o => o.BlockId == blockId).Select(o => o.FormerAppKey).FirstOrDefaultAsync(ct);
+        return orphan is not null ? new ItemOwner(null, orphan, true) : ItemOwner.Master;
+    }
+
+    public async Task<ItemOwner> FieldOwnerAsync(long fieldId, CancellationToken ct)
+    {
+        var bindings = await (from b in db.Set<AppField>().AsNoTracking()
+                              where b.FieldId == fieldId
+                              join a in db.Set<App>().AsNoTracking() on b.AppId equals a.Id
+                              select new { a.Id, a.Key, a.Kind, b.Name }).ToListAsync(ct);
+        if (bindings.FirstOrDefault(b => b.Name.Contains('/')) is { } contributor) return new ItemOwner(contributor.Id, contributor.Key, false);
+        var orphan = await db.Set<AppOrphan>().AsNoTracking().Where(o => o.FieldId == fieldId).Select(o => o.FormerAppKey).FirstOrDefaultAsync(ct);
+        if (orphan is not null) return new ItemOwner(null, orphan, true);
+        return bindings.Any(b => b.Kind == AppKind.Master) ? ItemOwner.Master : ItemOwner.Master with { Known = false };
+    }
 }

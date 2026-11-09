@@ -35,7 +35,7 @@ public class FieldsController(IMediator mediator) : ControllerBase
 
     [HttpPost("fields/{id:long}/options")]
     public async Task<IActionResult> AddOption(long id, AddOptionBody body) =>
-        (await mediator.Send(new AddOptionRequest(id, body.Label, body.Color))).ToActionResult(this);
+        (await mediator.Send(new AddOptionRequest(id, body.Label, body.Color, Designer: true))).ToActionResult(this);
 
     [HttpPut("options/{id:long}")]
     public async Task<IActionResult> UpdateOption(long id, UpdateOptionBody body) =>

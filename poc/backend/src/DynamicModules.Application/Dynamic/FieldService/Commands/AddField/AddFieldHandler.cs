@@ -16,7 +16,8 @@ namespace DynamicModules.Application.Dynamic.FieldService.Commands.AddField;
 public class AddFieldHandler(
     IModuleRepository modules, IRecordRepository records, IUnitOfWork uow, FieldTypeRegistry registry, ICurrentUser user, IBusinessTime time,
     ReferenceProviderRegistry providers, RollupRecalc rollups, IEventFactRepository facts,
-    Dynamic.LedgerService.ImmutableDataGuard immutable, Common.Security.FieldLocks locks)
+    Dynamic.LedgerService.ImmutableDataGuard immutable, Common.Security.FieldLocks locks,
+    Dynamic.AppService.SharedMasters.MasterDesigner masterDesigner)
     : IRequestHandler<AddFieldRequest, ServiceResult>
 {
     public async Task<ServiceResult> Handle(AddFieldRequest request, CancellationToken ct)
@@ -25,6 +26,7 @@ public class AddFieldHandler(
         if (module is null) return ServiceResult.NotFound("找不到模組");
         var block = module.Blocks.FirstOrDefault(b => b.Id == request.BlockId);
         if (block is null) return ServiceResult.NotFound("找不到區塊");
+        if (request.Designer && await masterDesigner.RejectAddFieldAsync(module, block.Id, ct) is { } orphaned) return orphaned;
 
         // 新增公式或彙總欄位會替既有記錄算值並寫回；Closed 的資料唯讀
         if (request.Type == FieldType.Formula && await ClosedDataGuard.RejectFormulaRecalcAsync(module, modules, ct) is { } closedFormula)
@@ -97,6 +99,7 @@ public class AddFieldHandler(
             await rollups.RecalculateModuleAsync(module, time.Today, ct);
         module.TouchVersion(user.UserId, now);
         await uow.CommitAsync(ct);
+        if (request.Designer) await masterDesigner.BindFieldAsync(module, field, ct);
         return ServiceResult.Created(field.ToResponse());
     }
 }

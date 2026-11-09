@@ -57,7 +57,7 @@ public class ModulesController(IMediator mediator) : ControllerBase
 
     [HttpPost("modules/{key}/blocks")]
     public async Task<IActionResult> AddBlock(string key, AddBlockBody body) =>
-        (await mediator.Send(new AddBlockRequest(key, body.Label))).ToActionResult(this);
+        (await mediator.Send(new AddBlockRequest(key, body.Label, Designer: true))).ToActionResult(this);
 
     [HttpPut("blocks/{id:long}")]
     public async Task<IActionResult> UpdateBlock(long id, UpdateBlockBody body) =>
@@ -65,6 +65,6 @@ public class ModulesController(IMediator mediator) : ControllerBase
 
     [HttpPost("modules/{key}/fields")]
     public async Task<IActionResult> AddField(string key, AddFieldBody body) =>
-        (await mediator.Send(new AddFieldRequest(key, body.BlockId, body.Type, body.Label, body.Config)))
+        (await mediator.Send(new AddFieldRequest(key, body.BlockId, body.Type, body.Label, body.Config, Designer: true)))
         .ToActionResult(this);
 }

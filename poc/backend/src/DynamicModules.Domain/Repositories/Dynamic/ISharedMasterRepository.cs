@@ -34,6 +34,19 @@ public interface ISharedMasterRepository
 
     /// <summary>模組上屬於貢獻者的區塊：貢獻者的對照列（含 /），加上孤兒區塊（擁有者記前擁有者 id）。基本區塊不在裡面。</summary>
     Task<List<BlockOwner>> ListBlockOwnersAsync(long moduleId, CancellationToken ct);
+
+
+    /// <summary>區塊的擁有者：貢獻者（對照列含 /）、孤兒（已刪除的貢獻者留下的），兩者都不是就是主檔（基本區塊）。</summary>
+    Task<ItemOwner> BlockOwnerAsync(long blockId, CancellationToken ct);
+
+    /// <summary>欄位的擁有者：貢獻者、孤兒、主檔（主檔名下有不含 / 的對照列）；都沒有時 Known 為 false，呼叫端改看所在區塊。</summary>
+    Task<ItemOwner> FieldOwnerAsync(long fieldId, CancellationToken ct);
+}
+
+/// <summary>Contributor 是貢獻者的 App Id（主檔或孤兒時為 null）；Orphan 時 AppKey 是前擁有者 id。</summary>
+public sealed record ItemOwner(long? Contributor, string? AppKey, bool Orphan, bool Known = true)
+{
+    public static readonly ItemOwner Master = new(null, null, false);
 }
 
 public sealed record BlockOwner(long BlockId, string OwnerKey);

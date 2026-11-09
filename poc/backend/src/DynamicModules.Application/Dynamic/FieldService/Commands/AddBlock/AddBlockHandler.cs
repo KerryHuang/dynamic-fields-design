@@ -8,7 +8,9 @@ using MediatR;
 
 namespace DynamicModules.Application.Dynamic.FieldService.Commands.AddBlock;
 
-public class AddBlockHandler(IModuleRepository modules, IUnitOfWork uow, ICurrentUser user, IBusinessTime time)
+public class AddBlockHandler(
+    IModuleRepository modules, IUnitOfWork uow, ICurrentUser user, IBusinessTime time,
+    Dynamic.AppService.SharedMasters.MasterDesigner masterDesigner)
     : IRequestHandler<AddBlockRequest, ServiceResult>
 {
     public async Task<ServiceResult> Handle(AddBlockRequest request, CancellationToken ct)
@@ -26,6 +28,7 @@ public class AddBlockHandler(IModuleRepository modules, IUnitOfWork uow, ICurren
         module.Blocks.Add(block);
         module.TouchVersion(user.UserId, now);
         await uow.CommitAsync(ct);
+        if (request.Designer) await masterDesigner.BindBlockAsync(module, block, ct);
         return ServiceResult.Created(block.ToResponse());
     }
 }

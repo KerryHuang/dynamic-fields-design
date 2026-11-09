@@ -9,7 +9,9 @@ using MediatR;
 
 namespace DynamicModules.Application.Dynamic.FieldService.Commands.AddOption;
 
-public class AddOptionHandler(IModuleRepository modules, IUnitOfWork uow, ICurrentUser user, IBusinessTime time)
+public class AddOptionHandler(
+    IModuleRepository modules, IUnitOfWork uow, ICurrentUser user, IBusinessTime time,
+    Dynamic.AppService.SharedMasters.MasterDesigner masterDesigner)
     : IRequestHandler<AddOptionRequest, ServiceResult>
 {
     public async Task<ServiceResult> Handle(AddOptionRequest request, CancellationToken ct)
@@ -19,6 +21,7 @@ public class AddOptionHandler(IModuleRepository modules, IUnitOfWork uow, ICurre
         var field = module.Blocks.SelectMany(b => b.Fields).Single(f => f.Id == request.FieldId);
         if (field.Type is not (FieldType.Enum or FieldType.MultiEnum))
             return FieldRules.Invalid("FieldId", "只有下拉欄位可以有選項");
+        if (request.Designer && await masterDesigner.RejectAddOptionAsync(module, field, ct) is { } orphaned) return orphaned;
 
         var now = time.Now;
         var option = new FieldOption
@@ -32,6 +35,7 @@ public class AddOptionHandler(IModuleRepository modules, IUnitOfWork uow, ICurre
         field.Options.Add(option);
         module.TouchVersion(user.UserId, now);
         await uow.CommitAsync(ct);
+        if (request.Designer) await masterDesigner.BindOptionAsync(module, field, option, ct);
         return ServiceResult.Created(option.ToResponse());
     }
 }
