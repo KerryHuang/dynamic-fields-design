@@ -235,7 +235,7 @@ describe('DynamicForm', () => {
       const w = mountForm({});
       await w.setProps({ serverErrors: { _record: ['此記錄目前不可修改'] } });
       await flushPromises();
-      expect(w.find('[data-testid="record-error"]').text()).toContain('此記錄目前不可修改');
+      await vi.waitFor(() => expect(w.find('[data-testid="record-error"]').text()).toContain('此記錄目前不可修改'));
     });
 
     it('a hidden field whose value changed is still submitted (decision 8)', async () => {

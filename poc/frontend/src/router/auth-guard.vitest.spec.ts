@@ -133,6 +133,10 @@ describe('auth guard', () => {
 });
 
 describe('handleUnauthorized (session expiry mid-edit)', () => {
+  beforeEach(() => {
+    meResponse = { status: 401, data: { message: '請先登入' } };
+  });
+
   const loggedIn = async (path: string): Promise<{ router: Router; qc: QueryClient }> => {
     meResponse = { status: 200, data: { userId: 'admin', mustChangePassword: false } };
     const router = setup();

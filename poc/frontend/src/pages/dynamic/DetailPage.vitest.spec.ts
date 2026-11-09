@@ -47,6 +47,9 @@ async function mountPage(s: ModuleSchema, rec: DynamicRecord = record, tabs: unk
   return w;
 }
 
+// Notify toasts live in one document-level container that outlives each wrapper, so earlier tests' toasts stay in body text; compare counts instead of absence.
+const bodyCount = (text: string) => (document.body.textContent ?? '').split(text).length - 1;
+
 describe('DetailPage', () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -120,12 +123,13 @@ describe('DetailPage', () => {
     });
 
     it('delete 409 depth message shows notify', async () => {
+      const staleBefore = bodyCount(zhTW.dynamic.stale);
       api.deleteRecord.mockRejectedValue({ status: 409, message: '連帶刪除超過 5 層，請先手動刪除下層資料' });
       const w = await mountPage(schema({}));
       await clickDelete(w);
       expect(document.querySelector('[data-testid="blocked-message"]')).toBeNull();
       await vi.waitFor(() => expect(document.body.textContent).toContain('連帶刪除超過 5 層'));
-      expect(document.body.textContent).not.toContain(zhTW.dynamic.stale);
+      expect(bodyCount(zhTW.dynamic.stale)).toBe(staleBefore);
     });
 
     it('a delete retried after a failure carries the same Idempotency-Key', async () => {

@@ -50,6 +50,9 @@ async function mountPage(s: ModuleSchema, path: string, rec: typeof record = rec
   return w;
 }
 
+// Notify toasts live in one document-level container that outlives each wrapper, so earlier tests' toasts stay in body text; compare counts instead of absence.
+const bodyCount = (text: string) => (document.body.textContent ?? '').split(text).length - 1;
+
 describe('FormPage', () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -137,6 +140,7 @@ describe('FormPage', () => {
     });
 
     it('create-mode 409 shows the server message, not the stale notice', async () => {
+      const staleBefore = bodyCount(zhTW.dynamic.stale);
       api.light.mockResolvedValue({ items: [], total: 0 });
       api.createRecord.mockRejectedValue({ status: 409, message: '這筆既有資料已經有擴充資料' });
       const w = await mountPage(refSchema([], { kind: 'extension', hostEntityKey: 'test.entity', titleFieldKey: null }), '/dynamic/m/new');
@@ -144,7 +148,7 @@ describe('FormPage', () => {
       await flushPromises();
       await w.find('form').trigger('submit');
       await vi.waitFor(() => expect(w.text()).toContain('這筆既有資料已經有擴充資料'));
-      expect(document.body.textContent).not.toContain(zhTW.dynamic.stale);
+      expect(bodyCount(zhTW.dynamic.stale)).toBe(staleBefore);
     });
 
     it('create-mode hostKey 400 lands on the host picker without a schema refetch', async () => {
