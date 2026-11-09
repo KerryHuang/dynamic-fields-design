@@ -553,4 +553,56 @@ public class SharedMasterPermissionTests : IDisposable
         res.StatusCode.Should().Be(HttpStatusCode.BadRequest);
         (await res.Content.ReadAsStringAsync()).Should().Contain("限定可見");
     }
+
+    /// <summary>只授予權限、沒有欄位的貢獻：拜訪紀錄給業務讀寫聯絡人（同內建 CRM 對聯絡人的做法，共用主檔設計 §11.1）。</summary>
+    private const string VisitWithGrant = """
+        {
+          "format": "formwright-app", "formatVersion": 6,
+          "manifest": { "id": "cxg", "version": "1.0.0", "name": { "zh-TW": "拜訪紀錄" },
+            "requires": { "masters": [ { "id": "ct", "modules": ["contact"] } ] } },
+          "groups": [ { "code": "visitor", "name": { "zh-TW": "拜訪人員" } } ],
+          "modules": [
+            { "code": "visit", "key": "cxg-visit", "name": { "zh-TW": "拜訪" }, "kind": "standalone", "titleField": "subject",
+              "blocks": [ { "code": "main", "label": { "zh-TW": "內容" }, "fields": [
+                { "code": "subject", "type": "text", "label": { "zh-TW": "主旨" }, "config": { "required": true } }
+              ] } ],
+              "permissions": [ { "group": "visitor", "scope": "all", "privileges": { "read": true, "add": true, "edit": true, "delete": true, "printExport": true, "pricing": true, "approve": true } } ] }
+          ],
+          "contributions": [ {
+            "master": "ct", "module": "contact", "block": { "code": "visit", "name": { "zh-TW": "拜訪" } }, "fields": [],
+            "permissions": [ { "group": "visitor", "scope": "all", "privileges": { "read": true, "add": true, "edit": true, "delete": false, "printExport": true, "pricing": false, "approve": false } } ]
+          } ]
+        }
+        """;
+
+    [Fact]
+    public async Task AContributionWithoutFields_OnlyGrantsPermissions_AddsNoBlock_AndIsExported()
+    {
+        await _rig.ImportAllAsync();
+        await _rig.ImportAsync(VisitWithGrant);
+        await _rig.OpenOkAsync("cxg", new
+        {
+            groupMap = new Dictionary<string, object> { ["visitor"] = new { mode = "map", groupId = _rig.GroupId("sales") } },
+            masters = new Dictionary<string, object>
+            {
+                ["bp"] = new Dictionary<string, object> { ["steward"] = new { mode = "create" } },
+                ["ct"] = new Dictionary<string, object> { ["steward"] = new { mode = "create" } }
+            }
+        });
+
+        _rig.Blocks("master-ct-contact").Select(b => b.Block).Should().Equal(["基本資料"], "沒有欄位的貢獻不建區塊");
+        var contact = _rig.Db(db => db.Set<Module>().Single(m => m.Key == "master-ct-contact").Id);
+        var sales = _rig.GroupId("sales");
+        _rig.Db(db => db.Set<AppGrant>().Where(g => g.ModuleId == contact && g.GroupId == sales && g.SourceKind == GrantSource.App).Select(g => g.Action).ToList())
+            .Should().BeEquivalentTo([PermissionAction.Read, PermissionAction.Add, PermissionAction.Edit, PermissionAction.PrintExport]);
+        await _rig.CreateRecordAsync(_rig.App.AsUser("sales01"), "master-ct-contact",
+            new Dictionary<string, object> { [_rig.FieldKey("ct", "contact.name")] = "林怡君" });
+        await _rig.AssertIntegrityAsync();
+
+        var (package, _) = await _rig.ExportAsync("cxg");
+        var exported = package.GetProperty("contributions").EnumerateArray().Single();
+        exported.GetProperty("master").GetString().Should().Be("ct");
+        exported.GetProperty("fields").GetArrayLength().Should().Be(0);
+        exported.GetProperty("permissions").EnumerateArray().Single().GetProperty("privileges").GetProperty("add").GetBoolean().Should().BeTrue();
+    }
 }

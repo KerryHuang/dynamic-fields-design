@@ -89,10 +89,11 @@ public sealed class TemplateInstantiator(
                 if ((failed = Fail(r, m.Code, $"{m.Code}.")) is not null) return failed;
             }
 
-        // 2b. 貢獻區塊：加在主檔模組上；接回的孤兒區塊直接沿用
+        // 2b. 貢獻區塊：加在主檔模組上；接回的孤兒區塊直接沿用。只授予權限、沒有欄位的貢獻不建區塊（空區塊只會在表單上多一個空分區）
         foreach (var c in contributions)
         {
             if (c.ReattachBlockId is { } reattached) { map.Blocks[$"{c.Prefix}.{c.BlockCode}"] = reattached; continue; }
+            if (c.Fields.Count == 0) continue;
             var added = await sender.Send(new AddBlockRequest(c.ModuleKey, c.BlockName), ct);
             if ((failed = Fail(added, c.Prefix, $"contributions.{c.Prefix}.")) is not null) return failed;
             map.Blocks[$"{c.Prefix}.{c.BlockCode}"] = ((BlockResponse)added.Data!).Id;
@@ -195,7 +196,7 @@ public sealed class TemplateInstantiator(
                 if ((failed = Fail(r, m.Code, $"{m.Code}.")) is not null) return failed;
             }
 
-        foreach (var c in contributions.Where(c => c.ReattachBlockId is null))
+        foreach (var c in contributions.Where(c => c.ReattachBlockId is null && c.Fields.Count > 0))
         {
             var ids = c.Fields.Select(f => map.Fields[TemplateGraph.Qualify(c.Prefix, f.Code)]).ToList();
             var r = await sender.Send(new ReorderFieldsRequest(map.Blocks[$"{c.Prefix}.{c.BlockCode}"], ids), ct);

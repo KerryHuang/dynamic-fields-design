@@ -38,7 +38,7 @@ internal static class AppTestPackagesV6
         }
         """;
 
-    /// <summary>用到主檔的應用程式：參照、守衛、帶值、轉換（目標是主檔）、報表與貢獻。固定值 header.set 在開啟流程支援前會被拒絕，另見 <see cref="CrmWithSet"/>。</summary>
+    /// <summary>用到主檔的應用程式：參照、守衛、帶值、轉換（目標是主檔）、報表與貢獻。帶固定值 header.set 的版本見 <see cref="CrmWithSet"/>。</summary>
     public static readonly string Crm = $$"""
         {
           "format": "formwright-app", "formatVersion": 6,

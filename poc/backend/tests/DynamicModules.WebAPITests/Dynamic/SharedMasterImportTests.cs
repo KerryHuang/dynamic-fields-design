@@ -34,14 +34,9 @@ public class SharedMasterImportTests : IDisposable
         await ImportOk(AppTestPackagesV6.Crm);
     }
 
+    /// <summary>開啟流程支援固定值之後，header.set 照常匯入（執行見 ConversionFixedValueTests）。</summary>
     [Fact]
-    public async Task HeaderSet_OnAPlainModuleTarget_IsRejectedAtImport()
-    {
-        var res = await Import(AppTestPackagesV6.LocalSet);
-        res.StatusCode.Should().Be(HttpStatusCode.BadRequest);
-        (await res.Content.ReadAsStringAsync()).Should().Contain("conversions[0].header.set").And.Contain("還不能執行轉換的固定值");
-        (await _admin.PostAsJsonAsync($"{Apps}/packages/set-lite/open", new { })).IsSuccessStatusCode.Should().BeFalse();
-    }
+    public async Task HeaderSet_OnAPlainModuleTarget_IsImported() => await ImportOk(AppTestPackagesV6.LocalSet);
 
     [Fact]
     public async Task Contribution_NullOption_Is400AtImport()

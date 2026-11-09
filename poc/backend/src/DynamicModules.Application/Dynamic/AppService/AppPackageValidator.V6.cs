@@ -16,9 +16,6 @@ public static partial class AppPackageValidator
     public const int MaxMasters = 5, MaxContributions = 20, MaxContributionFields = 50;
     public const string MasterModuleKeyPrefix = "master-";
 
-    /// <summary>開啟流程建立轉換時還不帶固定值（設計 §4.5 的實作在第 4 步），收下會讓轉出的記錄靜默少了值，所以先整份拒絕。</summary>
-    public const string HeaderSetNotYetSupported = "這個版本還不能執行轉換的固定值（header.set），請先拿掉";
-
     // ---- 結構層 ----
 
     private static void Format6Structure(AppPackageData p, List<string> errors)
@@ -109,7 +106,6 @@ public static partial class AppPackageValidator
                 if (!Code().IsMatch(c.Block.Code ?? "")) errors.Add($"{at}.block.code: 格式錯誤");
                 CheckText(c.Block.Name, $"{at}.block.name", errors);
             }
-            if (c.Fields.Count == 0) errors.Add($"{at}.fields: 至少要有一個欄位");
             if (c.Fields.Count > MaxContributionFields) errors.Add($"{at}.fields: 最多 {MaxContributionFields} 個");
             foreach (var f in c.Fields)
             {

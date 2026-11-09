@@ -94,15 +94,18 @@ public static partial class AppPackageValidator
             if (!source.Ok) errors.Add($"{at}.header.sourceField: {Why(source.Error, $"{c.Header.SourceField} 必須是目標模組 {c.Target} 的欄位")}");
             CheckCopies(c.Header.Copy, c.Source, c.Target, $"{at}.header.copy",
                 (name, module) => module == c.Target ? TargetField(name, c.Target!).Ok : Field(name, module), errors);
+            var setTargets = new HashSet<string>();
             foreach (var set in c.Header.Set ?? [])
             {
                 if (set is null) { errors.Add($"{at}.header.set: 不能有 null"); continue; }
+                // 和開啟時建立轉換的檢查一致（ConversionValidator）：一個欄位只設一次，不和追溯欄位、複製的目的欄位重疊
+                if (!setTargets.Add(set.To ?? "") || set.To == c.Header.SourceField || c.Header.Copy.Any(x => x?.To == set.To))
+                    errors.Add($"{at}.header.set: 欄位 {set.To} 重複，或與追溯欄位、複製的目的欄位相同");
                 var (ok, def, why) = TargetField(set.To, c.Target!);
                 if (!ok) errors.Add($"{at}.header.set: {Why(why, $"欄位 {set.To} 必須是目標模組 {c.Target} 的欄位")}");
                 else if (def is not null && def.Type != FieldType.Enum) errors.Add($"{at}.header.set: 固定值只能寫入下拉欄位，{set.To} 不是");
                 else if (def is not null && def.Options.All(o => o.Code != set.Option)) errors.Add($"{at}.header.set: {set.Option} 不是 {set.To} 的選項代號");
             }
-            if (c.Header.Set is { Count: > 0 }) errors.Add($"{at}.header.set: {HeaderSetNotYetSupported}");
             if (c.Lines is { } lines)
             {
                 if (!modules.ContainsKey(lines.SourceModule ?? "") || !modules.ContainsKey(lines.TargetModule ?? ""))

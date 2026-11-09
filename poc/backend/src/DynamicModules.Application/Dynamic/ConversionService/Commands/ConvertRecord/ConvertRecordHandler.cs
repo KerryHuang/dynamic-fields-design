@@ -31,7 +31,7 @@ public class ConvertRecordHandler(
     public const string LineNotOfSource = "這一列不屬於這張來源單據";
     public const string OverRemaining = "轉換數量超過剩餘量";
     public const string DefinitionInvalid = "轉換定義已失效，請聯絡管理者檢查設定";
-    public const string StoredMismatch = "目標單據存下的追溯值或數量與轉換不一致，已取消轉換";
+    public const string StoredMismatch = "目標單據存下的追溯值、固定值或數量與轉換不一致，已取消轉換";
 
     public async Task<ServiceResult> Handle(ConvertRecordRequest request, CancellationToken ct)
     {
@@ -83,6 +83,13 @@ public class ConvertRecordHandler(
         var traceKey = $"f_{def.Header.SourceFieldId}";
         headerValues[traceKey] = JsonSerializer.SerializeToElement(record.Id);
         systemKeys.Add(traceKey);
+        // 固定值放在使用者覆寫之後：設計者指定的值，轉換對話框不能蓋掉（同追溯欄位）
+        foreach (var v in def.Header.Set ?? [])
+        {
+            var key = $"f_{v.FieldId}";
+            headerValues[key] = JsonSerializer.SerializeToElement(OptionValue(v.OptionId));
+            systemKeys.Add(key);
+        }
 
         Dictionary<string, List<DetailRowInput>>? details = null;
         if (def.Lines is null)
@@ -112,7 +119,12 @@ public class ConvertRecordHandler(
         await uow.CommitAsync(ct);
         var def = conversion.Definition;
         var header = await records.GetAsync(created.Id, ct);
-        if (header is null || ConversionLedger.NumberOf(RecordValueProcessor.Parse(header.ValuesJson), $"f_{def.Header.SourceFieldId}") != sourceId) return false;
+        if (header is null) return false;
+        var headerValues = RecordValueProcessor.Parse(header.ValuesJson);
+        if (ConversionLedger.NumberOf(headerValues, $"f_{def.Header.SourceFieldId}") != sourceId) return false;
+        foreach (var v in def.Header.Set ?? [])
+            if (!headerValues.TryGetValue($"f_{v.FieldId}", out var fixedValue) || fixedValue is not { ValueKind: JsonValueKind.String } option
+                || option.GetString() != OptionValue(v.OptionId)) return false;
         if (def.Lines is not { } lines) return true;
 
         var targetLine = await modules.GetByKeyAsync(lines.TargetModuleKey, includeChildren: true, ct);
@@ -208,6 +220,8 @@ public class ConvertRecordHandler(
         }
         return (values, system);
     }
+
+    private static string OptionValue(long optionId) => $"opt_{optionId}";
 
     private static ServiceResult Invalid(string key, string message) =>
         ServiceResult.Invalid(new Dictionary<string, string[]> { [key] = [message] });

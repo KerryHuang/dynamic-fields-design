@@ -290,7 +290,9 @@ public sealed partial class AppExporter(
     private async Task<AppContribution?> ContributionOfAsync(
         App app, MasterView view, Func<long, string> groupCode, List<string> warnings, CancellationToken ct)
     {
-        if (view.OwnFields.Count == 0 && view.OwnBlocks.Count == 0) return null;
+        var grants = (await shared.ListGrantsAsync(view.Source.Id, ct)).Where(g => g.SourceKind == GrantSource.App && g.AppId == app.Id).ToList();
+        // 只授予權限、沒有欄位的貢獻（例如 CRM 對聯絡人）也要匯出，否則換庫後它的群組沒有權限
+        if (view.OwnFields.Count == 0 && view.OwnBlocks.Count == 0 && grants.Count == 0) return null;
         var ownCodes = view.OwnFields.Values.ToHashSet(StringComparer.Ordinal);
         var fields = view.Module.Blocks.SelectMany(b => b.Fields).Where(f => ownCodes.Contains(f.Code)).ToList();
         foreach (var f in view.Source.Blocks.SelectMany(b => b.Fields)
@@ -298,7 +300,6 @@ public sealed partial class AppExporter(
             warnings.Add($"貢獻欄位「{f.LabelI18n.Resolve(I18nText.FallbackLocale)}」引用了停用、未匯出或別的應用程式的欄位，未匯出");
         var (blockId, blockCode) = view.OwnBlocks.Count > 0 ? (view.OwnBlocks.First().Key, view.OwnBlocks.First().Value) : (0L, "main");
         var block = view.Source.Blocks.FirstOrDefault(b => b.Id == blockId);
-        var grants = (await shared.ListGrantsAsync(view.Source.Id, ct)).Where(g => g.SourceKind == GrantSource.App && g.AppId == app.Id).ToList();
         var groups = grants.Select(g => g.GroupId).ToHashSet();
         var access = new List<AppFieldAccess>();
         foreach (var p in (await permissions.LoadModuleRowsAsync(view.Source, ct)).FieldPermissions)
@@ -493,8 +494,12 @@ public sealed partial class AppExporter(
             AppCopy? Copy(FillMapping x) => names.Field(x.From) is { } from && names.Field(x.To) is { } to ? new AppCopy(from, to) : null;
             var header = names.Field(d.Header.SourceFieldId);
             var headerCopy = d.Header.Copy.Select(Copy).ToList();
+            // 固定值：欄位用限定名（目標是主檔時為主檔符號），選項用該欄位的選項代號
+            var fixedValues = d.Header.Set?.Select(x => names.Field(x.FieldId) is { } to && names.Option(x.FieldId, x.OptionId) is { } option
+                ? new AppConversionSet(to, option) : null).ToList();
             AppConversionLines? lines = null;
-            var ok = header is not null && headerCopy.All(x => x is not null) && states.All(s => s is not null);
+            var ok = header is not null && headerCopy.All(x => x is not null) && states.All(s => s is not null)
+                     && (fixedValues is null || fixedValues.All(x => x is not null));
             if (ok && d.Lines is { } l)
             {
                 var sm = byKey.GetValueOrDefault(l.SourceModuleKey);
@@ -511,7 +516,8 @@ public sealed partial class AppExporter(
                 continue;
             }
             result.Add(new AppConversion(c.Key, c.NameI18n, c.Active, codeOf[source.Id], targetCode,
-                states.OfType<string>().ToList(), new AppConversionHeader(header!, headerCopy.OfType<AppCopy>().ToList()), lines));
+                states.OfType<string>().ToList(), new AppConversionHeader(header!, headerCopy.OfType<AppCopy>().ToList(),
+                    fixedValues is { Count: > 0 } ? fixedValues.OfType<AppConversionSet>().ToList() : null), lines));
         }
         return result;
     }

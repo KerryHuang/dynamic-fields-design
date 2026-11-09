@@ -23,8 +23,14 @@ public record ConversionDefinition(List<long> SourceStates, ConversionHeader Hea
     public ConversionDefinition() : this([], new ConversionHeader(0, []), null) { }
 }
 
-/// <summary>SourceFieldId：目標表頭上指向來源表頭的唯讀參照欄位；Copy：來源表頭欄位 → 目標表頭欄位。</summary>
-public record ConversionHeader(long SourceFieldId, List<FillMapping> Copy);
+/// <summary>
+/// SourceFieldId：目標表頭上指向來源表頭的唯讀參照欄位；Copy：來源表頭欄位 → 目標表頭欄位；
+/// Set：建立目標時寫入的固定值（目標表頭的下拉欄位 → 選項），沒有時是 null。
+/// </summary>
+public record ConversionHeader(long SourceFieldId, List<FillMapping> Copy, List<ConversionFixedValue>? Set = null);
+
+/// <summary>轉換的固定值：目標表頭的下拉欄位 FieldId 寫入選項 OptionId（例如潛在客戶轉往來對象時角色設為客戶）。</summary>
+public record ConversionFixedValue(long FieldId, long OptionId);
 
 /// <summary>
 /// 明細轉換。SourceModuleKey／TargetModuleKey 是來源與目標的明細模組；SourceLineFieldId 是目標明細上存來源明細列 Id 的唯讀整數欄位；

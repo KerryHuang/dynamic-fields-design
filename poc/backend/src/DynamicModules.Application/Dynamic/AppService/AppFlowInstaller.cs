@@ -212,8 +212,12 @@ public sealed class AppFlowInstaller(ISender sender)
             names.AddRange([l.SourceLineField, l.Quantity.From, l.Quantity.To]);
             names.AddRange(l.Copy.SelectMany(x => new[] { x.From, x.To }));
         }
+        names.AddRange((c.Header.Set ?? []).Select(x => x.To));
         if (Missing([.. names])) return null;
         if (c.SourceStates.Any(s => !ids.OptionIds.ContainsKey($"{c.Source}.{s}"))) return null;
+        // 固定值的選項：選項對照名稱是 <模組>.<選項代號>，模組取欄位限定名的模組部分（主檔符號含 <主檔 id>/）
+        string OptionName(AppConversionSet x) => $"{x.To[..x.To.LastIndexOf('.')]}.{x.Option}";
+        if ((c.Header.Set ?? []).Any(x => !ids.OptionIds.ContainsKey(OptionName(x)))) return null;
 
         var lines = c.Lines is { } ln
             ? new ConversionLines(ids.ModuleKeys[ln.SourceModule], ids.ModuleKeys[ln.TargetModule], Id(ln.SourceLineField),
@@ -221,7 +225,9 @@ public sealed class AppFlowInstaller(ISender sender)
             : null;
         var definition = new ConversionDefinition(
             c.SourceStates.Select(s => ids.OptionIds[$"{c.Source}.{s}"]).ToList(),
-            new ConversionHeader(Id(c.Header.SourceField), c.Header.Copy.Select(Map).ToList()), lines);
+            new ConversionHeader(Id(c.Header.SourceField), c.Header.Copy.Select(Map).ToList(),
+                c.Header.Set is { Count: > 0 } set ? set.Select(x => new ConversionFixedValue(Id(x.To), ids.OptionIds[OptionName(x)])).ToList() : null),
+            lines);
         return new ConversionInput(c.Code, c.Name, ids.ModuleKeys[c.Source], ids.ModuleKeys[c.Target], c.Active, definition);
     }
 

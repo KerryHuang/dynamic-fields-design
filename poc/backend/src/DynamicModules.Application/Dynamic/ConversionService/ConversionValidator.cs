@@ -73,6 +73,7 @@ public class ConversionValidator(IModuleRepository modules)
             Err("definition.header.sourceFieldId", "必須是目標表頭上、指向來源模組、設為唯讀的參照欄位");
         else traceKeys.Add(trace.Id); // 表頭追溯欄位是參照欄位，設計器本來就不允許它當帶值的目的欄位
         CheckCopy(header.Copy, sourceFields, targetFields, traceKeys, "definition.header.copy", errors);
+        CheckFixedValues(header, targetFields, traceKeys, errors);
 
         if (def.Lines is { } lines) await CheckLinesAsync(lines, source, target, traceKeys, errors, ct);
     }
@@ -146,7 +147,25 @@ public class ConversionValidator(IModuleRepository modules)
         }
     }
 
-    public const string FillTargetMessage = "追溯欄位與數量欄位不能是參照欄位帶值的目的欄位（帶值會蓋掉轉換填的值）";
+    public const string FixedValueMessage = "固定值只能寫入目標表頭啟用中的下拉欄位與它的選項，欄位不能重複，也不能是追溯欄位或複製的目的欄位";
+
+    /// <summary>固定值（共用主檔設計 §4.5 的 header.set）：目標表頭的下拉欄位與它的選項，一個欄位只設一次，不和複製或追溯欄位重疊。</summary>
+    private static void CheckFixedValues(
+        ConversionHeader header, Dictionary<long, Field> targetFields, HashSet<long> traceKeys, Dictionary<string, string[]> errors)
+    {
+        if (header.Set is not { Count: > 0 } set) return;
+        var copied = (header.Copy ?? []).Select(m => m.To).ToHashSet();
+        var seen = new HashSet<long>();
+        foreach (var v in set)
+            if (v is null || !targetFields.TryGetValue(v.FieldId, out var field) || field.Type != FieldType.Enum
+                || !field.Options.Any(o => o.Id == v.OptionId && o.Active) || !seen.Add(v.FieldId) || traceKeys.Contains(v.FieldId) || copied.Contains(v.FieldId))
+            {
+                errors.TryAdd("definition.header.set", [FixedValueMessage]);
+                return;
+            }
+    }
+
+    public const string FillTargetMessage ="追溯欄位與數量欄位不能是參照欄位帶值的目的欄位（帶值會蓋掉轉換填的值）";
 
     /// <summary>啟用中的參照欄位所設定的帶值（任何模式）的目的欄位。</summary>
     private static HashSet<long> FillTargets(Module m) => m.Blocks.SelectMany(b => b.Fields)

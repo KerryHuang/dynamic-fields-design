@@ -217,18 +217,24 @@ public class AppFormat6Tests
             .Should().Contain("conversions[0].header.set: 固定值只能寫入下拉欄位，partner-lite/partner.phone 不是");
     }
 
-    /// <summary>開啟流程還不會寫入固定值（只傳追溯欄位與 copy），收下會讓轉出的記錄靜默少了值：非空的 header.set 一律拒絕。</summary>
+    /// <summary>開啟流程會建立固定值（ConversionFixedValueTests），目標是一般模組或主檔模組都接受。</summary>
     [Fact]
-    public void HeaderSet_IsRefusedUntilOpeningSupportsIt_ForPlainAndMasterTargets()
+    public void HeaderSet_IsAccepted_ForPlainAndMasterTargets()
     {
-        var expected = $"conversions[0].header.set: {AppPackageValidator.HeaderSetNotYetSupported}";
-        var withoutSet = System.Text.RegularExpressions.Regex.Replace(AppTestPackagesV6.LocalSet, @",\s*""set"": \[[^\]]*\]", "");
-        withoutSet.Should().NotBe(AppTestPackagesV6.LocalSet);
-        AloneErrors(withoutSet).Should().BeEmpty();
-        AloneErrors(AppTestPackagesV6.LocalSet).Should().Equal(expected);
+        AloneErrors(AppTestPackagesV6.LocalSet).Should().BeEmpty();
+        Errors(AppTestPackagesV6.CrmWithSet).Should().BeEmpty();
         AloneErrors(AppTestPackagesV6.LocalSet.Replace("\"set\": [ { \"to\": \"customer.role\", \"option\": \"customer\" } ]", "\"set\": []"))
             .Should().BeEmpty();
-        Errors(AppTestPackagesV6.CrmWithSet).Should().Equal(expected);
+    }
+
+    [Fact]
+    public void HeaderSet_AFieldOnlyOnce_NotTheTraceFieldOrACopyTarget()
+    {
+        const string one = "\"set\": [ { \"to\": \"customer.role\", \"option\": \"customer\" } ]";
+        AppTestPackagesV6.LocalSet.Should().Contain(one);
+        AloneErrors(AppTestPackagesV6.LocalSet.Replace(one,
+                "\"set\": [ { \"to\": \"customer.role\", \"option\": \"customer\" }, { \"to\": \"customer.role\", \"option\": \"supplier\" } ]"))
+            .Should().Contain(e => e.StartsWith("conversions[0].header.set: 欄位 customer.role 重複"));
     }
 
     // ---- contributions（§4.3） ----
