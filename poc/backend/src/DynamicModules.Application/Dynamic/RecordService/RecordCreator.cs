@@ -29,6 +29,7 @@ public class RecordCreator(
         foreach (var (key, value) in await rollups.EmptyValuesAsync(module, time.Today, ct)) allRollups.TryAdd(key, value);
         var userIds = await modules.ListUserIdsAsync(ct);
         var validRefKeys = await refs.ValidKeysAsync(module, input, null, ct);
+        RecordValueProcessor.RejectFrozenInput(module, input, null, userIds, registry, perms, validRefKeys, extraSystemKeys);
         var filled = new Dictionary<string, JsonElement?>(input);
         var systemKeys = new HashSet<string>(await fill.ApplyAsync(
             module, filled, null, validRefKeys, RecordValueProcessor.WritablePredicate(module, null, perms, registry, userIds, time.Today), ct));

@@ -128,6 +128,17 @@ public static class RecordValueProcessor
     }
 
     /// <summary>
+    /// 第一道鎖對原始請求的檢查：要在帶值（ReferenceFill）等改寫輸入的步驟之前呼叫。lock 帶值在參照沒變時會移除目的欄位的輸入，
+    /// 只在 Process 裡檢查就看不到「明確給了不同的值」（審查必修 5）；帶值自己寫進去的變更由 Process 再檢查一次。
+    /// </summary>
+    public static void RejectFrozenInput(
+        Module module, IReadOnlyDictionary<string, JsonElement?> input, IReadOnlyDictionary<string, JsonElement?>? previous,
+        IReadOnlySet<string> userIds, FieldTypeRegistry registry, EffectivePermissions permissions,
+        IReadOnlyDictionary<long, IReadOnlySet<string>>? validRefKeys, IReadOnlySet<string>? systemKeys) =>
+        RejectFrozenChanges(module.Blocks.SelectMany(b => b.Fields).Where(f => f.Status == FieldStatus.Active), input, previous,
+            registry, permissions, userIds, validRefKeys, systemKeys);
+
+    /// <summary>
     /// 生命週期鎖的第一道（共用主檔設計 §7）：對凍結欄位明確給了和舊值不同的值，整個請求 409；值沒變或沒給就照常通過。
     /// 和狀態機唯讀同層、優先於 systemKeys，所以轉換、事件、整合事件、匯入要寫它時整個動作失敗。
     /// 使用者看不到的欄位不比對：輸入照「沒權限的欄位忽略輸入」處理，回應不因隱藏的舊值而不同（審查必修 1）；系統寫入（systemKeys）照樣檢查。

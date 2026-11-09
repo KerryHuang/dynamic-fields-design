@@ -141,6 +141,7 @@ public class DetailWriter(
             input[parentKey] = JsonSerializer.SerializeToElement(parentId);
             validRefKeys[set.ParentField.Id] = new HashSet<string> { parentId.ToString() };
         }
+        RecordValueProcessor.RejectFrozenInput(set.Child, input, previous, userIds, registry, set.Permissions, validRefKeys, row.SystemKeys);
         var systemKeys = new HashSet<string>(await fill.ApplyAsync(set.Child, input, previous, validRefKeys,
             RecordValueProcessor.WritablePredicate(set.Child, previous, set.Permissions, registry, userIds, time.Today), ct));
         if (row.SystemKeys is not null) systemKeys.UnionWith(row.SystemKeys);

@@ -56,6 +56,7 @@ public class UpdateRecordHandler(
             });
 
         var validRefKeys = await refs.ValidKeysAsync(module, request.Values, previous, ct);
+        RecordValueProcessor.RejectFrozenInput(module, request.Values, previous, userIds, registry, perms, validRefKeys, request.SystemKeys);
         var input = new Dictionary<string, JsonElement?>(request.Values);
         var systemKeys = new HashSet<string>(await fill.ApplyAsync(module, input, previous, validRefKeys,
             RecordValueProcessor.WritablePredicate(module, previous, perms, registry, userIds, time.Today), ct));

@@ -4,6 +4,7 @@ using System.Net.Http.Json;
 using System.Text;
 using System.Text.Json;
 using DynamicModules.Domain.Entities.Dynamic;
+using DynamicModules.Domain.ValueObjects;
 using FluentAssertions;
 using Record = DynamicModules.Domain.Entities.Dynamic.Record;
 using static DynamicModules.WebAPITests.Dynamic.ApiTestKit;
@@ -239,6 +240,40 @@ public class SharedMasterFreezeTests : IDisposable
         await ShouldBeFrozenAsync(res);
         _rig.Db(db => db.Set<Record>().Single(r => r.Id == contactId).DeleteFlag).Should().BeFalse();
         (await GetAsync(partner)).GetProperty("values").GetProperty(Key("crmx", "bp/partner.mainContact")).GetInt64().Should().Be(contactId);
+    }
+
+    /// <summary>
+    /// 審查必修 5：CRM 的參照欄位以 lock 模式帶入備忘。CRM 關閉後明確送不同的備忘與新名稱：帶值會先移除 lock 欄位的輸入，
+    /// 凍結檢查要看原始請求，整筆 409、名稱也不寫。
+    /// </summary>
+    [Fact]
+    public async Task Update_AFrozenLockFillTarget_WithADifferentValue_Is409Whole_EvenThoughTheFillDropsTheInput()
+    {
+        await _rig.ImportAllAsync();
+        await _rig.OpenOkAsync("crmx");
+        await _rig.OpenOkAsync("stk");
+        await _rig.OpenOkAsync("cx");
+        var mainContact = _rig.FieldId("crmx", "bp/partner.mainContact");
+        var memo = _rig.FieldId("crmx", "bp/partner.memo");
+        var contactName = _rig.FieldId("ct", "contact.name");
+        _rig.Db(db =>
+        {
+            var field = db.Set<Field>().Single(f => f.Id == mainContact);
+            field.Config = field.Config with { Fill = new FillConfig(FillConfig.Lock, [new FillMapping(contactName, memo)]) };
+        });
+        var contact = await _rig.CreateRecordAsync(_rig.Admin, "master-ct-contact", new Dictionary<string, object> { [Key("ct", "contact.name")] = "王小明" });
+        var record = await _rig.CreateRecordAsync(_rig.Admin, Partner, new Dictionary<string, object>
+            { [Key("bp", "partner.name")] = "甲公司", [Key("crmx", "bp/partner.mainContact")] = contact.GetProperty("id").GetInt64() });
+        record.GetProperty("values").GetProperty(Key("crmx", "bp/partner.memo")).GetString().Should().Be("王小明", "lock 帶值");
+        await _rig.CloseOkAsync("crmx");
+
+        await ShouldBeFrozenAsync(await PutAsync(record, new() { [Key("crmx", "bp/partner.memo")] = "不同的備忘", [Key("bp", "partner.name")] = "甲公司二" }));
+        var after = await GetAsync(record);
+        after.GetProperty("title").GetString().Should().Be("甲公司", "整筆回滾");
+        after.GetProperty("values").GetProperty(Key("crmx", "bp/partner.memo")).GetString().Should().Be("王小明");
+
+        var same = await PutAsync(record, new() { [Key("crmx", "bp/partner.memo")] = "王小明", [Key("bp", "partner.name")] = "甲公司二" });
+        same.StatusCode.Should().Be(HttpStatusCode.OK, await same.Content.ReadAsStringAsync());
     }
 
     [Fact]
