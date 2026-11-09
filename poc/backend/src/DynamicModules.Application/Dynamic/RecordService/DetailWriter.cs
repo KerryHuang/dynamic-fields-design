@@ -197,6 +197,7 @@ public class DetailWriter(
                     record.StampCreated(user.UserId, now);
                 }
                 else Touch(record, now);
+                FieldLocks.Restore(set.Child, set.Permissions.Frozen, change.Before, values);   // 生命週期鎖第二道
                 record.Title = RecordValueProcessor.TitleOf(set.Child, values);
                 record.ValuesJson = RecordValueProcessor.Serialize(values);
                 await records.ReplaceIndexAsync(record, RecordIndexer.Build(set.Child, values, registry), ct);

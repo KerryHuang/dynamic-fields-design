@@ -38,9 +38,13 @@ public record SchemaDetail(
 
 public record SchemaBlock(long Id, I18nText Label, bool Collapsed, int Columns, List<SchemaField> Fields);
 
+/// <param name="LockedBy">凍結的貢獻欄位（貢獻者應用程式已關閉，共用主檔設計 §7）：屬於哪個應用程式；其他欄位是 null。</param>
 public record SchemaField(
     long Id, string Key, FieldType Type, I18nText Label, FieldConfig Config, List<SchemaOption> Options,
-    SchemaReference? Reference = null);
+    SchemaReference? Reference = null, SchemaLock? LockedBy = null);
+
+/// <summary>欄位凍結的原因：所屬應用程式的 id 與名稱。</summary>
+public record SchemaLock(string AppKey, I18nText AppName);
 
 /// <summary>參照欄位的目標資訊；LightUrl 相對於 API 根路徑。</summary>
 public record SchemaReference(string Kind, string Key, I18nText Name, string LightUrl);

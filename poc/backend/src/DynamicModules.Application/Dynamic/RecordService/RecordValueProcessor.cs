@@ -49,6 +49,8 @@ public static class RecordValueProcessor
         var values = previous is null ? [] : new Dictionary<string, JsonElement?>(previous);
         var errors = new Dictionary<string, string[]>();
         var fields = module.Blocks.SelectMany(b => b.Fields).Where(f => f.Status == FieldStatus.Active).ToList();
+        RejectFrozenChanges(fields, input, previous, registry, permissions, userIds, validRefKeys);
+        bool IsFrozen(Field f) => permissions.Frozen.ContainsKey(f.Id);
 
         var stored = previous is null ? null : RuleEngine.Evaluate(module, previous, previous, registry, userIds, rules.Today);
         if (stored is { ReadOnlyAll: true })
@@ -59,7 +61,7 @@ public static class RecordValueProcessor
 
         // 無權寫入（權限、Config.ReadOnly、規則唯讀、狀態機唯讀狀態）：忽略輸入、保留舊值、新增只套預設值、不檢查必填
         var userWritable = BuildWritable(permissions, stored);
-        bool Writable(Field f) => !FieldRules.IsComputed(f.Type) && !IsWorkflowLocked(module, previous, f, frozen)
+        bool Writable(Field f) => !FieldRules.IsComputed(f.Type) && !IsWorkflowLocked(module, previous, f, frozen) && !IsFrozen(f)
             && (systemKeys?.Contains(f.Key) == true || userWritable(f));
 
         foreach (var field in fields.Where(f => !FieldRules.IsComputed(f.Type)))
@@ -67,7 +69,7 @@ public static class RecordValueProcessor
             JsonElement? raw = null;
             var provided = Writable(field) && input.TryGetValue(field.Key, out raw);
             var fromDefault = false;
-            if (!provided && previous is null && DynamicDefaultOf(field, rules.Today, parentValues) is { } dflt)
+            if (!provided && previous is null && !IsFrozen(field) && DynamicDefaultOf(field, rules.Today, parentValues) is { } dflt)
             {
                 raw = dflt;
                 provided = true;
@@ -95,7 +97,7 @@ public static class RecordValueProcessor
         foreach (var (key, value) in rollupValues ?? new Dictionary<string, JsonElement?>())
             if (value is null) values.Remove(key);
             else values[key] = value;
-        if (!frozen) ApplyFormulas(module, values, rules.Today);
+        if (!frozen) ApplyFormulas(module, values, rules.Today, permissions.Frozen);
         var outcome = RuleEngine.Evaluate(module, values, previous, registry, userIds, rules.Today);
 
         foreach (var field in fields.Where(f => outcome.RequiredFieldIds.Contains(f.Id) && Writable(f)))
@@ -123,6 +125,37 @@ public static class RecordValueProcessor
             }
 
         return (values, errors);
+    }
+
+    /// <summary>
+    /// 生命週期鎖的第一道（共用主檔設計 §7）：對凍結欄位明確給了和舊值不同的值，整個請求 409；值沒變或沒給就照常通過。
+    /// 和狀態機唯讀同層、優先於 systemKeys，所以轉換、事件、整合事件、匯入要寫它時整個動作失敗。
+    /// </summary>
+    private static void RejectFrozenChanges(
+        IEnumerable<Field> fields, IReadOnlyDictionary<string, JsonElement?> input, IReadOnlyDictionary<string, JsonElement?>? previous,
+        FieldTypeRegistry registry, EffectivePermissions permissions, IReadOnlySet<string> userIds,
+        IReadOnlyDictionary<long, IReadOnlySet<string>>? validRefKeys)
+    {
+        if (permissions.Frozen.Count == 0) return;
+        foreach (var field in fields)
+        {
+            // 公式等計算欄位本來就不收輸入（凍結時另由 ApplyFormulas 跳過），不算「給了值」
+            if (FieldRules.IsComputed(field.Type) || !permissions.Frozen.TryGetValue(field.Id, out var owner)
+                || !input.TryGetValue(field.Key, out var raw)) continue;
+            JsonElement? prev = previous is not null && previous.TryGetValue(field.Key, out var p) ? p : null;
+            if (Same(raw, prev)) continue;
+            var ctx = new FieldTypeContext(field.Options.Select(o => o.Id).ToHashSet(), field.Options.Select(o => o.Id).ToHashSet(),
+                field.Options.ToDictionary(o => o.Id, o => o.Sequence), prev, userIds, validRefKeys?.GetValueOrDefault(field.Id));
+            var result = registry.Get(field.Type).Normalize(raw, field, ctx);
+            if (result.IsValid && Same(result.Value, prev)) continue;
+            throw new FrozenFieldException(field, owner);
+        }
+    }
+
+    private static bool Same(JsonElement? a, JsonElement? b)
+    {
+        static bool Empty(JsonElement? v) => v is null || v.Value.ValueKind == JsonValueKind.Null;
+        return Empty(a) ? Empty(b) : !Empty(b) && a!.Value.GetRawText() == b!.Value.GetRawText();
     }
 
     /// <summary>使用者自己能寫的欄位（不含系統填入）：權限、Config.ReadOnly、規則唯讀、狀態機唯讀狀態。</summary>
@@ -164,11 +197,13 @@ public static class RecordValueProcessor
             ? [id]
             : [];
 
-    /// <summary>依相依順序算出每個啟用中的公式欄位並寫回 values；結果為 null 就移除鍵。</summary>
-    public static void ApplyFormulas(Module module, Dictionary<string, JsonElement?> values, DateOnly today)
+    /// <summary>依相依順序算出每個啟用中的公式欄位並寫回 values；結果為 null 就移除鍵。凍結的公式（skip）保持最後的值、不重算。</summary>
+    public static void ApplyFormulas(Module module, Dictionary<string, JsonElement?> values, DateOnly today,
+        IReadOnlyDictionary<long, FieldLock>? skip = null)
     {
         foreach (var field in FormulaGraph.EvaluationOrder(module))
         {
+            if (skip?.ContainsKey(field.Id) == true) continue;
             var node = FormulaParser.Parse(field.Config.Formula, module).Node;
             var scale = field.Config.ResultType == "date" ? null : field.Config.Scale;
             var result = node is null ? null : FormulaEvaluator.Evaluate(node, module, values, today, scale);

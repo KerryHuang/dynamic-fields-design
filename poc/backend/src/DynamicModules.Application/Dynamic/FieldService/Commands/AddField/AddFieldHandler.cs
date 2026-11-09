@@ -16,7 +16,7 @@ namespace DynamicModules.Application.Dynamic.FieldService.Commands.AddField;
 public class AddFieldHandler(
     IModuleRepository modules, IRecordRepository records, IUnitOfWork uow, FieldTypeRegistry registry, ICurrentUser user, IBusinessTime time,
     ReferenceProviderRegistry providers, RollupRecalc rollups, IEventFactRepository facts,
-    Dynamic.LedgerService.ImmutableDataGuard immutable)
+    Dynamic.LedgerService.ImmutableDataGuard immutable, Common.Security.FieldLocks locks)
     : IRequestHandler<AddFieldRequest, ServiceResult>
 {
     public async Task<ServiceResult> Handle(AddFieldRequest request, CancellationToken ct)
@@ -92,7 +92,7 @@ public class AddFieldHandler(
         // Field.Key = f_<Id> 需先有 Id；(ModuleId, Key) 唯一，所以先以空 Key 插入再回填。
         field.Key = $"f_{field.Id}";
         if (request.Type == FieldType.Formula)
-            await FormulaRecalc.RecalculateAsync(module, records, registry, rollups, facts, time.Today, ct);
+            await FormulaRecalc.RecalculateAsync(module, records, registry, rollups, facts, time.Today, ct, locks);
         else if (request.Type == FieldType.Rollup)
             await rollups.RecalculateModuleAsync(module, time.Today, ct);
         module.TouchVersion(user.UserId, now);

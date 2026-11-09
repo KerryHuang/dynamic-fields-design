@@ -9,7 +9,11 @@ public record DynamicRecordResponse(
     long Id, string ModuleKey, string Title, Dictionary<string, JsonElement?> Values, string OwnerUserId,
     string CreatedUserId, DateTime CreatedTime, string ModifiedUserId, DateTime ModifiedTime, string RowVersion,
     IReadOnlyDictionary<string, ReferenceInfo> References, string? HostKey,
-    IReadOnlyDictionary<string, IReadOnlyList<DynamicRecordResponse>>? Details = null, bool FrozenByEffects = false);
+    IReadOnlyDictionary<string, IReadOnlyList<DynamicRecordResponse>>? Details = null, bool FrozenByEffects = false)
+{
+    /// <summary>凍結的貢獻欄位（欄位 key → 所屬的已關閉應用程式，共用主檔設計 §7）；沒有時是 null。</summary>
+    public IReadOnlyDictionary<string, SchemaService.Data.SchemaLock>? LockedBy { get; init; }
+}
 
 public static class RecordMapper
 {
@@ -25,9 +29,11 @@ public static class RecordMapper
         var visible = module.Blocks.SelectMany(b => b.Fields).Where(p.CanSee).Select(f => f.Key).ToHashSet();
         values = values.Where(kv => visible.Contains(kv.Key)).ToDictionary(kv => kv.Key, kv => kv.Value);
         var title = module.TitleVisibleTo(p) ? r.Title : "";
+        var locked = p.Frozen.Count == 0 ? null : module.Blocks.SelectMany(b => b.Fields).Where(f => p.Frozen.ContainsKey(f.Id) && visible.Contains(f.Key))
+            .ToDictionary(f => f.Key, f => new SchemaService.Data.SchemaLock(p.Frozen[f.Id].AppKey, p.Frozen[f.Id].AppName));
         return new(r.Id, moduleKey, title, values, r.OwnerUserId,
             r.CreatedUserId, r.CreatedTime, r.ModifiedUserId ?? r.CreatedUserId, r.ModifiedTime ?? r.CreatedTime,
-            r.RowVersion, references ?? new Dictionary<string, ReferenceInfo>(), r.HostKey);
+            r.RowVersion, references ?? new Dictionary<string, ReferenceInfo>(), r.HostKey) { LockedBy = locked };
     }
 
     /// <summary>

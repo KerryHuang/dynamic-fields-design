@@ -195,7 +195,8 @@ public class ConvertRecordHandler(
         foreach (var m in copy)
         {
             if (!sourceFields.TryGetValue(m.From, out var from) || !perms.CanSee(from)) continue;
-            if (!targetFields.TryGetValue(m.To, out var to) || !targetPerms.CanWrite(to)) continue;
+            // 凍結的貢獻欄位（共用主檔設計 §7）不當成一般唯讀而略過：照樣帶進去，由寫入管線讓整個轉換失敗
+            if (!targetFields.TryGetValue(m.To, out var to) || (!targetPerms.CanWrite(to) && !targetPerms.Frozen.ContainsKey(to.Id))) continue;
             if (!sourceValues.TryGetValue(from.Key, out var v) || v is not { ValueKind: not JsonValueKind.Null }) continue;
             values[$"f_{m.To}"] = v;
             system.Add($"f_{m.To}");

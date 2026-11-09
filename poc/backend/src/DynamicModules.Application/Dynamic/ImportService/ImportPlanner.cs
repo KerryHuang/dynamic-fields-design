@@ -75,7 +75,9 @@ public class ImportPlanner(
             }
             if (!seen.Add(field.Id)) return FileError($"欄位「{field.LabelI18n.Resolve(I18nText.FallbackLocale)}」重複");
             if (FieldRules.IsComputed(field.Type)) columns.Add(new ImportColumn(header, null, ComputedColumn));
-            else if (!perms.CanWrite(field) || field.Config.ReadOnly) columns.Add(new ImportColumn(header, null, ReadOnlyColumn));
+            // 凍結的貢獻欄位不當成一般唯讀而略過：照樣帶進去，有值時由寫入管線整批 409（共用主檔設計 §7）
+            else if ((!perms.CanWrite(field) || field.Config.ReadOnly) && !perms.Frozen.ContainsKey(field.Id))
+                columns.Add(new ImportColumn(header, null, ReadOnlyColumn));
             else
             {
                 columns.Add(new ImportColumn(header, field.Key, null));

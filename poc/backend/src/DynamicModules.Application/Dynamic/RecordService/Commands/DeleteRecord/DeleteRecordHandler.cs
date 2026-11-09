@@ -15,7 +15,7 @@ namespace DynamicModules.Application.Dynamic.RecordService.Commands.DeleteRecord
 public class DeleteRecordHandler(
     IModuleRepository modules, IRecordRepository records, ICurrentUser user, IBusinessTime time,
     IDynamicAccessGuard guard, ReferenceDeletePlanner planner, RollupRecalc rollups, RecordHistoryWriter history,
-    Dynamic.LedgerService.LedgerGate ledgerGate, Dynamic.EventService.EventFactLock factLock)
+    Dynamic.LedgerService.LedgerGate ledgerGate, Dynamic.EventService.EventFactLock factLock, FieldLocks locks)
     : IRequestHandler<DeleteRecordRequest, ServiceResult>
 {
     public async Task<ServiceResult> Handle(DeleteRecordRequest request, CancellationToken ct)
@@ -49,6 +49,9 @@ public class DeleteRecordHandler(
         var now = time.Now;
         var deleted = plan.ToDelete.Prepend(record).ToList();
         var deletedIds = deleted.Select(r => r.Id).ToHashSet();
+        // 清空參照也算寫入：要清空的是凍結的貢獻欄位（貢獻者已關閉）就整筆不刪（共用主檔設計 §7 凍結第 5 點）
+        if (await locks.RejectClearAsync(plan.ToClear.Where(c => !deletedIds.Contains(c.Record.Id)).Select(c => c.Field), ct) is { } frozenMessage)
+            return ServiceResult.Conflict(frozenMessage);
         // 彙總重算（決策 8）：刪除的記錄是 (寫入前, null)，清空的記錄是 (寫入前, 清空後)
         var changes = deleted.Select(r => (r.ModuleId, Before: RecordValueProcessor.Parse(r.ValuesJson), After: (Dictionary<string, JsonElement?>?)null))
             .ToList();

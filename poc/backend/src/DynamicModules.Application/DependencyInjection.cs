@@ -27,6 +27,7 @@ public static class DependencyInjection
         services.AddScoped<Common.IWriteJournal, Common.WriteJournal>();
         services.AddScoped<Common.IOperationContext, Common.OperationContext>();
         services.AddScoped<ISystemIdentity, SystemIdentity>();
+        services.AddScoped<FieldLocks>();
         services.AddScoped<IDynamicAccessGuard, DynamicAccessGuard>();
         services.AddScoped<Dynamic.SchemaService.Queries.GetModuleSchema.ModuleSchemaBuilder>();
         services.AddScoped<Dynamic.References.ReferenceValidator>();

@@ -16,7 +16,8 @@ namespace DynamicModules.Application.Dynamic.RecordService;
 /// </summary>
 public class RecordCreator(
     IModuleRepository modules, IRecordRepository records, INumberSequenceRepository sequences, FieldTypeRegistry registry,
-    ICurrentUser user, ISystemIdentity system, IBusinessTime time, ReferenceValidator refs, ReferenceFill fill, WorkflowEnforcer workflow, RollupRecalc rollups, RecordHistoryWriter history)
+    ICurrentUser user, ISystemIdentity system, IBusinessTime time, ReferenceValidator refs, ReferenceFill fill, WorkflowEnforcer workflow, RollupRecalc rollups, RecordHistoryWriter history,
+    FieldLocks locks)
 {
     /// <param name="rollupValues">這次存檔在記憶體算好的彙總值（明細彙總）；沒給的一般參照彙總取空集合的值（第 6 階段 R13）。</param>
     public async Task<(Dictionary<string, JsonElement?> Values, Dictionary<string, string[]> Errors)> ValidateAsync(
@@ -44,6 +45,7 @@ public class RecordCreator(
         Module module, Dictionary<string, JsonElement?> values, string? hostKey, string? hostTitle, CancellationToken ct)
     {
         await RecordAutoNumbers.AssignAsync(sequences, module, values, time.Now, null, ct);
+        await locks.RestoreAsync(module, null, values, ct);   // 生命週期鎖第二道：新增時凍結欄位沒有值
         var record = new Record
         {
             ModuleId = module.Id,

@@ -72,6 +72,7 @@ public class UpdateRecordHandler(
             foreach (var (key, messages) in await workflow.CheckAsync(module, previous, values, ct)) errors[key] = messages;
         if (errors.Count > 0) return ServiceResult.Invalid(errors);
 
+        FieldLocks.Restore(module, perms.Frozen, previous, values);   // 生命週期鎖第二道：凍結欄位落地時蓋回舊值
         if (module.Kind != ModuleKind.Extension) record.Title = RecordValueProcessor.TitleOf(module, values);
         record.ValuesJson = RecordValueProcessor.Serialize(values);
         history.Updated(record, module, previous, values);

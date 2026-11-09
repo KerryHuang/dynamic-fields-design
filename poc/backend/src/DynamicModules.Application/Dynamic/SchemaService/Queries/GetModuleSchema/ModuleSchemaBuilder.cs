@@ -74,6 +74,8 @@ public class ModuleSchemaBuilder(
                     .OrderBy(f => f.Sequence).ThenBy(f => f.Id)
                     .Select(f => ToSchemaField(f, p, references.GetValueOrDefault(f.Id))).ToList()))
             .Where(b => b.Fields.Count > 0)
+            // 貢獻者已關閉的區塊（欄位全部凍結）預設收起（共用主檔設計 §7）
+            .Select(b => b.Fields.All(f => f.LockedBy is not null) ? b with { Collapsed = true } : b)
             .ToList();
         return (titleKey, blocks);
     }
@@ -163,5 +165,6 @@ public class ModuleSchemaBuilder(
             f.Options.OrderBy(o => o.Sequence).ThenBy(o => o.Id)
                 .Select(o => new SchemaOption($"opt_{o.Id}", o.LabelI18n, o.Color,
                     o.Active && !p.UnselectableOptionIds.Contains(o.Id))).ToList(),
-            reference);
+            reference,
+            p.Frozen.TryGetValue(f.Id, out var owner) ? new SchemaLock(owner.AppKey, owner.AppName) : null);
 }

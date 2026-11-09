@@ -4,7 +4,8 @@ using DynamicModules.Domain.Repositories.Dynamic;
 namespace DynamicModules.Application.Common.Security;
 
 public class DynamicAccessGuard(
-    ICurrentUser user, IProgramRepository programs, IPermissionRepository permissions, IModuleRepository modules, ISystemIdentity system)
+    ICurrentUser user, IProgramRepository programs, IPermissionRepository permissions, IModuleRepository modules, ISystemIdentity system,
+    FieldLocks locks)
     : IDynamicAccessGuard
 {
     public const string DesignerProgramCode = "DYN00000";
@@ -17,7 +18,7 @@ public class DynamicAccessGuard(
     public async Task<AccessResult> AuthorizeAsync(Module module, PermissionAction action, CancellationToken ct)
     {
         if (ClosedBlocks(module, action)) return Deny();
-        if (system.Active) return new AccessResult(SystemPermissions, null);
+        if (system.Active) return new AccessResult(await locks.ApplyAsync(module, SystemPermissions, ct), null);
         var program = await programs.GetAsync(module.ProgramCode, ct);
         if (program is not { Active: true }) return Deny();
 
@@ -25,13 +26,13 @@ public class DynamicAccessGuard(
         if (inputs is null) return Deny();
 
         var effective = PermissionResolver.Resolve(module, inputs, null, await HiddenSourceFieldsAsync(module, inputs, ct), action);
-        return effective.Can(action) ? new AccessResult(effective, null) : Deny();
+        return effective.Can(action) ? new AccessResult(await locks.ApplyAsync(module, effective, ct), null) : Deny();
     }
 
     public async Task<AccessResult> AuthorizeDetailAsync(Module parent, Module child, PermissionAction action, CancellationToken ct)
     {
         if (ClosedBlocks(parent, action) || ClosedBlocks(child, action)) return Deny();
-        if (system.Active) return new AccessResult(SystemPermissions, null);
+        if (system.Active) return new AccessResult(await locks.ApplyAsync(child, SystemPermissions, ct), null);
         var program = await programs.GetAsync(parent.ProgramCode, ct);
         if (program is not { Active: true }) return Deny();
 
@@ -41,7 +42,7 @@ public class DynamicAccessGuard(
 
         // 動作軸與資料範圍來自表頭的授權列；欄位例外與選項範圍來自明細模組
         var effective = PermissionResolver.Resolve(child, DetailInputs(parentInputs, childInputs), parent, forAction: action);
-        return effective.Can(action) ? new AccessResult(effective, null) : Deny();
+        return effective.Can(action) ? new AccessResult(await locks.ApplyAsync(child, effective, ct), null) : Deny();
     }
 
     /// <summary>

@@ -54,7 +54,7 @@ internal static class SharedMasterPackages
         }
         """;
 
-    /// <summary>CRM：潛在客戶轉往來對象（目標是主檔、追溯欄位是貢獻欄位）；貢獻產業、來源潛在客戶、主要聯絡人、分數與一個引用基本欄位的公式。</summary>
+    /// <summary>CRM：潛在客戶轉往來對象（目標是主檔、追溯欄位是貢獻欄位）；貢獻產業、來源潛在客戶、主要聯絡人、分數、備忘與一個引用基本欄位的公式。</summary>
     public static readonly string Crm = $$"""
         {
           "format": "formwright-app", "formatVersion": 6,
@@ -96,6 +96,7 @@ internal static class SharedMasterPackages
               { "code": "mainContact", "type": "reference", "label": { "zh-TW": "主要聯絡人" },
                 "config": { "onDelete": "setNull", "refTarget": { "kind": "module", "key": "contact", "app": "ct" } } },
               { "code": "score", "type": "integer", "label": { "zh-TW": "分數" }, "config": {} },
+              { "code": "memo", "type": "text", "label": { "zh-TW": "備忘" }, "config": {} },
               { "code": "headX2", "type": "formula", "label": { "zh-TW": "人數兩倍" }, "config": { "formula": "{headcount} * 2", "resultType": "number" } }
             ],
             "permissions": [ { "group": "sales", "scope": "all", "privileges": {{ReadOnly}} } ]
@@ -103,7 +104,7 @@ internal static class SharedMasterPackages
         }
         """;
 
-    /// <summary>進銷存：出貨單參照往來對象；貢獻送貨地址。對主檔授予「讀取＋編輯／own」。</summary>
+    /// <summary>進銷存：出貨單參照往來對象；貢獻送貨地址與「來源出貨單」（參照自己的模組）。對主檔授予「讀取＋編輯／own」。</summary>
     public static readonly string Stock = $$"""
         {
           "format": "formwright-app", "formatVersion": 6,
@@ -124,7 +125,9 @@ internal static class SharedMasterPackages
           "contributions": [ {
             "master": "bp", "module": "partner",
             "block": { "code": "stock", "name": { "zh-TW": "進銷存" } },
-            "fields": [ { "code": "shipAddress", "type": "text", "label": { "zh-TW": "送貨地址" }, "config": {} } ],
+            "fields": [ { "code": "shipAddress", "type": "text", "label": { "zh-TW": "送貨地址" }, "config": {} },
+                        { "code": "fromShip", "type": "reference", "label": { "zh-TW": "來源出貨單" },
+                          "config": { "readOnly": true, "onDelete": "setNull", "refTarget": { "kind": "module", "key": "ship" } } } ],
             "permissions": [ { "group": "clerk", "scope": "own", "privileges": {{ReadEdit}} } ]
           } ]
         }

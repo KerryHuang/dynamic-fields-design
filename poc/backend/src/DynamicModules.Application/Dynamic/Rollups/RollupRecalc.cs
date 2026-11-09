@@ -15,7 +15,7 @@ namespace DynamicModules.Application.Dynamic.Rollups;
 /// </summary>
 public class RollupRecalc(
     IModuleRepository modules, IRecordRepository records, IUnitOfWork uow, FieldTypeRegistry registry, IBusinessTime time, IWriteJournal journal,
-    IEventFactRepository facts)
+    IEventFactRepository facts, Common.Security.FieldLocks locks)
 {
     /// <summary>寫入前後來源欄位指向的父記錄；改指向時新舊兩筆都算，null 忽略。</summary>
     public static IReadOnlySet<(long ParentModuleId, long ParentRecordId)> CollectParents(
@@ -131,7 +131,9 @@ public class RollupRecalc(
             else values.Remove(rollup.Key);
         }
         // 已記帳的來源（有事件事實）公式保留記帳當時的值，彙總本身照常更新（設計 §4.7、§10.4）
+        var previous = RecordValueProcessor.Parse(record.ValuesJson);
         if (!await facts.AnyBySourceAsync(record.Id, ct)) RecordValueProcessor.ApplyFormulas(parent, values, today);
+        await locks.RestoreAsync(parent, previous, values, ct);   // 生命週期鎖第二道：凍結的貢獻欄位保持最後的值
         var json = RecordValueProcessor.Serialize(values);
         if (json == record.ValuesJson) return;
         record.ValuesJson = json;
