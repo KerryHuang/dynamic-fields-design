@@ -29,4 +29,5 @@ public interface IAppPackageRepository
     Task<List<AppPackage>> ListAsync(CancellationToken ct);
     Task<AppPackage?> GetByKeyAsync(string key, CancellationToken ct);
     void Add(AppPackage p);
+    void Update(AppPackage p);
 }

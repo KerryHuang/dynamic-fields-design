@@ -47,8 +47,10 @@ public sealed partial class AppOpenPlanner(
         // 主檔定義：目錄與匯入套件裡的主檔；引用的主檔欄位與選項都要找得到（共用主檔 §4.6）
         var knownMasters = (await packages.ListAsync(ct)).Where(k => k.Package.Manifest.IsMaster)
             .GroupBy(k => k.Package.Manifest.Id).ToDictionary(g => g.Key, g => g.First().Package);
-        var validation = AppPackageValidator.Validate(package, knownMasters);
-        var warnings = new List<string>(validation.Warnings);
+        // 套件本身的錯誤（不看主檔）直接擋；對不上主檔（套件定義或資料庫裡現在的樣子）的引用算 unbound（§4.6、§9 最後一點），
+        // 這樣「匯出的主檔少了被刪的基本欄位」和「已開啟的主檔被客戶改過」都回同一種 409
+        var validation = AppPackageValidator.Validate(package, new Dictionary<string, AppPackageData>());
+        var warnings = new List<string>(AppPackageValidator.Validate(package, knownMasters).Warnings);
         var errors = new List<string>(validation.Errors);
         if (errors.Count > 0)
             return new Plan(null, source, new Dictionary<string, string>(), new Dictionary<string, string>(), Empty with { Errors = errors }, new Dictionary<string, long>());
@@ -168,21 +170,16 @@ public sealed partial class AppOpenPlanner(
     }
 
     /// <summary>
-    /// 已開啟的主檔被客戶改過（基本欄位被刪或改型別）時，套件引用的主檔符號對不上：用資料庫裡主檔現在的樣子再驗一次，
-    /// 多出來的錯誤就是 unbound（§4.6），列出對不上的符號。
+    /// 套件引用的主檔符號對不上：用主檔的定義（已開啟的用資料庫裡現在的樣子，客戶刪過或改過型別的基本欄位會在這裡現形；
+    /// 沒開啟的用目錄與匯入的那份）再驗一次，比不看主檔時多出來的錯誤就是 unbound（§4.6），列出對不上的符號。
     /// </summary>
     private async Task<List<string>> UnboundAsync(
         AppPackageData package, IReadOnlyDictionary<string, AppPackageData> known, IReadOnlyList<string> baseline, CancellationToken ct)
     {
         var live = new Dictionary<string, AppPackageData>(known);
-        var any = false;
         foreach (var r in package.Manifest.Requires.Masters)
             if (await apps.GetByKeyAsync(r.Id, ct) is { Kind: AppKind.Master } app)
-            {
                 live[r.Id] = await symbols.DefinitionAsync(app, known.GetValueOrDefault(r.Id), ct);
-                any = true;
-            }
-        if (!any) return [];
         return AppPackageValidator.Validate(package, live).Errors.Except(baseline).ToList();
     }
 

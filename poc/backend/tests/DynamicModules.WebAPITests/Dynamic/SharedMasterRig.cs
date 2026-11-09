@@ -46,6 +46,16 @@ internal sealed class SharedMasterRig : IDisposable
         res.StatusCode.Should().Be(HttpStatusCode.Created, await res.Content.ReadAsStringAsync());
     }
 
+    /// <summary>再匯入一份已存在的主檔：合併（200），回傳回應裡的 warnings。</summary>
+    public async Task<List<string>> ImportMergeOkAsync(string json)
+    {
+        var res = await Admin.PostAsync($"{Apps}/packages/import", new StringContent(json, Encoding.UTF8, "application/json"));
+        res.StatusCode.Should().Be(HttpStatusCode.OK, await res.Content.ReadAsStringAsync() + LastError());
+        var body = await JsonOf(res);
+        body.GetProperty("merged").GetBoolean().Should().BeTrue();
+        return body.GetProperty("warnings").EnumerateArray().Select(w => w.GetString()!).ToList();
+    }
+
     public long GroupId(string key) => Db(db => db.Set<PermissionGroup>().Single(g => g.Key == key).Id);
 
     /// <summary>使用者套件的群組照 <see cref="GroupMap"/> 對應，主檔的 steward 群組一律新建。</summary>

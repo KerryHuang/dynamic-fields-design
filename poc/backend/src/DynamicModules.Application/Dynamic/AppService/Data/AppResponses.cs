@@ -4,10 +4,17 @@ using DynamicModules.Domain.ValueObjects;
 
 namespace DynamicModules.Application.Dynamic.AppService.Data;
 
-/// <summary>目錄裡的一個套件；Status 是它對應的已開啟應用程式狀態（Open、Closed），沒開過是 null。</summary>
+/// <summary>
+/// 目錄裡的一個套件；Status 是它對應的已開啟應用程式狀態（Open、Closed），沒開過是 null。
+/// Merged、Warnings 只在匯入時有意義：再匯入已存在的共用主檔是合併（共用主檔設計 §9），Warnings 列出沒合併、避撞與保留既有的項目。
+/// </summary>
 public record AppPackageSummary(
     string Id, string Version, I18nText Name, I18nText? Description, string? Icon, string? Vendor, string Source,
-    AppManifestRequires Requires, List<AppGroup> Groups, List<TemplateModuleSummary> Modules, string? Status);
+    AppManifestRequires Requires, List<AppGroup> Groups, List<TemplateModuleSummary> Modules, string? Status)
+{
+    public bool Merged { get; init; }
+    public List<string> Warnings { get; init; } = [];
+}
 
 public record AppModuleResponse(string Code, string Key, long Id, I18nText Name, string Status);
 

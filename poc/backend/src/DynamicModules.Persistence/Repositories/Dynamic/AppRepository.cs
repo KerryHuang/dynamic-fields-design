@@ -50,4 +50,6 @@ public class AppPackageRepository(DynamicDbContext db) : IAppPackageRepository
         db.Set<AppPackage>().AsNoTracking().FirstOrDefaultAsync(p => p.Key == key, ct);
 
     public void Add(AppPackage p) => db.Set<AppPackage>().Add(p);
+
+    public void Update(AppPackage p) => db.Set<AppPackage>().Update(p);
 }

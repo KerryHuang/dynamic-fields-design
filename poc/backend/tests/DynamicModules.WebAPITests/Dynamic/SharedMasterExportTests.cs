@@ -90,6 +90,27 @@ public class SharedMasterExportTests : IDisposable
     }
 
     [Fact]
+    public async Task AGroupCreatedAtOpen_HasOneCodeAcrossModulesContributionsAndGroups()
+    {
+        await _rig.ImportAsync(SharedMasterPackages.Bp);
+        await _rig.ImportAsync(SharedMasterPackages.Ct);
+        await _rig.ImportAsync(SharedMasterPackages.Crm.Replace("\"name\": { \"zh-TW\": \"業務\" }", "\"name\": { \"zh-TW\": \"業務二組\" }"));
+        await _rig.OpenOkAsync("crmx", new
+        {
+            groupMap = new Dictionary<string, object> { ["sales"] = new { mode = "create" } },
+            masters = new Dictionary<string, object>
+            {
+                ["bp"] = new Dictionary<string, object> { ["steward"] = new { mode = "create" } },
+                ["ct"] = new Dictionary<string, object> { ["steward"] = new { mode = "create" } }
+            }
+        });
+        var (crm, _) = await _rig.ExportAsync("crmx");
+        var code = Arr(crm, "groups").Select(g => Str(g, "code")).Should().ContainSingle().Subject;
+        Arr(crm, "modules").SelectMany(m => Arr(m, "permissions")).Select(p => Str(p, "group")).Distinct().Should().Equal(code);
+        Arr(Arr(crm, "contributions").Single(), "permissions").Select(p => Str(p, "group")).Should().Equal(code);
+    }
+
+    [Fact]
     public async Task ExportingTheMaster_HasOnlyItsBaseFields_InactiveOnesMarked_StewardOnly_AndWarnsAboutOrphans()
     {
         await OpenCrmAndStockAsync();

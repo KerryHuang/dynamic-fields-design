@@ -12,21 +12,30 @@ public sealed class AppPackageSource(AppCatalog catalog, TemplateCatalog templat
     public const string BuiltIn = "builtIn";
     public const string Imported = "imported";
 
+    /// <summary>
+    /// 內建優先；只有共用主檔例外：再匯入主檔會把合併結果存成匯入的那份（共用主檔設計 §9），所以主檔是匯入的優先於內建。
+    /// </summary>
     public async Task<SourcedPackage?> FindAsync(string id, CancellationToken ct)
     {
-        if (catalog.BuiltIns.FirstOrDefault(p => p.Manifest.Id == id) is { } builtIn) return new(builtIn, BuiltIn);
-        var row = await imported.GetByKeyAsync(id, ct);
-        if (row is null) return null;
-        var (package, _) = await ReadAsync(row.Json, ct);
-        return package is null ? null : new(package, Imported);
+        var builtIn = catalog.BuiltIns.FirstOrDefault(p => p.Manifest.Id == id);
+        if (builtIn is { Manifest.IsMaster: false }) return new(builtIn, BuiltIn);
+        if (await imported.GetByKeyAsync(id, ct) is { } row && (await ReadAsync(row.Json, ct)).Package is { } package
+            && (builtIn is null || package.Manifest.IsMaster))
+            return new(package, Imported);
+        return builtIn is null ? null : new(builtIn, BuiltIn);
     }
 
-    /// <summary>內建在前、各自依 id 排序；匯入的壞資料略過。</summary>
+    /// <summary>內建在前、各自依 id 排序；匯入的壞資料略過。內建主檔有合併過的匯入版時以匯入的取代，同一個 id 只列一次。</summary>
     public async Task<IReadOnlyList<SourcedPackage>> ListAsync(CancellationToken ct)
     {
         var list = catalog.BuiltIns.OrderBy(p => p.Manifest.Id, StringComparer.Ordinal).Select(p => new SourcedPackage(p, BuiltIn)).ToList();
         foreach (var row in await imported.ListAsync(ct))
-            if ((await ReadAsync(row.Json, ct)).Package is { } p) list.Add(new(p, Imported));
+        {
+            if ((await ReadAsync(row.Json, ct)).Package is not { } p) continue;
+            var index = list.FindIndex(x => x.Package.Manifest.Id == p.Manifest.Id);
+            if (index < 0) list.Add(new(p, Imported));
+            else if (list[index].Package.Manifest.IsMaster && p.Manifest.IsMaster) list[index] = new(p, Imported);
+        }
         return list;
     }
 
