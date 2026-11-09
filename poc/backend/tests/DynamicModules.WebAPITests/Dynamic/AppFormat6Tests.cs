@@ -246,6 +246,15 @@ public class AppFormat6Tests
             .Should().Contain("contributions[0]: 主檔模組 partner-lite/partner 不接受貢獻（沒有標 extensible）");
     }
 
+    /// <summary>審查反例：貢獻欄位的選項寫成 null，結構層要給可定位的錯誤，不能走到引用層的 NullReferenceException。</summary>
+    [Fact]
+    public void Contribution_NullOption_IsAStructureError()
+    {
+        var json = Crm("\"options\": [ { \"code\": \"manufacturing\", \"label\": { \"zh-TW\": \"製造\" } } ]", "\"options\": [null]");
+        AloneErrors(json).Should().Equal("contributions[0].fields[industry].options: 不能有 null");
+        Errors(json).Should().Equal("contributions[0].fields[industry].options: 不能有 null");
+    }
+
     [Fact]
     public void Contribution_FieldsCannotBeRequired()
     {

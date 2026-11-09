@@ -124,6 +124,7 @@ public static partial class AppPackageValidator
                 var fat = $"{at}.fields[{f.Code}]";
                 CheckText(f.Label, $"{fat}.label", errors);
                 if (f.Options.Count > MaxOptionsPerField) errors.Add($"{fat}: 選項最多 {MaxOptionsPerField} 個");
+                if (f.Options.Any(o => o is null)) errors.Add($"{fat}.options: 不能有 null");
                 foreach (var o in f.Options.Where(o => o is not null)) CheckText(o.Label, $"{fat}.options.{o.Code}", errors);
                 CheckConfigKeys($"{at}.fields", f, p.FormatVersion, errors);
                 if (!ContributionFieldTypes.Contains(f.Type))

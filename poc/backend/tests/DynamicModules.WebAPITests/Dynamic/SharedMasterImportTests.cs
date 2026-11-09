@@ -44,6 +44,17 @@ public class SharedMasterImportTests : IDisposable
     }
 
     [Fact]
+    public async Task Contribution_NullOption_Is400AtImport()
+    {
+        await ImportOk(AppTestPackagesV6.Master);
+        var json = AppTestPackagesV6.Crm.Replace("\"options\": [ { \"code\": \"manufacturing\", \"label\": { \"zh-TW\": \"製造\" } } ]", "\"options\": [null]");
+        json.Should().NotBe(AppTestPackagesV6.Crm);
+        var res = await Import(json);
+        res.StatusCode.Should().Be(HttpStatusCode.BadRequest, await res.Content.ReadAsStringAsync());
+        (await res.Content.ReadAsStringAsync()).Should().Contain("contributions[0].fields[industry].options: 不能有 null");
+    }
+
+    [Fact]
     public async Task User_ReferencingAFieldTheImportedMasterLacks_IsRejected()
     {
         await ImportOk(AppTestPackagesV6.Master);
