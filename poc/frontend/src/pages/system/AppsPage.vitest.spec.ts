@@ -94,6 +94,47 @@ describe('AppsPage', () => {
     });
   });
 
+  it('open: masters opened along with it get their own group mapping (steward is not skipped)', async () => {
+    api.previewOpenApp.mockResolvedValue({
+      ...okPreview, groups: [],
+      masters: [
+        { id: 'bp', name: { 'zh-TW': '往來對象' }, action: 'open', groups: [{ code: 'steward', name: { 'zh-TW': '往來對象管理員' }, suggestion: 'create' }] },
+        { id: 'ct', name: { 'zh-TW': '聯絡人' }, action: 'bind', groups: [] },
+      ],
+      unbound: [],
+    });
+    api.openApp.mockResolvedValue(app('a', 'Open'));
+    await mountPage([pkg('a', null)], []);
+    await click('app-open');
+    const masters = { bp: { steward: { mode: 'create' } } };
+    expect(api.previewOpenApp).toHaveBeenNthCalledWith(2, 'a', { groupMap: {}, masters, locale: 'zh-TW' });
+    expect(q('open-masters')!.textContent).toContain('往來對象管理員');
+    await click('open-confirm');
+    expect(api.openApp).toHaveBeenCalledWith('a', { groupMap: {}, masters, locale: 'zh-TW' });
+  });
+
+  it('open: unbound master symbols are blockers', async () => {
+    api.previewOpenApp.mockResolvedValue({ ...okPreview, canOpen: false, masters: [], unbound: ['ship.customer.fill.map: bp/partner.phone'] });
+    await mountPage([pkg('a', null)], []);
+    await click('app-open');
+    expect(q('open-blockers')!.textContent).toContain('bp/partner.phone');
+  });
+
+  it('import: a merged master shows its warnings', async () => {
+    api.importAppPackage.mockResolvedValue({ ...pkg('bp', 'Open'), merged: true, warnings: ['「電話」（phone）的型別和匯入的不同，保留既有的'] });
+    await mountPage([], []);
+    const notify = vi.spyOn(mounted!.findComponent(AppsPage).vm.$q, 'notify');
+    const input = q('apps-file') as unknown as HTMLInputElement;
+    const file = new File(['{}'], 'bp.app.json', { type: 'application/json' });
+    Object.defineProperty(file, 'text', { value: () => Promise.resolve('{}') });
+    Object.defineProperty(input, 'files', { value: [file] });
+    input.dispatchEvent(new Event('change'));
+    await flushPromises();
+    expect(api.importAppPackage).toHaveBeenCalledWith('{}');
+    expect(notify).toHaveBeenCalledWith(expect.objectContaining({ type: 'positive', message: zhTW.apps.merged }));
+    expect(notify).toHaveBeenCalledWith(expect.objectContaining({ type: 'warning', message: '「電話」（phone）的型別和匯入的不同，保留既有的' }));
+  });
+
   it('open: blockers are listed and confirm stays disabled (nothing is sent)', async () => {
     api.previewOpenApp.mockResolvedValue({
       ...okPreview, canOpen: false, keyConflicts: [{ moduleCode: 'cust', key: 'customer' }],

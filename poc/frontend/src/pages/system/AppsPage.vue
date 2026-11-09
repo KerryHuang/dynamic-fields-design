@@ -38,7 +38,10 @@ async function onFile(ev: Event) {
   input.value = '';
   if (!file) return;
   importPackage.mutate(await file.text(), {
-    onSuccess: () => $q.notify({ type: 'positive', message: t('apps.imported') }),
+    onSuccess: (r) => {
+      $q.notify({ type: 'positive', message: t(r.merged ? 'apps.merged' : 'apps.imported') });
+      (r.warnings ?? []).forEach((w) => $q.notify({ type: 'warning', message: w, timeout: 0, closeBtn: true }));
+    },
     onError: (e) => fail(e, t('apps.importFailed')),
   });
 }
@@ -50,7 +53,17 @@ const result = ref<OpenPreview | null>(null);
 const groupMapOf = (groups: OpenPreview['groups']): OpenAppBody['groupMap'] => Object.fromEntries(groups.map((g) => [
   g.code, g.suggestion === 'map' ? { mode: 'map' as const, groupId: g.suggestedGroupId } : { mode: g.suggestion },
 ]));
-const openBody = computed<OpenAppBody>(() => ({ groupMap: groupMapOf(result.value?.groups ?? []), locale: locale.value }));
+// 一起開啟的共用主檔各有自己的群組（如 steward），同樣照建議對應；不列就會被略過、沒人有主檔權限
+const mastersOf = (masters: OpenPreview['masters']): OpenAppBody['masters'] => {
+  const opened = (masters ?? []).filter((m) => m.action === 'open' && m.groups.length);
+  return opened.length ? Object.fromEntries(opened.map((m) => [m.id, groupMapOf(m.groups)!])) : undefined;
+};
+const bodyOf = (r: OpenPreview): OpenAppBody => {
+  const masters = mastersOf(r.masters);
+  return { groupMap: groupMapOf(r.groups), ...(masters ? { masters } : {}), locale: locale.value };
+};
+const openBody = computed<OpenAppBody>(() => (result.value ? bodyOf(result.value) : { groupMap: {}, locale: locale.value }));
+const masterGroups = computed(() => (result.value?.masters ?? []).filter((m) => m.action === 'open' && m.groups.length));
 
 function startOpen(p: AppPackageSummary) {
   opening.value = p;
@@ -60,7 +73,7 @@ function startOpen(p: AppPackageSummary) {
   preview.mutate({ id: p.id, body: { locale: locale.value } }, {
     onError: failed,
     onSuccess: (first) => preview.mutate(
-      { id: p.id, body: { groupMap: groupMapOf(first.groups), locale: locale.value } },
+      { id: p.id, body: bodyOf(first) },
       { onSuccess: (r) => { result.value = r; }, onError: failed }),
   });
 }
@@ -72,6 +85,7 @@ const blockers = computed(() => {
     ...r.keyConflicts.map((c) => t('apps.keyConflict', { module: c.moduleCode, key: c.key })),
     ...r.hostEntityConflicts,
     ...r.missingDependencies.map((m) => t('apps.missing', { app: m.appId ?? '', detail: m.moduleCode ?? m.entity ?? '', reason: m.reason })),
+    ...(r.unbound ?? []).map((u) => t('apps.unbound', { detail: u })),
   ];
 });
 function confirmOpen() {
@@ -157,6 +171,10 @@ const reopen = (key: string) => reopenApp.mutate(key, {
               <ul v-if="result.groups.length" data-testid="open-groups">
                 <li v-for="g in result.groups" :key="g.code">{{ name(g.name) }}：{{ t(`apps.group.${g.suggestion}`) }}</li>
               </ul>
+              <div v-for="m in masterGroups" :key="m.id" data-testid="open-masters">
+                <div class="text-caption text-muted">{{ t('apps.masterGroups', { name: name(m.name) }) }}</div>
+                <ul><li v-for="g in m.groups" :key="g.code">{{ name(g.name) }}：{{ t(`apps.group.${g.suggestion}`) }}</li></ul>
+              </div>
             </template>
             <ul v-if="result.warnings.length" class="text-muted"><li v-for="w in result.warnings" :key="w">{{ w }}</li></ul>
           </q-card-section>

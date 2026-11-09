@@ -67,6 +67,9 @@ export interface AppPackageSummary {
   modules: TemplateModuleSummary[];
   /** Status of the opened app made from this package; null when never opened. */
   status: 'Open' | 'Closed' | null;
+  /** Import only: re-importing a shared master merges into it; warnings list what was kept, renamed or not merged. */
+  merged?: boolean;
+  warnings?: string[];
 }
 export interface AppModuleInfo { code: string; key: string; id: number; name: I18nText; status: string }
 export interface AppInfo {
@@ -90,14 +93,22 @@ export interface OpenPreview {
   keyConflicts: { moduleCode: string; key: string }[];
   hostEntityConflicts: string[];
   missingDependencies: MissingDependency[];
-  groups: { code: string; name: I18nText; suggestion: 'map' | 'create' | 'skip'; suggestedGroupId?: number }[];
+  groups: GroupSuggestion[];
   warnings: string[];
   canOpen: boolean;
+  /** Shared masters handled along with it, in dependency order; only `open` ones bring groups to map. */
+  masters?: { id: string; name: I18nText; action: 'open' | 'reopen' | 'bind'; groups: GroupSuggestion[] }[];
+  /** Master symbols the package uses that the master no longer has (blocks opening). */
+  unbound?: string[];
 }
+export interface GroupSuggestion { code: string; name: I18nText; suggestion: 'map' | 'create' | 'skip'; suggestedGroupId?: number }
+export type GroupMap = Record<string, { mode: 'map' | 'create' | 'skip'; groupId?: number }>;
 export interface OpenAppBody {
   moduleKeys?: Record<string, string>;
   excludeFields?: string[];
-  groupMap?: Record<string, { mode: 'map' | 'create' | 'skip'; groupId?: number }>;
+  groupMap?: GroupMap;
+  /** Group mapping for each master opened along with it (master id → its group mapping). */
+  masters?: Record<string, GroupMap>;
   locale?: string;
 }
 
