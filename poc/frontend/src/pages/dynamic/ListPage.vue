@@ -258,7 +258,7 @@ function removeCurrent() {
         <ColumnChooser :schema="schema" :model-value="effectiveColumns" @update:model-value="(v) => (columnIds = v)" />
       </q-expansion-item>
       <q-table
-        flat bordered row-key="id" :rows="pageData?.items ?? []" :columns="columns"
+        flat bordered class="list-table" row-key="id" :rows="pageData?.items ?? []" :columns="columns"
         :loading="recordsQuery.isFetching.value" :pagination="pagination" :rows-per-page-options="[20]"
         :no-data-label="t('dynamic.noData')"
         @request="(p) => onPagination(p.pagination)"
@@ -273,3 +273,14 @@ function removeCurrent() {
     </template>
   </q-page>
 </template>
+
+<style scoped>
+/* 窄螢幕讓儲存格與欄名換行，組合標題較長時表格不必橫向捲動（q-table 預設 nowrap） */
+@media (max-width: 599px) {
+  .list-table :deep(th),
+  .list-table :deep(td) {
+    white-space: normal;
+    word-break: break-word;
+  }
+}
+</style>
