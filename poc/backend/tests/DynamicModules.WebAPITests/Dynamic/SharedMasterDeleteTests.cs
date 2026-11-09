@@ -334,6 +334,41 @@ public class SharedMasterDeleteTests : IDisposable
         await _rig.AssertIntegrityAsync();
     }
 
+    /// <summary>
+    /// 審查必修 7：第一版產業是下拉、留下 manufacturing 選項孤兒；第二版產業改成文字，另一個新下拉欄位合法重用 manufacturing。
+    /// 型別不符時舊欄位的選項孤兒一併失去接回資格，填值後再刪一次不撞 (FormerAppKey, Kind, Name)。
+    /// </summary>
+    [Fact]
+    public async Task ADifferentType_AlsoRetiresItsOptionOrphans_SoAReusedOptionCodeCanBeOrphanedAgain()
+    {
+        var (_, industry, _, _) = await ConvertedThenClosedAsync(withStock: true);
+        var oldOptions = _rig.Db(db => db.Set<FieldOption>().Where(o => o.FieldId == industry).Select(o => o.Id).ToList());
+        await DeleteOkAsync("crmx");
+        _rig.Db(db =>
+        {
+            var row = db.Set<AppPackage>().Single(p => p.Key == "crmx");
+            row.Json = System.Text.RegularExpressions.Regex.Replace(row.Json, """\{ "code": "industry".*?\] \},""",
+                """{ "code": "industry", "type": "text", "label": { "zh-TW": "產業" }, "config": {} }, """
+                + """{ "code": "sector", "type": "enum", "label": { "zh-TW": "行業" }, "config": {}, "options": [ { "code": "manufacturing", "label": { "zh-TW": "製造" } } ] },""",
+                System.Text.RegularExpressions.RegexOptions.Singleline);
+            row.Json.Should().Contain("\"sector\"");
+        });
+
+        await _rig.OpenOkAsync("crmx");
+        _rig.Db(db => db.Set<AppOrphan>().Count(o => o.FormerAppKey == "crmx")).Should().Be(0, "舊產業的欄位與選項孤兒都失去接回資格");
+        oldOptions.Should().OnlyContain(id => _rig.Db(db => db.Set<FieldOption>().Any(o => o.Id == id)), "舊選項本身保留，資料不動");
+        var sector = _rig.FieldId("crmx", "bp/partner.sector");
+        var option = _rig.Db(db => db.Set<FieldOption>().Single(o => o.FieldId == sector).Id);
+        await _rig.CreateRecordAsync(_rig.Admin, Partner, new Dictionary<string, object>
+            { [Key("bp", "partner.name")] = "乙公司", [Key("crmx", "bp/partner.sector")] = $"opt_{option}" });
+        await _rig.CloseOkAsync("crmx");
+
+        await DeleteOkAsync("crmx");
+        _rig.Db(db => db.Set<AppOrphan>().Where(o => o.FormerAppKey == "crmx" && o.Kind == OrphanKind.Option).Select(o => $"{o.Name}:{o.OptionId}").ToList())
+            .Should().Equal($"bp/partner.manufacturing:{option}");
+        await _rig.AssertIntegrityAsync();
+    }
+
     [Fact]
     public async Task AnOrphanReEnabledInTheDesigner_StaysRestricted_UntilTheAdminGrantsIt()
     {

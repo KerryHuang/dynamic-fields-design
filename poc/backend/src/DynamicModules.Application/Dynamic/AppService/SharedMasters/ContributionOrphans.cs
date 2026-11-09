@@ -8,7 +8,7 @@ namespace DynamicModules.Application.Dynamic.AppService.SharedMasters;
 
 /// <summary>
 /// 同一個應用程式重新開啟時接回它留下的孤兒（共用主檔設計 §7 刪除第 6 點）：同一個前擁有者＋同一種類＋同一個代號就接回，
-/// 欄位型別不同時不接回、新欄位沿用原代號，並刪掉舊孤兒列（舊欄位只留成停用欄位，失去接回資格）。
+/// 欄位型別不同時不接回、新欄位沿用原代號，並刪掉舊孤兒列與它的選項孤兒列（舊欄位只留成停用欄位，失去接回資格）。
 /// </summary>
 public sealed class ContributionOrphans(ISharedMasterRepository shared, IAppRepository apps, IModuleRepository modules)
 {
@@ -35,7 +35,10 @@ public sealed class ContributionOrphans(ISharedMasterRepository shared, IAppRepo
                 if (orphan?.FieldId is not { } id || !fields.TryGetValue(id, out var existing)) continue;
                 if (existing.Type != f.Type)
                 {
+                    // 舊欄位的選項孤兒一併失去接回資格（舊選項本身保留）：新欄位可能合法重用同一個選項代號，
+                    // 之後再刪一次時同名的選項孤兒才不會撞 (FormerAppKey, Kind, Name)（審查必修 7）
                     stale.Add(orphan);
+                    stale.AddRange(orphans.Where(o => o.Kind == OrphanKind.Option && o.OptionId is { } oid && existing.Options.Any(x => x.Id == oid)));
                     warnings.Add($"「{existing.LabelI18n.Resolve(I18nText.FallbackLocale)}」的型別和套件不同，沒有接回；舊欄位保留為停用，新欄位沿用代號 {f.Code}");
                     continue;
                 }
