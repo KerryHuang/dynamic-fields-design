@@ -489,6 +489,57 @@ public class SharedMasterPermissionTests : IDisposable
         (await SaveAsync(_rig.FieldId("bp", "partner.name"), shipNote.Id, allow: false)).StatusCode.Should().Be(HttpStatusCode.Created, "基本欄位照常");
     }
 
+    /// <summary>
+    /// 第三輪 4：公式一開始只引用一般欄位，事件複製它不需要 allowHiddenSource；之後把公式改成引用限定可見的欄位，
+    /// 它就變成衍生的限定可見公式，事後改公式要重跑隱藏來源檢查，不合格就拒絕這次修改（含間接引用它的公式）。
+    /// </summary>
+    [Fact]
+    public async Task EditingAFormula_ToReadARestrictedField_IsRejected_WhenAnEventCopiesItOrAFormulaOverIt()
+    {
+        await OpenSalesTwiceAsync("crmx", "stk");
+        var headcount = _rig.FieldId("bp", "partner.headcount");
+        var score = _rig.FieldId("crmx", "bp/partner.score");
+        var inner = await AddField(_rig.Admin, Partner, "formula", new { formula = $"{{{headcount}}} + 1", resultType = "number" });
+        var outer = await AddField(_rig.Admin, Partner, "formula", new { formula = $"{{{inner.Id}}} + 1", resultType = "number" });
+        var shipQty = await AddField(_rig.Admin, "stk-ship", "decimal");
+        var save = await _rig.Admin.PostAsJsonAsync($"{Base}/events", new
+        {
+            key = "ev-" + Guid.NewGuid().ToString("N")[..8], name = new Dictionary<string, string> { ["zh-TW"] = "抄到出貨單" },
+            sourceModuleKey = Partner, active = true,
+            definition = new
+            {
+                trigger = new { on = "create" },
+                effects = new[]
+                {
+                    new
+                    {
+                        code = "mk", kind = "create", targetModuleKey = "stk-ship",
+                        set = new object[]
+                        {
+                            new { to = _rig.FieldId("stk", "ship.no"), @const = "SH" },
+                            new { to = shipQty.Id, from = new { side = "header", fieldId = outer.Id }, allowHiddenSource = false }
+                        }
+                    }
+                }
+            }
+        });
+        save.StatusCode.Should().Be(HttpStatusCode.Created, await save.Content.ReadAsStringAsync());
+
+        Task<HttpResponseMessage> EditAsync(long id, string formula) => _rig.Admin.PutAsJsonAsync($"{Base}/fields/{id}", new
+        {
+            blockId = _rig.Db(db => db.Set<Field>().Single(f => f.Id == id).BlockId), type = "formula",
+            label = new Dictionary<string, string> { ["zh-TW"] = "欄位" }, config = new { formula, resultType = "number" }
+        });
+
+        var rejected = await EditAsync(inner.Id, $"{{{score}}} + 1");
+        rejected.StatusCode.Should().Be(HttpStatusCode.BadRequest, await rejected.Content.ReadAsStringAsync());
+        (await rejected.Content.ReadAsStringAsync()).Should().Contain("allowHiddenSource");
+        _rig.Db(db => db.Set<Field>().Single(f => f.Id == inner.Id).Config.Formula).Should().Be($"{{{headcount}}} + 1", "這次修改沒有生效");
+
+        var ok = await EditAsync(inner.Id, $"{{{headcount}}} + 2");
+        ok.StatusCode.Should().Be(HttpStatusCode.OK, await ok.Content.ReadAsStringAsync());
+    }
+
     [Fact]
     public async Task FieldGrants_OnlyForRestrictedFields()
     {

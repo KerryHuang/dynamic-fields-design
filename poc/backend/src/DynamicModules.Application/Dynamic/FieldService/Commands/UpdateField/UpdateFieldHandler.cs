@@ -17,7 +17,8 @@ namespace DynamicModules.Application.Dynamic.FieldService.Commands.UpdateField;
 public class UpdateFieldHandler(
     IModuleRepository modules, IRecordRepository records, IUnitOfWork uow, FieldTypeRegistry registry, ICurrentUser user, IBusinessTime time,
     RollupRecalc rollups, IEventFactRepository facts, Dynamic.LedgerService.ImmutableDataGuard immutable,
-    Dynamic.CheckService.CheckFieldGuard checkGuard, Common.Security.FieldLocks locks)
+    Dynamic.CheckService.CheckFieldGuard checkGuard, Common.Security.FieldLocks locks,
+    Dynamic.EventService.EventValidator eventValidator, Dynamic.EventService.EventHiddenGuard hiddenGuard)
     : IRequestHandler<UpdateFieldRequest, ServiceResult>
 {
     public async Task<ServiceResult> Handle(UpdateFieldRequest request, CancellationToken ct)
@@ -67,6 +68,18 @@ public class UpdateFieldHandler(
         {
             var bad = FieldRules.CheckFormula(module, field.Id, config);
             if (bad is not null) return bad;
+            // 改公式後可能變成引用隱藏／限定可見欄位的衍生公式：新變成看不到的欄位若被事件複製且沒有 allowHiddenSource，拒絕這次修改（第三輪 4）
+            if (field.Config.Formula != config.Formula)
+            {
+                var before = await eventValidator.HiddenAsync(module, ct);
+                var original = field.Config;
+                field.Config = config;
+                HashSet<long> after;
+                try { after = await eventValidator.HiddenAsync(module, ct); }
+                finally { field.Config = original; }
+                if (await hiddenGuard.FindViolationAsync(module, after.Except(before).ToHashSet(), ct) is { } violation)
+                    return FieldRules.Invalid("Config.Formula", violation);
+            }
             var probe = new Field { Id = field.Id, Type = FieldType.Formula, Config = config };
             if (ModuleRelations.DependsOnRollup(module, probe)
                 && (await modules.ListRollupsBySourceModuleAsync(module.Id, ct))
