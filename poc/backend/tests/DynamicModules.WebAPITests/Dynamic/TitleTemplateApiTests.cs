@@ -2,6 +2,7 @@ using System.Net;
 using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using System.Text;
+using System.Text.Json;
 using FluentAssertions;
 using static DynamicModules.WebAPITests.Dynamic.ApiTestKit;
 
@@ -162,6 +163,131 @@ public class TitleTemplateApiTests(TestApp app) : IClassFixture<TestApp>
         var row = list.GetProperty("items")[0];
         row.GetProperty("values").GetProperty(mold.Key).GetRawText().Trim('"').Should().Be(moldId.ToString());
         row.GetProperty("references").GetProperty(mold.Key).GetProperty("title").GetString().Should().Be("MD-01 上蓋模");
+    }
+
+    // ---- 已固定的記錄（唯讀狀態、已記帳）：重組標題整筆回 409（必修 2） ----
+
+    private async Task<long> Option(long fieldId, string label) =>
+        (await JsonOf(await _admin.PostAsJsonAsync($"{Base}/fields/{fieldId}/options", new { label = Zh(label), color = (string?)null })))
+        .GetProperty("id").GetInt64();
+
+    private async Task<JsonElement> ModuleOf(string key) => await JsonOf(await _admin.GetAsync($"{Base}/modules/{key}"));
+
+    private static async Task ShouldBeFixedConflict(HttpResponseMessage res)
+    {
+        res.StatusCode.Should().Be(HttpStatusCode.Conflict, await res.Content.ReadAsStringAsync());
+        (await res.Content.ReadAsStringAsync()).Should().Contain("唯讀或已記帳的記錄");
+    }
+
+    [Fact]
+    public async Task Retitling_IsRefusedWhole_WhenAnyRecordIsInAReadOnlyState()
+    {
+        var m = await MoldModule();
+        var kind = await AddField(_admin, m.Key, "enum");
+        var upper = await Option(kind.Id, "上模");
+        var status = await AddField(_admin, m.Key, "enum");
+        var draft = await Option(status.Id, "草稿");
+        var done = await Option(status.Id, "完成");
+        (await _admin.PutAsJsonAsync($"{Base}/modules/{m.Key}/workflow", new
+        {
+            statusFieldId = status.Id, initialOptionId = draft,
+            states = new object[] { new { optionId = draft }, new { optionId = done, readOnly = true } },
+            transitions = new[] { new { from = draft, to = done, groupIds = Array.Empty<long>() } }
+        })).EnsureSuccessStatusCode();
+        var template = $"{{{m.NoId}}} {{{m.NameId}}}（{{{kind.Id}}}）";
+        (await PutTitle(m.Key, m.NameId, template)).EnsureSuccessStatusCode();   // 還沒有固定的記錄：照常可改
+
+        var id = await AddRecord(m.Key, new() { [m.NameKey] = "上蓋模", [m.NoKey] = "MD-01", [kind.Key] = $"opt_{upper}" });
+        await AddRecord(m.Key, new() { [m.NameKey] = "下蓋模", [m.NoKey] = "MD-02" });
+        var version = (await JsonOf(await _admin.GetAsync($"{Base}/records/{id}"))).GetProperty("rowVersion").GetString();
+        (await _admin.PutAsJsonAsync($"{Base}/records/{id}",
+            new { values = new Dictionary<string, object> { [status.Key] = $"opt_{done}" }, rowVersion = version })).EnsureSuccessStatusCode();
+
+        await ShouldBeFixedConflict(await PutTitle(m.Key, m.NameId, $"{{{m.NameId}}}"));            // 改樣板
+        await ShouldBeFixedConflict(await PutTitle(m.Key, m.NameId, null));                         // 清除樣板
+        await ShouldBeFixedConflict(await PutTitle(m.Key, m.NoId, template));                       // 換標題欄位
+        await ShouldBeFixedConflict(await _admin.PutAsJsonAsync($"{Base}/options/{upper}",          // 改樣板用到的選項名稱
+            new { label = Zh("公模"), color = (string?)null, active = true }));
+
+        var module = await ModuleOf(m.Key);
+        module.GetProperty("titleTemplate").GetString().Should().Be(template);
+        module.GetProperty("titleFieldId").GetInt64().Should().Be(m.NameId);
+        module.GetProperty("blocks")[0].GetProperty("fields").EnumerateArray().Single(f => f.GetProperty("id").GetInt64() == kind.Id)
+            .GetProperty("options").EnumerateArray().Single().GetProperty("label").GetProperty("zh-TW").GetString().Should().Be("上模");
+        (await Titles(m.Key)).Should().BeEquivalentTo("MD-01 上蓋模（上模）", "MD-02 下蓋模（）");
+
+        // 不重組標題的修改照常可做：模組名稱、不在樣板裡的選項
+        (await _admin.PutAsJsonAsync($"{Base}/modules/{m.Key}", new { name = Zh("模具（改名）"), titleFieldId = m.NameId, titleTemplate = template }))
+            .StatusCode.Should().Be(HttpStatusCode.OK);
+        (await _admin.PutAsJsonAsync($"{Base}/options/{draft}", new { label = Zh("草擬"), color = (string?)null, active = true }))
+            .StatusCode.Should().Be(HttpStatusCode.OK);
+    }
+
+    [Fact]
+    public async Task Retitling_IsRefusedWhole_WhenAnyRecordHasEventFacts()
+    {
+        var m = await MoldModule();
+        var move = await CreateModule(_admin);
+        await Activate(_admin, move);
+        var moveTitle = await TitleKey(_admin, move);
+        var ev = await _admin.PostAsJsonAsync($"{Base}/events", new
+        {
+            key = "ev-" + Guid.NewGuid().ToString("N")[..8], name = Zh("建檔"), sourceModuleKey = m.Key, active = true,
+            definition = new
+            {
+                trigger = new { on = "create" },
+                effects = new[] { new { code = "log", kind = "create", targetModuleKey = move, set = new object[] { new { to = long.Parse(moveTitle[2..]), @const = "建檔" } } } }
+            }
+        });
+        ev.StatusCode.Should().Be(HttpStatusCode.Created, await ev.Content.ReadAsStringAsync());
+        await AddRecord(m.Key, new() { [m.NameKey] = "上蓋模", [m.NoKey] = "MD-01" });
+
+        await ShouldBeFixedConflict(await PutTitle(m.Key, m.NameId, $"{{{m.NoId}}} {{{m.NameId}}}"));   // 設定樣板
+        await ShouldBeFixedConflict(await PutTitle(m.Key, m.NoId, null));                              // 換標題欄位
+        (await ModuleOf(m.Key)).TryGetProperty("titleTemplate", out _).Should().BeFalse();
+        (await Titles(m.Key)).Should().Equal("上蓋模");
+    }
+
+    /// <summary>明細列自己沒有狀態與事實，鎖在表頭上：表頭在唯讀狀態時，明細模組也不能重組標題。</summary>
+    [Fact]
+    public async Task Retitling_ADetailModule_IsRefused_WhenAHeaderIsInAReadOnlyState()
+    {
+        var head = await CreateModule(_admin);
+        var headTitle = await TitleKey(_admin, head);
+        var status = await AddField(_admin, head, "enum");
+        var draft = await Option(status.Id, "草稿");
+        var done = await Option(status.Id, "完成");
+        var line = await CreateModule(_admin);
+        var lineName = await TitleKey(_admin, line);
+        await AddField(_admin, line, "reference", new { refTarget = new { kind = "module", key = head }, relation = "detail" });
+        var lineNo = await AddField(_admin, line, "text");
+        await Activate(_admin, head);
+        await Activate(_admin, line);
+        (await _admin.PutAsJsonAsync($"{Base}/modules/{head}/workflow", new
+        {
+            statusFieldId = status.Id, initialOptionId = draft,
+            states = new object[] { new { optionId = draft }, new { optionId = done, readOnly = true } },
+            transitions = new[] { new { from = draft, to = done, groupIds = Array.Empty<long>() } }
+        })).EnsureSuccessStatusCode();
+        var create = await _admin.PostAsJsonAsync($"{Base}/modules/{head}/records", new
+        {
+            values = new Dictionary<string, object> { [headTitle] = "單一" },
+            details = new Dictionary<string, object[]>
+            {
+                [line] = [new { values = new Dictionary<string, object> { [lineName] = "螺絲", [lineNo.Key] = "L-1" }, _delete = false }]
+            }
+        });
+        create.StatusCode.Should().Be(HttpStatusCode.Created, await create.Content.ReadAsStringAsync());
+        var header = await JsonOf(create);
+        (await _admin.PutAsJsonAsync($"{Base}/records/{header.GetProperty("id").GetInt64()}", new
+        {
+            values = new Dictionary<string, object> { [status.Key] = $"opt_{done}" }, rowVersion = header.GetProperty("rowVersion").GetString()
+        })).EnsureSuccessStatusCode();
+
+        var lineNameId = long.Parse(lineName[2..]);
+        await ShouldBeFixedConflict(await _admin.PutAsJsonAsync($"{Base}/modules/{line}",
+            new { name = Zh("明細"), titleFieldId = lineNameId, titleTemplate = $"{{{lineNo.Id}}} {{{lineNameId}}}" }));
+        (await ModuleOf(line)).TryGetProperty("titleTemplate", out _).Should().BeFalse();
     }
 
     private const string Package = """

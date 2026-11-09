@@ -14,7 +14,7 @@ namespace DynamicModules.Application.Dynamic.ModuleService.Commands.UpdateModule
 
 public class UpdateModuleHandler(
     IModuleRepository modules, IRecordRepository records, IPermissionRepository permissions, IUnitOfWork uow, ICurrentUser user, IBusinessTime time,
-    Dynamic.LedgerService.ImmutableDataGuard immutable)
+    Dynamic.LedgerService.ImmutableDataGuard immutable, TitleRewriteGuard fixedRecords)
     : IRequestHandler<UpdateModuleRequest, ServiceResult>
 {
     public async Task<ServiceResult> Handle(UpdateModuleRequest request, CancellationToken ct)
@@ -22,10 +22,12 @@ public class UpdateModuleHandler(
         var module = await modules.GetByKeyAsync(request.Key, includeChildren: true, ct);
         if (module is null) return ServiceResult.NotFound("找不到模組");
 
-        // 換標題欄位或標題樣板會重寫全部既有記錄的 Title；Closed 的資料唯讀，其餘欄位（名稱、圖示、區段）照常可改
+        // 換標題欄位或標題樣板會重寫全部既有記錄的 Title；Closed 的資料唯讀、已固定的記錄不能改，其餘欄位（名稱、圖示、區段）照常可改
         var titleChanged = module.TitleFieldId != request.TitleFieldId || module.TitleTemplate != request.TitleTemplate;
         if (titleChanged && ClosedDataGuard.Reject(module) is { } closed) return closed;
         if (titleChanged && await immutable.RejectAsync(module, ct) is { } ledgerFrozen) return ledgerFrozen;
+        List<Record> rows = titleChanged ? await records.ListAllByModuleAsync(module.Id, ct) : [];
+        if (titleChanged && await fixedRecords.RejectAsync(module, rows, ct) is { } fixedRecord) return fixedRecord;
 
         if (module.Kind == ModuleKind.Extension)
         {
@@ -56,7 +58,7 @@ public class UpdateModuleHandler(
         module.TitleFieldId = request.TitleFieldId;
         module.TitleTemplate = request.TitleTemplate;
         if (titleChanged)
-            foreach (var record in await records.ListAllByModuleAsync(module.Id, ct))
+            foreach (var record in rows)
                 record.Title = RecordValueProcessor.TitleOf(module, RecordValueProcessor.Parse(record.ValuesJson));
         module.TouchVersion(user.UserId, time.Now);
         await uow.CommitAsync(ct);
