@@ -24,7 +24,7 @@ public class DynamicAccessGuard(
         var inputs = await permissions.LoadInputsAsync(user.UserId, module, ct);
         if (inputs is null) return Deny();
 
-        var effective = PermissionResolver.Resolve(module, inputs, null, await HiddenSourceFieldsAsync(module, inputs, ct));
+        var effective = PermissionResolver.Resolve(module, inputs, null, await HiddenSourceFieldsAsync(module, inputs, ct), action);
         return effective.Can(action) ? new AccessResult(effective, null) : Deny();
     }
 
@@ -40,7 +40,7 @@ public class DynamicAccessGuard(
         if (parentInputs is null || childInputs is null) return Deny();
 
         // 動作軸與資料範圍來自表頭的授權列；欄位例外與選項範圍來自明細模組
-        var effective = PermissionResolver.Resolve(child, DetailInputs(parentInputs, childInputs), parent);
+        var effective = PermissionResolver.Resolve(child, DetailInputs(parentInputs, childInputs), parent, forAction: action);
         return effective.Can(action) ? new AccessResult(effective, null) : Deny();
     }
 
@@ -52,7 +52,7 @@ public class DynamicAccessGuard(
         module.Status == ModuleStatus.Closed && action is not (PermissionAction.Read or PermissionAction.PrintExport);
 
     private static PermissionInputs DetailInputs(PermissionInputs parentInputs, PermissionInputs childInputs) =>
-        parentInputs with { FieldPermissions = childInputs.FieldPermissions, OptionScopes = childInputs.OptionScopes };
+        parentInputs with { FieldPermissions = childInputs.FieldPermissions, OptionScopes = childInputs.OptionScopes, FieldGrants = childInputs.FieldGrants };
 
     /// <summary>module 有以明細欄位為加總對象的彙總時，算出使用者在各明細模組看不到的欄位（沿用明細模組自己的隱藏規則）。</summary>
     private async Task<IReadOnlySet<long>?> HiddenSourceFieldsAsync(Module module, PermissionInputs inputs, CancellationToken ct)

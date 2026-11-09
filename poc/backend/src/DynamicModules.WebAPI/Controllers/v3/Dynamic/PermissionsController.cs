@@ -15,7 +15,7 @@ public class PermissionsController(IMediator mediator) : ControllerBase
 {
     public record SavePermissionsBody(
         List<GroupPermissionDto>? Groups, List<UserPermissionDto>? Users,
-        List<FieldPermissionDto>? Fields, List<OptionScopeDto>? Options);
+        List<FieldPermissionDto>? Fields, List<OptionScopeDto>? Options, List<FieldGrantDto>? FieldGrants = null);
 
     [HttpGet("users")]
     public async Task<IActionResult> Users() => (await mediator.Send(new GetUsersRequest())).ToActionResult(this);
@@ -33,6 +33,6 @@ public class PermissionsController(IMediator mediator) : ControllerBase
     [HttpPut("modules/{key}/permissions")]
     public async Task<IActionResult> Save(string key, SavePermissionsBody body) =>
         (await mediator.Send(new SaveModulePermissionsRequest(key,
-            new ModulePermissionsDto(body.Groups ?? [], body.Users ?? [], body.Fields ?? [], body.Options ?? []))))
+            new ModulePermissionsDto(body.Groups ?? [], body.Users ?? [], body.Fields ?? [], body.Options ?? [], body.FieldGrants))))
         .ToActionResult(this);
 }

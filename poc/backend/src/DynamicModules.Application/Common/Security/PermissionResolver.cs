@@ -13,8 +13,13 @@ public static class PermissionResolver
 
     /// <param name="accessModule">動作軸、資料範圍取自哪個模組的 ProgramCode 與資料範圍；明細模組傳表頭，其餘為 null（取 module 自己）。</param>
     /// <param name="hiddenSourceFieldIds">彙總來源模組（明細）裡，這位使用者看不到的欄位；以這些欄位為加總對象的彙總一併隱藏。</param>
+    /// <param name="forAction">
+    /// 要執行的動作。模組有逐動作範圍列（共用主檔模組，設計 §6）時，資料範圍取「使用者所屬群組中授予這個動作者」的最寬範圍；
+    /// 沒指定時用讀取的範圍。沒有逐動作範圍列的一般模組不看它，維持所有動作共用讀取範圍。
+    /// </param>
     public static EffectivePermissions Resolve(
-        Module module, PermissionInputs inputs, Module? accessModule = null, IReadOnlySet<long>? hiddenSourceFieldIds = null)
+        Module module, PermissionInputs inputs, Module? accessModule = null, IReadOnlySet<long>? hiddenSourceFieldIds = null,
+        PermissionAction? forAction = null)
     {
         var grantSource = accessModule ?? module;
         if (inputs.User.IsSystemAdmin)
@@ -23,11 +28,14 @@ public static class PermissionResolver
         var actions = Actions(grantSource.ProgramCode, inputs);
         var groups = inputs.GroupIds.ToHashSet();
 
-        var readScopes = inputs.GroupPrivileges
-            .Where(p => p.ProgramCode == grantSource.ProgramCode && p.CanRead)
-            .Select(p => inputs.Scopes.FirstOrDefault(s => s.ModuleId == grantSource.Id && s.GroupId == p.GroupId)?.Scope
-                         ?? DataScope.All)
-            .ToList();
+        var actionScopes = (inputs.ActionScopes ?? []).Where(s => s.ModuleId == grantSource.Id && groups.Contains(s.GroupId)).ToList();
+        var readScopes = actionScopes.Count > 0
+            ? actionScopes.Where(s => s.Action == (forAction ?? PermissionAction.Read)).Select(s => s.Scope).ToList()
+            : inputs.GroupPrivileges
+                .Where(p => p.ProgramCode == grantSource.ProgramCode && p.CanRead)
+                .Select(p => inputs.Scopes.FirstOrDefault(s => s.ModuleId == grantSource.Id && s.GroupId == p.GroupId)?.Scope
+                             ?? DataScope.All)
+                .ToList();
         var scope = readScopes.Count > 0 ? readScopes.Max() : DataScope.Own;
         var owners = scope switch
         {
@@ -38,6 +46,9 @@ public static class PermissionResolver
 
         var access = inputs.FieldPermissions.Where(p => groups.Contains(p.GroupId)).ToList();
         var hidden = access.Where(p => p.Access == FieldAccess.Hidden).Select(p => p.FieldId).ToHashSet();
+        // 限定可見的貢獻欄位：使用者的群組都不在可見列裡就隱藏（fail closed，設計 §6）；可見列只解除這一層，Hidden 仍優先
+        var granted = (inputs.FieldGrants ?? []).Where(g => groups.Contains(g.GroupId)).Select(g => g.FieldId).ToHashSet();
+        hidden.UnionWith(module.Blocks.SelectMany(b => b.Fields).Where(f => f.VisibilityRestricted && !granted.Contains(f.Id)).Select(f => f.Id));
         if (!actions.Contains(PermissionAction.Pricing))
             hidden.UnionWith(module.Blocks.SelectMany(b => b.Fields)
                 .Where(f => f.Type == FieldType.Currency

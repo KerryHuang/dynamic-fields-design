@@ -22,9 +22,13 @@ public class PermissionRepository(DynamicDbContext db) : IPermissionRepository
             .Where(s => optionIds.Contains(s.OptionId)).ToListAsync(ct);
         var mates = await db.Set<UserGroupMapping>().AsNoTracking()
             .Where(m => groupIds.Contains(m.GroupId)).Select(m => m.UserId).Distinct().ToListAsync(ct);
+        var actionScopes = await db.Set<ModuleActionScope>().AsNoTracking()
+            .Where(s => s.ModuleId == module.Id && groupIds.Contains(s.GroupId)).ToListAsync(ct);
+        var fieldGrants = await db.Set<FieldGrant>().AsNoTracking()
+            .Where(g => groupIds.Contains(g.GroupId) && fieldIds.Contains(g.FieldId)).ToListAsync(ct);
 
         return new PermissionInputs(user, groupIds, groupPrivileges, userPrivilege,
-            scopes, fieldPermissions, optionScopes, new HashSet<string>(mates) { userId });
+            scopes, fieldPermissions, optionScopes, new HashSet<string>(mates) { userId }, actionScopes, fieldGrants);
     }
 
     public async Task<PermissionInputs?> LoadProgramInputsAsync(string userId, string programCode, CancellationToken ct)

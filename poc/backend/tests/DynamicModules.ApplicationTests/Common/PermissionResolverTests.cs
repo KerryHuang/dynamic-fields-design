@@ -25,9 +25,71 @@ public class PermissionResolverTests
     private static PermissionInputs Inputs(
         long[]? groups = null, GroupProgramPrivilege[]? gp = null, UserProgramPrivilege? up = null,
         ModuleDataScope[]? scopes = null, FieldPermission[]? fp = null, FieldOptionScope[]? os = null,
-        string[]? mates = null, bool admin = false) =>
+        string[]? mates = null, bool admin = false, ModuleActionScope[]? acts = null, FieldGrant[]? fg = null) =>
         new(new AppUser { UserId = "me", IsSystemAdmin = admin }, groups ?? [], gp ?? [], up,
-            scopes ?? [], fp ?? [], os ?? [], new HashSet<string>(mates ?? ["me"]));
+            scopes ?? [], fp ?? [], os ?? [], new HashSet<string>(mates ?? ["me"]), acts ?? [], fg ?? []);
+
+    private static ModuleActionScope A(long group, PermissionAction action, DataScope scope) =>
+        new() { ModuleId = 1, GroupId = group, Action = action, Scope = scope };
+
+    // ---- 共用主檔：逐動作範圍（設計 §6）----
+
+    [Fact]
+    public void Resolve_WithActionScopes_EachActionTakesTheWidestScopeOfTheGroupsGrantingIt()
+    {
+        var module = MakeModule();
+        var inputs = Inputs([1, 2],
+            [G(1, p => p.CanRead = true), G(2, p => { p.CanRead = true; p.CanEdit = true; })],
+            scopes: [S(1, DataScope.All), S(2, DataScope.Own)],
+            mates: ["me", "mate"],
+            acts: [A(1, PermissionAction.Read, DataScope.All), A(2, PermissionAction.Read, DataScope.Own), A(2, PermissionAction.Edit, DataScope.Own)]);
+
+        var read = PermissionResolver.Resolve(module, inputs, forAction: PermissionAction.Read);
+        var edit = PermissionResolver.Resolve(module, inputs, forAction: PermissionAction.Edit);
+
+        read.Scope.Should().Be(DataScope.All);
+        read.OwnerUserIds.Should().BeNull();
+        edit.Scope.Should().Be(DataScope.Own, "沒有任何來源授予過「編輯 all」");
+        edit.OwnerUserIds.Should().BeEquivalentTo(["me"]);
+        edit.Actions.Should().BeEquivalentTo(read.Actions);
+        PermissionResolver.Resolve(module, inputs).Scope.Should().Be(DataScope.All, "沒指定動作時用讀取的範圍");
+    }
+
+    [Fact]
+    public void Resolve_WithoutActionScopes_EveryActionUsesTheReadScopeAsBefore()
+    {
+        var module = MakeModule();
+        var inputs = Inputs([1, 2],
+            [G(1, p => p.CanRead = true), G(2, p => { p.CanRead = true; p.CanEdit = true; })],
+            scopes: [S(1, DataScope.All), S(2, DataScope.Own)]);
+
+        PermissionResolver.Resolve(module, inputs, forAction: PermissionAction.Edit).Scope.Should().Be(DataScope.All);
+        PermissionResolver.Resolve(module, inputs, forAction: PermissionAction.Edit).Hash
+            .Should().Be(PermissionResolver.Resolve(module, inputs).Hash);
+    }
+
+    // ---- 共用主檔：貢獻欄位限定可見（設計 §6）----
+
+    [Fact]
+    public void Resolve_RestrictedField_HiddenUnlessAGroupOfTheUserIsGranted_AndHiddenStillWins()
+    {
+        var plain = new Field { Id = 1, Type = FieldType.Text, Status = FieldStatus.Active };
+        var restricted = new Field { Id = 2, Type = FieldType.Text, Status = FieldStatus.Active, VisibilityRestricted = true };
+        var formula = Formula(3, "{2} + 1");
+        var module = MakeModule(plain, restricted, formula);
+        var read = new[] { G(1, p => p.CanRead = true), G(2, p => p.CanRead = true) };
+
+        PermissionResolver.Resolve(module, Inputs([1], read)).HiddenFieldIds.Should().BeEquivalentTo([2L, 3L], "沒有可見列；引用它的公式也隱藏");
+        PermissionResolver.Resolve(module, Inputs([1], read, fg: [new FieldGrant { FieldId = 2, GroupId = 2 }]))
+            .HiddenFieldIds.Should().BeEquivalentTo([2L, 3L], "授予的是別的群組");
+        PermissionResolver.Resolve(module, Inputs([1], read, fg: [new FieldGrant { FieldId = 2, GroupId = 1 }]))
+            .HiddenFieldIds.Should().BeEmpty();
+        PermissionResolver.Resolve(module, Inputs([1], read, fp: [new FieldPermission { GroupId = 1, FieldId = 2, Access = FieldAccess.Hidden }],
+                fg: [new FieldGrant { FieldId = 2, GroupId = 1 }]))
+            .HiddenFieldIds.Should().Contain(2L, "收緊優先：可見授予不解除 Hidden");
+        PermissionResolver.Resolve(module, Inputs([1], read, admin: true)).HiddenFieldIds.Should().BeEmpty("系統管理員看得到");
+    }
+
 
     private static ModuleDataScope S(long group, DataScope scope) =>
         new() { ModuleId = 1, GroupId = group, Scope = scope };

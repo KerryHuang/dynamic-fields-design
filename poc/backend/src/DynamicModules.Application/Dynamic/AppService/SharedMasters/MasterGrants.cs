@@ -81,6 +81,70 @@ public sealed class MasterGrants(
             await RecalcAsync(member.ModuleId, status, ct);
     }
 
+    /// <summary>模組是不是共用主檔的成員（權限走來源記錄重算、逐動作範圍）。</summary>
+    public async Task<bool> IsMasterModuleAsync(long moduleId, CancellationToken ct) =>
+        (await apps.ListAsync(ct)).Any(a => a.Kind == AppKind.Master && a.Modules.Any(m => m.ModuleId == moduleId));
+
+    /// <summary>
+    /// 管理員在權限頁儲存主檔模組（設計 §6「管理員手動修改」）：送來的是有效值，和**存檔當下重算出的有效值**比對，只把差異寫回來源。
+    /// 多出的動作、放寬的範圍記成手動來源；拿掉的動作從目前有計入的來源移除（含應用程式授予的），之後重算不會長回來；
+    /// 收窄的範圍把有計入的來源壓到送來的範圍。關閉中的應用程式授予的寫入不計入有效值，所以不在差異裡、不會被刪。
+    /// 群組沒給某個動作的範圍時沿用目前的有效範圍，新授予的動作用群組的 scope（再沒有就 all）。呼叫端負責提交與重算。
+    /// </summary>
+    public async Task SaveAsync(Module module, IReadOnlyList<GroupPermissionDto> groups, CancellationToken ct)
+    {
+        var grants = await shared.ListGrantsAsync(module.Id, ct);
+        var status = await AppStatusAsync(ct);
+        var current = Effective(grants, status);
+        var wanted = new Dictionary<(long Group, PermissionAction Action), DataScope>();
+        foreach (var g in groups)
+            foreach (var action in AllActions.Where(a => Has(g.Privileges, a)))
+                wanted[(g.GroupId, action)] = g.ActionScopes?.FirstOrDefault(s => s.Action == action)?.Scope
+                                              ?? (current.TryGetValue((g.GroupId, action), out var now) ? now : g.Scope ?? DataScope.All);
+
+        foreach (var (key, have) in current)
+        {
+            var counted = grants.Where(x => x.GroupId == key.Group && x.Action == key.Action && Counts(x, status)).ToList();
+            if (!wanted.TryGetValue(key, out var want))
+                foreach (var x in counted) { shared.RemoveGrant(x); grants.Remove(x); }
+            else if (want < have)
+                foreach (var x in counted.Where(x => x.Scope > want)) x.Scope = want;
+        }
+        foreach (var (key, want) in wanted)
+        {
+            if (current.TryGetValue(key, out var have) && want <= have) continue;
+            var manual = grants.FirstOrDefault(x => x.SourceKind == GrantSource.Manual && x.GroupId == key.Group && x.Action == key.Action);
+            if (manual is null)
+                shared.AddGrant(new AppGrant { SourceKind = GrantSource.Manual, ModuleId = module.Id, GroupId = key.Group, Action = key.Action, Scope = want });
+            else manual.Scope = want;
+        }
+    }
+
+    /// <summary>限定可見欄位的可見群組與來源（GET 權限頁用）。</summary>
+    public async Task<List<FieldVisibilityDto>> VisibilityAsync(Module module, CancellationToken ct)
+    {
+        var restricted = module.Blocks.SelectMany(b => b.Fields).Where(f => f.VisibilityRestricted).Select(f => f.Id).Order().ToList();
+        if (restricted.Count == 0) return [];
+        var keyOf = (await apps.ListAsync(ct)).ToDictionary(a => a.Id, a => a.Key);
+        var rows = await shared.ListFieldGrantsAsync(restricted, ct);
+        return restricted.Select(id => new FieldVisibilityDto(id,
+            rows.Where(r => r.FieldId == id && r.SourceKind == GrantSource.Manual).Select(r => r.GroupId).Order().ToList(),
+            rows.Where(r => r.FieldId == id).OrderBy(r => r.GroupId).ThenBy(r => r.SourceKind)
+            .Select(r => new FieldVisibilityGroupDto(r.GroupId, r.SourceKind, r.AppId is { } a ? keyOf.GetValueOrDefault(a) : null)).ToList())).ToList();
+    }
+
+    /// <summary>以送來的清單取代這個模組全部的手動可見授予；貢獻者給的可見列不動（要收回請用 Hidden）。呼叫端負責驗證與提交。</summary>
+    public async Task SaveFieldGrantsAsync(Module module, IReadOnlyList<FieldGrantDto> body, CancellationToken ct)
+    {
+        var restricted = module.Blocks.SelectMany(b => b.Fields).Where(f => f.VisibilityRestricted).Select(f => f.Id).ToList();
+        var rows = await shared.ListFieldGrantsAsync(restricted, ct);
+        var wanted = body.SelectMany(f => f.GroupIds.Select(g => (f.FieldId, g))).ToHashSet();
+        foreach (var r in rows.Where(r => r.SourceKind == GrantSource.Manual && !wanted.Contains((r.FieldId, r.GroupId))))
+            shared.RemoveFieldGrant(r);
+        foreach (var (fieldId, groupId) in wanted.Where(w => !rows.Any(r => r.SourceKind == GrantSource.Manual && r.FieldId == w.FieldId && r.GroupId == w.g)))
+            shared.AddFieldGrant(new FieldGrant { SourceKind = GrantSource.Manual, FieldId = fieldId, GroupId = groupId });
+    }
+
     /// <summary>完整性：模組現在的群組權限列、資料範圍列、逐動作範圍列等於重算結果。</summary>
     public async Task<IReadOnlyList<string>> CheckAsync(long moduleId, CancellationToken ct)
     {

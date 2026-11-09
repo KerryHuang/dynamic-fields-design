@@ -8,7 +8,8 @@ using MediatR;
 namespace DynamicModules.Application.Dynamic.PermissionService.Commands.SaveModulePermissions;
 
 public class SaveModulePermissionsHandler(
-    IModuleRepository modules, IPermissionRepository permissions, IUnitOfWork uow, EventService.EventHiddenGuard hiddenGuard)
+    IModuleRepository modules, IPermissionRepository permissions, IUnitOfWork uow, EventService.EventHiddenGuard hiddenGuard,
+    AppService.SharedMasters.MasterGrants masterGrants, ISharedMasterRepository shared)
     : IRequestHandler<SaveModulePermissionsRequest, ServiceResult>
 {
     public async Task<ServiceResult> Handle(SaveModulePermissionsRequest request, CancellationToken ct)
@@ -73,6 +74,17 @@ public class SaveModulePermissionsHandler(
             }
         }
 
+        var restricted = fields.Where(f => f.VisibilityRestricted).Select(f => f.Id).ToHashSet();
+        var seenGrants = new HashSet<long>();
+        for (var i = 0; i < (body.FieldGrants?.Count ?? 0); i++)
+        {
+            var fg = body.FieldGrants![i];
+            if (!restricted.Contains(fg.FieldId)) Err($"fieldGrants[{i}].fieldId", "只有限定可見的欄位（其他應用程式貢獻的欄位）能設定可見群組");
+            else if (!seenGrants.Add(fg.FieldId)) Err($"fieldGrants[{i}].fieldId", "設定重複");
+            for (var j = 0; j < fg.GroupIds.Count; j++)
+                if (!groupIds.Contains(fg.GroupIds[j])) Err($"fieldGrants[{i}].groupIds[{j}]", "群組不存在");
+        }
+
         if (errors.Count > 0) return ServiceResult.Invalid(errors);
 
         // 事後隱藏：被連動事件複製的來源欄位，沒有明確允許就不能設為隱藏
@@ -87,9 +99,30 @@ public class SaveModulePermissionsHandler(
             body.Fields.Select(f => new FieldPermission { FieldId = f.FieldId, GroupId = f.GroupId, Access = f.Access }).ToList(),
             body.Options.SelectMany(o => o.GroupIds.Select(g => new FieldOptionScope { OptionId = o.OptionId, GroupId = g })).ToList());
 
+        if (body.FieldGrants is not null) await masterGrants.SaveFieldGrantsAsync(module, body.FieldGrants, ct);
+        if (await masterGrants.IsMasterModuleAsync(module.Id, ct))
+        {
+            // 共用主檔模組：群組權限列與範圍由來源記錄重算（設計 §6），送來的群組列只用來算差異寫回來源
+            await masterGrants.SaveAsync(module, body.Groups, ct);
+            await uow.CommitAsync(ct);
+            await permissions.ReplaceModuleRowsAsync(module, rows with { GroupPrivileges = [], Scopes = [] }, ct);
+            await uow.CommitAsync(ct);
+            await masterGrants.RecalcAsync(module.Id, null, ct);
+            await uow.CommitAsync(ct);
+            return ServiceResult.Success(await ResponseAsync(module, allGroups, ct));
+        }
+
         await permissions.ReplaceModuleRowsAsync(module, rows, ct);
         await uow.CommitAsync(ct);
-        return ServiceResult.Success((await permissions.LoadModuleRowsAsync(module, ct)).ToResponse(allGroups));
+        return ServiceResult.Success(await ResponseAsync(module, allGroups, ct));
+    }
+
+    private async Task<ModulePermissionsResponse> ResponseAsync(Module module, List<PermissionGroup> allGroups, CancellationToken ct)
+    {
+        var rows = await permissions.LoadModuleRowsAsync(module, ct);
+        return await masterGrants.IsMasterModuleAsync(module.Id, ct)
+            ? rows.ToResponse(allGroups, await shared.ListActionScopesAsync(module.Id, ct), await masterGrants.VisibilityAsync(module, ct))
+            : rows.ToResponse(allGroups, fieldGrants: await masterGrants.VisibilityAsync(module, ct) is { Count: > 0 } v ? v : null);
     }
 
     private static T Fill<T>(T row, Module module, PrivilegesDto p) where T : ProgramPrivilege

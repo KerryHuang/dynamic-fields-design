@@ -5,15 +5,21 @@ using MediatR;
 
 namespace DynamicModules.Application.Dynamic.PermissionService.Queries.GetModulePermissions;
 
-public class GetModulePermissionsHandler(IModuleRepository modules, IPermissionRepository permissions)
+public class GetModulePermissionsHandler(
+    IModuleRepository modules, IPermissionRepository permissions, AppService.SharedMasters.MasterGrants masterGrants, ISharedMasterRepository shared)
     : IRequestHandler<GetModulePermissionsRequest, ServiceResult>
 {
     public async Task<ServiceResult> Handle(GetModulePermissionsRequest request, CancellationToken ct)
     {
-        var module = await modules.GetByKeyAsync(request.Key, includeChildren: false, ct);
+        var module = await modules.GetByKeyAsync(request.Key, includeChildren: true, ct);
         if (module is null) return ServiceResult.NotFound("找不到模組");
 
         var rows = await permissions.LoadModuleRowsAsync(module, ct);
-        return ServiceResult.Success(rows.ToResponse(await permissions.ListGroupsAsync(ct)));
+        var groups = await permissions.ListGroupsAsync(ct);
+        var visibility = await masterGrants.VisibilityAsync(module, ct);
+        // 共用主檔模組逐動作回傳範圍（設計 §6）；限定可見欄位回傳可見群組與來源
+        return ServiceResult.Success(await masterGrants.IsMasterModuleAsync(module.Id, ct)
+            ? rows.ToResponse(groups, await shared.ListActionScopesAsync(module.Id, ct), visibility)
+            : rows.ToResponse(groups, fieldGrants: visibility.Count > 0 ? visibility : null));
     }
 }
