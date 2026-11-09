@@ -27,6 +27,10 @@ public sealed class ReferenceHandler : IFieldTypeHandler
         var expected = field.Config.RefTarget?.Kind == ReferenceTarget.ModuleKind
             ? JsonValueKind.Number
             : JsonValueKind.String;
+        // 模組目標的記錄 Id 送成字串（"123"）時，能轉成整數就轉、存成數字；轉不了照常回「不存在」
+        if (expected == JsonValueKind.Number && value.ValueKind == JsonValueKind.String
+            && long.TryParse(value.GetString(), System.Globalization.NumberStyles.None, System.Globalization.CultureInfo.InvariantCulture, out var parsed))
+            value = JsonSerializer.SerializeToElement(parsed);
         if (value.ValueKind != expected) return FieldValueResult.Fail(NotFound);
 
         var key = KeyOf(value);

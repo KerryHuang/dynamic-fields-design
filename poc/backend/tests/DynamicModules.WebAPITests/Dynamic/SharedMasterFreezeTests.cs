@@ -256,7 +256,7 @@ public class SharedMasterFreezeTests : IDisposable
         var contact = await _rig.CreateRecordAsync(_rig.Admin, "master-ct-contact", new Dictionary<string, object> { [Key("ct", "contact.name")] = "王小明" });
         var contactId = contact.GetProperty("id").GetInt64();
         var partner = await _rig.CreateRecordAsync(_rig.Admin, Partner, new Dictionary<string, object>
-            { [Key("bp", "partner.name")] = "甲公司", [Key("crmx", "bp/partner.mainContact")] = contactId });
+            { [Key("bp", "partner.name")] = "甲公司", [Key("crmx", "bp/partner.mainContact")] = contactId.ToString() });
         await _rig.CloseOkAsync("crmx");
         _rig.StatusOf("ct").Should().Be(AppStatus.Open, "cx 還在用聯絡人");
 

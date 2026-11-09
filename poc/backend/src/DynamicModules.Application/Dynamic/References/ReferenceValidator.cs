@@ -25,12 +25,12 @@ public class ReferenceValidator(
             var key = ReferenceHandler.KeyOf(value);
             if (key is null) continue; // 型別不對，由 ReferenceHandler 回錯
             if (previous is not null && previous.TryGetValue(field.Key, out var prev) && prev is { } p && ReferenceHandler.KeyOf(p) == key) continue;
-            result[field.Id] = await ResolveAsync(field.Config.RefTarget!, field.Config.RefGuard, key, value, ct);
+            result[field.Id] = await ResolveAsync(field.Config.RefTarget!, field.Config.RefGuard, key, ct);
         }
         return result;
     }
 
-    private async Task<IReadOnlySet<string>> ResolveAsync(ReferenceTarget target, RefGuardConfig? refGuard, string key, JsonElement value, CancellationToken ct)
+    private async Task<IReadOnlySet<string>> ResolveAsync(ReferenceTarget target, RefGuardConfig? refGuard, string key, CancellationToken ct)
     {
         if (target.Kind == ReferenceTarget.EntityKind)
         {
@@ -39,7 +39,10 @@ public class ReferenceValidator(
         }
 
         var targetModule = await modules.GetByKeyAsync(target.Key, includeChildren: true, ct);
-        if (!targetModule.IsWritable() || !value.TryGetInt64(out var id)) return new HashSet<string>();
+        // 值可能是數字或字串形式的 Id（"123"）；字串轉不成整數就沒有合法鍵，由 ReferenceHandler 回 400（不能對字串呼叫 TryGetInt64）
+        if (!targetModule.IsWritable()
+            || !long.TryParse(key, System.Globalization.NumberStyles.None, System.Globalization.CultureInfo.InvariantCulture, out var id))
+            return new HashSet<string>();
         var access = await guard.AuthorizeAsync(targetModule, PermissionAction.Read, ct);
         if (access.Permissions is not { } perms) return new HashSet<string>();
         var visible = await records.ListVisibleIdsAsync(targetModule.Id, [id], perms.OwnerUserIds, ct);

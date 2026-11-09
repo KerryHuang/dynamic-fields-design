@@ -19,9 +19,23 @@ public class ReferenceHandlerTests
     public void Normalize_ModuleTarget_NumberOk() =>
         Run(FieldType.Reference, "42", Module).IsValid.Should().BeTrue();
 
+    /// <summary>字串形式的記錄 Id 能轉成整數就轉，存成數字（原本在 ReferenceValidator 丟例外變 500）。</summary>
     [Fact]
-    public void Normalize_ModuleTarget_StringRejected() =>
-        Run(FieldType.Reference, "\"42\"", Module).Error.Should().Be(NotFound);
+    public void Normalize_ModuleTarget_DigitStringIsStoredAsANumber()
+    {
+        var r = Run(FieldType.Reference, "\"42\"", Module, Ctx() with { ValidRefKeys = new HashSet<string> { "42" } });
+        r.IsValid.Should().BeTrue();
+        r.Value!.Value.ValueKind.Should().Be(System.Text.Json.JsonValueKind.Number);
+        r.Value.Value.GetInt64().Should().Be(42);
+    }
+
+    [Theory]
+    [InlineData("\"abc\"")]
+    [InlineData("\"4.2\"")]
+    [InlineData("\" 42\"")]
+    [InlineData("\"\"")]
+    public void Normalize_ModuleTarget_NonIntegerStringRejected(string json) =>
+        Run(FieldType.Reference, json, Module).Error.Should().Be(NotFound);
 
     [Fact]
     public void Normalize_EntityTarget_NumberRejected() =>

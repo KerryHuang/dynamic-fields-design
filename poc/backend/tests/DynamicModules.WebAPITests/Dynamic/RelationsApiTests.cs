@@ -7,6 +7,34 @@ namespace DynamicModules.WebAPITests.Dynamic;
 
 public class RelationsApiTests(TestApp app) : IClassFixture<TestApp>
 {
+    /// <summary>參照模組的值傳字串 id：能轉成整數就轉、存成數字；轉不了回 400（原本丟例外回 500）。</summary>
+    [Fact]
+    public async Task AStringRecordId_IsConvertedToANumber_ANonNumericOneIs400()
+    {
+        var admin = app.AsUser();
+        var target = await CreateModule(admin);
+        await Activate(admin, target);
+        var source = await CreateModule(admin);
+        var refField = await AddField(admin, source, "reference", new { refTarget = new { kind = "module", key = target } });
+        await Activate(admin, source);
+        var sourceTitle = await TitleKey(admin, source);
+        var rec = await admin.PostAsJsonAsync($"{Base}/modules/{target}/records",
+            new { values = new Dictionary<string, object> { [await TitleKey(admin, target)] = "申請" } });
+        var id = (await JsonOf(rec)).GetProperty("id").GetInt64();
+
+        var created = await admin.PostAsJsonAsync($"{Base}/modules/{source}/records",
+            new { values = new Dictionary<string, object> { [sourceTitle] = "維修", [refField.Key] = id.ToString() } });
+        created.StatusCode.Should().Be(HttpStatusCode.Created, await created.Content.ReadAsStringAsync());
+        (await JsonOf(created)).GetProperty("values").GetProperty(refField.Key).GetInt64().Should().Be(id);
+
+        foreach (var bad in new[] { "abc", "1.5" })
+        {
+            var res = await admin.PostAsJsonAsync($"{Base}/modules/{source}/records",
+                new { values = new Dictionary<string, object> { [sourceTitle] = "維修", [refField.Key] = bad } });
+            res.StatusCode.Should().Be(HttpStatusCode.BadRequest, $"{bad}：{await res.Content.ReadAsStringAsync()}");
+        }
+    }
+
     [Fact]
     public async Task Related_Endpoints_Roundtrip()
     {
