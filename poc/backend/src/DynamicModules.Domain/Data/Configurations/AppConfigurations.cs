@@ -12,6 +12,7 @@ public class AppConfiguration : IEntityTypeConfiguration<App>
         b.HasKey(x => x.Id);
         b.Property(x => x.Key).HasMaxLength(40).IsRequired();
         b.HasIndex(x => x.Key).IsUnique();
+        b.Property(x => x.Kind).HasConversion<string>().HasMaxLength(10).HasDefaultValue(AppKind.App);
         b.Property(x => x.NameI18n).HasJsonConversion();
         b.Property(x => x.Icon).HasMaxLength(100);
         b.Property(x => x.PackageVersion).HasMaxLength(20).IsRequired();

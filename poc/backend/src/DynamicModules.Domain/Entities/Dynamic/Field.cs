@@ -13,5 +13,7 @@ public class Field : AuditableEntity
     public FieldConfig Config { get; set; } = new();
     public int Sequence { get; set; }
     public FieldStatus Status { get; set; }
+    /// <summary>貢獻欄位：只有 Dynamic_FieldGrant 列出的群組與系統管理員看得到。建立時決定，貢獻者刪除後也不清掉。</summary>
+    public bool VisibilityRestricted { get; set; }
     public List<FieldOption> Options { get; set; } = [];
 }

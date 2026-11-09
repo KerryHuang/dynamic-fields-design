@@ -12,14 +12,15 @@ public sealed class SqliteTestDb : IAsyncDisposable
     public SqliteConnection Connection => _connection;
     public DynamicDbContext Context { get; private set; } = null!;
 
-    public static async Task<SqliteTestDb> CreateAsync()
+    /// <param name="migrate">false 時不套 migration，由測試自己依序套用（驗證既有資料升級）。</param>
+    public static async Task<SqliteTestDb> CreateAsync(bool migrate = true)
     {
         var db = new SqliteTestDb();
         await db._connection.OpenAsync();
         db.Context = new DynamicDbContext(new DbContextOptionsBuilder<DynamicDbContext>()
             .UseSqlite(db._connection, b => b.MigrationsAssembly("DynamicModules.Persistence"))
             .Options);
-        await db.Context.Database.MigrateAsync();
+        if (migrate) await db.Context.Database.MigrateAsync();
         return db;
     }
 

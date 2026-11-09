@@ -13,6 +13,8 @@ public class App : AuditableEntity
     public long Id { get; set; }
     /// <summary>= manifest.id，全站唯一。</summary>
     public string Key { get; set; } = "";
+    /// <summary>manifest.kind：一般應用程式或共用主檔。</summary>
+    public AppKind Kind { get; set; } = AppKind.App;
     public I18nText NameI18n { get; set; } = new();
     public string? Icon { get; set; }
     /// <summary>manifest.version，只是資訊，不參與任何判斷。</summary>

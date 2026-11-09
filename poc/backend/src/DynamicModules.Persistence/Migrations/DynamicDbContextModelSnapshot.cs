@@ -46,6 +46,13 @@ namespace DynamicModules.Persistence.Migrations
                         .HasMaxLength(40)
                         .HasColumnType("TEXT");
 
+                    b.Property<string>("Kind")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasMaxLength(10)
+                        .HasColumnType("TEXT")
+                        .HasDefaultValue("App");
+
                     b.Property<DateTime?>("ModifiedTime")
                         .HasColumnType("TEXT");
 
@@ -128,6 +135,54 @@ namespace DynamicModules.Persistence.Migrations
                     b.ToTable("Dynamic_AppField", (string)null);
                 });
 
+            modelBuilder.Entity("DynamicModules.Domain.Entities.Dynamic.AppGrant", b =>
+                {
+                    b.Property<long>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("Action")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("TEXT");
+
+                    b.Property<long?>("AppId")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<long>("GroupId")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<long>("ModuleId")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("Scope")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("SourceKind")
+                        .IsRequired()
+                        .HasMaxLength(10)
+                        .HasColumnType("TEXT");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("GroupId");
+
+                    b.HasIndex("ModuleId", "GroupId", "Action")
+                        .IsUnique()
+                        .HasFilter("\"AppId\" IS NULL");
+
+                    b.HasIndex("AppId", "ModuleId", "GroupId", "Action")
+                        .IsUnique()
+                        .HasFilter("\"AppId\" IS NOT NULL");
+
+                    b.ToTable("Dynamic_AppGrant", null, t =>
+                        {
+                            t.HasCheckConstraint("CK_AppGrant_Source", "(\"SourceKind\" = 'Manual') = (\"AppId\" IS NULL)");
+                        });
+                });
+
             modelBuilder.Entity("DynamicModules.Domain.Entities.Dynamic.AppIntegration", b =>
                 {
                     b.Property<long>("AppId")
@@ -159,6 +214,21 @@ namespace DynamicModules.Persistence.Migrations
                     b.HasKey("AppId", "Code");
 
                     b.ToTable("Dynamic_AppIntegration", (string)null);
+                });
+
+            modelBuilder.Entity("DynamicModules.Domain.Entities.Dynamic.AppMasterUse", b =>
+                {
+                    b.Property<long>("AppId")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<long>("MasterAppId")
+                        .HasColumnType("INTEGER");
+
+                    b.HasKey("AppId", "MasterAppId");
+
+                    b.HasIndex("MasterAppId");
+
+                    b.ToTable("Dynamic_AppMasterUse", (string)null);
                 });
 
             modelBuilder.Entity("DynamicModules.Domain.Entities.Dynamic.AppModule", b =>
@@ -198,6 +268,53 @@ namespace DynamicModules.Persistence.Migrations
                     b.HasIndex("OptionId");
 
                     b.ToTable("Dynamic_AppOption", (string)null);
+                });
+
+            modelBuilder.Entity("DynamicModules.Domain.Entities.Dynamic.AppOrphan", b =>
+                {
+                    b.Property<long>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("INTEGER");
+
+                    b.Property<long?>("BlockId")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<long?>("FieldId")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("FormerAppKey")
+                        .IsRequired()
+                        .HasMaxLength(40)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Kind")
+                        .IsRequired()
+                        .HasMaxLength(10)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("TEXT");
+
+                    b.Property<long?>("OptionId")
+                        .HasColumnType("INTEGER");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("BlockId");
+
+                    b.HasIndex("FieldId");
+
+                    b.HasIndex("OptionId");
+
+                    b.HasIndex("FormerAppKey", "Kind", "Name")
+                        .IsUnique();
+
+                    b.ToTable("Dynamic_AppOrphan", null, t =>
+                        {
+                            t.HasCheckConstraint("CK_AppOrphan_One", "(\"FieldId\" IS NOT NULL) + (\"OptionId\" IS NOT NULL) + (\"BlockId\" IS NOT NULL) = 1");
+                        });
                 });
 
             modelBuilder.Entity("DynamicModules.Domain.Entities.Dynamic.AppPackage", b =>
@@ -633,6 +750,9 @@ namespace DynamicModules.Persistence.Migrations
                         .HasMaxLength(20)
                         .HasColumnType("TEXT");
 
+                    b.Property<bool>("VisibilityRestricted")
+                        .HasColumnType("INTEGER");
+
                     b.HasKey("Id");
 
                     b.HasIndex("BlockId");
@@ -641,6 +761,46 @@ namespace DynamicModules.Persistence.Migrations
                         .IsUnique();
 
                     b.ToTable("Dynamic_Field", (string)null);
+                });
+
+            modelBuilder.Entity("DynamicModules.Domain.Entities.Dynamic.FieldGrant", b =>
+                {
+                    b.Property<long>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("INTEGER");
+
+                    b.Property<long?>("AppId")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<long>("FieldId")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<long>("GroupId")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("SourceKind")
+                        .IsRequired()
+                        .HasMaxLength(10)
+                        .HasColumnType("TEXT");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("AppId");
+
+                    b.HasIndex("GroupId");
+
+                    b.HasIndex("FieldId", "GroupId")
+                        .IsUnique()
+                        .HasFilter("\"AppId\" IS NULL");
+
+                    b.HasIndex("FieldId", "GroupId", "AppId")
+                        .IsUnique()
+                        .HasFilter("\"AppId\" IS NOT NULL");
+
+                    b.ToTable("Dynamic_FieldGrant", null, t =>
+                        {
+                            t.HasCheckConstraint("CK_FieldGrant_Source", "(\"SourceKind\" = 'Manual') = (\"AppId\" IS NULL)");
+                        });
                 });
 
             modelBuilder.Entity("DynamicModules.Domain.Entities.Dynamic.FieldOption", b =>
@@ -901,6 +1061,30 @@ namespace DynamicModules.Persistence.Migrations
                         .IsUnique();
 
                     b.ToTable("Dynamic_Module", (string)null);
+                });
+
+            modelBuilder.Entity("DynamicModules.Domain.Entities.Dynamic.ModuleActionScope", b =>
+                {
+                    b.Property<long>("ModuleId")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<long>("GroupId")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("Action")
+                        .HasMaxLength(20)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Scope")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("TEXT");
+
+                    b.HasKey("ModuleId", "GroupId", "Action");
+
+                    b.HasIndex("GroupId");
+
+                    b.ToTable("Dynamic_ModuleActionScope", (string)null);
                 });
 
             modelBuilder.Entity("DynamicModules.Domain.Entities.Dynamic.ModuleCheck", b =>
@@ -1655,12 +1839,47 @@ namespace DynamicModules.Persistence.Migrations
                         .IsRequired();
                 });
 
+            modelBuilder.Entity("DynamicModules.Domain.Entities.Dynamic.AppGrant", b =>
+                {
+                    b.HasOne("DynamicModules.Domain.Entities.Dynamic.App", null)
+                        .WithMany()
+                        .HasForeignKey("AppId")
+                        .OnDelete(DeleteBehavior.Cascade);
+
+                    b.HasOne("DynamicModules.Domain.Entities.Dynamic.PermissionGroup", null)
+                        .WithMany()
+                        .HasForeignKey("GroupId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("DynamicModules.Domain.Entities.Dynamic.Module", null)
+                        .WithMany()
+                        .HasForeignKey("ModuleId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
             modelBuilder.Entity("DynamicModules.Domain.Entities.Dynamic.AppIntegration", b =>
                 {
                     b.HasOne("DynamicModules.Domain.Entities.Dynamic.App", null)
                         .WithMany()
                         .HasForeignKey("AppId")
                         .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("DynamicModules.Domain.Entities.Dynamic.AppMasterUse", b =>
+                {
+                    b.HasOne("DynamicModules.Domain.Entities.Dynamic.App", null)
+                        .WithMany()
+                        .HasForeignKey("AppId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("DynamicModules.Domain.Entities.Dynamic.App", null)
+                        .WithMany()
+                        .HasForeignKey("MasterAppId")
+                        .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
                 });
 
@@ -1692,6 +1911,24 @@ namespace DynamicModules.Persistence.Migrations
                         .HasForeignKey("OptionId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
+                });
+
+            modelBuilder.Entity("DynamicModules.Domain.Entities.Dynamic.AppOrphan", b =>
+                {
+                    b.HasOne("DynamicModules.Domain.Entities.Dynamic.Block", null)
+                        .WithMany()
+                        .HasForeignKey("BlockId")
+                        .OnDelete(DeleteBehavior.Cascade);
+
+                    b.HasOne("DynamicModules.Domain.Entities.Dynamic.Field", null)
+                        .WithMany()
+                        .HasForeignKey("FieldId")
+                        .OnDelete(DeleteBehavior.Cascade);
+
+                    b.HasOne("DynamicModules.Domain.Entities.Dynamic.FieldOption", null)
+                        .WithMany()
+                        .HasForeignKey("OptionId")
+                        .OnDelete(DeleteBehavior.Cascade);
                 });
 
             modelBuilder.Entity("DynamicModules.Domain.Entities.Dynamic.AppReport", b =>
@@ -1766,6 +2003,26 @@ namespace DynamicModules.Persistence.Migrations
                         .IsRequired();
                 });
 
+            modelBuilder.Entity("DynamicModules.Domain.Entities.Dynamic.FieldGrant", b =>
+                {
+                    b.HasOne("DynamicModules.Domain.Entities.Dynamic.App", null)
+                        .WithMany()
+                        .HasForeignKey("AppId")
+                        .OnDelete(DeleteBehavior.Cascade);
+
+                    b.HasOne("DynamicModules.Domain.Entities.Dynamic.Field", null)
+                        .WithMany()
+                        .HasForeignKey("FieldId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("DynamicModules.Domain.Entities.Dynamic.PermissionGroup", null)
+                        .WithMany()
+                        .HasForeignKey("GroupId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
             modelBuilder.Entity("DynamicModules.Domain.Entities.Dynamic.FieldOption", b =>
                 {
                     b.HasOne("DynamicModules.Domain.Entities.Dynamic.Field", null)
@@ -1777,6 +2034,21 @@ namespace DynamicModules.Persistence.Migrations
 
             modelBuilder.Entity("DynamicModules.Domain.Entities.Dynamic.ListView", b =>
                 {
+                    b.HasOne("DynamicModules.Domain.Entities.Dynamic.Module", null)
+                        .WithMany()
+                        .HasForeignKey("ModuleId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("DynamicModules.Domain.Entities.Dynamic.ModuleActionScope", b =>
+                {
+                    b.HasOne("DynamicModules.Domain.Entities.Dynamic.PermissionGroup", null)
+                        .WithMany()
+                        .HasForeignKey("GroupId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
                     b.HasOne("DynamicModules.Domain.Entities.Dynamic.Module", null)
                         .WithMany()
                         .HasForeignKey("ModuleId")
