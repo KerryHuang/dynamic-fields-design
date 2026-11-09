@@ -6,7 +6,7 @@
 
 ![Home dashboard: order statistics and top 5 customers as seen by a sales user](docs/images/readme/dashboard.png)
 
-> **Try the demo**: on the login page, click one of the "Demo accounts" buttons to sign in instantly, no registration. The free host sleeps when idle, so the first load can take about 1 minute. Demo data is reset periodically; please do not enter real data. The demo UI is in Traditional Chinese by default; the language can be switched in the app.
+> **Try the demo**: on the login page, click one of the "Demo accounts" buttons to sign in instantly, no registration. The free host sleeps when idle, so the first load can take about 1 minute. Demo data is reset periodically; please do not enter real data. The demo UI is in Traditional Chinese.
 
 ## What it solves
 
@@ -40,7 +40,7 @@ Planned items are not implemented yet; see the [ERP roadmap](docs/superpowers/sp
 - **State machines and document conversion**: define how a document moves between statuses and who may move it; a quote can be partially converted into an order with its source preserved.
 - **Reports and dashboards**: reports that merge several modules, charts, drill-down and sharing; a 12-column drag-and-drop dashboard that can be embedded in the home page.
 - **Import, export and history**: CSV import with preview and confirmation, CSV and Excel export, and a change history on every record.
-- **Four languages**: the interface and module names support Traditional Chinese, English, Thai and Vietnamese.
+- **Four languages**: interface text and module and field names are maintained in Traditional Chinese, English, Thai and Vietnamese.
 
 ![Designer: define modules and fields without code](docs/images/readme/designer.png)
 
@@ -75,7 +75,7 @@ Open `http://localhost:8080` and sign in as `admin`.
 - The product is under active development; features and screens will keep changing.
 - Only SQLite is supported for now.
 - The backend assumes a single instance per customer and cannot scale out horizontally.
-- The Thai and Vietnamese UI text is machine-translated and needs native-speaker review before real use.
+- The interface currently always displays Traditional Chinese; a language switcher is not available yet. The Thai and Vietnamese text is machine-translated and needs native-speaker review before real use.
 - The demo runs on a free host: it sleeps when idle and its data is reset, so it is for trying only.
 
 ## Tech
