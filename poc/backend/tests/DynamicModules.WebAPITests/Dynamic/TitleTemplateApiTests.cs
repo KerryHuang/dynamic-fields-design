@@ -4,6 +4,7 @@ using System.Net.Http.Json;
 using System.Text;
 using System.Text.Json;
 using FluentAssertions;
+using Microsoft.Extensions.DependencyInjection;
 using static DynamicModules.WebAPITests.Dynamic.ApiTestKit;
 
 namespace DynamicModules.WebAPITests.Dynamic;
@@ -288,6 +289,71 @@ public class TitleTemplateApiTests(TestApp app) : IClassFixture<TestApp>
         await ShouldBeFixedConflict(await _admin.PutAsJsonAsync($"{Base}/modules/{line}",
             new { name = Zh("明細"), titleFieldId = lineNameId, titleTemplate = $"{{{lineNo.Id}}} {{{lineNameId}}}" }));
         (await ModuleOf(line)).TryGetProperty("titleTemplate", out _).Should().BeFalse();
+    }
+
+    // ---- 列表的標題欄（必修 5）：有樣板時依持久化的 Record.Title 排序 ----
+
+    private async Task MakeSortable(string key, long fieldId)
+    {
+        var field = (await ModuleOf(key)).GetProperty("blocks")[0].GetProperty("fields").EnumerateArray().Single(f => f.GetProperty("id").GetInt64() == fieldId);
+        var config = System.Text.Json.Nodes.JsonNode.Parse(field.GetProperty("config").GetRawText())!.AsObject();
+        config["isSortable"] = true;
+        (await _admin.PutAsJsonAsync($"{Base}/fields/{fieldId}", new
+        {
+            type = field.GetProperty("type").GetString(), label = Zh("名稱"), config, blockId = field.GetProperty("blockId").GetInt64()
+        })).EnsureSuccessStatusCode();
+    }
+
+    private async Task<List<string>> PagedTitles(HttpClient c, string key, string query)
+    {
+        var res = await c.GetAsync($"{Base}/modules/{key}/records/paged?currentPage=1&pagesSize=10{query}");
+        res.StatusCode.Should().Be(HttpStatusCode.OK, await res.Content.ReadAsStringAsync());
+        return (await JsonOf(res)).GetProperty("items").EnumerateArray().Select(i => i.GetProperty("title").GetString()!).ToList();
+    }
+
+    /// <summary>審查反例：樣板 {no} {name}，兩筆標題是「01 Z」「02 A」；依標題欄升冪要排成 01 Z、02 A，不是依名稱。</summary>
+    [Fact]
+    public async Task ListSort_OnTheTitleField_OrdersByTheComposedTitle_WhenThereIsATemplate()
+    {
+        var m = await MoldModule();
+        await MakeSortable(m.Key, m.NameId);
+        await AddRecord(m.Key, new() { [m.NameKey] = "Z", [m.NoKey] = "01" });
+        await AddRecord(m.Key, new() { [m.NameKey] = "A", [m.NoKey] = "02" });
+
+        (await PagedTitles(_admin, m.Key, $"&sortBy={m.NameKey}&sortOrder=asc")).Should().Equal("A", "Z");   // 沒有樣板：依名稱，行為不變
+
+        (await PutTitle(m.Key, m.NameId, $"{{{m.NoId}}} {{{m.NameId}}}")).EnsureSuccessStatusCode();
+        (await PagedTitles(_admin, m.Key, $"&sortBy={m.NameKey}&sortOrder=asc")).Should().Equal("01 Z", "02 A");
+        (await PagedTitles(_admin, m.Key, $"&sortBy={m.NameKey}&sortOrder=desc")).Should().Equal("02 A", "01 Z");
+        (await JsonOf(await _admin.GetAsync($"{Base}/modules/{m.Key}/schema"))).GetProperty("hasTitleTemplate").GetBoolean().Should().BeTrue();
+    }
+
+    /// <summary>樣板用到的欄位對使用者隱藏（例如舊資料留下的例外）時，標題看不到，也不能拿標題排序。</summary>
+    [Fact]
+    public async Task ListSort_ByTitle_IsRefused_WhenATemplateFieldIsHiddenFromTheCaller()
+    {
+        var m = await MoldModule();
+        await MakeSortable(m.Key, m.NameId);
+        (await PutTitle(m.Key, m.NameId, $"{{{m.NoId}}} {{{m.NameId}}}")).EnsureSuccessStatusCode();
+        app.GrantBusinessGroups(m.Key);
+        await AddRecord(m.Key, new() { [m.NameKey] = "Z", [m.NoKey] = "01" });
+        HideFromSales(m.NoId);
+
+        var sales = app.AsUser("sales01");
+        var res = await sales.GetAsync($"{Base}/modules/{m.Key}/records/paged?currentPage=1&pagesSize=10&sortBy={m.NameKey}&sortOrder=asc");
+        (await ErrorOf(res, "sortBy")).Should().Contain(m.NameKey);
+        (await PagedTitles(sales, m.Key, "")).Should().Equal("");
+    }
+
+    /// <summary>繞過設計器的防護直接寫入隱藏例外（模擬舊資料）。</summary>
+    private void HideFromSales(long fieldId)
+    {
+        using var scope = app.Services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<DynamicModules.Domain.Data.DynamicDbContext>();
+        var sales = db.Set<DynamicModules.Domain.Entities.Dynamic.PermissionGroup>().Single(g => g.Key == "sales");
+        db.Set<DynamicModules.Domain.Entities.Dynamic.FieldPermission>().Add(
+            new DynamicModules.Domain.Entities.Dynamic.FieldPermission { FieldId = fieldId, GroupId = sales.Id, Access = DynamicModules.Domain.Entities.Dynamic.FieldAccess.Hidden });
+        db.SaveChanges();
     }
 
     private const string Package = """

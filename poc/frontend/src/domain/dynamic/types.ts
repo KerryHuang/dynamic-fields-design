@@ -174,6 +174,8 @@ export interface ModuleSchema {
   icon?: string;
   /** null when the title field is hidden for the current user. */
   titleFieldKey: string | null;
+  /** The title is composed from a template: the list's title column is "標題" and sorting the title field orders by the stored title. */
+  hasTitleTemplate?: boolean;
   version: number;
   /** Absent means standalone. */
   kind?: 'standalone' | 'extension';

@@ -52,6 +52,11 @@ public static class DynamicQueryBuilder
         for (var k = 0; k < q.Sorts.Count; k++)
         {
             var sort = q.Sorts[k];
+            if (sort.ByTitle)
+            {
+                orderBy.Append($"r.Title {(sort.Descending ? "DESC" : "ASC")}, ");   // Title 必填，沒有 NULL
+                continue;
+            }
             joins.Append($" LEFT JOIN Dynamic_RecordIndex s{k} ON s{k}.RecordId = r.Id AND s{k}.FieldId = @s{k} AND s{k}.Seq = 0");
             ctx.Parameters.Add($"s{k}", sort.Field.Id);
             string expr;

@@ -63,12 +63,14 @@ public static class RecordQueryBuilder
             for (var i = 0; i < by.Count; i++)
             {
                 var field = fields.FirstOrDefault(f => f.Key == by[i] && f.Status == FieldStatus.Active && perms.CanSee(f) && f.Config.IsSortable);
-                if (field is null)
+                // 有標題樣板時，列表的標題欄就是組好的標題：依 Record.Title 排序，標題看不到的人不能拿它排序
+                var byTitle = field is not null && module.TitleTemplate is not null && field.Id == module.TitleFieldId;
+                if (field is null || (byTitle && !module.TitleVisibleTo(perms)))
                 {
                     errors["sortBy"] = [$"欄位 {by[i]} 不存在或未開放排序"];
                     break;
                 }
-                sorts.Add(new RecordSort(field, order[i] == "desc"));
+                sorts.Add(new RecordSort(field, order[i] == "desc", byTitle));
             }
         }
         return sorts;

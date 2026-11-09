@@ -9,7 +9,8 @@ public sealed record RecordQuery(
     long ModuleId, ConditionNode? Filter, IReadOnlyList<RecordSort> Sorts, string? Keyword,
     DateOnly Today, int Page, int Size, IReadOnlySet<string>? OwnerUserIds = null);
 
-public sealed record RecordSort(Field Field, bool Descending);
+/// <summary>ByTitle：依持久化的 Record.Title 排序（模組有標題樣板時，標題欄位代表組好的標題）。</summary>
+public sealed record RecordSort(Field Field, bool Descending, bool ByTitle = false);
 
 /// <summary>組鍵的一個欄位；Value 為 null 代表「這個欄位沒有值」。</summary>
 public sealed record AggregateGroupKey(Field Field, IndexValue? Value);

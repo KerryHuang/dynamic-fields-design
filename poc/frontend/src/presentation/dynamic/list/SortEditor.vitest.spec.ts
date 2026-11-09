@@ -16,10 +16,10 @@ const schema: ModuleSchema = {
   blocks: [{ id: 1, label: { 'zh-TW': '區塊' }, collapsed: false, columns: 2, fields: [field(1, 'A'), field(2, 'B'), field(3, 'C'), field(4, 'D'), field(5, 'E', false)] }],
 };
 
-function mountEditor(modelValue: ViewSort[]) {
+function mountEditor(modelValue: ViewSort[], patch: Partial<ModuleSchema> = {}) {
   const i18n = createI18n({ legacy: false, locale: 'zh-TW', messages: { 'zh-TW': zhTW } });
   return mount(SortEditor, {
-    props: { schema, modelValue },
+    props: { schema: { ...schema, ...patch }, modelValue },
     global: { plugins: [[quasar.Quasar, { components: quasar }], i18n] },
   });
 }
@@ -44,5 +44,12 @@ describe('SortEditor', () => {
     expect(w.get('[data-testid="add-sort"]').attributes('disabled')).toBeDefined();
     emitted = w.emitted('update:modelValue')!;
     expect(emitted).toHaveLength(1);
+  });
+
+  it('names the title field 標題 when the module has a title template (its sort follows the composed title)', () => {
+    const fieldOptions = (w: ReturnType<typeof mountEditor>) =>
+      (w.findAllComponents(GenericSelect)[0]!.props('options') as { value: string; label: string }[]).map((o) => o.label);
+    expect(fieldOptions(mountEditor([{ field: 1, order: 'asc' }], { hasTitleTemplate: true }))).toEqual([zhTW.dynamic.titleColumn, 'B', 'C', 'D']);
+    expect(fieldOptions(mountEditor([{ field: 1, order: 'asc' }]))).toEqual(['A', 'B', 'C', 'D']);
   });
 });

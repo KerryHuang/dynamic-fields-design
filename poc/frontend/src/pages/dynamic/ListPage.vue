@@ -142,7 +142,8 @@ const columns = computed<QTableColumn<DynamicRecord>[]>(() => {
       field: (r: DynamicRecord) => r.title,
     }] : []),
     ...(s.titleFieldKey ? [{
-      name: title?.key ?? 'title', label: resolveI18n(title?.label, locale.value), align: 'left' as const, sortable: title?.config.isSortable,
+      name: title?.key ?? 'title', label: s.hasTitleTemplate ? t('dynamic.titleColumn') : resolveI18n(title?.label, locale.value),
+      align: 'left' as const, sortable: title?.config.isSortable,
       field: (r: DynamicRecord) => r.title, classes: title && CODE_TYPES.has(title.type) ? 'cell-code' : undefined,
     }] : []),
     ...listed.map<QTableColumn<DynamicRecord>>((f) => ({

@@ -186,6 +186,21 @@ describe('ListPage', () => {
     expect(lastCall().sort).toEqual([{ field: 1, order: 'asc' }]);
   });
 
+  it('with a title template the title column is labelled 標題 and still sorts by the title field (the server orders by the stored title)', async () => {
+    schemaPatch = { hasTitleTemplate: true, blocks: [{ ...schema.blocks[0]!, fields: [field(1, '名稱'), field(2, '甲'), field(3, '乙')] }] };
+    const w = await mountPage();
+    expect(w.findAll('th').map((h) => h.text().replace('arrow_upward', ''))).toEqual([zhTW.dynamic.titleColumn, '甲', '乙', zhTW.dynamic.modifiedTime]);
+    await w.findAll('th.sortable')[0]!.trigger('click');
+    await flushPromises();
+    expect(lastCall().sort).toEqual([{ field: 1, order: 'asc' }]);
+  });
+
+  it('without a title template the title column keeps the title field label', async () => {
+    schemaPatch = { blocks: [{ ...schema.blocks[0]!, fields: [field(1, '名稱'), field(2, '甲'), field(3, '乙')] }] };
+    const w = await mountPage();
+    expect(w.findAll('th').map((h) => h.text().replace('arrow_upward', ''))).toEqual(['名稱', '甲', '乙', zhTW.dynamic.modifiedTime]);
+  });
+
   it('notifies the first 400 message and keeps previous rows', async () => {
     const w = await mountPage();
     api.getPagedRecords.mockResolvedValue({ items: [row], totalCount: 1, currentPage: 1, pagesSize: 20 });

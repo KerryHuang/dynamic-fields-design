@@ -11,7 +11,12 @@ const emit = defineEmits<{ 'update:modelValue': [value: ViewSort[]] }>();
 const { t, locale } = useI18n();
 
 const sortable = computed(() => props.schema.blocks.flatMap((b) => b.fields).filter((f) => f.config.isSortable));
-const label = (id: number) => resolveI18n(sortable.value.find((f) => f.id === id)?.label, locale.value);
+// 有標題樣板時，依標題欄位排序就是依組好的標題排序，跟列表的標題欄同名
+const label = (id: number) => {
+  const f = sortable.value.find((x) => x.id === id);
+  return props.schema.hasTitleTemplate && f && f.key === props.schema.titleFieldKey
+    ? t('dynamic.titleColumn') : resolveI18n(f?.label, locale.value);
+};
 const optionsFor = (index: number) => {
   const taken = new Set(props.modelValue.filter((_, i) => i !== index).map((s) => s.field));
   return sortable.value.filter((f) => !taken.has(f.id)).map((f) => ({ value: String(f.id), label: label(f.id) }));
