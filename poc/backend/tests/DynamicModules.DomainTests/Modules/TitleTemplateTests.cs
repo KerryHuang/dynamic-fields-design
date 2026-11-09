@@ -59,7 +59,46 @@ public class TitleTemplateTests
 
     [Fact]
     public void Parse_TooLong() =>
-        TitleTemplate.Parse("{a}" + new string('x', 200)).Error.Should().Be($"標題樣板不能超過 {TitleTemplate.MaxLength} 字");
+        TitleTemplate.Parse("{a}" + new string('x', 200)).Error.Should().Be(TitleTemplate.TooLongMessage);
+
+    /// <summary>上限量的是樣板本身（文字加上每個欄位算 1 字），跟欄位寫成代號還是 Id 無關，兩種表示才能互轉。</summary>
+    [Fact]
+    public void Parse_LengthCountsEachFieldAsOne()
+    {
+        TitleTemplate.Parse(new string('x', 199) + "{a_very_long_field_code}").Error.Should().BeNull();
+        TitleTemplate.Parse(new string('x', 199) + "{9223372036854775807}").Error.Should().BeNull();
+        TitleTemplate.Parse(new string('x', 199) + "{a}{b}").Error.Should().Be(TitleTemplate.TooLongMessage);
+        TitleTemplate.Parse("{" + new string('a', TitleTemplate.MaxTokenLength + 1) + "}").Error
+            .Should().Be($"標題樣板的 {{}} 內最多 {TitleTemplate.MaxTokenLength} 字");
+    }
+
+    /// <summary>審查反例：197 個 x 加 {a} 恰為 200 字，換成 {12} 後變 201 字；反方向是短 Id 換成長代號。兩邊都要能來回。</summary>
+    [Fact]
+    public void Map_NearTheLimit_RoundTripsBothWays()
+    {
+        var codes = new string('x', 197) + "{a}";
+        var ids = TitleTemplate.Map(codes, _ => "12")!;
+        ids.Length.Should().Be(201);
+        TitleTemplate.Parse(ids).Error.Should().BeNull();
+        TitleTemplate.Map(ids, _ => "a").Should().Be(codes);
+
+        var designer = new string('x', 199) + "{7}";
+        var longCode = "c" + new string('o', TitleTemplate.MaxTokenLength - 1);
+        var exported = TitleTemplate.Map(designer, _ => longCode)!;
+        TitleTemplate.Parse(exported).Error.Should().BeNull();
+        TitleTemplate.Map(exported, _ => "7").Should().Be(designer);
+    }
+
+    /// <summary>內部表示的上限：通過輸入上限的樣板，欄位寫成 Id 或最長的代號（含大括號內空白）都放得進資料庫欄位。</summary>
+    [Fact]
+    public void StoredLength_FitsAnyTemplateWithinTheInputLimit()
+    {
+        var worst = string.Concat(Enumerable.Repeat("{ " + new string('c', TitleTemplate.MaxTokenLength - 2) + " }", TitleTemplate.MaxLength));
+        TitleTemplate.Parse(worst).Error.Should().BeNull();
+        worst.Length.Should().Be(TitleTemplate.MaxStoredLength);
+        TitleTemplate.Parse(worst + "x").Error.Should().Be(TitleTemplate.TooLongMessage);
+        TitleTemplate.Parse(string.Concat(Enumerable.Repeat("{9223372036854775807}", TitleTemplate.MaxLength))).Error.Should().BeNull();
+    }
 
     [Fact]
     public void Render_TextAutonumberDateAndOptionLabel()

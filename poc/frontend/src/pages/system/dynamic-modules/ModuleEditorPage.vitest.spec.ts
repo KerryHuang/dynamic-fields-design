@@ -177,6 +177,17 @@ describe('ModuleEditorPage', () => {
       expect(api.updateModule).toHaveBeenLastCalledWith('m', { name: detail.name, icon: undefined, section: 's', titleFieldId: 5, titleTemplate: '{6} {5}' });
     });
 
+    // 上限由伺服器量（文字加上每個欄位算 1 字）：輸入框存的是欄位 Id，長度跟代號不同，不能在前端以字元數截斷
+    it('does not cut the template at a raw character count', async () => {
+      const long = 'x'.repeat(199) + '{6}';
+      const w = await mountPage(withFields());
+      expect(input(w).attributes('maxlength')).toBeUndefined();
+      await input(w).setValue(long);
+      await input(w).trigger('change');
+      await flushPromises();
+      expect(api.updateModule).toHaveBeenLastCalledWith('m', { name: detail.name, icon: undefined, section: 's', titleFieldId: 5, titleTemplate: long });
+    });
+
     it('shows the server error under the template', async () => {
       const w = await mountPage(withFields());
       api.updateModule.mockRejectedValue({ status: 400, errors: { TitleTemplate: ['標題樣板的大括號沒有成對'] } });

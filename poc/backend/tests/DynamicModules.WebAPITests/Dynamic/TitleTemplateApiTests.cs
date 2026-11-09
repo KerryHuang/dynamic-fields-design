@@ -103,7 +103,7 @@ public class TitleTemplateApiTests(TestApp app) : IClassFixture<TestApp>
         (await ErrorOf(await PutTitle(m.Key, m.NameId, "只有文字"), "TitleTemplate")).Should().Be("標題樣板至少要引用一個欄位");
         (await ErrorOf(await PutTitle(m.Key, m.NameId, "   "), "TitleTemplate")).Should().Be("標題樣板是空的");
         (await ErrorOf(await PutTitle(m.Key, m.NameId, "{" + m.NoId + "}" + new string('x', 200)), "TitleTemplate"))
-            .Should().Be("標題樣板不能超過 200 字");
+            .Should().Be("標題樣板不能超過 200 字（每個欄位算 1 字）");
     }
 
     [Fact]
@@ -325,5 +325,38 @@ public class TitleTemplateApiTests(TestApp app) : IClassFixture<TestApp>
 
         var exported = await JsonOf(await _admin.GetAsync($"{Base}/apps/title-lite/export"));
         exported.GetProperty("modules")[0].GetProperty("titleTemplate").GetString().Should().Be("{no} {name}");
+    }
+
+    /// <summary>
+    /// 審查反例（必修 4）：套件樣板開啟時換成欄位 Id 會變長（199 個 x 加 {no} 是 200 字以內的樣板，換成 Id 後超過 200 個字元）；反方向，設計器的 {Id} 匯出成代號也會變長。
+    /// 上限量的是樣板本身（每個欄位算 1 字），兩個方向都要能來回。
+    /// </summary>
+    [Fact]
+    public async Task Package_NearTheLimit_OpensAndExportsBack_AndADesignerTemplateNearTheLimitExportsAsAValidPackage()
+    {
+        var near = new string('x', 199) + "{no}";
+        var json = Package.Replace("title-lite", "title-near").Replace("\"title-tool\"", "\"title-near-tool\"").Replace("{no} {name}", near);
+        (await _admin.PostAsync($"{Base}/apps/packages/import", new StringContent(json, Encoding.UTF8, "application/json")))
+            .StatusCode.Should().Be(HttpStatusCode.Created);
+        var open = await _admin.PostAsJsonAsync($"{Base}/apps/packages/title-near/open", new { });
+        open.StatusCode.Should().Be(HttpStatusCode.Created, await open.Content.ReadAsStringAsync());
+
+        var module = await ModuleOf("title-near-tool");
+        var ids = module.GetProperty("blocks")[0].GetProperty("fields").EnumerateArray()
+            .ToDictionary(f => f.GetProperty("label").GetProperty("zh-TW").GetString()!, f => f.GetProperty("id").GetInt64());
+        var stored = module.GetProperty("titleTemplate").GetString()!;
+        stored.Should().Be(new string('x', 199) + $"{{{ids["編號"]}}}");
+        stored.Length.Should().BeGreaterThan(200);
+        (await JsonOf(await _admin.GetAsync($"{Base}/apps/title-near/export"))).GetProperty("modules")[0].GetProperty("titleTemplate").GetString()
+            .Should().Be(near);
+
+        // 設計器：199 字加一個欄位 Id（原樣超過 200 字）可以存；匯出成代號後仍是合法的套件
+        var designer = new string('y', 199) + $"{{{ids["名稱"]}}}";
+        (await PutTitle("title-near-tool", ids["名稱"], designer)).StatusCode.Should().Be(HttpStatusCode.OK);
+        var exported = await _admin.GetStringAsync($"{Base}/apps/title-near/export");
+        var parsed = DynamicModules.Application.Dynamic.AppService.AppJson.Parse(exported);
+        parsed.Errors.Should().BeEmpty();
+        parsed.V2!.Modules.Single().TitleTemplate.Should().Be(new string('y', 199) + "{name}");
+        DynamicModules.Application.Dynamic.AppService.AppPackageValidator.Validate(parsed.V2).Errors.Should().BeEmpty();
     }
 }

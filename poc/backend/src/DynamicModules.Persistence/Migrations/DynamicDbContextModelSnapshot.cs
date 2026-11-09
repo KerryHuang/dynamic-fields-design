@@ -1049,7 +1049,7 @@ namespace DynamicModules.Persistence.Migrations
                         .HasColumnType("INTEGER");
 
                     b.Property<string>("TitleTemplate")
-                        .HasMaxLength(500)
+                        .HasMaxLength(8400)
                         .HasColumnType("TEXT");
 
                     b.Property<int>("Version")

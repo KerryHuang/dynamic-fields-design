@@ -246,7 +246,7 @@ function saveSection() {
       </div>
       <div v-if="!isExtension" class="row items-start q-gutter-md q-mb-md">
         <div class="col-grow" style="min-width: 220px; max-width: 520px" data-testid="title-template-field">
-          <q-input v-model="templateDraft" :label="t('designer.titleTemplate')" maxlength="200" outlined dense data-testid="title-template"
+          <q-input v-model="templateDraft" :label="t('designer.titleTemplate')" outlined dense data-testid="title-template"
             :hint="templatePreview ? t('designer.titleTemplatePreview', { text: templatePreview }) : t('designer.titleTemplateHint')"
             :error="!!errorFor(templateError, 'TitleTemplate') || undefined" :error-message="errorFor(templateError, 'TitleTemplate')"
             @change="saveTemplate" />

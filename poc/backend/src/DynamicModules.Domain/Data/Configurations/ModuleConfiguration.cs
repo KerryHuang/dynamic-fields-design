@@ -15,8 +15,8 @@ public class ModuleConfiguration : IEntityTypeConfiguration<Module>
         b.Property(x => x.NameI18n).HasJsonConversion();
         b.Property(x => x.Icon).HasMaxLength(100);
         b.Property(x => x.Section).HasMaxLength(100);
-        // 樣板本身最多 200 字（TitleTemplate.MaxLength），換成欄位 Id 後可能變長
-        b.Property(x => x.TitleTemplate).HasMaxLength(500);
+        // 樣板的上限不量欄位寫法（TitleTemplate.MaxLength），存的是欄位 Id：照最長的 Id 算才放得下任何合法樣板
+        b.Property(x => x.TitleTemplate).HasMaxLength(Modules.TitleTemplate.MaxStoredLength);
         b.Property(x => x.Status).HasConversion<string>().HasMaxLength(20);
         b.Property(x => x.Kind).HasConversion<string>().HasMaxLength(20).HasDefaultValue(ModuleKind.Standalone);
         b.Property(x => x.HostEntityKey).HasMaxLength(100);

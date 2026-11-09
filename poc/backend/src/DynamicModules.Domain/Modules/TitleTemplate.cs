@@ -12,7 +12,22 @@ namespace DynamicModules.Domain.Modules;
 /// </summary>
 public static class TitleTemplate
 {
+    /// <summary>
+    /// 樣板本身的上限：大括號外的文字加上每個欄位算 1 字。不量欄位寫法的長度，因為同一份樣板在資料庫是 {Id}、在套件是 {代號}，
+    /// 長度不同；量字元數會讓一邊合法的樣板換成另一邊就超過（開啟或再次匯入時被擋）。
+    /// </summary>
     public const int MaxLength = 200;
+
+    /// <summary>大括號內最多幾個字：欄位代號最多 40 字，欄位 Id 最多 19 位數。</summary>
+    public const int MaxTokenLength = 40;
+
+    /// <summary>
+    /// 內部表示的上限：每個欄位連大括號最多 <see cref="MaxTokenLength"/> + 2 字，所以任何通過 <see cref="MaxLength"/> 的樣板
+    /// 不論寫成 Id 還是代號（含大括號內的空白）都放得進資料庫欄位。
+    /// </summary>
+    public const int MaxStoredLength = MaxLength * (MaxTokenLength + 2);
+
+    public const string TooLongMessage = "標題樣板不能超過 200 字（每個欄位算 1 字）";
 
     /// <summary>可以放進樣板的型別：值本身就是一段文字（下拉取選項名稱）。</summary>
     public static readonly IReadOnlySet<FieldType> AllowedTypes = new HashSet<FieldType>
@@ -30,7 +45,7 @@ public static class TitleTemplate
     public static (IReadOnlyList<Part> Parts, string? Error) Parse(string? template)
     {
         if (string.IsNullOrWhiteSpace(template)) return ([], "標題樣板是空的");
-        if (template.Length > MaxLength) return ([], $"標題樣板不能超過 {MaxLength} 字");
+        if (template.Length > MaxStoredLength) return ([], TooLongMessage);   // 先擋明顯過長的輸入，不必逐字解析
         var parts = new List<Part>();
         var text = new StringBuilder();
         for (var i = 0; i < template.Length; i++)
@@ -40,6 +55,7 @@ public static class TitleTemplate
             if (c != '{') { text.Append(c); continue; }
             var end = template.IndexOfAny(['{', '}'], i + 1);
             if (end < 0 || template[end] == '{') return ([], "標題樣板的大括號沒有成對");
+            if (end - i - 1 > MaxTokenLength) return ([], $"標題樣板的 {{}} 內最多 {MaxTokenLength} 字");   // 連空白一起量，存進資料庫的是原字串
             var token = template[(i + 1)..end].Trim();
             if (token.Length == 0) return ([], "標題樣板有空的 {}");
             if (text.Length > 0) { parts.Add(new Part(text.ToString(), null)); text.Clear(); }
@@ -47,6 +63,7 @@ public static class TitleTemplate
             i = end;
         }
         if (text.Length > 0) parts.Add(new Part(text.ToString(), null));
+        if (parts.Sum(p => p.Text?.Length ?? 1) > MaxLength) return ([], TooLongMessage);
         return parts.Any(p => p.Token is not null) ? (parts, null) : ([], "標題樣板至少要引用一個欄位");
     }
 
