@@ -19,8 +19,16 @@ using static DynamicModules.WebAPITests.Dynamic.ApiTestKit;
 
 namespace DynamicModules.WebAPITests.Dynamic;
 
+/// <summary>Demo 產生類測試（每個都完整跑一次約 900 步、近 9 萬條 SQL）獨佔執行：不與其他測試類別平行，避免全套高負載時輪詢逾時。</summary>
+[CollectionDefinition(Name, DisableParallelization = true)]
+public sealed class DemoGenerationCollection
+{
+    public const string Name = "DemoGeneration";
+}
+
 /// <summary>Demo 資料的背景產生、狀態與產生端點、啟動時自動產生。</summary>
 /// <remarks>每個測試自己的 TestApp：Demo 模組代碼固定，共用會互相撞。</remarks>
+[Collection(DemoGenerationCollection.Name)]
 public sealed class DemoDataApiTests
 {
     private const string Status = $"{Base}/demo-data";
