@@ -41,7 +41,8 @@ public sealed class RepairScenario : IDemoScenario
     {
         var today = plan.Today;
         var rnd = plan.Random;
-        var molds = plan.Records["mold"];
+        if (!plan.Records.TryGetValue("mold", out var molds) || molds.Count == 0)
+            throw new InvalidOperationException("模具保養情境必須排在報修之前：報修要挑的模具資料還沒有規劃");
         var planned = new List<(int N, string Creator, DemoRecord Mold, DemoRecord Record)>();
         var toggle = false;
 
@@ -50,7 +51,7 @@ public sealed class RepairScenario : IDemoScenario
             var date = today.AddDays(-(90 - (int)Math.Round((n - 1) * 89.0 / (Count - 1))));
             var days = today.DayNumber - date.DayNumber;
             var creator = n % 10 == 0 ? Maint : n % 2 == 1 ? "floor01" : "floor02";
-            var mold = molds[rnd.Next(1, 13) - 1];
+            var mold = molds[rnd.Next(molds.Count)];
             DemoRecord? related = null;
             if (Related.Contains(n))
             {

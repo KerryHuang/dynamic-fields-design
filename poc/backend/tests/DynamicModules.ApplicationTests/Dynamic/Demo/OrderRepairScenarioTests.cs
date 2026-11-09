@@ -1,6 +1,8 @@
 using System.Globalization;
 using System.Text.Json;
 using DynamicModules.Application.Common;
+using DynamicModules.Application.Dynamic.DemoService;
+using DynamicModules.Application.Dynamic.DemoService.Scenarios;
 using DynamicModules.Application.Dynamic.DemoService.Commands.GenerateDemoData;
 using DynamicModules.Application.Dynamic.RecordService.Data;
 using DynamicModules.Application.Dynamic.RecordService.Queries.GetRecord;
@@ -173,5 +175,34 @@ public class OrderRepairScenarioTests(DemoGeneratedFixture fx)
             target.Values[mold]!.Value.GetInt64().Should().Be(r.Values[mold]!.Value.GetInt64());
             target.CreatedTime.Should().BeBefore(r.CreatedTime);
         }
+    }
+    /// <summary>報修第 1–50 筆依序挑到的模具編號：改成依實際模具數抽選後，序列必須與原本寫死 12 支時相同（Demo 資料不變）。</summary>
+    private const string MoldSequence =
+        "M-0004,M-0005,M-0003,M-0009,M-0008,M-0010,M-0003,M-0002,M-0012,M-0011," +
+        "M-0005,M-0003,M-0010,M-0005,M-0003,M-0006,M-0005,M-0003,M-0005,M-0011," +
+        "M-0002,M-0004,M-0012,M-0011,M-0008,M-0004,M-0006,M-0009,M-0003,M-0009," +
+        "M-0012,M-0003,M-0002,M-0008,M-0003,M-0009,M-0010,M-0001,M-0004,M-0002," +
+        "M-0001,M-0004,M-0012,M-0008,M-0012,M-0007,M-0011,M-0003,M-0012,M-0001";
+
+    [Fact]
+    public async Task Repairs_MoldSequence_Unchanged()
+    {
+        Generated();
+        var mold = await fx.Key("mes-repair", "模具");
+        var reportDate = await fx.Key("mes-repair", "報修日期");
+        var no = await fx.Key("mes-mold", "模具編號");
+        var molds = (await fx.Records("mes-mold")).ToDictionary(m => m.Id, m => DemoGeneratedFixture.Text(m, no));
+
+        var picked = (await fx.Records("mes-repair")).OrderBy(r => DemoGeneratedFixture.Text(r, reportDate))
+            .Select(r => molds[r.Values[mold]!.Value.GetInt64()]);
+        string.Join(",", picked).Should().Be(MoldSequence);
+    }
+
+    [Fact]
+    public void Repair_PlannedWithoutMolds_ThrowsClearError()
+    {
+        var plan = new DemoPlan(Today, new Random(1), new Dictionary<string, IReadOnlyList<DemoRecord>>());
+        var act = () => new RepairScenario().Plan(plan);
+        act.Should().Throw<InvalidOperationException>().WithMessage("*模具保養情境必須排在報修之前*");
     }
 }
