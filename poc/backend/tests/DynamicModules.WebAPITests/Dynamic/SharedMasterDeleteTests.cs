@@ -450,6 +450,40 @@ public class SharedMasterDeleteTests : IDisposable
         await _rig.AssertIntegrityAsync();
     }
 
+    /// <summary>
+    /// 審查待決 6：第二版整個拿掉產業欄位，新欄位沿用同一個選項代碼。第一版留下的 manufacturing 選項孤兒沒有人接回，
+    /// 與新選項同名；不解除資格的話，填值後再刪除會撞 (FormerAppKey, Kind, Name)。
+    /// </summary>
+    [Fact]
+    public async Task AFieldDroppedFromThePackage_RetiresItsOptionOrphans_WhenANewFieldReusesTheOptionCode()
+    {
+        var (_, industry, _, _) = await ConvertedThenClosedAsync(withStock: true);
+        var oldOptions = _rig.Db(db => db.Set<FieldOption>().Where(o => o.FieldId == industry).Select(o => o.Id).ToList());
+        await DeleteOkAsync("crmx");
+        _rig.Db(db =>
+        {
+            var row = db.Set<AppPackage>().Single(p => p.Key == "crmx");
+            row.Json = System.Text.RegularExpressions.Regex.Replace(row.Json, """\{ "code": "industry".*?\] \},""",
+                """{ "code": "sector", "type": "enum", "label": { "zh-TW": "行業" }, "config": {}, "options": [ { "code": "manufacturing", "label": { "zh-TW": "製造" } } ] },""",
+                System.Text.RegularExpressions.RegexOptions.Singleline);
+            row.Json.Should().Contain("\"sector\"").And.NotContain("\"industry\"");
+        });
+
+        await _rig.OpenOkAsync("crmx");
+        oldOptions.Should().OnlyContain(id => _rig.Db(db => db.Set<FieldOption>().Any(o => o.Id == id)), "舊選項本身保留，資料不動");
+        var sector = _rig.FieldId("crmx", "bp/partner.sector");
+        var option = _rig.Db(db => db.Set<FieldOption>().Single(o => o.FieldId == sector).Id);
+        await _rig.CreateRecordAsync(_rig.Admin, Partner, new Dictionary<string, object>
+            { [Key("bp", "partner.name")] = "乙公司", [Key("crmx", "bp/partner.sector")] = $"opt_{option}" });
+        await _rig.CloseOkAsync("crmx");
+
+        await DeleteOkAsync("crmx");
+        _rig.Db(db => db.Set<AppOrphan>().Where(o => o.FormerAppKey == "crmx" && o.Kind == OrphanKind.Option).Select(o => $"{o.Name}:{o.OptionId}").ToList())
+            .Should().Contain($"bp/partner.manufacturing:{option}").And.OnlyContain(x => !oldOptions.Any(id => x.EndsWith($":{id}") && x.Contains("manufacturing")),
+                "同名的舊選項孤兒已失去資格，不重複；其他沒撞名的舊選項孤兒照舊可接回");
+        await _rig.AssertIntegrityAsync();
+    }
+
     [Fact]
     public async Task AnOrphanReEnabledInTheDesigner_StaysRestricted_UntilTheAdminGrantsIt()
     {

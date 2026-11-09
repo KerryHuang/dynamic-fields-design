@@ -52,6 +52,11 @@ public sealed class ContributionOrphans(ISharedMasterRepository shared, IAppRepo
                         reattachOptions[option.Code] = optionId;
                     }
             }
+            // 套件裡的選項代號若撞上沒被接回的選項孤兒（例如原欄位整個被拿掉、新欄位沿用代號），一樣解除接回資格，
+            // 否則下次刪除時同名的選項孤兒會撞 (FormerAppKey, Kind, Name)（審查待決 6）。選項本身保留
+            foreach (var option in c.Fields.SelectMany(f => f.Options))
+                foreach (var o in orphans.Where(o => o.Kind == OrphanKind.Option && o.Name == $"{prefix}.{option.Code}"))
+                    if (!consumed.Contains(o) && !stale.Contains(o)) stale.Add(o);
             long? reattachBlock = null;
             if (orphans.FirstOrDefault(o => o.Kind == OrphanKind.Block && o.Name == $"{prefix}.{c.Block.Code}") is { BlockId: { } blockId } ob
                 && module.Blocks.Any(b => b.Id == blockId))
