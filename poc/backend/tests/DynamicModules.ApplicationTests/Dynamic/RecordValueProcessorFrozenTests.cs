@@ -64,6 +64,30 @@ public class RecordValueProcessorFrozenTests
         values["f_4"]!.Value.GetDecimal().Should().Be(10, "凍結的公式保持最後的值");
     }
 
+    /// <summary>審查必修 1：使用者看不到的凍結欄位，送來的值一律忽略；不比對舊值、不 409，所以回應不會因隱藏舊值而不同。</summary>
+    [Fact]
+    public void AHiddenFrozenField_IgnoresTheInput_WhateverTheValue()
+    {
+        var hidden = Perms() with { HiddenFieldIds = new HashSet<long> { 2 } };
+        var previous = V(("f_1", "\"甲\""), ("f_2", "\"舊\""), ("f_3", "5"));
+        foreach (var guess in new[] { "\"舊\"", "\"猜錯\"", "null" })
+        {
+            var (values, errors) = RecordValueProcessor.Process(Mod(), V(("f_1", "\"乙\""), ("f_2", guess)), previous, NoUsers, Registry, hidden, Ctx);
+            errors.Should().BeEmpty(guess);
+            values["f_1"]!.Value.GetString().Should().Be("乙");
+            values["f_2"]!.Value.GetString().Should().Be("舊", "看不到的欄位不吃輸入");
+        }
+    }
+
+    [Fact]
+    public void AHiddenFrozenField_StillThrows_ForASystemWrite()
+    {
+        var hidden = Perms() with { HiddenFieldIds = new HashSet<long> { 2 } };
+        var act = () => RecordValueProcessor.Process(Mod(), V(("f_2", "\"新\"")), V(("f_2", "\"舊\"")), NoUsers, Registry, hidden, Ctx,
+            systemKeys: new HashSet<string> { "f_2" });
+        act.Should().Throw<FrozenFieldException>();
+    }
+
     [Fact]
     public void Create_FrozenFieldGetsNoDefault()
     {

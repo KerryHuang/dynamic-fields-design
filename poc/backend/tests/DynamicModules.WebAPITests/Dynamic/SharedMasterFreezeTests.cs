@@ -78,6 +78,41 @@ public class SharedMasterFreezeTests : IDisposable
         saved.GetProperty("values").GetProperty(score).GetInt32().Should().Be(3);
     }
 
+    /// <summary>
+    /// 審查必修 1：倉管看不到 CRM 的分數。CRM 關閉後倉管猜分數送進來，猜對猜錯都一樣 200、值不變、回應不提欄位名稱，
+    /// 不能靠成功／409 分辨隱藏的舊值。
+    /// </summary>
+    [Fact]
+    public async Task AHiddenFrozenField_ItsInputIsIgnored_RightAndWrongGuessesLookTheSame()
+    {
+        await _rig.ImportAllAsync();
+        await _rig.OpenOkAsync("crmx");
+        await _rig.OpenOkAsync("stk");
+        await _rig.OpenOkAsync("cx");
+        var keeper = _rig.App.AsUser("keeper01");
+        var score = Key("crmx", "bp/partner.score");
+        var name = Key("bp", "partner.name");
+        var record = await _rig.CreateRecordAsync(keeper, Partner, new Dictionary<string, object> { [name] = "甲公司" });
+        (await PutAsync(record, new() { [score] = 3 })).StatusCode.Should().Be(HttpStatusCode.OK);
+        await _rig.CloseOkAsync("crmx");
+
+        var id = record.GetProperty("id").GetInt64();
+        foreach (var (guess, title) in new[] { (3, "甲公司二"), (4, "甲公司三") })
+        {
+            var fresh = await JsonOf(await keeper.GetAsync($"{Base}/records/{id}"));
+            var res = await keeper.PutAsJsonAsync($"{Base}/records/{id}", new
+            {
+                values = new Dictionary<string, object> { [score] = guess, [name] = title },
+                rowVersion = fresh.GetProperty("rowVersion").GetString()
+            });
+            var body = await res.Content.ReadAsStringAsync();
+            res.StatusCode.Should().Be(HttpStatusCode.OK, $"猜 {guess}：{body}");
+            body.Should().NotContain("分數").And.NotContain(score);
+        }
+        (await GetAsync(record)).GetProperty("values").GetProperty(score).GetInt32().Should().Be(3, "看不到的欄位不吃輸入");
+        (await GetAsync(record)).GetProperty("title").GetString().Should().Be("甲公司三", "其他欄位照常寫");
+    }
+
     [Fact]
     public async Task Create_WithAValueForAFrozenField_Is409_WithoutItSucceedsAndTheFieldStaysEmpty()
     {

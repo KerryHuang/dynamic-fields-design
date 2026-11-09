@@ -49,7 +49,7 @@ public static class RecordValueProcessor
         var values = previous is null ? [] : new Dictionary<string, JsonElement?>(previous);
         var errors = new Dictionary<string, string[]>();
         var fields = module.Blocks.SelectMany(b => b.Fields).Where(f => f.Status == FieldStatus.Active).ToList();
-        RejectFrozenChanges(fields, input, previous, registry, permissions, userIds, validRefKeys);
+        RejectFrozenChanges(fields, input, previous, registry, permissions, userIds, validRefKeys, systemKeys);
         bool IsFrozen(Field f) => permissions.Frozen.ContainsKey(f.Id);
 
         var stored = previous is null ? null : RuleEngine.Evaluate(module, previous, previous, registry, userIds, rules.Today);
@@ -130,11 +130,12 @@ public static class RecordValueProcessor
     /// <summary>
     /// 生命週期鎖的第一道（共用主檔設計 §7）：對凍結欄位明確給了和舊值不同的值，整個請求 409；值沒變或沒給就照常通過。
     /// 和狀態機唯讀同層、優先於 systemKeys，所以轉換、事件、整合事件、匯入要寫它時整個動作失敗。
+    /// 使用者看不到的欄位不比對：輸入照「沒權限的欄位忽略輸入」處理，回應不因隱藏的舊值而不同（審查必修 1）；系統寫入（systemKeys）照樣檢查。
     /// </summary>
     private static void RejectFrozenChanges(
         IEnumerable<Field> fields, IReadOnlyDictionary<string, JsonElement?> input, IReadOnlyDictionary<string, JsonElement?>? previous,
         FieldTypeRegistry registry, EffectivePermissions permissions, IReadOnlySet<string> userIds,
-        IReadOnlyDictionary<long, IReadOnlySet<string>>? validRefKeys)
+        IReadOnlyDictionary<long, IReadOnlySet<string>>? validRefKeys, IReadOnlySet<string>? systemKeys)
     {
         if (permissions.Frozen.Count == 0) return;
         foreach (var field in fields)
@@ -142,6 +143,7 @@ public static class RecordValueProcessor
             // 公式等計算欄位本來就不收輸入（凍結時另由 ApplyFormulas 跳過），不算「給了值」
             if (FieldRules.IsComputed(field.Type) || !permissions.Frozen.TryGetValue(field.Id, out var owner)
                 || !input.TryGetValue(field.Key, out var raw)) continue;
+            if (!permissions.CanSee(field) && systemKeys?.Contains(field.Key) != true) continue;
             JsonElement? prev = previous is not null && previous.TryGetValue(field.Key, out var p) ? p : null;
             if (Same(raw, prev)) continue;
             var ctx = new FieldTypeContext(field.Options.Select(o => o.Id).ToHashSet(), field.Options.Select(o => o.Id).ToHashSet(),
