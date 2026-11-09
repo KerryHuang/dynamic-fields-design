@@ -27,6 +27,8 @@ public class SetFieldStatusHandler(IModuleRepository modules, IRecordRepository 
 
         if (request.Status == FieldStatus.Inactive && module.TitleFieldId == request.FieldId)
             return FieldRules.Invalid("Status", "記錄標題欄位不能停用");
+        if (request.Status == FieldStatus.Inactive && module.TitleFieldIds().Contains(request.FieldId))
+            return FieldRules.Invalid("Status", "標題樣板用到的欄位不能停用");
 
         if (request.Status == FieldStatus.Inactive && module.Workflow?.StatusFieldId == request.FieldId)
             return FieldRules.Invalid("Status", "這是狀態機的狀態欄位，請先移除狀態機");

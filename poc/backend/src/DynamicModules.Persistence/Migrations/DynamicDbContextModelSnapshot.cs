@@ -1048,6 +1048,10 @@ namespace DynamicModules.Persistence.Migrations
                     b.Property<long?>("TitleFieldId")
                         .HasColumnType("INTEGER");
 
+                    b.Property<string>("TitleTemplate")
+                        .HasMaxLength(500)
+                        .HasColumnType("TEXT");
+
                     b.Property<int>("Version")
                         .HasColumnType("INTEGER");
 

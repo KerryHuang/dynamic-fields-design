@@ -287,6 +287,8 @@ public static partial class AppPackageValidator
             var (modCode, fieldCode) = SplitQualified(a.Field)!.Value;
             if (a.Access == FieldAccess.Hidden && modules[modCode].TitleField == fieldCode)
                 errors.Add($"{at}: 標題欄位不能是隱藏");
+            else if (a.Access == FieldAccess.Hidden && Domain.Modules.TitleTemplate.Tokens(modules[modCode].TitleTemplate).Contains(fieldCode))
+                errors.Add($"{at}: 標題樣板用到的欄位不能是隱藏");
         }
 
         var seenScopes = new HashSet<string>();

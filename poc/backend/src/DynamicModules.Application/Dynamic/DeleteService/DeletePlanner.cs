@@ -163,7 +163,7 @@ public class DeletePlanner(IDeletionRepository data)
         {
             if (f.Status == FieldStatus.Active)
                 blockers.Add(FieldBlocker(DeleteBlockerKind.FieldActive, module, f));
-            if (module.TitleFieldId == f.Id)
+            if (module.TitleFieldIds().Contains(f.Id))
                 blockers.Add(FieldBlocker(DeleteBlockerKind.TitleField, module, f));
         }
 

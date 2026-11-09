@@ -6,12 +6,13 @@ namespace DynamicModules.Application.Dynamic.ModuleService.Data;
 
 public record ModuleResponse(
     long Id, string Key, string ProgramCode, I18nText Name, string? Icon, string? Section,
-    long? TitleFieldId, string Status, int Version, ModuleKind Kind, string? HostEntityKey, string? DetailOf = null);
+    long? TitleFieldId, string Status, int Version, ModuleKind Kind, string? HostEntityKey, string? DetailOf = null,
+    string? TitleTemplate = null);
 
 public record ModuleDetailResponse(
     long Id, string Key, string ProgramCode, I18nText Name, string? Icon, string? Section,
     long? TitleFieldId, string Status, int Version, List<BlockResponse> Blocks,
-    ModuleKind Kind, string? HostEntityKey, string? DetailOf = null);
+    ModuleKind Kind, string? HostEntityKey, string? DetailOf = null, string? TitleTemplate = null);
 
 public record BlockResponse(long Id, I18nText Label, int Sequence, bool Collapsed, int Columns, List<FieldResponse> Fields);
 
@@ -27,12 +28,12 @@ public static class ModuleMapper
     /// <param name="detailOf">模組沒載入欄位時（清單）由呼叫端提供表頭模組鍵；null 則從已載入的欄位推得。</param>
     public static ModuleResponse ToResponse(this Module m, string? detailOf = null) =>
         new(m.Id, m.Key, m.ProgramCode, m.NameI18n, m.Icon, m.Section, m.TitleFieldId, m.Status.ToString(), m.Version, m.Kind, m.HostEntityKey,
-            detailOf ?? ModuleRelations.ParentKeyOf(m));
+            detailOf ?? ModuleRelations.ParentKeyOf(m), m.TitleTemplate);
 
     public static ModuleDetailResponse ToDetail(this Module m) =>
         new(m.Id, m.Key, m.ProgramCode, m.NameI18n, m.Icon, m.Section, m.TitleFieldId, m.Status.ToString(), m.Version,
             m.Blocks.OrderBy(b => b.Sequence).ThenBy(b => b.Id).Select(ToResponse).ToList(), m.Kind, m.HostEntityKey,
-            ModuleRelations.ParentKeyOf(m));
+            ModuleRelations.ParentKeyOf(m), m.TitleTemplate);
 
     public static BlockResponse ToResponse(this Block b) =>
         new(b.Id, b.LabelI18n, b.Sequence, b.Collapsed, b.Columns,

@@ -45,6 +45,7 @@ public sealed partial class TemplateGraph
         foreach (var module in package.Modules)
         {
             if (module.TitleField is not null) locked.Add(Qualify(module.Code, module.TitleField));
+            foreach (var code in Domain.Modules.TitleTemplate.Tokens(module.TitleTemplate)) locked.Add(Qualify(module.Code, code));
             foreach (var field in module.Blocks.SelectMany(b => b.Fields))
             {
                 var name = Qualify(module.Code, field.Code);

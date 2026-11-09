@@ -55,6 +55,8 @@ public class SaveModulePermissionsHandler(
             if (!groupIds.Contains(f.GroupId)) Err($"fields[{i}].groupId", "群組不存在");
             if (f.Access == FieldAccess.Hidden && f.FieldId == module.TitleFieldId)
                 Err($"fields[{i}].access", "標題欄位不能設為隱藏");
+            else if (f.Access == FieldAccess.Hidden && module.TitleFieldIds().Contains(f.FieldId))
+                Err($"fields[{i}].access", "標題樣板用到的欄位不能設為隱藏");
         }
 
         var seenOptions = new HashSet<long>();

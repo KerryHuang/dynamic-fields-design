@@ -52,7 +52,7 @@ public class PrintRecordHandler(
         var refs = await resolver.ResolveAsync(module, perms, [record], ct);
         var headerValues = RecordValueProcessor.Parse(record.ValuesJson);
         var visible = VisibleFields(module, perms);
-        var titleVisible = module.TitleFieldId is { } tid && visible.Values.Any(f => f.Id == tid);
+        var titleVisible = module.TitleFieldId is not null && module.TitleFieldIds().All(id => visible.Values.Any(f => f.Id == id));
 
         string? Header(string key) => key switch
         {

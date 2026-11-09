@@ -51,8 +51,11 @@ public sealed partial class TemplateExporter(IModuleRepository modules, IPermiss
             var rules = m.Rules.OrderBy(r => r.Sequence).Select((r, i) => ctx.Rule(m, r, i)).OfType<TemplateRule>().ToList();
             var shared = (await views.ListByScopeAsync(m.Id, null, ct)).OrderBy(v => v.Id).Select(ctx.View).ToList();
             var title = m.TitleFieldId is { } t && ctx.Exported.Contains(t) ? ctx.FieldCode(ctx.Fields[t]) : null;
+            // 標題樣板存欄位 Id，匯出換成代號；樣板用到的欄位不能停用，所以一定都有匯出
+            var titleTemplate = m.TitleTemplate is null ? null : Domain.Modules.TitleTemplate.Map(m.TitleTemplate,
+                id => long.TryParse(id, System.Globalization.NumberStyles.None, System.Globalization.CultureInfo.InvariantCulture, out var fid) && ctx.Exported.Contains(fid) ? ctx.FieldCode(ctx.Fields[fid]) : null);
             result.Add(new TemplateModule(codeOf(m), m.Key, m.NameI18n, m.Icon, m.Section, m.Kind, m.HostEntityKey, title,
-                blocks, rules, shared, IsDetail(m) ? [] : await PermissionsAsync(m, groups, ct)));
+                blocks, rules, shared, IsDetail(m) ? [] : await PermissionsAsync(m, groups, ct), TitleTemplate: titleTemplate));
         }
         return new ExportedModules(result, ctx.Warnings, ctx.Names());
     }

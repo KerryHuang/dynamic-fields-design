@@ -3,6 +3,7 @@ using System.Text.RegularExpressions;
 using DynamicModules.Application.Dynamic.ModuleService.Data;
 using DynamicModules.Application.Dynamic.TemplateService.Data;
 using DynamicModules.Domain.Entities.Dynamic;
+using DynamicModules.Domain.Modules;
 using DynamicModules.Domain.ValueObjects;
 using static DynamicModules.Application.Dynamic.TemplateService.TemplateGraph;
 
@@ -61,6 +62,20 @@ public static partial class TemplateValidator
         return errors;
     }
 
+    /// <summary>標題樣板的 {} 內是本模組的欄位代號，型別見 <see cref="TitleTemplate.AllowedTypes"/>。</summary>
+    private static void ValidateTitleTemplate(TemplateModule m, string template, Dictionary<string, TemplateField> fields, List<string> errors)
+    {
+        var mc = m.Code;
+        if (m.Kind == ModuleKind.Extension) { errors.Add($"{mc}: 擴充模組的標題取自既有資料，不能設標題樣板"); return; }
+        var (parts, error) = TitleTemplate.Parse(template);
+        if (error is not null) { errors.Add($"{mc}: {error}"); return; }
+        foreach (var code in parts.Where(p => p.Token is not null).Select(p => p.Token!).Distinct())
+        {
+            if (!fields.TryGetValue(code, out var f)) errors.Add($"{mc}: 標題樣板引用了不存在的欄位 {code}");
+            else if (!TitleTemplate.AllowedTypes.Contains(f.Type)) errors.Add($"{mc}: 標題樣板不能引用 {code}（{TitleTemplate.AllowedTypesText}）");
+        }
+    }
+
     private static void ValidateModule(TemplateModule m, Dictionary<string, TemplateModule> modules, List<string> errors)
     {
         var mc = m.Code;
@@ -104,6 +119,7 @@ public static partial class TemplateValidator
             errors.Add($"{mc}: 標題欄位 {m.TitleField} 不存在");
         else if (title.Type is not (FieldType.Text or FieldType.AutoNumber))
             errors.Add($"{mc}: 標題欄位 {m.TitleField} 必須是 text 或 autonumber");
+        if (m.TitleTemplate is { } template) ValidateTitleTemplate(m, template, fields, errors);
 
         foreach (var f in m.Blocks.SelectMany(b => b.Fields))
             ValidateFieldConfig(m, f, fields, modules, errors);

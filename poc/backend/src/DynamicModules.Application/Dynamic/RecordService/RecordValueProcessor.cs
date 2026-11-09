@@ -195,8 +195,10 @@ public static class RecordValueProcessor
     public static Dictionary<string, JsonElement?> Parse(string json) =>
         JsonSerializer.Deserialize<Dictionary<string, JsonElement?>>(json) ?? [];
 
+    /// <summary>記錄標題：有標題樣板就照樣板組，否則是標題欄位的值；都截到 <see cref="MaxTitleLength"/>。</summary>
     public static string TitleOf(Module module, IReadOnlyDictionary<string, JsonElement?> values)
     {
+        if (module.TitleTemplate is not null) return TruncateChars(DynamicModules.Domain.Modules.TitleTemplate.Render(module, values), MaxTitleLength);
         var key = module.Blocks.SelectMany(b => b.Fields).FirstOrDefault(f => f.Id == module.TitleFieldId)?.Key;
         if (key is null || !values.TryGetValue(key, out var v) || v is not { ValueKind: JsonValueKind.String } s)
             return "";

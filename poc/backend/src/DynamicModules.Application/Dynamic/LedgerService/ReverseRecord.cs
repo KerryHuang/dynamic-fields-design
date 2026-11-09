@@ -99,8 +99,8 @@ public class GetRecordLedgerHandler(
         var ledger = await ledgers.GetByModuleAsync(module.Id, ct);
         if (ledger is null) return ServiceResult.Success(new RecordLedgerResponse(false, null, null));
 
-        var titleVisible = module.TitleFieldId is not { } tid
-                           || module.Blocks.SelectMany(b => b.Fields).FirstOrDefault(f => f.Id == tid) is not { } tf || perms.CanSee(tf);
+        var titleIds = module.TitleFieldIds();
+        var titleVisible = module.Blocks.SelectMany(b => b.Fields).Where(f => titleIds.Contains(f.Id)).All(perms.CanSee);
         async Task<LedgerLink?> Link(long? id)
         {
             if (id is not { } rid || await records.GetAsync(rid, ct) is not { DeleteFlag: false } r) return null;

@@ -297,4 +297,48 @@ public class AppFormat6Tests
         var twice = p with { Contributions = [p.Contributions[0], p.Contributions[0] with { Block = new AppContributionBlock("crm2", p.Contributions[0].Block.Name) }] };
         AppPackageValidator.Validate(twice).Errors.Should().Contain("contributions[1]: 對 partner-lite/partner 的貢獻重複（同一個主檔模組至多一筆）");
     }
+
+    // ---- 標題樣板（格式 6 一起帶進來的核心能力） ----
+
+    private const string LeadTitle = "\"titleField\": \"company\",";
+
+    [Fact]
+    public void TitleTemplate_OfOwnTextFields_Passes()
+    {
+        var json = Crm(LeadTitle, LeadTitle + " \"titleTemplate\": \"{company}（{phone}）\",");
+        Errors(json).Should().BeEmpty();
+        Parse(json).Modules.Single(m => m.Code == "lead").TitleTemplate.Should().Be("{company}（{phone}）");
+    }
+
+    [Theory]
+    [InlineData("{company} {nope}", "lead: 標題樣板引用了不存在的欄位 nope")]
+    [InlineData("{company", "lead: 標題樣板的大括號沒有成對")]
+    [InlineData("潛在客戶", "lead: 標題樣板至少要引用一個欄位")]
+    public void TitleTemplate_BadTemplates_AreRejected(string template, string error)
+    {
+        AloneErrors(Crm(LeadTitle, LeadTitle + $" \"titleTemplate\": \"{template}\",")).Should().Contain(error);
+    }
+
+    [Fact]
+    public void TitleTemplate_ReferenceField_IsRejected()
+    {
+        var json = Crm("\"titleField\": \"no\",", "\"titleField\": \"no\", \"titleTemplate\": \"{no} {customer}\",");
+        AloneErrors(json).Should().Contain("order: 標題樣板不能引用 customer（只能用文字、電子郵件、電話、網址、自動編號、日期或單選下拉欄位）");
+    }
+
+    [Fact]
+    public void TitleTemplate_FieldHiddenByFieldAccess_IsRejected()
+    {
+        var json = Crm(LeadTitle, LeadTitle + " \"titleTemplate\": \"{company}（{phone}）\",")
+            .Replace("\"contributions\": [", "\"fieldAccess\": [ { \"field\": \"lead.phone\", \"group\": \"sales\", \"access\": \"hidden\" } ],\n  \"contributions\": [");
+        AloneErrors(json).Should().Contain("fieldAccess[0]: 標題樣板用到的欄位不能是隱藏");
+    }
+
+    [Fact]
+    public void TitleTemplate_InFormat5_IsRejected()
+    {
+        var json = AppTestPackages.Crm.Replace("\"formatVersion\": 2", "\"formatVersion\": 5")
+            .Replace("\"titleField\": \"name\",", "\"titleField\": \"name\", \"titleTemplate\": \"{name} {phone}\",");
+        AloneErrors(json).Should().Contain("customer.titleTemplate: formatVersion 6 才支援標題樣板");
+    }
 }

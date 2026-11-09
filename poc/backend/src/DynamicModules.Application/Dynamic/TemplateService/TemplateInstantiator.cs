@@ -123,11 +123,13 @@ public sealed class TemplateInstantiator(
                 if ((failed = Fail(r, m.Code, $"{m.Code}.")) is not null) return failed;
             }
 
-        // 7. 標題欄位、圖示、分區、名稱
+        // 7. 標題欄位、標題樣板（代號換成欄位 Id）、圖示、分區、名稱
         foreach (var m in p.Modules)
         {
+            var titleTemplate = m.TitleTemplate is null ? null : Domain.Modules.TitleTemplate.Map(m.TitleTemplate,
+                code => map.Fields.TryGetValue(TemplateGraph.Qualify(m.Code, code), out var id) ? id.ToString(System.Globalization.CultureInfo.InvariantCulture) : null);
             var r = await sender.Send(new UpdateModuleRequest(map.Key(m.Code), overrides.GetValueOrDefault(m.Code)?.Name ?? m.Name,
-                m.Icon, m.Section, m.TitleField is null ? null : map.Fields[TemplateGraph.Qualify(m.Code, m.TitleField)]), ct);
+                m.Icon, m.Section, m.TitleField is null ? null : map.Fields[TemplateGraph.Qualify(m.Code, m.TitleField)], titleTemplate), ct);
             if ((failed = Fail(r, m.Code, $"{m.Code}.")) is not null) return failed;
         }
 

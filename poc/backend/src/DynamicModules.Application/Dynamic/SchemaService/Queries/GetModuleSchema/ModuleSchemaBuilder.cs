@@ -63,9 +63,9 @@ public class ModuleSchemaBuilder(
     private async Task<(string? TitleKey, List<SchemaBlock> Blocks)> BuildAsync(
         Module module, EffectivePermissions p, long? excludeFieldId, CancellationToken ct)
     {
-        // 標題欄位對我隱藏時不外露它的 key
+        // 標題欄位（或標題樣板用到的欄位）對我隱藏時不外露它的 key
         var titleField = module.Blocks.SelectMany(b => b.Fields).FirstOrDefault(f => f.Id == module.TitleFieldId);
-        var titleKey = titleField is not null && p.CanSee(titleField) ? titleField.Key : null;
+        var titleKey = titleField is not null && module.TitleVisibleTo(p) ? titleField.Key : null;
         var references = await ReferencesOfAsync(module, p, ct);
         var blocks = module.Blocks
             .OrderBy(b => b.Sequence).ThenBy(b => b.Id)

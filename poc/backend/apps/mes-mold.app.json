@@ -1,6 +1,6 @@
 {
  "format": "formwright-app",
- "formatVersion": 5,
+ "formatVersion": 6,
  "x-translation": "th、vi 標籤為機器翻譯，待母語者校對",
  "manifest": {
   "id": "mes-mold",
@@ -3652,6 +3652,7 @@
    "kind": "standalone",
    "hostEntityKey": null,
    "titleField": "name",
+   "titleTemplate": "{no} {name}",
    "blocks": [
     {
      "code": "main",

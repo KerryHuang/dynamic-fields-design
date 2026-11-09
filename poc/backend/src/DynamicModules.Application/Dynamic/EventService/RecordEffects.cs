@@ -50,10 +50,9 @@ public class GetRecordEffectsHandler(
                 hidden++;
                 continue;
             }
-            var titleField = entry.Module.Blocks.SelectMany(b => b.Fields).FirstOrDefault(f => f.Id == entry.Module.TitleFieldId);
             var kind = await ledgers.FindReversalByAsync(target.Id, ct) is null ? "create" : "reverse";
             items.Add(new EffectItem(fact.EventKey, fact.EffectCode, kind, entry.Module.Key, entry.Module.NameI18n.Resolve("zh-TW"),
-                target.Id, titleField is null || p.CanSee(titleField) ? target.Title : null, fact.CreatedTime));
+                target.Id, entry.Module.TitleVisibleTo(p) ? target.Title : null, fact.CreatedTime));
         }
         return ServiceResult.Success(new RecordEffectsResponse(items, hidden));
     }

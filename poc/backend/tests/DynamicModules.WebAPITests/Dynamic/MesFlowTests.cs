@@ -276,14 +276,19 @@ public class MesFlowTests : IDisposable
                 .Single(f => f.GetProperty("label").GetProperty("zh-TW").GetString() == "模具").GetProperty("reference");
             reference.GetProperty("kind").GetString().Should().Be("module");
             reference.GetProperty("key").GetString().Should().Be("mes-mold");
-            var light = await JsonOf(await user.GetAsync($"{Base}{reference.GetProperty("lightUrl").GetString()}?keyword=上蓋"));
-            light.GetProperty("items").EnumerateArray().Select(i => i.GetProperty("key").GetString()).Should().Equal(Id(mold).ToString());
+            // 標題樣板 {no} {name}：用編號或名稱都找得到
+            foreach (var keyword in new[] { "上蓋", "MD-01" })
+            {
+                var light = await JsonOf(await user.GetAsync($"{Base}{reference.GetProperty("lightUrl").GetString()}?keyword={keyword}"));
+                light.GetProperty("items").EnumerateArray().Select(i => i.GetProperty("key").GetString()).Should().Equal(Id(mold).ToString());
+                light.GetProperty("items")[0].GetProperty("title").GetString().Should().Be("MD-01 測試上蓋模");
+            }
         }
 
         var (r, _) = await Layout("repair");
         var repair = await Create(floor, "repair", new() { [r["模具"]] = Id(mold), [r["申請人"]] = "floor01", [r["故障說明"]] = "冷卻水路漏水" });
         var info = (await JsonOf(await floor.GetAsync($"{Base}/records/{Id(repair)}"))).GetProperty("references").GetProperty(r["模具"]);
-        info.GetProperty("title").GetString().Should().Be("測試上蓋模");
+        info.GetProperty("title").GetString().Should().Be("MD-01 測試上蓋模");
         var (c, _) = await Layout("care");
         await Create(maint, "care", new() { [c["模具"]] = Id(mold), [c["保養日期"]] = "2026-11-01", [c["保養週期（天）"]] = 30 });
 

@@ -63,6 +63,18 @@ public class DemoReportsTests(DemoGeneratedFixture fx)
     }
 
     [Fact]
+    public async Task Generate_MoldCareReport_LabelsMoldsByTheTitleTemplate()
+    {
+        // 模具的標題樣板是 {no} {name}：報表的分組標籤是「編號 名稱」
+        fx.Generated();
+        var report = (await StoredReports()).Single(r => r.Name == "近 180 天各模具保養費用");
+        var run = (ReportResult)(await fx.As("maint01", new RunReportRequest(report.Id, null, "zh-TW"))).Data!;
+        run.State.Should().Be("ok");
+        var labels = run.Groups!.Select(g => g.GroupLabels.Single()).ToList();
+        labels.Should().NotBeEmpty().And.OnlyContain(l => System.Text.RegularExpressions.Regex.IsMatch(l, @"^M-\d{4} \S+模$"));
+    }
+
+    [Fact]
     public async Task FloorStaff_OpenAmountReport_SeesRestricted()
     {
         fx.Generated();

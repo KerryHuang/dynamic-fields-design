@@ -30,7 +30,15 @@ public static class RecordMapper
             r.RowVersion, references ?? new Dictionary<string, ReferenceInfo>(), r.HostKey);
     }
 
-    /// <summary>標題欄位對使用者不可見時，Title 與關鍵字搜尋都不能外露（fail-closed：找不到標題欄位也視為不可見）。</summary>
-    public static bool TitleVisibleTo(this Module module, EffectivePermissions p) =>
-        module.Kind == ModuleKind.Extension || module.Blocks.SelectMany(b => b.Fields).FirstOrDefault(f => f.Id == module.TitleFieldId) is { } f && p.CanSee(f);
+    /// <summary>
+    /// 決定標題的欄位（標題欄位與標題樣板引用的欄位）有任何一個對使用者不可見時，Title 與關鍵字搜尋都不能外露
+    /// （fail-closed：找不到標題欄位也視為不可見）。
+    /// </summary>
+    public static bool TitleVisibleTo(this Module module, EffectivePermissions p)
+    {
+        if (module.Kind == ModuleKind.Extension) return true;
+        var ids = module.TitleFieldIds();
+        var fields = module.Blocks.SelectMany(b => b.Fields).Where(f => ids.Contains(f.Id)).ToList();
+        return module.TitleFieldId is not null && fields.Count == ids.Count && fields.All(p.CanSee);
+    }
 }

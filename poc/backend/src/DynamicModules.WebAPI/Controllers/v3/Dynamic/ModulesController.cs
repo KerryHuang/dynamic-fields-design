@@ -21,7 +21,7 @@ public class ModulesController(IMediator mediator) : ControllerBase
 {
     public record CreateModuleBody(string Key, I18nText Name, string? Icon, string? Section,
         ModuleKind Kind = ModuleKind.Standalone, string? HostEntityKey = null);
-    public record UpdateModuleBody(I18nText Name, string? Icon, string? Section, long? TitleFieldId);
+    public record UpdateModuleBody(I18nText Name, string? Icon, string? Section, long? TitleFieldId, string? TitleTemplate = null);
     public record AddBlockBody(I18nText Label);
     public record UpdateBlockBody(I18nText Label, bool Collapsed, int? Columns);
     public record AddFieldBody(long BlockId, FieldType Type, I18nText Label, FieldConfig Config);
@@ -40,7 +40,7 @@ public class ModulesController(IMediator mediator) : ControllerBase
 
     [HttpPut("modules/{key}")]
     public async Task<IActionResult> Update(string key, UpdateModuleBody body) =>
-        (await mediator.Send(new UpdateModuleRequest(key, body.Name, body.Icon, body.Section, body.TitleFieldId)))
+        (await mediator.Send(new UpdateModuleRequest(key, body.Name, body.Icon, body.Section, body.TitleFieldId, body.TitleTemplate)))
         .ToActionResult(this);
 
     [HttpGet("modules/{key}/rollup-sources")]
