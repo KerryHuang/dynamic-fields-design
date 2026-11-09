@@ -36,10 +36,19 @@ public class MesMigrationEquivalenceTests
 
     private static bool Same(JsonNode? a, JsonNode? b) => JsonNode.DeepEquals(a, b);
 
+    private static JsonNode? WithoutRefTarget(JsonNode? config)
+    {
+        var copy = config?.DeepClone().AsObject();
+        copy?.Remove("refTarget");
+        return copy;
+    }
+
     // 白名單（設計 §4.2）：這些欄位的型別／設定允許不同，或套件多出來的欄位／規則／權限
     private static readonly HashSet<string> ChangedFields =
-        ["line.unit",                                                                             // 下拉改文字：轉換不能複製下拉
-         "repair.mold", "care.mold"];                                                             // 模具參照改指 MES 自己的模組 mold（s2d-0）
+        ["line.unit"];                                                                            // 下拉改文字：轉換不能複製下拉
+    // 只改參照目標（s2d-0 模具參照改指 MES 自己的模組 mold）：型別、其他設定、選項照比，refTarget 斷言等於預期值
+    private static readonly Dictionary<string, (string Kind, string Key)> RetargetedRefs =
+        new() { ["repair.mold"] = ("module", "mold"), ["care.mold"] = ("module", "mold") };
     // 模具從核心實體的擴充模組改為 MES 自己的模組（s2d-0）：代碼、型態、宿主、標題欄位與區塊都不同，欄位逐一比對
     private static readonly HashSet<string> RehomedModules = ["mold"];
     private static readonly HashSet<string> AddedFields =
@@ -89,7 +98,15 @@ public class MesMigrationEquivalenceTests
                     Same(oldField!["label"], nowField["label"]).Should().BeTrue($"{code}.{fieldCode} 標籤");
                     if (ChangedFields.Contains($"{code}.{fieldCode}")) continue;
                     Same(oldField["type"], nowField["type"]).Should().BeTrue($"{code}.{fieldCode} 型別");
-                    Same(oldField["config"], nowField["config"]).Should().BeTrue($"{code}.{fieldCode} 設定");
+                    if (RetargetedRefs.TryGetValue($"{code}.{fieldCode}", out var target))
+                    {
+                        var nowTarget = nowField["config"]?["refTarget"];
+                        ((string?)nowTarget?["kind"]).Should().Be(target.Kind, $"{code}.{fieldCode} 參照目標型態");
+                        ((string?)nowTarget?["key"]).Should().Be(target.Key, $"{code}.{fieldCode} 參照目標");
+                        Same(WithoutRefTarget(oldField["config"]), WithoutRefTarget(nowField["config"])).Should().BeTrue($"{code}.{fieldCode} 設定（refTarget 以外）");
+                    }
+                    else
+                        Same(oldField["config"], nowField["config"]).Should().BeTrue($"{code}.{fieldCode} 設定");
                     Same(oldField["options"], nowField["options"]).Should().BeTrue($"{code}.{fieldCode} 選項");
                 }
             }
