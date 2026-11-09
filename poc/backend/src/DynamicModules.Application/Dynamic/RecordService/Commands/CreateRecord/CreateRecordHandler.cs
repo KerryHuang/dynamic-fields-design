@@ -30,7 +30,9 @@ public class CreateRecordHandler(
         {
             hostKey = request.HostKey;
             if (string.IsNullOrEmpty(hostKey)) return HostInvalid("擴充模組的記錄必須指定既有資料");
-            var titles = await providers.Get(module.HostEntityKey!)!.TitlesAsync([hostKey], ct);
+            // 舊資料庫可能留著指向已移除實體的擴充模組，找不到提供者就當作既有資料不存在
+            if (providers.Get(module.HostEntityKey!) is not { } provider) return HostInvalid("既有資料不存在");
+            var titles = await provider.TitlesAsync([hostKey], ct);
             if (!titles.TryGetValue(hostKey, out hostTitle)) return HostInvalid("既有資料不存在");
             if (await records.GetByHostAsync(module.Id, hostKey, ct) is not null) return HostConflict;
         }
