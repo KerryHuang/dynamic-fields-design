@@ -51,6 +51,8 @@ public class MesMigrationEquivalenceTests
         new() { ["repair.mold"] = ("module", "mold"), ["care.mold"] = ("module", "mold") };
     // 模具從核心實體的擴充模組改為 MES 自己的模組（s2d-0）：代碼、型態、宿主、標題欄位與區塊都不同，欄位逐一比對
     private static readonly HashSet<string> RehomedModules = ["mold"];
+    // 舊範本沒有分區、選單歸到「自訂功能」的模組，套件補上分區：只比對期望的新值
+    private static readonly Dictionary<string, string> AddedSections = new() { ["part"] = "設備" };
     private static readonly HashSet<string> AddedFields =
         ["order.fromQuote", "order.qualityCount", "line.sourceLine", "quality.workOrder",      // 追溯、彙總、掛工令
          "mold.no", "mold.name"];                                                                // 模具自己的編號與名稱（s2d-0）
@@ -76,7 +78,13 @@ public class MesMigrationEquivalenceTests
             var rehomed = RehomedModules.Contains(code);
             if (!rehomed) ((string)now["key"]!).Should().Be("mes-" + (string)old["key"]!, code);
             foreach (var prop in rehomed ? new[] { "name", "icon", "section" } : new[] { "name", "icon", "section", "kind", "hostEntityKey", "titleField" })
-                Same(old[prop], now[prop]).Should().BeTrue($"{code}.{prop}");
+                if (prop == "section" && AddedSections.TryGetValue(code, out var section))
+                {
+                    old[prop].Should().BeNull($"{code} 舊範本沒有分區");
+                    ((string?)now[prop]).Should().Be(section, $"{code}.{prop}");
+                }
+                else
+                    Same(old[prop], now[prop]).Should().BeTrue($"{code}.{prop}");
 
             // 區塊與欄位
             var nowBlocks = now["blocks"]!.AsArray().ToDictionary(b => (string)b!["code"]!);

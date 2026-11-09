@@ -76,6 +76,20 @@ public class MesPackageTests
         mold.Blocks.Single(b => b.Code == "care").Fields.Select(f => f.Code).Should().Equal("lastCareDate", "cycleDays", "shotCount");
     }
 
+    [Fact]
+    public void EveryModuleExceptDetailChildren_HasAMenuSection()
+    {
+        // 沒有 section 的模組在選單會被歸到「自訂功能」；明細子模組（relation: detail）不上選單，不需要
+        var p = Package.Value;
+        var detailChildren = p.Modules
+            .Where(m => m.Blocks.SelectMany(b => b.Fields).Any(f =>
+                f.Type == FieldType.Reference && f.Config.TryGetProperty("relation", out var r) && r.GetString() == "detail"))
+            .Select(m => m.Code);
+        p.Modules.Where(m => !detailChildren.Contains(m.Code) && m.Kind == ModuleKind.Standalone)
+            .Where(m => string.IsNullOrEmpty(m.Section)).Select(m => m.Code)
+            .Should().BeEmpty();
+    }
+
     [Theory]
     [InlineData("repair")]
     [InlineData("care")]

@@ -4227,7 +4227,7 @@
     "vi": "Thay linh kiện"
    },
    "icon": null,
-   "section": null,
+   "section": "設備",
    "kind": "standalone",
    "hostEntityKey": null,
    "titleField": "partName",
