@@ -1,8 +1,8 @@
 # s2e 設計：CRM 訂單轉 MES 工令、出貨改走進銷存
 
-> 起草 2026-11-11｜路線階段 2 的最後一個工作單元，排在 s2d-2 合併之後、s3c 會計之前｜前置：[ERP 資料模型](2026-11-10-erp-data-model-design.md)（下稱「資料模型」）、[共用主檔（s2d）](2026-11-10-shared-master-design.md)、[應用程式整合層（s2c）](2026-11-09-app-integration-design.md)、[進銷存與 MES](2026-11-08-inventory-mes-design.md)、[CRM](2026-11-07-crm-app-design.md)、[事件、檢查、分錄](2026-11-08-events-ledger-design.md)
+> 起草 2026-11-11｜第一輪審查修訂（修訂紀錄見 §12）｜路線階段 2 的最後一段，排在 s2d-2 合併之後、s3c 會計之前；分成兩個依序交付的工作單元 **s2e-a**、**s2e-b**（§9）｜前置：[ERP 資料模型](2026-11-10-erp-data-model-design.md)（下稱「資料模型」）、[共用主檔（s2d）](2026-11-10-shared-master-design.md)、[應用程式整合層（s2c）](2026-11-09-app-integration-design.md)、[進銷存與 MES](2026-11-08-inventory-mes-design.md)、[CRM](2026-11-07-crm-app-design.md)、[事件、檢查、分錄](2026-11-08-events-ledger-design.md)
 > 本文件**只寫設計，不改程式**。假設 s2d-2 已合併：往來對象 `partner/partner`、品項 `item/item`（含必填的 `supplyType`）已存在，CRM、MES、進銷存的客戶與品項都指向它們，`stockOut` 已改指主檔品項。
-> 標「（我的判斷）」的是我代為決定的事，彙整在 §10，全部是**主控裁決，待使用者確認**。與資料模型寫法不同的地方，都在 §10 說明理由。
+> 標「（我的判斷）」的是代為決定的事，彙整在 §10；使用者已裁決的列在 §10.1。與資料模型寫法不同的地方，都在 §10 說明理由，資料模型已依本文件回修（標「依 s2e 設計修訂」）。文中「情境 N」指資料模型 §11 的驗收情境，T-S、T-A、T-B 是本文件 §9 的測試編號。
 
 ## 1. 問題與現況盤點
 
@@ -13,18 +13,22 @@
 | CRM 訂單狀態 | 起始就是 `confirmed`，沒有草稿 | `crm-sales.app.json` workflows `order` |
 | CRM 訂單交期 | 表頭、明細都沒有交期欄位 | `crm-sales.app.json` 模組 `order` |
 | 訂單明細的履約量 | CRM、MES 訂單明細都沒有已完工量、已出貨量 | 兩份套件的 `order-line`、`line` |
-| 工令追溯 | 工令 `order` 只參照 MES 訂單表頭，沒有明細列 | `mes-mold.app.json` 模組 `workorder` |
+| 參照明細列 | 參照欄位不能指向明細模組；挑選端點對明細模組回 404；刪明細列時直接軟刪，不檢查是否被參照 | `FieldRules.IsValidRefTargetAsync`、`GetLightRecordsHandler`、`DetailWriter.ApplyAsync` |
+| 工令追溯 | 工令 `order` 只參照 MES 訂單表頭，沒有明細列；也分不出「備庫」與「漏填」 | `mes-mold.app.json` 模組 `workorder` |
 | MES 出貨單追溯 | 只有 `workOrder`，沒有來源訂單列 | 模組 `shipment` |
-| 數量型別 | 工令 `qty`、報工 `goodQty`／`defectQty`、MES 出貨 `qty`／`doneQty` 是整數；`remainingQty`、`totalQty`、`finalGood` 是 `scale: 0`；彙總未設位數（預設 2 位，`RollupCalculator`） | MES 套件；`poc/backend/src/DynamicModules.Domain/Rollups/RollupCalculator.cs` |
+| 數量型別 | 工令 `qty`、報工 `goodQty`／`defectQty`、MES 出貨 `qty`／`doneQty` 是整數；`remainingQty`、`totalQty`、`finalGood` 是 `scale: 0`；彙總未設位數（預設 2 位，`RollupCalculator`） | MES 套件；`Domain/Rollups/RollupCalculator.cs` |
 | 轉換已轉量 | 取消的目標單據仍計入已轉量 | `ConversionService/ConversionLedger.cs`（只排除已刪除） |
 | 狀態機 | 狀態只有 `ReadOnly` 旗標，沒有「取消類」 | `Domain/Entities/Dynamic/Workflow.cs`（`WorkflowState`） |
+| 欄位停用檢查 | 只看公式、規則、彙總的依賴 | `SetFieldStatusHandler` |
+| 刪除檢查 | 外部參照與事件引用不排除停用的欄位或事件 | `DeleteService/DeletePlanner.cs` |
 | 事件 `each` | 迭代明細時知道列 Id，但不提供給 `set`，也不能依列篩選；`when` 只看表頭 | `EventService/EffectApplier.cs`、`EventStage.cs` |
 | 事件取值 | `set.from` 只能讀來源記錄自己的欄位，不能經參照讀 | `EffectApplier.BuildValues` |
 | 沖銷查事實 | `reverse` 依觸發記錄自己的 Id 查事實；入口守衛也是 | `EffectApplier.ReverseAsync`、`Integrations/IntegrationGuardStage.cs` |
 | 事實鎖 | 有事實的記錄除狀態外整筆鎖，明細一律不能改 | `EventService/EventFactLock.cs` |
-| 整合 | 只能加欄位到擁有者、不收轉換、沒有成對、不能收選單 | s2c §3.1；`GetMenuHandler` 只看 Read |
+| 整合 | 只能加欄位到擁有者、不收轉換、沒有成對、不能收選單、沒有移除入口 | s2c §3.1、§5.7；`GetMenuHandler` 只看 Read |
 | `stockOut` | MES 出貨單過帳扣進銷存庫存（整合欄位 `stockItem`、`stockWarehouse`，檢查 `mes-stock-item-required`） | `mes-mold.app.json` `integrations[0]` |
 | 依賴 `stockOut` 的程式 | 約 22 個整合層機制測試、Demo | `tests/.../MesInventoryIntegrationTests.cs`、`DemoService/DemoStructure.cs`、`Scenarios/MesProductionScenario.cs` |
+| CRM Demo 訂單路徑 | 轉單後直接 `confirmed → shipped`，沒有確認步驟 | `DemoService/Scenarios/CrmScenario.cs`（`OrderPath`） |
 
 跨應用程式重複的單據（設計檢核第 1 題）：報價與銷售訂單 CRM、MES 各一套；出貨單 MES、進銷存各一張；「已出貨」在 CRM 是訂單狀態 `shipped`、在 MES 是工令彙總 `shippedQty`、在進銷存是出貨單狀態，三處各記各的。主檔（客戶、品項）的重複已由 s2d 消除。完整盤點與處置見 §8.4。
 
@@ -35,43 +39,58 @@
 1. CRM＋MES：CRM 訂單由草稿確認時，對自製品明細逐列建立草稿工令，工令追溯到訂單列；MES 的報價、訂單收掉。
 2. MES＋進銷存：末道報工完工入庫；出貨只用進銷存出貨單，由銷售訂單轉換開立；MES 出貨單收掉，`stockOut` 移除。
 3. 訂單明細有已完工量 `producedQty`、已出貨量 `deliveredQty`，由事實推算、換手不歸零（資料模型 §3.4 七原則全部落地）。
-4. 數量鏈一律小數 3 位；取消的下游單據不佔已轉量；上限在改量、過帳時重驗；有下游時擋下上游取消。
-5. 每個應用程式仍能獨立開關；七種組合與中途開關都有明確行為（§8.2、§8.3）。
+4. 數量鏈一律小數 3 位；取消的下游單據不佔已轉量；上限在改量、過帳時重驗；有下游時擋下上游取消與刪除。
+5. 每個應用程式仍能獨立開關；七種組合與中途開關都有明確行為（§8.2、§7）；`skip` 期間漏掉的連動有人工補連動（§5.2），成對整合能卸除（§5.2）。
 
-**不做：** MRP、排程、預留（reservation）、訂單專屬庫存、出貨單自動產生、超交容許量、訂單變更單（確認後改明細）、多單位換算、存貨計價。
+**交付方式：** 兩個依序交付的工作單元（使用者裁決，§10.1）。**s2e-a** 做單據追溯到明細列、履約量核心、各應用程式單開時的適配；**s2e-b** 做應用程式間的成對整合、覆蓋收掉重複選單、完整的訂單到出貨鏈。每個合併點都驗完整既有行為（含 Demo），範圍與驗收見 §9。
+
+**不做：** MRP、排程、預留（reservation）、訂單專屬庫存、出貨單自動產生、超交容許量、訂單變更單（確認後改明細）、多單位換算、存貨計價、`skip` 期間事件的自動回補（只做人工補連動）。
 
 **延後：**
 
 | 項目 | 延到 | 理由 |
 |---|---|---|
 | 銷項發票與 `invoicedQty`、開票政策、開票路徑共用計數 | s3c | 沒有發票就沒有第二條開票路徑；s2e 只把追溯建到列 |
-| 「已開票的出貨不能取消」（§11 情境 11） | s3c | s3c 之前沒有發票，不會發生 |
+| 「已開票的出貨不能取消」（資料模型 §11 情境 11） | s3c | s3c 之前沒有發票，不會發生 |
 | 進項端：採購明細 `receivedQty`、`billedQty` | s3c | 同上；s2e 只讓取消的進貨單釋放採購剩餘量（缺口 7 的副作用） |
+| 期初完工量（`producedQty` 的受控初始化） | 不排 | 目前流程沒有需求；`producedQty` 只由來源推算（§4.4） |
 | 逐列轉換（缺口 E，一列轉一張單據） | 不排 | 工令改由事件逐列建立，第二個情境仍未出現 |
 | 應用程式管理頁顯示覆蓋與整合狀態 | 階段 5 | 路線已排定 |
 | 已開啟資料庫的套件升級 | 第一個客戶上線前 | 同 s2d §11、路線「套件更新入口」 |
 
 ## 3. 選定的方案與為什麼
 
-**一句話：** 在核心補四個通用能力（取消類狀態、履約欄位、追溯守衛、整合擴充），再用**三個成對整合**（每一對應用程式一個）把 CRM、MES、進銷存接起來；`stockOut` 移除。
+**一句話：** 在核心補五個通用能力（取消類狀態、明細追溯與追溯槽、履約欄位、追溯守衛、整合擴充），再用**三個成對整合**（每一對應用程式一個）把 CRM、MES、進銷存接起來；`stockOut` 移除。
 
 具體上：
 
-- **履約欄位（trace total）是宣告式的**：訂單明細的 `producedQty`、`deliveredQty` 宣告「基準量＋各來源的合計」，來源是「追溯到這一列、未取消的某模組記錄的某欄位」。寫入管線在事件之後重算受影響的列，重算的是總量，不是增量（§4.3）。
-- **成對整合**：同一個連動橫跨兩個擁有者（例如觸發在 CRM 訂單、追溯欄位在 MES 工令），兩邊各宣告一半、同代號、標 `pair`，安裝、停用、恢復作為一個單位（§5.2）。
+- **明細追溯（line trace）**：參照欄位新增受控的「指向明細列」關係，定義選取、帶值、資料範圍、欄位權限與刪除列的保護；**追溯槽**規定工令「有訂單來源就必須追溯到列」、多個來源互斥、品項一致、有下游後不能改掛（§4.3）。
+- **履約欄位（trace total）是宣告式的**：訂單明細的 `producedQty`、`deliveredQty` 宣告「基準量＋各來源的合計」，來源是「追溯到這一列、未取消的某模組記錄的某欄位」。寫入管線在事件之後重算受影響的列，判斷一律用由來源事實重建的交易前、後快照（§4.4）。
+- **成對整合**：同一個連動橫跨兩個擁有者（例如觸發在 CRM 訂單、追溯欄位在 MES 工令），兩邊各宣告一半、同代號、標 `pair`，安裝、停用、恢復、卸除作為一個單位（§5.2）。
 - **組合覆蓋**由被收掉模組的擁有者在整合裡宣告：夥伴開著時收回新增、收掉選單、擋下指定的正向轉移（§6）。
 
 **考慮過、不採用：**
 
 | 做法 | 不採用的理由 |
 |---|---|
-| 履約量用事件效果回寫（資料模型 §3.1 的寫法：報工事件經 `salesLine` 更新訂單列） | 工令 `completedQty`、`shippedQty` 是彙總，彙總重算是靜默寫入、不觸發事件（事件設計 §4.5），所以「工令出貨單取消」這類間接變化抓不到；每個來源都要配一組建立／取消／沖銷事件，漏一個就算錯 |
+| 履約量用事件效果回寫（資料模型原本的寫法） | 見下方說明 |
 | 履約量用彙總欄位 | 彙總不能彙總彙總，也不能跨應用程式加總夥伴模組；放寬會影響所有模組（資料模型 §3.1 已排除） |
-| 下游存在守衛用既有跨記錄驗證 | 檢查只加總「被寫入的那個模組」（事件設計 §5.1、§5.4）；取消寫的是訂單，要數的是工令，表達不了（資料模型 §6.2 缺口 11 要 s2e 驗證，結論是不夠） |
-| 整合直接加欄位到夥伴模組（不做成對） | 推翻 s2c「整合不改夥伴結構」的原則，夥伴關閉、刪除時的清理範圍就不再明確 |
-| 改寫 `stockOut`（保留 MES 出貨扣庫存） | 進銷存開著時 MES 出貨單已收掉，留著就有兩條扣庫存的路（裁決 3）；單開 MES 時沒有庫存可扣 |
-| 一個大整合涵蓋三個應用程式 | `with` 任一夥伴不在就整個暫停，CRM＋MES 不開進銷存時連工令都建不了 |
-| 每項連動各自一個整合（約 7 個） | 同一組合下的連動彼此依賴（工令追溯欄位是出貨量回寫的前提），分開後可能只裝一半；單位越多，狀態組合越難懂（我的判斷） |
+| 放寬一般參照，允許指向明細模組 | 影響所有模組的挑選、刪除、權限 |
+| 下游存在守衛用既有跨記錄驗證 | 檢查只加總被寫入的模組，表達不了（見下方說明） |
+| 整合直接加欄位到夥伴模組（不做成對） | 推翻 s2c「整合不改夥伴結構」的原則 |
+| 改寫 `stockOut`（保留 MES 出貨扣庫存） | 進銷存開著時 MES 出貨單已收掉，留著就有兩條扣庫存的路 |
+| 一個大整合涵蓋三個應用程式 | `with` 任一夥伴不在就整個暫停 |
+| 每項連動各自一個整合（約 7 個） | 同組合下的連動彼此依賴，分開後可能只裝一半（我的判斷） |
+| `skip` 期間的事件在夥伴重開後自動回補 | 見下方說明 |
+
+說明：
+
+- **事件回寫**：工令 `completedQty`、`shippedQty` 是彙總，彙總重算是靜默寫入、不觸發事件（事件設計 §4.5），所以「MES 出貨單取消」這類間接變化抓不到；每個來源都要配一組建立／取消／沖銷事件，漏一個就算錯。
+- **放寬一般參照**：所有模組的參照挑選、刪除規劃、欄位權限都要改；明細追溯只開給套件與整合宣告的欄位（§4.3），一般參照照舊。
+- **跨記錄驗證**：檢查只加總「被寫入的那個模組」（事件設計 §5.1、§5.4）；取消寫的是訂單，要數的是工令（資料模型 §6.2 缺口 11 要 s2e 驗證，結論是不夠）。
+- **成對與 `stockOut`**：整合加欄位到夥伴模組時，夥伴關閉、刪除的清理範圍就不再明確；單開 MES 時也沒有庫存可扣（裁決 3）。
+- **一個大整合**：CRM＋MES 不開進銷存時連工令都建不了。
+- **自動回補**：關閉期間使用者可能已用其他方式處理（手動建工令、人工記出貨），自動補會重複；改由人逐筆補連動，有授權、有防重（§5.2）。
 
 ## 4. 單據流程與數量鏈
 
@@ -86,92 +105,170 @@ CRM 訂單 draft ─確認→ confirmed ──（P1，自製品逐列）──�
 訂單列 producedQty ← Σ 工令 completedQty；deliveredQty ← 基準量 ＋ Σ 進銷存出貨明細 ＋ Σ 工令 shippedQty
 ```
 
-P1、P2、P3 是 §5.3 的三個成對整合。單開 MES 時，工令由生管手動新增並選 MES 訂單明細列，出貨用 MES 出貨單；MES＋進銷存時，MES 訂單經 P3 轉成進銷存出貨單。
+P1、P2、P3 是 §5.3 的三個成對整合（s2e-b）。單開 MES 時，工令由生管手動新增：有訂單的選 MES 訂單明細列，備庫的標「備庫」（§4.3）；出貨用 MES 出貨單。MES＋進銷存時，MES 訂單經 P3 轉成進銷存出貨單。
 
 ### 4.2 每個數量欄位的來源、守衛、取消／沖銷
 
 | 欄位 | 值的來源 | 守衛 | 取消／沖銷 |
 |---|---|---|---|
-| 訂單列 `qty`（CRM、MES） | 使用者輸入；報價轉訂單 | 確認後受事實鎖（CRM＋MES）；任何時候不得改到低於 `deliveredQty` | — |
-| 訂單列 `producedQty` | Σ 追溯到本列、未取消工令的 `completedQty` | 減少時不得低於 `deliveredQty`（min） | 報工沖銷、工令取消 → 重算減少 |
+| 訂單列 `qty`（CRM、MES） | 使用者輸入；報價轉訂單 | 有事實時受事實鎖；降低時不得低於 `deliveredQty`（§4.4 max） | — |
+| 訂單列 `producedQty` | Σ 追溯到本列、未取消工令的 `completedQty`；不可人工改 | 減少時不得低於 `deliveredQty`（min） | 報工沖銷、工令取消 → 重算減少 |
 | 訂單列 `deliveredQty` | 基準量 ＋ Σ 追溯到本列、已過帳進銷存出貨明細 `qty` ＋ Σ 追溯到本列、未取消工令的 `shippedQty` | 增加時不得超過 `qty`（max） | 出貨單取消 → 重算減少 |
 | 工令 `qty` | P1 由訂單列 `qty` 帶入；手動新增時使用者輸入 | 報工每道工序良品合計 ≤ `qty`（既有 `mes-report-within-wo-qty`） | — |
 | 工令 `completedQty` | 彙總報工 `finalGood`（含沖銷的負值） | — | 沖銷報工即減少 |
 | 工令 `shippedQty` | 彙總已出貨 MES 出貨單 `qty` | 既有 `mes-shipment-within-completed`（≤ `doneQty`） | MES 出貨單取消即減少 |
 | 報工 `goodQty`／`defectQty` | 使用者輸入（分錄） | 同工令 `qty` | 只能沖銷（R2，`reverses` = R1） |
-| 庫存異動 `qty`（完工入庫） | 報工 `finalGood` | 不得負庫存（既有 `inv-no-negative-stock`） | 依 R1 的事實沖銷（§4.5） |
-| 進銷存出貨明細 `qty` | P2／P3 轉換或手動 | 轉換剩餘量在改量、過帳時重驗（§4.4）；訂單列 max；不得負庫存 | 取消 → 既有 `inv-shipment-cancel` 沖銷庫存，並釋放已轉量 |
-| MES 出貨單 `qty` | 使用者輸入（單開 MES、CRM＋MES 沒開進銷存時） | 既有 ≤ `doneQty`；訂單列 max | 取消即釋放 |
+| 庫存異動 `qty`（完工入庫） | 報工 `finalGood` | 不得負庫存（既有 `inv-no-negative-stock`） | 依 R1 的事實沖銷（§4.6） |
+| 進銷存出貨明細 `qty` | P2／P3 轉換或手動 | 轉換剩餘量在改量、過帳時重驗（§4.5）；訂單列 max；不得負庫存 | 取消 → 既有 `inv-shipment-cancel` 沖銷庫存，並釋放已轉量 |
+| MES 出貨單 `qty` | 使用者輸入（沒開進銷存時） | 既有 ≤ `doneQty`；訂單列 max | 取消即釋放 |
 
-### 4.3 履約欄位（缺口 5）
+### 4.3 明細追溯與追溯槽（s2e-a）
+
+**明細追溯欄位（line trace）。** 參照欄位的關係 `relation` 新增 `lineTrace`（現有 `lookup`、`detail`），目標必須是明細模組。一般參照指向明細模組仍被 `FieldRules` 拒絕，只有 `lineTrace` 例外。
+
+- **建欄：** 只能由套件或整合宣告；設計器可檢視，不能新增、不能改目標（我的判斷，同第 23 項）。可以是使用者可選的欄位（MES 工令 `salesLine`），也可以是唯讀、由事件寫入的欄位（P1 的 `crmLine`）。
+- **選取：** 新端點 `GET /api/v3/dynamic/fields/{fieldId}/line-options?keyword=&page=`，只接受 `lineTrace` 欄位。候選列的條件是表頭未刪除、使用者對表頭模組有 Read、表頭在使用者的資料範圍內（`OwnerUserIds` 看表頭）；欄位設了既有的 `refGuard` 時，再依表頭狀態篩選。顯示文字是「表頭標題 · 列標題」，例如「SO-0012 · 上模座 2 組」，同品名多列也分得出來。上限沿用 `records/light` 的 50 筆；`records/light` 對明細模組仍回 404，不變。
+- **寫入驗證：** 使用者存檔時，伺服器用同樣的條件重驗（列存在且未刪除、表頭可讀且在範圍內、符合 `refGuard`），不符回 400。系統身分寫入（事件 `$row`）不受資料範圍限制，同既有事件寫入。
+- **帶值：** `fill.mode: lock` 的映射可以取列上的欄位，包括列上的表頭參照（`line.order → order`）；只讀一層。
+- **顯示與欄位權限：** 記錄回應帶列的顯示文字；讀者對表頭模組沒有 Read 時，照核心既有的參照隱藏規則處理。
+- **刪除明細列：** `DetailWriter` 軟刪明細列前，查有沒有未刪除的記錄追溯到這一列，有就 409 並列出下游（§4.7）。「追溯」包括三種欄位：`lineTrace` 欄位、轉換的明細追溯（`lines.sourceLineField`，唯讀整數）、履約來源的 `trace`。這三種欄位一律自動設為可篩選，並回填索引（同檢查規則的做法），查詢走索引。
+- **刪除模組或欄位：** `DeletePlanner` 既有的參照欄位檢查不排除停用欄位，照樣涵蓋 `lineTrace`。
+
+**追溯槽（trace slot）。** 模組可以宣告追溯槽，把「指向上游明細列」的幾個欄位綁成一組，核心在寫入時驗證：
+
+```json
+"traceSlots": [ { "code": "salesSource", "exemptWhen": { "field": "sourceKind", "op": "eq", "value": "stock" } } ]
+```
+
+成員欄位在 `config.traceSlot` 宣告所屬的槽與一致欄位，例如 `{ "slot": "salesSource", "match": { "item": "item" } }`（工令的 `item` 必須等於追溯列的 `item`）。規則：
+
+1. **互斥：** 槽內最多一個成員有值。
+2. **必填：** `exemptWhen` 不成立時，恰好一個成員有值；成立時，全部成員必須為空。
+3. **一致：** 有值的成員，其 `match` 列出的欄位必須等於追溯列上的對應欄位（讀一層），否則 400。
+4. **凍結：** 記錄有事件事實，或有任何未刪除記錄以參照或追溯指向它之後，槽成員與 `exemptWhen` 引用的欄位都不能再改（409）。工令有報工或 MES 出貨單之後就不能改掛來源。
+
+成員可以是擁有者套件的欄位，也可以是**擁有者自己那一半整合**新增的欄位（P1 的 MES 半新增 `crmLine`）；不能加入別的擁有者的槽。成員所屬的整合 `Disabled`、`Suspended` 時，欄位仍算在槽內，已有值的工令不會因此變成「沒有追溯」。
+
+**套用到工令：** 工令加 `sourceKind`（來源：訂單 `order`／備庫 `stock`，必填，預設 `order`），宣告槽 `salesSource`，`exemptWhen` 為 `sourceKind = stock`。成員是 `salesLine`（s2e-a）與 P1 的 `crmLine`（s2e-b），兩者都要求品項一致。結果是：有訂單來源的新工令必須追溯到列，表頭由列推得（`salesLine` 的帶值鎖定 `order`）；CRM、MES 兩種來源互斥；真正沒有訂單的備庫工令明確標成 `stock`，與「漏填追溯」分開（漏填會被必填擋下）。
+
+### 4.4 履約欄位（缺口 5；核心在 s2e-a，整合來源在 s2e-b）
 
 **值的定義：** `F = 基準量 ＋ Σ 來源合計`。
 
-- **來源**：「`module` 中 `trace` 等於本列 Id、狀態符合 `states`（預設為所有非取消類狀態；明細模組看其表頭的狀態）、未刪除的記錄，其 `sum` 欄位的合計」。一個履約欄位可以有多個來源，來自擁有者套件自己（例如 MES 明細從 MES 工令），或擁有者在整合裡宣告的夥伴模組（例如 CRM 明細從進銷存出貨明細）。**只有擁有者能為自己的欄位宣告來源**，這就是資料模型原則 4 的「擁有者指定可寫入的整合」。
-- **計入所有已安裝的來源，不看整合目前的狀態**：整合 `Suspended`、`Disabled`、夥伴關閉時，夥伴已有的事實照算（資料是唯讀保留，不是消失）。這是原則 1「換手不歸零」的落地方式。
-- **基準量**（人工＋期初）存在核心旁表（§5.6），不是套件欄位。這一列**沒有適用的 `Active` 來源**時，使用者可以改 `F`：系統把基準量設為「輸入值 − Σ 來源合計」，結果小於 0 回 400。之後有了適用的 `Active` 來源（例如開了進銷存），基準量就鎖住、不能再改，成為資料模型所說的「期初履約事實」；來源再次不 `Active` 時又開放人工改。這樣「只開 CRM 手記 6 件 → 開進銷存再出 4 件」得到 10，不會被重算成 4（§11 情境 10）。
-- **適用範圍 `applies`**：`always`（每一列都適用，進銷存出貨屬此類）或 `traced`（至少有一筆來源記錄追溯到這一列才適用，工令屬此類）。CRM＋MES 沒開進銷存時，外購品列沒有工令，所以可人工填出貨量；自製品列有工令，就不能填（§11 情境 6）。用 `traced` 而不是「品項是自製」，是因為 MES 關閉期間確認的訂單不會有工令，若依品項判斷，這些列就永遠無法記出貨（我的判斷）。
-- **上下限：** `max`（增加時不得超過同列某欄位）、`min`（減少時不得低於同列某欄位）。只在「變糟的方向」檢查：出貨從庫存先出、工令後完工時，`deliveredQty > producedQty` 是合法的中間狀態；但完工量因沖銷而**減少**到低於已交貨量就擋下（§11 情境 3）。上下限在重算當下以重算後的值比較，違反時整筆 409。
-- **重算時點：** 寫入管線在事件階段之後、寫入後盾之前，新增「履約重算」步驟：對本次請求寫入日誌裡的每一筆記錄（**含彙總造成的靜默寫入**、刪除），若它屬於某個來源模組（或是來源明細模組的表頭），取它寫入前後的追溯值，找出受影響的列，逐列重算 `F`、比對上下限，以系統身分寫回。訂單列自己被寫入（改 `qty`、改基準量）時也重算。重算只讀一層追溯、在 C# 以 `decimal` 加總，量小（一列的下游通常是個位數）；追溯欄位要可篩選（同檢查的規則，自動打開並回填）。
-- **寫入目標關閉時**（例如 CRM 關閉、MES 繼續沖銷報工）：仍照算並檢查上下限，但不寫回（目標唯讀）；該應用程式重開時，對它所有有來源記錄的履約欄位整批重算一次。
-- **列層級的事實鎖例外：** `EventFactLock` 對「只改到可人工改的履約欄位」的明細修改放行，其他欄位、其他列照鎖。履約欄位在套件宣告為 `readOnly`；可人工改時由記錄回應帶出逐列的可編輯旗標，前端據以開放。
-- 履約欄位不能再當其他履約欄位或事件 `from` 的來源（避免連鎖重算與事實漂移），定義時擋下。
+- **來源：** 「`module` 中 `trace` 等於本列 Id、狀態符合 `states`（預設為所有非取消類狀態；明細模組看其表頭的狀態）、未刪除的記錄，其 `sum` 欄位的合計」。來源可以來自擁有者套件自己（MES 明細從 MES 工令，s2e-a），或擁有者在整合裡宣告的夥伴模組（CRM 明細從進銷存出貨明細，s2e-b）。**只有擁有者能為自己的欄位宣告來源**，這就是資料模型原則 4 的「擁有者指定可寫入的整合」。
+- **計入所有已安裝的來源，不看整合目前的狀態：** 整合 `Suspended`、`Disabled`、夥伴關閉時，夥伴已有的事實照算（資料是唯讀保留，不是消失）。這是原則 1「換手不歸零」的落地方式。
+- **人工修改政策逐欄宣告：** `traceTotal.manual` 為 `baseline`（可人工記基準量）或 `none`（只由來源推算，預設）。
 
-### 4.4 已轉量、上限重驗（缺口 7、10 的出貨部分）
+  | 欄位 | `manual` | 理由 |
+  |---|---|---|
+  | CRM `order-line.deliveredQty` | `baseline` | 只開 CRM、或外購品沒有出貨單時要人工記 |
+  | CRM `order-line.producedQty` | `none` | 完工只來自工令；只開 CRM 時永遠是 0 |
+  | MES `line.producedQty`、`deliveredQty` | `none` | 來源是 MES 自己的工令，始終可用，沒有換手情境（我的判斷） |
 
-1. **取消類狀態不佔已轉量。** `ConversionLedger` 只計目標表頭不在取消類狀態的；表頭轉換（沒有明細）的「已轉換過」也一樣。進銷存「取消進貨單不釋放採購單剩餘量」的既有限制隨之修掉。
-2. **轉換剩餘量扣基準量與其他來源。** 轉換的明細可宣告 `fulfills`（指向來源列上的履約欄位），這時剩餘量 = `qty` − 基準量 − 其他來源已履約量 − 本轉換未取消的目標量。沒有 `fulfills` 的轉換（報價轉訂單、採購轉進貨）維持「`qty` − 本轉換未取消的目標量」。這是共用計數（缺口 8）在出貨上的子集，開票部分留給 s3c 擴充（我的判斷，§10）。
-3. **改量時重驗。** 新的寫入步驟對「本次寫入的轉換目標明細列」（改量、新增帶追溯值的列）重算對應來源列的剩餘量，小於 0 回 409：訂單 10 件轉出貨草稿後改成 20，存檔就被擋（§11 情境 2）。過帳時由 `deliveredQty` 的 max 再擋一次。併發由既有的 `WriteGate`（SQLite `BEGIN IMMEDIATE`）序列化所有寫入，同一交易內重算即可，不另上鎖。
+  `none` 的欄位沒有基準量，使用者修改回 400。期初完工量若之後需要，另立受控的初始化規則（§2 延後）。
+- **基準量**（`manual: baseline` 才有）存在核心旁表（§5.6），不是套件欄位。這一列**沒有適用的 `Active` 來源**時，使用者可以改 `F`：系統把基準量設為「輸入值 − Σ 來源合計」，結果小於 0 回 400。之後有了適用的 `Active` 來源（例如開了進銷存），基準量就鎖住，成為資料模型所說的「期初履約事實」；來源再次不 `Active` 時又開放人工改。「只開 CRM 手記 6 件 → 開進銷存再出 4 件」得到 10，不會被重算成 4（資料模型 §11 情境 10）。
+- **適用範圍 `applies`：** `always`（每一列都適用，進銷存出貨屬此類）或 `traced`（至少有一筆來源記錄追溯到這一列才適用，工令屬此類）。CRM＋MES 沒開進銷存時，外購品列沒有工令，所以可人工填出貨量；自製品列有工令，就不能填（情境 6）。用 `traced` 而不是「品項是自製」，是因為 MES 關閉期間確認的訂單不會有工令，若依品項判斷，這些列就永遠無法記出貨（我的判斷）。
 
-### 4.5 沖銷依沖銷對象查事實（缺口 6）
+**上下限。** 兩種都比較「寫入後」的值，差別在什麼時候檢查：
+
+- **`max: { field }`**：寫入後 `F ≤ 上限`。在 `F` 增加（含基準量增加）**或上限欄位減少**時檢查。例：只開 CRM，訂購 10、人工已交貨 6，把訂購量改成 5 → 上限減少 → 6 ≤ 5 不成立 → 409。
+- **`min: { field }`**：寫入後 `F ≥ 下限`。只在 `F` 減少時檢查；**下限欄位增加時不檢查**：出貨從庫存先出、工令後完工時，`deliveredQty > producedQty` 是合法的中間狀態，若下限增加也檢查，先出貨就會被擋（我的判斷）。完工量因沖銷而減少到低於已交貨量就擋下（情境 3）。
+- 上下限欄位本身是另一個履約欄位時（`producedQty` 的下限是 `deliveredQty`），它的前後值同樣由快照算。
+- 違反時整筆 409，訊息列出哪張單據、哪一列、哪個欄位、前後值。
+
+**判斷用的快照。** 增減方向與上下限比較，一律用由來源事實重建的值，**不讀目標上保存的履約值**：
+
+- **交易前快照：** 本次請求寫入日誌中每筆記錄第一次寫入前的值（含彙總造成的靜默寫入、刪除、狀態轉移）；日誌以外的記錄用資料庫現值（本交易沒動過，等於交易前）。
+- **交易後快照：** 日誌中每筆記錄的最終值。
+- **受影響的列：** 交易前、後快照中 `trace` 指向的列的聯集，改掛、刪除、取消、狀態變化都涵蓋；訂單列自己被寫入（改 `qty`、改基準量）也算。
+- 對每個受影響的列，用兩份快照各算出同列所有履約欄位與上下限的值，基準量用旁表在交易前、後的值。保存值只用來決定要不要寫回（相同就不寫），不參與任何判斷。
+
+**重算時點。** 寫入管線在事件階段之後、寫入後盾之前，新增「履約重算」步驟：取本次寫入日誌、建兩份快照、算受影響的列、比對上下限，以系統身分寫回。重算只讀一層追溯、在 C# 以 `decimal` 加總，量小（一列的下游通常是個位數）。這一步能否看到彙總的靜默寫入與其終值，是 s2e-a 的第一道門檻 V1（§9.2）。
+
+**來源失效時 fail closed。** 一個履約欄位的依賴是：目標欄位、上下限欄位、每個來源的模組、`trace` 欄位、`sum` 欄位、`states` 引用的狀態，以及明細來源的表頭參照。
+
+- **定義變更：** 被任何來源引用的欄位，不論來源屬於套件或整合、整合是 `Active`、`Disabled`、`Suspended` 還是 `Blocked`，都不能停用（`SetFieldStatusHandler` 新增檢查，400「此欄位被履約來源引用」）、不能改型別、改位數、改彙總或公式設定。被 `states` 引用的狀態不能刪、不能改 `cancelled` 旗標。`DeletePlanner` 新增阻擋種類 `TraceTotalSource`。
+- **執行期：** 重算時任一依賴不可用（欄位不是 Active、型別不符、模組或狀態不存在），**本次會重算到這個欄位的寫入**回 409，不當 0、不沿用保存值；沒有影響到的寫入照常。
+- 來源模組所屬的應用程式關閉，不算失效：資料唯讀保留，照算（原則 1）。
+
+**寫入目標關閉時（s2e-b 才會發生，例如 CRM 關閉、MES 繼續報工或沖銷）：** 仍用快照照算並檢查上下限，但不寫回（目標唯讀）。該應用程式重開時，在同一個交易內對它**所有含履約欄位的模組的每一列**重算一次並寫回差異，不只目前有來源的列，關閉期間來源全被取消到零的列也會歸位（我的判斷）。重算碰到失效的依賴時，重開回 409 並說明原因。
+
+**其他：**
+
+- **列層級的事實鎖例外：** `EventFactLock` 對「只改到可人工改的履約欄位」的明細修改放行，其他欄位、其他列照鎖。履約欄位在套件宣告為 `readOnly`；可人工改時，記錄回應帶出逐列的可編輯旗標，前端據以開放。
+- 履約欄位不能再當其他履約欄位或事件 `from` 的來源，避免連鎖重算與事實漂移，定義時擋下。
+
+### 4.5 已轉量、上限重驗（缺口 7、10 的出貨部分）
+
+1. **取消類狀態不佔已轉量（s2e-a）。** `ConversionLedger` 只計目標表頭不在取消類狀態的；表頭轉換（沒有明細）的「已轉換過」也一樣。進銷存「取消進貨單不釋放採購單剩餘量」的既有限制隨之修掉。
+2. **改量時重驗（s2e-a）。** 新的寫入步驟對「本次寫入的轉換目標明細列」（改量、新增帶追溯值的列）重算對應來源列的剩餘量，小於 0 回 409。s2e-a 以單一應用程式內的轉換驗收（採購轉進貨、報價轉訂單）；訂單 10 件轉出貨草稿後改成 20 被擋（情境 2）在 s2e-b 驗收。過帳時由 `deliveredQty` 的 max 再擋一次。併發由既有的 `WriteGate`（SQLite `BEGIN IMMEDIATE`）序列化所有寫入，同一交易內重算即可，不另上鎖。
+3. **轉換剩餘量扣基準量與其他來源（s2e-b）。** 轉換的明細可宣告 `fulfills`（指向來源列上的履約欄位），這時剩餘量 = `qty` − 基準量 − 其他來源已履約量 − 本轉換未取消的目標量。沒有 `fulfills` 的轉換維持「`qty` − 本轉換未取消的目標量」。這是共用計數（缺口 8）在出貨上的子集，開票部分留給 s3c 擴充（第 7 項）。
+
+### 4.6 沖銷依沖銷對象查事實（缺口 6，s2e-b）
 
 - `reverse` 效果新增 `ofRecord`（來源模組上的參照欄位，例如 `report.reverses`）：有值時依它指向的原記錄（R1）查事件事實，沖銷 R1 建立的目標；沒有值時沿用現行行為。
-- `IntegrationGuardStage` 判斷「這次寫入是不是反向、來源是否已連動」時，若事件的 `reverse` 效果有 `ofRecord`，改查 R1 的事實。整合停用後建立 R2：守衛查到 R1 已連動，回 409，R2 不成立；整合恢復後再沖銷，`reverse` 依 R1 找到入庫並沖銷（§11 情境 1）。
+- `IntegrationGuardStage` 判斷「這次寫入是不是反向、來源是否已連動」時，若事件的 `reverse` 效果有 `ofRecord`，改查 R1 的事實。整合停用後建立 R2：守衛查到 R1 已連動，回 409，R2 不成立；整合恢復後再沖銷，`reverse` 依 R1 找到入庫並沖銷（情境 1）。
 - R2 照分錄規則建立（`ReverseRecordHandler`），完工入庫事件的 `when` 是 `finalGood > 0`，R2 的 `finalGood` 為負，所以不會再入庫一次。
 
-### 4.6 取消與刪除上游（缺口 11）
+### 4.7 取消與刪除上游：追溯守衛（缺口 11，s2e-a）
 
-**追溯守衛：** 上游記錄轉移到取消類狀態，或被刪除時，若有任何未刪除、不在取消類狀態的下游記錄追溯到它（或它的明細列），回 409，訊息列出下游單據並提示先取消。「追溯」是下列欄位：轉換的表頭追溯欄位（`header.sourceField`）、明細追溯欄位（`lines.sourceLineField`）、履約來源的 `trace`。判斷位置在入口守衛同一層（事件之前）。
+使用者裁決全面生效：所有有追溯的單據，都要先取消下游才能取消上游（§10.1）。
 
-例：訂單確認後只建了草稿工令，`producedQty`、`deliveredQty` 都是 0，取消訂單仍被擋（§11 情境 7）。新行為也套用到只開進銷存：有未取消進貨單的採購單不能取消。
+- **「下游」的定義：** 以下列欄位指向上游記錄或其明細列的記錄：轉換的表頭追溯（`header.sourceField`）、轉換的明細追溯（`lines.sourceLineField`）、`lineTrace` 欄位、履約來源的 `trace`。
+- **取消：** 上游轉移到取消類狀態時，有任何未刪除、不在取消類狀態的下游，回 409。
+- **刪除：** 刪除上游記錄或其明細列時，有任何未刪除的下游（**含已取消的**）就回 409：刪掉之後，下游的追溯值會指向不存在的列（我的判斷）。
+- **錯誤訊息**列出要先處理的下游單據：模組名稱、單據標題、目前狀態，最多 20 筆並附總數，提示先取消（或先刪除）。
+- 判斷位置在入口守衛同一層（事件之前）。
 
-### 4.7 對照資料模型 §3.4 七原則
+例：MES 訂單有一張草稿工令（`salesLine` 指向它的列），`producedQty`、`deliveredQty` 都是 0，取消訂單仍被擋；CRM＋MES 時同理（情境 7）。只開進銷存時，有未取消進貨單的採購單不能取消，訊息列出那幾張進貨單。
 
-| 原則 | 落地方式 | 本文件 | 測試（§9.2） |
+### 4.8 對照資料模型 §3.4 七原則
+
+| 原則 | 落地方式 | 本文件 | 測試（§9） |
 |---|---|---|---|
-| 1 履約量由事實推算、不看開關 | 履約欄位計入所有已安裝來源，不看整合狀態；人工量轉基準量 | §4.3 | T-S4、T-S10 |
-| 2 上限在每次寫入與過帳時驗證 | 轉換剩餘量改量重驗；履約 max 在過帳時再擋 | §4.4 | T-S2 |
-| 3 沖銷與守衛依沖銷對象查事實；工令重開看已交貨量 | `ofRecord`；履約 min（`producedQty` ≥ `deliveredQty`，減少時） | §4.5、§4.3 | T-S1、T-S3 |
-| 4 受控寫入、列層級事實鎖例外 | 只有擁有者能宣告來源；系統身分寫回；可人工改的列放行 | §4.3 | T-S5、T-S6 |
-| 5 取消上游前檢查下游存在 | 追溯守衛，不看回寫量 | §4.6 | T-S7 |
-| 6 追溯到明細列 | 工令 `salesLine`／`crmLine`、出貨明細 `crmLine`／`mesLine`、MES 出貨單 `salesLine` | §5.4 | T-S8 |
-| 7 只沿實際追溯扣量 | 來源只算 `trace` 有值且等於本列的；手動出貨不扣任何列 | §4.3 | T-S9 |
+| 1 履約量由事實推算、不看開關 | 計入所有已安裝來源；人工量轉基準量；目標關閉後重開整批重算 | §4.4 | T-S4、T-S10、T-B4 |
+| 2 上限在每次寫入與過帳時驗證 | 改量重驗；max 在履約增加或上限降低時都驗 | §4.4、§4.5 | T-S2、T-A6 |
+| 3 沖銷與守衛依沖銷對象查事實；工令重開看已交貨量 | `ofRecord`；min 由快照判斷 | §4.6、§4.4 | T-S1、T-S3、T-A9、T-B4 |
+| 4 受控寫入、列層級事實鎖例外 | 只有擁有者能宣告來源；逐欄人工政策；系統身分寫回 | §4.4 | T-S5、T-S6、T-A7 |
+| 5 取消上游前檢查下游存在 | 追溯守衛，不看回寫量；涵蓋刪除與刪列 | §4.7 | T-S7、T-A3 |
+| 6 追溯到明細列 | 明細追溯欄位與追溯槽；出貨明細 `crmLine`／`mesLine`、MES 出貨單 `salesLine` | §4.3、§5.4 | T-S8、T-A4、T-A5 |
+| 7 只沿實際追溯扣量 | 來源只算 `trace` 有值且等於本列的；手動出貨不扣任何列 | §4.4 | T-S9 |
 
 ## 5. 核心、格式與套件的改動
 
-### 5.1 格式 6 → 7
+### 5.1 格式 6 → 7（s2e-a）→ 8（s2e-b）
 
-`CurrentFormatVersion` 提高到 **7**（s2d 是 6）。新增的鍵（下列各節）出現在格式 6 以下的檔案一律整份拒絕（fail-closed，同 s2c §3.1）。格式 7 在第一段（s2e-1）就提高，後續段只加鍵；`AppJson.StrictOptions` 已拒絕未知成員（`UnmappedMemberHandling.Disallow`），所以中間版本讀到較新的檔案會整份拒絕，不會靜默略過。三個內建套件都升到 7。
+s2e-a 把 `CurrentFormatVersion` 提高到 **7**，s2e-b 再提高到 **8**（s2d 是 6；我的判斷，取代原第 24 項）。每個版本新增的鍵，出現在較舊格式的檔案裡一律整份拒絕（fail closed，同 s2c §3.1）；`AppJson.StrictOptions` 已拒絕未知成員（`UnmappedMemberHandling.Disallow`），所以 s2e-a 版本讀到 s2e-b 匯出的檔案會整份拒絕，不會靜默略過。兩個合併點各自讓三個內建套件升到當時的版本。
 
-| 位置 | 新鍵 | 用途 |
-|---|---|---|
-| `workflows[].states[]` | `cancelled: true` | 取消類狀態（必須同時 `readOnly`） |
-| 欄位 `config` | `traceTotal: { max?, min?, sources?[] }` | 履約欄位（§4.3） |
-| `conversions[].lines` | `fulfills` | 剩餘量扣履約（§4.4） |
-| 事件 effect | `eachWhere`；`set[].from.field = "$row"`；`set[].from.via` | 逐列篩選、目前列、經一層參照讀值（§5.2） |
-| 事件 `reverse` effect | `ofRecord` | 依沖銷對象查事實（§4.5） |
-| `integrations[]` | `pair`、`conversions[]`、`traceTotals[]`、`overrides[]` | §5.2、§6 |
+| 位置 | 新鍵 | 用途 | 版本 |
+|---|---|---|---|
+| `workflows[].states[]` | `cancelled: true` | 取消類狀態（必須同時 `readOnly`） | 7 |
+| 參照欄位 `config` | `relation: "lineTrace"` | 明細追溯（§4.3） | 7 |
+| 模組 | `traceSlots[]` | 追溯槽（§4.3） | 7 |
+| 欄位 `config` | `traceSlot: { slot, match? }` | 加入追溯槽 | 7 |
+| 欄位 `config` | `traceTotal: { manual?, max?, min?, sources?[] }` | 履約欄位（§4.4） | 7 |
+| `conversions[].lines` | `fulfills` | 剩餘量扣履約（§4.5） | 8 |
+| 事件 effect | `eachWhere`；`set[].from.field = "$row"`；`set[].from.via` | 逐列篩選、目前列、經一層參照讀值（§5.2） | 8 |
+| 事件 `reverse` effect | `ofRecord` | 依沖銷對象查事實（§4.6） | 8 |
+| 事件 | `catchUp: { states? }` | 補連動（§5.2） | 8 |
+| `integrations[]` | `pair`、`conversions[]`、`traceTotals[]`、`overrides[]` | §5.2、§6 | 8 |
 
-### 5.2 整合層擴充（缺口 1～4）
+### 5.2 整合層擴充（缺口 1～4，s2e-b）
 
 **成對整合（缺口 1）。** 兩份套件各宣告一個同 `code`、`"pair": true` 的整合，`with` 只能有一項，就是對方。規則：
 
 - 一半可以引用另一半新增的欄位（夥伴符號，例如 CRM 這一半寫 `mes-mold/workorder.crmLine`）；不能引用其他整合的欄位（s2c 的限制不變）。
 - **一個單位：** 兩半的狀態一起推導（兩個擁有者都 Open、兩半都 enabled 才 `Active`）；安裝時兩半的欄位先建、再建兩半的事件、檢查、轉換、履約來源，全在同一個 savepoint；任一半完整性失敗，兩半都 `Blocked`。另一半不存在（例如對方是舊版套件開啟的）時是 `Waiting`，原因 `pairMissing`。
 - 目錄層對帳：內建套件的每個成對整合，對方套件必須有同代號的另一半，否則拒絕啟動。
-- 刪除照 s2c §5.5 逐半處理：擁有者被刪時它那一半跟著刪，另一半的參照欄位會擋下刪除；兩半都停用後才可刪（列入 §11 風險）。
 
-**整合收轉換（缺口 2）。** `integrations[].conversions[]` 格式同一般轉換，來源是擁有者模組，目標與追溯欄位可以是夥伴（另一半新增的）欄位。轉換在安裝時建立、隨整合啟用與停用（`Active` 同步），整合不是 `Active` 時轉換不出現在記錄頁，呼叫回 404。登記在 `ItemsJson.conversions`，完整性檢查涵蓋它。`ConversionValidator` 現行規則照用：表頭追溯是指向來源模組的唯讀參照，明細追溯是唯讀整數。
+**成對卸除與整組刪除。** 現行 `DeletePlanner` 檢查外部參照時不排除停用欄位，事件引用也不因停用而消失：即使空庫，P1 的 MES 半參照欄位會擋刪 CRM，CRM 半的建工令事件會擋刪 MES，停用兩半解除不了結構引用。所以新增：
+
+- **卸除：** `DELETE /api/v3/dynamic/apps/{key}/integrations/{code}`，對成對整合一次處理兩半，權限同 retry（設計器 Edit 加系統管理員）。前提有兩個：兩半都 `Disabled`（先停用，卸除途中不會觸發）；沒有歷史資料，也就是兩半新增的欄位在任何記錄（含軟刪除）都沒有值、兩半的事件沒有事件事實。轉換產生的目標都帶夥伴追溯欄位的值，已由第一個條件涵蓋。成立時，同一交易刪除兩半的欄位、事件、檢查、轉換、履約來源與覆蓋；兩邊的 `IntegrationsJson` 保留宣告、維持 `Disabled`，重新啟用就重新安裝。
+- **有歷史資料時拒絕：** 409，逐項列出阻擋（哪個欄位有幾筆值、哪個事件有幾筆事實），並說明保留條件：整合只能維持停用，資料唯讀保留；兩個應用程式都不能刪，只能關閉。
+- **刪除應用程式：** `DeleteApp` 對它參與的每個成對整合先做卸除判斷。可卸除的，兩半一起併入同一個刪除交易：`DeletePlanner` 把兩半的項目當作「一起刪除的集合」，與既有 `alsoDeleting` 同一機制。刪除應用程式時它已關閉，整合是 `Suspended`，不需要先手動停用。不能卸除的，回新的阻擋種類 `PairHistory`，訊息同上。
+- 非成對的整合維持 s2c §5.5。
+
+**整合收轉換（缺口 2）。** `integrations[].conversions[]` 格式同一般轉換，來源是擁有者模組，目標與追溯欄位可以是夥伴（另一半新增的）欄位。轉換在安裝時建立、隨整合啟用與停用（`Active` 同步）；整合不是 `Active` 時，轉換不出現在記錄頁，呼叫回 404。轉換登記在 `ItemsJson.conversions`，完整性檢查涵蓋它。`ConversionValidator` 現行規則照用：表頭追溯是指向來源模組的唯讀參照，明細追溯是唯讀整數。
 
 **`each` 提供目前列與篩選（缺口 4），加經參照讀值：**
 
@@ -180,73 +277,107 @@ P1、P2、P3 是 §5.3 的三個成對整合。單開 MES 時，工令由生管�
   "eachWhere": { "via": "order-line.item", "field": "item/item.supplyType", "op": "eq", "value": "make" },
   "set": [
     { "to": "mes-mold/workorder.crmLine", "from": { "side": "line", "field": "$row" } },
-    { "to": "mes-mold/workorder.itemNo",  "from": { "side": "line", "via": "order-line.item", "field": "item/item.no" } } ] }
+    { "to": "mes-mold/workorder.sourceKind", "const": "order" },
+    { "to": "mes-mold/workorder.item",    "from": { "side": "line", "field": "order-line.item" } } ] }
 ```
 
-- `$row` 是目前列的記錄 Id，只能寫到參照該明細模組的參照欄位或唯讀整數欄位。
+- `$row` 是目前列的記錄 Id，只能寫到指向該明細模組的 `lineTrace` 欄位或唯讀整數欄位。
 - `eachWhere` 是規則條件格式，作用在列上；可加 `via`（列上的參照欄位）讀一層參照目標的欄位。經 `via` 讀到的值為空時，整個事件失敗並列出是哪幾列（fail closed）：`supplyType` 是空值的品項不會被靜默略過（s2d §5.3）。
 - `set[].from.via` 同理，供完工入庫從報工經工令讀品項與入庫倉。只讀一層，不鏈接。
 - `via` 讀到的欄位也受事件設計 §4.7 限制：不得是彙總或依賴彙總的公式。
 
-**整合宣告的履約來源：** `integrations[].traceTotals[]`，每項 `{ field, module, trace, sum, states?, applies }`。`field` 必須是**擁有者自己**宣告了 `traceTotal` 的欄位；`module`、`trace`、`sum` 可以是夥伴（含另一半新增）的符號。安裝時寫入核心的來源表（§5.6），登記在 `ItemsJson.traceTotals`。
+**整合宣告的履約來源：** `integrations[].traceTotals[]`，每項 `{ field, module, trace, sum, states?, applies }`。`field` 必須是**擁有者自己**宣告了 `traceTotal` 的欄位；`module`、`trace`、`sum` 可以是夥伴（含另一半新增）的符號。安裝時寫入核心的來源表（§5.6），登記在 `ItemsJson.traceTotals`；依賴保護見 §4.4。
 
-### 5.3 三個成對整合
+**補連動（`skip` 的人工補救）。** `skip` 不回補（s2c §5.3 的既有語意不變）；另外提供逐筆、人工觸發的補連動，讓關閉期間漏掉的連動回到原鏈：
 
-| 整合 | 兩半 | 內容 | `onPartnerClosed` |
-|---|---|---|---|
-| P1 `salesWorkOrder` | CRM ↔ MES | CRM 半：訂單 draft → confirmed 時對自製品列建草稿工令（§5.2 的事件）；`producedQty` 來源工令 `completedQty`、`deliveredQty` 來源工令 `shippedQty`（皆 `traced`）。MES 半：工令欄位 `crmLine`（唯讀參照 CRM 訂單明細）；覆蓋收掉 MES `quote`、`order` | `skip` |
-| P2 `salesShipment` | CRM ↔ 進銷存 | CRM 半：轉換「CRM 訂單轉出貨單」（來源狀態 confirmed、shipped；明細 `fulfills: order-line.deliveredQty`）；`deliveredQty` 來源出貨明細 `qty`（`states: ["shipped"]`，`always`）。進銷存半：出貨單欄位 `crmOrder`（表頭追溯）、出貨明細欄位 `crmLine`（明細追溯） | `skip` |
-| P3 `productionStock` | MES ↔ 進銷存 | MES 半：工令欄位 `stockWarehouse`（入庫倉）；事件「末道報工完工入庫」（報工 create，`when` `finalGood > 0`，建 `inventory/move` kind in，品項與倉經 `via` 讀工令）、「報工沖銷沖銷入庫」（報工 create，`when` `reverses` 不為空，`reverse` 帶 `ofRecord: report.reverses`）；檢查「工令下達時必須有入庫倉」；轉換「MES 訂單轉出貨單」（來源狀態 confirmed、shipping，`fulfills: line.deliveredQty`）；`deliveredQty` 來源出貨明細；覆蓋收掉 MES `shipment` 並擋 draft → shipped。進銷存半：出貨單 `mesOrder`、出貨明細 `mesLine` | `skip` |
+- **入口：** `POST /api/v3/dynamic/records/{id}/catch-up`，body `{ "event": "<事件代號>" }`；`GET .../integrations/{code}/catch-up-candidates` 列出符合下列前提的來源記錄。記錄頁的可補連動清單由 API 決定（同轉換清單），前端顯示按鈕。
+- **適用：** 整合事件，效果全是 `create` 的才可補；`reverse` 類事件不補。整合目前必須 `Active`。
+- **前提：** (a) 該事件對這筆記錄沒有事實（事實的唯一索引防重，重送得到同一結果）；(b) 記錄狀態在事件宣告的 `catchUp.states` 內（預設為觸發轉移的目標狀態），不在取消類；(c) 事件 `when` 對目前值成立；(d) 沒有任何記錄以 `ofRecord` 指向它（已沖銷的報工不補）；(e) 有 `each` 時照目前的列與 `eachWhere` 跑。
+- **授權：** 呼叫者要有觸發這個事件的那個操作的權限（CRM 訂單的確認轉移、新增報工），而且記錄在資料範圍內；效果照常以系統身分寫入。
+- **追溯：** 事實照常寫入，`OperationId` 用補連動請求的操作識別；來源記錄的歷程加一筆「補連動」（事件、操作者、時間）。不需要結構異動。
+- **取消與沖銷：** 補出來的連動與一般連動完全相同。補建的工令照常取消（受追溯守衛），補入的完工入庫依原報工沖銷（`ofRecord`），入口守衛也一樣查得到事實。
+- **盤點調整不是復原路徑：** 調整單沒有連到原報工，之後沖銷原報工時找不到它，完工量歸零但庫存仍多。已經用盤點補過的，要先取消調整單再補連動（§11）。
+
+例（P1）：MES 關閉期間確認的 CRM 訂單沒有工令；MES 重開後，業務對該訂單補連動，自製品列建出草稿工令（帶 `crmLine`），再補一次不會重複。例（P3）：進銷存關閉期間報工 R1；重開後對 R1 補連動，完工入庫；之後沖銷 R1，依 R1 的事實沖掉入庫。若 R1 在關閉期間已被 R2 沖銷，R1 不能補（前提 d），兩邊都沒有入庫，一致。
+
+### 5.3 三個成對整合（s2e-b）
+
+| 整合 | 兩半 | `onPartnerClosed` |
+|---|---|---|
+| P1 `salesWorkOrder` | CRM ↔ MES | `skip` |
+| P2 `salesShipment` | CRM ↔ 進銷存 | `skip` |
+| P3 `productionStock` | MES ↔ 進銷存 | `skip` |
+
+**P1 `salesWorkOrder`（CRM ↔ MES）：**
+
+- CRM 半：訂單 draft → confirmed 時，對自製品列建草稿工令（§5.2 的事件，`catchUp.states: ["confirmed", "shipped"]`）；`producedQty` 來源工令 `completedQty`、`deliveredQty` 來源工令 `shippedQty`，兩者都是 `traced`。
+- MES 半：工令欄位 `crmLine`（`lineTrace`，唯讀，指向 CRM 訂單明細，加入追溯槽 `salesSource`，`match: { item: item }`）；覆蓋收掉 MES `quote`、`order`。
+
+**P2 `salesShipment`（CRM ↔ 進銷存）：**
+
+- CRM 半：轉換「CRM 訂單轉出貨單」（來源狀態 confirmed、shipped；明細 `fulfills: order-line.deliveredQty`）；`deliveredQty` 來源出貨明細 `qty`（`states: ["shipped"]`，`always`）。
+- 進銷存半：出貨單欄位 `crmOrder`（表頭追溯）、出貨明細欄位 `crmLine`（明細追溯）。
+
+**P3 `productionStock`（MES ↔ 進銷存）：**
+
+- MES 半的欄位與檢查：工令欄位 `stockWarehouse`（入庫倉）；檢查「工令下達時必須有入庫倉」。
+- MES 半的事件：「末道報工完工入庫」（報工 create，`when` `finalGood > 0`，建 `inventory/move` kind in，品項與倉經 `via` 讀工令；可補連動）；「報工沖銷沖銷入庫」（報工 create，`when` `reverses` 不為空，`reverse` 帶 `ofRecord: report.reverses`）。
+- MES 半的轉換與來源：轉換「MES 訂單轉出貨單」（來源狀態 confirmed、shipping，`fulfills: line.deliveredQty`）；`deliveredQty` 來源出貨明細。
+- MES 半的覆蓋：收掉 MES `shipment`，並擋 draft → shipped。
+- 進銷存半：出貨單 `mesOrder`、出貨明細 `mesLine`。
 
 三者全開時，P1、P2、P3 同時 `Active`。P3 的「MES 訂單轉出貨單」仍 `Active`：MES 訂單已不能新增，但組合改變前留下的未結 MES 訂單要靠它出貨（資料模型 §4.2）。
 
-全用 `skip`：夥伴關閉期間確認的 CRM 訂單不建工令、報工不入庫，之後也不補（s2c §5.3 的既有語意）；已連動記錄的反向操作由入口守衛擋下。若用 `block`，關掉 MES 會讓 CRM 不能確認任何訂單，違反獨立開關（我的判斷）。
+全用 `skip`：夥伴關閉期間確認的 CRM 訂單不建工令、報工不入庫，事後不自動補，由人補連動（§5.2）；已連動記錄的反向操作由入口守衛擋下。若用 `block`，關掉 MES 會讓 CRM 不能確認任何訂單，違反獨立開關（第 12 項）。
 
 ### 5.4 套件逐檔改動
 
 **CRM（`crm-sales.app.json`）：**
 
-- 訂單狀態機：新增 `draft`（起始），`draft → confirmed`（sales、manager）、`draft → cancelled`（sales、manager）；`cancelled` 標 `cancelled: true`。報價轉訂單轉出的訂單從草稿開始。
-- 訂單表頭加 `dueDate`（交期，選填）；工令交期取它（我的判斷）。
-- 訂單明細加 `producedQty`、`deliveredQty`（小數 3 位、唯讀、`traceTotal`；`deliveredQty` 帶 `max: order-line.qty`，`producedQty` 帶 `min: order-line.deliveredQty`），自己沒有來源。
-- 新群組 `viewer`（CRM 查詢）：只讀訂單與明細，給生管、倉管看追溯與執行轉換（§6.2）。
-- 整合：P1、P2 的 CRM 半。
+- [s2e-a] 訂單狀態機：新增 `draft`（起始），`draft → confirmed`（sales、manager）、`draft → cancelled`（sales、manager）；`cancelled` 標 `cancelled: true`。報價轉訂單轉出的訂單從草稿開始。
+- [s2e-a] 訂單表頭加 `dueDate`（交期，選填）；工令交期取它（第 16 項）。
+- [s2e-a] 訂單明細加 `producedQty`（`manual: none`、`min: order-line.deliveredQty`）、`deliveredQty`（`manual: baseline`、`max: order-line.qty`），小數 3 位、唯讀、`traceTotal`，套件自己沒有來源。
+- [s2e-a] 數量改 3 位（§5.7）。
+- [s2e-b] 新群組 `viewer`（CRM 查詢）：只讀訂單與明細，給生管、倉管看追溯與執行轉換（§6.2）。
+- [s2e-b] 整合：P1、P2 的 CRM 半。
 
 **MES（`mes-mold.app.json`）：**
 
-- 訂單明細 `line` 加 `producedQty`、`deliveredQty`（同 CRM），來源是自己的工令：`trace: workorder.salesLine`，`sum` 分別為 `completedQty`、`shippedQty`（`always`）。
-- 工令加 `salesLine`（參照 `line`，選填），帶值 `lock` 映射 `line.order → order`、`line.item → item`、`line.itemNo`、`line.itemName`、`line.unit`；既有 `order` 保留（舊工令與報表沿用）。
-- MES 出貨單加 `salesLine`（唯讀參照 `line`），由 `workOrder` 的 `lock` 帶值從 `workorder.salesLine` 取得，給 s3c 依列開票用。
-- 狀態機：訂單 `cancel`、工令 `cancelled`、出貨單 `cancelled` 標 `cancelled: true`。
-- 工令 `shippedQty`、`liveShipments`、重開規則（`liveShipments = 0`）**保留**：`shippedQty` 是 MES 出貨的履約來源，重開規則保護沒有 `salesLine` 的舊工令；訂單列層級的保護由 `producedQty` 的 min 負責（我的判斷，資料模型寫「取代」，§10）。
-- 新群組 `viewer`（MES 查詢）：只讀訂單、明細、工令，給倉管執行 P3 轉換（§6.2）。
-- 整合：移除 `stockOut`（§5.5）；新增 P1、P3 的 MES 半。
-- `quality.order` 不改：CRM＋MES 時品質異常改用既有的 `quality.workOrder` 關聯到工令，工令再追溯到 CRM 訂單列（我的判斷）。
+- [s2e-a] 訂單明細 `line` 加 `producedQty`、`deliveredQty`（小數 3 位、唯讀、`manual: none`，上下限同 CRM）；來源是自己的工令：`trace: workorder.salesLine`，`sum` 分別為 `completedQty`、`shippedQty`（`always`）。
+- [s2e-a] 工令加 `sourceKind`（訂單／備庫，必填，預設訂單）與追溯槽 `salesSource`；`salesLine` 改為 `lineTrace` 指向 `line`，加入槽（`match: { item: item }`），帶值 `lock` 映射 `line.order → order`、`line.item → item`、`line.itemNo`、`line.itemName`、`line.unit`，`refGuard` 限表頭狀態 confirmed、shipping。既有 `order` 保留，由列推得（報表沿用）。
+- [s2e-a] MES 出貨單加 `salesLine`（唯讀 `lineTrace`），由 `workOrder` 的 `lock` 帶值從 `workorder.salesLine` 取得；備庫工令出貨時為空。給 s3c 依列開票用。
+- [s2e-a] 狀態機：訂單 `cancel`、工令 `cancelled`、出貨單 `cancelled` 標 `cancelled: true`。數量改 3 位（§5.7）。
+- [s2e-a] 工令 `shippedQty`、`liveShipments`、重開規則（`liveShipments = 0`）**保留**：`shippedQty` 是 MES 出貨的履約來源；重開規則保護備庫工令（沒有訂單列，就沒有 min 可擋）；有訂單列的工令由 `producedQty` 的 min 保護（第 18 項）。
+- [s2e-a] `stockOut` 在 s2e-a **照舊保留**，隨位數一起改 3 位。
+- [s2e-b] 新群組 `viewer`（MES 查詢）：只讀訂單、明細、工令，給倉管執行 P3 轉換（§6.2）。
+- [s2e-b] 整合：移除 `stockOut`（§5.5）；新增 P1、P3 的 MES 半。
+- `quality.order` 不改：CRM＋MES 時品質異常改用既有的 `quality.workOrder` 關聯到工令，工令再追溯到 CRM 訂單列（第 22 項）。
 
 **進銷存（`inventory.app.json`）：**
 
-- 狀態機：採購單、進貨單、出貨單、調整單的 `cancelled` 標 `cancelled: true`。
-- 整合：P2、P3 的進銷存半（只有追溯欄位，沒有事件）。
+- [s2e-a] 狀態機：採購單、進貨單、出貨單、調整單的 `cancelled` 標 `cancelled: true`。數量改 3 位。
+- [s2e-b] 整合：P2、P3 的進銷存半（只有追溯欄位，沒有事件）。
 
-### 5.5 `stockOut` 移除
+### 5.5 `stockOut` 移除（s2e-b）
 
 - 刪除 `stockOut` 整合（欄位 `stockItem`、`stockWarehouse`，事件 `mes-stock-out`、`mes-stock-out-cancel`，檢查 `mes-stock-item-required`）。取代它的是 P3 的完工入庫加進銷存出貨。
 - 單開 MES 時出貨過的 MES 出貨單從未扣過庫存，開進銷存後取消它不動庫存，是正確的（沒有事實可沖）。
 - 已開啟的資料庫保存的 `IntegrationsJson` 不受影響（調和只看保存的宣告），舊庫的 `stockOut` 照舊運作；見 §7。
-- `MesInventoryIntegrationTests` 中測整合層機制（狀態、守衛、retry、匯出往返、`block`）的約 22 個案例，改用**測試專用的成對套件**（只在測試專案，應用程式 id 用 `test-owner`、`test-partner` 這類與業務無關的名稱），機制覆蓋率不因內建套件改變而消失；業務行為改由 P1～P3 的測試涵蓋（我的判斷）。
+- `MesInventoryIntegrationTests` 中測整合層機制（狀態、守衛、retry、匯出往返、`block`）的約 22 個案例，改用**測試專用的套件**（只在測試專案，應用程式 id 用 `test-owner`、`test-partner` 這類與業務無關的名稱），機制覆蓋率不因內建套件改變而消失；業務行為改由 P1～P3 的測試涵蓋（第 11 項）。
 
-### 5.6 資料模型（migration：`TraceTotals`）
+### 5.6 資料模型（migration）
 
-| 異動 | 內容 |
-|---|---|
-| 新表 `Dynamic_TraceTotalSource` | `Id`、`TargetFieldId`、`OwnerKind`（`package`／`integration`）、`AppId`、`IntegrationCode`（可空）、`SourceModuleId`、`TraceFieldId`、`SumFieldId`、`StatesJson`、`Applies`；索引 `SourceModuleId`、`TargetFieldId`。開啟應用程式（套件自己的來源）或安裝整合時寫入，隨擁有者刪除 |
-| 新表 `Dynamic_TraceTotalBaseline` | `RecordId`、`FieldId`、`Qty`、`UpdatedTime`、`UpdatedBy`；主鍵（`RecordId`, `FieldId`）。基準量，只在人工改或期初時寫 |
-| `WorkflowState` | 加 `Cancelled`；狀態存在工作流程的 JSON 欄位，不需要結構異動（實作前驗證 V9） |
-| 其他 | `ofRecord`、`eachWhere`、`via`、`pair`、`overrides`、整合轉換都在既有 JSON 欄位（事件定義、`IntegrationsJson`、`ItemsJson`） |
+| 異動 | 內容 | 單元 |
+|---|---|---|
+| 新表 `Dynamic_TraceTotalSource` | `Id`、`TargetFieldId`、`OwnerKind`（`package`／`integration`）、`AppId`、`IntegrationCode`（可空）、`SourceModuleId`、`TraceFieldId`、`SumFieldId`、`StatesJson`、`Applies`；索引 `SourceModuleId`、`TargetFieldId`、`TraceFieldId`、`SumFieldId`（依賴檢查用）。開啟應用程式（套件自己的來源）或安裝整合時寫入，隨擁有者刪除或成對卸除移除 | s2e-a（migration `TraceTotals`） |
+| 新表 `Dynamic_TraceTotalBaseline` | `RecordId`、`FieldId`、`Qty`、`UpdatedTime`、`UpdatedBy`；主鍵（`RecordId`, `FieldId`）。只在人工改或期初時寫 | s2e-a |
+| `WorkflowState` | 加 `Cancelled`；狀態存在工作流程的 JSON 欄位，不需要結構異動（V9） | s2e-a |
+| 欄位設定 | `lineTrace`、`traceSlot`、`traceTotal` 在既有欄位 `Config` JSON；`traceSlots` 在模組定義 JSON | s2e-a |
+| 其他 | `ofRecord`、`eachWhere`、`via`、`catchUp`、`pair`、`overrides`、整合轉換都在既有 JSON 欄位（事件定義、`IntegrationsJson`、`ItemsJson`）；補連動用既有事實表與歷程 | s2e-b |
 
-核心程式不得出現業務名詞（`NoBusinessWordsTests`）：用 trace total、baseline、pair、override 這類詞，不用 delivered、shipment。
+核心程式不得出現業務名詞（`NoBusinessWordsTests`）：用 trace total、baseline、line trace、trace slot、pair、override、catch-up 這類詞，不用 delivered、shipment。
 
-### 5.7 數量欄位改小數 3 位（缺口 9，逐欄）
+### 5.7 數量欄位改小數 3 位（缺口 9，逐欄，s2e-a）
 
 | 套件 | 欄位 | 現在 | 改成 |
 |---|---|---|---|
@@ -263,9 +394,9 @@ P1、P2、P3 是 §5.3 的三個成對整合。單開 MES 時，工令由生管�
 | 進銷存 | `po-line.qty`、`receipt-line.qty`、`shipment-line.qty`、`adjust-line.qty`、`move.qty` | 小數 2 | 小數 3 |
 | 進銷存 | 品項貢獻欄位 `safetyStock` | 小數 2 | 小數 3 |
 
-不改：工序序號 `opSeq`、`finalSeq`（不是數量）、`liveShipments`（筆數）、工時 `hours`、`plannedHours`。金額公式 `qty * price` 結果仍是 `scale: 0` 的金額。套件內引用這些欄位的檢查（`inv-no-negative-stock`、`mes-report-within-wo-qty`、`mes-shipment-within-completed`）隨套件一起開啟，位數一致，不觸發「被檢查引用的欄位不能改位數」的限制。品項單位是否允許小數，第一版只顯示不強制（資料模型 §3.3）。
+不改：工序序號 `opSeq`、`finalSeq`（不是數量）、`liveShipments`（筆數）、工時 `hours`、`plannedHours`。金額公式 `qty * price` 結果仍是 `scale: 0` 的金額。套件內引用這些欄位的檢查（`inv-no-negative-stock`、`mes-report-within-wo-qty`、`mes-shipment-within-completed`）隨套件一起開啟，位數一致，不觸發「被檢查引用的欄位不能改位數」的限制；`stockOut` 的映射（MES 出貨 `qty` → 庫存異動 `qty`）兩邊同為 3 位。品項單位是否允許小數，第一版只顯示不強制（資料模型 §3.3）。
 
-## 6. 權限與選單收斂
+## 6. 權限與選單收斂（s2e-b）
 
 ### 6.1 組合覆蓋（缺口 3）
 
@@ -280,25 +411,27 @@ P1、P2、P3 是 §5.3 的三個成對整合。單開 MES 時，工令由生管�
 
 - 宣告在**被收掉模組的擁有者**（MES）那一半；前兩項在 P1、第三項在 P3。
 - **套用條件只看組合：** 擁有者與該半的夥伴都 Open（夥伴模組 Active）就套用，與整合是否 enabled、`Blocked` 無關，否則整合一壞 MES 訂單選單就冒出來（資料模型 §6.2 缺口 3）。
-- **效果：** (a) 選單不列該模組，模組回應帶 `canAdd: false`，前端隱藏「新增」；(b) 新增記錄、匯入、轉換**到**該模組、事件建立該模組記錄一律 409，訊息指出改用哪張單據；(c) `blockTransitions` 列出的轉移 409；取消類轉移一律不擋。對所有人生效，含系統管理員（我的判斷：管理員能新增就等於留了第二條路）。
-- **不影響讀取：** 既有記錄可讀、可沿原網址開啟、參照欄位仍選得到、反向關聯照常；未結的 MES 訂單可以繼續推進狀態、手動建工令、經 P3 轉出貨，直到結案（資料模型 §9 第 3 題）。
+- **效果：** (a) 選單不列該模組，模組回應帶 `canAdd: false`，前端隱藏「新增」；(b) 新增記錄、匯入、轉換**到**該模組、事件建立該模組記錄一律 409，訊息指出改用哪張單據；(c) `blockTransitions` 列出的轉移 409；取消類轉移一律不擋。對所有人生效，含系統管理員（第 13 項）。
+- **不影響讀取：** 既有記錄可讀、可沿原網址開啟、參照欄位仍選得到、反向關聯照常；未結的 MES 訂單可以繼續推進狀態、手動建工令（選它的列）、經 P3 轉出貨，直到結案（資料模型 §9 第 3 題）。
 - 判斷位置在入口守衛同一層（事件之前），依保存的宣告與當下推導的組合，不信任儲存的狀態；只讀已開啟應用程式的狀態，沒有任何覆蓋時零成本。
 - 單開 MES 時已核准的 MES 報價，在 CRM＋MES 時不能再轉成 MES 訂單（轉換到被收掉的模組）；要在 CRM 重新報價（列入 §11）。
 
 ### 6.2 群組與權限
 
 - **整合不替任何群組授權**（s2c §7 不變）。系統身分只用在事件效果、履約重算的寫回。
-- **觸發權限就是操作本身的權限：** 誰能確認 CRM 訂單，誰就能讓工令被建立；誰能過帳進銷存出貨單，誰就能讓 CRM 訂單列的 `deliveredQty` 變動。
-- **轉換到夥伴模組：** 要有來源 Read 與目標 Add（既有 `ConvertRecordHandler`）。照 ERP 慣例由倉管依訂單開出貨單：倉管需要 CRM、MES 的 Read，所以兩份套件各加 `viewer` 群組；Demo 把倉管帳號對應進去（我的判斷）。業務要自己開出貨單，須由管理員另外授予進銷存出貨單的新增權限。
-- **看得到追溯：** 生管要看工令的 `crmLine`，需要 CRM `viewer`；沒有 Read 的人看到參照欄位，照核心既有的隱藏規則顯示。
+- **觸發權限就是操作本身的權限：** 誰能確認 CRM 訂單，誰就能讓工令被建立，也能對它補連動；誰能過帳進銷存出貨單，誰就能讓 CRM 訂單列的 `deliveredQty` 變動。
+- **轉換到夥伴模組：** 要有來源 Read 與目標 Add（既有 `ConvertRecordHandler`）。照 ERP 慣例由倉管依訂單開出貨單：倉管需要 CRM、MES 的 Read，所以兩份套件各加 `viewer` 群組；Demo 把倉管帳號對應進去（第 20 項）。業務要自己開出貨單，須由管理員另外授予進銷存出貨單的新增權限。
+- **看得到追溯：** 生管要看工令的 `crmLine`，需要 CRM `viewer`；沒有 Read 的人看到明細追溯欄位，照核心既有的隱藏規則顯示（§4.3）。
 - **基準量的人工修改**需要該明細所屬模組的 Edit（一般欄位權限），不另設權限。
+- **成對卸除**的權限同 retry（設計器 Edit 加系統管理員）。
 - 覆蓋是權限層之外的另一道閘，不改任何群組的權限列，不 fail-open。
 
 ## 7. 既有資料與已開啟應用程式的遷移
 
 - **不寫舊資料庫的資料遷移**，與 s2d §11 相同：s2d 已要求重建（舊庫不會轉成共用主檔），s2e 建立在 s2d 之上，一樣只對重建的資料庫生效。Demo 每次部署重建。EF migration 只負責 §5.6 的結構。
 - **已開啟的應用程式**保存的是開啟當時的套件內容與 `IntegrationsJson`，不會自動換成新版：舊庫的 `stockOut` 照舊；舊庫若之後才開新版 CRM，P1 的 CRM 半找不到 MES 半，停在 `Waiting`（`pairMissing`），不會只裝一半。
-- **組合中途改變時的既有單據**（新庫內）：
+- **s2e-a 合併後、s2e-b 之前的使用者可見變化**（每項都隨 s2e-a 一起改 Demo）：CRM 訂單多一個草稿與確認；MES 建工令要選來源（訂單列或備庫）；數量顯示 3 位；有下游時取消、刪除上游或刪明細列會被擋並列出下游；CRM 訂單明細可人工記 `deliveredQty`。其餘行為（含 `stockOut` 扣庫存、三個應用程式互不連動）與合併前相同。
+- **組合中途改變時的既有單據**（新庫內，s2e-b 之後）：
 
 | 變化 | 既有單據的處理 |
 |---|---|
@@ -306,13 +439,14 @@ P1、P2、P3 是 §5.3 的三個成對整合。單開 MES 時，工令由生管�
 | 單開 MES 後開進銷存 | MES 出貨單停止新增；草稿只能取消；已出貨的不動；之後出貨經 P3 轉換 |
 | 只開 CRM 人工記了出貨量後開進銷存 | 人工量成為基準量鎖住，進銷存只能出剩餘量 |
 | CRM＋進銷存關掉進銷存 | 已過帳出貨仍計入 `deliveredQty`；進銷存唯讀，出貨單不能取消；基準量重新開放人工記，但總量仍受 max 限制 |
-| MES＋進銷存關掉進銷存 | MES 出貨單回來；`deliveredQty` 含進銷存出貨，MES 不能對同一批再出（max） |
-| CRM＋MES 關掉 MES | 已建工令唯讀保留，`producedQty` 停在最後的值；新確認的訂單不建工令，自製品列可人工記出貨量（沒有工令就沒有 `traced` 來源） |
-| 關掉 CRM | MES 報價、訂單選單回來；由 CRM 訂單建立的工令保留 `crmLine`，唯讀可查；MES 繼續報工時照算 CRM 訂單列的上下限，CRM 重開時整批重算寫回 |
+| MES＋進銷存關掉進銷存 | MES 出貨單回來；`deliveredQty` 含進銷存出貨，MES 不能對同一批再出（max）；期間的報工不入庫，重開後補連動 |
+| CRM＋MES 關掉 MES | 已建工令唯讀保留，`producedQty` 停在最後的值；新確認的訂單不建工令，自製品列可人工記出貨量（沒有工令就沒有 `traced` 來源）；MES 重開後可對這些訂單補連動 |
+| 關掉 CRM | MES 報價、訂單選單回來；由 CRM 訂單建立的工令保留 `crmLine`，唯讀可查；MES 繼續報工時用快照照算 CRM 訂單列的上下限，CRM 重開時整批重算寫回 |
 
-- **Demo：** CRM 情境的訂單改為先草稿再確認，含一張同時有自製品與外購品的訂單；三者全開時，MES 情境的工令來自 CRM 訂單（不再另建 MES 訂單），生管設入庫倉、下達、報工，末道報工完工入庫，其中一筆報工沖銷；進銷存情境由倉管依 CRM 訂單轉出貨單並過帳，含一次分批出貨與一次取消後重轉。`stockOut` 相關的 Demo 步驟與「進銷存查詢組」對應調整（s2c §10.3）。資料一律虛構。
+- **Demo（s2e-a）：** CRM 情境的訂單改為先草稿再確認（`OrderPath` 加確認步驟），加一張草稿直接取消；MES 情境的工令改選 MES 訂單列，另有一兩張標成備庫；數量含一筆小數。`stockOut` 的 Demo 步驟照舊。
+- **Demo（s2e-b）：** 加一張同時有自製品與外購品的 CRM 訂單；三者全開時，MES 情境的工令來自 CRM 訂單（不再另建 MES 訂單），生管設入庫倉、下達、報工，末道報工完工入庫，其中一筆報工沖銷；進銷存情境由倉管依 CRM 訂單轉出貨單並過帳，含一次分批出貨與一次取消後重轉。移除 `stockOut` 相關的 Demo 步驟，「進銷存查詢組」對應調整（s2c §10.3）。資料一律虛構。
 - **報表：** MES `mesShipMonthly` 在開了進銷存後不再增加（資料模型 §8 已記）；其他報表欄位不變，數量改小數後度量照常。
-- **前端：** 選單與新增鈕依覆蓋；履約欄位依逐列可編輯旗標；記錄頁的轉換清單本來就由 API 決定，整合轉換不需新畫面。
+- **前端：** s2e-a 有明細列挑選器（顯示「表頭 · 列」）、履約欄位逐列可編輯、追溯守衛的 409 訊息；s2e-b 有選單與新增鈕依覆蓋、補連動按鈕、卸除整合的確認。記錄頁的轉換清單本來就由 API 決定，整合轉換不需新畫面。
 
 ## 8. ERP 對照與開關組合
 
@@ -325,10 +459,11 @@ P1、P2、P3 是 §5.3 的三個成對整合。單開 MES 時，工令由生管�
 |---|---|---|---|
 | 訂單確認產生工單 | 依路線，逐需求 | 經 MRP 或依訂單生產 | 自製品逐列，不經 MRP |
 | 追溯層級 | 明細（`sale_line_id`） | 項目（單據流） | 明細列 |
+| 備庫生產 | 補貨規則產生，無銷售來源 | 計畫訂單，無銷售項目 | 工令標「備庫」 |
 | 完工入庫 | 庫存移動 | 101／102 | 進銷存庫存異動，沖銷依原報工 |
 | 出貨單產生 | 確認時自動 | 使用者建立交貨單 | 使用者由訂單轉換 |
 | 已交貨量 | 由庫存移動計算 | 單據流與交貨狀態 | 由追溯事實計算，換手不歸零 |
-| 有下游時取消訂單 | 要先處理出貨與製造單 | 有後續單據時不能刪項目 | 追溯守衛擋下 |
+| 有下游時取消訂單 | 要先處理出貨與製造單 | 有後續單據時不能刪項目 | 追溯守衛擋下並列出下游 |
 | 超交容許 | 可設 | 可設容差 | 不做（上限＝訂購量） |
 
 相同的是單據擁有者（銷售擁有訂單、製造擁有工單、庫存擁有出貨）與明細層級的追溯；簡化的是不經 MRP、不自動產生出貨單、不做預留與超交容許。理由：目標客戶是 50 人以下的模具廠，訂單通常一列一模、少量；自動產生出貨單會讓「確認」帶出使用者沒開的單據，由轉換開立又自然支援分批出貨（資料模型 §5.2）。
@@ -340,9 +475,9 @@ C＝CRM、M＝MES、I＝進銷存。
 | 組合 | 訂單 | 工令 | 完工入庫 | 出貨 |
 |---|---|---|---|---|
 | 只開 C | CRM | 無 | 無 | 無單據；`deliveredQty` 人工記 |
-| 只開 M | MES | 生管手動，選 MES 訂單列 | 無 | MES 出貨單 |
+| 只開 M | MES | 生管手動，選 MES 訂單列或標備庫 | 無 | MES 出貨單 |
 | 只開 I | 無 | 無 | 無 | 進銷存出貨單，手動，不扣任何訂單列 |
-| C＋M | CRM | 確認時自製品逐列建立（P1） | 無 | 自製品 MES 出貨單；外購品人工記 |
+| C＋M | CRM | 確認時自製品逐列建立（P1）；手動的標備庫 | 無 | 自製品 MES 出貨單；外購品人工記 |
 | C＋I | CRM | 無 | 無 | 進銷存出貨單，由 CRM 訂單轉（P2） |
 | M＋I | MES | 生管手動 | 末道報工入庫（P3） | 進銷存出貨單，由 MES 訂單轉（P3） |
 | C＋M＋I | CRM | 確認時建立（P1） | 入庫（P3） | 進銷存出貨單，由 CRM 訂單轉（P2）；舊 MES 訂單經 P3 |
@@ -353,15 +488,15 @@ C＝CRM、M＝MES、I＝進銷存。
 | 只開 M | 無 | 無 | — | 自己的工令 |
 | 只開 I | 無 | 無 | — | — |
 | C＋M | MES 報價、訂單 | P1 | 工令（`traced`）＋基準量 | 自己的工令 |
-| C＋I | 無 | P2 | 進銷存出貨 | — |
+| C＋I | 無 | P2 | 進銷存出貨＋基準量 | — |
 | M＋I | MES 出貨單（含擋過帳） | P3 | — | 自己的工令＋進銷存出貨 |
-| C＋M＋I | MES 報價、訂單、出貨單 | P1、P2、P3 | 工令＋進銷存出貨 | 自己的工令＋進銷存出貨 |
+| C＋M＋I | MES 報價、訂單、出貨單 | P1、P2、P3 | 工令＋進銷存出貨＋基準量 | 自己的工令＋進銷存出貨 |
 
-只開 C 時 `deliveredQty` 人工記、`producedQty` 永遠是 0。只開 I 時進銷存不知道訂單，行為與現在相同。組合中途改變見 §7。
+只開 C 時 `deliveredQty` 人工記、`producedQty` 永遠是 0（`manual: none`）。只開 I 時進銷存不知道訂單，行為除追溯守衛外與現在相同。組合中途改變見 §7。s2e-a 合併後、s2e-b 之前，三個應用程式全開也只有單開的行為加上 `stockOut`。
 
 ### 8.3 會計影響（設計檢核第 7 題）
 
-s2e 不產生傳票：完工入庫、出貨都是庫存異動，不進傳票（資料模型 §3.5）。s3c 需要的前提由 s2e 備好：工令、進銷存出貨明細、MES 出貨單都追溯到訂單列，開票可以算到列；取消類狀態與上限重驗已存在，s3c 只需加 `invoicedQty` 的來源、開票政策上限與「已開票的出貨不能取消」。
+s2e 不產生傳票：完工入庫、出貨都是庫存異動，不進傳票（資料模型 §3.5）。s3c 需要的前提由 s2e 備好：工令、進銷存出貨明細、MES 出貨單都追溯到訂單列，開票可以算到列；取消類狀態、上限重驗、追溯守衛已存在，s3c 只需加 `invoicedQty` 的來源、開票政策上限與「已開票的出貨不能取消」。
 
 ### 8.4 重複概念盤點與設計檢核
 
@@ -369,8 +504,9 @@ s2e 不產生傳票：完工入庫、出貨都是庫存異動，不進傳票（�
 |---|---|
 | 報價、銷售訂單（CRM、MES 各一套） | C＋M 時覆蓋收掉 MES 的；單開 MES 時用 MES 的 |
 | 出貨單（MES、進銷存各一張） | M＋I 時覆蓋收掉 MES 的並擋過帳；`stockOut` 移除 |
-| 「已出貨」三處記法 | 以訂單列 `deliveredQty` 為準；CRM 訂單狀態 `shipped`、MES 訂單 `shipping` 仍由人推進，不自動同步（我的判斷，§10） |
+| 「已出貨」三處記法 | 以訂單列 `deliveredQty` 為準；狀態仍由人推進，不自動同步（第 21 項） |
 | MES 出貨單 `customer` 與工令、訂單的客戶 | 仍由人選；同一個主檔，不會對不上，只是要再選一次 |
+| 工令的兩個訂單來源（`salesLine`、`crmLine`） | 同一個追溯槽，互斥（§4.3） |
 | 品質異常 `quality.order`（只能參照 MES 訂單） | 不改；C＋M 時用 `quality.workOrder` |
 | 報表 `mesShipMonthly` 與 `invShipByCustomer` | 開了進銷存後看後者 |
 | 客戶、品項 | s2d 已併成共用主檔 |
@@ -381,34 +517,116 @@ s2e 不產生傳票：完工入庫、出貨都是庫存異動，不進傳票（�
 | 2 主檔欄位歸屬 | 只引用基本欄位 `item/item.no`、`supplyType`、`partner/partner`；不新增貢獻欄位 |
 | 3 單據擁有者 | 不新增單據；擁有者依 §8.2 |
 | 4 上下游與產生方式 | §4.1、§5.3 |
-| 5 數量與計數 | §4.2～§4.7、§5.7 |
+| 5 數量與計數 | §4.2～§4.8、§5.7 |
 | 6 開關組合 | §8.2、§7 |
 | 7 會計影響 | §8.3 |
 | 8 對照一般 ERP | §8.1 |
-| 9 核心能力 | 取消類狀態（訂單、採購、進貨各自的重轉）；履約欄位（銷售的完工與出貨、之後 s3c 的開票與進貨）；追溯守衛（訂單、採購單、之後的發票）；成對整合（P1～P3 三個）；覆蓋（MES 報價、訂單、出貨單）；`each` 目前列與經參照讀值（CRM 建工令、完工入庫）；`ofRecord`（報工沖銷，之後分錄型單據產生的傳票）。每項都有兩個以上不相干的情境 |
+| 9 核心能力 | 見下方說明 |
 
-## 9. 測試、可行性驗證、實作順序
+核心能力與各自的兩個以上不相干情境：
 
-### 9.1 實作前的可行性驗證
+- 取消類狀態：訂單、採購、進貨各自的重轉。
+- 明細追溯：工令選訂單列、MES 出貨單帶訂單列，之後 s3c 發票明細選訂單列或出貨列。
+- 追溯槽：工令的 MES／CRM 來源，之後 s3c 發票明細的訂單／出貨來源。
+- 履約欄位：銷售的完工與出貨，之後 s3c 的開票與進貨。
+- 追溯守衛：訂單、採購單，之後的發票。
+- 成對整合（含卸除）：P1～P3 三個。
+- 覆蓋：MES 報價、訂單、出貨單。
+- `each` 目前列與經參照讀值：CRM 建工令、完工入庫。
+- `ofRecord`：報工沖銷，之後分錄型單據產生的傳票。
+- 補連動：P1 建工令、P3 完工入庫，之後 s3c 的 `skip` 型整合。
 
-先寫失敗測試確認；標「停」的不成立時停下回報主控，不自行改用備案。**任何備案都不得放寬權限、不得讓應該鎖住的欄位變可寫。**
+## 9. 工作單元、測試與實作順序
+
+### 9.1 切分總覽
+
+依使用者裁決分成兩個依序交付的工作單元（§10.1）。**本文件不拆檔**：兩個單元共用 §1～§8 的同一份數量鏈與格式定義，拆成兩份會讓 §4 的規則各寫一次、改一處漏一處；各單元的範圍、步驟、測試與合併點驗收集中在 §9.2、§9.3，實作計畫可以各自只引用自己那一節。
+
+| 單元 | 一句話 | 依賴 |
+|---|---|---|
+| s2e-a | 單據追溯到明細列、履約量核心、各應用程式單開時的適配 | s2d-2 合併 |
+| s2e-b | 應用程式間成對整合、覆蓋收掉重複選單、完整訂單到出貨鏈 | s2e-a 合併 |
+
+兩個單元都動 `apps/*.app.json`，同一位 worker 依序做，不能與其他動這些檔案的工作同時進行。內部步驟各自一個 commit、各自全綠，但只在單元結束時合併。**每個步驟都自帶它造成的 Demo 與回歸修改**，不留到最後一步（審查必修 9 的教訓：CRM 訂單改草稿起始卻把 Demo 留到後面，中間版本就會嘗試非法的 `draft → shipped`）。
+
+先寫失敗測試確認可行性；標「停」的不成立時**停下回報主控重新設計**，不自行改用備案。**任何備案都不得放寬權限、不得讓應該鎖住的欄位變可寫。**
+
+### 9.2 s2e-a：追溯到明細列、履約量核心、單開適配
+
+**範圍：** 格式 7；取消類狀態（缺口 7）；已轉量排除取消、改量重驗（缺口 10 的單一應用程式部分）；追溯守衛全面生效（缺口 11）；數量 3 位（缺口 9）；明細追溯與追溯槽（§4.3）；履約欄位核心（缺口 5：套件來源、基準量、逐欄人工政策、上下限、快照、fail closed、列層級事實鎖例外）；三份套件 [s2e-a] 項目（§5.4）；Demo 與前端的對應修改（§7）。**不含：** 任何整合擴充、`fulfills`、`ofRecord`、補連動、卸除；`stockOut` 不動。
+
+**內部步驟：**
+
+| 步驟 | 內容 | 同步改的 Demo 與回歸 |
+|---|---|---|
+| a1 可行性門檻 | V1（門檻）、V9、V5、V6、V8、V11 的失敗測試；V1 不成立就停 | 無 |
+| a2 單據能力 | 格式 7；取消類狀態；已轉量排除取消；改量重驗；追溯守衛；數量 3 位；三份套件標取消類、改位數 | Demo 數量位數；Demo 中有取消上游的步驟依新守衛調整順序（先取消下游）；`stockOut` 機制測試照過 |
+| a3 明細追溯 | `lineTrace`、挑選端點、`DetailWriter` 刪列檢查、追溯槽；MES 工令 `sourceKind`、`salesLine`、MES 出貨單 `salesLine` | MES Demo 工令改選訂單列、部分標備庫；前端挑選器 |
+| a4 履約欄位 | 核心與 migration `TraceTotals`；CRM 草稿狀態、`dueDate`、明細履約欄位；MES 明細履約欄位 | CRM Demo `OrderPath` 加確認步驟、加一張草稿取消；前端逐列可編輯 |
+
+**可行性驗證：**
 
 | # | 假設 | 不成立時 |
 |---|---|---|
-| V1 | 履約重算步驟看得到寫入日誌中彙總造成的靜默寫入（工令 `completedQty`），且當時彙總已是終值 | 停：改為重算時直接加總報工與 MES 出貨單（兩層），格式要改 |
-| V2 | 系統身分寫回另一個應用程式的明細列，不被事實鎖、寫入後盾（`FactBackstopStage`）、`ClosedDataGuard` 誤擋；目標唯讀時能略過寫回只做檢查 | 寫入後盾對履約欄位放行；仍擋不住就停 |
-| V3 | 兩半的安裝能在同一個 SQLite savepoint 內完成，失敗整組回滾 | 停（同 s2c §5.4，沒有備案） |
-| V4 | `ConversionValidator` 與 `ConvertRecordHandler` 能接受「目標與追溯欄位是夥伴整合欄位」的轉換 | 在整合安裝路徑另做驗證，執行器不改 |
-| V5 | 帶值 `lock` 能複製參照值（`line.order → workorder.order`、`workorder.salesLine → shipment.salesLine`） | 改由 MES 自己的事件在建立時寫入 |
+| V1（門檻） | 履約重算步驟看得到寫入日誌中彙總造成的靜默寫入（工令 `completedQty`），能取得每筆記錄第一次寫入前的值與最終值，且最終值已是彙總終值（靜態上 `UnitOfWork` 會把靜默寫入留在 journal，`EventStage` 只略過觸發） | **停**：回報主控重新設計來源格式。不得自行改成「直接加總報工與 MES 出貨單兩層」——目前來源格式只有單層 `trace`／`sum`，沒有兩層追溯、各層狀態篩選與受影響列定位的定義 |
+| V5 | 帶值 `lock` 能從明細列複製參照值（`line.order → workorder.order`、`workorder.salesLine → shipment.salesLine`） | 改由 MES 自己的事件在建立時寫入 |
 | V6 | `EventFactLock.RejectEdit` 能拿到明細修改的欄位清單，做到列與欄位層級的例外 | 履約欄位改走專用端點（不經一般修改） |
-| V7 | 覆蓋閘能涵蓋新增、匯入、轉換、事件 `create` 四條建立路徑 | 沒經過共同點的路徑各自補；補不完就停 |
-| V8 | `records/light` 挑選訂單明細列時，使用者分得出是哪張訂單的哪一列 | 第一版接受只顯示品名，寫入已知限制 |
+| V8 | 明細列挑選能以「表頭標題 · 列標題」顯示，並依表頭的 Read 與資料範圍篩選，一次查詢完成 | 停（明細追溯是 s2e-a 的前提，沒有「只顯示品名」的退讓） |
 | V9 | `WorkflowState` 存在 JSON 欄位，加 `Cancelled` 不需要結構異動 | 併入 `TraceTotals` migration |
+| V11 | 三種追溯欄位設為可篩選後，`DetailWriter` 刪列前的下游查詢走索引 | 在 `TraceTotalSource` 與轉換定義上建專用索引 |
+
+**測試清單（核心能力，用測試專用套件）：**
+
+- **T-A1 取消類狀態：** 取消的目標不佔已轉量，可重轉；表頭轉換取消後可再轉；`cancelled` 未同時 `readOnly`、標在非狀態選項上，套件驗證 400。
+- **T-A2 改量重驗：** 採購 10 轉進貨草稿 10，改成 20 存檔 409；取消後重轉。
+- **T-A3 追溯守衛：** 轉換表頭、轉換明細、`lineTrace` 三種各一；取消上游只看未取消的下游；刪除上游記錄與刪除明細列，已取消的下游也擋；下游全取消後可取消、全刪除後可刪；訊息列出下游的模組、標題、狀態，超過 20 筆附總數。
+- **T-A4 明細追溯：** 一般參照指向明細仍 400；`lineTrace` 指向非明細 400；設計器不能新增 `lineTrace`；挑選只列可讀且在資料範圍內的表頭的列、顯示「表頭 · 列」、`refGuard` 限表頭狀態；寫入看不到的列 400；`lock` 帶出列的欄位與表頭參照；讀者沒有表頭 Read 時隱藏；`records/light` 對明細仍 404。
+- **T-A5 追溯槽：** 兩個成員都有值 400；不豁免時全空 400；豁免時有值 400；`match` 不一致 400；有下游記錄或事件事實後改成員、改豁免欄位 409。
+- **T-A6 上下限：** max：F 增加超過 409；上限降低到低於 F 409（訂購 10、交貨 6、改訂購 5）；min：F 減少到低於下限 409；下限增加超過 F 放行；違規訊息帶列與前後值。
+- **T-A7 人工政策與基準量：** `manual: none` 的欄位改值 400；`baseline` 小於 0 被拒；有適用 `Active` 來源時基準量鎖住、來源不 `Active` 後重開放；`always` 與 `traced`；列層級事實鎖只放行可人工改的欄位。
+- **T-A8 快照：** 同一交易內改掛來源、取消、刪除、改 `sum` 值並存時，前後值正確；判斷不讀保存值（夾具先把保存值改成錯的，判斷仍正確，寫回後保存值被修正）；重送與沖銷冪等。
+- **T-A9 fail closed：** 停用被引用的 `sum`、`trace` 欄位 400；改型別、改位數、改彙總設定 400；刪除或改 `cancelled` 被 `states` 引用的狀態 400；`DeletePlanner` 列出 `TraceTotalSource`；夾具直接寫壞定義時，會重算到該欄位的寫入 409、其他寫入照常。
+
+**測試清單（內建套件，單開各一）：**
+
+- 只開 C：報價轉訂單是草稿；確認；草稿由業務取消；改 `deliveredQty` 成功；改 `producedQty` 400；T-A6 的「改訂購量 5」用 CRM 訂單再跑一次。
+- 只開 M：T-S8（兩列同品項、單價不同，各建工令並出貨，兩列各自的 `deliveredQty` 正確，MES 出貨單帶 `salesLine`）；工令選訂單列帶出 `order` 與品項，改品項 400；`sourceKind` 為訂單卻沒選列 400；備庫工令不能選列；有報工後改列 409；MES 訂單有草稿工令時取消 409（情境 7 的 MES 版）；工令完工 10、MES 出貨 10 後重開沖銷報工 409（情境 3 的 MES 版，`producedQty` min）；數量 3 位（工令 1.5、末道良品 1.5、`finalGood` 1.5，不四捨五入成 2）。
+- 只開 I：有未取消進貨單的採購單取消 409，訊息列出進貨單；取消進貨單後採購單可取消、可重轉。
+- `MesInventoryIntegrationTests` 的 `stockOut` 案例全部照過（位數改 3 位後）。
+- `NoBusinessWordsTests` 涵蓋新的核心檔案。
+
+**合併點驗收（全部要過才合併）：**
+
+1. 後端全部測試綠，前端單元測試與 build 通過。
+2. **Demo 行為不得壞：** 重建資料庫跑完整 Demo 部署流程，所有情境無錯誤；`DemoStructure` 結構檢查通過；依現有組合各開一次 Demo。
+3. 既有 Demo 行為逐項比對，只容許 §7「s2e-a 合併後的使用者可見變化」列出的差異：CRM 報價 → 訂單 →（新）確認 → 出貨 → 完成，與取消；MES 報價 → 訂單 → 工令（改選訂單列或備庫）→ 報工 → MES 出貨（含樣品出貨取消沖回庫存，`stockOut` 照舊扣庫存）；進銷存採購 → 進貨 → 出貨、調整；報表數字一致（位數改 3 位）。
+4. Demo 帳號逐一登入，選單與既有畫面不變。
+5. 前端與 RWD：明細列挑選器、工令來源欄位、訂單列履約欄位逐列可編輯、追溯守衛與上下限的 409 訊息，手機、平板、筆電、桌機四種版型實機走一遍。
+
+### 9.3 s2e-b：成對整合、覆蓋、完整訂單到出貨鏈
+
+**範圍：** 格式 8；成對整合（缺口 1）、整合收轉換（缺口 2）、覆蓋（缺口 3）、`each` 目前列與篩選、經參照讀值（缺口 4）、整合宣告履約來源（含目標關閉與重開整批重算）、`fulfills`、`ofRecord`（缺口 6）、補連動、成對卸除與整組刪除；P1～P3；移除 `stockOut` 與搬機制測試；`viewer` 群組；Demo 完整鏈；前端；RWD。
+
+**內部步驟：**
+
+| 步驟 | 內容 | 同步改的 Demo 與回歸 |
+|---|---|---|
+| b1 整合擴充核心 | 格式 8；成對；整合轉換；`fulfills`；`each`／`$row`／`eachWhere`／`via`；整合履約來源（目標關閉、重開重算）；`ofRecord`；覆蓋；測試專用成對套件 | 內建套件仍是 s2e-a 的狀態，Demo 不變；全部既有測試照過 |
+| b2 復原與卸除 | 補連動；成對卸除與整組刪除 | 同上 |
+| b3 內建套件與 Demo | P1、P2、P3；`crmLine` 加入追溯槽；移除 `stockOut`，機制測試搬到測試專用套件；`viewer`；Demo 完整鏈；前端 | Demo 改成 §7 的 s2e-b 版；移除 `stockOut` 的 Demo 步驟與查詢組調整 |
+
+**可行性驗證：**
+
+| # | 假設 | 不成立時 |
+|---|---|---|
+| V2 | 系統身分寫回另一個應用程式的明細列，不被事實鎖、寫入後盾（`FactBackstopStage`）、`ClosedDataGuard` 誤擋；目標唯讀時能略過寫回只做檢查 | 寫入後盾對履約欄位放行；仍擋不住就停 |
+| V3 | 兩半的安裝與卸除能在同一個 SQLite savepoint 內完成，失敗整組回滾 | 停（同 s2c §5.4，沒有備案） |
+| V4 | `ConversionValidator` 與 `ConvertRecordHandler` 能接受「目標與追溯欄位是夥伴整合欄位」的轉換 | 在整合安裝路徑另做驗證，執行器不改 |
+| V7 | 覆蓋閘能涵蓋新增、匯入、轉換、事件 `create` 四條建立路徑 | 沒經過共同點的路徑各自補；補不完就停 |
 | V10 | `eachWhere` 經參照讀值在 200 列上限內效能可接受 | 一次批次讀取所有列的參照目標 |
+| V12 | `DeletePlanner` 能把成對整合兩半的項目併入「一起刪除的集合」，與 `alsoDeleting` 同一條路徑 | 在 `DeleteApp` 先跑卸除、再跑既有刪除規劃，兩步同一交易 |
 
-### 9.2 測試清單
-
-**資料模型 §11 屬於 s2e 的情境（必做，用內建套件）：**
+**測試清單（資料模型 §11 屬於 s2e 的情境，用內建套件）：**
 
 | # | 情境 | 期望 |
 |---|---|---|
@@ -418,87 +636,115 @@ s2e 不產生傳票：完工入庫、出貨都是庫存異動，不進傳票（�
 | T-S4 | M＋I，進銷存已依訂單列出貨 10；關閉進銷存 | MES 出貨單回來；`deliveredQty` 仍 10；對同列出 10 件被擋 |
 | T-S5 | C＋I，進銷存出貨 10 過帳 | CRM 訂單列 `deliveredQty` = 10；使用者改它回 409（有適用的 `Active` 來源，基準量鎖住） |
 | T-S6 | C＋M 沒開 I，訂單含自製、外購各一列，確認後 | 外購品列可改 `deliveredQty`；自製品列與其他欄位仍鎖 |
-| T-S7 | 訂單確認後有草稿工令，取消訂單 | 409，提示先取消工令；取消工令後可取消訂單 |
-| T-S8 | 只開 M，訂單兩列同品項、單價不同，各建工令並出貨 | 工令與 MES 出貨單都帶來源列；兩列各自的 `deliveredQty` 正確（開票部分屬 s3c） |
+| T-S7 | C＋M，訂單確認後有草稿工令，取消訂單 | 409，列出工令；取消工令後可取消訂單 |
 | T-S9 | C＋I 手動開沒有來源訂單的出貨單並過帳 | 不扣任何訂單列 |
 | T-S10 | 只開 C 人工記 6；開 I 後轉出貨 | 剩餘量 4；出 4 後 `deliveredQty` 10、剩餘量 0 |
 
-**核心能力（測試專用套件，各段自帶）：**
+T-S8 在 s2e-a 已驗；s2e-b 合併前在三者全開下再跑一次。
 
-- 取消類狀態：取消的目標不佔已轉量，可重轉；表頭轉換取消後可再轉；採購單取消後重轉進貨。
-- `cancelled` 未同時 `readOnly`、標在非狀態選項上，套件驗證 400。
-- 追溯守衛：表頭追溯、明細追溯、履約來源追溯三種各一；刪除上游同樣被擋；下游全取消後放行。
-- 履約欄位：`always` 與 `traced`；`max` 只在增加時、`min` 只在減少時；來源整合 `Suspended`、`Disabled` 時照算；基準量小於 0 被拒；有適用 `Active` 來源時基準量鎖住、來源不 `Active` 後重開放；目標應用程式關閉時只檢查不寫回、重開時整批重算；重送與沖銷冪等（同一操作重送結果相同）。
-- 轉換 `fulfills`：剩餘量扣基準量與其他來源；沒有 `fulfills` 的轉換行為不變。
-- `each`：`$row` 寫入追溯；`eachWhere` 篩選；經參照讀到空值時事件失敗並列出列；`via` 讀彙總欄位定義時 400。
-- `ofRecord`：反向效果與入口守衛都依原記錄查事實；未設時行為不變。
-- 成對整合：任一半缺席 `Waiting`（`pairMissing`）；一半完整性失敗兩半 `Blocked`；兩種開啟順序結果相同；匯出兩份、匯入空庫兩種順序都 `Active`；引用另一半欄位可以、引用無關整合的欄位 400。
-- 覆蓋：新增、匯入、轉換、事件建立四條路徑都 409；讀取、參照、反向關聯不受影響；指定轉移被擋、取消不擋；整合 `Blocked` 或 `Disabled` 時仍套用；夥伴關閉後解除；系統管理員也被擋。
-- 原 `MesInventoryIntegrationTests` 的機制案例移到測試專用套件後全綠。
+**測試清單（核心能力與新增情境）：**
 
-**套件與 Demo：**
+- **T-B1 成對整合：** 任一半缺席 `Waiting`（`pairMissing`）；一半完整性失敗兩半 `Blocked`；兩種開啟順序結果相同；匯出兩份、匯入空庫兩種順序都 `Active`；引用另一半欄位可以、引用無關整合的欄位 400。
+- **T-B2 整合轉換、`fulfills`、`each`、`ofRecord`、覆蓋：** 整合不是 `Active` 時轉換 404；剩餘量扣基準量與其他來源，沒有 `fulfills` 的轉換行為不變；`$row` 寫入追溯、`eachWhere` 篩選、經參照讀到空值時事件失敗並列出列、`via` 讀彙總欄位定義時 400；反向效果與入口守衛都依原記錄查事實，未設時行為不變；覆蓋的四條建立路徑都 409，讀取、參照、反向關聯不受影響，指定轉移被擋、取消不擋，整合 `Blocked` 或 `Disabled` 時仍套用，夥伴關閉後解除，系統管理員也被擋。
+- **T-B3 整合履約來源：** 來源整合 `Suspended`、`Disabled` 時照算；被 `Disabled`／`Suspended` 整合的來源引用的欄位仍不能停用（fail closed）。
+- **T-B4 目標關閉（審查必修 4 的反例）：** C＋M＋I，CRM 保存完工量 10 後關閉 CRM；MES 再完工 10（實際 20）；先前建立的進銷存出貨草稿過帳 15；再沖銷後一次報工 → 409（實際 20 → 10，低於已交貨 15），不因 CRM 保存值是 10 而放行。另一例：CRM 關閉期間把某列的工令全部取消到零，CRM 重開後該列 `producedQty` 歸零。
+- **T-B5 補連動：** P1：MES 關閉期間確認訂單，重開後補連動建出工令，再補一次不重複；沒有確認權限 403；訂單已取消不能補。P3：進銷存關閉期間報工 R1，重開後補連動入庫，再沖銷 R1 依事實沖掉入庫；R1 在關閉期間已被沖銷則不能補。`reverse` 類事件不能補；整合不是 `Active` 時不能補；候選清單只列符合前提的記錄。
+- **T-B6 成對卸除與整組刪除：** 空庫兩半 `Disabled` 後卸除，同一交易清掉兩半，重新啟用後重新安裝；有欄位值或事件事實時 409 並列出阻擋與保留條件；沒停用就卸除 409；刪除 CRM 時 P1、P2 沒有歷史資料 → 整組刪除成功；有歷史資料 → `PairHistory` 阻擋；卸除途中失敗整組回滾。
+- **T-B7 追溯槽與 P1：** P1 建的工令 `crmLine` 有值、`sourceKind` 為訂單；使用者再選 `salesLine` 400；`crmLine` 的品項與工令品項不一致 400。
+- **套件與其他：** `supplyType` 空值的品項，確認訂單 409 並列出列；三者全開跑通：報價 → 訂單 → 確認 → 工令 → 報工 → 入庫 → 轉出貨（分批）→ 取消一張後重轉 → `deliveredQty` 等於訂購量；目錄層：成對整合的兩半齊全、引用的另一半欄位存在、事件圖無環；原 `MesInventoryIntegrationTests` 的機制案例移到測試專用套件後全綠；`NoBusinessWordsTests`。
 
-- 數量 3 位：CRM 訂單 1.5 件建出工令 1.5；末道良品 1.5 時 `finalGood` 1.5、完工入庫 1.5，不四捨五入成 2。
-- `supplyType` 空值的品項，確認訂單 409 並列出列。
-- CRM 報價轉訂單後是草稿；確認才建工令；草稿可取消。
-- 三者全開跑通：報價 → 訂單 → 工令 → 報工 → 入庫 → 轉出貨（分批）→ 取消一張後重轉 → `deliveredQty` 等於訂購量。
-- 七種組合各開一次 Demo，結構檢查（`DemoStructure`）通過；開啟順序不影響結果。
-- 目錄層：成對整合的兩半齊全、引用的另一半欄位存在、事件圖無環。
-- `NoBusinessWordsTests` 涵蓋新的核心檔案。
-- **前端與 RWD：** 選單收掉、新增鈕隱藏、履約欄位逐列可編輯、MES 出貨單被擋的訊息，四種版型（手機、平板、筆電、桌機）實機走一遍。
+**合併點驗收（全部要過才合併）：**
 
-### 9.3 實作順序與切分
+1. 後端全部測試綠（含搬家後的機制測試與 s2e-a 的全部測試），前端單元測試與 build 通過。
+2. **Demo：** 重建資料庫跑完整 Demo 部署流程無錯誤；七種組合各開一次 Demo，`DemoStructure` 結構檢查通過，開啟順序不影響結果。
+3. 既有 Demo 行為比對：單開各應用程式的 Demo 與 s2e-a 合併時相同；三者全開時改走 §7 的 s2e-b 版（CRM 訂單建工令、完工入庫、進銷存出貨），`stockOut` 相關步驟已移除。
+4. Demo 帳號逐一登入：三者全開時 MES 報價、訂單、出貨單不在選單；倉管看得到 CRM、MES 訂單並能轉出貨。
+5. 前端與 RWD：選單收掉、新增鈕隱藏、MES 出貨單被擋的訊息、補連動按鈕、卸除整合的確認，四種版型實機走一遍。
 
-同一位 worker 依序做，每段單獨驗收、單獨合併；四段都動 `apps/*.app.json`，不能與其他動這些檔案的工作同時進行。
+## 10. 使用者裁決與我代為決定的事
 
-| 段 | 內容 | 驗收 | 可獨立合併的理由 |
-|---|---|---|---|
-| s2e-1 單據能力 | 格式 7；取消類狀態（缺口 7）；轉換排除取消、改量重驗（缺口 10 出貨部分）；追溯守衛（缺口 11）；`ofRecord`（缺口 6）；數量 3 位（缺口 9）；三份套件標取消類狀態與改位數 | 核心能力測試中對應的部分；V9；T-S2 的改量部分（單一應用程式內） | 只改單一應用程式內的行為，整合層不動 |
-| s2e-2 履約欄位 | 履約欄位與基準量（缺口 5，含列層級事實鎖）；轉換 `fulfills`；MES 工令 `salesLine`、出貨單 `salesLine`、明細履約欄位；CRM 草稿狀態、交期、明細履約欄位（只開 C 人工記） | V1、V2、V5、V6、V8；T-S8；只開 M 時的 T-S3 類情境（MES 出貨） | 只用套件自己的來源，不需要整合擴充 |
-| s2e-3 整合擴充 | 成對（缺口 1）、整合收轉換（缺口 2）、覆蓋（缺口 3）、`each` 目前列與篩選、經參照讀值（缺口 4）、整合宣告履約來源；測試專用成對套件；`stockOut` 機制測試搬家 | V3、V4、V7、V10；核心能力測試全部 | 用測試專用套件驗收，內建套件仍是 s2e-2 的狀態 |
-| s2e-4 內建套件與 Demo | P1、P2、P3；移除 `stockOut`；`viewer` 群組；Demo；前端；RWD | T-S1～T-S10；套件與 Demo 全部 | 前三段的能力齊了才有意義 |
+### 10.1 使用者裁決
 
-s2e-1 與 s2e-2 若要平行，只能拆給不同 worker 且先排好 `apps/*.app.json` 的合併順序；建議不拆（我的判斷）。
+除了資料模型 §1.2 的既有裁決（兩套訂單、出貨、主檔一份、ERP 對照與開關組合），第一輪審查後使用者裁決（2026-11-09）：
 
-## 10. 我代為決定的事
+1. **追溯守衛全面生效。** 所有有追溯的單據都要先取消下游才能取消上游，包括只開進銷存時，採購單底下有未取消的進貨單就不能取消。錯誤訊息要列出要先取消哪些下游單據（§4.7）。原第 8 項移到這裡。
+2. **拆成兩個依序交付的工作單元。** s2e-a「單據追溯到明細列、履約量核心、各應用程式單開時的適配」；s2e-b「應用程式間成對整合、覆蓋收掉重複選單、完整訂單到出貨鏈」。每個合併點都要驗完整既有行為（含 Demo）；s2e-a 合併後 Demo 行為不得壞（§9）。原 §9.3 的四段切分改為兩個單元的內部步驟。
 
-全部是**主控裁決，待使用者確認**。
+### 10.2 起草時代為決定的事
+
+全部是**主控裁決，待使用者確認**。第一輪修訂改過的項目標「（第一輪修訂）」。
 
 1. **履約量用宣告式來源加寫入管線的重算步驟，不用事件效果回寫。** 理由：彙總是靜默寫入、不觸發事件，MES 出貨單取消這類間接變化抓不到；宣告式只要寫一次，重算是總量所以冪等。選錯的代價：多一個寫入步驟與兩張表；若推翻，改回事件要為每個來源配建立、取消、沖銷三組事件。
 2. **履約值計入所有已安裝的來源，不看整合狀態。** 理由：原則 1，換手不歸零。代價：夥伴關閉期間仍要讀夥伴的唯讀資料；若改成只算 `Active` 的來源，T-S4 會失敗。
-3. **基準量（人工＋期初）存在核心旁表，有適用 `Active` 來源時鎖住、沒有時開放。** 理由：同一欄位兼容人工與自動，換手時不需要搬資料。代價：使用者看到的是總量，改的是基準量，介面要說明；若改成另設「人工出貨量」套件欄位，報表要自己加總兩欄。
+3. **基準量存在核心旁表，有適用 `Active` 來源時鎖住、沒有時開放；只有 `manual: baseline` 的欄位有基準量（第一輪修訂）。** 理由：同一欄位兼容人工與自動，換手時不需要搬資料；逐欄宣告讓 `producedQty` 不會被人工填入、再被計入沖銷下限。代價：使用者看到的是總量，改的是基準量，介面要說明；若改成另設「人工出貨量」套件欄位，報表要自己加總兩欄。
 4. **來源適用範圍分 `always`、`traced`，工令用 `traced`。** 理由：MES 關閉期間確認的訂單沒有工令，依品項判斷會卡死。代價：自製品若從庫存直接出貨（沒工令），在沒開進銷存時可以人工記，可能與後來補建的工令重複，由 max 擋住超交。
-5. **上下限只在變糟的方向檢查（max 增加時、min 減少時）。** 理由：先出庫存、後完工是合法的；只擋讓情況變差的寫入，與「沖銷後不得低於已交貨量」的需求一致。代價：已經違規的資料不會被事後揪出（同檢查的既有限制）。
+5. **上下限比較寫入後的值；max 在履約增加或上限降低時檢查，min 在履約減少時檢查（第一輪修訂）。** 理由：先出庫存、後完工是合法的；改訂購量到低於已交貨量也要擋。代價：已經違規的資料不會被事後揪出（同檢查的既有限制）；下限另見第 30 項。
 6. **出貨上限＝訂購量，不做超交容許。** 理由：簡單、與模具廠一單一模的實務相符。代價：多交一點點也要先改訂單量。
-7. **轉換剩餘量扣基準量與其他來源（`fulfills`），在 s2e 先做共用計數的出貨部分。** 理由：T-S10 要求剩餘量 0，單靠轉換已轉量做不到。代價：資料模型 §8 說缺口 8 留給 s3c；這裡提前做了一個子集，s3c 要在同一機制上加開票政策上限。
-8. **追溯守衛不用跨記錄驗證，新增核心能力，並涵蓋刪除。** 理由：檢查只能加總被寫入的模組；刪除與取消同樣會讓下游失去上游。代價：多一條入口守衛；只開進銷存時，有未取消進貨單的採購單不能再取消（新行為）。
+7. **轉換剩餘量扣基準量與其他來源（`fulfills`），在 s2e 先做共用計數的出貨部分。** 理由：T-S10 要求剩餘量 0，單靠轉換已轉量做不到。代價：資料模型原本說缺口 8 留給 s3c；這裡提前做了一個子集，s3c 要在同一機制上加開票政策上限（資料模型 §8 已依此修訂）。
+8. （移到 §10.1 第 1 項：使用者已裁決追溯守衛全面生效。）
 9. **成對整合用同代號、`pair: true`、`with` 只有對方。** 理由：最少的新格式，沿用 s2c 的狀態機與 savepoint。代價：一對應用程式只能有一個成對整合；需要第二個時要擴充格式。
 10. **每一對應用程式一個成對整合（P1、P2、P3），完工入庫與 MES 訂單轉出貨放在同一個。** 理由：同組合下的連動互相依賴，避免只裝一半。代價：其中一項壞掉，同組合的其他連動一起 `Blocked`。
 11. **`stockOut` 直接移除，不改寫；整合層機制測試搬到測試專用套件。** 理由：裁決 3 之後沒有它的使用情境；機制覆蓋率不能隨業務套件消失。代價：約 22 個測試要改夾具。
-12. **三個整合都用 `skip`。** 理由：`block` 會讓關掉 MES 後 CRM 不能確認訂單，違反獨立開關。代價：夥伴關閉期間確認的訂單不建工令、報工不入庫，之後不補，要人工處理（盤點調整或手動建工令）。
+12. **三個整合都用 `skip`，漏掉的連動由人補連動（第一輪修訂）。** 理由：`block` 會讓關掉 MES 後 CRM 不能確認訂單，違反獨立開關；補連動讓漏掉的連動回到原鏈。代價：要有人發現並逐筆補（有候選清單）；補連動的設計見第 33 項。
 13. **覆蓋對所有人生效，含系統管理員；轉換到被收掉的模組也擋。** 理由：管理員能新增就留下第二條路。代價：單開 MES 時已核准的 MES 報價，在 C＋M 時要在 CRM 重新報價。
 14. **新增「經一層參照讀值」（`via`）給事件 `set` 與 `eachWhere`。** 理由：建工令要讀品項的 `supplyType`、完工入庫要讀工令的品項與入庫倉；帶值不能複製下拉，整合也不能改既有欄位的帶值設定。代價：資料模型沒列這項，是 s2e 新增的核心能力；只讀一層。
 15. **`supplyType` 為空時確認訂單整筆失敗並列出列，不是略過。** 理由：s2d §5.3 要求 fail closed，略過就是少了工令。代價：客戶把 `supplyType` 改成選填後，空值品項的訂單確認不了，要先補值。
 16. **CRM 訂單加表頭交期 `dueDate`，工令交期取它。** 理由：工令需要交期，CRM 現在沒有。代價：明細層級的不同交期第一版不支援。
 17. **入庫倉放在工令（P3 欄位），工令下達時 P3 檢查要求有值。** 理由：完工入庫在報工時發生，現場人員不該選倉；在下達時擋比在末道報工時才失敗好。代價：進銷存開著時，生管下達工令多一個必選欄位。
-18. **保留工令 `shippedQty`、`liveShipments` 與重開規則，另加訂單列層級的 min。** 理由：`shippedQty` 是 MES 出貨的履約來源；重開規則保護沒有 `salesLine` 的舊工令。代價：與資料模型「兩個彙總改由推算值取代」的寫法不同；進銷存開著時重開規則形同無作用，保護靠 min。
-19. **只開 MES 時工令新增 `salesLine` 並由它鎖定帶出 `order`、品項；MES 出貨單加 `salesLine`。** 理由：原則 6；`order` 保留給舊工令與報表。代價：同一張工令有兩個指向訂單的欄位，舊資料只有 `order`、沒有列層級追溯。
+18. **保留工令 `shippedQty`、`liveShipments` 與重開規則，另加訂單列層級的 min。** 理由：`shippedQty` 是 MES 出貨的履約來源；重開規則保護備庫工令（第一輪修訂：新庫沒有「沒有 `salesLine` 的舊工令」，改為保護備庫工令）。代價：與資料模型原本「兩個彙總改由推算值取代」的寫法不同（資料模型已依此修訂）；進銷存開著時重開規則對有訂單列的工令形同無作用，保護靠 min。
+19. **工令以追溯槽規定來源：有訂單來源就必須追溯到列，表頭由列推得；MES 出貨單加 `salesLine`（第一輪修訂）。** 理由：原則 6；選填會讓「選了表頭、沒選列」繞過數量鏈。代價：同一張工令有 `order` 與 `salesLine` 兩個指向訂單的欄位，`order` 由列鎖定帶出，只為報表沿用。
 20. **CRM、MES 各加 `viewer` 群組，由倉管執行跨應用程式的出貨轉換。** 理由：ERP 慣例由倉儲依訂單開出貨；s2c 規定整合不代授權限。代價：兩份套件多一個群組；業務要自己開出貨單需管理員授權。
 21. **CRM 訂單 `shipped`／`completed`、MES 訂單 `shipping`／`closed` 不依履約量自動推進。** 理由：自動推進要新增「依數量轉移狀態」的能力，沒有被要求。代價：狀態與數量可能不一致，看數量為準。
 22. **`quality.order` 不改，C＋M 時用 `quality.workOrder`。** 理由：品質異常本來就關聯工令，工令再追溯訂單列。代價：品質異常不能直接選 CRM 訂單。
 23. **履約欄位的宣告不能在設計器修改，只能檢視；刪除走安全刪除（有來源時擋）。** 理由：改錯會讓數量鏈失真，第一版不開。代價：客戶不能自己加來源。
-24. **格式 7 在 s2e-1 就提高，後續段只加鍵。** 理由：嚴格反序列化保證中間版本不會靜默略過新鍵。代價：s2e-1 到 s2e-4 之間匯出的檔案只能給同段以後的版本讀。
-25. **供應方式沿用 s2d 的欄位名 `supplyType`（資料模型寫 `supplyMode`、預設外購；s2d 改為必填、無預設）。** 理由：s2d 是實作依據。代價：資料模型要回頭改名，否則兩份文件不一致。
+24. （由第 36 項取代：格式改為 s2e-a 提高到 7、s2e-b 提高到 8。）
+25. **供應方式沿用 s2d 的欄位名 `supplyType`（資料模型原寫 `supplyMode`、預設外購；s2d 改為必填、無預設）。** 理由：s2d 是實作依據。代價：資料模型要回頭改名（已依此修訂）。
 26. **CRM 訂單草稿可由業務直接取消（不需主管）；已確認的取消仍要主管。** 理由：草稿沒有下游，取消不影響任何人。代價：業務能刪改自己的草稿，與報價的權限一致。
-27. **核心用 trace total、baseline、pair、override 等詞，套件格式鍵用 `traceTotal`。** 理由：`NoBusinessWordsTests` 禁止業務名詞；套件鍵與核心同名比較好查。代價：文件裡的「履約欄位」與程式名稱不同，靠本文件對照。
+27. **核心用 trace total、baseline、line trace、trace slot、pair、override、catch-up 等詞，套件格式鍵用 `traceTotal`、`lineTrace`、`traceSlot`。** 理由：`NoBusinessWordsTests` 禁止業務名詞；套件鍵與核心同名比較好查。代價：文件裡的「履約欄位」與程式名稱不同，靠本文件對照。
+
+### 10.3 第一輪修訂新增的判斷
+
+全部是**主控裁決，待使用者確認**。
+
+28. **明細追溯用新的參照關係 `lineTrace`，不放寬一般參照；只能由套件、整合宣告。** 理由：一般參照指向明細，會牽動所有模組的挑選、刪除規劃與權限；只開受控的一條，範圍可以完整定義與測試。代價：客戶不能在設計器自己建「指向明細列」的欄位。
+29. **新增核心能力「追溯槽」；工令以 `sourceKind`（訂單／備庫）區分備庫與漏填。** 理由：CRM 來源欄位 `crmLine` 由整合新增，套件規則引用不到，互斥、必填、品項一致、有下游後凍結都要跨「套件欄位＋自己那一半整合的欄位」判斷；同一需求 s3c 發票明細（訂單列或出貨列）也會遇到。代價：多一個核心概念；生管手動建工令多一個欄位（預設訂單，備庫要明確選）。
+30. **下限欄位增加時不檢查 min。** 理由：從庫存先出貨、工令後完工時，已交貨量超過完工量是合法的中間狀態；只在完工量減少時擋。代價：「交貨超過完工」不會在出貨當下提醒，要到沖銷報工時才擋。
+31. **目標應用程式重開時，整批重算它所有含履約欄位的模組的每一列，不只目前有來源的列。** 理由：關閉期間來源全被取消到零的列不在任何來源清單裡，只重算有來源的列會留下舊量。代價：重開時間與列數成正比；以目標客戶的量可接受，大量資料時要量測（§11）。
+32. **履約依賴的欄位與狀態一律不能停用、改型別或刪除，不論整合狀態；執行期依賴失效時擋下會重算到它的寫入。** 理由：fail closed，不默認零、不沿用舊值；停用整合的歷史來源仍算數，所以仍受保護。代價：要改這些欄位得先卸除整合；套件自己的來源只能隨應用程式刪除。
+33. **補連動：逐筆、人工觸發，只補 `create` 類整合事件，權限等於觸發操作本身，已沖銷的不補。** 理由：不自動重播，避免和關閉期間的人工處理重複；沿用事實唯一索引防重，補出的連動與一般連動完全相同，取消與沖銷不需要新規則。代價：要有人逐筆補；已用盤點調整補過的，要先取消調整單，系統偵測不到這種重複。
+34. **成對卸除要求兩半先停用、沒有歷史資料；刪除應用程式時可卸除的成對整合自動一起清。** 理由：有資料時拆掉會讓追溯值、事件事實與欄位對不上；沒資料時一起清，刪除才真的可用。代價：有歷史資料的成對應用程式只能關閉、不能刪除。
+35. **刪除上游（記錄或明細列）時，已取消的下游也擋；取消上游只看未取消的下游。** 理由：刪除會讓下游的追溯值指向不存在的列；取消不會。代價：要刪訂單得先刪掉已取消的工令。
+36. **格式版本：s2e-a 提高到 7，s2e-b 再提高到 8（取代第 24 項）。** 理由：兩個合併點各自 fail closed，s2e-a 版本讀到 s2e-b 的檔案整份拒絕，比「同一版本中途加鍵」清楚。代價：多一次版本號。
+37. **`ofRecord`、`fulfills` 放在 s2e-b。** 理由：只有整合用到（P3 沖銷入庫、P2／P3 轉出貨）；s2e-a 單開時沒有情境可驗收。代價：`ConversionLedger` 在兩個單元各改一次（a 排除取消、b 扣履約）。
+38. **MES 訂單明細兩個履約欄位都是 `manual: none`。** 理由：來源是 MES 自己的工令，應用程式開著就可用，沒有換手情境。代價：單開 MES 時不能記沒有工令的交貨；MES 出貨單本來就必須參照工令，現況也記不了。
+39. **期初完工量的受控初始化列為不排。** 理由：目前流程沒有需求；審查允許延後。代價：從只開 CRM 換到 C＋M 時，換手前的完工量記不進 `producedQty`（出貨量可以，靠基準量）。
 
 ## 11. 風險與已知限制
 
-- **新增的核心能力多**（取消類狀態、履約欄位、追溯守衛、成對、覆蓋、`each` 擴充、`via`、`ofRecord`），s2e 整體比 s2d 大。§9.3 的四段切分是為了讓每段都能單獨驗收；若 s2e-3 的成對整合在 V3 卡住，P1～P3 都做不了，只有前兩段能交付。
-- **成對整合的刪除：** 兩半互為夥伴，任一邊要刪除都會被另一半的參照欄位擋住，須先停用兩半；s2c 沒有「移除整合」的入口（§5.7），實際上刪除 CRM 或 MES 會很麻煩，第一個客戶上線前要補移除整合的設計。
-- **`skip` 的空窗：** 夥伴關閉期間的事件不補；例如關閉進銷存期間報工，成品沒有入庫，重開後庫存偏少，要盤點調整。
+- **新增的核心能力多**（取消類狀態、明細追溯、追溯槽、履約欄位、追溯守衛、成對、覆蓋、`each` 擴充、`via`、`ofRecord`、補連動、卸除），s2e 整體比 s2d 大，所以拆成兩個單元。V1 不成立時 s2e-a 停在第一步、重新設計來源格式；s2e-b 的 V3 卡住時 P1～P3 都做不了，s2e-a 的成果仍可獨立使用。
+- **`skip` 的空窗靠人補：** 補連動要有人發現並逐筆執行（有候選清單）；已用盤點調整補過庫存的，系統偵測不到重複，要先取消調整單再補連動。
+- **有歷史資料的成對應用程式不能刪除**，只能關閉（§5.2）。
 - **訂單確認後不能改明細**（事實鎖）：要改量只能取消工令、取消訂單、重開新單；ERP 的變更單不做。
-- **挑選訂單明細列的顯示**（V8）：若 `records/light` 只能顯示品名，同品名多列時要靠訂單號辨認。
 - **C＋I 關閉進銷存後**，已過帳的進銷存出貨單唯讀、不能取消；要沖銷得重開進銷存。
-- **重算量：** 履約重算是同步的，一次寫入影響的訂單列數與下游筆數成正比；以模具廠的量（一列個位數下游）不成問題，大量匯入出貨單時要量測。
+- **重算量：** 履約重算是同步的，一次寫入影響的訂單列數與下游筆數成正比；以模具廠的量（一列個位數下游）不成問題，大量匯入出貨單時要量測。目標應用程式重開時的整批重算與列數成正比，同樣要量測。
+- **刪除比以前嚴：** 已取消的下游也會擋刪上游；明細列被追溯後不能刪。
 - **舊資料庫不升級**：已開啟的應用程式保有舊整合與舊位數，要重建才會套用 s2e。
+
+## 12. 修訂紀錄
+
+### 12.1 第一輪審查（必修 9、建議 1，全部採用）
+
+| 項 | 審查重點 | 怎麼改 | 位置 |
+|---|---|---|---|
+| 必修 1 | 參照訂單明細列缺核心能力（參照不能指向明細、挑選 404、刪列直接軟刪），V8 低估 | 新增受控的明細追溯 `lineTrace`：建欄、選取端點、寫入驗證、帶值、表頭資料範圍、欄位權限、`DetailWriter` 刪列前檢查被追溯；V8 改為門檻，不再接受「只顯示品名」；放 s2e-a | §4.3、§5.1、§9.2（V8、V11、T-A4）、§10.3 第 28 項 |
+| 必修 2 | 列追溯選填可繞過數量鏈 | 新增追溯槽：有訂單來源必須追溯到列、表頭由列推得、CRM／MES 來源互斥、品項一致、有報工或出貨後凍結；工令 `sourceKind` 明確標備庫 | §4.3、§5.3 P1、§5.4 MES、§9.2 T-A5、§9.3 T-B7、§10.2 第 19 項、§10.3 第 29 項 |
+| 必修 3 | max 只在增加時檢查，漏掉上限降低 | max 在履約增加或上限降低時都驗寫入後的不等式；min 只在履約減少時驗，下限增加不驗並寫明理由 | §4.4「上下限」、§9.2 T-A6、§10.2 第 5 項、§10.3 第 30 項 |
+| 必修 4 | 目標關閉後缺可靠舊值 | 判斷一律用來源事實＋本次寫入日誌重建的交易前、後快照，不讀保存值；重開時整批重算所有列，含已取消到零的列 | §4.4「判斷用的快照」「寫入目標關閉時」、§9.2 T-A8、§9.3 T-B4、§10.3 第 31 項 |
+| 必修 5 | 履約來源沒有納入定義變更與 fail-closed 守衛 | `trace`、`sum`、狀態、上下限欄位納入依賴：不能停用、改型別、刪除（不論整合狀態）；執行期依賴失效時擋受影響寫入；`DeletePlanner` 新阻擋種類 | §4.4「來源失效時 fail closed」、§5.6 索引、§9.2 T-A9、§9.3 T-B3、§10.3 第 32 項 |
+| 必修 6 | 人工基準量與「只開 CRM 完工量為零」矛盾 | 逐欄宣告 `manual`：CRM `deliveredQty` 可人工基準量；`producedQty` 只由來源推算；MES 兩欄都不可人工；期初完工量列為不排 | §4.4「人工修改政策」、§2 延後、§5.4、§10.2 第 3 項、§10.3 第 38、39 項 |
+| 必修 7 | `skip` 的人工補救回不到原鏈 | 保留 `skip`、不自動回補、不改 `block`；新增補連動：有追溯（事實與歷程）、可防重（事實唯一索引）、有授權（觸發操作權限）；取消與沖銷同一般連動；明寫盤點調整不是復原路徑；放 s2e-b | §5.2「補連動」、§5.3、§7、§9.3 T-B5、§10.2 第 12 項、§10.3 第 33 項 |
+| 必修 8 | 「兩半停用後可刪」與 `DeletePlanner` 不符 | 新增成對卸除（同一交易清理兩半，前提是先停用且沒有歷史資料）與整組刪除（刪應用程式時可卸除的一起清）；有歷史資料時拒絕並說明保留條件；刪掉原本的錯誤宣稱；放 s2e-b | §5.2「成對卸除與整組刪除」、§9.3（V12、T-B6）、§11、§10.3 第 34 項 |
+| 必修 9 | 四段不能各自合併，s2e-2 先破壞 Demo | 依使用者裁決拆成 s2e-a、s2e-b；每個內部步驟自帶 Demo 與回歸修改（CRM 草稿狀態與 Demo 確認步驟同在 a4）；兩個合併點各自列出完整既有行為與 Demo 驗收；格式版本隨單元切成 7、8 | §2、§7、§9.1～§9.3、§10.1 第 2 項、§10.3 第 36、37 項 |
+| 建議 10 | V1 的停止條件與備案範圍不準 | V1 前移為 s2e-a 第一步的門檻；失敗即停止、回報主控重新設計來源格式；刪除「直接加總兩層」作為現成退路的說法，並寫明它缺的定義 | §9.2 步驟 a1 與 V1 |
+
+同步修訂：資料模型 §2.4、§3.1、§6.2 缺口 4、5、8、§8、§9 的 `supplyMode` → `supplyType`、回寫寫法、缺口 8 分工；路線文件階段 2 的 s2e 段落改為 s2e-a、s2e-b。
