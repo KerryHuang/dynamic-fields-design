@@ -530,6 +530,40 @@ public class SharedMasterDeleteTests : IDisposable
         await _rig.AssertIntegrityAsync();
     }
 
+    /// <summary>
+    /// 第三輪 6：想重現的情境是「孤兒列還在、欄位實體已被刪」。實測做不出來：孤兒表對欄位、選項、區塊都有外鍵連帶刪除，
+    /// 設計器把停用的孤兒欄位清掉時，孤兒列（與選項孤兒列）一起消失，所以不存在懸空的孤兒列，也不會撞唯一索引。
+    /// 這個測試把這件事釘住：清掉孤兒欄位後重開、填值、再刪除都順利，不留舊孤兒。
+    /// </summary>
+    [Fact]
+    public async Task DeletingAnOrphanedFieldInTheDesigner_TakesItsOrphanRowsWithIt_SoTheSameCodeCanBeOrphanedAgain()
+    {
+        var (partnerRecord, industry, _, _) = await ConvertedThenClosedAsync(withStock: true);
+        await DeleteOkAsync("crmx");
+        _rig.Db(db => db.Set<AppOrphan>().Count(o => o.FormerAppKey == "crmx" && o.Kind == OrphanKind.Field && o.FieldId == industry)).Should().Be(1);
+        await SoftDeleteAsync(partnerRecord); // 欄位有資料時設計器不讓刪；記錄刪除後才清得掉
+
+        var check = await JsonOf(await _rig.Admin.GetAsync($"{Base}/fields/{industry}/delete-check"));
+        var del = await _rig.Admin.DeleteAsync($"{Base}/fields/{industry}?purged={check.GetProperty("purge").GetProperty("records").GetInt32()}");
+        del.StatusCode.Should().Be(HttpStatusCode.OK, await del.Content.ReadAsStringAsync());
+        FieldExists(industry).Should().BeFalse();
+        _rig.Db(db => db.Set<AppOrphan>().Count(o => o.FormerAppKey == "crmx" && o.Kind != OrphanKind.Block))
+            .Should().Be(0, "欄位與它的選項孤兒列隨外鍵連帶刪除，沒有懸空的孤兒列");
+
+        await _rig.OpenOkAsync("crmx");
+        var newIndustry = _rig.FieldId("crmx", "bp/partner.industry");
+        newIndustry.Should().NotBe(industry);
+        var option = _rig.Db(db => db.Set<FieldOption>().First(o => o.FieldId == newIndustry).Id);
+        await _rig.CreateRecordAsync(_rig.Admin, Partner, new Dictionary<string, object>
+            { [Key("bp", "partner.name")] = "乙公司", [Key("crmx", "bp/partner.industry")] = $"opt_{option}" });
+        await _rig.CloseOkAsync("crmx");
+
+        await DeleteOkAsync("crmx");
+        _rig.Db(db => db.Set<AppOrphan>().Where(o => o.FormerAppKey == "crmx" && o.Kind == OrphanKind.Field).Select(o => o.FieldId).ToList())
+            .Should().Contain(newIndustry).And.NotContain(industry);
+        await _rig.AssertIntegrityAsync();
+    }
+
     [Fact]
     public async Task AnOrphanReEnabledInTheDesigner_StaysRestricted_UntilTheAdminGrantsIt()
     {
