@@ -184,8 +184,8 @@ public class AppOpener(
             foreach (var m in package.Modules)
             {
                 var moduleId = result.Modules.First(x => x.Code == m.Code).Id;
-                foreach (var perm in m.Permissions.Where(p => groupIds.ContainsKey(p.Group)))
-                    await grants.GrantAsync(GrantSource.Master, app.Id, moduleId, groupIds[perm.Group], perm.Privileges, perm.Scope ?? DataScope.All, ct);
+                await grants.GrantAsync(GrantSource.Master, app.Id, moduleId, m.Permissions.Where(p => groupIds.ContainsKey(p.Group))
+                    .Select(p => (groupIds[p.Group], p.Privileges, p.Scope ?? DataScope.All)), ct);
             }
 
         foreach (var c in package.Contributions)
@@ -193,8 +193,7 @@ public class AppOpener(
             var input = contributions.First(x => x.Prefix == $"{c.Master}/{c.Module}");
             var module = (await modules.GetByKeyAsync(input.ModuleKey, includeChildren: true, ct))!;
             var mapped = c.Permissions.Where(p => groupIds.ContainsKey(p.Group)).ToList();
-            foreach (var perm in mapped)
-                await grants.GrantAsync(GrantSource.App, app.Id, module.Id, groupIds[perm.Group], perm.Privileges, perm.Scope ?? DataScope.All, ct);
+            await grants.GrantAsync(GrantSource.App, app.Id, module.Id, mapped.Select(p => (groupIds[p.Group], p.Privileges, p.Scope ?? DataScope.All)), ct);
 
             var fieldIds = c.Fields.Select(f => ids.FieldIds[TemplateService.TemplateGraph.Qualify(input.Prefix, f.Code)]).ToHashSet();
             var visibleTo = mapped.Select(p => groupIds[p.Group]).Distinct().ToList();
@@ -211,11 +210,18 @@ public class AppOpener(
             {
                 var rows = await permissions.LoadModuleRowsAsync(module, ct);
                 var access = rows.FieldPermissions.ToList();
-                foreach (var a in c.FieldAccess.Where(a => groupIds.ContainsKey(a.Group) && ids.FieldIds.ContainsKey(a.Field)))
+                // 多個套件群組映射到同一個群組時，同一個欄位取最嚴的限制（Hidden 優先於 ReadOnly），不是最後一筆覆蓋（審查必修 8）
+                var strictest = c.FieldAccess.Where(a => groupIds.ContainsKey(a.Group) && ids.FieldIds.ContainsKey(a.Field))
+                    .GroupBy(a => (FieldId: ids.FieldIds[a.Field], GroupId: groupIds[a.Group]))
+                    .Select(g => new FieldPermission
+                    {
+                        FieldId = g.Key.FieldId, GroupId = g.Key.GroupId,
+                        Access = g.Any(a => a.Access == FieldAccess.Hidden) ? FieldAccess.Hidden : FieldAccess.ReadOnly
+                    });
+                foreach (var p in strictest)
                 {
-                    var fieldId = ids.FieldIds[a.Field];
-                    access.RemoveAll(x => x.FieldId == fieldId && x.GroupId == groupIds[a.Group]);
-                    access.Add(new FieldPermission { FieldId = fieldId, GroupId = groupIds[a.Group], Access = a.Access });
+                    access.RemoveAll(x => x.FieldId == p.FieldId && x.GroupId == p.GroupId);
+                    access.Add(p);
                 }
                 await permissions.ReplaceModuleRowsAsync(module, rows with { FieldPermissions = access }, ct);
             }

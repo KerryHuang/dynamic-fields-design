@@ -26,19 +26,25 @@ public sealed class MasterGrants(
         grants.Where(g => Counts(g, appStatus)).GroupBy(g => (g.GroupId, g.Action))
             .ToDictionary(x => x.Key, x => x.Max(g => g.Scope));
 
-    /// <summary>把一個來源授予的動作記成來源記錄（每個動作一列，已有的同鍵列就放寬範圍）。呼叫端負責提交與重算。</summary>
-    public async Task GrantAsync(GrantSource kind, long? appId, long moduleId, long groupId, PrivilegesDto privileges, DataScope scope, CancellationToken ct)
+    /// <summary>
+    /// 把一個來源授予的權限記成來源記錄（每個群組、每個動作一列，已有的同鍵列就放寬範圍）。先依實際的群組 Id 合併：
+    /// 動作取聯集、每個動作的範圍取最寬，再一次寫入；同一份套件的多個群組映射到同一個群組時才不會重複新增（審查必修 8）。
+    /// 呼叫端負責提交與重算。
+    /// </summary>
+    public async Task GrantAsync(GrantSource kind, long? appId, long moduleId,
+        IEnumerable<(long GroupId, PrivilegesDto Privileges, DataScope Scope)> grants, CancellationToken ct)
     {
+        var merged = new Dictionary<(long Group, PermissionAction Action), DataScope>();
+        foreach (var (groupId, privileges, scope) in grants)
+            foreach (var action in AllActions.Where(a => Has(privileges, a)))
+                merged[(groupId, action)] = merged.TryGetValue((groupId, action), out var had) && had > scope ? had : scope;
+        if (merged.Count == 0) return;
         var existing = await shared.ListGrantsAsync(moduleId, ct);
-        foreach (var action in AllActions.Where(a => Has(privileges, a)))
+        foreach (var ((groupId, action), scope) in merged)
         {
             var row = existing.FirstOrDefault(g => g.SourceKind == kind && g.AppId == appId && g.GroupId == groupId && g.Action == action);
             if (row is null)
-            {
-                row = new AppGrant { SourceKind = kind, AppId = appId, ModuleId = moduleId, GroupId = groupId, Action = action, Scope = scope };
-                shared.AddGrant(row);
-                existing.Add(row);
-            }
+                shared.AddGrant(new AppGrant { SourceKind = kind, AppId = appId, ModuleId = moduleId, GroupId = groupId, Action = action, Scope = scope });
             else if (scope > row.Scope) row.Scope = scope;
         }
     }

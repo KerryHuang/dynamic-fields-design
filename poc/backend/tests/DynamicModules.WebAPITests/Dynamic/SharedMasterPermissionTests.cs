@@ -86,6 +86,53 @@ public class SharedMasterPermissionTests : IDisposable
         await _rig.AssertIntegrityAsync();
     }
 
+    /// <summary>
+    /// 審查必修 8：同一份套件的兩個群組都映射到業務。來源記錄先依實際群組合併（動作聯集、逐動作範圍取最寬、欄位限制取最嚴）再寫：
+    /// 不撞唯一鍵，Hidden 也不會被後一筆 ReadOnly 放寬。
+    /// </summary>
+    [Fact]
+    public async Task TwoGroupsOfOnePackageMappedToOneGroup_AreMergedBeforeWriting_TheStricterFieldAccessWins()
+    {
+        var crm = JsonNode.Parse(SharedMasterPackages.Crm)!;
+        crm["groups"]!.AsArray().Add(new JsonObject { ["code"] = "sales2", ["name"] = new JsonObject { ["zh-TW"] = "業務二" } });
+        var contribution = crm["contributions"]![0]!;
+        contribution["permissions"]!.AsArray().Add(new JsonObject
+        {
+            ["group"] = "sales2", ["scope"] = "own",
+            ["privileges"] = new JsonObject
+            {
+                ["read"] = true, ["add"] = true, ["edit"] = true, ["delete"] = false, ["printExport"] = false, ["pricing"] = false, ["approve"] = false
+            }
+        });
+        contribution["fieldAccess"] = new JsonArray(
+            new JsonObject { ["field"] = "bp/partner.memo", ["group"] = "sales", ["access"] = "hidden" },
+            new JsonObject { ["field"] = "bp/partner.memo", ["group"] = "sales2", ["access"] = "readOnly" });
+        foreach (var json in new[] { SharedMasterPackages.Bp, SharedMasterPackages.Ct, crm.ToJsonString() }) await _rig.ImportAsync(json);
+
+        var sales = _rig.GroupId("sales");
+        await _rig.OpenOkAsync("crmx", new
+        {
+            groupMap = new Dictionary<string, object> { ["sales"] = new { mode = "map", groupId = sales }, ["sales2"] = new { mode = "map", groupId = sales } },
+            masters = new Dictionary<string, object>
+            {
+                ["bp"] = new Dictionary<string, object> { ["steward"] = new { mode = "create" } },
+                ["ct"] = new Dictionary<string, object> { ["steward"] = new { mode = "create" } }
+            }
+        });
+
+        ActionScopes("sales").Should().BeEquivalentTo(new Dictionary<PermissionAction, DataScope>
+        {
+            [PermissionAction.Read] = DataScope.All, [PermissionAction.PrintExport] = DataScope.All,
+            [PermissionAction.Add] = DataScope.Own, [PermissionAction.Edit] = DataScope.Own
+        });
+        var memo = _rig.FieldId("crmx", "bp/partner.memo");
+        _rig.Db(db => db.Set<FieldPermission>().Where(p => p.FieldId == memo && p.GroupId == sales).Select(p => p.Access).ToList())
+            .Should().Equal(FieldAccess.Hidden);
+        var record = await PartnerAsync("甲公司");
+        (await VisibleKeysAsync(_rig.App.AsUser("sales01"), record)).Should().NotContain($"f_{memo}", "Hidden 不被 ReadOnly 放寬");
+        await _rig.AssertIntegrityAsync();
+    }
+
     [Fact]
     public async Task MergedScopes_ApplyPerAction_ReadAll_EditOnlyOwn()
     {
