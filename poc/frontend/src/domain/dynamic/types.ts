@@ -386,6 +386,8 @@ export interface ModuleDetail {
   icon?: string;
   section?: string;
   titleFieldId?: number;
+  /** Title template with field ids in braces, e.g. `{12} {13}`; absent means the title is the title field. */
+  titleTemplate?: string;
   status: 'Draft' | 'Active' | 'Inactive';
   version: number;
   /** Absent means standalone. */

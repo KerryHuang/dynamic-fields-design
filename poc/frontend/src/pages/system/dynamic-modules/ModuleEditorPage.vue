@@ -163,14 +163,42 @@ const titleOptions = computed(() =>
 const titleSel = useSelectFilter(titleOptions);
 const titleError = ref<ApiError | null>(null);
 // The menu shows the icon, so module updates also refresh it.
-const updateModule = useDesignerMutation((patch: { titleFieldId?: number; icon?: string; section?: string }) => {
+const updateModule = useDesignerMutation((patch: { titleFieldId?: number; titleTemplate?: string; icon?: string; section?: string }) => {
   const m = mod.value!;
-  return dynamicApi.updateModule(m.key, { name: m.name, icon: m.icon, section: m.section, titleFieldId: m.titleFieldId, ...patch });
+  return dynamicApi.updateModule(m.key, { name: m.name, icon: m.icon, section: m.section, titleFieldId: m.titleFieldId, titleTemplate: m.titleTemplate, ...patch });
 }, () => moduleKey.value, ['menu']);
 function setTitle(id: number) {
   titleError.value = null;
   updateModule.mutate({ titleFieldId: id }, { onError: (e) => { titleError.value = e as unknown as ApiError; fail(e, ['TitleFieldId']); } });
 }
+// ---- title template: field ids in braces, like formulas; the preview shows labels ----
+const TEMPLATE_TYPES = new Set(['text', 'email', 'phone', 'url', 'autonumber', 'date', 'enum']);
+const templateFields = computed(() => (mod.value?.blocks ?? []).flatMap((b) => b.fields).filter((f) => f.status === 'Active'));
+const templateInsertOptions = computed(() => templateFields.value.filter((f) => TEMPLATE_TYPES.has(f.type))
+  .map((f) => ({ value: f.id, label: resolveI18n(f.label, locale.value) })));
+const templateInsertSel = useSelectFilter(templateInsertOptions);
+const templateDraft = ref('');
+watch(() => mod.value?.titleTemplate, (v) => { templateDraft.value = v ?? ''; }, { immediate: true });
+const templateError = ref<ApiError | null>(null);
+const templatePreview = computed(() => templateDraft.value.trim()
+  && templateDraft.value.replace(/\{\s*(\d+)\s*\}/g, (all, id: string) => {
+    const f = templateFields.value.find((x) => x.id === Number(id));
+    return f ? resolveI18n(f.label, locale.value) : all;
+  }).trim());
+function saveTemplate() {
+  const titleTemplate = templateDraft.value.trim() || undefined;
+  templateDraft.value = titleTemplate ?? '';
+  if (titleTemplate === mod.value?.titleTemplate) return;
+  templateError.value = null;
+  updateModule.mutate({ titleTemplate }, { onError: (e) => { templateError.value = e as unknown as ApiError; fail(e, ['TitleTemplate']); } });
+}
+function insertTemplateField(id: number | null) {
+  if (id == null) return;
+  const current = templateDraft.value.trim();
+  templateDraft.value = current ? `${current} {${id}}` : `{${id}}`;
+  saveTemplate();
+}
+
 function setIcon(icon: string) {
   updateModule.mutate({ icon }, { onError: (e) => fail(e) });
 }
@@ -213,6 +241,20 @@ function saveSection() {
           :hint="t('designer.titleFieldHint')" emit-value map-options outlined dense style="min-width: 260px"
           data-testid="title-field" :error="!!errorFor(titleError, 'TitleFieldId') || undefined"
           :error-message="errorFor(titleError, 'TitleFieldId')" @update:model-value="setTitle" use-input input-debounce="0" fill-input hide-selected @filter="titleSel.onFilter" @popup-hide="titleSel.reset">
+          <template #no-option><SelectNoOption /></template>
+        </q-select>
+      </div>
+      <div v-if="!isExtension" class="row items-start q-gutter-md q-mb-md">
+        <div class="col-grow" style="min-width: 220px; max-width: 520px" data-testid="title-template-field">
+          <q-input v-model="templateDraft" :label="t('designer.titleTemplate')" maxlength="200" outlined dense data-testid="title-template"
+            :hint="templatePreview ? t('designer.titleTemplatePreview', { text: templatePreview }) : t('designer.titleTemplateHint')"
+            :error="!!errorFor(templateError, 'TitleTemplate') || undefined" :error-message="errorFor(templateError, 'TitleTemplate')"
+            @change="saveTemplate" />
+        </div>
+        <q-select :model-value="null" :options="templateInsertSel.filtered.value" :label="t('designer.titleTemplateInsert')"
+          emit-value map-options outlined dense style="min-width: 180px" data-testid="title-template-insert"
+          use-input input-debounce="0" @filter="templateInsertSel.onFilter" @popup-hide="templateInsertSel.reset"
+          @update:model-value="insertTemplateField">
           <template #no-option><SelectNoOption /></template>
         </q-select>
       </div>

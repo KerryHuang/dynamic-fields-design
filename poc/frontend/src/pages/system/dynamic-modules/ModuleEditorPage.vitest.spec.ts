@@ -131,6 +131,66 @@ describe('ModuleEditorPage', () => {
     vi.useRealTimers();
     click.mockRestore();
   });
+  describe('title template', () => {
+    const f = (id: number, type: 'text' | 'integer' | 'enum', label: string) => ({
+      id, key: `f_${id}`, type, label: { 'zh-TW': label }, blockId: 9, sequence: id, status: 'Active' as const, options: [],
+      config: { required: false, readOnly: false, showInList: false, isFilterable: false, isSortable: false },
+    });
+    const withFields = (titleTemplate?: string): ModuleDetail => ({
+      ...detail, titleTemplate,
+      blocks: [{ id: 9, label: { 'zh-TW': '區塊' }, sequence: 1, collapsed: false, columns: 2,
+        fields: [f(5, 'text', '名稱'), f(6, 'text', '編號'), f(7, 'integer', '數量'), f(8, 'enum', '種類')] }],
+    });
+    const input = (w: Awaited<ReturnType<typeof mountPage>>) => w.find('input[data-testid="title-template"]');
+
+    it('shows the template and a preview with field labels; other saves keep it', async () => {
+      const w = await mountPage(withFields('{6} {5}'));
+      expect((input(w).element as HTMLInputElement).value).toBe('{6} {5}');
+      expect(w.find('[data-testid="title-template-field"]').text()).toContain('標題會像：編號 名稱');
+      w.getComponent(IconSelect).vm.$emit('update:modelValue', 'factory');
+      await flushPromises();
+      expect(api.updateModule).toHaveBeenLastCalledWith('m', { name: detail.name, icon: 'factory', section: 's', titleFieldId: 5, titleTemplate: '{6} {5}' });
+    });
+
+    it('saves on change; blank clears it', async () => {
+      const w = await mountPage(withFields());
+      expect(w.find('[data-testid="title-template-field"]').text()).toContain(zhTW.designer.titleTemplateHint);
+      await input(w).setValue(' {6}-{5} ');
+      await input(w).trigger('change');
+      await flushPromises();
+      expect(api.updateModule).toHaveBeenLastCalledWith('m', { name: detail.name, icon: undefined, section: 's', titleFieldId: 5, titleTemplate: '{6}-{5}' });
+      const w2 = await mountPage(withFields('{6}'));
+      await input(w2).setValue('  ');
+      await input(w2).trigger('change');
+      await flushPromises();
+      expect(api.updateModule).toHaveBeenLastCalledWith('m', { name: detail.name, icon: undefined, section: 's', titleFieldId: 5, titleTemplate: undefined });
+    });
+
+    it('insert field offers only text-like fields and adds {id} to the template', async () => {
+      const w = await mountPage(withFields('{6}'));
+      const el = w.get('[data-testid="title-template-insert"]').element;
+      const select = w.findAllComponents(quasar.QSelect).find((c) => c.element.contains(el))!;
+      const options = (select.props('options') as { value: number }[]).map((o) => o.value);
+      expect(options).toEqual([5, 6, 8]);
+      select.vm.$emit('update:modelValue', 5);
+      await flushPromises();
+      expect(api.updateModule).toHaveBeenLastCalledWith('m', { name: detail.name, icon: undefined, section: 's', titleFieldId: 5, titleTemplate: '{6} {5}' });
+    });
+
+    it('shows the server error under the template', async () => {
+      const w = await mountPage(withFields());
+      api.updateModule.mockRejectedValue({ status: 400, errors: { TitleTemplate: ['標題樣板的大括號沒有成對'] } });
+      await input(w).setValue('{6');
+      await input(w).trigger('change');
+      await vi.waitFor(() => expect(w.find('[data-testid="title-template-field"]').text()).toContain('標題樣板的大括號沒有成對'));
+    });
+
+    it('an extension module has no title template', async () => {
+      const w = await mountPage({ ...withFields(), titleFieldId: undefined, kind: 'extension', hostEntityKey: 'test.entity' });
+      expect(input(w).exists()).toBe(false);
+    });
+  });
+
   describe('delete entry points', () => {
     const field = (id: number, status: 'Active' | 'Inactive') => ({
       id, key: `f_${id}`, type: 'text' as const, label: { 'zh-TW': `欄${id}` }, blockId: 9, sequence: id, status, options: [],
