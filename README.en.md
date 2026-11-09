@@ -14,7 +14,7 @@ Small and mid-sized companies often keep inventory, customers, work orders and q
 
 Formwright lets you define modules and fields on screen, and the system generates the list, form, detail view, search and permissions for you. The built-in applications are made of the same definitions, so once enabled they can be reshaped to fit your own process.
 
-It is aimed at companies of up to about 50 people who want to own their business system, and at consultants who implement systems for clients.
+It is aimed at small and mid-sized companies that want to own their business system, and at consultants who implement systems for clients.
 
 ## Built-in applications
 
@@ -34,7 +34,7 @@ Planned items are not implemented yet; see the [ERP roadmap](docs/superpowers/sp
 
 ## Platform capabilities
 
-- **Module and field designer**: build modules, sections and 20 field types on screen without code; preview, export and import templates.
+- **Module and field designer**: build modules, sections and 21 field types on screen without code; preview, export and import templates.
 - **Rules and formulas**: show, require, read-only and validation conditions per field, formulas and auto-numbering, evaluated identically on the front end and back end.
 - **Permissions and data scope**: group and per-user action permissions, data scope (all, own, same group), field-level permissions and option scopes.
 - **State machines and document conversion**: define how a document moves between statuses and who may move it; a quote can be partially converted into an order with its source preserved.
