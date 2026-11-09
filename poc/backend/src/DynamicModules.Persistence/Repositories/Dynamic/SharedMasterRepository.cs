@@ -74,6 +74,21 @@ public class SharedMasterRepository(DynamicDbContext db) : ISharedMasterReposito
         return owned.Concat(orphans).ToList();
     }
 
+    public async Task<bool> IsMasterModuleAsync(string? moduleKey, long? fieldId, long? blockId, long? optionId, CancellationToken ct)
+    {
+        IQueryable<long> ids =
+            moduleKey is not null ? db.Set<Module>().Where(m => m.Key == moduleKey).Select(m => m.Id)
+            : fieldId is { } f ? db.Set<Field>().Where(x => x.Id == f).Select(x => x.ModuleId)
+            : blockId is { } b ? db.Set<Block>().Where(x => x.Id == b).Select(x => x.ModuleId)
+            : optionId is { } o ? from op in db.Set<FieldOption>() where op.Id == o
+                                  join fl in db.Set<Field>() on op.FieldId equals fl.Id select fl.ModuleId
+            : db.Set<Module>().Where(_ => false).Select(m => m.Id);
+        return await (from am in db.Set<AppModule>().AsNoTracking()
+                      join a in db.Set<App>().AsNoTracking() on am.AppId equals a.Id
+                      where a.Kind == AppKind.Master && ids.Contains(am.ModuleId)
+                      select am.ModuleId).AnyAsync(ct);
+    }
+
     public async Task<ItemOwner> BlockOwnerAsync(long blockId, CancellationToken ct)
     {
         var contributor = await (from b in db.Set<AppBlock>().AsNoTracking()

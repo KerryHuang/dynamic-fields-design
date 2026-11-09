@@ -6,7 +6,8 @@ using MediatR;
 
 namespace DynamicModules.Application.Dynamic.FieldService.Commands.UpdateField;
 
-public record UpdateFieldRequest(long FieldId, FieldType Type, I18nText Label, FieldConfig Config, long BlockId) : IRequest<ServiceResult>, ITransactionalRequest, IDesignerRequest
+public record UpdateFieldRequest(long FieldId, FieldType Type, I18nText Label, FieldConfig Config, long BlockId) : IRequest<ServiceResult>, ITransactionalRequest, IDesignerRequest, IMasterDesignRequest
 {
+    public MasterDesignTarget MasterTarget => new(FieldId: FieldId);
     public PermissionAction RequiredDesignerAction => PermissionAction.Edit;
 }

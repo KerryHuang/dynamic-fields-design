@@ -35,6 +35,11 @@ public interface ISharedMasterRepository
     /// <summary>模組上屬於貢獻者的區塊：貢獻者的對照列（含 /），加上孤兒區塊（擁有者記前擁有者 id）。基本區塊不在裡面。</summary>
     Task<List<BlockOwner>> ListBlockOwnersAsync(long moduleId, CancellationToken ct);
 
+    /// <summary>
+    /// 模組（以 key、欄位、區塊或選項 Id 指定，取第一個非 null 的）是不是共用主檔的成員模組；找不到模組回 false。
+    /// 設計器在主檔模組上要系統管理員（設計 §6 最後一點）。
+    /// </summary>
+    Task<bool> IsMasterModuleAsync(string? moduleKey, long? fieldId, long? blockId, long? optionId, CancellationToken ct);
 
     /// <summary>區塊的擁有者：貢獻者（對照列含 /）、孤兒（已刪除的貢獻者留下的），兩者都不是就是主檔（基本區塊）。</summary>
     Task<ItemOwner> BlockOwnerAsync(long blockId, CancellationToken ct);

@@ -10,7 +10,7 @@ namespace DynamicModules.WebAPITests.Dynamic;
 
 /// <summary>
 /// 設計器在主檔模組上的歸屬（設計 §5.4）：加在基本區塊的歸主檔、加在貢獻者區塊的歸貢獻者，建立時就寫對照列與持久代號；
-/// 跨歸屬拖曳 409；孤兒區塊不能新增或拖入、孤兒欄位不能拖出。
+/// 跨歸屬拖曳 409；孤兒區塊不能新增或拖入、孤兒欄位不能拖出；主檔模組的設計器只限系統管理員（§6 最後一點）。
 /// </summary>
 public class SharedMasterDesignerTests : IDisposable
 {
@@ -222,6 +222,37 @@ public class SharedMasterDesignerTests : IDisposable
         _rig.Db(db => db.Set<AppOrphan>().Any(o => o.Kind == OrphanKind.Field && o.FieldId == valued && o.Name == code)).Should().BeTrue();
         _rig.Db(db => db.Set<Field>().Any(f => f.Id == empty)).Should().BeFalse("沒有值的直接刪");
         await _rig.AssertIntegrityAsync();
+    }
+
+    [Fact]
+    public async Task TheMasterDesigner_NeedsASystemAdmin_OrdinaryModulesDoNot()
+    {
+        await OpenCrmAndStockAsync();
+        _rig.Db(db => { db.Set<UserProgramPrivilege>().Add(new UserProgramPrivilege
+        {
+            UserId = "planner01", ProgramCode = "DYN00000", CanRead = true, CanAdd = true, CanEdit = true, CanDelete = true
+        }); });
+        var designer = _rig.App.AsUser("planner01");
+        var main = BlockOf("bp", "partner.main");
+        var phone = _rig.FieldId("bp", "partner.phone");
+
+        (await PostField(designer, main, "text", "官網")).StatusCode.Should().Be(HttpStatusCode.Forbidden);
+        (await PostField(designer, BlockOf("crmx", "bp/partner.crm"), "text", "官網")).StatusCode.Should().Be(HttpStatusCode.Forbidden, "貢獻欄位也一樣");
+        (await designer.PostAsJsonAsync($"{Base}/modules/{Partner}/blocks", new { label = new Dictionary<string, string> { ["zh-TW"] = "財務" } }))
+            .StatusCode.Should().Be(HttpStatusCode.Forbidden);
+        (await designer.PutAsJsonAsync($"{Base}/fields/{phone}/status", new { status = "Inactive" })).StatusCode.Should().Be(HttpStatusCode.Forbidden);
+        (await PostOption(designer, _rig.FieldId("bp", "partner.role"), "外包商")).StatusCode.Should().Be(HttpStatusCode.Forbidden);
+        (await designer.PutAsJsonAsync($"{Base}/blocks/{main}", new { label = new Dictionary<string, string> { ["zh-TW"] = "改名" }, collapsed = false }))
+            .StatusCode.Should().Be(HttpStatusCode.Forbidden);
+
+        // 一般模組只要設計器權限
+        var lead = await designer.PostAsJsonAsync($"{Base}/modules/crmx-lead/fields", new
+        {
+            blockId = BlockOf("crmx", "lead.main"), type = "text", label = new Dictionary<string, string> { ["zh-TW"] = "來源" }, config = new { }
+        });
+        lead.StatusCode.Should().Be(HttpStatusCode.Created, await lead.Content.ReadAsStringAsync());
+        // 系統管理員照常可以改主檔
+        (await PostField(_rig.Admin, main, "text", "官網")).StatusCode.Should().Be(HttpStatusCode.Created);
     }
 
     private async Task DeleteAppAsync(string key)

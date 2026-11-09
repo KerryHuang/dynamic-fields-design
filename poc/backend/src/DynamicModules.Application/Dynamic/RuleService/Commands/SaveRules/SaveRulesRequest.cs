@@ -6,7 +6,8 @@ using MediatR;
 namespace DynamicModules.Application.Dynamic.RuleService.Commands.SaveRules;
 
 public record SaveRulesRequest(string ModuleKey, List<RuleInput> Rules)
-    : IRequest<ServiceResult>, ITransactionalRequest, IDesignerRequest
+    : IRequest<ServiceResult>, ITransactionalRequest, IDesignerRequest, IMasterDesignRequest
 {
+    public MasterDesignTarget MasterTarget => new(ModuleKey: ModuleKey);
     public PermissionAction RequiredDesignerAction => PermissionAction.Edit;
 }

@@ -6,7 +6,8 @@ using MediatR;
 namespace DynamicModules.Application.Dynamic.PermissionService.Commands.SaveModulePermissions;
 
 public record SaveModulePermissionsRequest(string Key, ModulePermissionsDto Body)
-    : IRequest<ServiceResult>, ITransactionalRequest, IDesignerRequest
+    : IRequest<ServiceResult>, ITransactionalRequest, IDesignerRequest, IMasterDesignRequest
 {
+    public MasterDesignTarget MasterTarget => new(ModuleKey: Key);
     public PermissionAction RequiredDesignerAction => PermissionAction.Edit;
 }

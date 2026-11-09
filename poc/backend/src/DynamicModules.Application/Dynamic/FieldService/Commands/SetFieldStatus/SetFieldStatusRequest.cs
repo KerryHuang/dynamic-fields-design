@@ -5,7 +5,8 @@ using MediatR;
 
 namespace DynamicModules.Application.Dynamic.FieldService.Commands.SetFieldStatus;
 
-public record SetFieldStatusRequest(long FieldId, FieldStatus Status) : IRequest<ServiceResult>, ITransactionalRequest, IDesignerRequest
+public record SetFieldStatusRequest(long FieldId, FieldStatus Status) : IRequest<ServiceResult>, ITransactionalRequest, IDesignerRequest, IMasterDesignRequest
 {
+    public MasterDesignTarget MasterTarget => new(FieldId: FieldId);
     public PermissionAction RequiredDesignerAction => PermissionAction.Edit;
 }
