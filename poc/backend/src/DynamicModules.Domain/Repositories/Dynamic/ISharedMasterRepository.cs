@@ -36,10 +36,11 @@ public interface ISharedMasterRepository
     Task<List<BlockOwner>> ListBlockOwnersAsync(long moduleId, CancellationToken ct);
 
     /// <summary>
-    /// 模組（以 key、欄位、區塊或選項 Id 指定，取第一個非 null 的）是不是共用主檔的成員模組；找不到模組回 false。
-    /// 設計器在主檔模組上要系統管理員（設計 §6 最後一點）。
+    /// 給的模組（以 key、欄位、區塊、選項 Id，或既有事件的來源模組、既有檢查的模組、既有轉換的來源與目標模組指定，
+    /// 非 null 的都看）有沒有任一個是共用主檔的成員模組；都找不到回 false。設計器在主檔模組上要系統管理員（設計 §6 最後一點）。
     /// </summary>
-    Task<bool> IsMasterModuleAsync(string? moduleKey, long? fieldId, long? blockId, long? optionId, CancellationToken ct);
+    Task<bool> IsMasterModuleAsync(string? moduleKey, long? fieldId, long? blockId, long? optionId,
+        string? eventKey, string? checkKey, string? conversionKey, CancellationToken ct);
 
     /// <summary>區塊的擁有者：貢獻者（對照列含 /）、孤兒（已刪除的貢獻者留下的），兩者都不是就是主檔（基本區塊）。</summary>
     Task<ItemOwner> BlockOwnerAsync(long blockId, CancellationToken ct);

@@ -16,19 +16,22 @@ public static class CheckMapping
         new(c.Key, c.NameI18n, moduleKey, c.Active, c.Definition, notices ?? []);
 }
 
-public record CreateCheckRequest(CheckInput Input) : IRequest<ServiceResult>, ITransactionalRequest, IDesignerRequest
+public record CreateCheckRequest(CheckInput Input) : IRequest<ServiceResult>, ITransactionalRequest, IDesignerRequest, IMasterDesignRequest
 {
+    public IReadOnlyList<MasterDesignTarget> MasterTargets => [new(ModuleKey: Input.ModuleKey)];
     public PermissionAction RequiredDesignerAction => PermissionAction.Edit;
 }
 
 /// <summary>更新時代碼與模組不能改。</summary>
-public record UpdateCheckRequest(string Key, CheckInput Input) : IRequest<ServiceResult>, ITransactionalRequest, IDesignerRequest
+public record UpdateCheckRequest(string Key, CheckInput Input) : IRequest<ServiceResult>, ITransactionalRequest, IDesignerRequest, IMasterDesignRequest
 {
+    public IReadOnlyList<MasterDesignTarget> MasterTargets => [new(CheckKey: Key), new(ModuleKey: Input.ModuleKey)];
     public PermissionAction RequiredDesignerAction => PermissionAction.Edit;
 }
 
-public record DeleteCheckRequest(string Key) : IRequest<ServiceResult>, ITransactionalRequest, IDesignerRequest
+public record DeleteCheckRequest(string Key) : IRequest<ServiceResult>, ITransactionalRequest, IDesignerRequest, IMasterDesignRequest
 {
+    public IReadOnlyList<MasterDesignTarget> MasterTargets => [new(CheckKey: Key)];
     public PermissionAction RequiredDesignerAction => PermissionAction.Edit;
 }
 

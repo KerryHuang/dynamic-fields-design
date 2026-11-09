@@ -8,6 +8,6 @@ namespace DynamicModules.Application.Dynamic.FieldService.Commands.UpdateBlock;
 /// <param name="Columns">每列欄數；null 表示不變。</param>
 public record UpdateBlockRequest(long BlockId, I18nText Label, bool Collapsed, int? Columns = null) : IRequest<ServiceResult>, ITransactionalRequest, IDesignerRequest, IMasterDesignRequest
 {
-    public MasterDesignTarget MasterTarget => new(BlockId: BlockId);
+    public IReadOnlyList<MasterDesignTarget> MasterTargets => [new(BlockId: BlockId)];
     public PermissionAction RequiredDesignerAction => PermissionAction.Edit;
 }

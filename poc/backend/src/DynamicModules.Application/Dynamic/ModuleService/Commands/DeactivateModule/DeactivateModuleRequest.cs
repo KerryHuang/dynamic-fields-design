@@ -6,6 +6,6 @@ namespace DynamicModules.Application.Dynamic.ModuleService.Commands.DeactivateMo
 
 public record DeactivateModuleRequest(string Key) : IRequest<ServiceResult>, ITransactionalRequest, IDesignerRequest, IMasterDesignRequest
 {
-    public MasterDesignTarget MasterTarget => new(ModuleKey: Key);
+    public IReadOnlyList<MasterDesignTarget> MasterTargets => [new(ModuleKey: Key)];
     public PermissionAction RequiredDesignerAction => PermissionAction.Edit;
 }

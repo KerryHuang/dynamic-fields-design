@@ -255,6 +255,109 @@ public class SharedMasterDesignerTests : IDisposable
         (await PostField(_rig.Admin, main, "text", "官網")).StatusCode.Should().Be(HttpStatusCode.Created);
     }
 
+    /// <summary>
+    /// 守衛涵蓋所有會改到主檔模組的設計器指令（§6 最後一點）：欄位、區塊、選項、規則、權限、模組刪除，
+    /// 以及狀態機、分錄、列印範本、連動事件、跨記錄檢查、轉換（來源或目標是主檔都算）。只帶代碼的修改、刪除以既有定義的模組為準。
+    /// </summary>
+    [Fact]
+    public async Task EveryDesignerCommandThatTouchesAMasterModule_NeedsASystemAdmin()
+    {
+        await OpenCrmAndStockAsync();
+        _rig.Db(db => { db.Set<UserProgramPrivilege>().Add(new UserProgramPrivilege
+        {
+            UserId = "planner01", ProgramCode = "DYN00000", CanRead = true, CanAdd = true, CanEdit = true, CanDelete = true
+        }); });
+        var designer = _rig.App.AsUser("planner01");
+        var main = BlockOf("bp", "partner.main");
+        var crm = BlockOf("crmx", "bp/partner.crm");
+        var phone = _rig.FieldId("bp", "partner.phone");
+        var role = _rig.FieldId("bp", "partner.role");
+        var customer = _rig.Db(db => db.Set<FieldOption>().First(o => o.FieldId == role).Id);
+        var partnerId = _rig.Db(db => db.Set<Module>().Single(m => m.Key == Partner).Id);
+        _rig.Db(db =>
+        {
+            db.Set<ModuleEvent>().Add(new ModuleEvent { Key = "ev-partner", SourceModuleId = partnerId });
+            db.Set<ModuleCheck>().Add(new ModuleCheck { Key = "chk-partner", ModuleId = partnerId });
+        });
+        static Dictionary<string, string> Name(string s) => new() { ["zh-TW"] = s };
+        var ev = new
+        {
+            key = "ev-x", name = Name("x"), sourceModuleKey = Partner, active = true,
+            definition = new { trigger = new { on = "create" }, effects = Array.Empty<object>() }
+        };
+        var check = new
+        {
+            key = "chk-x", name = Name("x"), moduleKey = Partner, active = true,
+            definition = new
+            {
+                groupBy = Array.Empty<long>(), function = "count", assert = new { op = "gte", limit = new { @const = 0 } }, message = Name("x")
+            }
+        };
+        object ConversionBody(string source, string target) => new
+        {
+            key = "cv-x", name = Name("x"), sourceModuleKey = source, targetModuleKey = target, active = true,
+            definition = new { sourceStates = Array.Empty<long>(), header = new { sourceFieldId = 0, copy = Array.Empty<object>() } }
+        };
+        var print = new { key = "pt-x", name = Name("x"), body = "<p>x</p>", active = true };
+        var noPrivileges = new { read = false, add = false, edit = false, delete = false, printExport = false, pricing = false, approve = false };
+
+        var calls = new (string What, Func<Task<HttpResponseMessage>> Send)[]
+        {
+            ("UpdateField", () => designer.PutAsJsonAsync($"{Base}/fields/{phone}", new { type = "phone", label = Name("電話"), config = new { }, blockId = main })),
+            ("DeleteField", () => designer.DeleteAsync($"{Base}/fields/{phone}?purged=0")),
+            ("DeleteBlock", () => designer.DeleteAsync($"{Base}/blocks/{crm}?purged=0")),
+            ("UpdateOption", () => designer.PutAsJsonAsync($"{Base}/options/{customer}", new { label = Name("客戶"), color = (string?)null, active = false })),
+            ("SaveRules", () => designer.PutAsJsonAsync($"{Base}/modules/{Partner}/rules", new { rules = Array.Empty<object>() })),
+            ("SaveModulePermissions", () => designer.PutAsJsonAsync($"{Base}/modules/{Partner}/permissions", new
+            {
+                groups = new[] { new { groupId = _rig.GroupId("sales"), privileges = noPrivileges, scope = "all" } },
+                users = Array.Empty<object>(), fields = Array.Empty<object>(), options = Array.Empty<object>()
+            })),
+            ("DeleteModule", () => designer.DeleteAsync($"{Base}/modules/{Partner}?purged=0")),
+            ("SaveWorkflow", () => designer.PutAsJsonAsync($"{Base}/modules/{Partner}/workflow", new
+            {
+                statusFieldId = role, initialOptionId = customer, states = new[] { new { optionId = customer, readOnly = true } },
+                transitions = Array.Empty<object>()
+            })),
+            ("DeleteWorkflow", () => designer.DeleteAsync($"{Base}/modules/{Partner}/workflow")),
+            ("SaveLedger", () => designer.PutAsJsonAsync($"{Base}/modules/{Partner}/ledger", new
+            {
+                reversalFieldId = phone, negate = Array.Empty<long>(), swap = Array.Empty<long[]>(), confirmFreeze = false
+            })),
+            ("DeleteLedger", () => designer.DeleteAsync($"{Base}/modules/{Partner}/ledger")),
+            ("CreatePrintTemplate", () => designer.PostAsJsonAsync($"{Base}/modules/{Partner}/print-templates", print)),
+            ("UpdatePrintTemplate", () => designer.PutAsJsonAsync($"{Base}/modules/{Partner}/print-templates/pt-x", print)),
+            ("DeletePrintTemplate", () => designer.DeleteAsync($"{Base}/modules/{Partner}/print-templates/pt-x")),
+            ("CreateEvent", () => designer.PostAsJsonAsync($"{Base}/events", ev)),
+            // 帶的是一般模組，但既有的事件來源是主檔：以既有定義為準
+            ("UpdateEvent", () => designer.PutAsJsonAsync($"{Base}/events/ev-partner", ev with { key = "ev-partner", sourceModuleKey = "crmx-lead" })),
+            ("DeleteEvent", () => designer.DeleteAsync($"{Base}/events/ev-partner")),
+            ("CreateCheck", () => designer.PostAsJsonAsync($"{Base}/checks", check)),
+            ("UpdateCheck", () => designer.PutAsJsonAsync($"{Base}/checks/chk-partner", check with { key = "chk-partner", moduleKey = "crmx-lead" })),
+            ("DeleteCheck", () => designer.DeleteAsync($"{Base}/checks/chk-partner")),
+            ("CreateConversion（來源是主檔）", () => designer.PostAsJsonAsync($"{Base}/conversions", ConversionBody(Partner, "crmx-order"))),
+            ("CreateConversion（目標是主檔）", () => designer.PostAsJsonAsync($"{Base}/conversions", ConversionBody("crmx-lead", Partner))),
+            // CRM 的「潛在客戶轉往來對象」目標是主檔；帶兩個一般模組也一樣以既有定義為準
+            ("UpdateConversion", () => designer.PutAsJsonAsync($"{Base}/conversions/crmx-lead-to-partner", ConversionBody("crmx-lead", "crmx-order"))),
+            ("DeleteConversion", () => designer.DeleteAsync($"{Base}/conversions/crmx-lead-to-partner")),
+        };
+        foreach (var (what, send) in calls)
+        {
+            var res = await send();
+            res.StatusCode.Should().Be(HttpStatusCode.Forbidden, $"{what}：{await res.Content.ReadAsStringAsync()}");
+        }
+        _rig.Db(db => db.Set<Conversion>().Any(c => c.Key == "crmx-lead-to-partner")).Should().BeTrue();
+        _rig.Db(db => db.Set<ModuleEvent>().Any(e => e.Key == "ev-partner")).Should().BeTrue();
+        _rig.Db(db => db.Set<Field>().Any(f => f.Id == phone)).Should().BeTrue();
+
+        // 一般模組只要設計器權限
+        var ordinary = await designer.PostAsJsonAsync($"{Base}/modules/crmx-lead/print-templates", print);
+        ordinary.StatusCode.Should().Be(HttpStatusCode.Created, await ordinary.Content.ReadAsStringAsync());
+        // 系統管理員照常可以
+        var admin = await _rig.Admin.PostAsJsonAsync($"{Base}/modules/{Partner}/print-templates", print);
+        admin.StatusCode.Should().Be(HttpStatusCode.Created, await admin.Content.ReadAsStringAsync());
+    }
+
     private async Task DeleteAppAsync(string key)
     {
         var preview = await _rig.Admin.DeleteAsync($"{SharedMasterRig.Apps}/{key}?purged=-1");

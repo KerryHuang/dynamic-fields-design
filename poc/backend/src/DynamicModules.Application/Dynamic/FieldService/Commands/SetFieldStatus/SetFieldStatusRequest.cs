@@ -7,6 +7,6 @@ namespace DynamicModules.Application.Dynamic.FieldService.Commands.SetFieldStatu
 
 public record SetFieldStatusRequest(long FieldId, FieldStatus Status) : IRequest<ServiceResult>, ITransactionalRequest, IDesignerRequest, IMasterDesignRequest
 {
-    public MasterDesignTarget MasterTarget => new(FieldId: FieldId);
+    public IReadOnlyList<MasterDesignTarget> MasterTargets => [new(FieldId: FieldId)];
     public PermissionAction RequiredDesignerAction => PermissionAction.Edit;
 }

@@ -10,7 +10,7 @@ namespace DynamicModules.Application.Dynamic.FieldService.Commands.AddField;
 public record AddFieldRequest(string ModuleKey, long BlockId, FieldType Type, I18nText Label, FieldConfig Config, bool Designer = false)
     : IRequest<ServiceResult>, ITransactionalRequest, IDesignerRequest, IMasterDesignRequest
 {
-    public MasterDesignTarget MasterTarget => new(ModuleKey: ModuleKey);
+    public IReadOnlyList<MasterDesignTarget> MasterTargets => [new(ModuleKey: ModuleKey)];
 
     public PermissionAction RequiredDesignerAction => PermissionAction.Add;
 }

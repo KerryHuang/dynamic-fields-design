@@ -4,19 +4,22 @@ using MediatR;
 
 namespace DynamicModules.Application.Dynamic.EventService;
 
-public record CreateEventRequest(EventInput Input) : IRequest<ServiceResult>, ITransactionalRequest, IDesignerRequest
+public record CreateEventRequest(EventInput Input) : IRequest<ServiceResult>, ITransactionalRequest, IDesignerRequest, IMasterDesignRequest
 {
+    public IReadOnlyList<MasterDesignTarget> MasterTargets => [new(ModuleKey: Input.SourceModuleKey)];
     public PermissionAction RequiredDesignerAction => PermissionAction.Edit;
 }
 
 /// <summary>更新時代碼與來源模組不能改（事件事實用代碼追溯）。</summary>
-public record UpdateEventRequest(string Key, EventInput Input) : IRequest<ServiceResult>, ITransactionalRequest, IDesignerRequest
+public record UpdateEventRequest(string Key, EventInput Input) : IRequest<ServiceResult>, ITransactionalRequest, IDesignerRequest, IMasterDesignRequest
 {
+    public IReadOnlyList<MasterDesignTarget> MasterTargets => [new(EventKey: Key), new(ModuleKey: Input.SourceModuleKey)];
     public PermissionAction RequiredDesignerAction => PermissionAction.Edit;
 }
 
-public record DeleteEventRequest(string Key) : IRequest<ServiceResult>, ITransactionalRequest, IDesignerRequest
+public record DeleteEventRequest(string Key) : IRequest<ServiceResult>, ITransactionalRequest, IDesignerRequest, IMasterDesignRequest
 {
+    public IReadOnlyList<MasterDesignTarget> MasterTargets => [new(EventKey: Key)];
     public PermissionAction RequiredDesignerAction => PermissionAction.Edit;
 }
 

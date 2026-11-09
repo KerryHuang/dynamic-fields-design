@@ -17,8 +17,14 @@ public class MasterDesignerBehavior<TReq, TRes>(ISharedMasterRepository shared, 
         if (typeof(TRes) != typeof(ServiceResult))
             throw new InvalidOperationException($"{typeof(TReq).Name} 是主檔設計器請求，回傳型別必須是 ServiceResult（fail-closed）");
 
-        var t = design.MasterTarget;
-        if (!await shared.IsMasterModuleAsync(t.ModuleKey, t.FieldId, t.BlockId, t.OptionId, ct)) return await next();
+        var touchesMaster = false;
+        foreach (var t in design.MasterTargets)
+            if (await shared.IsMasterModuleAsync(t.ModuleKey, t.FieldId, t.BlockId, t.OptionId, t.EventKey, t.CheckKey, t.ConversionKey, ct))
+            {
+                touchesMaster = true;
+                break;
+            }
+        if (!touchesMaster) return await next();
         var user = await accounts.GetTrackedAsync(current.UserId, ct);
         return user is { IsActive: true, IsSystemAdmin: true }
             ? await next()

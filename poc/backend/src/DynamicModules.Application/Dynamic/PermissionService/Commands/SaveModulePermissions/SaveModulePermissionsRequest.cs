@@ -8,6 +8,6 @@ namespace DynamicModules.Application.Dynamic.PermissionService.Commands.SaveModu
 public record SaveModulePermissionsRequest(string Key, ModulePermissionsDto Body)
     : IRequest<ServiceResult>, ITransactionalRequest, IDesignerRequest, IMasterDesignRequest
 {
-    public MasterDesignTarget MasterTarget => new(ModuleKey: Key);
+    public IReadOnlyList<MasterDesignTarget> MasterTargets => [new(ModuleKey: Key)];
     public PermissionAction RequiredDesignerAction => PermissionAction.Edit;
 }

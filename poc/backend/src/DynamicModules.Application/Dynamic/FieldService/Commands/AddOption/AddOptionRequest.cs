@@ -9,7 +9,7 @@ namespace DynamicModules.Application.Dynamic.FieldService.Commands.AddOption;
 public record AddOptionRequest(long FieldId, I18nText Label, string? Color, bool Designer = false)
     : IRequest<ServiceResult>, ITransactionalRequest, IDesignerRequest, IMasterDesignRequest
 {
-    public MasterDesignTarget MasterTarget => new(FieldId: FieldId);
+    public IReadOnlyList<MasterDesignTarget> MasterTargets => [new(FieldId: FieldId)];
 
     public PermissionAction RequiredDesignerAction => PermissionAction.Add;
 }

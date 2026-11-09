@@ -74,15 +74,28 @@ public class SharedMasterRepository(DynamicDbContext db) : ISharedMasterReposito
         return owned.Concat(orphans).ToList();
     }
 
-    public async Task<bool> IsMasterModuleAsync(string? moduleKey, long? fieldId, long? blockId, long? optionId, CancellationToken ct)
+    public async Task<bool> IsMasterModuleAsync(string? moduleKey, long? fieldId, long? blockId, long? optionId,
+        string? eventKey, string? checkKey, string? conversionKey, CancellationToken ct)
     {
-        IQueryable<long> ids =
-            moduleKey is not null ? db.Set<Module>().Where(m => m.Key == moduleKey).Select(m => m.Id)
-            : fieldId is { } f ? db.Set<Field>().Where(x => x.Id == f).Select(x => x.ModuleId)
-            : blockId is { } b ? db.Set<Block>().Where(x => x.Id == b).Select(x => x.ModuleId)
-            : optionId is { } o ? from op in db.Set<FieldOption>() where op.Id == o
-                                  join fl in db.Set<Field>() on op.FieldId equals fl.Id select fl.ModuleId
-            : db.Set<Module>().Where(_ => false).Select(m => m.Id);
+        var ids = new List<long>();
+        if (moduleKey is not null)
+            ids.AddRange(await db.Set<Module>().AsNoTracking().Where(m => m.Key == moduleKey).Select(m => m.Id).ToListAsync(ct));
+        if (fieldId is { } f)
+            ids.AddRange(await db.Set<Field>().AsNoTracking().Where(x => x.Id == f).Select(x => x.ModuleId).ToListAsync(ct));
+        if (blockId is { } b)
+            ids.AddRange(await db.Set<Block>().AsNoTracking().Where(x => x.Id == b).Select(x => x.ModuleId).ToListAsync(ct));
+        if (optionId is { } o)
+            ids.AddRange(await (from op in db.Set<FieldOption>().AsNoTracking() where op.Id == o
+                                join fl in db.Set<Field>().AsNoTracking() on op.FieldId equals fl.Id select fl.ModuleId).ToListAsync(ct));
+        if (eventKey is not null)
+            ids.AddRange(await db.Set<ModuleEvent>().AsNoTracking().Where(e => e.Key == eventKey).Select(e => e.SourceModuleId).ToListAsync(ct));
+        if (checkKey is not null)
+            ids.AddRange(await db.Set<ModuleCheck>().AsNoTracking().Where(c => c.Key == checkKey).Select(c => c.ModuleId).ToListAsync(ct));
+        if (conversionKey is not null)
+            foreach (var c in await db.Set<Conversion>().AsNoTracking().Where(c => c.Key == conversionKey)
+                         .Select(c => new { c.SourceModuleId, c.TargetModuleId }).ToListAsync(ct))
+                ids.AddRange([c.SourceModuleId, c.TargetModuleId]);
+        if (ids.Count == 0) return false;
         return await (from am in db.Set<AppModule>().AsNoTracking()
                       join a in db.Set<App>().AsNoTracking() on am.AppId equals a.Id
                       where a.Kind == AppKind.Master && ids.Contains(am.ModuleId)

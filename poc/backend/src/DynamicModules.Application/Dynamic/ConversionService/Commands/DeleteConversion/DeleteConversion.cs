@@ -5,8 +5,9 @@ using MediatR;
 
 namespace DynamicModules.Application.Dynamic.ConversionService.Commands.DeleteConversion;
 
-public record DeleteConversionRequest(string Key) : IRequest<ServiceResult>, ITransactionalRequest, IDesignerRequest
+public record DeleteConversionRequest(string Key) : IRequest<ServiceResult>, ITransactionalRequest, IDesignerRequest, IMasterDesignRequest
 {
+    public IReadOnlyList<MasterDesignTarget> MasterTargets => [new(ConversionKey: Key)];
     public PermissionAction RequiredDesignerAction => PermissionAction.Edit;
 }
 

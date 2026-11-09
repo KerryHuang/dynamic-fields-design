@@ -8,6 +8,6 @@ namespace DynamicModules.Application.Dynamic.RuleService.Commands.SaveRules;
 public record SaveRulesRequest(string ModuleKey, List<RuleInput> Rules)
     : IRequest<ServiceResult>, ITransactionalRequest, IDesignerRequest, IMasterDesignRequest
 {
-    public MasterDesignTarget MasterTarget => new(ModuleKey: ModuleKey);
+    public IReadOnlyList<MasterDesignTarget> MasterTargets => [new(ModuleKey: ModuleKey)];
     public PermissionAction RequiredDesignerAction => PermissionAction.Edit;
 }

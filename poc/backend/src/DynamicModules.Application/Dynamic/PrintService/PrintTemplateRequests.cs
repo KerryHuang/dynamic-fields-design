@@ -10,19 +10,22 @@ public record GetPrintTemplateDefinitionsRequest(string ModuleKey) : IRequest<Se
     public PermissionAction RequiredDesignerAction => PermissionAction.Read;
 }
 
-public record CreatePrintTemplateRequest(string ModuleKey, PrintTemplateInput Input) : IRequest<ServiceResult>, ITransactionalRequest, IDesignerRequest
+public record CreatePrintTemplateRequest(string ModuleKey, PrintTemplateInput Input) : IRequest<ServiceResult>, ITransactionalRequest, IDesignerRequest, IMasterDesignRequest
 {
+    public IReadOnlyList<MasterDesignTarget> MasterTargets => [new(ModuleKey: ModuleKey)];
     public PermissionAction RequiredDesignerAction => PermissionAction.Edit;
 }
 
 /// <summary>更新時代碼不能改。</summary>
-public record UpdatePrintTemplateRequest(string ModuleKey, string Key, PrintTemplateInput Input) : IRequest<ServiceResult>, ITransactionalRequest, IDesignerRequest
+public record UpdatePrintTemplateRequest(string ModuleKey, string Key, PrintTemplateInput Input) : IRequest<ServiceResult>, ITransactionalRequest, IDesignerRequest, IMasterDesignRequest
 {
+    public IReadOnlyList<MasterDesignTarget> MasterTargets => [new(ModuleKey: ModuleKey)];
     public PermissionAction RequiredDesignerAction => PermissionAction.Edit;
 }
 
-public record DeletePrintTemplateRequest(string ModuleKey, string Key) : IRequest<ServiceResult>, ITransactionalRequest, IDesignerRequest
+public record DeletePrintTemplateRequest(string ModuleKey, string Key) : IRequest<ServiceResult>, ITransactionalRequest, IDesignerRequest, IMasterDesignRequest
 {
+    public IReadOnlyList<MasterDesignTarget> MasterTargets => [new(ModuleKey: ModuleKey)];
     public PermissionAction RequiredDesignerAction => PermissionAction.Edit;
 }
 
