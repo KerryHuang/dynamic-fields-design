@@ -308,6 +308,23 @@ public class AppFormat6Tests
         AloneErrors(AppTestPackagesV6.Crm).Should().BeEmpty("公式本身也停用時可以");
     }
 
+    private static string CrmWithCopyEvent(string field, string allow) => AppTestPackagesV6.Crm.Replace("  \"contributions\": [",
+        "  \"events\": [ { \"code\": \"crm6-copy\", \"name\": { \"zh-TW\": \"抄\" }, \"active\": true, \"source\": \"order\", \"trigger\": { \"on\": \"create\" }, \"when\": null,\n"
+        + "      \"effects\": [ { \"code\": \"mk\", \"kind\": \"create\", \"target\": \"lead\", \"set\": [ { \"to\": \"lead.company\", \"from\": { \"side\": \"header\", \"field\": \"" + field + "\" }" + allow + " } ] } ] } ],\n"
+        + "  \"contributions\": [");
+
+    /// <summary>審查待決 7：限定可見的貢獻欄位（和引用它們的貢獻公式）和隱藏欄位一樣，事件複製要明確 allowHiddenSource，與執行期一致。</summary>
+    [Theory]
+    [InlineData("partner-lite/partner.credit")]
+    [InlineData("partner-lite/partner.nameLength")]
+    public void Event_CopyingARestrictedContributionField_NeedsAllowHiddenSource(string field)
+    {
+        Parse(CrmWithCopyEvent(field, "")).Events.Should().ContainSingle("事件確實被加進套件");
+        AloneErrors(CrmWithCopyEvent(field, "")).Should().Contain(e => e.Contains("allowHiddenSource") && e.Contains(field));
+        AloneErrors(CrmWithCopyEvent(field, ", \"allowHiddenSource\": true")).Should().NotContain(e => e.Contains("allowHiddenSource"));
+        AloneErrors(CrmWithCopyEvent("lead.company", "")).Should().NotContain(e => e.Contains("allowHiddenSource"));
+    }
+
     [Fact]
     public void Contribution_CodeAndOptionCodeCannotEqualBaseCodes()
     {

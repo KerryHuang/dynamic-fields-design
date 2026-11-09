@@ -26,6 +26,20 @@ public static partial class AppPackageValidator
             AppReportCodec.TypesOf(p.Modules));
         var workflowOf = p.Workflows.Where(w => w is not null && w.Module is not null).GroupBy(w => w.Module).ToDictionary(g => g.Key, g => g.First());
         var hidden = p.FieldAccess.Where(a => a is { Access: FieldAccess.Hidden }).Select(a => a.Field).ToHashSet();
+        // 貢獻欄位是限定可見的欄位，加上引用它們的公式（逐層），和執行期 EventValidator 的規則一致（審查待決 7）
+        var restricted = p.Contributions.Where(c => c?.Master is not null && c.Module is not null)
+            .SelectMany(c => c.Fields.Where(f => f is not null).Select(f => Qualify($"{c.Master}/{c.Module}", f.Code))).ToHashSet();
+        var formulas = p.Modules.SelectMany(m => m.Blocks.SelectMany(b => b.Fields).Select(f => (Scope: m.Code, Field: f)))
+            .Concat(p.Contributions.Where(c => c?.Master is not null && c.Module is not null).SelectMany(c => c.Fields.Where(f => f is not null).Select(f => (Scope: $"{c.Master}/{c.Module}", Field: f))))
+            .Select(x => (Name: Qualify(x.Scope, x.Field.Code), Refs: FormulaOf(x.Field) is { } fx ? FormulaCodes(fx).Select(t => t.Contains('.') ? t : Qualify(x.Scope, t)).ToList() : []))
+            .Where(x => x.Refs.Count > 0).ToList();
+        for (var grew = true; grew;)
+        {
+            grew = false;
+            foreach (var f in formulas.Where(f => !restricted.Contains(f.Name) && f.Refs.Any(restricted.Contains)))
+                grew |= restricted.Add(f.Name);
+        }
+        hidden.UnionWith(restricted);
 
         // ---- events ----
         var eventCodes = new HashSet<string>();
@@ -67,7 +81,7 @@ public static partial class AppPackageValidator
                     if (s.Formula is { } formula)
                         used.AddRange(System.Text.RegularExpressions.Regex.Matches(formula.Expr ?? "", @"\{([^{}.\s]+\.[^{}.\s]+)\}").Select(m => m.Groups[1].Value));
                     foreach (var name in used.Where(hidden.Contains).Distinct())
-                        errors.Add($"{at}.effects[{fx.Code}]: 來源欄位 {name} 對某些群組設為隱藏，複製會把被隱藏的值帶到目標模組，必須在該對應明確允許（allowHiddenSource）");
+                        errors.Add($"{at}.effects[{fx.Code}]: 來源欄位 {name} 對某些群組設為隱藏或限定可見，複製會把看不到的值帶到目標模組，必須在該對應明確允許（allowHiddenSource）");
                 }
         }
         foreach (var e in p.Events.Where(e => e is not null))
