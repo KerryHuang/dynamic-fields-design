@@ -40,6 +40,8 @@ public sealed partial class AppOpenPlanner(
         var validation = AppPackageValidator.Validate(package);
         var warnings = new List<string>(validation.Warnings);
         var errors = new List<string>(validation.Errors);
+        // 共用主檔的開啟、綁定與貢獻還沒實作（設計 §15.3 第 4 步）：先整份擋下，不能開成「看起來有主檔、其實沒有」
+        if (UsesSharedMasters(package)) errors.Add(AppMessages.SharedMastersNotYetSupported);
         if (errors.Count > 0)
             return new Plan(null, source, new Dictionary<string, string>(), new Dictionary<string, string>(), Empty with { Errors = errors }, new Dictionary<string, long>());
 
@@ -112,8 +114,12 @@ public sealed partial class AppOpenPlanner(
     public static AppRequires RequiresOf(AppPackageData package) => new()
     {
         Apps = package.Manifest.Requires.Apps.Select(a => new AppRequirement { Id = a.Id, Modules = [.. a.Modules] }).ToList(),
-        Entities = [.. package.Manifest.Requires.Entities]
+        Entities = [.. package.Manifest.Requires.Entities],
+        Masters = package.Manifest.Requires.Masters.Select(a => new AppRequirement { Id = a.Id, Modules = [.. a.Modules] }).ToList()
     };
+
+    private static bool UsesSharedMasters(AppPackageData package) =>
+        package.Manifest.IsMaster || package.Manifest.Requires.Masters.Count > 0 || package.Contributions.Count > 0;
 
     private static Plan Fail(ServiceResult failure) =>
         new(failure, null, new Dictionary<string, string>(), new Dictionary<string, string>(), Empty, new Dictionary<string, long>());

@@ -15,11 +15,15 @@ public record TemplatePackage(
     public List<TemplateModule> Modules { get; init; } = Modules ?? [];
 }
 
-/// <summary>TitleField 只有擴充模組可以是 null（標題取自既有資料）。</summary>
+/// <summary>
+/// TitleField 只有擴充模組可以是 null（標題取自既有資料）。
+/// TitleTemplate 是標題樣板，例如 <c>{no} {name}</c>，{} 內是本模組的欄位代號；有值時記錄標題照樣板組成。
+/// Extensible 只有主檔套件的模組可以設（接受其他應用程式貢獻欄位）。兩者都是應用程式套件格式 6 才有。
+/// </summary>
 public record TemplateModule(
     string Code, string Key, I18nText Name, string? Icon, string? Section, ModuleKind Kind,
     string? HostEntityKey, string? TitleField, List<TemplateBlock> Blocks, List<TemplateRule> Rules,
-    List<TemplateView> Views, List<TemplatePermission> Permissions)
+    List<TemplateView> Views, List<TemplatePermission> Permissions, bool? Extensible = null, string? TitleTemplate = null)
 {
     public List<TemplateBlock> Blocks { get; init; } = Blocks ?? [];
     public List<TemplateRule> Rules { get; init; } = Rules ?? [];
@@ -33,8 +37,11 @@ public record TemplateBlock(string Code, I18nText Label, bool Collapsed, List<Te
     public List<TemplateField> Fields { get; init; } = Fields ?? [];
 }
 
-/// <summary>Config 是 FieldConfig 的 JSON，但 formula、選項、rollup、parentDefaultField 用代號；替換在套用時做。</summary>
-public record TemplateField(string Code, FieldType Type, I18nText Label, JsonElement Config, List<TemplateOption> Options)
+/// <summary>
+/// Config 是 FieldConfig 的 JSON，但 formula、選項、rollup、parentDefaultField 用代號；替換在套用時做。
+/// Active 是 false 代表客戶停用了這個欄位（應用程式套件格式 6，只用在主檔模組與貢獻欄位）；省略時為啟用。
+/// </summary>
+public record TemplateField(string Code, FieldType Type, I18nText Label, JsonElement Config, List<TemplateOption> Options, bool? Active = null)
 {
     private static readonly JsonElement EmptyObject = JsonDocument.Parse("{}").RootElement.Clone();
 

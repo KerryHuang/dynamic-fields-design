@@ -5,7 +5,7 @@ using DynamicModules.Domain.ValueObjects;
 
 namespace DynamicModules.Application.Dynamic.AppService.Data;
 
-// 應用程式套件格式（formatVersion 2 到 4）。modules 直接重用範本的 TemplateModule；
+// 應用程式套件格式（formatVersion 2 到 6）。modules 直接重用範本的 TemplateModule；
 // 保留的 section（dashboards）目前只能是空陣列，讀進來的值不解讀，非空一律整份拒絕（fail-closed，見 AppPackageValidator）。
 
 public record AppPackageData(
@@ -13,15 +13,18 @@ public record AppPackageData(
     List<AppFieldAccess>? FieldAccess, List<AppOptionScope>? OptionScopes,
     List<AppPackageReport>? Reports, List<JsonElement>? Dashboards, List<AppWorkflow>? Workflows,
     List<AppConversion>? Conversions, List<AppEvent>? Events, List<AppPrintTemplate>? PrintTemplates,
-    List<AppCheck>? Checks = null, List<AppLedger>? Ledgers = null, List<AppIntegrationDecl>? Integrations = null)
+    List<AppCheck>? Checks = null, List<AppLedger>? Ledgers = null, List<AppIntegrationDecl>? Integrations = null,
+    List<AppContribution>? Contributions = null)
 {
     public const string FormatName = "formwright-app";
     /// <summary>
     /// 3：workflows、conversions、reports、printTemplates 與 config.fill 可用（2 的檔案這些必須是空的）。
     /// 4：events、checks、ledgers 可用（3 以下的檔案這些必須是空的）。
     /// 5：integrations 與 config.refGuard 可用（4 以下的檔案這些必須是空的／不存在）。
+    /// 6：共用主檔（manifest.kind、requires.masters、contributions、模組的 extensible、欄位的 active、轉換的 header.set）
+    ///    與模組的標題樣板 titleTemplate 可用（5 以下的檔案這些必須是空的／不存在）。
     /// </summary>
-    public const int CurrentFormatVersion = 5;
+    public const int CurrentFormatVersion = 6;
     public const int MinFormatVersion = 2;
 
     public List<AppGroup> Groups { get; init; } = Groups ?? [];
@@ -36,6 +39,7 @@ public record AppPackageData(
     public List<AppCheck> Checks { get; init; } = Checks ?? [];
     public List<AppLedger> Ledgers { get; init; } = Ledgers ?? [];
     public List<AppIntegrationDecl> Integrations { get; init; } = Integrations ?? [];
+    public List<AppContribution> Contributions { get; init; } = Contributions ?? [];
 
     /// <summary>名稱與非空的保留 section；有值就代表這份套件需要這個版本讀不懂的功能。</summary>
     public IEnumerable<string> UnsupportedSections()
@@ -44,16 +48,24 @@ public record AppPackageData(
     }
 }
 
+/// <summary>Kind 是 app（省略時）或 master（共用主檔套件，格式 6）。</summary>
 public record AppManifest(
-    string Id, string Version, I18nText Name, I18nText? Description, string? Icon, string? Vendor, AppManifestRequires? Requires)
+    string Id, string Version, I18nText Name, I18nText? Description, string? Icon, string? Vendor, AppManifestRequires? Requires,
+    string? Kind = null)
 {
+    public const string AppKindName = "app", MasterKindName = "master";
+
     public AppManifestRequires Requires { get; init; } = Requires ?? new AppManifestRequires(null, null);
+
+    public bool IsMaster => Kind == MasterKindName;
 }
 
-public record AppManifestRequires(List<AppRequirementData>? Apps, List<string>? Entities)
+/// <summary>Masters 是硬相依、自動滿足的共用主檔（格式 6）；形狀同 Apps。</summary>
+public record AppManifestRequires(List<AppRequirementData>? Apps, List<string>? Entities, List<AppRequirementData>? Masters = null)
 {
     public List<AppRequirementData> Apps { get; init; } = Apps ?? [];
     public List<string> Entities { get; init; } = Entities ?? [];
+    public List<AppRequirementData> Masters { get; init; } = Masters ?? [];
 }
 
 public record AppRequirementData(string Id, List<string> Modules)
@@ -102,10 +114,14 @@ public record AppConversion(
     public List<string> SourceStates { get; init; } = SourceStates ?? [];
 }
 
-public record AppConversionHeader(string SourceField, List<AppCopy> Copy)
+/// <summary>Set 是格式 6 的固定值（只收下拉欄位與選項代號）；沒有時保持 null，匯出格式 5 以前的轉換不多出 set。</summary>
+public record AppConversionHeader(string SourceField, List<AppCopy> Copy, List<AppConversionSet>? Set = null)
 {
     public List<AppCopy> Copy { get; init; } = Copy ?? [];
 }
+
+/// <summary>轉換建立目標時寫入的固定值：To 是目標的限定欄位名（可以是主檔符號），Option 是該下拉欄位的選項代號。</summary>
+public record AppConversionSet(string To, string Option);
 
 public record AppConversionLines(string SourceModule, string TargetModule, string SourceLineField, AppCopy Quantity, List<AppCopy> Copy)
 {
@@ -227,3 +243,22 @@ public record AppIntegrationPartner(string Id, List<string> Modules)
 
 /// <summary>加到擁有者模組的欄位。Block 是該模組既有區塊的代號；Config 同模組欄位的 config（refTarget 可帶 app）。</summary>
 public record AppIntegrationField(string Module, string Block, string Code, FieldType Type, I18nText Label, JsonElement Config);
+
+// ---- 格式 6 的 section：在共用主檔的模組上加自己的區塊與欄位。 ----
+
+/// <summary>
+/// 貢獻：Master 是 requires.masters 的主檔 id，Module 是該主檔標 extensible 的模組代號，同一個（主檔, 模組）至多一筆。
+/// Fields 同模組欄位的格式（不得必填、型別有限制）；Permissions 的群組與 FieldAccess 的欄位都只能是本套件的，
+/// FieldAccess.Field 寫主檔符號 &lt;主檔 id&gt;/&lt;模組代號&gt;.&lt;本貢獻的欄位代號&gt;。
+/// </summary>
+public record AppContribution(
+    string Master, string Module, AppContributionBlock Block, List<TemplateField> Fields,
+    List<TemplatePermission>? Permissions, List<AppFieldAccess>? FieldAccess)
+{
+    public List<TemplateField> Fields { get; init; } = Fields ?? [];
+    public List<TemplatePermission> Permissions { get; init; } = Permissions ?? [];
+    public List<AppFieldAccess> FieldAccess { get; init; } = FieldAccess ?? [];
+}
+
+/// <summary>貢獻者在主檔模組裡的專屬區塊。</summary>
+public record AppContributionBlock(string Code, I18nText Name);

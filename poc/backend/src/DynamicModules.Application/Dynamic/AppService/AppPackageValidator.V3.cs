@@ -10,7 +10,7 @@ namespace DynamicModules.Application.Dynamic.AppService;
 public static partial class AppPackageValidator
 {
     private static void V3References(
-        AppPackageData p, Dictionary<string, TemplateField> fields, HashSet<string> groupCodes, List<string> errors)
+        AppPackageData p, Dictionary<string, TemplateField> fields, HashSet<string> groupCodes, MasterScope scope, List<string> errors)
     {
         var modules = p.Modules.ToDictionary(m => m.Code, m => m);
         // 「模組代號.選項代號」→ 擁有它的欄位限定名（選項代號在模組內唯一）
@@ -20,6 +20,19 @@ public static partial class AppPackageValidator
 
         bool Field(string? name, string? inModule = null) =>
             name is not null && fields.ContainsKey(name) && (inModule is null || SplitQualified(name)!.Value.Module == inModule);
+
+        // 轉換目標可以是 requires.masters 的主檔模組（§4.5）：目標上的欄位寫主檔符號，解析交給 MasterScope
+        string? MasterModule(string? symbol) =>
+            MasterScope.Parse(symbol) is { Tail: null } s && scope.Declares(s.App) ? symbol : null;
+        // Error 是主檔符號解析失敗的原因（例如不是基本欄位也不是本套件貢獻的欄位）；一般欄位找不到時是 null，由呼叫端給訊息
+        (bool Ok, TemplateField? Def, string? Error) TargetField(string? name, string target)
+        {
+            if (!target.Contains('/')) return (Field(name, target), name is not null && fields.TryGetValue(name, out var f) ? f : null, null);
+            if (MasterScope.Parse(name) is not { Tail: not null } s || $"{s.App}/{s.Module}" != target) return (false, null, null);
+            var (def, error) = scope.Field(name!);
+            return (error is null, def, error);
+        }
+        string Why(string? error, string fallback) => error ?? fallback;
 
         // ---- workflows ----
         var workflowOf = new Dictionary<string, AppWorkflow>();
@@ -59,7 +72,13 @@ public static partial class AppPackageValidator
             if (!AppId().IsMatch(c.Code ?? "")) errors.Add($"{at}.code: 格式錯誤（小寫英文、數字、連字號，2 到 40 字，英文開頭）");
             else if (!conversionCodes.Add(c.Code!)) errors.Add($"{at}.code: 轉換代碼重複 {c.Code}");
             CheckText(c.Name, $"{at}.name", errors);
-            if (!modules.ContainsKey(c.Source ?? "") || !modules.ContainsKey(c.Target ?? "")) { errors.Add($"{at}: 來源或目標模組不在套件內"); continue; }
+            if (!modules.ContainsKey(c.Source ?? "")) { errors.Add($"{at}: 來源或目標模組不在套件內"); continue; }
+            if (MasterModule(c.Target) is { } masterTarget)
+            {
+                var sp = MasterScope.Parse(masterTarget)!.Value;
+                if (scope.ModuleError(sp.App, sp.Module) is { } masterError) { errors.Add($"{at}.target: {masterError}"); continue; }
+            }
+            else if (!modules.ContainsKey(c.Target ?? "")) { errors.Add($"{at}: 來源或目標模組不在套件內"); continue; }
             if (c.SourceStates.Count > 0)
             {
                 if (!workflowOf.TryGetValue(c.Source!, out var wf)) errors.Add($"{at}.sourceStates: 來源模組 {c.Source} 沒有狀態機");
@@ -71,8 +90,18 @@ public static partial class AppPackageValidator
                 }
             }
             if (c.Header is null) { errors.Add($"{at}.header: 缺少表頭設定"); continue; }
-            if (!Field(c.Header.SourceField, c.Target)) errors.Add($"{at}.header.sourceField: {c.Header.SourceField} 必須是目標模組 {c.Target} 的欄位");
-            CheckCopies(c.Header.Copy, c.Source, c.Target, $"{at}.header.copy", Field, errors);
+            var source = TargetField(c.Header.SourceField, c.Target!);
+            if (!source.Ok) errors.Add($"{at}.header.sourceField: {Why(source.Error, $"{c.Header.SourceField} 必須是目標模組 {c.Target} 的欄位")}");
+            CheckCopies(c.Header.Copy, c.Source, c.Target, $"{at}.header.copy",
+                (name, module) => module == c.Target ? TargetField(name, c.Target!).Ok : Field(name, module), errors);
+            foreach (var set in c.Header.Set ?? [])
+            {
+                if (set is null) { errors.Add($"{at}.header.set: 不能有 null"); continue; }
+                var (ok, def, why) = TargetField(set.To, c.Target!);
+                if (!ok) errors.Add($"{at}.header.set: {Why(why, $"欄位 {set.To} 必須是目標模組 {c.Target} 的欄位")}");
+                else if (def is not null && def.Type != FieldType.Enum) errors.Add($"{at}.header.set: 固定值只能寫入下拉欄位，{set.To} 不是");
+                else if (def is not null && def.Options.All(o => o.Code != set.Option)) errors.Add($"{at}.header.set: {set.Option} 不是 {set.To} 的選項代號");
+            }
             if (c.Lines is { } lines)
             {
                 if (!modules.ContainsKey(lines.SourceModule ?? "") || !modules.ContainsKey(lines.TargetModule ?? ""))
@@ -96,11 +125,13 @@ public static partial class AppPackageValidator
                 var at = $"{m.Code}.{f.Code}.fill";
                 var mode = ConfigString(fill, "mode");
                 if (mode is not ("lock" or "default")) errors.Add($"{at}.mode: 必須是 lock 或 default");
-                var target = ConfigObject(f.Config, "refTarget") is { } rt && ConfigString(rt, "app") is null
-                    && ConfigString(rt, "kind") == "module" ? ConfigString(rt, "key") : null;
-                if (target is null || !modules.ContainsKey(target))
+                var rtApp = ConfigObject(f.Config, "refTarget") is { } rt0 ? ConfigString(rt0, "app") : null;
+                var target = ConfigObject(f.Config, "refTarget") is { } rt && ConfigString(rt, "kind") == "module" ? ConfigString(rt, "key") : null;
+                if (rtApp is not null && scope.Declares(rtApp) && target is not null)
+                    target = $"{rtApp}/{target}";   // 主檔模組：來源欄位寫主檔符號
+                else if (rtApp is not null || target is null || !modules.ContainsKey(target))
                 {
-                    errors.Add($"{at}: 帶值只能用在指向本套件模組的參照欄位");
+                    errors.Add($"{at}: 帶值只能用在指向本套件模組或 requires.masters 主檔模組的參照欄位");
                     continue;
                 }
                 if (!fill.TryGetProperty("map", out var map) || map.ValueKind != System.Text.Json.JsonValueKind.Array || map.GetArrayLength() == 0)
@@ -112,7 +143,8 @@ public static partial class AppPackageValidator
                 {
                     var from = ConfigString(entry, "from");
                     var to = ConfigString(entry, "to");
-                    if (!Field(from, target)) errors.Add($"{at}.map: 來源欄位 {from} 必須是 {target} 的欄位（<模組代號>.<欄位代號>）");
+                    var resolved = TargetField(from, target);
+                    if (!resolved.Ok) errors.Add($"{at}.map: 來源欄位 {Why(resolved.Error, $"{from} 必須是 {target} 的欄位（<模組代號>.<欄位代號>）")}");
                     if (!Field(Qualify(m.Code, to))) errors.Add($"{at}.map: 目的欄位 {to} 不在 {m.Code}");
                 }
             }
@@ -130,8 +162,22 @@ public static partial class AppPackageValidator
                 var split = SplitQualified(statusField);
                 var statusType = split is null ? null : modules.GetValueOrDefault(split.Value.Module)?.Blocks.SelectMany(b => b.Fields)
                     .FirstOrDefault(x => x.Code == split.Value.Field)?.Type;
-                var external = ConfigString(ConfigObject(f.Config, "refTarget")!.Value, "app") is not null;
-                if (external) { errors.Add($"{at}: 目標狀態守衛目前只能用在指向本套件模組的參照欄位"); continue; }
+                var externalApp = ConfigString(ConfigObject(f.Config, "refTarget")!.Value, "app");
+                if (externalApp is not null && scope.Declares(externalApp))
+                {
+                    // 主檔模組的守衛：field 寫主檔符號，in 是該欄位的選項代號（主檔定義未知時只檢查前綴）
+                    var (guardOk, guardDef, guardWhy) = TargetField(statusField, $"{externalApp}/{target}");
+                    if (!guardOk) errors.Add($"{at}.field: {Why(guardWhy, $"必須是 {externalApp}/{target} 的下拉欄位（<主檔 id>/<模組代號>.<欄位代號>）")}");
+                    else if (guardDef is not null && guardDef.Type != FieldType.Enum) errors.Add($"{at}.field: {statusField} 不是下拉欄位");
+                    if (!guard.TryGetProperty("in", out var masterIn) || masterIn.ValueKind != System.Text.Json.JsonValueKind.Array || masterIn.GetArrayLength() == 0)
+                        errors.Add($"{at}.in: 至少要列一個允許的狀態（選項代號）");
+                    else if (guardDef is not null)
+                        foreach (var option in masterIn.EnumerateArray())
+                            if (option.ValueKind != System.Text.Json.JsonValueKind.String || guardDef.Options.All(o => o.Code != option.GetString()))
+                                errors.Add($"{at}.in: 狀態 {option} 不是 {statusField} 的選項代號");
+                    continue;
+                }
+                if (externalApp is not null) { errors.Add($"{at}: 目標狀態守衛只能用在指向本套件模組或 requires.masters 主檔模組的參照欄位"); continue; }
                 if (split is null || split.Value.Module != target || statusType != FieldType.Enum)
                     errors.Add($"{at}.field: 必須是 {target} 的下拉欄位（<模組代號>.<欄位代號>）");
                 if (!guard.TryGetProperty("in", out var allowed) || allowed.ValueKind != System.Text.Json.JsonValueKind.Array || allowed.GetArrayLength() == 0)
@@ -144,7 +190,8 @@ public static partial class AppPackageValidator
 
         // ---- reports ----
         var reportCodes = new HashSet<string>();
-        var lookups = new AppReportCodec.Lookups(
+        var masterErrors = new List<string>();
+        var lookups = MasterLookups(scope, masterErrors,
             code => modules.ContainsKey(code) ? code : null,
             name => Field(name) ? 1 : null,
             name => optionOwner.ContainsKey(name) ? 1 : null,
@@ -161,6 +208,8 @@ public static partial class AppPackageValidator
                 if (!groupCodes.Contains(g)) errors.Add($"{at}.shareWith: 群組 {g} 沒有在 groups 宣告");
             if (r.Definition is null) { errors.Add($"{at}.definition: 缺少報表定義"); continue; }
             foreach (var e in AppReportCodec.ToDefinition(r.Definition, lookups).Errors) errors.Add($"{at}.definition: {e}");
+            foreach (var e in masterErrors.Distinct()) errors.Add($"{at}.definition: {e}");
+            masterErrors.Clear();
         }
     }
 

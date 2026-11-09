@@ -1,0 +1,83 @@
+using System.Net;
+using System.Net.Http.Json;
+using System.Text;
+using FluentAssertions;
+using static DynamicModules.WebAPITests.Dynamic.ApiTestKit;
+
+namespace DynamicModules.WebAPITests.Dynamic;
+
+/// <summary>格式 6 的套件經匯入端點：已匯入的主檔參與驗證與循環檢查；共用主檔的開啟在第 4 步之前一律擋下。</summary>
+public class SharedMasterImportTests : IDisposable
+{
+    private const string Apps = Base + "/apps";
+
+    private readonly TestApp _app = new();
+    private readonly HttpClient _admin;
+
+    public SharedMasterImportTests() => _admin = _app.AsUser();
+
+    public void Dispose() => _app.Dispose();
+
+    private Task<HttpResponseMessage> Import(string json) =>
+        _admin.PostAsync($"{Apps}/packages/import", new StringContent(json, Encoding.UTF8, "application/json"));
+
+    private async Task ImportOk(string json)
+    {
+        var res = await Import(json);
+        res.StatusCode.Should().Be(HttpStatusCode.Created, await res.Content.ReadAsStringAsync());
+    }
+
+    [Fact]
+    public async Task MasterThenUser_Import()
+    {
+        await ImportOk(AppTestPackagesV6.Master);
+        await ImportOk(AppTestPackagesV6.Crm);
+    }
+
+    [Fact]
+    public async Task User_ReferencingAFieldTheImportedMasterLacks_IsRejected()
+    {
+        await ImportOk(AppTestPackagesV6.Master);
+        var res = await Import(AppTestPackagesV6.Crm.Replace("\"from\": \"partner-lite/partner.phone\"", "\"from\": \"partner-lite/partner.fax\""));
+        res.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+        (await res.Content.ReadAsStringAsync()).Should().Contain("partner-lite/partner.fax 不是主檔 partner-lite 的基本欄位");
+    }
+
+    [Fact]
+    public async Task RequiresApps_ListingAnImportedMaster_IsRejected()
+    {
+        await ImportOk(AppTestPackagesV6.Master);
+        var json = AppTestPackages.Quote.Replace("\"id\": \"crm-lite\", \"modules\": [\"customer\"]", "\"id\": \"partner-lite\", \"modules\": [\"partner\"]")
+            .Replace("\"key\": \"customer\", \"app\": \"crm-lite\"", "\"key\": \"partner\", \"app\": \"partner-lite\"");
+        var res = await Import(json);
+        res.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+        (await res.Content.ReadAsStringAsync()).Should().Contain("partner-lite 是共用主檔，要列在 requires.masters");
+    }
+
+    [Fact]
+    public async Task MastersRequiringEachOther_SecondImportIsRejectedAsACycle()
+    {
+        string Pkg(string id, string requires) => AppTestPackagesV6.Master
+            .Replace("\"id\": \"partner-lite\"", $"\"id\": \"{id}\"").Replace("master-partner-lite", $"master-{id}")
+            .Replace("\"name\": { \"zh-TW\": \"往來對象（測試）\" } },",
+                $"\"name\": {{ \"zh-TW\": \"x\" }}, \"requires\": {{ \"masters\": [ {{ \"id\": \"{requires}\", \"modules\": [\"partner\"] }} ] }} }},");
+        await ImportOk(Pkg("m-alpha", "m-beta"));
+        var res = await Import(Pkg("m-beta", "m-alpha"));
+        res.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+        (await res.Content.ReadAsStringAsync()).Should().Contain("循環");
+    }
+
+    [Fact]
+    public async Task OpeningAPackageThatUsesSharedMasters_IsRefusedForNow()
+    {
+        await ImportOk(AppTestPackagesV6.Master);
+        await ImportOk(AppTestPackagesV6.Crm);
+        foreach (var id in new[] { "partner-lite", "crm6-lite" })
+        {
+            var res = await _admin.PostAsJsonAsync($"{Apps}/packages/{id}/open", new { });
+            res.IsSuccessStatusCode.Should().BeFalse(id);
+            (await res.Content.ReadAsStringAsync()).Should().Contain("還不能開啟用到共用主檔的套件");
+        }
+        (await _admin.GetStringAsync($"{Apps}")).Should().NotContain("crm6-lite");
+    }
+}

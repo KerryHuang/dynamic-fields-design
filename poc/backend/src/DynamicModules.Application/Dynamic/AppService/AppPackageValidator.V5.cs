@@ -35,7 +35,7 @@ public static partial class AppPackageValidator
         if (p.Integrations.Count > MaxIntegrations) errors.Add($"integrations: 最多 {MaxIntegrations} 個");
     }
 
-    private static void V5References(AppPackageData p, Dictionary<string, TemplateField> fields, List<string> errors)
+    private static void V5References(AppPackageData p, Dictionary<string, TemplateField> fields, MasterScope scope, List<string> errors)
     {
         if (p.Integrations.Count == 0) return;
         var modules = p.Modules.ToDictionary(m => m.Code, m => m);
@@ -82,7 +82,7 @@ public static partial class AppPackageValidator
                 else ownFields[Qualify(f.Module, f.Code)] = f.Type;
                 CheckText(f.Label, $"{fat}.label", errors);
                 if (!IntegrationFieldTypes.Contains(f.Type)) errors.Add($"{fat}.type: 整合欄位只能是文字、整數、小數、日期或參照");
-                IntegrationFieldConfig(fat, f, partners, errors);
+                IntegrationFieldConfig(fat, f, partners, scope, errors);
             }
 
             // ---- events、checks：符號空間 = 擁有者（含本整合新增的欄位）+ 夥伴符號 ----
@@ -94,7 +94,8 @@ public static partial class AppPackageValidator
                 if (!partners.TryGetValue(sp.App, out var allowed)) partnerErrors.Add($"夥伴 {sp.App} 沒有在 with 宣告");
                 else if (!allowed.Contains(sp.Remainder.Split('.')[0])) partnerErrors.Add($"夥伴模組 {sp.Remainder.Split('.')[0]} 沒有列在 with[{sp.App}].modules");
             }
-            var lookups = new AppReportCodec.Lookups(
+            // 主檔符號（requires.masters）先交給 MasterScope；其餘帶 / 的才是夥伴符號
+            var lookups = MasterLookups(scope, partnerErrors,
                 code =>
                 {
                     if (SplitPartner(code) is not null) { CheckPartnerModule(code); return code; }
@@ -150,7 +151,8 @@ public static partial class AppPackageValidator
                     if (!allEventCodes.Contains(fx.OfEvent ?? "")) errors.Add($"integrations[{g.Code}].events[{e.Code}]: 沖銷的事件 {fx.OfEvent} 不在套件內");
     }
 
-    private static void IntegrationFieldConfig(string at, AppIntegrationField f, Dictionary<string, HashSet<string>> partners, List<string> errors)
+    private static void IntegrationFieldConfig(
+        string at, AppIntegrationField f, Dictionary<string, HashSet<string>> partners, MasterScope scope, List<string> errors)
     {
         if (f.Config.ValueKind != JsonValueKind.Object)
         {
@@ -173,6 +175,11 @@ public static partial class AppPackageValidator
         var key = ConfigString(target.Value, "key");
         if (ConfigString(target.Value, "kind") != ReferenceTarget.ModuleKind || app is null)
             errors.Add($"{at}: 整合的參照欄位必須指向夥伴應用程式的模組（refTarget 要有 kind = module 與 app）");
+        else if (!partners.ContainsKey(app) && scope.Declares(app))
+        {
+            // 也可以指向 requires.masters 的主檔模組（§10），with 不必列主檔
+            if (scope.ModuleError(app, key ?? "") is { } error) errors.Add($"{at}: {error}");
+        }
         else if (!partners.TryGetValue(app, out var modulesOfPartner) || key is null || !modulesOfPartner.Contains(key))
             errors.Add($"{at}: 夥伴模組 {app}/{key} 沒有列在 with");
     }

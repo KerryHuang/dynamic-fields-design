@@ -68,6 +68,7 @@ public static class AppMessages
     public const string PackageNotFound = "套件不存在";
     public const string AlreadyOpen = "應用程式已開啟";
     public const string AlreadyClosedHint = "應用程式已開啟但目前是關閉狀態，請改用重新開啟";
+    public const string SharedMastersNotYetSupported = "manifest: 這個版本還不能開啟用到共用主檔的套件（主檔套件、requires.masters 或 contributions）";
 }
 
 public static class AppMapper

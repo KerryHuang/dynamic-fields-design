@@ -24,19 +24,23 @@ public class ImportAppPackageHandler(
         var (package, readErrors) = await packages.ReadAsync(parsed, ct);
         if (package is null) return Invalid(readErrors);
 
-        var validation = AppPackageValidator.Validate(package);
+        // 已知的主檔（內建與匯入）：requires.apps 不得列主檔，引用的主檔欄位要找得到（§4.6）；不在的主檔留到開啟時回 masterNotAvailable
+        var known = await packages.ListAsync(ct);
+        var masters = known.Where(k => k.Package.Manifest.IsMaster)
+            .GroupBy(k => k.Package.Manifest.Id).ToDictionary(g => g.Key, g => g.First().Package);
+        var validation = AppPackageValidator.Validate(package, masters);
         if (validation.Errors.Count > 0) return Invalid(validation.Errors);
 
         var id = package.Manifest.Id;
         if (catalog.BuiltIns.Any(p => p.Manifest.Id == id) || await repository.GetByKeyAsync(id, ct) is not null)
             return ServiceResult.Conflict("套件代碼已存在");
 
-        // requires 不得循環：把新套件加進「所有已知套件加上已開啟應用程式的 requires」的圖
+        // requires（含 requires.masters）不得循環：把新套件加進「所有已知套件加上已開啟應用程式的 requires」的圖
         var edges = new Dictionary<string, IReadOnlyList<string>>();
-        foreach (var known in await packages.ListAsync(ct))
-            edges[known.Package.Manifest.Id] = known.Package.Manifest.Requires.Apps.Select(a => a.Id).ToList();
-        foreach (var app in await apps.ListAsync(ct)) edges[app.Key] = app.Requires.Apps.Select(a => a.Id).ToList();
-        edges[id] = package.Manifest.Requires.Apps.Select(a => a.Id).ToList();
+        foreach (var k in known)
+            edges[k.Package.Manifest.Id] = AppDependencyGraph.RequiresOf(k.Package.Manifest.Requires);
+        foreach (var app in await apps.ListAsync(ct)) edges[app.Key] = AppDependencyGraph.RequiresOf(app.Requires);
+        edges[id] = AppDependencyGraph.RequiresOf(package.Manifest.Requires);
         if (AppDependencyGraph.FindCycle(edges.Select(kv => (kv.Key, kv.Value))) is { } cycle)
             return Invalid([$"requires 有循環：{string.Join(" → ", cycle)}"]);
 

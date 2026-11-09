@@ -35,11 +35,12 @@ public class App : AuditableEntity
     public void TouchRowVersion() => RowVersion = Guid.NewGuid().ToString();
 }
 
-/// <summary>套件宣告的相依：其他應用程式的模組，以及既有實體。</summary>
+/// <summary>套件宣告的相依：其他應用程式的模組、既有實體，以及共用主檔（requires.masters，格式 6）。</summary>
 public class AppRequires
 {
     public List<AppRequirement> Apps { get; set; } = [];
     public List<string> Entities { get; set; } = [];
+    public List<AppRequirement> Masters { get; set; } = [];
 }
 
 public class AppRequirement

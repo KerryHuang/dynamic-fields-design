@@ -342,7 +342,7 @@ public class InventoryAppTests : IDisposable
         var res = await _admin.GetAsync($"{Apps}/inventory/export");
         res.StatusCode.Should().Be(HttpStatusCode.OK, await res.Content.ReadAsStringAsync());
         var exported = await JsonOf(res);
-        exported.GetProperty("formatVersion").GetInt32().Should().Be(5);
+        exported.GetProperty("formatVersion").GetInt32().Should().Be(6);
         exported.GetProperty("events").GetArrayLength().Should().Be(6);
         exported.GetProperty("checks").GetArrayLength().Should().Be(1);
         exported.GetProperty("ledgers").GetArrayLength().Should().Be(1);

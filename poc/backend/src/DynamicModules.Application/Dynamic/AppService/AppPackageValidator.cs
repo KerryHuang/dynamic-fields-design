@@ -45,12 +45,14 @@ public static partial class AppPackageValidator
     private static readonly HashSet<string> FillMapKeys = new(StringComparer.Ordinal) { "from", "to" };
     private static readonly HashSet<string> RollupKeys = new(StringComparer.Ordinal) { "sourceField", "function", "aggregateField", "condition" };
 
-    public static AppValidation Validate(AppPackageData p)
+    /// <param name="masters">已知的主檔套件（id → 套件），給了才做主檔欄位層級的檢查（目錄層、匯入）；
+    /// 沒給時主檔符號只檢查前綴（主檔 id 與模組在 requires.masters）。</param>
+    public static AppValidation Validate(AppPackageData p, IReadOnlyDictionary<string, AppPackageData>? masters = null)
     {
         var warnings = new List<string>();
         var errors = Structure(p);
         if (errors.Count > 0) return new AppValidation(errors, warnings);
-        errors = References(p, warnings);
+        errors = References(p, warnings, masters);
         return new AppValidation(errors, warnings);
     }
 
@@ -78,6 +80,7 @@ public static partial class AppPackageValidator
             if (p.Ledgers.Count > 0) errors.Add("ledgers: formatVersion 4 才支援 ledgers");
         }
         IntegrationStructure(p, errors);
+        Format6Structure(p, errors);
         if (p.Events.Count > MaxEvents) errors.Add($"events: 最多 {MaxEvents} 個");
         if (p.Checks.Count > MaxChecks) errors.Add($"checks: 最多 {MaxChecks} 個");
         if (p.Workflows.Count > MaxModules) errors.Add($"workflows: 最多 {MaxModules} 個");
@@ -186,8 +189,9 @@ public static partial class AppPackageValidator
 
     // ---- 引用層 ----
 
-    private static List<string> References(AppPackageData p, List<string> warnings)
+    private static List<string> References(AppPackageData p, List<string> warnings, IReadOnlyDictionary<string, AppPackageData>? masters)
     {
+        var scope = new MasterScope(p, masters);
         var errors = new List<string>(TemplateValidator.Validate(AppPackageAdapter.ToTemplate(p)));
         var modules = p.Modules.ToDictionary(m => m.Code, m => m);
         var groupCodes = new HashSet<string>();
@@ -238,6 +242,11 @@ public static partial class AppPackageValidator
                             errors.Add($"{at}: 目標模組 {key} 不在套件內（要引用其他應用程式請加 app 並列入 requires.apps）");
                     }
                     else if (IsDetailReference(f)) errors.Add($"{at}: 明細的表頭必須在本套件內");
+                    else if (scope.Declares(app))
+                    {
+                        if (scope.ModuleError(app, key ?? "") is { } masterError) errors.Add($"{at}: {masterError}");
+                        else usedApps.Add($"{app}/{key}");
+                    }
                     else
                     {
                         var req = requiredApps.FirstOrDefault(r => r.Id == app);
@@ -253,6 +262,11 @@ public static partial class AppPackageValidator
         foreach (var r in requiredApps.Where(r => r is not null))
             foreach (var code in r.Modules.Where(c => !usedApps.Contains($"{r.Id}/{c}")))
                 warnings.Add($"requires.apps: 宣告了 {r.Id}.{code}，但套件裡沒有欄位引用它");
+        // 主檔只能出現在 requires.masters（§4.2）：requires.apps 列了已知的主檔就整份拒絕
+        if (masters is not null)
+            for (var i = 0; i < requiredApps.Count; i++)
+                if (requiredApps[i] is { } r && masters.ContainsKey(r.Id ?? ""))
+                    errors.Add($"manifest.requires.apps[{i}]: {r.Id} 是共用主檔，要列在 requires.masters");
         foreach (var e in requiresEntities.Where(e => !usedEntities.Contains(e)))
             warnings.Add($"requires.entities: 宣告了 {e}，但套件裡沒有使用它");
 
@@ -286,9 +300,10 @@ public static partial class AppPackageValidator
             foreach (var g in s.Groups) CheckGroup(g, $"{at}.groups");
             if (!seenScopes.Add(s.Option ?? "")) errors.Add($"{at}: {s.Option} 重複設定");
         }
-        V3References(p, fieldNames, groupCodes, errors);
-        V4References(p, fieldNames, errors);
-        V5References(p, fieldNames, errors);
+        V3References(p, fieldNames, groupCodes, scope, errors);
+        V4References(p, fieldNames, scope, errors);
+        V5References(p, fieldNames, scope, errors);
+        V6References(p, groupCodes, scope, errors);
         PrintTemplateReferences(p, fieldNames, errors);
         return errors;
     }

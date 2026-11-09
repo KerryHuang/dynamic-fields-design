@@ -13,12 +13,13 @@ public static partial class AppPackageValidator
 {
     public const int MaxEvents = 100, MaxChecks = 100;
 
-    private static void V4References(AppPackageData p, Dictionary<string, TemplateField> fields, List<string> errors)
+    private static void V4References(AppPackageData p, Dictionary<string, TemplateField> fields, MasterScope scope, List<string> errors)
     {
         var modules = p.Modules.ToDictionary(m => m.Code, m => m);
         var optionNames = p.Modules.SelectMany(m => m.Blocks.SelectMany(b => b.Fields).SelectMany(f => f.Options.Select(o => $"{m.Code}.{o.Code}")))
             .ToHashSet();
-        var lookups = new AppReportCodec.Lookups(
+        var masterErrors = new List<string>();
+        var lookups = MasterLookups(scope, masterErrors,
             code => modules.ContainsKey(code) ? code : null,
             name => fields.ContainsKey(name) ? 1 : null,
             name => optionNames.Contains(name) ? 1 : null,
@@ -101,6 +102,7 @@ public static partial class AppPackageValidator
             if (g.Swap.Any(pair => pair is null || pair.Count != 2)) { errors.Add($"{at}.swap: 每組必須剛好兩個欄位"); continue; }
             foreach (var error in AppEffectsCodec.ToInput(g, lookups).Errors) errors.Add($"{at}: {error}");
         }
+        foreach (var error in masterErrors.Distinct()) errors.Add($"events／checks: {error}");
     }
 
     /// <summary>套件內啟用事件的環（模組層級、偏保守，和設計器同一套 <see cref="EventGraph"/>）；沒有回 null。</summary>

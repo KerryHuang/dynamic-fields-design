@@ -39,9 +39,9 @@ public class AppPackageFormatTests
     // ---- 檔案層 ----
 
     [Fact]
-    public void File_UnknownFormatVersion6_IsRejectedWithUpgradeHint()
+    public void File_UnknownFormatVersion7_IsRejectedWithUpgradeHint()
     {
-        var json = AppTestPackages.Crm.Replace("\"formatVersion\": 2", "\"formatVersion\": 6");
+        var json = AppTestPackages.Crm.Replace("\"formatVersion\": 2", "\"formatVersion\": 7");
         ParseErrors(Encoding.UTF8.GetBytes(json)).Should().ContainSingle().Which.Should().Contain("較新版本");
     }
 
