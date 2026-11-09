@@ -314,6 +314,7 @@ public class SharedMasterDesignerTests : IDisposable
                 users = Array.Empty<object>(), fields = Array.Empty<object>(), options = Array.Empty<object>()
             })),
             ("DeleteModule", () => designer.DeleteAsync($"{Base}/modules/{Partner}?purged=0")),
+            ("ActivateModule", () => designer.PostAsync($"{Base}/modules/{Partner}/activate", null)),
             ("SaveWorkflow", () => designer.PutAsJsonAsync($"{Base}/modules/{Partner}/workflow", new
             {
                 statusFieldId = role, initialOptionId = customer, states = new[] { new { optionId = customer, readOnly = true } },
