@@ -161,7 +161,7 @@ public static class RecordValueProcessor
                 field.Options.ToDictionary(o => o.Id, o => o.Sequence), prev, userIds, validRefKeys?.GetValueOrDefault(field.Id));
             var result = registry.Get(field.Type).Normalize(raw, field, ctx);
             if (result.IsValid && Same(result.Value, prev)) continue;
-            throw new FrozenFieldException(field, owner);
+            throw new FrozenFieldException(field, owner, permissions.CanSee(field));
         }
     }
 

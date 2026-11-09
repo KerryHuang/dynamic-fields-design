@@ -10,8 +10,10 @@ public class FrozenFieldExceptionHandler : IExceptionHandler
     {
         if (exception is not FrozenFieldException frozen) return false;
         context.Response.StatusCode = StatusCodes.Status409Conflict;
-        await context.Response.WriteAsJsonAsync(
-            new { traceId = context.TraceIdentifier, message = frozen.Message, fieldId = frozen.FieldId, lockedBy = frozen.AppKey }, ct);
+        if (!frozen.Visible) await context.Response.WriteAsJsonAsync(new { traceId = context.TraceIdentifier, message = frozen.Message }, ct);
+        else
+            await context.Response.WriteAsJsonAsync(
+                new { traceId = context.TraceIdentifier, message = frozen.Message, fieldId = frozen.FieldId, lockedBy = frozen.AppKey }, ct);
         return true;
     }
 }

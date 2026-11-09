@@ -65,10 +65,16 @@ public sealed class FieldLocks(ISharedMasterRepository shared)
         Restore(module, await FrozenAsync(module, ct), previous, values);
 }
 
-/// <summary>對凍結欄位明確給了不同的值：整個請求 409（WebAPI 的例外處理轉成回應），交易回滾。</summary>
-public sealed class FrozenFieldException(Field field, FieldLock owner)
-    : Exception($"欄位「{field.LabelI18n.Resolve(I18nText.FallbackLocale)}」屬於已關閉的應用程式「{owner.AppName.Resolve(I18nText.FallbackLocale)}」，不能修改")
+/// <summary>
+/// 對凍結欄位明確給了不同的值：整個請求 409（WebAPI 的例外處理轉成回應），交易回滾。
+/// 使用者看不到的欄位（visible 為 false，例如帶值寫進去的系統寫入）只回通用訊息，不帶欄位名、應用程式名與欄位 id，免得探測隱藏值（第三輪 3）。
+/// </summary>
+public sealed class FrozenFieldException(Field field, FieldLock owner, bool visible = true)
+    : Exception(visible
+        ? $"欄位「{field.LabelI18n.Resolve(I18nText.FallbackLocale)}」屬於已關閉的應用程式「{owner.AppName.Resolve(I18nText.FallbackLocale)}」，不能修改"
+        : "這筆資料有無法修改的欄位")
 {
+    public bool Visible { get; } = visible;
     public long FieldId { get; } = field.Id;
     public string AppKey { get; } = owner.AppKey;
 }

@@ -328,6 +328,56 @@ public class SharedMasterFreezeTests : IDisposable
         (await GetAsync(record)).GetProperty("values").GetProperty(Key("crmx", "bp/partner.memo")).GetString().Should().Be("李小華", "改成另一筆時帶值跟著走");
     }
 
+    /// <summary>
+    /// 第三輪 3：一般參照欄位以 lock 帶值寫進使用者看不到的凍結欄位（systemKeys），整筆 409，但回應不能帶欄位名、應用程式名與欄位 id，
+    /// 猜不同的聯絡人（帶出不同的值）回應都一樣；看得到的凍結欄位（管理員）訊息維持原樣。
+    /// </summary>
+    [Fact]
+    public async Task AFillIntoAHiddenFrozenField_Is409_WithAGenericMessage_ThatNamesNothing()
+    {
+        await _rig.ImportAllAsync();
+        await _rig.OpenOkAsync("crmx");
+        await _rig.OpenOkAsync("stk");
+        await _rig.OpenOkAsync("cx");
+        var link = await AddField(_rig.Admin, Partner, "reference", new { refTarget = new { kind = "module", key = "master-ct-contact" } });
+        var memo = _rig.FieldId("crmx", "bp/partner.memo");
+        var contactName = _rig.FieldId("ct", "contact.name");
+        _rig.Db(db =>
+        {
+            var field = db.Set<Field>().Single(f => f.Id == link.Id);
+            field.Config = field.Config with { Fill = new FillConfig(FillConfig.Lock, [new FillMapping(contactName, memo)]) };
+        });
+        var keeper = _rig.App.AsUser("keeper01");
+        var contactCode = _rig.Db(db => db.Set<Module>().Single(m => m.Key == "master-ct-contact").ProgramCode);
+        _rig.Db(db => { db.Set<UserProgramPrivilege>().Add(new UserProgramPrivilege { UserId = "keeper01", ProgramCode = contactCode, CanRead = true, CanAdd = true }); });
+        var first = await _rig.CreateRecordAsync(keeper, "master-ct-contact", new Dictionary<string, object> { [Key("ct", "contact.name")] = "王小明" });
+        var second = await _rig.CreateRecordAsync(keeper, "master-ct-contact", new Dictionary<string, object> { [Key("ct", "contact.name")] = "李小華" });
+        await _rig.CloseOkAsync("crmx");
+
+        var created = new List<string>();
+        foreach (var contact in new[] { first, second })
+        {
+            var res = await keeper.PostAsJsonAsync($"{Base}/modules/{Partner}/records", new
+            {
+                values = new Dictionary<string, object> { [Key("bp", "partner.name")] = "丙公司", [link.Key] = contact.GetProperty("id").GetInt64() }
+            });
+            var body = await res.Content.ReadAsStringAsync();
+            res.StatusCode.Should().Be(HttpStatusCode.Conflict, body);
+            body.Should().Contain("無法修改的欄位").And.NotContain("備忘").And.NotContain("客戶關係").And.NotContain("crmx")
+                .And.NotContain("fieldId").And.NotContain(memo.ToString());
+            created.Add(body.Replace(JsonDocument.Parse(body).RootElement.GetProperty("traceId").GetString()!, ""));
+        }
+        created[0].Should().Be(created[1], "猜不同的聯絡人，回應一樣");
+        _rig.Db(db => db.Set<Record>().Count(r => r.Title == "丙公司")).Should().Be(0);
+
+        var admin = await _rig.Admin.PostAsJsonAsync($"{Base}/modules/{Partner}/records", new
+        {
+            values = new Dictionary<string, object> { [Key("bp", "partner.name")] = "丁公司", [link.Key] = first.GetProperty("id").GetInt64() }
+        });
+        await ShouldBeFrozenAsync(admin);
+        (await admin.Content.ReadAsStringAsync()).Should().Contain("備忘", "看得到的凍結欄位，訊息維持原樣");
+    }
+
     [Fact]
     public async Task SchemaAndRecord_ShowFrozenFieldsAsReadOnlyWithTheReason_TheBlockCollapsed()
     {
