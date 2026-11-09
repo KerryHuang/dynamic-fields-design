@@ -358,6 +358,94 @@ public class SharedMasterDesignerTests : IDisposable
         admin.StatusCode.Should().Be(HttpStatusCode.Created, await admin.Content.ReadAsStringAsync());
     }
 
+    private static Task<HttpResponseMessage> PostFieldWith(HttpClient c, long blockId, string type, string label, object config) =>
+        c.PostAsJsonAsync($"{Base}/modules/{Partner}/fields",
+            new { blockId, type, label = new Dictionary<string, string> { ["zh-TW"] = label }, config });
+
+    /// <summary>
+    /// 設計器加在貢獻者區塊、或修改屬於貢獻者的欄位，套用和套件驗證相同的貢獻欄位規則（§4.3、§15.2「照貢獻欄位處理」），不合就 409；
+    /// 基本區塊不受這些限制。
+    /// </summary>
+    [Fact]
+    public async Task AFieldInTheCrmBlock_FollowsTheContributionRules_Otherwise409()
+    {
+        await OpenCrmAndStockAsync();
+        var crm = BlockOf("crmx", "bp/partner.crm");
+        var stockScore = await _rig.AddDesignerFieldAsync(Partner, BlockOf("stk", "bp/partner.stock"), "integer", "庫存評分");
+        async Task Conflict(string what, string type, object config, string expected)
+        {
+            var res = await PostFieldWith(_rig.Admin, crm, type, what, config);
+            var body = await res.Content.ReadAsStringAsync();
+            res.StatusCode.Should().Be(HttpStatusCode.Conflict, $"{what}：{body}");
+            body.Should().Contain(expected, what);
+        }
+
+        await Conflict("附件", "attachment", new { }, "貢獻欄位不能是 attachment");
+        await Conflict("複選", "multienum", new { }, "貢獻欄位不能是 multienum");
+        await Conflict("必填", "text", new { required = true }, "不得必填");
+        await Conflict("串聯刪除", "reference", new { refTarget = new { kind = "module", key = "crmx-lead" }, onDelete = "cascade" }, "cascade");
+        await Conflict("明細", "reference", new { refTarget = new { kind = "module", key = "crmx-order" }, relation = "detail" }, "明細");
+        await Conflict("指向自己模組但 restrict", "reference", new { refTarget = new { kind = "module", key = "crmx-lead" }, onDelete = "restrict" }, "setNull");
+        await Conflict("指向別的應用程式", "reference", new { refTarget = new { kind = "module", key = "stk-ship" }, onDelete = "setNull" }, "只能指向");
+        await Conflict("引用別人的貢獻", "formula", new { formula = $"{{{stockScore}}} * 2", resultType = "number" }, "公式引用了");
+        _rig.Db(db => db.Set<Field>().Count(f => f.BlockId == crm)).Should().Be(6, "一個都沒加進去");
+
+        // 合規的照常可以
+        await _rig.AddDesignerFieldAsync(Partner, crm, "reference", "轉自潛在客戶",
+            new { refTarget = new { kind = "module", key = "crmx-lead" }, onDelete = "setNull" });
+        await _rig.AddDesignerFieldAsync(Partner, crm, "reference", "窗口", new { refTarget = new { kind = "module", key = "master-ct-contact" } });
+        var headcount = _rig.FieldId("bp", "partner.headcount");
+        var score = _rig.FieldId("crmx", "bp/partner.score");
+        await _rig.AddDesignerFieldAsync(Partner, crm, "formula", "加權", new { formula = $"{{{headcount}}} + {{{score}}}", resultType = "number" });
+        // 基本區塊不受貢獻欄位的限制
+        await _rig.AddDesignerFieldAsync(Partner, BlockOf("bp", "partner.main"), "attachment", "合約");
+
+        // 修改屬於 CRM 的欄位也一樣
+        var memo = _rig.FieldId("crmx", "bp/partner.memo");
+        var required = await _rig.Admin.PutAsJsonAsync($"{Base}/fields/{memo}", new
+        {
+            type = "text", label = new Dictionary<string, string> { ["zh-TW"] = "備忘" }, config = new { required = true }, blockId = crm
+        });
+        required.StatusCode.Should().Be(HttpStatusCode.Conflict, await required.Content.ReadAsStringAsync());
+        var fromLead = _rig.FieldId("crmx", "bp/partner.fromLead");
+        var restrict = await _rig.Admin.PutAsJsonAsync($"{Base}/fields/{fromLead}", new
+        {
+            type = "reference", label = new Dictionary<string, string> { ["zh-TW"] = "來源潛在客戶" },
+            config = new { readOnly = true, onDelete = "restrict", refTarget = new { kind = "module", key = "crmx-lead" } }, blockId = crm
+        });
+        restrict.StatusCode.Should().Be(HttpStatusCode.Conflict, await restrict.Content.ReadAsStringAsync());
+        _rig.Db(db => db.Set<Field>().Single(f => f.Id == memo).Config.Required).Should().BeFalse();
+        var ok = await _rig.Admin.PutAsJsonAsync($"{Base}/fields/{memo}", new
+        {
+            type = "text", label = new Dictionary<string, string> { ["zh-TW"] = "備註" }, config = new { }, blockId = crm
+        });
+        ok.StatusCode.Should().Be(HttpStatusCode.OK, await ok.Content.ReadAsStringAsync());
+        await _rig.AssertIntegrityAsync();
+    }
+
+    /// <summary>貢獻者已關閉（凍結）時，設計器不能在它的區塊新增欄位或選項（§7 生命週期鎖）；重開後照常。</summary>
+    [Fact]
+    public async Task WhileCrmIsClosed_ItsBlockTakesNoNewFieldOrOption()
+    {
+        await OpenCrmAndStockAsync();
+        var crm = BlockOf("crmx", "bp/partner.crm");
+        var industry = _rig.FieldId("crmx", "bp/partner.industry");
+        await _rig.CloseOkAsync("crmx");
+
+        var field = await PostField(_rig.Admin, crm, "text", "新欄位");
+        field.StatusCode.Should().Be(HttpStatusCode.Conflict, await field.Content.ReadAsStringAsync());
+        (await field.Content.ReadAsStringAsync()).Should().Contain("已關閉");
+        var option = await PostOption(_rig.Admin, industry, "服務");
+        option.StatusCode.Should().Be(HttpStatusCode.Conflict, await option.Content.ReadAsStringAsync());
+        (await option.Content.ReadAsStringAsync()).Should().Contain("已關閉");
+        // 基本區塊照常
+        await AddFieldOk(BlockOf("bp", "partner.main"), "text", "官網");
+
+        await _rig.ReopenOkAsync("crmx");
+        await AddFieldOk(crm, "text", "新欄位");
+        await AddOptionOk(industry, "服務");
+    }
+
     private async Task DeleteAppAsync(string key)
     {
         var preview = await _rig.Admin.DeleteAsync($"{SharedMasterRig.Apps}/{key}?purged=-1");

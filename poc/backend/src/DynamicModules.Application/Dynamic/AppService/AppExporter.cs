@@ -159,7 +159,14 @@ public sealed partial class AppExporter(
                 var owner = m.Blocks.SelectMany(b => b.Fields).FirstOrDefault(f => f.Options.Any(o => o.Id == scope.Key && o.Active));
                 var option = owner?.Options.First(o => o.Id == scope.Key);
                 if (owner is null || option is null || exported.Names.Option(owner.Id, option.Id) is null || exported.Names.Field(owner.Id) is null) continue;
-                var scopeGroups = scope.Select(s => s.GroupId).Distinct().Where(id => groupList.Any(g => g.Id == id)).Select(GroupCode).ToList();
+                var existing = scope.Select(s => s.GroupId).Distinct().Where(id => groupList.Any(g => g.Id == id)).ToList();
+                // 主檔匯出比照 fieldAccess，只帶 steward 群組；只限定給別的群組的選項範圍不匯出
+                if (isMaster && existing.Count > 0)
+                {
+                    existing = existing.Where(masterGroups[m.Id].Contains).ToList();
+                    if (existing.Count == 0) continue;
+                }
+                var scopeGroups = existing.Select(GroupCode).ToList();
                 // 範圍指向的群組都已不存在（殘留資料）：匯出空範圍會被匯入驗證退回，所以不匯出並告知
                 if (scopeGroups.Count == 0)
                 {
@@ -170,6 +177,8 @@ public sealed partial class AppExporter(
             }
         }
 
+        // 貢獻參照欄位指向的主檔也收進 requires.masters；只收真的是主檔的（審查 P2-1）
+        var masterKeys = allApps.Where(a => a.Kind == AppKind.Master).Select(a => a.Key).ToHashSet(StringComparer.Ordinal);
         var contributions = new List<AppContribution>();
         foreach (var view in views)
             if (await ContributionOfAsync(app, view, GroupCode, warnings, ct) is { } contribution)
@@ -177,7 +186,7 @@ public sealed partial class AppExporter(
                 contributions.Add(contribution);
                 foreach (var f in contribution.Fields.Where(f => f.Type == FieldType.Reference))
                     if (TemplateGraph.ConfigObject(f.Config, "refTarget") is { } t && TemplateGraph.ConfigString(t, "app") is { } refApp
-                        && TemplateGraph.ConfigString(t, "key") is { } refKey)
+                        && masterKeys.Contains(refApp) && TemplateGraph.ConfigString(t, "key") is { } refKey)
                         Use(usedMasters, refApp, refKey);
             }
 

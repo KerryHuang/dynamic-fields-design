@@ -26,7 +26,7 @@ public class AddFieldHandler(
         if (module is null) return ServiceResult.NotFound("找不到模組");
         var block = module.Blocks.FirstOrDefault(b => b.Id == request.BlockId);
         if (block is null) return ServiceResult.NotFound("找不到區塊");
-        if (request.Designer && await masterDesigner.RejectAddFieldAsync(module, block.Id, ct) is { } orphaned) return orphaned;
+        if (request.Designer && await masterDesigner.RejectAddFieldAsync(module, block.Id, request.Type, request.Config, ct) is { } rejected) return rejected;
 
         // 新增公式或彙總欄位會替既有記錄算值並寫回；Closed 的資料唯讀
         if (request.Type == FieldType.Formula && await ClosedDataGuard.RejectFormulaRecalcAsync(module, modules, ct) is { } closedFormula)

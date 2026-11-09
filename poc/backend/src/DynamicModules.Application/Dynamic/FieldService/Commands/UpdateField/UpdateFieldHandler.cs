@@ -41,6 +41,7 @@ public class UpdateFieldHandler(
             : request.Config;
         var invalid = FieldRules.CheckDefault(registry, field, requested, await modules.ListUserIdsAsync(ct), out var config);
         if (invalid is not null) return invalid;
+        if (request.Designer && await masterDesigner.RejectContributionUpdateAsync(module, field, config, ct) is { } contribution) return contribution;
 
         var badDynamic = FieldRules.CheckDynamicDefaults(
             module, field, config, await FieldRules.ParentOfAsync(module, modules, ct));

@@ -1,5 +1,6 @@
 using System.Text.Json;
 using DynamicModules.Application.Dynamic.AppService.Data;
+using DynamicModules.Application.Dynamic.AppService.SharedMasters;
 using DynamicModules.Application.Dynamic.TemplateService.Data;
 using DynamicModules.Domain.Entities.Dynamic;
 using DynamicModules.Domain.ValueObjects;
@@ -17,14 +18,6 @@ public static partial class AppPackageValidator
 
     /// <summary>開啟流程建立轉換時還不帶固定值（設計 §4.5 的實作在第 4 步），收下會讓轉出的記錄靜默少了值，所以先整份拒絕。</summary>
     public const string HeaderSetNotYetSupported = "這個版本還不能執行轉換的固定值（header.set），請先拿掉";
-
-    private static readonly HashSet<FieldType> ContributionFieldTypes =
-    [
-        FieldType.Text, FieldType.Textarea, FieldType.Email, FieldType.Phone, FieldType.Url,
-        FieldType.Integer, FieldType.Decimal, FieldType.Currency, FieldType.Percent,
-        FieldType.Date, FieldType.DateTime, FieldType.Time,
-        FieldType.Enum, FieldType.Boolean, FieldType.User, FieldType.Reference, FieldType.Formula
-    ];
 
     // ---- 結構層 ----
 
@@ -127,21 +120,18 @@ public static partial class AppPackageValidator
                 if (f.Options.Any(o => o is null)) errors.Add($"{fat}.options: 不能有 null");
                 foreach (var o in f.Options.Where(o => o is not null)) CheckText(o.Label, $"{fat}.options.{o.Code}", errors);
                 CheckConfigKeys($"{at}.fields", f, p.FormatVersion, errors);
-                if (!ContributionFieldTypes.Contains(f.Type))
-                    errors.Add($"{fat}.type: 貢獻欄位不能是 {LowerName(f.Type)}（不收自動編號、複選、附件、彙總）");
-                if (f.Config.ValueKind != JsonValueKind.Object) continue;
-                if (f.Config.TryGetProperty("required", out var req) && req.ValueKind == JsonValueKind.True)
-                    errors.Add($"{fat}: 貢獻欄位不得必填（別的應用程式建立主檔記錄時不該被擋住）");
-                if (ConfigString(f.Config, "relation") is "detail") errors.Add($"{fat}: 貢獻欄位不能是明細的表頭參照");
-                if (f.Type == FieldType.Reference && ConfigString(f.Config, "onDelete") == "cascade")
-                    errors.Add($"{fat}.onDelete: 貢獻的參照欄位不能是 cascade（主檔記錄不能因為別的應用程式刪資料而消失）");
+                // 規則和設計器在貢獻者區塊加欄位共用（ContributionFieldRules）
+                var hasConfig = f.Config.ValueKind == JsonValueKind.Object;
+                var shape = ContributionFieldRules.ShapeErrors(f.Type,
+                    required: hasConfig && f.Config.TryGetProperty("required", out var req) && req.ValueKind == JsonValueKind.True,
+                    detail: hasConfig && ConfigString(f.Config, "relation") is "detail",
+                    cascade: hasConfig && ConfigString(f.Config, "onDelete") == "cascade");
+                foreach (var (path, message) in shape) errors.Add($"{fat}{path}: {message}");
             }
             foreach (var perm in c.Permissions.Where(x => x is null)) errors.Add($"{at}.permissions: 不能有 null");
             foreach (var a in c.FieldAccess.Where(x => x is null)) errors.Add($"{at}.fieldAccess: 不能有 null");
         }
     }
-
-    private static string LowerName(FieldType t) => t.ToString().ToLowerInvariant();
 
     private static IEnumerable<TemplateField> FieldsOf(TemplateModule m) =>
         m.Blocks.Where(b => b is not null).SelectMany(b => b.Fields).Where(f => f is not null);
@@ -242,7 +232,7 @@ public static partial class AppPackageValidator
         // 公式只能引用主檔基本欄位與本貢獻的欄位；主檔定義未知時，不是本貢獻的代號無從判斷，留給開啟時解析
         if (FormulaOf(f) is { } formula)
             foreach (var code in FormulaCodes(formula).Distinct().Where(code => !local(code) && masterKnown))
-                errors.Add($"{at}: 公式引用了 {code}，貢獻的公式只能引用主檔的基本欄位與本貢獻的欄位");
+                errors.Add($"{at}: {ContributionFieldRules.FormulaOutOfScope(code)}");
 
         if (config.TryGetProperty("defaultValue", out var dv) && IsOptionField(f) && dv.ValueKind == JsonValueKind.String
             && OptionReference().Match(dv.GetString()!) is { Success: true } om && f.Options.All(o => o.Code != om.Groups[1].Value))
@@ -254,16 +244,15 @@ public static partial class AppPackageValidator
         var app = ConfigString(target, "app");
         string? targetModule = null;   // 帶值、守衛的來源模組：本套件模組代號，或主檔模組符號
         if (ConfigString(target, "kind") != ReferenceTarget.ModuleKind)
-            errors.Add($"{at}: 貢獻的參照欄位只能指向本套件的模組或 requires.masters 的主檔模組");
+            errors.Add($"{at}: {ContributionFieldRules.TargetNotAllowed}");
         else if (app is null)
         {
             if (key is null || !modules.ContainsKey(key)) errors.Add($"{at}: 目標模組 {key} 不在套件內");
             else targetModule = key;
-            // 指向自己模組的貢獻參照：刪除自己的記錄時清掉追溯值，不然轉換過一次之後那筆記錄就刪不掉（§4.3）
-            if (ConfigString(config, "onDelete") != "setNull")
-                errors.Add($"{at}.onDelete: 指向本套件模組的貢獻參照欄位必須是 setNull");
+            if (ContributionFieldRules.TargetError(ContributionFieldRules.Target.OwnModule, ConfigString(config, "onDelete") == "setNull") is { } own)
+                errors.Add($"{at}{own.Path}: {own.Message}");
         }
-        else if (!scope.Declares(app)) errors.Add($"{at}: 貢獻的參照欄位只能指向本套件的模組或 requires.masters 的主檔模組（{app} 不是）");
+        else if (!scope.Declares(app)) errors.Add($"{at}: {ContributionFieldRules.TargetNotAllowed}（{app} 不是）");
         else if (scope.ModuleError(app, key ?? "") is { } error) errors.Add($"{at}: {error}");
         else targetModule = $"{app}/{key}";
         if (targetModule is null) return;

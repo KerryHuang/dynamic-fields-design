@@ -22,7 +22,7 @@ public class FieldsController(IMediator mediator) : ControllerBase
 
     [HttpPut("fields/{id:long}")]
     public async Task<IActionResult> Update(long id, UpdateFieldBody body) =>
-        (await mediator.Send(new UpdateFieldRequest(id, body.Type, body.Label, body.Config, body.BlockId)))
+        (await mediator.Send(new UpdateFieldRequest(id, body.Type, body.Label, body.Config, body.BlockId, Designer: true)))
         .ToActionResult(this);
 
     [HttpPut("fields/{id:long}/status")]

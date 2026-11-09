@@ -178,6 +178,30 @@ public class SharedMasterMergeTests : IDisposable
     private static string Section(JsonElement package, params string[] names) =>
         string.Join("\n", names.Select(n => package.TryGetProperty(n, out var v) ? v.GetRawText() : ""));
 
+    /// <summary>設計器加在 CRM 區塊的合規欄位（指向自己模組的 setNull 參照、指向主檔的參照、只引用基本與自己欄位的公式）匯出後能匯入空庫並開啟（審查 P2-1）。</summary>
+    [Fact]
+    public async Task CompliantDesignerFieldsInTheCrmBlock_ExportAndOpenInAnEmptyDatabase()
+    {
+        await _rig.ImportAllAsync();
+        await _rig.OpenOkAsync("crmx");
+        var crm = _rig.BlockId("crmx", "bp/partner.crm");
+        await _rig.AddDesignerFieldAsync(Partner, crm, "reference", "轉自潛在客戶",
+            new { refTarget = new { kind = "module", key = "crmx-lead" }, onDelete = "setNull" });
+        await _rig.AddDesignerFieldAsync(Partner, crm, "reference", "窗口", new { refTarget = new { kind = "module", key = "master-ct-contact" } });
+        await _rig.AddDesignerFieldAsync(Partner, crm, "formula", "加權", new
+        {
+            formula = $"{{{_rig.FieldId("bp", "partner.headcount")}}} + {{{_rig.FieldId("crmx", "bp/partner.score")}}}", resultType = "number"
+        });
+        var exports = new Dictionary<string, JsonElement>();
+        foreach (var key in new[] { "bp", "ct", "crmx" }) exports[key] = (await _rig.ExportAsync(key)).Package;
+
+        using var b = new SharedMasterRig();
+        foreach (var key in new[] { "bp", "ct", "crmx" }) await b.ImportAsync(exports[key].GetRawText());
+        await b.OpenOkAsync("crmx", BodyFrom(b, exports, "crmx", exports["crmx"].GetRawText()));
+        FieldNames(b, "crmx").Should().Equal(FieldNames(_rig, "crmx"));
+        b.Blocks(Partner).Should().BeEquivalentTo(_rig.Blocks(Partner), o => o.WithStrictOrdering());
+    }
+
     [Theory]
     [InlineData("crmx", "stk")]
     [InlineData("stk", "crmx")]

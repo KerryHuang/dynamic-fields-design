@@ -145,6 +145,51 @@ public class SharedMasterExportTests : IDisposable
         _rig.Db(db => db.Set<PermissionGroup>().Count(g => g.Key == "warehouse")).Should().Be(1, "進銷存的 warehouse 群組對主檔有權限，但不是主檔自己授予的");
     }
 
+    /// <summary>
+    /// 貢獻參照欄位指向的應用程式只有真的是主檔才收進 requires.masters（審查 P2-1）。設計器現在擋下這種欄位，
+    /// 這裡直接改資料庫模擬一個指向一般應用程式模組的舊貢獻欄位。
+    /// </summary>
+    [Fact]
+    public async Task AContributionReferenceToAnOrdinaryApp_IsNotListedInRequiresMasters()
+    {
+        await OpenCrmAndStockAsync();
+        var ship = await _rig.AddDesignerFieldAsync(Partner, _rig.BlockId("bp", "partner.main"), "reference", "出貨單",
+            new { refTarget = new { kind = "module", key = "stk-ship" }, onDelete = "setNull" });
+        var crm = _rig.BlockId("crmx", "bp/partner.crm");
+        var crmx = _rig.Db(db => db.Set<App>().Single(a => a.Key == "crmx").Id);
+        _rig.Db(db =>
+        {
+            db.Set<AppField>().RemoveRange(db.Set<AppField>().Where(f => f.FieldId == ship));
+            db.Set<AppField>().Add(new AppField { AppId = crmx, Name = "bp/partner.ushipment", FieldId = ship });
+            db.Set<Field>().Single(f => f.Id == ship).BlockId = crm;
+        });
+
+        var (package, _) = await _rig.ExportAsync("crmx");
+        Arr(package.GetProperty("manifest").GetProperty("requires"), "masters").Select(m => Str(m, "id"))
+            .Should().Equal(["bp", "ct"], "stk 是一般應用程式，不是主檔");
+    }
+
+    /// <summary>主檔匯出的選項範圍比照 fieldAccess，只帶 steward 群組；別的群組不會因此進 groups[]。</summary>
+    [Fact]
+    public async Task ExportingTheMaster_KeepsOnlyStewardGroupsInOptionScopes()
+    {
+        await OpenCrmAndStockAsync();
+        var partner = _rig.Db(db => db.Set<Module>().Single(m => m.Key == Partner).Id);
+        var steward = _rig.Db(db => db.Set<AppGrant>().First(g => g.ModuleId == partner && g.SourceKind == GrantSource.Master).GroupId);
+        var customer = _rig.Db(db => db.Set<AppOption>().Single(o => o.Name == "partner.customer").OptionId);
+        var supplier = _rig.Db(db => db.Set<AppOption>().Single(o => o.Name == "partner.supplier").OptionId);
+        var sales = _rig.GroupId("sales");
+        _rig.Db(db => db.Set<FieldOptionScope>().AddRange(
+            new FieldOptionScope { OptionId = customer, GroupId = steward }, new FieldOptionScope { OptionId = customer, GroupId = sales },
+            new FieldOptionScope { OptionId = supplier, GroupId = sales }));
+
+        var (bp, _) = await _rig.ExportAsync("bp");
+        var stewardCode = Str(Arr(Arr(bp, "modules").Single(), "permissions").Single(), "group");
+        Arr(bp, "optionScopes").Select(s => $"{Str(s, "option")}:{string.Join(",", Arr(s, "groups").Select(g => g.GetString()))}")
+            .Should().Equal($"partner.customer:{stewardCode}");
+        Arr(bp, "groups").Select(g => Str(g, "code")).Should().Equal(stewardCode);
+    }
+
     [Fact]
     public async Task AFallbackOptionCode_NeverEqualsABaseOptionCode()
     {
