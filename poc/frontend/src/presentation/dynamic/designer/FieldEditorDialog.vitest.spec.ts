@@ -378,9 +378,9 @@ describe('FieldEditorDialog', () => {
   describe('reference type', () => {
     const modules = [
       { id: 1, key: 'cust', programCode: 'P1', name: { 'zh-TW': '客戶模組' }, status: 'Active', version: 1, kind: 'standalone' },
-      { id: 2, key: 'ext', programCode: 'P2', name: { 'zh-TW': '擴充模組' }, status: 'Active', version: 1, kind: 'extension', hostEntityKey: 'design.mold' },
+      { id: 2, key: 'ext', programCode: 'P2', name: { 'zh-TW': '擴充模組' }, status: 'Active', version: 1, kind: 'extension', hostEntityKey: 'test.entity' },
     ];
-    const entities = [{ key: 'design.mold', name: { 'zh-TW': '模具' } }];
+    const entities = [{ key: 'test.entity', name: { 'zh-TW': '測試實體' } }];
     beforeEach(() => {
       vi.spyOn(dynamicApi, 'getModules').mockResolvedValue(modules as never);
       vi.spyOn(dynamicApi, 'entities').mockResolvedValue(entities);
@@ -418,7 +418,7 @@ describe('FieldEditorDialog', () => {
       expect(keysOf(sel(w, 'ref-target'))).toEqual(['cust']);
       await sel(w, 'ref-kind').vm.$emit('update:modelValue', 'entity');
       await flushPromises();
-      expect(keysOf(sel(w, 'ref-target'))).toEqual(['design.mold']);
+      expect(keysOf(sel(w, 'ref-target'))).toEqual(['test.entity']);
       w.unmount();
     });
 
@@ -506,25 +506,25 @@ describe('FieldEditorDialog', () => {
       await sel(w, 'ref-ondelete').vm.$emit('update:modelValue', 'cascade');
       await sel(w, 'ref-kind').vm.$emit('update:modelValue', 'entity');
       await flushPromises();
-      await sel(w, 'ref-target').vm.$emit('update:modelValue', 'design.mold');
+      await sel(w, 'ref-target').vm.$emit('update:modelValue', 'test.entity');
       await setLabel(w);
       await flushPromises();
       save();
       await flushPromises();
       const cfg = spy.mock.calls[0]![1].config;
-      expect(cfg.refTarget).toEqual({ kind: 'entity', key: 'design.mold' });
+      expect(cfg.refTarget).toEqual({ kind: 'entity', key: 'test.entity' });
       expect(cfg).not.toHaveProperty('onDelete');
       w.unmount();
     });
 
     it('editing an entity-target reference keeps refTarget in the payload', async () => {
       const spy = vi.spyOn(dynamicApi, 'updateField').mockResolvedValue(undefined);
-      const w = mountDialog({ field: refField({ kind: 'entity', key: 'design.mold' }) });
+      const w = mountDialog({ field: refField({ kind: 'entity', key: 'test.entity' }) });
       await flushPromises();
       save();
       await flushPromises();
       const cfg = spy.mock.calls[0]![1].config;
-      expect(cfg.refTarget).toEqual({ kind: 'entity', key: 'design.mold' });
+      expect(cfg.refTarget).toEqual({ kind: 'entity', key: 'test.entity' });
       expect(cfg).not.toHaveProperty('onDelete');
       w.unmount();
     });
@@ -543,7 +543,7 @@ describe('FieldEditorDialog', () => {
 
     it('entity target omits onDelete and shows Config.RefTarget under the target', async () => {
       const spy = vi.spyOn(dynamicApi, 'updateField').mockRejectedValue({ errors: { 'Config.RefTarget': ['參照目標不正確'] } });
-      const w = mountDialog({ field: refField({ kind: 'entity', key: 'design.mold' }) });
+      const w = mountDialog({ field: refField({ kind: 'entity', key: 'test.entity' }) });
       await flushPromises();
       [...document.body.querySelectorAll('button')].find((b) => b.textContent?.includes('儲存'))!.click();
       await flushPromises();

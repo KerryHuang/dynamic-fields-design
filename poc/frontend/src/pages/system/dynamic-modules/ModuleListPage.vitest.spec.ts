@@ -19,7 +19,7 @@ async function mountPage(modules: unknown[] = [], add = true, edit = true) {
   api.getMe.mockResolvedValue({ designer: { read: true, add, edit, delete: true } } as never);
   api.getTemplates.mockResolvedValue([]);
   api.getModules.mockResolvedValue(modules as never);
-  api.entities.mockResolvedValue([{ key: 'design.mold', name: { 'zh-TW': '模具' } }]);
+  api.entities.mockResolvedValue([{ key: 'test.entity', name: { 'zh-TW': '測試實體' } }]);
   api.createModule.mockResolvedValue({} as never);
   const router = createRouter({
     history: createMemoryHistory(),
@@ -45,9 +45,9 @@ async function fillExtension(w: Awaited<ReturnType<typeof mountPage>>) {
   (q('new-module') as HTMLElement).click();
   await flushPromises();
   const key = document.body.querySelector('input:not([type=file])') as HTMLInputElement;
-  key.value = 'mold-ext';
+  key.value = 'entity-ext';
   key.dispatchEvent(new Event('input'));
-  await w.findComponent({ name: 'I18nTextInput' }).vm.$emit('update:modelValue', { 'zh-TW': '模具擴充' });
+  await w.findComponent({ name: 'I18nTextInput' }).vm.$emit('update:modelValue', { 'zh-TW': '實體擴充' });
   await w.findAllComponents({ name: 'QOptionGroup' })[0]!.vm.$emit('update:modelValue', 'extension');
   await flushPromises();
 }
@@ -81,11 +81,11 @@ describe('ModuleListPage create dialog', () => {
     const w = await mountPage();
     await fillExtension(w);
     await w.findAllComponents({ name: 'QSelect' }).find((c) => (c.vm.$el as HTMLElement).closest('[data-testid="host-entity"]'))!
-      .vm.$emit('update:modelValue', 'design.mold');
+      .vm.$emit('update:modelValue', 'test.entity');
     await flushPromises();
     button('建立').click();
     await flushPromises();
-    expect(api.createModule).toHaveBeenCalledWith(expect.objectContaining({ key: 'mold-ext', kind: 'extension', hostEntityKey: 'design.mold' }));
+    expect(api.createModule).toHaveBeenCalledWith(expect.objectContaining({ key: 'entity-ext', kind: 'extension', hostEntityKey: 'test.entity' }));
     w.unmount();
   });
 
@@ -138,7 +138,7 @@ describe('ModuleListPage create dialog', () => {
     const w = await mountPage();
     await fillExtension(w);
     await w.findAllComponents({ name: 'QSelect' }).find((c) => (c.vm.$el as HTMLElement).closest('[data-testid="host-entity"]'))!
-      .vm.$emit('update:modelValue', 'design.mold');
+      .vm.$emit('update:modelValue', 'test.entity');
     await w.findAllComponents({ name: 'QOptionGroup' })[0]!.vm.$emit('update:modelValue', 'standalone');
     await flushPromises();
     button('建立').click();

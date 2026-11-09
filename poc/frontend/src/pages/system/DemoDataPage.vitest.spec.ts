@@ -85,8 +85,8 @@ describe('DemoDataPage', () => {
   });
 
   it('conflict: lists every conflict with the hint, button disabled', async () => {
-    await mountPage(status({ state: 'conflict', conflicts: ['模組代碼 order 已存在', '既有實體 design.mold 已有擴充模組'] }));
-    expect([...q('demo-conflicts')!.querySelectorAll('li')].map((li) => li.textContent)).toEqual(['模組代碼 order 已存在', '既有實體 design.mold 已有擴充模組']);
+    await mountPage(status({ state: 'conflict', conflicts: ['模組代碼 order 已存在', '既有實體 test.entity 已有擴充模組'] }));
+    expect([...q('demo-conflicts')!.querySelectorAll('li')].map((li) => li.textContent)).toEqual(['模組代碼 order 已存在', '既有實體 test.entity 已有擴充模組']);
     expect(text('demo-conflict-hint')).toContain('不會產生 Demo 資料');
     expect(q('demo-generate')!.disabled).toBe(true);
   });

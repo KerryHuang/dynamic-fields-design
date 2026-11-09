@@ -24,7 +24,7 @@ const detail: ModuleDetail = {
 async function mountPage(d: ModuleDetail = detail, canDelete = true, canRead = true) {
   api.getModule.mockResolvedValue(d);
   api.getMe.mockResolvedValue({ designer: { read: canRead, add: true, edit: true, delete: canDelete } } as never);
-  api.entities.mockResolvedValue([{ key: 'design.mold', name: { 'zh-TW': '模具' } }]);
+  api.entities.mockResolvedValue([{ key: 'test.entity', name: { 'zh-TW': '測試實體' } }]);
   api.updateModule.mockResolvedValue({} as never);
   const router = createRouter({ history: createMemoryHistory(), routes: [{ path: '/m/:moduleKey', component: ModuleEditorPage }] });
   await router.push('/m/m');
@@ -107,10 +107,10 @@ describe('ModuleEditorPage', () => {
   });
 
   it('extension module hides the title field and shows the host entity read-only', async () => {
-    const w = await mountPage({ ...detail, titleFieldId: undefined, kind: 'extension', hostEntityKey: 'design.mold' });
+    const w = await mountPage({ ...detail, titleFieldId: undefined, kind: 'extension', hostEntityKey: 'test.entity' });
     expect(w.find('[data-testid="title-field"]').exists()).toBe(false);
     const host = w.find('input[data-testid="host-entity"]').element as HTMLInputElement;
-    expect(host.value).toBe('模具');
+    expect(host.value).toBe('測試實體');
     expect(host.readOnly).toBe(true);
   });
 

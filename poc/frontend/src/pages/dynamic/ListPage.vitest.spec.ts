@@ -147,7 +147,7 @@ describe('ListPage', () => {
   });
 
   it('ListPage hides the import button for extension modules', async () => {
-    schemaPatch = { kind: 'extension', hostEntityKey: 'design.mold', titleFieldKey: null };
+    schemaPatch = { kind: 'extension', hostEntityKey: 'test.entity', titleFieldKey: null };
     const w = await mountPage();
     expect(w.find('[data-testid="new-btn"]').exists()).toBe(true);
     expect(w.find('[data-testid="import-btn"]').exists()).toBe(false);
@@ -249,7 +249,7 @@ describe('ListPage', () => {
   });
 
   it('extension module list shows host title column', async () => {
-    schemaPatch = { kind: 'extension', hostEntityKey: 'design.mold', titleFieldKey: null };
+    schemaPatch = { kind: 'extension', hostEntityKey: 'test.entity', titleFieldKey: null };
     const w = await mountPage();
     api.getPagedRecords.mockResolvedValue({ items: [{ ...row, title: 'M-0001 外殼上蓋模' }], totalCount: 1, currentPage: 1, pagesSize: 20 });
     w.findComponent(quasar.QTable).vm.$emit('update:pagination', { page: 2, rowsPerPage: 20 });

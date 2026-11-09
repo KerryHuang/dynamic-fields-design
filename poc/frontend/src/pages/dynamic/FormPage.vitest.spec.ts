@@ -82,7 +82,7 @@ describe('FormPage', () => {
   describe('references', () => {
     const refField = (id: number, kind: 'module' | 'entity'): SchemaField => ({
       ...field(id, `參照${id}`), type: 'reference',
-      reference: { kind, key: kind === 'module' ? 'cust' : 'design.mold', name: { 'zh-TW': 'x' }, lightUrl: kind === 'module' ? '/modules/cust/records/light' : '/entities/design.mold/light' },
+      reference: { kind, key: kind === 'module' ? 'cust' : 'test.entity', name: { 'zh-TW': 'x' }, lightUrl: kind === 'module' ? '/modules/cust/records/light' : '/entities/test.entity/light' },
     });
     const refSchema = (fields: SchemaField[], extra: Partial<ModuleSchema> = {}) => ({ ...schema(all, [field(1, '標題'), ...fields]), ...extra });
 
@@ -121,9 +121,9 @@ describe('FormPage', () => {
     it('extension module new form requires host pick', async () => {
       api.light.mockResolvedValue({ items: [{ key: 'M-0001', title: 'M-0001 外殼上蓋模' }], total: 1 });
       api.createRecord.mockResolvedValue({ ...record, id: 9 } as never);
-      const w = await mountPage(refSchema([], { kind: 'extension', hostEntityKey: 'design.mold', titleFieldKey: null }), '/dynamic/m/new');
+      const w = await mountPage(refSchema([], { kind: 'extension', hostEntityKey: 'test.entity', titleFieldKey: null }), '/dynamic/m/new');
       const host = w.findComponent(PopupSelect);
-      expect(host.props('lightUrl')).toBe('/entities/design.mold/light');
+      expect(host.props('lightUrl')).toBe('/entities/test.entity/light');
       expect(host.props('valueKind')).toBe('string');
       await w.find('form').trigger('submit');
       await new Promise((r) => setTimeout(r, 50));
@@ -139,7 +139,7 @@ describe('FormPage', () => {
     it('create-mode 409 shows the server message, not the stale notice', async () => {
       api.light.mockResolvedValue({ items: [], total: 0 });
       api.createRecord.mockRejectedValue({ status: 409, message: '這筆既有資料已經有擴充資料' });
-      const w = await mountPage(refSchema([], { kind: 'extension', hostEntityKey: 'design.mold', titleFieldKey: null }), '/dynamic/m/new');
+      const w = await mountPage(refSchema([], { kind: 'extension', hostEntityKey: 'test.entity', titleFieldKey: null }), '/dynamic/m/new');
       w.findComponent(PopupSelect).vm.$emit('update:modelValue', 'M-0001');
       await flushPromises();
       await w.find('form').trigger('submit');
@@ -149,7 +149,7 @@ describe('FormPage', () => {
 
     it('create-mode hostKey 400 lands on the host picker without a schema refetch', async () => {
       api.createRecord.mockRejectedValue({ status: 400, message: 'x', errors: { hostKey: ['既有資料不存在'] } });
-      const w = await mountPage(refSchema([], { kind: 'extension', hostEntityKey: 'design.mold', titleFieldKey: null }), '/dynamic/m/new');
+      const w = await mountPage(refSchema([], { kind: 'extension', hostEntityKey: 'test.entity', titleFieldKey: null }), '/dynamic/m/new');
       w.findComponent(PopupSelect).vm.$emit('update:modelValue', 'M-0001');
       await flushPromises();
       await w.find('form').trigger('submit');

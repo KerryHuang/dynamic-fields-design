@@ -150,21 +150,21 @@ describe('DetailPage', () => {
   describe('references', () => {
     const refField = (id: number, kind: 'module' | 'entity'): SchemaField => ({
       ...field(id, `參照${id}`), type: 'reference',
-      reference: { kind, key: kind === 'module' ? 'cust' : 'design.mold', name: { 'zh-TW': 'x' }, lightUrl: '/x' },
+      reference: { kind, key: kind === 'module' ? 'cust' : 'test.entity', name: { 'zh-TW': 'x' }, lightUrl: '/x' },
     });
     const withRefs = (fields: SchemaField[], values: Record<string, unknown>, references: Record<string, unknown>, extra: Partial<ModuleSchema> = {}) =>
       [schema({ blocks: [{ id: 1, label: { 'zh-TW': '區' }, collapsed: false, columns: 2, fields: [field(1, '標題'), ...fields] }], ...extra }),
         { ...record, values: { f_1: 'a', ...values }, references } as DynamicRecord] as const;
 
     it('reference ok renders link to target record', async () => {
-      const [s, r] = withRefs([refField(2, 'module'), refField(3, 'entity')], { f_2: 42, f_3: 'M-1' }, {
-        f_2: { key: '42', title: '客戶甲', state: 'ok' }, f_3: { key: 'M-1', title: 'M-1 模具', state: 'ok' },
+      const [s, r] = withRefs([refField(2, 'module'), refField(3, 'entity')], { f_2: 42, f_3: 'E-0001' }, {
+        f_2: { key: '42', title: '客戶甲', state: 'ok' }, f_3: { key: 'E-0001', title: 'E-0001 甲號', state: 'ok' },
       });
       const w = await mountPage(s, r);
       const link = w.find('[data-testid="f_2"] a');
       expect(link.text()).toBe('客戶甲');
       expect(link.attributes('href')).toBe('/dynamic/cust/42');
-      expect(w.find('[data-testid="f_3"]').text()).toBe('M-1 模具');
+      expect(w.find('[data-testid="f_3"]').text()).toBe('E-0001 甲號');
       expect(w.find('[data-testid="f_3"] a').exists()).toBe(false);
     });
 
@@ -183,9 +183,9 @@ describe('DetailPage', () => {
     });
 
     it('extension record shows host title', async () => {
-      const [s, r] = withRefs([], {}, {}, { kind: 'extension', hostEntityKey: 'design.mold', titleFieldKey: null });
-      const w = await mountPage(s, { ...r, title: 'M-0001 外殼上蓋模', hostKey: 'M-0001' });
-      expect(w.find('.text-h6').text()).toBe('M-0001 外殼上蓋模');
+      const [s, r] = withRefs([], {}, {}, { kind: 'extension', hostEntityKey: 'test.entity', titleFieldKey: null });
+      const w = await mountPage(s, { ...r, title: 'E-0001 甲號', hostKey: 'E-0001' });
+      expect(w.find('.text-h6').text()).toBe('E-0001 甲號');
     });
   });
 
