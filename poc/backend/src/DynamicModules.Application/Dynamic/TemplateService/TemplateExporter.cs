@@ -34,20 +34,23 @@ public sealed partial class TemplateExporter(IModuleRepository modules, IPermiss
     /// 匯出一組模組。codeOf：模組在套件內的代號（範本用 Module.Key，應用程式用 AppModule.Code）。
     /// refTargets：參照目標的模組 Key → 套件內的 (代號, 應用程式) ；null 代表照範本的老做法保留 Module.Key，
     /// 回傳 null 代表表達不了（該欄位不匯出）。
+    /// includeInactive：停用的欄位也匯出並標 active: false（共用主檔模組依歸屬匯出，§9）。
+    /// external：套件外、但檔案裡能用符號表達的欄位與選項（共用主檔的基本欄位，例如帶值來源 bp/partner.phone、守衛 bp/partner.role）。
     /// </summary>
     public async Task<ExportedModules> ExportMembersAsync(
         List<Module> members, Func<Module, string> codeOf, Func<string, (string Code, string? App)?>? refTargets, CancellationToken ct,
-        ExportCodes? codes = null)
+        ExportCodes? codes = null, bool includeInactive = false, AppReportCodec.Names? external = null)
     {
-        var ctx = new Context(members, codeOf, refTargets, codes ?? ExportCodes.Default);
+        var ctx = new Context(members, codeOf, refTargets, codes ?? ExportCodes.Default, includeInactive, external);
         var groups = (await permissions.ListGroupsAsync(ct)).OrderBy(g => g.Id).ToList();
         var result = new List<TemplateModule>();
         foreach (var m in members)
         {
             var blocks = Blocks(m).Select(b => new TemplateBlock(ctx.BlockCode(b.Id), b.LabelI18n, b.Collapsed,
-                ActiveFields(b).Where(f => ctx.Exported.Contains(f.Id))
+                ctx.FieldsOf(b).Where(f => ctx.Exported.Contains(f.Id))
                     .Select(f => new TemplateField(ctx.FieldCode(f), f.Type, f.LabelI18n, ctx.Config(f), ActiveOptions(f)
-                        .Select(o => new TemplateOption(ctx.OptionCode(o.Id), o.LabelI18n, o.Color)).ToList())).ToList(), b.Columns)).ToList();
+                        .Select(o => new TemplateOption(ctx.OptionCode(o.Id), o.LabelI18n, o.Color)).ToList(),
+                        f.Status == FieldStatus.Active ? null : false)).ToList(), b.Columns)).ToList();
             var rules = m.Rules.OrderBy(r => r.Sequence).Select((r, i) => ctx.Rule(m, r, i)).OfType<TemplateRule>().ToList();
             var shared = (await views.ListByScopeAsync(m.Id, null, ct)).OrderBy(v => v.Id).Select(ctx.View).ToList();
             var title = m.TitleFieldId is { } t && ctx.Exported.Contains(t) ? ctx.FieldCode(ctx.Fields[t]) : null;
@@ -102,7 +105,7 @@ public sealed partial class TemplateExporter(IModuleRepository modules, IPermiss
         private readonly HashSet<long> _options;
         private readonly HashSet<long> _blocks;
 
-        /// <summary>套件內啟用中的欄位。</summary>
+        /// <summary>套件內匯出候選的欄位：啟用中的（includeInactive 時含停用的）。</summary>
         public Dictionary<long, Field> Fields { get; } = new();
 
         /// <summary>實際匯出的欄位：啟用中，且沒有因為無法表達的引用被略過。</summary>
@@ -116,19 +119,28 @@ public sealed partial class TemplateExporter(IModuleRepository modules, IPermiss
         private readonly Dictionary<long, long> _optionOwner = new();
 
         private readonly ExportCodes _codes;
+        private readonly bool _includeInactive;
+        private readonly AppReportCodec.Names? _external;
+
+        public IEnumerable<Field> FieldsOf(Block b) => _includeInactive
+            ? b.Fields.Where(f => f.Status is FieldStatus.Active or FieldStatus.Inactive).OrderBy(f => f.Sequence).ThenBy(f => f.Id)
+            : ActiveFields(b);
 
         public string FieldCode(Field f) => _codes.Field(f);
         public string BlockCode(long id) => _codes.Block(id);
         public string OptionCode(long id) => _codes.Option(id);
 
-        public Context(List<Module> members, Func<Module, string> codeOf, Func<string, (string Code, string? App)?>? refTargets, ExportCodes codes)
+        public Context(List<Module> members, Func<Module, string> codeOf, Func<string, (string Code, string? App)?>? refTargets, ExportCodes codes,
+            bool includeInactive = false, AppReportCodec.Names? external = null)
         {
             _codes = codes;
+            _includeInactive = includeInactive;
+            _external = external;
             _codeOf = codeOf;
             _refTargets = refTargets;
             var all = members.SelectMany(m => m.Blocks.SelectMany(b => b.Fields).Select(f => (m, f))).ToList();
             _allFieldIds = all.Select(x => x.f.Id).ToHashSet();
-            foreach (var (m, f) in all.Where(x => x.f.Status == FieldStatus.Active))
+            foreach (var (m, f) in all.Where(x => x.f.Status == FieldStatus.Active || includeInactive && x.f.Status == FieldStatus.Inactive))
             {
                 Fields[f.Id] = f;
                 _moduleOf[f.Id] = m;
@@ -140,7 +152,7 @@ public sealed partial class TemplateExporter(IModuleRepository modules, IPermiss
             Exported = Fields.Keys.Where(id => !codes.Excluded.Contains(id)).ToHashSet();
 
             // 略過一個欄位可能讓依賴它的欄位也表達不了，重複到穩定
-            var ordered = members.SelectMany(m => Blocks(m).SelectMany(ActiveFields)).ToList();
+            var ordered = members.SelectMany(m => Blocks(m).SelectMany(FieldsOf)).ToList();
             for (var changed = true; changed;)
             {
                 changed = false;
@@ -160,13 +172,20 @@ public sealed partial class TemplateExporter(IModuleRepository modules, IPermiss
 
         private string Qualified(long fieldId) => $"{_codeOf(_moduleOf[fieldId])}.{_codes.Field(Fields[fieldId])}";
 
-        /// <summary>報表、狀態機、轉換用的 Id → 代號查表；只認實際匯出的欄位。</summary>
-        public AppReportCodec.Names Names() => new(
-            key => _moduleOf.Values.FirstOrDefault(m => m.Key == key) is { } m ? _codeOf(m) : null,
-            id => Exported.Contains(id) ? Qualified(id) : null,
-            (fieldId, optionId) => _optionOwner.TryGetValue(optionId, out var owner) && owner == fieldId ? _codes.Option(optionId) : null,
-            id => Fields.TryGetValue(id, out var f) && IsOptionField(f),
-            id => Fields.TryGetValue(id, out var f) && f.Type is FieldType.Reference or FieldType.User ? f.Type : null);
+        /// <summary>報表、狀態機、轉換用的 Id → 代號查表；只認實際匯出的欄位，其餘交給 external（沒有就是表達不了）。</summary>
+        public AppReportCodec.Names Names()
+        {
+            var own = new AppReportCodec.Names(
+                key => _moduleOf.Values.FirstOrDefault(m => m.Key == key) is { } m ? _codeOf(m) : null,
+                id => Exported.Contains(id) ? Qualified(id) : null,
+                (fieldId, optionId) => _optionOwner.TryGetValue(optionId, out var owner) && owner == fieldId ? _codes.Option(optionId) : null,
+                id => Fields.TryGetValue(id, out var f) && IsOptionField(f),
+                id => Fields.TryGetValue(id, out var f) && f.Type is FieldType.Reference or FieldType.User ? f.Type : null);
+            return _external is null ? own : AppReportCodec.Names.Or(own, _external);
+        }
+
+        /// <summary>帶值來源、守衛欄位：套件內匯出的用限定名，套件外的看 external。</summary>
+        private string? Symbol(long fieldId) => Exported.Contains(fieldId) ? Qualified(fieldId) : _external?.Field(fieldId);
 
         public string? OptionCodeOrNull(long optionId) => _options.Contains(optionId) ? _codes.Option(optionId) : null;
 
@@ -227,8 +246,8 @@ public sealed partial class TemplateExporter(IModuleRepository modules, IPermiss
             {
                 var map = new JsonArray();
                 foreach (var entry in fill.Map)
-                    if (Exported.Contains(entry.From) && Exported.Contains(entry.To) && _moduleOf[entry.To] == _moduleOf[f.Id])
-                        map.Add(new JsonObject { ["from"] = Qualified(entry.From), ["to"] = Code(entry.To) });
+                    if (Symbol(entry.From) is { } from && Exported.Contains(entry.To) && _moduleOf[entry.To] == _moduleOf[f.Id])
+                        map.Add(new JsonObject { ["from"] = from, ["to"] = Code(entry.To) });
                 if (map.Count == fill.Map.Count) node["fill"] = new JsonObject { ["mode"] = fill.Mode, ["map"] = map };
                 else
                 {
@@ -239,9 +258,9 @@ public sealed partial class TemplateExporter(IModuleRepository modules, IPermiss
             if (f.Config.RefGuard is { } guard)
             {
                 node.Remove("refGuard");
-                var codes = guard.OptionIds.Select(OptionCodeOrNull).ToList();
-                if (Exported.Contains(guard.FieldId) && codes.All(c => c is not null))
-                    node["refGuard"] = new JsonObject { ["field"] = Qualified(guard.FieldId), ["in"] = new JsonArray(codes.Select(c => (JsonNode?)JsonValue.Create(c)).ToArray()) };
+                var codes = guard.OptionIds.Select(id => OptionCodeOrNull(id) ?? _external?.Option(guard.FieldId, id)).ToList();
+                if (Symbol(guard.FieldId) is { } guarded && codes.All(c => c is not null))
+                    node["refGuard"] = new JsonObject { ["field"] = guarded, ["in"] = new JsonArray(codes.Select(c => (JsonNode?)JsonValue.Create(c)).ToArray()) };
                 else Warnings.Add($"「{Label(f)}」的目標狀態守衛引用了停用、未匯出或套件外的欄位或選項，未匯出這個設定，匯入後不再限制目標狀態");
             }
             if (f.Config.ParentDefaultFieldId is { } parent)

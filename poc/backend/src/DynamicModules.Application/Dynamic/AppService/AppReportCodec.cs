@@ -120,7 +120,16 @@ public static partial class AppReportCodec
     /// <summary>Id → 代號所需的查表。Module：Module.Key → 模組代號；Field：欄位 Id → 限定欄位名；Option：選項 Id → 選項代號（只收該欄位的選項）。</summary>
     public sealed record Names(
         Func<string, string?> Module, Func<long, string?> Field, Func<long, long, string?> Option, Func<long, bool> IsOptionField,
-        Func<long, FieldType?> IdentityTypeOf);
+        Func<long, FieldType?> IdentityTypeOf)
+    {
+        /// <summary>先查 first，查不到再查 second（例如本套件的欄位，再來是共用主檔的符號）。</summary>
+        public static Names Or(Names first, Names second) => new(
+            key => first.Module(key) ?? second.Module(key),
+            id => first.Field(id) ?? second.Field(id),
+            (field, option) => first.Option(field, option) ?? second.Option(field, option),
+            id => first.IsOptionField(id) || second.IsOptionField(id),
+            id => first.IdentityTypeOf(id) ?? second.IdentityTypeOf(id));
+    }
 
     public static (AppReportDefinition? Definition, List<string> Errors) ToPackage(ReportDefinition d, Names n)
     {

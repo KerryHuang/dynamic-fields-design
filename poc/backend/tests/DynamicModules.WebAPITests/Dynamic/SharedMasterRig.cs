@@ -132,6 +132,54 @@ internal sealed class SharedMasterRig : IDisposable
                     .Select(f => $"{f.LabelI18n.Resolve("zh-TW")}:{f.Type}:{f.Status}").ToList())).ToList();
     });
 
+    /// <summary>GET /apps/{key}/export：回傳套件檔與 X-Export-Warnings 標頭裡的警告。</summary>
+    public async Task<(JsonElement Package, List<string> Warnings)> ExportAsync(string key)
+    {
+        var res = await Admin.GetAsync($"{Apps}/{key}/export");
+        res.StatusCode.Should().Be(HttpStatusCode.OK, await res.Content.ReadAsStringAsync() + LastError());
+        var warnings = res.Headers.TryGetValues("X-Export-Warnings", out var values)
+            ? values.SelectMany(v => v.Split('|')).Where(w => w.Length > 0).Select(Uri.UnescapeDataString).ToList()
+            : [];
+        return (await JsonOf(res), warnings);
+    }
+
+    /// <summary>設計器（Designer）在主檔模組的某個區塊新增欄位；回傳欄位 Id。</summary>
+    public async Task<long> AddDesignerFieldAsync(string moduleKey, long blockId, string type, string label, object? config = null)
+    {
+        var res = await Admin.PostAsJsonAsync($"{Base}/modules/{moduleKey}/fields",
+            new { blockId, type, label = new Dictionary<string, string> { ["zh-TW"] = label }, config = config ?? new { } });
+        res.StatusCode.Should().Be(HttpStatusCode.Created, await res.Content.ReadAsStringAsync() + LastError());
+        return (await JsonOf(res)).GetProperty("id").GetInt64();
+    }
+
+    public async Task<long> AddDesignerOptionAsync(long fieldId, string label)
+    {
+        var res = await Admin.PostAsJsonAsync($"{Base}/fields/{fieldId}/options", new { label = new Dictionary<string, string> { ["zh-TW"] = label }, color = (string?)null });
+        res.StatusCode.Should().Be(HttpStatusCode.Created, await res.Content.ReadAsStringAsync());
+        return (await JsonOf(res)).GetProperty("id").GetInt64();
+    }
+
+    public async Task SetFieldStatusOkAsync(long fieldId, string status)
+    {
+        var res = await Admin.PutAsJsonAsync($"{Base}/fields/{fieldId}/status", new { status });
+        res.StatusCode.Should().Be(HttpStatusCode.OK, await res.Content.ReadAsStringAsync());
+    }
+
+    /// <summary>應用程式名下某個區塊對照列的區塊 Id（例如 bp 的 partner.main、crmx 的 bp/partner.crm）。</summary>
+    public long BlockId(string appKey, string name) => Db(db =>
+        (from a in db.Set<App>() where a.Key == appKey
+         join b in db.Set<AppBlock>() on a.Id equals b.AppId
+         where b.Name == name select b.BlockId).Single());
+
+    /// <summary>刪除應用程式（先預覽拿確認數）。</summary>
+    public async Task DeleteAppOkAsync(string key)
+    {
+        var preview = await JsonOf(await Admin.DeleteAsync($"{Apps}/{key}?purged=-1"));
+        preview.GetProperty("canDelete").GetBoolean().Should().BeTrue(preview.ToString());
+        var res = await Admin.DeleteAsync($"{Apps}/{key}?purged={preview.GetProperty("purgedTotal").GetInt32()}");
+        res.StatusCode.Should().Be(HttpStatusCode.OK, await res.Content.ReadAsStringAsync());
+    }
+
     public async Task<JsonElement> CreateRecordAsync(HttpClient c, string moduleKey, object values)
     {
         var res = await c.PostAsJsonAsync($"{Base}/modules/{moduleKey}/records", new { values });
