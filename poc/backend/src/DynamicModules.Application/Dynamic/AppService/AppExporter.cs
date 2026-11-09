@@ -160,11 +160,12 @@ public sealed partial class AppExporter(
                 var option = owner?.Options.First(o => o.Id == scope.Key);
                 if (owner is null || option is null || exported.Names.Option(owner.Id, option.Id) is null || exported.Names.Field(owner.Id) is null) continue;
                 var existing = scope.Select(s => s.GroupId).Distinct().Where(id => groupList.Any(g => g.Id == id)).ToList();
-                // 主檔匯出比照 fieldAccess，只帶 steward 群組；只限定給別的群組的選項範圍不匯出
+                // 主檔匯出只帶 steward 群組；只限定給別的群組的選項改成只限 steward，
+                // 整筆不帶會讓另一個庫變成所有人可見（只收緊、不放寬）
                 if (isMaster && existing.Count > 0)
                 {
-                    existing = existing.Where(masterGroups[m.Id].Contains).ToList();
-                    if (existing.Count == 0) continue;
+                    var own = existing.Where(masterGroups[m.Id].Contains).ToList();
+                    existing = own.Count > 0 ? own : masterGroups[m.Id].ToList();
                 }
                 var scopeGroups = existing.Select(GroupCode).ToList();
                 // 範圍指向的群組都已不存在（殘留資料）：匯出空範圍會被匯入驗證退回，所以不匯出並告知

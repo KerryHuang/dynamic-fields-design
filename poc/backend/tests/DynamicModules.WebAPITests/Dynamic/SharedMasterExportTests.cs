@@ -169,7 +169,10 @@ public class SharedMasterExportTests : IDisposable
             .Should().Equal(["bp", "ct"], "stk 是一般應用程式，不是主檔");
     }
 
-    /// <summary>主檔匯出的選項範圍比照 fieldAccess，只帶 steward 群組；別的群組不會因此進 groups[]。</summary>
+    /// <summary>
+    /// 主檔匯出的選項範圍只帶 steward 群組；別的群組不會因此進 groups[]。只限定給別的群組的選項改成只限 steward，
+    /// 不能整筆不帶，否則在另一個庫會變成所有人可見（只收緊、不放寬）。
+    /// </summary>
     [Fact]
     public async Task ExportingTheMaster_KeepsOnlyStewardGroupsInOptionScopes()
     {
@@ -186,7 +189,7 @@ public class SharedMasterExportTests : IDisposable
         var (bp, _) = await _rig.ExportAsync("bp");
         var stewardCode = Str(Arr(Arr(bp, "modules").Single(), "permissions").Single(), "group");
         Arr(bp, "optionScopes").Select(s => $"{Str(s, "option")}:{string.Join(",", Arr(s, "groups").Select(g => g.GetString()))}")
-            .Should().Equal($"partner.customer:{stewardCode}");
+            .Should().BeEquivalentTo([$"partner.customer:{stewardCode}", $"partner.supplier:{stewardCode}"]);
         Arr(bp, "groups").Select(g => Str(g, "code")).Should().Equal(stewardCode);
     }
 
