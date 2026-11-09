@@ -1,6 +1,7 @@
 using System.Net;
 using System.Net.Http.Json;
 using System.Text.Json;
+using System.Text.Json.Nodes;
 using DynamicModules.Domain.Entities.Dynamic;
 using FluentAssertions;
 using static DynamicModules.WebAPITests.Dynamic.ApiTestKit;
@@ -282,6 +283,35 @@ public class SharedMasterDeleteTests : IDisposable
         await DeleteOkAsync("crmx");
         _rig.Db(db => db.Set<AppOrphan>().Where(o => o.FormerAppKey == "crmx").Select(o => $"{o.Kind}:{o.Name}").ToList())
             .Should().Contain(["Field:bp/partner.vip", "Option:bp/partner.vip", "Field:bp/partner.industry"]);
+        await _rig.AssertIntegrityAsync();
+    }
+
+    [Fact]
+    public async Task AnOrphanReEnabledInTheDesigner_StaysRestricted_UntilTheAdminGrantsIt()
+    {
+        await _rig.ImportAllAsync();
+        await _rig.OpenOkAsync("crmx");
+        await _rig.OpenOkAsync("stk");
+        var keeper = _rig.App.AsUser("keeper01");
+        var record = await _rig.CreateRecordAsync(keeper, Partner, new Dictionary<string, object> { [Key("bp", "partner.name")] = "丙公司" });
+        var industry = _rig.FieldId("crmx", "bp/partner.industry");
+        var option = _rig.Db(db => db.Set<FieldOption>().First(o => o.FieldId == industry).Id);
+        await UpdateAsync(record, new() { [$"f_{industry}"] = $"opt_{option}" });
+        await _rig.CloseOkAsync("crmx");
+        await DeleteOkAsync("crmx");
+
+        (await _rig.Admin.PutAsJsonAsync($"{Base}/fields/{industry}/status", new { status = "Active" })).StatusCode.Should().Be(HttpStatusCode.OK);
+        FieldById(industry).VisibilityRestricted.Should().BeTrue();
+        async Task<bool> KeeperSeesIt() => (await JsonOf(await keeper.GetAsync($"{Base}/records/{record.GetProperty("id").GetInt64()}")))
+            .GetProperty("values").TryGetProperty($"f_{industry}", out _);
+        (await KeeperSeesIt()).Should().BeFalse("只剩系統管理員看得到");
+
+        var perms = JsonNode.Parse(await (await _rig.Admin.GetAsync($"{Base}/modules/{Partner}/permissions")).Content.ReadAsStringAsync())!;
+        perms["fieldGrants"] = new JsonArray(new JsonObject { ["fieldId"] = industry, ["groupIds"] = new JsonArray(_rig.GroupId("warehouse")) });
+        var saved = await _rig.Admin.PutAsync($"{Base}/modules/{Partner}/permissions",
+            new StringContent(perms.ToJsonString(), System.Text.Encoding.UTF8, "application/json"));
+        saved.StatusCode.Should().Be(HttpStatusCode.OK, await saved.Content.ReadAsStringAsync());
+        (await KeeperSeesIt()).Should().BeTrue("管理員另外授予後看得到");
         await _rig.AssertIntegrityAsync();
     }
 
