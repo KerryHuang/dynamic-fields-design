@@ -3692,7 +3692,8 @@
        "config": {
         "required": true,
         "showInList": true,
-        "isFilterable": true
+        "isFilterable": true,
+        "isSortable": true
        }
       }
      ]

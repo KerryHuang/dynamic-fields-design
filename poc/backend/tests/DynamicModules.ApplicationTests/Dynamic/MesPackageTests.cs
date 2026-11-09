@@ -29,6 +29,19 @@ public class MesPackageTests
     }
 
     [Fact]
+    public void EveryBuiltInModuleWithTitleTemplate_HasSortableTitleField()
+    {
+        // 列表標題欄的排序開關取自標題欄位的 isSortable；有樣板的模組依 Record.Title 排序
+        var offenders = AppCatalog.Load(AppCatalog.DefaultDirectory).BuiltIns
+            .SelectMany(p => p.Modules.Where(m => !string.IsNullOrEmpty(m.TitleTemplate)).Select(m => (p, m)))
+            .Where(x => !(x.m.Blocks.SelectMany(b => b.Fields).Single(f => f.Code == x.m.TitleField).Config
+                .TryGetProperty("isSortable", out var v) && v.ValueKind == System.Text.Json.JsonValueKind.True))
+            .Select(x => $"{x.p.Manifest.Id}/{x.m.Code}")
+            .ToList();
+        offenders.Should().BeEmpty();
+    }
+
+    [Fact]
     public void EveryLabel_HasAllFourLocales()
     {
         var p = Package.Value;
