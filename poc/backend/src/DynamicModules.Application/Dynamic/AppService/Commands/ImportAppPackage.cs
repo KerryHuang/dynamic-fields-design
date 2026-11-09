@@ -24,7 +24,8 @@ public record ImportAppPackageRequest(byte[] Content) : IRequest<ServiceResult>,
 /// </summary>
 public class ImportAppPackageHandler(
     AppCatalog catalog, AppPackageSource packages, IAppPackageRepository repository, IAppRepository apps,
-    IUnitOfWork uow, ICurrentUser user, IBusinessTime time, MasterMerger merger) : IRequestHandler<ImportAppPackageRequest, ServiceResult>
+    IUnitOfWork uow, ICurrentUser user, IBusinessTime time, MasterMerger merger, AppExporter exporter)
+    : IRequestHandler<ImportAppPackageRequest, ServiceResult>
 {
     public async Task<ServiceResult> Handle(ImportAppPackageRequest request, CancellationToken ct)
     {
@@ -71,7 +72,11 @@ public class ImportAppPackageHandler(
         return ServiceResult.Created(AppResponseBuilder.Summarize(new SourcedPackage(package, AppPackageSource.Imported), null));
     }
 
-    /// <summary>主檔合併：先合併定義並驗證，資料庫裡已有主檔就依持久代號補進去，最後把匯入的那份更新成合併結果。</summary>
+    /// <summary>
+    /// 主檔合併：先合併定義並驗證，資料庫裡已有主檔就依持久代號補進去，最後把匯入的那份更新成合併結果。
+    /// 資料庫裡已有主檔時，合併結果取資料庫匯出的主檔（避撞改名後的代號、沒有貢獻與孤兒），不取定義層的合併，
+    /// 之後的匯出、重新採用與使用者套件的驗證才和資料庫一致（§9 情況 2，審查 P2-2）。
+    /// </summary>
     private async Task<ServiceResult> MergeAsync(
         AppPackageData incoming, AppPackageData current, AppPackage? stored, IReadOnlyDictionary<string, AppPackageData> masters, CancellationToken ct)
     {
@@ -87,6 +92,7 @@ public class ImportAppPackageHandler(
             if (await merger.MergeIntoDatabaseAsync(app, incoming, dbWarnings, ct) is { } failed) return failed;
             // 資料庫層的警告（實際補進去的結果）比定義層準；定義層只多出「沒有合併」的那幾類
             warnings = [.. dbWarnings, .. warnings.Where(w => w.Contains("沒有合併") && !dbWarnings.Contains(w))];
+            merged = (await exporter.ExportAsync(app, ct)).Package;
         }
 
         var json = JsonSerializer.Serialize(merged, TemplateJson.Options);

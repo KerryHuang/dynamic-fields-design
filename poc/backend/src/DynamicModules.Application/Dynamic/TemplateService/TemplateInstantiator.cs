@@ -141,7 +141,7 @@ public sealed class TemplateInstantiator(
                 else
                 {
                     var r = await sender.Send(new AddFieldRequest(c.ModuleKey, map.Blocks[$"{c.Prefix}.{c.BlockCode}"], f.Type, f.Label,
-                        map.Config(c.Prefix, f, withDefaults: false)), ct);
+                        map.Config(c.Prefix, f, withDefaults: false), MasterBase: c.MasterBase), ct);
                     if ((failed = Fail(r, c.Prefix, $"contributions.{name}.")) is not null) return failed;
                     var field = (FieldResponse)r.Data!;
                     fieldId = field.Id;

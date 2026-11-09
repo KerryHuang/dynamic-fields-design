@@ -46,7 +46,9 @@ public record InstantiationSeeds(
 /// <summary>
 /// 一筆貢獻：Prefix 是主檔模組的符號 &lt;主檔 id&gt;/&lt;模組代號&gt;，欄位、選項、區塊的對照名稱都以它開頭。
 /// Reattach*：同一個應用程式重新開啟時接回的孤兒（代號 → 既有的 id），接回的不另建（設計 §7 刪除第 6 點）。
+/// MasterBase：再匯入主檔時補的基本欄位（不是貢獻），主檔關閉時也照補（見 AddFieldRequest.MasterBase）。
 /// </summary>
 public record ContributionInput(
     string Prefix, string ModuleKey, string BlockCode, I18nText BlockName, IReadOnlyList<TemplateField> Fields,
-    long? ReattachBlockId, IReadOnlyDictionary<string, long> ReattachFields, IReadOnlyDictionary<string, long> ReattachOptions);
+    long? ReattachBlockId, IReadOnlyDictionary<string, long> ReattachFields, IReadOnlyDictionary<string, long> ReattachOptions,
+    bool MasterBase = false);

@@ -29,7 +29,8 @@ public class AddFieldHandler(
         if (request.Designer && await masterDesigner.RejectAddFieldAsync(module, block.Id, request.Type, request.Config, ct) is { } rejected) return rejected;
 
         // 新增公式或彙總欄位會替既有記錄算值並寫回；Closed 的資料唯讀
-        if (request.Type == FieldType.Formula && await ClosedDataGuard.RejectFormulaRecalcAsync(module, modules, ct) is { } closedFormula)
+        if (request.Type == FieldType.Formula && !request.MasterBase
+            && await ClosedDataGuard.RejectFormulaRecalcAsync(module, modules, ct) is { } closedFormula)
             return closedFormula;
         if (request.Type == FieldType.Rollup && ClosedDataGuard.Reject(module) is { } closedRollup) return closedRollup;
         if (request.Type is FieldType.Formula or FieldType.Rollup && await immutable.RejectAsync(module, ct) is { } ledgerFrozen) return ledgerFrozen;

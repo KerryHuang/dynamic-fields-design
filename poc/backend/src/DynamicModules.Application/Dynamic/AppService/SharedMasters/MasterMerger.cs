@@ -185,8 +185,12 @@ public sealed class MasterMerger(
                     {
                         var existing = dbFields[fieldId];
                         if (existing.Type != f.Type) { warnings.Add(TypeKept(Label(existing.LabelI18n), f.Code)); continue; }
-                        foreach (var o in f.Options.Where(o => !baseOptions.ContainsKey(o.Code)))
-                            optionAdds.Add((im.Code, fieldId, NewOption(o)));
+                        foreach (var o in f.Options)
+                        {
+                            if (!baseOptions.TryGetValue(o.Code, out var optionId)) optionAdds.Add((im.Code, fieldId, NewOption(o)));
+                            else if (existing.Options.All(x => x.Id != optionId))
+                                warnings.Add($"選項「{Label(o.Label)}」的代號 {o.Code} 已是同模組另一個欄位的選項，沒有合併");
+                        }
                         continue;
                     }
                     var code = Avoid(f.Code, takenFields);
@@ -201,7 +205,7 @@ public sealed class MasterMerger(
                 var blockCode = blockId is null ? Avoid(ib.Code, takenBlocks) : ib.Code;
                 if (blockId is null) Collided(warnings, "區塊", Label(ib.Label), ib.Code, blockCode);
                 inputs.Add(new ContributionInput(im.Code, module.Key, blockCode, ib.Label,
-                    fresh.Select(f => Renamed(f, renamed)).ToList(), blockId, None, None));
+                    fresh.Select(f => Renamed(f, renamed)).ToList(), blockId, None, None, MasterBase: true));
                 if (blockId is null) touched.Add(module.Id);
             }
         }
