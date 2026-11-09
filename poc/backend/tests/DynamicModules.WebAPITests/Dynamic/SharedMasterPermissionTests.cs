@@ -324,6 +324,55 @@ public class SharedMasterPermissionTests : IDisposable
         await _rig.AssertIntegrityAsync();
     }
 
+    /// <summary>
+    /// 審查必修 4：主檔上的事件把 CRM 限定可見的備忘（或引用限定可見欄位的公式）複製到別的模組，等於把它給看不到的群組；
+    /// 跟隱藏欄位一樣，沒有在對應上明確 allowHiddenSource 就不能存。
+    /// </summary>
+    [Fact]
+    public async Task AnEventCopyingARestrictedField_OrAFormulaOverIt_NeedsAllowHiddenSource()
+    {
+        await _rig.ImportAllAsync();
+        await _rig.OpenOkAsync("crmx");
+        await _rig.OpenOkAsync("stk");
+        var derived = await AddField(_rig.Admin, Partner, "formula",
+            new { formula = $"{{{_rig.FieldId("crmx", "bp/partner.score")}}} + 1", resultType = "number" });
+        var shipQty = await AddField(_rig.Admin, "stk-ship", "decimal");
+        var shipNote = await AddField(_rig.Admin, "stk-ship", "text");
+
+        Task<HttpResponseMessage> SaveAsync(long from, long to, bool allow) => _rig.Admin.PostAsJsonAsync($"{Base}/events", new
+        {
+            key = "ev-" + Guid.NewGuid().ToString("N")[..8], name = new Dictionary<string, string> { ["zh-TW"] = "抄到出貨單" },
+            sourceModuleKey = Partner, active = true,
+            definition = new
+            {
+                trigger = new { on = "create" },
+                effects = new[]
+                {
+                    new
+                    {
+                        code = "mk", kind = "create", targetModuleKey = "stk-ship",
+                        set = new object[]
+                        {
+                            new { to = _rig.FieldId("stk", "ship.no"), @const = "SH" },
+                            new { to, from = new { side = "header", fieldId = from }, allowHiddenSource = allow }
+                        }
+                    }
+                }
+            }
+        });
+
+        var memo = _rig.FieldId("crmx", "bp/partner.memo");
+        foreach (var (from, to) in new[] { (memo, shipNote.Id), (derived.Id, shipQty.Id) })
+        {
+            var rejected = await SaveAsync(from, to, allow: false);
+            rejected.StatusCode.Should().Be(HttpStatusCode.BadRequest, $"來源 {from}：{await rejected.Content.ReadAsStringAsync()}");
+            (await rejected.Content.ReadAsStringAsync()).Should().Contain("allowHiddenSource");
+            var allowed = await SaveAsync(from, to, allow: true);
+            allowed.StatusCode.Should().Be(HttpStatusCode.Created, await allowed.Content.ReadAsStringAsync());
+        }
+        (await SaveAsync(_rig.FieldId("bp", "partner.name"), shipNote.Id, allow: false)).StatusCode.Should().Be(HttpStatusCode.Created, "基本欄位照常");
+    }
+
     [Fact]
     public async Task FieldGrants_OnlyForRestrictedFields()
     {

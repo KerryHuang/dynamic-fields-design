@@ -223,7 +223,7 @@ public class EventValidator(
         $"來源欄位「{f.LabelI18n.Resolve("zh-TW")}」是彙總欄位或依賴彙總的公式；彙總會隨子記錄變動，複製後與已記帳的帳務失配，不能當來源";
 
     private static string HiddenMessage(Field f) =>
-        $"來源欄位「{f.LabelI18n.Resolve("zh-TW")}」對某些群組設為隱藏；複製會把被隱藏的值帶到目標模組，必須在該對應明確允許（allowHiddenSource）";
+        $"來源欄位「{f.LabelI18n.Resolve("zh-TW")}」對某些群組設為隱藏或限定可見；複製會把看不到的值帶到目標模組，必須在該對應明確允許（allowHiddenSource）";
 
     private static Dictionary<long, Field>? SideFields(
         string side, EventEffect fx, Dictionary<long, Field> sourceFields, Dictionary<long, Field>? lineFields,
@@ -234,8 +234,20 @@ public class EventValidator(
         return side == "line" && fx.Kind == "create" ? lineFields : null;
     }
 
-    private async Task<HashSet<long>> HiddenAsync(Module m, CancellationToken ct) =>
-        (await permissions.LoadModuleRowsAsync(m, ct)).FieldPermissions.Where(p => p.Access == FieldAccess.Hidden).Select(p => p.FieldId).ToHashSet();
+    /// <summary>
+    /// 對某些群組看不到的來源欄位：設為 Hidden 的欄位，加上限定可見的貢獻欄位（共用主檔 §6）與引用它們的公式（逐層），
+    /// 後兩者和 PermissionResolver 算 hidden 的規則一致（審查必修 4）。
+    /// </summary>
+    private async Task<HashSet<long>> HiddenAsync(Module m, CancellationToken ct)
+    {
+        var hidden = (await permissions.LoadModuleRowsAsync(m, ct)).FieldPermissions.Where(p => p.Access == FieldAccess.Hidden).Select(p => p.FieldId).ToHashSet();
+        var restricted = m.Blocks.SelectMany(b => b.Fields).Where(f => f.VisibilityRestricted).Select(f => f.Id).ToHashSet();
+        if (restricted.Count == 0) return hidden;
+        foreach (var f in FormulaGraph.EvaluationOrder(m))
+            if (FormulaGraph.RefsOf(f).Overlaps(restricted)) restricted.Add(f.Id);
+        hidden.UnionWith(restricted);
+        return hidden;
+    }
 
     /// <summary>此事件（啟用時）加入既有的啟用事件後，圖上是否有包含它的環。</summary>
     private async Task<List<string>?> FindCycleAsync(EventInput input, Module source, CancellationToken ct)
