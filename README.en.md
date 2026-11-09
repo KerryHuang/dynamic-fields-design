@@ -75,7 +75,7 @@ Open `http://localhost:8080` and sign in as `admin`.
 - The product is under active development; features and screens will keep changing.
 - Only SQLite is supported for now.
 - The backend assumes a single instance per customer and cannot scale out horizontally.
-- The interface currently always displays Traditional Chinese; a language switcher is not available yet. The Thai and Vietnamese text is machine-translated and needs native-speaker review before real use.
+- The interface language can be switched on the sign-in page and from the top-right menu (Traditional Chinese, English, Thai, Vietnamese); the choice is remembered in that browser. The Thai and Vietnamese text is machine-translated and needs native-speaker review before real use.
 - The demo runs on a free host: it sleeps when idle and its data is reset, so it is for trying only.
 
 ## Tech
