@@ -201,16 +201,49 @@ public class ApprovalFlowDefinitionTests : ApprovalTestBase
     }
 
     [Fact]
-    public async Task EditableField_HiddenForSomeGroup_400()
+    public async Task EditableField_HiddenOnlyForOtherGroup_Ok()
     {
-        // 裁決 22：可編輯欄位不得是對簽核人隱藏的欄位；存流程時不知道最後是誰簽，對任何群組隱藏就拒絕
+        // 主控裁決（修正輪 1）：只檢查存檔時推得出的簽核人群組；欄位只對 finance 隱藏，簽核人是 purchase-lead 群組或主管 → 可存
         var r = await BuildPurchase();
         await HideFor(r.Module, r.DueDate, FinanceGroup);
-        var bad = await Send(new CreateApprovalFlowRequest(r.Module,
-            Input("po-h", r.Confirmed, 1, Def(null, Stage("lead", Group(PurchaseLeadGroup), editable: [r.DueDate])))));
-        bad.Errors["definition.stages[0].editableFields"].Should().Equal(ApprovalMessages.EditableFieldHidden);
-        Db.Context.Set<ApprovalFlow>().AsNoTracking().Count().Should().Be(0);
+        await Create(r, Input("po-h", r.Confirmed, 1, Def(null, Stage("lead", Group(PurchaseLeadGroup), editable: [r.DueDate]))));
+        await Create(r, Input("po-m", r.Confirmed, 2, Def(null, Stage("mgr", Manager(1), editable: [r.DueDate]))));
+    }
 
-        await Create(r, Input("po-h", r.Confirmed, 1, Def(null, Stage("lead", Group(PurchaseLeadGroup), editable: [r.Memo]))));
+    [Fact]
+    public async Task EditableField_HiddenForDerivableApproverGroup_400()
+    {
+        // 推得出的簽核人群組看不到這個欄位：來源群組本身、指定使用者所屬的群組、備援也照這兩條算
+        var r = await BuildPurchase();
+        await HideFor(r.Module, r.DueDate, FinanceGroup);
+        async Task Bad(ApprovalDefinition d)
+        {
+            var res = await Send(new CreateApprovalFlowRequest(r.Module, Input("po-h", r.Confirmed, 1, d)));
+            res.Errors["definition.stages[0].editableFields"].Should().Equal(ApprovalMessages.EditableFieldHidden);
+        }
+        await Bad(Def(null, Stage("fin", Group(FinanceGroup), editable: [r.DueDate])));
+        await Bad(Def(null, Stage("fin", Users("fin1"), editable: [r.DueDate])));
+        await Bad(Def(null, Stage("mgr", Manager(1), editable: [r.DueDate])) with { FallbackApprovers = Users("buyer2", "fin2") });
+        await Bad(Def(null, Stage("mgr", Manager(1), editable: [r.DueDate])) with { FallbackApprovers = Group(FinanceGroup) });
+        Db.Context.Set<ApprovalFlow>().AsNoTracking().Count().Should().Be(0);
+    }
+
+    [Fact]
+    public async Task EditableField_VisibilityRestricted_NeedsGrantForApproverGroup()
+    {
+        // 限定可見的欄位：推得出的簽核人群組沒有可見列 → 400；給了 finance 可見列後，finance 簽核可存
+        var r = await BuildPurchase();
+        var memo = Db.Context.Set<Field>().Single(f => f.Id == r.Memo);
+        memo.VisibilityRestricted = true;
+        await Db.Context.SaveChangesAsync();
+        Db.Context.ChangeTracker.Clear();
+        var d = Def(null, Stage("fin", Group(FinanceGroup), editable: [r.Memo]));
+        (await Send(new CreateApprovalFlowRequest(r.Module, Input("po-v", r.Confirmed, 1, d))))
+            .Errors["definition.stages[0].editableFields"].Should().Equal(ApprovalMessages.EditableFieldHidden);
+
+        Db.Context.Add(new FieldGrant { SourceKind = GrantSource.Manual, FieldId = r.Memo, GroupId = FinanceGroup });
+        await Db.Context.SaveChangesAsync();
+        Db.Context.ChangeTracker.Clear();
+        await Create(r, Input("po-v", r.Confirmed, 1, d));
     }
 }

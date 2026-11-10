@@ -75,7 +75,7 @@ public static class ApprovalMessages
     public const string NoPreviousStage = "前面沒有已同意的關卡，只能退回發起人";
     public const string NotEditableField = "這一關不能修改這個欄位";
     public const string FieldHiddenForApprover = "這個欄位對你隱藏，不能在簽核時修改";
-    public const string EditableFieldHidden = "可編輯欄位不能是對任何群組隱藏或限定可見的欄位，簽核人可能看不到它";
+    public const string EditableFieldHidden = "可編輯欄位不能是對這一關簽核人（或備援）所屬群組隱藏或限定可見的欄位";
     public const string RejectTargetInvalid = "退回對象只能是 initiator 或 previous";
     public const string TransitionGone = "簽核要執行的狀態轉移已不在狀態機上，請聯絡管理員";
 }

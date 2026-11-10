@@ -14,7 +14,8 @@ namespace DynamicModules.Application.Dynamic.ApprovalService;
 /// stages[i].code／name／when／approvers／mode／editableFields／dueHours／onEmpty。跨流程與入口的約束在 ApprovalConstraints。
 /// </summary>
 public sealed partial class ApprovalDefinitionValidator(
-    IPermissionRepository permissions, FieldTypeRegistry registry, IConversionRepository conversions, ILedgerRepository ledgers)
+    IPermissionRepository permissions, FieldTypeRegistry registry, IConversionRepository conversions, ILedgerRepository ledgers,
+    ISharedMasterRepository shared)
 {
     [GeneratedRegex("^[a-z][a-z0-9-]{0,39}$")]
     private static partial Regex CodePattern();
@@ -44,7 +45,11 @@ public sealed partial class ApprovalDefinitionValidator(
         else if (stages.Select(s => s.Code).Distinct().Count() != stages.Count) Err("stages", ApprovalMessages.StageCodeDuplicate);
 
         var nonEditable = await NonEditableFieldIdsAsync(module, wf, ct);
-        var hidden = await HiddenFieldIdsAsync(module, ct);
+        var hiddenRows = (await permissions.LoadModuleRowsAsync(module, ct)).FieldPermissions.Where(p => p.Access == FieldAccess.Hidden).ToList();
+        var restricted = fields.Values.Where(f => f.VisibilityRestricted).ToList();
+        var grants = restricted.Count == 0 ? [] : (await shared.ListFieldGrantsAsync(restricted.Select(f => f.Id).ToList(), ct))
+            .GroupBy(g => g.FieldId).ToDictionary(g => g.Key, g => g.Select(x => x.GroupId).ToHashSet());
+        var groupsOf = (await permissions.ListMembershipsAsync(ct)).ToLookup(m => m.UserId, m => m.GroupId);
         for (var i = 0; i < stages.Count; i++)
         {
             var s = stages[i];
@@ -59,7 +64,8 @@ public sealed partial class ApprovalDefinitionValidator(
             if (s.OnEmpty is not (ApprovalOnEmpty.Fallback or ApprovalOnEmpty.Skip)) Err($"{p}.onEmpty", ApprovalMessages.OnEmptyInvalid);
             if ((s.EditableFields ?? []).Any(id => !fields.TryGetValue(id, out var f) || f.Status != FieldStatus.Active || nonEditable.Contains(id)))
                 Err($"{p}.editableFields", ApprovalMessages.EditableFieldInvalid);
-            else if ((s.EditableFields ?? []).Any(hidden.Contains)) Err($"{p}.editableFields", ApprovalMessages.EditableFieldHidden);
+            else if (s.Approvers is not null && (s.EditableFields ?? []).Count > 0
+                     && (s.EditableFields ?? []).Any(HiddenForDerivable(s, d.FallbackApprovers, hiddenRows, grants, groupsOf, restricted).Contains)) Err($"{p}.editableFields", ApprovalMessages.EditableFieldHidden);
         }
         return errors;
 
@@ -97,14 +103,30 @@ public sealed partial class ApprovalDefinitionValidator(
     }
 
     /// <summary>
-    /// 對某些群組看不到的欄位：任何群組設為 Hidden、或限定可見（共用主檔貢獻欄位）。存流程時還不知道最後由誰簽（主管、備援、自選），
-    /// 所以只要有群組看不到就不能當可編輯欄位（裁決 22，fail closed）；執行期另在同意時依簽核人本人的權限再擋一次。
+    /// 這一關存檔時推得出的簽核人看不到的欄位（裁決 22，主控修正輪 1）。推得出的群組集合：來源是群組時每個群組各一組；
+    /// 來源是指定使用者時每位使用者所屬的群組各一組；流程的備援也照這兩條算。一組群組看不到 = 其中有群組設為 Hidden，
+    /// 或欄位限定可見而這組群組都沒有可見列（與 PermissionResolver 相同）。主管、使用者欄位、發起人自選推不出人選，不在存檔時擋，
+    /// 靠執行期同意時依簽核人本人的權限回 400。
     /// </summary>
-    private async Task<HashSet<long>> HiddenFieldIdsAsync(Module module, CancellationToken ct)
+    private static HashSet<long> HiddenForDerivable(
+        ApprovalStageDef stage, ApproverSource? fallback, List<FieldPermission> hiddenRows, Dictionary<long, HashSet<long>> grants,
+        ILookup<string, long> groupsOf, IReadOnlyList<Field> restricted)
     {
-        var ids = (await permissions.LoadModuleRowsAsync(module, ct)).FieldPermissions.Where(p => p.Access == FieldAccess.Hidden)
-            .Select(p => p.FieldId).ToHashSet();
-        ids.UnionWith(module.Blocks.SelectMany(b => b.Fields).Where(f => f.VisibilityRestricted).Select(f => f.Id));
+        var ids = new HashSet<long>();
+        foreach (var source in new[] { stage.Approvers, fallback })
+        {
+            IEnumerable<HashSet<long>> sets = source?.Source switch
+            {
+                ApprovalSources.Group => (source.GroupIds ?? []).Select(g => new HashSet<long> { g }),
+                ApprovalSources.Users => (source.UserIds ?? []).Select(u => groupsOf[u].ToHashSet()),
+                _ => []
+            };
+            foreach (var set in sets)
+            {
+                ids.UnionWith(hiddenRows.Where(p => set.Contains(p.GroupId)).Select(p => p.FieldId));
+                ids.UnionWith(restricted.Where(f => !grants.TryGetValue(f.Id, out var gs) || !gs.Overlaps(set)).Select(f => f.Id));
+            }
+        }
         return ids;
     }
 
