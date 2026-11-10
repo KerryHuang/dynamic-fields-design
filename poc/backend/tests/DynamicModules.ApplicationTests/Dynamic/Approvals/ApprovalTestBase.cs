@@ -1,5 +1,6 @@
 using System.Text.Json;
 using DynamicModules.Application.Common;
+using DynamicModules.Application.Dynamic.ApprovalService;
 using DynamicModules.Application.Dynamic.FieldService.Commands.AddOption;
 using DynamicModules.Application.Dynamic.ModuleService.Commands.ActivateModule;
 using DynamicModules.Application.Dynamic.ModuleService.Data;
@@ -261,6 +262,53 @@ public abstract class ApprovalTestBase : EffectsTestBase, IAsyncLifetime
 
     protected static Dictionary<string, JsonElement?> V(params (long Field, object? Value)[] pairs) =>
         pairs.ToDictionary(p => $"f_{p.Field}", p => p.Value is null ? (JsonElement?)null : JsonSerializer.SerializeToElement(p.Value));
+
+    // ───────── 送出與動作 ─────────
+
+    protected static string Dump(ServiceResult r) => r.Message + string.Join("；", r.Errors.Select(e => $"{e.Key}={string.Join("|", e.Value)}"));
+
+    /// <summary>
+    /// 已確認：A（優先序 1，總額 ≥ 100000，主管＋[board, purchase-lead] 會簽）、B（優先序 2，總額 ≥ 10000，purchase-lead）；
+    /// 已取消：C（board）。草稿 → 已確認 需簽核 direct；已確認 → 已取消 需簽核 block。
+    /// </summary>
+    protected async Task<PurchaseRig> Scenario3(string p = "po", List<long>? submitGroups = null)
+    {
+        var r = await BuildPurchase(p);
+        await SeedFlow(r, $"{p}-a", r.Confirmed, 1,
+            Def(Cond(r.Total, "gte", 100000), Stage("mgr", Manager(1)), Stage("board", Group(BoardGroup, PurchaseLeadGroup), mode: ApprovalModes.All)));
+        await SeedFlow(r, $"{p}-b", r.Confirmed, 2, Def(Cond(r.Total, "gte", 10000), Stage("lead", Group(PurchaseLeadGroup))));
+        await SeedFlow(r, $"{p}-c", r.Cancelled, 1, Def(null, Stage("board", Group(BoardGroup))));
+        var wf = await SaveWorkflow(r, [
+            new WorkflowTransition(r.Draft, r.Confirmed, submitGroups ?? [], new TransitionApproval(true, ApprovalNoMatch.Direct)),
+            Plain(r.Confirmed, r.Partial), Plain(r.Partial, r.Received), Needs(r.Confirmed, r.Cancelled)
+        ]);
+        wf.IsSuccess.Should().BeTrue(Dump(wf));
+        await GrantEveryone(r.Module, r.Extra);
+        return r;
+    }
+
+    protected Task<ServiceResult> Submit(long recordId, long to, Dictionary<string, List<string>>? picks = null, string? rowVersion = null) =>
+        Send(new SubmitApprovalRequest(recordId, to, rowVersion ?? Rec(recordId).Row.RowVersion, picks, null));
+
+    protected async Task<SubmitApprovalResponse> MustSubmit(long recordId, long to, int status = 201)
+    {
+        var res = await Submit(recordId, to);
+        (status == 201 ? res.IsCreated : res.IsSuccess && !res.IsCreated).Should().BeTrue(Dump(res));
+        return (SubmitApprovalResponse)res.Data!;
+    }
+
+    protected List<ApprovalTask> TasksOf(long instanceId) =>
+        Db.Context.Set<ApprovalTask>().AsNoTracking().Where(t => t.InstanceId == instanceId).OrderBy(t => t.Id).ToList();
+
+    protected List<ApprovalAction> ActionsOf(long instanceId) =>
+        Db.Context.Set<ApprovalAction>().AsNoTracking().Where(a => a.InstanceId == instanceId).OrderBy(a => a.Id).ToList();
+
+    protected int Notices(string user, string kind) =>
+        Db.Context.Set<Notification>().AsNoTracking().Count(n => n.UserId == user && n.Kind == kind);
+
+    protected ApprovalInstance Inst(long id) => Db.Context.Set<ApprovalInstance>().AsNoTracking().Single(i => i.Id == id);
+
+    protected ApprovalFlow Flow(string key) => Db.Context.Set<ApprovalFlow>().AsNoTracking().Single(f => f.Key == key);
 
     /// <summary>直接在 Db 建一個綁定這個流程目前版本的實例（status 預設 pending）；snapshotOnly 時只出現在快照索引。</summary>
     protected async Task<ApprovalInstance> SeedInstance(PurchaseRig r, ApprovalFlow flow, string status = ApprovalInstanceStatus.Pending,

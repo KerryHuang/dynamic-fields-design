@@ -10,7 +10,6 @@ namespace DynamicModules.ApplicationTests.Dynamic.Approvals;
 /// <summary>流程的增改刪、版本與「被用過」（設計 §4.4、§5.2）。</summary>
 public class ApprovalFlowDefinitionTests : ApprovalTestBase
 {
-    private static string Dump(ServiceResult r) => r.Message + string.Join("；", r.Errors.Select(e => $"{e.Key}={string.Join("|", e.Value)}"));
 
     private static ApprovalFlowInput Input(string key, long to, int priority, ApprovalDefinition d, bool active = true) =>
         new(key, Text(key), to, priority, active, d);
@@ -38,7 +37,6 @@ public class ApprovalFlowDefinitionTests : ApprovalTestBase
         return r;
     }
 
-    private ApprovalFlow Flow(string key) => Db.Context.Set<ApprovalFlow>().AsNoTracking().Single(f => f.Key == key);
     private List<ApprovalFlowVersion> Versions(string key)
     {
         var id = Flow(key).Id;

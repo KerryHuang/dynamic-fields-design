@@ -14,7 +14,6 @@ namespace DynamicModules.ApplicationTests.Dynamic.Approvals;
 /// <summary>被流程版本引用的欄位與群組不能刪、不能停用；模組清除連帶刪掉簽核資料（設計 §8.6）。</summary>
 public class ApprovalDeleteGuardTests : ApprovalTestBase
 {
-    private static string Dump(ServiceResult r) => r.Message + string.Join("；", r.Errors.Select(e => $"{e.Key}={string.Join("|", e.Value)}"));
 
     private async Task<DeleteCheckResponse> CheckField(long fieldId)
     {

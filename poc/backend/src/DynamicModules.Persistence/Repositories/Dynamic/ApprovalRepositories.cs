@@ -123,9 +123,19 @@ public class ApprovalInstanceRepository(DynamicDbContext db) : IApprovalInstance
         return [.. ids];
     }
 
-    public async Task<bool> TryBumpRowVersionAsync(long instanceId, string expected, string next, CancellationToken ct) =>
-        await db.Set<ApprovalInstance>().Where(i => i.Id == instanceId && i.RowVersion == expected)
-            .ExecuteUpdateAsync(s => s.SetProperty(i => i.RowVersion, next), ct) == 1;
+    public async Task<bool> TryBumpRowVersionAsync(long instanceId, string expected, string next, CancellationToken ct)
+    {
+        if (await db.Set<ApprovalInstance>().Where(i => i.Id == instanceId && i.RowVersion == expected)
+                .ExecuteUpdateAsync(s => s.SetProperty(i => i.RowVersion, next), ct) != 1) return false;
+        // 已追蹤的實例同步新值，之後的 SaveChanges 以新值當並行權杖
+        if (db.Set<ApprovalInstance>().Local.FirstOrDefault(i => i.Id == instanceId) is { } tracked)
+        {
+            var p = db.Entry(tracked).Property(i => i.RowVersion);
+            p.CurrentValue = next;
+            p.OriginalValue = next;
+        }
+        return true;
+    }
 
     public Task<List<ApprovalStageRun>> ListRunsAsync(long instanceId, CancellationToken ct) =>
         db.Set<ApprovalStageRun>().Where(r => r.InstanceId == instanceId).OrderBy(r => r.Seq).ToListAsync(ct);

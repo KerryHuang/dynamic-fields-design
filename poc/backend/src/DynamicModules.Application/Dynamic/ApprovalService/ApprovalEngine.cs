@@ -74,7 +74,7 @@ public sealed class ApprovalEngine(
 
     /// <summary>啟動一個關卡：建 StageRun、任務、備援說明，通知新任務的負責人（不通知這次動作的人自己）。</summary>
     public async Task<ApprovalStageRun> StartAsync(ApprovalInstance inst, ApprovalStageRun run, IReadOnlyList<SeatPlan> seats, int? dueHours,
-        CancellationToken ct)
+        CancellationToken ct, string kind = NotificationKinds.ApprovalPending)
     {
         var now = time.Now;
         run.Status = ApprovalStageStatus.Active;
@@ -88,8 +88,23 @@ public sealed class ApprovalEngine(
                 targets: [.. seat.UserIds]);
         inst.CurrentStageRunId = run.Id;
         await uow.CommitAsync(ct);
-        await notifier.NotifyAsync(NotificationKinds.ApprovalPending, inst, created.Select(t => t.AssigneeUserId), user.UserId, ct);
+        await notifier.NotifyAsync(kind, inst, created.Select(t => t.AssigneeUserId), user.UserId, ct);
         return run;
+    }
+
+    /// <summary>退回上一關：用同一個關卡代號建新的關卡實例並重新解析簽核人（設計 §7.3）；新負責人收到 approvalReturned。</summary>
+    public async Task<ServiceResult?> RestartStageAsync(ApprovalInstance inst, Module module, IReadOnlyDictionary<string, JsonElement?> values,
+        ApprovalStageRun previous, int seq, CancellationToken ct)
+    {
+        if (DefinitionOf(inst) is not { } def || def.Stages.FirstOrDefault(s => s.Code == previous.StageCode) is not { } s)
+            return ServiceResult.Conflict("找不到要退回的關卡定義");
+        var ctx = await resolver.ContextAsync(module, inst.InitiatorUserId, values, inst.Picks.GetValueOrDefault(s.Code), ct);
+        var resolution = ApproverResolver.Resolve(ctx, s.Name, s.Mode, s.Approvers, def.FallbackApprovers, s.OnEmpty);
+        if (resolution.Error is { } error) return ServiceResult.Conflict(error);
+        if (resolution.AllUnitsEmpty) return ServiceResult.Conflict(ApprovalMessages.NoApprover(s.Name.Resolve("zh-TW"), s.Code));
+        var run = new ApprovalStageRun { InstanceId = inst.Id, Seq = seq, StageCode = s.Code, NameSnapshot = s.Name, Mode = s.Mode };
+        await StartAsync(inst, run, resolution.Seats, s.DueHours, ct, NotificationKinds.ApprovalReturned);
+        return null;
     }
 
     private async Task SkipAsync(ApprovalInstance inst, ApprovalStageRun run, string reason, CancellationToken ct)
