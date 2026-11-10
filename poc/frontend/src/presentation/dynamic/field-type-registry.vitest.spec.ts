@@ -205,3 +205,32 @@ describe('defaultValueOf today', () => {
     expect(defaultValueOf(dateField({ defaultToday: true }))).toMatch(/^\d{4}-\d{2}-\d{2}$/);
   });
 });
+
+describe('fieldTypeRegistry 顯示隨語系', () => {
+  it('布林顯示是／否隨語系', () => {
+    const fmt = (v: boolean, l: string) => fieldTypeRegistry.boolean.format(v, f('boolean'), l);
+    expect([fmt(true, 'zh-TW'), fmt(false, 'zh-TW')]).toEqual(['是', '否']);
+    expect([fmt(true, 'en-US'), fmt(false, 'en-US')]).toEqual(['Yes', 'No']);
+    expect([fmt(true, 'th'), fmt(false, 'th')]).toEqual(['ใช่', 'ไม่ใช่']);
+    expect([fmt(true, 'vi'), fmt(false, 'vi')]).toEqual(['Có', 'Không']);
+  });
+
+  it('複選值在 en-US 用逗號分隔、zh-TW 用頓號', () => {
+    const field = f('multienum', undefined, [...opts, { value: 'opt_3', label: { 'zh-TW': '丙', 'en-US': 'C' }, active: true }]);
+    expect(fieldTypeRegistry.multienum.format(['opt_3', 'opt_1'], field, 'en-US')).toBe('A, C');
+    expect(fieldTypeRegistry.multienum.format(['opt_3', 'opt_1'], field, 'zh-TW')).toBe('甲、丙');
+  });
+
+  it('附件清單的檔名分隔符隨語系', () => {
+    const files = [{ name: 'a.pdf' }, { name: 'b.png' }];
+    expect(fieldTypeRegistry.attachment.format(files, f('attachment'), 'en-US')).toBe('a.pdf, b.png');
+    expect(fieldTypeRegistry.attachment.format(files, f('attachment'), 'zh-TW')).toBe('a.pdf、b.png');
+  });
+
+  it('幣別千分位用目前語系', () => {
+    const cur = f('currency', 2);
+    expect(fieldTypeRegistry.currency.format(1234567.5, cur, 'en-US')).toBe('1,234,567.50');
+    expect(fieldTypeRegistry.currency.format(1234567.5, cur, 'zh-TW')).toBe('1,234,567.50');
+    expect(fieldTypeRegistry.currency.format(1234567.5, cur, 'vi')).toBe('1.234.567,50');
+  });
+});

@@ -142,6 +142,12 @@ describe('buildZodSchema', () => {
           { storedRuleState: stored ? stateOf(s, stored, stored) : undefined })
           .safeParse(cur).error?.issues.map((i) => `${i.path.join('.')}:${i.message}`);
 
+      it('en-US 下提示是英文', () => {
+        const s = mk('enum');
+        const r = buildZodSchema(s, 'create', undefined, stateOf(s, { a: 'go', c: 'opt_2' }), { locale: 'en-US' }).safeParse({ a: 'go', c: 'opt_2' });
+        expect(r.error?.issues[0]?.message).toBe('Option is outside the allowed range');
+      });
+
       it('create checks the whole value', () => {
         const s = mk('enum');
         expect(issues(s, { a: 'go', c: 'opt_2' })).toEqual(['c:選項不在可選範圍']);
@@ -165,5 +171,32 @@ describe('buildZodSchema', () => {
         expect(issues(s, { a: 'go', c: 'opt_2' })).toBeUndefined();
       });
     });
+  });
+});
+
+describe('buildZodSchema 提示隨語系', () => {
+  const en = { locale: 'en-US' };
+  it('en-US 下必填、數字、整數、字數、選項範圍的提示是英文', () => {
+    const req = buildZodSchema(schemaOf(field('name', 'text', { config: { required: true, maxLength: 3 } })), 'create', undefined, undefined, en);
+    expect(msg(req.safeParse({ name: null }))).toBe('This field is required');
+    expect(msg(req.safeParse({ name: 'abcd' }))).toBe('Exceeds 3 characters');
+    const num = buildZodSchema(schemaOf(field('d', 'decimal'), field('i', 'integer')), 'create', undefined, undefined, en);
+    expect(msg(num.safeParse({ d: '3.5', i: null }))).toBe('Must be a number');
+    expect(msg(num.safeParse({ d: null, i: 1.5 }))).toBe('Must be an integer');
+    expect(msg(num.safeParse({ d: 1.234, i: null }))).toBe('At most 2 decimal places');
+  });
+
+  it('th／vi 的必填提示不是中文也不是英文', () => {
+    const s = schemaOf(field('name', 'text', { config: { required: true } }));
+    const th = msg(buildZodSchema(s, 'create', undefined, undefined, { locale: 'th' }).safeParse({ name: null }));
+    const vi = msg(buildZodSchema(s, 'create', undefined, undefined, { locale: 'vi' }).safeParse({ name: null }));
+    expect(th).not.toMatch(/[一-鿿]|This field/);
+    expect(vi).toBe('Trường này là bắt buộc');
+  });
+
+  it('呼叫端傳入的 t 優先（鍵與參數交給 t 轉）', () => {
+    const t = (k: string, p?: Record<string, unknown>) => `${k}|${JSON.stringify(p ?? {})}`;
+    const s = buildZodSchema(schemaOf(field('name', 'text', { config: { maxLength: 3 } })), 'create', undefined, undefined, { t });
+    expect(msg(s.safeParse({ name: 'abcd' }))).toBe('dynamic.validation.maxLength|{"n":3}');
   });
 });

@@ -2,15 +2,18 @@ import { z, type ZodTypeAny } from 'zod';
 import { resolveI18n } from 'src/domain/dynamic/i18n-text';
 import type { RuleState } from 'src/domain/dynamic/rule-engine';
 import type { DynamicRecord, ModuleSchema, SchemaField } from 'src/domain/dynamic/types';
+import { tFor, type Translate } from 'src/i18n/translate';
 import { zodFor } from './field-type-registry';
 import { isWritable } from './rule-state';
 
-const OUT_OF_RANGE = '選項不在可選範圍';
+const OUT_OF_RANGE = 'dynamic.validation.optionOutOfRange';
 
 export interface RuleOptions {
   /** Rule state computed from the stored record's values; lets the option check tell which options are new. */
   storedRuleState?: RuleState;
   locale?: string;
+  /** Translator from the caller (useI18n().t); without it the messages follow `locale`. */
+  t?: Translate;
 }
 
 const sameSet = (a: Set<string> | undefined, b: Set<string> | undefined) =>
@@ -26,13 +29,13 @@ export function buildZodSchema(
   mode: 'create' | 'edit',
   existing?: DynamicRecord,
   ruleState?: RuleState,
-  { storedRuleState, locale = 'zh-TW' }: RuleOptions = {},
+  { storedRuleState, locale = 'zh-TW', t = tFor(locale) }: RuleOptions = {},
 ) {
   const shape: Record<string, ZodTypeAny> = {};
   const fields: SchemaField[] = schema.blocks.flatMap((b) => b.fields);
   for (const field of fields) {
     const required = ruleState ? ruleState.required.has(field.id) && isWritable(field, ruleState) : field.config.required;
-    shape[field.key] = zodFor(field, mode === 'edit' ? existing?.values[field.key] : undefined, required);
+    shape[field.key] = zodFor(field, mode === 'edit' ? existing?.values[field.key] : undefined, required, t);
   }
   return z.object(shape).superRefine((data, ctx) => {
     if (!ruleState) return;
@@ -47,7 +50,7 @@ export function buildZodSchema(
       const previous = stored ? [stored[field.key]].flat() : [];
       const recheckAll = !stored || !sameSet(allowed, storedRuleState?.allowedOptions.get(field.id));
       const bad = chosen.some((o) => !allowed.has(o) && (recheckAll || !previous.includes(o)));
-      if (bad) ctx.addIssue({ code: 'custom', message: OUT_OF_RANGE, path: [field.key] });
+      if (bad) ctx.addIssue({ code: 'custom', message: t(OUT_OF_RANGE), path: [field.key] });
     }
 
     // Validation (M3): first target that is not rule-hidden (the schema holds only fields visible to the user), else _record.

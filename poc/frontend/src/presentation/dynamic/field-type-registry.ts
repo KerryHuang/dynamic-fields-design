@@ -13,6 +13,7 @@ import ToggleInput from 'src/components/framework/ToggleInput.vue';
 import { resolveI18n } from 'src/domain/dynamic/i18n-text';
 import { operatorNeedsValue } from 'src/domain/dynamic/condition';
 import type { FieldType, FilterOperator, SchemaField } from 'src/domain/dynamic/types';
+import { joinList, tFor, type Translate } from 'src/i18n/translate';
 import { useIdentityStore } from 'src/stores/use-identity-store';
 
 export interface FieldTypeEntry {
@@ -30,24 +31,29 @@ export interface FieldTypeEntry {
   filterInput(field: SchemaField, op: FilterOperator): { component: Component; props: Record<string, unknown> } | undefined;
 }
 
-const REQUIRED = '此欄位必填';
-const OPTION_GONE = '選項不存在或已停用';
+const V = 'dynamic.validation.';
+const REQUIRED = V + 'required';
+const OPTION_GONE = V + 'optionGone';
+
+/** A message as i18n key plus params; the caller turns it into text with t(). */
+export interface CheckMessage { key: string; params?: Record<string, unknown> }
+const msgOf = (key: string, params?: Record<string, unknown>): CheckMessage => ({ key, params });
 
 /** Returns an error message, or null when valid. `v` is never null/empty here. */
-type Check = (v: unknown, field: SchemaField, previous: unknown) => string | null;
+type Check = (v: unknown, field: SchemaField, previous: unknown) => CheckMessage | null;
 
 const scaleOf = (f: SchemaField) => f.config.scale ?? 2;
 const isNum = (v: unknown): v is number => typeof v === 'number' && Number.isFinite(v);
-const isStr = (v: unknown, re: RegExp, msg: string) => (typeof v === 'string' && re.test(v) ? null : msg);
+const isStr = (v: unknown, re: RegExp, key: string) => (typeof v === 'string' && re.test(v) ? null : msgOf(key));
 
 function scaleCheck(v: unknown, f: SchemaField) {
-  if (!isNum(v)) return '必須是數字';
+  if (!isNum(v)) return msgOf(V + 'number');
   const decimals = (String(v).split('.')[1] ?? '').length;
-  return decimals > scaleOf(f) ? `小數最多 ${scaleOf(f)} 位` : null;
+  return decimals > scaleOf(f) ? msgOf(V + 'maxDecimals', { n: scaleOf(f) }) : null;
 }
 const textCheck = (fallback: number): Check => (v, f) => {
   const max = f.config.maxLength ?? fallback;
-  return typeof v === 'string' && v.length <= max ? null : `超過 ${max} 個字元`;
+  return typeof v === 'string' && v.length <= max ? null : msgOf(V + 'maxLength', { n: max });
 };
 const activeOrPrevious = (value: unknown, f: SchemaField, previous: unknown) =>
   typeof value === 'string' && ([previous].flat().includes(value) || f.options.some((o) => o.active && o.value === value));
@@ -55,38 +61,38 @@ const activeOrPrevious = (value: unknown, f: SchemaField, previous: unknown) =>
 const checks: Record<FieldType, Check> = {
   text: textCheck(255),
   textarea: textCheck(4000),
-  integer: (v) => (isNum(v) && Number.isInteger(v) ? null : '必須是整數'),
+  integer: (v) => (isNum(v) && Number.isInteger(v) ? null : msgOf(V + 'integer')),
   decimal: scaleCheck,
   currency: scaleCheck,
   percent: scaleCheck,
   date: (v) => {
     const ok = typeof v === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(v) && new Date(`${v}T00:00:00Z`).toISOString().startsWith(v);
-    return ok ? null : '日期格式必須是 yyyy-MM-dd';
+    return ok ? null : msgOf(V + 'date');
   },
-  datetime: (v) => isStr(v, /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(:\d{2}(\.\d+)?)?(Z|[+-]\d{2}:\d{2})$/, '日期時間格式錯誤') ?? (Number.isNaN(Date.parse(v as string)) ? '日期時間格式錯誤' : null),
-  time: (v) => isStr(v, /^([01]\d|2[0-3]):[0-5]\d$/, '時間格式必須是 HH:mm'),
-  boolean: (v) => (typeof v === 'boolean' ? null : '必須是是或否'),
-  email: (v) => isStr(v, /^[^@\s]+@[^@\s]+\.[^@\s]+$/, 'Email 格式錯誤'),
-  phone: (v) => isStr(v, /^[\d +\-()#]{1,30}$/, '電話格式錯誤'),
+  datetime: (v) => isStr(v, /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(:\d{2}(\.\d+)?)?(Z|[+-]\d{2}:\d{2})$/, V + 'datetime') ?? (Number.isNaN(Date.parse(v as string)) ? msgOf(V + 'datetime') : null),
+  time: (v) => isStr(v, /^([01]\d|2[0-3]):[0-5]\d$/, V + 'time'),
+  boolean: (v) => (typeof v === 'boolean' ? null : msgOf(V + 'boolean')),
+  email: (v) => isStr(v, /^[^@\s]+@[^@\s]+\.[^@\s]+$/, V + 'email'),
+  phone: (v) => isStr(v, /^[\d +\-()#]{1,30}$/, V + 'phone'),
   url: (v) => {
-    const msg = '網址必須以 http:// 或 https:// 開頭';
+    const msg = msgOf(V + 'url');
     if (typeof v !== 'string' || !/^https?:\/\//.test(v)) return msg;
     return URL.canParse(v) ? null : msg;
   },
-  enum: (v, f, prev) => (activeOrPrevious(v, f, prev) ? null : OPTION_GONE),
+  enum: (v, f, prev) => (activeOrPrevious(v, f, prev) ? null : msgOf(OPTION_GONE)),
   multienum: (v, f, prev) => {
-    return Array.isArray(v) && v.every((x) => activeOrPrevious(x, f, prev)) ? null : OPTION_GONE;
+    return Array.isArray(v) && v.every((x) => activeOrPrevious(x, f, prev)) ? null : msgOf(OPTION_GONE);
   },
   // Frontend has no user directory beyond ids; the backend enforces existence.
-  user: (v) => (typeof v === 'string' ? null : '使用者不存在'),
+  user: (v) => (typeof v === 'string' ? null : msgOf(V + 'user')),
   // System-computed: the backend ignores any input, so nothing to check here.
   formula: () => null,
   rollup: () => null,
   autonumber: () => null,
   // Module targets store the record id (number), entity targets the entity key (string); existence is checked by the backend.
   // Files enter only through the upload endpoint; the backend rejects ids it does not already hold.
-  attachment: (v) => (Array.isArray(v) ? null : '附件的值必須是檔案清單'),
-  reference: (v) => (isNum(v) || (typeof v === 'string' && v !== '') ? null : '參照的資料不存在或無權選取'),
+  attachment: (v) => (Array.isArray(v) ? null : msgOf(V + 'attachment')),
+  reference: (v) => (isNum(v) || (typeof v === 'string' && v !== '') ? null : msgOf(V + 'reference')),
 };
 
 /** The browser's local date as yyyy-MM-dd. */
@@ -140,16 +146,16 @@ export function normalizeForRules(raw: unknown, type: FieldType): unknown {
  * Builds the validator for one field; `previous` is the stored value in edit mode (keeps inactive options valid).
  * `required` overrides config.required (the rule engine decides it per record).
  */
-export function zodFor(field: SchemaField, previous?: unknown, required = field.config.required): ZodTypeAny {
+export function zodFor(field: SchemaField, previous?: unknown, required = field.config.required, t: Translate = tFor('zh-TW')): ZodTypeAny {
   return z.unknown().transform((raw, ctx) => {
     const v = normalize(raw, field.type);
     if (v === null) {
-      if (required) ctx.addIssue({ code: 'custom', message: REQUIRED });
+      if (required) ctx.addIssue({ code: 'custom', message: t(REQUIRED) });
       return null;
     }
     const err = checks[field.type](v, field, previous);
     if (err) {
-      ctx.addIssue({ code: 'custom', message: err });
+      ctx.addIssue({ code: 'custom', message: t(err.key, err.params) });
       return z.NEVER;
     }
     if (field.type === 'datetime') return toTaipei(v as string);
@@ -182,8 +188,8 @@ const selectProps = (multiple: boolean) => (f: SchemaField, locale: string) => (
 });
 
 const asText = (v: unknown) => String(v);
-const formatCurrency = (v: unknown, f: SchemaField) =>
-  Number(v).toLocaleString('en-US', { minimumFractionDigits: scaleOf(f), maximumFractionDigits: scaleOf(f) });
+const formatCurrency = (v: unknown, f: SchemaField, locale: string) =>
+  Number(v).toLocaleString(locale, { minimumFractionDigits: scaleOf(f), maximumFractionDigits: scaleOf(f) });
 const number = (scale: (f: SchemaField) => number) => ({
   ...plain(MoneyNumberInput, (f) => ({ scale: scale(f) })),
 });
@@ -275,33 +281,33 @@ export const fieldTypeRegistry: Record<FieldType, FieldTypeEntry> = {
   date: entry('date', plain(DateSelect)),
   datetime: entry('datetime', plain(DateSelect, () => ({ withTime: true })), (v) => asText(v).replace('T', ' ').slice(0, 16)),
   time: entry('time', plain(TimeInput)),
-  boolean: entry('boolean', plain(ToggleInput), (v) => (v ? '是' : '否')),
+  boolean: entry('boolean', plain(ToggleInput), (v, _f, l) => tFor(l)(v ? 'common.yes' : 'common.no')),
   email: entry('email', plain(TextInput)),
   phone: entry('phone', plain(TextInput)),
   url: entry('url', plain(TextInput)),
   enum: entry('enum', { component: GenericSelect, props: selectProps(false) }, (v, f, l) => optionLabel(f, asText(v), l)),
   multienum: entry('multienum', { component: GenericSelect, props: selectProps(true) }, (v, f, l) => {
     const order = new Map(f.options.map((o, i) => [o.value, i]));
-    return (v as string[])
-      .toSorted((a, b) => (order.get(a) ?? 1e9) - (order.get(b) ?? 1e9))
-      .map((x) => optionLabel(f, x, l))
-      .join('、');
+    return joinList(
+      (v as string[]).toSorted((a, b) => (order.get(a) ?? 1e9) - (order.get(b) ?? 1e9)).map((x) => optionLabel(f, x, l)),
+      l,
+    );
   }),
   // Options come from the identity store's /users list: value = userId, label = displayName.
   formula: {
     ...entry('formula', readOnlyText, (v, f, l) =>
-      f.config.resultType === 'currency' ? formatCurrency(v, f) : asText(v)),
+      f.config.resultType === 'currency' ? formatCurrency(v, f, l) : asText(v)),
     filterInput: formulaFilterInput,
   },
   rollup: {
-    ...entry('rollup', readOnlyText, (v, f) => (f.config.resultType === 'currency' ? formatCurrency(v, f) : asText(v))),
+    ...entry('rollup', readOnlyText, (v, f, l) => (f.config.resultType === 'currency' ? formatCurrency(v, f, l) : asText(v))),
     filterInput: formulaFilterInput,
   },
   autonumber: entry('autonumber', readOnlyText),
   attachment: entry(
     'attachment',
     plain(AttachmentInput, (f) => ({ fieldId: f.id })),
-    (v) => (v as { name: string }[]).map((x) => x.name).join('、'),
+    (v, _f, l) => joinList((v as { name: string }[]).map((x) => x.name), l),
   ),
   // format shows the key: it has no access to record.references; list/detail pages render the title.
   reference: {

@@ -71,7 +71,7 @@ const detailRows = ref<Record<string, DetailRowState[]>>(initialRows());
 const uidAt = ref<Record<string, string[]>>({});
 const rowsTried = ref(false); // client row errors show after the first submit, then follow the edits
 const clientRowErrors = computed(() => Object.fromEntries((props.schema.details ?? []).map((d) => [
-  d.moduleKey, rowsTried.value ? validateRows(d, detailRows.value[d.moduleKey] ?? [], locale.value) : new Map<string, Record<string, string>>(),
+  d.moduleKey, rowsTried.value ? validateRows(d, detailRows.value[d.moduleKey] ?? [], locale.value, t) : new Map<string, Record<string, string>>(),
 ])));
 // Server row errors, per detail module; a cell's error is dropped once the user edits it (`_record` stays until the next submit).
 const serverRowErrors = ref<Record<string, Map<string, Record<string, string>>>>({});
@@ -107,7 +107,7 @@ const { handleSubmit, values, errors, setErrors, setFieldValue, resetForm } = us
   // Identity `cast`: vee-validate would otherwise rewrite the model with zod-normalized values (e.g. trimmed text).
   validationSchema: computed(() => ({
     ...toTypedSchema(buildZodSchema(props.schema, props.mode, props.record, ruleState.value, {
-      storedRuleState: storedRuleState.value, locale: locale.value,
+      storedRuleState: storedRuleState.value, locale: locale.value, t,
     })),
     cast: (v: unknown) => v,
   })),
