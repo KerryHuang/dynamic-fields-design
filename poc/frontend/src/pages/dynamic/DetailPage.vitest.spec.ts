@@ -143,7 +143,7 @@ describe('DetailPage', () => {
     });
 
     it('delete 409 stale shows stale notify with reload', async () => {
-      api.deleteRecord.mockRejectedValue({ status: 409, message: '資料已被其他人修改，請重新載入' });
+      api.deleteRecord.mockRejectedValue({ status: 409, code: 'stale', message: 'This data was changed by someone else. Please reload' });
       const w = await mountPage(schema({}));
       await clickDelete(w);
       await vi.waitFor(() => expect(document.body.textContent).toContain(zhTW.dynamic.stale));

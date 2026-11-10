@@ -6,8 +6,10 @@ export interface ApiError {
   status: number;
   errors?: Record<string, string[]>;
   message?: string;
-  /** Machine-readable reason, e.g. passwordChangeRequired on 403. */
+  /** Machine-readable reason: passwordChangeRequired on 403, stale / ledgerFreezeConfirm on 409, network when the request never got a response. */
   code?: string;
+  /** Values that go with code, e.g. { count } for ledgerFreezeConfirm. */
+  params?: Record<string, unknown>;
   /** 409 on delete: records that still reference the target. */
   references?: BlockingRef[];
   total?: number;
@@ -21,6 +23,15 @@ export const isForbidden = (e: unknown): boolean => (e as ApiError | null)?.stat
 
 export const http = axios.create({ baseURL: '/api/v3/dynamic' });
 
+// 後端訊息依 X-Locale 回傳；目前介面語系在啟動時已從 formwright.locale 讀入，登入前的請求也帶
+http.interceptors.request.use((config) => {
+  config.headers.set('X-Locale', currentLocale());
+  return config;
+});
+
+/** axios 沒拿到回應的原因裡，真正屬於連線問題的（斷線、逾時）；取消請求與其他例外不算。 */
+const NETWORK_CODES = ['ERR_NETWORK', 'ECONNABORTED', 'ETIMEDOUT'];
+
 export interface AuthHandlers {
   onUnauthorized(): void;
   onPasswordChangeRequired(): void;
@@ -30,11 +41,15 @@ let authHandlers: AuthHandlers | undefined;
 export const setAuthHandlers = (h: AuthHandlers) => { authHandlers = h; };
 
 export function toApiError(e: unknown): ApiError {
-  const err = e as AxiosError<{ errors?: Record<string, string[]>; message?: string; code?: string; title?: string; references?: BlockingRef[]; total?: number; blockingOptions?: BlockingOption[] } & Partial<DeleteCheck>>;
-  if (!err?.response) return { status: 0, message: tFor(currentLocale())('common.networkError') };
+  const err = e as AxiosError<{ errors?: Record<string, string[]>; message?: string; code?: string; params?: Record<string, unknown>; title?: string; references?: BlockingRef[]; total?: number; blockingOptions?: BlockingOption[] } & Partial<DeleteCheck>>;
+  if (!err?.response) {
+    return NETWORK_CODES.includes(err?.code ?? '')
+      ? { status: 0, code: 'network', message: tFor(currentLocale())('common.networkError') }
+      : { status: 0, message: err?.message };
+  }
   const { status, data } = err.response;
   if (status === 400) return { status, errors: data?.errors, message: data?.title };
-  const base = { status, message: data?.message ?? data?.title, ...(data?.code ? { code: data.code } : {}) };
+  const base = { status, message: data?.message ?? data?.title, ...(data?.code ? { code: data.code } : {}), ...(data?.params ? { params: data.params } : {}) };
   if (status === 409 && data?.blockers && data.purge)
     return { ...base, deleteCheck: { canDelete: !!data.canDelete, blockers: data.blockers, purge: data.purge } };
   if (status === 409 && data?.blockingOptions) return { ...base, blockingOptions: data.blockingOptions };

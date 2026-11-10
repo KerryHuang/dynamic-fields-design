@@ -126,8 +126,8 @@ function submit(confirmFreeze = false) {
     onError: (e) => {
       const err = e as unknown as ApiError;
       // the first time a module with records becomes a ledger, the server says how many get frozen and waits for a yes
-      if (err.status === 409 && !exists.value && !confirmFreeze) {
-        confirmCount.value = Number(/(\d+)\s*筆/.exec(err.message ?? '')?.[1] ?? Number.NaN) || null;
+      if (err.code === 'ledgerFreezeConfirm' && !confirmFreeze) {
+        confirmCount.value = typeof err.params?.count === 'number' ? err.params.count : null;
         confirming.value = true;
       } else {
         confirming.value = false;

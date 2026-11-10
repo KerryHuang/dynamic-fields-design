@@ -84,7 +84,7 @@ describe('LedgerTab', () => {
   });
 
   it('the first save of a module that has records asks for confirmation with the count, then resends confirmed', async () => {
-    api.putLedger.mockRejectedValueOnce({ status: 409, message: '這個模組已有 12 筆記錄，設為分錄後它們會立刻變成不可修改；確認請帶 confirmFreeze' }).mockResolvedValue(saved({ recordCount: 12 }));
+    api.putLedger.mockRejectedValueOnce({ status: 409, code: 'ledgerFreezeConfirm', params: { count: 12 }, message: 'This module already has 12 records. Send confirmFreeze to confirm' }).mockResolvedValue(saved({ recordCount: 12 }));
     const w = await mountTab(mod(), null);
     await pick(w, 'ledger-enable', true);
     await pick(w, 'ledger-reversal-field', 4);

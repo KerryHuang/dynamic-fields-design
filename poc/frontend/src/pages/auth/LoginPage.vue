@@ -23,7 +23,12 @@ const done = (u: AuthUser) => {
   const redirect = route.query.redirect;
   void router.replace(u.mustChangePassword ? '/change-password' : safeRedirect(typeof redirect === 'string' ? redirect : undefined));
 };
-const fail = (e: unknown) => { error.value = (e as ApiError).message ?? t('auth.loginFailed'); };
+// 只顯示已依語系產生的訊息：後端字串表的 401（登入失敗）、503（系統忙碌）與前端的網路錯誤；其餘（如 500 的英文標題）一律「登入失敗」
+const fail = (e: unknown) => {
+  const err = e as ApiError;
+  const localized = err.status === 401 || err.status === 503 || err.code === 'network';
+  error.value = (localized && err.message) || t('auth.loginFailed');
+};
 
 const submit = () => {
   error.value = '';

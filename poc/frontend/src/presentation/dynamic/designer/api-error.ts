@@ -1,8 +1,8 @@
 import type { ApiError } from 'src/services/api/http';
 import { joinList } from 'src/i18n/translate';
 
-/** Server's RowVersion-conflict message; any other 409 message (e.g. cascade depth) is shown as is. */
-export const SERVER_STALE_MESSAGE = '資料已被其他人修改，請重新載入';
+/** RowVersion conflict (409 code stale); any other 409 message (e.g. cascade depth) is shown as is. */
+export const isStale = (e: ApiError): boolean => e.status === 409 && e.code === 'stale';
 
 /** Field-level messages whose backend key starts with `prefix` (e.g. 'Config.MaxLength'), else undefined. */
 export function errorFor(e: ApiError | null, prefix: string): string | undefined {

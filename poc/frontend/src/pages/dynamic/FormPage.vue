@@ -7,7 +7,7 @@ import { useRecord, useSaveRecord } from 'src/application/dynamic/queries/record
 import { useModuleSchema } from 'src/application/dynamic/queries/schema-queries';
 import PopupSelect from 'src/components/framework/PopupSelect.vue';
 import DynamicForm from 'src/presentation/dynamic/components/DynamicForm.vue';
-import { messagesOutside, SERVER_STALE_MESSAGE } from 'src/presentation/dynamic/designer/api-error';
+import { isStale, messagesOutside } from 'src/presentation/dynamic/designer/api-error';
 import { parseDetailKey } from 'src/presentation/dynamic/details/detail-rows';
 import type { DetailRowPayload, ReferenceInfo } from 'src/domain/dynamic/types';
 import ForbiddenNotice from 'src/components/framework/ForbiddenNotice.vue';
@@ -125,7 +125,7 @@ async function onSubmit(values: Record<string, unknown>, details: Record<string,
         void schemaQuery.refetch();
       }
     }
-    else if (err.status === 409 && err.message && err.message !== SERVER_STALE_MESSAGE) {
+    else if (err.status === 409 && err.message && !isStale(err)) {
       if (isExtensionNew.value) hostError.value = err.message;
       else $q.notify({ type: 'warning', message: err.message });
     } else if (err.status === 409 && isEdit.value) {

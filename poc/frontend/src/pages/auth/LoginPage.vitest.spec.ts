@@ -66,6 +66,23 @@ describe('LoginPage', () => {
     expect(useIdentityStore().userId).toBe('');
   });
 
+  it('伺服器沒有給語系化訊息的失敗（500 的 ProblemDetails 英文標題）顯示「登入失敗」', async () => {
+    await mountPage(off);
+    api.login.mockRejectedValue({ status: 500, message: 'An error occurred while processing your request.' });
+    await submit();
+    expect(q('login-error')!.textContent).toBe(zhTW.auth.loginFailed);
+  });
+
+  it('真正斷線顯示網路錯誤；其他沒有回應的例外顯示「登入失敗」', async () => {
+    await mountPage(off);
+    api.login.mockRejectedValue({ status: 0, code: 'network', message: zhTW.common.networkError });
+    await submit();
+    expect(q('login-error')!.textContent).toBe(zhTW.common.networkError);
+    api.login.mockRejectedValue({ status: 0, message: 'x is not a function' });
+    await submit();
+    expect(q('login-error')!.textContent).toBe(zhTW.auth.loginFailed);
+  });
+
   it('success clears the cache, sets the session and goes to redirect', async () => {
     const { router, queryClient } = await mountPage(off, '/dynamic/order');
     api.login.mockResolvedValue({ userId: 'admin', displayName: 'A', mustChangePassword: false });

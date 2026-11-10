@@ -75,7 +75,7 @@ describe('http', () => {
     expect(toApiError({ response: { status: 409, data: { message: 'conflict' } } }))
       .toEqual({ status: 409, message: 'conflict' });
     expect(toApiError({ response: { status: 404, data: {} } })).toEqual({ status: 404, message: undefined });
-    expect(toApiError({ message: 'Network Error' })).toEqual({ status: 0, message: '網路連線失敗，請檢查網路後再試' });
+    expect(toApiError({ code: 'ERR_NETWORK', message: 'Network Error' })).toEqual({ status: 0, code: 'network', message: '網路連線失敗，請檢查網路後再試' });
   });
 
   it('uses ProblemDetails title as the message for 500 and error-less 400', () => {
@@ -86,13 +86,46 @@ describe('http', () => {
   });
 });
 
+describe('X-Locale 標頭', () => {
+  afterEach(() => { i18n.global.locale.value = 'zh-TW'; });
+
+  it('每個請求都帶目前介面語系（登入前也一樣）', async () => {
+    const seen: unknown[] = [];
+    http.defaults.adapter = async (config) => {
+      seen.push(config.headers.get('X-Locale'));
+      return { config, data: {}, status: 200, statusText: 'OK', headers: {} };
+    };
+    await http.post('/auth/login', {});
+    i18n.global.locale.value = 'th';
+    await http.get('/modules');
+    expect(seen).toEqual(['zh-TW', 'th']);
+  });
+});
+
+describe('toApiError code 與 params', () => {
+  it('帶出 409 的 code 與 params', () => {
+    expect(toApiError({ response: { status: 409, data: { message: 'm', code: 'ledgerFreezeConfirm', params: { count: 3 } } } }))
+      .toEqual({ status: 409, message: 'm', code: 'ledgerFreezeConfirm', params: { count: 3 } });
+  });
+});
+
 describe('toApiError 網路失敗', () => {
   afterEach(() => { i18n.global.locale.value = 'zh-TW'; });
 
   it('status 0 不顯示 axios 英文訊息，改用語系檔', () => {
-    const e = { message: 'Network Error' };
-    expect(toApiError(e)).toEqual({ status: 0, message: '網路連線失敗，請檢查網路後再試' });
+    const e = { code: 'ERR_NETWORK', message: 'Network Error' };
+    expect(toApiError(e)).toEqual({ status: 0, code: 'network', message: '網路連線失敗，請檢查網路後再試' });
     i18n.global.locale.value = 'en-US';
-    expect(toApiError(e)).toEqual({ status: 0, message: 'Network error. Check your connection and try again.' });
+    expect(toApiError(e)).toEqual({ status: 0, code: 'network', message: 'Network error. Check your connection and try again.' });
+  });
+
+  it('逾時也算網路失敗', () => {
+    for (const code of ['ECONNABORTED', 'ETIMEDOUT'])
+      expect(toApiError({ code, message: 'timeout of 1ms exceeded' })).toMatchObject({ status: 0, code: 'network' });
+  });
+
+  it('取消請求與非 axios 例外不顯示網路錯誤，保留原訊息', () => {
+    expect(toApiError({ code: 'ERR_CANCELED', message: 'canceled' })).toEqual({ status: 0, message: 'canceled' });
+    expect(toApiError(new TypeError('x is not a function'))).toEqual({ status: 0, message: 'x is not a function' });
   });
 });

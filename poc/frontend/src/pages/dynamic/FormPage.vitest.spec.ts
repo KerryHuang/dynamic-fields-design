@@ -163,7 +163,7 @@ describe('FormPage', () => {
     });
 
     it('edit-mode stale 409 still shows the stale notice', async () => {
-      api.updateRecord.mockRejectedValue({ status: 409, message: '資料已被其他人修改，請重新載入' });
+      api.updateRecord.mockRejectedValue({ status: 409, code: 'stale', message: 'This data was changed by someone else. Please reload' });
       const w = await mountPage(refSchema([]), '/dynamic/m/5/edit');
       await w.find('input').setValue('y');
       await w.find('form').trigger('submit');
@@ -233,7 +233,7 @@ describe('FormPage', () => {
     });
 
     it('409 stale on detail shows reload', async () => {
-      api.updateRecord.mockRejectedValue({ status: 409, message: '資料已被其他人修改，請重新載入' });
+      api.updateRecord.mockRejectedValue({ status: 409, code: 'stale', message: 'This data was changed by someone else. Please reload' });
       const w = await mountPage(detailSchema(), '/dynamic/m/5/edit', header as never);
       await gridRows(w)[0]!.findAll('input')[1]!.setValue('X');
       await submit(w);

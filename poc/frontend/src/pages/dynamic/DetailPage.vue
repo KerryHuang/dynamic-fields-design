@@ -18,7 +18,7 @@ import RelatedTabs from 'src/presentation/dynamic/related/RelatedTabs.vue';
 import ForbiddenNotice from 'src/components/framework/ForbiddenNotice.vue';
 import type { DeleteBlocked } from 'src/domain/dynamic/types';
 import { canAdvance, isReadOnlyState } from 'src/domain/dynamic/workflow';
-import { SERVER_STALE_MESSAGE } from 'src/presentation/dynamic/designer/api-error';
+import { isStale } from 'src/presentation/dynamic/designer/api-error';
 import { newIdempotencyKey } from 'src/services/api/idempotency';
 import { isForbidden, type ApiError } from 'src/services/api/http';
 
@@ -64,7 +64,7 @@ async function onDelete() {
     if (err.status === 422) deleteKey = newIdempotencyKey();
     if (err.status === 409 && err.references) {
       blocked.value = { message: err.message ?? '', references: err.references, total: err.total ?? err.references.length };
-    } else if (err.status === 409 && err.message && err.message !== SERVER_STALE_MESSAGE) {
+    } else if (err.status === 409 && err.message && !isStale(err)) {
       $q.notify({ type: 'warning', message: err.message });
     } else if (err.status === 409) {
       $q.notify({
