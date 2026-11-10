@@ -13,6 +13,9 @@ public class TaskRepository(DynamicDbContext db) : ITaskRepository
     public Task<TaskItem?> GetAsync(long id, CancellationToken ct) =>
         db.Set<TaskItem>().Include(t => t.Participants).FirstOrDefaultAsync(t => t.Id == id, ct);
 
+    public Task<TaskItem?> GetReadOnlyAsync(long id, CancellationToken ct) =>
+        db.Set<TaskItem>().AsNoTracking().Include(t => t.Participants).FirstOrDefaultAsync(t => t.Id == id, ct);
+
     public Task<List<TaskItem>> ListByRecordAsync(long recordId, CancellationToken ct) =>
         Sorted(db.Set<TaskItem>().Include(t => t.Participants).Where(t => t.RecordId == recordId)).ToListAsync(ct);
 
@@ -98,7 +101,9 @@ public class TaskRepository(DynamicDbContext db) : ITaskRepository
     {
         var open = new[] { TaskItemStatus.Todo, TaskItemStatus.InProgress };
         var tomorrow = today.AddDays(1);
+        // 掛在已關閉（凍結）模組記錄上的任務不提醒，模組重新開啟後恢復（設計 §16 第 6 條）
         return db.Set<TaskItem>().Where(t => t.AssigneeUserId == userId && open.Contains(t.Status) && t.DueDate != null
+            && (t.ModuleId == null || !db.Set<Module>().Any(m => m.Id == t.ModuleId && m.Status == ModuleStatus.Closed))
             && ((t.DueDate == tomorrow && t.LastDueSoonNotified != today) || (t.DueDate < today && t.LastOverdueNotified != today)));
     }
 

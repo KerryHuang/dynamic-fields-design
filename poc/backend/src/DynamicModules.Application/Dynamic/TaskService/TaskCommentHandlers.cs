@@ -32,7 +32,7 @@ public class CheckTaskCommentUploadHandler(ITaskRepository tasks, TaskAccess acc
 {
     public async Task<ServiceResult> Handle(CheckTaskCommentUploadRequest request, CancellationToken ct)
     {
-        var task = await tasks.GetAsync(request.TaskId, ct);
+        var task = await tasks.GetReadOnlyAsync(request.TaskId, ct);
         if (task is null) return ServiceResult.NotFound(TaskMessages.NotFound);
         var p = await access.EvaluateAsync(task, ct);
         if (!p.CanSee) return ServiceResult.NotFound(TaskMessages.NotFound);

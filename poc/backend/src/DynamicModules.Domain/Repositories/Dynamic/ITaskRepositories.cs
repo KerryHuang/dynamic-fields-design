@@ -6,6 +6,8 @@ public interface ITaskRepository
 {
     /// <summary>追蹤，含參與者。</summary>
     Task<TaskItem?> GetAsync(long id, CancellationToken ct);
+    /// <summary>不追蹤，含參與者；只讀的檢查（例如上傳資格）用，避免把舊值留在追蹤器裡讓後面的處理器讀到。</summary>
+    Task<TaskItem?> GetReadOnlyAsync(long id, CancellationToken ct);
     /// <summary>追蹤，含參與者；DueDate 升冪、null 最後、再依 Id。</summary>
     Task<List<TaskItem>> ListByRecordAsync(long recordId, CancellationToken ct);
     /// <summary>追蹤，含參與者。</summary>

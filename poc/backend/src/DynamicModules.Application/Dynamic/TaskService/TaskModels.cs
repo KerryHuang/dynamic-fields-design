@@ -54,6 +54,25 @@ internal static class TaskViews
             t.DueDate, Overdue(t, today), p.Record, t.RuleId is not null, p.CanEdit);
     }
 
+    /// <summary>
+    /// 負責人異動的系統記錄只存使用者帳號（from／to）；讀取時補上 fromName、fromActive、toName、toActive，
+    /// 前端據此顯示「名稱（已停用）」。帳號是空的或查無此人時不補該組欄位；原有欄位照舊，不改資料格式。
+    /// </summary>
+    private static JsonElement WithAssigneeNames(JsonElement original, IReadOnlyDictionary<string, AppUser> users)
+    {
+        if (original.ValueKind != JsonValueKind.Object) return original.Clone();
+        var node = new Dictionary<string, JsonElement>();
+        foreach (var p in original.EnumerateObject()) node[p.Name] = p.Value.Clone();
+        foreach (var side in new[] { "from", "to" })
+        {
+            if (!node.TryGetValue(side, out var id) || id.ValueKind != JsonValueKind.String) continue;
+            if (!users.TryGetValue(id.GetString()!, out var u)) continue;
+            node[side + "Name"] = JsonSerializer.SerializeToElement(u.DisplayName);
+            node[side + "Active"] = JsonSerializer.SerializeToElement(u.IsActive);
+        }
+        return JsonSerializer.SerializeToElement(node);
+    }
+
     /// <summary>Mentions：內文裡存在的使用者都列出（含已停用），不存在的不列。</summary>
     public static TaskCommentResponse ToComment(TaskComment c, IReadOnlyDictionary<string, AppUser> users, bool canWithdraw)
     {
@@ -71,7 +90,7 @@ internal static class TaskViews
         if (c.SystemData is not null)
         {
             using var doc = JsonDocument.Parse(c.SystemData);
-            data = doc.RootElement.Clone();
+            data = c.SystemEvent == TaskSystemEvents.AssigneeChanged ? WithAssigneeNames(doc.RootElement, users) : doc.RootElement.Clone();
         }
         return new TaskCommentResponse(c.Id, c.Kind, c.AuthorUserId, author?.DisplayName, c.Withdrawn ? null : c.Body,
             c.Withdrawn, c.SystemEvent, data, c.CreatedTime, mentions, attachments, canWithdraw && human && !c.Withdrawn);

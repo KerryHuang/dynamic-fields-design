@@ -5,7 +5,7 @@ namespace DynamicModules.Application.Common;
 /// <summary>
 /// 最外層交易提交之後才做的收尾（例如刪實體檔）：回滾時整批丟掉；巢狀的交易型請求只由最外層執行。
 /// 單一動作失敗只記 log，不丟例外——資料已經提交，不能再回滾。每個請求一份，執行或丟掉後清空，不跨請求保留。
-/// 不在交易型請求裡登記的動作不會執行（留給後續的清掃）。
+/// 不在交易型請求裡登記的動作不會執行（最外層交易開始時丟掉，留給後續的清掃）。
 /// </summary>
 public sealed class AfterCommitActions(ILogger<AfterCommitActions> logger)
 {
@@ -14,7 +14,11 @@ public sealed class AfterCommitActions(ILogger<AfterCommitActions> logger)
 
     public void Add(string label, Action action) => _actions.Add((label, action));
 
-    internal void Enter() => _depth++;
+    /// <summary>進入一層交易；最外層開始時，先丟掉交易外登記的動作（它們不屬於任何交易）。</summary>
+    internal void Enter()
+    {
+        if (_depth++ == 0) _actions.Clear();
+    }
 
     /// <summary>離開一層交易；回到最外層時，提交成功就執行、否則丟掉。</summary>
     internal void Leave(bool committed)
