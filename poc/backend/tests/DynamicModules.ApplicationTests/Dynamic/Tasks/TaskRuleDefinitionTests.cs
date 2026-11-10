@@ -365,4 +365,22 @@ public class TaskRuleDefinitionTests : TaskTestBase
         Db.Context.ChangeTracker.Clear();
         (await Db.Context.Set<TaskRule>().AsNoTracking().OrderBy(x => x.Key).Select(x => x.Active).ToListAsync()).Should().Equal(false, true, false);
     }
+
+    [Fact]
+    public async Task TaskConditions_NullHolds_BadJsonDoesNot_ConditionIsEvaluated()
+    {
+        var r = await BuildRig();
+        var module = (await Svc<IModuleRepository>().GetByKeyAsync(r.Key, includeChildren: true, CancellationToken.None))!;
+        var registry = Svc<DynamicModules.Domain.FieldTypes.FieldTypeRegistry>();
+        var today = new DateOnly(2026, 11, 4);
+        var users = new HashSet<string>();
+        IReadOnlyDictionary<string, JsonElement?> flag(bool on) => new Dictionary<string, JsonElement?> { [$"f_{r.BoolField}"] = J(on ? "true" : "false") };
+
+        TaskConditions.Holds(null, module, flag(false), registry, today, users).Should().BeTrue("沒有條件一律成立");
+        TaskConditions.Holds("{壞掉", module, flag(true), registry, today, users).Should().BeFalse("解析失敗不成立");
+        TaskConditions.Holds(Cond(999999, "eq", "true").GetRawText(), module, flag(true), registry, today, users).Should().BeFalse("引用不存在的欄位");
+        var when = Cond(r.BoolField, "eq", "true").GetRawText();
+        TaskConditions.Holds(when, module, flag(true), registry, today, users).Should().BeTrue();
+        TaskConditions.Holds(when, module, flag(false), registry, today, users).Should().BeFalse();
+    }
 }
