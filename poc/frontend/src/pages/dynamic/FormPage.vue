@@ -13,6 +13,7 @@ import type { DetailRowPayload, ReferenceInfo } from 'src/domain/dynamic/types';
 import ForbiddenNotice from 'src/components/framework/ForbiddenNotice.vue';
 import { newIdempotencyKey } from 'src/services/api/idempotency';
 import { isForbidden, type ApiError } from 'src/services/api/http';
+import { joinList } from 'src/i18n/translate';
 
 const { t } = useI18n();
 const $q = useQuasar();
@@ -111,7 +112,7 @@ async function onSubmit(values: Record<string, unknown>, details: Record<string,
     if (err.status === 422) idempotencyKey = newIdempotencyKey(); // the key was used for other content; the next send is a new request
     if (err.status === 400 && err.errors) {
       const { hostKey: hostMessages, ...fieldErrors } = err.errors;
-      if (hostMessages) hostError.value = hostMessages.join('、');
+      if (hostMessages) hostError.value = joinList(hostMessages);
       const entries = Object.entries(fieldErrors);
       serverErrors.value = Object.fromEntries(entries.filter(([k]) => !k.startsWith('details.')));
       detailErrors.value = Object.fromEntries(entries.filter(([k]) => k.startsWith('details.')));
@@ -120,7 +121,7 @@ async function onSubmit(values: Record<string, unknown>, details: Record<string,
         ...entries.map(([k]) => k).filter(shownOnRow)];
       const rest = messagesOutside(fieldErrors, keys);
       if (rest.length) {
-        $q.notify({ type: 'negative', message: rest.join('、') });
+        $q.notify({ type: 'negative', message: joinList(rest) });
         void schemaQuery.refetch();
       }
     }

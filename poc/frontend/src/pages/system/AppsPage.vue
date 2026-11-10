@@ -11,6 +11,7 @@ import { resolveI18n } from 'src/domain/dynamic/i18n-text';
 import { notifyApiError } from 'src/presentation/dynamic/designer/api-error';
 import type { AppInfo, AppPackageSummary, OpenAppBody, OpenPreview } from 'src/services/api/dynamic-api';
 import { isForbidden, type ApiError } from 'src/services/api/http';
+import { joinList } from 'src/i18n/translate';
 
 const { t, locale } = useI18n();
 const $q = useQuasar();
@@ -141,7 +142,7 @@ const reopen = (key: string) => reopenApp.mutate(key, {
               <template v-if="p.requires.apps.length">・{{ t('apps.requires', { apps: p.requires.apps.map((r) => r.app).join('、') }) }}</template>
             </q-item-label>
             <q-item-label v-if="p.status && appByKey.get(p.id)?.dependents.length" caption>
-              {{ t('apps.dependents', { apps: appByKey.get(p.id)!.dependents.join('、') }) }}
+              {{ t('apps.dependents', { apps: joinList(appByKey.get(p.id)!.dependents) }) }}
             </q-item-label>
           </q-item-section>
           <q-item-section side>
@@ -191,10 +192,10 @@ const reopen = (key: string) => reopenApp.mutate(key, {
           <q-card-section>
             <p>{{ t('apps.closeHint') }}</p>
             <div v-if="closing?.dependents.length" class="text-warning" data-testid="close-dependents">
-              {{ t('apps.closeDependents', { apps: closing.dependents.join('、') }) }}
+              {{ t('apps.closeDependents', { apps: joinList(closing.dependents) }) }}
             </div>
             <div v-if="closing?.unaffiliatedReferrers.length" class="text-muted" data-testid="close-referrers">
-              {{ t('apps.closeReferrers', { modules: closing.unaffiliatedReferrers.join('、') }) }}
+              {{ t('apps.closeReferrers', { modules: joinList(closing.unaffiliatedReferrers) }) }}
             </div>
           </q-card-section>
           <q-card-actions align="right">

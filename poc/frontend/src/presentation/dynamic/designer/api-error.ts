@@ -1,4 +1,5 @@
 import type { ApiError } from 'src/services/api/http';
+import { joinList } from 'src/i18n/translate';
 
 /** Server's RowVersion-conflict message; any other 409 message (e.g. cascade depth) is shown as is. */
 export const SERVER_STALE_MESSAGE = '資料已被其他人修改，請重新載入';
@@ -6,7 +7,7 @@ export const SERVER_STALE_MESSAGE = '資料已被其他人修改，請重新載�
 /** Field-level messages whose backend key starts with `prefix` (e.g. 'Config.MaxLength'), else undefined. */
 export function errorFor(e: ApiError | null, prefix: string): string | undefined {
   const hit = Object.entries(e?.errors ?? {}).filter(([k]) => k.startsWith(prefix)).flatMap(([, v]) => v);
-  return hit.length ? hit.join('、') : undefined;
+  return hit.length ? joinList(hit) : undefined;
 }
 
 /** Notify only what no input shows; a generic message when the error carries nothing at all. */
@@ -14,7 +15,7 @@ export function notifyApiError(
   notify: (o: { type: string; message: string }) => void, e: ApiError, shown: string[], fallback: string,
 ) {
   const rest = leftoverMessages(e, shown);
-  if (rest.length) notify({ type: 'negative', message: rest.join('、') });
+  if (rest.length) notify({ type: 'negative', message: joinList(rest) });
   else if (!Object.keys(e.errors ?? {}).length) notify({ type: 'negative', message: fallback });
 }
 

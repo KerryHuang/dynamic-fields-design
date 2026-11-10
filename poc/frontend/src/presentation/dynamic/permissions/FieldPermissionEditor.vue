@@ -6,6 +6,7 @@ import { resolveI18n } from 'src/domain/dynamic/i18n-text';
 import SelectNoOption from 'src/components/framework/SelectNoOption.vue';
 import { useSelectFilter } from 'src/components/framework/useSelectFilter';
 import type { DesignerField, Group, ModulePermissions } from 'src/domain/dynamic/types';
+import { joinList } from 'src/i18n/translate';
 
 type Access = 'default' | 'readOnly' | 'hidden';
 
@@ -88,7 +89,7 @@ const grantError = (fieldId: number) => {
 
 function errorsAt(prefix: string): string | undefined {
   const hit = Object.entries(props.errors ?? {}).filter(([k]) => k === prefix || k.startsWith(`${prefix}.`)).flatMap(([, v]) => v);
-  return hit.length ? hit.join('、') : undefined;
+  return hit.length ? joinList(hit) : undefined;
 }
 const cellError = (fieldId: number, groupId: number) => {
   const i = props.modelValue.fields.findIndex((p) => p.fieldId === fieldId && p.groupId === groupId);

@@ -11,6 +11,7 @@ import type { ModuleDetail } from 'src/domain/dynamic/types';
 import { leftoverMessages } from 'src/presentation/dynamic/designer/api-error';
 import type { ApiError } from 'src/services/api/http';
 import CheckEditorDialog from './CheckEditorDialog.vue';
+import { joinList } from 'src/i18n/translate';
 
 const OP_SYMBOLS: Record<CheckOp, string> = { gte: '≥', gt: '>', lte: '≤', lt: '<', eq: '=' };
 
@@ -48,7 +49,7 @@ const remove = useDeleteCheckMutation();
 function confirmDelete() {
   remove.mutate(deleting.value!.key, {
     onSuccess: () => { deleting.value = null; $q.notify({ type: 'positive', message: t('checks.deleted') }); },
-    onError: (e) => $q.notify({ type: 'negative', message: leftoverMessages(e as unknown as ApiError, []).join('、') || t('designer.saveFailed') }),
+    onError: (e) => $q.notify({ type: 'negative', message: joinList(leftoverMessages(e as unknown as ApiError, [])) || t('designer.saveFailed') }),
   });
 }
 </script>

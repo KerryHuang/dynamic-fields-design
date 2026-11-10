@@ -11,6 +11,7 @@ import { leftoverMessages } from 'src/presentation/dynamic/designer/api-error';
 import { toSchemaFields } from 'src/presentation/dynamic/designer/schema-fields';
 import type { ApiError } from 'src/services/api/http';
 import RuleEditorDialog from './RuleEditorDialog.vue';
+import { joinList } from 'src/i18n/translate';
 
 const MAX_RULES = 100;
 
@@ -44,7 +45,7 @@ function edit(fn: (rules: Rule[]) => void) {
 }
 const rowError = (i: number) => {
   const hit = Object.entries(errors.value).filter(([k]) => k.startsWith(`rules[${i}]`)).flatMap(([, v]) => v);
-  return hit.length ? hit.join('、') : undefined;
+  return hit.length ? joinList(hit) : undefined;
 };
 
 function move(i: number, delta: -1 | 1) {
@@ -108,7 +109,7 @@ function submit() {
       const err = e as unknown as ApiError;
       errors.value = err.errors ?? {};
       const rest = leftoverMessages(err, ['rules[']);
-      $q.notify({ type: 'negative', message: rest.length ? rest.join('、') : t('designer.saveFailed') });
+      $q.notify({ type: 'negative', message: rest.length ? joinList(rest) : t('designer.saveFailed') });
     },
   });
 }

@@ -9,6 +9,7 @@ import { errorFor } from 'src/presentation/dynamic/designer/api-error';
 import { dynamicApi } from 'src/services/api/dynamic-api';
 import { newIdempotencyKey } from 'src/services/api/idempotency';
 import { isForbidden, type ApiError } from 'src/services/api/http';
+import { joinList } from 'src/i18n/translate';
 
 const props = defineProps<{ schema: ModuleSchema; modelValue: boolean }>();
 const emit = defineEmits<{ 'update:modelValue': [value: boolean] }>();
@@ -66,7 +67,7 @@ const columnRows = computed(() => (preview.value?.columns ?? []).map((c, i) => (
   id: i, header: c.header, target: mappedLabel(c.fieldKey) ?? c.ignoredReason ?? '',
 })));
 const errorRows = computed(() => rowErrors.value.flatMap((r) =>
-  Object.entries(r.errors).map(([key, msgs]) => ({ id: `${r.line}:${key}`, line: r.line, field: labelOf(key), message: msgs.join('、') }))));
+  Object.entries(r.errors).map(([key, msgs]) => ({ id: `${r.line}:${key}`, line: r.line, field: labelOf(key), message: joinList(msgs) }))));
 
 const columnCols = computed<QTableColumn[]>(() => [
   { name: 'header', label: t('dynamic.import.fileColumn'), field: 'header', align: 'left' },
@@ -105,7 +106,7 @@ function confirm() {
       const err = e as unknown as ApiError;
       const { rows, rest } = rowsFromCommitErrors(err.errors ?? {});
       if (rows.length) rowErrors.value = rows;
-      if (rest.length) fileError.value = rest.join('、');
+      if (rest.length) fileError.value = joinList(rest);
       else if (!rows.length) fileError.value = messageOf(err);
     },
   });

@@ -14,6 +14,7 @@ import DynamicField from 'src/presentation/dynamic/components/DynamicField.vue';
 import { messagesOutside } from 'src/presentation/dynamic/designer/api-error';
 import { newIdempotencyKey } from 'src/services/api/idempotency';
 import type { ApiError } from 'src/services/api/http';
+import { joinList } from 'src/i18n/translate';
 
 const props = defineProps<{ modelValue: boolean; recordId: number; rowVersion: string; conversion: RecordConversion }>();
 const emit = defineEmits<{ 'update:modelValue': [open: boolean] }>();
@@ -114,7 +115,7 @@ async function submit() {
       await showServerFieldErrors(err.errors);
       const fieldKeys = inputFields.value.map((f) => f.key);
       const rest = messagesOutside(err.errors, [...fieldKeys, ...Object.keys(err.errors).filter((k) => QUANTITY_KEY.test(k))]);
-      if (rest.length) $q.notify({ type: 'negative', message: rest.join('、') });
+      if (rest.length) $q.notify({ type: 'negative', message: joinList(rest) });
     } else if (err.status === 409) {
       $q.notify({
         type: 'warning', message: t('docflow.convert.stale'),

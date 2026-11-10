@@ -21,6 +21,7 @@ import { toSchemaFields } from 'src/presentation/dynamic/designer/schema-fields'
 import ConditionEditor from 'src/presentation/dynamic/list/ConditionEditor.vue';
 import type { ApiError } from 'src/services/api/http';
 import EventEffectEditor from './EventEffectEditor.vue';
+import { joinList } from 'src/i18n/translate';
 
 const props = defineProps<{ modelValue: boolean; module: ModuleDetail; event?: ModuleEvent }>();
 const emit = defineEmits<{ 'update:modelValue': [open: boolean] }>();
@@ -94,7 +95,7 @@ async function submit() {
   });
 }
 const errors = computed(() => groupEventErrors(error.value?.errors));
-const joined = (lines: string[]) => lines.join('、') || undefined;
+const joined = (lines: string[]) => joinList(lines) || undefined;
 </script>
 
 <template>
@@ -138,14 +139,14 @@ const joined = (lines: string[]) => lines.join('、') || undefined;
       >
         <template #no-option><SelectNoOption /></template>
       </q-select>
-      <div v-if="errors.trigger.length" class="text-negative" data-testid="event-trigger-error">{{ errors.trigger.join('、') }}</div>
+      <div v-if="errors.trigger.length" class="text-negative" data-testid="event-trigger-error">{{ joinList(errors.trigger) }}</div>
     </div>
 
     <div>
       <div class="text-subtitle1 q-mb-xs">{{ t('events.when') }}</div>
       <ConditionEditor :model-value="form.when" :fields="conditionFields" @update:model-value="setWhen" />
       <div class="text-caption text-muted q-mt-xs">{{ t('events.whenHint') }}</div>
-      <div v-if="errors.when.length" class="text-negative" data-testid="event-when-error">{{ errors.when.join('、') }}</div>
+      <div v-if="errors.when.length" class="text-negative" data-testid="event-when-error">{{ joinList(errors.when) }}</div>
     </div>
 
     <div class="column q-gutter-y-sm">

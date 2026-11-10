@@ -13,6 +13,7 @@ import { leftoverMessages, notifyApiError } from 'src/presentation/dynamic/desig
 import DepartmentSelect from 'src/presentation/organization/DepartmentSelect.vue';
 import { isForbidden, type ApiError } from 'src/services/api/http';
 import { useIdentityStore } from 'src/stores/use-identity-store';
+import { joinList } from 'src/i18n/translate';
 
 const MIN_PASSWORD = 8;
 const { t, locale } = useI18n();
@@ -79,7 +80,7 @@ function openEdit(u: AdminUser) {
 function save() {
   error.value = '';
   const { userId, displayName, password, groupIds, isSystemAdmin, departmentId } = form.value;
-  const showError = (e: unknown) => { error.value = leftoverMessages(e as ApiError, []).join('、') || t('users.saveFailed'); };
+  const showError = (e: unknown) => { error.value = joinList(leftoverMessages(e as ApiError, [])) || t('users.saveFailed'); };
   const done = () => { dialog.value = false; $q.notify({ type: 'positive', message: t('users.saved') }); };
   // The account is saved first; its department is a separate call, so a department error leaves the dialog open
   const handlers = {
@@ -109,7 +110,7 @@ function submitReset() {
   if (resetPassword.value.length < MIN_PASSWORD) { resetError.value = t('users.passwordTooShort'); return; }
   reset.mutate({ id: resetTarget.value!, password: resetPassword.value }, {
     onSuccess: () => { resetTarget.value = null; $q.notify({ type: 'positive', message: t('users.passwordReset') }); },
-    onError: (e) => { resetError.value = leftoverMessages(e as unknown as ApiError, []).join('、') || t('users.saveFailed'); },
+    onError: (e) => { resetError.value = joinList(leftoverMessages(e as unknown as ApiError, [])) || t('users.saveFailed'); },
   });
 }
 

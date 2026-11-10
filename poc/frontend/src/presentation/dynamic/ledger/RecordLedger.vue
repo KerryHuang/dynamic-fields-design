@@ -7,6 +7,7 @@ import { useRecordLedger, useReverseRecord } from 'src/application/dynamic/queri
 import { messagesOutside } from 'src/presentation/dynamic/designer/api-error';
 import { newIdempotencyKey } from 'src/services/api/idempotency';
 import type { ApiError } from 'src/services/api/http';
+import { joinList } from 'src/i18n/translate';
 
 const props = defineProps<{ recordId: number; moduleKey: string }>();
 const { t } = useI18n();
@@ -40,7 +41,7 @@ async function submit() {
       void ledger.refetch();
     }
     const lines = err.status === 400 ? messagesOutside(err.errors, []) : [];
-    $q.notify({ type: 'negative', message: (lines.length ? lines.join('、') : err.message) ?? t('designer.saveFailed') });
+    $q.notify({ type: 'negative', message: (lines.length ? joinList(lines) : err.message) ?? t('designer.saveFailed') });
   }
 }
 </script>

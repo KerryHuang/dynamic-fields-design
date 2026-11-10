@@ -8,6 +8,7 @@ import { leftoverMessages } from 'src/presentation/dynamic/designer/api-error';
 import FieldPermissionEditor from 'src/presentation/dynamic/permissions/FieldPermissionEditor.vue';
 import PrivilegeEditor from 'src/presentation/dynamic/permissions/PrivilegeEditor.vue';
 import type { ApiError } from 'src/services/api/http';
+import { joinList } from 'src/i18n/translate';
 
 const props = withDefaults(defineProps<{ moduleKey: string; fields?: DesignerField[]; titleFieldId?: number; detailOf?: string }>(), { fields: () => [], titleFieldId: undefined, detailOf: undefined });
 const { t } = useI18n();
@@ -48,7 +49,7 @@ function submit() {
       const err = e as unknown as ApiError;
       errors.value = err.errors ?? {};
       const rest = leftoverMessages(err, ['groups[', 'users[', 'fields[', 'options[', 'fieldGrants[']);
-      $q.notify({ type: 'negative', message: rest.length ? rest.join('、') : t('designer.saveFailed') });
+      $q.notify({ type: 'negative', message: rest.length ? joinList(rest) : t('designer.saveFailed') });
     },
   });
 }

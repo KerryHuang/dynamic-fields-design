@@ -6,6 +6,7 @@ import { useReportShareTargets, useSetReportShares } from 'src/application/dynam
 import { resolveI18n } from 'src/domain/dynamic/i18n-text';
 import { leftoverMessages } from 'src/presentation/dynamic/designer/api-error';
 import type { ApiError } from 'src/services/api/http';
+import { joinList } from 'src/i18n/translate';
 
 const props = defineProps<{ reportId: number; open: boolean; groupIds: number[] }>();
 const emit = defineEmits<{ close: [] }>();
@@ -21,7 +22,7 @@ function submit() {
   error.value = '';
   save.mutate({ id: props.reportId, groupIds: selected.value }, {
     onSuccess: () => { Notify.create({ type: 'positive', message: t('reports.shareSaved') }); emit('close'); },
-    onError: (e) => { error.value = leftoverMessages(e as unknown as ApiError, []).join('、') || t('reports.saveFailed'); },
+    onError: (e) => { error.value = joinList(leftoverMessages(e as unknown as ApiError, [])) || t('reports.saveFailed'); },
   });
 }
 </script>

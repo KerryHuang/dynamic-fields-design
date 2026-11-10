@@ -6,6 +6,7 @@ import { resolveI18n } from 'src/domain/dynamic/i18n-text';
 import SelectNoOption from 'src/components/framework/SelectNoOption.vue';
 import { useSelectFilter } from 'src/components/framework/useSelectFilter';
 import type { DataScope, Group, ModulePermissions, Privileges, User } from 'src/domain/dynamic/types';
+import { joinList } from 'src/i18n/translate';
 
 const props = defineProps<{
   modelValue: ModulePermissions;
@@ -31,7 +32,7 @@ const groupIndex = (id: number) => props.modelValue.groups.findIndex((g) => g.gr
 function rowErrors(kind: 'groups' | 'users', index: number): string | undefined {
   if (index < 0) return undefined;
   const hit = Object.entries(props.errors ?? {}).filter(([k]) => k.startsWith(`${kind}[${index}]`)).flatMap(([, v]) => v);
-  return hit.length ? hit.join('、') : undefined;
+  return hit.length ? joinList(hit) : undefined;
 }
 
 function toggleGroup(groupId: number, axis: keyof Privileges, value: boolean) {

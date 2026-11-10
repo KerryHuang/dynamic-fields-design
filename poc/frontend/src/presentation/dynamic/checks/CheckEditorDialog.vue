@@ -15,6 +15,7 @@ import I18nTextInput from 'src/presentation/dynamic/designer/I18nTextInput.vue';
 import { toSchemaFields } from 'src/presentation/dynamic/designer/schema-fields';
 import ConditionEditor from 'src/presentation/dynamic/list/ConditionEditor.vue';
 import type { ApiError } from 'src/services/api/http';
+import { joinList } from 'src/i18n/translate';
 
 /** Group keys must be indexed types; sums read number fields. */
 const GROUP_TYPES = ['reference', 'enum', 'text', 'integer', 'date', 'autonumber'];
@@ -89,7 +90,7 @@ async function submit() {
   });
 }
 const errors = computed(() => groupCheckErrors(error.value?.errors));
-const joined = (lines: string[]) => lines.join('、') || undefined;
+const joined = (lines: string[]) => joinList(lines) || undefined;
 </script>
 
 <template>
@@ -138,7 +139,7 @@ const joined = (lines: string[]) => lines.join('、') || undefined;
       <div class="text-subtitle2 q-mb-xs">{{ t('checks.where') }}</div>
       <ConditionEditor :model-value="form.where" :fields="conditionFields" @update:model-value="setWhere" />
       <div class="text-caption text-muted q-mt-xs">{{ t('checks.whereHint') }}</div>
-      <div v-if="errors.where.length" class="text-negative text-caption" data-testid="check-where-error">{{ errors.where.join('、') }}</div>
+      <div v-if="errors.where.length" class="text-negative text-caption" data-testid="check-where-error">{{ joinList(errors.where) }}</div>
     </div>
 
     <div>
@@ -196,7 +197,7 @@ const joined = (lines: string[]) => lines.join('、') || undefined;
           </div>
         </template>
       </div>
-      <div v-if="errors.assert.length" class="text-negative text-caption" data-testid="check-assert-error">{{ errors.assert.join('、') }}</div>
+      <div v-if="errors.assert.length" class="text-negative text-caption" data-testid="check-assert-error">{{ joinList(errors.assert) }}</div>
     </div>
 
     <div data-testid="check-message">

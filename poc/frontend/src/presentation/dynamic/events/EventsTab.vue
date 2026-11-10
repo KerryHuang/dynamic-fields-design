@@ -11,6 +11,7 @@ import type { ModuleDetail } from 'src/domain/dynamic/types';
 import { leftoverMessages } from 'src/presentation/dynamic/designer/api-error';
 import type { ApiError } from 'src/services/api/http';
 import EventEditorDialog from './EventEditorDialog.vue';
+import { joinList } from 'src/i18n/translate';
 
 const props = defineProps<{ module: ModuleDetail }>();
 const { t, locale } = useI18n();
@@ -51,7 +52,7 @@ const remove = useDeleteEventMutation();
 function confirmDelete() {
   remove.mutate(deleting.value!.key, {
     onSuccess: () => { deleting.value = null; $q.notify({ type: 'positive', message: t('events.deleted') }); },
-    onError: (e) => $q.notify({ type: 'negative', message: leftoverMessages(e as unknown as ApiError, []).join('、') || t('designer.saveFailed') }),
+    onError: (e) => $q.notify({ type: 'negative', message: joinList(leftoverMessages(e as unknown as ApiError, [])) || t('designer.saveFailed') }),
   });
 }
 </script>

@@ -6,6 +6,7 @@ import { useChangePassword, useLogout } from 'src/application/dynamic/queries/au
 import { leftoverMessages } from 'src/presentation/dynamic/designer/api-error';
 import type { ApiError } from 'src/services/api/http';
 import { useIdentityStore } from 'src/stores/use-identity-store';
+import { joinList } from 'src/i18n/translate';
 
 const { t } = useI18n();
 const router = useRouter();
@@ -25,7 +26,7 @@ const submit = () => {
   if (newPassword.value !== confirm.value) { error.value = t('auth.passwordMismatch'); return; }
   change.mutate({ oldPassword: oldPassword.value, newPassword: newPassword.value }, {
     onSuccess: () => { void router.replace('/'); },
-    onError: (e) => { error.value = leftoverMessages(e as unknown as ApiError, []).join('、') || t('auth.changeFailed'); },
+    onError: (e) => { error.value = joinList(leftoverMessages(e as unknown as ApiError, [])) || t('auth.changeFailed'); },
   });
 };
 

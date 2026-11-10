@@ -10,6 +10,7 @@ import { resolveI18n } from 'src/domain/dynamic/i18n-text';
 import type { AdminGroup, BlockingOption } from 'src/domain/dynamic/types';
 import { leftoverMessages } from 'src/presentation/dynamic/designer/api-error';
 import { isForbidden, type ApiError } from 'src/services/api/http';
+import { joinList } from 'src/i18n/translate';
 
 const { t, locale } = useI18n();
 const $q = useQuasar();
@@ -17,7 +18,7 @@ const groups = useAdminGroups();
 const users = useAdminUsers();
 const forbidden = computed(() => isForbidden(groups.error.value));
 const nameOf = (g: AdminGroup) => resolveI18n(g.nameI18n, locale.value);
-const errorText = (e: unknown, fallback = t('groups.saveFailed')) => leftoverMessages(e as ApiError, []).join('、') || fallback;
+const errorText = (e: unknown, fallback = t('groups.saveFailed')) => joinList(leftoverMessages(e as ApiError, [])) || fallback;
 
 const columns = computed<QTableColumn<AdminGroup>[]>(() => [
   { name: 'name', label: t('groups.name'), align: 'left', field: nameOf },
@@ -163,15 +164,15 @@ function confirmDelete() {
           <q-card-section v-if="impact.data.value" class="column q-gutter-y-sm">
             <div data-testid="impact-members">{{ t('groups.impactMembers', { n: impact.data.value.memberCount }) }}</div>
             <div data-testid="impact-modules">
-              {{ t('groups.impactModules', { list: impact.data.value.modules.join('、') || t('groups.impactNone') }) }}
+              {{ t('groups.impactModules', { list: joinList(impact.data.value.modules) || t('groups.impactNone') }) }}
             </div>
             <div data-testid="impact-fields">{{ t('groups.impactFields', { n: impact.data.value.fieldPermissionCount }) }}</div>
             <div data-testid="impact-scopes">{{ t('groups.impactScopes', { n: impact.data.value.dataScopeCount }) }}</div>
             <div data-testid="impact-reports">
-              {{ t('groups.impactReports', { list: impact.data.value.reports.join('、') || t('groups.impactNone') }) }}
+              {{ t('groups.impactReports', { list: joinList(impact.data.value.reports) || t('groups.impactNone') }) }}
             </div>
             <div data-testid="impact-dashboards">
-              {{ t('groups.impactDashboards', { list: impact.data.value.dashboards.join('、') || t('groups.impactNone') }) }}
+              {{ t('groups.impactDashboards', { list: joinList(impact.data.value.dashboards) || t('groups.impactNone') }) }}
             </div>
             <div class="text-warning" data-testid="impact-warning">{{ t('groups.loseWarning') }}</div>
             <div v-if="blocking.length" class="text-negative" data-testid="impact-blocking">
