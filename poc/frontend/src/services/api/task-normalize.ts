@@ -1,5 +1,5 @@
 import type {
-  ManualRule, RecordTasks, TaskComment, TaskDetail, TaskPage, TaskRecordRef, TaskSummary,
+  ManualRule, NotificationItem, NotificationList, RecordTasks, TaskComment, TaskDetail, TaskPage, TaskRecordRef, TaskSummary,
 } from 'src/domain/dynamic/task-types';
 
 /** The server leaves out every property whose value is null; the types promise `null`, so put it back. */
@@ -79,5 +79,17 @@ export function normalizeTaskComment(c: Wire<TaskComment>): TaskComment {
     mentions: c.mentions ?? [],
     attachments: c.attachments ?? [],
     canWithdraw: !!c.canWithdraw,
+  };
+}
+
+/** Anything that is not the documented shape counts as an empty list, so a bad reply never breaks the header. */
+export function normalizeNotificationList(l: unknown): NotificationList {
+  const raw = (l ?? {}) as { items?: unknown; unreadCount?: unknown };
+  const items = Array.isArray(raw.items) ? (raw.items as Wire<NotificationItem>[]) : [];
+  return {
+    items: items.map((n) => ({
+      id: n.id as number, kind: n.kind ?? '', title: n.title ?? '', link: n.link ?? '', read: !!n.read, createdTime: n.createdTime ?? '',
+    })),
+    unreadCount: typeof raw.unreadCount === 'number' ? raw.unreadCount : 0,
   };
 }

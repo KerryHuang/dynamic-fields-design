@@ -110,3 +110,24 @@ export interface TaskCounts {
 
 /** Quasar brand color for a status badge. */
 export const taskStatusColor = (s: TaskStatus): string => (s === 'done' ? 'positive' : s === 'cancelled' ? 'muted' : 'primary');
+
+/** Kinds the server writes today (NotificationKinds); an unknown kind still renders, with its title only. */
+export const NOTIFICATION_KINDS = [
+  'taskAssigned', 'taskMentioned', 'taskCommented', 'taskDueSoon', 'taskOverdue', 'taskCompleted', 'taskCancelled',
+] as const;
+
+export interface NotificationItem {
+  id: number;
+  kind: string;
+  /** Task title at the time the notification was written. */
+  title: string;
+  /** In-app path such as `/tasks?open=5`; empty when there is nothing to open. */
+  link: string;
+  read: boolean;
+  createdTime: string;
+}
+
+export interface NotificationList {
+  items: NotificationItem[];
+  unreadCount: number;
+}

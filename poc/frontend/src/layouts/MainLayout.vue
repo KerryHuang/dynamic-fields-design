@@ -13,6 +13,7 @@
           flat dense no-caps class="q-mr-sm" icon="palette" :label="$q.screen.gt.xs ? t('theme.title') : undefined" :aria-label="t('theme.title')"
           data-testid="theme-open" @click="themeOpen = true"
         />
+        <NotificationBell />
         <LocaleSwitcher class="q-mr-sm" />
         <q-btn v-if="!identity.isDemoAccount" flat dense no-caps class="q-mr-sm" :label="t('auth.changePassword')" to="/change-password" data-testid="change-password-link" />
         <span v-if="logoutError" class="q-mr-sm bg-negative text-white q-px-sm rounded-borders" data-testid="logout-error">{{ t('auth.logoutFailed') }}</span>
@@ -88,6 +89,7 @@ import { recordRecent } from 'src/application/dynamic/recent-modules';
 import { resolveI18n } from 'src/domain/dynamic/i18n-text';
 import { groupMenu, systemLinks } from 'src/domain/dynamic/menu-nav';
 import LocaleSwitcher from 'src/presentation/locale/LocaleSwitcher.vue';
+import NotificationBell from 'src/presentation/notifications/NotificationBell.vue';
 import AppBreadcrumb from 'src/presentation/theme/AppBreadcrumb.vue';
 import ThemeDialog from 'src/presentation/theme/ThemeDialog.vue';
 import { useIdentityStore } from 'src/stores/use-identity-store';

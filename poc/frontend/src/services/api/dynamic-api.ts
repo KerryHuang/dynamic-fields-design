@@ -10,11 +10,11 @@ import type { MeTheme, ThemeChoice, ThemeDefaults } from 'src/domain/theme/theme
 import type { Department, DepartmentInput } from 'src/domain/dynamic/organization';
 import type { CheckDefinition, LedgerBody, LedgerConfig, ModuleCheck, ModuleEvent, RecordEffects, RecordLedger } from 'src/domain/dynamic/events-ledger';
 import type {
-  RecordTasks, TaskComment, TaskCounts, TaskDetail, TaskInput, TaskListFilter, TaskListTab, TaskPage, TaskPatch,
+  NotificationList, RecordTasks, TaskComment, TaskCounts, TaskDetail, TaskInput, TaskListFilter, TaskListTab, TaskPage, TaskPatch,
 } from 'src/domain/dynamic/task-types';
 import { handleAuthFailure, http, toApiError } from './http';
 import {
-  normalizeRecordTasks, normalizeTaskComment, normalizeTaskDetail, normalizeTaskPage,
+  normalizeNotificationList, normalizeRecordTasks, normalizeTaskComment, normalizeTaskDetail, normalizeTaskPage,
 } from './task-normalize';
 
 /** Request config for write calls: the key makes a retried request take effect once (server: Dynamic_Operation). */
@@ -439,6 +439,10 @@ export const dynamicApi = {
     http.get<TaskPage>('/tasks', { params: { tab, filter, currentPage: page, pagesSize: size } }).then(data).then(normalizeTaskPage),
   getTaskSummary: () => http.get<TaskCounts>('/tasks/summary').then(data)
     .then((c) => ({ dueToday: c.dueToday ?? 0, overdue: c.overdue ?? 0 })),
+  getNotifications: (take = 20) =>
+    http.get<NotificationList>('/notifications', { params: { take } }).then(data).then(normalizeNotificationList),
+  markNotificationRead: (id: number) => http.post(`/notifications/${id}/read`).then(data),
+  markAllNotificationsRead: () => http.post('/notifications/read-all').then(data),
   getTask: (id: number) => http.get<TaskDetail>(`/tasks/${id}`).then(data).then(normalizeTaskDetail),
   createTask: (body: TaskInput) => http.post<TaskDetail>('/tasks', body).then(data).then(normalizeTaskDetail),
   /** A property left out stays as it is; an explicit null clears it, so the patch is sent as given. */

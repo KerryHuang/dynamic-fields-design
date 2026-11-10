@@ -22,7 +22,7 @@ async function mountAtWidth(width: number, locale: 'zh-TW' | 'en-US' = 'zh-TW') 
   const pinia = createPinia();
   setActivePinia(pinia);
   http.defaults.adapter = async (config) => ({
-    data: config.url === '/me' ? ME : config.url === '/users' ? USERS : [], status: 200, statusText: 'OK', headers: {}, config,
+    data: config.url === '/me' ? ME : config.url === '/users' ? USERS : config.url === '/notifications' ? { items: [], unreadCount: 3 } : [], status: 200, statusText: 'OK', headers: {}, config,
   });
   const stub = { template: '<i/>' };
   const router = createRouter({ history: createMemoryHistory(), routes: [{ path: '/', component: stub }, { path: '/reports', component: stub }] });
@@ -59,6 +59,17 @@ describe('MainLayout 響應式選單', () => {
     expect(w.find('[data-testid="menu-toggle"]').exists()).toBe(false);
     expect(w.find('.q-drawer--standard').exists()).toBe(true);
     expect(drawerOpen()).toBe(false);
+    w.unmount();
+  });
+
+  // jsdom 不排版，量不到 scrollWidth；改驗會撐寬頁首的東西：鈴鐺只有圖示（沒有文字標籤），badge 浮在圖示上不佔寬
+  it.each([[390], [820], [1366], [1920]])('%ipx：頁首有通知鈴鐺，只有圖示，未讀數是浮動 badge', async (width) => {
+    const { w } = await mountAtWidth(width);
+    const bell = w.get('[data-testid="notification-bell"]');
+    expect(bell.text()).toBe('notifications3');
+    expect(bell.classes()).toContain('q-btn--round');
+    expect(bell.get('[data-testid="notification-badge"]').classes()).toContain('q-badge--floating');
+    expect(bell.attributes('aria-label')).toBe(zhTW.notifications.title);
     w.unmount();
   });
 

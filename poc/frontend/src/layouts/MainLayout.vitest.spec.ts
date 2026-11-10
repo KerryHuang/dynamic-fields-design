@@ -45,6 +45,7 @@ describe('MainLayout menu', () => {
       let data: unknown = [];
       if (config.url === '/users') data = USERS;
       else if (config.url === '/me') data = me(true);
+      else if (config.url === '/notifications') data = { items: [], unreadCount: 0 };
       else { seen.push(user); data = [{ key: 'm', name: { 'zh-TW': `menu-${user}` } }]; }
       return { data, status: 200, statusText: 'OK', headers: {}, config };
     };
