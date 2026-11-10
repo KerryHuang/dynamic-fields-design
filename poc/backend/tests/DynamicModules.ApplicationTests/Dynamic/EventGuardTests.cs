@@ -148,6 +148,8 @@ public class EventGuardTests : EffectsTestBase
         effects.HiddenCount.Should().Be(0);
         var item = effects.Items.Should().ContainSingle().Subject;
         (item.EventKey, item.EffectCode, item.Kind, item.TargetModuleKey, item.Title).Should().Be(("ege-post", "post", "create", s.Move, "出貨"));
+        // 目標模組名稱帶整份多語系文字，由前端依介面語系挑（不固定繁中）
+        item.TargetModuleName.Resolve("zh-TW").Should().NotBeEmpty();
 
         (await Send(new GetRecordEffectsRequest(987654))).IsNotFound.Should().BeTrue();
     }

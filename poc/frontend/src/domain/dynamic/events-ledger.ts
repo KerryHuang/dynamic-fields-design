@@ -112,7 +112,7 @@ export interface EffectItem {
   effectCode: string;
   kind: 'create' | 'reverse';
   targetModuleKey: string;
-  targetModuleName: string;
+  targetModuleName: I18nText;
   targetRecordId: number;
   /** null when the user may not see the title (or the record). */
   title: string | null;

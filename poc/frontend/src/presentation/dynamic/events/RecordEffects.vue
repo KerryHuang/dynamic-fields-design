@@ -3,9 +3,10 @@ import { date } from 'quasar';
 import { computed } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { useRecordEffects } from 'src/application/dynamic/queries/ledger-queries';
+import { resolveI18n } from 'src/domain/dynamic/i18n-text';
 
 const props = defineProps<{ recordId: number }>();
-const { t } = useI18n();
+const { t, locale } = useI18n();
 
 // A failed request (no permission, an old server) just leaves the section out.
 const query = useRecordEffects(() => props.recordId);
@@ -25,7 +26,7 @@ const timeText = (iso: string) => date.formatDate(new Date(iso), 'YYYY-MM-DD HH:
             <span v-else class="text-muted">{{ t('events.results.noAccess') }}</span>
           </q-item-label>
           <q-item-label caption class="effect-caption">
-            {{ x.targetModuleName }} · {{ t(x.kind === 'reverse' ? 'events.results.reversed' : 'events.results.created') }} · {{ x.eventKey }} / {{ x.effectCode }} · {{ timeText(x.createdTime) }}
+            {{ resolveI18n(x.targetModuleName, locale) }} · {{ t(x.kind === 'reverse' ? 'events.results.reversed' : 'events.results.created') }} · {{ x.eventKey }} / {{ x.effectCode }} · {{ timeText(x.createdTime) }}
           </q-item-label>
         </q-item-section>
       </q-item>

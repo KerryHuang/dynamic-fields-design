@@ -151,8 +151,8 @@ describe('DetailPage linked results', () => {
 
   const effects: RecordEffects = {
     items: [
-      { eventKey: 'ship-post', effectCode: 'post', kind: 'create', targetModuleKey: 'stock-move', targetModuleName: '庫存異動', targetRecordId: 31, title: '出貨 A', createdTime: '2026-11-08T09:30:00' },
-      { eventKey: 'ship-post', effectCode: 'post', kind: 'create', targetModuleKey: 'stock-move', targetModuleName: '庫存異動', targetRecordId: 32, title: null, createdTime: '2026-11-08T09:30:00' },
+      { eventKey: 'ship-post', effectCode: 'post', kind: 'create', targetModuleKey: 'stock-move', targetModuleName: { 'zh-TW': '庫存異動' }, targetRecordId: 31, title: '出貨 A', createdTime: '2026-11-08T09:30:00' },
+      { eventKey: 'ship-post', effectCode: 'post', kind: 'create', targetModuleKey: 'stock-move', targetModuleName: { 'zh-TW': '庫存異動' }, targetRecordId: 32, title: null, createdTime: '2026-11-08T09:30:00' },
     ],
     hiddenCount: 2,
   };
