@@ -172,6 +172,57 @@ public class ApprovalBackstopTests : ApprovalTestBase
         res!.Message.Should().Be(ApprovalMessages.TransitionBlocked(po.Id));
     }
 
+    /// <summary>同一個 scope 內以系統身分依序改狀態（每步各自 commit，同一份寫入日誌），最後跑後盾。</summary>
+    private async Task<ServiceResult?> SystemSteps(long recordId, params long[] states)
+    {
+        using var scope = NewScope();
+        var sp = scope.ServiceProvider;
+        var update = sp.GetRequiredService<IRequestHandler<UpdateRecordRequest, ServiceResult>>();
+        foreach (var to in states)
+        {
+            var row = await sp.GetRequiredService<IRecordRepository>().GetAsync(recordId, CancellationToken.None);
+            using (sp.GetRequiredService<ISystemIdentity>().Enter(null))
+                (await update.Handle(new UpdateRecordRequest(recordId, new() { [Status] = O(to) }, row!.RowVersion, null,
+                    new HashSet<string> { Status }), CancellationToken.None)).IsSuccess.Should().BeTrue();
+            await sp.GetRequiredService<IUnitOfWork>().CommitAsync(CancellationToken.None);
+        }
+        return await sp.GetRequiredService<ApprovalBackstopStage>().RunAsync(CancellationToken.None);
+    }
+
+    [Fact]
+    public async Task SystemChain_PlainThenApprovalTransition_InOneRequest_409()
+    {
+        // 草稿 → 已退回（一般）→ 已取消（需簽核）：合併後只看得到「草稿 → 已取消」這條不存在的轉移，要逐筆看（審查建議 1）
+        _r = await BuildPurchase();
+        _flow = await SeedFlow(_r, "po-b", _r.Confirmed, 1, Def(null, Stage("lead", Group(PurchaseLeadGroup))));
+        await SeedFlow(_r, "po-c", _r.Cancelled, 1, Def(null, Stage("lead", Group(PurchaseLeadGroup))));
+        var wf = await SaveWorkflow(_r, [Needs(_r.Draft, _r.Confirmed), Plain(_r.Confirmed, _r.Partial), Plain(_r.Partial, _r.Received),
+            Needs(_r.Confirmed, _r.Cancelled), Plain(_r.Draft, _r.Returned), Needs(_r.Returned, _r.Cancelled)]);
+        wf.IsSuccess.Should().BeTrue(Dump(wf));
+        var po = await NewPo(_r);
+        (await SystemSteps(po.Id, _r.Returned, _r.Cancelled))!.Message.Should().Be(ApprovalMessages.TransitionBlocked(po.Id));
+    }
+
+    [Fact]
+    public async Task Runner_ExemptChecksValue_LaterWriteMovesStatusAgain_409()
+    {
+        // 豁免只放行簽核自己寫的值：同一請求裡狀態又被推到別處（已確認 → 部分到貨）→ 409（審查建議 1）
+        await Rig();
+        var po = await NewPo(_r);
+        var inst = await SeedInstance(_r, _flow, recordId: po.Id);
+        using var scope = NewScope();
+        var sp = scope.ServiceProvider;
+        var loaded = (await sp.GetRequiredService<IApprovalInstanceRepository>().GetAsync(inst.Id, CancellationToken.None))!;
+        (await sp.GetRequiredService<ApprovalTransitionRunner>().RunAsync(loaded, _r.Confirmed, null, CancellationToken.None)).IsSuccess.Should().BeTrue();
+        await sp.GetRequiredService<IUnitOfWork>().CommitAsync(CancellationToken.None);
+        var row = await sp.GetRequiredService<IRecordRepository>().GetAsync(po.Id, CancellationToken.None);
+        using (sp.GetRequiredService<ISystemIdentity>().Enter(null))
+            (await sp.GetRequiredService<IRequestHandler<UpdateRecordRequest, ServiceResult>>().Handle(new UpdateRecordRequest(po.Id,
+                new() { [Status] = O(_r.Partial) }, row!.RowVersion, null, new HashSet<string> { Status }), CancellationToken.None)).IsSuccess.Should().BeTrue();
+        await sp.GetRequiredService<IUnitOfWork>().CommitAsync(CancellationToken.None);
+        (await sp.GetRequiredService<ApprovalBackstopStage>().RunAsync(CancellationToken.None))!.Message.Should().Be(ApprovalMessages.EventBlocked(po.Id));
+    }
+
     private async Task<ServiceResult?> RunInOneRequest(long instanceId, long recordId, bool alsoMemo)
     {
         using var scope = NewScope();
