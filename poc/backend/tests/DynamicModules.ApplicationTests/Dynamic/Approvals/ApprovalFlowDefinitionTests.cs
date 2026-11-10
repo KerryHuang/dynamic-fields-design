@@ -199,4 +199,18 @@ public class ApprovalFlowDefinitionTests : ApprovalTestBase
         one.Priority.Should().Be(2);
         (await Send(new GetApprovalFlowRequest("nope"))).IsNotFound.Should().BeTrue();
     }
+
+    [Fact]
+    public async Task EditableField_HiddenForSomeGroup_400()
+    {
+        // 裁決 22：可編輯欄位不得是對簽核人隱藏的欄位；存流程時不知道最後是誰簽，對任何群組隱藏就拒絕
+        var r = await BuildPurchase();
+        await HideFor(r.Module, r.DueDate, FinanceGroup);
+        var bad = await Send(new CreateApprovalFlowRequest(r.Module,
+            Input("po-h", r.Confirmed, 1, Def(null, Stage("lead", Group(PurchaseLeadGroup), editable: [r.DueDate])))));
+        bad.Errors["definition.stages[0].editableFields"].Should().Equal(ApprovalMessages.EditableFieldHidden);
+        Db.Context.Set<ApprovalFlow>().AsNoTracking().Count().Should().Be(0);
+
+        await Create(r, Input("po-h", r.Confirmed, 1, Def(null, Stage("lead", Group(PurchaseLeadGroup), editable: [r.Memo]))));
+    }
 }

@@ -58,7 +58,7 @@ public sealed class ApprovalActionSupport(
 /// <summary>同意（設計 §7.2、§8.2）：或簽任一人、會簽全部席位；關卡完成就推進，沒有下一關就核准並執行轉移。</summary>
 public class ApproveTaskHandler(
     IApprovalInstanceRepository repo, ApprovalActionSupport support, ApprovalEngine engine, ApprovalTransitionRunner runner,
-    ICurrentUser user, IBusinessTime time, IUnitOfWork uow) : IRequestHandler<ApproveTaskRequest, ServiceResult>
+    IPermissionRepository permissions, ICurrentUser user, IBusinessTime time, IUnitOfWork uow) : IRequestHandler<ApproveTaskRequest, ServiceResult>
 {
     public async Task<ServiceResult> Handle(ApproveTaskRequest request, CancellationToken ct)
     {
@@ -80,6 +80,8 @@ public class ApproveTaskHandler(
         var editable = (stageDef?.EditableFields ?? []).Select(id => $"f_{id}").ToHashSet();
         var outside = values.Keys.Where(k => !editable.Contains(k)).ToList();
         if (outside.Count > 0) return ServiceResult.Invalid(outside.ToDictionary(k => k, _ => new[] { ApprovalMessages.NotEditableField }));
+        if (values.Count > 0 && await HiddenKeysAsync(module, values.Keys, ct) is { Count: > 0 } hidden)
+            return ServiceResult.Invalid(hidden.ToDictionary(k => k, _ => new[] { ApprovalMessages.FieldHiddenForApprover }));
 
         var now = time.Now;
         me.Status = ApprovalTaskStatus.Approved;
@@ -116,6 +118,17 @@ public class ApproveTaskHandler(
         }
         await uow.CommitAsync(ct);
         return ServiceResult.Success(new ApprovalActionResponse(outcome, inst.Id, inst.RowVersion));
+    }
+
+    /// <summary>
+    /// 對這位簽核人隱藏的鍵（設計 §9.2「欄位對該簽核人隱藏時，不能編輯」；裁決 22 執行期）：依簽核人本人的欄位權限；
+    /// 讀不到權限輸入時全部當成隱藏（fail closed）。
+    /// </summary>
+    private async Task<List<string>> HiddenKeysAsync(Module module, IEnumerable<string> keys, CancellationToken ct)
+    {
+        var inputs = await permissions.LoadInputsAsync(user.UserId, module, ct);
+        var hidden = inputs is null ? null : PermissionResolver.Resolve(module, inputs).HiddenFieldIds;
+        return keys.Where(k => hidden is null || (long.TryParse(k.AsSpan(2), out var id) && hidden.Contains(id))).ToList();
     }
 
     internal static string? Clean(string? comment) => string.IsNullOrWhiteSpace(comment) ? null : comment;

@@ -213,6 +213,29 @@ public class ApprovalActionTests : ApprovalTestBase
     }
 
     [Fact]
+    public async Task Approve_EditableFieldHiddenForApprover_400_NothingWritten()
+    {
+        // 裁決 22（執行期）：流程存好之後欄位才被設成對簽核人隱藏 → 同意帶這個欄位的值回 400，什麼都不寫
+        var r = await BuildPurchase();
+        await SeedFlow(r, "po-e", r.Confirmed, 1, Def(null, Stage("lead", Group(PurchaseLeadGroup), editable: [r.DueDate])));
+        (await SaveWorkflow(r, [Needs(r.Draft, r.Confirmed), Plain(r.Confirmed, r.Partial), Plain(r.Partial, r.Received),
+            Plain(r.Confirmed, r.Cancelled)])).IsSuccess.Should().BeTrue();
+        await GrantEveryone(r.Module);
+        var id = await SubmitAs(r, "buyer1", 5000);
+        As("admin");
+        await HideFor(r.Module, r.DueDate, PurchaseLeadGroup);
+        var po = Inst(id).RecordId;
+        var before = Inst(id).RowVersion;
+
+        var res = await Approve(id, "buyer2", V((r.DueDate, "2026-12-01")));
+        res.Errors[$"f_{r.DueDate}"].Should().Equal(ApprovalMessages.FieldHiddenForApprover);
+        Inst(id).RowVersion.Should().Be(before);
+        Open(id, "buyer2").Status.Should().Be(ApprovalTaskStatus.Open);
+        Rec(po).Values.ContainsKey($"f_{r.DueDate}").Should().BeFalse();
+        Outcome(await Approve(id, "buyer2")).Should().Be(ApprovalOutcomes.Approved);   // 不帶值照常同意
+    }
+
+    [Fact]
     public async Task Approve_ClosedModule_409()
     {
         var r = await Scenario3();

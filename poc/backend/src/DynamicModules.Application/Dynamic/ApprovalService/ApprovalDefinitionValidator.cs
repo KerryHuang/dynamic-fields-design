@@ -44,6 +44,7 @@ public sealed partial class ApprovalDefinitionValidator(
         else if (stages.Select(s => s.Code).Distinct().Count() != stages.Count) Err("stages", ApprovalMessages.StageCodeDuplicate);
 
         var nonEditable = await NonEditableFieldIdsAsync(module, wf, ct);
+        var hidden = await HiddenFieldIdsAsync(module, ct);
         for (var i = 0; i < stages.Count; i++)
         {
             var s = stages[i];
@@ -58,6 +59,7 @@ public sealed partial class ApprovalDefinitionValidator(
             if (s.OnEmpty is not (ApprovalOnEmpty.Fallback or ApprovalOnEmpty.Skip)) Err($"{p}.onEmpty", ApprovalMessages.OnEmptyInvalid);
             if ((s.EditableFields ?? []).Any(id => !fields.TryGetValue(id, out var f) || f.Status != FieldStatus.Active || nonEditable.Contains(id)))
                 Err($"{p}.editableFields", ApprovalMessages.EditableFieldInvalid);
+            else if ((s.EditableFields ?? []).Any(hidden.Contains)) Err($"{p}.editableFields", ApprovalMessages.EditableFieldHidden);
         }
         return errors;
 
@@ -92,6 +94,18 @@ public sealed partial class ApprovalDefinitionValidator(
                     return ApprovalMessages.SourceInvalid;
             }
         }
+    }
+
+    /// <summary>
+    /// 對某些群組看不到的欄位：任何群組設為 Hidden、或限定可見（共用主檔貢獻欄位）。存流程時還不知道最後由誰簽（主管、備援、自選），
+    /// 所以只要有群組看不到就不能當可編輯欄位（裁決 22，fail closed）；執行期另在同意時依簽核人本人的權限再擋一次。
+    /// </summary>
+    private async Task<HashSet<long>> HiddenFieldIdsAsync(Module module, CancellationToken ct)
+    {
+        var ids = (await permissions.LoadModuleRowsAsync(module, ct)).FieldPermissions.Where(p => p.Access == FieldAccess.Hidden)
+            .Select(p => p.FieldId).ToHashSet();
+        ids.UnionWith(module.Blocks.SelectMany(b => b.Fields).Where(f => f.VisibilityRestricted).Select(f => f.Id));
+        return ids;
     }
 
     /// <summary>不能當可編輯欄位的欄位：計算欄位、狀態欄位、轉換追溯欄位、分錄沖銷欄位、lock 帶值的目的欄位。</summary>
