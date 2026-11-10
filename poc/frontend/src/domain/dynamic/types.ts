@@ -325,6 +325,8 @@ export interface AdminUser {
   isDemoAccount: boolean;
   isLocked: boolean;
   groupIds: number[];
+  /** Absent when the user has no department (the server omits nulls). */
+  departmentId?: number | null;
 }
 export interface AdminUserUpdate { displayName: string; groupIds: number[]; isSystemAdmin: boolean }
 export interface AdminUserCreate extends AdminUserUpdate { userId: string; password: string }

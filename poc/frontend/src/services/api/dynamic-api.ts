@@ -7,6 +7,7 @@ import type {
 } from 'src/domain/dynamic/dashboard-types';
 import type { CatalogModule, DrillResult, ModuleCatalog, ReportDateRange, ReportDefinition, ReportDetail, ReportItem, ReportResult, ReportShareTarget } from 'src/domain/dynamic/report-types';
 import type { MeTheme, ThemeChoice, ThemeDefaults } from 'src/domain/theme/theme-model';
+import type { Department, DepartmentInput } from 'src/domain/dynamic/organization';
 import type { CheckDefinition, LedgerBody, LedgerConfig, ModuleCheck, ModuleEvent, RecordEffects, RecordLedger } from 'src/domain/dynamic/events-ledger';
 import { handleAuthFailure, http, toApiError } from './http';
 
@@ -214,6 +215,12 @@ export const dynamicApi = {
   setGroupMembers: (id: number, body: { userIds: string[] }) => http.put(`/admin/groups/${id}/members`, body).then(data),
   getGroupImpact: (id: number) => http.get<GroupImpact>(`/admin/groups/${id}/impact`).then(data),
   deleteGroup: (id: number) => http.delete(`/admin/groups/${id}`).then(data),
+  getDepartments: () => http.get<Department[]>('/departments').then(data),
+  createDepartment: (body: DepartmentInput) => http.post<Department>('/departments', body).then(data),
+  updateDepartment: (id: number, body: DepartmentInput) => http.put<Department>(`/departments/${id}`, body).then(data),
+  deleteDepartment: (id: number) => http.delete(`/departments/${id}`).then(data),
+  setUserDepartment: (userId: string, departmentId: number | null) =>
+    http.put(`/admin/users/${encodeURIComponent(userId)}/department`, { departmentId }).then(data),
   getModulePermissions: (key: string) => http.get<ModulePermissions>(`/modules/${key}/permissions`).then(data),
   saveModulePermissions: (key: string, body: ModulePermissions) =>
     http.put<ModulePermissions>(`/modules/${key}/permissions`, body).then(data),

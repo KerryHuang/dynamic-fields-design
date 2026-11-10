@@ -99,7 +99,7 @@ describe('HomePage', () => {
       (await run({ me: m, menu: [mod('a')] })).w.findAll('[data-testid="home-system-link"]').map((l) => l.attributes('href'));
     expect(await links(me())).toEqual([]);
     expect((await run({ menu: [mod('a')] })).w.find('[data-testid="home-system"]').exists()).toBe(false);
-    expect(await links(me({ admin: true }))).toEqual(['/system/users', '/system/groups', '/system/dashboards', '/system/appearance']);
+    expect(await links(me({ admin: true }))).toEqual(['/system/users', '/system/groups', '/system/organization', '/system/dashboards', '/system/appearance']);
     expect(await links(me({ designerRead: true }))).toEqual(['/system/dynamic-modules', '/system/conversions', '/system/demo-data']);
   });
 

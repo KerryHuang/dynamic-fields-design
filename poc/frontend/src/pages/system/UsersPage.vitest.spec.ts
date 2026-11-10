@@ -9,12 +9,14 @@ import zhTW from 'src/i18n/zh-TW.json';
 import type { AdminUser } from 'src/domain/dynamic/types';
 import { dynamicApi } from 'src/services/api/dynamic-api';
 import { useIdentityStore } from 'src/stores/use-identity-store';
+import DepartmentSelect from 'src/presentation/organization/DepartmentSelect.vue';
+import type { Department } from 'src/domain/dynamic/organization';
 import UsersPage from './UsersPage.vue';
 
 vi.mock('src/services/api/dynamic-api', () => ({
   dynamicApi: {
     getAdminUsers: vi.fn(), createUser: vi.fn(), updateUser: vi.fn(), resetUserPassword: vi.fn(), setUserActive: vi.fn(),
-    getGroups: vi.fn(), getUsers: vi.fn(), getMe: vi.fn(),
+    getGroups: vi.fn(), getUsers: vi.fn(), getMe: vi.fn(), getDepartments: vi.fn(), setUserDepartment: vi.fn(),
   },
 }));
 const api = vi.mocked(dynamicApi);
@@ -22,9 +24,13 @@ const api = vi.mocked(dynamicApi);
 const user = (userId: string, extra: Partial<AdminUser> = {}): AdminUser => ({
   userId, displayName: `名-${userId}`, isActive: true, isSystemAdmin: false, isDemoAccount: false, isLocked: false, groupIds: [], ...extra,
 });
+const dept = (id: number, code: string, name: string, parentId: number | null): Department => ({
+  id, code, name: { 'zh-TW': name }, parentId, managerUserId: null, sortOrder: 0, active: true, memberUserIds: [],
+});
+const DEPARTMENTS = [dept(1, 'exec', '總經理室', null), dept(2, 'sales', '業務部', 1)];
 const USERS = [
   user('admin', { isSystemAdmin: true }),
-  user('sales01', { groupIds: [1] }),
+  user('sales01', { groupIds: [1], departmentId: 2 }),
   user('old01', { isActive: false }),
 ];
 
@@ -39,6 +45,7 @@ async function mountPage(users: AdminUser[] | { status: number } = USERS) {
   api.getGroups.mockResolvedValue([{ id: 1, key: 'sales', name: { 'zh-TW': '業務群組' }, members: [] }]);
   api.getMe.mockResolvedValue({ userId: 'admin', isSystemAdmin: true } as never);
   api.getUsers.mockResolvedValue([]);
+  api.getDepartments.mockResolvedValue(DEPARTMENTS);
   const i18n = createI18n({ legacy: false, locale: 'zh-TW', messages: { 'zh-TW': zhTW } });
   const Host = { render: () => h(quasar.QLayout, null, () => h(quasar.QPageContainer, null, () => h(UsersPage))) };
   queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
@@ -76,6 +83,41 @@ describe('UsersPage', () => {
     expect(text('admin')).toContain(zhTW.users.systemAdmin);
     expect(text('sales01')).toContain('業務群組');
     expect(text('old01')).toContain(zhTW.users.inactive);
+  });
+
+  it('shows the department path column and filters by department', async () => {
+    const w = await mountPage();
+    expect(q('user-row-sales01')!.textContent).toContain('總經理室 / 業務部');
+    const filter = w.findAllComponents(DepartmentSelect).find((c) => c.props('label') === zhTW.users.filterDepartment)!;
+    filter.vm.$emit('update:modelValue', 2);
+    await flushPromises();
+    expect(q('user-row-sales01')).not.toBeNull();
+    expect(q('user-row-admin')).toBeNull();
+    filter.vm.$emit('update:modelValue', null);
+    await flushPromises();
+    expect(q('user-row-admin')).not.toBeNull();
+  });
+
+  it('choosing a department in the edit dialog sends PUT admin/users/{id}/department', async () => {
+    api.updateUser.mockResolvedValue(user('sales01'));
+    api.setUserDepartment.mockResolvedValue(undefined as never);
+    const w = await mountPage();
+    await click('user-edit-sales01');
+    const select = w.findAllComponents(DepartmentSelect).find((c) => c.props('label') === zhTW.users.department)!;
+    expect(select.props('modelValue')).toBe(2);
+    select.vm.$emit('update:modelValue', 1);
+    await flushPromises();
+    await click('user-save');
+    expect(api.setUserDepartment).toHaveBeenCalledWith('sales01', 1);
+  });
+
+  it('saving without changing the department does not call the department endpoint', async () => {
+    api.updateUser.mockResolvedValue(user('sales01'));
+    await mountPage();
+    await click('user-edit-sales01');
+    await click('user-save');
+    expect(api.updateUser).toHaveBeenCalled();
+    expect(api.setUserDepartment).not.toHaveBeenCalled();
   });
 
   it('create sends the exact body', async () => {

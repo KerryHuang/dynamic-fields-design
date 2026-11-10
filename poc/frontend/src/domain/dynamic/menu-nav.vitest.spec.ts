@@ -27,11 +27,15 @@ describe('systemLinks', () => {
     expect(systemLinks(me(false, false))).toEqual([]);
     expect(systemLinks(undefined)).toEqual([]);
   });
-  it('system admins get users, groups, dashboards, appearance; designer readers get designer, conversions and demo data', () => {
-    expect(systemLinks(me(true, false)).map((l) => l.to)).toEqual(['/system/users', '/system/groups', '/system/dashboards', '/system/appearance']);
+  it('system admins get users, groups, organization, dashboards, appearance; designer readers get designer, conversions and demo data', () => {
+    expect(systemLinks(me(true, false)).map((l) => l.to))
+      .toEqual(['/system/users', '/system/groups', '/system/organization', '/system/dashboards', '/system/appearance']);
+    expect(systemLinks(me(true, false)).find((l) => l.to === '/system/organization'))
+      .toEqual({ to: '/system/organization', label: 'menu.organization', icon: 'account_tree', testid: 'organization-menu' });
+    expect(systemLinks(me(false, true)).map((l) => l.testid)).not.toContain('organization-menu');
     expect(systemLinks(me(true, true)).map((l) => l.to)).toContain('/system/apps');
     expect(systemLinks(me(false, true)).map((l) => l.to)).not.toContain('/system/apps');
     expect(systemLinks(me(false, true)).map((l) => l.to)).toEqual(['/system/dynamic-modules', '/system/conversions', '/system/demo-data']);
-    expect(systemLinks(me(true, true))).toHaveLength(8);
+    expect(systemLinks(me(true, true))).toHaveLength(9);
   });
 });

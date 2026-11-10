@@ -3,11 +3,14 @@ import { useQuasar, type QTableColumn } from 'quasar';
 import { computed, ref } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { useAdminUsers, useCreateUser, useResetPassword, useSetUserActive, useUpdateUser } from 'src/application/dynamic/queries/admin-queries';
+import { useDepartments, useSetUserDepartment } from 'src/application/dynamic/queries/organization-queries';
 import { useGroups } from 'src/application/dynamic/queries/permissions-queries';
 import ForbiddenNotice from 'src/components/framework/ForbiddenNotice.vue';
 import { resolveI18n } from 'src/domain/dynamic/i18n-text';
+import { departmentPath } from 'src/domain/dynamic/organization';
 import type { AdminUser } from 'src/domain/dynamic/types';
 import { leftoverMessages, notifyApiError } from 'src/presentation/dynamic/designer/api-error';
+import DepartmentSelect from 'src/presentation/organization/DepartmentSelect.vue';
 import { isForbidden, type ApiError } from 'src/services/api/http';
 import { useIdentityStore } from 'src/stores/use-identity-store';
 
@@ -17,6 +20,11 @@ const $q = useQuasar();
 const identity = useIdentityStore();
 const users = useAdminUsers();
 const groups = useGroups();
+const departments = useDepartments();
+const deptPath = (id: number | null | undefined) => departmentPath(departments.data.value ?? [], id, locale.value);
+const filterDepartment = ref<number | null>(null);
+const rows = computed(() =>
+  (users.data.value ?? []).filter((u) => filterDepartment.value === null || u.departmentId === filterDepartment.value));
 const forbidden = computed(() => isForbidden(users.error.value));
 
 const groupOptions = computed(() => (groups.data.value ?? []).map((g) => ({ value: g.id, label: resolveI18n(g.name, locale.value) })));
@@ -27,6 +35,7 @@ const columns = computed<QTableColumn<AdminUser>[]>(() => [
   { name: 'userId', label: t('users.userId'), align: 'left', field: 'userId' },
   { name: 'displayName', label: t('users.displayName'), align: 'left', field: 'displayName' },
   { name: 'groups', label: t('users.groups'), align: 'left', field: (u) => groupNames(u.groupIds) },
+  { name: 'department', label: t('users.department'), align: 'left', field: (u) => deptPath(u.departmentId) },
   { name: 'status', label: t('users.status'), align: 'left', field: (u) => statusLabel(u) },
   { name: 'admin', label: t('users.systemAdmin'), align: 'left', field: (u) => (u.isSystemAdmin ? t('users.systemAdmin') : '') },
   { name: 'actions', label: '', align: 'right', field: 'userId' },
@@ -41,30 +50,47 @@ const notifyFail = (e: unknown) => notifyApiError((o) => $q.notify(o), e as ApiE
 // 新增／編輯共用一個對話框；編輯時帳號唯讀、不顯示密碼
 const dialog = ref(false);
 const editingId = ref<string | null>(null);
-const form = ref({ userId: '', displayName: '', password: '', groupIds: [] as number[], isSystemAdmin: false });
+const form = ref({ userId: '', displayName: '', password: '', groupIds: [] as number[], isSystemAdmin: false, departmentId: null as number | null });
+/** Department before editing: the department endpoint is only called when it changed. */
+const originalDepartment = ref<number | null>(null);
 const error = ref('');
 const create = useCreateUser();
 const update = useUpdateUser();
-const saving = computed(() => create.isPending.value || update.isPending.value);
+const setDepartment = useSetUserDepartment();
+const saving = computed(() => create.isPending.value || update.isPending.value || setDepartment.isPending.value);
 
 function openCreate() {
   editingId.value = null;
-  form.value = { userId: '', displayName: '', password: '', groupIds: [], isSystemAdmin: false };
+  form.value = { userId: '', displayName: '', password: '', groupIds: [], isSystemAdmin: false, departmentId: null };
+  originalDepartment.value = null;
   error.value = '';
   dialog.value = true;
 }
 function openEdit(u: AdminUser) {
   editingId.value = u.userId;
-  form.value = { userId: u.userId, displayName: u.displayName, password: '', groupIds: [...u.groupIds], isSystemAdmin: u.isSystemAdmin };
+  form.value = {
+    userId: u.userId, displayName: u.displayName, password: '', groupIds: [...u.groupIds], isSystemAdmin: u.isSystemAdmin,
+    departmentId: u.departmentId ?? null,
+  };
+  originalDepartment.value = u.departmentId ?? null;
   error.value = '';
   dialog.value = true;
 }
 function save() {
   error.value = '';
-  const { userId, displayName, password, groupIds, isSystemAdmin } = form.value;
+  const { userId, displayName, password, groupIds, isSystemAdmin, departmentId } = form.value;
+  const showError = (e: unknown) => { error.value = leftoverMessages(e as ApiError, []).join('、') || t('users.saveFailed'); };
+  const done = () => { dialog.value = false; $q.notify({ type: 'positive', message: t('users.saved') }); };
+  // The account is saved first; its department is a separate call, so a department error leaves the dialog open
   const handlers = {
-    onSuccess: () => { dialog.value = false; $q.notify({ type: 'positive', message: t('users.saved') }); },
-    onError: (e: unknown) => { error.value = leftoverMessages(e as ApiError, []).join('、') || t('users.saveFailed'); },
+    onSuccess: () => {
+      if (departmentId === originalDepartment.value) { done(); return; }
+      setDepartment.mutate({ userId, departmentId }, {
+        onSuccess: done,
+        onError: (e) => { if (!editingId.value) editingId.value = userId; showError(e); },
+      });
+    },
+    onError: showError,
   };
   if (editingId.value) update.mutate({ id: editingId.value, body: { displayName, groupIds, isSystemAdmin } }, handlers);
   else create.mutate({ userId, displayName, password, groupIds, isSystemAdmin }, handlers);
@@ -110,8 +136,14 @@ function runSetActive(u: AdminUser, active: boolean) {
         <q-space />
         <q-btn color="primary" icon="add" :label="t('users.create')" data-testid="user-create" @click="openCreate" />
       </div>
+      <div class="row q-mb-md">
+        <DepartmentSelect
+          v-model="filterDepartment" :label="t('users.filterDepartment')" class="col-12 col-sm-6 col-md-4"
+          data-testid="user-filter-department"
+        />
+      </div>
       <q-table
-        flat bordered row-key="userId" :rows="users.data.value ?? []" :columns="columns" :loading="users.isFetching.value"
+        flat bordered row-key="userId" :rows="rows" :columns="columns" :loading="users.isFetching.value"
         :rows-per-page-options="[0]" hide-pagination
       >
         <template #body="{ row, cols }">
@@ -149,6 +181,9 @@ function runSetActive(u: AdminUser, active: boolean) {
                 v-model="form.groupIds" :options="groupOptions" :label="t('users.groups')" multiple use-chips emit-value map-options dense outlined
                 data-testid="user-groups"
               />
+            </div>
+            <div class="col-12 col-sm-6">
+              <DepartmentSelect v-model="form.departmentId" :label="t('users.department')" assignable data-testid="user-department" />
             </div>
             <div class="col-12 col-sm-6 self-center">
               <q-toggle v-model="form.isSystemAdmin" :label="t('users.systemAdmin')" data-testid="user-admin" />
