@@ -13,6 +13,7 @@ import DynamicDetail from 'src/presentation/dynamic/components/DynamicDetail.vue
 import DetailTables from 'src/presentation/dynamic/details/DetailTables.vue';
 import DeleteBlockedDialog from 'src/presentation/dynamic/related/DeleteBlockedDialog.vue';
 import RecordHistory from 'src/presentation/dynamic/history/RecordHistory.vue';
+import RecordTasks from 'src/presentation/dynamic/tasks/RecordTasks.vue';
 import RelatedTabs from 'src/presentation/dynamic/related/RelatedTabs.vue';
 import ForbiddenNotice from 'src/components/framework/ForbiddenNotice.vue';
 import type { DeleteBlocked } from 'src/domain/dynamic/types';
@@ -104,6 +105,7 @@ async function onDelete() {
       <RecordConversions :record-id="recordId" :row-version="recordQuery.data.value.rowVersion" :closed="schemaQuery.data.value.readOnly" />
       <DynamicDetail :schema="schemaQuery.data.value" :record="recordQuery.data.value" />
       <DetailTables v-if="schemaQuery.data.value.details?.length" class="q-mt-md" :details="schemaQuery.data.value.details" :rows="recordQuery.data.value.details ?? {}" />
+      <RecordTasks :record-id="recordId" :closed="!!schemaQuery.data.value.readOnly" />
       <RecordEffects :record-id="recordId" />
       <RelatedTabs :record-id="recordId" />
       <RecordHistory :record-id="recordId" />
