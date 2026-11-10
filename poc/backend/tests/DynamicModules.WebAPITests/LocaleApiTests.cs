@@ -147,7 +147,7 @@ public class LocaleApiTests
         var json = await JsonOf(res);
         json.GetProperty("code").GetString().Should().Be("ledgerFreezeConfirm");
         json.GetProperty("params").GetProperty("count").GetInt32().Should().Be(2);
-        json.GetProperty("message").GetString().Should().StartWith("This module already has 2 records.");
+        json.GetProperty("message").GetString().Should().StartWith("This module already has 2 record(s).");
 
         var zh = await JsonOf(await admin.SendAsync(Req(HttpMethod.Put, $"{Base}/modules/{key}/ledger", body, null)));
         zh.GetProperty("message").GetString().Should()

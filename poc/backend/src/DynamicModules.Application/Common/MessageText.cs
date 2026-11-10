@@ -33,7 +33,7 @@ public static class MessageText
         [Stale] = ("資料已被其他人修改，請重新載入", "This data was changed by someone else. Please reload",
             "ข้อมูลนี้ถูกผู้อื่นแก้ไขแล้ว โปรดโหลดใหม่", "Dữ liệu đã bị người khác sửa, vui lòng tải lại"),
         [LedgerFreezeConfirm] = ("這個模組已有 {0} 筆記錄，設為分錄後它們會立刻變成不可修改、不可刪除，且設定後不能取消；確認請帶 confirmFreeze",
-            "This module already has {0} records. Once it becomes a ledger they can no longer be edited or deleted, and this setting cannot be undone. Send confirmFreeze to confirm",
+            "This module already has {0} record(s). Once it becomes a ledger they can no longer be edited or deleted, and this setting cannot be undone. Send confirmFreeze to confirm",
             "โมดูลนี้มีระเบียนอยู่แล้ว {0} รายการ เมื่อตั้งเป็นบัญชีแยกประเภท ระเบียนเหล่านี้จะแก้ไขหรือลบไม่ได้ทันที และยกเลิกการตั้งค่านี้ไม่ได้ ส่ง confirmFreeze เพื่อยืนยัน",
             "Mô-đun này đã có {0} bản ghi. Khi đặt làm sổ cái, chúng sẽ lập tức không thể sửa hoặc xóa, và không thể hủy thiết lập này. Gửi confirmFreeze để xác nhận"),
         [LoginFailed] = ("帳號或密碼錯誤，或帳號暫時無法登入", "Incorrect user ID or password, or the account cannot sign in right now",
