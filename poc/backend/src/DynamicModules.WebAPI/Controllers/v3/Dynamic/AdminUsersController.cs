@@ -4,6 +4,7 @@ using DynamicModules.Application.Dynamic.AccountService.Commands.ResetPassword;
 using DynamicModules.Application.Dynamic.AccountService.Commands.SetUserActive;
 using DynamicModules.Application.Dynamic.AccountService.Commands.UpdateUser;
 using DynamicModules.Application.Dynamic.AccountService.Queries.AdminListUsers;
+using DynamicModules.Application.Dynamic.OrganizationService;
 using MediatR;
 using Microsoft.AspNetCore.Mvc;
 
@@ -19,6 +20,8 @@ public class AdminUsersController(IMediator mediator) : ControllerBase
     public record UpdateBody(string? DisplayName, List<long>? GroupIds, bool? IsSystemAdmin);
 
     public record ResetBody(string? Password);
+
+    public record DepartmentBody(long? DepartmentId);
 
     [HttpGet]
     public async Task<IActionResult> List() => (await mediator.Send(new AdminListUsersRequest())).ToActionResult(this);
@@ -48,4 +51,9 @@ public class AdminUsersController(IMediator mediator) : ControllerBase
 
     [HttpPost("{id}/activate")]
     public async Task<IActionResult> Activate(string id) => (await mediator.Send(new SetUserActiveRequest(id, true))).ToActionResult(this);
+
+    /// <summary>body 的 departmentId 為 null 代表移除所屬部門。</summary>
+    [HttpPut("{id}/department")]
+    public async Task<IActionResult> SetDepartment(string id, DepartmentBody body) =>
+        (await mediator.Send(new SetUserDepartmentRequest(id, body.DepartmentId))).ToActionResult(this);
 }

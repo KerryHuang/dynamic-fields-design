@@ -111,6 +111,8 @@ public static class DependencyInjection
         services.AddScoped<Dynamic.TaskService.TaskWriter>();
         services.AddScoped<Dynamic.TaskService.ITaskNotifier, Dynamic.NotificationService.TaskNotificationWriter>();
         services.AddScoped<Dynamic.NotificationService.INotificationReminderSource, Dynamic.NotificationService.TaskReminderSource>();
+        services.AddScoped<Dynamic.OrganizationService.OrgSnapshotLoader>();
+        services.AddScoped<Dynamic.OrganizationService.DepartmentValidator>();
         services.AddScoped<Dynamic.TaskService.TaskRecordStage>();
         services.AddScoped<Common.Behaviors.IWriteStage>(sp => sp.GetRequiredService<Dynamic.TaskService.TaskRecordStage>());
         return services;
