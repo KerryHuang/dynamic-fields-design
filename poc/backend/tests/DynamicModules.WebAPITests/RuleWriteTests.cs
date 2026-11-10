@@ -67,6 +67,28 @@ public class RuleWriteTests : IClassFixture<TestApp>
     }
 
     [Fact]
+    public async Task Create_ValidationRuleMessage_FollowsXLocale()
+    {
+        var key = await CreateModule(_admin);
+        var qty = await AddField(_admin, key, "integer");
+        var message = new Dictionary<string, string> { ["zh-TW"] = "數量要大於 5", ["en-US"] = "Quantity must be over 5" };
+        (await _admin.PutAsJsonAsync($"{Base}/modules/{key}/rules", new
+        {
+            rules = new[] { new { kind = "validation", condition = Cond(qty.Id, "gt", 5), targets = new[] { $"field:{qty.Id}" }, message, active = true } }
+        })).EnsureSuccessStatusCode();
+        await Go(key);
+        var title = await TitleKey(_admin, key);
+
+        var req = new HttpRequestMessage(HttpMethod.Post, $"{Base}/modules/{key}/records")
+        {
+            Content = JsonContent.Create(new { values = new Dictionary<string, object> { [title] = "t", [qty.Key] = 1 } })
+        };
+        req.Headers.Add("X-Locale", "en-US");
+        (await ErrorOf(await _sales.SendAsync(req), qty.Key)).Should().Be("Quantity must be over 5");
+        (await ErrorOf(await Post(key, new() { [title] = "t", [qty.Key] = 1 }), qty.Key)).Should().Be("數量要大於 5");
+    }
+
+    [Fact]
     public async Task Create_RuleRequired_Enforced()
     {
         var key = await CreateModule(_admin);

@@ -14,12 +14,12 @@ public class ChangePasswordHandler(
     public async Task<ServiceResult> Handle(ChangePasswordRequest request, CancellationToken ct)
     {
         var user = await accounts.GetTrackedAsync(current.UserId, ct);
-        if (user is null) return ServiceResult.NotFound("使用者不存在");
+        if (user is null) return ServiceResult.NotFound(MessageRef.Of(MessageText.UserNotFound));
 
         if (user.PasswordHash is null || !passwords.Verify(user.PasswordHash, request.OldPassword))
-            return Invalid("oldPassword", "舊密碼錯誤");
+            return ServiceResult.Invalid("oldPassword", MessageRef.Of(MessageText.OldPasswordWrong));
         if (request.NewPassword == request.OldPassword)
-            return Invalid("newPassword", "新密碼不可與舊密碼相同");
+            return ServiceResult.Invalid("newPassword", MessageRef.Of(MessageText.NewPasswordSameAsOld));
 
         user.PasswordHash = passwords.Hash(request.NewPassword);
         user.MustChangePassword = false;
@@ -31,7 +31,4 @@ public class ChangePasswordHandler(
         logger.LogInformation("帳號 {UserId} 已變更密碼", user.UserId);
         return ServiceResult.Success(new AuthUserResponse(user.UserId, user.DisplayName, user.MustChangePassword, user.SecurityStamp));
     }
-
-    private static ServiceResult Invalid(string key, string message) =>
-        ServiceResult.Invalid(new Dictionary<string, string[]> { [key] = [message] });
 }

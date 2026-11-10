@@ -17,7 +17,7 @@ namespace DynamicModules.Application.Dynamic.RecordService;
 public class RecordCreator(
     IModuleRepository modules, IRecordRepository records, INumberSequenceRepository sequences, FieldTypeRegistry registry,
     ICurrentUser user, ISystemIdentity system, IBusinessTime time, ReferenceValidator refs, ReferenceFill fill, WorkflowEnforcer workflow, RollupRecalc rollups, RecordHistoryWriter history,
-    FieldLocks locks)
+    FieldLocks locks, Common.ICurrentLocale locale)
 {
     /// <param name="rollupValues">這次存檔在記憶體算好的彙總值（明細彙總）；沒給的一般參照彙總取空集合的值（第 6 階段 R13）。</param>
     public async Task<(Dictionary<string, JsonElement?> Values, Dictionary<string, string[]> Errors)> ValidateAsync(
@@ -36,7 +36,7 @@ public class RecordCreator(
         if (extraSystemKeys is not null) systemKeys.UnionWith(extraSystemKeys);
         WorkflowEnforcer.SeedInitial(module, filled, systemKeys);
         var result = RecordValueProcessor.Process(
-            module, filled, null, userIds, registry, perms, new RuleContext(time.Today), validRefKeys, allRollups, systemKeys: systemKeys);
+            module, filled, null, userIds, registry, perms, new RuleContext(time.Today, locale.Locale), validRefKeys, allRollups, systemKeys: systemKeys);
         foreach (var (key, messages) in await workflow.CheckAsync(module, null, result.values, ct)) result.errors[key] = messages;
         return result;
     }

@@ -50,7 +50,7 @@ public class ConvertRecordHandler(
         if (access.Permissions is not { } perms) return access.Denied!;
         if (perms.OwnerUserIds is not null && !perms.OwnerUserIds.Contains(record.OwnerUserId))
             return ServiceResult.NotFound(RecordMapper.RecordNotFound);
-        if (request.RowVersion is not null && request.RowVersion != record.RowVersion) return ServiceResult.Conflict(RecordMapper.Stale);
+        if (request.RowVersion is not null && request.RowVersion != record.RowVersion) return ServiceResult.Stale();
 
         var def = conversion.Definition;
         var sourceValues = RecordValueProcessor.Parse(record.ValuesJson);
@@ -73,7 +73,7 @@ public class ConvertRecordHandler(
         }
         catch (DbUpdateConcurrencyException)
         {
-            return ServiceResult.Conflict(RecordMapper.Stale);
+            return ServiceResult.Stale();
         }
 
         var sourceFields = source.Blocks.SelectMany(b => b.Fields).ToDictionary(f => f.Id);

@@ -1,3 +1,4 @@
+using DynamicModules.Application.Common;
 using DynamicModules.Persistence;
 using Microsoft.AspNetCore.Diagnostics;
 
@@ -9,14 +10,12 @@ namespace DynamicModules.WebAPI.Errors;
 /// </summary>
 public class DatabaseBusyExceptionHandler : IExceptionHandler
 {
-    public const string Message = "系統忙碌中，請稍後再試";
-
     public async ValueTask<bool> TryHandleAsync(HttpContext context, Exception exception, CancellationToken ct)
     {
         if (!DatabaseBusy.Is(exception)) return false;
         context.Response.StatusCode = StatusCodes.Status503ServiceUnavailable;
         context.Response.Headers.RetryAfter = "2";
-        await context.Response.WriteAsJsonAsync(new { traceId = context.TraceIdentifier, message = Message }, ct);
+        await context.Response.WriteAsJsonAsync(new { traceId = context.TraceIdentifier, message = MessageText.Get(context.RequestServices.GetService<ICurrentLocale>()?.Locale, MessageText.DatabaseBusy) }, ct);
         return true;
     }
 }

@@ -1,3 +1,5 @@
+using DynamicModules.Application.Common;
+using DynamicModules.Application.Common.Behaviors;
 using DynamicModules.Application.Dynamic.AccountService.Commands.ChangePassword;
 using FluentValidation;
 
@@ -8,6 +10,6 @@ public class ResetPasswordValidator : AbstractValidator<ResetPasswordRequest>
     public ResetPasswordValidator()
     {
         RuleFor(x => x.Password).NotEmpty().MinimumLength(ChangePasswordValidator.MinLength)
-            .WithMessage($"密碼至少 {ChangePasswordValidator.MinLength} 碼");
+            .WithText(MessageText.PasswordTooShort, ChangePasswordValidator.MinLength);
     }
 }

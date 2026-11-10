@@ -5,5 +5,6 @@ namespace DynamicModules.Application.Common;
 /// </summary>
 public class DatabaseBusyException(string message, Exception? inner = null) : Exception(message, inner)
 {
-    public const string DefaultMessage = "系統忙碌中，請稍後再試";
+    /// <summary>例外本身的訊息（記錄用）；回給使用者的文字由 WebAPI 依語系另外解析。</summary>
+    public static readonly string DefaultMessage = MessageText.Get(null, MessageText.DatabaseBusy);
 }

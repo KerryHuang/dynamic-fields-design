@@ -19,7 +19,8 @@ public class UpdateRecordHandler(
     IModuleRepository modules, IRecordRepository records, FieldTypeRegistry registry,
     ICurrentUser user, IBusinessTime time, IDynamicAccessGuard guard, ReferenceValidator refs, ReferenceFill fill, ReferenceResolver resolver,
     DetailWriter details, DetailReader detailReader, RollupRecalc rollups, RecordHistoryWriter history, WorkflowEnforcer workflow,
-    Dynamic.LedgerService.LedgerGate ledgerGate, Dynamic.EventService.EventFactLock factLock, Dynamic.ApprovalService.ApprovalGate approvalGate)
+    Dynamic.LedgerService.LedgerGate ledgerGate, Dynamic.EventService.EventFactLock factLock, Dynamic.ApprovalService.ApprovalGate approvalGate,
+    ICurrentLocale locale)
     : IRequestHandler<UpdateRecordRequest, ServiceResult>
 {
     public async Task<ServiceResult> Handle(UpdateRecordRequest request, CancellationToken ct)
@@ -39,7 +40,7 @@ public class UpdateRecordHandler(
                 request.Details?.Values.Any(rows => rows.Count > 0) == true) is { } approvalBlocked) return approvalBlocked;
         var frozen = await factLock.IsFrozenAsync(record.Id, ct);
         if (frozen && factLock.RejectEdit(module, request.Values.Keys, request.Details?.Values.Any(rows => rows.Count > 0) == true) is { } factLocked) return factLocked;
-        if (record.RowVersion != request.RowVersion) return ServiceResult.Conflict(RecordMapper.Stale);
+        if (record.RowVersion != request.RowVersion) return ServiceResult.Stale();
 
         var userIds = await modules.ListUserIdsAsync(ct);
         var previous = RecordValueProcessor.Parse(record.ValuesJson);
@@ -66,10 +67,10 @@ public class UpdateRecordHandler(
         WorkflowEnforcer.SeedMissingState(module, previous, input, systemKeys);
         var plan = await details.PrepareAsync(module, record, PermissionAction.Edit, request.Details, ct,
             () => Task.FromResult<IReadOnlyDictionary<string, JsonElement?>>(RecordValueProcessor.Process(
-                module, input, previous, userIds, registry, perms, new RuleContext(time.Today), validRefKeys, systemKeys: systemKeys).values));
+                module, input, previous, userIds, registry, perms, new RuleContext(time.Today, locale.Locale), validRefKeys, systemKeys: systemKeys).values));
         if (plan.Failure is { } failure) return failure;
         var (values, errors) = RecordValueProcessor.Process(
-            module, input, previous, userIds, registry, perms, new RuleContext(time.Today), validRefKeys, plan.RollupValues, systemKeys: systemKeys, frozen: frozen);
+            module, input, previous, userIds, registry, perms, new RuleContext(time.Today, locale.Locale), validRefKeys, plan.RollupValues, systemKeys: systemKeys, frozen: frozen);
         foreach (var (key, messages) in plan.Errors) errors[key] = messages;
         if (errors.Count == 0)
             foreach (var (key, messages) in await workflow.CheckAsync(module, previous, values, ct)) errors[key] = messages;

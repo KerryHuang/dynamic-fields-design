@@ -21,7 +21,8 @@ public sealed record GroupOutcome(string? Violation, ServiceResult? Failure, dec
 /// 跨記錄驗證的求值核心（設計 §5.2），寫入後的 CheckStage 與設計器的試跑共用同一份。
 /// 狀態是否符合 where 用記憶體內的條件求值；聚合走 SQL（組鍵與 where 同一套參數化轉換）。
 /// </summary>
-public class CheckEvaluator(IRecordRepository records, IModuleRepository modules, FieldTypeRegistry registry, IBusinessTime time)
+public class CheckEvaluator(IRecordRepository records, IModuleRepository modules, FieldTypeRegistry registry, IBusinessTime time,
+    ICurrentLocale locale)
 {
     public const string NoLimit = "找不到上限";
     public const string Incomplete = "跨記錄驗證的索引不完整，請重新儲存這個檢查以重建索引";
@@ -80,7 +81,7 @@ public class CheckEvaluator(IRecordRepository records, IModuleRepository modules
         if (agg.MissingScaled > 0) return new GroupOutcome(null, ServiceResult.Conflict(Incomplete), 0, null);
 
         var value = sumField is null ? agg.Count : agg.ScaledSum / Pow10(ScaledNumber.ScaleOf(sumField));
-        var message = def.Message.Resolve(Domain.ValueObjects.I18nText.FallbackLocale);
+        var message = def.Message.Resolve(locale.Locale);
         var limit = await LimitAsync(def.Assert.Limit, group.Source, ct);
         if (limit is null) return new GroupOutcome($"{NoLimit}（{message}）", null, value, null);
         if (Holds(def.Assert.Op, value, limit.Value)) return new GroupOutcome(null, null, value, limit);

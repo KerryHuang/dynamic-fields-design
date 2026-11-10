@@ -66,7 +66,8 @@ public class EffectsRuntimeApiTests : IClassFixture<TestApp>
             definition = new
             {
                 groupBy = new[] { item.Id }, function = "sum", fieldId = qty.Id,
-                assert = new { op = "gte", limit = new { @const = 0 } }, message = Name("庫存不足")
+                assert = new { op = "gte", limit = new { @const = 0 } },
+                message = new Dictionary<string, string> { ["zh-TW"] = "庫存不足", ["en-US"] = "Out of stock" }
             }
         });
         check.StatusCode.Should().Be(HttpStatusCode.Created, await check.Content.ReadAsStringAsync());
@@ -158,6 +159,17 @@ public class EffectsRuntimeApiTests : IClassFixture<TestApp>
         (await res.Content.ReadAsStringAsync()).Should().Contain("庫存不足").And.NotContain("-3");
         (await CountAsync(r.Doc)).Should().Be(0);
         (await CountAsync(r.Move)).Should().Be(0);
+    }
+
+    [Fact]
+    public async Task Failed_check_message_follows_XLocale()
+    {
+        var r = await BuildAsync(grantMove: true);
+        var req = NewDoc(r);
+        req.Headers.Add("X-Locale", "en-US");
+        var res = await _admin.SendAsync(req);
+        res.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+        (await res.Content.ReadAsStringAsync()).Should().Contain("Out of stock").And.NotContain("庫存不足");
     }
 
     [Fact]

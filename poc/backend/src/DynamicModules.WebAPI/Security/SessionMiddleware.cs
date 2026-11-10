@@ -1,4 +1,5 @@
 using System.Security.Claims;
+using DynamicModules.Application.Common;
 using DynamicModules.Domain.Data;
 using DynamicModules.Domain.Entities.Dynamic;
 using Microsoft.EntityFrameworkCore;
@@ -14,7 +15,7 @@ public class SessionMiddleware(RequestDelegate next)
     private const string Prefix = "/api/v3/dynamic";
     private const string AuthPrefix = Prefix + "/auth/";
 
-    public async Task InvokeAsync(HttpContext ctx, DynamicDbContext db)
+    public async Task InvokeAsync(HttpContext ctx, DynamicDbContext db, ICurrentLocale locale)
     {
         var path = (ctx.Request.Path.Value ?? "").TrimEnd('/');
         if (!path.StartsWith(Prefix, StringComparison.OrdinalIgnoreCase) || IsAnonymous(ctx.Request.Method, path))
@@ -34,14 +35,14 @@ public class SessionMiddleware(RequestDelegate next)
         {
             if (ctx.User.Identity?.IsAuthenticated == true) await AuthCookies.SignOutAsync(ctx);
             ctx.Response.StatusCode = StatusCodes.Status401Unauthorized;
-            await ctx.Response.WriteAsJsonAsync(new { message = "請先登入" });
+            await ctx.Response.WriteAsJsonAsync(new { message = MessageText.Get(locale.Locale, MessageText.SignInRequired) });
             return;
         }
 
         if (row.MustChangePassword && !IsAllowedWhileMustChange(ctx.Request.Method, path))
         {
             ctx.Response.StatusCode = StatusCodes.Status403Forbidden;
-            await ctx.Response.WriteAsJsonAsync(new { message = "請先變更密碼", code = "passwordChangeRequired" });
+            await ctx.Response.WriteAsJsonAsync(new { message = MessageText.Get(locale.Locale, MessageText.PasswordChangeRequired), code = "passwordChangeRequired" });
             return;
         }
 

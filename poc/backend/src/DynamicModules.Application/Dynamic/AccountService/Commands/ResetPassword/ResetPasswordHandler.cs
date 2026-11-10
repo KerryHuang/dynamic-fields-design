@@ -13,7 +13,7 @@ public class ResetPasswordHandler(
     public async Task<ServiceResult> Handle(ResetPasswordRequest request, CancellationToken ct)
     {
         var user = await accounts.GetTrackedAsync(request.UserId, ct);
-        if (user is null) return ServiceResult.NotFound("使用者不存在");
+        if (user is null) return ServiceResult.NotFound(MessageRef.Of(MessageText.UserNotFound));
 
         user.PasswordHash = passwords.Hash(request.Password);
         user.MustChangePassword = true;

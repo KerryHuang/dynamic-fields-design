@@ -35,7 +35,7 @@ public class DeleteRecordHandler(
         if (await approvalGate.RejectAsync(module, record, RecordValueProcessor.Parse(record.ValuesJson), null, true, ct) is { } approvalBlocked)
             return approvalBlocked;
         if (await factLock.IsFrozenAsync(record.Id, ct)) return ServiceResult.Conflict(Dynamic.EventService.EventFactLock.DeleteMessage);
-        if (record.RowVersion != request.RowVersion) return ServiceResult.Conflict(RecordMapper.Stale);
+        if (record.RowVersion != request.RowVersion) return ServiceResult.Stale();
 
         if (module.Workflow is { } wf && wf.IsLocked(RecordValueProcessor.Parse(record.ValuesJson)))
             return ServiceResult.Conflict(WorkflowService.WorkflowEnforcer.LockedDeleteMessage);

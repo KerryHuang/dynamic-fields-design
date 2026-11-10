@@ -32,7 +32,7 @@ public class SaveLedgerHandler(
         else
         {
             if (count > 0 && !input.ConfirmFreeze)
-                return ServiceResult.Conflict($"這個模組已有 {count} 筆記錄，設為分錄後它們會立刻變成不可修改、不可刪除，且設定後不能取消；確認請帶 confirmFreeze");
+                return ServiceResult.Conflict(MessageRef.Of(MessageText.LedgerFreezeConfirm, count), "ledgerFreezeConfirm", new { count });
             existing = new ModuleLedger { ModuleId = module.Id, Definition = definition };
             existing.StampCreated(user.UserId, time.Now);
             ledgers.Add(existing);

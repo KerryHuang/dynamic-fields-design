@@ -1,6 +1,5 @@
 using System.Net;
 using System.Text.Json;
-using DynamicModules.Application.Dynamic.RecordService.Data;
 using FluentAssertions;
 using MediatR;
 using Microsoft.AspNetCore.Mvc.Testing;
@@ -40,7 +39,8 @@ public class ConcurrencyExceptionTests
 
         res.StatusCode.Should().Be(HttpStatusCode.Conflict);
         using var doc = JsonDocument.Parse(await res.Content.ReadAsStringAsync());
-        doc.RootElement.GetProperty("message").GetString().Should().Be(RecordMapper.Stale);
+        doc.RootElement.GetProperty("message").GetString().Should().Be("資料已被其他人修改，請重新載入");
+        doc.RootElement.GetProperty("code").GetString().Should().Be("stale");
         doc.RootElement.GetProperty("traceId").GetString().Should().NotBeNullOrEmpty();
     }
 }

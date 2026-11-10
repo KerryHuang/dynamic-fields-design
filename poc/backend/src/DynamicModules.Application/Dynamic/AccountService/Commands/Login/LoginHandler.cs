@@ -11,8 +11,6 @@ public class LoginHandler(
     IAccountRepository accounts, IPasswordService passwords, IUnitOfWork uow, TimeProvider time, LoginThrottle throttle, ILogger<LoginHandler> logger)
     : IRequestHandler<LoginRequest, ServiceResult>
 {
-    public const string FailureMessage = "帳號或密碼錯誤，或帳號暫時無法登入";
-
     // 同一帳號的登入序列化：失敗計數是「讀、驗 PBKDF2、寫」，並行猜測會互相覆蓋而超過 5 次。
     // 只在單一站台實例內有效（假設只有一個程序服務這個資料庫；多實例要改用資料庫層的原子更新）。
     private static readonly SemaphoreSlim[] Locks = Enumerable.Range(0, 64).Select(_ => new SemaphoreSlim(1, 1)).ToArray();
@@ -100,6 +98,6 @@ public class LoginHandler(
             passwords.Verify(_dummyHash ??= passwords.Hash("dummy-password-for-timing"), passwordToBurn);
         if (storedUserId is null) logger.LogWarning("登入失敗：{Reason}（帳號不存在，不記錄輸入）", reason);
         else logger.LogWarning("帳號 {UserId} 登入失敗：{Reason}", storedUserId, reason);
-        return ServiceResult.Unauthorized(FailureMessage);
+        return ServiceResult.Unauthorized(MessageRef.Of(MessageText.LoginFailed));
     }
 }

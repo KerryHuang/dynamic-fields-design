@@ -17,9 +17,11 @@ public class ValidationBehavior<TReq, TRes>(IEnumerable<IValidator<TReq>> valida
 
         if (typeof(TRes) != typeof(ServiceResult)) throw new ValidationException(failures);
 
+        // 用 WithText 的規則帶字串表的鍵（依請求語系解析），其餘照舊是字面值
         var errors = failures
             .GroupBy(f => f.PropertyName)
-            .ToDictionary(g => g.Key, g => g.Select(f => f.ErrorMessage).Distinct().ToArray());
+            .ToDictionary(g => g.Key, g => g.DistinctBy(f => f.ErrorMessage)
+                .Select(f => f.CustomState as MessageRef ?? MessageRef.Literal(f.ErrorMessage)).ToArray());
         return (TRes)(object)ServiceResult.Invalid(errors);
     }
 }

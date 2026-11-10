@@ -10,8 +10,8 @@ using DynamicModules.Domain.ValueObjects;
 
 namespace DynamicModules.Application.Dynamic.RecordService;
 
-/// <summary>規則求值需要的環境；today 取自 IBusinessTime。</summary>
-public sealed record RuleContext(DateOnly Today);
+/// <summary>規則求值需要的環境；today 取自 IBusinessTime，locale 是規則訊息要解析的請求語系（ICurrentLocale）。</summary>
+public sealed record RuleContext(DateOnly Today, string Locale = I18nText.FallbackLocale);
 
 /// <summary>把輸入值依欄位型別正規化、套預設值、算公式，再套規則（必填、下拉連動、驗證），並與舊值合併。</summary>
 public static class RecordValueProcessor
@@ -121,7 +121,7 @@ public static class RecordValueProcessor
             {
                 var visible = targetIds.Select(id => fields.FirstOrDefault(f => f.Id == id)).FirstOrDefault(f => f is not null && permissions.CanSee(f) && !outcome.HiddenFieldIds.Contains(f.Id));
                 var key = visible?.Key ?? RecordErrorKey;
-                errors[key] = [.. errors.GetValueOrDefault(key) ?? [], message.Resolve(I18nText.FallbackLocale)];
+                errors[key] = [.. errors.GetValueOrDefault(key) ?? [], message.Resolve(rules.Locale)];
             }
 
         return (values, errors);

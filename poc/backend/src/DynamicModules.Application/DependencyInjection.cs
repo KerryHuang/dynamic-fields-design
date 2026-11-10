@@ -3,6 +3,7 @@ using DynamicModules.Application.Common.Security;
 using DynamicModules.Domain.FieldTypes;
 using FluentValidation;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 
 namespace DynamicModules.Application;
 
@@ -28,6 +29,8 @@ public static class DependencyInjection
         services.AddScoped<Common.IWriteJournal, Common.WriteJournal>();
         services.AddScoped<Common.AfterCommitActions>();
         services.AddScoped<Common.IOperationContext, Common.OperationContext>();
+        // WebAPI 另註冊讀 X-Locale 的實作（後註冊者優先）；沒有請求的環境（Application 測試）用繁中
+        services.TryAddScoped<Common.ICurrentLocale, Common.FallbackCurrentLocale>();
         services.AddScoped<ISystemIdentity, SystemIdentity>();
         services.AddScoped<FieldLocks>();
         services.AddScoped<IDynamicAccessGuard, DynamicAccessGuard>();

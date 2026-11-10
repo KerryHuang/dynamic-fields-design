@@ -1,3 +1,5 @@
+using DynamicModules.Application.Common;
+using DynamicModules.Application.Common.Behaviors;
 using FluentValidation;
 
 namespace DynamicModules.Application.Dynamic.AccountService.Commands.ChangePassword;
@@ -8,7 +10,7 @@ public class ChangePasswordValidator : AbstractValidator<ChangePasswordRequest>
 
     public ChangePasswordValidator()
     {
-        RuleFor(x => x.OldPassword).NotEmpty().WithMessage("請輸入舊密碼");
-        RuleFor(x => x.NewPassword).NotEmpty().MinimumLength(MinLength).WithMessage($"新密碼至少 {MinLength} 碼");
+        RuleFor(x => x.OldPassword).NotEmpty().WithText(MessageText.OldPasswordRequired);
+        RuleFor(x => x.NewPassword).NotEmpty().MinimumLength(MinLength).WithText(MessageText.NewPasswordTooShort, MinLength);
     }
 }

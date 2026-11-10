@@ -1,4 +1,4 @@
-using DynamicModules.Application.Dynamic.RecordService.Data;
+using DynamicModules.Application.Common;
 using Microsoft.AspNetCore.Diagnostics;
 using Microsoft.EntityFrameworkCore;
 
@@ -12,7 +12,7 @@ public class ConcurrencyExceptionHandler : IExceptionHandler
         if (exception is not DbUpdateConcurrencyException) return false;
         context.Response.StatusCode = StatusCodes.Status409Conflict;
         await context.Response.WriteAsJsonAsync(
-            new { traceId = context.TraceIdentifier, message = RecordMapper.Stale }, ct);
+            new { traceId = context.TraceIdentifier, message = MessageText.Get(context.RequestServices.GetService<ICurrentLocale>()?.Locale, MessageText.Stale), code = "stale" }, ct);
         return true;
     }
 }

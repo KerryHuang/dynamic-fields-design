@@ -1,6 +1,5 @@
 using DynamicModules.Application.Common;
 using DynamicModules.Application.Common.Security;
-using DynamicModules.Application.Dynamic.AccountService.Commands.Login;
 using DynamicModules.Application.Dynamic.AccountService.Data;
 using DynamicModules.Domain.Repositories.Dynamic;
 using MediatR;
@@ -17,7 +16,7 @@ public class DemoLoginHandler(AuthSettings settings, IAccountRepository accounts
 {
     public async Task<ServiceResult> Handle(DemoLoginRequest request, CancellationToken ct)
     {
-        if (!settings.DemoLoginEnabled) return ServiceResult.NotFound("找不到資源");
+        if (!settings.DemoLoginEnabled) return ServiceResult.NotFound(MessageRef.Of(MessageText.ResourceNotFound));
 
         var userId = (request.UserId ?? "").Trim().ToLowerInvariant();
         var user = await accounts.GetTrackedAsync(userId, ct);
@@ -26,7 +25,7 @@ public class DemoLoginHandler(AuthSettings settings, IAccountRepository accounts
             // 帳號不存在時不記錄匿名輸入
             if (user is null) logger.LogWarning("一鍵登入失敗：帳號不存在（不記錄輸入）");
             else logger.LogWarning("帳號 {UserId} 一鍵登入失敗", user.UserId);
-            return ServiceResult.Unauthorized(LoginHandler.FailureMessage);
+            return ServiceResult.Unauthorized(MessageRef.Of(MessageText.LoginFailed));
         }
 
         if (user.MustChangePassword)

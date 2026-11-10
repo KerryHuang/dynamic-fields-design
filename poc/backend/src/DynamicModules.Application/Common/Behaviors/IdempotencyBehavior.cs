@@ -37,7 +37,7 @@ public class IdempotencyBehavior<TReq, TRes>(
         if (await operations.GetAsync(user.UserId, key, ct) is { } existing)
         {
             if (existing.RequestHash != hash)
-                return (TRes)(object)ServiceResult.Unprocessable("同一個操作識別碼（Idempotency-Key）已用在不同內容的請求");
+                return (TRes)(object)ServiceResult.Unprocessable(MessageRef.Of(MessageText.IdempotencyKeyReused));
             operation.Replayed = true;
             return (TRes)(object)Replay(existing);
         }
