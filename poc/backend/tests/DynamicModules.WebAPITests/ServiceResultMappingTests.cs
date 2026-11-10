@@ -62,8 +62,22 @@ public class ServiceResultMappingTests
     public void Literal_ThatMatchesTable_IsTranslated_OtherLiteralsAsIs()
     {
         BodyOf(ServiceResult.NotFound("找不到模組").ToActionResult(En)).GetProperty("message").GetString().Should().Be("Module not found");
-        BodyOf(ServiceResult.NotFound("找不到欄位").ToActionResult(En)).GetProperty("message").GetString().Should().Be("找不到欄位");
+        BodyOf(ServiceResult.NotFound("找不到這個東西").ToActionResult(En)).GetProperty("message").GetString().Should().Be("找不到這個東西");
     }
+
+    [Fact]
+    public void Literal_InFieldErrors_IsNeverTranslated()
+    {
+        // 設計者寫的規則訊息剛好等於字串表某句時，不能被系統譯文取代；自動翻譯只留給 message
+        var res = ServiceResult.Invalid(new Dictionary<string, string[]> { ["f_1"] = ["找不到模組"] }).ToActionResult(En)
+            .Should().BeOfType<BadRequestObjectResult>().Subject;
+        using var doc = JsonDocument.Parse(JsonSerializer.Serialize(res.Value));
+        doc.RootElement.GetProperty("errors").GetProperty("f_1")[0].GetString().Should().Be("找不到模組");
+    }
+
+    [Fact]
+    public void NullMessage_IsOmittedFromTheBody() =>
+        BodyOf(ServiceResult.NotFound(null).ToActionResult(En)).TryGetProperty("message", out _).Should().BeFalse();
 
     [Fact]
     public void Mapping_Invalid_Returns400WithTraceIdAndErrors()

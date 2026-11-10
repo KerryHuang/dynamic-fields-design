@@ -29,7 +29,8 @@ public static class ServiceResultExtensions
     /// <summary>{ message, code?, params?, ...data }：409 的 data 公開屬性以 camelCase 鍵展開，值交給 MVC 的 JSON 設定序列化。</summary>
     private static Dictionary<string, object?> Body(ServiceResult r, string? locale)
     {
-        var body = new Dictionary<string, object?> { ["message"] = r.MessageIn(locale) };
+        var body = new Dictionary<string, object?>();
+        if (r.MessageIn(locale) is { } message) body["message"] = message;   // 訊息為 null 時不輸出 message 鍵（與改成字典之前的回應形狀相同）
         if (r.Code is not null) body["code"] = r.Code;
         if (r.Params is not null) body["params"] = r.Params;
         if (r.IsConflict && r.Data is { } data)

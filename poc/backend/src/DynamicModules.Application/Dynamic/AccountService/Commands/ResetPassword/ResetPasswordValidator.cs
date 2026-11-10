@@ -9,7 +9,7 @@ public class ResetPasswordValidator : AbstractValidator<ResetPasswordRequest>
 {
     public ResetPasswordValidator()
     {
-        RuleFor(x => x.Password).NotEmpty().MinimumLength(ChangePasswordValidator.MinLength)
-            .WithText(MessageText.PasswordTooShort, ChangePasswordValidator.MinLength);
+        RuleFor(x => x.Password).NotEmpty().WithText(MessageText.PasswordTooShort, ChangePasswordValidator.MinLength)
+            .MinimumLength(ChangePasswordValidator.MinLength).WithText(MessageText.PasswordTooShort, ChangePasswordValidator.MinLength);
     }
 }

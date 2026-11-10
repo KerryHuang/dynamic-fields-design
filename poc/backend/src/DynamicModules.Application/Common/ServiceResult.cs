@@ -31,7 +31,7 @@ public sealed class ServiceResult
     /// <summary>驗證失敗（400）：沒有其他狀態旗標，但帶有欄位錯誤。</summary>
     public bool IsInvalid => ErrorRefs.Count > 0;
 
-    public string? MessageIn(string? locale) => MessageSource?.Resolve(locale);
+    public string? MessageIn(string? locale) => MessageSource?.Resolve(locale, translateLiteral: true);
 
     public IReadOnlyDictionary<string, string[]> ErrorsIn(string? locale) =>
         ErrorRefs.ToDictionary(kv => kv.Key, kv => kv.Value.Select(m => m.Resolve(locale)).ToArray());

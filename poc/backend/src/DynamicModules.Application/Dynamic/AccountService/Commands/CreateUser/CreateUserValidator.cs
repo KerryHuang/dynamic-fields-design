@@ -15,7 +15,7 @@ public class CreateUserValidator : AbstractValidator<CreateUserRequest>
         RuleFor(x => x.UserId).Must(id => id is not null && IdPattern.IsMatch(id.ToLowerInvariant()))
             .WithText(MessageText.UserIdFormat);
         RuleFor(x => x.DisplayName).NotEmpty().WithText(MessageText.DisplayNameRequired).MaximumLength(100).WithText(MessageText.DisplayNameTooLong, 100);
-        RuleFor(x => x.Password).NotEmpty().MinimumLength(ChangePasswordValidator.MinLength)
-            .WithText(MessageText.PasswordTooShort, ChangePasswordValidator.MinLength);
+        RuleFor(x => x.Password).NotEmpty().WithText(MessageText.PasswordTooShort, ChangePasswordValidator.MinLength)
+            .MinimumLength(ChangePasswordValidator.MinLength).WithText(MessageText.PasswordTooShort, ChangePasswordValidator.MinLength);
     }
 }
