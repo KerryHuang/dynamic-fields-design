@@ -13,6 +13,7 @@ export const routes: RouteRecordRaw[] = [
       { path: 'dynamic/:moduleKey/new', component: () => import('src/pages/dynamic/FormPage.vue') },
       { path: 'dynamic/:moduleKey/:id(\\d+)', component: () => import('src/pages/dynamic/DetailPage.vue') },
       { path: 'dynamic/:moduleKey/:id(\\d+)/edit', component: () => import('src/pages/dynamic/FormPage.vue') },
+      { path: 'tasks', component: () => import('src/pages/tasks/MyTasksPage.vue') },
       { path: 'reports', component: () => import('src/pages/reports/ReportListPage.vue') },
       { path: 'reports/new', component: () => import('src/pages/reports/ReportDesignerPage.vue') },
       { path: 'reports/:id(\\d+)', component: () => import('src/pages/reports/ReportViewPage.vue') },

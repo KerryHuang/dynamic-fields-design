@@ -2,7 +2,7 @@
 import { computed, ref } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { useRecordTasks, useUpdateTask } from 'src/application/dynamic/queries/tasks-queries';
-import type { TaskSummary } from 'src/domain/dynamic/task-types';
+import { taskStatusColor, type TaskSummary } from 'src/domain/dynamic/task-types';
 import TaskDialog from './TaskDialog.vue';
 import TaskFormDialog from './TaskFormDialog.vue';
 
@@ -43,7 +43,7 @@ const toggle = (task: TaskSummary, done: boolean) =>
           <q-item-label caption class="row items-center q-gutter-x-sm">
             <span :data-testid="`task-assignee-${task.id}`">{{ task.assigneeName ?? (task.assigneeUserId ? task.assigneeUserId : t('tasks.unassigned')) }}</span>
             <span v-if="task.dueDate" :class="{ 'text-negative': task.overdue }" :data-testid="`task-due-${task.id}`">{{ task.dueDate }}</span>
-            <q-badge outline :color="task.status === 'done' ? 'positive' : task.status === 'cancelled' ? 'grey' : 'primary'" :label="t(`tasks.status.${task.status}`)" />
+            <q-badge outline :color="taskStatusColor(task.status)" :label="t(`tasks.status.${task.status}`)" />
           </q-item-label>
         </q-item-section>
       </q-item>

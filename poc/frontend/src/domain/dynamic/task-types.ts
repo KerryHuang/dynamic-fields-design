@@ -107,3 +107,6 @@ export interface TaskCounts {
   dueToday: number;
   overdue: number;
 }
+
+/** Quasar brand color for a status badge. */
+export const taskStatusColor = (s: TaskStatus): string => (s === 'done' ? 'positive' : s === 'cancelled' ? 'muted' : 'primary');

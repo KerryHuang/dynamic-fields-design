@@ -28,3 +28,9 @@ describe('conversions route', () => {
     expect(loaderOf('/system/conversions').source).toContain('ConversionsPage');
   });
 });
+
+describe('tasks route', () => {
+  it('/tasks opens MyTasksPage', () => {
+    expect(loaderOf('/tasks').source).toContain('MyTasksPage');
+  });
+});
