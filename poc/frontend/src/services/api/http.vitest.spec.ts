@@ -1,5 +1,6 @@
 import { createPinia, setActivePinia } from 'pinia';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { i18n } from 'src/boot/i18n';
 import { http, setAuthHandlers, toApiError } from './http';
 
 describe('http', () => {
@@ -74,7 +75,7 @@ describe('http', () => {
     expect(toApiError({ response: { status: 409, data: { message: 'conflict' } } }))
       .toEqual({ status: 409, message: 'conflict' });
     expect(toApiError({ response: { status: 404, data: {} } })).toEqual({ status: 404, message: undefined });
-    expect(toApiError({ message: 'Network Error' })).toEqual({ status: 0, message: 'Network Error' });
+    expect(toApiError({ message: 'Network Error' })).toEqual({ status: 0, message: '網路連線失敗，請檢查網路後再試' });
   });
 
   it('uses ProblemDetails title as the message for 500 and error-less 400', () => {
@@ -82,5 +83,16 @@ describe('http', () => {
       .toEqual({ status: 500, message: 'An error occurred' });
     expect(toApiError({ response: { status: 400, data: { title: 'Bad body' } } }))
       .toEqual({ status: 400, errors: undefined, message: 'Bad body' });
+  });
+});
+
+describe('toApiError 網路失敗', () => {
+  afterEach(() => { i18n.global.locale.value = 'zh-TW'; });
+
+  it('status 0 不顯示 axios 英文訊息，改用語系檔', () => {
+    const e = { message: 'Network Error' };
+    expect(toApiError(e)).toEqual({ status: 0, message: '網路連線失敗，請檢查網路後再試' });
+    i18n.global.locale.value = 'en-US';
+    expect(toApiError(e)).toEqual({ status: 0, message: 'Network error. Check your connection and try again.' });
   });
 });

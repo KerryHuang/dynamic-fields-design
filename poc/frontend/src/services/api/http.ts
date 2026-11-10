@@ -1,4 +1,5 @@
 import axios, { AxiosError } from 'axios';
+import { currentLocale, tFor } from 'src/i18n/translate';
 import type { BlockingOption, BlockingRef, DeleteCheck } from 'src/domain/dynamic/types';
 
 export interface ApiError {
@@ -30,7 +31,7 @@ export const setAuthHandlers = (h: AuthHandlers) => { authHandlers = h; };
 
 export function toApiError(e: unknown): ApiError {
   const err = e as AxiosError<{ errors?: Record<string, string[]>; message?: string; code?: string; title?: string; references?: BlockingRef[]; total?: number; blockingOptions?: BlockingOption[] } & Partial<DeleteCheck>>;
-  if (!err?.response) return { status: 0, message: err?.message };
+  if (!err?.response) return { status: 0, message: tFor(currentLocale())('common.networkError') };
   const { status, data } = err.response;
   if (status === 400) return { status, errors: data?.errors, message: data?.title };
   const base = { status, message: data?.message ?? data?.title, ...(data?.code ? { code: data.code } : {}) };
