@@ -129,8 +129,9 @@ public class DemoGenerationSharedTests(DemoGeneratedFixture fx)
     {
         fx.Generated();
         var db = fx.Host.Db.Context;
+        // MES 的模組加上它用的共用主檔往來對象（MES 的客戶與它貢獻的欄位在那裡，s2d-1f）
         var mesKeys = fx.Host.Services.GetRequiredService<AppCatalog>().BuiltIns.Single(p => p.Manifest.Id == DemoCatalog.MesAppId)
-            .Modules.Select(m => m.Key).ToList();
+            .Modules.Select(m => m.Key).Append("master-partner").ToList();
         var moduleIds = await db.Set<Module>().AsNoTracking().Where(m => mesKeys.Contains(m.Key)).Select(m => m.Id).ToListAsync();
         moduleIds.Should().HaveCount(mesKeys.Count);
         var fields = await db.Set<Field>().AsNoTracking()

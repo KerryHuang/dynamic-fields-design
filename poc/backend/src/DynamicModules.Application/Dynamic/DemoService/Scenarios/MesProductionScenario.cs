@@ -54,7 +54,7 @@ public sealed class MesProductionScenario : IDemoScenario
             var item = Items[i % Items.Length];
             var qty = rnd.Next(2, 13) * 10;
             var opCount = rnd.Next(4, 7);
-            var customer = (string)order.Facts["customer"]!;
+            var customer = (DemoRecord)order.Facts["customer"]!;
             var label = $"工令第 {i + 1} 張";
 
             var createdAt = plan.At(order.Date.AddDays(1 + rnd.Next(2)));
@@ -181,13 +181,13 @@ public sealed class MesProductionScenario : IDemoScenario
     /// 出貨單。進銷存同時開啟時，「出貨扣庫存」整合要求每張出貨單帶庫存品項與倉庫：一律從進銷存情境建立的「成品模仁」「成品倉」扣
     /// （期初每品每倉 500，所有工令的出貨量加起來遠小於此）。進銷存情境排在本情境之前，所以這兩筆記錄的 Id 執行時已回填。
     /// </summary>
-    private static DemoRecord CreateShipment(DemoPlan plan, DemoRecord wo, string customer, DateOnly date, int qty, string carrier, DateTime at, string label)
+    private static DemoRecord CreateShipment(DemoPlan plan, DemoRecord wo, DemoRecord customer, DateOnly date, int qty, string carrier, DateTime at, string label)
     {
         var stockItem = plan.Records["inv-item"][FinishedItem];
         var stockWarehouse = plan.Records["inv-warehouse"][FinishedWarehouse];
         return plan.Create("mes-shipment", at, Planner, label, ctx => new CreateRecordRequest(
             ctx.Ids.ModuleKeys["shipment"],
-            ctx.Values("shipment", ("workOrder", wo.Id), ("customer", customer), ("shipDate", Iso(date)), ("qty", qty), ("carrier", carrier),
+            ctx.Values("shipment", ("workOrder", wo.Id), ("customer", customer.Id), ("shipDate", Iso(date)), ("qty", qty), ("carrier", carrier),
                 ("stockItem", stockItem.Id), ("stockWarehouse", stockWarehouse.Id), ("status", ctx.Opt("shipment", "draft")))));
     }
 

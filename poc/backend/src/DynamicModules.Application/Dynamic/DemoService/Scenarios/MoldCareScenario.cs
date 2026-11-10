@@ -6,7 +6,8 @@ using DynamicModules.Application.Dynamic.RecordService.Commands.UpdateRecord;
 namespace DynamicModules.Application.Dynamic.DemoService.Scenarios;
 
 /// <summary>
-/// 今天前 180 天：maint01 在 MES 的模具資料建 12 支模具、manager01 建 8 家客戶的擴充資料。
+/// 今天前 180 天：maint01 在 MES 的模具資料建 12 支模具；manager01 替 MES 的 8 家客戶（<see cref="MasterScenario"/> 建在共用主檔往來對象）
+/// 補上 MES 貢獻的信用等級與網站。
 /// 之後每支模具每隔一個保養週期一筆保養紀錄（含更換零件），每筆保養後 maint01 更新模具的上次保養日與累計射出數。
 /// 規劃順序排在報修之前：報修要參照這裡建的模具記錄。
 /// </summary>
@@ -45,29 +46,21 @@ public sealed class MoldCareScenario : IDemoScenario
 
     private static readonly string[] Notes = ["分模面有輕微積碳，已清除", "水路流量偏低，下次保養複查", "頂出順暢，無異音"];
 
-    private static readonly string[] PaymentTerms = ["月結 30 天", "月結 60 天", "貨到付款", "月結 90 天"];
-
     public void Plan(DemoPlan plan)
     {
         var today = plan.Today;
         var rnd = plan.Random;
         var start = today.AddDays(-HistoryDays);
 
-        for (var c = 1; c <= 8; c++)
+        // ---- MES 的客戶：往來對象本身由共用主檔情境建立，這裡只補 MES 自己的欄位 ----
+        var customers = MasterScenario.ForApp(plan, DemoCatalog.MesAppId);
+        for (var c = 0; c < customers.Count; c++)
         {
-            var code = $"C-{c:000}";
-            var credit = new[] { "a", "b", "c" }[(c - 1) % 3];
-            var rep = c % 2 == 1 ? "sales01" : "sales02";
-            var terms = PaymentTerms[rnd.Next(PaymentTerms.Length)];
-            var phone = $"04-23{rnd.Next(10, 100)}-{rnd.Next(1000, 10000)}";
-            var email = $"purchase@c{c:000}.example.com";
-            var site = $"https://c{c:000}.example.com";
-            plan.Create("customer", plan.At(start), Manager, $"客戶資料 {code} 建立", ctx => new CreateRecordRequest(
-                ctx.Ids.ModuleKeys["customer"],
-                ctx.Values("customer",
-                    ("creditLevel", ctx.Opt("customer", credit)), ("paymentTerms", terms), ("accountRep", rep),
-                    ("email", email), ("phone", phone), ("website", site)),
-                HostKey: code));
+            var credit = new[] { "a", "b", "c" }[c % 3];
+            var site = $"https://c{c + 1:000}.example.com";
+            plan.Update(customers[c], plan.At(today.AddDays(-87 + c)), Manager, $"客戶 {customers[c].Facts["name"]} 設定信用等級與網站", (ctx, r) =>
+                new UpdateRecordRequest(r.Id, ctx.Values(MasterScenario.PartnerSymbol,
+                    ("creditLevel", ctx.Opt(MasterScenario.PartnerSymbol, credit)), ("website", site)), r.RowVersion));
         }
 
         for (var m = 0; m < Deltas.Length; m++)

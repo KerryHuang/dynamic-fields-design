@@ -17,11 +17,11 @@ public static class DemoReports
         new("近 90 天訂單狀態分布", ["sales-manager", "sales"], ids => Def(ids, "order", "bar",
             groups: [Group(Main(ids, "order.status"))],
             measures: [Count()], primary: Main(ids, "order.orderDate"), range: Last(90))),
-        // 用到金額，現場人員沒有金額權限，開啟時看到無權限。合併訂單明細，依客戶（帶出參照欄位的標題）分組；明細欄位供下鑽
+        // 用到金額，現場人員沒有金額權限，開啟時看到無權限。合併訂單明細，依客戶（經參照欄位帶出往來對象的名稱）分組；明細欄位供下鑽
         new("近 90 天各客戶訂單金額", ["sales-manager", "floor"], ids => Def(ids, "order", "table",
             child: new ReportChild(ids.ModuleKeys["line"], ids.FieldIds["line.order"]),
             columns: [Child(ids, "line.itemName"), Child(ids, "line.qty")],
-            groups: [Group(new ReportFieldRef("main", 0, ids.FieldIds["order.customer"]))],
+            groups: [Group(new ReportFieldRef("main", ids.FieldIds["partner/partner.name"], ids.FieldIds["order.customer"]))],
             measures: [Count(), Sum("amount", Child(ids, "line.amount"))],
             primary: Main(ids, "order.orderDate"), range: Last(90))),
 
@@ -58,7 +58,7 @@ public static class DemoReports
             groups: [Group(Main(ids, "order.orderDate"), "month")],
             measures: [Count()], primary: Main(ids, "order.orderDate"), range: new ReportDateRange("lastMonths", 6))),
         new("近 90 天各客戶訂單筆數", ["sales-manager", "sales"], ids => Def(ids, "order", "bar",
-            groups: [Group(new ReportFieldRef("main", 0, ids.FieldIds["order.customer"]))],
+            groups: [Group(new ReportFieldRef("main", ids.FieldIds["partner/partner.name"], ids.FieldIds["order.customer"]))],
             measures: [Count()], primary: Main(ids, "order.orderDate"), range: Last(90))),
         new("報修筆數", ["maint", "floor"], ids => Def(ids, "repair", "indicator",
             groups: [], measures: [Count()], primary: Main(ids, "repair.reportDate"), range: null)),

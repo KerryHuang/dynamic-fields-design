@@ -42,12 +42,13 @@ public sealed class OrderScenario : IDemoScenario
         var overdue = Enumerable.Range(0, Count).Where(i => statuses[i] == "shipping").Take(2)
             .Concat(Enumerable.Range(0, Count).Where(i => statuses[i] == "confirmed").Take(2)).ToHashSet();
 
+        var customers = MasterScenario.ForApp(plan, DemoCatalog.MesAppId);
         for (var i = 0; i < Count; i++)
         {
             var date = dates[i];
             var status = statuses[i];
             var creator = i % 2 == 0 ? "sales01" : "sales02";
-            var customer = $"C-{rnd.Next(1, 9):000}";
+            var customer = customers[rnd.Next(1, 9) - 1];
             var due = overdue.Contains(i) ? date.AddDays(7) : date.AddDays(rnd.Next(7, 46));
             var lines = Enumerable.Range(0, rnd.Next(1, 7)).Select(_ =>
             {
@@ -60,7 +61,7 @@ public sealed class OrderScenario : IDemoScenario
             var order = plan.Create("order", createdAt, creator, $"{label} 建立", ctx => new CreateRecordRequest(
                 ctx.Ids.ModuleKeys["order"],
                 ctx.Values("order",
-                    ("customer", customer), ("orderDate", Iso(date)), ("dueDate", Iso(due)),
+                    ("customer", customer.Id), ("orderDate", Iso(date)), ("dueDate", Iso(due)),
                     ("status", ctx.Opt("order", "draft")), ("salesRep", creator)),
                 Details: new() { [ctx.Ids.ModuleKeys["line"]] = lines.Select(l => new DetailRowInput(null, ctx.Values("line",
                     ("itemNo", l.ItemNo), ("itemName", l.ItemName), ("qty", (decimal)l.Qty),

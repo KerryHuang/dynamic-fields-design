@@ -46,4 +46,24 @@ internal static class ApiTestKit
 
     public static async Task Activate(HttpClient c, string moduleKey) =>
         (await c.PostAsync($"{Base}/modules/{moduleKey}/activate", null)).EnsureSuccessStatusCode();
+
+    /// <summary>
+    /// 在內建共用主檔往來對象（模組鍵 master-partner）建一筆記錄，回傳 id。角色用畫面上的名稱（客戶、供應商、客戶與供應商）；
+    /// 內建 MES、進銷存、CRM 的單據都用它當客戶或供應商。
+    /// </summary>
+    public static async Task<long> PartnerAsync(HttpClient c, string name, string role = "客戶")
+    {
+        var module = await JsonOf(await c.GetAsync($"{Base}/modules/{BuiltInMasterTests.Partner}"));
+        var fields = module.GetProperty("blocks").EnumerateArray().SelectMany(b => b.GetProperty("fields").EnumerateArray()).ToList();
+        JsonElement Field(string label) => fields.Single(f => f.GetProperty("label").GetProperty("zh-TW").GetString() == label);
+        var roleValue = Field("角色").GetProperty("options").EnumerateArray()
+            .Single(o => o.GetProperty("label").GetProperty("zh-TW").GetString() == role).GetProperty("value").GetString()!;
+        var res = await c.PostAsJsonAsync($"{Base}/modules/{BuiltInMasterTests.Partner}/records", new
+        {
+            values = new Dictionary<string, object> { [Field("名稱").GetProperty("key").GetString()!] = name, [Field("角色").GetProperty("key").GetString()!] = roleValue }
+        });
+        if (!res.IsSuccessStatusCode)
+            throw new HttpRequestException($"建立往來對象失敗 {(int)res.StatusCode}：{await res.Content.ReadAsStringAsync()}");
+        return (await JsonOf(res)).GetProperty("id").GetInt64();
+    }
 }

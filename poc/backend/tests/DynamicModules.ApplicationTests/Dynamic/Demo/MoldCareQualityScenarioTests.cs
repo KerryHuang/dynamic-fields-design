@@ -26,7 +26,7 @@ public class MoldCareQualityScenarioTests(DemoGeneratedFixture fx)
         (ModuleSchemaResponse)(await fx.As(userId, new GetModuleSchemaRequest(module))).Data!;
 
     [Fact]
-    public async Task Molds_12_CustomerInfo_8()
+    public async Task Molds_12_MesCustomers_8()
     {
         fx.Generated();
 
@@ -35,24 +35,34 @@ public class MoldCareQualityScenarioTests(DemoGeneratedFixture fx)
         var molds = await fx.Records("mes-mold");
         molds.Select(r => DemoGeneratedFixture.Text(r, no)).Should().BeEquivalentTo(Enumerable.Range(1, 12).Select(i => $"M-{i:0000}"));
         molds.Should().OnlyContain(r => r.HostKey == null);
-        var customers = await fx.Records("mes-customer-info");
-        customers.Select(r => r.HostKey).Should().BeEquivalentTo(Enumerable.Range(1, 8).Select(i => $"C-{i:000}"));
-        var credit = await fx.Key("mes-customer-info", "信用等級");
+
+        // MES 的客戶是共用主檔往來對象（s2d-1f），信用等級與網站是 MES 貢獻的欄位
+        const string partner = "master-partner";
+        var credit = await fx.Key(partner, "信用等級");
+        var site = await fx.Key(partner, "網站");
+        var customers = (await fx.Records(partner)).Where(p => DemoGeneratedFixture.Text(p, credit) is not null).ToList();
+        customers.Should().HaveCount(8);
         customers.Select(c => DemoGeneratedFixture.Text(c, credit)).Distinct().Should().HaveCount(3);
-        var email = await fx.Key("mes-customer-info", "聯絡 Email");
-        customers.Should().OnlyContain(c => DemoGeneratedFixture.Text(c, email)!.EndsWith(".example.com"));
+        customers.Select(c => DemoGeneratedFixture.Text(c, site)).Should().OnlyHaveUniqueItems().And.OnlyContain(s => s!.EndsWith(".example.com"));
+        var name = await fx.Key(partner, "名稱");
+        customers.Select(c => DemoGeneratedFixture.Text(c, name)).Should().Contain(["嵐岳精密", "禾晟電機"], "沿用原本的虛構名稱");
     }
 
     [Fact]
-    public async Task CustomerInfo_EmailPerCustomer_Distinct()
+    public async Task MesDocuments_ReferToTheMesCustomers()
     {
         fx.Generated();
 
-        var customers = await fx.Records("mes-customer-info");
-        var email = await fx.Key("mes-customer-info", "聯絡 Email");
-        var emails = customers.Select(c => DemoGeneratedFixture.Text(c, email)).ToList();
-        emails.Should().OnlyHaveUniqueItems().And.HaveCount(8);
-        DemoGeneratedFixture.Text(customers.Single(c => c.HostKey == "C-001"), email).Should().Be("purchase@c001.example.com");
+        const string partner = "master-partner";
+        var credit = await fx.Key(partner, "信用等級");
+        var mesCustomers = (await fx.Records(partner)).Where(p => DemoGeneratedFixture.Text(p, credit) is not null).Select(p => p.Id).ToHashSet();
+        foreach (var module in new[] { "mes-quote", "mes-order", "mes-shipment" })
+        {
+            var customer = await fx.Key(module, "客戶");
+            var records = await fx.Records(module);
+            records.Should().NotBeEmpty(module);
+            records.Should().OnlyContain(r => mesCustomers.Contains(Id(r, customer) ?? 0), module);
+        }
     }
 
     [Fact]

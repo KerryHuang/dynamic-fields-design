@@ -16,6 +16,7 @@ public class MesFlowTests : IDisposable
     private readonly TestApp _app = new(fileDatabase: true);
     private readonly HttpClient _admin;
     private JsonElement _opened;
+    private long _customer;
     private readonly Dictionary<string, (Dictionary<string, string> Keys, Dictionary<string, string> Options)> _layouts = new();
 
     public MesFlowTests() => _admin = _app.AsUser();
@@ -36,6 +37,7 @@ public class MesFlowTests : IDisposable
         var res = await _admin.PostAsJsonAsync($"{Apps}/packages/mes-mold/open", new { groupMap = map });
         res.StatusCode.Should().Be(HttpStatusCode.Created, await res.Content.ReadAsStringAsync());
         _opened = await JsonOf(res);
+        _customer = await PartnerAsync(_admin, "宏達科技");
     }
 
     private string Key(string code) =>
@@ -82,12 +84,12 @@ public class MesFlowTests : IDisposable
         return await JsonOf(res);
     }
 
-    /// <summary>已核准的報價單：單一品項「導柱」數量 10、單價 100，客戶 C-001。</summary>
+    /// <summary>已核准的報價單：單一品項「導柱」數量 10、單價 100，客戶是往來對象「宏達科技」。</summary>
     private async Task<(JsonElement Quote, long LineId)> ApprovedQuote(HttpClient sales, HttpClient manager)
     {
         var (q, _) = await Layout("quote");
         var (l, _) = await Layout("quote-line");
-        var created = await Create(sales, "quote", new() { [q["客戶"]] = "C-001", [q["負責業務"]] = "sales01" },
+        var created = await Create(sales, "quote", new() { [q["客戶"]] = _customer, [q["負責業務"]] = "sales01" },
             new Dictionary<string, object[]>
             {
                 [Key("quote-line")] = [new { values = new Dictionary<string, object?> { [l["品號"]] = "GP-01", [l["品名"]] = "導柱", [l["數量"]] = 10, [l["單位"]] = "pcs", [l["單價"]] = 100 } }]
@@ -112,7 +114,7 @@ public class MesFlowTests : IDisposable
         first.StatusCode.Should().Be(HttpStatusCode.Created, await first.Content.ReadAsStringAsync());
         var order = await JsonOf(first);
         var (o, _) = await Layout("order");
-        order.GetProperty("values").GetProperty(o["客戶"]).GetString().Should().Be("C-001");
+        order.GetProperty("values").GetProperty(o["客戶"]).GetInt64().Should().Be(_customer);
         order.GetProperty("values").GetProperty(o["來源報價單"]).GetInt64().Should().Be(Id(quote));
         var row = (await JsonOf(await _admin.GetAsync($"{Base}/records/{Id(order)}"))).GetProperty("details").GetProperty(Key("line"))[0].GetProperty("values");
         var (ol, _) = await Layout("line");
@@ -146,7 +148,7 @@ public class MesFlowTests : IDisposable
         await OpenMes();
         var manager = _app.AsUser("manager01"); var planner = _app.AsUser("planner01");
         var (o, _) = await Layout("order"); var (w, _) = await Layout("workorder");
-        var order = await Create(manager, "order", new() { [o["客戶"]] = "C-001", [o["交期"]] = "2026-12-20" });
+        var order = await Create(manager, "order", new() { [o["客戶"]] = _customer, [o["交期"]] = "2026-12-20" });
 
         var wo = await Create(planner, "workorder", new() { [w["品名"]] = "導柱", [w["工令數量"]] = 5, [w["訂單"]] = Id(order) });
         wo.GetProperty("values").GetProperty(w["交期"]).GetString().Should().Be("2026-12-20");
@@ -181,7 +183,7 @@ public class MesFlowTests : IDisposable
         await OpenMes();
         var manager = _app.AsUser("manager01"); var planner = _app.AsUser("planner01");
         var (o, _) = await Layout("order");
-        var order = await Create(manager, "order", new() { [o["客戶"]] = "C-001" });
+        var order = await Create(manager, "order", new() { [o["客戶"]] = _customer });
         var confirmed = await Move(manager, order, "order", "已確認");
         (await TryMove(planner, confirmed, "order", "出貨中")).StatusCode.Should().BeOneOf(HttpStatusCode.Forbidden, HttpStatusCode.BadRequest);
         var shipping = await Move(manager, confirmed, "order", "出貨中");
@@ -253,7 +255,7 @@ public class MesFlowTests : IDisposable
         var wo = await Move(planner, draft, "workorder", "已發放");
         await Create(planner, "report", new() { [r["工令"]] = Id(wo), [r["工序序號"]] = 1, [r["工序"]] = ro["工序/備料"], [r["良品數"]] = 10 });
         await Move(planner, wo, "workorder", "完工");
-        var ship = await Create(planner, "shipment", new() { [s["工令"]] = Id(wo), [s["客戶"]] = "C-001", [s["出貨數量"]] = 10, [s["運送方式"]] = "貨運" });
+        var ship = await Create(planner, "shipment", new() { [s["工令"]] = Id(wo), [s["客戶"]] = _customer, [s["出貨數量"]] = 10, [s["運送方式"]] = "貨運" });
         var html = await (await planner.GetAsync($"{Base}/records/{Id(ship)}/print/mes-ship-sheet?locale=zh-TW")).Content.ReadAsStringAsync();
         html.Should().Contain("出貨單").And.Contain("貨運").And.Contain("10");
     }
@@ -299,9 +301,9 @@ public class MesFlowTests : IDisposable
     }
 
     [Fact]
-    public async Task Open_WhenACustomerExtensionModuleAlreadyExists_Is409_AndNothingIsLeftBehind()
+    public async Task Open_WhenACustomerExtensionModuleAlreadyExists_StillWorks_BecauseMesNoLongerExtendsTheCoreCustomer()
     {
-        // 客戶擴充（宿主實體 sales.customer）每個實體只能有一個；舊範本建過就不能開 MES（審查第一輪 #9）
+        // s2d-1f：MES 的客戶改用共用主檔往來對象，不再擴充核心實體 sales.customer，自建的客戶擴充不再擋下開啟
         var res = await _admin.PostAsJsonAsync($"{Base}/modules", new
         {
             key = "my-customer-ext", kind = "extension", hostEntityKey = "sales.customer", name = new Dictionary<string, string> { ["zh-TW"] = "自建客戶擴充" }
@@ -309,9 +311,7 @@ public class MesFlowTests : IDisposable
         res.StatusCode.Should().Be(HttpStatusCode.Created, await res.Content.ReadAsStringAsync());
 
         var opened = await _admin.PostAsJsonAsync($"{Apps}/packages/mes-mold/open", new { groupMap = new Dictionary<string, object>() });
-        opened.StatusCode.Should().Be(HttpStatusCode.Conflict);
-        (await JsonOf(opened)).GetProperty("hostEntityConflicts").EnumerateArray().Select(e => e.GetString()).Should().Equal("customer");
-        (await _admin.GetAsync($"{Base}/modules/mes-workorder")).StatusCode.Should().Be(HttpStatusCode.NotFound);
-        (await JsonOf(await _admin.GetAsync(Apps))).GetArrayLength().Should().Be(0);
+        opened.StatusCode.Should().Be(HttpStatusCode.Created, await opened.Content.ReadAsStringAsync());
+        (await _admin.GetAsync($"{Base}/modules/mes-customer-info")).StatusCode.Should().Be(HttpStatusCode.NotFound);
     }
 }

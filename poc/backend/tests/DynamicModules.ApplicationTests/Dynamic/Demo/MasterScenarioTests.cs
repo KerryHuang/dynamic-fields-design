@@ -23,7 +23,12 @@ public class MasterScenarioTests(DemoGeneratedFixture fx)
     [Fact]
     public void OnlyTheRolesTheOpenAppsNeed_AreCreated()
     {
-        PlanFor(DemoCatalog.MesAppId, DemoCatalog.InventoryAppId).Steps.Should().BeEmpty("MES、進銷存還沒改用主檔");
+        PlanFor().Steps.Should().BeEmpty("沒有開啟任何用到主檔的應用程式");
+
+        var mes = PlanFor(DemoCatalog.MesAppId).Created;
+        mes.Should().OnlyContain(r => r.ModuleCode == MasterScenario.PartnerModule, "MES 不用聯絡人");
+        mes.Should().HaveCount(8).And.OnlyContain(p => (string)p.Facts["role"]! == "customer");
+        mes.Select(p => (string)p.Facts["name"]!).Should().StartWith("嵐岳精密", "沿用 MES 原本的虛構客戶名稱");
 
         var crm = PlanFor(DemoCatalog.CrmAppId);
         var partners = crm.Created.Where(r => r.ModuleCode == MasterScenario.PartnerModule).ToList();
@@ -48,7 +53,7 @@ public class MasterScenarioTests(DemoGeneratedFixture fx)
         var role = await fx.Key(partner, "角色");
         var industry = await fx.Key(partner, "產業");
         var partners = await fx.Records(partner);
-        partners.Should().HaveCount(12, "十家客戶加上兩筆由潛在客戶轉出的客戶");
+        partners.Should().HaveCount(20, "CRM 十家、MES 八家，加上兩筆由潛在客戶轉出的客戶");
         var customer = await fx.Opt(partner, "角色", "客戶");
         var both = await fx.Opt(partner, "角色", "客戶與供應商");
         partners.Select(p => DemoGeneratedFixture.Text(p, role)).Should().OnlyContain(r => r == customer || r == both);

@@ -1,10 +1,7 @@
 using System.Net;
 using System.Net.Http.Json;
 using System.Text.Json;
-using DynamicModules.Domain.Data;
-using DynamicModules.Domain.Entities.Mock;
 using FluentAssertions;
-using Microsoft.Extensions.DependencyInjection;
 using static DynamicModules.WebAPITests.Dynamic.ApiTestKit;
 
 namespace DynamicModules.WebAPITests.Dynamic;
@@ -21,6 +18,7 @@ public class MesAppTests : IDisposable
     private readonly HttpClient _admin;
     private readonly Dictionary<string, (Dictionary<string, string> Keys, Dictionary<string, string> Options)> _layouts = new();
     private JsonElement _opened;
+    private long _customer;
 
     public MesAppTests() => _admin = _app.AsUser();
 
@@ -38,10 +36,7 @@ public class MesAppTests : IDisposable
         var res = await _admin.PostAsJsonAsync($"{Apps}/packages/mes-mold/open", body);
         res.StatusCode.Should().Be(HttpStatusCode.Created, await res.Content.ReadAsStringAsync());
         _opened = await JsonOf(res);
-        using var scope = _app.Services.CreateScope();
-        var db = scope.ServiceProvider.GetRequiredService<DynamicDbContext>();
-        db.Set<MockCustomer>().Add(new MockCustomer { CustomerNo = "C-001", Name = "宏達科技" });
-        await db.SaveChangesAsync();
+        _customer = await PartnerAsync(_admin, "宏達科技");
     }
 
     private string Key(string code) =>
@@ -132,7 +127,7 @@ public class MesAppTests : IDisposable
     private async Task<HttpResponseMessage> TryShipment(JsonElement wo, int qty)
     {
         var (s, _) = await Layout("shipment");
-        return await TryCreate("shipment", new() { [s["工令"]] = Id(wo), [s["客戶"]] = "C-001", [s["出貨數量"]] = qty });
+        return await TryCreate("shipment", new() { [s["工令"]] = Id(wo), [s["客戶"]] = _customer, [s["出貨數量"]] = qty });
     }
 
     private async Task<JsonElement> Shipment(JsonElement wo, int qty)
@@ -160,7 +155,7 @@ public class MesAppTests : IDisposable
         (await _admin.GetAsync($"{Base}/modules/mes-workorder")).StatusCode.Should().Be(HttpStatusCode.NotFound);
         await OpenMes();
         var keys = _opened.GetProperty("modules").EnumerateArray().Select(m => m.GetProperty("key").GetString()!).ToList();
-        keys.Should().HaveCount(14).And.OnlyContain(k => k.StartsWith("mes-"));
+        keys.Should().HaveCount(13, "客戶擴充改為共用主檔往來對象的貢獻").And.OnlyContain(k => k.StartsWith("mes-"));
         keys.Should().Contain(["mes-quote", "mes-order", "mes-workorder", "mes-wo-op", "mes-report", "mes-shipment", "mes-quality"]);
     }
 

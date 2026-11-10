@@ -5,7 +5,6 @@ using System.Text.Json.Nodes;
 using DynamicModules.Application.Dynamic.AppService.Integrations;
 using DynamicModules.Domain.Data;
 using DynamicModules.Domain.Entities.Dynamic;
-using DynamicModules.Domain.Entities.Mock;
 using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
@@ -20,6 +19,7 @@ public class MesInventoryIntegrationTests : IDisposable
     private readonly TestApp _app = new(seedDemoPeople: false, fileDatabase: true);
     private readonly HttpClient _admin;
     private JsonElement _mes;
+    private long? _customer;
     private InventoryRig? _inv;
 
     public MesInventoryIntegrationTests() => _admin = _app.AsUser();
@@ -28,21 +28,16 @@ public class MesInventoryIntegrationTests : IDisposable
 
     // ---- 開啟與讀取 ----
 
-    private async Task OpenMes(string package = "mes-mold", string[]? groups = null) => _mes = await OpenMesOn(_app, _admin, package, groups);
+    private async Task OpenMes(string package = "mes-mold", string[]? groups = null) => _mes = await OpenMesOn(_admin, package, groups);
 
-    private static async Task<JsonElement> OpenMesOn(TestApp app, HttpClient admin, string package, string[]? groups = null)
+    private static async Task<JsonElement> OpenMesOn(HttpClient admin, string package, string[]? groups = null)
     {
         var res = await admin.PostAsJsonAsync($"{Apps}/packages/{package}/open", new
         {
             groupMap = (groups ?? ["sales", "salesManager", "floor", "maint", "qa", "planner"]).ToDictionary(g => g, _ => (object)new { mode = "create" })
         });
         res.StatusCode.Should().Be(HttpStatusCode.Created, await res.Content.ReadAsStringAsync());
-        var opened = await JsonOf(res);
-        using var scope = app.Services.CreateScope();
-        var db = scope.ServiceProvider.GetRequiredService<DynamicDbContext>();
-        if (!await db.Set<MockCustomer>().AnyAsync()) db.Set<MockCustomer>().Add(new MockCustomer { CustomerNo = "C-001", Name = "宏達科技" });
-        await db.SaveChangesAsync();
-        return opened;
+        return await JsonOf(res);
     }
 
     private async Task OpenInventory()
@@ -129,7 +124,8 @@ public class MesInventoryIntegrationTests : IDisposable
     private async Task<long> Shipment(long workOrder, int qty, (long Item, long Warehouse)? stock = null)
     {
         var (s, _) = await Layout("shipment");
-        var values = new Dictionary<string, object?> { [s["工令"]] = workOrder, [s["客戶"]] = "C-001", [s["出貨數量"]] = qty };
+        _customer ??= await PartnerAsync(_admin, "宏達科技");
+        var values = new Dictionary<string, object?> { [s["工令"]] = workOrder, [s["客戶"]] = _customer, [s["出貨數量"]] = qty };
         if (stock is { } st)
         {
             values[s["庫存品項"]] = st.Item;
@@ -583,7 +579,7 @@ public class MesInventoryIntegrationTests : IDisposable
     {
         using var source = new TestApp(seedDemoPeople: false, fileDatabase: true);
         var admin = source.AsUser();
-        await OpenMesOn(source, admin, "mes-mold");
+        await OpenMesOn(admin, "mes-mold");
         await InventoryRig.OpenAsync(admin, assignMembers: false);
         var res = await admin.GetAsync($"{Apps}/mes-mold/export");
         res.StatusCode.Should().Be(HttpStatusCode.OK);

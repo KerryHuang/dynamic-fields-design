@@ -144,7 +144,7 @@ public class AppCombinationTests : IDisposable
         var key = KeyOf(mes, "quote");
         var quote = await _admin.PostAsJsonAsync($"{Base}/modules/{key}/records", new
         {
-            values = new Dictionary<string, object?> { [await FieldKey(key, "客戶")] = "C-001", [await FieldKey(key, "報價日期")] = "2026-11-01" }
+            values = new Dictionary<string, object?> { [await FieldKey(key, "客戶")] = await PartnerAsync(_admin, "宏達科技"), [await FieldKey(key, "報價日期")] = "2026-11-01" }
         });
         quote.StatusCode.Should().Be(HttpStatusCode.Created, await quote.Content.ReadAsStringAsync());
         ((int)(await CreateItem(inv, "不該成功")).StatusCode).Should().BeInRange(400, 499);

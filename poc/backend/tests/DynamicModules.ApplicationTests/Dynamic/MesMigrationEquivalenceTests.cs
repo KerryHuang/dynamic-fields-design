@@ -40,6 +40,7 @@ public class MesMigrationEquivalenceTests
     {
         var copy = config?.DeepClone().AsObject();
         copy?.Remove("refTarget");
+        copy?.Remove("refGuard");
         return copy;
     }
 
@@ -48,7 +49,13 @@ public class MesMigrationEquivalenceTests
         ["line.unit"];                                                                            // 下拉改文字：轉換不能複製下拉
     // 只改參照目標（s2d-0 模具參照改指 MES 自己的模組 mold）：型別、其他設定、選項照比，refTarget 斷言等於預期值
     private static readonly Dictionary<string, (string Kind, string Key)> RetargetedRefs =
-        new() { ["repair.mold"] = ("module", "mold"), ["care.mold"] = ("module", "mold") };
+        new() { ["repair.mold"] = ("module", "mold"), ["care.mold"] = ("module", "mold"), ["order.customer"] = ("module", "partner") };
+    // 改指共用主檔的參照（s2d-1f）：目標帶主檔 id，另加角色守衛（只收客戶或兩者）
+    private static readonly Dictionary<string, string> MasterRefs = new() { ["order.customer"] = "partner" };
+    // 客戶擴充模組移除（s2d-1f，共用主檔設計 §11.2）：欄位變 MES 在往來對象上的貢獻欄位，或併入往來對象的基本欄位（舊代號 → 基本欄位代號）
+    private const string MovedToMaster = "customer";
+    private static readonly Dictionary<string, string> MergedIntoBaseFields =
+        new() { ["paymentTerms"] = "salesPaymentTerms", ["accountRep"] = "owner", ["email"] = "email", ["phone"] = "phone" };
     // 模具從核心實體的擴充模組改為 MES 自己的模組（s2d-0）：代碼、型態、宿主、標題欄位與區塊都不同，欄位逐一比對
     private static readonly HashSet<string> RehomedModules = ["mold"];
     // 舊範本沒有分區、選單歸到「自訂功能」的模組，套件補上分區：只比對期望的新值
@@ -73,6 +80,11 @@ public class MesMigrationEquivalenceTests
         foreach (var old in fixture["modules"]!.AsArray().Select(m => m!.AsObject()))
         {
             var code = (string)old["code"]!;
+            if (code == MovedToMaster)
+            {
+                CustomerFields_AreContributedOrMergedIntoThePartner(old);
+                continue;
+            }
             var now = MesModule(code);
 
             var rehomed = RehomedModules.Contains(code);
@@ -111,6 +123,12 @@ public class MesMigrationEquivalenceTests
                         var nowTarget = nowField["config"]?["refTarget"];
                         ((string?)nowTarget?["kind"]).Should().Be(target.Kind, $"{code}.{fieldCode} 參照目標型態");
                         ((string?)nowTarget?["key"]).Should().Be(target.Key, $"{code}.{fieldCode} 參照目標");
+                        if (MasterRefs.TryGetValue($"{code}.{fieldCode}", out var master))
+                        {
+                            ((string?)nowTarget?["app"]).Should().Be(master, $"{code}.{fieldCode} 參照的主檔");
+                            ((string?)nowField["config"]?["refGuard"]?["field"]).Should().Be($"{master}/{master}.role", $"{code}.{fieldCode} 角色守衛");
+                        }
+                        else nowTarget?["app"].Should().BeNull($"{code}.{fieldCode}");
                         Same(WithoutRefTarget(oldField["config"]), WithoutRefTarget(nowField["config"])).Should().BeTrue($"{code}.{fieldCode} 設定（refTarget 以外）");
                     }
                     else
@@ -141,6 +159,29 @@ public class MesMigrationEquivalenceTests
             nowPerms.Select(p => (string)p!["group"]!).Where(g => !oldGroups.Contains(g))
                 .Should().BeSubsetOf(AddedPermissionGroups.GetValueOrDefault(code, []), $"{code} 多出的權限群組");
         }
+    }
+
+    private static void CustomerFields_AreContributedOrMergedIntoThePartner(JsonObject old)
+    {
+        Mes["modules"]!.AsArray().Should().NotContain(m => (string)m!["code"]! == MovedToMaster, "客戶擴充模組已移除");
+        var contribution = Mes["contributions"]!.AsArray().Select(c => c!).Single(c => (string)c["master"]! == "partner");
+        var contributed = contribution["fields"]!.AsArray().ToDictionary(f => (string)f!["code"]!);
+        var partner = StripAddedLocales(Load(Path.Combine(AppContext.BaseDirectory, "apps", "partner.app.json")));
+        var baseFields = partner["modules"]![0]!["blocks"]!.AsArray().SelectMany(b => b!["fields"]!.AsArray()).ToDictionary(f => (string)f!["code"]!);
+        foreach (var oldField in old["blocks"]!.AsArray().SelectMany(b => b!["fields"]!.AsArray()))
+        {
+            var fieldCode = (string)oldField!["code"]!;
+            if (MergedIntoBaseFields.TryGetValue(fieldCode, out var baseCode))
+            {
+                contributed.Should().NotContainKey(fieldCode, $"{fieldCode} 併入基本欄位，不再貢獻");
+                Same(oldField["type"], baseFields[baseCode]!["type"]).Should().BeTrue($"{fieldCode} → 基本欄位 {baseCode} 型別");
+                continue;
+            }
+            var nowField = contributed[fieldCode]!;
+            foreach (var prop in new[] { "type", "label", "config", "options" })
+                Same(oldField[prop], nowField[prop]).Should().BeTrue($"貢獻欄位 {fieldCode}.{prop}");
+        }
+        contributed.Keys.Should().BeEquivalentTo(["creditLevel", "website"]);
     }
 
     [Fact]

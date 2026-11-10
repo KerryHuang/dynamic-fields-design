@@ -9,7 +9,7 @@ namespace DynamicModules.Application.Dynamic.DemoService.Scenarios;
 /// <summary>
 /// 「MES 模具廠」的報價到訂單：8 張報價單（今天前 12–70 天），業務建立並送審、業務主管核准或退回；
 /// 已核准的報價單依 <c>mes-quote-to-order</c> 轉成訂單（一張全轉、一張分兩次轉完、一張只轉一部分），轉出的訂單由業務確認。
-/// 全部走一般的建立、更新、轉換指令，權限、狀態機、帶值與逐項追蹤已轉數量照常生效。客戶用 Demo 的 C-001…C-008。
+/// 全部走一般的建立、更新、轉換指令，權限、狀態機、帶值與逐項追蹤已轉數量照常生效。客戶用共用主檔情境建立的 MES 八家客戶。
 /// </summary>
 public sealed class MesQuoteScenario : IDemoScenario
 {
@@ -50,13 +50,14 @@ public sealed class MesQuoteScenario : IDemoScenario
         var rnd = plan.Random;
         DateTime After(DateTime t, int days = 1) => plan.At(DateOnly.FromDateTime(t).AddDays(days), t);
 
+        var customers = MasterScenario.ForApp(plan, DemoCatalog.MesAppId);
         for (var i = 0; i < Specs.Length; i++)
         {
             var spec = Specs[i];
             var n = i;
             var rep = Reps[i % Reps.Length];
             var date = today.AddDays(-spec.DaysAgo);
-            var customer = $"C-{i + 1:000}";
+            var customer = customers[i];
             var lineCount = spec.Conversions.Length > 0 ? spec.Conversions.Max(c => c.Length) : rnd.Next(1, 4);
             var lines = Enumerable.Range(0, lineCount).Select(k =>
             {
@@ -68,7 +69,7 @@ public sealed class MesQuoteScenario : IDemoScenario
             var at = plan.At(date);
             var quote = plan.Create("mes-quote", at, rep, $"{label} 建立", ctx => new CreateRecordRequest(
                 ctx.Ids.ModuleKeys["quote"],
-                ctx.Values("quote", ("customer", customer), ("quoteDate", Iso(date)), ("validUntil", Iso(date.AddDays(30))),
+                ctx.Values("quote", ("customer", customer.Id), ("quoteDate", Iso(date)), ("validUntil", Iso(date.AddDays(30))),
                     ("status", ctx.Opt("quote", "draft")), ("owner", rep)),
                 Details: new()
                 {

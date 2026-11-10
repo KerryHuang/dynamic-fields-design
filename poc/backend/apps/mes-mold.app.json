@@ -19,9 +19,13 @@
   },
   "icon": "precision_manufacturing",
   "requires": {
-   "apps": [],
-   "entities": [
-    "sales.customer"
+   "masters": [
+    {
+     "id": "partner",
+     "modules": [
+      "partner"
+     ]
+    }
    ]
   }
  },
@@ -151,8 +155,16 @@
        },
        "config": {
         "refTarget": {
-         "kind": "entity",
-         "key": "sales.customer"
+         "kind": "module",
+         "key": "partner",
+         "app": "partner"
+        },
+        "refGuard": {
+         "field": "partner/partner.role",
+         "in": [
+          "customer",
+          "both"
+         ]
         },
         "required": true,
         "showInList": true,
@@ -829,8 +841,16 @@
        },
        "config": {
         "refTarget": {
-         "kind": "entity",
-         "key": "sales.customer"
+         "kind": "module",
+         "key": "partner",
+         "app": "partner"
+        },
+        "refGuard": {
+         "field": "partner/partner.role",
+         "in": [
+          "customer",
+          "both"
+         ]
         },
         "required": true,
         "showInList": true,
@@ -2903,8 +2923,16 @@
        },
        "config": {
         "refTarget": {
-         "kind": "entity",
-         "key": "sales.customer"
+         "kind": "module",
+         "key": "partner",
+         "app": "partner"
+        },
+        "refGuard": {
+         "field": "partner/partner.role",
+         "in": [
+          "customer",
+          "both"
+         ]
         },
         "required": true,
         "showInList": true,
@@ -3776,165 +3804,6 @@
       "add": false,
       "edit": false,
       "delete": false,
-      "printExport": false,
-      "pricing": false,
-      "approve": false
-     }
-    }
-   ]
-  },
-  {
-   "code": "customer",
-   "key": "mes-customer-info",
-   "name": {
-    "zh-TW": "客戶資料",
-    "en-US": "Customer information",
-    "th": "ข้อมูลลูกค้า",
-    "vi": "Thông tin khách hàng"
-   },
-   "icon": "business",
-   "section": "業務",
-   "kind": "extension",
-   "hostEntityKey": "sales.customer",
-   "titleField": null,
-   "blocks": [
-    {
-     "code": "main",
-     "label": {
-      "zh-TW": "往來資訊",
-      "en-US": "Account information",
-      "th": "ข้อมูลการติดต่อทางธุรกิจ",
-      "vi": "Thông tin giao dịch"
-     },
-     "collapsed": false,
-     "fields": [
-      {
-       "code": "creditLevel",
-       "type": "enum",
-       "label": {
-        "zh-TW": "信用等級",
-        "en-US": "Credit level",
-        "th": "ระดับเครดิต",
-        "vi": "Hạng tín dụng"
-       },
-       "options": [
-        {
-         "code": "a",
-         "label": {
-          "zh-TW": "A",
-          "en-US": "A",
-          "th": "A",
-          "vi": "A"
-         },
-         "color": "#21ba45"
-        },
-        {
-         "code": "b",
-         "label": {
-          "zh-TW": "B",
-          "en-US": "B",
-          "th": "B",
-          "vi": "B"
-         },
-         "color": "#f2c037"
-        },
-        {
-         "code": "c",
-         "label": {
-          "zh-TW": "C",
-          "en-US": "C",
-          "th": "C",
-          "vi": "C"
-         },
-         "color": "#c10015"
-        }
-       ],
-       "config": {
-        "showInList": true,
-        "isFilterable": true
-       }
-      },
-      {
-       "code": "paymentTerms",
-       "type": "text",
-       "label": {
-        "zh-TW": "付款條件",
-        "en-US": "Payment terms",
-        "th": "เงื่อนไขการชำระเงิน",
-        "vi": "Điều khoản thanh toán"
-       }
-      },
-      {
-       "code": "accountRep",
-       "type": "user",
-       "label": {
-        "zh-TW": "業務窗口",
-        "en-US": "Account rep",
-        "th": "ผู้ประสานงานฝ่ายขาย",
-        "vi": "Đầu mối kinh doanh"
-       },
-       "config": {
-        "showInList": true,
-        "isFilterable": true
-       }
-      },
-      {
-       "code": "email",
-       "type": "email",
-       "label": {
-        "zh-TW": "聯絡 Email",
-        "en-US": "Contact email",
-        "th": "อีเมลติดต่อ",
-        "vi": "Email liên hệ"
-       }
-      },
-      {
-       "code": "phone",
-       "type": "phone",
-       "label": {
-        "zh-TW": "聯絡電話",
-        "en-US": "Contact phone",
-        "th": "โทรศัพท์ติดต่อ",
-        "vi": "Điện thoại liên hệ"
-       }
-      },
-      {
-       "code": "website",
-       "type": "url",
-       "label": {
-        "zh-TW": "網站",
-        "en-US": "Website",
-        "th": "เว็บไซต์",
-        "vi": "Trang web"
-       }
-      }
-     ]
-    }
-   ],
-   "rules": [],
-   "views": [],
-   "permissions": [
-    {
-     "group": "sales",
-     "scope": "all",
-     "privileges": {
-      "read": true,
-      "add": false,
-      "edit": true,
-      "delete": false,
-      "printExport": false,
-      "pricing": false,
-      "approve": false
-     }
-    },
-    {
-     "group": "salesManager",
-     "scope": "all",
-     "privileges": {
-      "read": true,
-      "add": true,
-      "edit": true,
-      "delete": true,
       "printExport": false,
       "pricing": false,
       "approve": false
@@ -5955,6 +5824,147 @@
      }
     }
    ]
+  }
+ ],
+ "contributions": [
+  {
+   "master": "partner",
+   "module": "partner",
+   "block": {
+    "code": "mes",
+    "name": {
+     "zh-TW": "MES",
+     "en-US": "MES",
+     "th": "MES",
+     "vi": "MES"
+    }
+   },
+   "fields": [
+    {
+     "code": "creditLevel",
+     "type": "enum",
+     "label": {
+      "zh-TW": "信用等級",
+      "en-US": "Credit level",
+      "th": "ระดับเครดิต",
+      "vi": "Hạng tín dụng"
+     },
+     "options": [
+      {
+       "code": "a",
+       "label": {
+        "zh-TW": "A",
+        "en-US": "A",
+        "th": "A",
+        "vi": "A"
+       },
+       "color": "#21ba45"
+      },
+      {
+       "code": "b",
+       "label": {
+        "zh-TW": "B",
+        "en-US": "B",
+        "th": "B",
+        "vi": "B"
+       },
+       "color": "#f2c037"
+      },
+      {
+       "code": "c",
+       "label": {
+        "zh-TW": "C",
+        "en-US": "C",
+        "th": "C",
+        "vi": "C"
+       },
+       "color": "#c10015"
+      }
+     ],
+     "config": {
+      "showInList": true,
+      "isFilterable": true
+     }
+    },
+    {
+     "code": "website",
+     "type": "url",
+     "label": {
+      "zh-TW": "網站",
+      "en-US": "Website",
+      "th": "เว็บไซต์",
+      "vi": "Trang web"
+     }
+    }
+   ],
+   "permissions": [
+    {
+     "group": "sales",
+     "scope": "all",
+     "privileges": {
+      "read": true,
+      "add": false,
+      "edit": true,
+      "delete": false,
+      "printExport": false,
+      "pricing": false,
+      "approve": false
+     }
+    },
+    {
+     "group": "salesManager",
+     "scope": "all",
+     "privileges": {
+      "read": true,
+      "add": true,
+      "edit": true,
+      "delete": false,
+      "printExport": false,
+      "pricing": false,
+      "approve": false
+     }
+    },
+    {
+     "group": "planner",
+     "scope": "all",
+     "privileges": {
+      "read": true,
+      "add": false,
+      "edit": false,
+      "delete": false,
+      "printExport": false,
+      "pricing": false,
+      "approve": false
+     }
+    },
+    {
+     "group": "floor",
+     "scope": "all",
+     "privileges": {
+      "read": true,
+      "add": false,
+      "edit": false,
+      "delete": false,
+      "printExport": false,
+      "pricing": false,
+      "approve": false
+     }
+    },
+    {
+     "group": "qa",
+     "scope": "all",
+     "privileges": {
+      "read": true,
+      "add": false,
+      "edit": false,
+      "delete": false,
+      "printExport": false,
+      "pricing": false,
+      "approve": false
+     }
+    }
+   ],
+   "fieldAccess": []
   }
  ]
 }

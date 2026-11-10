@@ -108,17 +108,14 @@ public class DemoStructureTests(DemoGeneratedFixture fx)
     }
 
     [Fact]
-    public async Task Generate_ExistingCustomerExtension_Conflict()
+    public async Task Preflight_AnExistingCustomerExtension_IsNoLongerAConflict()
     {
+        // s2d-1f：MES 的客戶改用共用主檔往來對象，Demo 不再擴充核心實體 sales.customer
         await using var host = await DemoTestHost.CreateAsync();
         (await host.Send(new CreateModuleRequest("cust-x", Text("客戶擴充"), null, null, ModuleKind.Extension, "sales.customer")))
             .IsSuccess.Should().BeTrue();
 
-        var r = await host.Send(new GenerateDemoDataRequest(DemoTestHost.Today));
-
-        r.IsConflict.Should().BeTrue();
-        ((DemoConflicts)r.Data!).Items.Should().Contain("既有實體 sales.customer 已有擴充模組");
-        (await host.Db.Context.Set<Module>().AsNoTracking().AnyAsync(m => m.Key == "mes-order")).Should().BeFalse();
+        (await host.Services.GetRequiredService<DemoPreflight>().ConflictsAsync(CancellationToken.None)).Should().BeEmpty();
     }
 
     [Fact]

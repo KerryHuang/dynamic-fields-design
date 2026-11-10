@@ -20,7 +20,7 @@ public class MesPackageTests
         p.Modules.Single(m => m.Code == "mold").TitleTemplate.Should().Be("{no} {name}");
         p.Manifest.Requires.Apps.Should().BeEmpty("三個應用程式彼此獨立");
         AppPackageValidator.Validate(p).Errors.Should().BeEmpty();
-        p.Modules.Should().HaveCount(14);
+        p.Modules.Should().HaveCount(13, "客戶擴充模組改為往來對象的貢獻");
         p.Modules.Should().OnlyContain(m => m.Key.StartsWith("mes-"));
         p.Events.Should().OnlyContain(e => e.Code.StartsWith("mes-"));
         p.Checks.Should().OnlyContain(c => c.Code.StartsWith("mes-"));
@@ -102,6 +102,39 @@ public class MesPackageTests
         p.Modules.Where(m => !detailChildren.Contains(m.Code) && m.Kind == ModuleKind.Standalone)
             .Where(m => string.IsNullOrEmpty(m.Section)).Select(m => m.Code)
             .Should().BeEmpty();
+    }
+
+    [Fact]
+    public void Customers_AreThePartnerMaster_NotAnExtensionOfACoreEntity()
+    {
+        // s2d-1f（共用主檔設計 §11.2）：客戶改用往來對象，信用等級與網站是 MES 在往來對象上的貢獻欄位
+        var p = Package.Value;
+        p.Manifest.Requires.Entities.Should().BeEmpty();
+        p.Manifest.Requires.Masters.Select(r => $"{r.Id}:{string.Join(',', r.Modules)}").Should().Equal("partner:partner");
+        p.Modules.Should().NotContain(m => m.Kind == ModuleKind.Extension || m.Code == "customer");
+        foreach (var module in new[] { "quote", "order", "shipment" })
+        {
+            var config = p.Modules.Single(m => m.Code == module).Blocks.SelectMany(b => b.Fields).Single(f => f.Code == "customer").Config;
+            var target = config.GetProperty("refTarget");
+            (target.GetProperty("kind").GetString(), target.GetProperty("key").GetString(), target.GetProperty("app").GetString())
+                .Should().Be(("module", "partner", "partner"), module);
+            config.GetProperty("refGuard").GetProperty("field").GetString().Should().Be("partner/partner.role", module);
+            config.GetProperty("refGuard").GetProperty("in").EnumerateArray().Select(x => x.GetString()).Should().Equal(["customer", "both"], module);
+            config.GetProperty("required").GetBoolean().Should().BeTrue(module);
+        }
+        var contribution = p.Contributions.Should().ContainSingle().Which;
+        (contribution.Master, contribution.Module, contribution.Block.Code, contribution.Block.Name.Resolve("zh-TW"))
+            .Should().Be(("partner", "partner", "mes", "MES"));
+        contribution.Fields.Select(f => $"{f.Code}:{f.Type}").Should().Equal("creditLevel:Enum", "website:Url");
+        contribution.Fields[0].Options.Select(o => o.Code).Should().Equal("a", "b", "c");
+        // 參照的標題要有讀取權限才看得到：會看或開含客戶欄位單據的群組（生管、現場、品保）只讀
+        contribution.Permissions.Select(x => x.Group).Should().Equal("sales", "salesManager", "planner", "floor", "qa");
+        contribution.Permissions.Should().OnlyContain(x => x.Privileges.Read && !x.Privileges.Delete && !x.Privileges.Approve,
+            "主檔的刪除與核准留給 steward");
+        var writers = contribution.Permissions.Where(x => x.Privileges.Add || x.Privileges.Edit).ToDictionary(x => x.Group, x => x.Privileges);
+        writers.Keys.Should().BeEquivalentTo(["sales", "salesManager"], "原本只有業務與業務主管能改客戶資料");
+        writers["sales"].Add.Should().BeFalse("業務原本就不能新增客戶資料");
+        writers["salesManager"].Add.Should().BeTrue();
     }
 
     [Theory]

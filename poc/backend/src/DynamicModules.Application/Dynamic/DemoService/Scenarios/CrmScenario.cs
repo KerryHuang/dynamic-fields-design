@@ -58,7 +58,7 @@ public sealed class CrmScenario : IDemoScenario
         }
 
         // ---- 客戶：共用主檔往來對象（MasterScenario 建立，角色客戶或兩者），CRM 補上自己的「產業」----
-        var customers = plan.Records[MasterScenario.PartnerModule].Where(p => (string?)p.Facts["role"] != "supplier").Take(Companies.Length).ToList();
+        var customers = MasterScenario.ForApp(plan, DemoCatalog.CrmAppId);
         for (var i = 0; i < customers.Count; i++)
         {
             var n = i;
