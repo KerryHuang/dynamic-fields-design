@@ -20,7 +20,7 @@ export function breadcrumbFor(path: string, menu: MenuItem[], t: (key: string) =
   const [area, page] = firstSegments(path);
   if (area === 'dynamic' && page) {
     const m = menu.find((x) => x.key === page);
-    return m ? [m.section || t('menu.custom'), resolveI18n(m.name, locale)] : [];
+    return m ? [resolveI18n(m.section, locale) || t('menu.custom'), resolveI18n(m.name, locale)] : [];
   }
   if (area === 'reports') return [t('menu.reports'), t('menu.myReports')];
   if (area === 'system') {

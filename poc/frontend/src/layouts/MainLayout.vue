@@ -32,7 +32,7 @@
           <q-item-section>{{ t('menu.myTasks') }}</q-item-section>
         </q-item>
 
-        <template v-for="g in menuGroups" :key="g.closed ? '__closed' : (g.title ?? '')">
+        <template v-for="g in menuGroups" :key="g.closed ? '__closed' : (g.key ?? '')">
           <q-item-label header :data-testid="g.closed ? 'closed-apps-group' : undefined">{{ g.closed ? t('menu.closedApps') : (g.title ?? t('menu.custom')) }}</q-item-label>
           <q-item
             v-for="m in g.items"
@@ -110,7 +110,7 @@ const router = useRouter();
 const logoutMutation = useLogout();
 
 const { data: menu } = useMenu();
-const menuGroups = computed(() => groupMenu(menu.value ?? []));
+const menuGroups = computed(() => groupMenu(menu.value ?? [], locale.value));
 const { data: me } = useMe();
 const links = computed(() => systemLinks(me.value));
 // 首頁的「最近開過」：每次進到某個模組就記一筆

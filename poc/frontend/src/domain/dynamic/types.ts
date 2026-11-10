@@ -295,7 +295,8 @@ export interface MenuItem {
   key: string;
   name: I18nText;
   icon?: string;
-  section?: string;
+  /** Menu section; modules group by its zh-TW text. */
+  section?: I18nText;
   /** The owning app is closed: data stays readable, nothing can be written. */
   closed?: boolean;
 }
@@ -395,7 +396,8 @@ export interface ModuleDetail {
   programCode: string;
   name: I18nText;
   icon?: string;
-  section?: string;
+  /** Menu section; modules group by its zh-TW text. */
+  section?: I18nText;
   titleFieldId?: number;
   /** Title template with field ids in braces, e.g. `{12} {13}`; absent means the title is the title field. */
   titleTemplate?: string;

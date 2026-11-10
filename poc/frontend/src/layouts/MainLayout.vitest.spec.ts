@@ -5,6 +5,7 @@ import * as quasar from 'quasar';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { createI18n } from 'vue-i18n';
 import { createMemoryHistory, createRouter } from 'vue-router';
+import enUS from 'src/i18n/en-US.json';
 import zhTW from 'src/i18n/zh-TW.json';
 import ListPage from 'src/pages/dynamic/ListPage.vue';
 import { dynamicApi } from 'src/services/api/dynamic-api';
@@ -132,7 +133,7 @@ describe('MainLayout menu', () => {
   it('groups menu items by section, unsectioned under 自訂功能 first, sections sorted by name', async () => {
     const pinia = createPinia();
     setActivePinia(pinia);
-    const item = (key: string, section?: string) => ({ key, name: { 'zh-TW': `item-${key}` }, ...(section ? { section } : {}) });
+    const item = (key: string, section?: string) => ({ key, name: { 'zh-TW': `item-${key}` }, ...(section ? { section: { 'zh-TW': section } } : {}) });
     http.defaults.adapter = async (config) => {
       const data = config.url === '/me' ? me(false) : config.url === '/users' ? USERS
         : [item('a', 'Zeta'), item('b'), item('c', 'Alpha'), item('d', 'Zeta'), item('e')];
@@ -149,6 +150,25 @@ describe('MainLayout menu', () => {
     expect(order.every((i) => i >= 0)).toBe(true);
     expect(order).toEqual([...order].sort((x, y) => x - y));
     expect(w.findAll('.q-item__label--header').map((h) => h.text())).toEqual(['自訂功能', 'Alpha', 'Zeta', '報表']);
+  });
+
+  it('titles menu sections in the current locale; same zh-TW section from different apps stays one group', async () => {
+    const pinia = createPinia();
+    setActivePinia(pinia);
+    const master = { 'zh-TW': '主檔', 'en-US': 'Master data', th: 'ข้อมูลหลัก', vi: 'Dữ liệu chủ' };
+    http.defaults.adapter = async (config) => {
+      const data = config.url === '/me' ? me(false) : config.url === '/users' ? USERS
+        : [{ key: 'partner', name: { 'zh-TW': '往來對象' }, section: master }, { key: 'contact', name: { 'zh-TW': '聯絡人' }, section: master },
+          { key: 'legacy', name: { 'zh-TW': '舊模組' }, section: { 'zh-TW': '庫存' } }];
+      return { data, status: 200, statusText: 'OK', headers: {}, config };
+    };
+    const router = createRouter({ history: createMemoryHistory(), routes: [{ path: '/', component: { template: '<i/>' } }] });
+    const i18n = createI18n({ legacy: false, locale: 'en-US', fallbackLocale: 'zh-TW', messages: { 'zh-TW': zhTW, 'en-US': enUS } });
+    const w = mount(MainLayout, {
+      global: { plugins: [[quasar.Quasar, { components: quasar }], pinia, router, i18n, [VueQueryPlugin, { queryClient: new QueryClient() }]] },
+    });
+    await flushPromises();
+    expect(w.findAll('.q-item__label--header').map((h) => h.text())).toEqual(['Master data', '庫存', enUS.menu.reports]);
   });
 
   describe('首頁入口', () => {

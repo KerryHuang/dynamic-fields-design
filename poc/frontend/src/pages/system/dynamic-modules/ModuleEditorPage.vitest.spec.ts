@@ -17,7 +17,7 @@ vi.mock('src/services/api/dynamic-api', () => ({ dynamicApi: { getModule: vi.fn(
 const api = vi.mocked(dynamicApi);
 
 const detail: ModuleDetail = {
-  id: 1, key: 'm', programCode: 'DYN00001', name: { 'zh-TW': '模組' }, section: 's', titleFieldId: 5,
+  id: 1, key: 'm', programCode: 'DYN00001', name: { 'zh-TW': '模組' }, section: { 'zh-TW': 's' }, titleFieldId: 5,
   status: 'Active', version: 3, blocks: [],
 };
 
@@ -50,22 +50,40 @@ describe('ModuleEditorPage', () => {
     const w = await mountPage();
     w.getComponent(IconSelect).vm.$emit('update:modelValue', 'factory');
     await flushPromises();
-    expect(api.updateModule).toHaveBeenCalledWith('m', { name: detail.name, icon: 'factory', section: 's', titleFieldId: 5 });
+    expect(api.updateModule).toHaveBeenCalledWith('m', { name: detail.name, icon: 'factory', section: { 'zh-TW': 's' }, titleFieldId: 5 });
   });
 
   it('saves the menu section with the module settings; emptying it clears the section', async () => {
     const w = await mountPage();
-    const input = w.find('input[data-testid="module-section"]');
-    expect((input.element as HTMLInputElement).value).toBe('s');
-    expect(input.attributes('maxlength')).toBe('100');
-    await input.setValue('  銷售 ');
-    await input.trigger('change');
+    const field = w.get('[data-testid="module-section"]');
+    const zh = field.get('[data-testid="i18n-zh-TW"] input');
+    expect((zh.element as HTMLInputElement).value).toBe('s');
+    expect(zh.attributes('maxlength')).toBe('100');
+    expect(field.text()).toContain(zhTW.designer.sectionHint);
+    await zh.setValue('  銷售 ');
+    await zh.trigger('change');
     await flushPromises();
-    expect(api.updateModule).toHaveBeenLastCalledWith('m', { name: detail.name, icon: undefined, section: '銷售', titleFieldId: 5 });
-    await input.setValue('  ');
-    await input.trigger('change');
+    expect(api.updateModule).toHaveBeenLastCalledWith('m', { name: detail.name, icon: undefined, section: { 'zh-TW': '銷售' }, titleFieldId: 5 });
+    await zh.setValue('  ');
+    await zh.trigger('change');
     await flushPromises();
     expect(api.updateModule).toHaveBeenLastCalledWith('m', { name: detail.name, icon: undefined, section: undefined, titleFieldId: 5 });
+  });
+
+  it('the menu section is multilingual like the name: other locales sit under the expansion and save with zh-TW', async () => {
+    const w = await mountPage({ ...detail, section: { 'zh-TW': '主檔', 'en-US': 'Master data' } });
+    const field = w.get('[data-testid="module-section"]');
+    expect(field.text()).toContain(zhTW.designer.otherLocales);
+    expect(field.text()).not.toContain('*');
+    await field.get('.q-expansion-item .q-item').trigger('click');
+    await flushPromises();
+    const inputs = field.findAll('input');
+    expect(inputs.map((i) => (i.element as HTMLInputElement).value)).toEqual(['主檔', 'Master data', '', '']);
+    await inputs[2]!.setValue('ข้อมูลหลัก');
+    await inputs[2]!.trigger('change');
+    await flushPromises();
+    expect(api.updateModule).toHaveBeenLastCalledWith('m',
+      { name: detail.name, icon: undefined, section: { 'zh-TW': '主檔', 'en-US': 'Master data', th: 'ข้อมูลหลัก' }, titleFieldId: 5 });
   });
 
   it('has tabs for linked events, cross-record checks and the ledger, each showing its own panel', async () => {
@@ -149,7 +167,7 @@ describe('ModuleEditorPage', () => {
       expect(w.find('[data-testid="title-template-field"]').text()).toContain('標題會像：編號 名稱');
       w.getComponent(IconSelect).vm.$emit('update:modelValue', 'factory');
       await flushPromises();
-      expect(api.updateModule).toHaveBeenLastCalledWith('m', { name: detail.name, icon: 'factory', section: 's', titleFieldId: 5, titleTemplate: '{6} {5}' });
+      expect(api.updateModule).toHaveBeenLastCalledWith('m', { name: detail.name, icon: 'factory', section: { 'zh-TW': 's' }, titleFieldId: 5, titleTemplate: '{6} {5}' });
     });
 
     it('saves on change; blank clears it', async () => {
@@ -158,12 +176,12 @@ describe('ModuleEditorPage', () => {
       await input(w).setValue(' {6}-{5} ');
       await input(w).trigger('change');
       await flushPromises();
-      expect(api.updateModule).toHaveBeenLastCalledWith('m', { name: detail.name, icon: undefined, section: 's', titleFieldId: 5, titleTemplate: '{6}-{5}' });
+      expect(api.updateModule).toHaveBeenLastCalledWith('m', { name: detail.name, icon: undefined, section: { 'zh-TW': 's' }, titleFieldId: 5, titleTemplate: '{6}-{5}' });
       const w2 = await mountPage(withFields('{6}'));
       await input(w2).setValue('  ');
       await input(w2).trigger('change');
       await flushPromises();
-      expect(api.updateModule).toHaveBeenLastCalledWith('m', { name: detail.name, icon: undefined, section: 's', titleFieldId: 5, titleTemplate: undefined });
+      expect(api.updateModule).toHaveBeenLastCalledWith('m', { name: detail.name, icon: undefined, section: { 'zh-TW': 's' }, titleFieldId: 5, titleTemplate: undefined });
     });
 
     it('insert field offers only text-like fields and adds {id} to the template', async () => {
@@ -174,7 +192,7 @@ describe('ModuleEditorPage', () => {
       expect(options).toEqual([5, 6, 8]);
       select.vm.$emit('update:modelValue', 5);
       await flushPromises();
-      expect(api.updateModule).toHaveBeenLastCalledWith('m', { name: detail.name, icon: undefined, section: 's', titleFieldId: 5, titleTemplate: '{6} {5}' });
+      expect(api.updateModule).toHaveBeenLastCalledWith('m', { name: detail.name, icon: undefined, section: { 'zh-TW': 's' }, titleFieldId: 5, titleTemplate: '{6} {5}' });
     });
 
     // 上限由伺服器量（文字加上每個欄位算 1 字）：輸入框存的是欄位 Id，長度跟代號不同，不能在前端以字元數截斷
@@ -185,7 +203,7 @@ describe('ModuleEditorPage', () => {
       await input(w).setValue(long);
       await input(w).trigger('change');
       await flushPromises();
-      expect(api.updateModule).toHaveBeenLastCalledWith('m', { name: detail.name, icon: undefined, section: 's', titleFieldId: 5, titleTemplate: long });
+      expect(api.updateModule).toHaveBeenLastCalledWith('m', { name: detail.name, icon: undefined, section: { 'zh-TW': 's' }, titleFieldId: 5, titleTemplate: long });
     });
 
     it('shows the server error under the template', async () => {

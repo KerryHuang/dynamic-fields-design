@@ -29,7 +29,7 @@ export interface ModuleSummary {
   programCode: string;
   name: I18nText;
   icon?: string;
-  section?: string;
+  section?: I18nText;
   titleFieldId?: number;
   status: string;
   version: number;
@@ -182,9 +182,9 @@ const withNulls = (d: Department): Department => ({ ...d, parentId: d.parentId ?
 export const dynamicApi = {
   getModules: () => http.get<ModuleSummary[]>('/modules').then(data),
   getModule: (key: string) => http.get<ModuleDetail>(`/modules/${key}`).then(data),
-  createModule: (body: { key: string; name: I18nText; icon?: string; section?: string; kind?: 'standalone' | 'extension'; hostEntityKey?: string }) =>
+  createModule: (body: { key: string; name: I18nText; icon?: string; section?: I18nText; kind?: 'standalone' | 'extension'; hostEntityKey?: string }) =>
     http.post<ModuleSummary>('/modules', body).then(data),
-  updateModule: (key: string, body: { name: I18nText; icon?: string; section?: string; titleFieldId?: number; titleTemplate?: string }) =>
+  updateModule: (key: string, body: { name: I18nText; icon?: string; section?: I18nText; titleFieldId?: number; titleTemplate?: string }) =>
     http.put<ModuleSummary>(`/modules/${key}`, body).then(data),
   activateModule: (key: string) => http.post<void>(`/modules/${key}/activate`).then(data),
   deactivateModule: (key: string) => http.post<void>(`/modules/${key}/deactivate`).then(data),

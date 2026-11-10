@@ -115,7 +115,7 @@ describe('ModuleListPage create dialog', () => {
       input.value = key;
       input.dispatchEvent(new Event('input'));
       await w.findComponent({ name: 'I18nTextInput' }).vm.$emit('update:modelValue', { 'zh-TW': '名' });
-      const sec = document.body.querySelector('input[data-testid="module-section"]') as HTMLInputElement;
+      const sec = document.body.querySelector('[data-testid="module-section"] [data-testid="i18n-zh-TW"] input') as HTMLInputElement;
       expect(sec.getAttribute('maxlength')).toBe('100');
       sec.value = section;
       sec.dispatchEvent(new Event('input'));
@@ -125,7 +125,7 @@ describe('ModuleListPage create dialog', () => {
     };
     const w = await mountPage();
     await fill(w, 'with-sec', '  銷售  ');
-    expect(api.createModule.mock.calls[0]![0].section).toBe('銷售');
+    expect(api.createModule.mock.calls[0]![0].section).toEqual({ 'zh-TW': '銷售' });
     w.unmount();
     document.body.innerHTML = '';
     const w2 = await mountPage();

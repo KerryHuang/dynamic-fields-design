@@ -15,7 +15,8 @@ const me = (o: { designerRead?: boolean; designerAdd?: boolean; admin?: boolean 
   userId: 'u', displayName: 'Alice', isSystemAdmin: o.admin ?? false, groups: [],
   designer: { read: o.designerRead ?? false, add: o.designerAdd ?? false, edit: false, delete: false },
 });
-const mod = (key: string, section?: string, icon?: string) => ({ key, name: { 'zh-TW': `name-${key}` }, section, icon });
+const mod = (key: string, section?: string, icon?: string) =>
+  ({ key, name: { 'zh-TW': `name-${key}` }, section: section === undefined ? undefined : { 'zh-TW': section }, icon });
 
 vi.stubGlobal('ResizeObserver', class { observe() {} unobserve() {} disconnect() {} });
 afterEach(() => localStorage.clear());

@@ -28,7 +28,7 @@ const dashId = computed(() => {
 });
 function pickDash(id: number) { picked.value = id; writeLastDashboard(identity.userId, id); }
 
-const groups = computed(() => groupMenu(menu.data.value ?? []));
+const groups = computed(() => groupMenu(menu.data.value ?? [], locale.value));
 const links = computed(() => systemLinks(me.data.value));
 // 只列選單裡還在的模組（已停用或被收回權限的不顯示）；storage 不可用時是空陣列，整區隱藏
 const recent = computed(() => {
@@ -82,7 +82,7 @@ const recent = computed(() => {
           </template>
           <template v-else>{{ t('home.noModules') }}</template>
         </div>
-        <div v-for="g in groups" :key="g.closed ? '__closed' : (g.title ?? '')" class="q-mb-md" data-testid="home-app-group">
+        <div v-for="g in groups" :key="g.closed ? '__closed' : (g.key ?? '')" class="q-mb-md" data-testid="home-app-group">
           <div class="text-caption text-muted q-mb-xs" data-testid="home-group-title">{{ g.closed ? t('menu.closedApps') : (g.title ?? t('menu.custom')) }}</div>
           <div class="row q-col-gutter-sm tile-grid">
             <div v-for="m in g.items" :key="m.key" class="col-12 col-sm-6 col-md-4 col-lg-3">

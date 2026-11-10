@@ -3,7 +3,7 @@ import zhTW from 'src/i18n/zh-TW.json';
 import { breadcrumbFor } from './breadcrumb';
 
 const MENU = [
-  { key: 'orders', name: { 'zh-TW': '訂單' }, section: '業務' },
+  { key: 'orders', name: { 'zh-TW': '訂單', 'en-US': 'Orders' }, section: { 'zh-TW': '業務', 'en-US': 'Sales operations' } },
   { key: 'plain', name: { 'zh-TW': '維修單' } },
 ];
 
@@ -27,6 +27,9 @@ describe('breadcrumbFor', () => {
     ['/dynamic/unknown', []],
   ])('%s', (path, expected) => {
     expect(breadcrumbFor(path, MENU, t, 'zh-TW')).toEqual(expected);
+  });
+  it('shows the section in the current locale', () => {
+    expect(breadcrumbFor('/dynamic/orders', MENU, t, 'en-US')).toEqual(['Sales operations', 'Orders']);
   });
 
   it('選單還沒載入時不顯示，不報錯', () => {

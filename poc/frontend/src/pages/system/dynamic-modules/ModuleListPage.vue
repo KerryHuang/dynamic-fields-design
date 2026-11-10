@@ -7,7 +7,7 @@ import { useDesignerMutation, useModules } from 'src/application/dynamic/queries
 import { useMe } from 'src/application/dynamic/queries/permissions-queries';
 import { useEntities } from 'src/application/dynamic/queries/relation-queries';
 import { useImportTemplate } from 'src/application/dynamic/queries/templates-queries';
-import { resolveI18n } from 'src/domain/dynamic/i18n-text';
+import { compactI18n, resolveI18n } from 'src/domain/dynamic/i18n-text';
 import type { I18nText } from 'src/domain/dynamic/types';
 import { errorFor, notifyApiError } from 'src/presentation/dynamic/designer/api-error';
 import I18nTextInput from 'src/presentation/dynamic/designer/I18nTextInput.vue';
@@ -75,7 +75,7 @@ async function onFile(ev: Event) {
 }
 
 const dialog = ref(false);
-const emptyForm = () => ({ key: '', name: {} as I18nText, icon: MODULE_ICONS[0]!, section: '', kind: 'standalone' as 'standalone' | 'extension', hostEntityKey: null as string | null });
+const emptyForm = () => ({ key: '', name: {} as I18nText, icon: MODULE_ICONS[0]!, section: {} as I18nText, kind: 'standalone' as 'standalone' | 'extension', hostEntityKey: null as string | null });
 const form = ref(emptyForm());
 const entities = useEntities();
 const kindOptions = computed(() => (['standalone', 'extension'] as const).map((v) => ({ value: v, label: t(`designer.extension.${v}`) })));
@@ -86,7 +86,7 @@ const error = ref<ApiError | null>(null);
 const nameInput = ref<{ validate(): Promise<boolean> } | null>(null);
 const create = useDesignerMutation(
   () => dynamicApi.createModule({
-    key: form.value.key, name: form.value.name, icon: form.value.icon, section: form.value.section.trim() || undefined, kind: form.value.kind,
+    key: form.value.key, name: form.value.name, icon: form.value.icon, section: compactI18n(form.value.section), kind: form.value.kind,
     ...(form.value.kind === 'extension' ? { hostEntityKey: form.value.hostEntityKey! } : {}),
   }),
   () => form.value.key,
@@ -165,8 +165,8 @@ async function submit() {
           />
           <I18nTextInput ref="nameInput" v-model="form.name" :label="t('designer.name')" :error="errorFor(error, 'Name')" />
           <IconSelect v-model="form.icon" :label="t('designer.icon')" />
-          <q-input v-model="form.section" :label="t('designer.section')" :hint="t('designer.sectionHint')" maxlength="100" outlined dense
-            data-testid="module-section" :error="!!errorFor(error, 'Section') || undefined" :error-message="errorFor(error, 'Section')" />
+          <I18nTextInput v-model="form.section" :label="t('designer.section')" :hint="t('designer.sectionHint')" :maxlength="100" optional
+            data-testid="module-section" :error="errorFor(error, 'Section')" />
           <div data-testid="module-kind">
             <div class="text-caption text-muted">{{ t('designer.extension.kind') }}</div>
             <q-option-group v-model="form.kind" :options="kindOptions" inline dense />

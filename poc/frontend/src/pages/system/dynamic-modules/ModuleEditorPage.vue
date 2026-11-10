@@ -7,7 +7,7 @@ import { useRoute, useRouter } from 'vue-router';
 import { useDesignerMutation, useModuleDetail } from 'src/application/dynamic/queries/modules-queries';
 import { useMe } from 'src/application/dynamic/queries/permissions-queries';
 import { useEntities } from 'src/application/dynamic/queries/relation-queries';
-import { resolveI18n } from 'src/domain/dynamic/i18n-text';
+import { compactI18n, resolveI18n } from 'src/domain/dynamic/i18n-text';
 import type { DeleteTargetRef, DesignerBlock, DesignerField, I18nText } from 'src/domain/dynamic/types';
 import { errorFor, notifyApiError } from 'src/presentation/dynamic/designer/api-error';
 import DeleteDialog from 'src/presentation/dynamic/designer/DeleteDialog.vue';
@@ -163,7 +163,7 @@ const titleOptions = computed(() =>
 const titleSel = useSelectFilter(titleOptions);
 const titleError = ref<ApiError | null>(null);
 // The menu shows the icon, so module updates also refresh it.
-const updateModule = useDesignerMutation((patch: { titleFieldId?: number; titleTemplate?: string; icon?: string; section?: string }) => {
+const updateModule = useDesignerMutation((patch: { titleFieldId?: number; titleTemplate?: string; icon?: string; section?: I18nText }) => {
   const m = mod.value!;
   return dynamicApi.updateModule(m.key, { name: m.name, icon: m.icon, section: m.section, titleFieldId: m.titleFieldId, titleTemplate: m.titleTemplate, ...patch });
 }, () => moduleKey.value, ['menu']);
@@ -202,13 +202,13 @@ function insertTemplateField(id: number | null) {
 function setIcon(icon: string) {
   updateModule.mutate({ icon }, { onError: (e) => fail(e) });
 }
-// Blank clears the section: `section: undefined` overrides the current value and is dropped from the JSON body.
-const sectionDraft = ref('');
-watch(() => mod.value?.section, (s) => { sectionDraft.value = s ?? ''; }, { immediate: true });
+// Blank zh-TW clears the section: `section: undefined` overrides the current value and is dropped from the JSON body.
+const sectionDraft = ref<I18nText>({});
+watch(() => mod.value?.section, (s) => { sectionDraft.value = { ...s }; }, { immediate: true });
 function saveSection() {
-  const section = sectionDraft.value.trim() || undefined;
-  sectionDraft.value = section ?? '';
-  if (section === mod.value?.section) return;
+  const section = compactI18n(sectionDraft.value);
+  sectionDraft.value = { ...section };
+  if (JSON.stringify(section) === JSON.stringify(compactI18n(mod.value?.section))) return;
   updateModule.mutate({ section }, { onError: (e) => fail(e, ['Section']) });
 }
 </script>
@@ -231,7 +231,7 @@ function saveSection() {
           @click="askDelete({ kind: 'module', key: mod.key }, resolveI18n(mod.name, locale))"
         />
         <IconSelect :model-value="mod.icon ?? ''" :label="t('designer.icon')" style="min-width: 220px" @update:model-value="setIcon" />
-        <q-input v-model="sectionDraft" :label="t('designer.section')" :hint="t('designer.sectionHint')" maxlength="100" outlined dense
+        <I18nTextInput v-model="sectionDraft" :label="t('designer.section')" :hint="t('designer.sectionHint')" :maxlength="100" optional
           style="min-width: 220px" data-testid="module-section" @change="saveSection" />
         <q-input
           v-if="isExtension" :model-value="hostName" :label="t('designer.extension.hostEntity')" readonly outlined dense

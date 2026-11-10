@@ -1,6 +1,10 @@
+import { resolveI18n } from './i18n-text';
 import type { MenuItem, Me } from './types';
 
 export interface MenuGroup {
+  /** The zh-TW section text: the same section from different apps forms one group. undefined = unsectioned. */
+  key: string | undefined;
+  /** Display title in the current locale, taken from the group's first module. */
   title: string | undefined;
   items: MenuItem[];
   /** The trailing group of modules whose app is closed (read-only). */
@@ -8,21 +12,23 @@ export interface MenuGroup {
 }
 
 /**
- * Unsectioned items form the leading group (title undefined); sections follow by name; /menu order holds inside a group.
+ * Unsectioned items form the leading group (title undefined); sections follow by their zh-TW text in every locale,
+ * so the order does not jump when switching language; /menu order holds inside a group.
  * Items of closed apps are pulled out into one trailing group so they never mix with writable modules.
  */
-export function groupMenu(items: MenuItem[]): MenuGroup[] {
+export function groupMenu(items: MenuItem[], locale: string): MenuGroup[] {
   const groups = new Map<string | undefined, MenuItem[]>();
   const closed: MenuItem[] = [];
   for (const m of items) {
     if (m.closed) { closed.push(m); continue; }
-    const g = groups.get(m.section || undefined);
-    if (g) g.push(m); else groups.set(m.section || undefined, [m]);
+    const key = m.section?.['zh-TW'] || undefined;
+    const g = groups.get(key);
+    if (g) g.push(m); else groups.set(key, [m]);
   }
   const open: MenuGroup[] = [...groups.entries()]
-    .map(([title, list]) => ({ title, items: list }))
-    .sort((a, b) => (a.title === undefined ? -1 : b.title === undefined ? 1 : a.title.localeCompare(b.title)));
-  return closed.length ? [...open, { title: undefined, items: closed, closed: true }] : open;
+    .map(([key, list]) => ({ key, title: key === undefined ? undefined : resolveI18n(list[0]!.section, locale), items: list }))
+    .sort((a, b) => (a.key === undefined ? -1 : b.key === undefined ? 1 : a.key.localeCompare(b.key)));
+  return closed.length ? [...open, { key: undefined, title: undefined, items: closed, closed: true }] : open;
 }
 
 export interface SystemLink {
