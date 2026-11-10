@@ -1,0 +1,149 @@
+using System.Text.Json;
+using DynamicModules.Application.Dynamic.ApprovalService;
+using DynamicModules.Domain.Approvals;
+using DynamicModules.Domain.Entities.Dynamic;
+using DynamicModules.Domain.Organization;
+using DynamicModules.Domain.ValueObjects;
+using FluentAssertions;
+
+namespace DynamicModules.ApplicationTests.Dynamic.Approvals;
+
+/// <summary>簽核人解析的純函式（設計 §6.1、§6.4、§6.5）；組織與群組自己組。</summary>
+public class ApproverResolverTests
+{
+    private const long Finance = 1, Board = 2, PurchaseLead = 3, Big = 4;
+    private static readonly I18nText Name = new([KeyValuePair.Create("zh-TW", "關卡")]);
+
+    private static readonly Field OwnerField = new() { Id = 50, Key = "f_50", Type = FieldType.User, LabelI18n = new([KeyValuePair.Create("zh-TW", "負責人")]) };
+
+    private static ResolveContext Ctx(string initiator, IReadOnlyList<string>? picks = null, string[]? admins = null, string[]? inactive = null,
+        Dictionary<string, JsonElement?>? values = null)
+    {
+        string[] users = ["gm", "mgrA", "emp1", "lead1", "emp3", "buyer1", "buyer2", "fin1", "fin2", "admin", .. Enumerable.Range(1, 25).Select(i => $"u{i}")];
+        var org = new OrgSnapshot(
+            new Dictionary<long, OrgDepartment>
+            {
+                [10] = new(10, null, "gm", true), [11] = new(11, 10, "mgrA", true), [12] = new(12, 11, "lead1", true),
+                [13] = new(13, 10, null, true)
+            },
+            new Dictionary<string, long> { ["gm"] = 10, ["mgrA"] = 11, ["lead1"] = 12, ["emp3"] = 12, ["buyer1"] = 13, ["buyer2"] = 13 },
+            users.Except(inactive ?? []).ToHashSet());
+        var groups = new Dictionary<long, IReadOnlyList<string>>
+        {
+            [Finance] = ["fin1", "fin2"], [Board] = [], [PurchaseLead] = ["buyer2"], [Big] = Enumerable.Range(1, 21).Select(i => $"u{i}").ToList()
+        };
+        var module = new Module { Blocks = [new Block { Fields = [OwnerField] }] };
+        return new ResolveContext(module, initiator, values ?? [], picks, org, groups, admins ?? ["admin"],
+            new Dictionary<long, string> { [Finance] = "finance", [Board] = "board", [PurchaseLead] = "purchase-lead", [Big] = "big" });
+    }
+
+    private static ApproverSource Group(params long[] ids) => new(ApprovalSources.Group, GroupIds: [.. ids]);
+
+    private static StageResolution Resolve(ResolveContext ctx, ApproverSource source, string mode = ApprovalModes.Any,
+        string onEmpty = ApprovalOnEmpty.Fallback, ApproverSource? fallback = null) =>
+        ApproverResolver.Resolve(ctx, Name, mode, source, fallback, onEmpty);
+
+    [Fact]
+    public void Group_RemovesInitiator_Dedups()
+    {
+        var r = Resolve(Ctx("fin1"), Group(Finance, Finance));
+        r.Error.Should().BeNull();
+        r.Seats.Should().ContainSingle().Which.UserIds.Should().Equal("fin2");
+    }
+
+    [Fact]
+    public void All_EmptyGroupUnit_GetsFallbackSeat()
+    {
+        var r = Resolve(Ctx("buyer1"), Group(Board, PurchaseLead), ApprovalModes.All);
+        r.Error.Should().BeNull();
+        r.Seats.Select(s => s.SeatKey).Should().Equal("u:buyer2", "fb:0");
+        r.Seats[1].UserIds.Should().Equal("admin");
+        r.Seats[1].Reason.Should().Be(ApprovalTaskReason.Fallback);
+        r.Seats[1].FallbackFor.Should().Be("board");
+    }
+
+    [Fact]
+    public void Any_EmptyUnit_AddsFallbackToCandidates()
+    {
+        var r = Resolve(Ctx("buyer1"), Group(Board, PurchaseLead));
+        r.Seats.Should().OnlyContain(s => s.SeatKey == ApproverResolver.AnySeat);
+        r.Seats.SelectMany(s => s.UserIds).Should().BeEquivalentTo(["buyer2", "admin"]);
+        r.Seats.Single(s => s.Reason == ApprovalTaskReason.Fallback).UserIds.Should().Equal("admin");
+    }
+
+    [Fact]
+    public void Skip_OnlyWhenAllUnitsEmpty()
+    {
+        Resolve(Ctx("buyer1"), Group(Board), onEmpty: ApprovalOnEmpty.Skip).AllUnitsEmpty.Should().BeTrue();
+        var partial = Resolve(Ctx("buyer1"), Group(Board, PurchaseLead), ApprovalModes.All, ApprovalOnEmpty.Skip);
+        partial.AllUnitsEmpty.Should().BeFalse();
+        partial.Seats.Select(s => s.SeatKey).Should().Equal("u:buyer2", "fb:0");
+    }
+
+    [Fact]
+    public void FallbackOnlyInitiator_Error()
+    {
+        var r = Resolve(Ctx("admin"), Group(Board));
+        r.Error.Should().Be(ApprovalMessages.NoApprover("關卡", "board"));
+        r.Seats.Should().BeEmpty();
+    }
+
+    [Fact]
+    public void Over20_Error() =>
+        Resolve(Ctx("buyer1"), Group(Big)).Error.Should().Be(ApprovalMessages.TooManyApprovers("關卡"));
+
+    [Fact]
+    public void InactiveUser_Excluded()
+    {
+        var r = Resolve(Ctx("buyer1", inactive: ["fin2"]), Group(Finance));
+        r.Seats.Should().ContainSingle().Which.UserIds.Should().Equal("fin1");
+        // users 來源：停用的那一位是空的單位 → 由備援頂替
+        var users = Resolve(Ctx("buyer1", inactive: ["fin2"]), new ApproverSource(ApprovalSources.Users, UserIds: ["fin1", "fin2"]), ApprovalModes.All);
+        users.Seats.Select(s => s.SeatKey).Should().Equal("u:fin1", "fb:0");
+        users.Seats[1].FallbackFor.Should().Be("fin2");
+    }
+
+    [Fact]
+    public void UnmatchedGroups_ActAsEmptyUnits()
+    {
+        var r = Resolve(Ctx("buyer1"), new ApproverSource(ApprovalSources.Group, GroupIds: [PurchaseLead], UnmatchedGroups: ["board"]), ApprovalModes.All);
+        r.Seats.Select(s => s.SeatKey).Should().Equal("u:buyer2", "fb:0");
+        r.Seats[1].FallbackFor.Should().Be("board");
+    }
+
+    [Fact]
+    public void Manager_VacantGoesUp_InitiatorIsManagerGoesUp_NoDepartmentFallback()
+    {
+        Resolve(Ctx("buyer1"), new ApproverSource(ApprovalSources.Manager, Level: 1)).Seats.Single().UserIds.Should().Equal("gm");
+        Resolve(Ctx("lead1"), new ApproverSource(ApprovalSources.Manager, Level: 1)).Seats.Single().UserIds.Should().Equal("mgrA");
+        Resolve(Ctx("emp3"), new ApproverSource(ApprovalSources.Manager, Level: 2)).Seats.Single().UserIds.Should().Equal("mgrA");
+        var none = Resolve(Ctx("fin1"), new ApproverSource(ApprovalSources.Manager, Level: 1));
+        none.Seats.Single().Reason.Should().Be(ApprovalTaskReason.Fallback);
+        none.Seats.Single().FallbackFor.Should().Be(ApprovalMessages.ManagerLabel(1));
+    }
+
+    [Fact]
+    public void Fallback_ManagerSource_ResolvesInitiatorsManager()
+    {
+        var r = Resolve(Ctx("emp3"), Group(Board), fallback: new ApproverSource(ApprovalSources.Manager, Level: 1));
+        r.Seats.Single().UserIds.Should().Equal("lead1");
+    }
+
+    [Fact]
+    public void UserField_NotCandidateOrSelf_IsEmpty()
+    {
+        var src = new ApproverSource(ApprovalSources.UserField, FieldId: OwnerField.Id, CandidateGroupIds: [Finance]);
+        JsonElement? V(string u) => JsonSerializer.SerializeToElement(u);
+        Resolve(Ctx("emp3", values: new() { ["f_50"] = V("fin1") }), src).Seats.Single().UserIds.Should().Equal("fin1");
+        Resolve(Ctx("emp3", values: new() { ["f_50"] = V("gm") }), src).Seats.Single().Reason.Should().Be(ApprovalTaskReason.Fallback);
+        Resolve(Ctx("fin1", values: new() { ["f_50"] = V("fin1") }), src).Seats.Single().Reason.Should().Be(ApprovalTaskReason.Fallback);
+    }
+
+    [Fact]
+    public void InitiatorPick_EachPickIsAUnit()
+    {
+        var src = new ApproverSource(ApprovalSources.InitiatorPick, Min: 1, Max: 3);
+        var r = Resolve(Ctx("emp3", picks: ["fin1", "fin2"]), src, ApprovalModes.All);
+        r.Seats.Select(s => s.SeatKey).Should().Equal("u:fin1", "u:fin2");
+    }
+}

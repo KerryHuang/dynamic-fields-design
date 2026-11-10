@@ -41,4 +41,11 @@ public static class ApprovalMessages
     public static string EditableFromLocked(string flow) => $"流程「{flow}」套用的起始狀態是唯讀或簽核鎖定狀態，不能設可編輯欄位";
     public static string EditableInClosure(string field, string via, string flow) => $"可編輯欄位「{field}」經由 {via} 影響流程「{flow}」的條件或簽核人";
     public static string EventPushes(string ev, string s) => $"連動事件「{ev}」會把狀態改成需簽核的「{s}」";
+
+    // ── 簽核人解析（§6.5） ──
+    public static string TooManyApprovers(string stage) => $"關卡「{stage}」的簽核人超過 20 人";
+    public static string NoApprover(string stage, string source) => $"關卡「{stage}」的來源「{source}」找不到簽核人，備援也沒有人";
+    public static string FallbackNote(string source) => $"來源 {source} 找不到簽核人，依設定改派備援簽核人";
+    public static string ManagerLabel(int level) => $"第 {level} 層主管";
+    public const string PickLabel = "發起人自選";
 }
