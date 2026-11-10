@@ -8,7 +8,7 @@ namespace DynamicModules.Application.Dynamic.LedgerService;
 /// <summary>分錄閘（設計 §2 步驟 2、§6.4）：分錄模組及其明細模組的修改與刪除一律擋下。不快取，每次問資料庫（表很小、有索引）。</summary>
 public class LedgerGate(ILedgerRepository ledgers, IModuleRepository modules)
 {
-    public const string Message = "分錄不可修改，請新增沖銷分錄";
+    public static readonly MessageRef Rejected = MessageRef.Of(MessageText.LedgerImmutable);
 
     /// <summary>module 要已載入欄位（判斷是否為明細）。</summary>
     public async Task<bool> IsLedgerAsync(Module module, CancellationToken ct)
@@ -20,7 +20,7 @@ public class LedgerGate(ILedgerRepository ledgers, IModuleRepository modules)
     }
 
     public async Task<ServiceResult?> RejectWriteAsync(Module module, CancellationToken ct) =>
-        await IsLedgerAsync(module, ct) ? ServiceResult.Conflict(Message) : null;
+        await IsLedgerAsync(module, ct) ? ServiceResult.Conflict(Rejected) : null;
 }
 
 /// <summary>
@@ -29,13 +29,13 @@ public class LedgerGate(ILedgerRepository ledgers, IModuleRepository modules)
 /// </summary>
 public class ImmutableDataGuard(LedgerGate gate, IRecordRepository records)
 {
-    public const string Message = "這是分錄模組，這項變更會改寫既有分錄的資料，不允許";
+    private static readonly MessageRef Rejected = MessageRef.Of(MessageText.LedgerSchemaImmutable);
 
     public async Task<ServiceResult?> RejectAsync(IEnumerable<Module> affected, CancellationToken ct)
     {
         foreach (var m in affected)
             if (await gate.IsLedgerAsync(m, ct) && await records.AnyByModuleAsync(m.Id, ct))
-                return ServiceResult.Conflict(Message);
+                return ServiceResult.Conflict(Rejected);
         return null;
     }
 

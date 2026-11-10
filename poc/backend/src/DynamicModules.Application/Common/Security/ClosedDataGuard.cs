@@ -11,11 +11,11 @@ namespace DynamicModules.Application.Common.Security;
 /// </summary>
 public static class ClosedDataGuard
 {
-    public const string Message = "應用程式已關閉，這項變更會改寫既有資料，請先重新開啟應用程式";
+    private static readonly MessageRef Rejected = MessageRef.Of(MessageText.AppClosedNoRewrite);
 
     /// <summary>任一模組是 Closed 就回 409；否則 null，可以繼續。</summary>
     public static ServiceResult? Reject(IEnumerable<Module> affected) =>
-        affected.Any(m => m.Status == ModuleStatus.Closed) ? ServiceResult.Conflict(Message) : null;
+        affected.Any(m => m.Status == ModuleStatus.Closed) ? ServiceResult.Conflict(Rejected) : null;
 
     public static ServiceResult? Reject(Module affected) => Reject([affected]);
 

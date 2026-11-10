@@ -22,7 +22,7 @@ public sealed class DateTimeHandler : IFieldTypeHandler
     public FieldValueResult Normalize(JsonElement? input, Field field, FieldTypeContext ctx)
     {
         if (HandlerHelpers.IsNull(input)) return FieldValueResult.Ok(null);
-        const string error = "日期時間格式錯誤";
+        const string error = FieldErrors.DateTimeFormat;
         if (input!.Value.ValueKind != JsonValueKind.String) return FieldValueResult.Fail(error);
         var s = input.Value.GetString()!;
         if (!Iso.IsMatch(s) || !DateTimeOffset.TryParse(s, CultureInfo.InvariantCulture, DateTimeStyles.None, out var dto))

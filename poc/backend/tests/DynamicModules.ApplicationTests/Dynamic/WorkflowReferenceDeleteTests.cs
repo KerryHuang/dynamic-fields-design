@@ -52,7 +52,7 @@ public class WorkflowReferenceDeleteTests : ConversionTestBase
 
         var r = await Send(new DeleteRecordRequest(party.Id, party.RowVersion));
         r.IsConflict.Should().BeTrue(Why(r));
-        r.Message.Should().Be(DeleteRecordHandler.LockedReferencedMessage);
+        r.Message.Should().Be("有處於唯讀狀態的單據參照這筆記錄，不能刪除");
 
         (await Stored(party.Id)).DeleteFlag.Should().BeFalse();
         var kept = await Stored(doc.Id);
@@ -120,7 +120,7 @@ public class WorkflowReferenceDeleteTests : ConversionTestBase
 
         var r = await Send(new DeleteRecordRequest(party.Id, party.RowVersion));
         r.IsConflict.Should().BeTrue(Why(r));
-        r.Message.Should().Be(DeleteRecordHandler.LockedReferencedMessage);
+        r.Message.Should().Be("有處於唯讀狀態的單據參照這筆記錄，不能刪除");
 
         (await Stored(party.Id)).DeleteFlag.Should().BeFalse();
         var line = await Stored(lineId);

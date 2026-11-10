@@ -20,6 +20,6 @@ public sealed class UserHandler : IFieldTypeHandler
         var s = input!.Value.ValueKind == JsonValueKind.String ? input.Value.GetString()! : "";
         return ctx.UserIds.Contains(s)
             ? FieldValueResult.Ok(HandlerHelpers.ToElement(s))
-            : FieldValueResult.Fail("使用者不存在");
+            : FieldValueResult.Fail(FieldErrors.UserNotFound);
     }
 }

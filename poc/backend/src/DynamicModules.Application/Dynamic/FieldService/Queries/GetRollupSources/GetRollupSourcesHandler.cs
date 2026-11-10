@@ -13,7 +13,7 @@ public class GetRollupSourcesHandler(IModuleRepository modules) : IRequestHandle
 {
     public async Task<ServiceResult> Handle(GetRollupSourcesRequest request, CancellationToken ct)
     {
-        if (!await modules.KeyExistsAsync(request.ModuleKey, ct)) return ServiceResult.NotFound("找不到模組");
+        if (!await modules.KeyExistsAsync(request.ModuleKey, ct)) return ServiceResult.NotFound(MessageRef.Of(MessageText.ModuleNotFound));
         var incoming = await modules.ListIncomingReferenceFieldsAsync(request.ModuleKey, ct);
         return ServiceResult.Success(incoming.Select(x => new RollupSourceResponse(
             x.Field.Id, x.Field.LabelI18n, x.Source.Key, x.Source.NameI18n,

@@ -1,3 +1,4 @@
+using DynamicModules.Domain.FieldTypes;
 using System.Text.Json;
 using DynamicModules.Domain.Entities.Dynamic;
 using FluentAssertions;
@@ -21,7 +22,7 @@ public class EnumHandlerTests
     [InlineData("\"opt_x\"")]
     [InlineData("5")]
     public void EnumHandler_UnknownOrMalformed_ReturnsError(string json) =>
-        Run(FieldType.Enum, json, ctx: Ctx(active: [5])).Error.Should().Be("選項不存在或已停用");
+        Run(FieldType.Enum, json, ctx: Ctx(active: [5])).Error.Should().Be(FieldErrors.OptionInvalid);
 
     [Fact]
     public void EnumHandler_InactiveOption_AllowedOnlyWhenUnchanged()
@@ -31,10 +32,10 @@ public class EnumHandlerTests
         Run(FieldType.Enum, "\"opt_7\"", ctx: unchanged).IsValid.Should().BeTrue();
 
         var created = Ctx(active: [5], all: [5, 7]);
-        Run(FieldType.Enum, "\"opt_7\"", ctx: created).Error.Should().Be("選項不存在或已停用");
+        Run(FieldType.Enum, "\"opt_7\"", ctx: created).Error.Should().Be(FieldErrors.OptionInvalid);
 
         var changedFromOther = Ctx(active: [5], all: [5, 7], previous: "\"opt_5\"");
-        Run(FieldType.Enum, "\"opt_7\"", ctx: changedFromOther).Error.Should().Be("選項不存在或已停用");
+        Run(FieldType.Enum, "\"opt_7\"", ctx: changedFromOther).Error.Should().Be(FieldErrors.OptionInvalid);
     }
 
     [Fact]
@@ -57,7 +58,7 @@ public class EnumHandlerTests
         ok.IsValid.Should().BeTrue();
         ok.Value!.Value.EnumerateArray().Select(e => e.GetString()).Should().Equal("opt_1", "opt_2");
 
-        Run(FieldType.MultiEnum, "[\"opt_3\"]", ctx: ctx).Error.Should().Be("選項不存在或已停用");
+        Run(FieldType.MultiEnum, "[\"opt_3\"]", ctx: ctx).Error.Should().Be(FieldErrors.OptionInvalid);
     }
 
     [Theory]
@@ -65,7 +66,7 @@ public class EnumHandlerTests
     [InlineData("[1]")]
     [InlineData("[\"opt_99\"]")]
     public void MultiEnumHandler_Invalid_ReturnsError(string json) =>
-        Run(FieldType.MultiEnum, json, ctx: Ctx(active: [1])).Error.Should().Be("選項不存在或已停用");
+        Run(FieldType.MultiEnum, json, ctx: Ctx(active: [1])).Error.Should().Be(FieldErrors.OptionInvalid);
 
     [Fact]
     public void MultiEnumHandler_Null_IsOkNull() => Run(FieldType.MultiEnum, "null", ctx: Ctx(active: [1])).Value.Should().BeNull();

@@ -43,9 +43,6 @@ public class DetailWriter(
     IDynamicAccessGuard guard, ReferenceValidator refs, ReferenceFill fill, ICurrentUser user, IBusinessTime time, RecordHistoryWriter history,
     ICurrentLocale locale)
 {
-    public const string UnknownDetail = "明細模組不存在或未啟用";
-    public const string RowNotFound = "明細不存在";
-    public const string TooManyRows = "明細最多 200 列";
     public const int MaxRows = 200;
 
     /// <param name="parentRecord">null 表示新增表頭（沒有既有列）。</param>
@@ -60,7 +57,7 @@ public class DetailWriter(
         // 寫入只認 Active 的明細模組；Closed 的明細（不會與 Active 表頭並存）一律當成不存在
         var children = (await ReadableDetailModulesAsync(modules, parent, ct)).Where(c => c.IsWritable()).ToList();
         foreach (var key in (details?.Keys ?? Enumerable.Empty<string>()).Where(k => children.All(c => c.Key != k)))
-            plan.Errors[$"details.{key}"] = [UnknownDetail];
+            plan.Errors[$"details.{key}"] = [MessageText.Get(locale.Locale, MessageText.UnknownDetail)];
 
         var userIds = await modules.ListUserIdsAsync(ct);
         IReadOnlyDictionary<string, JsonElement?>? header = null;
@@ -86,7 +83,7 @@ public class DetailWriter(
                     return new DetailPlan { Failure = ServiceResult.Stale() };
 
             var after = existing.Count + set.Changes.Count(c => c.Before is null) - set.Changes.Count(c => c.After is null);
-            if (after > MaxRows) plan.Errors[$"details.{child.Key}"] = [TooManyRows];
+            if (after > MaxRows) plan.Errors[$"details.{child.Key}"] = [MessageText.Get(locale.Locale, MessageText.TooManyDetailRows)];
             ComputeRollups(parent, set, userIds, plan.RollupValues);
             plan.Sets.Add(set);
         }
@@ -115,7 +112,7 @@ public class DetailWriter(
             record = set.Existing.FirstOrDefault(r => r.Id == id);
             if (record is null || set.Changes.Any(c => c.Record == record))
             {
-                errors[prefix + RecordValueProcessor.RecordErrorKey] = [RowNotFound];
+                errors[prefix + RecordValueProcessor.RecordErrorKey] = [MessageText.Get(locale.Locale, MessageText.DetailRowNotFound)];
                 return false;
             }
             if (record.RowVersion != row.RowVersion) return true;
@@ -124,7 +121,7 @@ public class DetailWriter(
             {
                 // 明細列自己的全單唯讀只鎖這一列，刪除也擋
                 if (RuleEngine.Evaluate(set.Child, previous, previous, registry, userIds, time.Today).ReadOnlyAll)
-                    errors[prefix + RecordValueProcessor.RecordErrorKey] = [RecordValueProcessor.ReadOnlyRecordMessage];
+                    errors[prefix + RecordValueProcessor.RecordErrorKey] = [MessageText.Get(locale.Locale, MessageText.RecordReadOnly)];
                 else set.Changes.Add(new DetailRowChange(record, previous, null));
                 return false;
             }

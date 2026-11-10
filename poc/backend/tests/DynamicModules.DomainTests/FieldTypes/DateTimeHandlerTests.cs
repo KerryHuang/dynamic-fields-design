@@ -1,3 +1,4 @@
+using DynamicModules.Domain.FieldTypes;
 using DynamicModules.Domain.Entities.Dynamic;
 using FluentAssertions;
 using static DynamicModules.DomainTests.FieldTypes.HandlerTestKit;
@@ -22,7 +23,7 @@ public class DateTimeHandlerTests
     public void DateHandler_RejectsNonIsoDate(string json)
     {
         var r = Run(FieldType.Date, json);
-        (r.IsValid, r.Error).Should().Be((false, "日期格式必須是 yyyy-MM-dd"));
+        (r.IsValid, r.Error).Should().Be((false, FieldErrors.DateFormat));
     }
 
     [Fact]
@@ -53,7 +54,7 @@ public class DateTimeHandlerTests
     public void DateTimeHandler_RejectsMissingOffsetOrBadFormat(string json)
     {
         var r = Run(FieldType.DateTime, json);
-        (r.IsValid, r.Error).Should().Be((false, "日期時間格式錯誤"));
+        (r.IsValid, r.Error).Should().Be((false, FieldErrors.DateTimeFormat));
     }
 
     [Fact]
@@ -61,7 +62,7 @@ public class DateTimeHandlerTests
     {
         Run(FieldType.Time, "\"09:30\"").Value!.Value.GetString().Should().Be("09:30");
         foreach (var bad in new[] { "\"9:30\"", "\"25:00\"", "\"09:30:00\"", "1" })
-            Run(FieldType.Time, bad).Error.Should().Be("時間格式必須是 HH:mm");
+            Run(FieldType.Time, bad).Error.Should().Be(FieldErrors.TimeFormat);
         Run(FieldType.Time, "null").IsValid.Should().BeTrue();
     }
 }

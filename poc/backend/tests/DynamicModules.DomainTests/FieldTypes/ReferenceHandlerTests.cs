@@ -10,7 +10,7 @@ namespace DynamicModules.DomainTests.FieldTypes;
 
 public class ReferenceHandlerTests
 {
-    private const string NotFound = "參照的資料不存在或無權選取";
+    private const string NotFound = FieldErrors.RefNotFound;
 
     private static FieldConfig Module => new() { RefTarget = new ReferenceTarget(ReferenceTarget.ModuleKind, "customer") };
     private static FieldConfig Entity => new() { RefTarget = new ReferenceTarget(ReferenceTarget.EntityKind, "test.entity") };

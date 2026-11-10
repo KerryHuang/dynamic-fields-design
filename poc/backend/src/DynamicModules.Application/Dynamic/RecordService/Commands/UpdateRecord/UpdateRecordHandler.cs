@@ -46,17 +46,11 @@ public class UpdateRecordHandler(
         var previous = RecordValueProcessor.Parse(record.ValuesJson);
         // 決策 4 第 2 步：表頭被全單唯讀鎖住時整個請求擋下，只改明細也一樣
         if (RuleEngine.Evaluate(module, previous, previous, registry, userIds, time.Today).ReadOnlyAll)
-            return ServiceResult.Invalid(new Dictionary<string, string[]>
-            {
-                [RecordValueProcessor.RecordErrorKey] = [RecordValueProcessor.ReadOnlyRecordMessage]
-            });
+            return ServiceResult.Invalid(RecordValueProcessor.RecordErrorKey, MessageRef.Of(MessageText.RecordReadOnly));
 
         // 狀態機的唯讀狀態：除了狀態欄位，明細也不能動（表頭欄位由 Process 忽略）
         if (module.Workflow is { } wf && wf.IsLocked(previous) && request.Details?.Values.Any(rows => rows.Count > 0) == true)
-            return ServiceResult.Invalid(new Dictionary<string, string[]>
-            {
-                [RecordValueProcessor.RecordErrorKey] = [WorkflowEnforcer.LockedDetailsMessage]
-            });
+            return ServiceResult.Invalid(RecordValueProcessor.RecordErrorKey, MessageRef.Of(MessageText.WorkflowLockedDetails));
 
         var validRefKeys = await refs.ValidKeysAsync(module, request.Values, previous, ct);
         RecordValueProcessor.RejectFrozenInput(module, request.Values, previous, userIds, registry, perms, validRefKeys, request.SystemKeys);

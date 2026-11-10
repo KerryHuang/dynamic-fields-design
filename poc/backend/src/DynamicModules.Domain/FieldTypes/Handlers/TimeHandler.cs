@@ -20,6 +20,6 @@ public sealed class TimeHandler : IFieldTypeHandler
         var s = input!.Value.ValueKind == JsonValueKind.String ? input.Value.GetString()! : "";
         return DateTime.TryParseExact(s, "HH:mm", CultureInfo.InvariantCulture, DateTimeStyles.None, out _)
             ? FieldValueResult.Ok(HandlerHelpers.ToElement(s))
-            : FieldValueResult.Fail("時間格式必須是 HH:mm");
+            : FieldValueResult.Fail(FieldErrors.TimeFormat);
     }
 }

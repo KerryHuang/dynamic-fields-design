@@ -22,6 +22,6 @@ public class GetConversionsHandler(IConversionRepository conversions, IModuleRep
 
         if (request.Key is null) return ServiceResult.Success((await conversions.ListAsync(ct)).Select(Map).ToList());
         var one = await conversions.GetByKeyAsync(request.Key, ct);
-        return one is null ? ServiceResult.NotFound("找不到轉換定義") : ServiceResult.Success(Map(one));
+        return one is null ? ServiceResult.NotFound(MessageRef.Of(MessageText.ConversionNotFound)) : ServiceResult.Success(Map(one));
     }
 }

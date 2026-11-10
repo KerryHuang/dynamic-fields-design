@@ -37,7 +37,7 @@ public class UpdateEventHandler(
     public async Task<ServiceResult> Handle(UpdateEventRequest request, CancellationToken ct)
     {
         var e = await events.GetByKeyAsync(request.Key, ct);
-        if (e is null) return ServiceResult.NotFound("找不到事件");
+        if (e is null) return ServiceResult.NotFound(MessageRef.Of(MessageText.EventNotFound));
         var input = request.Input;
         if (input.Key != e.Key) return ServiceResult.Invalid(new Dictionary<string, string[]> { ["key"] = ["事件代碼不能更改"] });
         var source = (await modules.GetByIdAsync(e.SourceModuleId, includeChildren: false, ct))!;
@@ -60,7 +60,7 @@ public class DeleteEventHandler(IEventRepository events, IUnitOfWork uow) : IReq
     public async Task<ServiceResult> Handle(DeleteEventRequest request, CancellationToken ct)
     {
         var e = await events.GetByKeyAsync(request.Key, ct);
-        if (e is null) return ServiceResult.NotFound("找不到事件");
+        if (e is null) return ServiceResult.NotFound(MessageRef.Of(MessageText.EventNotFound));
         var user = (await events.ListAsync(ct)).FirstOrDefault(o => o.Key != e.Key && o.Definition.Effects.Any(x => x is { Kind: "reverse" } && x.OfEvent == e.Key));
         if (user is not null) return ServiceResult.Conflict($"事件「{user.Key}」的沖銷效果引用了這個事件，請先移除該效果");
         events.Remove(e);
@@ -77,7 +77,7 @@ public class GetEventsHandler(IEventRepository events, IModuleRepository modules
         if (request.Key is not null)
         {
             var one = await events.GetByKeyAsync(request.Key, ct);
-            if (one is null) return ServiceResult.NotFound("找不到事件");
+            if (one is null) return ServiceResult.NotFound(MessageRef.Of(MessageText.EventNotFound));
             list = [one];
         }
         else if (request.SourceModuleKey is not null)

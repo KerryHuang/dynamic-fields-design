@@ -25,7 +25,7 @@ public class UpdateFieldHandler(
     public async Task<ServiceResult> Handle(UpdateFieldRequest request, CancellationToken ct)
     {
         var module = await modules.GetByFieldIdAsync(request.FieldId, ct);
-        if (module is null) return ServiceResult.NotFound("找不到欄位");
+        if (module is null) return ServiceResult.NotFound(MessageRef.Of(MessageText.FieldNotFound));
         var oldBlock = module.Blocks.Single(b => b.Fields.Any(f => f.Id == request.FieldId));
         var field = oldBlock.Fields.Single(f => f.Id == request.FieldId);
 

@@ -15,7 +15,7 @@ public class SaveModulePermissionsHandler(
     public async Task<ServiceResult> Handle(SaveModulePermissionsRequest request, CancellationToken ct)
     {
         var module = await modules.GetByKeyAsync(request.Key, includeChildren: true, ct);
-        if (module is null) return ServiceResult.NotFound("找不到模組");
+        if (module is null) return ServiceResult.NotFound(MessageRef.Of(MessageText.ModuleNotFound));
 
         var body = request.Body;
         var allGroups = await permissions.ListGroupsAsync(ct);

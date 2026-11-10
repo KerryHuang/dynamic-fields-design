@@ -243,7 +243,7 @@ public class RecordPermissionTests : IAsyncLifetime
         var r = await Send(new GetRecordRequest(id));
 
         r.IsNotFound.Should().BeTrue();
-        r.Message.Should().Be(RecordMapper.RecordNotFound);
+        r.Message.Should().Be("記錄不存在");
     }
 
     [Fact]
@@ -362,9 +362,9 @@ public class RecordPermissionTests : IAsyncLifetime
         var del = await Send(new DeleteRecordRequest(rec.Id, rec.RowVersion));
 
         upd.IsNotFound.Should().BeTrue();
-        upd.Message.Should().Be(RecordMapper.RecordNotFound);
+        upd.Message.Should().Be("記錄不存在");
         del.IsNotFound.Should().BeTrue();
-        del.Message.Should().Be(RecordMapper.RecordNotFound);
+        del.Message.Should().Be("記錄不存在");
         (await Reload(rec.Id)).Values[s.NameKey]!.Value.GetString().Should().Be("b1");
     }
 

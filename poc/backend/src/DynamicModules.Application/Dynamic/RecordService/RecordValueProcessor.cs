@@ -1,5 +1,6 @@
 using System.Globalization;
 using System.Text.Json;
+using DynamicModules.Application.Common;
 using DynamicModules.Application.Common.Security;
 using DynamicModules.Application.Dynamic.FieldService.Data;
 using DynamicModules.Domain.Entities.Dynamic;
@@ -16,9 +17,6 @@ public sealed record RuleContext(DateOnly Today, string Locale = I18nText.Fallba
 /// <summary>把輸入值依欄位型別正規化、套預設值、算公式，再套規則（必填、下拉連動、驗證），並與舊值合併。</summary>
 public static class RecordValueProcessor
 {
-    public const string RequiredMessage = "此欄位必填";
-    public const string ReadOnlyRecordMessage = "此記錄目前不可修改";
-    public const string OptionOutOfRangeMessage = "選項不在可選範圍";
     /// <summary>整筆記錄層級的錯誤鍵：全單唯讀，或驗證規則的目標欄位使用者都看不到。</summary>
     public const string RecordErrorKey = "_record";
     public const int MaxTitleLength = 200;
@@ -55,7 +53,7 @@ public static class RecordValueProcessor
         var stored = previous is null ? null : RuleEngine.Evaluate(module, previous, previous, registry, userIds, rules.Today);
         if (stored is { ReadOnlyAll: true })
         {
-            errors[RecordErrorKey] = [ReadOnlyRecordMessage];
+            errors[RecordErrorKey] = [MessageText.Get(rules.Locale, MessageText.RecordReadOnly)];
             return (values, errors);
         }
 
@@ -87,7 +85,7 @@ public static class RecordValueProcessor
             if (!result.IsValid)
             {
                 // 預設值已不合法（如預設選項被停用）：視同沒有預設值，必填檢查照常
-                if (!fromDefault) errors[field.Key] = [result.Error!];
+                if (!fromDefault) errors[field.Key] = [MessageText.Get(rules.Locale, result.Error!, result.ErrorArgs ?? [])];
             }
             else if (result.Value is null) values.Remove(field.Key);
             else values[field.Key] = result.Value;
@@ -102,7 +100,7 @@ public static class RecordValueProcessor
 
         foreach (var field in fields.Where(f => outcome.RequiredFieldIds.Contains(f.Id) && Writable(f)))
             if (!errors.ContainsKey(field.Key) && IsEmpty(values.GetValueOrDefault(field.Key)))
-                errors[field.Key] = [RequiredMessage];
+                errors[field.Key] = [MessageText.Get(rules.Locale, MessageText.Required)];
 
         // 無權寫入（含權限隱藏）的欄位不檢查範圍，值不會被這次存檔改動。可選範圍沒變（和舊值求值的結果相同）時，只檢查和舊值不同的選項
         // （multienum 即新加入的），舊的停用／超範圍值不擋存檔；範圍因這次存檔而變了（如上層被改掉），整個值都要重驗。
@@ -113,7 +111,7 @@ public static class RecordValueProcessor
             var rangeChanged = stored is null || !stored.AllowedOptions.TryGetValue(fieldId, out var before) || !before.SetEquals(allowed);
             var checkedIds = OptionIdsOf(values.GetValueOrDefault(field.Key));
             if (!rangeChanged) checkedIds = checkedIds.Except(OptionIdsOf(previous!.GetValueOrDefault(field.Key)));
-            if (checkedIds.Any(id => !allowed.Contains(id))) errors[field.Key] = [OptionOutOfRangeMessage];
+            if (checkedIds.Any(id => !allowed.Contains(id))) errors[field.Key] = [MessageText.Get(rules.Locale, MessageText.OptionOutOfRange)];
         }
 
         if (!normalizeFailed)

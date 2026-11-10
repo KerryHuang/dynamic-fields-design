@@ -2,6 +2,7 @@ using System.Reflection;
 using System.Text.RegularExpressions;
 using FluentAssertions;
 using DynamicModules.Application.Common;
+using DynamicModules.Domain.FieldTypes;
 
 namespace DynamicModules.ApplicationTests.Common;
 
@@ -59,5 +60,14 @@ public class MessageTextTests
                 act.Should().NotThrow($"{key} 的 {Locales[i]} 帶入 {args.Length} 個參數");
             }
         }
+    }
+
+    [Fact]
+    public void EveryDomainFieldError_HasAMessage()
+    {
+        var keys = Entries().Select(e => e.Key).ToHashSet();
+        var missing = typeof(FieldErrors).GetFields(BindingFlags.Public | BindingFlags.Static)
+            .Select(f => (string)f.GetRawConstantValue()!).Where(k => !keys.Contains(k)).ToList();
+        missing.Should().BeEmpty("Domain 只帶鍵，沒有文字的鍵在執行時會 KeyNotFoundException");
     }
 }

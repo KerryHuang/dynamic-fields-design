@@ -10,7 +10,7 @@ namespace DynamicModules.Domain.FieldTypes.Handlers;
 /// </summary>
 public sealed class AttachmentHandler : IFieldTypeHandler
 {
-    public const string ForgedMessage = "附件只能透過上傳加入";
+    public const string ForgedMessage = FieldErrors.AttachmentForged;
 
     public FieldType Type => FieldType.Attachment;
 
@@ -21,7 +21,7 @@ public sealed class AttachmentHandler : IFieldTypeHandler
     public FieldValueResult Normalize(JsonElement? input, Field field, FieldTypeContext ctx)
     {
         if (input is not { } v || v.ValueKind == JsonValueKind.Null) return FieldValueResult.Ok(null);
-        if (v.ValueKind != JsonValueKind.Array) return FieldValueResult.Fail("附件的值必須是檔案清單");
+        if (v.ValueKind != JsonValueKind.Array) return FieldValueResult.Fail(FieldErrors.AttachmentNotList);
         var existing = AttachmentValue.Parse(ctx.PreviousValue).ToDictionary(f => f.Id);
         var kept = new List<AttachmentRef>();
         foreach (var e in v.EnumerateArray())

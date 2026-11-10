@@ -16,7 +16,7 @@ public class AddBlockHandler(
     public async Task<ServiceResult> Handle(AddBlockRequest request, CancellationToken ct)
     {
         var module = await modules.GetByKeyAsync(request.ModuleKey, includeChildren: true, ct);
-        if (module is null) return ServiceResult.NotFound("找不到模組");
+        if (module is null) return ServiceResult.NotFound(MessageRef.Of(MessageText.ModuleNotFound));
 
         var now = time.Now;
         var block = new Block

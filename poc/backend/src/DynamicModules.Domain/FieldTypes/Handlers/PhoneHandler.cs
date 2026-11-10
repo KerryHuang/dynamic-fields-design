@@ -17,5 +17,5 @@ public sealed class PhoneHandler : IFieldTypeHandler
     private static readonly Regex Pattern = new(@"^[0-9 +\-()#]{1,30}\z", RegexOptions.CultureInvariant);
 
     public FieldValueResult Normalize(JsonElement? input, Field field, FieldTypeContext ctx) =>
-        HandlerHelpers.NormalizePattern(input, Pattern, "電話格式錯誤");
+        HandlerHelpers.NormalizePattern(input, Pattern, FieldErrors.PhoneFormat);
 }

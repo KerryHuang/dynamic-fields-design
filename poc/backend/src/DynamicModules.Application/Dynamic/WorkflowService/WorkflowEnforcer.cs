@@ -1,4 +1,5 @@
 using System.Text.Json;
+using DynamicModules.Application.Common;
 using DynamicModules.Application.Common.Security;
 using DynamicModules.Domain.Entities.Dynamic;
 using DynamicModules.Domain.Repositories.Dynamic;
@@ -9,13 +10,11 @@ namespace DynamicModules.Application.Dynamic.WorkflowService;
 /// 狀態機的後端強制（前端只是縮小選項）：新增只能從起始狀態開始；修改時狀態有變就必須有 from → to 的定義，
 /// 而且使用者在該轉移的群組內（系統管理員可做任何已定義的轉移；沒有定義的轉移任何人都不行）。
 /// </summary>
-public class WorkflowEnforcer(IPermissionRepository permissions, ICurrentUser user, ISystemIdentity system)
+public class WorkflowEnforcer(IPermissionRepository permissions, ICurrentUser user, ISystemIdentity system, ICurrentLocale locale)
 {
-    public const string NotInitialMessage = "新增時只能使用起始狀態";
-    public const string NotAllowedMessage = "不允許這個狀態轉移";
-    public const string NotPermittedMessage = "你沒有權限執行這個狀態轉移";
-    public const string LockedDetailsMessage = "此狀態的單據不可修改明細";
-    public const string LockedDeleteMessage = "此狀態的單據不可刪除";
+    // 繁中文字取自字串表；簽核（ApprovalService）與既有測試還以字串用這兩句，之後簽核語系化時改走鍵
+    public static readonly string NotAllowedMessage = MessageText.Get(null, MessageText.WorkflowNotAllowed);
+    public static readonly string NotPermittedMessage = MessageText.Get(null, MessageText.WorkflowNotPermitted);
 
     private static bool HasState(JsonElement? v) =>
         v is { ValueKind: not JsonValueKind.Null } s && !(s.ValueKind == JsonValueKind.String && string.IsNullOrEmpty(s.GetString()));
@@ -70,7 +69,7 @@ public class WorkflowEnforcer(IPermissionRepository permissions, ICurrentUser us
 
         if (previous is null)
         {
-            if (now != wf.InitialOptionId) errors[key] = [NotInitialMessage];
+            if (now != wf.InitialOptionId) errors[key] = [MessageText.Get(locale.Locale, MessageText.WorkflowNotInitial)];
             return errors;
         }
 
@@ -79,7 +78,7 @@ public class WorkflowEnforcer(IPermissionRepository permissions, ICurrentUser us
         if (now == before || (now is null && wf.StateOf(previous) is null)) return errors;
         if (now is not { } to || wf.Find(before, to) is not { } transition)
         {
-            errors[key] = [NotAllowedMessage];
+            errors[key] = [MessageText.Get(locale.Locale, MessageText.WorkflowNotAllowed)];
             return errors;
         }
         // 需簽核的轉移只能走送出端點（簽核設計 §5.3）；系統身分（事件、簽核完成的轉移）交給簽核後盾判斷
@@ -92,7 +91,7 @@ public class WorkflowEnforcer(IPermissionRepository permissions, ICurrentUser us
 
         var inputs = await permissions.LoadInputsAsync(user.UserId, module, ct);
         var permitted = inputs is not null && (inputs.User.IsSystemAdmin || inputs.GroupIds.Any(transition.GroupIds.Contains));
-        if (!permitted) errors[key] = [NotPermittedMessage];
+        if (!permitted) errors[key] = [MessageText.Get(locale.Locale, MessageText.WorkflowNotPermitted)];
         return errors;
     }
 }

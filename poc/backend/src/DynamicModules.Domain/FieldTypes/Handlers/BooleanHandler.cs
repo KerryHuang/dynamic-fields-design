@@ -19,6 +19,6 @@ public sealed class BooleanHandler : IFieldTypeHandler
         if (HandlerHelpers.IsNull(input)) return FieldValueResult.Ok(null);
         return input!.Value.ValueKind is JsonValueKind.True or JsonValueKind.False
             ? FieldValueResult.Ok(HandlerHelpers.ToElement(input.Value.GetBoolean()))
-            : FieldValueResult.Fail("必須是是或否");
+            : FieldValueResult.Fail(FieldErrors.MustBeBoolean);
     }
 }

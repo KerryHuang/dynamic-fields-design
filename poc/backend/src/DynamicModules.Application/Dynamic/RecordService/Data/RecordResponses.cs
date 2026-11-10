@@ -1,4 +1,5 @@
 using System.Text.Json;
+using DynamicModules.Application.Common;
 using DynamicModules.Application.Common.Security;
 using DynamicModules.Application.Dynamic.References;
 using DynamicModules.Domain.Entities.Dynamic;
@@ -17,8 +18,8 @@ public record DynamicRecordResponse(
 
 public static class RecordMapper
 {
-    public const string ModuleNotFound = "模組不存在或未啟用";
-    public const string RecordNotFound = "記錄不存在";
+    public static readonly MessageRef ModuleNotFound = MessageRef.Of(MessageText.ModuleNotAvailable);
+    public static readonly MessageRef RecordNotFound = MessageRef.Of(MessageText.RecordNotFound);
 
     /// <summary>白名單：values 只留模組內且使用者看得到的欄位；Module 沒載入欄位時結果為空（fail-closed）。</summary>
     public static DynamicRecordResponse ToResponse(this Record r, string moduleKey, EffectivePermissions p, Module module,

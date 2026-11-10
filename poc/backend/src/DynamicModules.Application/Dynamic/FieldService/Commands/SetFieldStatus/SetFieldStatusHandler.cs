@@ -23,7 +23,7 @@ public class SetFieldStatusHandler(IModuleRepository modules, IRecordRepository 
     public async Task<ServiceResult> Handle(SetFieldStatusRequest request, CancellationToken ct)
     {
         var module = await modules.GetByFieldIdAsync(request.FieldId, ct);
-        if (module is null) return ServiceResult.NotFound("找不到欄位");
+        if (module is null) return ServiceResult.NotFound(MessageRef.Of(MessageText.FieldNotFound));
 
         if (request.Status == FieldStatus.Inactive && module.TitleFieldId == request.FieldId)
             return FieldRules.Invalid("Status", "記錄標題欄位不能停用");

@@ -14,7 +14,7 @@ public class SaveLedgerHandler(
     public async Task<ServiceResult> Handle(SaveLedgerRequest request, CancellationToken ct)
     {
         var module = await modules.GetByKeyAsync(request.ModuleKey, includeChildren: true, ct);
-        if (module is null) return ServiceResult.NotFound("找不到模組");
+        if (module is null) return ServiceResult.NotFound(MessageRef.Of(MessageText.ModuleNotFound));
         var input = request.Input;
         if (await validator.ValidateAsync(module, input, ct) is { } invalid) return invalid;
 

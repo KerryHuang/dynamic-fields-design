@@ -20,7 +20,7 @@ public class UpdateModuleHandler(
     public async Task<ServiceResult> Handle(UpdateModuleRequest request, CancellationToken ct)
     {
         var module = await modules.GetByKeyAsync(request.Key, includeChildren: true, ct);
-        if (module is null) return ServiceResult.NotFound("找不到模組");
+        if (module is null) return ServiceResult.NotFound(MessageRef.Of(MessageText.ModuleNotFound));
 
         // 換標題欄位或標題樣板會重寫全部既有記錄的 Title；Closed 的資料唯讀、已固定的記錄不能改，其餘欄位（名稱、圖示、區段）照常可改
         var titleChanged = module.TitleFieldId != request.TitleFieldId || module.TitleTemplate != request.TitleTemplate;

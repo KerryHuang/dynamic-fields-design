@@ -14,7 +14,7 @@ public sealed class EnumHandler : IFieldTypeHandler
     public IReadOnlyList<IndexValue> ToIndex(JsonElement value, Field field) =>
         [EnumIndex(0, value.GetString()!)];
 
-    internal const string Error = "選項不存在或已停用";
+    internal const string Error = FieldErrors.OptionInvalid;
 
     public FieldValueResult Normalize(JsonElement? input, Field field, FieldTypeContext ctx)
     {

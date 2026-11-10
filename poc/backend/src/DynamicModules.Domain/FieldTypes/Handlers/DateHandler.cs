@@ -20,6 +20,6 @@ public sealed class DateHandler : IFieldTypeHandler
         var s = input!.Value.ValueKind == JsonValueKind.String ? input.Value.GetString()! : "";
         return DateTime.TryParseExact(s, "yyyy-MM-dd", CultureInfo.InvariantCulture, DateTimeStyles.None, out _)
             ? FieldValueResult.Ok(HandlerHelpers.ToElement(s))
-            : FieldValueResult.Fail("日期格式必須是 yyyy-MM-dd");
+            : FieldValueResult.Fail(FieldErrors.DateFormat);
     }
 }

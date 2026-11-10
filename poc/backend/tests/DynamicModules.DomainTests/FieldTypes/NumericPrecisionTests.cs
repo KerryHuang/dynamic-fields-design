@@ -83,7 +83,8 @@ public class NumericPrecisionTests(ITestOutputHelper output)
         Run(type, "999999999999.999", new() { Scale = 3 }).IsValid.Should().BeTrue("15 位有效數字");
         var tooMany = Run(type, "1234567890123.456", new() { Scale = 3 });
         tooMany.IsValid.Should().BeFalse("16 位有效數字會在索引裡失真");
-        tooMany.Error.Should().Contain("15");
+        tooMany.Error.Should().Be(FieldErrors.DigitsExceeded);
+        tooMany.ErrorArgs.Should().Equal(15);
         Run(type, "-12345678901234567.89").IsValid.Should().BeFalse();
     }
 

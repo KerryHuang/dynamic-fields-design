@@ -17,7 +17,7 @@ public sealed class UrlHandler : IFieldTypeHandler
     public FieldValueResult Normalize(JsonElement? input, Field field, FieldTypeContext ctx)
     {
         if (HandlerHelpers.IsNull(input)) return FieldValueResult.Ok(null);
-        const string error = "網址必須以 http:// 或 https:// 開頭";
+        const string error = FieldErrors.UrlFormat;
         if (input!.Value.ValueKind != JsonValueKind.String) return FieldValueResult.Fail(error);
         var s = input.Value.GetString()!;
         var prefixed = s.StartsWith("http://", StringComparison.OrdinalIgnoreCase)

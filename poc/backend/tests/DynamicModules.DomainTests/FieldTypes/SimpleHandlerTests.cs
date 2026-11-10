@@ -1,3 +1,4 @@
+using DynamicModules.Domain.FieldTypes;
 using DynamicModules.Domain.Entities.Dynamic;
 using FluentAssertions;
 using static DynamicModules.DomainTests.FieldTypes.HandlerTestKit;
@@ -20,7 +21,7 @@ public class SimpleHandlerTests
     [InlineData("\"true\"")]
     [InlineData("1")]
     public void BooleanHandler_RejectsNonBool(string json) =>
-        Run(FieldType.Boolean, json).Error.Should().Be("必須是是或否");
+        Run(FieldType.Boolean, json).Error.Should().Be(FieldErrors.MustBeBoolean);
 
     [Fact]
     public void BooleanHandler_Null_IsOkNull() => Run(FieldType.Boolean, "null").Value.Should().BeNull();
@@ -30,7 +31,7 @@ public class SimpleHandlerTests
     {
         Run(FieldType.Email, "\"a@b.com\"").IsValid.Should().BeTrue();
         foreach (var bad in new[] { "\"a@b\"", "\"a b@c.com\"", "\"@b.com\"", "1", "\"a@b.com\\n\"" })
-            Run(FieldType.Email, bad).Error.Should().Be("Email 格式錯誤");
+            Run(FieldType.Email, bad).Error.Should().Be(FieldErrors.EmailFormat);
         Run(FieldType.Email, "null").IsValid.Should().BeTrue();
     }
 
@@ -39,7 +40,7 @@ public class SimpleHandlerTests
     {
         Run(FieldType.Phone, "\"+886 (2) 1234-5678 #12\"").IsValid.Should().BeTrue();
         foreach (var bad in new[] { "\"abc\"", "\"\"", $"\"{new string('1', 31)}\"", "123", "\"0912345678\\n\"", "\"02\\t1234\"" })
-            Run(FieldType.Phone, bad).Error.Should().Be("電話格式錯誤");
+            Run(FieldType.Phone, bad).Error.Should().Be(FieldErrors.PhoneFormat);
         Run(FieldType.Phone, "null").IsValid.Should().BeTrue();
     }
 
@@ -49,7 +50,7 @@ public class SimpleHandlerTests
         Run(FieldType.Url, "\"https://example.com/a?b=1\"").IsValid.Should().BeTrue();
         Run(FieldType.Url, "\"http://example.com\"").IsValid.Should().BeTrue();
         foreach (var bad in new[] { "\"ftp://example.com\"", "\"example.com\"", "\"http://\"", "1" })
-            Run(FieldType.Url, bad).Error.Should().Be("網址必須以 http:// 或 https:// 開頭");
+            Run(FieldType.Url, bad).Error.Should().Be(FieldErrors.UrlFormat);
         Run(FieldType.Url, "null").IsValid.Should().BeTrue();
     }
 
@@ -58,7 +59,7 @@ public class SimpleHandlerTests
     {
         var ctx = Ctx(users: ["alice", "bob"]);
         Run(FieldType.User, "\"alice\"", ctx: ctx).IsValid.Should().BeTrue();
-        Run(FieldType.User, "\"eve\"", ctx: ctx).Error.Should().Be("使用者不存在");
+        Run(FieldType.User, "\"eve\"", ctx: ctx).Error.Should().Be(FieldErrors.UserNotFound);
         Run(FieldType.User, "null", ctx: ctx).Value.Should().BeNull();
     }
 }

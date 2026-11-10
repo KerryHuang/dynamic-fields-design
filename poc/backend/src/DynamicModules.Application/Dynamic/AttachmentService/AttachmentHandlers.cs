@@ -45,15 +45,15 @@ public sealed class AttachmentUploadGate(
 
         var field = module.Blocks.SelectMany(b => b.Fields)
             .FirstOrDefault(f => f.Id == fieldId && f.Status == FieldStatus.Active && f.Type == FieldType.Attachment);
-        if (field is null || !perms.CanSee(field)) return (ServiceResult.NotFound("找不到附件欄位"), null);
+        if (field is null || !perms.CanSee(field)) return (ServiceResult.NotFound(MessageRef.Of(MessageText.AttachmentFieldNotFound)), null);
 
         var userIds = await modules.ListUserIdsAsync(ct);
         var previous = RecordValueProcessor.Parse(record.ValuesJson);
         var today = time.Today;
         if (RuleEngine.Evaluate(module, previous, previous, registry, userIds, today).ReadOnlyAll)
-            return (Invalid(RecordValueProcessor.RecordErrorKey, RecordValueProcessor.ReadOnlyRecordMessage), null);
+            return (Invalid(RecordValueProcessor.RecordErrorKey, MessageRef.Of(MessageText.RecordReadOnly)), null);
         if (module.Workflow is { } wf && wf.IsLocked(previous))
-            return (Invalid(RecordValueProcessor.RecordErrorKey, RecordValueProcessor.ReadOnlyRecordMessage), null);
+            return (Invalid(RecordValueProcessor.RecordErrorKey, MessageRef.Of(MessageText.RecordReadOnly)), null);
         if (!RecordValueProcessor.WritablePredicate(module, previous, perms, registry, userIds, today)(field))
             return (Invalid(field.Key, "此欄位目前不可修改"), null);
 
@@ -67,6 +67,8 @@ public sealed class AttachmentUploadGate(
 
     private static ServiceResult Invalid(string key, string message) =>
         ServiceResult.Invalid(new Dictionary<string, string[]> { [key] = [message] });
+
+    private static ServiceResult Invalid(string key, MessageRef message) => ServiceResult.Invalid(key, message);
 }
 
 /// <summary>控制器在收進請求主體之前先問：這個人現在能不能對這個欄位上傳？只做檢查，不寫入。</summary>
@@ -125,6 +127,8 @@ public sealed class UploadAttachmentHandler(
 
     private static ServiceResult Invalid(string key, string message) =>
         ServiceResult.Invalid(new Dictionary<string, string[]> { [key] = [message] });
+
+    private static ServiceResult Invalid(string key, MessageRef message) => ServiceResult.Invalid(key, message);
 }
 
 /// <summary>
@@ -135,7 +139,7 @@ public sealed class DownloadAttachmentHandler(
     IModuleRepository modules, IRecordRepository records, IDynamicAccessGuard guard, IAttachmentStore store)
     : IRequestHandler<DownloadAttachmentRequest, ServiceResult>
 {
-    private const string FileNotFound = "找不到附件";
+    private static readonly MessageRef FileNotFound = MessageRef.Of(MessageText.AttachmentNotFound);
 
     public async Task<ServiceResult> Handle(DownloadAttachmentRequest request, CancellationToken ct)
     {

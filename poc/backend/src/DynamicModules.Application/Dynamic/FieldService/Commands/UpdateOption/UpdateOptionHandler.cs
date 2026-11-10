@@ -17,7 +17,7 @@ public class UpdateOptionHandler(
     public async Task<ServiceResult> Handle(UpdateOptionRequest request, CancellationToken ct)
     {
         var module = await modules.GetByOptionIdAsync(request.OptionId, ct);
-        if (module is null) return ServiceResult.NotFound("找不到選項");
+        if (module is null) return ServiceResult.NotFound(MessageRef.Of(MessageText.OptionNotFound));
 
         var now = time.Now;
         var field = module.Blocks.SelectMany(b => b.Fields).Single(f => f.Options.Any(o => o.Id == request.OptionId));

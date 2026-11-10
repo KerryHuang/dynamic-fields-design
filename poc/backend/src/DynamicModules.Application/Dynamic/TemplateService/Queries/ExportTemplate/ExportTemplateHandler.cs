@@ -12,7 +12,7 @@ public class ExportTemplateHandler(IModuleRepository modules, TemplateExporter e
     public async Task<ServiceResult> Handle(ExportTemplateRequest request, CancellationToken ct)
     {
         var module = await modules.GetByKeyAsync(request.Key, includeChildren: true, ct);
-        if (module is null) return ServiceResult.NotFound("找不到模組");
+        if (module is null) return ServiceResult.NotFound(MessageRef.Of(MessageText.ModuleNotFound));
         var package = await exporter.ExportAsync(module, ct);
         return ServiceResult.Success(new ExportFile(
             $"{module.Key}.template.json", "application/json", JsonSerializer.SerializeToUtf8Bytes(package, TemplateJson.Options)));

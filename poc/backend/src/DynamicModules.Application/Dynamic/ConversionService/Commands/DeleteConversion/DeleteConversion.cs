@@ -18,7 +18,7 @@ public class DeleteConversionHandler(IConversionRepository conversions, IUnitOfW
     public async Task<ServiceResult> Handle(DeleteConversionRequest request, CancellationToken ct)
     {
         var conversion = await conversions.GetByKeyAsync(request.Key, ct);
-        if (conversion is null) return ServiceResult.NotFound("找不到轉換定義");
+        if (conversion is null) return ServiceResult.NotFound(MessageRef.Of(MessageText.ConversionNotFound));
         conversions.Remove(conversion);
         await uow.CommitAsync(ct);
         return ServiceResult.Success();

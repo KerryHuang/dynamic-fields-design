@@ -16,7 +16,7 @@ public class DeactivateModuleHandler(
     public async Task<ServiceResult> Handle(DeactivateModuleRequest request, CancellationToken ct)
     {
         var module = await modules.GetByKeyAsync(request.Key, includeChildren: false, ct);
-        if (module is null) return ServiceResult.NotFound("找不到模組");
+        if (module is null) return ServiceResult.NotFound(MessageRef.Of(MessageText.ModuleNotFound));
         if (module.Status == ModuleStatus.Closed) return ServiceResult.Conflict(ClosedMessage);
 
         module.Status = ModuleStatus.Inactive;

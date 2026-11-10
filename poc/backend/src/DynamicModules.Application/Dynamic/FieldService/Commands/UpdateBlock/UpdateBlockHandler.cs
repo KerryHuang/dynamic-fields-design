@@ -13,7 +13,7 @@ public class UpdateBlockHandler(IModuleRepository modules, IUnitOfWork uow, ICur
     public async Task<ServiceResult> Handle(UpdateBlockRequest request, CancellationToken ct)
     {
         var module = await modules.GetByBlockIdAsync(request.BlockId, ct);
-        if (module is null) return ServiceResult.NotFound("找不到區塊");
+        if (module is null) return ServiceResult.NotFound(MessageRef.Of(MessageText.BlockNotFound));
 
         var now = time.Now;
         var block = module.Blocks.Single(b => b.Id == request.BlockId);

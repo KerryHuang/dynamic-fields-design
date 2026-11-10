@@ -18,7 +18,8 @@ public record GetConversionInputsRequest(long RecordId, string ConversionKey) : 
 /// 只留下「必填卻沒有值」且使用者自己能寫的欄位（使用者寫不了的欄位不檢查必填，不會擋住轉換）。回欄位鍵清單，欄位定義前端從目標模組取。
 /// </summary>
 public class GetConversionInputsHandler(
-    IConversionRepository conversions, IModuleRepository modules, IRecordRepository records, IDynamicAccessGuard guard, RecordCreator creator)
+    IConversionRepository conversions, IModuleRepository modules, IRecordRepository records, IDynamicAccessGuard guard, RecordCreator creator,
+    ICurrentLocale locale)
     : IRequestHandler<GetConversionInputsRequest, ServiceResult>
 {
     public async Task<ServiceResult> Handle(GetConversionInputsRequest request, CancellationToken ct)
@@ -48,7 +49,8 @@ public class GetConversionInputsHandler(
         systemKeys.Add(traceKey);
 
         var (_, errors) = await creator.ValidateAsync(target, addPerms, values, null, ct, systemKeys);
-        var keys = target.Blocks.SelectMany(b => b.Fields).Where(f => errors.TryGetValue(f.Key, out var m) && m.Contains(RecordValueProcessor.RequiredMessage))
+        var required = MessageText.Get(locale.Locale, MessageText.Required);   // 驗證訊息依請求語系產生，比對也用同一個語系
+        var keys = target.Blocks.SelectMany(b => b.Fields).Where(f => errors.TryGetValue(f.Key, out var m) && m.Contains(required))
             .Select(f => f.Key).ToList();
         return ServiceResult.Success(keys);
     }

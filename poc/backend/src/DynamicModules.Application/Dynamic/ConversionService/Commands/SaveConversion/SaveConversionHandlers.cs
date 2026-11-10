@@ -41,7 +41,7 @@ public class UpdateConversionHandler(
     public async Task<ServiceResult> Handle(UpdateConversionRequest request, CancellationToken ct)
     {
         var conversion = await conversions.GetByKeyAsync(request.Key, ct);
-        if (conversion is null) return ServiceResult.NotFound("找不到轉換定義");
+        if (conversion is null) return ServiceResult.NotFound(MessageRef.Of(MessageText.ConversionNotFound));
         var input = request.Input;
         if (input.Key != conversion.Key) return ServiceResult.Invalid(new Dictionary<string, string[]> { ["key"] = ["轉換代碼不能更改"] });
         // 設計器畫面不編輯固定值（套件的 header.set）：沒帶 set 時保留原本的，帶空陣列才是清掉

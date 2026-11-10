@@ -23,9 +23,9 @@ public class AddFieldHandler(
     public async Task<ServiceResult> Handle(AddFieldRequest request, CancellationToken ct)
     {
         var module = await modules.GetByKeyAsync(request.ModuleKey, includeChildren: true, ct);
-        if (module is null) return ServiceResult.NotFound("找不到模組");
+        if (module is null) return ServiceResult.NotFound(MessageRef.Of(MessageText.ModuleNotFound));
         var block = module.Blocks.FirstOrDefault(b => b.Id == request.BlockId);
-        if (block is null) return ServiceResult.NotFound("找不到區塊");
+        if (block is null) return ServiceResult.NotFound(MessageRef.Of(MessageText.BlockNotFound));
         if (request.Designer && await masterDesigner.RejectAddFieldAsync(module, block.Id, request.Type, request.Config, ct) is { } rejected) return rejected;
 
         // 新增公式或彙總欄位會替既有記錄算值並寫回；Closed 的資料唯讀

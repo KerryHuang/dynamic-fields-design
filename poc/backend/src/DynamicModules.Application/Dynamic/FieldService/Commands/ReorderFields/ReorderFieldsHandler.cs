@@ -14,7 +14,7 @@ public class ReorderFieldsHandler(IModuleRepository modules, IUnitOfWork uow, IC
     public async Task<ServiceResult> Handle(ReorderFieldsRequest request, CancellationToken ct)
     {
         var module = await modules.GetByBlockIdAsync(request.BlockId, ct);
-        if (module is null) return ServiceResult.NotFound("找不到區塊");
+        if (module is null) return ServiceResult.NotFound(MessageRef.Of(MessageText.BlockNotFound));
         var block = module.Blocks.Single(b => b.Id == request.BlockId);
 
         // 清單須恰為區塊內全部欄位（含停用），不重複。

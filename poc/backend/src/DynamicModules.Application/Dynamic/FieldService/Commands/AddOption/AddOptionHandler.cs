@@ -17,7 +17,7 @@ public class AddOptionHandler(
     public async Task<ServiceResult> Handle(AddOptionRequest request, CancellationToken ct)
     {
         var module = await modules.GetByFieldIdAsync(request.FieldId, ct);
-        if (module is null) return ServiceResult.NotFound("找不到欄位");
+        if (module is null) return ServiceResult.NotFound(MessageRef.Of(MessageText.FieldNotFound));
         var field = module.Blocks.SelectMany(b => b.Fields).Single(f => f.Id == request.FieldId);
         if (field.Type is not (FieldType.Enum or FieldType.MultiEnum))
             return FieldRules.Invalid("FieldId", "只有下拉欄位可以有選項");

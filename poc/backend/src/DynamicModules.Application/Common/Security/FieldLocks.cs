@@ -33,11 +33,11 @@ public sealed class FieldLocks(ISharedMasterRepository shared)
     }
 
     /// <summary>刪除記錄要清空的參照欄位裡，第一個凍結的（清空也算寫入，設計 §7 凍結第 5 點）；都沒有回 null。</summary>
-    public async Task<string?> RejectClearAsync(IEnumerable<Field> cleared, CancellationToken ct)
+    public async Task<MessageRef?> RejectClearAsync(IEnumerable<Field> cleared, CancellationToken ct)
     {
         foreach (var field in cleared)
             if ((await FrozenAsync(field.ModuleId, ct)).TryGetValue(field.Id, out var owner))
-                return new FrozenFieldException(field, owner).Message;
+                return FrozenFieldException.MessageOf(field, owner);
         return null;
     }
 
@@ -70,10 +70,13 @@ public sealed class FieldLocks(ISharedMasterRepository shared)
 /// 使用者看不到的欄位（visible 為 false，例如帶值寫進去的系統寫入）只回通用訊息，不帶欄位名、應用程式名與欄位 id，免得探測隱藏值（第三輪 3）。
 /// </summary>
 public sealed class FrozenFieldException(Field field, FieldLock owner, bool visible = true)
-    : Exception(visible
-        ? $"欄位「{field.LabelI18n.Resolve(I18nText.FallbackLocale)}」屬於已關閉的應用程式「{owner.AppName.Resolve(I18nText.FallbackLocale)}」，不能修改"
-        : "這筆資料有無法修改的欄位")
+    : Exception(MessageOf(field, owner, visible).Resolve(I18nText.FallbackLocale))
 {
+    /// <summary>依語系的訊息（欄位標籤與應用程式名稱也依語系挑）；<see cref="Exception.Message"/> 是繁中，給記錄與測試用。</summary>
+    public static MessageRef MessageOf(Field field, FieldLock owner, bool visible = true) =>
+        visible ? MessageRef.Of(MessageText.FrozenField, field.LabelI18n, owner.AppName) : MessageRef.Of(MessageText.FrozenFieldHidden);
+
+    public MessageRef Text { get; } = MessageOf(field, owner, visible);
     public bool Visible { get; } = visible;
     public long FieldId { get; } = field.Id;
     public string AppKey { get; } = owner.AppKey;

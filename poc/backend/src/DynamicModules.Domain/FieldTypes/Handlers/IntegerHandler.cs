@@ -17,7 +17,7 @@ public sealed class IntegerHandler : IFieldTypeHandler
     public FieldValueResult Normalize(JsonElement? input, Field field, FieldTypeContext ctx)
     {
         if (HandlerHelpers.IsNull(input)) return FieldValueResult.Ok(null);
-        const string error = "必須是整數";
+        const string error = FieldErrors.MustBeInteger;
         if (input!.Value.ValueKind != JsonValueKind.Number || !input.Value.TryGetDecimal(out var d)
             || d != decimal.Truncate(d) || (ctx.EnforceWriteLimits ? Math.Abs(d) > HandlerHelpers.MaxExactInteger : d < long.MinValue || d > long.MaxValue))
             return FieldValueResult.Fail(error);

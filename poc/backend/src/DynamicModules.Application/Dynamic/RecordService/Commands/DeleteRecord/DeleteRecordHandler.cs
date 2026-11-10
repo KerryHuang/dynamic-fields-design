@@ -38,12 +38,12 @@ public class DeleteRecordHandler(
         if (record.RowVersion != request.RowVersion) return ServiceResult.Stale();
 
         if (module.Workflow is { } wf && wf.IsLocked(RecordValueProcessor.Parse(record.ValuesJson)))
-            return ServiceResult.Conflict(WorkflowService.WorkflowEnforcer.LockedDeleteMessage);
+            return ServiceResult.Conflict(MessageRef.Of(MessageText.WorkflowLockedDelete));
 
         var plan = await planner.PlanAsync(record, module, ct);
-        if (plan.DepthExceeded) return ServiceResult.Conflict(TooDeep); // 提早停止時 Blocking 不完整，先判深度
+        if (plan.DepthExceeded) return ServiceResult.Conflict(MessageRef.Of(MessageText.DeleteTooDeep)); // 提早停止時 Blocking 不完整，先判深度
         if (plan.Blocking.Count > 0)
-            return ServiceResult.ConflictWith(Referenced, new DeleteBlockedResponse(await WithTitlesAsync(plan.Blocking.Take(MaxListed), ct), plan.BlockingTotal));
+            return ServiceResult.ConflictWith(MessageRef.Of(MessageText.DeleteReferenced), new DeleteBlockedResponse(await WithTitlesAsync(plan.Blocking.Take(MaxListed), ct), plan.BlockingTotal));
 
         // 連帶刪除（Cascade）或清空參照（SetNull）的記錄也要守狀態機的唯讀：在任何寫入之前檢查，有一筆被鎖就整個不做
         if (await TouchesLockedRecordAsync(plan, record, ct) is { } lockedMessage) return ServiceResult.Conflict(lockedMessage);
@@ -95,7 +95,7 @@ public class DeleteRecordHandler(
     /// 明細列沒有自己的狀態機也沒有自己的事實，要看表頭單據：往上找到表頭記錄，用表頭模組的狀態機與表頭的事實判斷（核心只支援一層明細）。
     /// 表頭已在刪除清單或就是被刪的根記錄時不重複查（它們本來就會被檢查）；找不到或已刪除的表頭略過。
     /// </summary>
-    private async Task<string?> TouchesLockedRecordAsync(DeletePlan plan, Record root, CancellationToken ct)
+    private async Task<MessageRef?> TouchesLockedRecordAsync(DeletePlan plan, Record root, CancellationToken ct)
     {
         var checkedIds = plan.ToDelete.Select(r => r.Id).Append(root.Id).ToHashSet();
         var affected = plan.ToDelete.Concat(plan.ToClear.Select(c => c.Record).Where(r => !checkedIds.Contains(r.Id))).DistinctBy(r => r.Id);
@@ -112,8 +112,8 @@ public class DeleteRecordHandler(
             if (m is null) continue;
             if (!ModuleRelations.IsDetail(m))
             {
-                if (m.Workflow is { } wf && wf.IsLocked(RecordValueProcessor.Parse(r.ValuesJson))) return LockedReferencedMessage;
-                if (await factLock.IsFrozenAsync(r.Id, ct)) return BookedReferencedMessage;
+                if (m.Workflow is { } wf && wf.IsLocked(RecordValueProcessor.Parse(r.ValuesJson))) return MessageRef.Of(MessageText.DeleteLockedReferenced);
+                if (await factLock.IsFrozenAsync(r.Id, ct)) return MessageRef.Of(MessageText.DeleteBookedReferenced);
                 continue;
             }
             var parentField = ModuleRelations.DetailFieldOf(m);
@@ -122,16 +122,12 @@ public class DeleteRecordHandler(
                 || checkedIds.Contains(headerId) || !seenHeaders.Add(headerId)) continue;
             var header = await records.GetAsync(headerId, ct);
             if (header is null || header.DeleteFlag) continue;
-            if ((await ModuleOf(header.ModuleId))?.Workflow is { } hwf && hwf.IsLocked(RecordValueProcessor.Parse(header.ValuesJson))) return LockedReferencedMessage;
-            if (await factLock.IsFrozenAsync(header.Id, ct)) return BookedReferencedMessage;
+            if ((await ModuleOf(header.ModuleId))?.Workflow is { } hwf && hwf.IsLocked(RecordValueProcessor.Parse(header.ValuesJson))) return MessageRef.Of(MessageText.DeleteLockedReferenced);
+            if (await factLock.IsFrozenAsync(header.Id, ct)) return MessageRef.Of(MessageText.DeleteBookedReferenced);
         }
         return null;
     }
 
-    public const string Referenced = "還有其他資料參照這筆記錄，不能刪除";
-    public const string LockedReferencedMessage = "有處於唯讀狀態的單據參照這筆記錄，不能刪除";
-    public const string BookedReferencedMessage = "有已記帳的單據參照這筆記錄，不能刪除";
-    public const string TooDeep = "連帶刪除超過 5 層，請先手動刪除下層資料";
     private const int MaxListed = 10;
 
     private void Touch(Record r, DateTime now)

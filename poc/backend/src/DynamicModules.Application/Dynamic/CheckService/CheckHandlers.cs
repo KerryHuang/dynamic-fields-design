@@ -34,7 +34,7 @@ public class UpdateCheckHandler(
     public async Task<ServiceResult> Handle(UpdateCheckRequest request, CancellationToken ct)
     {
         var c = await checks.GetByKeyAsync(request.Key, ct);
-        if (c is null) return ServiceResult.NotFound("找不到檢查");
+        if (c is null) return ServiceResult.NotFound(MessageRef.Of(MessageText.CheckNotFound));
         var input = request.Input;
         if (input.Key != c.Key) return ServiceResult.Invalid(new Dictionary<string, string[]> { ["key"] = ["檢查代碼不能更改"] });
         var module = (await modules.GetByIdAsync(c.ModuleId, includeChildren: true, ct))!;
@@ -56,7 +56,7 @@ public class DeleteCheckHandler(ICheckRepository checks, IUnitOfWork uow) : IReq
     public async Task<ServiceResult> Handle(DeleteCheckRequest request, CancellationToken ct)
     {
         var c = await checks.GetByKeyAsync(request.Key, ct);
-        if (c is null) return ServiceResult.NotFound("找不到檢查");
+        if (c is null) return ServiceResult.NotFound(MessageRef.Of(MessageText.CheckNotFound));
         checks.Remove(c);
         await uow.CommitAsync(ct);
         return ServiceResult.Success();
@@ -71,7 +71,7 @@ public class GetChecksHandler(ICheckRepository checks, IModuleRepository modules
         if (request.Key is not null)
         {
             var one = await checks.GetByKeyAsync(request.Key, ct);
-            if (one is null) return ServiceResult.NotFound("找不到檢查");
+            if (one is null) return ServiceResult.NotFound(MessageRef.Of(MessageText.CheckNotFound));
             list = [one];
         }
         else if (request.ModuleKey is not null)
@@ -98,7 +98,7 @@ public class ScanCheckHandler(ICheckRepository checks, IModuleRepository modules
     public async Task<ServiceResult> Handle(ScanCheckRequest request, CancellationToken ct)
     {
         var check = await checks.GetByKeyAsync(request.Key, ct);
-        if (check is null) return ServiceResult.NotFound("找不到檢查");
+        if (check is null) return ServiceResult.NotFound(MessageRef.Of(MessageText.CheckNotFound));
         var module = (await modules.GetByIdAsync(check.ModuleId, includeChildren: true, ct))!;
         var (prepared, failure) = await evaluator.PrepareAsync(module, check, ct);
         if (failure is not null) return failure;

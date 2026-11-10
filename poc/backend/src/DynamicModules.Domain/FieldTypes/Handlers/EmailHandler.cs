@@ -17,5 +17,5 @@ public sealed class EmailHandler : IFieldTypeHandler
     private static readonly Regex Pattern = new(@"^[^@\s]+@[^@\s]+\.[^@\s]+\z", RegexOptions.CultureInvariant);
 
     public FieldValueResult Normalize(JsonElement? input, Field field, FieldTypeContext ctx) =>
-        HandlerHelpers.NormalizePattern(input, Pattern, "Email 格式錯誤");
+        HandlerHelpers.NormalizePattern(input, Pattern, FieldErrors.EmailFormat);
 }

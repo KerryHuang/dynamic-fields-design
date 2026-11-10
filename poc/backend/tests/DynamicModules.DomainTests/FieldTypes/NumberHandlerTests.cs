@@ -1,3 +1,4 @@
+using DynamicModules.Domain.FieldTypes;
 using DynamicModules.Domain.Entities.Dynamic;
 using DynamicModules.Domain.ValueObjects;
 using FluentAssertions;
@@ -25,7 +26,7 @@ public class NumberHandlerTests
     public void IntegerHandler_RejectsNonInteger(string json)
     {
         var r = Run(FieldType.Integer, json);
-        (r.IsValid, r.Error).Should().Be((false, "必須是整數"));
+        (r.IsValid, r.Error).Should().Be((false, FieldErrors.MustBeInteger));
     }
 
     [Fact]
@@ -54,21 +55,24 @@ public class NumberHandlerTests
     public void DecimalHandler_RejectsStringAndLocaleFormatted(string json)
     {
         var r = Run(FieldType.Decimal, json);
-        (r.IsValid, r.Error).Should().Be((false, "必須是數字"));
+        (r.IsValid, r.Error).Should().Be((false, FieldErrors.MustBeNumber));
     }
 
     [Fact]
     public void DecimalHandler_ScaleExceeded_ReturnsError()
     {
         var r = Run(FieldType.Decimal, "1.234", new FieldConfig { Scale = 2 });
-        (r.IsValid, r.Error).Should().Be((false, "小數最多 2 位"));
+        (r.IsValid, r.Error).Should().Be((false, FieldErrors.ScaleExceeded));
+        r.ErrorArgs.Should().Equal(2);
     }
 
     [Fact]
     public void DecimalHandler_ScaleConfigAndDefault()
     {
         Run(FieldType.Decimal, "1.234", new FieldConfig { Scale = 3 }).IsValid.Should().BeTrue();
-        Run(FieldType.Currency, "1.234").Error.Should().Be("小數最多 2 位");
-        Run(FieldType.Percent, "0.123", new FieldConfig { Scale = 0 }).Error.Should().Be("小數最多 0 位");
+        Run(FieldType.Currency, "1.234").Error.Should().Be(FieldErrors.ScaleExceeded);
+        var percent = Run(FieldType.Percent, "0.123", new FieldConfig { Scale = 0 });
+        percent.Error.Should().Be(FieldErrors.ScaleExceeded);
+        percent.ErrorArgs.Should().Equal(0);
     }
 }

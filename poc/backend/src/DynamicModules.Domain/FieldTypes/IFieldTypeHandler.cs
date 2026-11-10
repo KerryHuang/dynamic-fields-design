@@ -20,10 +20,11 @@ public interface IFieldTypeHandler
     FieldValueResult Normalize(JsonElement? input, Field field, FieldTypeContext ctx);
 }
 
-public sealed record FieldValueResult(bool IsValid, JsonElement? Value, string? Error)
+/// <summary>Error 是 <see cref="FieldErrors"/> 的訊息鍵，ErrorArgs 是文字裡的參數（如字數上限）；文字由 Application 依語系產生。</summary>
+public sealed record FieldValueResult(bool IsValid, JsonElement? Value, string? Error, object[]? ErrorArgs = null)
 {
     public static FieldValueResult Ok(JsonElement? value) => new(true, value, null);
-    public static FieldValueResult Fail(string error) => new(false, null, error);
+    public static FieldValueResult Fail(string error, params object[] args) => new(false, null, error, args.Length == 0 ? null : args);
 }
 
 public sealed record FieldTypeContext(

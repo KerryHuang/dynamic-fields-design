@@ -10,6 +10,6 @@ public class GetRulesHandler(IModuleRepository modules) : IRequestHandler<GetRul
     public async Task<ServiceResult> Handle(GetRulesRequest request, CancellationToken ct)
     {
         var module = await modules.GetByKeyAsync(request.ModuleKey, includeChildren: true, ct);
-        return module is null ? ServiceResult.NotFound("找不到模組") : ServiceResult.Success(module.Rules.ToResponse());
+        return module is null ? ServiceResult.NotFound(MessageRef.Of(MessageText.ModuleNotFound)) : ServiceResult.Success(module.Rules.ToResponse());
     }
 }

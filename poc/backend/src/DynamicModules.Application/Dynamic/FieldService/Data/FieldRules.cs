@@ -228,7 +228,7 @@ public static class FieldRules
         var probe = new Field { Id = field.Id, Type = field.Type, Config = config, Options = field.Options };
         var result = registry.Get(field.Type).Normalize(config.DefaultValue, probe, ctx);
         if (!result.IsValid)
-            return ServiceResult.Invalid(new Dictionary<string, string[]> { ["Config.DefaultValue"] = [result.Error!] });
+            return ServiceResult.Invalid("Config.DefaultValue", MessageRef.Of(result));
 
         normalized = config with { DefaultValue = result.Value };
         return null;

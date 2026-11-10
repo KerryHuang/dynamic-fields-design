@@ -22,7 +22,7 @@ public class SaveRulesHandler(IModuleRepository modules, IUnitOfWork uow, FieldT
     public async Task<ServiceResult> Handle(SaveRulesRequest request, CancellationToken ct)
     {
         var module = await modules.GetByKeyAsync(request.ModuleKey, includeChildren: true, ct);
-        if (module is null) return ServiceResult.NotFound("找不到模組");
+        if (module is null) return ServiceResult.NotFound(MessageRef.Of(MessageText.ModuleNotFound));
 
         var input = request.Rules;
         if (input.Count > MaxRules) return FieldRules.Invalid("rules", "規則最多 100 條");

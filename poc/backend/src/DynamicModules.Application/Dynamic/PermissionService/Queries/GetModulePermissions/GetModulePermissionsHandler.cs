@@ -12,7 +12,7 @@ public class GetModulePermissionsHandler(
     public async Task<ServiceResult> Handle(GetModulePermissionsRequest request, CancellationToken ct)
     {
         var module = await modules.GetByKeyAsync(request.Key, includeChildren: true, ct);
-        if (module is null) return ServiceResult.NotFound("找不到模組");
+        if (module is null) return ServiceResult.NotFound(MessageRef.Of(MessageText.ModuleNotFound));
 
         var rows = await permissions.LoadModuleRowsAsync(module, ct);
         var groups = await permissions.ListGroupsAsync(ct);

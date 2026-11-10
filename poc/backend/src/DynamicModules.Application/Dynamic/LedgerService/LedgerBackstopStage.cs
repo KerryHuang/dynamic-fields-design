@@ -19,7 +19,7 @@ public class LedgerBackstopStage(IWriteJournal journal, IModuleRepository module
         {
             var module = await modules.GetByIdAsync(entry.ModuleId, includeChildren: true, ct);
             if (module is not null && await gate.IsLedgerAsync(module, ct))
-                return ServiceResult.Conflict($"{LedgerGate.Message}（模組「{module.Key}」的既有分錄被這次請求改動）");
+                return ServiceResult.Conflict(MessageRef.Of(MessageText.LedgerBackstop, module.Key));
         }
         return null;
     }

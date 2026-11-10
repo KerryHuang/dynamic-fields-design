@@ -7,8 +7,8 @@ namespace DynamicModules.Domain.FieldTypes.Handlers;
 /// <summary>參照欄位：模組目標存記錄 Id（number），實體目標存實體主鍵（string）；索引一律用字串 RefKey。</summary>
 public sealed class ReferenceHandler : IFieldTypeHandler
 {
-    private const string NotFound = "參照的資料不存在或無權選取";
-    private const string StateMismatch = "目標記錄的狀態不符，不能選";
+    private const string NotFound = FieldErrors.RefNotFound;
+    private const string StateMismatch = FieldErrors.RefStateMismatch;
 
     /// <summary>目標記錄可見但不在參照目標狀態守衛允許的狀態：合法鍵集合回這個（空的）實例，Normalize 據此回守衛訊息。</summary>
     public static readonly IReadOnlySet<string> RejectedByGuard = new HashSet<string>();

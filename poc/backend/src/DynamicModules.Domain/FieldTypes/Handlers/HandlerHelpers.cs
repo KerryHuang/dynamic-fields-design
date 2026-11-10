@@ -13,11 +13,11 @@ internal static class HandlerHelpers
     public static FieldValueResult NormalizeText(JsonElement? input, int maxLength)
     {
         if (IsNull(input)) return FieldValueResult.Ok(null);
-        if (input!.Value.ValueKind != JsonValueKind.String) return FieldValueResult.Fail("必須是文字");
+        if (input!.Value.ValueKind != JsonValueKind.String) return FieldValueResult.Fail(FieldErrors.MustBeText);
         var text = input.Value.GetString()!.Trim();
         if (text.Length == 0) return FieldValueResult.Ok(null);
         return text.Length > maxLength
-            ? FieldValueResult.Fail($"超過 {maxLength} 個字元")
+            ? FieldValueResult.Fail(FieldErrors.TooLong, maxLength)
             : FieldValueResult.Ok(ToElement(text));
     }
 
@@ -25,16 +25,16 @@ internal static class HandlerHelpers
     {
         if (IsNull(input)) return FieldValueResult.Ok(null);
         if (input!.Value.ValueKind != JsonValueKind.Number || !input.Value.TryGetDecimal(out var d))
-            return FieldValueResult.Fail("必須是數字");
+            return FieldValueResult.Fail(FieldErrors.MustBeNumber);
         d /= 1.0000000000000000000000000000m; // 去除尾端的 0
         var bits = decimal.GetBits(d);
         var actualScale = (bits[3] >> 16) & 0xFF;
-        if (actualScale > scale) return FieldValueResult.Fail($"小數最多 {scale} 位");
+        if (actualScale > scale) return FieldValueResult.Fail(FieldErrors.ScaleExceeded, scale);
         var mantissa = ((UInt128)(uint)bits[2] << 64) | ((UInt128)(uint)bits[1] << 32) | (uint)bits[0];
         // 尾端的零不是有效數字（1e15 只有一位）；只改計數，存的值與小數位數不變
         while (mantissa != 0 && mantissa % 10 == 0) mantissa /= 10;
         return enforceWriteLimits && mantissa.ToString().Length > MaxSignificantDigits
-            ? FieldValueResult.Fail($"有效數字最多 {MaxSignificantDigits} 位")
+            ? FieldValueResult.Fail(FieldErrors.DigitsExceeded, MaxSignificantDigits)
             : FieldValueResult.Ok(ToElement(d));
     }
 
