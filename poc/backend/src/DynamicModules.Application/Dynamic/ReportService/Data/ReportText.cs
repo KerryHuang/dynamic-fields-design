@@ -3,7 +3,7 @@ using DynamicModules.Domain.ValueObjects;
 
 namespace DynamicModules.Application.Dynamic.ReportService.Data;
 
-/// <summary>報表結果裡的系統字串（spec §14 四語系）。存檔驗證的 400 訊息不在這裡，照現有慣例寫繁中。泰文與越南文待母語者校對。</summary>
+/// <summary>報表結果與欄位值顯示（FieldDisplay：布林、參照狀態）用的系統字串（spec §14 四語系）。存檔驗證的 400 訊息不在這裡，照現有慣例寫繁中。泰文與越南文待母語者校對。</summary>
 public static class ReportText
 {
     public const string
@@ -12,6 +12,7 @@ public static class ReportText
         HiddenField = nameof(HiddenField), NotUsable = nameof(NotUsable), TooMany = nameof(TooMany), TooManyToLoad = nameof(TooManyToLoad), SqlTimeout = nameof(SqlTimeout),
         RowMeaning = nameof(RowMeaning), Count = nameof(Count), Sum = nameof(Sum), Avg = nameof(Avg), Min = nameof(Min), Max = nameof(Max), Ratio = nameof(Ratio),
         Title = nameof(Title), FieldPath = nameof(FieldPath), Deleted = nameof(Deleted), NoPermission = nameof(NoPermission), Blank = nameof(Blank),
+        Yes = nameof(Yes), No = nameof(No),
         ExportTotal = nameof(ExportTotal), DedupedNote = nameof(DedupedNote), Unshared = nameof(Unshared), ReportGone = nameof(ReportGone);
 
     private static readonly Dictionary<string, (string Zh, string En, string Th, string Vi)> Table = new()
@@ -44,6 +45,8 @@ public static class ReportText
         [FieldPath] = ("{0}．{1}", "{0}.{1}", "{0}.{1}", "{0}.{1}"),
         [Deleted] = ("（已刪除）", "(Deleted)", "(ถูกลบแล้ว)", "(Đã xóa)"),
         [NoPermission] = ("（無權限）", "(No permission)", "(ไม่มีสิทธิ์)", "(Không có quyền)"),
+        [Yes] = ("是", "Yes", "ใช่", "Có"),
+        [No] = ("否", "No", "ไม่ใช่", "Không"),
         [Blank] = ("（空白）", "(Blank)", "(ว่าง)", "(Trống)"),
         [ExportTotal] = ("總計", "Total", "รวม", "Tổng"),
         [Unshared] = ("此報表已不再分享", "This report is no longer shared", "รายงานนี้ไม่ได้แชร์อีกต่อไป", "Báo cáo này không còn được chia sẻ"),

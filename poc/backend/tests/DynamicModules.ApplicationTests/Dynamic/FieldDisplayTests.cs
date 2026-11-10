@@ -73,8 +73,8 @@ public class FieldDisplayTests
     [InlineData("zh-TW", false, "否")]
     [InlineData("en-US", true, "Yes")]
     [InlineData("en-US", false, "No")]
-    [InlineData("th", true, "Yes")]
-    [InlineData("vi", false, "No")]
+    [InlineData("th", true, "ใช่")]
+    [InlineData("vi", false, "Không")]
     public void Boolean_ByLocale(string locale, bool v, string expected) =>
         Fmt(F(FieldType.Boolean), v, locale).Should().Be(expected);
 
@@ -115,6 +115,10 @@ public class FieldDisplayTests
         Fmt(f, "K1", r: new ReferenceInfo("K1", "客戶A", ReferenceInfo.Ok)).Should().Be("客戶A");
         Fmt(f, "K1", r: new ReferenceInfo("K1", null, ReferenceInfo.Restricted)).Should().Be("（無權限）");
         Fmt(f, "K1", r: new ReferenceInfo("K1", null, ReferenceInfo.Missing)).Should().Be("（已刪除）");
+        Fmt(f, "K1", "en-US", new ReferenceInfo("K1", null, ReferenceInfo.Restricted)).Should().Be("(No permission)");
+        Fmt(f, "K1", "en-US", new ReferenceInfo("K1", null, ReferenceInfo.Missing)).Should().Be("(Deleted)");
+        Fmt(f, "K1", "th", new ReferenceInfo("K1", null, ReferenceInfo.Restricted)).Should().Be("(ไม่มีสิทธิ์)");
+        Fmt(f, "K1", "vi", new ReferenceInfo("K1", null, ReferenceInfo.Missing)).Should().Be("(Đã xóa)");
         Fmt(f, "K1").Should().Be("K1");
     }
 

@@ -1,6 +1,7 @@
 using System.Globalization;
 using System.Text.Json;
 using DynamicModules.Application.Dynamic.References;
+using DynamicModules.Application.Dynamic.ReportService.Data;
 using DynamicModules.Domain.Entities.Dynamic;
 using DynamicModules.Domain.FieldTypes;
 using DynamicModules.Domain.FieldTypes.Handlers;
@@ -28,7 +29,7 @@ public static class FieldDisplay
             FieldType.Enum => OptionLabel(field, v.GetString()!, locale),
             FieldType.MultiEnum => MultiEnum(field, v, locale),
             FieldType.User => userNames.GetValueOrDefault(v.GetString()!, v.GetString()!),
-            FieldType.Reference => ReferenceText(ReferenceHandler.KeyOf(v) ?? v.GetRawText(), reference),
+            FieldType.Reference => ReferenceText(ReferenceHandler.KeyOf(v) ?? v.GetRawText(), reference, locale),
             FieldType.Formula or FieldType.Rollup => Computed(field, v),
             FieldType.Attachment => string.Join("; ", AttachmentValue.Parse(v).Select(f => f.Name)),
             _ => v.GetString() ?? v.GetRawText(),
@@ -52,8 +53,7 @@ public static class FieldDisplay
 
     private static string Boolean(JsonElement v, string locale)
     {
-        var yes = v.GetBoolean();
-        return locale == "zh-TW" ? (yes ? "是" : "否") : (yes ? "Yes" : "No");
+        return ReportText.Get(locale, v.GetBoolean() ? ReportText.Yes : ReportText.No);
     }
 
     private static string OptionLabel(Field field, string id, string locale)
@@ -70,11 +70,11 @@ public static class FieldDisplay
         return string.Join("; ", ordered.Select(id => OptionLabel(field, id, locale)));
     }
 
-    private static string ReferenceText(string key, ReferenceInfo? reference) => reference?.State switch
+    private static string ReferenceText(string key, ReferenceInfo? reference, string locale) => reference?.State switch
     {
         ReferenceInfo.Ok => reference.Title ?? key,
-        ReferenceInfo.Restricted => "（無權限）",
-        ReferenceInfo.Missing => "（已刪除）",
+        ReferenceInfo.Restricted => ReportText.Get(locale, ReportText.NoPermission),
+        ReferenceInfo.Missing => ReportText.Get(locale, ReportText.Deleted),
         _ => key,
     };
 
