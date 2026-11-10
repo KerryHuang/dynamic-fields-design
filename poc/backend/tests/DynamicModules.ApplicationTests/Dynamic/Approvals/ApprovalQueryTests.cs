@@ -1,5 +1,7 @@
 using DynamicModules.Application.Common;
 using DynamicModules.Application.Dynamic.ApprovalService;
+using DynamicModules.Application.Dynamic.PermissionService.Commands.SaveModulePermissions;
+using DynamicModules.Application.Dynamic.PermissionService.Data;
 using DynamicModules.Application.Dynamic.RecordService.Data;
 using DynamicModules.Application.Dynamic.RecordService.Queries.GetRecord;
 using DynamicModules.Application.Dynamic.SchemaService.Data;
@@ -159,6 +161,46 @@ public class ApprovalQueryTests : ApprovalTestBase
         var all = await Inbox("admin", "all", r.Module);
         all.Items.Should().ContainSingle().Which.InstanceId.Should().Be(id);
         (await Inbox("admin", "all")).Items.Select(i => i.InstanceId).Should().Contain(id);
+    }
+
+    [Fact]
+    public async Task OutOfScopeRecord_NotLeaked_RecordApproval404_InboxAllFiltered()
+    {
+        // 審查測試缺口 1：Read 與 Approve 軸的資料範圍只到自己的記錄（Own），範圍外的記錄不得洩漏標題或欄位值
+        var r = await Scenario3();
+        var everyone = Db.Context.Set<PermissionGroup>().AsNoTracking().Single(g => g.Key == "everyone");
+        As("admin");
+        (await Send(new SaveModulePermissionsRequest(r.Module, new ModulePermissionsDto(
+            [new GroupPermissionDto(everyone.Id, new PrivilegesDto(true, true, true, true, false, true, true), DataScope.Own)], [], [], []))))
+            .IsSuccess.Should().BeTrue();
+
+        async Task<long> SubmitTitled(string user, string title)
+        {
+            As(user);
+            var po = await NewPo(r, price: 50000, title: title);
+            return (await MustSubmit(po.Id, r.Confirmed)).InstanceId!.Value;
+        }
+        var other = await SubmitTitled("buyer1", "範圍外的單據");
+        var mine = await SubmitTitled("fin1", "自己的單據");
+        var otherRecord = Inst(other).RecordId;
+
+        // fin1：有 Read 與 Approve，但記錄在範圍外、不是發起人、也沒有任務 → 404，本文不帶任何實例
+        As("fin1");
+        var res = await Send(new GetRecordApprovalRequest(otherRecord));
+        res.IsNotFound.Should().BeTrue(Dump(res));
+        res.Data.Should().BeNull();
+        (await Send(new GetRecordRequest(otherRecord))).IsSuccess.Should().BeFalse();   // 對照：記錄本身也讀不到
+
+        // 簽核中心 all：只列範圍內的實例，範圍外的標題快照不出現
+        var all = await Inbox("fin1", "all", r.Module);
+        all.Items.Select(i => i.InstanceId).Should().Equal(mine);
+        all.TotalCount.Should().Be(1);
+        all.Items.Should().NotContain(i => i.TitleSnapshot.Contains("範圍外"));
+        (await Inbox("fin1", "all")).Items.Select(i => i.InstanceId).Should().Equal(mine);
+
+        // 任務負責人 buyer2 在 todo 看得到（§10.2），但 all 依資料範圍：buyer2 沒有自己的記錄 → 空
+        (await Inbox("buyer2", "todo")).Items.Select(i => i.InstanceId).Should().BeEquivalentTo([other, mine]);
+        (await Inbox("buyer2", "all")).Items.Should().BeEmpty();
     }
 
     [Fact]
