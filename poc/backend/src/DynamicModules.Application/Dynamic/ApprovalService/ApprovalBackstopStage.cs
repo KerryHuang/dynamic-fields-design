@@ -84,7 +84,8 @@ public class ApprovalBackstopStage(IWriteJournal journal, IApprovalInstanceRepos
             var before = RecordValueProcessor.Parse(e.BeforeValues!);
             var after = RecordValueProcessor.Parse(e.AfterValues);
             var key = wf.StatusFieldKey;
-            if (Raw(before, key) == Raw(after, key) || context.IsExempt(e.RecordId, key, Raw(after, key))) continue;
+            if (Raw(before, key) == Raw(after, key)
+                || (context.IsOwnEntry(e.RecordId, e.Seq) && context.IsExempt(e.RecordId, key, Raw(after, key)))) continue;
             if (wf.StateOf(after) is { } to && wf.RequiresApproval(wf.StateOf(before) ?? wf.InitialOptionId, to))
                 return ServiceResult.Conflict(ApprovalMessages.TransitionBlocked(e.RecordId));
         }

@@ -8,6 +8,7 @@ public sealed class ApprovalWriteContext
 {
     private readonly Dictionary<long, Dictionary<string, string?>> _exempt = [];
     private readonly HashSet<long> _touched = [];
+    private readonly Dictionary<long, HashSet<int>> _entries = [];
 
     /// <summary>expected：鍵 → 寫入後的原始 JSON（null 代表清空）。同一筆記錄多次登記時後者覆蓋。</summary>
     public void Exempt(long recordId, long instanceId, IReadOnlyDictionary<string, string?> expected)
@@ -21,6 +22,15 @@ public sealed class ApprovalWriteContext
     public bool IsExempt(long recordId, string key, string? raw) =>
         _exempt.TryGetValue(recordId, out var map) && map.TryGetValue(key, out var expected) && expected == raw;
 
+    /// <summary>簽核自己寫入的那幾筆寫入日誌（Seq）。逐筆的轉移檢查只豁免這幾筆，值相同但由別人寫的不算（設計 §8.5「靠實例標記辨認」）。</summary>
+    public void ExemptEntries(long recordId, IEnumerable<int> seqs)
+    {
+        if (!_entries.TryGetValue(recordId, out var set)) _entries[recordId] = set = [];
+        set.UnionWith(seqs);
+    }
+
+    public bool IsOwnEntry(long recordId, int seq) => _entries.TryGetValue(recordId, out var set) && set.Contains(seq);
+
     public void Touch(long recordId) => _touched.Add(recordId);
 
     public IReadOnlySet<long> TouchedRecordIds => _touched;
@@ -30,5 +40,6 @@ public sealed class ApprovalWriteContext
     {
         _exempt.Clear();
         _touched.Clear();
+        _entries.Clear();
     }
 }

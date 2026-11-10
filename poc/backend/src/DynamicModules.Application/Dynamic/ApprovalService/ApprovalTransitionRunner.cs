@@ -15,7 +15,7 @@ namespace DynamicModules.Application.Dynamic.ApprovalService;
 /// </summary>
 public sealed class ApprovalTransitionRunner(
     IRecordRepository records, IModuleRepository modules, ISystemIdentity system, ApprovalWriteContext context,
-    IRequestHandler<UpdateRecordRequest, ServiceResult> update)
+    IRequestHandler<UpdateRecordRequest, ServiceResult> update, IUnitOfWork uow, IWriteJournal journal)
 {
     /// <summary>toOptionId 為 null 時不改狀態；values 為 null 時只改狀態。兩者都沒有就什麼都不做。</summary>
     public async Task<ServiceResult> RunAsync(ApprovalInstance inst, long? toOptionId, IReadOnlyDictionary<string, JsonElement?>? values, CancellationToken ct)
@@ -30,6 +30,7 @@ public sealed class ApprovalTransitionRunner(
         if (input.Count == 0) return ServiceResult.Success();
 
         var keys = input.Keys.ToHashSet();
+        var seqBefore = journal.Entries.Count == 0 ? 0 : journal.Entries.Max(e => e.Seq);
         ServiceResult result;
         using (system.Enter(null))
             result = await update.Handle(new UpdateRecordRequest(record.Id, input, record.RowVersion, null, keys), ct);
@@ -37,6 +38,9 @@ public sealed class ApprovalTransitionRunner(
         // 豁免登記寫入後的實際值（update 已改了同一個追蹤中的記錄）：同一請求裡其他寫入再改這些鍵，後盾照擋
         var after = RecordValueProcessor.Parse(record.ValuesJson);
         context.Exempt(record.Id, inst.Id, keys.ToDictionary(k => k, k => ApprovalBackstopStage.Raw(after, k)));
+        // 立刻存檔，讓這次寫入成為寫入日誌裡自己的一筆，記下 Seq：後盾的逐筆轉移檢查只豁免這幾筆（仍在同一個交易內）
+        await uow.CommitAsync(ct);
+        context.ExemptEntries(record.Id, journal.Entries.Where(e => e.Seq > seqBefore && e.RecordId == record.Id).Select(e => e.Seq));
         return result;
     }
 }

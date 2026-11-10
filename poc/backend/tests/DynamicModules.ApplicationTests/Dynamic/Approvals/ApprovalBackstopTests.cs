@@ -268,6 +268,34 @@ public class ApprovalBackstopTests : ApprovalTestBase
         (await sp.GetRequiredService<ApprovalBackstopStage>().RunAsync(CancellationToken.None))!.Message.Should().Be(ApprovalMessages.EventBlocked(po.Id));
     }
 
+    [Fact]
+    public async Task Runner_ExemptOnlyRunnersOwnEntry_LoopBackIntoApprovedState_409()
+    {
+        // 複審建議：runner 轉到已確認（豁免值＝已確認）；同一請求再以系統身分 已確認 → 部分到貨（一般）→ 已確認（需簽核）。
+        // 最後一步的值等於豁免值，但不是 runner 寫的那一筆，要擋
+        _r = await BuildPurchase();
+        _flow = await SeedFlow(_r, "po-b", _r.Confirmed, 1, Def(null, Stage("lead", Group(PurchaseLeadGroup))));
+        var wf = await SaveWorkflow(_r, [Needs(_r.Draft, _r.Confirmed), Plain(_r.Confirmed, _r.Partial), Needs(_r.Partial, _r.Confirmed),
+            Plain(_r.Partial, _r.Received), Plain(_r.Confirmed, _r.Cancelled)]);
+        wf.IsSuccess.Should().BeTrue(Dump(wf));
+        var po = await NewPo(_r);
+        var inst = await SeedInstance(_r, _flow, recordId: po.Id);
+        using var scope = NewScope();
+        var sp = scope.ServiceProvider;
+        var loaded = (await sp.GetRequiredService<IApprovalInstanceRepository>().GetAsync(inst.Id, CancellationToken.None))!;
+        (await sp.GetRequiredService<ApprovalTransitionRunner>().RunAsync(loaded, _r.Confirmed, null, CancellationToken.None)).IsSuccess.Should().BeTrue();
+        await sp.GetRequiredService<IUnitOfWork>().CommitAsync(CancellationToken.None);
+        foreach (var to in new[] { _r.Partial, _r.Confirmed })
+        {
+            var row = await sp.GetRequiredService<IRecordRepository>().GetAsync(po.Id, CancellationToken.None);
+            using (sp.GetRequiredService<ISystemIdentity>().Enter(null))
+                (await sp.GetRequiredService<IRequestHandler<UpdateRecordRequest, ServiceResult>>().Handle(new UpdateRecordRequest(po.Id,
+                    new() { [Status] = O(to) }, row!.RowVersion, null, new HashSet<string> { Status }), CancellationToken.None)).IsSuccess.Should().BeTrue();
+            await sp.GetRequiredService<IUnitOfWork>().CommitAsync(CancellationToken.None);
+        }
+        (await sp.GetRequiredService<ApprovalBackstopStage>().RunAsync(CancellationToken.None))!.Message.Should().Be(ApprovalMessages.TransitionBlocked(po.Id));
+    }
+
     private async Task<ServiceResult?> RunInOneRequest(long instanceId, long recordId, bool alsoMemo)
     {
         using var scope = NewScope();
