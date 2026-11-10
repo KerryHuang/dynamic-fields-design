@@ -3,6 +3,7 @@ using DynamicModules.Application.Common;
 using DynamicModules.Application.Common.Security;
 using DynamicModules.Application.Dynamic.ApprovalService;
 using DynamicModules.Application.Dynamic.EventService;
+using DynamicModules.Application.Dynamic.RecordService;
 using DynamicModules.Application.Dynamic.RecordService.Commands.CreateRecord;
 using DynamicModules.Application.Dynamic.RecordService.Commands.DeleteRecord;
 using DynamicModules.Application.Dynamic.RecordService.Commands.UpdateRecord;
@@ -97,6 +98,50 @@ public class ApprovalBackstopTests : ApprovalTestBase
         var res = await Put(po.Id, [], new() { [_r.Line] = [row] });
         res.IsConflict.Should().BeTrue();
         res.Message.Should().Be(ApprovalMessages.Pending);
+    }
+
+    private Record LineOf(long poId)
+    {
+        var lineModule = Db.Context.Set<Module>().AsNoTracking().Single(m => m.Key == _r.Line).Id;
+        return Db.Context.Set<Record>().AsNoTracking().Where(x => x.ModuleId == lineModule).AsEnumerable()
+            .Single(x => Rec(x.Id).Values.TryGetValue($"f_{_r.LineHead}", out var h) && h is { } e && e.GetInt64() == poId);
+    }
+
+    /// <summary>
+    /// 明細模組自己的寫入（不經表頭的入口閘門；使用者 PUT 明細模組會 404，所以只會來自事件或系統寫入）：
+    /// 在同一個 scope 直接改明細記錄、經 IUnitOfWork 寫進日誌，再跑後盾。
+    /// </summary>
+    private async Task<ServiceResult?> WriteLineDirect(long lineId, (long Field, object Value) change)
+    {
+        using var scope = NewScope();
+        var sp = scope.ServiceProvider;
+        var row = (await sp.GetRequiredService<IRecordRepository>().GetAsync(lineId, CancellationToken.None))!;
+        var values = RecordValueProcessor.Parse(row.ValuesJson);
+        values[$"f_{change.Field}"] = JsonSerializer.SerializeToElement(change.Value);
+        row.ValuesJson = JsonSerializer.Serialize(values);
+        await sp.GetRequiredService<IUnitOfWork>().CommitAsync(CancellationToken.None);
+        return await sp.GetRequiredService<ApprovalBackstopStage>().RunAsync(CancellationToken.None);
+    }
+
+    [Fact]
+    public async Task DetailModuleOwnWrite_HeaderPending_EventBlocked()
+    {
+        // 明細模組自己的寫入走後盾的表頭判斷（審查測試缺口 6）
+        await Rig();
+        var po = await PendingPo();
+        var res = await WriteLineDirect(LineOf(po.Id).Id, (_r.LineQty, 99));
+        res!.Message.Should().Be(ApprovalMessages.EventBlocked(po.Id));
+    }
+
+    [Fact]
+    public async Task DetailRowMovedIntoPendingHeader_409()
+    {
+        // 明細列從非簽核中的表頭搬到簽核中的表頭：新表頭也要檢查（審查建議 8）
+        await Rig();
+        var free = await NewPo(_r);
+        var pending = await PendingPo();
+        var res = await WriteLineDirect(LineOf(free.Id).Id, (_r.LineHead, pending.Id));
+        res!.Message.Should().Be(ApprovalMessages.EventBlocked(pending.Id));
     }
 
     [Fact]

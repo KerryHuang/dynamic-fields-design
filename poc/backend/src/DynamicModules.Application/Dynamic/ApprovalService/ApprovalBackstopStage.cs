@@ -32,7 +32,7 @@ public class ApprovalBackstopStage(IWriteJournal journal, IApprovalInstanceRepos
             return m;
         }
 
-        var headerOf = new Dictionary<long, long>();
+        var headersOf = new Dictionary<long, List<long>>();   // 明細列 → 表頭（換表頭時新舊兩邊都算）
         var anyApproval = context.TouchedRecordIds.Count > 0;
         foreach (var e in entries)
         {
@@ -40,15 +40,17 @@ public class ApprovalBackstopStage(IWriteJournal journal, IApprovalInstanceRepos
             if (m is null) continue;
             if (m.Workflow is { } wf && ApprovalTopology.ApprovalTargets(wf).Count > 0) anyApproval = true;
             if (ModuleRelations.DetailFieldOf(m) is not { } parentField) continue;
-            if ((HeaderId(e.BeforeValues, parentField.Key) ?? HeaderId(e.AfterValues, parentField.Key)) is not { } header) continue;
-            headerOf[e.RecordId] = header;
+            var headers = new[] { HeaderId(e.BeforeValues, parentField.Key), HeaderId(e.AfterValues, parentField.Key) }
+                .OfType<long>().Distinct().ToList();
+            if (headers.Count == 0) continue;
+            headersOf[e.RecordId] = headers;
             if (parentField.Config.RefTarget?.Key is { } parentKey && await modules.GetByKeyAsync(parentKey, includeChildren: false, ct) is { } parent
                 && (await ModuleOf(parent.Id))?.Workflow is { } pwf && ApprovalTopology.ApprovalTargets(pwf).Count > 0)
                 anyApproval = true;
         }
         if (!anyApproval) return null;   // 沒有任何牽涉簽核的模組：一般寫入不多查
 
-        var ids = entries.Select(e => e.RecordId).Concat(headerOf.Values).Distinct().ToList();
+        var ids = entries.Select(e => e.RecordId).Concat(headersOf.Values.SelectMany(h => h)).Distinct().ToList();
         var inApproval = await instances.ListPendingRecordIdsAsync(ids, ct);
         inApproval.UnionWith(context.TouchedRecordIds);
 
@@ -61,7 +63,8 @@ public class ApprovalBackstopStage(IWriteJournal journal, IApprovalInstanceRepos
             var changed = before.Keys.Union(after.Keys).Where(k => Raw(before, k) != Raw(after, k)).ToList();
             var deleted = e.AfterDeleted && !e.BeforeDeleted;
 
-            if (headerOf.TryGetValue(e.RecordId, out var header) && inApproval.Contains(header) && (deleted || changed.Count > 0 || e.Kind == JournalKind.Added))
+            if (headersOf.TryGetValue(e.RecordId, out var headers) && headers.FirstOrDefault(inApproval.Contains) is var header and > 0
+                && (deleted || changed.Count > 0 || e.Kind == JournalKind.Added))
                 return ServiceResult.Conflict(ApprovalMessages.EventBlocked(header));
 
             if (inApproval.Contains(e.RecordId) && e.Kind == JournalKind.Modified)
