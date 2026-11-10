@@ -1,3 +1,4 @@
+using System.Text.Json;
 using DynamicModules.Application.Common;
 using DynamicModules.Application.Dynamic.ApprovalService;
 using DynamicModules.Application.Dynamic.RecordService.Data;
@@ -61,6 +62,19 @@ public class ApprovalSubmitTests : ApprovalTestBase
         res.Message.Should().Be(ApprovalMessages.FlowConditionUndecidable("po-z"));
         StateOf(r, po.Id).Should().Be(r.Draft);
         Db.Context.Set<ApprovalInstance>().AsNoTracking().Count().Should().Be(0);
+    }
+
+    [Fact]
+    public async Task Submit_FlowConditionEmptyGroup_201_FlowMatches()
+    {
+        // 空群組 {"all":[]} 是「沒有條件」：解析得出來（Node 為 null、無 Error），流程成立，不能當解析失敗回 409
+        var r = await Scenario3();
+        await SeedFlow(r, "po-e", r.Confirmed, 0, Def(JsonSerializer.SerializeToElement(new { all = Array.Empty<object>() }), Stage("mgr", Manager(1))));
+        As("buyer1");
+        var po = await NewPo(r, price: 5000);
+        var res = await MustSubmit(po.Id, r.Confirmed);
+        res.Outcome.Should().Be(ApprovalOutcomes.Submitted);
+        Inst(res.InstanceId!.Value).Status.Should().Be(ApprovalInstanceStatus.Pending);
     }
 
     [Fact]

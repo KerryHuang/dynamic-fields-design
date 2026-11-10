@@ -22,8 +22,9 @@ public static class ApprovalRouter
         {
             if (e.Definition.When is not { ValueKind: JsonValueKind.Object } w) return (e, null);
             var parsed = ConditionParser.Parse(w, module, registry, ConditionUsage.Rule, userIds);
-            if (parsed.Node is null) return (null, e);
-            if (ConditionEvaluator.Evaluate(parsed.Node, values, registry, today)) return (e, null);
+            if (parsed.Error is not null) return (null, e);
+            // Node 為 null 且無 Error＝空群組（沒有條件），視為成立
+            if (parsed.Node is null || ConditionEvaluator.Evaluate(parsed.Node, values, registry, today)) return (e, null);
         }
         return (null, null);
     }
