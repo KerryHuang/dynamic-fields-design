@@ -215,7 +215,9 @@ export const dynamicApi = {
   setGroupMembers: (id: number, body: { userIds: string[] }) => http.put(`/admin/groups/${id}/members`, body).then(data),
   getGroupImpact: (id: number) => http.get<GroupImpact>(`/admin/groups/${id}/impact`).then(data),
   deleteGroup: (id: number) => http.delete(`/admin/groups/${id}`).then(data),
-  getDepartments: () => http.get<Department[]>('/departments').then(data),
+  /** The server omits null properties; roots and vacant managers come back without parentId / managerUserId. */
+  getDepartments: () => http.get<Department[]>('/departments').then(data)
+    .then((list) => list.map((d) => ({ ...d, parentId: d.parentId ?? null, managerUserId: d.managerUserId ?? null }))),
   createDepartment: (body: DepartmentInput) => http.post<Department>('/departments', body).then(data),
   updateDepartment: (id: number, body: DepartmentInput) => http.put<Department>(`/departments/${id}`, body).then(data),
   deleteDepartment: (id: number) => http.delete(`/departments/${id}`).then(data),

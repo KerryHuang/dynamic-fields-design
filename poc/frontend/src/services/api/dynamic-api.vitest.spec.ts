@@ -284,3 +284,17 @@ describe('dynamicApi events, checks and ledger', () => {
     expect(seen.key).toBe('key-import-1');
   });
 });
+
+describe('dynamicApi.getDepartments', () => {
+  beforeEach(() => setActivePinia(createPinia()));
+
+  it('turns the omitted null parentId and managerUserId into null (the server drops null properties)', async () => {
+    http.defaults.adapter = async (config) => ({
+      data: [{ id: 1, code: 'exec', name: { 'zh-TW': '總經理室' }, sortOrder: 0, active: true, memberUserIds: [] }],
+      status: 200, statusText: 'OK', headers: {}, config,
+    });
+    const [d] = await dynamicApi.getDepartments();
+    expect(d.parentId).toBeNull();
+    expect(d.managerUserId).toBeNull();
+  });
+});
