@@ -245,10 +245,10 @@ function saveSection() {
       <!-- 多語系輸入比一行高，展開「其他語系」會更高：自成一列靠上對齊，不撐高上面那列 -->
       <div class="row items-start q-gutter-md q-mb-md">
         <I18nTextInput v-model="sectionDraft" :label="t('designer.section')" :hint="t('designer.sectionHint')" :maxlength="100" optional
-          class="col-grow" style="min-width: 220px; max-width: 520px" data-testid="module-section" @change="saveSection" />
+          class="col-grow" style="min-width: 220px; max-width: min(520px, 100%)" data-testid="module-section" @change="saveSection" />
       </div>
       <div v-if="!isExtension" class="row items-start q-gutter-md q-mb-md">
-        <div class="col-grow" style="min-width: 220px; max-width: 520px" data-testid="title-template-field">
+        <div class="col-grow" style="min-width: 220px; max-width: min(520px, 100%)" data-testid="title-template-field">
           <q-input v-model="templateDraft" :label="t('designer.titleTemplate')" outlined dense data-testid="title-template"
             :hint="templatePreview ? t('designer.titleTemplatePreview', { text: templatePreview }) : t('designer.titleTemplateHint')"
             :error="!!errorFor(templateError, 'TitleTemplate') || undefined" :error-message="errorFor(templateError, 'TitleTemplate')"
