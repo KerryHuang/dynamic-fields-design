@@ -10,6 +10,7 @@ import { groupMenu, systemLinks } from 'src/domain/dynamic/menu-nav';
 import { resolveI18n } from 'src/domain/dynamic/i18n-text';
 import ForbiddenNotice from 'src/components/framework/ForbiddenNotice.vue';
 import DashboardView from 'src/presentation/dashboards/DashboardView.vue';
+import TaskSummaryCard from 'src/presentation/tasks/TaskSummaryCard.vue';
 import { useIdentityStore } from 'src/stores/use-identity-store';
 
 const { t, locale } = useI18n();
@@ -43,6 +44,8 @@ const recent = computed(() => {
       <div class="text-h5">Formwright</div>
       <div v-if="me.data.value" class="text-muted">{{ t('home.welcome', { name: me.data.value.displayName }) }}</div>
     </div>
+
+    <TaskSummaryCard />
 
     <section v-if="dashId !== null" class="q-mb-lg" data-testid="home-dashboard">
       <q-select

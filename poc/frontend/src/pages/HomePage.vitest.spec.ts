@@ -21,12 +21,16 @@ const mod = (key: string, section?: string, icon?: string) =>
 vi.stubGlobal('ResizeObserver', class { observe() {} unobserve() {} disconnect() {} });
 afterEach(() => localStorage.clear());
 
-async function run(opts: { me?: ReturnType<typeof me>; menu?: unknown[]; recent?: string[]; gate?: Promise<void>; menuStatus?: number } = {}) {
+async function run(opts: { me?: ReturnType<typeof me>; menu?: unknown[]; recent?: string[]; gate?: Promise<void>; menuStatus?: number; summary?: unknown; summaryStatus?: number } = {}) {
   setActivePinia(createPinia());
   useIdentityStore().setSession('u');
   if (opts.recent) localStorage.setItem('formwright:recent-modules:u', JSON.stringify(opts.recent));
   http.defaults.adapter = async (config) => {
     if (config.url === '/me') return { data: opts.me ?? me(), status: 200, statusText: 'OK', headers: {}, config };
+    if (config.url === '/tasks/summary') {
+      if (opts.summaryStatus) return Promise.reject({ config, response: { status: opts.summaryStatus, data: {}, headers: {}, config } });
+      return { data: opts.summary ?? { dueToday: 0, overdue: 0 }, status: 200, statusText: 'OK', headers: {}, config };
+    }
     if (opts.gate) await opts.gate;
     if (opts.menuStatus) return Promise.reject({ status: opts.menuStatus });
     return { data: opts.menu ?? [], status: 200, statusText: 'OK', headers: {}, config };
@@ -37,6 +41,7 @@ async function run(opts: { me?: ReturnType<typeof me>; menu?: unknown[]; recent?
     routes: [
       { path: '/', component: HomePage },
       { path: '/reports', component: stub },
+      { path: '/tasks', component: stub },
       { path: '/system/:rest(.*)', component: stub },
       { path: '/dynamic/:moduleKey', component: stub },
     ],
@@ -51,6 +56,24 @@ async function run(opts: { me?: ReturnType<typeof me>; menu?: unknown[]; recent?
 }
 
 describe('HomePage', () => {
+  it('shows today-due and overdue task counts, each linking to the filtered task list', async () => {
+    const { w } = await run({ summary: { dueToday: 2, overdue: 1 } });
+    const due = w.get('[data-testid="home-tasks-due-today"]');
+    const overdue = w.get('[data-testid="home-tasks-overdue"]');
+    expect(due.text()).toContain('2');
+    expect(due.text()).toContain(zhTW.home.tasksDueToday);
+    expect(due.attributes('href')).toBe('/tasks?filter=thisWeek');
+    expect(overdue.text()).toContain('1');
+    expect(overdue.text()).toContain(zhTW.home.tasksOverdue);
+    expect(overdue.attributes('href')).toBe('/tasks?filter=overdue');
+  });
+
+  it('hides the whole card when the summary request fails', async () => {
+    const { w } = await run({ summaryStatus: 500 });
+    expect(w.find('[data-testid="home-tasks"]').exists()).toBe(false);
+    expect(w.find('[data-testid="home-welcome"]').exists()).toBe(true);
+  });
+
   it('stays on the home page for everyone and greets the user by name', async () => {
     for (const m of [me({ designerRead: true }), me()]) {
       const { router, w } = await run({ me: m, menu: [mod('orders')] });
