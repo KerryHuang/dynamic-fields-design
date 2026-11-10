@@ -1283,6 +1283,56 @@ namespace DynamicModules.Persistence.Migrations
                     b.ToTable("Dynamic_ModuleTemplate", (string)null);
                 });
 
+            modelBuilder.Entity("DynamicModules.Domain.Entities.Dynamic.Notification", b =>
+                {
+                    b.Property<long>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("INTEGER");
+
+                    b.Property<DateTime>("CreatedTime")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Kind")
+                        .IsRequired()
+                        .HasMaxLength(40)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Link")
+                        .IsRequired()
+                        .HasMaxLength(400)
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTime?>("ReadTime")
+                        .HasColumnType("TEXT");
+
+                    b.Property<long?>("SourceId")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("SourceType")
+                        .HasMaxLength(40)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("TitleSnapshot")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("UserId")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("TEXT");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("SourceType", "SourceId");
+
+                    b.HasIndex("UserId", "CreatedTime");
+
+                    b.HasIndex("UserId", "ReadTime");
+
+                    b.ToTable("Dynamic_Notification", (string)null);
+                });
+
             modelBuilder.Entity("DynamicModules.Domain.Entities.Dynamic.NumberSequence", b =>
                 {
                     b.Property<long>("FieldId")
@@ -1696,6 +1746,344 @@ namespace DynamicModules.Persistence.Migrations
                     b.HasKey("Key");
 
                     b.ToTable("Dynamic_SystemSetting", (string)null);
+                });
+
+            modelBuilder.Entity("DynamicModules.Domain.Entities.Dynamic.TaskComment", b =>
+                {
+                    b.Property<long>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("AuthorUserId")
+                        .HasMaxLength(50)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Body")
+                        .IsRequired()
+                        .HasMaxLength(4000)
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTime>("CreatedTime")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Kind")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("SystemData")
+                        .HasMaxLength(2000)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("SystemEvent")
+                        .HasMaxLength(40)
+                        .HasColumnType("TEXT");
+
+                    b.Property<long>("TaskId")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<bool>("Withdrawn")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("WithdrawnBy")
+                        .HasMaxLength(50)
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTime?>("WithdrawnTime")
+                        .HasColumnType("TEXT");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("TaskId");
+
+                    b.ToTable("Dynamic_TaskComment", (string)null);
+                });
+
+            modelBuilder.Entity("DynamicModules.Domain.Entities.Dynamic.TaskCommentAttachment", b =>
+                {
+                    b.Property<long>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("INTEGER");
+
+                    b.Property<long>("CommentId")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("ContentType")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTime>("CreatedTime")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("FileName")
+                        .IsRequired()
+                        .HasMaxLength(150)
+                        .HasColumnType("TEXT");
+
+                    b.Property<long>("Size")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("StorageKey")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("TEXT");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CommentId");
+
+                    b.HasIndex("StorageKey")
+                        .IsUnique();
+
+                    b.ToTable("Dynamic_TaskCommentAttachment", (string)null);
+                });
+
+            modelBuilder.Entity("DynamicModules.Domain.Entities.Dynamic.TaskItem", b =>
+                {
+                    b.Property<long>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("INTEGER");
+
+                    b.Property<bool>("AssigneeOverridden")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("AssigneeUserId")
+                        .HasMaxLength(50)
+                        .HasColumnType("TEXT");
+
+                    b.Property<bool>("CancelledByRule")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<DateTime?>("CompletedTime")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("CreatedBy")
+                        .HasMaxLength(50)
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTime>("CreatedTime")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Description")
+                        .HasMaxLength(4000)
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateOnly?>("DueDate")
+                        .HasColumnType("TEXT");
+
+                    b.Property<bool>("DueOverridden")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<DateOnly?>("LastDueSoonNotified")
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateOnly?>("LastOverdueNotified")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("ModifiedBy")
+                        .HasMaxLength(50)
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTime?>("ModifiedTime")
+                        .HasColumnType("TEXT");
+
+                    b.Property<long?>("ModuleId")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<long?>("RecordId")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("RecordTitleSnapshot")
+                        .HasMaxLength(200)
+                        .HasColumnType("TEXT");
+
+                    b.Property<long?>("RuleId")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int?>("RuleOccurrence")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("RuleTaskCode")
+                        .HasMaxLength(40)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Title")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("TEXT");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CreatedBy");
+
+                    b.HasIndex("ModuleId");
+
+                    b.HasIndex("RecordId");
+
+                    b.HasIndex("AssigneeUserId", "Status");
+
+                    b.HasIndex("RuleId", "RecordId", "RuleOccurrence", "RuleTaskCode")
+                        .IsUnique();
+
+                    b.ToTable("Dynamic_Task", (string)null);
+                });
+
+            modelBuilder.Entity("DynamicModules.Domain.Entities.Dynamic.TaskParticipant", b =>
+                {
+                    b.Property<long>("TaskId")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("UserId")
+                        .HasMaxLength(50)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Reason")
+                        .HasMaxLength(20)
+                        .HasColumnType("TEXT");
+
+                    b.HasKey("TaskId", "UserId", "Reason");
+
+                    b.HasIndex("UserId");
+
+                    b.ToTable("Dynamic_TaskParticipant", (string)null);
+                });
+
+            modelBuilder.Entity("DynamicModules.Domain.Entities.Dynamic.TaskRule", b =>
+                {
+                    b.Property<long>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("INTEGER");
+
+                    b.Property<bool>("Active")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<long?>("AppId")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<DateTime>("CreatedTime")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("CreatedUserId")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Key")
+                        .IsRequired()
+                        .HasMaxLength(40)
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTime?>("ModifiedTime")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("ModifiedUserId")
+                        .HasMaxLength(50)
+                        .HasColumnType("TEXT");
+
+                    b.Property<long>("ModuleId")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("NameI18n")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Repeat")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasMaxLength(20)
+                        .HasColumnType("TEXT")
+                        .HasDefaultValue("Once");
+
+                    b.Property<string>("Trigger")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("WhenJson")
+                        .HasColumnType("TEXT");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("AppId");
+
+                    b.HasIndex("Key")
+                        .IsUnique();
+
+                    b.HasIndex("ModuleId");
+
+                    b.ToTable("Dynamic_TaskRule", (string)null);
+                });
+
+            modelBuilder.Entity("DynamicModules.Domain.Entities.Dynamic.TaskRuleRun", b =>
+                {
+                    b.Property<long>("RuleId")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<long>("RecordId")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int>("Occurrence")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<DateTime>("CreatedTime")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("TriggeredBy")
+                        .HasMaxLength(50)
+                        .HasColumnType("TEXT");
+
+                    b.HasKey("RuleId", "RecordId", "Occurrence");
+
+                    b.ToTable("Dynamic_TaskRuleRun", (string)null);
+                });
+
+            modelBuilder.Entity("DynamicModules.Domain.Entities.Dynamic.TaskRuleTask", b =>
+                {
+                    b.Property<long>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("INTEGER");
+
+                    b.Property<long>("AssigneeFieldId")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("Code")
+                        .IsRequired()
+                        .HasMaxLength(40)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("DescriptionI18n")
+                        .HasColumnType("TEXT");
+
+                    b.Property<long?>("DueFieldId")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int>("DueOffsetDays")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<long>("RuleId")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int>("SortOrder")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("TitleI18n")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("WhenJson")
+                        .HasColumnType("TEXT");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("RuleId", "Code")
+                        .IsUnique();
+
+                    b.ToTable("Dynamic_TaskRuleTask", (string)null);
                 });
 
             modelBuilder.Entity("DynamicModules.Domain.Entities.Dynamic.UserGroupMapping", b =>
@@ -2154,6 +2542,68 @@ namespace DynamicModules.Persistence.Migrations
                         .IsRequired();
                 });
 
+            modelBuilder.Entity("DynamicModules.Domain.Entities.Dynamic.TaskComment", b =>
+                {
+                    b.HasOne("DynamicModules.Domain.Entities.Dynamic.TaskItem", null)
+                        .WithMany("Comments")
+                        .HasForeignKey("TaskId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("DynamicModules.Domain.Entities.Dynamic.TaskCommentAttachment", b =>
+                {
+                    b.HasOne("DynamicModules.Domain.Entities.Dynamic.TaskComment", null)
+                        .WithMany("Attachments")
+                        .HasForeignKey("CommentId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("DynamicModules.Domain.Entities.Dynamic.TaskItem", b =>
+                {
+                    b.HasOne("DynamicModules.Domain.Entities.Dynamic.Module", null)
+                        .WithMany()
+                        .HasForeignKey("ModuleId")
+                        .OnDelete(DeleteBehavior.Restrict);
+                });
+
+            modelBuilder.Entity("DynamicModules.Domain.Entities.Dynamic.TaskParticipant", b =>
+                {
+                    b.HasOne("DynamicModules.Domain.Entities.Dynamic.TaskItem", null)
+                        .WithMany("Participants")
+                        .HasForeignKey("TaskId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("DynamicModules.Domain.Entities.Dynamic.TaskRule", b =>
+                {
+                    b.HasOne("DynamicModules.Domain.Entities.Dynamic.Module", null)
+                        .WithMany()
+                        .HasForeignKey("ModuleId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("DynamicModules.Domain.Entities.Dynamic.TaskRuleRun", b =>
+                {
+                    b.HasOne("DynamicModules.Domain.Entities.Dynamic.TaskRule", null)
+                        .WithMany()
+                        .HasForeignKey("RuleId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("DynamicModules.Domain.Entities.Dynamic.TaskRuleTask", b =>
+                {
+                    b.HasOne("DynamicModules.Domain.Entities.Dynamic.TaskRule", null)
+                        .WithMany("Tasks")
+                        .HasForeignKey("RuleId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
             modelBuilder.Entity("DynamicModules.Domain.Entities.Dynamic.Workflow", b =>
                 {
                     b.HasOne("DynamicModules.Domain.Entities.Dynamic.Module", null)
@@ -2202,6 +2652,23 @@ namespace DynamicModules.Persistence.Migrations
             modelBuilder.Entity("DynamicModules.Domain.Entities.Dynamic.Report", b =>
                 {
                     b.Navigation("Shares");
+                });
+
+            modelBuilder.Entity("DynamicModules.Domain.Entities.Dynamic.TaskComment", b =>
+                {
+                    b.Navigation("Attachments");
+                });
+
+            modelBuilder.Entity("DynamicModules.Domain.Entities.Dynamic.TaskItem", b =>
+                {
+                    b.Navigation("Comments");
+
+                    b.Navigation("Participants");
+                });
+
+            modelBuilder.Entity("DynamicModules.Domain.Entities.Dynamic.TaskRule", b =>
+                {
+                    b.Navigation("Tasks");
                 });
 #pragma warning restore 612, 618
         }

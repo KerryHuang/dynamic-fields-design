@@ -85,6 +85,63 @@ public class SchemaTests
     }
 
     [Fact]
+    public async Task Schema_HasTaskTables()
+    {
+        await using var db = await SqliteTestDb.CreateAsync();
+
+        var tables = await db.Context.Database
+            .SqlQueryRaw<string>("SELECT name AS Value FROM sqlite_master WHERE type = 'table'")
+            .ToListAsync();
+        var indexes = await db.Context.Database
+            .SqlQueryRaw<string>("SELECT name AS Value FROM sqlite_master WHERE type = 'index' AND tbl_name = 'Dynamic_Task'")
+            .ToListAsync();
+        var runPk = await db.Context.Database
+            .SqlQueryRaw<string>("SELECT name AS Value FROM pragma_table_info('Dynamic_TaskRuleRun') WHERE pk > 0 ORDER BY pk")
+            .ToListAsync();
+
+        tables.Should().Contain([
+            "Dynamic_Task", "Dynamic_TaskComment", "Dynamic_TaskCommentAttachment", "Dynamic_TaskParticipant",
+            "Dynamic_TaskRule", "Dynamic_TaskRuleTask", "Dynamic_TaskRuleRun", "Dynamic_Notification"
+        ]);
+        indexes.Should().Contain("IX_Dynamic_Task_RuleId_RecordId_RuleOccurrence_RuleTaskCode");
+        runPk.Should().Equal("RuleId", "RecordId", "Occurrence");
+    }
+
+    [Fact]
+    public async Task DuplicateRuleTask_SameOccurrenceAndCode_IsRejectedByUniqueIndex()
+    {
+        await using var db = await SqliteTestDb.CreateAsync();
+        db.Context.Set<TaskItem>().Add(RuleTask(occurrence: 1));
+        db.Context.Set<TaskItem>().Add(RuleTask(occurrence: 1));
+
+        var act = () => db.Context.SaveChangesAsync();
+
+        await act.Should().ThrowAsync<DbUpdateException>();
+    }
+
+    [Fact]
+    public async Task SameCode_DifferentOccurrence_IsAllowed()
+    {
+        await using var db = await SqliteTestDb.CreateAsync();
+        db.Context.Set<TaskItem>().Add(RuleTask(occurrence: 1));
+        db.Context.Set<TaskItem>().Add(RuleTask(occurrence: 2));
+
+        await db.Context.SaveChangesAsync();
+
+        (await db.Context.Set<TaskItem>().CountAsync()).Should().Be(2);
+    }
+
+    private static TaskItem RuleTask(int occurrence) => new()
+    {
+        Title = "x",
+        RuleId = 1,
+        RecordId = 1,
+        RuleOccurrence = occurrence,
+        RuleTaskCode = "a",
+        CreatedTime = new DateTime(2026, 11, 4, 1, 0, 0, DateTimeKind.Utc)
+    };
+
+    [Fact]
     public async Task Seed_IsIdempotent()
     {
         await using var db = await SqliteTestDb.CreateAsync();
