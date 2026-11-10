@@ -13,3 +13,12 @@ public sealed record CreateRecordTaskRequest(long RecordId, TaskInput Input) : I
 public sealed record UpdateTaskRequest(long Id, JsonElement Patch) : IRequest<ServiceResult>, ITransactionalRequest;
 
 public sealed record DeleteTaskRequest(long Id) : IRequest<ServiceResult>, ITransactionalRequest;
+
+/// <summary>Tab：assigned、created、mentioned；Filter：open、overdue、thisWeek、all。</summary>
+public sealed record GetMyTasksRequest(string Tab, string Filter, int CurrentPage, int PagesSize) : IRequest<ServiceResult>;
+
+public sealed record GetTaskSummaryRequest : IRequest<ServiceResult>;
+
+public sealed record GetTaskRequest(long Id) : IRequest<ServiceResult>;
+
+public sealed record GetRecordTasksRequest(long RecordId) : IRequest<ServiceResult>;

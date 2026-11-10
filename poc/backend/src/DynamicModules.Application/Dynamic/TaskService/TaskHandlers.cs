@@ -105,3 +105,78 @@ public class DeleteTaskHandler(ITaskRepository tasks, TaskAccess access, IUnitOf
         return ServiceResult.Success();
     }
 }
+
+public class GetMyTasksHandler(ITaskRepository tasks, TaskAccess access, IPermissionRepository permissions, ICurrentUser user, IBusinessTime time)
+    : IRequestHandler<GetMyTasksRequest, ServiceResult>
+{
+    private static readonly Dictionary<string, TaskListTab> Tabs = new()
+    {
+        ["assigned"] = TaskListTab.Assigned, ["created"] = TaskListTab.Created, ["mentioned"] = TaskListTab.Mentioned
+    };
+
+    private static readonly Dictionary<string, TaskListFilter> Filters = new()
+    {
+        ["open"] = TaskListFilter.Open, ["overdue"] = TaskListFilter.Overdue, ["thisWeek"] = TaskListFilter.ThisWeek, ["all"] = TaskListFilter.All
+    };
+
+    public async Task<ServiceResult> Handle(GetMyTasksRequest request, CancellationToken ct)
+    {
+        var errors = new Dictionary<string, string[]>();
+        if (!Tabs.TryGetValue(request.Tab, out var tab)) errors["tab"] = ["分頁不正確"];
+        if (!Filters.TryGetValue(request.Filter, out var filter)) errors["filter"] = ["篩選不正確"];
+        if (errors.Count > 0) return ServiceResult.Invalid(errors);
+        var page = Math.Max(request.CurrentPage, 1);
+        var size = Math.Clamp(request.PagesSize, 1, 100);
+        var today = time.Today;
+        var (items, total) = await tasks.QueryMineAsync(
+            new TaskListQuery(user.UserId, tab, filter, today, WeekEnd(today), page, size), ct);
+        var perms = await access.EvaluateManyAsync(items, ct);
+        var users = (await permissions.ListUsersAsync(ct)).ToDictionary(u => u.UserId);
+        var rows = items.Select((t, i) => TaskViews.ToSummary(t, perms[i], users, today)).ToList();
+        return ServiceResult.Success(new PagedResponse<TaskSummaryResponse>(rows, total, page, size));
+    }
+
+    /// <summary>本週日（週一到週日為一週）。</summary>
+    internal static DateOnly WeekEnd(DateOnly today) =>
+        today.AddDays((7 - (int)today.DayOfWeek) % 7);
+}
+
+public class GetTaskSummaryHandler(ITaskRepository tasks, ICurrentUser user, IBusinessTime time)
+    : IRequestHandler<GetTaskSummaryRequest, ServiceResult>
+{
+    public async Task<ServiceResult> Handle(GetTaskSummaryRequest request, CancellationToken ct)
+    {
+        var (dueToday, overdue) = await tasks.CountMineDueAsync(user.UserId, time.Today, ct);
+        return ServiceResult.Success(new TaskSummaryCounts(dueToday, overdue));
+    }
+}
+
+public class GetTaskHandler(ITaskRepository tasks, TaskAccess access, TaskSupport support)
+    : IRequestHandler<GetTaskRequest, ServiceResult>
+{
+    public async Task<ServiceResult> Handle(GetTaskRequest request, CancellationToken ct)
+    {
+        var task = await tasks.GetAsync(request.Id, ct);
+        if (task is null) return ServiceResult.NotFound(TaskMessages.NotFound);
+        var p = await access.EvaluateAsync(task, ct);
+        // 看不到與不存在同一個回應，不洩漏任務存在
+        if (!p.CanSee) return ServiceResult.NotFound(TaskMessages.NotFound);
+        return ServiceResult.Success(await support.DetailAsync(task, p, ct));
+    }
+}
+
+public class GetRecordTasksHandler(ITaskRepository tasks, TaskAccess access, IPermissionRepository permissions, IBusinessTime time)
+    : IRequestHandler<GetRecordTasksRequest, ServiceResult>
+{
+    public async Task<ServiceResult> Handle(GetRecordTasksRequest request, CancellationToken ct)
+    {
+        var target = await access.ForRecordAsync(request.RecordId, ct);
+        if (target is null) return ServiceResult.NotFound(RecordMapper.RecordNotFound);
+        var items = await tasks.ListByRecordAsync(request.RecordId, ct);
+        var perms = await access.EvaluateManyAsync(items, ct);
+        var users = (await permissions.ListUsersAsync(ct)).ToDictionary(u => u.UserId);
+        var today = time.Today;
+        var rows = items.Select((t, i) => TaskViews.ToSummary(t, perms[i], users, today)).ToList();
+        return ServiceResult.Success(new RecordTasksResponse(rows, target.CanAdd, []));
+    }
+}
