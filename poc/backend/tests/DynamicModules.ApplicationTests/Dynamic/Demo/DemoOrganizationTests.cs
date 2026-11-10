@@ -13,11 +13,8 @@ namespace DynamicModules.ApplicationTests.Dynamic.Demo;
 [Collection(DemoGeneratedCollection.Name)]
 public class DemoOrganizationTests(DemoGeneratedFixture fx)
 {
-    private async Task<OrgSnapshot> Org()
-    {
-        using var scope = fx.Host.Services.CreateScope();
-        return await scope.ServiceProvider.GetRequiredService<OrgSnapshotLoader>().LoadAsync(default);
-    }
+    // 不開新 scope：DemoTestHost 的 DbContext 註冊成 scoped 工廠，scope 結束會把整個 collection 共用的 context 釋放掉
+    private Task<OrgSnapshot> Org() => fx.Host.Services.GetRequiredService<OrgSnapshotLoader>().LoadAsync(default);
 
     [Fact]
     public async Task DemoOrg_MatchesTable()
