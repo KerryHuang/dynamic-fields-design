@@ -284,4 +284,54 @@ public class ApprovalActionTests : ApprovalTestBase
         Db.Context.Set<ApprovalStageRun>().AsNoTracking().Count(x => x.InstanceId == id).Should().Be(1);
         StateOf(r, Inst(id).RecordId).Should().Be(r.Draft);
     }
+    [Fact]
+    public async Task Reject_ToPrevious_NotifiesInitiator()
+    {
+        // 設計 §12「被退回」：發起人；退回上一關時另通知上一關的新任務負責人（審查建議 3）
+        var r = await Scenario3();
+        var id = await SubmitAs(r, "buyer1", 150000);
+        await Approve(id, "gm");
+        Outcome(await Reject(id, "buyer2", "請重看", RejectTaskHandler.ToPrevious)).Should().Be(ApprovalOutcomes.Returned);
+        Notices("buyer1", NotificationKinds.ApprovalReturned).Should().Be(1);
+        Notices("gm", NotificationKinds.ApprovalReturned).Should().Be(1);
+        Notices("buyer2", NotificationKinds.ApprovalReturned).Should().Be(0);
+    }
+
+    /// <summary>只有一關（採購主管群組）的流程，RejectTo 直接寫進定義（不經驗證，模擬設定後來被改掉）。</summary>
+    private async Task<(PurchaseRig R, long Id)> RejectRig(Func<PurchaseRig, long?> rejectTo)
+    {
+        var r = await BuildPurchase();
+        var flow = await SeedFlow(r, "po-rt", r.Confirmed, 1, Def(null, Stage("lead", Group(PurchaseLeadGroup))));
+        (await SaveWorkflow(r, [Needs(r.Draft, r.Confirmed), Plain(r.Confirmed, r.Partial), Plain(r.Partial, r.Received),
+            Plain(r.Confirmed, r.Cancelled)])).IsSuccess.Should().BeTrue();
+        var version = Db.Context.Set<ApprovalFlowVersion>().Single(v => v.FlowId == flow.Id);
+        version.Definition = version.Definition with { RejectTo = rejectTo(r) };
+        await Db.Context.SaveChangesAsync();
+        await GrantEveryone(r.Module);
+        return (r, await SubmitAs(r, "buyer1", 5000));
+    }
+
+    [Fact]
+    public async Task Reject_RejectToTransitionGone_409_NothingChanged()
+    {
+        // 執行期再驗：RejectTo 指向的轉移（草稿 → 部分到貨）沒有定義 → 409，實例與記錄都不動（設計 §8.3）
+        var (r, id) = await RejectRig(x => x.Partial);
+        var res = await Reject(id, "buyer2", "不行");
+        res.IsConflict.Should().BeTrue(Dump(res));
+        res.Message.Should().Be(ApprovalMessages.TransitionGone);
+        Inst(id).Status.Should().Be(ApprovalInstanceStatus.Pending);
+        Open(id, "buyer2").Status.Should().Be(ApprovalTaskStatus.Open);
+        StateOf(r, Inst(id).RecordId).Should().Be(r.Draft);
+    }
+
+    [Theory]
+    [InlineData(false)]   // 沒設 RejectTo
+    [InlineData(true)]    // RejectTo 等於送出時的狀態（草稿）
+    public async Task Reject_RejectToNullOrFrom_StateUnchanged(bool toFrom)
+    {
+        var (r, id) = await RejectRig(x => toFrom ? x.Draft : null);
+        Outcome(await Reject(id, "buyer2", "不行")).Should().Be(ApprovalOutcomes.Rejected);
+        Inst(id).Status.Should().Be(ApprovalInstanceStatus.Rejected);
+        StateOf(r, Inst(id).RecordId).Should().Be(r.Draft);
+    }
 }

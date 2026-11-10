@@ -64,6 +64,24 @@ public class ApprovalSubmitTests : ApprovalTestBase
     }
 
     [Fact]
+    public async Task Submit_AllStagesSkipped_201_Approved_Transitioned()
+    {
+        // 送出時每一關的條件都不成立：建實例、全部略過、直接轉移（實作者技術決定 3）
+        var r = await BuildPurchase();
+        await SeedFlow(r, "po-s", r.Confirmed, 1, Def(null, Stage("board", Group(BoardGroup), when: Cond(r.Total, "gt", 1000000))));
+        (await SaveWorkflow(r, [Needs(r.Draft, r.Confirmed), Plain(r.Confirmed, r.Partial), Plain(r.Partial, r.Received),
+            Plain(r.Confirmed, r.Cancelled)])).IsSuccess.Should().BeTrue();
+        await GrantEveryone(r.Module);
+        As("buyer1");
+        var po = await NewPo(r, price: 5000);
+        var res = await MustSubmit(po.Id, r.Confirmed);
+        res.Outcome.Should().Be(ApprovalOutcomes.Approved);
+        Inst(res.InstanceId!.Value).Status.Should().Be(ApprovalInstanceStatus.Approved);
+        TasksOf(res.InstanceId!.Value).Should().BeEmpty();
+        StateOf(r, po.Id).Should().Be(r.Confirmed);
+    }
+
+    [Fact]
     public async Task Submit_NoMatch_Block_400()
     {
         var r = await Scenario3();

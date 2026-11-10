@@ -147,6 +147,8 @@ public class RejectTaskHandler(
             await uow.CommitAsync(ct);
             var restart = await engine.RestartStageAsync(inst, module, await support.ValuesAsync(inst.RecordId, ct), previous, runs.Max(r => r.Seq) + 1, ct);
             if (restart is not null) return restart;
+            // 設計 §12「被退回」：發起人也要知道（上一關的新負責人由 RestartStageAsync 通知）
+            await notifier.NotifyAsync(NotificationKinds.ApprovalReturned, inst, [inst.InitiatorUserId], user.UserId, ct);
             await uow.CommitAsync(ct);
             return ServiceResult.Success(new ApprovalActionResponse(ApprovalOutcomes.Returned, inst.Id, inst.RowVersion));
         }
