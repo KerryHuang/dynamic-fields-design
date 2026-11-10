@@ -1,8 +1,10 @@
 using DynamicModules.Application.Common;
 using DynamicModules.Application.Common.Security;
 using DynamicModules.Application.Common.Time;
+using DynamicModules.Application.Dynamic.ApprovalService;
 using DynamicModules.Application.Dynamic.FieldService.Data;
 using DynamicModules.Application.Dynamic.WorkflowService.Data;
+using DynamicModules.Domain.Approvals;
 using DynamicModules.Domain.Entities.Dynamic;
 using DynamicModules.Domain.Modules;
 using DynamicModules.Domain.Repositories.Dynamic;
@@ -11,7 +13,8 @@ using MediatR;
 namespace DynamicModules.Application.Dynamic.WorkflowService.Commands.SaveWorkflow;
 
 public class SaveWorkflowHandler(
-    IModuleRepository modules, IPermissionRepository permissions, IUnitOfWork uow, ICurrentUser user, IBusinessTime time)
+    IModuleRepository modules, IPermissionRepository permissions, IUnitOfWork uow, ICurrentUser user, IBusinessTime time,
+    IApprovalFlowRepository flows, IEventRepository events, WorkflowApprovals approvals)
     : IRequestHandler<SaveWorkflowRequest, ServiceResult>
 {
     public const int MaxStates = 30;
@@ -52,6 +55,8 @@ public class SaveWorkflowHandler(
             Err("transitions", "轉移的兩端必須是不同的狀態、不重複，群組必須存在");
         if (errors.Count > 0) return ServiceResult.Invalid(errors);
 
+        if (await ApprovalErrorsAsync(module, input, ct) is { Count: > 0 } approvalErrors) return ServiceResult.Invalid(approvalErrors);
+
         var now = time.Now;
         var workflow = module.Workflow;
         if (workflow is null)
@@ -68,6 +73,27 @@ public class SaveWorkflowHandler(
 
         module.TouchVersion(user.UserId, now);
         await uow.CommitAsync(ct);
-        return ServiceResult.Success(workflow.ToResponse());
+        return ServiceResult.Success(workflow.ToResponse(await approvals.LockedFieldIdsAsync(module, workflow, ct)));
+    }
+
+    /// <summary>簽核的入口約束與事件交叉檢查（簽核設計 §5.2、§5.3）；沒有需簽核轉移時不查資料庫、一律通過。</summary>
+    private async Task<Dictionary<string, string[]>?> ApprovalErrorsAsync(Module module, WorkflowInput input, CancellationToken ct)
+    {
+        var candidate = new Workflow
+        {
+            ModuleId = module.Id, StatusFieldId = input.StatusFieldId, InitialOptionId = input.InitialOptionId,
+            States = [.. input.States], Transitions = [.. input.Transitions]
+        };
+        if (!candidate.Transitions.Any(t => t.Approval is { Required: true })) return null;
+        if (candidate.Transitions.Any(t => t.Approval is { NoMatch: not (ApprovalNoMatch.Block or ApprovalNoMatch.Direct) }))
+            return new() { ["transitions"] = ["沒有流程符合時的處理只能是 block 或 direct"] };
+
+        var errors = ApprovalConstraints.Validate(module, candidate, await flows.ListCurrentByModuleAsync(module.Id, ct));
+        var labels = module.Blocks.SelectMany(b => b.Fields).Single(f => f.Id == input.StatusFieldId).Options
+            .ToDictionary(o => o.Id, o => o.LabelI18n.Resolve("zh-TW"));
+        var active = (await events.ListAsync(ct)).Where(e => e.Active);
+        foreach (var (key, to) in ApprovalEventCrossCheck.Find(module, candidate, active))
+            errors.TryAdd($"events[{key}]", [ApprovalMessages.EventPushes(key, labels.GetValueOrDefault(to) ?? to.ToString())]);
+        return errors;
     }
 }

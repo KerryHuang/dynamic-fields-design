@@ -1,6 +1,7 @@
 using System.Text.Json;
 using System.Text.RegularExpressions;
 using DynamicModules.Application.Common;
+using DynamicModules.Application.Dynamic.ApprovalService;
 using DynamicModules.Domain.Conditions;
 using DynamicModules.Domain.Entities.Dynamic;
 using DynamicModules.Domain.FieldTypes;
@@ -65,6 +66,7 @@ public class EventValidator(
         }
         if (errors.Count == 0 && input.Active && await FindCycleAsync(input, source, ct) is { } cycle)
             Err("definition", $"連動事件形成循環：{string.Join(" → ", cycle)}");
+        if (errors.Count == 0 && input.Active) await CheckApprovalPushAsync(input, errors, ct);
         return (errors.Count > 0 ? ServiceResult.Invalid(errors) : null, warnings);
     }
 
@@ -238,6 +240,24 @@ public class EventValidator(
     /// 對某些群組看不到的來源欄位：設為 Hidden 的欄位，加上限定可見的貢獻欄位（共用主檔 §6）與引用它們的公式（逐層），
     /// 後兩者和 PermissionResolver 算 hidden 的規則一致（審查必修 4）。
     /// </summary>
+    /// <summary>事件的 update 效果不能把目標的狀態改成需簽核轉移的目標狀態（簽核設計 §5.3）。</summary>
+    private async Task CheckApprovalPushAsync(EventInput input, Dictionary<string, string[]> errors, CancellationToken ct)
+    {
+        var ev = new ModuleEvent { Key = input.Key, Definition = input.Definition };
+        for (var i = 0; i < input.Definition.Effects.Count; i++)
+        {
+            var fx = input.Definition.Effects[i];
+            if (fx.Kind != "update") continue;
+            var target = await modules.GetByKeyAsync(fx.TargetModuleKey ?? "", includeChildren: true, ct);
+            if (target?.Workflow is not { } wf) continue;
+            var labels = target.Blocks.SelectMany(b => b.Fields).FirstOrDefault(f => f.Id == wf.StatusFieldId)?.Options
+                .ToDictionary(o => o.Id, o => o.LabelI18n.Resolve("zh-TW")) ?? [];
+            var single = new ModuleEvent { Key = ev.Key, Definition = ev.Definition with { Effects = [fx] } };
+            if (ApprovalEventCrossCheck.Find(target, wf, [single]).FirstOrDefault() is { EventKey: not null } hit)
+                errors.TryAdd($"definition.effects[{i}]", [ApprovalMessages.EventPushes(hit.EventKey, labels.GetValueOrDefault(hit.To) ?? hit.To.ToString())]);
+        }
+    }
+
     public async Task<HashSet<long>> HiddenAsync(Module m, CancellationToken ct)
     {
         var hidden = (await permissions.LoadModuleRowsAsync(m, ct)).FieldPermissions.Where(p => p.Access == FieldAccess.Hidden).Select(p => p.FieldId).ToHashSet();

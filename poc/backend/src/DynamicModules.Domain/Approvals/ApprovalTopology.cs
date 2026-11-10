@@ -29,4 +29,21 @@ public static class ApprovalTopology
     }
 
     public static bool IsLocked(Workflow wf, long? optionId) => optionId is { } id && LockedStates(wf).Contains(id);
+
+    /// <summary>需簽核轉移的目標狀態。</summary>
+    public static IReadOnlySet<long> ApprovalTargets(Workflow wf) =>
+        wf.Transitions.Where(t => t.Approval is { Required: true }).Select(t => t.To).ToHashSet();
+
+    /// <summary>
+    /// 鎖定欄位（設計 §9.3）：definitions 是掛在需簽核目標狀態上的所有流程、各版本。
+    /// 條件與 userField 引用的欄位經公式、彙總、帶值的上游閉包，加上所有可編輯欄位；狀態欄位除外。
+    /// </summary>
+    public static IReadOnlySet<long> LockedFields(Module module, Workflow wf, IEnumerable<ApprovalDefinition> definitions)
+    {
+        var defs = definitions.ToList();
+        var ids = FieldClosure.Upstream(module, defs.SelectMany(FieldClosure.DirectFields), wf.StatusFieldId).FieldIds.ToHashSet();
+        ids.UnionWith(defs.SelectMany(d => d.Stages ?? []).SelectMany(s => s.EditableFields ?? []));
+        ids.Remove(wf.StatusFieldId);
+        return ids;
+    }
 }

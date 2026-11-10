@@ -59,3 +59,6 @@ public static class ApprovalLimits
     public const int MaxDueHours = 8760;
     public const int MaxCommentLength = 1000;
 }
+
+/// <summary>流程與它目前版本的定義；入口約束與鎖定計算的輸入。</summary>
+public sealed record FlowState(Entities.Dynamic.ApprovalFlow Flow, ApprovalDefinition Definition);
