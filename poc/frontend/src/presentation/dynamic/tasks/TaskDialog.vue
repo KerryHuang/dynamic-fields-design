@@ -58,7 +58,7 @@ async function save() {
     await update.mutateAsync({ id: props.taskId!, patch: patch.value });
   } catch (e) {
     const err = e as ApiError;
-    error.value = (err.errors ? Object.values(err.errors).flat().join(t('tasks.listSep')) : err.message) || t('tasks.saveFailed');
+    error.value = (err.errors ? Object.values(err.errors).flat().join(t('common.listSeparator')) : err.message) || t('tasks.saveFailed');
   }
 }
 

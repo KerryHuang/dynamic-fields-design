@@ -62,7 +62,7 @@ function onRejected(entries: { failedPropValidation: string; file: File }[]) {
     .map((e) => (e.failedPropValidation === 'max-file-size'
       ? t('tasks.fileTooBig', { name: e.file.name, max: mb(maxBytes.value ?? 0) })
       : t('tasks.fileRejected', { name: e.file.name })))
-    .join(t('tasks.listSep'));
+    .join(t('common.listSeparator'));
 }
 
 function onFiles(v: File[] | null) {
@@ -86,7 +86,7 @@ async function submit() {
     const err = e as ApiError;
     // Field errors come keyed `files` / `body`; a 413 has no JSON at all, so it falls back to a generic message.
     if (err.status === 413) error.value = t('tasks.tooLarge');
-    else error.value = (err.errors ? Object.values(err.errors).flat().join(t('tasks.listSep')) : err.message) || t('tasks.sendFailed');
+    else error.value = (err.errors ? Object.values(err.errors).flat().join(t('common.listSeparator')) : err.message) || t('tasks.sendFailed');
   }
 }
 </script>
