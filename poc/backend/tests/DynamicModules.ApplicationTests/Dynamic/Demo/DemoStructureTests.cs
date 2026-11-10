@@ -108,6 +108,24 @@ public class DemoStructureTests(DemoGeneratedFixture fx)
     }
 
     [Fact]
+    public async Task Generate_MasterModuleKeyAlreadyTaken_Conflict_NothingChanged()
+    {
+        // §11.5：共用主檔還沒開，它的模組代碼卻已被別的模組用掉，產生前就列出衝突
+        await using var host = await DemoTestHost.CreateAsync();
+        (await host.Send(new CreateModuleRequest("master-partner", Text("自建往來對象"), null, null))).IsSuccess.Should().BeTrue();
+        var db = host.Db.Context;
+        var modules = await db.Set<Module>().AsNoTracking().CountAsync();
+
+        var r = await host.Send(new GenerateDemoDataRequest(DemoTestHost.Today));
+
+        r.IsConflict.Should().BeTrue();
+        var items = ((DemoConflicts)r.Data!).Items;
+        items.Should().Contain("模組代碼 master-partner 已存在");
+        items.Should().NotContain(i => i.Contains("master-contact") || i.Contains("master-employment"));
+        (await db.Set<Module>().AsNoTracking().CountAsync()).Should().Be(modules);
+    }
+
+    [Fact]
     public async Task Preflight_AnExistingCustomerExtension_IsNoLongerAConflict()
     {
         // s2d-1f：MES 的客戶改用共用主檔往來對象，Demo 不再擴充核心實體 sales.customer
