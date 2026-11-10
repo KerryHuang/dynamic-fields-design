@@ -231,8 +231,6 @@ function saveSection() {
           @click="askDelete({ kind: 'module', key: mod.key }, resolveI18n(mod.name, locale))"
         />
         <IconSelect :model-value="mod.icon ?? ''" :label="t('designer.icon')" style="min-width: 220px" @update:model-value="setIcon" />
-        <I18nTextInput v-model="sectionDraft" :label="t('designer.section')" :hint="t('designer.sectionHint')" :maxlength="100" optional
-          style="min-width: 220px" data-testid="module-section" @change="saveSection" />
         <q-input
           v-if="isExtension" :model-value="hostName" :label="t('designer.extension.hostEntity')" readonly outlined dense
           style="min-width: 260px" data-testid="host-entity"
@@ -243,6 +241,11 @@ function saveSection() {
           :error-message="errorFor(titleError, 'TitleFieldId')" @update:model-value="setTitle" use-input input-debounce="0" fill-input hide-selected @filter="titleSel.onFilter" @popup-hide="titleSel.reset">
           <template #no-option><SelectNoOption /></template>
         </q-select>
+      </div>
+      <!-- 多語系輸入比一行高，展開「其他語系」會更高：自成一列靠上對齊，不撐高上面那列 -->
+      <div class="row items-start q-gutter-md q-mb-md">
+        <I18nTextInput v-model="sectionDraft" :label="t('designer.section')" :hint="t('designer.sectionHint')" :maxlength="100" optional
+          class="col-grow" style="min-width: 220px; max-width: 520px" data-testid="module-section" @change="saveSection" />
       </div>
       <div v-if="!isExtension" class="row items-start q-gutter-md q-mb-md">
         <div class="col-grow" style="min-width: 220px; max-width: 520px" data-testid="title-template-field">
