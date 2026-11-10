@@ -67,13 +67,17 @@ describe('NotificationBell', () => {
   });
 
   it('沒有連結的通知只標為已讀；站外連結不前往', async () => {
-    const { w, push } = await mountBell({ items: [note(1, { link: '' }), note(2, { link: '//evil.example/x' })], unreadCount: 2 });
+    const { w, push } = await mountBell({
+      items: [note(1, { link: '' }), note(2, { link: '//evil.example/x' }), note(3, { link: '/\\evil.example/x' })], unreadCount: 3,
+    });
     await w.get('[data-testid="notification-bell"]').trigger('click');
     await flushPromises();
     body('[data-testid="notification-item-1"]')!.click();
     body('[data-testid="notification-item-2"]')!.click();
+    body('[data-testid="notification-item-3"]')!.click();
     await flushPromises();
-    expect(calls.filter((c) => c.method === 'post').map((c) => c.url)).toEqual(['/notifications/1/read', '/notifications/2/read']);
+    expect(calls.filter((c) => c.method === 'post').map((c) => c.url))
+      .toEqual(['/notifications/1/read', '/notifications/2/read', '/notifications/3/read']);
     expect(push).not.toHaveBeenCalled();
     w.unmount();
   });

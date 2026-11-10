@@ -37,6 +37,7 @@ import {
   useMarkAllNotificationsRead, useMarkNotificationRead, useNotifications,
 } from 'src/application/dynamic/queries/notifications-queries';
 import { NOTIFICATION_KINDS, type NotificationItem } from 'src/domain/dynamic/task-types';
+import { safeRedirect } from 'src/router/auth-guard';
 
 const { t } = useI18n();
 const router = useRouter();
@@ -53,7 +54,7 @@ function label(n: NotificationItem) {
   return known ? `${t(`notifications.kind.${n.kind}`)} ${n.title}` : n.title;
 }
 
-/** Mark as read first, then follow the link. Only in-app paths are followed (never `//host` or a full URL). */
+/** Mark as read first, then follow the link. Only in-app paths are followed (never `//host`, `/\host` or a full URL). */
 async function open(n: NotificationItem) {
   const link = n.link;
   try {
@@ -61,7 +62,7 @@ async function open(n: NotificationItem) {
   } catch {
     // Still follow the link: failing to mark it read must not make the notification unreachable.
   }
-  if (link.startsWith('/') && !link.startsWith('//')) void router.push(link);
+  if (link && safeRedirect(link) === link) void router.push(link);
 }
 </script>
 

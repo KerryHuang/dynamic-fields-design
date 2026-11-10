@@ -15,7 +15,8 @@ export function useMarkNotificationRead() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (id: number) => dynamicApi.markNotificationRead(id),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['notifications'] }),
+    // Not awaited: the caller navigates right after the POST instead of waiting for the list to refetch.
+    onSuccess: () => { void qc.invalidateQueries({ queryKey: ['notifications'] }); },
   });
 }
 
