@@ -113,4 +113,21 @@ public class TaskQueryTests : TaskTestBase
         detail.RuleDeleted.Should().BeTrue();
         detail.CanDelete.Should().BeFalse();
     }
+
+    [Fact]
+    public async Task MyTasks_SkipsTasksWithoutParticipantRow()
+    {
+        // 直接寫 Db、漏了參與者列：負責人是 floor01，但他不是參與者、看不到（個人任務）
+        Db.Context.Add(new TaskItem { Title = "漏了參與者", CreatedBy = "admin", AssigneeUserId = "floor01", CreatedTime = SeedTime });
+        await Db.Context.SaveChangesAsync();
+        Db.Context.ChangeTracker.Clear();
+
+        As("floor01");
+        var r = await Send(new GetMyTasksRequest("assigned", "all", 1, 20));
+        As("admin");
+
+        var page = (PagedResponse<TaskSummaryResponse>)r.Data!;
+        page.Items.Should().BeEmpty();
+        page.TotalCount.Should().Be(0);
+    }
 }

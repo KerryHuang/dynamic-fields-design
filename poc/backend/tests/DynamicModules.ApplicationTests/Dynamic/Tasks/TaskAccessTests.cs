@@ -128,4 +128,60 @@ public class TaskAccessTests : TaskTestBase
         As("manager01");
         (await Svc<TaskAccess>().ForRecordAsync(rec, default))!.CanEditTasks.Should().BeFalse();
     }
+
+    [Fact]
+    public async Task SoftDeletedRecord_RecordRef_Snapshot_HiddenTitle_OutOfScope()
+    {
+        var t = await BuildTarget();
+        var rec = await NewRecord(t, "sales01", "現在的標題");
+        var task = await SeedTask(createdBy: "admin", target: t, recordId: rec);   // 快照是「案件甲」
+        await Db.Context.Set<DynamicModules.Domain.Entities.Dynamic.Record>().Where(r => r.Id == rec)
+            .ExecuteUpdateAsync(s => s.SetProperty(r => r.DeleteFlag, true));
+
+        (await Eval("sales01", task.Id)).Record.Should().Be(new TaskRecordRef(true, t.Key, rec, "案件甲", true));
+        var outside = await Eval("sales02", task.Id);
+        outside.CanSee.Should().BeFalse();
+        outside.Record.Should().Be(new TaskRecordRef(false, null, null, null, false));
+        Db.Context.Add(new FieldPermission { FieldId = t.TitleFieldId, GroupId = t.SalesGroupId, Access = FieldAccess.Hidden });
+        await Db.Context.SaveChangesAsync();
+        Db.Context.ChangeTracker.Clear();
+        (await Eval("sales01", task.Id)).Record.Should().Be(new TaskRecordRef(true, t.Key, rec, null, true));
+    }
+
+    [Fact]
+    public async Task DetailModuleRecord_ForRecordIsNull_TaskRecordHidden()
+    {
+        var t = await BuildTarget("head");
+        await NewModule("line");
+        await MustAdd("line", FieldType.Reference, RefTo("head", ReferenceRelation.Detail), "表頭");
+        (await Send(new DynamicModules.Application.Dynamic.ModuleService.Commands.ActivateModule.ActivateModuleRequest("line"))).IsSuccess.Should().BeTrue();
+        var line = await Detail("line");
+        var row = new DynamicModules.Domain.Entities.Dynamic.Record
+        {
+            ModuleId = line.Id, Title = "明細一", OwnerUserId = "admin", RowVersion = Guid.NewGuid().ToString(),
+            CreatedUserId = "admin", CreatedTime = SeedTime
+        };
+        Db.Context.Add(row);
+        await Db.Context.SaveChangesAsync();
+        Db.Context.ChangeTracker.Clear();
+        var task = await SeedTask(createdBy: "sales01", target: t with { ModuleId = line.Id }, recordId: row.Id);
+
+        As("admin");
+        (await Svc<TaskAccess>().ForRecordAsync(row.Id, default)).Should().BeNull();
+        var creator = await Eval("sales01", task.Id);
+        creator.CanSee.Should().BeTrue();
+        creator.Record.Should().Be(new TaskRecordRef(false, null, null, null, false));
+    }
+
+    [Fact]
+    public async Task InactiveSystemAdmin_IsNotAdmin()
+    {
+        var task = await SeedTask(createdBy: "sales01");
+        await Db.Context.Set<AppUser>().Where(u => u.UserId == "admin")
+            .ExecuteUpdateAsync(s => s.SetProperty(u => u.IsActive, false));
+
+        As("admin");
+        (await Svc<TaskAccess>().IsSystemAdminAsync(default)).Should().BeFalse();
+        (await Eval("admin", task.Id)).CanSee.Should().BeFalse();
+    }
 }

@@ -219,4 +219,20 @@ public class TaskWriteTests : TaskTestBase
         task.RecordTitleSnapshot.Should().Be("案件乙");
         task.ModuleId.Should().Be(t.ModuleId);
     }
+
+    [Fact]
+    public async Task CreateRecordTask_ClosedModule_409()
+    {
+        var t = await BuildTarget();
+        var rec = await NewRecord(t, "sales01");
+        await Db.Context.Set<Module>().Where(m => m.Id == t.ModuleId)
+            .ExecuteUpdateAsync(s => s.SetProperty(m => m.Status, ModuleStatus.Closed));
+        Db.Context.ChangeTracker.Clear();
+
+        var r = await Send(new CreateRecordTaskRequest(rec, new TaskInput("x", null, null, null)));
+
+        r.IsConflict.Should().BeTrue();
+        r.Message.Should().Be("應用程式已關閉，資料唯讀");
+        (await Db.Context.Set<TaskItem>().CountAsync()).Should().Be(0);
+    }
 }

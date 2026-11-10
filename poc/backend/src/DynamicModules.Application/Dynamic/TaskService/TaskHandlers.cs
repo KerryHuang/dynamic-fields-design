@@ -132,8 +132,10 @@ public class GetMyTasksHandler(ITaskRepository tasks, TaskAccess access, IPermis
             new TaskListQuery(user.UserId, tab, filter, today, WeekEnd(today), page, size), ct);
         var perms = await access.EvaluateManyAsync(items, ct);
         var users = (await permissions.ListUsersAsync(ct)).ToDictionary(u => u.UserId);
-        var rows = items.Select((t, i) => TaskViews.ToSummary(t, perms[i], users, today)).ToList();
-        return ServiceResult.Success(new PagedResponse<TaskSummaryResponse>(rows, total, page, size));
+        // 縱深防禦：分頁條件靠參與者表維持「抓到的都看得到」，這裡再濾一次；濾掉的也從總數扣掉，不洩漏筆數
+        var rows = items.Select((t, i) => (t, p: perms[i])).Where(x => x.p.CanSee)
+            .Select(x => TaskViews.ToSummary(x.t, x.p, users, today)).ToList();
+        return ServiceResult.Success(new PagedResponse<TaskSummaryResponse>(rows, total - (items.Count - rows.Count), page, size));
     }
 
     /// <summary>本週日（週一到週日為一週）。</summary>
@@ -176,7 +178,8 @@ public class GetRecordTasksHandler(ITaskRepository tasks, TaskAccess access, IPe
         var perms = await access.EvaluateManyAsync(items, ct);
         var users = (await permissions.ListUsersAsync(ct)).ToDictionary(u => u.UserId);
         var today = time.Today;
-        var rows = items.Select((t, i) => TaskViews.ToSummary(t, perms[i], users, today)).ToList();
+        var rows = items.Select((t, i) => (t, p: perms[i])).Where(x => x.p.CanSee)
+            .Select(x => TaskViews.ToSummary(x.t, x.p, users, today)).ToList();
         return ServiceResult.Success(new RecordTasksResponse(rows, target.CanAdd, []));
     }
 }

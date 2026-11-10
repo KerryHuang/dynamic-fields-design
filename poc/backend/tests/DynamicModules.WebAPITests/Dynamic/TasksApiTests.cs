@@ -66,7 +66,9 @@ public class TasksApiTests : IDisposable
             new { values = new Dictionary<string, object> { [title] = "案件甲" } }));
         var recordId = record.GetProperty("id").GetInt64();
 
-        var created = await _admin.PostAsJsonAsync($"{Base}/records/{recordId}/tasks", new { title = "聯絡窗口", assigneeUserId = "admin" });
+        _app.Clock.Fixed = new DateTime(2026, 11, 4, 9, 0, 0);
+        var created = await _admin.PostAsJsonAsync($"{Base}/records/{recordId}/tasks",
+            new { title = "聯絡窗口", assigneeUserId = "admin", dueDate = "2026-11-04" });
         created.StatusCode.Should().Be(HttpStatusCode.Created);
         var taskId = (await JsonOf(created)).GetProperty("id").GetInt64();
         var list = await JsonOf(await _admin.GetAsync($"{Base}/records/{recordId}/tasks"));
@@ -79,11 +81,15 @@ public class TasksApiTests : IDisposable
         var mine = await JsonOf(await _admin.GetAsync($"{Base}/tasks?tab=assigned&filter=all&currentPage=1&pagesSize=20"));
         mine.GetProperty("totalCount").GetInt32().Should().Be(1);
         var summary = await JsonOf(await _admin.GetAsync($"{Base}/tasks/summary"));
-        summary.GetProperty("dueToday").GetInt32().Should().Be(0);
+        summary.GetProperty("dueToday").GetInt32().Should().Be(1);
+        summary.GetProperty("overdue").GetInt32().Should().Be(0);
         (await _admin.GetAsync($"{Base}/tasks?tab=bogus")).StatusCode.Should().Be(HttpStatusCode.BadRequest);
 
         var delete = await _admin.DeleteAsync($"{Base}/tasks/{taskId}");
         delete.StatusCode.Should().Be(HttpStatusCode.OK);
+        var after = await _admin.GetAsync($"{Base}/tasks/{taskId}");
+        after.StatusCode.Should().Be(HttpStatusCode.NotFound);
+        (await JsonOf(after)).GetProperty("message").GetString().Should().Be("找不到任務");
     }
 
     [Fact]
