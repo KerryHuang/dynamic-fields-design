@@ -5964,7 +5964,38 @@
      }
     }
    ],
-   "fieldAccess": []
+   "fieldAccess": [
+    {
+     "field": "partner/partner.creditLevel",
+     "group": "planner",
+     "access": "hidden"
+    },
+    {
+     "field": "partner/partner.creditLevel",
+     "group": "floor",
+     "access": "hidden"
+    },
+    {
+     "field": "partner/partner.creditLevel",
+     "group": "qa",
+     "access": "hidden"
+    },
+    {
+     "field": "partner/partner.website",
+     "group": "planner",
+     "access": "hidden"
+    },
+    {
+     "field": "partner/partner.website",
+     "group": "floor",
+     "access": "hidden"
+    },
+    {
+     "field": "partner/partner.website",
+     "group": "qa",
+     "access": "hidden"
+    }
+   ]
   }
  ]
 }

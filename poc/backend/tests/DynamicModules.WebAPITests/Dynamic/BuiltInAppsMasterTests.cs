@@ -77,6 +77,46 @@ public class BuiltInAppsMasterTests
         contribution.GetProperty("fields").EnumerateArray().Select(f => f.GetProperty("code").GetString()).Should().Equal("creditLevel", "website");
     }
 
+    [Fact]
+    public async Task MesShopFloorGroups_ReadThePartner_ButNotTheSalesOnlyCreditLevelAndWebsite()
+    {
+        // 遷移前信用等級、網站在擴充模組 mes-customer-info，只給業務與業務主管；改成貢獻欄位後，生管、現場、品保為了參照標題拿到讀取，不能連帶看到這兩欄
+        using var rig = new SharedMasterRig();
+        await rig.OpenOkAsync("mes-mold", new
+        {
+            groupMap = new Dictionary<string, object>
+            {
+                ["sales"] = new { mode = "map", groupId = rig.GroupId("sales") }, ["floor"] = new { mode = "map", groupId = rig.GroupId("floor") }
+            }
+        });
+        var p = await FieldKeys(rig.Admin, Partner);
+        var schema = (await JsonOf(await rig.Admin.GetAsync($"{Base}/modules/{Partner}"))).GetProperty("blocks").EnumerateArray()
+            .SelectMany(b => b.GetProperty("fields").EnumerateArray()).ToList();
+        string Option(string field, string label) => schema.Single(f => f.GetProperty("key").GetString() == p[field]).GetProperty("options").EnumerateArray()
+            .Single(o => o.GetProperty("label").GetProperty("zh-TW").GetString() == label).GetProperty("value").GetString()!;
+        var created = await rig.Admin.PostAsJsonAsync($"{Base}/modules/{Partner}/records", new
+        {
+            values = new Dictionary<string, object>
+            {
+                [p["名稱"]] = "嵐岳精密", [p["角色"]] = Option("角色", "客戶"),
+                [p["信用等級"]] = schema.Single(f => f.GetProperty("key").GetString() == p["信用等級"]).GetProperty("options")[0].GetProperty("value").GetString()!,
+                [p["網站"]] = "https://example.com"
+            }
+        });
+        created.StatusCode.Should().Be(HttpStatusCode.Created, await created.Content.ReadAsStringAsync());
+        var id = (await JsonOf(created)).GetProperty("id").GetInt64();
+
+        async Task<HashSet<string>> Visible(string user)
+        {
+            var res = await rig.App.AsUser(user).GetAsync($"{Base}/records/{id}");
+            res.StatusCode.Should().Be(HttpStatusCode.OK, user);
+            return (await JsonOf(res)).GetProperty("values").EnumerateObject().Select(v => v.Name).ToHashSet();
+        }
+
+        (await Visible("floor01")).Should().Contain(p["名稱"]).And.NotContain([p["信用等級"], p["網站"]]);
+        (await Visible("sales01")).Should().Contain([p["信用等級"], p["網站"]]);
+    }
+
     // ---- 進銷存 ----
 
     private static async Task<HttpStatusCode> CreateAsync(HttpClient c, string module, Dictionary<string, object> values) =>

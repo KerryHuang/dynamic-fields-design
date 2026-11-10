@@ -135,6 +135,10 @@ public class MesPackageTests
         writers.Keys.Should().BeEquivalentTo(["sales", "salesManager"], "原本只有業務與業務主管能改客戶資料");
         writers["sales"].Add.Should().BeFalse("業務原本就不能新增客戶資料");
         writers["salesManager"].Add.Should().BeTrue();
+        // 信用等級、網站原本只給業務看：只為參照標題拿讀取的群組要隱藏
+        contribution.FieldAccess.Select(a => $"{a.Field}:{a.Group}:{a.Access}").Should().BeEquivalentTo(
+            from f in new[] { "creditLevel", "website" } from g in new[] { "planner", "floor", "qa" }
+            select $"partner/partner.{f}:{g}:Hidden");
     }
 
     [Theory]
