@@ -241,7 +241,7 @@
         }
       ],
       "icon": "inventory_2",
-      "section": "進銷存基本資料",
+      "section": { "zh-TW": "進銷存基本資料", "en-US": "Inventory master data", "th": "ข้อมูลพื้นฐานการซื้อขายและคลังสินค้า", "vi": "Dữ liệu cơ bản mua bán tồn kho" },
       "permissions": [
         {
           "group": "buyer",
@@ -381,7 +381,7 @@
         }
       ],
       "icon": "warehouse",
-      "section": "進銷存基本資料",
+      "section": { "zh-TW": "進銷存基本資料", "en-US": "Inventory master data", "th": "ข้อมูลพื้นฐานการซื้อขายและคลังสินค้า", "vi": "Dữ liệu cơ bản mua bán tồn kho" },
       "permissions": [
         {
           "group": "buyer",
@@ -686,7 +686,7 @@
         }
       ],
       "icon": "shopping_cart",
-      "section": "採購",
+      "section": { "zh-TW": "採購", "en-US": "Purchasing", "th": "จัดซื้อ", "vi": "Mua hàng" },
       "permissions": [
         {
           "group": "buyer",
@@ -936,7 +936,7 @@
           ]
         }
       ],
-      "section": "採購"
+      "section": { "zh-TW": "採購", "en-US": "Purchasing", "th": "จัดซื้อ", "vi": "Mua hàng" }
     },
     {
       "code": "receipt",
@@ -1119,7 +1119,7 @@
         }
       ],
       "icon": "move_to_inbox",
-      "section": "採購",
+      "section": { "zh-TW": "採購", "en-US": "Purchasing", "th": "จัดซื้อ", "vi": "Mua hàng" },
       "permissions": [
         {
           "group": "buyer",
@@ -1332,7 +1332,7 @@
           ]
         }
       ],
-      "section": "採購",
+      "section": { "zh-TW": "採購", "en-US": "Purchasing", "th": "จัดซื้อ", "vi": "Mua hàng" },
       "rules": [
         {
           "kind": "validation",
@@ -1536,7 +1536,7 @@
         }
       ],
       "icon": "outbox",
-      "section": "庫存",
+      "section": { "zh-TW": "庫存", "en-US": "Inventory", "th": "สินค้าคงคลัง", "vi": "Tồn kho" },
       "permissions": [
         {
           "group": "buyer",
@@ -1741,7 +1741,7 @@
           ]
         }
       ],
-      "section": "庫存",
+      "section": { "zh-TW": "庫存", "en-US": "Inventory", "th": "สินค้าคงคลัง", "vi": "Tồn kho" },
       "rules": [
         {
           "kind": "validation",
@@ -1958,7 +1958,7 @@
         }
       ],
       "icon": "fact_check",
-      "section": "庫存",
+      "section": { "zh-TW": "庫存", "en-US": "Inventory", "th": "สินค้าคงคลัง", "vi": "Tồn kho" },
       "permissions": [
         {
           "group": "buyer",
@@ -2124,7 +2124,7 @@
           ]
         }
       ],
-      "section": "庫存",
+      "section": { "zh-TW": "庫存", "en-US": "Inventory", "th": "สินค้าคงคลัง", "vi": "Tồn kho" },
       "rules": [
         {
           "kind": "validation",
@@ -2333,7 +2333,7 @@
         }
       ],
       "icon": "swap_vert",
-      "section": "庫存",
+      "section": { "zh-TW": "庫存", "en-US": "Inventory", "th": "สินค้าคงคลัง", "vi": "Tồn kho" },
       "permissions": [
         {
           "group": "buyer",

@@ -96,7 +96,7 @@
     "vi": "Đơn hàng bán"
    },
    "icon": "receipt_long",
-   "section": "業務",
+   "section": { "zh-TW": "業務", "en-US": "Sales operations", "th": "งานขาย", "vi": "Kinh doanh" },
    "kind": "standalone",
    "hostEntityKey": null,
    "titleField": "no",
@@ -800,7 +800,7 @@
     "vi": "Báo giá"
    },
    "icon": "request_quote",
-   "section": "業務",
+   "section": { "zh-TW": "業務", "en-US": "Sales operations", "th": "งานขาย", "vi": "Kinh doanh" },
    "kind": "standalone",
    "hostEntityKey": null,
    "titleField": "no",
@@ -1292,7 +1292,7 @@
     "vi": "Lệnh sản xuất"
    },
    "icon": "precision_manufacturing",
-   "section": "生產",
+   "section": { "zh-TW": "生產", "en-US": "Production", "th": "การผลิต", "vi": "Sản xuất" },
    "kind": "standalone",
    "hostEntityKey": null,
    "titleField": "no",
@@ -2287,7 +2287,7 @@
     "vi": "Báo cáo sản lượng"
    },
    "icon": "assignment_turned_in",
-   "section": "生產",
+   "section": { "zh-TW": "生產", "en-US": "Production", "th": "การผลิต", "vi": "Sản xuất" },
    "kind": "standalone",
    "hostEntityKey": null,
    "titleField": "no",
@@ -2836,7 +2836,7 @@
     "vi": "Phiếu giao hàng"
    },
    "icon": "local_shipping",
-   "section": "生產",
+   "section": { "zh-TW": "生產", "en-US": "Production", "th": "การผลิต", "vi": "Sản xuất" },
    "kind": "standalone",
    "hostEntityKey": null,
    "titleField": "no",
@@ -3156,7 +3156,7 @@
     "vi": "Báo sửa chữa"
    },
    "icon": "build",
-   "section": "設備",
+   "section": { "zh-TW": "設備", "en-US": "Equipment", "th": "อุปกรณ์", "vi": "Thiết bị" },
    "kind": "standalone",
    "hostEntityKey": null,
    "titleField": "no",
@@ -3676,7 +3676,7 @@
     "vi": "Thông tin khuôn"
    },
    "icon": "precision_manufacturing",
-   "section": "設備",
+   "section": { "zh-TW": "設備", "en-US": "Equipment", "th": "อุปกรณ์", "vi": "Thiết bị" },
    "kind": "standalone",
    "hostEntityKey": null,
    "titleField": "name",
@@ -3821,7 +3821,7 @@
     "vi": "Hồ sơ bảo dưỡng khuôn"
    },
    "icon": "handyman",
-   "section": "設備",
+   "section": { "zh-TW": "設備", "en-US": "Equipment", "th": "อุปกรณ์", "vi": "Thiết bị" },
    "kind": "standalone",
    "hostEntityKey": null,
    "titleField": "no",
@@ -4098,7 +4098,7 @@
     "vi": "Thay linh kiện"
    },
    "icon": null,
-   "section": "設備",
+   "section": { "zh-TW": "設備", "en-US": "Equipment", "th": "อุปกรณ์", "vi": "Thiết bị" },
    "kind": "standalone",
    "hostEntityKey": null,
    "titleField": "partName",
@@ -4215,7 +4215,7 @@
     "vi": "Sự cố chất lượng"
    },
    "icon": "report_problem",
-   "section": "品質",
+   "section": { "zh-TW": "品質", "en-US": "Quality", "th": "คุณภาพ", "vi": "Chất lượng" },
    "kind": "standalone",
    "hostEntityKey": null,
    "titleField": "no",

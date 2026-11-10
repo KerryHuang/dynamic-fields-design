@@ -93,8 +93,11 @@ public class MesMigrationEquivalenceTests
                 if (prop == "section" && AddedSections.TryGetValue(code, out var section))
                 {
                     old[prop].Should().BeNull($"{code} 舊範本沒有分區");
-                    ((string?)now[prop]).Should().Be(section, $"{code}.{prop}");
+                    ((string?)now[prop]?["zh-TW"]).Should().Be(section, $"{code}.{prop}");
                 }
+                else if (prop == "section")
+                    // 套件的分區補成四語系物件；舊範本是繁中字串，比對繁中值
+                    ((string?)now[prop]?["zh-TW"]).Should().Be((string?)old[prop], $"{code}.{prop}");
                 else
                     Same(old[prop], now[prop]).Should().BeTrue($"{code}.{prop}");
 

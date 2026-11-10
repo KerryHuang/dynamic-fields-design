@@ -42,7 +42,7 @@
       },
       "kind": "standalone",
       "titleField": "name",
-      "section": "主檔",
+      "section": { "zh-TW": "主檔", "en-US": "Master data", "th": "ข้อมูลหลัก", "vi": "Dữ liệu chủ" },
       "icon": "handshake",
       "extensible": true,
       "blocks": [

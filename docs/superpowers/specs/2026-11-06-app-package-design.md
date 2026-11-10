@@ -203,7 +203,7 @@
 | `code` | string | 是 | 模組在套件內的代號，`ModuleKeyPattern`；也是 `Dynamic_AppModule.Code`，**開啟後永遠不變**，其他套件靠它引用（§7） |
 | `key` | string | 是 | 預設的 `Module.Key`；與別的模組衝突時由開啟請求改寫（§6.2） |
 | `name` | i18n | 是 | |
-| `icon`、`section` | string | 否 | 選單用；`section` 是單一語系字串（沿用 `Module.Section`） |
+| `icon`、`section` | string；`section` 也可以是 i18n 物件 | 否 | 選單用；`section` 寫字串等於只有 zh-TW，要多語系就寫 i18n 物件（不升版號；匯出時只有 zh-TW 寫字串、有其他語系寫物件）。選單以 zh-TW 值分組 |
 | `kind` | `standalone` \| `extension` | 是 | |
 | `hostEntityKey` | string \| null | `extension` 時必填 | 擴充的既有實體；同時要列入 `requires.entities` |
 | `titleField` | string \| null | 非擴充模組必填 | 欄位代號，型別限 `text`、`autonumber` |
