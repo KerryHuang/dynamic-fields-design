@@ -50,6 +50,20 @@ public class CrmMasterTests
         return rig.Blocks(BuiltInMasterTests.Partner);
     }
 
+    /// <summary>主檔的刪除與核准留給 steward（§4.3、§5.1、§5.2）：CRM 對往來對象、聯絡人授予的權限沒有這兩個動作。</summary>
+    [Fact]
+    public async Task CrmGrantsOnTheMasters_NeverIncludeDeleteOrApprove()
+    {
+        using var rig = new SharedMasterRig();
+        await rig.OpenOkAsync("crm-sales", CrmBody);
+        var actions = rig.Db(db =>
+        {
+            var crm = db.Set<App>().Single(a => a.Key == "crm-sales").Id;
+            return db.Set<AppGrant>().Where(g => g.SourceKind == GrantSource.App && g.AppId == crm).Select(g => g.Action).Distinct().ToList();
+        });
+        actions.Should().NotBeEmpty().And.NotContain([PermissionAction.Delete, PermissionAction.Approve]);
+    }
+
     [Fact]
     public async Task OpeningOrder_DoesNotChangeThePartnerFieldsOrBlockSequence()
     {

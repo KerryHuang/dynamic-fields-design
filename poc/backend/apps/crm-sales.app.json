@@ -2462,10 +2462,10 @@
             "read": true,
             "add": true,
             "edit": true,
-            "delete": true,
+            "delete": false,
             "printExport": true,
             "pricing": true,
-            "approve": true
+            "approve": false
           }
         }
       ],
@@ -2505,10 +2505,10 @@
             "read": true,
             "add": true,
             "edit": true,
-            "delete": true,
+            "delete": false,
             "printExport": true,
             "pricing": true,
-            "approve": true
+            "approve": false
           }
         }
       ],
