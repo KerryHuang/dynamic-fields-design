@@ -236,10 +236,6 @@ public class EventValidator(
         return side == "line" && fx.Kind == "create" ? lineFields : null;
     }
 
-    /// <summary>
-    /// 對某些群組看不到的來源欄位：設為 Hidden 的欄位，加上限定可見的貢獻欄位（共用主檔 §6）與引用它們的公式（逐層），
-    /// 後兩者和 PermissionResolver 算 hidden 的規則一致（審查必修 4）。
-    /// </summary>
     /// <summary>事件的 update 效果不能把目標的狀態改成需簽核轉移的目標狀態（簽核設計 §5.3）。</summary>
     private async Task CheckApprovalPushAsync(EventInput input, Dictionary<string, string[]> errors, CancellationToken ct)
     {
@@ -258,6 +254,10 @@ public class EventValidator(
         }
     }
 
+    /// <summary>
+    /// 對某些群組看不到的來源欄位：設為 Hidden 的欄位，加上限定可見的貢獻欄位（共用主檔 §6）與引用它們的公式（逐層），
+    /// 後兩者和 PermissionResolver 算 hidden 的規則一致（審查必修 4）。
+    /// </summary>
     public async Task<HashSet<long>> HiddenAsync(Module m, CancellationToken ct)
     {
         var hidden = (await permissions.LoadModuleRowsAsync(m, ct)).FieldPermissions.Where(p => p.Access == FieldAccess.Hidden).Select(p => p.FieldId).ToHashSet();

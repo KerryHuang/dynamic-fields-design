@@ -7,7 +7,8 @@ public static class ApprovalMessages
     public const string ShapeInvalid = "流程形狀只能是 sequence";
     public static string WhenInvalid(string reason) => $"條件不正確：{reason}";
     public const string RejectToInvalidState = "退回狀態必須是狀態機的狀態";
-    public const string FallbackSourceInvalid = "備援簽核人只能是指定使用者或群組";
+    public const string FallbackSourceInvalid = "備援簽核人只能是指定使用者、群組或主管";
+    public const string FlowKeyReserved = "流程代碼 order 是保留字，請改用其他代碼";
     public const string StagesCount = "關卡必須有 1 到 10 關";
     public const string StageCodeInvalid = "關卡代號只能用小寫英文、數字、連字號，英文開頭，最多 40 字";
     public const string StageCodeDuplicate = "關卡代號不能重複";

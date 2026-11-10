@@ -61,8 +61,26 @@ public class ApprovalDefinitionValidatorTests : ApprovalTestBase
         E(await Validate(Valid() with { RejectTo = 999999 }), "rejectTo").Should().Be(ApprovalMessages.RejectToInvalidState);
 
     [Fact]
-    public async Task Fallback_Manager_400() =>
-        E(await Validate(Valid() with { FallbackApprovers = Manager(1) }), "fallbackApprovers").Should().Be(ApprovalMessages.FallbackSourceInvalid);
+    public async Task Fallback_Manager_Allowed() =>
+        (await Validate(Valid() with { FallbackApprovers = Manager(2) })).Should().BeEmpty();
+
+    [Fact]
+    public async Task Fallback_ManagerLevel6_400() =>
+        E(await Validate(Valid() with { FallbackApprovers = Manager(6) }), "fallbackApprovers").Should().Be(ApprovalMessages.ManagerLevel);
+
+    [Fact]
+    public async Task Fallback_UserFieldOrPick_400()
+    {
+        await BuildRig();
+        E(await Validate(Valid() with
+        {
+            FallbackApprovers = new ApproverSource(ApprovalSources.UserField, FieldId: _r.Owner, CandidateGroupIds: [BoardGroup])
+        }), "fallbackApprovers").Should().Be(ApprovalMessages.FallbackSourceInvalid);
+        E(await Validate(Valid() with
+        {
+            FallbackApprovers = new ApproverSource(ApprovalSources.InitiatorPick, Min: 1, Max: 1)
+        }), "fallbackApprovers").Should().Be(ApprovalMessages.FallbackSourceInvalid);
+    }
 
     [Fact]
     public async Task Stages_None_400() =>

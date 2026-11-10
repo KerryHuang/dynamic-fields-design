@@ -55,7 +55,7 @@ public class SaveWorkflowHandler(
             Err("transitions", "轉移的兩端必須是不同的狀態、不重複，群組必須存在");
         if (errors.Count > 0) return ServiceResult.Invalid(errors);
 
-        if (await ApprovalErrorsAsync(module, input, ct) is { Count: > 0 } approvalErrors) return ServiceResult.Invalid(approvalErrors);
+        if (await ApprovalErrorsAsync(module, input, states, transitions, ct) is { Count: > 0 } approvalErrors) return ServiceResult.Invalid(approvalErrors);
 
         var now = time.Now;
         var workflow = module.Workflow;
@@ -77,12 +77,13 @@ public class SaveWorkflowHandler(
     }
 
     /// <summary>簽核的入口約束與事件交叉檢查（簽核設計 §5.2、§5.3）；沒有需簽核轉移時不查資料庫、一律通過。</summary>
-    private async Task<Dictionary<string, string[]>?> ApprovalErrorsAsync(Module module, WorkflowInput input, CancellationToken ct)
+    private async Task<Dictionary<string, string[]>?> ApprovalErrorsAsync(
+        Module module, WorkflowInput input, List<WorkflowState> states, List<WorkflowTransition> transitions, CancellationToken ct)
     {
         var candidate = new Workflow
         {
             ModuleId = module.Id, StatusFieldId = input.StatusFieldId, InitialOptionId = input.InitialOptionId,
-            States = [.. input.States], Transitions = [.. input.Transitions]
+            States = [.. states], Transitions = [.. transitions]
         };
         if (!candidate.Transitions.Any(t => t.Approval is { Required: true })) return null;
         if (candidate.Transitions.Any(t => t.Approval is { NoMatch: not (ApprovalNoMatch.Block or ApprovalNoMatch.Direct) }))

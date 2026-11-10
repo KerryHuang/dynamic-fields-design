@@ -17,6 +17,9 @@ public sealed class ApprovalFlowEditor(IApprovalFlowRepository flows, ApprovalDe
     public const string UsedCannotDelete = "流程已被使用，只能停用";
     public const string UsedCannotRetarget = "被使用過的流程不能改目標狀態，請另建流程";
 
+    /// <summary>和 approval-flows 底下的字面路由段衝突的代碼（PUT approval-flows/order 是排序端點）。</summary>
+    public static readonly IReadOnlySet<string> ReservedKeys = new HashSet<string> { "order" };
+
     public static ServiceResult? CheckModule(Module module) =>
         module.Kind != ModuleKind.Standalone || ModuleRelations.IsDetail(module) || module.Workflow is null
             ? ServiceResult.Invalid(new Dictionary<string, string[]> { ["moduleKey"] = ["簽核流程只能掛在有狀態機的獨立模組上"] })
@@ -30,6 +33,7 @@ public sealed class ApprovalFlowEditor(IApprovalFlowRepository flows, ApprovalDe
         void Err(string key, string message) => errors.TryAdd(key, [message]);
 
         if (!Regex.IsMatch(input.Key ?? "", ModuleRules.ModuleKeyPattern)) Err("key", "流程代碼只能用小寫英文、數字、連字號，2 到 40 字，英文開頭");
+        else if (ReservedKeys.Contains(input.Key!)) Err("key", ApprovalMessages.FlowKeyReserved);
         if (input.Name is null || !input.Name.IsValid(out _)) Err("name", "名稱必須有繁體中文");
         if (input.ToOptionId == wf.InitialOptionId || wf.States.All(s => s.OptionId != input.ToOptionId))
             Err("toOptionId", "目標狀態必須是狀態機的狀態，而且不是起始狀態");

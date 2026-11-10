@@ -35,7 +35,7 @@ public sealed partial class ApprovalDefinitionValidator(
         if (d.RejectTo is { } rt && wf.States.All(s => s.OptionId != rt)) Err("rejectTo", ApprovalMessages.RejectToInvalidState);
         if (d.FallbackApprovers is { } fb)
         {
-            if (fb.Source is not (ApprovalSources.Users or ApprovalSources.Group)) Err("fallbackApprovers", ApprovalMessages.FallbackSourceInvalid);
+            if (fb.Source is not (ApprovalSources.Users or ApprovalSources.Group or ApprovalSources.Manager)) Err("fallbackApprovers", ApprovalMessages.FallbackSourceInvalid);
             else if (SourceError(fb) is { } fe) Err("fallbackApprovers", fe);
         }
 

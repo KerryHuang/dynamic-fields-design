@@ -77,7 +77,13 @@ public class IntegrationReconciler(
                 return await SetStatusAsync(row, IntegrationStatus.Suspended,
                     owner.Status == AppStatus.Open ? $"suspended: 夥伴 {partners.Missing} 不在" : "suspended: 擁有者已關閉", previous, decl, ct);
             case IntegrationTarget.Held:
-                await SetActiveAsync(items, decl, true, ct);
+                if (await SetActiveAsync(items, decl, true, ct) is { Count: > 0 } pushing)
+                {
+                    row.Status = IntegrationStatus.Blocked;
+                    row.Reason = $"approval: 事件 {string.Join("、", pushing)} 會把狀態改成需簽核的狀態";
+                    await uow.CommitAsync(ct);
+                    return $"整合「{decl.Name.Resolve("zh-TW")}」無法啟用：{row.Reason}，已維持停用";
+                }
                 return await SetStatusAsync(row, IntegrationStatus.Held, $"held: 夥伴 {partners.Missing} 不在，來源寫入會被擋", previous, decl, ct);
             default:
                 return await EnsureInSavepointAsync(owner, row, decl, items, appList, allowCreate: target == IntegrationTarget.Install || retry, ct);
@@ -137,14 +143,23 @@ public class IntegrationReconciler(
         await SetActiveAsync(items, decl, false, ct);
     }
 
-    /// <summary>直接切旗標、不驗證：停用永遠要做得到（來源模組可能已經 Closed）；on 時只恢復宣告為啟用的項目。</summary>
-    private async Task SetActiveAsync(IntegrationItems items, AppIntegrationDecl decl, bool on, CancellationToken ct)
+    /// <summary>
+    /// 直接切旗標：停用永遠要做得到（來源模組可能已經 Closed）；on 時只恢復宣告為啟用的項目。
+    /// 重新啟用事件時補做簽核的定義時交叉檢查（簽核設計 §5.3）：會推動需簽核轉移的事件維持停用，回傳它們的代碼。
+    /// </summary>
+    public async Task<List<string>> SetActiveAsync(IntegrationItems items, AppIntegrationDecl decl, bool on, CancellationToken ct)
     {
+        var pushing = new List<string>();
         foreach (var key in items.Events)
             if (await events.GetByKeyAsync(key, ct) is { } e)
             {
                 var want = on && (decl.Events.FirstOrDefault(x => x.Code == key)?.Active ?? false);
                 if (e.Active == want) continue;
+                if (want && await ApprovalService.ApprovalEventCrossCheck.PushesAsync(e, modules, ct))
+                {
+                    pushing.Add(key);
+                    continue;
+                }
                 e.Active = want;
                 e.StampModified(user.UserId, time.Now);
             }
@@ -157,6 +172,7 @@ public class IntegrationReconciler(
                 c.StampModified(user.UserId, time.Now);
             }
         await uow.CommitAsync(ct);
+        return pushing;
     }
 
     private async Task<string?> EnsureInSavepointAsync(
