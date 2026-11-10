@@ -34,7 +34,7 @@ public class SubmitApprovalHandler(
         if (perms.OwnerUserIds is not null && !perms.OwnerUserIds.Contains(record.OwnerUserId)) return ServiceResult.NotFound(RecordMapper.RecordNotFound);
         // 先查「已在簽核中」再比對版本：並發送出的第二個請求讀到的是第一個換過的版本（設計 §8.4）
         if (await instances.GetPendingByRecordAsync(record.Id, ct) is not null) return ServiceResult.Conflict(ApprovalMessages.AlreadyPending);
-        if (record.RowVersion != request.RecordRowVersion) return ServiceResult.Conflict(RecordMapper.Stale);
+        if (record.RowVersion != request.RecordRowVersion) return ServiceResult.Stale();
         if (ApprovalActionRules.CommentError(request.Comment, required: false) is { } commentError)
             return ServiceResult.Invalid(new Dictionary<string, string[]> { ["comment"] = [commentError] });
 

@@ -179,7 +179,7 @@ public class ApprovalSubmitTests : ApprovalTestBase
         var po = await NewPo(r, price: 50000);
         var stale = await Submit(po.Id, r.Confirmed, rowVersion: "old");
         stale.IsConflict.Should().BeTrue();
-        stale.Message.Should().Be(RecordMapper.Stale);
+        stale.Code.Should().Be("stale");
         (await Submit(po.Id, r.Partial)).Errors[$"f_{r.Status}"].Should().Equal(WorkflowEnforcer.NotAllowedMessage);
     }
 
