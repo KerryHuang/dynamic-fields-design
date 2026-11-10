@@ -112,6 +112,25 @@ describe('OrganizationPage', () => {
     expect(api.updateDepartment).toHaveBeenCalledWith(1, expect.objectContaining({ code: 'exec', parentId: 4, managerUserId: 'manager01' }));
   });
 
+  it('"Move to…" is disabled with a hint while the form has unsaved changes, and comes back after reverting', async () => {
+    await mountPage();
+    await click('dept-node-2');
+    const move = () => q('dept-move') as HTMLButtonElement;
+    expect(move().disabled).toBe(false);
+    expect(q('dept-move-hint')).toBeNull();
+    const code = q('dept-code') as HTMLInputElement;
+    code.value = 'sales-x';
+    code.dispatchEvent(new Event('input'));
+    await flushPromises();
+    expect(move().disabled).toBe(true);
+    expect(q('dept-move-hint')!.textContent).toContain('請先儲存或放棄修改');
+    code.value = 'sales';
+    code.dispatchEvent(new Event('input'));
+    await flushPromises();
+    expect(move().disabled).toBe(false);
+    expect(q('dept-move-hint')).toBeNull();
+  });
+
   it('a child department can be moved up to root', async () => {
     api.updateDepartment.mockResolvedValue(DEPARTMENTS[2]);
     await mountPage();

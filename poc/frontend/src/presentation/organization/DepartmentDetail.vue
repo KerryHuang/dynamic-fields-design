@@ -29,6 +29,15 @@ watch(() => [props.department, props.newParentId], () => {
   apiError.value = null;
 }, { immediate: true });
 
+// 表單與已儲存的值不同：搬移只送已儲存的值，搬完表單會重設，未存的修改會消失，所以先擋下
+const dirty = computed(() => {
+  const d = props.department;
+  if (!d) return false;
+  const f = form.value;
+  return f.code !== d.code || f.managerUserId !== d.managerUserId || f.sortOrder !== d.sortOrder || f.active !== d.active
+    || JSON.stringify(f.name) !== JSON.stringify(d.name);
+});
+
 const parentId = computed(() => (props.department ? props.department.parentId : props.newParentId));
 const parentPath = computed(() => departmentPath(props.departments, parentId.value, locale.value) || t('organization.root'));
 const nameOf = (userId: string) => props.users.find((u) => u.userId === userId)?.displayName ?? userId;
@@ -114,8 +123,12 @@ function runDelete() {
         <div class="text-caption text-muted">{{ t('organization.parent') }}</div>
         <div class="row items-center q-gutter-sm">
           <div class="ellipsis" style="min-width: 0; flex: 1 1 auto" data-testid="dept-parent">{{ parentPath }}</div>
-          <q-btn v-if="department" flat dense color="primary" icon="drive_file_move" :label="t('organization.moveTo')" data-testid="dept-move" @click="moveOpen = true" />
+          <q-btn
+            v-if="department" flat dense color="primary" icon="drive_file_move" :label="t('organization.moveTo')" :disable="dirty"
+            data-testid="dept-move" @click="moveOpen = true"
+          />
         </div>
+        <div v-if="dirty" class="text-caption text-muted" data-testid="dept-move-hint">{{ t('organization.moveBlockedDirty') }}</div>
         <div v-if="errorFor(apiError, 'parentId')" class="text-negative text-caption">{{ errorFor(apiError, 'parentId') }}</div>
       </div>
     </div>
