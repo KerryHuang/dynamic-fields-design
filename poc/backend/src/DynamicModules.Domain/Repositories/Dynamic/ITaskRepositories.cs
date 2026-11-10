@@ -30,6 +30,13 @@ public interface ITaskRepository
     Task<HashSet<string>> ListLiveAttachmentKeysAsync(CancellationToken ct);
     /// <summary>不追蹤；附件須屬於該留言與任務，留言已撤回時回 null。</summary>
     Task<TaskCommentAttachment?> GetAttachmentAsync(long taskId, long commentId, long attachmentId, CancellationToken ct);
+    /// <summary>
+    /// 負責人是 userId、未完成、DueDate 不為 null，而且
+    /// (DueDate == today+1 且 LastDueSoonNotified != today) 或 (DueDate &lt; today 且 LastOverdueNotified != today)。
+    /// </summary>
+    Task<bool> AnyReminderDueAsync(string userId, DateOnly today, CancellationToken ct);
+    /// <summary>條件同 <see cref="AnyReminderDueAsync"/>；追蹤。</summary>
+    Task<List<TaskItem>> ListReminderDueAsync(string userId, DateOnly today, CancellationToken ct);
     void Add(TaskItem task);
     void Remove(TaskItem task);
 }

@@ -94,6 +94,20 @@ public class TaskRepository(DynamicDbContext db) : ITaskRepository
                 && db.Set<TaskComment>().Any(c => c.Id == commentId && c.TaskId == taskId && !c.Withdrawn))
             .FirstOrDefaultAsync(ct);
 
+    private IQueryable<TaskItem> ReminderDue(string userId, DateOnly today)
+    {
+        var open = new[] { TaskItemStatus.Todo, TaskItemStatus.InProgress };
+        var tomorrow = today.AddDays(1);
+        return db.Set<TaskItem>().Where(t => t.AssigneeUserId == userId && open.Contains(t.Status) && t.DueDate != null
+            && ((t.DueDate == tomorrow && t.LastDueSoonNotified != today) || (t.DueDate < today && t.LastOverdueNotified != today)));
+    }
+
+    public Task<bool> AnyReminderDueAsync(string userId, DateOnly today, CancellationToken ct) =>
+        ReminderDue(userId, today).AsNoTracking().AnyAsync(ct);
+
+    public Task<List<TaskItem>> ListReminderDueAsync(string userId, DateOnly today, CancellationToken ct) =>
+        ReminderDue(userId, today).OrderBy(t => t.Id).ToListAsync(ct);
+
     public void Add(TaskItem task) => db.Set<TaskItem>().Add(task);
 
     public void Remove(TaskItem task) => db.Set<TaskItem>().Remove(task);
