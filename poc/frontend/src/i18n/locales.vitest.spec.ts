@@ -1,3 +1,4 @@
+import { baseCompile } from '@intlify/message-compiler';
 import { describe, expect, it } from 'vitest';
 import enUS from './en-US.json';
 import th from './th.json';
@@ -34,5 +35,14 @@ describe('四語系訊息檔', () => {
   it.each([['th', th], ['vi', vi]])('%s 的文案不得直接放英文（縮寫與格式名除外）', (_name, msgs) => {
     const same = Object.entries(leaves(msgs)).filter(([k, v]) => v === en[k] && !UNTRANSLATED_OK.has(k)).map(([k]) => k);
     expect(same).toEqual([]);
+  });
+
+  // 正式版 vue-i18n 會編譯訊息：裸 @、| 等是語法字元，編譯失敗會讓整個元件渲染中斷（測試環境不會報錯）
+  it.each([['zh-TW', zhTW], ['en-US', enUS], ['th', th], ['vi', vi]])('%s 每句訊息都能被 vue-i18n 編譯', (_name, msgs) => {
+    const bad: string[] = [];
+    for (const [k, v] of Object.entries(leaves(msgs))) {
+      baseCompile(v, { onError: (e) => bad.push(`${k}: ${e.message}`) });
+    }
+    expect(bad).toEqual([]);
   });
 });
