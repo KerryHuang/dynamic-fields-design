@@ -154,6 +154,53 @@ public class DepartmentTests : DesignerTestBase
             .Should().Be(OrganizationMessages.ManagerInvalid);
     }
 
+    private async Task Deactivate(params string[] userIds)
+    {
+        foreach (var id in userIds) Db.Context.Set<AppUser>().Single(u => u.UserId == id).IsActive = false;
+        await Db.Context.SaveChangesAsync();
+    }
+
+    [Fact]
+    public async Task ManagerDeactivatedLater_UnchangedManager_RenameAndMoveStillWork()
+    {
+        var hq = await Create("hq");
+        var other = await Create("other");
+        var sales = await Create("sales", hq, "manager01");
+        await Deactivate("manager01");
+
+        (await Send(new UpdateDepartmentRequest(sales, new("sales", Text("renamed"), hq, "manager01", 0, true)))).IsSuccess.Should().BeTrue();
+        (await Send(new UpdateDepartmentRequest(sales, new("sales", Text("renamed"), other, "manager01", 0, true)))).IsSuccess.Should().BeTrue();
+
+        var d = (await List()).Single(x => x.Id == sales);
+        d.ParentId.Should().Be(other);
+        d.ManagerUserId.Should().Be("manager01");
+    }
+
+    [Fact]
+    public async Task ManagerChangedToAnotherInactiveUser_400()
+    {
+        var sales = await Create("sales", manager: "manager01");
+        await Deactivate("manager01", "sales02");
+
+        Err(await Send(new UpdateDepartmentRequest(sales, Input("sales", manager: "sales02"))), "managerUserId")
+            .Should().Be(OrganizationMessages.ManagerInvalid);
+        (await List()).Single().ManagerUserId.Should().Be("manager01");
+    }
+
+    [Fact]
+    public async Task ManagerBlankString_TreatedAsVacant_AndPaddedIdIsTrimmed()
+    {
+        var a = await Create("a", manager: "   ");
+        var b = await Create("b", manager: " sales02 ");
+
+        var list = await List();
+
+        list.Single(d => d.Id == a).ManagerUserId.Should().BeNull();
+        list.Single(d => d.Id == b).ManagerUserId.Should().Be("sales02");
+        (await Send(new UpdateDepartmentRequest(b, Input("b", manager: "  ")))).IsSuccess.Should().BeTrue();
+        (await List()).Single(d => d.Id == b).ManagerUserId.Should().BeNull();
+    }
+
     [Fact]
     public async Task Name_MissingZhTw_400()
     {
