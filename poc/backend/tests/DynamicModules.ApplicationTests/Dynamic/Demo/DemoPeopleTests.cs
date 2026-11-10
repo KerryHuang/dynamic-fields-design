@@ -1,3 +1,4 @@
+using DynamicModules.Application.Common.Time;
 using DynamicModules.Application.Dynamic.DemoService;
 using DynamicModules.Application.Dynamic.DemoService.Commands.GenerateDemoData;
 using DynamicModules.Domain.Data;
@@ -15,7 +16,8 @@ public class DemoPeopleTests
     /// <summary>產生器加完人員後把 maint01 拿掉，讓時間線上第一個 maint01 的步驟失敗。</summary>
     internal static void WithoutMaintenanceUser(IServiceCollection services) =>
         services.AddScoped<IDemoPeople>(sp => new DropMaintenance(
-            new DemoPeopleSeeder(sp.GetRequiredService<DynamicDbContext>()), sp.GetRequiredService<DynamicDbContext>()));
+            new DemoPeopleSeeder(sp.GetRequiredService<DynamicDbContext>(), sp.GetRequiredService<IBusinessTime>()),
+            sp.GetRequiredService<DynamicDbContext>()));
 
     private sealed class DropMaintenance(IDemoPeople inner, DynamicDbContext db) : IDemoPeople
     {
