@@ -43,6 +43,8 @@ public sealed class ApproverResolver(OrgSnapshotLoader org, IPermissionRepositor
     {
         var stage = stageName.Resolve("zh-TW");
         var units = Units(ctx, source).Select(u => (u.Label, Users: Clean(ctx, u.Users))).ToList();
+        // 一個單位都沒有（清單空、來源不認得）：不能建出沒有任務的關卡，也不算「全部單位都空」而跳過（fail closed）
+        if (units.Count == 0) return new([], false, ApprovalMessages.NoApprover(stage, source.Source));
         if (units.All(u => u.Users.Count == 0) && onEmpty == ApprovalOnEmpty.Skip) return new([], true, null);
 
         var empty = units.Where(u => u.Users.Count == 0).Select(u => u.Label).ToList();
@@ -67,11 +69,13 @@ public sealed class ApproverResolver(OrgSnapshotLoader org, IPermissionRepositor
             if (empty.Count > 0)
             {
                 var extra = backups.Where(u => !resolved.Contains(u)).ToList();
-                if (backups.Count == 0 || (resolved.Count == 0 && extra.Count == 0)) return new([], false, ApprovalMessages.NoApprover(stage, empty[0]));
-                if (extra.Count > 0) seats.Add(new SeatPlan(AnySeat, extra, ApprovalTaskReason.Fallback, string.Join("、", empty)));
+                // 移除已有任務的人後備援為空 → 409（設計 §6.5），即使這關還有其他候選人
+                if (extra.Count == 0) return new([], false, ApprovalMessages.NoApprover(stage, empty[0]));
+                seats.Add(new SeatPlan(AnySeat, extra, ApprovalTaskReason.Fallback, string.Join("、", empty)));
             }
         }
 
+        if (seats.Count == 0) return new([], false, ApprovalMessages.NoApprover(stage, empty.FirstOrDefault() ?? source.Source));
         if (seats.SelectMany(s => s.UserIds).Distinct(StringComparer.Ordinal).Count() > ApprovalLimits.MaxApprovers)
             return new([], false, ApprovalMessages.TooManyApprovers(stage));
         return new(seats, false, null);

@@ -297,6 +297,27 @@ public class ApprovalActionTests : ApprovalTestBase
         Notices("buyer2", NotificationKinds.ApprovalReturned).Should().Be(0);
     }
 
+    [Fact]
+    public async Task Reject_SameUserApprovedOtherSeatInStage_409()
+    {
+        // 會簽兩個空單位、備援 gm 與 mgrA 共用：gm 同意 fb:0 後，不能再用 fb:1 的任務退回（設計 §7.7；審查建議 6）
+        var r = await OneFlow(Def(null, Stage("both", Users("emp1", "emp2"), mode: ApprovalModes.All)) with { FallbackApprovers = Users("gm", "mgrA") });
+        await Deactivate("emp1", "emp2");
+        var id = await SubmitAs(r, "buyer1", 5000);
+        var gmTasks = TasksOf(id).Where(t => t.AssigneeUserId == "gm").OrderBy(t => t.SeatKey).ToList();
+        gmTasks.Select(t => t.SeatKey).Should().Equal("fb:0", "fb:1");
+        As("gm");
+        Outcome(await Send(new ApproveTaskRequest(gmTasks[0].Id, Inst(id).RowVersion, null, null))).Should().Be(ApprovalOutcomes.Advanced);
+
+        var actions = ActionsOf(id).Count;
+        var res = await Send(new RejectTaskRequest(gmTasks[1].Id, Inst(id).RowVersion, "改退回", RejectTaskHandler.ToInitiator));
+        res.IsConflict.Should().BeTrue(Dump(res));
+        res.Message.Should().Be(ApprovalMessages.StageHandled);
+        Inst(id).Status.Should().Be(ApprovalInstanceStatus.Pending);
+        ActionsOf(id).Should().HaveCount(actions);
+        TasksOf(id).Single(t => t.Id == gmTasks[1].Id).Status.Should().Be(ApprovalTaskStatus.Open);
+    }
+
     /// <summary>只有一關（採購主管群組）的流程，RejectTo 直接寫進定義（不經驗證，模擬設定後來被改掉）。</summary>
     private async Task<(PurchaseRig R, long Id)> RejectRig(Func<PurchaseRig, long?> rejectTo)
     {

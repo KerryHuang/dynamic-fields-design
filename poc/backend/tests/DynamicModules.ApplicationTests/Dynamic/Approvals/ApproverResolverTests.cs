@@ -159,4 +159,27 @@ public class ApproverResolverTests
         two.Error.Should().BeNull();
         two.Seats.Select(s => s.SeatKey).Should().Equal("fb:0", "fb:1");
     }
+
+    [Fact]
+    public void Any_FallbackAllAlreadyCandidates_Error()
+    {
+        // 或簽：備援移除已有任務的人後為空 → 409（設計 §6.5 字面；審查建議 7）
+        var r = Resolve(Ctx("buyer1"), Group(Board, PurchaseLead), fallback: new ApproverSource(ApprovalSources.Users, UserIds: ["buyer2"]));
+        r.Error.Should().Be(ApprovalMessages.NoApprover("關卡", "board"));
+        r.Seats.Should().BeEmpty();
+    }
+
+    [Theory]
+    [InlineData(ApprovalOnEmpty.Fallback)]
+    [InlineData(ApprovalOnEmpty.Skip)]
+    public void NoUnits_ZeroSeats_Error(string onEmpty)
+    {
+        // 單位清單是空的、或來源不認得：不能建出沒有任務的關卡，也不能當成「全部單位都空」而跳過（審查建議 9）
+        var empty = Resolve(Ctx("buyer1"), new ApproverSource(ApprovalSources.Users, UserIds: []), ApprovalModes.All, onEmpty);
+        empty.Error.Should().Be(ApprovalMessages.NoApprover("關卡", ApprovalSources.Users));
+        empty.AllUnitsEmpty.Should().BeFalse();
+        var unknown = Resolve(Ctx("buyer1"), new ApproverSource("bogus"), onEmpty: onEmpty);
+        unknown.Error.Should().Be(ApprovalMessages.NoApprover("關卡", "bogus"));
+        unknown.Seats.Should().BeEmpty();
+    }
 }

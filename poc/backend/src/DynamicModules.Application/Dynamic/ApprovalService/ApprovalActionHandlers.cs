@@ -40,6 +40,10 @@ public sealed class ApprovalActionSupport(
 
     public static ServiceResult Bad(string key, string message) => ServiceResult.Invalid(new Dictionary<string, string[]> { [key] = [message] });
 
+    /// <summary>會簽一人一票（設計 §7.7）：同一人在同一關已經同意過，不能再處理（同意或退回）另一個任務。</summary>
+    public static bool AlreadyApprovedInStage(IEnumerable<ApprovalTask> tasks, ApprovalTask me, string userId) =>
+        tasks.Any(t => t.StageRunId == me.StageRunId && t.Id != me.Id && t.Status == ApprovalTaskStatus.Approved && t.AssigneeUserId == userId);
+
     /// <summary>open 任務改 closed（已由他人處理、撤回、退回）。</summary>
     public static void CloseOpen(IEnumerable<ApprovalTask> tasks)
     {
@@ -65,9 +69,7 @@ public class ApproveTaskHandler(
         if (me.Status != ApprovalTaskStatus.Open) return ServiceResult.Conflict(ApprovalMessages.StageHandled);
         var run = runs.Single(r => r.Id == me.StageRunId);
         var stageTasks = tasks.Where(t => t.StageRunId == run.Id).ToList();
-        // 會簽一人一票（設計 §7.7）：同一人在同一關已經同意過，不能再處理另一個任務
-        if (stageTasks.Any(t => t.Id != me.Id && t.Status == ApprovalTaskStatus.Approved && (t.AssigneeUserId == user.UserId)))
-            return ServiceResult.Conflict(ApprovalMessages.StageHandled);
+        if (ApprovalActionSupport.AlreadyApprovedInStage(tasks, me, user.UserId)) return ServiceResult.Conflict(ApprovalMessages.StageHandled);
 
         var values = request.Values ?? [];
         var stageDef = def.Stages.FirstOrDefault(s => s.Code == run.StageCode);
@@ -135,6 +137,7 @@ public class RejectTaskHandler(
         var (inst, module, def, runs, tasks) = loaded!;
         var me = tasks.Single(t => t.Id == task.Id);
         if (me.Status != ApprovalTaskStatus.Open) return ServiceResult.Conflict(ApprovalMessages.StageHandled);
+        if (ApprovalActionSupport.AlreadyApprovedInStage(tasks, me, user.UserId)) return ServiceResult.Conflict(ApprovalMessages.StageHandled);
         var run = runs.Single(r => r.Id == me.StageRunId);
         var now = time.Now;
 
