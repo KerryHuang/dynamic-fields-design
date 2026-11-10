@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
+import { useRouter } from 'vue-router';
 import { useUsers } from 'src/application/dynamic/queries/permissions-queries';
 import { useDeleteTask, useTask, useTaskComments, useUpdateTask } from 'src/application/dynamic/queries/tasks-queries';
 import DateSelect from 'src/components/framework/DateSelect.vue';
@@ -13,6 +14,7 @@ import TaskTimeline from './TaskTimeline.vue';
 const props = defineProps<{ taskId: number | null }>();
 const emit = defineEmits<{ 'update:taskId': [value: number | null] }>();
 const { t } = useI18n();
+const router = useRouter();
 const task = useTask(() => props.taskId);
 const comments = useTaskComments(() => props.taskId);
 const users = useUsers();
@@ -56,7 +58,7 @@ async function save() {
     await update.mutateAsync({ id: props.taskId!, patch: patch.value });
   } catch (e) {
     const err = e as ApiError;
-    error.value = (err.errors ? Object.values(err.errors).flat().join('、') : err.message) || t('tasks.saveFailed');
+    error.value = (err.errors ? Object.values(err.errors).flat().join(t('tasks.listSep')) : err.message) || t('tasks.saveFailed');
   }
 }
 
@@ -75,6 +77,14 @@ const recordLink = computed(() => {
   const r = data.value?.record;
   return r?.accessible && !r.deleted && r.moduleKey ? `/dynamic/${r.moduleKey}/${r.recordId}` : null;
 });
+// The record can be visible while its title field is hidden by field permissions (the server then sends no title).
+const recordTitle = computed(() => data.value?.record?.title || t('tasks.recordFallback', { id: data.value?.record?.recordId ?? '' }));
+
+// Close first so the dialog's own router.replace starts before, and is cancelled by, the push to the record.
+function goRecord() {
+  emit('update:taskId', null);
+  void router.push(recordLink.value!);
+}
 </script>
 
 <template>
@@ -82,13 +92,18 @@ const recordLink = computed(() => {
     :model-value="taskId !== null" :maximized="$q.screen.lt.sm" @update:model-value="(v) => { if (!v) emit('update:taskId', null); }"
   >
     <q-card style="width: 640px; max-width: 100vw" class="column no-wrap" data-testid="task-dialog">
-      <q-card-section v-if="missing" class="text-negative" data-testid="task-not-found">
-        {{ (task.error.value as ApiError | null)?.status === 404 ? t('tasks.notFound') : t('tasks.loadFailed') }}
-      </q-card-section>
-      <q-card-section v-else-if="!data" class="text-muted">
-        <q-spinner size="sm" />
-      </q-card-section>
-      <template v-else>
+      <template v-if="missing || !data">
+        <q-card-section v-if="missing" class="text-negative" data-testid="task-not-found">
+          {{ (task.error.value as ApiError | null)?.status === 404 ? t('tasks.notFound') : t('tasks.loadFailed') }}
+        </q-card-section>
+        <q-card-section v-else class="text-muted">
+          <q-spinner size="sm" />
+        </q-card-section>
+        <q-card-actions align="right">
+          <q-btn flat no-caps :label="t('tasks.close')" v-close-popup data-testid="task-dialog-close" />
+        </q-card-actions>
+      </template>
+      <template v-else-if="data">
         <q-card-section class="scroll col" style="max-height: 80vh">
           <div v-if="data.frozen" class="text-caption text-muted q-mb-sm" data-testid="task-frozen">{{ t('tasks.frozen') }}</div>
           <div v-if="data.fromRule" class="text-caption text-muted q-mb-xs">{{ t('tasks.fromRule') }}</div>
@@ -108,13 +123,12 @@ const recordLink = computed(() => {
               </div>
             </div>
             <div data-testid="task-record" class="text-body2">
-              <span class="text-caption text-muted">{{ t('tasks.fields.record') }}：</span>
-              <template v-if="!data.record">—</template>
-              <router-link v-else-if="recordLink" :to="recordLink" @click="emit('update:taskId', null)">{{ data.record.title }}</router-link>
-              <span v-else-if="data.record.deleted" class="text-muted">{{ t('tasks.recordDeleted', { title: data.record.title ?? '' }) }}</span>
+              <template v-if="!data.record"><span class="text-caption text-muted">{{ t('tasks.fields.record') }}{{ t('tasks.colon') }}</span>{{ t('tasks.none') }}</template>
+              <template v-else-if="recordLink"><span class="text-caption text-muted">{{ t('tasks.fields.record') }}{{ t('tasks.colon') }}</span><router-link :to="recordLink" @click.prevent="goRecord">{{ recordTitle }}</router-link></template>
+              <span v-else-if="data.record.deleted" class="text-muted">{{ t('tasks.recordDeleted', { title: recordTitle }) }}</span>
               <span v-else class="text-muted">{{ t('tasks.recordNoAccess') }}</span>
             </div>
-            <div v-if="data.createdByName" class="text-caption text-muted">{{ t('tasks.createdBy') }}：{{ data.createdByName }}</div>
+            <div v-if="data.createdByName" class="text-caption text-muted">{{ t('tasks.createdBy') }}{{ t('tasks.colon') }}{{ data.createdByName }}</div>
             <div v-if="error" class="text-negative text-caption" data-testid="task-error">{{ error }}</div>
           </div>
           <q-separator class="q-my-md" />

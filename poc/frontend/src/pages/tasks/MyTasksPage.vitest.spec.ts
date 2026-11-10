@@ -88,6 +88,25 @@ describe('MyTasksPage', () => {
     w.unmount();
   });
 
+  it('404 的對話框可按關閉鈕，網址的 open 被移除', async () => {
+    const { w, router } = await mountPage('/tasks?open=7', { detailFails: true });
+    document.body.querySelector<HTMLElement>('[data-testid="task-dialog-close"]')!.click();
+    await flushPromises();
+    await new Promise((r) => setTimeout(r, 30));
+    await flushPromises();
+    expect(router.currentRoute.value.query.open).toBeUndefined();
+    w.unmount();
+  });
+
+  it('在對話框點相關記錄會導到記錄頁，不會被關閉對話框的導航蓋掉', async () => {
+    const { w, router } = await mountPage('/tasks?open=7');
+    document.body.querySelector<HTMLElement>('[data-testid="task-record"] a')!.click();
+    await flushPromises();
+    await new Promise((r) => setTimeout(r, 30));
+    expect(router.currentRoute.value.path).toBe('/dynamic/crm_customer/9');
+    w.unmount();
+  });
+
   it('?open= 不是數字時忽略，不打開對話框', async () => {
     const { w } = await mountPage('/tasks?open=abc');
     expect(document.body.querySelector('[data-testid="task-dialog"]')).toBeNull();

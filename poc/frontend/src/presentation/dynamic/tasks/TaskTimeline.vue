@@ -1,9 +1,10 @@
 <script setup lang="ts">
-import { date } from 'quasar';
+import { date, useQuasar } from 'quasar';
 import { computed } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { useUsers } from 'src/application/dynamic/queries/permissions-queries';
 import { useWithdrawTaskComment } from 'src/application/dynamic/queries/tasks-queries';
+import type { ApiError } from 'src/services/api/http';
 import { mentionSegments } from 'src/domain/dynamic/task-mentions';
 import type { TaskComment } from 'src/domain/dynamic/task-types';
 
@@ -11,6 +12,12 @@ const props = defineProps<{ taskId: number; comments: TaskComment[]; readonly?: 
 const { t } = useI18n();
 const users = useUsers();
 const withdraw = useWithdrawTaskComment();
+const $q = useQuasar();
+const doWithdraw = (commentId: number) =>
+  withdraw.mutate(
+    { id: props.taskId, commentId },
+    { onError: (e) => $q.notify({ type: 'negative', message: (e as unknown as ApiError).message || t('tasks.withdrawFailed') }) },
+  );
 
 const names = computed(() => new Map((users.data.value ?? []).map((u) => [u.userId, u.displayName])));
 const nameOf = (id: unknown) => (typeof id === 'string' && id ? (names.value.get(id) ?? id) : t('tasks.unassigned'));
@@ -43,8 +50,8 @@ const segments = (c: TaskComment) => mentionSegments(c.body ?? '', c.mentions);
         <q-space />
         <q-btn
           v-if="c.canWithdraw && !readonly" flat dense no-caps size="sm" :label="t('tasks.withdraw')"
-          :loading="withdraw.isPending.value" :data-testid="`comment-withdraw-${c.id}`"
-          @click="withdraw.mutate({ id: taskId, commentId: c.id })"
+          :loading="withdraw.isPending.value && withdraw.variables.value?.commentId === c.id" :data-testid="`comment-withdraw-${c.id}`"
+          @click="doWithdraw(c.id)"
         />
       </div>
       <div v-if="c.kind === 'system'" class="text-body2 text-muted" style="overflow-wrap: anywhere">{{ systemText(c) }}</div>

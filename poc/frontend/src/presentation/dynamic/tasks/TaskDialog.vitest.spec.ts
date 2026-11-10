@@ -2,9 +2,10 @@ import { QueryClient, VueQueryPlugin } from '@tanstack/vue-query';
 import { flushPromises, mount } from '@vue/test-utils';
 import { createPinia, setActivePinia } from 'pinia';
 import * as quasar from 'quasar';
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createI18n } from 'vue-i18n';
 import { createMemoryHistory, createRouter } from 'vue-router';
+import enUS from 'src/i18n/en-US.json';
 import zhTW from 'src/i18n/zh-TW.json';
 import { bodyOf, HttpFail, mockHttp, type Call } from 'src/test-utils/mock-http';
 import TaskDialog from './TaskDialog.vue';
@@ -16,6 +17,9 @@ interface Opts {
   settings?: Record<string, unknown>;
   candidates?: unknown[];
   taskStatus?: number;
+  commentFail?: HttpFail;
+  withdrawFail?: HttpFail;
+  locale?: 'zh-TW' | 'en-US';
 }
 let calls: Call[];
 const body = () => document.body;
@@ -25,18 +29,19 @@ async function mountDialog(o: Opts = {}) {
   calls = mockHttp((c) => {
     if (c.url === '/tasks/5' && c.method === 'get') return o.taskStatus ? new HttpFail(o.taskStatus, { message: '找不到' }) : taskDetailWire(o.task);
     if (c.url === '/tasks/5/comments' && c.method === 'get') return o.comments ?? [];
-    if (c.url === '/tasks/5/comments' && c.method === 'post') return commentWire();
+    if (c.url === '/tasks/5/comments' && c.method === 'post') return o.commentFail ?? commentWire();
+    if (/\/withdraw$/.test(c.url)) return o.withdrawFail ?? commentWire({ withdrawn: true });
     if (c.url === '/users') return USERS;
     if (c.url === '/users/mention-candidates') return o.candidates ?? [USERS[1]];
     if (c.url === '/attachments/settings') return { uploadEnabled: true, maxBytes: 1048576, allowedExtensions: ['txt', 'pdf'], maxFilesPerField: 3, ...o.settings };
     return {};
   });
   const router = createRouter({ history: createMemoryHistory(), routes: [{ path: '/:p(.*)*', component: { render: () => null } }] });
-  const i18n = createI18n({ legacy: false, locale: 'zh-TW', messages: { 'zh-TW': zhTW } });
+  const i18n = createI18n({ legacy: false, locale: o.locale ?? 'zh-TW', messages: { 'zh-TW': zhTW, 'en-US': enUS } });
   const w = mount(TaskDialog, {
     props: { taskId: 5 },
     attachTo: document.body,
-    global: { plugins: [[quasar.Quasar, { components: quasar, directives: quasar }], createPinia(), router, i18n, [VueQueryPlugin, { queryClient: new QueryClient() }]] },
+    global: { plugins: [[quasar.Quasar, { components: quasar, directives: quasar, plugins: { Notify: quasar.Notify } }], createPinia(), router, i18n, [VueQueryPlugin, { queryClient: new QueryClient() }]] },
   });
   await flushPromises();
   await new Promise((r) => setTimeout(r, 20));
@@ -129,6 +134,32 @@ describe('TaskDialog', () => {
     w.unmount();
   });
 
+  it('同名候選人以帳號區分，兩人都選時內容各存各的 @{userId}', async () => {
+    const dup = [{ userId: 'wang01', displayName: '王小明' }, { userId: 'wang02', displayName: '王小明' }];
+    const w = await mountDialog({ candidates: dup });
+    const ta = body().querySelector<HTMLTextAreaElement>('textarea[data-testid="mention-input"]')!;
+    const type = async (v: string) => {
+      ta.value = v;
+      ta.setSelectionRange(v.length, v.length);
+      ta.dispatchEvent(new Event('input'));
+      await flushPromises();
+      await new Promise((r) => setTimeout(r, 20));
+    };
+    await type('@王');
+    expect(body().querySelector('[data-testid="mention-option-wang01"]')!.textContent).toContain('wang01');
+    expect(body().querySelector('[data-testid="mention-option-wang02"]')!.textContent).toContain('wang02');
+    body().querySelector<HTMLElement>('[data-testid="mention-option-wang01"]')!.click();
+    await flushPromises();
+    await type(`${ta.value}@王`);
+    body().querySelector<HTMLElement>('[data-testid="mention-option-wang02"]')!.click();
+    await flushPromises();
+    body().querySelector<HTMLElement>('[data-testid="comment-send"]')!.click();
+    await flushPromises();
+    const post = calls.find((c) => c.url === '/tasks/5/comments' && c.method === 'post');
+    expect(bodyOf(post)).toEqual({ body: '@{wang01} @{wang02}' });
+    w.unmount();
+  });
+
   it('寬度 390 時對話框 maximized', async () => {
     const original = window.innerWidth;
     window.innerWidth = 390;
@@ -149,6 +180,101 @@ describe('TaskDialog', () => {
   it('任務不存在或看不到（404）時顯示提示，不卡在載入', async () => {
     const w = await mountDialog({ taskStatus: 404 });
     expect(body().querySelector('[data-testid="task-not-found"]')!.textContent).toContain('找不到這個任務');
+    w.unmount();
+  });
+
+  it('404 時有關閉鈕，按下後發出 update:taskId null', async () => {
+    const w = await mountDialog({ taskStatus: 404 });
+    const btn = body().querySelector<HTMLElement>('[data-testid="task-dialog-close"]');
+    expect(btn).not.toBeNull();
+    btn!.click();
+    await flushPromises();
+    await new Promise((r) => setTimeout(r, 30));
+    await flushPromises();
+    expect(w.emitted('update:taskId')?.at(-1)).toEqual([null]);
+    w.unmount();
+  });
+
+  it('載入失敗（非 404）時同樣有關閉鈕', async () => {
+    const w = await mountDialog({ taskStatus: 500 });
+    expect(body().querySelector('[data-testid="task-not-found"]')!.textContent).toContain('任務載入失敗');
+    expect(body().querySelector('[data-testid="task-dialog-close"]')).not.toBeNull();
+    w.unmount();
+  });
+
+  it('記錄標題被欄位權限隱藏（title 缺）時，連結顯示「記錄 #9」且可點', async () => {
+    const w = await mountDialog({ task: { record: { accessible: true, moduleKey: 'crm_customer', recordId: 9, deleted: false } } });
+    const a = body().querySelector('[data-testid="task-record"] a')!;
+    expect(a.textContent!.trim()).toBe('記錄 #9');
+    expect(a.getAttribute('href')).toBe('/dynamic/crm_customer/9');
+    w.unmount();
+  });
+
+  it('記錄已刪除且標題被隱藏時顯示「記錄 #9」已刪除', async () => {
+    const w = await mountDialog({ task: { record: { accessible: true, moduleKey: 'crm_customer', recordId: 9, deleted: true } } });
+    expect(body().querySelector('[data-testid="task-record"]')!.textContent).toContain('「記錄 #9」已刪除');
+    w.unmount();
+  });
+
+  it('凍結時顯示提示、欄位唯讀、沒有儲存／刪除鈕與留言框', async () => {
+    const w = await mountDialog({ task: { frozen: true, canEdit: false, canComment: false, canDelete: false } });
+    expect(body().querySelector('[data-testid="task-frozen"]')!.textContent).toContain('相關記錄已鎖定');
+    expect(body().querySelector<HTMLInputElement>('input[data-testid="task-title"]')!.readOnly).toBe(true);
+    expect(body().querySelector('[data-testid="task-save"]')).toBeNull();
+    expect(body().querySelector('[data-testid="task-delete"]')).toBeNull();
+    expect(body().querySelector('textarea[data-testid="mention-input"]')).toBeNull();
+    w.unmount();
+  });
+
+  it('清掉說明送 description:null', async () => {
+    const w = await mountDialog();
+    const d = body().querySelector<HTMLTextAreaElement>('textarea[data-testid="task-description"]')!;
+    d.value = '';
+    d.dispatchEvent(new Event('input'));
+    await flushPromises();
+    body().querySelector<HTMLElement>('[data-testid="task-save"]')!.click();
+    await flushPromises();
+    expect(bodyOf(calls.find((c) => c.method === 'patch'))).toEqual({ description: null });
+    w.unmount();
+  });
+
+  it('清掉到期日送 dueDate:null', async () => {
+    const w = await mountDialog();
+    const due = w.findAllComponents(quasar.QInput).find((i) => i.props('label') === '到期日')!;
+    due.vm.$emit('update:modelValue', '');
+    await flushPromises();
+    body().querySelector<HTMLElement>('[data-testid="task-save"]')!.click();
+    await flushPromises();
+    expect(bodyOf(calls.find((c) => c.method === 'patch'))).toEqual({ dueDate: null });
+    w.unmount();
+  });
+
+  it('撤回留言失敗時跳出錯誤提示', async () => {
+    const w = await mountDialog({
+      comments: [commentWire({ id: 8, canWithdraw: true })],
+      withdrawFail: new HttpFail(409, { message: '應用程式已關閉' }),
+    });
+    const notify = vi.spyOn(w.vm.$q, 'notify');
+    body().querySelector<HTMLElement>('[data-testid="comment-withdraw-8"]')!.click();
+    await flushPromises();
+    expect(notify).toHaveBeenCalledWith(expect.objectContaining({ type: 'negative', message: '應用程式已關閉' }));
+    w.unmount();
+  });
+
+  it('英文語系下標點走語系檔：記錄標籤用半形冒號、錯誤用逗號串接', async () => {
+    const w = await mountDialog({
+      locale: 'en-US', commentFail: new HttpFail(400, { errors: { files: ['bad type'], body: ['too long'] } }),
+    });
+    const rec = body().querySelector('[data-testid="task-record"]')!.textContent!;
+    expect(rec).not.toContain('：');
+    expect(rec).toMatch(/Related record: /);
+    const ta = body().querySelector<HTMLTextAreaElement>('textarea[data-testid="mention-input"]')!;
+    ta.value = 'hi';
+    ta.dispatchEvent(new Event('input'));
+    await flushPromises();
+    body().querySelector<HTMLElement>('[data-testid="comment-send"]')!.click();
+    await flushPromises();
+    expect(body().querySelector('[data-testid="comment-error"]')!.textContent).toBe('bad type, too long');
     w.unmount();
   });
 
@@ -214,6 +340,26 @@ describe('TaskDialog', () => {
       w.unmount();
     });
 
+    it('檔案超過大小上限時被擋下並提示，不進入待送清單', async () => {
+      const w = await mountDialog();
+      const qfile = w.findComponent(quasar.QFile);
+      expect(qfile.props('maxFileSize')).toBe(1048576);
+      qfile.vm.$emit('rejected', [{ failedPropValidation: 'max-file-size', file: file('big.txt') }]);
+      await flushPromises();
+      expect(body().querySelector('[data-testid="attach-rejected"]')!.textContent).toContain('超過大小上限');
+      w.unmount();
+    });
+
+    it('400 依 files、body 欄位顯示錯誤，用頓號串接', async () => {
+      const w = await mountDialog({ commentFail: new HttpFail(400, { errors: { files: ['不允許的副檔名'], body: ['內容太長'] } }) });
+      w.findComponent(quasar.QFile).vm.$emit('update:modelValue', [file('a.txt')]);
+      await flushPromises();
+      body().querySelector<HTMLElement>('[data-testid="comment-send"]')!.click();
+      await flushPromises();
+      expect(body().querySelector('[data-testid="comment-error"]')!.textContent).toBe('不允許的副檔名、內容太長');
+      w.unmount();
+    });
+
     it('413 沒有 JSON 時顯示通用訊息，不會解析失敗', async () => {
       const w = await mountDialog();
       const original = calls;
@@ -228,7 +374,7 @@ describe('TaskDialog', () => {
     });
   });
 
-  it('有編輯權限時改標題會送只含變動欄位的 PATCH；清掉到期日送 null', async () => {
+  it('有編輯權限時改標題會送只含變動欄位的 PATCH', async () => {
     const w = await mountDialog();
     const title = body().querySelector<HTMLInputElement>('input[data-testid="task-title"]')!;
     title.value = '新標題';

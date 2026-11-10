@@ -1,13 +1,18 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue';
+import { useQuasar } from 'quasar';
 import { useI18n } from 'vue-i18n';
 import { useRecordTasks, useUpdateTask } from 'src/application/dynamic/queries/tasks-queries';
 import { taskStatusColor, type TaskSummary } from 'src/domain/dynamic/task-types';
+import type { ApiError } from 'src/services/api/http';
+import { useIdentityStore } from 'src/stores/use-identity-store';
 import TaskDialog from './TaskDialog.vue';
 import TaskFormDialog from './TaskFormDialog.vue';
 
 const props = defineProps<{ recordId: number; closed: boolean }>();
 const { t } = useI18n();
+const $q = useQuasar();
+const identity = useIdentityStore();
 const query = useRecordTasks(() => props.recordId);
 const update = useUpdateTask();
 const items = computed(() => query.data.value?.items ?? []);
@@ -19,7 +24,10 @@ const adding = ref(false);
 const locked = (task: TaskSummary) => props.closed || !task.canEdit;
 // Unticking a finished task reopens it as "to do"; ticking finishes it.
 const toggle = (task: TaskSummary, done: boolean) =>
-  update.mutate({ id: task.id, patch: { status: done ? 'done' : 'todo' } });
+  update.mutate(
+    { id: task.id, patch: { status: done ? 'done' : 'todo' } },
+    { onError: (e) => $q.notify({ type: 'negative', message: (e as unknown as ApiError).message || t('tasks.saveFailed') }) },
+  );
 </script>
 
 <template>
@@ -41,14 +49,14 @@ const toggle = (task: TaskSummary, done: boolean) =>
         <q-item-section class="cursor-pointer" @click="openId = task.id">
           <q-item-label :class="{ 'text-strike text-muted': task.status === 'done' || task.status === 'cancelled' }" style="overflow-wrap: anywhere">{{ task.title }}</q-item-label>
           <q-item-label caption class="row items-center q-gutter-x-sm">
-            <span :data-testid="`task-assignee-${task.id}`">{{ task.assigneeName ?? (task.assigneeUserId ? task.assigneeUserId : t('tasks.unassigned')) }}</span>
+            <span :data-testid="`task-assignee-${task.id}`">{{ task.assigneeName ?? (task.assigneeUserId || t('tasks.unassigned')) }}</span>
             <span v-if="task.dueDate" :class="{ 'text-negative': task.overdue }" :data-testid="`task-due-${task.id}`">{{ task.dueDate }}</span>
             <q-badge outline :color="taskStatusColor(task.status)" :label="t(`tasks.status.${task.status}`)" />
           </q-item-label>
         </q-item-section>
       </q-item>
     </q-list>
-    <TaskFormDialog v-model="adding" :record-id="recordId" />
+    <TaskFormDialog v-model="adding" :record-id="recordId" :default-assignee="identity.userId" />
     <TaskDialog :task-id="openId" @update:task-id="openId = $event" />
   </q-card>
 </template>

@@ -49,7 +49,7 @@ async function submit() {
     emit('update:modelValue', false);
   } catch (e) {
     const err = e as ApiError;
-    error.value = (err.errors ? Object.values(err.errors).flat().join('、') : err.message) || t('tasks.saveFailed');
+    error.value = (err.errors ? Object.values(err.errors).flat().join(t('tasks.listSep')) : err.message) || t('tasks.saveFailed');
   }
 }
 </script>

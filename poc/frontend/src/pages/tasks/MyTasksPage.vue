@@ -70,10 +70,10 @@ const setOpen = (id: number | null) => go({ open: id === null ? undefined : Stri
             <span :data-testid="`my-task-open-${task.id}`" @click.stop="setOpen(task.id)">{{ task.title }}</span>
           </q-item-label>
           <q-item-label caption style="overflow-wrap: anywhere">
-            <template v-if="task.record">{{ task.record.accessible ? (task.record.title ?? '') : t('tasks.recordNoAccess') }}</template>
+            <template v-if="task.record">{{ task.record.accessible ? (task.record.title || t('tasks.recordFallback', { id: task.record.recordId })) : t('tasks.recordNoAccess') }}</template>
           </q-item-label>
           <q-item-label caption class="row items-center q-gutter-x-sm">
-            <span>{{ task.assigneeName ?? t('tasks.unassigned') }}</span>
+            <span>{{ task.assigneeName ?? (task.assigneeUserId || t('tasks.unassigned')) }}</span>
             <span v-if="task.dueDate" :class="{ 'text-negative': task.overdue }">{{ task.dueDate }}</span>
             <q-badge outline :color="taskStatusColor(task.status)" :label="t(`tasks.status.${task.status}`)" />
           </q-item-label>

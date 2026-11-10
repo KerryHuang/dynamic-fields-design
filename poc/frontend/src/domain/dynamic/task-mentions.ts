@@ -3,6 +3,8 @@ import type { MentionRef } from './task-types';
 export interface MentionPick {
   userId: string;
   displayName: string;
+  /** Text shown after the "@" when it differs from the display name (two people share one name). */
+  label?: string;
 }
 
 export type MentionSegment =
@@ -16,10 +18,11 @@ const TOKEN = /@\{([A-Za-z0-9._-]{1,50})\}/g;
 
 /** Turns the visible "@display name" of each picked person into the stored "@{userId}". */
 export function encodeMentions(text: string, picked: MentionPick[]): string {
-  const names = picked.filter((p) => p.displayName).sort((a, b) => b.displayName.length - a.displayName.length);
+  const shown = (p: MentionPick) => p.label || p.displayName;
+  const names = picked.filter(shown).sort((a, b) => shown(b).length - shown(a).length);
   if (!names.length) return text;
-  const byName = new Map(names.map((p) => [p.displayName, p.userId]));
-  const pattern = new RegExp(`@(${names.map((p) => escapeRegExp(p.displayName)).join('|')})`, 'g');
+  const byName = new Map(names.map((p) => [shown(p), p.userId]));
+  const pattern = new RegExp(`@(${names.map((p) => escapeRegExp(shown(p))).join('|')})`, 'g');
   return text.replace(pattern, (_m, name: string) => `@{${byName.get(name)}}`);
 }
 
