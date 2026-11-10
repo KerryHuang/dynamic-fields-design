@@ -104,7 +104,7 @@ function goRecord() {
         </q-card-actions>
       </template>
       <template v-else-if="data">
-        <q-card-section class="scroll col" style="max-height: 80vh">
+        <q-card-section class="scroll col" :style="$q.screen.lt.sm ? undefined : 'max-height: 80vh'">
           <div v-if="data.frozen" class="text-caption text-muted q-mb-sm" data-testid="task-frozen">{{ t('tasks.frozen') }}</div>
           <div v-if="data.fromRule" class="text-caption text-muted q-mb-xs">{{ t('tasks.fromRule') }}</div>
           <div v-if="data.ruleDeleted" class="text-caption text-warning q-mb-xs" data-testid="task-rule-deleted">{{ t('tasks.ruleDeleted') }}</div>
