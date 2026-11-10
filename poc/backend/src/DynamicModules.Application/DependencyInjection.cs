@@ -105,6 +105,7 @@ public static class DependencyInjection
         services.AddScoped<Dynamic.DemoService.DemoStructure>();
         services.AddScoped<Dynamic.DeleteService.DeletePlanner>();
         services.AddScoped<Dynamic.DeleteService.ModuleRemover>();
+        services.AddScoped<Dynamic.TaskService.TaskAccess>();
         return services;
     }
 }
