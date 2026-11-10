@@ -76,6 +76,26 @@ public class ApprovalActionTests : ApprovalTestBase
                 new { StageCode = (string?)"board", Status = "skipped", SkipReason = (string?)"condition" });
         ActionsOf(id).Should().Contain(a => a.Action == ApprovalActions.Skip);
         StateOf(r, Inst(id).RecordId).Should().Be(r.Confirmed);
+        Notices("buyer1", NotificationKinds.ApprovalApproved).Should().Be(1);   // 審查測試缺口 7
+    }
+
+    [Fact]
+    public async Task NextAction_UsesInstanceRowVersionFromPreviousResponse()
+    {
+        // 每個動作都用上一次回應的 InstanceRowVersion，不重新讀資料庫（RowVersion 修法的回歸；審查測試缺口 5）
+        var r = await Scenario3();
+        var id = await SubmitAs(r, "buyer1", 150000);
+        As("gm");
+        var first = (ApprovalActionResponse)(await Send(new ApproveTaskRequest(Open(id, "gm").Id, Inst(id).RowVersion, null, null))).Data!;
+        first.InstanceRowVersion.Should().Be(Inst(id).RowVersion);
+        var second = await Send(new ApproveTaskRequest(Open(id, "gm").Id, first.InstanceRowVersion, null, null));
+        second.IsSuccess.Should().BeTrue(Dump(second));
+        var rv2 = ((ApprovalActionResponse)second.Data!).InstanceRowVersion;
+        rv2.Should().Be(Inst(id).RowVersion).And.NotBe(first.InstanceRowVersion);
+        As("buyer2");
+        var last = await Send(new ApproveTaskRequest(Open(id, "buyer2").Id, rv2, null, null));
+        Outcome(last).Should().Be(ApprovalOutcomes.Approved);
+        ((ApprovalActionResponse)last.Data!).InstanceRowVersion.Should().Be(Inst(id).RowVersion);
     }
 
     [Fact]
