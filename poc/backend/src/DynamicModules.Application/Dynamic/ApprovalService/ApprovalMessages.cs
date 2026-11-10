@@ -25,6 +25,7 @@ public static class ApprovalMessages
     public const string PickRange = "自選人數必須符合 1 ≤ 最少 ≤ 最多 ≤ 20";
     public const string DueHours = "逾期時數必須是 1 到 8760";
     public const string OnEmptyInvalid = "找不到人時的處理只能是 fallback 或 skip";
+    public const string OnEmptySkipUnmatched = "這一關的簽核人來源有對不上的群組，找不到人時只能交給備援簽核人，不能跳過";
     public const string EditableFieldInvalid =
         "可編輯欄位必須是本模組表頭、啟用中的欄位，不能是公式、彙總、自動編號、狀態、轉換追溯、分錄沖銷或鎖定帶值的欄位";
 

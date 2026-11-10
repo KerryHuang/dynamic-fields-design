@@ -286,6 +286,27 @@ public class ApprovalSubmitTests : ApprovalTestBase
     }
 
     [Fact]
+    public async Task Submit_PickCandidatesUnmatched_OnEmptySkip_FallbackNotSkipped()
+    {
+        // 審查 M2 重現：定義存成 skip（繞過驗證、例如舊版本）且候選群組對不上 → 仍交給備援，與 D-10 的「由備援簽核人處理」一致
+        var r = await BuildPurchase();
+        await SeedFlow(r, "po-pick", r.Confirmed, 1, Def(null, Stage("it",
+            new ApproverSource(ApprovalSources.InitiatorPick, CandidateGroupIds: [], Min: 1, Max: 1, CandidatesUnmatched: true),
+            onEmpty: ApprovalOnEmpty.Skip)));
+        (await SaveWorkflow(r, [Needs(r.Draft, r.Confirmed), Plain(r.Confirmed, r.Partial), Plain(r.Partial, r.Received),
+            Plain(r.Confirmed, r.Cancelled)])).IsSuccess.Should().BeTrue();
+        await GrantEveryone(r.Module);
+        As("buyer2");
+        var po = await NewPo(r, price: 50000);
+
+        var res = await Submit(po.Id, r.Confirmed);
+        res.IsCreated.Should().BeTrue(Dump(res));
+        var inst = ((SubmitApprovalResponse)res.Data!).InstanceId!.Value;
+        Db.Context.Set<ApprovalInstance>().AsNoTracking().Single(i => i.Id == inst).Status.Should().Be(ApprovalInstanceStatus.Pending);
+        TasksOf(inst).Select(t => (t.AssigneeUserId, t.Reason)).Should().Equal(("admin", ApprovalTaskReason.Fallback));
+    }
+
+    [Fact]
     public async Task Submit_UserField_NotCandidateOrSelf_400()
     {
         var r = await BuildPurchase();

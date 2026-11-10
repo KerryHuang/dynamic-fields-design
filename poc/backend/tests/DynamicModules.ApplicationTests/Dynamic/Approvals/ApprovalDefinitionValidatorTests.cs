@@ -46,6 +46,25 @@ public class ApprovalDefinitionValidatorTests : ApprovalTestBase
     private async Task BuildRig() => _r ??= await BuildPurchase();
 
     [Fact]
+    public async Task OnEmptySkip_SourceUnmatched_400()
+    {
+        // 審查 M2：開啟套件後標成對不上的關卡不能設 skip（不經備援），存檔或啟用時就擋；fallback 可以
+        await BuildRig();
+        ApproverSource[] flagged =
+        [
+            new(ApprovalSources.Group, GroupIds: [BoardGroup], UnmatchedGroups: ["gone"]),
+            new(ApprovalSources.InitiatorPick, CandidateGroupIds: [], Min: 1, Max: 1, CandidatesUnmatched: true),
+            new(ApprovalSources.UserField, FieldId: _r.Owner, CandidateGroupIds: [PurchaseLeadGroup], CandidatesUnmatched: true)
+        ];
+        foreach (var src in flagged)
+        {
+            E(await Validate(Valid(Stage("x", src, onEmpty: ApprovalOnEmpty.Skip))), "stages[0].onEmpty")
+                .Should().Be(ApprovalMessages.OnEmptySkipUnmatched);
+            (await Validate(Valid(Stage("x", src)))).Should().BeEmpty();
+        }
+    }
+
+    [Fact]
     public async Task Shape_Graph_400() =>
         E(await Validate(Valid() with { Shape = "graph" }), "shape").Should().Be(ApprovalMessages.ShapeInvalid);
 

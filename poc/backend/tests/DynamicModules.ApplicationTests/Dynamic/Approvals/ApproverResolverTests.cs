@@ -183,6 +183,34 @@ public class ApproverResolverTests
         one.Seats.Should().BeEmpty();
     }
 
+    [Fact]
+    public void Skip_SourceUnmatched_GoesToFallback_NotSkipped()
+    {
+        // 審查 M2：來源對不上是設定缺漏、不是「解析為空」（設計 §6.5、§14.4），onEmpty = skip 也要交給備援
+        JsonElement? V(string u) => JsonSerializer.SerializeToElement(u);
+        var sources = new[]
+        {
+            new ApproverSource(ApprovalSources.Group, GroupIds: [Board], UnmatchedGroups: ["gone"]),
+            new ApproverSource(ApprovalSources.InitiatorPick, Min: 1, Max: 1, CandidatesUnmatched: true),
+            new ApproverSource(ApprovalSources.UserField, FieldId: OwnerField.Id, CandidateGroupIds: [Finance], CandidatesUnmatched: true)
+        };
+        foreach (var src in sources)
+        {
+            var r = Resolve(Ctx("buyer1", values: new() { ["f_50"] = V("fin1") }), src, onEmpty: ApprovalOnEmpty.Skip);
+            r.AllUnitsEmpty.Should().BeFalse(src.Source);
+            r.Error.Should().BeNull(src.Source);
+            r.Seats.Should().ContainSingle().Which.Should().Match<SeatPlan>(s => s.Reason == ApprovalTaskReason.Fallback && s.UserIds.SequenceEqual(new[] { "admin" }));
+
+            // 沒有備援（備援只有發起人自己）→ 409，不跳關
+            var none = Resolve(Ctx("buyer1", values: new() { ["f_50"] = V("fin1") }), src, onEmpty: ApprovalOnEmpty.Skip,
+                fallback: new ApproverSource(ApprovalSources.Users, UserIds: ["buyer1"]));
+            none.AllUnitsEmpty.Should().BeFalse(src.Source);
+            none.Error.Should().NotBeNull(src.Source);
+        }
+        // 對照：真的解析為空（board 沒有成員）才跳過
+        Resolve(Ctx("buyer1"), Group(Board), onEmpty: ApprovalOnEmpty.Skip).AllUnitsEmpty.Should().BeTrue();
+    }
+
     [Theory]
     [InlineData(ApprovalOnEmpty.Fallback)]
     [InlineData(ApprovalOnEmpty.Skip)]

@@ -45,7 +45,9 @@ public sealed class ApproverResolver(OrgSnapshotLoader org, IPermissionRepositor
         var units = Units(ctx, source).Select(u => (u.Label, Users: Clean(ctx, u.Users))).ToList();
         // 一個單位都沒有（清單空、來源不認得）：不能建出沒有任務的關卡，也不算「全部單位都空」而跳過（fail closed）
         if (units.Count == 0) return new([], false, ApprovalMessages.NoApprover(stage, source.Source));
-        if (units.All(u => u.Users.Count == 0) && onEmpty == ApprovalOnEmpty.Skip) return new([], true, null);
+        // 來源對不上（略過的群組、候選群組失效）是設定缺漏、不是解析為空：一律交給備援，skip 也不跳關（設計 §14.4，審查 M2）
+        var unmatched = source.CandidatesUnmatched || source.UnmatchedGroups is { Count: > 0 };
+        if (units.All(u => u.Users.Count == 0) && onEmpty == ApprovalOnEmpty.Skip && !unmatched) return new([], true, null);
 
         var empty = units.Where(u => u.Users.Count == 0).Select(u => u.Label).ToList();
         var resolved = units.SelectMany(u => u.Users).Distinct(StringComparer.Ordinal).ToList();

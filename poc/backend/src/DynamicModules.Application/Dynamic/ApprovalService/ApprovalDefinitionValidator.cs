@@ -62,6 +62,8 @@ public sealed partial class ApprovalDefinitionValidator(
             if (s.Mode is not (ApprovalModes.All or ApprovalModes.Any)) Err($"{p}.mode", ApprovalMessages.ModeInvalid);
             if (s.DueHours is { } h && h is < 1 or > ApprovalLimits.MaxDueHours) Err($"{p}.dueHours", ApprovalMessages.DueHours);
             if (s.OnEmpty is not (ApprovalOnEmpty.Fallback or ApprovalOnEmpty.Skip)) Err($"{p}.onEmpty", ApprovalMessages.OnEmptyInvalid);
+            else if (s.OnEmpty == ApprovalOnEmpty.Skip && s.Approvers is { } src && (src.CandidatesUnmatched || src.UnmatchedGroups is { Count: > 0 }))
+                Err($"{p}.onEmpty", ApprovalMessages.OnEmptySkipUnmatched);
             if ((s.EditableFields ?? []).Any(id => !fields.TryGetValue(id, out var f) || f.Status != FieldStatus.Active || nonEditable.Contains(id)))
                 Err($"{p}.editableFields", ApprovalMessages.EditableFieldInvalid);
             else if (s.Approvers is not null && (s.EditableFields ?? []).Count > 0
