@@ -31,10 +31,22 @@ public class Workflow : AuditableEntity
     public bool IsLocked(IReadOnlyDictionary<string, JsonElement?> values) => IsReadOnlyState(StateOf(values));
 
     public WorkflowTransition? Find(long from, long to) => Transitions.FirstOrDefault(t => t.From == from && t.To == to);
+
+    /// <summary>From → To 是已定義且需簽核的轉移。</summary>
+    public bool RequiresApproval(long from, long to) => Find(from, to)?.Approval is { Required: true };
+
+    /// <summary>以 to 為目標狀態的所有轉移（入口）。</summary>
+    public IEnumerable<WorkflowTransition> EntriesOf(long to) => Transitions.Where(t => t.To == to);
 }
 
-/// <summary>參與狀態機的選項；ReadOnly 表示處於這個狀態的記錄除了狀態欄位以外都不能改、不能刪。</summary>
-public record WorkflowState(long OptionId, bool ReadOnly = false);
+/// <summary>
+/// 參與狀態機的選項；ReadOnly 表示處於這個狀態的記錄除了狀態欄位以外都不能改、不能刪。
+/// Editable 是設計者標記的可編輯狀態（退回重送），簽核鎖定的延伸到這裡為止（簽核設計 §9.3）。
+/// </summary>
+public record WorkflowState(long OptionId, bool ReadOnly = false, bool Editable = false);
 
-/// <summary>From → To 的轉移；GroupIds 是能推進的群組，空陣列代表有該模組 Edit 權限的人都可以。</summary>
-public record WorkflowTransition(long From, long To, List<long> GroupIds);
+/// <summary>From → To 的轉移；GroupIds 是能推進的群組，空陣列代表有該模組 Edit 權限的人都可以。Approval 不為 null 時是需簽核的設定。</summary>
+public record WorkflowTransition(long From, long To, List<long> GroupIds, TransitionApproval? Approval = null);
+
+/// <summary>轉移的簽核設定；NoMatch 是沒有流程符合時的處理：block（擋下）或 direct（直接轉移）。</summary>
+public record TransitionApproval(bool Required, string NoMatch = "block");

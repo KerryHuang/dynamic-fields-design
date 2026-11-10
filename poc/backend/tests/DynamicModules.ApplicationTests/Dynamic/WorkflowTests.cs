@@ -87,6 +87,21 @@ public class WorkflowTests : DesignerTestBase
     }
 
     [Fact]
+    public async Task Workflow_OldJson_ReadsWithDefaults()
+    {
+        var w = await Build();
+        var id = Db.Context.Set<Workflow>().AsNoTracking().Single().Id;
+        await Db.Context.Database.ExecuteSqlRawAsync(
+            "UPDATE Dynamic_Workflow SET States = {0}, Transitions = {1} WHERE Id = {2}",
+            $"[{{\"optionId\":{w.Draft},\"readOnly\":false}}]", $"[{{\"from\":{w.Draft},\"to\":{w.Approved},\"groupIds\":[]}}]", id);
+
+        var wf = Db.Context.Set<Workflow>().AsNoTracking().Single(x => x.Id == id);
+
+        wf.States.Should().ContainSingle().Which.Editable.Should().BeFalse();
+        wf.Transitions.Should().ContainSingle().Which.Approval.Should().BeNull();
+    }
+
+    [Fact]
     public async Task Get_WithoutWorkflow_NotFound()
     {
         await Build(save: false);

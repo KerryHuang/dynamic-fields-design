@@ -21,6 +21,17 @@ internal static class JsonConversions
                 v => JsonSerializer.Deserialize<T>(Serialize(v), Options)!))
             .IsRequired();
 
+    /// <summary>沒有無參數建構式的型別（例如 positional record）：必填，讀到 null 時丟例外，不默默給空值。</summary>
+    public static PropertyBuilder<T> HasJsonRecordConversion<T>(this PropertyBuilder<T> builder) where T : class =>
+        builder.HasConversion(
+            v => Serialize(v),
+            v => DeserializeRequired<T>(v),
+            new ValueComparer<T>(
+                (a, b) => Serialize(a) == Serialize(b),
+                v => Serialize(v).GetHashCode(),
+                v => JsonSerializer.Deserialize<T>(Serialize(v), Options)!))
+            .IsRequired();
+
     public static PropertyBuilder<T?> HasJsonNullableConversion<T>(this PropertyBuilder<T?> builder) where T : class =>
         builder.HasConversion(
             v => v == null ? null : Serialize(v),
@@ -31,6 +42,9 @@ internal static class JsonConversions
                 v => v == null ? null : JsonSerializer.Deserialize<T>(Serialize(v), Options)));
 
     private static string Serialize<T>(T? value) => JsonSerializer.Serialize(value, Options);
+
+    private static T DeserializeRequired<T>(string json) where T : class =>
+        JsonSerializer.Deserialize<T>(json, Options) ?? throw new InvalidOperationException($"{typeof(T).Name} 不能是 null");
 
     public static void ConfigureAudit<T>(this EntityTypeBuilder<T> b) where T : Entities.Dynamic.AuditableEntity
     {

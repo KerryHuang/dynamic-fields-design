@@ -159,6 +159,54 @@ public class SchemaTests
         await act.Should().ThrowAsync<DbUpdateException>();
     }
 
+    [Fact]
+    public async Task Schema_HasApprovalTables()
+    {
+        await using var db = await SqliteTestDb.CreateAsync();
+
+        var tables = await db.Context.Database
+            .SqlQueryRaw<string>("SELECT name AS Value FROM sqlite_master WHERE type = 'table'")
+            .ToListAsync();
+        var pendingIndex = await db.Context.Database
+            .SqlQueryRaw<string>("SELECT sql AS Value FROM sqlite_master WHERE type = 'index' AND name = 'IX_Dynamic_ApprovalInstance_RecordId'")
+            .ToListAsync();
+
+        tables.Should().Contain([
+            "Dynamic_ApprovalFlow", "Dynamic_ApprovalFlowVersion", "Dynamic_ApprovalInstance", "Dynamic_ApprovalInstanceFlow",
+            "Dynamic_ApprovalStageRun", "Dynamic_ApprovalTask", "Dynamic_ApprovalAction", "Dynamic_ApprovalDelegate"
+        ]);
+        pendingIndex.Should().ContainSingle().Which.Should().Contain("WHERE");
+    }
+
+    [Fact]
+    public async Task TwoPendingInstances_SameRecord_Rejected()
+    {
+        await using var db = await SqliteTestDb.CreateAsync();
+        db.Context.Set<ApprovalInstance>().Add(Instance(ApprovalInstanceStatus.Pending));
+        db.Context.Set<ApprovalInstance>().Add(Instance(ApprovalInstanceStatus.Approved));
+        await db.Context.SaveChangesAsync();
+
+        db.Context.Set<ApprovalInstance>().Add(Instance(ApprovalInstanceStatus.Pending));
+        var act = () => db.Context.SaveChangesAsync();
+
+        await act.Should().ThrowAsync<DbUpdateException>();
+    }
+
+    private static ApprovalInstance Instance(string status) => new()
+    {
+        RecordId = 1,
+        ModuleId = 1,
+        RouteKind = ApprovalRouteKind.Flow,
+        FromOptionId = 1,
+        ToOptionId = 2,
+        InitiatorUserId = "emp1",
+        Status = status,
+        TitleSnapshot = "x",
+        SubmittedTime = new DateTime(2026, 11, 4, 1, 0, 0),
+        RowVersion = Guid.NewGuid().ToString(),
+        OperationId = Guid.NewGuid().ToString("N")
+    };
+
     private static TaskItem RuleTask(int occurrence) => new()
     {
         Title = "x",
