@@ -147,6 +147,20 @@ public class ApprovalSubmitTests : ApprovalTestBase
     }
 
     [Fact]
+    public async Task Submit_Twice_SameStaleRowVersion_SecondAlreadyPending()
+    {
+        // 兩個分頁拿同一個記錄版本先後送出：第二個要回「已在簽核中」，不是「資料已被修改」（設計 §8.4；審查必修 2）
+        var r = await Scenario3();
+        As("buyer1");
+        var po = await NewPo(r, price: 50000);
+        var stale = Rec(po.Id).Row.RowVersion;
+        (await Submit(po.Id, r.Confirmed, rowVersion: stale)).IsCreated.Should().BeTrue();
+        var again = await Submit(po.Id, r.Confirmed, rowVersion: stale);
+        again.IsConflict.Should().BeTrue();
+        again.Message.Should().Be(ApprovalMessages.AlreadyPending);
+    }
+
+    [Fact]
     public async Task Submit_InitiatorPick_InvalidPicks_400()
     {
         var r = await BuildPurchase();

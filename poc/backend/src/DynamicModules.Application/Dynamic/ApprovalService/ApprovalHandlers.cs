@@ -32,6 +32,8 @@ public class SubmitApprovalHandler(
         var access = await guard.AuthorizeAsync(module, PermissionAction.Edit, ct);
         if (access.Permissions is not { } perms) return access.Denied!;
         if (perms.OwnerUserIds is not null && !perms.OwnerUserIds.Contains(record.OwnerUserId)) return ServiceResult.NotFound(RecordMapper.RecordNotFound);
+        // 先查「已在簽核中」再比對版本：並發送出的第二個請求讀到的是第一個換過的版本（設計 §8.4）
+        if (await instances.GetPendingByRecordAsync(record.Id, ct) is not null) return ServiceResult.Conflict(ApprovalMessages.AlreadyPending);
         if (record.RowVersion != request.RecordRowVersion) return ServiceResult.Conflict(RecordMapper.Stale);
         if (ApprovalActionRules.CommentError(request.Comment, required: false) is { } commentError)
             return ServiceResult.Invalid(new Dictionary<string, string[]> { ["comment"] = [commentError] });
@@ -49,7 +51,6 @@ public class SubmitApprovalHandler(
             if (inputs is null || !(inputs.User.IsSystemAdmin || inputs.GroupIds.Any(transition.GroupIds.Contains)))
                 return ServiceResult.Invalid(Bad(WorkflowEnforcer.NotPermittedMessage));
         }
-        if (await instances.GetPendingByRecordAsync(record.Id, ct) is not null) return ServiceResult.Conflict(ApprovalMessages.AlreadyPending);
 
         var snapshot = (await flows.ListCurrentByModuleAsync(module.Id, ct)).Where(f => f.Flow.ToOptionId == request.To)
             .Select(f => new FlowSnapshotEntry(f.Flow.Id, f.Flow.CurrentVersionId!.Value, f.Flow.Priority, f.Flow.Active, f.Flow.NameI18n, f.Definition))
