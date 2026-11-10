@@ -229,17 +229,21 @@ public abstract class ApprovalTestBase : EffectsTestBase, IAsyncLifetime
     protected async Task<DynamicRecordResponse> NewPo(PurchaseRig r, decimal qty = 1, decimal price = 1000, string title = "單據",
         Dictionary<string, JsonElement?>? extra = null)
     {
-        var values = new Dictionary<string, JsonElement?> { [$"f_{(await Detail(r.Module)).TitleFieldId}"] = JsonSerializer.SerializeToElement(title) };
+        var values = new Dictionary<string, JsonElement?> { [$"f_{TitleId(r.Module)}"] = JsonSerializer.SerializeToElement(title) };
         foreach (var (k, v) in extra ?? []) values[k] = v;
         var line = new DetailRowInput(null, new Dictionary<string, JsonElement?>
         {
-            [$"f_{(await Detail(r.Line)).TitleFieldId}"] = JsonSerializer.SerializeToElement("明細"),
+            [$"f_{TitleId(r.Line)}"] = JsonSerializer.SerializeToElement("明細"),
             [$"f_{r.LineQty}"] = JsonSerializer.SerializeToElement(qty), [$"f_{r.LinePrice}"] = JsonSerializer.SerializeToElement(price)
         }, null);
         var res = await Send(new CreateRecordRequest(r.Module, values, null, new() { [r.Line] = [line] }));
         res.IsCreated.Should().BeTrue(res.Message + string.Join(";", res.Errors.Select(e => e.Key + e.Value[0])));
         return (DynamicRecordResponse)res.Data!;
     }
+
+    /// <summary>模組的標題欄位 Id（直接讀 Db，不受目前使用者的設計器權限影響）。</summary>
+    protected long TitleId(string moduleKey) =>
+        Db.Context.Set<Module>().AsNoTracking().Single(m => m.Key == moduleKey).TitleFieldId!.Value;
 
     /// <summary>直接讀資料庫的記錄（不追蹤）與值。</summary>
     protected (Record Row, Dictionary<string, JsonElement?> Values) Rec(long id)

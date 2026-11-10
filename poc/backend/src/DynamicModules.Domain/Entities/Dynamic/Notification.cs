@@ -23,4 +23,15 @@ public static class NotificationKinds
     public const string TaskOverdue = "taskOverdue";
     public const string TaskCompleted = "taskCompleted";
     public const string TaskCancelled = "taskCancelled";
+    public const string ApprovalPending = "approvalPending";
+    public const string ApprovalTransferred = "approvalTransferred";
+    public const string ApprovalAddSigned = "approvalAddSigned";
+    public const string ApprovalRejected = "approvalRejected";
+    public const string ApprovalReturned = "approvalReturned";
+    public const string ApprovalApproved = "approvalApproved";
+    public const string ApprovalWithdrawn = "approvalWithdrawn";
+    public const string ApprovalCancelled = "approvalCancelled";
+    public const string ApprovalRerouted = "approvalRerouted";
+    public const string ApprovalOverdue = "approvalOverdue";
+    public const string ApprovalAdminAlert = "approvalAdminAlert";
 }
