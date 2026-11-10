@@ -3,6 +3,7 @@ using DynamicModules.Application.Dynamic.DemoService.Commands.GenerateDemoData;
 using DynamicModules.Application.Dynamic.OrganizationService;
 using DynamicModules.Domain.Entities.Dynamic;
 using DynamicModules.Domain.Organization;
+using DynamicModules.Persistence.Seed;
 using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
@@ -66,6 +67,22 @@ public class DemoOrganizationSetupTests : DesignerTestBase
     {
         (await Db.Context.Set<Department>().AsNoTracking().CountAsync()).Should().Be(0);
         (await Db.Context.Set<UserDepartment>().AsNoTracking().CountAsync()).Should().Be(0);
+    }
+
+    [Fact]
+    public async Task EnsureOrganization_CalledTwice_NoDuplicates()
+    {
+        var at = new DateTime(2026, 11, 4, 9, 0, 0);
+        await DemoPeople.EnsureOrganizationAsync(Db.Context, at);
+        var departments = await Db.Context.Set<Department>().AsNoTracking().CountAsync();
+        var members = await Db.Context.Set<UserDepartment>().AsNoTracking().CountAsync();
+
+        await DemoPeople.EnsureOrganizationAsync(Db.Context, at);
+
+        departments.Should().Be(5);
+        members.Should().Be(11);
+        (await Db.Context.Set<Department>().AsNoTracking().CountAsync()).Should().Be(departments);
+        (await Db.Context.Set<UserDepartment>().AsNoTracking().CountAsync()).Should().Be(members);
     }
 
     [Fact]

@@ -63,4 +63,33 @@ public class ManagerChainTests
 
     [Fact]
     public void Level3_ReachesRoot() => ManagerChain.Resolve(Org(), "emp3", 3).Should().Be("gm");
+
+    [Fact]
+    public void CyclicData_TreatedAsNotFound_AndTerminates()
+    {
+        // 資料成環（A↔B 互為上級），兩邊都沒有可用主管：走完環就停，回 null
+        var org = new OrgSnapshot(
+            new Dictionary<long, OrgDepartment> { [1] = new(1, 2, null, true), [2] = new(2, 1, null, true) },
+            new Dictionary<string, long> { ["emp"] = 1 },
+            new HashSet<string> { "emp" });
+
+        var result = Record.Exception(() =>
+        {
+            for (var level = 1; level <= 5; level++) ManagerChain.Resolve(org, "emp", level).Should().BeNull();
+        });
+
+        result.Should().BeNull();
+    }
+
+    [Fact]
+    public void CyclicData_ManagerFoundBeforeLoop_StillResolves_NextLevelNull()
+    {
+        var org = new OrgSnapshot(
+            new Dictionary<long, OrgDepartment> { [1] = new(1, 2, "mgrB", true), [2] = new(2, 1, null, true) },
+            new Dictionary<string, long> { ["emp"] = 1, ["mgrB"] = 2 },
+            new HashSet<string> { "emp", "mgrB" });
+
+        ManagerChain.Resolve(org, "emp", 1).Should().Be("mgrB");
+        ManagerChain.Resolve(org, "emp", 2).Should().BeNull();
+    }
 }
