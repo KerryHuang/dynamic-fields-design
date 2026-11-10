@@ -30,7 +30,7 @@ public class TransactionBehaviorTests
     public async Task Success_Commits()
     {
         var log = new List<string>();
-        var b = new TransactionBehavior<WriteCommand, ServiceResult>(new FakeManager(log));
+        var b = new TransactionBehavior<WriteCommand, ServiceResult>(new FakeManager(log), new AfterCommitActions(Microsoft.Extensions.Logging.Abstractions.NullLogger<AfterCommitActions>.Instance));
         await b.Handle(new WriteCommand(), () => Task.FromResult(ServiceResult.Success()), CancellationToken.None);
         log.Should().Equal("begin", "commit");
     }
@@ -39,7 +39,7 @@ public class TransactionBehaviorTests
     public async Task FailureResult_RollsBack()
     {
         var log = new List<string>();
-        var b = new TransactionBehavior<WriteCommand, ServiceResult>(new FakeManager(log));
+        var b = new TransactionBehavior<WriteCommand, ServiceResult>(new FakeManager(log), new AfterCommitActions(Microsoft.Extensions.Logging.Abstractions.NullLogger<AfterCommitActions>.Instance));
         await b.Handle(new WriteCommand(), () => Task.FromResult(ServiceResult.Conflict("x")), CancellationToken.None);
         log.Should().Equal("begin", "rollback");
     }
@@ -48,7 +48,7 @@ public class TransactionBehaviorTests
     public async Task Exception_RollsBackAndRethrows()
     {
         var log = new List<string>();
-        var b = new TransactionBehavior<WriteCommand, ServiceResult>(new FakeManager(log));
+        var b = new TransactionBehavior<WriteCommand, ServiceResult>(new FakeManager(log), new AfterCommitActions(Microsoft.Extensions.Logging.Abstractions.NullLogger<AfterCommitActions>.Instance));
         var act = () => b.Handle(new WriteCommand(), () => throw new InvalidOperationException("boom"), CancellationToken.None);
         await act.Should().ThrowAsync<InvalidOperationException>();
         log.Should().Equal("begin", "rollback");
@@ -58,7 +58,7 @@ public class TransactionBehaviorTests
     public async Task UnmarkedRequest_SkipsTransaction()
     {
         var log = new List<string>();
-        var b = new TransactionBehavior<ReadQuery, ServiceResult>(new FakeManager(log));
+        var b = new TransactionBehavior<ReadQuery, ServiceResult>(new FakeManager(log), new AfterCommitActions(Microsoft.Extensions.Logging.Abstractions.NullLogger<AfterCommitActions>.Instance));
         await b.Handle(new ReadQuery(), () => Task.FromResult(ServiceResult.Success()), CancellationToken.None);
         log.Should().BeEmpty();
     }

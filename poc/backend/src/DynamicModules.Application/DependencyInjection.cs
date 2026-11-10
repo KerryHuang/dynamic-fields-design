@@ -26,6 +26,7 @@ public static class DependencyInjection
         services.AddValidatorsFromAssembly(assembly);
         services.AddSingleton<Common.Security.LoginThrottle>();
         services.AddScoped<Common.IWriteJournal, Common.WriteJournal>();
+        services.AddScoped<Common.AfterCommitActions>();
         services.AddScoped<Common.IOperationContext, Common.OperationContext>();
         services.AddScoped<ISystemIdentity, SystemIdentity>();
         services.AddScoped<FieldLocks>();

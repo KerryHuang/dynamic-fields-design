@@ -67,7 +67,12 @@ internal static class TaskViews
         IReadOnlyList<TaskAttachmentResponse> attachments = c.Withdrawn
             ? []
             : c.Attachments.OrderBy(a => a.Id).Select(a => new TaskAttachmentResponse(a.Id, a.FileName, a.ContentType, a.Size)).ToList();
-        JsonElement? data = c.SystemData is null ? null : JsonDocument.Parse(c.SystemData).RootElement.Clone();
+        JsonElement? data = null;
+        if (c.SystemData is not null)
+        {
+            using var doc = JsonDocument.Parse(c.SystemData);
+            data = doc.RootElement.Clone();
+        }
         return new TaskCommentResponse(c.Id, c.Kind, c.AuthorUserId, author?.DisplayName, c.Withdrawn ? null : c.Body,
             c.Withdrawn, c.SystemEvent, data, c.CreatedTime, mentions, attachments, canWithdraw && human && !c.Withdrawn);
     }

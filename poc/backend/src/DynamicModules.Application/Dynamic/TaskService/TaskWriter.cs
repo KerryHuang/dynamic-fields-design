@@ -116,7 +116,7 @@ public sealed class TaskWriter(ICurrentUser user, IBusinessTime time, ITaskRepos
     }
 
     /// <summary>人寫的留言：內文 @ 到的啟用中使用者加為 Mentioned 參與者，記 Mentioned（每人一筆）與 Commented（帶被 @ 的清單）。</summary>
-    public Task<TaskComment> AddCommentAsync(TaskItem task, string body, IReadOnlySet<string> activeUserIds,
+    public async Task<TaskComment> AddCommentAsync(TaskItem task, string body, IReadOnlySet<string> activeUserIds,
         IReadOnlyList<TaskCommentAttachment> attachments, CancellationToken ct)
     {
         var actor = user.UserId;
@@ -126,13 +126,18 @@ public sealed class TaskWriter(ICurrentUser user, IBusinessTime time, ITaskRepos
         };
         task.Comments.Add(comment);
         var mentioned = TaskMentions.UserIds(body).Where(activeUserIds.Contains).ToList();
+        // 參與者以資料庫為準：另一個請求可能在這個請求讀到任務之後才把同一個人寫成 Mentioned，存在就略過，不撞主鍵
+        var stored = task.Id == 0
+            ? new HashSet<string>()
+            : (await tasks.ListParticipantsAsync(task.Id, ct))
+                .Where(p => p.Reason == TaskParticipantReason.Mentioned).Select(p => p.UserId).ToHashSet(StringComparer.Ordinal);
         foreach (var id in mentioned)
         {
-            AddParticipant(task, id, TaskParticipantReason.Mentioned);
+            if (!stored.Contains(id)) AddParticipant(task, id, TaskParticipantReason.Mentioned);
             _pending.Add(new TaskChange(TaskChangeKind.Mentioned, task, actor, id));
         }
         _pending.Add(new TaskChange(TaskChangeKind.Commented, task, actor, null, mentioned));
-        return Task.FromResult(comment);
+        return comment;
     }
 
     /// <summary>撤回：內文保留在資料庫，回應時不再輸出。</summary>

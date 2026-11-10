@@ -29,6 +29,9 @@ public sealed record GetTaskCommentsRequest(long TaskId) : IRequest<ServiceResul
 public sealed record AddTaskCommentRequest(long TaskId, string Body, IReadOnlyList<CommentFileUpload> Files)
     : IRequest<ServiceResult>, ITransactionalRequest;
 
+/// <summary>帶附件的留言在收進主體之前的資格檢查：看不到或不存在 404、凍結 409，其餘成功。</summary>
+public sealed record CheckTaskCommentUploadRequest(long TaskId) : IRequest<ServiceResult>;
+
 /// <summary>Content 由呼叫端（控制器）負責釋放。</summary>
 public sealed record CommentFileUpload(Stream Content, string? FileName, string? ContentType);
 

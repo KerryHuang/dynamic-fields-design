@@ -130,6 +130,9 @@ public class TaskCommentAttachmentsApiTests : IDisposable
 
         res.StatusCode.Should().Be(HttpStatusCode.Conflict);
         (await JsonOf(res)).GetProperty("message").GetString().Should().StartWith("此環境已停用附件上傳");
+        DiskFiles().Should().BeEmpty();
+        var list = await JsonOf(await Admin.GetAsync($"{Base}/tasks/{id}/comments"));
+        list.EnumerateArray().Should().OnlyContain(c => c.GetProperty("kind").GetString() == "system", "沒有新增留言列");
         // 只有文字的留言照常可以
         (await Admin.PostAsJsonAsync($"{Base}/tasks/{id}/comments", new { body = "純文字" })).StatusCode.Should().Be(HttpStatusCode.Created);
     }
@@ -241,5 +244,125 @@ public class TaskCommentAttachmentsApiTests : IDisposable
         var swept = await JsonOf(await Admin.PostAsync($"{Base}/attachments/sweep?graceMinutes=0", null));
         swept.GetProperty("deleted").GetInt32().Should().Be(1);
         DiskFiles().Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task Comment_BodyOverLimit_413()
+    {
+        var id = await NewTask();
+        var limit = 1024 * 5 + 64 * 1024;
+
+        var res = await Post(id, Form("太大", File("big.png", limit + 1)));
+
+        res.StatusCode.Should().Be(HttpStatusCode.RequestEntityTooLarge);
+        DiskFiles().Should().BeEmpty();
+    }
+
+    /// <summary>看不到任務、任務不存在、任務凍結時，在收進主體之前就拒絕（主體故意寫壞：讀了主體會是 400）。</summary>
+    [Fact]
+    public async Task Upload_AccessCheckedBeforeBody()
+    {
+        var id = await NewTask(_app.AsUser("sales01"));
+        static HttpContent Broken()
+        {
+            var c = new StringContent("--這不是 multipart--");
+            c.Headers.ContentType = MediaTypeHeaderValue.Parse("multipart/form-data; boundary=zzz");
+            return c;
+        }
+
+        var hidden = await _app.AsUser("sales02").PostAsync($"{Base}/tasks/{id}/comments", Broken());
+        var missing = await Admin.PostAsync($"{Base}/tasks/{id + 1000}/comments", Broken());
+
+        hidden.StatusCode.Should().Be(HttpStatusCode.NotFound);
+        (await JsonOf(hidden)).GetProperty("message").GetString().Should().Be("找不到任務");
+        missing.StatusCode.Should().Be(HttpStatusCode.NotFound);
+        (await JsonOf(missing)).GetProperty("message").GetString().Should().Be("找不到任務");
+    }
+
+    private async Task<(string Module, long TaskId)> NewRecordTask()
+    {
+        var module = await CreateModule(Admin);
+        await Activate(Admin, module);
+        var title = await TitleKey(Admin, module);
+        var record = await JsonOf(await Admin.PostAsJsonAsync($"{Base}/modules/{module}/records",
+            new { values = new Dictionary<string, object> { [title] = "案件甲" } }));
+        return (module, await NewTask(recordPath: $"{Base}/records/{record.GetProperty("id").GetInt64()}/tasks"));
+    }
+
+    private void CloseModule(string module)
+    {
+        using var scope = _app.Services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<DynamicDbContext>();
+        var m = db.Set<Module>().Single(x => x.Key == module);
+        m.Status = ModuleStatus.Closed;
+        db.SaveChanges();
+    }
+
+    [Fact]
+    public async Task Upload_FrozenTask_409BeforeBody()
+    {
+        var (module, id) = await NewRecordTask();
+        CloseModule(module);
+        var broken = new StringContent("--x--");
+        broken.Headers.ContentType = MediaTypeHeaderValue.Parse("multipart/form-data; boundary=zzz");
+
+        var res = await Admin.PostAsync($"{Base}/tasks/{id}/comments", broken);
+
+        res.StatusCode.Should().Be(HttpStatusCode.Conflict);
+    }
+
+    [Fact]
+    public async Task ClosedModule_StillDownloads()
+    {
+        var (module, id) = await NewRecordTask();
+        var comment = await PostOk(id, Form("x", File("a.png", 3)));
+        CloseModule(module);
+
+        var res = await Download(Admin, id, comment.GetProperty("id").GetInt64(), comment.GetProperty("attachments")[0].GetProperty("id").GetInt64());
+
+        res.StatusCode.Should().Be(HttpStatusCode.OK);
+        (await res.Content.ReadAsByteArrayAsync()).Should().HaveCount(3);
+    }
+
+    /// <summary>拿別的任務／別的留言的附件 id 走這個任務的路徑：一律 404「找不到附件」，不洩漏附件在別處存在。</summary>
+    [Fact]
+    public async Task Download_CrossTaskOrCommentIds_404()
+    {
+        var sales = _app.AsUser("sales01");
+        var a = await NewTask();                       // admin 的任務 A，sales01 看不到
+        var b = await NewTask(sales);                  // sales01 的任務 B
+        var ca = await PostOk(a, Form("A 的檔", File("a.png")));
+        var cb = await PostOk(b, Form("B 的檔", File("b.png")), sales);
+        var cb2 = await PostOk(b, Form("B 的第二則", File("c.png")), sales);
+        long Cid(JsonElement c) => c.GetProperty("id").GetInt64();
+        long Aid(JsonElement c) => c.GetProperty("attachments")[0].GetProperty("id").GetInt64();
+
+        var crossTask = await Download(sales, b, Cid(ca), Aid(ca));
+        var crossComment = await Download(sales, b, Cid(cb), Aid(cb2));
+
+        foreach (var res in new[] { crossTask, crossComment })
+        {
+            res.StatusCode.Should().Be(HttpStatusCode.NotFound);
+            (await JsonOf(res)).GetProperty("message").GetString().Should().Be("找不到附件");
+        }
+        (await Download(sales, b, Cid(cb2), Aid(cb2))).StatusCode.Should().Be(HttpStatusCode.OK);
+    }
+
+    /// <summary>兩則留言同時 @ 同一個還不是參與者的人：都不得回 500，參與者只有一列（檔案型資料庫，真正併發）。</summary>
+    [Fact]
+    public async Task ConcurrentMentions_SameNewUser_No500()
+    {
+        using var app = new TestApp(fileDatabase: true);
+        app.Settings["Logging:LogLevel:Default"] = "Warning";
+        var admin = app.AsUser();
+        var id = (await JsonOf(await admin.PostAsJsonAsync($"{Base}/tasks", new { title = "併發 @" }))).GetProperty("id").GetInt64();
+        var clients = Enumerable.Range(0, 6).Select(_ => app.AsUser()).ToArray();
+
+        var results = await Task.WhenAll(clients.Select((c, i) => c.PostAsJsonAsync($"{Base}/tasks/{id}/comments", new { body = $"第 {i} 則 @{{floor01}}" })));
+
+        results.Select(r => r.StatusCode).Should().OnlyContain(s => s == HttpStatusCode.Created || s == HttpStatusCode.ServiceUnavailable);
+        using var scope = app.Services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<DynamicDbContext>();
+        db.Set<TaskParticipant>().Count(p => p.TaskId == id && p.UserId == "floor01").Should().Be(1);
     }
 }

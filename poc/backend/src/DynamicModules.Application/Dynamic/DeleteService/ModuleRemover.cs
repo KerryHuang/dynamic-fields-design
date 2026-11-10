@@ -1,3 +1,4 @@
+using DynamicModules.Application.Common;
 using DynamicModules.Application.Dynamic.AttachmentService;
 using DynamicModules.Application.Dynamic.EventService;
 using DynamicModules.Domain.Repositories.Dynamic;
@@ -11,7 +12,7 @@ namespace DynamicModules.Application.Dynamic.DeleteService;
 public class ModuleRemover(
     IModuleRepository modules, IRecordRepository records, IDeletionRepository deletion, IConversionRepository conversions,
     IEventRepository events, ICheckRepository checks, ILedgerRepository ledgers, ITaskRepository tasks, IAttachmentStore store,
-    IUnitOfWork uow)
+    AfterCommitActions afterCommit, IUnitOfWork uow)
 {
     public async Task RemoveAsync(long moduleId, CancellationToken ct)
     {
@@ -32,7 +33,7 @@ public class ModuleRemover(
         // 事後條件：讀已提交的資料庫上，檢查與清除之間可能有人寫入
         if (await records.AnyByModuleAsync(moduleId, ct))
             throw new InvalidOperationException("刪除模組後仍有記錄，已回滾");
-        // 任務留言附件的檔案：盡力而為；外層交易之後若回滾，資料列還在但檔案沒了，下載只會回找不到附件
-        foreach (var key in taskFiles) store.Delete(key);
+        // 任務留言附件的檔案：等最外層交易提交後才刪（DeleteApp 後面的模組失敗回滾時檔案還在）；單檔失敗只記 log，留給清掃
+        foreach (var key in taskFiles) afterCommit.Add($"刪除任務留言附件 {key}", () => store.Delete(key));
     }
 }

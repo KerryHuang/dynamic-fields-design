@@ -27,6 +27,19 @@ public class GetTaskCommentsHandler(ITaskRepository tasks, TaskAccess access, IP
     }
 }
 
+public class CheckTaskCommentUploadHandler(ITaskRepository tasks, TaskAccess access)
+    : IRequestHandler<CheckTaskCommentUploadRequest, ServiceResult>
+{
+    public async Task<ServiceResult> Handle(CheckTaskCommentUploadRequest request, CancellationToken ct)
+    {
+        var task = await tasks.GetAsync(request.TaskId, ct);
+        if (task is null) return ServiceResult.NotFound(TaskMessages.NotFound);
+        var p = await access.EvaluateAsync(task, ct);
+        if (!p.CanSee) return ServiceResult.NotFound(TaskMessages.NotFound);
+        return p.Frozen ? ServiceResult.Conflict(ModuleGate.ClosedMessage) : ServiceResult.Success();
+    }
+}
+
 /// <summary>
 /// 留言（可帶附件，與留言同一個請求）。順序：任務 404 → 凍結 409 → 文字與附件都空 400 → 附件超過 5 個 → 逐檔檢查檔名與副檔名 →
 /// 逐檔寫入（超過大小上限 400）。檔案先寫、資料列後寫：之後任何失敗都把這次寫入的檔案刪掉，不留孤兒。

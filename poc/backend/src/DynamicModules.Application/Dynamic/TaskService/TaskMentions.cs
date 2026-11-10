@@ -8,7 +8,7 @@ public static partial class TaskMentions
     [GeneratedRegex(@"@\{([A-Za-z0-9._\-]{1,50})\}")]
     private static partial Regex Pattern();
 
-    /// <summary>依出現順序去重。</summary>
+    /// <summary>依出現順序去重；帳號一律小寫儲存，所以轉成小寫再比對（<c>@{Sales01}</c> 就是 sales01）。</summary>
     public static IReadOnlyList<string> UserIds(string body) =>
-        Pattern().Matches(body).Select(m => m.Groups[1].Value).Distinct(StringComparer.Ordinal).ToList();
+        Pattern().Matches(body).Select(m => m.Groups[1].Value.ToLowerInvariant()).Distinct(StringComparer.Ordinal).ToList();
 }

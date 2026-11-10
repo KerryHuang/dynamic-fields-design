@@ -85,6 +85,26 @@ public class TaskQueryTests : TaskTestBase
         body.Items[1].Record.Should().Be(new TaskRecordRef(true, t.Key, rec, "案件甲", false));
     }
 
+    /// <summary>
+    /// 記錄任務列表的權限過濾：看得到記錄、但不是參與者的人（sales-manager，只有 Read、範圍 All）看得到記錄上全部任務，
+    /// 但不能改；過濾只濾掉看不到的，不多濾。
+    /// </summary>
+    [Fact]
+    public async Task RecordTasks_ReadOnlyViewer_SeesAllTasks_CannotEdit()
+    {
+        var t = await BuildTarget();
+        var rec = await NewRecord(t, "sales01");
+        await SeedTask(title: "甲", createdBy: "admin", assignee: "sales01", target: t, recordId: rec, due: D(11, 9));
+        await SeedTask(title: "乙", createdBy: "sales02", target: t, recordId: rec, due: D(11, 5));
+
+        As("manager01");
+        var body = (RecordTasksResponse)(await Send(new GetRecordTasksRequest(rec))).Data!;
+
+        body.Items.Select(i => i.Title).Should().Equal("乙", "甲");
+        body.Items.Should().OnlyContain(i => !i.CanEdit);
+        body.CanAdd.Should().BeTrue();
+    }
+
     [Fact]
     public async Task GetTask_InvisibleAndMissing_SameNotFound()
     {

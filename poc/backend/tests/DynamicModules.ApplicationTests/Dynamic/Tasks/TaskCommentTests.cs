@@ -61,6 +61,41 @@ public class TaskCommentTests : TaskTestBase
         TaskMentions.UserIds("嗨 @{sales01} 與 @{sales02}，@{sales01}").Should().Equal("sales01", "sales02");
         TaskMentions.UserIds("@{} @{a b} @sales01 @{x").Should().BeEmpty();
         TaskMentions.UserIds("@{" + new string('a', 51) + "}").Should().BeEmpty();
+        // 帳號一律小寫儲存：解析時正規化成小寫，大小寫不同視為同一人
+        TaskMentions.UserIds("@{Sales01} @{SALES01} @{sales02}").Should().Equal("sales01", "sales02");
+    }
+
+    [Fact]
+    public async Task Comment_MentionUpperCase_MatchesUser()
+    {
+        var task = await SeedTask(createdBy: "sales01");
+
+        As("sales01");
+        var created = await MustComment(task.Id, "請 @{Floor01} 確認");
+
+        created.Mentions.Should().Equal(new MentionRef("floor01", "現場人員", true));
+        (await Load(task.Id)).Participants.Should().ContainSingle(p => p.UserId == "floor01" && p.Reason == TaskParticipantReason.Mentioned);
+        _notifier.Changes.Should().ContainSingle(c => c.Kind == TaskChangeKind.Mentioned && c.UserId == "floor01");
+    }
+
+    /// <summary>
+    /// 併發情境的重現：這個請求讀到任務之後、提交之前，另一個請求已經把同一個人寫成 Mentioned 參與者。
+    /// 寫入參與者時以資料庫為準，存在就略過，不得撞主鍵。
+    /// </summary>
+    [Fact]
+    public async Task Comment_MentionedRowAddedConcurrently_NoConflict()
+    {
+        var task = await SeedTask(createdBy: "sales01");
+        As("sales01");
+        var tracked = (await Svc<DynamicModules.Domain.Repositories.Dynamic.ITaskRepository>().GetAsync(task.Id, default))!;
+        await Db.Context.Database.ExecuteSqlRawAsync(
+            "INSERT INTO Dynamic_TaskParticipant (TaskId, UserId, Reason) VALUES ({0}, 'floor01', 'Mentioned')", task.Id);
+
+        var writer = Svc<TaskWriter>();
+        await writer.AddCommentAsync(tracked, "@{floor01} 看一下", new HashSet<string> { "floor01", "sales01" }, [], default);
+        await writer.FlushAsync(default);
+
+        (await Load(task.Id)).Participants.Where(p => p.UserId == "floor01").Should().ContainSingle();
     }
 
     [Fact]
