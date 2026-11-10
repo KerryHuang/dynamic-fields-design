@@ -131,6 +131,34 @@ public class SchemaTests
         (await db.Context.Set<TaskItem>().CountAsync()).Should().Be(2);
     }
 
+    [Fact]
+    public async Task Schema_HasOrganizationTables()
+    {
+        await using var db = await SqliteTestDb.CreateAsync();
+
+        var tables = await db.Context.Database
+            .SqlQueryRaw<string>("SELECT name AS Value FROM sqlite_master WHERE type = 'table'")
+            .ToListAsync();
+        var indexes = await db.Context.Database
+            .SqlQueryRaw<string>("SELECT name AS Value FROM sqlite_master WHERE type = 'index' AND tbl_name = 'Dynamic_Department'")
+            .ToListAsync();
+
+        tables.Should().Contain(["Dynamic_Department", "Dynamic_UserDepartment"]);
+        indexes.Should().Contain("IX_Dynamic_Department_Code");
+    }
+
+    [Fact]
+    public async Task DuplicateDepartmentCode_RejectedByUniqueIndex()
+    {
+        await using var db = await SqliteTestDb.CreateAsync();
+        db.Context.Set<Department>().Add(new Department { Code = "sales", CreatedUserId = "admin" });
+        db.Context.Set<Department>().Add(new Department { Code = "sales", CreatedUserId = "admin" });
+
+        var act = () => db.Context.SaveChangesAsync();
+
+        await act.Should().ThrowAsync<DbUpdateException>();
+    }
+
     private static TaskItem RuleTask(int occurrence) => new()
     {
         Title = "x",

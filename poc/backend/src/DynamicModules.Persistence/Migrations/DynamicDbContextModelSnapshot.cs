@@ -631,6 +631,59 @@ namespace DynamicModules.Persistence.Migrations
                     b.ToTable("Dynamic_DashboardPersonalVersion", (string)null);
                 });
 
+            modelBuilder.Entity("DynamicModules.Domain.Entities.Dynamic.Department", b =>
+                {
+                    b.Property<long>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("INTEGER");
+
+                    b.Property<bool>("Active")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("Code")
+                        .IsRequired()
+                        .HasMaxLength(40)
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTime>("CreatedTime")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("CreatedUserId")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("ManagerUserId")
+                        .HasMaxLength(50)
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTime?>("ModifiedTime")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("ModifiedUserId")
+                        .HasMaxLength(50)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("NameI18n")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<long?>("ParentId")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int>("SortOrder")
+                        .HasColumnType("INTEGER");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("Code")
+                        .IsUnique();
+
+                    b.HasIndex("ParentId");
+
+                    b.ToTable("Dynamic_Department", (string)null);
+                });
+
             modelBuilder.Entity("DynamicModules.Domain.Entities.Dynamic.DynamicProgram", b =>
                 {
                     b.Property<string>("ProgramCode")
@@ -2086,6 +2139,22 @@ namespace DynamicModules.Persistence.Migrations
                     b.ToTable("Dynamic_TaskRuleTask", (string)null);
                 });
 
+            modelBuilder.Entity("DynamicModules.Domain.Entities.Dynamic.UserDepartment", b =>
+                {
+                    b.Property<string>("UserId")
+                        .HasMaxLength(50)
+                        .HasColumnType("TEXT");
+
+                    b.Property<long>("DepartmentId")
+                        .HasColumnType("INTEGER");
+
+                    b.HasKey("UserId");
+
+                    b.HasIndex("DepartmentId");
+
+                    b.ToTable("Dynamic_UserDepartment", (string)null);
+                });
+
             modelBuilder.Entity("DynamicModules.Domain.Entities.Dynamic.UserGroupMapping", b =>
                 {
                     b.Property<long>("GroupId")
@@ -2601,6 +2670,15 @@ namespace DynamicModules.Persistence.Migrations
                         .WithMany("Tasks")
                         .HasForeignKey("RuleId")
                         .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("DynamicModules.Domain.Entities.Dynamic.UserDepartment", b =>
+                {
+                    b.HasOne("DynamicModules.Domain.Entities.Dynamic.Department", null)
+                        .WithMany()
+                        .HasForeignKey("DepartmentId")
+                        .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
                 });
 
