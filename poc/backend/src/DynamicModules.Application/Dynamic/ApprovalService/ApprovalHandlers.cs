@@ -56,7 +56,8 @@ public class SubmitApprovalHandler(
             .Select(f => new FlowSnapshotEntry(f.Flow.Id, f.Flow.CurrentVersionId!.Value, f.Flow.Priority, f.Flow.Active, f.Flow.NameI18n, f.Definition))
             .ToList();
         var userIds = await modules.ListUserIdsAsync(ct);
-        var match = ApprovalRouter.Match(snapshot, module, values, registry, time.Today, userIds);
+        var (match, undecidable) = ApprovalRouter.Match(snapshot, module, values, registry, time.Today, userIds);
+        if (undecidable is not null) return ServiceResult.Conflict(ApprovalMessages.FlowConditionUndecidable(undecidable.Name.Resolve("zh-TW")));
         if (match is null)
         {
             if (approval.NoMatch != ApprovalNoMatch.Direct) return ServiceResult.Invalid(Bad(ApprovalMessages.NoMatchingFlow));

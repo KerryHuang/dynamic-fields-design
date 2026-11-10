@@ -44,6 +44,7 @@ public static class ApprovalMessages
 
     // ── 簽核人解析（§6.5） ──
     public static string TooManyApprovers(string stage) => $"關卡「{stage}」的簽核人超過 20 人";
+    public static string FlowConditionUndecidable(string flow) => $"簽核流程「{flow}」的條件無法判斷，請系統管理員檢查流程設定";
     public static string NoApprover(string stage, string source) => $"關卡「{stage}」的來源「{source}」找不到簽核人，備援也沒有人";
     public static string FallbackNote(string source) => $"來源 {source} 找不到簽核人，依設定改派備援簽核人";
     public static string ManagerLabel(int level) => $"第 {level} 層主管";

@@ -46,6 +46,23 @@ public class ApprovalSubmitTests : ApprovalTestBase
         Db.Context.Set<ApprovalInstance>().AsNoTracking().Count().Should().Be(0);
     }
 
+    [Theory]
+    [InlineData(5000)]     // 原本會落到 direct
+    [InlineData(150000)]   // 原本會選到後面的流程
+    public async Task Submit_FlowConditionUndecidable_409_NoDirect(int total)
+    {
+        // 流程條件解析不了（引用的欄位已不在）不算成立也不算不成立：fail closed 回 409（主控裁決；審查建議 2）
+        var r = await Scenario3();
+        await SeedFlow(r, "po-z", r.Confirmed, 0, Def(Cond(999999, "gt", 0), Stage("mgr", Manager(1))));
+        As("buyer1");
+        var po = await NewPo(r, price: total);
+        var res = await Submit(po.Id, r.Confirmed);
+        res.IsConflict.Should().BeTrue(Dump(res));
+        res.Message.Should().Be(ApprovalMessages.FlowConditionUndecidable("po-z"));
+        StateOf(r, po.Id).Should().Be(r.Draft);
+        Db.Context.Set<ApprovalInstance>().AsNoTracking().Count().Should().Be(0);
+    }
+
     [Fact]
     public async Task Submit_NoMatch_Block_400()
     {
