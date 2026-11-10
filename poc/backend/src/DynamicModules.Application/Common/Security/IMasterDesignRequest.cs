@@ -13,6 +13,7 @@ public interface IMasterDesignRequest
 /// <param name="EventKey">既有連動事件的代碼：看它的來源模組。</param>
 /// <param name="CheckKey">既有跨記錄檢查的代碼：看它的模組。</param>
 /// <param name="ConversionKey">既有轉換的代碼：來源與目標模組都看。</param>
+/// <param name="ApprovalFlowKey">既有簽核流程的代碼：看它的模組。</param>
 public readonly record struct MasterDesignTarget(
     string? ModuleKey = null, long? FieldId = null, long? BlockId = null, long? OptionId = null,
-    string? EventKey = null, string? CheckKey = null, string? ConversionKey = null);
+    string? EventKey = null, string? CheckKey = null, string? ConversionKey = null, string? ApprovalFlowKey = null);
