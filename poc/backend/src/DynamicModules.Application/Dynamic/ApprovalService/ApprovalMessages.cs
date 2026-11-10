@@ -69,6 +69,7 @@ public static class ApprovalMessages
     public const string CommentTooLong = "意見不能超過 1000 字";
     public const string TaskNotFound = "找不到待簽核";
     public const string StageHandled = "這一關已由他人處理";
+    public const string StateChanged = "簽核狀態已更新，請重新整理後再試";
     public const string CannotWithdraw = "目前關卡已有人處理，不能撤回";
     public const string NoPreviousStage = "前面沒有已同意的關卡，只能退回發起人";
     public const string NotEditableField = "這一關不能修改這個欄位";

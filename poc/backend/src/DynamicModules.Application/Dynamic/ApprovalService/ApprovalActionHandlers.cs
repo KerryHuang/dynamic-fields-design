@@ -16,9 +16,12 @@ public sealed class ApprovalActionSupport(
 {
     public sealed record Loaded(ApprovalInstance Inst, Module Module, ApprovalDefinition Definition, List<ApprovalStageRun> Runs, List<ApprovalTask> Tasks);
 
-    /// <summary>不存在 404；模組 Closed 409；實例不是 pending 409；RowVersion 條件更新失敗 409。成功時實例的 RowVersion 已換新。</summary>
+    /// <summary>
+    /// 不存在 404；模組 Closed 409；實例不是 pending 409；RowVersion 條件更新失敗 409。成功時實例的 RowVersion 已換新。
+    /// mine：呼叫者自己的任務；版本對不上而這個任務仍是 open，代表是拿舊畫面（例如會簽另一席剛同意），回「請重新整理」而不是「已由他人處理」。
+    /// </summary>
     public async Task<(Loaded? Value, ServiceResult? Failure)> LoadAsync(long instanceId, string rowVersion, CancellationToken ct,
-        Func<ApprovalInstance, ServiceResult?>? authorize = null)
+        Func<ApprovalInstance, ServiceResult?>? authorize = null, ApprovalTask? mine = null)
     {
         var inst = await repo.GetAsync(instanceId, ct);
         if (inst is null) return (null, ServiceResult.NotFound(ApprovalMessages.TaskNotFound));
@@ -30,7 +33,8 @@ public sealed class ApprovalActionSupport(
         if (inst.Status != ApprovalInstanceStatus.Pending) return (null, ServiceResult.Conflict(ApprovalMessages.StageHandled));
         if (ApprovalEngine.DefinitionOf(inst) is not { } def) return (null, ServiceResult.Conflict("找不到實例綁定的流程版本"));
         var next = Guid.NewGuid().ToString();
-        if (!await repo.TryBumpRowVersionAsync(inst.Id, rowVersion, next, ct)) return (null, ServiceResult.Conflict(ApprovalMessages.StageHandled));
+        if (!await repo.TryBumpRowVersionAsync(inst.Id, rowVersion, next, ct))
+            return (null, ServiceResult.Conflict(mine is { Status: ApprovalTaskStatus.Open } ? ApprovalMessages.StateChanged : ApprovalMessages.StageHandled));
         inst.RowVersion = next;
         return (new Loaded(inst, module, def, await repo.ListRunsAsync(inst.Id, ct), await repo.ListTasksAsync(inst.Id, ct)), null);
     }
@@ -62,7 +66,7 @@ public class ApproveTaskHandler(
         if (task is null) return ServiceResult.NotFound(ApprovalMessages.TaskNotFound);
         if (ApprovalActionRules.CommentError(request.Comment, required: false) is { } ce) return ApprovalActionSupport.Bad("comment", ce);
         var (loaded, failure) = await support.LoadAsync(task.InstanceId, request.RowVersion, ct,
-            _ => ApprovalActionRules.IsActor(task, user.UserId) ? null : ServiceResult.Forbidden());
+            _ => ApprovalActionRules.IsActor(task, user.UserId) ? null : ServiceResult.Forbidden(), task);
         if (failure is not null) return failure;
         var (inst, module, def, runs, tasks) = loaded!;
         var me = tasks.Single(t => t.Id == task.Id);
@@ -132,7 +136,7 @@ public class RejectTaskHandler(
         if (ApprovalActionRules.CommentError(request.Comment, required: true) is { } ce) return ApprovalActionSupport.Bad("comment", ce);
         if (request.To is not (ToInitiator or ToPrevious)) return ApprovalActionSupport.Bad("to", ApprovalMessages.RejectTargetInvalid);
         var (loaded, failure) = await support.LoadAsync(task.InstanceId, request.RowVersion, ct,
-            _ => ApprovalActionRules.IsActor(task, user.UserId) ? null : ServiceResult.Forbidden());
+            _ => ApprovalActionRules.IsActor(task, user.UserId) ? null : ServiceResult.Forbidden(), task);
         if (failure is not null) return failure;
         var (inst, module, def, runs, tasks) = loaded!;
         var me = tasks.Single(t => t.Id == task.Id);

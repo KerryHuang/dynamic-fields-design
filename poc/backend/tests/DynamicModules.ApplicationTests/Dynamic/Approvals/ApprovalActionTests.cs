@@ -98,6 +98,26 @@ public class ApprovalActionTests : ApprovalTestBase
     }
 
     [Fact]
+    public async Task Countersign_LateArrival_OwnSeatOpen_RefreshMessage()
+    {
+        // 會簽兩席：gm 先同意，buyer2 拿舊版本同意 → 409，但他的席位還沒處理，文案不能說「已由他人處理」（審查建議 5）
+        var r = await Scenario3();
+        var id = await SubmitAs(r, "buyer1", 150000);
+        await Approve(id, "gm");
+        var buyer2Task = Open(id, "buyer2");
+        var stale = Inst(id).RowVersion;
+        Outcome(await Approve(id, "gm")).Should().Be(ApprovalOutcomes.Advanced);
+        As("buyer2");
+        var late = await Send(new ApproveTaskRequest(buyer2Task.Id, stale, null, null));
+        late.IsConflict.Should().BeTrue();
+        late.Message.Should().Be(ApprovalMessages.StateChanged);
+        var lateReject = await Send(new RejectTaskRequest(buyer2Task.Id, stale, "舊畫面", RejectTaskHandler.ToInitiator));
+        lateReject.Message.Should().Be(ApprovalMessages.StateChanged);
+        TasksOf(id).Single(t => t.Id == buyer2Task.Id).Status.Should().Be(ApprovalTaskStatus.Open);
+        Outcome(await Approve(id, "buyer2")).Should().Be(ApprovalOutcomes.Approved);   // 重新整理後可以同意
+    }
+
+    [Fact]
     public async Task NotActor_403_UnknownTask_404()
     {
         var r = await Scenario3();
