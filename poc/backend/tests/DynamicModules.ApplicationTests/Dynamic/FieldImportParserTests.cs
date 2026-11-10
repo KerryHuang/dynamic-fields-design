@@ -1,5 +1,6 @@
 using System.Text.Json;
 using DynamicModules.Application.Dynamic.ImportService;
+using DynamicModules.Application.Dynamic.ReportService.Data;
 using DynamicModules.Domain.Entities.Dynamic;
 using DynamicModules.Domain.ValueObjects;
 using FluentAssertions;
@@ -69,6 +70,17 @@ public class FieldImportParserTests
     [InlineData("0", "false")]
     public void Parse_Boolean(string text, string expected) =>
         P(F(FieldType.Boolean), text).Should().Be((expected, null));
+
+    [Theory]
+    [InlineData("zh-TW")]
+    [InlineData("en-US")]
+    [InlineData("th")]
+    [InlineData("vi")]
+    public void Parse_Boolean_accepts_what_each_locale_exports(string locale)
+    {
+        P(F(FieldType.Boolean), ReportText.Get(locale, ReportText.Yes)).Should().Be(("true", null));
+        P(F(FieldType.Boolean), ReportText.Get(locale, ReportText.No)).Should().Be(("false", null));
+    }
 
     [Fact]
     public void Parse_Boolean_Invalid() =>

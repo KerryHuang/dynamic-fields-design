@@ -2,6 +2,7 @@ using System.Globalization;
 using System.Text.Json;
 using System.Text.RegularExpressions;
 using DynamicModules.Application.Dynamic.Display;
+using DynamicModules.Application.Dynamic.ReportService.Data;
 using DynamicModules.Domain.Entities.Dynamic;
 using DynamicModules.Domain.ValueObjects;
 
@@ -67,11 +68,15 @@ public static class FieldImportParser
     private static (JsonElement?, string?) Boolean(string text)
     {
         if (text.Equals("是", StringComparison.OrdinalIgnoreCase) || text.Equals("true", StringComparison.OrdinalIgnoreCase)
-            || text.Equals("yes", StringComparison.OrdinalIgnoreCase) || text == "1") return Ok(true);
+            || text.Equals("yes", StringComparison.OrdinalIgnoreCase) || text == "1" || IsDisplayed(text, ReportText.Yes)) return Ok(true);
         if (text.Equals("否", StringComparison.OrdinalIgnoreCase) || text.Equals("false", StringComparison.OrdinalIgnoreCase)
-            || text.Equals("no", StringComparison.OrdinalIgnoreCase) || text == "0") return Ok(false);
+            || text.Equals("no", StringComparison.OrdinalIgnoreCase) || text == "0" || IsDisplayed(text, ReportText.No)) return Ok(false);
         return Fail("請輸入「是」或「否」");
     }
+
+    // 各語系匯出的布林文字（FieldDisplay 用 ReportText）都要能原樣匯回。
+    private static bool IsDisplayed(string text, string key) =>
+        I18nText.SupportedLocales.Any(l => text.Equals(ReportText.Get(l, key), StringComparison.OrdinalIgnoreCase));
 
     private static (JsonElement?, string?) Date(string text) =>
         System.DateTime.TryParseExact(text, DateFormats, CultureInfo.InvariantCulture, DateTimeStyles.None, out var d)
