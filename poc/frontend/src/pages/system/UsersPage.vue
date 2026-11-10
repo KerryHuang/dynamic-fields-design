@@ -144,7 +144,7 @@ function runSetActive(u: AdminUser, active: boolean) {
       </div>
       <q-table
         flat bordered row-key="userId" :rows="rows" :columns="columns" :loading="users.isFetching.value"
-        :rows-per-page-options="[0]" hide-pagination
+        :rows-per-page-options="[0]" hide-pagination :grid="$q.screen.lt.sm"
       >
         <template #body="{ row, cols }">
           <q-tr :data-testid="`user-row-${row.userId}`">
@@ -160,6 +160,28 @@ function runSetActive(u: AdminUser, active: boolean) {
               <template v-else>{{ c.value }}</template>
             </q-td>
           </q-tr>
+        </template>
+        <template #item="{ row, cols }">
+          <div class="col-12 q-py-xs">
+            <q-card flat bordered :data-testid="`user-card-${row.userId}`">
+              <q-list dense>
+                <q-item v-for="c in cols.filter((x) => x.name !== 'actions' && x.value)" :key="c.name">
+                  <q-item-section>
+                    <q-item-label caption>{{ c.label }}</q-item-label>
+                    <q-item-label style="overflow-wrap: anywhere">{{ c.value }}</q-item-label>
+                  </q-item-section>
+                </q-item>
+              </q-list>
+              <q-card-actions align="right">
+                <q-btn flat dense color="primary" :label="t('users.edit')" :data-testid="`user-edit-${row.userId}`" @click="openEdit(row)" />
+                <q-btn flat dense color="primary" :label="t('users.resetPassword')" :data-testid="`user-reset-${row.userId}`" @click="openReset(row)" />
+                <q-btn
+                  flat dense :color="row.isActive ? 'negative' : 'primary'" :label="row.isActive ? t('users.deactivate') : t('users.activate')"
+                  :disable="row.userId === identity.userId" :data-testid="`user-toggle-${row.userId}`" @click="toggle(row)"
+                />
+              </q-card-actions>
+            </q-card>
+          </div>
         </template>
       </q-table>
 

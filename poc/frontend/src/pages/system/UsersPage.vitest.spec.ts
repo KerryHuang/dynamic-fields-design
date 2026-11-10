@@ -37,7 +37,8 @@ const USERS = [
 let mounted: ReturnType<typeof mount> | undefined;
 let queryClient: QueryClient;
 
-async function mountPage(users: AdminUser[] | { status: number } = USERS) {
+async function mountPage(users: AdminUser[] | { status: number } = USERS, width = 1366) {
+  window.innerWidth = width;
   setActivePinia(createPinia());
   useIdentityStore().setSession('admin');
   if (Array.isArray(users)) api.getAdminUsers.mockResolvedValue(users);
@@ -57,6 +58,10 @@ async function mountPage(users: AdminUser[] | { status: number } = USERS) {
     },
   });
   await flushPromises();
+  // Quasar's Screen listens to resize (debounced); jsdom starts at 1024 wide
+  window.dispatchEvent(new Event('resize'));
+  await new Promise((r) => setTimeout(r, 150));
+  await flushPromises();
   mounted = w;
   return w;
 }
@@ -75,6 +80,24 @@ describe('UsersPage', () => {
     vi.stubGlobal('ResizeObserver', class { observe() {} unobserve() {} disconnect() {} });
   });
   afterEach(() => { mounted?.unmount(); document.body.innerHTML = ''; });
+
+  it('390 wide: shows cards (not table rows) with the same fields and actions', async () => {
+    await mountPage(USERS, 390);
+    expect(document.body.querySelector('[data-testid^="user-row-"]')).toBeNull();
+    const card = q('user-card-sales01')!;
+    expect(card).not.toBeNull();
+    for (const text of ['sales01', '名-sales01', '業務群組', '總經理室 / 業務部', '啟用中']) expect(card.textContent).toContain(text);
+    expect(q('user-card-admin')!.textContent).toContain('系統管理員');
+    expect(q('user-card-old01')!.textContent).toContain('已停用');
+    await click('user-edit-sales01');
+    expect((q('user-id') as HTMLInputElement).value).toBe('sales01');
+  });
+
+  it('wide screens keep the table', async () => {
+    await mountPage(USERS, 1366);
+    expect(q('user-row-sales01')).not.toBeNull();
+    expect(q('user-card-sales01')).toBeNull();
+  });
 
   it('lists accounts with name, group names, status and admin flag, inactive ones included', async () => {
     await mountPage();
