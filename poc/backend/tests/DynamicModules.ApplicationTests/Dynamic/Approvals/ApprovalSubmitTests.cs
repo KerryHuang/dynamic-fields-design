@@ -244,6 +244,28 @@ public class ApprovalSubmitTests : ApprovalTestBase
     }
 
     [Fact]
+    public async Task Submit_InitiatorPick_CandidatesUnmatched_NoPickRequired_PickRejected()
+    {
+        // 候選群組在開啟套件時被略過：解析一律當空單位交給備援，送出驗證要一致——不要求自選，帶了自選回 400 說明（審查建議 10）
+        var r = await BuildPurchase();
+        await SeedFlow(r, "po-pick", r.Confirmed, 1, Def(null, Stage("it",
+            new ApproverSource(ApprovalSources.InitiatorPick, CandidateGroupIds: [], Min: 1, Max: 1, CandidatesUnmatched: true))));
+        (await SaveWorkflow(r, [Needs(r.Draft, r.Confirmed), Plain(r.Confirmed, r.Partial), Plain(r.Partial, r.Received),
+            Plain(r.Confirmed, r.Cancelled)])).IsSuccess.Should().BeTrue();
+        await GrantEveryone(r.Module);
+        As("buyer2");
+        var po = await NewPo(r, price: 50000);
+
+        (await Submit(po.Id, r.Confirmed, new() { ["it"] = ["gm"] })).Errors["picks.it"].Should().Equal(ApprovalMessages.PickCandidatesUnmatched);
+        Db.Context.Set<ApprovalInstance>().AsNoTracking().Count().Should().Be(0);
+
+        var ok = await Submit(po.Id, r.Confirmed);
+        ok.IsCreated.Should().BeTrue(Dump(ok));
+        TasksOf(((SubmitApprovalResponse)ok.Data!).InstanceId!.Value).Select(t => (t.AssigneeUserId, t.Reason))
+            .Should().Equal(("admin", ApprovalTaskReason.Fallback));
+    }
+
+    [Fact]
     public async Task Submit_UserField_NotCandidateOrSelf_400()
     {
         var r = await BuildPurchase();

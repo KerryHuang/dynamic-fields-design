@@ -62,6 +62,7 @@ public static class ApprovalMessages
     public const string AlreadyPending = "這張單已在簽核中";
     public const string NoMatchingFlow = "沒有符合條件的簽核流程，請聯絡管理員";
     public const string PickInvalid = "自選的簽核人必須是候選群組內、啟用中的其他使用者";
+    public const string PickCandidatesUnmatched = "這一關的候選群組已失效，不能自選，送出後由備援簽核人處理";
     public static string PickCount(int min, int max) => $"請選 {min} 到 {max} 位簽核人";
     public const string UserFieldNotCandidate = "簽核人不在候選群組內";
     public const string UserFieldIsInitiator = "簽核人不能是發起人自己";

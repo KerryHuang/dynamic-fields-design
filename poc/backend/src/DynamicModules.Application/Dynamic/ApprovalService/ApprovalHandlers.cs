@@ -106,7 +106,8 @@ public class SubmitApprovalHandler(
 
     private static string Truncate(string s, int max) => s.Length <= max ? s : s[..max];
 
-    /// <summary>發起人自選（設計 §6.1、Review Focus 3）：只能帶 initiatorPick 關卡的代號；不重複、候選群組內、啟用中、不是發起人；人數在 min..max。</summary>
+    /// <summary>發起人自選（設計 §6.1、Review Focus 3）：只能帶 initiatorPick 關卡的代號；不重複、候選群組內、啟用中、不是發起人；人數在 min..max。
+    /// 候選群組對不上的關卡不收自選（與 ApproverResolver 一致）。</summary>
     private static Dictionary<string, string[]> PickErrors(ApprovalDefinition def, Dictionary<string, List<string>> picks, ResolveContext ctx)
     {
         var errors = new Dictionary<string, string[]>();
@@ -116,6 +117,12 @@ public class SubmitApprovalHandler(
         {
             var src = stage.Approvers;
             var list = picks.GetValueOrDefault(code) ?? [];
+            // 候選群組對不上（開啟套件時略過）：解析一律當空單位交給備援，自選不會生效 → 不要求自選，帶了就回 400 說明
+            if (src.CandidatesUnmatched)
+            {
+                if (list.Count > 0) errors[$"picks.{code}"] = [ApprovalMessages.PickCandidatesUnmatched];
+                continue;
+            }
             var candidates = ApproverResolver.Candidates(ctx, src);
             if (list.Distinct(StringComparer.Ordinal).Count() != list.Count
                 || list.Any(u => u == ctx.InitiatorUserId || !ctx.Org.ActiveUsers.Contains(u) || (candidates is not null && !candidates.Contains(u))))
