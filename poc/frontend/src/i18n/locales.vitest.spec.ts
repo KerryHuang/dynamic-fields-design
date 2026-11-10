@@ -28,7 +28,7 @@ describe('四語系訊息檔', () => {
   // th／vi 補完前有近 400 句直接放英文。縮寫、格式名、識別字、純佔位符本來就不翻，列在這裡；其他不得與 en-US 相同
   const UNTRANSLATED_OK = new Set([
     'dynamic.export.csv', 'dynamic.export.excel', 'designer.types.email', 'designer.types.url', 'designer.programCode',
-    'designer.locales.en-US', 'groups.blockingItem', 'reports.designer.rangeN',
+    'designer.locales.en-US', 'groups.blockingItem', 'reports.designer.rangeN', 'common.listSeparator',
   ]);
   it.each([['th', th], ['vi', vi]])('%s 的文案不得直接放英文（縮寫與格式名除外）', (_name, msgs) => {
     const same = Object.entries(leaves(msgs)).filter(([k, v]) => v === en[k] && !UNTRANSLATED_OK.has(k)).map(([k]) => k);
