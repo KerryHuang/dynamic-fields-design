@@ -271,6 +271,10 @@ public class DeletePlanner(IDeletionRepository data, IApprovalFlowRepository app
         foreach (var (flowId, flowKey, def) in await approvalFlows.ListDefinitionsInUseAsync(module.Id, ct))
             if (FieldClosure.ReferencedFields(def).Any(ids.Contains))
                 blockers.Add(new(DeleteBlockerKind.ApprovalFlow, module.Key, flowId, flowKey));
+        // 任務規則的觸發欄位、負責人、到期基準與條件（停用的規則也算，重新啟用時會壞掉）
+        foreach (var rule in await data.ListTaskRulesAsync(ct))
+            if (rule.ModuleId == module.Id && TaskRuleReferences.FieldIdsOf(rule).Overlaps(ids))
+                blockers.Add(new(DeleteBlockerKind.TaskRule, module.Key, rule.Id, Name(rule.NameI18n, rule.Key)));
     }
 
     /// <summary>f 是否是公式、彙總或預設帶值設定，引用了 targetIds 裡的欄位。</summary>

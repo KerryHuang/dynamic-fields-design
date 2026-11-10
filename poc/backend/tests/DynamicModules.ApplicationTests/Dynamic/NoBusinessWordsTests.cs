@@ -29,7 +29,7 @@ public class NoBusinessWordsTests
         var src = Path.Combine(Root(), "src");
         var app = Path.Combine(src, "DynamicModules.Application");
         var domain = Path.Combine(src, "DynamicModules.Domain");
-        foreach (var dir in new[] { "EventService", "CheckService", "LedgerService", "ApprovalService", "OrganizationService" })
+        foreach (var dir in new[] { "EventService", "CheckService", "LedgerService", "ApprovalService", "OrganizationService", "TaskService", "TaskRuleService", "NotificationService" })
             foreach (var f in Directory.EnumerateFiles(Path.Combine(app, "Dynamic", dir), "*.cs", SearchOption.AllDirectories)) yield return f;
         foreach (var dir in new[] { "Approvals", "Organization" })
             foreach (var f in Directory.EnumerateFiles(Path.Combine(domain, dir), "*.cs", SearchOption.AllDirectories)) yield return f;

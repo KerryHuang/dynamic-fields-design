@@ -34,4 +34,5 @@ public static class DeleteBlockerKind
     public const string Dashboard = "dashboard";
     public const string PersonalDashboard = "personalDashboard";
     public const string ApprovalFlow = "approvalFlow";
+    public const string TaskRule = "taskRule";
 }

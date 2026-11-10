@@ -188,6 +188,8 @@ public class DeleteAppHandler(
             module.TouchVersion(user.UserId, now);
             await uow.CommitAsync(ct);
             var ids = contributions.Where(c => c.Module.Id == module.Id && c.Fate != Fate.Orphan).Select(c => c.Field.Id).ToList();
+            // 規則引用的欄位被清除：規則自動停用（讀取時顯示「引用的欄位已刪除」），不擋刪除（設計 §16 第 2 條）
+            if (ids.Count > 0) await deletion.DeactivateTaskRulesReferencingAsync(module.Id, ids.ToHashSet(), ct);
             if (ids.Count > 0 || emptyBlocks.Count > 0)
                 await FieldPurge.RemoveAsync(module, ids, emptyBlocks, deletion, uow, user, time, ct);
         }

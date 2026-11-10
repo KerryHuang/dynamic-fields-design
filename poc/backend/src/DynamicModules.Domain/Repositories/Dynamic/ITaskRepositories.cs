@@ -60,6 +60,28 @@ public interface INotificationRepository
     Task RemoveBySourceAsync(string sourceType, long sourceId, CancellationToken ct);
 }
 
+/// <summary>任務規則（設計 §5）。含 Tasks 的方法都依 SortOrder 排序。</summary>
+public interface ITaskRuleRepository
+{
+    /// <summary>追蹤，含 Tasks。</summary>
+    Task<TaskRule?> GetByKeyAsync(string key, CancellationToken ct);
+    /// <summary>不追蹤，含 Tasks，依 Key。</summary>
+    Task<List<TaskRule>> ListByModuleAsync(long moduleId, CancellationToken ct);
+    /// <summary>不追蹤，含 Tasks，只列啟用中的規則，依 Key。</summary>
+    Task<List<TaskRule>> ListActiveByModuleAsync(long moduleId, CancellationToken ct);
+    /// <summary>追蹤，含 Tasks。</summary>
+    Task<List<TaskRule>> ListByAppAsync(long appId, CancellationToken ct);
+    /// <summary>不追蹤，含 Tasks。</summary>
+    Task<TaskRule?> GetByIdAsync(long id, CancellationToken ct);
+    /// <summary>這筆記錄最近一次觸發這條規則的次數（Occurrence）；沒有觸發過回 null。</summary>
+    Task<int?> GetLatestOccurrenceAsync(long ruleId, long recordId, CancellationToken ct);
+    /// <summary>觸發條件、任務的負責人或到期基準、條件引用了任一欄位的規則；追蹤，含 Tasks。</summary>
+    Task<List<TaskRule>> ListReferencingFieldsAsync(IReadOnlyCollection<long> fieldIds, CancellationToken ct);
+    void AddRun(TaskRuleRun run);
+    void Add(TaskRule rule);
+    void Remove(TaskRule rule);
+}
+
 public sealed record TaskRecordStub(long Id, long ModuleId, string OwnerUserId, string Title, bool Deleted);
 
 public enum TaskListTab { Assigned, Created, Mentioned }

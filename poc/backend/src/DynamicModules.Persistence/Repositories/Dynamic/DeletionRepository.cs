@@ -30,6 +30,17 @@ public class DeletionRepository(DynamicDbContext db) : IDeletionRepository
     public Task<List<ModuleLedger>> ListLedgersAsync(CancellationToken ct) =>
         db.Set<ModuleLedger>().AsNoTracking().OrderBy(l => l.Id).ToListAsync(ct);
 
+    public Task<List<TaskRule>> ListTaskRulesAsync(CancellationToken ct) =>
+        db.Set<TaskRule>().AsNoTracking().Include(r => r.Tasks).OrderBy(r => r.Id).ToListAsync(ct);
+
+    public async Task<int> DeactivateTaskRulesReferencingAsync(long moduleId, IReadOnlySet<long> fieldIds, CancellationToken ct)
+    {
+        var hit = (await db.Set<TaskRule>().Include(r => r.Tasks).Where(r => r.ModuleId == moduleId && r.Active).ToListAsync(ct))
+            .Where(r => Domain.Rules.TaskRuleReferences.FieldIdsOf(r).Overlaps(fieldIds)).ToList();
+        foreach (var rule in hit) rule.Active = false;
+        return hit.Count;
+    }
+
     public async Task<List<DashboardLayoutSource>> ListDashboardLayoutsAsync(CancellationToken ct)
     {
         var dashboards = await db.Set<Dashboard>().AsNoTracking().OrderBy(d => d.Id)
@@ -127,6 +138,11 @@ public class DeletionRepository(DynamicDbContext db) : IDeletionRepository
         await db.Set<ApprovalInstance>().Where(i => i.ModuleId == module.Id).ExecuteDeleteAsync(ct);
         await db.Set<ApprovalFlowVersion>().Where(v => flowIds.Contains(v.FlowId)).ExecuteDeleteAsync(ct);
         await db.Set<ApprovalFlow>().Where(f => f.ModuleId == module.Id).ExecuteDeleteAsync(ct);
+        // 任務規則對模組的外鍵是 Restrict；規則的任務範本與觸發記錄一起刪（Task.RuleId 沒有外鍵，已產生的任務留著）
+        var ruleIds = db.Set<TaskRule>().Where(r => r.ModuleId == module.Id).Select(r => r.Id);
+        await db.Set<TaskRuleRun>().Where(r => ruleIds.Contains(r.RuleId)).ExecuteDeleteAsync(ct);
+        await db.Set<TaskRuleTask>().Where(t => ruleIds.Contains(t.RuleId)).ExecuteDeleteAsync(ct);
+        await db.Set<TaskRule>().Where(r => r.ModuleId == module.Id).ExecuteDeleteAsync(ct);
         await db.Set<RecordHistory>().Where(h => recordIds.Contains(h.RecordId)).ExecuteDeleteAsync(ct);
         await db.Set<RecordIndex>().Where(i => recordIds.Contains(i.RecordId)).ExecuteDeleteAsync(ct);
         await db.Set<Record>().Where(r => r.ModuleId == module.Id).ExecuteDeleteAsync(ct);

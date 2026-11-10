@@ -1,6 +1,7 @@
 using DynamicModules.Domain.Data;
 using DynamicModules.Domain.Entities.Dynamic;
 using DynamicModules.Domain.Repositories.Dynamic;
+using DynamicModules.Domain.Rules;
 using Microsoft.EntityFrameworkCore;
 
 namespace DynamicModules.Persistence.Repositories.Dynamic;
@@ -116,6 +117,43 @@ public class TaskRepository(DynamicDbContext db) : ITaskRepository
     public void Add(TaskItem task) => db.Set<TaskItem>().Add(task);
 
     public void Remove(TaskItem task) => db.Set<TaskItem>().Remove(task);
+}
+
+public class TaskRuleRepository(DynamicDbContext db) : ITaskRuleRepository
+{
+    private IQueryable<TaskRule> WithTasks(bool track = false)
+    {
+        var q = db.Set<TaskRule>().Include(r => r.Tasks.OrderBy(t => t.SortOrder).ThenBy(t => t.Id));
+        return track ? q : q.AsNoTracking();
+    }
+
+    public Task<TaskRule?> GetByKeyAsync(string key, CancellationToken ct) =>
+        WithTasks(track: true).FirstOrDefaultAsync(r => r.Key == key, ct);
+
+    public Task<List<TaskRule>> ListByModuleAsync(long moduleId, CancellationToken ct) =>
+        WithTasks().Where(r => r.ModuleId == moduleId).OrderBy(r => r.Key).ToListAsync(ct);
+
+    public Task<List<TaskRule>> ListActiveByModuleAsync(long moduleId, CancellationToken ct) =>
+        WithTasks().Where(r => r.ModuleId == moduleId && r.Active).OrderBy(r => r.Key).ToListAsync(ct);
+
+    public Task<List<TaskRule>> ListByAppAsync(long appId, CancellationToken ct) =>
+        WithTasks(track: true).Where(r => r.AppId == appId).OrderBy(r => r.Key).ToListAsync(ct);
+
+    public Task<TaskRule?> GetByIdAsync(long id, CancellationToken ct) =>
+        WithTasks().FirstOrDefaultAsync(r => r.Id == id, ct);
+
+    public Task<int?> GetLatestOccurrenceAsync(long ruleId, long recordId, CancellationToken ct) =>
+        db.Set<TaskRuleRun>().AsNoTracking().Where(r => r.RuleId == ruleId && r.RecordId == recordId).MaxAsync(r => (int?)r.Occurrence, ct);
+
+    public async Task<List<TaskRule>> ListReferencingFieldsAsync(IReadOnlyCollection<long> fieldIds, CancellationToken ct) =>
+        (await WithTasks(track: true).OrderBy(r => r.Key).ToListAsync(ct))
+            .Where(r => TaskRuleReferences.FieldIdsOf(r).Overlaps(fieldIds)).ToList();
+
+    public void AddRun(TaskRuleRun run) => db.Set<TaskRuleRun>().Add(run);
+
+    public void Add(TaskRule rule) => db.Set<TaskRule>().Add(rule);
+
+    public void Remove(TaskRule rule) => db.Set<TaskRule>().Remove(rule);
 }
 
 public class NotificationRepository(DynamicDbContext db) : INotificationRepository

@@ -16,6 +16,12 @@ public interface IDeletionRepository
     Task<List<ModuleEvent>> ListEventsAsync(CancellationToken ct);
     Task<List<ModuleCheck>> ListChecksAsync(CancellationToken ct);
     Task<List<ModuleLedger>> ListLedgersAsync(CancellationToken ct);
+    /// <summary>所有任務規則（含任務範本），不追蹤。</summary>
+    Task<List<TaskRule>> ListTaskRulesAsync(CancellationToken ct);
+    /// <summary>
+    /// 這個模組上引用了任一欄位的規則改成停用（欄位被清除時用，規則不擋刪除）；追蹤，由呼叫端提交。回傳停用的規則數。
+    /// </summary>
+    Task<int> DeactivateTaskRulesReferencingAsync(long moduleId, IReadOnlySet<long> fieldIds, CancellationToken ct);
     /// <summary>所有儀表板版面：指派版、使用者自己的儀表板，以及每個個人版，不追蹤。</summary>
     Task<List<DashboardLayoutSource>> ListDashboardLayoutsAsync(CancellationToken ct);
 
