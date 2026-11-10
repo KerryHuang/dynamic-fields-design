@@ -77,17 +77,24 @@ public class IntegrationReconciler(
                 return await SetStatusAsync(row, IntegrationStatus.Suspended,
                     owner.Status == AppStatus.Open ? $"suspended: 夥伴 {partners.Missing} 不在" : "suspended: 擁有者已關閉", previous, decl, ct);
             case IntegrationTarget.Held:
-                if (await SetActiveAsync(items, decl, true, ct) is { Count: > 0 } pushing)
-                {
-                    row.Status = IntegrationStatus.Blocked;
-                    row.Reason = $"approval: 事件 {string.Join("、", pushing)} 會把狀態改成需簽核的狀態";
-                    await uow.CommitAsync(ct);
-                    return $"整合「{decl.Name.Resolve("zh-TW")}」無法啟用：{row.Reason}，已維持停用";
-                }
+                if (await ActivateHeldAsync(row, items, decl, ct) is { } blocked) return blocked;
                 return await SetStatusAsync(row, IntegrationStatus.Held, $"held: 夥伴 {partners.Missing} 不在，來源寫入會被擋", previous, decl, ct);
             default:
                 return await EnsureInSavepointAsync(owner, row, decl, items, appList, allowCreate: target == IntegrationTarget.Install || retry, ct);
         }
+    }
+
+    /// <summary>
+    /// Held：重新啟用項目；有事件會把狀態推進需簽核轉移（裁決 18、25）→ 整合標 Blocked 並寫原因、全部項目停用，回警告；全部可啟用回 null。
+    /// </summary>
+    public async Task<string?> ActivateHeldAsync(AppIntegration row, IntegrationItems items, AppIntegrationDecl decl, CancellationToken ct)
+    {
+        if (await SetActiveAsync(items, decl, true, ct) is not { Count: > 0 } pushing) return null;
+        row.Status = IntegrationStatus.Blocked;
+        row.Reason = $"approval: 事件 {string.Join("、", pushing)} 會把狀態改成需簽核的狀態";
+        await uow.CommitAsync(ct);
+        await SetActiveAsync(items, decl, false, ct);   // 和 EnsureInSavepointAsync 的 Blocked 路徑一致：全部項目停用
+        return $"整合「{decl.Name.Resolve("zh-TW")}」無法啟用：{row.Reason}，已維持停用";
     }
 
     private async Task<string?> SetStatusAsync(AppIntegration row, string status, string? reason, string previous, AppIntegrationDecl decl, CancellationToken ct)

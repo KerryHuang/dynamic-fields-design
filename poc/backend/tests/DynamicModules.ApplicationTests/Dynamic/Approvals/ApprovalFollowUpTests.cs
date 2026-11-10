@@ -63,4 +63,32 @@ public class ApprovalFollowUpTests : ApprovalTestBase
         active["po-push"].Should().BeFalse();
         active["po-memo"].Should().BeTrue();
     }
+    [Fact]
+    public async Task IntegrationHeld_EventPushingApproval_Blocked_AllItemsInactive()
+    {
+        // Held 時判成 Blocked：其他事件也要停用，和另一條 Blocked 路徑一致（審查建議 4）
+        var r = await BuildPurchase();
+        var push = Event("po-push", r.Extra, new EventTrigger("create", null, null, null),
+            UpdateVia("touch", r.Module, r.ExtraRef, Const(r.Status, $"\"{Opt(r.Confirmed)}\"")));
+        var benign = Event("po-memo", r.Extra, new EventTrigger("create", null, null, null),
+            UpdateVia("memo", r.Module, r.ExtraRef, Const(r.Memo, "\"x\"")));
+        foreach (var e in new[] { push, benign })
+            (await Send(new CreateEventRequest(e))).IsCreated.Should().BeTrue();
+        await Db.Context.Set<ModuleEvent>().ExecuteUpdateAsync(s => s.SetProperty(e => e.Active, false));
+        await SeedFlow(r, "po-b", r.Confirmed, 1, Def(null, Stage("lead", Group(PurchaseLeadGroup))));
+        (await SaveWorkflow(r, [Needs(r.Draft, r.Confirmed), Plain(r.Confirmed, r.Partial), Plain(r.Partial, r.Received),
+            Plain(r.Confirmed, r.Cancelled)])).IsSuccess.Should().BeTrue();
+
+        AppEvent Decl(string code) => new(code, Text(code), true, r.Extra, new AppEventTrigger("create", null, null, null), null, []);
+        var decl = new AppIntegrationDecl("link", Text("link"), [], "block", null, [Decl("po-push"), Decl("po-memo")], null);
+        var row = new AppIntegration { Code = "link", Status = IntegrationStatus.Suspended };
+        var warning = await Svc<IntegrationReconciler>().ActivateHeldAsync(row,
+            new IntegrationItems(null, ["po-push", "po-memo"], null), decl, CancellationToken.None);
+
+        warning.Should().Contain("po-push");
+        row.Status.Should().Be(IntegrationStatus.Blocked);
+        Db.Context.ChangeTracker.Clear();
+        Db.Context.Set<ModuleEvent>().AsNoTracking().Where(e => e.Key == "po-push" || e.Key == "po-memo").Select(e => e.Active).ToList()
+            .Should().OnlyContain(a => !a);
+    }
 }
