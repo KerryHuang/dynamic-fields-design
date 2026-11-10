@@ -71,4 +71,8 @@ public static class FieldClosure
         }
         return ids;
     }
+
+    /// <summary>直接引用的欄位加上各關的可編輯欄位；欄位的刪除與停用保護用（設計 §8.6）。</summary>
+    public static IEnumerable<long> ReferencedFields(ApprovalDefinition d) =>
+        DirectFields(d).Concat((d.Stages ?? []).SelectMany(s => s.EditableFields ?? [])).Distinct();
 }

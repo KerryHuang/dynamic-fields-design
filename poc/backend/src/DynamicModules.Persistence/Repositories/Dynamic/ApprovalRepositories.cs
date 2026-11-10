@@ -59,7 +59,7 @@ public class ApprovalFlowRepository(DynamicDbContext db) : IApprovalFlowReposito
     public Task<int> CountPendingAsync(long flowId, CancellationToken ct) =>
         db.Set<ApprovalInstance>().CountAsync(i => i.FlowId == flowId && i.Status == ApprovalInstanceStatus.Pending, ct);
 
-    public async Task<List<(string FlowKey, ApprovalDefinition Definition)>> ListDefinitionsInUseAsync(long moduleId, CancellationToken ct)
+    public async Task<List<(long FlowId, string FlowKey, ApprovalDefinition Definition)>> ListDefinitionsInUseAsync(long moduleId, CancellationToken ct)
     {
         var flows = db.Set<ApprovalFlow>().AsNoTracking().Where(f => f.ModuleId == moduleId);
         return await InUse(flows, ct);
@@ -72,7 +72,7 @@ public class ApprovalFlowRepository(DynamicDbContext db) : IApprovalFlowReposito
     }
 
     /// <summary>這些流程的目前版本，加上 pending 實例綁定或快照裡的版本。</summary>
-    private async Task<List<(string FlowKey, ApprovalDefinition Definition)>> InUse(IQueryable<ApprovalFlow> flows, CancellationToken ct)
+    private async Task<List<(long FlowId, string FlowKey, ApprovalDefinition Definition)>> InUse(IQueryable<ApprovalFlow> flows, CancellationToken ct)
     {
         var pending = db.Set<ApprovalInstance>().AsNoTracking().Where(i => i.Status == ApprovalInstanceStatus.Pending);
         var bound = pending.Where(i => i.FlowVersionId != null).Select(i => i.FlowVersionId!.Value);
@@ -82,8 +82,8 @@ public class ApprovalFlowRepository(DynamicDbContext db) : IApprovalFlowReposito
             join f in flows on v.FlowId equals f.Id
             where v.Id == f.CurrentVersionId || bound.Contains(v.Id) || snapshot.Contains(v.Id)
             orderby f.Key, v.Version
-            select new { f.Key, v.Definition }).ToListAsync(ct);
-        return rows.Select(x => (x.Key, x.Definition)).ToList();
+            select new { f.Id, f.Key, v.Definition }).ToListAsync(ct);
+        return rows.Select(x => (x.Id, x.Key, x.Definition)).ToList();
     }
 
     private static bool References(ApprovalDefinition d, long groupId)

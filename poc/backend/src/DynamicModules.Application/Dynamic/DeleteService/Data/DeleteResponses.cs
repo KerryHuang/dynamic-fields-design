@@ -33,4 +33,5 @@ public static class DeleteBlockerKind
     public const string Report = "report";
     public const string Dashboard = "dashboard";
     public const string PersonalDashboard = "personalDashboard";
+    public const string ApprovalFlow = "approvalFlow";
 }

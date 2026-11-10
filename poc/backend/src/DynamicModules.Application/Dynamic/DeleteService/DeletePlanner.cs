@@ -1,3 +1,4 @@
+using DynamicModules.Domain.Approvals;
 using DynamicModules.Application.Dynamic.DeleteService.Data;
 using DynamicModules.Application.Dynamic.EventService;
 using DynamicModules.Domain.Entities.Dynamic;
@@ -24,7 +25,7 @@ public record DeletePlan(DeleteCheckResponse Check, long ModuleId, IReadOnlyList
 /// 盤點模組、欄位、區塊能不能刪（未啟用、無資料、未被引用，規則見設計文件）並算出清除筆數。
 /// 只讀取，不修改；命令與預檢共用，確保預告與實際行為一致。
 /// </summary>
-public class DeletePlanner(IDeletionRepository data)
+public class DeletePlanner(IDeletionRepository data, IApprovalFlowRepository approvalFlows)
 {
     /// <param name="alsoDeleting">
     /// 同一個動作一起刪除的模組鍵（刪除整個應用程式時是全部成員）。集合內的模組彼此的引用不算被引用，
@@ -266,6 +267,10 @@ public class DeletePlanner(IDeletionRepository data)
         AddConversionBlockers(conversions, all, ids, [], [], blockers);
         foreach (var m in all.Where(m => m.Workflow is { } w && ids.Contains(w.StatusFieldId)))
             blockers.Add(new(DeleteBlockerKind.Workflow, m.Key, m.Workflow!.Id, Name(m.NameI18n, m.Key)));
+        // 簽核流程的目前版本，以及進行中實例綁定或快照裡的版本（簽核設計 §8.6）
+        foreach (var (flowId, flowKey, def) in await approvalFlows.ListDefinitionsInUseAsync(module.Id, ct))
+            if (FieldClosure.ReferencedFields(def).Any(ids.Contains))
+                blockers.Add(new(DeleteBlockerKind.ApprovalFlow, module.Key, flowId, flowKey));
     }
 
     /// <summary>f 是否是公式、彙總或預設帶值設定，引用了 targetIds 裡的欄位。</summary>

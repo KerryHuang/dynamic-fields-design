@@ -36,7 +36,7 @@ public interface IApprovalFlowRepository
     Task<int> CountPendingAsync(long flowId, CancellationToken ct);
 
     /// <summary>模組流程的目前版本，加上被 pending 實例綁定或出現在其快照裡的版本（設計 §8.6）。</summary>
-    Task<List<(string FlowKey, ApprovalDefinition Definition)>> ListDefinitionsInUseAsync(long moduleId, CancellationToken ct);
+    Task<List<(long FlowId, string FlowKey, ApprovalDefinition Definition)>> ListDefinitionsInUseAsync(long moduleId, CancellationToken ct);
 
     /// <summary>目前版本或 pending 實例用到的版本裡，簽核人來源、候選群組或備援引用這個群組的流程鍵；只被已結束實例用過的版本不算。</summary>
     Task<List<string>> ListFlowKeysReferencingGroupAsync(long groupId, CancellationToken ct);

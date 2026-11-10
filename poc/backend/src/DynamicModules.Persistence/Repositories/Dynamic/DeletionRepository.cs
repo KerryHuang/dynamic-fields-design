@@ -116,6 +116,17 @@ public class DeletionRepository(DynamicDbContext db) : IDeletionRepository
         await db.Set<TaskComment>().Where(c => taskIds.Contains(c.TaskId)).ExecuteDeleteAsync(ct);
         await db.Set<TaskParticipant>().Where(p => taskIds.Contains(p.TaskId)).ExecuteDeleteAsync(ct);
         await db.Set<TaskItem>().Where(t => t.ModuleId == module.Id).ExecuteDeleteAsync(ct);
+        // 簽核：子表對實例的 Cascade 同樣不靠 SQLite 外鍵設定，依序明確刪除；流程對模組的外鍵是 Restrict
+        var instanceIds = db.Set<ApprovalInstance>().Where(i => i.ModuleId == module.Id).Select(i => i.Id);
+        var flowIds = db.Set<ApprovalFlow>().Where(f => f.ModuleId == module.Id).Select(f => f.Id);
+        await db.Set<Notification>().Where(n => n.SourceType == "approval" && n.SourceId != null && instanceIds.Contains(n.SourceId.Value)).ExecuteDeleteAsync(ct);
+        await db.Set<ApprovalAction>().Where(a => instanceIds.Contains(a.InstanceId)).ExecuteDeleteAsync(ct);
+        await db.Set<ApprovalTask>().Where(t => instanceIds.Contains(t.InstanceId)).ExecuteDeleteAsync(ct);
+        await db.Set<ApprovalStageRun>().Where(s => instanceIds.Contains(s.InstanceId)).ExecuteDeleteAsync(ct);
+        await db.Set<ApprovalInstanceFlow>().Where(x => instanceIds.Contains(x.InstanceId)).ExecuteDeleteAsync(ct);
+        await db.Set<ApprovalInstance>().Where(i => i.ModuleId == module.Id).ExecuteDeleteAsync(ct);
+        await db.Set<ApprovalFlowVersion>().Where(v => flowIds.Contains(v.FlowId)).ExecuteDeleteAsync(ct);
+        await db.Set<ApprovalFlow>().Where(f => f.ModuleId == module.Id).ExecuteDeleteAsync(ct);
         await db.Set<RecordHistory>().Where(h => recordIds.Contains(h.RecordId)).ExecuteDeleteAsync(ct);
         await db.Set<RecordIndex>().Where(i => recordIds.Contains(i.RecordId)).ExecuteDeleteAsync(ct);
         await db.Set<Record>().Where(r => r.ModuleId == module.Id).ExecuteDeleteAsync(ct);

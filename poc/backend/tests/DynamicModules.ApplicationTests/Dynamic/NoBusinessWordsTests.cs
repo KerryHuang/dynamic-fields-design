@@ -9,7 +9,10 @@ namespace DynamicModules.ApplicationTests.Dynamic;
 public class NoBusinessWordsTests
 {
     private static readonly string[] ChineseWords =
-        ["庫存", "工令", "傳票", "出貨", "報工", "請假", "倉庫", "訂單", "發票", "薪資", "進貨", "過帳", "借方", "貸方", "科目"];
+        [
+            "庫存", "工令", "傳票", "出貨", "報工", "請假", "倉庫", "訂單", "發票", "薪資", "進貨", "過帳", "借方", "貸方", "科目",
+            "假別", "報支", "費用", "採購", "設計案"
+        ];
 
     private static readonly string[] EnglishWords =
         ["stock", "inventory", "voucher", "shipment", "shipping", "payroll", "invoice", "warehouse", "salary", "debit", "credit"];
@@ -26,14 +29,17 @@ public class NoBusinessWordsTests
         var src = Path.Combine(Root(), "src");
         var app = Path.Combine(src, "DynamicModules.Application");
         var domain = Path.Combine(src, "DynamicModules.Domain");
-        foreach (var dir in new[] { "EventService", "CheckService", "LedgerService" })
+        foreach (var dir in new[] { "EventService", "CheckService", "LedgerService", "ApprovalService", "OrganizationService" })
             foreach (var f in Directory.EnumerateFiles(Path.Combine(app, "Dynamic", dir), "*.cs", SearchOption.AllDirectories)) yield return f;
+        foreach (var dir in new[] { "Approvals", "Organization" })
+            foreach (var f in Directory.EnumerateFiles(Path.Combine(domain, dir), "*.cs", SearchOption.AllDirectories)) yield return f;
         foreach (var f in new[]
                  {
                      Path.Combine(domain, "Entities", "Dynamic", "ModuleEvent.cs"), Path.Combine(domain, "Entities", "Dynamic", "ModuleCheck.cs"),
                      Path.Combine(domain, "Entities", "Dynamic", "ModuleLedger.cs"), Path.Combine(app, "Common", "Behaviors", "RecordEffectsBehavior.cs"),
                      Path.Combine(app, "Common", "Security", "SystemIdentity.cs"), Path.Combine(app, "Dynamic", "Rollups", "FrozenRecords.cs"),
                      Path.Combine(app, "Dynamic", "AppService", "AppEffectsCodec.cs"), Path.Combine(app, "Dynamic", "AppService", "AppPackageValidator.V4.cs"),
+                     Path.Combine(domain, "Entities", "Dynamic", "Approval.cs"), Path.Combine(domain, "Entities", "Dynamic", "Department.cs"),
                  })
             yield return f;
     }
@@ -44,6 +50,14 @@ public class NoBusinessWordsTests
         var files = Files().ToList();
         files.Should().OnlyContain(f => File.Exists(f));
         files.Count.Should().BeGreaterThan(20);
+    }
+
+    [Fact]
+    public void NoBusinessWords_ApprovalServices()
+    {
+        var files = Files().Select(Path.GetFileName).ToList();
+        files.Should().Contain(["ApprovalConstraints.cs", "ApprovalDefinition.cs", "Approval.cs", "OrganizationHandlers.cs", "ManagerChain.cs"]);
+        ChineseWords.Should().Contain(["假別", "報支", "費用", "採購", "設計案"]);
     }
 
     [Fact]

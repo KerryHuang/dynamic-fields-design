@@ -17,7 +17,7 @@ namespace DynamicModules.Application.Dynamic.FieldService.Commands.SetFieldStatu
 
 public class SetFieldStatusHandler(IModuleRepository modules, IRecordRepository records, IUnitOfWork uow, FieldTypeRegistry registry,
     ICurrentUser user, IBusinessTime time, RollupRecalc rollups, IEventFactRepository facts,
-    Dynamic.LedgerService.ImmutableDataGuard immutable, Common.Security.FieldLocks locks)
+    Dynamic.LedgerService.ImmutableDataGuard immutable, Common.Security.FieldLocks locks, IApprovalFlowRepository approvalFlows)
     : IRequestHandler<SetFieldStatusRequest, ServiceResult>
 {
     public async Task<ServiceResult> Handle(SetFieldStatusRequest request, CancellationToken ct)
@@ -48,6 +48,11 @@ public class SetFieldStatusHandler(IModuleRepository modules, IRecordRepository 
             && (await modules.ListRollupsBySourceModuleAsync(module.Id, ct))
                 .Any(x => ModuleRelations.RollupRefsOf(x.Rollup).Contains(request.FieldId)))
             return FieldRules.Invalid("Status", "此欄位被彙總欄位引用，不能停用");
+
+        if (request.Status == FieldStatus.Inactive
+            && (await approvalFlows.ListDefinitionsInUseAsync(module.Id, ct))
+                .FirstOrDefault(x => Domain.Approvals.FieldClosure.ReferencedFields(x.Definition).Contains(request.FieldId)) is { FlowKey: { } flowKey })
+            return ServiceResult.Conflict($"欄位被簽核流程「{flowKey}」使用");
 
         if (request.Status == FieldStatus.Active && field.Status == FieldStatus.Inactive && field.Type == FieldType.Rollup)
         {
