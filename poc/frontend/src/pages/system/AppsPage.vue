@@ -139,7 +139,7 @@ const reopen = (key: string) => reopenApp.mutate(key, {
             <q-item-label v-if="p.description" caption>{{ name(p.description) }}</q-item-label>
             <q-item-label caption>
               {{ t('apps.modules', { n: p.modules.length }) }}
-              <template v-if="p.requires.apps.length">・{{ t('apps.requires', { apps: p.requires.apps.map((r) => r.app).join('、') }) }}</template>
+              <template v-if="p.requires.apps.length">・{{ t('apps.requires', { apps: joinList(p.requires.apps.map((r) => r.app)) }) }}</template>
             </q-item-label>
             <q-item-label v-if="p.status && appByKey.get(p.id)?.dependents.length" caption>
               {{ t('apps.dependents', { apps: joinList(appByKey.get(p.id)!.dependents) }) }}

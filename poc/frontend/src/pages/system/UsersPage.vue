@@ -30,7 +30,7 @@ const forbidden = computed(() => isForbidden(users.error.value));
 
 const groupOptions = computed(() => (groups.data.value ?? []).map((g) => ({ value: g.id, label: resolveI18n(g.name, locale.value) })));
 const groupNames = (ids: number[]) =>
-  ids.map((id) => groupOptions.value.find((o) => o.value === id)?.label).filter(Boolean).join('、');
+  joinList(ids.map((id) => groupOptions.value.find((o) => o.value === id)?.label).filter((l): l is string => !!l));
 
 const columns = computed<QTableColumn<AdminUser>[]>(() => [
   { name: 'userId', label: t('users.userId'), align: 'left', field: 'userId' },

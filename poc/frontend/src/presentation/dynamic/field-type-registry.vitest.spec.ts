@@ -1,5 +1,6 @@
 import { createPinia, setActivePinia } from 'pinia';
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it } from 'vitest';
+import { i18n } from 'src/boot/i18n';
 import { useIdentityStore } from 'src/stores/use-identity-store';
 import sharedOperators from '../../../../shared/filter-operators.json';
 import enUS from 'src/i18n/en-US.json';
@@ -225,6 +226,18 @@ describe('fieldTypeRegistry 顯示隨語系', () => {
     const files = [{ name: 'a.pdf' }, { name: 'b.png' }];
     expect(fieldTypeRegistry.attachment.format(files, f('attachment'), 'en-US')).toBe('a.pdf, b.png');
     expect(fieldTypeRegistry.attachment.format(files, f('attachment'), 'zh-TW')).toBe('a.pdf、b.png');
+  });
+
+  describe('entry().zod', () => {
+    afterEach(() => { i18n.global.locale.value = 'zh-TW'; });
+
+    it('驗證訊息用目前介面語系，不固定繁中', () => {
+      const req = { ...f('text'), config: { ...f('text').config, required: true } };
+      const message = () => fieldTypeRegistry.text.zod(req).safeParse('').error?.issues[0]?.message;
+      expect(message()).toBe(zhTW.dynamic.validation.required);
+      i18n.global.locale.value = 'en-US';
+      expect(message()).toBe(enUS.dynamic.validation.required);
+    });
   });
 
   it('幣別千分位用目前語系', () => {

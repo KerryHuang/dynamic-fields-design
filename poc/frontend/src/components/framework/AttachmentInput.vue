@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, inject, ref } from 'vue';
 import { useI18n } from 'vue-i18n';
+import { joinList } from 'src/i18n/translate';
 import { useQuasar } from 'quasar';
 import { useAttachmentSettings } from 'src/application/dynamic/queries/attachment-queries';
 import type { AttachmentFile } from 'src/domain/dynamic/types';
@@ -38,7 +39,7 @@ const sizeText = (n: number) => (n >= 1048576 ? `${(n / 1048576).toFixed(1)} MB`
 
 function notifyFailure(e: unknown) {
   const err = e as ApiError;
-  const detail = err.errors ? Object.values(err.errors).flat().join('、') : err.message;
+  const detail = err.errors ? joinList(Object.values(err.errors).flat()) : err.message;
   $q.notify({ type: 'negative', message: detail || t('attachment.failed') });
 }
 

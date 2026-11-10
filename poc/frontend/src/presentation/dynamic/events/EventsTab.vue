@@ -36,7 +36,7 @@ function trigger(ev: ModuleEvent): string {
   const tr = ev.definition.trigger;
   const kind = t(`events.triggerKind.${tr.on}`);
   if (tr.on !== 'transition' || tr.toState == null) return kind;
-  const from = tr.fromStates?.length ? tr.fromStates.map(stateLabel).join('、') : '*';
+  const from = tr.fromStates?.length ? joinList(tr.fromStates.map(stateLabel)) : '*';
   return `${kind}：${from} → ${stateLabel(tr.toState)}`;
 }
 

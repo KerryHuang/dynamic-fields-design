@@ -2,6 +2,7 @@
 import { useQuasar } from 'quasar';
 import { computed, reactive, ref, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
+import { joinList } from 'src/i18n/translate';
 import { useSaveConversionMutation } from 'src/application/dynamic/queries/conversions-queries';
 import { useModuleDetail, useModules } from 'src/application/dynamic/queries/modules-queries';
 import { useWorkflowQuery } from 'src/application/dynamic/queries/workflow-queries';
@@ -115,8 +116,8 @@ async function submit() {
 }
 // Key and name errors sit on their inputs; the rest (definition paths such as header.copy[0]) are listed under the form.
 const errorsOf = (prefix: string) => Object.entries(error.value?.errors ?? {}).filter(([k]) => k.toLowerCase().startsWith(prefix));
-const keyError = computed(() => errorsOf('key').flatMap(([, v]) => v).join('、') || undefined);
-const nameError = computed(() => errorsOf('name').flatMap(([, v]) => v).join('、') || undefined);
+const keyError = computed(() => joinList(errorsOf('key').flatMap(([, v]) => v)) || undefined);
+const nameError = computed(() => joinList(errorsOf('name').flatMap(([, v]) => v)) || undefined);
 const definitionErrors = computed(() => Object.entries(error.value?.errors ?? {})
   .filter(([k]) => !/^(key|name)/i.test(k)).flatMap(([, v]) => v));
 </script>

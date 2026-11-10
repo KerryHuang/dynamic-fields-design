@@ -13,7 +13,7 @@ import ToggleInput from 'src/components/framework/ToggleInput.vue';
 import { resolveI18n } from 'src/domain/dynamic/i18n-text';
 import { operatorNeedsValue } from 'src/domain/dynamic/condition';
 import type { FieldType, FilterOperator, SchemaField } from 'src/domain/dynamic/types';
-import { joinList, tFor, type Translate } from 'src/i18n/translate';
+import { currentLocale, joinList, tFor, type Translate } from 'src/i18n/translate';
 import { useIdentityStore } from 'src/stores/use-identity-store';
 
 export interface FieldTypeEntry {
@@ -146,7 +146,7 @@ export function normalizeForRules(raw: unknown, type: FieldType): unknown {
  * Builds the validator for one field; `previous` is the stored value in edit mode (keeps inactive options valid).
  * `required` overrides config.required (the rule engine decides it per record).
  */
-export function zodFor(field: SchemaField, previous?: unknown, required = field.config.required, t: Translate = tFor('zh-TW')): ZodTypeAny {
+export function zodFor(field: SchemaField, previous?: unknown, required = field.config.required, t: Translate = tFor(currentLocale())): ZodTypeAny {
   return z.unknown().transform((raw, ctx) => {
     const v = normalize(raw, field.type);
     if (v === null) {

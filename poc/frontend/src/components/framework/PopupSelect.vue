@@ -2,6 +2,7 @@
 import { useQuery } from '@tanstack/vue-query';
 import { computed, onBeforeUnmount, ref, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
+import { joinList } from 'src/i18n/translate';
 import type { LightItem, ReferenceInfo } from 'src/domain/dynamic/types';
 import { dynamicApi } from 'src/services/api/dynamic-api';
 
@@ -54,7 +55,7 @@ const toValue = (key: string): Key => (props.valueKind === 'number' ? Number(key
 const current = computed<Key[]>(() => [props.modelValue ?? []].flat());
 const titleOf = (v: Key) => titles.value.get(String(v)) ?? props.knownTitles?.[String(v)] ?? String(v);
 const display = computed(() => {
-  if (props.multiple) return current.value.map(titleOf).join('、');
+  if (props.multiple) return joinList(current.value.map(titleOf));
   const v = current.value[0];
   if (v === undefined) return '';
   const info = props.reference;

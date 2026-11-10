@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed } from 'vue';
 import { useI18n } from 'vue-i18n';
+import { joinList } from 'src/i18n/translate';
 import { useModuleDetail } from 'src/application/dynamic/queries/modules-queries';
 import { useHiddenFieldIds } from 'src/application/dynamic/queries/events-queries';
 import SelectNoOption from 'src/components/framework/SelectNoOption.vue';
@@ -31,6 +32,7 @@ const props = defineProps<{
 }>();
 const emit = defineEmits<{ 'update:modelValue': [effect: EffectDraft]; remove: [] }>();
 const { t, locale } = useI18n();
+const setError = (i: number) => { const m = props.errors?.set.get(i); return m && joinList(m); };
 
 const e = computed(() => props.modelValue);
 const id = (suffix: string) => `effect-${props.index}-${suffix}`;
@@ -166,7 +168,7 @@ const argsText = computed(() => (e.value.custom?.args === undefined ? '' : JSON.
           v-for="(row, i) in e.set" :key="i" :model-value="row" :id-prefix="`set-${index}-${i}`" :kind="e.kind as 'create' | 'update'"
           :to-options="toOptions" :target-field="targetFieldOf(row.to)" :header-options="headerOptions" :line-options="lineOptions"
           :has-line="e.kind === 'create' && !!e.each" :hidden-header="hiddenHeader" :hidden-line="hiddenLine" :disabled="disabled"
-          :error="errors?.set.get(i)?.join('、')" @update:model-value="(r) => setRow(i, r)" @remove="removeRow(i)"
+          :error="setError(i)" @update:model-value="(r) => setRow(i, r)" @remove="removeRow(i)"
         />
       </div>
     </div>

@@ -141,7 +141,7 @@ function submit() {
             <q-badge v-if="!r.active" color="muted" class="q-ml-sm">{{ t('designer.rules.inactive') }}</q-badge>
           </q-item-label>
           <q-item-label caption>{{ t('designer.rules.condition') }}：{{ summary(r.condition) }}</q-item-label>
-          <q-item-label caption>{{ t('designer.rules.targets') }}：{{ r.targets.map(targetText).join('、') }}</q-item-label>
+          <q-item-label caption>{{ t('designer.rules.targets') }}：{{ joinList(r.targets.map(targetText)) }}</q-item-label>
           <q-item-label v-if="rowError(i)" class="text-negative" :data-testid="`rule-error-${i}`">{{ rowError(i) }}</q-item-label>
         </q-item-section>
         <q-item-section side>
