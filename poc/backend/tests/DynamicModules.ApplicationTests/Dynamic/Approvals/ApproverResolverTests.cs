@@ -146,4 +146,17 @@ public class ApproverResolverTests
         var r = Resolve(Ctx("emp3", picks: ["fin1", "fin2"]), src, ApprovalModes.All);
         r.Seats.Select(s => s.SeatKey).Should().Equal("u:fin1", "u:fin2");
     }
+    [Fact]
+    public void All_TwoEmptyUnits_FallbackPoolSmallerThanSeats_Error()
+    {
+        // 兩個空單位、備援只有一人：一人一票下第二席永遠補不上，啟動時就要失敗（設計 §6.5）
+        var src = new ApproverSource(ApprovalSources.Users, UserIds: ["u1", "u2"]);
+        var one = Resolve(Ctx("buyer1", inactive: ["u1", "u2"]), src, ApprovalModes.All);
+        one.Error.Should().Be(ApprovalMessages.NoApprover("關卡", "u2"));
+        one.Seats.Should().BeEmpty();
+
+        var two = Resolve(Ctx("buyer1", inactive: ["u1", "u2"], admins: ["admin", "gm"]), src, ApprovalModes.All);
+        two.Error.Should().BeNull();
+        two.Seats.Select(s => s.SeatKey).Should().Equal("fb:0", "fb:1");
+    }
 }

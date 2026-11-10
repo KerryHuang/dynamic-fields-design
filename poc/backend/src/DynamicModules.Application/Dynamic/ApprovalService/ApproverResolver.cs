@@ -54,9 +54,10 @@ public sealed class ApproverResolver(OrgSnapshotLoader org, IPermissionRepositor
         {
             seats.AddRange(resolved.Select(u => new SeatPlan($"u:{u}", [u], ApprovalTaskReason.Resolved, null)));
             var pool = backups.Where(u => !resolved.Contains(u)).ToList();
+            // 備援席位共用同一份名單、會簽一人一票：人數少於空單位數，後面的席位永遠補不上（設計 §6.5）
+            if (pool.Count < empty.Count) return new([], false, ApprovalMessages.NoApprover(stage, empty[pool.Count]));
             for (var i = 0; i < empty.Count; i++)
             {
-                if (pool.Count == 0) return new([], false, ApprovalMessages.NoApprover(stage, empty[i]));
                 seats.Add(new SeatPlan($"fb:{i}", pool, ApprovalTaskReason.Fallback, empty[i]));
             }
         }

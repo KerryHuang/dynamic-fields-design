@@ -237,4 +237,51 @@ public class ApprovalActionTests : ApprovalTestBase
         Outcome(await Approve(id, "buyer2")).Should().Be(ApprovalOutcomes.Approved);
         StateOf(r, Inst(id).RecordId).Should().Be(r.Confirmed);
     }
+    private Task Deactivate(params string[] users) =>
+        Db.Context.Set<AppUser>().Where(u => users.Contains(u.UserId)).ExecuteUpdateAsync(s => s.SetProperty(u => u.IsActive, false));
+
+    private async Task<PurchaseRig> OneFlow(ApprovalDefinition d)
+    {
+        var r = await BuildPurchase();
+        await SeedFlow(r, "po-n", r.Confirmed, 1, d);
+        (await SaveWorkflow(r, [Needs(r.Draft, r.Confirmed), Plain(r.Confirmed, r.Partial), Plain(r.Partial, r.Received),
+            Plain(r.Confirmed, r.Cancelled)])).IsSuccess.Should().BeTrue();
+        await GrantEveryone(r.Module);
+        return r;
+    }
+
+    [Fact]
+    public async Task Submit_AllStage_TwoEmptyUnits_SingleFallback_409_NoInstance()
+    {
+        // 會簽兩個空單位、備援只有 admin 一人：送出就 409，不留實例（設計 §6.5；審查必修 1）
+        var r = await OneFlow(Def(null, Stage("both", Users("emp1", "emp2"), mode: ApprovalModes.All)));
+        await Deactivate("emp1", "emp2");
+        As("buyer1");
+        var po = await NewPo(r, price: 5000);
+        var res = await Submit(po.Id, r.Confirmed);
+        res.IsConflict.Should().BeTrue(Dump(res));
+        res.Message.Should().Be(ApprovalMessages.NoApprover("both", "emp2"));
+        Db.Context.Set<ApprovalInstance>().AsNoTracking().Count(i => i.RecordId == po.Id).Should().Be(0);
+        StateOf(r, po.Id).Should().Be(r.Draft);
+    }
+
+    [Fact]
+    public async Task Approve_NextStageNoApprover_409_NothingChanged()
+    {
+        // 推進時下一關找不到人、備援也沒有 → 同意回 409、什麼都不留（設計 §6.5 末段）
+        var r = await OneFlow(Def(null, Stage("lead", Group(PurchaseLeadGroup)), Stage("next", Users("emp1"))) with { FallbackApprovers = Users("emp2") });
+        var id = await SubmitAs(r, "buyer1", 5000);
+        await Deactivate("emp1", "emp2");
+        var before = Inst(id).RowVersion;
+        var actions = ActionsOf(id).Count;
+        var res = await Approve(id, "buyer2");
+        res.IsConflict.Should().BeTrue(Dump(res));
+        res.Message.Should().Be(ApprovalMessages.NoApprover("next", "emp1"));
+        Inst(id).RowVersion.Should().Be(before);
+        Inst(id).Status.Should().Be(ApprovalInstanceStatus.Pending);
+        ActionsOf(id).Should().HaveCount(actions);
+        Open(id, "buyer2").Status.Should().Be(ApprovalTaskStatus.Open);
+        Db.Context.Set<ApprovalStageRun>().AsNoTracking().Count(x => x.InstanceId == id).Should().Be(1);
+        StateOf(r, Inst(id).RecordId).Should().Be(r.Draft);
+    }
 }
