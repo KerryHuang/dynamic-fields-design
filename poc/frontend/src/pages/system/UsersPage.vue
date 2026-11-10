@@ -165,7 +165,7 @@ function runSetActive(u: AdminUser, active: boolean) {
           <div class="col-12 q-py-xs">
             <q-card flat bordered :data-testid="`user-card-${row.userId}`">
               <q-list dense>
-                <q-item v-for="c in cols.filter((x) => x.name !== 'actions' && x.value)" :key="c.name">
+                <q-item v-for="c in cols.filter((x: { name: string; value: unknown }) => x.name !== 'actions' && x.value)" :key="c.name">
                   <q-item-section>
                     <q-item-label caption>{{ c.label }}</q-item-label>
                     <q-item-label style="overflow-wrap: anywhere">{{ c.value }}</q-item-label>
