@@ -609,4 +609,16 @@ public class SharedMasterDeleteTests : IDisposable
         _rig.Db(db => db.Set<Module>().Any(m => m.Key == Partner)).Should().BeFalse();
         await _rig.AssertIntegrityAsync();
     }
+
+    /// <summary>轉換的固定值（header.set）也是對目標欄位的引用：沒有資料的固定值欄位，安全刪除要被轉換擋下。</summary>
+    [Fact]
+    public async Task AFieldUsedByAConversionFixedValue_IsBlockedFromSafeDelete()
+    {
+        await _rig.ImportAsync(AppTestPackagesV6.LocalSet);
+        await _rig.OpenOkAsync("set-lite", new { groupMap = new Dictionary<string, object>() });
+        var role = _rig.FieldId("set-lite", "customer.role");
+
+        var check = await JsonOf(await _rig.Admin.GetAsync($"{Base}/fields/{role}/delete-check"));
+        check.GetProperty("blockers").EnumerateArray().Select(b => b.GetProperty("kind").GetString()).Should().Contain("conversion");
+    }
 }

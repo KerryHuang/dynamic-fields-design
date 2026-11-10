@@ -284,7 +284,7 @@ public class DeletePlanner(IDeletionRepository data)
             blockers.Add(FieldBlocker(DeleteBlockerKind.Fill, owner, f));
     }
 
-    /// <summary>轉換定義引用了這些欄位（對應、追溯、數量欄位），或引用了這些模組（來源、目標、明細模組）。</summary>
+    /// <summary>轉換定義引用了這些欄位（對應、追溯、數量、固定值欄位），或引用了這些模組（來源、目標、明細模組）。</summary>
     private static void AddConversionBlockers(
         List<Conversion> conversions, List<Module> all, IReadOnlySet<long> fieldIds, IReadOnlyCollection<long> moduleIds,
         IReadOnlyCollection<string> moduleKeys, List<DeleteBlocker> blockers)
@@ -292,7 +292,8 @@ public class DeletePlanner(IDeletionRepository data)
         foreach (var c in conversions)
         {
             var d = c.Definition;
-            var refs = d.Header.Copy.SelectMany(m => new[] { m.From, m.To }).Append(d.Header.SourceFieldId).ToList();
+            var refs = d.Header.Copy.SelectMany(m => new[] { m.From, m.To }).Append(d.Header.SourceFieldId)
+                .Concat((d.Header.Set ?? []).Select(v => v.FieldId)).ToList();
             if (d.Lines is { } l)
                 refs.AddRange(l.Copy.SelectMany(m => new[] { m.From, m.To }).Concat([l.Quantity.From, l.Quantity.To, l.SourceLineFieldId]));
             var hitsModule = moduleIds.Contains(c.SourceModuleId) || moduleIds.Contains(c.TargetModuleId)
