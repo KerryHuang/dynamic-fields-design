@@ -108,6 +108,14 @@ public class DeletionRepository(DynamicDbContext db) : IDeletionRepository
     public async Task PurgeModuleAsync(Module module, CancellationToken ct)
     {
         var recordIds = db.Set<Record>().Where(r => r.ModuleId == module.Id).Select(r => r.Id);
+        // 任務對模組的外鍵是 Restrict，留言、參與者、附件的 Cascade 不靠 SQLite 外鍵設定：依序明確刪除（檔案由 ModuleRemover 刪）
+        var taskIds = db.Set<TaskItem>().Where(t => t.ModuleId == module.Id).Select(t => t.Id);
+        var commentIds = db.Set<TaskComment>().Where(c => taskIds.Contains(c.TaskId)).Select(c => c.Id);
+        await db.Set<Notification>().Where(n => n.SourceType == "task" && n.SourceId != null && taskIds.Contains(n.SourceId.Value)).ExecuteDeleteAsync(ct);
+        await db.Set<TaskCommentAttachment>().Where(a => commentIds.Contains(a.CommentId)).ExecuteDeleteAsync(ct);
+        await db.Set<TaskComment>().Where(c => taskIds.Contains(c.TaskId)).ExecuteDeleteAsync(ct);
+        await db.Set<TaskParticipant>().Where(p => taskIds.Contains(p.TaskId)).ExecuteDeleteAsync(ct);
+        await db.Set<TaskItem>().Where(t => t.ModuleId == module.Id).ExecuteDeleteAsync(ct);
         await db.Set<RecordHistory>().Where(h => recordIds.Contains(h.RecordId)).ExecuteDeleteAsync(ct);
         await db.Set<RecordIndex>().Where(i => recordIds.Contains(i.RecordId)).ExecuteDeleteAsync(ct);
         await db.Set<Record>().Where(r => r.ModuleId == module.Id).ExecuteDeleteAsync(ct);
