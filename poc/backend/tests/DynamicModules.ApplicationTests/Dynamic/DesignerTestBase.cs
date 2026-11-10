@@ -3,6 +3,7 @@ using DynamicModules.Application;
 using DynamicModules.Application.Common;
 using DynamicModules.Application.Common.Security;
 using DynamicModules.Application.Common.Time;
+using DynamicModules.Application.Dynamic.AttachmentService;
 using DynamicModules.Application.Dynamic.FieldService.Commands.AddField;
 using DynamicModules.Application.Dynamic.FieldService.Commands.SetFieldStatus;
 using DynamicModules.Application.Dynamic.FieldService.Commands.UpdateField;
@@ -15,6 +16,7 @@ using DynamicModules.ApplicationTests.Persistence;
 using DynamicModules.Domain.Entities.Dynamic;
 using DynamicModules.Domain.ValueObjects;
 using DynamicModules.Persistence;
+using DynamicModules.Persistence.Files;
 using DynamicModules.Persistence.Seed;
 using DynamicModules.TestSupport;
 using FluentAssertions;
@@ -32,6 +34,9 @@ public abstract class DesignerTestBase : IAsyncLifetime
     private sealed class FakeUser : ICurrentUser { public string UserId { get; set; } = "admin"; }
 
     private readonly FakeUser _user = new();
+
+    /// <summary>附件的本機儲存根目錄（每個測試一個，結束時刪除）；模組清除與留言附件會用到。</summary>
+    private readonly string _attachmentRoot = Path.Combine(Path.GetTempPath(), $"dm-app-att-{Guid.NewGuid():N}");
 
     /// <summary>切換目前使用者（預設 admin）。</summary>
     protected void As(string userId) => _user.UserId = userId;
@@ -66,6 +71,9 @@ public abstract class DesignerTestBase : IAsyncLifetime
         services.AddSingleton<ICurrentUser>(_user);
         services.AddSingleton<IBusinessTime, FakeTime>();
         services.AddSingleton(new AuthSettings(false));
+        services.AddSingleton(new AttachmentSettings(_attachmentRoot, AttachmentSettings.DefaultMaxBytes,
+            AttachmentSettings.DefaultExtensions, AttachmentSettings.DefaultMaxFilesPerField, true, null));
+        services.AddSingleton<IAttachmentStore>(new LocalAttachmentStore(_attachmentRoot));
         ConfigureServices(services);
         _sp = services.BuildServiceProvider();
         if (FieldsFilterable)
@@ -82,6 +90,7 @@ public abstract class DesignerTestBase : IAsyncLifetime
     {
         await _sp.DisposeAsync();
         await Db.DisposeAsync();
+        if (Directory.Exists(_attachmentRoot)) Directory.Delete(_attachmentRoot, recursive: true);
     }
 
     protected T Svc<T>() where T : notnull => _sp.GetRequiredService<T>();

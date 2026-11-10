@@ -56,10 +56,11 @@ public static class UploadGuard
 
     /// <summary>
     /// Content-Length 超過上限回 413（IActionResult）；否則設定 <see cref="IHttpMaxRequestBodySizeFeature"/> 與表單 multipart 長度上限後回 null。
+    /// 上限是「單檔上限 × files ＋ multipart 開銷」。
     /// </summary>
-    public static IActionResult? ApplyBodyLimit(HttpContext http, AttachmentSettings settings)
+    public static IActionResult? ApplyBodyLimit(HttpContext http, AttachmentSettings settings, int files = 1)
     {
-        var limit = settings.MaxBytes + MultipartOverhead;
+        var limit = settings.MaxBytes * files + MultipartOverhead;
         if (http.Request.ContentLength > limit) return new StatusCodeResult(StatusCodes.Status413PayloadTooLarge);
 
         var feature = http.Features.Get<IHttpMaxRequestBodySizeFeature>();

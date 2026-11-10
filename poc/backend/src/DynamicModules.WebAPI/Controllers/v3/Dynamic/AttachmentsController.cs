@@ -31,13 +31,7 @@ public class AttachmentsController(IMediator mediator) : ControllerBase
     public async Task<IActionResult> Download(long recordId, long fieldId, string fileId, CancellationToken ct)
     {
         var result = await mediator.Send(new DownloadAttachmentRequest(recordId, fieldId, fileId), ct);
-        if (result.Data is not AttachmentDownload file) return result.ToActionResult(this);
-
-        Response.Headers["X-Content-Type-Options"] = "nosniff";
-        Response.Headers["Content-Security-Policy"] = "sandbox; default-src 'none'";
-        Response.Headers.CacheControl = "private, no-store";
-        // 固定 octet-stream：不依檔名猜 MIME，也就不會被瀏覽器當成 HTML 或 SVG 開在站內
-        return File(file.Content, "application/octet-stream", file.Name);
+        return result.Data is AttachmentDownload file ? AttachmentFileResult.From(this, file) : result.ToActionResult(this);
     }
 
     [HttpPost("attachments/sweep")]

@@ -160,13 +160,14 @@ public sealed class DownloadAttachmentHandler(
     }
 }
 
-public sealed class SweepAttachmentsHandler(IModuleRepository modules, IRecordRepository records, IAttachmentStore store)
+public sealed class SweepAttachmentsHandler(IModuleRepository modules, IRecordRepository records, ITaskRepository tasks, IAttachmentStore store)
     : IRequestHandler<SweepAttachmentsRequest, ServiceResult>
 {
     public async Task<ServiceResult> Handle(SweepAttachmentsRequest request, CancellationToken ct)
     {
-        // 被參照＝任何記錄（含軟刪除，還原後要用）目前的值裡列出。永久清除的記錄不在了，它的檔案就成了孤兒。
-        var referenced = new HashSet<string>(StringComparer.Ordinal);
+        // 被參照＝任何記錄（含軟刪除，還原後要用）目前的值裡列出，或是未撤回的任務留言的附件。
+        // 永久清除的記錄、撤回的留言、刪掉的任務不在名單內，它們的檔案就成了孤兒。
+        var referenced = await tasks.ListLiveAttachmentKeysAsync(ct);
         foreach (var listed in await modules.ListAsync(ct))
         {
             var module = await modules.GetByIdAsync(listed.Id, includeChildren: true, ct);

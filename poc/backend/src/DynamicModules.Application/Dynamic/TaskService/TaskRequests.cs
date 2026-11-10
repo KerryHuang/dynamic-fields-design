@@ -36,3 +36,6 @@ public sealed record WithdrawTaskCommentRequest(long TaskId, long CommentId) : I
 
 /// <summary>啟用中的使用者，DisplayName 或 UserId 包含 Keyword（不分大小寫），最多 20 筆。</summary>
 public sealed record GetMentionCandidatesRequest(string? Keyword) : IRequest<ServiceResult>;
+
+/// <summary>成功時 Data 是 <see cref="AttachmentService.AttachmentDownload"/>。</summary>
+public sealed record DownloadTaskAttachmentRequest(long TaskId, long CommentId, long AttachmentId) : IRequest<ServiceResult>;

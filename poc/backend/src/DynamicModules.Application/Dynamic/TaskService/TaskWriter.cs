@@ -116,12 +116,13 @@ public sealed class TaskWriter(ICurrentUser user, IBusinessTime time, ITaskRepos
     }
 
     /// <summary>人寫的留言：內文 @ 到的啟用中使用者加為 Mentioned 參與者，記 Mentioned（每人一筆）與 Commented（帶被 @ 的清單）。</summary>
-    public Task<TaskComment> AddCommentAsync(TaskItem task, string body, IReadOnlySet<string> activeUserIds, CancellationToken ct)
+    public Task<TaskComment> AddCommentAsync(TaskItem task, string body, IReadOnlySet<string> activeUserIds,
+        IReadOnlyList<TaskCommentAttachment> attachments, CancellationToken ct)
     {
         var actor = user.UserId;
         var comment = new TaskComment
         {
-            Kind = TaskCommentKind.Comment, AuthorUserId = actor, Body = body, CreatedTime = time.Now
+            Kind = TaskCommentKind.Comment, AuthorUserId = actor, Body = body, CreatedTime = time.Now, Attachments = [.. attachments]
         };
         task.Comments.Add(comment);
         var mentioned = TaskMentions.UserIds(body).Where(activeUserIds.Contains).ToList();

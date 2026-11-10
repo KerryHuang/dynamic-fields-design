@@ -26,6 +26,10 @@ public interface ITaskRepository
     Task<List<TaskComment>> ListCommentsAsync(long taskId, CancellationToken ct);
     /// <summary>追蹤，含附件。</summary>
     Task<TaskComment?> GetCommentAsync(long taskId, long commentId, CancellationToken ct);
+    /// <summary>未撤回留言的附件儲存鍵（附件清掃把它們算成被參照）。</summary>
+    Task<HashSet<string>> ListLiveAttachmentKeysAsync(CancellationToken ct);
+    /// <summary>不追蹤；附件須屬於該留言與任務，留言已撤回時回 null。</summary>
+    Task<TaskCommentAttachment?> GetAttachmentAsync(long taskId, long commentId, long attachmentId, CancellationToken ct);
     void Add(TaskItem task);
     void Remove(TaskItem task);
 }

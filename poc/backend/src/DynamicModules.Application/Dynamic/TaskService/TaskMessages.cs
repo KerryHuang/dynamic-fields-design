@@ -14,4 +14,6 @@ public static class TaskMessages
     public const string BodyTooLong = "留言不能超過 4000 字";
     public const string CommentNotFound = "找不到留言";
     public const string SystemEntryNoWithdraw = "系統記錄不能撤回";
+    public const string TooManyFiles = "一則留言最多 5 個附件";
+    public const string AttachmentNotFound = "找不到附件";
 }

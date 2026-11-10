@@ -1,4 +1,5 @@
 using System.Text.Json;
+using DynamicModules.Application.Dynamic.AttachmentService;
 using DynamicModules.Application.Dynamic.TaskService;
 using MediatR;
 using Microsoft.AspNetCore.Mvc;
@@ -46,6 +47,37 @@ public class TasksController(IMediator mediator) : ControllerBase
     [Consumes("application/json")]
     public async Task<IActionResult> AddComment(long id, TaskCommentInput body) =>
         (await mediator.Send(new AddTaskCommentRequest(id, body.Body ?? "", []))).ToActionResult(this);
+
+    /// <summary>帶附件的留言：表單欄位 body 與 files（最多 5 個）。<see cref="TaskCommentUploadGuardFilter"/> 在收進主體之前先擋（關閉、過大）。</summary>
+    [HttpPost("tasks/{id:long}/comments")]
+    [Consumes("multipart/form-data")]
+    [TypeFilter(typeof(TaskCommentUploadGuardFilter))]
+    public async Task<IActionResult> AddCommentWithFiles(long id, [FromForm] string? body, [FromForm] List<IFormFile>? files, CancellationToken ct)
+    {
+        var streams = new List<Stream>();
+        try
+        {
+            var uploads = new List<CommentFileUpload>();
+            foreach (var f in files ?? [])
+            {
+                var stream = f.OpenReadStream();
+                streams.Add(stream);
+                uploads.Add(new CommentFileUpload(stream, f.FileName, f.ContentType));
+            }
+            return (await mediator.Send(new AddTaskCommentRequest(id, body ?? "", uploads), ct)).ToActionResult(this);
+        }
+        finally
+        {
+            foreach (var s in streams) await s.DisposeAsync();
+        }
+    }
+
+    [HttpGet("tasks/{id:long}/comments/{cid:long}/attachments/{aid:long}")]
+    public async Task<IActionResult> DownloadAttachment(long id, long cid, long aid, CancellationToken ct)
+    {
+        var result = await mediator.Send(new DownloadTaskAttachmentRequest(id, cid, aid), ct);
+        return result.Data is AttachmentDownload file ? AttachmentFileResult.From(this, file) : result.ToActionResult(this);
+    }
 
     [HttpPost("tasks/{id:long}/comments/{cid:long}/withdraw")]
     public async Task<IActionResult> WithdrawComment(long id, long cid) =>

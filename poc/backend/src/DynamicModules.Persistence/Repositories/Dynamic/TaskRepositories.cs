@@ -83,6 +83,17 @@ public class TaskRepository(DynamicDbContext db) : ITaskRepository
     public Task<TaskComment?> GetCommentAsync(long taskId, long commentId, CancellationToken ct) =>
         db.Set<TaskComment>().Include(c => c.Attachments).FirstOrDefaultAsync(c => c.Id == commentId && c.TaskId == taskId, ct);
 
+    public async Task<HashSet<string>> ListLiveAttachmentKeysAsync(CancellationToken ct) =>
+        (await db.Set<TaskCommentAttachment>().AsNoTracking()
+            .Where(a => db.Set<TaskComment>().Any(c => c.Id == a.CommentId && !c.Withdrawn))
+            .Select(a => a.StorageKey).ToListAsync(ct)).ToHashSet(StringComparer.Ordinal);
+
+    public Task<TaskCommentAttachment?> GetAttachmentAsync(long taskId, long commentId, long attachmentId, CancellationToken ct) =>
+        db.Set<TaskCommentAttachment>().AsNoTracking()
+            .Where(a => a.Id == attachmentId && a.CommentId == commentId
+                && db.Set<TaskComment>().Any(c => c.Id == commentId && c.TaskId == taskId && !c.Withdrawn))
+            .FirstOrDefaultAsync(ct);
+
     public void Add(TaskItem task) => db.Set<TaskItem>().Add(task);
 
     public void Remove(TaskItem task) => db.Set<TaskItem>().Remove(task);
