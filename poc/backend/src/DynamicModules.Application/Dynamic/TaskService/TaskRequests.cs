@@ -22,3 +22,17 @@ public sealed record GetTaskSummaryRequest : IRequest<ServiceResult>;
 public sealed record GetTaskRequest(long Id) : IRequest<ServiceResult>;
 
 public sealed record GetRecordTasksRequest(long RecordId) : IRequest<ServiceResult>;
+
+public sealed record GetTaskCommentsRequest(long TaskId) : IRequest<ServiceResult>;
+
+/// <summary>Files 是空清單時只有文字；有附件時 Body 可以是空的。</summary>
+public sealed record AddTaskCommentRequest(long TaskId, string Body, IReadOnlyList<CommentFileUpload> Files)
+    : IRequest<ServiceResult>, ITransactionalRequest;
+
+/// <summary>Content 由呼叫端（控制器）負責釋放。</summary>
+public sealed record CommentFileUpload(Stream Content, string? FileName, string? ContentType);
+
+public sealed record WithdrawTaskCommentRequest(long TaskId, long CommentId) : IRequest<ServiceResult>, ITransactionalRequest;
+
+/// <summary>啟用中的使用者，DisplayName 或 UserId 包含 Keyword（不分大小寫），最多 20 筆。</summary>
+public sealed record GetMentionCandidatesRequest(string? Keyword) : IRequest<ServiceResult>;

@@ -22,6 +22,10 @@ public interface ITaskRepository
     Task<string?> GetRuleKeyAsync(long ruleId, CancellationToken ct);
     /// <summary>這個模組的任務留言附件的儲存鍵（模組清除時刪檔用）。</summary>
     Task<List<string>> ListAttachmentKeysByModuleAsync(long moduleId, CancellationToken ct);
+    /// <summary>不追蹤，含附件；CreatedTime、Id 升冪。</summary>
+    Task<List<TaskComment>> ListCommentsAsync(long taskId, CancellationToken ct);
+    /// <summary>追蹤，含附件。</summary>
+    Task<TaskComment?> GetCommentAsync(long taskId, long commentId, CancellationToken ct);
     void Add(TaskItem task);
     void Remove(TaskItem task);
 }

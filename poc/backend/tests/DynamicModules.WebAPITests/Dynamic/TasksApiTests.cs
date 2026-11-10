@@ -85,4 +85,33 @@ public class TasksApiTests : IDisposable
         var delete = await _admin.DeleteAsync($"{Base}/tasks/{taskId}");
         delete.StatusCode.Should().Be(HttpStatusCode.OK);
     }
+
+    [Fact]
+    public async Task TasksApi_CommentWithdrawAndCandidates_OverHttp()
+    {
+        var task = await JsonOf(await _admin.PostAsJsonAsync($"{Base}/tasks", new { title = "整理報價" }));
+        var id = task.GetProperty("id").GetInt64();
+
+        var added = await _admin.PostAsJsonAsync($"{Base}/tasks/{id}/comments", new { body = "請 @{sales01} 看一下" });
+        added.StatusCode.Should().Be(HttpStatusCode.Created, await added.Content.ReadAsStringAsync());
+        var comment = await JsonOf(added);
+        comment.GetProperty("kind").GetString().Should().Be("comment");
+        comment.GetProperty("mentions")[0].GetProperty("displayName").GetString().Should().Be("業務一");
+        var cid = comment.GetProperty("id").GetInt64();
+
+        (await _admin.PostAsync($"{Base}/tasks/{id}/comments/{cid}/withdraw", null)).StatusCode.Should().Be(HttpStatusCode.OK);
+        var list = await JsonOf(await _admin.GetAsync($"{Base}/tasks/{id}/comments"));
+        list.GetArrayLength().Should().Be(2);
+        list[0].GetProperty("kind").GetString().Should().Be("system");
+        list[0].GetProperty("systemEvent").GetString().Should().Be("created");
+        list[1].GetProperty("withdrawn").GetBoolean().Should().BeTrue();
+        list[1].TryGetProperty("body", out _).Should().BeFalse();
+
+        var blank = await _admin.PostAsJsonAsync($"{Base}/tasks/{id}/comments", new { body = " " });
+        blank.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+        (await blank.Content.ReadAsStringAsync()).Should().Contain("留言不能是空的");
+
+        var candidates = await JsonOf(await _app.AsUser("floor01").GetAsync($"{Base}/users/mention-candidates?keyword=SALES"));
+        candidates.EnumerateArray().Select(u => u.GetProperty("userId").GetString()).Should().Equal("sales01", "sales02");
+    }
 }

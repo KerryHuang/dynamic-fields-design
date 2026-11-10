@@ -115,6 +115,34 @@ public sealed class TaskWriter(ICurrentUser user, IBusinessTime time, ITaskRepos
         Touch(task, null);
     }
 
+    /// <summary>人寫的留言：內文 @ 到的啟用中使用者加為 Mentioned 參與者，記 Mentioned（每人一筆）與 Commented（帶被 @ 的清單）。</summary>
+    public Task<TaskComment> AddCommentAsync(TaskItem task, string body, IReadOnlySet<string> activeUserIds, CancellationToken ct)
+    {
+        var actor = user.UserId;
+        var comment = new TaskComment
+        {
+            Kind = TaskCommentKind.Comment, AuthorUserId = actor, Body = body, CreatedTime = time.Now
+        };
+        task.Comments.Add(comment);
+        var mentioned = TaskMentions.UserIds(body).Where(activeUserIds.Contains).ToList();
+        foreach (var id in mentioned)
+        {
+            AddParticipant(task, id, TaskParticipantReason.Mentioned);
+            _pending.Add(new TaskChange(TaskChangeKind.Mentioned, task, actor, id));
+        }
+        _pending.Add(new TaskChange(TaskChangeKind.Commented, task, actor, null, mentioned));
+        return Task.FromResult(comment);
+    }
+
+    /// <summary>撤回：內文保留在資料庫，回應時不再輸出。</summary>
+    public void Withdraw(TaskComment comment)
+    {
+        if (comment.Withdrawn) return;
+        comment.Withdrawn = true;
+        comment.WithdrawnBy = user.UserId;
+        comment.WithdrawnTime = time.Now;
+    }
+
     public Task EnsureParticipantAsync(TaskItem task, string userId, TaskParticipantReason reason, CancellationToken ct)
     {
         AddParticipant(task, userId, reason);

@@ -76,6 +76,13 @@ public class TaskRepository(DynamicDbContext db) : ITaskRepository
                 && db.Set<TaskItem>().Any(t => t.Id == c.TaskId && t.ModuleId == moduleId)))
             .OrderBy(a => a.Id).Select(a => a.StorageKey).ToListAsync(ct);
 
+    public Task<List<TaskComment>> ListCommentsAsync(long taskId, CancellationToken ct) =>
+        db.Set<TaskComment>().AsNoTracking().Include(c => c.Attachments).Where(c => c.TaskId == taskId)
+            .OrderBy(c => c.CreatedTime).ThenBy(c => c.Id).ToListAsync(ct);
+
+    public Task<TaskComment?> GetCommentAsync(long taskId, long commentId, CancellationToken ct) =>
+        db.Set<TaskComment>().Include(c => c.Attachments).FirstOrDefaultAsync(c => c.Id == commentId && c.TaskId == taskId, ct);
+
     public void Add(TaskItem task) => db.Set<TaskItem>().Add(task);
 
     public void Remove(TaskItem task) => db.Set<TaskItem>().Remove(task);

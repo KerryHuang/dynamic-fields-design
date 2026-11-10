@@ -1,3 +1,4 @@
+using System.Text.Json;
 using DynamicModules.Domain.Entities.Dynamic;
 using DynamicModules.Domain.ValueObjects;
 
@@ -22,6 +23,15 @@ public sealed record ManualRuleResponse(string Key, I18nText Name, TaskRuleRepea
 
 public sealed record TaskSummaryCounts(int DueToday, int Overdue);
 
+public sealed record MentionRef(string UserId, string DisplayName, bool Active);
+
+public sealed record TaskAttachmentResponse(long Id, string FileName, string ContentType, long Size);
+
+/// <summary>已撤回的留言：Body 是 null、Mentions 與 Attachments 是空清單。系統記錄由前端依 SystemEvent＋SystemData 組文字。</summary>
+public sealed record TaskCommentResponse(long Id, TaskCommentKind Kind, string? AuthorUserId, string? AuthorName, string? Body,
+    bool Withdrawn, string? SystemEvent, JsonElement? SystemData, DateTime CreatedTime, IReadOnlyList<MentionRef> Mentions,
+    IReadOnlyList<TaskAttachmentResponse> Attachments, bool CanWithdraw);
+
 internal static class TaskViews
 {
     public static bool Overdue(TaskItem t, DateOnly today) => t.IsOpen && t.DueDate is { } d && d < today;
@@ -42,5 +52,23 @@ internal static class TaskViews
         var assignee = t.AssigneeUserId is null ? null : users.GetValueOrDefault(t.AssigneeUserId);
         return new TaskSummaryResponse(t.Id, t.Title, t.Status, t.AssigneeUserId, assignee?.DisplayName, assignee is { IsActive: true },
             t.DueDate, Overdue(t, today), p.Record, t.RuleId is not null, p.CanEdit);
+    }
+
+    /// <summary>Mentions：內文裡存在的使用者都列出（含已停用），不存在的不列。</summary>
+    public static TaskCommentResponse ToComment(TaskComment c, IReadOnlyDictionary<string, AppUser> users, bool canWithdraw)
+    {
+        var author = c.AuthorUserId is null ? null : users.GetValueOrDefault(c.AuthorUserId);
+        var human = c.Kind == TaskCommentKind.Comment;
+        var visible = human && !c.Withdrawn;
+        IReadOnlyList<MentionRef> mentions = visible
+            ? TaskMentions.UserIds(c.Body).Select(id => users.GetValueOrDefault(id)).OfType<AppUser>()
+                .Select(u => new MentionRef(u.UserId, u.DisplayName, u.IsActive)).ToList()
+            : [];
+        IReadOnlyList<TaskAttachmentResponse> attachments = c.Withdrawn
+            ? []
+            : c.Attachments.OrderBy(a => a.Id).Select(a => new TaskAttachmentResponse(a.Id, a.FileName, a.ContentType, a.Size)).ToList();
+        JsonElement? data = c.SystemData is null ? null : JsonDocument.Parse(c.SystemData).RootElement.Clone();
+        return new TaskCommentResponse(c.Id, c.Kind, c.AuthorUserId, author?.DisplayName, c.Withdrawn ? null : c.Body,
+            c.Withdrawn, c.SystemEvent, data, c.CreatedTime, mentions, attachments, canWithdraw && human && !c.Withdrawn);
     }
 }
