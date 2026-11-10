@@ -47,3 +47,46 @@ public interface IApprovalFlowRepository
     /// <summary>連同所有版本一起刪除（呼叫端已確認沒被用過）。</summary>
     Task RemoveAsync(ApprovalFlow f, CancellationToken ct);
 }
+
+/// <summary>簽核實例、關卡實例、任務與歷程（設計 §4.3）。標「追蹤」的回傳值改了會在 SaveChanges 時寫回。</summary>
+public interface IApprovalInstanceRepository
+{
+    /// <summary>追蹤。</summary>
+    Task<ApprovalInstance?> GetAsync(long id, CancellationToken ct);
+
+    /// <summary>追蹤。</summary>
+    Task<ApprovalInstance?> GetPendingByRecordAsync(long recordId, CancellationToken ct);
+
+    /// <summary>這些記錄裡有 pending 實例的。</summary>
+    Task<HashSet<long>> ListPendingRecordIdsAsync(IReadOnlyCollection<long> recordIds, CancellationToken ct);
+
+    /// <summary>條件更新 RowVersion（WHERE RowVersion = expected）；沒有更新到回 false。</summary>
+    Task<bool> TryBumpRowVersionAsync(long instanceId, string expected, string next, CancellationToken ct);
+
+    /// <summary>追蹤，依 Seq。</summary>
+    Task<List<ApprovalStageRun>> ListRunsAsync(long instanceId, CancellationToken ct);
+
+    /// <summary>追蹤。</summary>
+    Task<List<ApprovalTask>> ListTasksAsync(long instanceId, CancellationToken ct);
+
+    /// <summary>追蹤。</summary>
+    Task<ApprovalTask?> GetTaskAsync(long taskId, CancellationToken ct);
+
+    /// <summary>不追蹤，SubmittedTime、Id 降冪。</summary>
+    Task<List<ApprovalInstance>> ListByRecordAsync(long recordId, CancellationToken ct);
+
+    /// <summary>不追蹤，依 Id。</summary>
+    Task<List<ApprovalAction>> ListActionsAsync(IReadOnlyCollection<long> instanceIds, CancellationToken ct);
+
+    /// <summary>不追蹤。</summary>
+    Task<List<ApprovalStageRun>> ListRunsAsync(IReadOnlyCollection<long> instanceIds, CancellationToken ct);
+
+    /// <summary>不追蹤。</summary>
+    Task<List<ApprovalTask>> ListTasksAsync(IReadOnlyCollection<long> instanceIds, CancellationToken ct);
+
+    void Add(ApprovalInstance i);
+    void AddRun(ApprovalStageRun r);
+    void AddTask(ApprovalTask t);
+    void AddAction(ApprovalAction a);
+    void AddSnapshotRows(IEnumerable<ApprovalInstanceFlow> rows);
+}

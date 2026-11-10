@@ -105,3 +105,53 @@ public class ApprovalFlowRepository(DynamicDbContext db) : IApprovalFlowReposito
         db.Set<ApprovalFlow>().Remove(f);
     }
 }
+
+public class ApprovalInstanceRepository(DynamicDbContext db) : IApprovalInstanceRepository
+{
+    public Task<ApprovalInstance?> GetAsync(long id, CancellationToken ct) =>
+        db.Set<ApprovalInstance>().FirstOrDefaultAsync(i => i.Id == id, ct);
+
+    public Task<ApprovalInstance?> GetPendingByRecordAsync(long recordId, CancellationToken ct) =>
+        db.Set<ApprovalInstance>().FirstOrDefaultAsync(i => i.RecordId == recordId && i.Status == ApprovalInstanceStatus.Pending, ct);
+
+    public async Task<HashSet<long>> ListPendingRecordIdsAsync(IReadOnlyCollection<long> recordIds, CancellationToken ct)
+    {
+        if (recordIds.Count == 0) return [];
+        var ids = await db.Set<ApprovalInstance>().AsNoTracking()
+            .Where(i => i.Status == ApprovalInstanceStatus.Pending && recordIds.Contains(i.RecordId)).Select(i => i.RecordId).ToListAsync(ct);
+        // 同一請求內新建、尚未存檔的不會在這裡；呼叫端另外合併
+        return [.. ids];
+    }
+
+    public async Task<bool> TryBumpRowVersionAsync(long instanceId, string expected, string next, CancellationToken ct) =>
+        await db.Set<ApprovalInstance>().Where(i => i.Id == instanceId && i.RowVersion == expected)
+            .ExecuteUpdateAsync(s => s.SetProperty(i => i.RowVersion, next), ct) == 1;
+
+    public Task<List<ApprovalStageRun>> ListRunsAsync(long instanceId, CancellationToken ct) =>
+        db.Set<ApprovalStageRun>().Where(r => r.InstanceId == instanceId).OrderBy(r => r.Seq).ToListAsync(ct);
+
+    public Task<List<ApprovalTask>> ListTasksAsync(long instanceId, CancellationToken ct) =>
+        db.Set<ApprovalTask>().Where(t => t.InstanceId == instanceId).OrderBy(t => t.Id).ToListAsync(ct);
+
+    public Task<ApprovalTask?> GetTaskAsync(long taskId, CancellationToken ct) =>
+        db.Set<ApprovalTask>().FirstOrDefaultAsync(t => t.Id == taskId, ct);
+
+    public Task<List<ApprovalInstance>> ListByRecordAsync(long recordId, CancellationToken ct) =>
+        db.Set<ApprovalInstance>().AsNoTracking().Where(i => i.RecordId == recordId)
+            .OrderByDescending(i => i.SubmittedTime).ThenByDescending(i => i.Id).ToListAsync(ct);
+
+    public Task<List<ApprovalAction>> ListActionsAsync(IReadOnlyCollection<long> instanceIds, CancellationToken ct) =>
+        db.Set<ApprovalAction>().AsNoTracking().Where(a => instanceIds.Contains(a.InstanceId)).OrderBy(a => a.Id).ToListAsync(ct);
+
+    public Task<List<ApprovalStageRun>> ListRunsAsync(IReadOnlyCollection<long> instanceIds, CancellationToken ct) =>
+        db.Set<ApprovalStageRun>().AsNoTracking().Where(r => instanceIds.Contains(r.InstanceId)).OrderBy(r => r.InstanceId).ThenBy(r => r.Seq).ToListAsync(ct);
+
+    public Task<List<ApprovalTask>> ListTasksAsync(IReadOnlyCollection<long> instanceIds, CancellationToken ct) =>
+        db.Set<ApprovalTask>().AsNoTracking().Where(t => instanceIds.Contains(t.InstanceId)).OrderBy(t => t.Id).ToListAsync(ct);
+
+    public void Add(ApprovalInstance i) => db.Set<ApprovalInstance>().Add(i);
+    public void AddRun(ApprovalStageRun r) => db.Set<ApprovalStageRun>().Add(r);
+    public void AddTask(ApprovalTask t) => db.Set<ApprovalTask>().Add(t);
+    public void AddAction(ApprovalAction a) => db.Set<ApprovalAction>().Add(a);
+    public void AddSnapshotRows(IEnumerable<ApprovalInstanceFlow> rows) => db.Set<ApprovalInstanceFlow>().AddRange(rows);
+}

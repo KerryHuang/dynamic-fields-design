@@ -19,7 +19,7 @@ public class UpdateRecordHandler(
     IModuleRepository modules, IRecordRepository records, FieldTypeRegistry registry,
     ICurrentUser user, IBusinessTime time, IDynamicAccessGuard guard, ReferenceValidator refs, ReferenceFill fill, ReferenceResolver resolver,
     DetailWriter details, DetailReader detailReader, RollupRecalc rollups, RecordHistoryWriter history, WorkflowEnforcer workflow,
-    Dynamic.LedgerService.LedgerGate ledgerGate, Dynamic.EventService.EventFactLock factLock)
+    Dynamic.LedgerService.LedgerGate ledgerGate, Dynamic.EventService.EventFactLock factLock, Dynamic.ApprovalService.ApprovalGate approvalGate)
     : IRequestHandler<UpdateRecordRequest, ServiceResult>
 {
     public async Task<ServiceResult> Handle(UpdateRecordRequest request, CancellationToken ct)
@@ -35,6 +35,8 @@ public class UpdateRecordHandler(
         if (perms.OwnerUserIds is not null && !perms.OwnerUserIds.Contains(record.OwnerUserId))
             return ServiceResult.NotFound(RecordMapper.RecordNotFound);
         if (await ledgerGate.RejectWriteAsync(module, ct) is { } ledgerLocked) return ledgerLocked;
+        if (await approvalGate.RejectAsync(module, record, RecordValueProcessor.Parse(record.ValuesJson), request.Values, false, ct,
+                request.Details?.Values.Any(rows => rows.Count > 0) == true) is { } approvalBlocked) return approvalBlocked;
         var frozen = await factLock.IsFrozenAsync(record.Id, ct);
         if (frozen && factLock.RejectEdit(module, request.Values.Keys, request.Details?.Values.Any(rows => rows.Count > 0) == true) is { } factLocked) return factLocked;
         if (record.RowVersion != request.RowVersion) return ServiceResult.Conflict(RecordMapper.Stale);

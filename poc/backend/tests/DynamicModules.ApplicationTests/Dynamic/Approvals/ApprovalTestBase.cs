@@ -3,6 +3,12 @@ using DynamicModules.Application.Common;
 using DynamicModules.Application.Dynamic.FieldService.Commands.AddOption;
 using DynamicModules.Application.Dynamic.ModuleService.Commands.ActivateModule;
 using DynamicModules.Application.Dynamic.ModuleService.Data;
+using DynamicModules.Application.Dynamic.PermissionService.Commands.SaveModulePermissions;
+using DynamicModules.Application.Dynamic.PermissionService.Data;
+using DynamicModules.Application.Dynamic.RecordService;
+using DynamicModules.Application.Dynamic.RecordService.Commands.CreateRecord;
+using DynamicModules.Application.Dynamic.RecordService.Commands.UpdateRecord;
+using DynamicModules.Application.Dynamic.RecordService.Data;
 using DynamicModules.Application.Dynamic.WorkflowService.Commands.SaveWorkflow;
 using DynamicModules.Application.Dynamic.WorkflowService.Data;
 using DynamicModules.Domain.Approvals;
@@ -10,6 +16,7 @@ using DynamicModules.Domain.Entities.Dynamic;
 using DynamicModules.Domain.ValueObjects;
 using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
+using Record = DynamicModules.Domain.Entities.Dynamic.Record;
 
 namespace DynamicModules.ApplicationTests.Dynamic.Approvals;
 
@@ -192,6 +199,64 @@ public abstract class ApprovalTestBase : EffectsTestBase, IAsyncLifetime
         Db.Context.ChangeTracker.Clear();
         return flow;
     }
+
+    // ───────── 記錄 ─────────
+
+    protected static readonly string[] OrgUsers = ["gm", "mgrA", "emp1", "emp2", "lead1", "emp3", "buyer1", "buyer2", "fin1", "fin2"];
+
+    /// <summary>給組織裡全部使用者這些模組的讀、增、改、刪（資料範圍 All，用一個測試專用群組）。</summary>
+    protected async Task GrantEveryone(params string[] modules)
+    {
+        var group = Db.Context.Set<PermissionGroup>().AsNoTracking().FirstOrDefault(g => g.Key == "everyone");
+        if (group is null)
+        {
+            group = new PermissionGroup { Key = "everyone", NameI18n = Text("everyone") };
+            Db.Context.Add(group);
+            await Db.Context.SaveChangesAsync();
+            foreach (var u in OrgUsers) Db.Context.Add(new UserGroupMapping { GroupId = group.Id, UserId = u });
+            await Db.Context.SaveChangesAsync();
+            Db.Context.ChangeTracker.Clear();
+        }
+        foreach (var m in modules)
+        {
+            var res = await Send(new SaveModulePermissionsRequest(m, new ModulePermissionsDto(
+                [new GroupPermissionDto(group.Id, new PrivilegesDto(true, true, true, true, false, true, false), DataScope.All)], [], [], [])));
+            res.IsSuccess.Should().BeTrue(res.Message + string.Join(";", res.Errors.Select(e => e.Key + e.Value[0])));
+        }
+    }
+
+    /// <summary>建一張單據（明細一列 qty × price）；回傳記錄。</summary>
+    protected async Task<DynamicRecordResponse> NewPo(PurchaseRig r, decimal qty = 1, decimal price = 1000, string title = "單據",
+        Dictionary<string, JsonElement?>? extra = null)
+    {
+        var values = new Dictionary<string, JsonElement?> { [$"f_{(await Detail(r.Module)).TitleFieldId}"] = JsonSerializer.SerializeToElement(title) };
+        foreach (var (k, v) in extra ?? []) values[k] = v;
+        var line = new DetailRowInput(null, new Dictionary<string, JsonElement?>
+        {
+            [$"f_{(await Detail(r.Line)).TitleFieldId}"] = JsonSerializer.SerializeToElement("明細"),
+            [$"f_{r.LineQty}"] = JsonSerializer.SerializeToElement(qty), [$"f_{r.LinePrice}"] = JsonSerializer.SerializeToElement(price)
+        }, null);
+        var res = await Send(new CreateRecordRequest(r.Module, values, null, new() { [r.Line] = [line] }));
+        res.IsCreated.Should().BeTrue(res.Message + string.Join(";", res.Errors.Select(e => e.Key + e.Value[0])));
+        return (DynamicRecordResponse)res.Data!;
+    }
+
+    /// <summary>直接讀資料庫的記錄（不追蹤）與值。</summary>
+    protected (Record Row, Dictionary<string, JsonElement?> Values) Rec(long id)
+    {
+        var row = Db.Context.Set<Record>().AsNoTracking().Single(x => x.Id == id);
+        return (row, RecordValueProcessor.Parse(row.ValuesJson));
+    }
+
+    protected long? StateOf(PurchaseRig r, long id) =>
+        Rec(id).Values.TryGetValue($"f_{r.Status}", out var v) && v is { ValueKind: JsonValueKind.String } s
+            && s.GetString() is { } text && text.StartsWith("opt_") ? long.Parse(text[4..]) : null;
+
+    protected Task<ServiceResult> Put(long id, Dictionary<string, JsonElement?> values, Dictionary<string, List<DetailRowInput>>? details = null) =>
+        Send(new UpdateRecordRequest(id, values, Rec(id).Row.RowVersion, details));
+
+    protected static Dictionary<string, JsonElement?> V(params (long Field, object? Value)[] pairs) =>
+        pairs.ToDictionary(p => $"f_{p.Field}", p => p.Value is null ? (JsonElement?)null : JsonSerializer.SerializeToElement(p.Value));
 
     /// <summary>直接在 Db 建一個綁定這個流程目前版本的實例（status 預設 pending）；snapshotOnly 時只出現在快照索引。</summary>
     protected async Task<ApprovalInstance> SeedInstance(PurchaseRig r, ApprovalFlow flow, string status = ApprovalInstanceStatus.Pending,

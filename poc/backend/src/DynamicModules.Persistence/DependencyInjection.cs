@@ -64,6 +64,7 @@ public static class DependencyInjection
         services.AddScoped<INotificationRepository, NotificationRepository>();
         services.AddScoped<IOrganizationRepository, OrganizationRepository>();
         services.AddScoped<IApprovalFlowRepository, ApprovalFlowRepository>();
+        services.AddScoped<IApprovalInstanceRepository, ApprovalInstanceRepository>();
         services.AddScoped<IReferenceProvider, MockCustomerProvider>();
         services.AddScoped<ReferenceProviderRegistry>();
         services.AddScoped<IDemoPeople, DemoPeopleSeeder>();

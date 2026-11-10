@@ -15,7 +15,8 @@ namespace DynamicModules.Application.Dynamic.RecordService.Commands.DeleteRecord
 public class DeleteRecordHandler(
     IModuleRepository modules, IRecordRepository records, ICurrentUser user, IBusinessTime time,
     IDynamicAccessGuard guard, ReferenceDeletePlanner planner, RollupRecalc rollups, RecordHistoryWriter history,
-    Dynamic.LedgerService.LedgerGate ledgerGate, Dynamic.EventService.EventFactLock factLock, FieldLocks locks)
+    Dynamic.LedgerService.LedgerGate ledgerGate, Dynamic.EventService.EventFactLock factLock, FieldLocks locks,
+    Dynamic.ApprovalService.ApprovalGate approvalGate)
     : IRequestHandler<DeleteRecordRequest, ServiceResult>
 {
     public async Task<ServiceResult> Handle(DeleteRecordRequest request, CancellationToken ct)
@@ -31,6 +32,8 @@ public class DeleteRecordHandler(
         if (perms.OwnerUserIds is not null && !perms.OwnerUserIds.Contains(record.OwnerUserId))
             return ServiceResult.NotFound(RecordMapper.RecordNotFound);
         if (await ledgerGate.RejectWriteAsync(module, ct) is { } ledgerLocked) return ledgerLocked;
+        if (await approvalGate.RejectAsync(module, record, RecordValueProcessor.Parse(record.ValuesJson), null, true, ct) is { } approvalBlocked)
+            return approvalBlocked;
         if (await factLock.IsFrozenAsync(record.Id, ct)) return ServiceResult.Conflict(Dynamic.EventService.EventFactLock.DeleteMessage);
         if (record.RowVersion != request.RowVersion) return ServiceResult.Conflict(RecordMapper.Stale);
 

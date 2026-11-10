@@ -21,7 +21,8 @@ namespace DynamicModules.Application.Dynamic.DemoService;
 /// </summary>
 public sealed class DemoStructure(
     ISender sender, IPermissionRepository permissions, AppOpener appOpener, IAppRepository apps, IReportRepository reports, IModuleRepository modules,
-    EventService.EffectBudget budget, IWriteJournal journal, AppService.SharedMasters.MasterSymbols masterSymbols)
+    EventService.EffectBudget budget, IWriteJournal journal, AppService.SharedMasters.MasterSymbols masterSymbols,
+    ApprovalService.ApprovalWriteContext approvalContext)
 {
     public const string CrmAppId = DemoCatalog.CrmAppId;
 
@@ -65,7 +66,7 @@ public sealed class DemoStructure(
         var masters = await MastersAsync(ct);
         return (new DemoContext(today, sender, ids, groupIds)
         {
-            BeginStep = () => { journal.Clear(); budget.Reset(); },
+            BeginStep = () => { journal.Clear(); budget.Reset(); approvalContext.Clear(); },
             Crm = new DemoContext(today, sender, opened[DemoCatalog.CrmAppId], groupIds),
             Inventory = new DemoContext(today, sender, opened[DemoCatalog.InventoryAppId], groupIds),
             Masters = masters is null ? null : new DemoContext(today, sender, masters, groupIds)

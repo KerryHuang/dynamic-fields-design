@@ -48,4 +48,30 @@ public static class ApprovalMessages
     public static string FallbackNote(string source) => $"來源 {source} 找不到簽核人，依設定改派備援簽核人";
     public static string ManagerLabel(int level) => $"第 {level} 層主管";
     public const string PickLabel = "發起人自選";
+
+    // ── 簽核中的寫入（§5.3、§8.5） ──
+    public const string NeedsSubmit = "這個狀態需要送出簽核";
+    public const string Pending = "簽核中，不可修改";
+    public const string WithdrawFirst = "簽核中，請先撤回";
+    public static string EventBlocked(long id) => $"記錄 {id} 正在簽核中，這次請求改動了它，已取消";
+    public static string TransitionBlocked(long id) => $"記錄 {id} 的狀態轉移需要送出簽核，這次請求改動了它，已取消";
+
+    // ── 送出與動作（§5.2、§7） ──
+    public const string NotApprovalTransition = "這個轉移不需要送出簽核";
+    public const string AlreadyPending = "這張單已在簽核中";
+    public const string NoMatchingFlow = "沒有符合條件的簽核流程，請聯絡管理員";
+    public const string PickInvalid = "自選的簽核人必須是候選群組內、啟用中的其他使用者";
+    public static string PickCount(int min, int max) => $"請選 {min} 到 {max} 位簽核人";
+    public const string UserFieldNotCandidate = "簽核人不在候選群組內";
+    public const string UserFieldIsInitiator = "簽核人不能是發起人自己";
+    public const string CommentRequired = "退回必須填寫意見";
+    public const string CommentTooLong = "意見不能超過 1000 字";
+    public const string TaskNotFound = "找不到待簽核";
+    public const string StageHandled = "這一關已由他人處理";
+    public const string CannotWithdraw = "目前關卡已有人處理，不能撤回";
+    public const string NoPreviousStage = "前面沒有已同意的關卡，只能退回發起人";
+    public const string NotEditableField = "這一關不能修改這個欄位";
+    public const string RejectTargetInvalid = "退回對象只能是 initiator 或 previous";
+    public const string TransitionGone = "簽核要執行的狀態轉移已不在狀態機上，請聯絡管理員";
 }
+
