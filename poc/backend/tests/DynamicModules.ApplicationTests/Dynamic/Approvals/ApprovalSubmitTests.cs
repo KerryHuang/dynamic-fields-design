@@ -266,6 +266,26 @@ public class ApprovalSubmitTests : ApprovalTestBase
     }
 
     [Fact]
+    public async Task Submit_CountersignPick_CandidatesUnmatched_OneFallback_409()
+    {
+        // 審查 M1 重現：min = 2 會簽、候選群組對不上、只有一位備援 → 不能建出一票就過的關卡，照「找不到足夠簽核人」擋下
+        var r = await BuildPurchase();
+        await SeedFlow(r, "po-pick", r.Confirmed, 1, Def(null, Stage("it",
+            new ApproverSource(ApprovalSources.InitiatorPick, CandidateGroupIds: [], Min: 2, Max: 2, CandidatesUnmatched: true),
+            mode: ApprovalModes.All)) with { FallbackApprovers = Users("gm") });
+        (await SaveWorkflow(r, [Needs(r.Draft, r.Confirmed), Plain(r.Confirmed, r.Partial), Plain(r.Partial, r.Received),
+            Plain(r.Confirmed, r.Cancelled)])).IsSuccess.Should().BeTrue();
+        await GrantEveryone(r.Module);
+        As("buyer2");
+        var po = await NewPo(r, price: 50000);
+
+        var res = await Submit(po.Id, r.Confirmed);
+        res.IsConflict.Should().BeTrue(Dump(res));
+        res.Message.Should().Be(ApprovalMessages.NoApprover("it", ApprovalMessages.PickLabel));
+        Db.Context.Set<ApprovalInstance>().AsNoTracking().Count().Should().Be(0);
+    }
+
+    [Fact]
     public async Task Submit_UserField_NotCandidateOrSelf_400()
     {
         var r = await BuildPurchase();

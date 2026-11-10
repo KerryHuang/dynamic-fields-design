@@ -71,7 +71,7 @@ public sealed class ApproverResolver(OrgSnapshotLoader org, IPermissionRepositor
                 var extra = backups.Where(u => !resolved.Contains(u)).ToList();
                 // 移除已有任務的人後備援為空 → 409（設計 §6.5），即使這關還有其他候選人
                 if (extra.Count == 0) return new([], false, ApprovalMessages.NoApprover(stage, empty[0]));
-                seats.Add(new SeatPlan(AnySeat, extra, ApprovalTaskReason.Fallback, string.Join("、", empty)));
+                seats.Add(new SeatPlan(AnySeat, extra, ApprovalTaskReason.Fallback, string.Join("、", empty.Distinct())));
             }
         }
 
@@ -110,7 +110,8 @@ public sealed class ApproverResolver(OrgSnapshotLoader org, IPermissionRepositor
             case ApprovalSources.InitiatorPick:
                 if (source.CandidatesUnmatched)
                 {
-                    yield return (ApprovalMessages.PickLabel, []);
+                    // 對不上時由備援頂替，會簽仍要湊滿原本的票數（設計 §14.4，審查 M1）：依 min 產生同樣數量的空單位
+                    for (var i = 0; i < Math.Max(1, source.Min ?? 1); i++) yield return (ApprovalMessages.PickLabel, []);
                     break;
                 }
                 var allowed = Candidates(ctx, source);

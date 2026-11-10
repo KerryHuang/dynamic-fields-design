@@ -169,6 +169,20 @@ public class ApproverResolverTests
         r.Seats.Should().BeEmpty();
     }
 
+    [Fact]
+    public void All_PickCandidatesUnmatched_FallbackSeatsKeepMin()
+    {
+        // 審查 M1：自選候選群組對不上時，會簽仍要湊滿 min 票（設計 §14.4），不能降成一個備援席位
+        var src = new ApproverSource(ApprovalSources.InitiatorPick, Min: 2, Max: 2, CandidatesUnmatched: true);
+        var two = Resolve(Ctx("buyer1"), src, ApprovalModes.All, fallback: new ApproverSource(ApprovalSources.Users, UserIds: ["gm", "mgrA"]));
+        two.Error.Should().BeNull();
+        two.Seats.Select(s => s.SeatKey).Should().Equal("fb:0", "fb:1");
+
+        var one = Resolve(Ctx("buyer1"), src, ApprovalModes.All, fallback: new ApproverSource(ApprovalSources.Users, UserIds: ["gm"]));
+        one.Error.Should().Be(ApprovalMessages.NoApprover("關卡", ApprovalMessages.PickLabel));
+        one.Seats.Should().BeEmpty();
+    }
+
     [Theory]
     [InlineData(ApprovalOnEmpty.Fallback)]
     [InlineData(ApprovalOnEmpty.Skip)]
