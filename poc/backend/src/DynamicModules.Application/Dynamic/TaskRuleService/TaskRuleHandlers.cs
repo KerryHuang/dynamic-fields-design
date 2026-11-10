@@ -1,3 +1,4 @@
+using System.Text.Json;
 using DynamicModules.Application.Common;
 using DynamicModules.Application.Common.Security;
 using DynamicModules.Application.Common.Time;
@@ -11,6 +12,13 @@ namespace DynamicModules.Application.Dynamic.TaskRuleService;
 /// <summary>規則增改共用：套用輸入、算回應。</summary>
 public sealed class TaskRuleEditor(IAppRepository apps)
 {
+    /// <summary>驗證通過的 opt_ 值（opt_05、opt_+5）改寫成記錄裡的標準格式 opt_{id}，比對記錄值時才會相等。</summary>
+    private static JsonElement? CanonicalValue(JsonElement? value) =>
+        value is { ValueKind: JsonValueKind.String } v && v.GetString() is { } s && s.StartsWith("opt_", StringComparison.Ordinal)
+            && long.TryParse(s.AsSpan(4), out var optionId)
+            ? JsonSerializer.SerializeToElement($"opt_{optionId}")
+            : value;
+
     public static void Apply(TaskRule rule, TaskRuleInput input)
     {
         rule.NameI18n = input.Name;
@@ -18,7 +26,7 @@ public sealed class TaskRuleEditor(IAppRepository apps)
         rule.Repeat = input.Repeat;
         // 只有指定值觸發才用欄位與值，其他觸發存成 null，避免留下沒用的引用
         rule.Trigger = input.Trigger.On == "onFieldBecomes"
-            ? new TaskRuleTrigger(input.Trigger.On, input.Trigger.FieldId, input.Trigger.Value)
+            ? new TaskRuleTrigger(input.Trigger.On, input.Trigger.FieldId, CanonicalValue(input.Trigger.Value))
             : new TaskRuleTrigger(input.Trigger.On, null, null);
         rule.WhenJson = TaskRuleMapping.WhenText(input.When);
 

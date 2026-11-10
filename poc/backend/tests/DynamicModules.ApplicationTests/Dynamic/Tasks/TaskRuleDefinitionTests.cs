@@ -205,6 +205,37 @@ public class TaskRuleDefinitionTests : TaskTestBase
         (await Send(new CreateTaskRuleRequest(r.Key, Rule("rule-c", new("bogus", null, null), steps: [Step(r)])))).Errors.Should().ContainKey("trigger.on");
     }
 
+    [Theory]
+    [InlineData("opt_0{id}")]
+    [InlineData("opt_+{id}")]
+    public async Task FieldBecomes_NonCanonicalOptionValue_IsStoredAsCanonical(string template)
+    {
+        var r = await BuildRig();
+        var raw = template.Replace("{id}", r.OptionId.ToString());
+
+        await Create(r, Rule("rule-a", new("onFieldBecomes", r.EnumField, J($"\"{raw}\"")), steps: [Step(r)]));
+
+        var list = (IReadOnlyList<TaskRuleResponse>)(await Send(new GetTaskRulesRequest(r.Key))).Data!;
+        var stored = list.Single().Trigger.Value!.Value;
+        stored.GetString().Should().Be($"opt_{r.OptionId}");
+        Db.Context.ChangeTracker.Clear();
+        var rule = await Db.Context.Set<TaskRule>().AsNoTracking().SingleAsync();
+        var after = new Dictionary<string, JsonElement?> { [$"f_{r.EnumField}"] = J($"\"opt_{r.OptionId}\"") };
+        TaskRuleEvaluator.Triggers(rule.Trigger, true, null, true, null, after).Should().BeTrue("記錄裡的值一律是標準格式");
+    }
+
+    [Fact]
+    public async Task TitleI18n_NullLocaleValue_400_NotServerError()
+    {
+        var r = await BuildRig();
+        var withNull = new I18nText([KeyValuePair.Create("zh-TW", "短"), KeyValuePair.Create<string, string>("en-US", null!)]);
+
+        var res = await Send(new CreateTaskRuleRequest(r.Key, Rule("rule-a", steps: [Step(r, title: withNull)])));
+
+        res.IsInvalid.Should().BeTrue(Dump(res));
+        res.Errors.Should().ContainKey("tasks[0].title");
+    }
+
     [Fact]
     public async Task TasksCount_And_RulesPerModule_Limits()
     {
@@ -290,6 +321,7 @@ public class TaskRuleDefinitionTests : TaskTestBase
     public async Task MasterModuleNeedsSystemAdmin_403()
     {
         var r = await BuildRig();
+        var plain = await BuildRig("tr-plain");
         var app = new App { Key = "master-x", Kind = AppKind.Master, Status = AppStatus.Open, Source = "builtIn", RowVersion = "x" };
         Db.Context.Add(app);
         await Db.Context.SaveChangesAsync();
@@ -299,6 +331,7 @@ public class TaskRuleDefinitionTests : TaskTestBase
         Db.Context.ChangeTracker.Clear();
 
         As("sales01");
+        (await Send(new CreateTaskRuleRequest(plain.Key, Rule("rule-p", steps: [Step(plain)])))).IsCreated.Should().BeTrue("對照組：有設計器權限、非主檔模組可以存");
         (await Send(new CreateTaskRuleRequest(r.Key, Rule("rule-a", steps: [Step(r)])))).IsForbidden.Should().BeTrue("設計器權限不夠，主檔還要系統管理員");
         As("admin");
         (await Send(new CreateTaskRuleRequest(r.Key, Rule("rule-a", steps: [Step(r)])))).IsCreated.Should().BeTrue();
@@ -315,6 +348,39 @@ public class TaskRuleDefinitionTests : TaskTestBase
 
         used.Blockers.Should().Contain(b => b.Kind == DeleteBlockerKind.TaskRule && b.ModuleKey == r.Key && b.Name == "rule-a");
         free.Blockers.Should().NotContain(b => b.Kind == DeleteBlockerKind.TaskRule);
+    }
+
+    [Fact]
+    public async Task DeletingAssigneeField_IsBlocked()
+    {
+        var r = await BuildRig();
+        await Create(r, Rule("rule-a", steps: [Step(r)]));
+
+        var check = (DeleteCheckResponse)(await Send(new CheckDeleteRequest(DeleteTarget.Field, null, r.UserField))).Data!;
+
+        check.Blockers.Should().Contain(b => b.Kind == DeleteBlockerKind.TaskRule && b.Name == "rule-a");
+    }
+
+    [Fact]
+    public async Task DeletingTriggerField_IsBlocked()
+    {
+        var r = await BuildRig();
+        await Create(r, Rule("rule-a", new("onFieldBecomes", r.EnumField, J($"\"opt_{r.OptionId}\"")), steps: [Step(r)]));
+
+        var check = (DeleteCheckResponse)(await Send(new CheckDeleteRequest(DeleteTarget.Field, null, r.EnumField))).Data!;
+
+        check.Blockers.Should().Contain(b => b.Kind == DeleteBlockerKind.TaskRule && b.Name == "rule-a");
+    }
+
+    [Fact]
+    public async Task DeletingFieldUsedByTaskLevelCondition_IsBlocked()
+    {
+        var r = await BuildRig();
+        await Create(r, Rule("rule-a", steps: [Step(r, when: Cond(r.TextField, "eq", "\"x\""))]));
+
+        var check = (DeleteCheckResponse)(await Send(new CheckDeleteRequest(DeleteTarget.Field, null, r.TextField))).Data!;
+
+        check.Blockers.Should().Contain(b => b.Kind == DeleteBlockerKind.TaskRule && b.Name == "rule-a");
     }
 
     [Fact]

@@ -17,7 +17,10 @@ public sealed class AfterCommitActions(ILogger<AfterCommitActions> logger)
     /// <summary>進入一層交易；最外層開始時，先丟掉交易外登記的動作（它們不屬於任何交易）。</summary>
     internal void Enter()
     {
-        if (_depth++ == 0) _actions.Clear();
+        if (_depth++ != 0) return;
+        if (_actions.Count > 0)
+            logger.LogWarning("交易外登記的收尾已丟棄：{Labels}", string.Join("、", _actions.Select(a => a.Label)));
+        _actions.Clear();
     }
 
     /// <summary>離開一層交易；回到最外層時，提交成功就執行、否則丟掉。</summary>

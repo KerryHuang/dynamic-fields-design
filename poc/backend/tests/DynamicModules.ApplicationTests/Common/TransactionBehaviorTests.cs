@@ -172,4 +172,17 @@ public class TransactionBehaviorTests
 
         log.Should().Equal("begin", "commit");
     }
+
+    [Fact]
+    public async Task AfterCommit_RegisteredOutsideTransaction_LogsWarningWithLabel()
+    {
+        var log = new List<string>();
+        var logger = new CaptureLogger();
+        var actions = new AfterCommitActions(logger);
+        actions.Add("交易外的清檔", () => log.Add("action-outside"));
+
+        await Behavior(log, actions).Handle(new WriteCommand(), () => Task.FromResult(ServiceResult.Success()), CancellationToken.None);
+
+        logger.Warnings.Should().ContainSingle(w => w.Contains("交易外的清檔"));
+    }
 }

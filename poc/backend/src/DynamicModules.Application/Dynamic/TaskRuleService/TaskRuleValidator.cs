@@ -112,6 +112,11 @@ public sealed class TaskRuleValidator(IModuleRepository modules, ITaskRuleReposi
             err(key, $"不支援的語系：{unknown}");
             return;
         }
+        if (text.Values.FirstOrDefault(kv => kv.Value is null) is { Key: { } nullKey })
+        {
+            err(key, $"語系 {nullKey} 的文字不能是空值");
+            return;
+        }
         if (text.Values.Values.Any(v => v.Trim().Length > max)) { err(key, tooLong); return; }
         if (required && string.IsNullOrWhiteSpace(text.Resolve(I18nText.FallbackLocale))) err(key, TaskMessages.TitleRequired);
     }
