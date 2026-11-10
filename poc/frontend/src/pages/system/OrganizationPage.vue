@@ -30,6 +30,7 @@ const managerName = (userId: string) => users.data.value?.find((u) => u.userId =
 <template>
   <q-page padding>
     <ForbiddenNotice v-if="forbidden" />
+    <div v-else-if="users.isPending.value" class="row justify-center q-pa-lg"><q-spinner size="32px" color="primary" /></div>
     <template v-else>
       <div class="row items-center q-mb-md">
         <div class="text-h6">{{ t('organization.title') }}</div>

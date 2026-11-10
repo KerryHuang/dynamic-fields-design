@@ -36,11 +36,11 @@ const user = (userId: string, isActive = true): AdminUser => ({
 let mounted: ReturnType<typeof mount> | undefined;
 let queryClient: QueryClient;
 
-async function mountPage(width = 1366) {
+async function mountPage(width = 1366, usersPending = false) {
   window.innerWidth = width;
   setActivePinia(createPinia());
   api.getDepartments.mockResolvedValue(DEPARTMENTS);
-  api.getAdminUsers.mockResolvedValue([user('manager01'), user('sales01'), user('old01', false)]);
+  api.getAdminUsers.mockImplementation(() => (usersPending ? new Promise(() => {}) : Promise.resolve([user('manager01'), user('sales01'), user('old01', false)])));
   const i18n = createI18n({ legacy: false, locale: 'zh-TW', messages: { 'zh-TW': zhTW } });
   const Host = { render: () => h(quasar.QLayout, null, () => h(quasar.QPageContainer, null, () => h(OrganizationPage))) };
   queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
@@ -69,6 +69,12 @@ describe('OrganizationPage', () => {
     vi.stubGlobal('ResizeObserver', class { observe() {} unobserve() {} disconnect() {} });
   });
   afterEach(() => { mounted?.unmount(); document.body.innerHTML = ''; });
+
+  it('shows no action buttons until the permission check (admin users request) has finished', async () => {
+    await mountPage(1366, true);
+    expect(q('dept-add')).toBeNull();
+    expect(q('dept-node-1')).toBeNull();
+  });
 
   it('shows the tree in order with indentation by depth', async () => {
     await mountPage();
