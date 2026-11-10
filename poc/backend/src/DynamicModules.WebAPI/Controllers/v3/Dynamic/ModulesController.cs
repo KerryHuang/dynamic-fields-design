@@ -19,9 +19,9 @@ namespace DynamicModules.WebAPI.Controllers.v3.Dynamic;
 [Route("api/v3/dynamic")]
 public class ModulesController(IMediator mediator) : ControllerBase
 {
-    public record CreateModuleBody(string Key, I18nText Name, string? Icon, string? Section,
+    public record CreateModuleBody(string Key, I18nText Name, string? Icon, I18nText? Section,
         ModuleKind Kind = ModuleKind.Standalone, string? HostEntityKey = null);
-    public record UpdateModuleBody(I18nText Name, string? Icon, string? Section, long? TitleFieldId, string? TitleTemplate = null);
+    public record UpdateModuleBody(I18nText Name, string? Icon, I18nText? Section, long? TitleFieldId, string? TitleTemplate = null);
     public record AddBlockBody(I18nText Label);
     public record UpdateBlockBody(I18nText Label, bool Collapsed, int? Columns);
     public record AddFieldBody(long BlockId, FieldType Type, I18nText Label, FieldConfig Config);

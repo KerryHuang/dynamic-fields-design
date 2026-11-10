@@ -506,7 +506,7 @@ public class CrmSalesAppTests : IDisposable
     {
         await OpenCrm();
         async Task<string> Section(string key) =>
-            (await JsonOf(await _admin.GetAsync($"{Base}/modules/{key}"))).GetProperty("section").GetString() ?? "";
+            (await JsonOf(await _admin.GetAsync($"{Base}/modules/{key}"))).GetProperty("section").GetProperty("zh-TW").GetString() ?? "";
 
         foreach (var key in new[] { "crm-lead", "crm-activity" }) (await Section(key)).Should().Be("客戶關係", key);
         foreach (var key in new[] { Partner, BuiltInMasterTests.Contact }) (await Section(key)).Should().Be("主檔", key);

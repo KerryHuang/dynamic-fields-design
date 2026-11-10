@@ -199,6 +199,33 @@ public class SchemaServiceTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task Menu_OldRowWithoutSectionI18n_ShowsTheZhTwSection()
+    {
+        await CreateModule("legacy", "舊模組");
+        await Send(new ActivateModuleRequest("legacy"));
+        // 加多語系欄位之前的資料：只有 Section 字串
+        await _db.Context.Database.ExecuteSqlRawAsync(
+            "UPDATE \"Dynamic_Module\" SET \"Section\" = '主檔', \"SectionI18n\" = NULL WHERE \"Key\" = 'legacy'");
+
+        var item = (await Send(new GetMenuRequest())).Single();
+
+        item.Section!.Values.Should().Equal(new Dictionary<string, string> { ["zh-TW"] = "主檔" });
+        item.Section.Resolve("en-US").Should().Be("主檔");
+    }
+
+    [Fact]
+    public async Task Menu_ReturnsEveryLocaleOfTheSection()
+    {
+        await Send(new CreateModuleRequest("partner", Text("往來對象"), null,
+            new I18nText([KeyValuePair.Create("zh-TW", "主檔"), KeyValuePair.Create("en-US", "Master data")])));
+        await Send(new ActivateModuleRequest("partner"));
+
+        var item = (await Send(new GetMenuRequest())).Single();
+
+        item.Section!.Resolve("en-US").Should().Be("Master data");
+    }
+
+    [Fact]
     public void SchemaETag_QuotesKeyVersionAndPermHash() =>
         SchemaETag.For("order", "3", "ab12cd34").Should().Be("\"order-v3-ab12cd34\"");
 

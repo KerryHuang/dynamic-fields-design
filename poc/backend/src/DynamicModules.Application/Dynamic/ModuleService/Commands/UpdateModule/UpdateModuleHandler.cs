@@ -54,7 +54,7 @@ public class UpdateModuleHandler(
 
         module.NameI18n = request.Name;
         module.Icon = request.Icon;
-        module.Section = request.Section;
+        module.SetSection(request.Section);
         module.TitleFieldId = request.TitleFieldId;
         module.TitleTemplate = request.TitleTemplate;
         if (titleChanged)

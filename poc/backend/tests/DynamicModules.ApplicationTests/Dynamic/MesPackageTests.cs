@@ -100,7 +100,7 @@ public class MesPackageTests
                 f.Type == FieldType.Reference && f.Config.TryGetProperty("relation", out var r) && r.GetString() == "detail"))
             .Select(m => m.Code);
         p.Modules.Where(m => !detailChildren.Contains(m.Code) && m.Kind == ModuleKind.Standalone)
-            .Where(m => string.IsNullOrEmpty(m.Section)).Select(m => m.Code)
+            .Where(m => string.IsNullOrEmpty(m.Section?.Values.GetValueOrDefault("zh-TW"))).Select(m => m.Code)
             .Should().BeEmpty();
     }
 

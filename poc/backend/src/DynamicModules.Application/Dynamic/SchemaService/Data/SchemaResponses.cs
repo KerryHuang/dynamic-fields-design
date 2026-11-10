@@ -55,7 +55,8 @@ public record SchemaRule(RuleKind Kind, JsonElement Condition, List<string> Targ
 public record SchemaOption(string Value, I18nText Label, string? Color, bool Active);
 
 /// <summary>Closed：所屬應用程式已關閉，仍可進入查閱，前端放在「已關閉的應用程式」分組。</summary>
-public record MenuItem(string Key, I18nText Name, string? Icon, string? Section, bool Closed = false);
+/// <summary>Section 是選單分區的多語系文字；前端以繁中值分組（不同應用程式的同名分區合成一組）。</summary>
+public record MenuItem(string Key, I18nText Name, string? Icon, I18nText? Section, bool Closed = false);
 
 public static class SchemaETag
 {

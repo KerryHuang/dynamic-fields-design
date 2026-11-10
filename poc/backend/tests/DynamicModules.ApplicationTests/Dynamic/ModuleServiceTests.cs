@@ -62,6 +62,9 @@ public class ModuleServiceTests : IAsyncLifetime
 
     private static I18nText Name(string zh = "訂單") => new([KeyValuePair.Create("zh-TW", zh)]);
 
+    private static I18nText Section(params (string Locale, string Text)[] items) =>
+        new(items.Select(i => KeyValuePair.Create(i.Locale, i.Text)));
+
     private Task<ServiceResult> Create(string key = "order", I18nText? name = null) =>
         Send(new CreateModuleRequest(key, name ?? Name(), null, null));
 
@@ -133,10 +136,73 @@ public class ModuleServiceTests : IAsyncLifetime
     [Fact]
     public async Task CreateModule_SectionOver100Chars_ReturnsValidationError()
     {
-        var result = await Send(new CreateModuleRequest("order", Name(), null, new string('a', 101)));
+        var result = await Send(new CreateModuleRequest("order", Name(), null, Name(new string('a', 101))));
 
         result.IsSuccess.Should().BeFalse();
         result.Errors["Section"].Should().Contain("選單分區不能超過 100 字");
+    }
+
+    [Fact]
+    public async Task CreateModule_SectionOver100CharsInAnotherLocale_ReturnsValidationError()
+    {
+        var section = Section(("zh-TW", "主檔"), ("en-US", new string('a', 101)));
+
+        var result = await Send(new CreateModuleRequest("order", Name(), null, section));
+
+        result.IsSuccess.Should().BeFalse();
+        result.Errors["Section"].Should().Contain("選單分區不能超過 100 字");
+    }
+
+    [Fact]
+    public async Task CreateModule_SectionWithUnsupportedLocale_ReturnsValidationError()
+    {
+        var result = await Send(new CreateModuleRequest("order", Name(), null, Section(("zh-TW", "主檔"), ("ja", "マスタ"))));
+
+        result.IsSuccess.Should().BeFalse();
+        result.Errors["Section"].Should().Contain("不支援的語系：ja");
+    }
+
+    [Fact]
+    public async Task CreateModule_SectionI18n_StoresZhTwAsGroupKeyAndEveryLocale()
+    {
+        var created = (ModuleResponse)(await Send(new CreateModuleRequest("order", Name(), null,
+            Section(("zh-TW", "主檔"), ("en-US", "Master data"))))).Data!;
+
+        created.Section!.Values.Should().Equal(new Dictionary<string, string> { ["zh-TW"] = "主檔", ["en-US"] = "Master data" });
+        var row = await _db.Context.Set<Module>().AsNoTracking().SingleAsync(m => m.Key == "order");
+        row.Section.Should().Be("主檔");
+        row.SectionI18n!.Resolve("en-US").Should().Be("Master data");
+    }
+
+    [Theory]
+    [InlineData("")]
+    [InlineData("   ")]
+    public async Task CreateModule_SectionWithBlankZhTw_HasNoSection(string zh)
+    {
+        var created = (ModuleResponse)(await Send(new CreateModuleRequest("order", Name(), null,
+            Section(("zh-TW", zh), ("en-US", "Master data"))))).Data!;
+
+        created.Section.Should().BeNull();
+        var row = await _db.Context.Set<Module>().AsNoTracking().SingleAsync(m => m.Key == "order");
+        row.Section.Should().BeNull();
+        row.SectionI18n.Should().BeNull();
+    }
+
+    [Fact]
+    public async Task UpdateModule_SectionI18n_ReplacesBoth_AndBlankClears()
+    {
+        var created = (ModuleResponse)(await Create()).Data!;
+
+        var updated = (ModuleResponse)(await Send(new UpdateModuleRequest("order", Name(), null,
+            Section(("zh-TW", "銷售"), ("th", "การขาย")), created.TitleFieldId))).Data!;
+        updated.Section!.Resolve("th").Should().Be("การขาย");
+        (await _db.Context.Set<Module>().AsNoTracking().SingleAsync(m => m.Key == "order")).Section.Should().Be("銷售");
+
+        var cleared = (ModuleResponse)(await Send(new UpdateModuleRequest("order", Name(), null, null, created.TitleFieldId))).Data!;
+        cleared.Section.Should().BeNull();
+        var row = await _db.Context.Set<Module>().AsNoTracking().SingleAsync(m => m.Key == "order");
+        row.Section.Should().BeNull();
+        row.SectionI18n.Should().BeNull();
     }
 
     [Fact]
@@ -144,7 +210,7 @@ public class ModuleServiceTests : IAsyncLifetime
     {
         var created = (ModuleResponse)(await Create()).Data!;
 
-        var result = await Send(new UpdateModuleRequest("order", Name(), null, new string('a', 101), created.TitleFieldId));
+        var result = await Send(new UpdateModuleRequest("order", Name(), null, Name(new string('a', 101)), created.TitleFieldId));
 
         result.IsSuccess.Should().BeFalse();
         result.Errors["Section"].Should().Contain("選單分區不能超過 100 字");
@@ -206,7 +272,7 @@ public class ModuleServiceTests : IAsyncLifetime
     {
         var created = (ModuleResponse)(await Create()).Data!;
 
-        var result = await Send(new UpdateModuleRequest("order", Name("訂單單"), "shop", "sales", created.TitleFieldId));
+        var result = await Send(new UpdateModuleRequest("order", Name("訂單單"), "shop", Name("sales"), created.TitleFieldId));
 
         var updated = (ModuleResponse)result.Data!;
         updated.Version.Should().Be(2);

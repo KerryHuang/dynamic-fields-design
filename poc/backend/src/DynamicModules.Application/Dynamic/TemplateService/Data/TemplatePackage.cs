@@ -1,4 +1,5 @@
 using System.Text.Json;
+using System.Text.Json.Serialization;
 using DynamicModules.Application.Dynamic.PermissionService.Data;
 using DynamicModules.Domain.Entities.Dynamic;
 using DynamicModules.Domain.ValueObjects;
@@ -16,12 +17,14 @@ public record TemplatePackage(
 }
 
 /// <summary>
+/// Section 是選單分區：JSON 可以是字串（只有繁中）或多語系物件，見 <see cref="SectionTextJsonConverter"/>。
 /// TitleField 只有擴充模組可以是 null（標題取自既有資料）。
 /// TitleTemplate 是標題樣板，例如 <c>{no} {name}</c>，{} 內是本模組的欄位代號；有值時記錄標題照樣板組成。
 /// Extensible 只有主檔套件的模組可以設（接受其他應用程式貢獻欄位）。兩者都是應用程式套件格式 6 才有。
 /// </summary>
 public record TemplateModule(
-    string Code, string Key, I18nText Name, string? Icon, string? Section, ModuleKind Kind,
+    string Code, string Key, I18nText Name, string? Icon,
+    [property: JsonConverter(typeof(SectionTextJsonConverter))] I18nText? Section, ModuleKind Kind,
     string? HostEntityKey, string? TitleField, List<TemplateBlock> Blocks, List<TemplateRule> Rules,
     List<TemplateView> Views, List<TemplatePermission> Permissions, bool? Extensible = null, string? TitleTemplate = null)
 {

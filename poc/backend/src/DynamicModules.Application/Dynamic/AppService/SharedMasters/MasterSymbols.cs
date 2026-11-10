@@ -64,7 +64,7 @@ public sealed class MasterSymbols(IAppRepository apps, IModuleRepository modules
                     return new TemplateField(x.Key[(member.Code.Length + 1)..], f.Type, f.LabelI18n, EmptyConfig, opts);
                 }).ToList();
             var declared = package?.Modules.FirstOrDefault(m => m.Code == member.Code);
-            result.Add(new TemplateModule(member.Code, module.Key, module.NameI18n, module.Icon, module.Section, module.Kind, null,
+            result.Add(new TemplateModule(member.Code, module.Key, module.NameI18n, module.Icon, module.SectionText(), module.Kind, null,
                 declared?.TitleField, [new TemplateBlock("main", new I18nText(), false, fields)], [], [], [],
                 Extensible: declared?.Extensible ?? true));
         }

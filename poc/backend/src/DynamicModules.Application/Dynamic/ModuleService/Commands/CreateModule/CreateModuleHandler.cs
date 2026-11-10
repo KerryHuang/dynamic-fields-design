@@ -49,13 +49,13 @@ public class CreateModuleHandler(
             ProgramCode = programCode,
             NameI18n = request.Name,
             Icon = request.Icon,
-            Section = request.Section,
             Kind = request.Kind,
             HostEntityKey = isExtension ? request.HostEntityKey : null,
             Status = ModuleStatus.Draft,
             Version = 1,
             Blocks = [block]
         };
+        module.SetSection(request.Section);
         module.StampCreated(user.UserId, now);
         modules.Add(module);
         await uow.CommitAsync(ct);

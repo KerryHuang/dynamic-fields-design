@@ -48,7 +48,7 @@ public class Phase7AcceptanceTests : IClassFixture<TestApp>
     /// <summary>建模組（可帶選單分區），並把預設的標題欄位改名；回傳區塊 id 與標題欄位 id。</summary>
     private async Task<(long BlockId, long TitleId)> NewModule(string key, string name, string titleLabel, bool titleRequired, string? section = null)
     {
-        (await _admin.PostAsJsonAsync($"{Base}/modules", new { key, name = Zh(name), section })).StatusCode
+        (await _admin.PostAsJsonAsync($"{Base}/modules", new { key, name = Zh(name), section = section is null ? null : Zh(section) })).StatusCode
             .Should().Be(HttpStatusCode.Created, key);
         var m = await JsonOf(await _admin.GetAsync($"{Base}/modules/{key}"));
         var blockId = m.GetProperty("blocks")[0].GetProperty("id").GetInt64();
@@ -104,7 +104,7 @@ public class Phase7AcceptanceTests : IClassFixture<TestApp>
         // 1. 訂單（分區「業務」）與明細，同第 6 階段
         var (orderBlock, _) = await NewModule(Order, "訂單", "備註", false, section: "業務");
         var no = await AddField(Order, orderBlock, "autonumber", "訂單編號", new { format = "SO-{yyyyMM}-{0000}" });
-        (await _admin.PutAsJsonAsync($"{Base}/modules/{Order}", new { name = Zh("訂單"), section = "業務", titleFieldId = no.Id }))
+        (await _admin.PutAsJsonAsync($"{Base}/modules/{Order}", new { name = Zh("訂單"), section = Zh("業務"), titleFieldId = no.Id }))
             .StatusCode.Should().Be(HttpStatusCode.OK);
         var customer = await AddField(Order, orderBlock, "reference", "客戶",
             new { refTarget = new { kind = "entity", key = "sales.customer" } });
@@ -135,7 +135,7 @@ public class Phase7AcceptanceTests : IClassFixture<TestApp>
         await Activate(_admin, Line);
         var menu = await JsonOf(await _admin.GetAsync($"{Base}/menu"));
         var orderItem = menu.EnumerateArray().Single(m => m.GetProperty("key").GetString() == Order);
-        orderItem.GetProperty("section").GetString().Should().Be("業務");
+        orderItem.GetProperty("section").GetProperty("zh-TW").GetString().Should().Be("業務");
 
         // 權限：業務 Own、沒有 Pricing 與 PrintExport；業務主管 All、全部動作
         var groups = await JsonOf(await _admin.GetAsync($"{Base}/groups"));

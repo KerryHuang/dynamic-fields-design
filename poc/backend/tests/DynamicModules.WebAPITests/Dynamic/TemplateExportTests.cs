@@ -176,7 +176,7 @@ public sealed partial class TemplateExportTests : IDisposable
         const string Line = "order-line";
         var (orderBlock, _) = await NewModule(Order, "訂單", "備註");
         var no = await AddField(Order, orderBlock, "autonumber", "訂單編號", new { format = "SO-{yyyyMM}-{0000}" });
-        await Ok(_admin.PutAsJsonAsync($"{Base}/modules/{Order}", new { name = Zh("訂單"), icon = "receipt", section = "業務", titleFieldId = no.Id }));
+        await Ok(_admin.PutAsJsonAsync($"{Base}/modules/{Order}", new { name = Zh("訂單"), icon = "receipt", section = new Dictionary<string, string> { ["zh-TW"] = "業務", ["en-US"] = "Sales operations" }, titleFieldId = no.Id }));
         await AddField(Order, orderBlock, "reference", "客戶", new { refTarget = new { kind = "entity", key = "sales.customer" } });
         var orderDate = await AddField(Order, orderBlock, "date", "訂單日期", new { defaultToday = true });
         var dueDate = await AddField(Order, orderBlock, "date", "交期", new { isSortable = true });
@@ -256,8 +256,12 @@ public sealed partial class TemplateExportTests : IDisposable
             }
         }));
 
-        var (first, _) = await ExportPackage(Order);
+        var (first, firstJson) = await ExportPackage(Order);
         first.Warnings.Should().BeNullOrEmpty();
+        // 有其他語系的分區匯出成物件；沒分區的明細模組不寫 section
+        var exportedModules = System.Text.Json.Nodes.JsonNode.Parse(firstJson)!["modules"]!.AsArray();
+        exportedModules[0]!["section"]!["en-US"]!.GetValue<string>().Should().Be("Sales operations");
+        exportedModules[1]!.AsObject().ContainsKey("section").Should().BeFalse();
         first.Modules.Select(m => m.Code).Should().Equal(Order, Line);
         var order = first.Modules[0];
         order.Blocks.Should().HaveCount(3);

@@ -6,7 +6,7 @@ using MediatR;
 
 namespace DynamicModules.Application.Dynamic.ModuleService.Commands.CreateModule;
 
-public record CreateModuleRequest(string Key, I18nText Name, string? Icon, string? Section,
+public record CreateModuleRequest(string Key, I18nText Name, string? Icon, I18nText? Section,
     ModuleKind Kind = ModuleKind.Standalone, string? HostEntityKey = null,
     bool CreateTitleField = true) : IRequest<ServiceResult>, ITransactionalRequest, IDesignerRequest
 {

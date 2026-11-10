@@ -153,7 +153,7 @@ public sealed class TemplateInstantiateTests : IDisposable
         order.GetProperty("status").GetString().Should().Be("Draft");
         line.GetProperty("status").GetString().Should().Be("Draft");
         order.GetProperty("icon").GetString().Should().Be("receipt_long");
-        order.GetProperty("section").GetString().Should().Be("業務");
+        order.GetProperty("section").GetProperty("zh-TW").GetString().Should().Be("業務", "範本的字串分區讀成只有繁中");
 
         order.GetProperty("blocks").EnumerateArray().Select(b => b.GetProperty("label").GetProperty("zh-TW").GetString())
             .Should().Equal("基本資料", "金額", "備註");

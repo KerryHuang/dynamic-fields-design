@@ -8,6 +8,6 @@ public class UpdateModuleValidator : AbstractValidator<UpdateModuleRequest>
     public UpdateModuleValidator()
     {
         RuleFor(x => x.Name).ValidModuleName();
-        RuleFor(x => x.Section).MaximumLength(100).WithMessage("選單分區不能超過 100 字");
+        RuleFor(x => x.Section).ValidModuleSection();
     }
 }

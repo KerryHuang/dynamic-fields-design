@@ -20,11 +20,13 @@ public class ModulesApiTests : IClassFixture<TestApp>
         {
             name = new Dictionary<string, string> { ["zh-TW"] = "改名" },
             icon = "star",
-            section = "sales"
+            section = new Dictionary<string, string> { ["zh-TW"] = "銷售", ["en-US"] = "Sales" }
         });
         put.StatusCode.Should().Be(HttpStatusCode.OK);
 
         var got = await JsonOf(await _admin.GetAsync($"{Base}/modules/{key}"));
+        got.GetProperty("section").GetProperty("zh-TW").GetString().Should().Be("銷售");
+        got.GetProperty("section").GetProperty("en-US").GetString().Should().Be("Sales");
         got.GetProperty("name").GetProperty("zh-TW").GetString().Should().Be("改名");
         got.GetProperty("status").GetString().Should().Be("Draft");
 
@@ -35,6 +37,37 @@ public class ModulesApiTests : IClassFixture<TestApp>
     [Fact]
     public async Task GetUnknownModule_Returns404()
         => (await _admin.GetAsync($"{Base}/modules/nope-nope")).StatusCode.Should().Be(HttpStatusCode.NotFound);
+
+    [Theory]
+    [InlineData("ja", "マスタ", "不支援的語系：ja")]
+    [InlineData("en-US", null, "選單分區不能超過 100 字")]
+    public async Task Update_InvalidSection_Returns400(string locale, string? text, string message)
+    {
+        var key = await CreateModule(_admin);
+
+        var res = await _admin.PutAsJsonAsync($"{Base}/modules/{key}", new
+        {
+            name = new Dictionary<string, string> { ["zh-TW"] = "x" },
+            section = new Dictionary<string, string> { ["zh-TW"] = "主檔", [locale] = text ?? new string('a', 101) }
+        });
+
+        res.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+        (await res.Content.ReadAsStringAsync()).Should().Contain(message);
+    }
+
+    [Fact]
+    public async Task Create_SectionWithBlankZhTw_HasNoSection()
+    {
+        var key = NewKey();
+        (await _admin.PostAsJsonAsync($"{Base}/modules", new
+        {
+            key, name = new Dictionary<string, string> { ["zh-TW"] = "x" },
+            section = new Dictionary<string, string> { ["zh-TW"] = " ", ["en-US"] = "Sales" }
+        })).StatusCode.Should().Be(HttpStatusCode.Created);
+
+        (await JsonOf(await _admin.GetAsync($"{Base}/modules/{key}"))).TryGetProperty("section", out var s)
+            .Should().BeFalse($"沒有分區時不回 section，實際：{s}");
+    }
 
     [Fact]
     public async Task CreateDuplicateKey_Returns409()
