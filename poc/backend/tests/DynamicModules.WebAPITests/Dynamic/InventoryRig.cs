@@ -132,23 +132,11 @@ internal sealed class InventoryRig
         }));
     }
 
-    public async Task<long> SupplierAsync(string name)
-    {
-        var f = await F("supplier");
-        return Id(await PostOk(Admin, $"{Base}/modules/{Key("supplier")}/records", new
-        {
-            values = new Dictionary<string, object> { [f["名稱"]] = name, [f["Email"]] = "supply@example.com" }
-        }));
-    }
+    /// <summary>供應商與客戶是共用主檔往來對象（s2d-1f）：建一筆角色是供應商的往來對象。</summary>
+    public Task<long> SupplierAsync(string name) => PartnerAsync(Admin, name, "供應商");
 
-    public async Task<long> CustomerAsync(string name)
-    {
-        var f = await F("customer");
-        return Id(await PostOk(Admin, $"{Base}/modules/{Key("customer")}/records", new
-        {
-            values = new Dictionary<string, object> { [f["名稱"]] = name, [f["Email"]] = "buyer@example.com" }
-        }));
-    }
+    /// <summary>建一筆角色是客戶的往來對象。</summary>
+    public Task<long> CustomerAsync(string name) => PartnerAsync(Admin, name, "客戶");
 
     // ---- 單據 ----
 

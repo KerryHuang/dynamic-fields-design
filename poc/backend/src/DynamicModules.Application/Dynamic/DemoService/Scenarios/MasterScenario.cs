@@ -23,21 +23,27 @@ public sealed class MasterScenario(IReadOnlyCollection<string> openApps) : IDemo
     private static readonly Dictionary<string, (bool Contacts, string[] Creators, string[] Owners, int FromDay)> Needs = new()
     {
         [DemoCatalog.CrmAppId] = (true, ["sales01", "sales02"], ["sales01", "sales02"], -80),
-        [DemoCatalog.MesAppId] = (false, ["manager01"], ["sales01", "sales02"], -95)
+        [DemoCatalog.MesAppId] = (false, ["manager01"], ["sales01", "sales02"], -95),
+        [DemoCatalog.InventoryAppId] = (true, ["buyer01"], ["buyer01"], -100)
     };
 
     /// <summary>
-    /// 公司：每家屬於原本用它的應用程式（只有該應用程式開啟時才建）。CRM 的十家客戶（其中一家也是供應商）、MES 的八家客戶。
+    /// 公司：每家屬於原本用它的應用程式（只有該應用程式開啟時才建）。CRM 的十家客戶（其中一家也是供應商）、MES 的八家客戶、
+    /// 進銷存的三家供應商與四家客戶。進銷存的公司各帶一位聯絡人（沿用原本「聯絡人」文字欄位的稱呼）。
     /// </summary>
-    private static readonly (string Name, string Role, string App)[] Companies =
+    private static readonly (string Name, string Role, string App, string? Contact)[] Companies =
     [
-        ("晨曦機械", "customer", DemoCatalog.CrmAppId), ("遠見電子", "customer", DemoCatalog.CrmAppId), ("新航物流", "customer", DemoCatalog.CrmAppId),
-        ("綠野食品", "customer", DemoCatalog.CrmAppId), ("恆展工業", "both", DemoCatalog.CrmAppId), ("藍海貿易", "customer", DemoCatalog.CrmAppId),
-        ("巨峰營造", "customer", DemoCatalog.CrmAppId), ("明日設計", "customer", DemoCatalog.CrmAppId), ("安泰五金", "customer", DemoCatalog.CrmAppId),
-        ("雲端製造", "customer", DemoCatalog.CrmAppId),
-        ("嵐岳精密", "customer", DemoCatalog.MesAppId), ("恆川機械", "customer", DemoCatalog.MesAppId), ("曜陽電子", "customer", DemoCatalog.MesAppId),
-        ("岳峰精機", "customer", DemoCatalog.MesAppId), ("澄川塑膠", "customer", DemoCatalog.MesAppId), ("瑞嶺零件", "customer", DemoCatalog.MesAppId),
-        ("拓明模具", "customer", DemoCatalog.MesAppId), ("禾晟電機", "customer", DemoCatalog.MesAppId)
+        ("晨曦機械", "customer", DemoCatalog.CrmAppId, null), ("遠見電子", "customer", DemoCatalog.CrmAppId, null), ("新航物流", "customer", DemoCatalog.CrmAppId, null),
+        ("綠野食品", "customer", DemoCatalog.CrmAppId, null), ("恆展工業", "both", DemoCatalog.CrmAppId, null), ("藍海貿易", "customer", DemoCatalog.CrmAppId, null),
+        ("巨峰營造", "customer", DemoCatalog.CrmAppId, null), ("明日設計", "customer", DemoCatalog.CrmAppId, null), ("安泰五金", "customer", DemoCatalog.CrmAppId, null),
+        ("雲端製造", "customer", DemoCatalog.CrmAppId, null),
+        ("嵐岳精密", "customer", DemoCatalog.MesAppId, null), ("恆川機械", "customer", DemoCatalog.MesAppId, null), ("曜陽電子", "customer", DemoCatalog.MesAppId, null),
+        ("岳峰精機", "customer", DemoCatalog.MesAppId, null), ("澄川塑膠", "customer", DemoCatalog.MesAppId, null), ("瑞嶺零件", "customer", DemoCatalog.MesAppId, null),
+        ("拓明模具", "customer", DemoCatalog.MesAppId, null), ("禾晟電機", "customer", DemoCatalog.MesAppId, null),
+        ("昌盛鋼鐵", "supplier", DemoCatalog.InventoryAppId, "林經理"), ("宏達五金", "supplier", DemoCatalog.InventoryAppId, "陳小姐"),
+        ("精工模料", "supplier", DemoCatalog.InventoryAppId, "王先生"),
+        ("遠航機械", "customer", DemoCatalog.InventoryAppId, "張經理"), ("新昇塑膠", "customer", DemoCatalog.InventoryAppId, "李小姐"),
+        ("大成電子", "customer", DemoCatalog.InventoryAppId, "吳先生"), ("恆久工業", "customer", DemoCatalog.InventoryAppId, "黃經理")
     ];
 
     private static readonly string[] Surnames = ["林", "陳", "王", "張", "李", "黃", "吳", "劉", "蔡", "楊"];
@@ -62,7 +68,7 @@ public sealed class MasterScenario(IReadOnlyCollection<string> openApps) : IDemo
         var perApp = new Dictionary<string, int>();
         for (var i = 0; i < Companies.Length; i++)
         {
-            var (name, role, app) = Companies[i];
+            var (name, role, app, _) = Companies[i];
             if (!apps.Contains(app)) continue;
             var k = perApp[app] = perApp.GetValueOrDefault(app) + 1;
             var (_, creators, owners, fromDay) = Needs[app];
@@ -83,6 +89,26 @@ public sealed class MasterScenario(IReadOnlyCollection<string> openApps) : IDemo
             record.Facts["role"] = role;
             record.Facts["app"] = app;
             partners[i] = record;
+        }
+
+        // ---- 帶聯絡人的公司（進銷存）：一家一位，任職經歷只有目前這一家 ----
+        foreach (var (i, partner) in partners.Where(p => Companies[p.Key].Contact is not null && Needs[Companies[p.Key].App].Contacts))
+        {
+            var name = Companies[i].Contact!;
+            var creator = Needs[Companies[i].App].Creators[0];
+            var record = plan.Create(ContactModule, plan.At(today.AddDays(Needs[Companies[i].App].FromDay + 10)), creator,
+                $"聯絡人 {Companies[i].Name} {name} 建立", ctx =>
+                {
+                    var m = ctx.Masters!;
+                    return new CreateRecordRequest(m.Ids.ModuleKeys[ContactSymbol], m.Values(ContactSymbol, ("name", name), ("partner", partner.Id)),
+                        Details: new Dictionary<string, List<DetailRowInput>>
+                        {
+                            [m.Ids.ModuleKeys[EmploymentSymbol]] = [new DetailRowInput(null, m.Values(EmploymentSymbol, ("partner", partner.Id)), null)]
+                        });
+                });
+            record.Facts["name"] = name;
+            record.Facts["partner"] = partner;
+            record.Facts["employment"] = 1;
         }
 
         // ---- CRM 的聯絡人：掛在 CRM 的客戶公司下；幾位換過公司，任職經歷有兩筆以上 ----

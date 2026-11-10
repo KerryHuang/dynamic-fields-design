@@ -1,5 +1,6 @@
 using DynamicModules.Application.Dynamic.AppService;
 using DynamicModules.Application.Dynamic.AppService.Data;
+using DynamicModules.Application.Dynamic.PermissionService.Data;
 using DynamicModules.Domain.ValueObjects;
 using FluentAssertions;
 
@@ -18,12 +19,46 @@ public class InventoryPackageTests
     public void Catalog_LoadsInventory_AndTheValidatorReportsNoErrors()
     {
         var p = Package.Value;
-        p.FormatVersion.Should().Be(4);
+        p.FormatVersion.Should().Be(6, "在共用主檔上貢獻欄位要格式 6");
         p.Manifest.Requires.Apps.Should().BeEmpty("進銷存不依賴其他應用程式");
         p.Manifest.Requires.Entities.Should().BeEmpty();
         AppPackageValidator.Validate(p).Errors.Should().BeEmpty();
-        p.Modules.Should().HaveCount(13);
+        p.Modules.Should().HaveCount(11, "供應商、客戶改用共用主檔往來對象");
         p.Modules.Should().OnlyContain(m => m.Key.StartsWith("inv-"));
+    }
+
+    [Fact]
+    public void SuppliersAndCustomers_AreThePartnerMaster_AndContactsTheContactMaster()
+    {
+        // s2d-1f（共用主檔設計 §11.3）：供應商、客戶改為往來對象（角色供應商或客戶），聯絡人改用共用主檔聯絡人
+        var p = Package.Value;
+        p.Manifest.Requires.Masters.Select(r => $"{r.Id}:{string.Join(',', r.Modules)}").Should().Equal("partner:partner", "contact:contact");
+        p.Modules.Select(m => m.Code).Should().NotContain(["supplier", "customer"]).And.Contain("item", "品項主檔是 s2d-2，這段不動");
+        foreach (var (module, field, roles) in new[]
+                 {
+                     ("po", "supplier", new[] { "supplier", "both" }), ("receipt", "supplier", new[] { "supplier", "both" }),
+                     ("shipment", "customer", new[] { "customer", "both" })
+                 })
+        {
+            var config = p.Modules.Single(m => m.Code == module).Blocks.SelectMany(b => b.Fields).Single(f => f.Code == field).Config;
+            var target = config.GetProperty("refTarget");
+            (target.GetProperty("kind").GetString(), target.GetProperty("key").GetString(), target.GetProperty("app").GetString())
+                .Should().Be(("module", "partner", "partner"), $"{module}.{field}");
+            config.GetProperty("refGuard").GetProperty("field").GetString().Should().Be("partner/partner.role");
+            config.GetProperty("refGuard").GetProperty("in").EnumerateArray().Select(x => x.GetString()).Should().Equal(roles, $"{module}.{field}");
+        }
+
+        p.Contributions.Select(c => $"{c.Master}/{c.Module}:{c.Block.Code}").Should().Equal("partner/partner:inventory", "contact/contact:inventory");
+        p.Contributions[0].Block.Name.Resolve("zh-TW").Should().Be("進銷存");
+        p.Contributions[0].Fields.Select(f => $"{f.Code}:{f.Type}").Should().Equal("shipAddress:Text");
+        p.Contributions[1].Fields.Should().BeEmpty("聯絡人只授予權限");
+        foreach (var c in p.Contributions)
+        {
+            c.Permissions.Select(x => x.Group).Should().Equal("buyer", "keeper", "manager");
+            c.Permissions.Should().OnlyContain(x => x.Privileges.Read && x.Privileges.Pricing && !x.Privileges.Delete && !x.Privileges.Approve,
+                "主檔的刪除與核准留給 steward");
+            c.Permissions.Single(x => x.Group == "keeper").Privileges.Should().Match<PrivilegesDto>(x => !x.Add && !x.Edit, "倉管原本只讀供應商與客戶");
+        }
     }
 
     [Fact]

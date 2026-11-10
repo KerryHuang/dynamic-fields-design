@@ -33,7 +33,7 @@ public class InventoryAppTests : IDisposable
         (await _admin.GetAsync($"{Base}/modules/inv-item")).StatusCode.Should().Be(HttpStatusCode.NotFound);
 
         var rig = await OpenAsync(_admin);
-        rig.App.GetProperty("modules").GetArrayLength().Should().Be(13);
+        rig.App.GetProperty("modules").GetArrayLength().Should().Be(11, "供應商、客戶改用共用主檔往來對象");
         rig.App.GetProperty("modules").EnumerateArray().Select(m => m.GetProperty("key").GetString()).Should().OnlyContain(k => k!.StartsWith("inv-"));
         var item = await rig.ItemAsync("螺絲 M3");
 

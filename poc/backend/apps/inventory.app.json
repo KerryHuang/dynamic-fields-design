@@ -1,6 +1,6 @@
 {
   "format": "formwright-app",
-  "formatVersion": 4,
+  "formatVersion": 6,
   "x-translation": "th、vi 標籤為機器翻譯，待母語者校對",
   "manifest": {
     "id": "inventory",
@@ -17,7 +17,23 @@
       "th": "สินค้า คลังสินค้า การจัดซื้อ การรับ การส่ง การตรวจนับ และยอดคงเหลือที่ไม่ติดลบ",
       "vi": "Mặt hàng, kho, mua hàng, nhập, xuất, kiểm kê và tồn kho không bao giờ âm"
     },
-    "icon": "inventory"
+    "icon": "inventory",
+    "requires": {
+      "masters": [
+        {
+          "id": "partner",
+          "modules": [
+            "partner"
+          ]
+        },
+        {
+          "id": "contact",
+          "modules": [
+            "contact"
+          ]
+        }
+      ]
+    }
   },
   "groups": [
     {
@@ -422,272 +438,6 @@
       ]
     },
     {
-      "code": "supplier",
-      "key": "inv-supplier",
-      "name": {
-        "zh-TW": "供應商",
-        "en-US": "Suppliers",
-        "th": "ผู้จำหน่าย",
-        "vi": "Nhà cung cấp"
-      },
-      "kind": "standalone",
-      "titleField": "name",
-      "blocks": [
-        {
-          "code": "main",
-          "label": {
-            "zh-TW": "基本資料",
-            "en-US": "Details",
-            "th": "ข้อมูลพื้นฐาน",
-            "vi": "Thông tin cơ bản"
-          },
-          "collapsed": false,
-          "columns": 2,
-          "fields": [
-            {
-              "code": "name",
-              "type": "text",
-              "label": {
-                "zh-TW": "名稱",
-                "en-US": "Name",
-                "th": "ชื่อ",
-                "vi": "Tên"
-              },
-              "config": {
-                "required": true,
-                "showInList": true,
-                "isFilterable": true
-              }
-            },
-            {
-              "code": "contact",
-              "type": "text",
-              "label": {
-                "zh-TW": "聯絡人",
-                "en-US": "Contact person",
-                "th": "ผู้ติดต่อ",
-                "vi": "Người liên hệ"
-              },
-              "config": {
-                "showInList": true
-              }
-            },
-            {
-              "code": "phone",
-              "type": "phone",
-              "label": {
-                "zh-TW": "電話",
-                "en-US": "Phone",
-                "th": "โทรศัพท์",
-                "vi": "Điện thoại"
-              },
-              "config": {
-                "showInList": true
-              }
-            },
-            {
-              "code": "email",
-              "type": "email",
-              "label": {
-                "zh-TW": "Email",
-                "en-US": "Email",
-                "th": "อีเมล",
-                "vi": "Email"
-              },
-              "config": {}
-            },
-            {
-              "code": "terms",
-              "type": "text",
-              "label": {
-                "zh-TW": "付款條件",
-                "en-US": "Payment terms",
-                "th": "เงื่อนไขการชำระเงิน",
-                "vi": "Điều khoản thanh toán"
-              },
-              "config": {}
-            }
-          ]
-        }
-      ],
-      "icon": "local_shipping",
-      "section": "進銷存基本資料",
-      "permissions": [
-        {
-          "group": "buyer",
-          "scope": "all",
-          "privileges": {
-            "read": true,
-            "add": true,
-            "edit": true,
-            "delete": true,
-            "printExport": true,
-            "pricing": true,
-            "approve": false
-          }
-        },
-        {
-          "group": "keeper",
-          "scope": "all",
-          "privileges": {
-            "read": true,
-            "add": false,
-            "edit": false,
-            "delete": false,
-            "printExport": true,
-            "pricing": true,
-            "approve": false
-          }
-        },
-        {
-          "group": "manager",
-          "scope": "all",
-          "privileges": {
-            "read": true,
-            "add": true,
-            "edit": true,
-            "delete": true,
-            "printExport": true,
-            "pricing": true,
-            "approve": false
-          }
-        }
-      ]
-    },
-    {
-      "code": "customer",
-      "key": "inv-customer",
-      "name": {
-        "zh-TW": "出貨客戶",
-        "en-US": "Customers",
-        "th": "ลูกค้า",
-        "vi": "Khách hàng"
-      },
-      "kind": "standalone",
-      "titleField": "name",
-      "blocks": [
-        {
-          "code": "main",
-          "label": {
-            "zh-TW": "基本資料",
-            "en-US": "Details",
-            "th": "ข้อมูลพื้นฐาน",
-            "vi": "Thông tin cơ bản"
-          },
-          "collapsed": false,
-          "columns": 2,
-          "fields": [
-            {
-              "code": "name",
-              "type": "text",
-              "label": {
-                "zh-TW": "名稱",
-                "en-US": "Name",
-                "th": "ชื่อ",
-                "vi": "Tên"
-              },
-              "config": {
-                "required": true,
-                "showInList": true,
-                "isFilterable": true
-              }
-            },
-            {
-              "code": "contact",
-              "type": "text",
-              "label": {
-                "zh-TW": "聯絡人",
-                "en-US": "Contact person",
-                "th": "ผู้ติดต่อ",
-                "vi": "Người liên hệ"
-              },
-              "config": {
-                "showInList": true
-              }
-            },
-            {
-              "code": "phone",
-              "type": "phone",
-              "label": {
-                "zh-TW": "電話",
-                "en-US": "Phone",
-                "th": "โทรศัพท์",
-                "vi": "Điện thoại"
-              },
-              "config": {
-                "showInList": true
-              }
-            },
-            {
-              "code": "email",
-              "type": "email",
-              "label": {
-                "zh-TW": "Email",
-                "en-US": "Email",
-                "th": "อีเมล",
-                "vi": "Email"
-              },
-              "config": {}
-            },
-            {
-              "code": "address",
-              "type": "text",
-              "label": {
-                "zh-TW": "地址",
-                "en-US": "Address",
-                "th": "ที่อยู่",
-                "vi": "Địa chỉ"
-              },
-              "config": {}
-            }
-          ]
-        }
-      ],
-      "icon": "storefront",
-      "section": "進銷存基本資料",
-      "permissions": [
-        {
-          "group": "buyer",
-          "scope": "all",
-          "privileges": {
-            "read": true,
-            "add": true,
-            "edit": true,
-            "delete": true,
-            "printExport": true,
-            "pricing": true,
-            "approve": false
-          }
-        },
-        {
-          "group": "keeper",
-          "scope": "all",
-          "privileges": {
-            "read": true,
-            "add": false,
-            "edit": false,
-            "delete": false,
-            "printExport": true,
-            "pricing": true,
-            "approve": false
-          }
-        },
-        {
-          "group": "manager",
-          "scope": "all",
-          "privileges": {
-            "read": true,
-            "add": true,
-            "edit": true,
-            "delete": true,
-            "printExport": true,
-            "pricing": true,
-            "approve": false
-          }
-        }
-      ]
-    },
-    {
       "code": "po",
       "key": "inv-po",
       "name": {
@@ -737,7 +487,15 @@
               "config": {
                 "refTarget": {
                   "kind": "module",
-                  "key": "supplier"
+                  "key": "partner",
+                  "app": "partner"
+                },
+                "refGuard": {
+                  "field": "partner/partner.role",
+                  "in": [
+                    "supplier",
+                    "both"
+                  ]
                 },
                 "required": true,
                 "showInList": true,
@@ -1248,7 +1006,15 @@
               "config": {
                 "refTarget": {
                   "kind": "module",
-                  "key": "supplier"
+                  "key": "partner",
+                  "app": "partner"
+                },
+                "refGuard": {
+                  "field": "partner/partner.role",
+                  "in": [
+                    "supplier",
+                    "both"
+                  ]
                 },
                 "required": true,
                 "showInList": true,
@@ -1639,7 +1405,15 @@
               "config": {
                 "refTarget": {
                   "kind": "module",
-                  "key": "customer"
+                  "key": "partner",
+                  "app": "partner"
+                },
+                "refGuard": {
+                  "field": "partner/partner.role",
+                  "in": [
+                    "customer",
+                    "both"
+                  ]
                 },
                 "required": true,
                 "showInList": true,
@@ -3419,6 +3193,132 @@
       },
       "active": true,
       "body": "<h1 align=\"center\">出貨單 {{no}}</h1><table width=\"100%\" cellpadding=\"4\"><tr><td>客戶：{{customer}}</td><td align=\"right\">出貨日期：{{shipDate}}</td></tr><tr><td>出庫倉：{{warehouse}}</td><td align=\"right\">狀態：{{status}}</td></tr></table><table width=\"100%\" border=\"1\" cellpadding=\"4\" style=\"border-collapse:collapse\"><thead><tr><th>項次</th><th>品名</th><th>單位</th><th align=\"right\">數量</th><th align=\"right\">單價</th><th align=\"right\">金額</th></tr></thead><tbody>{{#each shipment-line}}<tr><td>{{seq}}</td><td>{{itemName}}</td><td>{{unit}}</td><td align=\"right\">{{qty}}</td><td align=\"right\">{{price}}</td><td align=\"right\">{{amount}}</td></tr>{{/each}}</tbody></table><p align=\"right\"><strong>合計（未稅）：{{subtotal}}</strong></p><p>備註：{{remark}}</p><table width=\"100%\" cellpadding=\"12\"><tr><td>倉管：</td><td>客戶簽收：</td></tr></table>"
+    }
+  ],
+  "contributions": [
+    {
+      "master": "partner",
+      "module": "partner",
+      "block": {
+        "code": "inventory",
+        "name": {
+          "zh-TW": "進銷存",
+          "en-US": "Inventory",
+          "th": "ระบบซื้อขายและคลังสินค้า",
+          "vi": "Mua bán và tồn kho"
+        }
+      },
+      "fields": [
+        {
+          "code": "shipAddress",
+          "type": "text",
+          "label": {
+            "zh-TW": "出貨地址",
+            "en-US": "Shipping address",
+            "th": "ที่อยู่จัดส่ง",
+            "vi": "Địa chỉ giao hàng"
+          },
+          "config": {}
+        }
+      ],
+      "permissions": [
+        {
+          "group": "buyer",
+          "scope": "all",
+          "privileges": {
+            "read": true,
+            "add": true,
+            "edit": true,
+            "delete": false,
+            "printExport": true,
+            "pricing": true,
+            "approve": false
+          }
+        },
+        {
+          "group": "keeper",
+          "scope": "all",
+          "privileges": {
+            "read": true,
+            "add": false,
+            "edit": false,
+            "delete": false,
+            "printExport": true,
+            "pricing": true,
+            "approve": false
+          }
+        },
+        {
+          "group": "manager",
+          "scope": "all",
+          "privileges": {
+            "read": true,
+            "add": true,
+            "edit": true,
+            "delete": false,
+            "printExport": true,
+            "pricing": true,
+            "approve": false
+          }
+        }
+      ],
+      "fieldAccess": []
+    },
+    {
+      "master": "contact",
+      "module": "contact",
+      "block": {
+        "code": "inventory",
+        "name": {
+          "zh-TW": "進銷存",
+          "en-US": "Inventory",
+          "th": "ระบบซื้อขายและคลังสินค้า",
+          "vi": "Mua bán và tồn kho"
+        }
+      },
+      "fields": [],
+      "permissions": [
+        {
+          "group": "buyer",
+          "scope": "all",
+          "privileges": {
+            "read": true,
+            "add": true,
+            "edit": true,
+            "delete": false,
+            "printExport": true,
+            "pricing": true,
+            "approve": false
+          }
+        },
+        {
+          "group": "keeper",
+          "scope": "all",
+          "privileges": {
+            "read": true,
+            "add": false,
+            "edit": false,
+            "delete": false,
+            "printExport": true,
+            "pricing": true,
+            "approve": false
+          }
+        },
+        {
+          "group": "manager",
+          "scope": "all",
+          "privileges": {
+            "read": true,
+            "add": true,
+            "edit": true,
+            "delete": false,
+            "printExport": true,
+            "pricing": true,
+            "approve": false
+          }
+        }
+      ],
+      "fieldAccess": []
     }
   ]
 }

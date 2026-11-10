@@ -7,7 +7,8 @@ using DynamicModules.Application.Dynamic.RecordService.Commands.UpdateRecord;
 namespace DynamicModules.Application.Dynamic.DemoService.Scenarios;
 
 /// <summary>
-/// 「進銷存」應用程式的虛構資料：8 項品號、2 個倉庫、3 家供應商、4 家客戶；期初盤點入庫；6 張採購單（確認、部分到貨、全部到貨後結案、取消），
+/// 「進銷存」應用程式的虛構資料：8 項品號、2 個倉庫（3 家供應商、4 家客戶與他們的聯絡人由 <see cref="MasterScenario"/> 建在共用主檔，
+/// 這裡替客戶補上進銷存貢獻的出貨地址）；期初盤點入庫；6 張採購單（確認、部分到貨、全部到貨後結案、取消），
 /// 到貨單由採購單轉出並過帳；4 張出貨單（過帳後庫存減少，其中一張出貨後被主管取消，沖回庫存）；一張盤點差異調整。
 /// 庫存異動由套件的事件在過帳、取消時自動寫入，全部走一般的建立、更新、轉換指令，權限與狀態機照常生效。
 /// 期初庫存每品每倉 500，出貨量遠低於庫存，所以不會出現負庫存。公司、人名、電話、Email 全是虛構（Email 一律 example.com）。
@@ -29,8 +30,6 @@ public sealed class InventoryScenario : IDemoScenario
     ];
 
     private static readonly string[] Warehouses = ["主倉", "成品倉"];
-    private static readonly (string Name, string Contact)[] Suppliers = [("昌盛鋼鐵", "林經理"), ("宏達五金", "陳小姐"), ("精工模料", "王先生")];
-    private static readonly (string Name, string Contact)[] Customers = [("遠航機械", "張經理"), ("新昇塑膠", "李小姐"), ("大成電子", "吳先生"), ("恆久工業", "黃經理")];
 
     /// <param name="Supplier">供應商編號。</param>
     /// <param name="Lines">（品項編號, 數量）。</param>
@@ -53,7 +52,7 @@ public sealed class InventoryScenario : IDemoScenario
         var today = plan.Today;
         DateTime After(DateTime t, int days = 1) => plan.At(DateOnly.FromDateTime(t).AddDays(days), t);
 
-        // ---- 主檔：品號、倉庫、供應商、客戶（主管建立）----
+        // ---- 主檔：品號、倉庫（主管建立）----
         var start = plan.At(today.AddDays(-90));
         var items = new List<DemoRecord>();
         for (var i = 0; i < Items.Length; i++)
@@ -70,21 +69,15 @@ public sealed class InventoryScenario : IDemoScenario
             warehouses.Add(plan.Create("inv-warehouse", After(start, 0), Manager, $"倉庫 {Warehouses[i]} 建立", ctx => Create(ctx, "warehouse",
                 ("code", $"WH-{(char)('A' + n)}"), ("name", Warehouses[n]), ("location", $"示範市工業區 {n + 1} 號廠房"), ("active", true))));
         }
-        var suppliers = new List<DemoRecord>();
-        for (var i = 0; i < Suppliers.Length; i++)
+        // 供應商、客戶：共用主檔往來對象（MasterScenario 建立），主管補上客戶的出貨地址
+        var partners = MasterScenario.ForApp(plan, DemoCatalog.InventoryAppId);
+        var suppliers = partners.Where(p => (string?)p.Facts["role"] == "supplier").ToList();
+        var customers = partners.Where(p => (string?)p.Facts["role"] == "customer").ToList();
+        for (var i = 0; i < customers.Count; i++)
         {
-            var n = i;
-            suppliers.Add(plan.Create("inv-supplier", After(start, 0), Buyer, $"供應商 {Suppliers[i].Name} 建立", ctx => Create(ctx, "supplier",
-                ("name", Suppliers[n].Name), ("contact", Suppliers[n].Contact), ("phone", $"02-5551-{2000 + n * 111:0000}"),
-                ("email", $"sales{n + 1}@example.com"), ("terms", n == 0 ? "月結 30 天" : "月結 60 天"))));
-        }
-        var customers = new List<DemoRecord>();
-        for (var i = 0; i < Customers.Length; i++)
-        {
-            var n = i;
-            customers.Add(plan.Create("inv-customer", After(start, 0), Manager, $"客戶 {Customers[i].Name} 建立", ctx => Create(ctx, "customer",
-                ("name", Customers[n].Name), ("contact", Customers[n].Contact), ("phone", $"02-5552-{3000 + n * 123:0000}"),
-                ("email", $"buyer{n + 1}@example.com"), ("address", $"示範市中正路 {20 + n * 6} 號"))));
+            var address = $"示範市中正路 {20 + i * 6} 號";
+            plan.Update(customers[i], After(start, 0), Manager, $"客戶 {customers[i].Facts["name"]} 設定出貨地址", (ctx, r) =>
+                new UpdateRecordRequest(r.Id, ctx.Inventory!.Values(MasterScenario.PartnerSymbol, ("shipAddress", address)), r.RowVersion));
         }
 
         // ---- 期初盤點：每品每倉 500，由倉管建立並過帳 ----

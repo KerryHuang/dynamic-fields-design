@@ -34,6 +34,13 @@ public class MasterScenarioTests(DemoGeneratedFixture fx)
         var partners = crm.Created.Where(r => r.ModuleCode == MasterScenario.PartnerModule).ToList();
         partners.Select(p => (string)p.Facts["role"]!).Distinct().Should().BeEquivalentTo(["customer", "both"], "只開 CRM 時不建供應商");
         partners.Should().HaveCount(10);
+
+        var inventory = PlanFor(DemoCatalog.InventoryAppId).Created;
+        var stock = inventory.Where(r => r.ModuleCode == MasterScenario.PartnerModule).ToList();
+        stock.Select(p => (string)p.Facts["name"]!).Should().Equal(["昌盛鋼鐵", "宏達五金", "精工模料", "遠航機械", "新昇塑膠", "大成電子", "恆久工業"],
+            "沿用進銷存原本的虛構供應商與客戶名稱");
+        stock.Count(p => (string)p.Facts["role"]! == "supplier").Should().Be(3);
+        inventory.Count(r => r.ModuleCode == MasterScenario.ContactModule).Should().Be(7, "原本的聯絡人文字改成聯絡人主檔");
     }
 
     [Fact]
@@ -53,14 +60,16 @@ public class MasterScenarioTests(DemoGeneratedFixture fx)
         var role = await fx.Key(partner, "角色");
         var industry = await fx.Key(partner, "產業");
         var partners = await fx.Records(partner);
-        partners.Should().HaveCount(20, "CRM 十家、MES 八家，加上兩筆由潛在客戶轉出的客戶");
+        partners.Should().HaveCount(27, "CRM 十家、MES 八家、進銷存七家，加上兩筆由潛在客戶轉出的客戶");
         var customer = await fx.Opt(partner, "角色", "客戶");
         var both = await fx.Opt(partner, "角色", "客戶與供應商");
-        partners.Select(p => DemoGeneratedFixture.Text(p, role)).Should().OnlyContain(r => r == customer || r == both);
+        var supplier = await fx.Opt(partner, "角色", "供應商");
+        partners.Select(p => DemoGeneratedFixture.Text(p, role)).Should().OnlyContain(r => r == customer || r == both || r == supplier);
+        partners.Count(p => DemoGeneratedFixture.Text(p, role) == supplier).Should().Be(3, "只有進銷存需要供應商");
         partners.Count(p => DemoGeneratedFixture.Text(p, industry) is not null).Should().BeGreaterThanOrEqualTo(10, "CRM 補上產業");
 
         var contacts = await fx.Records(contact);
-        contacts.Should().HaveCount(10);
+        contacts.Should().HaveCount(17, "CRM 十位、進銷存七位");
         var rows = new List<int>();
         foreach (var c in contacts)
         {
@@ -70,6 +79,6 @@ public class MasterScenarioTests(DemoGeneratedFixture fx)
         rows.Should().OnlyContain(n => n >= 1);
         rows.Count(n => n >= 2).Should().BeGreaterThanOrEqualTo(2, "幾位聯絡人換過公司");
 
-        (await fx.Records(contact, "sales01")).Should().HaveCount(10, "業務靠 CRM 貢獻的權限看得到聯絡人");
+        (await fx.Records(contact, "sales01")).Should().HaveCount(17, "業務靠 CRM 貢獻的權限看得到聯絡人");
     }
 }
