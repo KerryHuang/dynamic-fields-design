@@ -98,3 +98,31 @@ public class TaskRepository(DynamicDbContext db) : ITaskRepository
 
     public void Remove(TaskItem task) => db.Set<TaskItem>().Remove(task);
 }
+
+public class NotificationRepository(DynamicDbContext db) : INotificationRepository
+{
+    public void Add(Notification n) => db.Set<Notification>().Add(n);
+
+    public Task<List<Notification>> ListLatestAsync(string userId, int take, CancellationToken ct) =>
+        db.Set<Notification>().AsNoTracking().Where(n => n.UserId == userId)
+            .OrderByDescending(n => n.CreatedTime).ThenByDescending(n => n.Id).Take(take).ToListAsync(ct);
+
+    public Task<int> CountUnreadAsync(string userId, CancellationToken ct) =>
+        db.Set<Notification>().AsNoTracking().CountAsync(n => n.UserId == userId && n.ReadTime == null, ct);
+
+    public Task<Notification?> GetOwnAsync(long id, string userId, CancellationToken ct) =>
+        db.Set<Notification>().FirstOrDefaultAsync(n => n.Id == id && n.UserId == userId, ct);
+
+    public Task MarkAllReadAsync(string userId, DateTime now, CancellationToken ct) =>
+        db.Set<Notification>().Where(n => n.UserId == userId && n.ReadTime == null)
+            .ExecuteUpdateAsync(s => s.SetProperty(n => n.ReadTime, now), ct);
+
+    public Task<bool> AnyOlderThanAsync(string userId, DateTime cutoff, CancellationToken ct) =>
+        db.Set<Notification>().AsNoTracking().AnyAsync(n => n.UserId == userId && n.CreatedTime < cutoff, ct);
+
+    public Task PurgeOlderThanAsync(string userId, DateTime cutoff, CancellationToken ct) =>
+        db.Set<Notification>().Where(n => n.UserId == userId && n.CreatedTime < cutoff).ExecuteDeleteAsync(ct);
+
+    public Task RemoveBySourceAsync(string sourceType, long sourceId, CancellationToken ct) =>
+        db.Set<Notification>().Where(n => n.SourceType == sourceType && n.SourceId == sourceId).ExecuteDeleteAsync(ct);
+}

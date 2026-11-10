@@ -34,6 +34,23 @@ public interface ITaskRepository
     void Remove(TaskItem task);
 }
 
+/// <summary>站內通知（設計 §6）。只碰自己的通知：每個方法都帶 userId。</summary>
+public interface INotificationRepository
+{
+    void Add(Notification n);
+    /// <summary>不追蹤；CreatedTime、Id 降冪。</summary>
+    Task<List<Notification>> ListLatestAsync(string userId, int take, CancellationToken ct);
+    Task<int> CountUnreadAsync(string userId, CancellationToken ct);
+    /// <summary>追蹤；不是這個人的通知回 null。</summary>
+    Task<Notification?> GetOwnAsync(long id, string userId, CancellationToken ct);
+    Task MarkAllReadAsync(string userId, DateTime now, CancellationToken ct);
+    Task<bool> AnyOlderThanAsync(string userId, DateTime cutoff, CancellationToken ct);
+    /// <summary>刪掉 CreatedTime 早於 cutoff 的通知。</summary>
+    Task PurgeOlderThanAsync(string userId, DateTime cutoff, CancellationToken ct);
+    /// <summary>來源被刪除時，刪掉所有人指向它的通知。</summary>
+    Task RemoveBySourceAsync(string sourceType, long sourceId, CancellationToken ct);
+}
+
 public sealed record TaskRecordStub(long Id, long ModuleId, string OwnerUserId, string Title, bool Deleted);
 
 public enum TaskListTab { Assigned, Created, Mentioned }

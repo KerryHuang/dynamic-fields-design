@@ -14,9 +14,3 @@ public interface ITaskNotifier
 {
     Task NotifyAsync(IReadOnlyList<TaskChange> changes, CancellationToken ct);
 }
-
-/// <summary>站內通知上線前的空實作。</summary>
-public sealed class NullTaskNotifier : ITaskNotifier
-{
-    public Task NotifyAsync(IReadOnlyList<TaskChange> changes, CancellationToken ct) => Task.CompletedTask;
-}

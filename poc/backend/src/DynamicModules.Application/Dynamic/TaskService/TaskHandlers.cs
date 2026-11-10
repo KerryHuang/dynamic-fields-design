@@ -88,7 +88,8 @@ public class UpdateTaskHandler(ITaskRepository tasks, TaskSupport support, TaskW
     }
 }
 
-public class DeleteTaskHandler(ITaskRepository tasks, TaskAccess access, IUnitOfWork uow)
+/// <summary>留言、參與者、附件資料列隨任務 cascade 刪除（實體檔交給清掃）；指向這筆任務的通知一起刪。</summary>
+public class DeleteTaskHandler(ITaskRepository tasks, INotificationRepository notifications, TaskAccess access, IUnitOfWork uow)
     : IRequestHandler<DeleteTaskRequest, ServiceResult>
 {
     public async Task<ServiceResult> Handle(DeleteTaskRequest request, CancellationToken ct)
@@ -100,6 +101,7 @@ public class DeleteTaskHandler(ITaskRepository tasks, TaskAccess access, IUnitOf
         if (p.Frozen) return ServiceResult.Conflict(ModuleGate.ClosedMessage);
         if (task.RuleId is not null) return ServiceResult.Conflict(TaskMessages.RuleTaskNoDelete);
         if (!p.CanDelete) return ServiceResult.Forbidden();
+        await notifications.RemoveBySourceAsync(NotificationService.TaskNotificationWriter.SourceType, task.Id, ct);
         tasks.Remove(task);
         await uow.CommitAsync(ct);
         return ServiceResult.Success();
