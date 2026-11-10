@@ -13,8 +13,8 @@ import type { ConvertBody, RecordConversion } from 'src/domain/dynamic/types';
 import DynamicField from 'src/presentation/dynamic/components/DynamicField.vue';
 import { messagesOutside } from 'src/presentation/dynamic/designer/api-error';
 import { newIdempotencyKey } from 'src/services/api/idempotency';
-import type { ApiError } from 'src/services/api/http';
 import { joinList } from 'src/i18n/translate';
+import type { ApiError } from 'src/services/api/http';
 
 const props = defineProps<{ modelValue: boolean; recordId: number; rowVersion: string; conversion: RecordConversion }>();
 const emit = defineEmits<{ 'update:modelValue': [open: boolean] }>();
@@ -48,7 +48,7 @@ const inputsReady = computed(() => !loadFailed.value && !inputsQuery.isPending.v
 const requiredKeys = computed(() => new Set(inputsQuery.data.value ?? []));
 const inputsFilled = computed(() => inputFields.value.every((f) => !requiredKeys.value.has(f.key) || !isBlank(formValues[f.key])));
 const quantities = reactive<Record<number, number | null>>({});
-const serverErrors = ref(new Map<number, string>());
+const serverErrors = ref(new Map<number, string[]>());
 // New per opened dialog; a resend after a failure reuses it, a success or a 422 (same key, other content) replaces it.
 let idempotencyKey = newIdempotencyKey();
 watch(() => [props.modelValue, props.conversion] as const, ([open]) => {
@@ -64,7 +64,9 @@ watch(() => [props.modelValue, props.conversion] as const, ([open]) => {
 const errors = computed(() => quantityErrors(lines.value ?? [], quantities));
 const errorText = (lineId: number) => {
   const e = errors.value.get(lineId);
-  return e ? t(`docflow.convert.error.${e}`) : serverErrors.value.get(lineId);
+  if (e) return t(`docflow.convert.error.${e}`);
+  const server = serverErrors.value.get(lineId);
+  return server ? joinList(server) : undefined;
 };
 // A header conversion has no lines to check; a line conversion needs at least one line above 0.
 const valid = computed(() => (lines.value ? canConvert(lines.value, quantities) : true) && inputsReady.value && inputsFilled.value);

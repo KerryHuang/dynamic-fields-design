@@ -32,6 +32,9 @@ http.interceptors.request.use((config) => {
 /** axios 沒拿到回應的原因裡，真正屬於連線問題的（斷線、逾時）；取消請求與其他例外不算。 */
 const NETWORK_CODES = ['ERR_NETWORK', 'ECONNABORTED', 'ETIMEDOUT'];
 
+/** 瀏覽器自己中止請求（換頁、卸載）時 XHR adapter 也用 ECONNABORTED，訊息固定是這句；不是連線問題。 */
+const isBrowserAbort = (err: { code?: string; message?: string } | undefined) => err?.code === 'ECONNABORTED' && err.message === 'Request aborted';
+
 export interface AuthHandlers {
   onUnauthorized(): void;
   onPasswordChangeRequired(): void;
@@ -43,7 +46,7 @@ export const setAuthHandlers = (h: AuthHandlers) => { authHandlers = h; };
 export function toApiError(e: unknown): ApiError {
   const err = e as AxiosError<{ errors?: Record<string, string[]>; message?: string; code?: string; params?: Record<string, unknown>; title?: string; references?: BlockingRef[]; total?: number; blockingOptions?: BlockingOption[] } & Partial<DeleteCheck>>;
   if (!err?.response) {
-    return NETWORK_CODES.includes(err?.code ?? '')
+    return NETWORK_CODES.includes(err?.code ?? '') && !isBrowserAbort(err)
       ? { status: 0, code: 'network', message: tFor(currentLocale())('common.networkError') }
       : { status: 0, message: err?.message };
   }

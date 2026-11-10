@@ -37,12 +37,12 @@ export function convertLines(lines: ConversionLineStatus[], quantities: Record<n
 /** Server keys `lines[i].quantity` back to the source line the i-th sent line came from. */
 export function serverQuantityErrors(
   errors: Record<string, string[]> | undefined, sent: NonNullable<ConvertBody['lines']>,
-): Map<number, string> {
-  const out = new Map<number, string>();
+): Map<number, string[]> {
+  const out = new Map<number, string[]>();
   for (const [key, messages] of Object.entries(errors ?? {})) {
     const m = /^lines\[(\d+)\]\.quantity$/.exec(key);
     const line = m ? sent[Number(m[1])] : undefined;
-    if (line) out.set(line.sourceLineId, messages.join('、'));
+    if (line) out.set(line.sourceLineId, messages);
   }
   return out;
 }

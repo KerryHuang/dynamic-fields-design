@@ -162,6 +162,16 @@ describe('FormPage', () => {
       expect(document.body.textContent).not.toContain('既有資料不存在');
     });
 
+    it('edit-mode 409 with a message but no code (old server, other conflicts) shows the message, not the stale notice', async () => {
+      const staleBefore = bodyCount(zhTW.dynamic.stale);
+      api.updateRecord.mockRejectedValue({ status: 409, message: '分錄不可修改，請新增沖銷分錄' });
+      const w = await mountPage(refSchema([]), '/dynamic/m/5/edit');
+      await w.find('input').setValue('y');
+      await w.find('form').trigger('submit');
+      await vi.waitFor(() => expect(document.body.textContent).toContain('分錄不可修改，請新增沖銷分錄'));
+      expect(bodyCount(zhTW.dynamic.stale)).toBe(staleBefore);
+    });
+
     it('edit-mode stale 409 still shows the stale notice', async () => {
       api.updateRecord.mockRejectedValue({ status: 409, code: 'stale', message: 'This data was changed by someone else. Please reload' });
       const w = await mountPage(refSchema([]), '/dynamic/m/5/edit');

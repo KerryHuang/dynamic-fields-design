@@ -37,7 +37,7 @@ describe('quantities', () => {
   it('maps server lines[i].quantity back to the source line', () => {
     const sent = [{ sourceLineId: 1, quantity: 2 }, { sourceLineId: 3, quantity: 1 }];
     const out = serverQuantityErrors({ 'lines[1].quantity': ['too many'], 'lines[9].quantity': ['x'], other: ['y'] }, sent);
-    expect([...out]).toEqual([[3, 'too many']]);
+    expect([...out]).toEqual([[3, ['too many']]]);
   });
 });
 

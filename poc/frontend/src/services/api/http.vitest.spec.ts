@@ -124,6 +124,10 @@ describe('toApiError 網路失敗', () => {
       expect(toApiError({ code, message: 'timeout of 1ms exceeded' })).toMatchObject({ status: 0, code: 'network' });
   });
 
+  it('瀏覽器自己中止的請求（換頁、卸載，ECONNABORTED 加 "Request aborted"）不顯示網路錯誤', () => {
+    expect(toApiError({ code: 'ECONNABORTED', message: 'Request aborted' })).toEqual({ status: 0, message: 'Request aborted' });
+  });
+
   it('取消請求與非 axios 例外不顯示網路錯誤，保留原訊息', () => {
     expect(toApiError({ code: 'ERR_CANCELED', message: 'canceled' })).toEqual({ status: 0, message: 'canceled' });
     expect(toApiError(new TypeError('x is not a function'))).toEqual({ status: 0, message: 'x is not a function' });
