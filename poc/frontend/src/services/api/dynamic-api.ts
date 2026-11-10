@@ -9,7 +9,13 @@ import type { CatalogModule, DrillResult, ModuleCatalog, ReportDateRange, Report
 import type { MeTheme, ThemeChoice, ThemeDefaults } from 'src/domain/theme/theme-model';
 import type { Department, DepartmentInput } from 'src/domain/dynamic/organization';
 import type { CheckDefinition, LedgerBody, LedgerConfig, ModuleCheck, ModuleEvent, RecordEffects, RecordLedger } from 'src/domain/dynamic/events-ledger';
+import type {
+  RecordTasks, TaskComment, TaskCounts, TaskDetail, TaskInput, TaskListFilter, TaskListTab, TaskPage, TaskPatch,
+} from 'src/domain/dynamic/task-types';
 import { handleAuthFailure, http, toApiError } from './http';
+import {
+  normalizeRecordTasks, normalizeTaskComment, normalizeTaskDetail, normalizeTaskPage,
+} from './task-normalize';
 
 /** Request config for write calls: the key makes a retried request take effect once (server: Dynamic_Operation). */
 const idem = (key?: string) => (key ? { headers: { 'Idempotency-Key': key } } : undefined);
@@ -428,6 +434,34 @@ export const dynamicApi = {
   /** The finished HTML document for one record; shown in a script-less sandbox and printed by the browser. */
   printRecord: (recordId: number, templateKey: string, locale: string) =>
     http.get<string>(`/records/${recordId}/print/${templateKey}`, { params: { locale }, responseType: 'text', transformResponse: (d) => d as string }).then(data),
+  /** Task endpoints: the server omits null properties, so every response goes through task-normalize. */
+  getMyTasks: (tab: TaskListTab, filter: TaskListFilter, page: number, size = 20) =>
+    http.get<TaskPage>('/tasks', { params: { tab, filter, currentPage: page, pagesSize: size } }).then(data).then(normalizeTaskPage),
+  getTaskSummary: () => http.get<TaskCounts>('/tasks/summary').then(data)
+    .then((c) => ({ dueToday: c.dueToday ?? 0, overdue: c.overdue ?? 0 })),
+  getTask: (id: number) => http.get<TaskDetail>(`/tasks/${id}`).then(data).then(normalizeTaskDetail),
+  createTask: (body: TaskInput) => http.post<TaskDetail>('/tasks', body).then(data).then(normalizeTaskDetail),
+  /** A property left out stays as it is; an explicit null clears it, so the patch is sent as given. */
+  updateTask: (id: number, patch: TaskPatch) => http.patch<TaskDetail>(`/tasks/${id}`, patch).then(data).then(normalizeTaskDetail),
+  deleteTask: (id: number) => http.delete(`/tasks/${id}`).then(data),
+  getRecordTasks: (recordId: number) => http.get<RecordTasks>(`/records/${recordId}/tasks`).then(data).then(normalizeRecordTasks),
+  createRecordTask: (recordId: number, body: TaskInput) =>
+    http.post<TaskDetail>(`/records/${recordId}/tasks`, body).then(data).then(normalizeTaskDetail),
+  getTaskComments: (id: number) => http.get<TaskComment[]>(`/tasks/${id}/comments`).then(data)
+    .then((list) => list.map(normalizeTaskComment)),
+  addTaskComment: (id: number, body: string) =>
+    http.post<TaskComment>(`/tasks/${id}/comments`, { body }).then(data).then(normalizeTaskComment),
+  /** One request carries the text and the files; the server rejects more than 5 files or a disabled upload. */
+  addTaskCommentWithFiles: (id: number, body: string, files: File[]) => {
+    const form = new FormData();
+    form.append('body', body);
+    for (const f of files) form.append('files', f);
+    return http.post<TaskComment>(`/tasks/${id}/comments`, form).then(data).then(normalizeTaskComment);
+  },
+  withdrawTaskComment: (id: number, commentId: number) =>
+    http.post<TaskComment>(`/tasks/${id}/comments/${commentId}/withdraw`).then(data).then(normalizeTaskComment),
+  getMentionCandidates: (keyword: string) =>
+    http.get<User[]>('/users/mention-candidates', { params: { keyword } }).then(data),
   getAttachmentSettings: () => http.get<AttachmentSettings>('/attachments/settings').then(data),
   uploadAttachment: (recordId: number, fieldId: number, file: File) => {
     const body = new FormData();

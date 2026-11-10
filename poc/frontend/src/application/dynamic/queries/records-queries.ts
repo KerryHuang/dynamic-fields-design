@@ -59,6 +59,8 @@ export function useSaveRecord() {
       qc.invalidateQueries({ queryKey: ['records', rec.moduleKey] }),
       qc.invalidateQueries({ queryKey: ['record', rec.id] }),
       qc.invalidateQueries({ queryKey: ['record-history', rec.id] }),
+      // saving can change a task's title snapshot or its record link, and can fire task rules
+      qc.invalidateQueries({ queryKey: ['record-tasks', rec.id] }),
     ]),
   });
 }
