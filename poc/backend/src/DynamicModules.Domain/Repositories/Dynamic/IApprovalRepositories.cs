@@ -84,6 +84,24 @@ public interface IApprovalInstanceRepository
     /// <summary>不追蹤。</summary>
     Task<List<ApprovalTask>> ListTasksAsync(IReadOnlyCollection<long> instanceIds, CancellationToken ct);
 
+    /// <summary>不追蹤，依 Id。</summary>
+    Task<List<ApprovalInstance>> ListInstancesAsync(IReadOnlyCollection<long> ids, CancellationToken ct);
+
+    /// <summary>不追蹤：這位使用者送出的實例。</summary>
+    Task<List<ApprovalInstance>> ListByInitiatorAsync(string userId, CancellationToken ct);
+
+    /// <summary>不追蹤：這些模組的實例。</summary>
+    Task<List<ApprovalInstance>> ListByModulesAsync(IReadOnlyCollection<long> moduleIds, CancellationToken ct);
+
+    /// <summary>有實例的模組 Id。</summary>
+    Task<List<long>> ListInstanceModuleIdsAsync(CancellationToken ct);
+
+    /// <summary>不追蹤：這位使用者可動作的 open 任務（負責人，或代理時的原簽核人）。</summary>
+    Task<List<ApprovalTask>> ListOpenTasksOfAsync(string userId, CancellationToken ct);
+
+    /// <summary>不追蹤：這位使用者動作過的任務（ActedTime 不為 null）。</summary>
+    Task<List<ApprovalTask>> ListActedTasksOfAsync(string userId, CancellationToken ct);
+
     void Add(ApprovalInstance i);
     void AddRun(ApprovalStageRun r);
     void AddTask(ApprovalTask t);

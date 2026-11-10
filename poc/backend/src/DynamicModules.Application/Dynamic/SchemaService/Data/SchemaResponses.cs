@@ -27,7 +27,8 @@ public record SchemaWorkflow(string StatusFieldKey, string InitialState, List<Sc
 
 public record SchemaWorkflowState(string Value, bool ReadOnly);
 
-public record SchemaWorkflowTransition(string From, string To);
+/// <param name="Approval">這條轉移需要送出簽核（簽核設計 §15；ETag 納入）。</param>
+public record SchemaWorkflowTransition(string From, string To, bool Approval = false);
 
 public record SchemaPermissions(bool Read, bool Add, bool Edit, bool Delete, bool PrintExport, bool Pricing);
 

@@ -15,3 +15,9 @@ public record ApproveTaskRequest(long TaskId, string RowVersion, string? Comment
 public record RejectTaskRequest(long TaskId, string RowVersion, string Comment, string To) : IRequest<ServiceResult>, IRecordWriteRequest;
 
 public record WithdrawApprovalRequest(long InstanceId, string RowVersion, string? Comment) : IRequest<ServiceResult>, IRecordWriteRequest;
+
+public record GetRecordApprovalRequest(long RecordId) : IRequest<ServiceResult>;
+
+/// <summary>Box：todo、done、submitted、all；From／To 篩送出日（含頭尾）；ModuleKey 為 null 不限模組。</summary>
+public record GetApprovalTasksRequest(string Box, string? ModuleKey, DateOnly? From, DateOnly? To, int CurrentPage, int PagesSize)
+    : IRequest<ServiceResult>;

@@ -14,6 +14,9 @@ public record DynamicRecordResponse(
 {
     /// <summary>凍結的貢獻欄位（欄位 key → 所屬的已關閉應用程式，共用主檔設計 §7）；沒有時是 null。</summary>
     public IReadOnlyDictionary<string, SchemaService.Data.SchemaLock>? LockedBy { get; init; }
+
+    /// <summary>簽核摘要（簽核設計 §15）：只有單筆讀取會填；沒有實例也不能送簽時是 null。</summary>
+    public ApprovalService.RecordApprovalSummary? Approval { get; init; }
 }
 
 public static class RecordMapper

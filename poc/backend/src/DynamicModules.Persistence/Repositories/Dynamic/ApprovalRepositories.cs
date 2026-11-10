@@ -159,6 +159,25 @@ public class ApprovalInstanceRepository(DynamicDbContext db) : IApprovalInstance
     public Task<List<ApprovalTask>> ListTasksAsync(IReadOnlyCollection<long> instanceIds, CancellationToken ct) =>
         db.Set<ApprovalTask>().AsNoTracking().Where(t => instanceIds.Contains(t.InstanceId)).OrderBy(t => t.Id).ToListAsync(ct);
 
+    public Task<List<ApprovalInstance>> ListInstancesAsync(IReadOnlyCollection<long> ids, CancellationToken ct) =>
+        db.Set<ApprovalInstance>().AsNoTracking().Where(i => ids.Contains(i.Id)).OrderBy(i => i.Id).ToListAsync(ct);
+
+    public Task<List<ApprovalInstance>> ListByInitiatorAsync(string userId, CancellationToken ct) =>
+        db.Set<ApprovalInstance>().AsNoTracking().Where(i => i.InitiatorUserId == userId).ToListAsync(ct);
+
+    public Task<List<ApprovalInstance>> ListByModulesAsync(IReadOnlyCollection<long> moduleIds, CancellationToken ct) =>
+        db.Set<ApprovalInstance>().AsNoTracking().Where(i => moduleIds.Contains(i.ModuleId)).ToListAsync(ct);
+
+    public Task<List<long>> ListInstanceModuleIdsAsync(CancellationToken ct) =>
+        db.Set<ApprovalInstance>().AsNoTracking().Select(i => i.ModuleId).Distinct().ToListAsync(ct);
+
+    public Task<List<ApprovalTask>> ListOpenTasksOfAsync(string userId, CancellationToken ct) =>
+        db.Set<ApprovalTask>().AsNoTracking().Where(t => t.Status == ApprovalTaskStatus.Open
+            && (t.AssigneeUserId == userId || (t.OriginalUserId == userId && t.Reason == ApprovalTaskReason.Delegated))).ToListAsync(ct);
+
+    public Task<List<ApprovalTask>> ListActedTasksOfAsync(string userId, CancellationToken ct) =>
+        db.Set<ApprovalTask>().AsNoTracking().Where(t => t.ActedTime != null && t.AssigneeUserId == userId).ToListAsync(ct);
+
     public void Add(ApprovalInstance i) => db.Set<ApprovalInstance>().Add(i);
     public void AddRun(ApprovalStageRun r) => db.Set<ApprovalStageRun>().Add(r);
     public void AddTask(ApprovalTask t) => db.Set<ApprovalTask>().Add(t);
