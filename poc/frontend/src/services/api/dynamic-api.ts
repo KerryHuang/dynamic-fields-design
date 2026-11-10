@@ -169,6 +169,8 @@ const importForm = (file: File) => {
 export type RecordValues = Record<string, unknown>;
 export type DetailsPayload = Record<string, DetailRowPayload[]>;
 const data = <T>(r: { data: T }) => r.data;
+/** The server omits null properties; roots and vacant managers come back without parentId / managerUserId. */
+const withNulls = (d: Department): Department => ({ ...d, parentId: d.parentId ?? null, managerUserId: d.managerUserId ?? null });
 
 /** One function per backend endpoint; names are the Task 10 Request names without the `Request` suffix. */
 export const dynamicApi = {
@@ -215,11 +217,9 @@ export const dynamicApi = {
   setGroupMembers: (id: number, body: { userIds: string[] }) => http.put(`/admin/groups/${id}/members`, body).then(data),
   getGroupImpact: (id: number) => http.get<GroupImpact>(`/admin/groups/${id}/impact`).then(data),
   deleteGroup: (id: number) => http.delete(`/admin/groups/${id}`).then(data),
-  /** The server omits null properties; roots and vacant managers come back without parentId / managerUserId. */
-  getDepartments: () => http.get<Department[]>('/departments').then(data)
-    .then((list) => list.map((d) => ({ ...d, parentId: d.parentId ?? null, managerUserId: d.managerUserId ?? null }))),
-  createDepartment: (body: DepartmentInput) => http.post<Department>('/departments', body).then(data),
-  updateDepartment: (id: number, body: DepartmentInput) => http.put<Department>(`/departments/${id}`, body).then(data),
+  getDepartments: () => http.get<Department[]>('/departments').then(data).then((list) => list.map(withNulls)),
+  createDepartment: (body: DepartmentInput) => http.post<Department>('/departments', body).then(data).then(withNulls),
+  updateDepartment: (id: number, body: DepartmentInput) => http.put<Department>(`/departments/${id}`, body).then(data).then(withNulls),
   deleteDepartment: (id: number) => http.delete(`/departments/${id}`).then(data),
   setUserDepartment: (userId: string, departmentId: number | null) =>
     http.put(`/admin/users/${encodeURIComponent(userId)}/department`, { departmentId }).then(data),

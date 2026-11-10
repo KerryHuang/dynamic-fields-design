@@ -298,3 +298,29 @@ describe('dynamicApi.getDepartments', () => {
     expect(d.managerUserId).toBeNull();
   });
 });
+
+describe('dynamicApi.createDepartment / updateDepartment', () => {
+  beforeEach(() => setActivePinia(createPinia()));
+
+  const input = { code: 'exec', name: { 'zh-TW': '總經理室' }, parentId: null, managerUserId: null, sortOrder: 0, active: true };
+  const stub = () => {
+    http.defaults.adapter = async (config) => ({
+      data: { id: 1, code: 'exec', name: { 'zh-TW': '總經理室' }, sortOrder: 0, active: true, memberUserIds: [] },
+      status: 200, statusText: 'OK', headers: {}, config,
+    });
+  };
+
+  it('turns the omitted null parentId and managerUserId into null in the create response', async () => {
+    stub();
+    const d = await dynamicApi.createDepartment(input);
+    expect(d.parentId).toBeNull();
+    expect(d.managerUserId).toBeNull();
+  });
+
+  it('turns the omitted null parentId and managerUserId into null in the update response', async () => {
+    stub();
+    const d = await dynamicApi.updateDepartment(1, input);
+    expect(d.parentId).toBeNull();
+    expect(d.managerUserId).toBeNull();
+  });
+});
