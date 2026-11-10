@@ -17,7 +17,11 @@ public sealed class ApprovalTransitionRunner(
     IRecordRepository records, IModuleRepository modules, ISystemIdentity system, ApprovalWriteContext context,
     IRequestHandler<UpdateRecordRequest, ServiceResult> update, IUnitOfWork uow, IWriteJournal journal)
 {
-    /// <summary>toOptionId 為 null 時不改狀態；values 為 null 時只改狀態。兩者都沒有就什麼都不做。</summary>
+    /// <summary>
+    /// toOptionId 為 null 時不改狀態；values 為 null 時只改狀態。兩者都沒有就什麼都不做。
+    /// 前提：呼叫前不得有同一筆記錄的未存檔修改。「自己寫的那幾筆」是以 seqBefore 之後、同一筆記錄的日誌認定，
+    /// 未存檔的修改會在下面的 CommitAsync 一起落成那幾筆而被豁免，等於繞過後盾少簽（審查建議 7）。
+    /// </summary>
     public async Task<ServiceResult> RunAsync(ApprovalInstance inst, long? toOptionId, IReadOnlyDictionary<string, JsonElement?>? values, CancellationToken ct)
     {
         var record = await records.GetAsync(inst.RecordId, ct);
