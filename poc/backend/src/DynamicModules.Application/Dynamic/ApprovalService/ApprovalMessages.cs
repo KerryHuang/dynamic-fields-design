@@ -54,6 +54,11 @@ public static class ApprovalMessages
     public static MessageRef NoApprover(object stage, object source) => MessageRef.Of(MessageText.ApprovalNoApprover, stage, source);
     /// <summary>備援說明會寫進簽核歷程（資料庫），固定繁中，不隨請求語系。</summary>
     public static string FallbackNote(string source) => $"來源 {source} 找不到簽核人，依設定改派備援簽核人";
+    /// <summary>重新比對的歷程說明（設計 §5.5 第 4 到 6 點），同樣固定繁中。</summary>
+    public static string RerouteNote(string flow) => $"單據內容已變，改用流程「{flow}」重新簽核";
+    public const string RerouteFallbackNote = "單據內容已變，沒有符合的流程，改由備援簽核人重新簽核";
+    public static string ReroutePickNote(string flow) => $"單據內容已變，改用流程「{flow}」，需由發起人重新送出";
+    public static readonly I18nText FallbackStageName = MessageText.AsI18n(MessageText.ApprovalFallbackStage);
     public static string ManagerLabel(int level) => MessageText.Get(null, MessageText.ApprovalManagerLabel, level);
     public static I18nText ManagerLabelI18n(int level) => MessageText.AsI18n(MessageText.ApprovalManagerLabel, level);
     public static readonly string PickLabel = MessageText.Get(null, MessageText.ApprovalPickLabel);

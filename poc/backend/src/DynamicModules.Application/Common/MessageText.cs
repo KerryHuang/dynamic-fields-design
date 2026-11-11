@@ -52,6 +52,7 @@ public static class MessageText
         ApprovalTransitionGone = nameof(ApprovalTransitionGone), ApprovalRecordGone = nameof(ApprovalRecordGone),
         ApprovalNoWorkflow = nameof(ApprovalNoWorkflow), ApprovalFlowVersionMissing = nameof(ApprovalFlowVersionMissing),
         ApprovalStageDefMissing = nameof(ApprovalStageDefMissing), ApprovalBoxInvalid = nameof(ApprovalBoxInvalid),
+        ApprovalFallbackStage = nameof(ApprovalFallbackStage),
         // 找不到某個東西
         BlockNotFound = nameof(BlockNotFound), FieldNotFound = nameof(FieldNotFound), OptionNotFound = nameof(OptionNotFound),
         EventNotFound = nameof(EventNotFound), CheckNotFound = nameof(CheckNotFound), ConversionNotFound = nameof(ConversionNotFound),
@@ -228,6 +229,7 @@ public static class MessageText
             "ไม่พบนิยามของขั้นที่จะส่งกลับ", "Không tìm thấy định nghĩa của bước cần trả lại"),
         [ApprovalBoxInvalid] = ("分頁只能是 todo、done、submitted、all", "The tab can only be todo, done, submitted, or all",
             "แท็บต้องเป็น todo, done, submitted หรือ all เท่านั้น", "Tab chỉ có thể là todo, done, submitted hoặc all"),
+        [ApprovalFallbackStage] = ("備援簽核", "Fallback approval", "การอนุมัติสำรอง", "Phê duyệt dự phòng"),
         [BlockNotFound] = ("找不到區塊", "Block not found", "ไม่พบบล็อก", "Không tìm thấy khối"),
         [FieldNotFound] = ("找不到欄位", "Field not found", "ไม่พบฟิลด์", "Không tìm thấy trường"),
         [OptionNotFound] = ("找不到選項", "Option not found", "ไม่พบตัวเลือก", "Không tìm thấy tùy chọn"),

@@ -6,11 +6,12 @@ using DynamicModules.Domain.Approvals;
 using DynamicModules.Domain.Entities.Dynamic;
 using DynamicModules.Domain.FieldTypes;
 using DynamicModules.Domain.Repositories.Dynamic;
+using DynamicModules.Domain.ValueObjects;
 
 namespace DynamicModules.Application.Dynamic.ApprovalService;
 
 /// <summary>
-/// 關卡推進與完成（設計 §6.3、§7.2、§8.2）。這一段同意時只照綁定版本推進；每次同意的重新比對在 a2c。
+/// 關卡推進、重新比對後的重來與完成（設計 §5.5、§6.3、§7.2、§8.2）。
 /// 系統動作（跳過、完成、備援說明）的歷程以 <see cref="SystemActor"/> 記錄。
 /// </summary>
 public sealed class ApprovalEngine(
@@ -83,13 +84,93 @@ public sealed class ApprovalEngine(
         repo.AddRun(run);
         await uow.CommitAsync(ct);
         var created = await tasks.CreateAsync(inst, run, seats, ct);
-        foreach (var seat in seats.Where(x => x.Reason == ApprovalTaskReason.Fallback))
-            Log(inst, ApprovalActions.Fallback, SystemActor, run.Id, comment: ApprovalMessages.FallbackNote(seat.FallbackFor ?? ""),
+        foreach (var seat in seats.Where(x => x.Reason == ApprovalTaskReason.Fallback && x.FallbackFor is not null))
+            Log(inst, ApprovalActions.Fallback, SystemActor, run.Id, comment: ApprovalMessages.FallbackNote(seat.FallbackFor!),
                 targets: [.. seat.UserIds]);
         inst.CurrentStageRunId = run.Id;
         await uow.CommitAsync(ct);
         await notifier.NotifyAsync(kind, inst, created.Select(t => t.AssigneeUserId), user.UserId, ct);
         return run;
+    }
+
+    /// <summary>備援實例唯一一關的關卡代號；不符合定義的代號格式，不會和流程的關卡撞名。</summary>
+    public const string FallbackStageCode = "_fallback";
+
+    /// <summary>
+    /// 路線不同時重來（設計 §5.5 第 4 到 6 點）：這次同意不計入；舊實例 rerouted、open 任務關閉、寫 reroute 歷程；
+    /// 新流程含發起人自選 → 不建新實例；快照沒有流程符合 → 備援實例（一關或簽）；否則依新流程從第 1 關開始。
+    /// 新實例沿用舊快照、發起人不變。通知發起人、舊實例中同意過的人與這次按同意的人 approvalRerouted。回傳新實例（沒建就是 null）或失敗。
+    /// </summary>
+    public async Task<(ApprovalInstance? Fresh, string Outcome, ServiceResult? Failure)> RerouteAsync(ApprovalInstance old, RouteCheck check, Module module,
+        IReadOnlyDictionary<string, JsonElement?> values, CancellationToken ct)
+    {
+        var now = time.Now;
+        var runs = await repo.ListRunsAsync(old.Id, ct);
+        var tasks = await repo.ListTasksAsync(old.Id, ct);
+        var notify = tasks.Where(t => t.Status == ApprovalTaskStatus.Approved).Select(t => t.AssigneeUserId)
+            .Prepend(user.UserId).Prepend(old.InitiatorUserId).ToList();
+        foreach (var t in tasks.Where(t => t.Status == ApprovalTaskStatus.Open)) t.Status = ApprovalTaskStatus.Closed;
+        foreach (var r in runs.Where(r => r.Status is ApprovalStageStatus.Active or ApprovalStageStatus.Queued))
+        {
+            r.Status = ApprovalStageStatus.Closed;
+            r.CompletedTime = now;
+        }
+        old.Status = ApprovalInstanceStatus.Rerouted;
+        old.CompletedTime = now;
+        old.CurrentStageRunId = null;
+        context.Touch(old.RecordId);
+        var name = check.NewFlow?.Name.Resolve(I18nText.FallbackLocale);
+        Log(old, ApprovalActions.Reroute, SystemActor, comment: check.NewFlow is null ? ApprovalMessages.RerouteFallbackNote
+            : check.NeedsPick ? ApprovalMessages.ReroutePickNote(name!) : ApprovalMessages.RerouteNote(name!),
+            data: JsonSerializer.Serialize(new { flowId = check.NewFlow?.FlowId, flowVersionId = check.NewFlow?.FlowVersionId }));
+        await uow.CommitAsync(ct);   // 舊實例先離開 pending，部分唯一索引才放得下新實例
+
+        if (check.NeedsPick)
+        {
+            await notifier.NotifyAsync(NotificationKinds.ApprovalRerouted, old, notify, null, ct);
+            return (null, ApprovalOutcomes.Rerouted, null);
+        }
+
+        var fresh = new ApprovalInstance
+        {
+            RecordId = old.RecordId, ModuleId = old.ModuleId,
+            // 備援實例保留舊綁定版本：備援名單與 rejectTo 都取自它（設計 §5.5 第 5 點）
+            FlowId = check.NewFlow?.FlowId ?? old.FlowId, FlowVersionId = check.NewFlow?.FlowVersionId ?? old.FlowVersionId,
+            FlowSetSnapshot = old.FlowSetSnapshot, RouteKind = check.NewFlow is null ? ApprovalRouteKind.Fallback : ApprovalRouteKind.Flow,
+            FromOptionId = old.FromOptionId, ToOptionId = old.ToOptionId, InitiatorUserId = old.InitiatorUserId,
+            Status = ApprovalInstanceStatus.Pending, RestartedFromInstanceId = old.Id, TitleSnapshot = old.TitleSnapshot,
+            SubmittedTime = now, RowVersion = Guid.NewGuid().ToString(), OperationId = op.OperationId
+        };
+        repo.Add(fresh);
+        context.Touch(fresh.RecordId);
+        await uow.CommitAsync(ct);
+        repo.AddSnapshotRows(old.FlowSetSnapshot.Select(e => new ApprovalInstanceFlow { InstanceId = fresh.Id, FlowId = e.FlowId, FlowVersionId = e.FlowVersionId }));
+
+        var outcome = ApprovalOutcomes.Rerouted;
+        if (check.NewFlow is null)
+        {
+            var ctx = await resolver.ContextAsync(module, fresh.InitiatorUserId, values, null, ct);
+            var resolution = ApproverResolver.ResolveFallback(ctx, DefinitionOf(old)?.FallbackApprovers);
+            if (resolution.Error is { } error) return (null, outcome, ServiceResult.Conflict(error));
+            var run = new ApprovalStageRun
+            {
+                InstanceId = fresh.Id, Seq = 1, StageCode = FallbackStageCode, NameSnapshot = ApprovalMessages.FallbackStageName, Mode = ApprovalModes.Any
+            };
+            await StartAsync(fresh, run, resolution.Seats, null, ct);
+        }
+        else
+        {
+            var (run, failure) = await ActivateNextAsync(fresh, module, values, ct);
+            if (failure is not null) return (null, outcome, failure);
+            if (run is null)
+            {
+                // 新流程的關卡全部跳過：照送出時的規則直接核准
+                if (await CompleteAsync(fresh, ct) is { } completeFailure) return (null, outcome, completeFailure);
+                outcome = ApprovalOutcomes.Approved;
+            }
+        }
+        await notifier.NotifyAsync(NotificationKinds.ApprovalRerouted, old, notify, null, ct);
+        return (fresh, outcome, null);
     }
 
     /// <summary>退回上一關：用同一個關卡代號建新的關卡實例並重新解析簽核人（設計 §7.3）；新負責人收到 approvalReturned。</summary>

@@ -5,6 +5,7 @@ using DynamicModules.Application.Common.Time;
 using DynamicModules.Application.Dynamic.RecordService;
 using DynamicModules.Domain.Approvals;
 using DynamicModules.Domain.Entities.Dynamic;
+using DynamicModules.Domain.FieldTypes;
 using DynamicModules.Domain.Repositories.Dynamic;
 using MediatR;
 
@@ -58,7 +59,8 @@ public sealed class ApprovalActionSupport(
 /// <summary>同意（設計 §7.2、§8.2）：或簽任一人、會簽全部席位；關卡完成就推進，沒有下一關就核准並執行轉移。</summary>
 public class ApproveTaskHandler(
     IApprovalInstanceRepository repo, ApprovalActionSupport support, ApprovalEngine engine, ApprovalTransitionRunner runner,
-    IPermissionRepository permissions, ICurrentUser user, IBusinessTime time, IUnitOfWork uow) : IRequestHandler<ApproveTaskRequest, ServiceResult>
+    IPermissionRepository permissions, ICurrentUser user, IBusinessTime time, IUnitOfWork uow, IModuleRepository modules, FieldTypeRegistry registry)
+    : IRequestHandler<ApproveTaskRequest, ServiceResult>
 {
     public async Task<ServiceResult> Handle(ApproveTaskRequest request, CancellationToken ct)
     {
@@ -83,12 +85,25 @@ public class ApproveTaskHandler(
         if (values.Count > 0 && await HiddenKeysAsync(module, values.Keys, ct) is { Count: > 0 } hidden)
             return ServiceResult.Invalid(hidden.ToDictionary(k => k, _ => new[] { ApprovalMessages.FieldHiddenForApprover }));
 
+        // 先寫可編輯欄位，再用當下的記錄值重新比對路線（設計 §5.5 第 1 點、§8.2 第 1、2 步）
+        if (values.Count > 0 && await runner.RunAsync(inst, null, values, ct) is { IsSuccess: false } written) return written;
+        var current = await support.ValuesAsync(inst.RecordId, ct);
+        var check = ApprovalRouter.Recheck(inst, runs, module, current, registry, time.Today, await modules.ListUserIdsAsync(ct));
+        if (check.Undecidable is { } undecidable) return ServiceResult.Conflict(ApprovalMessages.FlowConditionUndecidable(undecidable.Name));
+        if (check.Changed)
+        {
+            // 這次同意不計入；回 200 讓交易提交，重來的實例才建得起來
+            var (fresh, rerouted, rerouteFailure) = await engine.RerouteAsync(inst, check, module, current, ct);
+            if (rerouteFailure is not null) return rerouteFailure;
+            await uow.CommitAsync(ct);
+            return ServiceResult.Success(new ApprovalActionResponse(rerouted, fresh?.Id ?? inst.Id, fresh?.RowVersion ?? inst.RowVersion, check.NewFlow?.Name));
+        }
+
         var now = time.Now;
         me.Status = ApprovalTaskStatus.Approved;
         me.ActedTime = now;
         engine.Log(inst, ApprovalActions.Approve, user.UserId, run.Id, me.Id, Clean(request.Comment),
             data: values.Count > 0 ? JsonSerializer.Serialize(values.Keys) : null);
-        if (values.Count > 0 && await runner.RunAsync(inst, null, values, ct) is { IsSuccess: false } written) return written;
 
         bool complete;
         if (run.Mode == ApprovalModes.All)
@@ -108,7 +123,10 @@ public class ApproveTaskHandler(
             run.Status = ApprovalStageStatus.Approved;
             run.CompletedTime = now;
             await uow.CommitAsync(ct);
-            var (next, nextFailure) = await engine.ActivateNextAsync(inst, module, await support.ValuesAsync(inst.RecordId, ct), ct);
+            // 備援實例只有一關：重新比對沒有流程符合，就核准並轉移（設計 §5.5 第 5 點）
+            var (next, nextFailure) = inst.RouteKind == ApprovalRouteKind.Fallback
+                ? (null, null)
+                : await engine.ActivateNextAsync(inst, module, current, ct);
             if (nextFailure is not null) return nextFailure;
             if (next is null)
             {

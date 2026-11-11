@@ -9,7 +9,7 @@ namespace DynamicModules.Application.Dynamic.ApprovalService;
 public sealed record SubmitApprovalResponse(string Outcome, long? InstanceId, string RecordRowVersion);
 
 /// <summary>Outcome：advanced、approved、rerouted、rejected、returned、withdrawn。</summary>
-public sealed record ApprovalActionResponse(string Outcome, long InstanceId, string InstanceRowVersion, string? NewFlowName = null);
+public sealed record ApprovalActionResponse(string Outcome, long InstanceId, string InstanceRowVersion, I18nText? NewFlowName = null);
 
 public static class ApprovalOutcomes
 {

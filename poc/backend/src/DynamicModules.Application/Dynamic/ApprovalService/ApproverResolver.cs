@@ -85,6 +85,18 @@ public sealed class ApproverResolver(OrgSnapshotLoader org, IPermissionRepositor
         return new(seats, false, null);
     }
 
+    /// <summary>
+    /// 重新比對後的備援實例（設計 §5.5 第 5 點）：只有一關或簽，名單是舊綁定版本的備援簽核人（省略時是系統管理員），
+    /// 解析規則同 §6.5（移除發起人與停用帳號）；仍為空就回錯誤（呼叫端 409）。
+    /// </summary>
+    public static StageResolution ResolveFallback(ResolveContext ctx, ApproverSource? fallback)
+    {
+        var users = FallbackUsers(ctx, fallback);
+        if (users.Count == 0) return new([], false, ApprovalMessages.NoApprover(ApprovalMessages.FallbackStageName, fallback?.Source ?? "admin"));
+        if (users.Count > ApprovalLimits.MaxApprovers) return new([], false, ApprovalMessages.TooManyApprovers(ApprovalMessages.FallbackStageName));
+        return new([new SeatPlan(AnySeat, users, ApprovalTaskReason.Fallback, null)], false, null);
+    }
+
     /// <summary>來源單位（設計 §6.5 表）：群組各一、使用者各一、manager／userField 整個一個、自選的人各一、略過的群組各一（為空）。</summary>
     private static IEnumerable<(object Label, IReadOnlyList<string> Users)> Units(ResolveContext ctx, ApproverSource source)
     {
