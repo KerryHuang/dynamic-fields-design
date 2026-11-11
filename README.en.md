@@ -22,7 +22,7 @@ Each application can be enabled on its own, or you can enable none and build up 
 
 | Application | Status | Contents |
 |---|---|---|
-| CRM and Sales | Done | Leads, customers and contacts, opportunities, activities; quote-to-order conversion, orders with line items and tax-inclusive totals |
+| CRM and Sales | Done | Leads, customers and contacts, opportunities, interactions, campaigns (tasks assigned automatically on creation); quote-to-order conversion, orders with line items and tax-inclusive totals |
 | Inventory | Done | Items, warehouses, suppliers, purchase orders, receipts, shipments, stock movements and adjustments; stock is posted from documents |
 | MES (mold shop) | Done | Quotes, orders, work orders and operations, production reports, shipments, quality issues, mold maintenance and repair requests |
 | Accounting | Planned | Journal entries and income statement |
@@ -38,6 +38,7 @@ Planned items are not implemented yet; see the [ERP roadmap](docs/superpowers/sp
 - **Rules and formulas**: show, require, read-only and validation conditions per field, formulas and auto-numbering, evaluated identically on the front end and back end.
 - **Permissions and data scope**: group and per-user action permissions, data scope (all, own, same group), field-level permissions and option scopes.
 - **State machines and document conversion**: define how a document moves between statuses and who may move it; a quote can be partially converted into an order with its source preserved.
+- **Tasks and notifications**: tasks attached to any record or kept as personal to-dos, comments with @mentions and attachments, task rules that assign work from a record's dates and owners, and in-app notifications with due-date reminders under the bell icon.
 - **Reports and dashboards**: reports that merge several modules, charts, drill-down and sharing; a 12-column drag-and-drop dashboard that can be embedded in the home page.
 - **Import, export and history**: CSV import with preview and confirmation, CSV and Excel export, and a change history on every record.
 - **Four languages**: interface text and module and field names are maintained in Traditional Chinese, English, Thai and Vietnamese.

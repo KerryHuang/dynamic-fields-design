@@ -140,7 +140,9 @@ Application 單元測試 62（sanitizer、引擎）、WebAPI 測試 29（權限�
 `poc/backend/apps/crm-sales.app.json`（formatVersion 3，id `crm-sales`），隨 WebAPI 發行，由 `AppCatalog` 啟動時載入驗證。**沒有開啟之前不產生任何模組、選單或資料**；開啟走既有的 `POST apps/packages/crm-sales/open`，從空系統即可。程式碼裡沒有任何 CRM 專用邏輯：所有行為都是套件宣告，換成採購情境（請購 → 採購單）用同一組能力（測試內定義，不出貨）。
 
 ### 5.2 模組（鍵一律 `crm-` 開頭）
-潛在客戶 `crm-lead`、客戶 `crm-customer`、聯絡人 `crm-contact`、產品 `crm-product`、商機 `crm-opportunity`、活動 `crm-activity`、報價單 `crm-quote` ＋明細 `crm-quote-line`、訂單 `crm-order` ＋明細 `crm-order-line`。群組兩個：「CRM 業務」（`sales`）、「CRM 業務主管」（`manager`）；開啟時由管理員對應（新建、對應既有、略過）。產品對業務唯讀。
+潛在客戶 `crm-lead`、客戶 `crm-customer`、聯絡人 `crm-contact`、產品 `crm-product`、商機 `crm-opportunity`、互動紀錄 `crm-activity`（原名「活動」）、行銷活動 `crm-campaign`、報價單 `crm-quote` ＋明細 `crm-quote-line`、訂單 `crm-order` ＋明細 `crm-order-line`。群組兩個：「CRM 業務」（`sales`）、「CRM 業務主管」（`manager`）；開啟時由管理員對應（新建、對應既有、略過）。產品對業務唯讀。
+
+**任務管理之後的修改（套件 1.1.0、格式 7）**：「活動」改名「互動紀錄」，拿掉「已完成」欄位，只記已發生的電話、拜訪、郵件、會議，待辦改用任務。新增「行銷活動」：名稱（標題）、類型（展覽、研討會、線上活動）、開始日、結束日、地點、狀態（規劃中、確定舉辦、已結束、取消）、規劃、佈置、回饋三個負責人、說明；業務與業務主管權限同互動紀錄。任務規則 `crm-campaign-tasks`（行銷活動派工）在建立時觸發：規劃活動內容（規劃負責人，開始日 −62 天）、展場佈置（佈置負責人，開始日 −1 天，只限展覽）、活動回饋（回饋負責人，結束日 +12 天）。設計見[任務管理](2026-11-10-task-management-design.md) §10。已開啟過舊版 CRM 的資料庫不自動改名或移除欄位，由管理員在設計器調整或重建資料庫。
 
 ### 5.3 流程
 - 潛在客戶（已確認）→ 客戶、→ 商機：表頭轉換，各只能轉一次，追溯欄位唯讀。
@@ -159,7 +161,8 @@ Application 單元測試 62（sanitizer、引擎）、WebAPI 測試 29（權限�
 ### 6.1 做法
 - `AppOpener`：把開啟應用程式的實作從 `OpenAppHandler` 抽出，回傳代號對照（`TemplateIdMap`），HTTP 路徑行為不變。Demo 產生器在已經是系統管理員的交易內直接呼叫，不走權限 pipeline。
 - `DemoStructure` 在補完權限之後開啟 `crm-sales`，群組對應：套件的 `sales` → Demo 既有的 `sales`、`manager` → `sales-manager`。所以 sales01、sales02、manager01 登入就有權限走完整條流程，**沒有新增任何帳號或權限機制**。`DemoContext.Crm` 另存 CRM 的對照（CRM 的模組代碼 order 等與四個範本重名）。
-- `CrmScenario`（種子 20261107，與其他情境相同的確定性規則）：8 項產品、10 家客戶與聯絡人、12 筆潛在客戶（4 新線索、3 已聯繫、3 已確認、2 流失；2 筆已轉客戶與商機）、12～13 筆商機（六個階段齊全）、18 筆活動、10 張報價單（2 草稿、2 待核准、1 已退回、5 已核准）、4 張訂單（1 張報價單分兩次轉、1 張只轉一部分、1 張報價單轉單後訂單取消）。全部走一般的建立、更新、轉換指令，以 sales01、sales02、manager01 的身分執行，所以權限、狀態機、帶值都真的跑過一次。
+- `CrmScenario`（種子 20261107，與其他情境相同的確定性規則）：8 項產品、10 家客戶與聯絡人、12 筆潛在客戶（4 新線索、3 已聯繫、3 已確認、2 流失；2 筆已轉客戶與商機）、12～13 筆商機（六個階段齊全）、18 筆互動紀錄、10 張報價單（2 草稿、2 待核准、1 已退回、5 已核准）、4 張訂單（1 張報價單分兩次轉、1 張只轉一部分、1 張報價單轉單後訂單取消）。全部走一般的建立、更新、轉換指令，以 sales01、sales02、manager01 的身分執行，所以權限、狀態機、帶值都真的跑過一次。
+- 行銷活動（任務管理 t5）：sales01 三天前建「春季工具機展」（展覽，約 88 天後開展、展期三天，三個負責人是 sales01、sales02、sales03），sales02 兩天前建「智慧製造研討會」（約 60 天後，不產生展場佈置）；另有兩則含 @ 的任務留言。為此新增 Demo 帳號 `sales03`（業務三，`sales` 群組）。
 - `CRM 儀表板`：引用套件自帶的兩份報表（`dashboards` 區段在格式 3 仍保留，套件放不了），指派給 sales-manager、sales、mis。
 - 資料全是虛構：公司與人名自編、電話用 555 號段、Email 一律 `example.com`，沒有任何競品或真實公司名稱。
 
