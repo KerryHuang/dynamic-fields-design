@@ -142,6 +142,6 @@ public class TasksApiTests : IDisposable
         (await blank.Content.ReadAsStringAsync()).Should().Contain("留言不能是空的");
 
         var candidates = await JsonOf(await _app.AsUser("floor01").GetAsync($"{Base}/users/mention-candidates?keyword=SALES"));
-        candidates.EnumerateArray().Select(u => u.GetProperty("userId").GetString()).Should().Equal("sales01", "sales02");
+        candidates.EnumerateArray().Select(u => u.GetProperty("userId").GetString()).Should().Equal("sales01", "sales02", "sales03");
     }
 }

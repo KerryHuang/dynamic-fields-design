@@ -272,7 +272,7 @@ public class PermissionServiceTests : IAsyncLifetime
 
         var groups = (List<GroupResponse>)(await Send(new GetGroupsRequest())).Data!;
 
-        groups.Single(g => g.Key == "sales").Members.Should().Equal("sales01", "sales02");
+        groups.Single(g => g.Key == "sales").Members.Should().Equal("sales01", "sales02", "sales03");
     }
 
     [Fact]

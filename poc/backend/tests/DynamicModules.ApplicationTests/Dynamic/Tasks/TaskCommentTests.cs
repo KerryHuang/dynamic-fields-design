@@ -240,8 +240,8 @@ public class TaskCommentTests : TaskTestBase
             ((IReadOnlyList<UserResponse>)(await Send(new GetMentionCandidatesRequest(keyword))).Data!).Select(u => u.UserId).ToList();
 
         (await Ids("TEMP")).Should().HaveCount(20);
-        (await Ids("SALES")).Should().Equal("sales01", "sales02");
-        (await Ids("業務")).Should().BeEquivalentTo("sales01", "sales02", "manager01");
+        (await Ids("SALES")).Should().Equal("sales01", "sales02", "sales03");
+        (await Ids("業務")).Should().BeEquivalentTo("sales01", "sales02", "sales03", "manager01");
         (await Ids("保養")).Should().BeEmpty();
         (await Ids(null)).Should().HaveCount(20).And.NotContain("maint01");
     }
