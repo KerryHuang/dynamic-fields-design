@@ -9,15 +9,27 @@ using static DynamicModules.Application.Dynamic.TemplateService.TemplateGraph;
 
 namespace DynamicModules.Application.Dynamic.AppService;
 
-// 格式 7 的 taskRules[]（任務管理設計 §5.8）。結構層看形狀與數量；引用層確認模組、欄位、選項都在套件內（或是 requires.masters
-// 宣告的主檔符號），並且做只看套件就能判斷的型別檢查。和資料庫合併後的驗證（條件語法、每模組上限）開啟時由 CreateTaskRuleRequest 負責。
+// 格式 7 的 taskRules[]（任務管理設計 §5.8）。結構層看形狀；引用層確認模組、欄位、選項都在套件內（或是 requires.masters
+// 宣告的主檔符號），並且做只看套件就能判斷的型別檢查。和資料庫合併後的驗證（條件語法）開啟時由 CreateTaskRuleRequest 負責。
+// 套件內規則總數（政策 A2）與每條任務數（A1 全系統值）在匯入與開啟時由 TaskRuleLimitErrors 檢查；
+// 每模組規則數由 CreateTaskRuleRequest 依模組生效值檢查。
 public static partial class AppPackageValidator
 {
-    public const int MaxTaskRules = 50;
 
     private static readonly string[] TaskTriggerKinds = ["onCreate", "onUpdateMatch", "onFieldBecomes", "manual"];
 
     private static string TaskRuleAt(AppTaskRule r, int i) => $"taskRules[{r.Code ?? i.ToString()}]";
+
+    /// <summary>上限由呼叫端從政策讀出後傳入（靜態的 Validate 在啟動時也會跑，那時不能讀資料庫）；null 規則略過，結構層已報錯。</summary>
+    public static IReadOnlyList<string> TaskRuleLimitErrors(AppPackageData p, int maxRules, int maxTasksPerRule)
+    {
+        var errors = new List<string>();
+        if (p.TaskRules.Count > maxRules) errors.Add($"taskRules: 最多 {maxRules} 個");
+        for (var i = 0; i < p.TaskRules.Count; i++)
+            if (p.TaskRules[i] is { } r && r.Tasks.Count > maxTasksPerRule)
+                errors.Add($"{TaskRuleAt(r, i)}.tasks: {TaskRuleMessages.TasksCount(maxTasksPerRule)}");
+        return errors;
+    }
 
     // ---- 結構層 ----
 
@@ -29,7 +41,6 @@ public static partial class AppPackageValidator
         if (p.TaskRules.Count == 0) return;
         // 舊讀取器靜默略過會讓客戶以為有自動派工卻沒有，一律整份拒絕
         if (p.FormatVersion < 7) { errors.Add("taskRules: formatVersion 7 才支援 taskRules"); return; }
-        if (p.TaskRules.Count > MaxTaskRules) errors.Add($"taskRules: 最多 {MaxTaskRules} 個");
 
         var codes = new HashSet<string>();
         for (var i = 0; i < p.TaskRules.Count; i++)

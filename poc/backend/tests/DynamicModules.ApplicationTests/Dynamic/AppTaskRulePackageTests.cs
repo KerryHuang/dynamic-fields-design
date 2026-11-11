@@ -158,11 +158,42 @@ public class AppTaskRulePackageTests
                 .Should().BeEmpty(value);
     }
 
+    private static AppPackageData Data(string json)
+    {
+        var parsed = AppJson.Parse(json);
+        parsed.Errors.Should().BeEmpty();
+        return parsed.V2!;
+    }
+
+    /// <summary>總數上限是政策（A2），靜態驗證不再檢查；匯入與開啟時以 TaskRuleLimitErrors 帶入生效值檢查。</summary>
     [Fact]
     public void TooManyTaskRules_Rejected()
     {
         var rules = string.Join(", ", Enumerable.Range(0, 51).Select(i => With(Rule, "t7-lead-follow", $"t7-rule-{i:00}")));
-        Errors(Package(rules)).Should().Contain("taskRules: 最多 50 個");
+        Errors(Package(rules)).Should().NotContain("taskRules: 最多 50 個");
+        AppPackageValidator.TaskRuleLimitErrors(Data(Package(rules)), 50, 20).Should().Contain("taskRules: 最多 50 個");
+
+        var fifty = string.Join(", ", Enumerable.Range(0, 50).Select(i => With(Rule, "t7-lead-follow", $"t7-rule-{i:00}")));
+        AppPackageValidator.TaskRuleLimitErrors(Data(Package(fifty)), 50, 20).Should().BeEmpty();
+    }
+
+    [Fact]
+    public void TasksPerRule_CheckedWithGivenLimit()
+    {
+        var two = With(Rule, "\"tasks\": [ {", "\"tasks\": [ { \"code\": \"mail\", \"title\": { \"zh-TW\": \"寄信\" }, \"assignee\": \"lead.owner\" }, {");
+        var data = Data(Package(two));
+        data.TaskRules.Single().Tasks.Should().HaveCount(2);
+
+        AppPackageValidator.TaskRuleLimitErrors(data, 50, 1).Should().ContainSingle()
+            .Which.Should().Be("taskRules[t7-lead-follow].tasks: 任務至少 1 個、至多 1 個");
+        AppPackageValidator.TaskRuleLimitErrors(data, 50, 2).Should().BeEmpty();
+    }
+
+    [Fact]
+    public void ZeroTasks_RejectedByStructure()
+    {
+        var none = With(Rule, Rule[Rule.IndexOf("\"tasks\"", StringComparison.Ordinal)..^1], "\"tasks\": [] ");
+        Errors(Package(none)).Should().Contain("taskRules[t7-lead-follow].tasks: 任務至少 1 個");
     }
 
     [Fact]

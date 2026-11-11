@@ -309,4 +309,71 @@ public class AppFormat7Tests : IDisposable
         rule.GetProperty("warnings").EnumerateArray().Select(w => w.GetString()).Should().Contain("引用的欄位已刪除");
         // 引擎（t4a2）合併後由主控補端到端斷言：記錄寫入時不再產生任務
     }
+
+    // ---- 政策 A2（套件內規則總數）與 A1（每條任務數、每模組規則數）在匯入、開啟時的檢查 ----
+
+    private async Task SetSystemPolicyAsync(string code, int? value)
+    {
+        var res = await _rig.Admin.PutAsJsonAsync($"{Base}/system/policies/{code}", new { value });
+        res.StatusCode.Should().Be(HttpStatusCode.OK, await res.Content.ReadAsStringAsync());
+    }
+
+    private Task<HttpResponseMessage> ImportRawAsync(string json) =>
+        _rig.Admin.PostAsync($"{SharedMasterRig.Apps}/packages/import", new StringContent(json, System.Text.Encoding.UTF8, "application/json"));
+
+    private void ShouldHaveRolledBack()
+    {
+        _rig.Db(db => db.Set<App>().Any(a => a.Key == "crmx")).Should().BeFalse("App 列回滾");
+        _rig.Db(db => db.Set<Module>().Any(m => m.Key == LeadKey)).Should().BeFalse("本套件的模組回滾");
+        _rig.Db(db => db.Set<TaskRule>().Any(r => r.Key == LeadRule)).Should().BeFalse("先建好的規則回滾");
+    }
+
+    [Fact]
+    public async Task Import_OverPackageRuleLimit_400()
+    {
+        foreach (var json in SharedMasterPackages.Masters) await _rig.ImportAsync(json);
+        await SetSystemPolicyAsync("task.maxRulesPerPackage", 1);
+
+        var res = await ImportRawAsync(Crm7());
+        res.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+        (await res.Content.ReadAsStringAsync()).Should().Contain("taskRules: 最多 1 個");
+
+        await SetSystemPolicyAsync("task.maxRulesPerPackage", null);
+        await _rig.ImportAsync(Crm7());
+    }
+
+    [Fact]
+    public async Task Open_PackageRuleLimitLoweredAfterImport_Rejected()
+    {
+        foreach (var json in SharedMasterPackages.Masters) await _rig.ImportAsync(json);
+        await _rig.ImportAsync(Crm7());
+        await SetSystemPolicyAsync("task.maxRulesPerPackage", 1);
+
+        var res = await _rig.OpenAsync("crmx");
+        var body = await res.Content.ReadAsStringAsync();
+        ((int)res.StatusCode).Should().BeInRange(400, 499, body);
+        body.Should().Contain("taskRules: 最多 1 個");
+        ShouldHaveRolledBack();
+    }
+
+    [Fact]
+    public async Task OpenApp_OverModuleRuleLimit_RollsBack()
+    {
+        foreach (var json in SharedMasterPackages.Masters) await _rig.ImportAsync(json);
+        await _rig.ImportAsync(Crm7());
+        await _rig.ImportAsync(SharedMasterPackages.Stock);
+        // 先開進銷存讓主檔的往來對象模組存在，再在上面手動建一條不同代碼的規則，並把該模組的規則數覆寫成 1
+        await _rig.OpenOkAsync("stk");
+        var owner = await AddField(_rig.Admin, PartnerKey, "user");
+        await CreateManualRuleAsync("manual-partner", owner.Id);
+        var put = await _rig.Admin.PutAsJsonAsync($"{Base}/modules/{PartnerKey}/policies/task.maxRulesPerModule", new { value = 1 });
+        put.StatusCode.Should().Be(HttpStatusCode.OK, await put.Content.ReadAsStringAsync());
+
+        var res = await _rig.OpenAsync("crmx");
+        var body = await res.Content.ReadAsStringAsync();
+        ((int)res.StatusCode).Should().BeInRange(400, 499, body);
+        body.Should().Contain("每個模組至多 1 條任務規則");
+        ShouldHaveRolledBack();
+        _rig.Db(db => db.Set<TaskRule>().Any(r => r.Key == PartnerRule)).Should().BeFalse();
+    }
 }

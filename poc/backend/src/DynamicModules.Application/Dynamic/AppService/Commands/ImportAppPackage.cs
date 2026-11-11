@@ -5,8 +5,10 @@ using DynamicModules.Application.Common.Security;
 using DynamicModules.Application.Common.Time;
 using DynamicModules.Application.Dynamic.AppService.Data;
 using DynamicModules.Application.Dynamic.AppService.SharedMasters;
+using DynamicModules.Application.Dynamic.PolicyService;
 using DynamicModules.Application.Dynamic.TemplateService;
 using DynamicModules.Domain.Entities.Dynamic;
+using DynamicModules.Domain.Policies;
 using DynamicModules.Domain.Repositories.Dynamic;
 using MediatR;
 
@@ -24,7 +26,7 @@ public record ImportAppPackageRequest(byte[] Content) : IRequest<ServiceResult>,
 /// </summary>
 public class ImportAppPackageHandler(
     AppCatalog catalog, AppPackageSource packages, IAppPackageRepository repository, IAppRepository apps,
-    IUnitOfWork uow, ICurrentUser user, IBusinessTime time, MasterMerger merger, AppExporter exporter)
+    IUnitOfWork uow, ICurrentUser user, IBusinessTime time, MasterMerger merger, AppExporter exporter, IPolicyReader policies)
     : IRequestHandler<ImportAppPackageRequest, ServiceResult>
 {
     public async Task<ServiceResult> Handle(ImportAppPackageRequest request, CancellationToken ct)
@@ -39,6 +41,9 @@ public class ImportAppPackageHandler(
             .GroupBy(k => k.Package.Manifest.Id).ToDictionary(g => g.Key, g => g.First().Package);
         var validation = AppPackageValidator.Validate(package, masters);
         if (validation.Errors.Count > 0) return Invalid(validation.Errors);
+        var limitErrors = AppPackageValidator.TaskRuleLimitErrors(package,
+            await policies.IntAsync(PolicyCatalog.TaskMaxRulesPerPackage, null, ct), await policies.IntAsync(PolicyCatalog.TaskMaxTasksPerRule, null, ct));
+        if (limitErrors.Count > 0) return Invalid(limitErrors);
 
         var id = package.Manifest.Id;
         var stored = await repository.GetByKeyAsync(id, ct);
