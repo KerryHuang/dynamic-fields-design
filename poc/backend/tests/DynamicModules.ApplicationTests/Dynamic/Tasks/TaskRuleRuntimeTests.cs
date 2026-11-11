@@ -252,6 +252,26 @@ public class TaskRuleRuntimeTests : TaskTestBase
     }
 
     [Fact]
+    public async Task Restored_Task_ResyncsAssigneeAndDue()
+    {
+        var r = await BuildRig();
+        await CreateRule(r, RuleInput("cp-tasks", OnCreate, CampaignTasks(r)));
+        var rec = await NewRecord(r, Campaign(r, r.Exhibition));
+        var overriddenRec = await NewRecord(r, Campaign(r, r.Exhibition));
+        await Patch(Code(await Tasks(overriddenRec), "setup").Id, """{"assigneeUserId":"manager01"}""");
+
+        foreach (var id in new[] { rec, overriddenRec })
+        {
+            await Change(id, Vals((r.Kind, Opt(r.Seminar))));
+            await Change(id, Vals((r.Start, S("2027-03-01")), (r.SetupOwner, S("sales01"))));
+            await Change(id, Vals((r.Kind, Opt(r.Exhibition))));
+        }
+
+        Line(Code(await Tasks(rec), "setup")).Should().Be("setup|2027-02-28|sales01", "恢復時依目前記錄重新同步");
+        Line(Code(await Tasks(overriddenRec), "setup")).Should().Be("setup|2027-02-28|manager01", "負責人被人改過不覆蓋，到期日照同步");
+    }
+
+    [Fact]
     public async Task TaskCondition_ManualCancelOrDone_Untouched()
     {
         var r = await BuildRig();

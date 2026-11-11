@@ -33,7 +33,7 @@ public sealed class TaskRuleApplier(ITaskRuleRepository rules, ITaskRepository t
 
     /// <summary>
     /// 只看第 occurrence 批：個別任務條件由不成立變成立時補產生或恢復規則取消的任務，由成立變不成立時取消未完成的任務；
-    /// 未完成、沒被人改過的任務跟著負責人欄位、到期基準同步。Done 與人手動取消的不動，代碼已不在規則裡的任務不動。
+    /// 未完成、沒被人改過的任務跟著負責人欄位、到期基準同步（剛恢復的任務視同兩者都變，強制同步）。Done 與人手動取消的不動，代碼已不在規則裡的任務不動。
     /// </summary>
     public async Task ReconcileAsync(TaskRule rule, Module module, long recordId, int occurrence, string recordTitle,
         IReadOnlyDictionary<string, JsonElement?>? before, IReadOnlyDictionary<string, JsonElement?> after,
@@ -46,6 +46,7 @@ public sealed class TaskRuleApplier(ITaskRuleRepository rules, ITaskRepository t
             var task = existing.FirstOrDefault(t => t.RuleTaskCode == def.Code);
             var was = before is not null && TaskConditions.Holds(def.WhenJson, module, before, registry, today, userIds);
             var now = TaskConditions.Holds(def.WhenJson, module, after, registry, today, userIds);
+            var restored = false;
             if (!was && now)
             {
                 if (task is null)
@@ -54,6 +55,7 @@ public sealed class TaskRuleApplier(ITaskRuleRepository rules, ITaskRepository t
                     continue;
                 }
                 writer.RestoreByRule(task);
+                restored = true;
             }
             else if (was && !now && task is { IsOpen: true })
             {
@@ -61,8 +63,8 @@ public sealed class TaskRuleApplier(ITaskRuleRepository rules, ITaskRepository t
             }
 
             if (task is not { IsOpen: true }) continue;
-            var setAssignee = !task.AssigneeOverridden && TaskRuleEvaluator.Changed(def.AssigneeFieldId, before, after);
-            var setDue = !task.DueOverridden && TaskRuleEvaluator.Changed(def.DueFieldId, before, after);
+            var setAssignee = !task.AssigneeOverridden && (restored || TaskRuleEvaluator.Changed(def.AssigneeFieldId, before, after));
+            var setDue = !task.DueOverridden && (restored || TaskRuleEvaluator.Changed(def.DueFieldId, before, after));
             if (setAssignee || setDue)
                 await writer.SyncFromRuleAsync(task, setAssignee, TaskRuleEvaluator.Assignee(def, after, activeUsers),
                     setDue, TaskRuleEvaluator.DueDate(def, module, after), ct);
