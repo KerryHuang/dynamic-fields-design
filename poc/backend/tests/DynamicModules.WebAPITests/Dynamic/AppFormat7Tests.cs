@@ -12,7 +12,7 @@ namespace DynamicModules.WebAPITests.Dynamic;
 
 /// <summary>
 /// 套件格式 7 的 taskRules 隨應用程式匯出、開啟、關閉與刪除（任務管理設計 §5.8）。
-/// 規則引擎（t4a2）合併前只驗規則本身：關閉後不再被列為啟用中的規則、資料保留；產生任務的端到端斷言等引擎合併後補。
+/// 關閉與重開應用程式時規則是否觸發，含端到端斷言（建記錄產生任務、關閉後不再產生）。
 /// </summary>
 public class AppFormat7Tests : IDisposable
 {
@@ -77,6 +77,27 @@ public class AppFormat7Tests : IDisposable
         return scope.ServiceProvider.GetRequiredService<ITaskRuleRepository>().ListActiveByModuleAsync(moduleId, CancellationToken.None)
             .GetAwaiter().GetResult().Select(r => r.Key).ToList();
     }
+
+    /// <summary>建一筆階段為「熱」的潛在客戶（觸發熱名單跟進規則）；回傳 HTTP 回應。</summary>
+    private Task<HttpResponseMessage> PostHotLeadAsync(string company)
+    {
+        var hot = _rig.Db(db => db.Set<AppOption>().Single(o => o.Name == "lead.hot").OptionId);
+        return _rig.Admin.PostAsJsonAsync($"{Base}/modules/{LeadKey}/records", new
+        {
+            values = new Dictionary<string, object>
+            {
+                [_rig.FieldKey("crmx", "lead.company")] = company,
+                [_rig.FieldKey("crmx", "lead.owner")] = "sales02",
+                [_rig.FieldKey("crmx", "lead.stage")] = $"opt_{hot}"
+            }
+        });
+    }
+
+    private int LeadRuleTaskCount() => _rig.Db(db =>
+    {
+        var ruleId = db.Set<TaskRule>().Single(r => r.Key == LeadRule).Id;
+        return db.Set<TaskItem>().Count(t => t.RuleId == ruleId);
+    });
 
     private async Task CreateManualRuleAsync(string key, long assigneeFieldId, string moduleKey = PartnerKey)
     {
@@ -226,6 +247,10 @@ public class AppFormat7Tests : IDisposable
         await OpenCrm7Async();
         await _rig.ImportAsync(SharedMasterPackages.Stock);
         await _rig.OpenOkAsync("stk");   // 讓往來對象主檔在 crmx 關閉後仍然開啟
+        var created = await PostHotLeadAsync("開啟中");
+        created.StatusCode.Should().Be(HttpStatusCode.Created, await created.Content.ReadAsStringAsync() + _rig.LastError());
+        var recordId = (await JsonOf(created)).GetProperty("id").GetInt64();
+        LeadRuleTaskCount().Should().Be(1, "開啟中建立記錄，規則產生任務");
         var ruleId = _rig.Db(db => db.Set<TaskRule>().Single(r => r.Key == PartnerRule).Id);
         _rig.Db(db => { db.Set<TaskItem>().Add(new TaskItem { Title = "已產生的任務", RuleId = ruleId, RuleTaskCode = "visit", CreatedTime = DateTime.UtcNow }); });
         ActiveRuleKeys(PartnerKey).Should().Equal(PartnerRule);
@@ -238,7 +263,6 @@ public class AppFormat7Tests : IDisposable
         _rig.Db(db => db.Set<TaskRule>().Count(r => r.Key == PartnerRule || r.Key == LeadRule)).Should().Be(2, "規則本身保留");
         _rig.Db(db => db.Set<TaskRule>().Single(r => r.Key == PartnerRule).Active).Should().BeTrue("關閉不改規則的啟用設定，重新開啟才能原樣恢復");
         _rig.Db(db => db.Set<TaskItem>().Count(t => t.RuleId == ruleId)).Should().Be(1, "已產生的任務保留");
-        // 引擎（t4a2）合併後由主控補端到端斷言：關閉期間記錄寫入不產生任務
     }
 
     [Fact]
@@ -253,7 +277,12 @@ public class AppFormat7Tests : IDisposable
         await _rig.ReopenOkAsync("crmx");
         ActiveRuleKeys(PartnerKey).Should().Equal(PartnerRule);
         ActiveRuleKeys(LeadKey).Should().Equal(LeadRule);
-        // 引擎（t4a2）合併後由主控補端到端斷言：重新開啟後記錄寫入又會產生任務
+
+        var res = await PostHotLeadAsync("重新開啟後");
+        res.StatusCode.Should().Be(HttpStatusCode.Created, await res.Content.ReadAsStringAsync() + _rig.LastError());
+        var recordId = (await JsonOf(res)).GetProperty("id").GetInt64();
+        var tasks = await JsonOf(await _rig.Admin.GetAsync($"{Base}/records/{recordId}/tasks"));
+        tasks.GetProperty("items").EnumerateArray().Select(t => t.GetProperty("title").GetString()).Should().Contain("打電話", "重新開啟後規則恢復觸發");
     }
 
     [Fact]
