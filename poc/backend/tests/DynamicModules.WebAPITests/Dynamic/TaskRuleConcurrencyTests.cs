@@ -84,6 +84,36 @@ public class TaskRuleConcurrencyTests : IDisposable
         (await RecordTasks(id)).GetArrayLength().Should().Be(2, "任務數等於範本數");
     }
 
+    private async Task<List<HttpStatusCode>> ApplyTwiceAtOnce(long recordId, string ruleKey)
+    {
+        var clients = new[] { _app.AsUser("sales01"), _app.AsUser("sales02") };
+        var results = await Task.WhenAll(clients.Select(c => c.PostAsync($"{Base}/records/{recordId}/task-rules/{ruleKey}/apply", null)));
+        return results.Select(x => x.StatusCode).ToList();
+    }
+
+    [Fact]
+    public async Task ConcurrentManualApply_GeneratesOnce()
+    {
+        var r = await BuildRig();
+        await CreateRule(r, "conc-manual", new { on = "manual" }, null, "once",
+            Step(r, "a", new() { ["zh-TW"] = "甲" }), Step(r, "b", new() { ["zh-TW"] = "乙" }));
+        var id = (await NewRecord(r, _admin, flag: false)).GetProperty("id").GetInt64();
+
+        (await ApplyTwiceAtOnce(id, "conc-manual")).Should().BeEquivalentTo([HttpStatusCode.OK, HttpStatusCode.Conflict]);
+        (await RecordTasks(id)).GetArrayLength().Should().Be(2);
+    }
+
+    [Fact]
+    public async Task ConcurrentManualApply_EveryTime_OneBatch()
+    {
+        var r = await BuildRig();
+        await CreateRule(r, "conc-every", new { on = "manual" }, null, "everyTime", Step(r, "a", new() { ["zh-TW"] = "甲" }));
+        var id = (await NewRecord(r, _admin, flag: false)).GetProperty("id").GetInt64();
+
+        (await ApplyTwiceAtOnce(id, "conc-every")).Should().BeEquivalentTo([HttpStatusCode.OK, HttpStatusCode.Conflict]);
+        (await RecordTasks(id)).GetArrayLength().Should().Be(1);
+    }
+
     [Fact]
     public async Task RuleTask_XLocaleHeader_Thai()
     {

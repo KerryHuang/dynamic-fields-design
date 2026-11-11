@@ -31,3 +31,6 @@ public record DeleteTaskRuleRequest(string ModuleKey, string Key)
     public IReadOnlyList<MasterDesignTarget> MasterTargets => [new(ModuleKey: ModuleKey)];
     public PermissionAction RequiredDesignerAction => PermissionAction.Edit;
 }
+
+/// <summary>記錄詳細頁的「套用任務範本」：只收啟用中、應用程式開啟中的 manual 規則。成功時 Data 是 <see cref="TaskService.RecordTasksResponse"/>。</summary>
+public sealed record ApplyTaskRuleRequest(long RecordId, string RuleKey) : IRequest<ServiceResult>, ITransactionalRequest;

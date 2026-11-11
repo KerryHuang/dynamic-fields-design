@@ -9,7 +9,8 @@ using MediatR;
 namespace DynamicModules.Application.Dynamic.TaskService;
 
 /// <summary>任務請求共用：輸入驗證與詳細回應組裝。</summary>
-public sealed class TaskSupport(ITaskRepository tasks, IPermissionRepository permissions, IBusinessTime time)
+public sealed class TaskSupport(ITaskRepository tasks, IPermissionRepository permissions, IBusinessTime time, TaskAccess access,
+    TaskRuleService.ManualTaskRules manualRules)
 {
     public async Task<Dictionary<string, string[]>> ValidateInputAsync(TaskInput input, CancellationToken ct)
     {
@@ -31,6 +32,18 @@ public sealed class TaskSupport(ITaskRepository tasks, IPermissionRepository per
             if (await permissions.GetUserAsync(id, ct) is { } u) users[id] = u;
         var ruleKey = task.RuleId is { } ruleId ? await tasks.GetRuleKeyAsync(ruleId, ct) : null;
         return TaskViews.ToDetail(task, p, users, time.Today, ruleKey);
+    }
+
+    /// <summary>記錄上看得到的任務，加上可手動套用的規則。</summary>
+    public async Task<RecordTasksResponse> RecordTasksAsync(RecordTaskAccess target, CancellationToken ct)
+    {
+        var items = await tasks.ListByRecordAsync(target.Record.Id, ct);
+        var perms = await access.EvaluateManyAsync(items, ct);
+        var users = (await permissions.ListUsersAsync(ct)).ToDictionary(u => u.UserId);
+        var today = time.Today;
+        var rows = items.Select((t, i) => (t, p: perms[i])).Where(x => x.p.CanSee)
+            .Select(x => TaskViews.ToSummary(x.t, x.p, users, today)).ToList();
+        return new RecordTasksResponse(rows, target.CanAdd, await manualRules.ListAsync(target.Module, target.Record, ct));
     }
 }
 
@@ -169,19 +182,13 @@ public class GetTaskHandler(ITaskRepository tasks, TaskAccess access, TaskSuppor
     }
 }
 
-public class GetRecordTasksHandler(ITaskRepository tasks, TaskAccess access, IPermissionRepository permissions, IBusinessTime time)
+public class GetRecordTasksHandler(TaskAccess access, TaskSupport support)
     : IRequestHandler<GetRecordTasksRequest, ServiceResult>
 {
     public async Task<ServiceResult> Handle(GetRecordTasksRequest request, CancellationToken ct)
     {
         var target = await access.ForRecordAsync(request.RecordId, ct);
         if (target is null) return ServiceResult.NotFound(RecordMapper.RecordNotFound);
-        var items = await tasks.ListByRecordAsync(request.RecordId, ct);
-        var perms = await access.EvaluateManyAsync(items, ct);
-        var users = (await permissions.ListUsersAsync(ct)).ToDictionary(u => u.UserId);
-        var today = time.Today;
-        var rows = items.Select((t, i) => (t, p: perms[i])).Where(x => x.p.CanSee)
-            .Select(x => TaskViews.ToSummary(x.t, x.p, users, today)).ToList();
-        return ServiceResult.Success(new RecordTasksResponse(rows, target.CanAdd, []));
+        return ServiceResult.Success(await support.RecordTasksAsync(target, ct));
     }
 }

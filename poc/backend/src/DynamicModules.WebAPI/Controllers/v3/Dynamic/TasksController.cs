@@ -1,5 +1,6 @@
 using System.Text.Json;
 using DynamicModules.Application.Dynamic.AttachmentService;
+using DynamicModules.Application.Dynamic.TaskRuleService;
 using DynamicModules.Application.Dynamic.TaskService;
 using MediatR;
 using Microsoft.AspNetCore.Mvc;
@@ -94,6 +95,10 @@ public class TasksController(IMediator mediator) : ControllerBase
     [HttpPost("records/{id:long}/tasks")]
     public async Task<IActionResult> CreateOnRecord(long id, TaskInput body) =>
         (await mediator.Send(new CreateRecordTaskRequest(id, body))).ToActionResult(this);
+
+    [HttpPost("records/{id:long}/task-rules/{ruleKey}/apply")]
+    public async Task<IActionResult> ApplyRule(long id, string ruleKey) =>
+        (await mediator.Send(new ApplyTaskRuleRequest(id, ruleKey))).ToActionResult(this);
 }
 
 public sealed record TaskCommentInput(string? Body);

@@ -16,7 +16,7 @@ public sealed record TaskSummaryResponse(
     long Id, string Title, TaskItemStatus Status, string? AssigneeUserId, string? AssigneeName, bool AssigneeActive,
     DateOnly? DueDate, bool Overdue, TaskRecordRef? Record, bool FromRule, bool CanEdit);
 
-/// <summary>ManualRules：t1a 一律是空清單，任務規則上線後才有值。</summary>
+/// <summary>ManualRules：這筆記錄可手動套用的任務規則（啟用中、manual、應用程式開啟中）。</summary>
 public sealed record RecordTasksResponse(IReadOnlyList<TaskSummaryResponse> Items, bool CanAdd, IReadOnlyList<ManualRuleResponse> ManualRules);
 
 public sealed record ManualRuleResponse(string Key, I18nText Name, TaskRuleRepeat Repeat, bool Applied, bool Applicable, bool PreviousOpen);
