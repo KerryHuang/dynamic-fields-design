@@ -73,6 +73,22 @@ describe('ModulePoliciesTab', () => {
     expect(bodyOf(put)).toEqual({ value: 5 });
   });
 
+  it('覆寫值改成 5 後清空輸入框，儲存鈕停用', async () => {
+    await mountTab();
+    q<HTMLElement>(`policy-override-${CODE}`)!.click();
+    await flushPromises();
+    await typeValue('5');
+    expect((q(`policy-save-${CODE}`) as HTMLButtonElement).disabled).toBe(false);
+    await typeValue('');
+    expect((q(`policy-save-${CODE}`) as HTMLButtonElement).disabled).toBe(true);
+  });
+
+  it('override 為 null 視同沿用全系統', async () => {
+    await mountTab({ policies: [policy({ override: null as never })] });
+    expect(radioChecked(`policy-inherit-${CODE}`)).toBe('true');
+    expect((q(`policy-save-${CODE}`) as HTMLButtonElement).disabled).toBe(true);
+  });
+
   it('沿用全系統送 null', async () => {
     await mountTab({ policies: [policy({ override: 5, effective: 5 })] });
     expect(radioChecked(`policy-override-${CODE}`)).toBe('true');

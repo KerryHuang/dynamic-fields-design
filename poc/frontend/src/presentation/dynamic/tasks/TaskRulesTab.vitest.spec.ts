@@ -108,6 +108,28 @@ describe('TaskRulesTab', () => {
     w.unmount();
   });
 
+  it('既有規則任務數超過上限：新增任務鈕停用，不增加任務時仍可改標題存檔', async () => {
+    const tasks = ['a', 'b', 'c'].map((code) => ({ code, title: { 'zh-TW': code }, assigneeFieldId: 1, dueOffsetDays: 0 }));
+    await mountTab({ maxTasks: 2, rules: [ruleWire({ tasks })] });
+    q<HTMLElement>('[data-testid="task-rule-edit-follow"]').click();
+    await flushPromises();
+    expect(q('[data-testid="task-add"]').hasAttribute('disabled')).toBe(true);
+    q<HTMLElement>('[data-testid="task-rule-save"]').click();
+    await flushPromises();
+    expect(calls.find((c) => c.method === 'put')?.url).toBe('/modules/m1/task-rules/follow');
+    w.unmount();
+  });
+
+  it('新規則的新增任務鈕依生效值上限停用（上限 2：加到第 2 個就停用）', async () => {
+    await mountTab({ maxTasks: 2, rules: [] });
+    await openAdd();
+    expect(q('[data-testid="task-add"]').hasAttribute('disabled')).toBe(false);
+    q<HTMLElement>('[data-testid="task-add"]').click();
+    await flushPromises();
+    expect(q('[data-testid="task-add"]').hasAttribute('disabled')).toBe(true);
+    w.unmount();
+  });
+
   it('19 條規則時新增鈕仍可用', async () => {
     await mountTab({ rules: Array.from({ length: 19 }, (_, i) => ruleWire({ key: `r${i}` })) });
     expect(q('[data-testid="add-task-rule"]').hasAttribute('disabled')).toBe(false);

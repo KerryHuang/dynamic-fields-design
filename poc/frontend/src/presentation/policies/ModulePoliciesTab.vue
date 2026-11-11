@@ -20,18 +20,19 @@ type Mode = 'inherit' | 'override';
 const modes = reactive<Record<string, Mode>>({});
 const drafts = reactive<Record<string, PolicyValue>>({});
 const errors = reactive<Record<string, string>>({});
+const invalid = reactive<Record<string, boolean>>({});
 const groups = computed(() => groupByCategory(policies.data.value ?? []));
 
 function seed(p: ModulePolicy) {
-  modes[p.code] = p.override === undefined ? 'inherit' : 'override';
+  modes[p.code] = p.override == null ? 'inherit' : 'override';
   drafts[p.code] = p.override ?? p.systemValue;
 }
 watch(() => policies.data.value, (list) => { for (const p of list ?? []) if (!(p.code in modes)) seed(p); }, { immediate: true });
 
 const nameKey = (code: string) => `policies.items.${code}.name`;
 const dirty = (p: ModulePolicy) => modes[p.code] === 'inherit'
-  ? p.override !== undefined
-  : p.override === undefined || !samePolicyValue(drafts[p.code], p.override);
+  ? p.override != null
+  : !invalid[p.code] && (p.override == null || !samePolicyValue(drafts[p.code], p.override));
 
 function submit(p: ModulePolicy) {
   errors[p.code] = '';
@@ -48,6 +49,7 @@ function submit(p: ModulePolicy) {
 <template>
   <div>
     <div class="text-muted q-mb-md">{{ t('policies.moduleHint') }}</div>
+    <div v-if="policies.isLoading.value" class="text-muted">{{ t('designer.loading') }}</div>
     <div v-if="policies.isError.value" class="text-negative" data-testid="module-policies-load-error">{{ t('policies.loadFailed') }}</div>
     <section v-for="g in groups" :key="g.category" class="q-mb-lg">
       <div class="text-subtitle1 text-weight-medium q-mb-sm">{{ t(`policies.categories.${g.category}`) }}</div>
@@ -71,6 +73,7 @@ function submit(p: ModulePolicy) {
               <div class="col q-pl-sm">
                 <PolicyValueEditor
                   v-model="drafts[p.code]" :meta="p" :label="t(nameKey(p.code))" :disable="!canEdit || modes[p.code] !== 'override'"
+                  @update:valid="(v: boolean) => (invalid[p.code] = !v)"
                 />
               </div>
             </div>

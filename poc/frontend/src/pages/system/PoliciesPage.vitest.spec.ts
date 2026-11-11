@@ -83,6 +83,23 @@ describe('PoliciesPage', () => {
     expect(api.saveSystemPolicy).toHaveBeenCalledWith('task.maxRulesPerModule', 30);
   });
 
+  it('改成 30 後清空輸入框，儲存鈕停用，不會送出看不見的舊值', async () => {
+    await mountPage();
+    await type('policy-row-task.maxRulesPerModule', '30');
+    expect((q('policy-save-task.maxRulesPerModule') as HTMLButtonElement).disabled).toBe(false);
+    await type('policy-row-task.maxRulesPerModule', '');
+    expect((q('policy-save-task.maxRulesPerModule') as HTMLButtonElement).disabled).toBe(true);
+    q('policy-save-task.maxRulesPerModule')!.click();
+    await flushPromises();
+    expect(api.saveSystemPolicy).not.toHaveBeenCalled();
+  });
+
+  it('value 為 null 視同沒設：不顯示恢復出廠值', async () => {
+    await mountPage({ policies: [{ ...RULES, value: null } as unknown as SystemPolicy] });
+    expect(q('policy-reset-task.maxRulesPerModule')).toBeNull();
+    expect((q('policy-row-task.maxRulesPerModule')!.querySelector('input') as HTMLInputElement).value).toBe('20');
+  });
+
   it('沒改過時不顯示恢復出廠值；改過的按下送 null', async () => {
     await mountPage({ policies: [RULES, { ...PACKAGE, value: 30, effective: 30 }] });
     expect(q('policy-reset-task.maxRulesPerModule')).toBeNull();

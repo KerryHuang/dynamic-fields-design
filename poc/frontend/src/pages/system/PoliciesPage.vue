@@ -18,6 +18,7 @@ const save = useSaveSystemPolicy();
 /** 草稿＝沒設時看到出廠值；存檔失敗時保留，讓使用者改。 */
 const drafts = reactive<Record<string, PolicyValue>>({});
 const errors = reactive<Record<string, string>>({});
+const invalid = reactive<Record<string, boolean>>({});
 const groups = computed(() => groupByCategory(policies.data.value ?? []));
 watch(() => policies.data.value, (list) => {
   for (const p of list ?? []) if (!(p.code in drafts)) drafts[p.code] = p.value ?? p.factory;
@@ -25,7 +26,7 @@ watch(() => policies.data.value, (list) => {
 
 const nameKey = (code: string) => `policies.items.${code}.name`;
 const helpKey = (code: string) => `policies.items.${code}.help`;
-const dirty = (p: SystemPolicy) => !samePolicyValue(drafts[p.code], p.effective);
+const dirty = (p: SystemPolicy) => !invalid[p.code] && !samePolicyValue(drafts[p.code], p.effective);
 
 function submit(p: SystemPolicy, value: PolicyValue | null) {
   errors[p.code] = '';
@@ -59,12 +60,12 @@ function submit(p: SystemPolicy, value: PolicyValue | null) {
               </div>
               <div class="text-muted text-caption">{{ t(helpKey(p.code)) }}</div>
               <div class="text-caption q-mt-sm">
-                {{ t('policies.factory') }}：{{ policyValueText(p, p.factory, t) }}
+                {{ t('policies.current') }}：{{ policyValueText(p, p.effective, t) }}／{{ t('policies.factory') }}：{{ policyValueText(p, p.factory, t) }}
                 <template v-if="policyRangeText(p, t)">／{{ t('policies.range') }}：{{ policyRangeText(p, t) }}</template>
               </div>
             </div>
             <div class="col-12 col-md-6">
-              <PolicyValueEditor v-model="drafts[p.code]" :meta="p" :label="t(nameKey(p.code))" :disable="save.isPending.value" />
+              <PolicyValueEditor v-model="drafts[p.code]" :meta="p" @update:valid="(v: boolean) => (invalid[p.code] = !v)" :label="t(nameKey(p.code))" :disable="save.isPending.value" />
               <div v-if="errors[p.code]" class="text-negative text-caption q-mt-xs" :data-testid="`policy-error-${p.code}`">{{ errors[p.code] }}</div>
               <div class="row q-gutter-sm q-mt-xs">
                 <q-btn
@@ -72,7 +73,7 @@ function submit(p: SystemPolicy, value: PolicyValue | null) {
                   :data-testid="`policy-save-${p.code}`" @click="submit(p, drafts[p.code])"
                 />
                 <q-btn
-                  v-if="p.value !== undefined" flat no-caps dense :label="t('policies.reset')" :disable="save.isPending.value"
+                  v-if="p.value != null" flat no-caps dense :label="t('policies.reset')" :disable="save.isPending.value"
                   :data-testid="`policy-reset-${p.code}`" @click="submit(p, null)"
                 />
               </div>

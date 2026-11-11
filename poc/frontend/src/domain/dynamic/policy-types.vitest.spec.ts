@@ -14,12 +14,6 @@ describe('policy-types', () => {
     expect(samePolicyValue(20, 20)).toBe(true);
   });
 
-  it('normalizes missing value to undefined', () => {
-    const item = { code: 'x', category: 'task', kind: 'integer', scope: 'module', factory: 20, effective: 20 } as SystemPolicy;
-    expect(samePolicyValue(item.value, undefined)).toBe(true);
-    expect('value' in item).toBe(false);
-  });
-
   it('policyRangeText', () => {
     expect(policyRangeText({ code: 'x', category: 'task', kind: 'integer', min: 1, max: 100 }, t)).toBe('1 到 100');
     expect(policyRangeText({ code: 'x', category: 'task', kind: 'codeList', min: 1, max: 40 }, t)).toBe('1 到 40 個');

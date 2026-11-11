@@ -30,6 +30,19 @@ describe('PolicyValueEditor', () => {
     expect(lastEmit()).toBe(7);
   });
 
+  it('Integer：清空輸入框送出 update:valid false，重新輸入恢復 true', async () => {
+    make({ code: 'a', category: 'task', kind: 'integer', min: 1, max: 100 }, 20);
+    const input = document.body.querySelector('input') as HTMLInputElement;
+    input.value = '';
+    input.dispatchEvent(new Event('input'));
+    await flushPromises();
+    expect(w!.emitted('update:valid')!.at(-1)![0]).toBe(false);
+    input.value = '8';
+    input.dispatchEvent(new Event('input'));
+    await flushPromises();
+    expect(w!.emitted('update:valid')!.at(-1)![0]).toBe(true);
+  });
+
   it('Boolean：切換送出 boolean', async () => {
     make({ code: 'a', category: 'task', kind: 'boolean' }, true);
     const toggle = document.body.querySelector('[role="switch"]') as HTMLElement;

@@ -4,16 +4,20 @@ import { useI18n } from 'vue-i18n';
 import { policyValueText, type PolicyMeta, type PolicyValue } from 'src/domain/dynamic/policy-types';
 
 const props = defineProps<{ meta: PolicyMeta; modelValue: PolicyValue; label: string; disable?: boolean }>();
-const emit = defineEmits<{ 'update:modelValue': [value: PolicyValue] }>();
+const emit = defineEmits<{ 'update:modelValue': [value: PolicyValue]; 'update:valid': [valid: boolean] }>();
 const { t } = useI18n();
 
-// 數字輸入框保留使用者正在打的文字；只有合法整數才送出
+// 數字輸入框保留使用者正在打的文字；只有合法整數才送出，空白時通知呼叫端（update:valid）停用儲存
 const text = ref(String(props.modelValue));
-watch(() => props.modelValue, (v) => { if (props.meta.kind === 'integer' && Number(text.value) !== v) text.value = String(v); });
+watch(() => props.modelValue, (v) => {
+  if (props.meta.kind === 'integer' && Number(text.value) !== v) { text.value = String(v); emit('update:valid', true); }
+});
 function onNumber(v: string | number | null) {
   text.value = v === null ? '' : String(v);
   const n = Number(text.value);
-  if (text.value.trim() !== '' && Number.isFinite(n)) emit('update:modelValue', n);
+  const valid = text.value.trim() !== '' && Number.isFinite(n);
+  emit('update:valid', valid);
+  if (valid) emit('update:modelValue', n);
 }
 
 const choiceOptions = computed(() => (props.meta.options ?? []).map((o) => ({ value: o, label: t(`policies.choices.${o}`) })));
