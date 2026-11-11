@@ -21,6 +21,7 @@ public class ModuleConfiguration : IEntityTypeConfiguration<Module>
         b.Property(x => x.Status).HasConversion<string>().HasMaxLength(20);
         b.Property(x => x.Kind).HasConversion<string>().HasMaxLength(20).HasDefaultValue(ModuleKind.Standalone);
         b.Property(x => x.HostEntityKey).HasMaxLength(100);
+        b.Property(x => x.TasksEnabled).HasDefaultValue(true).HasSentinel(true);
         b.HasIndex(x => x.Key).IsUnique();
         b.HasIndex(x => x.HostEntityKey).IsUnique().HasFilter("\"HostEntityKey\" IS NOT NULL");
         b.ConfigureAudit();

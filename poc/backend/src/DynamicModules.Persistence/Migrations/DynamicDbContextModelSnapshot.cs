@@ -1503,6 +1503,11 @@ namespace DynamicModules.Persistence.Migrations
                         .HasMaxLength(20)
                         .HasColumnType("TEXT");
 
+                    b.Property<bool>("TasksEnabled")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("INTEGER")
+                        .HasDefaultValue(true);
+
                     b.Property<long?>("TitleFieldId")
                         .HasColumnType("INTEGER");
 

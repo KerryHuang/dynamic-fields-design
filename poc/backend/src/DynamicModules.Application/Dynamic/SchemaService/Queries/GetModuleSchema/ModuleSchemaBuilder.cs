@@ -44,7 +44,7 @@ public class ModuleSchemaBuilder(
             module.Key, module.ProgramCode, module.NameI18n, module.Icon, titleKey, module.Version, blocks,
             new SchemaPermissions(p.Can(PermissionAction.Read), !closed && p.Can(PermissionAction.Add), !closed && !ledger && p.Can(PermissionAction.Edit),
                 !closed && !ledger && p.Can(PermissionAction.Delete), p.Can(PermissionAction.PrintExport), p.Can(PermissionAction.Pricing)), rules, module.Kind, module.HostEntityKey,
-            details, workflow, closed, ledger, module.TitleTemplate is not null)
+            details, workflow, closed, ledger, module.TitleTemplate is not null, module.TasksEnabled)
         { PermHash = permHash, ETagVersion = etagVersion };
     }
 

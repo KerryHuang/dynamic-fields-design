@@ -21,6 +21,8 @@ public class Module : AuditableEntity
     /// <summary>擴充模組所擴充的既有實體鍵；standalone 為 null。</summary>
     public string? HostEntityKey { get; set; }
     public int Version { get; set; }
+    /// <summary>關閉時記錄頁不顯示任務、不能新增、規則不觸發；既有任務保留（任務設計 §4.4）。</summary>
+    public bool TasksEnabled { get; set; } = true;
     public List<Block> Blocks { get; set; } = [];
     public List<Rule> Rules { get; set; } = [];
     /// <summary>狀態機；沒有就是 null。includeChildren 時載入。</summary>

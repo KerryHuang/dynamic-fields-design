@@ -60,6 +60,7 @@ public class UpdateModuleHandler(
         if (titleChanged)
             foreach (var record in rows)
                 record.Title = RecordValueProcessor.TitleOf(module, RecordValueProcessor.Parse(record.ValuesJson));
+        if (request.TasksEnabled is { } on) module.TasksEnabled = on;
         module.TouchVersion(user.UserId, time.Now);
         await uow.CommitAsync(ct);
         return ServiceResult.Success(module.ToResponse());

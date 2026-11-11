@@ -11,7 +11,7 @@ public record ModuleSchemaResponse(
     string Key, string ProgramCode, I18nText Name, string? Icon, string? TitleFieldKey, int Version, List<SchemaBlock> Blocks,
     SchemaPermissions Permissions, List<SchemaRule> Rules,
     ModuleKind Kind, string? HostEntityKey, List<SchemaDetail>? Details = null, SchemaWorkflow? Workflow = null, bool ReadOnly = false,
-    bool Ledger = false, bool HasTitleTemplate = false)
+    bool Ledger = false, bool HasTitleTemplate = false, bool TasksEnabled = true)
 {
     /// <summary>ETag 用的版本：表頭 Version 接上每個明細模組的 Version（依 Key 排序），以 . 串接；不序列化。</summary>
     [JsonIgnore]
