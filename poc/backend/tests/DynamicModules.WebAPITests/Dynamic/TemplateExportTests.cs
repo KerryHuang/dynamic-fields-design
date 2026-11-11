@@ -170,6 +170,28 @@ public sealed partial class TemplateExportTests : IDisposable
     }
 
     [Fact]
+    public async Task Instantiate_BlocksWithoutColumns_GetDefaultFour()
+    {
+        var (block, _) = await NewModule("plain", "簡單", "名稱");
+        await AddField("plain", block, "text", "備註", new { });
+        (await _admin.PostAsJsonAsync($"{Base}/modules/plain/blocks", new { label = Zh("第二區") })).StatusCode.Should().Be(HttpStatusCode.Created);
+        var (exported, json) = await ExportPackage("plain");
+        exported.Modules[0].Blocks.Should().HaveCount(2);
+
+        // 模擬套件 JSON 省略 columns
+        var node = System.Text.Json.Nodes.JsonNode.Parse(json)!;
+        foreach (var b in node["modules"]!.AsArray()[0]!["blocks"]!.AsArray()) b!.AsObject().Remove("columns");
+        var (stripped, error) = TemplateJson.Parse(node.ToJsonString());
+        error.Should().BeNull();
+        stripped!.Modules[0].Blocks.Should().OnlyContain(b => b.Columns == 4);
+
+        _app.Extra.Add(stripped with { Key = "nocol" });
+        await Instantiate("nocol", ("plain", "plain2"));
+        var (applied, _) = await ExportPackage("plain2");
+        applied.Modules[0].Blocks.Select(b => b.Columns).Should().Equal(4, 4);
+    }
+
+    [Fact]
     public async Task Export_HandBuiltModules_RoundTrip()
     {
         const string Order = "order";
@@ -200,6 +222,12 @@ public sealed partial class TemplateExportTests : IDisposable
         var noteBlock = (await JsonOf(noteRes)).GetProperty("id").GetInt64();
         await Ok(_admin.PutAsJsonAsync($"{Base}/blocks/{noteBlock}", new { label = Zh("附註"), collapsed = false, columns = 1 }));
         await AddField(Order, noteBlock, "text", "附註內容", new { });
+        // 非第一個、未收合、欄數 2 的區塊：套用時必須送 UpdateBlock，不能因為「過去預設是 2」而略過
+        var twoRes = await _admin.PostAsJsonAsync($"{Base}/modules/{Order}/blocks", new { label = Zh("雙欄") });
+        twoRes.StatusCode.Should().Be(HttpStatusCode.Created);
+        var twoBlock = (await JsonOf(twoRes)).GetProperty("id").GetInt64();
+        await Ok(_admin.PutAsJsonAsync($"{Base}/blocks/{twoBlock}", new { label = Zh("雙欄"), collapsed = false, columns = 2 }));
+        await AddField(Order, twoBlock, "text", "雙欄內容", new { });
 
         var (lineBlock, _) = await NewModule(Line, "訂單明細", "品名");
         var parentRef = await AddField(Line, lineBlock, "reference", "訂單",
@@ -264,10 +292,11 @@ public sealed partial class TemplateExportTests : IDisposable
         exportedModules[1]!.AsObject().ContainsKey("section").Should().BeFalse();
         first.Modules.Select(m => m.Code).Should().Equal(Order, Line);
         var order = first.Modules[0];
-        order.Blocks.Should().HaveCount(3);
+        order.Blocks.Should().HaveCount(4);
         order.Blocks[1].Collapsed.Should().BeTrue();
         order.Blocks[2].Collapsed.Should().BeFalse();
-        (order.Blocks[0].Columns, order.Blocks[1].Columns, order.Blocks[2].Columns).Should().Be((2, 3, 1));
+        // 第一個區塊由 CreateModule 建立，預設 4；其餘為明確設定的值
+        (order.Blocks[0].Columns, order.Blocks[1].Columns, order.Blocks[2].Columns, order.Blocks[3].Columns).Should().Be((4, 3, 1, 2));
         Field(order, "說明").Config.GetProperty("fullWidth").GetBoolean().Should().BeFalse();
         Field(order, "地址").Config.GetProperty("fullWidth").GetBoolean().Should().BeTrue();
         order.Rules.Should().HaveCount(4);

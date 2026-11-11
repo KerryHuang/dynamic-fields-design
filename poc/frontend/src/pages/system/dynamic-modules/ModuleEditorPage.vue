@@ -96,7 +96,7 @@ watch(mod, (m) => {
 const block = computed(() => mod.value?.blocks.find((b) => b.id === selectedBlockId.value));
 
 const blockDialog = ref(false);
-const blockForm = ref<{ id?: number; label: I18nText; collapsed: boolean; columns: number }>({ label: {}, collapsed: false, columns: 2 });
+const blockForm = ref<{ id?: number; label: I18nText; collapsed: boolean; columns: number }>({ label: {}, collapsed: false, columns: 4 });
 const blockError = ref<ApiError | null>(null);
 const blockInput = ref<{ validate(): Promise<boolean> } | null>(null);
 const addBlock = mutation((label: I18nText) => dynamicApi.addBlock(moduleKey.value, label));
@@ -104,7 +104,7 @@ const updateBlock = mutation((v: { id: number; label: I18nText; collapsed: boole
   dynamicApi.updateBlock(v.id, { label: v.label, collapsed: v.collapsed, columns: v.columns }));
 
 function openBlock(b?: DesignerBlock) {
-  blockForm.value = b ? { id: b.id, label: { ...b.label }, collapsed: b.collapsed, columns: b.columns } : { label: {}, collapsed: false, columns: 2 };
+  blockForm.value = b ? { id: b.id, label: { ...b.label }, collapsed: b.collapsed, columns: b.columns } : { label: {}, collapsed: false, columns: 4 };
   blockError.value = null;
   blockDialog.value = true;
 }

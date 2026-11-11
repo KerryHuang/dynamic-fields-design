@@ -207,7 +207,7 @@
 | `kind` | `standalone` \| `extension` | 是 | |
 | `hostEntityKey` | string \| null | `extension` 時必填 | 擴充的既有實體；同時要列入 `requires.entities` |
 | `titleField` | string \| null | 非擴充模組必填 | 欄位代號，型別限 `text`、`autonumber` |
-| `blocks[]` | array | 是，至少 1 個 | `{code, label, collapsed, columns(1–3, 預設 2), fields[]}` |
+| `blocks[]` | array | 是，至少 1 個 | `{code, label, collapsed, columns(1–4, 預設 4；省略時為 4，舊套件省略 columns 的語意由 2 變 4), fields[]}` |
 | `blocks[].fields[]` | array | 否 | `{code, type, label, config, options[]}`；`config` 是 `FieldConfig` 的 JSON，其中公式、選項值、彙總、`parentDefaultField` 用代號（見 §4.7） |
 | `rules[]` | array | 否 | `{kind, targets[], condition, options[], message, active}`；`targets` 元素是 `field:<代號>`、`block:<代號>` 或 `*` |
 | `views[]` | array | 否 | 共用檢視 `{name, columns[], filter, sort[], isDefault}` |

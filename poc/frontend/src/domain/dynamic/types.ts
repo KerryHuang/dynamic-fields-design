@@ -119,7 +119,7 @@ export interface SchemaBlock {
   id: number;
   label: I18nText;
   collapsed: boolean;
-  /** 表單每列欄數 1 到 3。 */
+  /** 表單每列欄數 1 到 4。 */
   columns: number;
   fields: SchemaField[];
 }
