@@ -391,7 +391,7 @@ function saveSection() {
               <div class="text-caption text-muted">{{ t('designer.columns') }}</div>
               <q-btn-toggle
                 v-model="blockForm.columns" data-testid="block-columns" no-caps unelevated toggle-color="primary"
-                :options="[1, 2, 3].map((n) => ({ label: String(n), value: n }))"
+                :options="[1, 2, 3, 4].map((n) => ({ label: String(n), value: n }))"
               />
             </div>
           </q-card-section>
