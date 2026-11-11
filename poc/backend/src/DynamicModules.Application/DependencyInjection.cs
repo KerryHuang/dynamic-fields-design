@@ -33,6 +33,9 @@ public static class DependencyInjection
         // WebAPI 另註冊讀 X-Locale 的實作（後註冊者優先）；沒有請求的環境（Application 測試）用繁中
         services.TryAddScoped<Common.ICurrentLocale, Common.FallbackCurrentLocale>();
         services.AddScoped<ISystemIdentity, SystemIdentity>();
+        services.AddScoped<Dynamic.PolicyService.IPolicyReader, Dynamic.PolicyService.PolicyReader>();
+        // 沒有部署出廠值時用空的；WebAPI 之後註冊讀部署設定檔的實例會蓋過它
+        services.TryAddSingleton(Dynamic.PolicyService.PolicyEnvironmentDefaults.Empty);
         services.AddScoped<FieldLocks>();
         services.AddScoped<IDynamicAccessGuard, DynamicAccessGuard>();
         services.AddScoped<Dynamic.SchemaService.Queries.GetModuleSchema.ModuleSchemaBuilder>();
