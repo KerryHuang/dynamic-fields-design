@@ -42,6 +42,17 @@ public class PolicyCatalogFixtureTests
         PolicyCatalog.TaskMaxTasksPerRule.Scope.Should().Be(PolicyScope.Module);
         PolicyCatalog.TaskMaxRulesPerPackage.Factory.Should().Be("50");
         PolicyCatalog.TaskMaxRulesPerPackage.Scope.Should().Be(PolicyScope.System);
+        PolicyCatalog.TaskReminderLeadDays.Factory.Should().Be("1");
+        PolicyCatalog.TaskRemindOverdue.Factory.Should().Be("true");
+        PolicyCatalog.TaskNotifyCommented.Factory.Should().Be("assignee,creator");
+        PolicyCatalog.TaskNotifyCompleted.Factory.Should().Be("creator");
+        PolicyCatalog.TaskNotifyCancelled.Factory.Should().Be("creator");
+        PolicyCatalog.NotificationRetentionDays.Factory.Should().Be("90");
+        PolicyCatalog.NotificationRetentionDays.Scope.Should().Be(PolicyScope.System);
+        PolicyCatalog.CalendarWeekStart.Factory.Should().Be("monday");
+        PolicyCatalog.CalendarWeekStart.Scope.Should().Be(PolicyScope.System);
+        PolicyCatalog.WeekStartOf("sunday").Should().Be(DayOfWeek.Sunday);
+        PolicyCatalog.WeekStartOf("monday").Should().Be(DayOfWeek.Monday);
     }
 
     [Fact]

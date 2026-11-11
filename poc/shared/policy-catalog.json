@@ -1,5 +1,5 @@
 {
-  "codes": ["task.maxRulesPerModule", "task.maxTasksPerRule", "task.maxRulesPerPackage"],
-  "categories": ["task"],
-  "choices": []
+  "codes": ["task.maxRulesPerModule", "task.maxTasksPerRule", "task.maxRulesPerPackage", "task.reminderLeadDays", "task.remindOverdue", "task.notify.commented", "task.notify.completed", "task.notify.cancelled", "notification.retentionDays", "calendar.weekStart"],
+  "categories": ["task", "notification", "locale"],
+  "choices": ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday", "assignee", "creator"]
 }
