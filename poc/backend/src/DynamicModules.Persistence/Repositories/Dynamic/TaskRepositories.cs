@@ -112,6 +112,14 @@ public class TaskRepository(DynamicDbContext db) : ITaskRepository
     public Task<bool> AnyReminderDueAsync(string userId, DateOnly today, CancellationToken ct) =>
         ReminderDue(userId, today).AsNoTracking().AnyAsync(ct);
 
+    public Task<List<TaskItem>> ListByRuleOccurrenceAsync(long ruleId, long recordId, int occurrence, CancellationToken ct) =>
+        db.Set<TaskItem>().Include(t => t.Participants)
+            .Where(t => t.RuleId == ruleId && t.RecordId == recordId && t.RuleOccurrence == occurrence).OrderBy(t => t.Id).ToListAsync(ct);
+
+    public Task<bool> AnyOpenByRuleAndRecordAsync(long ruleId, long recordId, CancellationToken ct) =>
+        db.Set<TaskItem>().AnyAsync(t => t.RuleId == ruleId && t.RecordId == recordId
+            && (t.Status == TaskItemStatus.Todo || t.Status == TaskItemStatus.InProgress), ct);
+
     public Task<List<TaskItem>> ListReminderDueAsync(string userId, DateOnly today, CancellationToken ct) =>
         ReminderDue(userId, today).OrderBy(t => t.Id).ToListAsync(ct);
 

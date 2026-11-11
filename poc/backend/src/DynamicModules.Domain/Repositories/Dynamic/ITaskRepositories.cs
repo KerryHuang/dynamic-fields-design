@@ -39,6 +39,10 @@ public interface ITaskRepository
     Task<bool> AnyReminderDueAsync(string userId, DateOnly today, CancellationToken ct);
     /// <summary>條件同 <see cref="AnyReminderDueAsync"/>；追蹤。</summary>
     Task<List<TaskItem>> ListReminderDueAsync(string userId, DateOnly today, CancellationToken ct);
+    /// <summary>這條規則在這筆記錄第 occurrence 次觸發產生的任務；追蹤，含參與者。</summary>
+    Task<List<TaskItem>> ListByRuleOccurrenceAsync(long ruleId, long recordId, int occurrence, CancellationToken ct);
+    /// <summary>這條規則在這筆記錄上是否還有未完成（待辦、進行中）的任務，不分第幾次觸發。</summary>
+    Task<bool> AnyOpenByRuleAndRecordAsync(long ruleId, long recordId, CancellationToken ct);
     void Add(TaskItem task);
     void Remove(TaskItem task);
 }

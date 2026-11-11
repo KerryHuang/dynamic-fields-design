@@ -55,7 +55,10 @@ public static class MessageText
         // 找不到某個東西
         BlockNotFound = nameof(BlockNotFound), FieldNotFound = nameof(FieldNotFound), OptionNotFound = nameof(OptionNotFound),
         EventNotFound = nameof(EventNotFound), CheckNotFound = nameof(CheckNotFound), ConversionNotFound = nameof(ConversionNotFound),
-        AttachmentFieldNotFound = nameof(AttachmentFieldNotFound), AttachmentNotFound = nameof(AttachmentNotFound);
+        AttachmentFieldNotFound = nameof(AttachmentFieldNotFound), AttachmentNotFound = nameof(AttachmentNotFound),
+        // 任務規則的執行與手動套用
+        TaskRuleAlreadyRun = nameof(TaskRuleAlreadyRun), TaskRuleApplied = nameof(TaskRuleApplied), TaskRulePreviousOpen = nameof(TaskRulePreviousOpen),
+        TaskRuleNotApplicable = nameof(TaskRuleNotApplicable), TaskRuleNotFound = nameof(TaskRuleNotFound);
 
     private static readonly Dictionary<string, (string Zh, string En, string Th, string Vi)> Table = new()
     {
@@ -232,6 +235,14 @@ public static class MessageText
         [ConversionNotFound] = ("找不到轉換定義", "Conversion definition not found", "ไม่พบนิยามการแปลง", "Không tìm thấy định nghĩa chuyển đổi"),
         [AttachmentFieldNotFound] = ("找不到附件欄位", "Attachment field not found", "ไม่พบฟิลด์ไฟล์แนบ", "Không tìm thấy trường tệp đính kèm"),
         [AttachmentNotFound] = ("找不到附件", "Attachment not found", "ไม่พบไฟล์แนบ", "Không tìm thấy tệp đính kèm"),
+        [TaskRuleAlreadyRun] = ("任務規則已套用，請重新整理後再試", "The task rule has already been applied. Please refresh and try again",
+            "กฎงานถูกนำไปใช้แล้ว โปรดรีเฟรชแล้วลองอีกครั้ง", "Quy tắc công việc đã được áp dụng, vui lòng làm mới rồi thử lại"),
+        [TaskRuleApplied] = ("已套用", "Already applied", "นำไปใช้แล้ว", "Đã áp dụng"),
+        [TaskRulePreviousOpen] = ("上一輪任務尚未完成", "The previous round of tasks is not finished yet",
+            "งานรอบก่อนหน้ายังไม่เสร็จ", "Các công việc của vòng trước vẫn chưa hoàn thành"),
+        [TaskRuleNotApplicable] = ("這筆記錄不符合規則條件", "This record does not meet the rule's conditions",
+            "ระเบียนนี้ไม่ตรงตามเงื่อนไขของกฎ", "Bản ghi này không thỏa điều kiện của quy tắc"),
+        [TaskRuleNotFound] = ("找不到任務規則", "Task rule not found", "ไม่พบกฎงาน", "Không tìm thấy quy tắc công việc"),
     };
 
     /// <summary>無參數訊息的繁中原文 → 鍵；兩鍵同一句時建表就會丟例外。</summary>

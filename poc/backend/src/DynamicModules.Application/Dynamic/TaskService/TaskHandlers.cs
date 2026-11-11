@@ -42,7 +42,7 @@ public class CreateTaskHandler(TaskSupport support, TaskWriter writer, TaskAcces
         var input = request.Input;
         if (await support.ValidateInputAsync(input, ct) is { Count: > 0 } errors) return ServiceResult.Invalid(errors);
         var task = writer.Create(new NewTask(input.Title.Trim(), TaskEditParser.NullIfBlank(input.Description),
-            TaskEditParser.NullIfBlank(input.AssigneeUserId), input.DueDate, null, null, null, null, null, user.UserId));
+            TaskEditParser.NullIfBlank(input.AssigneeUserId), input.DueDate, null, null, null, null, null, null, user.UserId));
         await writer.FlushAsync(ct);
         return ServiceResult.Created(await support.DetailAsync(task, await access.EvaluateAsync(task, ct), ct));
     }
@@ -60,7 +60,7 @@ public class CreateRecordTaskHandler(TaskSupport support, TaskWriter writer, Tas
         if (await support.ValidateInputAsync(input, ct) is { Count: > 0 } errors) return ServiceResult.Invalid(errors);
         var task = writer.Create(new NewTask(input.Title.Trim(), TaskEditParser.NullIfBlank(input.Description),
             TaskEditParser.NullIfBlank(input.AssigneeUserId), input.DueDate,
-            target.Module.Id, target.Record.Id, target.Record.Title, null, null, user.UserId));
+            target.Module.Id, target.Record.Id, target.Record.Title, null, null, null, user.UserId));
         await writer.FlushAsync(ct);
         return ServiceResult.Created(await support.DetailAsync(task, await access.EvaluateAsync(task, ct), ct));
     }

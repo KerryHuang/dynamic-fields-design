@@ -7,7 +7,7 @@ using DynamicModules.Domain.Repositories.Dynamic;
 namespace DynamicModules.Application.Dynamic.TaskService;
 
 public sealed record NewTask(string Title, string? Description, string? AssigneeUserId, DateOnly? DueDate,
-    long? ModuleId, long? RecordId, string? RecordTitle, long? RuleId, string? RuleTaskCode, string? CreatedBy);
+    long? ModuleId, long? RecordId, string? RecordTitle, long? RuleId, int? RuleOccurrence, string? RuleTaskCode, string? CreatedBy);
 
 /// <summary>Set* 為 false 代表沒送、不改；為 true 時值可以是 null（清除）。Title、Status 為 null 代表不改。</summary>
 public sealed record TaskEdit(string? Title, bool SetDescription, string? Description, bool SetAssignee, string? AssigneeUserId,
@@ -29,7 +29,7 @@ public sealed class TaskWriter(ICurrentUser user, IBusinessTime time, ITaskRepos
         {
             Title = input.Title, Description = input.Description, AssigneeUserId = input.AssigneeUserId, DueDate = input.DueDate,
             ModuleId = input.ModuleId, RecordId = input.RecordId, RecordTitleSnapshot = input.RecordTitle,
-            RuleId = input.RuleId, RuleTaskCode = input.RuleTaskCode, CreatedBy = input.CreatedBy, CreatedTime = now
+            RuleId = input.RuleId, RuleOccurrence = input.RuleOccurrence, RuleTaskCode = input.RuleTaskCode, CreatedBy = input.CreatedBy, CreatedTime = now
         };
         AddSystemEntry(task, TaskSystemEvents.Created, input.CreatedBy, null);
         if (input.CreatedBy is not null) AddParticipant(task, input.CreatedBy, TaskParticipantReason.Creator);
@@ -114,6 +114,9 @@ public sealed class TaskWriter(ICurrentUser user, IBusinessTime time, ITaskRepos
         task.CancelledByRule = false;
         Touch(task, null);
     }
+
+    /// <summary>只留一筆系統記錄（作者為 null），不改任務本身；例如規則再次符合、但上一輪任務尚未完成。</summary>
+    public void AddSystemEntry(TaskItem task, string systemEvent) => AddSystemEntry(task, systemEvent, null, null);
 
     /// <summary>人寫的留言：內文 @ 到的啟用中使用者加為 Mentioned 參與者，記 Mentioned（每人一筆）與 Commented（帶被 @ 的清單）。</summary>
     public async Task<TaskComment> AddCommentAsync(TaskItem task, string body, IReadOnlySet<string> activeUserIds,

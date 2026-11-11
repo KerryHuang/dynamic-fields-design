@@ -116,6 +116,7 @@ public static class DependencyInjection
         services.AddScoped<Dynamic.NotificationService.INotificationReminderSource, Dynamic.NotificationService.TaskReminderSource>();
         services.AddScoped<Dynamic.TaskRuleService.TaskRuleValidator>();
         services.AddScoped<Dynamic.TaskRuleService.TaskRuleEditor>();
+        services.AddScoped<Dynamic.TaskRuleService.TaskRuleApplier>();
         services.AddScoped<Dynamic.OrganizationService.OrgSnapshotLoader>();
         services.AddScoped<Dynamic.OrganizationService.DepartmentValidator>();
         services.AddScoped<Dynamic.ApprovalService.ApprovalDefinitionValidator>();
@@ -134,6 +135,8 @@ public static class DependencyInjection
         services.AddScoped<Dynamic.WorkflowService.WorkflowApprovals>();
         services.AddScoped<Dynamic.TaskService.TaskRecordStage>();
         services.AddScoped<Common.Behaviors.IWriteStage>(sp => sp.GetRequiredService<Dynamic.TaskService.TaskRecordStage>());
+        services.AddScoped<Dynamic.TaskRuleService.TaskRuleStage>();
+        services.AddScoped<Common.Behaviors.IWriteStage>(sp => sp.GetRequiredService<Dynamic.TaskRuleService.TaskRuleStage>());
         return services;
     }
 }
