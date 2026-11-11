@@ -239,6 +239,14 @@ describe('print.css', () => {
     expect(bridge).toMatch(/@media \(max-width: 599\.98px\)[\s\S]*\.q-card__actions\s*\{[^}]*position:\s*sticky/);
   });
 
+  it('按鈕（含 dense）與欄位同高，工具列才對齊；只有表格與清單項目裡的 dense 按鈕維持緊湊', () => {
+    const btn = bodiesOf(bridge, '[data-style] .q-btn--rectangle').join(';');
+    expect(btn).toMatch(/min-height:\s*var\(--t-field-height\)/);
+    expect(btn).toMatch(/padding-top:\s*max\(0px, calc\(\(var\(--t-field-height\) - 1\.715em\) \/ 2\)\)/);
+    expect(bridge).not.toMatch(/\.q-btn--rectangle:not\(\.q-btn--dense\)/);
+    expect(bodiesOf(bridge, '[data-style] .q-table td .q-btn--rectangle.q-btn--dense').join(';')).toMatch(/min-height:\s*2em/);
+  });
+
   it('觸控裝置的可點擊目標至少 44px', () => {
     const coarse = bridge.slice(bridge.indexOf('@media (pointer: coarse)'));
     expect(coarse).toMatch(/\.q-btn--rectangle[^{]*\{[^}]*min-height:\s*44px/);

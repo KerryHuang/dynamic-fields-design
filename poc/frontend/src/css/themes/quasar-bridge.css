@@ -517,8 +517,20 @@ textarea:focus-visible {
   padding: var(--t-space-md) var(--t-space-md) var(--t-space-xs);
 }
 
-[data-style] .q-btn--rectangle:not(.q-btn--dense) {
+/* 按鈕（含 dense）與欄位同高，工具列裡按鈕、搜尋框、下拉才會對齊；
+   上下內距依欄位高度算，欄位比按鈕內容（圖示 1.715em）還矮的佈景也不會被撐高。
+   表格儲存格、清單項目裡的 dense 按鈕維持緊湊。 */
+[data-style] .q-btn--rectangle {
   min-height: var(--t-field-height);
+  padding-top: max(0px, calc((var(--t-field-height) - 1.715em) / 2));
+  padding-bottom: max(0px, calc((var(--t-field-height) - 1.715em) / 2));
+}
+
+[data-style] .q-table td .q-btn--rectangle.q-btn--dense,
+[data-style] .q-item .q-btn--rectangle.q-btn--dense {
+  min-height: 2em;
+  padding-top: 0.285em;
+  padding-bottom: 0.285em;
 }
 
 [data-style] .q-card__actions {
@@ -548,7 +560,7 @@ textarea:focus-visible {
     min-height: max(var(--t-row-height), 44px);
   }
 
-  [data-style] .q-btn--rectangle:not(.q-btn--dense) {
+  [data-style] .q-btn--rectangle {
     min-height: 44px;
   }
 }
