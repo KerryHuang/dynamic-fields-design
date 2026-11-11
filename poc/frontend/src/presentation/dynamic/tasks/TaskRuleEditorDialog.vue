@@ -94,7 +94,7 @@ function submit() {
   <q-dialog :model-value="modelValue" persistent @update:model-value="(v) => emit('update:modelValue', v)">
     <q-card class="task-rule-dialog">
       <q-card-section class="text-h6">{{ rule ? t('taskRules.edit') : t('taskRules.add') }}</q-card-section>
-      <q-card-section class="column q-gutter-md scroll" style="max-height: 70vh">
+      <q-card-section class="column no-wrap q-gutter-md scroll" style="max-height: 70vh" data-testid="task-rule-dialog-body">
         <q-input
           v-model="draft.key" :label="`${t('taskRules.key')} *`" :hint="t('taskRules.keyHint')" :disable="!!rule" outlined dense
           data-testid="task-rule-key"

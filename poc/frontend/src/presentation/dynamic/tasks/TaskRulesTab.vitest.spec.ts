@@ -98,6 +98,15 @@ describe('TaskRulesTab', () => {
     w.unmount();
   });
 
+  it('對話框捲動區不折欄：內容超過 70vh 時直向捲動，不往右溢出', async () => {
+    await mountTab({ rules: [] });
+    await openAdd();
+    const section = q('[data-testid="task-rule-dialog-body"]');
+    expect(section.classList.contains('column')).toBe(true);
+    expect(section.classList.contains('no-wrap')).toBe(true);
+    w.unmount();
+  });
+
   it('啟用任務時沒有提示', async () => {
     await mountTab();
     expect(body().querySelector('[data-testid="task-rules-module-off"]')).toBeNull();
