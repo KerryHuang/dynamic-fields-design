@@ -252,4 +252,15 @@ describe('print.css', () => {
     expect(coarse).toMatch(/\.q-btn--rectangle[^{]*\{[^}]*min-height:\s*44px/);
     expect(coarse).toMatch(/\.q-field--dense \.q-field__control[^{]*\{[^}]*max\(var\(--t-field-height\), 44px\)/);
   });
+
+  it('多選 chips 欄位高度跟著內容長，chips 換行不會壓到下面的按鈕；單行下拉維持固定高度', () => {
+    // dense 欄位的固定 height 也會套到 chips 欄位，只靠 min-height 撐不開；兩處（一般、觸控）都要 height: auto
+    const autoRules = (css: string) => css.split('}')
+      .filter((r) => /\.q-select--with-chips\.q-field--dense \.q-field__control\s*\{/.test(r));
+    expect(bodiesOf(bridge, '[data-style] .q-field--auto-height.q-field--dense .q-field__control').join(';')).not.toMatch(/height:\s*auto/);
+    const coarse = bridge.slice(bridge.indexOf('@media (pointer: coarse)'));
+    const fine = bridge.slice(0, bridge.indexOf('@media (pointer: coarse)'));
+    expect(autoRules(fine).join('}')).toMatch(/height:\s*auto/);
+    expect(autoRules(coarse).join('}')).toMatch(/height:\s*auto/);
+  });
 });

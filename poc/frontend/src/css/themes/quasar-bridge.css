@@ -470,9 +470,15 @@ textarea:focus-visible {
 }
 
 /* q-select 等 auto-height 欄位另有 min-height: 40px，要一起蓋；欄位底部的訊息列（.q-field__bottom）已在欄位內占位，
-   Quasar 再為 .q-field--with-bottom 多留的 padding 等於重複保留一次，去掉 */
+   Quasar 再為 .q-field--with-bottom 多留的 padding 等於重複保留一次，去掉。
+   上面的固定 height 也會套到這裡；多選 chips 換行時要改回 auto，否則 chips 溢出欄位、壓到下面的按鈕
+   （只放寬 chips 欄位：單行下拉維持固定高度，跟輸入框對齊） */
 [data-style] .q-field--auto-height.q-field--dense .q-field__control {
   min-height: var(--t-field-height);
+}
+
+[data-style] .q-select--with-chips.q-field--dense .q-field__control {
+  height: auto;
 }
 
 [data-style] .q-field--with-bottom {
@@ -548,6 +554,10 @@ textarea:focus-visible {
   [data-style] .q-field--dense .q-field__control,
   [data-style] .q-field--dense .q-field__marginal {
     height: max(var(--t-field-height), 44px);
+  }
+
+  [data-style] .q-select--with-chips.q-field--dense .q-field__control {
+    height: auto;
   }
 
   [data-style] .q-field--auto-height.q-field--dense .q-field__control {
