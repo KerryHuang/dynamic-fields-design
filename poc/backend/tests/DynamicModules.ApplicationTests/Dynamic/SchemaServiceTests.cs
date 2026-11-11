@@ -226,8 +226,15 @@ public class SchemaServiceTests : IAsyncLifetime
     }
 
     [Fact]
-    public void SchemaETag_QuotesKeyVersionAndPermHash() =>
-        SchemaETag.For("order", "3", "ab12cd34").Should().Be("\"order-v3-ab12cd34\"");
+    public void SchemaETag_QuotesKeyVersionPermHashAndInstance() =>
+        SchemaETag.For("order", "3", "ab12cd34").Should().Be($"\"order-v3-ab12cd34-{SchemaETag.Instance}\"");
+
+    [Fact]
+    public void SchemaETag_Instance_IsNonEmpty()
+    {
+        // 資料庫重建（Demo 每次部署）時版本號會重複；ETag 帶程序實例標記，重啟後舊快取一定失效。
+        SchemaETag.Instance.Should().MatchRegex("^[0-9a-f]{8}$");
+    }
 
     // ---- 權限 ----
 

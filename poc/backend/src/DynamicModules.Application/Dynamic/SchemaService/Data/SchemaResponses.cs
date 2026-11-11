@@ -62,5 +62,8 @@ public record MenuItem(string Key, I18nText Name, string? Icon, I18nText? Sectio
 public static class SchemaETag
 {
     /// <summary>schema 的 ETag，含雙引號，如 "order-v3-1a2b3c4d"；換人或改權限 permHash 就變。</summary>
-    public static string For(string key, string version, string permHash) => $"\"{key}-v{version}-{permHash}\"";
+    // 程序實例標記：Demo 每次部署重建資料庫時版本號會重複，帶上它讓重啟前的瀏覽器快取一定失效。
+    public static readonly string Instance = Guid.NewGuid().ToString("N")[..8];
+
+    public static string For(string key, string version, string permHash) => $"\"{key}-v{version}-{permHash}-{Instance}\"";
 }
