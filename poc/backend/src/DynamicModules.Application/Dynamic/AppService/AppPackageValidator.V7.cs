@@ -66,12 +66,13 @@ public static partial class AppPackageValidator
 
     private static bool IsEmpty(JsonElement? value) => value is null or { ValueKind: JsonValueKind.Null or JsonValueKind.Undefined };
 
-    /// <summary>說明和設計器一樣上限 4000 字（CheckText 的 200 字是名稱用的，套用在說明上會讓設計器存得下的規則匯出後讀不回來）。</summary>
+    /// <summary>說明和設計器的 CheckText(required:false) 同一套規則：zh-TW 可以不填，只擋不支援的語系、null 值、超過 4000 字。</summary>
     private static void CheckDescription(I18nText text, string at, List<string> errors)
     {
-        if (!text.IsValid(out var error)) { errors.Add($"{at}: {error}"); return; }
+        if (text.Values.Keys.FirstOrDefault(k => !I18nText.SupportedLocales.Contains(k)) is { } unknown) { errors.Add($"{at}: 不支援的語系：{unknown}"); return; }
         foreach (var (locale, value) in text.Values)
-            if (value is null || value.Length > TaskEditParser.DescriptionMax) errors.Add($"{at}: {locale} 必須是 0 到 {TaskEditParser.DescriptionMax} 字");
+            if (value is null) errors.Add($"{at}: 語系 {locale} 的文字不能是空值");
+            else if (value.Trim().Length > TaskEditParser.DescriptionMax) errors.Add($"{at}: {locale} 不能超過 {TaskEditParser.DescriptionMax} 字");
     }
 
     // ---- 引用層 ----

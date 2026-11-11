@@ -164,6 +164,26 @@ public class AppFormat7Tests : IDisposable
     }
 
     [Fact]
+    public async Task DescriptionOnlyEnUs_RoundTrips()
+    {
+        await OpenCrm7Async();
+        // 設計器允許說明只填 en-US（zh-TW 可以不填）；匯出的檔案必須能讀回來
+        var ruleId = _rig.Db(db => db.Set<TaskRule>().Single(r => r.Key == LeadRule).Id);
+        _rig.Db(db =>
+        {
+            var task = db.Set<TaskRuleTask>().Single(t => t.RuleId == ruleId);
+            task.DescriptionI18n = new([KeyValuePair.Create("en-US", "Check stock")]);
+        });
+        var (package, _) = await _rig.ExportAsync("crmx");
+        package.GetProperty("taskRules")[0].GetProperty("tasks")[0].GetProperty("description").GetRawText().Should().Contain("Check stock");
+
+        using var other = new SharedMasterRig();
+        foreach (var json in SharedMasterPackages.Masters) await other.ImportAsync(json);
+        await other.ImportAsync(package.GetRawText());
+        await other.OpenOkAsync("crmx");
+    }
+
+    [Fact]
     public async Task TaskRules_OnMasterModule_ExportedWithSymbol()
     {
         await OpenCrm7Async();

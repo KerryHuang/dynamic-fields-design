@@ -86,6 +86,22 @@ public class TaskRuleDefinitionTests : TaskTestBase
     }
 
     [Fact]
+    public async Task RuleName_Over200_RejectedByDesigner()
+    {
+        var r = await BuildRig();
+        var tooLong = Rule("rule-a", steps: [Step(r)]) with { Name = Text(new string('長', 201)) };
+        var res = await Send(new CreateTaskRuleRequest(r.Key, tooLong));
+        res.IsInvalid.Should().BeTrue();
+        res.Errors["name"][0].Should().Be("名稱每個語系必須是 1 到 200 字");
+
+        var emptyLocale = Rule("rule-a", steps: [Step(r)]) with { Name = new([KeyValuePair.Create("zh-TW", "跟進"), KeyValuePair.Create("en-US", "")]) };
+        (await Send(new CreateTaskRuleRequest(r.Key, emptyLocale))).Errors["name"][0].Should().Be("名稱每個語系必須是 1 到 200 字");
+
+        var exactly200 = Rule("rule-a", steps: [Step(r)]) with { Name = Text(new string('長', 200)) };
+        (await Send(new CreateTaskRuleRequest(r.Key, exactly200))).IsCreated.Should().BeTrue();
+    }
+
+    [Fact]
     public async Task OnUpdateMatch_RequiresCondition()
     {
         var r = await BuildRig();

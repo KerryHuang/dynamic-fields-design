@@ -32,6 +32,7 @@ public sealed class TaskRuleValidator(IModuleRepository modules, ITaskRuleReposi
 
         if (!Regex.IsMatch(input.Key ?? "", ModuleRules.ModuleKeyPattern)) Err("key", TaskRuleMessages.BadKey);
         if (input.Name is null || !input.Name.IsValid(out _)) Err("name", TaskRuleMessages.NameInvalid);
+        else if (input.Name.Values.Values.Any(v => v is null || v.Length is 0 or > 200)) Err("name", TaskRuleMessages.NameLength);
         if (input.Trigger is null) Err("trigger", TaskRuleMessages.BadTriggerOn);
         if (input.Tasks is null || input.Tasks.Count is 0 or > MaxTasks) Err("tasks", TaskRuleMessages.TasksCount);
         if (errors.Count > 0) return ServiceResult.Invalid(errors);
