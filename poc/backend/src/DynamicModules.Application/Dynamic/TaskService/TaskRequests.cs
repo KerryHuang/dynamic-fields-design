@@ -14,7 +14,7 @@ public sealed record UpdateTaskRequest(long Id, JsonElement Patch) : IRequest<Se
 
 public sealed record DeleteTaskRequest(long Id) : IRequest<ServiceResult>, ITransactionalRequest;
 
-/// <summary>Tab：assigned、created、mentioned；Filter：open、overdue、thisWeek、all。</summary>
+/// <summary>Tab：assigned、created、mentioned；Filter：open、overdue、today、thisWeek、all。</summary>
 public sealed record GetMyTasksRequest(string Tab, string Filter, int CurrentPage, int PagesSize) : IRequest<ServiceResult>;
 
 public sealed record GetTaskSummaryRequest : IRequest<ServiceResult>;

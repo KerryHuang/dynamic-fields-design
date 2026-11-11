@@ -42,6 +42,7 @@ public class TaskRepository(DynamicDbContext db) : ITaskRepository
         {
             TaskListFilter.Open => query.Where(t => open.Contains(t.Status)),
             TaskListFilter.Overdue => query.Where(t => open.Contains(t.Status) && t.DueDate != null && t.DueDate < q.Today),
+            TaskListFilter.Today => query.Where(t => open.Contains(t.Status) && t.DueDate == q.Today),
             TaskListFilter.ThisWeek => query.Where(t => open.Contains(t.Status) && t.DueDate != null && t.DueDate >= q.Today && t.DueDate <= q.WeekEnd),
             _ => query,
         };

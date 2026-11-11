@@ -57,6 +57,30 @@ public class TasksApiTests : IDisposable
     }
 
     [Fact]
+    public async Task TasksApi_TodayFilter_ReturnsOnlyTasksDueToday()
+    {
+        var module = await CreateModule(_admin);
+        await Activate(_admin, module);
+        var title = await TitleKey(_admin, module);
+        var record = await JsonOf(await _admin.PostAsJsonAsync($"{Base}/modules/{module}/records",
+            new { values = new Dictionary<string, object> { [title] = "案件乙" } }));
+        var recordId = record.GetProperty("id").GetInt64();
+
+        _app.Clock.Fixed = new DateTime(2026, 11, 4, 9, 0, 0);
+        foreach (var (name, due) in new[] { ("昨天", "2026-11-03"), ("今天", "2026-11-04"), ("明天", "2026-11-05") })
+        {
+            var created = await _admin.PostAsJsonAsync($"{Base}/records/{recordId}/tasks", new { title = name, assigneeUserId = "admin", dueDate = due });
+            created.StatusCode.Should().Be(HttpStatusCode.Created);
+        }
+
+        var res = await _admin.GetAsync($"{Base}/tasks?tab=assigned&filter=today&currentPage=1&pagesSize=20");
+        res.StatusCode.Should().Be(HttpStatusCode.OK);
+        var body = await JsonOf(res);
+        body.GetProperty("totalCount").GetInt32().Should().Be(1);
+        body.GetProperty("items")[0].GetProperty("title").GetString().Should().Be("今天");
+    }
+
+    [Fact]
     public async Task TasksApi_RecordTasks_MyTasksAndSummary()
     {
         var module = await CreateModule(_admin);

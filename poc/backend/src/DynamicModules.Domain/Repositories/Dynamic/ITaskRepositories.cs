@@ -86,6 +86,6 @@ public sealed record TaskRecordStub(long Id, long ModuleId, string OwnerUserId, 
 
 public enum TaskListTab { Assigned, Created, Mentioned }
 
-public enum TaskListFilter { Open, Overdue, ThisWeek, All }
+public enum TaskListFilter { Open, Overdue, Today, ThisWeek, All }
 
 public sealed record TaskListQuery(string UserId, TaskListTab Tab, TaskListFilter Filter, DateOnly Today, DateOnly WeekEnd, int Page, int Size);

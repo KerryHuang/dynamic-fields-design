@@ -118,7 +118,7 @@ public class GetMyTasksHandler(ITaskRepository tasks, TaskAccess access, IPermis
 
     private static readonly Dictionary<string, TaskListFilter> Filters = new()
     {
-        ["open"] = TaskListFilter.Open, ["overdue"] = TaskListFilter.Overdue, ["thisWeek"] = TaskListFilter.ThisWeek, ["all"] = TaskListFilter.All
+        ["open"] = TaskListFilter.Open, ["overdue"] = TaskListFilter.Overdue, ["today"] = TaskListFilter.Today, ["thisWeek"] = TaskListFilter.ThisWeek, ["all"] = TaskListFilter.All
     };
 
     public async Task<ServiceResult> Handle(GetMyTasksRequest request, CancellationToken ct)

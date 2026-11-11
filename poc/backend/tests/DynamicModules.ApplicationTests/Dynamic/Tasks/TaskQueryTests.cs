@@ -37,6 +37,17 @@ public class TaskQueryTests : TaskTestBase
     }
 
     [Fact]
+    public async Task MyTasks_TodayFilter_OnlyOpenTasksDueToday()
+    {
+        await SeedTask(createdBy: "admin", assignee: "sales01", due: D(11, 3));
+        await SeedTask(createdBy: "admin", assignee: "sales01", due: D(11, 4));
+        await SeedTask(createdBy: "admin", assignee: "sales01", due: D(11, 5));
+        await SeedTask(createdBy: "admin", assignee: "sales01", due: D(11, 4), status: TaskItemStatus.Done);
+
+        (await Mine("sales01", "assigned", "today")).Should().Equal(D(11, 4));
+    }
+
+    [Fact]
     public async Task MyTasks_NullDueLast_UnknownTabOrFilter400()
     {
         await SeedTask(createdBy: "admin", assignee: "sales01", due: null);
