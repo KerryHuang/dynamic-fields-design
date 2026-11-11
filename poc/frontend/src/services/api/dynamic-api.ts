@@ -13,6 +13,7 @@ import type {
   NotificationList, RecordTasks, TaskComment, TaskCounts, TaskDetail, TaskInput, TaskListFilter, TaskListTab, TaskPage, TaskPatch,
 } from 'src/domain/dynamic/task-types';
 import type { TaskRule, TaskRuleInput } from 'src/domain/dynamic/task-rule-draft';
+import type { EffectivePolicies, ModulePolicy, PolicyValue, SystemPolicy } from 'src/domain/dynamic/policy-types';
 import { handleAuthFailure, http, toApiError } from './http';
 import {
   normalizeNotificationList, normalizeRecordTasks, normalizeTaskComment, normalizeTaskDetail, normalizeTaskPage, normalizeTaskRule,
@@ -448,6 +449,15 @@ export const dynamicApi = {
   deleteTaskRule: (moduleKey: string, ruleKey: string) => http.delete(`/modules/${encodeURIComponent(moduleKey)}/task-rules/${encodeURIComponent(ruleKey)}`).then(data),
   applyTaskRule: (recordId: number, ruleKey: string) =>
     http.post<RecordTasks>(`/records/${recordId}/task-rules/${encodeURIComponent(ruleKey)}/apply`).then(data).then(normalizeRecordTasks),
+  /** Policy endpoints; an absent `value`/`override` in a response means "not set" (the server omits nulls). Sending `null` goes back to the layer above. */
+  getSystemPolicies: () => http.get<SystemPolicy[]>('/system/policies').then(data),
+  saveSystemPolicy: (code: string, value: PolicyValue | null) =>
+    http.put<SystemPolicy>(`/system/policies/${encodeURIComponent(code)}`, { value }).then(data),
+  getModulePolicies: (moduleKey: string) => http.get<ModulePolicy[]>(`/modules/${encodeURIComponent(moduleKey)}/policies`).then(data),
+  saveModulePolicy: (moduleKey: string, code: string, value: PolicyValue | null) =>
+    http.put<ModulePolicy>(`/modules/${encodeURIComponent(moduleKey)}/policies/${encodeURIComponent(code)}`, { value }).then(data),
+  getEffectivePolicies: (moduleKey: string | null) =>
+    http.get<EffectivePolicies>('/policies/effective', moduleKey ? { params: { module: moduleKey } } : undefined).then(data),
   getTaskSummary: () => http.get<TaskCounts>('/tasks/summary').then(data)
     .then((c) => ({ dueToday: c.dueToday ?? 0, overdue: c.overdue ?? 0 })),
   getNotifications: (take = 20) =>
