@@ -1,8 +1,8 @@
 # MCP server：讓 AI agents 接上產品功能 設計文件
 
-> 2026-11-11｜平台共用能力｜前置：[路線](2026-11-06-erp-roadmap-design.md)、[政策設定](2026-11-11-policy-settings-design.md)、[使用者與群組](2026-11-05-users-groups-design.md)、[簽核流程](2026-11-10-approval-workflow-design.md)、[任務管理](2026-11-10-task-management-design.md)；同日的維運設計 `2026-11-11-ops-observability-design.md`（以下稱「維運設計」，O1–O6 段）
-> 狀態：初稿，待使用者確認。這次只寫設計，不改程式；實作分段見 §12，第一段 m1 的細部設計見 §13。
-> 標「（使用者裁決）」的是使用者 2026-11-11 拍板的；標「（主控判斷）」的是主控代為決定、可以推翻的，彙整在 §16。
+> 2026-11-11｜平台共用能力｜前置：[路線](2026-11-06-erp-roadmap-design.md)、[政策設定](2026-11-11-policy-settings-design.md)、[使用者與群組](2026-11-05-users-groups-design.md)、[簽核流程](2026-11-10-approval-workflow-design.md)、[任務管理](2026-11-10-task-management-design.md)；同日的[維運設計](2026-11-11-ops-observability-design.md)（以下稱「維運設計」，O1–O6 段）
+> 狀態：草稿，主控已依 builder 審查修訂；待使用者核准與 C1–C7 裁決。這次只寫設計，不改程式；實作分段見 §12，第一段 m1 的細部設計見 §13。
+> 標「（使用者裁決）」的是使用者 2026-11-11 拍板的；標「（主控判斷）」的是主控代為決定、可以推翻的，彙整在 §16。只有使用者能答的 C1–C7 彙整在 §20；正文標「依 C? 裁決，暫以建議方案描述」的段落，裁決後要回頭改。標「未查證」的外部事實不作為設計依據。
 
 ## 1. 目的與為什麼
 
@@ -20,7 +20,7 @@ MCP（Model Context Protocol）是 AI client（Claude Code、Codex、Claude.ai�
 
 **目標**
 
-- 一個 MCP endpoint，與 WebAPI 同進程，給地端版與雲端版共用（使用者裁決；技術判斷見 §4.2）。
+- 一個 MCP endpoint，與 WebAPI 同進程，給地端版與雲端版共用（主控判斷，§4.2；初稿標為使用者裁決，checkpoint 查不到出處，已改標）。
 - 身分先用個人存取權杖：使用者在個人設定產生，可選範圍與到期日，隨時撤銷；第二段加 OAuth（使用者裁決）。
 - agent 的權限一律等同該使用者，權杖範圍只能再縮小，不另開後門（使用者裁決）。
 - 工具分唯讀、一般寫入、高風險三級；高風險先回預演與確認碼，帶確認碼再送才執行（使用者裁決）。
@@ -29,7 +29,7 @@ MCP（Model Context Protocol）是 AI client（Claude Code、Codex、Claude.ai�
 
 **非目標（這份設計不做）**
 
-- 不做通用的對外 REST API 與 Webhook。個人存取權杖只在 MCP endpoint 有效，REST API 照舊只認登入 cookie（主控判斷 U16）。功能清單「決定不做」那條要改寫成「通用 REST API 與 Webhook 不做；AI 接入走 MCP」，由主控合併時處理（§18 第 1 條）。
+- 不做通用的對外 REST API 與 Webhook。個人存取權杖只在 MCP endpoint 有效，REST API 照舊只認登入 cookie（主控判斷 U16）。功能清單「決定不做」與路線「這版不做」已改寫成「通用 REST API 與 Webhook 仍不做；AI 接入走 MCP」（§18 第 1 條）。
 - 不做 stdio 版本的 MCP server（主控判斷 T3）。
 - m1 到 m3 不做 MCP resources 與 prompts（主控判斷 U13）。
 - 不替個別模組或應用程式寫專用工具。
@@ -50,12 +50,15 @@ MCP（Model Context Protocol）是 AI client（Claude Code、Codex、Claude.ai�
 1. MCP 的意思是「讓 AI agents 接上產品功能」。三種情境（使用者操作業務、設計者建模組、維運 agent）都要，先定共用地基：身分、權限、稽核、工具分級。
 2. 身分先做個人存取權杖（範圍、到期日、可撤銷），第二段加 OAuth，給 Claude.ai、ChatGPT 的連接器用。權限沿用使用者本身的權限。
 3. 工具分唯讀、一般寫入、高風險三級。一般寫入直接執行並記稽核。高風險（刪除、簽核同意／退回、套用模組、改權限）先回預演、拿確認碼再送才執行。高風險清單可在系統設定調整。
-4. 地基 m1（權杖、稽核、工具分級、唯讀工具）排在簽核 a2d–a6 與維運 O2 之後。之後依序是業務寫入工具、設計器工具、OAuth。整體排程：p1 → O1 → pg0 → a2d–a6 → O2 → m1 → O3…
+4. 地基 m1（權杖、稽核、工具分級、唯讀工具）排在簽核 a2d–a6 與維運 O2 之後。之後依序是業務寫入工具、設計器工具、OAuth。整體排程：p1 → O1 → pg0 → a2d–a6 → O2 → m1 → O3…（a2c 與 p2、p3 的位置是主控判斷，見維運設計 §9：簽核主線從 a2c 開始，m1 不等 p3）
 5. 維運 agent 的 O4、O6 直接用 MCP 工具，不另做處置 API；稽核表與維運 O2 共用。
 6. 工具必須是通用型（例如 list_modules、describe_module 回 schema，query_records、create_record 以 schema 驗證），不為個別模組寫死工具。
-7. 地端版在客戶內網，MCP 與 WebAPI 同進程部署；雲端版每客戶一套。
-8. 業務門檻（權杖最長效期、每分鐘呼叫上限、單次回傳筆數上限、確認碼有效時間）一律走政策設定；可寫死的只限完整性、安全、技術限制，要列清單。
-9. 新資料表與查詢要與 PostgreSQL 相容，不寫 SQLite 專屬寫法。
+7. 新資料表與查詢要與 PostgreSQL 相容，不寫 SQLite 專屬寫法（已寫成 `.claude/rules/backend.md` 的「PostgreSQL 相容」條）。
+
+初稿另列了兩條「裁決」，checkpoint 查不到出處，改標主控判斷（若主控 transcript 找得到使用者原話再改回）：
+
+- 地端版在客戶內網，MCP 與 WebAPI 同進程部署；雲端版每客戶一套。「每客戶一套」出自路線「不做多租戶」；「同進程」是主控判斷（§4.2）。
+- 業務門檻一律走政策設定、可寫死的只限完整性、安全、技術限制並列清單：這是 AGENTS.md 鐵則 2（使用者 2026-11-11 指示）；列舉的四個門檻（權杖最長效期、每分鐘呼叫上限、單次回傳筆數上限、確認碼有效時間）是主控依鐵則 2 挑出來的。
 
 ## 4. 架構
 
@@ -75,6 +78,7 @@ MCP（Model Context Protocol）是 AI client（Claude Code、Codex、Claude.ai�
  |                                                                    |
  |  ① 認證：權杖 scheme（只掛在 /mcp；/mcp 不收 cookie，REST 不收權杖）     |
  |       查雜湊 → 權杖有效、帳號啟用、非 Demo、MCP 已開啟 → 填 User        |
+ |       （維運服務帳號改看遠端維運政策，依 C1 裁決，§5.3）                |
  |  ② 速率限制：每把權杖每分鐘／每日（政策）                              |
  |  ③ MCP SDK（stateless）：tools/list 依權杖範圍過濾                     |
  |  ④ 工具層：參數檢查 → 分級（高風險走預演＋確認碼）→ IMediator.Send       |
@@ -95,9 +99,9 @@ MCP（Model Context Protocol）是 AI client（Claude Code、Codex、Claude.ai�
    PostgreSQL（正式）／SQLite（研發、Demo）
 ```
 
-### 4.2 同進程部署（技術判斷確認使用者裁決）
+### 4.2 同進程部署（主控判斷）
 
-主控確認同進程是對的，理由：
+初稿標題寫「技術判斷確認使用者裁決」，但 checkpoint 查不到「同進程」的使用者裁決，改標主控判斷。理由：
 
 - **重用整條管線**：權限 behavior、`DynamicAccessGuard`、交易、冪等、事件與檢查都在同一個 DI 容器裡。分開部署就得透過 HTTP 呼叫 REST API，等於先做一套對外 REST API（非目標）。
 - **SQLite 單一寫入者**：研發與 Demo 用 SQLite，寫入靠進程內的 `WriteGate` 排隊；另一個進程寫同一個檔案會繞過它。
@@ -108,24 +112,36 @@ MCP（Model Context Protocol）是 AI client（Claude Code、Codex、Claude.ai�
 
 ### 4.3 協定版本與 SDK
 
-查證日 2026-11-11（來源見 §19）：
+查證日 2026-11-11（來源見 §19）。下面分「已查證」與「未查證」；未查證的不作為設計依據，m1a 第一步實測時確認。
 
-- MCP 規範最新版是 **2026-07-28**，主要改變：
-  - 拿掉 protocol 層的 session 與 `Mcp-Session-Id`。
-  - 拿掉 `initialize` 握手，改成每個 request 自帶協定版本。
-  - Streamable HTTP 只需要支援 POST。
-  - DCR（RFC 7591）降為 MAY 並標為 deprecated，改推 CIMD（Client ID Metadata Documents）。
+**MCP 規範 2026-07-28**（builder 讀 changelog 確認）：
+
+- 拿掉 protocol 層的 session 與 `Mcp-Session-Id`。
+- 拿掉 `initialize` 握手，改成每個 request 在 `_meta` 自帶協定版本。
+- Streamable HTTP 只需要支援 POST；GET endpoint 改成 `subscriptions/listen`（產品不用訂閱，不實作）。
+- DCR（RFC 7591）降為 MAY 並標為 deprecated，改推 CIMD（Client ID Metadata Documents）。
+- Roots、Sampling、Logging 標為 deprecated；MRTR 取代 server 主動發出的 request。
+- 初稿漏列、server 端要做到的（m1a 實測 SDK 時逐條確認 SDK 有處理，沒處理就在工具層補）：
+  - `server/discover` 是 MUST。
+  - 請求標頭 `Mcp-Method`、`Mcp-Name` 是必要的。
+  - 以上兩條 server 端的確切義務（回什麼、標頭與 body 不一致時怎麼辦），builder 只讀了 changelog，m1a 讀規範正文確認。
+  - 結果必填 `resultType`。
+  - list 類結果（含 `tools/list`）必填 `ttlMs`、`cacheScope`。本產品的 `tools/list` 依權杖範圍變化，所以 `cacheScope` 設成 `private`；`ttlMs` 取短值（技術判斷：60 秒），讓範圍變更很快反映。
+  - 規範定義了 `_meta.traceparent`；產品預設不採用外部追蹤脈絡，比照維運設計 T3。
 - 前一版 2025-11-25 仍有 session，GET 與 SSE 為選用；client 端還會並存一段時間。
-- 官方 C# SDK `ModelContextProtocol.AspNetCore` 的狀態：
-  - 2026-02-25 發 1.0 GA，最新穩定版是 2.4.0（2026-11-07）。
-  - 支援 net8.0，可以用在本專案的 .NET 8。
-  - 2.0 起預設 stateless；2.2 起同一個 endpoint 可以同時服務 2025-11-25 與 2026-07-28 的 client。
-  - 2.3.1 修補了已認證 stateful session 與 OAuth 的安全問題。
-- 採用方式（主控判斷 T2）：
-  - 用 2.x 最新穩定版，stateless 模式。
-  - 不用 server 主動推送，也不用 sampling、roots、logging；後三者在 2026-07-28 都已 deprecated。
-  - 有沒有 session 不影響身分，每個 POST 都重新驗權杖。
-- ⚠️ 未驗證：SDK 2.4.0 依賴 10.0.x 版的 `Microsoft.Extensions.*.Abstractions`，在 .NET 8 專案能不能乾淨 restore，要在 m1 計畫的第一步實測。不行就退回 1.x 維護線（1.4.2），代價是只支援到 2025-11-25 協定。
+
+**官方 C# SDK `ModelContextProtocol.AspNetCore`**：
+
+- 已查證（builder 讀 NuGet 頁）：最新穩定版 2.4.0（2026-11-07）；1.0.0 發佈於 2026-02-25；2.0.0 發佈於 2026-07-28；1.4.2 發佈於 2026-11-03；支援 net8.0。
+- ⚠️ 未查證（研究 subagent 讀 release notes，主控與 builder 都沒有複核）：2.0 起預設 stateless；2.2 起同一個 endpoint 可以同時服務 2025-11-25 與 2026-07-28 的 client；2.3.1 修補了已認證 stateful session 與 OAuth 的安全問題。
+- ⚠️ 未查證：SDK 2.4.0 依賴 10.0.x 版的 `Microsoft.Extensions.*.Abstractions`（NuGet 頁沒顯示 net8 的依賴版本），在 .NET 8 專案能不能乾淨 restore，要在 m1 計畫的第一步實測。不行就退回 1.x 維護線（1.4.2，已確認存在），代價是只支援到 2025-11-25 協定。
+
+**採用方式**（主控判斷 T2）：
+
+- 用 2.x 最新穩定版，設定成 stateless 模式（不依賴「預設」是什麼，明確設定）。
+- 不用 server 主動推送，也不用 sampling、roots、logging；後三者在 2026-07-28 都已 deprecated。
+- 有沒有 session 不影響身分，每個 POST 都重新驗權杖。
+- 「同一 endpoint 服務新舊兩版 client」不作為依據：m1a 實測；做不到時先只支援 SDK 實際支援的版本，在手冊寫明。
 
 ### 4.4 工具怎麼重用既有 handler
 
@@ -136,11 +152,11 @@ MCP（Model Context Protocol）是 AI client（Claude Code、Codex、Claude.ai�
   - 分級與確認碼（§6）。
 - 架構測試：工具類別只准依賴 `IMediator` 與 MCP 基礎元件，不准依賴 repository、`DynamicDbContext`（主控判斷 T4）。
 
-m1 唯讀工具對應的既有 request：
+m1 唯讀工具對應的既有 request（builder 審查時逐一查證，12 個都存在）：
 
 | 工具 | 既有 request |
 |---|---|
-| list_modules | `GetMenuRequest`（已依讀取權過濾） |
+| list_modules | `GetMenuRequest`（已依讀取權過濾；回 `List<MenuItem>`，不是 `ServiceResult`，可能含非模組的選單項） |
 | describe_module | `GetModuleSchemaRequest` |
 | query_records | `GetPagedRecordsRequest` |
 | get_record | `GetRecordRequest` |
@@ -149,7 +165,7 @@ m1 唯讀工具對應的既有 request：
 | list_my_tasks、get_task | `GetMyTasksRequest`、`GetTaskRequest`、`GetTaskCommentsRequest` |
 | list_approval_tasks、get_record_approval | `GetApprovalTasksRequest`、`GetRecordApprovalRequest` |
 
-`GetModulesRequest` 是設計器請求（`IDesignerRequest`），一般使用者不能用。所以 list_modules 走選單查詢，不走它。
+`GetModulesRequest` 是設計器請求（`IDesignerRequest`），一般使用者不能用。所以 list_modules 走選單查詢，不走它。工具層要把 `List<MenuItem>` 轉成模組清單、濾掉非模組的選單項，並補一個測試（主控判斷 B15，§13.8）。
 
 ## 5. 身分與權限
 
@@ -164,7 +180,7 @@ m1 唯讀工具對應的既有 request：
 - **建立時填**：名稱、範圍（§5.2）、到期日。
   - 到期日預設為今天加 `mcp.tokenDefaultLifetimeDays`，最晚今天加 `mcp.tokenMaxLifetimeDays`。
   - 一律要有到期日，沒有永不過期（寫死）。
-  - 到期日當天營運時區（政策 A17）結束時失效。
+  - 到期日當天營運時區結束時失效。營運時區是政策 A17，屬於 p3，不在 m1 之前的排程裡；p3 之前沿用既有的 `IBusinessTime`，p3 再接上 A17（主控判斷 B17）。
 - **明文只顯示一次**：格式是前綴 `fwp_` 加 32 bytes 隨機值的 base62 編碼。
   - 前綴方便 secret scanning 認出外洩的權杖。
   - 資料庫只存 SHA-256 雜湊與末四碼（主控判斷 T6）。
@@ -204,6 +220,7 @@ m1 唯讀工具對應的既有 request：
 2. 依雜湊找權杖：找不到、已撤銷、已過期 → 401。
 3. 帳號不存在、停用、必須改密碼、是 Demo 帳號 → 401。
 4. `mcp.enabled` 為否，或使用者不在 `mcp.allowedGroups` → 403，訊息說明原因。
+   - 維運服務帳號走另一條分支，依 C1 裁決，暫以建議方案描述：不看 `mcp.enabled`、`mcp.allowedGroups`；改看 `Ops:Edition` 是 `Cloud`（不是就 401）、`ops.remoteDiagnosticsEnabled` 為是（否則 403，訊息說明「客戶已關閉遠端維運」）。處置工具另看 `ops.remoteActionsEnabled`（§17 第 1 點）。
 5. 通過後填 ClaimsPrincipal：使用者 id、權杖 id、範圍、通道＝MCP。
 6. 更新最後使用時間與 IP，同一把權杖最多每 60 秒寫一次（技術限制，避免每次呼叫都寫）。
 
@@ -245,12 +262,18 @@ m1 唯讀工具對應的既有 request：
   - 維運工具的授權判斷是「系統管理員，或維運服務帳號」。
   - 所以 agent 即使被 prompt injection 誘導，也讀不到業務記錄。
 - **不能登入畫面**：沒有密碼，cookie 登入一律拒絕。
-- **權杖怎麼發**：
-  - 雲端版開通實例時，由廠商的開通程序建立帳號並發一把權杖，交給維運中心保管。
-  - 權杖範圍只含 `ops.read`（O6 起加 `ops.act`），有到期日，到期前由維運中心輪替。
-  - 客戶管理員在「AI 連線」管理頁看得到這個帳號與它的權杖，可以撤銷（撤銷後連唯讀也停）。
-  - 客戶管理員也可以用政策 `ops.remoteActionsEnabled` 只關掉處置工具。
-- **只有雲端版**：地端版不建立維運服務帳號，維運中心也不連入（寫死，維運設計 §12）。版別判斷沿用維運設計的部署設定，本文件不另定。
+- **權杖怎麼發**（依 C6 裁決，暫以建議方案描述）：
+  - 雲端版由廠商的部署流程注入：比照 `AdminBootstrap`，啟動時從部署 secret 讀權杖雜湊與到期日，upsert 服務帳號與它的權杖列；同一雜湊被撤銷過就不重建。
+  - 輪替＝維運中心換 secret 後重啟實例；沒有「用權杖換權杖」的入口。
+  - 這是 §15「權杖只能在已登入畫面建立」的明列例外。
+- **兩把權杖**（對齊維運設計 §6）：一把只有 `ops.read`（mO1 起）、一把是 `ops.read`＋`ops.act`（mO2 起）；都有到期日。L1 轉送只用前者，轉送點的過濾寫錯時產品端還擋得住。
+- **客戶的控制**：
+  - 客戶管理員在「AI 連線」管理頁看得到這個帳號與它的權杖，可以撤銷（撤銷後連唯讀也停，要經廠商重新開通才恢復）。
+  - 政策 `ops.remoteDiagnosticsEnabled`（允許廠商遠端維運，唯讀）關掉時，唯讀與處置都停（依 C1 裁決，暫以建議方案描述）。
+  - 政策 `ops.remoteActionsEnabled` 只關掉處置工具。
+  - 服務帳號不受 `mcp.enabled`、`mcp.allowedGroups` 約束（依 C1 裁決，暫以建議方案描述）；它本來就不能加入群組，若受 `mcp.allowedGroups` 約束，客戶一限定群組它就永遠被擋。
+- **只有雲端版**：地端版不建立維運服務帳號，維運中心也不連入（寫死，維運設計 §12）。版別判斷用維運設計 §4.1 定義的部署設定 `Ops:Edition`（`Cloud`／`OnPrem`，出廠 `OnPrem`），本文件不另定。
+- **實作段**：mO1（隨 O4），不是 O6。
 - **稽核標明**：行為者種類記「維運服務帳號」。轉送點另帶一個工作編號標頭，產品只當作不可信的標籤記進稽核（§17 第 5 點）。
 - **權限檢查的落點**：
   - 「沒有業務權限」靠既有權限資料自然成立：這個帳號沒有群組，guard 算不出任何讀取權。
@@ -289,7 +312,7 @@ annotations 只是提示。規範明說 client 不該信任它，所以產品端
 ### 6.3 高風險的兩段式確認（使用者裁決；機制細節是主控判斷 U9）
 
 1. **第一次呼叫**（不帶 `confirmationCode`）：
-   - 伺服器走既有的預演路徑算出影響，不寫業務資料。現有的預演路徑包括刪除前檢查（`delete-check`）、送簽預覽（`approval/preview`）、套件預覽（`apps/packages/{id}/preview`）。
+   - 伺服器走既有的預演路徑算出影響，不寫業務資料。現有的預演路徑包括刪除前檢查（`delete-check`，`DeletionController`）、送簽預覽（`approval/preview`，`ApprovalsController:42`）、套件預覽（`apps/packages/{id}/preview`，`AppsController:35`），builder 審查時已查證存在。
    - 回傳預演摘要、確認碼、到期時間，以及一句說明：「請把預演內容給使用者看，使用者同意後再以相同參數加上 confirmationCode 呼叫」。
    - 這一步不是錯誤，`isError` 為否。
 2. **確認碼綁定**：權杖、工具、參數雜湊（不含確認碼本身）、目標版本（RowVersion 或預演指紋）。
@@ -299,22 +322,23 @@ annotations 只是提示。規範明說 client 不該信任它，所以產品端
    - 驗證碼存在、未用過、未過期、權杖相同、參數雜湊相同、目標版本未變。
    - 通過後，在同一個交易裡把碼標成已使用並執行動作。
    - 任一項不符就回 `isError`，代碼 `confirmation_invalid`，不說明是哪一項不符，要求重新預演。
-4. **稽核**：預演與執行各一筆，以確認 id 關聯；逾時未確認的在清理時記為「逾時未確認」。
+4. **稽核**：預演與執行各一筆，以確認 id 關聯；逾時未確認的在清理時**另寫一筆新紀錄**記「逾時未確認」，不回頭改預演那一筆（稽核表只能新增，主控判斷 B11）。
 5. **上限**：每把權杖同時未使用的確認碼最多 20 個（技術限制），超過時最舊的作廢。
 
 ⚠️ 確認碼會經過 LLM，它**不能證明有人同意**。只要 client 讓 AI 自動連續呼叫，AI 就能自己帶回確認碼。它的價值在三件事：
 
 - 強迫分成兩次呼叫，中間一定有一份預演。
-- 第二次呼叫是另一個工具呼叫，有核准機制的 client 會再問一次人。Claude Code 預設逐次詢問；ChatGPT 對寫入要求手動確認。
+- 第二次呼叫是另一個工具呼叫，有核准機制的 client 會再問一次人。Claude Code 預設逐次詢問；ChatGPT 對寫入要求手動確認（研究 subagent 讀 OpenAI 文件，主控未複核，⚠️ 未查證）。
 - 對維運中心這種確定性的執行者來說，它可以先比對預演是否符合 runbook 預期，再決定要不要確認。
 
 真正要「人親手按」的強化版列為後續（§18 第 3 條）：client 有宣告 elicitation 時改走 elicitation，或改成在產品畫面確認。手冊要寫明：client 不要把高風險工具設成自動允許。
 
-### 6.4 高風險清單可調（使用者裁決；地板是主控判斷 U11）
+### 6.4 高風險清單可調（使用者裁決；地板依 C7 裁決）
 
 - 政策 `mcp.highRiskTools`（m2b 加；型別是「多選代碼」，政策登記要新增這個型別）。出廠清單見 §14。
 - 只有寫入類工具能加進清單；唯讀工具不能設成高風險，因為唯讀沒有可預演的影響。
-- **地板**（寫死，不能移出清單）：改權限、套用應用程式套件、刪除模組或欄位、全部維運處置工具。理由：這些一旦做錯會影響整個系統或安全，屬於安全檢查。
+- **地板**（依 C7 裁決，暫以建議方案描述；寫死，不能移出清單）：改權限、套用應用程式套件、刪除模組或欄位、全部維運處置工具。理由：這些一旦做錯會影響整個系統或安全，屬於安全檢查。
+  - 和裁決的衝突：使用者裁決是「高風險清單可在系統設定調」，沒有說哪些不能調；地板等於把這幾項從「可調」裡拿掉，所以不是主控能定的，列在 §20 C7。
 - 其他高風險工具（例如刪除記錄、簽核同意與退回）管理員可以移出，移出後改成一般寫入，直接執行並照記稽核。
 
 ### 6.5 錯誤怎麼回
@@ -330,7 +354,7 @@ annotations 只是提示。規範明說 client 不該信任它，所以產品端
 | Conflict（stale） | `isError`，代碼 `stale`，提示重新讀取再改 |
 | 速率超限 | `isError`，代碼 `rate_limited`，附幾秒後可重試 |
 
-訊息語系沿用 `HeaderCurrentLocale`；client 沒帶語系標頭時用系統預設語系（政策 A18）。
+訊息語系沿用 `HeaderCurrentLocale`；client 沒帶語系標頭時用系統預設語系。預設語系是政策 A18，屬於 p3；p3 之前沿用目前的預設語系，p3 再接上 A18（主控判斷 B17）。
 
 ## 7. 工具目錄
 
@@ -385,7 +409,9 @@ annotations 只是提示。規範明說 client 不該信任它，所以產品端
 
 - 依維運設計 §4.1：健康檢查結果、維運事件與樣本、排程器狀態、版本與執行環境、規則失控與暫停紀錄。
 - 只碰維運資料，不讀業務記錄。
-- 讀稽核也是唯讀工具之一，但只給系統管理員；維運服務帳號不能用。
+- 事件與樣本回傳多少原文，依 C2 裁決，暫以建議方案描述：只給正規化後的訊息與類別、歸屬、moduleKey、ruleId、request id。
+- 讀稽核也是唯讀工具之一，範圍歸 `ops.read`，但工具內另加「只限系統管理員」的檢查；維運服務帳號不能用（主控判斷 B28）。
+- 同一段一起做維運服務帳號（§5.6）與 `ops.remoteDiagnosticsEnabled`（依 C1 裁決）。
 - 工具的實際名稱與參數由 O4 細部設計定；本文件只定範圍、分級與授權形狀。
 
 **mO2 維運處置**（`ops.act`，隨維運 O6，只雲端版）
@@ -396,7 +422,8 @@ annotations 只是提示。規範明說 client 不該信任它，所以產品端
   - 資料庫例行維護。
   - 取消超時報表查詢。
   - 重跑完整性檢查。
-- 一律高風險、在地板清單裡；`ops.remoteActionsEnabled` 為否時一律拒絕。
+- 一律高風險、在地板清單裡（依 C7 裁決，暫以建議方案描述）；`ops.remoteActionsEnabled` 為否時一律拒絕。
+- 誰來呼叫：依維運設計 C4 裁決，暫以建議方案描述，由維運中心的 runbook 呼叫，不是 agent。
 - 產品端另有寫死的每日硬上限，數字由 O6 定。
 
 ## 8. 稽核與用量
@@ -405,12 +432,12 @@ annotations 只是提示。規範明說 client 不該信任它，所以產品端
 
 - 用 O2 建的全平台共用稽核表，m1 只加寫入點，不另開表（維運設計 §5.6）。
 - **唯讀呼叫也逐筆記**（主控判斷 U10）。理由：AI 讀了哪些資料，正是事後最想查的事。量的估算見本節最後。
-- 每筆 MCP 呼叫寫進稽核表的內容（欄位命名由 O2 定；§5.6 沒有的項目列在 §17 第 3 點，由 O2 補欄位或放進摘要）：
+- 每筆 MCP 呼叫寫進稽核表的內容（欄位命名由 O2 定；維運設計 §5.6 已採用：行為者種類、參數雜湊、回傳筆數是獨立欄位，其餘放結構化摘要，O2 一次建好，m1 不加 migration）：
 
 | 內容 | MCP 的值 |
 |---|---|
 | 時間 | UTC |
-| 行為者 | 使用者 id；行為者種類（人員／維運服務帳號） |
+| 行為者 | 使用者 id；行為者種類（人員／維運服務帳號；排程工作為「系統」） |
 | 來源管道 | MCP |
 | 權杖 | 權杖 id（不存權杖本身）；m4 之後是 OAuth 授權 id |
 | 動作代碼 | `mcp.<工具名稱>`，例如 `mcp.query_records` |
@@ -431,15 +458,15 @@ annotations 只是提示。規範明說 client 不該信任它，所以產品端
 ### 8.2 速率與用量（主控判斷 U7）
 
 - 每把權杖：每分鐘 `mcp.callsPerMinute`、每日 `mcp.callsPerDay`。
-  - 用 ASP.NET Core 內建 rate limiter，依權杖 id 分區。
-  - 新值在下一個時間窗生效。
+  - 每分鐘上限用 ASP.NET Core 內建 rate limiter，依權杖 id 分區；新值在下一個時間窗生效。
+  - 每日上限改用稽核表計數判斷（主控判斷 B18）：記憶體 rate limiter 在重啟或 Render 休眠後會歸零，每日上限會失效。依權杖 id＋UTC 起訖計數，稽核表要有（權杖、時間）索引；起訖由應用層算出，不用資料庫的日期函式。
   - 超過時回工具錯誤 `rate_limited`，附重試秒數。
-- 每日用量從稽核表計算（依權杖、依日彙總），不另開計數表；個人頁與管理頁顯示今日次數。
+- 每日用量同樣從稽核表計算（依權杖、依日彙總），不另開計數表；個人頁與管理頁顯示今日次數。
 - 認證失敗（壞權杖）依來源 IP 降速，回 HTTP 429（寫死）。
 - 回應大小：單次工具結果的文字上限 60,000 字元（技術限制）。
   - 超過時截斷筆數並標示 `truncated` 與下一頁參數。
-  - 理由：Claude Code 預設單次工具輸出上限 25,000 tokens，超過 10,000 會警告；回太多只會塞爆 AI 的 context。
-- 已知限制：rate limiter 在單一實例記憶體，與維運設計 §12 的登入限流同一個限制；雲端版每客戶一套、單一實例時沒有影響。
+  - 理由：Claude Code 預設單次工具輸出上限 25,000 tokens，超過 10,000 會警告（研究 subagent 讀 Claude Code 文件；builder 所知一致但沒有重讀，⚠️ 未查證）；回太多只會塞爆 AI 的 context。60,000 字元是技術限制，數字不對時改常數即可，m1a 實測一次。
+- 已知限制：每分鐘的 rate limiter 在單一實例記憶體，與維運設計 §12 的登入限流同一個限制；雲端版每客戶一套、單一實例時沒有影響。每日上限走稽核表，不受這個限制。
 
 ### 8.3 誰看得到什麼
 
@@ -466,20 +493,20 @@ annotations 只是提示。規範明說 client 不該信任它，所以產品端
 
 注意：
 
-- 微軟的 spotlighting 做法在 2026 年就出過套用不一致造成的漏洞，標示不能當成完整防禦。
+- 標示不能當成完整防禦。有報導指出微軟的 spotlighting 做法出過套用不一致造成的漏洞（只看過搜尋摘要，⚠️ 未查證，不作為依據）；即使沒有這件事，標示本來就只是輔助，前兩層才是防線。
 - 產品本身沒有對外送資料的工具，資料外流只可能經 client 的其他工具（例如網頁抓取）。手冊要寫明這種情況：同一個 agent 同時有私有資料、不可信內容、對外通道三樣（Simon Willison 所說的 lethal trifecta）時，最容易被利用。
 
 ### 9.2 tool poisoning
 
 - 工具名稱、描述、參數說明全部是程式裡的固定文字，不夾帶模組名稱、欄位標籤、說明這類設計者輸入的內容（寫死）。
 - 動態的 schema 只從 describe_module 的**結果**回傳，一樣放在 `data` 區、標成不可信。
-- `tools/list` 的內容只依權杖範圍改變，不依其他狀態改變（規範要求），順序固定。
+- `tools/list` 的內容只依權杖範圍改變，不依其他狀態改變，順序固定（主控判斷）。規範的要求只有：list 不再依連線變化、順序 SHOULD 固定；依使用者或權杖變化是允許的，但結果要標 `cacheScope: private`（§4.3）。初稿寫「規範要求」是誇大，已更正。
 
 ### 9.3 權杖處理
 
 - 權杖只在 HTTPS 上收。例外：請求來自 loopback（本機開發與單機試用）。
 - 地端內網沒有 TLS 時，部署設定可以明確放行 HTTP，啟動時記 Warning，手冊建議用反向代理加 TLS（主控判斷 U14）。
-- 權杖不進 log。request log 的 `Authorization` 標頭一律遮蔽，與維運設計 §10.2.2 的「不准寫進 log 的內容」合併成一份清單。
+- 權杖不進 log。request log 的 `Authorization` 標頭、權杖與確認碼明文一律不記，已併入維運設計 §10.2.2 的「不准寫進 log 的內容」，以那一份清單為準。
 - 不轉送：產品不會把收到的權杖帶去呼叫任何其他服務（規範 MUST NOT token passthrough）。
 - 外洩應變：手冊寫明到個人頁撤銷；管理員可一次撤銷某人全部權杖。
 
@@ -519,7 +546,7 @@ annotations 只是提示。規範明說 client 不該信任它，所以產品端
 | 能連的 client | Claude Code、Codex（m1）；Claude.ai、ChatGPT 連接器（m4） | 內網裡的 Claude Code、Codex 與客戶自己的 agent |
 | Claude.ai、ChatGPT 連接器 | 支援（m4 OAuth） | 不支援：連線來自 AI 服務商的雲端，要公網可達；客戶自行對外開放者自負風險（主控判斷 U14） |
 | OAuth（m4） | 主要用途 | 可用，但沒有公網時意義不大 |
-| 維運服務帳號 | 有，權杖在維運中心 | 不建立（寫死） |
+| 維運服務帳號 | 有，權杖在維運中心；不受 `mcp.enabled` 約束（依 C1 裁決，暫以建議方案描述） | 不建立（寫死，看 `Ops:Edition`） |
 | `mcp.enabled` 出廠 | 否 | 否 |
 | 資料庫 | PostgreSQL | PostgreSQL；單機試用可 SQLite |
 | 速率限制 | 單一實例記憶體 | 同左 |
@@ -528,10 +555,12 @@ annotations 只是提示。規範明說 client 不該信任它，所以產品端
 
 | 組合 | 誰能用 AI 接入 | 誰處理問題 |
 |---|---|---|
-| `mcp.enabled` 否 | 沒有人；`/mcp` 一律回 403，個人權杖頁不顯示 | — |
+| `mcp.enabled` 否（地端版） | 沒有人；`/mcp` 一律回 403，個人權杖頁不顯示 | — |
+| `mcp.enabled` 否＋雲端版（依 C1 裁決，暫以建議方案描述） | 人員都不能用；維運服務帳號照常（受 `ops.remoteDiagnosticsEnabled` 管） | 廠商照常維運；「AI 連線」說明頁寫明廠商診斷也經 AI 服務商 |
 | 開啟、`mcp.allowedGroups` 空 | 全部啟用中的非 Demo 帳號 | 管理員管開關與撤銷；使用者管自己的權杖 |
 | 開啟、限定群組 | 群組成員；被移出群組的人，下一次呼叫起被拒（權杖保留，回到群組後恢復） | 同上 |
-| 雲端版、客戶撤銷維運服務帳號權杖 | 廠商 L1、L2 都停；事件推送不受影響 | 廠商改人工處理，需客戶重新授權 |
+| 開啟、限定群組＋雲端版 | 群組成員；維運服務帳號不受群組限制（依 C1 裁決，暫以建議方案描述） | 同上 |
+| 雲端版、客戶撤銷維運服務帳號權杖，或關閉 `ops.remoteDiagnosticsEnabled` | 廠商 L1、L2 都停；事件推送不受影響 | 廠商改人工處理；撤銷權杖要經廠商重新開通，關政策則客戶自己打開即可 |
 | 雲端版、`ops.remoteActionsEnabled` 否 | L1 照常；L2 一律拒絕 | 廠商人工處理 |
 | Demo 站（`Demo:LoginEnabled`） | 整個 MCP 停用 | — |
 
@@ -557,7 +586,7 @@ annotations 只是提示。規範明說 client 不該信任它，所以產品端
 
 ## 12. 分段
 
-整體順序沿用使用者裁決（p1 → O1 → pg0 → a2d–a6 → O2 → m1 → O3…），m1 之後的順序是主控建議：
+整體順序沿用使用者裁決（p1 → O1 → pg0 → a2d–a6 → O2 → m1 → O3…；簽核主線從 a2c 開始、p2 與 p3 穿插，見維運設計 §9），m1 之後的順序是主控建議：
 
 **m1a → m1b → m2a → m2b → m3 → m4**；mO1 隨 O4、mO2 隨 O6 一起做。
 
@@ -565,13 +594,13 @@ m2 以後與 O3–O6 怎麼穿插，由主控依當時進度排定。m4 可以�
 
 | 段 | 範圍 | 相依 | 驗收方式 |
 |---|---|---|---|
-| m1a | 後端地基：權杖資料表與 API、權杖認證、範圍、工具登記與分級、確認碼機制（以測試專用工具驗證）、稽核寫入點、速率限制、「不提供給 AI」欄位旗標的後端、12 個唯讀工具、MCP 類政策（§13.6） | p1（政策登記）、O1（排程器清理）、O2（稽核表）、pg0（兩種資料庫驗證）、a2d–a6（簽核查詢穩定） | §13.8 的自動測試全過；用 Claude Code 與 Codex 實際連本機查到資料 |
+| m1a | 後端地基：權杖資料表與 API、權杖認證、範圍、工具登記與分級、確認碼機制（以測試專用工具驗證）、稽核寫入點、速率限制、「不提供給 AI」欄位旗標的後端、12 個唯讀工具、MCP 類政策（§13.6） | p1（政策登記）、O1（排程器清理）、O2（稽核表）、pg0（兩種資料庫驗證）、a2c–a6（簽核查詢穩定）；不等 p2、p3 | §13.8 的自動測試全過；用 Claude Code 與 Codex 實際連本機查到資料 |
 | m1b | 前端：個人「AI 存取權杖」頁、管理員「AI 連線」頁、設計器欄位旗標、政策頁分類、手冊章節 | m1a | 四種寬度走查；從畫面建權杖→Claude Code 連上→撤銷後被拒 |
-| m2a | 一般寫入工具、冪等鍵 | m1 | 對照測試：MCP 建立／修改的記錄與畫面建立的完全相同（含事件、檢查、歷程）；重送同一冪等鍵不重複寫 |
-| m2b | 高風險業務工具、`mcp.highRiskTools` 與「多選代碼」政策型別 | m2a | 刪除與簽核同意都要兩段式；目標版本改變後確認碼失效；管理員把刪除移出清單後改成一般寫入；地板項目移不出去 |
+| m2a | 一般寫入工具、冪等鍵；寫入迴圈偵測（依 C3 裁決，暫以建議方案描述：同一權杖或來源反覆寫同一筆，政策 `ops.ruleLoopTriggersPerRecord`） | m1 | 對照測試：MCP 建立／修改的記錄與畫面建立的完全相同（含事件、檢查、歷程）；重送同一冪等鍵不重複寫 |
+| m2b | 高風險業務工具、`mcp.highRiskTools` 與「多選代碼」政策型別 | m2a | 刪除與簽核同意都要兩段式；目標版本改變後確認碼失效；管理員把刪除移出清單後改成一般寫入；地板項目移不出去（依 C7 裁決，暫以建議方案描述） |
 | m3 | 設計器工具（另寫設計） | m2b | 用 AI 從零建一個兩模組的小應用程式，設計器畫面看到結果一致；套用套件走兩段式 |
 | m4 | OAuth 2.1：受保護資源中繼資料、內建授權伺服器、CIMD 與 DCR、同意頁、授權列在個人頁 | m1 | Claude.ai 自訂連接器與 ChatGPT developer mode 連上雲端測試站並查到資料；撤銷授權後被拒 |
-| mO1 | 維運唯讀工具、維運服務帳號、`ops.read` | m1、O4 | 照維運設計 O4 驗收；另驗服務帳號查業務記錄被拒、不能登入畫面 |
+| mO1 | 維運唯讀工具、維運服務帳號（權杖注入依 C6）、`ops.read`、`ops.remoteDiagnosticsEnabled`（依 C1） | m1、O4 | 照維運設計 O4 驗收；另驗服務帳號查業務記錄被拒、不能登入畫面、`Ops:Edition`＝`OnPrem` 時認證被拒 |
 | mO2 | 維運處置工具、`ops.act` | m1、O6 | 照維運設計 O6 驗收 |
 
 ## 13. m1 細部設計
@@ -595,6 +624,8 @@ m1 分兩小段（主控判斷 T11）。只有 m1a 有 migration。m1b 是畫面
 - `WebAPI/Mcp/`：
   - 權杖認證 handler（§5.3）。
   - MCP SDK 註冊：stateless、`MapMcp("/mcp")`，只掛權杖 scheme 的授權。
+    - 路由順序（主控判斷 B19）：`MapMcp` 要放在 `MapFallbackToFile("index.html")` 之前（`Program.cs:144-145`），否則 `/mcp` 可能被 SPA fallback 吃掉。
+    - m1a 第一步實測 SDK 時，逐條確認 §4.3 列的 2026-07-28 必要項（`server/discover`、`Mcp-Method`／`Mcp-Name`、`resultType`、`ttlMs`／`cacheScope`）SDK 有沒有處理（主控判斷 B16）。
   - 工具類別：每個工具一個方法，只呼叫 `IMediator`。
   - 結果轉換：`ServiceResult` → 工具結果，包括 §9.1 的標示格式與 §8.2 的截斷。
   - 稽核寫入：O2 的寫入介面。
@@ -767,6 +798,9 @@ m1 分兩小段（主控判斷 T11）。只有 m1a 有 migration。m1b 是畫面
   - `/mcp` 帶 cookie 不算登入。
   - REST API 帶權杖不算登入。
 - Origin 不在允許清單回 403。
+- GET `/mcp` 不回 SPA 的 `index.html`（B19）。
+- `tools/list` 的結果帶 `cacheScope: private` 與 `ttlMs`（B16）。
+- list_modules 只回模組，不含非模組的選單項（B15）。
 - **對照測試**：同一個虛構使用者經 REST 與經 MCP 查同一模組，回傳的記錄 id 集合與欄位集合相同。至少涵蓋三種資料範圍（全部、本人、同群組）與一個 Pricing 隱藏的幣別欄位。
 - 稽核：
   - 成功、被拒、驗證錯誤、速率超限各寫一筆，內容符合 §8.1。
@@ -786,7 +820,7 @@ m1 分兩小段（主控判斷 T11）。只有 m1a 有 migration。m1b 是畫面
 1. 以虛構使用者登入，建一把 `business.read` 權杖。
 2. Claude Code：`claude mcp add --transport http formwright http://127.0.0.1:5180/mcp --header "Authorization: Bearer ${FORMWRIGHT_TOKEN}"`。
    - 問「列出我能看的模組」「查本月逾期的任務」「跑某張報表」，結果與畫面一致。
-3. Codex：在 `config.toml` 設 `url` 與 `bearer_token_env_var`，問同樣的問題。
+3. Codex：在 `config.toml` 設 `url` 與 `bearer_token_env_var`，問同樣的問題（設定鍵名由研究 subagent 讀 Codex 文件，主控未複核，⚠️ 未查證；實測時以當時文件為準）。
 4. 管理員的稽核頁看到這些呼叫，帶權杖 id。
 5. 撤銷權杖後，下一次呼叫被拒。
 6. 四種寬度走查兩個新頁與設計器欄位設定。
@@ -799,7 +833,7 @@ m1 分兩小段（主控判斷 T11）。只有 m1a 有 migration。m1b 是畫面
 - 使用者怎麼建權杖。
 - Claude Code 與 Codex 的連線方式：
   - Claude Code 用 `--header` 或 `.mcp.json` 的 `headers` 加環境變數展開。
-  - 環境變數不要取名 `ANTHROPIC_API_KEY` 這類保留名稱，Claude Code 對遠端 server 會把它們讀成空值。
+  - 初稿另有一句「環境變數不要取名 `ANTHROPIC_API_KEY` 這類保留名稱，Claude Code 對遠端 server 會把它們讀成空值」，沒有出處（⚠️ 未查證），先拿掉；m1b 寫手冊時實測，確有其事再補。
 - 權杖外洩怎麼辦。
 - 為什麼不要把高風險工具設成自動允許。
 - 「不提供給 AI」欄位怎麼用。
@@ -817,13 +851,14 @@ m1 分兩小段（主控判斷 T11）。只有 m1a 有 migration。m1b 是畫面
 | `mcp.callsPerDay` | 每日呼叫上限 | 5000 | S | 100–100000 | m1a |
 | `mcp.maxRows` | 單次回傳筆數 | 50 | S | 1–200 | m1a |
 | `mcp.confirmTtlSeconds` | 確認碼有效時間 | 300 | S | 60–1800 | m1a |
-| `mcp.highRiskTools` | 高風險工具清單（多選代碼） | 刪除記錄、簽核同意、簽核退回，加上地板項目 | S | 只能選寫入類工具；地板項目移不出 | m2b |
+| `mcp.highRiskTools` | 高風險工具清單（多選代碼） | 刪除記錄、簽核同意、簽核退回，加上地板項目 | S | 只能選寫入類工具；地板項目移不出（依 C7 裁決，暫以建議方案描述） | m2b |
 
 沿用其他文件的政策，不另設：
 
 - 稽核保留天數 `ops.auditRetentionDays`（維運 O2）。
-- 維運處置總開關 `ops.remoteActionsEnabled`（維運 O6）。
-- 營運時區 A17、預設語系 A18（政策設定 p3）。
+- 廠商遠端維運（唯讀）開關 `ops.remoteDiagnosticsEnabled`（維運 O4／mO1；依 C1 裁決，暫以建議方案描述）。
+- 維運處置總開關 `ops.remoteActionsEnabled`（維運 O6／mO2）。
+- 營運時區 A17、預設語系 A18（政策設定 p3；p3 之前沿用 `IBusinessTime` 與目前的預設語系，B17）。
 
 ## 15. 可寫死清單
 
@@ -838,6 +873,7 @@ m1 分兩小段（主控判斷 T11）。只有 m1a 有 migration。m1b 是畫面
 **安全**
 
 - 權杖只能在已登入的畫面建立，建立要重新輸入密碼；不能用權杖建權杖，沒有管理權杖的 MCP 工具。
+  - 明列的例外（依 C6 裁決，暫以建議方案描述）：雲端版維運服務帳號的權杖由部署流程從部署 secret 注入（§5.6），只在 `Ops:Edition`＝`Cloud` 時生效；被撤銷過的雜湊不重建。
 - 權杖一律有到期日；明文只顯示一次；只存 SHA-256 雜湊；前綴 `fwp_`。
 - 權杖只在 `/mcp` 有效，REST 不收；`/mcp` 不收 cookie；權杖不得放 query string。
 - Demo 帳號、停用、必須改密碼的帳號不能建立或使用權杖；`Demo:LoginEnabled` 開啟時整個 MCP 停用。
@@ -846,13 +882,13 @@ m1 分兩小段（主控判斷 T11）。只有 m1a 有 migration。m1b 是畫面
 - 認證失敗依 IP 降速。
 - 「不提供給 AI」欄位在 guard 層隱藏（含篩選與排序）；附件內容不經 MCP 回傳。
 - 工具名稱與描述是固定文字，不夾帶使用者定義的內容；記錄內容一律放在標成不可信的 `data` 區。
-- 高風險地板：改權限、套用應用程式套件、刪除模組或欄位、全部維運處置工具。唯讀工具不能設成高風險。
+- 高風險地板（依 C7 裁決，暫以建議方案描述）：改權限、套用應用程式套件、刪除模組或欄位、全部維運處置工具。唯讀工具不能設成高風險。
 - 確認碼單次有效，綁權杖、工具、參數雜湊、目標版本；只存雜湊；驗證失敗不說明原因。
 - 稽核寫不進去就不回資料；權杖、確認碼、密碼不進稽核與 log。
 - 只在 HTTPS 收權杖（loopback 例外；地端內網要放行 HTTP 必須明確設部署設定，啟動記 Warning）。
 - 驗 `Origin`。
 - 不接受非本系統簽發的權杖，不轉送權杖。
-- 維運服務帳號：只有雲端版有；不能登入畫面、不能設密碼、不能加入群組、不能設為系統管理員、沒有業務與設計權限；只能用 `ops.*` 工具。
+- 維運服務帳號：只有雲端版有（看 `Ops:Edition`）；不能登入畫面、不能設密碼、不能加入群組、不能設為系統管理員、沒有業務與設計權限；只能用 `ops.*` 工具。
 
 **技術限制**
 
@@ -863,12 +899,13 @@ m1 分兩小段（主控判斷 T11）。只有 m1a 有 migration。m1b 是畫面
 - 稽核參數摘要 2000 字、目標記錄 id 最多記 20 個；預演摘要 2000 字。
 - 過期與已用的確認碼 1 天後清除。
 - 範圍代碼清單、工具清單、工具分級的宣告（平台功能清單，不是政策）。
-- rate limiter 只在單一實例記憶體（已知限制，同維運設計 §12）。
+- 每分鐘的 rate limiter 只在單一實例記憶體（已知限制，同維運設計 §12）；每日上限走稽核表計數。
+- `tools/list` 結果的 `cacheScope` 固定 `private`、`ttlMs` 60 秒。
 - 不支援 stdio transport；只用 SDK 的 stateless 模式。
 
 ## 16. 主控判斷（待使用者確認）
 
-每條寫決定、理由、選錯的代價。使用者行為類會改變使用者看到或要做的事，請優先確認；技術類可由主控負責。
+每條寫決定、理由、選錯的代價。使用者行為類會改變使用者看到或要做的事，請優先確認；技術類可由主控負責。U11 限縮了使用者裁決、U15 牽涉客戶同意與權杖核發，這兩條不在這裡拍板，列在 §20（C7、C1、C6）。依 builder 審查新增的判斷在 §16.3。
 
 ### 16.1 使用者行為類
 
@@ -922,7 +959,7 @@ m1 分兩小段（主控判斷 T11）。只有 m1a 有 migration。m1b 是畫面
 - 決定：
   - 單次 50 筆。
   - 結果分 `meta` 與 `data` 兩區，加 `contentTrust` 標示，文字內容第一行固定加提醒。
-- 理由：AI client 的工具輸出有大小上限（Claude Code 預設 25,000 tokens），50 筆普通記錄約在範圍內；標示是業界做法（spotlighting），但不當成主要防線。
+- 理由：AI client 的工具輸出有大小上限（Claude Code 預設 25,000 tokens，未重讀查證），50 筆普通記錄約在範圍內；標示是業界做法（spotlighting），但不當成主要防線。
 - 選錯代價：筆數改政策即可；標示格式改了要通知已寫好的 agent 腳本。
 
 **U9 確認碼機制**
@@ -945,9 +982,9 @@ m1 分兩小段（主控判斷 T11）。只有 m1a 有 migration。m1b 是畫面
 - 理由：AI 讀了什麼正是事後要查的；讓使用者自己看得到，權杖被盜用時本人最先發現。
 - 選錯代價：資料量一年約 0.5GB（§8.1），PostgreSQL 承受得了；若要減量，改成唯讀只記彙總，但會失去逐筆追查能力。
 
-**U11 高風險清單的地板**
+**U11 高風險清單的地板**（提議的修改，待使用者裁決，見 §20 C7）
 
-- 決定：改權限、套用套件、刪除模組或欄位、維運處置永遠是高風險；刪除記錄、簽核同意與退回出廠是高風險，但可以移出。
+- 提議：改權限、套用套件、刪除模組或欄位、維運處置永遠是高風險；刪除記錄、簽核同意與退回出廠是高風險，但可以移出。
 - 理由：前者做錯會影響整個系統或權限（安全檢查，可寫死）；後者影響單筆，客戶可依習慣決定。
 - 選錯代價：若使用者要「全部都能調」，拿掉地板即可；若要更嚴，把刪除記錄也放進地板。
 
@@ -977,9 +1014,9 @@ m1 分兩小段（主控判斷 T11）。只有 m1a 有 migration。m1b 是畫面
 
 - 決定：§5.6。
   - 一種新的帳號種類，只有 `ops.*` 工具可用，不能登入畫面。
-  - 權杖由廠商開通時發、維運中心保管。
+  - 權杖由廠商部署流程注入、維運中心保管兩把（核發與輪替方式依 C6 裁決）。
   - 客戶管理員看得到、可撤銷。
-  - 只有雲端版有。
+  - 只有雲端版有；與 `mcp.enabled`、`mcp.allowedGroups` 的關係依 C1 裁決。
 - 理由：
   - 維運中心不能用任何真人的權杖：人離職會斷，而且會拿到業務權限。
   - 做成帳號而不是特例判斷，所有既有權限、稽核、撤銷都能照用。
@@ -997,7 +1034,7 @@ m1 分兩小段（主控判斷 T11）。只有 m1a 有 migration。m1b 是畫面
 
 **T1 路徑 `/mcp`**：理由是 client 習慣這個路徑，而且不在 `/api/v3/dynamic` 底下，不會被 `SessionMiddleware` 的 cookie 邏輯套到。選錯代價：改路徑只改一行註冊與手冊。
 
-**T2 SDK 2.x、stateless**：理由見 §4.3，stateless 不必 sticky session，與「每個 POST 都驗權杖」一致。選錯代價：.NET 8 restore 不相容時退回 1.4.2 維護線，只支援到 2025-11-25 協定，之後升 .NET 版本時再換。
+**T2 SDK 2.x、stateless**：理由見 §4.3，stateless 不必 sticky session，與「每個 POST 都驗權杖」一致。release notes 的「2.0 起預設 stateless」「2.2 雙版本共存」未查證，不作為理由；stateless 一律明確設定。選錯代價：.NET 8 restore 不相容時退回 1.4.2 維護線，只支援到 2025-11-25 協定，之後升 .NET 版本時再換。
 
 **T3 不做 stdio**：理由是 stdio 要在使用者電腦上跑一個本機程式，再用別的方式連回產品，等於多一個要發佈的元件；Claude Code 與 Codex 都支援 HTTP。選錯代價：若有只支援 stdio 的 client，可以用社群的 stdio↔HTTP 轉接器，不必改產品。
 
@@ -1032,19 +1069,35 @@ m1 分兩小段（主控判斷 T11）。只有 m1a 有 migration。m1b 是畫面
 
 **T15 預設效期大於最長效期時不擋存檔**：理由是政策登記沒有跨項驗證，為一組值新增這個機制不划算；取用時夾到最長效期並在政策頁提示。選錯代價：管理員可能困惑一次；日後政策登記有跨項驗證時再改成擋。
 
+### 16.3 依 builder 審查新增的主控判斷
+
+builder 審查（2026-11-11）的 (b) 類中與本文件有關的，主控照建議答案採用，已寫進正文。編號沿用審查的 B 編號；只涉及維運的見維運設計 §14.3。每條都可逆、代價小。
+
+| # | 決定 | 寫在 |
+|---|---|---|
+| B10 | 稽核表的 MCP 欄位（行為者種類、參數雜湊、回傳筆數）由 O2 一次建好，列舉值與維運設計 §5.6 統一 | §8.1、§17 第 3 點 |
+| B11 | 「逾時未確認」另寫新的稽核列，不改預演那列 | §6.3 |
+| B12 | 寫入類稽核經 `IWriteStage` 與業務同交易 | §8.1 |
+| B15 | list_modules 把 `List<MenuItem>` 轉成模組清單、濾掉非模組項，補測試 | §4.4、§13.8 |
+| B16 | m1a 實測 SDK 時確認 2026-07-28 的必要項；`tools/list` 設 `cacheScope: private` | §4.3、§9.2、§13.2 |
+| B17 | A17、A18 屬於 p3；p3 之前用 `IBusinessTime` 與目前的預設語系 | §5.1、§6.5、§14 |
+| B18 | 每日呼叫上限用稽核表計數，每分鐘上限才用記憶體 | §8.2 |
+| B19 | `MapMcp` 放在 SPA fallback 之前，加「GET `/mcp` 不回 SPA」的測試 | §13.2、§13.8 |
+| B28 | 讀稽核工具歸 `ops.read`，工具內只限系統管理員 | §7.2 |
+
 ## 17. 與維運設計對齊（回應維運設計 §15 第 11 條）
 
 1. **維運工具清單與分級**（維運設計 §4.1、U2）：
-   - 照收。唯讀工具歸 `ops.read`，分級唯讀；處置工具歸 `ops.act`，分級高風險並列入地板，不能被 `mcp.highRiskTools` 移出。
+   - 照收。唯讀工具歸 `ops.read`，分級唯讀；處置工具歸 `ops.act`，分級高風險並列入地板，不能被 `mcp.highRiskTools` 移出（地板依 C7 裁決）。
    - `ops.remoteActionsEnabled` 為否時，處置工具在工具層直接拒絕（工具仍列在 `tools/list`，呼叫回 `isError` 說明已被客戶關閉，讓維運中心知道要轉人工）。
    - 工具的實際名稱與參數由 O4、O6 細部設計定，本文件只定範圍、分級、授權（§7.2）。
    - 讀稽核的工具只給系統管理員，維運服務帳號不能用。
 2. **維運服務帳號的權限形狀**：見 §5.6 與 U15。
    - 帳號種類＝維運服務；只能用 `ops.*`；不能登入畫面、不能設密碼、不能加入群組、不能設為系統管理員。
-   - 權杖由廠商開通程序建立、維運中心保管、有到期日、客戶管理員可撤銷。
-   - 實作放在 mO1（隨 O4）。
-   - 需要 O4 確認：維運中心輪替權杖的方式（開通程序重發，或提供一個只給維運服務帳號用的輪替入口）。
-3. **稽核表欄位**（維運設計 §5.6）：照用那張表，m1 只加寫入點。§5.6 沒有、但 MCP 需要的項目：
+   - 權杖由廠商部署流程注入、維運中心保管兩把、有到期日、客戶管理員可撤銷。
+   - 實作放在 mO1（隨 O4）；維運設計 §9 已把服務帳號從 O6 搬到 O4。
+   - 輪替方式依 C6 裁決，暫以建議方案描述：換部署 secret 後重啟；不提供「用權杖換權杖」的輪替入口。
+3. **稽核表欄位**（維運設計 §5.6）：照用那張表，m1 只加寫入點。初稿列的「§5.6 沒有、但 MCP 需要的項目」，維運設計 §5.6 已全部採用（前三項做成欄位，其餘放結構化摘要），O2 一次建好：
    - 行為者種類（人員／維運服務帳號）。
    - 工具名稱：可以直接放在動作代碼，`mcp.<工具>`。
    - 參數雜湊。
@@ -1054,7 +1107,7 @@ m1 分兩小段（主控判斷 T11）。只有 m1a 有 migration。m1b 是畫面
    - operation id。
    - 轉送點帶來的工作編號（不可信標籤）。
 
-   請 O2 細部設計決定：這些放成獨立欄位，還是放進「摘要」的結構化文字。建議前三項（行為者種類、參數雜湊、回傳筆數）做成欄位，因為會用來篩選與計數。
+   列舉值兩邊統一：結果＝成功、被拒、驗證錯誤、失敗；預演關聯＝預演、已確認、逾時未確認、不符；行為者種類＝人員、維運服務帳號、系統。
 4. **唯讀呼叫是否逐筆稽核**：逐筆記（U10），量的估算見 §8.1。保留天數沿用 `ops.auditRetentionDays`。
 5. **轉送點連線方式**（維運設計 T7）：
    - 維運中心對產品是一般的 MCP client，持有維運服務帳號的權杖。
@@ -1063,14 +1116,14 @@ m1 分兩小段（主控判斷 T11）。只有 m1a 有 migration。m1b 是畫面
      - ⚠️ 未驗證：SDK 能不能對所有工具固定回 `application/json`、不開 SSE。m1a 計畫時確認；不行的話，轉送點要能讀單一請求範圍的 SSE 回應。
    - 轉送點可在請求帶工作編號標頭，產品只當不可信標籤記進稽核，不據此授權。
    - 依分級過濾工具是轉送點的責任，產品端的範圍是第二道防線：L1 工作用的權杖只有 `ops.read`。
-   - 建議維運中心持有兩把權杖（只有 `ops.read` 的、加上 `ops.act` 的），L1 轉送只用前者。這樣即使轉送點的過濾寫錯，產品端也擋得住。
+   - 維運中心持有兩把權杖（只有 `ops.read` 的、加上 `ops.act` 的），L1 轉送只用前者。這樣即使轉送點的過濾寫錯，產品端也擋得住。維運設計 §6 已採用。
 
-兩份文件衝突時以本文件的地基為準（維運設計 §15 第 11 條）。目前發現一處要回頭改維運設計：維運設計 §4.1 寫「產品 MCP server（m1）：維運唯讀工具、維運處置工具」。依本文件，維運工具在 mO1、mO2（隨 O4、O6）才登記，m1 只提供地基與確認碼機制。
+兩份文件衝突時以本文件的地基為準（維運設計 §15 第 11 條）。builder 審查列出的不一致已兩邊對齊：維運工具在 mO1、mO2（維運設計 §4.1）；服務帳號歸 O4（維運設計 §9）；稽核欄位與列舉值（第 3 點）；兩把權杖（第 5 點）；版別部署設定 `Ops:Edition` 由維運設計 §4.1 定義；不准寫進 log 的清單以維運設計 §10.2.2 為準。
 
 ## 18. 未決問題
 
-1. **功能清單與路線的「對外 API 與 Webhook 不做」**：MCP 是對外介面。建議改寫成「通用 REST API 與 Webhook 不做；AI agent 接入走 MCP server，權杖只限 MCP」，並在路線「這版不做」同步註明。本文件不改這兩份。
-2. **SDK 在 .NET 8 的相容性**：2.4.0 依賴 10.0.x 的 Abstractions 套件，m1a 第一步實測 restore 與執行；不行就用 1.4.2（§4.3）。
+1. **功能清單與路線的「對外 API 與 Webhook 不做」**：已處理。功能清單「決定不做」與路線「這版不做」都改成「通用 REST API 與 Webhook 仍不做；AI agent 接入走 MCP server，個人存取權杖只限 MCP」。
+2. **SDK 在 .NET 8 的相容性**：2.4.0 可能依賴 10.0.x 的 Abstractions 套件（未查證），m1a 第一步實測 restore 與執行；不行就用 1.4.2（builder 已確認 NuGet 有這一版，2026-11-03 發佈；§4.3）。
 3. **「人親手按」的高風險確認**：確認碼擋不住會自動連續呼叫的 AI（§6.3）。兩個強化方向：
    - client 宣告 elicitation 時改走 elicitation，由人在 client 的對話框回答。2026-07-28 版用 MRTR；Claude Code 已支援，其他 client 未查證。
    - 高風險改成在產品畫面或站內通知按確認。
@@ -1081,11 +1134,12 @@ m1 分兩小段（主控判斷 T11）。只有 m1a 有 migration。m1b 是畫面
 6. **雲端版的合約與隱私說明**：資料經 AI client 送到第三方，訂閱條款要寫清楚責任歸屬；雲端版方案是否都含 MCP，也是商業決定。
 7. **Claude.ai 靜態標頭連接**：Claude.ai 有 static headers 選項，但是 beta、限定組織，可能讓雲端版在 m4 之前就能用個人權杖接 Claude.ai。目前以「不可用」為保守假設，m4 前再查一次。
 8. **ChatGPT 的 transport 支援**：OpenAI 文件範例仍是 SSE，是否支援 Streamable HTTP 與 2026-07-28 協定未查證；m4 開工前實測。
-9. **多實例**：rate limiter 與認證失敗降速都在記憶體；雲端版若要多實例，要和維運設計 §15 第 8 條一起改成共享狀態。
+9. **多實例**：每分鐘 rate limiter 與認證失敗降速都在記憶體；雲端版若要多實例，要和維運設計 §15 第 8 條一起改成共享狀態。
+10. **SDK 能否固定回 JSON、不開 SSE**：未查證（§17 第 5 點）。轉送點要不要讀 SSE 看這一點，m1a 確認。
 
 ## 19. 來源
 
-以下為 2026-11-11 實際讀過的頁面：
+以下為 2026-11-11 研究 subagent 實際讀過的頁面。主控抽查了 Odoo；builder 審查時另外重讀了 2026-07-28 changelog 與 NuGet 頁（§4.3 標「已查證」的部分）。其餘頁面的內容主控與 builder 都沒有複核，文件裡引用到時另標「未查證」，不作為設計依據。
 
 - MCP 規範最新版與版本頁：https://modelcontextprotocol.io/specification/latest
 - 2026-07-28 changelog（stateless、移除 session、MRTR、DCR deprecated）：https://modelcontextprotocol.io/specification/2026-07-28/changelog
@@ -1097,7 +1151,7 @@ m1 分兩小段（主控判斷 T11）。只有 m1a 有 migration。m1b 是畫面
 - Elicitation（form／url、MRTR、敏感資訊不可走 form）：https://modelcontextprotocol.io/specification/2026-07-28/client/elicitation
 - Security Best Practices（confused deputy、token passthrough、state handle hijacking、SSRF、scope 最小化）：https://modelcontextprotocol.io/specification/latest/basic/security_best_practices
 - C# SDK NuGet（2.4.0、1.0 GA 日期、target frameworks）：https://www.nuget.org/packages/ModelContextProtocol.AspNetCore
-- C# SDK releases（2.0 stateless 預設、2.2 雙版本共存、2.3.1 安全修補）：https://github.com/modelcontextprotocol/csharp-sdk/releases
+- C# SDK releases（2.0 stateless 預設、2.2 雙版本共存、2.3.1 安全修補；⚠️ 未查證，見 §4.3）：https://github.com/modelcontextprotocol/csharp-sdk/releases
 - C# SDK 文件（入門、HttpContext、stateless、identity）：https://csharp.sdk.modelcontextprotocol.io/v1/concepts/getting-started.html 、https://csharp.sdk.modelcontextprotocol.io/v1/concepts/httpcontext/httpcontext.html 、https://csharp.sdk.modelcontextprotocol.io/v1/concepts/stateless/stateless.html 、https://csharp.sdk.modelcontextprotocol.io/v1/concepts/identity/identity.html
 - Claude Code 連 MCP（HTTP、header、環境變數展開、OAuth、輸出上限、elicitation）：https://code.claude.com/docs/en/mcp
 - Codex CLI 的 MCP 設定（`bearer_token_env_var`、OAuth 登入）：https://learn.chatgpt.com/docs/extend/mcp?surface=cli
@@ -1120,3 +1174,73 @@ m1 分兩小段（主控判斷 T11）。只有 m1a 有 migration。m1b 是畫面
 - `Application/Common/Behaviors/`：DesignerAccess、SystemAdmin、Transaction、Idempotency 等 behavior。
 - `Application/Common/ServiceResult.cs`、`OperationContext.cs`。
 - `Application/Dynamic/RecordService/Queries/GetPagedRecords/`：條件樹篩選與 `CanSee` 檢查。
+
+## 20. 待使用者裁決
+
+builder 審查找出 7 題只有使用者能答、答案會改變要做什麼的問題。主控沒有拍板；正文依賴這些題目的段落都標「依 C? 裁決，暫以建議方案描述」，裁決後要回頭改。C2–C5 的主體在[維運設計 §16](2026-11-11-ops-observability-design.md#16-待使用者裁決)，這裡寫 MCP 這一側需要知道的部分。
+
+建議在寫 m1a 計畫之前問完 C1；C6、C7 可以在 mO1、m2b 之前問。
+
+### C1 維運服務帳號要不要受「AI 連線總開關」與「限定群組」管？
+
+- **背景**：
+  - §5.3 第 4 步規定 `mcp.enabled` 為否、或帳號不在 `mcp.allowedGroups`，一律回 403。
+  - §10 規定兩版的 `mcp.enabled` 出廠都是否。
+  - §5.6 規定維運服務帳號不能加入任何群組。
+  - 照字面實作有三個後果：雲端版出廠時，廠商的 L1 診斷與 L2 處置一律被 403；客戶要讓廠商維運，就得替全公司打開 AI 連線；客戶一旦限定群組，服務帳號就永遠被擋。
+  - 同時牽涉客戶同意：關掉 AI 的客戶，廠商的 AI 仍在讀它的維運資料。
+  - 這決定 m1a 的認證 handler 怎麼分支，以及 mO1 要不要多一個開關。
+- **選項**：
+  1. （建議）服務帳號不受 `mcp.enabled`、`mcp.allowedGroups` 約束；另設只在雲端版有效的政策 `ops.remoteDiagnosticsEnabled`「允許廠商遠端維運（唯讀）」，出廠為是，與 `ops.remoteActionsEnabled`（處置）並列；客戶關掉它，或撤銷權杖，就連唯讀也停；「AI 連線」說明頁寫明廠商的診斷也會經 AI 服務商。
+  2. 照字面：服務帳號受兩項約束。
+  3. 服務帳號不受約束，也不另設開關，只靠撤銷權杖。
+- **選錯代價**：選 2，雲端版的 O4、O6 驗收在出廠設定下就過不了，客戶要為廠商維運打開全公司的 AI 連線。選 3，客戶以為關了 AI 其實沒關，有合約與信任風險。選 1 的成本是多一項政策與一條認證分支。
+- **本文件依賴處**：§4.1 圖的 ①、§5.3 第 4 步、§5.6、§7.2 mO1、§10 兩張表、§12 mO1 列、§14、§16 U15。
+
+### C2 送到 AI 服務商的維運資料可以含多少原文？（主體見維運設計 C2）
+
+- **背景**：mO1 的維運唯讀工具會回「維運事件與其樣本」，樣本含不含原始例外訊息、前端 stack 沒定義；這些內容經 `claude -p` 的個人訂閱送到 Anthropic，消費者方案的資料條款沒查（未查證）。
+- **選項**：1.（建議）只給正規化後的內容，另加類別、歸屬、moduleKey、ruleId、request id；原始訊息只留在產品內。2. 給原文，另寫合約與隱私說明。3. 只給地端白名單的欄位。
+- **選錯代價**：給太多，客戶業務資料以消費者條款流到第三方；給太少，診斷變弱，但事後放寬只是改回傳欄位。
+- **本文件依賴處**：§7.2 mO1。
+
+### C3 規則失控暫停的限縮與迴圈偵測（主體見維運設計 C3）
+
+- **背景**：任務規則其實在存檔交易內執行，迴圈偵測目前沒有對象；唯一可能的來源是 m2a 上線後 AI 反覆寫同一筆。
+- **選項**：1.（建議）迴圈偵測延到 m2a，對象改成「同一權杖或來源在時間窗內反覆寫同一筆記錄」。2. 照裁決字面在 O2 做。3. 連事件與檢查也暫停。
+- **選錯代價**：選 2 會寫出量不到東西的偵測器；選 3 有靜默壞帳的風險。選 1 的代價是 m2a 多一項工作。
+- **本文件依賴處**：§12 m2a 列。
+
+### C4 L2 由維運中心 runbook 執行、不由 agent 執行（主體見維運設計 C4）
+
+- **背景**：使用者核准的三層方向是「agent：雲端 L1/L2/L3」；主控提議 L2 改由維運中心的 runbook 呼叫 mO2 的處置工具，agent 只能建議。
+- **選項**：1.（建議）接受，mO2 的呼叫者是維運中心。2. 照原裁決，由 agent 經轉送點呼叫處置工具。
+- **選錯代價**：選 1 而使用者要 LLM 判斷，O6 要重做成「agent 提案＋中心審核」；選 2 讓 agent 直接處置，正是業界事故的來源。
+- **本文件依賴處**：§7.2 mO2。
+
+### C5 Mac 上的 agent 要隔離到什麼程度？（主體見維運設計 C5）
+
+- **背景**：L1 要開 Bash 跑測試、輸入不可信、Mac 上有個人憑證、`claude -p` 的 transcript 預設留在本機。這題不改本文件的產品端設計，但決定經轉送點呼叫 MCP 的那台機器有多可信。
+- **選項**：1.（建議）專用 macOS 標準使用者＋sandbox＋暫存設定目錄＋Bash 前綴白名單。2. 每件工作一個 VM 或容器。3. 不隔離。
+- **選錯代價**：不隔離，一次 injection 就可能外洩個人憑證；隔離過頭，O4 延期。
+- **本文件依賴處**：無（產品端照樣只給 `ops.read` 權杖給轉送點）。
+
+### C6 維運服務帳號的權杖由誰核發、怎麼輪替？
+
+- **背景**：§15 寫死「權杖只能在已登入的畫面建立、要重新輸入密碼、不能用權杖建權杖」。但服務帳號沒有密碼、不能登入（§5.6）；初稿寫權杖「由廠商開通程序」發、到期前「由維運中心輪替」（§17 第 2 點），維運設計初稿還有「領工時發短效權杖給 agent」的備案（已刪）。三處都違反 §15。這牽涉客戶同意（客戶管理員要不要親手核發廠商的權杖），也決定 §15 要不要開例外、mO1 做的是部署注入還是管理頁按鈕。
+- **選項**：
+  1. （建議）雲端版由廠商的部署流程注入：比照 `AdminBootstrap`，啟動時從部署 secret 讀權杖雜湊與到期日，upsert 服務帳號的權杖列（被撤銷過的雜湊不重建）；輪替＝維運中心換 secret 後重啟；客戶管理員在「AI 連線」頁看得到、可撤銷，撤銷後要經廠商重新開通才恢復；§15 加一條明列的例外。
+  2. 客戶管理員在畫面親手核發給廠商（要重新輸入管理員密碼），到期再核發一次。
+  3. 提供只給服務帳號用的輪替入口（用舊權杖換新權杖）。
+- **選錯代價**：選 2，每個雲端客戶開通與每次到期都要人工交接權杖。選 3，等於開了「用權杖建權杖」，舊權杖外洩時攻擊者可以自己續命。不開任何例外，服務帳號根本建不出權杖。
+- **本文件依賴處**：§5.6 權杖怎麼發、§15 安全第一條的例外、§16 U15、§17 第 2 點。
+
+### C7 高風險清單的「地板」接受嗎？
+
+- **背景**：使用者裁決「高風險清單可在系統設定調」。主控判斷 U11 加了一組寫死、移不出清單的地板：改權限、套用應用程式套件、刪除模組或欄位、全部維運處置工具。這和裁決衝突：裁決說清單可調，沒說哪些不能調；地板等於主控把這幾項從「可調」裡拿掉，限縮了裁決。它決定 m2b 的政策驗證要不要有不可移除項，以及 §15 可寫死清單的內容。
+- **選項**：
+  1. （建議）接受地板：這些都是影響整個系統或權限的動作，屬於安全檢查，鐵則 2 允許寫死，但要列清單給使用者看過（§15 已列）。
+  2. 拿掉地板，全部可調（照裁決字面）。
+  3. 更嚴：把刪除記錄也放進地板。
+- **選錯代價**：小。拿掉地板只要刪一段驗證；但若沒有地板，管理員誤把「套用套件」移出，AI 就能一次改掉整個系統。選 3 則客戶不能依習慣讓 AI 直接刪單筆記錄，每次都要兩段式。
+- **本文件依賴處**：§6.4、§7.2 mO2、§12 m2b 列、§14 `mcp.highRiskTools`、§15 高風險地板、§16 U11、§17 第 1 點。
