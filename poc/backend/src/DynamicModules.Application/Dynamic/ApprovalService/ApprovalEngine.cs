@@ -17,7 +17,7 @@ namespace DynamicModules.Application.Dynamic.ApprovalService;
 public sealed class ApprovalEngine(
     IApprovalInstanceRepository repo, ApproverResolver resolver, ApprovalTaskFactory tasks, ApprovalNotifier notifier,
     ApprovalTransitionRunner runner, FieldTypeRegistry registry, IModuleRepository modules, IBusinessTime time, ICurrentUser user,
-    IOperationContext op, IUnitOfWork uow, ApprovalWriteContext context)
+    IOperationContext op, IUnitOfWork uow, ApprovalWriteContext context, ApprovalAlert alert)
 {
     public const string SystemActor = "system";
 
@@ -198,6 +198,13 @@ public sealed class ApprovalEngine(
         Log(inst, ApprovalActions.Skip, SystemActor, run.Id, data: JsonSerializer.Serialize(new { reason }));
     }
 
+    /// <summary>執行期再驗失敗：登記警示（回滾後另開交易通知系統管理員），回 409（設計 §5.2 末段）。</summary>
+    public ServiceResult RuntimeInvalid(ApprovalInstance inst, string reason)
+    {
+        alert.Raise(inst.Id, reason);
+        return ServiceResult.Conflict(ApprovalMessages.RuntimeInvalid);
+    }
+
     /// <summary>實例 approved、寫 complete、以 runner 執行 From → To；失敗回結果（呼叫端回給使用者，整筆回滾）。</summary>
     public async Task<ServiceResult?> CompleteAsync(ApprovalInstance inst, CancellationToken ct)
     {
@@ -208,7 +215,8 @@ public sealed class ApprovalEngine(
         Log(inst, ApprovalActions.Complete, SystemActor);
         // 執行前再驗（設計 §8.3）：要走的轉移仍是狀態機上已定義的轉移
         var module = await modules.GetByIdAsync(inst.ModuleId, includeChildren: true, ct);
-        if (module?.Workflow?.Find(inst.FromOptionId, inst.ToOptionId) is null) return ServiceResult.Conflict(ApprovalMessages.TransitionGone);
+        var reason = module?.Workflow is { } wf ? ApprovalRuntimeCheck.Verify(wf, inst.FromOptionId, inst.ToOptionId, isReject: false) : "模組沒有狀態機";
+        if (reason is not null) return RuntimeInvalid(inst, reason);
         var result = await runner.RunAsync(inst, inst.ToOptionId, null, ct);
         if (!result.IsSuccess) return result;
         await notifier.NotifyAsync(NotificationKinds.ApprovalApproved, inst, [inst.InitiatorUserId], user.UserId, ct);

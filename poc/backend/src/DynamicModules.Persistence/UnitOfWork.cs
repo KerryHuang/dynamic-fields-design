@@ -13,6 +13,8 @@ public class UnitOfWork(DynamicDbContext db, IWriteJournal journal) : IUnitOfWor
     /// 而不是未處理的例外（500）。
     /// 儲存成功後把這次儲存對記錄的增量寫進請求的寫入日誌（設計 §3.3）；新增的記錄要等儲存後才有 Id。
     /// </summary>
+    public void Discard() => db.ChangeTracker.Clear();
+
     public async Task CommitAsync(CancellationToken ct)
     {
         var pending = db.ChangeTracker.Entries<Record>()

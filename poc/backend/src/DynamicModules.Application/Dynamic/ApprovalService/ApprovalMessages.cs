@@ -90,7 +90,7 @@ public static class ApprovalMessages
     public static readonly MessageRef NotEditableField = MessageRef.Of(MessageText.ApprovalNotEditableField);
     public static readonly MessageRef FieldHiddenForApprover = MessageRef.Of(MessageText.ApprovalFieldHiddenForApprover);
     public static readonly MessageRef RejectTargetInvalid = MessageRef.Of(MessageText.ApprovalRejectTargetInvalid);
-    public static readonly MessageRef TransitionGone = MessageRef.Of(MessageText.ApprovalTransitionGone);
+    public static readonly MessageRef RuntimeInvalid = MessageRef.Of(MessageText.ApprovalRuntimeInvalid);
     public static readonly MessageRef RecordGone = MessageRef.Of(MessageText.ApprovalRecordGone);
     public static readonly MessageRef NoWorkflow = MessageRef.Of(MessageText.ApprovalNoWorkflow);
     public static readonly MessageRef FlowVersionMissing = MessageRef.Of(MessageText.ApprovalFlowVersionMissing);

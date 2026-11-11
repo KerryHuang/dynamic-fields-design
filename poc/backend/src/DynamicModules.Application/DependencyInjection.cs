@@ -19,6 +19,7 @@ public static class DependencyInjection
             cfg.AddOpenBehavior(typeof(SystemAdminBehavior<,>));
             cfg.AddOpenBehavior(typeof(MasterDesignerBehavior<,>));
             cfg.AddOpenBehavior(typeof(ValidationBehavior<,>));
+            cfg.AddOpenBehavior(typeof(ApprovalAlertBehavior<,>));
             cfg.AddOpenBehavior(typeof(TransactionBehavior<,>));
             // 在交易之內：寫入鎖已持有，冪等查詢與寫入、事件與驗證才在同一把鎖之下（設計 §2）
             cfg.AddOpenBehavior(typeof(IdempotencyBehavior<,>));
@@ -132,6 +133,7 @@ public static class DependencyInjection
         services.AddScoped<Dynamic.ApprovalService.ApprovalActionSupport>();
         services.AddScoped<Dynamic.ApprovalService.ApprovalReader>();
         services.AddScoped<Dynamic.ApprovalService.ApprovalReadGrant>();
+        services.AddScoped<Dynamic.ApprovalService.ApprovalAlert>();
         services.AddScoped<Dynamic.ApprovalService.ApprovalBackstopStage>();
         services.AddScoped<Common.Behaviors.IWriteStage>(sp => sp.GetRequiredService<Dynamic.ApprovalService.ApprovalBackstopStage>());
         services.AddScoped<Dynamic.WorkflowService.WorkflowApprovals>();

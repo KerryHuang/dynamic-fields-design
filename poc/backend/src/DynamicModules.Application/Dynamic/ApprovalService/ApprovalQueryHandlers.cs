@@ -63,7 +63,7 @@ public sealed class ApprovalReader(IApprovalInstanceRepository repo, IDynamicAcc
 /// </summary>
 public class GetRecordApprovalHandler(
     IRecordRepository records, IModuleRepository modules, IApprovalInstanceRepository repo, IDynamicAccessGuard guard,
-    IPermissionRepository permissions, ApprovalReader reader, ICurrentUser user)
+    IPermissionRepository permissions, ApprovalReader reader, ApprovalReadGrant grant, ICurrentUser user)
     : IRequestHandler<GetRecordApprovalRequest, ServiceResult>
 {
     public async Task<ServiceResult> Handle(GetRecordApprovalRequest request, CancellationToken ct)
@@ -94,11 +94,23 @@ public class GetRecordApprovalHandler(
         var actions = await repo.ListActionsAsync(visibleIds, ct);
         var names = await ApprovalViews.UserNamesAsync(permissions, ct);
         var writable = module.IsWritable();
-        var views = visible.Select(i => ApprovalViews.Instance(i, runs, tasks, actions, names, me, writable, manager)).ToList();
+        var hidden = await HiddenFieldsAsync(module, record, read, ct);
+        var views = visible.Select(i => ApprovalViews.Instance(i, runs, tasks, actions, names, me, writable, manager, hidden)).ToList();
         var pending = instances.Any(i => i.Status == ApprovalInstanceStatus.Pending);
         var targets = canRead ? await reader.SubmitTargetsAsync(module, record, pending, ct) : [];
         return ServiceResult.Success(new RecordApprovalResponse(
             views.FirstOrDefault(v => v.Status == ApprovalInstanceStatus.Pending), views.Where(v => v.Status != ApprovalInstanceStatus.Pending).ToList(), targets));
+    }
+
+    /// <summary>
+    /// content-changed 的前後值依讀者的欄位權限遮蔽（設計 §8.5）：有 Read 用它；沒有時用臨時讀取權，再沒有就用自己的群組欄位例外；
+    /// 讀不到權限輸入回 null（全部遮蔽）。
+    /// </summary>
+    private async Task<IReadOnlySet<long>?> HiddenFieldsAsync(Module module, Record record, EffectivePermissions? read, CancellationToken ct)
+    {
+        if (read is not null) return read.HiddenFieldIds;
+        if (await grant.ForRecordAsync(module, record, ct) is { } granted) return granted.HiddenFieldIds;
+        return await permissions.LoadInputsAsync(user.UserId, module, ct) is { } inputs ? PermissionResolver.Resolve(module, inputs).HiddenFieldIds : null;
     }
 }
 
@@ -202,11 +214,24 @@ public class GetApprovalTasksHandler(
 /// <summary>查詢回應的組裝。</summary>
 internal static class ApprovalViews
 {
+    /// <summary>歷程的 Data；content-changed 只留讀者看得到的欄位（hidden 為 null 時全部遮蔽）。</summary>
+    private static JsonElement? Data(ApprovalAction a, IReadOnlySet<long>? hidden)
+    {
+        if (a.DataJson is null) return null;
+        using var doc = JsonDocument.Parse(a.DataJson);
+        if (a.Action != ApprovalActions.ContentChanged || doc.RootElement.ValueKind != JsonValueKind.Array) return doc.RootElement.Clone();
+        var visible = doc.RootElement.EnumerateArray()
+            .Where(e => hidden is not null && e.TryGetProperty("fieldId", out var id) && id.TryGetInt64(out var fid) && !hidden.Contains(fid))
+            .Select(e => e.Clone()).ToList();
+        return JsonSerializer.SerializeToElement(visible);
+    }
+
     public static async Task<Dictionary<string, string>> UserNamesAsync(IPermissionRepository permissions, CancellationToken ct) =>
         (await permissions.ListUsersAsync(ct)).ToDictionary(u => u.UserId, u => string.IsNullOrEmpty(u.DisplayName) ? u.UserId : u.DisplayName);
 
     public static ApprovalInstanceView Instance(ApprovalInstance i, IReadOnlyList<ApprovalStageRun> allRuns, IReadOnlyList<ApprovalTask> allTasks,
-        IReadOnlyList<ApprovalAction> allActions, IReadOnlyDictionary<string, string> names, string me, bool writable, bool manager)
+        IReadOnlyList<ApprovalAction> allActions, IReadOnlyDictionary<string, string> names, string me, bool writable, bool manager,
+        IReadOnlySet<long>? hiddenFieldIds)
     {
         string Name(string id) => names.GetValueOrDefault(id) ?? id;
         var pending = i.Status == ApprovalInstanceStatus.Pending;
@@ -218,8 +243,7 @@ internal static class ApprovalViews
                 pending && writable && t.Status == ApprovalTaskStatus.Open && ApprovalActionRules.IsActor(t, me)
                 && !ApprovalActionSupport.AlreadyApprovedInStage(tasks, t, me))).ToList())).ToList();
         var actions = allActions.Where(a => a.InstanceId == i.Id).OrderBy(a => a.Id).Select(a => new ApprovalActionView(a.Action, a.ActorUserId, Name(a.ActorUserId),
-            a.OnBehalfOfUserId, a.TargetUserIds ?? [], a.Comment, a.DataJson is null ? null : JsonDocument.Parse(a.DataJson).RootElement.Clone(),
-            a.CreatedTime)).ToList();
+            a.OnBehalfOfUserId, a.TargetUserIds ?? [], a.Comment, Data(a, hiddenFieldIds), a.CreatedTime)).ToList();
         // 撤回資格同 WithdrawApprovalHandler：目前關卡還沒有任何同意或退回
         var current = runs.FirstOrDefault(r => r.Id == i.CurrentStageRunId) ?? runs.LastOrDefault(r => r.Status == ApprovalStageStatus.Active);
         var canWithdraw = pending && writable && i.InitiatorUserId == me

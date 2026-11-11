@@ -42,7 +42,7 @@ public class ApprovalRuntimeTextTests
         { MessageText.ApprovalNotEditableField, "這一關不能修改這個欄位", [] },
         { MessageText.ApprovalFieldHiddenForApprover, "這個欄位對你隱藏，不能在簽核時修改", [] },
         { MessageText.ApprovalRejectTargetInvalid, "退回對象只能是 initiator 或 previous", [] },
-        { MessageText.ApprovalTransitionGone, "簽核要執行的狀態轉移已不在狀態機上，請聯絡管理員", [] },
+        { MessageText.ApprovalRuntimeInvalid, "簽核設定與狀態機不一致，已停止並通知系統管理員", [] },
         { MessageText.ApprovalRecordGone, "找不到簽核的記錄（可能已被刪除）", [] },
         { MessageText.ApprovalNoWorkflow, "記錄所在模組沒有狀態機", [] },
         { MessageText.ApprovalFlowVersionMissing, "找不到實例綁定的流程版本", [] },

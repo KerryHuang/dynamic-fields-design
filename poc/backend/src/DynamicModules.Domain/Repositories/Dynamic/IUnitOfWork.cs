@@ -4,4 +4,7 @@ namespace DynamicModules.Domain.Repositories.Dynamic;
 public interface IUnitOfWork
 {
     Task CommitAsync(CancellationToken ct);
+
+    /// <summary>丟掉追蹤中、還沒存檔的修改（失敗的請求回滾之後、同一個 scope 還要另寫一筆時用）。</summary>
+    void Discard();
 }

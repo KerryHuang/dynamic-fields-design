@@ -402,7 +402,7 @@ public class ApprovalActionTests : ApprovalTestBase
         var (r, id) = await RejectRig(x => x.Partial);
         var res = await Reject(id, "buyer2", "不行");
         res.IsConflict.Should().BeTrue(Dump(res));
-        res.Message.Should().Be(ApprovalMessages.TransitionGone.Resolve(null));
+        res.Message.Should().Be(ApprovalMessages.RuntimeInvalid.Resolve(null));
         Inst(id).Status.Should().Be(ApprovalInstanceStatus.Pending);
         Open(id, "buyer2").Status.Should().Be(ApprovalTaskStatus.Open);
         StateOf(r, Inst(id).RecordId).Should().Be(r.Draft);

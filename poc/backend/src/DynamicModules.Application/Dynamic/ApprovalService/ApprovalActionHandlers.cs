@@ -85,6 +85,9 @@ public class ApproveTaskHandler(
         if (values.Count > 0 && await HiddenKeysAsync(module, values.Keys, ct) is { Count: > 0 } hidden)
             return ServiceResult.Invalid(hidden.ToDictionary(k => k, _ => new[] { ApprovalMessages.FieldHiddenForApprover }));
 
+        // 可編輯欄位的豁免：送出時的狀態是簽核鎖定狀態就不放行（設計 §8.5）
+        if (values.Count > 0 && (module.Workflow is { } wf ? ApprovalRuntimeCheck.VerifyEditable(wf, inst.FromOptionId) : "模組沒有狀態機") is { } locked)
+            return engine.RuntimeInvalid(inst, locked);
         // 先寫可編輯欄位，再用當下的記錄值重新比對路線（設計 §5.5 第 1 點、§8.2 第 1、2 步）
         if (values.Count > 0 && await runner.RunAsync(inst, null, values, ct) is { IsSuccess: false } written) return written;
         var current = await support.ValuesAsync(inst.RecordId, ct);
@@ -200,10 +203,8 @@ public class RejectTaskHandler(
         if (def.RejectTo is { } rt && rt != inst.FromOptionId)
         {
             // 執行前再驗（設計 §5.2、§8.3）：退回轉移已定義、不需簽核、不會讓單據不簽就進入鎖定狀態
-            var wf = module.Workflow;
-            if (wf?.Find(inst.FromOptionId, rt) is not { } t || t.Approval is { Required: true }
-                || (ApprovalTopology.IsLocked(wf, rt) && !ApprovalTopology.IsLocked(wf, inst.FromOptionId)))
-                return ServiceResult.Conflict(ApprovalMessages.TransitionGone);
+            var reason = module.Workflow is { } wf ? ApprovalRuntimeCheck.Verify(wf, inst.FromOptionId, rt, isReject: true) : "模組沒有狀態機";
+            if (reason is not null) return engine.RuntimeInvalid(inst, reason);
             if (await runner.RunAsync(inst, rt, null, ct) is { IsSuccess: false } moved) return moved;
         }
         await notifier.NotifyAsync(NotificationKinds.ApprovalRejected, inst, [inst.InitiatorUserId], user.UserId, ct);

@@ -55,6 +55,7 @@ public class ApprovalRerouteTests : ApprovalTestBase
         var (po, id) = await SubmitAs(r, "buyer1", 50000);
         Inst(id).FlowId.Should().Be(Flow("po-b").Id);
         await AddExtra(r, po, 120000);
+        ActionsOf(id).Should().Contain(a => a.Action == ApprovalActions.ContentChanged);   // 時間軸看得到金額為什麼變了
 
         var res = await Approve(id, "buyer2");
         res.IsSuccess.Should().BeTrue(Dump(res));
