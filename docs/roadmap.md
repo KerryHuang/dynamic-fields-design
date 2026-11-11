@@ -25,6 +25,7 @@
 | a4b | 前端：送簽畫面與簽核中心 | 未開始 | [簽核流程](superpowers/specs/2026-11-10-approval-workflow-design.md) |
 | a5 | 套件格式 8：簽核流程 | 未開始 | [簽核流程](superpowers/specs/2026-11-10-approval-workflow-design.md) |
 | a6 | CRM 設計案與簽核 Demo、文件 | 未開始 | [簽核流程](superpowers/specs/2026-11-10-approval-workflow-design.md) |
+| 權限軸 | 設計與授權分成兩條權限軸（使用者 11-11 裁決排在簽核主線之後；開工前再寫設計） | 未開始 | — |
 | O2 | 事件中心：健康檢查、維運事件、稽核表（與 MCP 共用）、告警通道、監控頁、規則失控自動暫停 | 未開始 | [維運與觀測](superpowers/specs/2026-11-11-ops-observability-design.md) §9 |
 | p2、p3 | 設計與處理上限；地區與組織政策（不在主序，依 p1 之後、a6 與 O2 之後視情況穿插，這裡排在 O2 之後） | 未開始 | [政策設定](superpowers/specs/2026-11-11-policy-settings-design.md) §9 |
 | m1a | MCP 後端地基：權杖、範圍、工具分級與確認碼、稽核寫入點、速率限制、12 個唯讀工具；權杖與確認碼的 repository 測試在 PostgreSQL 與 SQLite 各跑一次 | 未開始 | [MCP server](superpowers/specs/2026-11-11-mcp-server-design.md) §12 |
@@ -46,8 +47,10 @@
 | s2f | 訂單變更單 | 未開始 | [訂單到出貨](superpowers/specs/2026-11-11-order-workorder-shipment-design.md) |
 | s3b | 期間鎖定、分組小計、損益表列結構、Top N | 未開始 | [ERP 資料模型](superpowers/specs/2026-11-10-erp-data-model-design.md) |
 | s3c | 會計應用程式 | 未開始 | [ERP 資料模型](superpowers/specs/2026-11-10-erp-data-model-design.md) |
+| HRM | 階段 4：員工主檔、請假、出勤、費用報支，含依部門的資料範圍；開工前再切段 | 未開始 | — |
+| 階段5 | 檢視與收尾：看板、日曆、專案與工時、客服工單、應用程式管理畫面補齊、備份還原；開工前再切段 | 未開始 | — |
 
-HRM（階段 4）與階段 5 其餘項目還沒有工作段代號，開工前再切段。
+HRM（階段 4）與階段 5 先用佔位列排序，開工前再切成正式工作段。
 
 ## 階段概況
 
