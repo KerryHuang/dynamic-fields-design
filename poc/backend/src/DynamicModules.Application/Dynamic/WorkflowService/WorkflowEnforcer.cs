@@ -12,7 +12,7 @@ namespace DynamicModules.Application.Dynamic.WorkflowService;
 /// </summary>
 public class WorkflowEnforcer(IPermissionRepository permissions, ICurrentUser user, ISystemIdentity system, ICurrentLocale locale)
 {
-    // 繁中文字取自字串表；簽核（ApprovalService）與既有測試還以字串用這兩句，之後簽核語系化時改走鍵
+    // 繁中文字取自字串表；既有測試還以字串用這兩句（簽核已改走鍵）
     public static readonly string NotAllowedMessage = MessageText.Get(null, MessageText.WorkflowNotAllowed);
     public static readonly string NotPermittedMessage = MessageText.Get(null, MessageText.WorkflowNotPermitted);
 
@@ -84,7 +84,7 @@ public class WorkflowEnforcer(IPermissionRepository permissions, ICurrentUser us
         // 需簽核的轉移只能走送出端點（簽核設計 §5.3）；系統身分（事件、簽核完成的轉移）交給簽核後盾判斷
         if (!system.Active && transition.Approval is { Required: true })
         {
-            errors[key] = [ApprovalService.ApprovalMessages.NeedsSubmit];
+            errors[key] = [ApprovalService.ApprovalMessages.NeedsSubmit.Resolve(locale.Locale)];
             return errors;
         }
         if (transition.GroupIds.Count == 0 || system.Active) return errors;   // 事件效果的轉移必須是已定義的，但不檢查群組

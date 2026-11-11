@@ -12,6 +12,7 @@ namespace DynamicModules.ApplicationTests.Dynamic.Approvals;
 public class ApproverResolverTests
 {
     private const long Finance = 1, Board = 2, PurchaseLead = 3, Big = 4;
+    private static I18nText T(string zh) => new([KeyValuePair.Create("zh-TW", zh)]);
     private static readonly I18nText Name = new([KeyValuePair.Create("zh-TW", "關卡")]);
 
     private static readonly Field OwnerField = new() { Id = 50, Key = "f_50", Type = FieldType.User, LabelI18n = new([KeyValuePair.Create("zh-TW", "負責人")]) };
@@ -34,7 +35,7 @@ public class ApproverResolverTests
         };
         var module = new Module { Blocks = [new Block { Fields = [OwnerField] }] };
         return new ResolveContext(module, initiator, values ?? [], picks, org, groups, admins ?? ["admin"],
-            new Dictionary<long, string> { [Finance] = "finance", [Board] = "board", [PurchaseLead] = "purchase-lead", [Big] = "big" });
+            new Dictionary<long, I18nText> { [Finance] = T("finance"), [Board] = T("board"), [PurchaseLead] = T("purchase-lead"), [Big] = T("big") });
     }
 
     private static ApproverSource Group(params long[] ids) => new(ApprovalSources.Group, GroupIds: [.. ids]);
@@ -84,13 +85,13 @@ public class ApproverResolverTests
     public void FallbackOnlyInitiator_Error()
     {
         var r = Resolve(Ctx("admin"), Group(Board));
-        r.Error.Should().Be(ApprovalMessages.NoApprover("關卡", "board"));
+        r.Error!.Resolve(null).Should().Be(ApprovalMessages.NoApprover("關卡", "board").Resolve(null));
         r.Seats.Should().BeEmpty();
     }
 
     [Fact]
     public void Over20_Error() =>
-        Resolve(Ctx("buyer1"), Group(Big)).Error.Should().Be(ApprovalMessages.TooManyApprovers("關卡"));
+        Resolve(Ctx("buyer1"), Group(Big)).Error!.Resolve(null).Should().Be(ApprovalMessages.TooManyApprovers("關卡").Resolve(null));
 
     [Fact]
     public void InactiveUser_Excluded()
@@ -152,7 +153,7 @@ public class ApproverResolverTests
         // 兩個空單位、備援只有一人：一人一票下第二席永遠補不上，啟動時就要失敗（設計 §6.5）
         var src = new ApproverSource(ApprovalSources.Users, UserIds: ["u1", "u2"]);
         var one = Resolve(Ctx("buyer1", inactive: ["u1", "u2"]), src, ApprovalModes.All);
-        one.Error.Should().Be(ApprovalMessages.NoApprover("關卡", "u2"));
+        one.Error!.Resolve(null).Should().Be(ApprovalMessages.NoApprover("關卡", "u2").Resolve(null));
         one.Seats.Should().BeEmpty();
 
         var two = Resolve(Ctx("buyer1", inactive: ["u1", "u2"], admins: ["admin", "gm"]), src, ApprovalModes.All);
@@ -165,7 +166,7 @@ public class ApproverResolverTests
     {
         // 或簽：備援移除已有任務的人後為空 → 409（設計 §6.5 字面；審查建議 7）
         var r = Resolve(Ctx("buyer1"), Group(Board, PurchaseLead), fallback: new ApproverSource(ApprovalSources.Users, UserIds: ["buyer2"]));
-        r.Error.Should().Be(ApprovalMessages.NoApprover("關卡", "board"));
+        r.Error!.Resolve(null).Should().Be(ApprovalMessages.NoApprover("關卡", "board").Resolve(null));
         r.Seats.Should().BeEmpty();
     }
 
@@ -179,7 +180,7 @@ public class ApproverResolverTests
         two.Seats.Select(s => s.SeatKey).Should().Equal("fb:0", "fb:1");
 
         var one = Resolve(Ctx("buyer1"), src, ApprovalModes.All, fallback: new ApproverSource(ApprovalSources.Users, UserIds: ["gm"]));
-        one.Error.Should().Be(ApprovalMessages.NoApprover("關卡", ApprovalMessages.PickLabel));
+        one.Error!.Resolve(null).Should().Be(ApprovalMessages.NoApprover("關卡", ApprovalMessages.PickLabel).Resolve(null));
         one.Seats.Should().BeEmpty();
     }
 
@@ -218,10 +219,10 @@ public class ApproverResolverTests
     {
         // 單位清單是空的、或來源不認得：不能建出沒有任務的關卡，也不能當成「全部單位都空」而跳過（審查建議 9）
         var empty = Resolve(Ctx("buyer1"), new ApproverSource(ApprovalSources.Users, UserIds: []), ApprovalModes.All, onEmpty);
-        empty.Error.Should().Be(ApprovalMessages.NoApprover("關卡", ApprovalSources.Users));
+        empty.Error!.Resolve(null).Should().Be(ApprovalMessages.NoApprover("關卡", ApprovalSources.Users).Resolve(null));
         empty.AllUnitsEmpty.Should().BeFalse();
         var unknown = Resolve(Ctx("buyer1"), new ApproverSource("bogus"), onEmpty: onEmpty);
-        unknown.Error.Should().Be(ApprovalMessages.NoApprover("關卡", "bogus"));
+        unknown.Error!.Resolve(null).Should().Be(ApprovalMessages.NoApprover("關卡", "bogus").Resolve(null));
         unknown.Seats.Should().BeEmpty();
     }
 }

@@ -1,3 +1,6 @@
+using DynamicModules.Application.Common;
+using DynamicModules.Domain.ValueObjects;
+
 namespace DynamicModules.Application.Dynamic.ApprovalService;
 
 /// <summary>簽核定義與約束的錯誤訊息（設計 docs/superpowers/specs/2026-11-10-approval-workflow-design.md §4.3、§5.2、§9.2）。</summary>
@@ -44,40 +47,52 @@ public static class ApprovalMessages
     public static string EventPushes(string ev, string s) => $"連動事件「{ev}」會把狀態改成需簽核的「{s}」";
 
     // ── 簽核人解析（§6.5） ──
-    public static string TooManyApprovers(string stage) => $"關卡「{stage}」的簽核人超過 20 人";
-    public static string FlowConditionUndecidable(string flow) => $"簽核流程「{flow}」的條件無法判斷，請系統管理員檢查流程設定";
-    public static string NoApprover(string stage, string source) => $"關卡「{stage}」的來源「{source}」找不到簽核人，備援也沒有人";
+    // 以下到「送出與動作」都是一般使用者執行期會看到的訊息：回 MessageRef（鍵在 MessageText），到 WebAPI 才依請求語系解析。
+    // 關卡、來源名稱等參數可直接傳 I18nText（會依語系挑文字）或字串。
+    public static MessageRef TooManyApprovers(object stage) => MessageRef.Of(MessageText.ApprovalTooManyApprovers, stage);
+    public static MessageRef FlowConditionUndecidable(object flow) => MessageRef.Of(MessageText.ApprovalFlowUndecidable, flow);
+    public static MessageRef NoApprover(object stage, object source) => MessageRef.Of(MessageText.ApprovalNoApprover, stage, source);
+    /// <summary>備援說明會寫進簽核歷程（資料庫），固定繁中，不隨請求語系。</summary>
     public static string FallbackNote(string source) => $"來源 {source} 找不到簽核人，依設定改派備援簽核人";
-    public static string ManagerLabel(int level) => $"第 {level} 層主管";
-    public const string PickLabel = "發起人自選";
+    public static string ManagerLabel(int level) => MessageText.Get(null, MessageText.ApprovalManagerLabel, level);
+    public static I18nText ManagerLabelI18n(int level) => MessageText.AsI18n(MessageText.ApprovalManagerLabel, level);
+    public static readonly string PickLabel = MessageText.Get(null, MessageText.ApprovalPickLabel);
+    public static readonly I18nText PickLabelI18n = MessageText.AsI18n(MessageText.ApprovalPickLabel);
 
     // ── 簽核中的寫入（§5.3、§8.5） ──
-    public const string NeedsSubmit = "這個狀態需要送出簽核";
-    public const string Pending = "簽核中，不可修改";
-    public const string WithdrawFirst = "簽核中，請先撤回";
-    public static string EventBlocked(long id) => $"記錄 {id} 正在簽核中，這次請求改動了它，已取消";
-    public static string TransitionBlocked(long id) => $"記錄 {id} 的狀態轉移需要送出簽核，這次請求改動了它，已取消";
+    public static readonly MessageRef NeedsSubmit = MessageRef.Of(MessageText.ApprovalNeedsSubmit);
+    public static readonly MessageRef Pending = MessageRef.Of(MessageText.ApprovalPending);
+    public static readonly MessageRef WithdrawFirst = MessageRef.Of(MessageText.ApprovalWithdrawFirst);
+    public static MessageRef EventBlocked(long id) => MessageRef.Of(MessageText.ApprovalEventBlocked, id);
+    public static MessageRef TransitionBlocked(long id) => MessageRef.Of(MessageText.ApprovalTransitionBlocked, id);
 
     // ── 送出與動作（§5.2、§7） ──
-    public const string NotApprovalTransition = "這個轉移不需要送出簽核";
-    public const string AlreadyPending = "這張單已在簽核中";
-    public const string NoMatchingFlow = "沒有符合條件的簽核流程，請聯絡管理員";
-    public const string PickInvalid = "自選的簽核人必須是候選群組內、啟用中的其他使用者";
-    public const string PickCandidatesUnmatched = "這一關的候選群組已失效，不能自選，送出後由備援簽核人處理";
-    public static string PickCount(int min, int max) => $"請選 {min} 到 {max} 位簽核人";
-    public const string UserFieldNotCandidate = "簽核人不在候選群組內";
-    public const string UserFieldIsInitiator = "簽核人不能是發起人自己";
-    public const string CommentRequired = "退回必須填寫意見";
-    public const string CommentTooLong = "意見不能超過 1000 字";
-    public const string TaskNotFound = "找不到待簽核";
-    public const string StageHandled = "這一關已由他人處理";
-    public const string StateChanged = "簽核狀態已更新，請重新整理後再試";
-    public const string CannotWithdraw = "目前關卡已有人處理，不能撤回";
-    public const string NoPreviousStage = "前面沒有已同意的關卡，只能退回發起人";
-    public const string NotEditableField = "這一關不能修改這個欄位";
-    public const string FieldHiddenForApprover = "這個欄位對你隱藏，不能在簽核時修改";
+    public static readonly MessageRef NotApprovalTransition = MessageRef.Of(MessageText.ApprovalNotApprovalTransition);
+    public static readonly MessageRef AlreadyPending = MessageRef.Of(MessageText.ApprovalAlreadyPending);
+    public static readonly MessageRef NoMatchingFlow = MessageRef.Of(MessageText.ApprovalNoMatchingFlow);
+    public static readonly MessageRef PickInvalid = MessageRef.Of(MessageText.ApprovalPickInvalid);
+    public static readonly MessageRef PickCandidatesUnmatched = MessageRef.Of(MessageText.ApprovalPickCandidatesUnmatched);
+    public static MessageRef PickCount(int min, int max) => MessageRef.Of(MessageText.ApprovalPickCount, min, max);
+    public static readonly MessageRef UserFieldNotCandidate = MessageRef.Of(MessageText.ApprovalUserFieldNotCandidate);
+    public static readonly MessageRef UserFieldIsInitiator = MessageRef.Of(MessageText.ApprovalUserFieldIsInitiator);
+    public static readonly MessageRef CommentRequired = MessageRef.Of(MessageText.ApprovalCommentRequired);
+    public static readonly MessageRef CommentTooLong = MessageRef.Of(MessageText.ApprovalCommentTooLong);
+    public static readonly MessageRef TaskNotFound = MessageRef.Of(MessageText.ApprovalTaskNotFound);
+    public static readonly MessageRef StageHandled = MessageRef.Of(MessageText.ApprovalStageHandled);
+    public static readonly MessageRef StateChanged = MessageRef.Of(MessageText.ApprovalStateChanged);
+    public static readonly MessageRef CannotWithdraw = MessageRef.Of(MessageText.ApprovalCannotWithdraw);
+    public static readonly MessageRef NoPreviousStage = MessageRef.Of(MessageText.ApprovalNoPreviousStage);
+    public static readonly MessageRef NotEditableField = MessageRef.Of(MessageText.ApprovalNotEditableField);
+    public static readonly MessageRef FieldHiddenForApprover = MessageRef.Of(MessageText.ApprovalFieldHiddenForApprover);
+    public static readonly MessageRef RejectTargetInvalid = MessageRef.Of(MessageText.ApprovalRejectTargetInvalid);
+    public static readonly MessageRef TransitionGone = MessageRef.Of(MessageText.ApprovalTransitionGone);
+    public static readonly MessageRef RecordGone = MessageRef.Of(MessageText.ApprovalRecordGone);
+    public static readonly MessageRef NoWorkflow = MessageRef.Of(MessageText.ApprovalNoWorkflow);
+    public static readonly MessageRef FlowVersionMissing = MessageRef.Of(MessageText.ApprovalFlowVersionMissing);
+    public static readonly MessageRef StageDefMissing = MessageRef.Of(MessageText.ApprovalStageDefMissing);
+    public static readonly MessageRef BoxInvalid = MessageRef.Of(MessageText.ApprovalBoxInvalid);
+
+    // 設計器的定義驗證訊息（管理類，不在執行期語系化範圍）
     public const string EditableFieldHidden = "可編輯欄位不能是對這一關簽核人（或備援）所屬群組隱藏或限定可見的欄位";
-    public const string RejectTargetInvalid = "退回對象只能是 initiator 或 previous";
-    public const string TransitionGone = "簽核要執行的狀態轉移已不在狀態機上，請聯絡管理員";
 }
 

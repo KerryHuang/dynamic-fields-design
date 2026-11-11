@@ -40,7 +40,7 @@ public sealed class ApprovalEngine(
     public async Task<(ApprovalStageRun? Run, ServiceResult? Failure)> ActivateNextAsync(
         ApprovalInstance inst, Module module, IReadOnlyDictionary<string, JsonElement?> values, CancellationToken ct)
     {
-        if (DefinitionOf(inst) is not { } def) return (null, ServiceResult.Conflict("找不到實例綁定的流程版本"));
+        if (DefinitionOf(inst) is not { } def) return (null, ServiceResult.Conflict(ApprovalMessages.FlowVersionMissing));
         var runs = await repo.ListRunsAsync(inst.Id, ct);
         var last = runs.LastOrDefault(r => r.StageCode is not null);
         var start = last is null ? 0 : def.Stages.FindIndex(s => s.Code == last.StageCode) + 1;
@@ -97,11 +97,11 @@ public sealed class ApprovalEngine(
         ApprovalStageRun previous, int seq, CancellationToken ct)
     {
         if (DefinitionOf(inst) is not { } def || def.Stages.FirstOrDefault(s => s.Code == previous.StageCode) is not { } s)
-            return ServiceResult.Conflict("找不到要退回的關卡定義");
+            return ServiceResult.Conflict(ApprovalMessages.StageDefMissing);
         var ctx = await resolver.ContextAsync(module, inst.InitiatorUserId, values, inst.Picks.GetValueOrDefault(s.Code), ct);
         var resolution = ApproverResolver.Resolve(ctx, s.Name, s.Mode, s.Approvers, def.FallbackApprovers, s.OnEmpty);
         if (resolution.Error is { } error) return ServiceResult.Conflict(error);
-        if (resolution.AllUnitsEmpty) return ServiceResult.Conflict(ApprovalMessages.NoApprover(s.Name.Resolve("zh-TW"), s.Code));
+        if (resolution.AllUnitsEmpty) return ServiceResult.Conflict(ApprovalMessages.NoApprover(s.Name, s.Code));
         var run = new ApprovalStageRun { InstanceId = inst.Id, Seq = seq, StageCode = s.Code, NameSnapshot = s.Name, Mode = s.Mode };
         await StartAsync(inst, run, resolution.Seats, s.DueHours, ct, NotificationKinds.ApprovalReturned);
         return null;

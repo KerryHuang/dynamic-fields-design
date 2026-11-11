@@ -21,7 +21,7 @@ public sealed class ApprovalGate(IApprovalInstanceRepository instances, ISystemI
         var from = wf.StateOf(previous) ?? wf.InitialOptionId;
         var to = input is not null && input.ContainsKey(key) ? wf.StateOf(input) : null;
         if (to is { } t && t != from && wf.RequiresApproval(from, t))
-            return ServiceResult.Invalid(new Dictionary<string, string[]> { [key] = [ApprovalMessages.NeedsSubmit] });
+            return ServiceResult.Invalid(key, ApprovalMessages.NeedsSubmit);
 
         if (await instances.GetPendingByRecordAsync(record.Id, ct) is null) return null;
         if (isDelete) return ServiceResult.Conflict(ApprovalMessages.Pending);

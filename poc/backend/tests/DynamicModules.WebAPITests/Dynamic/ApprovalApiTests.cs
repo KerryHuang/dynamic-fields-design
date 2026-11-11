@@ -29,7 +29,7 @@ public class ApprovalApiTests : IDisposable
     private sealed record Rig(string Module, string Title, long Draft, long Done);
 
     /// <summary>草稿 → 已核准 需簽核（block）；流程一關，群組 sales（sales01、sales02）或簽。</summary>
-    private async Task<Rig> Arrange()
+    private async Task<Rig> Arrange(string stageGroup = "sales")
     {
         var key = await CreateModule(_admin);
         var status = await AddField(_admin, key, "enum");
@@ -41,7 +41,7 @@ public class ApprovalApiTests : IDisposable
         await Activate(_admin, key);
         _app.GrantBusinessGroups(key);
         var sales = (await JsonOf(await _admin.GetAsync($"{Base}/groups"))).EnumerateArray()
-            .Single(g => g.GetProperty("key").GetString() == "sales").GetProperty("id").GetInt64();
+            .Single(g => g.GetProperty("key").GetString() == stageGroup).GetProperty("id").GetInt64();
         object Workflow(bool approval) => new
         {
             statusFieldId = status.Id, initialOptionId = draft,
@@ -62,7 +62,7 @@ public class ApprovalApiTests : IDisposable
                 {
                     new
                     {
-                        code = "lead", name = Zh("業務"), approvers = new { source = "group", groupIds = new[] { sales } },
+                        code = "lead", name = new Dictionary<string, string> { ["zh-TW"] = "業務", ["en-US"] = "Sales" }, approvers = new { source = "group", groupIds = new[] { sales } },
                         mode = "any", editableFields = Array.Empty<long>(), dueHours = (int?)24, onEmpty = "fallback"
                     }
                 }
@@ -101,6 +101,16 @@ public class ApprovalApiTests : IDisposable
     private static long TaskOf(JsonElement current, string user) =>
         current.GetProperty("stages")[0].GetProperty("tasks").EnumerateArray()
             .Single(t => t.GetProperty("assigneeUserId").GetString() == user).GetProperty("id").GetInt64();
+
+    private Task<HttpResponseMessage> SubmitIn(string locale, Rig r, long id, string rowVersion, long? to = null)
+    {
+        var req = new HttpRequestMessage(HttpMethod.Post, $"{Base}/records/{id}/approval/submit")
+        {
+            Content = JsonContent.Create(new { to = to ?? r.Done, recordRowVersion = rowVersion })
+        };
+        req.Headers.Add("X-Locale", locale);
+        return _admin.SendAsync(req);
+    }
 
     private static async Task<string?> Message(HttpResponseMessage res) =>
         (await JsonOf(res)).TryGetProperty("message", out var m) ? m.GetString() : null;
@@ -186,5 +196,34 @@ public class ApprovalApiTests : IDisposable
 
         var finished = (await JsonOf(await _admin.GetAsync($"{Base}/records/{id}/approval"))).GetProperty("previous").EnumerateArray().Single();
         finished.GetProperty("actions").EnumerateArray().Count(a => a.GetProperty("action").GetString() == "approve").Should().Be(1);
+    }
+
+    [Fact]
+    public async Task EnUs_submit_blocked_when_no_approver_is_found()
+    {
+        // 關卡群組只有發起人自己（admin），備援（其他系統管理員）也沒有人
+        var r = await Arrange("mis");
+        var (id, rv) = await NewRecord(r);
+        var res = await SubmitIn("en-US", r, id, rv);
+        res.StatusCode.Should().Be(HttpStatusCode.Conflict, await res.Content.ReadAsStringAsync());
+        (await Message(res)).Should().Be("No approver found for stage \"Sales\" from source \"MIS\", and there is no fallback either");
+        // 沒帶標頭仍是繁中
+        var zh = await Submit(_admin, r, id, rv);
+        (await Message(zh)).Should().Be("關卡「業務」的來源「MIS」找不到簽核人，備援也沒有人");
+    }
+
+    [Fact]
+    public async Task EnUs_submit_blocked_when_already_pending_or_transition_not_allowed()
+    {
+        var r = await Arrange();
+        var (id, rv) = await NewRecord(r);
+        var notAllowed = await SubmitIn("en-US", r, id, rv, r.Draft);
+        notAllowed.StatusCode.Should().Be(HttpStatusCode.BadRequest, await notAllowed.Content.ReadAsStringAsync());
+        (await JsonOf(notAllowed)).GetProperty("errors").EnumerateObject().Single().Value[0].GetString().Should().Be("This status change is not allowed");
+
+        (await SubmitIn("en-US", r, id, rv)).StatusCode.Should().Be(HttpStatusCode.Created);
+        var again = await SubmitIn("en-US", r, id, rv);
+        again.StatusCode.Should().Be(HttpStatusCode.Conflict);
+        (await Message(again)).Should().Be("This record is already in approval");
     }
 }

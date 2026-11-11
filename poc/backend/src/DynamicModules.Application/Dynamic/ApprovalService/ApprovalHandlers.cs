@@ -36,20 +36,20 @@ public class SubmitApprovalHandler(
         if (await instances.GetPendingByRecordAsync(record.Id, ct) is not null) return ServiceResult.Conflict(ApprovalMessages.AlreadyPending);
         if (record.RowVersion != request.RecordRowVersion) return ServiceResult.Stale();
         if (ApprovalActionRules.CommentError(request.Comment, required: false) is { } commentError)
-            return ServiceResult.Invalid(new Dictionary<string, string[]> { ["comment"] = [commentError] });
+            return ServiceResult.Invalid("comment", commentError);
 
-        if (module.Workflow is not { } wf) return ServiceResult.Invalid(new Dictionary<string, string[]> { ["to"] = [ApprovalMessages.NotApprovalTransition] });
+        if (module.Workflow is not { } wf) return ServiceResult.Invalid("to", ApprovalMessages.NotApprovalTransition);
         var statusKey = wf.StatusFieldKey;
-        Dictionary<string, string[]> Bad(string message) => new() { [statusKey] = [message] };
+        Dictionary<string, MessageRef[]> Bad(MessageRef message) => new() { [statusKey] = [message] };
         var values = RecordValueProcessor.Parse(record.ValuesJson);
         var from = wf.StateOf(values) ?? wf.InitialOptionId;
-        if (wf.Find(from, request.To) is not { } transition) return ServiceResult.Invalid(Bad(WorkflowEnforcer.NotAllowedMessage));
+        if (wf.Find(from, request.To) is not { } transition) return ServiceResult.Invalid(Bad(MessageRef.Of(MessageText.WorkflowNotAllowed)));
         if (transition.Approval is not { Required: true } approval) return ServiceResult.Invalid(Bad(ApprovalMessages.NotApprovalTransition));
         if (transition.GroupIds.Count > 0)
         {
             var inputs = await permissions.LoadInputsAsync(user.UserId, module, ct);
             if (inputs is null || !(inputs.User.IsSystemAdmin || inputs.GroupIds.Any(transition.GroupIds.Contains)))
-                return ServiceResult.Invalid(Bad(WorkflowEnforcer.NotPermittedMessage));
+                return ServiceResult.Invalid(Bad(MessageRef.Of(MessageText.WorkflowNotPermitted)));
         }
 
         var snapshot = (await flows.ListCurrentByModuleAsync(module.Id, ct)).Where(f => f.Flow.ToOptionId == request.To)
@@ -57,7 +57,7 @@ public class SubmitApprovalHandler(
             .ToList();
         var userIds = await modules.ListUserIdsAsync(ct);
         var (match, undecidable) = ApprovalRouter.Match(snapshot, module, values, registry, time.Today, userIds);
-        if (undecidable is not null) return ServiceResult.Conflict(ApprovalMessages.FlowConditionUndecidable(undecidable.Name.Resolve("zh-TW")));
+        if (undecidable is not null) return ServiceResult.Conflict(ApprovalMessages.FlowConditionUndecidable(undecidable.Name));
         if (match is null)
         {
             if (approval.NoMatch != ApprovalNoMatch.Direct) return ServiceResult.Invalid(Bad(ApprovalMessages.NoMatchingFlow));
@@ -108,9 +108,9 @@ public class SubmitApprovalHandler(
 
     /// <summary>發起人自選（設計 §6.1、Review Focus 3）：只能帶 initiatorPick 關卡的代號；不重複、候選群組內、啟用中、不是發起人；人數在 min..max。
     /// 候選群組對不上的關卡不收自選（與 ApproverResolver 一致）。</summary>
-    private static Dictionary<string, string[]> PickErrors(ApprovalDefinition def, Dictionary<string, List<string>> picks, ResolveContext ctx)
+    private static Dictionary<string, MessageRef[]> PickErrors(ApprovalDefinition def, Dictionary<string, List<string>> picks, ResolveContext ctx)
     {
-        var errors = new Dictionary<string, string[]>();
+        var errors = new Dictionary<string, MessageRef[]>();
         var pickStages = def.Stages.Where(s => s.Approvers.Source == ApprovalSources.InitiatorPick).ToDictionary(s => s.Code);
         foreach (var code in picks.Keys.Where(k => !pickStages.ContainsKey(k))) errors[$"picks.{code}"] = [ApprovalMessages.PickInvalid];
         foreach (var (code, stage) in pickStages)
@@ -134,10 +134,10 @@ public class SubmitApprovalHandler(
     }
 
     /// <summary>使用者欄位來源（設計 §6.1）：欄位填的人不在候選群組、或是發起人自己 → 400（鍵為該欄位）。空值交給關卡啟動時的備援。</summary>
-    private static Dictionary<string, string[]> UserFieldErrors(ApprovalDefinition def, Module module, IReadOnlyDictionary<string, JsonElement?> values,
+    private static Dictionary<string, MessageRef[]> UserFieldErrors(ApprovalDefinition def, Module module, IReadOnlyDictionary<string, JsonElement?> values,
         ResolveContext ctx)
     {
-        var errors = new Dictionary<string, string[]>();
+        var errors = new Dictionary<string, MessageRef[]>();
         foreach (var stage in def.Stages.Where(s => s.Approvers.Source == ApprovalSources.UserField))
         {
             var field = module.Blocks.SelectMany(b => b.Fields).FirstOrDefault(f => f.Id == stage.Approvers.FieldId);

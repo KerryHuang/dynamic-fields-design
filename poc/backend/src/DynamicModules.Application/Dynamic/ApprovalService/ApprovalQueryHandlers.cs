@@ -117,7 +117,7 @@ public class GetApprovalTasksHandler(
     public async Task<ServiceResult> Handle(GetApprovalTasksRequest request, CancellationToken ct)
     {
         if (!ApprovalInboxBoxes.Values.Contains(request.Box))
-            return ServiceResult.Invalid(new Dictionary<string, string[]> { ["box"] = ["分頁只能是 todo、done、submitted、all"] });
+            return ServiceResult.Invalid("box", ApprovalMessages.BoxInvalid);
         var page = Math.Max(request.CurrentPage, 1);
         var size = Math.Clamp(request.PagesSize, 1, 100);
         var me = user.UserId;

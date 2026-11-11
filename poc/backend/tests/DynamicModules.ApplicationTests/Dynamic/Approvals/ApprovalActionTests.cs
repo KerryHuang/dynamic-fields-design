@@ -48,7 +48,7 @@ public class ApprovalActionTests : ApprovalTestBase
         Outcome(await Approve(id, "gm")).Should().Be(ApprovalOutcomes.Advanced);   // 會簽：還差 buyer2
         As("buyer1");
         var withdraw = await Send(new WithdrawApprovalRequest(id, Inst(id).RowVersion, null));
-        withdraw.Message.Should().Be(ApprovalMessages.CannotWithdraw);
+        withdraw.Message.Should().Be(ApprovalMessages.CannotWithdraw.Resolve(null));
 
         var done = await Approve(id, "buyer2");
         Outcome(done).Should().Be(ApprovalOutcomes.Approved);
@@ -130,9 +130,9 @@ public class ApprovalActionTests : ApprovalTestBase
         As("buyer2");
         var late = await Send(new ApproveTaskRequest(buyer2Task.Id, stale, null, null));
         late.IsConflict.Should().BeTrue();
-        late.Message.Should().Be(ApprovalMessages.StateChanged);
+        late.Message.Should().Be(ApprovalMessages.StateChanged.Resolve(null));
         var lateReject = await Send(new RejectTaskRequest(buyer2Task.Id, stale, "舊畫面", RejectTaskHandler.ToInitiator));
-        lateReject.Message.Should().Be(ApprovalMessages.StateChanged);
+        lateReject.Message.Should().Be(ApprovalMessages.StateChanged.Resolve(null));
         TasksOf(id).Single(t => t.Id == buyer2Task.Id).Status.Should().Be(ApprovalTaskStatus.Open);
         Outcome(await Approve(id, "buyer2")).Should().Be(ApprovalOutcomes.Approved);   // 重新整理後可以同意
     }
@@ -186,7 +186,7 @@ public class ApprovalActionTests : ApprovalTestBase
     {
         var r = await Scenario3();
         var id = await SubmitAs(r, "buyer1", 150000);
-        (await Reject(id, "gm", "第一關沒有上一關", RejectTaskHandler.ToPrevious)).Errors["to"].Should().Equal(ApprovalMessages.NoPreviousStage);
+        (await Reject(id, "gm", "第一關沒有上一關", RejectTaskHandler.ToPrevious)).Errors["to"].Should().Equal(ApprovalMessages.NoPreviousStage.Resolve(null));
 
         await Approve(id, "gm");
         Outcome(await Reject(id, "buyer2", "請重看", RejectTaskHandler.ToPrevious)).Should().Be(ApprovalOutcomes.Returned);
@@ -223,7 +223,7 @@ public class ApprovalActionTests : ApprovalTestBase
         await GrantEveryone(r.Module);
         var id = await SubmitAs(r, "buyer1", 5000);
         var po = Inst(id).RecordId;
-        (await Approve(id, "buyer2", V((r.Memo, "偷改")))).Errors[$"f_{r.Memo}"].Should().Equal(ApprovalMessages.NotEditableField);
+        (await Approve(id, "buyer2", V((r.Memo, "偷改")))).Errors[$"f_{r.Memo}"].Should().Equal(ApprovalMessages.NotEditableField.Resolve(null));
         Open(id, "buyer2").Status.Should().Be(ApprovalTaskStatus.Open);
         Rec(po).Values.ContainsKey($"f_{r.Memo}").Should().BeFalse();
 
@@ -248,7 +248,7 @@ public class ApprovalActionTests : ApprovalTestBase
         var before = Inst(id).RowVersion;
 
         var res = await Approve(id, "buyer2", V((r.DueDate, "2026-12-01")));
-        res.Errors[$"f_{r.DueDate}"].Should().Equal(ApprovalMessages.FieldHiddenForApprover);
+        res.Errors[$"f_{r.DueDate}"].Should().Equal(ApprovalMessages.FieldHiddenForApprover.Resolve(null));
         Inst(id).RowVersion.Should().Be(before);
         Open(id, "buyer2").Status.Should().Be(ApprovalTaskStatus.Open);
         Rec(po).Values.ContainsKey($"f_{r.DueDate}").Should().BeFalse();
@@ -323,7 +323,7 @@ public class ApprovalActionTests : ApprovalTestBase
         var po = await NewPo(r, price: 5000);
         var res = await Submit(po.Id, r.Confirmed);
         res.IsConflict.Should().BeTrue(Dump(res));
-        res.Message.Should().Be(ApprovalMessages.NoApprover("both", "emp2"));
+        res.Message.Should().Be(ApprovalMessages.NoApprover("both", "emp2").Resolve(null));
         Db.Context.Set<ApprovalInstance>().AsNoTracking().Count(i => i.RecordId == po.Id).Should().Be(0);
         StateOf(r, po.Id).Should().Be(r.Draft);
     }
@@ -339,7 +339,7 @@ public class ApprovalActionTests : ApprovalTestBase
         var actions = ActionsOf(id).Count;
         var res = await Approve(id, "buyer2");
         res.IsConflict.Should().BeTrue(Dump(res));
-        res.Message.Should().Be(ApprovalMessages.NoApprover("next", "emp1"));
+        res.Message.Should().Be(ApprovalMessages.NoApprover("next", "emp1").Resolve(null));
         Inst(id).RowVersion.Should().Be(before);
         Inst(id).Status.Should().Be(ApprovalInstanceStatus.Pending);
         ActionsOf(id).Should().HaveCount(actions);
@@ -375,7 +375,7 @@ public class ApprovalActionTests : ApprovalTestBase
         var actions = ActionsOf(id).Count;
         var res = await Send(new RejectTaskRequest(gmTasks[1].Id, Inst(id).RowVersion, "改退回", RejectTaskHandler.ToInitiator));
         res.IsConflict.Should().BeTrue(Dump(res));
-        res.Message.Should().Be(ApprovalMessages.StageHandled);
+        res.Message.Should().Be(ApprovalMessages.StageHandled.Resolve(null));
         Inst(id).Status.Should().Be(ApprovalInstanceStatus.Pending);
         ActionsOf(id).Should().HaveCount(actions);
         TasksOf(id).Single(t => t.Id == gmTasks[1].Id).Status.Should().Be(ApprovalTaskStatus.Open);
@@ -402,7 +402,7 @@ public class ApprovalActionTests : ApprovalTestBase
         var (r, id) = await RejectRig(x => x.Partial);
         var res = await Reject(id, "buyer2", "不行");
         res.IsConflict.Should().BeTrue(Dump(res));
-        res.Message.Should().Be(ApprovalMessages.TransitionGone);
+        res.Message.Should().Be(ApprovalMessages.TransitionGone.Resolve(null));
         Inst(id).Status.Should().Be(ApprovalInstanceStatus.Pending);
         Open(id, "buyer2").Status.Should().Be(ApprovalTaskStatus.Open);
         StateOf(r, Inst(id).RecordId).Should().Be(r.Draft);

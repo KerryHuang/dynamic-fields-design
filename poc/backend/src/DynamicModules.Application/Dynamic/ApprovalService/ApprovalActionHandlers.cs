@@ -29,9 +29,9 @@ public sealed class ApprovalActionSupport(
         var module = await modules.GetByIdAsync(inst.ModuleId, includeChildren: true, ct);
         if (module is null) return (null, ServiceResult.NotFound(ApprovalMessages.TaskNotFound));
         if (!module.IsWritable())
-            return (null, module.Status == ModuleStatus.Closed ? ServiceResult.Conflict(ModuleGate.ClosedMessage) : ServiceResult.NotFound(ApprovalMessages.TaskNotFound));
+            return (null, module.Status == ModuleStatus.Closed ? ServiceResult.Conflict(ModuleGate.Closed) : ServiceResult.NotFound(ApprovalMessages.TaskNotFound));
         if (inst.Status != ApprovalInstanceStatus.Pending) return (null, ServiceResult.Conflict(ApprovalMessages.StageHandled));
-        if (ApprovalEngine.DefinitionOf(inst) is not { } def) return (null, ServiceResult.Conflict("找不到實例綁定的流程版本"));
+        if (ApprovalEngine.DefinitionOf(inst) is not { } def) return (null, ServiceResult.Conflict(ApprovalMessages.FlowVersionMissing));
         var next = Guid.NewGuid().ToString();
         if (!await repo.TryBumpRowVersionAsync(inst.Id, rowVersion, next, ct))
             return (null, ServiceResult.Conflict(mine is { Status: ApprovalTaskStatus.Open } ? ApprovalMessages.StateChanged : ApprovalMessages.StageHandled));
@@ -42,7 +42,7 @@ public sealed class ApprovalActionSupport(
     public async Task<Dictionary<string, JsonElement?>> ValuesAsync(long recordId, CancellationToken ct) =>
         (await records.GetAsync(recordId, ct)) is { } r ? RecordValueProcessor.Parse(r.ValuesJson) : [];
 
-    public static ServiceResult Bad(string key, string message) => ServiceResult.Invalid(new Dictionary<string, string[]> { [key] = [message] });
+    public static ServiceResult Bad(string key, MessageRef message) => ServiceResult.Invalid(key, message);
 
     /// <summary>會簽一人一票（設計 §7.7）：同一人在同一關已經同意過，不能再處理（同意或退回）另一個任務。</summary>
     public static bool AlreadyApprovedInStage(IEnumerable<ApprovalTask> tasks, ApprovalTask me, string userId) =>

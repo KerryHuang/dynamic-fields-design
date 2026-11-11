@@ -59,7 +59,7 @@ public class ApprovalSubmitTests : ApprovalTestBase
         var po = await NewPo(r, price: total);
         var res = await Submit(po.Id, r.Confirmed);
         res.IsConflict.Should().BeTrue(Dump(res));
-        res.Message.Should().Be(ApprovalMessages.FlowConditionUndecidable("po-z"));
+        res.Message.Should().Be(ApprovalMessages.FlowConditionUndecidable("po-z").Resolve(null));
         StateOf(r, po.Id).Should().Be(r.Draft);
         Db.Context.Set<ApprovalInstance>().AsNoTracking().Count().Should().Be(0);
     }
@@ -105,7 +105,7 @@ public class ApprovalSubmitTests : ApprovalTestBase
         await Db.Context.Set<ApprovalFlow>().Where(f => f.Key == "po-c").ExecuteUpdateAsync(s => s.SetProperty(f => f.Active, false));
 
         var res = await Submit(po.Id, r.Cancelled);
-        res.Errors[$"f_{r.Status}"].Should().Equal(ApprovalMessages.NoMatchingFlow);
+        res.Errors[$"f_{r.Status}"].Should().Equal(ApprovalMessages.NoMatchingFlow.Resolve(null));
         Db.Context.Set<ApprovalInstance>().AsNoTracking().Count().Should().Be(0);
     }
 
@@ -206,7 +206,7 @@ public class ApprovalSubmitTests : ApprovalTestBase
         (await Submit(po.Id, r.Confirmed, rowVersion: stale)).IsCreated.Should().BeTrue();
         var again = await Submit(po.Id, r.Confirmed, rowVersion: stale);
         again.IsConflict.Should().BeTrue();
-        again.Message.Should().Be(ApprovalMessages.AlreadyPending);
+        again.Message.Should().Be(ApprovalMessages.AlreadyPending.Resolve(null));
     }
 
     [Fact]
@@ -232,7 +232,7 @@ public class ApprovalSubmitTests : ApprovalTestBase
         ];
         foreach (var picks in bad)
             (await Submit(po.Id, r.Confirmed, picks)).Errors.Should().ContainKey("picks.it", string.Join(",", picks["it"]));
-        (await Submit(po.Id, r.Confirmed, new() { ["it"] = ["fin1", "gm"] })).Errors["picks.it"].Should().Equal(ApprovalMessages.PickCount(1, 1));
+        (await Submit(po.Id, r.Confirmed, new() { ["it"] = ["fin1", "gm"] })).Errors["picks.it"].Should().Equal(ApprovalMessages.PickCount(1, 1).Resolve(null));
         (await Submit(po.Id, r.Confirmed, new() { ["it"] = ["fin1"], ["zz"] = ["gm"] })).Errors.Should().ContainKey("picks.zz");
         Db.Context.Set<ApprovalInstance>().AsNoTracking().Count().Should().Be(0);
 
@@ -256,7 +256,7 @@ public class ApprovalSubmitTests : ApprovalTestBase
         As("buyer2");
         var po = await NewPo(r, price: 50000);
 
-        (await Submit(po.Id, r.Confirmed, new() { ["it"] = ["gm"] })).Errors["picks.it"].Should().Equal(ApprovalMessages.PickCandidatesUnmatched);
+        (await Submit(po.Id, r.Confirmed, new() { ["it"] = ["gm"] })).Errors["picks.it"].Should().Equal(ApprovalMessages.PickCandidatesUnmatched.Resolve(null));
         Db.Context.Set<ApprovalInstance>().AsNoTracking().Count().Should().Be(0);
 
         var ok = await Submit(po.Id, r.Confirmed);
@@ -281,7 +281,7 @@ public class ApprovalSubmitTests : ApprovalTestBase
 
         var res = await Submit(po.Id, r.Confirmed);
         res.IsConflict.Should().BeTrue(Dump(res));
-        res.Message.Should().Be(ApprovalMessages.NoApprover("it", ApprovalMessages.PickLabel));
+        res.Message.Should().Be(ApprovalMessages.NoApprover("it", ApprovalMessages.PickLabel).Resolve(null));
         Db.Context.Set<ApprovalInstance>().AsNoTracking().Count().Should().Be(0);
     }
 
@@ -317,9 +317,9 @@ public class ApprovalSubmitTests : ApprovalTestBase
         await GrantEveryone(r.Module);
         As("buyer1");
         var outside = await NewPo(r, price: 50000, extra: V((r.Owner, "emp1")));
-        (await Submit(outside.Id, r.Confirmed)).Errors[$"f_{r.Owner}"].Should().Equal(ApprovalMessages.UserFieldNotCandidate);
+        (await Submit(outside.Id, r.Confirmed)).Errors[$"f_{r.Owner}"].Should().Equal(ApprovalMessages.UserFieldNotCandidate.Resolve(null));
         var self = await NewPo(r, price: 50000, extra: V((r.Owner, "buyer1")));
-        (await Submit(self.Id, r.Confirmed)).Errors[$"f_{r.Owner}"].Should().Equal(ApprovalMessages.UserFieldIsInitiator);
+        (await Submit(self.Id, r.Confirmed)).Errors[$"f_{r.Owner}"].Should().Equal(ApprovalMessages.UserFieldIsInitiator.Resolve(null));
         var good = await NewPo(r, price: 50000, extra: V((r.Owner, "fin1")));
         var res = await Submit(good.Id, r.Confirmed);
         TasksOf(((SubmitApprovalResponse)res.Data!).InstanceId!.Value).Select(t => t.AssigneeUserId).Should().Equal("fin1");

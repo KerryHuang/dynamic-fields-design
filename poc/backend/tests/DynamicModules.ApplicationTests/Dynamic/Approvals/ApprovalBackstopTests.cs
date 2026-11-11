@@ -63,7 +63,7 @@ public class ApprovalBackstopTests : ApprovalTestBase
 
         var other = await Put(po.Id, new() { [Status] = O(_r.Returned) });
         other.IsConflict.Should().BeTrue();
-        other.Message.Should().Be(ApprovalMessages.WithdrawFirst);
+        other.Message.Should().Be(ApprovalMessages.WithdrawFirst.Resolve(null));
     }
 
     [Fact]
@@ -72,7 +72,7 @@ public class ApprovalBackstopTests : ApprovalTestBase
         await Rig();
         var po = await NewPo(_r);   // 目前使用者是系統管理員，也不能用 PUT 走需簽核轉移
         var res = await Put(po.Id, new() { [Status] = O(_r.Confirmed) });
-        res.Errors[Status].Should().Equal(ApprovalMessages.NeedsSubmit);
+        res.Errors[Status].Should().Equal(ApprovalMessages.NeedsSubmit.Resolve(null));
         StateOf(_r, po.Id).Should().Be(_r.Draft);
         // 一般轉移照舊
         (await Put(po.Id, new() { [Status] = O(_r.Returned) })).IsSuccess.Should().BeTrue();
@@ -85,7 +85,7 @@ public class ApprovalBackstopTests : ApprovalTestBase
         var po = await PendingPo();
         var res = await Send(new DeleteRecordRequest(po.Id, Rec(po.Id).Row.RowVersion));
         res.IsConflict.Should().BeTrue();
-        res.Message.Should().Be(ApprovalMessages.Pending);
+        res.Message.Should().Be(ApprovalMessages.Pending.Resolve(null));
         Rec(po.Id).Row.DeleteFlag.Should().BeFalse();
     }
 
@@ -97,7 +97,7 @@ public class ApprovalBackstopTests : ApprovalTestBase
         var row = new DetailRowInput(null, V(((await Detail(_r.Line)).TitleFieldId!.Value, "列"), (_r.LineQty, 5), (_r.LinePrice, 10)), null);
         var res = await Put(po.Id, [], new() { [_r.Line] = [row] });
         res.IsConflict.Should().BeTrue();
-        res.Message.Should().Be(ApprovalMessages.Pending);
+        res.Message.Should().Be(ApprovalMessages.Pending.Resolve(null));
     }
 
     private Record LineOf(long poId)
@@ -130,7 +130,7 @@ public class ApprovalBackstopTests : ApprovalTestBase
         await Rig();
         var po = await PendingPo();
         var res = await WriteLineDirect(LineOf(po.Id).Id, (_r.LineQty, 99));
-        res!.Message.Should().Be(ApprovalMessages.EventBlocked(po.Id));
+        res!.Message.Should().Be(ApprovalMessages.EventBlocked(po.Id).Resolve(null));
     }
 
     [Fact]
@@ -141,7 +141,7 @@ public class ApprovalBackstopTests : ApprovalTestBase
         var free = await NewPo(_r);
         var pending = await PendingPo();
         var res = await WriteLineDirect(LineOf(free.Id).Id, (_r.LineHead, pending.Id));
-        res!.Message.Should().Be(ApprovalMessages.EventBlocked(pending.Id));
+        res!.Message.Should().Be(ApprovalMessages.EventBlocked(pending.Id).Resolve(null));
     }
 
     [Fact]
@@ -156,7 +156,7 @@ public class ApprovalBackstopTests : ApprovalTestBase
 
         var res = await NewExtra(po.Id, 100);
         res.IsConflict.Should().BeTrue();
-        res.Message.Should().Be(ApprovalMessages.EventBlocked(po.Id));
+        res.Message.Should().Be(ApprovalMessages.EventBlocked(po.Id).Resolve(null));
         Rec(po.Id).Row.ValuesJson.Should().Be(before);
         Db.Context.Set<Record>().AsNoTracking().Count(x => x.ModuleId == ExtraModuleId()).Should().Be(0);
     }
@@ -172,7 +172,7 @@ public class ApprovalBackstopTests : ApprovalTestBase
 
         var res = await Send(new DeleteRecordRequest(vendor.Id, Rec(vendor.Id).Row.RowVersion));
         res.IsConflict.Should().BeTrue();
-        res.Message.Should().Be(ApprovalMessages.EventBlocked(po.Id));
+        res.Message.Should().Be(ApprovalMessages.EventBlocked(po.Id).Resolve(null));
         Rec(vendor.Id).Row.DeleteFlag.Should().BeFalse();
     }
 
@@ -214,7 +214,7 @@ public class ApprovalBackstopTests : ApprovalTestBase
                 new HashSet<string> { Status }), CancellationToken.None)).IsSuccess.Should().BeTrue();
         await sp.GetRequiredService<IUnitOfWork>().CommitAsync(CancellationToken.None);
         var res = await sp.GetRequiredService<ApprovalBackstopStage>().RunAsync(CancellationToken.None);
-        res!.Message.Should().Be(ApprovalMessages.TransitionBlocked(po.Id));
+        res!.Message.Should().Be(ApprovalMessages.TransitionBlocked(po.Id).Resolve(null));
     }
 
     /// <summary>同一個 scope 內以系統身分依序改狀態（每步各自 commit，同一份寫入日誌），最後跑後盾。</summary>
@@ -245,7 +245,7 @@ public class ApprovalBackstopTests : ApprovalTestBase
             Needs(_r.Confirmed, _r.Cancelled), Plain(_r.Draft, _r.Returned), Needs(_r.Returned, _r.Cancelled)]);
         wf.IsSuccess.Should().BeTrue(Dump(wf));
         var po = await NewPo(_r);
-        (await SystemSteps(po.Id, _r.Returned, _r.Cancelled))!.Message.Should().Be(ApprovalMessages.TransitionBlocked(po.Id));
+        (await SystemSteps(po.Id, _r.Returned, _r.Cancelled))!.Message.Should().Be(ApprovalMessages.TransitionBlocked(po.Id).Resolve(null));
     }
 
     [Fact]
@@ -265,7 +265,7 @@ public class ApprovalBackstopTests : ApprovalTestBase
             (await sp.GetRequiredService<IRequestHandler<UpdateRecordRequest, ServiceResult>>().Handle(new UpdateRecordRequest(po.Id,
                 new() { [Status] = O(_r.Partial) }, row!.RowVersion, null, new HashSet<string> { Status }), CancellationToken.None)).IsSuccess.Should().BeTrue();
         await sp.GetRequiredService<IUnitOfWork>().CommitAsync(CancellationToken.None);
-        (await sp.GetRequiredService<ApprovalBackstopStage>().RunAsync(CancellationToken.None))!.Message.Should().Be(ApprovalMessages.EventBlocked(po.Id));
+        (await sp.GetRequiredService<ApprovalBackstopStage>().RunAsync(CancellationToken.None))!.Message.Should().Be(ApprovalMessages.EventBlocked(po.Id).Resolve(null));
     }
 
     [Fact]
@@ -293,7 +293,7 @@ public class ApprovalBackstopTests : ApprovalTestBase
                     new() { [Status] = O(to) }, row!.RowVersion, null, new HashSet<string> { Status }), CancellationToken.None)).IsSuccess.Should().BeTrue();
             await sp.GetRequiredService<IUnitOfWork>().CommitAsync(CancellationToken.None);
         }
-        (await sp.GetRequiredService<ApprovalBackstopStage>().RunAsync(CancellationToken.None))!.Message.Should().Be(ApprovalMessages.TransitionBlocked(po.Id));
+        (await sp.GetRequiredService<ApprovalBackstopStage>().RunAsync(CancellationToken.None))!.Message.Should().Be(ApprovalMessages.TransitionBlocked(po.Id).Resolve(null));
     }
 
     private async Task<ServiceResult?> RunInOneRequest(long instanceId, long recordId, bool alsoMemo)

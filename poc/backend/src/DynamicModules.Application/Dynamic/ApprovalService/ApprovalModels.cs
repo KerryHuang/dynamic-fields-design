@@ -1,6 +1,8 @@
 using System.Text.Json;
 using DynamicModules.Domain.ValueObjects;
 
+using DynamicModules.Application.Common;
+
 namespace DynamicModules.Application.Dynamic.ApprovalService;
 
 /// <summary>Outcome：submitted（建立實例）、approved（全部關卡都被跳過，直接核准）、direct（沒有流程符合，直接轉移）。</summary>
@@ -19,7 +21,7 @@ public static class ApprovalOutcomes
 public static class ApprovalActionRules
 {
     /// <summary>空白算沒填；回 CommentRequired／CommentTooLong／null。</summary>
-    public static string? CommentError(string? comment, bool required)
+    public static MessageRef? CommentError(string? comment, bool required)
     {
         if (string.IsNullOrWhiteSpace(comment)) return required ? ApprovalMessages.CommentRequired : null;
         return comment.Length > Domain.Approvals.ApprovalLimits.MaxCommentLength ? ApprovalMessages.CommentTooLong : null;

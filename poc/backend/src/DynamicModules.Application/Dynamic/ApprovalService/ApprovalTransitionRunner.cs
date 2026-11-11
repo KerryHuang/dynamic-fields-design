@@ -25,9 +25,9 @@ public sealed class ApprovalTransitionRunner(
     public async Task<ServiceResult> RunAsync(ApprovalInstance inst, long? toOptionId, IReadOnlyDictionary<string, JsonElement?>? values, CancellationToken ct)
     {
         var record = await records.GetAsync(inst.RecordId, ct);
-        if (record is null) return ServiceResult.Conflict("找不到簽核的記錄（可能已被刪除）");
+        if (record is null) return ServiceResult.Conflict(ApprovalMessages.RecordGone);
         var module = await modules.GetByIdAsync(record.ModuleId, includeChildren: true, ct);
-        if (module?.Workflow is not { } wf) return ServiceResult.Conflict("記錄所在模組沒有狀態機");
+        if (module?.Workflow is not { } wf) return ServiceResult.Conflict(ApprovalMessages.NoWorkflow);
 
         var input = values is null ? new Dictionary<string, JsonElement?>() : new Dictionary<string, JsonElement?>(values);
         if (toOptionId is { } to) input[wf.StatusFieldKey] = JsonSerializer.SerializeToElement($"opt_{to}");
