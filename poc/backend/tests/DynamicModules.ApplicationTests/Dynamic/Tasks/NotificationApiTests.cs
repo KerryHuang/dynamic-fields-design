@@ -143,6 +143,19 @@ public class NotificationApiTests : TaskTestBase
     }
 
     [Fact]
+    public async Task Purge_FollowsRetentionPolicy()
+    {
+        As("admin");
+        (await Send(new UpdateSystemPolicyRequest("notification.retentionDays", J("30")))).IsSuccess.Should().BeTrue();
+        await SeedNotification("sales01", new DateTime(2026, 10, 3, 9, 0, 0));    // 32 天前
+        var kept = await SeedNotification("sales01", new DateTime(2026, 10, 6, 9, 0, 0));   // 29 天前
+
+        var list = await Get("sales01");
+
+        list.Items.Select(i => i.Id).Should().Equal(kept);
+    }
+
+    [Fact]
     public async Task List_LatestFirst_TakeLimits_SourceMissingStillShown()
     {
         var older = await SeedNotification("sales01", new DateTime(2026, 11, 1, 9, 0, 0), sourceId: 999);   // 任務 999 不存在

@@ -1,6 +1,8 @@
 using DynamicModules.Application.Common;
 using DynamicModules.Application.Common.Security;
 using DynamicModules.Application.Common.Time;
+using DynamicModules.Application.Dynamic.PolicyService;
+using DynamicModules.Domain.Policies;
 using DynamicModules.Domain.Repositories.Dynamic;
 using MediatR;
 using Microsoft.Extensions.Logging;
@@ -10,7 +12,7 @@ namespace DynamicModules.Application.Dynamic.NotificationService;
 /// <summary>先唯讀檢查要不要補提醒或清舊通知，成立才送交易型的 upkeep，再讀清單與未讀數。</summary>
 public class GetNotificationsHandler(
     IEnumerable<INotificationReminderSource> sources, INotificationRepository notifications, ICurrentUser user, IBusinessTime time, ISender sender,
-    ILogger<GetNotificationsHandler> logger)
+    IPolicyReader policies, ILogger<GetNotificationsHandler> logger)
     : IRequestHandler<GetNotificationsRequest, ServiceResult>
 {
     public async Task<ServiceResult> Handle(GetNotificationsRequest request, CancellationToken ct)
@@ -38,14 +40,17 @@ public class GetNotificationsHandler(
     {
         foreach (var source in sources)
             if (await source.AnyDueAsync(userId, time.Today, ct)) return true;
-        return await notifications.AnyOlderThanAsync(userId, Cutoff(time), ct);
+        return await notifications.AnyOlderThanAsync(userId, await CutoffAsync(time, policies, ct), ct);
     }
 
-    internal static DateTime Cutoff(IBusinessTime time) => time.Now.AddDays(-NotificationRules.RetentionDays);
+    /// <summary>超過這個時間的通知要清掉；保留天數見政策 notification.retentionDays。</summary>
+    internal static async Task<DateTime> CutoffAsync(IBusinessTime time, IPolicyReader policies, CancellationToken ct) =>
+        time.Now.AddDays(-await policies.IntAsync(PolicyCatalog.NotificationRetentionDays, null, ct));
 }
 
 public class EnsureNotificationUpkeepHandler(
-    IEnumerable<INotificationReminderSource> sources, INotificationRepository notifications, ICurrentUser user, IBusinessTime time, IUnitOfWork uow)
+    IEnumerable<INotificationReminderSource> sources, INotificationRepository notifications, ICurrentUser user, IBusinessTime time, IUnitOfWork uow,
+    IPolicyReader policies)
     : IRequestHandler<EnsureNotificationUpkeepRequest, ServiceResult>
 {
     public async Task<ServiceResult> Handle(EnsureNotificationUpkeepRequest request, CancellationToken ct)
@@ -53,7 +58,7 @@ public class EnsureNotificationUpkeepHandler(
         var userId = user.UserId;
         foreach (var source in sources) await source.AddDueAsync(userId, time.Today, ct);
         await uow.CommitAsync(ct);
-        var cutoff = GetNotificationsHandler.Cutoff(time);
+        var cutoff = await GetNotificationsHandler.CutoffAsync(time, policies, ct);
         if (await notifications.AnyOlderThanAsync(userId, cutoff, ct)) await notifications.PurgeOlderThanAsync(userId, cutoff, ct);
         return ServiceResult.Success();
     }

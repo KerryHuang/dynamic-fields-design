@@ -16,7 +16,6 @@ public static class NotificationMessages
 
 public static class NotificationRules
 {
-    public const int RetentionDays = 90;
     public const int MaxTake = 100;
 }
 

@@ -1,4 +1,5 @@
 using DynamicModules.Application.Dynamic.PermissionService.Data;
+using DynamicModules.Application.Dynamic.PolicyService;
 using DynamicModules.Application.Dynamic.TaskService;
 using DynamicModules.Domain.Entities.Dynamic;
 using FluentAssertions;
@@ -88,6 +89,54 @@ public class TaskNotificationTests : TaskTestBase
         await Patch(task.Id, """{"status":"cancelled"}""");
         (await Inbox("admin")).Should().ContainSingle("建立者自己取消不通知");
         (await Inbox("sales01")).Should().BeEmpty("完成、取消只通知建立者");
+    }
+
+    private async Task Override(Target t, string code, string jsonValue)
+    {
+        As("admin");
+        (await Send(new UpdateModulePolicyRequest(t.Key, code, J(jsonValue)))).IsSuccess.Should().BeTrue();
+    }
+
+    [Fact]
+    public async Task Comment_RecipientsFollowModulePolicy()
+    {
+        var t = await BuildTarget();
+        await Override(t, "task.notify.commented", """["creator"]""");
+        var task = await SeedTask(createdBy: "admin", assignee: "sales01", mentioned: ["sales02"], moduleId: t.ModuleId);
+
+        As("sales02");
+        await Comment(task.Id, "請看");
+
+        (await Inbox("admin")).Select(n => n.Kind).Should().Equal(NotificationKinds.TaskCommented);
+        (await Inbox("sales01")).Should().BeEmpty("政策只通知建立者");
+    }
+
+    [Fact]
+    public async Task Comment_EmptyRoles_NobodyGetsCommented_MentionsStillSent()
+    {
+        var t = await BuildTarget();
+        await Override(t, "task.notify.commented", "[]");
+        var task = await SeedTask(createdBy: "admin", assignee: "sales01", mentioned: ["sales02"], moduleId: t.ModuleId);
+
+        As("sales02");
+        await Comment(task.Id, "@{sales01} 請看");
+
+        (await Inbox("sales01")).Select(n => n.Kind).Should().Equal(NotificationKinds.TaskMentioned);
+        (await Inbox("admin")).Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task Complete_NotifiesAssigneeToo_WhenPolicySaysSo()
+    {
+        var t = await BuildTarget();
+        await Override(t, "task.notify.completed", """["assignee","creator"]""");
+        var task = await SeedTask(createdBy: "sales02", assignee: "sales01", moduleId: t.ModuleId);
+
+        As("admin");
+        await Patch(task.Id, """{"status":"done"}""");
+
+        (await Inbox("sales01")).Select(n => n.Kind).Should().Equal(NotificationKinds.TaskCompleted);
+        (await Inbox("sales02")).Select(n => n.Kind).Should().Equal(NotificationKinds.TaskCompleted);
     }
 
     [Fact]
