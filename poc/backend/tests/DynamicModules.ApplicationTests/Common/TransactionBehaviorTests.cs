@@ -19,6 +19,8 @@ public class TransactionBehaviorTests
 
     private class FakeManager(List<string> log) : ITransactionManager
     {
+        public bool IsActive => false;
+
         public Task<ITransactionScopeHandle> BeginAsync(CancellationToken ct)
         {
             log.Add("begin");

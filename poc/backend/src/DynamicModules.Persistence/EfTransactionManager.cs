@@ -12,6 +12,8 @@ public class EfTransactionManager(DynamicDbContext db) : ITransactionManager
     /// 已在交易內（如從範本建立時重播的內層指令）回不做事的 handle，由外層決定提交或回滾。
     /// 最外層交易先在 <see cref="WriteGate"/> 排隊，再開交易（EF 對 SQLite 開的是 BEGIN IMMEDIATE，一開始就持有寫入鎖）。
     /// </summary>
+    public bool IsActive => db.Database.CurrentTransaction is not null;
+
     public async Task<ITransactionScopeHandle> BeginAsync(CancellationToken ct)
     {
         if (db.Database.CurrentTransaction is not null) return NoopHandle.Instance;
