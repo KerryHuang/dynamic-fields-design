@@ -439,15 +439,15 @@ export const dynamicApi = {
   getMyTasks: (tab: TaskListTab, filter: TaskListFilter, page: number, size = 20) =>
     http.get<TaskPage>('/tasks', { params: { tab, filter, currentPage: page, pagesSize: size } }).then(data).then(normalizeTaskPage),
   /** Designer endpoints for task rules; the server omits null properties, so lists default to empty. */
-  getTaskRules: (moduleKey: string) => http.get<TaskRule[]>(`/modules/${moduleKey}/task-rules`).then(data)
+  getTaskRules: (moduleKey: string) => http.get<TaskRule[]>(`/modules/${encodeURIComponent(moduleKey)}/task-rules`).then(data)
     .then((list) => list.map(normalizeTaskRule)),
   createTaskRule: (moduleKey: string, body: TaskRuleInput) =>
-    http.post<TaskRule>(`/modules/${moduleKey}/task-rules`, body).then(data).then(normalizeTaskRule),
+    http.post<TaskRule>(`/modules/${encodeURIComponent(moduleKey)}/task-rules`, body).then(data).then(normalizeTaskRule),
   updateTaskRule: (moduleKey: string, ruleKey: string, body: TaskRuleInput) =>
-    http.put<TaskRule>(`/modules/${moduleKey}/task-rules/${ruleKey}`, body).then(data).then(normalizeTaskRule),
-  deleteTaskRule: (moduleKey: string, ruleKey: string) => http.delete(`/modules/${moduleKey}/task-rules/${ruleKey}`).then(data),
+    http.put<TaskRule>(`/modules/${encodeURIComponent(moduleKey)}/task-rules/${encodeURIComponent(ruleKey)}`, body).then(data).then(normalizeTaskRule),
+  deleteTaskRule: (moduleKey: string, ruleKey: string) => http.delete(`/modules/${encodeURIComponent(moduleKey)}/task-rules/${encodeURIComponent(ruleKey)}`).then(data),
   applyTaskRule: (recordId: number, ruleKey: string) =>
-    http.post<RecordTasks>(`/records/${recordId}/task-rules/${ruleKey}/apply`).then(data).then(normalizeRecordTasks),
+    http.post<RecordTasks>(`/records/${recordId}/task-rules/${encodeURIComponent(ruleKey)}/apply`).then(data).then(normalizeRecordTasks),
   getTaskSummary: () => http.get<TaskCounts>('/tasks/summary').then(data)
     .then((c) => ({ dueToday: c.dueToday ?? 0, overdue: c.overdue ?? 0 })),
   getNotifications: (take = 20) =>
