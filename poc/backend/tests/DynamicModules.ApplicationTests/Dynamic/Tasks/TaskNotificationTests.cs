@@ -140,6 +140,33 @@ public class TaskNotificationTests : TaskTestBase
     }
 
     [Fact]
+    public async Task Complete_SameAssigneeAndCreator_NotifiedOnce()
+    {
+        var t = await BuildTarget();
+        await Override(t, "task.notify.completed", """["assignee","creator"]""");
+        var task = await SeedTask(createdBy: "sales01", assignee: "sales01", moduleId: t.ModuleId);
+
+        As("admin");
+        await Patch(task.Id, """{"status":"done"}""");
+
+        (await Inbox("sales01")).Select(n => n.Kind).Should().Equal(NotificationKinds.TaskCompleted);
+    }
+
+    [Fact]
+    public async Task Complete_ActorIsAssignee_NotNotified_CreatorIs()
+    {
+        var t = await BuildTarget();
+        await Override(t, "task.notify.completed", """["assignee","creator"]""");
+        var task = await SeedTask(createdBy: "admin", assignee: "sales01", moduleId: t.ModuleId);
+
+        As("sales01");
+        await Patch(task.Id, """{"status":"done"}""");
+
+        (await Inbox("sales01")).Should().BeEmpty("完成的人本人不通知");
+        (await Inbox("admin")).Select(n => n.Kind).Should().Equal(NotificationKinds.TaskCompleted);
+    }
+
+    [Fact]
     public async Task CompleteOrCancel_SystemCreator_NoNotification()
     {
         var task = await SeedTask(createdBy: null, assignee: "sales01");

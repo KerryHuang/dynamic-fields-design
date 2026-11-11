@@ -24,6 +24,14 @@ public class ReportDatesTests
         R("thisWeek", basis: sunday, weekStart: DayOfWeek.Sunday).Should().Be(Range(2026, 11, 1, 2026, 11, 7));
     }
 
+    [Fact]
+    public void ThisWeek_CrossesYear_AndWeekEndsToday()
+    {
+        R("thisWeek", basis: new DateOnly(2027, 1, 1), weekStart: DayOfWeek.Sunday).Should().Be(Range(2026, 12, 27, 2027, 1, 2));
+        R("thisWeek", weekStart: DayOfWeek.Thursday).Should().Be(Range(2026, 11, 5, 2026, 11, 11));
+        R("thisWeek", basis: new DateOnly(2026, 11, 4), weekStart: DayOfWeek.Thursday).Should().Be(Range(2026, 10, 29, 2026, 11, 4));
+    }
+
     [Fact] public void Today() => R("today").Should().Be(Range(2026, 11, 5, 2026, 11, 5));
     [Fact] public void ThisWeek_StartsMonday() => R("thisWeek").Should().Be(Range(2026, 11, 2, 2026, 11, 8));
     [Fact] public void LastWeek() => R("lastWeek").Should().Be(Range(2026, 10, 26, 2026, 11, 1));

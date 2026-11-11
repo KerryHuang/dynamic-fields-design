@@ -50,8 +50,8 @@ public partial class ReportRunner
         if (Value(total) is not { } current) return null;
 
         var previous = new List<decimal>();
-        foreach (var window in ReportCardMath.PreviousWindows(range, basis, periods,
-            PolicyCatalog.WeekStartOf(await policies.ChoiceAsync(PolicyCatalog.CalendarWeekStart, null, ct))))
+        var weekStart = PolicyCatalog.WeekStartOf(await policies.ChoiceAsync(PolicyCatalog.CalendarWeekStart, null, ct));
+        foreach (var window in ReportCardMath.PreviousWindows(range, basis, periods, weekStart))
         {
             var run = await RunAsync(d, new ReportRunOptions(null, null, o.Locale, Window: window), ct);
             if (run.State is not ("ok" or "empty")) return null;

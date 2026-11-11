@@ -102,6 +102,26 @@ public class NotificationApiTests : TaskTestBase
     }
 
     [Fact]
+    public async Task ReminderFilter_ExcludesInDatabase_WrongDateAndOverdueOffModule()
+    {
+        var t = await BuildTarget();
+        await SeedTask(title: "對的日期", assignee: "sales01", due: D(11, 7));
+        await SeedTask(title: "錯的日期", assignee: "sales01", due: D(11, 5));
+        await SeedTask(title: "模組逾期（關）", assignee: "sales01", due: D(11, 3), moduleId: t.ModuleId);
+        await SeedTask(title: "無模組逾期（開）", assignee: "sales01", due: D(11, 2));
+        var repo = Svc<DynamicModules.Domain.Repositories.Dynamic.ITaskRepository>();
+
+        var filter = new DynamicModules.Domain.Repositories.Dynamic.ReminderFilter([D(11, 7)], [], OverdueWithoutModule: true);
+        var due = await repo.ListReminderDueAsync("sales01", D(11, 4), filter, track: false, CancellationToken.None);
+        due.Select(x => x.Title).Should().Equal("對的日期", "無模組逾期（開）");
+
+        var off = new DynamicModules.Domain.Repositories.Dynamic.ReminderFilter([], [], OverdueWithoutModule: false);
+        (await repo.AnyReminderDueAsync("sales01", D(11, 4), off, CancellationToken.None)).Should().BeFalse();
+        (await repo.ListReminderModuleIdsAsync("sales01", D(11, 4), 30, CancellationToken.None))
+            .Should().BeEquivalentTo(new long?[] { null, t.ModuleId });
+    }
+
+    [Fact]
     public async Task Overdue_NextDay_RemindsAgain()
     {
         await SeedTask(title: "已逾期", assignee: "sales01", due: D(11, 3));
@@ -147,12 +167,13 @@ public class NotificationApiTests : TaskTestBase
     {
         As("admin");
         (await Send(new UpdateSystemPolicyRequest("notification.retentionDays", J("30")))).IsSuccess.Should().BeTrue();
-        await SeedNotification("sales01", new DateTime(2026, 10, 3, 9, 0, 0));    // 32 天前
+        await SeedNotification("sales01", new DateTime(2026, 10, 4, 8, 59, 0));    // 31 天前
+        var boundary = await SeedNotification("sales01", new DateTime(2026, 10, 5, 9, 0, 0));   // 剛好 30 天前：不早於 cutoff，保留
         var kept = await SeedNotification("sales01", new DateTime(2026, 10, 6, 9, 0, 0));   // 29 天前
 
         var list = await Get("sales01");
 
-        list.Items.Select(i => i.Id).Should().Equal(kept);
+        list.Items.Select(i => i.Id).Should().BeEquivalentTo([boundary, kept]);
     }
 
     [Fact]

@@ -99,14 +99,39 @@ public class TaskRepository(DynamicDbContext db) : ITaskRepository
                 && db.Set<TaskComment>().Any(c => c.Id == commentId && c.TaskId == taskId && !c.Withdrawn))
             .FirstOrDefaultAsync(ct);
 
-    public Task<List<TaskItem>> ListReminderCandidatesAsync(string userId, DateOnly today, int maxLeadDays, bool track, CancellationToken ct)
+    private IQueryable<TaskItem> ReminderBase(string userId)
     {
         var open = new[] { TaskItemStatus.Todo, TaskItemStatus.InProgress };
-        var last = today.AddDays(maxLeadDays);
         // 掛在已關閉（凍結）模組記錄上的任務不提醒，模組重新開啟後恢復（設計 §16 第 6 條）
-        var query = db.Set<TaskItem>().Where(t => t.AssigneeUserId == userId && open.Contains(t.Status) && t.DueDate != null
-            && (t.ModuleId == null || !db.Set<Module>().Any(m => m.Id == t.ModuleId && m.Status == ModuleStatus.Closed))
-            && ((t.DueDate >= today && t.DueDate <= last && t.LastDueSoonNotified != today) || (t.DueDate < today && t.LastOverdueNotified != today)));
+        return db.Set<TaskItem>().Where(t => t.AssigneeUserId == userId && open.Contains(t.Status) && t.DueDate != null
+            && (t.ModuleId == null || !db.Set<Module>().Any(m => m.Id == t.ModuleId && m.Status == ModuleStatus.Closed)));
+    }
+
+    public Task<List<long?>> ListReminderModuleIdsAsync(string userId, DateOnly today, int maxLeadDays, CancellationToken ct)
+    {
+        var last = today.AddDays(maxLeadDays);
+        return ReminderBase(userId).AsNoTracking()
+            .Where(t => (t.DueDate >= today && t.DueDate <= last && t.LastDueSoonNotified != today)
+                || (t.DueDate < today && t.LastOverdueNotified != today))
+            .Select(t => t.ModuleId).Distinct().ToListAsync(ct);
+    }
+
+    private IQueryable<TaskItem> ReminderDue(string userId, DateOnly today, ReminderFilter filter)
+    {
+        var dates = filter.DueSoonDates.ToArray();
+        var overdueModules = filter.OverdueModuleIds.ToArray();
+        var overdueNoModule = filter.OverdueWithoutModule;
+        return ReminderBase(userId).Where(t => (dates.Contains(t.DueDate!.Value) && t.LastDueSoonNotified != today)
+            || (t.DueDate < today && t.LastOverdueNotified != today
+                && (t.ModuleId == null ? overdueNoModule : overdueModules.Contains(t.ModuleId.Value))));
+    }
+
+    public Task<bool> AnyReminderDueAsync(string userId, DateOnly today, ReminderFilter filter, CancellationToken ct) =>
+        ReminderDue(userId, today, filter).AsNoTracking().AnyAsync(ct);
+
+    public Task<List<TaskItem>> ListReminderDueAsync(string userId, DateOnly today, ReminderFilter filter, bool track, CancellationToken ct)
+    {
+        var query = ReminderDue(userId, today, filter);
         return (track ? query : query.AsNoTracking()).OrderBy(t => t.Id).ToListAsync(ct);
     }
 

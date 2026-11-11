@@ -177,7 +177,10 @@ public partial class ReportRunner(
 
         // 日期區間與執行上下文在載入前就定好：SQL 路徑與記憶體路徑共用
         var range = (o.RangeOverride ?? d.DateRange) is { } rangeDef && d.PrimaryDateField is not null ? rangeDef : null;
-        var weekStart = PolicyCatalog.WeekStartOf(await policies.ChoiceAsync(PolicyCatalog.CalendarWeekStart, null, ct));
+        // 只有真的要依區間換算（沒有固定區間）時才讀政策
+        var weekStart = o.Window is null && range is not null
+            ? PolicyCatalog.WeekStartOf(await policies.ChoiceAsync(PolicyCatalog.CalendarWeekStart, null, ct))
+            : DayOfWeek.Monday;
         (DateOnly, DateOnly)? resolved = d.PrimaryDateField is null ? null
             : o.Window is { } fixedWindow ? fixedWindow
             : range is null ? null : ReportDates.Resolve(range, basis, weekStart);
