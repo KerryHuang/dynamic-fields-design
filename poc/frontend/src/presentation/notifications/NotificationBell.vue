@@ -22,6 +22,7 @@
         >
           <q-item-section>
             <q-item-label class="notification-text">{{ label(n) }}</q-item-label>
+            <q-item-label caption :data-testid="`notification-time-${n.id}`">{{ timeText(n) }}</q-item-label>
           </q-item-section>
         </q-item>
       </q-list>
@@ -30,6 +31,7 @@
 </template>
 
 <script setup lang="ts">
+import { date } from 'quasar';
 import { computed } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { useRouter } from 'vue-router';
@@ -53,6 +55,8 @@ function label(n: NotificationItem) {
   const known = (NOTIFICATION_KINDS as readonly string[]).includes(n.kind);
   return known ? `${t(`notifications.kind.${n.kind}`)} ${n.title}` : n.title;
 }
+
+const timeText = (n: NotificationItem) => (n.createdTime ? date.formatDate(new Date(n.createdTime), 'YYYY-MM-DD HH:mm') : '');
 
 /** Mark as read first, then follow the link. Only in-app paths are followed (never `//host`, `/\host` or a full URL). */
 async function open(n: NotificationItem) {

@@ -66,6 +66,14 @@ describe('NotificationBell', () => {
     w.unmount();
   });
 
+  it('每則通知顯示建立時間（YYYY-MM-DD HH:mm）', async () => {
+    const { w } = await mountBell({ items: [note(9)], unreadCount: 1 });
+    await w.get('[data-testid="notification-bell"]').trigger('click');
+    await flushPromises();
+    expect(body('[data-testid="notification-time-9"]')!.textContent).toBe(quasar.date.formatDate(new Date('2026-11-10T01:00:00'), 'YYYY-MM-DD HH:mm'));
+    w.unmount();
+  });
+
   it('沒有連結的通知只標為已讀；站外連結不前往', async () => {
     const { w, push } = await mountBell({
       items: [note(1, { link: '' }), note(2, { link: '//evil.example/x' }), note(3, { link: '/\\evil.example/x' })], unreadCount: 3,
