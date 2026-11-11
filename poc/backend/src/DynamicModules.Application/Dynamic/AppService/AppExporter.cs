@@ -18,7 +18,7 @@ public sealed partial class AppExporter(
     TemplateExporter templates, IModuleRepository modules, IAppRepository apps, IPermissionRepository permissions,
     IConversionRepository conversions, IReportRepository reports, IPrintTemplateRepository printTemplates,
     IEventRepository events, ICheckRepository checks, ILedgerRepository ledgers, ISharedMasterRepository shared,
-    AppPackageSource packages)
+    AppPackageSource packages, ITaskRuleRepository taskRules)
 {
     [GeneratedRegex("[^a-zA-Z0-9_]")]
     private static partial Regex NotCode();
@@ -199,6 +199,7 @@ public sealed partial class AppExporter(
         var ledgerList = await ExportLedgersAsync(members, codeOfModule, names, warnings, ct);
         var eventList = await ExportEventsAsync(members, keyToCode, names, warnings, excludedEvents, ct);
         var checkList = await ExportChecksAsync(members, codeOfModule, names, warnings, excludedChecks, ct);
+        var taskRuleList = await ExportTaskRulesAsync(app, isMaster, members, codeOfModule, masterTargets, names, warnings, ct);
         if (isMaster && workflows.Count + conversionList.Count + printList.Count + ledgerList.Count + eventList.Count + checkList.Count > 0)
         {
             // 主檔套件不收流程（§4.1）：客戶在設計器加的就留在資料庫，不寫進檔案，否則匯出的檔案會被匯入驗證退回
@@ -227,7 +228,7 @@ public sealed partial class AppExporter(
             AppPackageData.FormatName, AppPackageData.CurrentFormatVersion,
             new AppManifest(app.Key, app.PackageVersion, app.NameI18n, null, app.Icon, null, requires, isMaster ? AppManifest.MasterKindName : null),
             groups, moduleList, fieldAccess, optionScopes, reportList, null, workflows, conversionList, eventList, printList,
-            checkList, ledgerList, IntegrationDeclarations.Parse(app.IntegrationsJson), contributions);
+            checkList, ledgerList, IntegrationDeclarations.Parse(app.IntegrationsJson), contributions, taskRuleList);
         // groups 在上面各步驟用到才加進 codeOfGroup，最後才組出來
         return new Exported(package, warnings);
     }
@@ -427,6 +428,40 @@ public sealed partial class AppExporter(
             else result.Add(package);
         }
         return result;
+    }
+
+    /// <summary>
+    /// 任務規則：成員模組上手動建的與本應用程式裝的匯出（用模組代號）；主檔模組上只匯出這個應用程式開啟時裝的（AppId 相同，用主檔符號），
+    /// 手動建在主檔上的、別的應用程式裝的不匯出。引用了表達不了的欄位或選項的規則不匯出並警告。
+    /// </summary>
+    private async Task<List<AppTaskRule>> ExportTaskRulesAsync(
+        App app, bool isMaster, List<Module> members, Dictionary<long, string> codeOf, IReadOnlyDictionary<long, string> masterTargets,
+        AppReportCodec.Names names, List<string> warnings, CancellationToken ct)
+    {
+        if (isMaster)
+        {
+            // 主檔套件不收任務規則（格式 7）：手動建在主檔上的留在資料庫，不寫進檔案；使用者應用程式裝的屬於那個應用程式
+            foreach (var m in members)
+                if ((await taskRules.ListByModuleAsync(m.Id, ct)).Any(r => r.AppId is null || r.AppId == app.Id))
+                {
+                    warnings.Add("共用主檔不帶任務規則，這些設定未匯出");
+                    break;
+                }
+            return [];
+        }
+        var result = new List<AppTaskRule>();
+        var sources = members.Select(m => (m.Id, Code: codeOf[m.Id], OwnOnly: false))
+            .Concat(masterTargets.Select(t => (Id: t.Key, Code: t.Value, OwnOnly: true)));
+        foreach (var (moduleId, code, ownOnly) in sources)
+            foreach (var r in await taskRules.ListByModuleAsync(moduleId, ct))
+            {
+                // 別的應用程式裝的（主檔模組上）一律不算；手動建的只在成員模組上算
+                if (r.AppId is { } owner ? owner != app.Id : ownOnly) continue;
+                var (rule, errors) = AppTaskRuleCodec.ToPackage(r, code, names);
+                if (rule is null) warnings.Add($"任務規則「{r.Key}」未匯出（{string.Join("；", errors)}）");
+                else result.Add(rule);
+            }
+        return result.OrderBy(r => r.Code, StringComparer.Ordinal).ToList();
     }
 
     private async Task<List<AppPrintTemplate>> ExportPrintTemplatesAsync(

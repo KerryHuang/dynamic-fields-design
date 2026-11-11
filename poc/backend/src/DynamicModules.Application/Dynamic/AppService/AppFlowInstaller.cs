@@ -9,6 +9,7 @@ using DynamicModules.Application.Dynamic.PrintService;
 using DynamicModules.Application.Dynamic.ReportService.Commands.CreateReport;
 using DynamicModules.Application.Dynamic.ReportService.Commands.SetReportShares;
 using DynamicModules.Application.Dynamic.ReportService.Data;
+using DynamicModules.Application.Dynamic.TaskRuleService;
 using DynamicModules.Application.Dynamic.TemplateService.Data;
 using DynamicModules.Application.Dynamic.WorkflowService.Commands.SaveWorkflow;
 using DynamicModules.Application.Dynamic.WorkflowService.Data;
@@ -174,6 +175,31 @@ public sealed class AppFlowInstaller(ISender sender)
             }
             var created = await sender.Send(new CreateCheckRequest(input), ct);
             if (!created.IsSuccess) return Prefixed(created, $"checks.{c.Code}");
+        }
+        return null;
+    }
+
+    /// <summary>
+    /// 任務規則（格式 7）：要在應用程式列寫入、有了 Id 之後才裝，規則記它屬於哪個應用程式（關閉時停止觸發、刪除時移除）。
+    /// 規則可以掛在主檔模組上（模組與欄位用主檔符號）。引用被排除欄位的規則整條略過並警告；其餘驗證交給 CreateTaskRuleRequest，失敗整批回滾。
+    /// </summary>
+    public async Task<ServiceResult?> InstallTaskRulesAsync(AppPackageData p, TemplateIdMap ids, long appId, List<string> warnings, CancellationToken ct)
+    {
+        var lookups = new AppReportCodec.Lookups(
+            code => ids.ModuleKeys.GetValueOrDefault(code),
+            name => ids.FieldIds.TryGetValue(name, out var id) ? id : null,
+            name => ids.OptionIds.TryGetValue(name, out var id) ? id : null,
+            AppReportCodec.TypesOf(p.Modules));
+        foreach (var r in p.TaskRules)
+        {
+            var (input, _) = AppTaskRuleCodec.ToInput(r, lookups);
+            if (input is null || lookups.ModuleKey(r.Module) is not { } moduleKey)
+            {
+                warnings.Add($"任務規則「{r.Code}」引用了被排除的欄位，已略過");
+                continue;
+            }
+            var created = await sender.Send(new CreateTaskRuleRequest(moduleKey, input, AppId: appId), ct);
+            if (!created.IsSuccess) return Prefixed(created, $"taskRules.{r.Code}");
         }
         return null;
     }

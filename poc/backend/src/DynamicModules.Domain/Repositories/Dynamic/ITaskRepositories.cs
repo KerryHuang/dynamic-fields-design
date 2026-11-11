@@ -73,7 +73,7 @@ public interface ITaskRuleRepository
     Task<TaskRule?> GetByKeyAsync(string key, CancellationToken ct);
     /// <summary>不追蹤，含 Tasks，依 Key。</summary>
     Task<List<TaskRule>> ListByModuleAsync(long moduleId, CancellationToken ct);
-    /// <summary>不追蹤，含 Tasks，只列啟用中的規則，依 Key。</summary>
+    /// <summary>不追蹤，含 Tasks，只列啟用中、且所屬應用程式（有的話）是開啟中的規則，依 Key。</summary>
     Task<List<TaskRule>> ListActiveByModuleAsync(long moduleId, CancellationToken ct);
     /// <summary>追蹤，含 Tasks。</summary>
     Task<List<TaskRule>> ListByAppAsync(long appId, CancellationToken ct);

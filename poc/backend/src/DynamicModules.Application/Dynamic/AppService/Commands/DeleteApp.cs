@@ -40,7 +40,8 @@ public class DeleteAppHandler(
     IAppRepository apps, IModuleRepository modules, DeletePlanner planner, ModuleRemover remover,
     AppDependencyChecker dependencies, IReportRepository reports, IDashboardRepository dashboards, IUnitOfWork uow,
     Integrations.IntegrationReconciler integrations, ISharedMasterRepository shared, IDeletionRepository deletion,
-    SharedMasters.MasterLifecycle lifecycle, ICurrentUser user, Common.Time.IBusinessTime time) : IRequestHandler<DeleteAppRequest, ServiceResult>
+    SharedMasters.MasterLifecycle lifecycle, ICurrentUser user, Common.Time.IBusinessTime time, ITaskRuleRepository taskRules)
+    : IRequestHandler<DeleteAppRequest, ServiceResult>
 {
     public const string DependentKind = "appDependent";
     public const string NotClosedKind = "appNotClosed";
@@ -122,6 +123,8 @@ public class DeleteAppHandler(
         var moduleIds = members.Select(m => m.Id).ToList();
         foreach (var reportId in ownReportIds)
             if (await reports.GetAsync(reportId, ct) is { } report) reports.Remove(report);
+        // 這個應用程式開啟時裝的任務規則，包括掛在共用主檔上的（成員模組上的另由模組清除時一併移除）；已產生的任務保留
+        foreach (var rule in await taskRules.ListByAppAsync(app.Id, ct)) taskRules.Remove(rule);
         apps.Remove(app);
         await uow.CommitAsync(ct);
         foreach (var id in moduleIds) await remover.RemoveAsync(id, ct);

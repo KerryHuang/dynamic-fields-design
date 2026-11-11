@@ -147,7 +147,10 @@ public class TaskRuleRepository(DynamicDbContext db) : ITaskRuleRepository
         WithTasks().Where(r => r.ModuleId == moduleId).OrderBy(r => r.Key).ToListAsync(ct);
 
     public Task<List<TaskRule>> ListActiveByModuleAsync(long moduleId, CancellationToken ct) =>
-        WithTasks().Where(r => r.ModuleId == moduleId && r.Active).OrderBy(r => r.Key).ToListAsync(ct);
+        // 應用程式關閉時它的規則不再觸發，包括掛在共用主檔上的（設計 §5.1）；規則本身的 Active 不動，重新開啟就恢復
+        WithTasks().Where(r => r.ModuleId == moduleId && r.Active
+                && (r.AppId == null || db.Set<App>().Any(a => a.Id == r.AppId && a.Status == AppStatus.Open)))
+            .OrderBy(r => r.Key).ToListAsync(ct);
 
     public Task<List<TaskRule>> ListByAppAsync(long appId, CancellationToken ct) =>
         WithTasks(track: true).Where(r => r.AppId == appId).OrderBy(r => r.Key).ToListAsync(ct);

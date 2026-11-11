@@ -142,6 +142,7 @@ public class AppOpener(
         app.StampCreated(user.UserId, time.Now);
         apps.Add(app);
         await uow.CommitAsync(ct);
+        if (await flows.InstallTaskRulesAsync(package, result.Ids!, app.Id, warnings, ct) is { } ruleFailure) return ruleFailure;
 
         // 代號對照（整合靠它解析夥伴的符號，匯出靠它保留原始代號）與整合的執行狀態；內建套件的整合預設啟用，匯入的要管理員逐一啟用。
         // 主檔的符號只是借來解析的（在主檔名下），不寫進本應用程式；貢獻的對照名稱含 /，記在本應用程式名下（§8）
