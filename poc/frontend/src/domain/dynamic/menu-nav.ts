@@ -50,6 +50,7 @@ export function systemLinks(me: Pick<Me, 'isSystemAdmin' | 'designer'> | undefin
       { to: '/system/organization', label: 'menu.organization', icon: 'account_tree', testid: 'organization-menu' },
       { to: '/system/dashboards', label: 'menu.dashboardsAdmin', icon: 'space_dashboard', testid: 'dashboards-admin-menu' },
       { to: '/system/appearance', label: 'theme.adminMenu', icon: 'palette', testid: 'appearance-menu' },
+      { to: '/system/policies', label: 'policies.menu', icon: 'tune', testid: 'policies-menu' },
     );
   }
   if (me.isSystemAdmin && me.designer.read)

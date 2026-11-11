@@ -6,6 +6,7 @@ const SYSTEM_PAGES: [prefix: string, key: string][] = [
   ['users', 'menu.users'],
   ['groups', 'menu.groups'],
   ['appearance', 'theme.adminMenu'],
+  ['policies', 'policies.menu'],
   ['demo-data', 'menu.demoData'],
   ['dynamic-modules', 'menu.dynamicModules'],
 ];

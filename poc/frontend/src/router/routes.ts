@@ -27,6 +27,7 @@ export const routes: RouteRecordRaw[] = [
       { path: 'system/groups', component: () => import('src/pages/system/GroupsPage.vue') },
       { path: 'system/organization', component: () => import('src/pages/system/OrganizationPage.vue') },
       { path: 'system/appearance', component: () => import('src/pages/system/AppearancePage.vue') },
+      { path: 'system/policies', component: () => import('src/pages/system/PoliciesPage.vue') },
       { path: 'system/apps', component: () => import('src/pages/system/AppsPage.vue') },
       { path: 'system/demo-data', component: () => import('src/pages/system/DemoDataPage.vue') },
     ],

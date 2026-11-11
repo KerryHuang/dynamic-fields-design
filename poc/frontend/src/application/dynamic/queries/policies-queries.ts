@@ -3,8 +3,8 @@ import { computed, toValue, type MaybeRefOrGetter } from 'vue';
 import type { PolicyValue } from 'src/domain/dynamic/policy-types';
 import { dynamicApi } from 'src/services/api/dynamic-api';
 
-export function useSystemPolicies() {
-  return useQuery({ queryKey: ['system-policies'], queryFn: dynamicApi.getSystemPolicies });
+export function useSystemPolicies(opts: { enabled?: MaybeRefOrGetter<boolean> } = {}) {
+  return useQuery({ queryKey: ['system-policies'], queryFn: dynamicApi.getSystemPolicies, enabled: computed(() => toValue(opts.enabled ?? true)) });
 }
 
 export function useSaveSystemPolicy() {

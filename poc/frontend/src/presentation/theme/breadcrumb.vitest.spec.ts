@@ -20,6 +20,7 @@ describe('breadcrumbFor', () => {
     ['/system/users', ['系統管理', '使用者']],
     ['/system/groups', ['系統管理', '群組']],
     ['/system/appearance', ['系統管理', '外觀預設']],
+    ['/system/policies', ['系統管理', '政策設定']],
     ['/system/demo-data', ['系統管理', 'Demo 資料']],
     ['/system/dynamic-modules/orders', ['系統管理', '動態模組設計']],
     ['/', []],

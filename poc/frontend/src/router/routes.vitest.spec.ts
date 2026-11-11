@@ -23,6 +23,12 @@ describe('appearance route', () => {
   });
 });
 
+describe('policies route', () => {
+  it('/system/policies 開啟 PoliciesPage', () => {
+    expect(loaderOf('/system/policies').source).toContain('PoliciesPage');
+  });
+});
+
 describe('conversions route', () => {
   it('/system/conversions opens ConversionsPage', () => {
     expect(loaderOf('/system/conversions').source).toContain('ConversionsPage');
