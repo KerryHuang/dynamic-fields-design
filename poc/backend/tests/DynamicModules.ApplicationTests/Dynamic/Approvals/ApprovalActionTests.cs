@@ -256,6 +256,30 @@ public class ApprovalActionTests : ApprovalTestBase
     }
 
     [Fact]
+    public async Task Approve_ManagerSource_EditableFieldHiddenForManagersGroup_400_NothingWritten()
+    {
+        // a2b2 修正複審建議 1：主管來源存檔時推不出群組、照常放行；執行期依同意者本人的權限判斷隱藏 → 帶值回 400
+        var r = await BuildPurchase();
+        (await SaveWorkflow(r, BaseTransitions(r))).IsSuccess.Should().BeTrue();
+        await GrantEveryone(r.Module);
+        await HideFor(r.Module, r.DueDate, BoardGroup);   // gm（board）是 buyer1 的第 1 層主管（採購部主管空缺往上）
+        var created = await Send(new CreateApprovalFlowRequest(r.Module, new ApprovalFlowInput("po-m", Text("po-m"), r.Confirmed, 1, true,
+            Def(null, Stage("mgr", Manager(1), editable: [r.DueDate])))));
+        created.IsCreated.Should().BeTrue(Dump(created));
+        (await SaveWorkflow(r, [Needs(r.Draft, r.Confirmed), Plain(r.Confirmed, r.Partial), Plain(r.Partial, r.Received),
+            Plain(r.Confirmed, r.Cancelled)])).IsSuccess.Should().BeTrue();
+        var id = await SubmitAs(r, "buyer1", 5000);
+        var po = Inst(id).RecordId;
+        var before = Inst(id).RowVersion;
+
+        var res = await Approve(id, "gm", V((r.DueDate, "2026-12-01")));
+        res.Errors[$"f_{r.DueDate}"].Should().Equal(ApprovalMessages.FieldHiddenForApprover.Resolve(null));
+        Inst(id).RowVersion.Should().Be(before);
+        Open(id, "gm").Status.Should().Be(ApprovalTaskStatus.Open);
+        Rec(po).Values.ContainsKey($"f_{r.DueDate}").Should().BeFalse();
+    }
+
+    [Fact]
     public async Task Approve_ClosedModule_409()
     {
         var r = await Scenario3();
