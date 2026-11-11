@@ -12,15 +12,17 @@ import RecordTasks from './RecordTasks.vue';
 import { taskWire, USERS } from './task-fixtures';
 
 let calls: Call[];
+let applyFails = false;
 
-async function mountBlock(props: { closed: boolean }, items: unknown[], canAdd = true, patchFails = false) {
+async function mountBlock(props: { closed: boolean }, items: unknown[], canAdd = true, patchFails = false, manualRules: unknown[] = []) {
   const pinia = createPinia();
   setActivePinia(pinia);
   useIdentityStore().setSession('sales01');
   calls = mockHttp((c) => {
-    if (c.url === '/records/9/tasks' && c.method === 'get') return { items, canAdd };
+    if (c.url === '/records/9/tasks' && c.method === 'get') return { items, canAdd, manualRules };
     if (c.url === '/users') return USERS;
     if (c.url === '/records/9/tasks' && c.method === 'post') return taskWire({ id: 50 });
+    if (c.url === '/records/9/task-rules/k/apply') return applyFails ? new HttpFail(409, { message: '條件不符' }) : { items: [], canAdd, manualRules };
     if (c.method === 'patch') return patchFails ? new HttpFail(409, { message: '應用程式已關閉' }) : taskWire({ status: 'done' });
     return [];
   });
@@ -36,7 +38,7 @@ async function mountBlock(props: { closed: boolean }, items: unknown[], canAdd =
 }
 
 describe('RecordTasks', () => {
-  beforeEach(() => { document.body.innerHTML = ''; });
+  beforeEach(() => { document.body.innerHTML = ''; applyFails = false; });
 
   it('未指派的任務顯示「未指派」，逾期的到期日有 text-negative', async () => {
     const w = await mountBlock({ closed: false }, [
@@ -110,5 +112,56 @@ describe('RecordTasks', () => {
     const post = calls.find((c) => c.url === '/records/9/tasks' && c.method === 'post');
     expect(bodyOf(post)).toMatchObject({ title: '回電', assigneeUserId: 'sales01' });
     w.unmount();
+  });
+  describe('apply task template', () => {
+    const rule = (o: Record<string, unknown> = {}) => ({ key: 'k', name: { 'zh-TW': '活動任務' }, repeat: 'once', applied: false, applicable: true, previousOpen: false, ...o });
+    const btn = (w: Awaited<ReturnType<typeof mountBlock>>) => w.get('[data-testid="task-apply-k"]');
+
+    it('once：可套用時按下送 POST /records/9/task-rules/k/apply', async () => {
+      const w = await mountBlock({ closed: false }, [], true, false, [rule()]);
+      expect(btn(w).text()).toContain('套用任務範本：活動任務');
+      expect(btn(w).attributes('aria-disabled')).not.toBe('true');
+      await btn(w).trigger('click');
+      await flushPromises();
+      expect(calls.find((c) => c.url === '/records/9/task-rules/k/apply')?.method).toBe('post');
+      w.unmount();
+    });
+
+    it('once：已套用時變灰並顯示「已套用」', async () => {
+      const w = await mountBlock({ closed: false }, [], true, false, [rule({ applied: true })]);
+      expect(btn(w).attributes('aria-disabled')).toBe('true');
+      expect(w.get('[data-testid="task-apply-state-k"]').text()).toBe('已套用');
+      w.unmount();
+    });
+
+    it('everyTime：一律不顯示「已套用」；上一輪未完成時停用並說明', async () => {
+      const w = await mountBlock({ closed: false }, [], true, false, [rule({ repeat: 'everyTime', applied: true })]);
+      expect(w.find('[data-testid="task-apply-state-k"]').exists()).toBe(false);
+      expect(btn(w).attributes('aria-disabled')).not.toBe('true');
+      w.unmount();
+      const w2 = await mountBlock({ closed: false }, [], true, false, [rule({ repeat: 'everyTime', previousOpen: true })]);
+      expect(btn(w2).attributes('aria-disabled')).toBe('true');
+      expect(w2.get('[data-testid="task-apply-state-k"]').text()).toBe('上一輪的任務尚未完成');
+      w2.unmount();
+    });
+
+    it('條件不符（applicable=false）時停用', async () => {
+      const w = await mountBlock({ closed: false }, [], true, false, [rule({ applicable: false })]);
+      expect(btn(w).attributes('aria-disabled')).toBe('true');
+      w.unmount();
+    });
+
+    it('記錄關閉或不能新增時不顯示按鈕；套用失敗時跳出錯誤提示', async () => {
+      const w = await mountBlock({ closed: true }, [], true, false, [rule()]);
+      expect(w.find('[data-testid="task-apply-k"]').exists()).toBe(false);
+      w.unmount();
+      applyFails = true;
+      const w2 = await mountBlock({ closed: false }, [], true, false, [rule()]);
+      const notify = vi.spyOn(w2.vm.$q, 'notify');
+      await btn(w2).trigger('click');
+      await flushPromises();
+      expect(notify).toHaveBeenCalledWith(expect.objectContaining({ type: 'negative', message: '條件不符' }));
+      w2.unmount();
+    });
   });
 });

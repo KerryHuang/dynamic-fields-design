@@ -2,21 +2,25 @@
 import { computed, ref } from 'vue';
 import { useQuasar } from 'quasar';
 import { useI18n } from 'vue-i18n';
-import { useRecordTasks, useUpdateTask } from 'src/application/dynamic/queries/tasks-queries';
-import { taskStatusColor, type TaskSummary } from 'src/domain/dynamic/task-types';
+import { resolveI18n } from 'src/domain/dynamic/i18n-text';
+import { useApplyTaskRule, useRecordTasks, useUpdateTask } from 'src/application/dynamic/queries/tasks-queries';
+import { taskStatusColor, type ManualRule, type TaskSummary } from 'src/domain/dynamic/task-types';
 import type { ApiError } from 'src/services/api/http';
 import { useIdentityStore } from 'src/stores/use-identity-store';
 import TaskDialog from './TaskDialog.vue';
 import TaskFormDialog from './TaskFormDialog.vue';
 
 const props = defineProps<{ recordId: number; closed: boolean }>();
-const { t } = useI18n();
+const { t, locale } = useI18n();
 const $q = useQuasar();
 const identity = useIdentityStore();
 const query = useRecordTasks(() => props.recordId);
 const update = useUpdateTask();
+const apply = useApplyTaskRule();
 const items = computed(() => query.data.value?.items ?? []);
 const canAdd = computed(() => !!query.data.value?.canAdd && !props.closed);
+
+const manualRules = computed(() => query.data.value?.manualRules ?? []);
 
 const openId = ref<number | null>(null);
 const adding = ref(false);
@@ -28,6 +32,15 @@ const toggle = (task: TaskSummary, done: boolean) =>
     { id: task.id, patch: { status: done ? 'done' : 'todo' } },
     { onError: (e) => $q.notify({ type: 'negative', message: (e as unknown as ApiError).message || t('tasks.saveFailed') }) },
   );
+
+// once: "applied" is final. everyTime never counts as applied; it waits until the previous round is done.
+const applyState = (r: ManualRule) => (r.repeat === 'once' ? (r.applied ? t('tasks.applied') : '') : (r.previousOpen ? t('tasks.previousRoundOpen') : ''));
+const applyDisabled = (r: ManualRule) => !r.applicable || !!applyState(r) || apply.isPending.value;
+const applyRule = (r: ManualRule) =>
+  apply.mutate(
+    { recordId: props.recordId, ruleKey: r.key },
+    { onError: (e) => $q.notify({ type: 'negative', message: (e as unknown as ApiError).message || t('tasks.saveFailed') }) },
+  );
 </script>
 
 <template>
@@ -37,6 +50,15 @@ const toggle = (task: TaskSummary, done: boolean) =>
       <q-space />
       <q-btn v-if="canAdd" flat dense color="primary" icon="add" :label="t('tasks.add')" data-testid="task-add" @click="adding = true" />
     </q-card-section>
+    <div v-if="canAdd && manualRules.length" class="column q-px-md q-pt-sm q-gutter-y-xs" data-testid="task-apply-list">
+      <div v-for="r in manualRules" :key="r.key" class="row items-center q-gutter-x-sm">
+        <q-btn
+          outline dense no-caps class="task-apply-btn" color="primary" icon="playlist_add" :label="t('tasks.applyTemplate', { name: resolveI18n(r.name, locale) })"
+          :disable="applyDisabled(r)" :data-testid="`task-apply-${r.key}`" style="max-width: 100%" @click="applyRule(r)"
+        />
+        <span v-if="applyState(r)" class="text-caption text-muted" :data-testid="`task-apply-state-${r.key}`">{{ applyState(r) }}</span>
+      </div>
+    </div>
     <div v-if="!items.length" class="q-pa-md text-muted" data-testid="tasks-empty">{{ t('tasks.empty') }}</div>
     <q-list v-else separator>
       <q-item v-for="task in items" :key="task.id" :data-testid="`task-row-${task.id}`">
@@ -60,3 +82,8 @@ const toggle = (task: TaskSummary, done: boolean) =>
     <TaskDialog :task-id="openId" @update:task-id="openId = $event" />
   </q-card>
 </template>
+
+<style scoped>
+/* A long rule name wraps inside the button instead of pushing the page wider than a phone. */
+.task-apply-btn :deep(.q-btn__content) { white-space: normal; text-align: left; overflow-wrap: anywhere; }
+</style>

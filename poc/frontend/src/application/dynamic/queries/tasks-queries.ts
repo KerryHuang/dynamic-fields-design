@@ -82,6 +82,15 @@ export function useUpdateTask() {
   });
 }
 
+/** Applying a template creates tasks, so every task list refreshes like any other task change. */
+export function useApplyTaskRule() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (i: { recordId: number; ruleKey: string }) => dynamicApi.applyTaskRule(i.recordId, i.ruleKey),
+    onSuccess: () => invalidateTasks(qc),
+  });
+}
+
 export function useDeleteTask() {
   const qc = useQueryClient();
   return useMutation({
