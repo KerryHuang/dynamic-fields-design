@@ -1,9 +1,14 @@
 ---
 name: formwright-demo-verify
-description: Use when checking a Formwright change on the live Demo site (https://dynamic-modules-demo.onrender.com) with a browser — after a deploy, or to reproduce a reported UI problem.
+description: Use when checking a Formwright change in a browser — on a local Demo (http://127.0.0.1:9180, before merge) or the live Demo site (https://dynamic-modules-demo.onrender.com, after deploy) — or reproducing a reported UI problem.
 ---
 
 # Formwright Demo 實機驗證
+
+兩個場地，步驟相同：
+
+- **本機**：`http://127.0.0.1:9180`，用 `scripts/unattended/local-demo.sh` 啟動。在合併前做，是主要驗證。
+- **線上**：`https://dynamic-modules-demo.onrender.com`。在部署後做冒煙檢查。
 
 ## 規則
 

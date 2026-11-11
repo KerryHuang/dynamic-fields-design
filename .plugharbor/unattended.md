@@ -29,6 +29,7 @@ main push 會自動部署 Demo（Render），但只在 `poc/` 有變更時才觸
 等部署完成：`bash scripts/unattended/wait-deploy.sh <sha>`，背景跑，等通知。腳本會把短 sha 展開成完整 sha。
 
 ## 實機驗證
+- 時機：有畫面的改動在 gate 通過、推上 main 之前，先用 `bash scripts/unattended/local-demo.sh <worktree>` 在本機走查（使用者 2026-11-11 裁決）。部署後的 Demo 只做冒煙檢查。
 - 登入：**只用登入頁的「Demo 帳號（點一下直接登入）」按鈕**，絕不在任何欄位輸入帳號密碼。
 - 登入後整頁重新載入再看畫面，不在同一段腳本裡 pushState 換頁，否則會讀到舊 schema。
 - 版型：用 `scripts/unattended/rwd-check.js` 檢查這次動到的頁面，寬度 390、820、1366、1920 四種。

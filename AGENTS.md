@@ -39,8 +39,8 @@ ERP 是產品目標，也是核心的壓力測試：做不出來的地方，就�
 
 - **先說驗收方式再動手**；修 bug 先寫重現的失敗測試。
 - **只跑相關測試**：`dotnet test <測試專案> --filter <類名>`；全套與 gate 一次只跑一個，不和其他吃 CPU 的測試並行。細節見 `docs/ai/testing.md`。
-- **上線流程**（gate → 外洩掃描 → fast-forward 推 main → 等部署 → Demo 驗證）用 `formwright-ship` skill；Demo 實機驗證用 `formwright-demo-verify` skill。
-- **有畫面的改動**要在 390、820、1366、1920 四種寬度驗過，不得橫向捲動。
+- **上線流程**（gate → 本機走查 → 外洩掃描 → fast-forward 推 main → 等部署 → Demo 冒煙檢查）用 `formwright-ship` skill；瀏覽器驗證用 `formwright-demo-verify` skill。
+- **有畫面的改動**合併前要在本機（`scripts/unattended/local-demo.sh`）的 390、820、1366、1920 四種寬度驗過，不得橫向捲動。
 - **git**：逐檔 `git add`，不用 `-A`／`.`、不用 `--no-verify`、不 force push、不 merge commit。
 
 ## 文件落點
