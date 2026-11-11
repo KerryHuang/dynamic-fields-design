@@ -447,14 +447,14 @@ public class FieldServiceTests : IAsyncLifetime
     }
 
     [Fact]
-    public async Task AddBlock_DefaultsToTwoColumns()
+    public async Task AddBlock_DefaultsToFourColumns()
     {
         var m = await CreateModule();
 
         var block = (BlockResponse)(await Send(new AddBlockRequest(m.Key, Text("明細")))).Data!;
 
-        block.Columns.Should().Be(2);
-        (await Detail()).Blocks.Should().AllSatisfy(b => b.Columns.Should().Be(2));
+        block.Columns.Should().Be(4);
+        (await Detail()).Blocks.Should().AllSatisfy(b => b.Columns.Should().Be(4));
     }
 
     [Fact]
@@ -465,6 +465,9 @@ public class FieldServiceTests : IAsyncLifetime
 
         (await Send(new UpdateBlockRequest(blockId, Text("基本"), false, 3))).IsSuccess.Should().BeTrue();
         (await Detail()).Blocks[0].Columns.Should().Be(3);
+        (await Send(new UpdateBlockRequest(blockId, Text("基本"), false, 4))).IsSuccess.Should().BeTrue();
+        (await Detail()).Blocks[0].Columns.Should().Be(4);
+        (await Send(new UpdateBlockRequest(blockId, Text("基本"), false, 3))).IsSuccess.Should().BeTrue();
 
         (await Send(new UpdateBlockRequest(blockId, Text("基本二"), false))).IsSuccess.Should().BeTrue();
         (await Detail()).Blocks[0].Columns.Should().Be(3);
@@ -475,9 +478,9 @@ public class FieldServiceTests : IAsyncLifetime
     {
         var m = await CreateModule();
 
-        var r = await Send(new UpdateBlockRequest(m.Blocks[0].Id, Text("基本"), false, 4));
+        var r = await Send(new UpdateBlockRequest(m.Blocks[0].Id, Text("基本"), false, 5));
 
-        r.Errors["Columns"].Should().Contain("每列欄數必須是 1 到 3");
+        r.Errors["Columns"].Should().Contain("每列欄數必須是 1 到 4");
     }
 
     [Fact]

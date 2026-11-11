@@ -22,7 +22,8 @@ public class AddBlockHandler(
         var block = new Block
         {
             LabelI18n = request.Label,
-            Sequence = module.Blocks.Select(b => b.Sequence).DefaultIfEmpty(0).Max() + 1
+            Sequence = module.Blocks.Select(b => b.Sequence).DefaultIfEmpty(0).Max() + 1,
+            Columns = Block.DefaultColumns
         };
         block.StampCreated(user.UserId, now);
         module.Blocks.Add(block);

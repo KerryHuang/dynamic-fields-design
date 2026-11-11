@@ -102,11 +102,11 @@ public class TemplateValidatorTests
             .Should().Equal("mold-care", "order", "quality", "repair");
 
     [Fact]
-    public void BlockColumns_MissingMeansTwo()
+    public void BlockColumns_MissingMeansFour()
     {
         var (package, error) = TemplateJson.Parse(Base().ToJsonString());
         error.Should().BeNull();
-        package!.Modules[0].Blocks[0].Columns.Should().Be(2);
+        package!.Modules[0].Blocks[0].Columns.Should().Be(4);
     }
 
     [Fact]
@@ -114,7 +114,7 @@ public class TemplateValidatorTests
     {
         var p = Base();
         Head(p)["blocks"]![0]!["columns"] = 5;
-        Validate(p).Should().ContainSingle().Which.Should().Be("head: 區塊 main 的每列欄數必須是 1 到 3");
+        Validate(p).Should().ContainSingle().Which.Should().Be("head: 區塊 main 的每列欄數必須是 1 到 4");
     }
 
     [Fact]

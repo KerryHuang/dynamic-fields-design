@@ -40,7 +40,8 @@ public class CreateModuleHandler(
         var block = new Block
         {
             LabelI18n = Text("基本資料", "General"),
-            Sequence = 1
+            Sequence = 1,
+            Columns = Block.DefaultColumns
         };
         block.StampCreated(user.UserId, now);
         var module = new Module
