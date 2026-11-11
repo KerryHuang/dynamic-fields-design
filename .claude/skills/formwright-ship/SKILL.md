@@ -65,5 +65,5 @@ bash scripts/unattended/wait-deploy.sh <sha>
 
 ## 6. 收尾
 
-- 進度寫進路線文件工作段表格；功能清單打勾並重算。
+- 進度寫進 `docs/roadmap.md` 的工作段表格；功能清單打勾並重算。
 - 確認分支已是 origin/main 的祖先後，移除 worktree 與分支。

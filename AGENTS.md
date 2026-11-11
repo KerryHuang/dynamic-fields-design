@@ -45,7 +45,7 @@ ERP 是產品目標，也是核心的壓力測試：做不出來的地方，就�
 
 ## 文件落點
 
-- 進度：路線文件的工作段表格（`docs/superpowers/specs/2026-11-06-erp-roadmap-design.md`）。
+- 進度：路線文件的工作段表格（`docs/roadmap.md`）。
 - 裁決：寫回對應的設計文件；功能討論與規劃結果列進 `docs/feature-checklist.md`（改完跑清單腳本重算）。
 - 使用者看得到的行為改變：同步 `docs/manual.md`。
 - 不屬於產品功能的跨 session 雜事（bug 調查、開發流程、清理）：`docs/todo.md`，做完就刪。

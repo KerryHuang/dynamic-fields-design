@@ -30,7 +30,7 @@ Each application can be enabled on its own, or you can enable none and build up 
 | Project time tracking | Planned | Projects and timesheets |
 | Service desk | Planned | Customer-service and IT tickets |
 
-Planned items are not implemented yet; see the [ERP roadmap](docs/superpowers/specs/2026-11-06-erp-roadmap-design.md) (zh-TW) for order and scope.
+Planned items are not implemented yet; see the [roadmap](docs/roadmap.md) (zh-TW) for order and the [ERP roadmap design](docs/superpowers/specs/2026-11-06-erp-roadmap-design.md) (zh-TW) for scope.
 
 ## Platform capabilities
 

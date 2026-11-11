@@ -30,7 +30,7 @@ Formwright 讓你在畫面上自己定義模組與欄位，系統自動長出列
 | 專案工時 | 規劃中 | 專案與工時紀錄 |
 | 客服工單 | 規劃中 | 客服與 IT 工單 |
 
-規劃中的項目還沒有實作，順序與範圍見 [ERP 路線設計](docs/superpowers/specs/2026-11-06-erp-roadmap-design.md)。
+規劃中的項目還沒有實作，順序見 [路線與進度](docs/roadmap.md)，範圍見 [ERP 路線設計](docs/superpowers/specs/2026-11-06-erp-roadmap-design.md)。
 
 ## 平台能力
 
