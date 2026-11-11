@@ -155,6 +155,9 @@ describe('RecordTasks', () => {
       const w = await mountBlock({ closed: true }, [], true, false, [rule()]);
       expect(w.find('[data-testid="task-apply-k"]').exists()).toBe(false);
       w.unmount();
+      const w1 = await mountBlock({ closed: false }, [], false, false, [rule()]);
+      expect(w1.find('[data-testid="task-apply-k"]').exists()).toBe(false);
+      w1.unmount();
       applyFails = true;
       const w2 = await mountBlock({ closed: false }, [], true, false, [rule()]);
       const notify = vi.spyOn(w2.vm.$q, 'notify');
