@@ -10,7 +10,8 @@ namespace DynamicModules.Application.Dynamic.ApprovalService;
 /// 查詢失敗或資料缺漏一律不放行。
 /// </summary>
 public sealed class ApprovalReadGrant(
-    IApprovalInstanceRepository repo, IPermissionRepository permissions, ICurrentUser user, FieldLocks locks, ApprovalHiddenFields hiddenFields)
+    IApprovalInstanceRepository repo, IPermissionRepository permissions, ICurrentUser user, FieldLocks locks, ApprovalHiddenFields hiddenFields,
+    IProgramRepository programs)
 {
     private static readonly IReadOnlySet<PermissionAction> GrantedActions = new HashSet<PermissionAction> { PermissionAction.Read, PermissionAction.Pricing };
 
@@ -19,6 +20,7 @@ public sealed class ApprovalReadGrant(
     {
         try
         {
+            if (await programs.GetAsync(module.ProgramCode, ct) is not { Active: true }) return null;   // 比照 guard：program 停用一律不放行
             if (!await repo.IsOpenActorAsync(record.Id, user.UserId, ct)) return null;
             var inputs = await permissions.LoadInputsAsync(user.UserId, module, ct);
             if (inputs is null) return null;

@@ -144,6 +144,19 @@ public class ApprovalReadGrantTests : ApprovalTestBase
     }
 
     [Fact]
+    public async Task ProgramInactive_NotGranted()
+    {
+        // 比照 guard：program 停用期間，可動作者也不能讀單筆
+        await Rig();
+        var (po, _) = await Pending();
+        var code = Db.Context.Set<Module>().AsNoTracking().Single(m => m.Key == _r.Module).ProgramCode;
+        (await Db.Context.Set<DynamicProgram>().SingleAsync(p => p.ProgramCode == code)).Active = false;
+        await Db.Context.SaveChangesAsync();
+        Db.Context.ChangeTracker.Clear();
+        (await Get("fin1", po)).IsSuccess.Should().BeFalse();
+    }
+
+    [Fact]
     public async Task HiddenFieldException_StillHidden()
     {
         await Rig();
