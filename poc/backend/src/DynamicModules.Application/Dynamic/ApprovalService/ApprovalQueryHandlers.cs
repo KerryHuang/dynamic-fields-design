@@ -63,7 +63,7 @@ public sealed class ApprovalReader(IApprovalInstanceRepository repo, IDynamicAcc
 /// </summary>
 public class GetRecordApprovalHandler(
     IRecordRepository records, IModuleRepository modules, IApprovalInstanceRepository repo, IDynamicAccessGuard guard,
-    IPermissionRepository permissions, ApprovalReader reader, ApprovalReadGrant grant, ICurrentUser user)
+    IPermissionRepository permissions, ApprovalReader reader, ApprovalReadGrant grant, ApprovalHiddenFields hiddenFields, ICurrentUser user)
     : IRequestHandler<GetRecordApprovalRequest, ServiceResult>
 {
     public async Task<ServiceResult> Handle(GetRecordApprovalRequest request, CancellationToken ct)
@@ -110,14 +110,14 @@ public class GetRecordApprovalHandler(
     }
 
     /// <summary>
-    /// content-changed 的前後值依讀者的欄位權限遮蔽（設計 §8.5）：有 Read 用它；沒有時用臨時讀取權，再沒有就用自己的群組欄位例外；
+    /// content-changed 的前後值依讀者的欄位權限遮蔽（設計 §8.5）：有 Read 用它；沒有時用臨時讀取權，再沒有就用自己的群組欄位例外（含明細來源隱藏）；
     /// 讀不到權限輸入回 null（全部遮蔽）。
     /// </summary>
     private async Task<IReadOnlySet<long>?> HiddenFieldsAsync(Module module, Record record, EffectivePermissions? read, CancellationToken ct)
     {
         if (read is not null) return read.HiddenFieldIds;
         if (await grant.ForRecordAsync(module, record, ct) is { } granted) return granted.HiddenFieldIds;
-        return await permissions.LoadInputsAsync(user.UserId, module, ct) is { } inputs ? PermissionResolver.Resolve(module, inputs).HiddenFieldIds : null;
+        return await hiddenFields.ForUserAsync(module, user.UserId, ct);
     }
 }
 

@@ -10,7 +10,7 @@ namespace DynamicModules.Application.Dynamic.ApprovalService;
 /// 查詢失敗或資料缺漏一律不放行。
 /// </summary>
 public sealed class ApprovalReadGrant(
-    IApprovalInstanceRepository repo, IPermissionRepository permissions, ICurrentUser user, FieldLocks locks, IModuleRepository modules)
+    IApprovalInstanceRepository repo, IPermissionRepository permissions, ICurrentUser user, FieldLocks locks, ApprovalHiddenFields hiddenFields)
 {
     private static readonly IReadOnlySet<PermissionAction> GrantedActions = new HashSet<PermissionAction> { PermissionAction.Read, PermissionAction.Pricing };
 
@@ -23,14 +23,8 @@ public sealed class ApprovalReadGrant(
             var inputs = await permissions.LoadInputsAsync(user.UserId, module, ct);
             if (inputs is null) return null;
             var elevated = Elevate(inputs, module);
-            var hiddenSource = new HashSet<long>();
-            if (module.Blocks.SelectMany(b => b.Fields).Any(f => f is { Type: FieldType.Rollup, Config.Rollup.AggregateFieldId: not null }))
-                foreach (var (child, _) in await modules.ListDetailModulesAsync(module.Key, ct))
-                {
-                    var childInputs = await permissions.LoadInputsAsync(user.UserId, child, ct);
-                    if (childInputs is null) return null;
-                    hiddenSource.UnionWith(PermissionResolver.Resolve(child, DetailInputs(elevated, childInputs), module).HiddenFieldIds);
-                }
+            var (ok, hiddenSource) = await hiddenFields.SourceAsync(module, elevated, user.UserId, ct);
+            if (!ok) return null;
             return await locks.ApplyAsync(module, Grant(PermissionResolver.Resolve(module, elevated, null, hiddenSource, PermissionAction.Read)), ct);
         }
         catch (Exception) when (!ct.IsCancellationRequested)
@@ -45,7 +39,8 @@ public sealed class ApprovalReadGrant(
         var parentInputs = await permissions.LoadInputsAsync(user.UserId, parent, ct);
         var childInputs = await permissions.LoadInputsAsync(user.UserId, child, ct);
         if (parentInputs is null || childInputs is null) return null;
-        var effective = PermissionResolver.Resolve(child, DetailInputs(Elevate(parentInputs, parent), childInputs), parent, forAction: PermissionAction.Read);
+        var effective = PermissionResolver.Resolve(child, ApprovalHiddenFields.DetailInputs(Elevate(parentInputs, parent), childInputs), parent,
+            forAction: PermissionAction.Read);
         return await locks.ApplyAsync(child, Grant(effective), ct);
     }
 
@@ -54,9 +49,6 @@ public sealed class ApprovalReadGrant(
     {
         UserPrivilege = new UserProgramPrivilege { UserId = inputs.User.UserId, ProgramCode = access.ProgramCode, CanRead = true, CanAmt = true }
     };
-
-    private static PermissionInputs DetailInputs(PermissionInputs parentInputs, PermissionInputs childInputs) =>
-        parentInputs with { FieldPermissions = childInputs.FieldPermissions, OptionScopes = childInputs.OptionScopes, FieldGrants = childInputs.FieldGrants };
 
     private static EffectivePermissions Grant(EffectivePermissions p) =>
         p with { Actions = GrantedActions, Scope = DataScope.All, OwnerUserIds = null, Hash = p.Hash + "-ag" };

@@ -76,6 +76,26 @@ public class ApprovalRuntimeCheckTests : ApprovalTestBase
     }
 
     [Fact]
+    public async Task ContentChanged_FallbackMask_IncludesDetailSourceHidden()
+    {
+        // 讀者沒有 Read、也沒有臨時讀取權（失去權限的發起人）：遮蔽集合要含明細來源隱藏 —
+        // 明細小計隱藏 → 明細合計、總額一起隱藏
+        var r = await Scenario3();
+        var (po, _) = await SubmitAs(r, "buyer1", 50000);
+        await AddExtra(r, po, 120000);
+        As("admin");
+        var everyone = Db.Context.Set<PermissionGroup>().AsNoTracking().Single(g => g.Key == "everyone").Id;
+        await HideDetailFor(r.Line, r.LineSubtotal, everyone);
+        await RevokeAll(r.Module);
+        As("buyer1");
+        var res = await Send(new GetRecordApprovalRequest(po));
+        res.IsSuccess.Should().BeTrue(Dump(res));
+        var shown = ((RecordApprovalResponse)res.Data!).Current!.Actions.Single(a => a.Action == ApprovalActions.ContentChanged).Data!.Value
+            .EnumerateArray().Select(e => e.GetProperty("fieldId").GetInt64()).ToList();
+        shown.Should().NotContain(r.Total).And.Contain(r.ExtraSum);
+    }
+
+    [Fact]
     public async Task ContentChanged_NotWrittenForOwnEditableWrite_OrNonPendingRecord()
     {
         var r = await Scenario3();

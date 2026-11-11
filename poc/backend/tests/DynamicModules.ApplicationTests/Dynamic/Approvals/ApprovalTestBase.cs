@@ -237,6 +237,21 @@ public abstract class ApprovalTestBase : EffectsTestBase, IAsyncLifetime
         res.IsSuccess.Should().BeTrue(Dump(res));
     }
 
+    /// <summary>把明細模組的欄位對某個群組設為隱藏（明細沒有自己的群組權限，動作軸沿用表頭）。</summary>
+    protected async Task HideDetailFor(string detailModule, long fieldId, long groupId)
+    {
+        var res = await Send(new SaveModulePermissionsRequest(detailModule, new ModulePermissionsDto([], [],
+            [new FieldPermissionDto(fieldId, groupId, FieldAccess.Hidden)], [])));
+        res.IsSuccess.Should().BeTrue(Dump(res));
+    }
+
+    /// <summary>收回模組的全部群組權限與欄位例外（組織成員從此沒有 Read）。</summary>
+    protected async Task RevokeAll(string module)
+    {
+        var res = await Send(new SaveModulePermissionsRequest(module, new ModulePermissionsDto([], [], [], [])));
+        res.IsSuccess.Should().BeTrue(Dump(res));
+    }
+
     /// <summary>建一張單據（明細一列 qty × price）；回傳記錄。</summary>
     protected async Task<DynamicRecordResponse> NewPo(PurchaseRig r, decimal qty = 1, decimal price = 1000, string title = "單據",
         Dictionary<string, JsonElement?>? extra = null)

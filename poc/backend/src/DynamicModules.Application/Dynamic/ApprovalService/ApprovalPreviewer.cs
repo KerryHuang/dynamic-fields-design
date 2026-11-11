@@ -63,7 +63,7 @@ public sealed class ApprovalSubmitEligibility(
 /// </summary>
 public sealed class ApprovalPreviewer(
     IApprovalFlowRepository flows, IModuleRepository modules, ApproverResolver resolver, IPermissionRepository permissions,
-    FieldTypeRegistry registry, IBusinessTime time)
+    FieldTypeRegistry registry, IBusinessTime time, IDynamicAccessGuard guard, ApprovalHiddenFields hiddenFields)
 {
     public async Task<ServiceResult> PreviewAsync(Module module, long to, TransitionApproval approval,
         IReadOnlyDictionary<string, JsonElement?> values, string initiator, bool designer, CancellationToken ct)
@@ -81,10 +81,12 @@ public sealed class ApprovalPreviewer(
         var users = await permissions.ListUsersAsync(ct);
         var names = users.ToDictionary(u => u.UserId, u => string.IsNullOrEmpty(u.DisplayName) ? u.UserId : u.DisplayName);
         UserRef Ref(string id) => new(id, names.GetValueOrDefault(id) ?? id);
-        // 記錄預覽只對發起人隱藏的欄位判斷 conditional；讀不到權限輸入時所有條件都當成看不到（fail closed）
+        // 記錄預覽的發起人就是目前使用者：有 Read 用 guard 的隱藏集合（含明細來源隱藏），沒有就自己算；
+        // 讀不到權限輸入時所有條件都當成看不到（fail closed）
         IReadOnlySet<long>? hidden = null;
         if (!designer)
-            hidden = await permissions.LoadInputsAsync(initiator, module, ct) is { } inputs ? PermissionResolver.Resolve(module, inputs).HiddenFieldIds : null;
+            hidden = (await guard.AuthorizeAsync(module, PermissionAction.Read, ct)).Permissions?.HiddenFieldIds
+                ?? await hiddenFields.ForUserAsync(module, initiator, ct);
 
         var ctx = await resolver.ContextAsync(module, initiator, values, null, ct);
         var def = match.Definition;
@@ -92,8 +94,9 @@ public sealed class ApprovalPreviewer(
         var picks = new List<PickRequirement>();
         foreach (var s in def.Stages)
         {
-            if (!designer && s.When is { ValueKind: JsonValueKind.Object } w
-                && (hidden is null || RuleReferences.ConditionFieldIdsOf(w).Any(hidden.Contains)))
+            // 條件引用隱藏欄位，或簽核人取自隱藏的使用者欄位 → conditional、不列簽核人
+            if (!designer && (s.When is { ValueKind: JsonValueKind.Object } w && (hidden is null || RuleReferences.ConditionFieldIdsOf(w).Any(hidden.Contains))
+                || s.Approvers is { Source: ApprovalSources.UserField, FieldId: var fid } && (hidden is null || fid is { } f && hidden.Contains(f))))
             {
                 stages.Add(new PreviewStage(s.Code, s.Name, PreviewStatuses.Conditional, [], false));
                 continue;

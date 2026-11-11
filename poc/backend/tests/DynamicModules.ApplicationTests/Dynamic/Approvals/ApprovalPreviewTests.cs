@@ -63,6 +63,33 @@ public class ApprovalPreviewTests : ApprovalTestBase
     }
 
     [Fact]
+    public async Task RecordPreview_RollupOfHiddenDetailField_Conditional()
+    {
+        // 明細小計對發起人隱藏 → 明細合計（彙總它）與總額（引用明細合計的公式）也隱藏；條件引用總額要標 conditional
+        var r = await OneFlow(x => Def(null, Stage("lead", Group(PurchaseLeadGroup)), Stage("board", Group(BoardGroup), when: Cond(x.Total, "gt", 100000))));
+        await HideDetailFor(r.Line, r.LineSubtotal, EveryoneGroup());
+        As("buyer1");
+        var po = await NewPo(r, price: 150000);
+        var p = await Preview("buyer1", po.Id, r.Confirmed);
+        p.Stages.Select(s => (s.Code, s.Status)).Should().Equal(("lead", PreviewStatuses.Enter), ("board", PreviewStatuses.Conditional));
+        p.Stages[1].Approvers.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task RecordPreview_UserFieldSourceHidden_Conditional_NoApprovers()
+    {
+        // 關卡來源是使用者欄位、該欄位對發起人隱藏 → 不列簽核人（比照 conditional）
+        var r = await OneFlow(x => Def(null, Stage("owner", new ApproverSource(ApprovalSources.UserField, FieldId: x.Owner))));
+        As("buyer1");
+        var po = await NewPo(r, price: 5000, extra: V((r.Owner, "gm")));
+        As("admin");
+        await HideFor(r.Module, r.Owner, EveryoneGroup());
+        var p = await Preview("buyer1", po.Id, r.Confirmed);
+        p.Stages.Single().Status.Should().Be(PreviewStatuses.Conditional);
+        p.Stages.Single().Approvers.Should().BeEmpty();
+    }
+
+    [Fact]
     public async Task RecordPreview_SkippedStageNotListed()
     {
         // 對發起人看得到的條件不成立：記錄預覽不列這一關，也不說為什麼（skip 只出現在設計器試算）
