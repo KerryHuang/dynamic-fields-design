@@ -3,9 +3,10 @@ import { useQuasar } from 'quasar';
 import { computed, ref } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { useMe } from 'src/application/dynamic/queries/permissions-queries';
+import { useEffectivePolicies } from 'src/application/dynamic/queries/policies-queries';
 import { useDeleteTaskRule, useSaveTaskRule, useTaskRulesQuery } from 'src/application/dynamic/queries/task-rules-queries';
 import { resolveI18n } from 'src/domain/dynamic/i18n-text';
-import { fromTaskRule, MAX_RULES, toTaskRuleBody, type TaskRule } from 'src/domain/dynamic/task-rule-draft';
+import { fromTaskRule, toTaskRuleBody, type TaskRule } from 'src/domain/dynamic/task-rule-draft';
 import type { ModuleDetail } from 'src/domain/dynamic/types';
 import { toSchemaFields } from 'src/presentation/dynamic/designer/schema-fields';
 import { joinList } from 'src/i18n/translate';
@@ -19,6 +20,11 @@ const $q = useQuasar();
 const key = computed(() => props.module.key);
 const rulesQuery = useTaskRulesQuery(key);
 const me = useMe();
+const policies = useEffectivePolicies(key);
+/** 上限一律取自政策生效值；還沒載入就是 undefined，相關按鈕停用（前端不留預設值）。 */
+const maxRules = computed(() => policies.data.value?.values['task.maxRulesPerModule'] as number | undefined);
+const maxTasks = computed(() => policies.data.value?.values['task.maxTasksPerRule'] as number | undefined);
+const atLimit = computed(() => maxRules.value !== undefined && (rulesQuery.data.value?.length ?? 0) >= maxRules.value);
 const saveRule = useSaveTaskRule(key);
 const deleteRule = useDeleteTaskRule(key);
 
@@ -56,13 +62,14 @@ function confirmDelete() {
   <div v-if="rulesQuery.isError.value" class="text-negative">{{ t('taskRules.loadFailed') }}</div>
   <div v-else-if="!ready" class="text-muted">{{ t('designer.loading') }}</div>
   <div v-else>
+    <div v-if="policies.isError.value" class="text-negative q-mb-sm" data-testid="task-rules-policy-error">{{ t('policies.loadFailed') }}</div>
     <q-banner v-if="module.tasksEnabled === false" dense class="bg-info-soft q-mb-sm" data-testid="task-rules-module-off">
       {{ t('taskRules.moduleTasksOff') }}
     </q-banner>
     <div class="row items-center q-mb-sm">
       <q-space />
-      <q-btn color="primary" icon="add" dense :label="t('taskRules.add')" :disable="readonly || rulesQuery.data.value!.length >= MAX_RULES" data-testid="add-task-rule" @click="open()">
-        <q-tooltip v-if="rulesQuery.data.value!.length >= MAX_RULES">{{ t('taskRules.limit') }}</q-tooltip>
+      <q-btn color="primary" icon="add" dense :label="t('taskRules.add')" :disable="readonly || maxRules === undefined || atLimit" data-testid="add-task-rule" @click="open()">
+        <q-tooltip v-if="atLimit">{{ t('taskRules.limit', { max: maxRules }) }}</q-tooltip>
       </q-btn>
     </div>
 
@@ -90,7 +97,7 @@ function confirmDelete() {
               :disable="readonly" :data-testid="`task-rule-toggle-${r.key}`" @click="toggleActive(r)"
             />
             <q-btn
-              flat dense round icon="edit" :title="t('taskRules.edit')" :disable="readonly" :data-testid="`task-rule-edit-${r.key}`"
+              flat dense round icon="edit" :title="t('taskRules.edit')" :disable="readonly || maxTasks === undefined" :data-testid="`task-rule-edit-${r.key}`"
               @click="open(r)"
             />
             <q-btn
@@ -102,7 +109,7 @@ function confirmDelete() {
       </q-item>
     </q-list>
 
-    <TaskRuleEditorDialog v-model="dialog" :module-key="module.key" :fields="fields" :rule="editing" />
+    <TaskRuleEditorDialog v-if="maxTasks !== undefined" v-model="dialog" :module-key="module.key" :fields="fields" :rule="editing" :max-tasks="maxTasks" />
 
     <q-dialog :model-value="!!pendingDelete" @update:model-value="(v) => { if (!v) pendingDelete = null; }">
       <q-card class="task-rule-confirm">

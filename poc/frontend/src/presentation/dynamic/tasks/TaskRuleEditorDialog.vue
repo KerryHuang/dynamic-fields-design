@@ -6,7 +6,7 @@ import GenericSelect from 'src/components/framework/GenericSelect.vue';
 import { isNestedCondition } from 'src/domain/dynamic/condition';
 import { resolveI18n } from 'src/domain/dynamic/i18n-text';
 import {
-  assigneeFields, blankTask, blankTaskRuleDraft, dueFields, fromTaskRule, MAX_TASKS, REPEATS, toTaskRuleBody, TRIGGERS, triggerFields,
+  assigneeFields, blankTask, blankTaskRuleDraft, dueFields, fromTaskRule, REPEATS, toTaskRuleBody, TRIGGERS, triggerFields,
   validateDraft, type TaskRule, type TaskRuleDraft, type TaskRuleOn,
 } from 'src/domain/dynamic/task-rule-draft';
 import type { ConditionNode, SchemaField } from 'src/domain/dynamic/types';
@@ -21,6 +21,8 @@ const props = defineProps<{
   fields: SchemaField[];
   /** Edit this rule; absent means a new one. */
   rule?: TaskRule;
+  /** 這個模組的「每條規則任務數上限」生效值（政策 task.maxTasksPerRule）。 */
+  maxTasks: number;
 }>();
 const emit = defineEmits<{ 'update:modelValue': [open: boolean]; saved: [] }>();
 const { t, locale } = useI18n();
@@ -75,8 +77,8 @@ const removeTask = (i: number) => draft.value.tasks.splice(i, 1);
 const setWhen = (target: { when?: ConditionNode | null }, v: ConditionNode | undefined) => { target.when = v ?? null; };
 
 function submit() {
-  const problems = validateDraft(draft.value, props.fields);
-  errors.value = problems.map((k) => t(k));
+  const problems = validateDraft(draft.value, props.fields, { maxTasks: props.maxTasks, originalTaskCount: props.rule?.tasks.length ?? 0 });
+  errors.value = problems.map((k) => t(k, { max: props.maxTasks }));
   if (problems.length) return;
   save.mutate({ ruleKey: props.rule?.key, body: toTaskRuleBody(draft.value) }, {
     onSuccess: () => { emit('saved'); emit('update:modelValue', false); },
@@ -173,7 +175,7 @@ function submit() {
         </q-card>
         <div>
           <q-btn
-            flat dense color="primary" icon="add" :label="t('taskRules.addTask')" :disable="draft.tasks.length >= MAX_TASKS"
+            flat dense color="primary" icon="add" :label="t('taskRules.addTask')" :disable="draft.tasks.length >= maxTasks"
             data-testid="task-add" @click="addTask"
           />
         </div>

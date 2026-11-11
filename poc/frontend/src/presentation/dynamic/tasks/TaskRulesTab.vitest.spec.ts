@@ -32,7 +32,7 @@ const ruleWire = (o: Record<string, unknown> = {}) => ({
 let calls: Call[];
 let w: VueWrapper;
 
-async function mountTab(opts: { module?: ModuleDetail; canEdit?: boolean; rules?: unknown[]; saveFails?: boolean } = {}) {
+async function mountTab(opts: { module?: ModuleDetail; canEdit?: boolean; rules?: unknown[]; saveFails?: boolean; maxRules?: number; maxTasks?: number; effectiveHangs?: boolean } = {}) {
   const pinia = createPinia();
   setActivePinia(pinia);
   useIdentityStore().setSession('admin');
@@ -40,6 +40,7 @@ async function mountTab(opts: { module?: ModuleDetail; canEdit?: boolean; rules?
   calls = mockHttp((c) => {
     if (c.url === '/me') return { userId: 'admin', displayName: 'A', isSystemAdmin: false, mustChangePassword: false, groups: [], designer: { read: true, add: true, edit: canEdit, delete: false }, theme: FACTORY_ME_THEME };
     if (c.url === '/modules/m1/task-rules' && c.method === 'get') return rules;
+    if (c.url === '/policies/effective') return opts.effectiveHangs ? new HttpFail(500, {}) : { moduleKey: 'm1', values: { 'task.maxRulesPerModule': opts.maxRules ?? 20, 'task.maxTasksPerRule': opts.maxTasks ?? 20 } };
     if (opts.saveFails && c.method !== 'get') return new HttpFail(400, { errors: { 'tasks[0].assigneeFieldId': ['負責人必須是這個模組的人員欄位'] } });
     return ruleWire();
   });
@@ -88,6 +89,22 @@ describe('TaskRulesTab', () => {
     (w.findComponent(quasar.QTooltip).vm as unknown as { show: () => void }).show();
     await flushPromises();
     expect(body().textContent).toContain('每個模組最多 20 條任務規則');
+    w.unmount();
+  });
+
+  it('上限依模組生效值', async () => {
+    await mountTab({ maxRules: 2, rules: [ruleWire({ key: 'a' }), ruleWire({ key: 'b' })] });
+    expect(q('[data-testid="add-task-rule"]').hasAttribute('disabled')).toBe(true);
+    (w.findComponent(quasar.QTooltip).vm as unknown as { show: () => void }).show();
+    await flushPromises();
+    expect(body().textContent).toContain('每個模組最多 2 條任務規則');
+    w.unmount();
+  });
+
+  it('生效值還沒回來時新增鈕停用，載入失敗顯示提示', async () => {
+    await mountTab({ effectiveHangs: true, rules: [] });
+    expect(q('[data-testid="add-task-rule"]').hasAttribute('disabled')).toBe(true);
+    expect(body().textContent).toContain('政策載入失敗');
     w.unmount();
   });
 

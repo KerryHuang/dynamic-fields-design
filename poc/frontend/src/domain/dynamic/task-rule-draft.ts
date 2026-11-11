@@ -45,8 +45,6 @@ export interface TaskRule extends TaskRuleInput {
 /** Editing copy: conditions may still hold half-filled rows, descriptions may be empty. */
 export type TaskRuleDraft = TaskRuleInput;
 
-export const MAX_TASKS = 20;
-export const MAX_RULES = 20;
 export const MAX_OFFSET_DAYS = 3650;
 const TEXT_MAX = 200;
 const DESCRIPTION_MAX = 4000;
@@ -110,7 +108,11 @@ export function toTaskRuleBody(draft: TaskRuleDraft): TaskRuleInput {
 const tooLong = (text: I18nText | null | undefined, max = TEXT_MAX) => Object.values(text ?? {}).some((v) => (v ?? '').trim().length > max);
 
 /** Same checks as the server's TaskRuleValidator; returns i18n keys (empty = fine to send). */
-export function validateDraft(draft: TaskRuleDraft, fields: SchemaField[]): string[] {
+export function validateDraft(
+  draft: TaskRuleDraft, fields: SchemaField[],
+  /** maxTasks 取自政策生效值；已超出新上限的既有規則，任務數沒增加就不報錯（同伺服器）。 */
+  limits: { maxTasks: number; originalTaskCount: number },
+): string[] {
   const errors = new Set<string>();
   const err = (k: string) => errors.add(`taskRules.errors.${k}`);
   const byId = new Map(fields.map((f) => [f.id, f]));
@@ -128,7 +130,8 @@ export function validateDraft(draft: TaskRuleDraft, fields: SchemaField[]): stri
     else if (f.type === 'boolean' ? typeof t.value !== 'boolean' : !f.options.some((o) => o.value === t.value)) err('triggerValue');
   }
 
-  if (draft.tasks.length < 1 || draft.tasks.length > MAX_TASKS) err('tasksCount');
+  const taskCount = draft.tasks.length;
+  if (taskCount < 1 || (taskCount > limits.maxTasks && taskCount > limits.originalTaskCount)) err('tasksCount');
   const codes = new Set<string>();
   for (const task of draft.tasks) {
     const code = task.code.trim();
