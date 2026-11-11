@@ -142,16 +142,16 @@ public sealed class CrmScenario : IDemoScenario
             }
         }
 
-        // ---- 活動 ----
+        // ---- 互動紀錄 ----
         string[] kinds = ["call", "visit", "email", "meeting"];
         for (var i = 0; i < 18; i++)
         {
             var n = i;
             var date = today.AddDays(-rnd.Next(2, 40));
             var customer = customers[i % customers.Count];
-            plan.Create("crm-activity", plan.At(date), Rep(i), $"活動 {i + 1} 建立", ctx => Create(ctx, "activity",
+            plan.Create("crm-activity", plan.At(date), Rep(i), $"互動紀錄 {i + 1} 建立", ctx => Create(ctx, "activity",
                 ("subject", n % 2 == 0 ? "確認需求與預算" : "回覆規格問題"), ("kind", ctx.Crm!.Opt("activity", kinds[n % kinds.Length])),
-                ("date", Iso(date)), ("customer", customer.Id), ("owner", Rep(n)), ("done", n % 3 != 0)));
+                ("date", Iso(date)), ("customer", customer.Id), ("owner", Rep(n))));
         }
 
         // ---- 報價單 ----

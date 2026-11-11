@@ -134,11 +134,42 @@ public class CrmSalesAppTests : IDisposable
         (await _admin.GetAsync($"{Base}/modules/crm-quote")).StatusCode.Should().Be(HttpStatusCode.NotFound);
 
         var app = await OpenCrm();
-        app.GetProperty("modules").GetArrayLength().Should().Be(8, "客戶與聯絡人改用共用主檔，不再是 CRM 自己的模組");
+        app.GetProperty("modules").GetArrayLength().Should().Be(9, "客戶與聯絡人改用共用主檔，不再是 CRM 自己的模組；1.1.0 加了行銷活動");
         app.GetProperty("modules").EnumerateArray().Select(m => m.GetProperty("key").GetString()).Should().OnlyContain(k => k!.StartsWith("crm-"));
         (await JsonOf(await _admin.GetAsync(Apps))).EnumerateArray().Select(a => a.GetProperty("key").GetString())
             .Should().BeEquivalentTo(["crm-sales", "partner", "contact"], "開 CRM 時自動開啟它用到的共用主檔");
         (await JsonOf(await _admin.GetAsync($"{Base}/menu"))).GetArrayLength().Should().BeGreaterThan(0);
+    }
+
+    [Fact]
+    public async Task CrmApp_OpensWithCampaignAndTaskRule()
+    {
+        await OpenCrm();
+        var res = await _admin.GetAsync($"{Base}/modules/crm-campaign/task-rules");
+        res.StatusCode.Should().Be(HttpStatusCode.OK, await res.Content.ReadAsStringAsync());
+        var rule = (await JsonOf(res)).EnumerateArray().Should().ContainSingle().Subject;
+        rule.GetProperty("key").GetString().Should().Be("crm-campaign-tasks");
+        rule.GetProperty("appKey").GetString().Should().Be("crm-sales");
+        rule.GetProperty("trigger").GetProperty("on").GetString().Should().Be("onCreate");
+        rule.GetProperty("warnings").GetArrayLength().Should().Be(0);
+        var tasks = rule.GetProperty("tasks").EnumerateArray().ToList();
+        tasks.Select(t => t.GetProperty("code").GetString()).Should().Equal("plan", "setup", "feedback");
+        tasks.Select(t => t.GetProperty("dueOffsetDays").GetInt32()).Should().Equal(-62, -1, 12);
+        tasks[1].GetProperty("title").GetProperty("zh-TW").GetString().Should().Be("展場佈置");
+
+        // 條件裡的選項代號（opt_exhibition）開啟時換成這個資料庫的選項值
+        var exhibition = await OptionValue(_admin, "crm-campaign", "類型", "展覽");
+        tasks[1].GetProperty("when").GetRawText().Should().Contain($"\"{exhibition}\"").And.NotContain("opt_exhibition");
+        (tasks[0].TryGetProperty("when", out var planWhen) ? planWhen.ValueKind : JsonValueKind.Null).Should().Be(JsonValueKind.Null);
+    }
+
+    [Fact]
+    public async Task CrmApp_ActivityRenamed_NoDoneField()
+    {
+        await OpenCrm();
+        var module = await JsonOf(await _admin.GetAsync($"{Base}/modules/crm-activity"));
+        module.GetProperty("name").GetProperty("zh-TW").GetString().Should().Be("互動紀錄");
+        (await FieldKeys(_admin, "crm-activity")).Keys.Should().NotContain("已完成").And.Contain("主旨");
     }
 
     [Fact]

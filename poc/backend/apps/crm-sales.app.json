@@ -1,9 +1,9 @@
 {
   "format": "formwright-app",
-  "formatVersion": 6,
+  "formatVersion": 7,
   "manifest": {
     "id": "crm-sales",
-    "version": "1.0.0",
+    "version": "1.1.0",
     "name": {
       "zh-TW": "CRM 與銷售",
       "en-US": "CRM and Sales",
@@ -699,10 +699,10 @@
       "code": "activity",
       "key": "crm-activity",
       "name": {
-        "zh-TW": "活動",
-        "en-US": "Activities",
-        "th": "กิจกรรม",
-        "vi": "Hoạt động"
+        "zh-TW": "互動紀錄",
+        "en-US": "Interactions",
+        "th": "บันทึกการติดต่อ",
+        "vi": "Nhật ký tương tác"
       },
       "kind": "standalone",
       "titleField": "subject",
@@ -860,19 +860,6 @@
               }
             },
             {
-              "code": "done",
-              "type": "boolean",
-              "label": {
-                "zh-TW": "已完成",
-                "en-US": "Done",
-                "th": "เสร็จแล้ว",
-                "vi": "Đã xong"
-              },
-              "config": {
-                "showInList": true
-              }
-            },
-            {
               "code": "note",
               "type": "textarea",
               "label": {
@@ -887,6 +874,264 @@
         }
       ],
       "icon": "event_note",
+      "section": { "zh-TW": "客戶關係", "en-US": "Customer relations", "th": "ลูกค้าสัมพันธ์", "vi": "Quan hệ khách hàng" },
+      "permissions": [
+        {
+          "group": "sales",
+          "scope": "all",
+          "privileges": {
+            "read": true,
+            "add": true,
+            "edit": true,
+            "delete": false,
+            "printExport": true,
+            "pricing": true,
+            "approve": false
+          }
+        },
+        {
+          "group": "manager",
+          "scope": "all",
+          "privileges": {
+            "read": true,
+            "add": true,
+            "edit": true,
+            "delete": true,
+            "printExport": true,
+            "pricing": true,
+            "approve": true
+          }
+        }
+      ]
+    },
+    {
+      "code": "campaign",
+      "key": "crm-campaign",
+      "name": {
+        "zh-TW": "行銷活動",
+        "en-US": "Campaigns",
+        "th": "แคมเปญการตลาด",
+        "vi": "Chiến dịch tiếp thị"
+      },
+      "kind": "standalone",
+      "titleField": "name",
+      "blocks": [
+        {
+          "code": "main",
+          "label": {
+            "zh-TW": "基本資料",
+            "en-US": "Details",
+            "th": "ข้อมูลพื้นฐาน",
+            "vi": "Thông tin cơ bản"
+          },
+          "collapsed": false,
+          "columns": 2,
+          "fields": [
+            {
+              "code": "name",
+              "type": "text",
+              "label": {
+                "zh-TW": "名稱",
+                "en-US": "Name",
+                "th": "ชื่อ",
+                "vi": "Tên"
+              },
+              "config": {
+                "required": true,
+                "showInList": true
+              }
+            },
+            {
+              "code": "kind",
+              "type": "enum",
+              "label": {
+                "zh-TW": "類型",
+                "en-US": "Type",
+                "th": "ประเภท",
+                "vi": "Loại"
+              },
+              "config": {
+                "showInList": true,
+                "isFilterable": true
+              },
+              "options": [
+                {
+                  "code": "exhibition",
+                  "label": {
+                    "zh-TW": "展覽",
+                    "en-US": "Exhibition",
+                    "th": "นิทรรศการ",
+                    "vi": "Triển lãm"
+                  },
+                  "color": null
+                },
+                {
+                  "code": "seminar",
+                  "label": {
+                    "zh-TW": "研討會",
+                    "en-US": "Seminar",
+                    "th": "สัมมนา",
+                    "vi": "Hội thảo"
+                  },
+                  "color": null
+                },
+                {
+                  "code": "online",
+                  "label": {
+                    "zh-TW": "線上活動",
+                    "en-US": "Online event",
+                    "th": "กิจกรรมออนไลน์",
+                    "vi": "Sự kiện trực tuyến"
+                  },
+                  "color": null
+                }
+              ]
+            },
+            {
+              "code": "startDate",
+              "type": "date",
+              "label": {
+                "zh-TW": "開始日",
+                "en-US": "Start date",
+                "th": "วันที่เริ่ม",
+                "vi": "Ngày bắt đầu"
+              },
+              "config": {
+                "showInList": true,
+                "isFilterable": true,
+                "isSortable": true
+              }
+            },
+            {
+              "code": "endDate",
+              "type": "date",
+              "label": {
+                "zh-TW": "結束日",
+                "en-US": "End date",
+                "th": "วันที่สิ้นสุด",
+                "vi": "Ngày kết thúc"
+              },
+              "config": {
+                "isSortable": true
+              }
+            },
+            {
+              "code": "location",
+              "type": "text",
+              "label": {
+                "zh-TW": "地點",
+                "en-US": "Location",
+                "th": "สถานที่",
+                "vi": "Địa điểm"
+              },
+              "config": {}
+            },
+            {
+              "code": "status",
+              "type": "enum",
+              "label": {
+                "zh-TW": "狀態",
+                "en-US": "Status",
+                "th": "สถานะ",
+                "vi": "Trạng thái"
+              },
+              "config": {
+                "showInList": true,
+                "isFilterable": true
+              },
+              "options": [
+                {
+                  "code": "planning",
+                  "label": {
+                    "zh-TW": "規劃中",
+                    "en-US": "Planning",
+                    "th": "กำลังวางแผน",
+                    "vi": "Đang lên kế hoạch"
+                  },
+                  "color": null
+                },
+                {
+                  "code": "confirmed",
+                  "label": {
+                    "zh-TW": "確定舉辦",
+                    "en-US": "Confirmed",
+                    "th": "ยืนยันจัดงาน",
+                    "vi": "Đã xác nhận tổ chức"
+                  },
+                  "color": null
+                },
+                {
+                  "code": "ended",
+                  "label": {
+                    "zh-TW": "已結束",
+                    "en-US": "Ended",
+                    "th": "จบแล้ว",
+                    "vi": "Đã kết thúc"
+                  },
+                  "color": null
+                },
+                {
+                  "code": "cancelled",
+                  "label": {
+                    "zh-TW": "取消",
+                    "en-US": "Cancelled",
+                    "th": "ยกเลิก",
+                    "vi": "Đã hủy"
+                  },
+                  "color": null
+                }
+              ]
+            },
+            {
+              "code": "planOwner",
+              "type": "user",
+              "label": {
+                "zh-TW": "規劃負責人",
+                "en-US": "Planning owner",
+                "th": "ผู้รับผิดชอบการวางแผน",
+                "vi": "Người phụ trách lên kế hoạch"
+              },
+              "config": {
+                "showInList": true
+              }
+            },
+            {
+              "code": "setupOwner",
+              "type": "user",
+              "label": {
+                "zh-TW": "佈置負責人",
+                "en-US": "Setup owner",
+                "th": "ผู้รับผิดชอบการจัดบูธ",
+                "vi": "Người phụ trách dàn dựng"
+              },
+              "config": {}
+            },
+            {
+              "code": "feedbackOwner",
+              "type": "user",
+              "label": {
+                "zh-TW": "回饋負責人",
+                "en-US": "Feedback owner",
+                "th": "ผู้รับผิดชอบการเก็บความคิดเห็น",
+                "vi": "Người phụ trách phản hồi"
+              },
+              "config": {}
+            },
+            {
+              "code": "note",
+              "type": "textarea",
+              "label": {
+                "zh-TW": "說明",
+                "en-US": "Notes",
+                "th": "รายละเอียด",
+                "vi": "Mô tả"
+              },
+              "config": {}
+            }
+          ]
+        }
+      ],
+      "icon": "campaign",
       "section": { "zh-TW": "客戶關係", "en-US": "Customer relations", "th": "ลูกค้าสัมพันธ์", "vi": "Quan hệ khách hàng" },
       "permissions": [
         {
@@ -2513,6 +2758,76 @@
         }
       ],
       "fieldAccess": []
+    }
+  ],
+  "taskRules": [
+    {
+      "code": "crm-campaign-tasks",
+      "name": {
+        "zh-TW": "行銷活動派工",
+        "en-US": "Campaign task assignment",
+        "th": "มอบหมายงานแคมเปญ",
+        "vi": "Phân công việc cho chiến dịch"
+      },
+      "active": true,
+      "module": "campaign",
+      "repeat": "once",
+      "trigger": {
+        "on": "onCreate"
+      },
+      "tasks": [
+        {
+          "code": "plan",
+          "title": {
+            "zh-TW": "規劃活動內容",
+            "en-US": "Plan the campaign content",
+            "th": "วางแผนเนื้อหากิจกรรม",
+            "vi": "Lên kế hoạch nội dung sự kiện"
+          },
+          "assignee": "campaign.planOwner",
+          "due": {
+            "field": "campaign.startDate",
+            "offsetDays": -62
+          }
+        },
+        {
+          "code": "setup",
+          "title": {
+            "zh-TW": "展場佈置",
+            "en-US": "Set up the booth",
+            "th": "จัดบูธในงาน",
+            "vi": "Dàn dựng gian hàng"
+          },
+          "assignee": "campaign.setupOwner",
+          "due": {
+            "field": "campaign.startDate",
+            "offsetDays": -1
+          },
+          "when": {
+            "all": [
+              {
+                "field": "campaign.kind",
+                "op": "eq",
+                "value": "opt_exhibition"
+              }
+            ]
+          }
+        },
+        {
+          "code": "feedback",
+          "title": {
+            "zh-TW": "活動回饋",
+            "en-US": "Collect campaign feedback",
+            "th": "สรุปความคิดเห็นหลังงาน",
+            "vi": "Thu thập phản hồi sau sự kiện"
+          },
+          "assignee": "campaign.feedbackOwner",
+          "due": {
+            "field": "campaign.endDate",
+            "offsetDays": 12
+          }
+        }
+      ]
     }
   ]
 }
