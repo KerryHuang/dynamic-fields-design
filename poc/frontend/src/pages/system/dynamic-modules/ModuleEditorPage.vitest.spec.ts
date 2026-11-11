@@ -13,7 +13,7 @@ import { dynamicApi } from 'src/services/api/dynamic-api';
 import ModuleEditorPage from './ModuleEditorPage.vue';
 
 vi.mock('src/services/api/dynamic-api', () => ({ dynamicApi: { getModule: vi.fn(), updateModule: vi.fn(), entities: vi.fn(), getPreviewSchema: vi.fn(), exportTemplate: vi.fn(), deleteCheck: vi.fn(), deleteTarget: vi.fn(), getMe: vi.fn(),
-  getEvents: vi.fn(), getChecks: vi.fn(), getLedger: vi.fn(), getWorkflow: vi.fn(), getModules: vi.fn() } }));
+  getEvents: vi.fn(), getChecks: vi.fn(), getLedger: vi.fn(), getWorkflow: vi.fn(), getModules: vi.fn(), getModulePolicies: vi.fn(), saveModulePolicy: vi.fn() } }));
 const api = vi.mocked(dynamicApi);
 
 const detail: ModuleDetail = {
@@ -44,6 +44,15 @@ describe('ModuleEditorPage', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     vi.stubGlobal('ResizeObserver', class { observe() {} unobserve() {} disconnect() {} });
+  });
+
+  it('明細模組沒有政策分頁，一般模組有', async () => {
+    const w = await mountPage();
+    expect(w.find('[data-testid="tab-policies"]').exists()).toBe(true);
+    w.unmount();
+    const w2 = await mountPage({ ...detail, detailOf: 'parent' });
+    expect(w2.find('[data-testid="tab-policies"]').exists()).toBe(false);
+    w2.unmount();
   });
 
   it('picking an icon saves it and keeps the other module settings', async () => {
