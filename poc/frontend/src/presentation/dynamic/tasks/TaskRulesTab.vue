@@ -5,7 +5,7 @@ import { useI18n } from 'vue-i18n';
 import { useMe } from 'src/application/dynamic/queries/permissions-queries';
 import { useDeleteTaskRule, useSaveTaskRule, useTaskRulesQuery } from 'src/application/dynamic/queries/task-rules-queries';
 import { resolveI18n } from 'src/domain/dynamic/i18n-text';
-import { fromTaskRule, toTaskRuleBody, type TaskRule } from 'src/domain/dynamic/task-rule-draft';
+import { fromTaskRule, MAX_RULES, toTaskRuleBody, type TaskRule } from 'src/domain/dynamic/task-rule-draft';
 import type { ModuleDetail } from 'src/domain/dynamic/types';
 import { toSchemaFields } from 'src/presentation/dynamic/designer/schema-fields';
 import { joinList } from 'src/i18n/translate';
@@ -61,7 +61,9 @@ function confirmDelete() {
     </q-banner>
     <div class="row items-center q-mb-sm">
       <q-space />
-      <q-btn color="primary" icon="add" dense :label="t('taskRules.add')" :disable="readonly" data-testid="add-task-rule" @click="open()" />
+      <q-btn color="primary" icon="add" dense :label="t('taskRules.add')" :disable="readonly || rulesQuery.data.value!.length >= MAX_RULES" data-testid="add-task-rule" @click="open()">
+        <q-tooltip v-if="rulesQuery.data.value!.length >= MAX_RULES">{{ t('taskRules.limit') }}</q-tooltip>
+      </q-btn>
     </div>
 
     <q-list bordered separator>

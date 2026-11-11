@@ -82,6 +82,22 @@ describe('TaskRulesTab', () => {
     w.unmount();
   });
 
+  it('已有 20 條規則時新增鈕停用並有提示', async () => {
+    await mountTab({ rules: Array.from({ length: 20 }, (_, i) => ruleWire({ key: `r${i}` })) });
+    expect(q('[data-testid="add-task-rule"]').hasAttribute('disabled')).toBe(true);
+    (w.findComponent(quasar.QTooltip).vm as unknown as { show: () => void }).show();
+    await flushPromises();
+    expect(body().textContent).toContain('每個模組最多 20 條任務規則');
+    w.unmount();
+  });
+
+  it('19 條規則時新增鈕仍可用', async () => {
+    await mountTab({ rules: Array.from({ length: 19 }, (_, i) => ruleWire({ key: `r${i}` })) });
+    expect(q('[data-testid="add-task-rule"]').hasAttribute('disabled')).toBe(false);
+    expect(w.findComponent(quasar.QTooltip).exists()).toBe(false);
+    w.unmount();
+  });
+
   it('啟用任務時沒有提示', async () => {
     await mountTab();
     expect(body().querySelector('[data-testid="task-rules-module-off"]')).toBeNull();

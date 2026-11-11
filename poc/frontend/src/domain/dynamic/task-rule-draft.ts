@@ -46,6 +46,7 @@ export interface TaskRule extends TaskRuleInput {
 export type TaskRuleDraft = TaskRuleInput;
 
 export const MAX_TASKS = 20;
+export const MAX_RULES = 20;
 export const MAX_OFFSET_DAYS = 3650;
 const TEXT_MAX = 200;
 const DESCRIPTION_MAX = 4000;
