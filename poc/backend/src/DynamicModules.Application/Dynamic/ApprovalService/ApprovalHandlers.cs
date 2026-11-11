@@ -154,19 +154,24 @@ public class PreviewRecordApprovalHandler(ApprovalSubmitEligibility eligibility,
 /// <summary>
 /// 設計器試算：流程所在目標狀態上的全部流程照送出規則比對；值以記錄（必須在同一模組）為底、Values 覆蓋。
 /// noMatch 取記錄目前狀態（沒有記錄時是起始狀態）進入目標狀態的轉移，找不到就取任一條進入它的需簽核轉移，再沒有就當 block。
+/// 帶記錄時呼叫者要對它有 Read 且在資料範圍內，否則 404（不能拿試算探查讀不到的記錄）；發起人必填。
 /// </summary>
-public class PreviewApprovalFlowHandler(IApprovalFlowRepository flows, IModuleRepository modules, IRecordRepository records, ApprovalPreviewer previewer)
+public class PreviewApprovalFlowHandler(IApprovalFlowRepository flows, IModuleRepository modules, IRecordRepository records, ApprovalPreviewer previewer,
+    IDynamicAccessGuard guard)
     : IRequestHandler<PreviewApprovalFlowRequest, ServiceResult>
 {
     public async Task<ServiceResult> Handle(PreviewApprovalFlowRequest request, CancellationToken ct)
     {
+        if (string.IsNullOrEmpty(request.InitiatorUserId)) return ServiceResult.Invalid("initiatorUserId", MessageRef.Of(MessageText.Required));
         if (await flows.GetByKeyAsync(request.Key, ct) is not { } flow) return ServiceResult.NotFound(MessageRef.Of(MessageText.ResourceNotFound));
         if (await modules.GetByIdAsync(flow.ModuleId, includeChildren: true, ct) is not { Workflow: { } wf } module)
             return ServiceResult.NotFound(MessageRef.Of(MessageText.ResourceNotFound));
         var values = new Dictionary<string, JsonElement?>();
         if (request.RecordId is { } id)
         {
-            if (await records.GetAsync(id, ct) is not { } record || record.ModuleId != module.Id)
+            if (await records.GetAsync(id, ct) is not { } record || record.ModuleId != module.Id
+                || !module.IsReadable() || (await guard.AuthorizeAsync(module, PermissionAction.Read, ct)).Permissions is not { } read
+                || !ApprovalReader.InScope(read, record.OwnerUserId))
                 return ServiceResult.NotFound(RecordMapper.RecordNotFound);
             values = RecordValueProcessor.Parse(record.ValuesJson);
         }

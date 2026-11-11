@@ -191,6 +191,32 @@ public class ApprovalPreviewTests : ApprovalTestBase
     }
 
     [Fact]
+    public async Task DesignerPreview_RecordWithoutRead_404()
+    {
+        // 只有設計器 Read、對模組沒有 Read：帶 recordId 不能拿來探查記錄值；不帶照常試算
+        var r = await OneFlow(_ => Def(null, Stage("lead", Group(PurchaseLeadGroup))));
+        As("buyer1");
+        var po = await NewPo(r, price: 5000);
+        Db.Context.Add(new UserProgramPrivilege { UserId = "fin1", ProgramCode = "DYN00000", CanRead = true });
+        await Db.Context.SaveChangesAsync();
+        await Db.Context.Set<UserGroupMapping>().Where(m => m.UserId == "fin1" && m.GroupId == EveryoneGroup()).ExecuteDeleteAsync();
+        Db.Context.ChangeTracker.Clear();
+        As("fin1");
+        (await Send(new PreviewApprovalFlowRequest("po-v", po.Id, null, "buyer1"))).IsNotFound.Should().BeTrue();
+        (await Send(new PreviewApprovalFlowRequest("po-v", null, null, "buyer1"))).IsSuccess.Should().BeTrue();
+    }
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("")]
+    public async Task DesignerPreview_MissingInitiator_400(string? initiator)
+    {
+        await OneFlow(_ => Def(null, Stage("lead", Group(PurchaseLeadGroup))));
+        As("admin");
+        (await Send(new PreviewApprovalFlowRequest("po-v", null, null, initiator!))).IsInvalid.Should().BeTrue();
+    }
+
+    [Fact]
     public async Task Preview_WritesNothing()
     {
         var r = await Scenario3();
