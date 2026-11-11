@@ -51,6 +51,16 @@ public class PolicyCatalogFixtureTests
         PolicyCatalog.NotificationRetentionDays.Scope.Should().Be(PolicyScope.System);
         PolicyCatalog.CalendarWeekStart.Factory.Should().Be("monday");
         PolicyCatalog.CalendarWeekStart.Scope.Should().Be(PolicyScope.System);
+        PolicyCatalog.AttachmentMaxFileBytes.Factory.Should().Be("10485760");
+        PolicyCatalog.AttachmentMaxFileBytes.Scope.Should().Be(PolicyScope.Module);
+        PolicyCatalog.AttachmentMaxFileBytes.Max.Should().Be(52428800);
+        PolicyCatalog.AttachmentMaxFilesPerField.Factory.Should().Be("20");
+        PolicyCatalog.AttachmentMaxFilesPerField.Scope.Should().Be(PolicyScope.Module);
+        PolicyCatalog.AttachmentAllowedExtensions.Factory.Should().Be("pdf,png,jpg,jpeg,webp,txt,csv,docx,xlsx,pptx");
+        PolicyCatalog.AttachmentAllowedExtensions.Scope.Should().Be(PolicyScope.System);
+        PolicyCatalog.AttachmentMaxFilesPerComment.Factory.Should().Be("5");
+        PolicyCatalog.AttachmentMaxFilesPerComment.Scope.Should().Be(PolicyScope.Module);
+        PolicyCatalog.AttachmentMaxFilesPerComment.Max.Should().Be(10);
         PolicyCatalog.WeekStartOf("sunday").Should().Be(DayOfWeek.Sunday);
         PolicyCatalog.WeekStartOf("monday").Should().Be(DayOfWeek.Monday);
     }

@@ -3,7 +3,9 @@ using DynamicModules.Application.Common.Security;
 using DynamicModules.Application.Common.Time;
 using DynamicModules.Application.Dynamic.AttachmentService;
 using DynamicModules.Application.Dynamic.PermissionService.Data;
+using DynamicModules.Application.Dynamic.PolicyService;
 using DynamicModules.Domain.Entities.Dynamic;
+using DynamicModules.Domain.Policies;
 using DynamicModules.Domain.Repositories.Dynamic;
 using MediatR;
 
@@ -27,7 +29,8 @@ public class GetTaskCommentsHandler(ITaskRepository tasks, TaskAccess access, IP
     }
 }
 
-public class CheckTaskCommentUploadHandler(ITaskRepository tasks, TaskAccess access)
+/// <summary>通過時回該任務所屬模組的 <see cref="UploadBodyLimit"/>（個人任務沒有模組，用全系統值）。</summary>
+public class CheckTaskCommentUploadHandler(ITaskRepository tasks, TaskAccess access, IPolicyReader policies)
     : IRequestHandler<CheckTaskCommentUploadRequest, ServiceResult>
 {
     public async Task<ServiceResult> Handle(CheckTaskCommentUploadRequest request, CancellationToken ct)
@@ -36,16 +39,19 @@ public class CheckTaskCommentUploadHandler(ITaskRepository tasks, TaskAccess acc
         if (task is null) return ServiceResult.NotFound(TaskMessages.NotFound);
         var p = await access.EvaluateAsync(task, ct);
         if (!p.CanSee) return ServiceResult.NotFound(TaskMessages.NotFound);
-        return p.Frozen ? ServiceResult.Conflict(ModuleGate.ClosedMessage) : ServiceResult.Success();
+        if (p.Frozen) return ServiceResult.Conflict(ModuleGate.ClosedMessage);
+        return ServiceResult.Success(new UploadBodyLimit(
+            await policies.IntAsync(PolicyCatalog.AttachmentMaxFileBytes, task.ModuleId, ct),
+            await policies.IntAsync(PolicyCatalog.AttachmentMaxFilesPerComment, task.ModuleId, ct)));
     }
 }
 
 /// <summary>
-/// 留言（可帶附件，與留言同一個請求）。順序：任務 404 → 凍結 409 → 文字與附件都空 400 → 附件超過 5 個 → 逐檔檢查檔名與副檔名 →
+/// 留言（可帶附件，與留言同一個請求）。順序：任務 404 → 凍結 409 → 文字與附件都空 400 → 附件超過該模組的留言附件數上限 → 逐檔檢查檔名與副檔名 →
 /// 逐檔寫入（超過大小上限 400）。檔案先寫、資料列後寫：之後任何失敗都把這次寫入的檔案刪掉，不留孤兒。
 /// </summary>
 public class AddTaskCommentHandler(ITaskRepository tasks, TaskAccess access, TaskWriter writer, IPermissionRepository permissions,
-    ICurrentUser user, IAttachmentStore store, AttachmentSettings settings, IBusinessTime time)
+    ICurrentUser user, IAttachmentStore store, AttachmentSettings settings, IPolicyReader policies, IBusinessTime time)
     : IRequestHandler<AddTaskCommentRequest, ServiceResult>
 {
     public async Task<ServiceResult> Handle(AddTaskCommentRequest request, CancellationToken ct)
@@ -60,16 +66,18 @@ public class AddTaskCommentHandler(ITaskRepository tasks, TaskAccess access, Tas
         if (body.Length == 0 && request.Files.Count == 0) return Invalid("body", TaskMessages.BodyRequired);
         if (body.Length > TaskCommentRules.BodyMax) return Invalid("body", TaskMessages.BodyTooLong);
         if (request.Files.Count > 0 && !settings.UploadEnabled) return AttachmentUploadGate.UploadDisabled(settings);
-        if (request.Files.Count > TaskCommentRules.MaxFiles) return Invalid("files", TaskMessages.TooManyFiles);
+        var maxFiles = await policies.IntAsync(PolicyCatalog.AttachmentMaxFilesPerComment, task.ModuleId, ct);
+        if (request.Files.Count > maxFiles) return Invalid("files", TaskMessages.TooManyFiles(maxFiles));
         var names = new List<string>();
         foreach (var f in request.Files)
         {
             var name = AttachmentRules.CleanName(f.FileName);
             if (name is null) return Invalid("files", AttachmentRules.NameRequired);
-            if (AttachmentRules.ExtensionOf(name) is not { } ext || !settings.IsAllowed(ext)) return Invalid("files", AttachmentRules.ExtensionRejected);
+            if (AttachmentRules.ExtensionOf(name) is not { } ext || !await AttachmentRules.IsAllowedAsync(policies, ext, ct)) return Invalid("files", AttachmentRules.ExtensionRejected);
             names.Add(name);
         }
 
+        var maxBytes = await policies.IntAsync(PolicyCatalog.AttachmentMaxFileBytes, task.ModuleId, ct);
         var written = new List<string>();
         try
         {
@@ -77,7 +85,7 @@ public class AddTaskCommentHandler(ITaskRepository tasks, TaskAccess access, Tas
             for (var i = 0; i < request.Files.Count; i++)
             {
                 var key = Guid.NewGuid().ToString("N");
-                var size = await store.SaveAsync(key, request.Files[i].Content, settings.MaxBytes, ct);
+                var size = await store.SaveAsync(key, request.Files[i].Content, maxBytes, ct);
                 if (size is null)
                 {
                     Discard(written);
@@ -183,7 +191,6 @@ public class GetMentionCandidatesHandler(IPermissionRepository permissions)
 public static class TaskCommentRules
 {
     public const int BodyMax = 4000;
-    public const int MaxFiles = 5;
     public const int ContentTypeMax = 100;
 
     /// <summary>人寫的、未撤回、任務沒凍結，且是作者或系統管理員。</summary>

@@ -1,6 +1,7 @@
 using DynamicModules.Application.Common;
 using DynamicModules.Application.Dynamic.AttachmentService;
 using DynamicModules.Application.Dynamic.DeleteService;
+using DynamicModules.Application.Dynamic.PolicyService;
 using DynamicModules.Application.Dynamic.TaskService;
 using DynamicModules.Domain.Entities.Dynamic;
 using DynamicModules.Persistence.Files;
@@ -43,8 +44,8 @@ public class TaskAttachmentFileTests : TaskTestBase, IAsyncLifetime
 
     protected override void ConfigureServices(IServiceCollection services)
     {
-        services.AddSingleton(new AttachmentSettings(_root, 1024, AttachmentSettings.DefaultExtensions,
-            AttachmentSettings.DefaultMaxFilesPerField, false, null));
+        services.AddSingleton(new AttachmentSettings(_root, false, null));
+        services.AddSingleton(new PolicyEnvironmentDefaults(new Dictionary<string, string> { ["attachment.maxFileBytes"] = "1024" }));
         services.AddSingleton<IAttachmentStore>(_store);
         services.AddTransient<IRequestHandler<RemoveModuleProbe, ServiceResult>, RemoveModuleProbeHandler>();
     }

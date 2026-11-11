@@ -52,8 +52,7 @@ public sealed class DemoTestHost : IAsyncDisposable
         services.AddSingleton<IBusinessTime>(new FakeTime(today ?? Today));
         services.AddSingleton(new AuthSettings(false));
         // 情境會在任務上留言（不帶附件），留言的處理器需要附件服務
-        services.AddSingleton(new AttachmentSettings(host._attachmentRoot, AttachmentSettings.DefaultMaxBytes,
-            AttachmentSettings.DefaultExtensions, AttachmentSettings.DefaultMaxFilesPerField, true, null));
+        services.AddSingleton(new AttachmentSettings(host._attachmentRoot, true, null));
         services.AddSingleton<IAttachmentStore>(new LocalAttachmentStore(host._attachmentRoot));
         services.AddActingOverrides();
         configure?.Invoke(services);

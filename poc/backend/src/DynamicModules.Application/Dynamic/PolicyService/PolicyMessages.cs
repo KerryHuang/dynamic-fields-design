@@ -8,6 +8,10 @@ public static class PolicyMessages
     public const string ModuleNotFound = "找不到模組";
     public const string SystemOnly = "這個政策只能在系統設定改，不能由模組覆寫";
 
+    /// <summary>白名單含寫死黑名單項目（網頁、腳本、可執行類）時，列出被拒的項目。</summary>
+    public static string Forbidden(IEnumerable<string> rejected) =>
+        $"不能收這些類型（網頁、腳本或可執行檔，基於安全不開放）：{string.Join("、", rejected)}";
+
     /// <summary>存檔被擋時寫出允許範圍。</summary>
     public static string Invalid(PolicyDefinition d) => d.Kind switch
     {

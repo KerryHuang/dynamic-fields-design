@@ -1,6 +1,9 @@
+using DynamicModules.Application.Dynamic.PolicyService;
+using DynamicModules.Domain.Policies;
+
 namespace DynamicModules.Application.Dynamic.AttachmentService;
 
-/// <summary>檔名的清理與副檔名檢查（純函式）。檔名只用來顯示與下載時的建議檔名，從不用來決定磁碟上的路徑。</summary>
+/// <summary>檔名的清理與副檔名檢查。檔名只用來顯示與下載時的建議檔名，從不用來決定磁碟上的路徑。</summary>
 public static class AttachmentRules
 {
     public const int MaxNameLength = 150;
@@ -28,5 +31,16 @@ public static class AttachmentRules
     {
         var dot = name.LastIndexOf('.');
         return dot <= 0 || dot == name.Length - 1 ? null : name[(dot + 1)..].ToLowerInvariant();
+    }
+
+    /// <summary>
+    /// 副檔名在全系統白名單內才收（不分大小寫）。寫死的危險副檔名黑名單在這裡再擋一次：
+    /// 讀值服務已把含黑名單項目的值當壞值丟掉，這一道是防白名單來源日後變動時漏掉。
+    /// </summary>
+    public static async Task<bool> IsAllowedAsync(IPolicyReader policies, string extension, CancellationToken ct)
+    {
+        var def = PolicyCatalog.AttachmentAllowedExtensions;
+        if (def.IsForbidden(extension)) return false;
+        return (await policies.ListAsync(def, null, ct)).Contains(extension, StringComparer.OrdinalIgnoreCase);
     }
 }

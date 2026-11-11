@@ -2,21 +2,28 @@ using System.Text.Json;
 using DynamicModules.Application.Common;
 using DynamicModules.Application.Common.Security;
 using DynamicModules.Application.Common.Time;
+using DynamicModules.Application.Dynamic.PolicyService;
 using DynamicModules.Application.Dynamic.RecordService;
 using DynamicModules.Application.Dynamic.RecordService.Data;
 using DynamicModules.Domain.Entities.Dynamic;
 using DynamicModules.Domain.FieldTypes;
 using DynamicModules.Domain.Modules;
+using DynamicModules.Domain.Policies;
 using DynamicModules.Domain.Repositories.Dynamic;
 using DynamicModules.Domain.Rules;
 using MediatR;
 
 namespace DynamicModules.Application.Dynamic.AttachmentService;
 
-public sealed class GetAttachmentSettingsHandler(AttachmentSettings settings) : IRequestHandler<GetAttachmentSettingsRequest, ServiceResult>
+public sealed class GetAttachmentSettingsHandler(AttachmentSettings settings, IPolicyReader policies)
+    : IRequestHandler<GetAttachmentSettingsRequest, ServiceResult>
 {
-    public Task<ServiceResult> Handle(GetAttachmentSettingsRequest request, CancellationToken ct) =>
-        Task.FromResult(ServiceResult.Success(AttachmentSettingsResponse.From(settings)));
+    public async Task<ServiceResult> Handle(GetAttachmentSettingsRequest request, CancellationToken ct) =>
+        ServiceResult.Success(new AttachmentSettingsResponse(
+            settings.UploadEnabled, settings.UploadEnabled ? null : settings.DisabledReason,
+            await policies.IntAsync(PolicyCatalog.AttachmentMaxFileBytes, null, ct),
+            await policies.ListAsync(PolicyCatalog.AttachmentAllowedExtensions, null, ct),
+            await policies.IntAsync(PolicyCatalog.AttachmentMaxFilesPerField, null, ct)));
 }
 
 /// <summary>上傳前的資格檢查結果：通過時帶著後面要用的記錄、模組、欄位與目前的值。</summary>
@@ -71,11 +78,20 @@ public sealed class AttachmentUploadGate(
     private static ServiceResult Invalid(string key, MessageRef message) => ServiceResult.Invalid(key, message);
 }
 
-/// <summary>控制器在收進請求主體之前先問：這個人現在能不能對這個欄位上傳？只做檢查，不寫入。</summary>
-public sealed class CheckAttachmentUploadHandler(AttachmentUploadGate gate) : IRequestHandler<CheckAttachmentUploadRequest, ServiceResult>
+/// <summary>
+/// 控制器在收進請求主體之前先問：這個人現在能不能對這個欄位上傳？只做檢查，不寫入。
+/// 通過時回該模組的 <see cref="UploadBodyLimit"/>（主體上限要看模組，所以必須先知道記錄屬於哪個模組）。
+/// </summary>
+public sealed class CheckAttachmentUploadHandler(AttachmentUploadGate gate, IPolicyReader policies)
+    : IRequestHandler<CheckAttachmentUploadRequest, ServiceResult>
 {
-    public async Task<ServiceResult> Handle(CheckAttachmentUploadRequest request, CancellationToken ct) =>
-        (await gate.CheckAsync(request.RecordId, request.FieldId, ct)).Rejected ?? ServiceResult.Success();
+    public async Task<ServiceResult> Handle(CheckAttachmentUploadRequest request, CancellationToken ct)
+    {
+        var (rejected, target) = await gate.CheckAsync(request.RecordId, request.FieldId, ct);
+        if (rejected is not null) return rejected;
+        return ServiceResult.Success(new UploadBodyLimit(
+            await policies.IntAsync(PolicyCatalog.AttachmentMaxFileBytes, target!.Module.Id, ct), 1));
+    }
 }
 
 /// <summary>
@@ -83,7 +99,7 @@ public sealed class CheckAttachmentUploadHandler(AttachmentUploadGate gate) : IR
 /// 最後把檔案描述寫進記錄的值（走歷程與 RowVersion）。檔案先寫、值後寫：值寫入失敗時刪除剛寫的檔案。
 /// </summary>
 public sealed class UploadAttachmentHandler(
-    AttachmentUploadGate gate, IAttachmentStore store, AttachmentSettings settings, RecordHistoryWriter history, IUnitOfWork uow,
+    AttachmentUploadGate gate, IAttachmentStore store, IPolicyReader policies, RecordHistoryWriter history, IUnitOfWork uow,
     ICurrentUser user, IBusinessTime time) : IRequestHandler<UploadAttachmentRequest, ServiceResult>
 {
     public async Task<ServiceResult> Handle(UploadAttachmentRequest request, CancellationToken ct)
@@ -95,13 +111,14 @@ public sealed class UploadAttachmentHandler(
         var name = AttachmentRules.CleanName(request.FileName);
         if (name is null) return Invalid(field.Key, AttachmentRules.NameRequired);
         var ext = AttachmentRules.ExtensionOf(name);
-        if (ext is null || !settings.IsAllowed(ext)) return Invalid(field.Key, AttachmentRules.ExtensionRejected);
+        if (ext is null || !await AttachmentRules.IsAllowedAsync(policies, ext, ct)) return Invalid(field.Key, AttachmentRules.ExtensionRejected);
 
         var existing = AttachmentValue.Parse(previous.GetValueOrDefault(field.Key));
-        if (existing.Count >= settings.MaxFilesPerField) return Invalid(field.Key, AttachmentRules.TooMany);
+        if (existing.Count >= await policies.IntAsync(PolicyCatalog.AttachmentMaxFilesPerField, module.Id, ct))
+            return Invalid(field.Key, AttachmentRules.TooMany);
 
         var id = Guid.NewGuid().ToString("N");
-        var size = await store.SaveAsync(id, request.Content, settings.MaxBytes, ct);
+        var size = await store.SaveAsync(id, request.Content, await policies.IntAsync(PolicyCatalog.AttachmentMaxFileBytes, module.Id, ct), ct);
         if (size is null) return Invalid(field.Key, AttachmentRules.TooLarge);
 
         try

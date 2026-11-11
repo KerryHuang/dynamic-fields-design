@@ -61,7 +61,7 @@ public class PolicyApiTests : IDisposable
         res.StatusCode.Should().Be(HttpStatusCode.OK);
         var list = await JsonOf(res);
         list.EnumerateArray().Select(e => e.GetProperty("code").GetString())
-            .Should().Equal(Rules, "task.maxTasksPerRule", "task.maxRulesPerPackage");
+            .Should().Equal(DynamicModules.Domain.Policies.PolicyCatalog.All.Select(d => d.Code));
         var item = Item(list, Rules);
         item.GetProperty("factory").GetInt32().Should().Be(20);
         item.GetProperty("effective").GetInt32().Should().Be(20);

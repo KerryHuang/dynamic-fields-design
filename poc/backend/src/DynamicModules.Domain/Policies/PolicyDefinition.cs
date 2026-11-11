@@ -13,6 +13,7 @@ public enum PolicyKind { Integer, Boolean, Choice, RoleSet, CodeList }
 /// 一個業務政策的登記項。<see cref="Min"/>／<see cref="Max"/> 是寫死的技術上下限（Integer 是數值，CodeList 是項目數）。
 /// 標準字串：Integer 不帶符號的十進位；Boolean <c>true</c>／<c>false</c>；Choice 選項原字；
 /// RoleSet 依選項順序、逗號分隔、可為空字串；CodeList 小寫、去前導點、去重保留首次順序、逗號分隔。
+/// <see cref="Forbidden"/> 是 CodeList 的寫死黑名單（安全檢查）：含黑名單項目的值一律不合法。
 /// </summary>
 public sealed partial record PolicyDefinition(
     string Code,
@@ -23,7 +24,8 @@ public sealed partial record PolicyDefinition(
     int Min = 0,
     int Max = 0,
     IReadOnlyList<string>? Options = null,
-    string? Unit = null)
+    string? Unit = null,
+    IReadOnlyList<string>? Forbidden = null)
 {
     public string SettingKey => $"policy.{Code}";
 
@@ -51,7 +53,7 @@ public sealed partial record PolicyDefinition(
             case PolicyKind.CodeList:
             {
                 var items = Split(raw).Select(CodeItem).ToList();
-                if (items.Any(i => !ValidCode(i))) return null;
+                if (items.Any(i => !ValidCode(i) || IsForbidden(i))) return null;
                 var distinct = items.Distinct(StringComparer.Ordinal).ToList();
                 return distinct.Count >= Min && distinct.Count <= Max ? string.Join(",", distinct) : null;
             }
@@ -74,7 +76,7 @@ public sealed partial record PolicyDefinition(
                     : null;
             case PolicyKind.CodeList:
             {
-                var items = Split(raw).Select(CodeItem).Where(i => ValidCode(i))
+                var items = Split(raw).Select(CodeItem).Where(i => ValidCode(i) && !IsForbidden(i))
                     .Distinct(StringComparer.Ordinal).Take(Max).ToList();
                 return items.Count >= Min ? string.Join(",", items) : null;
             }
@@ -82,6 +84,14 @@ public sealed partial record PolicyDefinition(
                 return Normalize(raw);
         }
     }
+
+    /// <summary>CodeList 的項目（不分大小寫、可帶前導點）是否在寫死黑名單內。</summary>
+    public bool IsForbidden(string item) =>
+        Forbidden is not null && Forbidden.Contains(CodeItem(item), StringComparer.Ordinal);
+
+    /// <summary>原始值中落在黑名單的項目（正規化後、去重），訊息列出被拒的項目用。</summary>
+    public IReadOnlyList<string> ForbiddenIn(string raw) =>
+        Split(raw).Select(CodeItem).Where(IsForbidden).Distinct(StringComparer.Ordinal).ToList();
 
     private static List<string> Split(string raw) =>
         raw.Split(',', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries).ToList();

@@ -31,7 +31,7 @@ public class UpdateSystemPolicyHandler(ISystemSettingRepository settings, IPolic
         if (PolicyCatalog.Find(request.Code) is not { } def) return ServiceResult.NotFound(PolicyMessages.NotFound);
         if (request.Value is { ValueKind: not (JsonValueKind.Null or JsonValueKind.Undefined) } value)
         {
-            if (PolicyJson.FromJson(def, value) is not { } canonical) return PolicyValueInvalid(def);
+            if (PolicyJson.FromJson(def, value) is not { } canonical) return PolicyValueInvalid(def, value);
             await settings.SetAsync(def.SettingKey, canonical, ct);
         }
         else
@@ -43,8 +43,11 @@ public class UpdateSystemPolicyHandler(ISystemSettingRepository settings, IPolic
         return ServiceResult.Success(PolicyJson.System(def, await reader.ResolveAsync(def, null, ct)));
     }
 
-    internal static ServiceResult PolicyValueInvalid(PolicyDefinition def) =>
-        ServiceResult.Invalid(new Dictionary<string, string[]> { ["value"] = [PolicyMessages.Invalid(def)] });
+    internal static ServiceResult PolicyValueInvalid(PolicyDefinition def, JsonElement value) =>
+        ServiceResult.Invalid(new Dictionary<string, string[]>
+        {
+            ["value"] = [PolicyJson.ForbiddenItems(def, value) is { Count: > 0 } rejected ? PolicyMessages.Forbidden(rejected) : PolicyMessages.Invalid(def)]
+        });
 }
 
 public class GetModulePoliciesHandler(IModuleRepository modules, IPolicyReader reader)
@@ -76,7 +79,7 @@ public class UpdateModulePolicyHandler(
         var existing = await overrides.GetTrackedAsync(module.Id, def.Code, ct);
         if (request.Value is { ValueKind: not (JsonValueKind.Null or JsonValueKind.Undefined) } value)
         {
-            if (PolicyJson.FromJson(def, value) is not { } canonical) return UpdateSystemPolicyHandler.PolicyValueInvalid(def);
+            if (PolicyJson.FromJson(def, value) is not { } canonical) return UpdateSystemPolicyHandler.PolicyValueInvalid(def, value);
             if (existing is null)
             {
                 existing = new ModulePolicy { ModuleId = module.Id, Code = def.Code };

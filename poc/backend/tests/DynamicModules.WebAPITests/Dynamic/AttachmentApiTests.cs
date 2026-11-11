@@ -61,6 +61,16 @@ public class AttachmentApiTests : IDisposable
     private async Task<JsonElement> RecordValues(World w) =>
         (await JsonOf(await Admin.GetAsync($"{Base}/records/{w.RecordId}"))).GetProperty("values");
 
+    private static Task<HttpResponseMessage> PutSystemPolicy(HttpClient c, string code, object? value) =>
+        c.PutAsJsonAsync($"{Base}/system/policies/{code}", new { value });
+
+    private static Task<HttpResponseMessage> PutModulePolicy(HttpClient c, string module, string code, object? value) =>
+        c.PutAsJsonAsync($"{Base}/modules/{module}/policies/{code}", new { value });
+
+    private async Task<JsonElement> FactoryOf(string code) =>
+        (await JsonOf(await Admin.GetAsync($"{Base}/system/policies"))).EnumerateArray()
+        .Single(e => e.GetProperty("code").GetString() == code).GetProperty("factory");
+
     private string[] DiskFiles() =>
         Directory.Exists(_app.AttachmentRoot) ? Directory.GetFiles(_app.AttachmentRoot, "*", SearchOption.AllDirectories) : [];
 
@@ -424,9 +434,8 @@ public class AttachmentApiTests : IDisposable
         var feature = new FakeBodySizeFeature();
         var http = new Microsoft.AspNetCore.Http.DefaultHttpContext();
         http.Features.Set<Microsoft.AspNetCore.Http.Features.IHttpMaxRequestBodySizeFeature>(feature); // 沒有 Content-Length
-        var settings = new DynamicModules.Application.Dynamic.AttachmentService.AttachmentSettings("x", 1000, ["txt"], 5, true, null);
 
-        DynamicModules.WebAPI.Controllers.v3.Dynamic.UploadGuard.ApplyBodyLimit(http, settings).Should().BeNull();
+        DynamicModules.WebAPI.Controllers.v3.Dynamic.UploadGuard.ApplyBodyLimit(http, 1000L).Should().BeNull();
 
         feature.MaxRequestBodySize.Should().BeInRange(1000, 1000 + 256 * 1024);
     }
@@ -435,6 +444,127 @@ public class AttachmentApiTests : IDisposable
     {
         public bool IsReadOnly => false;
         public long? MaxRequestBodySize { get; set; } = 64L * 1024 * 1024;
+    }
+
+    // ---- A20 附件政策：部署設定檔當出廠值、模組覆寫、危險副檔名黑名單 ----
+
+    [Fact]
+    public async Task Settings_ConfigValueIsEnvironmentFactory()
+    {
+        _app.Settings["Attachments:MaxFilesPerField"] = "2";
+        _app.Settings["Attachments:AllowedExtensions:0"] = ".PDF";
+        _app.Settings["Attachments:AllowedExtensions:1"] = "txt";
+
+        (await FactoryOf("attachment.maxFilesPerField")).GetInt32().Should().Be(2);
+        (await FactoryOf("attachment.allowedExtensions")).EnumerateArray().Select(e => e.GetString()).Should().Equal("pdf", "txt");
+        (await FactoryOf("attachment.maxFileBytes")).GetInt64().Should().Be(10485760, "設定檔沒寫的鍵用程式出廠值");
+        var settings = await JsonOf(await Admin.GetAsync($"{Base}/attachments/settings"));
+        settings.GetProperty("maxFilesPerField").GetInt32().Should().Be(2);
+        settings.GetProperty("allowedExtensions").EnumerateArray().Select(e => e.GetString()).Should().Equal("pdf", "txt");
+    }
+
+    [Fact]
+    public async Task Settings_ConfigOutOfRange_Clamped()
+    {
+        _app.Settings["Attachments:MaxBytes"] = "999999999";
+
+        (await FactoryOf("attachment.maxFileBytes")).GetInt64().Should().Be(52428800);
+    }
+
+    [Fact]
+    public async Task Settings_ConfigForbiddenExtension_DroppedFromFactory()
+    {
+        _app.Settings["Attachments:AllowedExtensions:0"] = "pdf";
+        _app.Settings["Attachments:AllowedExtensions:1"] = "exe";
+
+        (await FactoryOf("attachment.allowedExtensions")).EnumerateArray().Select(e => e.GetString()).Should().Equal("pdf");
+    }
+
+    [Fact]
+    public async Task Upload_ModuleOverrideMaxFiles_UsesOverride()
+    {
+        var w = await MakeWorld();
+        (await PutModulePolicy(Admin, w.Module, "attachment.maxFilesPerField", 1)).StatusCode.Should().Be(HttpStatusCode.OK);
+
+        await UploadOk(w, "1.txt");
+        (await Upload(Admin, w, "2.txt")).StatusCode.Should().Be(HttpStatusCode.BadRequest);
+        // 全系統值沒動，別的模組不受影響
+        (await FactoryOf("attachment.maxFilesPerField")).GetInt32().Should().Be(20);
+    }
+
+    [Fact]
+    public async Task Upload_FieldAlreadyOverLoweredLimit_Rejected()
+    {
+        var w = await MakeWorld();
+        var ids = new List<string>();
+        for (var i = 1; i <= 3; i++) ids.Add(await UploadOk(w, $"{i}.txt"));
+        (await PutModulePolicy(Admin, w.Module, "attachment.maxFilesPerField", 2)).EnsureSuccessStatusCode();
+
+        (await Upload(Admin, w, "4.txt")).StatusCode.Should().Be(HttpStatusCode.BadRequest, "已超標的欄位不能再增加");
+        (await Download(Admin, w, ids[0])).StatusCode.Should().Be(HttpStatusCode.OK, "既有檔案照常可讀");
+
+        // 刪到只剩 1 個（存記錄）後可以再傳
+        var rec = await JsonOf(await Admin.GetAsync($"{Base}/records/{w.RecordId}"));
+        var keep = rec.GetProperty("values").GetProperty(w.FieldKey)[0];
+        var saved = await Admin.PutAsJsonAsync($"{Base}/records/{w.RecordId}", new
+        {
+            rowVersion = rec.GetProperty("rowVersion").GetString(),
+            values = new Dictionary<string, object> { [w.FieldKey] = new[] { keep } }
+        });
+        saved.StatusCode.Should().Be(HttpStatusCode.OK, await saved.Content.ReadAsStringAsync());
+        await UploadOk(w, "5.txt");
+    }
+
+    [Fact]
+    public async Task Upload_ModuleOverrideMaxBytes_413WithoutReadingTheBody()
+    {
+        var w = await MakeWorld();
+        (await PutModulePolicy(Admin, w.Module, "attachment.maxFileBytes", 1000)).EnsureSuccessStatusCode();
+
+        var (res, _) = await UploadProbe(Admin, w);
+
+        res.StatusCode.Should().Be(HttpStatusCode.RequestEntityTooLarge);
+        _app.BodyBytesRead.Should().BeLessThan(ProbeSize / 4, "主體上限用的是該模組的覆寫值，不是全系統值");
+    }
+
+    [Fact]
+    public async Task Upload_ExtensionRemovedFromWhitelist_ExistingDownloadStillWorks()
+    {
+        var w = await MakeWorld();
+        var id = await UploadOk(w, "a.txt");
+
+        (await PutSystemPolicy(Admin, "attachment.allowedExtensions", new[] { "pdf" })).EnsureSuccessStatusCode();
+
+        (await Upload(Admin, w, "b.txt")).StatusCode.Should().Be(HttpStatusCode.BadRequest);
+        (await Download(Admin, w, id)).StatusCode.Should().Be(HttpStatusCode.OK);
+    }
+
+    [Fact]
+    public async Task Put_ForbiddenExtension_400ListsTheRejectedOnes()
+    {
+        var res = await PutSystemPolicy(Admin, "attachment.allowedExtensions", new[] { "pdf", "EXE", ".svg" });
+
+        res.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+        var message = (await JsonOf(res)).GetProperty("errors").GetProperty("value")[0].GetString()!;
+        message.Should().Contain("exe").And.Contain("svg").And.NotContain("pdf");
+        (await FactoryOf("attachment.allowedExtensions")).GetArrayLength().Should().Be(10, "沒存進去");
+    }
+
+    [Fact]
+    public async Task Upload_ForbiddenExtensionInStoredList_Rejected()
+    {
+        // 手改資料庫塞進黑名單項目：整個值視為壞值，上傳仍不收
+        using (var scope = _app.Services.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<DynamicDbContext>();
+            db.Set<SystemSetting>().Add(new SystemSetting { Key = "policy.attachment.allowedExtensions", Value = "txt,exe,svg" });
+            db.SaveChanges();
+        }
+        var w = await MakeWorld();
+
+        (await Upload(Admin, w, "run.exe")).StatusCode.Should().Be(HttpStatusCode.BadRequest);
+        (await Upload(Admin, w, "pic.svg")).StatusCode.Should().Be(HttpStatusCode.BadRequest);
+        DiskFiles().Should().BeEmpty();
     }
 
     // ---- Demo / 環境開關 ----

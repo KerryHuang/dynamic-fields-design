@@ -11,6 +11,9 @@ public sealed record UploadAttachmentRequest(long RecordId, long FieldId, Stream
 /// <summary>只檢查上傳資格（權限、可寫、環境開關），不讀檔案；給控制器在收進請求主體前先擋。</summary>
 public sealed record CheckAttachmentUploadRequest(long RecordId, long FieldId) : IRequest<ServiceResult>;
 
+/// <summary>資格檢查通過時帶回的請求主體上限：單檔大小（該模組生效值）與這個請求最多幾個檔。</summary>
+public sealed record UploadBodyLimit(long MaxBytes, int Files);
+
 public sealed record UploadedAttachment(string Id, string Name, long Size, string RowVersion);
 
 public sealed record DownloadAttachmentRequest(long RecordId, long FieldId, string FileId) : IRequest<ServiceResult>;

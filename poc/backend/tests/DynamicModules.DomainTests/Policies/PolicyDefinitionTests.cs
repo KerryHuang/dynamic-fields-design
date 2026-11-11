@@ -75,6 +75,34 @@ public class PolicyDefinitionTests
         Exts().Clamp(FortyOne()).Should().Be(string.Join(",", Enumerable.Range(1, 40).Select(i => $"e{i}")));
     }
 
+    [Theory]
+    [InlineData("pdf,exe")]
+    [InlineData("HTML")]
+    [InlineData(".svg,png")]
+    public void Normalize_ForbiddenExtension_Rejected(string raw)
+    {
+        PolicyCatalog.AttachmentAllowedExtensions.Normalize(raw).Should().BeNull();
+        PolicyCatalog.AttachmentAllowedExtensions.ForbiddenIn(raw).Should().NotBeEmpty();
+    }
+
+    [Fact]
+    public void Clamp_ForbiddenExtension_Dropped()
+    {
+        // 部署設定檔：黑名單項目丟掉；Clamp 本身不記 log，Warning 由 PolicyEnvironmentDefaults.Build 記（見 Clamp_ConfigForbiddenExtension_DroppedWithWarning）
+        PolicyCatalog.AttachmentAllowedExtensions.Clamp("pdf,exe,.SVG,png").Should().Be("pdf,png");
+        PolicyCatalog.AttachmentAllowedExtensions.Clamp("exe,html").Should().BeNull();
+    }
+
+    [Fact]
+    public void Forbidden_ListIsNotInFactory_AndMatchesLowercaseItems()
+    {
+        var forbidden = PolicyCatalog.AttachmentAllowedExtensions.Forbidden!;
+        forbidden.Should().Contain(["html", "svg", "exe", "js", "sh", "php"]);
+        PolicyCatalog.AttachmentAllowedExtensions.Factory.Split(',').Should().NotIntersectWith(forbidden);
+        PolicyCatalog.AttachmentAllowedExtensions.IsForbidden("EXE").Should().BeTrue();
+        PolicyCatalog.AttachmentAllowedExtensions.IsForbidden("pdf").Should().BeFalse();
+    }
+
     [Fact]
     public void Clamp_OtherKinds_SameAsNormalize()
     {

@@ -49,8 +49,9 @@ builder.Services.AddScoped<DynamicModules.Application.Common.ICurrentLocale, Hea
 builder.Services.AddSingleton<IPasswordService, PasswordService>();
 builder.Services.AddSingleton(new AuthSettings(builder.Configuration.GetValue<bool>("Demo:LoginEnabled")));
 // 附件：預設放在資料庫旁的 attachments 目錄（記憶體資料庫則放暫存目錄）。Demo 登入開啟時預設不開放上傳，可用 Attachments:UploadEnabled 明確覆寫。
-var attachmentSettings = AttachmentSettingsFactory.Create(builder.Configuration, dynamicConnection);
+var (attachmentSettings, policyDefaults, attachmentWarnings) = AttachmentSettingsFactory.Create(builder.Configuration, dynamicConnection);
 builder.Services.AddSingleton(attachmentSettings);
+builder.Services.AddSingleton(policyDefaults);
 builder.Services.AddSingleton<IAttachmentStore>(new LocalAttachmentStore(attachmentSettings.Root));
 // 鎖定判斷用真實時間；IBusinessTime 會被 ActingScope 覆寫，不能用
 builder.Services.AddSingleton(TimeProvider.System);
@@ -99,6 +100,7 @@ builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
 
 var app = builder.Build();
+foreach (var warning in attachmentWarnings) app.Logger.LogWarning("{Warning}", warning);
 
 // 內建範本有錯就拒絕啟動（spec §13.1）：在碰資料庫之前先解析 singleton
 app.Services.GetRequiredService<TemplateCatalog>();

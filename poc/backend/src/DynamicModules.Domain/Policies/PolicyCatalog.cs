@@ -49,12 +49,40 @@ public static class PolicyCatalog
         new("calendar.weekStart", "locale", PolicyKind.Choice, PolicyScope.System, "monday",
             Options: ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"]);
 
+    /// <summary>
+    /// 附件副檔名的寫死黑名單（安全檢查，設計 §10）：網頁、腳本與可執行類。白名單從部署設定檔移到畫面可改之後，
+    /// 這些項目不論誰設都不收；出廠白名單本來就不含它們。
+    /// </summary>
+    private static readonly string[] ForbiddenExtensions =
+    [
+        "html", "htm", "xhtml", "svg", "js", "mjs", "exe", "msi", "bat", "cmd", "com", "scr", "ps1", "sh",
+        "jar", "vbs", "dll", "app", "dmg", "php", "asp", "aspx", "jsp"
+    ];
+
+    /// <summary>A20：附件單檔大小上限（位元組）。</summary>
+    public static readonly PolicyDefinition AttachmentMaxFileBytes =
+        new("attachment.maxFileBytes", "attachment", PolicyKind.Integer, PolicyScope.Module, "10485760", 1, 52428800, Unit: "bytes");
+
+    /// <summary>A20：每個附件欄位的檔案數上限。</summary>
+    public static readonly PolicyDefinition AttachmentMaxFilesPerField =
+        new("attachment.maxFilesPerField", "attachment", PolicyKind.Integer, PolicyScope.Module, "20", 1, 100, Unit: "count");
+
+    /// <summary>A20：允許上傳的副檔名白名單（沒列出的一律拒絕；<see cref="ForbiddenExtensions"/> 不論怎麼設都不收）。</summary>
+    public static readonly PolicyDefinition AttachmentAllowedExtensions =
+        new("attachment.allowedExtensions", "attachment", PolicyKind.CodeList, PolicyScope.System,
+            "pdf,png,jpg,jpeg,webp,txt,csv,docx,xlsx,pptx", 1, 40, Forbidden: ForbiddenExtensions);
+
+    /// <summary>A20：每則任務留言的附件數上限。</summary>
+    public static readonly PolicyDefinition AttachmentMaxFilesPerComment =
+        new("attachment.maxFilesPerComment", "attachment", PolicyKind.Integer, PolicyScope.Module, "5", 1, 10, Unit: "count");
+
     public static DayOfWeek WeekStartOf(string choice) => Enum.Parse<DayOfWeek>(choice, ignoreCase: true);
 
     public static IReadOnlyList<PolicyDefinition> All { get; } =
         [TaskMaxRulesPerModule, TaskMaxTasksPerRule, TaskMaxRulesPerPackage,
          TaskReminderLeadDays, TaskRemindOverdue, TaskNotifyCommented, TaskNotifyCompleted, TaskNotifyCancelled,
-         NotificationRetentionDays, CalendarWeekStart];
+         NotificationRetentionDays, CalendarWeekStart,
+         AttachmentMaxFileBytes, AttachmentMaxFilesPerField, AttachmentAllowedExtensions, AttachmentMaxFilesPerComment];
 
     public static PolicyDefinition? Find(string code) =>
         All.FirstOrDefault(d => string.Equals(d.Code, code, StringComparison.Ordinal));

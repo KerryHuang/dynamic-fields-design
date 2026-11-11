@@ -78,6 +78,35 @@ public class TaskCommentAttachmentsApiTests : IDisposable
     }
 
     [Fact]
+    public async Task Comment_ModuleOverrideMaxFiles()
+    {
+        var (module, id) = await NewRecordTask();
+        (await Admin.PutAsJsonAsync($"{Base}/modules/{module}/policies/attachment.maxFilesPerComment", new { value = 2 })).EnsureSuccessStatusCode();
+
+        var res = await Post(id, Form("三個檔", File("1.png"), File("2.png"), File("3.png")));
+
+        (await FilesError(res)).Should().Contain("最多 2 個");
+        DiskFiles().Should().BeEmpty();
+        (await Post(id, Form("兩個檔", File("1.png"), File("2.png")))).StatusCode.Should().Be(HttpStatusCode.Created);
+        // 個人任務（沒有模組）仍用全系統值 5
+        var personal = await NewTask();
+        (await Post(personal, Form("五個檔", File("1.png"), File("2.png"), File("3.png"), File("4.png"), File("5.png"))))
+            .StatusCode.Should().Be(HttpStatusCode.Created);
+    }
+
+    [Fact]
+    public async Task Comment_ModuleOverrideMaxFiles_BodyLimitFollowsOverride()
+    {
+        var (module, id) = await NewRecordTask();
+        (await Admin.PutAsJsonAsync($"{Base}/modules/{module}/policies/attachment.maxFilesPerComment", new { value = 2 })).EnsureSuccessStatusCode();
+
+        var res = await Post(id, Form("太大", File("big.png", 1024 * 2 + 64 * 1024 + 1)));
+
+        res.StatusCode.Should().Be(HttpStatusCode.RequestEntityTooLarge);
+        DiskFiles().Should().BeEmpty();
+    }
+
+    [Fact]
     public async Task Comment_DisallowedExtension_400()
     {
         var id = await NewTask();

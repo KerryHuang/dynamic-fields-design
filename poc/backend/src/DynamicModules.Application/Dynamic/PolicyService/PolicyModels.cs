@@ -43,6 +43,12 @@ public static class PolicyJson
         return def.Normalize(raw);
     }
 
+    /// <summary>CodeList 的值裡落在寫死黑名單的項目（正規化後）；沒有黑名單或型別不對回空清單。</summary>
+    public static IReadOnlyList<string> ForbiddenItems(PolicyDefinition def, JsonElement value) =>
+        def.Forbidden is null || value.ValueKind != JsonValueKind.Array || !value.EnumerateArray().All(e => e.ValueKind == JsonValueKind.String)
+            ? []
+            : def.ForbiddenIn(string.Join(",", value.EnumerateArray().Select(e => e.GetString())));
+
     public static bool HasRange(PolicyDefinition def) => def.Kind is PolicyKind.Integer or PolicyKind.CodeList;
 
     public static bool HasOptions(PolicyDefinition def) => def.Kind is PolicyKind.Choice or PolicyKind.RoleSet;

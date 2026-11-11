@@ -71,8 +71,7 @@ public abstract class DesignerTestBase : IAsyncLifetime
         services.AddSingleton<ICurrentUser>(_user);
         services.AddSingleton<IBusinessTime, FakeTime>();
         services.AddSingleton(new AuthSettings(false));
-        services.AddSingleton(new AttachmentSettings(_attachmentRoot, AttachmentSettings.DefaultMaxBytes,
-            AttachmentSettings.DefaultExtensions, AttachmentSettings.DefaultMaxFilesPerField, true, null));
+        services.AddSingleton(new AttachmentSettings(_attachmentRoot, true, null));
         services.AddSingleton<IAttachmentStore>(new LocalAttachmentStore(_attachmentRoot));
         ConfigureServices(services);
         _sp = services.BuildServiceProvider();

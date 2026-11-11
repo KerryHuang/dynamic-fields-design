@@ -1,4 +1,5 @@
 using DynamicModules.Application.Dynamic.AttachmentService;
+using DynamicModules.Domain.Policies;
 using FluentAssertions;
 
 namespace DynamicModules.ApplicationTests.Dynamic;
@@ -49,5 +50,5 @@ public class AttachmentRulesTests
     [InlineData("sh")]
     [InlineData("zip")]
     public void DefaultWhitelist_DoesNotContainDangerousTypes(string ext) =>
-        AttachmentSettings.DefaultExtensions.Should().NotContain(ext);
+        PolicyCatalog.AttachmentAllowedExtensions.Factory.Split(',').Should().NotContain(ext);
 }
