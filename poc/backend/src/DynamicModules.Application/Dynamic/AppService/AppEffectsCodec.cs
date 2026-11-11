@@ -110,7 +110,7 @@ public static partial class AppEffectsCodec
         return (errors.Count == 0 ? package : null, errors.Distinct().ToList());
     }
 
-    private static JsonElement ExportCondition(JsonElement json, AppReportCodec.Names n, List<string> errors)
+    internal static JsonElement ExportCondition(JsonElement json, AppReportCodec.Names n, List<string> errors)
     {
         JsonNode? Walk(JsonNode? node)
         {
