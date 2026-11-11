@@ -4,6 +4,7 @@ using DynamicModules.Application.Dynamic.DeleteService.Commands.DeleteModule;
 using DynamicModules.Application.Dynamic.DeleteService.Data;
 using DynamicModules.Application.Dynamic.DeleteService.Queries.CheckDelete;
 using DynamicModules.Application.Dynamic.FieldService.Commands.AddOption;
+using DynamicModules.Application.Dynamic.FieldService.Commands.SetFieldStatus;
 using DynamicModules.Application.Dynamic.ModuleService.Commands.ActivateModule;
 using DynamicModules.Application.Dynamic.ModuleService.Commands.DeactivateModule;
 using DynamicModules.Application.Dynamic.ModuleService.Data;
@@ -408,6 +409,22 @@ public class TaskRuleDefinitionTests : TaskTestBase
         var check = (DeleteCheckResponse)(await Send(new CheckDeleteRequest(DeleteTarget.Field, null, r.TextField))).Data!;
 
         check.Blockers.Should().Contain(b => b.Kind == DeleteBlockerKind.TaskRule);
+    }
+
+    [Fact]
+    public async Task DeactivateField_ReferencedByTaskRule_Blocked()
+    {
+        var r = await BuildRig();
+        await Create(r, Rule("rule-a", active: false, trigger: new("onFieldBecomes", r.EnumField, J($"\"opt_{r.OptionId}\"")),
+            when: Cond(r.BoolField, "eq", "true"), steps: [Step(r, due: r.DateField, when: Cond(r.TextField, "eq", "\"x\""))]));
+
+        foreach (var field in new[] { r.UserField, r.DateField, r.EnumField, r.BoolField, r.TextField })
+        {
+            var off = await Send(new SetFieldStatusRequest(field, FieldStatus.Inactive));
+            off.IsConflict.Should().BeTrue(field.ToString());
+            off.Message.Should().Be("欄位被任務規則「rule-a」使用");
+        }
+        (await Send(new SetFieldStatusRequest(r.DateTimeField, FieldStatus.Inactive))).IsSuccess.Should().BeTrue("對照組：沒被引用的欄位照常停用");
     }
 
     [Fact]

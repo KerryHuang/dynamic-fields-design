@@ -17,7 +17,8 @@ namespace DynamicModules.Application.Dynamic.FieldService.Commands.SetFieldStatu
 
 public class SetFieldStatusHandler(IModuleRepository modules, IRecordRepository records, IUnitOfWork uow, FieldTypeRegistry registry,
     ICurrentUser user, IBusinessTime time, RollupRecalc rollups, IEventFactRepository facts,
-    Dynamic.LedgerService.ImmutableDataGuard immutable, Common.Security.FieldLocks locks, IApprovalFlowRepository approvalFlows)
+    Dynamic.LedgerService.ImmutableDataGuard immutable, Common.Security.FieldLocks locks, IApprovalFlowRepository approvalFlows,
+    ITaskRuleRepository taskRules)
     : IRequestHandler<SetFieldStatusRequest, ServiceResult>
 {
     public async Task<ServiceResult> Handle(SetFieldStatusRequest request, CancellationToken ct)
@@ -53,6 +54,12 @@ public class SetFieldStatusHandler(IModuleRepository modules, IRecordRepository 
             && (await approvalFlows.ListDefinitionsInUseAsync(module.Id, ct))
                 .FirstOrDefault(x => Domain.Approvals.FieldClosure.ReferencedFields(x.Definition).Contains(request.FieldId)) is { FlowKey: { } flowKey })
             return ServiceResult.Conflict($"欄位被簽核流程「{flowKey}」使用");
+
+        // 任務規則（含停用的）引用的欄位不能停用，否則規則壞掉、連停用開關都存不了（同刪除欄位的 taskRule 阻擋）
+        if (request.Status == FieldStatus.Inactive
+            && (await taskRules.ListByModuleAsync(module.Id, ct))
+                .FirstOrDefault(r => TaskRuleReferences.FieldIdsOf(r).Contains(request.FieldId)) is { Key: { } ruleKey })
+            return ServiceResult.Conflict($"欄位被任務規則「{ruleKey}」使用");
 
         if (request.Status == FieldStatus.Active && field.Status == FieldStatus.Inactive && field.Type == FieldType.Rollup)
         {
