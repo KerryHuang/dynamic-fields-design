@@ -99,6 +99,9 @@ public interface IApprovalInstanceRepository
     /// <summary>不追蹤：這位使用者可動作的 open 任務（負責人，或代理時的原簽核人）。</summary>
     Task<List<ApprovalTask>> ListOpenTasksOfAsync(string userId, CancellationToken ct);
 
+    /// <summary>這位使用者是這筆記錄某個 open 任務的可動作者：負責人，或 Reason = delegated 時的原簽核人（設計 §10.1）。</summary>
+    Task<bool> IsOpenActorAsync(long recordId, string userId, CancellationToken ct);
+
     /// <summary>不追蹤：這位使用者動作過的任務（ActedTime 不為 null）。</summary>
     Task<List<ApprovalTask>> ListActedTasksOfAsync(string userId, CancellationToken ct);
 

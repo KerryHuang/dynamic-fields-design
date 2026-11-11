@@ -136,7 +136,8 @@ public sealed class UploadAttachmentHandler(
 /// 軟刪除的記錄、被移除的檔案、看不到的欄位都一律回找不到。Closed 模組可以下載。
 /// </summary>
 public sealed class DownloadAttachmentHandler(
-    IModuleRepository modules, IRecordRepository records, IDynamicAccessGuard guard, IAttachmentStore store)
+    IModuleRepository modules, IRecordRepository records, IDynamicAccessGuard guard, IAttachmentStore store,
+    ApprovalService.ApprovalReadGrant grant)
     : IRequestHandler<DownloadAttachmentRequest, ServiceResult>
 {
     private static readonly MessageRef FileNotFound = MessageRef.Of(MessageText.AttachmentNotFound);
@@ -148,9 +149,14 @@ public sealed class DownloadAttachmentHandler(
         var module = await modules.GetByIdAsync(record.ModuleId, includeChildren: true, ct);
         if (!module.IsReadable() || ModuleRelations.IsDetail(module)) return ServiceResult.NotFound(RecordMapper.RecordNotFound);
         var access = await guard.AuthorizeAsync(module, PermissionAction.Read, ct);
-        if (access.Permissions is not { } perms) return access.Denied!;
-        if (perms.OwnerUserIds is not null && !perms.OwnerUserIds.Contains(record.OwnerUserId))
-            return ServiceResult.NotFound(RecordMapper.RecordNotFound);
+        var perms = access.Permissions;
+        if (perms is null || (perms.OwnerUserIds is { } owners && !owners.Contains(record.OwnerUserId)))
+        {
+            // 簽核人的臨時讀取權（簽核設計 §10.1），規則同單筆讀取
+            if (await grant.ForRecordAsync(module, record, ct) is not { } g)
+                return perms is null ? access.Denied! : ServiceResult.NotFound(RecordMapper.RecordNotFound);
+            perms = g;
+        }
 
         var field = module.Blocks.SelectMany(b => b.Fields)
             .FirstOrDefault(f => f.Id == request.FieldId && f.Status == FieldStatus.Active && f.Type == FieldType.Attachment);
