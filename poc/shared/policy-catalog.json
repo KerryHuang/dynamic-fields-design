@@ -1,0 +1,5 @@
+{
+  "codes": ["task.maxRulesPerModule", "task.maxTasksPerRule", "task.maxRulesPerPackage"],
+  "categories": ["task"],
+  "choices": []
+}
