@@ -4,7 +4,7 @@
     <div class="row q-col-gutter-sm">
       <div class="col-12 col-sm-6 col-md-4 col-lg-3">
         <q-card flat bordered>
-          <q-item clickable to="/tasks?filter=thisWeek" data-testid="home-tasks-due-today">
+          <q-item clickable to="/tasks?filter=today" data-testid="home-tasks-due-today">
             <q-item-section avatar><q-icon name="event" /></q-item-section>
             <q-item-section>{{ t('home.tasksDueToday') }}</q-item-section>
             <q-item-section side class="text-h6">{{ counts.dueToday }}</q-item-section>

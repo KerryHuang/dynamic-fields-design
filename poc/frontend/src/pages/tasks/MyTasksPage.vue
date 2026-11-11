@@ -9,7 +9,7 @@ import TaskFormDialog from 'src/presentation/dynamic/tasks/TaskFormDialog.vue';
 import { useIdentityStore } from 'src/stores/use-identity-store';
 
 const TABS: TaskListTab[] = ['assigned', 'created', 'mentioned'];
-const FILTERS: TaskListFilter[] = ['open', 'overdue', 'thisWeek', 'all'];
+const FILTERS: TaskListFilter[] = ['open', 'overdue', 'today', 'thisWeek', 'all'];
 const SIZE = 20;
 
 const { t } = useI18n();

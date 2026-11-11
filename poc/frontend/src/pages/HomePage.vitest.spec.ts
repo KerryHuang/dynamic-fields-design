@@ -62,7 +62,7 @@ describe('HomePage', () => {
     const overdue = w.get('[data-testid="home-tasks-overdue"]');
     expect(due.text()).toContain('2');
     expect(due.text()).toContain(zhTW.home.tasksDueToday);
-    expect(due.attributes('href')).toBe('/tasks?filter=thisWeek');
+    expect(due.attributes('href')).toBe('/tasks?filter=today');
     expect(overdue.text()).toContain('1');
     expect(overdue.text()).toContain(zhTW.home.tasksOverdue);
     expect(overdue.attributes('href')).toBe('/tasks?filter=overdue');

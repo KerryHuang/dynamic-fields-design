@@ -2,7 +2,7 @@ import type { I18nText } from './types';
 
 export type TaskStatus = 'todo' | 'inProgress' | 'done' | 'cancelled';
 export type TaskListTab = 'assigned' | 'created' | 'mentioned';
-export type TaskListFilter = 'open' | 'overdue' | 'thisWeek' | 'all';
+export type TaskListFilter = 'open' | 'overdue' | 'today' | 'thisWeek' | 'all';
 
 export interface TaskRecordRef {
   accessible: boolean;
