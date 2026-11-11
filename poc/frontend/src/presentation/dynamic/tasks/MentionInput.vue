@@ -95,7 +95,7 @@ async function submit() {
   <div class="q-mt-sm" data-testid="comment-composer">
     <q-input
       ref="input" :model-value="text" type="textarea" autogrow outlined dense maxlength="4000"
-      :placeholder="t('tasks.commentPlaceholder')" data-testid="mention-input"
+      :placeholder="t('tasks.commentPlaceholder')" :aria-label="t('tasks.commentPlaceholder')" data-testid="mention-input"
       @update:model-value="onText" @click="refreshQuery" @keyup.left="refreshQuery" @keyup.right="refreshQuery"
     >
       <q-menu :model-value="menuOpen" no-focus no-refocus no-parent-event fit anchor="bottom left" self="top left" @update:model-value="(v) => { if (!v) keyword = null; }">

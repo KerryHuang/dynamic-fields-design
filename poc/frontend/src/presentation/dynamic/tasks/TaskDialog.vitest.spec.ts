@@ -111,6 +111,13 @@ describe('TaskDialog', () => {
     w.unmount();
   });
 
+  it('留言輸入框有可讀名稱（aria-label），不只靠 placeholder', async () => {
+    const w = await mountDialog();
+    const ta = body().querySelector<HTMLTextAreaElement>('textarea[data-testid="mention-input"]')!;
+    expect(ta.getAttribute('aria-label')).toBe('輸入留言，用 @ 提到同事');
+    w.unmount();
+  });
+
   it('在留言框輸入 @業 列出候選人，選定後送出的 body 是 "@{sales01} …"', async () => {
     const w = await mountDialog();
     const ta = body().querySelector<HTMLTextAreaElement>('textarea[data-testid="mention-input"]')!;
