@@ -8,6 +8,7 @@ using DynamicModules.Application.Dynamic.FieldService.Commands.SetFieldStatus;
 using DynamicModules.Application.Dynamic.ModuleService.Commands.ActivateModule;
 using DynamicModules.Application.Dynamic.ModuleService.Commands.DeactivateModule;
 using DynamicModules.Application.Dynamic.ModuleService.Data;
+using DynamicModules.Application.Dynamic.PolicyService;
 using DynamicModules.Application.Dynamic.TaskRuleService;
 using DynamicModules.Domain.Entities.Dynamic;
 using DynamicModules.Domain.Repositories.Dynamic;
@@ -265,6 +266,71 @@ public class TaskRuleDefinitionTests : TaskTestBase
         var over = await Send(new CreateTaskRuleRequest(r.Key, Rule("rule-xx", steps: [Step(r)])));
         over.Errors["moduleKey"][0].Should().Be("每個模組至多 20 條任務規則");
         (await Send(new UpdateTaskRuleRequest(r.Key, "rule-00", Rule("rule-00", steps: [Step(r)])))).IsSuccess.Should().BeTrue("既有的規則照常可改");
+    }
+
+    private async Task Override(Rig r, string code, int value) =>
+        (await Send(UpdatePolicyOverride(r.Key, code, value))).IsSuccess.Should().BeTrue();
+
+    private static UpdateModulePolicyRequest UpdatePolicyOverride(string moduleKey, string code, int value) =>
+        new(moduleKey, code, J(value.ToString(System.Globalization.CultureInfo.InvariantCulture)));
+
+    [Fact]
+    public async Task RulesPerModule_UsesModuleOverride()
+    {
+        var r = await BuildRig();
+        await Override(r, "task.maxRulesPerModule", 2);
+        await Create(r, Rule("rule-a", steps: [Step(r)]));
+        await Create(r, Rule("rule-b", steps: [Step(r)]));
+
+        var over = await Send(new CreateTaskRuleRequest(r.Key, Rule("rule-c", steps: [Step(r)])));
+        over.IsInvalid.Should().BeTrue(Dump(over));
+        over.Errors["moduleKey"][0].Should().Be("每個模組至多 2 條任務規則");
+    }
+
+    [Fact]
+    public async Task RulesPerModule_OverrideWiderThanFactory()
+    {
+        var r = await BuildRig();
+        await Override(r, "task.maxRulesPerModule", 21);
+        for (var i = 0; i < 21; i++) await Create(r, Rule($"rule-{i:00}", steps: [Step(r)]));
+        (await Send(new CreateTaskRuleRequest(r.Key, Rule("rule-xx", steps: [Step(r)])))).Errors["moduleKey"][0]
+            .Should().Be("每個模組至多 21 條任務規則");
+    }
+
+    [Fact]
+    public async Task RulesLimitLowered_ExistingRulesStillEditable()
+    {
+        var r = await BuildRig();
+        for (var i = 0; i < 3; i++) await Create(r, Rule($"rule-{i}", steps: [Step(r)]));
+        await Override(r, "task.maxRulesPerModule", 1);
+
+        var renamed = Rule("rule-0", steps: [Step(r)]) with { Name = Text("改名") };
+        var upd = await Send(new UpdateTaskRuleRequest(r.Key, "rule-0", renamed));
+        upd.IsSuccess.Should().BeTrue(Dump(upd));
+        (await Send(new CreateTaskRuleRequest(r.Key, Rule("rule-x", steps: [Step(r)])))).IsInvalid.Should().BeTrue();
+    }
+
+    [Fact]
+    public async Task TasksPerRule_LoweredLimit_EditWithoutIncreaseAllowed()
+    {
+        var r = await BuildRig();
+        await Create(r, Rule("rule-a", steps: [Step(r, "a"), Step(r, "b"), Step(r, "c")]));
+        await Override(r, "task.maxTasksPerRule", 2);
+
+        var sameCount = await Send(new UpdateTaskRuleRequest(r.Key, "rule-a",
+            Rule("rule-a", steps: [Step(r, "a", title: Text("改標題")), Step(r, "b"), Step(r, "c")])));
+        sameCount.IsSuccess.Should().BeTrue(Dump(sameCount));
+
+        var more = await Send(new UpdateTaskRuleRequest(r.Key, "rule-a",
+            Rule("rule-a", steps: [Step(r, "a"), Step(r, "b"), Step(r, "c"), Step(r, "d")])));
+        more.IsInvalid.Should().BeTrue(Dump(more));
+        more.Errors["tasks"][0].Should().Be("任務至少 1 個、至多 2 個");
+
+        var fewer = await Send(new UpdateTaskRuleRequest(r.Key, "rule-a", Rule("rule-a", steps: [Step(r, "a"), Step(r, "b")])));
+        fewer.IsSuccess.Should().BeTrue(Dump(fewer));
+
+        (await Send(new CreateTaskRuleRequest(r.Key, Rule("rule-b", steps: [Step(r, "a"), Step(r, "b"), Step(r, "c")]))))
+            .Errors["tasks"][0].Should().Be("任務至少 1 個、至多 2 個");
     }
 
     [Fact]

@@ -107,7 +107,7 @@ public class UpdateTaskRuleHandler(
         var input = request.Input;
         if (input.Key != rule.Key) return ServiceResult.Invalid(new Dictionary<string, string[]> { ["key"] = [TaskRuleMessages.KeyImmutable] });
         if (TaskRuleValidator.CheckModule(module) is { } bad) return bad;
-        if (await validator.ValidateAsync(module, input, rule.Key, ct) is { } invalid) return invalid;
+        if (await validator.ValidateAsync(module, input, rule, ct) is { } invalid) return invalid;
 
         TaskRuleEditor.Apply(rule, input);
         rule.StampModified(user.UserId, time.Now);

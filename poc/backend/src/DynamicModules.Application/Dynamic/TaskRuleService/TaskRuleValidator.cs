@@ -2,20 +2,25 @@ using System.Text.Json;
 using System.Text.RegularExpressions;
 using DynamicModules.Application.Common;
 using DynamicModules.Application.Dynamic.ModuleService.Data;
+using DynamicModules.Application.Dynamic.PolicyService;
 using DynamicModules.Application.Dynamic.TaskService;
 using DynamicModules.Domain.Conditions;
 using DynamicModules.Domain.Entities.Dynamic;
 using DynamicModules.Domain.FieldTypes;
 using DynamicModules.Domain.Modules;
+using DynamicModules.Domain.Policies;
 using DynamicModules.Domain.Repositories.Dynamic;
 using DynamicModules.Domain.ValueObjects;
 
 namespace DynamicModules.Application.Dynamic.TaskRuleService;
 
-/// <summary>任務規則定義的驗證（設計 §5）。錯誤鍵是欄位路徑，例如 tasks[0].code、trigger.field。</summary>
-public sealed class TaskRuleValidator(IModuleRepository modules, ITaskRuleRepository rules, FieldTypeRegistry registry)
+/// <summary>
+/// 任務規則定義的驗證（設計 §5）。錯誤鍵是欄位路徑，例如 tasks[0].code、trigger.field。
+/// 每模組規則數、每條任務數讀模組生效政策（A1）；上限調低後只擋「這次增加數量」（政策設計 §3.5）。
+/// </summary>
+public sealed class TaskRuleValidator(IModuleRepository modules, ITaskRuleRepository rules, FieldTypeRegistry registry, IPolicyReader policies)
 {
-    public const int MaxRulesPerModule = 20, MaxTasks = 20, MaxOffsetDays = 3650;
+    public const int MaxOffsetDays = 3650;
     private static readonly string[] TriggerKinds = ["onCreate", "onUpdateMatch", "onFieldBecomes", "manual"];
     private static readonly Regex TaskCodePattern = new("^[a-z][a-zA-Z0-9_]{0,39}$");
 
@@ -24,9 +29,10 @@ public sealed class TaskRuleValidator(IModuleRepository modules, ITaskRuleReposi
             ? ServiceResult.Invalid(new Dictionary<string, string[]> { ["moduleKey"] = [TaskRuleMessages.DetailModule] })
             : null;
 
-    /// <summary>selfKey 是更新中的規則代碼（新增時為 null）；通過時回 null。</summary>
-    public async Task<ServiceResult?> ValidateAsync(Module module, TaskRuleInput input, string? selfKey, CancellationToken ct)
+    /// <summary>existing 是更新中的規則（含 Tasks），新增時為 null；通過時回 null。</summary>
+    public async Task<ServiceResult?> ValidateAsync(Module module, TaskRuleInput input, TaskRule? existing, CancellationToken ct)
     {
+        var maxTasks = await policies.IntAsync(PolicyCatalog.TaskMaxTasksPerRule, module.Id, ct);
         var errors = new Dictionary<string, string[]>();
         void Err(string key, string message) => errors.TryAdd(key, [message]);
 
@@ -34,7 +40,9 @@ public sealed class TaskRuleValidator(IModuleRepository modules, ITaskRuleReposi
         if (input.Name is null || !input.Name.IsValid(out _)) Err("name", TaskRuleMessages.NameInvalid);
         else if (input.Name.Values.Values.Any(v => v is null || v.Length is 0 or > 200)) Err("name", TaskRuleMessages.NameLength);
         if (input.Trigger is null) Err("trigger", TaskRuleMessages.BadTriggerOn);
-        if (input.Tasks is null || input.Tasks.Count is 0 or > MaxTasks) Err("tasks", TaskRuleMessages.TasksCount);
+        if (input.Tasks is null || input.Tasks.Count == 0
+            || (input.Tasks.Count > maxTasks && input.Tasks.Count > (existing?.Tasks.Count ?? 0)))
+            Err("tasks", TaskRuleMessages.TasksCount(maxTasks));
         if (errors.Count > 0) return ServiceResult.Invalid(errors);
 
         var fields = module.Blocks.SelectMany(b => b.Fields).ToDictionary(f => f.Id);
@@ -62,10 +70,10 @@ public sealed class TaskRuleValidator(IModuleRepository modules, ITaskRuleReposi
 
         if (input.Repeat == TaskRuleRepeat.EveryTime && input.Trigger!.On == "onCreate") Err("repeat", TaskRuleMessages.CreateCannotRepeat);
 
-        if (errors.Count == 0)
+        if (errors.Count == 0 && existing is null)
         {
-            var count = (await rules.ListByModuleAsync(module.Id, ct)).Count(r => r.Key != selfKey);
-            if (count >= MaxRulesPerModule) Err("moduleKey", TaskRuleMessages.TooManyRules);
+            var maxRules = await policies.IntAsync(PolicyCatalog.TaskMaxRulesPerModule, module.Id, ct);
+            if ((await rules.ListByModuleAsync(module.Id, ct)).Count >= maxRules) Err("moduleKey", TaskRuleMessages.TooManyRules(maxRules));
         }
         return errors.Count > 0 ? ServiceResult.Invalid(errors) : null;
     }

@@ -34,13 +34,15 @@ public static class TaskRuleMessages
     public const string TriggerFieldKind = "指定值觸發只支援下拉或是非欄位";
     public const string TriggerValueInvalid = "指定的值必須是該欄位的選項（下拉）或 true／false（是非）";
     public const string CreateCannotRepeat = "建立時觸發只有一次，不能選每次符合都觸發";
-    public const string TasksCount = "任務至少 1 個、至多 20 個";
+    public static string TasksCount(int max) => $"任務至少 1 個、至多 {max} 個";
+    /// <summary>套件結構層只檢查至少 1 個；上限由政策在匯入與開啟時檢查。</summary>
+    public const string TasksRequired = "任務至少 1 個";
     public const string BadTaskCode = "任務代碼只能用英文字母、數字、底線，英文字母開頭，至多 40 字";
     public const string DuplicateTaskCode = "任務代碼在同一條規則內不能重複";
     public const string AssigneeField = "負責人必須是這個模組的人員欄位";
     public const string DueField = "到期基準必須是這個模組的日期欄位";
     public const string DueOffsetRange = "到期日偏移必須在 -3650 到 3650 天之間";
-    public const string TooManyRules = "每個模組至多 20 條任務規則";
+    public static string TooManyRules(int max) => $"每個模組至多 {max} 條任務規則";
     public const string FieldDeleted = "引用的欄位已刪除";
 }
 

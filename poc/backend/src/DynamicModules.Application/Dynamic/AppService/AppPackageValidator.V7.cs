@@ -49,7 +49,7 @@ public static partial class AppPackageValidator
             if (r.Trigger.On != "onFieldBecomes" && (r.Trigger.Field is not null || !IsEmpty(r.Trigger.Value)))
                 errors.Add($"{at}.trigger: 只有 onFieldBecomes 可以指定 field 與 value");
 
-            if (r.Tasks.Count is 0 or > TaskRuleValidator.MaxTasks) errors.Add($"{at}.tasks: {TaskRuleMessages.TasksCount}");
+            if (r.Tasks.Count == 0) errors.Add($"{at}.tasks: {TaskRuleMessages.TasksRequired}");
             var taskCodes = new HashSet<string>();
             for (var j = 0; j < r.Tasks.Count; j++)
             {
