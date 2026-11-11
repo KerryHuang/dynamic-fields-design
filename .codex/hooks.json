@@ -1,0 +1,12 @@
+{
+  "hooks": {
+    "SessionStart": [
+      {
+        "hooks": [
+          { "type": "command", "command": "R=\"$(git rev-parse --show-toplevel)\" && node \"$R/.claude/scripts/sync-codex-mirror.mjs\" --root \"$R\"", "timeout": 15 },
+          { "type": "command", "command": "R=\"$(git rev-parse --show-toplevel)\" && node \"$R/.claude/scripts/codex-rules.mjs\" --root \"$R\"", "timeout": 15 }
+        ]
+      }
+    ]
+  }
+}

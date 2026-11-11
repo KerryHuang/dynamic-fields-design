@@ -1,5 +1,7 @@
 # 無人值守：本專案設定
 
+有人在場時的上線流程見 `formwright-ship` skill；兩邊步驟改了要一起改。
+
 ## 閘門
 `bash scripts/unattended/gate.sh <worktree>`，用 run_in_background 跑，等通知。
 
