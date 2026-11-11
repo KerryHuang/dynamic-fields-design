@@ -10,6 +10,7 @@ namespace DynamicModules.WebAPI.Controllers.v3.Dynamic;
 public class ApprovalFlowsController(IMediator mediator) : ControllerBase
 {
     public sealed record ReorderBody(string Module, long ToOptionId, List<string> Keys);
+    public sealed record PreviewBody(long? RecordId, Dictionary<string, System.Text.Json.JsonElement?>? Values, string InitiatorUserId);
 
     [HttpGet("approval-flows")]
     public async Task<IActionResult> List([FromQuery] string module) =>
@@ -30,6 +31,11 @@ public class ApprovalFlowsController(IMediator mediator) : ControllerBase
     [HttpPut("approval-flows/{key}")]
     public async Task<IActionResult> Update(string key, ApprovalFlowInput body) =>
         (await mediator.Send(new UpdateApprovalFlowRequest(key, body))).ToActionResult(this);
+
+    /// <summary>設計器試算（簽核設計 §5.4）：不寫入。</summary>
+    [HttpPost("approval-flows/{key}/preview")]
+    public async Task<IActionResult> Preview(string key, PreviewBody body) =>
+        (await mediator.Send(new PreviewApprovalFlowRequest(key, body.RecordId, body.Values, body.InitiatorUserId))).ToActionResult(this);
 
     [HttpDelete("approval-flows/{key}")]
     public async Task<IActionResult> Delete(string key) =>

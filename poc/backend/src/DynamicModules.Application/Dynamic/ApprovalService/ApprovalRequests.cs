@@ -1,5 +1,6 @@
 using System.Text.Json;
 using DynamicModules.Application.Common;
+using DynamicModules.Application.Common.Security;
 using MediatR;
 
 namespace DynamicModules.Application.Dynamic.ApprovalService;
@@ -21,3 +22,13 @@ public record GetRecordApprovalRequest(long RecordId) : IRequest<ServiceResult>;
 /// <summary>Box：todo、done、submitted、all；From／To 篩送出日（含頭尾）；ModuleKey 為 null 不限模組。</summary>
 public record GetApprovalTasksRequest(string Box, string? ModuleKey, DateOnly? From, DateOnly? To, int CurrentPage, int PagesSize)
     : IRequest<ServiceResult>;
+
+/// <summary>送出前預覽（設計 §5.4）：資格同送出，不寫入。</summary>
+public record PreviewRecordApprovalRequest(long RecordId, long To) : IRequest<ServiceResult>;
+
+/// <summary>設計器試算：以 InitiatorUserId 當發起人、Values 覆蓋記錄值（RecordId 省略時只用 Values），比對這個流程所在目標狀態的全部流程。</summary>
+public record PreviewApprovalFlowRequest(string Key, long? RecordId, Dictionary<string, JsonElement?>? Values, string InitiatorUserId)
+    : IRequest<ServiceResult>, IDesignerRequest
+{
+    public PermissionAction RequiredDesignerAction => PermissionAction.Read;
+}

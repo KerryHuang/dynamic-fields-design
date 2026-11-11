@@ -14,6 +14,7 @@ public class ApprovalsController(IMediator mediator) : ControllerBase
     public sealed record ApproveBody(string RowVersion, string? Comment, Dictionary<string, System.Text.Json.JsonElement?>? Values);
     public sealed record RejectBody(string RowVersion, string Comment, string To);
     public sealed record WithdrawBody(string RowVersion, string? Comment);
+    public sealed record PreviewBody(long To);
 
     [HttpPost("approval-tasks/{id:long}/approve")]
     public async Task<IActionResult> Approve(long id, ApproveBody body) =>
@@ -36,6 +37,11 @@ public class ApprovalsController(IMediator mediator) : ControllerBase
     public async Task<IActionResult> Inbox([FromQuery] string box = ApprovalInboxBoxes.Todo, [FromQuery] string? module = null,
         [FromQuery] DateOnly? from = null, [FromQuery] DateOnly? to = null, [FromQuery] int currentPage = 1, [FromQuery] int pagesSize = 20) =>
         (await mediator.Send(new GetApprovalTasksRequest(box, module, from, to, currentPage, pagesSize))).ToActionResult(this);
+
+    /// <summary>送出前預覽（簽核設計 §5.4）：不寫入。</summary>
+    [HttpPost("records/{id:long}/approval/preview")]
+    public async Task<IActionResult> Preview(long id, PreviewBody body) =>
+        (await mediator.Send(new PreviewRecordApprovalRequest(id, body.To))).ToActionResult(this);
 
     [HttpPost("records/{id:long}/approval/submit")]
     public async Task<IActionResult> Submit(long id, SubmitBody body) =>

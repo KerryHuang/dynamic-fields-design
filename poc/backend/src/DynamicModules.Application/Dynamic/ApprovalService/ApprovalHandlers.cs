@@ -17,40 +17,25 @@ namespace DynamicModules.Application.Dynamic.ApprovalService;
 
 /// <summary>送出簽核（設計 §5.2）：資格同原本執行這條轉移；比對流程、驗自選與使用者欄位、建實例並啟動第一關。</summary>
 public class SubmitApprovalHandler(
-    IModuleRepository modules, IRecordRepository records, IDynamicAccessGuard guard, IPermissionRepository permissions, ICurrentUser user,
+    IModuleRepository modules, ApprovalSubmitEligibility eligibility, ICurrentUser user,
     IBusinessTime time, IOperationContext op, IApprovalFlowRepository flows, IApprovalInstanceRepository instances, ApprovalEngine engine,
     ApprovalTransitionRunner runner, ApproverResolver resolver, ApprovalWriteContext context, FieldTypeRegistry registry, IUnitOfWork uow)
     : IRequestHandler<SubmitApprovalRequest, ServiceResult>
 {
     public async Task<ServiceResult> Handle(SubmitApprovalRequest request, CancellationToken ct)
     {
-        var record = await records.GetAsync(request.RecordId, ct);
-        if (record is null) return ServiceResult.NotFound(RecordMapper.RecordNotFound);
-        var module = await modules.GetByIdAsync(record.ModuleId, includeChildren: true, ct);
-        if (module is null || ModuleRelations.IsDetail(module)) return ServiceResult.NotFound(RecordMapper.RecordNotFound);
-        if (await ModuleGate.RejectUnwritableAsync(module, guard, ct) is { } blocked) return blocked;
-        var access = await guard.AuthorizeAsync(module, PermissionAction.Edit, ct);
-        if (access.Permissions is not { } perms) return access.Denied!;
-        if (perms.OwnerUserIds is not null && !perms.OwnerUserIds.Contains(record.OwnerUserId)) return ServiceResult.NotFound(RecordMapper.RecordNotFound);
+        var (record, module, denied) = await eligibility.LoadAsync(request.RecordId, ct);
+        if (record is null || module is null) return denied!;
         // 先查「已在簽核中」再比對版本：並發送出的第二個請求讀到的是第一個換過的版本（設計 §8.4）
         if (await instances.GetPendingByRecordAsync(record.Id, ct) is not null) return ServiceResult.Conflict(ApprovalMessages.AlreadyPending);
         if (record.RowVersion != request.RecordRowVersion) return ServiceResult.Stale();
         if (ApprovalActionRules.CommentError(request.Comment, required: false) is { } commentError)
             return ServiceResult.Invalid("comment", commentError);
 
-        if (module.Workflow is not { } wf) return ServiceResult.Invalid("to", ApprovalMessages.NotApprovalTransition);
-        var statusKey = wf.StatusFieldKey;
-        Dictionary<string, MessageRef[]> Bad(MessageRef message) => new() { [statusKey] = [message] };
-        var values = RecordValueProcessor.Parse(record.ValuesJson);
-        var from = wf.StateOf(values) ?? wf.InitialOptionId;
-        if (wf.Find(from, request.To) is not { } transition) return ServiceResult.Invalid(Bad(MessageRef.Of(MessageText.WorkflowNotAllowed)));
-        if (transition.Approval is not { Required: true } approval) return ServiceResult.Invalid(Bad(ApprovalMessages.NotApprovalTransition));
-        if (transition.GroupIds.Count > 0)
-        {
-            var inputs = await permissions.LoadInputsAsync(user.UserId, module, ct);
-            if (inputs is null || !(inputs.User.IsSystemAdmin || inputs.GroupIds.Any(transition.GroupIds.Contains)))
-                return ServiceResult.Invalid(Bad(MessageRef.Of(MessageText.WorkflowNotPermitted)));
-        }
+        var (target, invalid) = await eligibility.TransitionAsync(record, module, request.To, ct);
+        if (invalid is not null) return invalid;
+        var (_, _, wf, from, approval, values) = target!;
+        Dictionary<string, MessageRef[]> Bad(MessageRef message) => new() { [wf.StatusFieldKey] = [message] };
 
         var snapshot = (await flows.ListCurrentByModuleAsync(module.Id, ct)).Where(f => f.Flow.ToOptionId == request.To)
             .Select(f => new FlowSnapshotEntry(f.Flow.Id, f.Flow.CurrentVersionId!.Value, f.Flow.Priority, f.Flow.Active, f.Flow.NameI18n, f.Definition))
@@ -148,5 +133,48 @@ public class SubmitApprovalHandler(
                 errors.TryAdd(field.Key, [ApprovalMessages.UserFieldNotCandidate]);
         }
         return errors;
+    }
+}
+
+/// <summary>送出前預覽（設計 §5.4）：資格與「已在簽核中」同送出；以目前使用者當發起人。</summary>
+public class PreviewRecordApprovalHandler(ApprovalSubmitEligibility eligibility, IApprovalInstanceRepository instances, ApprovalPreviewer previewer,
+    ICurrentUser user) : IRequestHandler<PreviewRecordApprovalRequest, ServiceResult>
+{
+    public async Task<ServiceResult> Handle(PreviewRecordApprovalRequest request, CancellationToken ct)
+    {
+        var (record, module, denied) = await eligibility.LoadAsync(request.RecordId, ct);
+        if (record is null || module is null) return denied!;
+        if (await instances.GetPendingByRecordAsync(record.Id, ct) is not null) return ServiceResult.Conflict(ApprovalMessages.AlreadyPending);
+        var (target, invalid) = await eligibility.TransitionAsync(record, module, request.To, ct);
+        if (invalid is not null) return invalid;
+        return await previewer.PreviewAsync(module, request.To, target!.Approval, target.Values, user.UserId, designer: false, ct);
+    }
+}
+
+/// <summary>
+/// 設計器試算：流程所在目標狀態上的全部流程照送出規則比對；值以記錄（必須在同一模組）為底、Values 覆蓋。
+/// noMatch 取記錄目前狀態（沒有記錄時是起始狀態）進入目標狀態的轉移，找不到就取任一條進入它的需簽核轉移，再沒有就當 block。
+/// </summary>
+public class PreviewApprovalFlowHandler(IApprovalFlowRepository flows, IModuleRepository modules, IRecordRepository records, ApprovalPreviewer previewer)
+    : IRequestHandler<PreviewApprovalFlowRequest, ServiceResult>
+{
+    public async Task<ServiceResult> Handle(PreviewApprovalFlowRequest request, CancellationToken ct)
+    {
+        if (await flows.GetByKeyAsync(request.Key, ct) is not { } flow) return ServiceResult.NotFound(MessageRef.Of(MessageText.ResourceNotFound));
+        if (await modules.GetByIdAsync(flow.ModuleId, includeChildren: true, ct) is not { Workflow: { } wf } module)
+            return ServiceResult.NotFound(MessageRef.Of(MessageText.ResourceNotFound));
+        var values = new Dictionary<string, JsonElement?>();
+        if (request.RecordId is { } id)
+        {
+            if (await records.GetAsync(id, ct) is not { } record || record.ModuleId != module.Id)
+                return ServiceResult.NotFound(RecordMapper.RecordNotFound);
+            values = RecordValueProcessor.Parse(record.ValuesJson);
+        }
+        foreach (var (k, v) in request.Values ?? []) values[k] = v;
+        var from = wf.StateOf(values) ?? wf.InitialOptionId;
+        var approval = wf.Find(from, flow.ToOptionId)?.Approval
+            ?? wf.Transitions.FirstOrDefault(t => t.To == flow.ToOptionId && t.Approval is { Required: true })?.Approval
+            ?? new TransitionApproval(true, ApprovalNoMatch.Block);
+        return await previewer.PreviewAsync(module, flow.ToOptionId, approval, values, request.InitiatorUserId, designer: true, ct);
     }
 }

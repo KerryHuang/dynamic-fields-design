@@ -63,3 +63,25 @@ public static class ApprovalInboxBoxes
     public const string Todo = "todo", Done = "done", Submitted = "submitted", All = "all";
     public static readonly IReadOnlySet<string> Values = new HashSet<string> { Todo, Done, Submitted, All };
 }
+
+// ── 預覽與試算（設計 §5.4） ──
+
+/// <summary>Status：enter（會進入）、skip（跳過，只在設計器試算）、conditional（條件引用對發起人隱藏的欄位）、pick（需發起人自選）。</summary>
+public sealed record PreviewStage(string? Code, I18nText Name, string Status, IReadOnlyList<UserRef> Approvers, bool UsesFallback);
+
+/// <summary>Outcome：flow（會用 FlowName 這個流程）、direct（沒有流程符合、直接轉移）、blocked（沒有流程符合、送出會被擋）。</summary>
+public sealed record ApprovalPreviewResponse(string Outcome, I18nText? FlowName, IReadOnlyList<PreviewStage> Stages, IReadOnlyList<PickRequirement> Picks);
+
+public sealed record UserRef(string UserId, string DisplayName);
+
+public sealed record PickRequirement(string StageCode, I18nText Name, int Min, int Max, IReadOnlyList<UserRef> Candidates);
+
+public static class ApprovalPreviewOutcomes
+{
+    public const string Flow = "flow", Direct = "direct", Blocked = "blocked";
+}
+
+public static class PreviewStatuses
+{
+    public const string Enter = "enter", Skip = "skip", Conditional = "conditional", Pick = "pick";
+}
