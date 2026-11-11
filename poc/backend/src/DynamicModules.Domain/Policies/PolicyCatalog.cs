@@ -56,7 +56,6 @@ public static class PolicyCatalog
          TaskReminderLeadDays, TaskRemindOverdue, TaskNotifyCommented, TaskNotifyCompleted, TaskNotifyCancelled,
          NotificationRetentionDays, CalendarWeekStart];
 
-
     public static PolicyDefinition? Find(string code) =>
         All.FirstOrDefault(d => string.Equals(d.Code, code, StringComparison.Ordinal));
 }
