@@ -1,4 +1,5 @@
 using System.Text.Json;
+using System.Text.Json.Nodes;
 using DynamicModules.Application.Common;
 using DynamicModules.Application.Common.Security;
 using DynamicModules.Application.Common.Time;
@@ -95,29 +96,24 @@ public class GetRecordApprovalHandler(
         bool Shown(long instanceId, long? stageRunId) =>
             !ownStages.TryGetValue(instanceId, out var own) || stageRunId is { } run && own.Contains(run);
 
+        // 沒有 Read 時，持臨時讀取權（open 任務的可動作者）的人另外看得到進行中實例的 content-changed（設計 §5.5 第 7 點：金額為什麼變了）
+        var granted = read is null ? await grant.ForRecordAsync(module, record, ct) : null;
+        var pendingId = instances.FirstOrDefault(i => i.Status == ApprovalInstanceStatus.Pending)?.Id;
         var visibleIds = visible.Select(i => i.Id).ToList();
         var runs = (await repo.ListRunsAsync(visibleIds, ct)).Where(r => Shown(r.InstanceId, r.Id)).ToList();
-        var actions = (await repo.ListActionsAsync(visibleIds, ct)).Where(a => Shown(a.InstanceId, a.StageRunId)).ToList();
+        var actions = (await repo.ListActionsAsync(visibleIds, ct)).Where(a => Shown(a.InstanceId, a.StageRunId)
+            || granted is not null && a.InstanceId == pendingId && a.Action == ApprovalActions.ContentChanged).ToList();
         tasks = tasks.Where(t => Shown(t.InstanceId, t.StageRunId)).ToList();
         var names = await ApprovalViews.UserNamesAsync(permissions, ct);
         var writable = module.IsWritable();
-        var hidden = await HiddenFieldsAsync(module, record, read, ct);
+        // 歷程的欄位遮蔽（設計 §8.5）：有 Read 用它；沒有時用臨時讀取權，再沒有就用自己的群組欄位例外（含明細來源隱藏）；
+        // 讀不到權限輸入是 null（全部遮蔽）
+        var hidden = read?.HiddenFieldIds ?? granted?.HiddenFieldIds ?? await hiddenFields.ForUserAsync(module, user.UserId, ct);
         var views = visible.Select(i => ApprovalViews.Instance(i, runs, tasks, actions, names, me, writable, manager, hidden)).ToList();
         var pending = instances.Any(i => i.Status == ApprovalInstanceStatus.Pending);
         var targets = canRead ? await reader.SubmitTargetsAsync(module, record, pending, ct) : [];
         return ServiceResult.Success(new RecordApprovalResponse(
             views.FirstOrDefault(v => v.Status == ApprovalInstanceStatus.Pending), views.Where(v => v.Status != ApprovalInstanceStatus.Pending).ToList(), targets));
-    }
-
-    /// <summary>
-    /// content-changed 的前後值依讀者的欄位權限遮蔽（設計 §8.5）：有 Read 用它；沒有時用臨時讀取權，再沒有就用自己的群組欄位例外（含明細來源隱藏）；
-    /// 讀不到權限輸入回 null（全部遮蔽）。
-    /// </summary>
-    private async Task<IReadOnlySet<long>?> HiddenFieldsAsync(Module module, Record record, EffectivePermissions? read, CancellationToken ct)
-    {
-        if (read is not null) return read.HiddenFieldIds;
-        if (await grant.ForRecordAsync(module, record, ct) is { } granted) return granted.HiddenFieldIds;
-        return await hiddenFields.ForUserAsync(module, user.UserId, ct);
     }
 }
 
@@ -227,14 +223,23 @@ public class GetApprovalTasksHandler(
 /// <summary>查詢回應的組裝。</summary>
 internal static class ApprovalViews
 {
-    /// <summary>歷程的 Data；content-changed 只留讀者看得到的欄位（hidden 為 null 時全部遮蔽）。</summary>
+    /// <summary>
+    /// 歷程的 Data；content-changed 只留讀者看得到的欄位，reroute 的 editedKeys 只留讀者看得到的鍵（hidden 為 null 時全部遮蔽）。
+    /// </summary>
     private static JsonElement? Data(ApprovalAction a, IReadOnlySet<long>? hidden)
     {
         if (a.DataJson is null) return null;
+        bool Visible(long fieldId) => hidden is not null && !hidden.Contains(fieldId);
+        if (a.Action == ApprovalActions.Reroute && JsonNode.Parse(a.DataJson) is JsonObject reroute && reroute["editedKeys"] is JsonArray keys)
+        {
+            reroute["editedKeys"] = new JsonArray(keys.Select(k => k?.GetValue<string>()).OfType<string>()
+                .Where(k => k.StartsWith("f_") && long.TryParse(k.AsSpan(2), out var fid) && Visible(fid)).Select(k => (JsonNode?)k).ToArray());
+            return JsonSerializer.SerializeToElement(reroute);
+        }
         using var doc = JsonDocument.Parse(a.DataJson);
         if (a.Action != ApprovalActions.ContentChanged || doc.RootElement.ValueKind != JsonValueKind.Array) return doc.RootElement.Clone();
         var visible = doc.RootElement.EnumerateArray()
-            .Where(e => hidden is not null && e.TryGetProperty("fieldId", out var id) && id.TryGetInt64(out var fid) && !hidden.Contains(fid))
+            .Where(e => e.TryGetProperty("fieldId", out var id) && id.TryGetInt64(out var fid) && Visible(fid))
             .Select(e => e.Clone()).ToList();
         return JsonSerializer.SerializeToElement(visible);
     }

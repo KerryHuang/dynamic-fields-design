@@ -268,6 +268,25 @@ public class ApprovalQueryTests : ApprovalTestBase
     }
 
     [Fact]
+    public async Task RecordApproval_OpenActorWithoutRead_SeesInstanceContentChanged()
+    {
+        // 設計 §5.5 第 7 點：第 2 關的簽核人看得到第 1 關期間金額為什麼變了（content-changed 掛在當時的關卡）
+        var r = await Scenario3();
+        var id = await SubmitAs(r, "buyer1", 150000);
+        As("buyer1");
+        var extra = await Send(new Application.Dynamic.RecordService.Commands.CreateRecord.CreateRecordRequest(r.Extra,
+            V((TitleId(r.Extra), "追加"), (r.ExtraRef, Inst(id).RecordId), (r.ExtraAmount, 1000))));
+        extra.IsCreated.Should().BeTrue(Dump(extra));
+        await Approve(id, "gm");
+        await RemoveFromEveryone("buyer2");
+        var view = (await RecordApproval(Inst(id).RecordId, "buyer2")).Current!;
+        view.Stages.Select(s => s.StageCode).Should().Equal("board");
+        var changed = view.Actions.Should().ContainSingle(a => a.Action == ApprovalActions.ContentChanged).Subject;
+        changed.Data!.Value.EnumerateArray().Select(e => e.GetProperty("fieldId").GetInt64()).Should().Contain(r.Total);
+        view.Actions.Should().NotContain(a => a.Action == ApprovalActions.Submit);   // 其他歷程照舊只給自己的關卡
+    }
+
+    [Fact]
     public async Task RecordApproval_ClosedWithoutActing_NotVisible()
     {
         // 或簽時別人先同意、自己的任務被關閉：從沒動作過，看不到這個實例（沒有 Read → 404）

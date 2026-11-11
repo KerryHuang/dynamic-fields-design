@@ -100,9 +100,10 @@ public sealed class ApprovalEngine(
     /// 路線不同時重來（設計 §5.5 第 4 到 6 點）：這次同意不計入；舊實例 rerouted、open 任務關閉、寫 reroute 歷程；
     /// 新流程含發起人自選 → 不建新實例；快照沒有流程符合 → 備援實例（一關或簽）；否則依新流程從第 1 關開始。
     /// 新實例沿用舊快照、發起人不變。通知發起人、舊實例中同意過的人與這次按同意的人 approvalRerouted。回傳新實例（沒建就是 null）或失敗。
+    /// editedKeys：這次同意先寫入的可編輯欄位；值留著，reroute 歷程記下 editedBy 與 editedKeys（讀歷程時鍵依讀者欄位權限遮蔽）。
     /// </summary>
     public async Task<(ApprovalInstance? Fresh, string Outcome, ServiceResult? Failure)> RerouteAsync(ApprovalInstance old, RouteCheck check, Module module,
-        IReadOnlyDictionary<string, JsonElement?> values, CancellationToken ct)
+        IReadOnlyDictionary<string, JsonElement?> values, CancellationToken ct, IReadOnlyCollection<string>? editedKeys = null)
     {
         var now = time.Now;
         var runs = await repo.ListRunsAsync(old.Id, ct);
@@ -122,7 +123,9 @@ public sealed class ApprovalEngine(
         var name = check.NewFlow?.Name.Resolve(I18nText.FallbackLocale);
         Log(old, ApprovalActions.Reroute, SystemActor, comment: check.NewFlow is null ? ApprovalMessages.RerouteFallbackNote
             : check.NeedsPick ? ApprovalMessages.ReroutePickNote(name!) : ApprovalMessages.RerouteNote(name!),
-            data: JsonSerializer.Serialize(new { flowId = check.NewFlow?.FlowId, flowVersionId = check.NewFlow?.FlowVersionId }));
+            data: editedKeys is { Count: > 0 }
+                ? JsonSerializer.Serialize(new { flowId = check.NewFlow?.FlowId, flowVersionId = check.NewFlow?.FlowVersionId, editedBy = user.UserId, editedKeys })
+                : JsonSerializer.Serialize(new { flowId = check.NewFlow?.FlowId, flowVersionId = check.NewFlow?.FlowVersionId }));
         await uow.CommitAsync(ct);   // 舊實例先離開 pending，部分唯一索引才放得下新實例
 
         if (check.NeedsPick)

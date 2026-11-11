@@ -96,7 +96,7 @@ public class ApproveTaskHandler(
         if (check.Changed)
         {
             // 這次同意不計入；回 200 讓交易提交，重來的實例才建得起來
-            var (fresh, rerouted, rerouteFailure) = await engine.RerouteAsync(inst, check, module, current, ct);
+            var (fresh, rerouted, rerouteFailure) = await engine.RerouteAsync(inst, check, module, current, ct, values.Keys);
             if (rerouteFailure is not null) return rerouteFailure;
             await uow.CommitAsync(ct);
             return ServiceResult.Success(new ApprovalActionResponse(rerouted, fresh?.Id ?? inst.Id, fresh?.RowVersion ?? inst.RowVersion, check.NewFlow?.Name));

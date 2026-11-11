@@ -84,6 +84,40 @@ public class ApprovalRerouteTests : ApprovalTestBase
     }
 
     [Fact]
+    public async Task EditableWrite_ThenReroute_RecordedOnRerouteAction()
+    {
+        // 簽核人改了可編輯欄位、同意時路線不同而重來：值留著，reroute 歷程記下是誰改了哪些欄位（讀歷程時鍵依讀者欄位權限遮蔽）
+        var r = await BuildPurchase();
+        await SeedFlow(r, "po-a", r.Confirmed, 1, Def(Cond(r.Total, "gte", 100000), Stage("board", Group(BoardGroup))));
+        await SeedFlow(r, "po-b", r.Confirmed, 2, Def(null, Stage("lead", Group(PurchaseLeadGroup), editable: [r.DueDate])));
+        var wf = await SaveWorkflow(r, [Needs(r.Draft, r.Confirmed), Plain(r.Confirmed, r.Partial), Plain(r.Partial, r.Received),
+            Plain(r.Confirmed, r.Cancelled)]);
+        wf.IsSuccess.Should().BeTrue(Dump(wf));
+        await GrantEveryone(r.Module, r.Extra);
+        var (po, id) = await SubmitAs(r, "buyer1", 50000);
+        await AddExtra(r, po, 120000);
+        As("buyer2");
+        var res = await Send(new ApproveTaskRequest(Open(id, "buyer2").Id, Inst(id).RowVersion, null, V((r.DueDate, "2026-12-01"))));
+        res.IsSuccess.Should().BeTrue(Dump(res));
+        Body(res).Outcome.Should().Be(ApprovalOutcomes.Rerouted);
+        Rec(po).Values[$"f_{r.DueDate}"]!.Value.GetString().Should().Be("2026-12-01");
+
+        using (var data = JsonDocument.Parse(ActionsOf(id).Single(a => a.Action == ApprovalActions.Reroute).DataJson!))
+        {
+            data.RootElement.GetProperty("editedBy").GetString().Should().Be("buyer2");
+            data.RootElement.GetProperty("editedKeys").EnumerateArray().Select(e => e.GetString()).Should().Equal($"f_{r.DueDate}");
+        }
+
+        As("admin");
+        await HideFor(r.Module, r.DueDate, BoardGroup);
+        As("gm");
+        var view = (RecordApprovalResponse)(await Send(new GetRecordApprovalRequest(po))).Data!;
+        var shown = view.Previous.Single(v => v.Id == id).Actions.Single(a => a.Action == ApprovalActions.Reroute).Data!.Value;
+        shown.GetProperty("editedBy").GetString().Should().Be("buyer2");
+        shown.GetProperty("editedKeys").EnumerateArray().Should().BeEmpty();
+    }
+
+    [Fact]
     public async Task Discount_NoFlowMatches_FallbackInstance()
     {
         var r = await Scenario3();
