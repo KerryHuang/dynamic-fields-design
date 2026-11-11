@@ -15,6 +15,8 @@ interface Opts {
   task?: Record<string, unknown>;
   comments?: unknown[];
   settings?: Record<string, unknown>;
+  maxFiles?: number;
+  maxBytes?: number;
   candidates?: unknown[];
   taskStatus?: number;
   commentFail?: HttpFail;
@@ -34,6 +36,7 @@ async function mountDialog(o: Opts = {}) {
     if (c.url === '/users') return USERS;
     if (c.url === '/users/mention-candidates') return o.candidates ?? [USERS[1]];
     if (c.url === '/attachments/settings') return { uploadEnabled: true, maxBytes: 1048576, allowedExtensions: ['txt', 'pdf'], maxFilesPerField: 3, ...o.settings };
+    if (c.url === '/policies/effective') return { values: { 'attachment.maxFilesPerComment': o.maxFiles ?? 5, 'attachment.maxFileBytes': o.maxBytes ?? 1048576 } };
     return {};
   });
   const router = createRouter({ history: createMemoryHistory(), routes: [{ path: '/:p(.*)*', component: { render: () => null } }] });
@@ -295,6 +298,48 @@ describe('TaskDialog', () => {
       await flushPromises();
       expect((qfile.props('modelValue') as File[]).length).toBe(5);
       expect(body().querySelector('[data-testid="attach-limit-warning"]')!.textContent).toContain('最多 5 個檔案');
+      w.unmount();
+    });
+
+    it('留言附件上限依任務模組生效值', async () => {
+      const w = await mountDialog({ maxFiles: 2 });
+      const qfile = w.findComponent(quasar.QFile);
+      qfile.vm.$emit('update:modelValue', ['a', 'b', 'c'].map((n) => file(`${n}.txt`)));
+      await flushPromises();
+      expect((qfile.props('modelValue') as File[]).length).toBe(2);
+      expect(body().querySelector('[data-testid="attach-limit-warning"]')!.textContent).toContain('最多 2 個檔案');
+      expect(calls.find((c) => c.url === '/policies/effective')!.params).toEqual({ module: 'crm_customer' });
+      w.unmount();
+    });
+
+    it('單檔大小上限也取生效值（不用全系統設定的 maxBytes）', async () => {
+      const w = await mountDialog({ maxBytes: 2048 });
+      expect(w.findComponent(quasar.QFile).props('maxFileSize')).toBe(2048);
+      w.unmount();
+    });
+
+    it('生效值載入前附件鈕停用', async () => {
+      setActivePinia(createPinia());
+      let release: () => void = () => {};
+      const gate = new Promise<void>((r) => { release = r; });
+      calls = mockHttp((c) => {
+        if (c.url === '/tasks/5' && c.method === 'get') return taskDetailWire();
+        if (c.url === '/tasks/5/comments' && c.method === 'get') return [];
+        if (c.url === '/users') return USERS;
+        if (c.url === '/attachments/settings') return { uploadEnabled: true, maxBytes: 1048576, allowedExtensions: ['txt'], maxFilesPerField: 3 };
+        if (c.url === '/policies/effective') return gate.then(() => ({ values: {} }));
+        return {};
+      });
+      const router = createRouter({ history: createMemoryHistory(), routes: [{ path: '/:p(.*)*', component: { render: () => null } }] });
+      const i18n = createI18n({ legacy: false, locale: 'zh-TW', messages: { 'zh-TW': zhTW, 'en-US': enUS } });
+      const w = mount(TaskDialog, {
+        props: { taskId: 5 }, attachTo: document.body,
+        global: { plugins: [[quasar.Quasar, { components: quasar, directives: quasar, plugins: { Notify: quasar.Notify } }], createPinia(), router, i18n, [VueQueryPlugin, { queryClient: new QueryClient() }]] },
+      });
+      await flushPromises();
+      await new Promise((r) => setTimeout(r, 20));
+      expect(w.findComponent(quasar.QFile).props('disable')).toBe(true);
+      release();
       w.unmount();
     });
 

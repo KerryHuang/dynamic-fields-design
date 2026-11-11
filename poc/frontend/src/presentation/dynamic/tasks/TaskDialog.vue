@@ -134,7 +134,7 @@ function goRecord() {
           <q-separator class="q-my-md" />
           <div class="text-subtitle2">{{ t('tasks.comment') }}</div>
           <TaskTimeline :task-id="data.id" :comments="comments.data.value ?? []" :readonly="!data.canComment" />
-          <MentionInput v-if="data.canComment" :task-id="data.id" />
+          <MentionInput v-if="data.canComment" :task-id="data.id" :module-key="data.record?.moduleKey ?? null" />
         </q-card-section>
         <q-separator />
         <q-card-actions align="right">

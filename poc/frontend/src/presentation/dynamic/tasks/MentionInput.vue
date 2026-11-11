@@ -2,15 +2,20 @@
 import { computed, ref } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { useAttachmentSettings } from 'src/application/dynamic/queries/attachment-queries';
+import { useEffectivePolicies } from 'src/application/dynamic/queries/policies-queries';
 import { useAddTaskComment, useMentionCandidates } from 'src/application/dynamic/queries/tasks-queries';
 import { encodeMentions, mentionQuery, type MentionPick } from 'src/domain/dynamic/task-mentions';
 import type { ApiError } from 'src/services/api/http';
 
-const MAX_FILES = 5;
-const props = defineProps<{ taskId: number }>();
+const props = defineProps<{ taskId: number; moduleKey: string | null }>();
 const { t } = useI18n();
 const send = useAddTaskComment();
 const settings = useAttachmentSettings();
+// Upload limits depend on the task's module, so they come from the effective policies, never from a constant here.
+// Until they load the attach button stays off; the extension list and the upload switch still come from the deployment settings.
+const policies = useEffectivePolicies(() => props.moduleKey);
+const maxFiles = computed(() => policies.data.value?.values?.['attachment.maxFilesPerComment'] as number | undefined);
+const maxBytes = computed(() => policies.data.value?.values?.['attachment.maxFileBytes'] as number | undefined);
 const input = ref<{ getNativeElement(): HTMLTextAreaElement } | null>(null);
 
 const text = ref('');
@@ -54,7 +59,6 @@ function pick(user: { userId: string; displayName: string }) {
   void Promise.resolve().then(() => { el?.focus(); el?.setSelectionRange(pos, pos); });
 }
 
-const maxBytes = computed(() => settings.data.value?.maxBytes);
 const mb = (n: number) => `${(n / 1048576).toFixed(1)} MB`;
 // q-file drops what breaks max-file-size / accept and reports it here.
 function onRejected(entries: { failedPropValidation: string; file: File }[]) {
@@ -68,8 +72,9 @@ function onRejected(entries: { failedPropValidation: string; file: File }[]) {
 function onFiles(v: File[] | null) {
   rejected.value = '';
   const list = v ?? [];
-  limitWarning.value = list.length > MAX_FILES;
-  files.value = list.slice(0, MAX_FILES);
+  const max = maxFiles.value ?? 0;
+  limitWarning.value = list.length > max;
+  files.value = list.slice(0, max);
 }
 
 async function submit() {
@@ -112,14 +117,15 @@ async function submit() {
     </q-input>
     <q-file
       :model-value="files" multiple append use-chips outlined dense class="q-mt-sm" :label="t('tasks.attach')"
-      :accept="accept" :max-file-size="maxBytes" :disable="uploadOff" :hint="uploadOff ? undefined : t('tasks.attachLimit', { n: MAX_FILES })"
+      :accept="accept" :max-file-size="maxBytes" :disable="uploadOff || maxFiles === undefined" :hint="uploadOff || maxFiles === undefined ? undefined : t('tasks.attachLimit', { n: maxFiles })"
       data-testid="task-attach" @update:model-value="onFiles" @rejected="onRejected"
     >
       <template #prepend><q-icon name="attach_file" /></template>
     </q-file>
+    <div v-if="policies.isError.value" class="text-caption text-negative q-mt-xs" data-testid="attach-limits-error">{{ t('policies.loadFailed') }}</div>
     <div v-if="uploadOff" class="text-caption text-warning q-mt-xs" data-testid="attach-off">{{ reason }}</div>
     <div v-if="rejected" class="text-caption text-negative q-mt-xs" data-testid="attach-rejected">{{ rejected }}</div>
-    <div v-if="limitWarning" class="text-caption text-warning q-mt-xs" data-testid="attach-limit-warning">{{ t('tasks.attachLimitReached', { n: MAX_FILES }) }}</div>
+    <div v-if="limitWarning" class="text-caption text-warning q-mt-xs" data-testid="attach-limit-warning">{{ t('tasks.attachLimitReached', { n: maxFiles }) }}</div>
     <div v-if="error" class="text-negative text-caption q-mt-xs" data-testid="comment-error">{{ error }}</div>
     <div class="row justify-end q-mt-sm">
       <q-btn color="primary" no-caps :label="t('tasks.send')" :disable="!canSend" :loading="send.isPending.value" data-testid="comment-send" @click="submit" />

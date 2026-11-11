@@ -31,8 +31,10 @@ export interface AttachmentSettings {
   uploadEnabled: boolean;
   /** Why uploads are off, when the operator gave a reason; the UI falls back to a generic localized text. */
   disabledReason?: string;
+  /** System-wide value only. A module may override it: per-module limits come from the effective policies API. */
   maxBytes: number;
   allowedExtensions: string[];
+  /** System-wide value only; see `maxBytes`. */
   maxFilesPerField: number;
 }
 
