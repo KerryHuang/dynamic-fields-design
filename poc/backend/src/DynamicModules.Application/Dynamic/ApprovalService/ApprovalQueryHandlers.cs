@@ -83,15 +83,22 @@ public class GetRecordApprovalHandler(
         var instances = await repo.ListByRecordAsync(record.Id, ct);
         var ids = instances.Select(i => i.Id).ToList();
         var tasks = await repo.ListTasksAsync(ids, ct);
-        var visible = canRead || manager
-            ? instances
-            : instances.Where(i => i.InitiatorUserId == me || tasks.Any(t => t.InstanceId == i.Id && (t.AssigneeUserId == me || t.OriginalUserId == me)))
-                .ToList();
+        // 沒有 Read／Approve 的任務負責人只看自己處理過的關卡（設計 §10.2）：open 或動作過的任務所在關卡；
+        // 從沒動作就被關閉的任務不算。發起人看整個實例。
+        var ownStages = new Dictionary<long, HashSet<long>>();
+        if (!canRead && !manager)
+            foreach (var i in instances.Where(i => i.InitiatorUserId != me))
+                ownStages[i.Id] = tasks.Where(t => t.InstanceId == i.Id && (t.AssigneeUserId == me || t.OriginalUserId == me)
+                    && (t.Status == ApprovalTaskStatus.Open || t.ActedTime is not null)).Select(t => t.StageRunId).ToHashSet();
+        var visible = instances.Where(i => !ownStages.TryGetValue(i.Id, out var own) || own.Count > 0).ToList();
         if (!canRead && !manager && visible.Count == 0) return ServiceResult.NotFound(RecordMapper.RecordNotFound);
+        bool Shown(long instanceId, long? stageRunId) =>
+            !ownStages.TryGetValue(instanceId, out var own) || stageRunId is { } run && own.Contains(run);
 
         var visibleIds = visible.Select(i => i.Id).ToList();
-        var runs = await repo.ListRunsAsync(visibleIds, ct);
-        var actions = await repo.ListActionsAsync(visibleIds, ct);
+        var runs = (await repo.ListRunsAsync(visibleIds, ct)).Where(r => Shown(r.InstanceId, r.Id)).ToList();
+        var actions = (await repo.ListActionsAsync(visibleIds, ct)).Where(a => Shown(a.InstanceId, a.StageRunId)).ToList();
+        tasks = tasks.Where(t => Shown(t.InstanceId, t.StageRunId)).ToList();
         var names = await ApprovalViews.UserNamesAsync(permissions, ct);
         var writable = module.IsWritable();
         var hidden = await HiddenFieldsAsync(module, record, read, ct);
@@ -156,7 +163,13 @@ public class GetApprovalTasksHandler(
             case ApprovalInboxBoxes.Done:
                 tasks = request.Box == ApprovalInboxBoxes.Todo ? await repo.ListOpenTasksOfAsync(me, ct) : await repo.ListActedTasksOfAsync(me, ct);
                 instances = await repo.ListInstancesAsync(tasks.Select(t => t.InstanceId).Distinct().ToList(), ct);
-                if (request.Box == ApprovalInboxBoxes.Todo) instances = instances.Where(i => i.Status == ApprovalInstanceStatus.Pending).ToList();
+                if (request.Box == ApprovalInboxBoxes.Todo)
+                {
+                    instances = instances.Where(i => i.Status == ApprovalInstanceStatus.Pending).ToList();
+                    // 同一關已用別的席位同意過的任務不能動作（會 409），不列
+                    var stageTasks = await repo.ListTasksAsync(instances.Select(i => i.Id).ToList(), ct);
+                    tasks = tasks.Where(t => !ApprovalActionSupport.AlreadyApprovedInStage(stageTasks.Where(x => x.InstanceId == t.InstanceId), t, me)).ToList();
+                }
                 break;
             case ApprovalInboxBoxes.Submitted:
                 instances = await repo.ListByInitiatorAsync(me, ct);
@@ -171,8 +184,8 @@ public class GetApprovalTasksHandler(
                 instances = [];
                 foreach (var group in (await repo.ListByModulesAsync(scopes.Keys.ToList(), ct)).GroupBy(i => i.ModuleId))
                 {
+                    // 不限範圍時也走 ListVisibleIdsAsync：排除已刪除的記錄，和限範圍一致
                     var owners = scopes[group.Key].OwnerUserIds;
-                    if (owners is null) { instances.AddRange(group); continue; }
                     var inScope = await records.ListVisibleIdsAsync(group.Key, group.Select(i => i.RecordId).Distinct().ToList(), owners, ct);
                     instances.AddRange(group.Where(i => inScope.Contains(i.RecordId)));
                 }

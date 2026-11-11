@@ -241,4 +241,81 @@ public class ApprovalQueryTests : ApprovalTestBase
         after.Workflow.Transitions.Single(t => t.To == $"opt_{r.Partial}").Approval.Should().BeFalse();
         after.PermHash.Should().NotBe(before.PermHash);
     }
+
+    // ── a2b2 審查建議 3、4、6 ──
+
+    private Task RemoveFromEveryone(params string[] users) =>
+        Db.Context.Set<UserGroupMapping>().Where(m => users.Contains(m.UserId)
+            && m.GroupId == Db.Context.Set<PermissionGroup>().Single(g => g.Key == "everyone").Id).ExecuteDeleteAsync();
+
+    [Fact]
+    public async Task RecordApproval_TaskHolderWithoutRead_SeesOnlyOwnStages()
+    {
+        // 設計 §10.2「任務負責人：自己處理過的關卡」：別關的任務與意見不給
+        var r = await Scenario3();
+        var id = await SubmitAs(r, "buyer1", 150000);
+        await Approve(id, "gm");
+        await RemoveFromEveryone("buyer2");
+        await Approve(id, "buyer2");   // 會簽：buyer2 同意後 board 仍等 gm
+        var view = (await RecordApproval(Inst(id).RecordId, "buyer2")).Current!;
+        view.Stages.Select(s => s.StageCode).Should().Equal("board");
+        var boardRun = view.Stages.Single().Id;
+        view.Actions.Should().NotBeEmpty().And.OnlyContain(a => a.Action != ApprovalActions.Submit);
+        Db.Context.Set<ApprovalAction>().AsNoTracking().Where(a => a.InstanceId == id && a.StageRunId != boardRun).Count().Should().BeGreaterThan(0);
+        view.Actions.Should().HaveCount(Db.Context.Set<ApprovalAction>().AsNoTracking().Count(a => a.InstanceId == id && a.StageRunId == boardRun));
+        // 有 Read 的人照舊看全部
+        (await RecordApproval(Inst(id).RecordId, "fin1")).Current!.Stages.Should().HaveCount(2);
+    }
+
+    [Fact]
+    public async Task RecordApproval_ClosedWithoutActing_NotVisible()
+    {
+        // 或簽時別人先同意、自己的任務被關閉：從沒動作過，看不到這個實例（沒有 Read → 404）
+        var r = await BuildPurchase();
+        await SeedFlow(r, "po-f", r.Confirmed, 1, Def(null, Stage("fin", Group(FinanceGroup))));
+        (await SaveWorkflow(r, [Needs(r.Draft, r.Confirmed), Plain(r.Confirmed, r.Partial), Plain(r.Partial, r.Received),
+            Plain(r.Confirmed, r.Cancelled)])).IsSuccess.Should().BeTrue();
+        await GrantEveryone(r.Module);
+        var id = await SubmitAs(r, "buyer1", 5000);
+        await RemoveFromEveryone("fin1", "fin2");
+        await Approve(id, "fin1");
+        As("fin2");
+        (await Send(new GetRecordApprovalRequest(Inst(id).RecordId))).IsNotFound.Should().BeTrue();
+        (await RecordApproval(Inst(id).RecordId, "fin1")).Previous.Should().ContainSingle();   // 動作過的人看得到
+    }
+
+    [Fact]
+    public async Task Inbox_All_DeletedRecord_HiddenLikeLimitedScope()
+    {
+        var r = await Scenario3();
+        var id = await SubmitAs(r, "buyer1", 50000);
+        As("buyer1");
+        await Send(new WithdrawApprovalRequest(id, Inst(id).RowVersion, null));
+        await Db.Context.Set<DynamicModules.Domain.Entities.Dynamic.Record>().Where(x => x.Id == Inst(id).RecordId)
+            .ExecuteUpdateAsync(s => s.SetProperty(x => x.DeleteFlag, true));
+        (await Inbox("admin", "all", r.Module)).Items.Should().BeEmpty();
+        (await Inbox("admin", "all")).Items.Should().NotContain(i => i.InstanceId == id);
+        (await Inbox("buyer1", "submitted")).Items.Should().Contain(i => i.InstanceId == id);   // 發起人仍看得到自己送出的（§10.2 永久可看）
+    }
+
+    [Fact]
+    public async Task Inbox_Todo_ExcludesTasksUserCannotAct()
+    {
+        // 會簽兩個備援席位共用 gm、mgrA：gm 同意 fb:0 後，fb:1 的 gm 任務仍 open，但 todo 不列（點下去會 409）
+        var r = await BuildPurchase();
+        await SeedFlow(r, "po-n", r.Confirmed, 1,
+            Def(null, Stage("both", Users("emp1", "emp2"), mode: ApprovalModes.All)) with { FallbackApprovers = Users("gm", "mgrA") });
+        (await SaveWorkflow(r, [Needs(r.Draft, r.Confirmed), Plain(r.Confirmed, r.Partial), Plain(r.Partial, r.Received),
+            Plain(r.Confirmed, r.Cancelled)])).IsSuccess.Should().BeTrue();
+        await GrantEveryone(r.Module);
+        await Db.Context.Set<AppUser>().Where(u => u.UserId == "emp1" || u.UserId == "emp2").ExecuteUpdateAsync(s => s.SetProperty(u => u.IsActive, false));
+        var id = await SubmitAs(r, "buyer1", 5000);
+        (await Inbox("gm", "todo")).Items.Should().HaveCount(2);
+        var first = TasksOf(id).Where(t => t.AssigneeUserId == "gm").OrderBy(t => t.SeatKey).First();
+        As("gm");
+        (await Send(new ApproveTaskRequest(first.Id, Inst(id).RowVersion, null, null))).IsSuccess.Should().BeTrue();
+        TasksOf(id).Count(t => t.AssigneeUserId == "gm" && t.Status == ApprovalTaskStatus.Open).Should().Be(1);
+        (await Inbox("gm", "todo")).Items.Should().BeEmpty();
+        (await Inbox("mgrA", "todo")).Items.Should().ContainSingle().Which.InstanceId.Should().Be(id);
+    }
 }
