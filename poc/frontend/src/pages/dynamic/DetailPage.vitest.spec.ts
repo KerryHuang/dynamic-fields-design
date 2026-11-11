@@ -12,7 +12,7 @@ import { dynamicApi } from 'src/services/api/dynamic-api';
 import DetailPage from './DetailPage.vue';
 
 vi.mock('src/services/api/dynamic-api', () => ({
-  dynamicApi: { getModuleSchema: vi.fn(), getRecord: vi.fn(), deleteRecord: vi.fn(), related: vi.fn(), recordHistory: vi.fn() },
+  dynamicApi: { getModuleSchema: vi.fn(), getRecord: vi.fn(), deleteRecord: vi.fn(), related: vi.fn(), recordHistory: vi.fn(), getRecordTasks: vi.fn() },
 }));
 const api = vi.mocked(dynamicApi);
 
@@ -67,6 +67,17 @@ describe('DetailPage', () => {
     const noDelete = await mountPage(schema({ permissions: { ...all, delete: false } }));
     expect(noDelete.text()).toContain(zhTW.dynamic.edit);
     expect(noDelete.text()).not.toContain(zhTW.dynamic.delete);
+  });
+
+  it('hides the task panel and skips loading tasks when the module has tasks off; absent means on', async () => {
+    const off = await mountPage(schema({ tasksEnabled: false }));
+    expect(off.find('[data-testid="record-tasks"]').exists()).toBe(false);
+    expect(api.getRecordTasks).not.toHaveBeenCalled();
+
+    api.getRecordTasks.mockResolvedValueOnce({ items: [], canAdd: true, manualRules: [] });
+    const on = await mountPage(schema({}));
+    expect(api.getRecordTasks).toHaveBeenCalledWith(5);
+    expect(on.find('[data-testid="record-tasks"]').exists()).toBe(true);
   });
 
   it('DetailPage shows the closed-app banner and no edit/delete when readOnly', async () => {

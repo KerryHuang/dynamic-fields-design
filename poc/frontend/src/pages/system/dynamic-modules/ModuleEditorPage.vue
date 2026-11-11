@@ -163,9 +163,11 @@ const titleOptions = computed(() =>
 const titleSel = useSelectFilter(titleOptions);
 const titleError = ref<ApiError | null>(null);
 // The menu shows the icon, so module updates also refresh it.
-const updateModule = useDesignerMutation((patch: { titleFieldId?: number; titleTemplate?: string; icon?: string; section?: I18nText }) => {
+const updateModule = useDesignerMutation((patch: { titleFieldId?: number; titleTemplate?: string; icon?: string; section?: I18nText; tasksEnabled?: boolean }) => {
   const m = mod.value!;
-  return dynamicApi.updateModule(m.key, { name: m.name, icon: m.icon, section: m.section, titleFieldId: m.titleFieldId, titleTemplate: m.titleTemplate, ...patch });
+  return dynamicApi.updateModule(m.key, {
+    name: m.name, icon: m.icon, section: m.section, titleFieldId: m.titleFieldId, titleTemplate: m.titleTemplate, tasksEnabled: m.tasksEnabled, ...patch,
+  });
 }, () => moduleKey.value, ['menu']);
 function setTitle(id: number) {
   titleError.value = null;
@@ -199,6 +201,9 @@ function insertTemplateField(id: number | null) {
   saveTemplate();
 }
 
+function setTasksEnabled(tasksEnabled: boolean) {
+  updateModule.mutate({ tasksEnabled }, { onError: (e) => fail(e) });
+}
 function setIcon(icon: string) {
   updateModule.mutate({ icon }, { onError: (e) => fail(e) });
 }
@@ -241,6 +246,11 @@ function saveSection() {
           :error-message="errorFor(titleError, 'TitleFieldId')" @update:model-value="setTitle" use-input input-debounce="0" fill-input hide-selected @filter="titleSel.onFilter" @popup-hide="titleSel.reset">
           <template #no-option><SelectNoOption /></template>
         </q-select>
+        <div v-if="!mod.detailOf" style="max-width: min(320px, 100%)">
+          <q-toggle :model-value="mod.tasksEnabled !== false" :label="t('designer.tasksEnabled')" data-testid="tasks-enabled"
+            @update:model-value="setTasksEnabled" />
+          <div class="text-caption text-muted">{{ t('designer.tasksEnabledHint') }}</div>
+        </div>
       </div>
       <!-- 多語系輸入比一行高，展開「其他語系」會更高：自成一列靠上對齊，不撐高上面那列 -->
       <div class="row items-start q-gutter-md q-mb-md">

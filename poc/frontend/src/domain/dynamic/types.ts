@@ -190,6 +190,8 @@ export interface ModuleSchema {
   readOnly?: boolean;
   /** Ledger module: records cannot be edited or deleted, only reversed; edit/delete are already false. */
   ledger?: boolean;
+  /** Absent means on. */
+  tasksEnabled?: boolean;
   blocks: SchemaBlock[];
   rules: SchemaRule[];
   /** Active detail modules of this header; absent when there are none. */
@@ -408,6 +410,8 @@ export interface ModuleDetail {
   hostEntityKey?: string;
   /** Header module key when this is a detail module. */
   detailOf?: string;
+  /** Absent means on. */
+  tasksEnabled?: boolean;
   blocks: DesignerBlock[];
 }
 

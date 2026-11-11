@@ -124,6 +124,31 @@ describe('ModuleEditorPage', () => {
     expect(w.text()).toContain('預覽使用目前的草稿設定，不會存檔');
   });
 
+  describe('tasks toggle', () => {
+    const toggle = (w: Awaited<ReturnType<typeof mountPage>>) => w.findComponent<typeof quasar.QToggle>('[data-testid="tasks-enabled"]');
+
+    it('is on when absent; switching it off saves tasksEnabled:false with the other settings', async () => {
+      const w = await mountPage();
+      expect(toggle(w).props('modelValue')).toBe(true);
+      toggle(w).vm.$emit('update:modelValue', false);
+      await flushPromises();
+      expect(api.updateModule).toHaveBeenLastCalledWith('m', { name: detail.name, icon: undefined, section: { 'zh-TW': 's' }, titleFieldId: 5, tasksEnabled: false });
+    });
+
+    it('other saves keep tasksEnabled:false', async () => {
+      const w = await mountPage({ ...detail, tasksEnabled: false });
+      expect(toggle(w).props('modelValue')).toBe(false);
+      w.getComponent(IconSelect).vm.$emit('update:modelValue', 'factory');
+      await flushPromises();
+      expect(api.updateModule).toHaveBeenLastCalledWith('m', { name: detail.name, icon: 'factory', section: { 'zh-TW': 's' }, titleFieldId: 5, tasksEnabled: false });
+    });
+
+    it('detail modules have no toggle', async () => {
+      const w = await mountPage({ ...detail, detailOf: 'h' });
+      expect(w.find('[data-testid="tasks-enabled"]').exists()).toBe(false);
+    });
+  });
+
   it('extension module hides the title field and shows the host entity read-only', async () => {
     const w = await mountPage({ ...detail, titleFieldId: undefined, kind: 'extension', hostEntityKey: 'test.entity' });
     expect(w.find('[data-testid="title-field"]').exists()).toBe(false);

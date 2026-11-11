@@ -105,7 +105,7 @@ async function onDelete() {
       <RecordConversions :record-id="recordId" :row-version="recordQuery.data.value.rowVersion" :closed="schemaQuery.data.value.readOnly" />
       <DynamicDetail :schema="schemaQuery.data.value" :record="recordQuery.data.value" />
       <DetailTables v-if="schemaQuery.data.value.details?.length" class="q-mt-md" :details="schemaQuery.data.value.details" :rows="recordQuery.data.value.details ?? {}" />
-      <RecordTasks :record-id="recordId" :closed="!!schemaQuery.data.value.readOnly" />
+      <RecordTasks v-if="schemaQuery.data.value.tasksEnabled !== false" :record-id="recordId" :closed="!!schemaQuery.data.value.readOnly" />
       <RecordEffects :record-id="recordId" />
       <RelatedTabs :record-id="recordId" />
       <RecordHistory :record-id="recordId" />
