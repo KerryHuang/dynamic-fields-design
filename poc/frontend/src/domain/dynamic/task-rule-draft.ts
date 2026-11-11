@@ -48,6 +48,7 @@ export type TaskRuleDraft = TaskRuleInput;
 export const MAX_TASKS = 20;
 export const MAX_OFFSET_DAYS = 3650;
 const TEXT_MAX = 200;
+const DESCRIPTION_MAX = 4000;
 const KEY_PATTERN = /^[a-z][a-z0-9-]{1,39}$/;
 const CODE_PATTERN = /^[a-z][a-zA-Z0-9_]{0,39}$/;
 
@@ -105,7 +106,7 @@ export function toTaskRuleBody(draft: TaskRuleDraft): TaskRuleInput {
   };
 }
 
-const tooLong = (text: I18nText | null | undefined) => Object.values(text ?? {}).some((v) => (v ?? '').trim().length > TEXT_MAX);
+const tooLong = (text: I18nText | null | undefined, max = TEXT_MAX) => Object.values(text ?? {}).some((v) => (v ?? '').trim().length > max);
 
 /** Same checks as the server's TaskRuleValidator; returns i18n keys (empty = fine to send). */
 export function validateDraft(draft: TaskRuleDraft, fields: SchemaField[]): string[] {
@@ -135,7 +136,7 @@ export function validateDraft(draft: TaskRuleDraft, fields: SchemaField[]): stri
     codes.add(code);
     if (!task.title['zh-TW']?.trim()) err('titleRequired');
     else if (tooLong(task.title)) err('titleTooLong');
-    if (tooLong(task.description)) err('descriptionTooLong');
+    if (tooLong(task.description, DESCRIPTION_MAX)) err('descriptionTooLong');
     if (byId.get(task.assigneeFieldId)?.type !== 'user') err('assigneeField');
     if (task.dueFieldId) {
       const due = byId.get(task.dueFieldId);

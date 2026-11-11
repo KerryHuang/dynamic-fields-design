@@ -60,6 +60,14 @@ describe('task-rule-draft', () => {
     expect(validateDraft(d, fields)).toEqual([]);
   });
 
+  it('任務說明各語系 ≤ 4000（與後端一致）', () => {
+    const d = valid();
+    d.tasks[0]!.description = { 'zh-TW': '說'.repeat(4000) };
+    expect(validateDraft(d, fields)).toEqual([]);
+    d.tasks[0]!.description = { 'zh-TW': '說'.repeat(4001) };
+    expect(validateDraft(d, fields)).toContain('taskRules.errors.descriptionTooLong');
+  });
+
   it('規則代碼、名稱、任務代碼、偏移天數與觸發欄位', () => {
     const d = valid();
     d.key = 'A';
