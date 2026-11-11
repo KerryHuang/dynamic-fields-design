@@ -3,7 +3,7 @@
   "formatVersion": 7,
   "manifest": {
     "id": "crm-sales",
-    "version": "1.1.0",
+    "version": "1.1.1",
     "name": {
       "zh-TW": "CRM 與銷售",
       "en-US": "CRM and Sales",
@@ -76,7 +76,7 @@
             "vi": "Thông tin cơ bản"
           },
           "collapsed": false,
-          "columns": 2,
+          "columns": 4,
           "fields": [
             {
               "code": "no",
@@ -338,7 +338,7 @@
             "vi": "Thông tin cơ bản"
           },
           "collapsed": false,
-          "columns": 2,
+          "columns": 4,
           "fields": [
             {
               "code": "sku",
@@ -466,7 +466,7 @@
             "vi": "Thông tin cơ bản"
           },
           "collapsed": false,
-          "columns": 2,
+          "columns": 4,
           "fields": [
             {
               "code": "no",
@@ -716,7 +716,7 @@
             "vi": "Thông tin cơ bản"
           },
           "collapsed": false,
-          "columns": 2,
+          "columns": 4,
           "fields": [
             {
               "code": "subject",
@@ -925,7 +925,7 @@
             "vi": "Thông tin cơ bản"
           },
           "collapsed": false,
-          "columns": 2,
+          "columns": 4,
           "fields": [
             {
               "code": "name",
@@ -1183,7 +1183,7 @@
             "vi": "Thông tin cơ bản"
           },
           "collapsed": false,
-          "columns": 2,
+          "columns": 4,
           "fields": [
             {
               "code": "no",
@@ -1546,7 +1546,7 @@
             "vi": "Thông tin cơ bản"
           },
           "collapsed": false,
-          "columns": 2,
+          "columns": 4,
           "fields": [
             {
               "code": "quote",
@@ -1702,7 +1702,7 @@
             "vi": "Thông tin cơ bản"
           },
           "collapsed": false,
-          "columns": 2,
+          "columns": 4,
           "fields": [
             {
               "code": "no",
@@ -1991,7 +1991,7 @@
             "vi": "Thông tin cơ bản"
           },
           "collapsed": false,
-          "columns": 2,
+          "columns": 4,
           "fields": [
             {
               "code": "order",

@@ -4,7 +4,7 @@
  "x-translation": "th、vi 標籤為機器翻譯，待母語者校對",
  "manifest": {
   "id": "mes-mold",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "name": {
    "zh-TW": "MES 模具廠",
    "en-US": "Mold-shop MES",

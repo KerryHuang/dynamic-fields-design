@@ -4,7 +4,7 @@
   "x-translation": "th、vi 標籤為機器翻譯，待母語者校對",
   "manifest": {
     "id": "inventory",
-    "version": "1.0.0",
+    "version": "1.0.1",
     "name": {
       "zh-TW": "進銷存",
       "en-US": "Inventory",
@@ -95,7 +95,7 @@
             "vi": "Thông tin cơ bản"
           },
           "collapsed": false,
-          "columns": 2,
+          "columns": 4,
           "fields": [
             {
               "code": "no",
@@ -318,7 +318,7 @@
             "vi": "Thông tin cơ bản"
           },
           "collapsed": false,
-          "columns": 2,
+          "columns": 4,
           "fields": [
             {
               "code": "code",
@@ -458,7 +458,7 @@
             "vi": "Thông tin cơ bản"
           },
           "collapsed": false,
-          "columns": 2,
+          "columns": 4,
           "fields": [
             {
               "code": "no",
@@ -795,7 +795,7 @@
             "vi": "Thông tin cơ bản"
           },
           "collapsed": false,
-          "columns": 2,
+          "columns": 4,
           "fields": [
             {
               "code": "po",
@@ -959,7 +959,7 @@
             "vi": "Thông tin cơ bản"
           },
           "collapsed": false,
-          "columns": 2,
+          "columns": 4,
           "fields": [
             {
               "code": "no",
@@ -1183,7 +1183,7 @@
             "vi": "Thông tin cơ bản"
           },
           "collapsed": false,
-          "columns": 2,
+          "columns": 4,
           "fields": [
             {
               "code": "receipt",
@@ -1376,7 +1376,7 @@
             "vi": "Thông tin cơ bản"
           },
           "collapsed": false,
-          "columns": 2,
+          "columns": 4,
           "fields": [
             {
               "code": "no",
@@ -1600,7 +1600,7 @@
             "vi": "Thông tin cơ bản"
           },
           "collapsed": false,
-          "columns": 2,
+          "columns": 4,
           "fields": [
             {
               "code": "shipment",
@@ -1785,7 +1785,7 @@
             "vi": "Thông tin cơ bản"
           },
           "collapsed": false,
-          "columns": 2,
+          "columns": 4,
           "fields": [
             {
               "code": "no",
@@ -2022,7 +2022,7 @@
             "vi": "Thông tin cơ bản"
           },
           "collapsed": false,
-          "columns": 2,
+          "columns": 4,
           "fields": [
             {
               "code": "adjust",
@@ -2168,7 +2168,7 @@
             "vi": "Thông tin cơ bản"
           },
           "collapsed": false,
-          "columns": 2,
+          "columns": 4,
           "fields": [
             {
               "code": "item",
