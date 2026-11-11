@@ -565,6 +565,7 @@ public class AttachmentApiTests : IDisposable
         (await Upload(Admin, w, "run.exe")).StatusCode.Should().Be(HttpStatusCode.BadRequest);
         (await Upload(Admin, w, "pic.svg")).StatusCode.Should().Be(HttpStatusCode.BadRequest);
         DiskFiles().Should().BeEmpty();
+        (await Upload(Admin, w, "a.txt")).StatusCode.Should().Be(HttpStatusCode.Created, "壞值退回的是出廠白名單，txt 仍可上傳");
     }
 
     // ---- Demo / 環境開關 ----
