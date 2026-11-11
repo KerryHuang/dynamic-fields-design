@@ -51,12 +51,12 @@ public abstract class TaskTestBase : DesignerTestBase
     /// <summary>直接在 Db 建任務；createdBy 與 assignee 自動成為參與者，mentioned 是額外的被 @ 參與者。</summary>
     protected async Task<TaskItem> SeedTask(string title = "準備資料", string? createdBy = "admin", string? assignee = null,
         Target? target = null, long? recordId = null, DateOnly? due = null, TaskItemStatus status = TaskItemStatus.Todo,
-        long? ruleId = null, string[]? mentioned = null)
+        long? ruleId = null, string[]? mentioned = null, long? moduleId = null)
     {
         var task = new TaskItem
         {
             Title = title, CreatedBy = createdBy, AssigneeUserId = assignee, DueDate = due, Status = status,
-            ModuleId = recordId is null ? null : target!.ModuleId, RecordId = recordId,
+            ModuleId = moduleId ?? (recordId is null ? null : target!.ModuleId), RecordId = recordId,
             RecordTitleSnapshot = recordId is null ? null : "案件甲", RuleId = ruleId, RuleOccurrence = ruleId is null ? null : 1,
             RuleTaskCode = ruleId is null ? null : "t1", CreatedTime = SeedTime
         };

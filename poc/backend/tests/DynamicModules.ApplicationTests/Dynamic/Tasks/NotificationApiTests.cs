@@ -1,5 +1,6 @@
 using DynamicModules.Application.Common.Time;
 using DynamicModules.Application.Dynamic.NotificationService;
+using DynamicModules.Application.Dynamic.PolicyService;
 using DynamicModules.Domain.Entities.Dynamic;
 using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
@@ -68,6 +69,36 @@ public class NotificationApiTests : TaskTestBase
         dueSoon.Read.Should().BeFalse();
         (await Load(soon.Id)).LastDueSoonNotified.Should().Be(D(11, 4));
         (await Db.Context.Set<Notification>().AsNoTracking().CountAsync(n => n.UserId == "sales02")).Should().Be(0, "只補讀取者自己的提醒");
+    }
+
+    [Fact]
+    public async Task LeadDays_ModuleOverride_RemindsThatManyDaysBefore()
+    {
+        var t = await BuildTarget();
+        As("admin");
+        (await Send(new UpdateModulePolicyRequest(t.Key, "task.reminderLeadDays", J("3")))).IsSuccess.Should().BeTrue();
+        await SeedTask(title: "三天後", assignee: "sales01", due: D(11, 7), moduleId: t.ModuleId);
+        await SeedTask(title: "明天（該模組）", assignee: "sales01", due: D(11, 5), moduleId: t.ModuleId);
+        await SeedTask(title: "明天（無模組）", assignee: "sales01", due: D(11, 5));
+
+        var list = await Get("sales01");
+
+        list.Items.Where(i => i.Kind == NotificationKinds.TaskDueSoon).Select(i => i.Title)
+            .Should().BeEquivalentTo(["三天後", "明天（無模組）"]);
+    }
+
+    [Fact]
+    public async Task RemindOverdue_Off_NoOverdueReminder()
+    {
+        await SeedTask(title: "已逾期", assignee: "sales01", due: D(11, 3));
+        As("admin");
+        (await Send(new UpdateSystemPolicyRequest("task.remindOverdue", J("false")))).IsSuccess.Should().BeTrue();
+
+        var source = Svc<IEnumerable<INotificationReminderSource>>().OfType<TaskReminderSource>().Single();
+        (await source.AnyDueAsync("sales01", D(11, 4), CancellationToken.None)).Should().BeFalse("只有逾期任務、又關了逾期提醒，不該觸發 upkeep");
+        var list = await Get("sales01");
+
+        Count(list, NotificationKinds.TaskOverdue).Should().Be(0);
     }
 
     [Fact]

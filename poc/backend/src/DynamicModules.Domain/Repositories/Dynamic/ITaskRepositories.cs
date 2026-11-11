@@ -33,12 +33,11 @@ public interface ITaskRepository
     /// <summary>不追蹤；附件須屬於該留言與任務，留言已撤回時回 null。</summary>
     Task<TaskCommentAttachment?> GetAttachmentAsync(long taskId, long commentId, long attachmentId, CancellationToken ct);
     /// <summary>
-    /// 負責人是 userId、未完成、DueDate 不為 null，而且
-    /// (DueDate == today+1 且 LastDueSoonNotified != today) 或 (DueDate &lt; today 且 LastOverdueNotified != today)。
+    /// 提醒候選：負責人是 userId、未完成、DueDate 不為 null、所屬模組沒關閉，而且
+    /// (today &lt;= DueDate &lt;= today+maxLeadDays 且 LastDueSoonNotified != today) 或 (DueDate &lt; today 且 LastOverdueNotified != today)；
+    /// 依 Id 排序。實際要不要提醒（每個模組的提醒天數、是否提醒逾期）由呼叫端依政策再判斷。track 為 true 時追蹤。
     /// </summary>
-    Task<bool> AnyReminderDueAsync(string userId, DateOnly today, CancellationToken ct);
-    /// <summary>條件同 <see cref="AnyReminderDueAsync"/>；追蹤。</summary>
-    Task<List<TaskItem>> ListReminderDueAsync(string userId, DateOnly today, CancellationToken ct);
+    Task<List<TaskItem>> ListReminderCandidatesAsync(string userId, DateOnly today, int maxLeadDays, bool track, CancellationToken ct);
     /// <summary>這條規則在這筆記錄第 occurrence 次觸發產生的任務；追蹤，含參與者。</summary>
     Task<List<TaskItem>> ListByRuleOccurrenceAsync(long ruleId, long recordId, int occurrence, CancellationToken ct);
     /// <summary>這條規則在這筆記錄上是否還有未完成（待辦、進行中）的任務，不分第幾次觸發。</summary>
