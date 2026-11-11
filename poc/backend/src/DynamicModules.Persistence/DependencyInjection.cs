@@ -50,6 +50,7 @@ public static class DependencyInjection
         services.AddLogging();   // ReportQueryRepository 記退回 warning；已註冊時是空操作
         services.AddScoped<IDashboardRepository, DashboardRepository>();
         services.AddScoped<ISystemSettingRepository, SystemSettingRepository>();
+        services.AddScoped<IModulePolicyRepository, ModulePolicyRepository>();
         services.AddScoped<IPermissionRepository, PermissionRepository>();
         services.AddScoped<IAccountRepository, AccountRepository>();
         services.AddScoped<IRecordRepository, RecordRepository>();
