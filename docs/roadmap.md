@@ -16,10 +16,10 @@
 | a2c | 重新比對、預覽、臨時讀取權 | 已上線（程式與測試已在 main，功能清單已勾） | [簽核流程](superpowers/specs/2026-11-10-approval-workflow-design.md) |
 | m1、i1、i2a、i2b、i2c | 多語系：模組選單分區、前端寫死文字、後端語系機制、記錄寫入與簽核訊息（這裡的 m1 是選單分區，和下面 MCP 的 m1a、m1b 不是同一件事） | 已上線 | — |
 | s2c、s3a | 應用程式整合層；報表資料庫端聚合 | 已上線 | [應用程式整合](superpowers/specs/2026-11-09-app-integration-design.md)、[報表資料庫端聚合](superpowers/specs/2026-11-10-report-db-aggregation-design.md) |
-| p1a | 政策後端基礎：政策登記、讀值服務、模組覆寫表與 migration、政策 API；接上 A1、A2 | 開發中（已實作，待合併） | [政策設定](superpowers/specs/2026-11-11-policy-settings-design.md) §9 |
-| p1b | 政策前端：系統「政策設定」頁、模組設計「政策」分頁；任務規則畫面改讀生效值 | 開發中（已實作，待合併） | [政策設定](superpowers/specs/2026-11-11-policy-settings-design.md) §9 |
-| p1c | 任務與通知政策：A6、A7、A13、A14 | 開發中（已實作，待合併） | [政策設定](superpowers/specs/2026-11-11-policy-settings-design.md) §9 |
-| p1d | 附件政策：A20（含部署設定檔當出廠值） | 未開始 | [政策設定](superpowers/specs/2026-11-11-policy-settings-design.md) §9 |
+| p1a | 政策後端基礎：政策登記、讀值服務、模組覆寫表與 migration、政策 API；接上 A1、A2 | 已上線 | [政策設定](superpowers/specs/2026-11-11-policy-settings-design.md) §9 |
+| p1b | 政策前端：系統「政策設定」頁、模組設計「政策」分頁；任務規則畫面改讀生效值 | 已上線 | [政策設定](superpowers/specs/2026-11-11-policy-settings-design.md) §9 |
+| p1c | 任務與通知政策：A6、A7、A13、A14 | 已上線 | [政策設定](superpowers/specs/2026-11-11-policy-settings-design.md) §9 |
+| p1d | 附件政策：A20（含部署設定檔當出廠值） | 已上線 | [政策設定](superpowers/specs/2026-11-11-policy-settings-design.md) §9 |
 | O1 | 維運地基：結構化 log 與 request id、health live／ready、版本端點、前端錯誤收集、背景排程器（o1a、o1b、o1c） | 未開始 | [維運與觀測](superpowers/specs/2026-11-11-ops-observability-design.md) §9、§10 |
 | pg0 | PostgreSQL provider 抽象＋可在 PostgreSQL 跑的測試環境；驗收要含 O1 的排程器（兩實例搶同一工作）與通知維護（兩條路徑並行不重複）在 PostgreSQL 上通過 | 未開始（設計待寫） | — |
 | a2d | 簽核鎖定、定義守衛、附件；併入簽核類政策設定 | 未開始 | [簽核流程](superpowers/specs/2026-11-10-approval-workflow-design.md)、[政策設定](superpowers/specs/2026-11-11-policy-settings-design.md) §9 |
