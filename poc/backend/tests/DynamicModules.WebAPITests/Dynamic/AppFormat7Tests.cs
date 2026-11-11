@@ -78,9 +78,9 @@ public class AppFormat7Tests : IDisposable
             .GetAwaiter().GetResult().Select(r => r.Key).ToList();
     }
 
-    private async Task CreateManualRuleAsync(string key, long assigneeFieldId)
+    private async Task CreateManualRuleAsync(string key, long assigneeFieldId, string moduleKey = PartnerKey)
     {
-        var res = await _rig.Admin.PostAsJsonAsync($"{Base}/modules/{PartnerKey}/task-rules", new
+        var res = await _rig.Admin.PostAsJsonAsync($"{Base}/modules/{moduleKey}/task-rules", new
         {
             key, name = new Dictionary<string, string> { ["zh-TW"] = "手動規則" }, active = true, repeat = "once",
             trigger = new { on = "manual" },
@@ -112,6 +112,24 @@ public class AppFormat7Tests : IDisposable
         var partner = (await RulesAsync(PartnerKey)).Single();
         partner.GetProperty("appKey").GetString().Should().Be("crmx", "掛在共用主檔上的規則也記它屬於哪個應用程式");
         partner.GetProperty("tasks")[0].GetProperty("assigneeFieldId").GetInt64().Should().Be(_rig.FieldId("crmx", "bp/partner.accountMgr"));
+    }
+
+    [Fact]
+    public async Task OpenApp_RuleFails_RollsBackEverything()
+    {
+        foreach (var json in SharedMasterPackages.Masters) await _rig.ImportAsync(json);
+        await _rig.ImportAsync(Crm7());
+        // 先在主檔上手動建一條同代號的規則，讓開啟時第二條規則撞到 409
+        var other = await CreateModule(_rig.Admin);
+        var owner = await AddField(_rig.Admin, other, "user");
+        await CreateManualRuleAsync(PartnerRule, owner.Id, other);
+
+        var res = await _rig.OpenAsync("crmx");
+        ((int)res.StatusCode).Should().BeInRange(400, 499, await res.Content.ReadAsStringAsync());
+        _rig.Db(db => db.Set<App>().Any(a => a.Key == "crmx")).Should().BeFalse("App 列回滾");
+        _rig.Db(db => db.Set<Module>().Any(m => m.Key == LeadKey)).Should().BeFalse("本套件的模組回滾");
+        _rig.Db(db => db.Set<TaskRule>().Any(r => r.Key == LeadRule)).Should().BeFalse("先建好的規則回滾");
+        _rig.Db(db => db.Set<TaskRule>().Count(r => r.Key == PartnerRule)).Should().Be(1, "只剩原本手動建的那一條");
     }
 
     [Fact]
