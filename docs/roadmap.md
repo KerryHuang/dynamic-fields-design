@@ -16,7 +16,10 @@
 | a2c | 重新比對、預覽、臨時讀取權 | 已上線（程式與測試已在 main，功能清單已勾） | [簽核流程](superpowers/specs/2026-11-10-approval-workflow-design.md) |
 | m1、i1、i2a、i2b、i2c | 多語系：模組選單分區、前端寫死文字、後端語系機制、記錄寫入與簽核訊息（這裡的 m1 是選單分區，和下面 MCP 的 m1a、m1b 不是同一件事） | 已上線 | — |
 | s2c、s3a | 應用程式整合層；報表資料庫端聚合 | 已上線 | [應用程式整合](superpowers/specs/2026-11-09-app-integration-design.md)、[報表資料庫端聚合](superpowers/specs/2026-11-10-report-db-aggregation-design.md) |
-| p1 | 政策設定基礎與任務、通知、附件政策（p1a、p1b、p1c） | 開發中（p1a 在分支上，未合併 main） | [政策設定](superpowers/specs/2026-11-11-policy-settings-design.md) §9 |
+| p1a | 政策後端基礎：政策登記、讀值服務、模組覆寫表與 migration、政策 API；接上 A1、A2 | 開發中（已實作，待合併） | [政策設定](superpowers/specs/2026-11-11-policy-settings-design.md) §9 |
+| p1b | 政策前端：系統「政策設定」頁、模組設計「政策」分頁；任務規則畫面改讀生效值 | 開發中（已實作，待合併） | [政策設定](superpowers/specs/2026-11-11-policy-settings-design.md) §9 |
+| p1c | 任務與通知政策：A6、A7、A13、A14 | 開發中（已實作，待合併） | [政策設定](superpowers/specs/2026-11-11-policy-settings-design.md) §9 |
+| p1d | 附件政策：A20（含部署設定檔當出廠值） | 未開始 | [政策設定](superpowers/specs/2026-11-11-policy-settings-design.md) §9 |
 | O1 | 維運地基：結構化 log 與 request id、health live／ready、版本端點、前端錯誤收集、背景排程器（o1a、o1b、o1c） | 未開始 | [維運與觀測](superpowers/specs/2026-11-11-ops-observability-design.md) §9、§10 |
 | pg0 | PostgreSQL provider 抽象＋可在 PostgreSQL 跑的測試環境；驗收要含 O1 的排程器（兩實例搶同一工作）與通知維護（兩條路徑並行不重複）在 PostgreSQL 上通過 | 未開始（設計待寫） | — |
 | a2d | 簽核鎖定、定義守衛、附件；併入簽核類政策設定 | 未開始 | [簽核流程](superpowers/specs/2026-11-10-approval-workflow-design.md)、[政策設定](superpowers/specs/2026-11-11-policy-settings-design.md) §9 |
@@ -27,7 +30,7 @@
 | a6 | CRM 設計案與簽核 Demo、文件 | 未開始 | [簽核流程](superpowers/specs/2026-11-10-approval-workflow-design.md) |
 | 權限軸 | 設計與授權分成兩條權限軸（使用者 11-11 裁決排在簽核主線之後；開工前再寫設計） | 未開始 | — |
 | O2 | 事件中心：健康檢查、維運事件、稽核表（與 MCP 共用）、告警通道、監控頁、規則失控自動暫停 | 未開始 | [維運與觀測](superpowers/specs/2026-11-11-ops-observability-design.md) §9 |
-| p2、p3 | 設計與處理上限；地區與組織政策（不在主序，依 p1 之後、a6 與 O2 之後視情況穿插，這裡排在 O2 之後） | 未開始 | [政策設定](superpowers/specs/2026-11-11-policy-settings-design.md) §9 |
+| p2、p3 | 設計與處理上限；地區與組織政策（不在主序，依 p1a 之後、a6 與 O2 之後視情況穿插，這裡排在 O2 之後） | 未開始 | [政策設定](superpowers/specs/2026-11-11-policy-settings-design.md) §9 |
 | m1a | MCP 後端地基：權杖、範圍、工具分級與確認碼、稽核寫入點、速率限制、12 個唯讀工具；權杖與確認碼的 repository 測試在 PostgreSQL 與 SQLite 各跑一次 | 未開始 | [MCP server](superpowers/specs/2026-11-11-mcp-server-design.md) §12 |
 | m1b | MCP 畫面：個人「AI 存取權杖」頁、管理員「AI 連線」頁、設計器欄位旗標、手冊 | 未開始 | [MCP server](superpowers/specs/2026-11-11-mcp-server-design.md) §12 |
 | O3 | 廠商維運中心（Cloudflare Workers＋D1）、外部探測、匿名回報與新版本通知、告警推播 | 未開始 | [維運與觀測](superpowers/specs/2026-11-11-ops-observability-design.md) §9 |
