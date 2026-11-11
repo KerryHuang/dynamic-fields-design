@@ -256,7 +256,7 @@ public static partial class AppEffectsCodec
         }
     }
 
-    private static JsonElement ImportCondition(JsonElement json, AppReportCodec.Lookups l, List<string> errors)
+    internal static JsonElement ImportCondition(JsonElement json, AppReportCodec.Lookups l, List<string> errors)
     {
         JsonNode? Walk(JsonNode? node)
         {

@@ -85,6 +85,7 @@ public static partial class AppPackageValidator
         Reject(p.PrintTemplates.Count, "printTemplates");
         Reject(p.Integrations.Count, "integrations");
         Reject(p.Contributions.Count, "contributions");
+        Reject(p.TaskRules.Count, "taskRules");
         if (p.Manifest.Requires.Apps.Count > 0 || p.Manifest.Requires.Entities.Count > 0)
             errors.Add("manifest.requires: 主檔套件的 requires 只能有 masters");
         if (!p.Modules.Any(x => x?.Extensible == true)) errors.Add("modules: 主檔套件至少要有一個模組標 extensible");

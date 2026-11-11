@@ -5,7 +5,7 @@ using DynamicModules.Domain.ValueObjects;
 
 namespace DynamicModules.Application.Dynamic.AppService.Data;
 
-// 應用程式套件格式（formatVersion 2 到 6）。modules 直接重用範本的 TemplateModule；
+// 應用程式套件格式（formatVersion 2 到 7）。modules 直接重用範本的 TemplateModule；
 // 保留的 section（dashboards）目前只能是空陣列，讀進來的值不解讀，非空一律整份拒絕（fail-closed，見 AppPackageValidator）。
 
 public record AppPackageData(
@@ -14,7 +14,7 @@ public record AppPackageData(
     List<AppPackageReport>? Reports, List<JsonElement>? Dashboards, List<AppWorkflow>? Workflows,
     List<AppConversion>? Conversions, List<AppEvent>? Events, List<AppPrintTemplate>? PrintTemplates,
     List<AppCheck>? Checks = null, List<AppLedger>? Ledgers = null, List<AppIntegrationDecl>? Integrations = null,
-    List<AppContribution>? Contributions = null)
+    List<AppContribution>? Contributions = null, List<AppTaskRule>? TaskRules = null)
 {
     public const string FormatName = "formwright-app";
     /// <summary>
@@ -23,8 +23,9 @@ public record AppPackageData(
     /// 5：integrations 與 config.refGuard 可用（4 以下的檔案這些必須是空的／不存在）。
     /// 6：共用主檔（manifest.kind、requires.masters、contributions、模組的 extensible、欄位的 active、轉換的 header.set）
     ///    與模組的標題樣板 titleTemplate 可用（5 以下的檔案這些必須是空的／不存在）。
+    /// 7：taskRules 可用（6 以下的檔案這些必須是空的）。
     /// </summary>
-    public const int CurrentFormatVersion = 6;
+    public const int CurrentFormatVersion = 7;
     public const int MinFormatVersion = 2;
 
     public List<AppGroup> Groups { get; init; } = Groups ?? [];
@@ -40,6 +41,7 @@ public record AppPackageData(
     public List<AppLedger> Ledgers { get; init; } = Ledgers ?? [];
     public List<AppIntegrationDecl> Integrations { get; init; } = Integrations ?? [];
     public List<AppContribution> Contributions { get; init; } = Contributions ?? [];
+    public List<AppTaskRule> TaskRules { get; init; } = TaskRules ?? [];
 
     /// <summary>名稱與非空的保留 section；有值就代表這份套件需要這個版本讀不懂的功能。</summary>
     public IEnumerable<string> UnsupportedSections()
@@ -262,3 +264,26 @@ public record AppContribution(
 
 /// <summary>貢獻者在主檔模組裡的專屬區塊。</summary>
 public record AppContributionBlock(string Code, I18nText Name);
+
+// ---- 格式 7 的 section：任務規則（任務管理設計 §5.8）。 ----
+
+/// <summary>
+/// 任務規則。Code 就是 TaskRule.Key（全站唯一，慣例以應用程式 id 當前綴）。Module 是本套件的模組代號，
+/// 或主檔符號 &lt;主檔 id&gt;/&lt;模組代號&gt;（必須列在 requires.masters）；欄位都用限定欄位名（主檔模組上用主檔符號）。
+/// Repeat 是 once（省略時）或 everyTime。When 是規則條件 JSON，寫法同連動事件。
+/// </summary>
+public record AppTaskRule(string Code, I18nText Name, bool Active, string Module, string? Repeat, AppTaskTrigger Trigger, JsonElement? When, List<AppTaskRuleTask> Tasks)
+{
+    public const string Once = "once", EveryTime = "everyTime";
+
+    public List<AppTaskRuleTask> Tasks { get; init; } = Tasks ?? [];
+}
+
+/// <summary>Field 是限定欄位名（只用在 onFieldBecomes）；Value 是 opt_&lt;選項代號&gt;（下拉）或 true／false（是非）。</summary>
+public record AppTaskTrigger(string On, string? Field, JsonElement? Value);
+
+/// <summary>Assignee 是人員欄位的限定欄位名；Due 不給代表沒有到期日。</summary>
+public record AppTaskRuleTask(string Code, I18nText Title, I18nText? Description, string Assignee, AppTaskDue? Due, JsonElement? When);
+
+/// <summary>Field 是日期或日期時間欄位的限定欄位名；OffsetDays 正數往後、負數往前。</summary>
+public record AppTaskDue(string Field, int OffsetDays);
