@@ -11,7 +11,7 @@ public static class DemoPeople
 {
     public static readonly (string Id, string Name)[] Users =
     [
-        ("sales01", "業務一"), ("sales02", "業務二"),
+        ("sales01", "業務一"), ("sales02", "業務二"), ("sales03", "業務三"),
         ("manager01", "業務主管"), ("floor01", "現場人員"),
         ("floor02", "現場人員二"), ("maint01", "保養人員"), ("qa01", "品保人員"),
         ("planner01", "生管人員"), ("buyer01", "採購人員"), ("keeper01", "倉管人員"), ("ops01", "進銷存主管")
@@ -20,7 +20,7 @@ public static class DemoPeople
     public static readonly (string Key, string Name, string[] Members)[] Groups =
     [
         ("mis", "MIS", ["admin"]),
-        ("sales", "業務", ["sales01", "sales02"]),
+        ("sales", "業務", ["sales01", "sales02", "sales03"]),
         ("sales-manager", "業務主管", ["manager01"]),
         ("floor", "現場人員", ["floor01", "floor02"]),
         ("maint", "保養", ["maint01"]),

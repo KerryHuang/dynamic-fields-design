@@ -3,6 +3,8 @@ using DynamicModules.Application.Dynamic.ConversionService.Commands.ConvertRecor
 using DynamicModules.Application.Dynamic.ConversionService.Data;
 using DynamicModules.Application.Dynamic.RecordService.Commands.CreateRecord;
 using DynamicModules.Application.Dynamic.RecordService.Commands.UpdateRecord;
+using DynamicModules.Application.Dynamic.TaskService;
+using DynamicModules.Application.Common;
 
 namespace DynamicModules.Application.Dynamic.DemoService.Scenarios;
 
@@ -154,6 +156,20 @@ public sealed class CrmScenario : IDemoScenario
                 ("date", Iso(date)), ("customer", customer.Id), ("owner", Rep(n))));
         }
 
+        // ---- 行銷活動：建立時由規則「行銷活動派工」產生任務（任務管理設計 §10）----
+        var expoStart = today.AddDays(88);
+        var expo = plan.Create("crm-campaign", plan.At(today.AddDays(-3)), "sales01", "行銷活動 春季工具機展 建立", ctx => Create(ctx, "campaign",
+            ("name", "春季工具機展"), ("kind", ctx.Crm!.Opt("campaign", "exhibition")), ("startDate", Iso(expoStart)),
+            ("endDate", Iso(expoStart.AddDays(2))), ("location", "濱港會展中心 B 館"), ("status", ctx.Crm.Opt("campaign", "confirmed")),
+            ("planOwner", "sales01"), ("setupOwner", "sales02"), ("feedbackOwner", "sales03"),
+            ("note", "攤位兩格，展示產線自動化方案")));
+        plan.Create("crm-campaign", plan.At(today.AddDays(-2)), "sales02", "行銷活動 智慧製造研討會 建立", ctx => Create(ctx, "campaign",
+            ("name", "智慧製造研討會"), ("kind", ctx.Crm!.Opt("campaign", "seminar")), ("startDate", Iso(today.AddDays(60))),
+            ("endDate", Iso(today.AddDays(60))), ("location", "線上與北區教育訓練室"), ("status", ctx.Crm.Opt("campaign", "planning")),
+            ("planOwner", "sales02"), ("feedbackOwner", "sales03")));
+        plan.Run(plan.At(today.AddDays(-2)), "sales02", "展場佈置 留言", (ctx, ct) => Comment(ctx, expo, "展場佈置", "@{sales01} 攤位尺寸要再確認", ct));
+        plan.Run(plan.At(today.AddDays(-1)), "sales03", "活動回饋 留言", (ctx, ct) => Comment(ctx, expo, "活動回饋", "@{sales02} 回饋表單我先擬", ct));
+
         // ---- 報價單 ----
         // Status: draft | pending | rejected | approved；Orders：每張報價單轉出的訂單（每張訂單列出各明細列要轉的數量，0 表示不轉）
         var quoteSpecs = new (string Status, int[][] Orders, string? OrderEnd)[]
@@ -265,6 +281,16 @@ public sealed class CrmScenario : IDemoScenario
             [ctx.Crm!.Ids.ModuleKeys["quote-line"]] = picks.Select((p, k) => new DetailRowInput(null, ctx.Crm.Values("quote-line",
                 ("product", products[p].Id), ("qty", (decimal)quantities[k % quantities.Length])), null)).ToList()
         };
+
+    /// <summary>在記錄上標題為 taskTitle 的任務留言（Demo 一律解析成 zh-TW，標題就能認出是規則的哪一筆任務）。</summary>
+    private static async Task<ServiceResult> Comment(DemoContext ctx, DemoRecord record, string taskTitle, string body, CancellationToken ct)
+    {
+        var listed = await ctx.Sender.Send(new GetRecordTasksRequest(record.Id), ct);
+        if (!listed.IsSuccess) return listed;
+        var task = ((RecordTasksResponse)listed.Data!).Items.FirstOrDefault(t => t.Title == taskTitle);
+        if (task is null) return ServiceResult.Invalid(new Dictionary<string, string[]> { ["task"] = [$"記錄上沒有任務「{taskTitle}」"] });
+        return await ctx.Sender.Send(new AddTaskCommentRequest(task.Id, body, []), ct);
+    }
 
     private static CreateRecordRequest Create(DemoContext ctx, string module, params (string Code, object? Value)[] items) =>
         new(ctx.Crm!.Ids.ModuleKeys[module], ctx.Crm.Values(module, items));

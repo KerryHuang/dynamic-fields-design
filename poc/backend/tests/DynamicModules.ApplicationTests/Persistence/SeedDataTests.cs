@@ -91,14 +91,14 @@ public class SeedDataTests
         string[] Of(string key) => members.Where(m => m.GroupId == groups.Single(g => g.Key == key).Id)
             .Select(m => m.UserId).Order().ToArray();
         Of("mis").Should().Equal("admin");
-        Of("sales").Should().Equal("sales01", "sales02");
+        Of("sales").Should().Equal("sales01", "sales02", "sales03");
         Of("floor").Should().Equal("floor01", "floor02");
         Of("planner").Should().Equal("planner01");
         Of("purchasing").Should().Equal("buyer01");
         Of("warehouse").Should().Equal("keeper01");
         Of("inv-viewer").Should().Equal("planner01", "sales01", "sales02");
         Of("ops-manager").Should().Equal("ops01");
-        (await db.Context.Set<AppUser>().CountAsync()).Should().Be(12);
+        (await db.Context.Set<AppUser>().CountAsync()).Should().Be(13);
         (await db.Context.Set<AppUser>().Where(u => u.UserId != "admin").AllAsync(u => u.IsDemoAccount && u.PasswordHash == null))
             .Should().BeTrue();
         (await db.Context.Set<MockCustomer>().Select(c => c.CustomerNo).ToListAsync())

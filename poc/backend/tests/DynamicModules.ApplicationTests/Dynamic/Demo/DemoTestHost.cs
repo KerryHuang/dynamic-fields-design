@@ -3,8 +3,10 @@ using DynamicModules.Application.Common;
 using DynamicModules.Application.Common.Acting;
 using DynamicModules.Application.Common.Security;
 using DynamicModules.Application.Common.Time;
+using DynamicModules.Application.Dynamic.AttachmentService;
 using DynamicModules.ApplicationTests.Persistence;
 using DynamicModules.Persistence;
+using DynamicModules.Persistence.Files;
 using DynamicModules.Persistence.Seed;
 using MediatR;
 using Microsoft.Extensions.DependencyInjection;
@@ -18,6 +20,7 @@ public sealed class DemoTestHost : IAsyncDisposable
 
     private SqliteTestDb _db = null!;
     private ServiceProvider _sp = null!;
+    private readonly string _attachmentRoot = Path.Combine(Path.GetTempPath(), $"dm-demo-att-{Guid.NewGuid():N}");
 
     public FakeUser User { get; } = new();
 
@@ -48,6 +51,10 @@ public sealed class DemoTestHost : IAsyncDisposable
         services.AddSingleton<ICurrentUser>(host.User);
         services.AddSingleton<IBusinessTime>(new FakeTime(today ?? Today));
         services.AddSingleton(new AuthSettings(false));
+        // 情境會在任務上留言（不帶附件），留言的處理器需要附件服務
+        services.AddSingleton(new AttachmentSettings(host._attachmentRoot, AttachmentSettings.DefaultMaxBytes,
+            AttachmentSettings.DefaultExtensions, AttachmentSettings.DefaultMaxFilesPerField, true, null));
+        services.AddSingleton<IAttachmentStore>(new LocalAttachmentStore(host._attachmentRoot));
         services.AddActingOverrides();
         configure?.Invoke(services);
         host._sp = services.BuildServiceProvider();
@@ -60,5 +67,6 @@ public sealed class DemoTestHost : IAsyncDisposable
     {
         await _sp.DisposeAsync();
         await _db.DisposeAsync();
+        if (Directory.Exists(_attachmentRoot)) Directory.Delete(_attachmentRoot, recursive: true);
     }
 }

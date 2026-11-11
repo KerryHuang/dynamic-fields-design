@@ -60,6 +60,10 @@ public sealed class DemoPlan(DateOnly today, Random random, IReadOnlyDictionary<
     public void Refresh(DemoRecord r, DateTime at, string userId, string label) =>
         Add(at, userId, label, async (ctx, ct) => Fill(r, await ctx.Sender.Send(new GetRecordRequest(r.Id), ct)));
 
+    /// <summary>不回填記錄的一般步驟（例如在任務上留言）；run 回傳失敗時整個產生停下。</summary>
+    public void Run(DateTime at, string userId, string label, Func<DemoContext, CancellationToken, Task<ServiceResult>> run) =>
+        Add(at, userId, label, run);
+
     /// <summary>同一天依種子取 08:00–17:59 的時刻（分鐘為單位）。</summary>
     public DateTime At(DateOnly date) => date.ToDateTime(new TimeOnly(8, 0)).AddMinutes(Random.Next(WorkMinutes));
 
