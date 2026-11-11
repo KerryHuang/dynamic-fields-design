@@ -157,6 +157,43 @@ public class ApprovalReadGrantTests : ApprovalTestBase
     }
 
     [Fact]
+    public async Task ReadButOutOfScope_OpenActorGranted_OtherRecord404()
+    {
+        // 有 Read 但資料範圍只限自己的記錄：可動作者對簽核中的這一筆照樣讀得到；別筆維持 404
+        await Rig();
+        var buyers = Db.Context.Set<PermissionGroup>().AsNoTracking().Single(g => g.Key == "buyers").Id;
+        As("admin");
+        (await Send(new SaveModulePermissionsRequest(_r.Module, new ModulePermissionsDto(
+        [
+            new GroupPermissionDto(buyers, new PrivilegesDto(true, true, true, true, true, true, false), DataScope.All),
+            new GroupPermissionDto(FinanceGroup, new PrivilegesDto(true, false, false, false, false, false, false), DataScope.Own)
+        ], [], [], [])))).IsSuccess.Should().BeTrue();
+        var (po, _) = await Pending();
+        As("buyer1");
+        var other = await NewPo(_r, price: 100);
+
+        (await Get("fin1", po)).IsSuccess.Should().BeTrue();
+        (await Get("fin1", other.Id)).IsNotFound.Should().BeTrue();
+    }
+
+    [Fact]
+    public async Task AttachmentFieldHiddenForApprover_Download404()
+    {
+        await Rig();
+        await Permissions(new FieldPermissionDto(_files, FinanceGroup, FieldAccess.Hidden));
+        As("buyer1");
+        var po = await NewPo(_r, price: 30000);
+        var up = await Send(new UploadAttachmentRequest(po.Id, _files, new MemoryStream(Encoding.UTF8.GetBytes("收據")), "receipt.txt"));
+        up.IsCreated.Should().BeTrue(Dump(up));
+        var file = (UploadedAttachment)up.Data!;
+        await MustSubmit(po.Id, _r.Confirmed);
+
+        As("fin1");
+        var res = await Send(new DownloadAttachmentRequest(po.Id, _files, file.Id));
+        res.IsNotFound.Should().BeTrue(Dump(res));
+    }
+
+    [Fact]
     public async Task HiddenFieldException_StillHidden()
     {
         await Rig();

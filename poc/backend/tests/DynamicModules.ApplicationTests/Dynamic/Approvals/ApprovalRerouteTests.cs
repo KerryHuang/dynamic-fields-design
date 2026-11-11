@@ -302,6 +302,59 @@ public class ApprovalRerouteTests : ApprovalTestBase
         Open(id, "buyer2").Status.Should().Be(ApprovalTaskStatus.Open);
     }
 
+    // ── a2c 審查 should-fix 8：測試缺口 ──
+
+    [Fact]
+    public async Task Reroute_NewFlowAllStagesSkipped_CompletesInSameRequest()
+    {
+        // 新流程的關卡全部跳過：同一個請求內以新實例核准並執行轉移；Outcome 照現況是 approved（不是 rerouted）
+        var r = await BuildPurchase();
+        await SeedFlow(r, "po-q", r.Confirmed, 1, Def(Cond(r.Total, "gte", 100000), Stage("board", Group(BoardGroup), when: Cond(r.Total, "lt", 0))));
+        await SeedFlow(r, "po-b", r.Confirmed, 2, Def(Cond(r.Total, "gte", 10000), Stage("lead", Group(PurchaseLeadGroup))));
+        var wf = await SaveWorkflow(r, [Needs(r.Draft, r.Confirmed), Plain(r.Confirmed, r.Partial), Plain(r.Partial, r.Received),
+            Plain(r.Confirmed, r.Cancelled)]);
+        wf.IsSuccess.Should().BeTrue(Dump(wf));
+        await GrantEveryone(r.Module, r.Extra);
+        var (po, id) = await SubmitAs(r, "buyer1", 50000);
+        await AddExtra(r, po, 120000);
+
+        var res = await Approve(id, "buyer2");
+        res.IsSuccess.Should().BeTrue(Dump(res));
+        Body(res).Outcome.Should().Be(ApprovalOutcomes.Approved);
+        Inst(id).Status.Should().Be(ApprovalInstanceStatus.Rerouted);
+        var fresh = Db.Context.Set<ApprovalInstance>().AsNoTracking().Single(i => i.RestartedFromInstanceId == id);
+        fresh.Status.Should().Be(ApprovalInstanceStatus.Approved);
+        fresh.FlowId.Should().Be(Flow("po-q").Id);
+        Body(res).InstanceId.Should().Be(fresh.Id);
+        RunsOf(fresh.Id).Should().ContainSingle().Which.Status.Should().Be(ApprovalStageStatus.Skipped);
+        StateOf(r, po).Should().Be(r.Confirmed);
+    }
+
+    [Fact]
+    public async Task Reroute_ToFallback_EmptyFallback_409_RolledBack()
+    {
+        // 改走備援但備援名單解析為空：409，整筆回滾（舊實例仍 pending、任務仍 open、沒有新實例）
+        var r = await BuildPurchase();
+        await SeedFlow(r, "po-b", r.Confirmed, 1, new ApprovalDefinition(ApprovalShapes.Sequence, Cond(r.Total, "gte", 10000), null, Users("emp1"),
+            [Stage("lead", Group(PurchaseLeadGroup))]));
+        var wf = await SaveWorkflow(r, [Needs(r.Draft, r.Confirmed), Plain(r.Confirmed, r.Partial), Plain(r.Partial, r.Received),
+            Plain(r.Confirmed, r.Cancelled)]);
+        wf.IsSuccess.Should().BeTrue(Dump(wf));
+        await GrantEveryone(r.Module, r.Extra);
+        var (po, id) = await SubmitAs(r, "buyer1", 50000);
+        await AddExtra(r, po, -45000);
+        await Db.Context.Set<AppUser>().Where(u => u.UserId == "emp1").ExecuteUpdateAsync(s => s.SetProperty(u => u.IsActive, false));
+        var actions = ActionsOf(id).Count;
+
+        var res = await Approve(id, "buyer2");
+        res.IsConflict.Should().BeTrue(Dump(res));
+        Inst(id).Status.Should().Be(ApprovalInstanceStatus.Pending);
+        Open(id, "buyer2").Status.Should().Be(ApprovalTaskStatus.Open);
+        Db.Context.Set<ApprovalInstance>().AsNoTracking().Count(i => i.RecordId == po).Should().Be(1);
+        ActionsOf(id).Should().HaveCount(actions);
+        StateOf(r, po).Should().Be(r.Draft);
+    }
+
     // ── 第三輪 7：用狀態欄位區分入口（送出部分） ──
 
     private async Task<PurchaseRig> EntryRig()
