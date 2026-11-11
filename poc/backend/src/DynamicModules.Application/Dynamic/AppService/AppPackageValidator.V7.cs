@@ -128,11 +128,16 @@ public static partial class AppPackageValidator
             {
                 var type = Field(triggerField).Type;
                 var value = trigger.Value;
+                var isBool = value is { ValueKind: JsonValueKind.True or JsonValueKind.False };
+                var optionCode = value is { ValueKind: JsonValueKind.String } v ? OptionCodeOf(v.GetString()) : null;
+                // 本套件的欄位用該欄位自己的選項檢查；主檔欄位的定義未知，只檢查選項在同一模組
                 var ok = type switch
                 {
-                    FieldType.Boolean => value is { ValueKind: JsonValueKind.True or JsonValueKind.False },
-                    _ => value is { ValueKind: JsonValueKind.String } v && OptionCodeOf(v.GetString()) is { } option
-                        && (type is null || lookups.OptionId($"{module}.{option}") is not null)
+                    FieldType.Boolean => isBool,
+                    null when MasterScope.Parse(triggerField) is not null => isBool || optionCode is not null,
+                    _ => optionCode is not null && (MasterScope.Parse(triggerField) is not null
+                        ? lookups.OptionId($"{module}.{optionCode}") is not null
+                        : fields[triggerField].Options.Any(o => o.Code == optionCode))
                 };
                 if (!ok) errors.Add($"{at}.trigger.value: {TaskRuleMessages.TriggerValueInvalid}（{value?.GetRawText() ?? "null"}）");
             }

@@ -33,7 +33,9 @@ public class AppTaskRulePackageTests
                 { "code": "owner", "type": "user", "label": { "zh-TW": "負責業務" }, "config": {} },
                 { "code": "due", "type": "date", "label": { "zh-TW": "預計成交" }, "config": {} },
                 { "code": "stage", "type": "enum", "label": { "zh-TW": "階段" }, "config": {},
-                  "options": [ { "code": "hot", "label": { "zh-TW": "熱" } }, { "code": "cold", "label": { "zh-TW": "冷" } } ] }
+                  "options": [ { "code": "hot", "label": { "zh-TW": "熱" } }, { "code": "cold", "label": { "zh-TW": "冷" } } ] },
+                { "code": "priority", "type": "enum", "label": { "zh-TW": "優先" }, "config": {},
+                  "options": [ { "code": "urgent", "label": { "zh-TW": "急" } } ] }
               ] } ],
               "permissions": [] }
           ],
@@ -135,6 +137,32 @@ public class AppTaskRulePackageTests
     {
         Errors(Package(With(Rule, "\"value\": \"opt_hot\"", "\"value\": \"opt_warm\"")))
             .Should().Contain(e => e.StartsWith("taskRules[t7-lead-follow]") && e.Contains("warm"));
+    }
+
+    [Fact]
+    public void TriggerOption_FromOtherField_Rejected()
+    {
+        // lead.urgent 是 lead.priority 的選項，不屬於 lead.stage
+        Errors(Package(With(Rule, "\"value\": \"opt_hot\"", "\"value\": \"opt_urgent\"")))
+            .Should().Contain(e => e.StartsWith("taskRules[t7-lead-follow].trigger.value:"));
+        Errors(Package(With(Rule, "\"lead.stage\", \"value\": \"opt_hot\"", "\"lead.priority\", \"value\": \"opt_urgent\"")))
+            .Should().BeEmpty();
+    }
+
+    [Fact]
+    public void MasterBaseBooleanTrigger_Accepted()
+    {
+        // 主檔基本欄位的型別在套件驗證時查不到，true／false／opt_ 都放行，開啟時由 CreateTaskRuleRequest 用真實欄位判斷
+        foreach (var value in new[] { "true", "false", "\"opt_vip\"" })
+            Errors(Package(With(MasterRule, "{ \"on\": \"manual\" }", $$"""{ "on": "onFieldBecomes", "field": "bp/partner.vip", "value": {{value}} }""")))
+                .Should().BeEmpty(value);
+    }
+
+    [Fact]
+    public void TooManyTaskRules_Rejected()
+    {
+        var rules = string.Join(", ", Enumerable.Range(0, 51).Select(i => With(Rule, "t7-lead-follow", $"t7-rule-{i:00}")));
+        Errors(Package(rules)).Should().Contain("taskRules: 最多 50 個");
     }
 
     [Fact]
