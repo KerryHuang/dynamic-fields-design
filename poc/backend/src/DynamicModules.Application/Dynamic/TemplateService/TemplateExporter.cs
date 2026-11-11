@@ -58,7 +58,8 @@ public sealed partial class TemplateExporter(IModuleRepository modules, IPermiss
             var titleTemplate = m.TitleTemplate is null ? null : Domain.Modules.TitleTemplate.Map(m.TitleTemplate,
                 id => long.TryParse(id, System.Globalization.NumberStyles.None, System.Globalization.CultureInfo.InvariantCulture, out var fid) && ctx.Exported.Contains(fid) ? ctx.FieldCode(ctx.Fields[fid]) : null);
             result.Add(new TemplateModule(codeOf(m), m.Key, m.NameI18n, m.Icon, m.SectionText(), m.Kind, m.HostEntityKey, title,
-                blocks, rules, shared, IsDetail(m) ? [] : await PermissionsAsync(m, groups, ct), TitleTemplate: titleTemplate));
+                blocks, rules, shared, IsDetail(m) ? [] : await PermissionsAsync(m, groups, ct), TitleTemplate: titleTemplate,
+                TasksEnabled: m.TasksEnabled ? null : false));
         }
         return new ExportedModules(result, ctx.Warnings, ctx.Names());
     }

@@ -43,8 +43,22 @@ public class ModuleTaskToggleTests : DesignerTestBase
         r.IsSuccess.Should().BeTrue(r.Message);
         ((ModuleResponse)r.Data!).TasksEnabled.Should().BeFalse();
         var stored = await Fresh("tg");
-        stored.TasksEnabled.Should().BeFalse("HasSentinel(true) 才不會被資料庫預設值翻回 true");
+        stored.TasksEnabled.Should().BeFalse("UPDATE 時有變更的屬性一律寫入");
         stored.Version.Should().Be(before.Version + 1);
+    }
+
+    [Fact]
+    public async Task Insert_TasksEnabledFalse_PersistsAcrossContexts()
+    {
+        // 直接以 false 新增模組（INSERT）：EF 只在 INSERT 看 sentinel，sentinel 是 false 時會把 false 當「沒設」改用資料庫預設的 true。
+        // 守的是模型的 sentinel 必須是 true（ModuleConfiguration 明寫 HasSentinel(true)；改成 HasSentinel(false) 這個測試就紅）
+        var m = new Module { Key = "tg-off", ProgramCode = "DYN99999", NameI18n = new([KeyValuePair.Create("zh-TW", "關閉")]), TasksEnabled = false };
+        m.StampCreated("admin", DateTime.UtcNow);
+        Db.Context.Add(m);
+        await Db.Context.SaveChangesAsync();
+        Db.Context.ChangeTracker.Clear();
+
+        (await Fresh("tg-off")).TasksEnabled.Should().BeFalse("sentinel 是 true，false 才會寫進 INSERT，不被資料庫預設值翻回 true");
     }
 
     [Fact]

@@ -67,6 +67,19 @@ public class BuiltInMasterPackagesTests
     }
 
     [Fact]
+    public void Masters_AreFormat7_WithTasksOff()
+    {
+        // 純主檔預設不用任務（任務設計 §4.4）；明細模組 employment 沒有開關，不寫
+        Package("partner").FormatVersion.Should().Be(7);
+        Package("partner").Modules.Single().TasksEnabled.Should().BeFalse();
+        var contact = Package("contact");
+        contact.FormatVersion.Should().Be(7);
+        contact.Modules.Single(m => m.Code == "contact").TasksEnabled.Should().BeFalse();
+        contact.Modules.Single(m => m.Code == "employment").TasksEnabled.Should().BeNull();
+        Package("partner").Manifest.Version.Should().Be("1.0.0", "只改格式，不改套件版本");
+    }
+
+    [Fact]
     public void TheCatalog_HasExactlyTheTwoMasters() =>
         BuiltIns.Where(p => p.Manifest.IsMaster).Select(p => p.Manifest.Id).Should().BeEquivalentTo(["partner", "contact"]);
 

@@ -1,4 +1,6 @@
 using DynamicModules.Application.Common;
+using DynamicModules.Application.Common.Security;
+using DynamicModules.Application.Common.Time;
 using DynamicModules.Application.Dynamic.AppService.Data;
 using DynamicModules.Application.Dynamic.CheckService;
 using DynamicModules.Application.Dynamic.EventService;
@@ -14,6 +16,7 @@ using DynamicModules.Application.Dynamic.TemplateService.Data;
 using DynamicModules.Application.Dynamic.WorkflowService.Commands.SaveWorkflow;
 using DynamicModules.Application.Dynamic.WorkflowService.Data;
 using DynamicModules.Domain.Entities.Dynamic;
+using DynamicModules.Domain.Repositories.Dynamic;
 using DynamicModules.Domain.ValueObjects;
 using MediatR;
 using static DynamicModules.Application.Dynamic.TemplateService.TemplateGraph;
@@ -25,7 +28,7 @@ namespace DynamicModules.Application.Dynamic.AppService;
 /// 代號用實例化回傳的 id 對照換成 id。呼叫端在交易內，任一步失敗回傳失敗，由外層回滾。
 /// 欄位被使用者取消勾選（沒有 id）的項目整個略過並警告，不是失敗。
 /// </summary>
-public sealed class AppFlowInstaller(ISender sender)
+public sealed class AppFlowInstaller(ISender sender, IModuleRepository modules, ICurrentUser user, IBusinessTime time)
 {
     public sealed record Result(ServiceResult? Failure, List<AppReport> Reports, List<string> Warnings);
 
@@ -182,6 +185,7 @@ public sealed class AppFlowInstaller(ISender sender)
     /// <summary>
     /// 任務規則（格式 7）：要在應用程式列寫入、有了 Id 之後才裝，規則記它屬於哪個應用程式（關閉時停止觸發、刪除時移除）。
     /// 規則可以掛在主檔模組上（模組與欄位用主檔符號）。引用被排除欄位的規則整條略過並警告；其餘驗證交給 CreateTaskRuleRequest，失敗整批回滾。
+    /// 規則所在的模組關閉任務時自動打開並警告（任務設計 §4.4、§5.8；預覽由 <see cref="AppOpenPlanner"/> 先列出）。
     /// </summary>
     public async Task<ServiceResult?> InstallTaskRulesAsync(AppPackageData p, TemplateIdMap ids, long appId, List<string> warnings, CancellationToken ct)
     {
@@ -198,11 +202,21 @@ public sealed class AppFlowInstaller(ISender sender)
                 warnings.Add($"任務規則「{r.Code}」引用了被排除的欄位，已略過");
                 continue;
             }
+            if (await modules.GetByKeyAsync(moduleKey, includeChildren: false, ct) is { TasksEnabled: false } off)
+            {
+                off.TasksEnabled = true;
+                off.TouchVersion(user.UserId, time.Now);
+                warnings.Add(TaskRuleAutoEnabled(r.Code, off.NameI18n.Resolve(I18nText.FallbackLocale)));
+            }
             var created = await sender.Send(new CreateTaskRuleRequest(moduleKey, input, AppId: appId), ct);
             if (!created.IsSuccess) return Prefixed(created, $"taskRules.{r.Code}");
         }
         return null;
     }
+
+    internal static string TaskRuleAutoEnabled(string code, string module) => $"任務規則「{code}」所在的模組「{module}」原本未啟用任務，已自動啟用";
+
+    internal static string TaskRuleWillAutoEnable(string code, string module) => $"任務規則「{code}」所在的模組「{module}」未啟用任務，開啟時會自動啟用";
 
     /// <summary>
     /// 沖銷別的事件的事件排在被沖銷的事件之後。匯出按名稱排序，沖銷者的代號可能排在前面；

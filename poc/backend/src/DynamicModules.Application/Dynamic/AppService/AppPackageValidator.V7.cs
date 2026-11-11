@@ -23,6 +23,9 @@ public static partial class AppPackageValidator
 
     private static void Format7Structure(AppPackageData p, List<string> errors)
     {
+        // 模組的 tasksEnabled 要在「沒有 taskRules 就 return」之前檢查，否則沒有規則的舊格式檔案會漏掉
+        foreach (var mod in p.Modules)
+            if (p.FormatVersion < 7 && mod?.TasksEnabled is not null) errors.Add($"{mod.Code}.tasksEnabled: formatVersion 7 才支援 tasksEnabled");
         if (p.TaskRules.Count == 0) return;
         // 舊讀取器靜默略過會讓客戶以為有自動派工卻沒有，一律整份拒絕
         if (p.FormatVersion < 7) { errors.Add("taskRules: formatVersion 7 才支援 taskRules"); return; }

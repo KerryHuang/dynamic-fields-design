@@ -1,6 +1,6 @@
 {
   "format": "formwright-app",
-  "formatVersion": 6,
+  "formatVersion": 7,
   "manifest": {
     "id": "contact",
     "kind": "master",
@@ -55,6 +55,7 @@
       "section": { "zh-TW": "主檔", "en-US": "Master data", "th": "ข้อมูลหลัก", "vi": "Dữ liệu chủ" },
       "icon": "contacts",
       "extensible": true,
+      "tasksEnabled": false,
       "blocks": [
         {
           "code": "main",

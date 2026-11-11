@@ -23,7 +23,7 @@ public record AppPackageData(
     /// 5：integrations 與 config.refGuard 可用（4 以下的檔案這些必須是空的／不存在）。
     /// 6：共用主檔（manifest.kind、requires.masters、contributions、模組的 extensible、欄位的 active、轉換的 header.set）
     ///    與模組的標題樣板 titleTemplate 可用（5 以下的檔案這些必須是空的／不存在）。
-    /// 7：taskRules 可用（6 以下的檔案這些必須是空的）。
+    /// 7：taskRules 與模組的 tasksEnabled 可用（6 以下的檔案這些必須是空的／不存在）。
     /// </summary>
     public const int CurrentFormatVersion = 7;
     public const int MinFormatVersion = 2;
