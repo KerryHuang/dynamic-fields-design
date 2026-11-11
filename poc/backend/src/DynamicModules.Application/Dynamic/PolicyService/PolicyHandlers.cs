@@ -29,7 +29,7 @@ public class UpdateSystemPolicyHandler(ISystemSettingRepository settings, IPolic
     public async Task<ServiceResult> Handle(UpdateSystemPolicyRequest request, CancellationToken ct)
     {
         if (PolicyCatalog.Find(request.Code) is not { } def) return ServiceResult.NotFound(PolicyMessages.NotFound);
-        if (request.Value is { } value)
+        if (request.Value is { ValueKind: not (JsonValueKind.Null or JsonValueKind.Undefined) } value)
         {
             if (PolicyJson.FromJson(def, value) is not { } canonical) return PolicyValueInvalid(def);
             await settings.SetAsync(def.SettingKey, canonical, ct);
@@ -74,7 +74,7 @@ public class UpdateModulePolicyHandler(
             return ServiceResult.Invalid(new Dictionary<string, string[]> { ["code"] = [PolicyMessages.SystemOnly] });
 
         var existing = await overrides.GetTrackedAsync(module.Id, def.Code, ct);
-        if (request.Value is { } value)
+        if (request.Value is { ValueKind: not (JsonValueKind.Null or JsonValueKind.Undefined) } value)
         {
             if (PolicyJson.FromJson(def, value) is not { } canonical) return UpdateSystemPolicyHandler.PolicyValueInvalid(def);
             if (existing is null)

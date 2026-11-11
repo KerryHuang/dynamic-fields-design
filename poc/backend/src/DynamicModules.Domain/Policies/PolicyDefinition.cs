@@ -51,7 +51,7 @@ public sealed partial record PolicyDefinition(
             case PolicyKind.CodeList:
             {
                 var items = Split(raw).Select(CodeItem).ToList();
-                if (items.Any(i => !CodePattern().IsMatch(i))) return null;
+                if (items.Any(i => !ValidCode(i))) return null;
                 var distinct = items.Distinct(StringComparer.Ordinal).ToList();
                 return distinct.Count >= Min && distinct.Count <= Max ? string.Join(",", distinct) : null;
             }
@@ -74,7 +74,7 @@ public sealed partial record PolicyDefinition(
                     : null;
             case PolicyKind.CodeList:
             {
-                var items = Split(raw).Select(CodeItem).Where(i => CodePattern().IsMatch(i))
+                var items = Split(raw).Select(CodeItem).Where(i => ValidCode(i))
                     .Distinct(StringComparer.Ordinal).Take(Max).ToList();
                 return items.Count >= Min ? string.Join(",", items) : null;
             }
@@ -88,6 +88,11 @@ public sealed partial record PolicyDefinition(
 
     private static string CodeItem(string item) => item.TrimStart('.').ToLowerInvariant();
 
-    [GeneratedRegex("^[a-z0-9]{1,10}$")]
+    /// <summary>CodeList 單一項目的長度上限（技術限制）；訊息與檢查共用。</summary>
+    public const int CodeItemMaxLength = 10;
+
+    [GeneratedRegex("^[a-z0-9]+$")]
     private static partial Regex CodePattern();
+
+    private static bool ValidCode(string item) => item.Length <= CodeItemMaxLength && CodePattern().IsMatch(item);
 }

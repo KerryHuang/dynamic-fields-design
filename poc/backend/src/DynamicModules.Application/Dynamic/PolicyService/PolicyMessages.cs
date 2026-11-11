@@ -15,7 +15,7 @@ public static class PolicyMessages
         PolicyKind.Boolean => "必須是 true 或 false",
         PolicyKind.Choice => $"必須是以下其中一個：{string.Join("、", d.Options ?? [])}",
         PolicyKind.RoleSet => $"只能從以下角色挑選：{string.Join("、", d.Options ?? [])}",
-        PolicyKind.CodeList => $"要有 {d.Min} 到 {d.Max} 個，每個只能是 1 到 10 個小寫英文或數字",
+        PolicyKind.CodeList => $"要有 {d.Min} 到 {d.Max} 個，每個只能是 1 到 {PolicyDefinition.CodeItemMaxLength} 個小寫英文或數字",
         _ => "值不正確",
     };
 }

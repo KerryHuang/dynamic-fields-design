@@ -163,6 +163,20 @@ public class PolicyApiTests : IDisposable
     }
 
     [Fact]
+    public async Task Module_Put_EmptyBody_SameAsNull()
+    {
+        var admin = _app.AsUser();
+        var key = await CreateModule(admin);
+        (await PutModule(admin, key, Rules, new { value = 3 })).StatusCode.Should().Be(HttpStatusCode.OK);
+        var res = await PutModule(admin, key, Rules, new { });
+        res.StatusCode.Should().Be(HttpStatusCode.OK, await res.Content.ReadAsStringAsync());
+        var body = await JsonOf(res);
+        body.TryGetProperty("override", out _).Should().BeFalse();
+        body.GetProperty("effective").GetInt32().Should().Be(20);
+        Db(db => db.Set<ModulePolicy>().Count()).Should().Be(0);
+    }
+
+    [Fact]
     public async Task Module_Put_OutOfRange_400()
     {
         var admin = _app.AsUser();
