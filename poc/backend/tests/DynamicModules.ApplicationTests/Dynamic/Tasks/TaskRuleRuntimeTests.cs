@@ -579,6 +579,28 @@ public class TaskRuleRuntimeTests : TaskTestBase
     }
 
     [Fact]
+    public async Task EveryTime_OldBatchReopened_SkipEntryOnOldBatchTask()
+    {
+        var r = await BuildRig();
+        await CreateRule(r, DesignLoop(r, Def("draft", "繪製設計稿", r.PlanOwner, null, 0)));
+        var rec = await NewRecord(r, Vals((r.Title, S("案")), (r.Stage, Opt(r.Designing)), (r.PlanOwner, S("sales01"))));
+        await Patch(Code(await Tasks(rec), "draft").Id, """{"status":"done"}""");
+        await Change(rec, Vals((r.Stage, Opt(r.Confirming))));
+        await Change(rec, Vals((r.Stage, Opt(r.Designing))));
+        var batch2 = Code(await Tasks(rec), "draft", 2);
+        await Patch(batch2.Id, """{"status":"done"}""");
+        var batch1 = Code(await Tasks(rec), "draft", 1);
+        await Patch(batch1.Id, """{"status":"todo"}""");
+
+        await Change(rec, Vals((r.Stage, Opt(r.Confirming))));
+        await Change(rec, Vals((r.Stage, Opt(r.Designing))));
+
+        (await Tasks(rec)).Should().HaveCount(2, "舊批次還有未完成，不產生第 3 批");
+        (await Events(batch1.Id)).Should().Contain(TaskSystemEvents.RetriggerSkipped);
+        (await Events(batch2.Id)).Should().NotContain(TaskSystemEvents.RetriggerSkipped);
+    }
+
+    [Fact]
     public async Task EveryTime_ConditionsAndSync_OnlyLatestBatch()
     {
         var r = await BuildRig();

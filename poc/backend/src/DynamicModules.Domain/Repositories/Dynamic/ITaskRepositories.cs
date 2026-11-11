@@ -43,6 +43,8 @@ public interface ITaskRepository
     Task<List<TaskItem>> ListByRuleOccurrenceAsync(long ruleId, long recordId, int occurrence, CancellationToken ct);
     /// <summary>這條規則在這筆記錄上是否還有未完成（待辦、進行中）的任務，不分第幾次觸發。</summary>
     Task<bool> AnyOpenByRuleAndRecordAsync(long ruleId, long recordId, CancellationToken ct);
+    /// <summary>同上，回傳這些未完成的任務（追蹤）。</summary>
+    Task<List<TaskItem>> ListOpenByRuleAndRecordAsync(long ruleId, long recordId, CancellationToken ct);
     void Add(TaskItem task);
     void Remove(TaskItem task);
 }

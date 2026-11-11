@@ -120,6 +120,10 @@ public class TaskRepository(DynamicDbContext db) : ITaskRepository
         db.Set<TaskItem>().AnyAsync(t => t.RuleId == ruleId && t.RecordId == recordId
             && (t.Status == TaskItemStatus.Todo || t.Status == TaskItemStatus.InProgress), ct);
 
+    public Task<List<TaskItem>> ListOpenByRuleAndRecordAsync(long ruleId, long recordId, CancellationToken ct) =>
+        db.Set<TaskItem>().Include(t => t.Participants).Where(t => t.RuleId == ruleId && t.RecordId == recordId
+            && (t.Status == TaskItemStatus.Todo || t.Status == TaskItemStatus.InProgress)).OrderBy(t => t.Id).ToListAsync(ct);
+
     public Task<List<TaskItem>> ListReminderDueAsync(string userId, DateOnly today, CancellationToken ct) =>
         ReminderDue(userId, today).OrderBy(t => t.Id).ToListAsync(ct);
 

@@ -74,13 +74,13 @@ public class TaskRuleStage(
                 }
                 if (rule.Repeat == TaskRuleRepeat.EveryTime && edge)
                 {
-                    if (!await tasks.AnyOpenByRuleAndRecordAsync(rule.Id, entry.RecordId, ct))
+                    var open = await tasks.ListOpenByRuleAndRecordAsync(rule.Id, entry.RecordId, ct);
+                    if (open.Count == 0)
                     {
                         await applier.GenerateAsync(rule, module, entry.RecordId, occurrence + 1, title, after, activeUsers, userIds, ct);
                         continue;
                     }
-                    foreach (var open in (await tasks.ListByRuleOccurrenceAsync(rule.Id, entry.RecordId, occurrence, ct)).Where(t => t.IsOpen))
-                        writer.AddSystemEntry(open, TaskSystemEvents.RetriggerSkipped);
+                    foreach (var t in open) writer.AddSystemEntry(t, TaskSystemEvents.RetriggerSkipped);
                 }
                 await applier.ReconcileAsync(rule, module, entry.RecordId, occurrence, title, before, after, activeUsers, userIds, ct);
             }
