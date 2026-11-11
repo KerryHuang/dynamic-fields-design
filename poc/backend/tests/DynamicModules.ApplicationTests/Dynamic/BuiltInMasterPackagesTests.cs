@@ -76,7 +76,7 @@ public class BuiltInMasterPackagesTests
         contact.FormatVersion.Should().Be(7);
         contact.Modules.Single(m => m.Code == "contact").TasksEnabled.Should().BeFalse();
         contact.Modules.Single(m => m.Code == "employment").TasksEnabled.Should().BeNull();
-        Package("partner").Manifest.Version.Should().Be("1.0.0", "只改格式，不改套件版本");
+        Package("partner").Manifest.Version.Should().Be("1.0.1", "格式 7 只改格式不升版；區塊預設 4 欄時升 1.0.1");
     }
 
     [Fact]
