@@ -18,6 +18,7 @@ import ChecksTab from 'src/presentation/dynamic/checks/ChecksTab.vue';
 import EventsTab from 'src/presentation/dynamic/events/EventsTab.vue';
 import LedgerTab from 'src/presentation/dynamic/ledger/LedgerTab.vue';
 import RulesTab from 'src/presentation/dynamic/rules/RulesTab.vue';
+import TaskRulesTab from 'src/presentation/dynamic/tasks/TaskRulesTab.vue';
 import PreviewTab from 'src/presentation/dynamic/designer/PreviewTab.vue';
 import PermissionsTab from 'src/presentation/dynamic/permissions/PermissionsTab.vue';
 import PrintTab from 'src/presentation/dynamic/print/PrintTab.vue';
@@ -35,7 +36,7 @@ const router = useRouter();
 const qc = useQueryClient();
 const { data: useMeData } = useMe();
 const moduleKey = computed(() => String(route.params.moduleKey));
-const tab = ref<'fields' | 'rules' | 'workflow' | 'events' | 'checks' | 'ledger' | 'print' | 'permissions' | 'preview'>('fields');
+const tab = ref<'fields' | 'rules' | 'taskRules' | 'workflow' | 'events' | 'checks' | 'ledger' | 'print' | 'permissions' | 'preview'>('fields');
 // 連動事件、跨記錄驗證、分錄都是設計器端點（DYN00000）：沒有設計器讀取權限就不放入口
 const showEventsLedger = computed(() => !!useMeData.value?.designer.read);
 const query = useModuleDetail(moduleKey);
@@ -275,6 +276,7 @@ function saveSection() {
       <q-tabs v-model="tab" dense align="left" class="q-mb-md" data-testid="designer-tabs">
         <q-tab name="fields" :label="t('designer.fieldsTab')" />
         <q-tab name="rules" :label="t('designer.rules.tab')" data-testid="tab-rules" />
+        <q-tab v-if="!mod?.detailOf" name="taskRules" :label="t('taskRules.tab')" data-testid="tab-task-rules" />
         <q-tab name="workflow" :label="t('docflow.workflow.tab')" data-testid="tab-workflow" />
         <q-tab v-if="showEventsLedger" name="events" :label="t('events.tab')" data-testid="tab-events" />
         <q-tab v-if="showEventsLedger" name="checks" :label="t('checks.tab')" data-testid="tab-checks" />
@@ -352,6 +354,9 @@ function saveSection() {
         </q-tab-panel>
         <q-tab-panel name="rules" class="q-pa-none">
           <RulesTab :module="mod" />
+        </q-tab-panel>
+        <q-tab-panel v-if="!mod?.detailOf" name="taskRules" class="q-pa-none">
+          <TaskRulesTab v-if="mod" :module="mod" />
         </q-tab-panel>
         <q-tab-panel name="workflow" class="q-pa-none">
           <WorkflowTab :module="mod" />

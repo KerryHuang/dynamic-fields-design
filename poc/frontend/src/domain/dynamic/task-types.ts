@@ -42,8 +42,12 @@ export interface TaskDetail extends TaskSummary {
 export interface ManualRule {
   key: string;
   name: I18nText;
+  repeat: 'once' | 'everyTime';
+  /** once: already applied. everyTime never sets this. */
   applied: boolean;
   applicable: boolean;
+  /** everyTime: the previous round still has open tasks. */
+  previousOpen: boolean;
 }
 
 export interface RecordTasks {

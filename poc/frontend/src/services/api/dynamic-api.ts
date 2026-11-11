@@ -12,9 +12,10 @@ import type { CheckDefinition, LedgerBody, LedgerConfig, ModuleCheck, ModuleEven
 import type {
   NotificationList, RecordTasks, TaskComment, TaskCounts, TaskDetail, TaskInput, TaskListFilter, TaskListTab, TaskPage, TaskPatch,
 } from 'src/domain/dynamic/task-types';
+import type { TaskRule, TaskRuleInput } from 'src/domain/dynamic/task-rule-draft';
 import { handleAuthFailure, http, toApiError } from './http';
 import {
-  normalizeNotificationList, normalizeRecordTasks, normalizeTaskComment, normalizeTaskDetail, normalizeTaskPage,
+  normalizeNotificationList, normalizeRecordTasks, normalizeTaskComment, normalizeTaskDetail, normalizeTaskPage, normalizeTaskRule,
 } from './task-normalize';
 
 /** Request config for write calls: the key makes a retried request take effect once (server: Dynamic_Operation). */
@@ -437,6 +438,16 @@ export const dynamicApi = {
   /** Task endpoints: the server omits null properties, so every response goes through task-normalize. */
   getMyTasks: (tab: TaskListTab, filter: TaskListFilter, page: number, size = 20) =>
     http.get<TaskPage>('/tasks', { params: { tab, filter, currentPage: page, pagesSize: size } }).then(data).then(normalizeTaskPage),
+  /** Designer endpoints for task rules; the server omits null properties, so lists default to empty. */
+  getTaskRules: (moduleKey: string) => http.get<TaskRule[]>(`/modules/${moduleKey}/task-rules`).then(data)
+    .then((list) => list.map(normalizeTaskRule)),
+  createTaskRule: (moduleKey: string, body: TaskRuleInput) =>
+    http.post<TaskRule>(`/modules/${moduleKey}/task-rules`, body).then(data).then(normalizeTaskRule),
+  updateTaskRule: (moduleKey: string, ruleKey: string, body: TaskRuleInput) =>
+    http.put<TaskRule>(`/modules/${moduleKey}/task-rules/${ruleKey}`, body).then(data).then(normalizeTaskRule),
+  deleteTaskRule: (moduleKey: string, ruleKey: string) => http.delete(`/modules/${moduleKey}/task-rules/${ruleKey}`).then(data),
+  applyTaskRule: (recordId: number, ruleKey: string) =>
+    http.post<RecordTasks>(`/records/${recordId}/task-rules/${ruleKey}/apply`).then(data).then(normalizeRecordTasks),
   getTaskSummary: () => http.get<TaskCounts>('/tasks/summary').then(data)
     .then((c) => ({ dueToday: c.dueToday ?? 0, overdue: c.overdue ?? 0 })),
   getNotifications: (take = 20) =>

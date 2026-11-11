@@ -147,6 +147,13 @@ describe('ModuleEditorPage', () => {
       const w = await mountPage({ ...detail, detailOf: 'h' });
       expect(w.find('[data-testid="tasks-enabled"]').exists()).toBe(false);
     });
+
+    it('has a task rules tab, except on detail modules', async () => {
+      const w = await mountPage();
+      expect(w.find('[data-testid="tab-task-rules"]').text()).toContain(zhTW.taskRules.tab);
+      const d = await mountPage({ ...detail, detailOf: 'h' });
+      expect(d.find('[data-testid="tab-task-rules"]').exists()).toBe(false);
+    });
   });
 
   it('extension module hides the title field and shows the host entity read-only', async () => {

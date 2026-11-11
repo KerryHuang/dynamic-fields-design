@@ -1,6 +1,7 @@
 import type {
   ManualRule, NotificationItem, NotificationList, RecordTasks, TaskComment, TaskDetail, TaskPage, TaskRecordRef, TaskSummary,
 } from 'src/domain/dynamic/task-types';
+import type { TaskRule } from 'src/domain/dynamic/task-rule-draft';
 
 /** The server leaves out every property whose value is null; the types promise `null`, so put it back. */
 type Wire<T> = { [K in keyof T]?: T[K] | null };
@@ -59,7 +60,8 @@ export function normalizeRecordTasks(r: { items?: Wire<TaskSummary>[]; canAdd?: 
     items: (r.items ?? []).map(normalizeTaskSummary),
     canAdd: !!r.canAdd,
     manualRules: (r.manualRules ?? []).map((m) => ({
-      key: m.key ?? '', name: m.name ?? {}, applied: !!m.applied, applicable: !!m.applicable,
+      key: m.key ?? '', name: m.name ?? {}, repeat: m.repeat ?? 'once', applied: !!m.applied, applicable: !!m.applicable,
+      previousOpen: !!m.previousOpen,
     })),
   };
 }
@@ -91,5 +93,14 @@ export function normalizeNotificationList(l: unknown): NotificationList {
       id: n.id as number, kind: n.kind ?? '', title: n.title ?? '', link: n.link ?? '', read: !!n.read, createdTime: n.createdTime ?? '',
     })),
     unreadCount: typeof raw.unreadCount === 'number' ? raw.unreadCount : 0,
+  };
+}
+
+export function normalizeTaskRule(r: Wire<TaskRule>): TaskRule {
+  return {
+    key: r.key ?? '', name: r.name ?? {}, moduleKey: r.moduleKey ?? '', active: !!r.active, appKey: r.appKey ?? null,
+    repeat: r.repeat ?? 'once', trigger: r.trigger ?? { on: 'manual' }, when: r.when ?? null,
+    tasks: (r.tasks ?? []).map((t) => ({ ...t, description: t.description ?? null, dueFieldId: t.dueFieldId ?? null, when: t.when ?? null })),
+    warnings: r.warnings ?? [],
   };
 }
