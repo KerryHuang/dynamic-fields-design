@@ -7,9 +7,9 @@ public static class ReportCardMath
     /// 往前推的 count 個同長度期間，由近到遠。一期的長度跟著區間走：本月比前 N 個月，近 30 天比前 N 個 30 天，
     /// 近 3 月比前 N 個 3 個月；週、日、年同理。
     /// </summary>
-    public static IReadOnlyList<(DateOnly From, DateOnly ToInclusive)> PreviousWindows(ReportDateRange range, DateOnly basis, int count)
+    public static IReadOnlyList<(DateOnly From, DateOnly ToInclusive)> PreviousWindows(ReportDateRange range, DateOnly basis, int count, DayOfWeek weekStart)
     {
-        var (from, to) = ReportDates.Resolve(range, basis);
+        var (from, to) = ReportDates.Resolve(range, basis, weekStart);
         var months = range.Kind switch { "thisMonth" or "lastMonth" => 1, "lastMonths" => range.N ?? 1, _ => 0 };
         var years = range.Kind is "thisYear" or "lastYear" ? 1 : 0;
         var days = to.DayNumber - from.DayNumber + 1;

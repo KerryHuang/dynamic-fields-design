@@ -7,11 +7,22 @@ public class ReportDatesTests
 {
     private static readonly DateOnly Basis = new(2026, 11, 5); // 週四
 
-    private static (DateOnly, DateOnly) R(string kind, int? n = null, DateOnly? basis = null) =>
-        ReportDates.Resolve(new ReportDateRange(kind, n), basis ?? Basis);
+    private static (DateOnly, DateOnly) R(string kind, int? n = null, DateOnly? basis = null, DayOfWeek weekStart = DayOfWeek.Monday) =>
+        ReportDates.Resolve(new ReportDateRange(kind, n), basis ?? Basis, weekStart);
 
     private static (DateOnly, DateOnly) Range(int y1, int m1, int d1, int y2, int m2, int d2) =>
         (new DateOnly(y1, m1, d1), new DateOnly(y2, m2, d2));
+
+    [Fact]
+    public void WeekStartsOnSunday()
+    {
+        R("thisWeek", weekStart: DayOfWeek.Sunday).Should().Be(Range(2026, 11, 1, 2026, 11, 7));
+        R("lastWeek", weekStart: DayOfWeek.Sunday).Should().Be(Range(2026, 10, 25, 2026, 10, 31));
+        R("lastWeeks", 2, weekStart: DayOfWeek.Sunday).Should().Be(Range(2026, 10, 25, 2026, 11, 7));
+        var sunday = new DateOnly(2026, 11, 1);
+        R("thisWeek", basis: sunday).Should().Be(Range(2026, 10, 26, 2026, 11, 1));
+        R("thisWeek", basis: sunday, weekStart: DayOfWeek.Sunday).Should().Be(Range(2026, 11, 1, 2026, 11, 7));
+    }
 
     [Fact] public void Today() => R("today").Should().Be(Range(2026, 11, 5, 2026, 11, 5));
     [Fact] public void ThisWeek_StartsMonday() => R("thisWeek").Should().Be(Range(2026, 11, 2, 2026, 11, 8));

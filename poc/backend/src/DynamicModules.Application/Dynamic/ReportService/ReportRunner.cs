@@ -6,11 +6,13 @@ using DynamicModules.Application.Dynamic.Display;
 using DynamicModules.Application.Dynamic.RecordService;
 using DynamicModules.Application.Dynamic.RecordService.Data;
 using DynamicModules.Application.Dynamic.References;
+using DynamicModules.Application.Dynamic.PolicyService;
 using DynamicModules.Application.Dynamic.ReportService.Data;
 using DynamicModules.Domain.Entities.Dynamic;
 using DynamicModules.Domain.FieldTypes;
 using DynamicModules.Domain.FieldTypes.Handlers;
 using DynamicModules.Domain.Modules;
+using DynamicModules.Domain.Policies;
 using DynamicModules.Domain.Reports;
 using DynamicModules.Domain.Repositories.Dynamic;
 using DynamicModules.Domain.ValueObjects;
@@ -24,7 +26,7 @@ namespace DynamicModules.Application.Dynamic.ReportService;
 public partial class ReportRunner(
     IModuleRepository modules, IRecordRepository records, IPermissionRepository permissions, IDynamicAccessGuard guard,
     ReferenceResolver resolver, FieldTypeRegistry registry, IBusinessTime time, ReportOptions options,
-    AuthSettings auth, ISystemSettingRepository settings, IReportQueryRepository queries)
+    AuthSettings auth, ISystemSettingRepository settings, IReportQueryRepository queries, IPolicyReader policies)
 {
     public const long EntityTitleFieldId = 0;
 
@@ -175,9 +177,10 @@ public partial class ReportRunner(
 
         // 日期區間與執行上下文在載入前就定好：SQL 路徑與記憶體路徑共用
         var range = (o.RangeOverride ?? d.DateRange) is { } rangeDef && d.PrimaryDateField is not null ? rangeDef : null;
+        var weekStart = PolicyCatalog.WeekStartOf(await policies.ChoiceAsync(PolicyCatalog.CalendarWeekStart, null, ct));
         (DateOnly, DateOnly)? resolved = d.PrimaryDateField is null ? null
             : o.Window is { } fixedWindow ? fixedWindow
-            : range is null ? null : ReportDates.Resolve(range, basis);
+            : range is null ? null : ReportDates.Resolve(range, basis, weekStart);
         ReportAppliedRange? applied = range is null ? null : new ReportAppliedRange(resolved!.Value.Item1, resolved.Value.Item2, range.Kind, range.N);
         var userNames = bound.Values.Any(b => b.Field.Type == FieldType.User)
             ? (await permissions.ListUsersAsync(ct)).ToDictionary(u => u.UserId, u => u.DisplayName)

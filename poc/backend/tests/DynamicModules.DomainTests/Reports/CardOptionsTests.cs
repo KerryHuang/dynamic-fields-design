@@ -10,7 +10,7 @@ public class CardOptionsTests
     [Fact]
     public void PreviousWindows_ThisMonth_IsPreviousFullMonths()
     {
-        var windows = ReportCardMath.PreviousWindows(new ReportDateRange("thisMonth", null), D(2026, 11, 15), 3);
+        var windows = ReportCardMath.PreviousWindows(new ReportDateRange("thisMonth", null), D(2026, 11, 15), 3, DayOfWeek.Monday);
 
         windows.Should().Equal((D(2026, 10, 1), D(2026, 10, 31)), (D(2026, 9, 1), D(2026, 9, 30)), (D(2026, 8, 1), D(2026, 8, 31)));
     }
@@ -18,7 +18,7 @@ public class CardOptionsTests
     [Fact]
     public void PreviousWindows_LastDays30_IsPrevious30DayWindows()
     {
-        var windows = ReportCardMath.PreviousWindows(new ReportDateRange("lastDays", 30), D(2026, 11, 30), 2);
+        var windows = ReportCardMath.PreviousWindows(new ReportDateRange("lastDays", 30), D(2026, 11, 30), 2, DayOfWeek.Monday);
 
         windows.Should().Equal((D(2026, 10, 2), D(2026, 10, 31)), (D(2026, 9, 2), D(2026, 10, 1)));
     }
@@ -26,19 +26,26 @@ public class CardOptionsTests
     [Fact]
     public void PreviousWindows_LastMonths3_ShiftsByThreeMonths()
     {
-        var windows = ReportCardMath.PreviousWindows(new ReportDateRange("lastMonths", 3), D(2026, 11, 15), 2);
+        var windows = ReportCardMath.PreviousWindows(new ReportDateRange("lastMonths", 3), D(2026, 11, 15), 2, DayOfWeek.Monday);
 
         windows.Should().Equal((D(2026, 6, 1), D(2026, 8, 31)), (D(2026, 3, 1), D(2026, 5, 31)));
     }
 
     [Fact]
+    public void PreviousWindows_FollowWeekStart()
+    {
+        ReportCardMath.PreviousWindows(new ReportDateRange("thisWeek", null), D(2026, 11, 5), 1, DayOfWeek.Sunday)
+            .Should().Equal((D(2026, 10, 25), D(2026, 10, 31)));
+    }
+
+    [Fact]
     public void PreviousWindows_WeekAndYearAndToday()
     {
-        ReportCardMath.PreviousWindows(new ReportDateRange("thisWeek", null), D(2026, 11, 5), 1)
+        ReportCardMath.PreviousWindows(new ReportDateRange("thisWeek", null), D(2026, 11, 5), 1, DayOfWeek.Monday)
             .Should().Equal((D(2026, 10, 26), D(2026, 11, 1)));
-        ReportCardMath.PreviousWindows(new ReportDateRange("lastYear", null), D(2026, 11, 5), 1)
+        ReportCardMath.PreviousWindows(new ReportDateRange("lastYear", null), D(2026, 11, 5), 1, DayOfWeek.Monday)
             .Should().Equal((D(2024, 1, 1), D(2024, 12, 31)));
-        ReportCardMath.PreviousWindows(new ReportDateRange("today", null), D(2026, 3, 1), 2)
+        ReportCardMath.PreviousWindows(new ReportDateRange("today", null), D(2026, 3, 1), 2, DayOfWeek.Monday)
             .Should().Equal((D(2026, 2, 28), D(2026, 2, 28)), (D(2026, 2, 27), D(2026, 2, 27)));
     }
 

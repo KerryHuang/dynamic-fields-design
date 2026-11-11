@@ -1061,6 +1061,26 @@ public class ReportRunnerTests : ReportTestBase
     }
 
     [Fact]
+    public async Task ThisWeek_FollowsWeekStartPolicy()
+    {
+        await Arrange();
+        await Insert("order", "admin", (Due, "2026-11-01"));
+        await Insert("order", "admin", (Due, "2026-11-08"));
+        var d = Def(groups: [G(MainF(Due), "day")], measures: [M("n", "countMain")], primary: MainF(Due), range: new ReportDateRange("thisWeek", null));
+
+        // 基準日 2026-11-04（週三）：週一起始是 11-02 到 11-08
+        var monday = await Run(d);
+        monday.Groups!.Select(g => g.GroupKeys[0]).Should().Equal("2026-11-08");
+        monday.AppliedRange!.From.Should().Be(new DateOnly(2026, 11, 2));
+
+        As("admin");
+        (await Send(new DynamicModules.Application.Dynamic.PolicyService.UpdateSystemPolicyRequest("calendar.weekStart", JsonSerializer.SerializeToElement("sunday")))).IsSuccess.Should().BeTrue();
+        var sunday = await Run(d);
+        sunday.Groups!.Select(g => g.GroupKeys[0]).Should().Equal("2026-11-01");
+        sunday.AppliedRange!.From.Should().Be(new DateOnly(2026, 11, 1));
+    }
+
+    [Fact]
     public async Task NoPrimaryDate_RangeNotApplied()
     {
         await Arrange();

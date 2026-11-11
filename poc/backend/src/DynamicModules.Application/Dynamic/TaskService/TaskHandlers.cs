@@ -1,8 +1,11 @@
 using DynamicModules.Application.Common;
 using DynamicModules.Application.Common.Security;
 using DynamicModules.Application.Common.Time;
+using DynamicModules.Application.Dynamic.PolicyService;
 using DynamicModules.Application.Dynamic.RecordService.Data;
 using DynamicModules.Domain.Entities.Dynamic;
+using DynamicModules.Domain.Policies;
+using DynamicModules.Domain.Reports;
 using DynamicModules.Domain.Repositories.Dynamic;
 using MediatR;
 
@@ -122,7 +125,7 @@ public class DeleteTaskHandler(ITaskRepository tasks, INotificationRepository no
     }
 }
 
-public class GetMyTasksHandler(ITaskRepository tasks, TaskAccess access, IPermissionRepository permissions, ICurrentUser user, IBusinessTime time)
+public class GetMyTasksHandler(ITaskRepository tasks, TaskAccess access, IPermissionRepository permissions, ICurrentUser user, IBusinessTime time, IPolicyReader policies)
     : IRequestHandler<GetMyTasksRequest, ServiceResult>
 {
     private static readonly Dictionary<string, TaskListTab> Tabs = new()
@@ -144,8 +147,9 @@ public class GetMyTasksHandler(ITaskRepository tasks, TaskAccess access, IPermis
         var page = Math.Max(request.CurrentPage, 1);
         var size = Math.Clamp(request.PagesSize, 1, 100);
         var today = time.Today;
+        var weekStart = PolicyCatalog.WeekStartOf(await policies.ChoiceAsync(PolicyCatalog.CalendarWeekStart, null, ct));
         var (items, total) = await tasks.QueryMineAsync(
-            new TaskListQuery(user.UserId, tab, filter, today, WeekEnd(today), page, size), ct);
+            new TaskListQuery(user.UserId, tab, filter, today, WeekEnd(today, weekStart), page, size), ct);
         var perms = await access.EvaluateManyAsync(items, ct);
         var users = (await permissions.ListUsersAsync(ct)).ToDictionary(u => u.UserId);
         // 縱深防禦：分頁條件靠參與者表維持「抓到的都看得到」，這裡再濾一次；濾掉的也從總數扣掉，不洩漏筆數
@@ -154,9 +158,9 @@ public class GetMyTasksHandler(ITaskRepository tasks, TaskAccess access, IPermis
         return ServiceResult.Success(new PagedResponse<TaskSummaryResponse>(rows, total - (items.Count - rows.Count), page, size));
     }
 
-    /// <summary>本週日（週一到週日為一週）。</summary>
-    internal static DateOnly WeekEnd(DateOnly today) =>
-        today.AddDays((7 - (int)today.DayOfWeek) % 7);
+    /// <summary>本週最後一天（本週起始日＋6 天；起始日見政策 calendar.weekStart）。</summary>
+    internal static DateOnly WeekEnd(DateOnly today, DayOfWeek weekStart) =>
+        ReportDates.WeekStart(today, weekStart).AddDays(6);
 }
 
 public class GetTaskSummaryHandler(ITaskRepository tasks, ICurrentUser user, IBusinessTime time)

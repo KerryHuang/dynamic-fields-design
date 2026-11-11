@@ -1,4 +1,5 @@
 using DynamicModules.Application.Common;
+using DynamicModules.Application.Dynamic.PolicyService;
 using DynamicModules.Application.Dynamic.TaskService;
 using DynamicModules.Domain.Entities.Dynamic;
 using FluentAssertions;
@@ -34,6 +35,17 @@ public class TaskQueryTests : TaskTestBase
         (await Mine("sales01", "assigned", "all")).Should().HaveCount(5);
         (await Mine("sales01", "created", "open")).Should().Equal(D(11, 20));
         (await Mine("sales01", "mentioned", "open")).Should().Equal([null]);
+    }
+
+    [Fact]
+    public async Task MyTasks_ThisWeek_FollowsWeekStartPolicy()
+    {
+        foreach (var day in new[] { 9, 3, 8, 4, 7 })
+            await SeedTask(createdBy: "admin", assignee: "sales01", due: D(11, day));
+
+        (await Mine("sales01", "assigned", "thisWeek")).Should().Equal(D(11, 4), D(11, 7), D(11, 8));
+        (await Send(new UpdateSystemPolicyRequest("calendar.weekStart", J("\"sunday\"")))).IsSuccess.Should().BeTrue();
+        (await Mine("sales01", "assigned", "thisWeek")).Should().Equal(D(11, 4), D(11, 7));
     }
 
     [Fact]

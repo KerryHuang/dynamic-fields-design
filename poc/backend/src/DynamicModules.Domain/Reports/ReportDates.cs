@@ -2,24 +2,24 @@ using System.Globalization;
 
 namespace DynamicModules.Domain.Reports;
 
-/// <summary>報表日期區間解析與分桶鍵；週一為一週開始，週別採 ISO 8601。</summary>
+/// <summary>報表日期區間解析與分桶鍵；一週起始日由呼叫端傳入（政策 calendar.weekStart）；週別分桶仍採 ISO 8601。</summary>
 public static class ReportDates
 {
     /// <summary>把區間設定依基準日解析成含頭含尾的日期範圍。last* 系列包含基準日所在的週／月。</summary>
-    public static (DateOnly From, DateOnly ToInclusive) Resolve(ReportDateRange r, DateOnly basis)
+    public static (DateOnly From, DateOnly ToInclusive) Resolve(ReportDateRange r, DateOnly basis, DayOfWeek weekStart)
     {
         var n = r.N ?? 1;
         return r.Kind switch
         {
             "today" => (basis, basis),
-            "thisWeek" => Weeks(basis, 1),
-            "lastWeek" => (WeekStart(basis).AddDays(-7), WeekStart(basis).AddDays(-1)),
+            "thisWeek" => Weeks(basis, 1, weekStart),
+            "lastWeek" => (WeekStart(basis, weekStart).AddDays(-7), WeekStart(basis, weekStart).AddDays(-1)),
             "thisMonth" => Months(basis, 1),
             "lastMonth" => Months(basis.AddMonths(-1), 1),
             "thisYear" => (new DateOnly(basis.Year, 1, 1), new DateOnly(basis.Year, 12, 31)),
             "lastYear" => (new DateOnly(basis.Year - 1, 1, 1), new DateOnly(basis.Year - 1, 12, 31)),
             "lastDays" => (basis.AddDays(1 - n), basis),
-            "lastWeeks" => Weeks(basis, n),
+            "lastWeeks" => Weeks(basis, n, weekStart),
             "lastMonths" => Months(basis, n),
             _ => throw new ArgumentException($"未知的日期區間：{r.Kind}", nameof(r)),
         };
@@ -43,10 +43,10 @@ public static class ReportDates
     public static bool Contains((DateOnly From, DateOnly ToInclusive) range, ReportCell cell) =>
         cell is { State: "ok", Date: { } d } && d >= range.From && d <= range.ToInclusive;
 
-    private static DateOnly WeekStart(DateOnly d) => d.AddDays(-(((int)d.DayOfWeek + 6) % 7));
+    public static DateOnly WeekStart(DateOnly d, DayOfWeek weekStart) => d.AddDays(-(((int)d.DayOfWeek - (int)weekStart + 7) % 7));
 
-    private static (DateOnly, DateOnly) Weeks(DateOnly basis, int count) =>
-        (WeekStart(basis).AddDays(-7 * (count - 1)), WeekStart(basis).AddDays(6));
+    private static (DateOnly, DateOnly) Weeks(DateOnly basis, int count, DayOfWeek weekStart) =>
+        (WeekStart(basis, weekStart).AddDays(-7 * (count - 1)), WeekStart(basis, weekStart).AddDays(6));
 
     private static (DateOnly, DateOnly) Months(DateOnly basis, int count)
     {

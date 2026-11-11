@@ -1,4 +1,6 @@
+using DynamicModules.Application.Dynamic.PolicyService;
 using DynamicModules.Application.Dynamic.ReportService.Data;
+using DynamicModules.Domain.Policies;
 using DynamicModules.Domain.Reports;
 
 namespace DynamicModules.Application.Dynamic.ReportService;
@@ -48,7 +50,8 @@ public partial class ReportRunner
         if (Value(total) is not { } current) return null;
 
         var previous = new List<decimal>();
-        foreach (var window in ReportCardMath.PreviousWindows(range, basis, periods))
+        foreach (var window in ReportCardMath.PreviousWindows(range, basis, periods,
+            PolicyCatalog.WeekStartOf(await policies.ChoiceAsync(PolicyCatalog.CalendarWeekStart, null, ct))))
         {
             var run = await RunAsync(d, new ReportRunOptions(null, null, o.Locale, Window: window), ct);
             if (run.State is not ("ok" or "empty")) return null;
