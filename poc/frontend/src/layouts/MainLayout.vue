@@ -15,7 +15,12 @@
         />
         <NotificationBell />
         <LocaleSwitcher class="q-mr-sm" />
-        <q-btn v-if="!identity.isDemoAccount" flat dense no-caps class="q-mr-sm" :label="t('auth.changePassword')" to="/change-password" data-testid="change-password-link" />
+        <q-btn
+          v-if="!identity.isDemoAccount" flat dense no-caps class="q-mr-sm" icon="key" :label="$q.screen.lt.sm ? undefined : t('auth.changePassword')"
+          :aria-label="t('auth.changePassword')" to="/change-password" data-testid="change-password-link"
+        >
+          <q-tooltip v-if="$q.screen.lt.sm">{{ t('auth.changePassword') }}</q-tooltip>
+        </q-btn>
         <span v-if="logoutError" class="q-mr-sm bg-negative text-white q-px-sm rounded-borders" data-testid="logout-error">{{ t('auth.logoutFailed') }}</span>
         <q-btn flat dense no-caps :label="t('auth.logout')" :loading="logoutMutation.isPending.value" data-testid="logout" @click="logout" />
       </q-toolbar>

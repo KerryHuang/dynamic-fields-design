@@ -73,6 +73,21 @@ describe('MainLayout 響應式選單', () => {
     w.unmount();
   });
 
+  it('390px 英文介面：「變更密碼」只有圖示，帶 aria-label 與 tooltip，不擠壓品牌名', async () => {
+    const { w } = await mountAtWidth(390, 'en-US');
+    const link = w.get('[data-testid="change-password-link"]');
+    expect(link.text()).not.toContain(enUS.auth.changePassword);
+    expect(link.attributes('aria-label')).toBe(enUS.auth.changePassword);
+    expect(link.findComponent(quasar.QTooltip).exists()).toBe(true);
+    w.unmount();
+  });
+
+  it('1366px 英文介面：「變更密碼」維持文字', async () => {
+    const { w } = await mountAtWidth(1366, 'en-US');
+    expect(w.get('[data-testid="change-password-link"]').text()).toContain(enUS.auth.changePassword);
+    w.unmount();
+  });
+
   it('☰ 鈕開啟覆蓋式抽屜；點選項目後關閉', async () => {
     const { w, router } = await mountAtWidth(390);
     await w.find('[data-testid="menu-toggle"]').trigger('click');
