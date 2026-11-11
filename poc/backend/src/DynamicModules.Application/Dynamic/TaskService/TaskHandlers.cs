@@ -43,7 +43,7 @@ public sealed class TaskSupport(ITaskRepository tasks, IPermissionRepository per
         var today = time.Today;
         var rows = items.Select((t, i) => (t, p: perms[i])).Where(x => x.p.CanSee)
             .Select(x => TaskViews.ToSummary(x.t, x.p, users, today)).ToList();
-        return new RecordTasksResponse(rows, target.CanAdd, await manualRules.ListAsync(target.Module, target.Record, ct));
+        return new RecordTasksResponse(rows, target.CanAdd && target.Module.TasksEnabled, await manualRules.ListAsync(target.Module, target.Record, ct));
     }
 }
 
@@ -69,6 +69,7 @@ public class CreateRecordTaskHandler(TaskSupport support, TaskWriter writer, Tas
         var target = await access.ForRecordAsync(request.RecordId, ct);
         if (target is null) return ServiceResult.NotFound(RecordMapper.RecordNotFound);
         if (!target.CanAdd) return ServiceResult.Conflict(ModuleGate.ClosedMessage);
+        if (!target.Module.TasksEnabled) return ServiceResult.Conflict(MessageRef.Of(MessageText.TasksDisabled));
         var input = request.Input;
         if (await support.ValidateInputAsync(input, ct) is { Count: > 0 } errors) return ServiceResult.Invalid(errors);
         var task = writer.Create(new NewTask(input.Title.Trim(), TaskEditParser.NullIfBlank(input.Description),

@@ -30,6 +30,7 @@ public sealed class ManualTaskRules(ITaskRuleRepository rules, ITaskRepository t
     /// <summary>Applied：once 已套用過；PreviousOpen：everyTime 還有未完成的任務；Applicable：規則條件成立。</summary>
     public async Task<IReadOnlyList<ManualRuleResponse>> ListAsync(Module module, Record record, CancellationToken ct)
     {
+        if (!module.TasksEnabled) return [];
         var usable = await ListUsableAsync(module.Id, ct);
         if (usable.Count == 0) return [];
         var values = RecordValueProcessor.Parse(record.ValuesJson);
@@ -47,7 +48,7 @@ public sealed class ManualTaskRules(ITaskRuleRepository rules, ITaskRepository t
 }
 
 /// <summary>
-/// 看不到記錄 404；模組不可寫 409；規則不存在、停用、不是 manual、應用程式已關閉 404；條件不符 409；
+/// 看不到記錄 404；模組不可寫 409；模組未啟用任務 409；規則不存在、停用、不是 manual、應用程式已關閉 404；條件不符 409；
 /// once 已套用、everyTime 上一輪未完成 409；其餘產生下一批（第一次是 1）。同時送出時由唯一索引擋下第二次。
 /// </summary>
 public class ApplyTaskRuleHandler(
@@ -60,6 +61,7 @@ public class ApplyTaskRuleHandler(
         var target = await access.ForRecordAsync(request.RecordId, ct);
         if (target is null) return ServiceResult.NotFound(RecordMapper.RecordNotFound);
         if (!target.CanAdd) return ServiceResult.Conflict(Common.Security.ModuleGate.ClosedMessage);
+        if (!target.Module.TasksEnabled) return ServiceResult.Conflict(MessageRef.Of(MessageText.TasksDisabled));
         var rule = (await manual.ListUsableAsync(target.Module.Id, ct)).FirstOrDefault(r => r.Key == request.RuleKey);
         if (rule is null) return ServiceResult.NotFound(MessageRef.Of(MessageText.TaskRuleNotFound));
 

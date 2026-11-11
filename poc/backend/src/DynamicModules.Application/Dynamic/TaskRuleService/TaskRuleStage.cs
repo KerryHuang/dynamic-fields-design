@@ -15,7 +15,7 @@ namespace DynamicModules.Application.Dynamic.TaskRuleService;
 /// 記錄寫入後的任務規則（Order 12，排在事件、後盾、跨記錄檢查、任務同步之後；設計 §5.2、§5.4、§5.5）。
 /// 讀整個請求合併後的日誌，靜默寫入也算，略過寫入後已刪除的記錄。每條啟用中、應用程式開啟中的規則：
 /// 沒觸發過就看這次是否觸發；once 只同步；everyTime 再次觸發時，上一輪還有未完成的任務就留系統記錄、不產生新批次。
-/// 快取只放在單次 <see cref="RunAsync"/> 的區域變數，不跨請求。
+/// 模組關閉任務時整個略過（任務設計 §4.4）。快取只放在單次 <see cref="RunAsync"/> 的區域變數，不跨請求。
 /// </summary>
 public class TaskRuleStage(
     IWriteJournal journal, ITaskRuleRepository rules, IModuleRepository modules, IRecordRepository records,
@@ -51,6 +51,11 @@ public class TaskRuleStage(
             if (list.Count == 0) continue;
             var module = await modules.GetByIdAsync(entry.ModuleId, includeChildren: true, ct);
             if (module is null) continue;
+            if (!module.TasksEnabled)
+            {
+                rulesByModule[entry.ModuleId] = [];
+                continue;
+            }
 
             userIds ??= await modules.ListUserIdsAsync(ct);
             activeUsers ??= (await permissions.ListUsersAsync(ct)).Where(u => u.IsActive).Select(u => u.UserId).ToHashSet(StringComparer.Ordinal);
