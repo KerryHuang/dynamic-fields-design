@@ -31,6 +31,12 @@ public class AppTaskToggleTests : IDisposable
           "tasks": [ { "code": "check", "title": { "zh-TW": "確認" }, "assignee": "off.owner" } ] }
         """;
 
+    private const string DueRule = """
+        { "code": "tt-off-due", "name": { "zh-TW": "到期" }, "active": true, "module": "off",
+          "trigger": { "on": "manual" },
+          "tasks": [ { "code": "due", "title": { "zh-TW": "到期處理" }, "assignee": "off.owner", "due": { "field": "off.due", "offsetDays": 0 } } ] }
+        """;
+
     private readonly SharedMasterRig _rig = new();
 
     public void Dispose() => _rig.Dispose();
@@ -59,7 +65,8 @@ public class AppTaskToggleTests : IDisposable
             { "code": "off", "key": "tt-off", "name": { "zh-TW": "關著" }, "kind": "standalone", "titleField": "name", "tasksEnabled": false,
               "blocks": [ { "code": "main", "label": { "zh-TW": "基本資料" }, "fields": [
                 { "code": "name", "type": "text", "label": { "zh-TW": "名稱" }, "config": { "required": true } },
-                { "code": "owner", "type": "user", "label": { "zh-TW": "負責人" }, "config": {} } ] } ],
+                { "code": "owner", "type": "user", "label": { "zh-TW": "負責人" }, "config": {} },
+                { "code": "due", "type": "date", "label": { "zh-TW": "到期日" }, "config": {} } ] } ],
               "permissions": [] }
           ],
           "contributions": [ {
@@ -195,6 +202,67 @@ public class AppTaskToggleTests : IDisposable
 
         var preview = await JsonOf(await _rig.Admin.PostAsJsonAsync($"{SharedMasterRig.Apps}/packages/tt2/preview", _rig.BodyFor("tt2")));
         Warnings(preview).Should().Contain($"任務規則「{PartnerRuleCode}」所在的模組「往來對象」未啟用任務，開啟時會自動啟用");
+    }
+
+    [Fact]
+    public async Task RuleSkippedByExcludedField_DoesNotEnableModule()
+    {
+        await _rig.ImportAsync(BpOff());
+        await _rig.ImportAsync(Tt(DueRule));
+        var body = JsonSerializer.SerializeToNode(_rig.BodyFor("tt"))!.AsObject();
+        body["excludeFields"] = new JsonArray("off.due");
+
+        var preview = await JsonOf(await _rig.Admin.PostAsJsonAsync($"{SharedMasterRig.Apps}/packages/tt/preview", body));
+        Warnings(preview).Should().NotContain(w => w.Contains("會自動啟用"), "規則會因被排除的欄位略過，不會啟用模組");
+
+        var opened = await _rig.OpenOkAsync("tt", body);
+        Warnings(opened).Should().NotContain(w => w.Contains("自動啟用"));
+        Warnings(opened).Should().Contain("任務規則「tt-off-due」引用了被排除的欄位，已略過");
+        TasksEnabled("tt-off").Should().BeFalse("規則略過，模組不打開");
+        _rig.Db(db => db.Set<TaskRule>().Any(r => r.Key == "tt-off-due")).Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task OwnModuleTasksOff_WithRule_AutoEnabled()
+    {
+        await _rig.ImportAsync(SharedMasterPackages.Bp);
+        await _rig.ImportAsync(Tt(OffRule));
+
+        var opened = await _rig.OpenOkAsync("tt");
+
+        TasksEnabled("tt-off").Should().BeTrue("套件自己的模組標了關閉又掛規則，同樣自動打開");
+        Warnings(opened).Should().Contain($"任務規則「{OffRuleCode}」所在的模組「關著」原本未啟用任務，已自動啟用");
+    }
+
+    [Fact]
+    public async Task OpenFails_AutoEnableRolledBack()
+    {
+        // 主檔已由 tt 開啟、partner 關閉。tt2 的第一條規則掛 partner（會先自動啟用），第二條與手動規則同代號而 409，整批回滾
+        await _rig.ImportAsync(BpOff());
+        await _rig.ImportAsync(Tt());
+        await _rig.OpenOkAsync("tt");
+        TasksEnabled(PartnerKey).Should().BeFalse();
+        var other = await CreateModule(_rig.Admin);
+        var owner = await AddField(_rig.Admin, other, "user");
+        var manual = await _rig.Admin.PostAsJsonAsync($"{Base}/modules/{other}/task-rules", new
+        {
+            key = "tt2-clash", name = new Dictionary<string, string> { ["zh-TW"] = "手動規則" }, active = true, repeat = "once",
+            trigger = new { on = "manual" },
+            tasks = new[] { new { code = "check", title = new Dictionary<string, string> { ["zh-TW"] = "確認" }, assigneeFieldId = owner.Id, dueOffsetDays = 0 } }
+        });
+        manual.StatusCode.Should().Be(HttpStatusCode.Created, await manual.Content.ReadAsStringAsync());
+
+        var pkg = JsonNode.Parse(Tt(PartnerRule.Replace(PartnerRuleCode, "tt2-first"), OffRule.Replace(OffRuleCode, "tt2-clash")))!.AsObject();
+        pkg["manifest"]!["id"] = "tt2";
+        foreach (var m in pkg["modules"]!.AsArray()) m!["key"] = "tt2-" + m["code"]!.GetValue<string>();
+        pkg["contributions"]![0]!["block"]!["code"] = "tt2";
+        await _rig.ImportAsync(pkg.ToJsonString());
+
+        var res = await _rig.OpenAsync("tt2");
+        ((int)res.StatusCode).Should().BeInRange(400, 499, await res.Content.ReadAsStringAsync());
+        _rig.Db(db => db.Set<App>().Any(a => a.Key == "tt2")).Should().BeFalse("App 列回滾");
+        _rig.Db(db => db.Set<TaskRule>().Any(r => r.Key == "tt2-first")).Should().BeFalse("先建好的規則回滾");
+        TasksEnabled(PartnerKey).Should().BeFalse("自動啟用跟著整批回滾");
     }
 
     [Fact]
