@@ -121,7 +121,7 @@ public sealed partial class AppOpenPlanner(
             warnings.Add($"群組「{g.Code}」沒有對應，已略過（不給任何人權限）");
         // 同一個應用程式重開：型別不同、不會接回的孤兒欄位先在預覽警告（§7 刪除第 6 點）
         if (package.Contributions.Count > 0) warnings.AddRange((await orphans.MatchAsync(package, ct)).Warnings);
-        warnings.AddRange(await TasksAutoEnableAsync(package, knownMasters, ct));
+        warnings.AddRange(await TasksAutoEnableAsync(package, knownMasters, body.ExcludeFields.ToHashSet(), ct));
 
         return new Plan(null, source, finalKeys, requirement.ExternalModuleKeys,
             new OpenPreview(errors, conflicts, hostConflicts, [.. requirement.Missing, .. masters.Missing], suggestions, warnings,
@@ -187,14 +187,17 @@ public sealed partial class AppOpenPlanner(
 
     /// <summary>
     /// 任務規則所在的模組關閉任務時，開啟會自動打開（<see cref="AppFlowInstaller.InstallTaskRulesAsync"/>），預覽先列出（任務設計 §4.4）。
-    /// 本套件的模組看套件；主檔模組已開啟的看資料庫現在的開關，還沒開啟的看主檔套件。每個模組只列第一條規則。
+    /// 本套件的模組看套件；主檔模組已開啟的看資料庫現在的開關，還沒開啟的看主檔套件。因 excludeFields 略過的規則不列。每個模組只列第一條規則。
     /// </summary>
-    private async Task<List<string>> TasksAutoEnableAsync(AppPackageData package, IReadOnlyDictionary<string, AppPackageData> known, CancellationToken ct)
+    private async Task<List<string>> TasksAutoEnableAsync(AppPackageData package, IReadOnlyDictionary<string, AppPackageData> known, IReadOnlySet<string> exclude, CancellationToken ct)
     {
         var result = new List<string>();
         var seen = new HashSet<string>();
+        // 與開啟時同一份轉換：引用被排除欄位的規則會被略過，不啟用模組。這裡只關心「解析得到與否」，Id 用佔位值
+        var lookups = new AppReportCodec.Lookups(_ => "-", name => exclude.Contains(name) ? null : 1L, _ => 1L, AppReportCodec.TypesOf(package.Modules));
         foreach (var r in package.TaskRules.Where(r => r is not null))
         {
+            if (AppTaskRuleCodec.ToInput(r, lookups).Input is null) continue;
             var target = r.Module ?? "";
             (bool Enabled, I18nText Name)? state = null;
             if (AppPackageValidator.MasterScope.Parse(target) is { } symbol)
