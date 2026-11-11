@@ -5,7 +5,7 @@ import th from 'src/i18n/th.json';
 import vi from 'src/i18n/vi.json';
 import zhTW from 'src/i18n/zh-TW.json';
 
-type Tree = { policies?: { items?: Record<string, Record<string, Record<string, string>>>; categories?: Record<string, string>; choices?: Record<string, string> } };
+type Tree = { policies?: { items?: Record<string, Record<string, unknown>>; categories?: Record<string, string>; choices?: Record<string, string> } };
 
 describe.each([['zh-TW', zhTW], ['en-US', enUS], ['th', th], ['vi', vi]])('政策文案齊全 %s', (_n, msgs) => {
   const p = (msgs as Tree).policies;
