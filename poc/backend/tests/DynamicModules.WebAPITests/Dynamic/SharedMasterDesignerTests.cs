@@ -255,6 +255,22 @@ public class SharedMasterDesignerTests : IDisposable
         (await PostField(_rig.Admin, main, "text", "官網")).StatusCode.Should().Be(HttpStatusCode.Created);
     }
 
+    /// <summary>主檔模組的政策覆寫同樣只限系統管理員（政策設計 §7，計畫判斷 3）。</summary>
+    [Fact]
+    public async Task ModulePolicyOverride_OnMaster_NeedsSystemAdmin()
+    {
+        await OpenCrmAndStockAsync();
+        _rig.Db(db => { db.Set<UserProgramPrivilege>().Add(new UserProgramPrivilege
+        {
+            UserId = "planner01", ProgramCode = "DYN00000", CanRead = true, CanAdd = true, CanEdit = true, CanDelete = true
+        }); });
+        var url = $"{Base}/modules/{Partner}/policies/task.maxRulesPerModule";
+
+        (await _rig.App.AsUser("planner01").PutAsJsonAsync(url, new { value = 3 })).StatusCode.Should().Be(HttpStatusCode.Forbidden);
+        var res = await _rig.Admin.PutAsJsonAsync(url, new { value = 3 });
+        res.StatusCode.Should().Be(HttpStatusCode.OK, await res.Content.ReadAsStringAsync());
+    }
+
     /// <summary>
     /// 守衛涵蓋所有會改到主檔模組的設計器指令（§6 最後一點）：欄位、區塊、選項、規則、權限、模組刪除，
     /// 以及狀態機、分錄、列印範本、連動事件、跨記錄檢查、轉換（來源或目標是主檔都算）。只帶代碼的修改、刪除以既有定義的模組為準。
