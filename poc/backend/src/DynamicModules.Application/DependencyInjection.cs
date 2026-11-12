@@ -112,6 +112,7 @@ public static class DependencyInjection
         services.AddScoped<Dynamic.AppService.AppExporter>();
         services.AddScoped<Dynamic.DemoService.DemoPreflight>();
         services.AddScoped<Dynamic.DemoService.DemoStructure>();
+        services.AddScoped<Dynamic.DemoService.DemoApprovals>();
         services.AddScoped<Dynamic.DeleteService.DeletePlanner>();
         services.AddScoped<Dynamic.DeleteService.ModuleRemover>();
         services.AddScoped<Dynamic.TaskService.TaskAccess>();

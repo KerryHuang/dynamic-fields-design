@@ -22,7 +22,7 @@ namespace DynamicModules.Application.Dynamic.DemoService;
 public sealed class DemoStructure(
     ISender sender, IPermissionRepository permissions, AppOpener appOpener, IAppRepository apps, IReportRepository reports, IModuleRepository modules,
     EventService.EffectBudget budget, IWriteJournal journal, AppService.SharedMasters.MasterSymbols masterSymbols,
-    ApprovalService.ApprovalWriteContext approvalContext, ApprovalService.ApprovalLockService approvalLock)
+    ApprovalService.ApprovalWriteContext approvalContext, ApprovalService.ApprovalLockService approvalLock, DemoApprovals demoApprovals)
 {
     public const string CrmAppId = DemoCatalog.CrmAppId;
 
@@ -42,7 +42,7 @@ public sealed class DemoStructure(
         foreach (var (appId, map) in new (string, (string Code, string Group)[])[]
         {
             (DemoCatalog.MesAppId, [("sales", "sales"), ("salesManager", "sales-manager"), ("floor", "floor"), ("maint", "maint"), ("qa", "qa"), ("planner", "planner")]),
-            (DemoCatalog.CrmAppId, [("sales", "sales"), ("manager", "sales-manager")]),
+            (DemoCatalog.CrmAppId, [("sales", "sales"), ("manager", "sales-manager"), ("designer", "design")]),
             (DemoCatalog.InventoryAppId, [("buyer", "purchasing"), ("keeper", "warehouse"), ("manager", "ops-manager"), ("viewer", "inv-viewer")])
         })
         {
@@ -51,6 +51,9 @@ public sealed class DemoStructure(
             if (!app.Result.IsSuccess) return (null, Fail($"開啟應用程式 {appId}", app.Result));
             opened[appId] = app.Ids!;
         }
+
+        if (await demoApprovals.CreateAsync(opened[DemoCatalog.CrmAppId], ct) is { } approvalFailed)
+            return (null, Fail("建簽核流程 設計案", approvalFailed));
 
         opened[DemoCatalog.MesAppId] = await WithIntegrationFieldsAsync(DemoCatalog.MesAppId, opened[DemoCatalog.MesAppId], ct);
         var ids = opened[DemoCatalog.MesAppId];
