@@ -129,11 +129,11 @@ public class ClientErrorsApiTests
     {
         var time = new FakeTimeProvider();
         var throttle = new ClientErrorThrottle(time);
-        var ok = Enumerable.Range(0, 1000).Count(i => throttle.TryAcquire($"10.0.{i / 256}.{i % 256}"));
+        var ok = Enumerable.Range(0, 1000).Count(i => throttle.TryAcquire($"203.0.{i / 256}.{i % 256}"));
         ok.Should().Be(600);
         throttle.TrackedKeys.Should().BeLessThanOrEqualTo(600);
         time.Advance(TimeSpan.FromSeconds(61));
-        throttle.TryAcquire("10.9.9.9").Should().BeTrue();
+        throttle.TryAcquire("198.51.100.9").Should().BeTrue();
         throttle.TrackedKeys.Should().BeLessThanOrEqualTo(1);
     }
 
