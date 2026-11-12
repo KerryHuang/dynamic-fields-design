@@ -32,7 +32,7 @@ public static class DemoPeople
         ("ops-manager", "進銷存管理組", ["ops01"]),
         // 只讀進銷存的品項與倉庫：MES 出貨單要選庫存品項與出庫倉（整合），出貨的生管與業務需要這份讀取權限
         ("inv-viewer", "進銷存查詢組", ["planner01", "sales01", "sales02"]),
-        // 設計案的設計人員（Demo 開 CRM 時對應套件的 designer 群組）
+        // 產品設計人員（Demo 開 CRM 時對應其 designer 群組）
         ("design", "產品設計", ["designer01"])
     ];
 
