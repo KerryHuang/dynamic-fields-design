@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { SchemaWorkflow } from './types';
 import {
-  buildWorkflow, canAdvance, draftFromWorkflow, emptyWorkflowDraft, intersectAllowed, isReadOnlyState, selectableStates,
+  approvalTargets, buildWorkflow, canAdvance, draftFromWorkflow, emptyWorkflowDraft, intersectAllowed, isReadOnlyState, selectableStates,
   setStateIncluded, setStateReadOnly, withStatusField,
 } from './workflow';
 
@@ -27,6 +27,27 @@ describe('selectableStates', () => {
   });
   it('has no restriction on edit when the stored state is empty', () => {
     expect(selectableStates(wf, 'edit', null)).toBeUndefined();
+  });
+});
+
+const approvalWf: SchemaWorkflow = {
+  statusFieldKey: 'f_5', initialState: 'opt_11',
+  states: [{ value: 'opt_11', readOnly: false }, { value: 'opt_12', readOnly: true }, { value: 'opt_13', readOnly: false }],
+  transitions: [{ from: 'opt_11', to: 'opt_12', approval: true }, { from: 'opt_11', to: 'opt_13' }],
+};
+
+describe('approval transitions', () => {
+  it('selectableStates excludes approval targets', () => {
+    expect([...selectableStates(approvalWf, 'edit', 'opt_11')!].sort()).toEqual(['opt_11', 'opt_13']);
+  });
+  it('canAdvance ignores approval transitions', () => {
+    expect(canAdvance({ ...approvalWf, transitions: [{ from: 'opt_11', to: 'opt_12', approval: true }] }, 'opt_11')).toBe(false);
+    expect(canAdvance(approvalWf, 'opt_11')).toBe(true);
+  });
+  it('approvalTargets lists only approval transitions from the state', () => {
+    expect(approvalTargets(approvalWf, 'opt_11')).toEqual(['opt_12']);
+    expect(approvalTargets(approvalWf, 'opt_13')).toEqual([]);
+    expect(approvalTargets(undefined, 'opt_11')).toEqual([]);
   });
 });
 
@@ -83,6 +104,19 @@ describe('workflow draft', () => {
       states: [{ optionId: 11, readOnly: false }, { optionId: 12, readOnly: true }],
       transitions: [{ from: 11, to: 12, groupIds: [3] }],
     });
+  });
+  it('buildWorkflow keeps approval and editable', () => {
+    const saved = {
+      statusFieldId: 5, initialOptionId: 11,
+      states: [{ optionId: 11, readOnly: false }, { optionId: 12, readOnly: true, editable: true }],
+      transitions: [{ from: 11, to: 12, groupIds: [3], approval: { required: true, noMatch: 'direct' as const } }],
+    };
+    expect(buildWorkflow(draftFromWorkflow(saved))).toEqual(saved);
+  });
+  it('buildWorkflow leaves the keys out when the draft has none', () => {
+    const body = buildWorkflow(draft)!;
+    expect(Object.keys(body.states[0]!)).toEqual(['optionId', 'readOnly']);
+    expect(Object.keys(body.transitions[0]!)).toEqual(['from', 'to', 'groupIds']);
   });
   it('builds nothing without a status field or an initial state', () => {
     expect(buildWorkflow(emptyWorkflowDraft())).toBeUndefined();

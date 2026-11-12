@@ -12,7 +12,8 @@ export function selectableStates(
   if (!workflow) return undefined;
   if (mode === 'create') return new Set([workflow.initialState]);
   if (typeof current !== 'string' || !current) return undefined;
-  return new Set([current, ...workflow.transitions.filter((t) => t.from === current).map((t) => t.to)]);
+  // A move that needs an approval is not a plain save: the server answers 400, so it is only offered via "submit approval".
+  return new Set([current, ...workflow.transitions.filter((t) => t.from === current && !t.approval).map((t) => t.to)]);
 }
 
 export function isReadOnlyState(workflow: SchemaWorkflow | undefined, state: unknown): boolean {
@@ -21,7 +22,12 @@ export function isReadOnlyState(workflow: SchemaWorkflow | undefined, state: unk
 
 /** Whether the current user can move a record out of `state`. */
 export function canAdvance(workflow: SchemaWorkflow | undefined, state: unknown): boolean {
-  return !!workflow && workflow.transitions.some((t) => t.from === state);
+  return !!workflow && workflow.transitions.some((t) => t.from === state && !t.approval);
+}
+
+/** Target states reachable from `state` only by submitting an approval. */
+export function approvalTargets(workflow: SchemaWorkflow | undefined, state: unknown): string[] {
+  return workflow ? workflow.transitions.filter((t) => t.from === state && t.approval).map((t) => t.to) : [];
 }
 
 /** Intersection where undefined is "everything". */
@@ -36,8 +42,8 @@ export function intersectAllowed(a: Set<string> | undefined, b: Set<string> | un
 export interface WorkflowDraft {
   statusFieldId: number | null;
   initialOptionId: number | null;
-  states: { optionId: number; readOnly: boolean }[];
-  transitions: { from: number | null; to: number | null; groupIds: number[] }[];
+  states: { optionId: number; readOnly: boolean; editable?: boolean }[];
+  transitions: { from: number | null; to: number | null; groupIds: number[]; approval?: Workflow['transitions'][number]['approval'] }[];
 }
 
 export const emptyWorkflowDraft = (): WorkflowDraft => ({ statusFieldId: null, initialOptionId: null, states: [], transitions: [] });
@@ -73,7 +79,9 @@ export function buildWorkflow(d: WorkflowDraft): Workflow | undefined {
   return {
     statusFieldId: d.statusFieldId,
     initialOptionId: d.initialOptionId,
-    states: d.states.map((s) => ({ optionId: s.optionId, readOnly: s.readOnly })),
-    transitions: d.transitions.flatMap((t) => (t.from == null || t.to == null ? [] : [{ from: t.from, to: t.to, groupIds: [...t.groupIds] }])),
+    // approval / editable are edited elsewhere (approval designer); a save must hand them back untouched.
+    states: d.states.map((s) => ({ optionId: s.optionId, readOnly: s.readOnly, ...(s.editable !== undefined && { editable: s.editable }) })),
+    transitions: d.transitions.flatMap((t) => (t.from == null || t.to == null ? []
+      : [{ from: t.from, to: t.to, groupIds: [...t.groupIds], ...(t.approval !== undefined && { approval: t.approval }) }])),
   };
 }

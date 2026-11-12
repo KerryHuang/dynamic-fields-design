@@ -61,6 +61,19 @@ describe('WorkflowTab', () => {
     expect(api.putWorkflow).toHaveBeenCalledWith('doc', saved);
   });
 
+  it('save round-trips approval and editable', async () => {
+    const withApproval: Workflow = {
+      ...saved,
+      states: [{ optionId: 11, readOnly: false, editable: true }, { optionId: 12, readOnly: true }],
+      transitions: [{ from: 11, to: 12, groupIds: [3], approval: { required: true, noMatch: 'block' } }],
+    };
+    api.putWorkflow.mockResolvedValue(withApproval);
+    const w = await mountTab(mod(), withApproval);
+    await w.find('[data-testid="save-workflow"]').trigger('click');
+    await flushPromises();
+    expect(api.putWorkflow).toHaveBeenCalledWith('doc', withApproval);
+  });
+
   it('cannot be saved until a status field and an initial state are picked', async () => {
     const w = await mountTab(mod(), null);
     expect(w.find('[data-testid="save-workflow"]').attributes('disabled')).toBeDefined();
