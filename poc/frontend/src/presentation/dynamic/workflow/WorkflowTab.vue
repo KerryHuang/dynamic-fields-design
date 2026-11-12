@@ -60,6 +60,17 @@ const setTransition = (i: number, p: Partial<WorkflowDraft['transitions'][number
   patch({ transitions: draft.value!.transitions.map((x, j) => (j === i ? { ...x, ...p } : x)) });
 const addTransition = () => patch({ transitions: [...draft.value!.transitions, { from: null, to: null, groupIds: [] }] });
 const removeTransition = (i: number) => patch({ transitions: draft.value!.transitions.filter((_, j) => j !== i) });
+// A transition that needs approval cannot be edited here; dropping it silently would let users skip the approval.
+const confirmingTransition = ref<number | null>(null);
+const askRemoveTransition = (i: number) => {
+  if (draft.value!.transitions[i]?.approval?.required) confirmingTransition.value = i;
+  else removeTransition(i);
+};
+function confirmRemoveTransition() {
+  if (confirmingTransition.value !== null) removeTransition(confirmingTransition.value);
+  confirmingTransition.value = null;
+}
+const isEditable = (id: number) => !!draft.value!.states.find((s) => s.optionId === id)?.editable;
 
 const body = computed(() => (draft.value ? buildWorkflow(draft.value) : undefined));
 
@@ -114,7 +125,10 @@ function removeWorkflow() {
           </thead>
           <tbody>
             <tr v-for="o in stateOptions" :key="o.value" :data-testid="`state-row-${o.value}`">
-              <td class="text-left">{{ o.label }}</td>
+              <td class="text-left">
+                {{ o.label }}
+                <q-badge v-if="isEditable(o.value)" outline color="primary" class="q-ml-xs" :label="t('docflow.workflow.editableState')" :data-testid="`state-editable-${o.value}`" />
+              </td>
               <td class="text-center">
                 <q-checkbox
                   :model-value="isIncluded(o.value)" dense :disable="readonly" :data-testid="`state-included-${o.value}`"
@@ -174,7 +188,8 @@ function removeWorkflow() {
           >
             <template #no-option><SelectNoOption /></template>
           </q-select>
-          <q-btn flat dense round icon="delete" color="negative" :title="t('docflow.workflow.removeTransition')" :disable="readonly" :data-testid="`transition-remove-${i}`" @click="removeTransition(i)" />
+          <q-badge v-if="tr.approval?.required" color="warning" text-color="dark" class="q-mt-sm" :label="t('docflow.workflow.needsApproval')" :data-testid="`transition-approval-${i}`" />
+          <q-btn flat dense round icon="delete" color="negative" :title="t('docflow.workflow.removeTransition')" :disable="readonly" :data-testid="`transition-remove-${i}`" @click="askRemoveTransition(i)" />
         </div>
       </div>
     </template>
@@ -193,6 +208,16 @@ function removeWorkflow() {
         data-testid="save-workflow" @click="submit"
       />
     </div>
+
+    <q-dialog :model-value="confirmingTransition !== null" @update:model-value="confirmingTransition = null">
+      <q-card>
+        <q-card-section>{{ t('docflow.workflow.removeApprovalConfirm') }}</q-card-section>
+        <q-card-actions align="right">
+          <q-btn v-close-popup flat :label="t('dynamic.cancel')" />
+          <q-btn color="negative" :label="t('docflow.workflow.removeTransition')" data-testid="confirm-remove-transition" @click="confirmRemoveTransition" />
+        </q-card-actions>
+      </q-card>
+    </q-dialog>
 
     <q-dialog v-model="confirmingRemove">
       <q-card>

@@ -74,6 +74,45 @@ describe('WorkflowTab', () => {
     expect(api.putWorkflow).toHaveBeenCalledWith('doc', withApproval);
   });
 
+  it('shows read-only approval and editable marks; edits to other parts keep them on save', async () => {
+    const withApproval: Workflow = {
+      ...saved,
+      states: [{ optionId: 11, readOnly: false, editable: true }, { optionId: 12, readOnly: true }],
+      transitions: [{ from: 11, to: 12, groupIds: [3], approval: { required: true, noMatch: 'direct' } }],
+    };
+    api.putWorkflow.mockResolvedValue(withApproval);
+    const w = await mountTab(mod(), withApproval);
+    expect(w.find('[data-testid="transition-approval-0"]').text()).toBe('需簽核');
+    expect(w.find('[data-testid="state-editable-11"]').text()).toBe('可編輯');
+    expect(w.find('[data-testid="state-editable-12"]').exists()).toBe(false);
+    w.findAllComponents({ name: 'QSelect' })[3]!.vm.$emit('update:modelValue', []);
+    await w.find('[data-testid="state-readonly-11"]').trigger('click');
+    await flushPromises();
+    await w.find('[data-testid="save-workflow"]').trigger('click');
+    await flushPromises();
+    const sent = api.putWorkflow.mock.calls[0]![1] as Workflow;
+    expect(sent.transitions[0]).toEqual({ from: 11, to: 12, groupIds: [], approval: { required: true, noMatch: 'direct' } });
+    expect(sent.states[0]).toEqual({ optionId: 11, readOnly: true, editable: true });
+  });
+
+  it('removing an approval transition asks first; a plain one is removed at once', async () => {
+    const mixed: Workflow = {
+      ...saved,
+      transitions: [{ from: 11, to: 12, groupIds: [3], approval: { required: true, noMatch: 'block' } }, { from: 12, to: 11, groupIds: [] }],
+    };
+    const w = await mountTab(mod(), mixed);
+    await w.find('[data-testid="transition-remove-1"]').trigger('click');
+    expect(w.find('[data-testid="transition-row-1"]').exists()).toBe(false);
+    await w.find('[data-testid="transition-remove-0"]').trigger('click');
+    await flushPromises();
+    expect(w.find('[data-testid="transition-row-0"]').exists()).toBe(true);
+    expect(document.body.textContent).toContain('這條轉移需要簽核');
+    (document.body.querySelector('[data-testid="confirm-remove-transition"]') as HTMLElement).click();
+    await flushPromises();
+    expect(w.find('[data-testid="transition-row-0"]').exists()).toBe(false);
+    w.unmount();
+  });
+
   it('cannot be saved until a status field and an initial state are picked', async () => {
     const w = await mountTab(mod(), null);
     expect(w.find('[data-testid="save-workflow"]').attributes('disabled')).toBeDefined();
