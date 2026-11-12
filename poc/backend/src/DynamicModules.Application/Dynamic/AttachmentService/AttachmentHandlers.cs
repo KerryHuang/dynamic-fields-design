@@ -97,11 +97,12 @@ public sealed class CheckAttachmentUploadHandler(AttachmentUploadGate gate, IPol
 
 /// <summary>
 /// 上傳：先過資格檢查（<see cref="AttachmentUploadGate"/>），再驗檔名、副檔名白名單、大小與數量，
-/// 最後把檔案描述寫進記錄的值（走歷程與 RowVersion）。檔案先寫、值後寫：值寫入失敗時刪除剛寫的檔案。
+/// 最後把檔案描述寫進記錄的值（走歷程與 RowVersion）。檔案先寫、值後寫：值寫入失敗時刪除剛寫的檔案；
+/// 寫入後的階段（後盾、事件、檢查）以結果回報失敗時，handler 看不到，由控制器呼叫 <see cref="AttachmentUploadTracker.DeleteAll"/> 清檔。
 /// </summary>
 public sealed class UploadAttachmentHandler(
     AttachmentUploadGate gate, IAttachmentStore store, IPolicyReader policies, RecordHistoryWriter history, IUnitOfWork uow,
-    ICurrentUser user, IBusinessTime time) : IRequestHandler<UploadAttachmentRequest, ServiceResult>
+    ICurrentUser user, IBusinessTime time, AttachmentUploadTracker tracker) : IRequestHandler<UploadAttachmentRequest, ServiceResult>
 {
     public async Task<ServiceResult> Handle(UploadAttachmentRequest request, CancellationToken ct)
     {
@@ -121,6 +122,7 @@ public sealed class UploadAttachmentHandler(
         var id = Guid.NewGuid().ToString("N");
         var size = await store.SaveAsync(id, request.Content, await policies.IntAsync(PolicyCatalog.AttachmentMaxFileBytes, module.Id, ct), ct);
         if (size is null) return Invalid(field.Key, AttachmentRules.TooLarge);
+        tracker.Track(id);
 
         try
         {

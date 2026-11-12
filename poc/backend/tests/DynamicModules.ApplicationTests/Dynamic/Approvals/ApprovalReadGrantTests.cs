@@ -184,7 +184,7 @@ public class ApprovalReadGrantTests : ApprovalTestBase
         await Permissions(new FieldPermissionDto(_files, FinanceGroup, FieldAccess.Hidden));
         As("buyer1");
         var po = await NewPo(_r, price: 30000);
-        var up = await Send(new UploadAttachmentRequest(po.Id, _files, new MemoryStream(Encoding.UTF8.GetBytes("收據")), "receipt.txt"));
+        var up = await Send(new UploadAttachmentRequest(po.Id, _files, new MemoryStream(Encoding.UTF8.GetBytes("收據")), "receipt.txt", 6));
         up.IsCreated.Should().BeTrue(Dump(up));
         var file = (UploadedAttachment)up.Data!;
         await MustSubmit(po.Id, _r.Confirmed);
@@ -213,7 +213,7 @@ public class ApprovalReadGrantTests : ApprovalTestBase
         await Rig();
         As("buyer1");
         var po = await NewPo(_r, price: 30000);
-        var up = await Send(new UploadAttachmentRequest(po.Id, _files, new MemoryStream(Encoding.UTF8.GetBytes("收據")), "receipt.txt"));
+        var up = await Send(new UploadAttachmentRequest(po.Id, _files, new MemoryStream(Encoding.UTF8.GetBytes("收據")), "receipt.txt", 6));
         up.IsCreated.Should().BeTrue(Dump(up));
         var file = (UploadedAttachment)up.Data!;
         await MustSubmit(po.Id, _r.Confirmed);

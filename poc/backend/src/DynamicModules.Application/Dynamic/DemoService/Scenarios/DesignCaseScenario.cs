@@ -177,7 +177,7 @@ public sealed class DesignCaseScenario : IDemoScenario
 
     private static async Task<ServiceResult> Upload(DemoContext ctx, DemoRecord rec, string name, byte[] bytes, CancellationToken ct)
     {
-        var r = await ctx.Sender.Send(new UploadAttachmentRequest(rec.Id, ctx.Crm!.Ids.FieldIds["design-case.drawings"], new MemoryStream(bytes), name), ct);
+        var r = await ctx.Sender.Send(new UploadAttachmentRequest(rec.Id, ctx.Crm!.Ids.FieldIds["design-case.drawings"], new MemoryStream(bytes), name, bytes.Length), ct);
         if (r.IsSuccess) rec.RowVersion = ((UploadedAttachment)r.Data!).RowVersion;
         return r;
     }

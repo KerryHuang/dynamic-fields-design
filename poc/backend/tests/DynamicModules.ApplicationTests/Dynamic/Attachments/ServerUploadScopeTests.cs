@@ -38,7 +38,7 @@ public class ServerUploadScopeTests : TaskTestBase
     {
         var (record, field) = await RecordWithFileField();
 
-        var r = await Send(new UploadAttachmentRequest(record, field, Bytes("x"), "a.txt"));
+        var r = await Send(new UploadAttachmentRequest(record, field, Bytes("x"), "a.txt", 1));
 
         r.IsConflict.Should().BeTrue();
         r.Message.Should().StartWith(AttachmentRules.UploadDisabledPrefix);
@@ -51,11 +51,11 @@ public class ServerUploadScopeTests : TaskTestBase
 
         using (ServerUploadScope.Begin())
         {
-            (await Send(new UploadAttachmentRequest(record, field, Bytes("x"), "a.txt"))).IsCreated.Should().BeTrue();
-            var bad = await Send(new UploadAttachmentRequest(record, field, Bytes("x"), "a.exe"));
+            (await Send(new UploadAttachmentRequest(record, field, Bytes("x"), "a.txt", 1))).IsCreated.Should().BeTrue();
+            var bad = await Send(new UploadAttachmentRequest(record, field, Bytes("x"), "a.exe", 1));
             bad.IsInvalid.Should().BeTrue("範圍只略過環境開關，副檔名白名單照常");
         }
-        (await Send(new UploadAttachmentRequest(record, field, Bytes("x"), "b.txt"))).IsConflict.Should().BeTrue("離開範圍後恢復");
+        (await Send(new UploadAttachmentRequest(record, field, Bytes("x"), "b.txt", 1))).IsConflict.Should().BeTrue("離開範圍後恢復");
     }
 
     [Fact]

@@ -11,7 +11,7 @@ namespace DynamicModules.WebAPI.Controllers.v3.Dynamic;
 /// </summary>
 [ApiController]
 [Route("api/v3/dynamic")]
-public class AttachmentsController(IMediator mediator) : ControllerBase
+public class AttachmentsController(IMediator mediator, AttachmentUploadTracker tracker) : ControllerBase
 {
     [HttpGet("attachments/settings")]
     public async Task<IActionResult> Settings() => (await mediator.Send(new GetAttachmentSettingsRequest())).ToActionResult(this);
@@ -24,7 +24,18 @@ public class AttachmentsController(IMediator mediator) : ControllerBase
         if (file is null || file.Length == 0)
             return ServiceResult.Invalid(new Dictionary<string, string[]> { ["file"] = [AttachmentRules.NameRequired] }).ToActionResult(this);
         await using var stream = file.OpenReadStream();
-        return (await mediator.Send(new UploadAttachmentRequest(recordId, fieldId, stream, file.FileName), ct)).ToActionResult(this);
+        try
+        {
+            var result = await mediator.Send(new UploadAttachmentRequest(recordId, fieldId, stream, file.FileName, file.Length), ct);
+            // 檔案先寫、記錄後寫：管線後段（簽核後盾、事件、檢查）回失敗時，剛寫的檔案不留
+            if (!result.IsSuccess) tracker.DeleteAll();
+            return result.ToActionResult(this);
+        }
+        catch
+        {
+            tracker.DeleteAll();
+            throw;
+        }
     }
 
     [HttpGet("records/{recordId:long}/attachments/{fieldId:long}/{fileId}")]

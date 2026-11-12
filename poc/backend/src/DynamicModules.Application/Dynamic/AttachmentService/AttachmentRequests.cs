@@ -1,12 +1,17 @@
 using DynamicModules.Application.Common;
 using DynamicModules.Application.Common.Security;
+using System.Text.Json.Serialization;
 using MediatR;
 
 namespace DynamicModules.Application.Dynamic.AttachmentService;
 
-/// <summary>上傳一個檔案到記錄的附件欄位。只能對已存檔的記錄上傳（檔案參照靠記錄的值，沒有「暫存區」）。</summary>
-public sealed record UploadAttachmentRequest(long RecordId, long FieldId, Stream Content, string? FileName)
-    : IRequest<ServiceResult>, ITransactionalRequest;
+/// <summary>
+/// 上傳一個檔案到記錄的附件欄位。只能對已存檔的記錄上傳（檔案參照靠記錄的值，沒有「暫存區」）。
+/// 算一次記錄更新（走寫入管線：事件、檢查、任務規則、事實鎖、分錄、簽核後盾）。
+/// <see cref="Content"/> 不進冪等雜湊，改以檔名與 <see cref="Length"/> 代表檔案。
+/// </summary>
+public sealed record UploadAttachmentRequest(long RecordId, long FieldId, [property: JsonIgnore] Stream Content, string? FileName, long Length)
+    : IRequest<ServiceResult>, IRecordWriteRequest;
 
 /// <summary>只檢查上傳資格（權限、可寫、環境開關），不讀檔案；給控制器在收進請求主體前先擋。</summary>
 public sealed record CheckAttachmentUploadRequest(long RecordId, long FieldId) : IRequest<ServiceResult>;

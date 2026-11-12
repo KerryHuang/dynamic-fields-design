@@ -684,4 +684,79 @@ public class AttachmentApiTests : IDisposable
         res.StatusCode.Should().Be(HttpStatusCode.OK);
         (await res.Content.ReadAsStringAsync()).Should().NotContain($"\"fieldId\":{w.FieldId},");
     }
+
+    // ---- 上傳走記錄寫入管線（a2d2）----
+
+    private static object Name(string key) => new Dictionary<string, string> { ["zh-TW"] = key };
+
+    private Task<HttpResponseMessage> UploadWithKey(World w, string key, string fileName)
+    {
+        var req = new HttpRequestMessage(HttpMethod.Post, $"{Base}/records/{w.RecordId}/attachments/{w.FieldId}")
+        {
+            Content = Form(fileName, "hello"u8.ToArray())
+        };
+        req.Headers.Add("Idempotency-Key", key);
+        return Admin.SendAsync(req);
+    }
+
+    [Fact]
+    [Trait("Category", "Postgres")]
+    public async Task Upload_WithIdempotencyKey_ReplayDoesNotStoreSecondFile()
+    {
+        var w = await MakeWorld();
+        var key = "up-" + Guid.NewGuid().ToString("N");
+        var first = await UploadWithKey(w, key, "a.txt");
+        var second = await UploadWithKey(w, key, "a.txt");
+
+        first.StatusCode.Should().Be(HttpStatusCode.Created, await first.Content.ReadAsStringAsync());
+        second.StatusCode.Should().Be(HttpStatusCode.Created);
+        (await JsonOf(second)).GetProperty("id").GetString().Should().Be((await JsonOf(first)).GetProperty("id").GetString());
+        (await RecordValues(w)).GetProperty(w.FieldKey).GetArrayLength().Should().Be(1);
+        DiskFiles().Should().HaveCount(1);
+    }
+
+    [Fact]
+    [Trait("Category", "Postgres")]
+    public async Task Upload_WithIdempotencyKey_DifferentFileName_Returns422()
+    {
+        var w = await MakeWorld();
+        var key = "up-" + Guid.NewGuid().ToString("N");
+        (await UploadWithKey(w, key, "a.txt")).StatusCode.Should().Be(HttpStatusCode.Created);
+
+        (await UploadWithKey(w, key, "b.txt")).StatusCode.Should().Be(HttpStatusCode.UnprocessableEntity);
+        DiskFiles().Should().HaveCount(1);
+    }
+
+    /// <summary>寫入後的階段（這裡用跨記錄驗證）以結果回報失敗時，剛寫進儲存的檔案要收掉。</summary>
+    [Fact]
+    [Trait("Category", "Postgres")]
+    public async Task Upload_RejectedByWriteStage_NoOrphanFile()
+    {
+        var module = await CreateModule(Admin);
+        var item = await AddField(Admin, module, "text");
+        var qty = await AddField(Admin, module, "decimal");
+        var files = await AddField(Admin, module, "attachment");
+        await Activate(Admin, module);
+        _app.GrantBusinessGroups(module);
+        var title = await TitleKey(Admin, module);
+        var createRes = await Admin.PostAsJsonAsync($"{Base}/modules/{module}/records",
+            new { values = new Dictionary<string, object> { [title] = "t", [item.Key] = "A", [qty.Key] = 5 } });
+        createRes.StatusCode.Should().Be(HttpStatusCode.Created, await createRes.Content.ReadAsStringAsync());
+        var created = await JsonOf(createRes);
+        var key = "chk-" + Guid.NewGuid().ToString("N")[..8];
+        (await Admin.PostAsJsonAsync($"{Base}/checks", new
+        {
+            key, name = Name(key), moduleKey = module, active = true,
+            definition = new
+            {
+                groupBy = new[] { item.Id }, function = "sum", fieldId = qty.Id,
+                assert = new { op = "gte", limit = new { @const = 100 } }, message = Name("不足")
+            }
+        })).StatusCode.Should().Be(HttpStatusCode.Created);
+
+        var res = await Admin.PostAsync($"{Base}/records/{created.GetProperty("id").GetInt64()}/attachments/{files.Id}", Form("a.txt", "hi"u8.ToArray()));
+
+        res.StatusCode.Should().Be(HttpStatusCode.BadRequest, await res.Content.ReadAsStringAsync());
+        DiskFiles().Should().BeEmpty();
+    }
 }
