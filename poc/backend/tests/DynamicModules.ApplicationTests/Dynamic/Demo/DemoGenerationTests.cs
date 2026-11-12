@@ -25,8 +25,8 @@ internal static class DemoDb
             .Select(r => $"{modules[r.ModuleId]}|{r.Title}|{r.ValuesJson}|{r.OwnerUserId}|{r.CreatedUserId}|{r.CreatedTime:O}|{r.ModifiedUserId}|{r.ModifiedTime:O}");
         var history = (await db.Set<RecordHistory>().AsNoTracking().ToListAsync()).OrderBy(h => h.Id)
             .Select(h => $"{h.RecordId}|{h.Operation}|{(h.FieldId is { } id ? fields[id] : null)}|{h.OldValue}|{h.NewValue}|{h.ChangedUserId}|{h.ChangedTime:O}");
-        // 附件檔案編號是上傳時隨機產生的（Guid），內容位元組才是固定的；快照比較時把編號蓋掉
-        return [.. records.Concat(history).Select(line => System.Text.RegularExpressions.Regex.Replace(line, "[0-9a-f]{32}", "<file-id>"))];
+        // 附件檔案編號（"id":"<32 位十六進位>"）是上傳時隨機產生的（Guid），內容位元組才是固定的；快照比較時只把這種編號蓋掉
+        return [.. records.Concat(history).Select(line => System.Text.RegularExpressions.Regex.Replace(line, "\"id\":\"[0-9a-f]{32}\"", "\"id\":\"<file-id>\""))];
     }
 
     public static Task<List<Record>> Records(DynamicDbContext db, string moduleKey) =>

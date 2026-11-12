@@ -41,10 +41,11 @@ public sealed class DesignCaseScenario : IDemoScenario
         t = ConfirmSecondRound(plan, closed, "客戶確認此版", -10, t);
         var submit = plan.At(Day(plan, -10), t);
         plan.Refresh(closed, submit, Sales, "設計案 感測器外殼改版 重讀");
-        plan.Run(plan.At(Day(plan, -10), submit), Sales, "設計案 感測器外殼改版 送簽", (ctx, ct) => Submit(ctx, closed, "客戶已確認第二版", ct));
-        var approve = plan.At(Day(plan, -9));
+        var submitted = plan.At(Day(plan, -10), submit);
+        plan.Run(submitted, Sales, "設計案 感測器外殼改版 送簽", (ctx, ct) => Submit(ctx, closed, "客戶已確認第二版", ct));
+        var approve = plan.At(Day(plan, -9), submitted);
         plan.Run(approve, Manager, "設計案 感測器外殼改版 同意", (ctx, ct) => Approve(ctx, closed, "同意", ct));
-        var close = plan.At(Day(plan, -8));
+        var close = plan.At(Day(plan, -8), approve);
         plan.Refresh(closed, close, Manager, "設計案 感測器外殼改版 重讀");
         plan.Update(closed, plan.At(Day(plan, -8), close), Manager, "設計案 感測器外殼改版 結案", Status("closed"));
 
@@ -54,7 +55,7 @@ public sealed class DesignCaseScenario : IDemoScenario
         t = FirstDrawing(plan, pending, "控制箱面板", -11, t);
         t = CustomerFeedback(plan, pending, customers[1], "控制箱面板", "背光改成白色，按鍵間距加大", -9, t);
         t = SecondDrawing(plan, pending, "控制箱面板", -4, t, setCustomerReview: false);
-        var review = plan.At(Day(plan, -3));
+        var review = plan.At(Day(plan, -3), t);
         plan.Update(pending, review, Designer, "設計案 控制箱面板改版 → 客戶確認中", Status("customer-review"));
 
         // 第三筆：第一輪設計中
@@ -89,8 +90,9 @@ public sealed class DesignCaseScenario : IDemoScenario
         plan.Update(rec, row, Designer, $"設計案 {prefix} 明細 v1", (ctx, r) => AddDrawingRow(ctx, r, 1, $"{prefix}-v1.png", null));
         var done = plan.At(Day(plan, day), row);
         plan.Run(done, Designer, $"設計案 {prefix} 繪製留言", (ctx, ct) => Comment(ctx, rec, DrawTitle, "第一版完成，請業務確認", [], ct));
-        plan.Run(plan.At(Day(plan, day), done), Designer, $"設計案 {prefix} 繪製完成", (ctx, ct) => CompleteTask(ctx, rec, DrawTitle, ct));
-        var status = plan.At(Day(plan, day), done);
+        var drawn = plan.At(Day(plan, day), done);
+        plan.Run(drawn, Designer, $"設計案 {prefix} 繪製完成", (ctx, ct) => CompleteTask(ctx, rec, DrawTitle, ct));
+        var status = plan.At(Day(plan, day), drawn);
         plan.Update(rec, status, Designer, $"設計案 {prefix} → 客戶確認中", Status("customer-review"));
         return status;
     }
@@ -105,8 +107,9 @@ public sealed class DesignCaseScenario : IDemoScenario
                 ("date", date), ("customer", customer.Id), ("owner", Sales))));
         var row = plan.At(Day(plan, day), at);
         plan.Refresh(rec, row, Sales, $"設計案 {prefix} 重讀");
-        plan.Update(rec, plan.At(Day(plan, day), row), Sales, $"設計案 {prefix} 客戶意見 v1", (ctx, r) => SetFeedback(ctx, r, 0, feedback));
-        var comment = plan.At(Day(plan, day), row);
+        var fb = plan.At(Day(plan, day), row);
+        plan.Update(rec, fb, Sales, $"設計案 {prefix} 客戶意見 v1", (ctx, r) => SetFeedback(ctx, r, 0, feedback));
+        var comment = plan.At(Day(plan, day), fb);
         plan.Run(comment, Sales, $"設計案 {prefix} 客戶標註留言", (ctx, ct) => Comment(ctx, rec, ConfirmTitle, "@{designer01} 客戶標註如附件",
             [new("客戶標註-v1.png", "image/png", DemoDrawings.Png(1, DemoDrawings.Kind.MarkedUp)),
              new("修改說明.txt", "text/plain", DemoDrawings.Note(feedback))], ct));

@@ -64,15 +64,30 @@ public class DesignCaseScenarioTests(DemoGeneratedFixture fx)
         (await StatusLabel(rec)).Should().Be("結案");
 
         var statusKey = await fx.Key(Case, "狀態");
-        var history = ((PagedResponse<RecordHistoryResponse>)(await fx.As("admin", new GetRecordHistoryRequest(rec.Id, 1, 200, "zh-TW"))).Data!).Items
+        var allHistory = ((PagedResponse<RecordHistoryResponse>)(await fx.As("admin", new GetRecordHistoryRequest(rec.Id, 1, 200, "zh-TW"))).Data!).Items;
+        var history = allHistory
             .Where(h => h.FieldKey == statusKey && h.Detail is null).OrderBy(h => h.ChangedTime).ThenBy(h => h.Id).ToList();
         history.Select(h => h.NewText).Should().Equal("設計中", "客戶確認中", "設計中", "客戶確認中", "待主管確認", "結案");
 
         var instance = await fx.Host.Db.Context.Set<ApprovalInstance>().AsNoTracking().SingleAsync(i => i.RecordId == rec.Id);
         instance.Status.Should().Be("approved");
         instance.InitiatorUserId.Should().Be("sales01");
-        var approvers = await fx.Host.Db.Context.Set<ApprovalTask>().AsNoTracking().Select(t => t.AssigneeUserId).Distinct().ToListAsync();
-        approvers.Should().Contain("manager01");
+        var approvers = await fx.Host.Db.Context.Set<ApprovalTask>().AsNoTracking().Where(t => t.InstanceId == instance.Id).Select(t => t.AssigneeUserId).Distinct().ToListAsync();
+        approvers.Should().Equal("manager01");
+
+        // 時間軸一步接一步：每次「完成繪製」都在接著改客戶確認中之前；「客戶意見 v1」不晚於退回設計中
+        var tasks = await TasksOf(rec.Id);
+        var draws = tasks.Where(t => t.RuleTaskCode == "draw").OrderBy(t => t.Id).ToList();
+        var toReview = history.Where(h => h.NewText == "客戶確認中").ToList();
+        var toDesigning = history.Where(h => h.NewText == "設計中").ToList();
+        draws.Should().HaveCount(2);
+        for (var i = 0; i < 2; i++)
+            draws[i].CompletedTime.Should().BeOnOrBefore(toReview[i].ChangedTime, $"第 {i + 1} 輪繪製完成要早於改客戶確認中");
+        var confirms = tasks.Where(t => t.RuleTaskCode == "confirm").OrderBy(t => t.Id).ToList();
+        confirms[0].CompletedTime.Should().BeOnOrBefore(toDesigning[1].ChangedTime, "第一輪確認完成早於退回設計中");
+        var feedbackV1 = allHistory.Single(h => h.Detail is not null && h.NewText == "指示燈窗改到右上角，側面加散熱槽");
+        feedbackV1.ChangedTime.Should().BeBefore(toDesigning[1].ChangedTime, "客戶意見 v1 在退回設計中之前填");
+        history.Select(h => h.ChangedTime).Should().BeInAscendingOrder();
     }
 
     [Fact]
@@ -146,7 +161,9 @@ public class DesignCaseScenarioTests(DemoGeneratedFixture fx)
         var review = long.Parse((await fx.Opt(Case, "狀態", "待主管確認"))[4..]);
         var preview = await fx.As("sales01", new PreviewRecordApprovalRequest(rec.Id, review));
         preview.IsSuccess.Should().BeTrue(preview.Message);
-        JsonSerializer.Serialize(preview.Data).Should().Contain("manager01");
+        var stages = ((ApprovalPreviewResponse)preview.Data!).Stages;
+        stages.Should().ContainSingle("只有一關");
+        stages[0].Approvers.Select(a => a.UserId).Should().Equal("manager01");
     }
 
     [Fact]
@@ -167,10 +184,10 @@ public class DesignCaseScenarioTests(DemoGeneratedFixture fx)
     {
         // 整個測試共用同一個 scope：每次請求前把「每個請求一份」的狀態歸零（同 DemoStructure 的 BeginStep）
         var sp = host.Services;
-        sp.GetRequiredService<IWriteJournal>().Clear();
-        sp.GetRequiredService<DynamicModules.Application.Dynamic.EventService.EffectBudget>().Reset();
-        sp.GetRequiredService<DynamicModules.Application.Dynamic.ApprovalService.ApprovalWriteContext>().Clear();
-        sp.GetRequiredService<DynamicModules.Application.Dynamic.ApprovalService.ApprovalLockService>().Reset();
+        DemoStructure.ResetPerRequestState(sp.GetRequiredService<IWriteJournal>(),
+            sp.GetRequiredService<DynamicModules.Application.Dynamic.EventService.EffectBudget>(),
+            sp.GetRequiredService<DynamicModules.Application.Dynamic.ApprovalService.ApprovalWriteContext>(),
+            sp.GetRequiredService<DynamicModules.Application.Dynamic.ApprovalService.ApprovalLockService>());
         using var _ = ActingScope.Begin(user);
         return await host.Send(request);
     }

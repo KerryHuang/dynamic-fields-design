@@ -66,7 +66,9 @@ public class CampaignTaskScenarioTests(DemoGeneratedFixture fx)
         fx.Generated();
         var mine = await NotificationsOf("sales01");
 
-        mine.Should().NotContain(n => n.Kind == NotificationKinds.TaskAssigned && n.TitleSnapshot == "規劃活動內容", "自己建立的活動、自己是規劃負責人，不通知自己");
+        // 白名單：sales01 收到的指派通知只能是設計案的兩種任務；活動情境自己建、自己負責的任務一律不通知自己
+        mine.Where(n => n.Kind == NotificationKinds.TaskAssigned).Select(n => n.TitleSnapshot)
+            .Should().OnlyContain(t => t == "確認需求並交設計" || t == "將設計圖交客戶確認", "自己建立的活動、自己是規劃負責人，不通知自己");
         mine.Should().ContainSingle(n => n.Kind == NotificationKinds.TaskMentioned && n.TitleSnapshot == "展場佈置");
     }
 }
