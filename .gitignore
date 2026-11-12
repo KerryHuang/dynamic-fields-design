@@ -2,6 +2,8 @@ bin/
 obj/
 node_modules/
 poc/backend/data/*.db*
+# log 含使用者代碼、路徑與請求紀錄，公開 repo 不能誤提交
+poc/backend/data/*.log
 poc/backend/data/keys/
 dist/
 .quasar/

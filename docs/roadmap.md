@@ -20,7 +20,7 @@
 | p1b | 政策前端：系統「政策設定」頁、模組設計「政策」分頁；任務規則畫面改讀生效值 | 已上線 | [政策設定](superpowers/specs/2026-11-11-policy-settings-design.md) §9 |
 | p1c | 任務與通知政策：A6、A7、A13、A14 | 已上線 | [政策設定](superpowers/specs/2026-11-11-policy-settings-design.md) §9 |
 | p1d | 附件政策：A20（含部署設定檔當出廠值） | 已上線 | [政策設定](superpowers/specs/2026-11-11-policy-settings-design.md) §9 |
-| O1 | 維運地基：結構化 log 與 request id、health live／ready、版本端點、前端錯誤收集、背景排程器（o1a、o1b、o1c）；任務「即將到期」提醒改為到期前 N 天內補一次、同一任務只補一次（使用者 2026-11-12 裁決，排進 o1b） | 未開始 | [維運與觀測](superpowers/specs/2026-11-11-ops-observability-design.md) §9、§10 |
+| O1 | 維運地基：結構化 log 與 request id、health live／ready、版本端點、前端錯誤收集、背景排程器（o1a、o1b、o1c）；任務「即將到期」提醒改為到期前 N 天內補一次、同一任務只補一次（使用者 2026-11-12 裁決，排進 o1b） | 進行中：o1a（觀測地基）開發完成待合併上線，o1b、o1c 未開始 | [維運與觀測](superpowers/specs/2026-11-11-ops-observability-design.md) §9、§10 |
 | un1 | 列表、匯出、篩選的使用者欄位顯示姓名（小段穿插，使用者 11-11 裁決；位置是主控判斷，2026-11-12 排定） | 未開始 | — |
 | pg0a | PostgreSQL provider 抽象：依 `Database:Provider` 選資料庫，SQLite 行為不變、不加 migration；排在 O1 之後（使用者裁決 O1 → pg0），但沒有硬依賴，可視資源與 O1 並行 | 未開始 | [PostgreSQL provider](superpowers/specs/2026-11-12-postgres-provider-design.md) |
 | pg0 | （pg0b–pg0d）PostgreSQL provider 與 migration＋可在 PostgreSQL 跑的測試環境；驗收要含 O1 的排程器（兩實例搶同一工作）與通知維護（兩條路徑並行不重複）在 PostgreSQL 上通過；pg0a 另列 | 未開始 | [PostgreSQL provider](superpowers/specs/2026-11-12-postgres-provider-design.md) |

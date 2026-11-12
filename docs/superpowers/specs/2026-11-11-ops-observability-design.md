@@ -429,8 +429,9 @@ o1a 與 o1c 可平行；o1b 有 migration，不與其他加 migration 的工作�
 - 每個請求的 request id＝目前 `Activity` 的 W3C trace id（32 個十六進位字元）。請求一開始就把 `HttpContext.TraceIdentifier` 設成同一個值，於是現有錯誤回應裡的 `traceId` 不用改，自動和 log 對得上。
 - 所有回應加 `X-Request-Id` 標頭。
 - 預設不採用外部送來的 `traceparent`，避免客戶端操控 log 裡的識別碼；放在自家反向代理後面時，可由部署設定 `Ops:TrustIncomingTraceParent` 開啟（主控判斷 T3）。
-- 每個請求開一個 log scope：`requestId`、`userId`、`route`（路由樣板，例如 `api/dynamic/{moduleKey}/records/{id}`）、`moduleKey`（路由有才帶）。
-- 規則引擎執行時再開一層 scope：`ruleKind`（event、check、taskRule、formula）、`ruleId`。O1 只在事件串聯、檢查、任務規則三個入口加，供 §5.1 的歸屬判斷。
+- 每個請求開 log scope：外層 `requestId`（`RequestContextMiddleware`，整條 pipeline 第一個）；內層 `userId`、`route`（路由樣板，例如 `api/v3/dynamic/modules/{key}`）、`moduleKey`（路由有才帶；`RequestScopeMiddleware`，認證之後）。〔o1a 計畫判斷 J5〕路由樣板與 `moduleKey` 在呼叫 `next` 之前就存進 `RequestOpsFeature`：`ExceptionHandlerMiddleware` 會清掉 endpoint，內層 scope 在例外往外傳時也已 Dispose，所以請求結束行與例外 log 不靠 scope，`UserId`、`Route`、`ModuleKey` 直接寫成欄位；只有 handler 內記的 log 帶內層 scope。框架自帶的 `RequestId` 欄位（連線序號格式）會並存，以 `requestId`（＝`TraceId`）為準（J6）。
+- 所有 ProblemDetails 與 `SessionMiddleware`（401、403）、`IdempotencyKeyMiddleware`（400）的回應主體，`traceId` 一律等於 `X-Request-Id`（J7）。
+- 規則歸屬〔o1a 計畫判斷 J9，取代原「規則 scope」寫法〕：scope 在例外往外傳時已 Dispose，最後一道 handler 看不到，所以改用例外標記。事件串聯、檢查、任務規則三個入口在每條規則外面加 `catch (Exception e) when (RuleFailureTag.Mark(e, kind, ruleId))`（永遠回 false，不吞例外），把 `ruleKind`（event、check、taskRule）與 `ruleId` 寫進 `e.Data`（最內層先寫者為準）；最後一道 handler 讀出來記進 log。`Mark` 不計數，`formwright.rule.failures` 只在最後一道 handler 真的處理到未處理例外且讀得到標記時才 +1，避免把 409、503 等正常流程算成規則失敗（O2 自動暫停會誤停）。代價：規則執行中記的 log 不帶規則識別。
 - 背景工作的 scope：`jobKey`、`runId`、`instanceId`。
 - mcp1 加入 MCP 後，請求 scope 再多 `channel`（畫面、MCP）與權杖 id；O1 先把 scope 的建立集中在一個 middleware，mcp1 只加欄位。
 
@@ -438,33 +439,32 @@ o1a 與 o1c 可平行；o1b 有 migration，不與其他加 migration 的工作�
 
 - 非開發環境改用內建的 JSON console formatter，開 `IncludeScopes`；開發環境維持現在的純文字（主控判斷 T2：不引入 Serilog）。
 - 每個請求結束時記一行，欄位：方法、路由樣板、狀態碼、耗時毫秒。
-  - 5xx 記 Error；4xx 記 Information；耗時超過 `ops.slowRequestMs` 記 Warning。
-  - `ops.slowRequestMs` 用 60 秒的程序內快取讀（主控判斷 B2）：政策讀值只有「同一個 request 內快取」（政策設定 §6），每個請求結束時去讀等於每個請求多一次資料庫讀，違反反目標「不拖垮業務請求」。代價是改值後最多 60 秒才生效。
+  - 503 記 Warning（資料庫忙碌這類可重試的暫時狀況，記 Error 會在 O2 變成事件；O2 要看忙碌趨勢改查 Warning），其他 5xx 記 Error；4xx 記 Information；耗時超過 `ops.slowRequestMs` 記 Warning（J32）。
+  - `ops.slowRequestMs` 用 60 秒的程序內快取讀（主控判斷 B2；實作 `CachedSystemPolicy`，J12）：讀不到資料庫時回出廠值並記 Warning，失敗結果也快取 10 秒、讀值逾時 2 秒，避免資料庫故障時每個請求都再連一次；請求耗時低於政策下限（200ms）時不讀政策。政策讀值只有「同一個 request 內快取」（政策設定 §6），每個請求結束時去讀等於每個請求多一次資料庫讀，違反反目標「不拖垮業務請求」。代價是改值後最多 60 秒才生效。
   - 2xx 且不慢的記 Debug（預設不輸出），避免鈴鐺輪詢灌爆 log。
   - 不記 `/api/health/*` 與靜態檔。
-- 新增最後一道 `IExceptionHandler`：記 Error（含例外型別、指紋、route、scope），回 ProblemDetails，body 帶 `traceId`（與現有三個 handler 同格式）。
-- 不准寫進 log 的內容（寫死，§12；與 MCP 設計 §9.3 合併成這一份清單）：查詢字串、request／response body、記錄欄位值、密碼、cookie、`Authorization` 標頭、上傳檔名、MCP 個人存取權杖明文（`fwp_` 開頭）、確認碼明文（`fwc_` 開頭）。EF Core 的 sensitive data logging 維持關閉。
+- 新增最後一道 `IExceptionHandler`（`UnhandledExceptionHandler`，註冊在其他三個之後）：記 Error（EventId 5000，含例外型別、指紋、route、userId、moduleKey、規則標記），回 `application/problem+json` 500，`traceId` 同 `X-Request-Id`，另帶 `message`（四語「系統發生錯誤，請稍後再試」，前端 `toApiError` 讀 `message`）（J8）。框架的 `BadHttpRequestException`（主體超限、格式壞掉）保留原狀態碼，只記 Information，不算指紋、不計 metric（J31）。
+- 不准**主動**寫進 log 的內容（我們自己的 log 呼叫；寫死，§12；與 MCP 設計 §9.3 合併成這一份清單）。框架自己的例外 log 帶完整例外訊息，可能含輸入值，所以產品 log 視同敏感資料控管存取（J29，部署說明已寫明）：查詢字串、request／response body、記錄欄位值、密碼、cookie、`Authorization` 標頭、上傳檔名、MCP 個人存取權杖明文（`fwp_` 開頭）、確認碼明文（`fwc_` 開頭）。EF Core 的 sensitive data logging 維持關閉。
 - log 落點：stdout。地端版由服務管理器（systemd journal、Docker、Windows 服務的包裝程式）收；要不要內建檔案輪替，留給地端安裝程式設計（§15）。
 
-#### 10.2.3 OpenTelemetry
+#### 10.2.3 自訂指標（O1 不裝 OpenTelemetry）
 
-主控判斷 T1：O1 採用 OpenTelemetry .NET，但**預設不匯出**。
+〔o1a 計畫判斷 J30，推翻主控判斷 T1〕理由（簡單優先）：O1 沒有任何匯出端，三個 OpenTelemetry 套件只帶來全域 propagator 互相影響、一條寫法不確定的測試與每請求多一個 Activity 的成本。
 
-- trace 與 metric 用 .NET 內建的 `ActivitySource`、`Meter`，O1 只加 ASP.NET Core 的 instrumentation（主控判斷 B5）。EF Core 的 instrumentation 先不加：builder 所知它長期是 prerelease（未查證）；要加時固定版號並寫進交付說明。
-- 套件三個：`OpenTelemetry.Extensions.Hosting`、`OpenTelemetry.Instrumentation.AspNetCore`、`OpenTelemetry.Exporter.OpenTelemetryProtocol`（授權與 .NET 8 支援在 o1a 計畫時確認）。
-- 部署設定有標準的 `OTEL_EXPORTER_OTLP_ENDPOINT` 時才啟用 OTLP exporter，可以接 Grafana Cloud 免費層等任何 OTLP 相容的後台；沒設就只在程序內產生，不送任何地方。
-- O1 自訂的 metric 只有三個：背景工作執行次數與耗時（依 jobKey、結果）、前端錯誤收件數、規則引擎失敗數（依 ruleKind）。其餘靠內建 instrumentation（HTTP 延遲、狀態碼）。
-- 地端版預設不匯出，不違反「只送匿名特徵」。
+- 自訂指標用 .NET 內建的 `System.Diagnostics.Metrics.Meter`（名稱 `Formwright`，`OpsMetrics`）：`formwright.job.runs`（依 job、result）、`formwright.job.duration`（ms）、`formwright.client_errors`、`formwright.rule.failures`（依 ruleKind）。
+- 不呼叫 `AddOpenTelemetry`、不設全域 propagator；忽略外來 `traceparent` 只靠 `IgnoreIncomingTraceContext`（`DistributedContextPropagator`）。
+- 目前沒有匯出端，要看用 `dotnet-counters monitor --counters Formwright`。接後台的工作段（O2 或 O3）再加 OpenTelemetry 與 OTLP exporter，約十行。
+- 地端版不匯出，不違反「只送匿名特徵」。
 
 #### 10.2.4 health
 
 | 端點 | 查什麼 | 回應 |
 |---|---|---|
 | `/api/health/live` | 不碰資料庫，只代表程序活著 | 200 `{status:"ok"}` |
-| `/api/health/ready` | 啟動初始化（migration、種子）已完成；資料庫 `SELECT 1` 在逾時內回應。不等索引回填 | 200 `{status:"ready"}`／503 `{status:"notReady", checks:{startup, database}}`，每項只回 ok／fail |
+| `/api/health/ready` | 資料庫在逾時內可連線（`AddDbContextCheck`，預設 `CanConnectAsync`）。不等索引回填 | 200 `{status:"ready"}`／503 `{status:"notReady", checks:{database:"fail"}}` |
 | `/api/health` | 維持現狀，等同 live（相容既有外部設定） | 200 `{status:"ok"}` |
 
-- 三個端點都不需登入，也不回錯誤細節或例外訊息（寫死，§12）；失敗原因只寫 log。
+- 三個端點都不需登入，也不回錯誤細節或例外訊息（寫死，§12）；失敗原因只寫 log。〔o1a 計畫判斷 J3、J4〕ready 只檢查資料庫、不含 `startup`：`Program.cs` 在 `app.Run()` 之前就跑完 migration、種子與索引回填，伺服器還沒聽埠，`startup` 永遠是 ok，寫了是死碼；日後把初始化改背景時再加回。`CanConnectAsync` 對 SQLite 只證明檔案打得開，O2 要更細的檢查再補。檢查逾時 2 秒，逾時回 503（不是 500）。
 - 用內建的 `Microsoft.Extensions.Diagnostics.HealthChecks` 加 EF Core 的 DbContext 檢查，兩種資料庫同一份寫法（主控判斷 T5：不用 Xabaril 套件；O2 要查 PostgreSQL 專屬統計時再評估）。
 - 資料庫逾時是寫死的技術限制（§12）：ready 在資料庫不通時也要能回答，而政策值存在資料庫裡，讀不到。
 - Demo 資料背景產生不影響 ready（沿用 `Program.cs:117` 的既有行為）。
@@ -473,7 +473,7 @@ o1a 與 o1c 可平行；o1b 有 migration，不與其他加 migration 的工作�
 
 #### 10.2.5 版本與 ops info
 
-- 版本資訊在建置時注入：Docker build-arg `APP_VERSION`、`GIT_COMMIT`、`BUILD_TIME` 傳給 `dotnet publish` 的 `InformationalVersion`，前端用同一組值注入 `import.meta.env`。本機開發沒有注入時回 `dev`。
+- 版本資訊在建置時注入〔o1a 計畫判斷 J10、J11〕：Docker build-arg `APP_VERSION`、`GIT_COMMIT`（退回 `RENDER_GIT_COMMIT`）、`BUILD_TIME` 傳給 `dotnet publish` 的 `-p:AppVersion/GitCommit/BuildTime`，寫成三個 `AssemblyMetadata`（不碰 `InformationalVersion`：沒注入時它預設是 `1.0.0`，分不出「沒注入」）；前端用同一組值注入（o1c）。沒注入時三個欄位都回 `dev`。⚠️ 未驗證 Render 是否把 `RENDER_GIT_COMMIT` 當 build arg 傳入，上線後在 Demo 看 `/api/version` 的 `commit`。
 - `GET /api/version`（不需登入）：`{version, commit, builtAt}`，只有這三個欄位（主控判斷 U8：比照 Odoo 公開版本資訊；外部探測與新版本比對都要用）。
 - `GET /api/v3/dynamic/system/ops/info`（系統管理員）：版本三欄、`Ops:Edition`、啟動時間、`instanceId`、資料庫種類、最新已套用的 migration、索引回填進度、排程器狀態（每個工作的最近開始、最近結束、結果、連續失敗次數、下次預定時間、租約持有者）。O2 的監控頁讀它。
 - 路徑放在 `/api/v3/dynamic` 底下（主控判斷 B1）：`SessionMiddleware` 只套用在這個前綴（`Prefix = "/api/v3/dynamic"`），放在外面時，被停用或被重設密碼的管理員舊 cookie 仍讀得到 ops info。
@@ -499,12 +499,13 @@ O1 就實作，log 與 O2 事件表共用同一套（主控判斷 T4）。指紋
 
 `POST /api/v3/dynamic/ops/client-errors`：
 
-- 路徑放在 `/api/v3/dynamic` 底下，並加進 `SessionMiddleware` 的匿名白名單（`IsAnonymous`）；已登入時照常經過 `SessionMiddleware` 的帳號檢查（主控判斷 B1）。
+- 路徑放在 `/api/v3/dynamic` 底下，並在 `SessionMiddleware` 加「可選登入」分支（`IsAnonymousOptional`）：沒帶身分就是匿名；帶 cookie 時照常比對資料庫，失效就降成匿名繼續（不回 401、不登出），有效才把 userId 交給 handler（主控判斷 B1；o1a 計畫判斷 J14）。
 - 不需登入（登入頁的錯誤也要收）；已登入時伺服器自行補上 userId，不信任 body 裡的身分。
 - body 上限、欄位長度、每來源 IP 與全站每分鐘次數都是寫死的技術限制（§12），超過回 413 或 429，前端不重試。
 - 伺服器重新算指紋、正規化訊息後記一行 Warning log（EventId `ClientError`）。O1 不寫資料庫；O2 起寫進維運事件表。
 - `ops.clientErrorCollection` 為否時回 204 並丟棄，不記 log。前端登入前讀不到政策，所以一律送，由伺服器決定收不收。伺服器讀這項政策同樣用 60 秒的程序內快取（B2）。
-- 來源 IP 判斷沿用登入限流的 `Auth:ClientIpHeader` 設定。
+- 來源 IP 判斷沿用登入限流的 `Auth:ClientIpHeader` 設定（抽成 `ClientIpResolver` 共用，J15）。
+- 欄位處理〔o1a 計畫判斷 J13〕：`kind` 只接受 `vue`、`window`、`promise`、`chunk`，其他回 400；body 超過 8KB 回 413；欄位超長在伺服器截斷而不回 413（訊息 500、stack 4000、`name`／`moduleKey` 100、`route`／`browser` 200、`version` 50、`locale` 20）；`route` 去掉 `?`、`#` 之後的部分、不是 `/` 開頭就記 null；`lastRequestId` 不符 32 個十六進位字元就記 null。log 帶原始訊息與原始 stack（J29），指紋與正規化訊息另列欄位。
 
 #### 10.2.8 背景排程器
 
@@ -715,6 +716,8 @@ O1 的三項見 §10.6。以下是 O2–O6 的建議登記（代碼與出廠值�
 - ready 檢查的資料庫逾時 2 秒（讀不到資料庫時也要能回答，不能放在資料庫裡的政策）。
 - 排程器檢查週期 30 秒、租約 5 分鐘、續租每 1 分鐘、單次執行最長 10 分鐘。
 - 前端錯誤收件：body 8KB、訊息 500 字、stack 4000 字；每來源 IP 每分鐘 30 則、全站每分鐘 600 則。
+- 前端錯誤收件的其他欄位上限：`name`／`moduleKey` 100、`route`／`browser` 200、`version` 50、`locale` 20，`lastRequestId` 32 個十六進位字元（O1 計畫判斷 J13）。
+- 請求路徑政策讀取失敗時快取 10 秒、讀值逾時 2 秒（O1 計畫判斷 J12）。
 - 前端本機：同指紋 5 分鐘一次、每分頁每分鐘 10 則。
 - 指紋長度 16 個十六進位字元、正規化訊息 200 字、取三個呼叫框。
 - `LastError` 截斷 1000 字。

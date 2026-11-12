@@ -22,7 +22,10 @@ API=backend/src/DynamicModules.WebAPI
 echo "產生 Demo 資料 ..."
 dotnet run --project "$API" -- --generate-demo-data >/dev/null 2>&1 || { echo "Demo 資料產生失敗" >&2; exit 1; }
 
-Demo__LoginEnabled=true dotnet run --no-build --project "$API" >/dev/null 2>&1 &
+# 後端輸出寫到 local-e2e.log（走查要看 JSON log 時加環境變數 Logging__Console__FormatterName=json 啟動）
+LOG="$ROOT/poc/backend/data/local-e2e.log"
+rm -f "$LOG"
+Demo__LoginEnabled=true dotnet run --no-build --project "$API" >"$LOG" 2>&1 &
 BACKEND=$!
 (cd frontend && exec bunx quasar dev >/dev/null 2>&1) &
 FRONTEND=$!
