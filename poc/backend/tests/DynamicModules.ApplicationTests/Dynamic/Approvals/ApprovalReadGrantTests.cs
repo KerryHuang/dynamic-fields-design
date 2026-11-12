@@ -9,6 +9,7 @@ using DynamicModules.Application.Dynamic.PermissionService.Data;
 using DynamicModules.Application.Dynamic.RecordService.Data;
 using DynamicModules.Application.Dynamic.RecordService.Queries.GetPagedRecords;
 using DynamicModules.Application.Dynamic.RecordService.Queries.GetRecord;
+using DynamicModules.Domain.Approvals;
 using DynamicModules.Domain.Entities.Dynamic;
 using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
@@ -27,12 +28,12 @@ public class ApprovalReadGrantTests : ApprovalTestBase
     /// 單據多一個金額欄位（Currency）與附件欄位；只有 buyers 群組（buyer1、buyer2）有模組的讀寫與 Pricing；
     /// finance 群組（fin1、fin2）對模組沒有任何權限。流程一關 finance 或簽。
     /// </summary>
-    private async Task Rig()
+    private async Task Rig(bool editableAmount = false)
     {
         _r = await BuildPurchase();
         _amount = (await MustAdd(_r.Module, FieldType.Currency, label: "金額")).Id;
         _files = (await MustAdd(_r.Module, FieldType.Attachment, label: "附件")).Id;
-        await SeedFlow(_r, "po-g", _r.Confirmed, 1, Def(null, Stage("fin", Group(FinanceGroup))));
+        await SeedFlow(_r, "po-g", _r.Confirmed, 1, Def(null, Stage("fin", Group(FinanceGroup), editable: editableAmount ? [_amount] : null)));
         (await SaveWorkflow(_r, [Needs(_r.Draft, _r.Confirmed), Plain(_r.Confirmed, _r.Partial), Plain(_r.Partial, _r.Received),
             Plain(_r.Confirmed, _r.Cancelled)])).IsSuccess.Should().BeTrue();
         await Permissions();
@@ -224,5 +225,58 @@ public class ApprovalReadGrantTests : ApprovalTestBase
 
         As("emp1");   // 沒有任務、沒有模組權限
         (await Send(new DownloadAttachmentRequest(po.Id, _files, file.Id))).IsForbidden.Should().BeTrue();
+    }
+
+    // ───────── 同意端與檢視端共用同一個欄位隱藏來源（審查 M2、裁決 U-A）─────────
+
+    private Task<ServiceResult> Approve(long instanceId, string user, Dictionary<string, JsonElement?>? values)
+    {
+        As(user);
+        var task = TasksOf(instanceId).Single(t => t.AssigneeUserId == user && t.Status == ApprovalTaskStatus.Open);
+        return Send(new ApproveTaskRequest(task.Id, Inst(instanceId).RowVersion, null, values));
+    }
+
+    [Fact]
+    public async Task GrantedApprover_EditableAmount_ListedAndApproveSucceeds()
+    {
+        await Rig(editableAmount: true);
+        var (po, id) = await Pending();
+
+        As("fin1");
+        var view = (RecordApprovalResponse)(await Send(new GetRecordApprovalRequest(po))).Data!;
+        view.Current!.Stages.Single(s => s.StageCode == "fin").EditableFieldKeys.Should().Equal($"f_{_amount}");
+
+        var res = await Approve(id, "fin1", V((_amount, 28000)));
+
+        res.IsSuccess.Should().BeTrue(Dump(res));
+        Rec(po).Values[$"f_{_amount}"]!.Value.GetDecimal().Should().Be(28000);
+    }
+
+    [Fact]
+    public async Task GrantedApprover_FieldOutsideEditable_StillRejected()
+    {
+        await Rig(editableAmount: true);
+        var (po, id) = await Pending();
+
+        var res = await Approve(id, "fin1", V((_r.Memo, "偷改")));
+
+        res.Errors[$"f_{_r.Memo}"].Should().Equal(ApprovalMessages.NotEditableField.Resolve(null));
+        Rec(po).Values.ContainsKey($"f_{_r.Memo}").Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task GrantedApprover_AmountHiddenByFieldException_ApproveWithItStill400()
+    {
+        // 限制優先：簽核人自己的群組把金額設為隱藏，臨時讀取也看不到 → 檢視端不列、同意端拒絕，兩邊一致
+        await Rig(editableAmount: true);
+        var (po, id) = await Pending();
+        var finance = Db.Context.Set<PermissionGroup>().AsNoTracking().Single(g => g.Key == "finance");   // 見 ApprovalTestBase 建立的財務群組
+        await Permissions(new FieldPermissionDto(_amount, finance.Id, FieldAccess.Hidden));
+
+        As("fin1");
+        var view = (RecordApprovalResponse)(await Send(new GetRecordApprovalRequest(po))).Data!;
+        view.Current!.Stages.Single(s => s.StageCode == "fin").EditableFieldKeys.Should().BeEmpty();
+        var res = await Approve(id, "fin1", V((_amount, 28000)));
+        res.Errors[$"f_{_amount}"].Should().Equal(ApprovalMessages.FieldHiddenForApprover.Resolve(null));
     }
 }

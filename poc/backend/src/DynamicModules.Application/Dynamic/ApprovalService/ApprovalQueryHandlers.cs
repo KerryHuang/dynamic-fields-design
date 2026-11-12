@@ -65,7 +65,7 @@ public sealed class ApprovalReader(IApprovalInstanceRepository repo, IDynamicAcc
 /// </summary>
 public class GetRecordApprovalHandler(
     IRecordRepository records, IModuleRepository modules, IApprovalInstanceRepository repo, IDynamicAccessGuard guard,
-    IPermissionRepository permissions, ApprovalReader reader, ApprovalReadGrant grant, ApprovalHiddenFields hiddenFields, ICurrentUser user)
+    IPermissionRepository permissions, ApprovalReader reader, ApprovalReadGrant grant, ICurrentUser user)
     : IRequestHandler<GetRecordApprovalRequest, ServiceResult>
 {
     public async Task<ServiceResult> Handle(GetRecordApprovalRequest request, CancellationToken ct)
@@ -109,7 +109,7 @@ public class GetRecordApprovalHandler(
         var writable = module.IsWritable();
         // 歷程的欄位遮蔽（設計 §8.5）：有 Read 用它；沒有時用臨時讀取權，再沒有就用自己的群組欄位例外（含明細來源隱藏）；
         // 讀不到權限輸入是 null（全部遮蔽）
-        var hidden = read?.HiddenFieldIds ?? granted?.HiddenFieldIds ?? await hiddenFields.ForUserAsync(module, user.UserId, ct);
+        var hidden = await grant.HiddenFieldIdsAsync(module, read, granted, ct);
         var views = visible.Select(i => ApprovalViews.Instance(i, runs, tasks, actions, names, me, writable, manager, hidden, module.Workflow)).ToList();
         var pending = instances.Any(i => i.Status == ApprovalInstanceStatus.Pending);
         var targets = canRead ? await reader.SubmitTargetsAsync(module, record, pending, ct) : [];

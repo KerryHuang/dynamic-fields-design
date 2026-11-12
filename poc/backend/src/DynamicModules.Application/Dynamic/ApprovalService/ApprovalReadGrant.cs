@@ -35,6 +35,13 @@ public sealed class ApprovalReadGrant(
         }
     }
 
+    /// <summary>
+    /// 讀者在這一筆記錄上看不到的欄位：有 Read 用 Read 的、沒有就用臨時讀取權（granted）的、再沒有用自己的群組欄位例外；
+    /// 讀不到權限輸入是 null（全部遮蔽）。簽核檢視（歷程遮蔽、可編輯欄位清單）與同意端共用這一個來源。
+    /// </summary>
+    public async Task<IReadOnlySet<long>?> HiddenFieldIdsAsync(Module module, EffectivePermissions? read, EffectivePermissions? granted, CancellationToken ct) =>
+        read?.HiddenFieldIds ?? granted?.HiddenFieldIds ?? await hiddenFields.ForUserAsync(module, user.UserId, ct);
+
     /// <summary>同一筆記錄的明細：動作軸取表頭（已確認是可動作者），欄位例外取明細模組。呼叫端只在 ForRecordAsync 放行之後才用。</summary>
     public async Task<EffectivePermissions?> ForDetailAsync(Module parent, Module child, CancellationToken ct)
     {

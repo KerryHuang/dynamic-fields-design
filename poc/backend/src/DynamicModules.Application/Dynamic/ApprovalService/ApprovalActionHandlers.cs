@@ -59,7 +59,8 @@ public sealed class ApprovalActionSupport(
 /// <summary>同意（設計 §7.2、§8.2）：或簽任一人、會簽全部席位；關卡完成就推進，沒有下一關就核准並執行轉移。</summary>
 public class ApproveTaskHandler(
     IApprovalInstanceRepository repo, ApprovalActionSupport support, ApprovalEngine engine, ApprovalTransitionRunner runner,
-    IPermissionRepository permissions, ICurrentUser user, IBusinessTime time, IUnitOfWork uow, IModuleRepository modules, FieldTypeRegistry registry)
+    ICurrentUser user, IBusinessTime time, IUnitOfWork uow, IModuleRepository modules, FieldTypeRegistry registry,
+    IDynamicAccessGuard guard, IRecordRepository records, ApprovalReadGrant grant)
     : IRequestHandler<ApproveTaskRequest, ServiceResult>
 {
     public async Task<ServiceResult> Handle(ApproveTaskRequest request, CancellationToken ct)
@@ -82,7 +83,7 @@ public class ApproveTaskHandler(
         var editable = (stageDef?.EditableFields ?? []).Select(id => $"f_{id}").ToHashSet();
         var outside = values.Keys.Where(k => !editable.Contains(k)).ToList();
         if (outside.Count > 0) return ServiceResult.Invalid(outside.ToDictionary(k => k, _ => new[] { ApprovalMessages.NotEditableField }));
-        if (values.Count > 0 && await HiddenKeysAsync(module, values.Keys, ct) is { Count: > 0 } hidden)
+        if (values.Count > 0 && await HiddenKeysAsync(module, inst.RecordId, values.Keys, ct) is { Count: > 0 } hidden)
             return ServiceResult.Invalid(hidden.ToDictionary(k => k, _ => new[] { ApprovalMessages.FieldHiddenForApprover }));
 
         // 可編輯欄位的豁免：送出時的狀態是簽核鎖定狀態就不放行（設計 §8.5）
@@ -142,13 +143,16 @@ public class ApproveTaskHandler(
     }
 
     /// <summary>
-    /// 對這位簽核人隱藏的鍵（設計 §9.2「欄位對該簽核人隱藏時，不能編輯」；裁決 22 執行期）：依簽核人本人的欄位權限；
-    /// 讀不到權限輸入時全部當成隱藏（fail closed）。
+    /// 對這位簽核人隱藏的鍵（設計 §9.2「欄位對該簽核人隱藏時，不能編輯」；裁決 22 執行期）：與簽核檢視共用同一個來源
+    /// （有 Read 用 Read、沒有用臨時讀取權、再沒有用自己的欄位例外；見 ApprovalReadGrant.HiddenFieldIdsAsync），
+    /// 所以畫面上列為可編輯的欄位，同意時一定能改；讀不到權限輸入時全部當成隱藏（fail closed）。
     /// </summary>
-    private async Task<List<string>> HiddenKeysAsync(Module module, IEnumerable<string> keys, CancellationToken ct)
+    private async Task<List<string>> HiddenKeysAsync(Module module, long recordId, IEnumerable<string> keys, CancellationToken ct)
     {
-        var inputs = await permissions.LoadInputsAsync(user.UserId, module, ct);
-        var hidden = inputs is null ? null : PermissionResolver.Resolve(module, inputs).HiddenFieldIds;
+        var record = await records.GetAsync(recordId, ct);
+        var read = module.IsReadable() ? (await guard.AuthorizeAsync(module, PermissionAction.Read, ct)).Permissions : null;
+        var hidden = record is null ? null
+            : await grant.HiddenFieldIdsAsync(module, read, read is null ? await grant.ForRecordAsync(module, record, ct) : null, ct);
         return keys.Where(k => hidden is null || (long.TryParse(k.AsSpan(2), out var id) && hidden.Contains(id))).ToList();
     }
 
