@@ -25,4 +25,17 @@
     background: #fff;
     color: #000;
   }
+
+  /* 可點整列的提示（手指、hover 底色、連結色、箭頭）在紙上沒有意義 */
+  [data-style] table tbody tr.row-clickable {
+    cursor: auto;
+  }
+
+  [data-style] table tbody tr.row-clickable td:first-child {
+    color: inherit;
+  }
+
+  [data-style] table tbody tr.row-chevron td:last-child::after {
+    display: none;
+  }
 }

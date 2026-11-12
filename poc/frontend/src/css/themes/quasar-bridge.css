@@ -549,6 +549,48 @@ textarea:focus-visible {
   padding-bottom: 0;
 }
 
+/* 可點整列的表格列（點列開啟明細或編輯）：手指游標、hover 底色、第一欄連結色。
+   沒有權限時不要套這個 class，列就不會有任何可點的提示。動作欄的 q-td 另加 @click.stop。
+   .row-chevron 是手機（沒有 hover）用的右側箭頭，加在沒有動作欄的列上。 */
+[data-style] table tbody tr.row-clickable {
+  cursor: pointer;
+}
+
+[data-style] table tbody tr.row-clickable td {
+  height: 44px;
+}
+
+[data-style] table tbody tr.row-clickable td:first-child {
+  color: var(--t-primary-text);
+}
+
+@supports (color: color-mix(in srgb, red 50%, transparent)) {
+  [data-style] table tbody tr.row-clickable:hover > td {
+    background: color-mix(in srgb, var(--t-primary) 8%, transparent);
+  }
+}
+
+[data-style] table tbody tr.row-clickable:hover > td:first-child {
+  text-decoration: underline;
+}
+
+[data-style] table tbody tr.row-chevron td:last-child::after {
+  content: '';
+  display: none;
+  width: 0.5em;
+  height: 0.5em;
+  margin-left: 0.5em;
+  border-top: 2px solid currentcolor;
+  border-right: 2px solid currentcolor;
+  transform: rotate(45deg);
+}
+
+@media (max-width: 599.98px) {
+  [data-style] table tbody tr.row-chevron td:last-child::after {
+    display: inline-block;
+  }
+}
+
 /* 觸控裝置：可點擊目標至少 44px，不因為密度縮小而難按（現場工業本來就 44px） */
 @media (pointer: coarse) {
   [data-style] .q-field--dense .q-field__control,

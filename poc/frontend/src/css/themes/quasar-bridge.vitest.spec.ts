@@ -247,6 +247,18 @@ describe('print.css', () => {
     expect(bodiesOf(bridge, '[data-style] .q-table td .q-btn--rectangle.q-btn--dense').join(';')).toMatch(/min-height:\s*2em/);
   });
 
+  it('可點整列：手指游標、hover 底色與第一欄連結色都走 token；手機有箭頭；列印還原', () => {
+    const row = '[data-style] table tbody tr.row-clickable';
+    expect(bodiesOf(bridge, row).join(';')).toMatch(/cursor:\s*pointer/);
+    expect(bodiesOf(bridge, `${row} td`).join(';')).toMatch(/height:\s*44px/);
+    expect(bodiesOf(bridge, `${row} td:first-child`).join(';')).toMatch(/color:\s*var\(--t-primary-text\)/);
+    expect(bodiesOf(bridge, `${row}:hover > td`).join(';')).toMatch(/color-mix\(in srgb, var\(--t-primary\)/);
+    const chevron = '[data-style] table tbody tr.row-chevron td:last-child::after';
+    expect(bridge).toMatch(/@media \(max-width: 599\.98px\)\s*\{[^@]*tr\.row-chevron td:last-child::after\s*\{[^}]*display:\s*inline-block/);
+    expect(bodiesOf(print, chevron).join(';')).toMatch(/display:\s*none/);
+    expect(bodiesOf(print, row).join(';')).toMatch(/cursor:\s*auto/);
+  });
+
   it('觸控裝置的可點擊目標至少 44px', () => {
     const coarse = bridge.slice(bridge.indexOf('@media (pointer: coarse)'));
     expect(coarse).toMatch(/\.q-btn--rectangle[^{]*\{[^}]*min-height:\s*44px/);
