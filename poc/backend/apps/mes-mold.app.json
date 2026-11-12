@@ -4,7 +4,7 @@
  "x-translation": "th、vi 標籤為機器翻譯，待母語者校對",
  "manifest": {
   "id": "mes-mold",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "name": {
    "zh-TW": "MES 模具廠",
    "en-US": "Mold-shop MES",
@@ -90,10 +90,10 @@
    "code": "order",
    "key": "mes-order",
    "name": {
-    "zh-TW": "訂單",
-    "en-US": "Sales order",
-    "th": "ใบสั่งขาย",
-    "vi": "Đơn hàng bán"
+    "zh-TW": "訂單（模具廠）",
+    "en-US": "Sales order (mold shop)",
+    "th": "ใบสั่งขาย (โรงงานแม่พิมพ์)",
+    "vi": "Đơn hàng bán (xưởng khuôn mẫu)"
    },
    "icon": "receipt_long",
    "section": { "zh-TW": "業務", "en-US": "Sales operations", "th": "งานขาย", "vi": "Kinh doanh" },
@@ -794,10 +794,10 @@
    "code": "quote",
    "key": "mes-quote",
    "name": {
-    "zh-TW": "報價單",
-    "en-US": "Quotes",
-    "th": "ใบเสนอราคา",
-    "vi": "Báo giá"
+    "zh-TW": "報價單（模具廠）",
+    "en-US": "Quotes (mold shop)",
+    "th": "ใบเสนอราคา (โรงงานแม่พิมพ์)",
+    "vi": "Báo giá (xưởng khuôn mẫu)"
    },
    "icon": "request_quote",
    "section": { "zh-TW": "業務", "en-US": "Sales operations", "th": "งานขาย", "vi": "Kinh doanh" },

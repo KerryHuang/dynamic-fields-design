@@ -159,6 +159,18 @@ public class MesAppTests : IDisposable
         keys.Should().Contain(["mes-quote", "mes-order", "mes-workorder", "mes-wo-op", "mes-report", "mes-shipment", "mes-quality"]);
     }
 
+    [Fact]
+    public async Task OpenFromEmptySystem_QuoteAndOrderNamesCarryTheMoldShopSuffix_SoTheyDifferFromCrm()
+    {
+        await OpenMes();
+        string Name(string code, string lang) => _opened.GetProperty("modules").EnumerateArray()
+            .Single(m => m.GetProperty("code").GetString() == code).GetProperty("name").GetProperty(lang).GetString()!;
+        Name("quote", "zh-TW").Should().Be("報價單（模具廠）");
+        Name("order", "zh-TW").Should().Be("訂單（模具廠）");
+        Name("quote", "en-US").Should().Be("Quotes (mold shop)");
+        Name("order", "en-US").Should().Be("Sales order (mold shop)");
+    }
+
     // ---- 報工：累計上限、末道、完工量 ----
 
     [Fact]
