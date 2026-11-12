@@ -366,4 +366,259 @@ public class CrmDesignCaseAppTests : IDisposable
         }
         comment.GetProperty("attachments").GetArrayLength().Should().Be(2);
     }
+
+    // ---- Task 3：簽核端到端（a5 之前套件不含流程，測試內以 API 建立，內容同 Demo 產生器要建的流程） ----
+
+    private sealed record Flow(long ManagerReview);
+
+    /// <summary>開 CRM、建業務部（主管 manager01，成員 sales01）、建「設計案主管確認」流程，再把客戶確認中 → 待主管確認標成需簽核。</summary>
+    private async Task<Flow> ArrangeApproval()
+    {
+        await OpenWithMembers();
+        var dept = await PostOk(_admin, $"{Base}/departments", new
+        {
+            code = "sales-dept", name = new Dictionary<string, string> { ["zh-TW"] = "業務部" }, parentId = (long?)null, managerUserId = "manager01", sortOrder = 0, active = true
+        });
+        (await _admin.PutAsJsonAsync($"{Base}/admin/users/sales01/department", new { departmentId = dept.GetProperty("id").GetInt64() }))
+            .StatusCode.Should().Be(HttpStatusCode.OK);
+
+        var module = await JsonOf(await _admin.GetAsync($"{Base}/modules/{Case}"));
+        var status = module.GetProperty("blocks").EnumerateArray().SelectMany(b => b.GetProperty("fields").EnumerateArray())
+            .Single(f => f.GetProperty("label").GetProperty("zh-TW").GetString() == "狀態");
+        long Opt(string label) => status.GetProperty("options").EnumerateArray()
+            .Single(o => o.GetProperty("label").GetProperty("zh-TW").GetString() == label).GetProperty("id").GetInt64();
+        long designing = Opt("設計中"), review = Opt("客戶確認中"), manager = Opt("待主管確認");
+
+        var flow = await _admin.PostAsJsonAsync($"{Base}/approval-flows?module={Case}", new
+        {
+            key = "crm-design-case-review", name = new Dictionary<string, string> { ["zh-TW"] = "設計案主管確認" }, toOptionId = manager, priority = 1, active = true,
+            definition = new
+            {
+                shape = "sequence", rejectTo = designing,
+                stages = new[]
+                {
+                    new
+                    {
+                        code = "owner-manager", name = new Dictionary<string, string> { ["zh-TW"] = "負責業務主管" },
+                        approvers = new { source = "manager", level = 1 }, mode = "any", editableFields = Array.Empty<long>(), onEmpty = "fallback"
+                    }
+                }
+            }
+        });
+        flow.StatusCode.Should().Be(HttpStatusCode.Created, await flow.Content.ReadAsStringAsync());
+
+        var wf = await JsonOf(await _admin.GetAsync($"{Base}/modules/{Case}/workflow"));
+        var body = System.Text.Json.Nodes.JsonNode.Parse(wf.GetRawText())!.AsObject();
+        foreach (var t in body["transitions"]!.AsArray())
+            if (t!["from"]!.GetValue<long>() == review && t["to"]!.GetValue<long>() == manager)
+                t["approval"] = System.Text.Json.Nodes.JsonNode.Parse("""{ "required": true, "noMatch": "block" }""");
+        var saved = await _admin.PutAsJsonAsync($"{Base}/modules/{Case}/workflow", body);
+        saved.StatusCode.Should().Be(HttpStatusCode.OK, await saved.Content.ReadAsStringAsync());
+        return new Flow(manager);
+    }
+
+    /// <summary>兩輪設計與客戶確認，停在第二輪的客戶確認中（第二批 draw 已完成）。</summary>
+    private async Task<JsonElement> TwoRoundsToCustomerReview()
+    {
+        var record = await NewCase(_app.AsUser("manager01"));
+        record = await GoRound(record, "設計中", null);
+        record = await GoRound(record, "客戶確認中", DrawTitle);
+        record = await GoRound(record, "設計中", ConfirmTitle);
+        return await GoRound(record, "客戶確認中", DrawTitle);
+    }
+
+    private async Task<HttpResponseMessage> Submit(HttpClient by, JsonElement record, Flow f) =>
+        await by.PostAsJsonAsync($"{Base}/records/{record.GetProperty("id").GetInt64()}/approval/submit",
+            new { to = f.ManagerReview, recordRowVersion = record.GetProperty("rowVersion").GetString() });
+
+    private async Task<JsonElement> Current(long recordId) =>
+        (await JsonOf(await _admin.GetAsync($"{Base}/records/{recordId}/approval"))).GetProperty("current");
+
+    private async Task<JsonElement> SubmitOk(JsonElement record, Flow f)
+    {
+        var res = await Submit(_app.AsUser("sales01"), record, f);
+        res.StatusCode.Should().Be(HttpStatusCode.Created, await res.Content.ReadAsStringAsync());
+        return await Current(record.GetProperty("id").GetInt64());
+    }
+
+    private static long TaskOf(JsonElement current, string user) =>
+        current.GetProperty("stages")[0].GetProperty("tasks").EnumerateArray()
+            .Single(t => t.GetProperty("assigneeUserId").GetString() == user).GetProperty("id").GetInt64();
+
+    private async Task<HttpResponseMessage> Approve(JsonElement current, string user) =>
+        await _app.AsUser(user).PostAsJsonAsync($"{Base}/approval-tasks/{TaskOf(current, user)}/approve",
+            new { rowVersion = current.GetProperty("rowVersion").GetString() });
+
+    private async Task<HttpResponseMessage> Reject(JsonElement current, string user, string comment) =>
+        await _app.AsUser(user).PostAsJsonAsync($"{Base}/approval-tasks/{TaskOf(current, user)}/reject",
+            new { rowVersion = current.GetProperty("rowVersion").GetString(), comment, to = "initiator" });
+
+    [Fact]
+    public async Task Workflow_LockedStates()
+    {
+        await ArrangeApproval();
+        var wf = await JsonOf(await _admin.GetAsync($"{Base}/modules/{Case}/workflow"));
+        var module = await JsonOf(await _admin.GetAsync($"{Base}/modules/{Case}"));
+        var status = module.GetProperty("blocks").EnumerateArray().SelectMany(b => b.GetProperty("fields").EnumerateArray())
+            .Single(f => f.GetProperty("label").GetProperty("zh-TW").GetString() == "狀態");
+        var byLabel = status.GetProperty("options").EnumerateArray()
+            .ToDictionary(o => o.GetProperty("label").GetProperty("zh-TW").GetString()!, o => o.GetProperty("id").GetInt64());
+        wf.GetProperty("lockedStates").EnumerateArray().Select(x => x.GetInt64())
+            .Should().BeEquivalentTo([byLabel["待主管確認"], byLabel["結案"]]);
+    }
+
+    [Fact]
+    public async Task Submit_TaskGoesToOwnersManager()
+    {
+        var f = await ArrangeApproval();
+        var record = await TwoRoundsToCustomerReview();
+        var current = await SubmitOk(record, f);
+        current.GetProperty("status").GetString().Should().Be("pending");
+        TaskOf(current, "manager01").Should().BePositive();
+        (await NotificationKinds("manager01")).Should().Contain("approvalPending");
+        var status = (await FieldKeys(_admin, Case))["狀態"];
+        (await Reload(record.GetProperty("id").GetInt64())).GetProperty("values").GetProperty(status).GetString()
+            .Should().Be(await OptionValue(_admin, Case, "狀態", "客戶確認中"), "送簽中記錄仍在客戶確認中");
+    }
+
+    [Fact]
+    public async Task Submit_ByDesigner_Forbidden()
+    {
+        var f = await ArrangeApproval();
+        var record = await TwoRoundsToCustomerReview();
+        var res = await Submit(_app.AsUser(Designer), record, f);
+        res.StatusCode.Should().BeOneOf(HttpStatusCode.BadRequest, HttpStatusCode.Forbidden);
+        var direct = await Put(_app.AsUser("sales01"), record, new() { [(await FieldKeys(_admin, Case))["狀態"]] = await OptionValue(_admin, Case, "狀態", "待主管確認") });
+        direct.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+        (await direct.Content.ReadAsStringAsync()).Should().Contain("需要送出簽核");
+    }
+
+    [Fact]
+    public async Task Approve_ThenClose()
+    {
+        var f = await ArrangeApproval();
+        var record = await TwoRoundsToCustomerReview();
+        var current = await SubmitOk(record, f);
+        var ok = await Approve(current, "manager01");
+        ok.StatusCode.Should().Be(HttpStatusCode.OK, await ok.Content.ReadAsStringAsync());
+        var id = record.GetProperty("id").GetInt64();
+        var status = (await FieldKeys(_admin, Case))["狀態"];
+        var after = await Reload(id);
+        after.GetProperty("values").GetProperty(status).GetString().Should().Be(await OptionValue(_admin, Case, "狀態", "待主管確認"));
+        (await NotificationKinds("sales01")).Should().Contain("approvalApproved");
+        await Move(_app.AsUser("manager01"), after, "結案");
+    }
+
+    /// <summary>
+    /// 鎖定範圍依簽核設計 §9.3：條件與可編輯欄位的閉包加所有附件欄位。J6 的流程 when 是空的、沒有可編輯欄位，
+    /// 所以鎖定欄位只有「設計圖檔」；需求說明與明細在待主管確認不鎖（見結果檔「需要決定的事」）。結案是唯讀狀態，寫入被忽略。
+    /// </summary>
+    [Fact]
+    public async Task Approved_LockedStates_RejectEdits()
+    {
+        var f = await ArrangeApproval();
+        var record = await TwoRoundsToCustomerReview();
+        var id = record.GetProperty("id").GetInt64();
+        var c = await FieldKeys(_admin, Case);
+        var current = await SubmitOk(record, f);
+        (await Approve(current, "manager01")).StatusCode.Should().Be(HttpStatusCode.OK);
+
+        var locked = await Reload(id);
+        // 附件只能經上傳加入，PUT 偽造不了；上傳被擋的 409 要等 a2d2（見 Pending_DrawingUpload_Rejected），這裡只驗鎖定範圍的宣告
+        var module = await JsonOf(await _admin.GetAsync($"{Base}/modules/{Case}"));
+        long FieldId(string label) => module.GetProperty("blocks").EnumerateArray().SelectMany(b => b.GetProperty("fields").EnumerateArray())
+            .Single(x => x.GetProperty("label").GetProperty("zh-TW").GetString() == label).GetProperty("id").GetInt64();
+        var wf = await JsonOf(await _admin.GetAsync($"{Base}/modules/{Case}/workflow"));
+        var lockedIds = wf.GetProperty("lockedFieldIds").EnumerateArray().Select(x => x.GetInt64()).ToList();
+        lockedIds.Should().Contain(FieldId("設計圖檔")).And.NotContain(FieldId("需求說明"));
+        (await Put(_app.AsUser("sales01"), locked, new() { [c["需求說明"]] = "補充需求" })).StatusCode
+            .Should().Be(HttpStatusCode.OK, "流程沒有條件欄位也沒有可編輯欄位，需求說明不在鎖定範圍");
+
+        var closed = await Move(_app.AsUser("manager01"), await Reload(id), "結案");
+        var edit = await Put(_app.AsUser("sales01"), closed, new() { [c["需求說明"]] = "偷改需求" });
+        edit.StatusCode.Should().Be(HttpStatusCode.OK, "唯讀狀態的寫入被忽略，不是整筆拒絕（同報價單的已核准）");
+        (await Reload(id)).GetProperty("values").GetProperty(c["需求說明"]).GetString().Should().Be("補充需求", "結案後的值改不動");
+    }
+
+    [Fact]
+    public async Task Reject_ReturnsToDesigning_NewDrawBatch()
+    {
+        var f = await ArrangeApproval();
+        var record = await TwoRoundsToCustomerReview();
+        var id = record.GetProperty("id").GetInt64();
+        var current = await SubmitOk(record, f);
+        var res = await Reject(current, "manager01", "面板顏色再確認");
+        res.StatusCode.Should().Be(HttpStatusCode.OK, await res.Content.ReadAsStringAsync());
+
+        var status = (await FieldKeys(_admin, Case))["狀態"];
+        (await Reload(id)).GetProperty("values").GetProperty(status).GetString().Should().Be(await OptionValue(_admin, Case, "狀態", "設計中"));
+        (await TasksOf(id, DrawTitle)).Should().HaveCount(3);
+        using var scope = _app.Services.CreateScope();
+        scope.ServiceProvider.GetRequiredService<DynamicDbContext>().Set<TaskItem>()
+            .Where(t => t.RecordId == id && t.Title == DrawTitle).Select(t => t.RuleOccurrence!.Value).OrderBy(x => x).ToList().Should().Equal(1, 2, 3);
+        (await NotificationKinds("sales01")).Should().Contain("approvalRejected");
+    }
+
+    [Fact]
+    public async Task Reject_CommentRequired()
+    {
+        var f = await ArrangeApproval();
+        var record = await TwoRoundsToCustomerReview();
+        var current = await SubmitOk(record, f);
+        (await Reject(current, "manager01", "")).StatusCode.Should().Be(HttpStatusCode.BadRequest);
+    }
+
+    private static MultipartFormDataContent File(string name, byte[] bytes)
+    {
+        var form = new MultipartFormDataContent();
+        form.Add(new ByteArrayContent(bytes), "file", name);
+        return form;
+    }
+
+    [Fact]
+    public async Task Approver_DownloadsCommentAttachment()
+    {
+        await ArrangeApproval();
+        var record = await NewCase(_app.AsUser("manager01"));
+        var id = record.GetProperty("id").GetInt64();
+        record = await Move(_admin, record, "設計中");
+        record = await Move(_admin, record, "客戶確認中");
+        var module = await JsonOf(await _admin.GetAsync($"{Base}/modules/{Case}"));
+        var fieldId = module.GetProperty("blocks").EnumerateArray().SelectMany(b => b.GetProperty("fields").EnumerateArray())
+            .Single(x => x.GetProperty("label").GetProperty("zh-TW").GetString() == "設計圖檔").GetProperty("id").GetInt64();
+        var bytes = new byte[] { 0x89, 0x50, 0x4E, 0x47, 9, 8, 7 };
+        var up = await _app.AsUser("sales01").PostAsync($"{Base}/records/{id}/attachments/{fieldId}", File("外殼-v2.png", bytes));
+        up.StatusCode.Should().BeOneOf(HttpStatusCode.OK, HttpStatusCode.Created);
+        var uploaded = await JsonOf(up);
+
+        var confirm = (await TasksOf(id, ConfirmTitle)).Single();
+        var taskId = confirm.GetProperty("id").GetInt64();
+        var form = new MultipartFormDataContent { { new StringContent("客戶標註"), "body" } };
+        form.Add(new ByteArrayContent(bytes), "files", "annotated.png");
+        var posted = await JsonOf(await _app.AsUser("sales01").PostAsync($"{Base}/tasks/{taskId}/comments", form));
+
+        var manager = _app.AsUser("manager01");
+        var a = posted.GetProperty("attachments")[0].GetProperty("id").GetInt64();
+        var d1 = await manager.GetAsync($"{Base}/tasks/{taskId}/comments/{posted.GetProperty("id").GetInt64()}/attachments/{a}");
+        d1.StatusCode.Should().Be(HttpStatusCode.OK);
+        (await d1.Content.ReadAsByteArrayAsync()).Should().Equal(bytes);
+        var fileId = uploaded.TryGetProperty("fileId", out var fid) ? fid.GetString() : uploaded.GetProperty("id").GetString();
+        var d2 = await manager.GetAsync($"{Base}/records/{id}/attachments/{fieldId}/{fileId}");
+        d2.StatusCode.Should().Be(HttpStatusCode.OK, await d2.Content.ReadAsStringAsync());
+        (await d2.Content.ReadAsByteArrayAsync()).Should().Equal(bytes);
+    }
+
+    [Fact(Skip = "上傳經記錄寫入管線與簽核中資格檢查屬 a2d2，尚未在基底；a2d2 合併後移除 Skip")]
+    public async Task Pending_DrawingUpload_Rejected()
+    {
+        var f = await ArrangeApproval();
+        var record = await TwoRoundsToCustomerReview();
+        var id = record.GetProperty("id").GetInt64();
+        await SubmitOk(record, f);
+        var module = await JsonOf(await _admin.GetAsync($"{Base}/modules/{Case}"));
+        var fieldId = module.GetProperty("blocks").EnumerateArray().SelectMany(b => b.GetProperty("fields").EnumerateArray())
+            .Single(x => x.GetProperty("label").GetProperty("zh-TW").GetString() == "設計圖檔").GetProperty("id").GetInt64();
+        var up = await _app.AsUser("sales01").PostAsync($"{Base}/records/{id}/attachments/{fieldId}", File("外殼-v3.png", [1, 2, 3]));
+        up.StatusCode.Should().Be(HttpStatusCode.Conflict, await up.Content.ReadAsStringAsync());
+    }
 }
