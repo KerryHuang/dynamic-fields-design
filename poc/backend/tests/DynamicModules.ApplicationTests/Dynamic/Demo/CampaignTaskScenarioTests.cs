@@ -66,7 +66,7 @@ public class CampaignTaskScenarioTests(DemoGeneratedFixture fx)
         fx.Generated();
         var mine = await NotificationsOf("sales01");
 
-        mine.Should().NotContain(n => n.Kind == NotificationKinds.TaskAssigned, "自己建立的活動、自己是規劃負責人，不通知自己");
+        mine.Should().NotContain(n => n.Kind == NotificationKinds.TaskAssigned && n.TitleSnapshot == "規劃活動內容", "自己建立的活動、自己是規劃負責人，不通知自己");
         mine.Should().ContainSingle(n => n.Kind == NotificationKinds.TaskMentioned && n.TitleSnapshot == "展場佈置");
     }
 }

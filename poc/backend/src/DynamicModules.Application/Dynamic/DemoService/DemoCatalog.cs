@@ -17,6 +17,6 @@ public static class DemoCatalog
     /// 模具保養排在報修之前：報修參照它建的模具記錄。
     /// </summary>
     public static IReadOnlyList<IDemoScenario> Scenarios { get; } =
-        [new MasterScenario(AppIds), new OrderScenario(), new MoldCareScenario(), new RepairScenario(), new QualityScenario(), new CrmScenario(),
+        [new MasterScenario(AppIds), new OrderScenario(), new MoldCareScenario(), new RepairScenario(), new QualityScenario(), new CrmScenario(), new DesignCaseScenario(),
          new MesQuoteScenario(), new InventoryScenario(), new MesProductionScenario()];
 }

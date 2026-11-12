@@ -25,7 +25,8 @@ internal static class DemoDb
             .Select(r => $"{modules[r.ModuleId]}|{r.Title}|{r.ValuesJson}|{r.OwnerUserId}|{r.CreatedUserId}|{r.CreatedTime:O}|{r.ModifiedUserId}|{r.ModifiedTime:O}");
         var history = (await db.Set<RecordHistory>().AsNoTracking().ToListAsync()).OrderBy(h => h.Id)
             .Select(h => $"{h.RecordId}|{h.Operation}|{(h.FieldId is { } id ? fields[id] : null)}|{h.OldValue}|{h.NewValue}|{h.ChangedUserId}|{h.ChangedTime:O}");
-        return [.. records, .. history];
+        // 附件檔案編號是上傳時隨機產生的（Guid），內容位元組才是固定的；快照比較時把編號蓋掉
+        return [.. records.Concat(history).Select(line => System.Text.RegularExpressions.Regex.Replace(line, "[0-9a-f]{32}", "<file-id>"))];
     }
 
     public static Task<List<Record>> Records(DynamicDbContext db, string moduleKey) =>
@@ -121,7 +122,7 @@ public class DemoGenerationTests
 [Collection(DemoGeneratedCollection.Name)]
 public class DemoGenerationSharedTests(DemoGeneratedFixture fx)
 {
-    /// <summary>附件的值只能經上傳端點產生（產生器不寫檔案），MES 套件的 Demo 模組也沒有附件欄位。</summary>
+    /// <summary>附件欄位不列入「全部欄位型別都有值」的檢查：只有設計案的設計圖檔有附件，檔案由 <c>DesignCaseScenario</c> 經上傳指令產生（見 DesignCaseScenarioTests）。</summary>
     private static readonly FieldType[] RecordValueTypes = [.. Enum.GetValues<FieldType>().Where(t => t != FieldType.Attachment)];
 
     [Fact]
