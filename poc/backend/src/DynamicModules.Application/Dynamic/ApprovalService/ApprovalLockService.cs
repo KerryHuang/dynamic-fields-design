@@ -14,6 +14,9 @@ public sealed class ApprovalLockService(IApprovalFlowRepository flows, IModuleRe
 {
     private readonly Dictionary<long, ApprovalLock> _cache = [];
 
+    /// <summary>清掉快取：同一個 scope 連續送多個請求時（Demo 產生器），前一步可能改了流程或狀態機。</summary>
+    public void Reset() => _cache.Clear();
+
     /// <param name="wf">候選或剛存的狀態機；null 用 <c>module.Workflow</c>（並快取）。有傳時不快取。</param>
     public async Task<ApprovalLock> ForModuleAsync(Module module, Workflow? wf, CancellationToken ct)
     {

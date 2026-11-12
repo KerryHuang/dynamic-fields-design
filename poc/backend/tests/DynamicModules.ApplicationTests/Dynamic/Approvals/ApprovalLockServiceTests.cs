@@ -14,11 +14,12 @@ public class ApprovalLockServiceTests : ApprovalTestBase
 {
     protected override bool ScopePerRequest => true;
 
-    private async Task<ApprovalLock> LockOf(string module, Func<Module, Workflow?>? candidate = null)
+    private async Task<ApprovalLock> LockOf(string module, Func<Module, Workflow?>? candidate = null, IServiceProvider? sp = null)
     {
         using var scope = NewScope();
-        var m = (await scope.ServiceProvider.GetRequiredService<IModuleRepository>().GetByKeyAsync(module, includeChildren: true, CancellationToken.None))!;
-        return await scope.ServiceProvider.GetRequiredService<ApprovalLockService>().ForModuleAsync(m, candidate?.Invoke(m), CancellationToken.None);
+        sp ??= scope.ServiceProvider;
+        var m = (await sp.GetRequiredService<IModuleRepository>().GetByKeyAsync(module, includeChildren: true, CancellationToken.None))!;
+        return await sp.GetRequiredService<ApprovalLockService>().ForModuleAsync(m, candidate?.Invoke(m), CancellationToken.None);
     }
 
     /// <summary>草稿 → 已確認 需簽核，流程條件引用 field。</summary>
@@ -83,15 +84,33 @@ public class ApprovalLockServiceTests : ApprovalTestBase
     public async Task ForModule_CandidateWorkflow_UsesCandidate()
     {
         var r = await RigWith(x => x.Supplier);
-        (await LockOf(r.Module)).LockedStateIds.Should().NotBeEmpty();   // 先以 null 算一次（有快取）
+        using var scope = NewScope();   // 同一個 scope：第二次呼叫才會碰到第一次的快取
+        (await LockOf(r.Module, null, scope.ServiceProvider)).LockedStateIds.Should().NotBeEmpty();   // 先以 null 算一次（寫入快取）
 
         var l = await LockOf(r.Module, m => new Workflow
         {
             StatusFieldId = r.Status, InitialOptionId = r.Draft, States = m.Workflow!.States,
             Transitions = [Plain(r.Draft, r.Confirmed), Plain(r.Confirmed, r.Partial)]
-        });
+        }, scope.ServiceProvider);
 
-        l.LockedStateIds.Should().BeEmpty();
+        l.LockedStateIds.Should().BeEmpty();   // 有快取時傳候選也不能讀到快取
+        (await LockOf(r.Module, null, scope.ServiceProvider)).LockedStateIds.Should().NotBeEmpty();   // 候選的結果也不能寫進快取
+
+    }
+
+    [Fact]
+    public async Task Reset_AfterWorkflowSaved_RecomputesInSameScope()
+    {
+        var r = await BuildPurchase();   // Plain 狀態機
+        using var scope = NewScope();   // 長 scope（Demo 產生器）：結構在 scope 內才存好
+        (await LockOf(r.Module, null, scope.ServiceProvider)).Should().BeSameAs(ApprovalLock.None);   // 快取成 None
+        await SeedFlow(r, "po-r", r.Confirmed, 1, Def(Cond(r.Supplier, "eq", 1), Stage("lead", Group(PurchaseLeadGroup))));
+        (await SaveWorkflow(r, [Needs(r.Draft, r.Confirmed), Plain(r.Confirmed, r.Partial)])).IsSuccess.Should().BeTrue();
+        (await LockOf(r.Module, null, scope.ServiceProvider)).Should().BeSameAs(ApprovalLock.None);   // 沒清就還是舊的
+
+        scope.ServiceProvider.GetRequiredService<ApprovalLockService>().Reset();
+
+        (await LockOf(r.Module, null, scope.ServiceProvider)).LockedStateIds.Should().NotBeEmpty();
     }
 
     [Fact]
