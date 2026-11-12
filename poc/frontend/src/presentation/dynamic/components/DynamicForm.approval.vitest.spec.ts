@@ -109,6 +109,8 @@ describe('DynamicDetail approval lock', () => {
     const lock = w.find('[data-testid="approval-lock-f_2"]');
     expect(lock.exists()).toBe(true);
     expect(lock.attributes('aria-label')).toBe('已經過簽核，要修改請先退回可編輯的狀態');
+    expect(lock.attributes('title')).toBe('已經過簽核，要修改請先退回可編輯的狀態');
+    expect(lock.attributes('aria-hidden')).not.toBe('true'); // QIcon hides itself from readers: the labelled wrapper must stay exposed
     expect(w.find('[data-testid="approval-lock-f_3"]').exists()).toBe(false);
   });
 

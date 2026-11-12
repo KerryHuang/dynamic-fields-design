@@ -40,10 +40,14 @@ const blockLocks = (fields: SchemaField[]) => [...new Set(fields.map((f) => f.lo
           <q-item-section side class="text-muted" style="min-width: 10rem">
             <span>
               {{ resolveI18n(f.label, locale) }}
-              <q-icon
-                v-if="lockedKeys.has(f.key)" name="lock" size="xs" class="q-ml-xs" role="img" :aria-label="t('approval.lockedHint')"
+              <!-- QIcon always sets aria-hidden: the wrapper is what a screen reader and a hover reach -->
+              <span
+                v-if="lockedKeys.has(f.key)" class="q-ml-xs" role="img" :aria-label="t('approval.lockedHint')" :title="t('approval.lockedHint')"
                 :data-testid="`approval-lock-${f.key}`"
-              />
+              >
+                <q-icon name="lock" size="xs" />
+                <q-tooltip>{{ t('approval.lockedHint') }}</q-tooltip>
+              </span>
             </span>
           </q-item-section>
           <q-item-section :data-testid="f.key">
