@@ -14,7 +14,7 @@ const timeText = (iso: string) => date.formatDate(new Date(iso), 'YYYY-MM-DD HH:
 
 const fields = computed(() => new Map((props.schema?.blocks ?? []).flatMap((b) => b.fields).map((f) => [f.id, f])));
 
-/** The server stores a Traditional Chinese note for audit; the screen words a reroute from its kind in the reader's language. */
+/** The server stores a Traditional Chinese note for audit; the screen words a reroute or a fallback hand-over in the reader's language. */
 function rerouteText(a: ApprovalActionView): string {
   const kind = (a.data as { kind?: string } | null)?.kind;
   return t(`approval.panel.reroute.${kind && ['flow', 'fallback', 'pick'].includes(kind) ? kind : 'generic'}`);
@@ -41,6 +41,7 @@ function changes(a: ApprovalActionView): Change[] {
         <span class="text-muted"> · {{ a.actorName }} · {{ timeText(a.createdTime) }}</span>
       </div>
       <div v-if="a.action === 'reroute'" class="q-pl-sm" data-testid="log-reroute">{{ rerouteText(a) }}</div>
+      <div v-else-if="a.action === 'fallback'" class="q-pl-sm" data-testid="log-fallback">{{ t('approval.panel.fallbackNote') }}</div>
       <div v-else-if="a.comment" class="q-pl-sm" data-testid="log-comment">{{ a.comment }}</div>
       <ul v-if="changes(a).length" class="q-my-none">
         <li v-for="c in changes(a)" :key="c.fieldId">{{ t('approval.panel.changed', { field: c.label, before: c.before || '—', after: c.after || '—' }) }}</li>

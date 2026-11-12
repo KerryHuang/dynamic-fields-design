@@ -107,6 +107,13 @@ describe('ApprovalPanel', () => {
     expect(text(w, 'approval-log')).not.toContain('儲存的繁中備註');
   });
 
+  it('fallback entry is worded from its kind, not the stored Chinese note', () => {
+    const w = mountPanel(approval(instance({ actions: [action({ action: 'fallback', actorName: '系統', comment: '來源 purchase-lead 找不到簽核人，依設定改派備援簽核人', data: { kind: 'fallback' } })] })));
+    expect(text(w, 'approval-log')).toContain('改由備援簽核人');
+    expect(text(w, 'approval-log')).toContain('找不到簽核人，已依設定改由備援簽核人處理');
+    expect(text(w, 'approval-log')).not.toContain('purchase-lead');
+  });
+
   it('shows action, actor and comment', () => {
     const w = mountPanel(approval(instance({ actions: [action({ action: 'reject', comment: '金額不符' })] })));
     const log = text(w, 'approval-log');
