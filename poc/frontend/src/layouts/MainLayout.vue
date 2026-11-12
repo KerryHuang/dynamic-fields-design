@@ -37,6 +37,10 @@
           <q-item-section avatar><q-icon name="task_alt" /></q-item-section>
           <q-item-section>{{ t('menu.myTasks') }}</q-item-section>
         </q-item>
+        <q-item clickable to="/approvals" data-testid="approvals-menu">
+          <q-item-section avatar><q-icon name="fact_check" /></q-item-section>
+          <q-item-section>{{ t('menu.approvals') }}</q-item-section>
+        </q-item>
 
         <template v-for="g in menuGroups" :key="g.closed ? '__closed' : (g.key ?? '')">
           <q-item-label header :data-testid="g.closed ? 'closed-apps-group' : undefined">{{ g.closed ? t('menu.closedApps') : (g.title ?? t('menu.custom')) }}</q-item-label>

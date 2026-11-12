@@ -40,3 +40,9 @@ describe('tasks route', () => {
     expect(loaderOf('/tasks').source).toContain('MyTasksPage');
   });
 });
+
+describe('approvals route', () => {
+  it('/approvals resolves to the approval center', () => {
+    expect(loaderOf('/approvals').source).toContain('ApprovalCenterPage');
+  });
+});

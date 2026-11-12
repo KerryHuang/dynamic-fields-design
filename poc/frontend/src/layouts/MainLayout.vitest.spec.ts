@@ -485,6 +485,25 @@ describe('MainLayout menu', () => {
     });
   });
 
+  it('menu has the approvals entry right after My tasks', async () => {
+    const pinia = createPinia();
+    setActivePinia(pinia);
+    http.defaults.adapter = async (config) => ({
+      data: config.url === '/me' ? me(false) : config.url === '/users' ? USERS : [], status: 200, statusText: 'OK', headers: {}, config,
+    });
+    const router = createRouter({ history: createMemoryHistory(), routes: [{ path: '/', component: { template: '<i/>' } }] });
+    const i18n = createI18n({ legacy: false, locale: 'zh-TW', messages: { 'zh-TW': zhTW } });
+    const w = mount(MainLayout, {
+      global: { plugins: [[quasar.Quasar, { components: quasar }], pinia, router, i18n, [VueQueryPlugin, { queryClient: new QueryClient() }]] },
+    });
+    await flushPromises();
+    const item = w.get('[data-testid="approvals-menu"]');
+    expect(item.text()).toContain('簽核');
+    expect(item.attributes('href')).toBe('/approvals');
+    expect(w.get('[data-testid="my-tasks-menu"]').element.nextElementSibling).toBe(item.element);
+    w.unmount();
+  });
+
   it('has the My tasks menu item right after Home', async () => {
     const pinia = createPinia();
     setActivePinia(pinia);
