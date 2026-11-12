@@ -2,7 +2,7 @@ import { QueryClient, VueQueryPlugin } from '@tanstack/vue-query';
 import { flushPromises, mount } from '@vue/test-utils';
 import { createPinia, setActivePinia } from 'pinia';
 import * as quasar from 'quasar';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { h } from 'vue';
 import { createI18n } from 'vue-i18n';
 import { createMemoryHistory, createRouter } from 'vue-router';
@@ -72,6 +72,8 @@ const pendingInstance: ApprovalInstanceView = {
 };
 
 describe('DetailPage approval', () => {
+  afterEach(() => { window.innerWidth = 1024; });
+
   beforeEach(() => {
     vi.clearAllMocks();
     vi.stubGlobal('ResizeObserver', class { observe() {} unobserve() {} disconnect() {} });
@@ -140,13 +142,11 @@ describe('DetailPage approval', () => {
   it('does not ask for submit targets when the user cannot submit', async () => {
     const w = await mountPage(record(summary({ status: 'approved' })));
     expect(w.findAll('[data-testid^="submit-approval-"]')).toHaveLength(0);
-    expect(api.getRecordApproval).not.toHaveBeenCalled();
   });
 
   it('a read-only (closed) schema offers no submit button even when canSubmit is true', async () => {
     const w = await mountPage(record(summary({ status: 'none', canSubmit: true })), [12], { ...schema, readOnly: true });
     expect(w.findAll('[data-testid^="submit-approval-"]')).toHaveLength(0);
-    expect(api.getRecordApproval).not.toHaveBeenCalled();
   });
 
   it('a target whose state label the viewer cannot see gets no button', async () => {
@@ -164,11 +164,11 @@ describe('DetailPage approval', () => {
 
   const actingInstance = (): ApprovalInstanceView => ({
     ...pendingInstance,
-    stages: [{ ...pendingInstance.stages[0]!, tasks: [{ id: 3, assigneeUserId: 'me', assigneeName: '我', originalUserId: 'me', reason: 'resolved', status: 'open', actedTime: null, canAct: true }] }],
+    stages: [{ ...pendingInstance.stages[0]!, tasks: [{ id: 3, assigneeUserId: 'me', assigneeName: '我', originalUserId: 'me', reason: 'resolved', status: 'open', actedTime: null, canAct: true, canReturnPrevious: false }] }],
   });
 
   it('an approver sees approve and reject in the approval panel', async () => {
-    const w = await mountPage(record(summary({ status: 'pending', stageSeq: 1, stageName: { 'zh-TW': '主管' } })), [], actingInstance());
+    const w = await mountPage(record(summary({ status: 'pending', stageSeq: 1, stageName: { 'zh-TW': '主管' } })), [], schema, actingInstance());
     expect(w.find('[data-testid="action-approve"]').exists()).toBe(true);
     expect(w.find('[data-testid="action-reject"]').exists()).toBe(true);
     expect(w.find('[data-testid="approval-mobile-bar"]').exists()).toBe(false);
@@ -176,13 +176,32 @@ describe('DetailPage approval', () => {
 
   it('phone: bottom bar shows and the page leaves room below the last block', async () => {
     window.innerWidth = 390;
-    const w = await mountPage(record(summary({ status: 'pending', stageSeq: 1, stageName: { 'zh-TW': '主管' } })), [], actingInstance());
+    const w = await mountPage(record(summary({ status: 'pending', stageSeq: 1, stageName: { 'zh-TW': '主管' } })), [], schema, actingInstance());
     window.dispatchEvent(new Event('resize'));
     await new Promise((r) => setTimeout(r, 150));
     await flushPromises();
     expect(w.find('[data-testid="approval-mobile-bar"]').exists()).toBe(true);
-    expect(w.find('.q-page').attributes('style')).toContain('padding-bottom: 88px');
-    window.innerWidth = 1024;
+    expect(w.find('.q-page').attributes('style')).toContain('padding-bottom: calc(88px + env(safe-area-inset-bottom))');
+  });
+
+  it('a closed module offers no action buttons and the phone gets no bottom bar or room for one', async () => {
+    window.innerWidth = 390;
+    const w = await mountPage(record(summary({ status: 'pending', stageSeq: 1, stageName: { 'zh-TW': '主管' } })), [], { ...schema, readOnly: true }, actingInstance());
+    window.dispatchEvent(new Event('resize'));
+    await new Promise((r) => setTimeout(r, 150));
+    await flushPromises();
+    expect(w.find('[data-testid="action-approve"]').exists()).toBe(false);
+    expect(w.find('[data-testid="approval-mobile-bar"]').exists()).toBe(false);
+    expect(w.find('.q-page').attributes('style') ?? '').not.toContain('88px');
+  });
+
+  it('phone: someone with nothing to do gets no extra room', async () => {
+    window.innerWidth = 390;
+    const w = await mountPage(record(summary({ status: 'pending', stageSeq: 1, stageName: { 'zh-TW': '主管' } })), [], schema, pendingInstance);
+    window.dispatchEvent(new Event('resize'));
+    await new Promise((r) => setTimeout(r, 150));
+    await flushPromises();
+    expect(w.find('.q-page').attributes('style') ?? '').not.toContain('88px');
   });
 
   it('approved summary shows positive badge', async () => {

@@ -78,7 +78,7 @@ function onSubmitted(outcome: SubmitApprovalResult['outcome']) {
 }
 // On a phone the action bar is fixed to the bottom: leave room so the last block is not covered.
 const identity = useIdentityStore();
-const barPad = computed(() => $q.screen.lt.sm && hasApprovalActions(approvalQuery.data.value?.current ?? null, identity.userId));
+const barPad = computed(() => $q.screen.lt.sm && !schemaQuery.data.value?.readOnly && hasApprovalActions(approvalQuery.data.value?.current ?? null, identity.userId));
 const submitTargets = computed(() => (canSubmit.value ? approvalQuery.data.value?.submitTargets ?? [] : []).filter((to) => stateLabel(to)));
 
 async function onDelete() {
@@ -106,7 +106,7 @@ async function onDelete() {
 </script>
 
 <template>
-  <q-page padding :style="barPad ? 'padding-bottom: 88px' : undefined">
+  <q-page padding :style="barPad ? 'padding-bottom: calc(88px + env(safe-area-inset-bottom))' : undefined">
     <ForbiddenNotice v-if="forbidden" />
     <div v-else-if="schemaMissing" class="text-negative">{{ t('dynamic.moduleNotFound') }}</div>
     <div v-else-if="recordMissing" class="text-negative">{{ t('dynamic.recordNotFound') }}</div>
@@ -141,6 +141,7 @@ async function onDelete() {
       <RecordConversions :record-id="recordId" :row-version="recordQuery.data.value.rowVersion" :closed="schemaQuery.data.value.readOnly" />
       <ApprovalPanel
         v-if="approval && approvalQuery.data.value" :approval="approvalQuery.data.value" :schema="schemaQuery.data.value" :record-id="recordId" :module-key="moduleKey"
+        :readonly="!!schemaQuery.data.value.readOnly"
       />
       <DynamicDetail :schema="schemaQuery.data.value" :record="recordQuery.data.value" />
       <DetailTables v-if="schemaQuery.data.value.details?.length" class="q-mt-md" :details="schemaQuery.data.value.details" :rows="recordQuery.data.value.details ?? {}" />

@@ -1,10 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import type { ApprovalInstanceView, ApprovalStageView, ApprovalTaskView } from 'src/domain/dynamic/approval-types';
 import zhTW from 'src/i18n/zh-TW.json';
-import { canReturnPrevious, currentStage, hasApprovalActions, myOpenTask, resultNotice } from './approval-actions';
+import { currentStage, hasApprovalActions, myOpenTask, resultNotice } from './approval-actions';
 
 const task = (p: Partial<ApprovalTaskView> = {}): ApprovalTaskView => ({
-  id: 1, assigneeUserId: 'u1', assigneeName: '王', originalUserId: 'u1', reason: 'resolved', status: 'open', actedTime: null, canAct: false, ...p,
+  id: 1, assigneeUserId: 'u1', assigneeName: '王', originalUserId: 'u1', reason: 'resolved', status: 'open', actedTime: null, canAct: false, canReturnPrevious: false, ...p,
 });
 const stage = (p: Partial<ApprovalStageView> = {}): ApprovalStageView => ({
   id: 1, seq: 1, stageCode: 's', name: { 'zh-TW': '主管' }, mode: 'all', status: 'active', skipReason: null, dueTime: null, tasks: [], editableFieldKeys: [], ...p,
@@ -30,13 +30,6 @@ describe('approval-actions', () => {
     expect(myOpenTask(inst([stage({ tasks: [task()] })]))).toBeUndefined();
   });
 
-  it('return to previous needs an earlier approved stage', () => {
-    expect(canReturnPrevious(inst([stage({ seq: 1, status: 'approved' }), stage({ id: 2, seq: 2 })]))).toBe(true);
-    expect(canReturnPrevious(inst([stage({ seq: 1, status: 'skipped' }), stage({ id: 2, seq: 2 })]))).toBe(false);
-    expect(canReturnPrevious(inst([stage({ seq: 1 })]))).toBe(false);
-    expect(canReturnPrevious(inst([stage({ seq: 1, status: 'approved' }), stage({ id: 2, seq: 2, status: 'queued' })]))).toBe(false);
-  });
-
   it('hasApprovalActions: approver or the initiator of a pending instance', () => {
     const acting = inst([stage({ tasks: [task({ canAct: true })] })]);
     expect(hasApprovalActions(acting, 'x')).toBe(true);
@@ -56,6 +49,9 @@ describe('approval-actions', () => {
     const flow = r('rerouted', { newFlowName: { 'zh-TW': '大額流程' } });
     expect(flow.message).toBe('單據內容已變，流程改為「大額流程」重新開始，你的同意未計入');
     expect(flow.type).toBe('warning');
+    const again = r('rerouted', { newFlowName: { 'zh-TW': '大額流程' }, needsResubmit: true });
+    expect(again.message).toBe('單據內容已變，流程改為「大額流程」，需由發起人重新送出；你的同意未計入');
+    expect(again.type).toBe('warning');
     expect(r('rerouted', { newFlowName: null }).message).toBe('單據內容已變，改由備援簽核人重新簽核，你的同意未計入');
   });
 });

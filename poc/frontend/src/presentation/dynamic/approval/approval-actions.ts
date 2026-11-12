@@ -10,26 +10,21 @@ export const currentStage = (i: ApprovalInstanceView): ApprovalStageView | undef
 /** The first task of the current stage the signed-in user may act on (the server decides `canAct`). */
 export const myOpenTask = (i: ApprovalInstanceView): ApprovalTaskView | undefined => currentStage(i)?.tasks.find((k) => k.canAct);
 
-/** Same rule as the server: an earlier stage that was approved (skipped stages do not count). */
-export function canReturnPrevious(i: ApprovalInstanceView): boolean {
-  const cur = currentStage(i);
-  return !!cur && i.stages.some((s) => s.seq < cur.seq && s.status === 'approved');
-}
-
 /** Whether the bar has anything to show: an approver with an open task, or the initiator of a running approval. */
 export function hasApprovalActions(i: ApprovalInstanceView | null, userId: string): boolean {
   if (!i || i.status !== 'pending') return false;
   return !!myOpenTask(i) || (!!userId && i.initiatorUserId === userId);
 }
 
-export interface ApprovalActionContext { instance: ApprovalInstanceView; task: ApprovalTaskView; recordId: number; refresh: () => void }
+/** task is missing for someone who is not an assignee (an administrator): extensions must cope with that. */
+export interface ApprovalActionContext { instance: ApprovalInstanceView; task?: ApprovalTaskView; recordId: number; refresh: () => void }
 export interface ApprovalExtraAction {
   key: string;
   label: (t: Translate) => string;
   visible: (c: ApprovalActionContext) => boolean;
   run: (c: ApprovalActionContext) => void;
 }
-/** Extension point: transfer and add-sign (a3) register here and show up in the "more" menu. */
+/** Extension point: transfer, add-sign, cancel and reassign (a3) register here and show up in the "more" menu. */
 export const approvalTaskActions: ApprovalExtraAction[] = [];
 
 export interface ActionNotice { type: 'positive' | 'warning'; message: string }
@@ -37,6 +32,7 @@ export interface ActionNotice { type: 'positive' | 'warning'; message: string }
 export function resultNotice(r: ApprovalActionResult, locale: string, t: Translate): ActionNotice {
   if (r.outcome === 'rerouted') {
     const flow = r.newFlowName ? resolveI18n(r.newFlowName, locale) : '';
+    if (r.needsResubmit) return { type: 'warning', message: t('approval.result.reroutedResubmit', { flow }) };
     return { type: 'warning', message: flow ? t('approval.result.reroutedFlow', { flow }) : t('approval.result.reroutedFallback') };
   }
   return { type: 'positive', message: t(`approval.result.${r.outcome}`) };

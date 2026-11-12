@@ -1,17 +1,18 @@
 import { useQueryClient } from '@tanstack/vue-query';
 import { useQuasar } from 'quasar';
-import { ref, watch } from 'vue';
+import { computed, ref } from 'vue';
 import { useI18n } from 'vue-i18n';
 import type { ApprovalActionResult } from 'src/domain/dynamic/approval-types';
 import { joinList } from 'src/i18n/translate';
 import { isStale } from 'src/presentation/dynamic/designer/api-error';
 import type { ApiError } from 'src/services/api/http';
 import { newIdempotencyKey } from 'src/services/api/idempotency';
+import { useEffectivePolicies } from 'src/application/dynamic/queries/policies-queries';
 import { resultNotice } from './approval-actions';
 
 interface Options {
   recordId: () => number;
-  open: () => boolean;
+  moduleKey: () => string;
   close: () => void;
   /** Sends the request with the key of this opening. */
   send: (idempotencyKey: string) => Promise<ApprovalActionResult>;
@@ -19,7 +20,8 @@ interface Options {
 
 /**
  * Shared behaviour of the approve, reject and withdraw dialogs: one Idempotency-Key per opening (kept on a retry after a
- * network error or 5xx, replaced after a success or a 422), the server's field errors, and the 409 cases.
+ * network error or 5xx, replaced after a 422; every opening mounts the dialog again, so a success needs no new one),
+ * the comment limit from the policy, the server's field errors, and the 409 cases.
  */
 export function useApprovalAction(o: Options) {
   const { t, locale } = useI18n();
@@ -31,17 +33,17 @@ export function useApprovalAction(o: Options) {
   const fieldErrors = ref<Record<string, string>>({});
   let key = newIdempotencyKey();
 
-  watch(o.open, (open) => {
-    if (!open) return;
-    key = newIdempotencyKey();
-    topError.value = '';
-    stale.value = false;
-    fieldErrors.value = {};
-  }, { immediate: true });
+  // The limit comes from the policy; without a value no maxlength is set and the server's 400 is the only guard.
+  const policies = useEffectivePolicies(o.moduleKey);
+  const maxComment = computed(() => {
+    const v = policies.data.value?.values['approval.maxCommentLength'];
+    return typeof v === 'number' ? v : undefined;
+  });
 
   const reload = () => Promise.all([
     qc.invalidateQueries({ queryKey: ['record', o.recordId()] }),
     qc.invalidateQueries({ queryKey: ['record-approval', o.recordId()] }),
+    qc.invalidateQueries({ queryKey: ['approval-inbox'] }),
   ]);
 
   async function submit() {
@@ -51,7 +53,6 @@ export function useApprovalAction(o: Options) {
     pending.value = true;
     try {
       const result = await o.send(key);
-      key = newIdempotencyKey();
       const n = resultNotice(result, locale.value, t);
       $q.notify({ type: n.type, message: n.message, timeout: n.type === 'warning' ? 8000 : undefined });
       o.close();
@@ -61,24 +62,24 @@ export function useApprovalAction(o: Options) {
       if (err.status === 400 && err.errors) {
         const rest: string[] = [];
         for (const [k, v] of Object.entries(err.errors)) {
-          if (k === 'comment' || k === 'to') fieldErrors.value[k] = joinList(v);
+          if (k === 'comment') fieldErrors.value[k] = joinList(v);
           else rest.push(...v);
         }
-        topError.value = rest.join('；');
+        topError.value = joinList(rest);
       } else if (err.status === 409 && isStale(err)) {
         stale.value = true;
         topError.value = t('dynamic.stale');
         void reload();
       } else if (err.status === 409) {
         // Already handled by someone else, already pending, no approver: the server says what; the page shows the new state.
-        $q.notify({ type: 'warning', message: err.message ?? t('dynamic.loadFailed') });
+        $q.notify({ type: 'warning', message: err.message ?? t('designer.saveFailed') });
         void reload();
         o.close();
-      } else topError.value = err.message ?? t('dynamic.loadFailed');
+      } else topError.value = err.message ?? t('designer.saveFailed');
     } finally {
       pending.value = false;
     }
   }
 
-  return { pending, topError, stale, fieldErrors, submit, reload };
+  return { pending, topError, stale, fieldErrors, maxComment, submit, reload };
 }

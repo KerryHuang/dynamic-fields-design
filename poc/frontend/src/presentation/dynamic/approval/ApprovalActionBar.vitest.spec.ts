@@ -13,7 +13,7 @@ import { approvalTaskActions } from './approval-actions';
 import ApprovalActionBar from './ApprovalActionBar.vue';
 
 const task = (p: Partial<ApprovalTaskView> = {}): ApprovalTaskView => ({
-  id: 11, assigneeUserId: 'me', assigneeName: '我', originalUserId: 'me', reason: 'resolved', status: 'open', actedTime: null, canAct: true, ...p,
+  id: 11, assigneeUserId: 'me', assigneeName: '我', originalUserId: 'me', reason: 'resolved', status: 'open', actedTime: null, canAct: true, canReturnPrevious: false, ...p,
 });
 const stage = (p: Partial<ApprovalStageView> = {}): ApprovalStageView => ({
   id: 1, seq: 1, stageCode: 's', name: { 'zh-TW': '主管' }, mode: 'all', status: 'active', skipReason: null, dueTime: null, tasks: [task()], editableFieldKeys: [], ...p,
@@ -22,7 +22,7 @@ const inst = (p: Partial<ApprovalInstanceView> = {}): ApprovalInstanceView => ({
   id: 7, status: 'pending', routeKind: 'flow', flowName: null, fromOptionId: 1, toOptionId: 2, initiatorUserId: 'a', submittedTime: '', completedTime: null,
   rowVersion: 'iv1', stages: [stage()], actions: [], canWithdraw: false, canCancel: false, titleSnapshot: '', ...p,
 });
-const twoStage = () => inst({ stages: [stage({ id: 1, seq: 1, status: 'approved', tasks: [] }), stage({ id: 2, seq: 2 })] });
+const twoStage = () => inst({ stages: [stage({ id: 1, seq: 1, status: 'approved', tasks: [] }), stage({ id: 2, seq: 2, tasks: [task({ canReturnPrevious: true })] })] });
 
 let calls: Call[];
 let keys: Record<string, unknown[]>;
@@ -155,7 +155,7 @@ describe('ApprovalActionBar', () => {
     w.unmount();
   });
 
-  it('retry after network error reuses the key; success replaces it', async () => {
+  it('retry after a 5xx reuses the key; reopening after a success uses a new one', async () => {
     const w = await mountBar(inst(), { reply: { '/approval-tasks/11/approve': [new HttpFail(500, {}), { outcome: 'advanced', instanceId: 7, instanceRowVersion: 'iv2' }] } });
     await click('action-approve');
     await click('approve-send');
@@ -192,7 +192,7 @@ describe('ApprovalActionBar', () => {
   });
 
   it('409 state changed offers reload and refetches', async () => {
-    const w = await mountBar(inst(), { reply: { '/approval-tasks/11/approve': [new HttpFail(409, { code: 'stale', message: 'x' })] } });
+    const w = await mountBar(inst(), { reply: { '/approval-tasks/11/approve': [new HttpFail(409, { code: 'stale', message: '簽核狀態已更新，請重新整理後再試' })] } });
     const spy = vi.spyOn(qc, 'invalidateQueries');
     await click('action-approve');
     await click('approve-send');
@@ -224,12 +224,118 @@ describe('ApprovalActionBar', () => {
     w.unmount();
   });
 
+  const typeInto = async (id: string, v: string) => {
+    const ta = q(id) as HTMLTextAreaElement;
+    ta.value = v;
+    ta.dispatchEvent(new Event('input'));
+    await settle();
+  };
+
+  it('reject keeps the typed comment and the dialog after a 409 state changed', async () => {
+    const w = await mountBar(twoStage(), { reply: { '/approval-tasks/11/reject': [new HttpFail(409, { code: 'stale', message: '簽核狀態已更新，請重新整理後再試' })] } });
+    await click('action-reject');
+    await typeInto('reject-comment', '金額不符');
+    await click('reject-send');
+    expect(q('reject-send')).not.toBeNull();
+    expect((q('reject-comment') as HTMLTextAreaElement).value).toBe('金額不符');
+    expect(q('action-reload')).not.toBeNull();
+    w.unmount();
+  });
+
+  it.each([['action-approve', 'approve-dialog'], ['action-reject', 'reject-dialog']])('%s opens a persistent dialog', async (btn, dlg) => {
+    const w = await mountBar(inst());
+    await click(btn);
+    expect(q(dlg)).not.toBeNull();
+    expect(w.findComponent({ name: 'QDialog' }).props('persistent')).toBe(true);
+    w.unmount();
+  });
+
+  it('withdraw dialog is persistent too', async () => {
+    const w = await mountBar(inst({ stages: [stage({ tasks: [task({ canAct: false })] })], canWithdraw: true }), { user: 'a' });
+    await click('action-withdraw');
+    expect(w.findComponent({ name: 'QDialog' }).props('persistent')).toBe(true);
+    w.unmount();
+  });
+
+  it('400 comment shows under the field; other keys, including "to", show at the top with the locale separator', async () => {
+    const w = await mountBar(twoStage(), {
+      reply: { '/approval-tasks/11/reject': [new HttpFail(400, { errors: { comment: ['意見太長'], to: ['沒有上一關'], other: ['壞了'] } })] },
+    });
+    await click('action-reject');
+    await typeInto('reject-comment', 'x');
+    await click('reject-send');
+    expect(body().textContent).toContain('意見太長');
+    expect(q('action-error')!.textContent).toContain('沒有上一關');
+    expect(q('action-error')!.textContent).toContain('壞了');
+    w.unmount();
+  });
+
+  it('a 422 replaces the key on the next send; a 404 shows at the top', async () => {
+    const w = await mountBar(inst(), {
+      reply: { '/approval-tasks/11/approve': [new HttpFail(422, { message: '金鑰重複' }), new HttpFail(404, { message: '找不到' })] },
+    });
+    await click('action-approve');
+    await click('approve-send');
+    await click('approve-send');
+    const k = keys['/approval-tasks/11/approve']!;
+    expect(k[1]).not.toBe(k[0]);
+    expect(q('action-error')!.textContent).toContain('找不到');
+    w.unmount();
+  });
+
+  it('withdraw 409 (someone acted meanwhile) tells the user, refetches and closes', async () => {
+    const w = await mountBar(inst({ stages: [stage({ tasks: [task({ canAct: false })] })], canWithdraw: true }), {
+      user: 'a', reply: { '/approval-instances/7/withdraw': [new HttpFail(409, { message: '目前關卡已有人處理' })] },
+    });
+    const spy = vi.spyOn(qc, 'invalidateQueries');
+    const n = notices(w);
+    await click('action-withdraw');
+    await click('withdraw-send');
+    expect(said(n)).toContain('目前關卡已有人處理');
+    expect(spy).toHaveBeenCalledWith({ queryKey: ['record-approval', 9] });
+    expect(q('withdraw-send')).toBeNull();
+    w.unmount();
+  });
+
+  it('a successful action also refreshes the list of the module', async () => {
+    const w = await mountBar(inst());
+    const spy = vi.spyOn(qc, 'invalidateQueries');
+    await click('action-approve');
+    await click('approve-send');
+    expect(spy).toHaveBeenCalledWith({ queryKey: ['records', 'po'] });
+    w.unmount();
+  });
+
+  it('rerouted into a flow that needs picks asks the initiator to submit again', async () => {
+    const w = await mountBar(inst(), {
+      reply: { '/approval-tasks/11/approve': [{ outcome: 'rerouted', instanceId: 7, instanceRowVersion: 'n', newFlowName: { 'zh-TW': '大額流程' }, needsResubmit: true }] },
+    });
+    const n = notices(w);
+    await click('action-approve');
+    await click('approve-send');
+    expect(said(n)).toContain('需由發起人重新送出');
+    expect(said(n)).not.toContain('重新開始');
+    w.unmount();
+  });
+
   it('mobile width shows a bottom bar with approve and reject only', async () => {
     const w = await mountBar(inst(), { width: 390 });
     expect(q('approval-mobile-bar')).not.toBeNull();
     expect(q('action-approve')).not.toBeNull();
     expect(q('action-reject')).not.toBeNull();
     expect(q('approval-more')).toBeNull();
+    expect(body().querySelector('.approval-sticky')).not.toBeNull();   // the layer that keeps the bar above the blocks that follow
+    w.unmount();
+  });
+
+  it('mobile: an approver who is also the initiator gets two buttons on the bar and withdraw in the menu, without its reason on the bar', async () => {
+    const w = await mountBar(inst({ initiatorUserId: 'me', canWithdraw: false }), { width: 390 });
+    expect(q('action-approve')).not.toBeNull();
+    expect(q('action-reject')).not.toBeNull();
+    expect(q('action-withdraw')).toBeNull();
+    expect(q('withdraw-blocked')).toBeNull();
+    await click('approval-more');
+    expect(body().textContent).toContain('撤回');
     w.unmount();
   });
 
@@ -239,10 +345,30 @@ describe('ApprovalActionBar', () => {
     w.unmount();
   });
 
-  it('extra actions appear in the more menu', async () => {
-    approvalTaskActions.push({ key: 'transfer', label: () => '轉交', visible: () => true, run: () => {} });
+  it('extra actions are run from the more menu with the instance, the task and a refresh that rereads the approval', async () => {
+    const run = vi.fn();
+    approvalTaskActions.push({ key: 'transfer', label: () => '轉交', visible: () => true, run });
     const w = await mountBar(inst(), { width: 390 });
-    expect(q('approval-more')).not.toBeNull();
+    const spy = vi.spyOn(qc, 'invalidateQueries');
+    await click('approval-more');
+    await click('approval-extra-transfer');
+    expect(run).toHaveBeenCalledTimes(1);
+    const ctx = run.mock.calls[0]![0];
+    expect(ctx.task.id).toBe(11);
+    expect(ctx.instance.id).toBe(7);
+    ctx.refresh();
+    expect(spy).toHaveBeenCalledWith({ queryKey: ['record-approval', 9] });
+    expect(spy).toHaveBeenCalledWith({ queryKey: ['record', 9] });
+    w.unmount();
+  });
+
+  it('extra actions also show for someone without a task (an administrator)', async () => {
+    const run = vi.fn();
+    approvalTaskActions.push({ key: 'cancel', label: () => '終止', visible: (c) => c.task === undefined, run });
+    const w = await mountBar(inst({ stages: [stage({ tasks: [task({ canAct: false })] })] }), { user: 'x' });
+    await click('approval-more');
+    await click('approval-extra-cancel');
+    expect(run.mock.calls[0]![0].task).toBeUndefined();
     w.unmount();
   });
 });

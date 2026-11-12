@@ -57,27 +57,27 @@ export function useSubmitApproval() {
 export function useApproveTask() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (i: { taskId: number; recordId: number; body: ApproveBody; idempotencyKey?: string }) =>
+    mutationFn: (i: { taskId: number; recordId: number; moduleKey: string; body: ApproveBody; idempotencyKey?: string }) =>
       dynamicApi.approveTask(i.taskId, i.body, i.idempotencyKey),
-    onSuccess: (_r, i) => invalidateApproval(qc, i.recordId),
+    onSuccess: (_r, i) => invalidateApproval(qc, i.recordId, i.moduleKey),
   });
 }
 
 export function useRejectTask() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (i: { taskId: number; recordId: number; body: RejectBody; idempotencyKey?: string }) =>
+    mutationFn: (i: { taskId: number; recordId: number; moduleKey: string; body: RejectBody; idempotencyKey?: string }) =>
       dynamicApi.rejectTask(i.taskId, i.body, i.idempotencyKey),
-    onSuccess: (_r, i) => invalidateApproval(qc, i.recordId),
+    onSuccess: (_r, i) => invalidateApproval(qc, i.recordId, i.moduleKey),
   });
 }
 
 export function useWithdrawApproval() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (i: { instanceId: number; recordId: number; body: WithdrawBody; idempotencyKey?: string }) =>
+    mutationFn: (i: { instanceId: number; recordId: number; moduleKey: string; body: WithdrawBody; idempotencyKey?: string }) =>
       dynamicApi.withdrawApproval(i.instanceId, i.body, i.idempotencyKey),
-    onSuccess: (_r, i) => invalidateApproval(qc, i.recordId),
+    onSuccess: (_r, i) => invalidateApproval(qc, i.recordId, i.moduleKey),
   });
 }
 

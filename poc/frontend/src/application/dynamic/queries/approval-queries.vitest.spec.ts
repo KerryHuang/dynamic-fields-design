@@ -34,7 +34,7 @@ describe('approval api and mutations', () => {
   it('approve posts rowVersion, comment and values to the task', async () => {
     calls = mockHttp(() => ({ outcome: 'advanced', instanceId: 3, instanceRowVersion: 'v3' }));
     const { m } = setup();
-    await m.approve.mutateAsync({ taskId: 5, recordId: 9, body: { rowVersion: 'v2', comment: 'ok', values: { f_1: 10 } }, idempotencyKey: 'k' });
+    await m.approve.mutateAsync({ taskId: 5, recordId: 9, moduleKey: 'po', body: { rowVersion: 'v2', comment: 'ok', values: { f_1: 10 } }, idempotencyKey: 'k' });
     expect(last()).toMatchObject({ method: 'post', url: '/approval-tasks/5/approve' });
     expect(bodyOf(last())).toEqual({ rowVersion: 'v2', comment: 'ok', values: { f_1: 10 } });
   });
@@ -42,7 +42,7 @@ describe('approval api and mutations', () => {
   it('reject posts to=previous and comment', async () => {
     calls = mockHttp(() => ({ outcome: 'returned', instanceId: 3, instanceRowVersion: 'v3' }));
     const { m } = setup();
-    await m.reject.mutateAsync({ taskId: 5, recordId: 9, body: { rowVersion: 'v2', comment: 'no', to: 'previous' }, idempotencyKey: 'k' });
+    await m.reject.mutateAsync({ taskId: 5, recordId: 9, moduleKey: 'po', body: { rowVersion: 'v2', comment: 'no', to: 'previous' }, idempotencyKey: 'k' });
     expect(last()).toMatchObject({ method: 'post', url: '/approval-tasks/5/reject' });
     expect(bodyOf(last())).toEqual({ rowVersion: 'v2', comment: 'no', to: 'previous' });
   });
@@ -50,20 +50,25 @@ describe('approval api and mutations', () => {
   it('withdraw posts to the instance', async () => {
     calls = mockHttp(() => ({ outcome: 'withdrawn', instanceId: 3, instanceRowVersion: 'v3' }));
     const { m } = setup();
-    await m.withdraw.mutateAsync({ instanceId: 3, recordId: 9, body: { rowVersion: 'v2' }, idempotencyKey: 'k' });
+    await m.withdraw.mutateAsync({ instanceId: 3, recordId: 9, moduleKey: 'po', body: { rowVersion: 'v2' }, idempotencyKey: 'k' });
     expect(last()).toMatchObject({ method: 'post', url: '/approval-instances/3/withdraw' });
   });
 
-  it('action success invalidates record, approval, history, inbox, bell, list, tasks, effects and ledger', async () => {
-    calls = mockHttp(() => ({ outcome: 'submitted', instanceId: 3, recordRowVersion: 'v2' }));
-    const { m, keys } = setup();
-    await m.submit.mutateAsync({ recordId: 9, moduleKey: 'po', body: { to: 12, recordRowVersion: 'v1' }, idempotencyKey: 'k' });
-    await flushPromises();
-    expect(keys()).toEqual(expect.arrayContaining([
-      '["record",9]', '["record-approval",9]', '["record-history",9]', '["approval-inbox"]', '["notifications"]',
-      '["records","po"]', '["record-tasks",9]', '["record-effects",9]', '["record-ledger",9]',
-    ]));
-  });
+  it.each(['submit', 'approve', 'reject', 'withdraw'] as const)(
+    '%s success invalidates record, approval, history, inbox, bell, list, tasks, effects and ledger', async (which) => {
+      calls = mockHttp(() => ({ outcome: 'advanced', instanceId: 3, instanceRowVersion: 'v2', recordRowVersion: 'v2' }));
+      const { m, keys } = setup();
+      if (which === 'submit') await m.submit.mutateAsync({ recordId: 9, moduleKey: 'po', body: { to: 12, recordRowVersion: 'v1' }, idempotencyKey: 'k' });
+      if (which === 'approve') await m.approve.mutateAsync({ taskId: 5, recordId: 9, moduleKey: 'po', body: { rowVersion: 'v1' }, idempotencyKey: 'k' });
+      if (which === 'reject') await m.reject.mutateAsync({ taskId: 5, recordId: 9, moduleKey: 'po', body: { rowVersion: 'v1', comment: 'no', to: 'initiator' }, idempotencyKey: 'k' });
+      if (which === 'withdraw') await m.withdraw.mutateAsync({ instanceId: 3, recordId: 9, moduleKey: 'po', body: { rowVersion: 'v1' }, idempotencyKey: 'k' });
+      await flushPromises();
+      expect(keys()).toEqual(expect.arrayContaining([
+        '["record",9]', '["record-approval",9]', '["record-history",9]', '["approval-inbox"]', '["notifications"]',
+        '["records","po"]', '["record-tasks",9]', '["record-effects",9]', '["record-ledger",9]',
+      ]));
+    },
+  );
 
   it('inbox passes box, module, status, from, to, currentPage, pagesSize', async () => {
     calls = mockHttp(() => ({ items: [], totalCount: 0, currentPage: 2, pagesSize: 20 }));

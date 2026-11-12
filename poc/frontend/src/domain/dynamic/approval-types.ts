@@ -15,6 +15,8 @@ export interface RecordApprovalLock { fieldKeys: string[]; detailRowsLocked: boo
 export interface ApprovalTaskView {
   id: number; assigneeUserId: string; assigneeName: string; originalUserId: string; reason: string;
   status: string; actedTime: string | null; canAct: boolean;
+  /** Server rule: the previous stage in the flow definition (skipped ones passed over) was approved. */
+  canReturnPrevious: boolean;
 }
 export interface ApprovalStageView {
   id: number; seq: number; stageCode: string | null; name: I18nText; mode: 'all' | 'any'; status: string;
@@ -50,6 +52,8 @@ export interface SubmitApprovalResult { outcome: 'submitted' | 'approved' | 'dir
 export interface ApprovalActionResult {
   outcome: 'advanced' | 'approved' | 'rerouted' | 'rejected' | 'returned' | 'withdrawn';
   instanceId: number; instanceRowVersion: string; newFlowName?: I18nText | null;
+  /** rerouted into a flow that needs the initiator's picks: no new instance, the initiator has to submit again. */
+  needsResubmit?: boolean;
 }
 
 export type ApprovalBox = 'todo' | 'done' | 'submitted' | 'all';

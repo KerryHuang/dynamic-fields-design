@@ -8,7 +8,7 @@ import zhTW from 'src/i18n/zh-TW.json';
 import ApprovalPanel from './ApprovalPanel.vue';
 
 const task = (p: Partial<ApprovalTaskView> = {}): ApprovalTaskView => ({
-  id: 1, assigneeUserId: 'u1', assigneeName: '王主管', originalUserId: 'u1', reason: 'resolved', status: 'open', actedTime: null, canAct: false, ...p,
+  id: 1, assigneeUserId: 'u1', assigneeName: '王主管', originalUserId: 'u1', reason: 'resolved', status: 'open', actedTime: null, canAct: false, canReturnPrevious: false, ...p,
 });
 const stage = (p: Partial<ApprovalStageView> = {}): ApprovalStageView => ({
   id: 1, seq: 1, stageCode: 's1', name: { 'zh-TW': '主管' }, mode: 'all', status: 'active', skipReason: null, dueTime: null, tasks: [task()], editableFieldKeys: [], ...p,
@@ -95,10 +95,16 @@ describe('ApprovalPanel', () => {
     expect(text(w, 'approval-log')).not.toContain('250');
   });
 
-  it('reroute entry shows its note', () => {
-    const w = mountPanel(approval(instance({ actions: [action({ action: 'reroute', actorName: '系統', comment: '單據內容已變，改用流程「X」重新簽核' })] })));
+  it.each([
+    ['flow', '已改用新的流程重新簽核'],
+    ['fallback', '改由備援簽核人重新簽核'],
+    ['pick', '需由發起人重新送出'],
+    [undefined, '流程已重來'],
+  ])('reroute entry of kind %s is worded from the kind, not the stored Chinese note', (kind, expected) => {
+    const w = mountPanel(approval(instance({ actions: [action({ action: 'reroute', actorName: '系統', comment: '儲存的繁中備註', data: kind ? { kind } : null })] })));
     expect(text(w, 'approval-log')).toContain('流程重來');
-    expect(text(w, 'approval-log')).toContain('單據內容已變，改用流程「X」重新簽核');
+    expect(text(w, 'approval-log')).toContain(expected);
+    expect(text(w, 'approval-log')).not.toContain('儲存的繁中備註');
   });
 
   it('shows action, actor and comment', () => {
@@ -120,5 +126,40 @@ describe('ApprovalPanel', () => {
   it('no previous instances: no 先前的簽核 section', () => {
     const w = mountPanel(approval(instance()));
     expect(w.find('[data-testid="approval-previous"]').exists()).toBe(false);
+  });
+
+  const ended = (id: number, status: ApprovalInstanceView['status'], extra: Partial<ApprovalInstanceView> = {}) =>
+    instance({ id, status, flowName: { 'zh-TW': `流程${id}` }, stages: [stage({ id, status: 'approved' })], ...extra });
+
+  it('with nothing running, the latest ended instance is the main block (not folded) and older ones stay folded', () => {
+    const w = mountPanel(approval(null, [ended(9, 'rejected', { actions: [action({ action: 'reject', comment: '金額不符' })] }), ended(5, 'approved')]));
+    expect(w.find('[data-testid="approval-main-status"]').text()).toBe('已退回');
+    expect(text(w, 'approval-panel')).toContain('流程9');
+    expect(text(w, 'approval-log')).toContain('金額不符');
+    const folded = w.find('[data-testid="approval-previous"]');
+    expect(folded.text()).toContain('先前的簽核');
+    expect(folded.text()).toContain('1');
+    expect(w.find('[data-testid="previous-9"]').exists()).toBe(false);
+  });
+
+  it('with nothing running and one ended instance there is no folded section', () => {
+    const w = mountPanel(approval(null, [ended(9, 'approved')]));
+    expect(w.find('[data-testid="approval-main-status"]').text()).toBe('已核准');
+    expect(w.find('[data-testid="approval-previous"]').exists()).toBe(false);
+  });
+
+  it('a running instance stays the main block and every ended one is folded', () => {
+    const w = mountPanel(approval(instance(), [ended(9, 'approved')]));
+    expect(w.find('[data-testid="approval-main-status"]').text()).toBe('簽核中');
+    expect(w.find('[data-testid="approval-previous"]').text()).toContain('1');
+  });
+
+  it('a rerouted instance in the folded list reads "flow restarted"; as the main block it asks to submit again', async () => {
+    const folded = mountPanel(approval(instance(), [ended(5, 'rerouted')]));
+    await folded.find('[data-testid="approval-previous"] .q-item').trigger('click');
+    expect(folded.find('[data-testid="previous-5"]').text()).toContain('流程已重來');
+    expect(folded.find('[data-testid="previous-5"]').text()).not.toContain('請重新送出');
+    const main = mountPanel(approval(null, [ended(5, 'rerouted')]));
+    expect(main.find('[data-testid="approval-main-status"]').text()).toContain('請重新送出');
   });
 });
