@@ -17,6 +17,7 @@ using DynamicModules.Persistence.Files;
 using DynamicModules.Persistence.Seed;
 using DynamicModules.WebAPI.Attachments;
 using DynamicModules.WebAPI.Demo;
+using DynamicModules.WebAPI.Ops;
 using DynamicModules.WebAPI.Security;
 using DynamicModules.WebAPI.Time;
 using Microsoft.AspNetCore.Authentication.Cookies;
@@ -95,7 +96,12 @@ builder.Services.AddControllers().AddJsonOptions(o =>
 builder.Services.AddExceptionHandler<DynamicModules.WebAPI.Errors.ConcurrencyExceptionHandler>();
 builder.Services.AddExceptionHandler<DynamicModules.WebAPI.Errors.FrozenFieldExceptionHandler>();
 builder.Services.AddExceptionHandler<DynamicModules.WebAPI.Errors.DatabaseBusyExceptionHandler>();
-builder.Services.AddProblemDetails();
+// 所有 ProblemDetails 的 traceId 與 X-Request-Id 一致（框架預設用 Activity.Id，格式不同）
+builder.Services.AddProblemDetails(o => o.CustomizeProblemDetails = c =>
+    c.ProblemDetails.Extensions["traceId"] = c.HttpContext.TraceIdentifier);
+// 預設不採用外來的 traceparent（匿名使用者不該能指定 request id）；內部串接才開
+if (!builder.Configuration.GetValue<bool>("Ops:TrustIncomingTraceParent"))
+    builder.Services.AddSingleton<System.Diagnostics.DistributedContextPropagator>(new IgnoreIncomingTraceContext());
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
 
@@ -123,9 +129,12 @@ if (app.Configuration.GetValue<bool>("Demo:SeedOnStartup"))
 if (app.Services.GetRequiredService<AuthSettings>().DemoLoginEnabled)
     app.Logger.LogWarning("Demo:LoginEnabled 已開啟：任何人都能不輸入密碼以示範帳號或 admin 登入，只能用在公開的 Demo 站");
 
+// 第一個：例外處理之前就定好 request id
+app.UseMiddleware<RequestContextMiddleware>();
 if (trustForwardedHeaders) app.UseForwardedHeaders();
 app.UseExceptionHandler();
 app.UseAuthentication();
+app.UseMiddleware<RequestScopeMiddleware>();
 app.UseMiddleware<SessionMiddleware>();
 app.UseMiddleware<IdempotencyKeyMiddleware>();
 if (app.Environment.IsDevelopment())

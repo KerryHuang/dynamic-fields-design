@@ -24,7 +24,7 @@ public class IdempotencyKeyMiddleware(RequestDelegate next)
         if (!Pattern.IsMatch(key))
         {
             http.Response.StatusCode = StatusCodes.Status400BadRequest;
-            await http.Response.WriteAsJsonAsync(new { message = "Idempotency-Key 必須是 8 到 64 個英數字、底線或連字號" });
+            await http.Response.WriteAsJsonAsync(new { traceId = http.TraceIdentifier, message = "Idempotency-Key 必須是 8 到 64 個英數字、底線或連字號" });
             return;
         }
 

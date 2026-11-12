@@ -122,7 +122,12 @@ public class TestApp : WebApplicationFactory<Program>
         foreach (var (key, value) in Settings) builder.UseSetting(key, value);
         // 空字串覆蓋 appsettings.Development.json 的開發用密碼，代表「沒設」
         builder.UseSetting("Auth:InitialAdminPassword", InitialAdminPassword ?? "");
-        builder.ConfigureLogging(l => l.AddProvider(Logs));
+        builder.ConfigureLogging(l =>
+        {
+            l.AddProvider(Logs);
+            // 2xx 的請求結束行是 Debug；provider 專屬規則優先於 appsettings 的 Default: Information
+            l.AddFilter<TestLogSink>("DynamicModules.WebAPI.Ops", LogLevel.Debug);
+        });
         builder.ConfigureServices(s =>
         {
             s.AddSingleton<IStartupFilter>(new CountingBodyFilter(this));
@@ -222,24 +227,47 @@ public sealed class FakeTimeProvider : TimeProvider
     public void Advance(TimeSpan by) => _now += by;
 }
 
-/// <summary>收集 log，供斷言啟動時印出的訊息。</summary>
-public sealed class TestLogSink : ILoggerProvider
+/// <summary>一則被收集的 log：Values 是 state 欄位加上所有 scope 的 key/value 攤平。</summary>
+public sealed record LogRecord(LogLevel Level, string Category, EventId EventId, string Message, IReadOnlyDictionary<string, object?> Values);
+
+/// <summary>收集 log，供斷言啟動時印出的訊息與結構化欄位。</summary>
+public sealed class TestLogSink : ILoggerProvider, ISupportExternalScope
 {
     private readonly System.Collections.Concurrent.ConcurrentQueue<(LogLevel Level, string Message)> _entries = new();
+    private readonly System.Collections.Concurrent.ConcurrentQueue<LogRecord> _records = new();
+    private IExternalScopeProvider? _scopes;
 
     public IReadOnlyList<(LogLevel Level, string Message)> Entries => _entries.ToArray();
 
-    public ILogger CreateLogger(string categoryName) => new Sink(_entries);
+    public IReadOnlyList<LogRecord> Records => _records.ToArray();
+
+    public void SetScopeProvider(IExternalScopeProvider scopeProvider) => _scopes = scopeProvider;
+
+    public ILogger CreateLogger(string categoryName) => new Sink(this, categoryName);
 
     public void Dispose() { }
 
-    private sealed class Sink(System.Collections.Concurrent.ConcurrentQueue<(LogLevel, string)> entries) : ILogger
+    private sealed class Sink(TestLogSink owner, string category) : ILogger
     {
-        public IDisposable? BeginScope<TState>(TState state) where TState : notnull => null;
+        public IDisposable? BeginScope<TState>(TState state) where TState : notnull => owner._scopes?.Push(state);
 
         public bool IsEnabled(LogLevel logLevel) => true;
 
         public void Log<TState>(LogLevel logLevel, EventId eventId, TState state, Exception? exception,
-            Func<TState, Exception?, string> formatter) => entries.Enqueue((logLevel, formatter(state, exception)));
+            Func<TState, Exception?, string> formatter)
+        {
+            var message = formatter(state, exception);
+            owner._entries.Enqueue((logLevel, message));
+            var values = new Dictionary<string, object?>();
+            owner._scopes?.ForEachScope((scope, v) => Flatten(scope, v), values);
+            Flatten(state, values);
+            owner._records.Enqueue(new LogRecord(logLevel, category, eventId, message, values));
+        }
+
+        private static void Flatten(object? source, Dictionary<string, object?> into)
+        {
+            if (source is IEnumerable<KeyValuePair<string, object?>> pairs)
+                foreach (var (k, v) in pairs) into[k] = v;
+        }
     }
 }

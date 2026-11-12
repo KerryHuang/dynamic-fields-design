@@ -35,14 +35,14 @@ public class SessionMiddleware(RequestDelegate next)
         {
             if (ctx.User.Identity?.IsAuthenticated == true) await AuthCookies.SignOutAsync(ctx);
             ctx.Response.StatusCode = StatusCodes.Status401Unauthorized;
-            await ctx.Response.WriteAsJsonAsync(new { message = MessageText.Get(locale.Locale, MessageText.SignInRequired) });
+            await ctx.Response.WriteAsJsonAsync(new { traceId = ctx.TraceIdentifier, message = MessageText.Get(locale.Locale, MessageText.SignInRequired) });
             return;
         }
 
         if (row.MustChangePassword && !IsAllowedWhileMustChange(ctx.Request.Method, path))
         {
             ctx.Response.StatusCode = StatusCodes.Status403Forbidden;
-            await ctx.Response.WriteAsJsonAsync(new { message = MessageText.Get(locale.Locale, MessageText.PasswordChangeRequired), code = "passwordChangeRequired" });
+            await ctx.Response.WriteAsJsonAsync(new { traceId = ctx.TraceIdentifier, message = MessageText.Get(locale.Locale, MessageText.PasswordChangeRequired), code = "passwordChangeRequired" });
             return;
         }
 
