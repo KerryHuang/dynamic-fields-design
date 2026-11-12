@@ -2,6 +2,7 @@ using DynamicModules.Application.Common;
 using DynamicModules.Application.Common.Security;
 using DynamicModules.Application.Dynamic.RecordService.Data;
 using DynamicModules.Application.Dynamic.References;
+using DynamicModules.Domain.Approvals;
 using DynamicModules.Domain.Entities.Dynamic;
 using DynamicModules.Domain.Repositories.Dynamic;
 using DynamicModules.Domain.Modules;
@@ -45,10 +46,12 @@ public class GetRecordHandler(IModuleRepository modules, IRecordRepository recor
 
     private async Task<ApprovalService.RecordApprovalLock?> LockOfAsync(Module module, Record record, EffectivePermissions p, CancellationToken ct)
     {
-        if (module.Workflow is not { } wf) return null;
+        // 先用純函式判斷狀態，非鎖定狀態（最常被讀）不用付算鎖定欄位的查詢成本
+        if (module.Workflow is not { } wf || !ApprovalTopology.IsLocked(wf, wf.StateOf(RecordValueProcessor.Parse(record.ValuesJson)))) return null;
         var locked = await locks.ForModuleAsync(module, null, ct);
-        if (!locked.IsLockedState(wf.StateOf(RecordValueProcessor.Parse(record.ValuesJson)))) return null;
-        var keys = module.Blocks.SelectMany(b => b.Fields).Where(f => locked.FieldIds.Contains(f.Id) && p.CanSee(f)).Select(f => f.Key).ToList();
+        var keys = module.Blocks.OrderBy(b => b.Sequence).ThenBy(b => b.Id)
+            .SelectMany(b => b.Fields.Where(f => f.Status == FieldStatus.Active).OrderBy(f => f.Sequence).ThenBy(f => f.Id))
+            .Where(f => locked.FieldIds.Contains(f.Id) && p.CanSee(f)).Select(f => f.Key).ToList();
         return new(keys, locked.DetailRowsLocked);
     }
 }
