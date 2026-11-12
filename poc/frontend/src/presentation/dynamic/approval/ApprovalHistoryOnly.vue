@@ -5,8 +5,9 @@ import type { RecordApproval } from 'src/domain/dynamic/approval-types';
 import { instanceTitle } from './approval-display';
 import ApprovalPanel from './ApprovalPanel.vue';
 
-/** What an approver sees once the record itself is out of reach: only the approval history, no record content and no actions. */
-const props = defineProps<{ approval: RecordApproval; recordId: number }>();
+/** What an approver sees once the record itself is out of reach: only the approval history, no record content.
+ *  The bar stays for what needs no read right: the initiator may still withdraw (the server's canWithdraw decides). */
+const props = defineProps<{ approval: RecordApproval; recordId: number; moduleKey: string }>();
 const { t, locale } = useI18n();
 const main = computed(() => props.approval.current ?? props.approval.previous[0]);
 const title = computed(() => instanceTitle(main.value?.titleSnapshot ?? '', undefined, props.recordId, locale.value));
@@ -19,7 +20,7 @@ const title = computed(() => instanceTitle(main.value?.titleSnapshot ?? '', unde
       <q-icon name="history" class="q-mr-sm" />
       <span>{{ t('approval.historyOnly.hint') }}</span>
     </div>
-    <ApprovalPanel :approval="approval" :schema="null" readonly />
+    <ApprovalPanel :approval="approval" :schema="null" :record-id="recordId" :module-key="moduleKey" />
   </div>
 </template>
 

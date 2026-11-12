@@ -181,6 +181,23 @@ describe('DetailPage temporary read', () => {
     expect(has(w, 'action-withdraw')).toBe(false);
   });
 
+  it('history only: the initiator can still withdraw a running approval, another user cannot', async () => {
+    const running = () => approvalOf(instance({ canWithdraw: true, initiatorUserId: 'fin' }));
+    const w = await mountPage(() => {
+      api.getModuleSchema.mockImplementation(() => gone(403));
+      api.getRecord.mockImplementation(() => gone(403));
+      api.getRecordApproval.mockResolvedValue(running());
+    });
+    expect(has(w, 'approval-history-only')).toBe(true);
+    expect((w.find('[data-testid="action-withdraw"]').element as HTMLButtonElement).disabled).toBe(false);
+    const other = await mountPage(() => {
+      api.getModuleSchema.mockImplementation(() => gone(403));
+      api.getRecord.mockImplementation(() => gone(403));
+      api.getRecordApproval.mockResolvedValue(approvalOf(instance({ canWithdraw: true, initiatorUserId: 'someone', stages: [] })));
+    });
+    expect(has(other, 'action-withdraw')).toBe(false);
+  });
+
   it('history only with an empty snapshot shows the record number instead of a blank title', async () => {
     const w = await mountPage(() => {
       api.getModuleSchema.mockImplementation(() => gone(403));

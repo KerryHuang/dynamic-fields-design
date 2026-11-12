@@ -121,7 +121,7 @@ async function onDelete() {
 <template>
   <q-page padding :style="barPad ? 'padding-bottom: calc(88px + env(safe-area-inset-bottom))' : undefined">
     <template v-if="historyPending" />
-    <ApprovalHistoryOnly v-else-if="historyOnly" :approval="approvalQuery.data.value!" :record-id="recordId" />
+    <ApprovalHistoryOnly v-else-if="historyOnly" :approval="approvalQuery.data.value!" :record-id="recordId" :module-key="moduleKey" />
     <ForbiddenNotice v-else-if="forbidden" />
     <div v-else-if="schemaMissing" class="text-negative">{{ t('dynamic.moduleNotFound') }}</div>
     <div v-else-if="recordMissing" class="text-negative">{{ t('dynamic.recordNotFound') }}</div>
