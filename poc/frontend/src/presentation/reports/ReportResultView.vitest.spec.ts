@@ -27,9 +27,9 @@ const OK: ReportResult = {
   total: { m1: 1234.5, m2: 739000 }, detailRows: null,
 };
 
-function mountView(result: ReportResult, viz = 'table', locale = 'zh-TW') {
+function mountView(result: ReportResult, viz = 'table', locale = 'zh-TW', drillable = false) {
   const i18n = createI18n({ legacy: false, locale, messages: { 'zh-TW': zhTW, 'en-US': enUS } });
-  return mount(ReportResultView, { props: { result, viz }, global: { plugins: [[quasar.Quasar, { components: quasar }], i18n] } });
+  return mount(ReportResultView, { props: { result, viz, drillable }, global: { plugins: [[quasar.Quasar, { components: quasar }], i18n] } });
 }
 const has = (w: ReturnType<typeof mount>, id: string) => w.find(`[data-testid="${id}"]`);
 
@@ -67,9 +67,17 @@ describe('ReportResultView', () => {
   });
 
   it('clicking a group row emits drill with its group keys', async () => {
-    const w = mountView(OK);
+    const w = mountView(OK, 'table', 'zh-TW', true);
+    expect(has(w, 'group-row-1').classes()).toContain('row-clickable');
     await has(w, 'group-row-1').trigger('click');
     expect(w.emitted('drill')).toEqual([[['b']]]);
+  });
+
+  it('without drillable the group rows have no clickable style and do not emit', async () => {
+    const w = mountView(OK);
+    expect(has(w, 'group-row-1').classes()).not.toContain('row-clickable');
+    await has(w, 'group-row-1').trigger('click');
+    expect(w.emitted('drill')).toBeUndefined();
   });
 
   it.each([

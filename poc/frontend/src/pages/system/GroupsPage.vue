@@ -31,6 +31,8 @@ const columns = computed<QTableColumn<AdminGroup>[]>(() => [
 const dialog = ref(false);
 const editing = ref<AdminGroup | null>(null);
 const name = ref('');
+// 已存進後端的名稱：改名成功後更新，成員失敗重試時不再重送改名
+const savedName = ref('');
 const selected = ref<string[]>([]);
 const formError = ref('');
 const create = useCreateGroup();
@@ -44,6 +46,7 @@ const memberOptions = computed(() => {
 function openEditor(g?: AdminGroup) {
   editing.value = g ?? null;
   name.value = g ? nameOf(g) : '';
+  savedName.value = name.value;
   selected.value = g ? [...g.memberUserIds] : [];
   formError.value = '';
   dialog.value = true;
@@ -60,8 +63,11 @@ function save() {
     if (unchanged) { done(); return; }
     setMembers.mutate({ id: g.id, userIds: selected.value }, { onSuccess: done, onError: fail });
   };
-  if (name.value === nameOf(g)) saveMembers();
-  else rename.mutate({ id: g.id, name: name.value, locale: locale.value }, { onSuccess: saveMembers, onError: fail });
+  if (name.value === savedName.value) saveMembers();
+  else {
+    const sent = name.value;
+    rename.mutate({ id: g.id, name: sent, locale: locale.value }, { onSuccess: () => { savedName.value = sent; saveMembers(); }, onError: fail });
+  }
 }
 
 // 刪除：先查影響；有選項範圍指定時停用刪除，409（別人剛加了範圍）把清單換成後端回的
@@ -102,7 +108,10 @@ function confirmDelete() {
         :rows-per-page-options="[0]" hide-pagination
       >
         <template #body="{ row, cols }">
-          <q-tr class="row-clickable" :data-testid="`group-row-${row.id}`" @click="openEditor(row)">
+          <q-tr
+            class="row-clickable" tabindex="0" :data-testid="`group-row-${row.id}`"
+            @click="openEditor(row)" @keydown.enter.self.prevent="openEditor(row)" @keydown.space.self.prevent="openEditor(row)"
+          >
             <template v-for="c in cols" :key="c.name">
               <q-td v-if="c.name === 'actions'" :align="c.align" @click.stop>
                 <q-btn

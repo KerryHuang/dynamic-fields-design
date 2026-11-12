@@ -128,7 +128,7 @@ function doDelete() {
         {{ t('reports.loadFailed') }}
         <q-btn flat dense color="primary" :label="t('reports.retry')" data-testid="run-retry" @click="run.refetch()" />
       </div>
-      <ReportResultView v-else-if="run.data.value" :result="run.data.value" :viz="detail.definition.viz" @drill="drillKeys = $event" />
+      <ReportResultView v-else-if="run.data.value" drillable :result="run.data.value" :viz="detail.definition.viz" @drill="drillKeys = $event" />
 
       <DrillDialog :report-id="detail.id" :group-keys="drillKeys" @close="drillKeys = null" />
       <ShareDialog :report-id="detail.id" :open="shareOpen" :group-ids="detail.sharedGroupIds" @close="shareOpen = false" />

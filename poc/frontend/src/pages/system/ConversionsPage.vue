@@ -67,7 +67,8 @@ function confirmDelete() {
       >
         <template #body="{ row, cols }">
           <q-tr
-            :class="{ 'row-clickable': canEdit }" :data-testid="`conversion-row-${row.key}`" @click="canEdit && open(row)"
+            :class="{ 'row-clickable': canEdit }" :tabindex="canEdit ? 0 : undefined" :data-testid="`conversion-row-${row.key}`"
+            @click="canEdit && open(row)" @keydown.enter.self.prevent="canEdit && open(row)" @keydown.space.self.prevent="canEdit && open(row)"
           >
             <template v-for="c in cols" :key="c.name">
               <q-td v-if="c.name === 'actions'" :align="c.align" @click.stop>

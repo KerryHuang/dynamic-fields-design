@@ -22,9 +22,9 @@ const detail: ModuleDetail = {
   status: 'Active', version: 3, blocks: [],
 };
 
-async function mountPage(d: ModuleDetail = detail, canDelete = true, canRead = true) {
+async function mountPage(d: ModuleDetail = detail, canDelete = true, canRead = true, canEdit = true) {
   api.getModule.mockResolvedValue(d);
-  api.getMe.mockResolvedValue({ designer: { read: canRead, add: true, edit: true, delete: canDelete } } as never);
+  api.getMe.mockResolvedValue({ designer: { read: canRead, add: true, edit: canEdit, delete: canDelete } } as never);
   api.entities.mockResolvedValue([{ key: 'test.entity', name: { 'zh-TW': '測試實體' } }]);
   api.updateModule.mockResolvedValue({} as never);
   const router = createRouter({ history: createMemoryHistory(), routes: [{ path: '/m/:moduleKey', component: ModuleEditorPage }] });
@@ -297,6 +297,16 @@ describe('ModuleEditorPage', () => {
       await w.get('[data-testid="field-1"]').trigger('click');
       await flushPromises();
       expect(dialog()).toBe(true);
+      w.unmount();
+    });
+
+    it('without designer.edit the field row is not clickable and does not open the editor', async () => {
+      const w = await mountPage(withBlock('Draft'), true, true, false);
+      const row = w.get('[data-testid="field-1"]');
+      expect(row.classes()).not.toContain('q-item--clickable');
+      await row.trigger('click');
+      await flushPromises();
+      expect(w.getComponent(FieldEditorDialog).props('modelValue')).toBe(false);
       w.unmount();
     });
 

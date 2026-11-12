@@ -62,7 +62,7 @@ const deltaClass = computed(() => ((result.value?.compare?.deltaPercent ?? 0) >=
         <q-btn flat dense no-caps color="primary" :label="t('dashboards.card.retry')" data-testid="card-retry" @click="run.refetch()" />
       </div>
       <template v-else-if="result">
-        <ReportResultView :result="result" :viz="card.viz" :chart-height="chartHeight" @drill="(keys: string[]) => (drillKeys = keys)" />
+        <ReportResultView :result="result" drillable :viz="card.viz" :chart-height="chartHeight" @drill="(keys: string[]) => (drillKeys = keys)" />
         <div v-if="compareText" class="text-caption q-mt-xs" :class="deltaClass" data-testid="card-compare">{{ compareText }}</div>
         <div v-if="result.ignoresDateFilter" class="text-caption text-muted q-mt-xs" data-testid="card-ignores-filter">{{ t('dashboards.card.ignoresFilter') }}</div>
       </template>

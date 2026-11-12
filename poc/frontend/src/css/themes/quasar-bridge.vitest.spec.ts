@@ -250,7 +250,11 @@ describe('print.css', () => {
   it('可點整列：手指游標、hover 底色與第一欄連結色都走 token；手機有箭頭；列印還原', () => {
     const row = '[data-style] table tbody tr.row-clickable';
     expect(bodiesOf(bridge, row).join(';')).toMatch(/cursor:\s*pointer/);
-    expect(bodiesOf(bridge, `${row} td`).join(';')).toMatch(/height:\s*44px/);
+    expect(bodiesOf(bridge.slice(0, bridge.indexOf('@media (pointer: coarse)')), `${row} td`).join(';')).not.toMatch(/height/);
+    const coarseCss = bridge.slice(bridge.indexOf('@media (pointer: coarse)'));
+    expect(coarseCss).toMatch(/tr\.row-clickable td\s*\{[^}]*height:\s*max\(var\(--t-row-height\), 44px\)/);
+    expect(bodiesOf(bridge, `${row}:focus-visible`).join(';')).toMatch(/outline:\s*2px solid var\(--t-primary\)/);
+    expect(bodiesOf(print, `${row} td`).join(';')).toMatch(/height:\s*auto/);
     expect(bodiesOf(bridge, `${row} td:first-child`).join(';')).toMatch(/color:\s*var\(--t-primary-text\)/);
     expect(bodiesOf(bridge, `${row}:hover > td`).join(';')).toMatch(/color-mix\(in srgb, var\(--t-primary\)/);
     const chevron = '[data-style] table tbody tr.row-chevron td:last-child::after';

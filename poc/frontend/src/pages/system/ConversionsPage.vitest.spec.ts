@@ -102,12 +102,25 @@ describe('ConversionsPage', () => {
     w.unmount();
   });
 
+  it('keyboard: the row is focusable and Enter opens the editor', async () => {
+    const w = mountPage();
+    await flushPromises();
+    const row = w.find('[data-testid="conversion-row-q2o"]');
+    expect(row.attributes('tabindex')).toBe('0');
+    await row.trigger('keydown', { key: 'Enter' });
+    await flushPromises();
+    expect(document.body.querySelector('[data-testid="conversion-key"]')).not.toBeNull();
+    w.unmount();
+  });
+
   it('without edit permission the row is not clickable and does not open the editor', async () => {
     api.getMe.mockResolvedValue({ designer: { read: true, add: false, edit: false, delete: false } } as never);
     const w = mountPage();
     await flushPromises();
     const row = w.find('[data-testid="conversion-row-q2o"]');
     expect(row.classes()).not.toContain('row-clickable');
+    expect(row.attributes('tabindex')).toBeUndefined();
+    await row.trigger('keydown', { key: 'Enter' });
     await row.trigger('click');
     await flushPromises();
     expect(document.body.querySelector('[data-testid="conversion-key"]')).toBeNull();

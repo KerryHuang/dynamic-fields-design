@@ -67,6 +67,10 @@ async function mountPage(users: AdminUser[] | { status: number } = USERS, width 
 }
 const q = (id: string) => document.body.querySelector(`[data-testid="${id}"]`) as HTMLInputElement | null;
 const click = async (id: string) => { q(id)!.click(); await flushPromises(); };
+const press = async (id: string, key: string) => {
+  q(id)!.dispatchEvent(new KeyboardEvent('keydown', { key, bubbles: true, cancelable: true }));
+  await flushPromises();
+};
 async function fill(id: string, value: string) {
   const el = q(id)!;
   el.value = value;
@@ -104,6 +108,26 @@ describe('UsersPage', () => {
     await click('user-toggle-old01');
     expect(q('user-id')).toBeNull();
     await click('user-row-sales01');
+    expect((q('user-id') as HTMLInputElement).value).toBe('sales01');
+  });
+
+  it('keyboard: the row is focusable; Enter and Space open the edit dialog, Enter on the inner button does not', async () => {
+    await mountPage(USERS, 1366);
+    expect(q('user-row-sales01')!.getAttribute('tabindex')).toBe('0');
+    await press('user-row-sales01', 'Enter');
+    expect((q('user-id') as HTMLInputElement).value).toBe('sales01');
+    await click('user-cancel');
+    await press('user-row-old01', ' ');
+    expect((q('user-id') as HTMLInputElement).value).toBe('old01');
+    await click('user-cancel');
+    await press('user-reset-sales01', 'Enter');
+    expect(q('user-id')).toBeNull();
+  });
+
+  it('390 wide keyboard: the card is focusable and Enter opens the edit dialog', async () => {
+    await mountPage(USERS, 390);
+    expect(q('user-card-sales01')!.getAttribute('tabindex')).toBe('0');
+    await press('user-card-sales01', 'Enter');
     expect((q('user-id') as HTMLInputElement).value).toBe('sales01');
   });
 

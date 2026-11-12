@@ -93,6 +93,53 @@ describe('GroupsPage', () => {
     expect(api.setGroupMembers).not.toHaveBeenCalled();
   });
 
+  it('keyboard: the row is focusable and Enter opens the edit dialog', async () => {
+    await mountPage();
+    expect(q('group-row-1')!.getAttribute('tabindex')).toBe('0');
+    q('group-row-1')!.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true }));
+    await flushPromises();
+    expect(q('group-name')!.value).toBe('業務群組');
+  });
+
+  it('members only: renameGroup is not called', async () => {
+    api.setGroupMembers.mockResolvedValue(undefined as never);
+    await mountPage();
+    await click('group-row-1');
+    await click('member-b02');
+    await click('group-save');
+    expect(api.renameGroup).not.toHaveBeenCalled();
+    expect(api.setGroupMembers).toHaveBeenCalledTimes(1);
+  });
+
+  it('rename failure keeps the dialog open, shows the error and never sets members', async () => {
+    api.renameGroup.mockRejectedValue({ status: 400, errors: { name: ['已有同名的群組'] } });
+    await mountPage();
+    await click('group-row-1');
+    await fill('group-name', '空群組');
+    await click('member-b02');
+    await click('group-save');
+    expect(q('group-error')!.textContent).toContain('已有同名的群組');
+    expect(q('group-name')).not.toBeNull();
+    expect(api.setGroupMembers).not.toHaveBeenCalled();
+  });
+
+  it('members failure after a successful rename keeps the dialog open and the retry does not rename again', async () => {
+    api.renameGroup.mockResolvedValue(GROUPS[0]);
+    api.setGroupMembers.mockRejectedValueOnce({ status: 500 }).mockResolvedValueOnce(undefined as never);
+    await mountPage();
+    await click('group-row-1');
+    await fill('group-name', '業務部');
+    await click('member-b02');
+    await click('group-save');
+    expect(q('group-error')!.textContent).toContain(zhTW.groups.saveFailed);
+    expect(q('group-name')).not.toBeNull();
+    expect(api.renameGroup).toHaveBeenCalledTimes(1);
+    await click('group-save');
+    expect(api.renameGroup).toHaveBeenCalledTimes(1);
+    expect(api.setGroupMembers).toHaveBeenCalledTimes(2);
+    expect(q('group-name')).toBeNull();
+  });
+
   it('the delete button does not open the edit dialog', async () => {
     api.getGroupImpact.mockResolvedValue(IMPACT);
     await mountPage();

@@ -148,7 +148,10 @@ function runSetActive(u: AdminUser, active: boolean) {
         :rows-per-page-options="[0]" hide-pagination :grid="$q.screen.lt.sm"
       >
         <template #body="{ row, cols }">
-          <q-tr class="row-clickable" :data-testid="`user-row-${row.userId}`" @click="openEdit(row)">
+          <q-tr
+            class="row-clickable" tabindex="0" :data-testid="`user-row-${row.userId}`"
+            @click="openEdit(row)" @keydown.enter.self.prevent="openEdit(row)" @keydown.space.self.prevent="openEdit(row)"
+          >
             <template v-for="c in cols" :key="c.name">
               <q-td v-if="c.name === 'actions'" :align="c.align" @click.stop>
                 <q-btn flat dense color="primary" :label="t('users.resetPassword')" :data-testid="`user-reset-${row.userId}`" @click="openReset(row)" />
@@ -163,7 +166,10 @@ function runSetActive(u: AdminUser, active: boolean) {
         </template>
         <template #item="{ row, cols }">
           <div class="col-12 q-py-xs">
-            <q-card flat bordered class="cursor-pointer" :data-testid="`user-card-${row.userId}`" @click="openEdit(row)">
+            <q-card
+              flat bordered class="cursor-pointer card-clickable" tabindex="0" :data-testid="`user-card-${row.userId}`"
+              @click="openEdit(row)" @keydown.enter.self.prevent="openEdit(row)" @keydown.space.self.prevent="openEdit(row)"
+            >
               <q-list dense>
                 <q-item v-for="c in cols.filter((x: { name: string; value: unknown }) => x.name !== 'actions' && x.value)" :key="c.name">
                   <q-item-section>

@@ -6,7 +6,7 @@ import type { ReportColumn, ReportResult } from 'src/domain/dynamic/report-types
 import ReportChart from './ReportChart.vue';
 import { formatValue } from './report-format';
 
-const props = defineProps<{ result: ReportResult; viz: string; chartHeight?: string }>();
+const props = defineProps<{ result: ReportResult; viz: string; chartHeight?: string; drillable?: boolean }>();
 const emit = defineEmits<{ drill: [groupKeys: string[]] }>();
 const { t, locale } = useI18n();
 
@@ -76,8 +76,8 @@ const countText = (n: number | null | undefined) => (n ?? 0).toLocaleString(loca
           </thead>
           <tbody>
             <tr
-              v-for="(g, i) in groups" :key="i" class="row-clickable" :data-testid="`group-row-${i}`"
-              @click="emit('drill', g.groupKeys)"
+              v-for="(g, i) in groups" :key="i" :class="{ 'row-clickable': drillable }" :data-testid="`group-row-${i}`"
+              @click="drillable && emit('drill', g.groupKeys)"
             >
               <td v-for="(c, ci) in groupCols" :key="c.key">{{ g.groupLabels[ci] }}</td>
               <td v-for="m in measureCols" :key="m.key">{{ fmt(g.values[m.key], m) }}</td>

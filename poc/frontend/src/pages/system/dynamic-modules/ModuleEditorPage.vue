@@ -72,6 +72,7 @@ const mutation = <V, R>(fn: (v: V) => Promise<R>) => useDesignerMutation(fn, () 
 // ---- delete (module / block / field) ----
 // 沒有設計器 Delete 權限就不顯示入口（後端仍會擋，這裡只是不放一個按了只會 403 的按鈕）
 const canDelete = computed(() => !!useMeData.value?.designer.delete);
+const canEditDesign = computed(() => !!useMeData.value?.designer.edit);
 const deleteDialog = ref(false);
 const deleteTarget = ref<DeleteTargetRef | null>(null);
 const deleteName = ref('');
@@ -324,8 +325,8 @@ function saveSection() {
             <q-list v-else bordered separator>
               <q-item v-if="!block.fields.length"><q-item-section class="text-muted">{{ t('designer.noFields') }}</q-item-section></q-item>
               <q-item
-                v-for="(f, i) in block.fields" :key="f.id" clickable :class="{ 'text-muted': f.status === 'Inactive' }" :data-testid="`field-${f.id}`"
-                @click="openField(f)"
+                v-for="(f, i) in block.fields" :key="f.id" :clickable="canEditDesign" :class="{ 'text-muted': f.status === 'Inactive' }" :data-testid="`field-${f.id}`"
+                @click="canEditDesign && openField(f)"
               >
                 <q-item-section>
                   <q-item-label>
@@ -341,7 +342,7 @@ function saveSection() {
                       { label: t('designer.moveUp'), disable: i === 0, run: () => move(i, -1) },
                       { label: t('designer.moveDown'), disable: i === block!.fields.length - 1, run: () => move(i, 1) },
                       f.status === 'Active'
-                        ? { label: t('designer.deactivate'), run: () => setStatus.mutate({ id: f.id, status: 'inactive' }, { onError: (e) => fail(e) }) }
+                        ? { label: t('designer.deactivate'), negative: true, run: () => setStatus.mutate({ id: f.id, status: 'inactive' }, { onError: (e) => fail(e) }) }
                         : { label: t('designer.reactivate'), run: () => setStatus.mutate({ id: f.id, status: 'active' }, { onError: (e) => fail(e) }) },
                       ...(canDelete && f.status === 'Inactive'
                         ? [{ label: t('designer.delete.action'), negative: true, testid: `delete-field-${f.id}`, run: () => askDelete({ kind: 'field', id: f.id }, resolveI18n(f.label, locale)) }]

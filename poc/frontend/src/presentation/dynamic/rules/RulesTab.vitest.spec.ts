@@ -51,6 +51,28 @@ describe('RulesTab', () => {
     vi.stubGlobal('ResizeObserver', class { observe() {} unobserve() {} disconnect() {} });
   });
 
+  it('390 wide: row actions move into the ⋮ menu; picking one runs it without opening the row editor', async () => {
+    window.innerWidth = 390;
+    window.dispatchEvent(new Event('resize'));
+    await new Promise((r) => setTimeout(r, 150));
+    const w = mountTab();
+    await flushPromises();
+    expect(id(w, 'rule-up-1').exists()).toBe(false);
+    await id(w, 'rule-more-0').trigger('click');
+    await flushPromises();
+    const items = Array.from(document.body.querySelectorAll('.q-menu .q-item')) as HTMLElement[];
+    const deactivate = items.find((el) => el.textContent?.includes(zhTW.designer.rules.deactivate))!;
+    expect(deactivate).toBeDefined();
+    deactivate.click();
+    await flushPromises();
+    expect(id(w, 'rule-row-0').text()).toContain(zhTW.designer.rules.inactive);
+    expect(document.body.querySelector('[data-testid="rule-dialog"]')).toBeNull();
+    w.unmount();
+    window.innerWidth = 1024;
+    window.dispatchEvent(new Event('resize'));
+    await new Promise((r) => setTimeout(r, 150));
+  });
+
   it('lists kind, condition summary and targets per row', async () => {
     const w = mountTab();
     await flushPromises();

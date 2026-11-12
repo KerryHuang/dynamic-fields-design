@@ -108,6 +108,16 @@ describe('TaskRulesTab', () => {
     w.unmount();
   });
 
+  it('任務上限還沒載入時規則列不可點', async () => {
+    await mountTab({ effectiveHangs: true, rules: [ruleWire({})] });
+    const row = q<HTMLElement>('[data-testid="task-rule-row-follow"]');
+    expect(row.classList.contains('q-item--clickable')).toBe(false);
+    row.click();
+    await flushPromises();
+    expect(document.body.querySelector('[data-testid="task-rule-dialog-body"]')).toBeNull();
+    w.unmount();
+  });
+
   it('既有規則任務數超過上限：新增任務鈕停用，不增加任務時仍可改標題存檔', async () => {
     const tasks = ['a', 'b', 'c'].map((code) => ({ code, title: { 'zh-TW': code }, assigneeFieldId: 1, dueOffsetDays: 0 }));
     await mountTab({ maxTasks: 2, rules: [ruleWire({ tasks })] });

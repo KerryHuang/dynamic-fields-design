@@ -35,6 +35,10 @@
     color: inherit;
   }
 
+  [data-style] table tbody tr.row-clickable td {
+    height: auto;
+  }
+
   [data-style] table tbody tr.row-chevron td:last-child::after {
     display: none;
   }

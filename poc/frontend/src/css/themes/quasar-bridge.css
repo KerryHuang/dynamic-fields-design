@@ -556,8 +556,11 @@ textarea:focus-visible {
   cursor: pointer;
 }
 
-[data-style] table tbody tr.row-clickable td {
-  height: 44px;
+/* 鍵盤聚焦（tabindex=0 的列與卡片）要看得到外框 */
+[data-style] table tbody tr.row-clickable:focus-visible,
+[data-style] .card-clickable:focus-visible {
+  outline: 2px solid var(--t-primary);
+  outline-offset: -2px;
 }
 
 [data-style] table tbody tr.row-clickable td:first-child {
@@ -593,6 +596,10 @@ textarea:focus-visible {
 
 /* 觸控裝置：可點擊目標至少 44px，不因為密度縮小而難按（現場工業本來就 44px） */
 @media (pointer: coarse) {
+  [data-style] table tbody tr.row-clickable td {
+    height: max(var(--t-row-height), 44px);
+  }
+
   [data-style] .q-field--dense .q-field__control,
   [data-style] .q-field--dense .q-field__marginal {
     height: max(var(--t-field-height), 44px);
