@@ -115,7 +115,8 @@ public class GetRecordApprovalHandler(
         // 歷程的欄位遮蔽（設計 §8.5）：有 Read 用它；沒有時用臨時讀取權，再沒有就用自己的群組欄位例外（含明細來源隱藏）；
         // 讀不到權限輸入是 null（全部遮蔽）
         var hidden = await grant.HiddenFieldIdsAsync(module, read, granted, ct);
-        var views = visible.Select(i => ApprovalViews.Instance(i, runs, tasks, actions, names, me, writable, manager, hidden, module.Workflow, ShowTitle(i))).ToList();
+        var unwritable = await grant.UnwritableFieldIdsAsync(module, read, granted, ct);
+        var views = visible.Select(i => ApprovalViews.Instance(i, runs, tasks, actions, names, me, writable, manager, hidden, unwritable, module.Workflow, ShowTitle(i))).ToList();
         var pending = instances.Any(i => i.Status == ApprovalInstanceStatus.Pending);
         var targets = canRead ? await reader.SubmitTargetsAsync(module, record, pending, ct) : [];
         return ServiceResult.Success(new RecordApprovalResponse(
@@ -258,7 +259,7 @@ internal static class ApprovalViews
 
     public static ApprovalInstanceView Instance(ApprovalInstance i, IReadOnlyList<ApprovalStageRun> allRuns, IReadOnlyList<ApprovalTask> allTasks,
         IReadOnlyList<ApprovalAction> allActions, IReadOnlyDictionary<string, string> names, string me, bool writable, bool manager,
-        IReadOnlySet<long>? hiddenFieldIds, Workflow? workflow, bool showTitle)
+        IReadOnlySet<long>? hiddenFieldIds, IReadOnlySet<long>? unwritableFieldIds, Workflow? workflow, bool showTitle)
     {
         string Name(string id) => names.GetValueOrDefault(id) ?? id;
         var pending = i.Status == ApprovalInstanceStatus.Pending;
@@ -275,7 +276,7 @@ internal static class ApprovalViews
                 && !ApprovalActionSupport.AlreadyApprovedInStage(tasks, t, me),
                 pending && ApprovalActionRules.PreviousRun(def, runs, r) is not null)).ToList();
             return new ApprovalStageView(r.Id, r.Seq, r.StageCode, r.NameSnapshot ?? new I18nText(), r.Mode, r.Status, r.SkipReason, r.DueTime, views,
-                EditableKeys(def, r, views.Any(v => v.CanAct), editableAllowed, hiddenFieldIds));
+                EditableKeys(def, r, views.Any(v => v.CanAct), editableAllowed, unwritableFieldIds));
         }).ToList();
         var actions = allActions.Where(a => a.InstanceId == i.Id).OrderBy(a => a.Id).Select(a => new ApprovalActionView(a.Action, a.ActorUserId, Name(a.ActorUserId),
             a.OnBehalfOfUserId, a.TargetUserIds ?? [], a.Comment, Data(a, hiddenFieldIds), a.CreatedTime)).ToList();
@@ -290,13 +291,13 @@ internal static class ApprovalViews
 
     /// <summary>
     /// 這一關讀者在同意時能修改的欄位 key（f_{id}）：關卡進行中、讀者在這一關能動作、送出時的狀態不是鎖定狀態，
-    /// 並扣掉對讀者隱藏的欄位（hidden 為 null＝讀不到權限，全部遮蔽）。
+    /// 並扣掉讀者不能寫的欄位（隱藏、欄位例外唯讀、應用程式關閉而凍結；unwritable 為 null＝讀不到權限，全部扣掉）。
     /// </summary>
     public static IReadOnlyList<string> EditableKeys(ApprovalDefinition? def, ApprovalStageRun run, bool canAct, bool editableAllowed,
-        IReadOnlySet<long>? hidden)
+        IReadOnlySet<long>? unwritable)
     {
-        if (def is null || hidden is null || !canAct || !editableAllowed || run.Status != ApprovalStageStatus.Active) return [];
+        if (def is null || unwritable is null || !canAct || !editableAllowed || run.Status != ApprovalStageStatus.Active) return [];
         var stage = def.Stages.FirstOrDefault(s => s.Code == run.StageCode);
-        return (stage?.EditableFields ?? []).Where(id => !hidden.Contains(id)).Select(id => $"f_{id}").ToList();
+        return (stage?.EditableFields ?? []).Where(id => !unwritable.Contains(id)).Select(id => $"f_{id}").ToList();
     }
 }

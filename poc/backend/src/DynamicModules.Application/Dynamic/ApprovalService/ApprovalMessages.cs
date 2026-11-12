@@ -91,6 +91,7 @@ public static class ApprovalMessages
     public static readonly MessageRef NoPreviousStage = MessageRef.Of(MessageText.ApprovalNoPreviousStage);
     public static readonly MessageRef NotEditableField = MessageRef.Of(MessageText.ApprovalNotEditableField);
     public static readonly MessageRef FieldHiddenForApprover = MessageRef.Of(MessageText.ApprovalFieldHiddenForApprover);
+    public static readonly MessageRef FieldReadOnlyForApprover = MessageRef.Of(MessageText.ApprovalFieldReadOnlyForApprover);
     public static readonly MessageRef RejectTargetInvalid = MessageRef.Of(MessageText.ApprovalRejectTargetInvalid);
     public static readonly MessageRef RuntimeInvalid = MessageRef.Of(MessageText.ApprovalRuntimeInvalid);
     public static readonly MessageRef RecordGone = MessageRef.Of(MessageText.ApprovalRecordGone);

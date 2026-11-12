@@ -259,6 +259,29 @@ public class ApprovalActionTests : ApprovalTestBase
     }
 
     [Fact]
+    public async Task Approve_EditableFieldReadOnlyForApprover_400_NothingWritten()
+    {
+        // a4b4 審查 U3：欄位例外設成唯讀的欄位，同意帶值回 400（唯讀的訊息），什麼都不寫
+        var r = await BuildPurchase();
+        await SeedFlow(r, "po-e", r.Confirmed, 1, Def(null, Stage("lead", Group(PurchaseLeadGroup), editable: [r.DueDate])));
+        (await SaveWorkflow(r, [Needs(r.Draft, r.Confirmed), Plain(r.Confirmed, r.Partial), Plain(r.Partial, r.Received),
+            Plain(r.Confirmed, r.Cancelled)])).IsSuccess.Should().BeTrue();
+        await GrantEveryone(r.Module);
+        var id = await SubmitAs(r, "buyer1", 5000);
+        As("admin");
+        await ReadOnlyFor(r.Module, r.DueDate, PurchaseLeadGroup);
+        var po = Inst(id).RecordId;
+        var before = Inst(id).RowVersion;
+
+        var res = await Approve(id, "buyer2", V((r.DueDate, "2026-12-01")));
+        res.Errors[$"f_{r.DueDate}"].Should().Equal(ApprovalMessages.FieldReadOnlyForApprover.Resolve(null));
+        Inst(id).RowVersion.Should().Be(before);
+        Open(id, "buyer2").Status.Should().Be(ApprovalTaskStatus.Open);
+        Rec(po).Values.ContainsKey($"f_{r.DueDate}").Should().BeFalse();
+        Outcome(await Approve(id, "buyer2")).Should().Be(ApprovalOutcomes.Approved);
+    }
+
+    [Fact]
     public async Task Approve_ManagerSource_EditableFieldHiddenForManagersGroup_400_NothingWritten()
     {
         // a2b2 修正複審建議 1：主管來源存檔時推不出群組、照常放行；執行期依同意者本人的權限判斷隱藏 → 帶值回 400

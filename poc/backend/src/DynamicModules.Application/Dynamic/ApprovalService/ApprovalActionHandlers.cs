@@ -84,8 +84,8 @@ public class ApproveTaskHandler(
         var editable = (stageDef?.EditableFields ?? []).Select(id => $"f_{id}").ToHashSet();
         var outside = values.Keys.Where(k => !editable.Contains(k)).ToList();
         if (outside.Count > 0) return ServiceResult.Invalid(outside.ToDictionary(k => k, _ => new[] { ApprovalMessages.NotEditableField }));
-        if (values.Count > 0 && await HiddenKeysAsync(module, inst.RecordId, values.Keys, ct) is { Count: > 0 } hidden)
-            return ServiceResult.Invalid(hidden.ToDictionary(k => k, _ => new[] { ApprovalMessages.FieldHiddenForApprover }));
+        if (values.Count > 0 && await BlockedKeysAsync(module, inst.RecordId, values.Keys, ct) is { Count: > 0 } blocked)
+            return ServiceResult.Invalid(blocked.ToDictionary(b => b.Key, b => new[] { b.Value }));
 
         // 可編輯欄位的豁免：送出時的狀態是簽核鎖定狀態就不放行（設計 §8.5）
         if (values.Count > 0 && (module.Workflow is { } wf ? ApprovalRuntimeCheck.VerifyEditable(wf, inst.FromOptionId) : "模組沒有狀態機") is { } locked)
@@ -144,17 +144,26 @@ public class ApproveTaskHandler(
     }
 
     /// <summary>
-    /// 對這位簽核人隱藏的鍵（設計 §9.2「欄位對該簽核人隱藏時，不能編輯」；裁決 22 執行期）：與簽核檢視共用同一個來源
-    /// （有 Read 用 Read、沒有用臨時讀取權、再沒有用自己的欄位例外；見 ApprovalReadGrant.HiddenFieldIdsAsync），
-    /// 所以畫面上列為可編輯的欄位，同意時一定能改；讀不到權限輸入時全部當成隱藏（fail closed）。
+    /// 這位簽核人不能寫的鍵（設計 §9.2「欄位對該簽核人隱藏時，不能編輯」；裁決 22 執行期；a4b4 審查 U3 加上唯讀）：隱藏回隱藏的訊息，
+    /// 欄位例外唯讀或應用程式關閉而凍結回唯讀的訊息。與簽核檢視共用同一個來源（有 Read 用 Read、沒有用臨時讀取權、再沒有用自己的欄位例外；
+    /// 見 ApprovalReadGrant.HiddenFieldIdsAsync／UnwritableFieldIdsAsync），所以畫面上列為可編輯的欄位，同意時一定能改；
+    /// 讀不到權限輸入時全部當成隱藏（fail closed）。
     /// </summary>
-    private async Task<List<string>> HiddenKeysAsync(Module module, long recordId, IEnumerable<string> keys, CancellationToken ct)
+    private async Task<Dictionary<string, MessageRef>> BlockedKeysAsync(Module module, long recordId, IEnumerable<string> keys, CancellationToken ct)
     {
         var record = await records.GetAsync(recordId, ct);
         var read = module.IsReadable() ? (await guard.AuthorizeAsync(module, PermissionAction.Read, ct)).Permissions : null;
-        var hidden = record is null ? null
-            : await grant.HiddenFieldIdsAsync(module, read, read is null ? await grant.ForRecordAsync(module, record, ct) : null, ct);
-        return keys.Where(k => hidden is null || (long.TryParse(k.AsSpan(2), out var id) && hidden.Contains(id))).ToList();
+        var granted = record is not null && read is null ? await grant.ForRecordAsync(module, record, ct) : null;
+        var hidden = record is null ? null : await grant.HiddenFieldIdsAsync(module, read, granted, ct);
+        var unwritable = record is null ? null : await grant.UnwritableFieldIdsAsync(module, read, granted, ct);
+        var blocked = new Dictionary<string, MessageRef>();
+        foreach (var k in keys)
+        {
+            var id = long.TryParse(k.AsSpan(2), out var parsed) ? parsed : (long?)null;
+            if (hidden is null || id is null || hidden.Contains(id.Value)) blocked[k] = ApprovalMessages.FieldHiddenForApprover;
+            else if (unwritable is null || unwritable.Contains(id.Value)) blocked[k] = ApprovalMessages.FieldReadOnlyForApprover;
+        }
+        return blocked;
     }
 
     internal static string? Clean(string? comment) => string.IsNullOrWhiteSpace(comment) ? null : comment;

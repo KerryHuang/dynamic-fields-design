@@ -403,6 +403,21 @@ public class ApprovalQueryTests : ApprovalTestBase
     }
 
     [Fact]
+    public async Task RecordApproval_EditableFieldReadOnlyForActor_NotListed()
+    {
+        // a4b4 審查 U3：欄位例外設成唯讀的欄位，不列在「這一關可修改」
+        var r = await EditableRig();
+        var id = await SubmitAs(r, "buyer1", 1000);
+        await Approve(id, "buyer2");
+        As("admin");
+        await ReadOnlyFor(r.Module, r.DueDate, FinanceGroup);
+
+        var view = await RecordApproval(Inst(id).RecordId, "fin1");
+
+        StageOf(view, "fin").EditableFieldKeys.Should().BeEmpty();
+    }
+
+    [Fact]
     public async Task RecordApproval_FromLockedState_EditableFieldKeysEmpty()
     {
         var r = await EditableRig();

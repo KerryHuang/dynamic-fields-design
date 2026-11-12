@@ -41,6 +41,7 @@ public class ApprovalRuntimeTextTests
         { MessageText.ApprovalNoPreviousStage, "前面沒有已同意的關卡，只能退回發起人", [] },
         { MessageText.ApprovalNotEditableField, "這一關不能修改這個欄位", [] },
         { MessageText.ApprovalFieldHiddenForApprover, "這個欄位對你隱藏，不能在簽核時修改", [] },
+        { MessageText.ApprovalFieldReadOnlyForApprover, "這個欄位對你是唯讀，不能在簽核時修改", [] },
         { MessageText.ApprovalRejectTargetInvalid, "退回對象只能是 initiator 或 previous", [] },
         { MessageText.ApprovalRuntimeInvalid, "簽核設定與狀態機不一致，已停止並通知系統管理員", [] },
         { MessageText.ApprovalRecordGone, "找不到簽核的記錄（可能已被刪除）", [] },

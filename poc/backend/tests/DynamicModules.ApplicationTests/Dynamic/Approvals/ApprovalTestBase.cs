@@ -227,13 +227,18 @@ public abstract class ApprovalTestBase : EffectsTestBase, IAsyncLifetime
     }
 
     /// <summary>把模組欄位對某個群組設為隱藏（保留 GrantEveryone 給的群組權限；整個模組的權限列會被取代）。</summary>
-    protected async Task HideFor(string module, long fieldId, long groupId)
+    protected Task HideFor(string module, long fieldId, long groupId) => SetFieldAccess(module, fieldId, groupId, FieldAccess.Hidden);
+
+    /// <summary>把模組欄位對某個群組設為唯讀（其他同 HideFor）。</summary>
+    protected Task ReadOnlyFor(string module, long fieldId, long groupId) => SetFieldAccess(module, fieldId, groupId, FieldAccess.ReadOnly);
+
+    private async Task SetFieldAccess(string module, long fieldId, long groupId, FieldAccess access)
     {
         var everyone = Db.Context.Set<PermissionGroup>().AsNoTracking().FirstOrDefault(g => g.Key == "everyone");
         List<GroupPermissionDto> groups = everyone is null ? []
             : [new GroupPermissionDto(everyone.Id, new PrivilegesDto(true, true, true, true, false, true, false), DataScope.All)];
         var res = await Send(new SaveModulePermissionsRequest(module, new ModulePermissionsDto(groups, [],
-            [new FieldPermissionDto(fieldId, groupId, FieldAccess.Hidden)], [])));
+            [new FieldPermissionDto(fieldId, groupId, access)], [])));
         res.IsSuccess.Should().BeTrue(Dump(res));
     }
 

@@ -42,6 +42,13 @@ public sealed class ApprovalReadGrant(
     public async Task<IReadOnlySet<long>?> HiddenFieldIdsAsync(Module module, EffectivePermissions? read, EffectivePermissions? granted, CancellationToken ct) =>
         read?.HiddenFieldIds ?? granted?.HiddenFieldIds ?? await hiddenFields.ForUserAsync(module, user.UserId, ct);
 
+    /// <summary>
+    /// 讀者在同意時不能寫的欄位＝看不到的＋唯讀的（欄位例外唯讀、應用程式關閉而凍結）；來源順序同 HiddenFieldIdsAsync。
+    /// 同意端與簽核檢視的可編輯欄位清單共用，畫面上列為可編輯的欄位同意時一定能改；null＝讀不到權限輸入，全部不能寫。
+    /// </summary>
+    public async Task<IReadOnlySet<long>?> UnwritableFieldIdsAsync(Module module, EffectivePermissions? read, EffectivePermissions? granted, CancellationToken ct) =>
+        (read ?? granted) is { } p ? p.HiddenFieldIds.Union(p.ReadOnlyFieldIds).ToHashSet() : await hiddenFields.UnwritableForUserAsync(module, user.UserId, ct);
+
     /// <summary>同一筆記錄的明細：動作軸取表頭（已確認是可動作者），欄位例外取明細模組。呼叫端只在 ForRecordAsync 放行之後才用。</summary>
     public async Task<EffectivePermissions?> ForDetailAsync(Module parent, Module child, CancellationToken ct)
     {
