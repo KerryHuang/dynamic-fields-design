@@ -1,4 +1,5 @@
 using DynamicModules.Application.Common;
+using DynamicModules.Application.Dynamic.FieldService.Data;
 using DynamicModules.Domain.Approvals;
 using DynamicModules.Domain.Entities.Dynamic;
 using DynamicModules.Domain.Repositories.Dynamic;
@@ -21,32 +22,29 @@ public sealed class ApprovalClosureRecheck(IApprovalFlowRepository flows)
         if (!HasApproval(module)) return null;
         var current = await flows.ListCurrentByModuleAsync(module.Id, ct);
         if (current.Count == 0) return null;
-        var before = ApprovalConstraints.Validate(module, module.Workflow!, current);
+        var seen = ApprovalConstraints.ClosureViolations(module, module.Workflow!, current).Select(v => (v.FlowKey, v.FieldId)).ToHashSet();
         var (config, oldStatus) = (field.Config, field.Status);
-        Dictionary<string, string[]> after;
+        IReadOnlyList<ApprovalConstraints.ClosureViolation> after;
         field.Config = candidate;
         field.Status = status;
-        try { after = ApprovalConstraints.Validate(module, module.Workflow!, current); }
+        try { after = ApprovalConstraints.ClosureViolations(module, module.Workflow!, current); }
         finally { (field.Config, field.Status) = (config, oldStatus); }
 
-        var added = new Dictionary<string, string[]>();
-        foreach (var (key, messages) in after)
-        {
-            var fresh = messages.Except(before.GetValueOrDefault(key) ?? []).ToArray();
-            if (fresh.Length > 0) added[key] = fresh;
-        }
+        // 以（流程鍵、可編輯欄位）識別違規，路徑改變不算新增
+        var added = after.Where(v => !seen.Contains((v.FlowKey, v.FieldId)))
+            .GroupBy(v => v.Key).ToDictionary(g => g.Key, g => g.Select(v => v.Message).Distinct().ToArray());
         return added.Count == 0 ? null : ServiceResult.Invalid(added);
     }
 
-    /// <summary>鎖定帶值（lock）的目的欄位是任何一關（任何版本）的可編輯欄位：鎖定帶值與簽核人填寫互相衝突，回 400（鍵 Config.Fill）。</summary>
+    /// <summary>鎖定帶值（lock）的目的欄位是目前版本任何一關的可編輯欄位：鎖定帶值與簽核人填寫互相衝突，回 400（鍵 FieldRules.FillKey）。進行中實例綁舊版時改帶值已由 PendingApprovalGuard 擋下，舊版與已完成的實例不再需要簽核人填寫。</summary>
     public async Task<ServiceResult?> RejectLockFillIntoEditableAsync(Module module, FieldConfig candidate, CancellationToken ct)
     {
         if (candidate.Fill is not { Mode: FillConfig.Lock } fill || fill.Map.Count == 0 || !HasApproval(module)) return null;
-        var editable = (await flows.ListAllVersionDefinitionsAsync(module.Id, ct))
-            .SelectMany(d => d.Stages ?? []).SelectMany(s => s.EditableFields ?? []).ToHashSet();
+        var editable = (await flows.ListCurrentByModuleAsync(module.Id, ct))
+            .SelectMany(f => f.Definition.Stages ?? []).SelectMany(s => s.EditableFields ?? []).ToHashSet();
         if (fill.Map.FirstOrDefault(m => editable.Contains(m.To)) is not { } hit) return null;
-        var label = module.Blocks.SelectMany(b => b.Fields).FirstOrDefault(f => f.Id == hit.To)?.LabelI18n.Resolve("zh-TW") ?? hit.To.ToString();
-        return ServiceResult.Invalid(new Dictionary<string, string[]> { ["Config.Fill"] = [ApprovalMessages.FillTargetEditable(label)] });
+        var label = module.Blocks.SelectMany(b => b.Fields).FirstOrDefault(f => f.Id == hit.To)?.LabelI18n.Resolve(I18nText.FallbackLocale) ?? hit.To.ToString();
+        return ServiceResult.Invalid(new Dictionary<string, string[]> { [FieldRules.FillKey] = [ApprovalMessages.FillTargetEditable(label)] });
     }
 
     private static bool HasApproval(Module module) => module.Workflow is { } wf && wf.Transitions.Any(t => t.Approval is { Required: true });

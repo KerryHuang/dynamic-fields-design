@@ -1,4 +1,6 @@
 using DynamicModules.Application.Common;
+using DynamicModules.Application.Dynamic.DeleteService.Data;
+using DynamicModules.Application.Dynamic.RecordService;
 using DynamicModules.Domain.Entities.Dynamic;
 using DynamicModules.Domain.Modules;
 using DynamicModules.Domain.Repositories.Dynamic;
@@ -9,7 +11,7 @@ namespace DynamicModules.Application.Dynamic.ApprovalService;
 /// 設計器的定義變更遇到簽核中的實例（設計 §8.6）：會改寫記錄值的定義，和進行中實例要走的轉移與狀態，在有實例 pending 時回 409，
 /// 避免簽核人看到的內容在簽核途中被定義變更改掉。判斷只看實例狀態，不看使用者身分；與 ClosedDataGuard、ImmutableDataGuard 掛在同一組檢查點。
 /// </summary>
-public sealed class PendingApprovalGuard(IApprovalInstanceRepository instances, IApprovalFlowRepository flows, IModuleRepository modules)
+public sealed class PendingApprovalGuard(IApprovalInstanceRepository instances, IApprovalFlowRepository flows, IModuleRepository modules, IRecordRepository records)
 {
     /// <summary>
     /// 改寫值的範圍：本模組、以它為來源的彙總所在的父模組（公式重算會連帶重算），以及本模組是明細時的表頭模組。
@@ -24,6 +26,24 @@ public sealed class PendingApprovalGuard(IApprovalInstanceRepository instances, 
             ids.Add(header.Id);
         var pending = await instances.ListPendingByModulesAsync(ids, ct);
         return pending.Count == 0 ? null : ServiceResult.Conflict(ApprovalMessages.DefinitionBlockedByPending(Titles(pending), pending.Count));
+    }
+
+    /// <summary>
+    /// 刪除欄位或區塊：清除會改寫記錄值時（有已軟刪除記錄、索引列或歷程列要清，或公式、彙總欄位在未刪除記錄上有值）才擋；
+    /// 公式與彙總沒有歷程也沒有索引列，Purge 全為 0 不代表沒有值要清。什麼都不清的刪除（空欄位、空區塊）照常放行。
+    /// </summary>
+    public async Task<ServiceResult?> RejectFieldPurgeAsync(Module module, PurgeCounts purge, IReadOnlyCollection<Field> fields, CancellationToken ct)
+    {
+        if (purge is { Records: 0, IndexRows: 0, HistoryRows: 0 } && !await HasComputedValuesAsync(module, fields, ct)) return null;
+        return await RejectValueRewriteAsync(module, ct);
+    }
+
+    private async Task<bool> HasComputedValuesAsync(Module module, IReadOnlyCollection<Field> fields, CancellationToken ct)
+    {
+        var keys = fields.Where(f => f.Type is FieldType.Formula or FieldType.Rollup).Select(f => f.Key).ToList();
+        if (keys.Count == 0) return false;
+        return (await records.ListLiveValuesAsync(module.Id, ct))
+            .Any(r => RecordValueProcessor.Parse(r.ValuesJson) is var v && keys.Any(k => v.TryGetValue(k, out var raw) && raw is { ValueKind: not (System.Text.Json.JsonValueKind.Null or System.Text.Json.JsonValueKind.Undefined) }));
     }
 
     /// <summary>

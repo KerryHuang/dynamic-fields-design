@@ -4,6 +4,7 @@ using DynamicModules.Application.Dynamic.ApprovalService;
 using DynamicModules.Domain.Repositories.Dynamic;
 using Microsoft.Extensions.DependencyInjection;
 using DynamicModules.Application.Dynamic.FieldService.Commands.AddField;
+using DynamicModules.Application.Dynamic.FieldService.Data;
 using DynamicModules.Application.Dynamic.FieldService.Commands.SetFieldStatus;
 using DynamicModules.Application.Dynamic.FieldService.Commands.UpdateField;
 using DynamicModules.Domain.Approvals;
@@ -120,6 +121,22 @@ public class ApprovalClosureRecheckTests : ApprovalTestBase
         res.IsSuccess.Should().BeTrue(Dump(res));
     }
 
+    /// <summary>可編輯欄位原本就直接在閉包內；改成經過新公式引用它，路徑變了但違規（流程、欄位）不變，不算新增。</summary>
+    [Fact]
+    public async Task UpdateFormula_PreexistingViolation_PathChanges_NotReported()
+    {
+        await Rig();
+        var version = await Db.Context.Set<ApprovalFlowVersion>().SingleAsync();
+        version.Definition = version.Definition with { Stages = [version.Definition.Stages![0] with { EditableFields = [_r.Discount] }] };
+        await Db.Context.SaveChangesAsync();
+        Db.Context.ChangeTracker.Clear();
+        var copy = await MustAdd(_r.Module, FieldType.Formula,
+            new FieldConfig { Formula = $"{{{_r.Discount}}}", ResultType = "number", Scale = 0 }, "折扣副本");
+
+        var res = await SetFormula(_r.NetTotal, $"{{{_r.Total}}} - {{{copy.Id}}}");
+        res.IsSuccess.Should().BeTrue(Dump(res));
+    }
+
     [Fact]
     public async Task UpdateFormula_Intersection_NoRecalcPerformed()
     {
@@ -158,7 +175,7 @@ public class ApprovalClosureRecheckTests : ApprovalTestBase
         await Rig();
         var res = await Send(new AddFieldRequest(_r.Module, BlockOf(_r.Memo), FieldType.Reference, Text("第三供應商"),
             RefTo(_r.Vendor) with { Fill = new FillConfig(FillConfig.Lock, [new FillMapping(_r.VendorName, _remark)]) }));
-        Rejected(res, "Config.Fill", "核簽備註");
+        Rejected(res, FieldRules.FillKey, "核簽備註");
     }
 
     [Fact]
@@ -167,12 +184,15 @@ public class ApprovalClosureRecheckTests : ApprovalTestBase
         await Rig();
         var res = await Send(new UpdateFieldRequest(_ref2, FieldType.Reference, Text("備用供應商"),
             RefTo(_r.Vendor) with { Fill = new FillConfig(FillConfig.Lock, [new FillMapping(_r.VendorName, _remark)]) }, BlockOf(_ref2)));
-        Rejected(res, "Config.Fill", "核簽備註");
+        Rejected(res, FieldRules.FillKey, "核簽備註");
     }
 
-    /// <summary>可編輯欄位只在舊版本的流程定義裡：實例可能還綁著舊版，所以任何版本都算。</summary>
+    /// <summary>
+    /// 可編輯欄位只在舊版本的流程定義裡：只看目前版本。進行中實例綁舊版時改帶值已由 a2d4 擋下
+    /// （PendingApprovalGuardTests.UpdateFill_WithPending_Returns409），已完成的實例不再有簽核人填寫。
+    /// </summary>
     [Fact]
-    public async Task UpdateFill_LockModeIntoFieldEditableOnlyInOldVersion_Returns400()
+    public async Task UpdateFill_LockModeIntoFieldEditableOnlyInOldVersion_Succeeds()
     {
         await Rig();
         var flow = await Db.Context.Set<ApprovalFlow>().SingleAsync(f => f.Key == "po-a");
@@ -189,7 +209,7 @@ public class ApprovalClosureRecheckTests : ApprovalTestBase
 
         var res = await Send(new UpdateFieldRequest(_ref2, FieldType.Reference, Text("備用供應商"),
             RefTo(_r.Vendor) with { Fill = new FillConfig(FillConfig.Lock, [new FillMapping(_r.VendorName, _remark)]) }, BlockOf(_ref2)));
-        Rejected(res, "Config.Fill", "核簽備註");
+        res.IsSuccess.Should().BeTrue(Dump(res));
     }
 
     /// <summary>預設帶值（default）不鎖欄位，指向可編輯欄位沒有衝突。</summary>

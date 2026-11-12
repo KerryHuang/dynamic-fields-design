@@ -64,20 +64,7 @@ public static class ApprovalConstraints
                     Err(key, ApprovalMessages.EditableFromLocked(name));
             }
 
-            // 可編輯欄位不能落在同一目標狀態上任何流程的條件或簽核人來源的上游閉包裡（§9.2）。
-            var seedOwner = new Dictionary<long, FlowState>();
-            foreach (var fs in onTarget)
-                foreach (var id in FieldClosure.DirectFields(fs.Definition))
-                    seedOwner.TryAdd(id, fs);
-            var closure = FieldClosure.Upstream(module, seedOwner.Keys, wf.StatusFieldId);
-            foreach (var fs in onTarget)
-                foreach (var id in (fs.Definition.Stages ?? []).SelectMany(s => s.EditableFields ?? []).Distinct())
-                {
-                    if (!closure.Paths.TryGetValue(id, out var path)) continue;
-                    var owner = seedOwner[path[0]];
-                    var via = path.Count > 1 ? string.Join(" → ", path.Take(path.Count - 1).Reverse().Select(p => $"「{F(p)}」")) : "條件直接引用";
-                    Err($"flows[{fs.Flow.Key}]", ApprovalMessages.EditableInClosure(F(id), via, owner.Flow.NameI18n.Resolve(Locale)));
-                }
+            foreach (var v in ClosureViolationsOf(module, wf, onTarget, F)) Err(v.Key, v.Message);
         }
 
         // 進入鎖定狀態一律要簽（§5.2）：從非鎖定狀態進入任何鎖定狀態的轉移都必須需簽核。
@@ -87,5 +74,38 @@ public static class ApprovalConstraints
         if (locked.Contains(wf.InitialOptionId)) Err("initialOptionId", ApprovalMessages.InitialLocked);
 
         return errors.ToDictionary(e => e.Key, e => e.Value.ToArray());
+    }
+
+    /// <summary>一則「可編輯欄位落在條件閉包」違規：以（流程鍵、可編輯欄位 Id）識別，訊息另附經過的路徑，路徑改變不算新違規。</summary>
+    public readonly record struct ClosureViolation(string FlowKey, long FieldId, string Message)
+    {
+        public string Key => $"flows[{FlowKey}]";
+    }
+
+    /// <summary>只算「可編輯欄位不落在條件或簽核人來源上游閉包」這一項（§9.2），供改欄位設定後重檢新增的違規。</summary>
+    public static IReadOnlyList<ClosureViolation> ClosureViolations(Module module, Workflow wf, IReadOnlyList<FlowState> flows)
+    {
+        var fields = module.Blocks.SelectMany(b => b.Fields).ToDictionary(f => f.Id);
+        string F(long id) => fields.TryGetValue(id, out var f) ? f.LabelI18n.Resolve(Locale) : id.ToString();
+        return [.. ApprovalTopology.ApprovalTargets(wf).Order()
+            .SelectMany(to => ClosureViolationsOf(module, wf, flows.Where(f => f.Flow.ToOptionId == to).ToList(), F))];
+    }
+
+    /// <summary>可編輯欄位不能落在同一目標狀態上任何流程的條件或簽核人來源的上游閉包裡（§9.2）。</summary>
+    private static IEnumerable<ClosureViolation> ClosureViolationsOf(Module module, Workflow wf, List<FlowState> onTarget, Func<long, string> F)
+    {
+        var seedOwner = new Dictionary<long, FlowState>();
+        foreach (var fs in onTarget)
+            foreach (var id in FieldClosure.DirectFields(fs.Definition))
+                seedOwner.TryAdd(id, fs);
+        var closure = FieldClosure.Upstream(module, seedOwner.Keys, wf.StatusFieldId);
+        foreach (var fs in onTarget)
+            foreach (var id in (fs.Definition.Stages ?? []).SelectMany(s => s.EditableFields ?? []).Distinct())
+            {
+                if (!closure.Paths.TryGetValue(id, out var path)) continue;
+                var owner = seedOwner[path[0]];
+                var via = path.Count > 1 ? string.Join(" → ", path.Take(path.Count - 1).Reverse().Select(p => $"「{F(p)}」")) : "條件直接引用";
+                yield return new ClosureViolation(fs.Flow.Key, id, ApprovalMessages.EditableInClosure(F(id), via, owner.Flow.NameI18n.Resolve(Locale)));
+            }
     }
 }

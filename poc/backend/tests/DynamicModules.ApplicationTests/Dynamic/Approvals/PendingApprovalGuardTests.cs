@@ -23,6 +23,8 @@ using DynamicModules.Domain.Repositories.Dynamic;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 
+using Record = DynamicModules.Domain.Entities.Dynamic.Record;
+
 namespace DynamicModules.ApplicationTests.Dynamic.Approvals;
 
 /// <summary>設計器遇到簽核中的實例（設計 §8.6）：不能改寫記錄值的定義，也不能拆掉實例要走的轉移與狀態。</summary>
@@ -191,6 +193,32 @@ public class PendingApprovalGuardTests : ApprovalTestBase
         (await Deactivate(tmp.Id)).IsSuccess.Should().BeTrue();
         var res = await Send(new DeleteFieldRequest(tmp.Id, 0));
         res.IsSuccess.Should().BeTrue(Dump(res));
+    }
+
+    /// <summary>公式欄位沒有歷程與索引列，Purge 全為 0；但記錄上的值會被清掉，有實例 pending 時一樣要擋，值保留。</summary>
+    [Fact]
+    public async Task DeleteFormulaWithValue_WithPending_Returns409_ValueKept()
+    {
+        await Rig();
+        var derived = await MustAdd(_r.Module, FieldType.Formula,
+            new FieldConfig { Formula = $"{{{_r.Discount}}} + 1", ResultType = "number", Scale = 0 }, "折扣加一");
+        await Pend("PO-甲");
+        (await Deactivate(derived.Id)).IsSuccess.Should().BeTrue();
+        Blocked(await Send(new DeleteFieldRequest(derived.Id, 0)), "PO-甲");
+        (await Db.Context.Set<Record>().AsNoTracking().ToListAsync()).Should().Contain(r => r.ValuesJson.Contains($"\"f_{derived.Id}\""));
+    }
+
+    [Fact]
+    public async Task DeleteBlockWithFormulaValue_WithPending_Returns409_ValueKept()
+    {
+        await Rig();
+        var block = (BlockResponse)(await Send(new AddBlockRequest(_r.Module, Text("新區塊")))).Data!;
+        var derived = (FieldResponse)(await Send(new AddFieldRequest(_r.Module, block.Id, FieldType.Formula, Text("折扣加一"),
+            new FieldConfig { Formula = $"{{{_r.Discount}}} + 1", ResultType = "number", Scale = 0 }))).Data!;
+        await Pend("PO-甲");
+        (await Deactivate(derived.Id)).IsSuccess.Should().BeTrue();
+        Blocked(await Send(new DeleteBlockRequest(block.Id, 0)), "PO-甲");
+        (await Db.Context.Set<Record>().AsNoTracking().ToListAsync()).Should().Contain(r => r.ValuesJson.Contains($"\"f_{derived.Id}\""));
     }
 
     [Fact]

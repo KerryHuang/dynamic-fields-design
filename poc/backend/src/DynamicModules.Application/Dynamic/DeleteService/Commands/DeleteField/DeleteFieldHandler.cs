@@ -25,9 +25,10 @@ public class DeleteFieldHandler(
         // 清除會從記錄、索引與歷程拿掉這些欄位的值；Closed 的資料唯讀。沒有任何值要清的刪除（空欄位、空區塊）與 Inactive 模組一樣放行
         if (ClosedDataGuard.RejectPurge(module, plan.Check.Purge) is { } closed) return closed;
         if (plan.Check.Purge is not { Records: 0, IndexRows: 0, HistoryRows: 0 } && await immutable.RejectAsync(module, ct) is { } ledgerFrozen) return ledgerFrozen;
-        if (plan.Check.Purge is not { Records: 0, IndexRows: 0, HistoryRows: 0 } && await pending.RejectValueRewriteAsync(module, ct) is { } pendingApproval) return pendingApproval;
-        if (plan.Check.Purge is not { Records: 0, IndexRows: 0, HistoryRows: 0 }
-            && await lockedData.RejectPurgeAsync(module, [.. module.Blocks.SelectMany(b => b.Fields).Where(f => plan.FieldIds.Contains(f.Id))], ct) is { } lockedValues) return lockedValues;
+        var fields = module.Blocks.SelectMany(b => b.Fields).Where(f => plan.FieldIds.Contains(f.Id)).ToList();
+        if (await pending.RejectFieldPurgeAsync(module, plan.Check.Purge, fields, ct) is { } pendingApproval) return pendingApproval;
+        // 鎖定資料守衛本身以「鎖定記錄上有值」判斷；公式與彙總沒有歷程與索引列（Purge 全 0），不能靠 Purge 閘門
+        if (await lockedData.RejectPurgeAsync(module, fields, ct) is { } lockedValues) return lockedValues;
         if (plan.Check.Purge.Records != request.Purged) return ServiceResult.ConflictWith(DeleteMessages.PurgedMismatch, plan.Check);
 
         await FieldPurge.RemoveAsync(module, plan.FieldIds, [], deletion, uow, user, time, ct);

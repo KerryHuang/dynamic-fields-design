@@ -5,6 +5,8 @@ using DynamicModules.Application.Dynamic.ApprovalService;
 using DynamicModules.Application.Dynamic.AttachmentService;
 using DynamicModules.Application.Dynamic.DeleteService.Commands.DeleteBlock;
 using DynamicModules.Application.Dynamic.DeleteService.Commands.DeleteField;
+using DynamicModules.Application.Dynamic.FieldService.Commands.AddBlock;
+using DynamicModules.Application.Dynamic.FieldService.Commands.AddField;
 using DynamicModules.Application.Dynamic.FieldService.Commands.AddOption;
 using DynamicModules.Application.Dynamic.FieldService.Commands.UpdateOption;
 using DynamicModules.Application.Dynamic.ModuleService.Data;
@@ -14,6 +16,7 @@ using DynamicModules.Application.Dynamic.WorkflowService.Data;
 using DynamicModules.Domain.Approvals;
 using DynamicModules.Domain.Entities.Dynamic;
 using DynamicModules.Domain.Repositories.Dynamic;
+using DynamicModules.Domain.ValueObjects;
 using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
@@ -170,12 +173,14 @@ public class LockedDataGuardTests : ApprovalTestBase
     public async Task DeactivateOption_LockedState_LockedSetUnchanged()
     {
         await Rig();
-        await Approved();
-        var wf = Db.Context.Set<Workflow>().AsNoTracking().Single(w => w.ModuleId == _r.ModuleId);
-        ApprovalTopology.LockedStates(wf).Should().Contain(_r.Confirmed);
-        var res = await Send(new UpdateOptionRequest(_r.Received, Text("已進貨"), null, false));   // 鎖定集合以外的選項，作為對照
+        var po = await Approved();
+        async Task<Workflow> Wf() => (await Db.Context.Set<Workflow>().AsNoTracking().SingleAsync(w => w.ModuleId == _r.ModuleId));
+        var before = ApprovalTopology.LockedStates(await Wf()).ToHashSet();
+        before.Should().Contain(_r.Confirmed);
+        var res = await Send(new UpdateOptionRequest(_r.Confirmed, Text("已確認"), null, false));   // 停用鎖定狀態自己的選項
         res.IsSuccess.Should().BeTrue(Dump(res));
-        ApprovalTopology.LockedStates(wf).Should().Contain(_r.Confirmed);
+        ApprovalTopology.LockedStates(await Wf()).ToHashSet().Should().BeEquivalentTo(before);   // 重新讀取，鎖定集合沒變
+        StateOf(_r, po).Should().Be(_r.Confirmed);
     }
 
     // ───────── 刪除鎖定欄位的值（裁決 10） ─────────
@@ -226,6 +231,67 @@ public class LockedDataGuardTests : ApprovalTestBase
         await Approved(withFile: true);
         var block = Db.Context.Set<Field>().AsNoTracking().Single(f => f.Id == _files).BlockId;
         (await Send(new DeleteBlockRequest(block, 0))).IsConflict.Should().BeTrue();
+    }
+
+    /// <summary>計算欄位（公式、彙總）刪除時 Purge 常為 0（無歷程、無索引），守衛不能靠 Purge 閘門觸發。</summary>
+    private async Task<int> RowsWithValue(string key) =>
+        (await Db.Context.Set<Record>().AsNoTracking().ToListAsync()).Count(r => r.ValuesJson.Contains($"\"{key}\""));
+
+    /// <summary>明細模組只用來顯示的公式：表頭已核准、明細列一起鎖，停用後刪除要 409，值保留。</summary>
+    [Fact]
+    public async Task DeleteDetailDisplayFormula_HeaderLocked_Returns409_ValueKept()
+    {
+        await Rig();
+        var dbl = await MustAdd(_r.Line, FieldType.Formula,
+            new FieldConfig { Formula = $"{{{_r.LineQty}}} * 2", ResultType = "number", Scale = 0 }, "數量兩倍");
+        await Approved();
+        var key = $"f_{dbl.Id}";
+        var before = await RowsWithValue(key);
+        before.Should().BeGreaterThan(0);
+        (await Deactivate(dbl.Id)).IsSuccess.Should().BeTrue();
+        Blocked(await Send(new DeleteFieldRequest(dbl.Id, 0)), "1 筆", "數量兩倍");
+        (await RowsWithValue(key)).Should().Be(before);
+    }
+
+    /// <summary>表頭公式只被流程舊版條件引用（目前版本不再引用），已核准單據有值：刪除要 409，值保留。</summary>
+    [Fact]
+    public async Task DeleteHeaderFormula_OnlyOldFlowVersionReferences_LockedRecordHasValue_Returns409_ValueKept()
+    {
+        await Rig();
+        var f = await MustAdd(_r.Module, FieldType.Formula,
+            new FieldConfig { Formula = $"{{{_r.Discount}}} * 2", ResultType = "number", Scale = 0 }, "折扣兩倍");
+        var flow = await SeedFlow(_r, "po-old", _r.Confirmed, 2, Def(Cond(f.Id, "gte", 0), Stage("lead", Group(PurchaseLeadGroup))));
+        var v2 = new ApprovalFlowVersion { FlowId = flow.Id, Version = 2, Definition = Def(null, Stage("lead", Group(PurchaseLeadGroup))), CreatedBy = "admin", CreatedTime = SeedTime };
+        Db.Context.Add(v2);
+        await Db.Context.SaveChangesAsync();
+        (await Db.Context.Set<ApprovalFlow>().SingleAsync(x => x.Id == flow.Id)).CurrentVersionId = v2.Id;
+        await Db.Context.SaveChangesAsync();
+        Db.Context.ChangeTracker.Clear();
+
+        await Approved();
+        var key = $"f_{f.Id}";
+        var before = await RowsWithValue(key);
+        before.Should().BeGreaterThan(0);
+        (await Deactivate(f.Id)).IsSuccess.Should().BeTrue();
+        Blocked(await Send(new DeleteFieldRequest(f.Id, 0)), "1 筆", "折扣兩倍");
+        (await RowsWithValue(key)).Should().Be(before);
+    }
+
+    /// <summary>刪區塊走另一支 handler：區塊內的鎖定公式在已核准單據有值，同樣要擋。</summary>
+    [Fact]
+    public async Task DeleteBlock_ContainsLockedFormulaWithValue_Returns409_ValueKept()
+    {
+        await Rig();
+        var block = (BlockResponse)(await Send(new AddBlockRequest(_r.Line, Text("明細區塊"))) ).Data!;
+        var dbl = (FieldResponse)(await Send(new AddFieldRequest(_r.Line, block.Id, FieldType.Formula, Text("數量兩倍"),
+            new FieldConfig { Formula = $"{{{_r.LineQty}}} * 2", ResultType = "number", Scale = 0 }))).Data!;
+        await Approved();
+        var key = $"f_{dbl.Id}";
+        var before = await RowsWithValue(key);
+        before.Should().BeGreaterThan(0);
+        (await Deactivate(dbl.Id)).IsSuccess.Should().BeTrue();
+        Blocked(await Send(new DeleteBlockRequest(block.Id, 0)), "1 筆", "數量兩倍");
+        (await RowsWithValue(key)).Should().Be(before);
     }
 
     // 安全刪除對「有值的欄位」已先擋，守衛本身的條件直接對守衛驗證。
