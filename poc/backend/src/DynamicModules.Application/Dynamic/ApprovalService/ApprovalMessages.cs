@@ -72,6 +72,12 @@ public static class ApprovalMessages
     public static string WorkflowBlockedByPending(IReadOnlyList<string> titles, int total) =>
         $"{Listing(titles, total)}正在簽核中，這項修改會拆掉它們要走的轉移或狀態，請等簽核結束或撤回後再改";
 
+    // ── 設計器的鎖定資料守衛（§8.6，管理類，不在執行期語系化範圍） ──
+    public static string UnlockBlockedByRecords(int count) =>
+        $"有 {count} 筆記錄停在會被解除鎖定的狀態；請先把它們轉回可編輯的狀態，或保留需簽核設定";
+    public static string PurgeBlockedByLocked(string fieldLabel, int count) =>
+        $"有 {count} 筆停在簽核鎖定狀態的記錄在「{fieldLabel}」有值，刪除欄位會清掉這些值；請先把它們轉回可編輯的狀態";
+
     // ── 簽核中的寫入（§5.3、§8.5） ──
     public static readonly MessageRef NeedsSubmit = MessageRef.Of(MessageText.ApprovalNeedsSubmit);
     public static readonly MessageRef Pending = MessageRef.Of(MessageText.ApprovalPending);

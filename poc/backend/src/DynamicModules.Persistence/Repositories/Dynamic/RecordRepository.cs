@@ -17,6 +17,10 @@ public class RecordRepository(DynamicDbContext db, ISqlDialect dialect) : IRecor
     public Task<List<Record>> ListAllByModuleAsync(long moduleId, CancellationToken ct) =>
         db.Set<Record>().Where(r => r.ModuleId == moduleId).ToListAsync(ct);
 
+    public async Task<IReadOnlyList<RecordValues>> ListLiveValuesAsync(long moduleId, CancellationToken ct) =>
+        await db.Set<Record>().AsNoTracking().Where(r => r.ModuleId == moduleId && !r.DeleteFlag).OrderBy(r => r.Id)
+            .Select(r => new RecordValues(r.Id, r.ValuesJson)).ToListAsync(ct);
+
     public Task<bool> AnyByModuleAsync(long moduleId, CancellationToken ct) =>
         db.Set<Record>().AnyAsync(r => r.ModuleId == moduleId, ct);
 

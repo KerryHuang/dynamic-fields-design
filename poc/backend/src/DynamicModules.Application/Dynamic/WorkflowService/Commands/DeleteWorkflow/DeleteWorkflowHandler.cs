@@ -7,7 +7,7 @@ using MediatR;
 
 namespace DynamicModules.Application.Dynamic.WorkflowService.Commands.DeleteWorkflow;
 
-public class DeleteWorkflowHandler(IModuleRepository modules, IUnitOfWork uow, ICurrentUser user, IBusinessTime time, PendingApprovalGuard pending)
+public class DeleteWorkflowHandler(IModuleRepository modules, IUnitOfWork uow, ICurrentUser user, IBusinessTime time, PendingApprovalGuard pending, LockedDataGuard lockedData)
     : IRequestHandler<DeleteWorkflowRequest, ServiceResult>
 {
     public async Task<ServiceResult> Handle(DeleteWorkflowRequest request, CancellationToken ct)
@@ -15,6 +15,7 @@ public class DeleteWorkflowHandler(IModuleRepository modules, IUnitOfWork uow, I
         var module = await modules.GetByKeyAsync(request.ModuleKey, includeChildren: true, ct);
         if (module?.Workflow is not { } workflow) return ServiceResult.NotFound("這個模組沒有狀態機");
         if (await pending.RejectWorkflowChangeAsync(module, null, ct) is { } pendingApproval) return pendingApproval;
+        if (await lockedData.RejectUnlockAsync(module, null, ct) is { } lockedRecords) return lockedRecords;
         modules.RemoveWorkflow(workflow);
         module.Workflow = null;
         module.TouchVersion(user.UserId, time.Now);

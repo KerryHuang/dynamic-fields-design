@@ -10,6 +10,8 @@ public interface IRecordRepository
     Task<List<Record>> ListAllByModuleAsync(long moduleId, CancellationToken ct);
     /// <summary>模組是否有任何記錄，含已刪除的。</summary>
     Task<bool> AnyByModuleAsync(long moduleId, CancellationToken ct);
+    /// <summary>模組內未刪除記錄的 Id 與 ValuesJson（不追蹤、只取這兩欄），依 Id 遞增；供守衛逐筆判斷狀態與欄位值。</summary>
+    Task<IReadOnlyList<RecordValues>> ListLiveValuesAsync(long moduleId, CancellationToken ct);
     /// <summary>模組內未刪除記錄的筆數。</summary>
     Task<int> CountByModuleAsync(long moduleId, CancellationToken ct);
     /// <summary>擴充模組中、host 鍵為 hostKey 的未刪除記錄。</summary>
@@ -63,3 +65,6 @@ public interface IRecordRepository
 public sealed class AggregateOverflowException(Exception inner) : Exception("加總超出可計算範圍", inner);
 
 public record RecordStub(long Id, string Title, string OwnerUserId);
+
+/// <summary>記錄的 Id 與值（ValuesJson），不帶其他欄位。</summary>
+public record RecordValues(long Id, string ValuesJson);

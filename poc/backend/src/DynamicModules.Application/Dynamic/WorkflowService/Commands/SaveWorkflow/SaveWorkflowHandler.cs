@@ -14,7 +14,8 @@ namespace DynamicModules.Application.Dynamic.WorkflowService.Commands.SaveWorkfl
 
 public class SaveWorkflowHandler(
     IModuleRepository modules, IPermissionRepository permissions, IUnitOfWork uow, ICurrentUser user, IBusinessTime time,
-    IApprovalFlowRepository flows, IEventRepository events, WorkflowApprovals approvals, PendingApprovalGuard pending)
+    IApprovalFlowRepository flows, IEventRepository events, WorkflowApprovals approvals, PendingApprovalGuard pending,
+    LockedDataGuard lockedData)
     : IRequestHandler<SaveWorkflowRequest, ServiceResult>
 {
     public const int MaxStates = 30;
@@ -61,6 +62,7 @@ public class SaveWorkflowHandler(
             States = [.. states], Transitions = [.. transitions]
         };
         if (await pending.RejectWorkflowChangeAsync(module, candidate, ct) is { } pendingApproval) return pendingApproval;
+        if (await lockedData.RejectUnlockAsync(module, candidate, ct) is { } lockedRecords) return lockedRecords;
 
         if (await ApprovalErrorsAsync(module, input, candidate, ct) is { Count: > 0 } approvalErrors) return ServiceResult.Invalid(approvalErrors);
 
