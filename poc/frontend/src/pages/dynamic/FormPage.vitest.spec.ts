@@ -74,6 +74,15 @@ describe('FormPage', () => {
     expect(noEdit.find('form').exists()).toBe(true);
   });
 
+  it('pending record shows read-only notice without the form', async () => {
+    const pending = { ...record, approval: { status: 'pending', stageName: null, stageSeq: 1, canSubmit: false } };
+    const w = await mountPage(schema(all), '/dynamic/m/5/edit', pending as never);
+    expect(w.find('[data-testid="approval-pending-readonly"]').text()).toContain('簽核中，記錄唯讀');
+    expect(w.find('form').exists()).toBe(false);
+    const done = await mountPage(schema(all), '/dynamic/m/5/edit', { ...record, approval: { status: 'approved', stageName: null, stageSeq: null, canSubmit: false } } as never);
+    expect(done.find('form').exists()).toBe(true);
+  });
+
   it('FormPage renders a read-only field as readonly', async () => {
     const w = await mountPage(schema(all, [field(1, '標題'), field(2, '甲', true)]), '/dynamic/m/5/edit');
     const inputs = w.findAll('input');

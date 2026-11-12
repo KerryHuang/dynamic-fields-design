@@ -5,7 +5,7 @@ import { computed, onMounted, provide, ref, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { fillPatch, fillReferenceInfos, lockedFillKeys } from 'src/domain/dynamic/fill';
 import { resolveI18n } from 'src/domain/dynamic/i18n-text';
-import { canAdvance, intersectAllowed, isReadOnlyState, selectableStates } from 'src/domain/dynamic/workflow';
+import { approvalTargets, canAdvance, intersectAllowed, isReadOnlyState, selectableStates } from 'src/domain/dynamic/workflow';
 import type { DetailRowPayload, DynamicRecord, ModuleSchema, ReferenceInfo, SchemaBlock, SchemaField } from 'src/domain/dynamic/types';
 import { attachmentContextKey } from 'src/presentation/dynamic/attachment-context';
 import { buildZodSchema } from 'src/presentation/dynamic/build-zod-schema';
@@ -123,6 +123,14 @@ const statusAllowed = computed(() => selectableStates(workflow.value, props.mode
 // A record an event has already posted is locked the same way: only the status may change (the cancel flow).
 const frozen = computed(() => props.mode === 'edit' && !!props.record?.frozenByEffects);
 const workflowLocked = computed(() => props.mode === 'edit' && (frozen.value || isReadOnlyState(workflow.value, storedStatus.value)));
+// States reachable only through "submit approval": tell the user where to go instead of leaving them out of the list unexplained.
+const approvalHint = computed(() => {
+  const targets = approvalTargets(workflow.value, storedStatus.value);
+  const status = fields.value.find((f) => f.key === statusKey.value);
+  return props.mode === 'edit' && status && targets.length
+    ? t('approval.useSubmitHint', { states: targets.map((v) => resolveI18n(status.options.find((o) => o.value === v)?.label, locale.value)).join('、') })
+    : '';
+});
 const allowedFor = (f: SchemaField) => {
   const byRules = ruleState.value.allowedOptions.get(f.id);
   return f.key === statusKey.value ? intersectAllowed(byRules, statusAllowed.value) : byRules;
@@ -236,6 +244,7 @@ watch(() => props.record, () => {
                 :required="(ruleState.required.has(f.id) || f.key === statusKey) && !fieldReadonly(f)" :allowed-options="allowedFor(f)"
                 :reference="fillReferences[f.key] ?? (record?.references ?? references)?.[f.key]"
               />
+              <div v-if="f.key === statusKey && approvalHint" class="text-caption text-muted q-mt-xs" data-testid="approval-use-submit-hint">{{ approvalHint }}</div>
             </div>
           </template>
         </div>

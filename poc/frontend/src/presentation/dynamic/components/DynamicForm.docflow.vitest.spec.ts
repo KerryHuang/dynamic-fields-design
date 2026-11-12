@@ -74,6 +74,18 @@ describe('DynamicForm workflow', () => {
     expect(w.find('[data-testid="workflow-readonly"]').exists()).toBe(false);
   });
 
+  it('status field hint names the approval targets', async () => {
+    const wf: SchemaWorkflow = { ...workflow, transitions: [{ from: 'opt_11', to: 'opt_12', approval: true }, { from: 'opt_11', to: 'opt_13' }] };
+    const w = mountForm({ schema: schema({ workflow: wf }), mode: 'edit', record: record('opt_11') });
+    await flushPromises();
+    expect(allowed(w, 'f_5')).toEqual(['opt_11', 'opt_13']);
+    expect(w.find('[data-testid="approval-use-submit-hint"]').text()).toContain('s12');
+    expect(w.find('[data-testid="approval-use-submit-hint"]').text()).not.toContain('s13');
+    const plain = mountForm({ schema: schema({ workflow }), mode: 'edit', record: record('opt_11') });
+    await flushPromises();
+    expect(plain.find('[data-testid="approval-use-submit-hint"]').exists()).toBe(false);
+  });
+
   it('a read-only state locks every field except the status, which can still advance', async () => {
     const w = mountForm({ schema: schema({ workflow }), mode: 'edit', record: record('opt_12') });
     await flushPromises();

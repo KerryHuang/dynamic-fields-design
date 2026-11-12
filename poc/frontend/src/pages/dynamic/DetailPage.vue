@@ -3,8 +3,10 @@ import { useQuasar } from 'quasar';
 import { computed, ref } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { useRoute, useRouter } from 'vue-router';
+import { useRecordApproval } from 'src/application/dynamic/queries/approval-queries';
 import { useDeleteRecord, useRecord } from 'src/application/dynamic/queries/records-queries';
 import { useModuleSchema } from 'src/application/dynamic/queries/schema-queries';
+import ApprovalBadge from 'src/presentation/dynamic/approval/ApprovalBadge.vue';
 import PrintMenu from 'src/presentation/dynamic/print/PrintMenu.vue';
 import RecordConversions from 'src/presentation/dynamic/conversions/RecordConversions.vue';
 import RecordEffects from 'src/presentation/dynamic/events/RecordEffects.vue';
@@ -17,12 +19,13 @@ import RecordTasks from 'src/presentation/dynamic/tasks/RecordTasks.vue';
 import RelatedTabs from 'src/presentation/dynamic/related/RelatedTabs.vue';
 import ForbiddenNotice from 'src/components/framework/ForbiddenNotice.vue';
 import type { DeleteBlocked } from 'src/domain/dynamic/types';
+import { resolveI18n } from 'src/domain/dynamic/i18n-text';
 import { canAdvance, isReadOnlyState } from 'src/domain/dynamic/workflow';
 import { isStale } from 'src/presentation/dynamic/designer/api-error';
 import { newIdempotencyKey } from 'src/services/api/idempotency';
 import { isForbidden, type ApiError } from 'src/services/api/http';
 
-const { t } = useI18n();
+const { t, locale } = useI18n();
 const $q = useQuasar();
 const route = useRoute();
 const router = useRouter();
@@ -51,8 +54,18 @@ const workflow = computed(() => schemaQuery.data.value?.workflow);
 const currentState = computed(() => (workflow.value ? recordQuery.data.value?.values[workflow.value.statusFieldKey] : undefined));
 const frozen = computed(() => !!recordQuery.data.value?.frozenByEffects);
 const stateLocked = computed(() => isReadOnlyState(workflow.value, currentState.value) || frozen.value);
-const canEdit = computed(() => !!schemaQuery.data.value?.permissions.edit && (!stateLocked.value || canAdvance(workflow.value, currentState.value)));
-const canDelete = computed(() => !!schemaQuery.data.value?.permissions.delete && !stateLocked.value);
+// While an approval is running the record is read-only (the server answers 409 to PUT and DELETE); withdraw first.
+const approval = computed(() => recordQuery.data.value?.approval ?? null);
+const approvalPending = computed(() => approval.value?.status === 'pending');
+const canEdit = computed(() => !!schemaQuery.data.value?.permissions.edit && !approvalPending.value && (!stateLocked.value || canAdvance(workflow.value, currentState.value)));
+const canDelete = computed(() => !!schemaQuery.data.value?.permissions.delete && !stateLocked.value && !approvalPending.value);
+
+// No summary = the module has no approval for this record: no badge, no request.
+const canSubmit = computed(() => !!approval.value?.canSubmit && !schemaQuery.data.value?.readOnly);
+const approvalQuery = useRecordApproval(recordId, canSubmit);
+const statusField = computed(() => schemaQuery.data.value?.blocks.flatMap((b) => b.fields).find((f) => f.key === workflow.value?.statusFieldKey));
+const stateLabel = (optionId: number) => resolveI18n(statusField.value?.options.find((o) => o.value === `opt_${optionId}`)?.label, locale.value);
+const submitTargets = computed(() => (canSubmit.value ? approvalQuery.data.value?.submitTargets ?? [] : []));
 
 async function onDelete() {
   try {
@@ -88,7 +101,12 @@ async function onDelete() {
       <div class="row items-center q-mb-md q-gutter-sm">
         <q-btn flat icon="arrow_back" :label="t('dynamic.back')" :to="`/dynamic/${moduleKey}`" />
         <div v-if="schemaQuery.data.value.titleFieldKey || schemaQuery.data.value.kind === 'extension'" class="text-h6">{{ recordQuery.data.value.title }}</div>
+        <ApprovalBadge v-if="approval" :summary="approval" />
         <q-space />
+        <q-btn
+          v-for="to in submitTargets" :key="to" color="primary" icon="rule" :label="t('approval.submitTo', { state: stateLabel(to) })"
+          :data-testid="`submit-approval-${to}`"
+        />
         <PrintMenu :module-key="moduleKey" :record-id="recordId" />
         <q-btn v-if="canEdit" color="primary" :label="t('dynamic.edit')" :to="`/dynamic/${moduleKey}/${recordId}/edit`" />
         <q-btn v-if="canDelete" color="negative" outline :label="t('dynamic.delete')" @click="confirming = true" />
@@ -96,6 +114,10 @@ async function onDelete() {
       <div v-if="schemaQuery.data.value.readOnly" class="row items-center no-wrap q-mb-sm text-muted" data-testid="closed-banner">
         <q-icon name="lock" class="q-mr-sm" />
         <span>{{ t('dynamic.closedBanner') }}</span>
+      </div>
+      <div v-if="approvalPending" class="row items-center no-wrap q-mb-sm text-muted" data-testid="approval-pending-readonly">
+        <q-icon name="lock" class="q-mr-sm" />
+        <span>{{ t('approval.pendingReadOnly') }}</span>
       </div>
       <div v-if="frozen" class="row items-center no-wrap q-mb-sm text-muted" data-testid="frozen-notice">
         <q-icon name="lock" class="q-mr-sm" />

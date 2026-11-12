@@ -82,6 +82,8 @@ const forbidden = computed(() => isForbidden(schemaQuery.error.value) || (isEdit
 const failed = computed(() => !forbidden.value && !schemaMissing.value && !recordMissing.value
   && (!!schemaQuery.error.value || (isEdit.value && !!recordQuery.error.value)));
 const ready = computed(() => schemaQuery.data.value && (!isEdit.value || recordQuery.data.value));
+// An approval in progress makes the record read-only (PUT answers 409): say so instead of showing a form that cannot be saved.
+const approvalPending = computed(() => isEdit.value && recordQuery.data.value?.approval?.status === 'pending');
 const back = () => router.push(isEdit.value ? `/dynamic/${moduleKey.value}/${recordId.value}` : `/dynamic/${moduleKey.value}`);
 
 // A `details.` key counts as shown when it points at a submitted row and a field of that detail (or the row itself).
@@ -150,14 +152,20 @@ async function onSubmit(values: Record<string, unknown>, details: Record<string,
         <q-space />
         <q-btn flat :label="t('dynamic.cancel')" @click="back" />
       </div>
-      <PopupSelect
-        v-if="isExtensionNew" v-model="hostKey" :light-url="hostLightUrl" value-kind="string" :label="t('designer.extension.hostEntity')"
-        :error="hostError" required class="q-mb-md" @update:model-value="hostError = undefined"
-      />
-      <DynamicForm
-        ref="form" :schema="schemaQuery.data.value!" :mode="isEdit ? 'edit' : 'create'" :record="isEdit ? recordQuery.data.value : undefined" :initial="prefill" :references="prefillReferences"
-        :server-errors="serverErrors" :detail-errors="detailErrors" :saving="save.isPending.value" @submit="onSubmit" @row-version="(v) => (uploadedRowVersion = v)"
-      />
+      <div v-if="approvalPending" class="row items-center no-wrap text-muted" data-testid="approval-pending-readonly">
+        <q-icon name="lock" class="q-mr-sm" />
+        <span>{{ t('approval.pendingReadOnly') }}</span>
+      </div>
+      <template v-else>
+        <PopupSelect
+          v-if="isExtensionNew" v-model="hostKey" :light-url="hostLightUrl" value-kind="string" :label="t('designer.extension.hostEntity')"
+          :error="hostError" required class="q-mb-md" @update:model-value="hostError = undefined"
+        />
+        <DynamicForm
+          ref="form" :schema="schemaQuery.data.value!" :mode="isEdit ? 'edit' : 'create'" :record="isEdit ? recordQuery.data.value : undefined" :initial="prefill" :references="prefillReferences"
+          :server-errors="serverErrors" :detail-errors="detailErrors" :saving="save.isPending.value" @submit="onSubmit" @row-version="(v) => (uploadedRowVersion = v)"
+        />
+      </template>
     </template>
   </q-page>
 </template>
