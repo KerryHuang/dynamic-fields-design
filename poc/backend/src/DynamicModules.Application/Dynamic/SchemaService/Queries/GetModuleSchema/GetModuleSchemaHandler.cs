@@ -24,7 +24,7 @@ public class GetModuleSchemaHandler(
             // 簽核人的臨時讀取（簽核設計 §10.1）：只在一般讀取被拒、而且指定了一筆記錄時
             if (request.RecordId is not { } recordId) return access.Denied!;
             var record = await records.GetAsync(recordId, ct);
-            if (record is null || record.ModuleId != module.Id) return ServiceResult.NotFound(RecordMapper.RecordNotFound);
+            if (record is null || record.ModuleId != module.Id) return access.Denied!;   // 不存在、別的模組都和沒有權限一樣，不洩漏存在性
             if (await grant.ForRecordAsync(module, record, ct) is not { } g) return access.Denied!;
             return ServiceResult.Success(await builder.BuildAsync(module, g, child => grant.ForDetailAsync(module, child, ct), ct, []));
         }

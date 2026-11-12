@@ -1,7 +1,9 @@
 using System.Text.Json;
 using DynamicModules.Application.Common;
+using DynamicModules.Application.Dynamic.ApprovalService;
 using DynamicModules.Application.Dynamic.SchemaService.Data;
 using DynamicModules.Application.Dynamic.SchemaService.Queries.GetModuleSchema;
+using DynamicModules.Domain.Approvals;
 using DynamicModules.Domain.Entities.Dynamic;
 using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
@@ -30,10 +32,10 @@ public class ApprovalGrantSchemaTests : ApprovalTestBase
         return po.Id;
     }
 
-    private async Task<ServiceResult> Schema(string user, long? recordId)
+    private async Task<ServiceResult> Schema(string user, long? recordId, string? module = null)
     {
         As(user);
-        return await Send(new GetModuleSchemaRequest(_r.Module, recordId));
+        return await Send(new GetModuleSchemaRequest(module ?? _r.Module, recordId));
     }
 
     [Fact]
@@ -58,7 +60,7 @@ public class ApprovalGrantSchemaTests : ApprovalTestBase
     }
 
     [Fact]
-    public async Task Schema_NoRead_RecordOfOtherModule_Returns404()
+    public async Task Schema_NoRead_RecordOfOtherModule_Returns403()
     {
         await Rig();
         var other = await BuildPurchase("pb");
@@ -67,7 +69,51 @@ public class ApprovalGrantSchemaTests : ApprovalTestBase
 
         var res = await Schema("buyer2", otherPo.Id);
 
-        res.IsNotFound.Should().BeTrue(Dump(res));
+        res.IsForbidden.Should().BeTrue(Dump(res));
+    }
+
+    [Fact]
+    public async Task Schema_NoRead_TaskOnOtherModuleRecord_Returns403()
+    {
+        // buyer2 在 A 模組的 po 上有 open 任務，拿這筆 id 去要沒有權限的 B 模組 schema：不能借用臨時讀取
+        var po = await Rig();
+        var other = await BuildPurchase("pb");
+
+        var res = await Schema("buyer2", po, other.Module);
+
+        res.IsForbidden.Should().BeTrue(Dump(res));
+        (await Schema("buyer2", po)).IsSuccess.Should().BeTrue();   // 對照：A 模組自己的 schema 拿得到
+    }
+
+    [Fact]
+    public async Task Schema_NoRead_RecordNotExist_Returns403()
+    {
+        await Rig();
+        (await Schema("buyer2", 999_999_999)).IsForbidden.Should().BeTrue();
+    }
+
+    [Fact]
+    public async Task Schema_AfterTaskApproved_Returns403()
+    {
+        var po = await Rig();
+        (await Schema("buyer2", po)).IsSuccess.Should().BeTrue();
+        var inst = Db.Context.Set<ApprovalInstance>().AsNoTracking().Single(i => i.RecordId == po);
+        var task = TasksOf(inst.Id).Single(t => t.AssigneeUserId == "buyer2" && t.Status == ApprovalTaskStatus.Open);
+        As("buyer2");
+        (await Send(new ApproveTaskRequest(task.Id, inst.RowVersion, null, null))).IsSuccess.Should().BeTrue();
+
+        (await Schema("buyer2", po)).IsForbidden.Should().BeTrue();
+    }
+
+    [Fact]
+    public async Task Schema_AfterWithdrawn_Returns403()
+    {
+        var po = await Rig();
+        var inst = Db.Context.Set<ApprovalInstance>().AsNoTracking().Single(i => i.RecordId == po);
+        As("buyer1");
+        (await Send(new WithdrawApprovalRequest(inst.Id, inst.RowVersion, null))).IsSuccess.Should().BeTrue();
+
+        (await Schema("buyer2", po)).IsForbidden.Should().BeTrue();
     }
 
     [Fact]
