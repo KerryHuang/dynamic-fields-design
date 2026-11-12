@@ -49,8 +49,15 @@ public interface IApprovalFlowRepository
 }
 
 /// <summary>簽核實例、關卡實例、任務與歷程（設計 §4.3）。標「追蹤」的回傳值改了會在 SaveChanges 時寫回。</summary>
+/// <summary>進行中實例的摘要：整批重算固定記錄、定義守衛用，不讀記錄值。</summary>
+public sealed record PendingInstanceRef(
+    long InstanceId, long RecordId, long ModuleId, long FromOptionId, long ToOptionId, long? FlowVersionId, string TitleSnapshot);
+
 public interface IApprovalInstanceRepository
 {
+    /// <summary>不追蹤：這些模組 pending 的實例摘要。</summary>
+    Task<List<PendingInstanceRef>> ListPendingByModulesAsync(IReadOnlyCollection<long> moduleIds, CancellationToken ct);
+
     /// <summary>追蹤。</summary>
     Task<ApprovalInstance?> GetAsync(long id, CancellationToken ct);
 

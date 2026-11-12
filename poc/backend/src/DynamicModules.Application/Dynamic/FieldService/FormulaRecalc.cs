@@ -11,12 +11,13 @@ namespace DynamicModules.Application.Dynamic.FieldService;
 public static class FormulaRecalc
 {
     public static async Task RecalculateAsync(
-        Module module, IRecordRepository records, FieldTypeRegistry registry, RollupRecalc rollups, IEventFactRepository facts,
+        Module module, IRecordRepository records, FieldTypeRegistry registry, RollupRecalc rollups, FrozenRecordsLoader loader,
         DateOnly today, CancellationToken ct, Common.Security.FieldLocks locks)
     {
-        var frozen = await FrozenRecords.LoadAsync(module, facts, ct);   // 已固定的記錄保留原值（設計 §10.4）
+        var all = await records.ListAllByModuleAsync(module.Id, ct);
+        var frozen = await loader.LoadAsync(module, all, ct);             // 已固定的記錄保留原值（設計 §8.6、§10.4）
         var locked = await locks.FrozenAsync(module, ct);                 // 凍結的貢獻欄位不重算（共用主檔設計 §7）
-        foreach (var record in (await records.ListAllByModuleAsync(module.Id, ct)).Where(r => !r.DeleteFlag && !frozen.Contains(r)))
+        foreach (var record in all.Where(r => !r.DeleteFlag && !frozen.Contains(r)))
         {
             var values = RecordValueProcessor.Parse(record.ValuesJson);
             RecordValueProcessor.ApplyFormulas(module, values, today, locked);

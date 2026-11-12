@@ -16,7 +16,7 @@ namespace DynamicModules.Application.Dynamic.FieldService.Commands.UpdateField;
 
 public class UpdateFieldHandler(
     IModuleRepository modules, IRecordRepository records, IUnitOfWork uow, FieldTypeRegistry registry, ICurrentUser user, IBusinessTime time,
-    RollupRecalc rollups, IEventFactRepository facts, Dynamic.LedgerService.ImmutableDataGuard immutable,
+    RollupRecalc rollups, Rollups.FrozenRecordsLoader loader, Dynamic.LedgerService.ImmutableDataGuard immutable,
     Dynamic.CheckService.CheckFieldGuard checkGuard, Common.Security.FieldLocks locks,
     Dynamic.EventService.EventValidator eventValidator, Dynamic.EventService.EventHiddenGuard hiddenGuard,
     Dynamic.AppService.SharedMasters.MasterDesigner masterDesigner)
@@ -153,7 +153,7 @@ public class UpdateFieldHandler(
 
         if (field.Type == FieldType.Formula
             && (old.Formula != config.Formula || old.Scale != config.Scale || old.ResultType != config.ResultType))
-            await FormulaRecalc.RecalculateAsync(module, records, registry, rollups, facts, time.Today, ct, locks);
+            await FormulaRecalc.RecalculateAsync(module, records, registry, rollups, loader, time.Today, ct, locks);
         else
         {
             if (field is { Type: FieldType.Rollup, Status: FieldStatus.Active } && RollupChanged(old.Rollup, config.Rollup))

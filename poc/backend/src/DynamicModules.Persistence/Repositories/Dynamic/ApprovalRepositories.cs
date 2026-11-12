@@ -165,6 +165,12 @@ public class ApprovalInstanceRepository(DynamicDbContext db) : IApprovalInstance
     public Task<List<ApprovalInstance>> ListByInitiatorAsync(string userId, CancellationToken ct) =>
         db.Set<ApprovalInstance>().AsNoTracking().Where(i => i.InitiatorUserId == userId).ToListAsync(ct);
 
+    public Task<List<PendingInstanceRef>> ListPendingByModulesAsync(IReadOnlyCollection<long> moduleIds, CancellationToken ct) =>
+        db.Set<ApprovalInstance>().AsNoTracking()
+            .Where(i => i.Status == ApprovalInstanceStatus.Pending && moduleIds.Contains(i.ModuleId))
+            .Select(i => new PendingInstanceRef(i.Id, i.RecordId, i.ModuleId, i.FromOptionId, i.ToOptionId, i.FlowVersionId, i.TitleSnapshot))
+            .ToListAsync(ct);
+
     public Task<List<ApprovalInstance>> ListByModulesAsync(IReadOnlyCollection<long> moduleIds, CancellationToken ct) =>
         db.Set<ApprovalInstance>().AsNoTracking().Where(i => moduleIds.Contains(i.ModuleId)).ToListAsync(ct);
 

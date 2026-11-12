@@ -78,6 +78,7 @@ public static class DependencyInjection
         services.AddScoped<Dynamic.RecordService.DetailWriter>();
         services.AddScoped<Dynamic.RecordService.DetailReader>();
         services.AddScoped<Dynamic.RecordService.RecordHistoryWriter>();
+        services.AddScoped<Dynamic.Rollups.FrozenRecordsLoader>();
         services.AddScoped<Dynamic.Rollups.RollupRecalc>();
         services.AddScoped<Dynamic.RecordService.RecordCreator>();
         services.AddScoped<Dynamic.ImportService.ImportPlanner>();
