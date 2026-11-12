@@ -429,7 +429,7 @@ o1a 與 o1c 可平行；o1b 有 migration，不與其他加 migration 的工作�
 - 每個請求的 request id＝目前 `Activity` 的 W3C trace id（32 個十六進位字元）。請求一開始就把 `HttpContext.TraceIdentifier` 設成同一個值，於是現有錯誤回應裡的 `traceId` 不用改，自動和 log 對得上。
 - 所有回應加 `X-Request-Id` 標頭。
 - 預設不採用外部送來的 `traceparent`，避免客戶端操控 log 裡的識別碼；放在自家反向代理後面時，可由部署設定 `Ops:TrustIncomingTraceParent` 開啟（主控判斷 T3）。
-- 每個請求開 log scope：外層 `requestId`（`RequestContextMiddleware`，整條 pipeline 第一個）；內層 `userId`、`route`（路由樣板，例如 `api/v3/dynamic/modules/{key}`）、`moduleKey`（路由有才帶；`RequestScopeMiddleware`，認證之後）。〔o1a 計畫判斷 J5〕路由樣板與 `moduleKey` 在呼叫 `next` 之前就存進 `RequestOpsFeature`：`ExceptionHandlerMiddleware` 會清掉 endpoint，內層 scope 在例外往外傳時也已 Dispose，所以請求結束行與例外 log 不靠 scope，`UserId`、`Route`、`ModuleKey` 直接寫成欄位；只有 handler 內記的 log 帶內層 scope。框架自帶的 `RequestId` 欄位（連線序號格式）會並存，以 `requestId`（＝`TraceId`）為準（J6）。
+- 每個請求開 log scope：外層 `requestId`（`RequestContextMiddleware`，整條 pipeline 第一個）；內層 `userId`、`route`（路由樣板，例如 `api/v3/dynamic/modules/{key}`）、`moduleKey`（路由有才帶；`RequestScopeMiddleware`，認證之後）。〔o1a 計畫判斷 J5〕路由樣板與 `moduleKey` 在呼叫 `next` 之前就存進 `RequestOpsFeature`：`ExceptionHandlerMiddleware` 會清掉 endpoint，內層 scope 在例外往外傳時也已 Dispose，所以請求結束行與例外 log 不靠 scope，`UserId`、`Route`、`ModuleKey` 直接寫成欄位；只有 handler 內記的 log 帶內層 scope。〔審查 S5，偏離 J5 原位置〕`RequestScopeMiddleware` 放在 `SessionMiddleware` 之後、`IdempotencyKeyMiddleware` 之前：可選登入的 cookie 失效時 `SessionMiddleware` 才把身分降成匿名，scope 要在這之後開，`userId` 才不會留著失效帳號。框架自帶的 `RequestId` 欄位（連線序號格式）會並存，以 `requestId`（＝`TraceId`）為準（J6）。
 - 所有 ProblemDetails 與 `SessionMiddleware`（401、403）、`IdempotencyKeyMiddleware`（400）的回應主體，`traceId` 一律等於 `X-Request-Id`（J7）。
 - 規則歸屬〔o1a 計畫判斷 J9，取代原「規則 scope」寫法〕：scope 在例外往外傳時已 Dispose，最後一道 handler 看不到，所以改用例外標記。事件串聯、檢查、任務規則三個入口在每條規則外面加 `catch (Exception e) when (RuleFailureTag.Mark(e, kind, ruleId))`（永遠回 false，不吞例外），把 `ruleKind`（event、check、taskRule）與 `ruleId` 寫進 `e.Data`（最內層先寫者為準）；最後一道 handler 讀出來記進 log。`Mark` 不計數，`formwright.rule.failures` 只在最後一道 handler 真的處理到未處理例外且讀得到標記時才 +1，避免把 409、503 等正常流程算成規則失敗（O2 自動暫停會誤停）。代價：規則執行中記的 log 不帶規則識別。
 - 背景工作的 scope：`jobKey`、`runId`、`instanceId`。
@@ -443,8 +443,8 @@ o1a 與 o1c 可平行；o1b 有 migration，不與其他加 migration 的工作�
   - `ops.slowRequestMs` 用 60 秒的程序內快取讀（主控判斷 B2；實作 `CachedSystemPolicy`，J12）：讀不到資料庫時回出廠值並記 Warning，失敗結果也快取 10 秒、讀值逾時 2 秒，避免資料庫故障時每個請求都再連一次；請求耗時低於政策下限（200ms）時不讀政策。政策讀值只有「同一個 request 內快取」（政策設定 §6），每個請求結束時去讀等於每個請求多一次資料庫讀，違反反目標「不拖垮業務請求」。代價是改值後最多 60 秒才生效。
   - 2xx 且不慢的記 Debug（預設不輸出），避免鈴鐺輪詢灌爆 log。
   - 不記 `/api/health/*` 與靜態檔。
-- 新增最後一道 `IExceptionHandler`（`UnhandledExceptionHandler`，註冊在其他三個之後）：記 Error（EventId 5000，含例外型別、指紋、route、userId、moduleKey、規則標記），回 `application/problem+json` 500，`traceId` 同 `X-Request-Id`，另帶 `message`（四語「系統發生錯誤，請稍後再試」，前端 `toApiError` 讀 `message`）（J8）。框架的 `BadHttpRequestException`（主體超限、格式壞掉）保留原狀態碼，只記 Information，不算指紋、不計 metric（J31）。
-- 不准**主動**寫進 log 的內容（我們自己的 log 呼叫；寫死，§12；與 MCP 設計 §9.3 合併成這一份清單）。框架自己的例外 log 帶完整例外訊息，可能含輸入值，所以產品 log 視同敏感資料控管存取（J29，部署說明已寫明）：查詢字串、request／response body、記錄欄位值、密碼、cookie、`Authorization` 標頭、上傳檔名、MCP 個人存取權杖明文（`fwp_` 開頭）、確認碼明文（`fwc_` 開頭）。EF Core 的 sensitive data logging 維持關閉。
+- 新增最後一道 `IExceptionHandler`（`UnhandledExceptionHandler`，註冊在其他三個之後）：記 Error（EventId 5000，含例外型別、指紋、route、userId、moduleKey、規則標記），回 `application/problem+json` 500，`traceId` 同 `X-Request-Id`，另帶 `message`（四語「系統發生錯誤，請稍後再試」，前端 `toApiError` 讀 `message`）（J8）。框架的 `BadHttpRequestException`（主體超限、格式壞掉）保留原狀態碼，只記 Information（EventId 5002，原因記框架的固定訊息），不算指紋、不計 metric（J31）。回應已開始後才失敗的串流（匯出、報表下載中途出錯）框架直接重新丟出，不呼叫我們的 handler，所以沒有 EventId 5000 與指紋，只有框架與 Kestrel 的 log（審查 N10）。`moduleKey` 目前只認路由樣板含 `modules/{key}` 的請求，`modules/{moduleKey}/…` 這組路由不帶（審查 N1）。
+- 不准**主動**寫進 log 的內容（我們自己的 log 呼叫；寫死，§12；與 MCP 設計 §9.3 合併成這一份清單）。框架自己的例外 log 帶完整例外訊息，可能含輸入值，所以產品 log 視同敏感資料控管存取（J29，部署說明已寫明）：查詢字串、request／response body、記錄欄位值、密碼、cookie、`Authorization` 標頭、上傳檔名、MCP 個人存取權杖明文（`fwp_` 開頭）、確認碼明文（`fwc_` 開頭）。EF Core 的 sensitive data logging 維持關閉。〔審查 S3，J29 例外〕`appsettings.json` 把 `Microsoft.AspNetCore.Diagnostics.ExceptionHandlerMiddleware` 的 log level 設為 `None`：.NET 8 的這個 middleware 在呼叫 `IExceptionHandler` 之前就先記一則 Error（帶完整 stack），連 409、503、413 這類已被處理的狀況也記，會讓 O2 以 Error 層級判斷事件時失真，真正的 500 也會變成兩則。我們的 `UnhandledExceptionHandler` 已帶例外與指紋記 Error，不失去 stack；回應已開始後才失敗的例外仍由 Kestrel（`Microsoft.AspNetCore.Server.Kestrel`）記錄。因此「框架的例外 log 保留」不再成立，上面「框架自己的例外 log 帶完整例外訊息」只剩 Kestrel 與其他框架類別。
 - log 落點：stdout。地端版由服務管理器（systemd journal、Docker、Windows 服務的包裝程式）收；要不要內建檔案輪替，留給地端安裝程式設計（§15）。
 
 #### 10.2.3 自訂指標（O1 不裝 OpenTelemetry）
@@ -464,7 +464,7 @@ o1a 與 o1c 可平行；o1b 有 migration，不與其他加 migration 的工作�
 | `/api/health/ready` | 資料庫在逾時內可連線（`AddDbContextCheck`，預設 `CanConnectAsync`）。不等索引回填 | 200 `{status:"ready"}`／503 `{status:"notReady", checks:{database:"fail"}}` |
 | `/api/health` | 維持現狀，等同 live（相容既有外部設定） | 200 `{status:"ok"}` |
 
-- 三個端點都不需登入，也不回錯誤細節或例外訊息（寫死，§12）；失敗原因只寫 log。〔o1a 計畫判斷 J3、J4〕ready 只檢查資料庫、不含 `startup`：`Program.cs` 在 `app.Run()` 之前就跑完 migration、種子與索引回填，伺服器還沒聽埠，`startup` 永遠是 ok，寫了是死碼；日後把初始化改背景時再加回。`CanConnectAsync` 對 SQLite 只證明檔案打得開，O2 要更細的檢查再補。檢查逾時 2 秒，逾時回 503（不是 500）。
+- 三個端點都不需登入，也不回錯誤細節或例外訊息（寫死，§12）；失敗原因只寫 log。〔o1a 計畫判斷 J3、J4〕ready 只檢查資料庫、不含 `startup`：`Program.cs` 在 `app.Run()` 之前就跑完 migration、種子與索引回填，伺服器還沒聽埠，`startup` 永遠是 ok，寫了是死碼；日後把初始化改背景時再加回。`CanConnectAsync` 對 SQLite 實際只做 `File.Exists`（不開檔），所以現階段 ready 幾乎不會失敗；換成 PostgreSQL 後會真的開連線，資料庫抖動超過 2 秒就回 503（pg0 前要決定 Render 健康檢查用 live 還是 ready，審查 S9）。O2 要更細的檢查再補。檢查逾時 2 秒，逾時回 503（不是 500）。
 - 用內建的 `Microsoft.Extensions.Diagnostics.HealthChecks` 加 EF Core 的 DbContext 檢查，兩種資料庫同一份寫法（主控判斷 T5：不用 Xabaril 套件；O2 要查 PostgreSQL 專屬統計時再評估）。
 - 資料庫逾時是寫死的技術限制（§12）：ready 在資料庫不通時也要能回答，而政策值存在資料庫裡，讀不到。
 - Demo 資料背景產生不影響 ready（沿用 `Program.cs:117` 的既有行為）。
@@ -715,7 +715,8 @@ O1 的三項見 §10.6。以下是 O2–O6 的建議登記（代碼與出廠值�
 
 - ready 檢查的資料庫逾時 2 秒（讀不到資料庫時也要能回答，不能放在資料庫裡的政策）。
 - 排程器檢查週期 30 秒、租約 5 分鐘、續租每 1 分鐘、單次執行最長 10 分鐘。
-- 前端錯誤收件：body 8KB、訊息 500 字、stack 4000 字；每來源 IP 每分鐘 30 則、全站每分鐘 600 則。
+- 前端錯誤收件：body 8KB、訊息 500 字、stack 4000 字；每來源 IP 每分鐘 30 則、全站每分鐘 600 則（雲端版同一出口 IP 共用額度，錯誤數可能被低估；O2 聚合時把 429 次數也計成 metric，審查 U3）。
+- 伺服器端指紋只取呼叫框名稱以 `DynamicModules.`（`ErrorFingerprint.ProductPrefix`）開頭的框；ops info 的機器名截斷 80 字元（`OpsInstance`）。
 - 前端錯誤收件的其他欄位上限：`name`／`moduleKey` 100、`route`／`browser` 200、`version` 50、`locale` 20，`lastRequestId` 32 個十六進位字元（O1 計畫判斷 J13）。
 - 請求路徑政策讀取失敗時快取 10 秒、讀值逾時 2 秒（O1 計畫判斷 J12）。
 - 前端本機：同指紋 5 分鐘一次、每分頁每分鐘 10 則。
@@ -814,7 +815,7 @@ O1 的三項見 §10.6。以下是 O2–O6 的建議登記（代碼與出廠值�
 
 **U11 前端錯誤預設收**
 
-- 決定：`ops.clientErrorCollection` 出廠為是；收到的只進自家 log 與事件表，不會因此送出客戶環境（地端版送不送由 `ops.telemetryEnabled` 另管）。
+- 決定：`ops.clientErrorCollection` 出廠為是；收到的只進自家 log 與事件表（log 帶錯誤原文，可能含畫面上的少量文字，政策說明明寫「log 請視同敏感資料保管」，使用者裁決 U1），不會因此送出客戶環境（地端版送不送由 `ops.telemetryEnabled` 另管）。
 - 理由：前端錯誤是現在完全看不到的一塊；路由只記樣板、不記記錄 id 與查詢字串。
 - 選錯代價：若客戶在意，管理員可關；出廠值改否只影響新安裝。
 

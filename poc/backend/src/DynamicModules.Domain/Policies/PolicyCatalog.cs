@@ -80,7 +80,7 @@ public static class PolicyCatalog
     public static readonly PolicyDefinition OpsSlowRequestMs =
         new("ops.slowRequestMs", "ops", PolicyKind.Integer, PolicyScope.System, "2000", 200, 60000, Unit: "ms");
 
-    /// <summary>O1：是否收集前端回報的程式錯誤（只進 log，不含記錄內容）。</summary>
+    /// <summary>O1：是否收集前端回報的程式錯誤（只進 log；錯誤原文可能帶到畫面上的少量文字，log 視同敏感資料）。</summary>
     public static readonly PolicyDefinition OpsClientErrorCollection =
         new("ops.clientErrorCollection", "ops", PolicyKind.Boolean, PolicyScope.System, "true");
 
