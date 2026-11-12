@@ -14,6 +14,8 @@ interface Options {
   recordId: () => number;
   moduleKey: () => string;
   close: () => void;
+  /** Request keys that belong to a field on the dialog (besides the comment): their 400 shows under that field. */
+  fieldKeys?: () => string[];
   /** Sends the request with the key of this opening. */
   send: (idempotencyKey: string) => Promise<ApprovalActionResult>;
 }
@@ -61,8 +63,9 @@ export function useApprovalAction(o: Options) {
       if (err.status === 422) key = newIdempotencyKey();
       if (err.status === 400 && err.errors) {
         const rest: string[] = [];
+        const own = o.fieldKeys?.() ?? [];
         for (const [k, v] of Object.entries(err.errors)) {
-          if (k === 'comment') fieldErrors.value[k] = joinList(v);
+          if (k === 'comment' || own.includes(k)) fieldErrors.value[k] = joinList(v);
           else rest.push(...v);
         }
         topError.value = joinList(rest);

@@ -37,3 +37,9 @@ export function resultNotice(r: ApprovalActionResult, locale: string, t: Transla
   }
   return { type: 'positive', message: t(`approval.result.${r.outcome}`) };
 }
+
+const sameValue = (a: unknown, b: unknown) => JSON.stringify(a ?? null) === JSON.stringify(b ?? null);
+/** Only the keys whose value differs from the one the record had; unchanged ones are not sent (the server judges what is sent). */
+export function changedValues(keys: string[], initial: Record<string, unknown>, current: Record<string, unknown>): Record<string, unknown> {
+  return Object.fromEntries(keys.filter((k) => !sameValue(initial[k], current[k])).map((k) => [k, current[k] ?? null]));
+}

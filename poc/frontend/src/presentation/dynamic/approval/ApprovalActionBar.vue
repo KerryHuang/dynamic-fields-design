@@ -5,13 +5,14 @@ import { computed, ref } from 'vue';
 import { useI18n } from 'vue-i18n';
 import RowActionMenu, { type RowAction } from 'src/components/framework/RowActionMenu.vue';
 import type { ApprovalInstanceView } from 'src/domain/dynamic/approval-types';
+import type { DynamicRecord, ModuleSchema } from 'src/domain/dynamic/types';
 import { useIdentityStore } from 'src/stores/use-identity-store';
-import { approvalTaskActions, hasApprovalActions, myOpenTask, type ApprovalActionContext } from './approval-actions';
+import { approvalTaskActions, currentStage, hasApprovalActions, myOpenTask, type ApprovalActionContext } from './approval-actions';
 import ApproveDialog from './ApproveDialog.vue';
 import RejectDialog from './RejectDialog.vue';
 import WithdrawDialog from './WithdrawDialog.vue';
 
-const props = defineProps<{ instance: ApprovalInstanceView; recordId: number; moduleKey: string }>();
+const props = defineProps<{ instance: ApprovalInstanceView; recordId: number; moduleKey: string; schema?: ModuleSchema | null; record?: DynamicRecord }>();
 const { t } = useI18n();
 const $q = useQuasar();
 const qc = useQueryClient();
@@ -73,7 +74,7 @@ const overflow = computed<RowAction[]>(() => [
   </component>
   <ApproveDialog
     v-if="dialog === 'approve' && task" :model-value="true" :record-id="recordId" :module-key="moduleKey" :task-id="task.id" :row-version="instance.rowVersion"
-    @update:model-value="dialog = null"
+    :editable-field-keys="currentStage(instance)?.editableFieldKeys" :schema="schema" :record="record" @update:model-value="dialog = null"
   />
   <RejectDialog
     v-if="dialog === 'reject' && task" :model-value="true" :record-id="recordId" :module-key="moduleKey" :task-id="task.id" :row-version="instance.rowVersion"

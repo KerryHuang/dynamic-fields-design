@@ -140,7 +140,7 @@ async function onDelete() {
       <RecordLedger v-if="schemaQuery.data.value.ledger" :record-id="recordId" :module-key="moduleKey" />
       <RecordConversions :record-id="recordId" :row-version="recordQuery.data.value.rowVersion" :closed="schemaQuery.data.value.readOnly" />
       <ApprovalPanel
-        v-if="approval && approvalQuery.data.value" :approval="approvalQuery.data.value" :schema="schemaQuery.data.value" :record-id="recordId" :module-key="moduleKey"
+        v-if="approval && approvalQuery.data.value" :approval="approvalQuery.data.value" :schema="schemaQuery.data.value" :record="recordQuery.data.value" :record-id="recordId" :module-key="moduleKey"
         :readonly="!!schemaQuery.data.value.readOnly"
       />
       <DynamicDetail :schema="schemaQuery.data.value" :record="recordQuery.data.value" />

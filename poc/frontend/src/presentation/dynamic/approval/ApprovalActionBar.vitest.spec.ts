@@ -36,7 +36,7 @@ const notices = (w: { vm: { $q: { notify: unknown } } }) => vi.spyOn(w.vm.$q as 
 const said = (n: ReturnType<typeof notices>) => n.mock.calls.map((c) => (c[0] as { message: string }).message).join('|');
 const posts = (suffix: string) => calls.filter((c) => c.method === 'post' && c.url.endsWith(suffix));
 
-async function mountBar(instance: ApprovalInstanceView, o: { user?: string; width?: number; reply?: Record<string, unknown[]> } = {}) {
+async function mountBar(instance: ApprovalInstanceView, o: { user?: string; width?: number; reply?: Record<string, unknown[]>; extra?: Record<string, unknown> } = {}) {
   setActivePinia(createPinia());
   useIdentityStore().setSession(o.user ?? 'me');
   keys = {};
@@ -54,7 +54,7 @@ async function mountBar(instance: ApprovalInstanceView, o: { user?: string; widt
   });
   window.innerWidth = o.width ?? 1366;
   const i18n = createI18n({ legacy: false, locale: 'zh-TW', messages: { 'zh-TW': zhTW } });
-  const Host = { render: () => h(quasar.QLayout, null, () => h(quasar.QPageContainer, null, () => h(quasar.QPage, null, () => h(ApprovalActionBar, { instance, recordId: 9, moduleKey: 'po' })))) };
+  const Host = { render: () => h(quasar.QLayout, null, () => h(quasar.QPageContainer, null, () => h(quasar.QPage, null, () => h(ApprovalActionBar, { instance, recordId: 9, moduleKey: 'po', ...o.extra })))) };
   const w = mount(Host, {
     attachTo: document.body,
     global: { plugins: [[quasar.Quasar, { components: quasar, directives: quasar, plugins: { Notify: quasar.Notify } }], i18n, [VueQueryPlugin, { queryClient: qc }]] },
@@ -65,12 +65,28 @@ async function mountBar(instance: ApprovalInstanceView, o: { user?: string; widt
   return w;
 }
 
+const editSchema = {
+  key: 'po', programCode: 'P', name: {}, titleFieldKey: null, version: 1, rules: [], permissions: {},
+  blocks: [{ id: 1, label: {}, collapsed: false, columns: 1, fields: [{
+    id: 2, key: 'f_2', type: 'text', label: { 'zh-TW': '核定金額' }, options: [],
+    config: { required: false, readOnly: false, showInList: false, isFilterable: false, isSortable: false },
+  }] }],
+};
+const editRecord = { id: 9, moduleKey: 'po', title: 't', values: { f_2: 'old' }, rowVersion: 'rv' };
+
 describe('ApprovalActionBar', () => {
   beforeEach(() => {
     document.body.innerHTML = '';
     vi.stubGlobal('ResizeObserver', class { observe() {} unobserve() {} disconnect() {} });
   });
   afterEach(() => { document.body.innerHTML = ''; approvalTaskActions.length = 0; window.innerWidth = 1024; });
+
+  it('approve dialog offers the current stage editable fields', async () => {
+    const w = await mountBar(inst({ stages: [stage({ editableFieldKeys: ['f_2'] })] }), { extra: { schema: editSchema, record: editRecord } });
+    await click('action-approve');
+    expect(q('approve-editable')!.textContent).toContain('核定金額');
+    w.unmount();
+  });
 
   it('approver sees approve and reject; others see none', async () => {
     const w = await mountBar(inst());
