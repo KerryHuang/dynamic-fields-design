@@ -38,12 +38,29 @@ public static class ApprovalTopology
     /// 鎖定欄位（設計 §9.3）：definitions 是掛在需簽核目標狀態上的所有流程、各版本。
     /// 條件與 userField 引用的欄位經公式、彙總、帶值的上游閉包，加上所有可編輯欄位；狀態欄位除外。
     /// </summary>
-    public static IReadOnlySet<long> LockedFields(Module module, Workflow wf, IEnumerable<ApprovalDefinition> definitions)
+    public static IReadOnlySet<long> LockedFields(Module module, Workflow wf, IEnumerable<ApprovalDefinition> definitions) =>
+        Lock(module, wf, definitions, _ => true).FieldIds;
+
+    /// <summary>
+    /// 鎖定的完整結果：鎖定狀態、鎖定欄位（<see cref="LockedFields"/> 再加本模組所有附件欄位，設計 §9.3「附件在鎖定狀態一律鎖定」）、
+    /// 明細列是否一起鎖（閉包含來源是本模組明細的彙總）。isOwnDetailRollup 判斷彙總的來源是不是本模組的明細。
+    /// </summary>
+    public static ApprovalLock Lock(Module module, Workflow wf, IEnumerable<ApprovalDefinition> definitions, Func<Field, bool> isOwnDetailRollup)
     {
         var defs = definitions.ToList();
-        var ids = FieldClosure.Upstream(module, defs.SelectMany(FieldClosure.DirectFields), wf.StatusFieldId).FieldIds.ToHashSet();
+        var closure = FieldClosure.Upstream(module, defs.SelectMany(FieldClosure.DirectFields), wf.StatusFieldId, isOwnDetailRollup);
+        var ids = closure.FieldIds.ToHashSet();
         ids.UnionWith(defs.SelectMany(d => d.Stages ?? []).SelectMany(s => s.EditableFields ?? []));
+        ids.UnionWith(module.Blocks.SelectMany(b => b.Fields).Where(f => f is { Type: FieldType.Attachment, Status: FieldStatus.Active }).Select(f => f.Id));
         ids.Remove(wf.StatusFieldId);
-        return ids;
+        return new ApprovalLock(LockedStates(wf), ids, closure.IncludesOwnDetailRollup);
     }
+}
+
+/// <summary>模組的簽核鎖定結果（設計 §9.3）：鎖定狀態、鎖定欄位（含附件）、明細列是否跟著表頭一起鎖。</summary>
+public sealed record ApprovalLock(IReadOnlySet<long> LockedStateIds, IReadOnlySet<long> FieldIds, bool DetailRowsLocked)
+{
+    public static readonly ApprovalLock None = new(new HashSet<long>(), new HashSet<long>(), false);
+
+    public bool IsLockedState(long? optionId) => optionId is { } id && LockedStateIds.Contains(id);
 }

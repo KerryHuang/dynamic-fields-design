@@ -143,6 +143,7 @@ public static class DependencyInjection
         services.AddScoped<Dynamic.ApprovalService.ApprovalPreviewer>();
         services.AddScoped<Dynamic.ApprovalService.ApprovalBackstopStage>();
         services.AddScoped<Common.Behaviors.IWriteStage>(sp => sp.GetRequiredService<Dynamic.ApprovalService.ApprovalBackstopStage>());
+        services.AddScoped<Dynamic.ApprovalService.ApprovalLockService>();
         services.AddScoped<Dynamic.WorkflowService.WorkflowApprovals>();
         services.AddScoped<Dynamic.TaskService.TaskRecordStage>();
         services.AddScoped<Common.Behaviors.IWriteStage>(sp => sp.GetRequiredService<Dynamic.TaskService.TaskRecordStage>());
