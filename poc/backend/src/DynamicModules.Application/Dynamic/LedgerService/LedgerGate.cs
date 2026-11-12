@@ -2,6 +2,7 @@ using DynamicModules.Domain.Entities.Dynamic;
 using DynamicModules.Domain.Modules;
 using DynamicModules.Domain.Repositories.Dynamic;
 using DynamicModules.Application.Common;
+using DynamicModules.Application.Dynamic.DeleteService.Data;
 
 namespace DynamicModules.Application.Dynamic.LedgerService;
 
@@ -40,4 +41,11 @@ public class ImmutableDataGuard(LedgerGate gate, IRecordRepository records)
     }
 
     public Task<ServiceResult?> RejectAsync(Module affected, CancellationToken ct) => RejectAsync([affected], ct);
+
+    /// <summary>刪除欄位或區塊：Purge 非零，或被刪的公式、彙總欄位在記錄上有值（Purge 為 0 但值會被清掉）才擋；什麼都不清的刪除照常放行。</summary>
+    public async Task<ServiceResult?> RejectFieldPurgeAsync(Module module, PurgeCounts purge, IReadOnlyCollection<Field> fields, CancellationToken ct)
+    {
+        if (ComputedValueProbe.NothingPurged(purge) && !await ComputedValueProbe.HasValuesAsync(records, module, fields, ct)) return null;
+        return await RejectAsync(module, ct);
+    }
 }

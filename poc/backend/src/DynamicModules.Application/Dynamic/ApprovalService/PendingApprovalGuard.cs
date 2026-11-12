@@ -34,16 +34,8 @@ public sealed class PendingApprovalGuard(IApprovalInstanceRepository instances, 
     /// </summary>
     public async Task<ServiceResult?> RejectFieldPurgeAsync(Module module, PurgeCounts purge, IReadOnlyCollection<Field> fields, CancellationToken ct)
     {
-        if (purge is { Records: 0, IndexRows: 0, HistoryRows: 0 } && !await HasComputedValuesAsync(module, fields, ct)) return null;
+        if (purge is { Records: 0, IndexRows: 0, HistoryRows: 0 } && !await ComputedValueProbe.HasValuesAsync(records, module, fields, ct)) return null;
         return await RejectValueRewriteAsync(module, ct);
-    }
-
-    private async Task<bool> HasComputedValuesAsync(Module module, IReadOnlyCollection<Field> fields, CancellationToken ct)
-    {
-        var keys = fields.Where(f => f.Type is FieldType.Formula or FieldType.Rollup).Select(f => f.Key).ToList();
-        if (keys.Count == 0) return false;
-        return (await records.ListLiveValuesAsync(module.Id, ct))
-            .Any(r => RecordValueProcessor.Parse(r.ValuesJson) is var v && keys.Any(k => v.TryGetValue(k, out var raw) && raw is { ValueKind: not (System.Text.Json.JsonValueKind.Null or System.Text.Json.JsonValueKind.Undefined) }));
     }
 
     /// <summary>
