@@ -134,6 +134,35 @@ public class ApprovalPreviewTests : ApprovalTestBase
     }
 
     [Fact]
+    public async Task RecordPreview_PickStageWithFalseCondition_StillRequiresPick_NoConditionLeak()
+    {
+        // 送出驗證對所有自選關卡都要求人選：條件不成立的自選關卡不列在 stages，但 picks 仍要列出（與 PickErrors 一致）
+        var r = await OneFlow(x => Def(null, Stage("lead", Group(PurchaseLeadGroup)),
+            Stage("pick", new ApproverSource(ApprovalSources.InitiatorPick, CandidateGroupIds: [FinanceGroup], Min: 1, Max: 1), when: Cond(x.Total, "gt", 100000))));
+        As("fin1");
+        var po = await NewPo(r, price: 5000);
+        var p = await Preview("fin1", po.Id, r.Confirmed);
+        p.Stages.Select(s => s.Code).Should().Equal("lead");
+        p.Picks.Single().StageCode.Should().Be("pick");
+        p.Picks.Single().Candidates.Select(u => u.UserId).Should().Equal("fin2");
+        JsonSerializer.Serialize(p).Should().NotContain("\"when\"");
+    }
+
+    [Fact]
+    public async Task RecordPreview_PickStageWithHiddenConditionField_ListsPick_StageConditional()
+    {
+        var r = await OneFlow(x => Def(null, Stage("lead", Group(PurchaseLeadGroup)),
+            Stage("pick", new ApproverSource(ApprovalSources.InitiatorPick, CandidateGroupIds: [FinanceGroup], Min: 1, Max: 1), when: Cond(x.Discount, "gt", 0))));
+        await HideFor(r.Module, r.Discount, EveryoneGroup());
+        As("fin1");
+        var po = await NewPo(r, price: 5000);
+        var p = await Preview("fin1", po.Id, r.Confirmed);
+        p.Stages.Select(s => (s.Code, s.Status)).Should().Equal(("lead", PreviewStatuses.Enter), ("pick", PreviewStatuses.Conditional));
+        p.Picks.Single().StageCode.Should().Be("pick");
+        JsonSerializer.Serialize(p).Should().NotContain($"f_{r.Discount}");
+    }
+
+    [Fact]
     public async Task RecordPreview_ListsPickCandidatesWithoutInitiator()
     {
         var r = await OneFlow(_ => Def(null, Stage("pick", new ApproverSource(ApprovalSources.InitiatorPick, CandidateGroupIds: [FinanceGroup], Min: 1, Max: 1))));

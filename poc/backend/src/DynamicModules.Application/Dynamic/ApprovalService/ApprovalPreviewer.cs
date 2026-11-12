@@ -92,8 +92,18 @@ public sealed class ApprovalPreviewer(
         var def = match.Definition;
         var stages = new List<PreviewStage>();
         var picks = new List<PickRequirement>();
+        void AddPick(ApprovalStageDef s)
+        {
+            if (picks.Any(p => p.StageCode == s.Code)) return;
+            var allowed = ApproverResolver.Candidates(ctx, s.Approvers);
+            var candidates = ctx.Org.ActiveUsers.Where(u => u != initiator && (allowed is null || allowed.Contains(u)))
+                .Order(StringComparer.Ordinal).Select(Ref).ToList();
+            picks.Add(new PickRequirement(s.Code, s.Name, s.Approvers.Min ?? 1, s.Approvers.Max ?? ApprovalLimits.MaxApprovers, candidates));
+        }
         foreach (var s in def.Stages)
         {
+            // 送出驗證（PickErrors）對所有自選關卡都要求人選，不論條件是否成立、是否引用隱藏欄位：預覽一律列出人選要求（只說要選人、不說會不會進入）
+            if (!designer && s.Approvers.Source == ApprovalSources.InitiatorPick && !s.Approvers.CandidatesUnmatched) AddPick(s);
             // 條件引用隱藏欄位，或簽核人取自隱藏的使用者欄位 → conditional、不列簽核人
             if (!designer && (s.When is { ValueKind: JsonValueKind.Object } w && (hidden is null || RuleReferences.ConditionFieldIdsOf(w).Any(hidden.Contains))
                 || s.Approvers is { Source: ApprovalSources.UserField, FieldId: var fid } && (hidden is null || fid is { } f && hidden.Contains(f))))
@@ -108,10 +118,7 @@ public sealed class ApprovalPreviewer(
             }
             if (s.Approvers.Source == ApprovalSources.InitiatorPick && !s.Approvers.CandidatesUnmatched)
             {
-                var allowed = ApproverResolver.Candidates(ctx, s.Approvers);
-                var candidates = ctx.Org.ActiveUsers.Where(u => u != initiator && (allowed is null || allowed.Contains(u)))
-                    .Order(StringComparer.Ordinal).Select(Ref).ToList();
-                picks.Add(new PickRequirement(s.Code, s.Name, s.Approvers.Min ?? 1, s.Approvers.Max ?? ApprovalLimits.MaxApprovers, candidates));
+                AddPick(s);
                 stages.Add(new PreviewStage(s.Code, s.Name, PreviewStatuses.Pick, [], false));
                 continue;
             }
