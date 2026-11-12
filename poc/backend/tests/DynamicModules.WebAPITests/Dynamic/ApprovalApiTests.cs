@@ -282,7 +282,7 @@ public class ApprovalApiTests : IDisposable
 
     [Fact]
     [Trait("Category", "Postgres")]
-    public async Task GetSchema_GrantPath_Returns200WithDifferentETag()
+    public async Task GetSchema_GrantPath_Returns200_AndStaleETagGets403NotModifiedAfterTaskEnds()
     {
         var r = await Arrange();
         var id = await Submitted(r);
@@ -296,8 +296,18 @@ public class ApprovalApiTests : IDisposable
         var grant = await sales.GetAsync($"{Base}/modules/{r.Module}/schema?recordId={id}");
 
         grant.StatusCode.Should().Be(HttpStatusCode.OK, await grant.Content.ReadAsStringAsync());
-        grant.Headers.ETag!.ToString().Should().NotBe(readTag);
+        grant.Headers.ETag!.ToString().Should().NotBe(readTag);   // 只驗形狀：收權限前後的權限內容本來就不同
         (await JsonOf(grant)).GetProperty("permissions").GetProperty("edit").GetBoolean().Should().BeFalse();
+        var grantTag = grant.Headers.ETag!.ToString();
+        (await JsonOf(await sales.GetAsync($"{Base}/records/{id}"))).GetProperty("approvalGrant").GetBoolean().Should().BeTrue();
+
+        // 任務結束後，瀏覽器帶著舊的 grant ETag 重新驗證：要回 403，不是 304（否則前端會繼續顯示 grant schema）
+        var current = await Current(sales, id);
+        (await sales.PostAsJsonAsync($"{Base}/approval-tasks/{TaskOf(current, "sales01")}/approve",
+            new { rowVersion = current.GetProperty("rowVersion").GetString() })).StatusCode.Should().Be(HttpStatusCode.OK);
+        var stale = new HttpRequestMessage(HttpMethod.Get, $"{Base}/modules/{r.Module}/schema?recordId={id}");
+        stale.Headers.TryAddWithoutValidation("If-None-Match", grantTag);
+        (await sales.SendAsync(stale)).StatusCode.Should().Be(HttpStatusCode.Forbidden);
     }
 
     private void RevokeBusinessGroups(string moduleKey)
@@ -311,7 +321,7 @@ public class ApprovalApiTests : IDisposable
 
     [Fact]
     [Trait("Category", "Postgres")]
-    public async Task Inbox_StatusQuery_FiltersAndJsonHasEditableKeys()
+    public async Task Inbox_StatusQuery_FiltersAndJsonHasEditableKeysShape()
     {
         var r = await Arrange();
         var id = await Submitted(r);
