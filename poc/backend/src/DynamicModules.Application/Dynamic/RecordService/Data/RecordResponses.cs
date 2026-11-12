@@ -17,6 +17,12 @@ public record DynamicRecordResponse(
 
     /// <summary>簽核摘要（簽核設計 §15）：只有單筆讀取會填；沒有實例也不能送簽時是 null。</summary>
     public ApprovalService.RecordApprovalSummary? Approval { get; init; }
+
+    /// <summary>簽核鎖定的欄位（只列讀者看得到的）；記錄不在簽核鎖定狀態時是 null。只有單筆讀取會填。</summary>
+    public ApprovalService.RecordApprovalLock? ApprovalLock { get; init; }
+
+    /// <summary>這次讀取是靠簽核任務的臨時讀取權（簽核設計 §10.1）。</summary>
+    public bool ApprovalGrant { get; init; }
 }
 
 public static class RecordMapper

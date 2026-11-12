@@ -254,4 +254,26 @@ public class ApprovalApiTests : IDisposable
         var errors = (await JsonOf(res)).GetProperty("errors");
         errors.GetProperty(r.Amount!)[0].GetString().Should().Contain("這個欄位已經過簽核");
     }
+
+    [Fact]
+    [Trait("Category", "Postgres")]
+    public async Task GetRecord_Json_HasApprovalLockAndGrant()
+    {
+        var r = await Arrange(lockAmount: true);
+        var created = await JsonOf(await _admin.PostAsJsonAsync($"{Base}/modules/{r.Module}/records",
+            new { values = new Dictionary<string, object> { [r.Title] = "單據", [r.Amount!] = 100 } }));
+        var id = created.GetProperty("id").GetInt64();
+        (await Submit(_admin, r, id, created.GetProperty("rowVersion").GetString()!)).StatusCode.Should().Be(HttpStatusCode.Created);
+        var s1 = _app.AsUser("sales01");
+        var current = await Current(s1, id);
+        (await s1.PostAsJsonAsync($"{Base}/approval-tasks/{TaskOf(current, "sales01")}/approve",
+            new { rowVersion = current.GetProperty("rowVersion").GetString() })).StatusCode.Should().Be(HttpStatusCode.OK);
+
+        var record = await JsonOf(await _admin.GetAsync($"{Base}/records/{id}"));
+
+        var lck = record.GetProperty("approvalLock");
+        lck.GetProperty("fieldKeys").EnumerateArray().Select(e => e.GetString()).Should().Contain(r.Amount);
+        lck.GetProperty("detailRowsLocked").ValueKind.Should().BeOneOf(JsonValueKind.True, JsonValueKind.False);
+        record.GetProperty("approvalGrant").GetBoolean().Should().BeFalse();
+    }
 }

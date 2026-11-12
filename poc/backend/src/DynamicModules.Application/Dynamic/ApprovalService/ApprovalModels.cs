@@ -37,6 +37,9 @@ public static class ApprovalActionRules
 /// <summary>記錄詳情的簽核摘要（GET records/{id} 的 approval）。Status：最近一個實例的狀態，沒有實例但能送出時是 none。</summary>
 public sealed record RecordApprovalSummary(string Status, I18nText? StageName, int? StageSeq, bool CanSubmit);
 
+/// <summary>記錄處於簽核鎖定狀態時，讀者看得到的鎖定欄位 key 與明細列是否一起鎖（GET records/{id} 的 approvalLock）。</summary>
+public sealed record RecordApprovalLock(IReadOnlyList<string> FieldKeys, bool DetailRowsLocked);
+
 public sealed record ApprovalTaskView(long Id, string AssigneeUserId, string AssigneeName, string OriginalUserId, string Reason, string Status,
     DateTime? ActedTime, bool CanAct);
 

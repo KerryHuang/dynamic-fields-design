@@ -11,7 +11,7 @@ namespace DynamicModules.Application.Dynamic.RecordService.Queries.GetRecord;
 
 public class GetRecordHandler(IModuleRepository modules, IRecordRepository records, IDynamicAccessGuard guard,
     ReferenceResolver resolver, DetailReader details, Dynamic.EventService.EventFactLock factLock, ApprovalService.ApprovalReader approvals,
-    ApprovalService.ApprovalReadGrant grant)
+    ApprovalService.ApprovalReadGrant grant, ApprovalService.ApprovalLockService locks)
     : IRequestHandler<GetRecordRequest, ServiceResult>
 {
     public async Task<ServiceResult> Handle(GetRecordRequest request, CancellationToken ct)
@@ -38,7 +38,17 @@ public class GetRecordHandler(IModuleRepository modules, IRecordRepository recor
             {
                 Details = await details.ReadAsync(module, record, PermissionAction.Read, ct,
                     granted ? child => grant.ForDetailAsync(module, child, ct) : null), FrozenByEffects = await factLock.IsFrozenAsync(record.Id, ct),
-                Approval = await approvals.SummaryAsync(module, record, ct)
+                Approval = await approvals.SummaryAsync(module, record, ct), ApprovalGrant = granted,
+                ApprovalLock = await LockOfAsync(module, record, p, ct)
             });
+    }
+
+    private async Task<ApprovalService.RecordApprovalLock?> LockOfAsync(Module module, Record record, EffectivePermissions p, CancellationToken ct)
+    {
+        if (module.Workflow is not { } wf) return null;
+        var locked = await locks.ForModuleAsync(module, null, ct);
+        if (!locked.IsLockedState(wf.StateOf(RecordValueProcessor.Parse(record.ValuesJson)))) return null;
+        var keys = module.Blocks.SelectMany(b => b.Fields).Where(f => locked.FieldIds.Contains(f.Id) && p.CanSee(f)).Select(f => f.Key).ToList();
+        return new(keys, locked.DetailRowsLocked);
     }
 }
