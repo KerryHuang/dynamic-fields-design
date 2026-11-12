@@ -3,7 +3,7 @@
   "formatVersion": 7,
   "manifest": {
     "id": "crm-sales",
-    "version": "1.1.1",
+    "version": "1.2.0",
     "name": {
       "zh-TW": "CRM 與銷售",
       "en-US": "CRM and Sales",
@@ -51,6 +51,15 @@
         "en-US": "CRM sales manager",
         "th": "ผู้จัดการฝ่ายขาย CRM",
         "vi": "Quản lý kinh doanh CRM"
+      }
+    },
+    {
+      "code": "designer",
+      "name": {
+        "zh-TW": "CRM 產品設計",
+        "en-US": "CRM product design",
+        "th": "ฝ่ายออกแบบผลิตภัณฑ์ CRM",
+        "vi": "Thiết kế sản phẩm CRM"
       }
     }
   ],
@@ -2121,6 +2130,363 @@
           ]
         }
       ]
+    },
+    {
+      "code": "design-case",
+      "key": "crm-design-case",
+      "name": {
+        "zh-TW": "設計案",
+        "en-US": "Design cases",
+        "th": "โครงการออกแบบ",
+        "vi": "Dự án thiết kế"
+      },
+      "kind": "standalone",
+      "titleField": "name",
+      "icon": "design_services",
+      "section": {
+        "zh-TW": "銷售",
+        "en-US": "Sales",
+        "th": "การขาย",
+        "vi": "Bán hàng"
+      },
+      "blocks": [
+        {
+          "code": "main",
+          "label": {
+            "zh-TW": "基本資料",
+            "en-US": "Details",
+            "th": "ข้อมูลพื้นฐาน",
+            "vi": "Thông tin cơ bản"
+          },
+          "collapsed": false,
+          "columns": 2,
+          "fields": [
+            {
+              "code": "no",
+              "type": "autonumber",
+              "label": {
+                "zh-TW": "案號",
+                "en-US": "Case no.",
+                "th": "เลขที่โครงการ",
+                "vi": "Mã dự án"
+              },
+              "config": {
+                "format": "DC-{yyyyMM}-{000}",
+                "showInList": true
+              }
+            },
+            {
+              "code": "name",
+              "type": "text",
+              "label": {
+                "zh-TW": "案名",
+                "en-US": "Case name",
+                "th": "ชื่อโครงการ",
+                "vi": "Tên dự án"
+              },
+              "config": {
+                "required": true,
+                "showInList": true
+              }
+            },
+            {
+              "code": "customer",
+              "type": "reference",
+              "label": {
+                "zh-TW": "客戶",
+                "en-US": "Customer",
+                "th": "ลูกค้า",
+                "vi": "Khách hàng"
+              },
+              "config": {
+                "required": true,
+                "showInList": true,
+                "isFilterable": true,
+                "refTarget": {
+                  "kind": "module",
+                  "key": "partner",
+                  "app": "partner"
+                },
+                "refGuard": {
+                  "field": "partner/partner.role",
+                  "in": [
+                    "customer",
+                    "both"
+                  ]
+                }
+              }
+            },
+            {
+              "code": "owner",
+              "type": "user",
+              "label": {
+                "zh-TW": "負責業務",
+                "en-US": "Sales owner",
+                "th": "พนักงานขายผู้รับผิดชอบ",
+                "vi": "Nhân viên kinh doanh phụ trách"
+              },
+              "config": {
+                "required": true,
+                "showInList": true,
+                "isFilterable": true
+              }
+            },
+            {
+              "code": "designOwner",
+              "type": "user",
+              "label": {
+                "zh-TW": "設計負責人",
+                "en-US": "Design owner",
+                "th": "ผู้รับผิดชอบการออกแบบ",
+                "vi": "Người phụ trách thiết kế"
+              },
+              "config": {
+                "required": true,
+                "showInList": true
+              }
+            },
+            {
+              "code": "requirement",
+              "type": "textarea",
+              "label": {
+                "zh-TW": "需求說明",
+                "en-US": "Requirements",
+                "th": "รายละเอียดความต้องการ",
+                "vi": "Mô tả yêu cầu"
+              },
+              "config": {
+                "required": true
+              }
+            },
+            {
+              "code": "status",
+              "type": "enum",
+              "label": {
+                "zh-TW": "狀態",
+                "en-US": "Status",
+                "th": "สถานะ",
+                "vi": "Trạng thái"
+              },
+              "config": {
+                "required": true,
+                "defaultValue": "opt_requirement",
+                "showInList": true,
+                "isFilterable": true
+              },
+              "options": [
+                {
+                  "code": "requirement",
+                  "label": {
+                    "zh-TW": "需求確認",
+                    "en-US": "Requirements",
+                    "th": "ยืนยันความต้องการ",
+                    "vi": "Xác nhận yêu cầu"
+                  },
+                  "color": "grey"
+                },
+                {
+                  "code": "designing",
+                  "label": {
+                    "zh-TW": "設計中",
+                    "en-US": "In design",
+                    "th": "กำลังออกแบบ",
+                    "vi": "Đang thiết kế"
+                  },
+                  "color": "blue"
+                },
+                {
+                  "code": "customer-review",
+                  "label": {
+                    "zh-TW": "客戶確認中",
+                    "en-US": "Customer review",
+                    "th": "รอลูกค้ายืนยัน",
+                    "vi": "Khách hàng đang xác nhận"
+                  },
+                  "color": "orange"
+                },
+                {
+                  "code": "manager-review",
+                  "label": {
+                    "zh-TW": "待主管確認",
+                    "en-US": "Awaiting manager",
+                    "th": "รอหัวหน้ายืนยัน",
+                    "vi": "Chờ quản lý xác nhận"
+                  },
+                  "color": "purple"
+                },
+                {
+                  "code": "closed",
+                  "label": {
+                    "zh-TW": "結案",
+                    "en-US": "Closed",
+                    "th": "ปิดโครงการ",
+                    "vi": "Đã kết thúc"
+                  },
+                  "color": "green"
+                },
+                {
+                  "code": "cancelled",
+                  "label": {
+                    "zh-TW": "取消",
+                    "en-US": "Cancelled",
+                    "th": "ยกเลิก",
+                    "vi": "Đã hủy"
+                  },
+                  "color": "red"
+                }
+              ]
+            },
+            {
+              "code": "drawings",
+              "type": "attachment",
+              "label": {
+                "zh-TW": "設計圖檔",
+                "en-US": "Design files",
+                "th": "ไฟล์แบบ",
+                "vi": "Tệp bản vẽ"
+              },
+              "config": {}
+            }
+          ]
+        }
+      ],
+      "permissions": [
+        {
+          "group": "sales",
+          "scope": "all",
+          "privileges": {
+            "read": true,
+            "add": true,
+            "edit": true,
+            "delete": false,
+            "printExport": true,
+            "pricing": false,
+            "approve": false
+          }
+        },
+        {
+          "group": "manager",
+          "scope": "all",
+          "privileges": {
+            "read": true,
+            "add": true,
+            "edit": true,
+            "delete": true,
+            "printExport": true,
+            "pricing": false,
+            "approve": true
+          }
+        },
+        {
+          "group": "designer",
+          "scope": "all",
+          "privileges": {
+            "read": true,
+            "add": false,
+            "edit": true,
+            "delete": false,
+            "printExport": false,
+            "pricing": false,
+            "approve": false
+          }
+        }
+      ]
+    },
+    {
+      "code": "design-drawing",
+      "key": "crm-design-drawing",
+      "name": {
+        "zh-TW": "設計圖",
+        "en-US": "Design drawings",
+        "th": "แบบ",
+        "vi": "Bản vẽ thiết kế"
+      },
+      "kind": "standalone",
+      "titleField": "fileName",
+      "section": {
+        "zh-TW": "銷售",
+        "en-US": "Sales",
+        "th": "การขาย",
+        "vi": "Bán hàng"
+      },
+      "blocks": [
+        {
+          "code": "main",
+          "label": {
+            "zh-TW": "基本資料",
+            "en-US": "Details",
+            "th": "ข้อมูลพื้นฐาน",
+            "vi": "Thông tin cơ bản"
+          },
+          "collapsed": false,
+          "columns": 2,
+          "fields": [
+            {
+              "code": "case",
+              "type": "reference",
+              "label": {
+                "zh-TW": "設計案",
+                "en-US": "Design case",
+                "th": "โครงการออกแบบ",
+                "vi": "Dự án thiết kế"
+              },
+              "config": {
+                "relation": "detail",
+                "refTarget": {
+                  "kind": "module",
+                  "key": "design-case"
+                }
+              }
+            },
+            {
+              "code": "version",
+              "type": "integer",
+              "label": {
+                "zh-TW": "版本",
+                "en-US": "Version",
+                "th": "เวอร์ชัน",
+                "vi": "Phiên bản"
+              },
+              "config": {
+                "required": true
+              }
+            },
+            {
+              "code": "fileName",
+              "type": "text",
+              "label": {
+                "zh-TW": "圖檔名稱",
+                "en-US": "File name",
+                "th": "ชื่อไฟล์",
+                "vi": "Tên tệp"
+              },
+              "config": {}
+            },
+            {
+              "code": "uploader",
+              "type": "user",
+              "label": {
+                "zh-TW": "上傳人",
+                "en-US": "Uploaded by",
+                "th": "ผู้อัปโหลด",
+                "vi": "Người tải lên"
+              },
+              "config": {}
+            },
+            {
+              "code": "feedback",
+              "type": "textarea",
+              "label": {
+                "zh-TW": "客戶意見",
+                "en-US": "Customer feedback",
+                "th": "ความเห็นของลูกค้า",
+                "vi": "Ý kiến khách hàng"
+              },
+              "config": {}
+            }
+          ]
+        }
+      ]
     }
   ],
   "workflows": [
@@ -2328,6 +2694,93 @@
         },
         {
           "from": "confirmed",
+          "to": "cancelled",
+          "groups": [
+            "manager"
+          ]
+        }
+      ]
+    },
+    {
+      "module": "design-case",
+      "statusField": "status",
+      "initial": "requirement",
+      "states": [
+        {
+          "option": "requirement"
+        },
+        {
+          "option": "designing"
+        },
+        {
+          "option": "customer-review"
+        },
+        {
+          "option": "manager-review"
+        },
+        {
+          "option": "closed",
+          "readOnly": true
+        },
+        {
+          "option": "cancelled",
+          "readOnly": true
+        }
+      ],
+      "transitions": [
+        {
+          "from": "requirement",
+          "to": "designing",
+          "groups": [
+            "sales",
+            "manager"
+          ]
+        },
+        {
+          "from": "designing",
+          "to": "customer-review",
+          "groups": [
+            "designer",
+            "sales"
+          ]
+        },
+        {
+          "from": "customer-review",
+          "to": "designing",
+          "groups": [
+            "sales"
+          ]
+        },
+        {
+          "from": "customer-review",
+          "to": "manager-review",
+          "groups": [
+            "sales"
+          ]
+        },
+        {
+          "from": "manager-review",
+          "to": "closed",
+          "groups": [
+            "manager"
+          ]
+        },
+        {
+          "from": "requirement",
+          "to": "cancelled",
+          "groups": [
+            "manager"
+          ]
+        },
+        {
+          "from": "designing",
+          "to": "cancelled",
+          "groups": [
+            "manager"
+          ]
+        },
+        {
+          "from": "customer-review",
           "to": "cancelled",
           "groups": [
             "manager"
@@ -2712,6 +3165,19 @@
             "pricing": true,
             "approve": false
           }
+        },
+        {
+          "group": "designer",
+          "scope": "all",
+          "privileges": {
+            "read": true,
+            "add": false,
+            "edit": false,
+            "delete": false,
+            "printExport": false,
+            "pricing": false,
+            "approve": false
+          }
         }
       ],
       "fieldAccess": []
@@ -2758,6 +3224,28 @@
         }
       ],
       "fieldAccess": []
+    }
+  ],
+  "fieldAccess": [
+    {
+      "field": "design-case.customer",
+      "group": "designer",
+      "access": "readOnly"
+    },
+    {
+      "field": "design-case.owner",
+      "group": "designer",
+      "access": "readOnly"
+    },
+    {
+      "field": "design-case.designOwner",
+      "group": "designer",
+      "access": "readOnly"
+    },
+    {
+      "field": "design-case.requirement",
+      "group": "designer",
+      "access": "readOnly"
     }
   ],
   "taskRules": [

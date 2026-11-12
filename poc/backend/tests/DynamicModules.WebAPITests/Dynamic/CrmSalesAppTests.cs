@@ -134,7 +134,7 @@ public class CrmSalesAppTests : IDisposable
         (await _admin.GetAsync($"{Base}/modules/crm-quote")).StatusCode.Should().Be(HttpStatusCode.NotFound);
 
         var app = await OpenCrm();
-        app.GetProperty("modules").GetArrayLength().Should().Be(9, "客戶與聯絡人改用共用主檔，不再是 CRM 自己的模組；1.1.0 加了行銷活動");
+        app.GetProperty("modules").GetArrayLength().Should().Be(11, "客戶與聯絡人改用共用主檔，不再是 CRM 自己的模組；1.1.0 加了行銷活動，1.2.0 加了設計案與設計圖");
         app.GetProperty("modules").EnumerateArray().Select(m => m.GetProperty("key").GetString()).Should().OnlyContain(k => k!.StartsWith("crm-"));
         (await JsonOf(await _admin.GetAsync(Apps))).EnumerateArray().Select(a => a.GetProperty("key").GetString())
             .Should().BeEquivalentTo(["crm-sales", "partner", "contact"], "開 CRM 時自動開啟它用到的共用主檔");

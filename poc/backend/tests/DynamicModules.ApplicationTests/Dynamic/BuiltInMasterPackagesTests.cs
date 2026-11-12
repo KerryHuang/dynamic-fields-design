@@ -92,7 +92,8 @@ public class BuiltInMasterPackagesTests
         crm.Modules.Select(m => m.Code).Should().NotContain(["customer", "contact"]).And.Contain("product", "CRM 的產品維持原樣");
         crm.Contributions.Select(c => $"{c.Master}/{c.Module}:{c.Block.Code}").Should().Equal("partner/partner:crm", "contact/contact:crm");
         crm.Contributions[0].Fields.Select(f => f.Code).Should().Equal("industry", "fromLead");
-        crm.Contributions.Should().OnlyContain(c => c.Permissions.Select(p => p.Group).SequenceEqual(new[] { "sales", "manager" }));
+        crm.Contributions[0].Permissions.Select(p => p.Group).Should().Equal("sales", "manager", "designer");   // 設計人員要讀客戶名稱（設計案）
+        crm.Contributions[1].Permissions.Select(p => p.Group).Should().Equal("sales", "manager");
     }
 
     [Fact]
