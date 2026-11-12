@@ -86,7 +86,7 @@ public class SeedDataTests
         await DemoPeople.EnsureAsync(db.Context);
 
         var groups = await db.Context.Set<PermissionGroup>().AsNoTracking().ToListAsync();
-        groups.Select(g => g.Key).Should().BeEquivalentTo("mis", "sales", "sales-manager", "floor", "maint", "qa", "planner", "purchasing", "warehouse", "ops-manager", "inv-viewer");
+        groups.Select(g => g.Key).Should().BeEquivalentTo("mis", "sales", "sales-manager", "floor", "maint", "qa", "planner", "purchasing", "warehouse", "ops-manager", "inv-viewer", "design");
         var members = await db.Context.Set<UserGroupMapping>().AsNoTracking().ToListAsync();
         string[] Of(string key) => members.Where(m => m.GroupId == groups.Single(g => g.Key == key).Id)
             .Select(m => m.UserId).Order().ToArray();
@@ -98,7 +98,8 @@ public class SeedDataTests
         Of("warehouse").Should().Equal("keeper01");
         Of("inv-viewer").Should().Equal("planner01", "sales01", "sales02");
         Of("ops-manager").Should().Equal("ops01");
-        (await db.Context.Set<AppUser>().CountAsync()).Should().Be(13);
+        Of("design").Should().Equal("designer01");
+        (await db.Context.Set<AppUser>().CountAsync()).Should().Be(14);
         (await db.Context.Set<AppUser>().Where(u => u.UserId != "admin").AllAsync(u => u.IsDemoAccount && u.PasswordHash == null))
             .Should().BeTrue();
         (await db.Context.Set<MockCustomer>().Select(c => c.CustomerNo).ToListAsync())

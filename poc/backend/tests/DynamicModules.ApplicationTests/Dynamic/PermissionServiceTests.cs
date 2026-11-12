@@ -129,7 +129,7 @@ public class PermissionServiceTests : IAsyncLifetime
         put.IsSuccess.Should().BeTrue(string.Join(";", put.Errors.Select(e => $"{e.Key}:{string.Join(",", e.Value)}")));
         var got = await Get("order");
 
-        got.Groups.Should().HaveCount(11, "列出所有群組");
+        got.Groups.Should().HaveCount(12, "列出所有群組");
         var sales = got.Groups.Single(g => g.GroupId == s.SalesId);
         sales.Privileges.Should().Be(Priv(read: true, add: true, edit: true));
         sales.Scope.Should().Be(DataScope.Own);

@@ -131,7 +131,7 @@ public class DemoLoginApiTests
             .Select(a => (a.GetProperty("userId").GetString(), a.GetProperty("displayName").GetString())).ToList();
         accounts[0].Should().Be(("admin", "系統管理員"));
         accounts.Select(a => a.Item1).Skip(1).Should().BeEquivalentTo(
-            ["buyer01", "floor01", "floor02", "keeper01", "maint01", "manager01", "ops01", "planner01", "qa01", "sales01", "sales02", "sales03"],
+            ["buyer01", "designer01", "floor01", "floor02", "keeper01", "maint01", "manager01", "ops01", "planner01", "qa01", "sales01", "sales02", "sales03"],
             o => o.WithStrictOrdering());
         accounts.Should().NotContain(a => a.Item1 == "retired01" || a.Item1 == "alice");
     }

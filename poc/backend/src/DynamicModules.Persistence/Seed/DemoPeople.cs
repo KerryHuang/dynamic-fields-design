@@ -14,7 +14,8 @@ public static class DemoPeople
         ("sales01", "業務一"), ("sales02", "業務二"), ("sales03", "業務三"),
         ("manager01", "業務主管"), ("floor01", "現場人員"),
         ("floor02", "現場人員二"), ("maint01", "保養人員"), ("qa01", "品保人員"),
-        ("planner01", "生管人員"), ("buyer01", "採購人員"), ("keeper01", "倉管人員"), ("ops01", "進銷存主管")
+        ("planner01", "生管人員"), ("buyer01", "採購人員"), ("keeper01", "倉管人員"), ("ops01", "進銷存主管"),
+        ("designer01", "設計人員")
     ];
 
     public static readonly (string Key, string Name, string[] Members)[] Groups =
@@ -30,7 +31,9 @@ public static class DemoPeople
         ("warehouse", "倉管組", ["keeper01"]),
         ("ops-manager", "進銷存管理組", ["ops01"]),
         // 只讀進銷存的品項與倉庫：MES 出貨單要選庫存品項與出庫倉（整合），出貨的生管與業務需要這份讀取權限
-        ("inv-viewer", "進銷存查詢組", ["planner01", "sales01", "sales02"])
+        ("inv-viewer", "進銷存查詢組", ["planner01", "sales01", "sales02"]),
+        // 設計案的設計人員（Demo 開 CRM 時對應套件的 designer 群組）
+        ("design", "產品設計", ["designer01"])
     ];
 
     public static readonly (string No, string Name)[] Customers =
@@ -46,7 +49,8 @@ public static class DemoPeople
     public static readonly (string Code, string Name, string? Parent, string? Manager, string[] Members)[] Departments =
     [
         ("exec", "總經理室", null, "manager01", ["manager01"]),
-        ("sales", "業務部", "exec", "manager01", ["sales01", "sales02"]),
+        ("sales", "業務部", "exec", "manager01", ["sales01", "sales02", "sales03"]),
+        ("design", "產品設計部", "exec", "designer01", ["designer01"]),
         ("ops", "營運部", "exec", "ops01", ["ops01", "keeper01"]),
         ("purchasing", "採購部", "ops", null, ["buyer01"]),
         ("production", "生產部", "ops", "planner01", ["planner01", "floor01", "floor02", "maint01", "qa01"])

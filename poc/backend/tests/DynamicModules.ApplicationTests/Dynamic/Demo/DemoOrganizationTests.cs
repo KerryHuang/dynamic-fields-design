@@ -31,6 +31,7 @@ public class DemoOrganizationTests(DemoGeneratedFixture fx)
             {
                 ("exec", "總經理室", null, "manager01"),
                 ("sales", "業務部", "exec", "manager01"),
+                ("design", "產品設計部", "exec", "designer01"),
                 ("ops", "營運部", "exec", "ops01"),
                 ("purchasing", "採購部", "ops", null),
                 ("production", "生產部", "ops", "planner01"),
@@ -39,7 +40,8 @@ public class DemoOrganizationTests(DemoGeneratedFixture fx)
             .Should().BeEquivalentTo(new Dictionary<string, string[]>
             {
                 ["exec"] = ["manager01"],
-                ["sales"] = ["sales01", "sales02"],
+                ["sales"] = ["sales01", "sales02", "sales03"],
+                ["design"] = ["designer01"],
                 ["ops"] = ["keeper01", "ops01"],
                 ["purchasing"] = ["buyer01"],
                 ["production"] = ["floor01", "floor02", "maint01", "planner01", "qa01"],
@@ -53,6 +55,8 @@ public class DemoOrganizationTests(DemoGeneratedFixture fx)
         var org = await Org();
 
         ManagerChain.Resolve(org, "sales01", 1).Should().Be("manager01");
+        ManagerChain.Resolve(org, "sales03", 1).Should().Be("manager01");
+        ManagerChain.Resolve(org, "designer01", 1).Should().Be("manager01");
         ManagerChain.Resolve(org, "buyer01", 1).Should().Be("ops01");
         ManagerChain.Resolve(org, "buyer01", 2).Should().Be("manager01");
         ManagerChain.Resolve(org, "floor01", 1).Should().Be("planner01");
@@ -79,8 +83,8 @@ public class DemoOrganizationSetupTests : DesignerTestBase
 
         await DemoPeople.EnsureOrganizationAsync(Db.Context, at);
 
-        departments.Should().Be(5);
-        members.Should().Be(11);
+        departments.Should().Be(6);
+        members.Should().Be(13);
         (await Db.Context.Set<Department>().AsNoTracking().CountAsync()).Should().Be(departments);
         (await Db.Context.Set<UserDepartment>().AsNoTracking().CountAsync()).Should().Be(members);
     }
