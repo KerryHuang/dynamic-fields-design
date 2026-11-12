@@ -23,6 +23,7 @@ public class UpdateOptionHandler(
         var now = time.Now;
         var field = module.Blocks.SelectMany(b => b.Fields).Single(f => f.Options.Any(o => o.Id == request.OptionId));
         var option = field.Options.Single(o => o.Id == request.OptionId);
+        if (option.Active && !request.Active && await pending.RejectOptionDeactivateAsync(module, option.Id, ct) is { } optionInUse) return optionInUse;
         // 標題樣板用到這個下拉欄位時，改名會重寫既有記錄的 Title（跟換標題欄位一樣受 Closed、帳本凍結與已固定的記錄限制）
         var retitle = module.TitleTemplate is not null && module.TitleFieldIds().Contains(field.Id)
             && option.LabelI18n.Resolve(I18nText.FallbackLocale) != request.Label.Resolve(I18nText.FallbackLocale);

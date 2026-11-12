@@ -4,6 +4,7 @@ using DynamicModules.Application.Dynamic.DeleteService.Commands.DeleteBlock;
 using DynamicModules.Application.Dynamic.DeleteService.Commands.DeleteField;
 using DynamicModules.Application.Dynamic.FieldService.Commands.AddBlock;
 using DynamicModules.Application.Dynamic.FieldService.Commands.AddField;
+using DynamicModules.Application.Dynamic.FieldService.Commands.AddOption;
 using DynamicModules.Application.Dynamic.FieldService.Commands.SetFieldStatus;
 using DynamicModules.Application.Dynamic.FieldService.Commands.UpdateField;
 using DynamicModules.Application.Dynamic.FieldService.Commands.UpdateOption;
@@ -11,11 +12,16 @@ using DynamicModules.Application.Dynamic.ModuleService.Commands.ActivateModule;
 using DynamicModules.Application.Dynamic.ModuleService.Commands.UpdateModule;
 using DynamicModules.Application.Dynamic.RecordService.Commands.DeleteRecord;
 using DynamicModules.Application.Dynamic.ModuleService.Data;
+using DynamicModules.Application.Dynamic.WorkflowService.Commands.DeleteWorkflow;
+using DynamicModules.Application.Dynamic.WorkflowService.Commands.SaveWorkflow;
+using DynamicModules.Application.Dynamic.WorkflowService.Data;
 using DynamicModules.Domain.Approvals;
 using DynamicModules.Domain.Entities.Dynamic;
 using DynamicModules.Domain.ValueObjects;
 using FluentAssertions;
+using DynamicModules.Domain.Repositories.Dynamic;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.DependencyInjection;
 
 namespace DynamicModules.ApplicationTests.Dynamic.Approvals;
 
@@ -265,6 +271,153 @@ public class PendingApprovalGuardTests : ApprovalTestBase
         As("admin");
 
         var res = await SetFormula(_r.NetTotal, $"{{{_r.LineSum}}}");
+        res.IsSuccess.Should().BeTrue(Dump(res));
+    }
+
+    // ───────── Task 12：轉移與狀態 ─────────
+
+    [Fact]
+    public async Task SaveWorkflow_RemovePendingTransition_Returns409()
+    {
+        await Rig();
+        await Pend("PO-甲");
+        Blocked(await SaveWorkflow(_r, [Plain(_r.Confirmed, _r.Draft), Plain(_r.Confirmed, _r.Partial)]), "PO-甲");
+    }
+
+    [Fact]
+    public async Task SaveWorkflow_TurnOffApprovalOnPendingTransition_Returns409()
+    {
+        await Rig();
+        await Pend();
+        Blocked(await SaveWorkflow(_r, [Plain(_r.Draft, _r.Confirmed), Plain(_r.Confirmed, _r.Draft), Plain(_r.Confirmed, _r.Partial)]));
+    }
+
+    [Fact]
+    public async Task SaveWorkflow_RemoveRejectToTransition_Returns409()
+    {
+        await Rig(rejectTo: null);
+        // 另建綁定「退回到已退回」版本的流程與實例
+        var other = await BuildPurchase("pr");
+        var flow = await SeedFlow(other, "pr-a", other.Confirmed, 1,
+            Def(null, Stage("lead", Group(PurchaseLeadGroup))) with { RejectTo = other.Returned });
+        List<WorkflowTransition> Wf(bool withReject) =>
+            [Needs(other.Draft, other.Confirmed), Plain(other.Confirmed, other.Draft), .. withReject ? [Plain(other.Draft, other.Returned)] : Array.Empty<WorkflowTransition>()];
+        (await SaveWorkflow(other, Wf(true))).IsSuccess.Should().BeTrue();
+        await SeedInstance(other, flow, recordId: 1);
+
+        Blocked(await SaveWorkflow(other, Wf(false)));
+    }
+
+    [Fact]
+    public async Task SaveWorkflow_RemovePendingStateOption_Returns409()
+    {
+        await Rig();
+        await Pend();
+        Blocked(await SaveWorkflow(_r, [Plain(_r.Draft, _r.Partial)], states: AllStates(_r).Where(s => s.OptionId != _r.Confirmed).ToList()));
+    }
+
+    [Fact]
+    public async Task SaveWorkflow_ChangeStatusField_Returns409()
+    {
+        await Rig();
+        await Pend();
+        // 換成另一個狀態欄位：輸入本身合法（選項屬於新欄位），只有實例綁定的狀態欄位變了
+        var other = await MustAdd(_r.Module, FieldType.Enum, label: "第二狀態");
+        var x = ((OptionResponse)(await Send(new AddOptionRequest(other.Id, Text("甲"), null))).Data!).Id;
+        var y = ((OptionResponse)(await Send(new AddOptionRequest(other.Id, Text("乙"), null))).Data!).Id;
+        var input = new WorkflowInput(other.Id, x, [new WorkflowState(x), new WorkflowState(y)], [Plain(x, y)]);
+        Blocked(await Send(new SaveWorkflowRequest(_r.Module, input)));
+    }
+
+    [Fact]
+    public async Task SaveWorkflow_UnrelatedTransitionAdded_Succeeds()
+    {
+        await Rig();
+        await Pend();
+        var res = await SaveWorkflow(_r, [.. Transitions(), Plain(_r.Partial, _r.Received)]);
+        res.IsSuccess.Should().BeTrue(Dump(res));
+    }
+
+    // 存狀態機的輸入驗證（400）排在守衛前面，合法輸入裡「狀態被拿掉但轉移還在」與「狀態欄位換了但狀態沒換」到不了守衛，
+    // 所以這兩條規則直接對守衛下候選狀態機驗證。
+    private async Task<ServiceResult?> GuardCandidate(Func<Workflow, Workflow> change)
+    {
+        using var scope = NewScope();
+        var sp = scope.ServiceProvider;
+        var module = (await sp.GetRequiredService<IModuleRepository>().GetByKeyAsync(_r.Module, true, CancellationToken.None))!;
+        return await sp.GetRequiredService<PendingApprovalGuard>().RejectWorkflowChangeAsync(module, change(module.Workflow!), CancellationToken.None);
+    }
+
+    [Fact]
+    public async Task Guard_CandidateDropsPendingState_TransitionKept_Returns409()
+    {
+        await Rig();
+        await Pend();
+        var res = await GuardCandidate(w => new Workflow
+        {
+            ModuleId = w.ModuleId, StatusFieldId = w.StatusFieldId, InitialOptionId = w.InitialOptionId,
+            States = w.States.Where(s => s.OptionId != _r.Confirmed).ToList(), Transitions = w.Transitions
+        });
+        res.Should().NotBeNull();
+        res!.IsConflict.Should().BeTrue();
+    }
+
+    [Fact]
+    public async Task Guard_CandidateChangesStatusField_StatesKept_Returns409()
+    {
+        await Rig();
+        await Pend();
+        var res = await GuardCandidate(w => new Workflow
+        {
+            ModuleId = w.ModuleId, StatusFieldId = w.StatusFieldId + 1000, InitialOptionId = w.InitialOptionId,
+            States = w.States, Transitions = w.Transitions
+        });
+        res.Should().NotBeNull();
+        res!.IsConflict.Should().BeTrue();
+    }
+
+    [Fact]
+    public async Task Guard_UnchangedCandidate_ReturnsNull()
+    {
+        await Rig();
+        await Pend();
+        (await GuardCandidate(w => new Workflow
+        {
+            ModuleId = w.ModuleId, StatusFieldId = w.StatusFieldId, InitialOptionId = w.InitialOptionId,
+            States = w.States, Transitions = w.Transitions
+        })).Should().BeNull();
+    }
+
+    [Fact]
+    public async Task DeleteWorkflow_WithPending_Returns409()
+    {
+        await Rig();
+        await Pend("PO-甲");
+        Blocked(await Send(new DeleteWorkflowRequest(_r.Module)), "PO-甲");
+    }
+
+    [Fact]
+    public async Task DeleteWorkflow_NoPending_Succeeds()
+    {
+        var other = await BuildPurchase("pl");
+        var res = await Send(new DeleteWorkflowRequest(other.Module));
+        res.IsSuccess.Should().BeTrue(Dump(res));
+    }
+
+    [Fact]
+    public async Task DeactivateOption_UsedByPending_Returns409()
+    {
+        await Rig();
+        await Pend("PO-甲");
+        Blocked(await Send(new UpdateOptionRequest(_r.Confirmed, Text("已確認"), null, false)), "PO-甲");
+    }
+
+    [Fact]
+    public async Task DeactivateOption_Unused_Succeeds()
+    {
+        await Rig();
+        await Pend();
+        var res = await Send(new UpdateOptionRequest(_r.Cancelled, Text("已取消"), null, false));
         res.IsSuccess.Should().BeTrue(Dump(res));
     }
 }
