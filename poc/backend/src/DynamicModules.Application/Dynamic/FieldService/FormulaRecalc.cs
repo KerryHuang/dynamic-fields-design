@@ -17,8 +17,9 @@ public static class FormulaRecalc
         var all = await records.ListAllByModuleAsync(module.Id, ct);
         var frozen = await loader.LoadAsync(module, all, ct);             // 已固定的記錄保留原值（設計 §8.6、§10.4）
         var locked = await locks.FrozenAsync(module, ct);                 // 凍結的貢獻欄位不重算（共用主檔設計 §7）
-        var preserved = all.Count(r => !r.DeleteFlag && frozen.Contains(r));
-        foreach (var record in all.Where(r => !r.DeleteFlag && !frozen.Contains(r)))
+        var live = all.Where(r => !r.DeleteFlag).ToLookup(frozen.Contains);   // 每列只判定一次
+        var preserved = live[true].Count();
+        foreach (var record in live[false])
         {
             var values = RecordValueProcessor.Parse(record.ValuesJson);
             RecordValueProcessor.ApplyFormulas(module, values, today, locked);

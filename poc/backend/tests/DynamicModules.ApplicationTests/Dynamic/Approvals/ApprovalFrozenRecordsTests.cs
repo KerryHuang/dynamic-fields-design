@@ -168,6 +168,55 @@ public class ApprovalFrozenRecordsTests : ApprovalTestBase
     }
 
     [Fact]
+    public async Task Loader_DetailRowOfReadOnlyHeader_Frozen()
+    {
+        var r = await BuildPurchase("pr");
+        (await SaveWorkflow(r, BaseTransitions(r), AllStates(r).Select(x => x.OptionId == r.Confirmed ? x with { ReadOnly = true } : x).ToList()))
+            .IsSuccess.Should().BeTrue();
+        var closed = await NewPo(r);
+        var open = await NewPo(r);
+        (await Put(closed.Id, V((r.Status, $"opt_{r.Confirmed}")))).IsSuccess.Should().BeTrue();
+
+        var frozen = await Load(r.Line);
+
+        LineRowsOf(r, closed.Id).Should().NotBeEmpty().And.OnlyContain(x => frozen.Contains(x));
+        LineRowsOf(r, open.Id).Should().NotBeEmpty().And.OnlyContain(x => !frozen.Contains(x));
+    }
+
+    [Fact]
+    public async Task Loader_RejectedInstance_NotFrozen()
+    {
+        await Rig();
+        As("buyer1");
+        var po = await NewPo(_r, extra: V((_r.Discount, 100)));
+        var instanceId = (await MustSubmit(po.Id, _r.Confirmed)).InstanceId!.Value;
+        As("buyer2");
+        var task = TasksOf(instanceId).Single(t => t.AssigneeUserId == "buyer2" && t.Status == ApprovalTaskStatus.Open);
+        (await Send(new RejectTaskRequest(task.Id, Inst(instanceId).RowVersion, "補資料", RejectTaskHandler.ToInitiator))).IsSuccess.Should().BeTrue();
+        As("admin");
+        Inst(instanceId).Status.Should().Be(ApprovalInstanceStatus.Rejected);
+
+        (await Load(_r.Module)).Contains(Row(po.Id)).Should().BeFalse();
+        var lines = await Load(_r.Line);
+        LineRows(po.Id).Should().NotBeEmpty().And.OnlyContain(x => !lines.Contains(x));
+    }
+
+    [Fact]
+    public async Task Loader_ExtendedLockedState_StillFrozen()
+    {
+        await Rig();
+        var po = await ApprovedPo();
+        (await Put(po.Id, V((_r.Status, $"opt_{_r.Partial}")))).IsSuccess.Should().BeTrue();
+        StateOf(_r, po.Id).Should().Be(_r.Partial);
+
+        var frozen = await Load(_r.Module);
+
+        frozen.Contains(Row(po.Id)).Should().BeTrue();
+        var lines = await Load(_r.Line);
+        LineRows(po.Id).Should().NotBeEmpty().And.OnlyContain(x => lines.Contains(x));
+    }
+
+    [Fact]
     public async Task Loader_ModuleWithoutApproval_SameAsFactsOnly()
     {
         var r = await BuildPurchase("pl");
@@ -259,6 +308,20 @@ public class ApprovalFrozenRecordsTests : ApprovalTestBase
             new FieldConfig { Rollup = new RollupConfig(_r.ExtraRef, RollupFunction.Count, null, null) }));
 
         res.IsCreated.Should().BeTrue(Dump(res));
+        ((FieldResponse)res.Data!).PreservedRecordCount.Should().Be(1);
+    }
+
+    [Fact]
+    public async Task UpdateRollupConfig_LockedRecord_ReportsCount()
+    {
+        await Rig();
+        await ApprovedPo();
+        await NewPo(_r);
+
+        var res = await Send(new UpdateFieldRequest(_r.ExtraSum, FieldType.Rollup, Text("追加費用合計"),
+            new FieldConfig { Rollup = new RollupConfig(_r.ExtraRef, RollupFunction.Count, null, null) }, BlockOf(_r.ExtraSum)));
+
+        res.IsSuccess.Should().BeTrue(Dump(res));
         ((FieldResponse)res.Data!).PreservedRecordCount.Should().Be(1);
     }
 

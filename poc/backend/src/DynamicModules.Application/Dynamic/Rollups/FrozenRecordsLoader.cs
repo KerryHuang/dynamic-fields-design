@@ -8,7 +8,7 @@ namespace DynamicModules.Application.Dynamic.Rollups;
 
 /// <summary>
 /// 載入整批重算要固定的記錄（<see cref="FrozenRecords"/>）：本模組的事實與進行中實例、鎖定規則；明細模組再加上表頭的事實、
-/// 進行中與鎖定狀態（只讀 rows 裡出現的表頭，不讀整個表頭模組）。rows 由呼叫端傳入，避免多讀一次。
+/// 進行中、唯讀與鎖定狀態（只讀 rows 裡出現的表頭，不讀整個表頭模組）。rows 由呼叫端傳入，避免多讀一次。
 /// </summary>
 public sealed class FrozenRecordsLoader(
     IEventFactRepository facts, IApprovalInstanceRepository instances, IRecordRepository records, IModuleRepository modules,
@@ -41,7 +41,10 @@ public sealed class FrozenRecordsLoader(
             {
                 var headerLock = await locks.ForModuleAsync(header, null, ct);
                 foreach (var h in await records.ListByIdsAsync(header.Id, headerIds, ct))
-                    if (headerLock.IsLockedState(wf.StateOf(RecordService.RecordValueProcessor.Parse(h.ValuesJson)))) frozenHeaders.Add(h.Id);
+                    {
+                    var hv = RecordService.RecordValueProcessor.Parse(h.ValuesJson);
+                    if (wf.IsLocked(hv) || headerLock.IsLockedState(wf.StateOf(hv))) frozenHeaders.Add(h.Id);
+                }
             }
         }
         return new FrozenRecords(module, withFacts, frozenHeaders, pending, await locks.ForModuleAsync(module, null, ct));

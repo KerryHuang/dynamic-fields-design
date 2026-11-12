@@ -48,11 +48,11 @@ public interface IApprovalFlowRepository
     Task RemoveAsync(ApprovalFlow f, CancellationToken ct);
 }
 
-/// <summary>簽核實例、關卡實例、任務與歷程（設計 §4.3）。標「追蹤」的回傳值改了會在 SaveChanges 時寫回。</summary>
 /// <summary>進行中實例的摘要：整批重算固定記錄、定義守衛用，不讀記錄值。</summary>
 public sealed record PendingInstanceRef(
     long InstanceId, long RecordId, long ModuleId, long FromOptionId, long ToOptionId, long? FlowVersionId, string TitleSnapshot);
 
+/// <summary>簽核實例、關卡實例、任務與歷程（設計 §4.3）。標「追蹤」的回傳值改了會在 SaveChanges 時寫回。</summary>
 public interface IApprovalInstanceRepository
 {
     /// <summary>不追蹤：這些模組 pending 的實例摘要。</summary>

@@ -146,7 +146,8 @@ describe('FieldEditorDialog', () => {
       [...document.body.querySelectorAll('button')].find((b) => b.textContent?.includes('儲存'))!.click();
       await flushPromises();
       expect(spy).toHaveBeenCalledOnce();
-      await new Promise((r) => setTimeout(r, 50));   // the mutation's onSuccess runs after the query invalidations settle
+      // onSuccess notifies first and then emits update:modelValue (closing the dialog), so the emit marks the end of onSuccess
+      await vi.waitFor(() => expect(w.emitted('update:modelValue')).toBeTruthy());
       const calls = notify.mock.calls.map((c) => c[0] as { type?: string; message?: string });
       spy.mockRestore();
       notify.mockRestore();
