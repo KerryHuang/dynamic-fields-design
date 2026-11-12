@@ -21,12 +21,13 @@
 | p1c | 任務與通知政策：A6、A7、A13、A14 | 已上線 | [政策設定](superpowers/specs/2026-11-11-policy-settings-design.md) §9 |
 | p1d | 附件政策：A20（含部署設定檔當出廠值） | 已上線 | [政策設定](superpowers/specs/2026-11-11-policy-settings-design.md) §9 |
 | a2d1 | 簽核鎖定寫入：鎖定狀態、鎖定欄位與明細的寫入守衛（只驗 SQLite，PostgreSQL 在 pg0 後補驗） | 已上線（2026-11-12，ef3c00ab） | [簽核流程](superpowers/specs/2026-11-10-approval-workflow-design.md)、[政策設定](superpowers/specs/2026-11-11-policy-settings-design.md) §9 |
-| a4b | 前端：送簽畫面與簽核中心 | 進行中：a4b4 完成（可編輯欄位、鎖頭、臨時讀取） | [簽核流程](superpowers/specs/2026-11-10-approval-workflow-design.md) |
+| a4b | 前端：送簽畫面與簽核中心 | 進行中：a4b5 完成（簽核中心、通知種類、手冊與設計寫回），待總收走查與合併 | [簽核流程](superpowers/specs/2026-11-10-approval-workflow-design.md) |
+| a4c | 清單頁系統篩選「簽核中」（記錄清單查詢加簽核實例子查詢）；排在 pg0 合併之後，讓兩種資料庫一次驗證（使用者 11-12 裁決 U2） | 未開始 | [簽核流程](superpowers/specs/2026-11-10-approval-workflow-design.md) §13.4 |
 | a6 | CRM 設計案與簽核 Demo、文件 | 未開始 | [簽核流程](superpowers/specs/2026-11-10-approval-workflow-design.md) |
 | a2d2–a2d7 | 附件、整批重算、定義守衛、鎖定資料守衛、簽核類政策設定；a2d1 上線後到 a2d2、a2d3 上線前，上傳附件不受鎖、設計者改公式的整批重算會改寫已核准單的值（只驗 SQLite，PostgreSQL 在 pg0 後補驗） | 未開始 | [簽核流程](superpowers/specs/2026-11-10-approval-workflow-design.md)、[政策設定](superpowers/specs/2026-11-11-policy-settings-design.md) §9 |
 | a4a | 前端：簽核設計器 | 未開始 | [簽核流程](superpowers/specs/2026-11-10-approval-workflow-design.md) |
 | a5 | 套件格式 8：簽核流程 | 未開始 | [簽核流程](superpowers/specs/2026-11-10-approval-workflow-design.md) |
-| a3 | 轉交、加簽、代理、逾期提醒 | 未開始 | [簽核流程](superpowers/specs/2026-11-10-approval-workflow-design.md) |
+| a3 | 轉交、加簽、代理、逾期提醒；個人代理設定、管理員終止與改派、臨時讀取的列印預覽（使用者 11-12 裁決） | 未開始 | [簽核流程](superpowers/specs/2026-11-10-approval-workflow-design.md) |
 | O1 | 維運地基：結構化 log 與 request id、health live／ready、版本端點、前端錯誤收集、背景排程器（o1a、o1b、o1c）；任務「即將到期」提醒改為到期前 N 天內補一次、同一任務只補一次（使用者 2026-11-12 裁決，排進 o1b） | 進行中：o1a（觀測地基）已上線（2026-11-12），o1b、o1c 未開始（使用者裁決排在簽核主線之後） | [維運與觀測](superpowers/specs/2026-11-11-ops-observability-design.md) §9、§10 |
 | un1 | 列表、匯出、篩選的使用者欄位顯示姓名（小段穿插，使用者 11-11 裁決；位置是主控判斷，2026-11-12 排定） | 未開始 | — |
 | pg0a | PostgreSQL provider 抽象：依 `Database:Provider` 選資料庫，SQLite 行為不變、不加 migration；排在 O1 之後（使用者裁決 O1 → pg0），但沒有硬依賴，可視資源與 O1 並行 | 未開始 | [PostgreSQL provider](superpowers/specs/2026-11-12-postgres-provider-design.md) |
