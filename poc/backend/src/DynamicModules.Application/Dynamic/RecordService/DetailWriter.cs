@@ -48,10 +48,11 @@ public class DetailWriter(
     /// <param name="parentRecord">null 表示新增表頭（沒有既有列）。</param>
     /// <param name="headerValues">算出表頭這次存檔後的值（ParentDefault 用）；只在新增的列需要時才呼叫，最多一次。</param>
     /// <param name="action">新增表頭用 Add、編輯表頭用 Edit；明細列的權限沿用表頭的這個動作。</param>
+    /// <param name="keepComputedRows">表頭在簽核鎖定、而且明細列一起鎖（設計 §9.3）：既有列的公式與彙總欄位保留舊值，不隨目前公式重算。</param>
     public async Task<DetailPlan> PrepareAsync(
         Module parent, Record? parentRecord, PermissionAction action,
         IReadOnlyDictionary<string, List<DetailRowInput>>? details, CancellationToken ct,
-        Func<Task<IReadOnlyDictionary<string, JsonElement?>>>? headerValues = null)
+        Func<Task<IReadOnlyDictionary<string, JsonElement?>>>? headerValues = null, bool keepComputedRows = false)
     {
         var plan = new DetailPlan();
         // 寫入只認 Active 的明細模組；Closed 的明細（不會與 Active 表頭並存）一律當成不存在
@@ -79,7 +80,7 @@ public class DetailWriter(
             var rows = details?.GetValueOrDefault(child.Key) ?? [];
             for (var i = 0; i < rows.Count; i++)
                 if (await PrepareRowAsync(set, rows[i], $"details.{child.Key}[{i}].", parentRecord, userIds, plan.Errors, ct,
-                        needsHeader && rows[i].Id is null && headerValues is not null ? await HeaderOnceAsync() : null))
+                        needsHeader && rows[i].Id is null && headerValues is not null ? await HeaderOnceAsync() : null, keepComputedRows))
                     return new DetailPlan { Failure = ServiceResult.Stale() };
 
             var after = existing.Count + set.Changes.Count(c => c.Before is null) - set.Changes.Count(c => c.After is null);
@@ -103,7 +104,8 @@ public class DetailWriter(
     /// <returns>true 表示列的 rowVersion 不符，整個請求要回 409。</returns>
     private async Task<bool> PrepareRowAsync(
         DetailSet set, DetailRowInput row, string prefix, Record? parentRecord, IReadOnlySet<string> userIds,
-        Dictionary<string, string[]> errors, CancellationToken ct, IReadOnlyDictionary<string, JsonElement?>? parentValues = null)
+        Dictionary<string, string[]> errors, CancellationToken ct, IReadOnlyDictionary<string, JsonElement?>? parentValues = null,
+        bool keepComputedRows = false)
     {
         Record? record = null;
         Dictionary<string, JsonElement?>? previous = null;
@@ -145,7 +147,10 @@ public class DetailWriter(
         if (row.SystemKeys is not null) systemKeys.UnionWith(row.SystemKeys);
         var (values, rowErrors) = RecordValueProcessor.Process(
             set.Child, input, previous, userIds, registry, set.Permissions, new RuleContext(time.Today, locale.Locale), validRefKeys,
-            parentValues: parentValues, systemKeys: systemKeys);
+            parentValues: parentValues, systemKeys: systemKeys,
+            keepComputed: keepComputedRows && previous is not null
+                ? set.Child.Blocks.SelectMany(b => b.Fields).Where(f => f.Type is FieldType.Formula or FieldType.Rollup).Select(f => f.Id).ToHashSet()
+                : null);
         foreach (var (key, messages) in rowErrors) errors[prefix + key] = messages;
         set.Changes.Add(new DetailRowChange(record, previous, values));
         return false;

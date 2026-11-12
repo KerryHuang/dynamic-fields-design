@@ -29,6 +29,7 @@ public static class RecordValueProcessor
     /// <param name="parentValues">明細列新增時，表頭這次存檔後啟用中欄位的值（Field.Key → 值）；ParentDefaultFieldId 從這裡取。</param>
     /// <param name="systemKeys">值由系統填入（帶值、單據轉換）的欄位鍵：不受欄位唯讀、唯讀權限與規則唯讀限制，仍照型別正規化。</param>
     /// <param name="frozen">這筆記錄已有事件事實（已記帳，設計 §4.7）：除狀態欄位外不能寫，公式不重算、保留記帳當時的值。</param>
+    /// <param name="keepComputed">簽核鎖定中的記錄要保留舊值的計算欄位 Id（公式、彙總，設計 §9.3）：這次存檔不重算、不套用 rollupValues，依賴它們的公式用保留的值。</param>
     /// <param name="rollupValues">這次存檔在記憶體算好的彙總值（null 值表示移除），在公式之前寫入，公式與規則看得到新值；沒給的彙總欄位保留舊值。</param>
     public static (Dictionary<string, JsonElement?> values, Dictionary<string, string[]> errors) Process(
         Module module,
@@ -42,7 +43,8 @@ public static class RecordValueProcessor
         IReadOnlyDictionary<string, JsonElement?>? rollupValues = null,
         IReadOnlyDictionary<string, JsonElement?>? parentValues = null,
         IReadOnlySet<string>? systemKeys = null,
-        bool frozen = false)
+        bool frozen = false,
+        IReadOnlySet<long>? keepComputed = null)
     {
         var values = previous is null ? [] : new Dictionary<string, JsonElement?>(previous);
         var errors = new Dictionary<string, string[]>();
@@ -92,10 +94,12 @@ public static class RecordValueProcessor
         }
         var normalizeFailed = errors.Count > 0;
 
+        var keptKeys = keepComputed is null ? null : fields.Where(f => keepComputed.Contains(f.Id)).Select(f => f.Key).ToHashSet();
         foreach (var (key, value) in rollupValues ?? new Dictionary<string, JsonElement?>())
-            if (value is null) values.Remove(key);
+            if (keptKeys?.Contains(key) == true) continue;
+            else if (value is null) values.Remove(key);
             else values[key] = value;
-        if (!frozen) ApplyFormulas(module, values, rules.Today, permissions.Frozen);
+        if (!frozen) ApplyFormulas(module, values, rules.Today, permissions.Frozen, keepComputed);
         var outcome = RuleEngine.Evaluate(module, values, previous, registry, userIds, rules.Today);
 
         foreach (var field in fields.Where(f => outcome.RequiredFieldIds.Contains(f.Id) && Writable(f)))
@@ -208,13 +212,13 @@ public static class RecordValueProcessor
             ? [id]
             : [];
 
-    /// <summary>依相依順序算出每個啟用中的公式欄位並寫回 values；結果為 null 就移除鍵。凍結的公式（skip）保持最後的值、不重算。</summary>
+    /// <summary>依相依順序算出每個啟用中的公式欄位並寫回 values；結果為 null 就移除鍵。凍結的公式（skip）與簽核鎖定要保留的公式（keep）保持最後的值、不重算。</summary>
     public static void ApplyFormulas(Module module, Dictionary<string, JsonElement?> values, DateOnly today,
-        IReadOnlyDictionary<long, FieldLock>? skip = null)
+        IReadOnlyDictionary<long, FieldLock>? skip = null, IReadOnlySet<long>? keep = null)
     {
         foreach (var field in FormulaGraph.EvaluationOrder(module))
         {
-            if (skip?.ContainsKey(field.Id) == true) continue;
+            if (skip?.ContainsKey(field.Id) == true || keep?.Contains(field.Id) == true) continue;
             var node = FormulaParser.Parse(field.Config.Formula, module).Node;
             var scale = field.Config.ResultType == "date" ? null : field.Config.Scale;
             var result = node is null ? null : FormulaEvaluator.Evaluate(node, module, values, today, scale);

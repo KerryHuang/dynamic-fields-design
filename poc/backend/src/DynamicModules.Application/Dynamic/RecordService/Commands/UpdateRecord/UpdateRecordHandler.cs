@@ -20,7 +20,7 @@ public class UpdateRecordHandler(
     ICurrentUser user, IBusinessTime time, IDynamicAccessGuard guard, ReferenceValidator refs, ReferenceFill fill, ReferenceResolver resolver,
     DetailWriter details, DetailReader detailReader, RollupRecalc rollups, RecordHistoryWriter history, WorkflowEnforcer workflow,
     Dynamic.LedgerService.LedgerGate ledgerGate, Dynamic.EventService.EventFactLock factLock, Dynamic.ApprovalService.ApprovalGate approvalGate,
-    ICurrentLocale locale)
+    ICurrentLocale locale, Dynamic.ApprovalService.ApprovalLockService approvalLock)
     : IRequestHandler<UpdateRecordRequest, ServiceResult>
 {
     public async Task<ServiceResult> Handle(UpdateRecordRequest request, CancellationToken ct)
@@ -59,12 +59,15 @@ public class UpdateRecordHandler(
             RecordValueProcessor.WritablePredicate(module, previous, perms, registry, userIds, time.Today), ct));
         if (request.SystemKeys is not null) systemKeys.UnionWith(request.SystemKeys);
         WorkflowEnforcer.SeedMissingState(module, previous, input, systemKeys);
+        // 簽核鎖定中的記錄（寫入前與寫入後都在鎖定狀態）：鎖定的計算欄位保留舊值（設計 §9.3，第一道）
+        var (keepComputed, keepDetailRows) = await KeptComputedAsync(module, previous, input, ct);
         var plan = await details.PrepareAsync(module, record, PermissionAction.Edit, request.Details, ct,
             () => Task.FromResult<IReadOnlyDictionary<string, JsonElement?>>(RecordValueProcessor.Process(
-                module, input, previous, userIds, registry, perms, new RuleContext(time.Today, locale.Locale), validRefKeys, systemKeys: systemKeys).values));
+                module, input, previous, userIds, registry, perms, new RuleContext(time.Today, locale.Locale), validRefKeys, systemKeys: systemKeys,
+                keepComputed: keepComputed).values), keepDetailRows);
         if (plan.Failure is { } failure) return failure;
         var (values, errors) = RecordValueProcessor.Process(
-            module, input, previous, userIds, registry, perms, new RuleContext(time.Today, locale.Locale), validRefKeys, plan.RollupValues, systemKeys: systemKeys, frozen: frozen);
+            module, input, previous, userIds, registry, perms, new RuleContext(time.Today, locale.Locale), validRefKeys, plan.RollupValues, systemKeys: systemKeys, frozen: frozen, keepComputed: keepComputed);
         foreach (var (key, messages) in plan.Errors) errors[key] = messages;
         if (errors.Count == 0)
             foreach (var (key, messages) in await workflow.CheckAsync(module, previous, values, ct)) errors[key] = messages;
@@ -82,5 +85,18 @@ public class UpdateRecordHandler(
         var shown = await resolver.ResolveAsync(module, perms, [record], ct);
         return ServiceResult.Success(record.ToResponse(module.Key, perms, module, shown.GetValueOrDefault(record.Id))
             with { Details = await detailReader.ReadAsync(module, record, PermissionAction.Edit, ct) });
+    }
+
+    /// <summary>寫入前與寫入後都在簽核鎖定狀態時，回傳鎖定欄位中的公式與彙總；解鎖的那次寫入不保留，照目前公式重算。</summary>
+    private async Task<(IReadOnlySet<long>? Keep, bool DetailRows)> KeptComputedAsync(
+        Module module, IReadOnlyDictionary<string, JsonElement?> previous, IReadOnlyDictionary<string, JsonElement?> input, CancellationToken ct)
+    {
+        if (module.Workflow is not { } wf) return (null, false);
+        var locked = await approvalLock.ForModuleAsync(module, null, ct);
+        var after = input.ContainsKey(wf.StatusFieldKey) ? wf.StateOf(input) : wf.StateOf(previous);
+        if (!locked.IsLockedState(wf.StateOf(previous)) || !locked.IsLockedState(after)) return (null, false);
+        var keep = module.Blocks.SelectMany(b => b.Fields)
+            .Where(f => f.Type is FieldType.Formula or FieldType.Rollup && locked.FieldIds.Contains(f.Id)).Select(f => f.Id).ToHashSet();
+        return (keep.Count == 0 ? null : keep, locked.DetailRowsLocked);
     }
 }
