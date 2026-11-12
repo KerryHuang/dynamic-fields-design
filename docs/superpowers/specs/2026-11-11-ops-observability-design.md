@@ -356,7 +356,7 @@ L2 的執行者，依 C4 使用者裁決（2026-11-12）：使用者核准的三
 | 面向 | PostgreSQL | SQLite |
 |---|---|---|
 | 健康（ready） | Npgsql 下 `SELECT 1`，短逾時；`pg_is_in_recovery()` 確認不是唯讀副本 | `SELECT 1`；資料庫檔所在目錄可寫 |
-| 連線與鎖 | `pg_stat_activity` 連線數對 `max_connections`、執行過久的查詢；`pg_locks` 找被擋的連線 | 計數 `SQLITE_BUSY`／`LOCKED`（現有 `DatabaseBusyExceptionHandler`）；`WriteGate` 等待時間 |
+| 連線與鎖 | `pg_stat_activity` 連線數對 `max_connections`、執行過久的查詢；`pg_locks` 找被擋的連線；`WriteGate` 等待時間（[pg0 設計](2026-11-12-postgres-provider-design.md) §5.6） | 計數 `SQLITE_BUSY`／`LOCKED`（現有 `DatabaseBusyExceptionHandler`）；`WriteGate` 等待時間 |
 | 備份 | `pg_dump -Fc` 邏輯備份；雲端版另用基礎備份＋WAL 歸檔做時間點還原，或託管資料庫的快照 | `VACUUM INTO` 或 Online Backup API，連同 `attachments/`、`keys/` 目錄一起備 |
 | 完整性 | `amcheck`（`bt_index_check`）、建庫時開 data checksums；加上產品層檢查（共用主檔 `MasterLifecycle.CheckAsync`） | `PRAGMA quick_check`（每日）、`PRAGMA integrity_check`（每週）、`PRAGMA foreign_key_check`；加上產品層檢查 |
 | 空間 | `pg_database_size`、`pg_total_relation_size`、`pg_stat_user_tables.n_dead_tup` 與最近 autovacuum；主機磁碟剩餘 | `page_count * page_size`、`freelist_count`、WAL 檔大小；主機磁碟剩餘 |
@@ -523,7 +523,7 @@ O1 就實作，log 與 O2 事件表共用同一套（主控判斷 T4）。指紋
 - 執行中每 1 分鐘續租；結束時寫結果、清租約、算下次預定時間（＝結束時間＋該工作的間隔政策值）。
 - 實例當掉時租約自然過期，另一個實例（或重啟後的同一實例）接手。
 - 租約時間一律用應用程式的 UTC 時間比較；多實例之間的時鐘誤差由 5 分鐘租約吸收，不另處理，列為已知限制（主控判斷 B9，§12）。
-- 工作在自己的 DI scope 裡執行，走既有的 MediatR pipeline 與 `ITransactionalRequest`，所以 SQLite 上一樣經過 `WriteGate`，不和使用者寫入搶鎖造成 `SQLITE_BUSY`。
+- 工作在自己的 DI scope 裡執行，走既有的 MediatR pipeline 與 `ITransactionalRequest`，所以一樣經過 `WriteGate`：SQLite 上不和使用者寫入搶鎖造成 `SQLITE_BUSY`；PostgreSQL 上同樣在程序內排隊，再取 pg0 的全庫 advisory lock（[pg0 設計](2026-11-12-postgres-provider-design.md) §5.6）。
 - 工作的身分（主控判斷 B3）：`ActingScope.Begin(userId)` 一定要給 userId，系統裡沒有「系統使用者」，初稿寫的「沿用 ActingScope 當系統身分」做不到。
   - 本來就逐人處理的工作（例如 `notification.upkeep`）對每位使用者各開一次 `ActingScope`。
   - 不代表任何人的工作，稽核的行為者種類記「系統」（§5.6 的保留種類），不建 AppUser 列；這類工作不呼叫需要 `ICurrentUser` 的 handler。
@@ -539,7 +539,7 @@ O1 就實作，log 與 O2 事件表共用同一套（主控判斷 T4）。指紋
 - 每位使用者各自一個交易、各自一個 `ActingScope`（B3）；一位失敗記 log 後繼續下一位，最後整體結果記為「部分失敗」。
 - **即將到期提醒的新規則**（使用者 2026-11-12 裁決，取代現行的「到期日是明天才提醒」）：任務在到期前 `N` 天內（N＝政策 A6「到期前幾天提醒」，出廠 1）的任何一天，只要使用者打開通知或排程器跑到，就補一次；同一任務的即將到期提醒只補一次（以 `LastDueSoonNotified` 非空為準，不再是一天一則）。逾期提醒維持現行（到期日早於今天，一天最多一則）。新規則在 o1b 與排程器一起改，惰性路徑與排程路徑共用同一個判斷。任務設計 §6.2 與政策設定 A6 同步改寫。
 - 保留惰性觸發（主控判斷 U4）：兩條路徑都冪等，排程器停了提醒也不會完全消失。
-- 去重要能承受兩條路徑同時跑：現在靠任務列上的 `LastDueSoonNotified`、`LastOverdueNotified` 日期戳。SQLite 經 `WriteGate` 序列化不會重複；PostgreSQL 兩個交易可能同時讀到舊值而各寫一則。所以 o1b 要把「寫日期戳」改成條件式更新（只在日期戳不是今天時更新，影響列數為 1 才新增通知），兩種資料庫都成立（§10.7）。
+- 去重要能承受兩條路徑同時跑：現在靠任務列上的 `LastDueSoonNotified`、`LastOverdueNotified` 日期戳。SQLite 經 `WriteGate` 序列化不會重複；PostgreSQL 在 pg0 也有程序內排隊與全庫 advisory lock，但去重不能依賴它們（多實例時程序內排隊不互通，全庫鎖將來也可能拿掉），沒有序列化時兩個交易可能同時讀到舊值而各寫一則。所以 o1b 要把「寫日期戳」改成條件式更新（只在日期戳不是今天時更新，影響列數為 1 才新增通知），兩種資料庫都成立（§10.7）。
 - 使用者看得到的變化：即將到期的提醒在進入到期前 N 天的範圍後一小時內就出現在鈴鐺未讀數，不必先打開鈴鐺；中途才被指派或才建立的任務也會補一次。手冊任務章節要同步（提醒說明改成「到期前 N 天內補一次」）。
 
 ### 10.3 前端
@@ -612,7 +612,7 @@ O1 排在 pg0 之前，所以合併當下還不能在 PostgreSQL 上跑；但 O1
 - 例外判斷不綁 `SqliteException`：排程器遇到資料庫忙碌或交易衝突時，透過 pg0 的重試對應判斷（SQLite 的 BUSY／LOCKED、PostgreSQL 的 40001／40P01），O1 先集中在一個判斷函式，pg0 補 PostgreSQL 分支。
 - 計數與次數用整數欄位、不用 `double`。
 - 字串主鍵不依賴大小寫不敏感比對（SQLite 預設與 PostgreSQL 不同），工作代碼一律小寫。
-- 並行假設以 PostgreSQL 為準：不能靠 `WriteGate` 的序列化保證正確，所有「先讀再寫」的去重都改成條件式更新（§10.2.9）。
+- 並行假設以 PostgreSQL 為準：不能靠序列化保證正確，所有「先讀再寫」的去重都改成條件式更新（§10.2.9）。pg0 在 PostgreSQL 上仍啟用 `WriteGate` 做程序內排隊（避免等鎖請求佔滿連線池），另加全庫 advisory lock（[pg0 設計](2026-11-12-postgres-provider-design.md) §5.6、T18）；兩者都不是正確性的依據：多實例時程序內排隊不互通，全庫鎖將來可能拿掉，pg0 用「無鎖模式」測試驗證 O1 本身正確。
 - ready 檢查有自己的短逾時，不被連線池耗盡拖住。
 - 多實例時，前端錯誤限流與現有登入限流（`LoginThrottle`）都只在單一實例的記憶體裡；O1 接受這個限制並列出（§12），雲端版要多實例時再改成共享。
 
