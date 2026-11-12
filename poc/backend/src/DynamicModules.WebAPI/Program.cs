@@ -96,6 +96,8 @@ builder.Services.AddControllers().AddJsonOptions(o =>
 builder.Services.AddExceptionHandler<DynamicModules.WebAPI.Errors.ConcurrencyExceptionHandler>();
 builder.Services.AddExceptionHandler<DynamicModules.WebAPI.Errors.FrozenFieldExceptionHandler>();
 builder.Services.AddExceptionHandler<DynamicModules.WebAPI.Errors.DatabaseBusyExceptionHandler>();
+// 最後一道：必須註冊在其他 handler 之後（依註冊順序執行）
+builder.Services.AddExceptionHandler<DynamicModules.WebAPI.Errors.UnhandledExceptionHandler>();
 // 所有 ProblemDetails 的 traceId 與 X-Request-Id 一致（框架預設用 Activity.Id，格式不同）
 builder.Services.AddProblemDetails(o => o.CustomizeProblemDetails = c =>
     c.ProblemDetails.Extensions["traceId"] = c.HttpContext.TraceIdentifier);

@@ -10,7 +10,7 @@ namespace DynamicModules.Application.Common;
 public static class MessageText
 {
     public const string
-        Forbidden = nameof(Forbidden), DatabaseBusy = nameof(DatabaseBusy), IdempotencyKeyReused = nameof(IdempotencyKeyReused),
+        Forbidden = nameof(Forbidden), DatabaseBusy = nameof(DatabaseBusy), ServerError = nameof(ServerError), IdempotencyKeyReused = nameof(IdempotencyKeyReused),
         ModuleNotFound = nameof(ModuleNotFound), ResourceNotFound = nameof(ResourceNotFound),
         Stale = nameof(Stale), LedgerFreezeConfirm = nameof(LedgerFreezeConfirm),
         LoginFailed = nameof(LoginFailed), SignInRequired = nameof(SignInRequired), PasswordChangeRequired = nameof(PasswordChangeRequired),
@@ -68,6 +68,8 @@ public static class MessageText
             "คุณไม่มีสิทธิ์ดำเนินการนี้", "Bạn không có quyền thực hiện thao tác này"),
         [DatabaseBusy] = ("系統忙碌中，請稍後再試", "The system is busy. Please try again later",
             "ระบบไม่ว่าง โปรดลองอีกครั้งในภายหลัง", "Hệ thống đang bận, vui lòng thử lại sau"),
+        [ServerError] = ("系統發生錯誤，請稍後再試", "Something went wrong. Please try again later",
+            "ระบบเกิดข้อผิดพลาด โปรดลองอีกครั้งในภายหลัง", "Hệ thống đã xảy ra lỗi, vui lòng thử lại sau"),
         [IdempotencyKeyReused] = ("同一個操作識別碼（Idempotency-Key）已用在不同內容的請求",
             "This operation ID (Idempotency-Key) was already used for a request with different content",
             "รหัสการดำเนินการนี้ (Idempotency-Key) ถูกใช้กับคำขอที่มีเนื้อหาต่างกันไปแล้ว",
