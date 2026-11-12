@@ -61,6 +61,12 @@ public class PolicyCatalogFixtureTests
         PolicyCatalog.AttachmentMaxFilesPerComment.Factory.Should().Be("5");
         PolicyCatalog.AttachmentMaxFilesPerComment.Scope.Should().Be(PolicyScope.Module);
         PolicyCatalog.AttachmentMaxFilesPerComment.Max.Should().Be(10);
+        PolicyCatalog.OpsSlowRequestMs.Factory.Should().Be("2000");
+        PolicyCatalog.OpsSlowRequestMs.Min.Should().Be(200);
+        PolicyCatalog.OpsSlowRequestMs.Max.Should().Be(60000);
+        PolicyCatalog.OpsSlowRequestMs.Scope.Should().Be(PolicyScope.System);
+        PolicyCatalog.OpsClientErrorCollection.Factory.Should().Be("true");
+        PolicyCatalog.OpsClientErrorCollection.Scope.Should().Be(PolicyScope.System);
         PolicyCatalog.WeekStartOf("sunday").Should().Be(DayOfWeek.Sunday);
         PolicyCatalog.WeekStartOf("monday").Should().Be(DayOfWeek.Monday);
     }

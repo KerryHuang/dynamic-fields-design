@@ -34,6 +34,7 @@ public static class DependencyInjection
         services.TryAddScoped<Common.ICurrentLocale, Common.FallbackCurrentLocale>();
         services.AddScoped<ISystemIdentity, SystemIdentity>();
         services.AddScoped<Dynamic.PolicyService.IPolicyReader, Dynamic.PolicyService.PolicyReader>();
+        services.AddSingleton<Dynamic.PolicyService.CachedSystemPolicy>();
         // 沒有部署出廠值時用空的；WebAPI 之後註冊讀部署設定檔的實例會蓋過它
         services.TryAddSingleton(Dynamic.PolicyService.PolicyEnvironmentDefaults.Empty);
         services.AddScoped<FieldLocks>();

@@ -1,5 +1,5 @@
 {
-  "codes": ["task.maxRulesPerModule", "task.maxTasksPerRule", "task.maxRulesPerPackage", "task.reminderLeadDays", "task.remindOverdue", "task.notify.commented", "task.notify.completed", "task.notify.cancelled", "notification.retentionDays", "calendar.weekStart", "attachment.maxFileBytes", "attachment.maxFilesPerField", "attachment.allowedExtensions", "attachment.maxFilesPerComment"],
-  "categories": ["task", "notification", "locale", "attachment"],
+  "codes": ["task.maxRulesPerModule", "task.maxTasksPerRule", "task.maxRulesPerPackage", "task.reminderLeadDays", "task.remindOverdue", "task.notify.commented", "task.notify.completed", "task.notify.cancelled", "notification.retentionDays", "calendar.weekStart", "attachment.maxFileBytes", "attachment.maxFilesPerField", "attachment.allowedExtensions", "attachment.maxFilesPerComment", "ops.slowRequestMs", "ops.clientErrorCollection"],
+  "categories": ["task", "notification", "locale", "attachment", "ops"],
   "choices": ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday", "assignee", "creator"]
 }

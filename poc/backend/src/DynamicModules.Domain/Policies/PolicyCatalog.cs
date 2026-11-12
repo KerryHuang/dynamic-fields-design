@@ -76,13 +76,22 @@ public static class PolicyCatalog
     public static readonly PolicyDefinition AttachmentMaxFilesPerComment =
         new("attachment.maxFilesPerComment", "attachment", PolicyKind.Integer, PolicyScope.Module, "5", 1, 10, Unit: "count");
 
+    /// <summary>O1：請求耗時超過這個值，結束時記一則 Warning（設計 ops-observability §10.6）。</summary>
+    public static readonly PolicyDefinition OpsSlowRequestMs =
+        new("ops.slowRequestMs", "ops", PolicyKind.Integer, PolicyScope.System, "2000", 200, 60000, Unit: "ms");
+
+    /// <summary>O1：是否收集前端回報的程式錯誤（只進 log，不含記錄內容）。</summary>
+    public static readonly PolicyDefinition OpsClientErrorCollection =
+        new("ops.clientErrorCollection", "ops", PolicyKind.Boolean, PolicyScope.System, "true");
+
     public static DayOfWeek WeekStartOf(string choice) => Enum.Parse<DayOfWeek>(choice, ignoreCase: true);
 
     public static IReadOnlyList<PolicyDefinition> All { get; } =
         [TaskMaxRulesPerModule, TaskMaxTasksPerRule, TaskMaxRulesPerPackage,
          TaskReminderLeadDays, TaskRemindOverdue, TaskNotifyCommented, TaskNotifyCompleted, TaskNotifyCancelled,
          NotificationRetentionDays, CalendarWeekStart,
-         AttachmentMaxFileBytes, AttachmentMaxFilesPerField, AttachmentAllowedExtensions, AttachmentMaxFilesPerComment];
+         AttachmentMaxFileBytes, AttachmentMaxFilesPerField, AttachmentAllowedExtensions, AttachmentMaxFilesPerComment,
+         OpsSlowRequestMs, OpsClientErrorCollection];
 
     public static PolicyDefinition? Find(string code) =>
         All.FirstOrDefault(d => string.Equals(d.Code, code, StringComparison.Ordinal));
