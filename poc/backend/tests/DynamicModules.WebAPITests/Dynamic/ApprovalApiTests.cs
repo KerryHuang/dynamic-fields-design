@@ -260,7 +260,7 @@ public class ApprovalApiTests : IDisposable
 
     [Fact]
     [Trait("Category", "Postgres")]
-    public async Task Upload_LockedRecord_RejectedBeforeBodyRead()
+    public async Task Upload_LockedRecord_Returns409_NoFile()
     {
         var r = await Arrange(lockAmount: true);
         var files = await AddField(_admin, r.Module, "attachment");

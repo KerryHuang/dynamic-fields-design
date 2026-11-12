@@ -28,7 +28,8 @@ public class AttachmentsController(IMediator mediator, AttachmentUploadTracker t
         {
             var result = await mediator.Send(new UploadAttachmentRequest(recordId, fieldId, stream, file.FileName, file.Length), ct);
             // 檔案先寫、記錄後寫：管線後段（簽核後盾、事件、檢查）回失敗時，剛寫的檔案不留
-            if (!result.IsSuccess) tracker.DeleteAll();
+            if (result.IsSuccess) tracker.Forget();
+            else tracker.DeleteAll();
             return result.ToActionResult(this);
         }
         catch

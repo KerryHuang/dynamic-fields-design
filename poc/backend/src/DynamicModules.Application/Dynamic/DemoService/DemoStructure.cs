@@ -22,18 +22,21 @@ namespace DynamicModules.Application.Dynamic.DemoService;
 public sealed class DemoStructure(
     ISender sender, IPermissionRepository permissions, AppOpener appOpener, IAppRepository apps, IReportRepository reports, IModuleRepository modules,
     EventService.EffectBudget budget, IWriteJournal journal, AppService.SharedMasters.MasterSymbols masterSymbols,
-    ApprovalService.ApprovalWriteContext approvalContext, ApprovalService.ApprovalLockService approvalLock, DemoApprovals demoApprovals)
+    ApprovalService.ApprovalWriteContext approvalContext, ApprovalService.ApprovalLockService approvalLock, DemoApprovals demoApprovals,
+    AttachmentService.AttachmentUploadTracker uploadTracker)
 {
     public const string CrmAppId = DemoCatalog.CrmAppId;
 
     /// <summary>把「每個 HTTP 請求一份」的 scoped 狀態歸零；產生器每一步與測試的每次請求共用這一份清單。</summary>
     public static void ResetPerRequestState(IWriteJournal journal, EventService.EffectBudget budget,
-        ApprovalService.ApprovalWriteContext approvalContext, ApprovalService.ApprovalLockService approvalLock)
+        ApprovalService.ApprovalWriteContext approvalContext, ApprovalService.ApprovalLockService approvalLock,
+        AttachmentService.AttachmentUploadTracker uploadTracker)
     {
         journal.Clear();
         budget.Reset();
         approvalContext.Clear();
         approvalLock.Reset();
+        uploadTracker.Forget();
     }
 
     public async Task<(DemoContext? Context, ServiceResult? Failed)> BuildAsync(DateOnly today, CancellationToken ct)
@@ -79,7 +82,7 @@ public sealed class DemoStructure(
         var masters = await MastersAsync(ct);
         return (new DemoContext(today, sender, ids, groupIds)
         {
-            BeginStep = () => ResetPerRequestState(journal, budget, approvalContext, approvalLock),
+            BeginStep = () => ResetPerRequestState(journal, budget, approvalContext, approvalLock, uploadTracker),
             Crm = new DemoContext(today, sender, opened[DemoCatalog.CrmAppId], groupIds),
             Inventory = new DemoContext(today, sender, opened[DemoCatalog.InventoryAppId], groupIds),
             Masters = masters is null ? null : new DemoContext(today, sender, masters, groupIds)

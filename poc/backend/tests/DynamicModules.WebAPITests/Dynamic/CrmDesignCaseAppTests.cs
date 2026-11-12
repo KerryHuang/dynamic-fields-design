@@ -660,6 +660,12 @@ public class CrmDesignCaseAppTests : IDisposable
         var fieldId = module.GetProperty("blocks").EnumerateArray().SelectMany(b => b.GetProperty("fields").EnumerateArray())
             .Single(x => x.GetProperty("label").GetProperty("zh-TW").GetString() == "設計圖檔").GetProperty("id").GetInt64();
         var up = await _app.AsUser("sales01").PostAsync($"{Base}/records/{id}/attachments/{fieldId}", File("外殼-v3.png", [1, 2, 3]));
-        up.StatusCode.Should().Be(HttpStatusCode.Conflict, await up.Content.ReadAsStringAsync());
+        var body = await up.Content.ReadAsStringAsync();
+        up.StatusCode.Should().Be(HttpStatusCode.Conflict, body);
+        body.Should().Contain("簽核中");
+        var key = (await FieldKeys(_admin, Case))["設計圖檔"];
+        var values = (await Reload(id)).GetProperty("values");
+        (values.TryGetProperty(key, out var list) && list.ValueKind == System.Text.Json.JsonValueKind.Array ? list.GetArrayLength() : 0)
+            .Should().Be(0, "簽核中的上傳被擋，設計圖檔數量不變");
     }
 }

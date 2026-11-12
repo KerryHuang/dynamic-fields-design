@@ -689,11 +689,11 @@ public class AttachmentApiTests : IDisposable
 
     private static object Name(string key) => new Dictionary<string, string> { ["zh-TW"] = key };
 
-    private Task<HttpResponseMessage> UploadWithKey(World w, string key, string fileName)
+    private Task<HttpResponseMessage> UploadWithKey(World w, string key, string fileName, byte[]? content = null)
     {
         var req = new HttpRequestMessage(HttpMethod.Post, $"{Base}/records/{w.RecordId}/attachments/{w.FieldId}")
         {
-            Content = Form(fileName, "hello"u8.ToArray())
+            Content = Form(fileName, content ?? "hello"u8.ToArray())
         };
         req.Headers.Add("Idempotency-Key", key);
         return Admin.SendAsync(req);
@@ -724,6 +724,18 @@ public class AttachmentApiTests : IDisposable
         (await UploadWithKey(w, key, "a.txt")).StatusCode.Should().Be(HttpStatusCode.Created);
 
         (await UploadWithKey(w, key, "b.txt")).StatusCode.Should().Be(HttpStatusCode.UnprocessableEntity);
+        DiskFiles().Should().HaveCount(1);
+    }
+
+    [Fact]
+    [Trait("Category", "Postgres")]
+    public async Task Upload_WithIdempotencyKey_DifferentLength_Returns422()
+    {
+        var w = await MakeWorld();
+        var key = "up-" + Guid.NewGuid().ToString("N");
+        (await UploadWithKey(w, key, "a.txt", "hello"u8.ToArray())).StatusCode.Should().Be(HttpStatusCode.Created);
+
+        (await UploadWithKey(w, key, "a.txt", "hello!"u8.ToArray())).StatusCode.Should().Be(HttpStatusCode.UnprocessableEntity);
         DiskFiles().Should().HaveCount(1);
     }
 

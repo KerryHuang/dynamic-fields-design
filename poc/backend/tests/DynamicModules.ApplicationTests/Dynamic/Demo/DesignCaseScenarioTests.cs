@@ -187,7 +187,8 @@ public class DesignCaseScenarioTests(DemoGeneratedFixture fx)
         DemoStructure.ResetPerRequestState(sp.GetRequiredService<IWriteJournal>(),
             sp.GetRequiredService<DynamicModules.Application.Dynamic.EventService.EffectBudget>(),
             sp.GetRequiredService<DynamicModules.Application.Dynamic.ApprovalService.ApprovalWriteContext>(),
-            sp.GetRequiredService<DynamicModules.Application.Dynamic.ApprovalService.ApprovalLockService>());
+            sp.GetRequiredService<DynamicModules.Application.Dynamic.ApprovalService.ApprovalLockService>(),
+            sp.GetRequiredService<DynamicModules.Application.Dynamic.AttachmentService.AttachmentUploadTracker>());
         using var _ = ActingScope.Begin(user);
         return await host.Send(request);
     }

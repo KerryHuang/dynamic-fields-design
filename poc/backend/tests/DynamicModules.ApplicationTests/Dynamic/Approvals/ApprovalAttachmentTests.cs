@@ -83,6 +83,7 @@ public class ApprovalAttachmentTests : ApprovalTestBase
         var res = await Upload(extra, _extraFiles);
 
         res.IsConflict.Should().BeTrue(Dump(res));
+        res.Message.Should().Be(ApprovalMessages.EventBlocked(po.Id).Resolve(null));
         FilesOf(extra, _extraFiles).Should().Be(0);
     }
 
@@ -98,6 +99,22 @@ public class ApprovalAttachmentTests : ApprovalTestBase
         (await Upload(extra, _extraFiles)).IsCreated.Should().BeTrue();
 
         Rec(po.Id).Values[$"f_{_r.Memo}"]!.Value.GetString().Should().Be("touched");
+    }
+
+    [Fact]
+    public async Task Upload_PendingRecord_InsideServerUploadScope_StillReturns409()
+    {
+        await Rig();
+        var po = await NewPo(_r);
+        await SeedInstance(_r, _flow, recordId: po.Id);
+
+        ServiceResult res;
+        using (DynamicModules.Application.Common.Uploads.ServerUploadScope.Begin())
+            res = await Upload(po.Id, _poFiles);
+
+        res.IsConflict.Should().BeTrue(Dump(res));
+        res.Message.Should().Be(ApprovalMessages.Pending.Resolve(null));
+        FilesOf(po.Id, _poFiles).Should().Be(0);
     }
 
     private Task<ServiceResult> CheckUpload(long record, long field) => Send(new CheckAttachmentUploadRequest(record, field));
