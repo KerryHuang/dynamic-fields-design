@@ -427,6 +427,25 @@ public class ApprovalQueryTests : ApprovalTestBase
     }
 
     [Fact]
+    public async Task RecordApproval_TitleHiddenForReader_SnapshotEmptyForBystanderOnly()
+    {
+        var r = await Scenario3();
+        As("buyer1");
+        var po = await NewPo(r, price: 150000, title: "採購甲");
+        var id = (await MustSubmit(po.Id, r.Confirmed)).InstanceId!.Value;
+        // 設計器不允許把標題用到的欄位設為隱藏，所以先隱藏備註，再直接把標題樣板改成引用它（模擬標題欄位對讀者隱藏）
+        As("admin");
+        await HideFor(r.Module, r.Memo, Db.Context.Set<PermissionGroup>().AsNoTracking().Single(g => g.Key == "everyone").Id);
+        await Db.Context.Set<Module>().Where(m => m.Key == r.Module).ExecuteUpdateAsync(u => u.SetProperty(m => m.TitleTemplate, $"{{{r.Memo}}}"));
+        Db.Context.ChangeTracker.Clear();
+
+        (await RecordApproval(po.Id, "emp1")).Current!.TitleSnapshot.Should().BeEmpty();   // 有 Read、標題欄位被隱藏的旁觀者
+        (await RecordApproval(po.Id, "buyer1")).Current!.TitleSnapshot.Should().Be("採購甲");   // 發起人
+        (await RecordApproval(po.Id, "gm")).Current!.TitleSnapshot.Should().Be("採購甲");   // 有任務的人
+        Inst(id).TitleSnapshot.Should().Be("採購甲");
+    }
+
+    [Fact]
     public async Task RecordApproval_InstanceHasTitleSnapshot()
     {
         var r = await Scenario3();

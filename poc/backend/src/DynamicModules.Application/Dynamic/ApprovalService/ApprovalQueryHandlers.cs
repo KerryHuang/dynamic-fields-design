@@ -87,6 +87,11 @@ public class GetRecordApprovalHandler(
         var tasks = await repo.ListTasksAsync(ids, ct);
         // 沒有 Read／Approve 的任務負責人只看自己處理過的關卡（設計 §10.2）：open 或動作過的任務所在關卡；
         // 從沒動作就被關閉的任務不算。發起人看整個實例。
+        // 標題快照的遮蔽（同記錄頁的 TitleVisibleTo）：發起人、在該實例有任務的人、簽核管理者一律看得到；
+        // 其他人（例如有 Read、但標題欄位對他隱藏的旁觀者）要標題對他可見才給
+        var titleVisible = read is not null && module.TitleVisibleTo(read);
+        bool ShowTitle(ApprovalInstance i) => titleVisible || manager || i.InitiatorUserId == me
+            || tasks.Any(t => t.InstanceId == i.Id && (t.AssigneeUserId == me || t.OriginalUserId == me));
         var ownStages = new Dictionary<long, HashSet<long>>();
         if (!canRead && !manager)
             foreach (var i in instances.Where(i => i.InitiatorUserId != me))
@@ -110,7 +115,7 @@ public class GetRecordApprovalHandler(
         // 歷程的欄位遮蔽（設計 §8.5）：有 Read 用它；沒有時用臨時讀取權，再沒有就用自己的群組欄位例外（含明細來源隱藏）；
         // 讀不到權限輸入是 null（全部遮蔽）
         var hidden = await grant.HiddenFieldIdsAsync(module, read, granted, ct);
-        var views = visible.Select(i => ApprovalViews.Instance(i, runs, tasks, actions, names, me, writable, manager, hidden, module.Workflow)).ToList();
+        var views = visible.Select(i => ApprovalViews.Instance(i, runs, tasks, actions, names, me, writable, manager, hidden, module.Workflow, ShowTitle(i))).ToList();
         var pending = instances.Any(i => i.Status == ApprovalInstanceStatus.Pending);
         var targets = canRead ? await reader.SubmitTargetsAsync(module, record, pending, ct) : [];
         return ServiceResult.Success(new RecordApprovalResponse(
@@ -253,7 +258,7 @@ internal static class ApprovalViews
 
     public static ApprovalInstanceView Instance(ApprovalInstance i, IReadOnlyList<ApprovalStageRun> allRuns, IReadOnlyList<ApprovalTask> allTasks,
         IReadOnlyList<ApprovalAction> allActions, IReadOnlyDictionary<string, string> names, string me, bool writable, bool manager,
-        IReadOnlySet<long>? hiddenFieldIds, Workflow? workflow)
+        IReadOnlySet<long>? hiddenFieldIds, Workflow? workflow, bool showTitle)
     {
         string Name(string id) => names.GetValueOrDefault(id) ?? id;
         var pending = i.Status == ApprovalInstanceStatus.Pending;
@@ -279,7 +284,7 @@ internal static class ApprovalViews
             && !tasks.Any(t => t.StageRunId == current?.Id && t.Status is ApprovalTaskStatus.Approved or ApprovalTaskStatus.Rejected);
         var flowName = i.FlowSetSnapshot.FirstOrDefault(e => e.FlowId == i.FlowId)?.Name;
         return new ApprovalInstanceView(i.Id, i.Status, i.RouteKind, flowName, i.FromOptionId, i.ToOptionId, i.InitiatorUserId, i.SubmittedTime, i.CompletedTime,
-            i.RowVersion, stages, actions, canWithdraw, pending && writable && manager, i.TitleSnapshot);
+            i.RowVersion, stages, actions, canWithdraw, pending && writable && manager, showTitle ? i.TitleSnapshot : "");
     }
 
     /// <summary>
