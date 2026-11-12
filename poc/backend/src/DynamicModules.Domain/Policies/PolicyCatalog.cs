@@ -84,6 +84,34 @@ public static class PolicyCatalog
     public static readonly PolicyDefinition OpsClientErrorCollection =
         new("ops.clientErrorCollection", "ops", PolicyKind.Boolean, PolicyScope.System, "true");
 
+    /// <summary>A3：一個簽核流程的關卡數。</summary>
+    public static readonly PolicyDefinition ApprovalMaxStages =
+        new("approval.maxStages", "approval", PolicyKind.Integer, PolicyScope.Module, "10", 1, 20, Unit: "count");
+
+    /// <summary>A3：一關的簽核人數（固定名單執行期只受技術上限 <c>Max</c> 管）。</summary>
+    public static readonly PolicyDefinition ApprovalMaxApprovers =
+        new("approval.maxApprovers", "approval", PolicyKind.Integer, PolicyScope.Module, "20", 1, 50, Unit: "count");
+
+    /// <summary>A3：一關的逾期時數；8760 小時是一年。</summary>
+    public static readonly PolicyDefinition ApprovalMaxDueHours =
+        new("approval.maxDueHours", "approval", PolicyKind.Integer, PolicyScope.Module, "8760", 1, 8760, Unit: "hours");
+
+    /// <summary>A3：簽核意見字數；上限 1000 是資料庫欄位長度。</summary>
+    public static readonly PolicyDefinition ApprovalMaxCommentLength =
+        new("approval.maxCommentLength", "approval", PolicyKind.Integer, PolicyScope.System, "1000", 1, 1000, Unit: "count");
+
+    /// <summary>A3＋A4：主管來源的層數；執行期的主管鏈解析只用技術上限 <c>Max</c>。</summary>
+    public static readonly PolicyDefinition ApprovalMaxManagerLevel =
+        new("approval.maxManagerLevel", "approval", PolicyKind.Integer, PolicyScope.Module, "5", 1, 10, Unit: "count");
+
+    /// <summary>A12：發起人在關卡名單內時是否保留、要自己簽。</summary>
+    public static readonly PolicyDefinition ApprovalAllowSelfApproval =
+        new("approval.allowSelfApproval", "approval", PolicyKind.Boolean, PolicyScope.Module, "false");
+
+    /// <summary>A15：系統管理員是否略過狀態轉移上的群組限制（只管轉移群組，不影響其他權限）。</summary>
+    public static readonly PolicyDefinition ApprovalAdminBypassTransitionGroups =
+        new("approval.adminBypassTransitionGroups", "approval", PolicyKind.Boolean, PolicyScope.System, "true");
+
     public static DayOfWeek WeekStartOf(string choice) => Enum.Parse<DayOfWeek>(choice, ignoreCase: true);
 
     public static IReadOnlyList<PolicyDefinition> All { get; } =
@@ -91,7 +119,9 @@ public static class PolicyCatalog
          TaskReminderLeadDays, TaskRemindOverdue, TaskNotifyCommented, TaskNotifyCompleted, TaskNotifyCancelled,
          NotificationRetentionDays, CalendarWeekStart,
          AttachmentMaxFileBytes, AttachmentMaxFilesPerField, AttachmentAllowedExtensions, AttachmentMaxFilesPerComment,
-         OpsSlowRequestMs, OpsClientErrorCollection];
+         OpsSlowRequestMs, OpsClientErrorCollection,
+         ApprovalMaxStages, ApprovalMaxApprovers, ApprovalMaxDueHours, ApprovalMaxCommentLength, ApprovalMaxManagerLevel,
+         ApprovalAllowSelfApproval, ApprovalAdminBypassTransitionGroups];
 
     public static PolicyDefinition? Find(string code) =>
         All.FirstOrDefault(d => string.Equals(d.Code, code, StringComparison.Ordinal));

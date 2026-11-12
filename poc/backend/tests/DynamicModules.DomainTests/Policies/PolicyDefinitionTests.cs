@@ -111,5 +111,45 @@ public class PolicyDefinitionTests
     }
 
     [Fact]
+    public void ApprovalPolicies_FactoryEqualsLegacyConstants()
+    {
+        new[]
+        {
+            PolicyCatalog.ApprovalMaxStages.Factory, PolicyCatalog.ApprovalMaxApprovers.Factory, PolicyCatalog.ApprovalMaxDueHours.Factory,
+            PolicyCatalog.ApprovalMaxCommentLength.Factory, PolicyCatalog.ApprovalMaxManagerLevel.Factory,
+            PolicyCatalog.ApprovalAllowSelfApproval.Factory, PolicyCatalog.ApprovalAdminBypassTransitionGroups.Factory
+        }.Should().Equal("10", "20", "8760", "1000", "5", "false", "true");
+        PolicyCatalog.ApprovalMaxStages.Max.Should().Be(20);
+        PolicyCatalog.ApprovalMaxDueHours.Max.Should().Be(8760);
+        PolicyCatalog.ApprovalAllowSelfApproval.Scope.Should().Be(PolicyScope.Module);
+        PolicyCatalog.ApprovalAdminBypassTransitionGroups.Scope.Should().Be(PolicyScope.System);
+        PolicyCatalog.ApprovalMaxCommentLength.Scope.Should().Be(PolicyScope.System);
+    }
+
+    [Fact]
+    public void ApprovalMaxCommentLength_Above1000_Invalid()
+    {
+        PolicyCatalog.ApprovalMaxCommentLength.Normalize("1001").Should().BeNull();
+        PolicyCatalog.ApprovalMaxCommentLength.Normalize("1000").Should().Be("1000");
+    }
+
+    [Fact]
+    public void ApprovalMaxManagerLevel_IsModuleScope_Max10()
+    {
+        PolicyCatalog.ApprovalMaxManagerLevel.Scope.Should().Be(PolicyScope.Module);
+        PolicyCatalog.ApprovalMaxManagerLevel.Max.Should().Be(10);
+        PolicyCatalog.ApprovalMaxManagerLevel.Normalize("10").Should().Be("10");
+        PolicyCatalog.ApprovalMaxManagerLevel.Normalize("11").Should().BeNull();
+    }
+
+    [Fact]
+    public void ApprovalMaxApprovers_TechnicalMax50()
+    {
+        PolicyCatalog.ApprovalMaxApprovers.Scope.Should().Be(PolicyScope.Module);
+        PolicyCatalog.ApprovalMaxApprovers.Max.Should().Be(50);
+        PolicyCatalog.ApprovalMaxApprovers.Normalize("51").Should().BeNull();
+    }
+
+    [Fact]
     public void SettingKey_HasPolicyPrefix() => Int().SettingKey.Should().Be("policy.t.int");
 }
