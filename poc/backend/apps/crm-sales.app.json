@@ -3316,6 +3316,91 @@
           }
         }
       ]
+    },
+    {
+      "code": "crm-design-case-intake",
+      "name": {
+        "zh-TW": "設計案建案派工",
+        "en-US": "Design case intake",
+        "th": "มอบหมายงานเมื่อสร้างโครงการ",
+        "vi": "Phân công khi tạo dự án"
+      },
+      "active": true,
+      "module": "design-case",
+      "repeat": "once",
+      "trigger": {
+        "on": "onCreate"
+      },
+      "tasks": [
+        {
+          "code": "intake",
+          "title": {
+            "zh-TW": "確認需求並交設計",
+            "en-US": "Confirm requirements and hand over to design",
+            "th": "ยืนยันความต้องการและส่งต่อให้ฝ่ายออกแบบ",
+            "vi": "Xác nhận yêu cầu và chuyển cho thiết kế"
+          },
+          "assignee": "design-case.owner"
+        }
+      ]
+    },
+    {
+      "code": "crm-design-case-draw",
+      "name": {
+        "zh-TW": "進入設計中派工",
+        "en-US": "Design-phase assignment",
+        "th": "มอบหมายงานเมื่อเข้าสู่การออกแบบ",
+        "vi": "Phân công khi vào giai đoạn thiết kế"
+      },
+      "active": true,
+      "module": "design-case",
+      "repeat": "everyTime",
+      "trigger": {
+        "on": "onFieldBecomes",
+        "field": "design-case.status",
+        "value": "opt_designing"
+      },
+      "tasks": [
+        {
+          "code": "draw",
+          "title": {
+            "zh-TW": "依需求繪製／修改設計圖",
+            "en-US": "Draw or revise the design per the requirements",
+            "th": "วาดหรือแก้ไขแบบตามความต้องการ",
+            "vi": "Vẽ hoặc chỉnh sửa bản vẽ theo yêu cầu"
+          },
+          "assignee": "design-case.designOwner"
+        }
+      ]
+    },
+    {
+      "code": "crm-design-case-confirm",
+      "name": {
+        "zh-TW": "客戶確認中派工",
+        "en-US": "Customer-review assignment",
+        "th": "มอบหมายงานเมื่อรอลูกค้ายืนยัน",
+        "vi": "Phân công khi chờ khách hàng xác nhận"
+      },
+      "active": true,
+      "module": "design-case",
+      "repeat": "everyTime",
+      "trigger": {
+        "on": "onFieldBecomes",
+        "field": "design-case.status",
+        "value": "opt_customer-review"
+      },
+      "tasks": [
+        {
+          "code": "confirm",
+          "title": {
+            "zh-TW": "將設計圖交客戶確認",
+            "en-US": "Send the design to the customer for confirmation",
+            "th": "ส่งแบบให้ลูกค้ายืนยัน",
+            "vi": "Gửi bản vẽ cho khách hàng xác nhận"
+          },
+          "assignee": "design-case.owner"
+        }
+      ]
     }
   ]
 }

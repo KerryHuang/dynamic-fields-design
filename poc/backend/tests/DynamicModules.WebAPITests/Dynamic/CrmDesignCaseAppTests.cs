@@ -18,7 +18,7 @@ public class CrmDesignCaseAppTests : IDisposable
     private const string Apps = Base + "/apps";
     private const string Case = "crm-design-case";
     private const string Drawing = "crm-design-drawing";
-    private const string Designer = "designerT";
+    private const string Designer = "designert";
     private const string Partner = BuiltInMasterTests.Partner;
 
     private readonly TestApp _app = new();
@@ -251,5 +251,119 @@ public class CrmDesignCaseAppTests : IDisposable
         var customer = read.GetProperty("references").GetProperty(c["客戶"]);
         customer.GetProperty("title").GetString().Should().Be("宏達科技");
         customer.GetProperty("state").GetString().Should().Be("ok");
+    }
+
+    // ---- Task 2：任務規則 ----
+
+    private const string IntakeTitle = "確認需求並交設計", DrawTitle = "依需求繪製／修改設計圖", ConfirmTitle = "將設計圖交客戶確認";
+
+    private async Task<List<JsonElement>> TasksOf(long recordId, string title) =>
+        (await JsonOf(await _admin.GetAsync($"{Base}/records/{recordId}/tasks"))).GetProperty("items").EnumerateArray()
+            .Where(t => t.GetProperty("title").GetString() == title).ToList();
+
+    private async Task Complete(JsonElement task)
+    {
+        var res = await _app.AsUser(task.GetProperty("assigneeUserId").GetString()).PatchAsync($"{Base}/tasks/{task.GetProperty("id").GetInt64()}",
+            JsonContent.Create(new { status = "done" }));
+        res.StatusCode.Should().Be(HttpStatusCode.OK, await res.Content.ReadAsStringAsync());
+    }
+
+    private async Task<string[]> NotificationKinds(string user) =>
+        (await JsonOf(await _app.AsUser(user).GetAsync($"{Base}/notifications?take=50"))).GetProperty("items").EnumerateArray()
+            .Select(i => i.GetProperty("kind").GetString()!).ToArray();
+
+    private async Task OpenWithMembers()
+    {
+        await OpenCrm();
+        await SetMembers(["sales01"], ["manager01"], [Designer]);
+    }
+
+    /// <summary>每次轉移前把上一批任務標完成；回傳最後的記錄。</summary>
+    private async Task<JsonElement> GoRound(JsonElement record, string toLabel, string? completeTitle)
+    {
+        if (completeTitle is not null)
+            foreach (var t in await TasksOf(record.GetProperty("id").GetInt64(), completeTitle)) if (t.GetProperty("status").GetString() != "done") await Complete(t);
+        return await Move(_admin, record, toLabel);
+    }
+
+    [Fact]
+    public async Task Create_AssignsIntakeToOwner_Notified()
+    {
+        await OpenWithMembers();
+        var record = await NewCase(_app.AsUser("manager01"));
+        var tasks = await TasksOf(record.GetProperty("id").GetInt64(), IntakeTitle);
+        tasks.Should().ContainSingle().Which.GetProperty("assigneeUserId").GetString().Should().Be("sales01");
+        (await NotificationKinds("sales01")).Should().Contain("taskAssigned");
+    }
+
+    [Fact]
+    public async Task TwoRounds_TwoBatchesEach()
+    {
+        await OpenWithMembers();
+        var record = await NewCase(_app.AsUser("manager01"));
+        var id = record.GetProperty("id").GetInt64();
+        record = await Move(_admin, record, "設計中");
+        record = await GoRound(record, "客戶確認中", DrawTitle);
+        record = await GoRound(record, "設計中", ConfirmTitle);
+        record = await GoRound(record, "客戶確認中", DrawTitle);
+
+        var draws = await TasksOf(id, DrawTitle);
+        draws.Should().HaveCount(2).And.OnlyContain(t => t.GetProperty("assigneeUserId").GetString() == Designer);
+        var confirms = await TasksOf(id, ConfirmTitle);
+        confirms.Should().HaveCount(2).And.OnlyContain(t => t.GetProperty("assigneeUserId").GetString() == "sales01");
+        using var scope = _app.Services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<DynamicDbContext>();
+        db.Set<TaskItem>().Where(t => t.RecordId == id && t.RuleOccurrence != null && t.Title == DrawTitle).Select(t => t.RuleOccurrence!.Value)
+            .OrderBy(x => x).ToList().Should().Equal(1, 2);
+    }
+
+    [Fact]
+    public async Task Redesign_WhileDrawOpen_NoNewBatch()
+    {
+        await OpenWithMembers();
+        var record = await NewCase(_app.AsUser("manager01"));
+        var id = record.GetProperty("id").GetInt64();
+        record = await Move(_admin, record, "設計中");
+        record = await Move(_admin, record, "客戶確認中");           // 第一批 draw 沒完成
+        record = await Move(_admin, record, "設計中");
+
+        var draws = await TasksOf(id, DrawTitle);
+        draws.Should().ContainSingle("上一輪尚未完成就不再派");
+        var comments = await JsonOf(await _admin.GetAsync($"{Base}/tasks/{draws[0].GetProperty("id").GetInt64()}/comments"));
+        comments.EnumerateArray().Any(c => c.GetProperty("kind").GetString() != "comment" && c.GetProperty("systemEvent").ValueKind == JsonValueKind.String)
+            .Should().BeTrue("留言串有系統記錄：條件再次符合，但上一輪任務尚未完成");
+    }
+
+    [Fact]
+    public async Task Comment_AttachmentAndMention()
+    {
+        await OpenWithMembers();
+        var record = await NewCase(_app.AsUser("manager01"));
+        var id = record.GetProperty("id").GetInt64();
+        record = await Move(_admin, record, "設計中");
+        record = await Move(_admin, record, "客戶確認中");
+        var confirm = (await TasksOf(id, ConfirmTitle)).Single();
+        var taskId = confirm.GetProperty("id").GetInt64();
+
+        var png = new byte[] { 0x89, 0x50, 0x4E, 0x47, 1, 2, 3 };
+        var txt = System.Text.Encoding.UTF8.GetBytes("面板顏色再確認");
+        var form = new MultipartFormDataContent { { new StringContent($"請看 @{{{Designer}}}"), "body" } };
+        form.Add(new ByteArrayContent(png), "files", "annotated.png");
+        form.Add(new ByteArrayContent(txt), "files", "notes.txt");
+        var posted = await _app.AsUser("sales01").PostAsync($"{Base}/tasks/{taskId}/comments", form);
+        posted.StatusCode.Should().Be(HttpStatusCode.Created, await posted.Content.ReadAsStringAsync());
+        var comment = await JsonOf(posted);
+
+        (await NotificationKinds(Designer)).Should().Contain("taskMentioned");
+        var designer = _app.AsUser(Designer);
+        var commentId = comment.GetProperty("id").GetInt64();
+        var expected = new Dictionary<string, byte[]> { ["annotated.png"] = png, ["notes.txt"] = txt };
+        foreach (var a in comment.GetProperty("attachments").EnumerateArray())
+        {
+            var down = await designer.GetAsync($"{Base}/tasks/{taskId}/comments/{commentId}/attachments/{a.GetProperty("id").GetInt64()}");
+            down.StatusCode.Should().Be(HttpStatusCode.OK);
+            (await down.Content.ReadAsByteArrayAsync()).Should().Equal(expected[a.GetProperty("fileName").GetString()!]);
+        }
+        comment.GetProperty("attachments").GetArrayLength().Should().Be(2);
     }
 }
