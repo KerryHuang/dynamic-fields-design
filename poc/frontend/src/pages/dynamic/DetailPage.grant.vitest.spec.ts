@@ -115,6 +115,7 @@ describe('DetailPage temporary read', () => {
       api.getRecordApproval.mockResolvedValue(approvalOf(null, [ended]));
     });
     expect(has(w, 'approval-history-only')).toBe(true);
+    expect(w.find('[data-testid="approval-history-back"]').attributes('href')).toBe('/approvals');
     expect(has(w, 'forbidden')).toBe(false);
     expect(has(w, 'approval-panel')).toBe(true);
     expect(has(w, 'action-approve')).toBe(false);

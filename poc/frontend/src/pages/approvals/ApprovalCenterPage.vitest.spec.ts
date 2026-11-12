@@ -20,7 +20,7 @@ const item = (o: Partial<ApprovalInboxItem> = {}): ApprovalInboxItem => ({
   dueTime: null, overdue: false, moduleClosed: false, status: 'pending', ...o,
 });
 
-interface Opts { items?: ApprovalInboxItem[]; total?: number; allForbidden?: boolean; listFails?: boolean; width?: number }
+interface Opts { items?: ApprovalInboxItem[]; total?: number; allForbidden?: boolean; allFails?: boolean; listFails?: boolean; listForbidden?: boolean; width?: number }
 
 async function mountPage(url: string, opts: Opts = {}) {
   window.innerWidth = opts.width ?? 1366;
@@ -30,7 +30,8 @@ async function mountPage(url: string, opts: Opts = {}) {
   const items = opts.items ?? [item(), item({ taskId: 12, instanceId: 6, recordId: 10, titleSnapshot: 'PO-0010 螢幕' })];
   calls = mockHttp((c) => {
     if (c.url === '/approval-tasks') {
-      if (c.params?.box === 'all' && c.params?.pagesSize === 1) return opts.allForbidden ? new HttpFail(403) : { items: [], totalCount: 0, currentPage: 1, pagesSize: 1 };
+      if (c.params?.box === 'all' && c.params?.pagesSize === 1) return opts.allFails ? new HttpFail(500, {}) : opts.allForbidden ? new HttpFail(403) : { items: [], totalCount: 0, currentPage: 1, pagesSize: 1 };
+      if (opts.listForbidden) return new HttpFail(403);
       if (opts.listFails) return new HttpFail(500, {});
       return { items, totalCount: opts.total ?? items.length, currentPage: Number(c.params?.currentPage ?? 1), pagesSize: 20 };
     }
@@ -175,6 +176,55 @@ describe('ApprovalCenterPage', () => {
   it.each([['todo', '目前沒有待簽核的單據'], ['done', '目前沒有處理過的簽核'], ['submitted', '你還沒有送出過簽核']])('empty %s tab says so', async (tab, text) => {
     const { w } = await mountPage(`/approvals?tab=${tab}`, { items: [] });
     expect(q('approval-empty')!.textContent).toContain(text);
+    w.unmount();
+  });
+
+  it('all tab with a module the user cannot approve (403) shows the empty state', async () => {
+    const { w } = await mountPage('/approvals?tab=all&module=exp', { listForbidden: true });
+    expect(q('approval-empty')).not.toBeNull();
+    expect(q('approval-load-failed')).toBeNull();
+    w.unmount();
+  });
+
+  it('all tab list failing with 500 still shows the error', async () => {
+    const { w } = await mountPage('/approvals?tab=all', { listFails: true });
+    expect(q('approval-load-failed')).not.toBeNull();
+    expect(q('approval-empty')).toBeNull();
+    w.unmount();
+  });
+
+  it('a 403 on the todo tab is still an error', async () => {
+    const { w } = await mountPage('/approvals', { listForbidden: true });
+    expect(q('approval-load-failed')).not.toBeNull();
+    w.unmount();
+  });
+
+  it('a non-403 probe failure keeps the all tab', async () => {
+    const { w } = await mountPage('/approvals', { allFails: true });
+    expect(q('approval-tab-all')).not.toBeNull();
+    w.unmount();
+  });
+
+  it('changing a filter on page 2 goes back to page 1', async () => {
+    const { w } = await mountPage('/approvals', { total: 45 });
+    const two = [...document.querySelectorAll('[data-testid="approval-pagination"] button')].find((b) => b.textContent?.trim() === '2') as HTMLElement;
+    two.click();
+    await flushPromises();
+    await new Promise((r) => setTimeout(r, 20));
+    expect(lists().at(-1)!.params).toMatchObject({ currentPage: 2 });
+    w.findComponent({ name: 'ApprovalInboxFilters' }).vm.$emit('update:modelValue', { module: 'po' });
+    await flushPromises();
+    await new Promise((r) => setTimeout(r, 20));
+    expect(lists().at(-1)!.params).toMatchObject({ module: 'po', currentPage: 1 });
+    w.unmount();
+  });
+
+  it('invalid status and dates in the URL are ignored', async () => {
+    const { w } = await mountPage('/approvals?tab=done&status=bogus&from=2026/11/01&to=2026-13-45');
+    const p = lists().at(-1)!.params!;
+    expect(p.status).toBeUndefined();
+    expect(p.from).toBeUndefined();
+    expect(p.to).toBeUndefined();
     w.unmount();
   });
 

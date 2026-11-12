@@ -15,6 +15,7 @@ const title = computed(() => instanceTitle(main.value?.titleSnapshot ?? '', unde
 
 <template>
   <div data-testid="approval-history-only">
+    <q-btn flat no-caps dense icon="arrow_back" :label="t('approval.historyOnly.backToCenter')" to="/approvals" class="q-mb-sm" data-testid="approval-history-back" />
     <div class="text-h6 approval-title" data-testid="approval-history-title">{{ title }}</div>
     <div class="row items-center no-wrap q-mb-md text-muted">
       <q-icon name="history" class="q-mr-sm" />

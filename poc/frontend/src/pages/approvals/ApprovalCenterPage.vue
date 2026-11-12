@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { date, useQuasar } from 'quasar';
-import { computed, ref } from 'vue';
+import { computed, ref, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { useRoute, useRouter, type LocationQueryRaw } from 'vue-router';
 import { useApprovalAllAccess } from 'src/application/dynamic/queries/approval-center-queries';
@@ -8,6 +8,7 @@ import { useApprovalInbox } from 'src/application/dynamic/queries/approval-queri
 import { useMenu } from 'src/application/dynamic/queries/modules-queries';
 import type { ApprovalBox, ApprovalInboxFilter, ApprovalInboxItem, ApprovalInstanceStatus } from 'src/domain/dynamic/approval-types';
 import { resolveI18n } from 'src/domain/dynamic/i18n-text';
+import { isForbidden } from 'src/services/api/http';
 import ApprovalInboxFilters from 'src/presentation/approvals/ApprovalInboxFilters.vue';
 import { INBOX_STATUSES } from 'src/presentation/approvals/inbox-filter';
 import { instanceTitle } from 'src/presentation/dynamic/approval/approval-display';
@@ -15,6 +16,7 @@ import { instanceTitle } from 'src/presentation/dynamic/approval/approval-displa
 const BOXES: ApprovalBox[] = ['todo', 'done', 'submitted'];
 const SIZE = 20;
 const DAY = /^\d{4}-\d{2}-\d{2}$/;
+const isDay = (v: string) => DAY.test(v) && !Number.isNaN(Date.parse(v));
 
 const { t, locale } = useI18n();
 const route = useRoute();
@@ -39,8 +41,8 @@ const filter = computed<ApprovalInboxFilter>(() => {
   return {
     module: str(route.query.module),
     status: showStatus.value && status && (INBOX_STATUSES as string[]).includes(status) ? (status as ApprovalInstanceStatus) : undefined,
-    from: from && DAY.test(from) ? from : undefined,
-    to: to && DAY.test(to) ? to : undefined,
+    from: from && isDay(from) ? from : undefined,
+    to: to && isDay(to) ? to : undefined,
   };
 });
 const page = ref(1);
@@ -48,6 +50,9 @@ const page = ref(1);
 const query = useApprovalInbox(tab, filter, page);
 const items = computed(() => query.data.value?.items ?? []);
 const pageCount = computed(() => Math.max(1, Math.ceil((query.data.value?.totalCount ?? 0) / SIZE)));
+watch(pageCount, (n) => { if (page.value > n) page.value = n; });
+// On the all tab a module the user cannot approve answers 403: nothing to show there, not a failure.
+const loadFailed = computed(() => !!query.error.value && !query.data.value && !(tab.value === 'all' && isForbidden(query.error.value)));
 
 const menu = useMenu();
 const modules = computed(() => (menu.data.value ?? []).map((m) => ({ value: m.key, label: resolveI18n(m.name, locale.value) })));
@@ -86,7 +91,7 @@ const columns = computed(() => [
     <q-separator class="q-mb-md" />
     <ApprovalInboxFilters :model-value="filter" :show-status="showStatus" :modules="modules" :mobile="$q.screen.lt.sm" @update:model-value="setFilter" />
 
-    <div v-if="query.error.value && !query.data.value" class="text-negative" data-testid="approval-load-failed">{{ t('approval.center.loadFailed') }}</div>
+    <div v-if="loadFailed" class="text-negative" data-testid="approval-load-failed">{{ t('approval.center.loadFailed') }}</div>
     <div v-else-if="!items.length && !query.isFetching.value" class="text-muted q-py-md" data-testid="approval-empty">{{ t(`approval.center.empty.${tab}`) }}</div>
     <q-table
       v-else flat bordered :row-key="key" :rows="items" :columns="columns" :loading="query.isFetching.value"
