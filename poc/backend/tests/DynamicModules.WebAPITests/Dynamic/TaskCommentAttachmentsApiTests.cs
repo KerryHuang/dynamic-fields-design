@@ -170,6 +170,7 @@ public class TaskCommentAttachmentsApiTests : IDisposable
     public async Task UploadDisabled_409_EvenIfServerScopeIsActiveInTheSameProcess()
     {
         _app.Settings["Attachments:UploadEnabled"] = "false";
+        _app.Server.PreserveExecutionContext = true;   // 讓測試端的範圍真的流進請求（須在建 client 之前設），否則這條測試不可能失敗
         var id = await NewTask();
         using var _ = DynamicModules.Application.Common.Uploads.ServerUploadScope.Begin();
 

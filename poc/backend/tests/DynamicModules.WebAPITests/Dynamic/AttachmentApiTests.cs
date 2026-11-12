@@ -394,11 +394,15 @@ public class AttachmentApiTests : IDisposable
     public async Task Upload_Disabled_StaysRejected_EvenIfServerScopeIsActiveInTheSameProcess()
     {
         _app.Settings["Attachments:UploadEnabled"] = "false";
+        // TestServer 預設不把測試端的 ExecutionContext 帶進請求；不開這個，範圍根本流不進伺服器，測試永遠綠。
+        // 這個屬性在建 client（handler）時才被複製，所以要在任何 client 建立之前設
+        _app.Server.PreserveExecutionContext = true;
         var w = await MakeWorld();
-        // 伺服器內部範圍只能由程式碼開；HTTP 請求沒有任何方式開啟它，同行程裡有範圍開著也不影響 HTTP 的閘門
+        // 伺服器內部範圍只能由程式碼開；同行程裡有範圍開著（且真的流進請求）也不影響 HTTP 的閘門
         using var _ = DynamicModules.Application.Common.Uploads.ServerUploadScope.Begin();
         var (res, _) = await UploadProbe(Admin, w);
         res.StatusCode.Should().Be(HttpStatusCode.Conflict);
+        // 以下兩個標頭只證明「沒有這兩個名字的入口」，不是通用的「請求無法開範圍」保證
         foreach (var header in new[] { "X-Server-Upload", "X-Upload-Enabled" })
         {
             var req = new HttpRequestMessage(HttpMethod.Post, $"{Base}/records/{w.RecordId}/attachments/{w.FieldId}") { Content = new ProbeContent(10) };
