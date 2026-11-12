@@ -13,13 +13,14 @@ public interface IWriteStage
 }
 
 /// <summary>放在 Transaction 與 Idempotency 之內，只處理 <see cref="IRecordWriteRequest"/>，對其他請求直接放行。</summary>
-public class RecordEffectsBehavior<TReq, TRes>(IEnumerable<IWriteStage> stages) : IPipelineBehavior<TReq, TRes> where TReq : notnull
+public class RecordEffectsBehavior<TReq, TRes>(IEnumerable<IWriteStage> stages, IWriteJournal journal) : IPipelineBehavior<TReq, TRes> where TReq : notnull
 {
     public async Task<TRes> Handle(TReq request, RequestHandlerDelegate<TRes> next, CancellationToken ct)
     {
         var response = await next();
         if (request is not IRecordWriteRequest || response is not ServiceResult { IsSuccess: true }) return response;
 
+        journal.MarkInputEnd();   // handler 的寫入到此為止；之後日誌裡新增的是事件效果
         foreach (var stage in stages.OrderBy(s => s.Order))
             if (await stage.RunAsync(ct) is { } failure)
                 return (TRes)(object)failure;

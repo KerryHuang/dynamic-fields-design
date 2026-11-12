@@ -42,7 +42,7 @@ public class ApprovalLockTests : ApprovalTestBase
         var def = onlyCondition is null
             ? Def(Cond(_r.NetTotal, "gte", 0), Stage("lead", Group(PurchaseLeadGroup), editable: [_r.DueDate]))
             : Def(null, Stage("lead", Group(PurchaseLeadGroup), editable: [_r.DueDate]),
-                Stage("sup", Group(PurchaseLeadGroup), Cond(await onlyCondition(_r), "eq", 1)));
+                Stage("sup", Group(PurchaseLeadGroup), Cond(await onlyCondition(_r), "eq", 987654321)));
         await SeedFlow(_r, "po-a", _r.Confirmed, 1, def);
         await SeedFlow(_r, "po-x", _r.Cancelled, 1, Def(null, Stage("lead", Group(PurchaseLeadGroup))));
         var wf = await SaveWorkflow(_r, [Needs(_r.Draft, _r.Confirmed), Plain(_r.Confirmed, _r.Draft), Plain(_r.Confirmed, _r.Partial),
@@ -163,5 +163,241 @@ public class ApprovalLockTests : ApprovalTestBase
         (await Put(po.Id, V((_r.Memo, "x")))).IsSuccess.Should().BeTrue();
 
         Num(po.Id, _r.NetTotal).Should().Be(1000);
+    }
+
+    // ───────── 第二道：後盾 ─────────
+
+    private Task<ServiceResult> NewExtra(long poId, decimal amount)
+    {
+        var title = Db.Context.Set<Module>().AsNoTracking().Single(m => m.Key == _r.Extra).TitleFieldId!.Value;
+        return Send(new CreateRecordRequest(_r.Extra, V((title, "追加"), (_r.ExtraRef, poId), (_r.ExtraAmount, amount))));
+    }
+
+    private static void ShouldRejectField(ServiceResult res, long field)
+    {
+        res.IsSuccess.Should().BeFalse();
+        res.Errors.Should().ContainKey($"f_{field}");
+        res.Errors[$"f_{field}"][0].Should().Contain("這個欄位已經過簽核");
+    }
+
+    [Fact]
+    public async Task Locked_PutLockedField_Returns400WithFieldKey()
+    {
+        var po = await ApprovedPo();
+
+        ShouldRejectField(await Put(po.Id, V((_r.Discount, 50))), _r.Discount);
+        Num(po.Id, _r.Discount).Should().Be(0);
+    }
+
+    [Fact]
+    public async Task Locked_PutMemo_Succeeds()
+    {
+        var po = await ApprovedPo();
+
+        (await Put(po.Id, V((_r.Memo, "x")))).IsSuccess.Should().BeTrue();
+    }
+
+    [Fact]
+    public async Task Locked_PutStatusTransitionBackToDraft_Succeeds()
+    {
+        var po = await ApprovedPo();
+
+        (await Put(po.Id, new() { [Status] = O(_r.Draft) })).IsSuccess.Should().BeTrue();
+        StateOf(_r, po.Id).Should().Be(_r.Draft);
+    }
+
+    [Fact]
+    public async Task Locked_TransitionBackAndChangeLockedField_SameRequest_Returns400()
+    {
+        var po = await ApprovedPo();
+
+        var res = await Put(po.Id, new() { [Status] = O(_r.Draft), [$"f_{_r.Discount}"] = JsonSerializer.SerializeToElement(50) });
+
+        ShouldRejectField(res, _r.Discount);
+        StateOf(_r, po.Id).Should().Be(_r.Confirmed);
+    }
+
+    /// <summary>
+    /// 在同一個 scope 依序做：使用者把記錄轉回草稿 → 輸入界線 → 事件效果（系統身分）改 Discount → 跑後盾。
+    /// 與正式流程相同的順序（RecordEffectsBehavior 在 handler 之後、階段之前標記界線）。
+    /// </summary>
+    private async Task<ServiceResult?> UnlockThenSystemWrite(long poId, bool userAlsoChangesDiscount = false)
+    {
+        using var scope = NewScope();
+        var sp = scope.ServiceProvider;
+        var update = sp.GetRequiredService<IRequestHandler<UpdateRecordRequest, ServiceResult>>();
+        var values = new Dictionary<string, JsonElement?> { [Status] = O(_r.Draft) };
+        if (userAlsoChangesDiscount) values[$"f_{_r.Discount}"] = JsonSerializer.SerializeToElement(9);
+        (await update.Handle(new UpdateRecordRequest(poId, values, Rec(poId).Row.RowVersion, null), CancellationToken.None)).IsSuccess.Should().BeTrue();
+        await sp.GetRequiredService<IUnitOfWork>().CommitAsync(CancellationToken.None);
+        sp.GetRequiredService<IWriteJournal>().MarkInputEnd();
+        var row = await sp.GetRequiredService<IRecordRepository>().GetAsync(poId, CancellationToken.None);
+        using (sp.GetRequiredService<ISystemIdentity>().Enter(null))
+            (await update.Handle(new UpdateRecordRequest(poId, V((_r.Discount, 0)), row!.RowVersion, null,
+                new HashSet<string> { $"f_{_r.Discount}" }), CancellationToken.None)).IsSuccess.Should().BeTrue();
+        await sp.GetRequiredService<IUnitOfWork>().CommitAsync(CancellationToken.None);
+        return await sp.GetRequiredService<ApprovalBackstopStage>().RunAsync(CancellationToken.None);
+    }
+
+    [Fact]
+    public async Task Locked_UnlockTransitionEventClearsLockedField_Succeeds()
+    {
+        var po = await ApprovedPo();
+        await SetRaw(po.Id, _r.Discount, 100);
+
+        (await UnlockThenSystemWrite(po.Id)).Should().BeNull();
+        StateOf(_r, po.Id).Should().Be(_r.Draft);
+        Num(po.Id, _r.Discount).Should().Be(0);
+    }
+
+    [Fact]
+    public async Task Locked_UnlockTransition_UserAlsoChangedLockedField_Returns400()
+    {
+        // 使用者（或整合）直接送來的值同次改鎖定欄位，即使後面的事件把它改回去，輸入界線之前的變動仍要擋
+        var po = await ApprovedPo();
+        await SetRaw(po.Id, _r.Discount, 100);
+
+        var res = await UnlockThenSystemWrite(po.Id, userAlsoChangesDiscount: true);
+
+        res.Should().NotBeNull();
+        res!.Errors.Should().ContainKey($"f_{_r.Discount}");
+    }
+
+    [Fact]
+    public async Task Locked_EventUpdatesLockedField_RollsBack400()
+    {
+        var po = await ApprovedPo();
+        var created = await Send(new CreateEventRequest(Event("po-lock-touch", _r.Extra, new EventTrigger("create", null, null, null),
+            UpdateVia("d", _r.Module, _r.ExtraRef, Const(_r.Discount, "7")))));
+        created.IsCreated.Should().BeTrue(Dump(created));
+
+        var res = await NewExtra(po.Id, 100);
+
+        ShouldRejectField(res, _r.Discount);
+        Num(po.Id, _r.Discount).Should().Be(0);
+        Db.Context.Set<Record>().AsNoTracking().Count(x => x.ModuleId == Db.Context.Set<Module>().Single(m => m.Key == _r.Extra).Id).Should().Be(0);
+    }
+
+    /// <summary>在一個 scope 內直接改記錄的計算欄位並跑後盾（silent 時先標靜默）。</summary>
+    private async Task<ServiceResult?> WriteComputedDirect(long poId, object value, bool silent)
+    {
+        using var scope = NewScope();
+        var sp = scope.ServiceProvider;
+        var row = (await sp.GetRequiredService<IRecordRepository>().GetAsync(poId, CancellationToken.None))!;
+        var values = RecordValueProcessor.Parse(row.ValuesJson);
+        values[$"f_{_r.NetTotal}"] = JsonSerializer.SerializeToElement(value);
+        row.ValuesJson = RecordValueProcessor.Serialize(values);
+        if (silent) sp.GetRequiredService<IWriteJournal>().MarkSilent(row);
+        await sp.GetRequiredService<IUnitOfWork>().CommitAsync(CancellationToken.None);
+        return await sp.GetRequiredService<ApprovalBackstopStage>().RunAsync(CancellationToken.None);
+    }
+
+    [Fact]
+    public async Task Backstop_NonSilentComputedChangeOnLocked_Returns400_SilentAllowed()
+    {
+        var po = await ApprovedPo();
+
+        var loud = await WriteComputedDirect(po.Id, 999, silent: false);
+        loud.Should().NotBeNull();
+        loud!.Errors.Should().ContainKey($"f_{_r.NetTotal}");
+
+        (await WriteComputedDirect(po.Id, 888, silent: true)).Should().BeNull();
+    }
+
+    private DetailRowInput NewLine() => new(null, V((TitleId(_r.Line), "列"), (_r.LineQty, 5), (_r.LinePrice, 10)), null);
+
+    [Fact]
+    public async Task Locked_AddDetailLine_WhenDetailRollupLocked_Returns400()
+    {
+        var po = await ApprovedPo();
+
+        var res = await Put(po.Id, [], new() { [_r.Line] = [NewLine()] });
+
+        res.IsSuccess.Should().BeFalse();
+        res.Errors.Should().ContainKey($"details.{_r.Line}");
+        Db.Context.Set<Record>().AsNoTracking().Count(x => x.ModuleId == Db.Context.Set<Module>().Single(m => m.Key == _r.Line).Id).Should().Be(1);
+    }
+
+    [Fact]
+    public async Task Locked_AddDetailLine_WhenConditionOnlySupplier_Succeeds()
+    {
+        var po = await ApprovedPo(r => Task.FromResult(r.Supplier));
+
+        (await Put(po.Id, [], new() { [_r.Line] = [NewLine()] })).IsSuccess.Should().BeTrue();
+    }
+
+    [Fact]
+    public async Task Locked_PutHeaderWithUnchangedDetails_Succeeds()
+    {
+        var po = await ApprovedPo();
+        var line = LineOf(po.Id);
+
+        var res = await Put(po.Id, V((_r.Memo, "x")), new() { [_r.Line] = [new DetailRowInput(line.Id, new Dictionary<string, JsonElement?>(), line.RowVersion)] });
+
+        res.IsSuccess.Should().BeTrue(Dump(res));
+    }
+
+    [Fact]
+    public async Task Locked_SetNullOnLockedReference_RollsBack400()
+    {
+        long backup = 0, vendorId = 0;
+        // 流程只引用「備用供應商」（參照設 SetNull），所以它是鎖定欄位；單據在核准前就帶了這個供應商
+        var po = await ApprovedPo(
+            async r =>
+            {
+                backup = (await MustAdd(r.Module, FieldType.Reference, RefTo(r.Vendor, onDelete: ReferenceOnDelete.SetNull), "備用供應商")).Id;
+                await GrantEveryone(r.Vendor);
+                var title = (await Detail(r.Vendor)).TitleFieldId!.Value;
+                vendorId = ((DynamicRecordResponse)(await Send(new CreateRecordRequest(r.Vendor, V((title, "v1"))))).Data!).Id;
+                return backup;
+            },
+            _ => V((backup, vendorId)));
+
+        var res = await Send(new DeleteRecordRequest(vendorId, Rec(vendorId).Row.RowVersion));
+
+        res.IsSuccess.Should().BeFalse();
+        Rec(vendorId).Row.DeleteFlag.Should().BeFalse();
+        Rec(po.Id).Values.Should().ContainKey($"f_{backup}");
+    }
+
+    [Fact]
+    public async Task Locked_RollupFromOtherModule_Recalculated_Allowed()
+    {
+        var po = await ApprovedPo();
+
+        var res = await NewExtra(po.Id, 250);
+
+        res.IsCreated.Should().BeTrue(Dump(res));
+        Num(po.Id, _r.ExtraSum).Should().Be(250);
+    }
+
+    [Fact]
+    public async Task Locked_ApprovalEditableFieldOnOwnInstance_StillExempt()
+    {
+        await Rig();
+        As("buyer1");
+        var po = await NewPo(_r, extra: V((_r.Discount, 0)));
+        var instanceId = (await MustSubmit(po.Id, _r.Confirmed)).InstanceId!.Value;
+        As("buyer2");
+        var task = TasksOf(instanceId).Single(t => t.AssigneeUserId == "buyer2" && t.Status == ApprovalTaskStatus.Open);
+
+        var res = await Send(new ApproveTaskRequest(task.Id, Inst(instanceId).RowVersion, null, V((_r.DueDate, "2026-12-01"))));
+
+        res.IsSuccess.Should().BeTrue(Dump(res));
+        StateOf(_r, po.Id).Should().Be(_r.Confirmed);
+        Rec(po.Id).Values[$"f_{_r.DueDate}"]!.Value.GetString().Should().Be("2026-12-01");
+    }
+
+    [Fact]
+    public async Task PendingFromLocked_PutLockedField_Returns409()
+    {
+        var po = await ApprovedPo();
+        As("buyer1");
+        (await MustSubmit(po.Id, _r.Cancelled)).InstanceId.Should().NotBeNull();
+        As("admin");
+
+        var res = await Put(po.Id, V((_r.Discount, 50)));
+
+        res.IsConflict.Should().BeTrue();
     }
 }

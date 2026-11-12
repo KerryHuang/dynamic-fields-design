@@ -70,6 +70,8 @@ public static class ApprovalMessages
     public static readonly MessageRef WithdrawFirst = MessageRef.Of(MessageText.ApprovalWithdrawFirst);
     public static MessageRef EventBlocked(long id) => MessageRef.Of(MessageText.ApprovalEventBlocked, id);
     public static MessageRef TransitionBlocked(long id) => MessageRef.Of(MessageText.ApprovalTransitionBlocked, id);
+    /// <summary>鎖定狀態的記錄被改到鎖定欄位（§8.5、§9.3）；fieldLabel 可傳 I18nText 或字串。</summary>
+    public static MessageRef FieldLocked(object fieldLabel) => MessageRef.Of(MessageText.ApprovalFieldLocked, fieldLabel);
 
     // ── 送出與動作（§5.2、§7） ──
     public static readonly MessageRef NotApprovalTransition = MessageRef.Of(MessageText.ApprovalNotApprovalTransition);

@@ -19,6 +19,14 @@ public interface IWriteJournal
 {
     IReadOnlyList<JournalEntry> Entries { get; }
 
+    /// <summary>
+    /// 「輸入界線」：Seq 小於等於它的項目是這次請求的 handler 寫入（使用者輸入，含整合、匯入的直接寫入），之後的是事件效果。
+    /// 由 <c>RecordEffectsBehavior</c> 在跑寫入後階段前呼叫 <see cref="MarkInputEnd"/> 設定；簽核鎖定用它放行解鎖轉移上的事件（設計 §9.3）。
+    /// </summary>
+    int InputSeqEnd { get; }
+
+    void MarkInputEnd();
+
     /// <summary>由 UnitOfWork 呼叫。</summary>
     void Add(Func<int, JournalEntry> create);
 
@@ -42,6 +50,10 @@ public sealed class WriteJournal : IWriteJournal
 
     public IReadOnlyList<JournalEntry> Entries => _entries;
 
+    public int InputSeqEnd { get; private set; }
+
+    public void MarkInputEnd() => InputSeqEnd = _entries.Count;
+
     public void Add(Func<int, JournalEntry> create) => _entries.Add(create(_entries.Count + 1));
 
     public void MarkSilent(object trackedRecord) => _silent.Add(trackedRecord);
@@ -54,6 +66,7 @@ public sealed class WriteJournal : IWriteJournal
     {
         _entries.Clear();
         _silent.Clear();
+        InputSeqEnd = 0;
     }
 }
 

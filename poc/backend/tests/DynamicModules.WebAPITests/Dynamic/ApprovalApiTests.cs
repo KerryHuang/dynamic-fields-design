@@ -26,13 +26,14 @@ public class ApprovalApiTests : IDisposable
 
     private static Dictionary<string, string> Zh(string s) => new() { ["zh-TW"] = s };
 
-    private sealed record Rig(string Module, string Title, long Draft, long Done);
+    private sealed record Rig(string Module, string Title, long Draft, long Done, string? Amount = null);
 
     /// <summary>草稿 → 已核准 需簽核（block）；流程一關，群組 sales（sales01、sales02）或簽。</summary>
-    private async Task<Rig> Arrange(string stageGroup = "sales")
+    private async Task<Rig> Arrange(string stageGroup = "sales", bool lockAmount = false)
     {
         var key = await CreateModule(_admin);
         var status = await AddField(_admin, key, "enum");
+        var amount = lockAmount ? await AddField(_admin, key, "decimal") : default;
         async Task<long> Option(string label) =>
             (await JsonOf(await _admin.PostAsJsonAsync($"{Base}/fields/{status.Id}/options", new { label = Zh(label), color = (string?)null })))
             .GetProperty("id").GetInt64();
@@ -58,6 +59,7 @@ public class ApprovalApiTests : IDisposable
             definition = new
             {
                 shape = "sequence",
+                when = lockAmount ? new { all = new[] { new { field = amount.Id, op = "gte", value = 0 } } } : null,
                 stages = new[]
                 {
                     new
@@ -70,7 +72,7 @@ public class ApprovalApiTests : IDisposable
         });
         flow.StatusCode.Should().Be(HttpStatusCode.Created, await flow.Content.ReadAsStringAsync());
         (await _admin.PutAsJsonAsync($"{Base}/modules/{key}/workflow", Workflow(true))).EnsureSuccessStatusCode();
-        return new Rig(key, await TitleKey(_admin, key), draft, done);
+        return new Rig(key, await TitleKey(_admin, key), draft, done, lockAmount ? amount.Key : null);
     }
 
     private async Task<(long Id, string RowVersion)> NewRecord(Rig r)
@@ -225,5 +227,31 @@ public class ApprovalApiTests : IDisposable
         var again = await SubmitIn("en-US", r, id, rv);
         again.StatusCode.Should().Be(HttpStatusCode.Conflict);
         (await Message(again)).Should().Be("This record is already in approval");
+    }
+
+    [Fact]
+    [Trait("Category", "Postgres")]
+    public async Task Put_LockedField_Returns400ProblemWithFieldKey()
+    {
+        // 流程條件引用「金額」，所以核准後金額鎖定；備註（標題）不鎖
+        var r = await Arrange(lockAmount: true);
+        var created = await JsonOf(await _admin.PostAsJsonAsync($"{Base}/modules/{r.Module}/records",
+            new { values = new Dictionary<string, object> { [r.Title] = "單據", [r.Amount!] = 100 } }));
+        var id = created.GetProperty("id").GetInt64();
+        (await Submit(_admin, r, id, created.GetProperty("rowVersion").GetString()!)).StatusCode.Should().Be(HttpStatusCode.Created);
+        var s1 = _app.AsUser("sales01");
+        var current = await Current(s1, id);
+        (await s1.PostAsJsonAsync($"{Base}/approval-tasks/{TaskOf(current, "sales01")}/approve",
+            new { rowVersion = current.GetProperty("rowVersion").GetString() })).StatusCode.Should().Be(HttpStatusCode.OK);
+
+        var record = await JsonOf(await _admin.GetAsync($"{Base}/records/{id}"));
+        var res = await _admin.PutAsJsonAsync($"{Base}/records/{id}", new
+        {
+            values = new Dictionary<string, object> { [r.Amount!] = 999 }, rowVersion = record.GetProperty("rowVersion").GetString()
+        });
+
+        res.StatusCode.Should().Be(HttpStatusCode.BadRequest, await res.Content.ReadAsStringAsync());
+        var errors = (await JsonOf(res)).GetProperty("errors");
+        errors.GetProperty(r.Amount!)[0].GetString().Should().Contain("這個欄位已經過簽核");
     }
 }
