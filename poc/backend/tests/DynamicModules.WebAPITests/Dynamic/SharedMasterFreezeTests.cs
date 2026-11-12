@@ -363,9 +363,11 @@ public class SharedMasterFreezeTests : IDisposable
             });
             var body = await res.Content.ReadAsStringAsync();
             res.StatusCode.Should().Be(HttpStatusCode.Conflict, body);
-            body.Should().Contain("無法修改的欄位").And.NotContain("備忘").And.NotContain("客戶關係").And.NotContain("crmx")
+            // traceId 是隨機的 32 個十六進位字元，可能剛好含 memo 的數字；先去掉再檢查
+            var stripped = body.Replace(JsonDocument.Parse(body).RootElement.GetProperty("traceId").GetString()!, "");
+            stripped.Should().Contain("無法修改的欄位").And.NotContain("備忘").And.NotContain("客戶關係").And.NotContain("crmx")
                 .And.NotContain("fieldId").And.NotContain(memo.ToString());
-            created.Add(body.Replace(JsonDocument.Parse(body).RootElement.GetProperty("traceId").GetString()!, ""));
+            created.Add(stripped);
         }
         created[0].Should().Be(created[1], "猜不同的聯絡人，回應一樣");
         _rig.Db(db => db.Set<Record>().Count(r => r.Title == "丙公司")).Should().Be(0);

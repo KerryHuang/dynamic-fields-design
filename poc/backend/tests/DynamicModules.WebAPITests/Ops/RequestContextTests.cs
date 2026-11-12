@@ -183,6 +183,12 @@ public class RequestContextTests
         public void Invalidate() => inner.Invalidate();
     }
 
+    /// <summary>耗時永遠量到 0：「很快的請求」不靠牆鐘（整套並行時 /me 偶爾超過 200ms，會誤讀政策）。</summary>
+    private sealed class ZeroElapsedTime : TimeProvider
+    {
+        public override long GetTimestamp() => 0;
+    }
+
     [Fact]
     public async Task FastRequest_DoesNotReadPolicy()
     {
@@ -190,6 +196,7 @@ public class RequestContextTests
         var seen = new List<string>();
         var client = app.WithWebHostBuilder(b => b.ConfigureServices(s =>
         {
+            s.AddSingleton<TimeProvider>(new ZeroElapsedTime());
             s.AddScoped<PolicyReader>(sp => ActivatorUtilities.CreateInstance<PolicyReader>(sp));
             s.AddScoped<IPolicyReader>(sp => new CountingReader(sp.GetRequiredService<PolicyReader>(), seen));
         })).CreateClient();
