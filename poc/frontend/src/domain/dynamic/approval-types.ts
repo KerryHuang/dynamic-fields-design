@@ -1,0 +1,61 @@
+import type { I18nText } from './types';
+
+export type ApprovalInstanceStatus = 'pending' | 'approved' | 'rejected' | 'withdrawn' | 'cancelled' | 'rerouted';
+
+/** Summary on GET records/{id}; `none` = never submitted but a submit is possible. */
+export interface RecordApprovalSummary {
+  status: ApprovalInstanceStatus | 'none';
+  stageName: I18nText | null;
+  stageSeq: number | null;
+  canSubmit: boolean;
+}
+
+export interface RecordApprovalLock { fieldKeys: string[]; detailRowsLocked: boolean }
+
+export interface ApprovalTaskView {
+  id: number; assigneeUserId: string; assigneeName: string; originalUserId: string; reason: string;
+  status: string; actedTime: string | null; canAct: boolean;
+}
+export interface ApprovalStageView {
+  id: number; seq: number; stageCode: string | null; name: I18nText; mode: 'all' | 'any'; status: string;
+  skipReason: string | null; dueTime: string | null; tasks: ApprovalTaskView[]; editableFieldKeys: string[];
+}
+export interface ApprovalActionView {
+  action: string; actorUserId: string; actorName: string; onBehalfOfUserId: string | null; targetUserIds: string[];
+  comment: string | null; data: unknown; createdTime: string;
+}
+export interface ApprovalInstanceView {
+  id: number; status: ApprovalInstanceStatus; routeKind: 'flow' | 'fallback'; flowName: I18nText | null;
+  fromOptionId: number; toOptionId: number; initiatorUserId: string; submittedTime: string; completedTime: string | null;
+  rowVersion: string; stages: ApprovalStageView[]; actions: ApprovalActionView[]; canWithdraw: boolean; canCancel: boolean;
+  titleSnapshot: string;
+}
+export interface RecordApproval { current: ApprovalInstanceView | null; previous: ApprovalInstanceView[]; submitTargets: number[] }
+
+export interface UserRef { userId: string; displayName: string }
+export interface PreviewStage {
+  code: string | null; name: I18nText; status: 'enter' | 'skip' | 'conditional' | 'pick'; approvers: UserRef[]; usesFallback: boolean;
+}
+export interface PickRequirement { stageCode: string; name: I18nText; min: number; max: number; candidates: UserRef[] }
+export interface ApprovalPreview {
+  outcome: 'flow' | 'direct' | 'blocked'; flowName: I18nText | null; stages: PreviewStage[]; picks: PickRequirement[];
+}
+
+export interface SubmitApprovalBody { to: number; recordRowVersion: string; picks?: Record<string, string[]>; comment?: string }
+export interface ApproveBody { rowVersion: string; comment?: string; values?: Record<string, unknown> }
+export interface RejectBody { rowVersion: string; comment: string; to: 'initiator' | 'previous' }
+export interface WithdrawBody { rowVersion: string; comment?: string }
+
+export interface SubmitApprovalResult { outcome: 'submitted' | 'approved' | 'direct'; instanceId: number | null; recordRowVersion: string }
+export interface ApprovalActionResult {
+  outcome: 'advanced' | 'approved' | 'rerouted' | 'rejected' | 'returned' | 'withdrawn';
+  instanceId: number; instanceRowVersion: string; newFlowName?: I18nText | null;
+}
+
+export type ApprovalBox = 'todo' | 'done' | 'submitted' | 'all';
+export interface ApprovalInboxItem {
+  taskId: number; instanceId: number; recordId: number; moduleKey: string; moduleName: I18nText; titleSnapshot: string;
+  stageName: I18nText | null; initiatorUserId: string; initiatorName: string; submittedTime: string; dueTime: string | null;
+  overdue: boolean; moduleClosed: boolean; status: ApprovalInstanceStatus;
+}
+export interface ApprovalInboxFilter { module?: string; status?: ApprovalInstanceStatus; from?: string; to?: string }

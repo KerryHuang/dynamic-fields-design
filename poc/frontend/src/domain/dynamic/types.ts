@@ -1,3 +1,4 @@
+import type { RecordApprovalLock, RecordApprovalSummary } from './approval-types';
 import type { MeTheme } from 'src/domain/theme/theme-model';
 
 export type Locale = 'zh-TW' | 'en-US' | 'th' | 'vi';
@@ -171,7 +172,8 @@ export interface SchemaWorkflow {
   statusFieldKey: string;
   initialState: string;
   states: { value: string; readOnly: boolean }[];
-  transitions: { from: string; to: string }[];
+  /** `approval`: the move needs a submitted approval, so the edit form must not offer it. */
+  transitions: { from: string; to: string; approval?: boolean }[];
 }
 
 export interface ModuleSchema {
@@ -257,6 +259,12 @@ export interface DynamicRecord {
   lockedBy?: Record<string, FieldLock>;
   /** Detail rows by child module key; present on GET record of a header. */
   details?: Record<string, DynamicRecord[]>;
+  /** Null/absent when the module has no approval flow for this record. */
+  approval?: RecordApprovalSummary | null;
+  /** Only while the record sits in an approval-locked state. */
+  approvalLock?: RecordApprovalLock | null;
+  /** This read relies on the temporary read right of an open approval task. */
+  approvalGrant?: boolean;
 }
 
 /** One detail row in a save body; omitted rows are left untouched by the server. */
@@ -526,8 +534,8 @@ export interface DeleteCheck {
 export interface Workflow {
   statusFieldId: number;
   initialOptionId: number;
-  states: { optionId: number; readOnly: boolean }[];
-  transitions: { from: number; to: number; groupIds: number[] }[];
+  states: { optionId: number; readOnly: boolean; editable?: boolean }[];
+  transitions: { from: number; to: number; groupIds: number[]; approval?: { required: boolean; noMatch: 'block' | 'direct' } | null }[];
 }
 
 export interface ConversionLines {

@@ -12,6 +12,10 @@ import type { CheckDefinition, LedgerBody, LedgerConfig, ModuleCheck, ModuleEven
 import type {
   NotificationList, RecordTasks, TaskComment, TaskCounts, TaskDetail, TaskInput, TaskListFilter, TaskListTab, TaskPage, TaskPatch,
 } from 'src/domain/dynamic/task-types';
+import type {
+  ApprovalActionResult, ApprovalBox, ApprovalInboxFilter, ApprovalInboxItem, ApprovalPreview, ApproveBody, RecordApproval, RejectBody,
+  SubmitApprovalBody, SubmitApprovalResult, WithdrawBody,
+} from 'src/domain/dynamic/approval-types';
 import type { TaskRule, TaskRuleInput } from 'src/domain/dynamic/task-rule-draft';
 import type { EffectivePolicies, ModulePolicy, PolicyValue, SystemPolicy } from 'src/domain/dynamic/policy-types';
 import { handleAuthFailure, http, toApiError } from './http';
@@ -208,7 +212,9 @@ export const dynamicApi = {
     http.put(`/options/${id}`, body).then(data),
 
   rollupSources: (key: string) => http.get<RollupSource[]>(`/modules/${key}/rollup-sources`).then(data),
-  getModuleSchema: (key: string) => http.get<ModuleSchema>(`/modules/${key}/schema`).then(data),
+  /** `recordId` asks for the temporary read path of an open approval task; the server only uses it when plain Read is missing. */
+  getModuleSchema: (key: string, recordId?: number) =>
+    http.get<ModuleSchema>(`/modules/${key}/schema`, recordId === undefined ? undefined : { params: { recordId } }).then(data),
   getPreviewSchema: (key: string) => http.get<ModuleSchema>(`/modules/${key}/schema/preview`).then(data),
   getUsers: () => http.get<User[]>('/users').then(data),
   getGroups: () => http.get<Group[]>('/groups').then(data),
@@ -292,6 +298,20 @@ export const dynamicApi = {
   createRecord: (key: string, values: RecordValues, hostKey?: string, details?: DetailsPayload, idempotencyKey?: string) =>
     http.post<DynamicRecord>(`/modules/${key}/records`, { values, hostKey, details }, idem(idempotencyKey)).then(data),
   getRecord: (id: number) => http.get<DynamicRecord>(`/records/${id}`).then(data),
+  getRecordApproval: (id: number) => http.get<RecordApproval>(`/records/${id}/approval`).then(data),
+  previewApproval: (id: number, to: number) => http.post<ApprovalPreview>(`/records/${id}/approval/preview`, { to }).then(data),
+  submitApproval: (id: number, body: SubmitApprovalBody, key?: string) =>
+    http.post<SubmitApprovalResult>(`/records/${id}/approval/submit`, body, idem(key)).then(data),
+  approveTask: (taskId: number, body: ApproveBody, key?: string) =>
+    http.post<ApprovalActionResult>(`/approval-tasks/${taskId}/approve`, body, idem(key)).then(data),
+  rejectTask: (taskId: number, body: RejectBody, key?: string) =>
+    http.post<ApprovalActionResult>(`/approval-tasks/${taskId}/reject`, body, idem(key)).then(data),
+  withdrawApproval: (instanceId: number, body: WithdrawBody, key?: string) =>
+    http.post<ApprovalActionResult>(`/approval-instances/${instanceId}/withdraw`, body, idem(key)).then(data),
+  getApprovalInbox: (box: ApprovalBox, filter: ApprovalInboxFilter, page: number, size = 20) =>
+    http.get<PagedResponse<ApprovalInboxItem>>('/approval-tasks', {
+      params: { box, module: filter.module, status: filter.status, from: filter.from, to: filter.to, currentPage: page, pagesSize: size },
+    }).then(data),
   updateRecord: (id: number, values: RecordValues, rowVersion: string, details?: DetailsPayload, idempotencyKey?: string) =>
     http.put<DynamicRecord>(`/records/${id}`, { values, rowVersion, details }, idem(idempotencyKey)).then(data),
   getViews: (key: string) => http.get<ListView[]>(`/modules/${key}/views`).then(data),
