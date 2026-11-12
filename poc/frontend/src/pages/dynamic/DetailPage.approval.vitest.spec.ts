@@ -6,7 +6,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { h } from 'vue';
 import { createI18n } from 'vue-i18n';
 import { createMemoryHistory, createRouter } from 'vue-router';
-import type { RecordApprovalSummary } from 'src/domain/dynamic/approval-types';
+import type { ApprovalInstanceView, RecordApprovalSummary } from 'src/domain/dynamic/approval-types';
 import type { DynamicRecord, ModuleSchema, SchemaField } from 'src/domain/dynamic/types';
 import zhTW from 'src/i18n/zh-TW.json';
 import { dynamicApi } from 'src/services/api/dynamic-api';
@@ -42,14 +42,14 @@ const record = (approval?: RecordApprovalSummary | null): DynamicRecord => ({
 });
 const summary = (p: Partial<RecordApprovalSummary>): RecordApprovalSummary => ({ status: 'none', stageName: null, stageSeq: null, canSubmit: false, ...p });
 
-async function mountPage(rec: DynamicRecord, targets: number[] = [], sch: ModuleSchema = schema) {
+async function mountPage(rec: DynamicRecord, targets: number[] = [], sch: ModuleSchema = schema, current: ApprovalInstanceView | null = null) {
   setActivePinia(createPinia());
   api.getModuleSchema.mockResolvedValue(sch);
   api.getRecord.mockResolvedValue(rec);
   api.related.mockResolvedValue([] as never);
   api.recordHistory.mockResolvedValue({ items: [], totalCount: 0, currentPage: 1, pagesSize: 20 });
   api.getRecordTasks.mockResolvedValue({ items: [], canAdd: false, manualRules: [] });
-  api.getRecordApproval.mockResolvedValue({ current: null, previous: [], submitTargets: targets });
+  api.getRecordApproval.mockResolvedValue({ current, previous: [], submitTargets: targets });
   api.getEffectivePolicies.mockResolvedValue({ values: {} });
   const router = createRouter({ history: createMemoryHistory(), routes: [{ path: '/dynamic/:moduleKey/:id', component: DetailPage }] });
   await router.push('/dynamic/m/5');
@@ -64,6 +64,12 @@ async function mountPage(rec: DynamicRecord, targets: number[] = [], sch: Module
   await flushPromises();
   return w;
 }
+
+const pendingInstance: ApprovalInstanceView = {
+  id: 7, status: 'pending', routeKind: 'flow', flowName: { 'zh-TW': '採購簽核' }, fromOptionId: 11, toOptionId: 12, initiatorUserId: 'a',
+  submittedTime: '2026-11-12T08:00:00', completedTime: null, rowVersion: 'iv', canWithdraw: false, canCancel: false, titleSnapshot: '記錄五', actions: [],
+  stages: [{ id: 1, seq: 1, stageCode: 's1', name: { 'zh-TW': '主管' }, mode: 'all', status: 'active', skipReason: null, dueTime: null, tasks: [], editableFieldKeys: [] }],
+};
 
 describe('DetailPage approval', () => {
   beforeEach(() => {
@@ -148,6 +154,13 @@ describe('DetailPage approval', () => {
     expect(w.findAll('[data-testid^="submit-approval-"]')).toHaveLength(1);
   });
 
+
+  it('shows the approval panel once the record has been through an approval; none without history', async () => {
+    const pending = await mountPage(record(summary({ status: 'pending', stageSeq: 1, stageName: { 'zh-TW': '主管' } })), [], schema, pendingInstance);
+    expect(pending.find('[data-testid="approval-panel"]').text()).toContain('主管');
+    const none = await mountPage(record(summary({ status: 'none', canSubmit: true })), [12]);
+    expect(none.find('[data-testid="approval-panel"]').exists()).toBe(false);
+  });
 
   it('approved summary shows positive badge', async () => {
     const w = await mountPage(record(summary({ status: 'approved' })));

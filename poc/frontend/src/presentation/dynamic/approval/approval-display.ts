@@ -27,3 +27,18 @@ export function instanceTitle(titleSnapshot: string, moduleName: I18nText | unde
   const module = resolveI18n(moduleName, locale);
   return module ? `${module} #${recordId}` : `#${recordId}`;
 }
+
+const STAGE_ICON: Record<string, string> = {
+  queued: 'schedule', active: 'hourglass_top', approved: 'check_circle', skipped: 'redo', returned: 'undo', closed: 'block',
+};
+const STAGE_COLOR: Record<string, string> = {
+  queued: 'muted', active: 'warning', approved: 'positive', skipped: 'muted', returned: 'negative', closed: 'muted',
+};
+export const stageIcon = (status: string) => STAGE_ICON[status] ?? 'help_outline';
+export const stageColor = (status: string) => STAGE_COLOR[status] ?? 'muted';
+
+/** Known keys translate; an unknown value from a newer server is shown as is instead of a missing-key marker. */
+export function labelOf(prefix: string, value: string, t: Translate, te: (key: string) => boolean): string {
+  const key = `${prefix}.${value}`;
+  return te(key) ? t(key) : value;
+}

@@ -6,6 +6,7 @@ import { useRoute, useRouter } from 'vue-router';
 import { useRecordApproval } from 'src/application/dynamic/queries/approval-queries';
 import { useDeleteRecord, useRecord } from 'src/application/dynamic/queries/records-queries';
 import { useModuleSchema } from 'src/application/dynamic/queries/schema-queries';
+import ApprovalPanel from 'src/presentation/dynamic/approval/ApprovalPanel.vue';
 import ApprovalBadge from 'src/presentation/dynamic/approval/ApprovalBadge.vue';
 import SubmitApprovalDialog from 'src/presentation/dynamic/approval/SubmitApprovalDialog.vue';
 import PrintMenu from 'src/presentation/dynamic/print/PrintMenu.vue';
@@ -64,7 +65,8 @@ const canDelete = computed(() => !!schemaQuery.data.value?.permissions.delete &&
 
 // No summary = the module has no approval for this record: no badge, no request.
 const canSubmit = computed(() => !!approval.value?.canSubmit && !schemaQuery.data.value?.readOnly);
-const approvalQuery = useRecordApproval(recordId, canSubmit);
+// The block shows whenever the record has an approval summary (also after the last stage); the submit buttons need canSubmit.
+const approvalQuery = useRecordApproval(recordId, () => !!approval.value);
 const statusField = computed(() => schemaQuery.data.value?.blocks.flatMap((b) => b.fields).find((f) => f.key === workflow.value?.statusFieldKey));
 const stateLabel = (optionId: number) => resolveI18n(statusField.value?.options.find((o) => o.value === `opt_${optionId}`)?.label, locale.value);
 const submitTo = ref<number | null>(null);
@@ -132,6 +134,7 @@ async function onDelete() {
       </div>
       <RecordLedger v-if="schemaQuery.data.value.ledger" :record-id="recordId" :module-key="moduleKey" />
       <RecordConversions :record-id="recordId" :row-version="recordQuery.data.value.rowVersion" :closed="schemaQuery.data.value.readOnly" />
+      <ApprovalPanel v-if="approval && approvalQuery.data.value" :approval="approvalQuery.data.value" :schema="schemaQuery.data.value" />
       <DynamicDetail :schema="schemaQuery.data.value" :record="recordQuery.data.value" />
       <DetailTables v-if="schemaQuery.data.value.details?.length" class="q-mt-md" :details="schemaQuery.data.value.details" :rows="recordQuery.data.value.details ?? {}" />
       <RecordTasks v-if="schemaQuery.data.value.tasksEnabled !== false" :record-id="recordId" :closed="!!schemaQuery.data.value.readOnly" />
