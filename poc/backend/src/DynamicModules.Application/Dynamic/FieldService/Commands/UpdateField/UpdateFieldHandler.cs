@@ -17,7 +17,7 @@ namespace DynamicModules.Application.Dynamic.FieldService.Commands.UpdateField;
 public class UpdateFieldHandler(
     IModuleRepository modules, IRecordRepository records, IUnitOfWork uow, FieldTypeRegistry registry, ICurrentUser user, IBusinessTime time,
     RollupRecalc rollups, Rollups.FrozenRecordsLoader loader, Dynamic.LedgerService.ImmutableDataGuard immutable,
-    Dynamic.ApprovalService.PendingApprovalGuard pending,
+    Dynamic.ApprovalService.PendingApprovalGuard pending, Dynamic.ApprovalService.ApprovalClosureRecheck closureRecheck,
     Dynamic.CheckService.CheckFieldGuard checkGuard, Common.Security.FieldLocks locks,
     Dynamic.EventService.EventValidator eventValidator, Dynamic.EventService.EventHiddenGuard hiddenGuard,
     Dynamic.AppService.SharedMasters.MasterDesigner masterDesigner)
@@ -123,6 +123,11 @@ public class UpdateFieldHandler(
         if ((formulaChanged || field is { Type: FieldType.Rollup, Status: FieldStatus.Active } && RollupChanged(field.Config.Rollup, config.Rollup)
                 || fillChanged || numberScaleChanged)
             && await pending.RejectValueRewriteAsync(module, ct) is { } pendingApproval) return pendingApproval;
+        // 公式、彙總、帶值改變後，可編輯欄位不能因此落進流程條件的上游閉包；鎖定帶值不能指向可編輯欄位。在整批重算之前比對，擋下時不寫任何值
+        var rollupChanged = field is { Type: FieldType.Rollup, Status: FieldStatus.Active } && RollupChanged(field.Config.Rollup, config.Rollup);
+        if ((formulaChanged || rollupChanged || fillChanged)
+            && await closureRecheck.RejectNewAsync(module, field, config, field.Status, ct) is { } closureHit) return closureHit;
+        if (fillChanged && await closureRecheck.RejectLockFillIntoEditableAsync(module, config, ct) is { } fillEditable) return fillEditable;
         foreach (var parentId in rederived.Select(r => r.ParentId).Distinct())
             if (await modules.GetByIdAsync(parentId, includeChildren: false, ct) is { } parent && ClosedDataGuard.Reject(parent) is { } closedParent)
                 return closedParent;

@@ -18,7 +18,8 @@ namespace DynamicModules.Application.Dynamic.FieldService.Commands.SetFieldStatu
 public class SetFieldStatusHandler(IModuleRepository modules, IRecordRepository records, IUnitOfWork uow, FieldTypeRegistry registry,
     ICurrentUser user, IBusinessTime time, RollupRecalc rollups, Rollups.FrozenRecordsLoader loader,
     Dynamic.LedgerService.ImmutableDataGuard immutable, Common.Security.FieldLocks locks, IApprovalFlowRepository approvalFlows,
-    ITaskRuleRepository taskRules, Dynamic.ApprovalService.PendingApprovalGuard pending)
+    ITaskRuleRepository taskRules, Dynamic.ApprovalService.PendingApprovalGuard pending,
+    Dynamic.ApprovalService.ApprovalClosureRecheck closureRecheck)
     : IRequestHandler<SetFieldStatusRequest, ServiceResult>
 {
     public async Task<ServiceResult> Handle(SetFieldStatusRequest request, CancellationToken ct)
@@ -76,6 +77,9 @@ public class SetFieldStatusHandler(IModuleRepository modules, IRecordRepository 
         if (reactivated && field.Type == FieldType.Rollup && ClosedDataGuard.Reject(module) is { } closedRollup) return closedRollup;
         if (reactivated && field.Type is FieldType.Formula or FieldType.Rollup && await immutable.RejectAsync(module, ct) is { } ledgerFrozen) return ledgerFrozen;
         if (reactivated && field.Type is FieldType.Formula or FieldType.Rollup && await pending.RejectValueRewriteAsync(module, ct) is { } pendingApproval) return pendingApproval;
+
+        if (reactivated && field.Type is FieldType.Formula or FieldType.Rollup
+            && await closureRecheck.RejectNewAsync(module, field, field.Config, FieldStatus.Active, ct) is { } closureHit) return closureHit;
 
         var now = time.Now;
         field.Status = request.Status;

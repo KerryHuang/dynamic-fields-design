@@ -78,6 +78,9 @@ public static class ApprovalMessages
     public static string PurgeBlockedByLocked(string fieldLabel, int count) =>
         $"有 {count} 筆停在簽核鎖定狀態的記錄在「{fieldLabel}」有值，刪除欄位會清掉這些值；請先把它們轉回可編輯的狀態";
 
+    public static string FillTargetEditable(string fieldLabel) =>
+        $"鎖定帶值不能指向簽核人可編輯的欄位「{fieldLabel}」；請改成預設帶值，或先從流程的可編輯欄位拿掉";
+
     // ── 簽核中的寫入（§5.3、§8.5） ──
     public static readonly MessageRef NeedsSubmit = MessageRef.Of(MessageText.ApprovalNeedsSubmit);
     public static readonly MessageRef Pending = MessageRef.Of(MessageText.ApprovalPending);

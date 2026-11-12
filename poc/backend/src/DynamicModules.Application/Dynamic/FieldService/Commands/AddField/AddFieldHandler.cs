@@ -16,7 +16,7 @@ namespace DynamicModules.Application.Dynamic.FieldService.Commands.AddField;
 public class AddFieldHandler(
     IModuleRepository modules, IRecordRepository records, IUnitOfWork uow, FieldTypeRegistry registry, ICurrentUser user, IBusinessTime time,
     ReferenceProviderRegistry providers, RollupRecalc rollups, Rollups.FrozenRecordsLoader loader,
-    Dynamic.LedgerService.ImmutableDataGuard immutable, Dynamic.ApprovalService.PendingApprovalGuard pending, Common.Security.FieldLocks locks,
+    Dynamic.LedgerService.ImmutableDataGuard immutable, Dynamic.ApprovalService.PendingApprovalGuard pending, Dynamic.ApprovalService.ApprovalClosureRecheck closureRecheck, Common.Security.FieldLocks locks,
     Dynamic.AppService.SharedMasters.MasterDesigner masterDesigner)
     : IRequestHandler<AddFieldRequest, ServiceResult>
 {
@@ -82,6 +82,8 @@ public class AddFieldHandler(
             if (badRollup is not null) return badRollup;
             config = derived;
         }
+
+        if (await closureRecheck.RejectLockFillIntoEditableAsync(module, config, ct) is { } fillEditable) return fillEditable;
 
         var now = time.Now;
         field.LabelI18n = request.Label;
