@@ -17,7 +17,7 @@ vi.mock('src/services/api/dynamic-api', () => ({
   dynamicApi: {
     getModuleSchema: vi.fn(), getRecord: vi.fn(), deleteRecord: vi.fn(), related: vi.fn(), recordHistory: vi.fn(), getRecordTasks: vi.fn(),
     getRecordApproval: vi.fn(), getEffectivePolicies: vi.fn(), getRecordConversions: vi.fn(), getRecordEffects: vi.fn(), getRecordLedger: vi.fn(),
-    printRecord: vi.fn(),
+    printRecord: vi.fn(), approveTask: vi.fn(),
   },
 }));
 const api = vi.mocked(dynamicApi);
@@ -47,6 +47,7 @@ const instance = (p: Partial<ApprovalInstanceView> = {}): ApprovalInstanceView =
 const approvalOf = (current: ApprovalInstanceView | null, previous: ApprovalInstanceView[] = []): RecordApproval => ({ current, previous, submitTargets: [] });
 const gone = (status: number) => Promise.reject({ status });
 
+let qc: QueryClient;
 async function mountPage(setup: () => void) {
   vi.clearAllMocks();
   setActivePinia(createPinia());
@@ -61,11 +62,12 @@ async function mountPage(setup: () => void) {
   const router = createRouter({ history: createMemoryHistory(), routes: [{ path: '/dynamic/:moduleKey/:id', component: DetailPage }] });
   await router.push('/dynamic/m/5');
   const i18n = createI18n({ legacy: false, locale: 'zh-TW', messages: { 'zh-TW': zhTW } });
+  qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   const Host = { render: () => h(quasar.QLayout, null, () => h(quasar.QPageContainer, null, () => h(DetailPage))) };
   const w = mount(Host, {
     global: {
       plugins: [[quasar.Quasar, { components: quasar, directives: quasar, plugins: { Notify: quasar.Notify } }], router, i18n,
-        [VueQueryPlugin, { queryClient: new QueryClient({ defaultOptions: { queries: { retry: false } } }) }]],
+        [VueQueryPlugin, { queryClient: qc }]],
     },
   });
   await flushPromises();
@@ -73,6 +75,8 @@ async function mountPage(setup: () => void) {
   await flushPromises();
   return w;
 }
+const settle = async () => { await flushPromises(); await new Promise((r) => setTimeout(r, 20)); await flushPromises(); };
+const dlg = (id: string) => document.body.querySelector<HTMLElement>(`[data-testid="${id}"]`);
 const has = (w: { find: (s: string) => { exists: () => boolean } }, id: string) => w.find(`[data-testid="${id}"]`).exists();
 
 describe('DetailPage temporary read', () => {
@@ -89,6 +93,9 @@ describe('DetailPage temporary read', () => {
     expect(has(w, 'forbidden')).toBe(false);
     expect(has(w, 'approval-grant-banner')).toBe(true);
     expect(has(w, 'action-approve')).toBe(true);
+    (w.find('[data-testid="action-approve"]').element as HTMLElement).click();
+    await settle();
+    expect(dlg('approve-editable')!.textContent).toContain('核定金額');
     expect(api.related).not.toHaveBeenCalled();
     expect(api.recordHistory).not.toHaveBeenCalled();
     expect(api.getRecordTasks).not.toHaveBeenCalled();
@@ -97,9 +104,10 @@ describe('DetailPage temporary read', () => {
     expect(w.text()).not.toContain('列印');
     expect(w.text()).not.toContain(zhTW.dynamic.edit);
     expect(w.text()).not.toContain(zhTW.dynamic.delete);
+    w.unmount(); // the dialog is teleported to body: do not leak it into the next test
   });
 
-  it('after approving, record 404 falls back to history only', async () => {
+  it('record 404 on first load shows history only', async () => {
     const ended = instance({ status: 'approved', completedTime: '2026-11-12T09:00:00' });
     const w = await mountPage(() => {
       api.getModuleSchema.mockImplementation(() => gone(403));
@@ -110,6 +118,45 @@ describe('DetailPage temporary read', () => {
     expect(has(w, 'forbidden')).toBe(false);
     expect(has(w, 'approval-panel')).toBe(true);
     expect(has(w, 'action-approve')).toBe(false);
+  });
+
+  it('approving with the temporary right turns the same page into history only', async () => {
+    const ended = instance({ status: 'approved', completedTime: '2026-11-12T09:00:00' });
+    const w = await mountPage(() => {
+      api.getModuleSchema.mockImplementation((_k, recordId) => (recordId === undefined ? gone(403) : Promise.resolve(grantSchema())));
+      api.getRecord.mockResolvedValue(record(true));
+      api.getRecordApproval.mockResolvedValue(approvalOf(instance()));
+      api.approveTask.mockImplementation(async () => {
+        // The task ended with the approval: the record is out of reach, the history is not.
+        api.getRecord.mockImplementation(() => gone(403));
+        api.getRecordApproval.mockResolvedValue(approvalOf(null, [ended]));
+        return { outcome: 'approved', instanceId: 7, instanceRowVersion: 'iv2' } as never;
+      });
+    });
+    expect(has(w, 'approval-grant-banner')).toBe(true);
+    (w.find('[data-testid="action-approve"]').element as HTMLElement).click();
+    await settle();
+    dlg('approve-send')!.click();
+    await settle();
+    expect(api.approveTask).toHaveBeenCalledTimes(1);
+    expect(has(w, 'approval-history-only')).toBe(true);
+    expect(has(w, 'approval-grant-banner')).toBe(false);
+    expect(has(w, 'forbidden')).toBe(false);
+  });
+
+  it('task closed by someone else: stale approval data is not shown as history', async () => {
+    const w = await mountPage(() => {
+      api.getModuleSchema.mockImplementation((_k, recordId) => (recordId === undefined ? gone(403) : Promise.resolve(grantSchema())));
+      api.getRecord.mockResolvedValue(record(true));
+      api.getRecordApproval.mockResolvedValue(approvalOf(instance()));
+    });
+    expect(has(w, 'approval-grant-banner')).toBe(true);
+    api.getRecord.mockImplementation(() => gone(403));
+    api.getRecordApproval.mockImplementation(() => gone(404));
+    await qc.invalidateQueries();
+    await settle();
+    expect(has(w, 'forbidden')).toBe(true);
+    expect(has(w, 'approval-history-only')).toBe(false);
   });
 
   it('record 403 and approval 404 shows the forbidden notice', async () => {

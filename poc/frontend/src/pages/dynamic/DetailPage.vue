@@ -57,8 +57,10 @@ const recordMissing = computed(() => status(recordQuery.error.value) === 404
   || (!!recordQuery.data.value && recordQuery.data.value.moduleKey !== moduleKey.value));
 // The record is out of reach (the temporary right ended with the task, or it never was there): the approval history may still be.
 const recordGone = computed(() => [403, 404].includes(status(recordQuery.error.value) ?? 0));
-const historyOnly = computed(() => recordGone.value && !!(approvalQuery.data.value?.current || approvalQuery.data.value?.previous.length));
-const historyPending = computed(() => recordGone.value && !approvalQuery.data.value && !approvalQuery.error.value);
+// A failed refetch keeps the last good data: only a successful answer may be shown as history (else the stale timeline outlives the task).
+const historyOnly = computed(() => recordGone.value && approvalQuery.isSuccess.value
+  && !!(approvalQuery.data.value?.current || approvalQuery.data.value?.previous.length));
+const historyPending = computed(() => recordGone.value && approvalQuery.isPending.value);
 const forbidden = computed(() => isForbidden(schemaError.value) || isForbidden(recordQuery.error.value));
 const failed = computed(() => !forbidden.value && !schemaMissing.value && !recordMissing.value
   && (!!schemaError.value || !!recordQuery.error.value));
