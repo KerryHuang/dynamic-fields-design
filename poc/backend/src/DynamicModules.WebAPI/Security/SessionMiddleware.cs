@@ -24,6 +24,14 @@ public class SessionMiddleware(RequestDelegate next)
             return;
         }
 
+        // 可選登入（前端錯誤收件）：沒帶身分就是匿名；帶了就照常比對資料庫，失效時降成匿名繼續，不回 401、不登出
+        var optional = IsAnonymousOptional(ctx.Request.Method, path);
+        if (optional && ctx.User.Identity?.IsAuthenticated != true)
+        {
+            await next(ctx);
+            return;
+        }
+
         var userId = ctx.User.FindFirstValue(ClaimTypes.NameIdentifier);
         var stamp = ctx.User.FindFirstValue(AuthCookies.StampClaim);
         var row = ctx.User.Identity?.IsAuthenticated == true && userId is not null
@@ -33,13 +41,19 @@ public class SessionMiddleware(RequestDelegate next)
             : null;
         if (row is null || !row.IsActive || row.SecurityStamp != stamp)
         {
+            if (optional)
+            {
+                ctx.User = new ClaimsPrincipal(new ClaimsIdentity());
+                await next(ctx);
+                return;
+            }
             if (ctx.User.Identity?.IsAuthenticated == true) await AuthCookies.SignOutAsync(ctx);
             ctx.Response.StatusCode = StatusCodes.Status401Unauthorized;
             await ctx.Response.WriteAsJsonAsync(new { traceId = ctx.TraceIdentifier, message = MessageText.Get(locale.Locale, MessageText.SignInRequired) });
             return;
         }
 
-        if (row.MustChangePassword && !IsAllowedWhileMustChange(ctx.Request.Method, path))
+        if (row.MustChangePassword && !optional && !IsAllowedWhileMustChange(ctx.Request.Method, path))
         {
             ctx.Response.StatusCode = StatusCodes.Status403Forbidden;
             await ctx.Response.WriteAsJsonAsync(new { traceId = ctx.TraceIdentifier, message = MessageText.Get(locale.Locale, MessageText.PasswordChangeRequired), code = "passwordChangeRequired" });
@@ -54,6 +68,10 @@ public class SessionMiddleware(RequestDelegate next)
         || (HttpMethods.IsGet(method) && path.Equals(AuthPrefix + "options", StringComparison.OrdinalIgnoreCase))
         || (HttpMethods.IsGet(method) && path.Equals(Prefix + "/theme", StringComparison.OrdinalIgnoreCase))
         || (HttpMethods.IsPost(method) && path.Equals(AuthPrefix + "demo-login", StringComparison.OrdinalIgnoreCase));
+
+    /// <summary>登入與否都收的端點：有身分時照常檢查，檢查不過就當匿名。</summary>
+    private static bool IsAnonymousOptional(string method, string path) =>
+        HttpMethods.IsPost(method) && path.Equals(Prefix + "/ops/client-errors", StringComparison.OrdinalIgnoreCase);
 
     private static bool IsAllowedWhileMustChange(string method, string path) =>
         path.StartsWith(AuthPrefix, StringComparison.OrdinalIgnoreCase)

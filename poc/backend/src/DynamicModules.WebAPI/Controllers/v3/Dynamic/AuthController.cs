@@ -11,7 +11,7 @@ namespace DynamicModules.WebAPI.Controllers.v3.Dynamic;
 
 [ApiController]
 [Route("api/v3/dynamic/auth")]
-public class AuthController(IMediator mediator, IConfiguration config) : ControllerBase
+public class AuthController(IMediator mediator, ClientIpResolver clientIp) : ControllerBase
 {
     public record LoginBody(string? UserId, string? Password);
 
@@ -21,7 +21,7 @@ public class AuthController(IMediator mediator, IConfiguration config) : Control
 
     [HttpPost("login")]
     public async Task<IActionResult> Login(LoginBody body) =>
-        await SignInOnSuccess(await mediator.Send(new LoginRequest(body.UserId ?? "", body.Password ?? "", ClientIp())));
+        await SignInOnSuccess(await mediator.Send(new LoginRequest(body.UserId ?? "", body.Password ?? "", clientIp.Resolve(HttpContext))));
 
     [HttpGet("options")]
     public async Task<IActionResult> Options() => (await mediator.Send(new GetAuthOptionsRequest())).ToActionResult(this);
@@ -40,20 +40,6 @@ public class AuthController(IMediator mediator, IConfiguration config) : Control
     [HttpPost("change-password")]
     public async Task<IActionResult> ChangePassword(ChangePasswordBody body) =>
         await SignInOnSuccess(await mediator.Send(new ChangePasswordRequest(body.OldPassword ?? "", body.NewPassword ?? "")));
-
-    /// <summary>
-    /// 登入限流用的來源 IP。站台在反向代理後面時，連線來源是代理，所有人會共用一個額度；
-    /// 設了 Auth:ClientIpHeader（代理自己加、不接受客戶端帶入的那個標頭）才改讀它，格式不對就退回連線來源。
-    /// 沒設定時一律忽略所有標頭，偽造的值換不到新額度。
-    /// </summary>
-    private string? ClientIp()
-    {
-        var header = config["Auth:ClientIpHeader"];
-        if (!string.IsNullOrWhiteSpace(header) && Request.Headers.TryGetValue(header, out var values)
-            && System.Net.IPAddress.TryParse(values.ToString().Trim(), out var fromHeader))
-            return fromHeader.ToString();
-        return HttpContext.Connection.RemoteIpAddress?.ToString();
-    }
 
     /// <summary>成功就（重）發 cookie，回應不含 SecurityStamp。</summary>
     private async Task<IActionResult> SignInOnSuccess(Application.Common.ServiceResult result)
