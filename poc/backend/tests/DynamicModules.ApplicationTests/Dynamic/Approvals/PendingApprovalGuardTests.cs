@@ -33,9 +33,10 @@ public class PendingApprovalGuardTests : ApprovalTestBase
     private PurchaseRig _r = null!;
 
     /// <summary>草稿 → 已確認 需簽核；已確認 → 草稿、部分進貨 是一般轉移；rejectTo 不為 null 時流程退回到該狀態（草稿 → 該狀態另加一般轉移）。</summary>
-    private async Task Rig(long? rejectTo = null)
+    private async Task Rig(Func<PurchaseRig, long>? rejectToOf = null)
     {
         _r = await BuildPurchase();
+        long? rejectTo = rejectToOf?.Invoke(_r);
         await SeedFlow(_r, "po-a", _r.Confirmed, 1,
             Def(Cond(_r.NetTotal, "gte", 0), Stage("lead", Group(PurchaseLeadGroup))) with { RejectTo = rejectTo });
         (await SaveWorkflow(_r, Transitions(rejectTo))).IsSuccess.Should().BeTrue();
@@ -45,7 +46,7 @@ public class PendingApprovalGuardTests : ApprovalTestBase
     private List<WorkflowTransition> Transitions(long? rejectTo = null)
     {
         var list = new List<WorkflowTransition> { Needs(_r.Draft, _r.Confirmed), Plain(_r.Confirmed, _r.Draft), Plain(_r.Confirmed, _r.Partial) };
-        if (rejectTo is { } rt) list.Add(Plain(_r.Draft, rt));
+        if (rejectTo is { } rt && rt != _r.Draft) list.Add(Plain(_r.Draft, rt));   // rejectTo 等於 from 是「退回留在原地」，不用轉移
         return list;
     }
 
@@ -142,7 +143,22 @@ public class PendingApprovalGuardTests : ApprovalTestBase
         await SoftDeletedPoWithValue(_r.Memo);
         await Pend();
         (await Deactivate(_r.Memo)).IsSuccess.Should().BeTrue();   // 刪除欄位要先停用
-        Blocked(await Send(new DeleteFieldRequest(_r.Memo, 1)));
+        Blocked(await Send(new DeleteFieldRequest(_r.Memo, 1)), "值", "歷程");
+    }
+
+    /// <summary>只剩異動歷程：備註填過又清空後送簽，Records 為 0，但 HistoryRows 大於 0，刪除仍要擋。</summary>
+    [Fact]
+    public async Task DeleteFieldHistoryOnly_WithPending_Returns409()
+    {
+        await Rig();
+        As("buyer1");
+        var po = await NewPo(_r, title: "PO-甲", extra: V((_r.Discount, 100), (_r.Memo, "x")));
+        (await Put(po.Id, V((_r.Memo, null)))).IsSuccess.Should().BeTrue();
+        await MustSubmit(po.Id, _r.Confirmed);
+        As("admin");
+        (await Db.Context.Set<RecordHistory>().CountAsync(h => h.FieldId == _r.Memo)).Should().BeGreaterThan(0);
+        (await Deactivate(_r.Memo)).IsSuccess.Should().BeTrue();
+        Blocked(await Send(new DeleteFieldRequest(_r.Memo, 0)), "PO-甲");
     }
 
     [Fact]
@@ -281,7 +297,7 @@ public class PendingApprovalGuardTests : ApprovalTestBase
     {
         await Rig();
         await Pend("PO-甲");
-        Blocked(await SaveWorkflow(_r, [Plain(_r.Confirmed, _r.Draft), Plain(_r.Confirmed, _r.Partial)]), "PO-甲");
+        Blocked(await SaveWorkflow(_r, [Plain(_r.Confirmed, _r.Draft), Plain(_r.Confirmed, _r.Partial)]), "PO-甲", "轉移或狀態");
     }
 
     [Fact]
@@ -295,7 +311,7 @@ public class PendingApprovalGuardTests : ApprovalTestBase
     [Fact]
     public async Task SaveWorkflow_RemoveRejectToTransition_Returns409()
     {
-        await Rig(rejectTo: null);
+        await Rig();
         // 另建綁定「退回到已退回」版本的流程與實例
         var other = await BuildPurchase("pr");
         var flow = await SeedFlow(other, "pr-a", other.Confirmed, 1,
@@ -306,6 +322,52 @@ public class PendingApprovalGuardTests : ApprovalTestBase
         await SeedInstance(other, flow, recordId: 1);
 
         Blocked(await SaveWorkflow(other, Wf(false)));
+    }
+
+    /// <summary>退回狀態就是送出時的狀態（留在原地）：不需要 from → rejectTo 轉移，守衛不能因此誤判。</summary>
+    [Fact]
+    public async Task SaveWorkflow_RejectToEqualsFrom_UnrelatedTransitionAdded_Succeeds()
+    {
+        await Rig();
+        await SetRejectTo(_r.Draft);
+        await Pend();
+        var res = await SaveWorkflow(_r, [.. Transitions(), Plain(_r.Partial, _r.Received)]);
+        res.IsSuccess.Should().BeTrue(Dump(res));
+    }
+
+    [Fact]
+    public async Task SaveWorkflow_RejectToEqualsFrom_ResaveUnchanged_Succeeds()
+    {
+        await Rig();
+        await SetRejectTo(_r.Draft);
+        await Pend();
+        var res = await SaveWorkflow(_r, Transitions());
+        res.IsSuccess.Should().BeTrue(Dump(res));
+    }
+
+    /// <summary>流程已改版成別的退回狀態，簽核中的實例仍綁舊版：約束只看現行版本，只有守衛擋得住。</summary>
+    [Fact]
+    public async Task SaveWorkflow_RemoveRejectToTransition_InstanceBoundToOldVersion_Returns409()
+    {
+        await Rig(rejectToOf: r => r.Returned);
+        await Pend("PO-甲");
+        var flow = await Db.Context.Set<ApprovalFlow>().SingleAsync(f => f.Key == "po-a");
+        var v2 = new ApprovalFlowVersion { FlowId = flow.Id, Version = 2, Definition = Def(Cond(_r.NetTotal, "gte", 0), Stage("lead", Group(PurchaseLeadGroup))), CreatedBy = "admin", CreatedTime = SeedTime };
+        Db.Context.Add(v2);
+        await Db.Context.SaveChangesAsync();
+        flow.CurrentVersionId = v2.Id;
+        await Db.Context.SaveChangesAsync();
+        Db.Context.ChangeTracker.Clear();
+        Blocked(await SaveWorkflow(_r, Transitions(null)), "PO-甲", "轉移或狀態");
+    }
+
+    /// <summary>把流程現行版本的退回狀態改成 <paramref name="rejectTo"/>（直接改資料，繞過流程設定的 API）。</summary>
+    private async Task SetRejectTo(long rejectTo)
+    {
+        var version = await Db.Context.Set<ApprovalFlowVersion>().SingleAsync();
+        version.Definition = version.Definition with { RejectTo = rejectTo };
+        await Db.Context.SaveChangesAsync();
+        Db.Context.ChangeTracker.Clear();
     }
 
     [Fact]
@@ -360,6 +422,7 @@ public class PendingApprovalGuardTests : ApprovalTestBase
         });
         res.Should().NotBeNull();
         res!.IsConflict.Should().BeTrue();
+        res.Message.Should().Contain("轉移或狀態");
     }
 
     [Fact]
@@ -374,6 +437,7 @@ public class PendingApprovalGuardTests : ApprovalTestBase
         });
         res.Should().NotBeNull();
         res!.IsConflict.Should().BeTrue();
+        res.Message.Should().Contain("轉移或狀態");
     }
 
     [Fact]
@@ -393,7 +457,7 @@ public class PendingApprovalGuardTests : ApprovalTestBase
     {
         await Rig();
         await Pend("PO-甲");
-        Blocked(await Send(new DeleteWorkflowRequest(_r.Module)), "PO-甲");
+        Blocked(await Send(new DeleteWorkflowRequest(_r.Module)), "PO-甲", "轉移或狀態");
     }
 
     [Fact]
@@ -409,7 +473,28 @@ public class PendingApprovalGuardTests : ApprovalTestBase
     {
         await Rig();
         await Pend("PO-甲");
-        Blocked(await Send(new UpdateOptionRequest(_r.Confirmed, Text("已確認"), null, false)), "PO-甲");
+        Blocked(await Send(new UpdateOptionRequest(_r.Confirmed, Text("已確認"), null, false)), "PO-甲", "轉移或狀態");
+    }
+
+    [Fact]
+    public async Task DeactivateOption_UsedAsRejectTo_Returns409()
+    {
+        await Rig(rejectToOf: r => r.Returned);
+        await Pend("PO-甲");
+        Blocked(await Send(new UpdateOptionRequest(_r.Returned, Text("已退回"), null, false)), "PO-甲", "轉移或狀態");
+    }
+
+    [Fact]
+    public async Task UpdateFormula_AfterWithdrawn_NoPending_Succeeds()
+    {
+        await Rig();
+        As("buyer1");
+        var po = await NewPo(_r, extra: V((_r.Discount, 100)));
+        var instanceId = (await MustSubmit(po.Id, _r.Confirmed)).InstanceId!.Value;
+        (await Send(new WithdrawApprovalRequest(instanceId, Inst(instanceId).RowVersion, null))).IsSuccess.Should().BeTrue();
+        As("admin");
+        var res = await SetFormula(_r.NetTotal, $"{{{_r.LineSum}}}");
+        res.IsSuccess.Should().BeTrue(Dump(res));
     }
 
     [Fact]

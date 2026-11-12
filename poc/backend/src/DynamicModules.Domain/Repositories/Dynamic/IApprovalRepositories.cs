@@ -27,6 +27,9 @@ public interface IApprovalFlowRepository
     /// <summary>追蹤。</summary>
     Task<ApprovalFlowVersion?> GetVersionAsync(long versionId, CancellationToken ct);
 
+    /// <summary>批次取版本，不追蹤。</summary>
+    Task<List<ApprovalFlowVersion>> ListVersionsAsync(IReadOnlyCollection<long> versionIds, CancellationToken ct);
+
     Task<int> MaxVersionAsync(long flowId, CancellationToken ct);
 
     Task<bool> IsUsedAsync(long flowId, CancellationToken ct);

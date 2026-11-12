@@ -38,6 +38,7 @@ public sealed class PendingApprovalGuard(IApprovalInstanceRepository instances, 
         var active = module.Workflow is { } current
             ? module.Blocks.SelectMany(b => b.Fields).FirstOrDefault(f => f.Id == current.StatusFieldId)?.Options.Where(o => o.Active).Select(o => o.Id).ToHashSet() ?? []
             : [];
+        var rejectTos = await RejectTosAsync(pending, ct);
         foreach (var p in pending)
         {
             if (candidate is null || candidate.StatusFieldId != module.Workflow?.StatusFieldId
@@ -47,7 +48,8 @@ public sealed class PendingApprovalGuard(IApprovalInstanceRepository instances, 
                 violating.Add(p);
                 continue;
             }
-            if (p.FlowVersionId is { } versionId && (await flows.GetVersionAsync(versionId, ct))?.Definition.RejectTo is { } rejectTo
+            // rejectTo 等於 from 是「退回留在原地」，不需要轉移，與執行期（ApprovalActionHandlers）的寫法一致
+            if (RejectToOf(rejectTos, p) is { } rejectTo && rejectTo != p.FromOptionId
                 && (!StateKept(candidate, active, rejectTo) || !candidate.Transitions.Any(t => t.From == p.FromOptionId && t.To == rejectTo)))
                 violating.Add(p);
         }
@@ -57,16 +59,22 @@ public sealed class PendingApprovalGuard(IApprovalInstanceRepository instances, 
     /// <summary>停用狀態欄位的選項：進行中實例的 from、to 或綁定版本的退回狀態用到它就回 409。</summary>
     public async Task<ServiceResult?> RejectOptionDeactivateAsync(Module module, long optionId, CancellationToken ct)
     {
-        var violating = new List<PendingInstanceRef>();
-        foreach (var p in await instances.ListPendingByModulesAsync([module.Id], ct))
-            if (p.FromOptionId == optionId || p.ToOptionId == optionId
-                || p.FlowVersionId is { } versionId && (await flows.GetVersionAsync(versionId, ct))?.Definition.RejectTo == optionId)
-                violating.Add(p);
+        var pending = await instances.ListPendingByModulesAsync([module.Id], ct);
+        var rejectTos = await RejectTosAsync(pending, ct);
+        var violating = pending.Where(p => p.FromOptionId == optionId || p.ToOptionId == optionId || RejectToOf(rejectTos, p) == optionId).ToList();
         return violating.Count == 0 ? null : ServiceResult.Conflict(ApprovalMessages.WorkflowBlockedByPending(Titles(violating), violating.Count));
     }
+
+    /// <summary>進行中實例綁定的各版本的退回狀態（一次查完，不追蹤）。</summary>
+    private async Task<Dictionary<long, long?>> RejectTosAsync(IEnumerable<PendingInstanceRef> pending, CancellationToken ct) =>
+        (await flows.ListVersionsAsync([.. pending.Select(p => p.FlowVersionId).OfType<long>().Distinct()], ct))
+        .ToDictionary(v => v.Id, v => v.Definition.RejectTo);
+
+    private static long? RejectToOf(Dictionary<long, long?> rejectTos, PendingInstanceRef p) =>
+        p.FlowVersionId is { } id && rejectTos.TryGetValue(id, out var rt) ? rt : null;
 
     private static bool StateKept(Workflow candidate, HashSet<long> active, long optionId) =>
         candidate.States.Any(s => s.OptionId == optionId) && active.Contains(optionId);
 
-    private static List<string> Titles(IEnumerable<PendingInstanceRef> list) => [.. list.Take(5).Select(p => p.TitleSnapshot)];
+    private static List<string> Titles(IEnumerable<PendingInstanceRef> list) => [.. list.OrderBy(p => p.InstanceId).Take(5).Select(p => p.TitleSnapshot)];
 }

@@ -68,7 +68,7 @@ public static class ApprovalMessages
     private static string Listing(IReadOnlyList<string> titles, int total) =>
         string.Concat(titles.Select(t => $"「{t}」")) + (total > titles.Count ? $"等 {total} 筆" : "");
     public static string DefinitionBlockedByPending(IReadOnlyList<string> titles, int total) =>
-        $"{Listing(titles, total)}正在簽核中，這項修改會改寫記錄的值，請等簽核結束或撤回後再改";
+        $"{Listing(titles, total)}正在簽核中，這項修改會改變簽核中單據的內容（欄位值與異動歷程），請等簽核結束或撤回後再改";
     public static string WorkflowBlockedByPending(IReadOnlyList<string> titles, int total) =>
         $"{Listing(titles, total)}正在簽核中，這項修改會拆掉它們要走的轉移或狀態，請等簽核結束或撤回後再改";
 

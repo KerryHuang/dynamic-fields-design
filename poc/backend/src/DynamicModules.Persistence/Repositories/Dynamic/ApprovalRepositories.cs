@@ -45,6 +45,9 @@ public class ApprovalFlowRepository(DynamicDbContext db) : IApprovalFlowReposito
     public Task<ApprovalFlowVersion?> GetVersionAsync(long versionId, CancellationToken ct) =>
         db.Set<ApprovalFlowVersion>().FirstOrDefaultAsync(v => v.Id == versionId, ct);
 
+    public Task<List<ApprovalFlowVersion>> ListVersionsAsync(IReadOnlyCollection<long> versionIds, CancellationToken ct) =>
+        db.Set<ApprovalFlowVersion>().AsNoTracking().Where(v => versionIds.Contains(v.Id)).ToListAsync(ct);
+
     public async Task<int> MaxVersionAsync(long flowId, CancellationToken ct) =>
         await db.Set<ApprovalFlowVersion>().Where(v => v.FlowId == flowId).MaxAsync(v => (int?)v.Version, ct) ?? 0;
 
