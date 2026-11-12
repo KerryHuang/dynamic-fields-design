@@ -21,9 +21,10 @@
 | p1c | 任務與通知政策：A6、A7、A13、A14 | 已上線 | [政策設定](superpowers/specs/2026-11-11-policy-settings-design.md) §9 |
 | p1d | 附件政策：A20（含部署設定檔當出廠值） | 已上線 | [政策設定](superpowers/specs/2026-11-11-policy-settings-design.md) §9 |
 | O1 | 維運地基：結構化 log 與 request id、health live／ready、版本端點、前端錯誤收集、背景排程器（o1a、o1b、o1c）；任務「即將到期」提醒改為到期前 N 天內補一次、同一任務只補一次（使用者 2026-11-12 裁決，排進 o1b） | 進行中：o1a（觀測地基）已上線（2026-11-12），o1b、o1c 未開始（使用者裁決排在簽核主線之後） | [維運與觀測](superpowers/specs/2026-11-11-ops-observability-design.md) §9、§10 |
-| a2d | 簽核鎖定、定義守衛、附件；併入簽核類政策設定（子段 a2d1 鎖定寫入已完成；a2d2–a2d7 未開始；只驗 SQLite，PostgreSQL 在 pg0 後補驗） | 進行中：a2d1 完成 | [簽核流程](superpowers/specs/2026-11-10-approval-workflow-design.md)、[政策設定](superpowers/specs/2026-11-11-policy-settings-design.md) §9 |
+| a2d1 | 簽核鎖定寫入：鎖定狀態、鎖定欄位與明細的寫入守衛（只驗 SQLite，PostgreSQL 在 pg0 後補驗） | 進行中：a2d1 待合併 | [簽核流程](superpowers/specs/2026-11-10-approval-workflow-design.md)、[政策設定](superpowers/specs/2026-11-11-policy-settings-design.md) §9 |
 | a4b | 前端：送簽畫面與簽核中心 | 未開始 | [簽核流程](superpowers/specs/2026-11-10-approval-workflow-design.md) |
 | a6 | CRM 設計案與簽核 Demo、文件 | 未開始 | [簽核流程](superpowers/specs/2026-11-10-approval-workflow-design.md) |
+| a2d2–a2d7 | 附件、整批重算、定義守衛、鎖定資料守衛、簽核類政策設定；a2d1 上線後到 a2d2、a2d3 上線前，上傳附件不受鎖、設計者改公式的整批重算會改寫已核准單的值（只驗 SQLite，PostgreSQL 在 pg0 後補驗） | 未開始 | [簽核流程](superpowers/specs/2026-11-10-approval-workflow-design.md)、[政策設定](superpowers/specs/2026-11-11-policy-settings-design.md) §9 |
 | a4a | 前端：簽核設計器 | 未開始 | [簽核流程](superpowers/specs/2026-11-10-approval-workflow-design.md) |
 | a5 | 套件格式 8：簽核流程 | 未開始 | [簽核流程](superpowers/specs/2026-11-10-approval-workflow-design.md) |
 | a3 | 轉交、加簽、代理、逾期提醒 | 未開始 | [簽核流程](superpowers/specs/2026-11-10-approval-workflow-design.md) |
@@ -90,12 +91,13 @@ HRM（階段 4）與階段 5 先用佔位列排序，開工前再切成正式工
 
 設計：[政策設定](superpowers/specs/2026-11-11-policy-settings-design.md)、[維運、觀測與告警派工 agent](superpowers/specs/2026-11-11-ops-observability-design.md)、[MCP server](superpowers/specs/2026-11-11-mcp-server-design.md)。這幾段插在上面第 1 項「任務管理與簽核」的簽核主線中間。
 
-順序：**p1 → o1a → 簽核 a2d → a4b → a6 → a4a → a5 → a3 → o1b、o1c → un1 → pg0 → O2 → p2、p3 → i3、i4 → mcp1（mcp1a → mcp1b）→ O3 → pkg1 → O4–O6**，MCP 後續段 mcp2a → mcp2b → mcp3 → mcp4 依進度與 O4–O6 穿插。
+順序：**p1 → o1a → 簽核 a2d1 → a4b → a6 → a2d2–a2d7 → a4a → a5 → a3 → o1b、o1c → un1 → pg0 → O2 → p2、p3 → i3、i4 → mcp1（mcp1a → mcp1b）→ O3 → pkg1 → O4–O6**，MCP 後續段 mcp2a → mcp2b → mcp3 → mcp4 依進度與 O4–O6 穿插。
 
 - 使用者裁決（2026-11-11）：p1 → O1 → pg0 → a2d–a6 → O2 → mcp1 → O3…；O1 在 p1 之後、a2d 之前；O2 以後視情況穿插；pg0 在 O1 之後，之後的功能兩種資料庫都驗，其餘 PostgreSQL 改寫排在簽核之後；MCP 地基 mcp1 在簽核與 O2 之後，業務寫入、設計器工具、OAuth 後續分段，維運 O4、O6 直接用 MCP 工具；列表的使用者欄位顯示姓名用小段穿插。
 - 使用者確認（2026-11-12）：p2、p3 排在 O2 之後、mcp1a 之前；O3 → O4 → O5 → O6 的先後；mcp1 之後是 mcp1a → mcp1b → mcp2a → mcp2b → mcp3 → mcp4，mcpO1 隨 O4、mcpO2 隨 O6，mcp4 可視雲端版第一個客戶的需求提前。
 - 使用者排定（2026-11-12）：翻譯匯出、匯入（i4）排在 p3 之後，與 i3 一起；套件更新入口（pkg1）排在 O3 之後，先寫設計；應用程式匯出畫面併入階段 5。
 - 使用者裁決（2026-11-12）：為了 Demo CRM 設計案，簽核主線提前到 o1a 之後、pg0 之前；簽核先只驗 SQLite，pg0 後補驗
+- 使用者裁決（2026-11-12）：a2d 拆開，a2d1（鎖定寫入）先做，a2d2–a2d7 排在 a4b、a6 之後、a4a 之前；理由：a4b、a6 不依賴附件與整批重算，先讓簽核畫面與 Demo 上線。
 - 主控判斷（位置）：un1 排在 O1 之後、pg0 之前；pkg1 緊接 O3，不等 O4。
 - 段號命名：MCP 各段一律用 mcp 開頭（mcp1a、mcp1b、mcp2a、mcp2b、mcp3、mcp4、mcpO1、mcpO2），與已上線的多語系 m1（模組選單分區）區隔。
 
