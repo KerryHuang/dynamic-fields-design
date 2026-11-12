@@ -4,10 +4,11 @@ import { useI18n } from 'vue-i18n';
 import type { ApprovalInstanceView, RecordApproval } from 'src/domain/dynamic/approval-types';
 import { resolveI18n } from 'src/domain/dynamic/i18n-text';
 import type { ModuleSchema } from 'src/domain/dynamic/types';
+import ApprovalActionBar from './ApprovalActionBar.vue';
 import ApprovalActionLog from './ApprovalActionLog.vue';
 import ApprovalStageList from './ApprovalStageList.vue';
 
-defineProps<{ approval: RecordApproval; schema: ModuleSchema | null; readonly?: boolean }>();
+defineProps<{ approval: RecordApproval; schema: ModuleSchema | null; readonly?: boolean; recordId?: number; moduleKey?: string }>();
 const { t, locale } = useI18n();
 const timeText = (iso: string) => date.formatDate(new Date(iso), 'YYYY-MM-DD HH:mm');
 const heading = (i: ApprovalInstanceView) => (i.flowName ? resolveI18n(i.flowName, locale.value) : t('approval.panel.fallbackRoute'));
@@ -21,7 +22,7 @@ const heading = (i: ApprovalInstanceView) => (i.flowName ? resolveI18n(i.flowNam
         <q-badge outline color="primary" :label="t(`approval.status.${approval.current.status}`)" />
         <span class="text-muted">{{ heading(approval.current) }}</span>
         <q-space />
-        <slot name="actions" :instance="approval.current" />
+        <ApprovalActionBar v-if="!readonly && recordId !== undefined && moduleKey" :instance="approval.current" :record-id="recordId" :module-key="moduleKey" />
       </q-card-section>
       <q-card-section class="q-pt-none">
         <div class="text-caption text-muted">{{ t('approval.panel.submitted', { time: timeText(approval.current.submittedTime) }) }}</div>

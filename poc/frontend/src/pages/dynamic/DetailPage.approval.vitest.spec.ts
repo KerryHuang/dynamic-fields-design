@@ -162,6 +162,29 @@ describe('DetailPage approval', () => {
     expect(none.find('[data-testid="approval-panel"]').exists()).toBe(false);
   });
 
+  const actingInstance = (): ApprovalInstanceView => ({
+    ...pendingInstance,
+    stages: [{ ...pendingInstance.stages[0]!, tasks: [{ id: 3, assigneeUserId: 'me', assigneeName: '我', originalUserId: 'me', reason: 'resolved', status: 'open', actedTime: null, canAct: true }] }],
+  });
+
+  it('an approver sees approve and reject in the approval panel', async () => {
+    const w = await mountPage(record(summary({ status: 'pending', stageSeq: 1, stageName: { 'zh-TW': '主管' } })), [], actingInstance());
+    expect(w.find('[data-testid="action-approve"]').exists()).toBe(true);
+    expect(w.find('[data-testid="action-reject"]').exists()).toBe(true);
+    expect(w.find('[data-testid="approval-mobile-bar"]').exists()).toBe(false);
+  });
+
+  it('phone: bottom bar shows and the page leaves room below the last block', async () => {
+    window.innerWidth = 390;
+    const w = await mountPage(record(summary({ status: 'pending', stageSeq: 1, stageName: { 'zh-TW': '主管' } })), [], actingInstance());
+    window.dispatchEvent(new Event('resize'));
+    await new Promise((r) => setTimeout(r, 150));
+    await flushPromises();
+    expect(w.find('[data-testid="approval-mobile-bar"]').exists()).toBe(true);
+    expect(w.find('.q-page').attributes('style')).toContain('padding-bottom: 88px');
+    window.innerWidth = 1024;
+  });
+
   it('approved summary shows positive badge', async () => {
     const w = await mountPage(record(summary({ status: 'approved' })));
     const badge = w.find('[data-testid="approval-badge"]');

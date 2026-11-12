@@ -6,6 +6,7 @@ import { useRoute, useRouter } from 'vue-router';
 import { useRecordApproval } from 'src/application/dynamic/queries/approval-queries';
 import { useDeleteRecord, useRecord } from 'src/application/dynamic/queries/records-queries';
 import { useModuleSchema } from 'src/application/dynamic/queries/schema-queries';
+import { hasApprovalActions } from 'src/presentation/dynamic/approval/approval-actions';
 import ApprovalPanel from 'src/presentation/dynamic/approval/ApprovalPanel.vue';
 import ApprovalBadge from 'src/presentation/dynamic/approval/ApprovalBadge.vue';
 import SubmitApprovalDialog from 'src/presentation/dynamic/approval/SubmitApprovalDialog.vue';
@@ -27,6 +28,7 @@ import { canAdvance, isReadOnlyState } from 'src/domain/dynamic/workflow';
 import { isStale } from 'src/presentation/dynamic/designer/api-error';
 import { newIdempotencyKey } from 'src/services/api/idempotency';
 import { isForbidden, type ApiError } from 'src/services/api/http';
+import { useIdentityStore } from 'src/stores/use-identity-store';
 
 const { t, locale } = useI18n();
 const $q = useQuasar();
@@ -74,6 +76,9 @@ function onSubmitted(outcome: SubmitApprovalResult['outcome']) {
   const state = submitTo.value === null ? '' : stateLabel(submitTo.value);
   $q.notify({ type: 'positive', message: t(`approval.submit.outcome.${outcome}`, { state }) });
 }
+// On a phone the action bar is fixed to the bottom: leave room so the last block is not covered.
+const identity = useIdentityStore();
+const barPad = computed(() => $q.screen.lt.sm && hasApprovalActions(approvalQuery.data.value?.current ?? null, identity.userId));
 const submitTargets = computed(() => (canSubmit.value ? approvalQuery.data.value?.submitTargets ?? [] : []).filter((to) => stateLabel(to)));
 
 async function onDelete() {
@@ -101,7 +106,7 @@ async function onDelete() {
 </script>
 
 <template>
-  <q-page padding>
+  <q-page padding :style="barPad ? 'padding-bottom: 88px' : undefined">
     <ForbiddenNotice v-if="forbidden" />
     <div v-else-if="schemaMissing" class="text-negative">{{ t('dynamic.moduleNotFound') }}</div>
     <div v-else-if="recordMissing" class="text-negative">{{ t('dynamic.recordNotFound') }}</div>
@@ -134,7 +139,9 @@ async function onDelete() {
       </div>
       <RecordLedger v-if="schemaQuery.data.value.ledger" :record-id="recordId" :module-key="moduleKey" />
       <RecordConversions :record-id="recordId" :row-version="recordQuery.data.value.rowVersion" :closed="schemaQuery.data.value.readOnly" />
-      <ApprovalPanel v-if="approval && approvalQuery.data.value" :approval="approvalQuery.data.value" :schema="schemaQuery.data.value" />
+      <ApprovalPanel
+        v-if="approval && approvalQuery.data.value" :approval="approvalQuery.data.value" :schema="schemaQuery.data.value" :record-id="recordId" :module-key="moduleKey"
+      />
       <DynamicDetail :schema="schemaQuery.data.value" :record="recordQuery.data.value" />
       <DetailTables v-if="schemaQuery.data.value.details?.length" class="q-mt-md" :details="schemaQuery.data.value.details" :rows="recordQuery.data.value.details ?? {}" />
       <RecordTasks v-if="schemaQuery.data.value.tasksEnabled !== false" :record-id="recordId" :closed="!!schemaQuery.data.value.readOnly" />
