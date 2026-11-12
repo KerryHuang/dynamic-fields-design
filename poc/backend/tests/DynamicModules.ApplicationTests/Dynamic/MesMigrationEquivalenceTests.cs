@@ -60,6 +60,8 @@ public class MesMigrationEquivalenceTests
     private static readonly HashSet<string> RehomedModules = ["mold"];
     // 舊範本沒有分區、選單歸到「自訂功能」的模組，套件補上分區：只比對期望的新值
     private static readonly Dictionary<string, string> AddedSections = new() { ["part"] = "設備" };
+    // CRM 與 MES 同時開啟時選單同名，過渡期 MES 顯示名稱加「（模具廠）」（使用者 2026-11-12 裁決）：只比對期望的新繁中名稱
+    private static readonly Dictionary<string, string> RenamedModules = new() { ["order"] = "訂單（模具廠）", ["quote"] = "報價單（模具廠）" };
     private static readonly HashSet<string> AddedFields =
         ["order.fromQuote", "order.qualityCount", "line.sourceLine", "quality.workOrder",      // 追溯、彙總、掛工令
          "mold.no", "mold.name"];                                                                // 模具自己的編號與名稱（s2d-0）
@@ -95,6 +97,8 @@ public class MesMigrationEquivalenceTests
                     old[prop].Should().BeNull($"{code} 舊範本沒有分區");
                     ((string?)now[prop]?["zh-TW"]).Should().Be(section, $"{code}.{prop}");
                 }
+                else if (prop == "name" && RenamedModules.TryGetValue(code, out var renamed))
+                    ((string?)now[prop]?["zh-TW"]).Should().Be(renamed, $"{code}.{prop}");
                 else if (prop == "section")
                     // 套件的分區補成四語系物件；舊範本是繁中字串，比對繁中值
                     ((string?)now[prop]?["zh-TW"]).Should().Be((string?)old[prop], $"{code}.{prop}");
