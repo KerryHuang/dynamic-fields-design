@@ -41,7 +41,7 @@ public sealed class FrozenRecordsLoader(
             {
                 var headerLock = await locks.ForModuleAsync(header, null, ct);
                 foreach (var h in await records.ListByIdsAsync(header.Id, headerIds, ct))
-                    {
+                {
                     var hv = RecordService.RecordValueProcessor.Parse(h.ValuesJson);
                     if (wf.IsLocked(hv) || headerLock.IsLockedState(wf.StateOf(hv))) frozenHeaders.Add(h.Id);
                 }
