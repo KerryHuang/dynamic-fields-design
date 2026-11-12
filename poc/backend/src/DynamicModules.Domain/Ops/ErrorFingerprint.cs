@@ -99,5 +99,5 @@ public static partial class ErrorFingerprint
     [GeneratedRegex(@"^<([^>]+)>")] private static partial Regex GroupRegex();
     [GeneratedRegex(@"^at (?:(.+?) \()?(.+?):\d+:\d+\)?$")] private static partial Regex ChromeRegex();
     [GeneratedRegex(@"^([^@\s]*)@(.+?):\d+:\d+$")] private static partial Regex FirefoxRegex();
-    [GeneratedRegex(@"-[A-Za-z0-9_]{8}(?=\.js$)")] private static partial Regex ViteHashRegex();
+    [GeneratedRegex(@"-[A-Za-z0-9_-]{8}(?=\.js$)")] private static partial Regex ViteHashRegex();
 }

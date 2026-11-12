@@ -51,6 +51,13 @@ public class ErrorFingerprintTests
             .Should().Be(ErrorFingerprint.ForServer("E", "m", ["DynamicModules.App.Foo.Handle"], null));
     }
 
+    [Theory]
+    [InlineData("at f (https://h/assets/DynamicForm-RZEY-5W4.js:1:2)", "f@DynamicForm.js")]   // 雜湊含 -
+    [InlineData("at g (https://h/assets/api-error-sXABj2Xu.js:1:2)", "g@api-error.js")]
+    [InlineData("at h (https://h/assets/my-long-name.js:1:2)", "h@my-long-name.js")]   // 後綴不是 8 字元，不能吃掉
+    public void ClientFrames_ViteHash_WithDashOrPlainName(string line, string expected) =>
+        ErrorFingerprint.ClientFrames(line).Should().Equal(expected);
+
     [Fact]
     public void ClientFrames_ChromeAndFirefox_StripHashAndLineNumbers()
     {
