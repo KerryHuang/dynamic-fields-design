@@ -18,6 +18,8 @@ const hidden = computed(() => ruleStateOf(props.schema, props.record.values, pro
 const visibleBlocks = computed(() => props.schema.blocks
   .map((b) => ({ ...b, fields: b.fields.filter((f) => !hidden.value.has(f.id)) }))
   .filter((b) => b.fields.length > 0));
+/** Fields the approval has locked (the server lists only what this reader can see). */
+const lockedKeys = computed(() => new Set(props.record.approvalLock?.fieldKeys ?? []));
 /** Names of the closed apps whose (frozen) fields this block shows. */
 const blockLocks = (fields: SchemaField[]) => [...new Set(fields.map((f) => f.lockedBy ?? props.record.lockedBy?.[f.key] ?? null)
   .filter((l) => l !== null).map((l) => resolveI18n(l.appName, locale.value)))];
@@ -35,7 +37,15 @@ const blockLocks = (fields: SchemaField[]) => [...new Set(fields.map((f) => f.lo
       <q-separator />
       <q-list class="row">
         <q-item v-for="f in block.fields" :key="f.key" :class="fieldColClass(block.columns, isFullWidth(f))">
-          <q-item-section side class="text-muted" style="min-width: 10rem">{{ resolveI18n(f.label, locale) }}</q-item-section>
+          <q-item-section side class="text-muted" style="min-width: 10rem">
+            <span>
+              {{ resolveI18n(f.label, locale) }}
+              <q-icon
+                v-if="lockedKeys.has(f.key)" name="lock" size="xs" class="q-ml-xs" role="img" :aria-label="t('approval.lockedHint')"
+                :data-testid="`approval-lock-${f.key}`"
+              />
+            </span>
+          </q-item-section>
           <q-item-section :data-testid="f.key">
             <template v-if="refOf(f)">
               <router-link v-if="refOf(f)!.to" :to="refOf(f)!.to!">{{ refOf(f)!.text }}</router-link>

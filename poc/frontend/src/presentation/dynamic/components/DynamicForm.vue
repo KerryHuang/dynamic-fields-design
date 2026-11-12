@@ -163,7 +163,10 @@ watch(() => fillFields.value.map((f) => values[f.key] ?? null), syncFill);
 onMounted(syncFill); // a prefilled reference on create
 
 const hiddenField = (f: SchemaField) => ruleState.value.hidden.has(f.id);
-const fieldReadonly = (f: SchemaField) => !!lockOf(f) || !isWritable(f, ruleState.value) || lockedKeys.value.has(f.key) || (workflowLocked.value && f.key !== statusKey.value);
+// After an approval the server locks these fields (and the detail rows); the status field is never on the list, so unlocking transitions stay possible.
+const approvalLockedKeys = computed(() => new Set(props.mode === 'edit' ? props.record?.approvalLock?.fieldKeys ?? [] : []));
+const detailRowsLocked = computed(() => props.mode === 'edit' && !!props.record?.approvalLock?.detailRowsLocked);
+const fieldReadonly = (f: SchemaField) => !!lockOf(f) || approvalLockedKeys.value.has(f.key) || !isWritable(f, ruleState.value) || lockedKeys.value.has(f.key) || (workflowLocked.value && f.key !== statusKey.value);
 /** Names of the closed apps whose fields are shown in this block. */
 const blockLocks = (b: SchemaBlock) => [...new Set(b.fields.filter((f) => !hiddenField(f)).map(lockOf)
   .filter((l) => l !== null).map((l) => resolveI18n(l.appName, locale.value)))];
@@ -242,6 +245,10 @@ watch(() => props.record, () => {
         <div class="row q-col-gutter-md">
           <template v-for="f in block.fields" :key="f.key">
             <div v-if="!hiddenField(f)" :class="fieldColClass(block.columns, isFullWidth(f))">
+              <div v-if="approvalLockedKeys.has(f.key)" class="row items-center no-wrap text-caption text-muted q-mb-xs" :data-testid="`approval-lock-${f.key}`">
+                <q-icon name="lock" size="xs" class="q-mr-xs" aria-hidden="true" />
+                <span>{{ t('approval.lockedHint') }}</span>
+              </div>
               <DynamicField
                 :field="f" :readonly="fieldReadonly(f)"
                 :required="(ruleState.required.has(f.id) || f.key === statusKey) && !fieldReadonly(f)" :allowed-options="allowedFor(f)"
@@ -255,7 +262,7 @@ watch(() => props.record, () => {
     </q-expansion-item>
     <DetailGrid
       v-for="d in schema.details ?? []" :key="d.moduleKey" :detail="d" :model-value="detailRows[d.moduleKey] ?? []"
-      :readonly="readOnlyForm || workflowLocked" :errors="gridErrors(d.moduleKey)" :header-values="formValues" :header-fields="fields" @update:model-value="(rows) => (detailRows[d.moduleKey] = rows)"
+      :readonly="readOnlyForm || workflowLocked || detailRowsLocked" :errors="gridErrors(d.moduleKey)" :header-values="formValues" :header-fields="fields" @update:model-value="(rows) => (detailRows[d.moduleKey] = rows)"
       @edit-cell="(uid, key) => clearServerCell(d.moduleKey, uid, key)"
     />
     <q-btn v-if="canSave" type="submit" color="primary" :label="t('dynamic.save')" :loading="saving" />
