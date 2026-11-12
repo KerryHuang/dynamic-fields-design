@@ -20,7 +20,7 @@
 | p1b | 政策前端：系統「政策設定」頁、模組設計「政策」分頁；任務規則畫面改讀生效值 | 已上線 | [政策設定](superpowers/specs/2026-11-11-policy-settings-design.md) §9 |
 | p1c | 任務與通知政策：A6、A7、A13、A14 | 已上線 | [政策設定](superpowers/specs/2026-11-11-policy-settings-design.md) §9 |
 | p1d | 附件政策：A20（含部署設定檔當出廠值） | 已上線 | [政策設定](superpowers/specs/2026-11-11-policy-settings-design.md) §9 |
-| a2d1 | 簽核鎖定寫入：鎖定狀態、鎖定欄位與明細的寫入守衛（只驗 SQLite，PostgreSQL 在 pg0 後補驗） | 進行中：a2d1 待合併 | [簽核流程](superpowers/specs/2026-11-10-approval-workflow-design.md)、[政策設定](superpowers/specs/2026-11-11-policy-settings-design.md) §9 |
+| a2d1 | 簽核鎖定寫入：鎖定狀態、鎖定欄位與明細的寫入守衛（只驗 SQLite，PostgreSQL 在 pg0 後補驗） | 已上線（2026-11-12，ef3c00ab） | [簽核流程](superpowers/specs/2026-11-10-approval-workflow-design.md)、[政策設定](superpowers/specs/2026-11-11-policy-settings-design.md) §9 |
 | a4b | 前端：送簽畫面與簽核中心 | 未開始 | [簽核流程](superpowers/specs/2026-11-10-approval-workflow-design.md) |
 | a6 | CRM 設計案與簽核 Demo、文件 | 未開始 | [簽核流程](superpowers/specs/2026-11-10-approval-workflow-design.md) |
 | a2d2–a2d7 | 附件、整批重算、定義守衛、鎖定資料守衛、簽核類政策設定；a2d1 上線後到 a2d2、a2d3 上線前，上傳附件不受鎖、設計者改公式的整批重算會改寫已核准單的值（只驗 SQLite，PostgreSQL 在 pg0 後補驗） | 未開始 | [簽核流程](superpowers/specs/2026-11-10-approval-workflow-design.md)、[政策設定](superpowers/specs/2026-11-11-policy-settings-design.md) §9 |
