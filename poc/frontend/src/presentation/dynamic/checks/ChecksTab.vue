@@ -65,7 +65,10 @@ function confirmDelete() {
     <div v-else-if="query.isPending.value" class="text-muted">{{ t('designer.loading') }}</div>
     <div v-else-if="!checks.length" class="text-muted">{{ t('checks.empty') }}</div>
     <q-list v-else bordered separator>
-      <q-item v-for="c in checks" :key="c.key" :class="{ 'text-muted': !c.active }" :data-testid="`check-row-${c.key}`">
+      <q-item
+        v-for="c in checks" :key="c.key" :clickable="!readonly" :class="{ 'text-muted': !c.active }" :data-testid="`check-row-${c.key}`"
+        @click="!readonly && open(c)"
+      >
         <q-item-section>
           <q-item-label>
             {{ resolveI18n(c.name, locale) }}
@@ -75,10 +78,14 @@ function confirmDelete() {
           <q-item-label caption class="check-rule">{{ rule(c) }}</q-item-label>
         </q-item-section>
         <q-item-section side>
-          <div class="row no-wrap items-center">
-            <q-btn flat dense color="primary" :label="t('designer.edit')" :disable="readonly" :data-testid="`check-edit-${c.key}`" @click="open(c)" />
-            <q-btn flat dense color="negative" :label="t('dynamic.delete')" :disable="readonly" :data-testid="`check-delete-${c.key}`" @click="deleting = c" />
-          </div>
+          <q-btn
+            v-if="$q.screen.lt.sm" flat round dense color="negative" icon="delete" :aria-label="t('dynamic.delete')" :disable="readonly"
+            :data-testid="`check-delete-${c.key}`" @click.stop="deleting = c"
+          />
+          <q-btn
+            v-else flat dense color="negative" :label="t('dynamic.delete')" :disable="readonly" :data-testid="`check-delete-${c.key}`"
+            @click.stop="deleting = c"
+          />
         </q-item-section>
       </q-item>
     </q-list>

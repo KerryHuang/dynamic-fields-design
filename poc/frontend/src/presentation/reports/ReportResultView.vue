@@ -76,7 +76,7 @@ const countText = (n: number | null | undefined) => (n ?? 0).toLocaleString(loca
           </thead>
           <tbody>
             <tr
-              v-for="(g, i) in groups" :key="i" class="cursor-pointer" :data-testid="`group-row-${i}`"
+              v-for="(g, i) in groups" :key="i" class="row-clickable" :data-testid="`group-row-${i}`"
               @click="emit('drill', g.groupKeys)"
             >
               <td v-for="(c, ci) in groupCols" :key="c.key">{{ g.groupLabels[ci] }}</td>

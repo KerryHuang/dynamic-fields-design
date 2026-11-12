@@ -80,14 +80,37 @@ describe('GroupsPage', () => {
     expect(api.createGroup).toHaveBeenCalledWith({ name: 'Support', locale: 'en-US' });
   });
 
-  it('rename prefills the current-locale name and sends it back with the locale', async () => {
+  it('click a row opens one dialog with name and members; renaming sends the name with the locale and skips unchanged members', async () => {
     api.renameGroup.mockResolvedValue(GROUPS[0]);
     await mountPage();
-    await click('group-rename-1');
+    expect(q('group-row-1')!.classList.contains('row-clickable')).toBe(true);
+    await click('group-row-1');
     expect(q('group-name')!.value).toBe('業務群組');
+    expect(q('member-a01')).not.toBeNull();
     await fill('group-name', '業務部');
     await click('group-save');
     expect(api.renameGroup).toHaveBeenCalledWith(1, { name: '業務部', locale: 'zh-TW' });
+    expect(api.setGroupMembers).not.toHaveBeenCalled();
+  });
+
+  it('the delete button does not open the edit dialog', async () => {
+    api.getGroupImpact.mockResolvedValue(IMPACT);
+    await mountPage();
+    await click('group-delete-1');
+    expect(q('group-name')).toBeNull();
+    expect(q('group-delete-confirm')).not.toBeNull();
+  });
+
+  it('changing name and members in the same dialog saves both', async () => {
+    api.renameGroup.mockResolvedValue(GROUPS[0]);
+    api.setGroupMembers.mockResolvedValue(undefined as never);
+    await mountPage();
+    await click('group-row-1');
+    await fill('group-name', '業務部');
+    await click('member-b02');
+    await click('group-save');
+    expect(api.renameGroup).toHaveBeenCalledWith(1, { name: '業務部', locale: 'zh-TW' });
+    expect(api.setGroupMembers).toHaveBeenCalledWith(1, { userIds: ['a01', 'old01', 'b02'] });
   });
 
   it('duplicate-name 400 is shown inside the dialog', async () => {
@@ -103,18 +126,18 @@ describe('GroupsPage', () => {
   it('member picker offers only active users, keeps inactive existing members, and sends userIds', async () => {
     api.setGroupMembers.mockResolvedValue(undefined as never);
     await mountPage();
-    await click('group-members-1');
+    await click('group-row-1');
     expect(q('member-a01')).not.toBeNull();
     expect(q('member-b02')).not.toBeNull();
     expect(q('member-old01')!.textContent).toContain(zhTW.users.inactive);
     await click('member-b02');
-    await click('members-save');
+    await click('group-save');
     expect(api.setGroupMembers).toHaveBeenCalledWith(1, { userIds: ['a01', 'old01', 'b02'] });
   });
 
   it('member picker does not list an inactive user who is not in the group', async () => {
     await mountPage();
-    await click('group-members-2');
+    await click('group-row-2');
     expect(q('member-a01')).not.toBeNull();
     expect(q('member-old01')).toBeNull();
   });

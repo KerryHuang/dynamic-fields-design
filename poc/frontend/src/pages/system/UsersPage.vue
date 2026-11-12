@@ -148,23 +148,22 @@ function runSetActive(u: AdminUser, active: boolean) {
         :rows-per-page-options="[0]" hide-pagination :grid="$q.screen.lt.sm"
       >
         <template #body="{ row, cols }">
-          <q-tr :data-testid="`user-row-${row.userId}`">
-            <q-td v-for="c in cols" :key="c.name" :align="c.align">
-              <template v-if="c.name === 'actions'">
-                <q-btn flat dense color="primary" :label="t('users.edit')" :data-testid="`user-edit-${row.userId}`" @click="openEdit(row)" />
+          <q-tr class="row-clickable" :data-testid="`user-row-${row.userId}`" @click="openEdit(row)">
+            <template v-for="c in cols" :key="c.name">
+              <q-td v-if="c.name === 'actions'" :align="c.align" @click.stop>
                 <q-btn flat dense color="primary" :label="t('users.resetPassword')" :data-testid="`user-reset-${row.userId}`" @click="openReset(row)" />
                 <q-btn
                   flat dense :color="row.isActive ? 'negative' : 'primary'" :label="row.isActive ? t('users.deactivate') : t('users.activate')"
                   :disable="row.userId === identity.userId" :data-testid="`user-toggle-${row.userId}`" @click="toggle(row)"
                 />
-              </template>
-              <template v-else>{{ c.value }}</template>
-            </q-td>
+              </q-td>
+              <q-td v-else :align="c.align">{{ c.value }}</q-td>
+            </template>
           </q-tr>
         </template>
         <template #item="{ row, cols }">
           <div class="col-12 q-py-xs">
-            <q-card flat bordered :data-testid="`user-card-${row.userId}`">
+            <q-card flat bordered class="cursor-pointer" :data-testid="`user-card-${row.userId}`" @click="openEdit(row)">
               <q-list dense>
                 <q-item v-for="c in cols.filter((x: { name: string; value: unknown }) => x.name !== 'actions' && x.value)" :key="c.name">
                   <q-item-section>
@@ -173,8 +172,7 @@ function runSetActive(u: AdminUser, active: boolean) {
                   </q-item-section>
                 </q-item>
               </q-list>
-              <q-card-actions align="right">
-                <q-btn flat dense color="primary" :label="t('users.edit')" :data-testid="`user-edit-${row.userId}`" @click="openEdit(row)" />
+              <q-card-actions align="right" @click.stop>
                 <q-btn flat dense color="primary" :label="t('users.resetPassword')" :data-testid="`user-reset-${row.userId}`" @click="openReset(row)" />
                 <q-btn
                   flat dense :color="row.isActive ? 'negative' : 'primary'" :label="row.isActive ? t('users.deactivate') : t('users.activate')"

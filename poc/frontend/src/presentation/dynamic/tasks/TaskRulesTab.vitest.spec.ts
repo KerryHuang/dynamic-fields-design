@@ -111,7 +111,7 @@ describe('TaskRulesTab', () => {
   it('既有規則任務數超過上限：新增任務鈕停用，不增加任務時仍可改標題存檔', async () => {
     const tasks = ['a', 'b', 'c'].map((code) => ({ code, title: { 'zh-TW': code }, assigneeFieldId: 1, dueOffsetDays: 0 }));
     await mountTab({ maxTasks: 2, rules: [ruleWire({ tasks })] });
-    q<HTMLElement>('[data-testid="task-rule-edit-follow"]').click();
+    q<HTMLElement>('[data-testid="task-rule-row-follow"]').click();
     await flushPromises();
     expect(q('[data-testid="task-add"]').hasAttribute('disabled')).toBe(true);
     q<HTMLElement>('[data-testid="task-rule-save"]').click();
@@ -154,9 +154,22 @@ describe('TaskRulesTab', () => {
 
   it('非設計器使用者是唯讀', async () => {
     await mountTab({ canEdit: false });
-    for (const id of ['add-task-rule', 'task-rule-edit-follow', 'task-rule-delete-follow', 'task-rule-toggle-follow']) {
+    for (const id of ['add-task-rule', 'task-rule-delete-follow', 'task-rule-toggle-follow']) {
       expect(q(`[data-testid="${id}"]`).hasAttribute('disabled'), id).toBe(true);
     }
+    expect(q('[data-testid="task-rule-row-follow"]').classList.contains('q-item--clickable')).toBe(false);
+    q<HTMLElement>('[data-testid="task-rule-row-follow"]').click();
+    await flushPromises();
+    expect(document.body.querySelector('[data-testid="task-rule-save"]')).toBeNull();
+    w.unmount();
+  });
+
+  it('動作按鈕不會連帶開啟編輯，可編輯時整列是 clickable', async () => {
+    await mountTab();
+    expect(q('[data-testid="task-rule-row-follow"]').classList.contains('q-item--clickable')).toBe(true);
+    q<HTMLElement>('[data-testid="task-rule-delete-follow"]').click();
+    await flushPromises();
+    expect(document.body.querySelector('[data-testid="task-rule-save"]')).toBeNull();
     w.unmount();
   });
 
@@ -230,7 +243,7 @@ describe('TaskRulesTab', () => {
 
   it('編輯送 PUT 且規則代碼不能改；伺服器錯誤顯示在對話框', async () => {
     await mountTab({ saveFails: true });
-    q<HTMLElement>('[data-testid="task-rule-edit-follow"]').click();
+    q<HTMLElement>('[data-testid="task-rule-row-follow"]').click();
     await flushPromises();
     expect(q<HTMLInputElement>('input[data-testid="task-rule-key"]').disabled).toBe(true);
     q<HTMLElement>('[data-testid="task-rule-save"]').click();

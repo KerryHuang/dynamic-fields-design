@@ -76,7 +76,7 @@ describe('EventsTab', () => {
 
   it('opens an existing event with its code locked', async () => {
     const w = await mountTab([event()]);
-    await w.find('[data-testid="event-edit-ship-post"]').trigger('click');
+    await w.find('[data-testid="event-row-ship-post"]').trigger('click');
     await flushPromises();
     expect(($('event-key')!.querySelector('input') as HTMLInputElement).readOnly).toBe(true);
   });
@@ -102,5 +102,18 @@ describe('EventsTab', () => {
     const w = await mountTab([event()], mod(), false);
     expect(w.find('[data-testid="event-create"]').attributes('disabled')).toBeDefined();
     expect(w.find('[data-testid="event-delete-ship-post"]').attributes('disabled')).toBeDefined();
+    expect(w.find('[data-testid="event-row-ship-post"]').classes()).not.toContain('q-item--clickable');
+    await w.find('[data-testid="event-row-ship-post"]').trigger('click');
+    await flushPromises();
+    expect($('event-key')).toBeNull();
+  });
+
+  it('the delete button does not open the editor', async () => {
+    const w = await mountTab([event()]);
+    expect(w.find('[data-testid="event-row-ship-post"]').classes()).toContain('q-item--clickable');
+    await w.find('[data-testid="event-delete-ship-post"]').trigger('click');
+    await flushPromises();
+    expect($('event-key')).toBeNull();
+    expect($('event-delete-confirm')).not.toBeNull();
   });
 });

@@ -26,50 +26,42 @@ const columns = computed<QTableColumn<AdminGroup>[]>(() => [
   { name: 'actions', label: '', align: 'right', field: 'id' },
 ]);
 
-// 新增／改名共用一個對話框，只編輯目前語系的名稱
-const nameDialog = ref(false);
-const editingId = ref<number | null>(null);
+// 新增／編輯共用一個對話框：編輯時名稱（只改目前語系）與成員在同一處改，新增只填名稱。
+// 成員只列啟用中的使用者；已在群組內但已停用的人保留勾選，儲存時不會被默默移除
+const dialog = ref(false);
+const editing = ref<AdminGroup | null>(null);
 const name = ref('');
-const nameError = ref('');
+const selected = ref<string[]>([]);
+const formError = ref('');
 const create = useCreateGroup();
 const rename = useRenameGroup();
-const saving = computed(() => create.isPending.value || rename.isPending.value);
-function openName(g?: AdminGroup) {
-  editingId.value = g?.id ?? null;
-  name.value = g ? nameOf(g) : '';
-  nameError.value = '';
-  nameDialog.value = true;
-}
-function saveName() {
-  nameError.value = '';
-  const handlers = {
-    onSuccess: () => { nameDialog.value = false; $q.notify({ type: 'positive', message: t('groups.saved') }); },
-    onError: (e: unknown) => { nameError.value = errorText(e); },
-  };
-  if (editingId.value !== null) rename.mutate({ id: editingId.value, name: name.value, locale: locale.value }, handlers);
-  else create.mutate({ name: name.value, locale: locale.value }, handlers);
-}
-
-// 成員：只列啟用中的使用者；已在群組內但已停用的人保留勾選，儲存時不會被默默移除
-const membersTarget = ref<AdminGroup | null>(null);
-const selected = ref<string[]>([]);
-const membersError = ref('');
 const setMembers = useSetGroupMembers();
+const saving = computed(() => create.isPending.value || rename.isPending.value || setMembers.isPending.value);
 const memberOptions = computed(() => {
-  const inGroup = new Set(membersTarget.value?.memberUserIds ?? []);
+  const inGroup = new Set(editing.value?.memberUserIds ?? []);
   return (users.data.value ?? []).filter((u) => u.isActive || inGroup.has(u.userId));
 });
-function openMembers(g: AdminGroup) {
-  membersTarget.value = g;
-  selected.value = [...g.memberUserIds];
-  membersError.value = '';
+function openEditor(g?: AdminGroup) {
+  editing.value = g ?? null;
+  name.value = g ? nameOf(g) : '';
+  selected.value = g ? [...g.memberUserIds] : [];
+  formError.value = '';
+  dialog.value = true;
 }
-function saveMembers() {
-  membersError.value = '';
-  setMembers.mutate({ id: membersTarget.value!.id, userIds: selected.value }, {
-    onSuccess: () => { membersTarget.value = null; $q.notify({ type: 'positive', message: t('groups.saved') }); },
-    onError: (e) => { membersError.value = errorText(e); },
-  });
+function save() {
+  formError.value = '';
+  const g = editing.value;
+  const done = () => { dialog.value = false; $q.notify({ type: 'positive', message: t('groups.saved') }); };
+  const fail = (e: unknown) => { formError.value = errorText(e); };
+  if (!g) { create.mutate({ name: name.value, locale: locale.value }, { onSuccess: done, onError: fail }); return; }
+  // 名稱先存；成員是另一個呼叫，名稱出錯時對話框保持開啟
+  const saveMembers = () => {
+    const unchanged = selected.value.length === g.memberUserIds.length && selected.value.every((id) => g.memberUserIds.includes(id));
+    if (unchanged) { done(); return; }
+    setMembers.mutate({ id: g.id, userIds: selected.value }, { onSuccess: done, onError: fail });
+  };
+  if (name.value === nameOf(g)) saveMembers();
+  else rename.mutate({ id: g.id, name: name.value, locale: locale.value }, { onSuccess: saveMembers, onError: fail });
 }
 
 // 刪除：先查影響；有選項範圍指定時停用刪除，409（別人剛加了範圍）把清單換成後端回的
@@ -103,57 +95,51 @@ function confirmDelete() {
       <div class="row items-center q-mb-md">
         <div class="text-h6">{{ t('groups.title') }}</div>
         <q-space />
-        <q-btn color="primary" icon="add" :label="t('groups.create')" data-testid="group-create" @click="openName()" />
+        <q-btn color="primary" icon="add" :label="t('groups.create')" data-testid="group-create" @click="openEditor()" />
       </div>
       <q-table
         flat bordered row-key="id" :rows="groups.data.value ?? []" :columns="columns" :loading="groups.isFetching.value"
         :rows-per-page-options="[0]" hide-pagination
       >
         <template #body="{ row, cols }">
-          <q-tr :data-testid="`group-row-${row.id}`">
-            <q-td v-for="c in cols" :key="c.name" :align="c.align">
-              <template v-if="c.name === 'actions'">
-                <q-btn flat dense color="primary" :label="t('groups.rename')" :data-testid="`group-rename-${row.id}`" @click="openName(row)" />
-                <q-btn flat dense color="primary" :label="t('groups.editMembers')" :data-testid="`group-members-${row.id}`" @click="openMembers(row)" />
-                <q-btn flat dense color="negative" :label="t('groups.delete')" :data-testid="`group-delete-${row.id}`" @click="openDelete(row)" />
-              </template>
-              <template v-else>{{ c.value }}</template>
-            </q-td>
+          <q-tr class="row-clickable" :data-testid="`group-row-${row.id}`" @click="openEditor(row)">
+            <template v-for="c in cols" :key="c.name">
+              <q-td v-if="c.name === 'actions'" :align="c.align" @click.stop>
+                <q-btn
+                  v-if="$q.screen.lt.sm" flat round dense color="negative" icon="delete" :aria-label="t('groups.delete')"
+                  :data-testid="`group-delete-${row.id}`" @click="openDelete(row)"
+                />
+                <q-btn v-else flat dense color="negative" :label="t('groups.delete')" :data-testid="`group-delete-${row.id}`" @click="openDelete(row)" />
+              </q-td>
+              <q-td v-else :align="c.align">{{ c.value }}</q-td>
+            </template>
           </q-tr>
         </template>
       </q-table>
 
-      <q-dialog v-model="nameDialog">
-        <q-card style="width: 480px; max-width: 95vw">
-          <q-card-section class="text-h6">{{ editingId !== null ? t('groups.rename') : t('groups.create') }}</q-card-section>
+      <q-dialog v-model="dialog">
+        <q-card style="width: 640px; max-width: 95vw">
+          <q-card-section class="text-h6">{{ editing ? t('groups.edit') : t('groups.create') }}</q-card-section>
           <q-card-section class="row q-col-gutter-md">
             <div class="col-12">
-              <q-input v-model="name" :label="t('groups.name')" dense outlined data-testid="group-name" @keyup.enter="saveName" />
+              <q-input v-model="name" :label="t('groups.name')" dense outlined data-testid="group-name" @keyup.enter="save" />
             </div>
-            <div v-if="nameError" class="col-12 text-negative" data-testid="group-error">{{ nameError }}</div>
+            <template v-if="editing">
+              <div class="col-12 text-subtitle2">{{ t('groups.members') }}</div>
+              <div class="col-12 row q-col-gutter-sm" style="max-height: 50vh; overflow: auto">
+                <div v-for="u in memberOptions" :key="u.userId" class="col-12 col-sm-6">
+                  <q-checkbox
+                    v-model="selected" :val="u.userId" dense :data-testid="`member-${u.userId}`"
+                    :label="u.isActive ? `${u.displayName} (${u.userId})` : `${u.displayName} (${u.userId}) ${t('groups.inactive')}`"
+                  />
+                </div>
+              </div>
+            </template>
+            <div v-if="formError" class="col-12 text-negative" data-testid="group-error">{{ formError }}</div>
           </q-card-section>
           <q-card-actions align="right">
-            <q-btn flat :label="t('groups.cancel')" data-testid="group-cancel" @click="nameDialog = false" />
-            <q-btn color="primary" :label="t('groups.save')" :loading="saving" data-testid="group-save" @click="saveName" />
-          </q-card-actions>
-        </q-card>
-      </q-dialog>
-
-      <q-dialog :model-value="membersTarget !== null" @update:model-value="membersTarget = null">
-        <q-card style="width: 640px; max-width: 95vw">
-          <q-card-section class="text-h6">{{ t('groups.editMembers') }}：{{ membersTarget ? nameOf(membersTarget) : '' }}</q-card-section>
-          <q-card-section class="row q-col-gutter-sm" style="max-height: 60vh; overflow: auto">
-            <div v-for="u in memberOptions" :key="u.userId" class="col-12 col-sm-6">
-              <q-checkbox
-                v-model="selected" :val="u.userId" dense :data-testid="`member-${u.userId}`"
-                :label="u.isActive ? `${u.displayName} (${u.userId})` : `${u.displayName} (${u.userId}) ${t('groups.inactive')}`"
-              />
-            </div>
-            <div v-if="membersError" class="col-12 text-negative" data-testid="members-error">{{ membersError }}</div>
-          </q-card-section>
-          <q-card-actions align="right">
-            <q-btn flat :label="t('groups.cancel')" data-testid="members-cancel" @click="membersTarget = null" />
-            <q-btn color="primary" :label="t('groups.save')" :loading="setMembers.isPending.value" data-testid="members-save" @click="saveMembers" />
+            <q-btn flat :label="t('groups.cancel')" data-testid="group-cancel" @click="dialog = false" />
+            <q-btn color="primary" :label="t('groups.save')" :loading="saving" data-testid="group-save" @click="save" />
           </q-card-actions>
         </q-card>
       </q-dialog>

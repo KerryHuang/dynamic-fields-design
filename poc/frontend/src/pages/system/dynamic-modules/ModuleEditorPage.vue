@@ -25,6 +25,7 @@ import PermissionsTab from 'src/presentation/dynamic/permissions/PermissionsTab.
 import PrintTab from 'src/presentation/dynamic/print/PrintTab.vue';
 import WorkflowTab from 'src/presentation/dynamic/workflow/WorkflowTab.vue';
 import { dynamicApi } from 'src/services/api/dynamic-api';
+import RowActionMenu from 'src/components/framework/RowActionMenu.vue';
 import ForbiddenNotice from 'src/components/framework/ForbiddenNotice.vue';
 import SelectNoOption from 'src/components/framework/SelectNoOption.vue';
 import { useSelectFilter } from 'src/components/framework/useSelectFilter';
@@ -322,7 +323,10 @@ function saveSection() {
             <div v-if="!block" class="text-muted">{{ t('designer.selectBlock') }}</div>
             <q-list v-else bordered separator>
               <q-item v-if="!block.fields.length"><q-item-section class="text-muted">{{ t('designer.noFields') }}</q-item-section></q-item>
-              <q-item v-for="(f, i) in block.fields" :key="f.id" :class="{ 'text-muted': f.status === 'Inactive' }" :data-testid="`field-${f.id}`">
+              <q-item
+                v-for="(f, i) in block.fields" :key="f.id" clickable :class="{ 'text-muted': f.status === 'Inactive' }" :data-testid="`field-${f.id}`"
+                @click="openField(f)"
+              >
                 <q-item-section>
                   <q-item-label>
                     {{ resolveI18n(f.label, locale) }}
@@ -331,10 +335,22 @@ function saveSection() {
                   <q-item-label caption>{{ typeLabel(f) }} · {{ f.key }}</q-item-label>
                 </q-item-section>
                 <q-item-section side>
-                  <div class="row no-wrap items-center">
+                  <RowActionMenu
+                    v-if="$q.screen.lt.sm" :testid="`field-more-${f.id}`"
+                    :actions="[
+                      { label: t('designer.moveUp'), disable: i === 0, run: () => move(i, -1) },
+                      { label: t('designer.moveDown'), disable: i === block!.fields.length - 1, run: () => move(i, 1) },
+                      f.status === 'Active'
+                        ? { label: t('designer.deactivate'), run: () => setStatus.mutate({ id: f.id, status: 'inactive' }, { onError: (e) => fail(e) }) }
+                        : { label: t('designer.reactivate'), run: () => setStatus.mutate({ id: f.id, status: 'active' }, { onError: (e) => fail(e) }) },
+                      ...(canDelete && f.status === 'Inactive'
+                        ? [{ label: t('designer.delete.action'), negative: true, testid: `delete-field-${f.id}`, run: () => askDelete({ kind: 'field', id: f.id }, resolveI18n(f.label, locale)) }]
+                        : []),
+                    ]"
+                  />
+                  <div v-else class="row no-wrap items-center" @click.stop>
                     <q-btn flat dense round icon="arrow_upward" :title="t('designer.moveUp')" :disable="i === 0" @click="move(i, -1)" />
                     <q-btn flat dense round icon="arrow_downward" :title="t('designer.moveDown')" :disable="i === block.fields.length - 1" @click="move(i, 1)" />
-                    <q-btn flat dense round icon="edit" :title="t('designer.edit')" @click="openField(f)" />
                     <q-btn
                       v-if="f.status === 'Active'" flat dense color="negative" :label="t('designer.deactivate')"
                       @click="setStatus.mutate({ id: f.id, status: 'inactive' }, { onError: (e) => fail(e) })"

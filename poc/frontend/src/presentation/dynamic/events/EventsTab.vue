@@ -69,7 +69,10 @@ function confirmDelete() {
     <div v-else-if="query.isPending.value" class="text-muted">{{ t('designer.loading') }}</div>
     <div v-else-if="!events.length" class="text-muted">{{ t('events.empty') }}</div>
     <q-list v-else bordered separator>
-      <q-item v-for="ev in events" :key="ev.key" :class="{ 'text-muted': !ev.active }" :data-testid="`event-row-${ev.key}`">
+      <q-item
+        v-for="ev in events" :key="ev.key" :clickable="!readonly" :class="{ 'text-muted': !ev.active }" :data-testid="`event-row-${ev.key}`"
+        @click="!readonly && open(ev)"
+      >
         <q-item-section>
           <q-item-label>
             {{ resolveI18n(ev.name, locale) }}
@@ -79,10 +82,14 @@ function confirmDelete() {
           <q-item-label caption class="event-trigger">{{ trigger(ev) }} · {{ t('events.effectCount', { n: ev.definition.effects.length }) }}</q-item-label>
         </q-item-section>
         <q-item-section side>
-          <div class="row no-wrap items-center">
-            <q-btn flat dense color="primary" :label="t('designer.edit')" :disable="readonly" :data-testid="`event-edit-${ev.key}`" @click="open(ev)" />
-            <q-btn flat dense color="negative" :label="t('dynamic.delete')" :disable="readonly" :data-testid="`event-delete-${ev.key}`" @click="deleting = ev" />
-          </div>
+          <q-btn
+            v-if="$q.screen.lt.sm" flat round dense color="negative" icon="delete" :aria-label="t('dynamic.delete')" :disable="readonly"
+            :data-testid="`event-delete-${ev.key}`" @click.stop="deleting = ev"
+          />
+          <q-btn
+            v-else flat dense color="negative" :label="t('dynamic.delete')" :disable="readonly" :data-testid="`event-delete-${ev.key}`"
+            @click.stop="deleting = ev"
+          />
         </q-item-section>
       </q-item>
     </q-list>

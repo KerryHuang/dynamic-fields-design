@@ -79,5 +79,20 @@ describe('ChecksTab', () => {
     const w = await mountTab([check], false);
     expect(w.find('[data-testid="check-create"]').attributes('disabled')).toBeDefined();
     expect(w.find('[data-testid="check-delete-stock"]').attributes('disabled')).toBeDefined();
+    expect(w.find('[data-testid="check-row-stock"]').classes()).not.toContain('q-item--clickable');
+    await w.find('[data-testid="check-row-stock"]').trigger('click');
+    await flushPromises();
+    expect($('check-save')).toBeNull();
+  });
+
+  it('click a row opens the editor; the delete button does not', async () => {
+    const w = await mountTab([check]);
+    expect(w.find('[data-testid="check-row-stock"]').classes()).toContain('q-item--clickable');
+    await w.find('[data-testid="check-delete-stock"]').trigger('click');
+    await flushPromises();
+    expect($('check-save')).toBeNull();
+    await w.find('[data-testid="check-row-stock"]').trigger('click');
+    await flushPromises();
+    expect($('check-save')).not.toBeNull();
   });
 });

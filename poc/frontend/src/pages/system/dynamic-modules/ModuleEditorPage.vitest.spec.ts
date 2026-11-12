@@ -10,6 +10,7 @@ import type { ModuleDetail } from 'src/domain/dynamic/types';
 import zhTW from 'src/i18n/zh-TW.json';
 import IconSelect from 'src/presentation/dynamic/designer/IconSelect.vue';
 import { dynamicApi } from 'src/services/api/dynamic-api';
+import FieldEditorDialog from 'src/presentation/dynamic/designer/FieldEditorDialog.vue';
 import ModuleEditorPage from './ModuleEditorPage.vue';
 
 vi.mock('src/services/api/dynamic-api', () => ({ dynamicApi: { getModule: vi.fn(), updateModule: vi.fn(), entities: vi.fn(), getPreviewSchema: vi.fn(), exportTemplate: vi.fn(), deleteCheck: vi.fn(), deleteTarget: vi.fn(), getMe: vi.fn(),
@@ -282,6 +283,21 @@ describe('ModuleEditorPage', () => {
       expect(w.find('[data-testid="delete-module"]').exists()).toBe(false);
       expect(w.find('[data-testid="delete-block-9"]').exists()).toBe(false);
       expect(w.find('[data-testid="delete-field-2"]').exists()).toBe(false);
+    });
+
+    it('click a field row opens the field editor; the delete button on the row does not', async () => {
+      api.deleteCheck.mockResolvedValue({ canDelete: true, blockers: [], purge: { records: 0, indexRows: 0, historyRows: 0 } });
+      const w = await mountPage(withBlock('Draft'));
+      const dialog = () => w.getComponent(FieldEditorDialog).props('modelValue');
+      expect(w.get('[data-testid="field-1"]').classes()).toContain('q-item--clickable');
+      expect(w.find('[data-testid="field-edit-1"]').exists()).toBe(false);
+      await w.get('[data-testid="delete-field-2"]').trigger('click');
+      await flushPromises();
+      expect(dialog()).toBe(false);
+      await w.get('[data-testid="field-1"]').trigger('click');
+      await flushPromises();
+      expect(dialog()).toBe(true);
+      w.unmount();
     });
 
     it('only inactive fields get a delete button; clicking it runs the field delete check', async () => {

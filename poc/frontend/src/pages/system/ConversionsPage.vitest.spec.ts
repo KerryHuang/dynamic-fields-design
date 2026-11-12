@@ -71,7 +71,7 @@ describe('ConversionsPage', () => {
     api.updateConversion.mockResolvedValue(conversion);
     const w = mountPage();
     await flushPromises();
-    await w.find('[data-testid="conversion-edit-q2o"]').trigger('click');
+    await w.find('[data-testid="conversion-row-q2o"]').trigger('click');
     await flushPromises();
     expect((document.body.querySelector('[data-testid="conversion-key"]') as HTMLInputElement).readOnly).toBe(true);
     (document.body.querySelector('[data-testid="conversion-save"]') as HTMLElement).click();
@@ -84,11 +84,33 @@ describe('ConversionsPage', () => {
     api.updateConversion.mockRejectedValue({ status: 400, errors: { 'definition.header.copy[0].to': ['目標欄位型別不相容'] } });
     const w = mountPage();
     await flushPromises();
-    await w.find('[data-testid="conversion-edit-q2o"]').trigger('click');
+    await w.find('[data-testid="conversion-row-q2o"]').trigger('click');
     await flushPromises();
     (document.body.querySelector('[data-testid="conversion-save"]') as HTMLElement).click();
     await flushPromises();
     expect(document.body.querySelector('[data-testid="conversion-errors"]')!.textContent).toContain('目標欄位型別不相容');
+    w.unmount();
+  });
+
+  it('the delete button does not open the editor', async () => {
+    const w = mountPage();
+    await flushPromises();
+    expect(w.find('[data-testid="conversion-row-q2o"]').classes()).toContain('row-clickable');
+    await w.find('[data-testid="conversion-delete-q2o"]').trigger('click');
+    await flushPromises();
+    expect(document.body.querySelector('[data-testid="conversion-key"]')).toBeNull();
+    w.unmount();
+  });
+
+  it('without edit permission the row is not clickable and does not open the editor', async () => {
+    api.getMe.mockResolvedValue({ designer: { read: true, add: false, edit: false, delete: false } } as never);
+    const w = mountPage();
+    await flushPromises();
+    const row = w.find('[data-testid="conversion-row-q2o"]');
+    expect(row.classes()).not.toContain('row-clickable');
+    await row.trigger('click');
+    await flushPromises();
+    expect(document.body.querySelector('[data-testid="conversion-key"]')).toBeNull();
     w.unmount();
   });
 

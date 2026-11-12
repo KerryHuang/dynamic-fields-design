@@ -89,8 +89,29 @@ describe('UsersPage', () => {
     for (const text of ['sales01', '名-sales01', '業務群組', '總經理室 / 業務部', '啟用中']) expect(card.textContent).toContain(text);
     expect(q('user-card-admin')!.textContent).toContain('系統管理員');
     expect(q('user-card-old01')!.textContent).toContain('已停用');
-    await click('user-edit-sales01');
+    await click('user-card-sales01');
     expect((q('user-id') as HTMLInputElement).value).toBe('sales01');
+  });
+
+  it('click a row opens the edit dialog; action buttons do not', async () => {
+    await mountPage(USERS, 1366);
+    expect(q('user-row-sales01')!.classList.contains('row-clickable')).toBe(true);
+    expect(q('user-edit-sales01')).toBeNull();
+    await click('user-reset-sales01');
+    expect(q('user-id')).toBeNull();
+    expect(q('user-reset-password')).not.toBeNull();
+    await click('user-reset-cancel');
+    await click('user-toggle-old01');
+    expect(q('user-id')).toBeNull();
+    await click('user-row-sales01');
+    expect((q('user-id') as HTMLInputElement).value).toBe('sales01');
+  });
+
+  it('390 wide: action buttons on a card do not open the edit dialog', async () => {
+    await mountPage(USERS, 390);
+    await click('user-reset-sales01');
+    expect(q('user-id')).toBeNull();
+    expect(q('user-reset-password')).not.toBeNull();
   });
 
   it('wide screens keep the table', async () => {
@@ -125,7 +146,7 @@ describe('UsersPage', () => {
     api.updateUser.mockResolvedValue(user('sales01'));
     api.setUserDepartment.mockResolvedValue(undefined as never);
     const w = await mountPage();
-    await click('user-edit-sales01');
+    await click('user-row-sales01');
     const select = w.findAllComponents(DepartmentSelect).find((c) => c.props('label') === zhTW.users.department)!;
     expect(select.props('modelValue')).toBe(2);
     select.vm.$emit('update:modelValue', 1);
@@ -137,7 +158,7 @@ describe('UsersPage', () => {
   it('saving without changing the department does not call the department endpoint', async () => {
     api.updateUser.mockResolvedValue(user('sales01'));
     await mountPage();
-    await click('user-edit-sales01');
+    await click('user-row-sales01');
     await click('user-save');
     expect(api.updateUser).toHaveBeenCalled();
     expect(api.setUserDepartment).not.toHaveBeenCalled();
@@ -172,7 +193,7 @@ describe('UsersPage', () => {
   it('edit keeps the account read-only and sends a full update including groupIds', async () => {
     api.updateUser.mockResolvedValue(user('sales01'));
     await mountPage();
-    await click('user-edit-sales01');
+    await click('user-row-sales01');
     expect(q('user-id')!.readOnly).toBe(true);
     expect(q('user-id')!.value).toBe('sales01');
     expect(q('user-password')).toBeNull();
@@ -223,7 +244,7 @@ describe('UsersPage', () => {
     api.updateUser.mockResolvedValue(user('admin'));
     await mountPage();
     const invalidate = vi.spyOn(queryClient, 'invalidateQueries');
-    await click('user-edit-admin');
+    await click('user-row-admin');
     await click('user-admin');
     await click('user-save');
     expect(api.updateUser).toHaveBeenCalledWith('admin', { displayName: '名-admin', groupIds: [], isSystemAdmin: false });

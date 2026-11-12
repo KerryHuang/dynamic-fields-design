@@ -66,14 +66,22 @@ function confirmDelete() {
         :rows-per-page-options="[0]" hide-pagination :no-data-label="t('docflow.conversion.empty')"
       >
         <template #body="{ row, cols }">
-          <q-tr :data-testid="`conversion-row-${row.key}`">
-            <q-td v-for="c in cols" :key="c.name" :align="c.align">
-              <template v-if="c.name === 'actions'">
-                <q-btn flat dense color="primary" :label="t('designer.edit')" :disable="!canEdit" :data-testid="`conversion-edit-${row.key}`" @click="open(row)" />
-                <q-btn flat dense color="negative" :label="t('dynamic.delete')" :disable="!canEdit" :data-testid="`conversion-delete-${row.key}`" @click="deleting = row" />
-              </template>
-              <template v-else>{{ c.value }}</template>
-            </q-td>
+          <q-tr
+            :class="{ 'row-clickable': canEdit }" :data-testid="`conversion-row-${row.key}`" @click="canEdit && open(row)"
+          >
+            <template v-for="c in cols" :key="c.name">
+              <q-td v-if="c.name === 'actions'" :align="c.align" @click.stop>
+                <q-btn
+                  v-if="$q.screen.lt.sm" flat round dense color="negative" icon="delete" :aria-label="t('dynamic.delete')"
+                  :disable="!canEdit" :data-testid="`conversion-delete-${row.key}`" @click="deleting = row"
+                />
+                <q-btn
+                  v-else flat dense color="negative" :label="t('dynamic.delete')" :disable="!canEdit"
+                  :data-testid="`conversion-delete-${row.key}`" @click="deleting = row"
+                />
+              </q-td>
+              <q-td v-else :align="c.align">{{ c.value }}</q-td>
+            </template>
           </q-tr>
         </template>
       </q-table>

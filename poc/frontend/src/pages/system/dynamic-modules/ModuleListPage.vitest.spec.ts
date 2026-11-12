@@ -11,9 +11,11 @@ import { dynamicApi } from 'src/services/api/dynamic-api';
 import ModuleListPage from './ModuleListPage.vue';
 
 vi.mock('src/services/api/dynamic-api', () => ({
-  dynamicApi: { getModules: vi.fn(), createModule: vi.fn(), entities: vi.fn(), getMe: vi.fn(), importTemplate: vi.fn(), getTemplates: vi.fn() },
+  dynamicApi: { getModules: vi.fn(), createModule: vi.fn(), entities: vi.fn(), getMe: vi.fn(), importTemplate: vi.fn(), getTemplates: vi.fn(), deactivateModule: vi.fn() },
 }));
 const api = vi.mocked(dynamicApi);
+
+let router: ReturnType<typeof createRouter>;
 
 async function mountPage(modules: unknown[] = [], add = true, edit = true) {
   api.getMe.mockResolvedValue({ designer: { read: true, add, edit, delete: true } } as never);
@@ -21,7 +23,7 @@ async function mountPage(modules: unknown[] = [], add = true, edit = true) {
   api.getModules.mockResolvedValue(modules as never);
   api.entities.mockResolvedValue([{ key: 'test.entity', name: { 'zh-TW': '測試實體' } }]);
   api.createModule.mockResolvedValue({} as never);
-  const router = createRouter({
+  router = createRouter({
     history: createMemoryHistory(),
     routes: [{ path: '/', component: ModuleListPage }, { path: '/system/dynamic-modules/:k', component: { render: () => null } }],
   });
@@ -221,6 +223,25 @@ describe('ModuleListPage templates', () => {
     const box = q('import-errors')!;
     expect(box.textContent).toContain('缺少 key');
     expect(box.textContent).toContain('模組重複');
+    w.unmount();
+  });
+});
+
+describe('ModuleListPage row click', () => {
+  const base = { programCode: 'P', status: 'Active', version: 1 };
+  it('the row is clickable and opens the designer; the action cell does not', async () => {
+    vi.stubGlobal('ResizeObserver', class { observe() {} unobserve() {} disconnect() {} });
+    document.body.innerHTML = '';
+    api.deactivateModule.mockResolvedValue({} as never);
+    const w = await mountPage([{ ...base, id: 1, key: 'order', name: { 'zh-TW': '訂單' } }]);
+    const tr = document.body.querySelector('tbody tr') as HTMLElement;
+    expect(tr.classList.contains('row-clickable')).toBe(true);
+    (tr.querySelector('td:last-child button:last-child') as HTMLElement).click();
+    await flushPromises();
+    expect(router.currentRoute.value.path).toBe('/');
+    (tr.querySelector('td') as HTMLElement).click();
+    await flushPromises();
+    expect(router.currentRoute.value.path).toBe('/system/dynamic-modules/order');
     w.unmount();
   });
 });

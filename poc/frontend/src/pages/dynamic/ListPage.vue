@@ -216,6 +216,9 @@ function removeCurrent() {
     onError: notifyViewError,
   });
 }
+
+/** 點整列進明細：給 q-table 的列 class（hover、手指、手機箭頭） */
+const rowClass = () => 'row-clickable row-chevron';
 </script>
 
 <template>
@@ -260,7 +263,7 @@ function removeCurrent() {
       <q-table
         flat bordered class="list-table" row-key="id" :rows="pageData?.items ?? []" :columns="columns"
         :loading="recordsQuery.isFetching.value" :pagination="pagination" :rows-per-page-options="[20]"
-        :no-data-label="t('dynamic.noData')"
+        :no-data-label="t('dynamic.noData')" :table-row-class-fn="rowClass"
         @request="(p) => onPagination(p.pagination)"
         @update:pagination="onPagination"
         @row-click="(_e, row) => router.push(`/dynamic/${moduleKey}/${row.id}`)"

@@ -45,6 +45,7 @@ describe('ReportListPage', () => {
     expect(q('report-row-1')!.textContent).toContain('已分享');
     expect(q('report-row-2')!.textContent).toContain('小王');
     expect(q('report-row-2')!.textContent).not.toContain('已分享');
+    expect(q('report-row-2')!.classList.contains('row-clickable')).toBe(true);
     q('report-row-2')!.click();
     await flushPromises();
     expect(router.currentRoute.value.path).toBe('/reports/2');

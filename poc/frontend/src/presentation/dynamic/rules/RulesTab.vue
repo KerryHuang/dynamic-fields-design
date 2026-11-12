@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import RowActionMenu from 'src/components/framework/RowActionMenu.vue';
 import { useQuasar } from 'quasar';
 import { computed, ref, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
@@ -132,8 +133,8 @@ function submit() {
     <q-list bordered separator>
       <q-item v-if="!draft!.length"><q-item-section class="text-muted">{{ t('designer.rules.empty') }}</q-item-section></q-item>
       <q-item
-        v-for="(r, i) in draft" :key="i" :class="{ 'text-muted': !r.active, 'rule-row--error': !!rowError(i) }"
-        :data-testid="`rule-row-${i}`"
+        v-for="(r, i) in draft" :key="i" :clickable="!readonly" :class="{ 'text-muted': !r.active, 'rule-row--error': !!rowError(i) }"
+        :data-testid="`rule-row-${i}`" @click="!readonly && open(i)"
       >
         <q-item-section>
           <q-item-label>
@@ -145,7 +146,16 @@ function submit() {
           <q-item-label v-if="rowError(i)" class="text-negative" :data-testid="`rule-error-${i}`">{{ rowError(i) }}</q-item-label>
         </q-item-section>
         <q-item-section side>
-          <div class="row no-wrap items-center">
+          <RowActionMenu
+            v-if="$q.screen.lt.sm" :testid="`rule-more-${i}`"
+            :actions="[
+              { label: t('designer.moveUp'), disable: readonly || i === 0, run: () => move(i, -1) },
+              { label: t('designer.moveDown'), disable: readonly || i === draft!.length - 1, run: () => move(i, 1) },
+              { label: r.active ? t('designer.rules.deactivate') : t('designer.rules.activate'), disable: readonly, run: () => toggleActive(i) },
+              { label: t('designer.rules.delete'), disable: readonly, negative: true, run: () => remove(i) },
+            ]"
+          />
+          <div v-else class="row no-wrap items-center" @click.stop>
             <q-btn flat dense round icon="arrow_upward" :title="t('designer.moveUp')" :disable="readonly || i === 0" :data-testid="`rule-up-${i}`" @click="move(i, -1)" />
             <q-btn
               flat dense round icon="arrow_downward" :title="t('designer.moveDown')" :disable="readonly || i === draft!.length - 1"
@@ -155,7 +165,6 @@ function submit() {
               flat dense round :icon="r.active ? 'toggle_on' : 'toggle_off'" :title="r.active ? t('designer.rules.deactivate') : t('designer.rules.activate')"
               :disable="readonly" :data-testid="`rule-active-${i}`" @click="toggleActive(i)"
             />
-            <q-btn flat dense round icon="edit" :title="t('designer.rules.edit')" :disable="readonly" :data-testid="`rule-edit-${i}`" @click="open(i)" />
             <q-btn flat dense round icon="delete" color="negative" :title="t('designer.rules.delete')" :disable="readonly" :data-testid="`rule-delete-${i}`" @click="remove(i)" />
           </div>
         </q-item-section>

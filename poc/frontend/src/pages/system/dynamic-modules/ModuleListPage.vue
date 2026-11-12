@@ -14,6 +14,7 @@ import I18nTextInput from 'src/presentation/dynamic/designer/I18nTextInput.vue';
 import TemplateDialog from 'src/presentation/dynamic/designer/TemplateDialog.vue';
 import IconSelect, { MODULE_ICONS } from 'src/presentation/dynamic/designer/IconSelect.vue';
 import { dynamicApi, type ModuleSummary } from 'src/services/api/dynamic-api';
+import RowActionMenu from 'src/components/framework/RowActionMenu.vue';
 import ForbiddenNotice from 'src/components/framework/ForbiddenNotice.vue';
 import SelectNoOption from 'src/components/framework/SelectNoOption.vue';
 import { useSelectFilter } from 'src/components/framework/useSelectFilter';
@@ -34,6 +35,9 @@ const columns = computed<QTableColumn<ModuleSummary>[]>(() => [
   { name: 'version', label: t('designer.version'), align: 'right', field: 'version' },
   { name: 'actions', label: '', align: 'right', field: 'key' },
 ]);
+
+/** 點整列進設計器：hover、手指與第一欄連結色 */
+const rowClass = () => 'row-clickable';
 
 const headerName = (key: string) => {
   const h = modules.data.value?.find((m) => m.key === key);
@@ -125,7 +129,7 @@ async function submit() {
     </div>
     <q-table
       v-if="!forbidden" flat bordered row-key="id" :rows="modules.data.value ?? []" :columns="columns" :loading="modules.isFetching.value"
-      :rows-per-page-options="[0]" hide-pagination :no-data-label="t('designer.noModules')" @row-click="(_e, row) => router.push(`/system/dynamic-modules/${row.key}`)"
+      :rows-per-page-options="[0]" hide-pagination :no-data-label="t('designer.noModules')" :table-row-class-fn="rowClass" @row-click="(_e, row) => router.push(`/system/dynamic-modules/${row.key}`)"
     >
       <template #body-cell-name="{ row, value }">
         <q-td>
@@ -137,8 +141,17 @@ async function submit() {
       </template>
       <template #body-cell-actions="{ row }">
         <q-td class="text-right" @click.stop>
-          <q-btn flat dense color="primary" :label="t('designer.activate')" :disable="row.status === 'Active'" @click="toggle(row, true)" />
-          <q-btn flat dense color="negative" :label="t('designer.deactivate')" :disable="row.status !== 'Active'" @click="toggle(row, false)" />
+          <RowActionMenu
+            v-if="$q.screen.lt.sm" :testid="`module-more-${row.key}`"
+            :actions="[
+              { label: t('designer.activate'), disable: row.status === 'Active', run: () => toggle(row, true) },
+              { label: t('designer.deactivate'), disable: row.status !== 'Active', negative: true, run: () => toggle(row, false) },
+            ]"
+          />
+          <template v-else>
+            <q-btn flat dense color="primary" :label="t('designer.activate')" :disable="row.status === 'Active'" @click="toggle(row, true)" />
+            <q-btn flat dense color="negative" :label="t('designer.deactivate')" :disable="row.status !== 'Active'" @click="toggle(row, false)" />
+          </template>
         </q-td>
       </template>
     </q-table>

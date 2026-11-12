@@ -74,6 +74,19 @@ describe('ListPage', () => {
     vi.stubGlobal('ResizeObserver', class { observe() {} unobserve() {} disconnect() {} });
   });
 
+  it('rows are visibly clickable and open the record detail', async () => {
+    const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    const w = await mountPage([], qc);
+    api.getPagedRecords.mockResolvedValue({ items: [row], totalCount: 1, currentPage: 1, pagesSize: 20 });
+    await qc.invalidateQueries();
+    await flushPromises();
+    const tr = w.get('tbody tr');
+    expect(tr.classes()).toEqual(expect.arrayContaining(['row-clickable', 'row-chevron']));
+    await tr.trigger('click');
+    await flushPromises();
+    expect(router.currentRoute.value.fullPath).toBe('/dynamic/m/1');
+  });
+
   it('resets page to 1 when filter changes', async () => {
     const w = await mountPage();
     w.findComponent(quasar.QTable).vm.$emit('update:pagination', { page: 2, rowsPerPage: 20 });

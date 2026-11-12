@@ -91,8 +91,20 @@ describe('RulesTab', () => {
   it('is read-only without designer.edit', async () => {
     const w = mountTab(false);
     await flushPromises();
-    for (const t of ['add-rule', 'save-rules', 'rule-edit-0', 'rule-delete-0', 'rule-up-1', 'rule-active-0']) {
+    for (const t of ['add-rule', 'save-rules', 'rule-delete-0', 'rule-up-1', 'rule-active-0']) {
       expect(id(w, t).attributes('disabled'), t).toBeDefined();
     }
+    expect(id(w, 'rule-row-0').classes()).not.toContain('q-item--clickable');
+  });
+
+  it('click a row opens the editor; the action buttons do not', async () => {
+    const w = mountTab(true);
+    await flushPromises();
+    expect(id(w, 'rule-row-0').classes()).toContain('q-item--clickable');
+    await id(w, 'rule-active-0').trigger('click');
+    expect(document.body.querySelector('[data-testid="rule-save"]')).toBeNull();
+    await id(w, 'rule-row-0').trigger('click');
+    await flushPromises();
+    expect(document.body.querySelector('[data-testid="rule-save"]')).not.toBeNull();
   });
 });

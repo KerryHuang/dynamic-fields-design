@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import RowActionMenu from 'src/components/framework/RowActionMenu.vue';
 import { useQuasar } from 'quasar';
 import { computed, ref } from 'vue';
 import { useI18n } from 'vue-i18n';
@@ -30,6 +31,8 @@ const deleteRule = useDeleteTaskRule(key);
 
 const fields = computed(() => toSchemaFields(props.module));
 const readonly = computed(() => !me.data.value?.designer.edit);
+/** 點整列開編輯：沒有編輯權限、或任務上限還沒載入時不可點 */
+const canOpen = computed(() => !readonly.value && maxTasks.value !== undefined);
 const ready = computed(() => rulesQuery.data.value && me.data.value);
 
 const dialog = ref(false);
@@ -76,7 +79,8 @@ function confirmDelete() {
     <q-list bordered separator>
       <q-item v-if="!rulesQuery.data.value!.length"><q-item-section class="text-muted">{{ t('taskRules.empty') }}</q-item-section></q-item>
       <q-item
-        v-for="r in rulesQuery.data.value" :key="r.key" :class="{ 'text-muted': !r.active }" :data-testid="`task-rule-row-${r.key}`"
+        v-for="r in rulesQuery.data.value" :key="r.key" :clickable="canOpen" :class="{ 'text-muted': !r.active }"
+        :data-testid="`task-rule-row-${r.key}`" @click="canOpen && open(r)"
       >
         <q-item-section>
           <q-item-label style="overflow-wrap: anywhere">
@@ -91,14 +95,17 @@ function confirmDelete() {
           </q-item-label>
         </q-item-section>
         <q-item-section side>
-          <div class="row no-wrap items-center">
+          <RowActionMenu
+            v-if="$q.screen.lt.sm" :testid="`task-rule-more-${r.key}`"
+            :actions="[
+              { label: r.active ? t('taskRules.deactivate') : t('taskRules.activate'), disable: readonly, run: () => toggleActive(r) },
+              { label: t('taskRules.delete'), disable: readonly, negative: true, run: () => (pendingDelete = r) },
+            ]"
+          />
+          <div v-else class="row no-wrap items-center" @click.stop>
             <q-btn
               flat dense round :icon="r.active ? 'toggle_on' : 'toggle_off'" :title="r.active ? t('taskRules.deactivate') : t('taskRules.activate')"
               :disable="readonly" :data-testid="`task-rule-toggle-${r.key}`" @click="toggleActive(r)"
-            />
-            <q-btn
-              flat dense round icon="edit" :title="t('taskRules.edit')" :disable="readonly || maxTasks === undefined" :data-testid="`task-rule-edit-${r.key}`"
-              @click="open(r)"
             />
             <q-btn
               flat dense round icon="delete" color="negative" :title="t('taskRules.delete')" :disable="readonly"
