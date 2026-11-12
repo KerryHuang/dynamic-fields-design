@@ -64,6 +64,12 @@ public static class ApprovalMessages
     public static readonly string PickLabel = MessageText.Get(null, MessageText.ApprovalPickLabel);
     public static readonly I18nText PickLabelI18n = MessageText.AsI18n(MessageText.ApprovalPickLabel);
 
+    // ── 設計器的進行中實例守衛（§8.6，管理類，不在執行期語系化範圍） ──
+    private static string Listing(IReadOnlyList<string> titles, int total) =>
+        string.Concat(titles.Select(t => $"「{t}」")) + (total > titles.Count ? $"等 {total} 筆" : "");
+    public static string DefinitionBlockedByPending(IReadOnlyList<string> titles, int total) =>
+        $"{Listing(titles, total)}正在簽核中，這項修改會改寫記錄的值，請等簽核結束或撤回後再改";
+
     // ── 簽核中的寫入（§5.3、§8.5） ──
     public static readonly MessageRef NeedsSubmit = MessageRef.Of(MessageText.ApprovalNeedsSubmit);
     public static readonly MessageRef Pending = MessageRef.Of(MessageText.ApprovalPending);

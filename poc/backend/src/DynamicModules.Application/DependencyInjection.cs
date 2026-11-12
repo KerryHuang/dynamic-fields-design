@@ -69,6 +69,7 @@ public static class DependencyInjection
         services.AddScoped<Dynamic.LedgerService.LedgerGate>();
         services.AddScoped<Dynamic.LedgerService.ImmutableDataGuard>();
         services.AddScoped<Dynamic.ModuleService.TitleRewriteGuard>();
+        services.AddScoped<Dynamic.ApprovalService.PendingApprovalGuard>();
         services.AddScoped<Dynamic.LedgerService.LedgerReverser>();
         services.AddScoped<Dynamic.LedgerService.LedgerBackstopStage>();
         services.AddScoped<Common.Behaviors.IWriteStage>(sp => sp.GetRequiredService<Dynamic.LedgerService.LedgerBackstopStage>());

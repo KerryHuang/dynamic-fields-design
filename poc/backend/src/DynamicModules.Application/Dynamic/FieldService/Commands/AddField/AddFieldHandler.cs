@@ -16,7 +16,7 @@ namespace DynamicModules.Application.Dynamic.FieldService.Commands.AddField;
 public class AddFieldHandler(
     IModuleRepository modules, IRecordRepository records, IUnitOfWork uow, FieldTypeRegistry registry, ICurrentUser user, IBusinessTime time,
     ReferenceProviderRegistry providers, RollupRecalc rollups, Rollups.FrozenRecordsLoader loader,
-    Dynamic.LedgerService.ImmutableDataGuard immutable, Common.Security.FieldLocks locks,
+    Dynamic.LedgerService.ImmutableDataGuard immutable, Dynamic.ApprovalService.PendingApprovalGuard pending, Common.Security.FieldLocks locks,
     Dynamic.AppService.SharedMasters.MasterDesigner masterDesigner)
     : IRequestHandler<AddFieldRequest, ServiceResult>
 {
@@ -34,6 +34,7 @@ public class AddFieldHandler(
             return closedFormula;
         if (request.Type == FieldType.Rollup && ClosedDataGuard.Reject(module) is { } closedRollup) return closedRollup;
         if (request.Type is FieldType.Formula or FieldType.Rollup && await immutable.RejectAsync(module, ct) is { } ledgerFrozen) return ledgerFrozen;
+        if (request.Type is FieldType.Formula or FieldType.Rollup && await pending.RejectValueRewriteAsync(module, ct) is { } pendingApproval) return pendingApproval;
 
         // 新增當下還沒有選項，下拉欄位的預設值要等加完選項後用 UpdateField 設定。
         var field = new Field { ModuleId = module.Id, BlockId = block.Id, Type = request.Type };

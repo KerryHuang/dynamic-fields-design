@@ -14,7 +14,8 @@ namespace DynamicModules.Application.Dynamic.ModuleService.Commands.UpdateModule
 
 public class UpdateModuleHandler(
     IModuleRepository modules, IRecordRepository records, IPermissionRepository permissions, IUnitOfWork uow, ICurrentUser user, IBusinessTime time,
-    Dynamic.LedgerService.ImmutableDataGuard immutable, TitleRewriteGuard fixedRecords)
+    Dynamic.LedgerService.ImmutableDataGuard immutable, TitleRewriteGuard fixedRecords,
+    Dynamic.ApprovalService.PendingApprovalGuard pending)
     : IRequestHandler<UpdateModuleRequest, ServiceResult>
 {
     public async Task<ServiceResult> Handle(UpdateModuleRequest request, CancellationToken ct)
@@ -26,6 +27,7 @@ public class UpdateModuleHandler(
         var titleChanged = module.TitleFieldId != request.TitleFieldId || module.TitleTemplate != request.TitleTemplate;
         if (titleChanged && ClosedDataGuard.Reject(module) is { } closed) return closed;
         if (titleChanged && await immutable.RejectAsync(module, ct) is { } ledgerFrozen) return ledgerFrozen;
+        if (titleChanged && await pending.RejectValueRewriteAsync(module, ct) is { } pendingApproval) return pendingApproval;
         List<Record> rows = titleChanged ? await records.ListAllByModuleAsync(module.Id, ct) : [];
         if (titleChanged && await fixedRecords.RejectAsync(module, rows, ct) is { } fixedRecord) return fixedRecord;
 

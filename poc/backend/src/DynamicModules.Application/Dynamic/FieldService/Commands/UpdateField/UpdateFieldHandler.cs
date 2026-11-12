@@ -17,6 +17,7 @@ namespace DynamicModules.Application.Dynamic.FieldService.Commands.UpdateField;
 public class UpdateFieldHandler(
     IModuleRepository modules, IRecordRepository records, IUnitOfWork uow, FieldTypeRegistry registry, ICurrentUser user, IBusinessTime time,
     RollupRecalc rollups, Rollups.FrozenRecordsLoader loader, Dynamic.LedgerService.ImmutableDataGuard immutable,
+    Dynamic.ApprovalService.PendingApprovalGuard pending,
     Dynamic.CheckService.CheckFieldGuard checkGuard, Common.Security.FieldLocks locks,
     Dynamic.EventService.EventValidator eventValidator, Dynamic.EventService.EventHiddenGuard hiddenGuard,
     Dynamic.AppService.SharedMasters.MasterDesigner masterDesigner)
@@ -116,6 +117,12 @@ public class UpdateFieldHandler(
             return closedRollup;
         if ((formulaChanged || field is { Type: FieldType.Rollup, Status: FieldStatus.Active } && RollupChanged(field.Config.Rollup, config.Rollup))
             && await immutable.RejectAsync(module, ct) is { } ledgerFrozen) return ledgerFrozen;
+        // 簽核中的記錄不能被定義變更改寫值：公式與彙總重算、帶值對應改變、數字欄位小數位改變
+        var fillChanged = !FillEquals(field.Config.Fill, config.Fill);
+        var numberScaleChanged = ScaledNumber.Applies(field) && ScaledNumber.ScaleOf(field.Type, field.Config) != ScaledNumber.ScaleOf(field.Type, config);
+        if ((formulaChanged || field is { Type: FieldType.Rollup, Status: FieldStatus.Active } && RollupChanged(field.Config.Rollup, config.Rollup)
+                || fillChanged || numberScaleChanged)
+            && await pending.RejectValueRewriteAsync(module, ct) is { } pendingApproval) return pendingApproval;
         foreach (var parentId in rederived.Select(r => r.ParentId).Distinct())
             if (await modules.GetByIdAsync(parentId, includeChildren: false, ct) is { } parent && ClosedDataGuard.Reject(parent) is { } closedParent)
                 return closedParent;
@@ -198,6 +205,9 @@ public class UpdateFieldHandler(
         }
         return (null, rederived);
     }
+
+    private static bool FillEquals(FillConfig? a, FillConfig? b) =>
+        a is null || b is null ? a is null && b is null : a.Mode == b.Mode && a.Map.SequenceEqual(b.Map);
 
     /// <summary>JsonElement 的相等比的是文件參照，條件改比原始文字。</summary>
     private static bool RollupChanged(RollupConfig? a, RollupConfig? b) =>
