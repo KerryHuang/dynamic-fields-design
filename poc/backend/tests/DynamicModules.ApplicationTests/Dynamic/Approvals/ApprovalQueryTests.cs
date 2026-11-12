@@ -151,6 +151,24 @@ public class ApprovalQueryTests : ApprovalTestBase
     }
 
     [Fact]
+    public async Task Inbox_Done_DueAndOverdueFollowCurrentStage_NotTheActedTask()
+    {
+        var r = await BuildPurchase();
+        await SeedFlow(r, "po-two", r.Confirmed, 1, Def(null, Stage("lead", Users("buyer2"), dueHours: 5), Stage("fin", Users("gm"))));
+        (await SaveWorkflow(r, [Needs(r.Draft, r.Confirmed), Plain(r.Confirmed, r.Partial), Plain(r.Partial, r.Received),
+            Plain(r.Confirmed, r.Cancelled)])).IsSuccess.Should().BeTrue();
+        await GrantEveryone(r.Module);
+        var id = await SubmitAs(r, "buyer1", 5000);
+        await Approve(id, "buyer2");
+        // 第 1 關的任務期限早已過去；單據在第 2 關（無期限），buyer2 準時處理
+        await Db.Context.Set<ApprovalTask>().Where(t => t.InstanceId == id)
+            .ExecuteUpdateAsync(s => s.SetProperty(t => t.DueTime, new DateTime(2026, 11, 1)));
+        var row = (await Inbox("buyer2", "done")).Items.Should().ContainSingle().Subject;
+        row.Overdue.Should().BeFalse();
+        row.DueTime.Should().BeNull();
+    }
+
+    [Fact]
     public async Task Inbox_All_RequiresApproveAxis_403()
     {
         var r = await Scenario3();

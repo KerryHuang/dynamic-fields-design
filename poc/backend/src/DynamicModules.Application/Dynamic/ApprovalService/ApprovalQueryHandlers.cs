@@ -208,7 +208,8 @@ public class GetApprovalTasksHandler(
 
         var rows = tasks is null
             ? instances.Select(i => new Row(i, null, CurrentDue(i))).OrderByDescending(r => r.Inst.SubmittedTime).ThenByDescending(r => r.Inst.Id).ToList()
-            : tasks.Where(t => byId.ContainsKey(t.InstanceId)).Select(t => new Row(byId[t.InstanceId], t, t.DueTime)).ToList();
+            : tasks.Where(t => byId.ContainsKey(t.InstanceId)).Select(t => new Row(byId[t.InstanceId], t,
+                request.Box == ApprovalInboxBoxes.Done ? CurrentDue(byId[t.InstanceId]) : t.DueTime)).ToList();   // 已處理列的期限與逾期看單據目前關卡，不看自己那個已結束的任務
         if (request.Box == ApprovalInboxBoxes.Todo)
             rows = rows.OrderBy(r => r.Due is null).ThenBy(r => r.Due).ThenBy(r => r.Inst.SubmittedTime).ThenBy(r => r.Task!.Id).ToList();
         else if (request.Box == ApprovalInboxBoxes.Done)
