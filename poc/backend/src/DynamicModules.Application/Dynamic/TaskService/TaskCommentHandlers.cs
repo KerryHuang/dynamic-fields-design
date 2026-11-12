@@ -1,5 +1,6 @@
 using DynamicModules.Application.Common;
 using DynamicModules.Application.Common.Security;
+using DynamicModules.Application.Common.Uploads;
 using DynamicModules.Application.Common.Time;
 using DynamicModules.Application.Dynamic.AttachmentService;
 using DynamicModules.Application.Dynamic.PermissionService.Data;
@@ -65,7 +66,7 @@ public class AddTaskCommentHandler(ITaskRepository tasks, TaskAccess access, Tas
         var body = request.Body?.Trim() ?? "";
         if (body.Length == 0 && request.Files.Count == 0) return Invalid("body", TaskMessages.BodyRequired);
         if (body.Length > TaskCommentRules.BodyMax) return Invalid("body", TaskMessages.BodyTooLong);
-        if (request.Files.Count > 0 && !settings.UploadEnabled) return AttachmentUploadGate.UploadDisabled(settings);
+        if (request.Files.Count > 0 && !(settings.UploadEnabled || ServerUploadScope.Active)) return AttachmentUploadGate.UploadDisabled(settings);
         var maxFiles = await policies.IntAsync(PolicyCatalog.AttachmentMaxFilesPerComment, task.ModuleId, ct);
         if (request.Files.Count > maxFiles) return Invalid("files", TaskMessages.TooManyFiles(maxFiles));
         var names = new List<string>();

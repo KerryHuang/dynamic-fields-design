@@ -1,5 +1,6 @@
 using System.Globalization;
 using DynamicModules.Application.Common;
+using DynamicModules.Application.Common.Uploads;
 using DynamicModules.Domain.Entities.Dynamic;
 using DynamicModules.Domain.Repositories.Dynamic;
 using MediatR;
@@ -23,7 +24,9 @@ public class GenerateDemoDataHandler(DemoPreflight preflight, IDemoPeople people
         if (failed is not null) return failed;
 
         var steps = DemoTimeline.Plan(request.Today, DemoCatalog.Scenarios);
-        failed = await DemoTimeline.RunAsync(context!, steps, request.Progress, ct);
+        // 時間軸裡有上傳設計圖與留言附件：Demo 站的環境停用上傳，伺服器自己寫入時略過那個開關（其餘檢查照常）
+        using (ServerUploadScope.Begin())
+            failed = await DemoTimeline.RunAsync(context!, steps, request.Progress, ct);
         if (failed is not null) return failed;
         // 資料日期停在這天；Demo 登入開啟時報表以它為基準日
         await settings.SetAsync(SystemSetting.DemoGeneratedOn, request.Today.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture), ct);

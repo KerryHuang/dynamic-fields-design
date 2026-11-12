@@ -1,6 +1,7 @@
 using System.Text.Json;
 using DynamicModules.Application.Common;
 using DynamicModules.Application.Common.Security;
+using DynamicModules.Application.Common.Uploads;
 using DynamicModules.Application.Common.Time;
 using DynamicModules.Application.Dynamic.PolicyService;
 using DynamicModules.Application.Dynamic.RecordService;
@@ -64,7 +65,7 @@ public sealed class AttachmentUploadGate(
         if (!RecordValueProcessor.WritablePredicate(module, previous, perms, registry, userIds, today)(field))
             return (Invalid(field.Key, "此欄位目前不可修改"), null);
 
-        if (!settings.UploadEnabled) return (UploadDisabled(settings), null);
+        if (!(settings.UploadEnabled || ServerUploadScope.Active)) return (UploadDisabled(settings), null);
         return (null, new UploadTarget(record, module, field, previous));
     }
 

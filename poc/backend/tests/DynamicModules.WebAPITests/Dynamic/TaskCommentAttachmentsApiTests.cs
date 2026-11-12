@@ -167,6 +167,19 @@ public class TaskCommentAttachmentsApiTests : IDisposable
     }
 
     [Fact]
+    public async Task UploadDisabled_409_EvenIfServerScopeIsActiveInTheSameProcess()
+    {
+        _app.Settings["Attachments:UploadEnabled"] = "false";
+        var id = await NewTask();
+        using var _ = DynamicModules.Application.Common.Uploads.ServerUploadScope.Begin();
+
+        var res = await Post(id, Form("x", File("a.png")));
+
+        res.StatusCode.Should().Be(HttpStatusCode.Conflict);
+        DiskFiles().Should().BeEmpty();
+    }
+
+    [Fact]
     public async Task Mentioned_CanDownload_InvisibleUser_404()
     {
         var id = await NewTask();

@@ -391,6 +391,23 @@ public class AttachmentApiTests : IDisposable
     }
 
     [Fact]
+    public async Task Upload_Disabled_StaysRejected_EvenIfServerScopeIsActiveInTheSameProcess()
+    {
+        _app.Settings["Attachments:UploadEnabled"] = "false";
+        var w = await MakeWorld();
+        // 伺服器內部範圍只能由程式碼開；HTTP 請求沒有任何方式開啟它，同行程裡有範圍開著也不影響 HTTP 的閘門
+        using var _ = DynamicModules.Application.Common.Uploads.ServerUploadScope.Begin();
+        var (res, _) = await UploadProbe(Admin, w);
+        res.StatusCode.Should().Be(HttpStatusCode.Conflict);
+        foreach (var header in new[] { "X-Server-Upload", "X-Upload-Enabled" })
+        {
+            var req = new HttpRequestMessage(HttpMethod.Post, $"{Base}/records/{w.RecordId}/attachments/{w.FieldId}") { Content = new ProbeContent(10) };
+            req.Headers.Add(header, "true");
+            (await Admin.SendAsync(req)).StatusCode.Should().Be(HttpStatusCode.Conflict, "請求標頭不能繞過上傳開關");
+        }
+    }
+
+    [Fact]
     public async Task Upload_ContentLengthOverTheLimit_413WithoutReadingTheBody()
     {
         _app.Settings["Attachments:MaxBytes"] = "1000";
