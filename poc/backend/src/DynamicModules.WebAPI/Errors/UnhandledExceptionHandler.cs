@@ -1,5 +1,6 @@
 using System.Security.Claims;
 using DynamicModules.Application.Common;
+using DynamicModules.Application.Common.Observability;
 using DynamicModules.Domain.Ops;
 using DynamicModules.WebAPI.Ops;
 using Microsoft.AspNetCore.Diagnostics;
@@ -15,8 +16,6 @@ namespace DynamicModules.WebAPI.Errors;
 public sealed class UnhandledExceptionHandler(ILogger<UnhandledExceptionHandler> logger, IProblemDetailsService problems) : IExceptionHandler
 {
     public static readonly EventId UnhandledEvent = new(5000, "UnhandledException");
-    // 規則歸屬標記的 e.Data 鍵（Task 5 收斂到 RuleFailureTag）
-    internal const string RuleKindKey = "formwright.ruleKind", RuleIdKey = "formwright.ruleId";
 
     public async ValueTask<bool> TryHandleAsync(HttpContext context, Exception exception, CancellationToken ct)
     {
@@ -34,8 +33,8 @@ public sealed class UnhandledExceptionHandler(ILogger<UnhandledExceptionHandler>
         var ops = context.Features.Get<RequestOpsFeature>();
         // ExceptionHandlerMiddleware 已清掉 endpoint，路由樣板讀請求開始時存下的 feature
         var route = ops?.Route ?? (context.Features.Get<IExceptionHandlerFeature>()?.Endpoint as RouteEndpoint)?.RoutePattern.RawText;
-        var ruleKind = exception.Data[RuleKindKey] as string;
-        var ruleId = exception.Data[RuleIdKey] as long?;
+        var (ruleKind, ruleId) = RuleFailureTag.Read(exception);
+        if (ruleKind is not null) OpsMetrics.RuleFailures.Add(1, new KeyValuePair<string, object?>("ruleKind", ruleKind));
         logger.Log(LogLevel.Error, UnhandledEvent, exception,
             "未處理的例外 {ExceptionType} 指紋 {Fingerprint} 版本 {FingerprintVersion} 路由 {Route} 使用者 {UserId} 模組 {ModuleKey} 規則 {RuleKind}/{RuleId}",
             exception.GetType().FullName, ServerErrorFingerprint.Of(exception, route), ErrorFingerprint.Version,

@@ -1,6 +1,7 @@
 using System.Text.Json;
 using DynamicModules.Application.Common;
 using DynamicModules.Application.Common.Behaviors;
+using DynamicModules.Application.Common.Observability;
 using DynamicModules.Application.Common.Time;
 using DynamicModules.Application.Dynamic.RecordService;
 using DynamicModules.Application.Dynamic.TaskService;
@@ -66,28 +67,32 @@ public class TaskRuleStage(
 
             foreach (var rule in list)
             {
-                var holdsAfter = TaskConditions.Holds(rule.WhenJson, module, after, registry, today, userIds);
-                bool? holdsBefore = before is null ? null : TaskConditions.Holds(rule.WhenJson, module, before, registry, today, userIds);
-                // 規則條件是整條規則的篩選：任何觸發方式都要這次寫入後成立
-                var edge = holdsAfter && TaskRuleEvaluator.Triggers(rule.Trigger, added, holdsBefore, holdsAfter, before, after);
-                var latest = await rules.GetLatestOccurrenceAsync(rule.Id, entry.RecordId, ct);
+                try
+                {
+                    var holdsAfter = TaskConditions.Holds(rule.WhenJson, module, after, registry, today, userIds);
+                    bool? holdsBefore = before is null ? null : TaskConditions.Holds(rule.WhenJson, module, before, registry, today, userIds);
+                    // 規則條件是整條規則的篩選：任何觸發方式都要這次寫入後成立
+                    var edge = holdsAfter && TaskRuleEvaluator.Triggers(rule.Trigger, added, holdsBefore, holdsAfter, before, after);
+                    var latest = await rules.GetLatestOccurrenceAsync(rule.Id, entry.RecordId, ct);
 
-                if (latest is not { } occurrence)
-                {
-                    if (edge) await applier.GenerateAsync(rule, module, entry.RecordId, 1, title, after, activeUsers, userIds, ct);
-                    continue;
-                }
-                if (rule.Repeat == TaskRuleRepeat.EveryTime && edge)
-                {
-                    var open = await tasks.ListOpenByRuleAndRecordAsync(rule.Id, entry.RecordId, ct);
-                    if (open.Count == 0)
+                    if (latest is not { } occurrence)
                     {
-                        await applier.GenerateAsync(rule, module, entry.RecordId, occurrence + 1, title, after, activeUsers, userIds, ct);
+                        if (edge) await applier.GenerateAsync(rule, module, entry.RecordId, 1, title, after, activeUsers, userIds, ct);
                         continue;
                     }
-                    foreach (var t in open) writer.AddSystemEntry(t, TaskSystemEvents.RetriggerSkipped);
+                    if (rule.Repeat == TaskRuleRepeat.EveryTime && edge)
+                    {
+                        var open = await tasks.ListOpenByRuleAndRecordAsync(rule.Id, entry.RecordId, ct);
+                        if (open.Count == 0)
+                        {
+                            await applier.GenerateAsync(rule, module, entry.RecordId, occurrence + 1, title, after, activeUsers, userIds, ct);
+                            continue;
+                        }
+                        foreach (var t in open) writer.AddSystemEntry(t, TaskSystemEvents.RetriggerSkipped);
+                    }
+                    await applier.ReconcileAsync(rule, module, entry.RecordId, occurrence, title, before, after, activeUsers, userIds, ct);
                 }
-                await applier.ReconcileAsync(rule, module, entry.RecordId, occurrence, title, before, after, activeUsers, userIds, ct);
+                catch (Exception e) when (RuleFailureTag.Mark(e, RuleFailureTag.TaskRule, rule.Id)) { throw; }
             }
         }
 

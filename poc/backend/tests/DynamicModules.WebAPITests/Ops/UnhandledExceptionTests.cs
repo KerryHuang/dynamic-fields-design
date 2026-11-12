@@ -100,4 +100,57 @@ public class UnhandledExceptionTests
         res.StatusCode.Should().Be(HttpStatusCode.Conflict);
         Unhandled(app).Should().BeEmpty();
     }
+
+    private static (System.Diagnostics.Metrics.MeterListener Listener, List<string> Tags) ListenRuleFailures()
+    {
+        var tags = new List<string>();
+        var listener = new System.Diagnostics.Metrics.MeterListener();
+        listener.InstrumentPublished = (inst, l) =>
+        {
+            if (inst.Meter.Name == "Formwright" && inst.Name == "formwright.rule.failures") l.EnableMeasurementEvents(inst);
+        };
+        listener.SetMeasurementEventCallback<long>((_, _, t, _) =>
+        {
+            foreach (var kv in t) if (kv.Key == "ruleKind") lock (tags) tags.Add((string)kv.Value!);
+        });
+        listener.Start();
+        return (listener, tags);
+    }
+
+    [Fact]
+    public async Task Unhandled_WithRuleTag_CountsRuleFailure()
+    {
+        using var app = new TestApp();
+        var (listener, tags) = ListenRuleFailures();
+        using var _ = listener;
+        var client = Client(app, _ =>
+        {
+            var e = new InvalidOperationException("boom");
+            DynamicModules.Application.Common.Observability.RuleFailureTag.Mark(e, "check", 7);
+            return e;
+        });
+        await client.GetAsync($"{Base}/modules/zz");
+
+        tags.Should().Equal("check");
+        var rec = Unhandled(app).Single();
+        rec.Values["RuleKind"].Should().Be("check");
+        rec.Values["RuleId"].Should().Be(7L);
+    }
+
+    [Fact]
+    public async Task HandledConflict_WithRuleTag_NotCounted()
+    {
+        using var app = new TestApp();
+        var (listener, tags) = ListenRuleFailures();
+        using var _ = listener;
+        var res = await Client(app, _ =>
+        {
+            var e = new DbUpdateConcurrencyException("race");
+            DynamicModules.Application.Common.Observability.RuleFailureTag.Mark(e, "check", 7);
+            return e;
+        }).GetAsync($"{Base}/modules/zz");
+
+        res.StatusCode.Should().Be(HttpStatusCode.Conflict);
+        tags.Should().BeEmpty();
+    }
 }

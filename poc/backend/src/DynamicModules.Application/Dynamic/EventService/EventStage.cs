@@ -1,6 +1,7 @@
 using System.Text.Json;
 using DynamicModules.Application.Common;
 using DynamicModules.Application.Common.Behaviors;
+using DynamicModules.Application.Common.Observability;
 using DynamicModules.Application.Common.Time;
 using DynamicModules.Application.Dynamic.RecordService;
 using DynamicModules.Domain.Conditions;
@@ -57,14 +58,18 @@ public class EventStage(
                 var before = entry.BeforeValues is null || entry.Kind == JournalKind.Added ? null : RecordValueProcessor.Parse(entry.BeforeValues);
                 foreach (var ev in list)
                 {
-                    if (!Triggers(ev, module, before, after, entry.Kind)) continue;
-                    if (await WhenHoldsAsync(ev, module, after, ct) is false) continue;
-                    if (ev.Definition.Effects.Count == 0) continue;
+                    try
+                    {
+                        if (!Triggers(ev, module, before, after, entry.Kind)) continue;
+                        if (await WhenHoldsAsync(ev, module, after, ct) is false) continue;
+                        if (ev.Definition.Effects.Count == 0) continue;
 
-                    if (round >= MaxDepth) return ServiceResult.Conflict(TooDeep);
-                    if (!visited.Add($"{ev.Key}|{entry.RecordId}|{ev.Definition.Trigger.On}")) return ServiceResult.Conflict(Loop);
-                    if (await applier.ApplyAsync(new EffectRun(ev, module, entry.RecordId, entry.OwnerUserId, after, round + 1), ct) is { } failure)
-                        return failure;
+                        if (round >= MaxDepth) return ServiceResult.Conflict(TooDeep);
+                        if (!visited.Add($"{ev.Key}|{entry.RecordId}|{ev.Definition.Trigger.On}")) return ServiceResult.Conflict(Loop);
+                        if (await applier.ApplyAsync(new EffectRun(ev, module, entry.RecordId, entry.OwnerUserId, after, round + 1), ct) is { } failure)
+                            return failure;
+                    }
+                    catch (Exception e) when (RuleFailureTag.Mark(e, RuleFailureTag.Event, ev.Id)) { throw; }
                 }
             }
             round++;

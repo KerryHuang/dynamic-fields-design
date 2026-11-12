@@ -1,5 +1,6 @@
 using DynamicModules.Application.Common;
 using DynamicModules.Application.Common.Behaviors;
+using DynamicModules.Application.Common.Observability;
 using DynamicModules.Application.Dynamic.RecordService;
 using DynamicModules.Domain.Entities.Dynamic;
 using DynamicModules.Domain.Repositories.Dynamic;
@@ -39,36 +40,40 @@ public class CheckStage(
             var module = (await modules.GetByIdAsync(byModule.Key, includeChildren: true, ct))!;
             foreach (var check in active)
             {
-                var (prepared, failure) = await evaluator.PrepareAsync(module, check, ct);
-                if (failure is not null) return failure;
-
-                if (TooLarge(prepared!, byModule) is { } big) return ServiceResult.Invalid(
-                    new Dictionary<string, string[]> { [RecordValueProcessor.RecordErrorKey] = [big] });
-
-                // 寫入後的狀態先收：上限若讀自本筆記錄（field／via），以「現在」的值為準，同組的寫入前狀態不再求值
-                // （否則把上限改小時，會拿舊上限比較而放行）。同組多筆記錄的上限不同時各自求值。
-                var groups = new Dictionary<string, CheckGroup>();
-                var afterIds = new HashSet<string>();
-                foreach (var entry in byModule)
-                    if (!entry.AfterDeleted && evaluator.GroupOf(prepared!, RecordValueProcessor.Parse(entry.AfterValues)) is { } after)
-                    {
-                        afterIds.Add(after.Id);
-                        groups.TryAdd(after.Id + "\u0000" + LimitKey(prepared!.Check.Definition.Assert.Limit, after), after);
-                    }
-                foreach (var entry in byModule)
-                    if (entry.BeforeValues is not null && !entry.BeforeDeleted && entry.Kind == JournalKind.Modified
-                        && evaluator.GroupOf(prepared!, RecordValueProcessor.Parse(entry.BeforeValues)) is { } before
-                        && !afterIds.Contains(before.Id))
-                        groups.TryAdd(before.Id + "\u0000" + LimitKey(prepared!.Check.Definition.Assert.Limit, before), before);
-                if ((groupCount += groups.Count) > MaxGroups)
-                    return ServiceResult.Conflict($"這次請求牽涉的檢查組數超過 {MaxGroups}，請分批處理");
-
-                foreach (var group in groups.Values)
+                try
                 {
-                    var outcome = await evaluator.EvaluateAsync(prepared!, group, ct);
-                    if (outcome.Failure is not null) return outcome.Failure;
-                    if (outcome.Violation is not null && !violations.Contains(outcome.Violation)) violations.Add(outcome.Violation);
+                    var (prepared, failure) = await evaluator.PrepareAsync(module, check, ct);
+                    if (failure is not null) return failure;
+
+                    if (TooLarge(prepared!, byModule) is { } big) return ServiceResult.Invalid(
+                        new Dictionary<string, string[]> { [RecordValueProcessor.RecordErrorKey] = [big] });
+
+                    // 寫入後的狀態先收：上限若讀自本筆記錄（field／via），以「現在」的值為準，同組的寫入前狀態不再求值
+                    // （否則把上限改小時，會拿舊上限比較而放行）。同組多筆記錄的上限不同時各自求值。
+                    var groups = new Dictionary<string, CheckGroup>();
+                    var afterIds = new HashSet<string>();
+                    foreach (var entry in byModule)
+                        if (!entry.AfterDeleted && evaluator.GroupOf(prepared!, RecordValueProcessor.Parse(entry.AfterValues)) is { } after)
+                        {
+                            afterIds.Add(after.Id);
+                            groups.TryAdd(after.Id + "\u0000" + LimitKey(prepared!.Check.Definition.Assert.Limit, after), after);
+                        }
+                    foreach (var entry in byModule)
+                        if (entry.BeforeValues is not null && !entry.BeforeDeleted && entry.Kind == JournalKind.Modified
+                            && evaluator.GroupOf(prepared!, RecordValueProcessor.Parse(entry.BeforeValues)) is { } before
+                            && !afterIds.Contains(before.Id))
+                            groups.TryAdd(before.Id + "\u0000" + LimitKey(prepared!.Check.Definition.Assert.Limit, before), before);
+                    if ((groupCount += groups.Count) > MaxGroups)
+                        return ServiceResult.Conflict($"這次請求牽涉的檢查組數超過 {MaxGroups}，請分批處理");
+
+                    foreach (var group in groups.Values)
+                    {
+                        var outcome = await evaluator.EvaluateAsync(prepared!, group, ct);
+                        if (outcome.Failure is not null) return outcome.Failure;
+                        if (outcome.Violation is not null && !violations.Contains(outcome.Violation)) violations.Add(outcome.Violation);
+                    }
                 }
+                catch (Exception e) when (RuleFailureTag.Mark(e, RuleFailureTag.Check, check.Id)) { throw; }
             }
         }
         return violations.Count == 0
