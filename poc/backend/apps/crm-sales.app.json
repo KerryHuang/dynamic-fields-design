@@ -2278,7 +2278,7 @@
                   "code": "requirement",
                   "label": {
                     "zh-TW": "需求確認",
-                    "en-US": "Requirements",
+                    "en-US": "Requirement review",
                     "th": "ยืนยันความต้องการ",
                     "vi": "Xác nhận yêu cầu"
                   },
@@ -2398,7 +2398,7 @@
       "name": {
         "zh-TW": "設計圖",
         "en-US": "Design drawings",
-        "th": "แบบ",
+        "th": "แบบงานออกแบบ",
         "vi": "Bản vẽ thiết kế"
       },
       "kind": "standalone",
@@ -3340,7 +3340,21 @@
             "th": "ยืนยันความต้องการและส่งต่อให้ฝ่ายออกแบบ",
             "vi": "Xác nhận yêu cầu và chuyển cho thiết kế"
           },
-          "assignee": "design-case.owner"
+          "assignee": "design-case.owner",
+          "when": {
+            "all": [
+              {
+                "field": "design-case.status",
+                "op": "ne",
+                "value": "opt_cancelled"
+              },
+              {
+                "field": "design-case.status",
+                "op": "ne",
+                "value": "opt_closed"
+              }
+            ]
+          }
         }
       ]
     },
@@ -3369,7 +3383,21 @@
             "th": "วาดหรือแก้ไขแบบตามความต้องการ",
             "vi": "Vẽ hoặc chỉnh sửa bản vẽ theo yêu cầu"
           },
-          "assignee": "design-case.designOwner"
+          "assignee": "design-case.designOwner",
+          "when": {
+            "all": [
+              {
+                "field": "design-case.status",
+                "op": "ne",
+                "value": "opt_cancelled"
+              },
+              {
+                "field": "design-case.status",
+                "op": "ne",
+                "value": "opt_closed"
+              }
+            ]
+          }
         }
       ]
     },
@@ -3398,7 +3426,21 @@
             "th": "ส่งแบบให้ลูกค้ายืนยัน",
             "vi": "Gửi bản vẽ cho khách hàng xác nhận"
           },
-          "assignee": "design-case.owner"
+          "assignee": "design-case.owner",
+          "when": {
+            "all": [
+              {
+                "field": "design-case.status",
+                "op": "ne",
+                "value": "opt_cancelled"
+              },
+              {
+                "field": "design-case.status",
+                "op": "ne",
+                "value": "opt_closed"
+              }
+            ]
+          }
         }
       ]
     }

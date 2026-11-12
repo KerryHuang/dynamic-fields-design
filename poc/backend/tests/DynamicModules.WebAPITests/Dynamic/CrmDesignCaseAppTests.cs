@@ -1,6 +1,7 @@
 using System.Net;
 using System.Net.Http.Json;
 using System.Text.Json;
+using DynamicModules.Application.Dynamic.WorkflowService;
 using DynamicModules.Domain.Data;
 using DynamicModules.Domain.Entities.Dynamic;
 using FluentAssertions;
@@ -125,6 +126,13 @@ public class CrmDesignCaseAppTests : IDisposable
 
     private async Task<JsonElement> Reload(long id) => await JsonOf(await _admin.GetAsync($"{Base}/records/{id}"));
 
+    private async Task<long> DrawingsFieldId()
+    {
+        var module = await JsonOf(await _admin.GetAsync($"{Base}/modules/{Case}"));
+        return module.GetProperty("blocks").EnumerateArray().SelectMany(b => b.GetProperty("fields").EnumerateArray())
+            .Single(x => x.GetProperty("label").GetProperty("zh-TW").GetString() == "設計圖檔").GetProperty("id").GetInt64();
+    }
+
     // ---- Task 1：模組、狀態機、群組、權限 ----
 
     [Fact]
@@ -179,8 +187,8 @@ public class CrmDesignCaseAppTests : IDisposable
     [InlineData("設計中", "取消", "manager01", true)]
     [InlineData("客戶確認中", "取消", "manager01", true)]
     [InlineData("需求確認", "取消", "sales01", false)]
-    [InlineData("待主管確認", "取消", "manager01", false)]
-    public async Task Transitions_GroupsPerTable(string from, string to, string user, bool allowed)
+    [InlineData("待主管確認", "取消", "manager01", false, true)]
+    public async Task Transitions_GroupsPerTable(string from, string to, string user, bool allowed, bool noSuchTransition = false)
     {
         await OpenCrm();
         await SetMembers(["sales01"], ["manager01"], [Designer]);
@@ -195,7 +203,13 @@ public class CrmDesignCaseAppTests : IDisposable
         var status = (await FieldKeys(_admin, Case))["狀態"];
         var res = await Put(_app.AsUser(user), record, new() { [status] = await OptionValue(_admin, Case, "狀態", to) });
         if (allowed) res.StatusCode.Should().Be(HttpStatusCode.OK, await res.Content.ReadAsStringAsync());
-        else res.StatusCode.Should().Be(HttpStatusCode.BadRequest, await res.Content.ReadAsStringAsync());
+        else
+        {
+            var body = await res.Content.ReadAsStringAsync();
+            res.StatusCode.Should().Be(HttpStatusCode.BadRequest, body);
+            // 分清兩種擋法：沒有這條轉移 vs 有轉移但群組不符
+            body.Should().Contain(noSuchTransition ? WorkflowEnforcer.NotAllowedMessage : WorkflowEnforcer.NotPermittedMessage);
+        }
     }
 
     [Fact]
@@ -213,6 +227,17 @@ public class CrmDesignCaseAppTests : IDisposable
 
         var record = await NewCase(_app.AsUser("manager01"));
         record = await Move(_admin, record, "設計中");
+        var id = record.GetProperty("id").GetInt64();
+        var fieldId = await DrawingsFieldId();
+        var bytes = new byte[] { 0x89, 0x50, 0x4E, 0x47, 5, 6, 7 };
+        var up = await designer.PostAsync($"{Base}/records/{id}/attachments/{fieldId}", File("外殼-v1.png", bytes));
+        up.StatusCode.Should().Be(HttpStatusCode.Created, await up.Content.ReadAsStringAsync());
+        var fileId = (await JsonOf(up)).GetProperty("id").GetString();
+        var down = await _app.AsUser("manager01").GetAsync($"{Base}/records/{id}/attachments/{fieldId}/{fileId}");
+        down.StatusCode.Should().Be(HttpStatusCode.OK, await down.Content.ReadAsStringAsync());
+        (await down.Content.ReadAsByteArrayAsync()).Should().Equal(bytes);
+        record = await Reload(id);
+
         var d = await FieldKeys(_admin, Drawing);
         var withRow = await designer.PutAsJsonAsync($"{Base}/records/{record.GetProperty("id").GetInt64()}", new
         {
@@ -330,8 +355,25 @@ public class CrmDesignCaseAppTests : IDisposable
         var draws = await TasksOf(id, DrawTitle);
         draws.Should().ContainSingle("上一輪尚未完成就不再派");
         var comments = await JsonOf(await _admin.GetAsync($"{Base}/tasks/{draws[0].GetProperty("id").GetInt64()}/comments"));
-        comments.EnumerateArray().Any(c => c.GetProperty("kind").GetString() != "comment" && c.GetProperty("systemEvent").ValueKind == JsonValueKind.String)
-            .Should().BeTrue("留言串有系統記錄：條件再次符合，但上一輪任務尚未完成");
+        comments.EnumerateArray().Where(c => c.GetProperty("kind").GetString() != "comment").Select(c => c.GetProperty("systemEvent").GetString())
+            .Should().Equal(new List<string?> { TaskSystemEvents.Created, TaskSystemEvents.RetriggerSkipped }, "留言串記下：條件再次符合，但上一輪任務尚未完成");
+    }
+
+    [Fact]
+    public async Task Cancel_CancelsOpenTasks()
+    {
+        await OpenWithMembers();
+        var record = await NewCase(_app.AsUser("manager01"));
+        var id = record.GetProperty("id").GetInt64();
+        record = await Move(_admin, record, "設計中");
+        (await TasksOf(id, DrawTitle)).Should().ContainSingle().Which.GetProperty("status").GetString().Should().NotBe("cancelled");
+        await Move(_app.AsUser("manager01"), record, "取消");
+
+        foreach (var title in new[] { DrawTitle, IntakeTitle })
+        {
+            var task = (await TasksOf(id, title)).Should().ContainSingle().Subject;
+            task.GetProperty("status").GetString().Should().Be("cancelled", $"案子取消時未完成的「{title}」由系統取消");
+        }
     }
 
     [Fact]
@@ -487,7 +529,8 @@ public class CrmDesignCaseAppTests : IDisposable
         var f = await ArrangeApproval();
         var record = await TwoRoundsToCustomerReview();
         var res = await Submit(_app.AsUser(Designer), record, f);
-        res.StatusCode.Should().BeOneOf(HttpStatusCode.BadRequest, HttpStatusCode.Forbidden);
+        res.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+        (await res.Content.ReadAsStringAsync()).Should().Contain(WorkflowEnforcer.NotPermittedMessage, "轉移群組限業務，設計人員不能送出");
         var direct = await Put(_app.AsUser("sales01"), record, new() { [(await FieldKeys(_admin, Case))["狀態"]] = await OptionValue(_admin, Case, "狀態", "待主管確認") });
         direct.StatusCode.Should().Be(HttpStatusCode.BadRequest);
         (await direct.Content.ReadAsStringAsync()).Should().Contain("需要送出簽核");
@@ -514,7 +557,7 @@ public class CrmDesignCaseAppTests : IDisposable
     /// 所以鎖定欄位只有「設計圖檔」；需求說明與明細在待主管確認不鎖（見結果檔「需要決定的事」）。結案是唯讀狀態，寫入被忽略。
     /// </summary>
     [Fact]
-    public async Task Approved_LockedStates_RejectEdits()
+    public async Task Approved_OnlyAttachmentsLocked_ClosedIgnoresWrites()
     {
         var f = await ArrangeApproval();
         var record = await TwoRoundsToCustomerReview();
@@ -552,7 +595,7 @@ public class CrmDesignCaseAppTests : IDisposable
 
         var status = (await FieldKeys(_admin, Case))["狀態"];
         (await Reload(id)).GetProperty("values").GetProperty(status).GetString().Should().Be(await OptionValue(_admin, Case, "狀態", "設計中"));
-        (await TasksOf(id, DrawTitle)).Should().HaveCount(3);
+        (await TasksOf(id, DrawTitle)).Should().HaveCount(3).And.OnlyContain(t => t.GetProperty("assigneeUserId").GetString() == Designer, "退回後第三批仍派給設計負責人");
         using var scope = _app.Services.CreateScope();
         scope.ServiceProvider.GetRequiredService<DynamicDbContext>().Set<TaskItem>()
             .Where(t => t.RecordId == id && t.Title == DrawTitle).Select(t => t.RuleOccurrence!.Value).OrderBy(x => x).ToList().Should().Equal(1, 2, 3);
@@ -578,17 +621,15 @@ public class CrmDesignCaseAppTests : IDisposable
     [Fact]
     public async Task Approver_DownloadsCommentAttachment()
     {
-        await ArrangeApproval();
+        await OpenWithMembers();
         var record = await NewCase(_app.AsUser("manager01"));
         var id = record.GetProperty("id").GetInt64();
         record = await Move(_admin, record, "設計中");
         record = await Move(_admin, record, "客戶確認中");
-        var module = await JsonOf(await _admin.GetAsync($"{Base}/modules/{Case}"));
-        var fieldId = module.GetProperty("blocks").EnumerateArray().SelectMany(b => b.GetProperty("fields").EnumerateArray())
-            .Single(x => x.GetProperty("label").GetProperty("zh-TW").GetString() == "設計圖檔").GetProperty("id").GetInt64();
+        var fieldId = await DrawingsFieldId();
         var bytes = new byte[] { 0x89, 0x50, 0x4E, 0x47, 9, 8, 7 };
         var up = await _app.AsUser("sales01").PostAsync($"{Base}/records/{id}/attachments/{fieldId}", File("外殼-v2.png", bytes));
-        up.StatusCode.Should().BeOneOf(HttpStatusCode.OK, HttpStatusCode.Created);
+        up.StatusCode.Should().Be(HttpStatusCode.Created, await up.Content.ReadAsStringAsync());
         var uploaded = await JsonOf(up);
 
         var confirm = (await TasksOf(id, ConfirmTitle)).Single();
@@ -602,7 +643,7 @@ public class CrmDesignCaseAppTests : IDisposable
         var d1 = await manager.GetAsync($"{Base}/tasks/{taskId}/comments/{posted.GetProperty("id").GetInt64()}/attachments/{a}");
         d1.StatusCode.Should().Be(HttpStatusCode.OK);
         (await d1.Content.ReadAsByteArrayAsync()).Should().Equal(bytes);
-        var fileId = uploaded.TryGetProperty("fileId", out var fid) ? fid.GetString() : uploaded.GetProperty("id").GetString();
+        var fileId = uploaded.GetProperty("id").GetString();
         var d2 = await manager.GetAsync($"{Base}/records/{id}/attachments/{fieldId}/{fileId}");
         d2.StatusCode.Should().Be(HttpStatusCode.OK, await d2.Content.ReadAsStringAsync());
         (await d2.Content.ReadAsByteArrayAsync()).Should().Equal(bytes);
