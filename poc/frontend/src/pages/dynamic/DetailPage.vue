@@ -7,6 +7,7 @@ import { useRecordApproval } from 'src/application/dynamic/queries/approval-quer
 import { useDeleteRecord, useRecord } from 'src/application/dynamic/queries/records-queries';
 import { useModuleSchema } from 'src/application/dynamic/queries/schema-queries';
 import ApprovalBadge from 'src/presentation/dynamic/approval/ApprovalBadge.vue';
+import SubmitApprovalDialog from 'src/presentation/dynamic/approval/SubmitApprovalDialog.vue';
 import PrintMenu from 'src/presentation/dynamic/print/PrintMenu.vue';
 import RecordConversions from 'src/presentation/dynamic/conversions/RecordConversions.vue';
 import RecordEffects from 'src/presentation/dynamic/events/RecordEffects.vue';
@@ -18,6 +19,7 @@ import RecordHistory from 'src/presentation/dynamic/history/RecordHistory.vue';
 import RecordTasks from 'src/presentation/dynamic/tasks/RecordTasks.vue';
 import RelatedTabs from 'src/presentation/dynamic/related/RelatedTabs.vue';
 import ForbiddenNotice from 'src/components/framework/ForbiddenNotice.vue';
+import type { SubmitApprovalResult } from 'src/domain/dynamic/approval-types';
 import type { DeleteBlocked } from 'src/domain/dynamic/types';
 import { resolveI18n } from 'src/domain/dynamic/i18n-text';
 import { canAdvance, isReadOnlyState } from 'src/domain/dynamic/workflow';
@@ -65,6 +67,11 @@ const canSubmit = computed(() => !!approval.value?.canSubmit && !schemaQuery.dat
 const approvalQuery = useRecordApproval(recordId, canSubmit);
 const statusField = computed(() => schemaQuery.data.value?.blocks.flatMap((b) => b.fields).find((f) => f.key === workflow.value?.statusFieldKey));
 const stateLabel = (optionId: number) => resolveI18n(statusField.value?.options.find((o) => o.value === `opt_${optionId}`)?.label, locale.value);
+const submitTo = ref<number | null>(null);
+function onSubmitted(outcome: SubmitApprovalResult['outcome']) {
+  const state = submitTo.value === null ? '' : stateLabel(submitTo.value);
+  $q.notify({ type: 'positive', message: t(`approval.submit.outcome.${outcome}`, { state }) });
+}
 const submitTargets = computed(() => (canSubmit.value ? approvalQuery.data.value?.submitTargets ?? [] : []));
 
 async function onDelete() {
@@ -105,7 +112,7 @@ async function onDelete() {
         <q-space />
         <q-btn
           v-for="to in submitTargets" :key="to" color="primary" icon="rule" :label="t('approval.submitTo', { state: stateLabel(to) })"
-          :data-testid="`submit-approval-${to}`"
+          :data-testid="`submit-approval-${to}`" @click="submitTo = to"
         />
         <PrintMenu :module-key="moduleKey" :record-id="recordId" />
         <q-btn v-if="canEdit" color="primary" :label="t('dynamic.edit')" :to="`/dynamic/${moduleKey}/${recordId}/edit`" />
@@ -131,6 +138,10 @@ async function onDelete() {
       <RecordEffects :record-id="recordId" />
       <RelatedTabs :record-id="recordId" />
       <RecordHistory :record-id="recordId" />
+      <SubmitApprovalDialog
+        v-if="submitTo !== null" :model-value="true" :record-id="recordId" :module-key="moduleKey" :to="submitTo" :to-label="stateLabel(submitTo)"
+        :record-row-version="recordQuery.data.value.rowVersion" @update:model-value="submitTo = null" @submitted="onSubmitted"
+      />
       <DeleteBlockedDialog v-if="blocked" :model-value="true" :blocked="blocked" @update:model-value="blocked = null" />
       <q-dialog v-model="confirming">
         <q-card>

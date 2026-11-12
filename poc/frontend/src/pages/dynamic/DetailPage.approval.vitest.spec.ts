@@ -99,6 +99,16 @@ describe('DetailPage approval', () => {
     expect(api.getRecordApproval).toHaveBeenCalledWith(5);
   });
 
+  it('clicking a submit button opens the dialog for that target and previews it', async () => {
+    api.previewApproval.mockResolvedValue({ outcome: 'direct', flowName: null, stages: [], picks: [] });
+    const w = await mountPage(record(summary({ status: 'none', canSubmit: true })), [12, 13]);
+    await w.find('[data-testid="submit-approval-13"]').trigger('click');
+    await flushPromises();
+    expect(api.previewApproval).toHaveBeenCalledWith(5, 13);
+    expect(document.body.querySelector('[data-testid="submit-approval-dialog"]')!.textContent).toContain('送出簽核：狀態13');
+    document.body.innerHTML = '';
+  });
+
   it('does not ask for submit targets when the user cannot submit', async () => {
     const w = await mountPage(record(summary({ status: 'approved' })));
     expect(w.findAll('[data-testid^="submit-approval-"]')).toHaveLength(0);
