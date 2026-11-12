@@ -104,6 +104,7 @@ builder.Services.AddProblemDetails(o => o.CustomizeProblemDetails = c =>
 // 預設不採用外來的 traceparent（匿名使用者不該能指定 request id）；內部串接才開
 if (!builder.Configuration.GetValue<bool>("Ops:TrustIncomingTraceParent"))
     builder.Services.AddSingleton<System.Diagnostics.DistributedContextPropagator>(new IgnoreIncomingTraceContext());
+builder.Services.AddHealthChecks().AddDbContextCheck<DynamicDbContext>("database", tags: ["ready"]);
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
 
@@ -146,7 +147,7 @@ if (app.Environment.IsDevelopment())
 }
 
 app.MapControllers();
-app.MapGet("/api/health", () => Results.Json(new { status = "ok" }));
+app.MapOpsEndpoints();
 
 // 部署時前端建置結果放在 wwwroot（Dockerfile），由同一個站台提供；本機開發沒有 wwwroot，前端走 quasar dev。
 if (Directory.Exists(Path.Combine(app.Environment.ContentRootPath, "wwwroot")))

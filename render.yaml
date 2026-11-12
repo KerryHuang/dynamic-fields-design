@@ -7,7 +7,7 @@ services:
     rootDir: poc
     dockerfilePath: ./Dockerfile.demo
     dockerContext: .
-    healthCheckPath: /api/health
+    healthCheckPath: /api/health/ready
     autoDeploy: true
     envVars:
       - key: Demo__LoginEnabled

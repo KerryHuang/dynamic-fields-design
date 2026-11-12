@@ -6,6 +6,7 @@
   </ItemGroup>
 
   <ItemGroup>
+    <PackageReference Include="Microsoft.Extensions.Diagnostics.HealthChecks.EntityFrameworkCore" Version="8.0.11" />
     <PackageReference Include="Swashbuckle.AspNetCore" Version="6.9.0" />
   </ItemGroup>
 
@@ -14,6 +15,22 @@
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
   </PropertyGroup>
+
+  <ItemGroup>
+    <!-- 版本資訊：建置時以 -p:AppVersion=… -p:GitCommit=… -p:BuildTime=… 注入；沒注入時 BuildInfo 回 dev -->
+    <AssemblyAttribute Include="System.Reflection.AssemblyMetadataAttribute" Condition="'$(AppVersion)' != ''">
+      <_Parameter1>AppVersion</_Parameter1>
+      <_Parameter2>$(AppVersion)</_Parameter2>
+    </AssemblyAttribute>
+    <AssemblyAttribute Include="System.Reflection.AssemblyMetadataAttribute" Condition="'$(GitCommit)' != ''">
+      <_Parameter1>GitCommit</_Parameter1>
+      <_Parameter2>$(GitCommit)</_Parameter2>
+    </AssemblyAttribute>
+    <AssemblyAttribute Include="System.Reflection.AssemblyMetadataAttribute" Condition="'$(BuildTime)' != ''">
+      <_Parameter1>BuildTime</_Parameter1>
+      <_Parameter2>$(BuildTime)</_Parameter2>
+    </AssemblyAttribute>
+  </ItemGroup>
 
   <ItemGroup>
     <!-- 內建應用程式套件（poc/backend/apps/*.app.json）複製到輸出目錄的 apps/；目前出貨 crm-sales，目錄也可以是空的 -->

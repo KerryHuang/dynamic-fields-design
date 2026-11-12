@@ -13,7 +13,14 @@ RUN bunx quasar prepare && bunx quasar build
 FROM mcr.microsoft.com/dotnet/sdk:8.0 AS backend
 WORKDIR /src
 COPY backend/ ./
-RUN dotnet publish src/DynamicModules.WebAPI/DynamicModules.WebAPI.csproj -c Release -o /app
+# 版本資訊：GIT_COMMIT 優先，退回 Render 傳入的 RENDER_GIT_COMMIT；沒給的欄位在 /api/version 顯示 dev
+ARG APP_VERSION=""
+ARG GIT_COMMIT=""
+ARG BUILD_TIME=""
+ARG RENDER_GIT_COMMIT=""
+RUN COMMIT="${GIT_COMMIT:-$RENDER_GIT_COMMIT}"; BUILT="${BUILD_TIME:-$(date -u +%Y-%m-%dT%H:%M:%SZ)}"; \
+    dotnet publish src/DynamicModules.WebAPI/DynamicModules.WebAPI.csproj -c Release -o /app \
+      -p:AppVersion="$APP_VERSION" -p:GitCommit="$COMMIT" -p:BuildTime="$BUILT"
 
 FROM mcr.microsoft.com/dotnet/aspnet:8.0
 WORKDIR /app
