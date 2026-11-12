@@ -35,7 +35,8 @@ public sealed class ApprovalActionSupport(
         if (ApprovalEngine.DefinitionOf(inst) is not { } def) return (null, ServiceResult.Conflict(ApprovalMessages.FlowVersionMissing));
         var next = Guid.NewGuid().ToString();
         if (!await repo.TryBumpRowVersionAsync(inst.Id, rowVersion, next, ct))
-            return (null, ServiceResult.Conflict(mine is { Status: ApprovalTaskStatus.Open } ? ApprovalMessages.StateChanged : ApprovalMessages.StageHandled));
+            return (null, ServiceResult.Conflict(mine is { Status: ApprovalTaskStatus.Open } ? ApprovalMessages.StateChanged : ApprovalMessages.StageHandled,
+                mine is { Status: ApprovalTaskStatus.Open } ? "stale" : null));
         inst.RowVersion = next;
         return (new Loaded(inst, module, def, await repo.ListRunsAsync(inst.Id, ct), await repo.ListTasksAsync(inst.Id, ct)), null);
     }
@@ -100,7 +101,7 @@ public class ApproveTaskHandler(
             var (fresh, rerouted, rerouteFailure) = await engine.RerouteAsync(inst, check, module, current, ct, values.Keys);
             if (rerouteFailure is not null) return rerouteFailure;
             await uow.CommitAsync(ct);
-            return ServiceResult.Success(new ApprovalActionResponse(rerouted, fresh?.Id ?? inst.Id, fresh?.RowVersion ?? inst.RowVersion, check.NewFlow?.Name));
+            return ServiceResult.Success(new ApprovalActionResponse(rerouted, fresh?.Id ?? inst.Id, fresh?.RowVersion ?? inst.RowVersion, check.NewFlow?.Name, NeedsResubmit: fresh is null));
         }
 
         var now = time.Now;
@@ -185,7 +186,7 @@ public class RejectTaskHandler(
 
         if (request.To == ToPrevious)
         {
-            var previous = runs.Where(r => r.Seq < run.Seq && r.Status == ApprovalStageStatus.Approved).MaxBy(r => r.Seq);
+            var previous = ApprovalActionRules.PreviousRun(def, runs, run);
             if (previous is null) return ApprovalActionSupport.Bad("to", ApprovalMessages.NoPreviousStage);
             Reject(me, run, tasks, now, ApprovalStageStatus.Returned);
             engine.Log(inst, ApprovalActions.Return, user.UserId, run.Id, me.Id, request.Comment);

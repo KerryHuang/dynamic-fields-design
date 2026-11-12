@@ -8,8 +8,8 @@ namespace DynamicModules.Application.Dynamic.ApprovalService;
 /// <summary>Outcome：submitted（建立實例）、approved（全部關卡都被跳過，直接核准）、direct（沒有流程符合，直接轉移）。</summary>
 public sealed record SubmitApprovalResponse(string Outcome, long? InstanceId, string RecordRowVersion);
 
-/// <summary>Outcome：advanced、approved、rerouted、rejected、returned、withdrawn。</summary>
-public sealed record ApprovalActionResponse(string Outcome, long InstanceId, string InstanceRowVersion, I18nText? NewFlowName = null);
+/// <summary>Outcome：advanced、approved、rerouted、rejected、returned、withdrawn。NeedsResubmit：rerouted 且新流程要發起人重新自選，沒有新實例。</summary>
+public sealed record ApprovalActionResponse(string Outcome, long InstanceId, string InstanceRowVersion, I18nText? NewFlowName = null, bool NeedsResubmit = false);
 
 public static class ApprovalOutcomes
 {
@@ -27,6 +27,24 @@ public static class ApprovalActionRules
         return comment.Length > Domain.Approvals.ApprovalLimits.MaxCommentLength ? ApprovalMessages.CommentTooLong : null;
     }
 
+    /// <summary>
+    /// 「上一關」（設計 §7.3）：依流程定義的關卡順序，目前關卡代號之前最近一個沒被跳過的關卡，取它最近一次的關卡實例，
+    /// 必須是已同意才算；第一關、備援關卡（不在定義裡）沒有上一關。退回上一關重啟的關卡有新 seq，所以不能只比 seq。
+    /// </summary>
+    public static Domain.Entities.Dynamic.ApprovalStageRun? PreviousRun(
+        Domain.Approvals.ApprovalDefinition? def, IReadOnlyList<Domain.Entities.Dynamic.ApprovalStageRun> runs, Domain.Entities.Dynamic.ApprovalStageRun current)
+    {
+        if (def is null) return null;
+        var index = def.Stages.FindIndex(s => s.Code == current.StageCode);
+        for (var i = index - 1; i >= 0; i--)
+        {
+            var latest = runs.Where(r => r.StageCode == def.Stages[i].Code).MaxBy(r => r.Seq);
+            if (latest is null or { Status: Domain.Entities.Dynamic.ApprovalStageStatus.Skipped }) continue;
+            return latest.Status == Domain.Entities.Dynamic.ApprovalStageStatus.Approved ? latest : null;
+        }
+        return null;
+    }
+
     /// <summary>Assignee，或 Reason = delegated 時的 Original（a3 用）。</summary>
     public static bool IsActor(Domain.Entities.Dynamic.ApprovalTask t, string userId) =>
         t.AssigneeUserId == userId || (t.Reason == Domain.Entities.Dynamic.ApprovalTaskReason.Delegated && t.OriginalUserId == userId);
@@ -41,7 +59,7 @@ public sealed record RecordApprovalSummary(string Status, I18nText? StageName, i
 public sealed record RecordApprovalLock(IReadOnlyList<string> FieldKeys, bool DetailRowsLocked);
 
 public sealed record ApprovalTaskView(long Id, string AssigneeUserId, string AssigneeName, string OriginalUserId, string Reason, string Status,
-    DateTime? ActedTime, bool CanAct);
+    DateTime? ActedTime, bool CanAct, bool CanReturnPrevious = false);
 
 public sealed record ApprovalStageView(long Id, int Seq, string? StageCode, I18nText Name, string Mode, string Status, string? SkipReason,
     DateTime? DueTime, IReadOnlyList<ApprovalTaskView> Tasks, IReadOnlyList<string> EditableFieldKeys);

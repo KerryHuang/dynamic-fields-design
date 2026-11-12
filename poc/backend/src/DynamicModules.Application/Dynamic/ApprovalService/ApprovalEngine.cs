@@ -121,11 +121,13 @@ public sealed class ApprovalEngine(
         old.CurrentStageRunId = null;
         context.Touch(old.RecordId);
         var name = check.NewFlow?.Name.Resolve(I18nText.FallbackLocale);
+        // 畫面依 kind 用使用者語系組文字；comment 是固定繁中，只留給資料庫與稽核
+        var rerouteKind = check.NewFlow is null ? "fallback" : check.NeedsPick ? "pick" : "flow";
         Log(old, ApprovalActions.Reroute, SystemActor, comment: check.NewFlow is null ? ApprovalMessages.RerouteFallbackNote
             : check.NeedsPick ? ApprovalMessages.ReroutePickNote(name!) : ApprovalMessages.RerouteNote(name!),
             data: editedKeys is { Count: > 0 }
-                ? JsonSerializer.Serialize(new { flowId = check.NewFlow?.FlowId, flowVersionId = check.NewFlow?.FlowVersionId, editedBy = user.UserId, editedKeys })
-                : JsonSerializer.Serialize(new { flowId = check.NewFlow?.FlowId, flowVersionId = check.NewFlow?.FlowVersionId }));
+                ? JsonSerializer.Serialize(new { kind = rerouteKind, flowId = check.NewFlow?.FlowId, flowVersionId = check.NewFlow?.FlowVersionId, editedBy = user.UserId, editedKeys })
+                : JsonSerializer.Serialize(new { kind = rerouteKind, flowId = check.NewFlow?.FlowId, flowVersionId = check.NewFlow?.FlowVersionId }));
         await uow.CommitAsync(ct);   // 舊實例先離開 pending，部分唯一索引才放得下新實例
 
         if (check.NeedsPick)

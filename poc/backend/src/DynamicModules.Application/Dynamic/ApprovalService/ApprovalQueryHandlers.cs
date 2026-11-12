@@ -272,7 +272,8 @@ internal static class ApprovalViews
             var views = tasks.Where(t => t.StageRunId == r.Id).Select(t => new ApprovalTaskView(t.Id, t.AssigneeUserId, Name(t.AssigneeUserId), t.OriginalUserId,
                 t.Reason, t.Status, t.ActedTime,
                 pending && writable && t.Status == ApprovalTaskStatus.Open && ApprovalActionRules.IsActor(t, me)
-                && !ApprovalActionSupport.AlreadyApprovedInStage(tasks, t, me))).ToList();
+                && !ApprovalActionSupport.AlreadyApprovedInStage(tasks, t, me),
+                pending && ApprovalActionRules.PreviousRun(def, runs, r) is not null)).ToList();
             return new ApprovalStageView(r.Id, r.Seq, r.StageCode, r.NameSnapshot ?? new I18nText(), r.Mode, r.Status, r.SkipReason, r.DueTime, views,
                 EditableKeys(def, r, views.Any(v => v.CanAct), editableAllowed, hiddenFieldIds));
         }).ToList();

@@ -61,6 +61,7 @@ public class ApprovalRerouteTests : ApprovalTestBase
         res.IsSuccess.Should().BeTrue(Dump(res));
         Body(res).Outcome.Should().Be(ApprovalOutcomes.Rerouted);
         Body(res).NewFlowName!.Resolve("zh-TW").Should().Be("po-a");
+        Body(res).NeedsResubmit.Should().BeFalse();
 
         var old = Inst(id);
         old.Status.Should().Be(ApprovalInstanceStatus.Rerouted);
@@ -274,6 +275,9 @@ public class ApprovalRerouteTests : ApprovalTestBase
         var res = await Approve(id, "buyer2");
         Body(res).Outcome.Should().Be(ApprovalOutcomes.Rerouted);
         Body(res).NewFlowName!.Resolve("zh-TW").Should().Be("po-k");
+        Body(res).NeedsResubmit.Should().BeTrue();
+        ActionsOf(id).Single(a => a.Action == ApprovalActions.Reroute).DataJson
+            .Should().Contain("\"kind\":\"pick\"");
         Inst(id).Status.Should().Be(ApprovalInstanceStatus.Rerouted);
         PendingOf(po).Should().BeNull();
         Db.Context.Set<ApprovalInstance>().AsNoTracking().Count(i => i.RecordId == po).Should().Be(1);

@@ -115,6 +115,7 @@ public class ApprovalActionTests : ApprovalTestBase
         var late = await Send(new ApproveTaskRequest(fin2Task.Id, stale, null, null));
         late.IsConflict.Should().BeTrue();
         late.Message.Should().Be("這一關已由他人處理");
+        late.Code.Should().BeNull();   // 他人處理過：前端關掉對話框並重讀
     }
 
     [Fact]
@@ -131,8 +132,10 @@ public class ApprovalActionTests : ApprovalTestBase
         var late = await Send(new ApproveTaskRequest(buyer2Task.Id, stale, null, null));
         late.IsConflict.Should().BeTrue();
         late.Message.Should().Be(ApprovalMessages.StateChanged.Resolve(null));
+        late.Code.Should().Be("stale");   // 前端靠它留著對話框（已填的意見不丟）
         var lateReject = await Send(new RejectTaskRequest(buyer2Task.Id, stale, "舊畫面", RejectTaskHandler.ToInitiator));
         lateReject.Message.Should().Be(ApprovalMessages.StateChanged.Resolve(null));
+        lateReject.Code.Should().Be("stale");
         TasksOf(id).Single(t => t.Id == buyer2Task.Id).Status.Should().Be(ApprovalTaskStatus.Open);
         Outcome(await Approve(id, "buyer2")).Should().Be(ApprovalOutcomes.Approved);   // 重新整理後可以同意
     }
@@ -371,6 +374,46 @@ public class ApprovalActionTests : ApprovalTestBase
         Db.Context.Set<ApprovalStageRun>().AsNoTracking().Count(x => x.InstanceId == id).Should().Be(1);
         StateOf(r, Inst(id).RecordId).Should().Be(r.Draft);
     }
+    [Fact]
+    public async Task Reject_ToPrevious_FollowsDefinitionOrder_RestartedStageHasNoPrevious()
+    {
+        // 退回上一關後，重啟的第一關有新的 seq，舊的同代號 run 仍是 approved；「上一關」依定義順序，所以第一關沒有上一關（審查 U3）
+        var r = await Scenario3();
+        var id = await SubmitAs(r, "buyer1", 150000);
+        async Task<bool> CanReturn(string user)
+        {
+            As(user);
+            var view = (RecordApprovalResponse)(await Send(new GetRecordApprovalRequest(Inst(id).RecordId))).Data!;
+            return view.Current!.Stages.SelectMany(s => s.Tasks).Single(t => t.AssigneeUserId == user && t.CanAct).CanReturnPrevious;
+        }
+        (await CanReturn("gm")).Should().BeFalse();
+        await Approve(id, "gm");
+        (await CanReturn("buyer2")).Should().BeTrue();
+        Outcome(await Reject(id, "buyer2", "請重看", RejectTaskHandler.ToPrevious)).Should().Be(ApprovalOutcomes.Returned);
+
+        (await CanReturn("gm")).Should().BeFalse();
+        (await Reject(id, "gm", "再退一次", RejectTaskHandler.ToPrevious)).Errors["to"].Should().Equal(ApprovalMessages.NoPreviousStage.Resolve(null));
+        TasksOf(id).Count(t => t.Status == ApprovalTaskStatus.Open).Should().Be(1);   // 沒有再重啟一次
+    }
+
+    [Fact]
+    public async Task Reject_ToPrevious_SkipsSkippedStages()
+    {
+        // 中間被跳過的關卡不算上一關：lead(approved) → board(skipped) → 第三關，往前找到 lead
+        var r = await BuildPurchase();
+        await SeedFlow(r, "po-s", r.Confirmed, 1, Def(null, Stage("lead", Group(PurchaseLeadGroup)),
+            Stage("board", Group(BoardGroup), Cond(r.Total, "gte", 999999999)), Stage("final", Manager(1))));
+        (await SaveWorkflow(r, [Needs(r.Draft, r.Confirmed), Plain(r.Confirmed, r.Partial), Plain(r.Partial, r.Received),
+            Plain(r.Confirmed, r.Cancelled)])).IsSuccess.Should().BeTrue();
+        await GrantEveryone(r.Module, r.Extra);
+        var id = await SubmitAs(r, "buyer1", 5000);
+        await Approve(id, "buyer2");
+        Outcome(await Reject(id, "gm", "退上一關", RejectTaskHandler.ToPrevious)).Should().Be(ApprovalOutcomes.Returned);
+        var runs = Db.Context.Set<ApprovalStageRun>().AsNoTracking().Where(x => x.InstanceId == id).OrderBy(x => x.Seq).ToList();
+        runs[^1].StageCode.Should().Be("lead");
+        runs[^1].Status.Should().Be(ApprovalStageStatus.Active);
+    }
+
     [Fact]
     public async Task Reject_ToPrevious_NotifiesInitiator()
     {
