@@ -3,6 +3,9 @@ using DynamicModules.Application.Common;
 using DynamicModules.Application.Common.Security;
 using DynamicModules.Application.Common.Uploads;
 using DynamicModules.Application.Common.Time;
+using DynamicModules.Application.Dynamic.ApprovalService;
+using DynamicModules.Application.Dynamic.EventService;
+using DynamicModules.Application.Dynamic.LedgerService;
 using DynamicModules.Application.Dynamic.PolicyService;
 using DynamicModules.Application.Dynamic.RecordService;
 using DynamicModules.Application.Dynamic.RecordService.Data;
@@ -37,7 +40,8 @@ public sealed record UploadTarget(
 /// </summary>
 public sealed class AttachmentUploadGate(
     IModuleRepository modules, IRecordRepository records, IDynamicAccessGuard guard, FieldTypeRegistry registry,
-    AttachmentSettings settings, IBusinessTime time)
+    AttachmentSettings settings, IBusinessTime time, IApprovalInstanceRepository instances, ApprovalLockService approvalLock,
+    EventFactLock factLock, LedgerGate ledgerGate)
 {
     public async Task<(ServiceResult? Rejected, UploadTarget? Target)> CheckAsync(long recordId, long fieldId, CancellationToken ct)
     {
@@ -62,6 +66,12 @@ public sealed class AttachmentUploadGate(
             return (Invalid(RecordValueProcessor.RecordErrorKey, MessageRef.Of(MessageText.RecordReadOnly)), null);
         if (module.Workflow is { } wf && wf.IsLocked(previous))
             return (Invalid(RecordValueProcessor.RecordErrorKey, MessageRef.Of(MessageText.RecordReadOnly)), null);
+        // 簽核中、簽核鎖定、已記帳：附件不能增減。上傳沒有欄位層級的 400 可回，收檔前直接 409（簽核設計 §8.5、§9.3）
+        if (await instances.GetPendingByRecordAsync(record.Id, ct) is not null) return (ServiceResult.Conflict(ApprovalMessages.Pending), null);
+        if (module.Workflow is { } lockWf && (await approvalLock.ForModuleAsync(module, null, ct)).IsLockedState(lockWf.StateOf(previous)))
+            return (ServiceResult.Conflict(ApprovalMessages.AttachmentLocked), null);
+        if (await factLock.IsFrozenAsync(record.Id, ct) || await ledgerGate.IsLedgerAsync(module, ct))
+            return (ServiceResult.Conflict(MessageRef.Of(MessageText.AttachmentPosted)), null);
         if (!RecordValueProcessor.WritablePredicate(module, previous, perms, registry, userIds, today)(field))
             return (Invalid(field.Key, "此欄位目前不可修改"), null);
 

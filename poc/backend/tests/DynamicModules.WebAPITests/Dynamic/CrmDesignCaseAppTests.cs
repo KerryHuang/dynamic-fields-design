@@ -567,7 +567,7 @@ public class CrmDesignCaseAppTests : IDisposable
         (await Approve(current, "manager01")).StatusCode.Should().Be(HttpStatusCode.OK);
 
         var locked = await Reload(id);
-        // 附件只能經上傳加入，PUT 偽造不了；上傳被擋的 409 要等 a2d2（見 Pending_DrawingUpload_Rejected），這裡只驗鎖定範圍的宣告
+        // 附件只能經上傳加入，PUT 偽造不了；上傳被擋的 409 見 Pending_DrawingUpload_Rejected，這裡只驗鎖定範圍的宣告
         var module = await JsonOf(await _admin.GetAsync($"{Base}/modules/{Case}"));
         long FieldId(string label) => module.GetProperty("blocks").EnumerateArray().SelectMany(b => b.GetProperty("fields").EnumerateArray())
             .Single(x => x.GetProperty("label").GetProperty("zh-TW").GetString() == label).GetProperty("id").GetInt64();
@@ -649,7 +649,7 @@ public class CrmDesignCaseAppTests : IDisposable
         (await d2.Content.ReadAsByteArrayAsync()).Should().Equal(bytes);
     }
 
-    [Fact(Skip = "上傳經記錄寫入管線與簽核中資格檢查屬 a2d2，尚未在基底；a2d2 合併後移除 Skip")]
+    [Fact]
     public async Task Pending_DrawingUpload_Rejected()
     {
         var f = await ArrangeApproval();

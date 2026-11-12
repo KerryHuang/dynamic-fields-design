@@ -759,4 +759,29 @@ public class AttachmentApiTests : IDisposable
         res.StatusCode.Should().Be(HttpStatusCode.BadRequest, await res.Content.ReadAsStringAsync());
         DiskFiles().Should().BeEmpty();
     }
+
+    [Fact]
+    [Trait("Category", "Postgres")]
+    public async Task Upload_PostedRecord_RejectedBeforeBodyRead()
+    {
+        var module = await CreateModule(Admin);
+        var rev = await AddField(Admin, module, "reference", new { refTarget = new { kind = "module", key = module }, readOnly = true });
+        var qty = await AddField(Admin, module, "decimal");
+        var files = await AddField(Admin, module, "attachment");
+        await Activate(Admin, module);
+        _app.GrantBusinessGroups(module);
+        (await Admin.PutAsJsonAsync($"{Base}/modules/{module}/ledger",
+            new { reversalFieldId = rev.Id, negate = new[] { qty.Id }, swap = Array.Empty<long[]>(), confirmFreeze = false }))
+            .StatusCode.Should().Be(HttpStatusCode.OK);
+        var title = await TitleKey(Admin, module);
+        var created = await JsonOf(await Admin.PostAsJsonAsync($"{Base}/modules/{module}/records",
+            new { values = new Dictionary<string, object> { [title] = "帳", [qty.Key] = 5 } }));
+        var w = new World(module, files.Id, files.Key, title, created.GetProperty("id").GetInt64(), created.GetProperty("rowVersion").GetString()!);
+
+        var (res, _) = await UploadProbe(Admin, w);
+
+        res.StatusCode.Should().Be(HttpStatusCode.Conflict, await res.Content.ReadAsStringAsync());
+        (await res.Content.ReadAsStringAsync()).Should().Contain("已記帳的單據不能再增減附件");
+        _app.BodyBytesRead.Should().BeLessThan(ProbeSize / 4, "已記帳時不該把整個請求收進來");
+    }
 }

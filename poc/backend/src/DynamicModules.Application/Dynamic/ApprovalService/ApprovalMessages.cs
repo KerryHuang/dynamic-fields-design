@@ -73,6 +73,9 @@ public static class ApprovalMessages
     /// <summary>鎖定狀態的記錄被改到鎖定欄位（§8.5、§9.3）；fieldLabel 可傳 I18nText 或字串。</summary>
     public static MessageRef FieldLocked(object fieldLabel) => MessageRef.Of(MessageText.ApprovalFieldLocked, fieldLabel);
 
+    /// <summary>鎖定狀態的記錄不能再上傳附件（§8.5、§9.3）。</summary>
+    public static readonly MessageRef AttachmentLocked = MessageRef.Of(MessageText.AttachmentLocked);
+
     // ── 送出與動作（§5.2、§7） ──
     public static readonly MessageRef NotApprovalTransition = MessageRef.Of(MessageText.ApprovalNotApprovalTransition);
     public static readonly MessageRef AlreadyPending = MessageRef.Of(MessageText.ApprovalAlreadyPending);

@@ -260,6 +260,32 @@ public class ApprovalApiTests : IDisposable
 
     [Fact]
     [Trait("Category", "Postgres")]
+    public async Task Upload_LockedRecord_RejectedBeforeBodyRead()
+    {
+        var r = await Arrange(lockAmount: true);
+        var files = await AddField(_admin, r.Module, "attachment");
+        var created = await JsonOf(await _admin.PostAsJsonAsync($"{Base}/modules/{r.Module}/records",
+            new { values = new Dictionary<string, object> { [r.Title] = "單據", [r.Amount!] = 100 } }));
+        var id = created.GetProperty("id").GetInt64();
+        (await Submit(_admin, r, id, created.GetProperty("rowVersion").GetString()!)).StatusCode.Should().Be(HttpStatusCode.Created);
+        var s1 = _app.AsUser("sales01");
+        var current = await Current(s1, id);
+        (await s1.PostAsJsonAsync($"{Base}/approval-tasks/{TaskOf(current, "sales01")}/approve",
+            new { rowVersion = current.GetProperty("rowVersion").GetString() })).StatusCode.Should().Be(HttpStatusCode.OK);
+
+        var file = new ByteArrayContent("hello"u8.ToArray());
+        file.Headers.ContentType = new System.Net.Http.Headers.MediaTypeHeaderValue("application/octet-stream");
+        var res = await _admin.PostAsync($"{Base}/records/{id}/attachments/{files.Id}",
+            new MultipartFormDataContent { { file, "file", "a.txt" } });
+
+        res.StatusCode.Should().Be(HttpStatusCode.Conflict, await res.Content.ReadAsStringAsync());
+        (await res.Content.ReadAsStringAsync()).Should().Contain("附件不能再增減");
+        var record = await JsonOf(await _admin.GetAsync($"{Base}/records/{id}"));
+        (record.GetProperty("values").TryGetProperty(files.Key, out var list) ? list.GetArrayLength() : 0).Should().Be(0);
+    }
+
+    [Fact]
+    [Trait("Category", "Postgres")]
     public async Task GetRecord_Json_HasApprovalLockAndGrant()
     {
         var r = await Arrange(lockAmount: true);
