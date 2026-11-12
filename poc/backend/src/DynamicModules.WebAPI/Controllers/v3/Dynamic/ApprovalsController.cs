@@ -32,11 +32,12 @@ public class ApprovalsController(IMediator mediator) : ControllerBase
     public async Task<IActionResult> GetRecordApproval(long id) =>
         (await mediator.Send(new GetRecordApprovalRequest(id))).ToActionResult(this);
 
-    /// <summary>簽核中心：box＝todo、done、submitted、all；from／to 篩送出日（yyyy-MM-dd，含頭尾）。</summary>
+    /// <summary>簽核中心：box＝todo、done、submitted、all；from／to 篩送出日（yyyy-MM-dd，含頭尾）；status＝實例狀態。</summary>
     [HttpGet("approval-tasks")]
     public async Task<IActionResult> Inbox([FromQuery] string box = ApprovalInboxBoxes.Todo, [FromQuery] string? module = null,
-        [FromQuery] DateOnly? from = null, [FromQuery] DateOnly? to = null, [FromQuery] int currentPage = 1, [FromQuery] int pagesSize = 20) =>
-        (await mediator.Send(new GetApprovalTasksRequest(box, module, from, to, currentPage, pagesSize))).ToActionResult(this);
+        [FromQuery] DateOnly? from = null, [FromQuery] DateOnly? to = null, [FromQuery] int currentPage = 1, [FromQuery] int pagesSize = 20,
+        [FromQuery] string? status = null) =>
+        (await mediator.Send(new GetApprovalTasksRequest(box, module, from, to, currentPage, pagesSize, status))).ToActionResult(this);
 
     /// <summary>送出前預覽（簽核設計 §5.4）：不寫入。</summary>
     [HttpPost("records/{id:long}/approval/preview")]

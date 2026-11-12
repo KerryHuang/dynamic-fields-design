@@ -48,6 +48,7 @@ public class ApprovalRuntimeTextTests
         { MessageText.ApprovalFlowVersionMissing, "找不到實例綁定的流程版本", [] },
         { MessageText.ApprovalStageDefMissing, "找不到要退回的關卡定義", [] },
         { MessageText.ApprovalBoxInvalid, "分頁只能是 todo、done、submitted、all", [] },
+        { MessageText.ApprovalStatusInvalid, "簽核狀態只能是 pending、approved、rejected、withdrawn、cancelled、rerouted", [] },
     };
 
     [Theory]

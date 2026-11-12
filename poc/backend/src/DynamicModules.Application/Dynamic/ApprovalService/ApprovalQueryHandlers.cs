@@ -5,6 +5,7 @@ using DynamicModules.Application.Common.Security;
 using DynamicModules.Application.Common.Time;
 using DynamicModules.Application.Dynamic.RecordService;
 using DynamicModules.Application.Dynamic.RecordService.Data;
+using DynamicModules.Domain.Approvals;
 using DynamicModules.Domain.Entities.Dynamic;
 using DynamicModules.Domain.Modules;
 using DynamicModules.Domain.Repositories.Dynamic;
@@ -109,7 +110,7 @@ public class GetRecordApprovalHandler(
         // 歷程的欄位遮蔽（設計 §8.5）：有 Read 用它；沒有時用臨時讀取權，再沒有就用自己的群組欄位例外（含明細來源隱藏）；
         // 讀不到權限輸入是 null（全部遮蔽）
         var hidden = read?.HiddenFieldIds ?? granted?.HiddenFieldIds ?? await hiddenFields.ForUserAsync(module, user.UserId, ct);
-        var views = visible.Select(i => ApprovalViews.Instance(i, runs, tasks, actions, names, me, writable, manager, hidden)).ToList();
+        var views = visible.Select(i => ApprovalViews.Instance(i, runs, tasks, actions, names, me, writable, manager, hidden, module.Workflow)).ToList();
         var pending = instances.Any(i => i.Status == ApprovalInstanceStatus.Pending);
         var targets = canRead ? await reader.SubmitTargetsAsync(module, record, pending, ct) : [];
         return ServiceResult.Success(new RecordApprovalResponse(
@@ -133,6 +134,8 @@ public class GetApprovalTasksHandler(
     {
         if (!ApprovalInboxBoxes.Values.Contains(request.Box))
             return ServiceResult.Invalid("box", ApprovalMessages.BoxInvalid);
+        if (request.Status is { } status && !ApprovalInstanceStatuses.Values.Contains(status))
+            return ServiceResult.Invalid("status", ApprovalMessages.StatusInvalid);
         var page = Math.Max(request.CurrentPage, 1);
         var size = Math.Clamp(request.PagesSize, 1, 100);
         var me = user.UserId;
@@ -190,7 +193,8 @@ public class GetApprovalTasksHandler(
 
         instances = instances.Where(i => (onlyModule is null || i.ModuleId == onlyModule)
             && (request.From is not { } from || DateOnly.FromDateTime(i.SubmittedTime) >= from)
-            && (request.To is not { } to || DateOnly.FromDateTime(i.SubmittedTime) <= to)).ToList();
+            && (request.To is not { } to || DateOnly.FromDateTime(i.SubmittedTime) <= to)
+            && (request.Status is not { } wanted || i.Status == wanted)).ToList();
         var byId = instances.ToDictionary(i => i.Id);
         var runs = await repo.ListRunsAsync(byId.Keys.ToList(), ct);
         var runById = runs.ToDictionary(r => r.Id);
@@ -249,17 +253,24 @@ internal static class ApprovalViews
 
     public static ApprovalInstanceView Instance(ApprovalInstance i, IReadOnlyList<ApprovalStageRun> allRuns, IReadOnlyList<ApprovalTask> allTasks,
         IReadOnlyList<ApprovalAction> allActions, IReadOnlyDictionary<string, string> names, string me, bool writable, bool manager,
-        IReadOnlySet<long>? hiddenFieldIds)
+        IReadOnlySet<long>? hiddenFieldIds, Workflow? workflow)
     {
         string Name(string id) => names.GetValueOrDefault(id) ?? id;
         var pending = i.Status == ApprovalInstanceStatus.Pending;
         var runs = allRuns.Where(r => r.InstanceId == i.Id).OrderBy(r => r.Seq).ToList();
         var tasks = allTasks.Where(t => t.InstanceId == i.Id).OrderBy(t => t.Id).ToList();
-        var stages = runs.Select(r => new ApprovalStageView(r.Id, r.Seq, r.StageCode, r.NameSnapshot ?? new I18nText(), r.Mode, r.Status, r.SkipReason, r.DueTime,
-            tasks.Where(t => t.StageRunId == r.Id).Select(t => new ApprovalTaskView(t.Id, t.AssigneeUserId, Name(t.AssigneeUserId), t.OriginalUserId, t.Reason,
-                t.Status, t.ActedTime,
+        var def = ApprovalEngine.DefinitionOf(i);
+        // 可編輯欄位只給能動作的人，而且送出時的狀態不能是簽核鎖定狀態（設計 §8.5）
+        var editableAllowed = workflow is not null && ApprovalRuntimeCheck.VerifyEditable(workflow, i.FromOptionId) is null;
+        var stages = runs.Select(r =>
+        {
+            var views = tasks.Where(t => t.StageRunId == r.Id).Select(t => new ApprovalTaskView(t.Id, t.AssigneeUserId, Name(t.AssigneeUserId), t.OriginalUserId,
+                t.Reason, t.Status, t.ActedTime,
                 pending && writable && t.Status == ApprovalTaskStatus.Open && ApprovalActionRules.IsActor(t, me)
-                && !ApprovalActionSupport.AlreadyApprovedInStage(tasks, t, me))).ToList())).ToList();
+                && !ApprovalActionSupport.AlreadyApprovedInStage(tasks, t, me))).ToList();
+            return new ApprovalStageView(r.Id, r.Seq, r.StageCode, r.NameSnapshot ?? new I18nText(), r.Mode, r.Status, r.SkipReason, r.DueTime, views,
+                EditableKeys(def, r, views.Any(v => v.CanAct), editableAllowed, hiddenFieldIds));
+        }).ToList();
         var actions = allActions.Where(a => a.InstanceId == i.Id).OrderBy(a => a.Id).Select(a => new ApprovalActionView(a.Action, a.ActorUserId, Name(a.ActorUserId),
             a.OnBehalfOfUserId, a.TargetUserIds ?? [], a.Comment, Data(a, hiddenFieldIds), a.CreatedTime)).ToList();
         // 撤回資格同 WithdrawApprovalHandler：目前關卡還沒有任何同意或退回
@@ -268,6 +279,18 @@ internal static class ApprovalViews
             && !tasks.Any(t => t.StageRunId == current?.Id && t.Status is ApprovalTaskStatus.Approved or ApprovalTaskStatus.Rejected);
         var flowName = i.FlowSetSnapshot.FirstOrDefault(e => e.FlowId == i.FlowId)?.Name;
         return new ApprovalInstanceView(i.Id, i.Status, i.RouteKind, flowName, i.FromOptionId, i.ToOptionId, i.InitiatorUserId, i.SubmittedTime, i.CompletedTime,
-            i.RowVersion, stages, actions, canWithdraw, pending && writable && manager);
+            i.RowVersion, stages, actions, canWithdraw, pending && writable && manager, i.TitleSnapshot);
+    }
+
+    /// <summary>
+    /// 這一關讀者在同意時能修改的欄位 key（f_{id}）：關卡進行中、讀者在這一關能動作、送出時的狀態不是鎖定狀態，
+    /// 並扣掉對讀者隱藏的欄位（hidden 為 null＝讀不到權限，全部遮蔽）。
+    /// </summary>
+    public static IReadOnlyList<string> EditableKeys(ApprovalDefinition? def, ApprovalStageRun run, bool canAct, bool editableAllowed,
+        IReadOnlySet<long>? hidden)
+    {
+        if (def is null || hidden is null || !canAct || !editableAllowed || run.Status != ApprovalStageStatus.Active) return [];
+        var stage = def.Stages.FirstOrDefault(s => s.Code == run.StageCode);
+        return (stage?.EditableFields ?? []).Where(id => !hidden.Contains(id)).Select(id => $"f_{id}").ToList();
     }
 }

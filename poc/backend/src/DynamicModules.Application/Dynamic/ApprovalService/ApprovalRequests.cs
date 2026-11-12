@@ -19,8 +19,8 @@ public record WithdrawApprovalRequest(long InstanceId, string RowVersion, string
 
 public record GetRecordApprovalRequest(long RecordId) : IRequest<ServiceResult>;
 
-/// <summary>Box：todo、done、submitted、all；From／To 篩送出日（含頭尾）；ModuleKey 為 null 不限模組。</summary>
-public record GetApprovalTasksRequest(string Box, string? ModuleKey, DateOnly? From, DateOnly? To, int CurrentPage, int PagesSize)
+/// <summary>Box：todo、done、submitted、all；From／To 篩送出日（含頭尾）；ModuleKey 為 null 不限模組；Status 為實例狀態，null 不限。</summary>
+public record GetApprovalTasksRequest(string Box, string? ModuleKey, DateOnly? From, DateOnly? To, int CurrentPage, int PagesSize, string? Status = null)
     : IRequest<ServiceResult>;
 
 /// <summary>送出前預覽（設計 §5.4）：資格同送出，不寫入。</summary>

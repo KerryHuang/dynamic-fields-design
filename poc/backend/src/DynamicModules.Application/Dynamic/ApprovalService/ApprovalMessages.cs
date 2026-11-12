@@ -98,6 +98,7 @@ public static class ApprovalMessages
     public static readonly MessageRef FlowVersionMissing = MessageRef.Of(MessageText.ApprovalFlowVersionMissing);
     public static readonly MessageRef StageDefMissing = MessageRef.Of(MessageText.ApprovalStageDefMissing);
     public static readonly MessageRef BoxInvalid = MessageRef.Of(MessageText.ApprovalBoxInvalid);
+    public static readonly MessageRef StatusInvalid = MessageRef.Of(MessageText.ApprovalStatusInvalid);
 
     // 設計器的定義驗證訊息（管理類，不在執行期語系化範圍）
     public const string EditableFieldHidden = "可編輯欄位不能是對這一關簽核人（或備援）所屬群組隱藏或限定可見的欄位";

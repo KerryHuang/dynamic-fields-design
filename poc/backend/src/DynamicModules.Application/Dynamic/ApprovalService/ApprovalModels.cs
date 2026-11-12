@@ -44,14 +44,14 @@ public sealed record ApprovalTaskView(long Id, string AssigneeUserId, string Ass
     DateTime? ActedTime, bool CanAct);
 
 public sealed record ApprovalStageView(long Id, int Seq, string? StageCode, I18nText Name, string Mode, string Status, string? SkipReason,
-    DateTime? DueTime, IReadOnlyList<ApprovalTaskView> Tasks);
+    DateTime? DueTime, IReadOnlyList<ApprovalTaskView> Tasks, IReadOnlyList<string> EditableFieldKeys);
 
 public sealed record ApprovalActionView(string Action, string ActorUserId, string ActorName, string? OnBehalfOfUserId, IReadOnlyList<string> TargetUserIds,
     string? Comment, JsonElement? Data, DateTime CreatedTime);
 
 public sealed record ApprovalInstanceView(long Id, string Status, string RouteKind, I18nText? FlowName, long FromOptionId, long ToOptionId,
     string InitiatorUserId, DateTime SubmittedTime, DateTime? CompletedTime, string RowVersion, IReadOnlyList<ApprovalStageView> Stages,
-    IReadOnlyList<ApprovalActionView> Actions, bool CanWithdraw, bool CanCancel);
+    IReadOnlyList<ApprovalActionView> Actions, bool CanWithdraw, bool CanCancel, string TitleSnapshot);
 
 /// <summary>Current：進行中的實例；Previous：其他看得到的實例（送出時間降冪）；SubmitTargets：現在能送簽的目標狀態。</summary>
 public sealed record RecordApprovalResponse(ApprovalInstanceView? Current, IReadOnlyList<ApprovalInstanceView> Previous, IReadOnlyList<long> SubmitTargets);
@@ -65,6 +65,16 @@ public static class ApprovalInboxBoxes
 {
     public const string Todo = "todo", Done = "done", Submitted = "submitted", All = "all";
     public static readonly IReadOnlySet<string> Values = new HashSet<string> { Todo, Done, Submitted, All };
+}
+
+public static class ApprovalInstanceStatuses
+{
+    public static readonly IReadOnlySet<string> Values = new HashSet<string>
+    {
+        Domain.Entities.Dynamic.ApprovalInstanceStatus.Pending, Domain.Entities.Dynamic.ApprovalInstanceStatus.Approved,
+        Domain.Entities.Dynamic.ApprovalInstanceStatus.Rejected, Domain.Entities.Dynamic.ApprovalInstanceStatus.Withdrawn,
+        Domain.Entities.Dynamic.ApprovalInstanceStatus.Cancelled, Domain.Entities.Dynamic.ApprovalInstanceStatus.Rerouted
+    };
 }
 
 // ── 預覽與試算（設計 §5.4） ──

@@ -308,4 +308,23 @@ public class ApprovalApiTests : IDisposable
         db.Set<GroupProgramPrivilege>().RemoveRange(db.Set<GroupProgramPrivilege>().Where(g => g.ProgramCode == code));
         db.SaveChanges();
     }
+
+    [Fact]
+    [Trait("Category", "Postgres")]
+    public async Task Inbox_StatusQuery_FiltersAndJsonHasEditableKeys()
+    {
+        var r = await Arrange();
+        var id = await Submitted(r);
+
+        var current = await Current(_admin, id);
+        current.GetProperty("titleSnapshot").GetString().Should().Be("單據");
+        current.GetProperty("stages")[0].GetProperty("editableFieldKeys").GetArrayLength().Should().Be(0);
+
+        var pending = await JsonOf(await _admin.GetAsync($"{Base}/approval-tasks?box=submitted&status=pending"));
+        pending.GetProperty("totalCount").GetInt32().Should().Be(1);
+        var rejected = await JsonOf(await _admin.GetAsync($"{Base}/approval-tasks?box=submitted&status=rejected"));
+        rejected.GetProperty("totalCount").GetInt32().Should().Be(0);
+        var bad = await _admin.GetAsync($"{Base}/approval-tasks?box=submitted&status=x");
+        bad.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+    }
 }

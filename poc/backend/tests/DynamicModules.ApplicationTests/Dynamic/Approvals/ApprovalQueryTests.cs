@@ -337,4 +337,134 @@ public class ApprovalQueryTests : ApprovalTestBase
         (await Inbox("gm", "todo")).Items.Should().BeEmpty();
         (await Inbox("mgrA", "todo")).Items.Should().ContainSingle().Which.InstanceId.Should().Be(id);
     }
+
+    // ───────── a4b1：可編輯欄位、標題快照、狀態篩選 ─────────
+
+    /// <summary>草稿 → 已確認 需簽核：第 1 關採購主管群組、第 2 關財務群組（可編輯交期）；已確認 → 已取消 也需簽核（財務單關，不可編輯：定義約束不允許鎖定起點的流程有可編輯欄位）。</summary>
+    private async Task<PurchaseRig> EditableRig()
+    {
+        var r = await BuildPurchase();
+        await SeedFlow(r, "po-a", r.Confirmed, 1, Def(null, Stage("lead", Group(PurchaseLeadGroup)), Stage("fin", Group(FinanceGroup), editable: [r.DueDate])));
+        await SeedFlow(r, "po-x", r.Cancelled, 1, Def(null, Stage("fin", Group(FinanceGroup))));
+        (await SaveWorkflow(r, [Needs(r.Draft, r.Confirmed), Plain(r.Confirmed, r.Partial), Needs(r.Confirmed, r.Cancelled)])).IsSuccess.Should().BeTrue();
+        await GrantEveryone(r.Module);
+        return r;
+    }
+
+    private ApprovalStageView StageOf(RecordApprovalResponse view, string code) => view.Current!.Stages.Single(s => s.StageCode == code);
+
+    [Fact]
+    public async Task RecordApproval_ActorOnEditableStage_ListsEditableFieldKeys()
+    {
+        var r = await EditableRig();
+        var id = await SubmitAs(r, "buyer1", 1000);
+        await Approve(id, "buyer2");
+        var po = Inst(id).RecordId;
+
+        var view = await RecordApproval(po, "fin1");
+
+        StageOf(view, "fin").EditableFieldKeys.Should().Equal($"f_{r.DueDate}");
+        StageOf(view, "lead").EditableFieldKeys.Should().BeEmpty();   // 已完成的關卡
+    }
+
+    [Fact]
+    public async Task RecordApproval_NonActor_EditableFieldKeysEmpty()
+    {
+        var r = await EditableRig();
+        var id = await SubmitAs(r, "buyer1", 1000);
+        await Approve(id, "buyer2");
+        var po = Inst(id).RecordId;
+
+        (await RecordApproval(po, "buyer1")).Current!.Stages.Should().OnlyContain(s => s.EditableFieldKeys.Count == 0);   // 發起人
+        (await RecordApproval(po, "emp1")).Current!.Stages.Should().OnlyContain(s => s.EditableFieldKeys.Count == 0);   // 有 Read 的旁觀者
+    }
+
+    [Fact]
+    public async Task RecordApproval_StageNotYetActive_EditableFieldKeysEmpty()
+    {
+        var r = await EditableRig();
+        var id = await SubmitAs(r, "buyer1", 1000);   // 第 1 關進行中，財務關還沒開始
+
+        (await RecordApproval(Inst(id).RecordId, "fin1")).Current!.Stages.Should().OnlyContain(s => s.EditableFieldKeys.Count == 0);
+    }
+
+    [Fact]
+    public async Task RecordApproval_EditableFieldHiddenForActor_NotListed()
+    {
+        var r = await EditableRig();
+        var id = await SubmitAs(r, "buyer1", 1000);
+        await Approve(id, "buyer2");
+        As("admin");
+        await HideFor(r.Module, r.DueDate, FinanceGroup);
+
+        var view = await RecordApproval(Inst(id).RecordId, "fin1");
+
+        StageOf(view, "fin").EditableFieldKeys.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task RecordApproval_FromLockedState_EditableFieldKeysEmpty()
+    {
+        var r = await EditableRig();
+        var first = await SubmitAs(r, "buyer1", 1000);
+        await Approve(first, "buyer2");
+        await Approve(first, "fin1");
+        var po = Inst(first).RecordId;
+        StateOf(r, po).Should().Be(r.Confirmed);
+        // 定義約束不允許存這種流程，直接改版本內容模擬舊資料或繞過驗證的流程
+        var version = Db.Context.Set<ApprovalFlowVersion>().Single(v => v.Id == Flow("po-x").CurrentVersionId);
+        version.Definition = Def(null, Stage("fin", Group(FinanceGroup), editable: [r.DueDate]));
+        await Db.Context.SaveChangesAsync();
+        Db.Context.ChangeTracker.Clear();
+        As("buyer1");
+        var voided = (await MustSubmit(po, r.Cancelled)).InstanceId!.Value;   // 作廢：from 是鎖定狀態
+
+        var view = await RecordApproval(po, "fin1");
+
+        view.Current!.Id.Should().Be(voided);
+        view.Current.Stages.Single().Tasks.Single(t => t.AssigneeUserId == "fin1").CanAct.Should().BeTrue();
+        view.Current.Stages.Single().EditableFieldKeys.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task RecordApproval_InstanceHasTitleSnapshot()
+    {
+        var r = await Scenario3();
+        As("buyer1");
+        var po = await NewPo(r, price: 150000, title: "採購甲");
+        var id = (await MustSubmit(po.Id, r.Confirmed)).InstanceId!.Value;
+
+        (await RecordApproval(po.Id, "buyer1")).Current!.TitleSnapshot.Should().Be("採購甲").And.Be(Inst(id).TitleSnapshot);
+    }
+
+    [Fact]
+    public async Task Inbox_StatusFilter_Rejected_OnlyRejectedInstances()
+    {
+        var r = await Scenario3();
+        var rejected = await SubmitAs(r, "buyer1", 50000);
+        var pending = await SubmitAs(r, "buyer1", 50000);
+        As("buyer2");
+        var task = TasksOf(rejected).Single(t => t.AssigneeUserId == "buyer2" && t.Status == ApprovalTaskStatus.Open);
+        (await Send(new RejectTaskRequest(task.Id, Inst(rejected).RowVersion, "請補資料", RejectTaskHandler.ToInitiator))).IsSuccess.Should().BeTrue();
+
+        As("buyer1");
+        var res = await Send(new GetApprovalTasksRequest("submitted", null, null, null, 1, 20, "rejected"));
+        res.IsSuccess.Should().BeTrue(Dump(res));
+        var page = (PagedResponse<ApprovalInboxItem>)res.Data!;
+        page.Items.Select(i => i.InstanceId).Should().Equal(rejected);
+        page.TotalCount.Should().Be(1);
+        var all = await Inbox("buyer1", "submitted");
+        all.Items.Select(i => i.InstanceId).Should().BeEquivalentTo([rejected, pending]);
+    }
+
+    [Fact]
+    public async Task Inbox_StatusInvalid_Returns400()
+    {
+        await Scenario3();
+        As("buyer1");
+
+        var res = await Send(new GetApprovalTasksRequest("submitted", null, null, null, 1, 20, "x"));
+
+        res.Errors.Should().ContainKey("status");
+    }
 }
