@@ -50,7 +50,7 @@ const blockLocks = (fields: SchemaField[]) => [...new Set(fields.map((f) => f.lo
               </span>
             </span>
           </q-item-section>
-          <q-item-section :data-testid="f.key">
+          <q-item-section :data-testid="f.key" style="overflow-wrap: anywhere; min-width: 0">
             <template v-if="refOf(f)">
               <router-link v-if="refOf(f)!.to" :to="refOf(f)!.to!">{{ refOf(f)!.text }}</router-link>
               <template v-else>{{ refOf(f)!.text }}</template>
