@@ -22,7 +22,7 @@
 | p1d | 附件政策：A20（含部署設定檔當出廠值） | 已上線 | [政策設定](superpowers/specs/2026-11-11-policy-settings-design.md) §9 |
 | O1 | 維運地基：結構化 log 與 request id、health live／ready、版本端點、前端錯誤收集、背景排程器（o1a、o1b、o1c）；任務「即將到期」提醒改為到期前 N 天內補一次、同一任務只補一次（使用者 2026-11-12 裁決，排進 o1b） | 未開始 | [維運與觀測](superpowers/specs/2026-11-11-ops-observability-design.md) §9、§10 |
 | un1 | 列表、匯出、篩選的使用者欄位顯示姓名（小段穿插，使用者 11-11 裁決；位置是主控判斷，2026-11-12 排定） | 未開始 | — |
-| pg0 | PostgreSQL provider 抽象＋可在 PostgreSQL 跑的測試環境；驗收要含 O1 的排程器（兩實例搶同一工作）與通知維護（兩條路徑並行不重複）在 PostgreSQL 上通過 | 未開始（設計待寫） | — |
+| pg0 | PostgreSQL provider 抽象＋可在 PostgreSQL 跑的測試環境；驗收要含 O1 的排程器（兩實例搶同一工作）與通知維護（兩條路徑並行不重複）在 PostgreSQL 上通過；分 pg0a–pg0d | 未開始 | [PostgreSQL provider](superpowers/specs/2026-11-12-postgres-provider-design.md) |
 | a2d | 簽核鎖定、定義守衛、附件；併入簽核類政策設定 | 未開始 | [簽核流程](superpowers/specs/2026-11-10-approval-workflow-design.md)、[政策設定](superpowers/specs/2026-11-11-policy-settings-design.md) §9 |
 | a3 | 轉交、加簽、代理、逾期提醒 | 未開始 | [簽核流程](superpowers/specs/2026-11-10-approval-workflow-design.md) |
 | a4a | 前端：簽核設計器 | 未開始 | [簽核流程](superpowers/specs/2026-11-10-approval-workflow-design.md) |

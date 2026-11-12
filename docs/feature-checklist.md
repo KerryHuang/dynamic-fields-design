@@ -86,7 +86,7 @@
 完成 0／共 7。設計見 ops-observability；順序見 [roadmap](roadmap.md)：p1 → O1 → pg0 → 簽核 a2d–a6 → O2 → p2、p3 → mcp1 → O3–O6（主序為使用者 11-11 裁決；p2、p3 位置與 O3–O6 的先後使用者 11-12 確認）。設計的 C1–C7 已由使用者 2026-11-12 全部裁決（ops-observability §16）。
 
 - [ ] 📋 維運地基（段 O1） — 結構化 log 與 request id、health live／ready、版本端點、前端錯誤收集、背景排程器（任務提醒不再依賴使用者上線）；「即將到期」提醒改為到期前 N 天內任一天打開通知或排程器跑到就補一次、同一任務只補一次（使用者 11-12 裁決）
-- [ ] 📋 PostgreSQL provider 抽象與測試環境（段 pg0） — 正式版資料庫是 PostgreSQL（使用者 11-11 說明）；provider 抽象＋可在 PostgreSQL 跑的測試環境，之後的功能兩種資料庫都驗；驗收含 O1 排程器與通知維護在 PostgreSQL 上通過；設計待寫 ⛔ 等：O1
+- [ ] 📋 PostgreSQL provider 抽象與測試環境（段 pg0） — 正式版資料庫是 PostgreSQL（使用者 11-11 說明）；provider 抽象＋可在 PostgreSQL 跑的測試環境，之後的功能兩種資料庫都驗；驗收含 O1 排程器與通知維護在 PostgreSQL 上通過；設計見 [PostgreSQL provider](superpowers/specs/2026-11-12-postgres-provider-design.md)（分 pg0a–pg0d） ⛔ 等：O1
 - [ ] 📋 事件中心（段 O2） — 健康檢查規則與紀錄、維運事件、稽核表（與 MCP 共用）、站內與 SMTP 告警、監控頁、客戶規則失控自動暫停與一鍵恢復 ⛔ 等：O1、pg0
 - [ ] 📋 廠商維運中心與外部探測（段 O3） — 獨立於產品的 Cloudflare Workers＋D1；雲端版全量事件與每分鐘探測，地端版選擇加入的匿名錯誤回報與新版本通知 ⛔ 等：O1
 - [ ] 📋 維運 agent 唯讀診斷（段 O4） — L1；Mac 開機領工、claude -p 唯讀診斷，經維運中心轉送呼叫產品 MCP 唯讀工具 ⛔ 等：O3、mcp1a
