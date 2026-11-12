@@ -17,8 +17,9 @@ namespace DynamicModules.Application.Dynamic.ApprovalService;
 /// 同一請求內的連鎖轉移（一般 → 需簽核）也擋；豁免比對寫入後的值，不只看記錄與鍵。
 /// 鎖定（兩道之第二道；第一道在 <c>UpdateRecordHandler</c>，鎖定記錄的計算欄位保留舊值）：以「請求開始前」的狀態判斷記錄是否在簽核鎖定狀態，
 /// 鎖定欄位被改 → 400（鍵為欄位鍵）；計算欄位只放行靜默項目（彙總、參照重算）；明細列在表頭鎖定且明細一起鎖時，新增、刪除、改值 → 400。
-/// 這次請求把記錄轉出鎖定狀態（解鎖）時，只看 handler 的輸入（<see cref="IWriteJournal.InputSeqEnd"/> 之前的項目），
-/// 解鎖轉移上的事件效果放行，使用者或整合直接送來的值同次改鎖定欄位仍 400。
+/// 這次請求把記錄轉出鎖定狀態（解鎖）時，逐筆以 <c>max(InputSeqEnd, 第一個轉出鎖定狀態的項目 Seq)</c> 為界：界線（含）之前的變動
+/// （使用者輸入，或事件、整合在解鎖前或解鎖同一筆寫入裡做的）改鎖定欄位仍 400，界線之後由解鎖轉移觸發的事件效果放行；
+/// 表頭解鎖時明細的計算欄位照目前公式重算也放行；表頭本身被軟刪除時明細規則略過，跟著刪除規則走。
 /// 都通過時，簽核中記錄被允許的路徑（彙總、公式）改了值 → 替進行中實例寫一筆 content-changed（設計 §8.5「靜默更新留歷程」，不發通知）。
 /// </summary>
 public class ApprovalBackstopStage(
@@ -107,14 +108,57 @@ public class ApprovalBackstopStage(
 
     private static bool IsComputed(Field f) => f.Type is FieldType.Formula or FieldType.Rollup;
 
-    /// <summary>鎖定檢查（見類別說明）。簽核中的記錄已在前面處理，這裡跳過。</summary>
+    /// <summary>
+    /// 鎖定檢查（見類別說明）。簽核中的記錄已在前面處理，這裡跳過。
+    /// 解鎖界線逐筆算：<c>max(InputSeqEnd, 該筆第一個轉出鎖定狀態的項目 Seq)</c>。界線（含）之前的變動是使用者輸入，或事件、整合在解鎖前
+    /// 或解鎖同一筆寫入裡做的，鎖定欄位被改一律 400；界線之後是解鎖轉移觸發的事件效果，放行。
+    /// </summary>
     private async Task<ServiceResult?> RejectLockedAsync(
         IReadOnlyList<JournalEntry> entries, Dictionary<long, List<long>> headersOf, IReadOnlySet<long> inApproval,
         Func<long, Task<Module?>> moduleOf, CancellationToken ct)
     {
-        // 記錄在 upTo（含）之前的日誌項目合併；upTo 為 null 取全部
-        JournalEntry? Effective(long recordId, int? upTo) =>
-            JournalView.Merge(journal.Entries.Where(x => x.RecordId == recordId && (upTo is null || x.Seq <= upTo))).FirstOrDefault();
+        var raw = journal.Entries;
+
+        // 記錄在 upTo（含）之前的日誌項目合併
+        JournalEntry? Effective(long recordId, int upTo) =>
+            JournalView.Merge(raw.Where(x => x.RecordId == recordId && x.Seq <= upTo)).FirstOrDefault();
+
+        // 這筆記錄第一個把它轉出鎖定狀態的項目 Seq → 解鎖界線；沒轉出回 null
+        int? UnlockBoundary(Workflow wf, ApprovalLock locked, long recordId)
+        {
+            var u = raw.FirstOrDefault(x => x.RecordId == recordId && x.Kind == JournalKind.Modified && x.BeforeValues is not null
+                && locked.IsLockedState(wf.StateOf(RecordValueProcessor.Parse(x.BeforeValues)))
+                && !locked.IsLockedState(wf.StateOf(RecordValueProcessor.Parse(x.AfterValues))));
+            return u is null ? null : Math.Max(journal.InputSeqEnd, u.Seq);
+        }
+
+        var parents = new Dictionary<string, (Module Module, Workflow Wf, ApprovalLock Lock)?>();
+        async Task<(Module Module, Workflow Wf, ApprovalLock Lock)?> ParentOf(string key)
+        {
+            if (parents.TryGetValue(key, out var cached)) return cached;
+            (Module, Workflow, ApprovalLock)? result = null;
+            if (await modules.GetByKeyAsync(key, includeChildren: false, ct) is { } stub && await moduleOf(stub.Id) is { Workflow: { } pwf } parent)
+                result = (parent, pwf, await lockService.ForModuleAsync(parent, null, ct));
+            return parents[key] = result;
+        }
+
+        // 表頭的狀態（以請求開始前為準）：(是否鎖定, 解鎖界線)；表頭不存在或不在鎖定狀態回 null
+        var headerStates = new Dictionary<long, (int? Boundary, bool Deleted)?>();
+        async Task<(int? Boundary, bool Deleted)?> HeaderState(long headerId, Module parent, Workflow pwf, ApprovalLock parentLock)
+        {
+            if (headerStates.TryGetValue(headerId, out var cached)) return cached;
+            (int?, bool)? result = null;
+            var header = entries.FirstOrDefault(x => x.RecordId == headerId);
+            if (header?.Kind != JournalKind.Added)
+            {
+                var (hb, ha) = header is not null ? (header.BeforeValues, header.AfterValues)
+                    : ((await records.ListByIdsAsync(parent.Id, [headerId], ct)).FirstOrDefault()?.ValuesJson is { } v ? (v, v) : (null, null));
+                if (hb is not null && ha is not null && parentLock.IsLockedState(pwf.StateOf(RecordValueProcessor.Parse(hb))))
+                    result = (parentLock.IsLockedState(pwf.StateOf(RecordValueProcessor.Parse(ha))) ? null : UnlockBoundary(pwf, parentLock, headerId),
+                        header is { AfterDeleted: true, BeforeDeleted: false });
+            }
+            return headerStates[headerId] = result;
+        }
 
         foreach (var e in entries)
         {
@@ -127,26 +171,26 @@ public class ApprovalBackstopStage(
                 var before = RecordValueProcessor.Parse(e.BeforeValues);
                 if (locked.IsLockedState(wf.StateOf(before)))
                 {
-                    var unlocking = !locked.IsLockedState(wf.StateOf(RecordValueProcessor.Parse(e.AfterValues)));
+                    var boundary = locked.IsLockedState(wf.StateOf(RecordValueProcessor.Parse(e.AfterValues))) ? null : UnlockBoundary(wf, locked, e.RecordId);
                     var lockedFields = module.Blocks.SelectMany(b => b.Fields).Where(f => locked.FieldIds.Contains(f.Id)).OrderBy(f => f.Id).ToList();
 
-                    // 一般欄位：解鎖時只看 handler 的輸入，事件效果放行
-                    var view = unlocking ? Effective(e.RecordId, journal.InputSeqEnd) : e;
+                    // 一般欄位：解鎖時只看界線以前，之後的事件效果放行
+                    var view = boundary is { } upTo ? Effective(e.RecordId, upTo) : e;
                     if (view?.BeforeValues is not null)
                     {
                         var vb = RecordValueProcessor.Parse(view.BeforeValues);
                         var va = RecordValueProcessor.Parse(view.AfterValues);
                         foreach (var f in lockedFields.Where(f => !IsComputed(f)))
-                            if (Raw(vb, f.Key) != Raw(va, f.Key) && !context.IsExempt(e.RecordId, f.Key, Raw(va, f.Key)))
+                            if (Raw(vb, f.Key) != Raw(va, f.Key))   // 簽核自己的豁免只發給進行中實例的記錄，那些在前面已跳過
                                 return ServiceResult.Invalid(f.Key, ApprovalMessages.FieldLocked(f.LabelI18n));
                     }
 
                     // 計算欄位：解鎖後照目前公式重算所以放行；其餘只放行靜默項目（彙總、參照重算，§8.5）
-                    if (!unlocking)
-                        foreach (var raw in journal.Entries.Where(x => x.RecordId == e.RecordId && x.Kind == JournalKind.Modified && x.BeforeValues is not null && !x.Silent))
+                    if (boundary is null)
+                        foreach (var entry in raw.Where(x => x.RecordId == e.RecordId && x.Kind == JournalKind.Modified && x.BeforeValues is not null && !x.Silent))
                         {
-                            var rb = RecordValueProcessor.Parse(raw.BeforeValues!);
-                            var ra = RecordValueProcessor.Parse(raw.AfterValues);
+                            var rb = RecordValueProcessor.Parse(entry.BeforeValues!);
+                            var ra = RecordValueProcessor.Parse(entry.AfterValues);
                             foreach (var f in lockedFields.Where(IsComputed))
                                 if (Raw(rb, f.Key) != Raw(ra, f.Key))
                                     return ServiceResult.Invalid(f.Key, ApprovalMessages.FieldLocked(f.LabelI18n));
@@ -156,27 +200,30 @@ public class ApprovalBackstopStage(
 
             // 明細列：表頭在鎖定狀態而且明細一起鎖
             if (!headersOf.TryGetValue(e.RecordId, out var headers) || ModuleRelations.DetailFieldOf(module) is not { } parentField
-                || parentField.Config.RefTarget?.Key is not { } parentKey || await modules.GetByKeyAsync(parentKey, includeChildren: false, ct) is not { } parentStub
-                || await moduleOf(parentStub.Id) is not { Workflow: { } pwf } parent) continue;
-            var parentLock = await lockService.ForModuleAsync(parent, null, ct);
-            if (!parentLock.DetailRowsLocked) continue;
+                || parentField.Config.RefTarget?.Key is not { } parentKey || await ParentOf(parentKey) is not { } p
+                || !p.Lock.DetailRowsLocked) continue;
             foreach (var headerId in headers)
             {
-                var header = entries.FirstOrDefault(x => x.RecordId == headerId);
-                if (header?.Kind == JournalKind.Added) continue;
-                var (hb, ha) = header is not null ? (header.BeforeValues, header.AfterValues)
-                    : ((await records.ListByIdsAsync(parent.Id, [headerId], ct)).FirstOrDefault()?.ValuesJson is { } v ? (v, v) : (null, null));
-                if (hb is null || ha is null || !parentLock.IsLockedState(pwf.StateOf(RecordValueProcessor.Parse(hb)))) continue;
-                var unlocking = !parentLock.IsLockedState(pwf.StateOf(RecordValueProcessor.Parse(ha)));
-                var row = unlocking ? Effective(e.RecordId, journal.InputSeqEnd) : e;
+                // 表頭沒有鎖定、是新增的，或這次被刪除（明細跟著表頭的刪除規則走，§8.5）：不在這裡擋
+                if (await HeaderState(headerId, p.Module, p.Wf, p.Lock) is not { } hs || hs.Deleted) continue;
+                var boundary = hs.Boundary;
+                var row = boundary is { } upTo ? Effective(e.RecordId, upTo) : e;
                 if (row is null || row.Silent) continue;
-                var changed = row.Kind == JournalKind.Added || (row.AfterDeleted && !row.BeforeDeleted)
-                    || (row.BeforeValues is not null && !RecordValueProcessor.Parse(row.BeforeValues).Keys.Union(RecordValueProcessor.Parse(row.AfterValues).Keys)
-                        .All(k => Raw(RecordValueProcessor.Parse(row.BeforeValues), k) == Raw(RecordValueProcessor.Parse(row.AfterValues), k)));
-                if (changed) return ServiceResult.Invalid($"details.{module.Key}", ApprovalMessages.FieldLocked(module.NameI18n));
+                if (row.Kind == JournalKind.Added || (row.AfterDeleted && !row.BeforeDeleted)
+                    || (row.BeforeValues is not null && DetailValuesChanged(module, row, skipComputed: boundary is not null)))
+                    return ServiceResult.Invalid($"details.{module.Key}", ApprovalMessages.FieldLocked(module.NameI18n));
             }
         }
         return null;
+    }
+
+    /// <summary>明細列有欄位被改；<paramref name="skipComputed"/>（表頭這次解鎖）時計算欄位不算，解鎖後照目前公式重算。</summary>
+    private static bool DetailValuesChanged(Module module, JournalEntry row, bool skipComputed)
+    {
+        var skip = skipComputed ? module.Blocks.SelectMany(b => b.Fields).Where(IsComputed).Select(f => f.Key).ToHashSet() : [];
+        var before = RecordValueProcessor.Parse(row.BeforeValues!);
+        var after = RecordValueProcessor.Parse(row.AfterValues);
+        return before.Keys.Union(after.Keys).Any(k => !skip.Contains(k) && Raw(before, k) != Raw(after, k));
     }
 
     /// <summary>

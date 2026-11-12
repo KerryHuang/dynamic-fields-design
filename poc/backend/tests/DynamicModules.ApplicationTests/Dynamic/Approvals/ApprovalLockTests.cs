@@ -1,20 +1,17 @@
 using System.Text.Json;
 using DynamicModules.Application.Common;
-using DynamicModules.Application.Common.Security;
 using DynamicModules.Application.Dynamic.ApprovalService;
 using DynamicModules.Application.Dynamic.EventService;
-using DynamicModules.Application.Dynamic.ModuleService.Commands.ActivateModule;
+using DynamicModules.Application.Dynamic.RecordService;
 using DynamicModules.Application.Dynamic.RecordService.Commands.CreateRecord;
 using DynamicModules.Application.Dynamic.RecordService.Commands.DeleteRecord;
-using DynamicModules.Domain.ValueObjects;
-using DynamicModules.Application.Dynamic.RecordService;
 using DynamicModules.Application.Dynamic.RecordService.Commands.UpdateRecord;
 using DynamicModules.Application.Dynamic.RecordService.Data;
 using DynamicModules.Domain.Approvals;
 using DynamicModules.Domain.Entities.Dynamic;
 using DynamicModules.Domain.Repositories.Dynamic;
+using DynamicModules.Domain.ValueObjects;
 using FluentAssertions;
-using MediatR;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Record = DynamicModules.Domain.Entities.Dynamic.Record;
@@ -106,21 +103,33 @@ public class ApprovalLockTests : ApprovalTestBase
         Rec(po.Id).Values[$"f_{_r.Memo}"]!.Value.GetString().Should().Be("x");
     }
 
-    [Fact]
-    public async Task Locked_SystemUpdatesMemo_TotalKept()
+    /// <summary>供應商加一個指回單據的參照並建一筆指向 po 的供應商；單據的供應商也指向它（兩跳事件鏈的中繼站）。</summary>
+    private async Task<(long VendorId, long VendorTitle, long BackRef)> VendorOf(long poId)
     {
-        // 事件、整合的更新經 EffectWriter 走同一個 UpdateRecordHandler，這裡直接以系統身分呼叫它
+        var back = (await MustAdd(_r.Vendor, FieldType.Reference, RefTo(_r.Module), "單據")).Id;
+        await GrantEveryone(_r.Vendor);
+        var title = (await Detail(_r.Vendor)).TitleFieldId!.Value;
+        var created = await Send(new CreateRecordRequest(_r.Vendor, V((title, "v1"), (back, poId))));
+        created.IsCreated.Should().BeTrue(Dump(created));
+        var id = ((DynamicRecordResponse)created.Data!).Id;
+        await SetRaw(poId, _r.Supplier, id);
+        return (id, title, back);
+    }
+
+    [Fact]
+    public async Task Locked_EventUpdatesMemo_TotalKept()
+    {
+        // 真的事件路徑：供應商更新 → 事件經指回單據的參照改單據備註（單據的總額不彙總到供應商，不會被靜默重算蓋掉）
         var po = await ApprovedPo();
+        var (vendorId, title, back) = await VendorOf(po.Id);
         await SetRaw(po.Id, _r.NetTotal, 12345);
+        (await Send(new CreateEventRequest(Event("vendor-memo", _r.Vendor, new EventTrigger("update", null, null, null),
+            UpdateVia("m", _r.Module, back, Const(_r.Memo, "\"ev\"")))))).IsCreated.Should().BeTrue();
 
-        using var scope = NewScope();
-        var sp = scope.ServiceProvider;
-        using (sp.GetRequiredService<ISystemIdentity>().Enter(null))
-            (await sp.GetRequiredService<IRequestHandler<UpdateRecordRequest, ServiceResult>>().Handle(new UpdateRecordRequest(po.Id,
-                V((_r.Memo, "sys")), Rec(po.Id).Row.RowVersion, null, new HashSet<string> { $"f_{_r.Memo}" }), CancellationToken.None))
-                .IsSuccess.Should().BeTrue();
-        await sp.GetRequiredService<IUnitOfWork>().CommitAsync(CancellationToken.None);
+        var res = await Send(new UpdateRecordRequest(vendorId, V((title, "v2")), Rec(vendorId).Row.RowVersion));
 
+        res.IsSuccess.Should().BeTrue(Dump(res));
+        Rec(po.Id).Values[$"f_{_r.Memo}"]!.Value.GetString().Should().Be("ev");
         Num(po.Id, _r.NetTotal).Should().Be(12345);
     }
 
@@ -217,50 +226,53 @@ public class ApprovalLockTests : ApprovalTestBase
         StateOf(_r, po.Id).Should().Be(_r.Confirmed);
     }
 
-    /// <summary>
-    /// 在同一個 scope 依序做：使用者把記錄轉回草稿 → 輸入界線 → 事件效果（系統身分）改 Discount → 跑後盾。
-    /// 與正式流程相同的順序（RecordEffectsBehavior 在 handler 之後、階段之前標記界線）。
-    /// </summary>
-    private async Task<ServiceResult?> UnlockThenSystemWrite(long poId, bool userAlsoChangesDiscount = false)
-    {
-        using var scope = NewScope();
-        var sp = scope.ServiceProvider;
-        var update = sp.GetRequiredService<IRequestHandler<UpdateRecordRequest, ServiceResult>>();
-        var values = new Dictionary<string, JsonElement?> { [Status] = O(_r.Draft) };
-        if (userAlsoChangesDiscount) values[$"f_{_r.Discount}"] = JsonSerializer.SerializeToElement(9);
-        (await update.Handle(new UpdateRecordRequest(poId, values, Rec(poId).Row.RowVersion, null), CancellationToken.None)).IsSuccess.Should().BeTrue();
-        await sp.GetRequiredService<IUnitOfWork>().CommitAsync(CancellationToken.None);
-        sp.GetRequiredService<IWriteJournal>().MarkInputEnd();
-        var row = await sp.GetRequiredService<IRecordRepository>().GetAsync(poId, CancellationToken.None);
-        using (sp.GetRequiredService<ISystemIdentity>().Enter(null))
-            (await update.Handle(new UpdateRecordRequest(poId, V((_r.Discount, 0)), row!.RowVersion, null,
-                new HashSet<string> { $"f_{_r.Discount}" }), CancellationToken.None)).IsSuccess.Should().BeTrue();
-        await sp.GetRequiredService<IUnitOfWork>().CommitAsync(CancellationToken.None);
-        return await sp.GetRequiredService<ApprovalBackstopStage>().RunAsync(CancellationToken.None);
-    }
+    private string DraftValue => $"\"opt_{_r.Draft}\"";
 
     [Fact]
-    public async Task Locked_UnlockTransitionEventClearsLockedField_Succeeds()
+    public async Task Locked_EventUnlocksAndChangesLockedField_Returns400()
     {
         var po = await ApprovedPo();
-        await SetRaw(po.Id, _r.Discount, 100);
+        (await Send(new CreateEventRequest(Event("po-unlock-touch", _r.Extra, new EventTrigger("create", null, null, null),
+            UpdateVia("d", _r.Module, _r.ExtraRef, Const(_r.Status, DraftValue), Const(_r.Discount, "7")))))).IsCreated.Should().BeTrue();
 
-        (await UnlockThenSystemWrite(po.Id)).Should().BeNull();
-        StateOf(_r, po.Id).Should().Be(_r.Draft);
+        var res = await NewExtra(po.Id, 100);
+
+        ShouldRejectField(res, _r.Discount);
+        StateOf(_r, po.Id).Should().Be(_r.Confirmed);
         Num(po.Id, _r.Discount).Should().Be(0);
     }
 
     [Fact]
-    public async Task Locked_UnlockTransition_UserAlsoChangedLockedField_Returns400()
+    public async Task Locked_EventChangesLockedFieldThenLaterUnlock_Returns400()
     {
-        // 使用者（或整合）直接送來的值同次改鎖定欄位，即使後面的事件把它改回去，輸入界線之前的變動仍要擋
         var po = await ApprovedPo();
+        (await Send(new CreateEventRequest(Event("po-touch-then-unlock", _r.Extra, new EventTrigger("create", null, null, null),
+            UpdateVia("a", _r.Module, _r.ExtraRef, Const(_r.Discount, "7")),
+            UpdateVia("b", _r.Module, _r.ExtraRef, Const(_r.Status, DraftValue)))))).IsCreated.Should().BeTrue();
+
+        var res = await NewExtra(po.Id, 100);
+
+        ShouldRejectField(res, _r.Discount);
+        StateOf(_r, po.Id).Should().Be(_r.Confirmed);
+    }
+
+    [Fact]
+    public async Task Locked_UnlockTransitionEventChain_ClearsLockedField_Succeeds()
+    {
+        // 轉回草稿 → 事件 1 改供應商 → 事件 2（供應商更新）經指回單據的參照把折扣清掉：兩跳都在解鎖那一筆之後，放行
+        var po = await ApprovedPo();
+        var (_, title, back) = await VendorOf(po.Id);
         await SetRaw(po.Id, _r.Discount, 100);
+        (await Send(new CreateEventRequest(Event("po-back", _r.Module, OnTransition(_r.Draft),
+            UpdateVia("v", _r.Vendor, _r.Supplier, Const(title, "\"changed\"")))))).IsCreated.Should().BeTrue();
+        (await Send(new CreateEventRequest(Event("vendor-clears", _r.Vendor, new EventTrigger("update", null, null, null),
+            UpdateVia("p", _r.Module, back, Const(_r.Discount, "0")))))).IsCreated.Should().BeTrue();
 
-        var res = await UnlockThenSystemWrite(po.Id, userAlsoChangesDiscount: true);
+        var res = await Put(po.Id, new() { [Status] = O(_r.Draft) });
 
-        res.Should().NotBeNull();
-        res!.Errors.Should().ContainKey($"f_{_r.Discount}");
+        res.IsSuccess.Should().BeTrue(Dump(res));
+        StateOf(_r, po.Id).Should().Be(_r.Draft);
+        Num(po.Id, _r.Discount).Should().Be(0);
     }
 
     [Fact]
@@ -372,7 +384,7 @@ public class ApprovalLockTests : ApprovalTestBase
     }
 
     [Fact]
-    public async Task Locked_ApprovalEditableFieldOnOwnInstance_StillExempt()
+    public async Task DraftApproval_WithEditableField_NotAffectedByLock()
     {
         await Rig();
         As("buyer1");
@@ -386,6 +398,89 @@ public class ApprovalLockTests : ApprovalTestBase
         res.IsSuccess.Should().BeTrue(Dump(res));
         StateOf(_r, po.Id).Should().Be(_r.Confirmed);
         Rec(po.Id).Values[$"f_{_r.DueDate}"]!.Value.GetString().Should().Be("2026-12-01");
+    }
+
+    [Fact]
+    public async Task Locked_TransitionToPartialAndChangeDiscount_Returns400()
+    {
+        var po = await ApprovedPo();
+
+        var res = await Put(po.Id, new() { [Status] = O(_r.Partial), [$"f_{_r.Discount}"] = JsonSerializer.SerializeToElement(50) });
+
+        ShouldRejectField(res, _r.Discount);
+        StateOf(_r, po.Id).Should().Be(_r.Confirmed);
+    }
+
+    [Fact]
+    public async Task Locked_ChangeDetailQty_Returns400()
+    {
+        var po = await ApprovedPo();
+        var line = LineOf(po.Id);
+
+        var res = await Put(po.Id, [], new() { [_r.Line] = [new DetailRowInput(line.Id, V((_r.LineQty, 9)), line.RowVersion)] });
+
+        res.IsSuccess.Should().BeFalse();
+        res.Errors.Should().ContainKey($"details.{_r.Line}");
+        Num(line.Id, _r.LineQty).Should().Be(1);
+    }
+
+    [Fact]
+    public async Task Locked_RemoveDetailLine_Returns400()
+    {
+        var po = await ApprovedPo();
+
+        var res = await Put(po.Id, V((_r.Memo, "x")), new() { [_r.Line] = [new DetailRowInput(LineOf(po.Id).Id, null, LineOf(po.Id).RowVersion, true)] });
+
+        res.IsSuccess.Should().BeFalse();
+        res.Errors.Should().ContainKey($"details.{_r.Line}");
+        Db.Context.Set<Record>().AsNoTracking().Count(x => x.ModuleId == Db.Context.Set<Module>().Single(m => m.Key == _r.Line).Id && !x.DeleteFlag).Should().Be(1);
+    }
+
+    [Fact]
+    public async Task Locked_UnlockWithUnchangedDetails_DetailFormulaDiffers_Succeeds()
+    {
+        var po = await ApprovedPo();
+        var line = LineOf(po.Id);
+        await SetRaw(line.Id, _r.LineSubtotal, 777);
+        line = LineOf(po.Id);
+
+        var res = await Put(po.Id, new() { [Status] = O(_r.Draft) },
+            new() { [_r.Line] = [new DetailRowInput(line.Id, new Dictionary<string, JsonElement?>(), line.RowVersion)] });
+
+        res.IsSuccess.Should().BeTrue(Dump(res));
+        StateOf(_r, po.Id).Should().Be(_r.Draft);
+        Num(LineOf(po.Id).Id, _r.LineSubtotal).Should().Be(1000);
+    }
+
+    [Fact]
+    public async Task Locked_UnlockAndAddDetailLine_SameRequest_Returns400()
+    {
+        var po = await ApprovedPo();
+
+        var res = await Put(po.Id, new() { [Status] = O(_r.Draft) }, new() { [_r.Line] = [NewLine()] });
+
+        res.IsSuccess.Should().BeFalse();
+        res.Errors.Should().ContainKey($"details.{_r.Line}");
+        StateOf(_r, po.Id).Should().Be(_r.Confirmed);
+    }
+
+    [Fact]
+    public async Task Locked_DeleteApprovedPo_WithLockedDetails_FollowsDeleteRule()
+    {
+        var po = await ApprovedPo();
+
+        var res = await Send(new DeleteRecordRequest(po.Id, Rec(po.Id).Row.RowVersion));
+
+        res.IsSuccess.Should().BeTrue(Dump(res));
+        Rec(po.Id).Row.DeleteFlag.Should().BeTrue();
+        LineOfDeleted(po.Id).DeleteFlag.Should().BeTrue();
+    }
+
+    private Record LineOfDeleted(long poId)
+    {
+        var lineModule = Db.Context.Set<Module>().AsNoTracking().Single(m => m.Key == _r.Line).Id;
+        return Db.Context.Set<Record>().AsNoTracking().Where(x => x.ModuleId == lineModule).AsEnumerable()
+            .Single(x => Rec(x.Id).Values.TryGetValue($"f_{_r.LineHead}", out var h) && h is { } e && e.GetInt64() == poId);
     }
 
     [Fact]

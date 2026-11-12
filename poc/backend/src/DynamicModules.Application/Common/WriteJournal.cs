@@ -21,7 +21,7 @@ public interface IWriteJournal
 
     /// <summary>
     /// 「輸入界線」：Seq 小於等於它的項目是這次請求的 handler 寫入（使用者輸入，含整合、匯入的直接寫入），之後的是事件效果。
-    /// 由 <c>RecordEffectsBehavior</c> 在跑寫入後階段前呼叫 <see cref="MarkInputEnd"/> 設定；簽核鎖定用它放行解鎖轉移上的事件（設計 §9.3）。
+    /// 由 <c>RecordEffectsBehavior</c> 在跑寫入後階段前呼叫 <see cref="MarkInputEnd"/> 設定；簽核鎖定以它與「第一個轉出鎖定狀態的項目」取較大者當解鎖界線（設計 §9.3）。
     /// </summary>
     int InputSeqEnd { get; }
 
