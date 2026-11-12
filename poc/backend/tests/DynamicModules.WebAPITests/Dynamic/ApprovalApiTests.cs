@@ -1,7 +1,10 @@
 using System.Net;
 using System.Net.Http.Json;
 using System.Text.Json;
+using DynamicModules.Domain.Data;
+using DynamicModules.Domain.Entities.Dynamic;
 using FluentAssertions;
+using Microsoft.Extensions.DependencyInjection;
 using static DynamicModules.WebAPITests.Dynamic.ApiTestKit;
 
 namespace DynamicModules.WebAPITests.Dynamic;
@@ -275,5 +278,34 @@ public class ApprovalApiTests : IDisposable
         lck.GetProperty("fieldKeys").EnumerateArray().Select(e => e.GetString()).Should().Contain(r.Amount);
         lck.GetProperty("detailRowsLocked").ValueKind.Should().BeOneOf(JsonValueKind.True, JsonValueKind.False);
         record.GetProperty("approvalGrant").GetBoolean().Should().BeFalse();
+    }
+
+    [Fact]
+    [Trait("Category", "Postgres")]
+    public async Task GetSchema_GrantPath_Returns200WithDifferentETag()
+    {
+        var r = await Arrange();
+        var id = await Submitted(r);
+        var sales = _app.AsUser("sales01");
+        var withRead = await sales.GetAsync($"{Base}/modules/{r.Module}/schema");
+        withRead.StatusCode.Should().Be(HttpStatusCode.OK);
+        var readTag = withRead.Headers.ETag!.ToString();
+        RevokeBusinessGroups(r.Module);
+
+        (await sales.GetAsync($"{Base}/modules/{r.Module}/schema")).StatusCode.Should().Be(HttpStatusCode.Forbidden);
+        var grant = await sales.GetAsync($"{Base}/modules/{r.Module}/schema?recordId={id}");
+
+        grant.StatusCode.Should().Be(HttpStatusCode.OK, await grant.Content.ReadAsStringAsync());
+        grant.Headers.ETag!.ToString().Should().NotBe(readTag);
+        (await JsonOf(grant)).GetProperty("permissions").GetProperty("edit").GetBoolean().Should().BeFalse();
+    }
+
+    private void RevokeBusinessGroups(string moduleKey)
+    {
+        using var scope = _app.Services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<DynamicDbContext>();
+        var code = db.Set<Module>().Single(m => m.Key == moduleKey).ProgramCode;
+        db.Set<GroupProgramPrivilege>().RemoveRange(db.Set<GroupProgramPrivilege>().Where(g => g.ProgramCode == code));
+        db.SaveChanges();
     }
 }

@@ -13,9 +13,9 @@ namespace DynamicModules.WebAPI.Controllers.v3.Dynamic;
 public class SchemaController(IMediator mediator) : ControllerBase
 {
     [HttpGet("modules/{key}/schema")]
-    public async Task<IActionResult> GetSchema(string key)
+    public async Task<IActionResult> GetSchema(string key, [FromQuery] long? recordId = null)
     {
-        var result = await mediator.Send(new GetModuleSchemaRequest(key));
+        var result = await mediator.Send(new GetModuleSchemaRequest(key, recordId));
         if (result.Data is not ModuleSchemaResponse schema) return result.ToActionResult(this);
 
         var etag = SchemaETag.For(schema.Key, schema.ETagVersion, schema.PermHash);
