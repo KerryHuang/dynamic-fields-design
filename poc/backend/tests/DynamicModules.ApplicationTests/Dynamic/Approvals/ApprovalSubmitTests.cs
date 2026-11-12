@@ -143,6 +143,8 @@ public class ApprovalSubmitTests : ApprovalTestBase
         var task = TasksOf(id).Should().ContainSingle().Subject;
         (task.AssigneeUserId, task.Reason).Should().Be(("admin", ApprovalTaskReason.Fallback));
         ActionsOf(id).Should().Contain(x => x.Action == ApprovalActions.Fallback && x.Comment == ApprovalMessages.FallbackNote("purchase-lead"));
+        // 畫面依 kind 用使用者語系組文字；comment 是固定繁中，只留給稽核
+        ActionsOf(id).Single(x => x.Action == ApprovalActions.Fallback).DataJson.Should().Contain("\"kind\":\"fallback\"");
         Notices("admin", NotificationKinds.ApprovalPending).Should().Be(1);
     }
 

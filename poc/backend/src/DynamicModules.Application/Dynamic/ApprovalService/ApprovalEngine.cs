@@ -85,8 +85,9 @@ public sealed class ApprovalEngine(
         await uow.CommitAsync(ct);
         var created = await tasks.CreateAsync(inst, run, seats, ct);
         foreach (var seat in seats.Where(x => x.Reason == ApprovalTaskReason.Fallback && x.FallbackFor is not null))
+            // 畫面依 kind 用使用者語系組文字；comment 是固定繁中，只留給稽核
             Log(inst, ApprovalActions.Fallback, SystemActor, run.Id, comment: ApprovalMessages.FallbackNote(seat.FallbackFor!),
-                targets: [.. seat.UserIds]);
+                targets: [.. seat.UserIds], data: JsonSerializer.Serialize(new { kind = "fallback" }));
         inst.CurrentStageRunId = run.Id;
         await uow.CommitAsync(ct);
         await notifier.NotifyAsync(kind, inst, created.Select(t => t.AssigneeUserId), user.UserId, ct);
