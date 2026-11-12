@@ -23,7 +23,7 @@
 | a2d1 | 簽核鎖定寫入：鎖定狀態、鎖定欄位與明細的寫入守衛（只驗 SQLite，PostgreSQL 在 pg0 後補驗） | 已上線（2026-11-12，ef3c00ab） | [簽核流程](superpowers/specs/2026-11-10-approval-workflow-design.md)、[政策設定](superpowers/specs/2026-11-11-policy-settings-design.md) §9 |
 | a4b | 前端：送簽畫面與簽核中心 | 已上線（2026-11-12，6ac7ec80） | [簽核流程](superpowers/specs/2026-11-10-approval-workflow-design.md) |
 | a4c | 清單頁系統篩選「簽核中」（記錄清單查詢加簽核實例子查詢）；排在 pg0 合併之後，讓兩種資料庫一次驗證（使用者 11-12 裁決 U2） | 未開始 | [簽核流程](superpowers/specs/2026-11-10-approval-workflow-design.md) §13.4 |
-| a6 | CRM 設計案與簽核 Demo、文件 | 進行中：a6a–a6c 完成，待走查與合併 | [簽核流程](superpowers/specs/2026-11-10-approval-workflow-design.md) |
+| a6 | CRM 設計案與簽核 Demo、文件 | 已上線（2026-11-12，026620fd） | [簽核流程](superpowers/specs/2026-11-10-approval-workflow-design.md) |
 | a2d2–a2d7 | 附件、整批重算、定義守衛、鎖定資料守衛、簽核類政策設定；a2d1 上線後到 a2d2、a2d3 上線前，上傳附件不受鎖、設計者改公式的整批重算會改寫已核准單的值（只驗 SQLite，PostgreSQL 在 pg0 後補驗） | 未開始 | [簽核流程](superpowers/specs/2026-11-10-approval-workflow-design.md)、[政策設定](superpowers/specs/2026-11-11-policy-settings-design.md) §9 |
 | a4a | 前端：簽核設計器 | 未開始 | [簽核流程](superpowers/specs/2026-11-10-approval-workflow-design.md) |
 | a5 | 套件格式 8：簽核流程；接手 CRM 設計案流程：套件內建，刪 `DemoApprovals`；採購單金額門檻的 Demo 在這裡驗收 | 未開始 | [簽核流程](superpowers/specs/2026-11-10-approval-workflow-design.md) |
