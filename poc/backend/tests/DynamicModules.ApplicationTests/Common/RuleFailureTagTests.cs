@@ -44,6 +44,14 @@ public class RuleFailureTagTests
     }
 
     [Fact]
+    public void Read_FindsMarkOnInnerException()
+    {
+        var inner = new InvalidOperationException("x");
+        RuleFailureTag.Mark(inner, RuleFailureTag.Event, 5);
+        RuleFailureTag.Read(new AggregateException(new Exception("wrap", inner))).Should().Be(("event", 5L));
+    }
+
+    [Fact]
     public void Read_Unmarked_ReturnsNulls() =>
         RuleFailureTag.Read(new Exception("x")).Should().Be(((string?)null, (long?)null));
 }

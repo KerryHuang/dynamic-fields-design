@@ -27,6 +27,11 @@ public static class RuleFailureTag
         return false;
     }
 
-    public static (string? Kind, long? Id) Read(Exception e) =>
-        (e.Data[KindKey] as string, e.Data[IdKey] as long?);
+    /// <summary>讀標記；例外被包進別的例外時，沿 InnerException 往內找第一個有標記的。</summary>
+    public static (string? Kind, long? Id) Read(Exception e)
+    {
+        for (var cur = e; cur is not null; cur = cur.InnerException)
+            if (cur.Data[KindKey] is string kind) return (kind, cur.Data[IdKey] as long?);
+        return (null, null);
+    }
 }
