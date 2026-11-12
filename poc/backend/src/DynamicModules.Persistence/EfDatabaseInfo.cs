@@ -9,7 +9,6 @@ public sealed class EfDatabaseInfo(DynamicDbContext db) : IDatabaseInfo
     public string Provider => (db.Database.ProviderName ?? "unknown").Split('.').Last().ToLowerInvariant() switch
     {
         "sqlite" => "sqlite",
-        "npgsql" => "postgresql",
         var other => other,
     };
 

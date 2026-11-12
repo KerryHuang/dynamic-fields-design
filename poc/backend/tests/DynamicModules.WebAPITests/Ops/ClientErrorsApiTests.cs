@@ -56,6 +56,8 @@ public class ClientErrorsApiTests
         res.StatusCode.Should().Be(HttpStatusCode.NoContent);
         res.Headers.Contains("Set-Cookie").Should().BeFalse();
         Logged(app).Values["UserId"].Should().BeNull();
+        // log scope 的 userId 也必須是匿名，不能留著失效 cookie 的帳號（RequestScopeMiddleware 在 SessionMiddleware 之後）
+        Logged(app).Values.GetValueOrDefault("userId").Should().BeNull();
     }
 
     [Fact]
@@ -64,7 +66,9 @@ public class ClientErrorsApiTests
         using var app = new TestApp();
         var client = app.AsUser(null);
         app.ResetBodyCount();
-        var res = await client.PostAsJsonAsync(Url, Body(message: new string('z', 9 * 1024)));
+        // StringContent 一定帶 Content-Length，明確測 Content-Length 分支（chunked 分支留給 Kestrel 走查）
+        var json = System.Text.Json.JsonSerializer.Serialize(Body(message: new string('z', 9 * 1024)));
+        var res = await client.PostAsync(Url, new StringContent(json, System.Text.Encoding.UTF8, "application/json"));
         res.StatusCode.Should().Be(HttpStatusCode.RequestEntityTooLarge);
         app.BodyBytesRead.Should().BeLessThan(9000);
     }

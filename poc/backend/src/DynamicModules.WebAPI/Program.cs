@@ -142,8 +142,9 @@ app.UseMiddleware<RequestContextMiddleware>();
 if (trustForwardedHeaders) app.UseForwardedHeaders();
 app.UseExceptionHandler();
 app.UseAuthentication();
-app.UseMiddleware<RequestScopeMiddleware>();
 app.UseMiddleware<SessionMiddleware>();
+// 在 SessionMiddleware 之後：cookie 失效降成匿名時，log scope 的 userId 才不會是舊帳號
+app.UseMiddleware<RequestScopeMiddleware>();
 app.UseMiddleware<IdempotencyKeyMiddleware>();
 if (app.Environment.IsDevelopment())
 {

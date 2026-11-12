@@ -101,6 +101,42 @@ public class UnhandledExceptionTests
         Unhandled(app).Should().BeEmpty();
     }
 
+    [Fact]
+    public async Task Unhandled_AcceptXml_StillReturns500WithJsonBody()
+    {
+        using var app = new TestApp();
+        var client = Client(app, Boom);
+        client.DefaultRequestHeaders.Accept.ParseAdd("application/xml");
+        var res = await client.GetAsync($"{Base}/modules/zz");
+        res.StatusCode.Should().Be(HttpStatusCode.InternalServerError);
+        var root = JsonDocument.Parse(await res.Content.ReadAsStringAsync()).RootElement;
+        root.GetProperty("message").GetString().Should().Be("系統發生錯誤，請稍後再試");
+        root.GetProperty("traceId").GetString().Should().Be(res.Headers.GetValues("X-Request-Id").Single());
+        Unhandled(app).Should().ContainSingle();
+    }
+
+    [Fact]
+    public async Task Unhandled_LogsExactlyOneError_FrameworkHandlerLogSilenced()
+    {
+        using var app = new TestApp();
+        await Client(app, Boom).GetAsync($"{Base}/modules/zz");
+        // 5100 是結束行（5xx 記 Error），不算例外本身；框架的 ExceptionHandlerMiddleware 記錄由 appsettings 關掉
+        app.Logs.Records.Where(r => r.Level >= LogLevel.Error && r.EventId.Id != 5100).Should().ContainSingle()
+            .Which.EventId.Id.Should().Be(5000);
+        app.Logs.Records.Should().NotContain(r => r.Category.Contains("ExceptionHandlerMiddleware") && r.Level >= LogLevel.Error);
+    }
+
+    [Fact]
+    public async Task Handled409_503_413_LogNoError()
+    {
+        using var app = new OpsTestApp();
+        (await Client(app, _ => new DbUpdateConcurrencyException("race")).GetAsync($"{Base}/modules/zz")).StatusCode.Should().Be(HttpStatusCode.Conflict);
+        (await Client(app, _ => new DynamicModules.Application.Common.DatabaseBusyException("busy")).GetAsync($"{Base}/modules/zz"))
+            .StatusCode.Should().Be(HttpStatusCode.ServiceUnavailable);
+        (await app.AsUser().GetAsync($"{Base}/test-ops/bad-request")).StatusCode.Should().Be(HttpStatusCode.RequestEntityTooLarge);
+        app.Logs.Records.Should().NotContain(r => r.Level >= LogLevel.Error);
+    }
+
     private static (System.Diagnostics.Metrics.MeterListener Listener, List<string> Tags) ListenRuleFailures()
     {
         var tags = new List<string>();

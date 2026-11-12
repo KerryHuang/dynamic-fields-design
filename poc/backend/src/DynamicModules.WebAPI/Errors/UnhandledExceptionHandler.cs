@@ -16,15 +16,17 @@ namespace DynamicModules.WebAPI.Errors;
 public sealed class UnhandledExceptionHandler(ILogger<UnhandledExceptionHandler> logger, IProblemDetailsService problems) : IExceptionHandler
 {
     public static readonly EventId UnhandledEvent = new(5000, "UnhandledException");
+    public static readonly EventId FrameworkRejectedEvent = new(5002, "FrameworkRejected");
 
     public async ValueTask<bool> TryHandleAsync(HttpContext context, Exception exception, CancellationToken ct)
     {
-        // 使用者中止的請求不是錯誤
+        // 使用者中止的請求不是錯誤（.NET 8 的框架通常先處理掉，這裡只是防禦）
         if (exception is OperationCanceledException && context.RequestAborted.IsCancellationRequested) return true;
 
         if (exception is BadHttpRequestException bad)
         {
-            logger.LogInformation("請求被框架拒絕 {StatusCode}：{Reason}", bad.StatusCode, bad.GetType().Name);
+            // Message 是框架的固定文字（例如 Request body too large），不含輸入值
+            logger.LogInformation(FrameworkRejectedEvent, "請求被框架拒絕 {StatusCode}：{Reason}", bad.StatusCode, bad.Message);
             context.Response.StatusCode = bad.StatusCode;
             await WriteAsync(context, bad.StatusCode, null);
             return true;
@@ -49,6 +51,10 @@ public sealed class UnhandledExceptionHandler(ILogger<UnhandledExceptionHandler>
         var details = new ProblemDetails { Status = status };
         if (messageKey is not null)
             details.Extensions["message"] = MessageText.Get(context.RequestServices.GetService<ICurrentLocale>()?.Locale, messageKey);
-        await problems.WriteAsync(new ProblemDetailsContext { HttpContext = context, ProblemDetails = details });
+        // Accept 不含 JSON 時預設 writer 會不寫（WriteAsync 反而丟例外），改 TryWriteAsync 並自己補 JSON body
+        if (await problems.TryWriteAsync(new ProblemDetailsContext { HttpContext = context, ProblemDetails = details })) return;
+        details.Extensions["traceId"] = context.TraceIdentifier;
+        context.Response.ContentType = "application/problem+json";
+        await context.Response.WriteAsJsonAsync(details, options: null, contentType: "application/problem+json");
     }
 }
