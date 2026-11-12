@@ -9,7 +9,7 @@ using MediatR;
 
 namespace DynamicModules.Application.Dynamic.AppService.Queries;
 
-public record GetAppPackagesRequest : IRequest<ServiceResult>, IDesignerRequest
+public record GetAppPackagesRequest : IRequest<ServiceResult>, IDesignerRequest, ISystemAdminRequest
 {
     public PermissionAction RequiredDesignerAction => PermissionAction.Read;
 }
@@ -26,7 +26,7 @@ public class GetAppPackagesHandler(AppPackageSource packages, IAppRepository app
     }
 }
 
-public record GetAppPackageRequest(string Id) : IRequest<ServiceResult>, IDesignerRequest
+public record GetAppPackageRequest(string Id) : IRequest<ServiceResult>, IDesignerRequest, ISystemAdminRequest
 {
     public PermissionAction RequiredDesignerAction => PermissionAction.Read;
 }
@@ -42,7 +42,7 @@ public class GetAppPackageHandler(AppPackageSource packages, IAppRepository apps
     }
 }
 
-public record GetAppsRequest : IRequest<ServiceResult>, IDesignerRequest
+public record GetAppsRequest : IRequest<ServiceResult>, IDesignerRequest, ISystemAdminRequest
 {
     public PermissionAction RequiredDesignerAction => PermissionAction.Read;
 }
@@ -57,7 +57,7 @@ public class GetAppsHandler(IAppRepository apps, AppResponseBuilder builder) : I
     }
 }
 
-public record GetAppRequest(string Key) : IRequest<ServiceResult>, IDesignerRequest
+public record GetAppRequest(string Key) : IRequest<ServiceResult>, IDesignerRequest, ISystemAdminRequest
 {
     public PermissionAction RequiredDesignerAction => PermissionAction.Read;
 }
@@ -72,8 +72,8 @@ public class GetAppHandler(IAppRepository apps, AppResponseBuilder builder) : IR
     }
 }
 
-/// <summary>預覽：做開啟的所有前置檢查但不寫入。只要設計器 Read。</summary>
-public record PreviewOpenAppRequest(string PackageId, OpenAppBody Body) : IRequest<ServiceResult>, IDesignerRequest
+/// <summary>預覽：做開啟的所有前置檢查但不寫入。要系統管理員加設計器 Read。</summary>
+public record PreviewOpenAppRequest(string PackageId, OpenAppBody Body) : IRequest<ServiceResult>, IDesignerRequest, ISystemAdminRequest
 {
     public PermissionAction RequiredDesignerAction => PermissionAction.Read;
 }
@@ -91,7 +91,7 @@ public class PreviewOpenAppHandler(AppOpenPlanner planner) : IRequestHandler<Pre
 public record AppExportResult(ExportFile File, IReadOnlyList<string> Warnings);
 
 /// <summary>由目前的成員模組重新產生套件檔；成功時 Data 是 AppExportResult。</summary>
-public record ExportAppRequest(string Key) : IRequest<ServiceResult>, IDesignerRequest
+public record ExportAppRequest(string Key) : IRequest<ServiceResult>, IDesignerRequest, ISystemAdminRequest
 {
     public PermissionAction RequiredDesignerAction => PermissionAction.Read;
 }

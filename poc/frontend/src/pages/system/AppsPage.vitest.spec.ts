@@ -176,4 +176,23 @@ describe('AppsPage', () => {
     await click('app-reopen');
     expect(api.reopenApp).toHaveBeenCalledWith('c');
   });
+
+  it('shows the forbidden notice instead of the list when the API refuses a non-admin', async () => {
+    const err = Object.assign(new Error('forbidden'), { status: 403 });
+    api.getMe.mockResolvedValue({ isSystemAdmin: false, designer: { read: true, add: false, edit: false, delete: false } } as never);
+    api.getAppPackages.mockRejectedValue(err);
+    api.getApps.mockRejectedValue(err);
+    const i18n = createI18n({ legacy: false, locale: 'zh-TW', messages: { 'zh-TW': zhTW } });
+    const Host = { render: () => h(quasar.QLayout, null, () => h(quasar.QPageContainer, null, () => h(AppsPage))) };
+    mounted = mount(Host, {
+      attachTo: document.body,
+      global: {
+        plugins: [[quasar.Quasar, { components: quasar, directives: quasar, plugins: { Notify: quasar.Notify } }], i18n, createPinia(),
+          [VueQueryPlugin, { queryClient: new QueryClient({ defaultOptions: { queries: { retry: false } } }) }]],
+      },
+    });
+    await flushPromises();
+    expect(q('forbidden')).not.toBeNull();
+    expect(all('app-reopen')).toHaveLength(0);
+  });
 });

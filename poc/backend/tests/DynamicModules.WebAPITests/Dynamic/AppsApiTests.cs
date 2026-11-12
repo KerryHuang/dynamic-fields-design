@@ -110,6 +110,26 @@ public class AppsApiTests : IDisposable
     }
 
     [Fact]
+    public async Task Reads_RequireSystemAdmin_NotJustDesignerRead()
+    {
+        await ImportOk(AppTestPackages.Procure);
+        await OpenOk("procure-lite");
+        // 有設計器讀取、不是系統管理員
+        Db(db => { db.Set<UserProgramPrivilege>().Add(new UserProgramPrivilege { UserId = "planner01", ProgramCode = "DYN00000", CanRead = true }); db.SaveChanges(); return 0; });
+        var planner = _app.AsUser("planner01");
+
+        (await planner.GetAsync(Apps)).StatusCode.Should().Be(HttpStatusCode.Forbidden);
+        (await planner.GetAsync($"{Apps}/procure-lite")).StatusCode.Should().Be(HttpStatusCode.Forbidden);
+        (await planner.GetAsync($"{Apps}/packages")).StatusCode.Should().Be(HttpStatusCode.Forbidden);
+        (await planner.GetAsync($"{Apps}/packages/procure-lite")).StatusCode.Should().Be(HttpStatusCode.Forbidden);
+        (await planner.PostAsync($"{Apps}/packages/procure-lite/preview", null)).StatusCode.Should().Be(HttpStatusCode.Forbidden);
+        (await planner.GetAsync($"{Apps}/procure-lite/export")).StatusCode.Should().Be(HttpStatusCode.Forbidden);
+
+        (await _admin.GetAsync(Apps)).StatusCode.Should().Be(HttpStatusCode.OK);
+        (await _admin.GetAsync($"{Apps}/procure-lite/export")).StatusCode.Should().Be(HttpStatusCode.OK);
+    }
+
+    [Fact]
     public async Task Import_RejectsBadAndDuplicatePackages_AndCyclesInRequires()
     {
         (await Import("{ not json")).StatusCode.Should().Be(HttpStatusCode.BadRequest);
