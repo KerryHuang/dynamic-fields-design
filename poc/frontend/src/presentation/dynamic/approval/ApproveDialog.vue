@@ -26,7 +26,7 @@ const hasEditable = computed(() => keys.value.length > 0 && !!props.schema && !!
 
 const close = () => emit('update:modelValue', false);
 const action = useApprovalAction({
-  recordId: () => props.recordId, moduleKey: () => props.moduleKey, close, fieldKeys: () => keys.value,
+  recordId: () => props.recordId, moduleKey: () => props.moduleKey, close, fieldKeys: () => editable.value?.drawn ?? [],
   send: (idempotencyKey) => approve.mutateAsync({
     taskId: props.taskId, recordId: props.recordId, moduleKey: props.moduleKey, idempotencyKey,
     body: {

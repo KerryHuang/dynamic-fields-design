@@ -31,7 +31,7 @@ const inputOf = (label: string) => [...body().querySelectorAll<HTMLInputElement>
 const type = async (label: string, v: string) => { const i = inputOf(label); i.value = v; i.dispatchEvent(new Event('input')); await settle(); };
 const posts = () => calls.filter((c) => c.method === 'post');
 
-async function mountDialog(o: { keys?: string[]; reply?: unknown } = {}) {
+async function mountDialog(o: { keys?: string[]; reply?: unknown; schema?: ModuleSchema; record?: DynamicRecord } = {}) {
   calls = mockHttp((c) => {
     if (c.method === 'post') return o.reply ?? { outcome: 'advanced', instanceId: 7, instanceRowVersion: 'iv2' };
     if (c.url === '/policies/effective') return { values: {} };
@@ -40,7 +40,7 @@ async function mountDialog(o: { keys?: string[]; reply?: unknown } = {}) {
   const i18n = createI18n({ legacy: false, locale: 'zh-TW', messages: { 'zh-TW': zhTW } });
   const w = mount(ApproveDialog, {
     attachTo: document.body,
-    props: { modelValue: true, recordId: 9, moduleKey: 'po', taskId: 11, rowVersion: 'iv1', editableFieldKeys: o.keys ?? [], schema, record },
+    props: { modelValue: true, recordId: 9, moduleKey: 'po', taskId: 11, rowVersion: 'iv1', editableFieldKeys: o.keys ?? [], schema: o.schema ?? schema, record: o.record ?? record },
     global: { plugins: [[quasar.Quasar, { components: quasar, directives: quasar, plugins: { Notify: quasar.Notify } }], createPinia(), i18n, [VueQueryPlugin, { queryClient: new QueryClient() }]] },
   });
   await settle();
@@ -94,6 +94,47 @@ describe('ApproveDialog editable fields', () => {
     expect(inputOf('核定金額').closest('.q-field')!.textContent).toContain('金額太大');
     expect(q('action-error')!.textContent).toContain('別的問題');
     expect(q('action-error')!.textContent).not.toContain('金額太大');
+    w.unmount();
+  });
+
+  it('sends the parsed value, as the normal form does: text is trimmed', async () => {
+    const w = await mountDialog({ keys: ['f_2'] });
+    await type('核定金額', '  new  ');
+    q('approve-send')!.click();
+    await settle();
+    expect(bodyOf(posts()[0])).toEqual({ rowVersion: 'iv1', values: { f_2: 'new' } });
+    w.unmount();
+  });
+
+  it('a reference field shows its title, not the id', async () => {
+    const s = structuredClone(schema);
+    s.blocks[0].fields[1] = { ...field(2, '供應商'), type: 'reference', reference: { kind: 'module', key: 'sup', name: { 'zh-TW': '供應商' }, lightUrl: '/modules/sup/records/light' } };
+    const r = { ...record, values: { ...record.values, f_2: 1023 }, references: { f_2: { key: '1023', title: '虹光文具', state: 'ok' as const } } };
+    const w = await mountDialog({ keys: ['f_2'], schema: s, record: r });
+    expect(inputOf('供應商').value).toBe('虹光文具');
+    w.unmount();
+  });
+
+  it('an error on a key that is not drawn still reaches the top', async () => {
+    const w = await mountDialog({ keys: ['f_2', 'f_99'], reply: new HttpFail(400, { errors: { f_99: ['看不見的欄位'] } }) });
+    await type('核定金額', 'new');
+    q('approve-send')!.click();
+    await settle();
+    expect(q('action-error')!.textContent).toContain('看不見的欄位');
+    w.unmount();
+  });
+
+  it('a stale 409 keeps the edited values for the resend', async () => {
+    const w = await mountDialog({ keys: ['f_2'], reply: new HttpFail(409, { code: 'stale', message: 'stale' }) });
+    await type('核定金額', 'new');
+    q('approve-send')!.click();
+    await settle();
+    expect(q('action-error')!.textContent).toContain('重新載入');
+    expect(inputOf('核定金額').value).toBe('new');
+    await w.setProps({ rowVersion: 'iv2' });
+    q('approve-send')!.click();
+    await settle();
+    expect(bodyOf(posts()[1])).toEqual({ rowVersion: 'iv2', values: { f_2: 'new' } });
     w.unmount();
   });
 
