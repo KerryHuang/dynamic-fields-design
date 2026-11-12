@@ -77,16 +77,21 @@ public class RollupRecalc(
         }
     }
 
-    /// <summary>重算一個模組全部未刪除記錄的彙總（彙總欄位新增、修改、重新啟用時）。</summary>
-    public async Task RecalculateModuleAsync(Module parent, DateOnly today, CancellationToken ct)
+    /// <summary>重算一個模組全部未刪除記錄的彙總（彙總欄位新增、修改、重新啟用時）。回傳被跳過（已固定）的未刪除記錄數。</summary>
+    public async Task<int> RecalculateModuleAsync(Module parent, DateOnly today, CancellationToken ct)
     {
         await uow.CommitAsync(ct);
         var userIds = await modules.ListUserIdsAsync(ct);
         var sources = await SourcesOfAsync(parent, ct);
         var all = await records.ListAllByModuleAsync(parent.Id, ct);
         var frozen = await loader.LoadAsync(parent, all, ct);   // 已固定的記錄不隨定義變更重算（設計 §8.6、§10.4）
-        foreach (var record in all.Where(r => !r.DeleteFlag && !frozen.Contains(r)))
-            await RecomputeAsync(parent, record, sources, userIds, today, ct);
+        var preserved = 0;
+        foreach (var record in all.Where(r => !r.DeleteFlag))
+        {
+            if (frozen.Contains(record)) preserved++;
+            else await RecomputeAsync(parent, record, sources, userIds, today, ct);
+        }
+        return preserved;
     }
 
     /// <summary>source 的值整批變了（公式重算）：以它為來源的彙總所在模組全部重算。</summary>

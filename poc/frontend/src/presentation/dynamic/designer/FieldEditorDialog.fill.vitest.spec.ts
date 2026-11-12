@@ -44,7 +44,7 @@ describe('FieldEditorDialog fill', () => {
 
   it('keeps an existing fill when the field is saved again', async () => {
     const fill = { mode: 'lock' as const, map: [{ from: 31, to: 2 }] };
-    const spy = vi.spyOn(dynamicApi, 'updateField').mockResolvedValue(undefined);
+    const spy = vi.spyOn(dynamicApi, 'updateField').mockResolvedValue(undefined as never);
     const w = mountDialog({ ...ownFields[3]!, config: { ...ownFields[3]!.config, fill } });
     await flushPromises();
     expect(document.body.querySelector('[data-testid="fill-settings"]')).toBeTruthy();
@@ -64,7 +64,7 @@ describe('FieldEditorDialog fill', () => {
   });
 
   it('adds a mapping row and sends only complete rows; no rows means no fill', async () => {
-    const spy = vi.spyOn(dynamicApi, 'updateField').mockResolvedValue(undefined);
+    const spy = vi.spyOn(dynamicApi, 'updateField').mockResolvedValue(undefined as never);
     const w = mountDialog(ownFields[3]!);
     await flushPromises();
     save();

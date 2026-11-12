@@ -391,6 +391,8 @@ export interface DesignerField {
   sequence: number;
   status: 'Active' | 'Inactive';
   options: DesignerOption[];
+  /** Set by the server only when a formula/rollup save recalculated a whole module: how many frozen records kept their value. */
+  preservedRecordCount?: number | null;
 }
 
 export interface DesignerBlock {

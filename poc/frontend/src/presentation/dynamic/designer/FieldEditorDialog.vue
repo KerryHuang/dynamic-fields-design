@@ -308,18 +308,25 @@ const update = useDesignerMutation(
   () => props.moduleKey,
 );
 
+/** The server reports how many frozen (approved, in approval, posted) records kept their value; 0 or absent shows nothing. */
+function notifyPreserved(f?: DesignerField) {
+  const n = f?.preservedRecordCount;
+  if (n) $q.notify({ type: 'warning', message: t('designer.field.preservedRecords', { n }), timeout: 8000, multiLine: true });
+}
+
 async function submit() {
   if (!(await labelInput.value?.validate())) return;
   error.value = null;
   if (isEdit.value) {
     update.mutate(undefined, {
-      onSuccess: () => {
+      onSuccess: (f) => {
+        notifyPreserved(f);
         emit('update:modelValue', false);
       },
       onError,
     });
   }
-  else create.mutate(undefined, { onSuccess: (f) => emit('created', f), onError });
+  else create.mutate(undefined, { onSuccess: (f) => { notifyPreserved(f); emit('created', f); }, onError });
 }
 const saving = computed(() => create.isPending.value || update.isPending.value);
 </script>

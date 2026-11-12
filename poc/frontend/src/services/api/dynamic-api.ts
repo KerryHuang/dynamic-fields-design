@@ -203,7 +203,7 @@ export const dynamicApi = {
   addField: (key: string, body: { blockId: number; type: FieldType; label: I18nText; config: FieldConfig }) =>
     http.post<DesignerField>(`/modules/${key}/fields`, body).then(data),
   updateField: (id: number, body: { type: FieldType; label: I18nText; config: FieldConfig; blockId: number }) =>
-    http.put(`/fields/${id}`, body).then(data),
+    http.put<DesignerField>(`/fields/${id}`, body).then(data),
   setFieldStatus: (id: number, status: 'active' | 'inactive') => http.put(`/fields/${id}/status`, { status }).then(data),
   reorderFields: (blockId: number, fieldIds: number[]) => http.put(`/blocks/${blockId}/field-order`, { fieldIds }).then(data),
   addOption: (fieldId: number, body: { label: I18nText; color?: string }) =>

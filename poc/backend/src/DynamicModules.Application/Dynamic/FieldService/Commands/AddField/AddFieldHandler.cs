@@ -94,13 +94,14 @@ public class AddFieldHandler(
 
         // Field.Key = f_<Id> 需先有 Id；(ModuleId, Key) 唯一，所以先以空 Key 插入再回填。
         field.Key = $"f_{field.Id}";
+        int? preserved = null;
         if (request.Type == FieldType.Formula)
-            await FormulaRecalc.RecalculateAsync(module, records, registry, rollups, loader, time.Today, ct, locks);
+            preserved = await FormulaRecalc.RecalculateAsync(module, records, registry, rollups, loader, time.Today, ct, locks);
         else if (request.Type == FieldType.Rollup)
-            await rollups.RecalculateModuleAsync(module, time.Today, ct);
+            preserved = await rollups.RecalculateModuleAsync(module, time.Today, ct);
         module.TouchVersion(user.UserId, now);
         await uow.CommitAsync(ct);
         if (request.Designer) await masterDesigner.BindFieldAsync(module, field, ct);
-        return ServiceResult.Created(field.ToResponse());
+        return ServiceResult.Created(field.ToResponse() with { PreservedRecordCount = preserved });
     }
 }

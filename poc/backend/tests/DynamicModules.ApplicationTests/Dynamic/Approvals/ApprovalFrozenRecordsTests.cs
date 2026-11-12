@@ -1,6 +1,7 @@
 using System.Text.Json;
 using DynamicModules.Application.Common;
 using DynamicModules.Application.Dynamic.ApprovalService;
+using DynamicModules.Application.Dynamic.FieldService.Commands.AddField;
 using DynamicModules.Application.Dynamic.FieldService.Commands.UpdateField;
 using DynamicModules.Application.Dynamic.ModuleService.Data;
 using DynamicModules.Application.Dynamic.RecordService;
@@ -214,5 +215,63 @@ public class ApprovalFrozenRecordsTests : ApprovalTestBase
 
         res.IsSuccess.Should().BeTrue(Dump(res));
         Num(approved.Id, _r.NetTotal).Should().Be(900);
+    }
+
+    // ───────── 保留筆數 ─────────
+
+    [Fact]
+    public async Task UpdateFormula_NoPending_LockedRecordKeepsOldValue_ReportsCount()
+    {
+        await Rig();
+        await ApprovedPo();
+        await NewPo(_r, extra: V((_r.Discount, 100)));
+
+        var res = await SetFormula(_r.NetTotal, "折扣後總額", $"{{{_r.LineSum}}}");
+
+        ((FieldResponse)res.Data!).PreservedRecordCount.Should().Be(1);
+    }
+
+    [Fact]
+    public async Task UpdateDetailFormula_LockedHeader_DetailRowKeepsOldValue()
+    {
+        await Rig();
+        var approved = await ApprovedPo(lines: 3);
+        var linesBefore = LineRows(approved.Id);
+        linesBefore.Should().HaveCount(3);
+        var totalBefore = Num(approved.Id, _r.LineSum);
+
+        var res = await SetFormula(_r.LineSubtotal, "小計", $"{{{_r.LineQty}}} * {{{_r.LinePrice}}} + 1");
+
+        res.IsSuccess.Should().BeTrue(Dump(res));
+        ((FieldResponse)res.Data!).PreservedRecordCount.Should().Be(3);
+        LineRows(approved.Id).Select(x => x.ValuesJson).Should().BeEquivalentTo(linesBefore.Select(x => x.ValuesJson));
+        Num(approved.Id, _r.LineSum).Should().Be(totalBefore);
+    }
+
+    [Fact]
+    public async Task AddRollupField_LockedRecord_ReportsCount()
+    {
+        await Rig();
+        await ApprovedPo();
+        await NewPo(_r);
+
+        var res = await Send(new AddFieldRequest(_r.Module, BlockOf(_r.Memo), FieldType.Rollup, Text("費用數"),
+            new FieldConfig { Rollup = new RollupConfig(_r.ExtraRef, RollupFunction.Count, null, null) }));
+
+        res.IsCreated.Should().BeTrue(Dump(res));
+        ((FieldResponse)res.Data!).PreservedRecordCount.Should().Be(1);
+    }
+
+    [Fact]
+    public async Task UpdateLabelOnly_PreservedRecordCountIsNull()
+    {
+        await Rig();
+        await ApprovedPo();
+
+        var config = (await Detail(_r.Module)).Blocks.SelectMany(b => b.Fields).Single(f => f.Id == _r.NetTotal).Config;
+        var res = await Send(new UpdateFieldRequest(_r.NetTotal, FieldType.Formula, Text("新標籤"), config, BlockOf(_r.NetTotal)));
+
+        res.IsSuccess.Should().BeTrue(Dump(res));
+        ((FieldResponse)res.Data!).PreservedRecordCount.Should().BeNull();
     }
 }

@@ -18,7 +18,7 @@ public record BlockResponse(long Id, I18nText Label, int Sequence, bool Collapse
 
 public record FieldResponse(
     long Id, string Key, FieldType Type, I18nText Label, FieldConfig Config, long BlockId,
-    int Sequence, string Status, List<OptionResponse> Options);
+    int Sequence, string Status, List<OptionResponse> Options, int? PreservedRecordCount = null);
 
 /// <summary>Value 是寫進記錄 JSON 的字串 opt_&lt;id&gt;。</summary>
 public record OptionResponse(long Id, string Value, I18nText Label, string? Color, int Sequence, bool Active);

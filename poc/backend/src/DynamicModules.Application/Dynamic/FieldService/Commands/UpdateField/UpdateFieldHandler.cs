@@ -151,20 +151,21 @@ public class UpdateFieldHandler(
             rederivedParents.Add(parent);
         }
 
+        int? preserved = null;   // 只算被修改的模組本身；連帶重算的父模組不加
         if (field.Type == FieldType.Formula
             && (old.Formula != config.Formula || old.Scale != config.Scale || old.ResultType != config.ResultType))
-            await FormulaRecalc.RecalculateAsync(module, records, registry, rollups, loader, time.Today, ct, locks);
+            preserved = await FormulaRecalc.RecalculateAsync(module, records, registry, rollups, loader, time.Today, ct, locks);
         else
         {
             if (field is { Type: FieldType.Rollup, Status: FieldStatus.Active } && RollupChanged(old.Rollup, config.Rollup))
-                await rollups.RecalculateModuleAsync(module, time.Today, ct);
+                preserved = await rollups.RecalculateModuleAsync(module, time.Today, ct);
             foreach (var parent in rederivedParents)
                 await rollups.RecalculateModuleAsync(parent, time.Today, ct);
         }
         field.StampModified(user.UserId, now);
         module.TouchVersion(user.UserId, now);
         await uow.CommitAsync(ct);
-        return ServiceResult.Success(field.ToResponse());
+        return ServiceResult.Success(field.ToResponse() with { PreservedRecordCount = preserved });
     }
 
     /// <summary>

@@ -22,7 +22,7 @@ function mountDialog(props: Record<string, unknown>, queryClient = new QueryClie
   return mount(FieldEditorDialog, {
     props: { modelValue: true, moduleKey: 'm', blockId: 1, ...props },
     attachTo: document.body,
-    global: { plugins: [[quasar.Quasar, { components: quasar }], createPinia(), i18n, [VueQueryPlugin, { queryClient }]] },
+    global: { plugins: [[quasar.Quasar, { components: quasar, plugins: { Notify: quasar.Notify } }], createPinia(), i18n, [VueQueryPlugin, { queryClient }]] },
   });
 }
 const q = (id: string) => document.body.querySelector(`[data-testid="${id}"]`);
@@ -34,7 +34,7 @@ describe('FieldEditorDialog', () => {
   afterEach(() => { document.body.innerHTML = ''; });
 
   it('keeps isFilterable/isSortable on edit save', async () => {
-    const spy = vi.spyOn(dynamicApi, 'updateField').mockResolvedValue(undefined);
+    const spy = vi.spyOn(dynamicApi, 'updateField').mockResolvedValue(undefined as never);
     const f = field('text');
     f.config.isFilterable = true;
     f.config.isSortable = true;
@@ -73,7 +73,7 @@ describe('FieldEditorDialog', () => {
   });
 
   it('save sends isFilterable/isSortable in config', async () => {
-    const spy = vi.spyOn(dynamicApi, 'updateField').mockResolvedValue(undefined);
+    const spy = vi.spyOn(dynamicApi, 'updateField').mockResolvedValue(undefined as never);
     const w = mountDialog({ field: field('text') });
     await flushPromises();
     toggle('filterable-toggle').click();
@@ -115,7 +115,7 @@ describe('FieldEditorDialog', () => {
   });
 
   it('edit resolves an unset fullWidth from the type and lets it be switched off', async () => {
-    const spy = vi.spyOn(dynamicApi, 'updateField').mockResolvedValue(undefined);
+    const spy = vi.spyOn(dynamicApi, 'updateField').mockResolvedValue(undefined as never);
     const f = field('textarea');
     const w = mountDialog({ field: f });
     await flushPromises();
@@ -127,6 +127,58 @@ describe('FieldEditorDialog', () => {
     expect(spy.mock.calls[0]![1].config).toMatchObject({ fullWidth: false });
     spy.mockRestore();
     w.unmount();
+  });
+
+  describe('preserved-record notice', () => {
+    // the dialog's own queries are refetched after a save and the mutation's onSuccess waits for them, so they must resolve
+    beforeEach(() => {
+      vi.spyOn(dynamicApi, 'getModule').mockResolvedValue({ id: 1, key: 'm', blocks: [] } as unknown as ModuleDetail);
+      vi.spyOn(dynamicApi, 'getModules').mockResolvedValue([] as never);
+      vi.spyOn(dynamicApi, 'entities').mockResolvedValue([] as never);
+    });
+    afterEach(() => { vi.restoreAllMocks(); });
+
+    async function saveWith(result: unknown) {
+      const spy = vi.spyOn(dynamicApi, 'updateField').mockResolvedValue(result as never);
+      const w = mountDialog({ field: field('text') });
+      await flushPromises();
+      const notify = vi.spyOn(w.vm.$q, 'notify');
+      [...document.body.querySelectorAll('button')].find((b) => b.textContent?.includes('儲存'))!.click();
+      await flushPromises();
+      expect(spy).toHaveBeenCalledOnce();
+      await new Promise((r) => setTimeout(r, 50));   // the mutation's onSuccess runs after the query invalidations settle
+      const calls = notify.mock.calls.map((c) => c[0] as { type?: string; message?: string });
+      spy.mockRestore();
+      notify.mockRestore();
+      w.unmount();
+      return calls;
+    }
+
+    it('shows the count after an edit save', async () => {
+      const calls = await saveWith({ preservedRecordCount: 2 });
+      expect(calls).toContainEqual(expect.objectContaining({ type: 'warning', message: '有 2 筆已固定的記錄保留原值，沒有跟著重算' }));
+    });
+
+    it('shows nothing when the count is null or 0', async () => {
+      for (const result of [{ preservedRecordCount: null }, { preservedRecordCount: 0 }, {}, undefined])
+        expect(await saveWith(result)).toEqual([]);
+    });
+
+    it('shows the count after a create save and still emits created', async () => {
+      const spy = vi.spyOn(dynamicApi, 'addField').mockResolvedValue({ id: 9, preservedRecordCount: 3 } as never);
+      const w = mountDialog({});
+      await flushPromises();
+      const notify = vi.spyOn(w.vm.$q, 'notify');
+      await w.findComponent({ name: 'I18nTextInput' }).vm.$emit('update:modelValue', { 'zh-TW': '小計' });
+      await flushPromises();
+      [...document.body.querySelectorAll('button')].find((b) => b.textContent?.includes('儲存'))!.click();
+      await flushPromises();
+      await vi.waitFor(() => expect(notify).toHaveBeenCalledWith(expect.objectContaining({ type: 'warning', message: expect.stringContaining('3') })));
+      expect(w.emitted('created')).toHaveLength(1);
+      spy.mockRestore();
+      notify.mockRestore();
+      w.unmount();
+    });
   });
 
   it('type selector is locked in edit mode', async () => {
@@ -184,7 +236,7 @@ describe('FieldEditorDialog', () => {
   });
 
   it('clearing scale omits it from the payload instead of sending an empty string', async () => {
-    const spy = vi.spyOn(dynamicApi, 'updateField').mockResolvedValue(undefined);
+    const spy = vi.spyOn(dynamicApi, 'updateField').mockResolvedValue(undefined as never);
     const f = field('decimal');
     f.config.scale = 3;
     const w = mountDialog({ field: f });
@@ -306,7 +358,7 @@ describe('FieldEditorDialog', () => {
     });
 
     it('formula save sends formula and resultType, without required/readOnly/default', async () => {
-      const spy = vi.spyOn(dynamicApi, 'updateField').mockResolvedValue(undefined);
+      const spy = vi.spyOn(dynamicApi, 'updateField').mockResolvedValue(undefined as never);
       const f = field('formula');
       f.config.formula = '{7} * 2';
       f.config.resultType = 'currency';
@@ -339,7 +391,7 @@ describe('FieldEditorDialog', () => {
     });
 
     it('autonumber save sends format', async () => {
-      const spy = vi.spyOn(dynamicApi, 'updateField').mockResolvedValue(undefined);
+      const spy = vi.spyOn(dynamicApi, 'updateField').mockResolvedValue(undefined as never);
       const f = field('autonumber');
       f.config.format = 'A-{000}';
       const w = mountDialog({ field: f });
@@ -518,7 +570,7 @@ describe('FieldEditorDialog', () => {
     });
 
     it('editing an entity-target reference keeps refTarget in the payload', async () => {
-      const spy = vi.spyOn(dynamicApi, 'updateField').mockResolvedValue(undefined);
+      const spy = vi.spyOn(dynamicApi, 'updateField').mockResolvedValue(undefined as never);
       const w = mountDialog({ field: refField({ kind: 'entity', key: 'test.entity' }) });
       await flushPromises();
       save();
@@ -530,7 +582,7 @@ describe('FieldEditorDialog', () => {
     });
 
     it('editing a module-target reference sends the original refTarget and the new onDelete', async () => {
-      const spy = vi.spyOn(dynamicApi, 'updateField').mockResolvedValue(undefined);
+      const spy = vi.spyOn(dynamicApi, 'updateField').mockResolvedValue(undefined as never);
       const w = mountDialog({ field: refField({ kind: 'module', key: 'cust' }, 'restrict') });
       await flushPromises();
       await sel(w, 'ref-ondelete').vm.$emit('update:modelValue', 'setNull');
@@ -684,7 +736,7 @@ describe('FieldEditorDialog', () => {
 
     it('autonumber scope is locked in edit mode', async () => {
       headerModule = moduleOf('m', [], { detailOf: 'order' });
-      const spy = vi.spyOn(dynamicApi, 'updateField').mockResolvedValue(undefined);
+      const spy = vi.spyOn(dynamicApi, 'updateField').mockResolvedValue(undefined as never);
       const f = mk(8, 'autonumber', '項次', { format: '{000}', scope: 'parent' });
       const w = mountDialog({ field: f });
       await flushPromises();
@@ -775,7 +827,7 @@ describe('FieldEditorDialog', () => {
     });
 
     it('rollup payload shape', async () => {
-      const spy = vi.spyOn(dynamicApi, 'updateField').mockResolvedValue(undefined);
+      const spy = vi.spyOn(dynamicApi, 'updateField').mockResolvedValue(undefined as never);
       const condition = { all: [{ field: 31, op: 'gt', value: 0 }] };
       const w = mountDialog({ field: rollupField({ condition: condition as never }) });
       await flushPromises();
@@ -791,7 +843,7 @@ describe('FieldEditorDialog', () => {
     });
 
     it('rollup count payload has no aggregateFieldId; an incomplete condition is pruned', async () => {
-      const spy = vi.spyOn(dynamicApi, 'updateField').mockResolvedValue(undefined);
+      const spy = vi.spyOn(dynamicApi, 'updateField').mockResolvedValue(undefined as never);
       const w = mountDialog({ field: rollupField({ function: 'count', condition: { all: [{ field: 0, op: 'eq' }] } as never }) });
       await flushPromises();
       save();
@@ -801,7 +853,7 @@ describe('FieldEditorDialog', () => {
     });
 
     it('changing the source clears aggregate field and condition', async () => {
-      const spy = vi.spyOn(dynamicApi, 'updateField').mockResolvedValue(undefined);
+      const spy = vi.spyOn(dynamicApi, 'updateField').mockResolvedValue(undefined as never);
       const w = mountDialog({ field: rollupField({ condition: { all: [{ field: 31, op: 'gt', value: 1 }] } as never }) });
       await flushPromises();
       await sel(w, 'rollup-source').vm.$emit('update:modelValue', 21);
@@ -820,7 +872,7 @@ describe('FieldEditorDialog', () => {
       vi.mocked(dynamicApi.rollupSources).mockResolvedValue([
         ...sources, { fieldId: 22, fieldLabel: ZH('維修'), moduleKey: 'line', moduleName: ZH('明細'), relation: 'lookup' as const },
       ]);
-      const spy = vi.spyOn(dynamicApi, 'updateField').mockResolvedValue(undefined);
+      const spy = vi.spyOn(dynamicApi, 'updateField').mockResolvedValue(undefined as never);
       const w = mountDialog({ field: rollupField() });
       await flushPromises();
       const condition = { all: [{ field: 31, op: 'gt', value: 5 }] };
@@ -949,7 +1001,7 @@ describe('FieldEditorDialog', () => {
       });
 
       it('editing only the label keeps defaultToday and parentDefaultFieldId', async () => {
-        const spy = vi.spyOn(dynamicApi, 'updateField').mockResolvedValue(undefined);
+        const spy = vi.spyOn(dynamicApi, 'updateField').mockResolvedValue(undefined as never);
         headerModule = moduleOf('m', [], { detailOf: 'order' });
         vi.spyOn(dynamicApi, 'getModule').mockImplementation(async (k) => (k === 'order' ? moduleOf('order', [mk(61, 'date', '訂單日')]) : headerModule));
         const today = mountDialog({ field: mk(8, 'date', '日', { defaultToday: true }) });
