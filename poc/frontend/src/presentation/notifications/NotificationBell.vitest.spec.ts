@@ -5,7 +5,11 @@ import * as quasar from 'quasar';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { createI18n } from 'vue-i18n';
 import { createMemoryHistory, createRouter } from 'vue-router';
+import enUS from 'src/i18n/en-US.json';
+import th from 'src/i18n/th.json';
+import vi_ from 'src/i18n/vi.json';
 import zhTW from 'src/i18n/zh-TW.json';
+import { NOTIFICATION_KINDS } from 'src/domain/dynamic/task-types';
 import { mockHttp, type Call } from 'src/test-utils/mock-http';
 import NotificationBell from './NotificationBell.vue';
 
@@ -108,5 +112,44 @@ describe('NotificationBell', () => {
     expect(body('[data-testid="notification-item-2"]')!.classList.contains('text-weight-bold')).toBe(true);
     expect(body('[data-testid="notification-item-2"]')!.textContent).toContain('任務2');
     w.unmount();
+  });
+
+  it('approval kinds show their label before the title', async () => {
+    const { w } = await mountBell({ items: [note(1, { kind: 'approvalPending', title: 'PO-0001' }), note(2, { kind: 'approvalApproved', title: 'PO-0002' })], unreadCount: 2 });
+    await w.get('[data-testid="notification-bell"]').trigger('click');
+    await flushPromises();
+    expect(body('[data-testid="notification-item-1"]')!.textContent).toContain('待你簽核： PO-0001');
+    expect(body('[data-testid="notification-item-2"]')!.textContent).toContain('已核准： PO-0002');
+    w.unmount();
+  });
+
+  it('approval notification link opens the record detail', async () => {
+    const { w, push } = await mountBell({ items: [note(7, { kind: 'approvalPending', title: 'PO-0007', link: '/dynamic/m/5' })], unreadCount: 1 });
+    await w.get('[data-testid="notification-bell"]').trigger('click');
+    await flushPromises();
+    body('[data-testid="notification-item-7"]')!.click();
+    await flushPromises();
+    expect(push).toHaveBeenCalledWith('/dynamic/m/5');
+    w.unmount();
+  });
+});
+
+describe('notification kinds', () => {
+  const APPROVAL = [
+    'approvalPending', 'approvalTransferred', 'approvalAddSigned', 'approvalRejected', 'approvalReturned', 'approvalApproved',
+    'approvalWithdrawn', 'approvalCancelled', 'approvalRerouted', 'approvalOverdue', 'approvalAdminAlert',
+  ];
+  it('NOTIFICATION_KINDS lists all 11 approval kinds the server writes', () => {
+    for (const k of APPROVAL) expect(NOTIFICATION_KINDS as readonly string[]).toContain(k);
+  });
+  it('every NOTIFICATION_KINDS entry has a label in all four locales, and the foreign ones hold no Chinese', () => {
+    const locales = { 'zh-TW': zhTW, 'en-US': enUS, th, vi: vi_ } as Record<string, { notifications: { kind: Record<string, string> } }>;
+    for (const [name, m] of Object.entries(locales)) {
+      for (const k of NOTIFICATION_KINDS) {
+        const text = m.notifications.kind[k];
+        expect(text, `${name} ${k}`).toBeTruthy();
+        if (name !== 'zh-TW') expect(text, `${name} ${k}`).not.toMatch(/[\u4e00-\u9fff]/);
+      }
+    }
   });
 });

@@ -118,6 +118,8 @@ export const taskStatusColor = (s: TaskStatus): string => (s === 'done' ? 'posit
 /** Kinds the server writes today (NotificationKinds); an unknown kind still renders, with its title only. */
 export const NOTIFICATION_KINDS = [
   'taskAssigned', 'taskMentioned', 'taskCommented', 'taskDueSoon', 'taskOverdue', 'taskCompleted', 'taskCancelled',
+  'approvalPending', 'approvalTransferred', 'approvalAddSigned', 'approvalRejected', 'approvalReturned', 'approvalApproved',
+  'approvalWithdrawn', 'approvalCancelled', 'approvalRerouted', 'approvalOverdue', 'approvalAdminAlert',
 ] as const;
 
 export interface NotificationItem {
