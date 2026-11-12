@@ -7,6 +7,7 @@ import { fillPatch, fillReferenceInfos, lockedFillKeys } from 'src/domain/dynami
 import { resolveI18n } from 'src/domain/dynamic/i18n-text';
 import { approvalTargets, canAdvance, intersectAllowed, isReadOnlyState, selectableStates } from 'src/domain/dynamic/workflow';
 import type { DetailRowPayload, DynamicRecord, ModuleSchema, ReferenceInfo, SchemaBlock, SchemaField } from 'src/domain/dynamic/types';
+import { joinList } from 'src/i18n/translate';
 import { attachmentContextKey } from 'src/presentation/dynamic/attachment-context';
 import { buildZodSchema } from 'src/presentation/dynamic/build-zod-schema';
 import DetailGrid from 'src/presentation/dynamic/details/DetailGrid.vue';
@@ -125,10 +126,12 @@ const frozen = computed(() => props.mode === 'edit' && !!props.record?.frozenByE
 const workflowLocked = computed(() => props.mode === 'edit' && (frozen.value || isReadOnlyState(workflow.value, storedStatus.value)));
 // States reachable only through "submit approval": tell the user where to go instead of leaving them out of the list unexplained.
 const approvalHint = computed(() => {
-  const targets = approvalTargets(workflow.value, storedStatus.value);
   const status = fields.value.find((f) => f.key === statusKey.value);
-  return props.mode === 'edit' && status && targets.length
-    ? t('approval.useSubmitHint', { states: targets.map((v) => resolveI18n(status.options.find((o) => o.value === v)?.label, locale.value)).join('、') })
+  // A target whose label the viewer cannot see would read as a blank name: leave it out.
+  const labels = approvalTargets(workflow.value, storedStatus.value)
+    .map((v) => resolveI18n(status?.options.find((o) => o.value === v)?.label, locale.value)).filter(Boolean);
+  return props.mode === 'edit' && labels.length
+    ? t('approval.useSubmitHint', { states: joinList(labels, locale.value) })
     : '';
 });
 const allowedFor = (f: SchemaField) => {

@@ -2,6 +2,7 @@
 import { useI18n } from 'vue-i18n';
 import type { PreviewStage } from 'src/domain/dynamic/approval-types';
 import { resolveI18n } from 'src/domain/dynamic/i18n-text';
+import { joinList } from 'src/i18n/translate';
 
 defineProps<{ stages: PreviewStage[] }>();
 const { t, locale } = useI18n();
@@ -17,7 +18,7 @@ const { t, locale } = useI18n();
       <div v-else-if="s.status === 'pick'" class="text-muted">{{ t('approval.submit.stagePick') }}</div>
       <div v-else-if="s.status === 'skip'" class="text-muted">{{ t('approval.submit.stageSkip') }}</div>
       <div v-else class="row items-center q-gutter-x-sm">
-        <span>{{ s.approvers.map((a) => a.displayName).join('、') }}</span>
+        <span>{{ joinList(s.approvers.map((a) => a.displayName), locale) }}</span>
         <q-badge v-if="s.usesFallback" outline color="warning" :label="t('approval.submit.stageFallback')" />
       </div>
     </q-timeline-entry>

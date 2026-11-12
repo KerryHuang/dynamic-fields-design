@@ -6,9 +6,16 @@ import type {
 import { dynamicApi } from 'src/services/api/dynamic-api';
 import { retryUnlessClientError } from './schema-queries';
 
-/** The record, its approval block, its history, the inbox lists and the bell all change with an approval action. */
-function invalidateApproval(qc: QueryClient, recordId: number) {
+/**
+ * The record, its approval block, its history, the inbox lists and the bell all change with an approval action.
+ * A transition it triggers also moves the list, task rules and events, so those go stale too.
+ */
+function invalidateApproval(qc: QueryClient, recordId: number, moduleKey?: string) {
   return Promise.all([
+    ...(moduleKey ? [qc.invalidateQueries({ queryKey: ['records', moduleKey] })] : []),
+    qc.invalidateQueries({ queryKey: ['record-tasks', recordId] }),
+    qc.invalidateQueries({ queryKey: ['record-effects', recordId] }),
+    qc.invalidateQueries({ queryKey: ['record-ledger', recordId] }),
     qc.invalidateQueries({ queryKey: ['record', recordId] }),
     qc.invalidateQueries({ queryKey: ['record-approval', recordId] }),
     qc.invalidateQueries({ queryKey: ['record-history', recordId] }),
@@ -41,9 +48,9 @@ export function useApprovalPreview(recordId: MaybeRefOrGetter<number>, to: Maybe
 export function useSubmitApproval() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (i: { recordId: number; body: SubmitApprovalBody; idempotencyKey?: string }) =>
+    mutationFn: (i: { recordId: number; moduleKey: string; body: SubmitApprovalBody; idempotencyKey?: string }) =>
       dynamicApi.submitApproval(i.recordId, i.body, i.idempotencyKey),
-    onSuccess: (_r, i) => invalidateApproval(qc, i.recordId),
+    onSuccess: (_r, i) => invalidateApproval(qc, i.recordId, i.moduleKey),
   });
 }
 

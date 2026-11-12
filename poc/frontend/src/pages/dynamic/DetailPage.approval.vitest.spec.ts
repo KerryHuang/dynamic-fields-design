@@ -15,7 +15,7 @@ import DetailPage from './DetailPage.vue';
 vi.mock('src/services/api/dynamic-api', () => ({
   dynamicApi: {
     getModuleSchema: vi.fn(), getRecord: vi.fn(), deleteRecord: vi.fn(), related: vi.fn(), recordHistory: vi.fn(), getRecordTasks: vi.fn(),
-    getRecordApproval: vi.fn(), previewApproval: vi.fn(), getEffectivePolicies: vi.fn(),
+    getRecordApproval: vi.fn(), previewApproval: vi.fn(), submitApproval: vi.fn(), getEffectivePolicies: vi.fn(),
   },
 }));
 const api = vi.mocked(dynamicApi);
@@ -42,9 +42,9 @@ const record = (approval?: RecordApprovalSummary | null): DynamicRecord => ({
 });
 const summary = (p: Partial<RecordApprovalSummary>): RecordApprovalSummary => ({ status: 'none', stageName: null, stageSeq: null, canSubmit: false, ...p });
 
-async function mountPage(rec: DynamicRecord, targets: number[] = []) {
+async function mountPage(rec: DynamicRecord, targets: number[] = [], sch: ModuleSchema = schema) {
   setActivePinia(createPinia());
-  api.getModuleSchema.mockResolvedValue(schema);
+  api.getModuleSchema.mockResolvedValue(sch);
   api.getRecord.mockResolvedValue(rec);
   api.related.mockResolvedValue([] as never);
   api.recordHistory.mockResolvedValue({ items: [], totalCount: 0, currentPage: 1, pagesSize: 20 });
@@ -69,6 +69,28 @@ describe('DetailPage approval', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     vi.stubGlobal('ResizeObserver', class { observe() {} unobserve() {} disconnect() {} });
+  });
+
+  // First on purpose: other tests empty document.body, which detaches Quasar's notification container.
+  it('direct outcome notifies with the target state; reopening sends a new idempotency key', async () => {
+    api.previewApproval.mockResolvedValue({ outcome: 'direct', flowName: null, stages: [], picks: [] });
+    api.submitApproval.mockResolvedValue({ outcome: 'direct', instanceId: null, recordRowVersion: 'v2' } as never);
+    const w = await mountPage(record(summary({ status: 'none', canSubmit: true })), [12]);
+    const sendOnce = async () => {
+      await w.find('[data-testid="submit-approval-12"]').trigger('click');
+      await flushPromises();
+      (document.body.querySelector('[data-testid="submit-approval-send"]') as HTMLElement).click();
+      await flushPromises();
+      await new Promise((r) => setTimeout(r, 20));
+      await flushPromises();
+    };
+    await sendOnce();
+    await vi.waitFor(() => expect(document.body.querySelector('.q-notifications')?.textContent).toContain('已直接轉為狀態12'));
+    await sendOnce();
+    expect(api.submitApproval).toHaveBeenCalledTimes(2);
+    const keys = api.submitApproval.mock.calls.map((c) => c[2]);
+    expect(keys[0]).toBeTruthy();
+    expect(keys[1]).not.toBe(keys[0]);
   });
 
   it('shows pending badge with stage seq and name', async () => {
@@ -112,7 +134,20 @@ describe('DetailPage approval', () => {
   it('does not ask for submit targets when the user cannot submit', async () => {
     const w = await mountPage(record(summary({ status: 'approved' })));
     expect(w.findAll('[data-testid^="submit-approval-"]')).toHaveLength(0);
+    expect(api.getRecordApproval).not.toHaveBeenCalled();
   });
+
+  it('a read-only (closed) schema offers no submit button even when canSubmit is true', async () => {
+    const w = await mountPage(record(summary({ status: 'none', canSubmit: true })), [12], { ...schema, readOnly: true });
+    expect(w.findAll('[data-testid^="submit-approval-"]')).toHaveLength(0);
+    expect(api.getRecordApproval).not.toHaveBeenCalled();
+  });
+
+  it('a target whose state label the viewer cannot see gets no button', async () => {
+    const w = await mountPage(record(summary({ status: 'none', canSubmit: true })), [12, 99]);
+    expect(w.findAll('[data-testid^="submit-approval-"]')).toHaveLength(1);
+  });
+
 
   it('approved summary shows positive badge', async () => {
     const w = await mountPage(record(summary({ status: 'approved' })));

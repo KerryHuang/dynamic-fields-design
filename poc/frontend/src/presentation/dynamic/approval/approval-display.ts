@@ -1,5 +1,6 @@
 import type { RecordApprovalSummary } from 'src/domain/dynamic/approval-types';
 import { resolveI18n } from 'src/domain/dynamic/i18n-text';
+import type { I18nText } from 'src/domain/dynamic/types';
 
 type Translate = (key: string, params?: Record<string, unknown>) => string;
 
@@ -18,4 +19,11 @@ export function badgeColor(status: RecordApprovalSummary['status']): 'warning' |
   if (status === 'approved') return 'positive';
   if (status === 'rejected') return 'negative';
   return 'muted';
+}
+
+/** Title shown for an instance: the snapshot can be '' (the record title was hidden from the viewer), then the module name and record number. */
+export function instanceTitle(titleSnapshot: string, moduleName: I18nText | undefined, recordId: number, locale: string): string {
+  if (titleSnapshot.trim()) return titleSnapshot;
+  const module = resolveI18n(moduleName, locale);
+  return module ? `${module} #${recordId}` : `#${recordId}`;
 }

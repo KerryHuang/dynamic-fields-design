@@ -25,7 +25,7 @@ describe('approval api and mutations', () => {
     let key: unknown;
     calls = mockHttp((_c, config) => { key = config.headers?.['Idempotency-Key']; return { outcome: 'submitted', instanceId: 3, recordRowVersion: 'v2' }; });
     const { m } = setup();
-    await m.submit.mutateAsync({ recordId: 9, body: { to: 12, recordRowVersion: 'v1', picks: { s1: ['u1'] }, comment: 'hi' }, idempotencyKey: 'k-1' });
+    await m.submit.mutateAsync({ recordId: 9, moduleKey: 'po', body: { to: 12, recordRowVersion: 'v1', picks: { s1: ['u1'] }, comment: 'hi' }, idempotencyKey: 'k-1' });
     expect(last()).toMatchObject({ method: 'post', url: '/records/9/approval/submit' });
     expect(bodyOf(last())).toEqual({ to: 12, recordRowVersion: 'v1', picks: { s1: ['u1'] }, comment: 'hi' });
     expect(key).toBe('k-1');
@@ -54,12 +54,15 @@ describe('approval api and mutations', () => {
     expect(last()).toMatchObject({ method: 'post', url: '/approval-instances/3/withdraw' });
   });
 
-  it('action success invalidates record, record-approval, approval-inbox and notifications', async () => {
+  it('action success invalidates record, approval, history, inbox, bell, list, tasks, effects and ledger', async () => {
     calls = mockHttp(() => ({ outcome: 'submitted', instanceId: 3, recordRowVersion: 'v2' }));
     const { m, keys } = setup();
-    await m.submit.mutateAsync({ recordId: 9, body: { to: 12, recordRowVersion: 'v1' }, idempotencyKey: 'k' });
+    await m.submit.mutateAsync({ recordId: 9, moduleKey: 'po', body: { to: 12, recordRowVersion: 'v1' }, idempotencyKey: 'k' });
     await flushPromises();
-    expect(keys()).toEqual(expect.arrayContaining(['["record",9]', '["record-approval",9]', '["record-history",9]', '["approval-inbox"]', '["notifications"]']));
+    expect(keys()).toEqual(expect.arrayContaining([
+      '["record",9]', '["record-approval",9]', '["record-history",9]', '["approval-inbox"]', '["notifications"]',
+      '["records","po"]', '["record-tasks",9]', '["record-effects",9]', '["record-ledger",9]',
+    ]));
   });
 
   it('inbox passes box, module, status, from, to, currentPage, pagesSize', async () => {

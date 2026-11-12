@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { createI18n } from 'vue-i18n';
 import zhTW from 'src/i18n/zh-TW.json';
-import { badgeColor, badgeText } from './approval-display';
+import { badgeColor, badgeText, instanceTitle } from './approval-display';
 
 const { t } = createI18n({ legacy: false, locale: 'zh-TW', messages: { 'zh-TW': zhTW } }).global;
 const summary = (status: string, extra = {}) => ({ status, stageName: null, stageSeq: null, canSubmit: false, ...extra }) as never;
@@ -31,5 +31,15 @@ describe('badgeColor', () => {
     expect(badgeColor('approved')).toBe('positive');
     expect(badgeColor('rejected')).toBe('negative');
     expect(badgeColor('withdrawn')).toBe('muted');
+  });
+});
+
+describe('instanceTitle', () => {
+  it('uses the snapshot when present', () => {
+    expect(instanceTitle('採購單 A', { 'zh-TW': '採購' }, 7, 'zh-TW')).toBe('採購單 A');
+  });
+  it('empty snapshot falls back to module name and record number', () => {
+    expect(instanceTitle('', { 'zh-TW': '採購' }, 7, 'zh-TW')).toBe('採購 #7');
+    expect(instanceTitle('  ', undefined, 7, 'zh-TW')).toBe('#7');
   });
 });

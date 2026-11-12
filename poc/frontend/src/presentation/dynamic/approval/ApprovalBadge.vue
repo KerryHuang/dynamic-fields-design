@@ -11,5 +11,10 @@ const color = computed(() => badgeColor(props.summary.status));
 </script>
 
 <template>
-  <q-badge v-if="text" :color="color" class="q-pa-xs" data-testid="approval-badge">{{ text }}</q-badge>
+  <q-badge v-if="text" :color="color" class="q-pa-xs approval-badge" data-testid="approval-badge">{{ text }}</q-badge>
 </template>
+
+<style scoped>
+/* Stage names are free text: let the badge wrap instead of widening the page. */
+.approval-badge { white-space: normal; max-width: 100%; }
+</style>

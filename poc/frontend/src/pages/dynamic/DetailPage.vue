@@ -72,7 +72,7 @@ function onSubmitted(outcome: SubmitApprovalResult['outcome']) {
   const state = submitTo.value === null ? '' : stateLabel(submitTo.value);
   $q.notify({ type: 'positive', message: t(`approval.submit.outcome.${outcome}`, { state }) });
 }
-const submitTargets = computed(() => (canSubmit.value ? approvalQuery.data.value?.submitTargets ?? [] : []));
+const submitTargets = computed(() => (canSubmit.value ? approvalQuery.data.value?.submitTargets ?? [] : []).filter((to) => stateLabel(to)));
 
 async function onDelete() {
   try {

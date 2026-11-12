@@ -20,19 +20,21 @@ const pickReq = (min = 1, max = 2) => ({
   stageCode: 's3', name: { 'zh-TW': '複核' }, min, max, candidates: [user('c1', '甲'), user('c2', '乙'), user('c3', '丙')],
 });
 
-interface Opts { preview?: unknown; submit?: unknown[]; policy?: Record<string, unknown>; previewFail?: HttpFail }
+interface Opts { preview?: unknown; previews?: unknown[]; submit?: unknown[]; policy?: Record<string, unknown>; previewFail?: HttpFail }
 let calls: Call[];
 let keys: unknown[];
 let qc: QueryClient;
 const body = () => document.body;
+const previews = () => calls.filter((c) => c.url === '/records/9/approval/preview');
 const sends = () => calls.filter((c) => c.url === '/records/9/approval/submit');
 
 async function mountDialog(o: Opts = {}) {
   keys = [];
   qc = new QueryClient();
   const queue = [...(o.submit ?? [{ outcome: 'submitted', instanceId: 1, recordRowVersion: 'v2' }])];
+  const previewQueue = [...(o.previews ?? [])];
   calls = mockHttp((c, config) => {
-    if (c.url === '/records/9/approval/preview') return o.previewFail ?? o.preview ?? flowPreview();
+    if (c.url === '/records/9/approval/preview') return o.previewFail ?? (previewQueue.length > 1 ? previewQueue.shift() : previewQueue[0]) ?? o.preview ?? flowPreview();
     if (c.url === '/records/9/approval/submit') { keys.push(config.headers?.['Idempotency-Key']); return queue.length > 1 ? queue.shift() : queue[0]; }
     if (c.url === '/policies/effective') return { values: o.policy ?? {} };
     return {};
@@ -118,44 +120,96 @@ describe('SubmitApprovalDialog', () => {
   });
 
   it('400 picks error shows under that pick select', async () => {
-    const w = await mountDialog({ preview: flowPreview({ picks: [pickReq(1, 2)] }) });
-    // Swap the handler: the submit now fails with a keyed 400.
-    mockHttp((c) => {
-      if (c.url === '/records/9/approval/preview') return flowPreview({ picks: [pickReq(1, 2)] });
-      if (c.url === '/records/9/approval/submit') return new HttpFail(400, { errors: { 'picks.s3': ['人數不符'], status: ['狀態錯誤'] } });
-      return { values: {} };
+    const w = await mountDialog({
+      preview: flowPreview({ picks: [pickReq(1, 2)] }),
+      submit: [new HttpFail(400, { errors: { 'picks.s3': ['人數不符'], status: ['狀態錯誤'] } })],
     });
     w.findComponent({ name: 'QSelect' }).vm.$emit('update:modelValue', ['c1']);
     await flushPromises();
     await click(sendBtn());
     expect(body().querySelector('[data-testid="pick-s3"]')!.textContent).toContain('人數不符');
     expect(body().querySelector('[data-testid="submit-error"]')!.textContent).toContain('狀態錯誤');
+    expect(previews()).toHaveLength(1);
     w.unmount();
   });
 
-  it('retry after network error reuses the key; success replaces it', async () => {
-    const w = await mountDialog();
-    let attempt = 0;
-    mockHttp((c, config) => {
-      if (c.url === '/records/9/approval/preview') return flowPreview();
-      if (c.url === '/records/9/approval/submit') {
-        keys.push(config.headers?.['Idempotency-Key']);
-        return ++attempt === 1 ? new HttpFail(503) : { outcome: 'submitted', instanceId: 1, recordRowVersion: 'v2' };
-      }
-      return { values: {} };
+  it('400 for a pick stage not in the preview shows at the top and refetches the preview', async () => {
+    const w = await mountDialog({ submit: [new HttpFail(400, { errors: { 'picks.s9': ['人數不符'] } })] });
+    await click(sendBtn());
+    expect(body().querySelector('[data-testid="submit-error"]')!.textContent).toContain('人數不符');
+    expect(previews()).toHaveLength(2);
+    w.unmount();
+  });
+
+  it('400 comment error shows under the comment box', async () => {
+    const w = await mountDialog({ submit: [new HttpFail(400, { errors: { comment: ['意見太長'] } })] });
+    await click(sendBtn());
+    expect(body().textContent).toContain('意見太長');
+    expect(body().querySelector('[data-testid="submit-error"]')).toBeNull();
+    w.unmount();
+  });
+
+  it('409 stale keeps the dialog open, refetches record and preview and drops picks that are gone', async () => {
+    const w = await mountDialog({
+      previews: [flowPreview({ picks: [pickReq(1, 2)] }), flowPreview()],
+      submit: [new HttpFail(409, { code: 'stale', message: 'x' }), { outcome: 'submitted', instanceId: 1, recordRowVersion: 'v2' }],
     });
+    w.findComponent({ name: 'QSelect' }).vm.$emit('update:modelValue', ['c1']);
+    await flushPromises();
+    const spy = vi.spyOn(qc, 'invalidateQueries');
+    await click(sendBtn());
+    expect(w.emitted('update:modelValue')).toBeUndefined();
+    expect(previews()).toHaveLength(2);
+    expect(body().querySelector('[data-testid="submit-error"]')!.textContent).toBe(zhTW.dynamic.stale);
+    expect(spy.mock.calls.map((c) => JSON.stringify((c[0] as { queryKey: unknown[] }).queryKey))).toContain('["record",9]');
+    expect(body().querySelector('[data-testid="pick-s3"]')).toBeNull();
+    await click(sendBtn());
+    expect(bodyOf(sends()[1])).toEqual({ to: 12, recordRowVersion: 'v1' });
+    w.unmount();
+  });
+
+  it('422 replaces the key for the next send', async () => {
+    const w = await mountDialog({ submit: [new HttpFail(422, { message: '金鑰重複' }), { outcome: 'submitted', instanceId: 1, recordRowVersion: 'v2' }] });
+    await click(sendBtn());
+    await click(sendBtn());
+    expect(keys).toHaveLength(2);
+    expect(keys[1]).not.toBe(keys[0]);
+    w.unmount();
+  });
+
+  it('preview load failure shows the error and keeps send disabled', async () => {
+    const w = await mountDialog({ previewFail: new HttpFail(404, { message: '壞了' }) });
+    expect(body().querySelector('[data-testid="preview-error"]')).not.toBeNull();
+    expect(sendBtn().disabled).toBe(true);
+    w.unmount();
+  });
+
+  it('retry after a network or 5xx error reuses the key; a success then replaces it', async () => {
+    const w = await mountDialog({ submit: [new HttpFail(503), { outcome: 'submitted', instanceId: 1, recordRowVersion: 'v2' }] });
     await click(sendBtn());
     expect(body().querySelector('[data-testid="submit-error"]')).not.toBeNull();
     await click(sendBtn());
     expect(keys).toHaveLength(2);
     expect(keys[0]).toBeTruthy();
     expect(keys[1]).toBe(keys[0]);
-    await w.setProps({ modelValue: false });
-    await w.setProps({ modelValue: true });
-    await flushPromises();
+    // The same mounted dialog sends again (the parent normally remounts it): the success must have issued a new key.
     await click(sendBtn());
     expect(keys).toHaveLength(3);
-    expect(keys[2]).not.toBe(keys[0]);
+    expect(keys[2]).not.toBe(keys[1]);
+    w.unmount();
+  });
+
+  it('direct outcome hides the comment box and sends no comment', async () => {
+    const w = await mountDialog({ preview: { outcome: 'direct', flowName: null, stages: [], picks: [] } });
+    expect(body().querySelector('textarea')).toBeNull();
+    await click(sendBtn());
+    expect(bodyOf(sends()[0])).toEqual({ to: 12, recordRowVersion: 'v1' });
+    w.unmount();
+  });
+
+  it('is persistent so a stray click does not drop the input', async () => {
+    const w = await mountDialog({ submit: [new HttpFail(503)] });
+    expect(w.findComponent({ name: 'QDialog' }).props('persistent')).toBe(true);
     w.unmount();
   });
 

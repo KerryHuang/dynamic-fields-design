@@ -1,12 +1,14 @@
 <script setup lang="ts">
 import { useQueryClient } from '@tanstack/vue-query';
 import { useQuasar } from 'quasar';
-import { computed, reactive, ref, watch } from 'vue';
+import { computed, reactive, ref } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { useApprovalPreview, useSubmitApproval } from 'src/application/dynamic/queries/approval-queries';
 import { useEffectivePolicies } from 'src/application/dynamic/queries/policies-queries';
 import type { PickRequirement, SubmitApprovalResult } from 'src/domain/dynamic/approval-types';
 import { resolveI18n } from 'src/domain/dynamic/i18n-text';
+import SelectNoOption from 'src/components/framework/SelectNoOption.vue';
+import { useSelectFilter } from 'src/components/framework/useSelectFilter';
 import { joinList } from 'src/i18n/translate';
 import { isStale } from 'src/presentation/dynamic/designer/api-error';
 import { newIdempotencyKey } from 'src/services/api/idempotency';
@@ -35,22 +37,17 @@ const comment = ref('');
 const picks = reactive<Record<string, string[]>>({});
 const topError = ref('');
 const fieldErrors = ref<Record<string, string>>({});
-// One key per opening: a resend after a network error reuses it (the server replays the first result); a success or a 422 replaces it.
+// One key per opening (the parent mounts the dialog fresh each time): a resend after a network error reuses it
+// (the server replays the first result, and only successes are stored); a success or a 422 replaces it.
 let idempotencyKey = newIdempotencyKey();
-watch(() => props.modelValue, (open) => {
-  if (!open) return;
-  idempotencyKey = newIdempotencyKey();
-  comment.value = '';
-  for (const k of Object.keys(picks)) delete picks[k];
-  topError.value = '';
-  fieldErrors.value = {};
-});
+const pickSel = useSelectFilter<{ label: string; value: string }>([]);
 
 const data = computed(() => preview.data.value);
 const blocked = computed(() => data.value?.outcome === 'blocked');
 const direct = computed(() => data.value?.outcome === 'direct');
 const countOk = (p: PickRequirement) => (picks[p.stageCode]?.length ?? 0) >= p.min && (picks[p.stageCode]?.length ?? 0) <= p.max;
 const canSubmit = computed(() => !!data.value && !blocked.value && (data.value.picks ?? []).every(countOk) && !submit.isPending.value);
+const clearError = (k: string) => { delete fieldErrors.value[k]; };
 const options = (p: PickRequirement) => p.candidates.map((c) => ({ label: c.displayName, value: c.userId }));
 const pickHint = (p: PickRequirement) => (p.min === p.max ? t('approval.submit.pickExact', { n: p.min }) : t('approval.submit.pickRange', { min: p.min, max: p.max }));
 const loadError = computed(() => (preview.error.value as ApiError | null)?.message ?? (preview.error.value ? t('approval.submit.previewFailed') : ''));
@@ -61,17 +58,24 @@ const refetchRecord = () => Promise.all([
   qc.invalidateQueries({ queryKey: ['record-approval', props.recordId] }),
 ]);
 
+/** Reload the preview and drop picks of stages the new preview no longer asks for. */
+async function refetchPreview() {
+  await preview.refetch();
+  const codes = new Set((preview.data.value?.picks ?? []).map((p) => p.stageCode));
+  for (const k of Object.keys(picks)) if (!codes.has(k)) delete picks[k];
+}
+
 async function onSubmit() {
   topError.value = '';
   fieldErrors.value = {};
   const required = data.value?.picks ?? [];
   try {
     const result = await submit.mutateAsync({
-      recordId: props.recordId, idempotencyKey,
+      recordId: props.recordId, moduleKey: props.moduleKey, idempotencyKey,
       body: {
         to: props.to, recordRowVersion: props.recordRowVersion,
         ...(required.length && { picks: Object.fromEntries(required.map((p) => [p.stageCode, picks[p.stageCode] ?? []])) }),
-        ...(comment.value.trim() && { comment: comment.value.trim() }),
+        ...(!direct.value && comment.value.trim() && { comment: comment.value.trim() }),
       },
     });
     idempotencyKey = newIdempotencyKey();
@@ -81,27 +85,36 @@ async function onSubmit() {
     const err = e as ApiError;
     if (err.status === 422) idempotencyKey = newIdempotencyKey(); // the key was used for other content
     if (err.status === 400 && err.errors) {
+      // Only a pick the preview shows has a select to hold its message; any other key means the preview is out of date.
+      const shown = new Set((data.value?.picks ?? []).map((p) => `picks.${p.stageCode}`));
       const rest: string[] = [];
+      let outdated = false;
       for (const [k, v] of Object.entries(err.errors)) {
-        if (k === 'comment' || k.startsWith('picks.')) fieldErrors.value[k] = joinList(v);
-        else rest.push(...v);
+        if (k === 'comment' || shown.has(k)) fieldErrors.value[k] = joinList(v);
+        else {
+          rest.push(...v);
+          if (k.startsWith('picks.')) outdated = true;
+        }
       }
-      topError.value = rest.join('；');
+      topError.value = joinList(rest);
+      if (outdated) void refetchPreview();
     } else if (err.status === 409 && isStale(err)) {
+      // Someone changed the record: the matching flow, its approvers and its pick stages may differ now.
       topError.value = t('dynamic.stale');
       void refetchRecord();
+      void refetchPreview();
     } else if (err.status === 409) {
-      // Someone else already started or finished it: the server message says what, the page shows the new state.
-      $q.notify({ type: 'warning', message: err.message ?? t('dynamic.loadFailed') });
+      // Any other conflict (already pending, undecidable condition, no approver found): show the server message and the new state.
+      $q.notify({ type: 'warning', message: err.message ?? t('designer.saveFailed') });
       void refetchRecord();
       close();
-    } else topError.value = err.message ?? t('dynamic.loadFailed');
+    } else topError.value = err.message ?? t('designer.saveFailed');
   }
 }
 </script>
 
 <template>
-  <q-dialog :model-value="modelValue" :maximized="$q.screen.lt.sm" @update:model-value="(v) => emit('update:modelValue', v)">
+  <q-dialog :model-value="modelValue" persistent :maximized="$q.screen.lt.sm" @update:model-value="(v) => emit('update:modelValue', v)">
     <q-card class="column no-wrap" :style="$q.screen.lt.sm ? undefined : 'width: 560px; max-width: 95vw; max-height: 90vh'" data-testid="submit-approval-dialog">
       <q-card-section class="text-h6">{{ t('approval.submit.title', { state: toLabel }) }}</q-card-section>
       <q-card-section class="col scroll q-pt-none">
@@ -116,21 +129,25 @@ async function onSubmit() {
             <div class="text-caption text-muted q-mb-md">{{ t('approval.submit.orgNote') }}</div>
             <div v-for="p in data.picks" :key="p.stageCode" :data-testid="`pick-${p.stageCode}`">
               <q-select
-                v-model="picks[p.stageCode]" multiple use-chips emit-value map-options outlined dense
-                :options="options(p)" :label="resolveI18n(p.name, locale)" :hint="pickHint(p)" class="q-mb-md"
+                v-model="picks[p.stageCode]" multiple use-chips emit-value map-options outlined dense use-input input-debounce="0"
+                :options="pickSel.filterBy(options(p))" :label="resolveI18n(p.name, locale)" :hint="pickHint(p)" class="q-mb-md"
                 :error="!!fieldErrors[`picks.${p.stageCode}`]" :error-message="fieldErrors[`picks.${p.stageCode}`]"
-              />
+                @filter="pickSel.onFilter" @popup-hide="pickSel.reset" @update:model-value="clearError(`picks.${p.stageCode}`)"
+              >
+                <template #no-option><SelectNoOption /></template>
+              </q-select>
             </div>
           </template>
           <q-input
-            v-if="!blocked" v-model="comment" type="textarea" outlined autogrow :label="t('approval.submit.comment')"
-            :maxlength="maxComment" :counter="maxComment !== undefined" :error="!!fieldErrors.comment" :error-message="fieldErrors.comment" data-testid="submit-comment"
+            v-if="!blocked && !direct" v-model="comment" type="textarea" outlined autogrow :label="t('approval.submit.comment')"
+            :maxlength="maxComment" :counter="maxComment !== undefined" :error="!!fieldErrors.comment" 
+            :error-message="fieldErrors.comment" data-testid="submit-comment" @update:model-value="clearError('comment')"
           />
         </template>
         <div v-if="topError" class="text-negative q-mt-md" data-testid="submit-error">{{ topError }}</div>
       </q-card-section>
       <q-card-actions align="right">
-        <q-btn flat :label="t('dynamic.cancel')" @click="close" />
+        <q-btn flat :label="t('dynamic.cancel')" :disable="submit.isPending.value" data-testid="submit-approval-cancel" @click="close" />
         <q-btn color="primary" :label="t('approval.submit.send')" :disable="!canSubmit" :loading="submit.isPending.value" data-testid="submit-approval-send" @click="onSubmit" />
       </q-card-actions>
     </q-card>
