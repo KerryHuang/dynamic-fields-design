@@ -24,16 +24,7 @@ export function defaultSourceOf(kind: ApproverSourceKind): ApproverSource {
   }
 }
 
-/** One person at most can ever come out of this source, so the stage mode does not matter (saved as `any`). */
-export function isSingleApprover(s: ApproverSource): boolean {
-  switch (s.source) {
-    case 'manager':
-    case 'userField': return true;
-    case 'users': return (s.userIds?.length ?? 0) <= 1;
-    case 'initiatorPick': return s.max === 1;
-    default: return false;
-  }
-}
+export { isSingleApprover } from 'src/domain/dynamic/approval-flow-draft';
 
 /** Manager level choices 1..max; a saved level above max stays selectable and is marked (tightening only governs what comes after). */
 export function levelOptions(max: number | undefined, saved?: number | null): { value: number; legacy: boolean }[] {
