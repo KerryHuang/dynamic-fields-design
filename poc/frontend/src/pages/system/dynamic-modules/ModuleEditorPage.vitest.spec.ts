@@ -3,7 +3,7 @@ import { flushPromises, mount } from '@vue/test-utils';
 import { createPinia } from 'pinia';
 import * as quasar from 'quasar';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { h } from 'vue';
+import { h, watch } from 'vue';
 import { createI18n } from 'vue-i18n';
 import { createMemoryHistory, createRouter } from 'vue-router';
 import type { ModuleDetail } from 'src/domain/dynamic/types';
@@ -79,6 +79,24 @@ describe('ModuleEditorPage', () => {
     await flushPromises();
     expect(w.findComponent(ApprovalFlowsTab).exists()).toBe(true);
     expect(w.findComponent(ApprovalFlowsTab).props('focusTarget')).toBe(12);
+    w.unmount();
+  });
+
+  it('a second open-flows for the same state resets the target first so the highlight fires again', async () => {
+    api.getApprovalFlows.mockResolvedValue([]);
+    const w = await mountPage();
+    await w.find('[data-testid="tab-workflow"]').trigger('click');
+    await flushPromises();
+    const workflowTab = w.findComponent(WorkflowTab);
+    workflowTab.vm.$emit('open-flows', 12);
+    await flushPromises();
+    const tab = w.findComponent(ApprovalFlowsTab);
+    const seen: (number | null | undefined)[] = [];
+    const stop = watch(() => tab.vm.$props.focusTarget, (v) => seen.push(v), { flush: 'sync' });
+    workflowTab.vm.$emit('open-flows', 12);
+    await flushPromises();
+    stop();
+    expect(seen).toEqual([null, 12]);
     w.unmount();
   });
 

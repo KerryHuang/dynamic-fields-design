@@ -130,6 +130,7 @@ public class ApprovalFlowDesignerTests : ApprovalTestBase
         var res = await Send(new UpdateApprovalFlowRequest("po-g", Input("po-g", r.Confirmed, 3, Def(null, Stage("board", Group(BoardGroup, FinanceGroup))), active: false)));
 
         res.IsSuccess.Should().BeFalse();
+        res.Errors.Keys.Should().Contain(k => k.StartsWith("definition.stages[0]"));
         Flow("po-g").Active.Should().BeTrue();
     }
 
