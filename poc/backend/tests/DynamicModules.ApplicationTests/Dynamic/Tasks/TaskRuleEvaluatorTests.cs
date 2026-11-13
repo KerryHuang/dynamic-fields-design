@@ -50,6 +50,7 @@ public class TaskRuleEvaluatorTests
     [InlineData("2027-02-01T00:30:00+08:00", 0, "2027-02-01")]
     [InlineData("2027-01-31T15:59:59Z", 0, "2027-01-31")]
     [InlineData("2027-01-31T17:00:00Z", 1, "2027-02-02")]
+    [InlineData("2027-02-01T23:00:00", 0, "2027-02-01")]
     public void DueDate_DateTime_UsesTaipeiDate(string value, int offset, string expected)
     {
         var due = TaskRuleEvaluator.DueDate(Def(EndField, offset), BuildModule(), Values((EndField, $"\"{value}\"")));

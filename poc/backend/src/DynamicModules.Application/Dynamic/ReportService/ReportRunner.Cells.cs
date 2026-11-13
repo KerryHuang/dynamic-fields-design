@@ -136,16 +136,7 @@ public partial class ReportRunner
             : EmptyCell;
 
     /// <summary>
-    /// 帶偏移的值換成台北牆上時間（FieldDisplay.BusinessOffset，與 IBusinessTime 同一時區）；
-    /// 不帶偏移的值本身就是台北牆上時間（spec §6.4）。
+    /// 同 BusinessClock.TryParseWallClock：帶偏移的值換成台北牆上時間，不帶偏移的值本身就是台北牆上時間（spec §6.4）。
     /// </summary>
-    private static bool TryWallClock(string s, out DateTime at)
-    {
-        at = default;
-        // AssumeUniversal 讓解析不經過主機時區；Kind 只用來分辨字串有沒有帶偏移
-        if (!DateTimeOffset.TryParse(s, CultureInfo.InvariantCulture, DateTimeStyles.AssumeUniversal, out var dto)
-            || !DateTime.TryParse(s, CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind, out var parsed)) return false;
-        at = parsed.Kind == DateTimeKind.Unspecified ? dto.DateTime : dto.ToOffset(FieldDisplay.BusinessOffset).DateTime;
-        return true;
-    }
+    private static bool TryWallClock(string s, out DateTime at) => BusinessClock.TryParseWallClock(s, out at);
 }

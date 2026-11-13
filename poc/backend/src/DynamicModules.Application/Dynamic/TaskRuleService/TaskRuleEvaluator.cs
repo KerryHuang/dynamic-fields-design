@@ -2,6 +2,7 @@ using System.Globalization;
 using System.Text.Json;
 using DynamicModules.Application.Dynamic.Display;
 using DynamicModules.Domain.Entities.Dynamic;
+using DynamicModules.Domain.FieldTypes;
 
 namespace DynamicModules.Application.Dynamic.TaskRuleService;
 
@@ -48,8 +49,7 @@ public static class TaskRuleEvaluator
         DateOnly? baseDate = field.Type switch
         {
             FieldType.Date => text.Length >= 10 && DateOnly.TryParseExact(text[..10], "yyyy-MM-dd", CultureInfo.InvariantCulture, DateTimeStyles.None, out var d) ? d : null,
-            FieldType.DateTime => DateTimeOffset.TryParse(text, CultureInfo.InvariantCulture, DateTimeStyles.None, out var dto)
-                ? DateOnly.FromDateTime(dto.ToOffset(FieldDisplay.BusinessOffset).DateTime) : null,
+            FieldType.DateTime => BusinessClock.TryParseWallClock(text, out var at) ? DateOnly.FromDateTime(at) : null,
             _ => null,
         };
         if (baseDate is not { } date) return null;
