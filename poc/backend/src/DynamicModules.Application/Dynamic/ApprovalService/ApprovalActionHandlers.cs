@@ -275,3 +275,34 @@ public class WithdrawApprovalHandler(
         return ServiceResult.Success(new ApprovalActionResponse(ApprovalOutcomes.Withdrawn, inst.Id, inst.RowVersion));
     }
 }
+
+/// <summary>轉交（設計 §7.5）：把自己這個任務交給另一位使用者；對象規則見 <see cref="ApprovalActionRules.TargetError"/>。</summary>
+public class TransferTaskHandler(
+    IApprovalInstanceRepository repo, ApprovalActionSupport support, ApprovalHandover handover, ApprovalPolicies policies,
+    IPermissionRepository permissions, ICurrentUser user, IUnitOfWork uow) : IRequestHandler<TransferTaskRequest, ServiceResult>
+{
+    public async Task<ServiceResult> Handle(TransferTaskRequest request, CancellationToken ct)
+    {
+        var task = await repo.GetTaskAsync(request.TaskId, ct);
+        if (task is null) return ServiceResult.NotFound(ApprovalMessages.TaskNotFound);
+        if (await support.CommentErrorAsync(request.Comment, required: false, ct) is { } ce) return ApprovalActionSupport.Bad("comment", ce);
+        var (loaded, failure) = await support.LoadAsync(task.InstanceId, request.RowVersion, ct,
+            _ => ApprovalActionRules.IsActor(task, user.UserId) ? null : ServiceResult.Forbidden(), task);
+        if (failure is not null) return failure;
+        var (inst, _, _, runs, tasks) = loaded!;
+        var me = tasks.Single(t => t.Id == task.Id);
+        if (me.Status != ApprovalTaskStatus.Open) return ServiceResult.Conflict(ApprovalMessages.StageHandled);
+        if (ApprovalActionSupport.AlreadyApprovedInStage(tasks, me, user.UserId)) return ServiceResult.Conflict(ApprovalMessages.StageHandled);
+
+        var activeUsers = (await permissions.ListUsersAsync(ct)).Where(u => u.IsActive).Select(u => u.UserId).ToHashSet(StringComparer.Ordinal);
+        var allowSelf = await policies.AllowSelfApprovalAsync(inst.ModuleId, ct);
+        if (ApprovalActionRules.TargetError(request.UserId, user.UserId, inst.InitiatorUserId, allowSelf, activeUsers,
+                tasks.Where(t => t.StageRunId == me.StageRunId)) is { } bad)
+            return ApprovalActionSupport.Bad("userId", bad);
+
+        await handover.HandOverAsync(inst, me, request.UserId, ApprovalActions.Transfer, user.UserId, null,
+            ApproveTaskHandler.Clean(request.Comment), ct);
+        await uow.CommitAsync(ct);
+        return ServiceResult.Success(new ApprovalActionResponse(ApprovalOutcomes.Transferred, inst.Id, inst.RowVersion));
+    }
+}

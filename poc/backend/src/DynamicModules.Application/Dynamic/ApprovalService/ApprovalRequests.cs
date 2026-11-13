@@ -15,6 +15,9 @@ public record ApproveTaskRequest(long TaskId, string RowVersion, string? Comment
 /// <summary>To：initiator（退回發起人）或 previous（退回上一關）。</summary>
 public record RejectTaskRequest(long TaskId, string RowVersion, string Comment, string To) : IRequest<ServiceResult>, IRecordWriteRequest;
 
+/// <summary>轉交（設計 §7.5）：UserId 是接手的人。</summary>
+public record TransferTaskRequest(long TaskId, string RowVersion, string UserId, string? Comment) : IRequest<ServiceResult>, IRecordWriteRequest;
+
 public record WithdrawApprovalRequest(long InstanceId, string RowVersion, string? Comment) : IRequest<ServiceResult>, IRecordWriteRequest;
 
 public record GetRecordApprovalRequest(long RecordId) : IRequest<ServiceResult>;

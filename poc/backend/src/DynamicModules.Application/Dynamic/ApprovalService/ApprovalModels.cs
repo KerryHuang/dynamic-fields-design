@@ -8,13 +8,13 @@ namespace DynamicModules.Application.Dynamic.ApprovalService;
 /// <summary>Outcome：submitted（建立實例）、approved（全部關卡都被跳過，直接核准）、direct（沒有流程符合，直接轉移）。</summary>
 public sealed record SubmitApprovalResponse(string Outcome, long? InstanceId, string RecordRowVersion);
 
-/// <summary>Outcome：advanced、approved、rerouted、rejected、returned、withdrawn。NeedsResubmit：rerouted 且新流程要發起人重新自選，沒有新實例。</summary>
+/// <summary>Outcome：advanced、approved、rerouted、rejected、returned、withdrawn、transferred。NeedsResubmit：rerouted 且新流程要發起人重新自選，沒有新實例。</summary>
 public sealed record ApprovalActionResponse(string Outcome, long InstanceId, string InstanceRowVersion, I18nText? NewFlowName = null, bool NeedsResubmit = false);
 
 public static class ApprovalOutcomes
 {
     public const string Submitted = "submitted", Direct = "direct", Advanced = "advanced", Approved = "approved", Rerouted = "rerouted",
-        Rejected = "rejected", Returned = "returned", Withdrawn = "withdrawn";
+        Rejected = "rejected", Returned = "returned", Withdrawn = "withdrawn", Transferred = "transferred";
 }
 
 /// <summary>動作的共同規則（設計 §7.1、§7.7）。</summary>
@@ -45,6 +45,21 @@ public static class ApprovalActionRules
         return null;
     }
 
+    /// <summary>
+    /// 轉交、改派、加簽對象的檢查，依序回第一個不符合的訊息：不存在或停用、是自己、是發起人（allowSelf 為 false 時）、
+    /// 這一關已有票（任務不是 transferred 的負責人，或代理任務的本人）；通過回 null。
+    /// </summary>
+    public static MessageRef? TargetError(string target, string actor, string initiator, bool allowSelf, IReadOnlySet<string> activeUsers,
+        IEnumerable<Domain.Entities.Dynamic.ApprovalTask> stageTasks)
+    {
+        if (!activeUsers.Contains(target)) return ApprovalMessages.TargetInactive;
+        if (target == actor) return ApprovalMessages.TargetSelf;
+        if (!allowSelf && target == initiator) return ApprovalMessages.TargetInitiator;
+        return stageTasks.Any(t => t.Status != Domain.Entities.Dynamic.ApprovalTaskStatus.Transferred && (t.AssigneeUserId == target
+            || t is { Reason: Domain.Entities.Dynamic.ApprovalTaskReason.Delegated } && t.OriginalUserId == target))
+            ? ApprovalMessages.TargetInStage : null;
+    }
+
     /// <summary>Assignee，或 Reason = delegated 時的 Original（a3 用）。</summary>
     public static bool IsActor(Domain.Entities.Dynamic.ApprovalTask t, string userId) =>
         t.AssigneeUserId == userId || (t.Reason == Domain.Entities.Dynamic.ApprovalTaskReason.Delegated && t.OriginalUserId == userId);
@@ -59,7 +74,7 @@ public sealed record RecordApprovalSummary(string Status, I18nText? StageName, i
 public sealed record RecordApprovalLock(IReadOnlyList<string> FieldKeys, bool DetailRowsLocked);
 
 public sealed record ApprovalTaskView(long Id, string AssigneeUserId, string AssigneeName, string OriginalUserId, string Reason, string Status,
-    DateTime? ActedTime, bool CanAct, bool CanReturnPrevious = false);
+    DateTime? ActedTime, bool CanAct, bool CanReturnPrevious = false, string? OriginalName = null);
 
 public sealed record ApprovalStageView(long Id, int Seq, string? StageCode, I18nText Name, string Mode, string Status, string? SkipReason,
     DateTime? DueTime, IReadOnlyList<ApprovalTaskView> Tasks, IReadOnlyList<string> EditableFieldKeys);

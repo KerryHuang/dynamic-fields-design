@@ -120,6 +120,10 @@ public static class ApprovalMessages
     public static readonly MessageRef FieldHiddenForApprover = MessageRef.Of(MessageText.ApprovalFieldHiddenForApprover);
     public static readonly MessageRef FieldReadOnlyForApprover = MessageRef.Of(MessageText.ApprovalFieldReadOnlyForApprover);
     public static readonly MessageRef RejectTargetInvalid = MessageRef.Of(MessageText.ApprovalRejectTargetInvalid);
+    public static readonly MessageRef TargetInactive = MessageRef.Of(MessageText.ApprovalTargetInactive);
+    public static readonly MessageRef TargetSelf = MessageRef.Of(MessageText.ApprovalTargetSelf);
+    public static readonly MessageRef TargetInitiator = MessageRef.Of(MessageText.ApprovalTargetInitiator);
+    public static readonly MessageRef TargetInStage = MessageRef.Of(MessageText.ApprovalTargetInStage);
     public static readonly MessageRef RuntimeInvalid = MessageRef.Of(MessageText.ApprovalRuntimeInvalid);
     public static readonly MessageRef RecordGone = MessageRef.Of(MessageText.ApprovalRecordGone);
     public static readonly MessageRef NoWorkflow = MessageRef.Of(MessageText.ApprovalNoWorkflow);

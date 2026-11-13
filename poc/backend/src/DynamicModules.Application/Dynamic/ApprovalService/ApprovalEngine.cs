@@ -26,11 +26,11 @@ public sealed class ApprovalEngine(
         inst.FlowSetSnapshot.FirstOrDefault(e => e.FlowVersionId == inst.FlowVersionId)?.Definition;
 
     public ApprovalAction Log(ApprovalInstance inst, string action, string actor, long? runId = null, long? taskId = null, string? comment = null,
-        List<string>? targets = null, string? data = null)
+        List<string>? targets = null, string? data = null, string? onBehalfOf = null)
     {
         var a = new ApprovalAction
         {
-            InstanceId = inst.Id, StageRunId = runId, TaskId = taskId, Action = action, ActorUserId = actor, Comment = comment,
+            InstanceId = inst.Id, StageRunId = runId, TaskId = taskId, Action = action, ActorUserId = actor, OnBehalfOfUserId = onBehalfOf, Comment = comment,
             TargetUserIds = targets, DataJson = data, CreatedTime = time.Now, OperationId = op.OperationId
         };
         repo.AddAction(a);

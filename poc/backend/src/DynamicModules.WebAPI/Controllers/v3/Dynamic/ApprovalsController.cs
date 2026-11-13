@@ -14,6 +14,7 @@ public class ApprovalsController(IMediator mediator) : ControllerBase
     public sealed record ApproveBody(string RowVersion, string? Comment, Dictionary<string, System.Text.Json.JsonElement?>? Values);
     public sealed record RejectBody(string RowVersion, string Comment, string To);
     public sealed record WithdrawBody(string RowVersion, string? Comment);
+    public sealed record TransferBody(string RowVersion, string UserId, string? Comment);
     public sealed record PreviewBody(long To);
 
     [HttpPost("approval-tasks/{id:long}/approve")]
@@ -23,6 +24,10 @@ public class ApprovalsController(IMediator mediator) : ControllerBase
     [HttpPost("approval-tasks/{id:long}/reject")]
     public async Task<IActionResult> Reject(long id, RejectBody body) =>
         (await mediator.Send(new RejectTaskRequest(id, body.RowVersion, body.Comment, body.To))).ToActionResult(this);
+
+    [HttpPost("approval-tasks/{id:long}/transfer")]
+    public async Task<IActionResult> Transfer(long id, TransferBody body) =>
+        (await mediator.Send(new TransferTaskRequest(id, body.RowVersion, body.UserId, body.Comment))).ToActionResult(this);
 
     [HttpPost("approval-instances/{id:long}/withdraw")]
     public async Task<IActionResult> Withdraw(long id, WithdrawBody body) =>

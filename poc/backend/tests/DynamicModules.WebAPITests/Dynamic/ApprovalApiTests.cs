@@ -204,6 +204,66 @@ public class ApprovalApiTests : IDisposable
     }
 
     [Fact]
+    [Trait("Category", "Postgres")]
+    public async Task Transfer_IdempotencyReplay_OneNewTask()
+    {
+        var r = await Arrange();
+        var id = await Submitted(r);
+        var s1 = _app.AsUser("sales01");
+        var current = await Current(s1, id);
+        var tasksBefore = current.GetProperty("stages")[0].GetProperty("tasks").GetArrayLength();
+        var body = new { rowVersion = current.GetProperty("rowVersion").GetString(), userId = "floor01", comment = "請代為處理" };
+        HttpRequestMessage Request()
+        {
+            var req = new HttpRequestMessage(HttpMethod.Post, $"{Base}/approval-tasks/{TaskOf(current, "sales01")}/transfer") { Content = JsonContent.Create(body) };
+            req.Headers.Add("Idempotency-Key", "transfer-once-1");
+            return req;
+        }
+
+        var first = await s1.SendAsync(Request());
+        first.StatusCode.Should().Be(HttpStatusCode.OK, await first.Content.ReadAsStringAsync());
+        (await JsonOf(first)).GetProperty("outcome").GetString().Should().Be("transferred");
+        var second = await s1.SendAsync(Request());
+        second.StatusCode.Should().Be(HttpStatusCode.OK);
+        second.Headers.GetValues("Idempotent-Replay").Should().ContainSingle("true");
+        (await second.Content.ReadAsStringAsync()).Should().Be(await first.Content.ReadAsStringAsync());
+
+        var tasks = (await Current(_admin, id)).GetProperty("stages")[0].GetProperty("tasks").EnumerateArray().ToList();
+        tasks.Count(t => t.GetProperty("assigneeUserId").GetString() == "floor01").Should().Be(1);
+        tasks.Count.Should().Be(tasksBefore + 1);   // 只多一個新任務
+        tasks.Single(t => t.GetProperty("assigneeUserId").GetString() == "sales01").GetProperty("status").GetString().Should().Be("transferred");
+        var finished = await JsonOf(await _admin.GetAsync($"{Base}/records/{id}/approval"));
+        finished.GetProperty("current").GetProperty("actions").EnumerateArray()
+            .Count(a => a.GetProperty("action").GetString() == "transfer").Should().Be(1);
+    }
+
+    [Fact]
+    [Trait("Category", "Postgres")]
+    public async Task TransferAndApprove_Concurrent_OneWins()
+    {
+        var r = await Arrange();
+        var id = await Submitted(r);
+        var s1 = _app.AsUser("sales01");
+        var current = await Current(s1, id);
+        var rv = current.GetProperty("rowVersion").GetString();
+        var taskId = TaskOf(current, "sales01");
+
+        var results = await Task.WhenAll(
+            s1.PostAsJsonAsync($"{Base}/approval-tasks/{taskId}/transfer", new { rowVersion = rv, userId = "floor01" }),
+            _app.AsUser("sales01").PostAsJsonAsync($"{Base}/approval-tasks/{taskId}/approve", new { rowVersion = rv }));
+        results.Select(x => x.StatusCode).Should().BeEquivalentTo([HttpStatusCode.OK, HttpStatusCode.Conflict]);
+
+        var record = await JsonOf(await _admin.GetAsync($"{Base}/records/{id}/approval"));
+        var view = record.TryGetProperty("current", out var c) ? c : record.GetProperty("previous").EnumerateArray().Single();
+        var actions = view.GetProperty("actions").EnumerateArray().Select(a => a.GetProperty("action").GetString()).ToList();
+        var transferWon = results[0].StatusCode == HttpStatusCode.OK;
+        // 不會既轉交又同意
+        (actions.Contains("transfer") && actions.Contains("approve")).Should().BeFalse(string.Join(",", actions));
+        actions.Contains(transferWon ? "transfer" : "approve").Should().BeTrue(string.Join(",", actions));
+        view.GetProperty("status").GetString().Should().Be(transferWon ? "pending" : "approved");
+    }
+
+    [Fact]
     public async Task EnUs_submit_blocked_when_no_approver_is_found()
     {
         // 關卡群組只有發起人自己（admin），備援（其他系統管理員）也沒有人
