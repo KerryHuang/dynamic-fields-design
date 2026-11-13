@@ -6,7 +6,7 @@
   "patternProperties": { "^x-": {} },
   "properties": {
     "format": { "const": "formwright-app" },
-    "formatVersion": { "enum": [2, 3, 4] },
+    "formatVersion": { "enum": [2, 3, 4, 5, 6, 7, 8] },
     "manifest": { "$ref": "#/$defs/manifest" },
     "groups": { "type": "array", "maxItems": 20, "items": { "$ref": "#/$defs/group" } },
     "modules": { "type": "array", "minItems": 1, "maxItems": 30 },
@@ -19,7 +19,11 @@
     "events": { "type": "array", "maxItems": 100 },
     "checks": { "type": "array", "maxItems": 100 },
     "ledgers": { "type": "array", "maxItems": 30 },
-    "printTemplates": { "type": "array", "maxItems": 100 }
+    "printTemplates": { "type": "array", "maxItems": 100 },
+    "integrations": { "type": "array", "maxItems": 20 },
+    "contributions": { "type": "array", "maxItems": 20 },
+    "taskRules": { "type": "array" },
+    "approvalFlows": { "type": "array", "maxItems": 50 }
   },
   "$defs": {
     "code": { "type": "string", "pattern": "^[a-z][a-zA-Z0-9_]{0,39}$" },
@@ -42,6 +46,7 @@
         "description": { "$ref": "#/$defs/i18n" },
         "icon": { "type": "string", "maxLength": 100 },
         "vendor": { "type": "string", "maxLength": 100 },
+        "kind": { "enum": ["app", "master"] },
         "requires": {
           "type": "object",
           "additionalProperties": false,
@@ -51,7 +56,12 @@
               "properties": {
                 "id": { "$ref": "#/$defs/appId" },
                 "modules": { "type": "array", "minItems": 1, "items": { "$ref": "#/$defs/appId" } } } } },
-            "entities": { "type": "array", "maxItems": 20, "items": { "type": "string", "maxLength": 100 } }
+            "entities": { "type": "array", "maxItems": 20, "items": { "type": "string", "maxLength": 100 } },
+            "masters": { "type": "array", "maxItems": 5, "items": {
+              "type": "object", "required": ["id"], "additionalProperties": false,
+              "properties": {
+                "id": { "$ref": "#/$defs/appId" },
+                "modules": { "type": "array", "items": { "$ref": "#/$defs/appId" } } } } }
           }
         }
       }
