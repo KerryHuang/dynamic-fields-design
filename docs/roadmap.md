@@ -31,10 +31,20 @@
 | a2d6 | 簽核數值與開關政策：關卡數、每關人數、逾期時數、主管層數（可模組覆寫）、意見字數、發起人自簽、管理員略過轉移群組改讀政策設定（只驗 SQLite，PostgreSQL 在 pg0 後補驗） | 已上線（2026-11-13，22e61ad8） | [簽核流程](superpowers/specs/2026-11-10-approval-workflow-design.md)、[政策設定](superpowers/specs/2026-11-11-policy-settings-design.md) §9 |
 | a2d7 | 簽核收件人政策（備援對象、異常通知對象）；總收文件與設計寫回（只驗 SQLite，PostgreSQL 在 pg0 後補驗） | 已上線（2026-11-13，a651b8e6） | [簽核流程](superpowers/specs/2026-11-10-approval-workflow-design.md)、[政策設定](superpowers/specs/2026-11-11-policy-settings-design.md) §9 |
 | a4a | 前端：簽核設計器 | 已上線（2026-11-13，6821b793） | [簽核流程](superpowers/specs/2026-11-10-approval-workflow-design.md) |
-| ci1 | gate 加速：合併前總檢查搬到 GitHub Actions、分路平行；依改動決定範圍（只改文件不跑、只改前端只跑前端、動到後端全跑）；功能分支外洩掃描通過才推（使用者 11-13 裁決） | 未開始 | — |
-| tz1 | 報表「今天、本月」等日期區間與無時區日期時間改用營運時區（Asia/Taipei），不依主機時區；修好後 CI 拿掉 `TZ` 覆寫。ci1 在 UTC 的 GitHub 機器上抓到：SQL 路徑依主機時區計算，Render 也是 UTC | 未開始 | — |
+| ci1 | gate 加速：合併前總檢查搬到 GitHub Actions、分路平行；依改動決定範圍（只改文件不跑、只改前端只跑前端、動到後端全跑）；功能分支外洩掃描通過才推（使用者 11-13 裁決） | 已上線（2026-11-13，c3d12146） | — |
+| tz1 | 報表「今天、本月」等日期區間與無時區日期時間改用營運時區（Asia/Taipei），不依主機時區；修好後 CI 拿掉 `TZ` 覆寫。ci1 在 UTC 的 GitHub 機器上抓到：SQL 路徑依主機時區計算，Render 也是 UTC | 已上線（2026-11-13，b51c169d） | — |
 | a5 | 套件格式 8：簽核流程；接手 CRM 設計案流程：套件內建，刪 `DemoApprovals`；採購單金額門檻的 Demo 在這裡驗收 | 未開始 | [簽核流程](superpowers/specs/2026-11-10-approval-workflow-design.md) |
 | a3 | 轉交、加簽、代理、逾期提醒；個人代理設定、管理員終止與改派、臨時讀取的列印預覽（使用者 11-12 裁決） | 未開始 | [簽核流程](superpowers/specs/2026-11-10-approval-workflow-design.md) |
+| fg1 | 簽核流程圖地基：圖形定義型別、結構驗證、sequence → graph 轉換、migration、分支數政策；API 仍不收 graph | 未開始 | [簽核流程圖](superpowers/specs/2026-11-13-approval-flowgraph-design.md) §17 |
+| fg2 | 流程圖執行引擎：並行分支、全部到齊／任一到齊匯合、分支取消、退回與撤回延伸、同一單據動作序列化 | 未開始 | [簽核流程圖](superpowers/specs/2026-11-13-approval-flowgraph-design.md) §17 |
+| fg3 | 拖拉式流程圖設計器（Vue Flow）：草稿與發布、四種寬度（手機只看圖＋改屬性），移除舊關卡編輯 | 未開始 | [簽核流程圖](superpowers/specs/2026-11-13-approval-flowgraph-design.md) §17 |
+| fg4 | 單據頁唯讀進度流程圖、並行時簽核摘要列出進行中的關（可與 fg3 平行） | 未開始 | [簽核流程圖](superpowers/specs/2026-11-13-approval-flowgraph-design.md) §17 |
+| fg5 | 通知節點：站內通知、收件人解析、範本帶欄位值並依收件人權限遮蔽 | 未開始 | [簽核流程圖](superpowers/specs/2026-11-13-approval-flowgraph-design.md) §17 |
+| fg6 | 流程圖收尾：既有流程批次轉換、套件格式升版、手冊與文件 | 未開始 | [簽核流程圖](superpowers/specs/2026-11-13-approval-flowgraph-design.md) §17 |
+| kb1、kb2、kb3 | 任務看板：主管看部屬任務與重派、看板資料表與 API、清單／看板切換、拖拉改值、自訂看板與分享 | 未開始 | [任務看板、報表與甘特圖](superpowers/specs/2026-11-13-task-board-reports-gantt-design.md) §20 |
+| kr1、kr2、kr3 | 任務報表：任務進報表資料來源、條件量值與中位數、內建任務統計報表（kr 只依賴 kb1） | 未開始 | [任務看板、報表與甘特圖](superpowers/specs/2026-11-13-task-board-reports-gantt-design.md) §20 |
+| st1、st2 | 子任務（一層、父任務顯示進度） | 未開始 | [任務看板、報表與甘特圖](superpowers/specs/2026-11-13-task-board-reports-gantt-design.md) §20 |
+| gt1、gt2 | 甘特圖：任務開始日、甘特檢視與拖拉調整日期 | 未開始 | [任務看板、報表與甘特圖](superpowers/specs/2026-11-13-task-board-reports-gantt-design.md) §20 |
 | O1 | 維運地基：結構化 log 與 request id、health live／ready、版本端點、前端錯誤收集、背景排程器（o1a、o1b、o1c）；任務「即將到期」提醒改為到期前 N 天內補一次、同一任務只補一次（使用者 2026-11-12 裁決，排進 o1b） | 進行中：o1a（觀測地基）已上線（2026-11-12），o1b、o1c 未開始（使用者裁決排在簽核主線之後） | [維運與觀測](superpowers/specs/2026-11-11-ops-observability-design.md) §9、§10 |
 | un1 | 列表、匯出、篩選的使用者欄位顯示姓名（小段穿插，使用者 11-11 裁決；位置是主控判斷，2026-11-12 排定） | 未開始 | — |
 | pg0a | PostgreSQL provider 抽象：依 `Database:Provider` 選資料庫，SQLite 行為不變、不加 migration；排在 O1 之後（使用者裁決 O1 → pg0），但沒有硬依賴，可視資源與 O1 並行 | 未開始 | [PostgreSQL provider](superpowers/specs/2026-11-12-postgres-provider-design.md) |
@@ -99,7 +109,7 @@ HRM（階段 4）與階段 5 先用佔位列排序，開工前再切成正式工
 
 設計：[政策設定](superpowers/specs/2026-11-11-policy-settings-design.md)、[維運、觀測與告警派工 agent](superpowers/specs/2026-11-11-ops-observability-design.md)、[MCP server](superpowers/specs/2026-11-11-mcp-server-design.md)。這幾段插在上面第 1 項「任務管理與簽核」的簽核主線中間。
 
-順序：**p1 → o1a → 簽核 a2d1 → a4b → a6 → a2d2–a2d7 → a4a → ci1 → tz1 → a5 → a3 → o1b、o1c → un1 → pg0 → O2 → p2、p3 → i3、i4 → mcp1（mcp1a → mcp1b）→ O3 → pkg1 → O4–O6**，MCP 後續段 mcp2a → mcp2b → mcp3 → mcp4 依進度與 O4–O6 穿插。
+順序：**p1 → o1a → 簽核 a2d1 → a4b → a6 → a2d2–a2d7 → a4a → ci1 → tz1 → a5 → a3 → fg1–fg6 → kb1–kb3、kr1–kr3 → st1、st2 → gt1、gt2 → o1b、o1c → un1 → pg0 → O2 → p2、p3 → i3、i4 → mcp1（mcp1a → mcp1b）→ O3 → pkg1 → O4–O6**，MCP 後續段 mcp2a → mcp2b → mcp3 → mcp4 依進度與 O4–O6 穿插。
 
 - 使用者裁決（2026-11-11）：p1 → O1 → pg0 → a2d–a6 → O2 → mcp1 → O3…；O1 在 p1 之後、a2d 之前；O2 以後視情況穿插；pg0 在 O1 之後，之後的功能兩種資料庫都驗，其餘 PostgreSQL 改寫排在簽核之後；MCP 地基 mcp1 在簽核與 O2 之後，業務寫入、設計器工具、OAuth 後續分段，維運 O4、O6 直接用 MCP 工具；列表的使用者欄位顯示姓名用小段穿插。
 - 使用者確認（2026-11-12）：p2、p3 排在 O2 之後、mcp1a 之前；O3 → O4 → O5 → O6 的先後；mcp1 之後是 mcp1a → mcp1b → mcp2a → mcp2b → mcp3 → mcp4，mcpO1 隨 O4、mcpO2 隨 O6，mcp4 可視雲端版第一個客戶的需求提前。
@@ -107,6 +117,7 @@ HRM（階段 4）與階段 5 先用佔位列排序，開工前再切成正式工
 - 使用者裁決（2026-11-12）：為了 Demo CRM 設計案，簽核主線提前到 o1a 之後、pg0 之前；簽核先只驗 SQLite，pg0 後補驗
 - 使用者裁決（2026-11-12）：a2d 拆開，a2d1（鎖定寫入）先做，a2d2–a2d7 排在 a4b、a6 之後、a4a 之前；理由：a4b、a6 不依賴附件與整批重算，先讓簽核畫面與 Demo 上線。
 - 使用者裁決（2026-11-13）：a4a 之後、a5 之前插入 ci1（gate 加速），先把總檢查搬到 GitHub Actions，再分析慢測試與不穩定測試。
+- 使用者裁決（2026-11-13）：簽核改成拖拉式流程圖（fg1–fg6），順序 a5 → a3 → fg；任務看板、報表、子任務、甘特圖排在流程圖之後，先子任務再甘特圖。
 - 主控判斷（2026-11-13，待使用者確認）：tz1 緊接 ci1、排在 a5 前；理由：正式 Demo 跑在 UTC，報表日期區間可能差 8 小時，屬正確性問題。
 - 主控判斷（位置）：un1 排在 O1 之後、pg0 之前；pkg1 緊接 O3，不等 O4。
 - 段號命名：MCP 各段一律用 mcp 開頭（mcp1a、mcp1b、mcp2a、mcp2b、mcp3、mcp4、mcpO1、mcpO2），與已上線的多語系 m1（模組選單分區）區隔。
