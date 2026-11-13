@@ -42,8 +42,13 @@ public sealed class ApprovalFlowEditor(IApprovalFlowRepository flows, ApprovalDe
         if (errors.Count > 0) return ServiceResult.Invalid(errors);
 
         var previous = self?.CurrentVersionId is { } vid ? (await flows.GetVersionAsync(vid, ct))?.Definition : null;
-        foreach (var (k, v) in await validator.ValidateAsync(module, wf, input.Definition!, previous, ct)) errors.TryAdd($"definition.{k}", v);
-        if (errors.Count > 0) return ServiceResult.Invalid(errors);
+        // 定義沒變、而且是從啟用改成停用：定義裡引用的群組或欄位可能已被刪除或停用，這時仍要讓設計者先把流程停下來，所以不重跑定義驗證。啟用時照常驗證。
+        var deactivatingOnly = self is { Active: true } && !input.Active && previous is not null && ApprovalDefinitionJson.SameAs(previous, input.Definition!);
+        if (!deactivatingOnly)
+        {
+            foreach (var (k, v) in await validator.ValidateAsync(module, wf, input.Definition!, previous, ct)) errors.TryAdd($"definition.{k}", v);
+            if (errors.Count > 0) return ServiceResult.Invalid(errors);
+        }
 
         var current = await flows.ListCurrentByModuleAsync(module.Id, ct);
         if (current.Any(f => f.Flow.Id != self?.Id && f.Flow.ToOptionId == input.ToOptionId && f.Flow.Priority == input.Priority))

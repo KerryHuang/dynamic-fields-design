@@ -85,6 +85,54 @@ public class ApprovalFlowDesignerTests : ApprovalTestBase
         VersionCount("po-b").Should().Be(2);
     }
 
+    /// <summary>流程引用的群組被刪掉（直接刪資料列，繞過 DeleteGroup 的引用守衛，模擬舊資料）。</summary>
+    private async Task<(PurchaseRig R, ApprovalDefinition Def)> WithDeletedGroup()
+    {
+        var r = await WithAB();
+        var def = Def(null, Stage("board", Group(BoardGroup)));
+        await SeedFlow(r, "po-g", r.Confirmed, 3, def);
+        await Db.Context.Set<UserGroupMapping>().Where(m => m.GroupId == BoardGroup).ExecuteDeleteAsync();
+        await Db.Context.Set<PermissionGroup>().Where(g => g.Id == BoardGroup).ExecuteDeleteAsync();
+        Db.Context.ChangeTracker.Clear();
+        return (r, def);
+    }
+
+    [Fact]
+    public async Task Update_DefinitionUnchanged_Deactivate_StillWorksAfterReferencedGroupDeleted()
+    {
+        var (r, def) = await WithDeletedGroup();
+
+        var got = await Update(Input("po-g", r.Confirmed, 3, def, active: false));
+
+        got.Active.Should().BeFalse();
+        Flow("po-g").Active.Should().BeFalse();
+        VersionCount("po-g").Should().Be(1);
+    }
+
+    [Fact]
+    public async Task Update_DefinitionUnchanged_Activate_RejectedWhenReferencedGroupDeleted()
+    {
+        var (r, def) = await WithDeletedGroup();
+        await Update(Input("po-g", r.Confirmed, 3, def, active: false));
+
+        var res = await Send(new UpdateApprovalFlowRequest("po-g", Input("po-g", r.Confirmed, 3, def, active: true)));
+
+        res.IsSuccess.Should().BeFalse();
+        res.Errors.Keys.Should().Contain(k => k.StartsWith("definition.stages[0]"));
+        Flow("po-g").Active.Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task Update_DefinitionChanged_Deactivate_StillValidated()
+    {
+        var (r, _) = await WithDeletedGroup();
+
+        var res = await Send(new UpdateApprovalFlowRequest("po-g", Input("po-g", r.Confirmed, 3, Def(null, Stage("board", Group(BoardGroup, FinanceGroup))), active: false)));
+
+        res.IsSuccess.Should().BeFalse();
+        Flow("po-g").Active.Should().BeTrue();
+    }
+
     [Fact]
     public async Task Response_CurrentVersionUsed_TrueWhenBound()
     {
