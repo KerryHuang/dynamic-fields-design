@@ -7,4 +7,5 @@
 - 補收件人名稱解析的後端測試（a2d7 N-M3）：政策收件人引用已停用或不存在帳號時的行為，a4a 前端部分已隨收件人 chip 修正補上
 - 加收件人政策 0 項或 20 項以上的提示（a2d7 N-M4）：不影響簽核設計器畫面，之後在政策設定頁處理
 - 讓簽核試算的發起人下拉可搜尋（a4a5 審查 S5）：現在列出全部使用者，人多時在手機上要捲很長；照記錄下拉加 use-input 與本地篩選
-- 讓營運時區可設定（目前寫死 Asia/Taipei）：tz1 只統一了「無偏移＝台北牆上時間」的解析；BusinessClock.Offset、TaipeiBusinessTime、Normalize 輸出的 "+08:00" 仍寫死
+- 讓營運時區可設定（目前寫死 Asia/Taipei）：tz1 只統一了「無偏移＝台北牆上時間」的解析；BusinessClock.Offset、TaipeiBusinessTime，以及 Normalize、匯入（FieldImportParser.cs:99）、報表過濾（ReportRules.cs:239）補上的 "+08:00" 字面值仍寫死
+- 讓極端日期（如 9999 年）存檔回欄位錯誤而不是 500：DateTimeHandler.Normalize 對 9999-12-31T20:00:00Z 這類值換到 +08:00 會超出範圍而丟例外（tz1 審查 S4）

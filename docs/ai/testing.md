@@ -24,6 +24,8 @@ bunx vitest run src/application/dynamic/queries --maxWorkers=2
 bun run typecheck
 ```
 
+改到日期時間解析或報表日期時，本機加跑一次 `TZ=UTC dotnet test ... --filter ...`（開發機是台北時區，會掩蓋誤用主機時區的錯；CI 跑 UTC）。
+
 改到共用的種子資料、應用程式套件或 i18n 檔，就擴大到 `SeedDataTests`、`AppCatalogChecks`、`locales.vitest.spec.ts`。
 
 ## 合併前：gate（GitHub Actions）

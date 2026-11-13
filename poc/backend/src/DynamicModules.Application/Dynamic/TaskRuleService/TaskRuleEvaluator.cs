@@ -1,6 +1,5 @@
 using System.Globalization;
 using System.Text.Json;
-using DynamicModules.Application.Dynamic.Display;
 using DynamicModules.Domain.Entities.Dynamic;
 using DynamicModules.Domain.FieldTypes;
 

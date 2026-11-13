@@ -2,7 +2,6 @@ using System.Globalization;
 using System.Text.Json;
 using DynamicModules.Application.Common.Security;
 using DynamicModules.Application.Common.Time;
-using DynamicModules.Application.Dynamic.Display;
 using DynamicModules.Application.Dynamic.RecordService;
 using DynamicModules.Application.Dynamic.RecordService.Data;
 using DynamicModules.Application.Dynamic.References;
