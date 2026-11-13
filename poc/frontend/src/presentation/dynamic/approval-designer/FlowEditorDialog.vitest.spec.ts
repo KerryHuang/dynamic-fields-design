@@ -340,9 +340,13 @@ describe('FlowEditorDialog', () => {
   it('has a trial section that keeps its state while switching sections', async () => {
     const w = await mountDialog({ flow: flow('a', 12, 1), flows: [flow('a', 12, 1)] });
     await click('section-trial');
-    expect(body('flow-trial')).not.toBeNull();
+    expect(body('trial-run')!.hasAttribute('disabled')).toBe(true);
+    w.findAllComponents(quasar.QSelect).find((c) => c.props('label') === '發起人')!.vm.$emit('update:modelValue', 'u1');
+    await flushPromises();
+    expect(body('trial-run')!.hasAttribute('disabled')).toBe(false);
     await click('section-basic');
-    expect(body('flow-trial')).not.toBeNull();
+    await click('section-trial');
+    expect(body('trial-run')!.hasAttribute('disabled')).toBe(false);
     w.unmount();
   });
 });

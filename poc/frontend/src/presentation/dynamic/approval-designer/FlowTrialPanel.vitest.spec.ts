@@ -171,10 +171,19 @@ describe('FlowTrialPanel', () => {
     expect(el('trial-result')).toBeNull();
   });
 
-  it('record search 403 shows the no-read note', async () => {
-    api.getPagedRecords.mockRejectedValue({ status: 403 });
+  it('draft 400 names the stage an error belongs to', async () => {
+    api.previewApprovalDraft.mockRejectedValue({ status: 400, errors: { 'definition.stages[1].approvers': ['群組不存在'], 'definition.rejectTo': ['退回狀態不對'] } });
     const w = await mountPanel();
-    select(w, '記錄（選填）').vm.$emit('filter', '', vi.fn());
+    await chooseInitiator(w);
+    await run();
+    expect(text('trial-errors')).toContain('第 2 關：群組不存在');
+    expect(text('trial-errors')).toContain('退回狀態不對');
+  });
+
+  it.each([403, 404])('record search %i shows the no-read note', async (status) => {
+    api.getPagedRecords.mockRejectedValue({ status });
+    const w = await mountPanel();
+    select(w, '記錄（選填）').vm.$emit('filter', '', (fn: () => void) => fn());
     await flushPromises();
     expect(text('trial-record-forbidden')).toBe('你沒有這個模組的讀取權，請改用欄位值試算');
   });
@@ -194,5 +203,65 @@ describe('FlowTrialPanel', () => {
     await mountPanel(draftOf({ toOptionId: null }));
     expect(text('trial-need-target')).toBe('請先在「基本」選擇目標狀態');
     expect(el('trial-run')).toBeNull();
+  });
+
+  it('a response that arrives after an edit is dropped', async () => {
+    let resolve!: (v: ApprovalPreview) => void;
+    api.previewApprovalDraft.mockReturnValue(new Promise<ApprovalPreview>((r) => { resolve = r; }));
+    const w = await mountPanel();
+    await chooseInitiator(w);
+    await run();
+    await w.setProps({ draft: draftOf({ when: { all: [{ field: 7, op: 'gte', value: 50 }] } }) });
+    await flushPromises();
+    resolve(preview({}));
+    await flushPromises();
+    expect(el('trial-result')).toBeNull();
+  });
+
+  it('a rejection that arrives after an edit is dropped', async () => {
+    let reject!: (e: unknown) => void;
+    api.previewApprovalDraft.mockReturnValue(new Promise<ApprovalPreview>((_, r) => { reject = r; }));
+    const w = await mountPanel();
+    await chooseInitiator(w);
+    await run();
+    await w.setProps({ draft: draftOf({ name: { 'zh-TW': '改名' } }) });
+    await flushPromises();
+    reject({ status: 400, errors: { 'definition.stages[0].approvers': ['舊錯誤'] } });
+    await flushPromises();
+    expect(el('trial-errors')).toBeNull();
+  });
+
+  it('clearing a prefilled field sends null; untouched fields are not sent', async () => {
+    api.previewApprovalDraft.mockResolvedValue(preview({}));
+    api.getPagedRecords.mockResolvedValue({ items: [{ id: 9, title: 'A', values: { f_7: 500 } } as never], totalCount: 1, currentPage: 1, pagesSize: 20 });
+    const w = await mountPanel();
+    await chooseInitiator(w);
+    await run();
+    expect(api.previewApprovalDraft.mock.calls[0]![1].values).toBeUndefined();
+    const rec = select(w, '記錄（選填）');
+    rec.vm.$emit('filter', '', (fn: () => void) => fn());
+    await flushPromises();
+    rec.vm.$emit('update:modelValue', 9);
+    await flushPromises();
+    w.findAllComponents(fieldTypeRegistry.decimal.component)[0]!.vm.$emit('update:modelValue', null);
+    await flushPromises();
+    await run();
+    expect(api.previewApprovalDraft.mock.calls[1]![1].values).toEqual({ f_7: null });
+  });
+
+  it('a field the edited draft starts to refer to gets a row prefilled from the chosen record', async () => {
+    api.getPagedRecords.mockResolvedValue({ items: [{ id: 9, title: 'A', values: { f_7: 500, f_8: 3 } } as never], totalCount: 1, currentPage: 1, pagesSize: 20 });
+    const w = await mountPanel();
+    const rec = select(w, '記錄（選填）');
+    rec.vm.$emit('filter', '', (fn: () => void) => fn());
+    await flushPromises();
+    rec.vm.$emit('update:modelValue', 9);
+    await flushPromises();
+    const decimals = () => w.findAllComponents(fieldTypeRegistry.decimal.component);
+    expect(decimals()).toHaveLength(1);
+    await w.setProps({ draft: draftOf({ when: { all: [{ field: 7, op: 'gte', value: 100 }, { field: 8, op: 'gte', value: 1 }] } }) });
+    await flushPromises();
+    expect(decimals()).toHaveLength(2);
+    expect((decimals()[1]!.vm.$props as { modelValue: unknown }).modelValue).toBe(3);
   });
 });

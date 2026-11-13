@@ -54,13 +54,28 @@ const trialFields = computed(() => {
 const values = ref<Record<string, unknown>>({});
 const setValue = (f: SchemaField, v: unknown) => { values.value = { ...values.value, [fieldKey(f)]: v ?? null }; };
 
+let pickedRecord: DynamicRecord | undefined;
+/** Prefill the rows the record has a value for and the user has not touched (a null the user typed stays). */
+function prefill(into: Record<string, unknown>) {
+  if (!pickedRecord) return;
+  for (const f of trialFields.value) {
+    const k = fieldKey(f);
+    if (!(k in into) && pickedRecord.values[k] !== undefined) into[k] = pickedRecord.values[k];
+  }
+}
 function pickRecord(id: number | null) {
   recordId.value = id;
-  const rec = recordOptions.value.find((o) => o.value === id)?.record;
+  pickedRecord = recordOptions.value.find((o) => o.value === id)?.record;
   const next: Record<string, unknown> = {};
-  if (rec) for (const f of trialFields.value) if (rec.values[fieldKey(f)] !== undefined) next[fieldKey(f)] = rec.values[fieldKey(f)];
+  prefill(next);
   values.value = next;
 }
+// An edit that makes the draft refer to more fields adds their rows, prefilled from the chosen record.
+watch(trialFields, () => {
+  const next = { ...values.value };
+  prefill(next);
+  if (Object.keys(next).length !== Object.keys(values.value).length) values.value = next;
+});
 
 /** Value input descriptor with the current locale applied over the zh-TW labels from the registry (same as the condition editor). */
 function inputOf(f: SchemaField) {
@@ -81,21 +96,31 @@ const preview = usePreviewApprovalDraft(() => props.module.key);
 const result = ref<ApprovalPreview | null>(null);
 const errors = ref<string[]>([]);
 const failed = ref(false);
-// An edit makes the shown result stale.
-watch(() => [JSON.stringify(input.value), initiator.value, recordId.value, values.value], () => { result.value = null; errors.value = []; failed.value = false; });
+// An edit makes the shown result stale; a response that arrives after an edit (or a newer run) is dropped.
+let runId = 0;
+watch(() => [JSON.stringify(input.value), initiator.value, recordId.value, values.value], () => { runId++; result.value = null; errors.value = []; failed.value = false; });
+
+const stageErr = /^definition\.stages\[(\d+)\]/;
+/** Messages with the stage they belong to (the keys are indexes into the draft's stages). */
+const errorLines = (e: Record<string, string[]>) => Object.entries(e).flatMap(([k, v]) => {
+  const n = stageErr.exec(k)?.[1];
+  return v.map((m) => (n === undefined ? m : t('approval.designer.trial.stageError', { s: t('approval.designer.stage.title', { n: Number(n) + 1 }), m })));
+});
 
 function run() {
   if (!input.value || !initiator.value) return;
   result.value = null; errors.value = []; failed.value = false;
+  const myRun = ++runId;
   const keys = new Set(trialFields.value.map(fieldKey));
   const sent = Object.fromEntries(Object.entries(values.value).filter(([k]) => keys.has(k)));
   preview.mutate({
     draft: input.value, initiatorUserId: initiator.value, recordId: recordId.value ?? undefined, values: Object.keys(sent).length ? sent : undefined,
   }, {
-    onSuccess: (r) => { result.value = r; },
+    onSuccess: (r) => { if (myRun === runId) result.value = r; },
     onError: (e) => {
+      if (myRun !== runId) return;
       const err = e as unknown as ApiError;
-      const msgs = Object.values(err.errors ?? {}).flat();
+      const msgs = errorLines(err.errors ?? {});
       if (err.status === 400 && msgs.length) errors.value = msgs;
       else failed.value = true;
     },
