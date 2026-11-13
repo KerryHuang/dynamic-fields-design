@@ -20,7 +20,8 @@ public sealed record SubmitTarget(Record Record, Module Module, Workflow Workflo
 
 /// <summary>送出資格（設計 §5.2 第 1 點）：送出與預覽共用，預覽的資格就是送出的資格。</summary>
 public sealed class ApprovalSubmitEligibility(
-    IModuleRepository modules, IRecordRepository records, IDynamicAccessGuard guard, IPermissionRepository permissions, ICurrentUser user)
+    IModuleRepository modules, IRecordRepository records, IDynamicAccessGuard guard, IPermissionRepository permissions, ICurrentUser user,
+    WorkflowService.TransitionAccess access)
 {
     /// <summary>記錄存在、是表頭、模組可寫、有 Edit 且在資料範圍內。</summary>
     public async Task<(Record? Record, Module? Module, ServiceResult? Failure)> LoadAsync(long recordId, CancellationToken ct)
@@ -49,7 +50,7 @@ public sealed class ApprovalSubmitEligibility(
         if (transition.GroupIds.Count > 0)
         {
             var inputs = await permissions.LoadInputsAsync(user.UserId, module, ct);
-            if (inputs is null || !(inputs.User.IsSystemAdmin || inputs.GroupIds.Any(transition.GroupIds.Contains)))
+            if (inputs is null || !(await access.BypassGroupsAsync(inputs, ct) || inputs.GroupIds.Any(transition.GroupIds.Contains)))
                 return (null, Bad(MessageRef.Of(MessageText.WorkflowNotPermitted)));
         }
         return (new SubmitTarget(record, module, wf, from, approval, values), null);
@@ -96,7 +97,7 @@ public sealed class ApprovalPreviewer(
         {
             if (picks.Any(p => p.StageCode == s.Code)) return;
             var allowed = ApproverResolver.Candidates(ctx, s.Approvers);
-            var candidates = ctx.Org.ActiveUsers.Where(u => u != initiator && (allowed is null || allowed.Contains(u)))
+            var candidates = ctx.Org.ActiveUsers.Where(u => (ctx.AllowSelfApproval || u != initiator) && (allowed is null || allowed.Contains(u)))
                 .Order(StringComparer.Ordinal).Select(Ref).ToList();
             picks.Add(new PickRequirement(s.Code, s.Name, s.Approvers.Min ?? 1, s.Approvers.Max ?? ctx.MaxApprovers, candidates));
         }

@@ -10,7 +10,8 @@ namespace DynamicModules.Application.Dynamic.WorkflowService;
 /// 狀態機的後端強制（前端只是縮小選項）：新增只能從起始狀態開始；修改時狀態有變就必須有 from → to 的定義，
 /// 而且使用者在該轉移的群組內（系統管理員可做任何已定義的轉移；沒有定義的轉移任何人都不行）。
 /// </summary>
-public class WorkflowEnforcer(IPermissionRepository permissions, ICurrentUser user, ISystemIdentity system, ICurrentLocale locale)
+public class WorkflowEnforcer(
+    IPermissionRepository permissions, ICurrentUser user, ISystemIdentity system, ICurrentLocale locale, TransitionAccess access)
 {
     // 繁中文字取自字串表；既有測試還以字串用這兩句（簽核已改走鍵）
     public static readonly string NotAllowedMessage = MessageText.Get(null, MessageText.WorkflowNotAllowed);
@@ -53,7 +54,7 @@ public class WorkflowEnforcer(IPermissionRepository permissions, ICurrentUser us
         if (!perms.Can(PermissionAction.Edit)) return [];
         var inputs = await permissions.LoadInputsAsync(user.UserId, module, ct);
         if (inputs is null) return [];
-        if (inputs.User.IsSystemAdmin) return wf.Transitions;
+        if (await access.BypassGroupsAsync(inputs, ct)) return wf.Transitions;
         return wf.Transitions.Where(t => t.GroupIds.Count == 0 || inputs.GroupIds.Any(t.GroupIds.Contains)).ToList();
     }
 
@@ -90,7 +91,7 @@ public class WorkflowEnforcer(IPermissionRepository permissions, ICurrentUser us
         if (transition.GroupIds.Count == 0 || system.Active) return errors;   // 事件效果的轉移必須是已定義的，但不檢查群組
 
         var inputs = await permissions.LoadInputsAsync(user.UserId, module, ct);
-        var permitted = inputs is not null && (inputs.User.IsSystemAdmin || inputs.GroupIds.Any(transition.GroupIds.Contains));
+        var permitted = inputs is not null && (await access.BypassGroupsAsync(inputs, ct) || inputs.GroupIds.Any(transition.GroupIds.Contains));
         if (!permitted) errors[key] = [MessageText.Get(locale.Locale, MessageText.WorkflowNotPermitted)];
         return errors;
     }

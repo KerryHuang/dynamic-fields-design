@@ -34,7 +34,7 @@ public class ApproverResolverTests
             [Finance] = ["fin1", "fin2"], [Board] = [], [PurchaseLead] = ["buyer2"], [Big] = Enumerable.Range(1, 21).Select(i => $"u{i}").ToList()
         };
         var module = new Module { Blocks = [new Block { Fields = [OwnerField] }] };
-        return new ResolveContext(module, initiator, values ?? [], picks, org, groups, admins ?? ["admin"], 20,
+        return new ResolveContext(module, initiator, values ?? [], picks, org, groups, admins ?? ["admin"], 20, false,
             new Dictionary<long, I18nText> { [Finance] = T("finance"), [Board] = T("board"), [PurchaseLead] = T("purchase-lead"), [Big] = T("big") });
     }
 

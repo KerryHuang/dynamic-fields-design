@@ -19,7 +19,7 @@ public sealed record StageResolution(IReadOnlyList<SeatPlan> Seats, bool AllUnit
 /// <summary>解析的輸入：Picks 是這一關的自選結果；GroupNames 給錯誤與歷程說明用。</summary>
 public sealed record ResolveContext(
     Module Module, string InitiatorUserId, IReadOnlyDictionary<string, JsonElement?> Values, IReadOnlyList<string>? Picks, OrgSnapshot Org,
-    IReadOnlyDictionary<long, IReadOnlyList<string>> GroupMembers, IReadOnlyList<string> ActiveAdmins, int MaxApprovers,
+    IReadOnlyDictionary<long, IReadOnlyList<string>> GroupMembers, IReadOnlyList<string> ActiveAdmins, int MaxApprovers, bool AllowSelfApproval,
     IReadOnlyDictionary<long, I18nText>? GroupNames = null);
 
 /// <summary>
@@ -39,7 +39,8 @@ public sealed class ApproverResolver(OrgSnapshotLoader org, IPermissionRepositor
         var groups = (await permissions.ListGroupsAsync(ct)).ToDictionary(g => g.Id, g => g.NameI18n);
         var admins = (await permissions.ListUsersAsync(ct)).Where(u => u.IsActive && u.IsSystemAdmin).Select(u => u.UserId).OrderBy(u => u).ToList();
         var limits = await approvalPolicies.LimitsAsync(module.Id, ct);   // 下一關啟動當下的設定（裁決 2）
-        return new ResolveContext(module, initiator, values, picks, snapshot, members, admins, limits.MaxApprovers, groups);
+        return new ResolveContext(module, initiator, values, picks, snapshot, members, admins, limits.MaxApprovers,
+            await approvalPolicies.AllowSelfApprovalAsync(module.Id, ct), groups);
     }
 
     public static StageResolution Resolve(ResolveContext ctx, I18nText stageName, string mode, ApproverSource source, ApproverSource? fallback, string onEmpty)
@@ -156,9 +157,9 @@ public sealed class ApproverResolver(OrgSnapshotLoader org, IPermissionRepositor
     private static string Zh(object label) => label is I18nText t ? t.Resolve(I18nText.FallbackLocale) : (string)label;
 
     private static List<string> Clean(ResolveContext ctx, IEnumerable<string> users) =>
-        users.Where(u => u != ctx.InitiatorUserId && ctx.Org.ActiveUsers.Contains(u)).Distinct(StringComparer.Ordinal).ToList();
+        users.Where(u => (ctx.AllowSelfApproval || u != ctx.InitiatorUserId) && ctx.Org.ActiveUsers.Contains(u)).Distinct(StringComparer.Ordinal).ToList();
 
-    /// <summary>備援名單：省略時是全部啟用中的系統管理員；一律移除發起人與停用帳號。</summary>
+    /// <summary>備援名單：省略時是全部啟用中的系統管理員；移除停用帳號，以及（政策不允許自簽時）發起人。</summary>
     private static List<string> FallbackUsers(ResolveContext ctx, ApproverSource? fallback)
     {
         if (fallback is null) return Clean(ctx, ctx.ActiveAdmins);

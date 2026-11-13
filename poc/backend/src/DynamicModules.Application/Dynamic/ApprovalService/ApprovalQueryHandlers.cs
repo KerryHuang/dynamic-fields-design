@@ -15,7 +15,8 @@ using MediatR;
 namespace DynamicModules.Application.Dynamic.ApprovalService;
 
 /// <summary>記錄的簽核摘要與「現在能送簽的目標」；GET records/{id} 與 GET records/{id}/approval 共用。</summary>
-public sealed class ApprovalReader(IApprovalInstanceRepository repo, IDynamicAccessGuard guard, IPermissionRepository permissions, ICurrentUser user)
+public sealed class ApprovalReader(IApprovalInstanceRepository repo, IDynamicAccessGuard guard, IPermissionRepository permissions, ICurrentUser user,
+    WorkflowService.TransitionAccess access)
 {
     public const string NoInstance = "none";
 
@@ -38,7 +39,7 @@ public sealed class ApprovalReader(IApprovalInstanceRepository repo, IDynamicAcc
             if (t.GroupIds.Count > 0)
             {
                 inputs ??= await permissions.LoadInputsAsync(user.UserId, module, ct);
-                if (inputs is null || !(inputs.User.IsSystemAdmin || inputs.GroupIds.Any(t.GroupIds.Contains))) continue;
+                if (inputs is null || !(await access.BypassGroupsAsync(inputs, ct) || inputs.GroupIds.Any(t.GroupIds.Contains))) continue;
             }
             targets.Add(t.To);
         }

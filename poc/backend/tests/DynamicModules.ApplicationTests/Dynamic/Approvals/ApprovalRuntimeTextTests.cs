@@ -68,7 +68,7 @@ public class ApprovalRuntimeTextTests
         var org = new OrgSnapshot(new Dictionary<long, OrgDepartment>(), new Dictionary<string, long>(), new[] { "admin", "buyer1" }.ToHashSet());
         var groups = new Dictionary<long, IReadOnlyList<string>> { [2] = [], [4] = Enumerable.Range(1, 21).Select(i => $"u{i}").ToList() };
         var users = Enumerable.Range(1, 21).Select(i => $"u{i}").Append("admin").Append("buyer1").ToHashSet();
-        return new ResolveContext(new Module(), initiator, new Dictionary<string, JsonElement?>(), null, org with { ActiveUsers = users }, groups, ["admin"], 20,
+        return new ResolveContext(new Module(), initiator, new Dictionary<string, JsonElement?>(), null, org with { ActiveUsers = users }, groups, ["admin"], 20, false,
             new Dictionary<long, I18nText> { [2] = T("董事會", "Board"), [4] = T("大", "Big") });
     }
 
@@ -91,7 +91,7 @@ public class ApprovalRuntimeTextTests
     public void Manager_source_label_follows_the_locale()
     {
         var org = new OrgSnapshot(new Dictionary<long, OrgDepartment>(), new Dictionary<string, long>(), new[] { "admin", "buyer1" }.ToHashSet());
-        var ctx = new ResolveContext(new Module(), "admin", new Dictionary<string, JsonElement?>(), null, org, new Dictionary<long, IReadOnlyList<string>>(), ["admin"], 20);
+        var ctx = new ResolveContext(new Module(), "admin", new Dictionary<string, JsonElement?>(), null, org, new Dictionary<long, IReadOnlyList<string>>(), ["admin"], 20, false);
         var r = ApproverResolver.Resolve(ctx, T("簽核關", "Review"), ApprovalModes.Any, new(ApprovalSources.Manager, Level: 2), null, ApprovalOnEmpty.Fallback);
         r.Error!.Resolve("en-US").Should().Be("No approver found for stage \"Review\" from source \"Level 2 manager\", and there is no fallback either");
         r.Error!.Resolve("zh-TW").Should().Contain("「第 2 層主管」");

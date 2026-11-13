@@ -111,7 +111,7 @@ public class SubmitApprovalHandler(
             }
             var candidates = ApproverResolver.Candidates(ctx, src);
             if (list.Distinct(StringComparer.Ordinal).Count() != list.Count
-                || list.Any(u => u == ctx.InitiatorUserId || !ctx.Org.ActiveUsers.Contains(u) || (candidates is not null && !candidates.Contains(u))))
+                || list.Any(u => (u == ctx.InitiatorUserId && !ctx.AllowSelfApproval) || !ctx.Org.ActiveUsers.Contains(u) || (candidates is not null && !candidates.Contains(u))))
                 errors[$"picks.{code}"] = [ApprovalMessages.PickInvalid];
             else if (list.Count < (src.Min ?? 1) || list.Count > (src.Max ?? ctx.MaxApprovers))
                 errors[$"picks.{code}"] = [ApprovalMessages.PickCount(src.Min ?? 1, src.Max ?? ctx.MaxApprovers)];
@@ -129,7 +129,7 @@ public class SubmitApprovalHandler(
             var field = module.Blocks.SelectMany(b => b.Fields).FirstOrDefault(f => f.Id == stage.Approvers.FieldId);
             if (field is null || !values.TryGetValue(field.Key, out var v) || v is not { ValueKind: JsonValueKind.String } s || s.GetString() is not { } who)
                 continue;
-            if (who == ctx.InitiatorUserId) errors.TryAdd(field.Key, [ApprovalMessages.UserFieldIsInitiator]);
+            if (who == ctx.InitiatorUserId && !ctx.AllowSelfApproval) errors.TryAdd(field.Key, [ApprovalMessages.UserFieldIsInitiator]);
             else if (ApproverResolver.Candidates(ctx, stage.Approvers) is { } candidates && !candidates.Contains(who))
                 errors.TryAdd(field.Key, [ApprovalMessages.UserFieldNotCandidate]);
         }

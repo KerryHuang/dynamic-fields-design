@@ -44,6 +44,7 @@ public static class DependencyInjection
         services.AddScoped<Dynamic.References.ReferenceResolver>();
         services.AddScoped<Dynamic.References.ReferenceFill>();
         services.AddScoped<Dynamic.WorkflowService.WorkflowEnforcer>();
+        services.AddScoped<Dynamic.WorkflowService.TransitionAccess>();
         services.AddScoped<Dynamic.ConversionService.ConversionLedger>();
         services.AddScoped<Dynamic.ConversionService.ConversionValidator>();
         services.AddScoped<Dynamic.EventService.EventValidator>();
