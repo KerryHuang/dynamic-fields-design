@@ -366,6 +366,17 @@ public class AppApprovalPackageTests
     }
 
     [Fact]
+    public void InvalidFlow_SkipsNoFlowOnlyForItsTarget()
+    {
+        // 複審 N-a：流程因 rejectTo 錯誤被排除時，只略過它目標（已確認）的「沒有流程」；同模組另一個真的缺流程的狀態（已退回）照報
+        var transitions = Transitions + """, { "from": "draft", "to": "returned", "groups": [], "approval": { "required": true } }""";
+        var errors = Errors(Package(With(MidFlow, "\"priority\": 2,", "\"priority\": 2, \"rejectTo\": \"nowhere\","), transitions: transitions));
+        errors.Should().Contain($"approvalFlows[t8-po-mid].rejectTo: {ApprovalMessages.RejectToInvalidState}");
+        errors.Should().NotContain(e => e.Contains(ApprovalMessages.NoFlow("已確認")));
+        errors.Should().Contain(e => e.Contains(ApprovalMessages.NoFlow("已退回")));
+    }
+
+    [Fact]
     public void DuplicatePriority_SameTarget_Rejected()
     {
         Errors(Package(Flows(LargeFlow, With(MidFlow, "\"priority\": 2", "\"priority\": 1"))))
