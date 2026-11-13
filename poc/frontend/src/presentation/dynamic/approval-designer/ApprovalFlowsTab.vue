@@ -169,10 +169,10 @@ const actionsOf = (list: ApprovalFlow[], f: ApprovalFlow, i: number) => [
   <div v-else-if="workflow.isError.value || flows.isError.value" class="text-negative">{{ t('dynamic.loadFailed') }}</div>
   <div v-else-if="workflow.isPending.value || flows.isPending.value" class="text-muted">{{ t('designer.loading') }}</div>
   <div v-else-if="workflow.data.value === null" class="text-muted" data-testid="flows-no-workflow">{{ t('approval.designer.list.noWorkflow') }}</div>
-  <div v-else class="q-gutter-md" data-testid="flows-tab">
-    <div class="row items-center no-wrap q-gutter-x-sm">
+  <div v-else class="column q-gutter-y-md" data-testid="flows-tab">
+    <div class="row items-center no-wrap">
       <div class="col text-caption text-muted">{{ t('approval.designer.list.hint') }}</div>
-      <q-btn v-if="!readonly" color="primary" unelevated dense no-caps icon="add" :label="t('approval.designer.list.add')" data-testid="flow-add" @click="openCreate(null)" />
+      <q-btn v-if="!readonly" class="q-ml-sm" color="primary" dense icon="add" :label="t('approval.designer.list.add')" data-testid="flow-add" @click="openCreate(null)" />
     </div>
 
     <section
@@ -197,7 +197,7 @@ const actionsOf = (list: ApprovalFlow[], f: ApprovalFlow, i: number) => [
         :draggable="!mobile && !readonly && !busy && g.flows.length > 1" @dragstart="dragging = { key: f.key, toOptionId: g.toOptionId }"
         @dragover.prevent @drop.prevent="onDrop(g.toOptionId, g.flows, f)" @dragend="dragging = null"
       >
-        <div class="row items-start no-wrap q-gutter-x-sm">
+        <div class="row items-start no-wrap">
           <div class="col" style="min-width: 0">
             <div class="text-body1 ellipsis-2-lines">{{ resolveI18n(f.name, locale) }}</div>
             <div class="text-caption text-muted">{{ f.key }}</div>
@@ -209,7 +209,7 @@ const actionsOf = (list: ApprovalFlow[], f: ApprovalFlow, i: number) => [
               <q-badge v-if="!f.active" outline color="negative" :label="t('approval.designer.list.inactive')" :data-testid="`flow-inactive-${f.key}`" />
             </div>
           </div>
-          <div v-if="!readonly" class="row no-wrap items-center" @click.stop @keydown.stop>
+          <div v-if="!readonly" class="row no-wrap items-center q-ml-sm" @click.stop @keydown.stop>
             <q-toggle
               :model-value="f.active" :disable="busy" :aria-label="`${t('approval.designer.list.active')} ${resolveI18n(f.name, locale)}`"
               :data-testid="`flow-active-${f.key}`" @update:model-value="(v: boolean) => onToggle(f, v)"
