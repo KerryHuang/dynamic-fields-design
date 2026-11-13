@@ -112,6 +112,7 @@ public static class AppMessages
     public static string ExportFlowUnmatched(string where) => $"{where}有開啟套件時略過的群組，請先在設計器移除或補上群組";
     public const string ExportFlowFieldMissing = "引用了停用或未匯出的欄位";
     public const string ExportFlowStateMissing = "引用了停用或未匯出的狀態";
+    public const string ExportFlowOptionMissing = "引用了停用或未匯出的選項";
     public const string ExportFlowGroupMissing = "引用了已不存在的群組";
     public static string ExportFlowCondition(string error) => $"的{error}";
 

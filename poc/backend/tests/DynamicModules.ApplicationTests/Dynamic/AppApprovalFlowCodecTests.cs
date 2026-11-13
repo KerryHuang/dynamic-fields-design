@@ -243,6 +243,20 @@ public class AppApprovalFlowCodecTests
         Export(input with { ToOptionId = 999 }).Errors.Should().Equal("簽核流程「採購單（大額）」引用了停用或未匯出的狀態");
         Export(input, _ => null).Errors.Should().Equal("簽核流程「採購單（大額）」引用了已不存在的群組");
     }
+
+    [Fact]
+    public void ToPackage_InactiveOptionInCondition_Error()
+    {
+        // a5a2 審查 S1：條件值引用的選項停用後不在 Names 裡，不能原樣寫出 opt_{資料庫 Id}（重新匯入會被拒）
+        var when = Json("""{ "all": [ { "field": "po.status", "op": "in", "value": ["opt_draft", "opt_confirmed"] } ] }""");
+        var input = Imported(Flow(null, Stage("lead", Group("purchaseLead"), when: when)) with { RejectTo = null });
+        var missing = Names with { Option = (field, option) => field == 104 && option == 202 ? "confirmed" : null };
+        var (flow, errors) = AppApprovalFlowCodec.ToPackage(
+            new ApprovalFlow { Key = input.Key, NameI18n = input.Name, ToOptionId = input.ToOptionId, Priority = 1, Active = true },
+            input.Definition, "po", 104, missing, GroupCode);
+        flow.Should().BeNull();
+        errors.Should().Equal("簽核流程「採購單（大額）」引用了停用或未匯出的選項");
+    }
 }
 
 /// <summary>轉換結果要通過設計器的定義驗證（在資料庫建好的採購單模組上）。</summary>

@@ -211,7 +211,7 @@ public sealed partial class AppExporter(
         if (isMaster && workflows.Count + conversionList.Count + printList.Count + ledgerList.Count + eventList.Count + checkList.Count > 0)
         {
             // 主檔套件不收流程（§4.1）：客戶在設計器加的就留在資料庫，不寫進檔案，否則匯出的檔案會被匯入驗證退回
-            warnings.Add("共用主檔不帶狀態機、轉換、連動事件、跨記錄檢查、分錄與列印範本，這些設定未匯出");
+            warnings.Add("共用主檔不帶狀態機、簽核流程、轉換、連動事件、跨記錄檢查、分錄與列印範本，這些設定未匯出");
             workflows = []; conversionList = []; printList = []; ledgerList = []; eventList = []; checkList = [];
         }
 

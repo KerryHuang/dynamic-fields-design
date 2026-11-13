@@ -561,6 +561,24 @@ public class AppFormat8Tests : IDisposable
         submit.StatusCode.Should().Be(HttpStatusCode.Created, await submit.Content.ReadAsStringAsync());
         var flowId = other.Db(db => db.Set<ApprovalFlow>().Single(f => f.Key == Large).Id);
         other.Db(db => db.Set<ApprovalInstance>().Single().FlowId).Should().Be(flowId);
+
+        // 審查 N1：新庫再匯出一次，流程與狀態機的每個屬性（條件、備援、可編輯欄位、群組代號）都和第一次相同
+        var (again, _) = await other.ExportAsync(AppId);
+        foreach (var section in new[] { "approvalFlows", "workflows" })
+            again.GetProperty(section).GetRawText().Should().Be(package.GetProperty(section).GetRawText(), section);
+    }
+
+    [Fact]
+    public async Task Export_WorkflowNotExported_409()
+    {
+        // 審查 N3：狀態機引用停用的選項而不匯出時，簽核設定不能單獨匯出（計畫 U7）
+        await ImportOpenAsync();
+        var res = await _rig.Admin.PutAsJsonAsync($"{Base}/options/{Option("cancelled")}",
+            new { label = new Dictionary<string, string> { ["zh-TW"] = "已取消" }, color = (string?)null, active = false });
+        res.StatusCode.Should().Be(HttpStatusCode.OK, await res.Content.ReadAsStringAsync());
+        var export = await ExportRawAsync();
+        export.StatusCode.Should().Be(HttpStatusCode.Conflict);
+        (await export.Content.ReadAsStringAsync()).Should().Contain("模組「採購單」的狀態機未匯出，簽核設定無法單獨匯出");
     }
 
     [Fact]

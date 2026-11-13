@@ -13,7 +13,7 @@ namespace DynamicModules.Application.Dynamic.AppService;
 /// 而是記成對不上的來源單位，由備援簽核人頂替（§14.4）；<see cref="Substitutions"/> 列出每一個被頂替的來源，預覽與開啟共用。
 /// 欄位或選項解析不到時累積成錯誤、回 null，不猜。
 /// </summary>
-public static class AppApprovalFlowCodec
+public static partial class AppApprovalFlowCodec
 {
     public const string KindApprovers = "approvers", KindCandidates = "candidates", KindFallback = "fallback";
     public const string ByFlowFallback = "flowFallback", ByPolicyDefault = "policyDefault";
@@ -130,6 +130,7 @@ public static class AppApprovalFlowCodec
             var errors = new List<string>();
             var converted = AppEffectsCodec.ExportCondition(w, n, errors);
             details.AddRange(errors.Select(AppMessages.ExportFlowCondition));
+            if (HasUnexportedOption(JsonNode.Parse(w.GetRawText()), n)) Add(AppMessages.ExportFlowOptionMissing);
             return converted;
         }
         List<string>? Groups(List<long>? ids) => ids?.Select(id => groupCode(id) ?? Add(AppMessages.ExportFlowGroupMissing)).ToList();
@@ -155,6 +156,23 @@ public static class AppApprovalFlowCodec
         var name = flow.NameI18n.Resolve(I18nText.FallbackLocale);
         return (null, details.Distinct().Select(d => AppMessages.ExportFlowError(name, d)).ToList());
     }
+
+    /// <summary>
+    /// 條件值裡的 opt_{Id} 查不到選項代號（停用或未匯出）：ExportValue 會原樣留下資料庫 Id，重新匯入時被拒，
+    /// 簽核匯出要整份擋下（a5a2 審查 S1；事件、任務規則的匯出維持原行為）。
+    /// </summary>
+    private static bool HasUnexportedOption(JsonNode? node, AppReportCodec.Names n) => node switch
+    {
+        JsonArray array => array.Any(x => HasUnexportedOption(x, n)),
+        JsonObject obj => (obj["field"] is JsonValue f && f.TryGetValue<long>(out var id) && n.IsOptionField(id)
+                && (obj["value"] is JsonArray a ? a.AsEnumerable() : [obj["value"]]).Any(v => v is JsonValue sv && sv.TryGetValue<string>(out var text)
+                    && OptionId().Match(text) is { Success: true } m && n.Option(id, long.Parse(m.Groups[1].Value)) is null))
+            || obj.Any(kv => kv.Value is JsonObject or JsonArray && HasUnexportedOption(kv.Value, n)),
+        _ => false
+    };
+
+    [System.Text.RegularExpressions.GeneratedRegex(@"^opt_(\d+)$")]
+    private static partial System.Text.RegularExpressions.Regex OptionId();
 
     /// <summary>流程引用的欄位（限定欄位名）：流程與關卡條件、使用者欄位、可編輯欄位；開啟時這些欄位不能被排除（§14.4 第一點）。</summary>
     public static IEnumerable<string> ReferencedFields(AppApprovalFlow f)
