@@ -1,7 +1,6 @@
 using System.Globalization;
 using System.Text.Json;
 using DynamicModules.Application.Common;
-using DynamicModules.Application.Dynamic.ApprovalService;
 using DynamicModules.Application.Dynamic.AttachmentService;
 using DynamicModules.Application.Dynamic.RecordService.Commands.UpdateRecord;
 using DynamicModules.Application.Dynamic.RecordService.Commands.CreateRecord;
@@ -42,9 +41,9 @@ public sealed class DesignCaseScenario : IDemoScenario
         var submit = plan.At(Day(plan, -10), t);
         plan.Refresh(closed, submit, Sales, "設計案 感測器外殼改版 重讀");
         var submitted = plan.At(Day(plan, -10), submit);
-        plan.Run(submitted, Sales, "設計案 感測器外殼改版 送簽", (ctx, ct) => Submit(ctx, closed, "客戶已確認第二版", ct));
+        plan.Run(submitted, Sales, "設計案 感測器外殼改版 送簽", (ctx, ct) => DemoApprovalSteps.Submit(ctx, closed, ctx.Crm!.Ids.OptionIds["design-case.manager-review"], "客戶已確認第二版", ct));
         var approve = plan.At(Day(plan, -9), submitted);
-        plan.Run(approve, Manager, "設計案 感測器外殼改版 同意", (ctx, ct) => Approve(ctx, closed, "同意", ct));
+        plan.Run(approve, Manager, "設計案 感測器外殼改版 同意", (ctx, ct) => DemoApprovalSteps.Approve(ctx, closed, "同意", ct));
         var close = plan.At(Day(plan, -8), approve);
         plan.Refresh(closed, close, Manager, "設計案 感測器外殼改版 重讀");
         plan.Update(closed, plan.At(Day(plan, -8), close), Manager, "設計案 感測器外殼改版 結案", Status("closed"));
@@ -204,19 +203,6 @@ public sealed class DesignCaseScenario : IDemoScenario
         if (failed is not null) return failed;
         return await ctx.Sender.Send(new AddTaskCommentRequest(task!.Id, body,
             [.. files.Select(f => new CommentFileUpload(new MemoryStream(f.Bytes), f.Name, f.ContentType))]), ct);
-    }
-
-    private static async Task<ServiceResult> Submit(DemoContext ctx, DemoRecord rec, string comment, CancellationToken ct) =>
-        await ctx.Sender.Send(new SubmitApprovalRequest(rec.Id, ctx.Crm!.Ids.OptionIds["design-case.manager-review"], rec.RowVersion, null, comment), ct);
-
-    private static async Task<ServiceResult> Approve(DemoContext ctx, DemoRecord rec, string comment, CancellationToken ct)
-    {
-        var current = await ctx.Sender.Send(new GetRecordApprovalRequest(rec.Id), ct);
-        if (!current.IsSuccess) return current;
-        var instance = ((RecordApprovalResponse)current.Data!).Current;
-        var task = instance?.Stages.SelectMany(s => s.Tasks).FirstOrDefault(t => t.CanAct);
-        if (instance is null || task is null) return ServiceResult.Conflict("沒有可同意的簽核任務");
-        return await ctx.Sender.Send(new ApproveTaskRequest(task.Id, instance.RowVersion, comment, null), ct);
     }
 
     private static DateOnly Day(DemoPlan plan, int offset) => plan.Today.AddDays(offset);
