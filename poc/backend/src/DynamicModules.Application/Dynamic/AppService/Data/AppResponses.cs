@@ -28,6 +28,8 @@ public record AppResponse(
     public List<IntegrationResponse> Integrations { get; init; } = Integrations ?? [];
     /// <summary>app 或 master（共用主檔，由使用它的應用程式管理，不能直接開關）。</summary>
     public string Kind { get; init; } = AppManifest.AppKindName;
+    /// <summary>只在開啟回應有：開啟時被略過的群組由備援頂替的每一個來源（簽核設計 §14.4）；同樣的內容也逐條列在 Warnings。</summary>
+    public IReadOnlyList<AppApprovalFlowCodec.Substitution> ApprovalSubstitutions { get; init; } = [];
 }
 
 /// <summary>
@@ -57,6 +59,8 @@ public record OpenPreview(
     IReadOnlyList<MasterPreview>? Masters = null, IReadOnlyList<string>? Unbound = null)
 {
     public IReadOnlyList<MasterPreview> Masters { get; init; } = Masters ?? [];
+    /// <summary>簽核流程引用的群組被略過、改由備援頂替的每一個來源（簽核設計 §14.4）；每一筆另有一條警告。只是提示，不擋開啟。</summary>
+    public IReadOnlyList<AppApprovalFlowCodec.Substitution> ApprovalSubstitutions { get; init; } = [];
     public IReadOnlyList<string> Unbound { get; init; } = Unbound ?? [];
     public bool CanOpen => Errors.Count == 0 && KeyConflicts.Count == 0 && HostEntityConflicts.Count == 0 && MissingDependencies.Count == 0
                            && Unbound.Count == 0;
@@ -92,6 +96,24 @@ public static class AppMessages
     public const string MasterManaged = "這是共用主檔，由使用它的應用程式管理，不能直接開啟、關閉或重新開啟";
     public const string MasterNotAvailable = "masterNotAvailable";
     public const string MasterInUse = "共用主檔還有應用程式在使用，不能刪除";
+
+    public static string FlowCodeTaken(string code) => $"approvalFlows.{code}: 流程代碼已被使用";
+
+    public static string FlowFieldExcluded(string field, string flow) => $"excludeFields: 「{field}」是簽核流程「{flow}」需要的欄位，不能排除";
+
+    /// <summary>開啟預覽的頂替警告（繁中），與 <see cref="AppApprovalFlowCodec.Substitution"/> 一一對應。</summary>
+    public static string ApprovalSubstituted(AppApprovalFlowCodec.Substitution s)
+    {
+        string Zh(I18nText t) => t.Resolve(I18nText.FallbackLocale);
+        var where = s.Kind switch
+        {
+            AppApprovalFlowCodec.KindApprovers => $"關卡「{Zh(s.StageName!)}」的簽核人來源",
+            AppApprovalFlowCodec.KindCandidates => $"關卡「{Zh(s.StageName!)}」的候選群組",
+            _ => "的備援簽核人"
+        };
+        var by = s.ReplacedBy == AppApprovalFlowCodec.ByFlowFallback ? "流程的備援簽核人" : "預設備援簽核人（簽核政策）";
+        return $"簽核流程「{Zh(s.FlowName)}」{where}「{Zh(s.GroupName)}」已略過，改由{by}頂替";
+    }
 }
 
 public static class AppMapper

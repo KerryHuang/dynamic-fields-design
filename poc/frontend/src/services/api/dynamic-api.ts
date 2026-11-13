@@ -99,6 +99,20 @@ export interface AppInfo {
   /** Self-built modules whose fields reference it (warning only). */
   unaffiliatedReferrers: string[];
   warnings: string[];
+  /** Open response only: approval sources replaced because their group was skipped (also listed in warnings). */
+  approvalSubstitutions?: ApprovalSubstitution[];
+}
+/** A skipped group in an approval flow, now covered by the flow's fallback approvers or the policy default. */
+export interface ApprovalSubstitution {
+  flow: string;
+  flowName: I18nText;
+  /** Null when the skipped group was in the flow's fallback approvers. */
+  stage?: string | null;
+  stageName?: I18nText | null;
+  group: string;
+  groupName: I18nText;
+  kind: 'approvers' | 'candidates' | 'fallback';
+  replacedBy: 'flowFallback' | 'policyDefault';
 }
 export interface CloseAppResult { app: AppInfo; closed: string[]; warnings: string[] }
 export interface MissingDependency { kind: string; appId?: string; moduleCode?: string; entity?: string; reason: string }
@@ -114,6 +128,8 @@ export interface OpenPreview {
   masters?: { id: string; name: I18nText; action: 'open' | 'reopen' | 'bind'; groups: GroupSuggestion[] }[];
   /** Master symbols the package uses that the master no longer has (blocks opening). */
   unbound?: string[];
+  /** Approval sources whose group would be skipped and replaced by fallback approvers (warning only). */
+  approvalSubstitutions?: ApprovalSubstitution[];
 }
 export interface GroupSuggestion { code: string; name: I18nText; suggestion: 'map' | 'create' | 'skip'; suggestedGroupId?: number }
 export type GroupMap = Record<string, { mode: 'map' | 'create' | 'skip'; groupId?: number }>;

@@ -1,4 +1,5 @@
 using System.Text.Json;
+using System.Text.Json.Nodes;
 using DynamicModules.Application.Dynamic.AppService.Data;
 using DynamicModules.Application.Dynamic.ApprovalService;
 using DynamicModules.Domain.Approvals;
@@ -102,5 +103,38 @@ public static class AppApprovalFlowCodec
         if (fallbackSkipped)
             result.AddRange(Skipped(f.FallbackApprovers!.Groups).Select(g => new Substitution(f.Code, f.Name, null, null, g, Name(g), KindFallback, ByPolicyDefault)));
         return result;
+    }
+
+    /// <summary>流程引用的欄位（限定欄位名）：流程與關卡條件、使用者欄位、可編輯欄位；開啟時這些欄位不能被排除（§14.4 第一點）。</summary>
+    public static IEnumerable<string> ReferencedFields(AppApprovalFlow f)
+    {
+        var names = new List<string>();
+        void When(JsonElement? json)
+        {
+            if (json is not { ValueKind: not (JsonValueKind.Null or JsonValueKind.Undefined) } w) return;
+            void Walk(JsonNode? node)
+            {
+                switch (node)
+                {
+                    case JsonArray array:
+                        foreach (var item in array) Walk(item);
+                        break;
+                    case JsonObject obj:
+                        foreach (var (key, value) in obj)
+                            if (key is "field" or "fieldRef" && value is JsonValue v && v.TryGetValue<string>(out var name)) names.Add(name);
+                            else Walk(value);
+                        break;
+                }
+            }
+            Walk(JsonNode.Parse(w.GetRawText()));
+        }
+        When(f.When);
+        foreach (var s in (f.Stages ?? []).Where(s => s is not null))
+        {
+            When(s.When);
+            if (s.Approvers is { Source: ApprovalSources.UserField, Field: { } field }) names.Add(field);
+            names.AddRange(s.EditableFields ?? []);
+        }
+        return names.Distinct();
     }
 }

@@ -124,7 +124,7 @@ public class AppOpener(
         }
 
         // 單據能力：狀態機、轉換、報表（群組代號用上面解析好的 id）
-        var installed = await flows.InstallAsync(package, result.Ids!, groupIds, ct);
+        var installed = await flows.InstallAsync(package, result.Ids!, groupIds, body.Locale, ct);
         if (installed.Failure is { } flowFailure) return flowFailure;
         warnings.AddRange(installed.Warnings);
 
@@ -170,7 +170,7 @@ public class AppOpener(
         // 調和要在自己的 SaveChanges 之後（回滾會清掉 change tracker）；整合失敗只回報，不讓開啟失敗
         if (package.Integrations.Count > 0 || (await apps.ListIntegrationsAsync(ct)).Count > 0)
             warnings.AddRange(await integrations.ReconcileAsync(ct));
-        return ServiceResult.Created(await builder.BuildAsync(app, withDependents: false, warnings, ct));
+        return ServiceResult.Created(await builder.BuildAsync(app, withDependents: false, warnings, ct) with { ApprovalSubstitutions = installed.ApprovalSubstitutions });
     }
 
     /// <summary>

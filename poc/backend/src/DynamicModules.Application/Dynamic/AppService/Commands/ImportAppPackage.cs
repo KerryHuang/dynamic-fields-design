@@ -43,6 +43,8 @@ public class ImportAppPackageHandler(
         if (validation.Errors.Count > 0) return Invalid(validation.Errors);
         var limitErrors = AppPackageValidator.TaskRuleLimitErrors(package,
             await policies.IntAsync(PolicyCatalog.TaskMaxRulesPerPackage, null, ct), await policies.IntAsync(PolicyCatalog.TaskMaxTasksPerRule, null, ct));
+        if (package.ApprovalFlows.Count > 0)
+            limitErrors = [.. limitErrors, .. AppPackageValidator.ApprovalLimitErrors(package, await AppOpenPlanner.SystemApprovalLimitsAsync(policies, ct))];
         if (limitErrors.Count > 0) return Invalid(limitErrors);
 
         var id = package.Manifest.Id;

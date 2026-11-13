@@ -2,6 +2,7 @@ using DynamicModules.Application.Common;
 using DynamicModules.Application.Common.Security;
 using DynamicModules.Application.Common.Time;
 using DynamicModules.Application.Dynamic.AppService.Data;
+using DynamicModules.Application.Dynamic.ApprovalService;
 using DynamicModules.Application.Dynamic.CheckService;
 using DynamicModules.Application.Dynamic.EventService;
 using DynamicModules.Application.Dynamic.LedgerService;
@@ -24,19 +25,27 @@ using static DynamicModules.Application.Dynamic.TemplateService.TemplateGraph;
 namespace DynamicModules.Application.Dynamic.AppService;
 
 /// <summary>
-/// 開啟應用程式時安裝單據能力：狀態機、轉換、報表。全部走既有的設計器與報表指令（驗證照跑），
+/// 開啟應用程式時安裝單據能力：狀態機、分錄、事件、檢查、簽核流程、轉換、報表。全部走既有的設計器與報表指令（驗證照跑），
 /// 代號用實例化回傳的 id 對照換成 id。呼叫端在交易內，任一步失敗回傳失敗，由外層回滾。
 /// 欄位被使用者取消勾選（沒有 id）的項目整個略過並警告，不是失敗。
 /// </summary>
 public sealed class AppFlowInstaller(ISender sender, IModuleRepository modules, ICurrentUser user, IBusinessTime time)
 {
-    public sealed record Result(ServiceResult? Failure, List<AppReport> Reports, List<string> Warnings);
+    /// <param name="ApprovalSubstitutions">開啟時被略過的群組由備援頂替的來源（簽核設計 §14.4）；警告由預覽帶入，這裡不重複加。</param>
+    public sealed record Result(
+        ServiceResult? Failure, List<AppReport> Reports, List<string> Warnings, List<AppApprovalFlowCodec.Substitution>? ApprovalSubstitutions = null)
+    {
+        public List<AppApprovalFlowCodec.Substitution> ApprovalSubstitutions { get; init; } = ApprovalSubstitutions ?? [];
+    }
 
+    /// <param name="locale">開啟請求的語系；被略過的群組以這個語系的名稱記進對不上的來源單位（計畫 J7）。</param>
     public async Task<Result> InstallAsync(
-        AppPackageData p, TemplateIdMap ids, IReadOnlyDictionary<string, long> groupIds, CancellationToken ct)
+        AppPackageData p, TemplateIdMap ids, IReadOnlyDictionary<string, long> groupIds, string locale, CancellationToken ct)
     {
         var warnings = new List<string>();
         var reports = new List<AppReport>();
+        // 第一趟存的狀態機（轉移不帶 approval）；有需簽核轉移的模組在流程建好後帶 approval 再存一次（計畫 J3）
+        var firstPass = new List<(AppWorkflow Source, WorkflowInput Input, List<AppTransitionApproval?> Approvals)>();
 
         foreach (var w in p.Workflows)
         {
@@ -48,6 +57,7 @@ public sealed class AppFlowInstaller(ISender sender, IModuleRepository modules, 
             }
             long Option(string code) => ids.OptionIds[$"{w.Module}.{code}"];
             var transitions = new List<WorkflowTransition>();
+            var approvals = new List<AppTransitionApproval?>();
             foreach (var t in w.Transitions)
             {
                 var mapped = t.Groups.Where(groupIds.ContainsKey).Select(g => groupIds[g]).Distinct().ToList();
@@ -60,15 +70,32 @@ public sealed class AppFlowInstaller(ISender sender, IModuleRepository modules, 
                 if (mapped.Count < t.Groups.Distinct().Count())
                     warnings.Add($"模組「{w.Module}」的轉移 {t.From} → {t.To} 有群組沒有對應，只開放給有對應的群組");
                 transitions.Add(new WorkflowTransition(Option(t.From), Option(t.To), mapped));
+                approvals.Add(t.Approval);
             }
             var input = new WorkflowInput(statusId, Option(w.Initial),
-                w.States.Select(s => new WorkflowState(Option(s.Option), s.ReadOnly)).ToList(), transitions);
+                w.States.Select(s => new WorkflowState(Option(s.Option), s.ReadOnly, s.Editable ?? false)).ToList(), transitions);
             var saved = await sender.Send(new SaveWorkflowRequest(ids.ModuleKeys[w.Module], input), ct);
             if (!saved.IsSuccess) return new Result(Prefixed(saved, $"{w.Module}.workflow"), reports, warnings);
+            firstPass.Add((w, input, approvals));
         }
 
         var failure = await InstallEffectsAsync(p, ids, warnings, ct);
         if (failure is not null) return new Result(failure, reports, warnings);
+
+        var substitutions = new List<AppApprovalFlowCodec.Substitution>();
+        failure = await InstallApprovalFlowsAsync(p, ids, groupIds, locale, substitutions, ct);
+        if (failure is not null) return new Result(failure, reports, warnings);
+        // 第二趟：帶 approval 再存，入口約束、事件交叉檢查、鎖定規則都照設計器規則跑；任何一項失敗整批回滾
+        foreach (var (w, input, approvals) in firstPass.Where(x => x.Approvals.Any(a => a is { Required: true })))
+        {
+            var withApproval = input with
+            {
+                Transitions = input.Transitions.Select((t, i) => approvals[i] is { Required: true } a
+                    ? t with { Approval = new TransitionApproval(true, a.NoMatch ?? Domain.Approvals.ApprovalNoMatch.Block) } : t).ToList()
+            };
+            var saved = await sender.Send(new SaveWorkflowRequest(ids.ModuleKeys[w.Module], withApproval), ct);
+            if (!saved.IsSuccess) return new Result(Prefixed(saved, $"{w.Module}.workflow"), reports, warnings);
+        }
 
         foreach (var c in p.Conversions)
         {
@@ -121,7 +148,36 @@ public sealed class AppFlowInstaller(ISender sender, IModuleRepository modules, 
             }
             reports.Add(new AppReport { Code = r.Code, ReportId = reportId });
         }
-        return new Result(null, reports, warnings);
+        return new Result(null, reports, warnings, substitutions);
+    }
+
+    /// <summary>
+    /// 簽核流程（格式 8）：依（模組, 目標, 優先序）建立，一律保留（§14.4）。被略過的群組記成對不上的來源單位、由備援頂替；
+    /// 驗證交給 CreateApprovalFlowRequest（模組層生效值、群組與欄位存在、閉包），失敗整批回滾。
+    /// 引用的欄位在開啟前置檢查已禁止排除，這裡解析不到是防禦，同樣整批回滾，不略過流程。
+    /// </summary>
+    private async Task<ServiceResult?> InstallApprovalFlowsAsync(
+        AppPackageData p, TemplateIdMap ids, IReadOnlyDictionary<string, long> groupIds, string locale,
+        List<AppApprovalFlowCodec.Substitution> substitutions, CancellationToken ct)
+    {
+        if (p.ApprovalFlows.Count == 0) return null;
+        var lookups = new AppReportCodec.Lookups(
+            code => ids.ModuleKeys.GetValueOrDefault(code),
+            name => ids.FieldIds.TryGetValue(name, out var id) ? id : null,
+            name => ids.OptionIds.TryGetValue(name, out var id) ? id : null,
+            AppReportCodec.TypesOf(p.Modules));
+        string GroupName(string code) => p.Groups.FirstOrDefault(g => g.Code == code)?.Name.Resolve(locale) ?? code;
+        var mapped = groupIds.Keys.ToHashSet();
+        foreach (var f in p.ApprovalFlows.OrderBy(f => f.Module, StringComparer.Ordinal).ThenBy(f => f.To, StringComparer.Ordinal).ThenBy(f => f.Priority))
+        {
+            var (input, errors) = AppApprovalFlowCodec.ToInput(f, lookups, groupIds, GroupName);
+            if (input is null)
+                return ServiceResult.Invalid(new Dictionary<string, string[]> { [$"approvalFlows.{f.Code}"] = [.. errors] });
+            var created = await sender.Send(new CreateApprovalFlowRequest(ids.ModuleKeys[f.Module], input), ct);
+            if (!created.IsSuccess) return Prefixed(created, $"approvalFlows.{f.Code}");
+            substitutions.AddRange(AppApprovalFlowCodec.Substitutions(f, mapped, p.Groups));
+        }
+        return null;
     }
 
     /// <summary>

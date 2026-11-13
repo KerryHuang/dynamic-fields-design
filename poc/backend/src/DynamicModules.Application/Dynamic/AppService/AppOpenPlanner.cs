@@ -18,7 +18,7 @@ public sealed partial class AppOpenPlanner(
     AppPackageSource packages, IAppRepository apps, IModuleRepository modules, IPermissionRepository permissions,
     IAccountRepository accounts, AppDependencyChecker dependencies, IConversionRepository conversions,
     IEventRepository events, ICheckRepository checks, SharedMasters.MasterSymbols symbols, SharedMasters.ContributionOrphans orphans,
-    IPolicyReader policies)
+    IPolicyReader policies, IApprovalFlowRepository approvalFlows)
 {
     [GeneratedRegex(ModuleRules.ModuleKeyPattern)]
     private static partial Regex ModuleKey();
@@ -59,6 +59,8 @@ public sealed partial class AppOpenPlanner(
         // 規則總數（A2）與每條任務數（A1 全系統值）：匯入後上限可能被調低，開啟時再檢查一次
         errors.AddRange(AppPackageValidator.TaskRuleLimitErrors(package,
             await policies.IntAsync(PolicyCatalog.TaskMaxRulesPerPackage, null, ct), await policies.IntAsync(PolicyCatalog.TaskMaxTasksPerRule, null, ct)));
+        // 簽核上限的系統層生效值（J5）；模組層覆寫值在開啟時由 CreateApprovalFlowRequest 檢查
+        if (package.ApprovalFlows.Count > 0) errors.AddRange(AppPackageValidator.ApprovalLimitErrors(package, await SystemApprovalLimitsAsync(policies, ct)));
         if (errors.Count > 0)
             return new Plan(null, source, new Dictionary<string, string>(), new Dictionary<string, string>(), Empty with { Errors = errors }, new Dictionary<string, long>());
 
@@ -85,6 +87,11 @@ public sealed partial class AppOpenPlanner(
             if (await events.GetByKeyAsync(e.Code, ct) is not null) errors.Add($"events.{e.Code}: 事件代碼已被使用");
         foreach (var c in package.Checks)
             if (await checks.GetByKeyAsync(c.Code, ct) is not null) errors.Add($"checks.{c.Code}: 檢查代碼已被使用");
+
+        // 流程代碼同樣全站唯一，衝突不自動改名（J8）
+        foreach (var f in package.ApprovalFlows)
+            if (await approvalFlows.GetByKeyAsync(f.Code, ct) is not null) errors.Add(AppMessages.FlowCodeTaken(f.Code));
+        errors.AddRange(ApprovalExcludeErrors(package, body.ExcludeFields.ToHashSet()));
 
         var hostConflicts = new List<string>();
         foreach (var m in package.Modules.Where(m => m.HostEntityKey is not null))
@@ -125,13 +132,17 @@ public sealed partial class AppOpenPlanner(
         }
         foreach (var g in package.Groups.Where(g => !body.GroupMap.ContainsKey(g.Code)))
             warnings.Add($"群組「{g.Code}」沒有對應，已略過（不給任何人權限）");
+        // 簽核流程一律保留：被略過的群組由備援頂替，逐條列出（§14.4）；已對應＝groupMap 的 map 或 create，與開啟時的 groupIds 相同
+        var mappedCodes = body.GroupMap.Where(kv => kv.Value?.Mode is "map" or "create").Select(kv => kv.Key).ToHashSet();
+        var substitutions = package.ApprovalFlows.SelectMany(f => AppApprovalFlowCodec.Substitutions(f, mappedCodes, package.Groups)).ToList();
+        warnings.AddRange(substitutions.Select(AppMessages.ApprovalSubstituted));
         // 同一個應用程式重開：型別不同、不會接回的孤兒欄位先在預覽警告（§7 刪除第 6 點）
         if (package.Contributions.Count > 0) warnings.AddRange((await orphans.MatchAsync(package, ct)).Warnings);
         warnings.AddRange(await TasksAutoEnableAsync(package, knownMasters, body.ExcludeFields.ToHashSet(), ct));
 
         return new Plan(null, source, finalKeys, requirement.ExternalModuleKeys,
             new OpenPreview(errors, conflicts, hostConflicts, [.. requirement.Missing, .. masters.Missing], suggestions, warnings,
-                masters.Previews, unbound), mapped, masters.Order);
+                masters.Previews, unbound) { ApprovalSubstitutions = substitutions }, mapped, masters.Order);
     }
 
     private sealed record MasterPlan(List<string> Order, List<MissingDependency> Missing, List<MasterPreview> Previews);
@@ -223,6 +234,30 @@ public sealed partial class AppOpenPlanner(
                 result.Add(AppFlowInstaller.TaskRuleWillAutoEnable(r.Code, off.Name.Resolve(I18nText.FallbackLocale)));
         }
         return result;
+    }
+
+    /// <summary>簽核上限的系統層生效值（模組 null）；預覽、開啟、匯入共用。</summary>
+    internal static async Task<Domain.Approvals.ApprovalLimitSet> SystemApprovalLimitsAsync(IPolicyReader policies, CancellationToken ct) => new(
+        await policies.IntAsync(PolicyCatalog.ApprovalMaxStages, null, ct), await policies.IntAsync(PolicyCatalog.ApprovalMaxApprovers, null, ct),
+        await policies.IntAsync(PolicyCatalog.ApprovalMaxDueHours, null, ct), await policies.IntAsync(PolicyCatalog.ApprovalMaxManagerLevel, null, ct));
+
+    /// <summary>
+    /// 被簽核流程引用的欄位（條件、使用者欄位、可編輯欄位）與掛流程的模組的狀態欄位不能排除（§14.4 第一點）：
+    /// 排除會讓流程裝不起來，而流程一律保留、不略過。開啟精靈沒有欄位勾選畫面，這條只在 API 生效。
+    /// </summary>
+    private static IEnumerable<string> ApprovalExcludeErrors(AppPackageData package, IReadOnlySet<string> exclude)
+    {
+        if (exclude.Count == 0 || package.ApprovalFlows.Count == 0) yield break;
+        var fields = TemplateService.TemplateGraph.AllFields(AppPackageAdapter.ToTemplate(package));
+        var seen = new HashSet<string>();
+        foreach (var f in package.ApprovalFlows)
+        {
+            var status = package.Workflows.FirstOrDefault(w => w.Module == f.Module) is { } w ? TemplateService.TemplateGraph.Qualify(w.Module, w.StatusField) : null;
+            foreach (var name in AppApprovalFlowCodec.ReferencedFields(f).Append(status).OfType<string>().Where(exclude.Contains))
+                if (seen.Add(name))
+                    yield return AppMessages.FlowFieldExcluded(fields.TryGetValue(name, out var field) ? field.Label.Resolve(I18nText.FallbackLocale) : name,
+                        f.Name.Resolve(I18nText.FallbackLocale));
+        }
     }
 
     public static AppRequires RequiresOf(AppPackageData package) => new()
