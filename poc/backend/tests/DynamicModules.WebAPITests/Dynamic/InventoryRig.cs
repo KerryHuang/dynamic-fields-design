@@ -161,6 +161,63 @@ internal sealed class InventoryRig
         return await JsonOf(res);
     }
 
+    /// <summary>採購單草稿：一列，單價取品項的參考單價（含稅總計 = 數量 × 單價 × 1.05）。</summary>
+    public async Task<JsonElement> PoDraftAsync(long supplier, long item, decimal qty, HttpClient? as_ = null)
+    {
+        var h = await F("po");
+        var l = await F("po-line");
+        return await PostOk(as_ ?? Admin, $"{Base}/modules/{Key("po")}/records", new
+        {
+            values = new Dictionary<string, object> { [h["供應商"]] = supplier },
+            details = new Dictionary<string, object[]>
+            {
+                [Key("po-line")] = [new { values = new Dictionary<string, object> { [l["品項"]] = item, [l["數量"]] = qty } }]
+            }
+        });
+    }
+
+    /// <summary>送出採購單簽核（目標「已確認」）：直接確認回 200，建立簽核實例回 201。</summary>
+    public async Task<HttpResponseMessage> SubmitPoAsync(HttpClient c, JsonElement po) =>
+        await c.PostAsJsonAsync($"{Base}/records/{Id(po)}/approval/submit", new
+        {
+            to = long.Parse((await Opt("po", "狀態", "已確認"))[4..]),
+            recordRowVersion = po.GetProperty("rowVersion").GetString()
+        });
+
+    /// <summary>目前進行中的簽核實例（沒有則為 null）。</summary>
+    public async Task<JsonElement?> CurrentApprovalAsync(long recordId, HttpClient? as_ = null)
+    {
+        var res = await (as_ ?? Admin).GetAsync($"{Base}/records/{recordId}/approval");
+        res.StatusCode.Should().Be(HttpStatusCode.OK, await res.Content.ReadAsStringAsync());
+        return (await JsonOf(res)).TryGetProperty("current", out var current) && current.ValueKind == JsonValueKind.Object ? current : null;
+    }
+
+    /// <summary>以 approver 同意目前實例中指派給他的未處理任務。</summary>
+    public async Task<HttpResponseMessage> ApprovePoAsync(HttpClient approver, string userId, long recordId)
+    {
+        var current = (await CurrentApprovalAsync(recordId))!.Value;
+        var task = current.GetProperty("stages").EnumerateArray().SelectMany(s => s.GetProperty("tasks").EnumerateArray())
+            .First(t => t.GetProperty("status").GetString() == "open" && t.GetProperty("assigneeUserId").GetString() == userId);
+        return await approver.PostAsJsonAsync($"{Base}/approval-tasks/{task.GetProperty("id").GetInt64()}/approve",
+            new { rowVersion = current.GetProperty("rowVersion").GetString() });
+    }
+
+    /// <summary>
+    /// 把採購單確認：送出簽核；有簽核實例就由 approver 逐關同意（測試沒建組織時各關都由備援的進銷存主管群組接手）。
+    /// 採購單不能再用 PUT 直接改成已確認。
+    /// </summary>
+    public async Task<JsonElement> ConfirmPoAsync(HttpClient submitter, JsonElement draft, HttpClient approver, string approverId)
+    {
+        var submit = await SubmitPoAsync(submitter, draft);
+        submit.IsSuccessStatusCode.Should().BeTrue(await submit.Content.ReadAsStringAsync());
+        for (var guard = 0; guard < 5 && await CurrentApprovalAsync(Id(draft)) is not null; guard++)
+        {
+            var ok = await ApprovePoAsync(approver, approverId, Id(draft));
+            ok.StatusCode.Should().Be(HttpStatusCode.OK, await ok.Content.ReadAsStringAsync());
+        }
+        return await GetAsync(Id(draft));
+    }
+
     /// <summary>盤點調整單（草稿）：一列，數量可正可負。</summary>
     public async Task<JsonElement> AdjustDraftAsync(long warehouse, long item, decimal qty, string reason = "盤點", HttpClient? as_ = null)
     {

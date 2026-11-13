@@ -98,7 +98,8 @@ public class InventoryAppTests : IDisposable
         Num(poLine, pl["單價"]).Should().Be(120m);
         (await _admin.PostAsJsonAsync(ConvertUrl(draft), new { lines = new[] { new { sourceLineId = Id(poLine), quantity = 4 } } }))
             .StatusCode.Should().NotBe(HttpStatusCode.Created, "草稿採購單不能轉進貨");
-        var po = await rig.TransitionOk(buyer, draft, "po", "已確認");
+        // 採購單的「草稿 → 已確認」由套件宣告成需簽核（總額不到門檻則送出即確認），不能再用 PUT 直接改
+        var po = await rig.ConfirmPoAsync(buyer, draft, _app.AsUser(Manager), Manager);
 
         // 倉管轉進貨：部分轉換 4 + 6，第三次超過剩餘量
         var keeper = _app.AsUser(Keeper);

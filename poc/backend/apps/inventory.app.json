@@ -1,10 +1,10 @@
 {
   "format": "formwright-app",
-  "formatVersion": 6,
+  "formatVersion": 8,
   "x-translation": "th、vi 標籤為機器翻譯，待母語者校對",
   "manifest": {
     "id": "inventory",
-    "version": "1.0.1",
+    "version": "1.1.0",
     "name": {
       "zh-TW": "進銷存",
       "en-US": "Inventory",
@@ -2395,7 +2395,8 @@
         },
         {
           "option": "cancelled",
-          "readOnly": true
+          "readOnly": true,
+          "editable": true
         }
       ],
       "transitions": [
@@ -2405,7 +2406,11 @@
           "groups": [
             "buyer",
             "manager"
-          ]
+          ],
+          "approval": {
+            "required": true,
+            "noMatch": "direct"
+          }
         },
         {
           "from": "confirmed",
@@ -2557,6 +2562,121 @@
             "keeper",
             "manager"
           ]
+        }
+      ]
+    }
+  ],
+  "approvalFlows": [
+    {
+      "code": "inv-po-large",
+      "name": {
+        "zh-TW": "採購單（大額）",
+        "en-US": "Purchase order (large)",
+        "th": "ใบสั่งซื้อ (มูลค่าสูง)",
+        "vi": "Đơn mua hàng (giá trị lớn)"
+      },
+      "active": true,
+      "module": "po",
+      "to": "confirmed",
+      "priority": 1,
+      "shape": "sequence",
+      "when": {
+        "all": [
+          {
+            "field": "po.total",
+            "op": "gte",
+            "value": 100000
+          }
+        ]
+      },
+      "fallbackApprovers": {
+        "source": "group",
+        "groups": [
+          "manager"
+        ]
+      },
+      "stages": [
+        {
+          "code": "buyer-lead",
+          "name": {
+            "zh-TW": "採購主管",
+            "en-US": "Purchasing manager",
+            "th": "หัวหน้าฝ่ายจัดซื้อ",
+            "vi": "Trưởng bộ phận mua hàng"
+          },
+          "approvers": {
+            "source": "manager",
+            "level": 1
+          },
+          "mode": "any",
+          "editableFields": [],
+          "dueHours": 24,
+          "onEmpty": "fallback"
+        },
+        {
+          "code": "gm",
+          "name": {
+            "zh-TW": "總經理",
+            "en-US": "General manager",
+            "th": "ผู้จัดการทั่วไป",
+            "vi": "Tổng giám đốc"
+          },
+          "approvers": {
+            "source": "manager",
+            "level": 2
+          },
+          "mode": "any",
+          "editableFields": [],
+          "dueHours": 48,
+          "onEmpty": "fallback"
+        }
+      ]
+    },
+    {
+      "code": "inv-po-medium",
+      "name": {
+        "zh-TW": "採購單（一萬以上）",
+        "en-US": "Purchase order (10,000 and above)",
+        "th": "ใบสั่งซื้อ (ตั้งแต่ 10,000)",
+        "vi": "Đơn mua hàng (từ 10.000)"
+      },
+      "active": true,
+      "module": "po",
+      "to": "confirmed",
+      "priority": 2,
+      "shape": "sequence",
+      "when": {
+        "all": [
+          {
+            "field": "po.total",
+            "op": "gte",
+            "value": 10000
+          }
+        ]
+      },
+      "fallbackApprovers": {
+        "source": "group",
+        "groups": [
+          "manager"
+        ]
+      },
+      "stages": [
+        {
+          "code": "buyer-lead",
+          "name": {
+            "zh-TW": "採購主管",
+            "en-US": "Purchasing manager",
+            "th": "หัวหน้าฝ่ายจัดซื้อ",
+            "vi": "Trưởng bộ phận mua hàng"
+          },
+          "approvers": {
+            "source": "manager",
+            "level": 1
+          },
+          "mode": "any",
+          "editableFields": [],
+          "dueHours": 24,
+          "onEmpty": "fallback"
         }
       ]
     }
