@@ -137,4 +137,33 @@ public class ApprovalFlowsApiTests
         var ids = body.GetProperty("editableFieldIds").EnumerateArray().Select(x => x.GetInt64()).ToList();
         ids.Should().Contain(s.Amount).And.NotContain(s.Status);
     }
+    [Fact]
+    [Trait("Category", "Postgres")]
+    public async Task DraftPreview_Json_HasFlowKey()
+    {
+        using var app = new TestApp();
+        var c = app.AsUser();
+        var s = await SeedApproval(c);
+        var before = await JsonOf(await c.GetAsync($"{Flows}?module={s.Key}"));
+        var draft = Flow("draft-new", s.Done, 9, s.Group);
+        var res = await c.PostAsJsonAsync($"{Flows}/preview?module={s.Key}", new { draft, initiatorUserId = "sales01" });
+        res.StatusCode.Should().Be(HttpStatusCode.OK);
+        var body = await JsonOf(res);
+        // 優先序 1 的 big 有條件（金額 ≥ 1000）、沒給金額不成立，草稿命中
+        body.GetProperty("flowKey").GetString().Should().Be("draft-new");
+        // 沒有問題時 problem 為 null（JSON 省略）；有問題的情境在 ApplicationTests
+        body.GetProperty("stages").GetArrayLength().Should().Be(1);
+        (await JsonOf(await c.GetAsync($"{Flows}?module={s.Key}"))).GetArrayLength().Should().Be(before.GetArrayLength());
+    }
+
+    [Fact]
+    [Trait("Category", "Postgres")]
+    public async Task DraftPreview_NonDesigner_Returns403()
+    {
+        using var app = new TestApp();
+        var s = await SeedApproval(app.AsUser());
+        var res = await app.AsUser("sales01").PostAsJsonAsync($"{Flows}/preview?module={s.Key}",
+            new { draft = Flow("draft-new", s.Done, 9, s.Group), initiatorUserId = "sales01" });
+        res.StatusCode.Should().Be(HttpStatusCode.Forbidden);
+    }
 }

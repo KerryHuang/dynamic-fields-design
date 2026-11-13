@@ -32,3 +32,11 @@ public record PreviewApprovalFlowRequest(string Key, long? RecordId, Dictionary<
 {
     public PermissionAction RequiredDesignerAction => PermissionAction.Read;
 }
+
+/// <summary>設計器試算編輯中的流程（不寫入）：目標狀態上現有的流程，同代碼的換成 Draft、沒有就加進去，Draft 一律當成啟用。</summary>
+public record PreviewApprovalDraftRequest(
+    string ModuleKey, ApprovalFlowInput Draft, long? RecordId, Dictionary<string, JsonElement?>? Values, string InitiatorUserId)
+    : IRequest<ServiceResult>, IDesignerRequest
+{
+    public PermissionAction RequiredDesignerAction => PermissionAction.Read;
+}

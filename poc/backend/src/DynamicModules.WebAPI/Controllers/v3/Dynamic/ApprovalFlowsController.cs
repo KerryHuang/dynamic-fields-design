@@ -12,6 +12,9 @@ public class ApprovalFlowsController(IMediator mediator) : ControllerBase
     public sealed record ReorderBody(string Module, long ToOptionId, List<string> Keys);
     public sealed record PreviewBody(long? RecordId, Dictionary<string, System.Text.Json.JsonElement?>? Values, string InitiatorUserId);
 
+    public sealed record DraftPreviewBody(
+        ApprovalFlowInput Draft, long? RecordId, Dictionary<string, System.Text.Json.JsonElement?>? Values, string InitiatorUserId);
+
     [HttpGet("approval-flows")]
     public async Task<IActionResult> List([FromQuery] string module) =>
         (await mediator.Send(new GetApprovalFlowsRequest(module))).ToActionResult(this);
@@ -31,6 +34,11 @@ public class ApprovalFlowsController(IMediator mediator) : ControllerBase
     [HttpPut("approval-flows/{key}")]
     public async Task<IActionResult> Update(string key, ApprovalFlowInput body) =>
         (await mediator.Send(new UpdateApprovalFlowRequest(key, body))).ToActionResult(this);
+
+    /// <summary>設計器試算編輯中的流程（不寫入）：流程還沒存也能試。</summary>
+    [HttpPost("approval-flows/preview")]
+    public async Task<IActionResult> PreviewDraft([FromQuery] string module, DraftPreviewBody body) =>
+        (await mediator.Send(new PreviewApprovalDraftRequest(module, body.Draft, body.RecordId, body.Values, body.InitiatorUserId))).ToActionResult(this);
 
     /// <summary>設計器試算（簽核設計 §5.4）：不寫入。</summary>
     [HttpPost("approval-flows/{key}/preview")]

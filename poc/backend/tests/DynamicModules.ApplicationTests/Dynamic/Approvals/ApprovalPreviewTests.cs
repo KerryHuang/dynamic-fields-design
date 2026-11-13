@@ -3,6 +3,7 @@ using DynamicModules.Application.Common;
 using DynamicModules.Application.Dynamic.ApprovalService;
 using DynamicModules.Domain.Approvals;
 using DynamicModules.Domain.Entities.Dynamic;
+using DynamicModules.Domain.Policies;
 using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
 
@@ -259,5 +260,152 @@ public class ApprovalPreviewTests : ApprovalTestBase
         Db.Context.Set<ApprovalAction>().AsNoTracking().Count().Should().Be(0);
         Db.Context.Set<Notification>().AsNoTracking().Count().Should().Be(0);
         Rec(po.Id).Row.RowVersion.Should().Be(rowVersion);
+    }
+    // ───────── 設計器試算編輯中的流程（草稿，不寫入） ─────────
+
+    private static ApprovalFlowInput Draft(string key, long to, ApprovalDefinition d, int priority = 1, bool active = true) =>
+        new(key, Text(key), to, priority, active, d);
+
+    private async Task<ServiceResult> DraftPreview(PurchaseRig r, ApprovalFlowInput draft, long? recordId = null,
+        Dictionary<string, JsonElement?>? values = null, string initiator = "buyer1")
+    {
+        As("admin");
+        return await Send(new PreviewApprovalDraftRequest(r.Module, draft, recordId, values, initiator));
+    }
+
+    private async Task<ApprovalPreviewResponse> MustDraftPreview(PurchaseRig r, ApprovalFlowInput draft, long? recordId = null,
+        Dictionary<string, JsonElement?>? values = null)
+    {
+        var res = await DraftPreview(r, draft, recordId, values);
+        res.IsSuccess.Should().BeTrue(Dump(res));
+        return (ApprovalPreviewResponse)res.Data!;
+    }
+
+    private (int Flows, int Versions) Counts() =>
+        (Db.Context.Set<ApprovalFlow>().AsNoTracking().Count(), Db.Context.Set<ApprovalFlowVersion>().AsNoTracking().Count());
+
+    [Fact]
+    public async Task DraftPreview_NewFlow_NotSaved_ShowsDraftStages()
+    {
+        var r = await BuildPurchase();
+        var before = Counts();
+
+        var p = await MustDraftPreview(r, Draft("po-new", r.Confirmed, Def(null, Stage("mgr", Manager(1)), Stage("lead", Group(PurchaseLeadGroup)))));
+
+        p.Outcome.Should().Be(ApprovalPreviewOutcomes.Flow);
+        p.FlowKey.Should().Be("po-new");
+        p.Stages.Select(s => s.Code).Should().Equal("mgr", "lead");
+        Counts().Should().Be(before);
+    }
+
+    [Fact]
+    public async Task DraftPreview_ReplacesSavedVersionOfSameKey()
+    {
+        var r = await OneFlow(x => Def(Cond(x.Total, "gte", 100000), Stage("lead", Group(PurchaseLeadGroup))));
+        var values = V((r.Total, 50));
+        As("admin");
+        var saved = (ApprovalPreviewResponse)(await Send(new PreviewApprovalFlowRequest("po-v", null, values, "buyer1"))).Data!;
+        saved.Outcome.Should().Be(ApprovalPreviewOutcomes.Blocked);
+
+        var p = await MustDraftPreview(r, Draft("po-v", r.Confirmed, Def(Cond(r.Total, "gte", 1), Stage("lead", Group(PurchaseLeadGroup)))), values: values);
+
+        p.Outcome.Should().Be(ApprovalPreviewOutcomes.Flow);
+        p.FlowKey.Should().Be("po-v");
+    }
+
+    [Fact]
+    public async Task DraftPreview_HigherPriorityFlowWins_FlowKeyIsOther()
+    {
+        var r = await OneFlow(x => Def(null, Stage("lead", Group(PurchaseLeadGroup))));
+
+        var p = await MustDraftPreview(r, Draft("po-draft", r.Confirmed, Def(null, Stage("mgr", Manager(1))), priority: 2));
+
+        p.FlowKey.Should().Be("po-v");
+        p.Stages.Select(s => s.Code).Should().Equal("lead");
+    }
+
+    [Fact]
+    public async Task DraftPreview_InactiveDraft_TreatedAsActive()
+    {
+        var r = await BuildPurchase();
+        var p = await MustDraftPreview(r, Draft("po-off", r.Confirmed, Def(null, Stage("mgr", Manager(1))), active: false));
+        (p.Outcome, p.FlowKey).Should().Be((ApprovalPreviewOutcomes.Flow, "po-off"));
+    }
+
+    [Fact]
+    public async Task DraftPreview_InvalidStageCode_Returns400WithDefinitionKey()
+    {
+        var r = await BuildPurchase();
+        var res = await DraftPreview(r, Draft("po-new", r.Confirmed, Def(null, Stage("Bad Code", Manager(1)))));
+        res.IsInvalid.Should().BeTrue(Dump(res));
+        res.Errors.Should().ContainKey("definition.stages[0].code");
+    }
+
+    [Fact]
+    public async Task DraftPreview_TargetIsInitialState_Returns400()
+    {
+        var r = await BuildPurchase();
+        var res = await DraftPreview(r, Draft("po-new", r.Draft, Def(null, Stage("mgr", Manager(1)))));
+        res.IsInvalid.Should().BeTrue(Dump(res));
+        res.Errors.Should().ContainKey("toOptionId");
+    }
+
+    [Fact]
+    public async Task DraftPreview_RecordOfOtherModule_Returns404()
+    {
+        var r = await OneFlow(_ => Def(null, Stage("lead", Group(PurchaseLeadGroup))));
+        var other = await BuildPurchase("pq");
+        await GrantEveryone(other.Module);
+        As("buyer1");
+        var po = await NewPo(other, price: 5000);
+        var res = await DraftPreview(r, Draft("po-new", r.Confirmed, Def(null, Stage("mgr", Manager(1)))), recordId: po.Id);
+        res.IsNotFound.Should().BeTrue();
+    }
+
+    private async Task<long> EmptyGroup()
+    {
+        var g = new PermissionGroup { Key = "nobody", NameI18n = Text("nobody") };
+        Db.Context.Add(g);
+        await Db.Context.SaveChangesAsync();
+        Db.Context.ChangeTracker.Clear();
+        return g.Id;
+    }
+
+    [Fact]
+    public async Task DesignerPreview_UnresolvableStage_ReportsNoApproverProblem()
+    {
+        var r = await BuildPurchase();
+        var empty = await EmptyGroup();
+        var def = new ApprovalDefinition(ApprovalShapes.Sequence, null, null, Group(empty),
+            [Stage("ok", Group(PurchaseLeadGroup)), Stage("none", Group(empty))]);
+
+        var p = await MustDraftPreview(r, Draft("po-new", r.Confirmed, def));
+
+        p.Stages.Select(s => (s.Code, s.Problem)).Should().Equal(("ok", null), ("none", PreviewProblems.NoApprover));
+        p.Stages[1].Approvers.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task DesignerPreview_OverStageLimit_ReportsTooManyProblem()
+    {
+        var r = await BuildPurchase();
+        Db.Context.Add(new ModulePolicy { ModuleId = r.ModuleId, Code = PolicyCatalog.ApprovalMaxApprovers.Code, Value = "1", ModifiedUserId = "admin" });
+        await Db.Context.SaveChangesAsync();
+        Db.Context.ChangeTracker.Clear();
+
+        var p = await MustDraftPreview(r, Draft("po-new", r.Confirmed, Def(null, Stage("fin", Group(FinanceGroup)))));
+
+        p.Stages.Should().ContainSingle().Which.Problem.Should().Be(PreviewProblems.TooManyApprovers);
+    }
+
+    [Fact]
+    public async Task RecordPreview_NoFlowKeyNoProblem()
+    {
+        var r = await OneFlow(_ => Def(null, Stage("lead", Group(PurchaseLeadGroup))));
+        As("buyer1");
+        var po = await NewPo(r, price: 5000);
+        var p = await Preview("buyer1", po.Id, r.Confirmed);
+        p.FlowKey.Should().BeNull();
+        p.Stages.Should().OnlyContain(s => s.Problem == null);
     }
 }

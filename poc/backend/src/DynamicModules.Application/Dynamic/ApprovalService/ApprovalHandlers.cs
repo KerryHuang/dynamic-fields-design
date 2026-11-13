@@ -167,20 +167,74 @@ public class PreviewApprovalFlowHandler(IApprovalFlowRepository flows, IModuleRe
         if (await flows.GetByKeyAsync(request.Key, ct) is not { } flow) return ServiceResult.NotFound(MessageRef.Of(MessageText.ResourceNotFound));
         if (await modules.GetByIdAsync(flow.ModuleId, includeChildren: true, ct) is not { Workflow: { } wf } module)
             return ServiceResult.NotFound(MessageRef.Of(MessageText.ResourceNotFound));
+        var (values, failure) = await DesignerPreviewInputs.ValuesAsync(records, guard, module, request.RecordId, request.Values, ct);
+        if (failure is not null) return failure;
+        var approval = DesignerPreviewInputs.ApprovalFor(wf, values!, flow.ToOptionId);
+        return await previewer.PreviewAsync(module, flow.ToOptionId, approval, values!, request.InitiatorUserId, designer: true, ct);
+    }
+}
+
+/// <summary>
+/// 設計器試算編輯中的流程（不寫入）：只跑定義驗證（錯誤鍵 definition.*），不跑入口約束與優先序唯一；
+/// 同代碼的流程換成草稿、沒有就加進去，草稿一律當成啟用。帶記錄的讀取規則同 <see cref="PreviewApprovalFlowHandler"/>。
+/// </summary>
+public class PreviewApprovalDraftHandler(IApprovalFlowRepository flows, IModuleRepository modules, IRecordRepository records, ApprovalPreviewer previewer,
+    IDynamicAccessGuard guard, ApprovalDefinitionValidator validator)
+    : IRequestHandler<PreviewApprovalDraftRequest, ServiceResult>
+{
+    public async Task<ServiceResult> Handle(PreviewApprovalDraftRequest request, CancellationToken ct)
+    {
+        if (string.IsNullOrEmpty(request.InitiatorUserId)) return ServiceResult.Invalid("initiatorUserId", MessageRef.Of(MessageText.Required));
+        var module = await modules.GetByKeyAsync(request.ModuleKey, includeChildren: true, ct);
+        if (module is null) return ServiceResult.NotFound("找不到模組");
+        if (ApprovalFlowEditor.CheckModule(module) is { } bad) return bad;
+        var wf = module.Workflow!;
+        var draft = request.Draft;
+        if (draft.ToOptionId == wf.InitialOptionId || wf.States.All(s => s.OptionId != draft.ToOptionId))
+            return ServiceResult.Invalid(new Dictionary<string, string[]> { ["toOptionId"] = ["目標狀態必須是狀態機的狀態，而且不是起始狀態"] });
+        if (draft.Definition is null) return ServiceResult.Invalid(new Dictionary<string, string[]> { ["definition"] = ["缺少流程定義"] });
+
+        var current = await flows.ListCurrentByModuleAsync(module.Id, ct);
+        var existing = current.FirstOrDefault(f => f.Flow.Key == draft.Key);
+        var errors = new Dictionary<string, string[]>();
+        foreach (var (k, v) in await validator.ValidateAsync(module, wf, draft.Definition, existing?.Definition, ct)) errors.TryAdd($"definition.{k}", v);
+        if (errors.Count > 0) return ServiceResult.Invalid(errors);
+
+        var (values, failure) = await DesignerPreviewInputs.ValuesAsync(records, guard, module, request.RecordId, request.Values, ct);
+        if (failure is not null) return failure;
+        var flowSet = current.Where(f => f.Flow.ToOptionId == draft.ToOptionId && f.Flow.Key != draft.Key)
+            .Select(f => (f.Flow.Key, new FlowSnapshotEntry(f.Flow.Id, f.Flow.CurrentVersionId!.Value, f.Flow.Priority, f.Flow.Active, f.Flow.NameI18n, f.Definition)))
+            .Append((draft.Key, new FlowSnapshotEntry(existing?.Flow.Id ?? 0, existing?.Flow.CurrentVersionId ?? 0, draft.Priority, true, draft.Name, draft.Definition)))
+            .ToList();
+        var approval = DesignerPreviewInputs.ApprovalFor(wf, values!, draft.ToOptionId);
+        return await previewer.PreviewAsync(module, draft.ToOptionId, approval, values!, request.InitiatorUserId, designer: true, ct, flowSet);
+    }
+}
+
+/// <summary>兩種設計器試算共用：記錄值的讀取（帶記錄時要有 Read 且在資料範圍內）與轉移的 noMatch 取法。</summary>
+internal static class DesignerPreviewInputs
+{
+    public static async Task<(Dictionary<string, JsonElement?>? Values, ServiceResult? Failure)> ValuesAsync(
+        IRecordRepository records, IDynamicAccessGuard guard, Module module, long? recordId, Dictionary<string, JsonElement?>? overrides, CancellationToken ct)
+    {
         var values = new Dictionary<string, JsonElement?>();
-        if (request.RecordId is { } id)
+        if (recordId is { } id)
         {
             if (await records.GetAsync(id, ct) is not { } record || record.ModuleId != module.Id
                 || !module.IsReadable() || (await guard.AuthorizeAsync(module, PermissionAction.Read, ct)).Permissions is not { } read
                 || !ApprovalReader.InScope(read, record.OwnerUserId))
-                return ServiceResult.NotFound(RecordMapper.RecordNotFound);
+                return (null, ServiceResult.NotFound(RecordMapper.RecordNotFound));
             values = RecordValueProcessor.Parse(record.ValuesJson);
         }
-        foreach (var (k, v) in request.Values ?? []) values[k] = v;
+        foreach (var (k, v) in overrides ?? []) values[k] = v;
+        return (values, null);
+    }
+
+    public static TransitionApproval ApprovalFor(Workflow wf, IReadOnlyDictionary<string, JsonElement?> values, long to)
+    {
         var from = wf.StateOf(values) ?? wf.InitialOptionId;
-        var approval = wf.Find(from, flow.ToOptionId)?.Approval
-            ?? wf.Transitions.FirstOrDefault(t => t.To == flow.ToOptionId && t.Approval is { Required: true })?.Approval
+        return wf.Find(from, to)?.Approval
+            ?? wf.Transitions.FirstOrDefault(t => t.To == to && t.Approval is { Required: true })?.Approval
             ?? new TransitionApproval(true, ApprovalNoMatch.Block);
-        return await previewer.PreviewAsync(module, flow.ToOptionId, approval, values, request.InitiatorUserId, designer: true, ct);
     }
 }

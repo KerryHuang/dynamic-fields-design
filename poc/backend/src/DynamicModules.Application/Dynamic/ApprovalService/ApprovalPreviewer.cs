@@ -66,12 +66,15 @@ public sealed class ApprovalPreviewer(
     IApprovalFlowRepository flows, IModuleRepository modules, ApproverResolver resolver, IPermissionRepository permissions,
     FieldTypeRegistry registry, IBusinessTime time, IDynamicAccessGuard guard, ApprovalHiddenFields hiddenFields)
 {
+    /// <summary>flowSet 省略時用目標狀態上目前的流程；設計器試算草稿時由呼叫端給（Key 對應 FlowKey 回報）。</summary>
     public async Task<ServiceResult> PreviewAsync(Module module, long to, TransitionApproval approval,
-        IReadOnlyDictionary<string, JsonElement?> values, string initiator, bool designer, CancellationToken ct)
+        IReadOnlyDictionary<string, JsonElement?> values, string initiator, bool designer, CancellationToken ct,
+        IReadOnlyList<(string Key, FlowSnapshotEntry Entry)>? flowSet = null)
     {
-        var snapshot = (await flows.ListCurrentByModuleAsync(module.Id, ct)).Where(f => f.Flow.ToOptionId == to)
-            .Select(f => new FlowSnapshotEntry(f.Flow.Id, f.Flow.CurrentVersionId!.Value, f.Flow.Priority, f.Flow.Active, f.Flow.NameI18n, f.Definition))
+        flowSet ??= (await flows.ListCurrentByModuleAsync(module.Id, ct)).Where(f => f.Flow.ToOptionId == to)
+            .Select(f => (f.Flow.Key, new FlowSnapshotEntry(f.Flow.Id, f.Flow.CurrentVersionId!.Value, f.Flow.Priority, f.Flow.Active, f.Flow.NameI18n, f.Definition)))
             .ToList();
+        var snapshot = flowSet.Select(x => x.Entry).ToList();
         var userIds = await modules.ListUserIdsAsync(ct);
         var (match, undecidable) = ApprovalRouter.Match(snapshot, module, values, registry, time.Today, userIds);
         if (undecidable is not null) return ServiceResult.Conflict(ApprovalMessages.FlowConditionUndecidable(undecidable.Name));
@@ -133,8 +136,14 @@ public sealed class ApprovalPreviewer(
             // 解析失敗（找不到人、超過上限）送出時會回 409；預覽照列這一關、不列簽核人
             var approvers = resolution.Seats.SelectMany(x => x.UserIds).Distinct(StringComparer.Ordinal).Select(Ref).ToList();
             stages.Add(new PreviewStage(s.Code, s.Name, PreviewStatuses.Enter, approvers,
-                resolution.Seats.Any(x => x.Reason == ApprovalTaskReason.Fallback)));
+                resolution.Seats.Any(x => x.Reason == ApprovalTaskReason.Fallback),
+                designer && resolution.Error is { } err ? ProblemOf(err) : null));
         }
-        return ServiceResult.Success(new ApprovalPreviewResponse(ApprovalPreviewOutcomes.Flow, match.Name, stages, picks));
+        var flowKey = designer ? flowSet.First(x => x.Entry.FlowId == match.FlowId).Key : null;
+        return ServiceResult.Success(new ApprovalPreviewResponse(ApprovalPreviewOutcomes.Flow, match.Name, stages, picks, flowKey));
     }
+
+    /// <summary>解析錯誤的訊息鍵對應成問題代碼；其他錯誤一律當成找不到人。</summary>
+    private static string ProblemOf(MessageRef error) =>
+        error.Key == MessageText.ApprovalTooManyApprovers ? PreviewProblems.TooManyApprovers : PreviewProblems.NoApprover;
 }

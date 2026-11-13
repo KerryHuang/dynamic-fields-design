@@ -97,11 +97,14 @@ public static class ApprovalInstanceStatuses
 
 // ── 預覽與試算（設計 §5.4） ──
 
-/// <summary>Status：enter（會進入）、skip（跳過，只在設計器試算）、conditional（條件引用對發起人隱藏的欄位）、pick（需發起人自選）。</summary>
-public sealed record PreviewStage(string? Code, I18nText Name, string Status, IReadOnlyList<UserRef> Approvers, bool UsesFallback);
+/// <summary>Status：enter（會進入）、skip（跳過，只在設計器試算）、conditional（條件引用對發起人隱藏的欄位）、pick（需發起人自選）。
+/// Problem 只在設計器試算填：這一關送出時會解析失敗的原因（<see cref="PreviewProblems"/>），送出前預覽一律為 null。</summary>
+public sealed record PreviewStage(string? Code, I18nText Name, string Status, IReadOnlyList<UserRef> Approvers, bool UsesFallback, string? Problem = null);
 
-/// <summary>Outcome：flow（會用 FlowName 這個流程）、direct（沒有流程符合、直接轉移）、blocked（沒有流程符合、送出會被擋）。</summary>
-public sealed record ApprovalPreviewResponse(string Outcome, I18nText? FlowName, IReadOnlyList<PreviewStage> Stages, IReadOnlyList<PickRequirement> Picks);
+/// <summary>Outcome：flow（會用 FlowName 這個流程）、direct（沒有流程符合、直接轉移）、blocked（沒有流程符合、送出會被擋）。
+/// FlowKey：命中的流程代碼，只在設計器試算填，送出前預覽為 null。</summary>
+public sealed record ApprovalPreviewResponse(
+    string Outcome, I18nText? FlowName, IReadOnlyList<PreviewStage> Stages, IReadOnlyList<PickRequirement> Picks, string? FlowKey = null);
 
 public sealed record UserRef(string UserId, string DisplayName);
 
@@ -115,4 +118,10 @@ public static class ApprovalPreviewOutcomes
 public static class PreviewStatuses
 {
     public const string Enter = "enter", Skip = "skip", Conditional = "conditional", Pick = "pick";
+}
+
+/// <summary>設計器試算的每關問題代碼（前端依代碼顯示多語文字）。</summary>
+public static class PreviewProblems
+{
+    public const string NoApprover = "noApprover", TooManyApprovers = "tooManyApprovers";
 }
