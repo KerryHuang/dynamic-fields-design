@@ -3,6 +3,7 @@ using System.Text.Json.Nodes;
 using DynamicModules.Application.Dynamic.AppService.Data;
 using DynamicModules.Application.Dynamic.ApprovalService;
 using DynamicModules.Domain.Approvals;
+using DynamicModules.Domain.Entities.Dynamic;
 using DynamicModules.Domain.ValueObjects;
 
 namespace DynamicModules.Application.Dynamic.AppService;
@@ -103,6 +104,56 @@ public static class AppApprovalFlowCodec
         if (fallbackSkipped)
             result.AddRange(Skipped(f.FallbackApprovers!.Groups).Select(g => new Substitution(f.Code, f.Name, null, null, g, Name(g), KindFallback, ByPolicyDefault)));
         return result;
+    }
+
+    // ---- 匯出方向：Id → 代號 ----
+
+    /// <summary>
+    /// 匯出方向：Id → 代號，取流程目前版本的定義。users 來源、對不上的單位、引用停用或未匯出的欄位與選項、已不存在的群組，一律回錯誤
+    /// （呼叫端讓整份匯出 409，不略過流程：略過會讓 direct 入口在重新匯入後少簽，計畫 U7）。空的可編輯欄位不寫出。
+    /// </summary>
+    /// <param name="groupCode">群組 Id → 套件群組代號；群組已不存在回 null。</param>
+    public static (AppApprovalFlow? Flow, List<string> Errors) ToPackage(
+        ApprovalFlow flow, ApprovalDefinition current, string moduleCode, long statusFieldId, AppReportCodec.Names n, Func<long, string?> groupCode)
+    {
+        var details = new List<string>();
+        string Option(long id) => n.Option(statusFieldId, id) ?? Add(AppMessages.ExportFlowStateMissing);
+        string Field(long id) => n.Field(id) ?? Add(AppMessages.ExportFlowFieldMissing);
+        string Add(string detail)
+        {
+            details.Add(detail);
+            return "";
+        }
+        JsonElement? When(JsonElement? json)
+        {
+            if (json is not { ValueKind: not (JsonValueKind.Null or JsonValueKind.Undefined) } w) return null;
+            var errors = new List<string>();
+            var converted = AppEffectsCodec.ExportCondition(w, n, errors);
+            details.AddRange(errors.Select(AppMessages.ExportFlowCondition));
+            return converted;
+        }
+        List<string>? Groups(List<long>? ids) => ids?.Select(id => groupCode(id) ?? Add(AppMessages.ExportFlowGroupMissing)).ToList();
+
+        AppApproverSource Source(ApproverSource a, string where)
+        {
+            if (a.Source == ApprovalSources.Users) Add(AppMessages.ExportFlowUsers(where));
+            if (a.UnmatchedGroups is { Count: > 0 } || a.CandidatesUnmatched) Add(AppMessages.ExportFlowUnmatched(where));
+            return new AppApproverSource(a.Source,
+                a.Source == ApprovalSources.Group ? Groups(a.GroupIds) : null, a.Level,
+                a.Source == ApprovalSources.UserField && a.FieldId is { } field ? Field(field) : null,
+                a.Source is ApprovalSources.UserField or ApprovalSources.InitiatorPick ? Groups(a.CandidateGroupIds) : null,
+                a.Min, a.Max);
+        }
+
+        var stages = current.Stages.Select(s => new AppApprovalStage(s.Code, s.Name, When(s.When),
+            Source(s.Approvers, AppMessages.ExportFlowStageAt(s.Name.Resolve(I18nText.FallbackLocale))), s.Mode,
+            s.EditableFields.Count > 0 ? s.EditableFields.Select(Field).ToList() : null, s.DueHours, s.OnEmpty)).ToList();
+        var fallback = current.FallbackApprovers is { } fb ? Source(fb, AppMessages.ExportFlowFallbackAt) : null;
+        var package = new AppApprovalFlow(flow.Key, flow.NameI18n, flow.Active, moduleCode, Option(flow.ToOptionId), flow.Priority, current.Shape,
+            When(current.When), current.RejectTo is { } rt ? Option(rt) : null, fallback, stages);
+        if (details.Count == 0) return (package, []);
+        var name = flow.NameI18n.Resolve(I18nText.FallbackLocale);
+        return (null, details.Distinct().Select(d => AppMessages.ExportFlowError(name, d)).ToList());
     }
 
     /// <summary>流程引用的欄位（限定欄位名）：流程與關卡條件、使用者欄位、可編輯欄位；開啟時這些欄位不能被排除（§14.4 第一點）。</summary>

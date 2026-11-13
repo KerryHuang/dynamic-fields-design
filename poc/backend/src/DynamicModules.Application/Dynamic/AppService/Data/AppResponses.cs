@@ -104,8 +104,18 @@ public static class AppMessages
 
     public static string FlowFieldExcluded(string field, string flow) => $"excludeFields: 「{field}」是簽核流程「{flow}」需要的欄位，不能排除";
 
-    /// <summary>a5a1 期間的暫時限制（計畫 J9），a5a2 換成真正的格式 8 匯出時刪除。</summary>
-    public static string ExportBlockedByApproval(string app) => $"應用程式「{app}」有簽核流程，匯出要等格式 8 的簽核流程匯出完成";
+    // ---- 匯出簽核流程失敗（整份 409，計畫 J10、U7）：ExportFlowError 組出「簽核流程「{流程}」{細節}」 ----
+    public static string ExportFlowError(string flow, string detail) => $"簽核流程「{flow}」{detail}";
+    public static string ExportFlowStageAt(string stage) => $"關卡「{stage}」";
+    public const string ExportFlowFallbackAt = "的備援簽核人";
+    public static string ExportFlowUsers(string where) => $"{where}指定了具體使用者，帳號屬於這個資料庫，套件不收";
+    public static string ExportFlowUnmatched(string where) => $"{where}有開啟套件時略過的群組，請先在設計器移除或補上群組";
+    public const string ExportFlowFieldMissing = "引用了停用或未匯出的欄位";
+    public const string ExportFlowStateMissing = "引用了停用或未匯出的狀態";
+    public const string ExportFlowGroupMissing = "引用了已不存在的群組";
+    public static string ExportFlowCondition(string error) => $"的{error}";
+
+    public static string ExportWorkflowMissing(string module) => $"模組「{module}」的狀態機未匯出，簽核設定無法單獨匯出";
 
     /// <summary>開啟預覽的頂替警告（繁中），與 <see cref="AppApprovalFlowCodec.Substitution"/> 一一對應。</summary>
     public static string ApprovalSubstituted(AppApprovalFlowCodec.Substitution s)

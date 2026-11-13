@@ -158,6 +158,91 @@ public class AppApprovalFlowCodecTests
 
         AppApprovalFlowCodec.Substitutions(withFallback, AllGroups.Keys.ToHashSet(), Groups).Should().BeEmpty();
     }
+
+    // ---- 匯出方向：Id → 代號 ----
+
+    private static readonly Dictionary<long, string> FieldNames = new() { [101] = "po.total", [102] = "po.memo", [103] = "po.buyer", [104] = "po.status" };
+
+    private static readonly AppReportCodec.Names Names = new(
+        key => key == "t8-po" ? "po" : null,
+        id => FieldNames.GetValueOrDefault(id),
+        (field, option) => field == 104 ? option switch { 201 => "draft", 202 => "confirmed", _ => null } : null,
+        id => id == 104,
+        id => id == 103 ? FieldType.User : null);
+
+    private static string? GroupCode(long id) => AllGroups.FirstOrDefault(kv => kv.Value == id).Key;
+
+    private static (AppApprovalFlow? Flow, List<string> Errors) Export(ApprovalFlowInput input, Func<long, string?>? groupCode = null) =>
+        AppApprovalFlowCodec.ToPackage(
+            new ApprovalFlow { Key = input.Key, NameI18n = input.Name, ToOptionId = input.ToOptionId, Priority = input.Priority, Active = input.Active },
+            input.Definition, "po", 104, Names, groupCode ?? GroupCode);
+
+    private static ApprovalFlowInput Imported(AppApprovalFlow f)
+    {
+        var (input, errors) = AppApprovalFlowCodec.ToInput(f, Lookups, AllGroups, GroupName);
+        errors.Should().BeEmpty();
+        return input!;
+    }
+
+    [Fact]
+    public void ToPackage_RoundTrip_EqualsOriginal()
+    {
+        var original = new AppApprovalFlow("t8-po-large", T("採購單（大額）"), false, "po", "confirmed", 3, "sequence",
+            Json("""{ "all": [ { "field": "po.total", "op": "gte", "value": 100000 } ] }"""), "draft", Group("purchaseLead"),
+            [
+                Stage("lead", Group("purchaseLead", "board"), mode: "all", editable: ["po.memo", "po.total"], dueHours: 24,
+                    when: Json("""{ "all": [ { "field": "po.status", "op": "eq", "value": "opt_draft" } ] }""")),
+                Stage("mgr", new AppApproverSource("manager", null, 2, null, null, null, null), onEmpty: "skip"),
+                Stage("owner", new AppApproverSource("userField", null, null, "po.buyer", ["buyers"], null, null), dueHours: 8),
+                Stage("pick", new AppApproverSource("initiatorPick", null, null, null, ["board", "buyers"], 1, 2), mode: "all")
+            ]);
+        var (exported, errors) = Export(Imported(original));
+        errors.Should().BeEmpty();
+        JsonSerializer.Serialize(exported, AppJson.StrictOptions).Should().Be(JsonSerializer.Serialize(original, AppJson.StrictOptions));
+    }
+
+    [Fact]
+    public void ToPackage_UsersSource_Error()
+    {
+        var input = Imported(Flow(null, Stage("lead", Group("purchaseLead"))));
+        var users = new ApproverSource(ApprovalSources.Users, UserIds: ["buyer01"]);
+        var stage = input with { Definition = input.Definition with { Stages = [input.Definition.Stages[0] with { Approvers = users }] } };
+        var (flow, errors) = Export(stage);
+        flow.Should().BeNull();
+        errors.Should().Equal("簽核流程「採購單（大額）」關卡「lead」指定了具體使用者，帳號屬於這個資料庫，套件不收");
+
+        var fallback = input with { Definition = input.Definition with { FallbackApprovers = users } };
+        Export(fallback).Errors.Should().Equal("簽核流程「採購單（大額）」的備援簽核人指定了具體使用者，帳號屬於這個資料庫，套件不收");
+    }
+
+    [Fact]
+    public void ToPackage_UnmatchedUnits_Error()
+    {
+        var userField = new AppApproverSource("userField", null, null, "po.buyer", ["board"], null, null);
+        var (input, _) = AppApprovalFlowCodec.ToInput(Flow(null, Stage("board", Group("board", "buyers")), Stage("owner", userField)),
+            Lookups, Without("board"), GroupName);
+        var (flow, errors) = Export(input!);
+        flow.Should().BeNull();
+        errors.Should().Equal(
+            "簽核流程「採購單（大額）」關卡「board」有開啟套件時略過的群組，請先在設計器移除或補上群組",
+            "簽核流程「採購單（大額）」關卡「owner」有開啟套件時略過的群組，請先在設計器移除或補上群組");
+    }
+
+    [Fact]
+    public void ToPackage_InactiveField_Error()
+    {
+        // 停用或未匯出的欄位 Names 查不到：可編輯欄位、條件、使用者欄位、狀態都算
+        var input = Imported(Flow(null, Stage("lead", Group("purchaseLead"), editable: ["po.memo"])));
+        var missing = Names with { Field = id => id == 102 ? null : FieldNames.GetValueOrDefault(id) };
+        var (flow, errors) = AppApprovalFlowCodec.ToPackage(
+            new ApprovalFlow { Key = input.Key, NameI18n = input.Name, ToOptionId = input.ToOptionId, Priority = 1, Active = true },
+            input.Definition, "po", 104, missing, GroupCode);
+        flow.Should().BeNull();
+        errors.Should().Equal("簽核流程「採購單（大額）」引用了停用或未匯出的欄位");
+
+        Export(input with { ToOptionId = 999 }).Errors.Should().Equal("簽核流程「採購單（大額）」引用了停用或未匯出的狀態");
+        Export(input, _ => null).Errors.Should().Equal("簽核流程「採購單（大額）」引用了已不存在的群組");
+    }
 }
 
 /// <summary>轉換結果要通過設計器的定義驗證（在資料庫建好的採購單模組上）。</summary>

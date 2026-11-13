@@ -3,6 +3,7 @@ using DynamicModules.Application.Dynamic.AppService.Data;
 using DynamicModules.Application.Dynamic.AppService.Integrations;
 using DynamicModules.Application.Dynamic.TemplateService;
 using DynamicModules.Application.Dynamic.TemplateService.Data;
+using DynamicModules.Domain.Approvals;
 using DynamicModules.Domain.Entities.Dynamic;
 using DynamicModules.Domain.Reports;
 using DynamicModules.Domain.Repositories.Dynamic;
@@ -204,6 +205,9 @@ public sealed partial class AppExporter(
         var eventList = await ExportEventsAsync(members, keyToCode, names, warnings, excludedEvents, ct);
         var checkList = await ExportChecksAsync(members, codeOfModule, names, warnings, excludedChecks, ct);
         var taskRuleList = await ExportTaskRulesAsync(app, isMaster, members, codeOfModule, masterTargets, names, warnings, ct);
+        // 主檔不帶狀態機，流程也不匯出（主檔模組本來就沒有套件帶來的狀態機，沿用下面的警告）
+        var (approvalList, approvalErrors) = isMaster ? (new List<AppApprovalFlow>(), new List<string>()) : await ExportApprovalFlowsAsync(members, codeOfModule, names,
+            workflows.Select(w => w.Module).ToHashSet(), id => groupList.Any(g => g.Id == id) ? GroupCode(id) : null, ct);
         if (isMaster && workflows.Count + conversionList.Count + printList.Count + ledgerList.Count + eventList.Count + checkList.Count > 0)
         {
             // 主檔套件不收流程（§4.1）：客戶在設計器加的就留在資料庫，不寫進檔案，否則匯出的檔案會被匯入驗證退回
@@ -232,21 +236,42 @@ public sealed partial class AppExporter(
             AppPackageData.FormatName, AppPackageData.CurrentFormatVersion,
             new AppManifest(app.Key, app.PackageVersion, app.NameI18n, null, app.Icon, null, requires, isMaster ? AppManifest.MasterKindName : null),
             groups, moduleList, fieldAccess, optionScopes, reportList, null, workflows, conversionList, eventList, printList,
-            checkList, ledgerList, IntegrationDeclarations.Parse(app.IntegrationsJson), contributions, taskRuleList);
+            checkList, ledgerList, IntegrationDeclarations.Parse(app.IntegrationsJson), contributions, taskRuleList, approvalList);
         // groups 在上面各步驟用到才加進 codeOfGroup，最後才組出來
-        return new Exported(package, warnings, isMaster ? null : await ApprovalExportErrorsAsync(app, members, ct));
+        return new Exported(package, warnings, approvalErrors);
     }
 
     /// <summary>
-    /// a5a1 的暫時限制（計畫 J9）：格式 8 的簽核流程匯出還沒做，照舊匯出會靜默丟掉流程與需簽核設定、寫出「格式 8 卻沒有流程」的檔案，
-    /// 讓 direct 入口在重新匯入後免簽。成員模組有任何流程或需簽核轉移就整份擋下；a5a2 換成真正的匯出時刪除。
+    /// 簽核流程（簽核設計 §14.4）：每個成員模組的流程取目前版本，停用的也匯出，依（模組、目標狀態的選項順序、優先序）排序；
+    /// 歷史版本、實例、任務、歷程、代理不匯出。表達不了的流程不略過、整份 409（略過會讓 direct 入口在重新匯入後少簽，計畫 U7）：
+    /// 有流程或需簽核轉移、但狀態機沒匯出（引用了停用選項），也算錯誤。
     /// </summary>
-    private async Task<List<string>> ApprovalExportErrorsAsync(App app, List<Module> members, CancellationToken ct)
+    private async Task<(List<AppApprovalFlow> Flows, List<string> Errors)> ExportApprovalFlowsAsync(
+        List<Module> members, Dictionary<long, string> codeOf, AppReportCodec.Names names, IReadOnlySet<string> exportedWorkflows,
+        Func<long, string?> groupCode, CancellationToken ct)
     {
+        var flows = new List<AppApprovalFlow>();
+        var errors = new List<string>();
         foreach (var m in members)
-            if (m.Workflow?.Transitions.Any(t => t.Approval is { Required: true }) == true || (await approvalFlows.ListCurrentByModuleAsync(m.Id, ct)).Count > 0)
-                return [AppMessages.ExportBlockedByApproval(app.NameI18n.Resolve(I18nText.FallbackLocale))];
-        return [];
+        {
+            var current = await approvalFlows.ListCurrentByModuleAsync(m.Id, ct);
+            if (current.Count == 0 && m.Workflow?.Transitions.Any(t => t.Approval is { Required: true }) != true) continue;
+            var module = codeOf[m.Id];
+            if (m.Workflow is not { } w || !exportedWorkflows.Contains(module))
+            {
+                errors.Add(AppMessages.ExportWorkflowMissing(m.NameI18n.Resolve(I18nText.FallbackLocale)));
+                continue;
+            }
+            var order = m.Blocks.SelectMany(b => b.Fields).FirstOrDefault(f => f.Id == w.StatusFieldId)?.Options
+                .OrderBy(o => o.Sequence).Select((o, i) => (o.Id, i)).ToDictionary(x => x.Id, x => x.i) ?? [];
+            foreach (var s in current.OrderBy(s => order.GetValueOrDefault(s.Flow.ToOptionId, int.MaxValue)).ThenBy(s => s.Flow.Priority))
+            {
+                var (flow, flowErrors) = AppApprovalFlowCodec.ToPackage(s.Flow, s.Definition, module, w.StatusFieldId, names, groupCode);
+                if (flow is null) errors.AddRange(flowErrors);
+                else flows.Add(flow);
+            }
+        }
+        return (flows, errors);
     }
 
     /// <summary>應用程式直接用到的每個主檔模組，各匯出一次（基本欄位＋本應用程式的貢獻，停用的也算）。</summary>
@@ -521,8 +546,9 @@ public sealed partial class AppExporter(
                 continue;
             }
             result.Add(new AppWorkflow(module, status[(module.Length + 1)..], initial,
-                w.States.Select(s => new AppWorkflowState(Option(s.OptionId)!, s.ReadOnly)).ToList(),
-                w.Transitions.Select(t => new AppWorkflowTransition(Option(t.From)!, Option(t.To)!, t.GroupIds.Select(groupCode).ToList())).ToList()));
+                w.States.Select(s => new AppWorkflowState(Option(s.OptionId)!, s.ReadOnly, s.Editable ? true : null)).ToList(),
+                w.Transitions.Select(t => new AppWorkflowTransition(Option(t.From)!, Option(t.To)!, t.GroupIds.Select(groupCode).ToList(),
+                    t.Approval is { Required: true } a ? new AppTransitionApproval(true, a.NoMatch == ApprovalNoMatch.Direct ? ApprovalNoMatch.Direct : null) : null)).ToList()));
         }
         return result;
     }
