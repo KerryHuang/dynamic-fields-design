@@ -15,7 +15,7 @@ const me = useMe();
 const key = computed(() => props.module.key);
 const policies = useModulePolicies(key);
 const save = useSaveModulePolicy(key);
-const { options: recipientOptions, names } = useRecipientNames();
+const { options: recipientOptions, names, ready: recipientsReady } = useRecipientNames();
 const canEdit = computed(() => me.data.value?.designer.edit === true);
 
 type Mode = 'inherit' | 'override';
@@ -74,7 +74,7 @@ function submit(p: ModulePolicy) {
               <q-radio v-model="modes[p.code]" val="override" :disable="!canEdit" :data-testid="`policy-override-${p.code}`" :label="t('policies.override')" />
               <div class="col q-pl-sm">
                 <PolicyValueEditor
-                  v-model="drafts[p.code]" :meta="p" :label="t(nameKey(p.code))" :recipient-options="recipientOptions" :disable="!canEdit || modes[p.code] !== 'override'"
+                  v-model="drafts[p.code]" :meta="p" :label="t(nameKey(p.code))" :recipient-options="recipientOptions" :recipients-ready="recipientsReady" :disable="!canEdit || modes[p.code] !== 'override'"
                   @update:valid="(v: boolean) => (invalid[p.code] = !v)"
                 />
               </div>

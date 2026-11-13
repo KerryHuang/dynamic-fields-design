@@ -8,11 +8,11 @@ import PolicyValueEditor from './PolicyValueEditor.vue';
 import { buildRecipientOptions } from './useRecipientNames';
 
 let w: ReturnType<typeof mount> | undefined;
-function make(meta: PolicyMeta, modelValue: PolicyValue, recipientOptions?: { value: string; label: string }[]) {
+function make(meta: PolicyMeta, modelValue: PolicyValue, recipientOptions?: { value: string; label: string }[], recipientsReady = false) {
   const i18n = createI18n({ legacy: false, locale: 'zh-TW', messages: { 'zh-TW': { ...zhTW, policies: { ...zhTW.policies, choices: { assignee: '負責人', creator: '建立者' } } } } });
   w = mount(PolicyValueEditor, {
     attachTo: document.body,
-    props: { meta, modelValue, label: '測試政策', recipientOptions },
+    props: { meta, modelValue, label: '測試政策', recipientOptions, recipientsReady },
     global: { plugins: [[quasar.Quasar, { components: quasar }], i18n] },
   });
   return w;
@@ -86,13 +86,26 @@ describe('PolicyValueEditor', () => {
     const options = buildRecipientOptions(
       [{ userId: 'fin1', displayName: '財務一' }, { userId: 'fin2', displayName: '財務二' }],
       [{ id: 7, key: 'finance', name: { 'zh-TW': '財務群組' }, members: [] }, { id: 8, key: 'board', name: { 'zh-TW': '董事會' }, members: [] }],
-      '全部系統管理員', 'zh-TW',
+      '全部系統管理員', 'zh-TW', (name, id) => `${name}（${id}）`,
     );
 
     it('選項依序是全部系統管理員、群組、使用者，共 5 個', () => {
       expect(options.map((o) => o.value)).toEqual(['admins', 'group:7', 'group:8', 'user:fin1', 'user:fin2']);
       expect(options[0].label).toBe('全部系統管理員');
       expect(options[1].label).toBe('財務群組');
+    });
+
+    it('editor shows raw items, not missing, before names are ready', () => {
+      make(meta, ['group:7', 'user:gone'], [], false);
+      expect(document.body.textContent).toContain('group:7');
+      expect(document.body.textContent).toContain('user:gone');
+      expect(document.body.textContent).not.toContain('找不到或已停用');
+    });
+
+    it('editor shows missing after ready for an unknown item', () => {
+      make(meta, ['user:gone'], options, true);
+      expect(document.body.textContent).toContain('找不到或已停用');
+      expect(document.body.textContent).toContain('user:gone');
     });
 
     it('已選項目顯示名稱，輸入框有可讀名稱', () => {
@@ -125,12 +138,12 @@ describe('PolicyValueEditor', () => {
     });
 
     it('使用者選項標籤含帳號，可用帳號搜尋', () => {
-      const withAccount = buildRecipientOptions([{ userId: 'fin1', displayName: '財務一' }], [], '全部系統管理員', 'zh-TW');
+      const withAccount = buildRecipientOptions([{ userId: 'fin1', displayName: '財務一' }], [], '全部系統管理員', 'zh-TW', (name, id) => `${name}（${id}）`);
       expect(withAccount[1].label).toBe('財務一（fin1）');
     });
 
     it('選項裡找不到的已選項目顯示「找不到或已停用」', () => {
-      make(meta, ['user:gone'], options);
+      make(meta, ['user:gone'], options, true);
       expect(document.body.textContent).toContain('找不到或已停用');
     });
   });

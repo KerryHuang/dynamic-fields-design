@@ -1,16 +1,15 @@
-import { useQuery } from '@tanstack/vue-query';
 import { computed, toValue, type MaybeRefOrGetter } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { resolveI18n } from 'src/domain/dynamic/i18n-text';
 import type { Group, User } from 'src/domain/dynamic/types';
-import { dynamicApi } from 'src/services/api/dynamic-api';
+import { useGroups, useUsers } from 'src/application/dynamic/queries/permissions-queries';
 
 export interface RecipientOption { value: string; label: string }
 
 /** 選項順序：全部系統管理員、群組、使用者（`/users` 只含啟用中的帳號）；使用者標籤含帳號，同名也分得出來、可用帳號搜尋。 */
 export function buildRecipientOptions(
   users: User[], groups: Group[], adminsLabel: string, locale: string,
-  userLabel: (name: string, id: string) => string = (name, id) => `${name}（${id}）`,
+  userLabel: (name: string, id: string) => string,
 ): RecipientOption[] {
   return [
     { value: 'admins', label: adminsLabel },
@@ -26,12 +25,13 @@ export function buildRecipientOptions(
 export function useRecipientNames(enabled: MaybeRefOrGetter<boolean> = true) {
   const { t, locale } = useI18n();
   const on = computed(() => toValue(enabled));
-  const users = useQuery({ queryKey: ['users'], queryFn: dynamicApi.getUsers, staleTime: Infinity, enabled: on });
-  const groups = useQuery({ queryKey: ['groups'], queryFn: dynamicApi.getGroups, enabled: on });
+  const users = useUsers({ enabled: on });
+  const groups = useGroups({ enabled: on });
   const options = computed(() => buildRecipientOptions(
     users.data.value ?? [], groups.data.value ?? [], t('policies.recipients.admins'), locale.value,
     (name, id) => t('policies.recipients.userLabel', { name, id }),
   ));
-  const names = computed(() => (users.isSuccess.value && groups.isSuccess.value ? new Map(options.value.map((o) => [o.value, o.label])) : undefined));
-  return { options, names };
+  const ready = computed(() => users.isSuccess.value && groups.isSuccess.value);
+  const names = computed(() => (ready.value ? new Map(options.value.map((o) => [o.value, o.label])) : undefined));
+  return { options, names, ready };
 }

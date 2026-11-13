@@ -15,7 +15,7 @@ const isAdmin = computed(() => me.data.value?.isSystemAdmin === true);
 // 非系統管理員不送請求（API 本來就會回 403）
 const policies = useSystemPolicies({ enabled: isAdmin });
 const save = useSaveSystemPolicy();
-const { options: recipientOptions, names } = useRecipientNames(isAdmin);
+const { options: recipientOptions, names, ready: recipientsReady } = useRecipientNames(isAdmin);
 
 /** 草稿＝沒設時看到出廠值；存檔失敗時保留，讓使用者改。 */
 const drafts = reactive<Record<string, PolicyValue>>({});
@@ -67,7 +67,7 @@ function submit(p: SystemPolicy, value: PolicyValue | null) {
               </div>
             </div>
             <div class="col-12 col-md-6">
-              <PolicyValueEditor v-model="drafts[p.code]" :meta="p" @update:valid="(v: boolean) => (invalid[p.code] = !v)" :label="t(nameKey(p.code))" :recipient-options="recipientOptions" :disable="save.isPending.value" />
+              <PolicyValueEditor v-model="drafts[p.code]" :meta="p" @update:valid="(v: boolean) => (invalid[p.code] = !v)" :label="t(nameKey(p.code))" :recipient-options="recipientOptions" :recipients-ready="recipientsReady" :disable="save.isPending.value" />
               <div v-if="errors[p.code]" class="text-negative text-caption q-mt-xs" :data-testid="`policy-error-${p.code}`">{{ errors[p.code] }}</div>
               <div class="row q-gutter-sm q-mt-xs">
                 <q-btn

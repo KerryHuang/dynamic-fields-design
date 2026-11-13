@@ -4,7 +4,7 @@ import { useI18n } from 'vue-i18n';
 import { policyValueText, type PolicyMeta, type PolicyValue } from 'src/domain/dynamic/policy-types';
 import type { RecipientOption } from './useRecipientNames';
 
-const props = defineProps<{ meta: PolicyMeta; modelValue: PolicyValue; label: string; disable?: boolean; recipientOptions?: RecipientOption[] }>();
+const props = defineProps<{ meta: PolicyMeta; modelValue: PolicyValue; label: string; disable?: boolean; recipientOptions?: RecipientOption[]; recipientsReady?: boolean }>();
 const emit = defineEmits<{ 'update:modelValue': [value: PolicyValue]; 'update:valid': [valid: boolean] }>();
 const { t } = useI18n();
 
@@ -23,13 +23,14 @@ function onNumber(v: string | number | null) {
 
 const choiceOptions = computed(() => (props.meta.options ?? []).map((o) => ({ value: o, label: t(`policies.choices.${o}`) })));
 
-// 收件人：選項＝呼叫端給的清單，加上已選但清單裡找不到的項目（已停用或不存在），標「找不到或已停用」
+// 收件人：選項＝呼叫端給的清單，加上已選但清單裡找不到的項目（已停用或不存在），標「找不到或已停用」；
+// 名稱還沒載入完（recipientsReady 為 false）時清單是空的，已選項目顯示原始代碼，不誤報
 const recipientFilter = ref('');
 const recipientAll = computed<RecipientOption[]>(() => {
   const base = props.recipientOptions ?? [];
   const known = new Set(base.map((o) => o.value));
   const missing = (props.modelValue as string[]).filter((v) => !known.has(v))
-    .map((v) => ({ value: v, label: t('policies.recipients.missingItem', { item: v }) }));
+    .map((v) => ({ value: v, label: props.recipientsReady ? t('policies.recipients.missingItem', { item: v }) : v }));
   return [...base, ...missing];
 });
 const recipientShown = computed(() => {
