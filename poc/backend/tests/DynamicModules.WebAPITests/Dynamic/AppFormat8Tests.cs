@@ -616,4 +616,84 @@ public class AppFormat8Tests : IDisposable
         JsonNode.Parse(package.GetRawText())!["workflows"]![0]!["transitions"]!.AsArray()
             .Should().OnlyContain(t => t!["approval"] == null);
     }
+    // ---- 生命週期：關閉、重新開啟、刪除（§17.4 第 10 步、套件設計 §6.3–§6.5） ----
+
+    private async Task<(long RecordId, long TaskId, string RowVersion)> PendingLargeAsync()
+    {
+        await ImportOpenAsync();
+        (await SubmitAsync(150000)).StatusCode.Should().Be(HttpStatusCode.Created);
+        var recordId = _rig.Db(db => db.Set<ApprovalInstance>().Single().RecordId);
+        var current = (await CurrentAsync(recordId)).GetProperty("current");
+        var task = current.GetProperty("stages")[0].GetProperty("tasks").EnumerateArray().Single(t => t.GetProperty("assigneeUserId").GetString() == "ops01");
+        return (recordId, task.GetProperty("id").GetInt64(), current.GetProperty("rowVersion").GetString()!);
+    }
+
+    [Fact]
+    public async Task CloseApp_PendingTask_ListedReadOnly_Approve409()
+    {
+        var (recordId, taskId, rowVersion) = await PendingLargeAsync();
+        await _rig.CloseOkAsync(AppId);
+
+        var todo = await JsonOf(await _rig.App.AsUser("ops01").GetAsync($"{Base}/approval-tasks?box=todo"));
+        var item = todo.GetProperty("items").EnumerateArray().Single(i => i.GetProperty("recordId").GetInt64() == recordId);
+        item.GetProperty("moduleClosed").GetBoolean().Should().BeTrue("關閉後待辦仍列出、但唯讀");
+        var res = await _rig.App.AsUser("ops01").PostAsJsonAsync($"{Base}/approval-tasks/{taskId}/approve", new { rowVersion });
+        res.StatusCode.Should().Be(HttpStatusCode.Conflict, await res.Content.ReadAsStringAsync());
+        _rig.Db(db => db.Set<ApprovalInstance>().Single().Status).Should().Be(ApprovalInstanceStatus.Pending);
+    }
+
+    [Fact]
+    public async Task ReopenApp_ApproveContinues()
+    {
+        var (recordId, _, _) = await PendingLargeAsync();
+        await _rig.CloseOkAsync(AppId);
+        await _rig.ReopenOkAsync(AppId);
+
+        await ApproveAsync("ops01", recordId);
+        var stages = (await CurrentAsync(recordId)).GetProperty("current").GetProperty("stages");
+        stages[1].GetProperty("tasks").EnumerateArray().Where(t => t.GetProperty("status").GetString() == ApprovalTaskStatus.Open)
+            .Select(t => t.GetProperty("assigneeUserId").GetString()).Should().Contain("buyer01", "推進到第 2 關");
+        _rig.Db(db => db.Set<ApprovalInstance>().Single().Status).Should().Be(ApprovalInstanceStatus.Pending);
+    }
+
+    [Fact]
+    public async Task DeleteApp_RemovesFlowsAndVersions()
+    {
+        await ImportOpenAsync();
+        var moduleId = _rig.Db(db => db.Set<Module>().Single(m => m.Key == PoKey).Id);
+        var flowIds = _rig.Db(db => db.Set<ApprovalFlow>().Where(f => f.ModuleId == moduleId).Select(f => f.Id).ToList());
+        flowIds.Should().HaveCount(2);
+        await _rig.CloseOkAsync(AppId);
+        await _rig.DeleteAppOkAsync(AppId);
+
+        (await _rig.Admin.GetAsync($"{Base}/approval-flows/{Large}")).StatusCode.Should().Be(HttpStatusCode.NotFound);
+        _rig.Db(db => db.Set<ApprovalFlow>().Any(f => f.ModuleId == moduleId)).Should().BeFalse();
+        _rig.Db(db => db.Set<ApprovalFlowVersion>().Any(v => flowIds.Contains(v.FlowId))).Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task DeleteApp_PurgesInstancesOfSoftDeletedRecords()
+    {
+        // 核准後的記錄停在唯讀的「已確認」不能刪（此狀態的單據不可刪除），所以照計畫改用「實例已撤回的記錄」：
+        // 第 1 關同意（留下任務與動作）後撤回，記錄回到草稿再軟刪除
+        var (recordId, _, _) = await PendingLargeAsync();
+        await ApproveAsync("ops01", recordId);
+        var current = (await CurrentAsync(recordId)).GetProperty("current");
+        var withdrawn = await _rig.Admin.PostAsJsonAsync($"{Base}/approval-instances/{current.GetProperty("id").GetInt64()}/withdraw",
+            new { rowVersion = current.GetProperty("rowVersion").GetString() });
+        withdrawn.StatusCode.Should().Be(HttpStatusCode.OK, await withdrawn.Content.ReadAsStringAsync());
+        _rig.Db(db => db.Set<ApprovalAction>().Count()).Should().BeGreaterThan(0);
+
+        var record = await JsonOf(await _rig.Admin.GetAsync($"{Base}/records/{recordId}"));
+        var deleted = await _rig.Admin.DeleteAsync($"{Base}/records/{recordId}?rowVersion={Uri.EscapeDataString(record.GetProperty("rowVersion").GetString()!)}");
+        deleted.IsSuccessStatusCode.Should().BeTrue(await deleted.Content.ReadAsStringAsync());
+        await _rig.CloseOkAsync(AppId);
+        await _rig.DeleteAppOkAsync(AppId);
+
+        _rig.Db(db => db.Set<ApprovalInstance>().Count()).Should().Be(0);
+        _rig.Db(db => db.Set<ApprovalTask>().Count()).Should().Be(0);
+        _rig.Db(db => db.Set<ApprovalAction>().Count()).Should().Be(0);
+        _rig.Db(db => db.Set<ApprovalStageRun>().Count()).Should().Be(0);
+        _rig.Db(db => db.Set<ApprovalInstanceFlow>().Count()).Should().Be(0);
+    }
 }
