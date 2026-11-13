@@ -1,0 +1,109 @@
+# 合併前總檢查（gate）。功能分支推上來就跑，依改動決定範圍：
+# 只改文件不跑；只改前端只跑前端；動到後端、共用檔、Dockerfile 或本檔就全跑。
+# 結果看最後的 gate job：全部通過或略過才算過。
+name: gate
+
+on:
+  push:
+    branches-ignore: [main]
+  workflow_dispatch:
+    inputs:
+      full:
+        description: 不看改動，全部都跑
+        type: boolean
+        default: true
+
+permissions:
+  contents: read
+
+concurrency:
+  group: gate-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  scope:
+    runs-on: ubuntu-latest
+    outputs:
+      backend: ${{ steps.s.outputs.backend }}
+      frontend: ${{ steps.s.outputs.frontend }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - id: s
+        env:
+          FULL: ${{ github.event_name == 'workflow_dispatch' && inputs.full }}
+        run: |
+          if [ "$FULL" = "true" ]; then
+            echo "backend=true" >> "$GITHUB_OUTPUT"; echo "frontend=true" >> "$GITHUB_OUTPUT"; exit 0
+          fi
+          base=$(git merge-base origin/main HEAD)
+          files=$(git diff --name-only "$base" HEAD)
+          echo "$files"
+          be=false; fe=false
+          if echo "$files" | grep -qE '^(poc/shared/|poc/Dockerfile|\.github/workflows/)'; then be=true; fe=true; fi
+          if echo "$files" | grep -qE '^poc/backend/'; then be=true; fi
+          if echo "$files" | grep -qE '^poc/frontend/'; then fe=true; fi
+          echo "backend=$be" >> "$GITHUB_OUTPUT"; echo "frontend=$fe" >> "$GITHUB_OUTPUT"
+
+  backend:
+    needs: scope
+    if: needs.scope.outputs.backend == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    strategy:
+      fail-fast: false
+      matrix:
+        project: [DomainTests, ApplicationTests, WebAPITests]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          global-json-file: poc/backend/global.json
+      - uses: actions/cache@v4
+        with:
+          path: ~/.nuget/packages
+          key: nuget-${{ runner.os }}-${{ hashFiles('poc/backend/**/*.csproj', 'poc/backend/Directory.Build.props') }}
+          restore-keys: nuget-${{ runner.os }}-
+      - name: dotnet test
+        working-directory: poc/backend
+        run: dotnet test tests/DynamicModules.${{ matrix.project }} --logger "console;verbosity=minimal"
+
+  frontend:
+    needs: scope
+    if: needs.scope.outputs.frontend == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        step: [test, typecheck, build]
+    defaults:
+      run:
+        working-directory: poc/frontend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.4.0
+      - uses: actions/cache@v4
+        with:
+          path: ~/.bun/install/cache
+          key: bun-${{ runner.os }}-${{ hashFiles('poc/frontend/bun.lock') }}
+          restore-keys: bun-${{ runner.os }}-
+      - run: bun install --frozen-lockfile
+      - run: bun run ${{ matrix.step }}
+
+  gate:
+    needs: [scope, backend, frontend]
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - env:
+          SCOPE: ${{ needs.scope.result }}
+          BE: ${{ needs.backend.result }}
+          FE: ${{ needs.frontend.result }}
+        run: |
+          echo "scope=$SCOPE backend=$BE frontend=$FE"
+          [ "$SCOPE" = success ] || exit 1
+          for r in "$BE" "$FE"; do case "$r" in success|skipped) ;; *) exit 1 ;; esac; done
