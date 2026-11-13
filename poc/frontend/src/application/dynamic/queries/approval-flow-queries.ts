@@ -3,10 +3,11 @@ import { computed, toValue, type MaybeRefOrGetter } from 'vue';
 import type { ApprovalFlowInput } from 'src/domain/dynamic/approval-flow-types';
 import { dynamicApi } from 'src/services/api/dynamic-api';
 
-export function useApprovalFlows(moduleKey: MaybeRefOrGetter<string>) {
+export function useApprovalFlows(moduleKey: MaybeRefOrGetter<string>, enabled: MaybeRefOrGetter<boolean> = true) {
   return useQuery({
     queryKey: computed(() => ['approval-flows', toValue(moduleKey)]),
     queryFn: () => dynamicApi.getApprovalFlows(toValue(moduleKey)),
+    enabled: computed(() => toValue(enabled)),
   });
 }
 

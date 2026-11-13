@@ -183,13 +183,13 @@ describe('WorkflowTab', () => {
       expect(w.find('[data-testid="transition-direct-warning-0"]').text()).toBe('條件都不符合的單據會直接轉移，不經任何人同意');
     });
 
-    it('flow count link shows N flows on the target and emits open-flows with the target option', async () => {
+    it('flow count shows N flows on the target as plain text', async () => {
       const withApproval: Workflow = { ...saved, transitions: [{ from: 11, to: 12, groupIds: [3], approval: { required: true, noMatch: 'block' } }] };
       const w = await mountTab(mod(), withApproval, [flowOn(12, 'a'), flowOn(12, 'b'), flowOn(11, 'c')]);
-      const link = w.find('[data-testid="transition-flows-0"]');
-      expect(link.text()).toContain('目標狀態已掛 2 個流程');
-      await link.trigger('click');
-      expect(w.emitted('open-flows')).toEqual([[12]]);
+      const count = w.find('[data-testid="transition-flows-0"]');
+      expect(count.text()).toContain('目標狀態已掛 2 個流程');
+      expect(count.element.tagName).not.toBe('BUTTON');
+      expect(w.emitted('open-flows')).toBeUndefined();
     });
 
     it('save disabled while an approval transition targets a state with no flow, with the reason', async () => {
@@ -206,12 +206,18 @@ describe('WorkflowTab', () => {
     });
 
     it('unsaved draft survives a workflow refetch', async () => {
-      const w = await mountTab(mod(), saved, [flowOn(12)]);
+      const m = mod();
+      m.blocks[0]!.fields = [status, { ...status, id: 7, key: 'f_7', type: 'text', label: { 'zh-TW': '附件說明' }, options: [] } as DesignerField];
+      const w = await mountTab(m, saved, [flowOn(12)]);
       await toggle(w).trigger('click');
       const fresh: WorkflowResponse = { ...saved, lockedStates: [12], editableStates: [], lockedFieldIds: [7] };
+      expect(w.find('[data-testid="state-locked-12"]').exists()).toBe(false);
       w.qc.setQueryData(['workflow', 'doc'], fresh);
       await flushPromises();
       expect(toggle(w).attributes('aria-checked')).toBe('true');
+      expect(w.find('[data-testid="state-locked-12"]').exists()).toBe(true);
+      expect(w.find('[data-testid="locked-fields"]').text()).toContain('附件說明');
+      expect(w.find('[data-testid="lock-dirty-caption"]').exists()).toBe(true);
       api.putWorkflow.mockResolvedValue(saved as never);
       await w.find('[data-testid="save-workflow"]').trigger('click');
       await flushPromises();
@@ -364,7 +370,7 @@ describe('WorkflowTab', () => {
       const old = window.innerWidth;
       quasar.Screen.setDebounce(0);
       await resizeTo(width);
-      try { await fn(); } finally { await resizeTo(old); quasar.Screen.setDebounce(50); }
+      try { await fn(); } finally { await resizeTo(old); quasar.Screen.setDebounce(16); }
     };
     const approved: Workflow = { ...saved, transitions: [{ from: 11, to: 12, groupIds: [3], approval: { required: true, noMatch: 'direct' } }] };
 
@@ -382,14 +388,12 @@ describe('WorkflowTab', () => {
       });
     });
 
-    it('mobile width stacks transition fields in a card', async () => {
+    it('mobile width puts each transition in a card with its fields and delete button', async () => {
       await withWidth(390, async () => {
         const w = await mountTab(mod(), approved, [flowOn(12)]);
         const row = w.find('[data-testid="transition-row-0"]');
         expect(row.classes()).toContain('q-card');
-        const selects = row.findAll('.q-field');
-        expect(selects.length).toBeGreaterThanOrEqual(4); // from, to, groups, noMatch
-        for (const f of selects) expect(f.classes()).toContain('col-12');
+        expect(row.findAll('.q-field').length).toBeGreaterThanOrEqual(4); // from, to, groups, noMatch
         expect(row.find('[data-testid="transition-flows-0"]').exists()).toBe(true);
         expect(row.find('[data-testid="transition-remove-0"]').exists()).toBe(true);
       });
@@ -400,6 +404,56 @@ describe('WorkflowTab', () => {
       expect(w.find('.q-table').exists()).toBe(true);
       expect(w.find('[data-testid="state-cards"]').exists()).toBe(false);
       expect(w.find('[data-testid="transition-row-0"]').classes()).not.toContain('q-card');
+    });
+  });
+
+  describe('review fixes', () => {
+    const three: WorkflowResponse = {
+      statusFieldId: 5, initialOptionId: 11,
+      states: [{ optionId: 11, readOnly: false }, { optionId: 12, readOnly: true, editable: true }, { optionId: 13, readOnly: true }],
+      transitions: [{ from: 11, to: 13, groupIds: [], approval: { required: true, noMatch: 'block' } }],
+      lockedStates: [13], editableStates: [11, 12], lockedFieldIds: [],
+    };
+
+    it('changing the target of an approval transition drops editable on the new target', async () => {
+      api.putWorkflow.mockResolvedValue(three as never);
+      const w = await mountTab(mod(), three, [flowOn(12), flowOn(13)]);
+      w.findAllComponents({ name: 'QSelect' })[2]!.vm.$emit('update:modelValue', 12);
+      await flushPromises();
+      expect(w.find('[data-testid="state-editable-toggle-12"]').attributes('aria-checked')).toBe('false');
+      await w.find('[data-testid="save-workflow"]').trigger('click');
+      await flushPromises();
+      const sent = api.putWorkflow.mock.calls[0]![1] as Workflow;
+      expect(sent.states.find((x) => x.optionId === 12)).toEqual({ optionId: 12, readOnly: true });
+    });
+
+    it('an error for a state that is not listed goes to the error list', async () => {
+      api.putWorkflow.mockRejectedValue({ status: 400, errors: { 'states[99]': ['停用的選項沒有流程'] } });
+      const w = await mountTab(mod(), three, [flowOn(13)]);
+      await w.find('[data-testid="save-workflow"]').trigger('click');
+      await flushPromises();
+      expect(w.find('[data-testid="workflow-errors"]').text()).toContain('停用的選項沒有流程');
+    });
+
+    it('an error for a transition that is not in the draft goes to the error list', async () => {
+      api.putWorkflow.mockRejectedValue({ status: 400, errors: { 'transitions[12>11]': ['這條轉移不能存'] } });
+      const w = await mountTab(mod(), three, [flowOn(13)]);
+      await w.find('[data-testid="save-workflow"]').trigger('click');
+      await flushPromises();
+      expect(w.find('[data-testid="workflow-errors"]').text()).toContain('這條轉移不能存');
+    });
+
+    it('detail modules do not ask for approval flows', async () => {
+      await mountTab(mod({ detailOf: 'header' }), null);
+      expect(api.getApprovalFlows).not.toHaveBeenCalled();
+    });
+
+    it('no recompute caption before a workflow has been saved', async () => {
+      const w = await mountTab(mod(), null);
+      w.findAllComponents({ name: 'QSelect' })[0]!.vm.$emit('update:modelValue', 5);
+      await flushPromises();
+      expect(w.find('[data-testid="state-row-11"]').exists()).toBe(true);
+      expect(w.find('[data-testid="lock-dirty-caption"]').exists()).toBe(false);
     });
   });
 });

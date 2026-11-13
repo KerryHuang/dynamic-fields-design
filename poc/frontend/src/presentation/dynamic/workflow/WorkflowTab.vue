@@ -17,7 +17,6 @@ import { fieldOptions } from 'src/presentation/dynamic/designer/field-options';
 import type { ApiError } from 'src/services/api/http';
 
 const props = defineProps<{ module: ModuleDetail }>();
-const emit = defineEmits<{ 'open-flows': [toOptionId: number] }>();
 const { t, locale } = useI18n();
 const $q = useQuasar();
 // Phone width swaps the state table and the transition rows for cards: five columns do not fit 390px.
@@ -25,7 +24,8 @@ const mobile = computed(() => $q.screen.lt.sm);
 
 const key = computed(() => props.module.key);
 const query = useWorkflowQuery(key);
-const flows = useApprovalFlows(key);
+const unsupported = computed(() => !!props.module.detailOf || props.module.kind === 'extension');
+const flows = useApprovalFlows(key, () => !unsupported.value);
 const groups = useGroups();
 const me = useMe();
 const save = useSaveWorkflowMutation(key);
@@ -50,7 +50,6 @@ watch([key, () => query.data.value], ([k, d], [, oldD]) => {
 }, { immediate: true });
 
 const readonly = computed(() => !me.data.value?.designer.edit);
-const unsupported = computed(() => !!props.module.detailOf || props.module.kind === 'extension');
 const ready = computed(() => draft.value && groups.data.value && me.data.value);
 const exists = computed(() => !!query.data.value);
 
@@ -119,9 +118,16 @@ const lockedFieldNames = computed(() => {
 });
 const hasApproval = computed(() => !!draft.value && draftTargets(draft.value).length > 0);
 
-const body = computed(() => (draft.value ? buildWorkflow(draft.value) : undefined));
+// An approval target is locked, never editable; whichever way the target got chosen, the body must not say otherwise.
+const body = computed(() => (draft.value
+  ? buildWorkflow(draftTargets(draft.value).reduce((d, id) => setStateEditable(d, id, false), draft.value)) : undefined));
 
 const rowKey = /^(transitions\[\d+>\d+\]|states\[\d+\]|initialOptionId)$/;
+const rowShown = (k: string) => {
+  const state = /^states\[(\d+)\]$/.exec(k)?.[1];
+  if (state) return stateOptions.value.some((o) => o.value === Number(state));
+  return !k.startsWith('transitions[') || draft.value!.transitions.some((x) => `transitions[${x.from}>${x.to}]` === k);
+};
 const flowKey = /^flows\[(.+)\]$/;
 function fail(e: unknown) {
   const err = e as ApiError;
@@ -131,7 +137,9 @@ function fail(e: unknown) {
   const lines: string[] = [];
   for (const [k, msgs] of Object.entries(err.errors ?? {})) {
     const flow = flowKey.exec(k)?.[1];
-    if (rowKey.test(k)) rows[k] = msgs;
+    // a message whose row is not on screen (inactive option, removed transition) goes to the list instead of vanishing
+    if (rowKey.test(k) && rowShown(k)) rows[k] = msgs;
+    else if (rowKey.test(k)) lines.push(...msgs.map((m) => `${k}：${m}`));
     else if (flow) {
       const f = flows.data.value?.find((x) => x.key === flow);
       lines.push(...msgs.map((m) => `${f ? resolveI18n(f.name, locale.value) : flow}：${m}`));
@@ -187,8 +195,8 @@ function removeWorkflow() {
       <div>
         <div class="text-subtitle1">{{ t('docflow.workflow.states') }}</div>
         <div class="text-caption text-muted q-mb-xs">{{ t('docflow.workflow.statesHint') }}</div>
-        <div v-if="dirty" class="text-caption text-muted q-mb-xs" data-testid="lock-dirty-caption">{{ t('docflow.workflow.lock.dirtyCaption') }}</div>
-        <q-markup-table v-if="!mobile" flat bordered dense>
+        <div v-if="dirty && exists" class="text-caption text-muted q-mb-xs" data-testid="lock-dirty-caption">{{ t('docflow.workflow.lock.dirtyCaption') }}</div>
+        <q-markup-table v-if="!mobile" flat bordered dense wrap-cells>
           <thead>
             <tr>
               <th class="text-left">{{ t('docflow.workflow.state') }}</th>
@@ -337,10 +345,7 @@ function removeWorkflow() {
                   @update:model-value="(v: 'block' | 'direct') => setNoMatch(i, v)"
                 />
                 <div v-if="tr.to != null && flowCount(tr.to) !== undefined" class="col-12 col-sm-auto">
-                  <q-btn
-                    flat dense no-caps color="primary" :label="t('docflow.workflow.approval.flowCount', { n: flowCount(tr.to) })"
-                    :data-testid="`transition-flows-${i}`" @click="emit('open-flows', tr.to!)"
-                  />
+                  <span class="text-caption text-muted" :data-testid="`transition-flows-${i}`">{{ t('docflow.workflow.approval.flowCount', { n: flowCount(tr.to) }) }}</span>
                 </div>
               </template>
             </div>
