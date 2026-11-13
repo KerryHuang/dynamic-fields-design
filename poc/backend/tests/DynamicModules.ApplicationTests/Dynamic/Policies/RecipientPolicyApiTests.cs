@@ -78,6 +78,7 @@ public class RecipientPolicyApiTests : ApprovalTestBase
     }
 
     [Fact]
+    [Trait("Category", "Postgres")]
     public async Task DeleteGroup_ReferencedBySystemPolicy_Returns409()
     {
         (await PutSystem(PolicyCatalog.ApprovalAlertRecipients, $"group:{FinanceGroup}")).IsSuccess.Should().BeTrue();
@@ -87,13 +88,25 @@ public class RecipientPolicyApiTests : ApprovalTestBase
     }
 
     [Fact]
+    [Trait("Category", "Postgres")]
     public async Task DeleteGroup_ReferencedByModuleOverride_Returns409()
     {
         var r = await BuildPurchase();
         (await PutModule(r.Module, PolicyCatalog.ApprovalDefaultFallbackApprovers, $"group:{BoardGroup}")).IsSuccess.Should().BeTrue();
         var res = await Send(new DeleteGroupRequest(BoardGroup));
         res.IsConflict.Should().BeTrue(Dump(res));
-        res.Message.Should().Contain(PolicyCatalog.ApprovalDefaultFallbackApprovers.Code);
+        res.Message.Should().Contain(PolicyCatalog.ApprovalDefaultFallbackApprovers.Code).And.Contain(r.Module);   // 附模組
+    }
+
+    [Fact]
+    [Trait("Category", "Postgres")]
+    public async Task DeleteGroup_ReferencedBySloppyStoredValue_StillReturns409()
+    {
+        // 資料庫被手改成帶空白的值：執行期會 Normalize 後使用，守衛也要照同一個標準比對
+        Db.Context.Add(new SystemSetting { Key = "policy.approval.alertRecipients", Value = $"admins, group:{FinanceGroup}" });
+        await Db.Context.SaveChangesAsync();
+        Db.Context.ChangeTracker.Clear();
+        (await Send(new DeleteGroupRequest(FinanceGroup))).IsConflict.Should().BeTrue();
     }
 
     [Fact]

@@ -1,4 +1,5 @@
 using System.Text.Json;
+using Microsoft.Extensions.Logging;
 using DynamicModules.Application.Common;
 using DynamicModules.Application.Dynamic.OrganizationService;
 using DynamicModules.Application.Dynamic.PolicyService;
@@ -28,7 +29,8 @@ public sealed record ResolveContext(
 /// 空的單位由備援簽核人頂替（會簽另佔一席、或簽併入候選），onEmpty = skip 只在全部單位都空時跳過。
 /// </summary>
 public sealed class ApproverResolver(
-    OrgSnapshotLoader org, IPermissionRepository permissions, ApprovalPolicies approvalPolicies, RecipientResolver recipients)
+    OrgSnapshotLoader org, IPermissionRepository permissions, ApprovalPolicies approvalPolicies, RecipientResolver recipients,
+    Microsoft.Extensions.Logging.ILogger<ApproverResolver> logger)
 {
     public const string AnySeat = "any";
 
@@ -40,6 +42,7 @@ public sealed class ApproverResolver(
             .ToDictionary(g => g.Key, g => (IReadOnlyList<string>)g.Select(m => m.UserId).ToList());
         var groups = (await permissions.ListGroupsAsync(ct)).ToDictionary(g => g.Id, g => g.NameI18n);
         var fallback = await recipients.ResolveAsync(await approvalPolicies.DefaultFallbackItemsAsync(module.Id, ct), ct);   // 政策預設備援，下一關啟動當下的設定
+        if (fallback.Count == 0) logger.LogDebug("模組 {ModuleKey} 的預設備援對象政策解析為空，需要備援的關卡會回 409", module.Key);
         var limits = await approvalPolicies.LimitsAsync(module.Id, ct);   // 下一關啟動當下的設定（裁決 2）
         return new ResolveContext(module, initiator, values, picks, snapshot, members, fallback, limits.MaxApprovers,
             await approvalPolicies.AllowSelfApprovalAsync(module.Id, ct), groups);
@@ -92,6 +95,9 @@ public sealed class ApproverResolver(
         if (seats.Where(s => s.Reason == ApprovalTaskReason.Resolved).SelectMany(s => s.UserIds).Distinct(StringComparer.Ordinal).Count() > ownLimit)
             return new([], false, ApprovalMessages.TooManyApprovers(stage, ownLimit));
         if (seats.Where(s => s.Reason == ApprovalTaskReason.Fallback).SelectMany(s => s.UserIds).Distinct(StringComparer.Ordinal).Count() > technicalMax)
+            return new([], false, ApprovalMessages.TooManyApprovers(stage, technicalMax));
+        // 技術上限 50 管的是整關合計（來源加頂替的備援，去重後）
+        if (seats.SelectMany(s => s.UserIds).Distinct(StringComparer.Ordinal).Count() > technicalMax)
             return new([], false, ApprovalMessages.TooManyApprovers(stage, technicalMax));
         return new(seats, false, null);
     }

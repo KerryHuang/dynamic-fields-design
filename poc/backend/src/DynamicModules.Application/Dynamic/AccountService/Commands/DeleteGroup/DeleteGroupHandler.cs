@@ -6,7 +6,7 @@ using MediatR;
 
 namespace DynamicModules.Application.Dynamic.AccountService.Commands.DeleteGroup;
 
-public class DeleteGroupHandler(IAccountRepository accounts, IApprovalFlowRepository approvalFlows, ISystemSettingRepository settings, IModulePolicyRepository modulePolicies, IUnitOfWork uow) : IRequestHandler<DeleteGroupRequest, ServiceResult>
+public class DeleteGroupHandler(IAccountRepository accounts, IApprovalFlowRepository approvalFlows, ISystemSettingRepository settings, IModulePolicyRepository modulePolicies, IModuleRepository modules, IUnitOfWork uow) : IRequestHandler<DeleteGroupRequest, ServiceResult>
 {
     public async Task<ServiceResult> Handle(DeleteGroupRequest request, CancellationToken ct)
     {
@@ -26,10 +26,15 @@ public class DeleteGroupHandler(IAccountRepository accounts, IApprovalFlowReposi
         var codes = PolicyCatalog.All.Where(d => d.Kind == PolicyKind.Recipients).ToList();
         var token = $"group:{group.Id}";
         var referenced = new List<string>();
+        bool Uses(PolicyDefinition d, string raw) => PolicyDefinition.RecipientItems(d.Normalize(raw) ?? raw.Replace(" ", "")).Contains(token);
         var system = await settings.ListByPrefixAsync("policy.", ct);
-        referenced.AddRange(codes.Where(d => system.TryGetValue(d.SettingKey, out var v) && PolicyDefinition.RecipientItems(v).Contains(token)).Select(d => d.Code));
+        referenced.AddRange(codes.Where(d => system.TryGetValue(d.SettingKey, out var v) && Uses(d, v)).Select(d => d.Code));
         var overrides = await modulePolicies.ListByCodesAsync(codes.Select(d => d.Code).ToList(), ct);
-        referenced.AddRange(overrides.Where(o => PolicyDefinition.RecipientItems(o.Value).Contains(token)).Select(o => o.Code));
+        foreach (var o in overrides.Where(o => Uses(codes.First(d => d.Code == o.Code), o.Value)))
+        {
+            var key = (await modules.GetByIdAsync(o.ModuleId, false, ct))?.Key ?? $"#{o.ModuleId}";
+            referenced.Add($"{o.Code}（{key}）");
+        }
         if (referenced.Count > 0) return ServiceResult.Conflict(PolicyMessages.GroupUsedByPolicies(referenced.Distinct()));
 
         await accounts.DeleteGroupAsync(group, ct);

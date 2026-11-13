@@ -25,6 +25,7 @@ describe('policy-types', () => {
     const names = new Map([['admins', '全部系統管理員'], ['user:fin1', '財務一']]);
     expect(policyValueText(meta, ['admins', 'user:fin1'], t, names)).toBe('全部系統管理員、財務一');
     expect(policyValueText(meta, ['user:gone'], t, names)).toBe('找不到或已停用');
+    expect(policyValueText(meta, ['admins', 'user:fin1'], t)).toBe('admins、user:fin1');   // 名稱還沒載入：顯示原始項目，不誤報找不到
     const range = policyRangeText(meta, t);
     expect(range).toContain('1');
     expect(range).toContain('20');

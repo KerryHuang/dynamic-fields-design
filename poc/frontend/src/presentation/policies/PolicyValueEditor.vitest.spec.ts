@@ -112,6 +112,23 @@ describe('PolicyValueEditor', () => {
       expect(lastEmit()).toEqual(['group:7']);
     });
 
+    it('項目數為 0 或超過 20 時送 update:valid false，回到範圍內送 true', async () => {
+      make(meta, ['admins'], options);
+      const remove = document.body.querySelector('.q-chip__icon--remove') as HTMLElement;
+      remove.click();
+      await flushPromises();
+      expect(w!.emitted('update:valid')!.at(-1)![0]).toBe(false);
+      await w!.setProps({ modelValue: Array.from({ length: 21 }, (_, i) => `group:${i + 1}`) });
+      expect(w!.emitted('update:valid')!.at(-1)![0]).toBe(false);
+      await w!.setProps({ modelValue: ['admins'] });
+      expect(w!.emitted('update:valid')!.at(-1)![0]).toBe(true);
+    });
+
+    it('使用者選項標籤含帳號，可用帳號搜尋', () => {
+      const withAccount = buildRecipientOptions([{ userId: 'fin1', displayName: '財務一' }], [], '全部系統管理員', 'zh-TW');
+      expect(withAccount[1].label).toBe('財務一（fin1）');
+    });
+
     it('選項裡找不到的已選項目顯示「找不到或已停用」', () => {
       make(meta, ['user:gone'], options);
       expect(document.body.textContent).toContain('找不到或已停用');

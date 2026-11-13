@@ -192,6 +192,6 @@ public class ApprovalRecipientPolicyTests : ApprovalTestBase
         await TriggerAlert();
         Notices("admin", NotificationKinds.ApprovalAdminAlert).Should().Be(1);
         Notices("fin1", NotificationKinds.ApprovalAdminAlert).Should().Be(0);
-        _logs.Should().Contain(l => l.Level == LogLevel.Warning);
+        _logs.Should().Contain(l => l.Level == LogLevel.Warning && l.Message.Contains("解析為空"));
     }
 }

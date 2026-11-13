@@ -15,7 +15,7 @@ const isAdmin = computed(() => me.data.value?.isSystemAdmin === true);
 // 非系統管理員不送請求（API 本來就會回 403）
 const policies = useSystemPolicies({ enabled: isAdmin });
 const save = useSaveSystemPolicy();
-const { options: recipientOptions, names } = useRecipientNames();
+const { options: recipientOptions, names } = useRecipientNames(isAdmin);
 
 /** 草稿＝沒設時看到出廠值；存檔失敗時保留，讓使用者改。 */
 const drafts = reactive<Record<string, PolicyValue>>({});

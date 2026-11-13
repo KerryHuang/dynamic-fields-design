@@ -121,6 +121,7 @@ public sealed partial record PolicyDefinition(
         return null;
     }
 
+    /// <summary>與 Application 的 <c>CreateUserValidator.IdPattern</c> 同步（Domain 不能參照 Application）；兩邊改動要一起改。</summary>
     [GeneratedRegex(@"^[a-z0-9._-]{2,50}\z")]
     private static partial Regex UserIdPattern();
 

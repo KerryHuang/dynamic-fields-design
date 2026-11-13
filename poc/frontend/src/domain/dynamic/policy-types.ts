@@ -49,7 +49,7 @@ function formatBytes(n: number): string {
 /** 收件人項目（admins、group:<id>、user:<userId>）→ 顯示名稱；對不到的項目由呼叫端以 missing 顯示。 */
 export type RecipientNames = ReadonlyMap<string, string>;
 
-export function policyValueText(meta: PolicyMeta, v: PolicyValue, t: Translate, names?: RecipientNames): string {
+export function policyValueText(meta: PolicyMeta, v: PolicyValue, t: Translate, names?: RecipientNames | undefined): string {
   switch (meta.kind) {
     case 'boolean': return t(v ? 'policies.on' : 'policies.off');
     case 'choice': return t(`policies.choices.${String(v)}`);
@@ -58,7 +58,8 @@ export function policyValueText(meta: PolicyMeta, v: PolicyValue, t: Translate, 
       return list.length ? joinList(list.map((o) => t(`policies.choices.${o}`))) : t('policies.none');
     }
     case 'codeList': return joinList(v as string[]);
-    case 'recipients': return joinList((v as string[]).map((i) => names?.get(i) ?? t('policies.recipients.missing')));
+    // 名稱還沒載入（names 為 undefined）時顯示原始項目，不誤報找不到
+    case 'recipients': return joinList((v as string[]).map((i) => (names ? names.get(i) ?? t('policies.recipients.missing') : i)));
     default:
       return meta.unit === 'bytes' ? `${v} (${t('policies.bytesHint', { size: formatBytes(Number(v)) })})` : String(v);
   }

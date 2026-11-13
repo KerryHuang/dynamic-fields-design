@@ -341,6 +341,19 @@ public class ApprovalPolicyLimitsTests : ApprovalTestBase
     }
 
     [Fact]
+    public async Task Resolve_FixedFiftyOneDisabled_FallbackTwo_TotalOverTechnicalMax_Returns409()
+    {
+        await AddUsers(50);
+        (await Db.Context.Set<AppUser>().FirstAsync(u => u.UserId == "u50")).IsActive = false;
+        await Db.Context.SaveChangesAsync();
+        Db.Context.ChangeTracker.Clear();
+        var r = await WithFlow(Def(null, Stage("fix", Users(UserIds(50)))) with { FallbackApprovers = Users("fin1", "fin2") });
+        var res = await SubmitSmall(r);   // 49 + 2 = 51，整關合計超過技術上限 50
+        res.IsConflict.Should().BeTrue(Dump(res));
+        res.Message.Should().Contain("超過 50 人");
+    }
+
+    [Fact]
     public async Task Resolve_GroupMembersAllGone_FixedFallbackOverLoweredLimit_Succeeds()
     {
         await AddUsers(15);
@@ -384,13 +397,21 @@ public class ApprovalPolicyLimitsTests : ApprovalTestBase
     public async Task Resolve_FallbackUsersOver_LoweredLimit_UsesTechnicalMax()
     {
         await AddUsers(51);
+        var big = new PermissionGroup { Key = "big15", NameI18n = Text("big15") };
+        Db.Context.Add(big);
+        await Db.Context.SaveChangesAsync();
+        foreach (var u in UserIds(15)) Db.Context.Add(new UserGroupMapping { GroupId = big.Id, UserId = u });
+        await Db.Context.SaveChangesAsync();
+        Db.Context.ChangeTracker.Clear();
         var r = await WithFlow(Def(null, Stage("fix", Users(UserIds(1)))));
         await SetOverride(r, PolicyCatalog.ApprovalMaxApprovers, "10");
         var ctx = await Svc<ApproverResolver>().ContextAsync((await Svc<IModuleRepository>().GetByIdAsync(r.ModuleId, true, default))!, "buyer1", new Dictionary<string, System.Text.Json.JsonElement?>(), null, default);
         var viaUsers = ApproverResolver.ResolveFallback(ctx, Users(UserIds(15)));
         viaUsers.Error.Should().BeNull();
         viaUsers.Seats.Single().UserIds.Should().HaveCount(15);
-        // 備援在執行時只受技術上限 50（不分來源）
+        // 備援在執行時只受技術上限 50（不分來源）：群組備援 15 人、當下上限 10 仍可
+        ApproverResolver.ResolveFallback(ctx, Group(big.Id)).Error.Should().BeNull();
+        ctx.DefaultFallback.Should().NotBeNull();
         ApproverResolver.ResolveFallback(ctx, Users(UserIds(51))).Error.Should().NotBeNull();
     }
 

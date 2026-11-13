@@ -29,13 +29,19 @@ const recipientAll = computed<RecipientOption[]>(() => {
   const base = props.recipientOptions ?? [];
   const known = new Set(base.map((o) => o.value));
   const missing = (props.modelValue as string[]).filter((v) => !known.has(v))
-    .map((v) => ({ value: v, label: `${t('policies.recipients.missing')}（${v}）` }));
+    .map((v) => ({ value: v, label: t('policies.recipients.missingItem', { item: v }) }));
   return [...base, ...missing];
 });
 const recipientShown = computed(() => {
   const q = recipientFilter.value.trim().toLowerCase();
   return q ? recipientAll.value.filter((o) => o.label.toLowerCase().includes(q)) : recipientAll.value;
 });
+const recipientsValid = (v: string[]) => v.length >= (props.meta.min ?? 1) && v.length <= (props.meta.max ?? 20);
+watch(() => props.modelValue, (v) => { if (props.meta.kind === 'recipients') emit('update:valid', recipientsValid(v as string[])); });
+function onRecipients(v: string[]) {
+  emit('update:valid', recipientsValid(v));
+  emit('update:modelValue', v);
+}
 function onRecipientFilter(v: string, update: (fn: () => void) => void) {
   update(() => { recipientFilter.value = v; });
 }
@@ -65,8 +71,8 @@ const hint = computed(() => props.meta.kind === 'integer' && props.meta.unit ===
   </div>
   <q-select
     v-else-if="meta.kind === 'recipients'" :model-value="modelValue as string[]" :options="recipientShown" multiple use-chips use-input
-    emit-value map-options dense outlined :label="label" :aria-label="label" :disable="disable" @filter="onRecipientFilter"
-    @update:model-value="(v: string[]) => emit('update:modelValue', v)"
+    emit-value map-options dense outlined :label="label" :aria-label="label" :placeholder="t('policies.recipients.search')" :disable="disable" @filter="onRecipientFilter"
+    @update:model-value="onRecipients"
   />
   <q-select
     v-else :model-value="modelValue as string[]" multiple use-chips use-input new-value-mode="add-unique" hide-dropdown-icon dense outlined
