@@ -5,6 +5,7 @@ using DynamicModules.Application.Dynamic.TemplateService.Data;
 using DynamicModules.Domain.Approvals;
 using DynamicModules.Domain.Entities.Dynamic;
 using DynamicModules.Domain.Policies;
+using DynamicModules.Domain.ValueObjects;
 using static DynamicModules.Application.Dynamic.TemplateService.TemplateGraph;
 
 namespace DynamicModules.Application.Dynamic.AppService;
@@ -152,7 +153,8 @@ public static partial class AppPackageValidator
 
     // ---- 引用層 ----
 
-    private static void ApprovalFlowReferences(AppPackageData p, Dictionary<string, TemplateField> fields, HashSet<string> groupCodes, List<string> errors)
+    private static void ApprovalFlowReferences(
+        AppPackageData p, Dictionary<string, TemplateField> fields, HashSet<string> groupCodes, List<string> errors, List<string> warnings)
     {
         if (p.ApprovalFlows.Count == 0 && p.Workflows.All(w => w?.Transitions.All(t => t?.Approval is null) != false)) return;
         var modules = p.Modules.Where(m => m is not null).GroupBy(m => m.Code).ToDictionary(g => g.Key, g => g.First());
@@ -161,6 +163,8 @@ public static partial class AppPackageValidator
             .SelectMany(m => m.Blocks.SelectMany(b => b.Fields).SelectMany(f => f.Options.Select(o => $"{m.Code}.{o.Code}"))).ToHashSet();
         var priorities = new HashSet<(string, string, int)>();
         var valid = new List<AppApprovalFlow>();
+        // 有流程沒通過引用檢查的模組：一致性檢查少了那個流程，「沒有流程」「沒有啟用中的流程」會是誤報（審查 N3）
+        var incomplete = new HashSet<string>();
 
         for (var i = 0; i < p.ApprovalFlows.Count; i++)
         {
@@ -172,14 +176,16 @@ public static partial class AppPackageValidator
             if (m.Kind != ModuleKind.Standalone || FieldsOf(m).Any(IsDetailReference) || !workflows.TryGetValue(module, out var w))
             {
                 errors.Add($"{at}.module: 簽核流程只能掛在有狀態機的獨立模組上");
+                incomplete.Add(module);
                 continue;
             }
             var states = w.States.Where(s => s is not null).Select(s => s.Option).ToHashSet();
             var ok = true;
             if (f.To is null || f.To == w.Initial || !states.Contains(f.To)) { errors.Add($"{at}.to: {ApprovalMessages.TargetStateInvalid}"); ok = false; }
             if (f.RejectTo is not null && !states.Contains(f.RejectTo)) { errors.Add($"{at}.rejectTo: {ApprovalMessages.RejectToInvalidState}"); ok = false; }
+            // 設計器允許這種狀態（取消轉移的需簽核、保留流程），匯出再匯入要讀得回來，所以只警告、不拒收（審查 S2，主控裁決）
             if (ok && !w.Transitions.Any(t => t is not null && t.To == f.To && t.Approval is { Required: true }))
-                errors.Add($"{at}.to: 狀態「{OptionLabel(fields, w, f.To!)}」沒有需簽核的轉移進入，這個流程不會被用到");
+                warnings.Add($"{at}.to: 狀態「{OptionLabel(fields, w, f.To!)}」沒有需簽核的轉移進入，這個流程不會被用到");
             if (ok && !priorities.Add((module, f.To!, f.Priority))) errors.Add($"{at}.priority: 同一目標狀態上的流程優先序不能重複");
 
             // 條件與欄位只認同一模組（§14.4 跨應用程式一點）：別的模組的欄位、主檔符號一律不收
@@ -223,22 +229,25 @@ public static partial class AppPackageValidator
                     errors.Add($"{sat}.editableFields: {name} 必須是模組 {module} 的欄位");
             }
             if (ok) valid.Add(f);
+            else incomplete.Add(module);
         }
 
         foreach (var (module, w) in workflows)
             if (valid.Any(f => f.Module == module) || w.Transitions.Any(t => t?.Approval is { Required: true }))
-                Consistency(module, w, valid.Where(f => f.Module == module).ToList(), fields, errors);
+                Consistency(module, w, valid.Where(f => f.Module == module).ToList(), fields, errors, incomplete.Contains(module));
     }
 
     private static string OptionLabel(Dictionary<string, TemplateField> fields, AppWorkflow w, string option) =>
-        fields.GetValueOrDefault(Qualify(w.Module, w.StatusField ?? ""))?.Options.FirstOrDefault(o => o.Code == option)?.Label.Resolve("zh-TW") ?? option;
+        fields.GetValueOrDefault(Qualify(w.Module, w.StatusField ?? ""))?.Options.FirstOrDefault(o => o.Code == option)?.Label.Resolve(I18nText.FallbackLocale) ?? option;
 
     /// <summary>
     /// 狀態一致性（J4，§14.4、§5.2）：用選項代號配發暫時 Id 組出 Workflow、只有狀態欄位的 Module 與 FlowState，交給 ApprovalConstraints；
     /// 錯誤鍵換回代號、加 workflows[{模組}]. 前綴。條件與簽核人來源不放進定義（閉包要看公式，留給開啟時），可編輯欄位只保留「有沒有」。
     /// 狀態或轉移有代號解析不到（V3 已報錯）就不檢查這個模組。
     /// </summary>
-    private static void Consistency(string module, AppWorkflow w, List<AppApprovalFlow> flows, Dictionary<string, TemplateField> fields, List<string> errors)
+    /// <param name="incomplete">這個模組有流程沒通過引用檢查（已報錯），略過「沒有流程」「沒有啟用中的流程」兩類訊息。</param>
+    private static void Consistency(
+        string module, AppWorkflow w, List<AppApprovalFlow> flows, Dictionary<string, TemplateField> fields, List<string> errors, bool incomplete)
     {
         if (!fields.TryGetValue(Qualify(module, w.StatusField ?? ""), out var status)) return;
         var ids = new Dictionary<string, long>();
@@ -270,13 +279,15 @@ public static partial class AppPackageValidator
                 (f.Stages ?? []).Where(s => s is not null).Select(s => new ApprovalStageDef(s.Code, s.Name, null, new ApproverSource(ApprovalSources.Group),
                     s.Mode, (s.EditableFields ?? []).Count > 0 ? [-1] : [], null, ApprovalOnEmpty.Fallback)).ToList()))).ToList();
 
+        var presence = status.Options.Where(o => o?.Label is not null).Select(o => o.Label.Resolve(I18nText.FallbackLocale))
+            .SelectMany(l => new[] { ApprovalMessages.NoFlow(l), ApprovalMessages.DirectNeedsActive(l) }).ToHashSet();
         string State(string id) => long.TryParse(id, out var n) && codeOf.TryGetValue(n, out var c) ? c : id;
         foreach (var (key, messages) in ApprovalConstraints.Validate(entity, wf, set))
         {
             var mapped = Regex.Replace(key, @"^transitions\[(\d+)>(\d+)\]$", m => $"transitions[{State(m.Groups[1].Value)}>{State(m.Groups[2].Value)}]");
             mapped = Regex.Replace(mapped, @"^states\[(\d+)\]$", m => $"states[{State(m.Groups[1].Value)}]");
             if (mapped == "initialOptionId") mapped = "initial";
-            foreach (var message in messages) errors.Add($"workflows[{module}].{mapped}: {message}");
+            foreach (var message in messages.Where(m => !incomplete || !presence.Contains(m))) errors.Add($"workflows[{module}].{mapped}: {message}");
         }
     }
 }

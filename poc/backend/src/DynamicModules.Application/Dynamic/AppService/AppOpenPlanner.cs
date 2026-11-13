@@ -136,6 +136,7 @@ public sealed partial class AppOpenPlanner(
         var mappedCodes = body.GroupMap.Where(kv => kv.Value?.Mode is "map" or "create").Select(kv => kv.Key).ToHashSet();
         var substitutions = package.ApprovalFlows.SelectMany(f => AppApprovalFlowCodec.Substitutions(f, mappedCodes, package.Groups)).ToList();
         warnings.AddRange(substitutions.Select(AppMessages.ApprovalSubstituted));
+        errors.AddRange(RejectTransitionErrors(package, mappedCodes));
         // 同一個應用程式重開：型別不同、不會接回的孤兒欄位先在預覽警告（§7 刪除第 6 點）
         if (package.Contributions.Count > 0) warnings.AddRange((await orphans.MatchAsync(package, ct)).Warnings);
         warnings.AddRange(await TasksAutoEnableAsync(package, knownMasters, body.ExcludeFields.ToHashSet(), ct));
@@ -257,6 +258,33 @@ public sealed partial class AppOpenPlanner(
                 if (seen.Add(name))
                     yield return AppMessages.FlowFieldExcluded(fields.TryGetValue(name, out var field) ? field.Label.Resolve(I18nText.FallbackLocale) : name,
                         f.Name.Resolve(I18nText.FallbackLocale));
+        }
+    }
+
+    /// <summary>
+    /// 退回用的轉移（需簽核入口的 from → rejectTo）在開啟時因群組都沒對應而整條略過，第二趟存狀態機會被入口約束擋下（審查 S1）；
+    /// 預覽用與安裝相同的規則（<see cref="AppFlowInstaller.TransitionSkipped"/>）先報出，預覽講的就是開啟會遇到的。
+    /// </summary>
+    private static IEnumerable<string> RejectTransitionErrors(AppPackageData package, IReadOnlySet<string> mappedCodes)
+    {
+        var fields = TemplateService.TemplateGraph.AllFields(AppPackageAdapter.ToTemplate(package));
+        var seen = new HashSet<string>();
+        foreach (var f in package.ApprovalFlows.Where(f => f.RejectTo is not null))
+        {
+            if (package.Workflows.FirstOrDefault(w => w.Module == f.Module) is not { } w) continue;
+            string Label(string option) =>
+                fields.GetValueOrDefault(TemplateService.TemplateGraph.Qualify(w.Module, w.StatusField))?.Options.FirstOrDefault(o => o.Code == option)
+                    ?.Label.Resolve(I18nText.FallbackLocale) ?? option;
+            var entries = w.Transitions.Where(t => t.To == f.To && t.From != f.RejectTo && t.Approval is { Required: true }
+                && !AppFlowInstaller.TransitionSkipped(t, mappedCodes.Contains));
+            foreach (var e in entries)
+                if (w.Transitions.FirstOrDefault(t => t.From == e.From && t.To == f.RejectTo && t.Approval is null) is { } back
+                    && AppFlowInstaller.TransitionSkipped(back, mappedCodes.Contains))
+                    foreach (var g in back.Groups.Distinct())
+                    {
+                        var message = AppMessages.RejectTransitionSkipped(g, Label(back.From), Label(back.To), f.Name.Resolve(I18nText.FallbackLocale));
+                        if (seen.Add(message)) yield return message;
+                    }
         }
     }
 

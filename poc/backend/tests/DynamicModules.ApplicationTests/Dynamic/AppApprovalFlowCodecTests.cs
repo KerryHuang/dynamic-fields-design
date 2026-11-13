@@ -192,4 +192,34 @@ public class AppApprovalFlowCodecDefinitionTests : ApprovalTestBase
         (await Svc<ApprovalDefinitionValidator>().ValidateAsync(module, module.Workflow!, input.Definition, null, CancellationToken.None))
             .Should().BeEmpty();
     }
+
+    [Fact]
+    public async Task ToInput_AllApproverGroupsSkipped_PassesDefinitionValidator()
+    {
+        // 審查 M1：一關的群組（或 userField 的候選群組）全部被略過，流程仍要存得進去，該關整個由備援頂替（§14.4 流程一律保留）
+        var r = await BuildPurchase();
+        var lookups = new AppReportCodec.Lookups(
+            code => code == "po" ? r.Module : null,
+            name => name == "po.owner" ? r.Owner : null,
+            name => name switch { "po.draft" => r.Draft, "po.confirmed" => r.Confirmed, _ => null },
+            name => name == "po.owner" ? FieldType.User : null);
+        var name = new I18nText([KeyValuePair.Create("zh-TW", "採購單（大額）")]);
+        var f = new AppApprovalFlow("t8-po-large", name, true, "po", "confirmed", 1, "sequence", null, null, null,
+            [
+                new AppApprovalStage("board", name, null, new AppApproverSource("group", ["board"], null, null, null, null, null), "all", null, null, "skip"),
+                new AppApprovalStage("owner", name, null, new AppApproverSource("userField", null, null, "po.owner", ["board"], null, null), "any", null, null, null)
+            ]);
+        var (input, errors) = AppApprovalFlowCodec.ToInput(f, lookups, new Dictionary<string, long>(), code => code == "board" ? "董事會" : code);
+        errors.Should().BeEmpty();
+        var stages = input!.Definition.Stages;
+        stages[0].Approvers.GroupIds.Should().BeEmpty();
+        stages[0].Approvers.UnmatchedGroups.Should().Equal("董事會");
+        stages[0].OnEmpty.Should().Be("fallback");
+        stages[1].Approvers.CandidateGroupIds.Should().BeEmpty();
+        stages[1].Approvers.CandidatesUnmatched.Should().BeTrue();
+
+        var module = (await Svc<IModuleRepository>().GetByKeyAsync(r.Module, includeChildren: true, CancellationToken.None))!;
+        (await Svc<ApprovalDefinitionValidator>().ValidateAsync(module, module.Workflow!, input.Definition, null, CancellationToken.None))
+            .Should().BeEmpty();
+    }
 }

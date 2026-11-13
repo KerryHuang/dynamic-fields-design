@@ -62,7 +62,7 @@ public sealed class AppFlowInstaller(ISender sender, IModuleRepository modules, 
             {
                 var mapped = t.Groups.Where(groupIds.ContainsKey).Select(g => groupIds[g]).Distinct().ToList();
                 // 空群組代表「有 Edit 權限的人都可以」：群組都沒對應時不能退化成空清單，那會放寬權限，整條轉移不建
-                if (t.Groups.Count > 0 && mapped.Count == 0)
+                if (TransitionSkipped(t, groupIds.ContainsKey))
                 {
                     warnings.Add($"模組「{w.Module}」的轉移 {t.From} → {t.To} 的群組都沒有對應，已略過這條轉移");
                     continue;
@@ -269,6 +269,9 @@ public sealed class AppFlowInstaller(ISender sender, IModuleRepository modules, 
         }
         return null;
     }
+
+    /// <summary>開啟時整條略過的轉移：有指定群組、卻一個都沒對應。預覽（<see cref="AppOpenPlanner"/>）用同一條規則預告。</summary>
+    internal static bool TransitionSkipped(AppWorkflowTransition t, Func<string, bool> isMapped) => t.Groups.Count > 0 && !t.Groups.Any(isMapped);
 
     internal static string TaskRuleAutoEnabled(string code, string module) => $"任務規則「{code}」所在的模組「{module}」原本未啟用任務，已自動啟用";
 

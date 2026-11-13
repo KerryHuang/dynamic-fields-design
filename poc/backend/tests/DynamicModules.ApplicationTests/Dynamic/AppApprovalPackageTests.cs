@@ -48,7 +48,7 @@ public class AppApprovalPackageTests
         { "option": "returned" }
         """;
 
-    private static string Package(string flows, int formatVersion = 8, string transitions = Transitions, string states = States, string kind = "") => $$"""
+    private static string Package(string flows, int formatVersion = 8, string transitions = Transitions, string states = States, string kind = "", string extraWorkflows = "") => $$"""
         {
           "format": "formwright-app", "formatVersion": {{formatVersion}},
           "manifest": { "id": "t8", "version": "1.0.0", "name": { "zh-TW": "簽核套件測試" }{{kind}} },
@@ -90,7 +90,7 @@ public class AppApprovalPackageTests
           "workflows": [
             { "module": "po", "statusField": "status", "initial": "draft",
               "states": [ {{states}} ],
-              "transitions": [ {{transitions}} ] }
+              "transitions": [ {{transitions}} ] }{{extraWorkflows}}
           ],
           "approvalFlows": [ {{flows}} ]
         }
@@ -316,8 +316,18 @@ public class AppApprovalPackageTests
     [Fact]
     public void Module_IsDetail_Rejected()
     {
-        Errors(Package(With(With(MidFlow, "\"module\": \"po\"", "\"module\": \"line\""), "\"to\": \"confirmed\"", "\"to\": \"closed\"")))
-            .Should().Contain("approvalFlows[t8-po-mid].module: 簽核流程只能掛在有狀態機的獨立模組上");
+        // 審查 S3：明細模組也有狀態機時，拒收的唯一原因是「它是明細」
+        const string lineWorkflow = """
+            , { "module": "line", "statusField": "state", "initial": "open",
+                "states": [ { "option": "open" }, { "option": "closed" } ],
+                "transitions": [ { "from": "open", "to": "closed", "groups": [], "approval": { "required": true } } ] }
+            """;
+        var lineFlow = With(With(MidFlow, "\"module\": \"po\"", "\"module\": \"line\""), "\"to\": \"confirmed\"", "\"to\": \"closed\"");
+        lineFlow = With(lineFlow, "\"code\": \"t8-po-mid\"", "\"code\": \"t8-line\"");
+        lineFlow = With(lineFlow, "\"field\": \"po.total\", \"op\": \"gte\", \"value\": 10000", "\"field\": \"line.item\", \"op\": \"isNotEmpty\"");
+        lineFlow = With(lineFlow, "\"editableFields\": [\"po.memo\"]", "\"editableFields\": []");
+        var errors = Errors(Package(Flows(LargeFlow, MidFlow, lineFlow), extraWorkflows: lineWorkflow));
+        errors.Should().Equal("approvalFlows[t8-line].module: 簽核流程只能掛在有狀態機的獨立模組上");
     }
 
     [Fact]
@@ -337,11 +347,22 @@ public class AppApprovalPackageTests
     }
 
     [Fact]
-    public void Flow_TargetWithoutApprovalTransition_Rejected()
+    public void Flow_TargetWithoutApprovalTransition_WarnsOnly()
     {
-        // §14.4：流程的目標狀態至少要有一條需簽核轉移，否則流程永遠不會被用到
-        Errors(Package(Flows(LargeFlow, MidFlow, With(With(MidFlow, "\"code\": \"t8-po-mid\"", "\"code\": \"t8-po-cancel\""), "\"to\": \"confirmed\"", "\"to\": \"cancelled\""))))
-            .Should().Contain("approvalFlows[t8-po-cancel].to: 狀態「已取消」沒有需簽核的轉移進入，這個流程不會被用到");
+        // §14.4：流程的目標狀態沒有需簽核轉移進入時流程不會被用到；設計器允許這種狀態、往返要讀得回來，所以只警告（審查 S2，主控裁決）
+        var cancelFlow = With(With(MidFlow, "\"code\": \"t8-po-mid\"", "\"code\": \"t8-po-cancel\""), "\"to\": \"confirmed\"", "\"to\": \"cancelled\"");
+        var result = AppPackageValidator.Validate(AppJson.Parse(Package(Flows(LargeFlow, MidFlow, cancelFlow))).V2!);
+        result.Errors.Should().BeEmpty();
+        result.Warnings.Should().Contain("approvalFlows[t8-po-cancel].to: 狀態「已取消」沒有需簽核的轉移進入，這個流程不會被用到");
+    }
+
+    [Fact]
+    public void InvalidFlow_DoesNotAlsoReportNoFlow()
+    {
+        // 審查 N3：唯一的流程因 to 錯誤被排除時，不再多報「已確認沒有流程」
+        var errors = Errors(Package(With(MidFlow, "\"to\": \"confirmed\"", "\"to\": \"shipped\"")));
+        errors.Should().Contain($"approvalFlows[t8-po-mid].to: {ApprovalMessages.TargetStateInvalid}");
+        errors.Should().NotContain(e => e.Contains(ApprovalMessages.NoFlow("已確認")));
     }
 
     [Fact]

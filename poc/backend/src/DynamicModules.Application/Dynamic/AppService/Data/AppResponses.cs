@@ -99,6 +99,9 @@ public static class AppMessages
 
     public static string FlowCodeTaken(string code) => $"approvalFlows.{code}: 流程代碼已被使用";
 
+    public static string RejectTransitionSkipped(string group, string from, string to, string flow) =>
+        $"groupMap.{group}: 略過後「{from} → {to}」沒有任何群組，簽核流程「{flow}」無法退回，請對應這個群組";
+
     public static string FlowFieldExcluded(string field, string flow) => $"excludeFields: 「{field}」是簽核流程「{flow}」需要的欄位，不能排除";
 
     /// <summary>a5a1 期間的暫時限制（計畫 J9），a5a2 換成真正的格式 8 匯出時刪除。</summary>

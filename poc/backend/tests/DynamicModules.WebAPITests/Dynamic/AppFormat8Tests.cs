@@ -63,6 +63,7 @@ public class AppFormat8Tests : IDisposable
                     { "code": "title", "type": "text", "label": { "zh-TW": "單號" }, "config": { "required": true } },
                     { "code": "total", "type": "decimal", "label": { "zh-TW": "總額" }, "config": { "scale": 0 } },
                     { "code": "memo", "type": "text", "label": { "zh-TW": "備註" }, "config": {} },
+                    { "code": "owner", "type": "user", "label": { "zh-TW": "負責人" }, "config": {} },
                     { "code": "status", "type": "enum", "label": { "zh-TW": "狀態" }, "config": {},
                       "options": [ { "code": "draft", "label": { "zh-TW": "草稿" } }, { "code": "confirmed", "label": { "zh-TW": "已確認" } },
                                    { "code": "cancelled", "label": { "zh-TW": "已取消" } } ] }
@@ -239,6 +240,76 @@ public class AppFormat8Tests : IDisposable
         _rig.Db(db => db.Set<ApprovalInstance>().Single().Status).Should().Be(ApprovalInstanceStatus.Pending, "備援席位還沒同意");
         await ApproveAsync("ops01", recordId);
         _rig.Db(db => db.Set<ApprovalInstance>().Single().Status).Should().Be(ApprovalInstanceStatus.Approved);
+    }
+
+    /// <summary>流程 A 的第 1 關只有 board 一個群組；第 2 關 userField 的候選群組只有 board。</summary>
+    private const string SingleGroupFlows = """
+        [ { "code": "t8-po-large", "name": { "zh-TW": "採購單（大額）" }, "active": true,
+            "module": "po", "to": "confirmed", "priority": 1, "shape": "sequence",
+            "when": { "all": [ { "field": "po.total", "op": "gte", "value": 100000 } ] },
+            "rejectTo": "draft",
+            "fallbackApprovers": { "source": "group", "groups": ["purchaseLead"] },
+            "stages": [
+              { "code": "board", "name": { "zh-TW": "董事會" }, "approvers": { "source": "group", "groups": ["board"] },
+                "mode": "any", "onEmpty": "skip" },
+              { "code": "owner", "name": { "zh-TW": "負責人" }, "approvers": { "source": "userField", "field": "po.owner", "candidateGroups": ["board"] },
+                "mode": "any" } ] } ]
+        """;
+
+    [Fact]
+    public async Task Open_SkipOnlyGroupOfStage_KeepsFlow_FallbackApproves()
+    {
+        // 審查 M1：一關的群組全部被略過，預覽與開啟要一致：流程保留、該關整個交給備援（§14.4），不是開啟才 400
+        await _rig.ImportAsync(Package(flows: SingleGroupFlows));
+        var preview = await PreviewAsync(Body("board"));
+        preview.GetProperty("canOpen").GetBoolean().Should().BeTrue();
+        preview.GetProperty("approvalSubstitutions").EnumerateArray().Select(x => x.GetProperty("kind").GetString())
+            .Should().Equal("approvers", "candidates");
+
+        await _rig.OpenOkAsync(AppId, Body("board"));
+        var stages = (await FlowsAsync()).Single().GetProperty("definition").GetProperty("stages");
+        stages[0].GetProperty("approvers").GetProperty("unmatchedGroups").EnumerateArray().Select(g => g.GetString()).Should().Equal("董事會");
+        stages[0].GetProperty("onEmpty").GetString().Should().Be("fallback");
+        stages[1].GetProperty("approvers").GetProperty("candidatesUnmatched").GetBoolean().Should().BeTrue();
+
+        var submitted = await SubmitAsync(150000);
+        submitted.StatusCode.Should().Be(HttpStatusCode.Created, await submitted.Content.ReadAsStringAsync());
+        var recordId = _rig.Db(db => db.Set<ApprovalInstance>().Single().RecordId);
+        var first = (await CurrentAsync(recordId)).GetProperty("current").GetProperty("stages")[0].GetProperty("tasks").EnumerateArray()
+            .Select(t => t.GetProperty("assigneeUserId").GetString()).ToList();
+        first.Should().Equal(["ops01"], "第 1 關整個由流程的備援簽核人頂替");
+        await ApproveAsync("ops01", recordId);
+        await ApproveAsync("ops01", recordId);
+        _rig.Db(db => db.Set<ApprovalInstance>().Single().Status).Should().Be(ApprovalInstanceStatus.Approved);
+    }
+
+    [Fact]
+    public async Task Preview_SkippedRejectTransition_ErrorMatchesOpen()
+    {
+        // 審查 S1：退回用的轉移（草稿 → 已取消）只開給 buyers，略過 buyers 後這條轉移不建，流程退回不了：預覽就要擋，與開啟一致
+        var flows = SingleGroupFlows.Replace("\"rejectTo\": \"draft\"", "\"rejectTo\": \"cancelled\"");
+        var json = Package(flows: flows).Replace("""{ "from": "draft", "to": "cancelled", "groups": [] }""", """{ "from": "draft", "to": "cancelled", "groups": ["buyers"] }""");
+        await _rig.ImportAsync(json);
+        var preview = await PreviewAsync(Body("buyers"));
+        preview.GetProperty("canOpen").GetBoolean().Should().BeFalse();
+        const string error = "groupMap.buyers: 略過後「草稿 → 已取消」沒有任何群組，簽核流程「採購單（大額）」無法退回，請對應這個群組";
+        preview.GetProperty("errors").EnumerateArray().Select(e => e.GetString()).Should().Contain(error);
+        var res = await _rig.OpenAsync(AppId, Body("buyers"));
+        res.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+        (await res.Content.ReadAsStringAsync()).Should().Contain(error);
+        AssertNothingCreated();
+
+        await _rig.OpenOkAsync(AppId, Body());
+    }
+
+    [Fact]
+    public async Task Import_StagesOverSystemPolicy_400()
+    {
+        // 審查 N2：匯入時就依系統層生效值檢查
+        (await _rig.Admin.PutAsJsonAsync($"{Base}/system/policies/approval.maxStages", new { value = 1 })).EnsureSuccessStatusCode();
+        var res = await _rig.Admin.PostAsync($"{SharedMasterRig.Apps}/packages/import", new StringContent(Package(), System.Text.Encoding.UTF8, "application/json"));
+        res.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+        (await res.Content.ReadAsStringAsync()).Should().Contain("approvalFlows[t8-po-large].stages: 關卡必須有 1 到 1 關");
     }
 
     [Fact]

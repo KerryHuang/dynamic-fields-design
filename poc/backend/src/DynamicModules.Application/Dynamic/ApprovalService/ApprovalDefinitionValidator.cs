@@ -93,14 +93,18 @@ public sealed partial class ApprovalDefinitionValidator(
                     if (ids.Count == 0 || (ids.Count > limits.MaxApprovers && ids.Count > oldCount)) return ApprovalMessages.UsersCount(limits.MaxApprovers, previous is not null);
                     return ids.All(activeUsers.Contains) ? null : ApprovalMessages.UsersInvalid;
                 case ApprovalSources.Group:
-                    return a.GroupIds is { Count: > 0 } g && g.All(groupIds.Contains) ? null : ApprovalMessages.GroupsInvalid;
+                    // 開啟套件時略過的群組記成對不上的單位（§14.4）：全部被略過時 GroupIds 為空，仍算有來源，執行時整關交給備援
+                    var g = a.GroupIds ?? [];
+                    return g.Count + (a.UnmatchedGroups?.Count ?? 0) > 0 && g.All(groupIds.Contains) ? null : ApprovalMessages.GroupsInvalid;
                 case ApprovalSources.Manager:
                     var oldLevel = old?.Source == ApprovalSources.Manager ? old.Level ?? 0 : 0;
                     return a.Level is { } lv && lv >= 1 && (lv <= limits.MaxManagerLevel || lv <= oldLevel) ? null : ApprovalMessages.ManagerLevel(limits.MaxManagerLevel, previous is not null);
                 case ApprovalSources.UserField:
                     if (a.FieldId is not { } fid || !fields.TryGetValue(fid, out var uf) || uf is not { Type: FieldType.User, Status: FieldStatus.Active })
                         return ApprovalMessages.UserFieldInvalid;
-                    if (a.CandidateGroupIds is not { Count: > 0 } cg) return ApprovalMessages.UserFieldWithoutCandidates;
+                    // 候選群組在開啟時被略過（CandidatesUnmatched）：執行時不看候選、一律交給備援，所以允許候選清單為空（§14.4）
+                    var cg = a.CandidateGroupIds ?? [];
+                    if (cg.Count == 0 && !a.CandidatesUnmatched) return ApprovalMessages.UserFieldWithoutCandidates;
                     return cg.All(groupIds.Contains) ? null : ApprovalMessages.CandidateGroupsInvalid;
                 case ApprovalSources.InitiatorPick:
                     var oldMax = old?.Source == ApprovalSources.InitiatorPick ? old.Max ?? 0 : 0;
