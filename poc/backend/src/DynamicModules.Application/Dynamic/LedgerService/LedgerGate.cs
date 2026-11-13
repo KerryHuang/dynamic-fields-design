@@ -28,7 +28,7 @@ public class LedgerGate(ILedgerRepository ledgers, IModuleRepository modules)
 /// 設計器的定義變更遇到分錄模組（設計 §10.3）：會改寫既有記錄值的操作（換標題欄位、新增或變更公式與彙總、刪除仍有值的欄位或區塊）
 /// 在模組已有記錄時回 409，保證已寫入的資料不隨定義改變。不改寫值的操作照常放行。
 /// </summary>
-public class ImmutableDataGuard(LedgerGate gate, IRecordRepository records)
+public class ImmutableDataGuard(LedgerGate gate, IRecordRepository records, IDeletionRepository data)
 {
     private static readonly MessageRef Rejected = MessageRef.Of(MessageText.LedgerSchemaImmutable);
 
@@ -45,7 +45,8 @@ public class ImmutableDataGuard(LedgerGate gate, IRecordRepository records)
     /// <summary>刪除欄位或區塊：Purge 非零，或被刪的公式、彙總欄位在記錄上有值（Purge 為 0 但值會被清掉）才擋；什麼都不清的刪除照常放行。</summary>
     public async Task<ServiceResult?> RejectFieldPurgeAsync(Module module, PurgeCounts purge, IReadOnlyCollection<Field> fields, CancellationToken ct)
     {
-        if (ComputedValueProbe.NothingPurged(purge) && !await ComputedValueProbe.HasValuesAsync(records, module, fields, ct)) return null;
-        return await RejectAsync(module, ct);
+        // 先查便宜的條件（分錄模組且已有記錄），成立才讀值探測
+        if (await RejectAsync(module, ct) is not { } rejected) return null;
+        return ComputedValueProbe.NothingPurged(purge) && !await ComputedValueProbe.HasValuesAsync(data, module, fields, ct) ? null : rejected;
     }
 }

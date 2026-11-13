@@ -22,10 +22,10 @@ public static class ClosedDataGuard
     /// <summary>
     /// 刪除欄位或區塊：Purge 非零，或被刪的公式、彙總欄位在記錄上有值（Purge 為 0 但值會被清掉）而模組是 Closed 就擋。
     /// </summary>
-    public static async Task<ServiceResult?> RejectFieldPurgeAsync(Module module, PurgeCounts purge, IReadOnlyCollection<Field> fields, IRecordRepository records, CancellationToken ct)
+    public static async Task<ServiceResult?> RejectFieldPurgeAsync(Module module, PurgeCounts purge, IReadOnlyCollection<Field> fields, IDeletionRepository data, CancellationToken ct)
     {
         if (module.Status != ModuleStatus.Closed) return null;
-        if (ComputedValueProbe.NothingPurged(purge) && !await ComputedValueProbe.HasValuesAsync(records, module, fields, ct)) return null;
+        if (ComputedValueProbe.NothingPurged(purge) && !await ComputedValueProbe.HasValuesAsync(data, module, fields, ct)) return null;
         return Reject(module);
     }
 

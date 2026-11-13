@@ -195,6 +195,23 @@ public class PendingApprovalGuardTests : ApprovalTestBase
         res.IsSuccess.Should().BeTrue(Dump(res));
     }
 
+    /// <summary>公式結果全是 null（引用沒填的欄位）：沒有值會被清掉，有實例 pending 時仍可刪。</summary>
+    [Fact]
+    public async Task DeleteFormulaAllNull_WithPending_Succeeds()
+    {
+        await Rig();
+        var blank = await MustAdd(_r.Module, FieldType.Decimal, new FieldConfig { Scale = 0 }, "空值");
+        var derived = await MustAdd(_r.Module, FieldType.Formula,
+            new FieldConfig { Formula = $"{{{blank.Id}}} + 1", ResultType = "number", Scale = 0 }, "空值加一");
+        var id = await Pend("PO-乙");
+        using (var doc = System.Text.Json.JsonDocument.Parse((await Db.Context.Set<Record>().AsNoTracking().SingleAsync(x => x.Id == id)).ValuesJson))
+            (!doc.RootElement.TryGetProperty($"f_{derived.Id}", out var v) || v.ValueKind == System.Text.Json.JsonValueKind.Null)
+                .Should().BeTrue("前提：公式結果是 null");
+        (await Deactivate(derived.Id)).IsSuccess.Should().BeTrue();
+        var res = await Send(new DeleteFieldRequest(derived.Id, 0));
+        res.IsSuccess.Should().BeTrue(Dump(res));
+    }
+
     /// <summary>公式欄位沒有歷程與索引列，Purge 全為 0；但記錄上的值會被清掉，有實例 pending 時一樣要擋，值保留。</summary>
     [Fact]
     public async Task DeleteFormulaWithValue_WithPending_Returns409_ValueKept()

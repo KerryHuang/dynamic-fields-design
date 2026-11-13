@@ -11,7 +11,7 @@ namespace DynamicModules.Application.Dynamic.ApprovalService;
 /// 設計器的定義變更遇到簽核中的實例（設計 §8.6）：會改寫記錄值的定義，和進行中實例要走的轉移與狀態，在有實例 pending 時回 409，
 /// 避免簽核人看到的內容在簽核途中被定義變更改掉。判斷只看實例狀態，不看使用者身分；與 ClosedDataGuard、ImmutableDataGuard 掛在同一組檢查點。
 /// </summary>
-public sealed class PendingApprovalGuard(IApprovalInstanceRepository instances, IApprovalFlowRepository flows, IModuleRepository modules, IRecordRepository records)
+public sealed class PendingApprovalGuard(IApprovalInstanceRepository instances, IApprovalFlowRepository flows, IModuleRepository modules, IDeletionRepository data)
 {
     /// <summary>
     /// 改寫值的範圍：本模組、以它為來源的彙總所在的父模組（公式重算會連帶重算），以及本模組是明細時的表頭模組。
@@ -34,8 +34,9 @@ public sealed class PendingApprovalGuard(IApprovalInstanceRepository instances, 
     /// </summary>
     public async Task<ServiceResult?> RejectFieldPurgeAsync(Module module, PurgeCounts purge, IReadOnlyCollection<Field> fields, CancellationToken ct)
     {
-        if (purge is { Records: 0, IndexRows: 0, HistoryRows: 0 } && !await ComputedValueProbe.HasValuesAsync(records, module, fields, ct)) return null;
-        return await RejectValueRewriteAsync(module, ct);
+        // 先查便宜的條件（有沒有簽核中的實例），成立才讀值探測
+        if (await RejectValueRewriteAsync(module, ct) is not { } rejected) return null;
+        return ComputedValueProbe.NothingPurged(purge) && !await ComputedValueProbe.HasValuesAsync(data, module, fields, ct) ? null : rejected;
     }
 
     /// <summary>

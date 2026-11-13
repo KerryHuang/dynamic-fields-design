@@ -1,4 +1,3 @@
-using DynamicModules.Application.Dynamic.RecordService;
 using DynamicModules.Domain.Entities.Dynamic;
 using DynamicModules.Domain.Repositories.Dynamic;
 
@@ -10,12 +9,12 @@ namespace DynamicModules.Application.Dynamic.DeleteService.Data;
 /// </summary>
 public static class ComputedValueProbe
 {
-    public static async Task<bool> HasValuesAsync(IRecordRepository records, Module module, IReadOnlyCollection<Field> fields, CancellationToken ct)
+    /// <summary>用串流計數的 <see cref="IDeletionRepository.CountLiveRecordsWithValueAsync"/>，空值定義與刪除規劃器一致（null、空白、空陣列）。</summary>
+    public static async Task<bool> HasValuesAsync(IDeletionRepository data, Module module, IReadOnlyCollection<Field> fields, CancellationToken ct)
     {
         var keys = fields.Where(f => f.Type is FieldType.Formula or FieldType.Rollup).Select(f => f.Key).ToList();
         if (keys.Count == 0) return false;
-        return (await records.ListLiveValuesAsync(module.Id, ct))
-            .Any(r => RecordValueProcessor.Parse(r.ValuesJson) is var v && keys.Any(k => v.TryGetValue(k, out var raw) && raw is { ValueKind: not (System.Text.Json.JsonValueKind.Null or System.Text.Json.JsonValueKind.Undefined) }));
+        return (await data.CountLiveRecordsWithValueAsync(module.Id, keys, ct)).Values.Any(count => count > 0);
     }
 
     public static bool NothingPurged(PurgeCounts purge) => purge is { Records: 0, IndexRows: 0, HistoryRows: 0 };
