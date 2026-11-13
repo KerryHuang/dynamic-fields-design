@@ -309,6 +309,7 @@ public static partial class AppPackageValidator
         V5References(p, fieldNames, scope, errors);
         V6References(p, groupCodes, scope, errors);
         TaskRuleReferences(p, fieldNames, scope, errors);
+        ApprovalFlowReferences(p, fieldNames, groupCodes, errors);
         PrintTemplateReferences(p, fieldNames, errors);
         return errors;
     }

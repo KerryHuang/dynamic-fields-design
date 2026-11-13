@@ -1,5 +1,6 @@
 using DynamicModules.Application.Dynamic.AppService;
 using DynamicModules.Application.Dynamic.ApprovalService;
+using DynamicModules.Domain.Approvals;
 using DynamicModules.Domain.Policies;
 using FluentAssertions;
 
@@ -300,5 +301,197 @@ public class AppApprovalPackageTests
     {
         Errors(Package(LargeFlow, transitions: With(Transitions, "\"noMatch\": \"direct\"", "\"noMatch\": \"skip\"")))
             .Should().Contain("workflows[po].transitions[draft>confirmed].approval.noMatch: 必須是 block 或 direct");
+    }
+    // ---- 引用層 ----
+
+    [Fact]
+    public void Module_NotInPackageOrWithoutWorkflow_Rejected()
+    {
+        Errors(Package(With(MidFlow, "\"module\": \"po\"", "\"module\": \"nope\"")))
+            .Should().Contain("approvalFlows[t8-po-mid].module: 模組 nope 不在套件內");
+        Errors(Package(With(With(MidFlow, "\"module\": \"po\"", "\"module\": \"vendor\""), "\"to\": \"confirmed\"", "\"to\": \"ok\"")))
+            .Should().Contain("approvalFlows[t8-po-mid].module: 簽核流程只能掛在有狀態機的獨立模組上");
+    }
+
+    [Fact]
+    public void Module_IsDetail_Rejected()
+    {
+        Errors(Package(With(With(MidFlow, "\"module\": \"po\"", "\"module\": \"line\""), "\"to\": \"confirmed\"", "\"to\": \"closed\"")))
+            .Should().Contain("approvalFlows[t8-po-mid].module: 簽核流程只能掛在有狀態機的獨立模組上");
+    }
+
+    [Fact]
+    public void To_NotAStateOrIsInitial_Rejected()
+    {
+        Errors(Package(With(MidFlow, "\"to\": \"confirmed\"", "\"to\": \"shipped\"")))
+            .Should().Contain($"approvalFlows[t8-po-mid].to: {ApprovalMessages.TargetStateInvalid}");
+        Errors(Package(With(MidFlow, "\"to\": \"confirmed\"", "\"to\": \"draft\"")))
+            .Should().Contain($"approvalFlows[t8-po-mid].to: {ApprovalMessages.TargetStateInvalid}");
+    }
+
+    [Fact]
+    public void RejectTo_NotAState_Rejected()
+    {
+        Errors(Package(With(LargeFlow, "\"rejectTo\": \"draft\"", "\"rejectTo\": \"shipped\"")))
+            .Should().Contain($"approvalFlows[t8-po-large].rejectTo: {ApprovalMessages.RejectToInvalidState}");
+    }
+
+    [Fact]
+    public void Flow_TargetWithoutApprovalTransition_Rejected()
+    {
+        // §14.4：流程的目標狀態至少要有一條需簽核轉移，否則流程永遠不會被用到
+        Errors(Package(Flows(LargeFlow, MidFlow, With(With(MidFlow, "\"code\": \"t8-po-mid\"", "\"code\": \"t8-po-cancel\""), "\"to\": \"confirmed\"", "\"to\": \"cancelled\""))))
+            .Should().Contain("approvalFlows[t8-po-cancel].to: 狀態「已取消」沒有需簽核的轉移進入，這個流程不會被用到");
+    }
+
+    [Fact]
+    public void DuplicatePriority_SameTarget_Rejected()
+    {
+        Errors(Package(Flows(LargeFlow, With(MidFlow, "\"priority\": 2", "\"priority\": 1"))))
+            .Should().Contain("approvalFlows[t8-po-mid].priority: 同一目標狀態上的流程優先序不能重複");
+    }
+
+    [Fact]
+    public void Condition_FieldOfAnotherModule_Rejected()
+    {
+        Errors(Package(With(MidFlow, "\"field\": \"po.total\"", "\"field\": \"vendor.rating\"")))
+            .Should().Contain("approvalFlows[t8-po-mid].when: vendor.rating 必須是模組 po 的欄位");
+    }
+
+    [Fact]
+    public void Condition_UnknownField_Rejected()
+    {
+        Errors(Package(With(MidFlow, "\"field\": \"po.total\"", "\"field\": \"po.nothing\"")))
+            .Should().Contain("approvalFlows[t8-po-mid].when: 條件引用了套件沒有的欄位 po.nothing");
+    }
+
+    [Fact]
+    public void Condition_UserConstant_Rejected()
+    {
+        var stageWhen = "\"approvers\": { \"source\": \"manager\", \"level\": 1 }, \"when\": { \"all\": [ { \"field\": \"po.buyer\", \"op\": \"eq\", \"value\": \"buyer01\" } ] },";
+        Errors(Package(With(MidFlow, "\"approvers\": { \"source\": \"manager\", \"level\": 1 },", stageWhen)))
+            .Should().Contain(e => e.StartsWith("approvalFlows[t8-po-mid].stages[lead].when: ") && e.Contains(AppEffectsCodec.ConcreteRecordMessage));
+    }
+
+    [Fact]
+    public void UserField_NotUserType_Rejected()
+    {
+        Errors(Package(With(MidFlow, "\"source\": \"manager\", \"level\": 1", "\"source\": \"userField\", \"field\": \"po.memo\", \"candidateGroups\": [\"buyers\"]")))
+            .Should().Contain("approvalFlows[t8-po-mid].stages[lead].approvers: po.memo 必須是模組 po 的使用者欄位");
+    }
+
+    [Fact]
+    public void EditableField_NotInModule_Rejected()
+    {
+        Errors(Package(With(MidFlow, "\"editableFields\": [\"po.memo\"]", "\"editableFields\": [\"vendor.name\"]")))
+            .Should().Contain("approvalFlows[t8-po-mid].stages[lead].editableFields: vendor.name 必須是模組 po 的欄位");
+    }
+
+    [Fact]
+    public void Group_NotDeclared_Rejected()
+    {
+        Errors(Package(With(LargeFlow, "\"groups\": [\"board\", \"buyers\"]", "\"groups\": [\"board\", \"ghost\"]")))
+            .Should().Contain("approvalFlows[t8-po-large].stages[board].approvers: 群組 ghost 沒有在 groups 宣告");
+        Errors(Package(With(MidFlow, "\"source\": \"manager\", \"level\": 1", "\"source\": \"userField\", \"field\": \"po.buyer\", \"candidateGroups\": [\"ghost\"]")))
+            .Should().Contain("approvalFlows[t8-po-mid].stages[lead].approvers: 群組 ghost 沒有在 groups 宣告");
+        Errors(Package(With(LargeFlow, "\"groups\": [\"purchaseLead\"] },", "\"groups\": [\"ghost\"] },")))
+            .Should().Contain("approvalFlows[t8-po-large].fallbackApprovers: 群組 ghost 沒有在 groups 宣告");
+    }
+
+    // ---- 狀態一致性（ApprovalConstraints） ----
+
+    [Fact]
+    public void ApprovalTarget_WithoutFlow_Rejected()
+    {
+        Errors(Package("")).Should().Contain($"workflows[po].states[confirmed]: {ApprovalMessages.NoFlow("已確認")}");
+    }
+
+    [Fact]
+    public void EntryMismatch_PlainEntryIntoTarget_Rejected()
+    {
+        var transitions = Transitions + """, { "from": "returned", "to": "confirmed", "groups": [] }""";
+        Errors(Package(Flows(LargeFlow, MidFlow), transitions: transitions))
+            .Should().Contain($"workflows[po].transitions[returned>confirmed]: {ApprovalMessages.EntryMismatch("已確認")}");
+    }
+
+    [Fact]
+    public void DirectEntry_AllFlowsInactive_Rejected()
+    {
+        Errors(Package(Flows(With(LargeFlow, "\"active\": true", "\"active\": false"), With(MidFlow, "\"active\": true", "\"active\": false"))))
+            .Should().Contain($"workflows[po].states[confirmed]: {ApprovalMessages.DirectNeedsActive("已確認")}");
+    }
+
+    [Fact]
+    public void PlainTransitionIntoLockedState_Rejected()
+    {
+        // 已確認 → 已退回 不需簽核、已退回不是可編輯狀態：鎖定延伸到已退回；草稿 → 已退回 不簽就進入鎖定
+        var transitions = Transitions + """, { "from": "confirmed", "to": "returned", "groups": [] }, { "from": "draft", "to": "returned", "groups": [] }""";
+        Errors(Package(Flows(LargeFlow, MidFlow), transitions: transitions))
+            .Should().Contain($"workflows[po].transitions[draft>returned]: {ApprovalMessages.LockEntry("草稿", "已退回")}");
+    }
+
+    [Fact]
+    public void InitialStateLocked_Rejected()
+    {
+        // 起始狀態不能當流程目標（to 檢查），但轉移仍可能把它標成需簽核：鎖定一致性要擋
+        var transitions = With(Transitions, "{ \"from\": \"cancelled\", \"to\": \"draft\", \"groups\": [] }",
+            "{ \"from\": \"cancelled\", \"to\": \"draft\", \"groups\": [], \"approval\": { \"required\": true } }");
+        Errors(Package(Flows(LargeFlow, MidFlow), transitions: transitions))
+            .Should().Contain($"workflows[po].initial: {ApprovalMessages.InitialLocked}");
+    }
+
+    [Fact]
+    public void RejectTo_UndefinedOrNeedsApproval_Rejected()
+    {
+        var name = "採購單（大額）";
+        Errors(Package(Flows(With(LargeFlow, "\"rejectTo\": \"draft\"", "\"rejectTo\": \"returned\""), MidFlow)))
+            .Should().Contain($"workflows[po].flows[t8-po-large]: {ApprovalMessages.RejectToInvalid(name, "草稿", "已退回")}");
+    }
+
+    [Fact]
+    public void RejectTo_LockedFromUnlocked_Rejected()
+    {
+        // 已確認 → 已退回 不需簽核：已退回被鎖定延伸；草稿 → 已退回 也定義為需簽核（不違反進入鎖定），但退回到鎖定狀態不行
+        var transitions = Transitions + """, { "from": "confirmed", "to": "returned", "groups": [] }, { "from": "draft", "to": "returned", "groups": [], "approval": { "required": true } }""";
+        var returnedFlow = With(With(MidFlow, "\"code\": \"t8-po-mid\"", "\"code\": \"t8-po-ret\""), "\"to\": \"confirmed\"", "\"to\": \"returned\"");
+        Errors(Package(Flows(With(LargeFlow, "\"rejectTo\": \"draft\"", "\"rejectTo\": \"confirmed\""), MidFlow, returnedFlow), transitions: transitions))
+            .Should().Contain($"workflows[po].flows[t8-po-large]: {ApprovalMessages.RejectToLocked("採購單（大額）")}");
+    }
+
+    [Fact]
+    public void EditableFields_FromReadOnlyState_Rejected()
+    {
+        var states = States.Replace("{ \"option\": \"draft\" }", "{ \"option\": \"draft\", \"readOnly\": true }");
+        Errors(Package(Flows(LargeFlow, MidFlow), states: states))
+            .Should().Contain($"workflows[po].flows[t8-po-mid]: {ApprovalMessages.EditableFromLocked("採購單（一萬以上）")}");
+    }
+
+    [Fact]
+    public void EditableStateIsApprovalTarget_Rejected()
+    {
+        var states = States.Replace("{ \"option\": \"confirmed\", \"readOnly\": true }", "{ \"option\": \"confirmed\", \"editable\": true }");
+        Errors(Package(Flows(LargeFlow, MidFlow), states: states))
+            .Should().Contain($"workflows[po].states[confirmed]: {ApprovalMessages.LockedMarkedEditable("已確認")}");
+    }
+
+    [Fact]
+    public void ErrorsUseCodes_NotTemporaryIds()
+    {
+        var transitions = Transitions + """, { "from": "returned", "to": "confirmed", "groups": [] }, { "from": "confirmed", "to": "returned", "groups": [] }, { "from": "draft", "to": "returned", "groups": [] }""";
+        var errors = Errors(Package(Flows(With(LargeFlow, "\"rejectTo\": \"draft\"", "\"rejectTo\": \"returned\""), MidFlow), transitions: transitions));
+        errors.Where(e => e.StartsWith("workflows[po].")).Should().HaveCountGreaterThan(2);
+        errors.Should().NotContain(e => System.Text.RegularExpressions.Regex.IsMatch(e, @"\[\d+(>|\])|>\d+\]"));
+        errors.Should().Contain(e => e.Contains("「已確認」"));
+    }
+
+    [Fact]
+    public void ApprovalLimitErrors_UsesGivenLimits()
+    {
+        var p = AppJson.Parse(Package(Flows(LargeFlow, MidFlow))).V2!;
+        AppPackageValidator.ApprovalLimitErrors(p, new ApprovalLimitSet(1, 20, 8760, 5))
+            .Should().Equal($"approvalFlows[t8-po-large].stages: {ApprovalMessages.StagesCount(1)}");
+        AppPackageValidator.ApprovalLimitErrors(p, new ApprovalLimitSet(20, 20, 8760, 5)).Should().BeEmpty();
+        AppPackageValidator.ApprovalLimitErrors(p, new ApprovalLimitSet(20, 20, 24, 5))
+            .Should().Equal($"approvalFlows[t8-po-large].stages[board].dueHours: {ApprovalMessages.DueHours(24)}");
     }
 }
