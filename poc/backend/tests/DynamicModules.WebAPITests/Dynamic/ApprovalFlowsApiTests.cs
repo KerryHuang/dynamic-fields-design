@@ -88,7 +88,7 @@ public class ApprovalFlowsApiTests
         (await app.AsUser("sales01").GetAsync($"{Flows}?module={key}")).StatusCode.Should().Be(HttpStatusCode.Forbidden);
     }
     /// <summary>建一個有狀態機（草稿 → 已核准，需簽核）與一個流程 big 的模組，回傳模組鍵、欄位與狀態。</summary>
-    private static async Task<(string Key, long Status, long Amount, long Draft, long Done, long Group)> SeedApproval(HttpClient c)
+    private static async Task<(string Key, long Status, long Amount, string AmountKey, long Draft, long Done, long Group)> SeedApproval(HttpClient c)
     {
         var key = await CreateModule(c);
         var status = await AddField(c, key, "enum");
@@ -113,7 +113,7 @@ public class ApprovalFlowsApiTests
         (await c.PutAsJsonAsync($"{Base}/modules/{key}/workflow", Workflow(false))).EnsureSuccessStatusCode();
         (await c.PostAsJsonAsync($"{Flows}?module={key}", Flow("big", done, 1, group, amount.Id, 1000))).EnsureSuccessStatusCode();
         (await c.PutAsJsonAsync($"{Base}/modules/{key}/workflow", Workflow(true))).EnsureSuccessStatusCode();
-        return (key, status.Id, amount.Id, draft, done, group);
+        return (key, status.Id, amount.Id, amount.Key, draft, done, group);
     }
 
     [Fact]
@@ -188,21 +188,59 @@ public class ApprovalFlowsApiTests
         (await JsonOf(res)).GetProperty("stages")[0].GetProperty("problem").GetString().Should().Be("noApprover");
     }
 
+    /// <summary>送出一張金額 5000 的單據，讓流程 big（金額 ≥ 1000）的目前版本被實例綁定。</summary>
+    private static async Task UseBigFlow(HttpClient c, (string Key, long Status, long Amount, string AmountKey, long Draft, long Done, long Group) s)
+    {
+        var title = await TitleKey(c, s.Key);
+        var created = await JsonOf(await c.PostAsJsonAsync($"{Base}/modules/{s.Key}/records",
+            new { values = new Dictionary<string, object> { [title] = "單據", [s.AmountKey] = 5000 } }));
+        var submit = await c.PostAsJsonAsync($"{Base}/records/{created.GetProperty("id").GetInt64()}/approval/submit",
+            new { to = s.Done, recordRowVersion = created.GetProperty("rowVersion").GetString() });
+        submit.StatusCode.Should().Be(HttpStatusCode.Created, await submit.Content.ReadAsStringAsync());
+        (await JsonOf(await c.GetAsync($"{Flows}/big"))).GetProperty("currentVersionUsed").GetBoolean().Should().BeTrue();
+    }
+
+    private static async Task<(HttpStatusCode Status, System.Text.Json.JsonElement Body)> PutEdited(
+        HttpClient c, System.Text.Json.JsonElement flow, Action<System.Text.Json.Nodes.JsonNode> edit)
+    {
+        var node = System.Text.Json.Nodes.JsonNode.Parse(flow.GetRawText())!;
+        edit(node);
+        var res = await c.PutAsync($"{Flows}/big", new StringContent(node.ToJsonString(), System.Text.Encoding.UTF8, "application/json"));
+        return (res.StatusCode, await JsonOf(res));
+    }
+
     [Fact]
     [Trait("Category", "Postgres")]
-    public async Task UpdateFlow_OnlyActiveChanged_RoundTrip_KeepsVersion()
+    public async Task UpdateFlow_UsedVersion_OnlyActiveChanged_RoundTrip_KeepsVersion()
     {
         using var app = new TestApp();
         var c = app.AsUser();
         var s = await SeedApproval(c);
+        await UseBigFlow(c, s);
         var before = await JsonOf(await c.GetAsync($"{Flows}/big"));
-        var edited = System.Text.Json.Nodes.JsonNode.Parse(before.GetRawText())!;
-        edited["active"] = false;
-        var res = await c.PutAsync($"{Flows}/big", new StringContent(edited.ToJsonString(), System.Text.Encoding.UTF8, "application/json"));
-        res.StatusCode.Should().Be(HttpStatusCode.OK);
-        var after = await JsonOf(res);
+
+        var (status, after) = await PutEdited(c, before, n => n["active"] = false);
+
+        status.Should().Be(HttpStatusCode.OK);
         after.GetProperty("active").GetBoolean().Should().BeFalse();
-        after.GetProperty("version").GetInt32().Should().Be(before.GetProperty("version").GetInt32());
+        after.GetProperty("version").GetInt32().Should().Be(1);
         (await JsonOf(await c.GetAsync($"{Flows}/big"))).GetProperty("version").GetInt32().Should().Be(1);
+    }
+
+    [Fact]
+    [Trait("Category", "Postgres")]
+    public async Task UpdateFlow_UsedVersion_StageChanged_RoundTrip_NewVersion()
+    {
+        using var app = new TestApp();
+        var c = app.AsUser();
+        var s = await SeedApproval(c);
+        await UseBigFlow(c, s);
+        var before = await JsonOf(await c.GetAsync($"{Flows}/big"));
+
+        var (status, after) = await PutEdited(c, before, n => n["definition"]!["stages"]![0]!["dueHours"] = 48);
+
+        status.Should().Be(HttpStatusCode.OK);
+        after.GetProperty("version").GetInt32().Should().Be(2);
+        after.GetProperty("currentVersionUsed").GetBoolean().Should().BeFalse();
     }
 }
