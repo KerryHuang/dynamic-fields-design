@@ -20,6 +20,16 @@ describe('policy-types', () => {
     expect(policyRangeText({ code: 'x', category: 'task', kind: 'boolean' }, t)).toBeNull();
   });
 
+  it('recipients：policyValueText 換成名稱、policyRangeText 寫項數範圍', () => {
+    const meta = { code: 'x', category: 'approval', kind: 'recipients', min: 1, max: 20 } as const;
+    const names = new Map([['admins', '全部系統管理員'], ['user:fin1', '財務一']]);
+    expect(policyValueText(meta, ['admins', 'user:fin1'], t, names)).toBe('全部系統管理員、財務一');
+    expect(policyValueText(meta, ['user:gone'], t, names)).toBe('找不到或已停用');
+    const range = policyRangeText(meta, t);
+    expect(range).toContain('1');
+    expect(range).toContain('20');
+  });
+
   it('policyValueText', () => {
     expect(policyValueText({ code: 'x', category: 'task', kind: 'boolean' }, true, t)).toBe('開');
     expect(policyValueText({ code: 'x', category: 'task', kind: 'boolean' }, false, t)).toBe('關');

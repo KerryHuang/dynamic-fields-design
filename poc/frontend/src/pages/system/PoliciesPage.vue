@@ -7,6 +7,7 @@ import { useSaveSystemPolicy, useSystemPolicies } from 'src/application/dynamic/
 import ForbiddenNotice from 'src/components/framework/ForbiddenNotice.vue';
 import { groupByCategory, policyRangeText, policyValueText, samePolicyValue, type PolicyValue, type SystemPolicy } from 'src/domain/dynamic/policy-types';
 import PolicyValueEditor from 'src/presentation/policies/PolicyValueEditor.vue';
+import { useRecipientNames } from 'src/presentation/policies/useRecipientNames';
 
 const { t } = useI18n();
 const me = useMe();
@@ -14,6 +15,7 @@ const isAdmin = computed(() => me.data.value?.isSystemAdmin === true);
 // 非系統管理員不送請求（API 本來就會回 403）
 const policies = useSystemPolicies({ enabled: isAdmin });
 const save = useSaveSystemPolicy();
+const { options: recipientOptions, names } = useRecipientNames();
 
 /** 草稿＝沒設時看到出廠值；存檔失敗時保留，讓使用者改。 */
 const drafts = reactive<Record<string, PolicyValue>>({});
@@ -60,12 +62,12 @@ function submit(p: SystemPolicy, value: PolicyValue | null) {
               </div>
               <div class="text-muted text-caption">{{ t(helpKey(p.code)) }}</div>
               <div class="text-caption q-mt-sm">
-                {{ t('policies.current') }}：{{ policyValueText(p, p.effective, t) }}／{{ t('policies.factory') }}：{{ policyValueText(p, p.factory, t) }}
+                {{ t('policies.current') }}：{{ policyValueText(p, p.effective, t, names) }}／{{ t('policies.factory') }}：{{ policyValueText(p, p.factory, t, names) }}
                 <template v-if="policyRangeText(p, t)">／{{ t('policies.range') }}：{{ policyRangeText(p, t) }}</template>
               </div>
             </div>
             <div class="col-12 col-md-6">
-              <PolicyValueEditor v-model="drafts[p.code]" :meta="p" @update:valid="(v: boolean) => (invalid[p.code] = !v)" :label="t(nameKey(p.code))" :disable="save.isPending.value" />
+              <PolicyValueEditor v-model="drafts[p.code]" :meta="p" @update:valid="(v: boolean) => (invalid[p.code] = !v)" :label="t(nameKey(p.code))" :recipient-options="recipientOptions" :disable="save.isPending.value" />
               <div v-if="errors[p.code]" class="text-negative text-caption q-mt-xs" :data-testid="`policy-error-${p.code}`">{{ errors[p.code] }}</div>
               <div class="row q-gutter-sm q-mt-xs">
                 <q-btn

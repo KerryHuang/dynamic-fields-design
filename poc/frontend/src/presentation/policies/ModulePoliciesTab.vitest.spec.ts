@@ -27,6 +27,7 @@ async function mountTab(opts: { canEdit?: boolean; policies?: ModulePolicy[] } =
   const { canEdit = true, policies = [policy()] } = opts;
   calls = mockHttp((c) => {
     if (c.url === '/me') return { userId: 'admin', displayName: 'A', isSystemAdmin: false, mustChangePassword: false, groups: [], designer: { read: true, add: true, edit: canEdit, delete: false }, theme: FACTORY_ME_THEME };
+    if (c.url === '/users' || c.url === '/groups') return [];
     if (c.url === '/modules/m1/policies' && c.method === 'get') return policies;
     return policy();
   });

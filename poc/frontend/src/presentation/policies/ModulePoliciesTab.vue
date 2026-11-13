@@ -7,6 +7,7 @@ import { useModulePolicies, useSaveModulePolicy } from 'src/application/dynamic/
 import { groupByCategory, policyRangeText, policyValueText, samePolicyValue, type ModulePolicy, type PolicyValue } from 'src/domain/dynamic/policy-types';
 import type { ModuleDetail } from 'src/domain/dynamic/types';
 import PolicyValueEditor from './PolicyValueEditor.vue';
+import { useRecipientNames } from './useRecipientNames';
 
 const props = defineProps<{ module: ModuleDetail }>();
 const { t } = useI18n();
@@ -14,6 +15,7 @@ const me = useMe();
 const key = computed(() => props.module.key);
 const policies = useModulePolicies(key);
 const save = useSaveModulePolicy(key);
+const { options: recipientOptions, names } = useRecipientNames();
 const canEdit = computed(() => me.data.value?.designer.edit === true);
 
 type Mode = 'inherit' | 'override';
@@ -59,20 +61,20 @@ function submit(p: ModulePolicy) {
             <div class="text-weight-medium">{{ t(nameKey(p.code)) }}</div>
             <div class="text-muted text-caption">{{ t(`policies.items.${p.code}.help`) }}</div>
             <div class="text-caption q-mt-sm">
-              {{ t('policies.systemValue') }}：{{ policyValueText(p, p.systemValue, t) }}
+              {{ t('policies.systemValue') }}：{{ policyValueText(p, p.systemValue, t, names) }}
               <template v-if="policyRangeText(p, t)">／{{ t('policies.range') }}：{{ policyRangeText(p, t) }}</template>
             </div>
           </div>
           <div class="col-12 col-md-7">
             <q-radio
               v-model="modes[p.code]" val="inherit" :disable="!canEdit" :data-testid="`policy-inherit-${p.code}`"
-              :label="t('policies.inherit', { value: policyValueText(p, p.systemValue, t) })"
+              :label="t('policies.inherit', { value: policyValueText(p, p.systemValue, t, names) })"
             />
             <div class="row items-start no-wrap">
               <q-radio v-model="modes[p.code]" val="override" :disable="!canEdit" :data-testid="`policy-override-${p.code}`" :label="t('policies.override')" />
               <div class="col q-pl-sm">
                 <PolicyValueEditor
-                  v-model="drafts[p.code]" :meta="p" :label="t(nameKey(p.code))" :disable="!canEdit || modes[p.code] !== 'override'"
+                  v-model="drafts[p.code]" :meta="p" :label="t(nameKey(p.code))" :recipient-options="recipientOptions" :disable="!canEdit || modes[p.code] !== 'override'"
                   @update:valid="(v: boolean) => (invalid[p.code] = !v)"
                 />
               </div>
