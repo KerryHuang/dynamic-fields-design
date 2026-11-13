@@ -296,6 +296,27 @@ public class ApprovalPreviewTests : ApprovalTestBase
         p.FlowKey.Should().Be("po-new");
         p.Stages.Select(s => s.Code).Should().Equal("mgr", "lead");
         Counts().Should().Be(before);
+        Db.Context.Set<ApprovalInstance>().AsNoTracking().Count().Should().Be(0);
+        Db.Context.Set<ApprovalAction>().AsNoTracking().Count().Should().Be(0);
+        Db.Context.Set<Notification>().AsNoTracking().Count().Should().Be(0);
+    }
+
+    [Fact]
+    public async Task DraftPreview_WithRecord_WritesNothing()
+    {
+        var r = await Scenario3();
+        As("buyer1");
+        var po = await NewPo(r, price: 150000);
+        var rowVersion = Rec(po.Id).Row.RowVersion;
+        var before = Counts();
+
+        await MustDraftPreview(r, Draft("po-new", r.Confirmed, Def(null, Stage("mgr", Manager(1))), priority: 9), recordId: po.Id);
+
+        Counts().Should().Be(before);
+        Db.Context.Set<ApprovalInstance>().AsNoTracking().Count().Should().Be(0);
+        Db.Context.Set<ApprovalAction>().AsNoTracking().Count().Should().Be(0);
+        Db.Context.Set<Notification>().AsNoTracking().Count().Should().Be(0);
+        Rec(po.Id).Row.RowVersion.Should().Be(rowVersion);
     }
 
     [Fact]
@@ -311,6 +332,10 @@ public class ApprovalPreviewTests : ApprovalTestBase
 
         p.Outcome.Should().Be(ApprovalPreviewOutcomes.Flow);
         p.FlowKey.Should().Be("po-v");
+        // 已存版本沒被草稿改動
+        var saved2 = Db.Context.Set<ApprovalFlowVersion>().AsNoTracking().Single();
+        saved2.Version.Should().Be(1);
+        saved2.Definition.When!.Value.GetRawText().Should().Contain("100000");
     }
 
     [Fact]

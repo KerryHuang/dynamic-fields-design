@@ -166,4 +166,43 @@ public class ApprovalFlowsApiTests
             new { draft = Flow("draft-new", s.Done, 9, s.Group), initiatorUserId = "sales01" });
         res.StatusCode.Should().Be(HttpStatusCode.Forbidden);
     }
+    [Fact]
+    [Trait("Category", "Postgres")]
+    public async Task DraftPreview_Json_ProblemKeyPresentOnlyWhenProblem()
+    {
+        using var app = new TestApp();
+        var c = app.AsUser();
+        var s = await SeedApproval(c);
+        // 發起人 admin 沒有主管：主管來源找不到人、備援（系統管理員）也被發起人自己排除時才有問題；
+        // 沒有問題的情境（群組有成員）不應出現 problem 鍵
+        var withGroup = await JsonOf(await c.PostAsJsonAsync($"{Flows}/preview?module={s.Key}",
+            new { draft = Flow("draft-new", s.Done, 9, s.Group), initiatorUserId = "sales01" }));
+        withGroup.GetProperty("stages")[0].TryGetProperty("problem", out _).Should().BeFalse();
+
+        var manager = Flow("draft-mgr", s.Done, 9, s.Group);
+        var json = System.Text.Json.JsonSerializer.Serialize(new { draft = manager, initiatorUserId = "admin" });
+        var node = System.Text.Json.Nodes.JsonNode.Parse(json)!;
+        node["draft"]!["definition"]!["stages"]![0]!["approvers"] = System.Text.Json.Nodes.JsonNode.Parse("{\"source\":\"manager\",\"level\":1}");
+        var res = await c.PostAsync($"{Flows}/preview?module={s.Key}", new StringContent(node.ToJsonString(), System.Text.Encoding.UTF8, "application/json"));
+        res.StatusCode.Should().Be(HttpStatusCode.OK);
+        (await JsonOf(res)).GetProperty("stages")[0].GetProperty("problem").GetString().Should().Be("noApprover");
+    }
+
+    [Fact]
+    [Trait("Category", "Postgres")]
+    public async Task UpdateFlow_OnlyActiveChanged_RoundTrip_KeepsVersion()
+    {
+        using var app = new TestApp();
+        var c = app.AsUser();
+        var s = await SeedApproval(c);
+        var before = await JsonOf(await c.GetAsync($"{Flows}/big"));
+        var edited = System.Text.Json.Nodes.JsonNode.Parse(before.GetRawText())!;
+        edited["active"] = false;
+        var res = await c.PutAsync($"{Flows}/big", new StringContent(edited.ToJsonString(), System.Text.Encoding.UTF8, "application/json"));
+        res.StatusCode.Should().Be(HttpStatusCode.OK);
+        var after = await JsonOf(res);
+        after.GetProperty("active").GetBoolean().Should().BeFalse();
+        after.GetProperty("version").GetInt32().Should().Be(before.GetProperty("version").GetInt32());
+        (await JsonOf(await c.GetAsync($"{Flows}/big"))).GetProperty("version").GetInt32().Should().Be(1);
+    }
 }
