@@ -2,7 +2,7 @@ import { QueryClient, VueQueryPlugin } from '@tanstack/vue-query';
 import { flushPromises, mount } from '@vue/test-utils';
 import { createPinia } from 'pinia';
 import * as quasar from 'quasar';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createI18n } from 'vue-i18n';
 import type { ApprovalFlow } from 'src/domain/dynamic/approval-flow-types';
 import type { DesignerField, ModuleDetail, Workflow } from 'src/domain/dynamic/types';
@@ -77,6 +77,11 @@ describe('ApprovalFlowsTab', () => {
     document.body.innerHTML = '';
     vi.stubGlobal('ResizeObserver', class { observe() {} unobserve() {} disconnect() {} });
     quasar.Screen.setDebounce(0);
+  });
+  // A test that fails between setting a mobile width and restoring it must not leave every later test on the mobile layout.
+  afterEach(() => {
+    window.innerWidth = 1024;
+    window.dispatchEvent(new Event('resize'));
   });
 
   it('groups flows by target state with entry transitions in the header', async () => {
@@ -206,10 +211,14 @@ describe('ApprovalFlowsTab', () => {
     const m = await mountTab([flow('a', 12, 1), flow('b', 12, 2)]);
     api.reorderApprovalFlows.mockClear();
     api.reorderApprovalFlows.mockReturnValue(new Promise(() => {}));
+    // The QMenu mounts and unmounts through transitions, so each step waits for the menu state instead of assuming it is settled.
     await m.find('[data-testid="flow-menu-a"]').trigger('click');
+    await vi.waitFor(() => expect(body('flow-down-a')).not.toBeNull());
     (body('flow-down-a') as HTMLElement).click();
     await flushPromises();
+    await vi.waitFor(() => expect(body('flow-down-a')).toBeNull());
     await m.find('[data-testid="flow-menu-a"]').trigger('click');
+    await vi.waitFor(() => expect(body('flow-down-a')).not.toBeNull());
     expect(body('flow-down-a')!.getAttribute('aria-disabled')).toBe('true');
     (body('flow-down-a') as HTMLElement).click();
     expect(api.reorderApprovalFlows).toHaveBeenCalledTimes(1);
