@@ -36,9 +36,9 @@ public sealed class ApprovalFlowEditor(IApprovalFlowRepository flows, ApprovalDe
         else if (ReservedKeys.Contains(input.Key!)) Err("key", ApprovalMessages.FlowKeyReserved);
         if (input.Name is null || !input.Name.IsValid(out _)) Err("name", "名稱必須有繁體中文");
         if (input.ToOptionId == wf.InitialOptionId || wf.States.All(s => s.OptionId != input.ToOptionId))
-            Err("toOptionId", "目標狀態必須是狀態機的狀態，而且不是起始狀態");
+            Err("toOptionId", ApprovalMessages.TargetStateInvalid);
         if (input.Priority < 0) Err("priority", "優先序不能是負數");
-        if (input.Definition is null) Err("definition", "缺少流程定義");
+        if (input.Definition is null) Err("definition", ApprovalMessages.DefinitionMissing);
         if (errors.Count > 0) return ServiceResult.Invalid(errors);
 
         var previous = self?.CurrentVersionId is { } vid ? (await flows.GetVersionAsync(vid, ct))?.Definition : null;

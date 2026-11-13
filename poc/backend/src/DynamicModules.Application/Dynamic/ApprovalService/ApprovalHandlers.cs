@@ -191,8 +191,8 @@ public class PreviewApprovalDraftHandler(IApprovalFlowRepository flows, IModuleR
         var wf = module.Workflow!;
         var draft = request.Draft;
         if (draft.ToOptionId == wf.InitialOptionId || wf.States.All(s => s.OptionId != draft.ToOptionId))
-            return ServiceResult.Invalid(new Dictionary<string, string[]> { ["toOptionId"] = ["目標狀態必須是狀態機的狀態，而且不是起始狀態"] });
-        if (draft.Definition is null) return ServiceResult.Invalid(new Dictionary<string, string[]> { ["definition"] = ["缺少流程定義"] });
+            return ServiceResult.Invalid(new Dictionary<string, string[]> { ["toOptionId"] = [ApprovalMessages.TargetStateInvalid] });
+        if (draft.Definition is null) return ServiceResult.Invalid(new Dictionary<string, string[]> { ["definition"] = [ApprovalMessages.DefinitionMissing] });
 
         var current = await flows.ListCurrentByModuleAsync(module.Id, ct);
         var existing = current.FirstOrDefault(f => f.Flow.Key == draft.Key);
