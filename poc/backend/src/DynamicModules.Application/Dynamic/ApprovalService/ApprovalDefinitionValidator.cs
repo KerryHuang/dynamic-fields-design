@@ -14,7 +14,7 @@ namespace DynamicModules.Application.Dynamic.ApprovalService;
 /// stages[i].code／name／when／approvers／mode／editableFields／dueHours／onEmpty。跨流程與入口的約束在 ApprovalConstraints。
 /// </summary>
 public sealed partial class ApprovalDefinitionValidator(
-    IPermissionRepository permissions, FieldTypeRegistry registry, IConversionRepository conversions, ILedgerRepository ledgers,
+    IPermissionRepository permissions, FieldTypeRegistry registry, ApprovalEditableFields editableFields,
     ISharedMasterRepository shared, ApprovalPolicies approvalPolicies)
 {
     [GeneratedRegex("^[a-z][a-z0-9-]{0,39}$")]
@@ -48,7 +48,7 @@ public sealed partial class ApprovalDefinitionValidator(
             Err("stages", ApprovalMessages.StagesCount(limits.MaxStages, previous is not null));
         else if (stages.Select(s => s.Code).Distinct().Count() != stages.Count) Err("stages", ApprovalMessages.StageCodeDuplicate);
 
-        var nonEditable = await NonEditableFieldIdsAsync(module, wf, ct);
+        var nonEditable = await editableFields.NonEditableAsync(module, wf, ct);
         var hiddenRows = (await permissions.LoadModuleRowsAsync(module, ct)).FieldPermissions.Where(p => p.Access == FieldAccess.Hidden).ToList();
         var restricted = fields.Values.Where(f => f.VisibilityRestricted).ToList();
         var grants = restricted.Count == 0 ? [] : (await shared.ListFieldGrantsAsync(restricted.Select(f => f.Id).ToList(), ct))
@@ -138,20 +138,6 @@ public sealed partial class ApprovalDefinitionValidator(
                 ids.UnionWith(restricted.Where(f => !grants.TryGetValue(f.Id, out var gs) || !gs.Overlaps(set)).Select(f => f.Id));
             }
         }
-        return ids;
-    }
-
-    /// <summary>不能當可編輯欄位的欄位：計算欄位、狀態欄位、轉換追溯欄位、分錄沖銷欄位、lock 帶值的目的欄位。</summary>
-    private async Task<HashSet<long>> NonEditableFieldIdsAsync(Module module, Workflow wf, CancellationToken ct)
-    {
-        var all = module.Blocks.SelectMany(b => b.Fields).ToList();
-        var ids = all.Where(f => f.Type is FieldType.Formula or FieldType.Rollup or FieldType.AutoNumber).Select(f => f.Id).ToHashSet();
-        ids.Add(wf.StatusFieldId);
-        foreach (var f in all.Where(f => f.Config.Fill is { Mode: FillConfig.Lock }))
-            ids.UnionWith(f.Config.Fill!.Map.Select(m => m.To));
-        foreach (var c in await conversions.ListTouchingAsync(module.Id, ct))
-            if (c.TargetModuleId == module.Id) ids.Add(c.Definition.Header.SourceFieldId);
-        if (await ledgers.GetByModuleAsync(module.Id, ct) is { } ledger) ids.Add(ledger.Definition.ReversalFieldId);
         return ids;
     }
 }

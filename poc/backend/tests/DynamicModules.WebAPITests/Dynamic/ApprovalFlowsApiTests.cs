@@ -126,4 +126,15 @@ public class ApprovalFlowsApiTests
         var list = await JsonOf(await c.GetAsync($"{Flows}?module={s.Key}"));
         list[0].GetProperty("currentVersionUsed").GetBoolean().Should().BeFalse();
     }
+    [Fact]
+    [Trait("Category", "Postgres")]
+    public async Task GetWorkflow_Json_HasEditableFieldIds()
+    {
+        using var app = new TestApp();
+        var c = app.AsUser();
+        var s = await SeedApproval(c);
+        var body = await JsonOf(await c.GetAsync($"{Base}/modules/{s.Key}/workflow"));
+        var ids = body.GetProperty("editableFieldIds").EnumerateArray().Select(x => x.GetInt64()).ToList();
+        ids.Should().Contain(s.Amount).And.NotContain(s.Status);
+    }
 }

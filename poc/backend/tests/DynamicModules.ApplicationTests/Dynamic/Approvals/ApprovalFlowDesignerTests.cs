@@ -1,7 +1,10 @@
 using DynamicModules.Application.Common;
 using DynamicModules.Application.Dynamic.ApprovalService;
+using DynamicModules.Application.Dynamic.WorkflowService.Data;
+using DynamicModules.Application.Dynamic.WorkflowService.Queries.GetWorkflow;
 using DynamicModules.Domain.Approvals;
 using DynamicModules.Domain.Entities.Dynamic;
+using DynamicModules.Domain.ValueObjects;
 using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
 
@@ -111,5 +114,65 @@ public class ApprovalFlowDesignerTests : ApprovalTestBase
         var got = (ApprovalFlowResponse)(await Send(new GetApprovalFlowRequest("po-b"))).Data!;
         got.CurrentVersionUsed.Should().BeTrue();
         got.Used.Should().BeTrue();
+    }
+    // ───────── 可編輯欄位候選 ─────────
+
+    private async Task<WorkflowResponse> GetWorkflow(PurchaseRig r)
+    {
+        var res = await Send(new GetWorkflowRequest(r.Module));
+        res.IsSuccess.Should().BeTrue(Dump(res));
+        return (WorkflowResponse)res.Data!;
+    }
+
+    [Fact]
+    public async Task GetWorkflow_EditableFieldIds_ExcludeComputedStatusAndLockFill()
+    {
+        var r = await BuildPurchase();
+        var other = await MustAdd(r.Module, FieldType.Text, label: "停用中");
+        (await Deactivate(other.Id)).IsSuccess.Should().BeTrue();
+
+        var got = (await GetWorkflow(r)).EditableFieldIds;
+
+        got.Should().Contain([r.Memo, r.DueDate, r.Discount, r.Supplier, r.Owner, TitleId(r.Module)]);
+        got.Should().NotContain([r.Total, r.LineSum, r.ExtraSum, r.NetTotal, r.No, r.Status, r.SupplierName, other.Id]);
+        got.Should().BeInAscendingOrder();
+    }
+
+    [Fact]
+    public async Task GetWorkflow_EditableFieldIds_ExcludeConversionTraceAndLedgerReversal()
+    {
+        var r = await BuildPurchase();
+        Db.Context.Add(new Conversion
+        {
+            Key = "to-po", NameI18n = Text("轉"), SourceModuleId = (await Detail(r.Vendor)).Id, TargetModuleId = r.ModuleId,
+            Definition = new ConversionDefinition([], new ConversionHeader(r.Supplier, []), null), CreatedUserId = "admin"
+        });
+        Db.Context.Add(new ModuleLedger { ModuleId = r.ModuleId, Definition = new LedgerDefinition(r.Owner, [], []) });
+        await Db.Context.SaveChangesAsync();
+        Db.Context.ChangeTracker.Clear();
+
+        var got = (await GetWorkflow(r)).EditableFieldIds;
+
+        got.Should().NotContain([r.Supplier, r.Owner]);
+        got.Should().Contain([r.Memo, r.DueDate]);
+    }
+
+    [Fact]
+    public async Task SaveWorkflow_ResponseHasEditableFieldIds()
+    {
+        var r = await BuildPurchase();
+        var res = await SaveWorkflow(r, BaseTransitions(r));
+        res.IsSuccess.Should().BeTrue(Dump(res));
+        ((WorkflowResponse)res.Data!).EditableFieldIds.Should().Contain(r.Memo).And.NotContain(r.Total);
+    }
+
+    [Fact]
+    public async Task Validator_StillRejectsFormulaAsEditable()
+    {
+        var r = await WithAB();
+        var res = await Send(new UpdateApprovalFlowRequest("po-b",
+            Input("po-b", r.Confirmed, 2, Def(null, Stage("mgr", Manager(1), editable: [r.Total])))));
+        res.IsInvalid.Should().BeTrue(Dump(res));
+        res.Errors.Should().ContainKey("definition.stages[0].editableFields");
     }
 }

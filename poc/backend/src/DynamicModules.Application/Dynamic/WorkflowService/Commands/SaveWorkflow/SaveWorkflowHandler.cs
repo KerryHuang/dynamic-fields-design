@@ -82,7 +82,8 @@ public class SaveWorkflowHandler(
 
         module.TouchVersion(user.UserId, now);
         await uow.CommitAsync(ct);
-        return ServiceResult.Success(workflow.ToResponse(await approvals.LockedFieldIdsAsync(module, workflow, ct)));
+        return ServiceResult.Success(workflow.ToResponse(await approvals.LockedFieldIdsAsync(module, workflow, ct),
+            await approvals.EditableFieldIdsAsync(module, workflow, ct)));
     }
 
     /// <summary>簽核的入口約束與事件交叉檢查（簽核設計 §5.2、§5.3）；沒有需簽核轉移時不查資料庫、一律通過。</summary>
