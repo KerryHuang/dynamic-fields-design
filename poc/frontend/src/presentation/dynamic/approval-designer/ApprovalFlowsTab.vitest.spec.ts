@@ -105,7 +105,6 @@ describe('ApprovalFlowsTab', () => {
     await flushPromises();
     expect(api.reorderApprovalFlows).toHaveBeenCalledWith('doc', 12, ['b', 'a']);
     notified('已調整優先序，只影響之後送出的單');
-    expect(w.find('[data-testid="flow-up-a"]').attributes('disabled')).toBeDefined();
     w.unmount();
   });
 
@@ -129,12 +128,14 @@ describe('ApprovalFlowsTab', () => {
     w.unmount();
   });
 
-  it('activate saves immediately', async () => {
+  it('activate saves immediately, without a confirmation', async () => {
     const w = await mountTab([flow('a', 12, 1, { active: false })]);
+    expect(w.find('[data-testid="flow-inactive-a"]').exists()).toBe(true);
     await w.find('[data-testid="flow-active-a"]').trigger('click');
     await flushPromises();
+    expect(body('flow-off-confirm')).toBeNull();
     expect(api.updateApprovalFlow).toHaveBeenCalledWith('a', expect.objectContaining({ active: true }));
-    expect(w.find('[data-testid="flow-inactive-a"]').exists()).toBe(true);
+    notified('已啟用，只影響之後送出的單');
     w.unmount();
   });
 
@@ -183,6 +184,67 @@ describe('ApprovalFlowsTab', () => {
     window.dispatchEvent(new Event('resize'));
   });
 
+  it('a second move while a reorder is pending sends nothing (desktop buttons, drop and mobile menu)', async () => {
+    const w = await mountTab([flow('a', 12, 1), flow('b', 12, 2), flow('c', 12, 3)]);
+    api.reorderApprovalFlows.mockReturnValue(new Promise(() => {}));
+    await w.find('[data-testid="flow-down-a"]').trigger('click');
+    await flushPromises();
+    expect(w.find('[data-testid="flow-down-b"]').attributes('disabled')).toBeDefined();
+    await w.find('[data-testid="flow-down-a"]').trigger('click');
+    await w.find('[data-testid="flow-card-a"]').trigger('dragstart');
+    await w.find('[data-testid="flow-card-c"]').trigger('drop');
+    expect(api.reorderApprovalFlows).toHaveBeenCalledTimes(1);
+    w.unmount();
+
+    window.innerWidth = 390;
+    window.dispatchEvent(new Event('resize'));
+    const m = await mountTab([flow('a', 12, 1), flow('b', 12, 2)]);
+    api.reorderApprovalFlows.mockClear();
+    api.reorderApprovalFlows.mockReturnValue(new Promise(() => {}));
+    await m.find('[data-testid="flow-menu-a"]').trigger('click');
+    (body('flow-down-a') as HTMLElement).click();
+    await flushPromises();
+    await m.find('[data-testid="flow-menu-a"]').trigger('click');
+    expect(body('flow-down-a')!.getAttribute('aria-disabled')).toBe('true');
+    (body('flow-down-a') as HTMLElement).click();
+    expect(api.reorderApprovalFlows).toHaveBeenCalledTimes(1);
+    m.unmount();
+    window.innerWidth = 1024;
+    window.dispatchEvent(new Event('resize'));
+  });
+
+  it('a drop from another target group is ignored', async () => {
+    const w = await mountTab([flow('a', 12, 1), flow('b', 13, 1)]);
+    await w.find('[data-testid="flow-card-a"]').trigger('dragstart');
+    await w.find('[data-testid="flow-card-b"]').trigger('drop');
+    expect(api.reorderApprovalFlows).not.toHaveBeenCalled();
+    w.unmount();
+  });
+
+  it('a reorder 400 shows the backend message', async () => {
+    const w = await mountTab([flow('a', 12, 1), flow('b', 12, 2)]);
+    api.reorderApprovalFlows.mockRejectedValue({ status: 400, errors: { keys: ['必須剛好列出這個目標狀態上的全部流程'] } });
+    await w.find('[data-testid="flow-down-a"]').trigger('click');
+    await flushPromises();
+    notified('必須剛好列出這個目標狀態上的全部流程');
+    w.unmount();
+  });
+
+  it('buttons carry the flow name in their aria-label', async () => {
+    const w = await mountTab([flow('a', 12, 1), flow('b', 12, 2)]);
+    expect(w.find('[data-testid="flow-down-a"]').attributes('aria-label')).toContain('流程a');
+    expect(w.find('[data-testid="flow-delete-b"]').attributes('aria-label')).toContain('流程b');
+    w.unmount();
+  });
+
+  it('deactivate confirm reads without the pending sentence when none are running', async () => {
+    const w = await mountTab([flow('a', 12, 1)]);
+    await w.find('[data-testid="flow-active-a"]').trigger('click');
+    await flushPromises();
+    expect(body('flow-off-confirm-text')!.textContent).toBe('停用後，之後送出的單不再比對這個流程。');
+    w.unmount();
+  });
+
   it('read-only designer sees no toggles or actions', async () => {
     const w = await mountTab([flow('a', 12, 1), flow('b', 12, 2)], { edit: false });
     expect(w.find('[data-testid="flow-card-a"]').exists()).toBe(true);
@@ -195,6 +257,16 @@ describe('ApprovalFlowsTab', () => {
   it('module without workflow shows the create-workflow hint', async () => {
     const w = await mountTab([], { workflow: null });
     expect(w.find('[data-testid="flows-no-workflow"]').text()).toContain('先到「狀態機」分頁建立');
+    w.unmount();
+  });
+
+  it('focusTarget on a state with no saved entry and no flow still shows and highlights its group', async () => {
+    const w = await mountTab([flow('a', 12, 1)], { focusTarget: 13 });
+    const g = w.find('[data-testid="flow-group-13"]');
+    expect(g.exists()).toBe(true);
+    expect(g.classes()).toContain('flow-group--focus');
+    expect(g.text()).toContain('這個狀態還沒有流程');
+    expect(w.find('[data-testid="flow-draft-13"]').exists()).toBe(true);
     w.unmount();
   });
 

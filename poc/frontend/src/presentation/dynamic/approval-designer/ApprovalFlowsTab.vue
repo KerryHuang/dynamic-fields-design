@@ -41,7 +41,7 @@ const optionLabel = (id: number) => {
   const o = statusField.value?.options.find((x) => x.id === id);
   return o ? resolveI18n(o.label, locale.value) : String(id);
 };
-const groups = computed(() => groupFlows(flows.data.value ?? [], workflow.data.value ?? undefined, optionLabel));
+const groups = computed(() => groupFlows(flows.data.value ?? [], workflow.data.value ?? undefined, optionLabel, props.focusTarget));
 const summary = (f: ApprovalFlow) => conditionSummary(f.definition.when, fields.value, t, locale.value);
 
 function fail(e: unknown) {
@@ -71,7 +71,8 @@ function confirmOff() {
 
 // ---- order ----
 function applyOrder(toOptionId: number, keys: string[] | null) {
-  if (!keys || readonly.value) return;
+  // The list is the cached order until the reorder and its refetch finish; a second move now would be computed from stale keys.
+  if (!keys || readonly.value || busy.value) return;
   reorder.mutate({ toOptionId, keys }, {
     onSuccess: () => $q.notify({ type: 'positive', message: t('approval.designer.list.reordered') }),
     onError: fail,
@@ -106,10 +107,13 @@ watch(() => props.focusTarget, async (id) => {
   timer = setTimeout(() => { highlighted.value = null; }, 2500);
 }, { immediate: true });
 
+const nameOf = (f: ApprovalFlow) => resolveI18n(f.name, locale.value);
 const actionsOf = (list: ApprovalFlow[], f: ApprovalFlow, i: number) => [
-  { label: t('approval.designer.list.moveUp'), run: () => move(f.toOptionId, list, f, -1), disable: i === 0, testid: `flow-up-${f.key}` },
-  { label: t('approval.designer.list.moveDown'), run: () => move(f.toOptionId, list, f, 1), disable: i === list.length - 1, testid: `flow-down-${f.key}` },
-  ...(f.used ? [] : [{ label: t('approval.designer.list.delete'), run: () => { confirmingDelete.value = f; }, negative: true, testid: `flow-delete-${f.key}` }]),
+  { label: t('approval.designer.list.moveUp'), run: () => move(f.toOptionId, list, f, -1), disable: busy.value || i === 0, testid: `flow-up-${f.key}` },
+  { label: t('approval.designer.list.moveDown'), run: () => move(f.toOptionId, list, f, 1), disable: busy.value || i === list.length - 1, testid: `flow-down-${f.key}` },
+  f.used
+    ? { label: t('approval.designer.list.usedMenu'), run: () => {}, disable: true, testid: `flow-used-${f.key}` }
+    : { label: t('approval.designer.list.delete'), run: () => { confirmingDelete.value = f; }, disable: busy.value, negative: true, testid: `flow-delete-${f.key}` },
 ];
 </script>
 
@@ -127,21 +131,22 @@ const actionsOf = (list: ApprovalFlow[], f: ApprovalFlow, i: number) => [
     >
       <div class="text-subtitle1 text-weight-medium">{{ g.label }}</div>
       <div v-if="g.entries.length" class="text-caption text-muted" :data-testid="`flow-entries-${g.toOptionId}`">
-        {{ t('approval.designer.list.entries', { entries: g.entries.join('、') }) }}
+        {{ t('approval.designer.list.entries', { entries: joinList(g.entries, locale) }) }}
       </div>
       <div v-else-if="g.flows.length" class="text-caption text-warning" :data-testid="`flow-no-entry-${g.toOptionId}`">{{ t('approval.designer.list.noEntryWarning') }}</div>
+      <div v-if="g.requested" class="text-caption text-warning" :data-testid="`flow-draft-${g.toOptionId}`">{{ t('approval.designer.list.draftTarget') }}</div>
       <div v-if="!g.flows.length" class="text-caption text-muted q-mt-xs">{{ t('approval.designer.list.noFlows') }}</div>
 
       <q-card
         v-for="(f, i) in g.flows" :key="f.key" flat bordered class="q-mt-sm q-pa-sm" :class="{ 'flow-card--off': !f.active }" :data-testid="`flow-card-${f.key}`"
-        :draggable="!mobile && !readonly && g.flows.length > 1" @dragstart="dragging = { key: f.key, toOptionId: g.toOptionId }"
+        :draggable="!mobile && !readonly && !busy && g.flows.length > 1" @dragstart="dragging = { key: f.key, toOptionId: g.toOptionId }"
         @dragover.prevent @drop.prevent="onDrop(g.toOptionId, g.flows, f)" @dragend="dragging = null"
       >
         <div class="row items-start no-wrap q-gutter-x-sm">
           <div class="col" style="min-width: 0">
             <div class="text-body1 ellipsis-2-lines">{{ resolveI18n(f.name, locale) }}</div>
             <div class="text-caption text-muted">{{ f.key }}</div>
-            <div class="text-caption q-mt-xs">{{ t('approval.designer.list.condition') }}：{{ summary(f) }}</div>
+            <div class="text-caption q-mt-xs" style="overflow-wrap: anywhere">{{ t('approval.designer.list.condition') }}：{{ summary(f) }}</div>
             <div class="row q-gutter-xs q-mt-xs">
               <q-badge outline color="primary" :label="t('approval.designer.list.stages', { n: f.definition.stages.length })" />
               <q-badge outline color="primary" :label="t('approval.designer.list.version', { v: f.version })" />
@@ -154,12 +159,12 @@ const actionsOf = (list: ApprovalFlow[], f: ApprovalFlow, i: number) => [
               :model-value="f.active" :disable="busy" :aria-label="`${t('approval.designer.list.active')} ${resolveI18n(f.name, locale)}`"
               :data-testid="`flow-active-${f.key}`" @update:model-value="(v: boolean) => onToggle(f, v)"
             />
-            <RowActionMenu v-if="mobile" :actions="actionsOf(g.flows, f, i)" :testid="`flow-menu-${f.key}`" />
+            <RowActionMenu v-if="mobile" :actions="actionsOf(g.flows, f, i)" :testid="`flow-menu-${f.key}`" :aria-label="`${t('common.moreActions')} ${nameOf(f)}`" />
             <div v-else class="row no-wrap items-center">
-              <q-btn flat dense round icon="arrow_upward" :aria-label="t('approval.designer.list.moveUp')" :disable="busy || i === 0" :data-testid="`flow-up-${f.key}`" @click="move(g.toOptionId, g.flows, f, -1)" />
-              <q-btn flat dense round icon="arrow_downward" :aria-label="t('approval.designer.list.moveDown')" :disable="busy || i === g.flows.length - 1" :data-testid="`flow-down-${f.key}`" @click="move(g.toOptionId, g.flows, f, 1)" />
+              <q-btn flat dense round icon="arrow_upward" :aria-label="`${t('approval.designer.list.moveUp')} ${nameOf(f)}`" :disable="busy || i === 0" :data-testid="`flow-up-${f.key}`" @click="move(g.toOptionId, g.flows, f, -1)" />
+              <q-btn flat dense round icon="arrow_downward" :aria-label="`${t('approval.designer.list.moveDown')} ${nameOf(f)}`" :disable="busy || i === g.flows.length - 1" :data-testid="`flow-down-${f.key}`" @click="move(g.toOptionId, g.flows, f, 1)" />
               <q-btn
-                v-if="!f.used" flat dense round icon="delete" color="negative" :aria-label="t('approval.designer.list.delete')" :disable="busy"
+                v-if="!f.used" flat dense round icon="delete" color="negative" :aria-label="`${t('approval.designer.list.delete')} ${nameOf(f)}`" :disable="busy"
                 :data-testid="`flow-delete-${f.key}`" @click="confirmingDelete = f"
               />
               <q-icon v-else name="lock" size="xs" class="q-mx-sm text-muted" :title="t('approval.designer.list.usedNoDelete')" :aria-label="t('approval.designer.list.usedNoDelete')" role="img" :data-testid="`flow-used-${f.key}`" />
@@ -171,7 +176,7 @@ const actionsOf = (list: ApprovalFlow[], f: ApprovalFlow, i: number) => [
 
     <q-dialog :model-value="confirmingOff !== null" @update:model-value="confirmingOff = null">
       <q-card>
-        <q-card-section data-testid="flow-off-confirm-text">{{ t('approval.designer.list.deactivateConfirm', { n: confirmingOff?.pendingCount ?? 0 }) }}</q-card-section>
+        <q-card-section data-testid="flow-off-confirm-text">{{ confirmingOff?.pendingCount ? t('approval.designer.list.deactivateConfirm', { n: confirmingOff.pendingCount }) : t('approval.designer.list.deactivateConfirmNone') }}</q-card-section>
         <q-card-actions align="right">
           <q-btn v-close-popup flat :label="t('dynamic.cancel')" />
           <q-btn color="negative" :label="t('approval.designer.list.deactivate')" data-testid="flow-off-confirm" @click="confirmOff" />

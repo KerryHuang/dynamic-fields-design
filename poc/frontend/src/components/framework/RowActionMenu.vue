@@ -9,12 +9,12 @@ export interface RowAction {
   negative?: boolean;
   testid?: string;
 }
-defineProps<{ actions: RowAction[]; testid?: string }>();
+defineProps<{ actions: RowAction[]; testid?: string; ariaLabel?: string }>();
 const { t } = useI18n();
 </script>
 
 <template>
-  <q-btn flat round dense icon="more_vert" :aria-label="t('common.moreActions')" :data-testid="testid" @click.stop>
+  <q-btn flat round dense icon="more_vert" :aria-label="ariaLabel ?? t('common.moreActions')" :data-testid="testid" @click.stop>
     <q-menu>
       <q-list dense>
         <q-item

@@ -32,9 +32,19 @@ describe('useRecipientNames', () => {
     h.w.unmount();
   });
 
-  it('names and ready stay unset until both lists load', async () => {
+  it('names and ready stay unset when one list fails', async () => {
     api.getUsers.mockResolvedValue([{ userId: 'u1', displayName: '王小明' }] as never);
     api.getGroups.mockRejectedValue(new Error('boom'));
+    const h = run();
+    await flushPromises();
+    expect(h.r.ready.value).toBe(false);
+    expect(h.r.names.value).toBeUndefined();
+    h.w.unmount();
+  });
+
+  it('ready is false while the lists are still loading', async () => {
+    api.getUsers.mockReturnValue(new Promise(() => {}));
+    api.getGroups.mockResolvedValue([]);
     const h = run();
     await flushPromises();
     expect(h.r.ready.value).toBe(false);

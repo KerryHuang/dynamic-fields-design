@@ -23,7 +23,7 @@ const mod: ModuleDetail = {
   blocks: [{ id: 1, label: { 'zh-TW': 'b' }, sequence: 1, collapsed: false, columns: 2, fields: [userField] }],
 };
 
-interface Opts { allowed?: ApproverSourceKind[]; limits?: ApproverLimits; saved?: ApproverSource | null; users?: 'pending' | 'ok'; groups?: 'ok' | 'fail' }
+interface Opts { fallback?: boolean; allowed?: ApproverSourceKind[]; limits?: ApproverLimits; saved?: ApproverSource | null; users?: 'pending' | 'ok'; groups?: 'ok' | 'fail' }
 async function mountEditor(modelValue: ApproverSource, o: Opts = {}) {
   if (o.users === 'pending') api.getUsers.mockReturnValue(new Promise(() => {}));
   else api.getUsers.mockResolvedValue([{ userId: 'u1', displayName: '王小明' }] as never);
@@ -32,7 +32,7 @@ async function mountEditor(modelValue: ApproverSource, o: Opts = {}) {
   const i18n = createI18n({ legacy: false, locale: 'zh-TW', messages: { 'zh-TW': zhTW } });
   const w = mount(ApproverSourceEditor, {
     attachTo: document.body,
-    props: { modelValue, module: mod, allowed: o.allowed ?? ALL_SOURCE_KINDS, limits: o.limits ?? { maxApprovers: 5, techMaxApprovers: 50, maxManagerLevel: 3 }, saved: o.saved, label: '來源' },
+    props: { modelValue, module: mod, allowed: o.allowed ?? ALL_SOURCE_KINDS, limits: o.limits ?? { maxApprovers: 5, techMaxApprovers: 50, maxManagerLevel: 3 }, saved: o.saved, label: '來源', fallback: o.fallback },
     global: { plugins: [[quasar.Quasar, { components: quasar, directives: quasar }], createPinia(), i18n,
       [VueQueryPlugin, { queryClient: new QueryClient({ defaultOptions: { queries: { retry: false } } }) }]] },
   });
@@ -87,11 +87,28 @@ describe('ApproverSourceEditor', () => {
   });
 
   it('fallback mode offers only users, group and manager with the fallback hint', async () => {
-    const w = await mountEditor({ source: 'users', userIds: [] }, { allowed: FALLBACK_SOURCE_KINDS });
+    const w = await mountEditor({ source: 'users', userIds: [] }, { allowed: FALLBACK_SOURCE_KINDS, fallback: true });
     expect((select(w, 0).props('options') as { value: string }[]).map((o) => o.value)).toEqual(['users', 'group', 'manager']);
     expect(w.find('[data-testid="source-hint"]').text()).toContain('備援簽核人頂替找不到人的來源時');
     expect(w.find('[data-testid="source-hint"]').text()).toContain('50 位');
     w.unmount();
+  });
+
+  it('a stage with only three allowed sources does not turn into the fallback hint without the fallback prop', async () => {
+    const w = await mountEditor({ source: 'group', groupIds: [3] }, { allowed: FALLBACK_SOURCE_KINDS });
+    expect(w.find('[data-testid="source-hint"]').text()).toContain('每一關啟動時');
+    w.unmount();
+  });
+
+  it('only the list the source needs is requested', async () => {
+    const m = await mountEditor({ source: 'manager', level: 1 });
+    expect(api.getUsers).not.toHaveBeenCalled();
+    expect(api.getGroups).not.toHaveBeenCalled();
+    m.unmount();
+    const u = await mountEditor({ source: 'users', userIds: [] });
+    expect(api.getUsers).toHaveBeenCalled();
+    expect(api.getGroups).not.toHaveBeenCalled();
+    u.unmount();
   });
 
   it('no hint number is invented when the policy cannot be read', async () => {

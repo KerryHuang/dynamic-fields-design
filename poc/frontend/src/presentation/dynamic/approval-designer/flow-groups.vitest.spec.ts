@@ -31,6 +31,13 @@ describe('groupFlows', () => {
     expect(g.map((x) => x.toOptionId)).toEqual([12]);
     expect(g[0]!.flows).toEqual([]);
   });
+  it('extraTarget lists a state with no saved entry and no flow, marked as requested', () => {
+    const g = groupFlows([], wf, label, 13);
+    expect(g.map((x) => [x.toOptionId, x.requested])).toEqual([[12, false], [13, true]]);
+    expect(g[1]!.flows).toEqual([]);
+    expect(groupFlows([], wf, label, 77).map((x) => x.toOptionId)).toEqual([12, 77]);
+    expect(groupFlows([flow('b', 13, 1)], wf, label, 13).find((x) => x.toOptionId === 13)!.requested).toBe(false);
+  });
   it('without a workflow, flows still group by target', () => {
     expect(groupFlows([flow('a', 5, 1)], undefined, label).map((x) => x.toOptionId)).toEqual([5]);
   });

@@ -8,15 +8,19 @@ export interface FlowGroup {
   entries: string[];
   hasApprovalEntry: boolean;
   flows: ApprovalFlow[];
+  /** Listed only because the caller asked for it (focus target from an unsaved state machine draft), not because of a saved entry or flow. */
+  requested: boolean;
 }
 
 /**
  * Flows grouped by target state, in the workflow's state order (targets the workflow no longer lists come last), each group by priority.
- * A state with an approval entry but no flow yet still gets a group, so the designer sees what is missing.
+ * A state with an approval entry but no flow yet still gets a group, so the designer sees what is missing;
+ * `extraTarget` (the state the designer came from, whose approval entry is still an unsaved draft) gets one too.
  */
-export function groupFlows(flows: ApprovalFlow[], workflow: Workflow | undefined, labelOf: (optionId: number) => string): FlowGroup[] {
+export function groupFlows(flows: ApprovalFlow[], workflow: Workflow | undefined, labelOf: (optionId: number) => string, extraTarget?: number | null): FlowGroup[] {
   const order = (workflow?.states ?? []).map((s) => s.optionId);
   const targets = [...new Set([...order, ...flows.map((f) => f.toOptionId)])];
+  if (extraTarget != null && !targets.includes(extraTarget)) targets.push(extraTarget);
   const rank = (id: number) => { const i = order.indexOf(id); return i < 0 ? order.length : i; };
   return targets
     .map((toOptionId) => {
@@ -24,10 +28,11 @@ export function groupFlows(flows: ApprovalFlow[], workflow: Workflow | undefined
         .map((tr) => `${labelOf(tr.from)} → ${labelOf(tr.to)}`);
       return {
         toOptionId, label: labelOf(toOptionId), entries, hasApprovalEntry: entries.length > 0,
-        flows: flows.filter((f) => f.toOptionId === toOptionId).sort((a, b) => a.priority - b.priority),
+        flows: flows.filter((f) => f.toOptionId === toOptionId).sort((a, b) => a.priority - b.priority), requested: false,
       };
     })
-    .filter((g) => g.flows.length > 0 || g.hasApprovalEntry)
+    .map((g) => (g.flows.length > 0 || g.hasApprovalEntry ? g : { ...g, requested: g.toOptionId === extraTarget }))
+    .filter((g) => g.flows.length > 0 || g.hasApprovalEntry || g.requested)
     .sort((a, b) => rank(a.toOptionId) - rank(b.toOptionId));
 }
 

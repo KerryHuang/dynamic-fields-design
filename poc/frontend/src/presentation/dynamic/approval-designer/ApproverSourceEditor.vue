@@ -6,7 +6,7 @@ import type { ApproverSource, ApproverSourceKind } from 'src/domain/dynamic/appr
 import { resolveI18n } from 'src/domain/dynamic/i18n-text';
 import type { ModuleDetail } from 'src/domain/dynamic/types';
 import { toSchemaFields } from 'src/presentation/dynamic/designer/schema-fields';
-import { defaultSourceOf, FALLBACK_SOURCE_KINDS, hintOf, levelOptions, type ApproverLimits } from './approver-source';
+import { defaultSourceOf, hintOf, levelOptions, type ApproverLimits } from './approver-source';
 
 const props = defineProps<{
   modelValue: ApproverSource;
@@ -18,12 +18,15 @@ const props = defineProps<{
   error?: string;
   label: string;
   disable?: boolean;
+  /** Editing a flow's fallback approvers (shows the fallback hint) rather than a stage's source. */
+  fallback?: boolean;
 }>();
 const emit = defineEmits<{ 'update:modelValue': [value: ApproverSource] }>();
 const { t, locale } = useI18n();
 
-const users = useUsers();
-const groups = useGroups();
+// Only the list the current source needs is requested (both are cached, a switch of source fetches the other on demand).
+const users = useUsers({ enabled: () => props.modelValue.source === 'users' });
+const groups = useGroups({ enabled: () => props.modelValue.source !== 'users' && props.modelValue.source !== 'manager' });
 
 type Opt = { value: string | number; label: string };
 // Selected items missing from the list: raw code until that list has loaded, "not found or inactive" after (a failed list never claims it).
@@ -44,10 +47,9 @@ const shown = (opts: Opt[]) => { const q = filter.value.trim().toLowerCase(); re
 function onFilter(v: string, update: (fn: () => void) => void) { update(() => { filter.value = v; }); }
 
 const kindOptions = computed(() => props.allowed.map((k) => ({ value: k, label: t(`approval.designer.source.kind.${k}`) })));
-const isFallback = computed(() => props.allowed.length === FALLBACK_SOURCE_KINDS.length && FALLBACK_SOURCE_KINDS.every((k) => props.allowed.includes(k)));
-const hint = computed(() => hintOf(props.modelValue.source, props.limits, t, isFallback.value));
+const hint = computed(() => hintOf(props.modelValue.source, props.limits, t, props.fallback));
 const levels = computed(() => levelOptions(props.limits.maxManagerLevel, props.saved?.source === 'manager' ? props.saved.level : undefined)
-  .map((o) => ({ value: o.value, label: o.legacy ? `${t('approval.designer.source.levelOption', { n: o.value })}（${t('approval.designer.source.legacy')}）` : t('approval.designer.source.levelOption', { n: o.value }) })));
+  .map((o) => ({ value: o.value, label: t(o.legacy ? 'approval.designer.source.levelOptionLegacy' : 'approval.designer.source.levelOption', { n: o.value }) })));
 
 const set = (patch: Partial<ApproverSource>) => emit('update:modelValue', { ...props.modelValue, ...patch });
 const setKind = (k: ApproverSourceKind) => { if (k !== props.modelValue.source) emit('update:modelValue', defaultSourceOf(k)); };
