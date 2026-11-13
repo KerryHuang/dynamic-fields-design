@@ -183,13 +183,20 @@ describe('WorkflowTab', () => {
       expect(w.find('[data-testid="transition-direct-warning-0"]').text()).toBe('條件都不符合的單據會直接轉移，不經任何人同意');
     });
 
-    it('flow count shows N flows on the target as plain text', async () => {
+    it('flow count is a button that asks to open the flows tab for the target state', async () => {
       const withApproval: Workflow = { ...saved, transitions: [{ from: 11, to: 12, groupIds: [3], approval: { required: true, noMatch: 'block' } }] };
       const w = await mountTab(mod(), withApproval, [flowOn(12, 'a'), flowOn(12, 'b'), flowOn(11, 'c')]);
       const count = w.find('[data-testid="transition-flows-0"]');
       expect(count.text()).toContain('目標狀態已掛 2 個流程');
-      expect(count.element.tagName).not.toBe('BUTTON');
-      expect(w.emitted('open-flows')).toBeUndefined();
+      expect(count.element.tagName).toBe('BUTTON');
+      await count.trigger('click');
+      expect(w.emitted('open-flows')).toEqual([[12]]);
+    });
+
+    it('the no-flow reason points to the flows tab', async () => {
+      const withApproval: Workflow = { ...saved, transitions: [{ from: 11, to: 12, groupIds: [3], approval: { required: true, noMatch: 'block' } }] };
+      const w = await mountTab(mod(), withApproval, []);
+      expect(w.find('[data-testid="workflow-no-flow"]').text()).toContain('「簽核流程」分頁');
     });
 
     it('save disabled while an approval transition targets a state with no flow, with the reason', async () => {

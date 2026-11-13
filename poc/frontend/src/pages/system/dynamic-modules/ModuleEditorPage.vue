@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { useQueryClient } from '@tanstack/vue-query';
 import { useQuasar } from 'quasar';
-import { computed, ref, watch } from 'vue';
+import { computed, nextTick, ref, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { useRoute, useRouter } from 'vue-router';
 import { useDesignerMutation, useModuleDetail } from 'src/application/dynamic/queries/modules-queries';
@@ -23,6 +23,7 @@ import ModulePoliciesTab from 'src/presentation/policies/ModulePoliciesTab.vue';
 import PreviewTab from 'src/presentation/dynamic/designer/PreviewTab.vue';
 import PermissionsTab from 'src/presentation/dynamic/permissions/PermissionsTab.vue';
 import PrintTab from 'src/presentation/dynamic/print/PrintTab.vue';
+import ApprovalFlowsTab from 'src/presentation/dynamic/approval-designer/ApprovalFlowsTab.vue';
 import WorkflowTab from 'src/presentation/dynamic/workflow/WorkflowTab.vue';
 import { dynamicApi } from 'src/services/api/dynamic-api';
 import RowActionMenu from 'src/components/framework/RowActionMenu.vue';
@@ -38,7 +39,17 @@ const router = useRouter();
 const qc = useQueryClient();
 const { data: useMeData } = useMe();
 const moduleKey = computed(() => String(route.params.moduleKey));
-const tab = ref<'fields' | 'rules' | 'taskRules' | 'policies' | 'workflow' | 'events' | 'checks' | 'ledger' | 'print' | 'permissions' | 'preview'>('fields');
+// Detail and extension modules have no workflow, so no approval flows either.
+const hasApprovalFlows = computed(() => !!mod.value && !mod.value.detailOf && mod.value.kind !== 'extension');
+// The state machine tab sends the target state to focus; reset first so asking for the same state again re-triggers the highlight.
+const flowsTarget = ref<number | null>(null);
+async function openFlows(toOptionId: number) {
+  flowsTarget.value = null;
+  tab.value = 'approvalFlows';
+  await nextTick();
+  flowsTarget.value = toOptionId;
+}
+const tab = ref<'fields' | 'rules' | 'taskRules' | 'policies' | 'workflow' | 'approvalFlows' | 'events' | 'checks' | 'ledger' | 'print' | 'permissions' | 'preview'>('fields');
 // 連動事件、跨記錄驗證、分錄都是設計器端點（DYN00000）：沒有設計器讀取權限就不放入口
 const showEventsLedger = computed(() => !!useMeData.value?.designer.read);
 const query = useModuleDetail(moduleKey);
@@ -282,6 +293,7 @@ function saveSection() {
         <q-tab v-if="!mod?.detailOf" name="taskRules" :label="t('taskRules.tab')" data-testid="tab-task-rules" />
         <q-tab v-if="!mod?.detailOf" name="policies" :label="t('policies.moduleTab')" data-testid="tab-policies" />
         <q-tab name="workflow" :label="t('docflow.workflow.tab')" data-testid="tab-workflow" />
+        <q-tab v-if="hasApprovalFlows" name="approvalFlows" :label="t('approval.designer.tab')" data-testid="tab-approval-flows" />
         <q-tab v-if="showEventsLedger" name="events" :label="t('events.tab')" data-testid="tab-events" />
         <q-tab v-if="showEventsLedger" name="checks" :label="t('checks.tab')" data-testid="tab-checks" />
         <q-tab v-if="showEventsLedger" name="ledger" :label="t('ledger.tab')" data-testid="tab-ledger" />
@@ -381,7 +393,10 @@ function saveSection() {
           <ModulePoliciesTab v-if="mod" :module="mod" />
         </q-tab-panel>
         <q-tab-panel name="workflow" class="q-pa-none">
-          <WorkflowTab :module="mod" />
+          <WorkflowTab :module="mod" @open-flows="openFlows" />
+        </q-tab-panel>
+        <q-tab-panel v-if="hasApprovalFlows" name="approvalFlows" class="q-pa-none">
+          <ApprovalFlowsTab :module="mod" :focus-target="flowsTarget" />
         </q-tab-panel>
         <q-tab-panel name="events" class="q-pa-none">
           <EventsTab :module="mod" />

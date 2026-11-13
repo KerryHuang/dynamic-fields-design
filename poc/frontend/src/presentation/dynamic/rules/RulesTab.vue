@@ -5,13 +5,13 @@ import { computed, ref, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { useMe } from 'src/application/dynamic/queries/permissions-queries';
 import { useRulesQuery, useSaveRulesMutation } from 'src/application/dynamic/queries/rules-queries';
-import { isConditionGroup } from 'src/domain/dynamic/condition';
 import { resolveI18n } from 'src/domain/dynamic/i18n-text';
-import type { ConditionNode, ModuleDetail, Rule, SchemaField } from 'src/domain/dynamic/types';
+import type { ConditionNode, ModuleDetail, Rule } from 'src/domain/dynamic/types';
 import { leftoverMessages } from 'src/presentation/dynamic/designer/api-error';
 import { toSchemaFields } from 'src/presentation/dynamic/designer/schema-fields';
 import type { ApiError } from 'src/services/api/http';
 import RuleEditorDialog from './RuleEditorDialog.vue';
+import { conditionSummary } from './condition-summary';
 import { joinList } from 'src/i18n/translate';
 
 const MAX_RULES = 100;
@@ -74,23 +74,7 @@ function onSave(rule: Rule) {
 const fieldById = (id: number) => fields.value.find((f) => f.id === id);
 const fieldLabel = (id: number) => { const f = fieldById(id); return f ? resolveI18n(f.label, locale.value) : `#${id}`; };
 
-function valueText(f: SchemaField | undefined, v: unknown): string {
-  if (typeof v === 'object' && v !== null && !Array.isArray(v) && 'fieldRef' in v) return fieldLabel((v as { fieldRef: number }).fieldRef);
-  if (Array.isArray(v)) return v.map((x) => valueText(f, x)).join(', ');
-  const opt = f?.options.find((o) => o.value === v);
-  return opt ? resolveI18n(opt.label, locale.value) : String(v);
-}
-function summary(n: ConditionNode): string {
-  if (isConditionGroup(n)) {
-    const kids = ('all' in n ? n.all : n.any);
-    const joined = kids.map((c) => (isConditionGroup(c) ? `(${summary(c)})` : summary(c)))
-      .join(` ${t('all' in n ? 'designer.rules.and' : 'designer.rules.or')} `);
-    return joined || t('designer.rules.always');
-  }
-  const f = fieldById(n.field);
-  const op = t(f?.type === 'multienum' && (n.op === 'in' || n.op === 'notIn') ? `dynamic.op.multienum.${n.op}` : `dynamic.op.${n.op}`);
-  return [fieldLabel(n.field), op, n.value === undefined ? '' : valueText(f, n.value)].filter(Boolean).join(' ');
-}
+const summary = (n: ConditionNode) => conditionSummary(n, fields.value, t, locale.value);
 function targetText(target: string): string {
   if (target === '*') return t('designer.rules.targetRecord');
   const [type, id] = [target.split(':')[0], Number(target.split(':')[1])];

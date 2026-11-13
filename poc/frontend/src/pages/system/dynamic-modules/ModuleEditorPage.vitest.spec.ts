@@ -10,11 +10,13 @@ import type { ModuleDetail } from 'src/domain/dynamic/types';
 import zhTW from 'src/i18n/zh-TW.json';
 import IconSelect from 'src/presentation/dynamic/designer/IconSelect.vue';
 import { dynamicApi } from 'src/services/api/dynamic-api';
+import ApprovalFlowsTab from 'src/presentation/dynamic/approval-designer/ApprovalFlowsTab.vue';
+import WorkflowTab from 'src/presentation/dynamic/workflow/WorkflowTab.vue';
 import FieldEditorDialog from 'src/presentation/dynamic/designer/FieldEditorDialog.vue';
 import ModuleEditorPage from './ModuleEditorPage.vue';
 
 vi.mock('src/services/api/dynamic-api', () => ({ dynamicApi: { getModule: vi.fn(), updateModule: vi.fn(), entities: vi.fn(), getPreviewSchema: vi.fn(), exportTemplate: vi.fn(), deleteCheck: vi.fn(), deleteTarget: vi.fn(), getMe: vi.fn(),
-  getEvents: vi.fn(), getChecks: vi.fn(), getLedger: vi.fn(), getWorkflow: vi.fn(), getModules: vi.fn(), getModulePolicies: vi.fn(), saveModulePolicy: vi.fn() } }));
+  getEvents: vi.fn(), getChecks: vi.fn(), getLedger: vi.fn(), getWorkflow: vi.fn(), getApprovalFlows: vi.fn(), getModules: vi.fn(), getModulePolicies: vi.fn(), saveModulePolicy: vi.fn() } }));
 const api = vi.mocked(dynamicApi);
 
 const detail: ModuleDetail = {
@@ -54,6 +56,30 @@ describe('ModuleEditorPage', () => {
     const w2 = await mountPage({ ...detail, detailOf: 'parent' });
     expect(w2.find('[data-testid="tab-policies"]').exists()).toBe(false);
     w2.unmount();
+  });
+
+  it('approval flows tab hidden for detail and extension modules', async () => {
+    const w = await mountPage();
+    expect(w.find('[data-testid="tab-approval-flows"]').exists()).toBe(true);
+    w.unmount();
+    const d = await mountPage({ ...detail, detailOf: 'parent' });
+    expect(d.find('[data-testid="tab-approval-flows"]').exists()).toBe(false);
+    d.unmount();
+    const e = await mountPage({ ...detail, kind: 'extension' });
+    expect(e.find('[data-testid="tab-approval-flows"]').exists()).toBe(false);
+    e.unmount();
+  });
+
+  it('workflow open-flows switches to the approval flows tab and passes the target', async () => {
+    api.getApprovalFlows.mockResolvedValue([]);
+    const w = await mountPage();
+    await w.find('[data-testid="tab-workflow"]').trigger('click');
+    await flushPromises();
+    w.findComponent(WorkflowTab).vm.$emit('open-flows', 12);
+    await flushPromises();
+    expect(w.findComponent(ApprovalFlowsTab).exists()).toBe(true);
+    expect(w.findComponent(ApprovalFlowsTab).props('focusTarget')).toBe(12);
+    w.unmount();
   });
 
   it('picking an icon saves it and keeps the other module settings', async () => {

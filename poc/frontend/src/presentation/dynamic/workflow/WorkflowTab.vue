@@ -17,6 +17,7 @@ import { fieldOptions } from 'src/presentation/dynamic/designer/field-options';
 import type { ApiError } from 'src/services/api/http';
 
 const props = defineProps<{ module: ModuleDetail }>();
+const emit = defineEmits<{ 'open-flows': [toOptionId: number] }>();
 const { t, locale } = useI18n();
 const $q = useQuasar();
 // Phone width swaps the state table and the transition rows for cards: five columns do not fit 390px.
@@ -345,7 +346,10 @@ function removeWorkflow() {
                   @update:model-value="(v: 'block' | 'direct') => setNoMatch(i, v)"
                 />
                 <div v-if="tr.to != null && flowCount(tr.to) !== undefined" class="col-12 col-sm-auto">
-                  <span class="text-caption text-muted" :data-testid="`transition-flows-${i}`">{{ t('docflow.workflow.approval.flowCount', { n: flowCount(tr.to) }) }}</span>
+                  <q-btn
+                    flat dense no-caps size="sm" color="primary" :label="t('docflow.workflow.approval.flowCount', { n: flowCount(tr.to) })"
+                    :data-testid="`transition-flows-${i}`" @click="emit('open-flows', tr.to!)"
+                  />
                 </div>
               </template>
             </div>
