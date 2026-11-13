@@ -10,7 +10,7 @@ namespace DynamicModules.WebAPITests.Dynamic;
 
 /// <summary>
 /// 套件格式 8 的簽核流程隨應用程式開啟（簽核設計 §14.4、§17.4 第 1、3 步、§17.5 審查第 1 項）：流程建成版本 1、轉移帶需簽核設定、
-/// 略過的群組由備援頂替並逐條列出、前置檢查與整批回滾。
+/// 略過的群組由備援頂替並逐條列出、前置檢查與整批回滾；以及 a5a1 期間含簽核的應用程式暫時不能匯出（計畫 J9）。
 /// 套件與組織在測試內定義：群組 purchaseLead → 進銷存管理組（ops01）、board → 業務主管（manager01）、buyers → 採購組（buyer01）。
 /// </summary>
 [Trait("Category", "Postgres")]
@@ -357,5 +357,28 @@ public class AppFormat8Tests : IDisposable
         var wf = await JsonOf(await _rig.Admin.GetAsync($"{Base}/modules/{PoKey}/workflow"));
         wf.GetProperty("transitions").EnumerateArray().Select(t => t.TryGetProperty("approval", out var a) ? a.ValueKind : JsonValueKind.Null)
             .Should().OnlyContain(k => k == JsonValueKind.Null);
+    }
+
+    // ---- 匯出（J9：a5a2 完成格式 8 的匯出前，含簽核的應用程式不能匯出） ----
+
+    [Fact]
+    public async Task Export_WithApprovalFlows_409UntilExporterLands()
+    {
+        await ImportOpenAsync();
+        var res = await _rig.Admin.GetAsync($"{SharedMasterRig.Apps}/{AppId}/export");
+        res.StatusCode.Should().Be(HttpStatusCode.Conflict);
+        var body = await res.Content.ReadAsStringAsync();
+        body.Should().Contain("簽核套件測試").And.Contain("簽核流程");
+    }
+
+    [Fact]
+    public async Task Export_WithoutApproval_StillWorks()
+    {
+        await ImportOpenAsync(Package(formatVersion: 7));
+        var (package, _) = await _rig.ExportAsync(AppId);
+        package.GetProperty("formatVersion").GetInt32().Should().Be(8);
+        if (package.TryGetProperty("approvalFlows", out var flows)) flows.EnumerateArray().Should().BeEmpty();
+        JsonNode.Parse(package.GetRawText())!["workflows"]![0]!["transitions"]!.AsArray()
+            .Should().OnlyContain(t => t!["approval"] == null);
     }
 }

@@ -103,6 +103,7 @@ public class ExportAppHandler(IAppRepository apps, AppExporter exporter) : IRequ
         var app = await apps.GetByKeyAsync(request.Key, ct);
         if (app is null) return ServiceResult.NotFound(AppMessages.NotFound);
         var exported = await exporter.ExportAsync(app, ct);
+        if (exported.Errors.Count > 0) return ServiceResult.ConflictWith(exported.Errors[0], new { errors = exported.Errors });
         return ServiceResult.Success(new AppExportResult(new ExportFile(
             $"{app.Key}.app.json", "application/json", JsonSerializer.SerializeToUtf8Bytes(exported.Package, TemplateJson.Options)),
             exported.Warnings));

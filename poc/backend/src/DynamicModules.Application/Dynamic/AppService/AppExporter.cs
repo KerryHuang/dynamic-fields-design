@@ -18,12 +18,16 @@ public sealed partial class AppExporter(
     TemplateExporter templates, IModuleRepository modules, IAppRepository apps, IPermissionRepository permissions,
     IConversionRepository conversions, IReportRepository reports, IPrintTemplateRepository printTemplates,
     IEventRepository events, ICheckRepository checks, ILedgerRepository ledgers, ISharedMasterRepository shared,
-    AppPackageSource packages, ITaskRuleRepository taskRules)
+    AppPackageSource packages, ITaskRuleRepository taskRules, IApprovalFlowRepository approvalFlows)
 {
     [GeneratedRegex("[^a-zA-Z0-9_]")]
     private static partial Regex NotCode();
 
-    public sealed record Exported(AppPackageData Package, List<string> Warnings);
+    /// <summary>Errors 不為空時整份不能匯出（呼叫端回 409），Package 只供內部合併路徑使用。</summary>
+    public sealed record Exported(AppPackageData Package, List<string> Warnings, List<string>? Errors = null)
+    {
+        public List<string> Errors { get; init; } = Errors ?? [];
+    }
 
     /// <summary>
     /// 使用者套件看得到的一個主檔模組（共用主檔 §9）：主檔名下的基本欄位加上本應用程式名下的貢獻（對照列含 /），
@@ -230,7 +234,19 @@ public sealed partial class AppExporter(
             groups, moduleList, fieldAccess, optionScopes, reportList, null, workflows, conversionList, eventList, printList,
             checkList, ledgerList, IntegrationDeclarations.Parse(app.IntegrationsJson), contributions, taskRuleList);
         // groups 在上面各步驟用到才加進 codeOfGroup，最後才組出來
-        return new Exported(package, warnings);
+        return new Exported(package, warnings, isMaster ? null : await ApprovalExportErrorsAsync(app, members, ct));
+    }
+
+    /// <summary>
+    /// a5a1 的暫時限制（計畫 J9）：格式 8 的簽核流程匯出還沒做，照舊匯出會靜默丟掉流程與需簽核設定、寫出「格式 8 卻沒有流程」的檔案，
+    /// 讓 direct 入口在重新匯入後免簽。成員模組有任何流程或需簽核轉移就整份擋下；a5a2 換成真正的匯出時刪除。
+    /// </summary>
+    private async Task<List<string>> ApprovalExportErrorsAsync(App app, List<Module> members, CancellationToken ct)
+    {
+        foreach (var m in members)
+            if (m.Workflow?.Transitions.Any(t => t.Approval is { Required: true }) == true || (await approvalFlows.ListCurrentByModuleAsync(m.Id, ct)).Count > 0)
+                return [AppMessages.ExportBlockedByApproval(app.NameI18n.Resolve(I18nText.FallbackLocale))];
+        return [];
     }
 
     /// <summary>應用程式直接用到的每個主檔模組，各匯出一次（基本欄位＋本應用程式的貢獻，停用的也算）。</summary>

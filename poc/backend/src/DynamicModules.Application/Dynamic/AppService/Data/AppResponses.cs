@@ -101,6 +101,9 @@ public static class AppMessages
 
     public static string FlowFieldExcluded(string field, string flow) => $"excludeFields: 「{field}」是簽核流程「{flow}」需要的欄位，不能排除";
 
+    /// <summary>a5a1 期間的暫時限制（計畫 J9），a5a2 換成真正的格式 8 匯出時刪除。</summary>
+    public static string ExportBlockedByApproval(string app) => $"應用程式「{app}」有簽核流程，匯出要等格式 8 的簽核流程匯出完成";
+
     /// <summary>開啟預覽的頂替警告（繁中），與 <see cref="AppApprovalFlowCodec.Substitution"/> 一一對應。</summary>
     public static string ApprovalSubstituted(AppApprovalFlowCodec.Substitution s)
     {
