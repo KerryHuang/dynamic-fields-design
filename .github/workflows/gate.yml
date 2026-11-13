@@ -67,6 +67,9 @@ jobs:
           restore-keys: nuget-${{ runner.os }}-
       - name: dotnet test
         working-directory: poc/backend
+        # 暫時比照開發機時區：報表 SQL 路徑依主機時區算「今天／本月」，UTC 下 3 條測試失敗（段 tz1 修正後拿掉這行）
+        env:
+          TZ: Asia/Taipei
         run: dotnet test tests/DynamicModules.${{ matrix.project }} --logger "console;verbosity=minimal"
 
   frontend:

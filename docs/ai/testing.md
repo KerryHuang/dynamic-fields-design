@@ -26,14 +26,12 @@ bun run typecheck
 
 改到共用的種子資料、應用程式套件或 i18n 檔，就擴大到 `SeedDataTests`、`AppCatalogChecks`、`locales.vitest.spec.ts`。
 
-## 合併前：完整 gate
+## 合併前：gate（GitHub Actions）
 
-```bash
-bash scripts/unattended/gate.sh <worktree 絕對路徑>
-```
+功能分支推上 GitHub 會跑 `.github/workflows/gate.yml`：後端三個測試專案、前端 test／typecheck／build 分開平行跑，範圍依改動決定（只改文件不跑、只改前端只跑前端、其他全跑）。用 `bash scripts/unattended/ci-wait.sh <sha>` 等結果。
 
-- 依序跑三個後端專案（不平行、不跑 sln），再跑前端 test／typecheck／build；每步印 `exit=`，全部 0 才算過。
-- 一次只跑一個 gate；gate 期間不在同一台機器跑其他測試或 build。
+- 公開 repo：推分支前先跑外洩掃描。
+- 本機完整 gate `bash scripts/unattended/gate.sh <worktree 絕對路徑>` 留作備援；跑的時候同一台機器不跑其他測試或 build。
 - 細節與失敗處理見 `formwright-ship` skill（`.claude/skills/formwright-ship/SKILL.md`）。
 
 ## 異常判讀

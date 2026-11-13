@@ -32,6 +32,7 @@
 | a2d7 | 簽核收件人政策（備援對象、異常通知對象）；總收文件與設計寫回（只驗 SQLite，PostgreSQL 在 pg0 後補驗） | 已上線（2026-11-13，a651b8e6） | [簽核流程](superpowers/specs/2026-11-10-approval-workflow-design.md)、[政策設定](superpowers/specs/2026-11-11-policy-settings-design.md) §9 |
 | a4a | 前端：簽核設計器 | 已上線（2026-11-13，6821b793） | [簽核流程](superpowers/specs/2026-11-10-approval-workflow-design.md) |
 | ci1 | gate 加速：合併前總檢查搬到 GitHub Actions、分路平行；依改動決定範圍（只改文件不跑、只改前端只跑前端、動到後端全跑）；功能分支外洩掃描通過才推（使用者 11-13 裁決） | 未開始 | — |
+| tz1 | 報表「今天、本月」等日期區間與無時區日期時間改用營運時區（Asia/Taipei），不依主機時區；修好後 CI 拿掉 `TZ` 覆寫。ci1 在 UTC 的 GitHub 機器上抓到：SQL 路徑依主機時區計算，Render 也是 UTC | 未開始 | — |
 | a5 | 套件格式 8：簽核流程；接手 CRM 設計案流程：套件內建，刪 `DemoApprovals`；採購單金額門檻的 Demo 在這裡驗收 | 未開始 | [簽核流程](superpowers/specs/2026-11-10-approval-workflow-design.md) |
 | a3 | 轉交、加簽、代理、逾期提醒；個人代理設定、管理員終止與改派、臨時讀取的列印預覽（使用者 11-12 裁決） | 未開始 | [簽核流程](superpowers/specs/2026-11-10-approval-workflow-design.md) |
 | O1 | 維運地基：結構化 log 與 request id、health live／ready、版本端點、前端錯誤收集、背景排程器（o1a、o1b、o1c）；任務「即將到期」提醒改為到期前 N 天內補一次、同一任務只補一次（使用者 2026-11-12 裁決，排進 o1b） | 進行中：o1a（觀測地基）已上線（2026-11-12），o1b、o1c 未開始（使用者裁決排在簽核主線之後） | [維運與觀測](superpowers/specs/2026-11-11-ops-observability-design.md) §9、§10 |
@@ -98,7 +99,7 @@ HRM（階段 4）與階段 5 先用佔位列排序，開工前再切成正式工
 
 設計：[政策設定](superpowers/specs/2026-11-11-policy-settings-design.md)、[維運、觀測與告警派工 agent](superpowers/specs/2026-11-11-ops-observability-design.md)、[MCP server](superpowers/specs/2026-11-11-mcp-server-design.md)。這幾段插在上面第 1 項「任務管理與簽核」的簽核主線中間。
 
-順序：**p1 → o1a → 簽核 a2d1 → a4b → a6 → a2d2–a2d7 → a4a → ci1 → a5 → a3 → o1b、o1c → un1 → pg0 → O2 → p2、p3 → i3、i4 → mcp1（mcp1a → mcp1b）→ O3 → pkg1 → O4–O6**，MCP 後續段 mcp2a → mcp2b → mcp3 → mcp4 依進度與 O4–O6 穿插。
+順序：**p1 → o1a → 簽核 a2d1 → a4b → a6 → a2d2–a2d7 → a4a → ci1 → tz1 → a5 → a3 → o1b、o1c → un1 → pg0 → O2 → p2、p3 → i3、i4 → mcp1（mcp1a → mcp1b）→ O3 → pkg1 → O4–O6**，MCP 後續段 mcp2a → mcp2b → mcp3 → mcp4 依進度與 O4–O6 穿插。
 
 - 使用者裁決（2026-11-11）：p1 → O1 → pg0 → a2d–a6 → O2 → mcp1 → O3…；O1 在 p1 之後、a2d 之前；O2 以後視情況穿插；pg0 在 O1 之後，之後的功能兩種資料庫都驗，其餘 PostgreSQL 改寫排在簽核之後；MCP 地基 mcp1 在簽核與 O2 之後，業務寫入、設計器工具、OAuth 後續分段，維運 O4、O6 直接用 MCP 工具；列表的使用者欄位顯示姓名用小段穿插。
 - 使用者確認（2026-11-12）：p2、p3 排在 O2 之後、mcp1a 之前；O3 → O4 → O5 → O6 的先後；mcp1 之後是 mcp1a → mcp1b → mcp2a → mcp2b → mcp3 → mcp4，mcpO1 隨 O4、mcpO2 隨 O6，mcp4 可視雲端版第一個客戶的需求提前。
@@ -106,6 +107,7 @@ HRM（階段 4）與階段 5 先用佔位列排序，開工前再切成正式工
 - 使用者裁決（2026-11-12）：為了 Demo CRM 設計案，簽核主線提前到 o1a 之後、pg0 之前；簽核先只驗 SQLite，pg0 後補驗
 - 使用者裁決（2026-11-12）：a2d 拆開，a2d1（鎖定寫入）先做，a2d2–a2d7 排在 a4b、a6 之後、a4a 之前；理由：a4b、a6 不依賴附件與整批重算，先讓簽核畫面與 Demo 上線。
 - 使用者裁決（2026-11-13）：a4a 之後、a5 之前插入 ci1（gate 加速），先把總檢查搬到 GitHub Actions，再分析慢測試與不穩定測試。
+- 主控判斷（2026-11-13，待使用者確認）：tz1 緊接 ci1、排在 a5 前；理由：正式 Demo 跑在 UTC，報表日期區間可能差 8 小時，屬正確性問題。
 - 主控判斷（位置）：un1 排在 O1 之後、pg0 之前；pkg1 緊接 O3，不等 O4。
 - 段號命名：MCP 各段一律用 mcp 開頭（mcp1a、mcp1b、mcp2a、mcp2b、mcp3、mcp4、mcpO1、mcpO2），與已上線的多語系 m1（模組選單分區）區隔。
 

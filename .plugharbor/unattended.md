@@ -3,10 +3,11 @@
 有人在場時的上線流程見 `formwright-ship` skill；兩邊步驟改了要一起改。
 
 ## 閘門
-`bash scripts/unattended/gate.sh <worktree>`，用 run_in_background 跑，等通知。
+GitHub Actions（`.github/workflows/gate.yml`）：先跑外洩掃描（三項 0），再 `git push -u origin <功能分支>`，然後 `bash scripts/unattended/ci-wait.sh <sha>` 用 run_in_background 跑、等通知。
 
-- 依序跑後端三個測試專案（不平行、不跑 sln），再跑前端 test／typecheck／build。每一步印 exit code，失敗時列出測試名稱。
-- 全部 exit 0 才算通過，看輸出最後幾行判斷。
+- 範圍依改動決定：只改文件不跑；只改前端只跑前端 test／typecheck／build；動到後端、`poc/shared/`、Dockerfile 或 workflow 全跑（使用者 2026-11-13 裁決）。
+- 最後一行 `success` 才算通過；失敗的 job 會列 `FAILED`，用 `gh run view <id> --log-failed` 看原因。
+- 等 CI 時可以同時做本機走查；本機 `bash scripts/unattended/gate.sh <worktree>` 只在 GitHub 不能用時當備援。
 - 背景指令不要在結尾加 `echo "exit=$?"`，那會讓背景工作永遠回 0。
 
 ## 外洩掃描
