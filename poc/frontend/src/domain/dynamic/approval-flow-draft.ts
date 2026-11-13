@@ -12,6 +12,8 @@ export interface StageDraft {
   editableFields: number[];
   dueHours: number | null;
   onEmpty: 'fallback' | 'skip';
+  /** The code this stage was saved with (absent on a new stage); changing it makes the backend treat the stage as a new one. Not sent. */
+  savedCode?: string;
 }
 
 export interface FlowDraft {
@@ -52,18 +54,20 @@ export function draftFromFlow(f: ApprovalFlow): FlowDraft {
     when: d.when ?? undefined, rejectTo: d.rejectTo ?? null, fallback: d.fallbackApprovers ?? null,
     stages: d.stages.map((s) => ({
       code: s.code, name: { ...s.name }, when: s.when ?? undefined, approvers: s.approvers, mode: s.mode,
-      editableFields: [...s.editableFields], dueHours: s.dueHours ?? null, onEmpty: s.onEmpty,
+      editableFields: [...s.editableFields], dueHours: s.dueHours ?? null, onEmpty: s.onEmpty, savedCode: s.code,
     })),
   };
 }
 
-export function insertStage(d: FlowDraft, at: number): FlowDraft {
+type HasStages = { stages: StageDraft[] };
+
+export function insertStage<T extends HasStages>(d: T, at: number): T {
   const stages = [...d.stages];
   stages.splice(Math.max(0, Math.min(at, stages.length)), 0, newStage(stages.map((s) => s.code)));
   return { ...d, stages };
 }
 
-export function moveStage(d: FlowDraft, i: number, delta: -1 | 1): FlowDraft {
+export function moveStage<T extends HasStages>(d: T, i: number, delta: -1 | 1): T {
   const j = i + delta;
   if (i < 0 || i >= d.stages.length || j < 0 || j >= d.stages.length) return d;
   const stages = [...d.stages];
@@ -72,7 +76,7 @@ export function moveStage(d: FlowDraft, i: number, delta: -1 | 1): FlowDraft {
 }
 
 /** The last stage stays: a flow needs at least one. */
-export function removeStage(d: FlowDraft, i: number): FlowDraft {
+export function removeStage<T extends HasStages>(d: T, i: number): T {
   if (d.stages.length <= 1 || i < 0 || i >= d.stages.length) return d;
   return { ...d, stages: d.stages.filter((_, k) => k !== i) };
 }

@@ -14,11 +14,10 @@ import { leftoverMessages } from 'src/presentation/dynamic/designer/api-error';
 import { toSchemaFields } from 'src/presentation/dynamic/designer/schema-fields';
 import { conditionSummary } from 'src/presentation/dynamic/rules/condition-summary';
 import type { ApiError } from 'src/services/api/http';
+import FlowEditorDialog from './FlowEditorDialog.vue';
 import { groupFlows, moveKeys, moveKeyTo } from './flow-groups';
 
 const props = defineProps<{ module: ModuleDetail; focusTarget?: number | null }>();
-// The editing dialog arrives with a4a4; these are declared so the page can already wire them.
-defineEmits<{ edit: [flow: ApprovalFlow]; create: [toOptionId: number] }>();
 const { t, locale } = useI18n();
 const $q = useQuasar();
 const mobile = computed(() => $q.screen.lt.sm);
@@ -95,6 +94,31 @@ function confirmDelete() {
   if (f) remove.mutate(f.key, { onSuccess: () => $q.notify({ type: 'positive', message: t('approval.designer.list.deleted') }), onError: fail });
 }
 
+// ---- create / edit dialog ----
+const dialogOpen = ref(false);
+const editing = ref<ApprovalFlow | undefined>();
+const preset = ref<number | null>(null);
+function openCreate(toOptionId: number | null) {
+  if (readonly.value) return;
+  editing.value = undefined;
+  preset.value = toOptionId;
+  dialogOpen.value = true;
+}
+function openEdit(f: ApprovalFlow) {
+  if (readonly.value) return;
+  editing.value = f;
+  preset.value = null;
+  dialogOpen.value = true;
+}
+// The state machine tab's "create the flow" link: a target that has no flow yet goes straight to the create dialog (one that already has flows is only highlighted).
+const wantCreate = ref<number | null>(null);
+watch(() => props.focusTarget, (id) => { wantCreate.value = id ?? null; }, { immediate: true });
+watch([wantCreate, () => flows.data.value, () => me.data.value], ([id, list]) => {
+  if (id == null || !list || !me.data.value) return;
+  wantCreate.value = null;
+  if (!list.some((f) => f.toOptionId === id)) openCreate(id);
+}, { immediate: true });
+
 // ---- focus a group when the state machine tab sent us here ----
 const highlighted = ref<number | null>(null);
 let timer: ReturnType<typeof setTimeout> | undefined;
@@ -109,6 +133,7 @@ watch(() => props.focusTarget, async (id) => {
 
 const nameOf = (f: ApprovalFlow) => resolveI18n(f.name, locale.value);
 const actionsOf = (list: ApprovalFlow[], f: ApprovalFlow, i: number) => [
+  { label: t('approval.designer.list.edit'), run: () => openEdit(f), testid: `flow-edit-${f.key}` },
   { label: t('approval.designer.list.moveUp'), run: () => move(f.toOptionId, list, f, -1), disable: busy.value || i === 0, testid: `flow-up-${f.key}` },
   { label: t('approval.designer.list.moveDown'), run: () => move(f.toOptionId, list, f, 1), disable: busy.value || i === list.length - 1, testid: `flow-down-${f.key}` },
   f.used
@@ -123,7 +148,10 @@ const actionsOf = (list: ApprovalFlow[], f: ApprovalFlow, i: number) => [
   <div v-else-if="workflow.isPending.value || flows.isPending.value" class="text-muted">{{ t('designer.loading') }}</div>
   <div v-else-if="workflow.data.value === null" class="text-muted" data-testid="flows-no-workflow">{{ t('approval.designer.list.noWorkflow') }}</div>
   <div v-else class="q-gutter-md" data-testid="flows-tab">
-    <div class="text-caption text-muted">{{ t('approval.designer.list.hint') }}</div>
+    <div class="row items-center no-wrap q-gutter-x-sm">
+      <div class="col text-caption text-muted">{{ t('approval.designer.list.hint') }}</div>
+      <q-btn v-if="!readonly" color="primary" unelevated dense no-caps icon="add" :label="t('approval.designer.list.add')" data-testid="flow-add" @click="openCreate(null)" />
+    </div>
 
     <section
       v-for="g in groups" :key="g.toOptionId" :class="{ 'flow-group--focus': highlighted === g.toOptionId }" class="flow-group"
@@ -136,9 +164,14 @@ const actionsOf = (list: ApprovalFlow[], f: ApprovalFlow, i: number) => [
       <div v-else-if="g.flows.length" class="text-caption text-warning" :data-testid="`flow-no-entry-${g.toOptionId}`">{{ t('approval.designer.list.noEntryWarning') }}</div>
       <div v-if="g.requested" class="text-caption text-warning" :data-testid="`flow-draft-${g.toOptionId}`">{{ t('approval.designer.list.draftTarget') }}</div>
       <div v-if="!g.flows.length" class="text-caption text-muted q-mt-xs">{{ t('approval.designer.list.noFlows') }}</div>
+      <q-btn
+        v-if="!readonly" flat dense no-caps color="primary" icon="add" class="q-mt-xs" :label="t('approval.designer.list.addInGroup')"
+        :aria-label="t('approval.designer.list.addInGroupAria', { state: g.label })" :data-testid="`flow-add-${g.toOptionId}`" @click="openCreate(g.toOptionId)"
+      />
 
       <q-card
-        v-for="(f, i) in g.flows" :key="f.key" flat bordered class="q-mt-sm q-pa-sm" :class="{ 'flow-card--off': !f.active }" :data-testid="`flow-card-${f.key}`"
+        v-for="(f, i) in g.flows" :key="f.key" flat bordered class="q-mt-sm q-pa-sm" :class="{ 'flow-card--off': !f.active, 'flow-card--open': !readonly }" :data-testid="`flow-card-${f.key}`"
+        :tabindex="readonly ? undefined : 0" @click="openEdit(f)" @keydown.enter.self.prevent="openEdit(f)" @keydown.space.self.prevent="openEdit(f)"
         :draggable="!mobile && !readonly && !busy && g.flows.length > 1" @dragstart="dragging = { key: f.key, toOptionId: g.toOptionId }"
         @dragover.prevent @drop.prevent="onDrop(g.toOptionId, g.flows, f)" @dragend="dragging = null"
       >
@@ -154,13 +187,14 @@ const actionsOf = (list: ApprovalFlow[], f: ApprovalFlow, i: number) => [
               <q-badge v-if="!f.active" outline color="negative" :label="t('approval.designer.list.inactive')" :data-testid="`flow-inactive-${f.key}`" />
             </div>
           </div>
-          <template v-if="!readonly">
+          <div v-if="!readonly" class="row no-wrap items-center" @click.stop @keydown.stop>
             <q-toggle
               :model-value="f.active" :disable="busy" :aria-label="`${t('approval.designer.list.active')} ${resolveI18n(f.name, locale)}`"
               :data-testid="`flow-active-${f.key}`" @update:model-value="(v: boolean) => onToggle(f, v)"
             />
             <RowActionMenu v-if="mobile" :actions="actionsOf(g.flows, f, i)" :testid="`flow-menu-${f.key}`" :aria-label="`${t('common.moreActions')} ${nameOf(f)}`" />
             <div v-else class="row no-wrap items-center">
+              <q-btn flat dense round icon="edit" :aria-label="`${t('approval.designer.list.edit')} ${nameOf(f)}`" :data-testid="`flow-edit-${f.key}`" @click="openEdit(f)" />
               <q-btn flat dense round icon="arrow_upward" :aria-label="`${t('approval.designer.list.moveUp')} ${nameOf(f)}`" :disable="busy || i === 0" :data-testid="`flow-up-${f.key}`" @click="move(g.toOptionId, g.flows, f, -1)" />
               <q-btn flat dense round icon="arrow_downward" :aria-label="`${t('approval.designer.list.moveDown')} ${nameOf(f)}`" :disable="busy || i === g.flows.length - 1" :data-testid="`flow-down-${f.key}`" @click="move(g.toOptionId, g.flows, f, 1)" />
               <q-btn
@@ -169,10 +203,15 @@ const actionsOf = (list: ApprovalFlow[], f: ApprovalFlow, i: number) => [
               />
               <q-icon v-else name="lock" size="xs" class="q-mx-sm text-muted" :title="t('approval.designer.list.usedNoDelete')" :aria-label="t('approval.designer.list.usedNoDelete')" role="img" :data-testid="`flow-used-${f.key}`" />
             </div>
-          </template>
+          </div>
         </div>
       </q-card>
     </section>
+
+    <FlowEditorDialog
+      v-if="dialogOpen && workflow.data.value" v-model="dialogOpen" :module="module" :workflow="workflow.data.value" :flows="flows.data.value ?? []"
+      :flow="editing" :preset-target="preset"
+    />
 
     <q-dialog :model-value="confirmingOff !== null" @update:model-value="confirmingOff = null">
       <q-card>
@@ -199,6 +238,7 @@ const actionsOf = (list: ApprovalFlow[], f: ApprovalFlow, i: number) => [
 <style scoped>
 .flow-group { padding-bottom: 8px; }
 .flow-group--focus { outline: 2px solid var(--q-primary); outline-offset: 4px; border-radius: 4px; }
+.flow-card--open { cursor: pointer; }
 .flow-card--off { opacity: 0.7; }
 .flow-card--off:hover { opacity: 1; }
 </style>

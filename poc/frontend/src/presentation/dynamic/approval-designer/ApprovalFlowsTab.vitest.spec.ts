@@ -9,9 +9,10 @@ import type { DesignerField, ModuleDetail, Workflow } from 'src/domain/dynamic/t
 import zhTW from 'src/i18n/zh-TW.json';
 import { dynamicApi } from 'src/services/api/dynamic-api';
 import ApprovalFlowsTab from './ApprovalFlowsTab.vue';
+import FlowEditorDialog from './FlowEditorDialog.vue';
 
 vi.mock('src/services/api/dynamic-api', () => ({
-  dynamicApi: { getWorkflow: vi.fn(), getApprovalFlows: vi.fn(), getMe: vi.fn(), updateApprovalFlow: vi.fn(), deleteApprovalFlow: vi.fn(), reorderApprovalFlows: vi.fn() },
+  dynamicApi: { getUsers: vi.fn(), getGroups: vi.fn(), getEffectivePolicies: vi.fn(), getModulePolicies: vi.fn(), getWorkflow: vi.fn(), getApprovalFlows: vi.fn(), getMe: vi.fn(), updateApprovalFlow: vi.fn(), deleteApprovalFlow: vi.fn(), reorderApprovalFlows: vi.fn() },
 }));
 const api = vi.mocked(dynamicApi);
 
@@ -45,6 +46,10 @@ async function mountTab(flows: ApprovalFlow[], opts: { workflow?: Workflow | nul
     return (opts.workflow ?? wf) as never;
   });
   api.getApprovalFlows.mockResolvedValue(flows);
+  api.getUsers.mockResolvedValue([]);
+  api.getGroups.mockResolvedValue([]);
+  api.getEffectivePolicies.mockResolvedValue({ values: {} } as never);
+  api.getModulePolicies.mockResolvedValue([]);
   api.getMe.mockResolvedValue({ designer: { read: true, add: true, edit: opts.edit ?? true, delete: true } } as never);
   api.updateApprovalFlow.mockResolvedValue({} as never);
   api.reorderApprovalFlows.mockResolvedValue([] as never);
@@ -274,6 +279,86 @@ describe('ApprovalFlowsTab', () => {
     const w = await mountTab([flow('a', 12, 1), flow('b', 13, 1)], { focusTarget: 13 });
     expect(w.find('[data-testid="flow-group-13"]').classes()).toContain('flow-group--focus');
     expect(w.find('[data-testid="flow-group-12"]').classes()).not.toContain('flow-group--focus');
+    w.unmount();
+  });
+  it('add in a group opens the dialog with that target', async () => {
+    const w = await mountTab([flow('a', 12, 1)]);
+    expect(w.findComponent(FlowEditorDialog).exists()).toBe(false);
+    await w.find('[data-testid="flow-add-12"]').trigger('click');
+    await flushPromises();
+    const d = w.findComponent(FlowEditorDialog);
+    expect(d.props('presetTarget')).toBe(12);
+    expect(d.props('flow')).toBeUndefined();
+    expect(d.props('modelValue')).toBe(true);
+    w.unmount();
+  });
+
+  it('the top add button opens the dialog without a target', async () => {
+    const w = await mountTab([flow('a', 12, 1)]);
+    await w.find('[data-testid="flow-add"]').trigger('click');
+    await flushPromises();
+    expect(w.findComponent(FlowEditorDialog).props('presetTarget')).toBeNull();
+    w.unmount();
+  });
+
+  it('card click and Enter or Space open the edit dialog; toggle and buttons inside do not', async () => {
+    const f = flow('a', 12, 1);
+    const w = await mountTab([f, flow('b', 12, 2)]);
+    const card = w.find('[data-testid="flow-card-a"]');
+    expect(card.attributes('tabindex')).toBe('0');
+    await card.trigger('click');
+    await flushPromises();
+    expect(w.findComponent(FlowEditorDialog).props('flow')?.key).toBe('a');
+    w.findComponent(FlowEditorDialog).vm.$emit('update:modelValue', false);
+    await flushPromises();
+    expect(w.findComponent(FlowEditorDialog).exists()).toBe(false);
+    await w.find('[data-testid="flow-card-b"]').trigger('keydown', { key: 'Enter' });
+    await flushPromises();
+    expect(w.findComponent(FlowEditorDialog).props('flow')?.key).toBe('b');
+    w.findComponent(FlowEditorDialog).vm.$emit('update:modelValue', false);
+    await flushPromises();
+    await w.find('[data-testid="flow-card-a"]').trigger('keydown', { key: ' ' });
+    await flushPromises();
+    expect(w.findComponent(FlowEditorDialog).props('flow')?.key).toBe('a');
+    w.findComponent(FlowEditorDialog).vm.$emit('update:modelValue', false);
+    await flushPromises();
+    await w.find('[data-testid="flow-down-a"]').trigger('click');
+    await flushPromises();
+    expect(w.findComponent(FlowEditorDialog).exists()).toBe(false);
+    w.unmount();
+  });
+
+  it('the edit button opens the dialog with that flow', async () => {
+    const w = await mountTab([flow('a', 12, 1)]);
+    await w.find('[data-testid="flow-edit-a"]').trigger('click');
+    await flushPromises();
+    expect(w.findComponent(FlowEditorDialog).props('flow')?.key).toBe('a');
+    w.unmount();
+  });
+
+  it('focusTarget from the workflow tab opens create with the target when it has no flow yet', async () => {
+    const w = await mountTab([flow('a', 13, 1)], { focusTarget: 12 });
+    await flushPromises();
+    const d = w.findComponent(FlowEditorDialog);
+    expect(d.exists()).toBe(true);
+    expect(d.props('presetTarget')).toBe(12);
+    w.unmount();
+  });
+
+  it('focusTarget on a target that already has flows only highlights it', async () => {
+    const w = await mountTab([flow('a', 12, 1)], { focusTarget: 12 });
+    await flushPromises();
+    expect(w.findComponent(FlowEditorDialog).exists()).toBe(false);
+    w.unmount();
+  });
+
+  it('a read-only designer gets no add, edit or tabindex', async () => {
+    const w = await mountTab([flow('a', 12, 1)], { edit: false });
+    expect(w.find('[data-testid="flow-add"]').exists()).toBe(false);
+    expect(w.find('[data-testid="flow-add-12"]').exists()).toBe(false);
+    expect(w.find('[data-testid="flow-card-a"]').attributes('tabindex')).toBeUndefined();
+    await w.find('[data-testid="flow-card-a"]').trigger('click');
+    expect(w.findComponent(FlowEditorDialog).exists()).toBe(false);
     w.unmount();
   });
 });
