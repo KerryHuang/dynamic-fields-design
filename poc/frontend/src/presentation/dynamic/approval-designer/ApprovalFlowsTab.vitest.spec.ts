@@ -328,6 +328,62 @@ describe('ApprovalFlowsTab', () => {
     w.unmount();
   });
 
+  describe('focus after the dialog closes', () => {
+    const active = () => (document.activeElement as HTMLElement | null)?.dataset.testid;
+    async function closeAfterSave(w: Awaited<ReturnType<typeof mountTab>>, saved: ApprovalFlow | undefined, after: ApprovalFlow[]) {
+      api.getApprovalFlows.mockResolvedValue(after);
+      const d = w.findComponent(FlowEditorDialog);
+      d.vm.$emit('saved', saved);
+      d.vm.$emit('update:modelValue', false);
+      await flushPromises();
+    }
+
+    it('saving an edit refetches, then focuses the rebuilt card, not the stale one', async () => {
+      const w = await mountTab([flow('a', 12, 1), flow('b', 12, 2)]);
+      const old = w.find('[data-testid="flow-card-a"]').element as HTMLElement;
+      old.focus();
+      await w.find('[data-testid="flow-edit-a"]').trigger('click');
+      await flushPromises();
+      // the saved flow moves to another group, so its card is a new element
+      await closeAfterSave(w, flow('a', 13, 1), [flow('a', 13, 1), flow('b', 12, 1)]);
+      const now = w.find('[data-testid="flow-card-a"]').element as HTMLElement;
+      expect(now).not.toBe(old);
+      expect(old.isConnected).toBe(false);
+      expect(document.activeElement).toBe(now);
+      w.unmount();
+    });
+
+    it('saving a new flow focuses its card', async () => {
+      const w = await mountTab([flow('a', 12, 1)]);
+      await w.find('[data-testid="flow-add"]').trigger('click');
+      await flushPromises();
+      await closeAfterSave(w, flow('n', 12, 2), [flow('a', 12, 1), flow('n', 12, 2)]);
+      expect(active()).toBe('flow-card-n');
+      w.unmount();
+    });
+
+    it('a saved flow that is not in the list falls back to the add button', async () => {
+      const w = await mountTab([flow('a', 12, 1)]);
+      await w.find('[data-testid="flow-add"]').trigger('click');
+      await flushPromises();
+      await closeAfterSave(w, flow('gone', 12, 2), [flow('a', 12, 1)]);
+      expect(active()).toBe('flow-add');
+      w.unmount();
+    });
+
+    it('cancel still returns to the card that opened the dialog', async () => {
+      const w = await mountTab([flow('a', 12, 1)]);
+      const card = w.find('[data-testid="flow-card-a"]').element as HTMLElement;
+      card.focus();
+      await w.find('[data-testid="flow-edit-a"]').trigger('click');
+      await flushPromises();
+      w.findComponent(FlowEditorDialog).vm.$emit('update:modelValue', false);
+      await flushPromises();
+      expect(document.activeElement).toBe(card);
+      w.unmount();
+    });
+  });
+
   it('the edit button opens the dialog with that flow', async () => {
     const w = await mountTab([flow('a', 12, 1)]);
     await w.find('[data-testid="flow-edit-a"]').trigger('click');

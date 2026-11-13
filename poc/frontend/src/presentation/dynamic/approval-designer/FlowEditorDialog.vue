@@ -4,7 +4,7 @@ import { computed, ref, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { useSaveApprovalFlow } from 'src/application/dynamic/queries/approval-flow-queries';
 import {
-  buildFlowInput, draftFromFlow, emptyFlowDraft, nextPriority, type FlowDraft,
+  buildFlowInput, definitionChanged, draftFromFlow, emptyFlowDraft, nextPriority, type FlowDraft,
 } from 'src/domain/dynamic/approval-flow-draft';
 import type { ApprovalFlow, ApproverSource } from 'src/domain/dynamic/approval-flow-types';
 import { resolveI18n } from 'src/domain/dynamic/i18n-text';
@@ -29,7 +29,7 @@ const props = defineProps<{
   flow?: ApprovalFlow;
   presetTarget?: number | null;
 }>();
-const emit = defineEmits<{ 'update:modelValue': [open: boolean] }>();
+const emit = defineEmits<{ 'update:modelValue': [open: boolean]; saved: [flow: ApprovalFlow | undefined] }>();
 const { t, locale } = useI18n();
 const $q = useQuasar();
 const mobile = computed(() => $q.screen.lt.sm);
@@ -98,7 +98,7 @@ const versionUsed = computed(() => !!props.flow && (props.flow.currentVersionUse
 const targetChanged = computed(() => !!props.flow && form.value.toOptionId !== props.flow.toOptionId);
 const banner = computed(() => {
   const f = props.flow;
-  if (f && versionUsed.value) {
+  if (f && versionUsed.value && definitionChanged(form.value, f)) {
     return f.pendingCount > 0
       ? t('approval.designer.dialog.versionBanner', { next: f.version + 1, n: f.pendingCount })
       : t('approval.designer.dialog.versionBannerNone', { next: f.version + 1 });
@@ -130,6 +130,7 @@ async function submit() {
   save.mutate({ key: props.flow?.key, input: body }, {
     onSuccess: (r) => {
       const saved = r as ApprovalFlow | undefined;
+      emit('saved', saved);
       emit('update:modelValue', false);
       const bumped = !!props.flow && !!saved?.version && saved.version !== props.flow.version;
       $q.notify({ type: 'positive', message: bumped ? t('approval.designer.dialog.savedVersion', { v: saved!.version }) : t('approval.designer.dialog.saved') });

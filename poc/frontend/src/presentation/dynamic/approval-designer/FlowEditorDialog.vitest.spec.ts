@@ -148,15 +148,53 @@ describe('FlowEditorDialog', () => {
     w.unmount();
   });
 
-  it('used current version shows the new-version banner with the pending count', async () => {
-    const w = await mountDialog({ flow: flow('a', 12, 1, { used: true, currentVersionUsed: true, pendingCount: 3, version: 2 }) });
+  const changeDefinition = async (w: W) => {
+    select(w, '退回後的狀態').vm.$emit('update:modelValue', 13);
+    await flushPromises();
+  };
+  const usedFlow = (extra: Partial<ApprovalFlow> = {}) => flow('a', 12, 1, { used: true, currentVersionUsed: true, version: 2, ...extra });
+
+  it('untouched used flow shows no new-version banner', async () => {
+    const w = await mountDialog({ flow: usedFlow({ pendingCount: 3 }) });
+    expect(body('flow-banner')).toBeNull();
+    w.unmount();
+  });
+
+  it('used current version with a changed definition shows the new-version banner with the pending count', async () => {
+    const w = await mountDialog({ flow: usedFlow({ pendingCount: 3 }) });
+    await changeDefinition(w);
     expect(text('flow-banner')).toBe('儲存會產生第 3 版，進行中的 3 張單照舊版本走完');
     w.unmount();
   });
 
   it('zero pending uses the not-affected variant', async () => {
-    const w = await mountDialog({ flow: flow('a', 12, 1, { used: true, currentVersionUsed: true, pendingCount: 0, version: 2 }) });
+    const w = await mountDialog({ flow: usedFlow({ pendingCount: 0 }) });
+    await changeDefinition(w);
     expect(text('flow-banner')).toBe('儲存會產生第 3 版，已送出的單不受影響');
+    w.unmount();
+  });
+
+  it('changing only the name shows no new-version banner', async () => {
+    const w = await mountDialog({ flow: usedFlow() });
+    const nameEl = document.body.querySelector<HTMLInputElement>('[data-testid="i18n-zh-TW"] input')!;
+    nameEl.value = '改個名字';
+    nameEl.dispatchEvent(new Event('input'));
+    await flushPromises();
+    expect(body('flow-banner')).toBeNull();
+    w.unmount();
+  });
+
+  it('a flow whose current version is unused shows no banner even when the definition changed', async () => {
+    const w = await mountDialog({ flow: flow('a', 12, 1, { used: true, currentVersionUsed: false }) });
+    await changeDefinition(w);
+    expect(body('flow-banner')).toBeNull();
+    w.unmount();
+  });
+
+  it('a new flow never shows the new-version banner', async () => {
+    const w = await mountDialog({ presetTarget: 12 });
+    await changeDefinition(w);
+    expect(text('flow-banner')).not.toContain('第');
     w.unmount();
   });
 

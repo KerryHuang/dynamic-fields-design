@@ -98,13 +98,21 @@ function confirmDelete() {
 const dialogOpen = ref(false);
 // The dialog unmounts as soon as it closes, so the element that opened it gets its focus back by hand.
 let opener: HTMLElement | null = null;
-// The opener can be gone by then (a menu item that closed, a card that moved to another group on save): the flow's card, or the add button, takes the focus.
+// The opener can be gone by then (a menu item that closed, a card that moved to another group or was rebuilt on save): the flow's card, or the add button, takes the focus.
+// After a save the list is refetched first, so the card to focus is the one of the new list (a created flow's card, else the add button).
+let savedKey: string | null | undefined;
+function onSaved(f: ApprovalFlow | undefined) { savedKey = f?.key ?? editing.value?.key ?? null; }
+const focusTestid = (testid: string) => document.querySelector<HTMLElement>(`[data-testid="${testid}"]`);
 watch(dialogOpen, async (open) => {
   if (open) return;
+  const afterSave = savedKey !== undefined;
+  const key = savedKey;
+  savedKey = undefined;
+  if (afterSave) await flows.refetch({ cancelRefetch: false });
   await nextTick();
-  const target = opener?.isConnected
-    ? opener
-    : document.querySelector<HTMLElement>(`[data-testid="${editing.value ? `flow-card-${editing.value.key}` : 'flow-add'}"]`);
+  const target = afterSave
+    ? (key ? focusTestid(`flow-card-${key}`) : null) ?? focusTestid('flow-add')
+    : opener?.isConnected ? opener : focusTestid(editing.value ? `flow-card-${editing.value.key}` : 'flow-add');
   target?.focus?.();
   opener = null;
 });
@@ -224,7 +232,7 @@ const actionsOf = (list: ApprovalFlow[], f: ApprovalFlow, i: number) => [
 
     <FlowEditorDialog
       v-if="dialogOpen && workflow.data.value" v-model="dialogOpen" :module="module" :workflow="workflow.data.value" :flows="flows.data.value ?? []"
-      :flow="editing" :preset-target="preset"
+      :flow="editing" :preset-target="preset" @saved="onSaved"
     />
 
     <q-dialog :model-value="confirmingOff !== null" @update:model-value="confirmingOff = null">

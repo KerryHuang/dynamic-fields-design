@@ -116,6 +116,24 @@ export function buildFlowInput(d: FlowDraft): ApprovalFlowInput | null {
   return { key: d.key, name: d.name, toOptionId: d.toOptionId, priority: d.priority, active: d.active, definition };
 }
 
+/** Same comparison as the backend: key order and null vs missing do not count. */
+function sameValue(a: unknown, b: unknown): boolean {
+  if (a === undefined || a === null) return b === undefined || b === null;
+  if (typeof a !== 'object' || b === null || typeof b !== 'object') return a === b;
+  if (Array.isArray(a) !== Array.isArray(b)) return false;
+  const x = a as Record<string, unknown>;
+  const y = b as Record<string, unknown>;
+  const keys = new Set([...Object.keys(x), ...Object.keys(y)]);
+  for (const k of keys) if (!sameValue(x[k], y[k])) return false;
+  return true;
+}
+
+/** True when saving the draft would change the saved flow's definition (only then does a used version turn into a new one). */
+export function definitionChanged(d: FlowDraft, saved: ApprovalFlow): boolean {
+  const built = buildFlowInput(d);
+  return !built || !sameValue(built.definition, saved.definition);
+}
+
 /** Last in the target state (max + 1), 1 when it has none; `exceptKey` leaves out the flow being edited. */
 export function nextPriority(flows: ApprovalFlow[], toOptionId: number, exceptKey?: string): number {
   const mine = flows.filter((f) => f.toOptionId === toOptionId && f.key !== exceptKey);

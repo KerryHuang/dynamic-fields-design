@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { ApprovalFlow } from './approval-flow-types';
 import {
-  buildFlowInput, draftFromFlow, emptyFlowDraft, insertStage, moveStage, newStage, nextPriority, removeStage, stageErrors,
+  buildFlowInput, definitionChanged, draftFromFlow, emptyFlowDraft, insertStage, moveStage, newStage, nextPriority, removeStage, stageErrors,
 } from './approval-flow-draft';
 
 const flow = (key: string, to: number, priority: number): ApprovalFlow => ({
@@ -82,5 +82,14 @@ describe('approval flow draft', () => {
     expect(stageErrors(errors, 1)).toEqual({ approvers: '無人', dueHours: '太大' });
     expect(stageErrors(errors, 10)).toEqual({ code: 'x' });
     expect(stageErrors(undefined, 0)).toEqual({});
+  });
+
+  it('definitionChanged: untouched draft, name, priority and active are not definition changes; stage content is', () => {
+    const f = flow('a', 12, 1);
+    const d = draftFromFlow(f);
+    expect(definitionChanged(d, f)).toBe(false);
+    expect(definitionChanged({ ...d, name: { 'zh-TW': 'x' }, priority: 9, active: false }, f)).toBe(false);
+    expect(definitionChanged({ ...d, stages: [{ ...d.stages[0]!, mode: 'any' }, d.stages[1]!] }, f)).toBe(true);
+    expect(definitionChanged({ ...d, rejectTo: 12 }, f)).toBe(true);
   });
 });
