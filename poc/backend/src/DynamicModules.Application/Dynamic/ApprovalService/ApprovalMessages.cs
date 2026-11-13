@@ -27,6 +27,7 @@ public static class ApprovalMessages
     public const string UserFieldInvalid = "使用者欄位必須是本模組表頭、啟用中的使用者欄位";
     public const string UserFieldWithoutCandidates = "使用者欄位來源必須設定候選群組";
     public const string CandidateGroupsInvalid = "候選群組都必須存在";
+    public const string PickCandidatesUnmatchedRemoved = "候選群組在開啟套件時被略過，要移除略過標記，請先選至少一個候選群組；否則任何使用者都可以被選為簽核人";
     public static string PickRange(int max, bool existing = false) => $"自選人數必須符合 1 ≤ 最少 ≤ 最多 ≤ {max}{KeepOld(existing)}";
     public static string DueHours(int max, bool existing = false) => $"逾期時數必須是 1 到 {max}{KeepOld(existing)}";
 

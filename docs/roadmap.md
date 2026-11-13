@@ -33,7 +33,7 @@
 | a4a | 前端：簽核設計器 | 已上線（2026-11-13，6821b793） | [簽核流程](superpowers/specs/2026-11-10-approval-workflow-design.md) |
 | ci1 | gate 加速：合併前總檢查搬到 GitHub Actions、分路平行；依改動決定範圍（只改文件不跑、只改前端只跑前端、動到後端全跑）；功能分支外洩掃描通過才推（使用者 11-13 裁決） | 已上線（2026-11-13，c3d12146） | — |
 | tz1 | 報表「今天、本月」等日期區間與無時區日期時間改用營運時區（Asia/Taipei），不依主機時區；修好後 CI 拿掉 `TZ` 覆寫。ci1 在 UTC 的 GitHub 機器上抓到：SQL 路徑依主機時區計算，Render 也是 UTC | 已上線（2026-11-13，b51c169d） | — |
-| a5 | 套件格式 8：簽核流程；接手 CRM 設計案流程：套件內建，刪 `DemoApprovals`；採購單金額門檻的 Demo 在這裡驗收 | 已上線（日期待主控補） | [簽核流程](superpowers/specs/2026-11-10-approval-workflow-design.md) |
+| a5 | 套件格式 8：簽核流程；接手 CRM 設計案流程：套件內建，刪 `DemoApprovals`；採購單金額門檻的 Demo 在這裡驗收 | 進行中（a5a1–a5d 實作與審查完成，待合併上線） | [簽核流程](superpowers/specs/2026-11-10-approval-workflow-design.md) |
 | a3 | 轉交、加簽、代理、逾期提醒；個人代理設定、管理員終止與改派、臨時讀取的列印預覽（使用者 11-12 裁決） | 未開始 | [簽核流程](superpowers/specs/2026-11-10-approval-workflow-design.md) |
 | fg1 | 簽核流程圖地基：圖形定義型別、結構驗證、sequence → graph 轉換、migration、分支數政策；API 仍不收 graph | 未開始 | [簽核流程圖](superpowers/specs/2026-11-13-approval-flowgraph-design.md) §17 |
 | fg2 | 流程圖執行引擎：並行分支、全部到齊／任一到齊匯合、分支取消、退回與撤回延伸、同一單據動作序列化 | 未開始 | [簽核流程圖](superpowers/specs/2026-11-13-approval-flowgraph-design.md) §17 |

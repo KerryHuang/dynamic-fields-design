@@ -1,12 +1,13 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue';
+import { useQuasar } from 'quasar';
 import { useI18n } from 'vue-i18n';
 import { useGroups, useUsers } from 'src/application/dynamic/queries/permissions-queries';
 import type { ApproverSource, ApproverSourceKind } from 'src/domain/dynamic/approval-flow-types';
 import { resolveI18n } from 'src/domain/dynamic/i18n-text';
 import type { ModuleDetail } from 'src/domain/dynamic/types';
 import { toSchemaFields } from 'src/presentation/dynamic/designer/schema-fields';
-import { clearUnmatched, defaultSourceOf, hintOf, levelOptions, unmatchedOf, type ApproverLimits } from './approver-source';
+import { clearUnmatched, defaultSourceOf, hintOf, levelOptions, removalBlocked, unmatchedOf, type ApproverLimits } from './approver-source';
 
 const props = defineProps<{
   modelValue: ApproverSource;
@@ -23,6 +24,7 @@ const props = defineProps<{
 }>();
 const emit = defineEmits<{ 'update:modelValue': [value: ApproverSource] }>();
 const { t, locale } = useI18n();
+const $q = useQuasar();
 
 // Only the list the current source needs is requested (both are cached, a switch of source fetches the other on demand).
 const users = useUsers({ enabled: () => props.modelValue.source === 'users' });
@@ -56,9 +58,14 @@ const setKind = (k: ApproverSourceKind) => { if (k !== props.modelValue.source) 
 const num = (v: string | number | null) => (v === null || v === '' ? null : Number(v));
 const unmatched = computed(() => unmatchedOf(props.modelValue));
 const hasUnmatched = computed(() => unmatched.value.names.length > 0 || unmatched.value.candidates);
+const unmatchedNames = computed(() => unmatched.value.names.map((n) => (n.trim() === '' ? t('approval.designer.source.unmatchedUnnamed') : n)).join(t('common.listSeparator')));
+const blocked = computed(() => removalBlocked(props.modelValue));
+// Wide screens keep the button on the text's row; on a phone it drops below so long names can wrap.
+const inlineActions = computed(() => !$q.screen.lt.sm);
 const confirmingRemove = ref(false);
-const removeUnmatched = () => { confirmingRemove.value = false; emit('update:modelValue', clearUnmatched(props.modelValue)); };
-const noCandidates = computed(() => props.modelValue.source === 'userField' && !(props.modelValue.candidateGroupIds?.length));
+const removeUnmatched = () => { confirmingRemove.value = false; if (blocked.value) return; emit('update:modelValue', clearUnmatched(props.modelValue)); };
+// Candidates skipped at open time are a different state (the fallback fills the source), shown by the banner instead of this error.
+const noCandidates = computed(() => props.modelValue.source === 'userField' && !(props.modelValue.candidateGroupIds?.length) && !props.modelValue.candidatesUnmatched);
 </script>
 
 <template>
@@ -119,10 +126,10 @@ const noCandidates = computed(() => props.modelValue.source === 'userField' && !
       </div>
     </template>
 
-    <q-banner v-if="hasUnmatched" dense rounded class="bg-muted" data-testid="source-unmatched">
+    <q-banner v-if="hasUnmatched" dense rounded class="bg-muted" :inline-actions="inlineActions" data-testid="source-unmatched">
       <template #avatar><q-icon name="warning" color="warning" /></template>
       <div v-if="unmatched.names.length" style="overflow-wrap: anywhere" data-testid="source-unmatched-groups">
-        {{ t('approval.designer.source.unmatchedGroups', { names: unmatched.names.join(t('common.listSeparator')) }) }}
+        {{ t('approval.designer.source.unmatchedGroups', { names: unmatchedNames }) }}
       </div>
       <div v-if="unmatched.candidates" style="overflow-wrap: anywhere" data-testid="source-unmatched-candidates">{{ t('approval.designer.source.unmatchedCandidates') }}</div>
       <template #action>
@@ -138,8 +145,15 @@ const noCandidates = computed(() => props.modelValue.source === 'userField' && !
 
     <q-dialog v-model="confirmingRemove">
       <q-card style="max-width: 100%">
-        <q-card-section data-testid="source-unmatched-confirm-text">{{ t('approval.designer.source.unmatchedConfirm') }}</q-card-section>
-        <q-card-actions align="right">
+        <q-card-section v-if="blocked" data-testid="source-unmatched-blocked-text">{{ t('approval.designer.source.unmatchedBlocked') }}</q-card-section>
+        <q-card-section v-else data-testid="source-unmatched-confirm-text">
+          <div v-if="unmatched.names.length">{{ t('approval.designer.source.unmatchedConfirm') }}</div>
+          <div v-if="unmatched.candidates">{{ t('approval.designer.source.unmatchedConfirmCandidates') }}</div>
+        </q-card-section>
+        <q-card-actions v-if="blocked" align="right">
+          <q-btn flat :label="t('designer.close')" data-testid="source-unmatched-cancel" @click="confirmingRemove = false" />
+        </q-card-actions>
+        <q-card-actions v-else align="right">
           <q-btn flat :label="t('dynamic.cancel')" data-testid="source-unmatched-cancel" @click="confirmingRemove = false" />
           <q-btn color="negative" :label="t('approval.designer.source.unmatchedRemove')" data-testid="source-unmatched-confirm" @click="removeUnmatched" />
         </q-card-actions>

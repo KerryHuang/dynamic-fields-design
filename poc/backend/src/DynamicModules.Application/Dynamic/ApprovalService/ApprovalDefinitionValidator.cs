@@ -110,6 +110,9 @@ public sealed partial class ApprovalDefinitionValidator(
                     var oldMax = old?.Source == ApprovalSources.InitiatorPick ? old.Max ?? 0 : 0;
                     if (a.Min is not { } min || a.Max is not { } max || min < 1 || min > max || (max > limits.MaxApprovers && max > oldMax))
                         return ApprovalMessages.PickRange(limits.MaxApprovers, previous is not null);
+                    // 原本候選群組被開啟套件略過（空候選 + 標記）：只清標記會變成「任何人都可被選」，要先選候選群組。沒被略過過的來源，空候選仍是「不限」（§6.3）
+                    if (old is { Source: ApprovalSources.InitiatorPick, CandidatesUnmatched: true } && !a.CandidatesUnmatched && (a.CandidateGroupIds ?? []).Count == 0)
+                        return ApprovalMessages.PickCandidatesUnmatchedRemoved;
                     return (a.CandidateGroupIds ?? []).All(groupIds.Contains) ? null : ApprovalMessages.CandidateGroupsInvalid;
                 default:
                     return ApprovalMessages.SourceInvalid;

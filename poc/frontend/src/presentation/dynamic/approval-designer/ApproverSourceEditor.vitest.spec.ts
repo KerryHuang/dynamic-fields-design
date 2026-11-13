@@ -195,7 +195,7 @@ describe('ApproverSourceEditor', () => {
       await w.find('[data-testid="source-unmatched-remove"]').trigger('click');
       await flushPromises();
       expect(w.emitted('update:modelValue')).toBeUndefined();
-      expect(body('source-unmatched-confirm-text')!.textContent).toBe('移除後這一關少了這些席位，確定要移除嗎？');
+      expect(body('source-unmatched-confirm-text')!.textContent).toBe('移除後這一關少了這些席位，確定要移除嗎？移除後，這個來源只能從目前選的候選群組選人，不再由備援簽核人頂替，確定要移除嗎？');
       body('source-unmatched-confirm')!.click();
       await flushPromises();
       expect(lastValue(w)).toEqual({ source: 'group', groupIds: [3], unmatchedGroups: null, candidatesUnmatched: false });
@@ -228,18 +228,64 @@ describe('ApproverSourceEditor', () => {
       w.unmount();
     });
 
-    it.each([390, 820, 1366, 1920])('at %i px wide the notice wraps inside the editor and keeps the remove button', async (width) => {
+    it('candidates confirm says only the selected candidate groups remain, not that seats are lost', async () => {
+      const w = await mountEditor({ source: 'userField', fieldId: 9, candidateGroupIds: [3], candidatesUnmatched: true });
+      await w.find('[data-testid="source-unmatched-remove"]').trigger('click');
+      await flushPromises();
+      expect(body('source-unmatched-confirm-text')!.textContent).toBe('移除後，這個來源只能從目前選的候選群組選人，不再由備援簽核人頂替，確定要移除嗎？');
+      body('source-unmatched-confirm')!.click();
+      await flushPromises();
+      expect(lastValue(w)).toEqual({ source: 'userField', fieldId: 9, candidateGroupIds: [3], unmatchedGroups: null, candidatesUnmatched: false });
+      w.unmount();
+    });
+
+    it('a pick source with every candidate skipped cannot drop the marker until candidates are chosen', async () => {
+      const w = await mountEditor({ source: 'initiatorPick', candidateGroupIds: [], min: 1, max: 1, candidatesUnmatched: true });
+      await w.find('[data-testid="source-unmatched-remove"]').trigger('click');
+      await flushPromises();
+      expect(body('source-unmatched-blocked-text')!.textContent).toContain('任何人都能被選為簽核人');
+      expect(body('source-unmatched-confirm')).toBeNull();
+      body('source-unmatched-cancel')!.click();
+      await flushPromises();
+      expect(w.emitted('update:modelValue')).toBeUndefined();
+      w.unmount();
+      // with a candidate group chosen the marker can go
+      const ok = await mountEditor({ source: 'initiatorPick', candidateGroupIds: [3], min: 1, max: 1, candidatesUnmatched: true });
+      await ok.find('[data-testid="source-unmatched-remove"]').trigger('click');
+      await flushPromises();
+      expect(body('source-unmatched-confirm')).not.toBeNull();
+      ok.unmount();
+    });
+
+    it('skipped candidates show the banner only, not the "pick at least one candidate group" error', async () => {
+      const w = await mountEditor({ source: 'userField', fieldId: 9, candidateGroupIds: [], candidatesUnmatched: true });
+      expect(w.find('[data-testid="source-unmatched-candidates"]').exists()).toBe(true);
+      expect(w.find('[data-testid="source-candidates-error"]').exists()).toBe(false);
+      w.unmount();
+    });
+
+    it('blank skipped names still show the notice with a placeholder name', async () => {
+      const w = await mountEditor({ source: 'group', groupIds: [], unmatchedGroups: ['  '] });
+      expect(w.find('[data-testid="source-unmatched-groups"]').text()).toContain('未命名群組');
+      w.unmount();
+    });
+
+    it('long names are allowed to break so a 390 px dialog never scrolls sideways', async () => {
+      const long = '很長很長的群組名稱'.repeat(6);
+      const w = await mountEditor({ source: 'group', groupIds: [3], unmatchedGroups: [long] });
+      expect(w.find('[data-testid="source-unmatched-groups"]').attributes('style')).toContain('overflow-wrap: anywhere');
+      w.unmount();
+    });
+
+    // jsdom has no layout, so what can be measured is which layout the widget asks for: the button shares the row with the text from 600 px up, drops below on a phone.
+    it.each([[390, false], [820, true], [1366, true], [1920, true]])('at %i px the remove button is %s on the text row', async (width, inline) => {
       window.innerWidth = width;
       window.dispatchEvent(new Event('resize'));
-      const long = '很長很長的群組名稱'.repeat(6);
-      const w = await mountEditor({ source: 'group', groupIds: [3], unmatchedGroups: [long], candidatesUnmatched: true });
-      const banner = w.find('[data-testid="source-unmatched"]');
-      expect(banner.exists()).toBe(true);
-      expect(banner.text()).toContain(long);
-      // Long names must be allowed to break so a 390 px dialog never scrolls sideways.
-      expect(w.find('[data-testid="source-unmatched-groups"]').attributes('style')).toContain('overflow-wrap: anywhere');
+      await new Promise((r) => setTimeout(r, 100));
+      const w = await mountEditor(skipped);
+      const actions = w.find('.q-banner__actions');
+      expect(actions.classes()).toContain(inline ? 'col-auto' : 'col-all');
       expect(w.find('[data-testid="source-unmatched-remove"]').exists()).toBe(true);
-      expect(w.find('[data-testid="approver-source"]').classes()).toContain('column');
       w.unmount();
       window.innerWidth = 1024;
       window.dispatchEvent(new Event('resize'));

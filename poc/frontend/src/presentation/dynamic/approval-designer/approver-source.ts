@@ -24,9 +24,14 @@ export function defaultSourceOf(kind: ApproverSourceKind): ApproverSource {
   }
 }
 
-/** What the package open left behind on a source: names of skipped approver groups, and whether the candidate groups were skipped. */
+/** What the package open left behind on a source: names of skipped approver groups (blank ones kept, the export check counts them too), and whether the candidate groups were skipped. */
 export function unmatchedOf(source: ApproverSource): { names: string[]; candidates: boolean } {
-  return { names: (source.unmatchedGroups ?? []).filter((n) => n.trim() !== ''), candidates: source.candidatesUnmatched === true };
+  return { names: source.unmatchedGroups ?? [], candidates: source.candidatesUnmatched === true };
+}
+
+/** Removing the candidate marker of a pick source whose candidates are all gone would let the initiator pick anyone, so it needs candidates first. */
+export function removalBlocked(source: ApproverSource): boolean {
+  return source.source === 'initiatorPick' && source.candidatesUnmatched === true && !(source.candidateGroupIds?.length);
 }
 
 /** Drops the skipped-group markers and keeps every other property of the source. */

@@ -46,6 +46,25 @@ public class ApprovalDefinitionValidatorTests : ApprovalTestBase
     private async Task BuildRig() => _r ??= await BuildPurchase();
 
     [Fact]
+    public async Task InitiatorPick_RemoveUnmatchedCandidates_WhileEmpty_400()
+    {
+        // 開啟時候選群組全被略過的發起人自選：清掉標記後候選為空 = 任何啟用中的使用者都可被選，等於放寬簽核控制
+        await BuildRig();
+        var module = (await Svc<IModuleRepository>().GetByKeyAsync(_r.Module, includeChildren: true, CancellationToken.None))!;
+        var flagged = new ApproverSource(ApprovalSources.InitiatorPick, CandidateGroupIds: [], Min: 1, Max: 1, CandidatesUnmatched: true);
+        var previous = Valid(Stage("pick", flagged));
+        Task<Dictionary<string, string[]>> Save(ApproverSource next) =>
+            Svc<ApprovalDefinitionValidator>().ValidateAsync(module, module.Workflow!, Valid(Stage("pick", next)), previous, CancellationToken.None);
+
+        E(await Save(flagged with { CandidatesUnmatched = false }), "stages[0].approvers").Should().Be(ApprovalMessages.PickCandidatesUnmatchedRemoved);
+        (await Save(flagged)).Should().BeEmpty("標記還在，執行時交給備援");
+        (await Save(flagged with { CandidatesUnmatched = false, CandidateGroupIds = [BoardGroup] })).Should().BeEmpty("先選了候選群組就能移除標記");
+        // 沒有被略過過的發起人自選，候選留空仍是「不限」（設計 §6.3）
+        var plain = new ApproverSource(ApprovalSources.InitiatorPick, CandidateGroupIds: [], Min: 1, Max: 1);
+        (await Validate(Valid(Stage("pick", plain)))).Should().BeEmpty();
+    }
+
+    [Fact]
     public async Task OnEmptySkip_SourceUnmatched_400()
     {
         // 審查 M2：開啟套件後標成對不上的關卡不能設 skip（不經備援），存檔或啟用時就擋；fallback 可以

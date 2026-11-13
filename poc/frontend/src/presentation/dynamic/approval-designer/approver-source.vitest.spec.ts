@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import zhTW from 'src/i18n/zh-TW.json';
-import { clearUnmatched, defaultSourceOf, hintOf, isSingleApprover, levelOptions, unmatchedOf } from './approver-source';
+import { clearUnmatched, defaultSourceOf, hintOf, isSingleApprover, levelOptions, removalBlocked, unmatchedOf } from './approver-source';
 
 const lookup = (k: string) => k.split('.').reduce<unknown>((o, p) => (o as Record<string, unknown>)[p], zhTW) as string;
 const t = (k: string, p: Record<string, unknown> = {}) => lookup(k).replace(/\{(\w+)\}/g, (_, n) => String(p[n]));
@@ -44,6 +44,17 @@ describe('approver-source', () => {
     expect(unmatchedOf({ source: 'userField', fieldId: 1, candidateGroupIds: [], candidatesUnmatched: true })).toEqual({ names: [], candidates: true });
     expect(unmatchedOf({ source: 'group', groupIds: [1], unmatchedGroups: null, candidatesUnmatched: false })).toEqual({ names: [], candidates: false });
     expect(unmatchedOf({ source: 'manager', level: 1 })).toEqual({ names: [], candidates: false });
+  });
+
+  it('unmatchedOf keeps blank names so the export check and the notice agree', () => {
+    expect(unmatchedOf({ source: 'group', groupIds: [], unmatchedGroups: [' '] })).toEqual({ names: [' '], candidates: false });
+  });
+
+  it('removalBlocked only for a pick source whose candidates are all skipped', () => {
+    expect(removalBlocked({ source: 'initiatorPick', candidateGroupIds: [], min: 1, max: 1, candidatesUnmatched: true })).toBe(true);
+    expect(removalBlocked({ source: 'initiatorPick', candidateGroupIds: [3], min: 1, max: 1, candidatesUnmatched: true })).toBe(false);
+    expect(removalBlocked({ source: 'userField', fieldId: 1, candidateGroupIds: [], candidatesUnmatched: true })).toBe(false);
+    expect(removalBlocked({ source: 'initiatorPick', candidateGroupIds: [], min: 1, max: 1 })).toBe(false);
   });
 
   it('clearUnmatched keeps the other properties', () => {
