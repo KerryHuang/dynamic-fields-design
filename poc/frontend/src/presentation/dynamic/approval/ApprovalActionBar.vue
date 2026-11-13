@@ -1,5 +1,4 @@
 <script setup lang="ts">
-import { useQueryClient } from '@tanstack/vue-query';
 import { QPageSticky, useQuasar } from 'quasar';
 import { computed, ref } from 'vue';
 import { useI18n } from 'vue-i18n';
@@ -7,51 +6,38 @@ import RowActionMenu, { type RowAction } from 'src/components/framework/RowActio
 import type { ApprovalInstanceView } from 'src/domain/dynamic/approval-types';
 import type { DynamicRecord, ModuleSchema } from 'src/domain/dynamic/types';
 import { useIdentityStore } from 'src/stores/use-identity-store';
-import { approvalTaskActions, currentStage, hasApprovalActions, myOpenTask, type ApprovalActionContext } from './approval-actions';
+import { currentStage, hasApprovalActions, myOpenTask } from './approval-actions';
 import ApproveDialog from './ApproveDialog.vue';
 import RejectDialog from './RejectDialog.vue';
+import TransferDialog from './TransferDialog.vue';
 import WithdrawDialog from './WithdrawDialog.vue';
 
 const props = defineProps<{ instance: ApprovalInstanceView; recordId: number; moduleKey: string; schema?: ModuleSchema | null; record?: DynamicRecord }>();
 const { t } = useI18n();
 const $q = useQuasar();
-const qc = useQueryClient();
 const identity = useIdentityStore();
 
 const task = computed(() => myOpenTask(props.instance));
 const isInitiator = computed(() => !!identity.userId && props.instance.initiatorUserId === identity.userId);
-const dialog = ref<'approve' | 'reject' | 'withdraw' | null>(null);
+const dialog = ref<'approve' | 'reject' | 'transfer' | 'withdraw' | null>(null);
 
-interface Btn { key: 'approve' | 'reject' | 'withdraw'; color: string; outline?: boolean; disable?: boolean }
+interface Btn { key: 'approve' | 'reject' | 'transfer' | 'withdraw'; color: string; outline?: boolean; disable?: boolean }
 const buttons = computed<Btn[]>(() => {
   const list: Btn[] = [];
-  if (task.value) list.push({ key: 'approve', color: 'primary' }, { key: 'reject', color: 'negative', outline: true });
+  if (task.value) list.push({ key: 'approve', color: 'primary' }, { key: 'reject', color: 'negative', outline: true }, { key: 'transfer', color: 'primary', outline: true });
   if (isInitiator.value && props.instance.status === 'pending') list.push({ key: 'withdraw', color: 'primary', outline: true, disable: !props.instance.canWithdraw });
   return list;
 });
 
-// Extensions (a3) get the instance even when the user holds no task (an administrator), and refresh really re-reads the block.
-const context = computed<ApprovalActionContext>(() => ({
-  instance: props.instance, task: task.value, recordId: props.recordId,
-  refresh: () => { void qc.invalidateQueries({ queryKey: ['record', props.recordId] }); void qc.invalidateQueries({ queryKey: ['record-approval', props.recordId] }); },
-}));
-const extras = computed<RowAction[]>(() => {
-  const c = context.value;
-  return props.instance.status === 'pending'
-    ? approvalTaskActions.filter((a) => a.visible(c)).map((a) => ({ label: a.label(t), run: () => a.run(c), testid: `approval-extra-${a.key}` }))
-    : [];
-});
-const show = computed(() => hasApprovalActions(props.instance, identity.userId) || extras.value.length > 0);
+const show = computed(() => hasApprovalActions(props.instance, identity.userId));
 
-// Phone: at most two buttons on the bottom bar; the rest and the extra actions go to the menu.
+// Phone: at most two buttons on the bottom bar; the rest go to the menu.
 const mobile = computed(() => $q.screen.lt.sm);
 const inline = computed(() => (mobile.value ? buttons.value.slice(0, 2) : buttons.value));
 // The reason sits next to the button, so it shows only while the withdraw button is on the bar itself.
 const withdrawBlocked = computed(() => inline.value.some((b) => b.key === 'withdraw' && b.disable));
-const overflow = computed<RowAction[]>(() => [
-  ...(mobile.value ? buttons.value.slice(2).map((b) => ({ label: t(`approval.actions.${b.key}`), run: () => { dialog.value = b.key; }, disable: b.disable })) : []),
-  ...extras.value,
-]);
+const overflow = computed<RowAction[]>(() =>
+  (mobile.value ? buttons.value.slice(2).map((b) => ({ label: t(`approval.actions.${b.key}`), run: () => { dialog.value = b.key; }, disable: b.disable, testid: `approval-more-${b.key}` })) : []));
 </script>
 
 <template>
@@ -79,6 +65,10 @@ const overflow = computed<RowAction[]>(() => [
   <RejectDialog
     v-if="dialog === 'reject' && task" :model-value="true" :record-id="recordId" :module-key="moduleKey" :task-id="task.id" :row-version="instance.rowVersion"
     :can-return-previous="task.canReturnPrevious" @update:model-value="dialog = null"
+  />
+  <TransferDialog
+    v-if="dialog === 'transfer' && task" :model-value="true" :record-id="recordId" :module-key="moduleKey" :task-id="task.id" :instance="instance"
+    @update:model-value="dialog = null"
   />
   <WithdrawDialog
     v-if="dialog === 'withdraw'" :model-value="true" :record-id="recordId" :module-key="moduleKey" :instance-id="instance.id" :row-version="instance.rowVersion"

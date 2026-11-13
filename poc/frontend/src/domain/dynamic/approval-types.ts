@@ -17,6 +17,8 @@ export interface ApprovalTaskView {
   status: string; actedTime: string | null; canAct: boolean;
   /** Server rule: the previous stage in the flow definition (skipped ones passed over) was approved. */
   canReturnPrevious: boolean;
+  /** The first holder of the seat when it was handed over (transfer): shown as "original approver". Null when the holder is the original. */
+  originalName?: string | null;
 }
 export interface ApprovalStageView {
   id: number; seq: number; stageCode: string | null; name: I18nText; mode: 'all' | 'any'; status: string;
@@ -51,10 +53,11 @@ export interface SubmitApprovalBody { to: number; recordRowVersion: string; pick
 export interface ApproveBody { rowVersion: string; comment?: string; values?: Record<string, unknown> }
 export interface RejectBody { rowVersion: string; comment: string; to: 'initiator' | 'previous' }
 export interface WithdrawBody { rowVersion: string; comment?: string }
+export interface TransferBody { rowVersion: string; userId: string; comment?: string }
 
 export interface SubmitApprovalResult { outcome: 'submitted' | 'approved' | 'direct'; instanceId: number | null; recordRowVersion: string }
 export interface ApprovalActionResult {
-  outcome: 'advanced' | 'approved' | 'rerouted' | 'rejected' | 'returned' | 'withdrawn';
+  outcome: 'advanced' | 'approved' | 'rerouted' | 'rejected' | 'returned' | 'withdrawn' | 'transferred';
   instanceId: number; instanceRowVersion: string; newFlowName?: I18nText | null;
   /** rerouted into a flow that needs the initiator's picks: no new instance, the initiator has to submit again. */
   needsResubmit?: boolean;

@@ -9,7 +9,6 @@ import type { ApprovalInstanceView, ApprovalStageView, ApprovalTaskView } from '
 import zhTW from 'src/i18n/zh-TW.json';
 import { bodyOf, HttpFail, mockHttp, type Call } from 'src/test-utils/mock-http';
 import { useIdentityStore } from 'src/stores/use-identity-store';
-import { approvalTaskActions } from './approval-actions';
 import ApprovalActionBar from './ApprovalActionBar.vue';
 
 const task = (p: Partial<ApprovalTaskView> = {}): ApprovalTaskView => ({
@@ -50,6 +49,7 @@ async function mountBar(instance: ApprovalInstanceView, o: { user?: string; widt
       return { outcome: 'advanced', instanceId: 7, instanceRowVersion: 'iv2' };
     }
     if (c.url === '/policies/effective') return { values: {} };
+    if (c.url === '/users') return [];
     return {};
   });
   window.innerWidth = o.width ?? 1366;
@@ -79,7 +79,7 @@ describe('ApprovalActionBar', () => {
     document.body.innerHTML = '';
     vi.stubGlobal('ResizeObserver', class { observe() {} unobserve() {} disconnect() {} });
   });
-  afterEach(() => { document.body.innerHTML = ''; approvalTaskActions.length = 0; window.innerWidth = 1024; });
+  afterEach(() => { document.body.innerHTML = ''; window.innerWidth = 1024; });
 
   it('approve dialog offers the current stage editable fields', async () => {
     const w = await mountBar(inst({ stages: [stage({ editableFieldKeys: ['f_2'] })] }), { extra: { schema: editSchema, record: editRecord } });
@@ -334,12 +334,13 @@ describe('ApprovalActionBar', () => {
     w.unmount();
   });
 
-  it('mobile width shows a bottom bar with approve and reject only', async () => {
+  it('mobile width shows a bottom bar with approve and reject only; transfer waits in the menu', async () => {
     const w = await mountBar(inst(), { width: 390 });
     expect(q('approval-mobile-bar')).not.toBeNull();
     expect(q('action-approve')).not.toBeNull();
     expect(q('action-reject')).not.toBeNull();
-    expect(q('approval-more')).toBeNull();
+    expect(q('action-transfer')).toBeNull();
+    expect(q('approval-more')).not.toBeNull();
     expect(body().querySelector('.approval-sticky')).not.toBeNull();   // the layer that keeps the bar above the blocks that follow
     w.unmount();
   });
@@ -361,30 +362,23 @@ describe('ApprovalActionBar', () => {
     w.unmount();
   });
 
-  it('extra actions are run from the more menu with the instance, the task and a refresh that rereads the approval', async () => {
-    const run = vi.fn();
-    approvalTaskActions.push({ key: 'transfer', label: () => '轉交', visible: () => true, run });
-    const w = await mountBar(inst(), { width: 390 });
-    const spy = vi.spyOn(qc, 'invalidateQueries');
-    await click('approval-more');
-    await click('approval-extra-transfer');
-    expect(run).toHaveBeenCalledTimes(1);
-    const ctx = run.mock.calls[0]![0];
-    expect(ctx.task.id).toBe(11);
-    expect(ctx.instance.id).toBe(7);
-    ctx.refresh();
-    expect(spy).toHaveBeenCalledWith({ queryKey: ['record-approval', 9] });
-    expect(spy).toHaveBeenCalledWith({ queryKey: ['record', 9] });
+  it('desktop shows transfer on the bar next to approve and reject; someone without a task sees none', async () => {
+    const w = await mountBar(inst());
+    expect(q('action-transfer')).not.toBeNull();
+    expect(q('approval-more')).toBeNull();
     w.unmount();
+    document.body.innerHTML = '';
+    const other = await mountBar(inst({ stages: [stage({ tasks: [task({ canAct: false })] })] }), { user: 'x' });
+    expect(q('action-transfer')).toBeNull();
+    other.unmount();
   });
 
-  it('extra actions also show for someone without a task (an administrator)', async () => {
-    const run = vi.fn();
-    approvalTaskActions.push({ key: 'cancel', label: () => '終止', visible: (c) => c.task === undefined, run });
-    const w = await mountBar(inst({ stages: [stage({ tasks: [task({ canAct: false })] })] }), { user: 'x' });
+  it('phone keeps transfer in the more menu, not on the bottom bar', async () => {
+    const w = await mountBar(inst(), { width: 390 });
+    expect(q('action-transfer')).toBeNull();
     await click('approval-more');
-    await click('approval-extra-cancel');
-    expect(run.mock.calls[0]![0].task).toBeUndefined();
+    await click('approval-more-transfer');
+    expect(q('transfer-dialog')).not.toBeNull();
     w.unmount();
   });
 });

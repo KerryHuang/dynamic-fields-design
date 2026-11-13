@@ -55,6 +55,15 @@ describe('ApprovalPanel', () => {
     expect(text(w, 'stage-2')).toContain('李財務');
   });
 
+  it('a transferred task shows the original approver; a plain one does not', () => {
+    const w = mountPanel(approval(instance({ stages: [stage({ tasks: [
+      task({ id: 1, assigneeName: '李財務', reason: 'transferred', originalName: '王主管' }), task({ id: 2, assigneeName: '陳業務' }),
+    ] })] })));
+    expect(text(w, 'task-1')).toContain('轉交');
+    expect(w.find('[data-testid="task-1"] [data-testid="task-original"]').text()).toBe('原簽核人 王主管');
+    expect(w.find('[data-testid="task-2"] [data-testid="task-original"]').exists()).toBe(false);
+  });
+
   it('shows the stage mode (all sign / any sign)', () => {
     const w = mountPanel(approval(instance({ stages: [stage({ mode: 'any' })] })));
     expect(text(w, 'stage-1')).toContain('或簽');

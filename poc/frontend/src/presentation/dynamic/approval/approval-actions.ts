@@ -16,19 +16,8 @@ export function hasApprovalActions(i: ApprovalInstanceView | null, userId: strin
   return !!myOpenTask(i) || (!!userId && i.initiatorUserId === userId);
 }
 
-/** task is missing for someone who is not an assignee (an administrator): extensions must cope with that. */
-export interface ApprovalActionContext { instance: ApprovalInstanceView; task?: ApprovalTaskView; recordId: number; refresh: () => void }
-export interface ApprovalExtraAction {
-  key: string;
-  label: (t: Translate) => string;
-  visible: (c: ApprovalActionContext) => boolean;
-  run: (c: ApprovalActionContext) => void;
-}
-/** Extension point: transfer, add-sign, cancel and reassign (a3) register here and show up in the "more" menu. */
-export const approvalTaskActions: ApprovalExtraAction[] = [];
-
 export interface ActionNotice { type: 'positive' | 'warning'; message: string }
-/** What to tell the user after an approve, reject or withdraw succeeded. */
+/** What to tell the user after an approve, reject, transfer or withdraw succeeded. */
 export function resultNotice(r: ApprovalActionResult, locale: string, t: Translate): ActionNotice {
   if (r.outcome === 'rerouted') {
     const flow = r.newFlowName ? resolveI18n(r.newFlowName, locale) : '';
