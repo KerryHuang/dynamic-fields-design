@@ -41,12 +41,17 @@ const editableOptionsOf = (s: StageDraft) => [...editableOptions.value, ...s.edi
 const atLimit = computed(() => props.limits.maxStages !== undefined && props.modelValue.length >= Math.max(props.limits.maxStages, props.saved?.length ?? 0));
 // Same rule as the backend: a stage is matched to the saved one by its current code.
 const savedOf = (s: StageDraft) => props.saved?.find((x) => x.code === s.code);
-const codeChanged = (s: StageDraft) => !!s.savedCode && s.savedCode !== s.code;
+const codeChanged = (s: StageDraft) => !!s.savedCode && s.savedCode !== s.code && !savedOf(s);
 // A code that is another saved stage's code gets that stage's relaxed limits.
 const codeReused = (s: StageDraft) => s.savedCode !== s.code && !!savedOf(s);
 
 const setAll = (draft: { stages: StageDraft[] }) => emit('update:modelValue', draft.stages);
-const setApprovers = (i: number, v: ApproverSource) => patch(i, isSingleApprover(v) ? { approvers: v, mode: 'any' } : { approvers: v });
+// A single-person source forces mode any; the chosen mode is kept aside and comes back when the source is a group again.
+function setApprovers(i: number, v: ApproverSource) {
+  const s = props.modelValue[i]!;
+  if (isSingleApprover(v)) patch(i, { approvers: v, mode: 'any', chosenMode: s.chosenMode ?? (isSingleApprover(s.approvers) ? undefined : s.mode) });
+  else patch(i, { approvers: v, mode: s.chosenMode ?? s.mode, chosenMode: undefined });
+}
 const patch = (i: number, p: Partial<StageDraft>) => emit('update:modelValue', props.modelValue.map((s, k) => (k === i ? { ...s, ...p } : s)));
 const wrap = () => ({ stages: props.modelValue });
 const insertAt = (at: number) => setAll(insertStage(wrap(), at, props.saved?.map((x) => x.code)));

@@ -5,10 +5,12 @@ import * as quasar from 'quasar';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { createI18n } from 'vue-i18n';
 import type { StageDraft } from 'src/domain/dynamic/approval-flow-draft';
-import type { ApprovalStageDef } from 'src/domain/dynamic/approval-flow-types';
+import { buildFlowInput, draftFromFlow } from 'src/domain/dynamic/approval-flow-draft';
+import type { ApprovalFlow, ApprovalStageDef } from 'src/domain/dynamic/approval-flow-types';
 import type { DesignerField, ModuleDetail } from 'src/domain/dynamic/types';
 import zhTW from 'src/i18n/zh-TW.json';
 import { dynamicApi } from 'src/services/api/dynamic-api';
+import ApproverSourceEditor from './ApproverSourceEditor.vue';
 import FlowStagesEditor from './FlowStagesEditor.vue';
 import type { FlowLimits } from './use-approval-limits';
 
@@ -201,12 +203,62 @@ describe('FlowStagesEditor', () => {
     renamed.unmount();
   });
 
-  it('choosing a single-person source sets mode any; a group keeps the mode', async () => {
+  it('choosing a single-person source sets mode any', async () => {
     const w = await mountEditor([stage('a', { mode: 'all' })]);
     const kind = w.findAllComponents(quasar.QSelect).find((c) => c.props('label') === '簽核人來源')!;
     kind.vm.$emit('update:modelValue', 'manager');
     await flushPromises();
     expect((w.props('modelValue') as StageDraft[])[0]!.mode).toBe('any');
+    w.unmount();
+  });
+
+  it('a group source keeps the chosen mode', async () => {
+    const w = await mountEditor([stage('a', { mode: 'all' })]);
+    w.findComponent(ApproverSourceEditor).vm.$emit('update:modelValue', { source: 'group', groupIds: [3, 4] });
+    await flushPromises();
+    expect((w.props('modelValue') as StageDraft[])[0]!.mode).toBe('all');
+    w.unmount();
+  });
+
+  it('removing a person and adding them back keeps all-must-approve and the saved definition', async () => {
+    const approvers = { source: 'users' as const, userIds: ['u1', 'u2'] };
+    const def = savedDef('a', { approvers, mode: 'all' });
+    const flow = { key: 'k', name: {}, toOptionId: 12, priority: 1, active: true, definition: { shape: 'sequence' as const, when: null, stages: [def] } } as unknown as ApprovalFlow;
+    const draft = draftFromFlow(flow);
+    const w = await mountEditor(draft.stages, { saved: [def] });
+    const set = (ids: string[]) => w.findComponent(ApproverSourceEditor).vm.$emit('update:modelValue', { source: 'users', userIds: ids });
+    set(['u1']);
+    await flushPromises();
+    expect((w.props('modelValue') as StageDraft[])[0]!.mode).toBe('any');
+    set(['u1', 'u2']);
+    await flushPromises();
+    const stages = w.props('modelValue') as StageDraft[];
+    expect(stages[0]!.mode).toBe('all');
+    expect(buildFlowInput({ ...draft, stages })).toEqual(buildFlowInput(draft));
+    expect(JSON.stringify(buildFlowInput({ ...draft, stages }))).not.toContain('chosenMode');
+    w.unmount();
+  });
+
+  it('a group stage switched to an empty user list and then filled keeps its mode', async () => {
+    const w = await mountEditor([stage('a', { mode: 'all' })]);
+    const set = (ids: string[]) => w.findComponent(ApproverSourceEditor).vm.$emit('update:modelValue', { source: 'users', userIds: ids });
+    set([]);
+    await flushPromises();
+    set(['u1', 'u2', 'u3']);
+    await flushPromises();
+    expect((w.props('modelValue') as StageDraft[])[0]!.mode).toBe('all');
+    w.unmount();
+  });
+
+  it('a saved stage renamed to another saved code shows only the reuse warning', async () => {
+    const saved = [savedDef('a'), savedDef('b')];
+    const w = await mountEditor([stage('a', { savedCode: 'a' }), stage('b', { savedCode: 'b' })], { saved });
+    await w.find('[data-testid="stage-code-1"]').setValue('a');
+    expect(w.find('[data-testid="stage-code-reused-1"]').exists()).toBe(true);
+    expect(w.find('[data-testid="stage-code-warning-1"]').exists()).toBe(false);
+    await w.find('[data-testid="stage-code-1"]').setValue('new');
+    expect(w.find('[data-testid="stage-code-warning-1"]').exists()).toBe(true);
+    expect(w.find('[data-testid="stage-code-reused-1"]').exists()).toBe(false);
     w.unmount();
   });
 

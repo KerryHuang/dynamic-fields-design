@@ -373,6 +373,34 @@ describe('ApprovalFlowsTab', () => {
     w.unmount();
   });
 
+  it('focus goes to the flow card when the opener left the DOM (mobile menu item)', async () => {
+    const w = await mountTab([flow('a', 12, 1)]);
+    const gone = document.createElement('button');
+    document.body.appendChild(gone);
+    gone.focus();
+    await w.find('[data-testid="flow-card-a"]').trigger('click');
+    await flushPromises();
+    gone.remove();
+    w.findComponent(FlowEditorDialog).vm.$emit('update:modelValue', false);
+    await flushPromises();
+    expect(document.activeElement).toBe(w.find('[data-testid="flow-card-a"]').element);
+    w.unmount();
+  });
+
+  it('focus goes to the add button when the create dialog opener left the DOM', async () => {
+    const w = await mountTab([flow('a', 12, 1)]);
+    const gone = document.createElement('button');
+    document.body.appendChild(gone);
+    gone.focus();
+    await w.find('[data-testid="flow-add"]').trigger('click');
+    await flushPromises();
+    gone.remove();
+    w.findComponent(FlowEditorDialog).vm.$emit('update:modelValue', false);
+    await flushPromises();
+    expect(document.activeElement).toBe(w.find('[data-testid="flow-add"]').element);
+    w.unmount();
+  });
+
   it('the focusable card has an accessible name that says it edits the flow', async () => {
     const w = await mountTab([flow('a', 12, 1)]);
     expect(w.find('[data-testid="flow-card-a"]').attributes('aria-label')).toBe('編輯 流程a');

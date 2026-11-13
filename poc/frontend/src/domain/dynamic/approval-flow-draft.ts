@@ -14,6 +14,8 @@ export interface StageDraft {
   onEmpty: 'fallback' | 'skip';
   /** The code this stage was saved with (absent on a new stage); changing it makes the backend treat the stage as a new one. Not sent. */
   savedCode?: string;
+  /** The mode the designer chose while the source was a single person (which forces `any`); restored when the source stops being one. Not sent. */
+  chosenMode?: 'all' | 'any';
   /** Stable key for the stage card while the list is edited (not sent). */
   uid?: string;
 }

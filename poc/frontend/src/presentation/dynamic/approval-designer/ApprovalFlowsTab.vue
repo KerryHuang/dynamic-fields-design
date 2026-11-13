@@ -98,7 +98,16 @@ function confirmDelete() {
 const dialogOpen = ref(false);
 // The dialog unmounts as soon as it closes, so the element that opened it gets its focus back by hand.
 let opener: HTMLElement | null = null;
-watch(dialogOpen, async (open) => { if (open) return; await nextTick(); opener?.focus?.(); opener = null; });
+// The opener can be gone by then (a menu item that closed, a card that moved to another group on save): the flow's card, or the add button, takes the focus.
+watch(dialogOpen, async (open) => {
+  if (open) return;
+  await nextTick();
+  const target = opener?.isConnected
+    ? opener
+    : document.querySelector<HTMLElement>(`[data-testid="${editing.value ? `flow-card-${editing.value.key}` : 'flow-add'}"]`);
+  target?.focus?.();
+  opener = null;
+});
 const editing = ref<ApprovalFlow | undefined>();
 const preset = ref<number | null>(null);
 function openCreate(toOptionId: number | null) {
