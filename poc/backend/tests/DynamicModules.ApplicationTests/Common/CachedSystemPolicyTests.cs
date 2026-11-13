@@ -92,11 +92,16 @@ public class CachedSystemPolicyTests
     {
         var (p, reader, time, _) = Create();
         reader.Hang = true;
-        // ReadTimeout 用注入的 TimeProvider 計時，測試中推進假時間觸發逾時
-        var task = p.IntAsync(PolicyCatalog.OpsSlowRequestMs, CancellationToken.None);
-        await Task.Delay(50);
-        time.Advance(CachedSystemPolicy.ReadTimeout + TimeSpan.FromMilliseconds(1));
-        (await task.WaitAsync(TimeSpan.FromSeconds(5))).Should().Be(2000);
+        // ReadTimeout 用注入的 TimeProvider 計時，測試中推進假時間觸發逾時。
+        // 整段放進 Task.Run 脫離 xUnit 的同步內容：否則逾時後的接續要排進 xUnit 有限的工作執行緒，
+        // 其他測試佔滿時會等超過牆鐘上限而誤判失敗。CTS 計時器在 IntAsync 同步段就登記，不必先等。
+        var result = await Task.Run(async () =>
+        {
+            var task = p.IntAsync(PolicyCatalog.OpsSlowRequestMs, CancellationToken.None);
+            time.Advance(CachedSystemPolicy.ReadTimeout + TimeSpan.FromMilliseconds(1));
+            return await task.WaitAsync(TimeSpan.FromSeconds(30));
+        });
+        result.Should().Be(2000);
     }
 
     [Fact]
