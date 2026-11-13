@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import type { SchemaWorkflow } from './types';
 import {
   approvalTargets, buildWorkflow, canAdvance, draftFromWorkflow, emptyWorkflowDraft, intersectAllowed, isReadOnlyState, selectableStates,
-  setStateIncluded, setStateReadOnly, withStatusField,
+  draftTargets, isDraftDirty, setStateEditable, setStateIncluded, setStateReadOnly, setTransitionApproval, withStatusField,
 } from './workflow';
 
 const wf: SchemaWorkflow = {
@@ -121,5 +121,45 @@ describe('workflow draft', () => {
   it('builds nothing without a status field or an initial state', () => {
     expect(buildWorkflow(emptyWorkflowDraft())).toBeUndefined();
     expect(buildWorkflow({ ...draft, initialOptionId: null })).toBeUndefined();
+  });
+});
+
+describe('approval and editable edits', () => {
+  const saved = {
+    statusFieldId: 5, initialOptionId: 11,
+    states: [{ optionId: 11, readOnly: false }, { optionId: 12, readOnly: true }],
+    transitions: [{ from: 11, to: 12, groupIds: [3] }, { from: 12, to: 11, groupIds: [] }],
+  };
+  const draft = draftFromWorkflow(saved);
+
+  it('setTransitionApproval on sets required with block', () => {
+    const next = setTransitionApproval(draft, 0, { required: true, noMatch: 'block' });
+    expect(next.transitions[0]!.approval).toEqual({ required: true, noMatch: 'block' });
+    expect(next.transitions[1]!.approval).toBeUndefined();
+  });
+  it('off removes approval', () => {
+    const on = setTransitionApproval(draft, 0, { required: true, noMatch: 'direct' });
+    const off = setTransitionApproval(on, 0, null);
+    expect('approval' in off.transitions[0]!).toBe(false);
+    expect(buildWorkflow(off)!.transitions[0]).toEqual({ from: 11, to: 12, groupIds: [3] });
+  });
+  it('draftTargets lists approval targets only', () => {
+    expect(draftTargets(draft)).toEqual([]);
+    expect(draftTargets(setTransitionApproval(draft, 1, { required: true, noMatch: 'block' }))).toEqual([11]);
+  });
+  it('isDraftDirty false right after draftFromWorkflow, true after a toggle', () => {
+    expect(isDraftDirty(draft, saved)).toBe(false);
+    expect(isDraftDirty(setTransitionApproval(draft, 0, { required: true, noMatch: 'block' }), saved)).toBe(true);
+  });
+  it('isDraftDirty ignores server extras and editable false versus absent', () => {
+    const server = { ...saved, id: 1, lockedStates: [12], editableStates: [], lockedFieldIds: [] };
+    expect(isDraftDirty(draftFromWorkflow(server), server)).toBe(false);
+    const toggled = setStateEditable(setStateEditable(draft, 11, true), 11, false);
+    expect(isDraftDirty(toggled, saved)).toBe(false);
+  });
+  it('setStateEditable puts editable in the body and removes it when off', () => {
+    const on = setStateEditable(draft, 12, true);
+    expect(buildWorkflow(on)!.states[1]).toEqual({ optionId: 12, readOnly: true, editable: true });
+    expect(Object.keys(buildWorkflow(setStateEditable(on, 12, false))!.states[1]!)).toEqual(['optionId', 'readOnly']);
   });
 });

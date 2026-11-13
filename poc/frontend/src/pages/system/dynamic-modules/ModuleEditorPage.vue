@@ -39,6 +39,8 @@ const qc = useQueryClient();
 const { data: useMeData } = useMe();
 const moduleKey = computed(() => String(route.params.moduleKey));
 const tab = ref<'fields' | 'rules' | 'taskRules' | 'policies' | 'workflow' | 'events' | 'checks' | 'ledger' | 'print' | 'permissions' | 'preview'>('fields');
+// Target state the workflow tab asked to look at; the approval flows tab (a4a3) switches to it and reads this.
+const flowsTarget = ref<number | null>(null);
 // 連動事件、跨記錄驗證、分錄都是設計器端點（DYN00000）：沒有設計器讀取權限就不放入口
 const showEventsLedger = computed(() => !!useMeData.value?.designer.read);
 const query = useModuleDetail(moduleKey);
@@ -381,7 +383,7 @@ function saveSection() {
           <ModulePoliciesTab v-if="mod" :module="mod" />
         </q-tab-panel>
         <q-tab-panel name="workflow" class="q-pa-none">
-          <WorkflowTab :module="mod" />
+          <WorkflowTab :module="mod" @open-flows="(id: number) => (flowsTarget = id)" />
         </q-tab-panel>
         <q-tab-panel name="events" class="q-pa-none">
           <EventsTab :module="mod" />

@@ -540,6 +540,15 @@ export interface Workflow {
   transitions: { from: number; to: number; groupIds: number[]; approval?: { required: boolean; noMatch: 'block' | 'direct' } | null }[];
 }
 
+/** GET/PUT /modules/{key}/workflow: the workflow plus what the approval topology derives from it (computed by the backend on save). */
+export type WorkflowResponse = Workflow & {
+  lockedStates?: number[];
+  editableStates?: number[];
+  lockedFieldIds?: number[];
+  /** Candidate fields for a stage's editable fields (a4a1); absent on an older backend. */
+  editableFieldIds?: number[];
+};
+
 export interface ConversionLines {
   sourceModuleKey: string;
   targetModuleKey: string;

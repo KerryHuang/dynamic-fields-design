@@ -2,6 +2,7 @@
 import { useQuasar } from 'quasar';
 import { computed, ref, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
+import { useApprovalFlows } from 'src/application/dynamic/queries/approval-flow-queries';
 import { useGroups, useMe } from 'src/application/dynamic/queries/permissions-queries';
 import { useDeleteWorkflowMutation, useSaveWorkflowMutation, useWorkflowQuery } from 'src/application/dynamic/queries/workflow-queries';
 import SelectNoOption from 'src/components/framework/SelectNoOption.vue';
@@ -9,18 +10,21 @@ import { useSelectFilter } from 'src/components/framework/useSelectFilter';
 import { resolveI18n } from 'src/domain/dynamic/i18n-text';
 import type { ModuleDetail } from 'src/domain/dynamic/types';
 import {
-  buildWorkflow, draftFromWorkflow, setStateIncluded, setStateReadOnly, withStatusField, type WorkflowDraft,
+  buildWorkflow, draftFromWorkflow, draftTargets, emptyWorkflowDraft, isDraftDirty, setStateIncluded, setStateReadOnly, setTransitionApproval,
+  withStatusField, type WorkflowDraft,
 } from 'src/domain/dynamic/workflow';
 import { messagesOutside } from 'src/presentation/dynamic/designer/api-error';
 import { fieldOptions } from 'src/presentation/dynamic/designer/field-options';
 import type { ApiError } from 'src/services/api/http';
 
 const props = defineProps<{ module: ModuleDetail }>();
+const emit = defineEmits<{ 'open-flows': [toOptionId: number] }>();
 const { t, locale } = useI18n();
 const $q = useQuasar();
 
 const key = computed(() => props.module.key);
 const query = useWorkflowQuery(key);
+const flows = useApprovalFlows(key);
 const groups = useGroups();
 const me = useMe();
 const save = useSaveWorkflowMutation(key);
@@ -28,9 +32,16 @@ const remove = useDeleteWorkflowMutation(key);
 
 const draft = ref<WorkflowDraft | null>(null);
 const errors = ref<string[]>([]);
-// query.data is null when the module has no workflow; following it also drops the previous module's draft.
-watch(() => query.data.value, (d) => {
-  draft.value = d === undefined ? null : draftFromWorkflow(d);
+// The server response (locks, candidates) and the draft are separate: a refetch only replaces the draft when nothing is unsaved,
+// otherwise a flow saved on another tab would wash out the toggle the designer just turned on. Saving resets it explicitly.
+// query.data is null when the module has no workflow; a module switch always drops the previous module's draft.
+let loadedKey = '';
+watch([key, () => query.data.value], ([k, d], [, oldD]) => {
+  const switched = k !== loadedKey;
+  loadedKey = k;
+  if (d === undefined) { draft.value = null; errors.value = []; return; }
+  if (!switched && draft.value && isDraftDirty(draft.value, oldD)) return;
+  draft.value = draftFromWorkflow(d);
   errors.value = [];
 }, { immediate: true });
 
@@ -38,6 +49,12 @@ const readonly = computed(() => !me.data.value?.designer.edit);
 const unsupported = computed(() => !!props.module.detailOf || props.module.kind === 'extension');
 const ready = computed(() => draft.value && groups.data.value && me.data.value);
 const exists = computed(() => !!query.data.value);
+
+const flowCount = (toOptionId: number | null): number | undefined =>
+  toOptionId == null || !flows.data.value ? undefined : flows.data.value.filter((f) => f.toOptionId === toOptionId).length;
+const optionLabel = (id: number) => stateOptions.value.find((o) => o.value === id)?.label ?? String(id);
+// Transitions that need approval into a state that has no flow would be rejected by the server; say why before the click.
+const noFlowTargets = computed(() => (draft.value ? draftTargets(draft.value).filter((id) => flowCount(id) === 0) : []));
 
 const statusFieldOptions = computed(() => fieldOptions(props.module, locale.value, (f) => f.type === 'enum'));
 const statusField = computed(() => props.module.blocks.flatMap((b) => b.fields).find((f) => f.id === draft.value?.statusFieldId));
@@ -55,6 +72,14 @@ const isIncluded = (id: number) => draft.value!.states.some((s) => s.optionId ==
 const isReadOnly = (id: number) => !!draft.value!.states.find((s) => s.optionId === id)?.readOnly;
 const patch = (p: Partial<WorkflowDraft>) => { draft.value = { ...draft.value!, ...p }; errors.value = []; };
 const edit = (next: WorkflowDraft) => { draft.value = next; errors.value = []; };
+
+const setApproval = (i: number, on: boolean) =>
+  edit(setTransitionApproval(draft.value!, i, on ? { required: true, noMatch: 'block' } : null));
+const setNoMatch = (i: number, noMatch: 'block' | 'direct') => edit(setTransitionApproval(draft.value!, i, { required: true, noMatch }));
+const noMatchOptions = computed(() => [
+  { value: 'block', label: t('docflow.workflow.approval.noMatchBlock') },
+  { value: 'direct', label: t('docflow.workflow.approval.noMatchDirect') },
+]);
 
 const setTransition = (i: number, p: Partial<WorkflowDraft['transitions'][number]>) =>
   patch({ transitions: draft.value!.transitions.map((x, j) => (j === i ? { ...x, ...p } : x)) });
@@ -84,13 +109,22 @@ function fail(e: unknown) {
 function submit() {
   if (!body.value) return;
   errors.value = [];
-  save.mutate(body.value, { onSuccess: () => $q.notify({ type: 'positive', message: t('docflow.workflow.saved') }), onError: fail });
+  save.mutate(body.value, {
+    onSuccess: (data) => {
+      if (data) draft.value = draftFromWorkflow(data);
+      $q.notify({ type: 'positive', message: t('docflow.workflow.saved') });
+    },
+    onError: fail,
+  });
 }
 const confirmingRemove = ref(false);
 function removeWorkflow() {
   errors.value = [];
   confirmingRemove.value = false;
-  remove.mutate(undefined, { onSuccess: () => $q.notify({ type: 'positive', message: t('docflow.workflow.removed') }), onError: fail });
+  remove.mutate(undefined, {
+    onSuccess: () => { draft.value = emptyWorkflowDraft(); $q.notify({ type: 'positive', message: t('docflow.workflow.removed') }); },
+    onError: fail,
+  });
 }
 </script>
 
@@ -164,35 +198,68 @@ function removeWorkflow() {
         </div>
         <div class="text-caption text-muted q-mb-xs">{{ t('docflow.workflow.groupsHint') }}</div>
         <div v-if="!draft!.transitions.length" class="text-muted">{{ t('docflow.workflow.noTransitions') }}</div>
-        <div v-for="(tr, i) in draft!.transitions" :key="i" class="row no-wrap items-start q-gutter-x-sm q-mb-sm" :data-testid="`transition-row-${i}`">
-          <q-select
-            class="col" :model-value="tr.from" :options="fromSel.filterBy(includedOptions)" :label="t('docflow.workflow.from')" :disable="readonly"
-            emit-value map-options outlined dense use-input input-debounce="0" fill-input hide-selected :data-testid="`transition-from-${i}`"
-            @filter="fromSel.onFilter" @popup-hide="fromSel.reset" @update:model-value="(v: number) => setTransition(i, { from: v })"
-          >
-            <template #no-option><SelectNoOption /></template>
-          </q-select>
-          <q-icon name="arrow_forward" class="q-mt-sm" />
-          <q-select
-            class="col" :model-value="tr.to" :options="toSel.filterBy(includedOptions)" :label="t('docflow.workflow.to')" :disable="readonly"
-            emit-value map-options outlined dense use-input input-debounce="0" fill-input hide-selected :data-testid="`transition-to-${i}`"
-            @filter="toSel.onFilter" @popup-hide="toSel.reset" @update:model-value="(v: number) => setTransition(i, { to: v })"
-          >
-            <template #no-option><SelectNoOption /></template>
-          </q-select>
-          <q-select
-            class="col-5" :model-value="tr.groupIds" :options="groupSel.filterBy(groupOptions)" :label="t('docflow.workflow.groups')"
-            :hint="tr.groupIds.length ? undefined : t('docflow.workflow.anyoneWithEdit')" :disable="readonly"
-            multiple use-chips emit-value map-options outlined dense use-input input-debounce="0" :data-testid="`transition-groups-${i}`"
-            @filter="groupSel.onFilter" @popup-hide="groupSel.reset" @update:model-value="(v: number[]) => setTransition(i, { groupIds: v })"
-          >
-            <template #no-option><SelectNoOption /></template>
-          </q-select>
-          <q-badge v-if="tr.approval?.required" color="warning" text-color="dark" class="q-mt-sm" :label="t('docflow.workflow.needsApproval')" :data-testid="`transition-approval-${i}`" />
-          <q-btn flat dense round icon="delete" color="negative" :title="t('docflow.workflow.removeTransition')" :disable="readonly" :data-testid="`transition-remove-${i}`" @click="askRemoveTransition(i)" />
+        <div
+          v-for="(tr, i) in draft!.transitions" :key="i" class="row no-wrap items-start q-mb-sm" :data-testid="`transition-row-${i}`"
+        >
+          <div class="col column no-wrap q-gutter-y-xs">
+            <div class="row items-start q-col-gutter-sm">
+              <q-select
+                class="col-12 col-sm-5 col-md" :model-value="tr.from" :options="fromSel.filterBy(includedOptions)" :label="t('docflow.workflow.from')" :disable="readonly"
+                emit-value map-options outlined dense use-input input-debounce="0" fill-input hide-selected :data-testid="`transition-from-${i}`"
+                @filter="fromSel.onFilter" @popup-hide="fromSel.reset" @update:model-value="(v: number) => setTransition(i, { from: v })"
+              >
+                <template #no-option><SelectNoOption /></template>
+              </q-select>
+              <q-icon name="arrow_forward" class="gt-xs q-mt-md" />
+              <q-select
+                class="col-12 col-sm-5 col-md" :model-value="tr.to" :options="toSel.filterBy(includedOptions)" :label="t('docflow.workflow.to')" :disable="readonly"
+                emit-value map-options outlined dense use-input input-debounce="0" fill-input hide-selected :data-testid="`transition-to-${i}`"
+                @filter="toSel.onFilter" @popup-hide="toSel.reset" @update:model-value="(v: number) => setTransition(i, { to: v })"
+              >
+                <template #no-option><SelectNoOption /></template>
+              </q-select>
+              <q-select
+                class="col-12 col-md-4" :model-value="tr.groupIds" :options="groupSel.filterBy(groupOptions)" :label="t('docflow.workflow.groups')"
+                :hint="tr.groupIds.length ? undefined : t('docflow.workflow.anyoneWithEdit')" :disable="readonly"
+                multiple use-chips emit-value map-options outlined dense use-input input-debounce="0" :data-testid="`transition-groups-${i}`"
+                @filter="groupSel.onFilter" @popup-hide="groupSel.reset" @update:model-value="(v: number[]) => setTransition(i, { groupIds: v })"
+              >
+                <template #no-option><SelectNoOption /></template>
+              </q-select>
+            </div>
+            <div class="row items-center q-col-gutter-sm">
+              <div class="col-12 col-sm-auto">
+                <q-toggle
+                  :model-value="!!tr.approval?.required" :label="t('docflow.workflow.approval.toggle')" :aria-label="t('docflow.workflow.approval.toggleAria')"
+                  :disable="readonly" dense :data-testid="`transition-approval-toggle-${i}`" @update:model-value="(v: boolean) => setApproval(i, v)"
+                />
+              </div>
+              <template v-if="tr.approval?.required">
+                <q-select
+                  class="col-12 col-sm-4" :model-value="tr.approval.noMatch" :options="noMatchOptions" :label="t('docflow.workflow.approval.noMatch')"
+                  :disable="readonly" emit-value map-options outlined dense :data-testid="`transition-nomatch-${i}`"
+                  @update:model-value="(v: 'block' | 'direct') => setNoMatch(i, v)"
+                />
+                <div v-if="tr.to != null && flowCount(tr.to) !== undefined" class="col-12 col-sm-auto">
+                  <q-btn
+                    flat dense no-caps color="primary" :label="t('docflow.workflow.approval.flowCount', { n: flowCount(tr.to) })"
+                    :data-testid="`transition-flows-${i}`" @click="emit('open-flows', tr.to!)"
+                  />
+                </div>
+              </template>
+            </div>
+            <div v-if="tr.approval?.required && tr.approval.noMatch === 'direct'" class="text-caption text-warning" :data-testid="`transition-direct-warning-${i}`">
+              {{ t('docflow.workflow.approval.directWarning') }}
+            </div>
+          </div>
+          <q-btn flat dense round icon="delete" color="negative" :title="t('docflow.workflow.removeTransition')" :aria-label="t('docflow.workflow.removeTransition')" :disable="readonly" :data-testid="`transition-remove-${i}`" @click="askRemoveTransition(i)" />
         </div>
       </div>
     </template>
+
+    <div v-if="noFlowTargets.length" class="text-warning" data-testid="workflow-no-flow">
+      <div v-for="id in noFlowTargets" :key="id">{{ t('docflow.workflow.approval.noFlowReason', { state: optionLabel(id) }) }}</div>
+    </div>
 
     <div v-if="errors.length" class="text-negative" data-testid="workflow-errors">
       <div v-for="line in errors" :key="line">{{ line }}</div>
@@ -204,7 +271,7 @@ function removeWorkflow() {
         data-testid="remove-workflow" @click="confirmingRemove = true"
       />
       <q-btn
-        color="primary" :label="t('docflow.workflow.save')" :disable="readonly || !body" :loading="save.isPending.value"
+        color="primary" :label="t('docflow.workflow.save')" :disable="readonly || !body || noFlowTargets.length > 0" :loading="save.isPending.value"
         data-testid="save-workflow" @click="submit"
       />
     </div>

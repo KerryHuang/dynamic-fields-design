@@ -1,6 +1,6 @@
 import type {
   AdminGroup, AdminUser, AttachmentSettings, PrintTemplateDefinition, PrintTemplateOption, UploadedAttachment, DeleteCheck, DeleteTargetRef, AdminUserCreate, AdminUserUpdate, AuthOptions, AuthUser, ConditionNode, ConvertBody, Conversion, DesignerField, DetailRowPayload, DynamicRecord, EntitySummary, FieldConfig, FieldType, Group, GroupImpact, I18nText, LightPage, ListView, Me, MenuItem, ModuleDetail, ModulePermissions, ModuleSchema, RecordConversion,
-  ImportPreview, ImportResult, PagedResponse, RecordHistoryEntry, RelatedTab, Rule, RollupSource, User, ViewSort, Workflow,
+  ImportPreview, ImportResult, PagedResponse, RecordHistoryEntry, RelatedTab, Rule, RollupSource, User, ViewSort, Workflow, WorkflowResponse,
 } from 'src/domain/dynamic/types';
 import type {
   AdminDashboardDetail, AdminDashboardItem, CardResult, DashboardCard, DashboardDetail, DashboardLayout, DashboardList,
@@ -16,6 +16,7 @@ import type {
   ApprovalActionResult, ApprovalBox, ApprovalInboxFilter, ApprovalInboxItem, ApprovalPreview, ApproveBody, RecordApproval, RejectBody,
   SubmitApprovalBody, SubmitApprovalResult, WithdrawBody,
 } from 'src/domain/dynamic/approval-types';
+import type { ApprovalFlow, ApprovalFlowInput } from 'src/domain/dynamic/approval-flow-types';
 import type { TaskRule, TaskRuleInput } from 'src/domain/dynamic/task-rule-draft';
 import type { EffectivePolicies, ModulePolicy, PolicyValue, SystemPolicy } from 'src/domain/dynamic/policy-types';
 import { handleAuthFailure, http, toApiError } from './http';
@@ -242,9 +243,16 @@ export const dynamicApi = {
     http.put<ModulePermissions>(`/modules/${key}/permissions`, body).then(data),
   getRules: (key: string) => http.get<Rule[]>(`/modules/${key}/rules`).then(data),
   putRules: (key: string, rules: Rule[]) => http.put<Rule[]>(`/modules/${key}/rules`, { rules }).then(data),
-  getWorkflow: (key: string) => http.get<Workflow>(`/modules/${key}/workflow`).then(data),
-  putWorkflow: (key: string, body: Workflow) => http.put<Workflow>(`/modules/${key}/workflow`, body).then(data),
+  getWorkflow: (key: string) => http.get<WorkflowResponse>(`/modules/${key}/workflow`).then(data),
+  putWorkflow: (key: string, body: Workflow) => http.put<WorkflowResponse>(`/modules/${key}/workflow`, body).then(data),
   deleteWorkflow: (key: string) => http.delete(`/modules/${key}/workflow`).then(data),
+  getApprovalFlows: (module: string) => http.get<ApprovalFlow[]>('/approval-flows', { params: { module } }).then(data),
+  getApprovalFlow: (key: string) => http.get<ApprovalFlow>(`/approval-flows/${encodeURIComponent(key)}`).then(data),
+  createApprovalFlow: (module: string, body: ApprovalFlowInput) => http.post<ApprovalFlow>('/approval-flows', body, { params: { module } }).then(data),
+  updateApprovalFlow: (key: string, body: ApprovalFlowInput) => http.put<ApprovalFlow>(`/approval-flows/${encodeURIComponent(key)}`, body).then(data),
+  deleteApprovalFlow: (key: string) => http.delete(`/approval-flows/${encodeURIComponent(key)}`).then(data),
+  reorderApprovalFlows: (module: string, toOptionId: number, keys: string[]) =>
+    http.put<ApprovalFlow[]>('/approval-flows/order', { module, toOptionId, keys }).then(data),
   getConversions: () => http.get<Conversion[]>('/conversions').then(data),
   createConversion: (body: Conversion) => http.post<Conversion>('/conversions', body).then(data),
   updateConversion: (key: string, body: Conversion) => http.put<Conversion>(`/conversions/${encodeURIComponent(key)}`, body).then(data),

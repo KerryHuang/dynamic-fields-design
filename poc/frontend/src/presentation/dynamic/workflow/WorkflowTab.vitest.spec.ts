@@ -4,13 +4,13 @@ import { createPinia } from 'pinia';
 import * as quasar from 'quasar';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { createI18n } from 'vue-i18n';
-import type { DesignerField, ModuleDetail, Workflow } from 'src/domain/dynamic/types';
+import type { DesignerField, ModuleDetail, Workflow, WorkflowResponse } from 'src/domain/dynamic/types';
 import zhTW from 'src/i18n/zh-TW.json';
 import { dynamicApi } from 'src/services/api/dynamic-api';
 import WorkflowTab from './WorkflowTab.vue';
 
 vi.mock('src/services/api/dynamic-api', () => ({
-  dynamicApi: { getWorkflow: vi.fn(), putWorkflow: vi.fn(), deleteWorkflow: vi.fn(), getGroups: vi.fn(), getMe: vi.fn() },
+  dynamicApi: { getWorkflow: vi.fn(), putWorkflow: vi.fn(), deleteWorkflow: vi.fn(), getGroups: vi.fn(), getMe: vi.fn(), getApprovalFlows: vi.fn() },
 }));
 const api = vi.mocked(dynamicApi);
 
@@ -29,20 +29,25 @@ const saved: Workflow = {
   transitions: [{ from: 11, to: 12, groupIds: [3] }],
 };
 
-async function mountTab(m: ModuleDetail, existing: Workflow | null) {
+const flowOn = (toOptionId: number, key = `f${toOptionId}`) => ({ key, toOptionId }) as never;
+
+async function mountTab(m: ModuleDetail, existing: Workflow | WorkflowResponse | null, flows: unknown[] | null = []) {
   api.getWorkflow.mockImplementation(async () => {
     if (existing) return existing;
     throw { status: 404 };
   });
+  if (flows) api.getApprovalFlows.mockResolvedValue(flows as never);
+  else api.getApprovalFlows.mockRejectedValue({ status: 500 });
   api.getGroups.mockResolvedValue([{ id: 3, key: 'mgr', name: { 'zh-TW': '主管' }, members: [] }]);
   api.getMe.mockResolvedValue({ designer: { read: true, add: true, edit: true, delete: true } } as never);
+  const qc = new QueryClient();
   const i18n = createI18n({ legacy: false, locale: 'zh-TW', messages: { 'zh-TW': zhTW } });
   const w = mount(WorkflowTab, {
     props: { module: m },
-    global: { plugins: [[quasar.Quasar, { components: quasar, directives: quasar, plugins: { Notify: quasar.Notify } }], createPinia(), i18n, [VueQueryPlugin, { queryClient: new QueryClient() }]] },
+    global: { plugins: [[quasar.Quasar, { components: quasar, directives: quasar, plugins: { Notify: quasar.Notify } }], createPinia(), i18n, [VueQueryPlugin, { queryClient: qc }]] },
   });
   await flushPromises();
-  return w;
+  return Object.assign(w, { qc });
 }
 
 describe('WorkflowTab', () => {
@@ -68,7 +73,7 @@ describe('WorkflowTab', () => {
       transitions: [{ from: 11, to: 12, groupIds: [3], approval: { required: true, noMatch: 'block' } }],
     };
     api.putWorkflow.mockResolvedValue(withApproval);
-    const w = await mountTab(mod(), withApproval);
+    const w = await mountTab(mod(), withApproval, [flowOn(12)]);
     await w.find('[data-testid="save-workflow"]').trigger('click');
     await flushPromises();
     expect(api.putWorkflow).toHaveBeenCalledWith('doc', withApproval);
@@ -81,8 +86,8 @@ describe('WorkflowTab', () => {
       transitions: [{ from: 11, to: 12, groupIds: [3], approval: { required: true, noMatch: 'direct' } }],
     };
     api.putWorkflow.mockResolvedValue(withApproval);
-    const w = await mountTab(mod(), withApproval);
-    expect(w.find('[data-testid="transition-approval-0"]').text()).toBe('需簽核');
+    const w = await mountTab(mod(), withApproval, [flowOn(12)]);
+    expect(w.find('[data-testid="transition-approval-toggle-0"]').attributes('aria-checked')).toBe('true');
     expect(w.find('[data-testid="state-editable-11"]').text()).toBe('可編輯');
     expect(w.find('[data-testid="state-editable-12"]').exists()).toBe(false);
     w.findAllComponents({ name: 'QSelect' })[3]!.vm.$emit('update:modelValue', []);
@@ -142,5 +147,104 @@ describe('WorkflowTab', () => {
     const w = await mountTab(mod({ detailOf: 'header' }), null);
     expect(w.find('[data-testid="workflow-unsupported"]').exists()).toBe(true);
     expect(w.find('[data-testid="save-workflow"]').exists()).toBe(false);
+  });
+
+  describe('approval on transitions', () => {
+    const toggle = (w: Awaited<ReturnType<typeof mountTab>>) => w.find('[data-testid="transition-approval-toggle-0"]');
+    const lastBody = () => api.putWorkflow.mock.calls.at(-1)![1] as Workflow;
+
+    it('approval toggle adds required approval with block and shows the noMatch select', async () => {
+      api.putWorkflow.mockResolvedValue(saved as never);
+      const w = await mountTab(mod(), saved, [flowOn(12)]);
+      expect(w.find('[data-testid="transition-nomatch-0"]').exists()).toBe(false);
+      await toggle(w).trigger('click');
+      expect(w.find('[data-testid="transition-nomatch-0"]').exists()).toBe(true);
+      await w.find('[data-testid="save-workflow"]').trigger('click');
+      await flushPromises();
+      expect(lastBody().transitions[0]!.approval).toEqual({ required: true, noMatch: 'block' });
+    });
+
+    it('turning approval off sends no approval for that transition', async () => {
+      const withApproval: Workflow = { ...saved, transitions: [{ from: 11, to: 12, groupIds: [3], approval: { required: true, noMatch: 'block' } }] };
+      api.putWorkflow.mockResolvedValue(withApproval as never);
+      const w = await mountTab(mod(), withApproval, [flowOn(12)]);
+      await toggle(w).trigger('click');
+      await w.find('[data-testid="save-workflow"]').trigger('click');
+      await flushPromises();
+      expect('approval' in lastBody().transitions[0]!).toBe(false);
+    });
+
+    it('direct noMatch shows the direct warning text', async () => {
+      const withApproval: Workflow = { ...saved, transitions: [{ from: 11, to: 12, groupIds: [3], approval: { required: true, noMatch: 'block' } }] };
+      const w = await mountTab(mod(), withApproval, [flowOn(12)]);
+      expect(w.find('[data-testid="transition-direct-warning-0"]').exists()).toBe(false);
+      w.findAllComponents({ name: 'QSelect' })[4]!.vm.$emit('update:modelValue', 'direct');
+      await flushPromises();
+      expect(w.find('[data-testid="transition-direct-warning-0"]').text()).toBe('條件都不符合的單據會直接轉移，不經任何人同意');
+    });
+
+    it('flow count link shows N flows on the target and emits open-flows with the target option', async () => {
+      const withApproval: Workflow = { ...saved, transitions: [{ from: 11, to: 12, groupIds: [3], approval: { required: true, noMatch: 'block' } }] };
+      const w = await mountTab(mod(), withApproval, [flowOn(12, 'a'), flowOn(12, 'b'), flowOn(11, 'c')]);
+      const link = w.find('[data-testid="transition-flows-0"]');
+      expect(link.text()).toContain('目標狀態已掛 2 個流程');
+      await link.trigger('click');
+      expect(w.emitted('open-flows')).toEqual([[12]]);
+    });
+
+    it('save disabled while an approval transition targets a state with no flow, with the reason', async () => {
+      const w = await mountTab(mod(), saved, [flowOn(11)]);
+      await toggle(w).trigger('click');
+      expect(w.find('[data-testid="save-workflow"]').attributes('disabled')).toBeDefined();
+      expect(w.find('[data-testid="workflow-no-flow"]').text()).toContain('「狀態12」還沒有簽核流程');
+    });
+
+    it('does not block saving while the flow list has not loaded', async () => {
+      const w = await mountTab(mod(), saved, null);
+      await toggle(w).trigger('click');
+      expect(w.find('[data-testid="save-workflow"]').attributes('disabled')).toBeUndefined();
+    });
+
+    it('unsaved draft survives a workflow refetch', async () => {
+      const w = await mountTab(mod(), saved, [flowOn(12)]);
+      await toggle(w).trigger('click');
+      const fresh: WorkflowResponse = { ...saved, lockedStates: [12], editableStates: [], lockedFieldIds: [7] };
+      w.qc.setQueryData(['workflow', 'doc'], fresh);
+      await flushPromises();
+      expect(toggle(w).attributes('aria-checked')).toBe('true');
+      api.putWorkflow.mockResolvedValue(saved as never);
+      await w.find('[data-testid="save-workflow"]').trigger('click');
+      await flushPromises();
+      expect(lastBody().transitions[0]!.approval).toEqual({ required: true, noMatch: 'block' });
+    });
+
+    it('a refetch replaces the draft when nothing is unsaved', async () => {
+      const w = await mountTab(mod(), saved, [flowOn(12)]);
+      const fresh: WorkflowResponse = { ...saved, transitions: [{ from: 11, to: 12, groupIds: [3], approval: { required: true, noMatch: 'block' } }], lockedStates: [12], editableStates: [], lockedFieldIds: [] };
+      w.qc.setQueryData(['workflow', 'doc'], fresh);
+      await flushPromises();
+      expect(toggle(w).attributes('aria-checked')).toBe('true');
+    });
+
+    it('saving resets the draft from the server response', async () => {
+      const w = await mountTab(mod(), saved, [flowOn(12)]);
+      await toggle(w).trigger('click');
+      const response: WorkflowResponse = {
+        ...saved, transitions: [{ from: 11, to: 12, groupIds: [3], approval: { required: true, noMatch: 'direct' } }],
+        lockedStates: [12], editableStates: [], lockedFieldIds: [],
+      };
+      api.putWorkflow.mockResolvedValue(response);
+      await w.find('[data-testid="save-workflow"]').trigger('click');
+      await flushPromises();
+      expect(w.find('[data-testid="transition-direct-warning-0"]').exists()).toBe(true);
+    });
+
+    it('read-only designer sees the toggle disabled', async () => {
+      const w = await mountTab(mod(), saved, [flowOn(12)]);
+      api.getMe.mockResolvedValue({ designer: { read: true, add: false, edit: false, delete: false } } as never);
+      await w.qc.invalidateQueries();
+      await flushPromises();
+      expect(toggle(w).attributes('aria-disabled')).toBe('true');
+    });
   });
 });

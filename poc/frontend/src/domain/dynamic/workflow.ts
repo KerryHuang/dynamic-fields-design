@@ -85,3 +85,43 @@ export function buildWorkflow(d: WorkflowDraft): Workflow | undefined {
       : [{ from: t.from, to: t.to, groupIds: [...t.groupIds], ...(t.approval !== undefined && { approval: t.approval }) }])),
   };
 }
+
+type DraftTransition = WorkflowDraft['transitions'][number];
+
+/** `null` removes the approval key, so a save sends the transition as a plain one. */
+export function setTransitionApproval(d: WorkflowDraft, index: number, approval: DraftTransition['approval'] | null): WorkflowDraft {
+  return {
+    ...d,
+    transitions: d.transitions.map((t, i) => {
+      if (i !== index) return t;
+      const { approval: _drop, ...rest } = t;
+      return approval ? { ...rest, approval } : rest;
+    }),
+  };
+}
+
+/** Off removes the key (the server reads absent as false). */
+export function setStateEditable(d: WorkflowDraft, optionId: number, editable: boolean): WorkflowDraft {
+  return {
+    ...d,
+    states: d.states.map((s) => {
+      if (s.optionId !== optionId) return s;
+      const { editable: _drop, ...rest } = s;
+      return editable ? { ...rest, editable: true } : rest;
+    }),
+  };
+}
+
+/** Option ids that some transition in the draft reaches through an approval. */
+export const draftTargets = (d: WorkflowDraft): number[] =>
+  [...new Set(d.transitions.filter((t) => t.approval?.required && t.to != null).map((t) => t.to as number))];
+
+const comparable = (d: WorkflowDraft) => JSON.stringify({
+  s: d.statusFieldId, i: d.initialOptionId,
+  st: d.states.map((s) => [s.optionId, s.readOnly, !!s.editable]),
+  tr: d.transitions.map((t) => [t.from, t.to, t.groupIds, t.approval?.required ? t.approval.noMatch : null]),
+});
+
+/** Whether the draft differs from the saved server response (server extras such as locked states do not count). */
+export const isDraftDirty = (d: WorkflowDraft, saved: Workflow | null | undefined): boolean =>
+  comparable(d) !== comparable(draftFromWorkflow(saved));

@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/vue-query';
 import { computed, toValue, type MaybeRefOrGetter } from 'vue';
-import type { Workflow } from 'src/domain/dynamic/types';
+import type { Workflow, WorkflowResponse } from 'src/domain/dynamic/types';
 import { dynamicApi } from 'src/services/api/dynamic-api';
 import type { ApiError } from 'src/services/api/http';
 
@@ -8,7 +8,7 @@ import type { ApiError } from 'src/services/api/http';
 export function useWorkflowQuery(key: MaybeRefOrGetter<string>) {
   return useQuery({
     queryKey: computed(() => ['workflow', toValue(key)]),
-    queryFn: async (): Promise<Workflow | null> => {
+    queryFn: async (): Promise<WorkflowResponse | null> => {
       try {
         return await dynamicApi.getWorkflow(toValue(key));
       } catch (e) {
@@ -24,7 +24,7 @@ export function useWorkflowQuery(key: MaybeRefOrGetter<string>) {
 }
 
 /** Saving or removing bumps what the schema carries (`workflow`), so every schema goes stale. */
-function useWorkflowWrite<V>(key: MaybeRefOrGetter<string>, fn: (k: string, v: V) => Promise<Workflow | void>) {
+function useWorkflowWrite<V>(key: MaybeRefOrGetter<string>, fn: (k: string, v: V) => Promise<WorkflowResponse | void>) {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (v: V) => fn(toValue(key), v),
