@@ -49,7 +49,7 @@ public static class PolicyJson
             ? []
             : def.ForbiddenIn(string.Join(",", value.EnumerateArray().Select(e => e.GetString())));
 
-    public static bool HasRange(PolicyDefinition def) => def.Kind is PolicyKind.Integer or PolicyKind.CodeList;
+    public static bool HasRange(PolicyDefinition def) => def.Kind is PolicyKind.Integer or PolicyKind.CodeList or PolicyKind.Recipients;
 
     public static bool HasOptions(PolicyDefinition def) => def.Kind is PolicyKind.Choice or PolicyKind.RoleSet;
 

@@ -112,6 +112,14 @@ public static class PolicyCatalog
     public static readonly PolicyDefinition ApprovalAdminBypassTransitionGroups =
         new("approval.adminBypassTransitionGroups", "approval", PolicyKind.Boolean, PolicyScope.System, "true");
 
+    /// <summary>A10：找不到簽核人時的備援對象（流程自己沒設備援名單時才用）。</summary>
+    public static readonly PolicyDefinition ApprovalDefaultFallbackApprovers =
+        new("approval.defaultFallbackApprovers", "approval", PolicyKind.Recipients, PolicyScope.Module, "admins", 1, 20);
+
+    /// <summary>A11：簽核異常通知的對象。</summary>
+    public static readonly PolicyDefinition ApprovalAlertRecipients =
+        new("approval.alertRecipients", "approval", PolicyKind.Recipients, PolicyScope.System, "admins", 1, 20);
+
     public static DayOfWeek WeekStartOf(string choice) => Enum.Parse<DayOfWeek>(choice, ignoreCase: true);
 
     public static IReadOnlyList<PolicyDefinition> All { get; } =
@@ -121,7 +129,8 @@ public static class PolicyCatalog
          AttachmentMaxFileBytes, AttachmentMaxFilesPerField, AttachmentAllowedExtensions, AttachmentMaxFilesPerComment,
          OpsSlowRequestMs, OpsClientErrorCollection,
          ApprovalMaxStages, ApprovalMaxApprovers, ApprovalMaxDueHours, ApprovalMaxCommentLength, ApprovalMaxManagerLevel,
-         ApprovalAllowSelfApproval, ApprovalAdminBypassTransitionGroups];
+         ApprovalAllowSelfApproval, ApprovalAdminBypassTransitionGroups,
+         ApprovalDefaultFallbackApprovers, ApprovalAlertRecipients];
 
     public static PolicyDefinition? Find(string code) =>
         All.FirstOrDefault(d => string.Equals(d.Code, code, StringComparison.Ordinal));

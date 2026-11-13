@@ -10,6 +10,9 @@ public class ModulePolicyRepository(DynamicDbContext db) : IModulePolicyReposito
     public Task<List<ModulePolicy>> ListByModuleAsync(long moduleId, CancellationToken ct) =>
         db.Set<ModulePolicy>().AsNoTracking().Where(p => p.ModuleId == moduleId).ToListAsync(ct);
 
+    public Task<List<ModulePolicy>> ListByCodesAsync(IReadOnlyCollection<string> codes, CancellationToken ct) =>
+        db.Set<ModulePolicy>().AsNoTracking().Where(p => codes.Contains(p.Code)).ToListAsync(ct);
+
     public Task<ModulePolicy?> GetTrackedAsync(long moduleId, string code, CancellationToken ct) =>
         db.Set<ModulePolicy>().FirstOrDefaultAsync(p => p.ModuleId == moduleId && p.Code == code, ct);
 

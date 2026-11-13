@@ -7,12 +7,13 @@ namespace DynamicModules.Domain.Policies;
 public enum PolicyScope { System, Module }
 
 /// <summary>政策值的型別；值一律以標準字串存放，由型別解析。</summary>
-public enum PolicyKind { Integer, Boolean, Choice, RoleSet, CodeList }
+public enum PolicyKind { Integer, Boolean, Choice, RoleSet, CodeList, Recipients }
 
 /// <summary>
 /// 一個業務政策的登記項。<see cref="Min"/>／<see cref="Max"/> 是寫死的技術上下限（Integer 是數值，CodeList 是項目數）。
 /// 標準字串：Integer 不帶符號的十進位；Boolean <c>true</c>／<c>false</c>；Choice 選項原字；
 /// RoleSet 依選項順序、逗號分隔、可為空字串；CodeList 小寫、去前導點、去重保留首次順序、逗號分隔。
+/// Recipients 是 <c>admins</c>、<c>group:&lt;id&gt;</c>、<c>user:&lt;userId&gt;</c> 的組合（逗號分隔、去重保留首次順序、項數 Min 到 Max），只檢查語法，存在與否由 Application 驗。
 /// <see cref="Forbidden"/> 是 CodeList 的寫死黑名單（安全檢查）：含黑名單項目的值一律不合法。
 /// </summary>
 public sealed partial record PolicyDefinition(
@@ -57,6 +58,13 @@ public sealed partial record PolicyDefinition(
                 var distinct = items.Distinct(StringComparer.Ordinal).ToList();
                 return distinct.Count >= Min && distinct.Count <= Max ? string.Join(",", distinct) : null;
             }
+            case PolicyKind.Recipients:
+            {
+                var items = Split(raw).Select(RecipientItem).ToList();
+                if (items.Any(i => i is null)) return null;
+                var distinct = items.Select(i => i!).Distinct(StringComparer.Ordinal).ToList();
+                return distinct.Count >= Min && distinct.Count <= Max ? string.Join(",", distinct) : null;
+            }
             default:
                 return null;
         }
@@ -92,6 +100,29 @@ public sealed partial record PolicyDefinition(
     /// <summary>原始值中落在黑名單的項目（正規化後、去重），訊息列出被拒的項目用。</summary>
     public IReadOnlyList<string> ForbiddenIn(string raw) =>
         Split(raw).Select(CodeItem).Where(IsForbidden).Distinct(StringComparer.Ordinal).ToList();
+
+    /// <summary>Recipients 標準字串拆成項目（逗號切開，不用字串包含，<c>group:1</c> 不會誤中 <c>group:12</c>）；空字串回空清單。</summary>
+    public static IReadOnlyList<string> RecipientItems(string normalized) =>
+        normalized.Length == 0 ? [] : normalized.Split(',');
+
+    /// <summary>單一收件人項目語法正確回標準寫法，否則 null。</summary>
+    private static string? RecipientItem(string item)
+    {
+        if (item == "admins") return item;
+        if (item.StartsWith("group:", StringComparison.Ordinal))
+            return long.TryParse(item.AsSpan(6), NumberStyles.None, CultureInfo.InvariantCulture, out var id) && id > 0
+                ? "group:" + id.ToString(CultureInfo.InvariantCulture)
+                : null;
+        if (item.StartsWith("user:", StringComparison.Ordinal))
+        {
+            var userId = item[5..].ToLowerInvariant();
+            return UserIdPattern().IsMatch(userId) ? "user:" + userId : null;
+        }
+        return null;
+    }
+
+    [GeneratedRegex(@"^[a-z0-9._-]{2,50}\z")]
+    private static partial Regex UserIdPattern();
 
     private static List<string> Split(string raw) =>
         raw.Split(',', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries).ToList();

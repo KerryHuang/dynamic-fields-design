@@ -1,10 +1,12 @@
 using DynamicModules.Application.Common;
+using DynamicModules.Application.Dynamic.PolicyService;
+using DynamicModules.Domain.Policies;
 using DynamicModules.Domain.Repositories.Dynamic;
 using MediatR;
 
 namespace DynamicModules.Application.Dynamic.AccountService.Commands.DeleteGroup;
 
-public class DeleteGroupHandler(IAccountRepository accounts, IApprovalFlowRepository approvalFlows, IUnitOfWork uow) : IRequestHandler<DeleteGroupRequest, ServiceResult>
+public class DeleteGroupHandler(IAccountRepository accounts, IApprovalFlowRepository approvalFlows, ISystemSettingRepository settings, IModulePolicyRepository modulePolicies, IUnitOfWork uow) : IRequestHandler<DeleteGroupRequest, ServiceResult>
 {
     public async Task<ServiceResult> Handle(DeleteGroupRequest request, CancellationToken ct)
     {
@@ -19,6 +21,16 @@ public class DeleteGroupHandler(IAccountRepository accounts, IApprovalFlowReposi
         // 簽核流程的目前版本或進行中實例用的版本引用這個群組：刪了關卡就找不到人（簽核設計 §8.6）
         var flowKeys = await approvalFlows.ListFlowKeysReferencingGroupAsync(group.Id, ct);
         if (flowKeys.Count > 0) return ServiceResult.Conflict($"群組被簽核流程使用：{string.Join("、", flowKeys)}");
+
+        // 收件人政策（全系統值與模組覆寫）引用這個群組：先拆成項目再比對，group:1 不會誤中 group:12
+        var codes = PolicyCatalog.All.Where(d => d.Kind == PolicyKind.Recipients).ToList();
+        var token = $"group:{group.Id}";
+        var referenced = new List<string>();
+        var system = await settings.ListByPrefixAsync("policy.", ct);
+        referenced.AddRange(codes.Where(d => system.TryGetValue(d.SettingKey, out var v) && PolicyDefinition.RecipientItems(v).Contains(token)).Select(d => d.Code));
+        var overrides = await modulePolicies.ListByCodesAsync(codes.Select(d => d.Code).ToList(), ct);
+        referenced.AddRange(overrides.Where(o => PolicyDefinition.RecipientItems(o.Value).Contains(token)).Select(o => o.Code));
+        if (referenced.Count > 0) return ServiceResult.Conflict(PolicyMessages.GroupUsedByPolicies(referenced.Distinct()));
 
         await accounts.DeleteGroupAsync(group, ct);
         await uow.CommitAsync(ct);

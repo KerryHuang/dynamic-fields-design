@@ -23,7 +23,8 @@ public class GetSystemPoliciesHandler(IPolicyReader reader) : IRequestHandler<Ge
     }
 }
 
-public class UpdateSystemPolicyHandler(ISystemSettingRepository settings, IPolicyReader reader, IUnitOfWork uow)
+public class UpdateSystemPolicyHandler(
+    ISystemSettingRepository settings, IPolicyReader reader, IUnitOfWork uow, IAccountRepository accounts, IPermissionRepository permissions)
     : IRequestHandler<UpdateSystemPolicyRequest, ServiceResult>
 {
     public async Task<ServiceResult> Handle(UpdateSystemPolicyRequest request, CancellationToken ct)
@@ -32,6 +33,8 @@ public class UpdateSystemPolicyHandler(ISystemSettingRepository settings, IPolic
         if (request.Value is { ValueKind: not (JsonValueKind.Null or JsonValueKind.Undefined) } value)
         {
             if (PolicyJson.FromJson(def, value) is not { } canonical) return PolicyValueInvalid(def, value);
+            if (await RecipientCheck.MissingAsync(def, canonical, accounts, permissions, ct) is { Count: > 0 } missing)
+                return ServiceResult.Invalid(new Dictionary<string, string[]> { ["value"] = [PolicyMessages.RecipientsMissing(missing)] });
             await settings.SetAsync(def.SettingKey, canonical, ct);
         }
         else
@@ -65,7 +68,8 @@ public class GetModulePoliciesHandler(IModuleRepository modules, IPolicyReader r
 }
 
 public class UpdateModulePolicyHandler(
-    IModuleRepository modules, IModulePolicyRepository overrides, IPolicyReader reader, IUnitOfWork uow, ICurrentUser user, IBusinessTime time)
+    IModuleRepository modules, IModulePolicyRepository overrides, IPolicyReader reader, IUnitOfWork uow, ICurrentUser user, IBusinessTime time,
+    IAccountRepository accounts, IPermissionRepository permissions)
     : IRequestHandler<UpdateModulePolicyRequest, ServiceResult>
 {
     public async Task<ServiceResult> Handle(UpdateModulePolicyRequest request, CancellationToken ct)
@@ -80,6 +84,8 @@ public class UpdateModulePolicyHandler(
         if (request.Value is { ValueKind: not (JsonValueKind.Null or JsonValueKind.Undefined) } value)
         {
             if (PolicyJson.FromJson(def, value) is not { } canonical) return UpdateSystemPolicyHandler.PolicyValueInvalid(def, value);
+            if (await RecipientCheck.MissingAsync(def, canonical, accounts, permissions, ct) is { Count: > 0 } missing)
+                return ServiceResult.Invalid(new Dictionary<string, string[]> { ["value"] = [PolicyMessages.RecipientsMissing(missing)] });
             if (existing is null)
             {
                 existing = new ModulePolicy { ModuleId = module.Id, Code = def.Code };
@@ -112,8 +118,32 @@ public class GetEffectivePoliciesHandler(IModuleRepository modules, IPolicyReade
             moduleId = module.Id;
         }
         var values = new Dictionary<string, JsonElement>(StringComparer.Ordinal);
-        foreach (var def in PolicyCatalog.All)
+        // 收件人類政策不出現：前端執行畫面用不到，回應還會帶出使用者帳號
+        foreach (var def in PolicyCatalog.All.Where(d => d.Kind != PolicyKind.Recipients))
             values[def.Code] = PolicyJson.ToJson(def, (await reader.ResolveAsync(def, moduleId, ct)).Effective);
         return ServiceResult.Success(new EffectivePoliciesResponse(request.ModuleKey, values));
+    }
+}
+
+/// <summary>收件人政策存檔時檢查：群組存在、使用者存在且啟用；回傳找不到或已停用的項目。</summary>
+internal static class RecipientCheck
+{
+    public static async Task<List<string>> MissingAsync(
+        PolicyDefinition def, string canonical, IAccountRepository accounts, IPermissionRepository permissions, CancellationToken ct)
+    {
+        var missing = new List<string>();
+        if (def.Kind != PolicyKind.Recipients) return missing;
+        foreach (var item in PolicyDefinition.RecipientItems(canonical))
+        {
+            if (item.StartsWith("group:", StringComparison.Ordinal))
+            {
+                if (!await accounts.GroupsExistAsync([long.Parse(item[6..])], ct)) missing.Add(item);
+            }
+            else if (item.StartsWith("user:", StringComparison.Ordinal))
+            {
+                if (await permissions.GetUserAsync(item[5..], ct) is not { IsActive: true }) missing.Add(item);
+            }
+        }
+        return missing;
     }
 }

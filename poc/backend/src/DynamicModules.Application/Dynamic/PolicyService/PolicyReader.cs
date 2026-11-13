@@ -18,7 +18,7 @@ public interface IPolicyReader
     Task<int> IntAsync(PolicyDefinition def, long? moduleId, CancellationToken ct);
     Task<bool> BoolAsync(PolicyDefinition def, long? moduleId, CancellationToken ct);
     Task<string> ChoiceAsync(PolicyDefinition def, long? moduleId, CancellationToken ct);
-    /// <summary>RoleSet 與 CodeList；空字串回空清單。</summary>
+    /// <summary>RoleSet、CodeList 與 Recipients（項目字串）；空字串回空清單。</summary>
     Task<IReadOnlyList<string>> ListAsync(PolicyDefinition def, long? moduleId, CancellationToken ct);
     /// <summary>寫入政策後呼叫，清掉這個 scope 的快取。</summary>
     void Invalidate();
@@ -73,7 +73,7 @@ public sealed class PolicyReader(
 
     public async Task<IReadOnlyList<string>> ListAsync(PolicyDefinition def, long? moduleId, CancellationToken ct)
     {
-        Expect(def, PolicyKind.RoleSet, PolicyKind.CodeList);
+        Expect(def, PolicyKind.RoleSet, PolicyKind.CodeList, PolicyKind.Recipients);
         var effective = (await ResolveAsync(def, moduleId, ct)).Effective;
         return effective.Length == 0 ? [] : effective.Split(',');
     }

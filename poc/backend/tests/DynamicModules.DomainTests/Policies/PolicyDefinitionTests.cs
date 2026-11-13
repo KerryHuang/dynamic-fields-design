@@ -150,6 +150,47 @@ public class PolicyDefinitionTests
         PolicyCatalog.ApprovalMaxApprovers.Normalize("51").Should().BeNull();
     }
 
+    private static PolicyDefinition Recips() => PolicyCatalog.ApprovalAlertRecipients;
+
+    [Fact]
+    public void Recipients_Normalize_DedupesKeepsOrder() =>
+        Recips().Normalize("user:fin1,admins,user:fin1").Should().Be("user:fin1,admins");
+
+    [Theory]
+    [InlineData("group:abc")]
+    [InlineData("group:0")]
+    [InlineData("user:A B")]
+    [InlineData("user:x")]
+    [InlineData("role:x")]
+    [InlineData("")]
+    public void Recipients_Normalize_RejectsBadSyntax(string raw) => Recips().Normalize(raw).Should().BeNull();
+
+    [Fact]
+    public void Recipients_Normalize_Over20_Null()
+    {
+        var twentyOne = string.Join(",", Enumerable.Range(1, 21).Select(i => $"group:{i}"));
+        var twenty = string.Join(",", Enumerable.Range(1, 20).Select(i => $"group:{i}"));
+        Recips().Normalize(twentyOne).Should().BeNull();
+        Recips().Normalize(twenty).Should().Be(twenty);
+    }
+
+    [Fact]
+    public void RecipientItems_SplitsExactly()
+    {
+        var items = PolicyDefinition.RecipientItems("group:12,admins");
+        items.Should().Equal("group:12", "admins");
+        items.Should().NotContain("group:1");
+    }
+
+    [Fact]
+    public void Recipients_Catalog_FactoryAdmins_ScopesAsRegistered()
+    {
+        PolicyCatalog.ApprovalDefaultFallbackApprovers.Factory.Should().Be("admins");
+        PolicyCatalog.ApprovalDefaultFallbackApprovers.Scope.Should().Be(PolicyScope.Module);
+        PolicyCatalog.ApprovalAlertRecipients.Factory.Should().Be("admins");
+        PolicyCatalog.ApprovalAlertRecipients.Scope.Should().Be(PolicyScope.System);
+    }
+
     [Fact]
     public void SettingKey_HasPolicyPrefix() => Int().SettingKey.Should().Be("policy.t.int");
 }

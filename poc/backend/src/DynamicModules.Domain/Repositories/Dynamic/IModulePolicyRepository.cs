@@ -7,6 +7,8 @@ public interface IModulePolicyRepository
 {
     /// <summary>不追蹤。</summary>
     Task<List<ModulePolicy>> ListByModuleAsync(long moduleId, CancellationToken ct);
+    /// <summary>所有模組中這些代碼的覆寫列（不追蹤）。</summary>
+    Task<List<ModulePolicy>> ListByCodesAsync(IReadOnlyCollection<string> codes, CancellationToken ct);
     /// <summary>追蹤；沒有回 null。</summary>
     Task<ModulePolicy?> GetTrackedAsync(long moduleId, string code, CancellationToken ct);
     void Add(ModulePolicy policy);
