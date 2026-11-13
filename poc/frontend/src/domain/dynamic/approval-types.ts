@@ -37,10 +37,14 @@ export interface RecordApproval { current: ApprovalInstanceView | null; previous
 export interface UserRef { userId: string; displayName: string }
 export interface PreviewStage {
   code: string | null; name: I18nText; status: 'enter' | 'skip' | 'conditional' | 'pick'; approvers: UserRef[]; usesFallback: boolean;
+  /** Designer trial only (absent = no problem): this stage would fail when the request is submitted or reaches it. */
+  problem?: 'noApprover' | 'tooManyApprovers' | null;
 }
 export interface PickRequirement { stageCode: string; name: I18nText; min: number; max: number; candidates: UserRef[] }
 export interface ApprovalPreview {
   outcome: 'flow' | 'direct' | 'blocked'; flowName: I18nText | null; stages: PreviewStage[]; picks: PickRequirement[];
+  /** Designer trial only: the key of the flow that matched (it may be another flow than the one being edited). */
+  flowKey?: string | null;
 }
 
 export interface SubmitApprovalBody { to: number; recordRowVersion: string; picks?: Record<string, string[]>; comment?: string }

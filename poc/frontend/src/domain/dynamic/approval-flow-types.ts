@@ -52,3 +52,11 @@ export interface ApprovalFlow extends ApprovalFlowInput {
   /** Whether the current version is bound to an instance (a4a1); absent on an older backend. */
   currentVersionUsed?: boolean;
 }
+
+/** Trial of the flow being edited (not saved): `values` override the record's, keyed `f_{fieldId}`. */
+export interface ApprovalDraftPreviewBody {
+  draft: ApprovalFlowInput;
+  initiatorUserId: string;
+  recordId?: number;
+  values?: Record<string, unknown>;
+}

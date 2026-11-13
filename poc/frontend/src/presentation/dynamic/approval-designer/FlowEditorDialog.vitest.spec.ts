@@ -336,4 +336,13 @@ describe('FlowEditorDialog', () => {
     expect(api.updateApprovalFlow.mock.calls[0]![1].definition.fallbackApprovers).toEqual(f.definition.fallbackApprovers);
     w.unmount();
   });
+
+  it('has a trial section that keeps its state while switching sections', async () => {
+    const w = await mountDialog({ flow: flow('a', 12, 1), flows: [flow('a', 12, 1)] });
+    await click('section-trial');
+    expect(body('flow-trial')).not.toBeNull();
+    await click('section-basic');
+    expect(body('flow-trial')).not.toBeNull();
+    w.unmount();
+  });
 });

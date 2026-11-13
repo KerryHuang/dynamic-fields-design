@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/vue-query';
 import { computed, toValue, type MaybeRefOrGetter } from 'vue';
-import type { ApprovalFlowInput } from 'src/domain/dynamic/approval-flow-types';
+import type { ApprovalDraftPreviewBody, ApprovalFlowInput } from 'src/domain/dynamic/approval-flow-types';
 import { dynamicApi } from 'src/services/api/dynamic-api';
 
 export function useApprovalFlows(moduleKey: MaybeRefOrGetter<string>, enabled: MaybeRefOrGetter<boolean> = true) {
@@ -35,3 +35,11 @@ export const useDeleteApprovalFlow = (moduleKey: MaybeRefOrGetter<string>) =>
 
 export const useReorderApprovalFlows = (moduleKey: MaybeRefOrGetter<string>) =>
   useFlowWrite<{ toOptionId: number; keys: string[] }>(moduleKey, (m, v) => dynamicApi.reorderApprovalFlows(m, v.toOptionId, v.keys));
+
+/** Trial of the edited flow: nothing is written, so no cache is invalidated. */
+export const usePreviewApprovalDraft = (moduleKey: MaybeRefOrGetter<string>) =>
+  useMutation({ mutationFn: (body: ApprovalDraftPreviewBody) => dynamicApi.previewApprovalDraft(toValue(moduleKey), body) });
+
+/** Record search for the trial (title search, first 20). */
+export const useSearchTrialRecords = (moduleKey: MaybeRefOrGetter<string>) =>
+  useMutation({ mutationFn: (q: string) => dynamicApi.getPagedRecords(toValue(moduleKey), { currentPage: 1, pagesSize: 20, q: q || undefined }) });

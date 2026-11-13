@@ -19,6 +19,7 @@ import type { ApiError } from 'src/services/api/http';
 import ApproverSourceEditor from './ApproverSourceEditor.vue';
 import { defaultSourceOf, FALLBACK_SOURCE_KINDS } from './approver-source';
 import FlowStagesEditor from './FlowStagesEditor.vue';
+import FlowTrialPanel from './FlowTrialPanel.vue';
 import { useApprovalLimits } from './use-approval-limits';
 
 const props = defineProps<{
@@ -35,7 +36,7 @@ const $q = useQuasar();
 const mobile = computed(() => $q.screen.lt.sm);
 
 const isEdit = computed(() => !!props.flow);
-const section = ref<'basic' | 'stages'>('basic');
+const section = ref<'basic' | 'stages' | 'trial'>('basic');
 const form = ref<FlowDraft>(emptyFlowDraft(null, 1));
 const error = ref<ApiError | null>(null);
 const targetMissing = ref(false);
@@ -161,6 +162,7 @@ const title = computed(() => (isEdit.value ? t('approval.designer.dialog.edit') 
           <q-tab name="stages" :label="t('approval.designer.dialog.sectionStages')" data-testid="section-stages">
             <q-badge v-if="stageErrorCount" color="negative" floating rounded :label="stageErrorCount" />
           </q-tab>
+          <q-tab name="trial" :label="t('approval.designer.dialog.sectionTrial')" data-testid="section-trial" />
         </q-tabs>
         <q-separator :vertical="!mobile" />
         <div class="col scroll q-pa-md" style="min-width: 0">
@@ -213,6 +215,10 @@ const title = computed(() => (isEdit.value ? t('approval.designer.dialog.edit') 
               v-model="form.stages" :module="module" :editable-field-ids="workflow.editableFieldIds ?? []" :limits="limits"
               :saved="flow?.definition.stages" :errors="errs" :disable="save.isPending.value"
             />
+          </div>
+
+          <div v-show="section === 'trial'" data-testid="flow-trial-section">
+            <FlowTrialPanel :module="module" :draft="form" :flows="flows" />
           </div>
         </div>
       </div>

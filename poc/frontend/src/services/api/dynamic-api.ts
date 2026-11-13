@@ -16,7 +16,7 @@ import type {
   ApprovalActionResult, ApprovalBox, ApprovalInboxFilter, ApprovalInboxItem, ApprovalPreview, ApproveBody, RecordApproval, RejectBody,
   SubmitApprovalBody, SubmitApprovalResult, WithdrawBody,
 } from 'src/domain/dynamic/approval-types';
-import type { ApprovalFlow, ApprovalFlowInput } from 'src/domain/dynamic/approval-flow-types';
+import type { ApprovalDraftPreviewBody, ApprovalFlow, ApprovalFlowInput } from 'src/domain/dynamic/approval-flow-types';
 import type { TaskRule, TaskRuleInput } from 'src/domain/dynamic/task-rule-draft';
 import type { EffectivePolicies, ModulePolicy, PolicyValue, SystemPolicy } from 'src/domain/dynamic/policy-types';
 import { handleAuthFailure, http, toApiError } from './http';
@@ -251,6 +251,8 @@ export const dynamicApi = {
   createApprovalFlow: (module: string, body: ApprovalFlowInput) => http.post<ApprovalFlow>('/approval-flows', body, { params: { module } }).then(data),
   updateApprovalFlow: (key: string, body: ApprovalFlowInput) => http.put<ApprovalFlow>(`/approval-flows/${encodeURIComponent(key)}`, body).then(data),
   deleteApprovalFlow: (key: string) => http.delete(`/approval-flows/${encodeURIComponent(key)}`).then(data),
+  previewApprovalDraft: (module: string, body: ApprovalDraftPreviewBody) =>
+    http.post<ApprovalPreview>('/approval-flows/preview', body, { params: { module } }).then(data),
   reorderApprovalFlows: (module: string, toOptionId: number, keys: string[]) =>
     http.put<ApprovalFlow[]>('/approval-flows/order', { module, toOptionId, keys }).then(data),
   getConversions: () => http.get<Conversion[]>('/conversions').then(data),
