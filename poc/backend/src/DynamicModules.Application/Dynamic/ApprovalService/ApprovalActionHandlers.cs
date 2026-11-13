@@ -13,8 +13,12 @@ namespace DynamicModules.Application.Dynamic.ApprovalService;
 
 /// <summary>動作的共同前置與載入（設計 §7、§8.4）。</summary>
 public sealed class ApprovalActionSupport(
-    IApprovalInstanceRepository repo, IModuleRepository modules, IRecordRepository records)
+    IApprovalInstanceRepository repo, IModuleRepository modules, IRecordRepository records, ApprovalPolicies policies)
 {
+    /// <summary>意見檢查（字數上限讀政策）；通過回 null。</summary>
+    public async Task<MessageRef?> CommentErrorAsync(string? comment, bool required, CancellationToken ct) =>
+        ApprovalActionRules.CommentError(comment, required, await policies.CommentLengthAsync(ct));
+
     public sealed record Loaded(ApprovalInstance Inst, Module Module, ApprovalDefinition Definition, List<ApprovalStageRun> Runs, List<ApprovalTask> Tasks);
 
     /// <summary>
@@ -68,7 +72,7 @@ public class ApproveTaskHandler(
     {
         var task = await repo.GetTaskAsync(request.TaskId, ct);
         if (task is null) return ServiceResult.NotFound(ApprovalMessages.TaskNotFound);
-        if (ApprovalActionRules.CommentError(request.Comment, required: false) is { } ce) return ApprovalActionSupport.Bad("comment", ce);
+        if (await support.CommentErrorAsync(request.Comment, required: false, ct) is { } ce) return ApprovalActionSupport.Bad("comment", ce);
         var (loaded, failure) = await support.LoadAsync(task.InstanceId, request.RowVersion, ct,
             _ => ApprovalActionRules.IsActor(task, user.UserId) ? null : ServiceResult.Forbidden(), task);
         if (failure is not null) return failure;
@@ -181,7 +185,7 @@ public class RejectTaskHandler(
     {
         var task = await repo.GetTaskAsync(request.TaskId, ct);
         if (task is null) return ServiceResult.NotFound(ApprovalMessages.TaskNotFound);
-        if (ApprovalActionRules.CommentError(request.Comment, required: true) is { } ce) return ApprovalActionSupport.Bad("comment", ce);
+        if (await support.CommentErrorAsync(request.Comment, required: true, ct) is { } ce) return ApprovalActionSupport.Bad("comment", ce);
         if (request.To is not (ToInitiator or ToPrevious)) return ApprovalActionSupport.Bad("to", ApprovalMessages.RejectTargetInvalid);
         var (loaded, failure) = await support.LoadAsync(task.InstanceId, request.RowVersion, ct,
             _ => ApprovalActionRules.IsActor(task, user.UserId) ? null : ServiceResult.Forbidden(), task);
@@ -243,7 +247,7 @@ public class WithdrawApprovalHandler(
 {
     public async Task<ServiceResult> Handle(WithdrawApprovalRequest request, CancellationToken ct)
     {
-        if (ApprovalActionRules.CommentError(request.Comment, required: false) is { } ce) return ApprovalActionSupport.Bad("comment", ce);
+        if (await support.CommentErrorAsync(request.Comment, required: false, ct) is { } ce) return ApprovalActionSupport.Bad("comment", ce);
         var (loaded, failure) = await support.LoadAsync(request.InstanceId, request.RowVersion, ct,
             i => i.InitiatorUserId == user.UserId ? null : ServiceResult.Forbidden());
         if (failure is not null) return failure;

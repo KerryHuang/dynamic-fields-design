@@ -21,10 +21,10 @@ public static class ApprovalOutcomes
 public static class ApprovalActionRules
 {
     /// <summary>空白算沒填；回 CommentRequired／CommentTooLong／null。</summary>
-    public static MessageRef? CommentError(string? comment, bool required)
+    public static MessageRef? CommentError(string? comment, bool required, int maxLength)
     {
         if (string.IsNullOrWhiteSpace(comment)) return required ? ApprovalMessages.CommentRequired : null;
-        return comment.Length > Domain.Approvals.ApprovalLimits.MaxCommentLength ? ApprovalMessages.CommentTooLong : null;
+        return comment.Length > maxLength ? ApprovalMessages.CommentTooLong(maxLength) : null;
     }
 
     /// <summary>

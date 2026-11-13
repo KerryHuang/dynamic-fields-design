@@ -31,6 +31,23 @@ public class ManagerChainTests
         return new OrgSnapshot(departments, members, active);
     }
 
+    /// <summary>12 層部門各有主管 m1（最上）到 m12（最下），發起人 emp 在最下層。</summary>
+    private static OrgSnapshot DeepOrg()
+    {
+        var departments = Enumerable.Range(1, 12).Select(i => new OrgDepartment(i, i == 1 ? null : i - 1, $"m{i}", true)).ToDictionary(d => d.Id);
+        var members = Enumerable.Range(1, 12).ToDictionary(i => $"m{i}", i => (long)i);
+        members["emp"] = 12;
+        return new OrgSnapshot(departments, members, members.Keys.ToHashSet());
+    }
+
+    [Fact]
+    public void ManagerChain_ResolvesUpToTechnicalMax()
+    {
+        ManagerChain.Resolve(DeepOrg(), "emp", 6).Should().Be("m7");
+        ManagerChain.Resolve(DeepOrg(), "emp", 10).Should().Be("m3");
+        ManagerChain.Resolve(DeepOrg(), "emp", 11).Should().BeNull();
+    }
+
     [Fact]
     public void Level1_DirectManager() => ManagerChain.Resolve(Org(), "emp3", 1).Should().Be("lead1");
 

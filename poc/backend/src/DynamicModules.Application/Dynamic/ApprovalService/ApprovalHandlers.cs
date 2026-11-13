@@ -19,7 +19,8 @@ namespace DynamicModules.Application.Dynamic.ApprovalService;
 public class SubmitApprovalHandler(
     IModuleRepository modules, ApprovalSubmitEligibility eligibility, ICurrentUser user,
     IBusinessTime time, IOperationContext op, IApprovalFlowRepository flows, IApprovalInstanceRepository instances, ApprovalEngine engine,
-    ApprovalTransitionRunner runner, ApproverResolver resolver, ApprovalWriteContext context, FieldTypeRegistry registry, IUnitOfWork uow)
+    ApprovalTransitionRunner runner, ApproverResolver resolver, ApprovalWriteContext context, FieldTypeRegistry registry, IUnitOfWork uow,
+    ApprovalPolicies policies)
     : IRequestHandler<SubmitApprovalRequest, ServiceResult>
 {
     public async Task<ServiceResult> Handle(SubmitApprovalRequest request, CancellationToken ct)
@@ -29,7 +30,7 @@ public class SubmitApprovalHandler(
         // 先查「已在簽核中」再比對版本：並發送出的第二個請求讀到的是第一個換過的版本（設計 §8.4）
         if (await instances.GetPendingByRecordAsync(record.Id, ct) is not null) return ServiceResult.Conflict(ApprovalMessages.AlreadyPending);
         if (record.RowVersion != request.RecordRowVersion) return ServiceResult.Stale();
-        if (ApprovalActionRules.CommentError(request.Comment, required: false) is { } commentError)
+        if (ApprovalActionRules.CommentError(request.Comment, required: false, await policies.CommentLengthAsync(ct)) is { } commentError)
             return ServiceResult.Invalid("comment", commentError);
 
         var (target, invalid) = await eligibility.TransitionAsync(record, module, request.To, ct);
@@ -112,8 +113,8 @@ public class SubmitApprovalHandler(
             if (list.Distinct(StringComparer.Ordinal).Count() != list.Count
                 || list.Any(u => u == ctx.InitiatorUserId || !ctx.Org.ActiveUsers.Contains(u) || (candidates is not null && !candidates.Contains(u))))
                 errors[$"picks.{code}"] = [ApprovalMessages.PickInvalid];
-            else if (list.Count < (src.Min ?? 1) || list.Count > (src.Max ?? ApprovalLimits.MaxApprovers))
-                errors[$"picks.{code}"] = [ApprovalMessages.PickCount(src.Min ?? 1, src.Max ?? ApprovalLimits.MaxApprovers)];
+            else if (list.Count < (src.Min ?? 1) || list.Count > (src.Max ?? ctx.MaxApprovers))
+                errors[$"picks.{code}"] = [ApprovalMessages.PickCount(src.Min ?? 1, src.Max ?? ctx.MaxApprovers)];
         }
         return errors;
     }

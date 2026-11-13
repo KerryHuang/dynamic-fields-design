@@ -50,15 +50,8 @@ public static class ApprovalNoMatch
 /// <summary>實例的流程快照：送出時目標狀態上每個流程的版本、優先序、啟停與完整定義（設計 §4.4）。</summary>
 public sealed record FlowSnapshotEntry(long FlowId, long FlowVersionId, int Priority, bool Active, I18nText Name, ApprovalDefinition Definition);
 
-/// <summary>設計 §4.3、§6.1、§7.1、§7.6 的上限。</summary>
-public static class ApprovalLimits
-{
-    public const int MaxStages = 10;
-    public const int MaxApprovers = 20;
-    public const int MaxManagerLevel = 5;
-    public const int MaxDueHours = 8760;
-    public const int MaxCommentLength = 1000;
-}
+/// <summary>某模組目前生效的簽核上限（來自政策，存流程時檢查用）。</summary>
+public sealed record ApprovalLimitSet(int MaxStages, int MaxApprovers, int MaxDueHours, int MaxManagerLevel);
 
 /// <summary>流程與它目前版本的定義；入口約束與鎖定計算的輸入。</summary>
 public sealed record FlowState(Entities.Dynamic.ApprovalFlow Flow, ApprovalDefinition Definition);

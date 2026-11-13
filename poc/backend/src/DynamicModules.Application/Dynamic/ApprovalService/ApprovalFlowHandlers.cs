@@ -41,7 +41,8 @@ public sealed class ApprovalFlowEditor(IApprovalFlowRepository flows, ApprovalDe
         if (input.Definition is null) Err("definition", "缺少流程定義");
         if (errors.Count > 0) return ServiceResult.Invalid(errors);
 
-        foreach (var (k, v) in await validator.ValidateAsync(module, wf, input.Definition!, ct)) errors.TryAdd($"definition.{k}", v);
+        var previous = self?.CurrentVersionId is { } vid ? (await flows.GetVersionAsync(vid, ct))?.Definition : null;
+        foreach (var (k, v) in await validator.ValidateAsync(module, wf, input.Definition!, previous, ct)) errors.TryAdd($"definition.{k}", v);
         if (errors.Count > 0) return ServiceResult.Invalid(errors);
 
         var current = await flows.ListCurrentByModuleAsync(module.Id, ct);

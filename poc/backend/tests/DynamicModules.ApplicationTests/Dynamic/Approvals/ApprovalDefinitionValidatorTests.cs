@@ -16,7 +16,7 @@ public class ApprovalDefinitionValidatorTests : ApprovalTestBase
     {
         _r ??= await BuildPurchase();
         var module = (await Svc<IModuleRepository>().GetByKeyAsync(_r.Module, includeChildren: true, CancellationToken.None))!;
-        return await Svc<ApprovalDefinitionValidator>().ValidateAsync(module, module.Workflow!, d, CancellationToken.None);
+        return await Svc<ApprovalDefinitionValidator>().ValidateAsync(module, module.Workflow!, d, null, CancellationToken.None);
     }
 
     private static string E(Dictionary<string, string[]> errors, string key)
@@ -85,7 +85,7 @@ public class ApprovalDefinitionValidatorTests : ApprovalTestBase
 
     [Fact]
     public async Task Fallback_ManagerLevel6_400() =>
-        E(await Validate(Valid() with { FallbackApprovers = Manager(6) }), "fallbackApprovers").Should().Be(ApprovalMessages.ManagerLevel);
+        E(await Validate(Valid() with { FallbackApprovers = Manager(6) }), "fallbackApprovers").Should().Be(ApprovalMessages.ManagerLevel(5));
 
     [Fact]
     public async Task Fallback_UserFieldOrPick_400()
@@ -103,12 +103,12 @@ public class ApprovalDefinitionValidatorTests : ApprovalTestBase
 
     [Fact]
     public async Task Stages_None_400() =>
-        E(await Validate(Def(null)), "stages").Should().Be(ApprovalMessages.StagesCount);
+        E(await Validate(Def(null)), "stages").Should().Be(ApprovalMessages.StagesCount(10));
 
     [Fact]
     public async Task Stages_11_400() =>
         E(await Validate(Def(null, Enumerable.Range(0, 11).Select(i => Stage($"s{i}", Manager(1))).ToArray())), "stages")
-            .Should().Be(ApprovalMessages.StagesCount);
+            .Should().Be(ApprovalMessages.StagesCount(10));
 
     [Fact]
     public async Task StageCode_Pattern_400() =>
@@ -144,7 +144,7 @@ public class ApprovalDefinitionValidatorTests : ApprovalTestBase
         var ids = Enumerable.Range(0, 21).Select(i => $"u{i}").ToArray();
         foreach (var u in ids) Db.Context.Add(new AppUser { UserId = u, DisplayName = u });
         await Db.Context.SaveChangesAsync();
-        E(await Validate(Valid(Stage("a", Users(ids)))), "stages[0].approvers").Should().Be(ApprovalMessages.UsersCount);
+        E(await Validate(Valid(Stage("a", Users(ids)))), "stages[0].approvers").Should().Be(ApprovalMessages.UsersCount(20));
     }
 
     [Fact]
@@ -167,7 +167,7 @@ public class ApprovalDefinitionValidatorTests : ApprovalTestBase
     [InlineData(0)]
     [InlineData(6)]
     public async Task Level6_400(int level) =>
-        E(await Validate(Valid(Stage("a", Manager(level)))), "stages[0].approvers").Should().Be(ApprovalMessages.ManagerLevel);
+        E(await Validate(Valid(Stage("a", Manager(level)))), "stages[0].approvers").Should().Be(ApprovalMessages.ManagerLevel(5));
 
     [Fact]
     public async Task UserField_WithoutCandidates_400()
@@ -191,13 +191,13 @@ public class ApprovalDefinitionValidatorTests : ApprovalTestBase
     [InlineData(1, 21)]
     public async Task InitiatorPick_Range_400(int min, int max) =>
         E(await Validate(Valid(Stage("a", new ApproverSource(ApprovalSources.InitiatorPick, Min: min, Max: max)))), "stages[0].approvers")
-            .Should().Be(ApprovalMessages.PickRange);
+            .Should().Be(ApprovalMessages.PickRange(20));
 
     [Theory]
     [InlineData(0)]
     [InlineData(8761)]
     public async Task DueHours_OutOfRange_400(int hours) =>
-        E(await Validate(Valid(Stage("a", Manager(1), dueHours: hours))), "stages[0].dueHours").Should().Be(ApprovalMessages.DueHours);
+        E(await Validate(Valid(Stage("a", Manager(1), dueHours: hours))), "stages[0].dueHours").Should().Be(ApprovalMessages.DueHours(8760));
 
     [Fact]
     public async Task OnEmpty_Invalid_400() =>

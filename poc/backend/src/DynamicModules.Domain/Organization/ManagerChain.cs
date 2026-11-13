@@ -4,12 +4,11 @@ namespace DynamicModules.Domain.Organization;
 public static class ManagerChain
 {
     public const int MinLevel = 1;
-    public const int MaxLevel = 5;
 
-    /// <summary>level 1..5；找不到回 null。第 N 層從第 N−1 層被找到的那個部門的上級開始找。</summary>
+    /// <summary>level 1 到技術上限（<see cref="Policies.PolicyCatalog.ApprovalMaxManagerLevel"/> 的 Max）；找不到回 null。第 N 層從第 N−1 層被找到的那個部門的上級開始找。</summary>
     public static string? Resolve(OrgSnapshot org, string initiatorUserId, int level)
     {
-        if (level is < MinLevel or > MaxLevel) return null;
+        if (level < MinLevel || level > Policies.PolicyCatalog.ApprovalMaxManagerLevel.Max) return null;
         if (!org.UserDepartment.TryGetValue(initiatorUserId, out var startId)) return null;
 
         long? current = startId;

@@ -4,6 +4,7 @@ using DynamicModules.Application.Dynamic.OrganizationService;
 using DynamicModules.Domain.Approvals;
 using DynamicModules.Domain.Entities.Dynamic;
 using DynamicModules.Domain.Organization;
+using DynamicModules.Domain.Policies;
 using DynamicModules.Domain.Repositories.Dynamic;
 using DynamicModules.Domain.ValueObjects;
 
@@ -18,14 +19,14 @@ public sealed record StageResolution(IReadOnlyList<SeatPlan> Seats, bool AllUnit
 /// <summary>解析的輸入：Picks 是這一關的自選結果；GroupNames 給錯誤與歷程說明用。</summary>
 public sealed record ResolveContext(
     Module Module, string InitiatorUserId, IReadOnlyDictionary<string, JsonElement?> Values, IReadOnlyList<string>? Picks, OrgSnapshot Org,
-    IReadOnlyDictionary<long, IReadOnlyList<string>> GroupMembers, IReadOnlyList<string> ActiveAdmins,
+    IReadOnlyDictionary<long, IReadOnlyList<string>> GroupMembers, IReadOnlyList<string> ActiveAdmins, int MaxApprovers,
     IReadOnlyDictionary<long, I18nText>? GroupNames = null);
 
 /// <summary>
 /// 簽核人解析（設計 §6.1、§6.4、§6.5）：先依來源切出來源單位，每個單位只留啟用中、不是發起人的人；
 /// 空的單位由備援簽核人頂替（會簽另佔一席、或簽併入候選），onEmpty = skip 只在全部單位都空時跳過。
 /// </summary>
-public sealed class ApproverResolver(OrgSnapshotLoader org, IPermissionRepository permissions)
+public sealed class ApproverResolver(OrgSnapshotLoader org, IPermissionRepository permissions, ApprovalPolicies approvalPolicies)
 {
     public const string AnySeat = "any";
 
@@ -37,7 +38,8 @@ public sealed class ApproverResolver(OrgSnapshotLoader org, IPermissionRepositor
             .ToDictionary(g => g.Key, g => (IReadOnlyList<string>)g.Select(m => m.UserId).ToList());
         var groups = (await permissions.ListGroupsAsync(ct)).ToDictionary(g => g.Id, g => g.NameI18n);
         var admins = (await permissions.ListUsersAsync(ct)).Where(u => u.IsActive && u.IsSystemAdmin).Select(u => u.UserId).OrderBy(u => u).ToList();
-        return new ResolveContext(module, initiator, values, picks, snapshot, members, admins, groups);
+        var limits = await approvalPolicies.LimitsAsync(module.Id, ct);   // 下一關啟動當下的設定（裁決 2）
+        return new ResolveContext(module, initiator, values, picks, snapshot, members, admins, limits.MaxApprovers, groups);
     }
 
     public static StageResolution Resolve(ResolveContext ctx, I18nText stageName, string mode, ApproverSource source, ApproverSource? fallback, string onEmpty)
@@ -80,8 +82,11 @@ public sealed class ApproverResolver(OrgSnapshotLoader org, IPermissionRepositor
         }
 
         if (seats.Count == 0) return new([], false, ApprovalMessages.NoApprover(stage, empty.FirstOrDefault() ?? source.Source));
-        if (seats.SelectMany(s => s.UserIds).Distinct(StringComparer.Ordinal).Count() > ApprovalLimits.MaxApprovers)
-            return new([], false, ApprovalMessages.TooManyApprovers(stage));
+        // 固定名單在存檔時已驗過上限，「只管之後」才真的成立，執行期只受技術上限管（判斷 17）；其他來源照當下的設定
+        var staticOnly = source.Source == ApprovalSources.Users && (empty.Count == 0 || fallback?.Source == ApprovalSources.Users);
+        var limit = staticOnly ? PolicyCatalog.ApprovalMaxApprovers.Max : ctx.MaxApprovers;
+        if (seats.SelectMany(s => s.UserIds).Distinct(StringComparer.Ordinal).Count() > limit)
+            return new([], false, ApprovalMessages.TooManyApprovers(stage, limit));
         return new(seats, false, null);
     }
 
@@ -93,7 +98,8 @@ public sealed class ApproverResolver(OrgSnapshotLoader org, IPermissionRepositor
     {
         var users = FallbackUsers(ctx, fallback);
         if (users.Count == 0) return new([], false, ApprovalMessages.NoApprover(ApprovalMessages.FallbackStageName, fallback?.Source ?? "admin"));
-        if (users.Count > ApprovalLimits.MaxApprovers) return new([], false, ApprovalMessages.TooManyApprovers(ApprovalMessages.FallbackStageName));
+        var limit = fallback?.Source == ApprovalSources.Users ? PolicyCatalog.ApprovalMaxApprovers.Max : ctx.MaxApprovers;
+        if (users.Count > limit) return new([], false, ApprovalMessages.TooManyApprovers(ApprovalMessages.FallbackStageName, limit));
         return new([new SeatPlan(AnySeat, users, ApprovalTaskReason.Fallback, null)], false, null);
     }
 

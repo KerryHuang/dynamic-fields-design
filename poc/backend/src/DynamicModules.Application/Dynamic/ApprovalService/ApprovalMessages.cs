@@ -12,21 +12,21 @@ public static class ApprovalMessages
     public const string RejectToInvalidState = "退回狀態必須是狀態機的狀態";
     public const string FallbackSourceInvalid = "備援簽核人只能是指定使用者、群組或主管";
     public const string FlowKeyReserved = "流程代碼 order 是保留字，請改用其他代碼";
-    public const string StagesCount = "關卡必須有 1 到 10 關";
+    public static string StagesCount(int max) => $"關卡必須有 1 到 {max} 關";
     public const string StageCodeInvalid = "關卡代號只能用小寫英文、數字、連字號，英文開頭，最多 40 字";
     public const string StageCodeDuplicate = "關卡代號不能重複";
     public const string StageNameRequired = "關卡名稱必須有繁體中文";
     public const string ModeInvalid = "簽核模式只能是 all 或 any";
     public const string SourceInvalid = "簽核人來源只能是 users、group、manager、userField、initiatorPick";
-    public const string UsersCount = "指定使用者必須有 1 到 20 位";
+    public static string UsersCount(int max) => $"指定使用者必須有 1 到 {max} 位";
     public const string UsersInvalid = "指定的使用者必須存在且啟用中";
     public const string GroupsInvalid = "群組至少要有一個，而且都必須存在";
-    public const string ManagerLevel = "主管層級必須是 1 到 5";
+    public static string ManagerLevel(int max) => $"主管層級必須是 1 到 {max}";
     public const string UserFieldInvalid = "使用者欄位必須是本模組表頭、啟用中的使用者欄位";
     public const string UserFieldWithoutCandidates = "使用者欄位來源必須設定候選群組";
     public const string CandidateGroupsInvalid = "候選群組都必須存在";
-    public const string PickRange = "自選人數必須符合 1 ≤ 最少 ≤ 最多 ≤ 20";
-    public const string DueHours = "逾期時數必須是 1 到 8760";
+    public static string PickRange(int max) => $"自選人數必須符合 1 ≤ 最少 ≤ 最多 ≤ {max}";
+    public static string DueHours(int max) => $"逾期時數必須是 1 到 {max}";
     public const string OnEmptyInvalid = "找不到人時的處理只能是 fallback 或 skip";
     public const string OnEmptySkipUnmatched = "這一關的簽核人來源有對不上的群組，找不到人時只能交給備援簽核人，不能跳過";
     public const string EditableFieldInvalid =
@@ -49,7 +49,7 @@ public static class ApprovalMessages
     // ── 簽核人解析（§6.5） ──
     // 以下到「送出與動作」都是一般使用者執行期會看到的訊息：回 MessageRef（鍵在 MessageText），到 WebAPI 才依請求語系解析。
     // 關卡、來源名稱等參數可直接傳 I18nText（會依語系挑文字）或字串。
-    public static MessageRef TooManyApprovers(object stage) => MessageRef.Of(MessageText.ApprovalTooManyApprovers, stage);
+    public static MessageRef TooManyApprovers(object stage, int max) => MessageRef.Of(MessageText.ApprovalTooManyApprovers, stage, max);
     public static MessageRef FlowConditionUndecidable(object flow) => MessageRef.Of(MessageText.ApprovalFlowUndecidable, flow);
     public static MessageRef NoApprover(object stage, object source) => MessageRef.Of(MessageText.ApprovalNoApprover, stage, source);
     /// <summary>備援說明會寫進簽核歷程（資料庫），固定繁中，不隨請求語系。</summary>
@@ -103,7 +103,7 @@ public static class ApprovalMessages
     public static readonly MessageRef UserFieldNotCandidate = MessageRef.Of(MessageText.ApprovalUserFieldNotCandidate);
     public static readonly MessageRef UserFieldIsInitiator = MessageRef.Of(MessageText.ApprovalUserFieldIsInitiator);
     public static readonly MessageRef CommentRequired = MessageRef.Of(MessageText.ApprovalCommentRequired);
-    public static readonly MessageRef CommentTooLong = MessageRef.Of(MessageText.ApprovalCommentTooLong);
+    public static MessageRef CommentTooLong(int max) => MessageRef.Of(MessageText.ApprovalCommentTooLong, max);
     public static readonly MessageRef TaskNotFound = MessageRef.Of(MessageText.ApprovalTaskNotFound);
     public static readonly MessageRef StageHandled = MessageRef.Of(MessageText.ApprovalStageHandled);
     public static readonly MessageRef StateChanged = MessageRef.Of(MessageText.ApprovalStateChanged);

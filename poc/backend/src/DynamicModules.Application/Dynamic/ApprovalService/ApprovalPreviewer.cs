@@ -98,7 +98,7 @@ public sealed class ApprovalPreviewer(
             var allowed = ApproverResolver.Candidates(ctx, s.Approvers);
             var candidates = ctx.Org.ActiveUsers.Where(u => u != initiator && (allowed is null || allowed.Contains(u)))
                 .Order(StringComparer.Ordinal).Select(Ref).ToList();
-            picks.Add(new PickRequirement(s.Code, s.Name, s.Approvers.Min ?? 1, s.Approvers.Max ?? ApprovalLimits.MaxApprovers, candidates));
+            picks.Add(new PickRequirement(s.Code, s.Name, s.Approvers.Min ?? 1, s.Approvers.Max ?? ctx.MaxApprovers, candidates));
         }
         foreach (var s in def.Stages)
         {

@@ -14,7 +14,7 @@ public class ApprovalRuntimeTextTests
 {
     public static TheoryData<string, string, object[]> ZhLiterals => new()
     {
-        { MessageText.ApprovalTooManyApprovers, "關卡「S」的簽核人超過 20 人", ["S"] },
+        { MessageText.ApprovalTooManyApprovers, "關卡「S」的簽核人超過 20 人", ["S", 20] },
         { MessageText.ApprovalFlowUndecidable, "簽核流程「F」的條件無法判斷，請系統管理員檢查流程設定", ["F"] },
         { MessageText.ApprovalNoApprover, "關卡「S」的來源「X」找不到簽核人，備援也沒有人", ["S", "X"] },
         { MessageText.ApprovalManagerLabel, "第 2 層主管", [2] },
@@ -33,7 +33,7 @@ public class ApprovalRuntimeTextTests
         { MessageText.ApprovalUserFieldNotCandidate, "簽核人不在候選群組內", [] },
         { MessageText.ApprovalUserFieldIsInitiator, "簽核人不能是發起人自己", [] },
         { MessageText.ApprovalCommentRequired, "退回必須填寫意見", [] },
-        { MessageText.ApprovalCommentTooLong, "意見不能超過 1000 字", [] },
+        { MessageText.ApprovalCommentTooLong, "意見不能超過 1000 字", [1000] },
         { MessageText.ApprovalTaskNotFound, "找不到待簽核", [] },
         { MessageText.ApprovalStageHandled, "這一關已由他人處理", [] },
         { MessageText.ApprovalStateChanged, "簽核狀態已更新，請重新整理後再試", [] },
@@ -68,7 +68,7 @@ public class ApprovalRuntimeTextTests
         var org = new OrgSnapshot(new Dictionary<long, OrgDepartment>(), new Dictionary<string, long>(), new[] { "admin", "buyer1" }.ToHashSet());
         var groups = new Dictionary<long, IReadOnlyList<string>> { [2] = [], [4] = Enumerable.Range(1, 21).Select(i => $"u{i}").ToList() };
         var users = Enumerable.Range(1, 21).Select(i => $"u{i}").Append("admin").Append("buyer1").ToHashSet();
-        return new ResolveContext(new Module(), initiator, new Dictionary<string, JsonElement?>(), null, org with { ActiveUsers = users }, groups, ["admin"],
+        return new ResolveContext(new Module(), initiator, new Dictionary<string, JsonElement?>(), null, org with { ActiveUsers = users }, groups, ["admin"], 20,
             new Dictionary<long, I18nText> { [2] = T("董事會", "Board"), [4] = T("大", "Big") });
     }
 
@@ -91,7 +91,7 @@ public class ApprovalRuntimeTextTests
     public void Manager_source_label_follows_the_locale()
     {
         var org = new OrgSnapshot(new Dictionary<long, OrgDepartment>(), new Dictionary<string, long>(), new[] { "admin", "buyer1" }.ToHashSet());
-        var ctx = new ResolveContext(new Module(), "admin", new Dictionary<string, JsonElement?>(), null, org, new Dictionary<long, IReadOnlyList<string>>(), ["admin"]);
+        var ctx = new ResolveContext(new Module(), "admin", new Dictionary<string, JsonElement?>(), null, org, new Dictionary<long, IReadOnlyList<string>>(), ["admin"], 20);
         var r = ApproverResolver.Resolve(ctx, T("簽核關", "Review"), ApprovalModes.Any, new(ApprovalSources.Manager, Level: 2), null, ApprovalOnEmpty.Fallback);
         r.Error!.Resolve("en-US").Should().Be("No approver found for stage \"Review\" from source \"Level 2 manager\", and there is no fallback either");
         r.Error!.Resolve("zh-TW").Should().Contain("「第 2 層主管」");

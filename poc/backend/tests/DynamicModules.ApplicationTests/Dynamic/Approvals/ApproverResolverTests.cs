@@ -34,7 +34,7 @@ public class ApproverResolverTests
             [Finance] = ["fin1", "fin2"], [Board] = [], [PurchaseLead] = ["buyer2"], [Big] = Enumerable.Range(1, 21).Select(i => $"u{i}").ToList()
         };
         var module = new Module { Blocks = [new Block { Fields = [OwnerField] }] };
-        return new ResolveContext(module, initiator, values ?? [], picks, org, groups, admins ?? ["admin"],
+        return new ResolveContext(module, initiator, values ?? [], picks, org, groups, admins ?? ["admin"], 20,
             new Dictionary<long, I18nText> { [Finance] = T("finance"), [Board] = T("board"), [PurchaseLead] = T("purchase-lead"), [Big] = T("big") });
     }
 
@@ -91,7 +91,7 @@ public class ApproverResolverTests
 
     [Fact]
     public void Over20_Error() =>
-        Resolve(Ctx("buyer1"), Group(Big)).Error!.Resolve(null).Should().Be(ApprovalMessages.TooManyApprovers("關卡").Resolve(null));
+        Resolve(Ctx("buyer1"), Group(Big)).Error!.Resolve(null).Should().Be(ApprovalMessages.TooManyApprovers("關卡", 20).Resolve(null));
 
     [Fact]
     public void InactiveUser_Excluded()
