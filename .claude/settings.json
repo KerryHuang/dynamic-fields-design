@@ -23,5 +23,22 @@
         ]
       }
     ]
+  },
+  "extraKnownMarketplaces": {
+    "dotnet-agent-skills": {
+      "source": {
+        "source": "github",
+        "repo": "dotnet/skills"
+      }
+    }
+  },
+  "enabledPlugins": {
+    "dotnet-test@dotnet-agent-skills": true
+  },
+  "skillOverrides": {
+    "dotnet-test:writing-mstest-tests": "off",
+    "dotnet-test:mtp-hot-reload": "off",
+    "dotnet-test:code-testing": "off",
+    "dotnet-test:code-testing-agent": "off"
   }
 }
