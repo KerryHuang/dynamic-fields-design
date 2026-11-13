@@ -65,6 +65,10 @@ public class FieldDisplayTests
         Fmt(F(FieldType.DateTime), "2026-11-04T01:30:00Z").Should().Be("2026-11-04 09:30");
 
     [Fact]
+    public void DateTime_NoOffset_IsTaipeiWallClock() =>
+        Fmt(F(FieldType.DateTime), "2026-11-04T23:00:00").Should().Be("2026-11-04 23:00");
+
+    [Fact]
     public void DateTime_StoredFormat() =>
         Fmt(F(FieldType.DateTime), "2026-11-04T09:30:00+08:00").Should().Be("2026-11-04 09:30");
 

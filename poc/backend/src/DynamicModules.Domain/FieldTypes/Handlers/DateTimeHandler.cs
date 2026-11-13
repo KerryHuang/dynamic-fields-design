@@ -12,12 +12,12 @@ public sealed class DateTimeHandler : IFieldTypeHandler
     public IReadOnlyList<FilterOperator> Operators => HandlerHelpers.DateTimeOperators;
 
     public IReadOnlyList<IndexValue> ToIndex(JsonElement value, Field field) =>
-        HandlerHelpers.SingleDate(DateTimeOffset.Parse(value.GetString()!, CultureInfo.InvariantCulture).ToOffset(Taipei).DateTime);
+        HandlerHelpers.SingleDate(BusinessClock.ParseWallClock(value.GetString()!));
 
     private static readonly Regex Iso = new(
         @"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(:\d{2}(\.\d+)?)?(Z|[+-]\d{2}:\d{2})$", RegexOptions.CultureInvariant);
 
-    private static readonly TimeSpan Taipei = TimeSpan.FromHours(8);
+    private static readonly TimeSpan Taipei = BusinessClock.Offset;
 
     public FieldValueResult Normalize(JsonElement? input, Field field, FieldTypeContext ctx)
     {

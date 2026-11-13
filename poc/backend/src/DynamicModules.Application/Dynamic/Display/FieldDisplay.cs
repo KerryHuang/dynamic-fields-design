@@ -12,7 +12,7 @@ namespace DynamicModules.Application.Dynamic.Display;
 public static class FieldDisplay
 {
     /// <summary>營運時區偏移（Asia/Taipei 無日光節約）；匯入解析日期時間也用這個。</summary>
-    public static readonly TimeSpan BusinessOffset = TimeSpan.FromHours(8);
+    public static readonly TimeSpan BusinessOffset = BusinessClock.Offset;
 
     public static string Format(
         Field field, JsonElement? value, string locale, ReferenceInfo? reference,
@@ -48,7 +48,7 @@ public static class FieldDisplay
         v.GetDecimal().ToString("F" + scale, CultureInfo.InvariantCulture);
 
     private static string DateTimeText(JsonElement v) =>
-        DateTimeOffset.Parse(v.GetString()!, CultureInfo.InvariantCulture).ToOffset(BusinessOffset)
+        BusinessClock.ParseWallClock(v.GetString()!)
             .ToString("yyyy-MM-dd HH:mm", CultureInfo.InvariantCulture);
 
     private static string Boolean(JsonElement v, string locale)
