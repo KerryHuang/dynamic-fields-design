@@ -1,6 +1,7 @@
 using DynamicModules.Application.Common;
 using DynamicModules.Application.Dynamic.ApprovalService;
 using DynamicModules.Application.Dynamic.RecordService.Data;
+using DynamicModules.Application.Dynamic.RecordService.Queries.GetRecord;
 using DynamicModules.Domain.Entities.Dynamic;
 using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
@@ -9,7 +10,7 @@ namespace DynamicModules.ApplicationTests.Dynamic.Demo;
 
 /// <summary>
 /// Demo 的進銷存採購單（簽核 a5c）：草稿 → 已確認 由套件宣告成需簽核，9 張採購單一律經送簽確認；
-/// 含稅總計 10,000 以上一關（ops01）、100,000 以上兩關（ops01、manager01）、不到門檻送出即確認，另有一張大額停在第二關。
+/// 未稅小計 10,000 以上一關（ops01）、100,000 以上兩關（ops01、manager01）、不到門檻送出即確認，另有一張大額停在第二關。
 /// </summary>
 [Collection(DemoGeneratedCollection.Name)]
 public class InventoryPoApprovalScenarioTests(DemoGeneratedFixture fx)
@@ -17,13 +18,13 @@ public class InventoryPoApprovalScenarioTests(DemoGeneratedFixture fx)
     private const string Po = "inv-po";
     private const decimal MediumFrom = 10000, LargeFrom = 100000;
 
-    private sealed record PoRow(DynamicRecordResponse Record, string Status, decimal Total);
+    private sealed record PoRow(DynamicRecordResponse Record, string Status, decimal Total);   // Total 是未稅小計（門檻比對的欄位）
 
     private async Task<List<PoRow>> Pos()
     {
         fx.Generated();
         var status = await fx.Key(Po, "狀態");
-        var total = await fx.Key(Po, "含稅總計");
+        var total = await fx.Key(Po, "未稅小計");
         var labels = (await fx.Module(Po)).Blocks.SelectMany(b => b.Fields).Single(f => f.Key == status).Options
             .ToDictionary(o => o.Value, o => o.Label.Resolve("zh-TW"));
         return [.. (await fx.Records(Po)).Select(r => new PoRow(r, labels[DemoGeneratedFixture.Text(r, status)!],
@@ -99,5 +100,11 @@ public class InventoryPoApprovalScenarioTests(DemoGeneratedFixture fx)
         var inbox = await fx.As("manager01", new GetApprovalTasksRequest("todo", null, null, null, 1, 50));
         inbox.IsSuccess.Should().BeTrue(inbox.Message);
         ((PagedResponse<ApprovalInboxItem>)inbox.Data!).Items.Should().Contain(i => i.RecordId == pending.Record.Id, "manager01 的簽核中心有這一張待簽");
+
+        // manager01 不在任何進銷存群組：靠待簽任務的臨時讀取打開單據，看得到含稅總計（金額軸一併開放）
+        var read = await fx.As("manager01", new GetRecordRequest(pending.Record.Id));
+        read.IsSuccess.Should().BeTrue(read.Message);
+        var detail = (DynamicRecordResponse)read.Data!;
+        detail.Values.GetValueOrDefault(await fx.Key(Po, "含稅總計")).Should().NotBeNull("臨時讀取連金額軸一起開放");
     }
 }

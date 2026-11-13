@@ -9,9 +9,9 @@ namespace DynamicModules.WebAPITests.Dynamic;
 
 /// <summary>
 /// 內建進銷存（apps/inventory.app.json 1.1.0）的採購單預設簽核流程（簽核 a5c）：草稿 → 已確認 需簽核，
-/// 含稅總計 100000 以上走兩關（採購主管、總經理）、10000 以上走一關、不到門檻送出即確認。
+/// 未稅小計 100000 以上走兩關（採購主管、總經理）、10000 以上走一關、不到門檻送出即確認（門檻不含稅，稅率改了不影響簽幾關）。
 /// 組織（全部虛構）：總部〔主管 sales03〕→ 營運部〔主管 ops01〕→ 採購部〔主管空缺，成員 sales01 = 採購〕；進銷存主管群組 = manager01。
-/// 品項單價 1000、稅率 5%：數量 4 → 4,200（直接確認）、40 → 42,000（一關）、100 → 105,000（兩關）。
+/// 品項單價 1000、稅率 5%：數量 4 → 未稅 4,000（直接確認）、40 → 40,000（一關）、110 → 110,000（兩關）。
 /// </summary>
 [Trait("Category", "Postgres")]
 public class InventoryApprovalTests : IDisposable
@@ -81,7 +81,32 @@ public class InventoryApprovalTests : IDisposable
                 [rig.Key("po-line")] = [new { id = Id(line), values = new Dictionary<string, object> { [l["數量"]] = 5 }, rowVersion = line.GetProperty("rowVersion").GetString() }]
             }
         });
-        edit.StatusCode.Should().Be(HttpStatusCode.BadRequest, await edit.Content.ReadAsStringAsync());
+        edit.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+        (await edit.Content.ReadAsStringAsync()).Should().Contain("已經過簽核", "是簽核鎖定擋下的，不是別的驗證");
+    }
+
+    [Theory]
+    [InlineData(96, true)]    // 未稅 96,000、含稅 100,800：含稅會落入大額，門檻看未稅所以仍是一萬以上一關
+    [InlineData(9.6, false)]  // 未稅 9,600、含稅 10,080：含稅會落入一萬以上，門檻看未稅所以送出即確認
+    public async Task Threshold_UsesSubtotalNotTaxIncluded(decimal qty, bool oneStage)
+    {
+        var (rig, supplier, item) = await ArrangeAsync();
+        var buyer = _app.AsUser(Buyer);
+        var draft = await rig.PoDraftAsync(supplier, item, qty, buyer);
+
+        var submit = await rig.SubmitPoAsync(buyer, draft);
+        if (oneStage)
+        {
+            submit.StatusCode.Should().Be(HttpStatusCode.Created, await submit.Content.ReadAsStringAsync());
+            var current = (await rig.CurrentApprovalAsync(Id(draft)))!.Value;
+            current.GetProperty("flowName").GetProperty("zh-TW").GetString().Should().Be("採購單（一萬以上）");
+            StageCodes(current).Should().Equal("buyer-lead");
+        }
+        else
+        {
+            submit.StatusCode.Should().Be(HttpStatusCode.OK, await submit.Content.ReadAsStringAsync());
+            (await rig.CurrentApprovalAsync(Id(draft))).Should().BeNull();
+        }
     }
 
     [Fact]
@@ -121,7 +146,7 @@ public class InventoryApprovalTests : IDisposable
     {
         var (rig, supplier, item) = await ArrangeAsync();
         var buyer = _app.AsUser(Buyer);
-        var draft = await rig.PoDraftAsync(supplier, item, 100, buyer);
+        var draft = await rig.PoDraftAsync(supplier, item, 110, buyer);
 
         (await rig.SubmitPoAsync(buyer, draft)).StatusCode.Should().Be(HttpStatusCode.Created);
         var first = (await rig.CurrentApprovalAsync(Id(draft)))!.Value;
@@ -184,6 +209,20 @@ public class InventoryApprovalTests : IDisposable
         });
         // 唯讀狀態除了狀態欄位以外的輸入會被忽略（備註維持取消時填的）
         InventoryRig.Str(await rig.GetAsync(Id(cancelled)), p["備註"]).Should().Be("客戶取消訂單", "已取消是唯讀狀態");
+    }
+
+    [Fact]
+    public async Task Cancel_FromDraft_NoApprovalInstance_AndNoSubmitNeeded()
+    {
+        var (rig, supplier, item) = await ArrangeAsync();
+        var manager = _app.AsUser(Manager);
+        var p = await rig.F("po");
+        var draft = await rig.PoDraftAsync(supplier, item, 110, _app.AsUser(Buyer));   // 大額單也一樣，取消不走簽核
+
+        var res = await rig.TransitionAsync(manager, draft, "po", "已取消", new() { [p["備註"]] = "供應商停產" });
+        res.StatusCode.Should().Be(HttpStatusCode.OK, await res.Content.ReadAsStringAsync());
+        (await StatusOf(rig, draft)).Should().Be(await rig.Opt("po", "狀態", "已取消"));
+        (await rig.CurrentApprovalAsync(Id(draft))).Should().BeNull("取消是一般轉移，沒有簽核實例");
     }
 
     [Fact]

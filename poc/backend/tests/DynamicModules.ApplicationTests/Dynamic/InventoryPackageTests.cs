@@ -153,8 +153,11 @@ public class InventoryPackageTests
             flow.FallbackApprovers.Groups.Should().Equal("manager");
         }
         (large.Priority, medium.Priority).Should().Be((1, 2), "大額優先");
-        large.When!.Value.GetRawText().Should().Contain("\"po.total\"").And.Contain("\"gte\"").And.Contain("100000");
-        medium.When!.Value.GetRawText().Should().Contain("\"po.total\"").And.Contain("\"gte\"").And.Contain("10000").And.NotContain("100000");
+        // 門檻看未稅小計（不含稅），稅率改了不影響簽幾關
+        large.When!.Value.GetRawText().Should().Contain("\"po.subtotal\"").And.NotContain("po.total");
+        medium.When!.Value.GetRawText().Should().Contain("\"po.subtotal\"").And.NotContain("po.total");
+        large.When!.Value.GetRawText().Should().Contain("\"gte\"").And.Contain("100000");
+        medium.When!.Value.GetRawText().Should().Contain("\"gte\"").And.Contain("10000").And.NotContain("100000");
 
         large.Stages!.Select(s => $"{s.Code}:{s.Approvers.Source}:{s.Approvers.Level}:{s.DueHours}").Should().Equal("buyer-lead:manager:1:24", "gm:manager:2:48");
         medium.Stages!.Select(s => $"{s.Code}:{s.Approvers.Source}:{s.Approvers.Level}:{s.DueHours}").Should().Equal("buyer-lead:manager:1:24");

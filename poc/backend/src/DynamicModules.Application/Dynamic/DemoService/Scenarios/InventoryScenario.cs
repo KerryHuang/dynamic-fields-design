@@ -10,7 +10,7 @@ namespace DynamicModules.Application.Dynamic.DemoService.Scenarios;
 /// 「進銷存」應用程式的虛構資料：8 項品號、2 個倉庫（3 家供應商、4 家客戶與他們的聯絡人由 <see cref="MasterScenario"/> 建在共用主檔，
 /// 這裡替客戶補上進銷存貢獻的出貨地址）；期初盤點入庫；9 張採購單，到貨單由採購單轉出並過帳；4 張出貨單（過帳後庫存減少，其中一張出貨後被主管取消，沖回庫存）；一張盤點差異調整。
 /// 採購單的「草稿 → 已確認」由套件宣告成需簽核（金額門檻流程，簽核 a5c），所以一律由採購人員送簽、依組織找主管同意：
-/// 含稅總計 10,000 以上走一關（營運部主管 ops01）、100,000 以上再加第二關（總經理室主管 manager01）、不到門檻送出即確認。
+/// 未稅小計 10,000 以上走一關（營運部主管 ops01）、100,000 以上再加第二關（總經理室主管 manager01）、不到門檻送出即確認（門檻比對未稅小計，不含 5% 稅）。
 /// 9 張的狀態：3 張一關核准後到貨結案、2 張一關核准的已確認（其中一張部分到貨）、1 張小額直接確認、1 張大額兩關核准、
 /// 1 張大額停在第二關（記錄仍是草稿，manager01 待簽）、1 張草稿。
 /// 庫存異動由套件的事件在過帳、取消時自動寫入，全部走一般的建立、更新、轉換指令，權限與狀態機照常生效。
@@ -39,7 +39,7 @@ public sealed class InventoryScenario : IDemoScenario
     /// <param name="Lines">（品項編號, 數量）。</param>
     /// <param name="Receipts">到貨批次各行比例（百分比）；空陣列＝尚未到貨。</param>
     /// <param name="End">draft／confirmed／closed／cancelled／pending（送簽後只同意 Approvers 列出的關卡，停在下一關）。</param>
-    /// <param name="Approvers">送簽後依序同意的人；空陣列＝不經簽核直接確認（含稅總計低於門檻）。</param>
+    /// <param name="Approvers">送簽後依序同意的人；空陣列＝不經簽核直接確認（未稅小計低於門檻）。</param>
     private sealed record PoSpec(int DaysAgo, int Supplier, (int Item, int Qty)[] Lines, int[][] Receipts, string End, string[] Approvers);
 
     private static readonly PoSpec[] Pos =
@@ -50,7 +50,7 @@ public sealed class InventoryScenario : IDemoScenario
         new(35, 0, [(0, 400), (1, 300)], [[60, 60]], "confirmed", [Manager]),
         new(18, 1, [(2, 60), (4, 30)], [], "confirmed", [Manager]),
         new(9, 2, [(7, 10)], [], "draft", []),
-        // 簽核 a5c 加的三張：小額（含稅約 5,460）直接確認；大額（約 109,200）兩關核准；大額（約 136,500）停在第二關
+        // 簽核 a5c 加的三張（未稅小計）：小額 5,200 直接確認；大額 104,000 兩關核准；大額 130,000 停在第二關
         new(7, 1, [(5, 20)], [], "confirmed", []),
         new(12, 0, [(7, 20)], [], "confirmed", [Manager, Executive]),
         new(4, 2, [(7, 25)], [], "pending", [Manager])
