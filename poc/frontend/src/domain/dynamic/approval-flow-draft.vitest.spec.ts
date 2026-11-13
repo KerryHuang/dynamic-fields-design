@@ -43,15 +43,15 @@ describe('approval flow draft', () => {
     expect(buildFlowInput(emptyFlowDraft(null, 1))).toBeNull();
   });
 
-  it('single approver source forces mode any', () => {
-    const d = emptyFlowDraft(12, 1);
-    d.stages = [
-      { ...d.stages[0]!, approvers: { source: 'manager', level: 1 }, mode: 'all' },
-      { ...d.stages[0]!, code: 'x', approvers: { source: 'group', groupIds: [1] }, mode: 'all' },
-    ];
-    const s = buildFlowInput(d)!.definition.stages;
-    expect(s[0]!.mode).toBe('any');
-    expect(s[1]!.mode).toBe('all');
+  it('a saved single-person stage with mode all round-trips unchanged', () => {
+    const f = flow('k', 12, 1);
+    f.definition.stages[0] = { ...f.definition.stages[0]!, approvers: { source: 'users', userIds: ['u1'] }, mode: 'all' };
+    expect(buildFlowInput(draftFromFlow(f))!.definition).toEqual(f.definition);
+  });
+
+  it('insert avoids reserved saved codes as well as the draft codes', () => {
+    const d = { ...emptyFlowDraft(12, 1), stages: [{ ...newStage([]), code: 'stage-1' }] };
+    expect(insertStage(d, 1, ['stage-1', 'stage-2']).stages[1]!.code).toBe('stage-3');
   });
 
   it('draftFromFlow then buildFlowInput equals the original definition', () => {

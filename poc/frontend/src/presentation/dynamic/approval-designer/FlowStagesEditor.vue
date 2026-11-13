@@ -4,7 +4,7 @@ import { computed } from 'vue';
 import { useI18n } from 'vue-i18n';
 import RowActionMenu from 'src/components/framework/RowActionMenu.vue';
 import { insertStage, isSingleApprover, moveStage, removeStage, stageErrors, type StageDraft } from 'src/domain/dynamic/approval-flow-draft';
-import type { ApprovalStageDef } from 'src/domain/dynamic/approval-flow-types';
+import type { ApprovalStageDef, ApproverSource } from 'src/domain/dynamic/approval-flow-types';
 import { resolveI18n } from 'src/domain/dynamic/i18n-text';
 import type { ModuleDetail } from 'src/domain/dynamic/types';
 import ConditionEditor from 'src/presentation/dynamic/list/ConditionEditor.vue';
@@ -37,14 +37,19 @@ const editableOptions = computed(() => props.editableFieldIds.map((id) => ({ val
 // A saved field that is no longer a candidate stays visible (as its name) so the designer sees what the stage still carries.
 const editableOptionsOf = (s: StageDraft) => [...editableOptions.value, ...s.editableFields.filter((id) => !props.editableFieldIds.includes(id)).map((id) => ({ value: id, label: fieldLabel(id) }))];
 
-const atLimit = computed(() => props.limits.maxStages !== undefined && props.modelValue.length >= props.limits.maxStages);
-const savedOf = (s: StageDraft) => (s.savedCode ? props.saved?.find((x) => x.code === s.savedCode) : undefined);
+// The backend only refuses a count above the limit that is also above the saved version's, so a flow saved with more stages may keep that many.
+const atLimit = computed(() => props.limits.maxStages !== undefined && props.modelValue.length >= Math.max(props.limits.maxStages, props.saved?.length ?? 0));
+// Same rule as the backend: a stage is matched to the saved one by its current code.
+const savedOf = (s: StageDraft) => props.saved?.find((x) => x.code === s.code);
 const codeChanged = (s: StageDraft) => !!s.savedCode && s.savedCode !== s.code;
+// A code that is another saved stage's code gets that stage's relaxed limits.
+const codeReused = (s: StageDraft) => s.savedCode !== s.code && !!savedOf(s);
 
 const setAll = (draft: { stages: StageDraft[] }) => emit('update:modelValue', draft.stages);
+const setApprovers = (i: number, v: ApproverSource) => patch(i, isSingleApprover(v) ? { approvers: v, mode: 'any' } : { approvers: v });
 const patch = (i: number, p: Partial<StageDraft>) => emit('update:modelValue', props.modelValue.map((s, k) => (k === i ? { ...s, ...p } : s)));
 const wrap = () => ({ stages: props.modelValue });
-const insertAt = (at: number) => setAll(insertStage(wrap(), at));
+const insertAt = (at: number) => setAll(insertStage(wrap(), at, props.saved?.map((x) => x.code)));
 const move = (i: number, d: -1 | 1) => setAll(moveStage(wrap(), i, d));
 const remove = (i: number) => setAll(removeStage(wrap(), i));
 const dueNum = (v: string | number | null) => (v === null || v === '' ? null : Number(v));
@@ -61,10 +66,10 @@ const actionsOf = (i: number) => [
   <div class="column no-wrap" data-testid="flow-stages">
     <div v-if="atLimit" class="text-caption text-warning q-mb-sm" data-testid="stages-limit">{{ t('approval.designer.stage.limitReached', { max: limits.maxStages }) }}</div>
 
-    <template v-for="(s, i) in modelValue" :key="i">
+    <template v-for="(s, i) in modelValue" :key="s.uid ?? i">
       <div class="row justify-center">
         <q-btn
-          flat dense round icon="add" size="sm" :disable="disable || atLimit" :aria-label="t('approval.designer.stage.insert')"
+          flat dense round icon="add" size="sm" :disable="disable || atLimit" :aria-label="t('approval.designer.stage.insertBefore', { n: i + 1 })"
           :data-testid="`stage-insert-${i}`" @click="insertAt(i)"
         />
       </div>
@@ -89,6 +94,7 @@ const actionsOf = (i: number) => [
             :error="!!errorsOf(i).code || undefined" :error-message="errorsOf(i).code" @update:model-value="(v) => patch(i, { code: String(v ?? '') })"
           />
           <div v-if="codeChanged(s)" class="text-caption text-warning" :data-testid="`stage-code-warning-${i}`">{{ t('approval.designer.stage.codeChanged') }}</div>
+          <div v-if="codeReused(s)" class="text-caption text-warning" :data-testid="`stage-code-reused-${i}`">{{ t('approval.designer.stage.codeReused', { code: s.code }) }}</div>
 
           <div>
             <div class="text-caption text-muted">{{ t('approval.designer.stage.when') }}</div>
@@ -99,11 +105,11 @@ const actionsOf = (i: number) => [
 
           <ApproverSourceEditor
             :model-value="s.approvers" :module="module" :allowed="ALL_SOURCE_KINDS" :limits="limits" :saved="savedOf(s)?.approvers"
-            :label="t('approval.designer.stage.source')" :error="errorsOf(i).approvers" :disable="disable" @update:model-value="(v) => patch(i, { approvers: v })"
+            :label="t('approval.designer.stage.source')" :error="errorsOf(i).approvers" :disable="disable" @update:model-value="(v) => setApprovers(i, v)"
           />
 
           <q-option-group
-            v-if="!isSingleApprover(s.approvers)" :model-value="s.mode" type="radio" inline :disable="disable" :aria-label="t('approval.designer.stage.mode')"
+            v-if="!isSingleApprover(s.approvers)" :model-value="s.mode" type="radio" inline :disable="disable" role="radiogroup" :aria-label="t('approval.designer.stage.mode')"
             :options="[{ value: 'all', label: t('approval.designer.stage.modeAll') }, { value: 'any', label: t('approval.designer.stage.modeAny') }]"
             :data-testid="`stage-mode-${i}`" @update:model-value="(v: 'all' | 'any') => patch(i, { mode: v })"
           />
@@ -123,7 +129,7 @@ const actionsOf = (i: number) => [
           />
 
           <q-option-group
-            :model-value="s.onEmpty" type="radio" inline :disable="disable" :aria-label="t('approval.designer.stage.onEmpty')"
+            :model-value="s.onEmpty" type="radio" inline :disable="disable" role="radiogroup" :aria-label="t('approval.designer.stage.onEmpty')"
             :options="[{ value: 'fallback', label: t('approval.designer.stage.onEmptyFallback') }, { value: 'skip', label: t('approval.designer.stage.onEmptySkip') }]"
             :data-testid="`stage-onempty-${i}`" @update:model-value="(v: 'fallback' | 'skip') => patch(i, { onEmpty: v })"
           />
@@ -135,7 +141,7 @@ const actionsOf = (i: number) => [
     </template>
     <div class="row justify-center">
       <q-btn
-        flat dense round icon="add" size="sm" :disable="disable || atLimit" :aria-label="t('approval.designer.stage.insert')"
+        flat dense round icon="add" size="sm" :disable="disable || atLimit" :aria-label="t('approval.designer.stage.insertLast')"
         :data-testid="`stage-insert-${modelValue.length}`" @click="insertAt(modelValue.length)"
       />
     </div>

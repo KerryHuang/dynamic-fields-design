@@ -5,6 +5,7 @@ import * as quasar from 'quasar';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { createI18n } from 'vue-i18n';
 import type { StageDraft } from 'src/domain/dynamic/approval-flow-draft';
+import type { ApprovalStageDef } from 'src/domain/dynamic/approval-flow-types';
 import type { DesignerField, ModuleDetail } from 'src/domain/dynamic/types';
 import zhTW from 'src/i18n/zh-TW.json';
 import { dynamicApi } from 'src/services/api/dynamic-api';
@@ -26,7 +27,7 @@ const stage = (code: string, extra: Partial<StageDraft> = {}): StageDraft => ({
   code, name: { 'zh-TW': code }, approvers: { source: 'group', groupIds: [3] }, mode: 'all', editableFields: [], dueHours: null, onEmpty: 'fallback', ...extra,
 });
 
-interface Opts { limits?: FlowLimits; errors?: Record<string, string[]>; editableFieldIds?: number[] }
+interface Opts { saved?: ApprovalStageDef[]; limits?: FlowLimits; errors?: Record<string, string[]>; editableFieldIds?: number[] }
 async function mountEditor(stages: StageDraft[], o: Opts = {}) {
   api.getUsers.mockResolvedValue([]);
   api.getGroups.mockResolvedValue([{ id: 3, key: 'mgr', name: { 'zh-TW': '主管群' }, members: [] }]);
@@ -34,7 +35,7 @@ async function mountEditor(stages: StageDraft[], o: Opts = {}) {
   const w = mount(FlowStagesEditor, {
     attachTo: document.body,
     props: {
-      modelValue: stages, module: mod, editableFieldIds: o.editableFieldIds ?? [7], limits: o.limits ?? { maxStages: 5, maxDueHours: 100 }, errors: o.errors,
+      modelValue: stages, module: mod, editableFieldIds: o.editableFieldIds ?? [7], limits: o.limits ?? { maxStages: 5, maxDueHours: 100 }, errors: o.errors, saved: o.saved,
       'onUpdate:modelValue': (v: StageDraft[]) => w.setProps({ modelValue: v }),
     },
     global: { plugins: [[quasar.Quasar, { components: quasar, directives: quasar }], createPinia(), i18n,
@@ -164,6 +165,65 @@ describe('FlowStagesEditor', () => {
     body('stage-down-0')!.click();
     await flushPromises();
     expect(codes(w)).toEqual(['b', 'a']);
+    w.unmount();
+  });
+  const savedDef = (code: string, extra: Partial<ApprovalStageDef> = {}): ApprovalStageDef => ({
+    code, name: { 'zh-TW': code }, when: null, approvers: { source: 'group', groupIds: [3] }, mode: 'all', editableFields: [], dueHours: null, onEmpty: 'fallback', ...extra,
+  });
+
+  it('a stage added after deleting a saved stage does not take the saved stage code', async () => {
+    const saved = [savedDef('stage-1'), savedDef('stage-2')];
+    const w = await mountEditor([stage('stage-1', { savedCode: 'stage-1' })], { saved });
+    await w.find('[data-testid="stage-insert-1"]').trigger('click');
+    expect(codes(w)).toEqual(['stage-1', 'stage-3']);
+    w.unmount();
+  });
+
+  it('typing a saved stage code onto another stage warns it reuses that stage', async () => {
+    const saved = [savedDef('a'), savedDef('b')];
+    const w = await mountEditor([stage('a', { savedCode: 'a' }), stage('stage-1')], { saved });
+    expect(w.find('[data-testid="stage-code-reused-1"]').exists()).toBe(false);
+    await w.find('[data-testid="stage-code-1"]').setValue('b');
+    expect(w.find('[data-testid="stage-code-reused-1"]').text()).toContain('b');
+    w.unmount();
+  });
+
+  it('a renamed stage no longer offers the saved manager level above the policy max', async () => {
+    const saved = [savedDef('a', { approvers: { source: 'manager', level: 5 } })];
+    const limits = { maxStages: 5, maxManagerLevel: 3 };
+    const stg = stage('a', { savedCode: 'a', approvers: { source: 'manager', level: 5 }, mode: 'any' });
+    const same = await mountEditor([stg], { saved, limits });
+    const levels = (w: W) => (w.findAllComponents(quasar.QSelect).find((c) => c.props('label') === '主管層級')!.props('options') as { value: number }[]).map((o) => o.value);
+    expect(levels(same)).toEqual([1, 2, 3, 4, 5]);
+    same.unmount();
+    const renamed = await mountEditor([{ ...stg, code: 'z' }], { saved, limits });
+    expect(levels(renamed)).toEqual([1, 2, 3]);
+    renamed.unmount();
+  });
+
+  it('choosing a single-person source sets mode any; a group keeps the mode', async () => {
+    const w = await mountEditor([stage('a', { mode: 'all' })]);
+    const kind = w.findAllComponents(quasar.QSelect).find((c) => c.props('label') === '簽核人來源')!;
+    kind.vm.$emit('update:modelValue', 'manager');
+    await flushPromises();
+    expect((w.props('modelValue') as StageDraft[])[0]!.mode).toBe('any');
+    w.unmount();
+  });
+
+  it('insert is allowed up to the saved stage count when the policy limit was tightened below it', async () => {
+    const saved = [1, 2, 3, 4, 5, 6].map((n) => savedDef(`s${n}`));
+    const w = await mountEditor(saved.slice(0, 5).map((s) => stage(s.code, { savedCode: s.code })), { saved, limits: { maxStages: 5 } });
+    expect(w.find('[data-testid="stage-insert-5"]').attributes('disabled')).toBeUndefined();
+    await w.find('[data-testid="stage-insert-5"]').trigger('click');
+    expect((w.props('modelValue') as StageDraft[]).length).toBe(6);
+    expect(w.find('[data-testid="stage-insert-6"]').attributes('disabled')).toBeDefined();
+    w.unmount();
+  });
+
+  it('insert buttons say where they insert', async () => {
+    const w = await mountEditor([stage('a'), stage('b')]);
+    expect(w.find('[data-testid="stage-insert-1"]').attributes('aria-label')).toBe('在第 2 關之前插入關卡');
+    expect(w.find('[data-testid="stage-insert-2"]').attributes('aria-label')).toBe('在最後插入關卡');
     w.unmount();
   });
 });

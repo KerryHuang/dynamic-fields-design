@@ -96,16 +96,21 @@ function confirmDelete() {
 
 // ---- create / edit dialog ----
 const dialogOpen = ref(false);
+// The dialog unmounts as soon as it closes, so the element that opened it gets its focus back by hand.
+let opener: HTMLElement | null = null;
+watch(dialogOpen, async (open) => { if (open) return; await nextTick(); opener?.focus?.(); opener = null; });
 const editing = ref<ApprovalFlow | undefined>();
 const preset = ref<number | null>(null);
 function openCreate(toOptionId: number | null) {
   if (readonly.value) return;
+  opener = document.activeElement as HTMLElement | null;
   editing.value = undefined;
   preset.value = toOptionId;
   dialogOpen.value = true;
 }
 function openEdit(f: ApprovalFlow) {
   if (readonly.value) return;
+  opener = document.activeElement as HTMLElement | null;
   editing.value = f;
   preset.value = null;
   dialogOpen.value = true;
@@ -171,7 +176,7 @@ const actionsOf = (list: ApprovalFlow[], f: ApprovalFlow, i: number) => [
 
       <q-card
         v-for="(f, i) in g.flows" :key="f.key" flat bordered class="q-mt-sm q-pa-sm" :class="{ 'flow-card--off': !f.active, 'flow-card--open': !readonly }" :data-testid="`flow-card-${f.key}`"
-        :tabindex="readonly ? undefined : 0" @click="openEdit(f)" @keydown.enter.self.prevent="openEdit(f)" @keydown.space.self.prevent="openEdit(f)"
+        :tabindex="readonly ? undefined : 0" :aria-label="readonly ? undefined : `${t('approval.designer.list.edit')} ${nameOf(f)}`" @click="openEdit(f)" @keydown.enter.self.prevent="openEdit(f)" @keydown.space.self.prevent="openEdit(f)"
         :draggable="!mobile && !readonly && !busy && g.flows.length > 1" @dragstart="dragging = { key: f.key, toOptionId: g.toOptionId }"
         @dragover.prevent @drop.prevent="onDrop(g.toOptionId, g.flows, f)" @dragend="dragging = null"
       >

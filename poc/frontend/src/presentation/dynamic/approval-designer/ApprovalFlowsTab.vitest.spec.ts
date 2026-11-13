@@ -361,4 +361,21 @@ describe('ApprovalFlowsTab', () => {
     expect(w.findComponent(FlowEditorDialog).exists()).toBe(false);
     w.unmount();
   });
+  it('closing the dialog returns focus to the card that opened it', async () => {
+    const w = await mountTab([flow('a', 12, 1)]);
+    const card = w.find('[data-testid="flow-card-a"]');
+    (card.element as HTMLElement).focus();
+    await card.trigger('keydown', { key: 'Enter' });
+    await flushPromises();
+    w.findComponent(FlowEditorDialog).vm.$emit('update:modelValue', false);
+    await flushPromises();
+    expect(document.activeElement).toBe(card.element);
+    w.unmount();
+  });
+
+  it('the focusable card has an accessible name that says it edits the flow', async () => {
+    const w = await mountTab([flow('a', 12, 1)]);
+    expect(w.find('[data-testid="flow-card-a"]').attributes('aria-label')).toBe('編輯 流程a');
+    w.unmount();
+  });
 });

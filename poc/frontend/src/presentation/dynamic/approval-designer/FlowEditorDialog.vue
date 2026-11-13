@@ -6,7 +6,7 @@ import { useSaveApprovalFlow } from 'src/application/dynamic/queries/approval-fl
 import {
   buildFlowInput, draftFromFlow, emptyFlowDraft, nextPriority, type FlowDraft,
 } from 'src/domain/dynamic/approval-flow-draft';
-import type { ApprovalFlow } from 'src/domain/dynamic/approval-flow-types';
+import type { ApprovalFlow, ApproverSource } from 'src/domain/dynamic/approval-flow-types';
 import { resolveI18n } from 'src/domain/dynamic/i18n-text';
 import { policyValueText } from 'src/domain/dynamic/policy-types';
 import type { ModuleDetail, WorkflowResponse } from 'src/domain/dynamic/types';
@@ -39,6 +39,8 @@ const section = ref<'basic' | 'stages'>('basic');
 const form = ref<FlowDraft>(emptyFlowDraft(null, 1));
 const error = ref<ApiError | null>(null);
 const targetMissing = ref(false);
+// Switching the fallback to inherit and back keeps what was there (the draft's custom value, else the saved one).
+let lastCustom: ApproverSource | null = null;
 const nameInput = ref<{ validate(): Promise<boolean> } | null>(null);
 
 watch(() => [props.modelValue, props.flow?.key, props.presetTarget] as const, ([open]) => {
@@ -49,6 +51,7 @@ watch(() => [props.modelValue, props.flow?.key, props.presetTarget] as const, ([
   const preset = props.presetTarget ?? null;
   form.value = f ? draftFromFlow(f) : emptyFlowDraft(preset, preset === null ? 1 : nextPriority(props.flows, preset));
   error.value = null;
+  lastCustom = null;
 }, { immediate: true });
 // Server errors point at indexes and values that an edit moves, so any edit clears them (as the rules tab does).
 watch(form, () => { error.value = null; }, { deep: true });
@@ -79,7 +82,10 @@ function setTarget(id: number) {
 
 // ---- fallback: null inherits the module default ----
 const fallbackMode = computed(() => (form.value.fallback ? 'custom' : 'inherit'));
-const setFallbackMode = (m: 'inherit' | 'custom') => { form.value.fallback = m === 'custom' ? defaultSourceOf('users') : null; };
+const setFallbackMode = (m: 'inherit' | 'custom') => {
+  if (m === 'inherit') { lastCustom = form.value.fallback ?? lastCustom; form.value.fallback = null; return; }
+  form.value.fallback = lastCustom ?? props.flow?.definition.fallbackApprovers ?? defaultSourceOf('users');
+};
 const inheritText = computed(() => {
   const p = fallbackPolicy.value;
   const v = p?.effective;
@@ -134,7 +140,8 @@ async function submit() {
       const keys = Object.keys(err.errors ?? {});
       if (!keys.length && !(err.status === 409 && !isEdit.value)) $q.notify({ type: 'negative', message: err.message ?? t('designer.saveFailed') });
       // Show where the problem is: any basic-section error first, otherwise the stages.
-      section.value = keys.some((k) => own.test(k)) || (!keys.length) ? 'basic' : 'stages';
+      // Only a stage error moves to the stages section; constraint errors (transitions[..], flows[..]) are listed at the top of whichever section is open.
+      section.value = keys.some((k) => stageKey.test(k)) && !keys.some((k) => own.test(k)) ? 'stages' : 'basic';
     },
   });
 }
@@ -142,9 +149,9 @@ const title = computed(() => (isEdit.value ? t('approval.designer.dialog.edit') 
 </script>
 
 <template>
-  <q-dialog :model-value="modelValue" persistent :maximized="mobile" @update:model-value="(v) => emit('update:modelValue', v)">
+  <q-dialog :model-value="modelValue" persistent :maximized="mobile" aria-labelledby="flow-dialog-title" @update:model-value="(v) => emit('update:modelValue', v)">
     <q-card class="column no-wrap flow-dialog" :class="{ 'flow-dialog--desktop': !mobile }" data-testid="flow-dialog">
-      <q-card-section class="text-h6 q-pb-none">{{ title }}</q-card-section>
+      <q-card-section id="flow-dialog-title" class="text-h6 q-pb-none">{{ title }}</q-card-section>
       <div :class="mobile ? 'column no-wrap col' : 'row no-wrap col'" style="min-height: 0">
         <q-tabs
           v-model="section" :vertical="!mobile" dense align="left" :class="mobile ? '' : 'flow-dialog__side'" :aria-label="title" data-testid="flow-sections"
@@ -186,7 +193,7 @@ const title = computed(() => (isEdit.value ? t('approval.designer.dialog.edit') 
             <div class="column no-wrap q-gutter-y-sm" data-testid="flow-fallback">
               <div class="text-subtitle2">{{ t('approval.designer.basic.fallback') }}</div>
               <q-option-group
-                :model-value="fallbackMode" type="radio" :aria-label="t('approval.designer.basic.fallback')" data-testid="flow-fallback-mode"
+                style="overflow-wrap: anywhere" :model-value="fallbackMode" type="radio" role="radiogroup" :aria-label="t('approval.designer.basic.fallback')" data-testid="flow-fallback-mode"
                 :options="[{ value: 'inherit', label: inheritText }, { value: 'custom', label: t('approval.designer.basic.fallbackCustom') }]"
                 @update:model-value="setFallbackMode"
               />

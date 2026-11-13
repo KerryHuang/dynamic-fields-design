@@ -14,6 +14,8 @@ export interface StageDraft {
   onEmpty: 'fallback' | 'skip';
   /** The code this stage was saved with (absent on a new stage); changing it makes the backend treat the stage as a new one. Not sent. */
   savedCode?: string;
+  /** Stable key for the stage card while the list is edited (not sent). */
+  uid?: string;
 }
 
 export interface FlowDraft {
@@ -32,6 +34,9 @@ export interface FlowDraft {
 /** Screen default only (not a business policy): the prefix of a pre-filled stage code. */
 const CODE_PREFIX = 'stage-';
 
+let uidSeq = 0;
+const nextUid = () => `s${++uidSeq}`;
+
 /** The smallest `stage-N` (N from 1) not already used; the code never follows the name. */
 export function newStage(existingCodes: string[]): StageDraft {
   const used = new Set(existingCodes);
@@ -39,7 +44,7 @@ export function newStage(existingCodes: string[]): StageDraft {
   while (used.has(`${CODE_PREFIX}${n}`)) n++;
   return {
     code: `${CODE_PREFIX}${n}`, name: {}, approvers: { source: 'manager', level: 1 }, mode: 'any',
-    editableFields: [], dueHours: null, onEmpty: 'fallback',
+    editableFields: [], dueHours: null, onEmpty: 'fallback', uid: nextUid(),
   };
 }
 
@@ -54,16 +59,17 @@ export function draftFromFlow(f: ApprovalFlow): FlowDraft {
     when: d.when ?? undefined, rejectTo: d.rejectTo ?? null, fallback: d.fallbackApprovers ?? null,
     stages: d.stages.map((s) => ({
       code: s.code, name: { ...s.name }, when: s.when ?? undefined, approvers: s.approvers, mode: s.mode,
-      editableFields: [...s.editableFields], dueHours: s.dueHours ?? null, onEmpty: s.onEmpty, savedCode: s.code,
+      editableFields: [...s.editableFields], dueHours: s.dueHours ?? null, onEmpty: s.onEmpty, savedCode: s.code, uid: nextUid(),
     })),
   };
 }
 
 type HasStages = { stages: StageDraft[] };
 
-export function insertStage<T extends HasStages>(d: T, at: number): T {
+/** `reserved`: codes of the saved version; the backend matches a stage to the saved one by its current code, so a new stage must not take one of them. */
+export function insertStage<T extends HasStages>(d: T, at: number, reserved: string[] = []): T {
   const stages = [...d.stages];
-  stages.splice(Math.max(0, Math.min(at, stages.length)), 0, newStage(stages.map((s) => s.code)));
+  stages.splice(Math.max(0, Math.min(at, stages.length)), 0, newStage([...stages.map((s) => s.code), ...reserved]));
   return { ...d, stages };
 }
 
@@ -92,7 +98,7 @@ export function isSingleApprover(s: ApproverSource): boolean {
   }
 }
 
-/** Null while no target state is chosen. Empty conditions become null; a source that can only yield one person saves mode `any`. */
+/** Null while no target state is chosen. Empty conditions become null. A single-person source gets mode `any` when it is chosen (the stage editor does that); a saved stage keeps the mode it came with so an untouched save stays the same version. */
 export function buildFlowInput(d: FlowDraft): ApprovalFlowInput | null {
   if (d.toOptionId === null) return null;
   const definition: ApprovalDefinition = {
@@ -102,7 +108,7 @@ export function buildFlowInput(d: FlowDraft): ApprovalFlowInput | null {
     fallbackApprovers: d.fallback,
     stages: d.stages.map((s) => ({
       code: s.code, name: s.name, when: pruneCondition(s.when) ?? null, approvers: s.approvers,
-      mode: isSingleApprover(s.approvers) ? 'any' : s.mode, editableFields: s.editableFields, dueHours: s.dueHours, onEmpty: s.onEmpty,
+      mode: s.mode, editableFields: s.editableFields, dueHours: s.dueHours, onEmpty: s.onEmpty,
     })),
   };
   return { key: d.key, name: d.name, toOptionId: d.toOptionId, priority: d.priority, active: d.active, definition };

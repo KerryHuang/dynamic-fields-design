@@ -255,4 +255,47 @@ describe('FlowEditorDialog', () => {
     expect(m.findComponent(quasar.QTabs).props('vertical')).toBe(false);
     m.unmount();
   });
+  // Shaped like what the backend returns: single-condition root, null parameters, a group fallback, a single-person stage saved as mode all.
+  const backendShaped = (): ApprovalFlow => flow('a', 12, 3, {
+    used: true, currentVersionUsed: true, version: 4, pendingCount: 2,
+    definition: {
+      shape: 'sequence', when: { field: 7, op: 'gte', value: 100 } as never, rejectTo: 13, fallbackApprovers: { source: 'group', groupIds: [3], userIds: null, level: null },
+      stages: [
+        { code: 'stage-1', name: { 'zh-TW': '主管', 'en-US': 'Manager' }, when: null, approvers: { source: 'manager', level: 1, userIds: null, groupIds: null, fieldId: null, candidateGroupIds: null, min: null, max: null, unmatchedGroups: null, candidatesUnmatched: false }, mode: 'all', editableFields: [7], dueHours: 24, onEmpty: 'skip' },
+        { code: 'stage-3', name: { 'zh-TW': '會計' }, when: { all: [{ field: 7, op: 'gt', value: 5 }] } as never, approvers: { source: 'group', groupIds: [3] }, mode: 'all', editableFields: [], dueHours: null, onEmpty: 'fallback' },
+      ],
+    },
+  });
+
+  it('edit without changes sends the identical definition', async () => {
+    const f = backendShaped();
+    const w = await mountDialog({ flow: f });
+    await click('flow-save');
+    expect(api.updateApprovalFlow).toHaveBeenCalledTimes(1);
+    expect(api.updateApprovalFlow.mock.calls[0]![1]).toEqual({ key: 'a', name: f.name, toOptionId: 12, priority: 3, active: true, definition: f.definition });
+    w.unmount();
+  });
+
+  it('constraint-only errors stay on the basics section', async () => {
+    const w = await mountDialog({ flow: flow('a', 12, 1) });
+    api.updateApprovalFlow.mockRejectedValue({ status: 400, errors: { 'flows[a]': ['入口至少要有一個啟用的流程'] } });
+    await click('flow-save');
+    expect((body('flow-basic') as HTMLElement).style.display).not.toBe('none');
+    expect((body('flow-stages-section') as HTMLElement).style.display).toBe('none');
+    expect(text('flow-top-errors')).toContain('入口至少要有一個啟用的流程');
+    w.unmount();
+  });
+
+  it('switching the fallback back to custom restores the saved custom value', async () => {
+    const f = backendShaped();
+    const w = await mountDialog({ flow: f });
+    const group = w.findComponent(quasar.QOptionGroup);
+    group.vm.$emit('update:modelValue', 'inherit');
+    await flushPromises();
+    group.vm.$emit('update:modelValue', 'custom');
+    await flushPromises();
+    await click('flow-save');
+    expect(api.updateApprovalFlow.mock.calls[0]![1].definition.fallbackApprovers).toEqual(f.definition.fallbackApprovers);
+    w.unmount();
+  });
 });
