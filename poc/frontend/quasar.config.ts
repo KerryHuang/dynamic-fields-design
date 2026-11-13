@@ -1,5 +1,5 @@
 import { fileURLToPath } from 'node:url';
-import { defineConfig } from '@quasar/app-vite/wrappers';
+import { defineConfig } from '#q-app';
 
 export default defineConfig(() => ({
   boot: ['pinia', 'theme', 'i18n', 'tanstack-query', 'axios'],

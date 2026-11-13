@@ -1,4 +1,4 @@
-import { defineBoot } from '@quasar/app-vite/wrappers';
+import { defineBoot } from '#q-app';
 import { createI18n } from 'vue-i18n';
 import enUS from 'src/i18n/en-US.json';
 import th from 'src/i18n/th.json';

@@ -1,4 +1,4 @@
-import { defineBoot } from '@quasar/app-vite/wrappers';
+import { defineBoot } from '#q-app';
 import { useThemeStore } from 'src/stores/use-theme-store';
 
 /** 接手內嵌 script 套用的主題：同步 Quasar Dark、監聽系統與列印。需排在 pinia 之後。 */

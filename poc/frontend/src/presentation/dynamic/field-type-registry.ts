@@ -147,7 +147,8 @@ export function normalizeForRules(raw: unknown, type: FieldType): unknown {
  * `required` overrides config.required (the rule engine decides it per record).
  */
 export function zodFor(field: SchemaField, previous?: unknown, required = field.config.required, t: Translate = tFor(currentLocale())): ZodTypeAny {
-  return z.unknown().transform((raw, ctx) => {
+  // zod 4 rejects a missing key for a bare transform; map undefined to null first so "blank" still reaches normalize().
+  return z.preprocess((raw) => (raw === undefined ? null : raw), z.unknown().transform((raw, ctx) => {
     const v = normalize(raw, field.type);
     if (v === null) {
       if (required) ctx.addIssue({ code: 'custom', message: t(REQUIRED) });
@@ -164,7 +165,7 @@ export function zodFor(field: SchemaField, previous?: unknown, required = field.
       return [...new Set(v as string[])].sort((a, b) => (order.get(a) ?? 1e9) - (order.get(b) ?? 1e9));
     }
     return v;
-  });
+  }));
 }
 
 const optionLabel = (field: SchemaField, value: string, locale: string) => {

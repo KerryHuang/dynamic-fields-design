@@ -16,18 +16,18 @@
     "@tanstack/vue-query": "^5",
     "@vee-validate/zod": "^4.15.1",
     "axios": "^1.21.0",
-    "echarts": "6.0.0",
+    "echarts": "6.1.0",
     "grid-layout-plus": "1.1.1",
     "pinia": "^3",
     "quasar": "^2.18",
     "vee-validate": "^4",
     "vue": "^3.5",
-    "vue-i18n": "^10",
+    "vue-i18n": "^11.4.14",
     "vue-router": "^4",
-    "zod": "^3"
+    "zod": "^4.6.6"
   },
   "devDependencies": {
-    "@quasar/app-vite": "^2",
+    "@quasar/app-vite": "^3.3.0",
     "@types/node": "^26.6.6",
     "@vitejs/plugin-vue": "^6.0.10",
     "@vue/test-utils": "^2.5.1",

@@ -1,4 +1,4 @@
-import { defineRouter } from '@quasar/app-vite/wrappers';
+import { defineRouter } from '#q-app';
 import { createRouter, createWebHistory } from 'vue-router';
 import { queryClient } from 'src/boot/tanstack-query';
 import { setAuthHandlers } from 'src/services/api/http';
