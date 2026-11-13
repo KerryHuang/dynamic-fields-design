@@ -22,7 +22,7 @@ namespace DynamicModules.Application.Dynamic.DemoService;
 public sealed class DemoStructure(
     ISender sender, IPermissionRepository permissions, AppOpener appOpener, IAppRepository apps, IReportRepository reports, IModuleRepository modules,
     EventService.EffectBudget budget, IWriteJournal journal, AppService.SharedMasters.MasterSymbols masterSymbols,
-    ApprovalService.ApprovalWriteContext approvalContext, ApprovalService.ApprovalLockService approvalLock, DemoApprovals demoApprovals,
+    ApprovalService.ApprovalWriteContext approvalContext, ApprovalService.ApprovalLockService approvalLock,
     AttachmentService.AttachmentUploadTracker uploadTracker)
 {
     public const string CrmAppId = DemoCatalog.CrmAppId;
@@ -64,9 +64,6 @@ public sealed class DemoStructure(
             if (!app.Result.IsSuccess) return (null, Fail($"開啟應用程式 {appId}", app.Result));
             opened[appId] = app.Ids!;
         }
-
-        if (await demoApprovals.CreateAsync(opened[DemoCatalog.CrmAppId], ct) is { } approvalFailed)
-            return (null, Fail("建簽核流程 設計案", approvalFailed));
 
         opened[DemoCatalog.MesAppId] = await WithIntegrationFieldsAsync(DemoCatalog.MesAppId, opened[DemoCatalog.MesAppId], ct);
         var ids = opened[DemoCatalog.MesAppId];

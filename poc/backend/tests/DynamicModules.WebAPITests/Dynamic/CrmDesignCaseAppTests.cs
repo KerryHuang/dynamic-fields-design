@@ -11,8 +11,8 @@ using static DynamicModules.WebAPITests.Dynamic.ApiTestKit;
 namespace DynamicModules.WebAPITests.Dynamic;
 
 /// <summary>
-/// 內建 CRM（apps/crm-sales.app.json 1.2.0）的設計案與設計圖：模組、狀態機、群組權限、任務規則，以及加上簽核流程後的端到端行為。
-/// 程式碼裡沒有任何設計案專用邏輯，行為全來自套件宣告；簽核流程在 a5 之前不在套件裡，測試內以 API 建立。
+/// 內建 CRM（apps/crm-sales.app.json 1.3.0）的設計案與設計圖：模組、狀態機、群組權限、任務規則，以及套件內建簽核流程後的端到端行為。
+/// 程式碼裡沒有任何設計案專用邏輯，行為全來自套件宣告（含簽核流程與需簽核轉移）。
 /// </summary>
 public class CrmDesignCaseAppTests : IDisposable
 {
@@ -163,6 +163,21 @@ public class CrmDesignCaseAppTests : IDisposable
     }
 
     [Fact]
+    public async Task OpenCrm_HasReviewFlowAndApprovalTransition()
+    {
+        await OpenCrm();
+        var flow = await JsonOf(await _admin.GetAsync($"{Base}/approval-flows/crm-design-case-review"));
+        flow.GetProperty("version").GetInt32().Should().Be(1);
+        flow.GetProperty("moduleKey").GetString().Should().Be(Case);
+        var wf = await JsonOf(await _admin.GetAsync($"{Base}/modules/{Case}/workflow"));
+        wf.GetProperty("lockedStates").EnumerateArray().Select(x => x.GetInt64()).Should().BeEquivalentTo(
+        [
+            long.Parse((await OptionValue(_admin, Case, "狀態", "待主管確認"))[4..]),
+            long.Parse((await OptionValue(_admin, Case, "狀態", "結案"))[4..])
+        ]);
+    }
+
+    [Fact]
     public async Task Open_WithoutDesignerMapping_StillOpens()
     {
         var res = await _admin.PostAsJsonAsync($"{Apps}/packages/crm-sales/open", MapAll("sales", "manager"));
@@ -179,8 +194,6 @@ public class CrmDesignCaseAppTests : IDisposable
     [InlineData("設計中", "客戶確認中", "manager01", false)]
     [InlineData("客戶確認中", "設計中", "sales01", true)]
     [InlineData("客戶確認中", "設計中", Designer, false)]
-    [InlineData("客戶確認中", "待主管確認", "sales01", true)]
-    [InlineData("客戶確認中", "待主管確認", Designer, false)]
     [InlineData("待主管確認", "結案", "manager01", true)]
     [InlineData("待主管確認", "結案", "sales01", false)]
     [InlineData("需求確認", "取消", "manager01", true)]
@@ -193,13 +206,14 @@ public class CrmDesignCaseAppTests : IDisposable
         await OpenCrm();
         await SetMembers(["sales01"], ["manager01"], [Designer]);
         var record = await NewCase(_app.AsUser("manager01"));
-        // 用 admin 沿主線走到起點（admin 屬 MIS，不受轉移群組限制）
-        foreach (var step in new[] { "設計中", "客戶確認中", "待主管確認" })
+        // 用 admin 沿主線走到起點（admin 屬 MIS，不受轉移群組限制）；待主管確認要經送簽、同意
+        foreach (var step in new[] { "設計中", "客戶確認中" })
         {
             if (from == "需求確認") break;
             record = await Move(_admin, record, step);
             if (step == from) break;
         }
+        if (from == "待主管確認") record = await ToManagerReview(record);
         var status = (await FieldKeys(_admin, Case))["狀態"];
         var res = await Put(_app.AsUser(user), record, new() { [status] = await OptionValue(_admin, Case, "狀態", to) });
         if (allowed) res.StatusCode.Should().Be(HttpStatusCode.OK, await res.Content.ReadAsStringAsync());
@@ -409,11 +423,11 @@ public class CrmDesignCaseAppTests : IDisposable
         comment.GetProperty("attachments").GetArrayLength().Should().Be(2);
     }
 
-    // ---- Task 3：簽核端到端（a5 之前套件不含流程，測試內以 API 建立，內容同 Demo 產生器要建的流程） ----
+    // ---- Task 3：簽核端到端（流程與需簽核轉移由套件內建） ----
 
     private sealed record Flow(long ManagerReview);
 
-    /// <summary>開 CRM、建業務部（主管 manager01，成員 sales01）、建「設計案主管確認」流程，再把客戶確認中 → 待主管確認標成需簽核。</summary>
+    /// <summary>開 CRM、建業務部（主管 manager01，成員 sales01）；流程由套件內建，這裡只確認它在。</summary>
     private async Task<Flow> ArrangeApproval()
     {
         await OpenWithMembers();
@@ -424,39 +438,9 @@ public class CrmDesignCaseAppTests : IDisposable
         (await _admin.PutAsJsonAsync($"{Base}/admin/users/sales01/department", new { departmentId = dept.GetProperty("id").GetInt64() }))
             .StatusCode.Should().Be(HttpStatusCode.OK);
 
-        var module = await JsonOf(await _admin.GetAsync($"{Base}/modules/{Case}"));
-        var status = module.GetProperty("blocks").EnumerateArray().SelectMany(b => b.GetProperty("fields").EnumerateArray())
-            .Single(f => f.GetProperty("label").GetProperty("zh-TW").GetString() == "狀態");
-        long Opt(string label) => status.GetProperty("options").EnumerateArray()
-            .Single(o => o.GetProperty("label").GetProperty("zh-TW").GetString() == label).GetProperty("id").GetInt64();
-        long designing = Opt("設計中"), review = Opt("客戶確認中"), manager = Opt("待主管確認");
-
-        var flow = await _admin.PostAsJsonAsync($"{Base}/approval-flows?module={Case}", new
-        {
-            key = "crm-design-case-review", name = new Dictionary<string, string> { ["zh-TW"] = "設計案主管確認" }, toOptionId = manager, priority = 1, active = true,
-            definition = new
-            {
-                shape = "sequence", rejectTo = designing,
-                stages = new[]
-                {
-                    new
-                    {
-                        code = "owner-manager", name = new Dictionary<string, string> { ["zh-TW"] = "負責業務主管" },
-                        approvers = new { source = "manager", level = 1 }, mode = "any", editableFields = Array.Empty<long>(), onEmpty = "fallback"
-                    }
-                }
-            }
-        });
-        flow.StatusCode.Should().Be(HttpStatusCode.Created, await flow.Content.ReadAsStringAsync());
-
-        var wf = await JsonOf(await _admin.GetAsync($"{Base}/modules/{Case}/workflow"));
-        var body = System.Text.Json.Nodes.JsonNode.Parse(wf.GetRawText())!.AsObject();
-        foreach (var t in body["transitions"]!.AsArray())
-            if (t!["from"]!.GetValue<long>() == review && t["to"]!.GetValue<long>() == manager)
-                t["approval"] = System.Text.Json.Nodes.JsonNode.Parse("""{ "required": true, "noMatch": "block" }""");
-        var saved = await _admin.PutAsJsonAsync($"{Base}/modules/{Case}/workflow", body);
-        saved.StatusCode.Should().Be(HttpStatusCode.OK, await saved.Content.ReadAsStringAsync());
-        return new Flow(manager);
+        var flow = await _admin.GetAsync($"{Base}/approval-flows/crm-design-case-review");
+        flow.StatusCode.Should().Be(HttpStatusCode.OK, await flow.Content.ReadAsStringAsync());
+        return new Flow(long.Parse((await OptionValue(_admin, Case, "狀態", "待主管確認"))[4..]));
     }
 
     /// <summary>兩輪設計與客戶確認，停在第二輪的客戶確認中（第二批 draw 已完成）。</summary>
@@ -467,6 +451,44 @@ public class CrmDesignCaseAppTests : IDisposable
         record = await GoRound(record, "客戶確認中", DrawTitle);
         record = await GoRound(record, "設計中", ConfirmTitle);
         return await GoRound(record, "客戶確認中", DrawTitle);
+    }
+
+    /// <summary>
+    /// 記錄在客戶確認中時走到待主管確認：sales01 送出簽核，admin 同意（測試裡 sales01 沒有部門，簽核人由備援頂替成系統管理員）。
+    /// 轉移不能再用 PUT 直接進，因為那一條由套件宣告成需簽核。
+    /// </summary>
+    private async Task<JsonElement> ToManagerReview(JsonElement record)
+    {
+        var f = new Flow(long.Parse((await OptionValue(_admin, Case, "狀態", "待主管確認"))[4..]));
+        var current = await SubmitOk(record, f);
+        var ok = await Approve(current, "admin");
+        ok.StatusCode.Should().Be(HttpStatusCode.OK, await ok.Content.ReadAsStringAsync());
+        return await Reload(record.GetProperty("id").GetInt64());
+    }
+
+    [Theory]
+    [InlineData("sales01", HttpStatusCode.Created)]
+    [InlineData(Designer, HttpStatusCode.BadRequest)]
+    public async Task ReviewEntry_SubmitPerGroup(string user, HttpStatusCode expected)
+    {
+        var f = await ArrangeApproval();
+        var record = await TwoRoundsToCustomerReview();
+        var res = await Submit(_app.AsUser(user), record, f);
+        res.StatusCode.Should().Be(expected, await res.Content.ReadAsStringAsync());
+        if (expected != HttpStatusCode.Created) (await res.Content.ReadAsStringAsync()).Should().Contain(WorkflowEnforcer.NotPermittedMessage);
+    }
+
+    [Fact]
+    public async Task ReviewEntry_PlainPut_Rejected()
+    {
+        await OpenWithMembers();
+        var record = await NewCase(_app.AsUser("manager01"));
+        record = await Move(_admin, record, "設計中");
+        record = await Move(_admin, record, "客戶確認中");
+        var status = (await FieldKeys(_admin, Case))["狀態"];
+        var res = await Put(_app.AsUser("sales01"), record, new() { [status] = await OptionValue(_admin, Case, "狀態", "待主管確認") });
+        res.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+        (await res.Content.ReadAsStringAsync()).Should().Contain("需要送出簽核");
     }
 
     private async Task<HttpResponseMessage> Submit(HttpClient by, JsonElement record, Flow f) =>

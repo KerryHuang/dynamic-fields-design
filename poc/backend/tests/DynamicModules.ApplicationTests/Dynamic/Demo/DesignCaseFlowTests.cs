@@ -1,4 +1,5 @@
 using DynamicModules.Application.Common.Acting;
+using DynamicModules.Application.Dynamic.AppService;
 using DynamicModules.Application.Dynamic.ApprovalService;
 using DynamicModules.Application.Dynamic.DemoService;
 using DynamicModules.Application.Dynamic.RecordService.Commands.CreateRecord;
@@ -10,11 +11,12 @@ using Microsoft.EntityFrameworkCore;
 
 namespace DynamicModules.ApplicationTests.Dynamic.Demo;
 
-/// <summary>Demo 在套件格式 8 之前補的設計案簽核流程（見 DemoApprovals）：流程定義、狀態機標記、只有這一個流程、設計群組的權限。</summary>
+/// <summary>Demo 開啟內建 CRM 套件後的設計案簽核流程（流程由套件內建）：流程定義、狀態機標記、Demo 的流程都來自內建套件、設計群組的權限。</summary>
 [Collection(DemoGeneratedCollection.Name)]
-public class DemoApprovalsTests(DemoGeneratedFixture fx)
+public class DesignCaseFlowTests(DemoGeneratedFixture fx)
 {
     private const string Case = "crm-design-case";
+    private const string DesignCaseFlowKey = "crm-design-case-review";
 
     private async Task<long> Option(string label) => long.Parse((await fx.Opt(Case, "狀態", label))[4..]);
 
@@ -22,7 +24,7 @@ public class DemoApprovalsTests(DemoGeneratedFixture fx)
     public async Task DesignCaseFlow_MatchesDefinition()
     {
         fx.Generated();
-        var r = await fx.As("admin", new GetApprovalFlowRequest(DemoApprovals.DesignCaseFlowKey));
+        var r = await fx.As("admin", new GetApprovalFlowRequest(DesignCaseFlowKey));
         r.IsSuccess.Should().BeTrue(r.Message);
         var flow = (ApprovalFlowResponse)r.Data!;
 
@@ -59,11 +61,14 @@ public class DemoApprovalsTests(DemoGeneratedFixture fx)
     }
 
     [Fact]
-    public async Task DemoHasNoOtherFlows()
+    public async Task DemoFlows_AreExactlyTheBuiltInPackageFlows()
     {
         fx.Generated();
+        var expected = AppCatalog.Load(AppCatalog.DefaultDirectory).BuiltIns
+            .Where(p => DemoCatalog.AppIds.Contains(p.Manifest.Id)).SelectMany(p => p.ApprovalFlows).Select(f => f.Code).ToList();
+        expected.Should().Contain(DesignCaseFlowKey);
         var keys = await fx.Host.Db.Context.Set<ApprovalFlow>().AsNoTracking().Select(f => f.Key).ToListAsync();
-        keys.Should().Equal(DemoApprovals.DesignCaseFlowKey);
+        keys.Should().BeEquivalentTo(expected);
     }
 
     [Fact]
