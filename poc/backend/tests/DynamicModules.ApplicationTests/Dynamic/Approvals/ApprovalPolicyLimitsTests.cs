@@ -60,8 +60,9 @@ public class ApprovalPolicyLimitsTests : ApprovalTestBase
         var r = await BuildPurchase();
         var res = await Create(r, Input("f1", r.Confirmed, Def(null, Stages(11))));
         res.Ok.Should().BeFalse();
-        res.Text("definition.stages").Should().Contain("10");
+        res.Text("definition.stages").Should().Contain("10").And.NotContain("沿用原本的數字");
         (await Create(r, Input("f2", r.Confirmed, Def(null, Stages(10))))).Ok.Should().BeTrue();
+        (await Update(r, Input("f2", r.Confirmed, Def(null, Stages(11))))).Text("definition.stages").Should().Contain("沿用原本的數字");
     }
 
     [Fact]
@@ -197,8 +198,9 @@ public class ApprovalPolicyLimitsTests : ApprovalTestBase
         var same = await Update(r, Input("f1", r.Confirmed, Def(null, Stage("a", Manager(4))), "改名"));
         same.Ok.Should().BeTrue(same.All);
         (await Update(r, Input("f1", r.Confirmed, Def(null, Stage("a", Manager(5)))))).Text("definition.stages[0].approvers").Should().Contain("3");
-        // 錯誤訊息要說明舊版的數字仍允許
-        (await Create(r, Input("f2", r.Confirmed, Def(null, Stage("a", Manager(4)))))).Text("definition.stages[0].approvers").Should().Contain("沿用原本的數字");
+        // 既有流程：錯誤訊息說明舊版的數字仍允許；新建流程沒有舊版，不附這句
+        (await Update(r, Input("f1", r.Confirmed, Def(null, Stage("a", Manager(5)))))).Text("definition.stages[0].approvers").Should().Contain("沿用原本的數字");
+        (await Create(r, Input("f2", r.Confirmed, Def(null, Stage("a", Manager(4)))))).Text("definition.stages[0].approvers").Should().NotContain("沿用原本的數字");
     }
 
     [Fact]
@@ -208,6 +210,18 @@ public class ApprovalPolicyLimitsTests : ApprovalTestBase
         await SetOverride(r, PolicyCatalog.ApprovalMaxManagerLevel, "3");
         var d = Def(null, Stage("a", Manager(1))) with { FallbackApprovers = Manager(4) };
         (await Create(r, Input("f1", r.Confirmed, d))).Text("definition.fallbackApprovers").Should().Contain("3");
+    }
+
+    [Fact]
+    public async Task SaveFlow_FallbackManagerLevelOverLoweredLimit_Unchanged_Allowed()
+    {
+        var r = await BuildPurchase();
+        ApprovalDefinition D(int level) => Def(null, Stage("a", Manager(1))) with { FallbackApprovers = Manager(level) };
+        (await Create(r, Input("f1", r.Confirmed, D(4)))).Ok.Should().BeTrue();
+        await SetOverride(r, PolicyCatalog.ApprovalMaxManagerLevel, "3");
+        var same = await Update(r, Input("f1", r.Confirmed, D(4), "改名"));
+        same.Ok.Should().BeTrue(same.All);
+        (await Update(r, Input("f1", r.Confirmed, D(5)))).Text("definition.fallbackApprovers").Should().Contain("3");
     }
 
     // ───────── 執行期（Task 19）─────────
@@ -286,8 +300,10 @@ public class ApprovalPolicyLimitsTests : ApprovalTestBase
         (await SubmitSmall(r, picks: new() { ["p"] = [.. UserIds(2)] })).IsSuccess.Should().BeTrue();
     }
 
-    [Fact]
-    public async Task Resolve_StaticUsersWithOneDisabled_OverLoweredLimit_StillUsesTechnicalMax()
+    [Theory]
+    [InlineData(false)]   // 流程沒設備援：政策預設（系統管理員）
+    [InlineData(true)]    // 流程的備援是群組
+    public async Task Resolve_StaticUsersWithOneDisabled_OverLoweredLimit_StillUsesTechnicalMax(bool groupFallback)
     {
         await AddUsers(16);
         Db.Context.Add(new AppUser { UserId = "sysadm", DisplayName = "sysadm", IsSystemAdmin = true });
@@ -295,23 +311,87 @@ public class ApprovalPolicyLimitsTests : ApprovalTestBase
         disabled.IsActive = false;
         await Db.Context.SaveChangesAsync();
         Db.Context.ChangeTracker.Clear();
-        var r = await WithFlow(Def(null, Stage("fix", Users(UserIds(15)))));   // 固定 15 人（含已停用的 u15），預設備援是系統管理員
+        var def = Def(null, Stage("fix", Users(UserIds(15))));   // 固定 15 人（含已停用的 u15）
+        var r = await WithFlow(groupFallback ? def with { FallbackApprovers = Group(FinanceGroup) } : def);
         await SetOverride(r, PolicyCatalog.ApprovalMaxApprovers, "10");
         var res = await SubmitSmall(r);
         res.IsSuccess.Should().BeTrue(Dump(res));
     }
 
+    // 頂替的備援簽核人在執行時只受技術上限 50，不計入每關人數的當下上限；關卡本身的來源仍依當下上限
+
+    [Fact]
+    public async Task Resolve_PickFullAtLimit_OneDisabled_FallbackSubstitutes_Succeeds()
+    {
+        await AddUsers(20);
+        var pick = new ApproverSource(ApprovalSources.InitiatorPick, CandidateGroupIds: [], Min: 1, Max: 20);
+        var r = await WithFlow(Def(null, Stage("lead", Group(PurchaseLeadGroup)), Stage("p", pick)) with { FallbackApprovers = Users("fin1", "fin2") });
+        var res = await SubmitSmall(r, picks: new() { ["p"] = [.. UserIds(20)] });   // 上限 20，選滿
+        res.IsSuccess.Should().BeTrue(Dump(res));
+        var id = ((SubmitApprovalResponse)res.Data!).InstanceId!.Value;
+        (await Db.Context.Set<AppUser>().FirstAsync(u => u.UserId == "u20")).IsActive = false;
+        await Db.Context.SaveChangesAsync();
+        Db.Context.ChangeTracker.Clear();
+
+        As("buyer2");
+        var task = TasksOf(id).Single(t => t.AssigneeUserId == "buyer2" && t.Status == ApprovalTaskStatus.Open);
+        var approve = await Send(new ApproveTaskRequest(task.Id, Inst(id).RowVersion, null, null));
+        approve.IsSuccess.Should().BeTrue(Dump(approve));   // 19 人 + 2 位頂替的備援 = 21，備援不計入 20
+        TasksOf(id).Where(t => t.Status == ApprovalTaskStatus.Open).Select(t => t.AssigneeUserId).Should().Contain(["fin1", "fin2"]);
+    }
+
+    [Fact]
+    public async Task Resolve_GroupMembersAllGone_FixedFallbackOverLoweredLimit_Succeeds()
+    {
+        await AddUsers(15);
+        var r = await WithFlow(Def(null, Stage("board", Group(BoardGroup))) with { FallbackApprovers = Users(UserIds(15)) });
+        Db.Context.RemoveRange(Db.Context.Set<UserGroupMapping>().Where(m => m.GroupId == BoardGroup));   // 群組成員全部調走
+        await Db.Context.SaveChangesAsync();
+        Db.Context.ChangeTracker.Clear();
+        await SetOverride(r, PolicyCatalog.ApprovalMaxApprovers, "10");
+        var res = await SubmitSmall(r);
+        res.IsSuccess.Should().BeTrue(Dump(res));
+        TasksOf(((SubmitApprovalResponse)res.Data!).InstanceId!.Value).Count(t => t.Status == ApprovalTaskStatus.Open).Should().Be(15);
+    }
+
+    [Fact]
+    public async Task Resolve_GroupSourceOverLimit_WithFixedFallback_StillReturns409()
+    {
+        await AddUsers(15);
+        var r = await WithFlow(Def(null, Stage("fin", Group(FinanceGroup))) with { FallbackApprovers = Users(UserIds(15)) });
+        await SetOverride(r, PolicyCatalog.ApprovalMaxApprovers, "1");   // 群組本身 2 人
+        var res = await SubmitSmall(r);
+        res.IsConflict.Should().BeTrue(Dump(res));
+        res.Message.Should().Contain("超過 1 人");
+    }
+
+    [Fact]
+    public async Task Resolve_UnmatchedPickAll_MinUsesEffectiveRange_FallbackFillsSeats()
+    {
+        await AddUsers(10);
+        // 存檔最少 12、最多 15 的會簽自選，候選群組失效；上限調成 10、備援固定 10 人
+        var pick = new ApproverSource(ApprovalSources.InitiatorPick, CandidateGroupIds: [], Min: 12, Max: 15) with { CandidatesUnmatched = true };
+        var r = await WithFlow(Def(null, Stage("p", pick, mode: ApprovalModes.All)) with { FallbackApprovers = Users(UserIds(10)) });
+        await SetOverride(r, PolicyCatalog.ApprovalMaxApprovers, "10");
+        var res = await SubmitSmall(r);
+        res.IsSuccess.Should().BeTrue(Dump(res));
+        var tasks = TasksOf(((SubmitApprovalResponse)res.Data!).InstanceId!.Value).Where(t => t.Status == ApprovalTaskStatus.Open).ToList();
+        tasks.Select(t => t.AssigneeUserId).Distinct().Should().HaveCount(10);
+        tasks.Select(t => t.SeatKey).Distinct().Should().HaveCount(10);   // 有效最少人數 10 → 10 個備援席位，共用同一份 10 人名單
+    }
+
     [Fact]
     public async Task Resolve_FallbackUsersOver_LoweredLimit_UsesTechnicalMax()
     {
-        await AddUsers(15);
+        await AddUsers(51);
         var r = await WithFlow(Def(null, Stage("fix", Users(UserIds(1)))));
         await SetOverride(r, PolicyCatalog.ApprovalMaxApprovers, "10");
         var ctx = await Svc<ApproverResolver>().ContextAsync((await Svc<IModuleRepository>().GetByIdAsync(r.ModuleId, true, default))!, "buyer1", new Dictionary<string, System.Text.Json.JsonElement?>(), null, default);
         var viaUsers = ApproverResolver.ResolveFallback(ctx, Users(UserIds(15)));
         viaUsers.Error.Should().BeNull();
         viaUsers.Seats.Single().UserIds.Should().HaveCount(15);
-        ApproverResolver.ResolveFallback(ctx, Group(FinanceGroup) with { GroupIds = [FinanceGroup, PurchaseLeadGroup, BoardGroup] }).Error.Should().BeNull();
+        // 備援在執行時只受技術上限 50（不分來源）
+        ApproverResolver.ResolveFallback(ctx, Users(UserIds(51))).Error.Should().NotBeNull();
     }
 
     // 自選關卡：有效上限＝min(存檔上限, 當下上限)，最少人數大於有效上限時改用有效上限
@@ -341,7 +421,7 @@ public class ApprovalPolicyLimitsTests : ApprovalTestBase
         var over = await SubmitSmall(r, picks: new() { ["p"] = [.. UserIds(11)] });
         over.IsSuccess.Should().BeFalse();
         over.Errors.Should().ContainKey("picks.p");
-        over.Errors["picks.p"][0].Should().Contain("10");
+        over.Errors["picks.p"][0].Should().Contain("10").And.Be("請選 10 位簽核人");   // 最少最多相同時不寫「10 到 10」
         var ok = await SubmitSmall(r, picks: new() { ["p"] = [.. UserIds(10)] });
         ok.IsSuccess.Should().BeTrue(Dump(ok));
     }

@@ -45,7 +45,7 @@ public sealed partial class ApprovalDefinitionValidator(
 
         var stages = d.Stages ?? [];
         if (stages.Count == 0 || (stages.Count > limits.MaxStages && stages.Count > (previous?.Stages?.Count ?? 0)))
-            Err("stages", ApprovalMessages.StagesCount(limits.MaxStages));
+            Err("stages", ApprovalMessages.StagesCount(limits.MaxStages, previous is not null));
         else if (stages.Select(s => s.Code).Distinct().Count() != stages.Count) Err("stages", ApprovalMessages.StageCodeDuplicate);
 
         var nonEditable = await NonEditableFieldIdsAsync(module, wf, ct);
@@ -66,7 +66,7 @@ public sealed partial class ApprovalDefinitionValidator(
             else if (SourceError(s.Approvers, before?.Approvers) is { } ae) Err($"{p}.approvers", ae);
             if (s.Mode is not (ApprovalModes.All or ApprovalModes.Any)) Err($"{p}.mode", ApprovalMessages.ModeInvalid);
             if (s.DueHours is { } h && (h < 1 || (h > limits.MaxDueHours && h > (before?.DueHours ?? 0))))
-                Err($"{p}.dueHours", ApprovalMessages.DueHours(limits.MaxDueHours));
+                Err($"{p}.dueHours", ApprovalMessages.DueHours(limits.MaxDueHours, previous is not null));
             if (s.OnEmpty is not (ApprovalOnEmpty.Fallback or ApprovalOnEmpty.Skip)) Err($"{p}.onEmpty", ApprovalMessages.OnEmptyInvalid);
             else if (s.OnEmpty == ApprovalOnEmpty.Skip && s.Approvers is { } src && (src.CandidatesUnmatched || src.UnmatchedGroups is { Count: > 0 }))
                 Err($"{p}.onEmpty", ApprovalMessages.OnEmptySkipUnmatched);
@@ -90,13 +90,13 @@ public sealed partial class ApprovalDefinitionValidator(
                 case ApprovalSources.Users:
                     var ids = a.UserIds ?? [];
                     var oldCount = old?.Source == ApprovalSources.Users ? old.UserIds?.Count ?? 0 : 0;
-                    if (ids.Count == 0 || (ids.Count > limits.MaxApprovers && ids.Count > oldCount)) return ApprovalMessages.UsersCount(limits.MaxApprovers);
+                    if (ids.Count == 0 || (ids.Count > limits.MaxApprovers && ids.Count > oldCount)) return ApprovalMessages.UsersCount(limits.MaxApprovers, previous is not null);
                     return ids.All(activeUsers.Contains) ? null : ApprovalMessages.UsersInvalid;
                 case ApprovalSources.Group:
                     return a.GroupIds is { Count: > 0 } g && g.All(groupIds.Contains) ? null : ApprovalMessages.GroupsInvalid;
                 case ApprovalSources.Manager:
                     var oldLevel = old?.Source == ApprovalSources.Manager ? old.Level ?? 0 : 0;
-                    return a.Level is { } lv && lv >= 1 && (lv <= limits.MaxManagerLevel || lv <= oldLevel) ? null : ApprovalMessages.ManagerLevel(limits.MaxManagerLevel);
+                    return a.Level is { } lv && lv >= 1 && (lv <= limits.MaxManagerLevel || lv <= oldLevel) ? null : ApprovalMessages.ManagerLevel(limits.MaxManagerLevel, previous is not null);
                 case ApprovalSources.UserField:
                     if (a.FieldId is not { } fid || !fields.TryGetValue(fid, out var uf) || uf is not { Type: FieldType.User, Status: FieldStatus.Active })
                         return ApprovalMessages.UserFieldInvalid;
@@ -105,7 +105,7 @@ public sealed partial class ApprovalDefinitionValidator(
                 case ApprovalSources.InitiatorPick:
                     var oldMax = old?.Source == ApprovalSources.InitiatorPick ? old.Max ?? 0 : 0;
                     if (a.Min is not { } min || a.Max is not { } max || min < 1 || min > max || (max > limits.MaxApprovers && max > oldMax))
-                        return ApprovalMessages.PickRange(limits.MaxApprovers);
+                        return ApprovalMessages.PickRange(limits.MaxApprovers, previous is not null);
                     return (a.CandidateGroupIds ?? []).All(groupIds.Contains) ? null : ApprovalMessages.CandidateGroupsInvalid;
                 default:
                     return ApprovalMessages.SourceInvalid;

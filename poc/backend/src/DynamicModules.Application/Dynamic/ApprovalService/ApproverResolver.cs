@@ -85,11 +85,14 @@ public sealed class ApproverResolver(
         }
 
         if (seats.Count == 0) return new([], false, ApprovalMessages.NoApprover(stage, empty.FirstOrDefault() ?? source.Source));
-        // 固定名單在存檔時已驗過上限，「只管之後」才真的成立：來源是固定名單的關卡（含頂替的備援）執行期只受技術上限管（判斷 17，主控 11-13 修正）；其他來源照當下的設定
-        var staticOnly = source.Source == ApprovalSources.Users;
-        var limit = staticOnly ? PolicyCatalog.ApprovalMaxApprovers.Max : ctx.MaxApprovers;
-        if (seats.SelectMany(s => s.UserIds).Distinct(StringComparer.Ordinal).Count() > limit)
-            return new([], false, ApprovalMessages.TooManyApprovers(stage, limit));
+        // 判斷 17：關卡本身的來源（群組、主管、使用者欄位、自選挑的人）依當下上限；固定名單存檔時已驗過，只受技術上限；
+        // 頂替的備援簽核人（流程的備援名單或政策預設備援）不計入每關人數的當下上限，只受技術上限
+        var technicalMax = PolicyCatalog.ApprovalMaxApprovers.Max;
+        var ownLimit = source.Source == ApprovalSources.Users ? technicalMax : ctx.MaxApprovers;
+        if (seats.Where(s => s.Reason == ApprovalTaskReason.Resolved).SelectMany(s => s.UserIds).Distinct(StringComparer.Ordinal).Count() > ownLimit)
+            return new([], false, ApprovalMessages.TooManyApprovers(stage, ownLimit));
+        if (seats.Where(s => s.Reason == ApprovalTaskReason.Fallback).SelectMany(s => s.UserIds).Distinct(StringComparer.Ordinal).Count() > technicalMax)
+            return new([], false, ApprovalMessages.TooManyApprovers(stage, technicalMax));
         return new(seats, false, null);
     }
 
@@ -101,7 +104,8 @@ public sealed class ApproverResolver(
     {
         var users = FallbackUsers(ctx, fallback);
         if (users.Count == 0) return new([], false, ApprovalMessages.NoApprover(ApprovalMessages.FallbackStageName, fallback?.Source ?? "admin"));
-        var limit = fallback?.Source == ApprovalSources.Users ? PolicyCatalog.ApprovalMaxApprovers.Max : ctx.MaxApprovers;
+        // 備援簽核人執行時只受技術上限（與 Resolve 頂替的備援一致）
+        var limit = PolicyCatalog.ApprovalMaxApprovers.Max;
         if (users.Count > limit) return new([], false, ApprovalMessages.TooManyApprovers(ApprovalMessages.FallbackStageName, limit));
         return new([new SeatPlan(AnySeat, users, ApprovalTaskReason.Fallback, null)], false, null);
     }
@@ -136,7 +140,7 @@ public sealed class ApproverResolver(
                 if (source.CandidatesUnmatched)
                 {
                     // 對不上時由備援頂替，會簽仍要湊滿原本的票數（設計 §14.4，審查 M1）：依 min 產生同樣數量的空單位
-                    for (var i = 0; i < Math.Max(1, source.Min ?? 1); i++) yield return (ApprovalMessages.PickLabelI18n, []);
+                    for (var i = 0; i < Math.Max(1, PickRange(ctx, source).Min); i++) yield return (ApprovalMessages.PickLabelI18n, []);
                     break;
                 }
                 var allowed = Candidates(ctx, source);
@@ -148,7 +152,7 @@ public sealed class ApproverResolver(
     }
 
     /// <summary>
-    /// 自選關卡的人數範圍（送出檢查、預覽、解析共用）：上限＝min(存檔上限, 當下政策上限)；
+    /// 自選關卡的人數範圍（送出檢查與預覽共用；解析時另依當下上限檢查）：上限＝min(存檔上限, 當下政策上限)；
     /// 存檔的最少人數大於有效上限時，最少人數改用有效上限。
     /// </summary>
     internal static (int Min, int Max) PickRange(ResolveContext ctx, ApproverSource source)

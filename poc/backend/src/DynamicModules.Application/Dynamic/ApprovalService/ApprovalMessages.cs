@@ -12,21 +12,24 @@ public static class ApprovalMessages
     public const string RejectToInvalidState = "退回狀態必須是狀態機的狀態";
     public const string FallbackSourceInvalid = "備援簽核人只能是指定使用者、群組或主管";
     public const string FlowKeyReserved = "流程代碼 order 是保留字，請改用其他代碼";
-    public static string StagesCount(int max) => $"關卡必須有 1 到 {max} 關；已存在的流程沿用原本的數字仍可儲存";
+    public static string StagesCount(int max, bool existing = false) => $"關卡必須有 1 到 {max} 關{KeepOld(existing)}";
     public const string StageCodeInvalid = "關卡代號只能用小寫英文、數字、連字號，英文開頭，最多 40 字";
     public const string StageCodeDuplicate = "關卡代號不能重複";
     public const string StageNameRequired = "關卡名稱必須有繁體中文";
     public const string ModeInvalid = "簽核模式只能是 all 或 any";
     public const string SourceInvalid = "簽核人來源只能是 users、group、manager、userField、initiatorPick";
-    public static string UsersCount(int max) => $"指定使用者必須有 1 到 {max} 位；已存在的流程沿用原本的數字仍可儲存";
+    public static string UsersCount(int max, bool existing = false) => $"指定使用者必須有 1 到 {max} 位{KeepOld(existing)}";
     public const string UsersInvalid = "指定的使用者必須存在且啟用中";
     public const string GroupsInvalid = "群組至少要有一個，而且都必須存在";
-    public static string ManagerLevel(int max) => $"主管層級必須是 1 到 {max}；已存在的流程沿用原本的數字仍可儲存";
+    public static string ManagerLevel(int max, bool existing = false) => $"主管層級必須是 1 到 {max}{KeepOld(existing)}";
     public const string UserFieldInvalid = "使用者欄位必須是本模組表頭、啟用中的使用者欄位";
     public const string UserFieldWithoutCandidates = "使用者欄位來源必須設定候選群組";
     public const string CandidateGroupsInvalid = "候選群組都必須存在";
-    public static string PickRange(int max) => $"自選人數必須符合 1 ≤ 最少 ≤ 最多 ≤ {max}；已存在的流程沿用原本的數字仍可儲存";
-    public static string DueHours(int max) => $"逾期時數必須是 1 到 {max}；已存在的流程沿用原本的數字仍可儲存";
+    public static string PickRange(int max, bool existing = false) => $"自選人數必須符合 1 ≤ 最少 ≤ 最多 ≤ {max}{KeepOld(existing)}";
+    public static string DueHours(int max, bool existing = false) => $"逾期時數必須是 1 到 {max}{KeepOld(existing)}";
+
+    /// <summary>只有既有流程（有舊版可比）才附這句；新建流程沒有舊版，附了反而誤導。</summary>
+    private static string KeepOld(bool existing) => existing ? "；已存在的流程沿用原本的數字仍可儲存" : "";
     public const string OnEmptyInvalid = "找不到人時的處理只能是 fallback 或 skip";
     public const string OnEmptySkipUnmatched = "這一關的簽核人來源有對不上的群組，找不到人時只能交給備援簽核人，不能跳過";
     public const string EditableFieldInvalid =
@@ -99,7 +102,8 @@ public static class ApprovalMessages
     public static readonly MessageRef NoMatchingFlow = MessageRef.Of(MessageText.ApprovalNoMatchingFlow);
     public static readonly MessageRef PickInvalid = MessageRef.Of(MessageText.ApprovalPickInvalid);
     public static readonly MessageRef PickCandidatesUnmatched = MessageRef.Of(MessageText.ApprovalPickCandidatesUnmatched);
-    public static MessageRef PickCount(int min, int max) => MessageRef.Of(MessageText.ApprovalPickCount, min, max);
+    public static MessageRef PickCount(int min, int max) =>
+        min == max ? MessageRef.Of(MessageText.ApprovalPickExact, min) : MessageRef.Of(MessageText.ApprovalPickCount, min, max);
     public static readonly MessageRef UserFieldNotCandidate = MessageRef.Of(MessageText.ApprovalUserFieldNotCandidate);
     public static readonly MessageRef UserFieldIsInitiator = MessageRef.Of(MessageText.ApprovalUserFieldIsInitiator);
     public static readonly MessageRef CommentRequired = MessageRef.Of(MessageText.ApprovalCommentRequired);
