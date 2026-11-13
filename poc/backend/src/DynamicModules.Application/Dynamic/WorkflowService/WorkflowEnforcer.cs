@@ -8,7 +8,7 @@ namespace DynamicModules.Application.Dynamic.WorkflowService;
 
 /// <summary>
 /// 狀態機的後端強制（前端只是縮小選項）：新增只能從起始狀態開始；修改時狀態有變就必須有 from → to 的定義，
-/// 而且使用者在該轉移的群組內（系統管理員可做任何已定義的轉移；沒有定義的轉移任何人都不行）。
+/// 而且使用者在該轉移的群組內（政策 approval.adminBypassTransitionGroups 開啟時，系統管理員可做任何已定義的轉移；沒有定義的轉移任何人都不行）。
 /// </summary>
 public class WorkflowEnforcer(
     IPermissionRepository permissions, ICurrentUser user, ISystemIdentity system, ICurrentLocale locale, TransitionAccess access)
@@ -46,7 +46,7 @@ public class WorkflowEnforcer(
         systemKeys.Add(wf.StatusFieldKey);
     }
 
-    /// <summary>使用者能做的轉移（給 schema 縮小選項用）：需要模組 Edit 權限；系統管理員全部；其餘依群組。</summary>
+    /// <summary>使用者能做的轉移（給 schema 縮小選項用）：需要模組 Edit 權限；系統管理員全部（政策 approval.adminBypassTransitionGroups 開啟時）；其餘依群組。</summary>
     public async Task<IReadOnlyCollection<WorkflowTransition>?> PermittedTransitionsAsync(
         Module module, EffectivePermissions perms, CancellationToken ct)
     {

@@ -113,8 +113,8 @@ public class SubmitApprovalHandler(
             if (list.Distinct(StringComparer.Ordinal).Count() != list.Count
                 || list.Any(u => (u == ctx.InitiatorUserId && !ctx.AllowSelfApproval) || !ctx.Org.ActiveUsers.Contains(u) || (candidates is not null && !candidates.Contains(u))))
                 errors[$"picks.{code}"] = [ApprovalMessages.PickInvalid];
-            else if (list.Count < (src.Min ?? 1) || list.Count > (src.Max ?? ctx.MaxApprovers))
-                errors[$"picks.{code}"] = [ApprovalMessages.PickCount(src.Min ?? 1, src.Max ?? ctx.MaxApprovers)];
+            else if (ApproverResolver.PickRange(ctx, src) is var (min, max) && (list.Count < min || list.Count > max))
+                errors[$"picks.{code}"] = [ApprovalMessages.PickCount(min, max)];
         }
         return errors;
     }

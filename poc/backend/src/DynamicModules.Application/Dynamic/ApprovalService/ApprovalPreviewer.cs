@@ -38,7 +38,7 @@ public sealed class ApprovalSubmitEligibility(
         return (record, module, null);
     }
 
-    /// <summary>從目前狀態到 to 是已定義、需簽核的轉移，而且使用者在轉移的群組內（或為系統管理員）。</summary>
+    /// <summary>從目前狀態到 to 是已定義、需簽核的轉移，而且使用者在轉移的群組內（或為系統管理員，且政策 approval.adminBypassTransitionGroups 開啟）。</summary>
     public async Task<(SubmitTarget? Target, ServiceResult? Failure)> TransitionAsync(Record record, Module module, long to, CancellationToken ct)
     {
         if (module.Workflow is not { } wf) return (null, ServiceResult.Invalid("to", ApprovalMessages.NotApprovalTransition));
@@ -99,7 +99,8 @@ public sealed class ApprovalPreviewer(
             var allowed = ApproverResolver.Candidates(ctx, s.Approvers);
             var candidates = ctx.Org.ActiveUsers.Where(u => (ctx.AllowSelfApproval || u != initiator) && (allowed is null || allowed.Contains(u)))
                 .Order(StringComparer.Ordinal).Select(Ref).ToList();
-            picks.Add(new PickRequirement(s.Code, s.Name, s.Approvers.Min ?? 1, s.Approvers.Max ?? ctx.MaxApprovers, candidates));
+            var (min, max) = ApproverResolver.PickRange(ctx, s.Approvers);
+            picks.Add(new PickRequirement(s.Code, s.Name, min, max, candidates));
         }
         foreach (var s in def.Stages)
         {

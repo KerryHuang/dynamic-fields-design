@@ -13,7 +13,7 @@ namespace DynamicModules.Application.Dynamic.ApprovalService;
 /// <summary>一個席位：同席位任一人同意即滿足。Reason 是 resolved 或 fallback；FallbackFor 是被頂替的來源說明。</summary>
 public sealed record SeatPlan(string SeatKey, IReadOnlyList<string> UserIds, string Reason, string? FallbackFor);
 
-/// <summary>一關的解析結果；Error 非 null 代表這次請求要回 409（找不到人、超過 20 人），訊息到 WebAPI 才依請求語系解析。</summary>
+/// <summary>一關的解析結果；Error 非 null 代表這次請求要回 409（找不到人、超過上限），訊息到 WebAPI 才依請求語系解析。</summary>
 public sealed record StageResolution(IReadOnlyList<SeatPlan> Seats, bool AllUnitsEmpty, MessageRef? Error);
 
 /// <summary>解析的輸入：Picks 是這一關的自選結果；GroupNames 給錯誤與歷程說明用。</summary>
@@ -23,7 +23,7 @@ public sealed record ResolveContext(
     IReadOnlyDictionary<long, I18nText>? GroupNames = null);
 
 /// <summary>
-/// 簽核人解析（設計 §6.1、§6.4、§6.5）：先依來源切出來源單位，每個單位只留啟用中、不是發起人的人；
+/// 簽核人解析（設計 §6.1、§6.4、§6.5）：先依來源切出來源單位，每個單位只留啟用中的人（政策不允許自簽時還要不是發起人）；
 /// 空的單位由備援簽核人頂替（會簽另佔一席、或簽併入候選），onEmpty = skip 只在全部單位都空時跳過。
 /// </summary>
 public sealed class ApproverResolver(OrgSnapshotLoader org, IPermissionRepository permissions, ApprovalPolicies approvalPolicies)
@@ -83,8 +83,8 @@ public sealed class ApproverResolver(OrgSnapshotLoader org, IPermissionRepositor
         }
 
         if (seats.Count == 0) return new([], false, ApprovalMessages.NoApprover(stage, empty.FirstOrDefault() ?? source.Source));
-        // 固定名單在存檔時已驗過上限，「只管之後」才真的成立，執行期只受技術上限管（判斷 17）；其他來源照當下的設定
-        var staticOnly = source.Source == ApprovalSources.Users && (empty.Count == 0 || fallback?.Source == ApprovalSources.Users);
+        // 固定名單在存檔時已驗過上限，「只管之後」才真的成立：來源是固定名單的關卡（含頂替的備援）執行期只受技術上限管（判斷 17，主控 11-13 修正）；其他來源照當下的設定
+        var staticOnly = source.Source == ApprovalSources.Users;
         var limit = staticOnly ? PolicyCatalog.ApprovalMaxApprovers.Max : ctx.MaxApprovers;
         if (seats.SelectMany(s => s.UserIds).Distinct(StringComparer.Ordinal).Count() > limit)
             return new([], false, ApprovalMessages.TooManyApprovers(stage, limit));
@@ -93,7 +93,7 @@ public sealed class ApproverResolver(OrgSnapshotLoader org, IPermissionRepositor
 
     /// <summary>
     /// 重新比對後的備援實例（設計 §5.5 第 5 點）：只有一關或簽，名單是舊綁定版本的備援簽核人（省略時是系統管理員），
-    /// 解析規則同 §6.5（移除發起人與停用帳號）；仍為空就回錯誤（呼叫端 409）。
+    /// 解析規則同 §6.5（移除停用帳號，政策不允許自簽時也移除發起人）；仍為空就回錯誤（呼叫端 409）。
     /// </summary>
     public static StageResolution ResolveFallback(ResolveContext ctx, ApproverSource? fallback)
     {
@@ -143,6 +143,16 @@ public sealed class ApproverResolver(OrgSnapshotLoader org, IPermissionRepositor
                 foreach (var p in picks) yield return (p, allowed is null || allowed.Contains(p) ? [p] : []);
                 break;
         }
+    }
+
+    /// <summary>
+    /// 自選關卡的人數範圍（送出檢查、預覽、解析共用）：上限＝min(存檔上限, 當下政策上限)；
+    /// 存檔的最少人數大於有效上限時，最少人數改用有效上限。
+    /// </summary>
+    internal static (int Min, int Max) PickRange(ResolveContext ctx, ApproverSource source)
+    {
+        var max = Math.Min(source.Max ?? ctx.MaxApprovers, ctx.MaxApprovers);
+        return (Math.Min(source.Min ?? 1, max), max);
     }
 
     /// <summary>候選群組的成員；沒有限定候選群組回 null（任何人都可）。</summary>

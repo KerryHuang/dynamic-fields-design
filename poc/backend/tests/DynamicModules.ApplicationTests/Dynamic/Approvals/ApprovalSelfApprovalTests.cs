@@ -119,6 +119,18 @@ public class ApprovalSelfApprovalTests : ApprovalTestBase
         OpenAssignees(InstanceOf(res)).Should().Equal("mgrA");
     }
 
+    [Theory]
+    [InlineData(true, new[] { "fin2", "gm" })]
+    [InlineData(false, new[] { "fin2" })]
+    public async Task SelfApproval_FallbackList_KeepsInitiatorOnlyWhenAllowed(bool allow, string[] expected)
+    {
+        // gm 是最上層、沒有主管 → 這關交給備援；備援名單含發起人 gm
+        var r = await WithFlow(Def(null, Stage("m", Manager(1))) with { FallbackApprovers = Users(["gm", "fin2"]) }, allow);
+        var res = await SubmitAs(r, "gm");
+        res.IsSuccess.Should().BeTrue(Dump(res));
+        OpenAssignees(InstanceOf(res)).Should().Equal(expected);
+    }
+
     private async Task PreviewCheck(bool allow)
     {
         var pick = new ApproverSource(ApprovalSources.InitiatorPick, CandidateGroupIds: [FinanceGroup], Min: 1, Max: 2);
