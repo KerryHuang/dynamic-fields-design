@@ -69,7 +69,8 @@ public sealed class ApprovalFlowEditor(IApprovalFlowRepository flows, ApprovalDe
     {
         var v = (await flows.GetVersionAsync(f.CurrentVersionId!.Value, ct))!;
         return new ApprovalFlowResponse(f.Key, f.NameI18n, moduleKey, f.ToOptionId, f.Priority, f.Active, v.Version,
-            await flows.IsUsedAsync(f.Id, ct), await flows.CountPendingAsync(f.Id, ct), v.Definition);
+            await flows.IsUsedAsync(f.Id, ct), await flows.CountPendingAsync(f.Id, ct), v.Definition,
+            await flows.IsVersionUsedAsync(v.Id, ct));
     }
 }
 
@@ -122,7 +123,8 @@ public class UpdateApprovalFlowHandler(
 
         var now = time.Now;
         var current = (await flows.GetVersionAsync(flow.CurrentVersionId!.Value, ct))!;
-        if (await flows.IsVersionUsedAsync(current.Id, ct))
+        // 目前版本已被用過、而且定義真的改了才開新版本；只改名稱、啟停、優先序不動版本。
+        if (await flows.IsVersionUsedAsync(current.Id, ct) && !ApprovalDefinitionJson.SameAs(current.Definition, input.Definition))
         {
             var next = new ApprovalFlowVersion
             {
@@ -133,7 +135,7 @@ public class UpdateApprovalFlowHandler(
             await uow.CommitAsync(ct);
             flow.CurrentVersionId = next.Id;
         }
-        else
+        else if (!await flows.IsVersionUsedAsync(current.Id, ct))
         {
             current.Definition = input.Definition;
             current.CreatedBy = user.UserId;

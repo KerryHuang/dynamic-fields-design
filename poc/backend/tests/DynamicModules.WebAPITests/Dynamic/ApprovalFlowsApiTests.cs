@@ -87,4 +87,43 @@ public class ApprovalFlowsApiTests
 
         (await app.AsUser("sales01").GetAsync($"{Flows}?module={key}")).StatusCode.Should().Be(HttpStatusCode.Forbidden);
     }
+    /// <summary>建一個有狀態機（草稿 → 已核准，需簽核）與一個流程 big 的模組，回傳模組鍵、欄位與狀態。</summary>
+    private static async Task<(string Key, long Status, long Amount, long Draft, long Done, long Group)> SeedApproval(HttpClient c)
+    {
+        var key = await CreateModule(c);
+        var status = await AddField(c, key, "enum");
+        var amount = await AddField(c, key, "decimal");
+        async Task<long> Option(string label) =>
+            (await JsonOf(await c.PostAsJsonAsync($"{Base}/fields/{status.Id}/options", new { label = Zh(label), color = (string?)null })))
+            .GetProperty("id").GetInt64();
+        var draft = await Option("草稿");
+        var done = await Option("已核准");
+        await Activate(c, key);
+        var group = (await JsonOf(await c.GetAsync($"{Base}/groups"))).EnumerateArray()
+            .Single(g => g.GetProperty("key").GetString() == "sales-manager").GetProperty("id").GetInt64();
+        object Workflow(bool approval) => new
+        {
+            statusFieldId = status.Id, initialOptionId = draft,
+            states = new object[] { new { optionId = draft }, new { optionId = done } },
+            transitions = new[]
+            {
+                new { from = draft, to = done, groupIds = Array.Empty<long>(), approval = approval ? new { required = true, noMatch = "block" } : null }
+            }
+        };
+        (await c.PutAsJsonAsync($"{Base}/modules/{key}/workflow", Workflow(false))).EnsureSuccessStatusCode();
+        (await c.PostAsJsonAsync($"{Flows}?module={key}", Flow("big", done, 1, group, amount.Id, 1000))).EnsureSuccessStatusCode();
+        (await c.PutAsJsonAsync($"{Base}/modules/{key}/workflow", Workflow(true))).EnsureSuccessStatusCode();
+        return (key, status.Id, amount.Id, draft, done, group);
+    }
+
+    [Fact]
+    [Trait("Category", "Postgres")]
+    public async Task GetFlows_Json_HasCurrentVersionUsed()
+    {
+        using var app = new TestApp();
+        var c = app.AsUser();
+        var s = await SeedApproval(c);
+        var list = await JsonOf(await c.GetAsync($"{Flows}?module={s.Key}"));
+        list[0].GetProperty("currentVersionUsed").GetBoolean().Should().BeFalse();
+    }
 }
