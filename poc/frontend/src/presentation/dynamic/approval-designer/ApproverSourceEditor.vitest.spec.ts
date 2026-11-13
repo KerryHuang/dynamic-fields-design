@@ -162,4 +162,87 @@ describe('ApproverSourceEditor', () => {
       w.unmount();
     }
   });
+
+  describe('unmatched groups left by opening a package', () => {
+    const body = (id: string) => document.body.querySelector<HTMLElement>(`[data-testid="${id}"]`);
+    const skipped: ApproverSource = { source: 'group', groupIds: [3], unmatchedGroups: ['採購組', '財務組'], candidatesUnmatched: false };
+
+    it('shows the unmatched notice with group names', async () => {
+      const w = await mountEditor(skipped);
+      expect(w.find('[data-testid="source-unmatched-groups"]').text()).toBe('開啟套件時略過的群組：採購組、財務組。執行時由備援簽核人頂替，會簽仍要湊滿這些席位。');
+      expect(w.find('[data-testid="source-unmatched-candidates"]').exists()).toBe(false);
+      w.unmount();
+    });
+
+    it('shows the candidates notice', async () => {
+      const w = await mountEditor({ source: 'userField', fieldId: 9, candidateGroupIds: [], candidatesUnmatched: true });
+      expect(w.find('[data-testid="source-unmatched-candidates"]').text()).toBe('開啟套件時略過了候選群組，這個來源執行時一律由備援簽核人頂替。');
+      expect(w.find('[data-testid="source-unmatched-groups"]').exists()).toBe(false);
+      w.unmount();
+    });
+
+    it('no notice when nothing is unmatched', async () => {
+      for (const s of [{ source: 'group', groupIds: [3] }, { source: 'group', groupIds: [3], unmatchedGroups: [], candidatesUnmatched: false }, { source: 'manager', level: 1, unmatchedGroups: null }] as ApproverSource[]) {
+        const w = await mountEditor(s);
+        expect(w.find('[data-testid="source-unmatched"]').exists()).toBe(false);
+        w.unmount();
+      }
+    });
+
+    it('remove asks for confirmation and clears both flags', async () => {
+      const w = await mountEditor({ ...skipped, candidatesUnmatched: true });
+      expect(w.find('[data-testid="source-unmatched-remove"]').attributes('aria-label')).toBe('移除開啟套件時略過的群組');
+      await w.find('[data-testid="source-unmatched-remove"]').trigger('click');
+      await flushPromises();
+      expect(w.emitted('update:modelValue')).toBeUndefined();
+      expect(body('source-unmatched-confirm-text')!.textContent).toBe('移除後這一關少了這些席位，確定要移除嗎？');
+      body('source-unmatched-confirm')!.click();
+      await flushPromises();
+      expect(lastValue(w)).toEqual({ source: 'group', groupIds: [3], unmatchedGroups: null, candidatesUnmatched: false });
+      w.unmount();
+    });
+
+    it('cancel keeps them', async () => {
+      const w = await mountEditor(skipped);
+      await w.find('[data-testid="source-unmatched-remove"]').trigger('click');
+      await flushPromises();
+      body('source-unmatched-cancel')!.click();
+      await flushPromises();
+      expect(w.emitted('update:modelValue')).toBeUndefined();
+      expect(w.findComponent(quasar.QDialog).props('modelValue')).toBe(false);
+      expect(w.find('[data-testid="source-unmatched"]').exists()).toBe(true);
+      w.unmount();
+    });
+
+    it('a disabled editor cannot remove', async () => {
+      const i18n = createI18n({ legacy: false, locale: 'zh-TW', messages: { 'zh-TW': zhTW } });
+      api.getUsers.mockResolvedValue([] as never);
+      api.getGroups.mockResolvedValue([]);
+      const w = mount(ApproverSourceEditor, {
+        attachTo: document.body,
+        props: { modelValue: skipped, module: mod, allowed: ALL_SOURCE_KINDS, limits: {}, label: '來源', disable: true },
+        global: { plugins: [[quasar.Quasar, { components: quasar, directives: quasar }], createPinia(), i18n, [VueQueryPlugin, { queryClient: new QueryClient() }]] },
+      });
+      await flushPromises();
+      expect(w.find('[data-testid="source-unmatched-remove"]').attributes('disabled')).toBeDefined();
+      w.unmount();
+    });
+
+    it.each([390, 820, 1366, 1920])('at %i px wide the notice wraps inside the editor and keeps the remove button', async (width) => {
+      window.innerWidth = width;
+      window.dispatchEvent(new Event('resize'));
+      const long = '很長很長的群組名稱'.repeat(6);
+      const w = await mountEditor({ source: 'group', groupIds: [3], unmatchedGroups: [long], candidatesUnmatched: true });
+      const banner = w.find('[data-testid="source-unmatched"]');
+      expect(banner.exists()).toBe(true);
+      expect(banner.text()).toContain(long);
+      // Long names must be allowed to break so a 390 px dialog never scrolls sideways.
+      expect(w.find('[data-testid="source-unmatched-groups"]').attributes('style')).toContain('overflow-wrap: anywhere');
+      expect(w.find('[data-testid="source-unmatched-remove"]').exists()).toBe(true);
+      expect(w.find('[data-testid="approver-source"]').classes()).toContain('column');
+      w.unmount();
+      window.innerWidth = 1024;
+      window.dispatchEvent(new Event('resize'));
+    });
+  });
 });

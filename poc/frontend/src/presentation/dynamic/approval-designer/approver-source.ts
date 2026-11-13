@@ -24,6 +24,16 @@ export function defaultSourceOf(kind: ApproverSourceKind): ApproverSource {
   }
 }
 
+/** What the package open left behind on a source: names of skipped approver groups, and whether the candidate groups were skipped. */
+export function unmatchedOf(source: ApproverSource): { names: string[]; candidates: boolean } {
+  return { names: (source.unmatchedGroups ?? []).filter((n) => n.trim() !== ''), candidates: source.candidatesUnmatched === true };
+}
+
+/** Drops the skipped-group markers and keeps every other property of the source. */
+export function clearUnmatched(source: ApproverSource): ApproverSource {
+  return { ...source, unmatchedGroups: null, candidatesUnmatched: false };
+}
+
 export { isSingleApprover } from 'src/domain/dynamic/approval-flow-draft';
 
 /** Manager level choices 1..max; a saved level above max stays selectable and is marked (tightening only governs what comes after). */

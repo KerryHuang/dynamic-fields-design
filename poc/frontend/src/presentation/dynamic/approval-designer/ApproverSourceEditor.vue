@@ -6,7 +6,7 @@ import type { ApproverSource, ApproverSourceKind } from 'src/domain/dynamic/appr
 import { resolveI18n } from 'src/domain/dynamic/i18n-text';
 import type { ModuleDetail } from 'src/domain/dynamic/types';
 import { toSchemaFields } from 'src/presentation/dynamic/designer/schema-fields';
-import { defaultSourceOf, hintOf, levelOptions, type ApproverLimits } from './approver-source';
+import { clearUnmatched, defaultSourceOf, hintOf, levelOptions, unmatchedOf, type ApproverLimits } from './approver-source';
 
 const props = defineProps<{
   modelValue: ApproverSource;
@@ -54,6 +54,10 @@ const levels = computed(() => levelOptions(props.limits.maxManagerLevel, props.s
 const set = (patch: Partial<ApproverSource>) => emit('update:modelValue', { ...props.modelValue, ...patch });
 const setKind = (k: ApproverSourceKind) => { if (k !== props.modelValue.source) emit('update:modelValue', defaultSourceOf(k)); };
 const num = (v: string | number | null) => (v === null || v === '' ? null : Number(v));
+const unmatched = computed(() => unmatchedOf(props.modelValue));
+const hasUnmatched = computed(() => unmatched.value.names.length > 0 || unmatched.value.candidates);
+const confirmingRemove = ref(false);
+const removeUnmatched = () => { confirmingRemove.value = false; emit('update:modelValue', clearUnmatched(props.modelValue)); };
 const noCandidates = computed(() => props.modelValue.source === 'userField' && !(props.modelValue.candidateGroupIds?.length));
 </script>
 
@@ -115,7 +119,31 @@ const noCandidates = computed(() => props.modelValue.source === 'userField' && !
       </div>
     </template>
 
+    <q-banner v-if="hasUnmatched" dense rounded class="bg-muted" data-testid="source-unmatched">
+      <template #avatar><q-icon name="warning" color="warning" /></template>
+      <div v-if="unmatched.names.length" style="overflow-wrap: anywhere" data-testid="source-unmatched-groups">
+        {{ t('approval.designer.source.unmatchedGroups', { names: unmatched.names.join(t('common.listSeparator')) }) }}
+      </div>
+      <div v-if="unmatched.candidates" style="overflow-wrap: anywhere" data-testid="source-unmatched-candidates">{{ t('approval.designer.source.unmatchedCandidates') }}</div>
+      <template #action>
+        <q-btn
+          flat dense no-caps color="warning" :label="t('approval.designer.source.unmatchedRemove')" :aria-label="t('approval.designer.source.unmatchedRemoveAria')"
+          :disable="disable" data-testid="source-unmatched-remove" @click="confirmingRemove = true"
+        />
+      </template>
+    </q-banner>
+
     <div v-if="hint" class="text-caption text-muted" data-testid="source-hint">{{ hint }}</div>
     <div v-if="error" class="text-caption text-negative" data-testid="source-error">{{ error }}</div>
+
+    <q-dialog v-model="confirmingRemove">
+      <q-card style="max-width: 100%">
+        <q-card-section data-testid="source-unmatched-confirm-text">{{ t('approval.designer.source.unmatchedConfirm') }}</q-card-section>
+        <q-card-actions align="right">
+          <q-btn flat :label="t('dynamic.cancel')" data-testid="source-unmatched-cancel" @click="confirmingRemove = false" />
+          <q-btn color="negative" :label="t('approval.designer.source.unmatchedRemove')" data-testid="source-unmatched-confirm" @click="removeUnmatched" />
+        </q-card-actions>
+      </q-card>
+    </q-dialog>
   </div>
 </template>

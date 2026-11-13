@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import zhTW from 'src/i18n/zh-TW.json';
-import { defaultSourceOf, hintOf, isSingleApprover, levelOptions } from './approver-source';
+import { clearUnmatched, defaultSourceOf, hintOf, isSingleApprover, levelOptions, unmatchedOf } from './approver-source';
 
 const lookup = (k: string) => k.split('.').reduce<unknown>((o, p) => (o as Record<string, unknown>)[p], zhTW) as string;
 const t = (k: string, p: Record<string, unknown> = {}) => lookup(k).replace(/\{(\w+)\}/g, (_, n) => String(p[n]));
@@ -37,5 +37,17 @@ describe('approver-source', () => {
     expect(defaultSourceOf('manager')).toEqual({ source: 'manager', level: 1 });
     expect(defaultSourceOf('initiatorPick')).toEqual({ source: 'initiatorPick', candidateGroupIds: [], min: 1, max: 1 });
     expect(defaultSourceOf('users')).toEqual({ source: 'users', userIds: [] });
+  });
+
+  it('unmatchedOf returns names and the candidates flag', () => {
+    expect(unmatchedOf({ source: 'group', groupIds: [1], unmatchedGroups: ['採購組', '財務組'] })).toEqual({ names: ['採購組', '財務組'], candidates: false });
+    expect(unmatchedOf({ source: 'userField', fieldId: 1, candidateGroupIds: [], candidatesUnmatched: true })).toEqual({ names: [], candidates: true });
+    expect(unmatchedOf({ source: 'group', groupIds: [1], unmatchedGroups: null, candidatesUnmatched: false })).toEqual({ names: [], candidates: false });
+    expect(unmatchedOf({ source: 'manager', level: 1 })).toEqual({ names: [], candidates: false });
+  });
+
+  it('clearUnmatched keeps the other properties', () => {
+    const cleared = clearUnmatched({ source: 'group', groupIds: [3], unmatchedGroups: ['採購組'], candidatesUnmatched: true });
+    expect(cleared).toEqual({ source: 'group', groupIds: [3], unmatchedGroups: null, candidatesUnmatched: false });
   });
 });
