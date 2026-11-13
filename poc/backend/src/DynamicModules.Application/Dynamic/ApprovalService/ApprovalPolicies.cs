@@ -14,6 +14,14 @@ public sealed class ApprovalPolicies(IPolicyReader policies)
     public Task<bool> AllowSelfApprovalAsync(long moduleId, CancellationToken ct) =>
         policies.BoolAsync(PolicyCatalog.ApprovalAllowSelfApproval, moduleId, ct);
 
+    /// <summary>找不到簽核人時的備援對象（模組範圍，標準項目）。</summary>
+    public Task<IReadOnlyList<string>> DefaultFallbackItemsAsync(long moduleId, CancellationToken ct) =>
+        policies.ListAsync(PolicyCatalog.ApprovalDefaultFallbackApprovers, moduleId, ct);
+
+    /// <summary>簽核異常通知對象（全系統，標準項目）。</summary>
+    public Task<IReadOnlyList<string>> AlertRecipientItemsAsync(CancellationToken ct) =>
+        policies.ListAsync(PolicyCatalog.ApprovalAlertRecipients, null, ct);
+
     public async Task<ApprovalLimitSet> LimitsAsync(long moduleId, CancellationToken ct) => new(
         await policies.IntAsync(PolicyCatalog.ApprovalMaxStages, moduleId, ct),
         await policies.IntAsync(PolicyCatalog.ApprovalMaxApprovers, moduleId, ct),

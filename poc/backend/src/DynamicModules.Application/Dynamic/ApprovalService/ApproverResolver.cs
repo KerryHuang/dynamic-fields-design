@@ -1,6 +1,7 @@
 using System.Text.Json;
 using DynamicModules.Application.Common;
 using DynamicModules.Application.Dynamic.OrganizationService;
+using DynamicModules.Application.Dynamic.PolicyService;
 using DynamicModules.Domain.Approvals;
 using DynamicModules.Domain.Entities.Dynamic;
 using DynamicModules.Domain.Organization;
@@ -19,14 +20,15 @@ public sealed record StageResolution(IReadOnlyList<SeatPlan> Seats, bool AllUnit
 /// <summary>解析的輸入：Picks 是這一關的自選結果；GroupNames 給錯誤與歷程說明用。</summary>
 public sealed record ResolveContext(
     Module Module, string InitiatorUserId, IReadOnlyDictionary<string, JsonElement?> Values, IReadOnlyList<string>? Picks, OrgSnapshot Org,
-    IReadOnlyDictionary<long, IReadOnlyList<string>> GroupMembers, IReadOnlyList<string> ActiveAdmins, int MaxApprovers, bool AllowSelfApproval,
+    IReadOnlyDictionary<long, IReadOnlyList<string>> GroupMembers, IReadOnlyList<string> DefaultFallback, int MaxApprovers, bool AllowSelfApproval,
     IReadOnlyDictionary<long, I18nText>? GroupNames = null);
 
 /// <summary>
 /// 簽核人解析（設計 §6.1、§6.4、§6.5）：先依來源切出來源單位，每個單位只留啟用中的人（政策不允許自簽時還要不是發起人）；
 /// 空的單位由備援簽核人頂替（會簽另佔一席、或簽併入候選），onEmpty = skip 只在全部單位都空時跳過。
 /// </summary>
-public sealed class ApproverResolver(OrgSnapshotLoader org, IPermissionRepository permissions, ApprovalPolicies approvalPolicies)
+public sealed class ApproverResolver(
+    OrgSnapshotLoader org, IPermissionRepository permissions, ApprovalPolicies approvalPolicies, RecipientResolver recipients)
 {
     public const string AnySeat = "any";
 
@@ -37,9 +39,9 @@ public sealed class ApproverResolver(OrgSnapshotLoader org, IPermissionRepositor
         var members = (await permissions.ListMembershipsAsync(ct)).GroupBy(m => m.GroupId)
             .ToDictionary(g => g.Key, g => (IReadOnlyList<string>)g.Select(m => m.UserId).ToList());
         var groups = (await permissions.ListGroupsAsync(ct)).ToDictionary(g => g.Id, g => g.NameI18n);
-        var admins = (await permissions.ListUsersAsync(ct)).Where(u => u.IsActive && u.IsSystemAdmin).Select(u => u.UserId).OrderBy(u => u).ToList();
+        var fallback = await recipients.ResolveAsync(await approvalPolicies.DefaultFallbackItemsAsync(module.Id, ct), ct);   // 政策預設備援，下一關啟動當下的設定
         var limits = await approvalPolicies.LimitsAsync(module.Id, ct);   // 下一關啟動當下的設定（裁決 2）
-        return new ResolveContext(module, initiator, values, picks, snapshot, members, admins, limits.MaxApprovers,
+        return new ResolveContext(module, initiator, values, picks, snapshot, members, fallback, limits.MaxApprovers,
             await approvalPolicies.AllowSelfApprovalAsync(module.Id, ct), groups);
     }
 
@@ -169,10 +171,10 @@ public sealed class ApproverResolver(OrgSnapshotLoader org, IPermissionRepositor
     private static List<string> Clean(ResolveContext ctx, IEnumerable<string> users) =>
         users.Where(u => (ctx.AllowSelfApproval || u != ctx.InitiatorUserId) && ctx.Org.ActiveUsers.Contains(u)).Distinct(StringComparer.Ordinal).ToList();
 
-    /// <summary>備援名單：省略時是全部啟用中的系統管理員；移除停用帳號，以及（政策不允許自簽時）發起人。</summary>
+    /// <summary>備援名單：流程沒設時是政策預設備援（出廠為全部啟用中的系統管理員）；移除停用帳號，以及（政策不允許自簽時）發起人。</summary>
     private static List<string> FallbackUsers(ResolveContext ctx, ApproverSource? fallback)
     {
-        if (fallback is null) return Clean(ctx, ctx.ActiveAdmins);
+        if (fallback is null) return Clean(ctx, ctx.DefaultFallback);
         return Clean(ctx, Units(ctx with { Picks = null }, fallback).SelectMany(u => u.Users));
     }
 }
