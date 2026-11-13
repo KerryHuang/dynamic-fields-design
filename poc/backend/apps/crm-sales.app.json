@@ -1,6 +1,7 @@
 {
   "format": "formwright-app",
   "formatVersion": 8,
+  "x-translation": "th、vi 標籤為機器翻譯，待母語者校對",
   "manifest": {
     "id": "crm-sales",
     "version": "1.3.0",
@@ -2813,7 +2814,7 @@
           "code": "owner-manager",
           "name": {
             "zh-TW": "負責業務主管",
-            "en-US": "Owner's manager",
+            "en-US": "Account owner's manager",
             "th": "หัวหน้าของผู้รับผิดชอบ",
             "vi": "Quản lý của người phụ trách"
           },

@@ -14,6 +14,7 @@ namespace DynamicModules.WebAPITests.Dynamic;
 /// 內建 CRM（apps/crm-sales.app.json 1.3.0）的設計案與設計圖：模組、狀態機、群組權限、任務規則，以及套件內建簽核流程後的端到端行為。
 /// 程式碼裡沒有任何設計案專用邏輯，行為全來自套件宣告（含簽核流程與需簽核轉移）。
 /// </summary>
+[Trait("Category", "Postgres")]
 public class CrmDesignCaseAppTests : IDisposable
 {
     private const string Apps = Base + "/apps";

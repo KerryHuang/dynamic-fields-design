@@ -23,6 +23,9 @@ public class CrmPackageApprovalTests
         (flow.Active, flow.Priority).Should().Be((true, 1));
         flow.When.Should().BeNull();
         flow.FallbackApprovers.Should().BeNull("省略時由政策預設（出廠為系統管理員）頂替");
+        // 手冊 §22 的劇本照這兩個繁中名稱寫，改名要連手冊一起改
+        flow.Name.Resolve("zh-TW").Should().Be("設計案主管確認");
+        flow.Stages![0].Name.Resolve("zh-TW").Should().Be("負責業務主管");
         foreach (var locale in new[] { "zh-TW", "en-US", "th", "vi" })
         {
             flow.Name.Resolve(locale).Should().NotBeNullOrWhiteSpace(locale);
