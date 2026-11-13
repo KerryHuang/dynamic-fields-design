@@ -5,7 +5,7 @@ using DynamicModules.Domain.ValueObjects;
 
 namespace DynamicModules.Application.Dynamic.AppService.Data;
 
-// 應用程式套件格式（formatVersion 2 到 7）。modules 直接重用範本的 TemplateModule；
+// 應用程式套件格式（formatVersion 2 到 8）。modules 直接重用範本的 TemplateModule；
 // 保留的 section（dashboards）目前只能是空陣列，讀進來的值不解讀，非空一律整份拒絕（fail-closed，見 AppPackageValidator）。
 
 public record AppPackageData(
@@ -14,7 +14,7 @@ public record AppPackageData(
     List<AppPackageReport>? Reports, List<JsonElement>? Dashboards, List<AppWorkflow>? Workflows,
     List<AppConversion>? Conversions, List<AppEvent>? Events, List<AppPrintTemplate>? PrintTemplates,
     List<AppCheck>? Checks = null, List<AppLedger>? Ledgers = null, List<AppIntegrationDecl>? Integrations = null,
-    List<AppContribution>? Contributions = null, List<AppTaskRule>? TaskRules = null)
+    List<AppContribution>? Contributions = null, List<AppTaskRule>? TaskRules = null, List<AppApprovalFlow>? ApprovalFlows = null)
 {
     public const string FormatName = "formwright-app";
     /// <summary>
@@ -24,8 +24,9 @@ public record AppPackageData(
     /// 6：共用主檔（manifest.kind、requires.masters、contributions、模組的 extensible、欄位的 active、轉換的 header.set）
     ///    與模組的標題樣板 titleTemplate 可用（5 以下的檔案這些必須是空的／不存在）。
     /// 7：taskRules 與模組的 tasksEnabled 可用（6 以下的檔案這些必須是空的／不存在）。
+    /// 8：approvalFlows、轉移的 approval、狀態的 editable 可用（7 以下的檔案這些必須是空的／不存在）。
     /// </summary>
-    public const int CurrentFormatVersion = 7;
+    public const int CurrentFormatVersion = 8;
     public const int MinFormatVersion = 2;
 
     public List<AppGroup> Groups { get; init; } = Groups ?? [];
@@ -42,6 +43,7 @@ public record AppPackageData(
     public List<AppIntegrationDecl> Integrations { get; init; } = Integrations ?? [];
     public List<AppContribution> Contributions { get; init; } = Contributions ?? [];
     public List<AppTaskRule> TaskRules { get; init; } = TaskRules ?? [];
+    public List<AppApprovalFlow> ApprovalFlows { get; init; } = ApprovalFlows ?? [];
 
     /// <summary>名稱與非空的保留 section；有值就代表這份套件需要這個版本讀不懂的功能。</summary>
     public IEnumerable<string> UnsupportedSections()
@@ -97,13 +99,17 @@ public record AppWorkflow(
     public List<AppWorkflowTransition> Transitions { get; init; } = Transitions ?? [];
 }
 
-public record AppWorkflowState(string Option, bool ReadOnly = false);
+/// <summary>Editable 是格式 8 的可編輯狀態（簽核設計 §9.3）；沒標時保持 null，匯出格式 7 以前的狀態不多出 editable。</summary>
+public record AppWorkflowState(string Option, bool ReadOnly = false, bool? Editable = null);
 
-/// <summary>Groups 是 groups[].code；空陣列代表有該模組 Edit 權限的人都可以。</summary>
-public record AppWorkflowTransition(string From, string To, List<string> Groups)
+/// <summary>Groups 是 groups[].code；空陣列代表有該模組 Edit 權限的人都可以。Approval 是格式 8 的需簽核設定，不需簽核就省略。</summary>
+public record AppWorkflowTransition(string From, string To, List<string> Groups, AppTransitionApproval? Approval = null)
 {
     public List<string> Groups { get; init; } = Groups ?? [];
 }
+
+/// <summary>NoMatch 是 block（省略時）或 direct；Required 只能是 true（不需簽核就省略整個 approval）。</summary>
+public record AppTransitionApproval(bool Required, string? NoMatch);
 
 /// <summary>
 /// 單據轉換。Code 就是 Conversion.Key（全站唯一，慣例以應用程式 id 當前綴）。
@@ -287,3 +293,22 @@ public record AppTaskRuleTask(string Code, I18nText Title, I18nText? Description
 
 /// <summary>Field 是日期或日期時間欄位的限定欄位名；OffsetDays 正數往後、負數往前。</summary>
 public record AppTaskDue(string Field, int OffsetDays);
+
+// ---- 格式 8 的 section：簽核流程（簽核設計 §14）。形狀與 DefinitionJson 相同，引用寫代號；fg6 在這裡加 Nodes、Edges。 ----
+
+/// <summary>
+/// 簽核流程。Code 就是 ApprovalFlow.Key（全站唯一，慣例以應用程式 id 當前綴）；Module 是本套件的獨立模組代號，
+/// To、RejectTo 是該模組狀態機的選項代號；When 是規則條件 JSON，欄位寫同模組的限定欄位名。Shape 必填，格式 8 只收 sequence。
+/// Stages 可為 null 是留給 fg6 的 graph（不帶 stages）；格式 8 的結構層要求非空。
+/// </summary>
+public record AppApprovalFlow(
+    string Code, I18nText Name, bool Active, string Module, string To, int Priority, string Shape,
+    JsonElement? When, string? RejectTo, AppApproverSource? FallbackApprovers, List<AppApprovalStage>? Stages);
+
+/// <summary>關卡；EditableFields 是同模組的限定欄位名。OnEmpty 省略時是 fallback。</summary>
+public record AppApprovalStage(
+    string Code, I18nText Name, JsonElement? When, AppApproverSource Approvers, string Mode,
+    List<string>? EditableFields, int? DueHours, string? OnEmpty);
+
+/// <summary>套件只收 group、manager、userField、initiatorPick；Groups、CandidateGroups 是 groups[].code，Field 是限定欄位名。</summary>
+public record AppApproverSource(string Source, List<string>? Groups, int? Level, string? Field, List<string>? CandidateGroups, int? Min, int? Max);

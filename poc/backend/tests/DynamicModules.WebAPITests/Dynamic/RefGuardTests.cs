@@ -258,7 +258,7 @@ public class RefGuardTests : IDisposable
         var exported = await _admin.GetAsync($"{Apps}/gate-lite/export");
         exported.StatusCode.Should().Be(HttpStatusCode.OK);
         var package = await JsonOf(exported);
-        package.GetProperty("formatVersion").GetInt32().Should().Be(7);
+        package.GetProperty("formatVersion").GetInt32().Should().Be(8);
         var guarded = package.GetProperty("modules").EnumerateArray().Single(m => m.GetProperty("code").GetString() == "note")
             .GetProperty("blocks").EnumerateArray().SelectMany(b => b.GetProperty("fields").EnumerateArray())
             .Single(f => f.GetProperty("type").GetString() == "reference").GetProperty("config").GetProperty("refGuard");

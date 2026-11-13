@@ -173,7 +173,7 @@ public class AppFormat7Tests : IDisposable
         await OpenCrm7Async();
         var (package, warnings) = await _rig.ExportAsync("crmx");
         warnings.Should().NotContain(w => w.Contains("任務規則"));
-        package.GetProperty("formatVersion").GetInt32().Should().Be(7);
+        package.GetProperty("formatVersion").GetInt32().Should().Be(8);
         var exported = package.GetProperty("taskRules").EnumerateArray().ToList();
         exported.Select(r => r.GetProperty("code").GetString()).Should().Equal(LeadRule, PartnerRule);
         var lead = exported[0];

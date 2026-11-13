@@ -112,7 +112,7 @@ public class AppTaskToggleTests : IDisposable
         await _rig.OpenOkAsync("tt");
 
         var (package, _) = await _rig.ExportAsync("tt");
-        package.GetProperty("formatVersion").GetInt32().Should().Be(7);
+        package.GetProperty("formatVersion").GetInt32().Should().Be(8);
         ModuleOf(package, "off").GetProperty("tasksEnabled").GetBoolean().Should().BeFalse();
         ModuleOf(package, "on").TryGetProperty("tasksEnabled", out _).Should().BeFalse("開著的模組不寫，既有匯出不變");
     }

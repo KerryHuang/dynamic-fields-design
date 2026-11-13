@@ -82,6 +82,7 @@ public static partial class AppPackageValidator
         IntegrationStructure(p, errors);
         Format6Structure(p, errors);
         Format7Structure(p, errors);
+        Format8Structure(p, errors);
         if (p.Events.Count > MaxEvents) errors.Add($"events: 最多 {MaxEvents} 個");
         if (p.Checks.Count > MaxChecks) errors.Add($"checks: 最多 {MaxChecks} 個");
         if (p.Workflows.Count > MaxModules) errors.Add($"workflows: 最多 {MaxModules} 個");
