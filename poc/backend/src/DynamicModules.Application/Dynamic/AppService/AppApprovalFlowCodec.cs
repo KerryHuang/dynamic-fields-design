@@ -130,7 +130,8 @@ public static partial class AppApprovalFlowCodec
             var errors = new List<string>();
             var converted = AppEffectsCodec.ExportCondition(w, n, errors);
             details.AddRange(errors.Select(AppMessages.ExportFlowCondition));
-            if (HasUnexportedOption(JsonNode.Parse(w.GetRawText()), n)) Add(AppMessages.ExportFlowOptionMissing);
+            foreach (var (field, text) in UnexportedOptions(JsonNode.Parse(w.GetRawText()), n).Distinct())
+                Add(AppMessages.ExportFlowOptionMissing(n.Field(field) ?? field.ToString(), text));
             return converted;
         }
         List<string>? Groups(List<long>? ids) => ids?.Select(id => groupCode(id) ?? Add(AppMessages.ExportFlowGroupMissing)).ToList();
@@ -161,15 +162,30 @@ public static partial class AppApprovalFlowCodec
     /// 條件值裡的 opt_{Id} 查不到選項代號（停用或未匯出）：ExportValue 會原樣留下資料庫 Id，重新匯入時被拒，
     /// 簽核匯出要整份擋下（a5a2 審查 S1；事件、任務規則的匯出維持原行為）。
     /// </summary>
-    private static bool HasUnexportedOption(JsonNode? node, AppReportCodec.Names n) => node switch
+    private static IEnumerable<(long Field, string Text)> UnexportedOptions(JsonNode? node, AppReportCodec.Names n)
     {
-        JsonArray array => array.Any(x => HasUnexportedOption(x, n)),
-        JsonObject obj => (obj["field"] is JsonValue f && f.TryGetValue<long>(out var id) && n.IsOptionField(id)
-                && (obj["value"] is JsonArray a ? a.AsEnumerable() : [obj["value"]]).Any(v => v is JsonValue sv && sv.TryGetValue<string>(out var text)
-                    && OptionId().Match(text) is { Success: true } m && n.Option(id, long.Parse(m.Groups[1].Value)) is null))
-            || obj.Any(kv => kv.Value is JsonObject or JsonArray && HasUnexportedOption(kv.Value, n)),
-        _ => false
-    };
+        switch (node)
+        {
+            case JsonArray array:
+                foreach (var item in array)
+                    foreach (var r in UnexportedOptions(item, n)) yield return r;
+                break;
+            case JsonObject obj:
+                if (obj["field"] is JsonValue f && f.TryGetValue<long>(out var id) && n.IsOptionField(id))
+                {
+                    IEnumerable<JsonNode?> values = obj["value"] is JsonArray a ? a : new List<JsonNode?> { obj["value"] };
+                    foreach (var v in values)
+                        // 數字超過 long 的 opt_ 不可能是這個資料庫的選項 Id，同樣算查不到（不能丟例外讓匯出變 500）
+                        if (v is JsonValue sv && sv.TryGetValue<string>(out var text) && OptionId().Match(text) is { Success: true } m
+                            && (!long.TryParse(m.Groups[1].Value, out var optionId) || n.Option(id, optionId) is null))
+                            yield return (id, text);
+                }
+                foreach (var (_, value) in obj)
+                    if (value is JsonObject or JsonArray)
+                        foreach (var r in UnexportedOptions(value, n)) yield return r;
+                break;
+        }
+    }
 
     [System.Text.RegularExpressions.GeneratedRegex(@"^opt_(\d+)$")]
     private static partial System.Text.RegularExpressions.Regex OptionId();

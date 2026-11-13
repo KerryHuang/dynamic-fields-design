@@ -255,7 +255,25 @@ public class AppApprovalFlowCodecTests
             new ApprovalFlow { Key = input.Key, NameI18n = input.Name, ToOptionId = input.ToOptionId, Priority = 1, Active = true },
             input.Definition, "po", 104, missing, GroupCode);
         flow.Should().BeNull();
-        errors.Should().Equal("簽核流程「採購單（大額）」引用了停用或未匯出的選項");
+        // 只指出查不到的那一個選項（202 查得到，不報），訊息帶欄位與選項，不是「所有 opt_ 一律擋」
+        errors.Should().Equal("簽核流程「採購單（大額）」引用了停用或未匯出的選項（欄位 po.status 的 opt_201）");
+    }
+
+    [Fact]
+    public void ToPackage_OptionIdBeyondLong_ErrorInsteadOfException()
+    {
+        // opt_ 後面的數字超過 long：不可能是這個資料庫的選項，匯出回驗證錯誤，不丟 OverflowException（500）
+        var input = Imported(Flow(null, Stage("lead", Group("purchaseLead"))) with { RejectTo = null });
+        var overflow = input with
+        {
+            Definition = input.Definition with
+            {
+                When = Json("""{ "all": [ { "field": 104, "op": "eq", "value": "opt_99999999999999999999999" } ] }""")
+            }
+        };
+        var (flow, errors) = Export(overflow);
+        flow.Should().BeNull();
+        errors.Should().Equal("簽核流程「採購單（大額）」引用了停用或未匯出的選項（欄位 po.status 的 opt_99999999999999999999999）");
     }
 }
 
