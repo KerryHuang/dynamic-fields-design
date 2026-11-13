@@ -30,7 +30,7 @@
 | a2d5 | 鎖定資料守衛與閉包重檢：有單據停在鎖定狀態時不能整批解鎖、不能刪鎖定欄位的值；改公式、彙總、帶值後重檢可編輯欄位與條件閉包（只驗 SQLite，PostgreSQL 在 pg0 後補驗） | 已上線（2026-11-13，568ba627） | [簽核流程](superpowers/specs/2026-11-10-approval-workflow-design.md) §8.6、§9.2 |
 | a2d6 | 簽核數值與開關政策：關卡數、每關人數、逾期時數、主管層數（可模組覆寫）、意見字數、發起人自簽、管理員略過轉移群組改讀政策設定（只驗 SQLite，PostgreSQL 在 pg0 後補驗） | 已上線（2026-11-13，22e61ad8） | [簽核流程](superpowers/specs/2026-11-10-approval-workflow-design.md)、[政策設定](superpowers/specs/2026-11-11-policy-settings-design.md) §9 |
 | a2d7 | 簽核收件人政策（備援對象、異常通知對象）；總收文件與設計寫回（只驗 SQLite，PostgreSQL 在 pg0 後補驗） | 已上線（2026-11-13，a651b8e6） | [簽核流程](superpowers/specs/2026-11-10-approval-workflow-design.md)、[政策設定](superpowers/specs/2026-11-11-policy-settings-design.md) §9 |
-| a4a | 前端：簽核設計器 | 進行中：a4a2 完成（狀態機分頁） | [簽核流程](superpowers/specs/2026-11-10-approval-workflow-design.md) |
+| a4a | 前端：簽核設計器 | 進行中：a4a2（狀態機分頁）已上線；a4a1 後端補齊完成 | [簽核流程](superpowers/specs/2026-11-10-approval-workflow-design.md) |
 | a5 | 套件格式 8：簽核流程；接手 CRM 設計案流程：套件內建，刪 `DemoApprovals`；採購單金額門檻的 Demo 在這裡驗收 | 未開始 | [簽核流程](superpowers/specs/2026-11-10-approval-workflow-design.md) |
 | a3 | 轉交、加簽、代理、逾期提醒；個人代理設定、管理員終止與改派、臨時讀取的列印預覽（使用者 11-12 裁決） | 未開始 | [簽核流程](superpowers/specs/2026-11-10-approval-workflow-design.md) |
 | O1 | 維運地基：結構化 log 與 request id、health live／ready、版本端點、前端錯誤收集、背景排程器（o1a、o1b、o1c）；任務「即將到期」提醒改為到期前 N 天內補一次、同一任務只補一次（使用者 2026-11-12 裁決，排進 o1b） | 進行中：o1a（觀測地基）已上線（2026-11-12），o1b、o1c 未開始（使用者裁決排在簽核主線之後） | [維運與觀測](superpowers/specs/2026-11-11-ops-observability-design.md) §9、§10 |
