@@ -24,6 +24,6 @@ describe.each([['zh-TW', zhTW], ['en-US', enUS], ['th', th], ['vi', vi]])('政�
   });
   it('A15 的 zh-TW 名稱照裁決 11', () => {
     if (_n !== 'zh-TW') return;
-    expect(p?.items?.approval?.adminBypassTransitionGroups?.name).toBe('系統管理員可以略過狀態轉移的群組限制');
+    expect((p?.items?.approval?.adminBypassTransitionGroups as { name?: string } | undefined)?.name).toBe('系統管理員可以略過狀態轉移的群組限制');
   });
 });
