@@ -89,6 +89,23 @@ public class ApprovalTransferTests : ApprovalTestBase
     }
 
     [Fact]
+    public async Task Transfer_KeepsDueTime_NotRestarted()
+    {
+        var (_, id) = await Stage1();
+        var due = SeedTime.AddHours(24);   // 啟動時就定好的期限，遠早於「現在 + 24 小時」
+        var old = Open(id, "gm");
+        await Db.Context.Set<ApprovalTask>().Where(t => t.Id == old.Id).ExecuteUpdateAsync(s => s.SetProperty(t => t.DueTime, due));
+        Db.Context.ChangeTracker.Clear();
+
+        await MustTransfer(id, "gm", "fin1");
+
+        var added = Open(id, "fin1");
+        added.DueTime.Should().NotBeNull();
+        added.DueTime.Should().Be(due);
+        added.DueTime.Should().NotBe(added.CreatedTime.AddHours(24));
+    }
+
+    [Fact]
     public async Task Transfer_OldAssigneeLosesReadAndAct()
     {
         var (r, id) = await Stage1();
@@ -107,7 +124,8 @@ public class ApprovalTransferTests : ApprovalTestBase
         var finTask = Open(id, "fin1");
         var approve = await Send(new ApproveTaskRequest(finTask.Id, Inst(id).RowVersion, null, null));
         approve.IsForbidden.Should().BeTrue(Dump(approve));
-        (await Send(new ApproveTaskRequest(gmTask.Id, Inst(id).RowVersion, null, null))).IsSuccess.Should().BeFalse();
+        var stale = await Send(new ApproveTaskRequest(gmTask.Id, Inst(id).RowVersion, null, null));
+        stale.IsConflict.Should().BeTrue(Dump(stale));   // 已轉交的任務：409 StageHandled
         As("fin1");
         (await Send(new GetRecordRequest(recordId))).IsSuccess.Should().BeTrue();
     }
@@ -277,12 +295,14 @@ public class ApprovalTransferTests : ApprovalTestBase
     public async Task RecordApproval_TaskView_HasOriginalName()
     {
         var (_, id) = await Stage1();
+        await Db.Context.Set<AppUser>().Where(u => u.UserId == "gm").ExecuteUpdateAsync(s => s.SetProperty(u => u.DisplayName, "總經理"));
+        Db.Context.ChangeTracker.Clear();
         await MustTransfer(id, "gm", "fin1");
         As("fin1");
         var view = (RecordApprovalResponse)(await Send(new GetRecordApprovalRequest(Inst(id).RecordId))).Data!;
         var task = view.Current!.Stages.SelectMany(s => s.Tasks).Single(t => t.AssigneeUserId == "fin1");
         task.Reason.Should().Be(ApprovalTaskReason.Transferred);
-        task.OriginalName.Should().Be("gm");
+        task.OriginalName.Should().Be("總經理");   // 顯示名稱，不是帳號
         task.CanAct.Should().BeTrue();
     }
 }

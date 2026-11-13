@@ -95,6 +95,18 @@ describe('TransferDialog', () => {
     w.unmount();
   });
 
+  it('reuses the same idempotency key when the user resends after a failure', async () => {
+    reply = [new HttpFail(400, { errors: { userId: ['不能交給發起人'] } }), { outcome: 'transferred', instanceId: 7, instanceRowVersion: 'iv2' }];
+    const w = await mountDialog();
+    await pick('財務一');
+    await click('transfer-send');
+    await click('transfer-send');
+    expect(posts()).toHaveLength(2);
+    expect(keys).toHaveLength(2);
+    expect(keys[1]).toBe(keys[0]);
+    w.unmount();
+  });
+
   it('offers neither me nor the initiator', async () => {
     const w = await mountDialog();
     expect((await search('財務')).map((e) => e.textContent)).toEqual(['財務一']);
@@ -108,6 +120,15 @@ describe('TransferDialog', () => {
     await click('transfer-send');
     expect(posts()).toHaveLength(0);
     expect(document.body.textContent).toContain('請選擇要轉交的對象');
+    w.unmount();
+  });
+
+  it('clears the missing-target error once a user is picked', async () => {
+    const w = await mountDialog();
+    await click('transfer-send');
+    expect(document.body.textContent).toContain('請選擇要轉交的對象');
+    await pick('財務一');
+    expect(document.body.textContent).not.toContain('請選擇要轉交的對象');
     w.unmount();
   });
 

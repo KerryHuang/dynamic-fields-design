@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { useQuasar } from 'quasar';
-import { computed, ref } from 'vue';
+import { computed, ref, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { useTransferTask } from 'src/application/dynamic/queries/approval-queries';
 import { useEffectivePolicies } from 'src/application/dynamic/queries/policies-queries';
@@ -22,6 +22,7 @@ const policies = useEffectivePolicies(() => props.moduleKey);
 const userId = ref<string | null>(null);
 const comment = ref('');
 const missing = ref(false);
+watch(userId, () => { missing.value = false; });
 
 // Without a policy value the initiator stays out of the list; the server decides either way.
 const candidates = computed(() => targetCandidates(
