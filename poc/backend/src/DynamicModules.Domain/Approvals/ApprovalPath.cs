@@ -14,8 +14,9 @@ public static class ApprovalPath
     /// 依賴的不變式：只有 RejectTaskHandler 的退回上一關會產生 returned，而且同一交易內接著以 Seq = max + 1 建重來
     /// （重來失敗整筆回滾）；被退回的加簽關卡另排一筆 queued 複本，Seq 在重來之後，不會插在 returned 與重來之間。
     /// 新增其他寫入 returned 的路徑，或讓別的關卡實例排在重來之前時，要一起檢查這裡。
+    /// includePassed：graph 段路徑（ApprovalGraphPath）讓 passed（條件、分支、匯合）也進路徑；sequence 不傳，行為不變。
     /// </summary>
-    public static IReadOnlyList<ApprovalStageRun> Effective(IReadOnlyList<ApprovalStageRun> runs)
+    public static IReadOnlyList<ApprovalStageRun> Effective(IReadOnlyList<ApprovalStageRun> runs, bool includePassed = false)
     {
         var path = new List<ApprovalStageRun>();
         int? cutAt = null;
@@ -32,7 +33,8 @@ public static class ApprovalPath
                 var target = path.FindLastIndex(r => r.Status == ApprovalStageStatus.Approved);
                 if (target >= 0) cutAt = target;
             }
-            else if (run.Status is ApprovalStageStatus.Approved or ApprovalStageStatus.Skipped) path.Add(run);
+            else if (run.Status is ApprovalStageStatus.Approved or ApprovalStageStatus.Skipped
+                || (includePassed && run.Status == ApprovalStageStatus.Passed)) path.Add(run);
         }
         return path;
     }
