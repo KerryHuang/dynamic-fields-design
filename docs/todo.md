@@ -16,3 +16,11 @@
 - 查簽核臨時讀取時 schema 先回 403 再重抓成功（a4b 既有）：畫面最終正常，但多一次失敗請求
 - 檢查 xUnit 測試是否還有依賴牆鐘短上限的寫法：CachedSystemPolicyTests 曾因工作執行緒被佔滿而 CI 失敗兩次（ef66fda7 已修該筆）
 - 補 MessageText 四語（任務看板 kb1 審查 N1）：a3 合併後把 SupervisorOnlyAssignee（主管只能改負責人的 403 訊息）、UndoInvalid（復原憑證無效）加進 MessageText 表；kb 段不能碰與 a3 共用的 MessageText.cs
+- 修 WriteGateTests.Waiters_AreServedInArrivalOrder 的不穩定：已兩次在 CI 偶發失敗
+- 修 vitest 在 jsdom 拆除後 Quasar 計時器觸發的「window is not defined」：ApproverSourceEditor spec，fg1a CI 因此重跑過一次
+- 查其他端點以 403／404 區別洩漏記錄是否存在：history、upload、update、delete、print、關聯分頁、沖銷、關閉模組（schema 臨時讀取已改一律 403）
+- 替「我已處理」查詢加 (ActorUserId, TaskId) 索引：目前缺索引，資料量大時會慢
+- 補直接請求被隱藏負責人欄的負面測試（任務看板 kb2 審查 S2）
+- 查 Demo 已確認的採購單無法改成已取消（demo.md §15 步驟 7）：confirmed→cancelled 只限 manager 群組，必要時改 demo.md 的步驟
+- 讓產品啟動時明確設 SQLite WAL：部署時若已有空的 .db 檔，EF Migrate 不會設 WAL，長交易期間其他請求會「database is locked」（demolock 根因）
+- 追蹤停用 graph 流程時略過驗證的例外（fg1d）：規則已寫進設計，fg2 之後確認仍成立
