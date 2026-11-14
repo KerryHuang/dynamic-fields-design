@@ -29,24 +29,6 @@ public static class ApprovalActionRules
     }
 
     /// <summary>
-    /// 「上一關」（設計 §7.3）：依流程定義的關卡順序，目前關卡代號之前最近一個沒被跳過的關卡，取它最近一次的關卡實例，
-    /// 必須是已同意才算；第一關、備援關卡（不在定義裡）沒有上一關。退回上一關重啟的關卡有新 seq，所以不能只比 seq。
-    /// </summary>
-    public static Domain.Entities.Dynamic.ApprovalStageRun? PreviousRun(
-        Domain.Approvals.ApprovalDefinition? def, IReadOnlyList<Domain.Entities.Dynamic.ApprovalStageRun> runs, Domain.Entities.Dynamic.ApprovalStageRun current)
-    {
-        if (def is null) return null;
-        var index = def.Stages.FindIndex(s => s.Code == current.StageCode);
-        for (var i = index - 1; i >= 0; i--)
-        {
-            var latest = runs.Where(r => r.StageCode == def.Stages[i].Code).MaxBy(r => r.Seq);
-            if (latest is null or { Status: Domain.Entities.Dynamic.ApprovalStageStatus.Skipped }) continue;
-            return latest.Status == Domain.Entities.Dynamic.ApprovalStageStatus.Approved ? latest : null;
-        }
-        return null;
-    }
-
-    /// <summary>
     /// 轉交、改派、加簽對象的檢查，依序回第一個不符合的訊息：不存在或停用、是自己（actor 為 null 時不檢查，改派用）、是發起人（allowSelf 為 false 時）、
     /// 這一關已有票（任務不是 transferred 的負責人，或代理任務的本人）；通過回 null。
     /// </summary>

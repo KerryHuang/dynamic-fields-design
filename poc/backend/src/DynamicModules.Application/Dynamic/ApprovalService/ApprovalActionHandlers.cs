@@ -211,7 +211,7 @@ public class RejectTaskHandler(
 
         if (request.To == ToPrevious)
         {
-            var previous = ApprovalActionRules.PreviousRun(def, runs, run);
+            var previous = ApprovalPath.Previous(runs, run);
             if (previous is null) return ApprovalActionSupport.Bad("to", ApprovalMessages.NoPreviousStage);
             Reject(me, run, tasks, now, ApprovalStageStatus.Returned);
             engine.Log(inst, ApprovalActions.Return, user.UserId, run.Id, me.Id, request.Comment);

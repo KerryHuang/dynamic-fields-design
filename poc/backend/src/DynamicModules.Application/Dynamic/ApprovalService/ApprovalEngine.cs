@@ -43,8 +43,7 @@ public sealed class ApprovalEngine(
     {
         if (DefinitionOf(inst) is not { } def) return (null, ServiceResult.Conflict(ApprovalMessages.FlowVersionMissing));
         var runs = await repo.ListRunsAsync(inst.Id, ct);
-        var last = runs.LastOrDefault(r => r.StageCode is not null);
-        var start = last is null ? 0 : def.Stages.FindIndex(s => s.Code == last.StageCode) + 1;
+        var start = ApprovalPath.NextStageIndex(def, runs);
         var seq = runs.Count == 0 ? 0 : runs.Max(r => r.Seq);
         var userIds = await modules.ListUserIdsAsync(ct);
         ResolveContext? ctx = null;
