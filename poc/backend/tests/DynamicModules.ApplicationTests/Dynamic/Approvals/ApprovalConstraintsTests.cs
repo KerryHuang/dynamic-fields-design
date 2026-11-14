@@ -234,4 +234,45 @@ public class ApprovalConstraintsTests : ApprovalTestBase
         wf.LockedFieldIds.Should().BeEmpty();
         wf.EditableStates.Should().BeEquivalentTo([r.Draft]);
     }
+
+    /// <summary>start → 條件（edgeField 分路）→ 簽核 a（可編輯 editable）→ end；預設線直接 end。</summary>
+    private ApprovalDefinition GraphDef(long edgeField, params long[] editable) => new(ApprovalShapes.Graph, null, null, null, [],
+    [
+        new ApprovalNodeDef("start", ApprovalNodeKinds.Start), new ApprovalNodeDef("c", ApprovalNodeKinds.Condition),
+        new ApprovalNodeDef("a", ApprovalNodeKinds.Approval, Text("a"), null, Group(BoardGroup), ApprovalModes.Any, [.. editable], null, ApprovalOnEmpty.Fallback),
+        new ApprovalNodeDef("end", ApprovalNodeKinds.End),
+    ],
+    [
+        new ApprovalEdgeDef("e1", "start", "c"), new ApprovalEdgeDef("e2", "c", "a", Order: 1, When: Cond(edgeField, "gte", 1)),
+        new ApprovalEdgeDef("e3", "c", "end", Default: true), new ApprovalEdgeDef("e4", "a", "end"),
+    ]);
+
+    [Fact]
+    public async Task Constraints_Graph_EditableFieldInConditionEdgeClosure_400()
+    {
+        var r = await BuildPurchase();
+        await SeedFlow(r, "po-g", r.Confirmed, 1, GraphDef(r.NetTotal, r.Discount));
+
+        var msg = Msgs(await SaveWorkflow(r, Approved(r)), "flows[po-g]");
+        msg.Should().ContainSingle(m => m.StartsWith("可編輯欄位「折扣」") && m.Contains("折扣後總額"));
+    }
+
+    [Fact]
+    public async Task Constraints_Graph_EditableFromLockedEntry_400()
+    {
+        var r = await WithFlowsAB();
+        await SeedFlow(r, "po-c", r.Cancelled, 1, GraphDef(r.Total, r.DueDate));
+        var transitions = Approved(r);
+        transitions[3] = Needs(r.Confirmed, r.Cancelled);
+        Msgs(await SaveWorkflow(r, transitions), "flows[po-c]").Should().Contain(ApprovalMessages.EditableFromLocked("po-c"));
+    }
+
+    [Fact]
+    public async Task Constraints_Graph_NoEditableFields_Ok()
+    {
+        var r = await BuildPurchase();
+        await SeedFlow(r, "po-g", r.Confirmed, 1, GraphDef(r.NetTotal));
+
+        Ok(await SaveWorkflow(r, Approved(r)));
+    }
 }

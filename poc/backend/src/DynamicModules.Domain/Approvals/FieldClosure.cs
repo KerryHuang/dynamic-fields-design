@@ -59,20 +59,18 @@ public static class FieldClosure
         return new ClosureResult(paths.Keys.ToHashSet(), ownDetailRollup, paths);
     }
 
-    /// <summary>定義直接引用的欄位：流程條件、各關條件、userField 的欄位（不含可編輯欄位）。</summary>
+    /// <summary>定義直接引用的欄位：流程條件、各關（節點）略過條件、graph 連線條件、userField 的欄位（不含可編輯欄位與通知範本）。</summary>
     public static IEnumerable<long> DirectFields(ApprovalDefinition d)
     {
         var ids = new HashSet<long>();
-        if (d.When is { } when) ids.UnionWith(RuleReferences.ConditionFieldIdsOf(when));
-        foreach (var s in d.Stages ?? [])
-        {
-            if (s.When is { } sw) ids.UnionWith(RuleReferences.ConditionFieldIdsOf(sw));
+        foreach (var c in ApprovalDefinitionRefs.Conditions(d)) ids.UnionWith(RuleReferences.ConditionFieldIdsOf(c));
+        foreach (var s in ApprovalDefinitionRefs.Steps(d))
             if (s.Approvers is { Source: ApprovalSources.UserField, FieldId: { } fid }) ids.Add(fid);
-        }
         return ids;
     }
 
-    /// <summary>直接引用的欄位加上各關的可編輯欄位；欄位的刪除與停用保護用（設計 §8.6）。</summary>
+    /// <summary>直接引用的欄位加上各關的可編輯欄位與通知範本引用的欄位；欄位的刪除與停用保護用（設計 §8.6、流程圖設計 §12.2）。</summary>
     public static IEnumerable<long> ReferencedFields(ApprovalDefinition d) =>
-        DirectFields(d).Concat((d.Stages ?? []).SelectMany(s => s.EditableFields ?? [])).Distinct();
+        DirectFields(d).Concat(ApprovalDefinitionRefs.Steps(d).SelectMany(s => s.EditableFields ?? []))
+            .Concat(ApprovalDefinitionRefs.NotifyFieldRefs(d)).Distinct();
 }

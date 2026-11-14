@@ -143,4 +143,49 @@ public class ApprovalDeleteGuardTests : ApprovalTestBase
         (await Db.Context.Set<Notification>().Select(n => n.TitleSnapshot).ToListAsync()).Should().Equal("y");
         (await Db.Context.Set<ApprovalDelegate>().CountAsync()).Should().Be(1);
     }
+
+    /// <summary>start → 條件（edgeField 分路）→ 通知（範本引用 template、收件人群組 group）→ end。</summary>
+    private static ApprovalDefinition NotifyGraph(long edgeField, long template, long group) => new(ApprovalShapes.Graph, null, null, null, [],
+    [
+        new ApprovalNodeDef("start", ApprovalNodeKinds.Start), new ApprovalNodeDef("c", ApprovalNodeKinds.Condition),
+        new ApprovalNodeDef("n", ApprovalNodeKinds.Notify, Text("n"),
+            Recipients: [new NotifyRecipientDef(ApprovalNotifyRecipientKinds.Group, GroupIds: [group])],
+            Template: new NotifyTemplateDef(Text("t"), Text($"值 {{f:{template}}}"))),
+        new ApprovalNodeDef("end", ApprovalNodeKinds.End),
+    ],
+    [
+        new ApprovalEdgeDef("e1", "start", "c"), new ApprovalEdgeDef("e2", "c", "n", Order: 1, When: Cond(edgeField, "gte", 1)),
+        new ApprovalEdgeDef("e3", "c", "end", Default: true), new ApprovalEdgeDef("e4", "n", "end"),
+    ]);
+
+    [Fact]
+    public async Task DeleteGuard_FieldInGraphTemplate_Blocked()
+    {
+        var (r, grade) = await RigWithGrade();
+        await SeedFlow(r, "po-g", r.Confirmed, 1, NotifyGraph(r.Total, grade, BoardGroup));
+
+        (await Deactivate(grade)).IsConflict.Should().BeTrue();
+        Flows(await CheckField(grade)).Should().ContainSingle().Which.Name.Should().Be("po-g");
+    }
+
+    [Fact]
+    public async Task DeleteGuard_FieldInGraphConditionEdge_Blocked()
+    {
+        var (r, grade) = await RigWithGrade();
+        await SeedFlow(r, "po-g", r.Confirmed, 1, NotifyGraph(grade, r.Memo, BoardGroup));
+
+        (await Deactivate(grade)).IsConflict.Should().BeTrue();
+        Flows(await CheckField(grade)).Should().ContainSingle().Which.Name.Should().Be("po-g");
+    }
+
+    [Fact]
+    public async Task DeleteGroup_ReferencedByGraphNotifyRecipient_Blocked()
+    {
+        var r = await BuildPurchase();
+        await SeedFlow(r, "po-g", r.Confirmed, 1, NotifyGraph(r.Total, r.Memo, BoardGroup));
+
+        var res = await Send(new DeleteGroupRequest(BoardGroup));
+        res.IsConflict.Should().BeTrue(Dump(res));
+        res.Message.Should().Be("群組被簽核流程使用：po-g");
+    }
 }

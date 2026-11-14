@@ -89,12 +89,7 @@ public class ApprovalFlowRepository(DynamicDbContext db) : IApprovalFlowReposito
         return rows.Select(x => (x.Id, x.Key, x.Definition)).ToList();
     }
 
-    private static bool References(ApprovalDefinition d, long groupId)
-    {
-        static bool In(ApproverSource? s, long g) =>
-            s is not null && ((s.GroupIds?.Contains(g) ?? false) || (s.CandidateGroupIds?.Contains(g) ?? false));
-        return In(d.FallbackApprovers, groupId) || (d.Stages ?? []).Any(s => In(s.Approvers, groupId));
-    }
+    private static bool References(ApprovalDefinition d, long groupId) => ApprovalDefinitionRefs.GroupRefs(d).Contains(groupId);
 
     public void Add(ApprovalFlow f) => db.Set<ApprovalFlow>().Add(f);
     public void AddVersion(ApprovalFlowVersion v) => db.Set<ApprovalFlowVersion>().Add(v);

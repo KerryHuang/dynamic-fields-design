@@ -157,4 +157,41 @@ public class ApprovalTopologyTests
         ApprovalLock.None.IsLockedState(Confirmed).Should().BeFalse();
         ApprovalTopology.Lock(Doc(), Flow(), [DefOn(TotalF)], _ => true).IsLockedState(null).Should().BeFalse();
     }
+
+    /// <summary>graph：條件節點的出線依 edgeField 分路；簽核節點可編輯 editable；通知範本引用 template。</summary>
+    private static ApprovalDefinition GraphDef(long edgeField, long editable, long template) => new(ApprovalShapes.Graph, null, null, null, [],
+    [
+        new ApprovalNodeDef("start", ApprovalNodeKinds.Start),
+        new ApprovalNodeDef("c", ApprovalNodeKinds.Condition),
+        new ApprovalNodeDef("a", ApprovalNodeKinds.Approval, new I18nText([new("zh-TW", "簽")]), null, new ApproverSource(ApprovalSources.Manager, Level: 1),
+            ApprovalModes.Any, [editable], null, ApprovalOnEmpty.Fallback),
+        new ApprovalNodeDef("n", ApprovalNodeKinds.Notify, Template: new NotifyTemplateDef(
+            new I18nText([new("zh-TW", "x")]), new I18nText([new("zh-TW", $"{{f:{template}}}")]))),
+        new ApprovalNodeDef("end", ApprovalNodeKinds.End),
+    ],
+    [
+        new ApprovalEdgeDef("e1", "start", "c"),
+        new ApprovalEdgeDef("e2", "c", "a", Order: 1,
+            When: JsonDocument.Parse($$"""{"all":[{"field":{{edgeField}},"op":"gte","value":1}]}""").RootElement.Clone()),
+        new ApprovalEdgeDef("e3", "c", "n", Default: true),
+        new ApprovalEdgeDef("e4", "a", "n"),
+        new ApprovalEdgeDef("e5", "n", "end"),
+    ]);
+
+    [Fact]
+    public void Lock_Graph_ConditionEdgeField_Locked()
+    {
+        var l = ApprovalTopology.Lock(Doc(), Flow(), [GraphDef(TotalF, 99, 98)], _ => true);
+
+        l.FieldIds.Should().Contain([TotalF, LineSumF, DiscountF]);
+        l.DetailRowsLocked.Should().BeTrue();
+    }
+
+    [Fact]
+    public void Lock_Graph_ApprovalNodeEditableFields_Locked() =>
+        ApprovalTopology.Lock(Doc(), Flow(), [GraphDef(97, SupplierF, 98)], _ => true).FieldIds.Should().Contain(SupplierF);
+
+    [Fact]
+    public void Lock_Graph_TemplateField_NotLocked() =>
+        ApprovalTopology.Lock(Doc(), Flow(), [GraphDef(97, 99, SupplierF)], _ => true).FieldIds.Should().NotContain(SupplierF);
 }

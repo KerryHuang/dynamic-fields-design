@@ -50,7 +50,7 @@ public static class ApprovalTopology
         var defs = definitions.ToList();
         var closure = FieldClosure.Upstream(module, defs.SelectMany(FieldClosure.DirectFields), wf.StatusFieldId, isOwnDetailRollup);
         var ids = closure.FieldIds.ToHashSet();
-        ids.UnionWith(defs.SelectMany(d => d.Stages ?? []).SelectMany(s => s.EditableFields ?? []));
+        ids.UnionWith(defs.SelectMany(ApprovalDefinitionRefs.Steps).SelectMany(s => s.EditableFields ?? []));
         ids.UnionWith(module.Blocks.SelectMany(b => b.Fields).Where(f => f is { Type: FieldType.Attachment, Status: FieldStatus.Active }).Select(f => f.Id));
         ids.Remove(wf.StatusFieldId);
         return new ApprovalLock(LockedStates(wf), ids, closure.IncludesOwnDetailRollup);

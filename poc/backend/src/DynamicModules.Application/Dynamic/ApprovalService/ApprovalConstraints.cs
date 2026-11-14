@@ -59,7 +59,7 @@ public static class ApprovalConstraints
                         if (back is null || back.Approval is { Required: true }) Err(key, ApprovalMessages.RejectToInvalid(name, S(e.From), S(rt)));
                         if (locked.Contains(rt) && !locked.Contains(e.From)) Err(key, ApprovalMessages.RejectToLocked(name));
                     }
-                var hasEditable = (fs.Definition.Stages ?? []).Any(s => (s.EditableFields ?? []).Count > 0);
+                var hasEditable = ApprovalDefinitionRefs.Steps(fs.Definition).Any(s => (s.EditableFields ?? []).Count > 0);
                 if (hasEditable && approvalEntries.Any(e => readOnly.Contains(e.From) || locked.Contains(e.From)))
                     Err(key, ApprovalMessages.EditableFromLocked(name));
             }
@@ -100,7 +100,7 @@ public static class ApprovalConstraints
                 seedOwner.TryAdd(id, fs);
         var closure = FieldClosure.Upstream(module, seedOwner.Keys, wf.StatusFieldId);
         foreach (var fs in onTarget)
-            foreach (var id in (fs.Definition.Stages ?? []).SelectMany(s => s.EditableFields ?? []).Distinct())
+            foreach (var id in ApprovalDefinitionRefs.Steps(fs.Definition).SelectMany(s => s.EditableFields ?? []).Distinct())
             {
                 if (!closure.Paths.TryGetValue(id, out var path)) continue;
                 var owner = seedOwner[path[0]];

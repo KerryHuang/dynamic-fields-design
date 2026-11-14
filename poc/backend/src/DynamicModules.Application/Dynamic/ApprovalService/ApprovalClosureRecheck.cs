@@ -41,7 +41,7 @@ public sealed class ApprovalClosureRecheck(IApprovalFlowRepository flows)
     {
         if (candidate.Fill is not { Mode: FillConfig.Lock } fill || fill.Map.Count == 0 || !HasApproval(module)) return null;
         var editable = (await flows.ListCurrentByModuleAsync(module.Id, ct))
-            .SelectMany(f => f.Definition.Stages ?? []).SelectMany(s => s.EditableFields ?? []).ToHashSet();
+            .SelectMany(f => ApprovalDefinitionRefs.Steps(f.Definition)).SelectMany(s => s.EditableFields ?? []).ToHashSet();
         if (fill.Map.FirstOrDefault(m => editable.Contains(m.To)) is not { } hit) return null;
         var label = module.Blocks.SelectMany(b => b.Fields).FirstOrDefault(f => f.Id == hit.To)?.LabelI18n.Resolve(I18nText.FallbackLocale) ?? hit.To.ToString();
         return ServiceResult.Invalid(new Dictionary<string, string[]> { [FieldRules.FillKey] = [ApprovalMessages.FillTargetEditable(label)] });
