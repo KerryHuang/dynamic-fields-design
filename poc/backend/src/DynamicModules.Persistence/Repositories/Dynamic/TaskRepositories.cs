@@ -15,6 +15,15 @@ public class TaskRepository(DynamicDbContext db) : ITaskRepository
     public Task<TaskItem?> GetAsync(long id, CancellationToken ct) =>
         db.Set<TaskItem>().Include(t => t.Participants).FirstOrDefaultAsync(t => t.Id == id, ct);
 
+    public async Task<bool> TryClaimVersionAsync(TaskItem task, CancellationToken ct)
+    {
+        var id = task.Id;
+        var version = task.ModifiedTime;
+        // 版本是 (ModifiedTime ?? CreatedTime)；CreatedTime 不會變，所以比對 ModifiedTime（含 null）即可。每次寫入都會 Touch，ModifiedTime 一定前進
+        return await db.Set<TaskItem>().Where(t => t.Id == id && t.ModifiedTime == version)
+            .ExecuteUpdateAsync(s => s.SetProperty(t => t.ModifiedTime, t => t.ModifiedTime), ct) == 1;
+    }
+
     public Task<TaskItem?> GetReadOnlyAsync(long id, CancellationToken ct) =>
         db.Set<TaskItem>().AsNoTracking().Include(t => t.Participants).FirstOrDefaultAsync(t => t.Id == id, ct);
 

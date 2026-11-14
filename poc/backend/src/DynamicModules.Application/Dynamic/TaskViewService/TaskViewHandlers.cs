@@ -163,6 +163,8 @@ public class SetTaskViewSharesHandler(TaskViewAccess access, IPermissionReposito
         if (view is null) return ServiceResult.NotFound(TaskViewMessages.NotFound);
         if (view.OwnerUserId != viewer.UserId) return ServiceResult.Forbidden();
 
+        // JSON 陣列可以含 null 元素，不能直接解參照
+        if (request.Shares.Any(s => s is null)) return TaskViewRules.Bad("shares", TaskViewMessages.ShareKindInvalid);
         var targets = request.Shares.Select(s => (Kind: s.Kind?.Trim() ?? "", Id: s.Id?.Trim() ?? "")).Distinct().ToList();
         if (targets.Count > TaskViewRules.MaxShares) return TaskViewRules.Bad("shares", TaskViewMessages.TooManyShares(TaskViewRules.MaxShares));
         if (targets.Any(t => t.Kind is not (TaskViewShareKinds.User or TaskViewShareKinds.Group or TaskViewShareKinds.Department) || t.Id.Length == 0))

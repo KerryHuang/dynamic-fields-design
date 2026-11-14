@@ -7,6 +7,11 @@ public interface ITaskRepository
 {
     /// <summary>追蹤，含參與者。</summary>
     Task<TaskItem?> GetAsync(long id, CancellationToken ct);
+    /// <summary>
+    /// 條件式更新認領版本：以讀到的 ModifiedTime 比對資料列，相符才算成功（列被鎖到交易結束，另一個同版本的請求會等到這筆交易結束，再比對失敗）。
+    /// 回 false 代表資料列已被別人改過，呼叫端要整筆回滾。
+    /// </summary>
+    Task<bool> TryClaimVersionAsync(TaskItem task, CancellationToken ct);
     /// <summary>不追蹤，含參與者；只讀的檢查（例如上傳資格）用，避免把舊值留在追蹤器裡讓後面的處理器讀到。</summary>
     Task<TaskItem?> GetReadOnlyAsync(long id, CancellationToken ct);
     /// <summary>追蹤，含參與者；DueDate 升冪、null 最後、再依 Id。</summary>

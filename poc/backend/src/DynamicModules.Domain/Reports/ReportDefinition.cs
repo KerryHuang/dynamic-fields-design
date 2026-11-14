@@ -34,6 +34,10 @@ public record ReportMeasure(string Id, string Kind, ReportFieldRef? Field, Repor
 public record ReportFilter(ReportFieldRef Field, string Op, JsonElement? Value);
 
 /// <summary>Kind 是 today|thisWeek|lastWeek|thisMonth|lastMonth|thisYear|lastYear|lastDays|lastWeeks|lastMonths；N 只用於 last* 系列。</summary>
-public record ReportDateRange(string Kind, int? N);
+public record ReportDateRange(string Kind, int? N)
+{
+    /// <summary>N 的上限（格式限制）；報表與任務看板的日期區間共用這一處。</summary>
+    public const int MaxN = 3650;
+}
 
 public record ReportSort(string Key, bool Desc);
