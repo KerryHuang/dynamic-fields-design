@@ -552,25 +552,58 @@ public class ApprovalApiTests : IDisposable
 
         var none = await me.GetAsync($"{Base}/me/approval-delegate");
         none.StatusCode.Should().Be(HttpStatusCode.OK);
-        (await none.Content.ReadAsStringAsync()).Should().BeEmpty();   // 沒有設定：200、本文為空
+        var empty = await JsonOf(none);   // 沒有設定：沒有 delegate（全站 JSON 省略 null），仍給營運日
+        empty.EnumerateObject().Select(p => p.Name).Should().BeEquivalentTo("today", "secondsToNextDay");
+        empty.GetProperty("today").GetString().Should().Be("2026-11-04");
+        empty.GetProperty("secondsToNextDay").GetInt32().Should().Be(15 * 3600);
 
         var put = await me.PutAsJsonAsync($"{Base}/me/approval-delegate", new { delegateUserId = "sales02", startDate = "2026-11-04", endDate = "2026-11-06" });
         put.StatusCode.Should().Be(HttpStatusCode.OK, await put.Content.ReadAsStringAsync());
         var saved = await JsonOf(put);
-        saved.EnumerateObject().Select(p => p.Name).Should().BeEquivalentTo("delegateUserId", "delegateName", "startDate", "endDate", "active");
+        saved.EnumerateObject().Select(p => p.Name).Should().BeEquivalentTo("delegateUserId", "delegateName", "startDate", "endDate", "active", "upcoming");
         saved.GetProperty("delegateUserId").GetString().Should().Be("sales02");
         saved.GetProperty("startDate").GetString().Should().Be("2026-11-04");
         saved.GetProperty("endDate").GetString().Should().Be("2026-11-06");
         saved.GetProperty("active").GetBoolean().Should().BeTrue();
+        saved.GetProperty("upcoming").GetBoolean().Should().BeFalse();
 
         var got = await JsonOf(await me.GetAsync($"{Base}/me/approval-delegate"));
-        got.GetProperty("delegateName").GetString().Should().Be(saved.GetProperty("delegateName").GetString());
+        got.EnumerateObject().Select(p => p.Name).Should().BeEquivalentTo("delegate", "today", "secondsToNextDay");
+        got.GetProperty("delegate").GetProperty("delegateName").GetString().Should().Be(saved.GetProperty("delegateName").GetString());
 
         var bad = await me.PutAsJsonAsync($"{Base}/me/approval-delegate", new { delegateUserId = "sales01", startDate = "2026-11-04", endDate = "2026-11-06" });
         bad.StatusCode.Should().Be(HttpStatusCode.BadRequest);
         (await JsonOf(bad)).GetProperty("errors").TryGetProperty("delegateUserId", out _).Should().BeTrue();
 
         (await me.DeleteAsync($"{Base}/me/approval-delegate")).StatusCode.Should().Be(HttpStatusCode.OK);
-        (await (await me.GetAsync($"{Base}/me/approval-delegate")).Content.ReadAsStringAsync()).Should().BeEmpty();
+        (await JsonOf(await me.GetAsync($"{Base}/me/approval-delegate"))).TryGetProperty("delegate", out _).Should().BeFalse();
+    }
+
+    [Fact]
+    [Trait("Category", "Postgres")]
+    public async Task GetRecord_NoRead_NotParticipant_SameResponseAsMissing()
+    {
+        var r = await Arrange();
+        var id = await Submitted(r);
+        RevokeBusinessGroups(r.Module);
+        var sales01 = _app.AsUser("sales01");
+        var current = await Current(sales01, id);
+        (await sales01.PostAsJsonAsync($"{Base}/approval-tasks/{TaskOf(current, "sales01")}/approve",
+            new { rowVersion = current.GetProperty("rowVersion").GetString() })).StatusCode.Should().Be(HttpStatusCode.OK);
+
+        // sales02 的任務在 sales01 同意時關閉、自己沒動作過：不是參與者，存在與不存在的回應要完全一樣
+        var sales02 = _app.AsUser("sales02");
+        foreach (var path in new[] { "", "/attachments/1/x" })
+        {
+            var exists = await sales02.GetAsync($"{Base}/records/{id}{path}");
+            var missing = await sales02.GetAsync($"{Base}/records/{id + 100000}{path}");
+            exists.StatusCode.Should().Be(HttpStatusCode.NotFound, path);
+            missing.StatusCode.Should().Be(exists.StatusCode, path);
+            (await exists.Content.ReadAsStringAsync()).Should().Be(await missing.Content.ReadAsStringAsync(), path);
+        }
+
+        // 處理過的 sales01 看得到簽核歷程：記錄維持 403，前端靠它改顯示「只看簽核歷程」
+        (await sales01.GetAsync($"{Base}/records/{id}")).StatusCode.Should().Be(HttpStatusCode.Forbidden);
+        (await sales01.GetAsync($"{Base}/records/{id}/approval")).StatusCode.Should().Be(HttpStatusCode.OK);
     }
 }

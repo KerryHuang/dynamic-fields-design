@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { date, useQuasar } from 'quasar';
+import { useQuasar } from 'quasar';
 import { computed, ref, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
 import {
@@ -22,7 +22,8 @@ const users = useUsers();
 const save = useSaveMyApprovalDelegate();
 const clear = useClearMyApprovalDelegate();
 
-const today = () => date.formatDate(new Date(), 'YYYY-MM-DD');
+// The server's business day: the browser's date may already be another day (time zone, a page left open overnight).
+const today = () => current.data.value?.today ?? '';
 const delegateUserId = ref<string | null>(null);
 const startDate = ref('');
 const endDate = ref('');
@@ -31,7 +32,7 @@ const topError = ref('');
 
 /** Every opening starts from the saved setting (or today to today when there is none). */
 function reset() {
-  const d = current.data.value;
+  const d = current.data.value?.delegate;
   delegateUserId.value = d?.delegateUserId ?? null;
   startDate.value = d?.startDate ?? today();
   endDate.value = d?.endDate ?? today();
@@ -116,7 +117,7 @@ async function remove() {
       </q-card-section>
       <q-card-actions align="right" class="q-gutter-sm">
         <q-btn
-          v-if="current.data.value" flat color="negative" :label="t('approval.delegate.clear')" :loading="clear.isPending.value" :disable="pending"
+          v-if="current.data.value?.delegate" flat color="negative" :label="t('approval.delegate.clear')" :loading="clear.isPending.value" :disable="pending"
           data-testid="delegate-clear" @click="remove"
         />
         <q-space />

@@ -1,5 +1,4 @@
 <script setup lang="ts">
-import { date } from 'quasar';
 import { computed } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { useMyApprovalDelegate } from 'src/application/dynamic/queries/approval-delegate-queries';
@@ -7,12 +6,13 @@ import { useMyApprovalDelegate } from 'src/application/dynamic/queries/approval-
 // Design 13.4: who handles my approvals now, or from when; nothing once the period is over.
 const { t } = useI18n();
 const current = useMyApprovalDelegate();
+// Active / upcoming come from the server's business day, not the browser's date.
 const text = computed(() => {
-  const d = current.data.value;
+  const d = current.data.value?.delegate;
   if (!d) return '';
   const p = { name: d.delegateName || d.delegateUserId, start: d.startDate, end: d.endDate };
   if (d.active) return t('approval.delegate.bannerActive', p);
-  return d.startDate > date.formatDate(new Date(), 'YYYY-MM-DD') ? t('approval.delegate.bannerUpcoming', p) : '';
+  return d.upcoming ? t('approval.delegate.bannerUpcoming', p) : '';
 });
 </script>
 

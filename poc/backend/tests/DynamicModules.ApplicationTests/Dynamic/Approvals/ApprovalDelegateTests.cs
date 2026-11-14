@@ -2,6 +2,7 @@ using System.Text.Json;
 using DynamicModules.Application.Common;
 using DynamicModules.Application.Common.Time;
 using DynamicModules.Application.Dynamic.ApprovalService;
+using DynamicModules.Application.Dynamic.AttachmentService;
 using DynamicModules.Application.Dynamic.RecordService.Queries.GetRecord;
 using DynamicModules.Domain.Approvals;
 using DynamicModules.Domain.Entities.Dynamic;
@@ -104,7 +105,7 @@ public class ApprovalDelegateTests : ApprovalTestBase
         foreach (var u in new[] { "buyer2", "emp1" })
         {
             As(u);
-            (await Send(new GetRecordRequest(recordId))).IsForbidden.Should().BeTrue(u);   // 計畫寫 404；沒有 Read 也不是可動作者時 guard 回 403（同 a3a）
+            (await Send(new GetRecordRequest(recordId))).IsForbidden.Should().BeTrue(u);   // 兩人都參與過（實際動作者、席位本人）：沒有 Read 維持 403；未參與者見 GetRecord_NoRead_NotParticipant_…
         }
     }
 
@@ -372,6 +373,197 @@ public class ApprovalDelegateTests : ApprovalTestBase
         (approve.OnBehalfOfUserId, approve.OnBehalfOfName).Should().Be(("buyer2", "buyer2"));
     }
 
+    // ───────── 實際動作者（a3d 審查修正：我已處理、結束後的歷程、記錄存在性） ─────────
+
+    private async Task<List<long>> Done(string user)
+    {
+        As(user);
+        var res = await Send(new GetApprovalTasksRequest(ApprovalInboxBoxes.Done, null, null, null, 1, 100));
+        res.IsSuccess.Should().BeTrue(Dump(res));
+        return ((PagedResponse<ApprovalInboxItem>)res.Data!).Items.Select(x => x.InstanceId).ToList();
+    }
+
+    private Task<ServiceResult> History(long id, string user)
+    {
+        As(user);
+        return Send(new GetRecordApprovalRequest(Inst(id).RecordId));
+    }
+
+    private Task<ServiceResult> Record(long recordId, string user)
+    {
+        As(user);
+        return Send(new GetRecordRequest(recordId));
+    }
+
+    [Fact]
+    public async Task Done_OriginalHandlesDelegatedTask_ListedForOriginalOnly()
+    {
+        var r = await Scenario3();
+        await SetDelegate("buyer2", "emp1", D(4), D(5));
+        var id = await SubmitAs(r, "buyer1", 50000);
+
+        await MustApprove(id, OpenOf(id, "emp1"), "buyer2");   // 本人自己處理代理給 emp1 的任務
+
+        (await Done("buyer2")).Should().Contain(id);
+        (await Done("emp1")).Should().NotContain(id);
+    }
+
+    [Fact]
+    public async Task Done_DelegateHandles_ListedForDelegateOnly()
+    {
+        var r = await Scenario3();
+        await SetDelegate("buyer2", "emp1", D(4), D(5));
+        var id = await SubmitAs(r, "buyer1", 50000);
+
+        await MustApprove(id, OpenOf(id, "emp1"), "emp1");
+
+        (await Done("emp1")).Should().Contain(id);
+        (await Done("buyer2")).Should().NotContain(id);
+    }
+
+    [Fact]
+    public async Task Done_ReassignAndCancel_NotHandled()
+    {
+        var r = await Scenario3();
+        var reassigned = await SubmitAs(r, "buyer1", 50000);
+        As("admin");
+        var move = await Send(new ReassignTaskRequest(OpenOf(reassigned, "buyer2").Id, Inst(reassigned).RowVersion, "fin1", null));
+        move.IsSuccess.Should().BeTrue(Dump(move));
+        var cancelled = await SubmitAs(r, "buyer1", 50000);
+        As("admin");
+        var stop = await Send(new CancelApprovalRequest(cancelled, Inst(cancelled).RowVersion, "供應商報價已過期"));
+        stop.IsSuccess.Should().BeTrue(Dump(stop));
+
+        (await Done("buyer2")).Should().NotContain([reassigned, cancelled]);   // 被改派走、被終止的人沒有處理
+        (await Done("admin")).Should().BeEmpty();   // 改派、終止是管理動作，不算處理任務
+    }
+
+    [Fact]
+    public async Task History_AfterEnd_OriginalActed_DelegateLosesIt()
+    {
+        var r = await Scenario3();
+        await SetDelegate("buyer2", "emp1", D(4), D(5));
+        var id = await SubmitAs(r, "buyer1", 50000);
+        As("admin");
+        await RevokeAll(r.Module);
+        foreach (var u in new[] { "buyer2", "emp1" })
+            (await History(id, u)).IsSuccess.Should().BeTrue(u);   // open 期間：兩個可動作者都看得到
+
+        await MustApprove(id, OpenOf(id, "emp1"), "buyer2");
+
+        (await History(id, "buyer2")).IsSuccess.Should().BeTrue();
+        (await History(id, "emp1")).IsNotFound.Should().BeTrue();   // 沒動作的代理人不再保有
+    }
+
+    [Fact]
+    public async Task History_AfterEnd_DelegateActed_BothKeepIt()
+    {
+        var r = await Scenario3();
+        await SetDelegate("buyer2", "emp1", D(4), D(5));
+        var id = await SubmitAs(r, "buyer1", 50000);
+        As("admin");
+        await RevokeAll(r.Module);
+
+        await MustApprove(id, OpenOf(id, "emp1"), "emp1");
+
+        foreach (var u in new[] { "buyer2", "emp1" })
+            (await History(id, u)).IsSuccess.Should().BeTrue(u);   // 實際動作者＋席位本人
+    }
+
+    [Fact]
+    public async Task GetRecord_NoRead_NotParticipant_SameAsMissing_ParticipantGets403()
+    {
+        var r = await Scenario3();
+        await SetDelegate("buyer2", "emp1", D(4), D(5));
+        var id = await SubmitAs(r, "buyer1", 50000);
+        As("admin");
+        await RevokeAll(r.Module);
+        await MustApprove(id, OpenOf(id, "emp1"), "buyer2");
+        var recordId = Inst(id).RecordId;
+        var missingId = recordId + 100000;
+
+        foreach (var u in new[] { "emp1", "fin1" })   // 沒動作的代理人、和這張單無關的人
+        {
+            var exists = await Record(recordId, u);
+            var missing = await Record(missingId, u);
+            exists.IsNotFound.Should().BeTrue(u);
+            (exists.IsNotFound, exists.Code, exists.Message).Should().Be((missing.IsNotFound, missing.Code, missing.Message), u);
+            As(u);
+            var file = await Send(new DownloadAttachmentRequest(recordId, 1, "x"));
+            var noFile = await Send(new DownloadAttachmentRequest(missingId, 1, "x"));
+            (file.IsNotFound, file.Code, file.Message).Should().Be((noFile.IsNotFound, noFile.Code, noFile.Message), u);
+        }
+
+        foreach (var u in new[] { "buyer2", "buyer1" })   // 處理過的本人、發起人：看得到歷程，維持 403
+        {
+            (await Record(recordId, u)).IsForbidden.Should().BeTrue(u);
+            As(u);
+            (await Send(new DownloadAttachmentRequest(recordId, 1, "x"))).IsForbidden.Should().BeTrue(u);
+            (await History(id, u)).IsSuccess.Should().BeTrue(u);
+        }
+    }
+
+    // ───────── 代辦歷程與讀取權收回（a3d 審查未覆蓋項） ─────────
+
+    [Fact]
+    public async Task Delegate_AddSignAndReturnPrevious_LogOnBehalfOf()
+    {
+        var r = await Scenario3();
+        await SetDelegate("buyer2", "emp1", D(4), D(5));
+        var id = await SubmitAs(r, "buyer1", 150000);
+        await MustApprove(id, OpenOf(id, "gm"), "gm");   // 第 2 關會簽 gm、buyer2（代理給 emp1）
+        var seat = OpenOf(id, "emp1");
+        seat.Reason.Should().Be(ApprovalTaskReason.Delegated);
+
+        As("emp1");
+        var add = await Send(new AddSignTaskRequest(seat.Id, Inst(id).RowVersion, null, null, ["mgrA"], ApprovalModes.Any));
+        add.IsSuccess.Should().BeTrue(Dump(add));
+        ActionsOf(id).Single(a => a.Action == ApprovalActions.AddSign).OnBehalfOfUserId.Should().Be("buyer2");
+
+        var other = await SubmitAs(r, "buyer1", 150000);
+        await MustApprove(other, OpenOf(other, "gm"), "gm");
+        As("emp1");
+        var back = await Send(new RejectTaskRequest(OpenOf(other, "emp1").Id, Inst(other).RowVersion, "金額要重核", RejectTaskHandler.ToPrevious));
+        back.IsSuccess.Should().BeTrue(Dump(back));
+        var ret = ActionsOf(other).Single(a => a.Action == ApprovalActions.Return);
+        (ret.ActorUserId, ret.OnBehalfOfUserId).Should().Be(("emp1", "buyer2"));
+    }
+
+    [Theory]
+    [InlineData("transfer")]
+    [InlineData("reassign")]
+    [InlineData("return")]
+    [InlineData("reject")]
+    [InlineData("cancel")]
+    public async Task Delegate_TaskEnds_BothLoseRead(string how)
+    {
+        var r = await Scenario3();
+        await SetDelegate("buyer2", "emp1", D(4), D(5));
+        var id = await SubmitAs(r, "buyer1", 150000);
+        await MustApprove(id, OpenOf(id, "gm"), "gm");   // 第 2 關：buyer2 那一席代理給 emp1
+        As("admin");
+        await RevokeAll(r.Module);
+        var recordId = Inst(id).RecordId;
+        var seat = OpenOf(id, "emp1");
+        foreach (var u in new[] { "buyer2", "emp1" })
+            (await Record(recordId, u)).IsSuccess.Should().BeTrue(u);
+
+        As(how is "reassign" or "cancel" ? "admin" : "emp1");
+        var rv = Inst(id).RowVersion;
+        var res = how switch
+        {
+            "transfer" => await Send(new TransferTaskRequest(seat.Id, rv, "fin1", null)),
+            "reassign" => await Send(new ReassignTaskRequest(seat.Id, rv, "fin1", null)),
+            "return" => await Send(new RejectTaskRequest(seat.Id, rv, "金額要重核", RejectTaskHandler.ToPrevious)),
+            "reject" => await Send(new RejectTaskRequest(seat.Id, rv, "數量不對", RejectTaskHandler.ToInitiator)),
+            _ => await Send(new CancelApprovalRequest(id, rv, "供應商報價已過期")),
+        };
+        res.IsSuccess.Should().BeTrue(Dump(res));
+
+        foreach (var u in new[] { "buyer2", "emp1" })
+            (await Record(recordId, u)).IsSuccess.Should().BeFalse($"{how}: {u}");
+    }
+
     // ───────── 設定 ─────────
 
     [Fact]
@@ -396,35 +588,57 @@ public class ApprovalDelegateTests : ApprovalTestBase
         (await Db.Context.Set<ApprovalDelegate>().CountAsync()).Should().Be(0);
     }
 
+    private async Task<MyApprovalDelegateResponse> Mine(string user)
+    {
+        As(user);
+        var res = await Send(new GetMyApprovalDelegateRequest());
+        res.IsSuccess.Should().BeTrue(Dump(res));
+        return (MyApprovalDelegateResponse)res.Data!;
+    }
+
     [Fact]
     public async Task SaveGetClear_RoundTrip()
     {
         await SetDelegate("gm", "emp1", D(5), D(8));
-        As("gm");
-        var upcoming = (ApprovalDelegateView)(await Send(new GetMyApprovalDelegateRequest())).Data!;
-        upcoming.Should().Be(new ApprovalDelegateView("emp1", "emp1", D(5), D(8), false));
+        (await Mine("gm")).Delegate.Should().Be(new ApprovalDelegateView("emp1", "emp1", D(5), D(8), false, true));
 
         await SetDelegate("gm", "emp2", D(4), D(4));   // 覆寫
-        As("gm");
-        var active = (ApprovalDelegateView)(await Send(new GetMyApprovalDelegateRequest())).Data!;
-        active.Should().Be(new ApprovalDelegateView("emp2", "emp2", D(4), D(4), true));
+        (await Mine("gm")).Delegate.Should().Be(new ApprovalDelegateView("emp2", "emp2", D(4), D(4), true, false));
         (await Db.Context.Set<ApprovalDelegate>().AsNoTracking().CountAsync()).Should().Be(1);
 
-        As("emp1");
-        (await Send(new GetMyApprovalDelegateRequest())).Data.Should().BeNull();   // 只看得到自己的
+        (await Mine("emp1")).Delegate.Should().BeNull();   // 只看得到自己的
 
         As("gm");
         (await Send(new ClearMyApprovalDelegateRequest())).IsSuccess.Should().BeTrue();
-        (await Send(new GetMyApprovalDelegateRequest())).Data.Should().BeNull();
+        (await Mine("gm")).Delegate.Should().BeNull();
+        As("gm");
         (await Send(new ClearMyApprovalDelegateRequest())).IsSuccess.Should().BeTrue();   // 沒有設定時也成功
     }
 
     [Fact]
-    public async Task Get_None_ReturnsNull()
+    public async Task Get_None_ReturnsNullDelegateWithBusinessToday()
     {
-        As("gm");
-        var res = await Send(new GetMyApprovalDelegateRequest());
-        res.IsSuccess.Should().BeTrue();
-        res.Data.Should().BeNull();
+        var mine = await Mine("gm");
+        mine.Delegate.Should().BeNull();
+        mine.Today.Should().Be(D(4));   // 沒有設定也給營運日：前端的預設日期用它
+        mine.SecondsToNextDay.Should().Be(15 * 3600);   // 09:00 → 隔天 00:00
+    }
+
+    [Fact]
+    public async Task Get_StatusFollowsBusinessDay_AcrossMidnight()
+    {
+        await SetDelegate("gm", "emp1", D(5), D(5));
+
+        _clock.Now = new DateTime(2026, 11, 4, 23, 30, 0);
+        var before = await Mine("gm");
+        (before.Today, before.SecondsToNextDay, before.Delegate!.Active, before.Delegate.Upcoming).Should().Be((D(4), 1800, false, true));
+
+        _clock.Now = new DateTime(2026, 11, 5, 0, 0, 0);
+        var during = await Mine("gm");
+        (during.Today, during.SecondsToNextDay, during.Delegate!.Active, during.Delegate.Upcoming).Should().Be((D(5), 86400, true, false));
+
+        _clock.Now = new DateTime(2026, 11, 6, 0, 0, 1);
+        var after = await Mine("gm");
+        (after.Today, after.Delegate!.Active, after.Delegate.Upcoming).Should().Be((D(6), false, false));   // 期間已過：兩者皆否
     }
 }

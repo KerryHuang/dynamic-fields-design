@@ -66,7 +66,9 @@ export interface AddSignBody { rowVersion: string; userIds: string[]; mode: 'all
 export interface WithdrawBody { rowVersion: string; comment?: string }
 export interface TransferBody { rowVersion: string; userId: string; comment?: string }
 /** The caller's own delegate (server: GET me/approval-delegate). Dates are business days `yyyy-MM-dd`, both ends included; `active`: today is inside. */
-export interface ApprovalDelegate { delegateUserId: string; delegateName: string; startDate: string; endDate: string; active: boolean }
+export interface ApprovalDelegate { delegateUserId: string; delegateName: string; startDate: string; endDate: string; active: boolean; upcoming: boolean }
+/** GET me/approval-delegate: today is the server's business day; refetch once secondsToNextDay have passed. No setting: delegate is left out (nulls are not sent). */
+export interface MyApprovalDelegate { delegate?: ApprovalDelegate | null; today: string; secondsToNextDay: number }
 export interface ApprovalDelegateBody { delegateUserId: string; startDate: string; endDate: string }
 export interface CancelBody { rowVersion: string; comment: string }
 export interface ReassignBody { rowVersion: string; userId: string; comment?: string }

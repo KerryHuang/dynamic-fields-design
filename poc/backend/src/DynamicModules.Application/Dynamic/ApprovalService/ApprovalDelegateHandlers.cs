@@ -7,10 +7,16 @@ using MediatR;
 
 namespace DynamicModules.Application.Dynamic.ApprovalService;
 
-/// <summary>個人代理設定（設計 §7.7、§13.5；計畫 U2、J15）。Active：今天（營運日）在起訖之內。</summary>
-public sealed record ApprovalDelegateView(string DelegateUserId, string DelegateName, DateOnly StartDate, DateOnly EndDate, bool Active);
+/// <summary>個人代理設定（設計 §7.7、§13.5；計畫 U2、J15）。Active：今天（營運日）在起訖之內；Upcoming：起日在今天之後。</summary>
+public sealed record ApprovalDelegateView(string DelegateUserId, string DelegateName, DateOnly StartDate, DateOnly EndDate, bool Active, bool Upcoming);
 
-/// <summary>自己的代理設定；沒有設定時 Data 為 null。</summary>
+/// <summary>
+/// GET me/approval-delegate：Delegate 沒有設定時是 null；Today 是伺服器營運日（前端的預設日期與提示都用它，不用瀏覽器日期）；
+/// SecondsToNextDay：距下一個營運日的秒數，前端到點重新取得。
+/// </summary>
+public sealed record MyApprovalDelegateResponse(ApprovalDelegateView? Delegate, DateOnly Today, int SecondsToNextDay);
+
+/// <summary>自己的代理設定與伺服器營運日（MyApprovalDelegateResponse；沒有設定時 Delegate 為 null）。</summary>
 public record GetMyApprovalDelegateRequest : IRequest<ServiceResult>;
 
 /// <summary>設定自己的代理（已有就覆寫）；只能設自己的，沒有 userId 參數。設定當下不搬既有任務。</summary>
@@ -26,15 +32,21 @@ internal static class ApprovalDelegateViews
         var names = await ApprovalViews.UserNamesAsync(permissions, ct);
         var today = time.Today;
         return new ApprovalDelegateView(d.DelegateUserId, names.GetValueOrDefault(d.DelegateUserId) ?? d.DelegateUserId, d.StartDate, d.EndDate,
-            d.StartDate <= today && today <= d.EndDate);
+            d.StartDate <= today && today <= d.EndDate, today < d.StartDate);
     }
 }
 
 public class GetMyApprovalDelegateHandler(IApprovalDelegateRepository delegates, IPermissionRepository permissions, ICurrentUser user, IBusinessTime time)
     : IRequestHandler<GetMyApprovalDelegateRequest, ServiceResult>
 {
-    public async Task<ServiceResult> Handle(GetMyApprovalDelegateRequest request, CancellationToken ct) =>
-        ServiceResult.Success(await delegates.GetAsync(user.UserId, ct) is { } d ? await ApprovalDelegateViews.ViewAsync(d, permissions, time, ct) : null);
+    public async Task<ServiceResult> Handle(GetMyApprovalDelegateRequest request, CancellationToken ct)
+    {
+        var view = await delegates.GetAsync(user.UserId, ct) is { } d ? await ApprovalDelegateViews.ViewAsync(d, permissions, time, ct) : null;
+        var now = time.Now;   // 讀一次：today 與秒數出自同一個時間點，換日那一刻不會對不上
+        var today = DateOnly.FromDateTime(now);
+        var toNextDay = (int)Math.Ceiling((today.AddDays(1).ToDateTime(TimeOnly.MinValue) - now).TotalSeconds);
+        return ServiceResult.Success(new MyApprovalDelegateResponse(view, today, toNextDay));
+    }
 }
 
 /// <summary>代理人存在且啟用、不是自己；起日 ≤ 迄日；迄日不早於今天（營運日）。</summary>

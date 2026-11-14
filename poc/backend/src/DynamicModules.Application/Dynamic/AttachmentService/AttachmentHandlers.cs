@@ -167,7 +167,7 @@ public sealed class UploadAttachmentHandler(
 /// </summary>
 public sealed class DownloadAttachmentHandler(
     IModuleRepository modules, IRecordRepository records, IDynamicAccessGuard guard, IAttachmentStore store,
-    ApprovalService.ApprovalReadGrant grant)
+    ApprovalService.ApprovalReadGrant grant, ApprovalService.ApprovalReader approvals)
     : IRequestHandler<DownloadAttachmentRequest, ServiceResult>
 {
     private static readonly MessageRef FileNotFound = MessageRef.Of(MessageText.AttachmentNotFound);
@@ -182,9 +182,9 @@ public sealed class DownloadAttachmentHandler(
         var perms = access.Permissions;
         if (perms is null || (perms.OwnerUserIds is { } owners && !owners.Contains(record.OwnerUserId)))
         {
-            // 簽核人的臨時讀取權（簽核設計 §10.1），規則同單筆讀取
+            // 簽核人的臨時讀取權（簽核設計 §10.1），規則同單筆讀取（含未參與者回與不存在相同的 404）
             if (await grant.ForRecordAsync(module, record, ct) is not { } g)
-                return perms is null ? access.Denied! : ServiceResult.NotFound(RecordMapper.RecordNotFound);
+                return perms is null && await approvals.ParticipatesAsync(module, record, ct) ? access.Denied! : ServiceResult.NotFound(RecordMapper.RecordNotFound);
             perms = g;
         }
 

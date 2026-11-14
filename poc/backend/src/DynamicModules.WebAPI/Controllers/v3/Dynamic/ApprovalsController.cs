@@ -49,7 +49,7 @@ public class ApprovalsController(IMediator mediator) : ControllerBase
     public async Task<IActionResult> Cancel(long id, CancelBody body) =>
         (await mediator.Send(new CancelApprovalRequest(id, body.RowVersion, body.Comment))).ToActionResult(this);
 
-    /// <summary>自己的代理設定；沒有設定時回 200、本文為空（設計 §13.5、計畫 J15）。</summary>
+    /// <summary>自己的代理設定與伺服器營運日：{ delegate（沒有設定時省略）, today, secondsToNextDay }（設計 §13.5、a3d 審查修正）。</summary>
     [HttpGet("me/approval-delegate")]
     public async Task<IActionResult> GetMyDelegate() =>
         (await mediator.Send(new GetMyApprovalDelegateRequest())).ToActionResult(this);

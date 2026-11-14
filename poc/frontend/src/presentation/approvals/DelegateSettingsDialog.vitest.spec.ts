@@ -11,12 +11,13 @@ import { bodyOf, HttpFail, mockHttp, type Call } from 'src/test-utils/mock-http'
 import DelegateSettingsDialog from './DelegateSettingsDialog.vue';
 
 const users = [{ userId: 'me', displayName: '我' }, { userId: 'sales01', displayName: '業務一' }, { userId: 'fin1', displayName: '財務一' }];
-const saved: ApprovalDelegate = { delegateUserId: 'sales01', delegateName: '業務一', startDate: '2026-11-17', endDate: '2026-11-21', active: false };
+const saved: ApprovalDelegate = { delegateUserId: 'sales01', delegateName: '業務一', startDate: '2026-11-17', endDate: '2026-11-21', active: false, upcoming: true };
 
 Element.prototype.scrollTo = () => {}; // jsdom has no scrollTo; the Quasar menu calls it
 
 let calls: Call[];
-let current: ApprovalDelegate | '';
+let current: ApprovalDelegate | null;
+let today: string;
 let putReply: unknown;
 const q = (id: string) => document.body.querySelector<HTMLElement>(`[data-testid="${id}"]`);
 const settle = async () => { await flushPromises(); await new Promise((r) => setTimeout(r, 20)); await flushPromises(); };
@@ -29,8 +30,8 @@ async function mountDialog() {
   calls = mockHttp((c) => {
     if (c.url === '/me/approval-delegate') {
       if (c.method === 'put') return putReply;
-      if (c.method === 'delete') { current = ''; return ''; }
-      return current;
+      if (c.method === 'delete') { current = null; return ''; }
+      return { delegate: current, today, secondsToNextDay: 3600 };
     }
     if (c.url === '/users') return users;
     return {};
@@ -68,11 +69,12 @@ async function setDate(id: string, v: string) {
 describe('DelegateSettingsDialog', () => {
   beforeEach(() => {
     document.body.innerHTML = '';
-    current = '';
+    current = null;
+    today = '2026-11-16';
     putReply = saved;
     vi.stubGlobal('ResizeObserver', class { observe() {} unobserve() {} disconnect() {} });
   });
-  afterEach(() => { document.body.innerHTML = ''; });
+  afterEach(() => { document.body.innerHTML = ''; vi.useRealTimers(); });
 
   it('dialog excludes me from the delegate options', async () => {
     const w = await mountDialog();
@@ -114,6 +116,16 @@ describe('DelegateSettingsDialog', () => {
     expect(end.textContent).toContain('迄日不能早於今天');
     expect(q('delegate-error')!.textContent).toContain('別的問題');
     expect(w.emitted('update:modelValue')).toBeUndefined();
+    w.unmount();
+  });
+
+  it('defaults to the server business day, not the browser date', async () => {
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(new Date('2026-11-16T16:30:00Z'));   // the browser (UTC) is still on the 16th; the server's business day is the 17th
+    today = '2026-11-17';
+    const w = await mountDialog();
+    expect((q('delegate-start') as HTMLInputElement).value).toBe('2026-11-17');
+    expect((q('delegate-end') as HTMLInputElement).value).toBe('2026-11-17');
     w.unmount();
   });
 

@@ -207,7 +207,7 @@ public class ApprovalManagerActionTests : ApprovalTestBase
 
         As("gm");
         var gone = await Send(new GetRecordRequest(recordId));
-        gone.IsForbidden.Should().BeTrue(Dump(gone));   // 計畫寫 404；沒 Read 也不是可動作者，guard 回 403（設計文件已更正）
+        gone.IsNotFound.Should().BeTrue(Dump(gone));   // gm 沒動作過、也不是發起人：不是參與者，回與不存在相同的 404（a3d 審查修正）
     }
 
     [Fact]

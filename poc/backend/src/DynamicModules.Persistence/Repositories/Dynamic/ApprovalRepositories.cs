@@ -188,8 +188,12 @@ public class ApprovalInstanceRepository(DynamicDbContext db) : IApprovalInstance
         db.Set<ApprovalTask>().AsNoTracking().AnyAsync(t => t.RecordId == recordId && t.Status == ApprovalTaskStatus.Open
             && (t.AssigneeUserId == userId || (t.OriginalUserId == userId && t.Reason == ApprovalTaskReason.Delegated)), ct);
 
-    public Task<List<ApprovalTask>> ListActedTasksOfAsync(string userId, CancellationToken ct) =>
-        db.Set<ApprovalTask>().AsNoTracking().Where(t => t.ActedTime != null && t.AssigneeUserId == userId).ToListAsync(ct);
+    public Task<List<ApprovalTask>> ListActedTasksOfAsync(string userId, CancellationToken ct)
+    {
+        var handled = ApprovalActions.TaskHandled.ToList();
+        return db.Set<ApprovalTask>().AsNoTracking().Where(t => db.Set<ApprovalAction>()
+            .Any(a => a.TaskId == t.Id && a.ActorUserId == userId && handled.Contains(a.Action))).ToListAsync(ct);
+    }
 
     public void Add(ApprovalInstance i) => db.Set<ApprovalInstance>().Add(i);
     public void AddRun(ApprovalStageRun r) => db.Set<ApprovalStageRun>().Add(r);

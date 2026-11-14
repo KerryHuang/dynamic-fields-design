@@ -6,7 +6,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { h } from 'vue';
 import { createI18n } from 'vue-i18n';
 import { createMemoryHistory, createRouter } from 'vue-router';
-import type { ApprovalDelegate, ApprovalInboxItem } from 'src/domain/dynamic/approval-types';
+import type { ApprovalDelegate, ApprovalInboxItem, MyApprovalDelegate } from 'src/domain/dynamic/approval-types';
 import zhTW from 'src/i18n/zh-TW.json';
 import { useIdentityStore } from 'src/stores/use-identity-store';
 import { HttpFail, mockHttp, type Call } from 'src/test-utils/mock-http';
@@ -20,7 +20,7 @@ const item = (o: Partial<ApprovalInboxItem> = {}): ApprovalInboxItem => ({
   dueTime: null, overdue: false, moduleClosed: false, status: 'pending', ...o,
 });
 
-interface Opts { delegate?: ApprovalDelegate | ''; items?: ApprovalInboxItem[]; total?: number; allForbidden?: boolean; allFails?: boolean; listFails?: boolean; listForbidden?: boolean; width?: number }
+interface Opts { delegate?: ApprovalDelegate; delegateReplies?: MyApprovalDelegate[]; items?: ApprovalInboxItem[]; total?: number; allForbidden?: boolean; allFails?: boolean; listFails?: boolean; listForbidden?: boolean; width?: number }
 
 async function mountPage(url: string, opts: Opts = {}) {
   window.innerWidth = opts.width ?? 1366;
@@ -28,6 +28,8 @@ async function mountPage(url: string, opts: Opts = {}) {
   setActivePinia(pinia);
   useIdentityStore().setSession('admin');
   const items = opts.items ?? [item(), item({ taskId: 12, instanceId: 6, recordId: 10, titleSnapshot: 'PO-0010 螢幕' })];
+  const replies = opts.delegateReplies ?? [{ delegate: opts.delegate ?? null, today: '2026-11-16', secondsToNextDay: 3600 }];
+  let delegateGets = 0;
   calls = mockHttp((c) => {
     if (c.url === '/approval-tasks') {
       if (c.params?.box === 'all' && c.params?.pagesSize === 1) return opts.allFails ? new HttpFail(500, {}) : opts.allForbidden ? new HttpFail(403) : { items: [], totalCount: 0, currentPage: 1, pagesSize: 1 };
@@ -35,7 +37,7 @@ async function mountPage(url: string, opts: Opts = {}) {
       if (opts.listFails) return new HttpFail(500, {});
       return { items, totalCount: opts.total ?? items.length, currentPage: Number(c.params?.currentPage ?? 1), pagesSize: 20 };
     }
-    if (c.url === '/me/approval-delegate') return opts.delegate ?? '';
+    if (c.url === '/me/approval-delegate') return replies[Math.min(delegateGets++, replies.length - 1)];
     if (c.url === '/menu') return [{ key: 'po', name: { 'zh-TW': '採購單' } }, { key: 'exp', name: { 'zh-TW': '費用報支' } }];
     return [];
   });
@@ -61,7 +63,7 @@ describe('ApprovalCenterPage', () => {
     document.body.innerHTML = '';
     vi.stubGlobal('ResizeObserver', class { observe() {} unobserve() {} disconnect() {} });
   });
-  afterEach(() => { document.body.innerHTML = ''; });
+  afterEach(() => { document.body.innerHTML = ''; vi.useRealTimers(); });
 
   it('defaults to the todo tab and lists title, module, stage, initiator and submitted time', async () => {
     const { w } = await mountPage('/approvals');
@@ -76,20 +78,48 @@ describe('ApprovalCenterPage', () => {
     w.unmount();
   });
 
+  const d = (o: Partial<ApprovalDelegate> = {}): ApprovalDelegate => ({
+    delegateUserId: 'sales01', delegateName: '業務一', startDate: '2026-11-17', endDate: '2026-11-21', active: false, upcoming: false, ...o,
+  });
+
   it('banner shows active and upcoming, hidden when none or ended', async () => {
-    const d = (o: Partial<ApprovalDelegate>): ApprovalDelegate => ({ delegateUserId: 'sales01', delegateName: '業務一', startDate: '2026-11-17', endDate: '2026-11-21', active: false, ...o });
     let { w } = await mountPage('/approvals', { delegate: d({ active: true }) });
     expect(q('delegate-banner')!.textContent).toContain('你的簽核目前由 業務一 代理（2026-11-17 至 2026-11-21）');
     expect(q('delegate-open')!.textContent).toContain('代理設定');
     w.unmount();
-    ({ w } = await mountPage('/approvals', { delegate: d({ startDate: '2099-01-02', endDate: '2099-01-05' }) }));
-    expect(q('delegate-banner')!.textContent).toContain('2099-01-02 起由 業務一 代理（至 2099-01-05）');
+    ({ w } = await mountPage('/approvals', { delegate: d({ upcoming: true }) }));
+    expect(q('delegate-banner')!.textContent).toContain('2026-11-17 起由 業務一 代理（至 2026-11-21）');
     w.unmount();
     ({ w } = await mountPage('/approvals'));
     expect(q('delegate-banner')).toBeNull();
     w.unmount();
-    ({ w } = await mountPage('/approvals', { delegate: d({ startDate: '2000-01-01', endDate: '2000-01-02' }) }));
+    ({ w } = await mountPage('/approvals', { delegate: d() }));   // ended: neither active nor upcoming
     expect(q('delegate-banner')).toBeNull();
+    w.unmount();
+  });
+
+  it('banner follows the server business day, not the browser date', async () => {
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(new Date('2026-11-18T12:00:00Z'));   // the browser is past the start, the server says it has not begun
+    let { w } = await mountPage('/approvals', { delegate: d({ upcoming: true }) });
+    expect(q('delegate-banner')!.textContent).toContain('2026-11-17 起由 業務一 代理');
+    w.unmount();
+    vi.setSystemTime(new Date('2026-11-10T12:00:00Z'));   // the browser is before the start, the server says it is over
+    ({ w } = await mountPage('/approvals', { delegate: d() }));
+    expect(q('delegate-banner')).toBeNull();
+    w.unmount();
+  });
+
+  it('refetches the delegate when the server business day turns', async () => {
+    const { w } = await mountPage('/approvals', { delegateReplies: [
+      { delegate: d({ upcoming: true }), today: '2026-11-16', secondsToNextDay: 0 },
+      { delegate: d({ active: true }), today: '2026-11-17', secondsToNextDay: 86400 },
+    ] });
+    expect(q('delegate-banner')!.textContent).toContain('起由 業務一 代理');
+    await new Promise((r) => setTimeout(r, 1300));
+    await flushPromises();
+    expect(calls.filter((c) => c.url === '/me/approval-delegate')).toHaveLength(2);
+    expect(q('delegate-banner')!.textContent).toContain('你的簽核目前由 業務一 代理');
     w.unmount();
   });
 

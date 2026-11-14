@@ -28,9 +28,10 @@ public class GetRecordHandler(IModuleRepository modules, IRecordRepository recor
         var granted = false;
         if (p is null || outOfScope)
         {
-            // 簽核人的臨時讀取權（簽核設計 §10.1）：只對這一筆；沒有時維持原回應（沒有 Read 403、範圍外 404，主控裁決 1）
+            // 簽核人的臨時讀取權（簽核設計 §10.1）：只對這一筆。沒有時：參與過這筆簽核的人（看得到簽核歷程）沒有 Read 維持 403，
+            // 前端靠它改顯示簽核歷程；其他人與範圍外一律回和不存在相同的 404，不洩漏存在性（a3d 審查修正）
             if (await grant.ForRecordAsync(module, record, ct) is not { } g)
-                return p is null ? access.Denied! : ServiceResult.NotFound(RecordMapper.RecordNotFound);   // 範圍外與不存在同一個回應
+                return p is null && await approvals.ParticipatesAsync(module, record, ct) ? access.Denied! : ServiceResult.NotFound(RecordMapper.RecordNotFound);
             (p, granted) = (g, true);
         }
         var refs = await resolver.ResolveAsync(module, p, [record], ct);

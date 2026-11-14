@@ -80,7 +80,7 @@ public class ApprovalReadGrantTests : ApprovalTestBase
         var body = (DynamicRecordResponse)res.Data!;
         body.Values[$"f_{_amount}"]!.Value.GetDecimal().Should().Be(30000);
         body.Details![_r.Line].Should().ContainSingle();
-        (await Get("emp1", po)).IsForbidden.Should().BeTrue();   // 沒有任務、沒有模組權限
+        (await Get("emp1", po)).IsNotFound.Should().BeTrue();   // 沒有任務、沒有模組權限：與不存在相同的 404（a3d 審查修正）
     }
 
     [Fact]
@@ -91,7 +91,7 @@ public class ApprovalReadGrantTests : ApprovalTestBase
         As("buyer1");
         var other = await NewPo(_r, price: 100);
         var res = await Get("fin1", other.Id);
-        res.IsForbidden.Should().BeTrue(Dump(res));   // 待裁決 1：沒有模組 Read 維持 403
+        res.IsNotFound.Should().BeTrue(Dump(res));   // 沒有模組 Read、也沒參與這筆簽核：與不存在相同的 404（a3d 審查修正）
     }
 
     [Fact]
@@ -124,8 +124,8 @@ public class ApprovalReadGrantTests : ApprovalTestBase
         As("fin1");
         var task = TasksOf(id).Single(t => t.AssigneeUserId == "fin1");
         (await Send(new RejectTaskRequest(task.Id, Inst(id).RowVersion, "請補資料", RejectTaskHandler.ToInitiator))).IsSuccess.Should().BeTrue();
-        (await Get("fin1", po)).IsForbidden.Should().BeTrue();
-        (await Get("fin2", po)).IsForbidden.Should().BeTrue();   // 同關被關閉的任務一起收回
+        (await Get("fin1", po)).IsForbidden.Should().BeTrue();   // 退回的人參與過：沒有 Read 維持 403
+        (await Get("fin2", po)).IsNotFound.Should().BeTrue();   // 同關被關閉的任務一起收回；沒動作過，不是參與者（a3d 審查修正）
     }
 
     [Fact]
@@ -140,7 +140,7 @@ public class ApprovalReadGrantTests : ApprovalTestBase
         (await Get("emp2", po)).IsSuccess.Should().BeTrue();
         await Db.Context.Set<ApprovalTask>().Where(t => t.InstanceId == id && t.AssigneeUserId == "emp2")
             .ExecuteUpdateAsync(s => s.SetProperty(t => t.Reason, ApprovalTaskReason.Transferred));
-        (await Get("fin1", po)).IsForbidden.Should().BeTrue();
+        (await Get("fin1", po)).IsNotFound.Should().BeTrue();   // 不是可動作者、也沒動作過：不是參與者（a3d 審查修正）
         (await Get("emp2", po)).IsSuccess.Should().BeTrue();
     }
 
@@ -223,8 +223,8 @@ public class ApprovalReadGrantTests : ApprovalTestBase
         res.IsSuccess.Should().BeTrue(Dump(res));
         await using (((AttachmentDownload)res.Data!).Content) { }
 
-        As("emp1");   // 沒有任務、沒有模組權限
-        (await Send(new DownloadAttachmentRequest(po.Id, _files, file.Id))).IsForbidden.Should().BeTrue();
+        As("emp1");   // 沒有任務、沒有模組權限：與不存在相同的 404（a3d 審查修正）
+        (await Send(new DownloadAttachmentRequest(po.Id, _files, file.Id))).IsNotFound.Should().BeTrue();
     }
 
     // ───────── 同意端與檢視端共用同一個欄位隱藏來源（審查 M2、裁決 U-A）─────────

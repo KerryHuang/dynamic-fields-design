@@ -746,14 +746,16 @@ D 排在 A 之後，所以從變更中送出的單只要總額 ≥ 100000，照�
 - 欄位可見性：以該使用者自己的群組欄位例外（限制優先）計算；**另外對這一筆記錄給 `Pricing` 軸**，看得到金額欄位。理由：審核費用與採購單卻看不到金額，簽核沒有意義；金額是簽核內容本身。
 - 欄位可見性在檢視端（可編輯欄位清單、歷程遮蔽）與同意端共用同一個來源：臨時讀取看得到的欄位（含 Pricing 金額），若在這一關的可編輯欄位內，同意時就能改；不在可編輯清單的欄位仍回 400（§20.4 第 20 項）。
 - 不放寬其他任何東西：不能讀同模組其他記錄、不能在清單頁看到這筆（清單照原本的資料範圍）、不能匯出、不能看反向關聯分頁、參照欄位只顯示標題（既有的 `TitleVisibleTo` 規則）。
-- 任務離開 `open`（同意、退回、轉交、關閉）後，所有可動作者的讀取權一起收回。之後在「我已處理」清單只看得到 `TitleSnapshot` 與自己的歷程，點進去照一般權限判斷（沒有權限回 403，同 §20.4 第 19 條，不洩漏記錄是否存在）。
+- 任務離開 `open`（同意、退回、轉交、關閉）後，所有可動作者的讀取權一起收回。之後在「我已處理」清單只看得到 `TitleSnapshot` 與自己的歷程，點進去照一般權限判斷。
+- 沒有 Read 也沒有臨時讀取權時，單筆讀取與附件下載依「是否參與過這筆簽核」分流（a3d 審查修正，主控裁決）：參與者（看得到這筆簽核歷程的人：簽核管理員、發起人、§10.2 看得到某一關的人）回 403，前端改顯示「只看簽核歷程」；其他人回與記錄不存在完全相同的 404（狀態碼與本文），不洩漏記錄是否存在。schema 的 `?recordId=` 對不存在與無權限本來就同回 403，不變。
 
 實作：記錄讀取的權限判定（`DynamicAccessGuard` 判 Read）加一條放行：「這位使用者是這筆記錄某個 `open` 任務的可動作者」，只對單筆讀取端點與附件下載生效。判定查 `Dynamic_ApprovalTask`：`AssigneeUserId = 我 AND Status = 'open'`，或 `OriginalUserId = 我 AND Reason = 'delegated' AND Status = 'open'`（索引見 §4.3）；查詢失敗或資料缺漏時不放行。
 
 ### 10.2 誰能看簽核歷程
 
 - 發起人：自己送出的實例，永久可看（含已失去模組權限之後，只看歷程與標題快照）。
-- 任務負責人：自己處理過的關卡。
+- 簽核人：任務 `open` 時是可動作者（負責人、代理任務的本人）；任務結束後是實際處理的人（歷程 `ActorUserId`，動作限同意、加簽、退回上一關、退回發起人、轉交）與席位本人（代理任務的 `OriginalUserId`、其他任務的負責人），沒動作的代理人不再保有（a3d 審查修正，主控裁決）。從沒動作就被關閉的任務不算。
+- 「我已處理」（`box=done`）同樣以實際處理的人為準：管理員改派、終止不算處理。
 - 對記錄有 Read 的人：該記錄的全部實例與歷程（記錄詳情頁的「簽核」區塊）。
 - 簽核管理員（Approve 軸）：見 §7.8。
 - 意見內容與歷程不受欄位權限影響；意見是簽核人寫給相關人看的。
@@ -1010,7 +1012,7 @@ Demo 資料（`DemoService`）在建立使用者之後、建立記錄之前產�
 | 撤回、終止 | `POST /approval-instances/{id}/{withdraw,cancel}` |
 | 改派 | `POST /approval-tasks/{id}/reassign` |
 | 簽核中心 | `GET /approval-tasks?box=todo,done,submitted,all` |
-| 代理設定 | `GET/PUT/DELETE /me/approval-delegate` |
+| 代理設定 | `GET/PUT/DELETE /me/approval-delegate`；GET 回 `{ delegate, today, secondsToNextDay }`（沒有設定時省略 `delegate`），`delegate` 帶 `active`、`upcoming`，前端的預設日期與提示都用伺服器營運日，跨日到點重新取得 |
 | 組織 | `GET/POST /departments`、`PUT/DELETE /departments/{id}`；使用者部門走既有使用者管理端點 |
 
 - 動作請求本文：`{ rowVersion, comment, values?, to?, userIds?, mode? }`，依動作取用；送出另帶 `{ to, picks, recordRowVersion }`，不收流程鍵（流程由系統決定）。同意的成功回應帶 `outcome`：`advanced`、`approved` 或 `rerouted`（§5.5）。

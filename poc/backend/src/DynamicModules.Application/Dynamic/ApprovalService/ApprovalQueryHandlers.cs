@@ -69,6 +69,38 @@ public sealed class ApprovalReader(IApprovalInstanceRepository repo, IDynamicAcc
             : await IsManagerAsync(module, record, ct);
 
     public static bool InScope(EffectivePermissions p, string ownerUserId) => p.OwnerUserIds is null || p.OwnerUserIds.Contains(ownerUserId);
+
+    /// <summary>
+    /// 沒有 Read／簽核管理權的人在各實例看得到的關卡（設計 §10.2）；發起人的實例不列（看整個實例）。
+    /// open 的任務給可動作者（負責人、代理任務的本人）；結束的任務給實際處理的人（ApprovalActions.TaskHandled），
+    /// 以及動作過的任務的席位本人（代理任務的 Original、其他任務的負責人）：沒動作的代理人不再保有。從沒動作就被關閉的任務不算。
+    /// </summary>
+    public static Dictionary<long, HashSet<long>> OwnStages(IEnumerable<ApprovalInstance> instances, IReadOnlyList<ApprovalTask> tasks,
+        IReadOnlyList<ApprovalAction> actions, string me)
+    {
+        var handled = actions.Where(a => a.TaskId is not null && a.ActorUserId == me && ApprovalActions.TaskHandled.Contains(a.Action))
+            .Select(a => a.TaskId!.Value).ToHashSet();
+        bool Sees(ApprovalTask t) => t.Status == ApprovalTaskStatus.Open
+            ? ApprovalActionRules.IsActor(t, me)
+            : handled.Contains(t.Id) || t.ActedTime is not null && (t.Reason == ApprovalTaskReason.Delegated ? t.OriginalUserId : t.AssigneeUserId) == me;
+        return instances.Where(i => i.InitiatorUserId != me)
+            .ToDictionary(i => i.Id, i => tasks.Where(t => t.InstanceId == i.Id && Sees(t)).Select(t => t.StageRunId).ToHashSet());
+    }
+
+    /// <summary>
+    /// 讀者參與過這筆記錄的簽核（GET records/{id}/approval 會給他歷程）：簽核管理者、某個實例的發起人，或在某個實例有看得到的關卡。
+    /// 沒有 Read 也沒有臨時讀取權時，記錄端點靠它決定回 403（前端改顯示只看簽核歷程）或與不存在相同的 404（不洩漏存在性）。
+    /// </summary>
+    public async Task<bool> ParticipatesAsync(Module module, Record record, CancellationToken ct)
+    {
+        var me = user.UserId;
+        var instances = await repo.ListByRecordAsync(record.Id, ct);
+        if (instances.Count == 0) return false;
+        if (instances.Any(i => i.InitiatorUserId == me)) return true;
+        var ids = instances.Select(i => i.Id).ToList();
+        if (OwnStages(instances, await repo.ListTasksAsync(ids, ct), await repo.ListActionsAsync(ids, ct), me).Values.Any(s => s.Count > 0)) return true;
+        return await IsManagerAsync(module, record, ct);
+    }
 }
 
 /// <summary>
@@ -96,18 +128,14 @@ public class GetRecordApprovalHandler(
         var instances = await repo.ListByRecordAsync(record.Id, ct);
         var ids = instances.Select(i => i.Id).ToList();
         var tasks = await repo.ListTasksAsync(ids, ct);
-        // 沒有 Read／Approve 的任務負責人只看自己處理過的關卡（設計 §10.2）：open 或動作過的任務所在關卡；
-        // 從沒動作就被關閉的任務不算。發起人看整個實例。
+        var everyAction = await repo.ListActionsAsync(ids, ct);
+        // 沒有 Read／Approve 的簽核人只看自己的關卡（設計 §10.2，規則見 ApprovalReader.OwnStages）；發起人看整個實例。
         // 標題快照的遮蔽（同記錄頁的 TitleVisibleTo）：發起人、在該實例有任務的人、簽核管理者一律看得到；
         // 其他人（例如有 Read、但標題欄位對他隱藏的旁觀者）要標題對他可見才給
         var titleVisible = read is not null && module.TitleVisibleTo(read);
         bool ShowTitle(ApprovalInstance i) => titleVisible || manager || i.InitiatorUserId == me
             || tasks.Any(t => t.InstanceId == i.Id && (t.AssigneeUserId == me || t.OriginalUserId == me));
-        var ownStages = new Dictionary<long, HashSet<long>>();
-        if (!canRead && !manager)
-            foreach (var i in instances.Where(i => i.InitiatorUserId != me))
-                ownStages[i.Id] = tasks.Where(t => t.InstanceId == i.Id && (t.AssigneeUserId == me || t.OriginalUserId == me)
-                    && (t.Status == ApprovalTaskStatus.Open || t.ActedTime is not null)).Select(t => t.StageRunId).ToHashSet();
+        var ownStages = !canRead && !manager ? ApprovalReader.OwnStages(instances, tasks, everyAction, me) : new Dictionary<long, HashSet<long>>();
         var visible = instances.Where(i => !ownStages.TryGetValue(i.Id, out var own) || own.Count > 0).ToList();
         if (!canRead && !manager && visible.Count == 0) return ServiceResult.NotFound(RecordMapper.RecordNotFound);
         bool Shown(long instanceId, long? stageRunId) =>
@@ -119,7 +147,7 @@ public class GetRecordApprovalHandler(
         var visibleIds = visible.Select(i => i.Id).ToList();
         // 未過濾的關卡實例與歷程只用來算「能不能退回上一關」「還能不能加簽」（a3c 審查 M3）：只輸出 bool，不帶出其他關卡的內容
         var allRuns = await repo.ListRunsAsync(visibleIds, ct);
-        var allActions = await repo.ListActionsAsync(visibleIds, ct);
+        var allActions = everyAction.Where(a => visibleIds.Contains(a.InstanceId)).ToList();
         var runs = allRuns.Where(r => Shown(r.InstanceId, r.Id)).ToList();
         var actions = allActions.Where(a => Shown(a.InstanceId, a.StageRunId)
             || granted is not null && a.InstanceId == pendingId && a.Action == ApprovalActions.ContentChanged).ToList();
