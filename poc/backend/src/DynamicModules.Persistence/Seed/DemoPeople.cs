@@ -1,12 +1,11 @@
 using DynamicModules.Domain.Data;
 using DynamicModules.Domain.Entities.Dynamic;
-using DynamicModules.Domain.Entities.Mock;
 using DynamicModules.Domain.ValueObjects;
 using Microsoft.EntityFrameworkCore;
 
 namespace DynamicModules.Persistence.Seed;
 
-/// <summary>示範人員與示範實體（使用者、群組、成員、客戶）；Demo 產生器與測試共用同一份清單。</summary>
+/// <summary>示範人員（使用者、群組、成員）；Demo 產生器與測試共用同一份清單。</summary>
 public static class DemoPeople
 {
     public static readonly (string Id, string Name)[] Users =
@@ -36,12 +35,6 @@ public static class DemoPeople
         ("design", "產品設計", ["designer01"])
     ];
 
-    public static readonly (string No, string Name)[] Customers =
-    [
-        ("C-001", "嵐岳精密"), ("C-002", "恆川機械"), ("C-003", "曜陽電子"),
-        ("C-004", "岳峰精機"), ("C-005", "澄川塑膠"), ("C-006", "瑞嶺零件"), ("C-007", "拓明模具"), ("C-008", "禾晟電機")
-    ];
-
     /// <summary>
     /// 示範組織（簽核計畫 a1 Task 5、主控裁決 6），上級排在下級之前。只由 Demo 產生器建立，不放進 <see cref="EnsureAsync"/>：
     /// 測試基底會呼叫 EnsureAsync，簽核測試自己建組織。
@@ -63,9 +56,6 @@ public static class DemoPeople
         foreach (var (id, name) in Users.Where(u => !users.Contains(u.Id)))
             db.Set<AppUser>().Add(new AppUser { UserId = id, DisplayName = name, IsDemoAccount = true });
 
-        var customers = await db.Set<MockCustomer>().Select(c => c.CustomerNo).ToListAsync(ct);
-        foreach (var (no, name) in Customers.Where(c => !customers.Contains(c.No)))
-            db.Set<MockCustomer>().Add(new MockCustomer { CustomerNo = no, Name = name });
         await db.SaveChangesAsync(ct);
 
         var groups = await db.Set<PermissionGroup>().ToListAsync(ct);
@@ -119,8 +109,6 @@ public static class DemoPeople
         conflicts.AddRange(Users.Where(u => users.Contains(u.Id)).Select(u => $"使用者 {u.Id} 已存在"));
         var groups = await db.Set<PermissionGroup>().Select(g => g.Key).ToListAsync(ct);
         conflicts.AddRange(Groups.Where(g => groups.Contains(g.Key)).Select(g => $"群組 {g.Key} 已存在"));
-        var customers = await db.Set<MockCustomer>().Select(c => c.CustomerNo).ToListAsync(ct);
-        conflicts.AddRange(Customers.Where(c => customers.Contains(c.No)).Select(c => $"客戶 {c.No} 已存在"));
         var departments = await db.Set<Department>().Select(d => d.Code).ToListAsync(ct);
         conflicts.AddRange(Departments.Where(d => departments.Contains(d.Code)).Select(d => $"部門 {d.Code} 已存在"));
         return conflicts;
