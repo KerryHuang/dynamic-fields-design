@@ -26,6 +26,10 @@ public class TasksController(IMediator mediator) : ControllerBase
     public async Task<IActionResult> Summary() =>
         (await mediator.Send(new GetTaskSummaryRequest())).ToActionResult(this);
 
+    [HttpGet("tasks/capabilities")]
+    public async Task<IActionResult> Capabilities() =>
+        (await mediator.Send(new GetTaskCapabilitiesRequest())).ToActionResult(this);
+
     [HttpGet("tasks/{id:long}")]
     public async Task<IActionResult> Get(long id) =>
         (await mediator.Send(new GetTaskRequest(id))).ToActionResult(this);
@@ -34,6 +38,11 @@ public class TasksController(IMediator mediator) : ControllerBase
     [HttpPatch("tasks/{id:long}")]
     public async Task<IActionResult> Update(long id, [FromBody] JsonElement body) =>
         (await mediator.Send(new UpdateTaskRequest(id, body))).ToActionResult(this);
+
+    /// <summary>復原主管重派：憑證來自 PATCH 回應的 undoToken。</summary>
+    [HttpPost("tasks/{id:long}/undo-reassign")]
+    public async Task<IActionResult> UndoReassign(long id, UndoReassignInput body) =>
+        (await mediator.Send(new UndoReassignRequest(id, body.UndoToken ?? ""))).ToActionResult(this);
 
     [HttpDelete("tasks/{id:long}")]
     public async Task<IActionResult> Delete(long id) =>
@@ -102,3 +111,5 @@ public class TasksController(IMediator mediator) : ControllerBase
 }
 
 public sealed record TaskCommentInput(string? Body);
+
+public sealed record UndoReassignInput(string? UndoToken);

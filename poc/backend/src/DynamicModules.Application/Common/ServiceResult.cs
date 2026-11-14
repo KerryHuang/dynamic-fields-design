@@ -56,6 +56,9 @@ public sealed class ServiceResult
 
     public static ServiceResult Forbidden() => new() { IsForbidden = true, MessageSource = MessageRef.Of(MessageText.Forbidden) };
 
+    /// <summary>403 並說明原因（例如「你以主管身分只能改負責人」）。</summary>
+    public static ServiceResult Forbidden(MessageRef message) => new() { IsForbidden = true, MessageSource = message };
+
     public static ServiceResult Unauthorized(MessageRef? message) => new() { IsUnauthorized = true, MessageSource = message };
 
     public static ServiceResult Invalid(IDictionary<string, string[]> errors) =>

@@ -25,6 +25,12 @@ public sealed record ManualRuleResponse(string Key, I18nText Name, TaskRuleRepea
 
 public sealed record TaskSummaryCounts(int DueToday, int Overdue);
 
+/// <summary>Subordinates：政策開啟且這位使用者有部屬（前端據此顯示「部屬的任務」分頁）。</summary>
+public sealed record TaskCapabilitiesResponse(bool Subordinates);
+
+/// <summary>寫入後操作者看不到這筆任務時的回應：不含任何任務內容，只帶一次性的復原憑證（Visible 固定 false；復原後仍看不到時沒有憑證）。</summary>
+public sealed record TaskHiddenAfterWrite(long Id, bool Visible, string? UndoToken);
+
 public sealed record MentionRef(string UserId, string DisplayName, bool Active);
 
 public sealed record TaskAttachmentResponse(long Id, string FileName, string ContentType, long Size);

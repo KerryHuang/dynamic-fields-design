@@ -1,7 +1,10 @@
 using System.Net;
 using System.Net.Http.Json;
 using System.Text;
+using DynamicModules.Domain.Data;
+using DynamicModules.Persistence.Seed;
 using FluentAssertions;
+using Microsoft.Extensions.DependencyInjection;
 using static DynamicModules.WebAPITests.Dynamic.ApiTestKit;
 
 namespace DynamicModules.WebAPITests.Dynamic;
@@ -143,5 +146,60 @@ public class TasksApiTests : IDisposable
 
         var candidates = await JsonOf(await _app.AsUser("floor01").GetAsync($"{Base}/users/mention-candidates?keyword=SALES"));
         candidates.EnumerateArray().Select(u => u.GetProperty("userId").GetString()).Should().Equal("sales01", "sales02", "sales03");
+    }
+    private async Task SeedOrganization()
+    {
+        using var scope = _app.Services.CreateScope();
+        await DemoPeople.EnsureOrganizationAsync(scope.ServiceProvider.GetRequiredService<DynamicDbContext>(), DateTime.UtcNow);
+    }
+
+    [Fact]
+    [Trait("Category", "Postgres")]
+    public async Task Patch_SupervisorReassign_RoundTrip_Undo()
+    {
+        await SeedOrganization();
+        var keeper = _app.AsUser("keeper01");
+        var ops = _app.AsUser("ops01");
+        var created = await JsonOf(await keeper.PostAsJsonAsync($"{Base}/tasks", new { title = "盤點備品倉", assigneeUserId = "keeper01" }));
+        var id = created.GetProperty("id").GetInt64();
+
+        var otherField = await ops.PatchAsync($"{Base}/tasks/{id}", Body("""{"assigneeUserId":"sales01","title":"改標題"}"""));
+        otherField.StatusCode.Should().Be(HttpStatusCode.Forbidden);
+
+        var moved = await ops.PatchAsync($"{Base}/tasks/{id}", Body("""{"assigneeUserId":"sales01"}"""));
+        moved.StatusCode.Should().Be(HttpStatusCode.OK, await moved.Content.ReadAsStringAsync());
+        var body = await JsonOf(moved);
+        body.EnumerateObject().Select(p => p.Name).Should().BeEquivalentTo("id", "visible", "undoToken");
+        body.GetProperty("visible").GetBoolean().Should().BeFalse();
+        var token = body.GetProperty("undoToken").GetString()!;
+        (await ops.GetAsync($"{Base}/tasks/{id}")).StatusCode.Should().Be(HttpStatusCode.NotFound);
+
+        var tampered = token[..^2] + (token[^2] == 'A' ? "B" : "A") + token[^1];
+        (await ops.PostAsync($"{Base}/tasks/{id}/undo-reassign", JsonContent.Create(new { undoToken = tampered }))).StatusCode.Should().Be(HttpStatusCode.BadRequest);
+        (await _app.AsUser("manager01").PostAsync($"{Base}/tasks/{id}/undo-reassign", JsonContent.Create(new { undoToken = token }))).StatusCode.Should().Be(HttpStatusCode.BadRequest);
+
+        var undone = await ops.PostAsync($"{Base}/tasks/{id}/undo-reassign", JsonContent.Create(new { undoToken = token }));
+        undone.StatusCode.Should().Be(HttpStatusCode.OK, await undone.Content.ReadAsStringAsync());
+        (await JsonOf(undone)).GetProperty("assigneeUserId").GetString().Should().Be("keeper01");
+        (await ops.PostAsync($"{Base}/tasks/{id}/undo-reassign", JsonContent.Create(new { undoToken = token }))).StatusCode.Should().Be(HttpStatusCode.BadRequest);
+    }
+
+    [Fact]
+    [Trait("Category", "Postgres")]
+    public async Task Tasks_SubordinatesTab_Http()
+    {
+        await SeedOrganization();
+        await _app.AsUser("keeper01").PostAsJsonAsync($"{Base}/tasks", new { title = "盤點備品倉", assigneeUserId = "keeper01" });
+        await _app.AsUser("sales01").PostAsJsonAsync($"{Base}/tasks", new { title = "整理名片", assigneeUserId = "sales01" });
+
+        var ops = await JsonOf(await _app.AsUser("ops01").GetAsync($"{Base}/tasks?tab=subordinates&filter=all"));
+        ops.GetProperty("items").EnumerateArray().Select(i => i.GetProperty("title").GetString()).Should().Equal("盤點備品倉");
+        var manager = await JsonOf(await _app.AsUser("manager01").GetAsync($"{Base}/tasks?tab=subordinates&filter=all"));
+        manager.GetProperty("totalCount").GetInt32().Should().Be(2);
+        var sales = await JsonOf(await _app.AsUser("sales01").GetAsync($"{Base}/tasks?tab=subordinates&filter=all"));
+        sales.GetProperty("totalCount").GetInt32().Should().Be(0);
+
+        (await JsonOf(await _app.AsUser("manager01").GetAsync($"{Base}/tasks/capabilities"))).GetProperty("subordinates").GetBoolean().Should().BeTrue();
+        (await JsonOf(await _app.AsUser("sales01").GetAsync($"{Base}/tasks/capabilities"))).GetProperty("subordinates").GetBoolean().Should().BeFalse();
     }
 }

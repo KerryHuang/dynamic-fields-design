@@ -7,6 +7,8 @@ using DynamicModules.Domain.Entities.Dynamic;
 using DynamicModules.Domain.Policies;
 using DynamicModules.Domain.Reports;
 using DynamicModules.Domain.Repositories.Dynamic;
+using DynamicModules.Domain.Tasks;
+using System.Text.Json;
 using MediatR;
 
 namespace DynamicModules.Application.Dynamic.TaskService;
@@ -83,9 +85,13 @@ public class CreateRecordTaskHandler(TaskSupport support, TaskWriter writer, Tas
     }
 }
 
-public class UpdateTaskHandler(ITaskRepository tasks, TaskSupport support, TaskWriter writer, TaskAccess access)
+public class UpdateTaskHandler(ITaskRepository tasks, TaskSupport support, TaskWriter writer, TaskAccess access, ITaskUndoTokens undoTokens,
+    ICurrentUser user, IBusinessTime time)
     : IRequestHandler<UpdateTaskRequest, ServiceResult>
 {
+    /// <summary>復原憑證的有效時間（安全限制，T24）。</summary>
+    internal static readonly TimeSpan UndoWindow = TimeSpan.FromMinutes(2);
+
     public async Task<ServiceResult> Handle(UpdateTaskRequest request, CancellationToken ct)
     {
         var task = await tasks.GetAsync(request.Id, ct);
@@ -93,15 +99,56 @@ public class UpdateTaskHandler(ITaskRepository tasks, TaskSupport support, TaskW
         var p = await access.EvaluateAsync(task, ct);
         if (!p.CanSee) return ServiceResult.NotFound(TaskMessages.NotFound);
         if (p.Frozen) return ServiceResult.Conflict(ModuleGate.ClosedMessage);
-        if (!p.CanEdit) return ServiceResult.Forbidden();
+        if (!p.CanEdit)
+        {
+            if (!p.CanReassign) return ServiceResult.Forbidden();
+            // 主管身分：只能改負責人，其他欄位一律拒絕（看板設計 §4.3）
+            if (request.Patch.ValueKind == JsonValueKind.Object
+                && request.Patch.EnumerateObject().Any(x => x.Name != "assigneeUserId"))
+                return ServiceResult.Forbidden(MessageRef.Literal(TaskMessages.SupervisorOnlyAssignee));
+        }
         var (edit, errors) = TaskEditParser.Parse(request.Patch);
         if (edit is null) return ServiceResult.Invalid(errors);
         if (edit is { SetAssignee: true, AssigneeUserId: { } assignee } && assignee != task.AssigneeUserId
             && !await support.IsActiveUserAsync(assignee, ct))
             return ServiceResult.Invalid(new Dictionary<string, string[]> { ["assigneeUserId"] = [TaskMessages.AssigneeInvalid] });
+        var from = task.AssigneeUserId;
         await writer.ApplyAsync(task, edit, ct);
         await writer.FlushAsync(ct);
-        return ServiceResult.Success(await support.DetailAsync(task, await access.EvaluateAsync(task, ct), ct));
+        var after = await access.EvaluateAsync(task, ct);
+        // 寫入後這位操作者看不到了（主管把任務派到範圍外）：不回任務內容，只給一次性的復原憑證
+        if (!after.CanSee)
+            return ServiceResult.Success(new TaskHiddenAfterWrite(task.Id, false, undoTokens.Issue(
+                new TaskUndoTicket(task.Id, user.UserId, from, task.AssigneeUserId, TaskVersion.Of(task), time.Now + UndoWindow))));
+        return ServiceResult.Success(await support.DetailAsync(task, after, ct));
+    }
+}
+
+/// <summary>
+/// 復原主管重派：憑證解得開、未過期、是本人、同一個任務、目前負責人仍是當時派去的人、任務版本沒變，才改回原負責人
+/// （照一般改負責人處理：系統記錄與通知照寫，已發的通知不收回）。任一不符 400，不改任何值。
+/// </summary>
+public class UndoReassignHandler(ITaskRepository tasks, TaskSupport support, TaskWriter writer, TaskAccess access, ITaskUndoTokens undoTokens,
+    ICurrentUser user, IBusinessTime time)
+    : IRequestHandler<UndoReassignRequest, ServiceResult>
+{
+    public async Task<ServiceResult> Handle(UndoReassignRequest request, CancellationToken ct)
+    {
+        var invalid = ServiceResult.Invalid("undoToken", MessageRef.Literal(TaskMessages.UndoInvalid));
+        var ticket = string.IsNullOrEmpty(request.Token) ? null : undoTokens.Read(request.Token);
+        if (ticket is null || ticket.ActorUserId != user.UserId || ticket.TaskId != request.Id || ticket.Expires < time.Now) return invalid;
+        var task = await tasks.GetAsync(request.Id, ct);
+        if (task is null) return ServiceResult.NotFound(TaskMessages.NotFound);
+        if ((await access.EvaluateAsync(task, ct)).Frozen) return ServiceResult.Conflict(ModuleGate.ClosedMessage);
+        if (task.AssigneeUserId != ticket.ToUserId || TaskVersion.Of(task) != ticket.Version) return invalid;
+        if (ticket.FromUserId is { } from && !await support.IsActiveUserAsync(from, ct)) return invalid;
+
+        await writer.ApplyAsync(task, new TaskEdit(null, false, null, true, ticket.FromUserId, false, null, null), ct);
+        await writer.FlushAsync(ct);
+        var p = await access.EvaluateAsync(task, ct);
+        return ServiceResult.Success(p.CanSee
+            ? await support.DetailAsync(task, p, ct)
+            : new TaskHiddenAfterWrite(task.Id, false, null));
     }
 }
 
@@ -125,12 +172,14 @@ public class DeleteTaskHandler(ITaskRepository tasks, INotificationRepository no
     }
 }
 
-public class GetMyTasksHandler(ITaskRepository tasks, TaskAccess access, IPermissionRepository permissions, ICurrentUser user, IBusinessTime time, IPolicyReader policies)
+public class GetMyTasksHandler(ITaskRepository tasks, TaskAccess access, IPermissionRepository permissions, ICurrentUser user, IBusinessTime time, IPolicyReader policies,
+    TaskVisibilityService visibility)
     : IRequestHandler<GetMyTasksRequest, ServiceResult>
 {
     private static readonly Dictionary<string, TaskListTab> Tabs = new()
     {
-        ["assigned"] = TaskListTab.Assigned, ["created"] = TaskListTab.Created, ["mentioned"] = TaskListTab.Mentioned
+        ["assigned"] = TaskListTab.Assigned, ["created"] = TaskListTab.Created, ["mentioned"] = TaskListTab.Mentioned,
+        ["subordinates"] = TaskListTab.Subordinates
     };
 
     private static readonly Dictionary<string, TaskListFilter> Filters = new()
@@ -148,8 +197,10 @@ public class GetMyTasksHandler(ITaskRepository tasks, TaskAccess access, IPermis
         var size = Math.Clamp(request.PagesSize, 1, 100);
         var today = time.Today;
         var weekStart = PolicyCatalog.WeekStartOf(await policies.ChoiceAsync(PolicyCatalog.CalendarWeekStart, null, ct));
+        // 政策關閉或沒有部屬時名單是空的，分頁回空清單（不回 400）
+        var subordinates = tab == TaskListTab.Subordinates ? await visibility.SubordinatesAsync(ct) : null;
         var (items, total) = await tasks.QueryMineAsync(
-            new TaskListQuery(user.UserId, tab, filter, today, WeekEnd(today, weekStart), page, size), ct);
+            new TaskListQuery(user.UserId, tab, filter, today, WeekEnd(today, weekStart), page, size, subordinates), ct);
         var perms = await access.EvaluateManyAsync(items, ct);
         var users = (await permissions.ListUsersAsync(ct)).ToDictionary(u => u.UserId);
         // 縱深防禦：分頁條件靠參與者表維持「抓到的都看得到」，這裡再濾一次；濾掉的也從總數扣掉，不洩漏筆數
@@ -161,6 +212,12 @@ public class GetMyTasksHandler(ITaskRepository tasks, TaskAccess access, IPermis
     /// <summary>本週最後一天（本週起始日＋6 天；起始日見政策 calendar.weekStart）。</summary>
     internal static DateOnly WeekEnd(DateOnly today, DayOfWeek weekStart) =>
         ReportDates.WeekStart(today, weekStart).AddDays(6);
+}
+
+public class GetTaskCapabilitiesHandler(TaskVisibilityService visibility) : IRequestHandler<GetTaskCapabilitiesRequest, ServiceResult>
+{
+    public async Task<ServiceResult> Handle(GetTaskCapabilitiesRequest request, CancellationToken ct) =>
+        ServiceResult.Success(new TaskCapabilitiesResponse((await visibility.SubordinatesAsync(ct)).Count > 0));
 }
 
 public class GetTaskSummaryHandler(ITaskRepository tasks, ICurrentUser user, IBusinessTime time)

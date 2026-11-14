@@ -56,7 +56,7 @@ public abstract class DesignerTestBase : IAsyncLifetime
     /// <summary>子類別追加或覆寫服務（例如註冊測試用的假外掛）。</summary>
     protected virtual void ConfigureServices(IServiceCollection services) { }
 
-    public async Task InitializeAsync()
+    public virtual async Task InitializeAsync()
     {
         Db = await SqliteTestDb.CreateAsync();
         await SeedData.EnsureSeededAsync(Db.Context);
@@ -71,6 +71,7 @@ public abstract class DesignerTestBase : IAsyncLifetime
         services.AddSingleton<ICurrentUser>(_user);
         services.AddSingleton<IBusinessTime, FakeTime>();
         services.AddSingleton(new AuthSettings(false));
+        services.AddSingleton<DynamicModules.Application.Dynamic.TaskService.ITaskUndoTokens, DynamicModules.ApplicationTests.Dynamic.Tasks.TestTaskUndoTokens>();
         services.AddSingleton(new AttachmentSettings(_attachmentRoot, true, null));
         services.AddSingleton<IAttachmentStore>(new LocalAttachmentStore(_attachmentRoot));
         ConfigureServices(services);
