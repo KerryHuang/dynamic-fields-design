@@ -4,6 +4,7 @@ using DynamicModules.Application.Dynamic.NotificationService;
 using DynamicModules.Domain.Approvals;
 using DynamicModules.Domain.Entities.Dynamic;
 using DynamicModules.Domain.Policies;
+using DynamicModules.Domain.Repositories.Dynamic;
 using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
@@ -221,5 +222,49 @@ public class ApprovalOverdueReminderTests : ApprovalTestBase
 
         Overdue(await Read("mgrA")).Should().Be(1);
         Open(id, "mgrA").LastRemindedTime.Should().Be(T(4, 23, 30));
+    }
+
+    private int NotificationCount() => Db.Context.Set<Notification>().AsNoTracking().Count(n => n.Kind == NotificationKinds.ApprovalOverdue);
+
+    private async Task SetStatus(long moduleId, ModuleStatus status)
+    {
+        await Db.Context.Set<Module>().Where(m => m.Id == moduleId).ExecuteUpdateAsync(s => s.SetProperty(m => m.Status, status));   // 不清追蹤：模擬另一個請求的提交，這個請求追蹤中的實體不會被刷新
+    }
+
+    [Fact]
+    public async Task Overdue_ModuleClosedBetweenPrecheckAndUpkeep_NoReminder()
+    {
+        var (r, id) = await Arrange();
+        _clock.Now = T(5, 10);
+        As("mgrA");
+        using var scope = NewScope();   // 同一個請求（同一個 DbContext）：預查在前、upkeep 在後，中間模組被關閉
+        var source = scope.ServiceProvider.GetServices<INotificationReminderSource>().OfType<ApprovalReminderSource>().Single();
+        (await source.AnyDueAsync("mgrA", _clock.Today, CancellationToken.None)).Should().BeTrue();
+        await SetStatus(r.ModuleId, ModuleStatus.Closed);   // 另一個請求提交的關閉
+
+        await source.AddDueAsync("mgrA", _clock.Today, CancellationToken.None);
+        await scope.ServiceProvider.GetRequiredService<IUnitOfWork>().CommitAsync(CancellationToken.None);
+
+        NotificationCount().Should().Be(0);
+        Open(id, "mgrA").LastRemindedTime.Should().BeNull();
+    }
+
+    [Fact]
+    public async Task Overdue_TaskAlreadyClaimedByAnotherRequest_NoReminder()
+    {
+        var (_, id) = await Arrange();
+        _clock.Now = T(5, 10);
+        As("mgrA");
+        using var scope = NewScope();
+        var source = scope.ServiceProvider.GetServices<INotificationReminderSource>().OfType<ApprovalReminderSource>().Single();
+        (await source.AnyDueAsync("mgrA", _clock.Today, CancellationToken.None)).Should().BeTrue();
+        var taskId = Open(id, "mgrA").Id;
+        await Db.Context.Set<ApprovalTask>().Where(t => t.Id == taskId).ExecuteUpdateAsync(s => s.SetProperty(t => t.LastRemindedTime, _clock.Now));   // 另一個請求先認領
+
+        await source.AddDueAsync("mgrA", _clock.Today, CancellationToken.None);
+        await scope.ServiceProvider.GetRequiredService<IUnitOfWork>().CommitAsync(CancellationToken.None);
+
+        NotificationCount().Should().Be(0);
+        Open(id, "mgrA").LastRemindedTime.Should().Be(_clock.Now);
     }
 }

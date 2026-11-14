@@ -184,9 +184,14 @@ public class ApprovalInstanceRepository(DynamicDbContext db) : IApprovalInstance
         db.Set<ApprovalTask>().AsNoTracking().Where(t => t.Status == ApprovalTaskStatus.Open
             && (t.AssigneeUserId == userId || (t.OriginalUserId == userId && t.Reason == ApprovalTaskReason.Delegated))).ToListAsync(ct);
 
-    private IQueryable<ApprovalTask> OverdueOpen(string userId, DateTime now) =>
-        db.Set<ApprovalTask>().Where(t => t.Status == ApprovalTaskStatus.Open && t.AssigneeUserId == userId && t.DueTime != null && t.DueTime < now
-            && db.Set<ApprovalInstance>().Any(i => i.Id == t.InstanceId && i.Status == ApprovalInstanceStatus.Pending));
+    private IQueryable<ApprovalTask> OverdueOpen(string userId, DateTime now)
+    {
+        // 模組可寫與否直接進資料庫條件（不經追蹤中的實體），預查之後才關閉的模組不會漏網
+        var writable = Enum.GetValues<ModuleStatus>().Where(s => s.IsWritable()).ToList();
+        return db.Set<ApprovalTask>().Where(t => t.Status == ApprovalTaskStatus.Open && t.AssigneeUserId == userId && t.DueTime != null && t.DueTime < now
+            && db.Set<ApprovalInstance>().Any(i => i.Id == t.InstanceId && i.Status == ApprovalInstanceStatus.Pending
+                && db.Set<Module>().Any(m => m.Id == i.ModuleId && writable.Contains(m.Status))));
+    }
 
     public Task<bool> AnyOverdueOpenAsync(string userId, DateTime now, DateTime remindedBefore, CancellationToken ct) =>
         OverdueOpen(userId, now).AsNoTracking().AnyAsync(t => t.LastRemindedTime == null || t.LastRemindedTime < remindedBefore, ct);
@@ -195,11 +200,13 @@ public class ApprovalInstanceRepository(DynamicDbContext db) : IApprovalInstance
         OverdueOpen(userId, now).AsNoTracking()
             .Select(t => db.Set<ApprovalInstance>().Where(i => i.Id == t.InstanceId).Select(i => i.ModuleId).First()).Distinct().ToListAsync(ct);
 
-    public Task<List<ApprovalTask>> ListOverdueOpenAsync(string userId, DateTime now, DateTime remindedBefore, bool track, CancellationToken ct)
-    {
-        var query = OverdueOpen(userId, now).Where(t => t.LastRemindedTime == null || t.LastRemindedTime < remindedBefore);
-        return (track ? query : query.AsNoTracking()).OrderBy(t => t.Id).ToListAsync(ct);
-    }
+    public Task<List<ApprovalTask>> ListOverdueOpenAsync(string userId, DateTime now, DateTime remindedBefore, CancellationToken ct) =>
+        OverdueOpen(userId, now).AsNoTracking().Where(t => t.LastRemindedTime == null || t.LastRemindedTime < remindedBefore)
+            .OrderBy(t => t.Id).ToListAsync(ct);
+
+    public async Task<bool> TryClaimReminderAsync(long taskId, DateTime now, DateTime remindedBefore, CancellationToken ct) =>
+        await db.Set<ApprovalTask>().Where(t => t.Id == taskId && (t.LastRemindedTime == null || t.LastRemindedTime < remindedBefore))
+            .ExecuteUpdateAsync(s => s.SetProperty(t => t.LastRemindedTime, now), ct) == 1;
 
     public Task<bool> IsOpenActorAsync(long recordId, string userId, CancellationToken ct) =>
         db.Set<ApprovalTask>().AsNoTracking().AnyAsync(t => t.RecordId == recordId && t.Status == ApprovalTaskStatus.Open
