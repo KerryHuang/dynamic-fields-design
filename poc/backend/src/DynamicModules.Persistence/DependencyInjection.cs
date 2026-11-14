@@ -5,7 +5,6 @@ using DynamicModules.Application.Dynamic.References;
 using DynamicModules.Domain.Data;
 using DynamicModules.Domain.Repositories.Dynamic;
 using DynamicModules.Persistence.Dynamic.Dialects;
-using DynamicModules.Persistence.References;
 using DynamicModules.Persistence.Seed;
 using DynamicModules.Persistence.Repositories.Dynamic;
 using Microsoft.EntityFrameworkCore;
@@ -68,7 +67,6 @@ public static class DependencyInjection
         services.AddScoped<IOrganizationRepository, OrganizationRepository>();
         services.AddScoped<IApprovalFlowRepository, ApprovalFlowRepository>();
         services.AddScoped<IApprovalInstanceRepository, ApprovalInstanceRepository>();
-        services.AddScoped<IReferenceProvider, MockCustomerProvider>();
         services.AddScoped<ReferenceProviderRegistry>();
         services.AddScoped<IDemoPeople, DemoPeopleSeeder>();
         services.AddScoped<IUnitOfWork, UnitOfWork>();
