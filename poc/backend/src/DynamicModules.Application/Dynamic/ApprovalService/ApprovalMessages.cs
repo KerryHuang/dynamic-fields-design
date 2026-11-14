@@ -1,4 +1,5 @@
 using DynamicModules.Application.Common;
+using DynamicModules.Domain.Approvals;
 using DynamicModules.Domain.ValueObjects;
 
 namespace DynamicModules.Application.Dynamic.ApprovalService;
@@ -17,6 +18,72 @@ public static class ApprovalMessages
     public const string FlowNotPublished = "這條流程還沒有發布的版本，請先發布";
     /// <summary>fg2 引擎上線前，執行期選到流程圖格式的流程時的 409 訊息（ApprovalShapeGate）。</summary>
     public static MessageRef GraphNotSupported(string flowName) => MessageRef.Literal($"流程「{flowName}」使用流程圖格式，這個版本的系統還不能執行");
+    /// <summary>fg2 之前流程圖格式一律不收（ApprovalDefinitionValidator.Graph.cs 最後固定加這一則；fg2 刪除）。</summary>
+    public const string GraphNotAccepted = "流程圖格式尚未開放，請繼續使用關卡設定";
+    public const string NodeNameRequired = "節點名稱必須有繁體中文";
+    public const string EdgeLabelInvalid = "連線標籤必須有繁體中文";
+    public static string NotifyRecipientsCount(int max) => $"通知收件人設定必須有 1 到 {max} 項";
+    public const string NotifyRecipientInvalid = "通知收件人的種類只能是 users、group、initiator、initiatorManager，而且只能帶該種類的參數";
+    public const string TemplateRequired = "通知範本的標題與內文都必須有繁體中文";
+    public static string TemplateTooLong(int max) => $"通知範本每個語系的文字不能超過 {max} 字";
+    public static string TemplatePlaceholderUnknown(string text) => $"通知範本有不認得的佔位符 {text}，可用的是 {{title}}、{{flow}}、{{initiator}}、{{node}}、{{f:欄位編號}}";
+    public const string TemplateFieldInvalid = "通知範本引用的欄位必須是本模組表頭、啟用中的欄位";
+
+    /// <summary>流程圖結構驗證（Domain ApprovalGraphValidator）的代碼對照；代碼與規則見流程圖設計 §9。數量上限的訊息要帶政策值。</summary>
+    public static string Graph(string code, int maxApprovalNodes = 0, int maxBranches = 0) => code switch
+    {
+        // G1
+        "idInvalid" => "節點與連線的代號只能用小寫英文、數字、連字號，英文開頭，最多 40 字",
+        "idDuplicate" => "節點與連線的代號不能重複",
+        "kindInvalid" => "節點種類只能是 start、approval、condition、fork、join、end、notify",
+        "stagesNotAllowed" => "流程圖格式不能同時有關卡（stages 必須是空的）",
+        "nodesMissing" => "流程圖缺少節點",
+        "edgeEndpointMissing" => "連線的起點與終點必須是存在的節點",
+        "selfLoop" => "連線不能連回自己",
+        "edgeDuplicate" => "同一對節點之間不能有兩條連線",
+        "attrNotAllowed" => "這種節點不能設定這個屬性",
+        // G2
+        "startCount" => "必須恰有一個開始節點",
+        "endMissing" => "至少要有一個結束節點",
+        "inCount" => "這個節點的入線數量不符合規定",
+        "outCount" => "這個節點的出線數量不符合規定",
+        // G3、G4、G5
+        "unreachable" => "這個節點無法從開始節點到達",
+        "deadEnd" => "這個節點走不到任何結束節點",
+        "cycle" => "流程圖不能有環",
+        // G6
+        "defaultCount" => "條件節點必須恰有一條預設線",
+        "whenMissing" => "條件節點的非預設線必須設定條件",
+        "orderInvalid" => "條件節點的非預設線必須有順序（正整數）",
+        "orderDuplicate" => "同一個條件節點的順序不能重複",
+        "defaultHasWhen" => "預設線不能有條件",
+        "conditionAttrNotAllowed" => "只有條件節點的出線可以設定條件、順序與預設",
+        // G7
+        "forkWithoutJoin" => "每個分支節點都要有一個匯合節點配對",
+        "joinForkInvalid" => "匯合節點必須指向一個存在的分支節點，而且一個分支節點只能有一個匯合節點",
+        "joinModeInvalid" => "匯合方式只能是 all（全部到齊）或 any（任一到齊）",
+        "edgeIntoRegion" => "並行區外的連線不能連進並行區內",
+        "edgeOutOfRegion" => "並行區內的連線不能連到並行區外",
+        "joinInEdgeOutside" => "匯合節點的入線必須都來自自己的並行區",
+        "branchesMerge" => "同一個分支節點的各分支不能在匯合節點以外的地方會合",
+        "regionCross" => "並行區可以巢狀，但不能交錯",
+        // G8
+        "endInRegion" => "結束節點不能在並行區內",
+        // G12
+        "editableOverlap" => "並行的不同分支，簽核節點的可編輯欄位不能重複",
+        // G13
+        "approvalNodesNone" => "流程圖至少要有一個簽核節點",
+        "approvalNodesTooMany" => $"簽核節點必須有 1 到 {maxApprovalNodes} 個",
+        "branchesTooMany" => $"每個分支節點最多 {maxBranches} 條分支",
+        "nodesTooMany" => $"節點總數不能超過 {ApprovalGraphLimits.MaxNodes} 個",
+        "edgesTooMany" => $"連線總數不能超過 {ApprovalGraphLimits.MaxEdges} 條",
+        "nestingTooDeep" => $"並行區最多巢狀 {ApprovalGraphLimits.MaxNesting} 層",
+        // 警告 W1–W3（發布回應在 fg3 才帶出）
+        "anyJoinWithoutApproval" => "有分支不經任何簽核就能到達匯合，送出時會立即通過",
+        "defaultToEndWithoutApproval" => "預設路線不經任何簽核就結束",
+        "skipConditionOnConditionBranch" => "這個簽核節點同時有略過條件，又在條件節點的出線上，請確認是刻意的",
+        _ => $"流程圖結構不正確（{code}）"
+    };
     public static string StagesCount(int max, bool existing = false) => $"關卡必須有 1 到 {max} 關{KeepOld(existing)}";
     public const string StageCodeInvalid = "關卡代號只能用小寫英文、數字、連字號，英文開頭，最多 40 字";
     public const string StageCodeDuplicate = "關卡代號不能重複";

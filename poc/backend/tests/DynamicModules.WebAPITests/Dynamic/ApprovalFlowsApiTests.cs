@@ -232,6 +232,41 @@ public class ApprovalFlowsApiTests
         (await c.PutAsJsonAsync($"{Flows}/draft-only", Flow("draft-only", s.Done, 9, s.Group))).StatusCode.Should().Be(HttpStatusCode.Conflict);
     }
 
+    [Fact]
+    [Trait("Category", "Postgres")]
+    public async Task Create_Graph_400_ShapeGateAndNodeKeys()
+    {
+        using var app = new TestApp();
+        var c = app.AsUser();
+        var s = await SeedApproval(c);
+        object Node(string id, string kind, object? more = null) => more ?? new { id, kind };
+        var body = new
+        {
+            key = "graph-one", name = Zh("流程圖"), toOptionId = s.Done, priority = 5, active = true,
+            definition = new
+            {
+                shape = "graph", stages = Array.Empty<object>(),
+                nodes = new[]
+                {
+                    Node("start", "start"),
+                    Node("a", "approval", new
+                    {
+                        id = "a", kind = "approval", name = Zh("主管"), approvers = new { source = "group", groupIds = new[] { s.Group } },
+                        mode = "bad", editableFields = Array.Empty<long>(), onEmpty = "fallback"
+                    }),
+                    Node("end", "end")
+                },
+                edges = new object[] { new { id = "e1", from = "start", to = "a" }, new { id = "e2", from = "a", to = "end" } }
+            }
+        };
+        var res = await c.PostAsJsonAsync($"{Flows}?module={s.Key}", body);
+        res.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+        var errors = (await JsonOf(res)).GetProperty("errors");
+        errors.TryGetProperty("definition.shape", out _).Should().BeTrue("fg2 之前流程圖一律拒收");
+        errors.TryGetProperty("definition.nodes.a.mode", out _).Should().BeTrue("屬性錯誤用節點代號定位");
+        (await c.GetAsync($"{Flows}/graph-one")).StatusCode.Should().Be(HttpStatusCode.NotFound);
+    }
+
     private static async Task<(HttpStatusCode Status, System.Text.Json.JsonElement Body)> PutEdited(
         HttpClient c, System.Text.Json.JsonElement flow, Action<System.Text.Json.Nodes.JsonNode> edit)
     {
