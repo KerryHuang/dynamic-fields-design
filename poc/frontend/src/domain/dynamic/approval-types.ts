@@ -35,6 +35,8 @@ export interface ApprovalActionView {
   comment: string | null; data: unknown; createdTime: string;
   /** Display names of `targetUserIds` in the same order (transfer, reassign): the log shows "→ name". */
   targetNames?: string[];
+  /** Display name of `onBehalfOfUserId`: a delegate acted for that person (design 7.7). */
+  onBehalfOfName?: string | null;
 }
 export interface ApprovalInstanceView {
   id: number; status: ApprovalInstanceStatus; routeKind: 'flow' | 'fallback'; flowName: I18nText | null;
@@ -63,6 +65,9 @@ export interface RejectBody { rowVersion: string; comment: string; to: 'initiato
 export interface AddSignBody { rowVersion: string; userIds: string[]; mode: 'all' | 'any'; comment?: string; values?: Record<string, unknown> }
 export interface WithdrawBody { rowVersion: string; comment?: string }
 export interface TransferBody { rowVersion: string; userId: string; comment?: string }
+/** The caller's own delegate (server: GET me/approval-delegate). Dates are business days `yyyy-MM-dd`, both ends included; `active`: today is inside. */
+export interface ApprovalDelegate { delegateUserId: string; delegateName: string; startDate: string; endDate: string; active: boolean }
+export interface ApprovalDelegateBody { delegateUserId: string; startDate: string; endDate: string }
 export interface CancelBody { rowVersion: string; comment: string }
 export interface ReassignBody { rowVersion: string; userId: string; comment?: string }
 

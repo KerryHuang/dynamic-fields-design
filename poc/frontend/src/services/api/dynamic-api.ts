@@ -15,7 +15,7 @@ import type {
 } from 'src/domain/dynamic/task-types';
 import type {
   ApprovalActionResult, ApprovalBox, ApprovalInboxFilter, ApprovalInboxItem, ApprovalPreview, ApproveBody, RecordApproval, RejectBody,
-  SubmitApprovalBody, SubmitApprovalResult, TransferBody, WithdrawBody, CancelBody, ReassignBody, AddSignBody,
+  SubmitApprovalBody, SubmitApprovalResult, TransferBody, WithdrawBody, CancelBody, ReassignBody, AddSignBody, ApprovalDelegate, ApprovalDelegateBody,
 } from 'src/domain/dynamic/approval-types';
 import type { ApprovalDraftPreviewBody, ApprovalFlow, ApprovalFlowInput } from 'src/domain/dynamic/approval-flow-types';
 import type { TaskRule, TaskRuleInput } from 'src/domain/dynamic/task-rule-draft';
@@ -342,6 +342,10 @@ export const dynamicApi = {
     http.post<ApprovalActionResult>(`/approval-tasks/${taskId}/reassign`, body, idem(key)).then(data),
   cancelApproval: (instanceId: number, body: CancelBody, key?: string) =>
     http.post<ApprovalActionResult>(`/approval-instances/${instanceId}/cancel`, body, idem(key)).then(data),
+  /** No setting answers 200 with an empty body: null here. */
+  getMyApprovalDelegate: () => http.get<ApprovalDelegate | ''>('/me/approval-delegate').then((r) => r.data || null),
+  saveMyApprovalDelegate: (body: ApprovalDelegateBody) => http.put<ApprovalDelegate>('/me/approval-delegate', body).then(data),
+  clearMyApprovalDelegate: () => http.delete('/me/approval-delegate').then(() => undefined),
   withdrawApproval: (instanceId: number, body: WithdrawBody, key?: string) =>
     http.post<ApprovalActionResult>(`/approval-instances/${instanceId}/withdraw`, body, idem(key)).then(data),
   getApprovalInbox: (box: ApprovalBox, filter: ApprovalInboxFilter, page: number, size = 20) =>

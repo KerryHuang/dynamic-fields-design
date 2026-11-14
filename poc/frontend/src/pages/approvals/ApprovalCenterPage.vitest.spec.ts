@@ -6,7 +6,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { h } from 'vue';
 import { createI18n } from 'vue-i18n';
 import { createMemoryHistory, createRouter } from 'vue-router';
-import type { ApprovalInboxItem } from 'src/domain/dynamic/approval-types';
+import type { ApprovalDelegate, ApprovalInboxItem } from 'src/domain/dynamic/approval-types';
 import zhTW from 'src/i18n/zh-TW.json';
 import { useIdentityStore } from 'src/stores/use-identity-store';
 import { HttpFail, mockHttp, type Call } from 'src/test-utils/mock-http';
@@ -20,7 +20,7 @@ const item = (o: Partial<ApprovalInboxItem> = {}): ApprovalInboxItem => ({
   dueTime: null, overdue: false, moduleClosed: false, status: 'pending', ...o,
 });
 
-interface Opts { items?: ApprovalInboxItem[]; total?: number; allForbidden?: boolean; allFails?: boolean; listFails?: boolean; listForbidden?: boolean; width?: number }
+interface Opts { delegate?: ApprovalDelegate | ''; items?: ApprovalInboxItem[]; total?: number; allForbidden?: boolean; allFails?: boolean; listFails?: boolean; listForbidden?: boolean; width?: number }
 
 async function mountPage(url: string, opts: Opts = {}) {
   window.innerWidth = opts.width ?? 1366;
@@ -35,6 +35,7 @@ async function mountPage(url: string, opts: Opts = {}) {
       if (opts.listFails) return new HttpFail(500, {});
       return { items, totalCount: opts.total ?? items.length, currentPage: Number(c.params?.currentPage ?? 1), pagesSize: 20 };
     }
+    if (c.url === '/me/approval-delegate') return opts.delegate ?? '';
     if (c.url === '/menu') return [{ key: 'po', name: { 'zh-TW': '採購單' } }, { key: 'exp', name: { 'zh-TW': '費用報支' } }];
     return [];
   });
@@ -72,6 +73,32 @@ describe('ApprovalCenterPage', () => {
     expect(row.textContent).toContain('業務一');
     expect(row.textContent).toContain('2026-11-10 09:30');
     expect(q('approval-row-6')).not.toBeNull();
+    w.unmount();
+  });
+
+  it('banner shows active and upcoming, hidden when none or ended', async () => {
+    const d = (o: Partial<ApprovalDelegate>): ApprovalDelegate => ({ delegateUserId: 'sales01', delegateName: '業務一', startDate: '2026-11-17', endDate: '2026-11-21', active: false, ...o });
+    let { w } = await mountPage('/approvals', { delegate: d({ active: true }) });
+    expect(q('delegate-banner')!.textContent).toContain('你的簽核目前由 業務一 代理（2026-11-17 至 2026-11-21）');
+    expect(q('delegate-open')!.textContent).toContain('代理設定');
+    w.unmount();
+    ({ w } = await mountPage('/approvals', { delegate: d({ startDate: '2099-01-02', endDate: '2099-01-05' }) }));
+    expect(q('delegate-banner')!.textContent).toContain('2099-01-02 起由 業務一 代理（至 2099-01-05）');
+    w.unmount();
+    ({ w } = await mountPage('/approvals'));
+    expect(q('delegate-banner')).toBeNull();
+    w.unmount();
+    ({ w } = await mountPage('/approvals', { delegate: d({ startDate: '2000-01-01', endDate: '2000-01-02' }) }));
+    expect(q('delegate-banner')).toBeNull();
+    w.unmount();
+  });
+
+  it('the delegate button opens the settings dialog', async () => {
+    const { w } = await mountPage('/approvals');
+    q('delegate-open')!.click();
+    await flushPromises();
+    await new Promise((r) => setTimeout(r, 50));
+    expect(q('delegate-dialog')).not.toBeNull();
     w.unmount();
   });
 

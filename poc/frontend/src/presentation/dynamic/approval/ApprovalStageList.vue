@@ -32,8 +32,9 @@ const overdue = (s: ApprovalStageView) => s.status === 'active' && !!s.dueTime &
       <div v-for="k in s.tasks" :key="k.id" class="row items-center q-gutter-x-sm q-mb-xs" :data-testid="`task-${k.id}`">
         <span class="approval-wrap">{{ k.assigneeName }}</span>
         <q-badge v-if="k.reason === 'fallback'" outline color="warning" :label="t('approval.reason.fallback')" data-testid="task-fallback" />
-        <q-badge v-else-if="k.reason !== 'resolved'" outline color="muted" :label="labelOf('approval.reason', k.reason, t, te)" />
+        <q-badge v-else-if="k.reason !== 'resolved' && k.reason !== 'delegated'" outline color="muted" :label="labelOf('approval.reason', k.reason, t, te)" />
         <span v-if="(k.reason === 'transferred' || k.reason === 'reassigned') && k.originalName" class="text-muted approval-wrap" data-testid="task-original">{{ t('approval.panel.originalUser', { name: k.originalName }) }}</span>
+        <span v-else-if="k.reason === 'delegated' && k.originalName" class="text-muted approval-wrap" data-testid="task-delegated-for">{{ t('approval.panel.delegatedFor', { name: k.originalName }) }}</span>
         <span class="text-muted">{{ labelOf('approval.taskStatus', k.status, t, te) }}</span>
         <span v-if="k.actedTime" class="text-muted">{{ timeText(k.actedTime) }}</span>
       </div>

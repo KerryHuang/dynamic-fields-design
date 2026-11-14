@@ -103,6 +103,30 @@ describe('ApprovalPanel', () => {
     expect(w.find('[data-testid="task-2"] [data-testid="task-original"]').text()).toBe('原簽核人 王主管');
   });
 
+  it('StageList shows the delegate relation', () => {
+    const w = mountPanel(approval(instance({ stages: [stage({ tasks: [
+      task({ id: 1, assigneeName: '業務一', originalUserId: 'ops01', reason: 'delegated', originalName: '進銷存主管' }), task({ id: 2, assigneeName: '陳業務' }),
+    ] })] })));
+    expect(w.find('[data-testid="task-1"] [data-testid="task-delegated-for"]').text()).toBe('（代理 進銷存主管）');
+    expect(text(w, 'task-1')).toContain('業務一');
+    expect(w.find('[data-testid="task-2"] [data-testid="task-delegated-for"]').exists()).toBe(false);
+  });
+
+  it('ActionLog shows on-behalf and not-delegated notes', () => {
+    const w = mountPanel(approval(instance({ actions: [
+      action({ actorName: '業務一', onBehalfOfUserId: 'ops01', onBehalfOfName: '進銷存主管' }),
+      action({ action: 'approve', actorName: '王主管' }),
+      action({ action: 'not-delegated', actorName: '系統', targetUserIds: ['gm', 'buyer01'], targetNames: ['總經理', '採購一'], data: { reason: 'initiator' } }),
+      action({ action: 'not-delegated', actorName: '系統', targetUserIds: ['b2', 'gm'], targetNames: ['採購二', '總經理'], data: { reason: 'duplicate' } }),
+    ] })));
+    const behalf = w.findAll('[data-testid="log-on-behalf"]');
+    expect(behalf).toHaveLength(1);
+    expect(behalf[0]!.text()).toBe('· 代 進銷存主管');
+    const notes = w.findAll('[data-testid="log-not-delegated-note"]').map((n) => n.text());
+    expect(notes).toEqual(['總經理 的代理人 採購一 是發起人，任務留給本人', '採購二 的代理人 總經理 在這一關已有簽核任務，任務留給本人']);
+    expect(text(w, 'approval-log')).toContain('代理未生效');
+  });
+
   it('shows the stage mode (all sign / any sign)', () => {
     const w = mountPanel(approval(instance({ stages: [stage({ mode: 'any' })] })));
     expect(text(w, 'stage-1')).toContain('或簽');

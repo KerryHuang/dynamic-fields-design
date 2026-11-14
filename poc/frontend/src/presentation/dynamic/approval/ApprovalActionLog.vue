@@ -20,6 +20,13 @@ function rerouteText(a: ApprovalActionView): string {
   return t(`approval.panel.reroute.${kind && ['flow', 'fallback', 'pick'].includes(kind) ? kind : 'generic'}`);
 }
 
+/** Why a seat stayed with its own holder (design 7.7): the targets are the holder and the delegate, in that order. */
+function notDelegatedText(a: ApprovalActionView): string {
+  const reason = (a.data as { reason?: string } | null)?.reason;
+  const [user, delegate] = a.targetNames?.length ? a.targetNames : a.targetUserIds;
+  return reason === 'initiator' || reason === 'duplicate' ? t(`approval.panel.notDelegated.${reason}`, { user, delegate }) : '';
+}
+
 /** "→ name" for hand-overs (transfer, reassign); falls back to the user ids when the server sent no names. */
 function targetsText(a: ApprovalActionView): string {
   if (a.action !== 'transfer' && a.action !== 'reassign' && a.action !== 'add-sign') return '';
@@ -45,10 +52,13 @@ function changes(a: ApprovalActionView): Change[] {
     <li v-for="(a, i) in actions" :key="i" class="q-mb-sm approval-wrap" :data-testid="`log-${a.action}`">
       <div>
         <span class="text-weight-medium">{{ labelOf('approval.action', a.action, t, te) }}</span>
-        <span class="text-muted"> · {{ a.actorName }} · {{ timeText(a.createdTime) }}</span>
+        <span class="text-muted"> · {{ a.actorName }}</span>
+        <span v-if="a.onBehalfOfUserId" class="text-muted" data-testid="log-on-behalf"> · {{ t('approval.panel.onBehalfOf', { name: a.onBehalfOfName || a.onBehalfOfUserId }) }}</span>
+        <span class="text-muted"> · {{ timeText(a.createdTime) }}</span>
       </div>
       <div v-if="a.action === 'reroute'" class="q-pl-sm" data-testid="log-reroute">{{ rerouteText(a) }}</div>
       <div v-else-if="a.action === 'fallback'" class="q-pl-sm" data-testid="log-fallback">{{ t('approval.panel.fallbackNote') }}</div>
+      <div v-else-if="a.action === 'not-delegated' && notDelegatedText(a)" class="q-pl-sm" data-testid="log-not-delegated-note">{{ notDelegatedText(a) }}</div>
       <div v-if="targetsText(a)" class="q-pl-sm" data-testid="log-targets">{{ targetsText(a) }}</div>
       <div v-if="a.action !== 'reroute' && a.action !== 'fallback' && a.comment" class="q-pl-sm" data-testid="log-comment">{{ a.comment }}</div>
       <ul v-if="changes(a).length" class="q-my-none">

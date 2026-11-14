@@ -10,6 +10,8 @@ import type { ApprovalBox, ApprovalInboxFilter, ApprovalInboxItem, ApprovalInsta
 import { resolveI18n } from 'src/domain/dynamic/i18n-text';
 import { isForbidden } from 'src/services/api/http';
 import ApprovalInboxFilters from 'src/presentation/approvals/ApprovalInboxFilters.vue';
+import DelegateBanner from 'src/presentation/approvals/DelegateBanner.vue';
+import DelegateSettingsDialog from 'src/presentation/approvals/DelegateSettingsDialog.vue';
 import { INBOX_STATUSES } from 'src/presentation/approvals/inbox-filter';
 import { instanceTitle } from 'src/presentation/dynamic/approval/approval-display';
 
@@ -46,6 +48,7 @@ const filter = computed<ApprovalInboxFilter>(() => {
   };
 });
 const page = ref(1);
+const delegateOpen = ref(false);
 
 const query = useApprovalInbox(tab, filter, page);
 const items = computed(() => query.data.value?.items ?? []);
@@ -84,7 +87,12 @@ const columns = computed(() => [
 
 <template>
   <q-page padding>
-    <div class="text-h6 q-mb-sm">{{ t('approval.center.title') }}</div>
+    <div class="row items-center no-wrap q-mb-sm q-gutter-x-sm">
+      <div class="col text-h6 approval-cell">{{ t('approval.center.title') }}</div>
+      <q-btn outline dense no-caps color="primary" icon="swap_horiz" :label="t('approval.delegate.button')" data-testid="delegate-open" @click="delegateOpen = true" />
+    </div>
+    <DelegateBanner />
+    <DelegateSettingsDialog v-model="delegateOpen" />
     <q-tabs :model-value="tab" dense align="left" narrow-indicator class="text-primary" @update:model-value="(v) => setTab(v as ApprovalBox)">
       <q-tab v-for="x in tabs" :key="x" :name="x" no-caps :label="t(`approval.center.tabs.${x}`)" :data-testid="`approval-tab-${x}`" />
     </q-tabs>
