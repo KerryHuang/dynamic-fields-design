@@ -1,7 +1,7 @@
 using System.Text.Json;
 using DynamicModules.Application.Dynamic.TaskService;
 using DynamicModules.Domain.Policies;
-using DynamicModules.Domain.Reports;
+using DynamicModules.Domain.Tasks;
 
 namespace DynamicModules.Application.Dynamic.DemoService.Scenarios;
 
@@ -39,7 +39,7 @@ public sealed class TaskBoardScenario : IDemoScenario
     public void Plan(DemoPlan plan)
     {
         var today = plan.Today;
-        var weekEnd = ReportDates.WeekStart(today, PolicyCatalog.WeekStartOf(PolicyCatalog.CalendarWeekStart.Factory)).AddDays(6);
+        var weekEnd = TaskDates.WeekEnd(today, PolicyCatalog.WeekStartOf(PolicyCatalog.CalendarWeekStart.Factory));
         var yesterday = today.AddDays(-1);
         var clock = yesterday.ToDateTime(new TimeOnly(8, 30));
         DateTime Next() => clock = clock.AddMinutes(15);   // 昨天上班時間內依序排開（約 20 步，不會跨到今天）
