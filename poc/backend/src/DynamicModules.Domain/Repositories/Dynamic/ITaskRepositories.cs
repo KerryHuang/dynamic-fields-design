@@ -23,6 +23,15 @@ public interface ITaskRepository
     Task<Dictionary<long, TaskRecordStub>> ListRecordStubsAsync(IReadOnlyCollection<long> recordIds, CancellationToken ct);
     /// <summary>符合可見條件的任務 Id（單一資料庫查詢，條件與 <c>TaskAccess</c> 的逐筆判斷一致）。</summary>
     Task<List<long>> ListVisibleIdsAsync(TaskVisibility visibility, CancellationToken ct);
+    /// <summary>
+    /// 看板各欄的任務數（可見條件＋範圍＋篩選＋欄條件）。狀態看板一次 GROUP BY 狀態、負責人看板一次 GROUP BY 負責人（回所有有任務的負責人，
+    /// 鍵 user:&lt;帳號&gt; 與 unassigned，忽略 columns），到期區間看板每欄一次 COUNT；沒有任務的欄不在結果裡。
+    /// </summary>
+    Task<Dictionary<string, int>> CountBoardColumnsAsync(TaskBoardQuery q, IReadOnlyCollection<string> columns, CancellationToken ct);
+    /// <summary>某一欄的一頁任務（不追蹤，含參與者）；排序照設定，「完成」欄固定完成時間新到舊，最後依 Id。</summary>
+    Task<List<TaskItem>> QueryBoardColumnAsync(TaskBoardQuery q, string column, int offset, int take, CancellationToken ct);
+    /// <summary>人寫的、未撤回的留言數；沒有留言的任務不在結果裡。</summary>
+    Task<Dictionary<long, int>> CountCommentsAsync(IReadOnlyCollection<long> taskIds, CancellationToken ct);
     /// <summary>規則已刪除時回 null。</summary>
     Task<string?> GetRuleKeyAsync(long ruleId, CancellationToken ct);
     /// <summary>這個模組的任務留言附件的儲存鍵（模組清除時刪檔用）。</summary>
@@ -103,6 +112,17 @@ public enum TaskListFilter { Open, Overdue, Today, ThisWeek, All }
 /// <param name="Subordinates">Tab 為 Subordinates 時的部屬名單（負責人在名單內，或未指派且建立者在名單內）；其他分頁忽略。</param>
 public sealed record TaskListQuery(string UserId, TaskListTab Tab, TaskListFilter Filter, DateOnly Today, DateOnly WeekEnd, int Page, int Size,
     IReadOnlySet<string>? Subordinates = null);
+
+/// <summary>
+/// 看板欄查詢的條件（看板設計 §5.7）：一律先套 <see cref="Visibility"/>，再套範圍與篩選。GroupBy、Scope、SortKey 的值見 <see cref="TaskBoardConfig"/>。
+/// </summary>
+/// <param name="Subordinates">Scope 為 subordinates 時的部屬名單（空集合＝沒有結果）。</param>
+/// <param name="Statuses">null 代表不篩狀態。</param>
+/// <param name="Sources">personal、record、rule；null 或空代表不篩。</param>
+public sealed record TaskBoardQuery(TaskVisibility Visibility, string GroupBy, string Scope, IReadOnlySet<string> Subordinates,
+    IReadOnlyCollection<TaskItemStatus>? Statuses, IReadOnlyCollection<string>? AssigneeUserIds, bool? IncludeUnassigned,
+    IReadOnlyCollection<string>? CreatorUserIds, IReadOnlyCollection<string>? Sources, DateOnly? DueFrom, DateOnly? DueTo, string? Keyword,
+    DateOnly Today, DateOnly WeekEnd, string SortKey, bool SortDescending);
 
 /// <summary>
 /// 提醒條件（由政策算出）：到期日在 <see cref="DueSoonDates"/> 內的任務是「即將到期」候選；
