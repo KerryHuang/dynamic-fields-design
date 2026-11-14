@@ -199,7 +199,7 @@ public sealed partial class TemplateExportTests : IDisposable
         var (orderBlock, _) = await NewModule(Order, "訂單", "備註");
         var no = await AddField(Order, orderBlock, "autonumber", "訂單編號", new { format = "SO-{yyyyMM}-{0000}" });
         await Ok(_admin.PutAsJsonAsync($"{Base}/modules/{Order}", new { name = Zh("訂單"), icon = "receipt", section = new Dictionary<string, string> { ["zh-TW"] = "業務", ["en-US"] = "Sales operations" }, titleFieldId = no.Id }));
-        await AddField(Order, orderBlock, "reference", "客戶", new { refTarget = new { kind = "entity", key = "sales.customer" } });
+        await AddField(Order, orderBlock, "reference", "客戶", new { refTarget = new { kind = "entity", key = "test.entity" } });
         var orderDate = await AddField(Order, orderBlock, "date", "訂單日期", new { defaultToday = true });
         var dueDate = await AddField(Order, orderBlock, "date", "交期", new { isSortable = true });
         var status = await AddField(Order, orderBlock, "enum", "狀態", new { isFilterable = true });

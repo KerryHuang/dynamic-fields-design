@@ -34,7 +34,7 @@
     {
       "code": "customer", "key": "customer-info", "name": { "zh-TW": "客戶資料", "en-US": "Customer information" },
       "icon": "business", "section": "業務",
-      "kind": "extension", "hostEntityKey": "sales.customer",
+      "kind": "extension", "hostEntityKey": "test.host",
       "titleField": null,
       "blocks": [
         { "code": "main", "label": { "zh-TW": "往來資訊", "en-US": "Account information" }, "collapsed": false,

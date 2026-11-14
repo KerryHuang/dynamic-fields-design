@@ -69,7 +69,7 @@ public class BuiltInAppsMasterTests
         (requires.TryGetProperty("apps", out var apps) ? apps.EnumerateArray().Select(a => a.GetProperty("id").GetString()).ToList() : [])
             .Should().NotContain("partner");
         (requires.TryGetProperty("entities", out var entities) ? entities.EnumerateArray().Select(e => e.GetString()).ToList() : [])
-            .Should().BeEmpty("MES 不再依賴核心實體 sales.customer");
+            .Should().BeEmpty("MES 不依賴任何既有實體");
         requires.GetProperty("masters").EnumerateArray().Select(m => m.GetProperty("id").GetString()).Should().Equal("partner");
         package.GetProperty("modules").EnumerateArray().Select(m => m.GetProperty("code").GetString()).Should().NotContain("customer");
         var contribution = package.GetProperty("contributions").EnumerateArray().Should().ContainSingle().Which;

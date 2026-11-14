@@ -8,7 +8,7 @@ namespace DynamicModules.TestSupport;
 /// 只在測試專案註冊的既有實體提供者（`test.entity`）：產品程式不留模擬實體，測試要「外部系統既有實體」時用它。
 /// 資料放在記憶體，每個 DI 容器一份；測試可以直接新增或標記刪除。
 /// </summary>
-public sealed class TestEntityProvider : IReferenceProvider
+public class TestEntityProvider : IReferenceProvider
 {
     public const string Key = "test.entity";
 
@@ -23,13 +23,17 @@ public sealed class TestEntityProvider : IReferenceProvider
     private readonly List<(string Key, string Name)> _rows = [.. Seed];
     private readonly HashSet<string> _deleted = [];
 
-    public string EntityKey => Key;
+    public TestEntityProvider() : this(Key, "測試實體", "Test entity") { }
 
-    public I18nText Name { get; } = new(
-    [
-        KeyValuePair.Create("zh-TW", "測試實體"), KeyValuePair.Create("en-US", "Test entity"),
-        KeyValuePair.Create("th", "เอนทิตีทดสอบ"), KeyValuePair.Create("vi", "Thực thể thử nghiệm")
-    ]);
+    protected TestEntityProvider(string key, string zh, string en)
+    {
+        EntityKey = key;
+        Name = new I18nText([KeyValuePair.Create("zh-TW", zh), KeyValuePair.Create("en-US", en)]);
+    }
+
+    public string EntityKey { get; }
+
+    public I18nText Name { get; }
 
     public void Add(string key, string name)
     {
@@ -65,13 +69,18 @@ public sealed class TestEntityProvider : IReferenceProvider
             Alive().Where(r => keys.Contains(r.Key)).ToDictionary(r => r.Key, r => $"{r.Key} {r.Name}"));
 }
 
+/// <summary>第二個測試實體（`test.host`）：一個既有實體只能有一個擴充模組，要兩個擴充的測試用它當第二個主機。</summary>
+public sealed class TestHostProvider() : TestEntityProvider("test.host", "測試主機", "Test host");
+
 public static class TestEntityServices
 {
-    /// <summary>註冊 <see cref="TestEntityProvider"/>（單例，測試可取出來改資料）。</summary>
+    /// <summary>註冊 <see cref="TestEntityProvider"/> 與 <see cref="TestHostProvider"/>（單例，測試可取出來改資料）。</summary>
     public static IServiceCollection AddTestEntities(this IServiceCollection services)
     {
         services.AddSingleton<TestEntityProvider>();
         services.AddSingleton<IReferenceProvider>(sp => sp.GetRequiredService<TestEntityProvider>());
+        services.AddSingleton<TestHostProvider>();
+        services.AddSingleton<IReferenceProvider>(sp => sp.GetRequiredService<TestHostProvider>());
         return services;
     }
 }

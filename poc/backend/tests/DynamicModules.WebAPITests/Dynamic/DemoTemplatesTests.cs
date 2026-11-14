@@ -239,7 +239,7 @@ public sealed class DemoTemplatesTests : IDisposable
         var l = await LayoutOf("order-line");
         var order = await Ok(_admin.PostAsJsonAsync($"{Base}/modules/order/records", new
         {
-            values = new Dictionary<string, object> { [o["客戶"]] = "C-001" },
+            values = new Dictionary<string, object> { [o["客戶"]] = "E-0001" },
             details = new Dictionary<string, object[]>
             {
                 ["order-line"] = [new { values = new Dictionary<string, object> { [l["品名"]] = "外殼", [l["數量"]] = 1 } }]
