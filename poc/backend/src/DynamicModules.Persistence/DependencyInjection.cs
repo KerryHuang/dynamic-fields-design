@@ -64,6 +64,7 @@ public static class DependencyInjection
         services.AddScoped<ISharedMasterRepository, SharedMasterRepository>();
         services.AddScoped<ITaskRepository, TaskRepository>();
         services.AddScoped<ITaskRuleRepository, TaskRuleRepository>();
+        services.AddScoped<ITaskViewRepository, TaskViewRepository>();
         services.AddScoped<INotificationRepository, NotificationRepository>();
         services.AddScoped<IOrganizationRepository, OrganizationRepository>();
         services.AddScoped<IApprovalFlowRepository, ApprovalFlowRepository>();
