@@ -30,4 +30,11 @@ public class ApprovalDefinitionJsonTests
 
     [Fact]
     public void SameAs_EditableFieldsOrderDiffers_False() => ApprovalDefinitionJson.SameAs(Make(100, 1, 2), Make(100, 2, 1)).Should().BeFalse();
+
+    [Fact]
+    public void SameAs_SequenceRoundTripUnchanged()
+    {
+        var a = Make(100, 1);
+        JsonSerializer.Serialize(JsonSerializer.Deserialize<ApprovalDefinition>(JsonSerializer.Serialize(a))!).Should().Be(JsonSerializer.Serialize(a));
+    }
 }

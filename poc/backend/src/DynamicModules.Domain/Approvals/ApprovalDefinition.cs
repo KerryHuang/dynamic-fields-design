@@ -1,4 +1,5 @@
 using System.Text.Json;
+using System.Text.Json.Serialization;
 using DynamicModules.Domain.ValueObjects;
 
 namespace DynamicModules.Domain.Approvals;
@@ -6,9 +7,17 @@ namespace DynamicModules.Domain.Approvals;
 // 簽核流程定義（設計 docs/superpowers/specs/2026-11-10-approval-workflow-design.md §4.3）。
 // 存在 Dynamic_ApprovalFlowVersion.Definition 與實例的流程快照裡，版本一經使用就不再修改。
 
-/// <summary>流程定義：形狀、啟動條件、退回狀態、備援簽核人與依序的關卡。</summary>
+/// <summary>
+/// 流程定義：形狀、啟動條件、退回狀態、備援簽核人，以及 sequence 的依序關卡或 graph 的節點與連線（流程圖設計 §7.1）。
+/// Stages 永遠非 null：graph 或缺 stages 時是空清單；Nodes、Edges 只有 graph 有值，null 時不寫出，sequence 的 JSON 因此維持原樣。
+/// </summary>
 public sealed record ApprovalDefinition(
-    string Shape, JsonElement? When, long? RejectTo, ApproverSource? FallbackApprovers, List<ApprovalStageDef> Stages);
+    string Shape, JsonElement? When, long? RejectTo, ApproverSource? FallbackApprovers, List<ApprovalStageDef> Stages,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] List<ApprovalNodeDef>? Nodes = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] List<ApprovalEdgeDef>? Edges = null)
+{
+    public List<ApprovalStageDef> Stages { get; init; } = Stages ?? [];
+}
 
 /// <summary>一個關卡：代號、名稱、條件、簽核人來源、會簽或或簽、可編輯欄位、逾期時數、找不到人時的處理。</summary>
 public sealed record ApprovalStageDef(
@@ -38,7 +47,55 @@ public static class ApprovalOnEmpty
 
 public static class ApprovalShapes
 {
-    public const string Sequence = "sequence";
+    public const string Sequence = "sequence", Graph = "graph";
+}
+
+/// <summary>流程圖節點（流程圖設計 §7.2）；依 Kind 使用其中的屬性，其餘為 null 且不寫出。Mode：簽核節點是會簽或簽，匯合節點是全部到齊或任一到齊。</summary>
+public sealed record ApprovalNodeDef(
+    string Id, string Kind,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] I18nText? Name = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] JsonElement? When = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] ApproverSource? Approvers = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? Mode = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] List<long>? EditableFields = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] int? DueHours = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? OnEmpty = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? ForkId = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] List<NotifyRecipientDef>? Recipients = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] NotifyTemplateDef? Template = null)
+{
+    /// <summary>簽核節點轉成第一版關卡，供驗證與解析重用（Code = Id）；缺的屬性補成會被驗證擋下或最嚴的值，不補成放行的值。</summary>
+    public ApprovalStageDef AsStage() => new(
+        Id, Name ?? new I18nText(), When, Approvers ?? new ApproverSource(string.Empty), Mode ?? ApprovalModes.All,
+        EditableFields ?? [], DueHours, OnEmpty ?? ApprovalOnEmpty.Fallback);
+}
+
+/// <summary>流程圖連線（§7.4）；When、Order、Default 只用在條件節點的出線。</summary>
+public sealed record ApprovalEdgeDef(
+    string Id, string From, string To,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] I18nText? Label = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] JsonElement? When = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] int? Order = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] bool? Default = null);
+
+/// <summary>通知收件人（§12.1）；依 Kind 使用其中的屬性。</summary>
+public sealed record NotifyRecipientDef(
+    string Kind,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] List<string>? UserIds = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] List<long>? GroupIds = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] int? Level = null);
+
+/// <summary>通知範本（§12.2）：標題與內文都是多語系文字，可含佔位符。</summary>
+public sealed record NotifyTemplateDef(I18nText Title, I18nText Body);
+
+public static class ApprovalNodeKinds
+{
+    public const string Start = "start", Approval = "approval", Condition = "condition", Fork = "fork", Join = "join", End = "end", Notify = "notify";
+}
+
+public static class ApprovalNotifyRecipientKinds
+{
+    public const string Users = "users", Group = "group", Initiator = "initiator", InitiatorManager = "initiatorManager";
 }
 
 /// <summary>轉移的簽核設定 NoMatch 的值。</summary>

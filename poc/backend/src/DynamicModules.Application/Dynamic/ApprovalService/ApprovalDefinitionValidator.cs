@@ -17,9 +17,6 @@ public sealed partial class ApprovalDefinitionValidator(
     IPermissionRepository permissions, FieldTypeRegistry registry, ApprovalEditableFields editableFields,
     ISharedMasterRepository shared, ApprovalPolicies approvalPolicies)
 {
-    [GeneratedRegex("^[a-z][a-z0-9-]{0,39}$")]
-    private static partial Regex CodePattern();
-
     /// <summary>previous 是這個流程目前版本的定義（新流程為 null）：數值上限「改嚴只管之後」，超過上限而且比舊版大才擋（政策設計 §3.5）。</summary>
     public async Task<Dictionary<string, string[]>> ValidateAsync(
         Module module, Workflow wf, ApprovalDefinition d, ApprovalDefinition? previous, CancellationToken ct)
@@ -59,7 +56,7 @@ public sealed partial class ApprovalDefinitionValidator(
             var s = stages[i];
             var p = $"stages[{i}]";
             var before = s.Code is null ? null : previous?.Stages?.FirstOrDefault(x => x.Code == s.Code);
-            if (s.Code is null || !CodePattern().IsMatch(s.Code)) Err($"{p}.code", ApprovalMessages.StageCodeInvalid);
+            if (!ApprovalCodes.IsValid(s.Code)) Err($"{p}.code", ApprovalMessages.StageCodeInvalid);
             if (s.Name is null || !s.Name.IsValid(out _)) Err($"{p}.name", ApprovalMessages.StageNameRequired);
             if (ConditionError(s.When) is { } se) Err($"{p}.when", ApprovalMessages.WhenInvalid(se));
             if (s.Approvers is null) Err($"{p}.approvers", ApprovalMessages.SourceInvalid);
