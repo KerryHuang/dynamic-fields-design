@@ -11,6 +11,11 @@ export function useMyTasks(tab: MaybeRefOrGetter<TaskListTab>, filter: MaybeRefO
   });
 }
 
+/** `subordinates` decides whether the "subordinates' tasks" tab exists; the answer rarely changes, so it is kept for a minute. */
+export function useTaskCapabilities() {
+  return useQuery({ queryKey: ['task-capabilities'], queryFn: dynamicApi.getTaskCapabilities, staleTime: 60_000 });
+}
+
 export function useTaskSummary() {
   return useQuery({ queryKey: ['task-summary'], queryFn: dynamicApi.getTaskSummary });
 }
@@ -78,6 +83,15 @@ export function useUpdateTask() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (i: { id: number; patch: TaskPatch }) => dynamicApi.updateTask(i.id, i.patch),
+    onSuccess: (_t, i) => invalidateTasks(qc, i.id),
+  });
+}
+
+/** Puts a task back where a manager's reassignment took it; every task list refreshes like any other task change. */
+export function useUndoReassign() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (i: { id: number; undoToken: string }) => dynamicApi.undoReassign(i.id, i.undoToken),
     onSuccess: (_t, i) => invalidateTasks(qc, i.id),
   });
 }

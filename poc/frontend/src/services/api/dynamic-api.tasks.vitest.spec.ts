@@ -89,4 +89,26 @@ describe('dynamicApi tasks', () => {
     stub('<html>Request Entity Too Large</html>', 413);
     await expect(dynamicApi.addTaskCommentWithFiles(5, 'x', [])).rejects.toMatchObject({ status: 413, message: undefined });
   });
+
+  it('updateTask normalizes a visible:false response without task fields', async () => {
+    stub({ id: 5, visible: false, undoToken: 'tok' });
+    const r = await dynamicApi.updateTask(5, { assigneeUserId: 'sales01' });
+    expect(r).toEqual({ id: 5, visible: false, undoToken: 'tok' });
+  });
+
+  it('updateTask still normalizes a normal reply, including the manager fields', async () => {
+    stub({ id: 5, title: 'T', status: 'todo', canEdit: false, canReassign: true, supervised: true, version: '20261105010000000' });
+    const r = await dynamicApi.updateTask(5, { assigneeUserId: 'sales01' });
+    expect(r).toMatchObject({ id: 5, canReassign: true, supervised: true, version: '20261105010000000', assigneeUserId: null });
+  });
+
+  it('getTaskCapabilities and undoReassign call the manager endpoints', async () => {
+    const seen = stub({ subordinates: true });
+    expect(await dynamicApi.getTaskCapabilities()).toEqual({ subordinates: true });
+    expect(seen.url).toBe('/api/v3/dynamic/tasks/capabilities');
+    const undo = stub({ id: 5, title: 'T', status: 'todo' });
+    await dynamicApi.undoReassign(5, 'tok');
+    expect(undo).toMatchObject({ method: 'post', url: '/api/v3/dynamic/tasks/5/undo-reassign' });
+    expect(JSON.parse(undo.body as string)).toEqual({ undoToken: 'tok' });
+  });
 });

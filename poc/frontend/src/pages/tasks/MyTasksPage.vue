@@ -2,13 +2,14 @@
 import { computed, ref } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { useRoute, useRouter } from 'vue-router';
-import { useMyTasks } from 'src/application/dynamic/queries/tasks-queries';
+import { useMyTasks, useTaskCapabilities } from 'src/application/dynamic/queries/tasks-queries';
 import { taskStatusColor, type TaskListFilter, type TaskListTab } from 'src/domain/dynamic/task-types';
 import TaskDialog from 'src/presentation/dynamic/tasks/TaskDialog.vue';
 import TaskFormDialog from 'src/presentation/dynamic/tasks/TaskFormDialog.vue';
 import { useIdentityStore } from 'src/stores/use-identity-store';
 
-const TABS: TaskListTab[] = ['assigned', 'created', 'mentioned'];
+const BASE_TABS: TaskListTab[] = ['assigned', 'created', 'mentioned'];
+const ALL_TABS: TaskListTab[] = [...BASE_TABS, 'subordinates'];
 const FILTERS: TaskListFilter[] = ['open', 'overdue', 'today', 'thisWeek', 'all'];
 const SIZE = 20;
 
@@ -19,7 +20,12 @@ const identity = useIdentityStore();
 
 const pick = <T extends string>(value: unknown, allowed: T[], fallback: T): T =>
   (allowed as string[]).includes(String(value)) ? (value as T) : fallback;
-const tab = computed(() => pick(route.query.tab, TABS, 'assigned'));
+const capabilities = useTaskCapabilities();
+// The subordinates tab exists only when the server says the user manages someone; a link to it from someone without falls back
+const hasSubordinates = computed(() => !!capabilities.data.value?.subordinates);
+const tabs = computed(() => (hasSubordinates.value ? ALL_TABS : BASE_TABS));
+const requestedTab = computed(() => pick(route.query.tab, ALL_TABS, 'assigned'));
+const tab = computed(() => (requestedTab.value === 'subordinates' && capabilities.data.value && !hasSubordinates.value ? 'assigned' : requestedTab.value));
 const filter = computed(() => pick(route.query.filter, FILTERS, 'open'));
 // A notification link is /tasks?open={id}; anything that is not a whole number is ignored.
 const openId = computed(() => (/^\d+$/.test(String(route.query.open ?? '')) ? Number(route.query.open) : null));
@@ -49,7 +55,7 @@ const setOpen = (id: number | null) => go({ open: id === null ? undefined : Stri
       <q-btn color="primary" no-caps icon="add" :label="t('tasks.add')" data-testid="my-task-add" @click="adding = true" />
     </div>
     <q-tabs :model-value="tab" dense align="left" narrow-indicator class="text-primary" @update:model-value="(v) => setTab(v as TaskListTab)">
-      <q-tab v-for="x in TABS" :key="x" :name="x" no-caps :label="t(`tasks.tabs.${x}`)" :data-testid="`tab-${x}`" />
+      <q-tab v-for="x in tabs" :key="x" :name="x" no-caps :label="t(`tasks.tabs.${x}`)" :data-testid="`tab-${x}`" />
     </q-tabs>
     <q-separator />
     <div class="q-my-md" style="max-width: 240px">
@@ -73,7 +79,7 @@ const setOpen = (id: number | null) => go({ open: id === null ? undefined : Stri
             <template v-if="task.record">{{ task.record.accessible ? (task.record.title || t('tasks.recordFallback', { id: task.record.recordId })) : t('tasks.recordNoAccess') }}</template>
           </q-item-label>
           <q-item-label caption class="row items-center q-gutter-x-sm">
-            <span>{{ task.assigneeName ?? (task.assigneeUserId || t('tasks.unassigned')) }}</span>
+            <span :data-testid="`my-task-assignee-${task.id}`">{{ task.assigneeName ?? (task.assigneeUserId || t('tasks.unassigned')) }}</span>
             <span v-if="task.dueDate" :class="{ 'text-negative': task.overdue }">{{ task.dueDate }}</span>
             <q-badge outline :color="taskStatusColor(task.status)" :label="t(`tasks.status.${task.status}`)" />
           </q-item-label>

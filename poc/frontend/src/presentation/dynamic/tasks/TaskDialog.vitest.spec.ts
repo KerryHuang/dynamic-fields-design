@@ -5,6 +5,7 @@ import * as quasar from 'quasar';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createI18n } from 'vue-i18n';
 import { createMemoryHistory, createRouter } from 'vue-router';
+import GenericSelect from 'src/components/framework/GenericSelect.vue';
 import enUS from 'src/i18n/en-US.json';
 import zhTW from 'src/i18n/zh-TW.json';
 import { bodyOf, HttpFail, mockHttp, type Call } from 'src/test-utils/mock-http';
@@ -22,7 +23,12 @@ interface Opts {
   commentFail?: HttpFail;
   withdrawFail?: HttpFail;
   locale?: 'zh-TW' | 'en-US';
+  patchReply?: unknown;
 }
+// The toast itself is covered in use-moved-out-notice.vitest.spec.ts; here only the hand-off matters.
+const showNotice = vi.hoisted(() => vi.fn());
+vi.mock('./use-moved-out-notice', () => ({ useMovedOutNotice: () => ({ show: showNotice }) }));
+
 let calls: Call[];
 const body = () => document.body;
 
@@ -33,6 +39,7 @@ async function mountDialog(o: Opts = {}) {
     if (c.url === '/tasks/5/comments' && c.method === 'get') return o.comments ?? [];
     if (c.url === '/tasks/5/comments' && c.method === 'post') return o.commentFail ?? commentWire();
     if (/\/withdraw$/.test(c.url)) return o.withdrawFail ?? commentWire({ withdrawn: true });
+    if (c.url === '/tasks/5' && c.method === 'patch') return o.patchReply ?? taskDetailWire(o.task);
     if (c.url === '/users') return USERS;
     if (c.url === '/users/mention-candidates') return o.candidates ?? [USERS[1]];
     if (c.url === '/attachments/settings') return { uploadEnabled: true, maxBytes: 1048576, allowedExtensions: ['txt', 'pdf'], maxFilesPerField: 3, ...o.settings };
@@ -227,7 +234,7 @@ describe('TaskDialog', () => {
   });
 
   it('凍結時顯示提示、欄位唯讀、沒有儲存／刪除鈕與留言框', async () => {
-    const w = await mountDialog({ task: { frozen: true, canEdit: false, canComment: false, canDelete: false } });
+    const w = await mountDialog({ task: { frozen: true, canEdit: false, canReassign: false, canComment: false, canDelete: false } });
     expect(body().querySelector('[data-testid="task-frozen"]')!.textContent).toContain('相關記錄已鎖定');
     expect(body().querySelector<HTMLInputElement>('input[data-testid="task-title"]')!.readOnly).toBe(true);
     expect(body().querySelector('[data-testid="task-save"]')).toBeNull();
@@ -441,10 +448,54 @@ describe('TaskDialog', () => {
   });
 
   it('沒有編輯權限時欄位唯讀、沒有儲存鈕；沒有留言權限時沒有留言框', async () => {
-    const w = await mountDialog({ task: { canEdit: false, canComment: false, canDelete: false } });
+    const w = await mountDialog({ task: { canEdit: false, canReassign: false, canComment: false, canDelete: false } });
     expect(body().querySelector('[data-testid="task-save"]')).toBeNull();
     expect(body().querySelector('textarea[data-testid="mention-input"]')).toBeNull();
     expect(body().querySelector('[data-testid="task-delete"]')).toBeNull();
     w.unmount();
+  });
+
+  describe('manager view of a subordinate task (D5)', () => {
+    const supervised = { canEdit: false, canReassign: true, supervised: true, canDelete: false };
+    const fieldOf = (label: string) => [...body().querySelectorAll('.q-field')].find((f) => f.textContent?.includes(label))!;
+
+    it('TaskDialog for a supervised task enables only the assignee and shows the hint', async () => {
+      const w = await mountDialog({ task: supervised });
+      expect(body().querySelector('[data-testid="task-supervisor-hint"]')!.textContent).toBe('你以主管身分查看，只能改負責人與留言');
+      expect(fieldOf('負責人').classList.contains('q-field--readonly')).toBe(false);
+      for (const label of ['標題', '說明', '狀態']) expect(fieldOf(label).classList.contains('q-field--readonly')).toBe(true);
+      expect(body().querySelector('[data-testid="task-save"]')).not.toBeNull();
+      w.unmount();
+    });
+
+    it('a normal editor sees no supervisor hint', async () => {
+      const w = await mountDialog();
+      expect(body().querySelector('[data-testid="task-supervisor-hint"]')).toBeNull();
+      w.unmount();
+    });
+
+    it('sends only assigneeUserId', async () => {
+      const w = await mountDialog({ task: supervised });
+      w.findAllComponents(GenericSelect)[0].vm.$emit('update:modelValue', 'sales02');
+      await flushPromises();
+      body().querySelector<HTMLElement>('[data-testid="task-save"]')!.click();
+      await flushPromises();
+      const patch = calls.find((c) => c.method === 'patch');
+      expect(bodyOf(patch)).toEqual({ assigneeUserId: 'sales02' });
+      w.unmount();
+    });
+
+    it('closes and shows the moved-out notice when visible is false', async () => {
+      const w = await mountDialog({ task: supervised, patchReply: { id: 5, visible: false, undoToken: 'tok-1' } });
+      w.findAllComponents(GenericSelect)[0].vm.$emit('update:modelValue', 'admin');
+      await flushPromises();
+      body().querySelector<HTMLElement>('[data-testid="task-save"]')!.click();
+      await flushPromises();
+      await new Promise((r) => setTimeout(r, 50));
+      await flushPromises();
+      expect(w.emitted('update:taskId')?.at(-1)).toEqual([null]);
+      expect(showNotice).toHaveBeenCalledWith(5, 'tok-1');
+      w.unmount();
+    });
   });
 });
