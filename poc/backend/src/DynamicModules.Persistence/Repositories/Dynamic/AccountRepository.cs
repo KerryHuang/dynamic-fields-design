@@ -99,6 +99,9 @@ public class AccountRepository(DynamicDbContext db) : IAccountRepository
         db.Set<ModuleDataScope>().RemoveRange(await db.Set<ModuleDataScope>().Where(x => x.GroupId == id).ToListAsync(ct));
         db.Set<FieldOptionScope>().RemoveRange(await db.Set<FieldOptionScope>().Where(x => x.GroupId == id).ToListAsync(ct));
         db.Set<ReportShare>().RemoveRange(await db.Set<ReportShare>().Where(x => x.GroupId == id).ToListAsync(ct));
+        var target = id.ToString(System.Globalization.CultureInfo.InvariantCulture);
+        db.Set<TaskViewShare>().RemoveRange(await db.Set<TaskViewShare>()
+            .Where(x => x.TargetKind == TaskViewShareKinds.Group && x.TargetId == target).ToListAsync(ct));
         db.Set<DashboardAssignment>().RemoveRange(await db.Set<DashboardAssignment>().Where(x => x.GroupId == id).ToListAsync(ct));
         db.Set<PermissionGroup>().Remove(group);
     }

@@ -138,7 +138,7 @@ public class UpdateDepartmentHandler(
     }
 }
 
-public class DeleteDepartmentHandler(IOrganizationRepository org, IUnitOfWork uow) : IRequestHandler<DeleteDepartmentRequest, ServiceResult>
+public class DeleteDepartmentHandler(IOrganizationRepository org, ITaskViewRepository taskViews, IUnitOfWork uow) : IRequestHandler<DeleteDepartmentRequest, ServiceResult>
 {
     public async Task<ServiceResult> Handle(DeleteDepartmentRequest request, CancellationToken ct)
     {
@@ -147,6 +147,8 @@ public class DeleteDepartmentHandler(IOrganizationRepository org, IUnitOfWork uo
         var children = await org.CountChildrenAsync(d.Id, ct);
         var members = await org.CountMembersAsync(d.Id, ct);
         if (children + members > 0) return ServiceResult.Conflict(OrganizationMessages.HasDependents(children, members));
+        // 看板分享給這個部門的對象一併清掉（看板設計 §6.3）
+        await taskViews.RemoveSharesToAsync(TaskViewShareKinds.Department, d.Id.ToString(System.Globalization.CultureInfo.InvariantCulture), ct);
         org.Remove(d);
         await uow.CommitAsync(ct);
         return ServiceResult.Success();
