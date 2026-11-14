@@ -20,7 +20,7 @@ public static class ApprovalGraphValidator
     ];
 
     /// <summary>
-    /// previous：這條流程目前版本（sequence 先轉換，J16）；政策上限超過且比舊版大才擋。Warnings 是 W1–W3，有 G1–G5 任一錯誤時不算。
+    /// previous：這條流程目前版本（sequence 先轉換，J16）；政策上限超過且比舊版大才擋。Warnings 是 W1–W3，有 G1–G5、G7、G8 任一錯誤時不算。
     /// 局部錯誤（G1 屬性、G2 度數）不影響拓撲分析，其他規則照跑；只有可達（G3、G4）或環（G5）這類
     /// 「沒辦法可靠分析拓撲」的錯誤才跳過並行區分析（G7 區域、G8、G12、巢狀深度）。
     /// 匯合與分支的配對檢查只看節點本身，不依賴區域，一律執行。
