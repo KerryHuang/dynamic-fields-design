@@ -1,4 +1,4 @@
-import { QueryClient, VueQueryPlugin } from '@tanstack/vue-query';
+import { focusManager, QueryClient, VueQueryPlugin } from '@tanstack/vue-query';
 import { flushPromises, mount } from '@vue/test-utils';
 import { createPinia, setActivePinia } from 'pinia';
 import * as quasar from 'quasar';
@@ -126,6 +126,25 @@ describe('DelegateSettingsDialog', () => {
     const w = await mountDialog();
     expect((q('delegate-start') as HTMLInputElement).value).toBe('2026-11-17');
     expect((q('delegate-end') as HTMLInputElement).value).toBe('2026-11-17');
+    w.unmount();
+  });
+
+  it('a background refetch that only moves the business day keeps the unsaved draft', async () => {
+    const w = await mountDialog();
+    await pick('業務一');
+    await setDate('delegate-start', '2026-11-18');
+    await setDate('delegate-end', '2026-11-20');
+    const gets = () => calls.filter((c) => c.method === 'get' && c.url === '/me/approval-delegate').length;
+    const before = gets();
+    today = '2026-11-17';   // the refetch brings a new business day and a new secondsToNextDay
+    focusManager.setFocused(false);
+    focusManager.setFocused(true);
+    await wait();
+    expect(gets()).toBeGreaterThan(before);
+    expect((q('delegate-start') as HTMLInputElement).value).toBe('2026-11-18');
+    await click('delegate-save');
+    expect(bodyOf(puts()[0])).toEqual({ delegateUserId: 'sales01', startDate: '2026-11-18', endDate: '2026-11-20' });
+    focusManager.setFocused(undefined);
     w.unmount();
   });
 

@@ -27,10 +27,9 @@ public record ClearMyApprovalDelegateRequest : IRequest<ServiceResult>, ITransac
 
 internal static class ApprovalDelegateViews
 {
-    public static async Task<ApprovalDelegateView> ViewAsync(ApprovalDelegate d, IPermissionRepository permissions, IBusinessTime time, CancellationToken ct)
+    public static async Task<ApprovalDelegateView> ViewAsync(ApprovalDelegate d, IPermissionRepository permissions, DateOnly today, CancellationToken ct)
     {
         var names = await ApprovalViews.UserNamesAsync(permissions, ct);
-        var today = time.Today;
         return new ApprovalDelegateView(d.DelegateUserId, names.GetValueOrDefault(d.DelegateUserId) ?? d.DelegateUserId, d.StartDate, d.EndDate,
             d.StartDate <= today && today <= d.EndDate, today < d.StartDate);
     }
@@ -41,9 +40,9 @@ public class GetMyApprovalDelegateHandler(IApprovalDelegateRepository delegates,
 {
     public async Task<ServiceResult> Handle(GetMyApprovalDelegateRequest request, CancellationToken ct)
     {
-        var view = await delegates.GetAsync(user.UserId, ct) is { } d ? await ApprovalDelegateViews.ViewAsync(d, permissions, time, ct) : null;
-        var now = time.Now;   // 讀一次：today 與秒數出自同一個時間點，換日那一刻不會對不上
+        var now = time.Now;   // 只取樣一次：active／upcoming、today 與秒數出自同一個時間點，跨午夜的請求不會回舊狀態
         var today = DateOnly.FromDateTime(now);
+        var view = await delegates.GetAsync(user.UserId, ct) is { } d ? await ApprovalDelegateViews.ViewAsync(d, permissions, today, ct) : null;
         var toNextDay = (int)Math.Ceiling((today.AddDays(1).ToDateTime(TimeOnly.MinValue) - now).TotalSeconds);
         return ServiceResult.Success(new MyApprovalDelegateResponse(view, today, toNextDay));
     }
@@ -72,7 +71,7 @@ public class SaveMyApprovalDelegateHandler(
         d.StartDate = request.StartDate;
         d.EndDate = request.EndDate;
         await uow.CommitAsync(ct);
-        return ServiceResult.Success(await ApprovalDelegateViews.ViewAsync(d, permissions, time, ct));
+        return ServiceResult.Success(await ApprovalDelegateViews.ViewAsync(d, permissions, time.Today, ct));
     }
 }
 

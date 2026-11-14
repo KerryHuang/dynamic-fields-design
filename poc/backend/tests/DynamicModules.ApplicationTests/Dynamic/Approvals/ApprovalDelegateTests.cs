@@ -20,7 +20,10 @@ public class ApprovalDelegateTests : ApprovalTestBase
 
     private sealed class Clock : IBusinessTime
     {
-        public DateTime Now { get; set; } = new(2026, 11, 4, 9, 0, 0);
+        private DateTime _now = new(2026, 11, 4, 9, 0, 0);
+        /// <summary>排了 Ticks 時每讀一次 Now 就前進到下一個時間點（模擬一次請求內跨午夜）；排完回到最後設定的時間。</summary>
+        public Queue<DateTime> Ticks { get; } = new();
+        public DateTime Now { get => Ticks.TryDequeue(out var t) ? t : _now; set => _now = value; }
         public DateOnly Today => DateOnly.FromDateTime(Now);
     }
 
@@ -640,5 +643,16 @@ public class ApprovalDelegateTests : ApprovalTestBase
         _clock.Now = new DateTime(2026, 11, 6, 0, 0, 1);
         var after = await Mine("gm");
         (after.Today, after.Delegate!.Active, after.Delegate.Upcoming).Should().Be((D(6), false, false));   // 期間已過：兩者皆否
+    }
+
+    [Fact]
+    public async Task Get_SamplesTimeOnce_WhenMidnightPassesDuringTheRequest()
+    {
+        await SetDelegate("gm", "emp1", D(5), D(5));
+        _clock.Now = new DateTime(2026, 11, 5, 0, 0, 1);
+        _clock.Ticks.Enqueue(new DateTime(2026, 11, 4, 23, 59, 59));   // 第一次讀時鐘還在 4 日，之後的讀取都已過午夜
+
+        var mine = await Mine("gm");
+        (mine.Today, mine.SecondsToNextDay, mine.Delegate!.Active, mine.Delegate.Upcoming).Should().Be((D(4), 1, false, true));   // 全部出自同一個時間點
     }
 }

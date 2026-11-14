@@ -40,7 +40,15 @@ function reset() {
   topError.value = '';
 }
 watch(() => props.modelValue, (open) => { if (open) reset(); }, { immediate: true });
-watch(() => current.data.value, () => { if (props.modelValue && !save.isPending.value) reset(); });
+// Refill only when the saved setting itself changes (or first arrives); a background refetch that only moves
+// today / secondsToNextDay must not wipe what the user is typing.
+const savedKey = computed(() => {
+  const r = current.data.value;
+  if (!r) return '';
+  const d = r.delegate;
+  return d ? `${d.delegateUserId}|${d.startDate}|${d.endDate}` : 'none';
+});
+watch(savedKey, () => { if (props.modelValue && !save.isPending.value) reset(); });
 
 const candidates = computed(() => (users.data.value ?? [])
   .filter((u) => u.userId !== identity.userId)
