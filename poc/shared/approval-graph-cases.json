@@ -1557,6 +1557,70 @@
       "limits": null,
       "errors": [["edges[2].id", "G1", "idDuplicate"], ["edges[2].to", "G1", "edgeEndpointMissing"]],
       "warnings": []
+    },
+    {
+      "id": "AG-065",
+      "name": "G1 重複代號的第二條連線仍檢查 G6 屬性 (來源非條件節點帶 default)",
+      "definition": { "shape": "graph", "stages": [],
+        "nodes": [
+          {"id": "start", "kind": "start"},
+          {"id": "a", "kind": "approval", "name": {"zh-TW": "a"}},
+          {"id": "end", "kind": "end"}
+        ],
+        "edges": [
+          {"id": "e1", "from": "start", "to": "a"},
+          {"id": "e2", "from": "a", "to": "end"},
+          {"id": "e2", "from": "a", "to": "end", "default": false}
+        ] },
+      "previous": null,
+      "limits": null,
+      "errors": [["edges[2].id", "G1", "idDuplicate"], ["edges[2].default", "G6", "conditionAttrNotAllowed"]],
+      "warnings": []
+    },
+    {
+      "id": "AG-066",
+      "name": "G1 重複代號的第二條連線仍檢查自環",
+      "definition": { "shape": "graph", "stages": [],
+        "nodes": [
+          {"id": "start", "kind": "start"},
+          {"id": "a", "kind": "approval", "name": {"zh-TW": "a"}},
+          {"id": "end", "kind": "end"}
+        ],
+        "edges": [
+          {"id": "e1", "from": "start", "to": "a"},
+          {"id": "e2", "from": "a", "to": "end"},
+          {"id": "e2", "from": "a", "to": "a"}
+        ] },
+      "previous": null,
+      "limits": null,
+      "errors": [["edges[2].id", "G1", "idDuplicate"], ["edges[2]", "G1", "selfLoop"]],
+      "warnings": []
+    },
+    {
+      "id": "AG-067",
+      "name": "G12 同一個節點同時在兩條分支內，不與自己比較",
+      "definition": { "shape": "graph", "stages": [],
+        "nodes": [
+          {"id": "start", "kind": "start"},
+          {"id": "f", "kind": "fork"},
+          {"id": "a", "kind": "approval", "name": {"zh-TW": "a"}, "editableFields": [1]},
+          {"id": "b", "kind": "approval", "name": {"zh-TW": "b"}, "editableFields": [2]},
+          {"id": "j", "kind": "join", "forkId": "f", "mode": "all"},
+          {"id": "end", "kind": "end"}
+        ],
+        "edges": [
+          {"id": "e1", "from": "start", "to": "f"},
+          {"id": "e2", "from": "f", "to": "a"},
+          {"id": "e3", "from": "f", "to": "b"},
+          {"id": "e4", "from": "a", "to": "b"},
+          {"id": "e5", "from": "a", "to": "j"},
+          {"id": "e6", "from": "b", "to": "j"},
+          {"id": "e7", "from": "j", "to": "end"}
+        ] },
+      "previous": null,
+      "limits": null,
+      "errors": [["nodes.a", "G2", "outCount"], ["nodes.f", "G7", "branchesMerge"]],
+      "warnings": []
     }
   ]
 }

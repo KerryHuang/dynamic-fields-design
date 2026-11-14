@@ -24,7 +24,7 @@ public static class ApprovalGraphValidator
     /// 局部錯誤（G1 屬性、G2 度數）不影響拓撲分析，其他規則照跑；只有可達（G3、G4）或環（G5）這類
     /// 「沒辦法可靠分析拓撲」的錯誤才跳過並行區分析（G7 區域、G8、G12、巢狀深度）。
     /// 匯合與分支的配對檢查只看節點本身，不依賴區域，一律執行。
-    /// 重複代號的第二筆不進圖模型，但仍檢查局部項目（kind、屬性、連線端點），錯誤鍵用陣列索引（nodes[2].kind）；第一筆維持代號鍵。
+    /// 重複代號的第二筆不進圖模型，但仍檢查局部項目（kind、屬性、連線端點、自環、G6 屬性），錯誤鍵用陣列索引（nodes[2].kind）；第一筆維持代號鍵。
     /// </summary>
     public static GraphCheck Check(ApprovalDefinition d, GraphPolicyLimits limits, ApprovalDefinition? previous)
     {
@@ -77,8 +77,14 @@ public static class ApprovalGraphValidator
             var ok = true;
             if (e.From is null || !seenNodes.Contains(e.From)) { Err($"{edgeKey[i]}.from", "G1", "edgeEndpointMissing"); ok = false; }
             if (e.To is null || !seenNodes.Contains(e.To)) { Err($"{edgeKey[i]}.to", "G1", "edgeEndpointMissing"); ok = false; }
-            if (!ok || dupEdge) continue;
+            if (!ok) continue;
             if (e.From == e.To) { Err(edgeKey[i], "G1", "selfLoop"); continue; }
+            if (dupEdge)
+            {
+                // 重複的連線不進圖模型，只做只看這條線本身的檢查；defaultCount、orderDuplicate 這類合計的檢查不算它。
+                if (nodes.First(x => x.Item2.Id == e.From).Item2.Kind != ApprovalNodeKinds.Condition) CheckNonConditionEdge(e, edgeKey[i], Err);
+                continue;
+            }
             if (!seenPairs.Add((e.From!, e.To!))) { Err(edgeKey[i], "G1", "edgeDuplicate"); continue; }
             edges.Add((i, e));
         }
@@ -159,6 +165,14 @@ public static class ApprovalGraphValidator
 
     private static bool HasValue(JsonElement? e) => e is { ValueKind: not (JsonValueKind.Null or JsonValueKind.Undefined) };
 
+    /// <summary>非條件節點的出線不能帶 when／order／default（G6）。</summary>
+    private static void CheckNonConditionEdge(ApprovalEdgeDef e, string key, Action<string, string, string> err)
+    {
+        if (HasValue(e.When)) err($"{key}.when", "G6", "conditionAttrNotAllowed");
+        if (e.Order is not null) err($"{key}.order", "G6", "conditionAttrNotAllowed");
+        if (e.Default is not null) err($"{key}.default", "G6", "conditionAttrNotAllowed");
+    }
+
     private static void CheckConditions(
         ApprovalGraphModel m, string[] edgeKey, string[] nodeKey, Action<string, string, string> err)
     {
@@ -167,13 +181,7 @@ public static class ApprovalGraphValidator
             var outs = m.Out(n.Id);
             if (n.Kind != ApprovalNodeKinds.Condition)
             {
-                foreach (var e in outs)
-                {
-                    var k = edgeKey[e.Index];
-                    if (HasValue(e.Def.When)) err($"{k}.when", "G6", "conditionAttrNotAllowed");
-                    if (e.Def.Order is not null) err($"{k}.order", "G6", "conditionAttrNotAllowed");
-                    if (e.Def.Default is not null) err($"{k}.default", "G6", "conditionAttrNotAllowed");
-                }
+                foreach (var e in outs) CheckNonConditionEdge(e.Def, edgeKey[e.Index], err);
                 continue;
             }
 
@@ -263,7 +271,8 @@ public static class ApprovalGraphValidator
                 for (var j = i + 1; j < p.Branches.Count; j++)
                     foreach (var a in Approvals(m, p.Branches[i]))
                         foreach (var b in Approvals(m, p.Branches[j]))
-                            if ((a.EditableFields ?? []).Intersect(b.EditableFields ?? []).Any())
+                            // 分支私下會合時同一節點會出現在兩條分支，不與自己比（那是 branchesMerge 的事）。
+                            if (a.Id != b.Id && (a.EditableFields ?? []).Intersect(b.EditableFields ?? []).Any())
                                 err($"{nodeKey(m.NodeOrder[a.Id] > m.NodeOrder[b.Id] ? a : b)}.editableFields", "G12", "editableOverlap");
     }
 
