@@ -256,17 +256,17 @@ describe('ReportDesignerPage review fixes', () => {
   });
 
   it('an entity reference uses the entity light url with string keys', async () => {
-    const cat: ModuleCatalog = { ...CAT2, fields: [...CAT2.fields, F(8, '實體', { type: 'reference', refKind: 'entity', refKey: 'sales.customer' })] };
+    const cat: ModuleCatalog = { ...CAT2, fields: [...CAT2.fields, F(8, '實體', { type: 'reference', refKind: 'entity', refKey: 'test.entity' })] };
     api.getReport.mockResolvedValue(detail({ ...DEF, filters: [{ field: MAIN(8), op: 'eq', value: 'C001' }] }));
     await mountAt('/reports/7/edit', cat);
     await goTo(2);
-    expect(mounted!.findComponent(PopupSelect).props()).toMatchObject({ lightUrl: '/entities/sales.customer/light', valueKind: 'string' });
+    expect(mounted!.findComponent(PopupSelect).props()).toMatchObject({ lightUrl: '/entities/test.entity/light', valueKind: 'string' });
     expect(api.getRecord).not.toHaveBeenCalled();
   });
 
   it('a via entity title condition and ratio use the picker with key operators, never free text', async () => {
-    const title = F(0, '標題', { type: 'reference', refKind: 'entity', refKey: 'sales.customer' });
-    const cat: ModuleCatalog = { ...CAT2, via: [{ fieldId: 8, label: '客戶', targetKey: 'sales.customer', fields: [title] }] };
+    const title = F(0, '標題', { type: 'reference', refKind: 'entity', refKey: 'test.entity' });
+    const cat: ModuleCatalog = { ...CAT2, via: [{ fieldId: 8, label: '客戶', targetKey: 'test.entity', fields: [title] }] };
     const via = { source: 'main', fieldId: 0, viaFieldId: 8 };
     api.getReport.mockResolvedValue(detail({
       ...DEF, filters: [{ field: via, op: 'ne', value: 'C-003' }],
@@ -274,11 +274,11 @@ describe('ReportDesignerPage review fixes', () => {
     }));
     await mountAt('/reports/7/edit', cat);
     await goTo(2);
-    expect(mounted!.findComponent(PopupSelect).props()).toMatchObject({ lightUrl: '/entities/sales.customer/light', valueKind: 'string', modelValue: 'C-003' });
+    expect(mounted!.findComponent(PopupSelect).props()).toMatchObject({ lightUrl: '/entities/test.entity/light', valueKind: 'string', modelValue: 'C-003' });
     const ops = (comp('filter-0-op').props() as unknown as { options: { value: string }[] }).options.map((o) => o.value);
     expect(ops).toEqual(['eq', 'ne', 'in', 'notIn', 'isEmpty', 'isNotEmpty']);
     await goTo(1);
-    expect(mounted!.findComponent(PopupSelect).props()).toMatchObject({ lightUrl: '/entities/sales.customer/light', modelValue: 'C-001' });
+    expect(mounted!.findComponent(PopupSelect).props()).toMatchObject({ lightUrl: '/entities/test.entity/light', modelValue: 'C-001' });
   });
 
   it('a saved sort key pointing at a missing field blocks until removed in the group step', async () => {

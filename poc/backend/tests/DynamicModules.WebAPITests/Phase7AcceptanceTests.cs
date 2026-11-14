@@ -107,7 +107,7 @@ public class Phase7AcceptanceTests : IClassFixture<TestApp>
         (await _admin.PutAsJsonAsync($"{Base}/modules/{Order}", new { name = Zh("訂單"), section = Zh("業務"), titleFieldId = no.Id }))
             .StatusCode.Should().Be(HttpStatusCode.OK);
         var customer = await AddField(Order, orderBlock, "reference", "客戶",
-            new { refTarget = new { kind = "entity", key = "sales.customer" } });
+            new { refTarget = new { kind = "entity", key = "test.entity" } });
         var orderDate = await AddField(Order, orderBlock, "date", "訂單日期", new { });
         var status = await AddField(Order, orderBlock, "enum", "狀態", new { });
         var draft = $"opt_{await AddOption(status.Id, "草稿")}";
@@ -157,7 +157,7 @@ public class Phase7AcceptanceTests : IClassFixture<TestApp>
         {
             values = new Dictionary<string, object>
             {
-                [customer.Key] = "C-001", [orderDate.Key] = "2026-11-05", [status.Key] = draft
+                [customer.Key] = "E-0001", [orderDate.Key] = "2026-11-05", [status.Key] = draft
             },
             details = Details(
                 Row(new Dictionary<string, object> { [lineTitle] = "甲", [qty.Key] = 2 }),

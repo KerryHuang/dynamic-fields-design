@@ -94,7 +94,7 @@ public sealed class Phase8AcceptanceTests : IDisposable
         });
         var created = await Ok(sales01.PostAsJsonAsync($"{Base}/modules/{order}/records", new
         {
-            values = new Dictionary<string, object> { [h["客戶"]] = "C-001", [h["交期"]] = "2026-11-12" },
+            values = new Dictionary<string, object> { [h["客戶"]] = "E-0001", [h["交期"]] = "2026-11-12" },
             details = Details(line, Line("甲", 2, 100), Line("乙", 3, 300), Line("丙", 1, 1000))
         }), HttpStatusCode.Created);
         var orderId = IdOf(created);
@@ -139,7 +139,7 @@ public sealed class Phase8AcceptanceTests : IDisposable
         // 8. 另一張訂單結案後同樣全單唯讀（只改明細也被拒）
         var second = await Ok(manager.PostAsJsonAsync($"{Base}/modules/{order}/records", new
         {
-            values = new Dictionary<string, object> { [h["客戶"]] = "C-002" },
+            values = new Dictionary<string, object> { [h["客戶"]] = "E-0002" },
             details = Details(line, Line("丁", 1, 10))
         }), HttpStatusCode.Created);
         var closed = await Ok(Put(manager, IdOf(second), Rv(second),
@@ -153,7 +153,7 @@ public sealed class Phase8AcceptanceTests : IDisposable
         var sales02 = _app.AsUser("sales02");
         var mine = await Ok(sales02.PostAsJsonAsync($"{Base}/modules/{order}/records", new
         {
-            values = new Dictionary<string, object> { [h["客戶"]] = "C-003" },
+            values = new Dictionary<string, object> { [h["客戶"]] = "E-0003" },
             details = Details(line, Line("戊", 1, 50))
         }), HttpStatusCode.Created);
         var paged = await JsonOf(await sales02.GetAsync($"{Base}/modules/{order}/records/paged?currentPage=1&pagesSize=50"));
@@ -203,7 +203,7 @@ public sealed class Phase8AcceptanceTests : IDisposable
         var l = await LayoutOf("order-b-line");
         var rec = await Ok(_admin.PostAsJsonAsync($"{Base}/modules/order-b/records", new
         {
-            values = new Dictionary<string, object> { [h["客戶"]] = "C-001", [h["交期"]] = "2026-11-20" },
+            values = new Dictionary<string, object> { [h["客戶"]] = "E-0001", [h["交期"]] = "2026-11-20" },
             details = Details("order-b-line", Row(new Dictionary<string, object>
             {
                 [l["品名"]] = "甲", [l["數量"]] = 2, [l["單價"]] = 150

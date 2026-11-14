@@ -128,9 +128,9 @@ public class DemoStructureTests(DemoGeneratedFixture fx)
     [Fact]
     public async Task Preflight_AnExistingCustomerExtension_IsNoLongerAConflict()
     {
-        // s2d-1f：MES 的客戶改用共用主檔往來對象，Demo 不再擴充核心實體 sales.customer
+        // s2d-1f：MES 的客戶改用共用主檔往來對象，Demo 不再擴充核心實體 test.entity
         await using var host = await DemoTestHost.CreateAsync();
-        (await host.Send(new CreateModuleRequest("cust-x", Text("客戶擴充"), null, null, ModuleKind.Extension, "sales.customer")))
+        (await host.Send(new CreateModuleRequest("cust-x", Text("客戶擴充"), null, null, ModuleKind.Extension, "test.entity")))
             .IsSuccess.Should().BeTrue();
 
         (await host.Services.GetRequiredService<DemoPreflight>().ConflictsAsync(CancellationToken.None)).Should().BeEmpty();

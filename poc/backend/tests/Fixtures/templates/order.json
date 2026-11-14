@@ -15,7 +15,7 @@
             { "code": "no", "type": "autonumber", "label": { "zh-TW": "訂單編號", "en-US": "Order no." },
               "config": { "format": "SO-{yyyyMM}-{0000}", "showInList": true, "isSortable": true } },
             { "code": "customer", "type": "reference", "label": { "zh-TW": "客戶", "en-US": "Customer" },
-              "config": { "refTarget": { "kind": "entity", "key": "sales.customer" },
+              "config": { "refTarget": { "kind": "entity", "key": "test.entity" },
                           "required": true, "showInList": true, "isFilterable": true } },
             { "code": "orderDate", "type": "date", "label": { "zh-TW": "訂單日期", "en-US": "Order date" },
               "config": { "defaultToday": true, "required": true, "showInList": true, "isFilterable": true, "isSortable": true } },

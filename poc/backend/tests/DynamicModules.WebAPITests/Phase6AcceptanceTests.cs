@@ -98,7 +98,7 @@ public class Phase6AcceptanceTests : IClassFixture<TestApp>
         (await _admin.PutAsJsonAsync($"{Base}/modules/{Order}", new { name = Zh("訂單"), titleFieldId = no.Id }))
             .StatusCode.Should().Be(HttpStatusCode.OK);
         var customer = await AddField(Order, orderBlock, "reference", "客戶",
-            new { refTarget = new { kind = "entity", key = "sales.customer" } });
+            new { refTarget = new { kind = "entity", key = "test.entity" } });
         var orderDate = await AddField(Order, orderBlock, "date", "訂單日期", new { });
         var dueDate = await AddField(Order, orderBlock, "date", "交期", new { });
         var status = await AddField(Order, orderBlock, "enum", "狀態", new { });
@@ -155,7 +155,7 @@ public class Phase6AcceptanceTests : IClassFixture<TestApp>
         {
             values = new Dictionary<string, object>
             {
-                [customer.Key] = "C-001", [orderDate.Key] = "2026-11-05", [dueDate.Key] = "2026-11-20"
+                [customer.Key] = "E-0001", [orderDate.Key] = "2026-11-05", [dueDate.Key] = "2026-11-20"
             },
             details = Details(
                 Row(new Dictionary<string, object> { [lineTitle] = "甲", [qty.Key] = 2, [price.Key] = 100 }),
@@ -238,7 +238,7 @@ public class Phase6AcceptanceTests : IClassFixture<TestApp>
         var manager = _app.AsUser("manager01");
         var own = await Post(sales01, new
         {
-            values = new Dictionary<string, object> { [customer.Key] = "C-002", [orderDate.Key] = "2026-11-05" },
+            values = new Dictionary<string, object> { [customer.Key] = "E-0002", [orderDate.Key] = "2026-11-05" },
             details = Details(Row(new Dictionary<string, object> { [lineTitle] = "戊", [qty.Key] = 2 }))
         });
         own.StatusCode.Should().Be(HttpStatusCode.Created);

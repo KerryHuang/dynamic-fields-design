@@ -208,7 +208,7 @@ public class ReportCatalogApiTests
         using var app = new TestApp();
         var admin = app.AsUser();
         var main = await CreateModule(admin);
-        var customer = await AddField(admin, main, "reference", new { refTarget = new { kind = "entity", key = "sales.customer" } });
+        var customer = await AddField(admin, main, "reference", new { refTarget = new { kind = "entity", key = "test.entity" } });
         await Activate(admin, main);
         app.GrantBusinessGroups(main);
 
@@ -224,7 +224,7 @@ public class ReportCatalogApiTests
         // 條件比對的是鍵，不是標題文字：目錄要讓設計器用記錄挑選器，運算子也跟參照欄位相同
         fields[0].GetProperty("type").GetString().Should().Be("reference");
         fields[0].GetProperty("refKind").GetString().Should().Be("entity");
-        fields[0].GetProperty("refKey").GetString().Should().Be("sales.customer");
+        fields[0].GetProperty("refKey").GetString().Should().Be("test.entity");
     }
 
     [Fact]
@@ -234,7 +234,7 @@ public class ReportCatalogApiTests
         var target = await NewActive(app);
         var main = await CreateModule(app.AsUser());
         var toModule = await AddField(app.AsUser(), main, "reference", new { refTarget = new { kind = "module", key = target } });
-        var toEntity = await AddField(app.AsUser(), main, "reference", new { refTarget = new { kind = "entity", key = "sales.customer" } });
+        var toEntity = await AddField(app.AsUser(), main, "reference", new { refTarget = new { kind = "entity", key = "test.entity" } });
         var plain = await AddField(app.AsUser(), main, "decimal", new { scale = 0 });
         await Activate(app.AsUser(), main);
         app.GrantBusinessGroups(main);
@@ -245,7 +245,7 @@ public class ReportCatalogApiTests
         Field(toModule.Id).GetProperty("refKind").GetString().Should().Be("module");
         Field(toModule.Id).GetProperty("refKey").GetString().Should().Be(target);
         Field(toEntity.Id).GetProperty("refKind").GetString().Should().Be("entity");
-        Field(toEntity.Id).GetProperty("refKey").GetString().Should().Be("sales.customer");
+        Field(toEntity.Id).GetProperty("refKey").GetString().Should().Be("test.entity");
         // 伺服器省略 null 屬性：非參照欄位沒有 refKey
         Field(plain.Id).TryGetProperty("refKey", out _).Should().BeFalse();
     }
