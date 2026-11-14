@@ -4,6 +4,7 @@ using System.Text.Json;
 using DynamicModules.Domain.Data;
 using DynamicModules.Domain.Entities.Dynamic;
 using FluentAssertions;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using static DynamicModules.WebAPITests.Dynamic.ApiTestKit;
 
@@ -605,5 +606,34 @@ public class ApprovalApiTests : IDisposable
         // 處理過的 sales01 看得到簽核歷程：記錄維持 403，前端靠它改顯示「只看簽核歷程」
         (await sales01.GetAsync($"{Base}/records/{id}")).StatusCode.Should().Be(HttpStatusCode.Forbidden);
         (await sales01.GetAsync($"{Base}/records/{id}/approval")).StatusCode.Should().Be(HttpStatusCode.OK);
+    }
+
+    [Fact]
+    [Trait("Category", "Postgres")]
+    public async Task Print_GrantPath_KeepsLockedHeaders()
+    {
+        // 簽核人沒有模組的任何權限：靠臨時讀取列印預覽，回應標頭照樣把文件鎖成只能顯示
+        var r = await Arrange();
+        using (var scope = _app.Services.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<DynamicDbContext>();
+            var code = db.Set<Module>().Single(m => m.Key == r.Module).ProgramCode;
+            db.Set<GroupProgramPrivilege>().Where(g => g.ProgramCode == code).ExecuteDelete();
+        }
+        (await _admin.PostAsJsonAsync($"{Base}/modules/{r.Module}/print-templates",
+            new { key = "sheet", name = Zh("單據"), body = $"<h1>{{{{{r.Title}}}}}</h1>", active = true })).StatusCode.Should().Be(HttpStatusCode.Created);
+        var id = await Submitted(r);
+        var s1 = _app.AsUser("sales01");
+
+        var options = await s1.GetAsync($"{Base}/modules/{r.Module}/print-templates?recordId={id}");
+        options.StatusCode.Should().Be(HttpStatusCode.OK, await options.Content.ReadAsStringAsync());
+        (await s1.GetAsync($"{Base}/modules/{r.Module}/print-templates")).StatusCode.Should().Be(HttpStatusCode.Forbidden);
+
+        var res = await s1.GetAsync($"{Base}/records/{id}/print/sheet");
+        res.StatusCode.Should().Be(HttpStatusCode.OK, await res.Content.ReadAsStringAsync());
+        res.Headers.GetValues("X-Content-Type-Options").Should().Equal("nosniff");
+        res.Headers.GetValues("Content-Security-Policy").Single().Should().Contain("default-src 'none'");
+        res.Headers.CacheControl!.NoStore.Should().BeTrue();
+        (await _app.AsUser("floor01").GetAsync($"{Base}/records/{id}/print/sheet")).StatusCode.Should().Be(HttpStatusCode.Forbidden);
     }
 }

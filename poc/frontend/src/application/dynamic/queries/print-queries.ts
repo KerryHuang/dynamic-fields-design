@@ -3,11 +3,14 @@ import { computed, toValue, type MaybeRefOrGetter } from 'vue';
 import type { PrintTemplateDefinition } from 'src/domain/dynamic/types';
 import { dynamicApi } from 'src/services/api/dynamic-api';
 
-/** Templates a user can print with; a 403 (no print permission) leaves `data` empty and the print button hidden. */
-export function usePrintTemplates(moduleKey: MaybeRefOrGetter<string>) {
+/**
+ * Templates a user can print with; a 403 (no print permission) leaves `data` empty and the print button hidden.
+ * `recordId` is passed only for an approver's temporary read (approval grant), which the backend checks per record.
+ */
+export function usePrintTemplates(moduleKey: MaybeRefOrGetter<string>, recordId?: MaybeRefOrGetter<number | undefined>) {
   return useQuery({
-    queryKey: computed(() => ['print-templates', toValue(moduleKey)]),
-    queryFn: () => dynamicApi.getPrintTemplates(toValue(moduleKey)),
+    queryKey: computed(() => ['print-templates', toValue(moduleKey), toValue(recordId) ?? null]),
+    queryFn: () => dynamicApi.getPrintTemplates(toValue(moduleKey), toValue(recordId)),
     retry: false,
     staleTime: 60_000,
   });

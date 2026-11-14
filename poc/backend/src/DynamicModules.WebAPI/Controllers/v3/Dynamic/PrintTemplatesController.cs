@@ -11,8 +11,8 @@ namespace DynamicModules.WebAPI.Controllers.v3.Dynamic;
 public class PrintTemplatesController(IMediator mediator) : ControllerBase
 {
     [HttpGet("modules/{moduleKey}/print-templates")]
-    public async Task<IActionResult> Options(string moduleKey) =>
-        (await mediator.Send(new GetPrintTemplatesRequest(moduleKey))).ToActionResult(this);
+    public async Task<IActionResult> Options(string moduleKey, [FromQuery] long? recordId) =>
+        (await mediator.Send(new GetPrintTemplatesRequest(moduleKey, recordId))).ToActionResult(this);
 
     [HttpGet("modules/{moduleKey}/print-templates/definitions")]
     public async Task<IActionResult> Definitions(string moduleKey) =>

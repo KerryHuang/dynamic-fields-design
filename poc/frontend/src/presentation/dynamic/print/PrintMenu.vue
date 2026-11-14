@@ -8,10 +8,10 @@ import { dynamicApi } from 'src/services/api/dynamic-api';
 import type { ApiError } from 'src/services/api/http';
 import PrintPreviewDialog from './PrintPreviewDialog.vue';
 
-const props = defineProps<{ moduleKey: string; recordId: number }>();
+const props = defineProps<{ moduleKey: string; recordId: number; grant?: boolean }>();
 const { t, locale } = useI18n();
 const $q = useQuasar();
-const templates = usePrintTemplates(() => props.moduleKey);
+const templates = usePrintTemplates(() => props.moduleKey, () => (props.grant ? props.recordId : undefined));
 const options = computed(() => templates.data.value ?? []);
 
 const html = ref('');

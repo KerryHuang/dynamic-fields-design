@@ -17,7 +17,7 @@ vi.mock('src/services/api/dynamic-api', () => ({
   dynamicApi: {
     getModuleSchema: vi.fn(), getRecord: vi.fn(), deleteRecord: vi.fn(), related: vi.fn(), recordHistory: vi.fn(), getRecordTasks: vi.fn(),
     getRecordApproval: vi.fn(), getEffectivePolicies: vi.fn(), getRecordConversions: vi.fn(), getRecordEffects: vi.fn(), getRecordLedger: vi.fn(),
-    printRecord: vi.fn(), approveTask: vi.fn(),
+    printRecord: vi.fn(), approveTask: vi.fn(), getPrintTemplates: vi.fn(),
   },
 }));
 const api = vi.mocked(dynamicApi);
@@ -58,6 +58,7 @@ async function mountPage(setup: () => void) {
   api.getEffectivePolicies.mockResolvedValue({ values: {} });
   api.getRecordConversions.mockResolvedValue([]);
   api.getRecordEffects.mockResolvedValue({ items: [], hiddenCount: 0 } as never);
+  api.getPrintTemplates.mockResolvedValue([]);
   setup();
   const router = createRouter({ history: createMemoryHistory(), routes: [{ path: '/dynamic/:moduleKey/:id', component: DetailPage }] });
   await router.push('/dynamic/m/5');
@@ -101,10 +102,21 @@ describe('DetailPage temporary read', () => {
     expect(api.getRecordTasks).not.toHaveBeenCalled();
     expect(api.getRecordConversions).not.toHaveBeenCalled();
     expect(api.getRecordEffects).not.toHaveBeenCalled();
-    expect(w.text()).not.toContain('列印');
     expect(w.text()).not.toContain(zhTW.dynamic.edit);
     expect(w.text()).not.toContain(zhTW.dynamic.delete);
     w.unmount(); // the dialog is teleported to body: do not leak it into the next test
+  });
+
+  it('DetailPage shows print under grant', async () => {
+    const w = await mountPage(() => {
+      api.getModuleSchema.mockImplementation((_k, recordId) => (recordId === undefined ? gone(403) : Promise.resolve(grantSchema())));
+      api.getRecord.mockResolvedValue(record(true));
+      api.getRecordApproval.mockResolvedValue(approvalOf(instance()));
+      api.getPrintTemplates.mockResolvedValue([{ key: 'sheet', name: { 'zh-TW': '採購單' } }]);
+    });
+    expect(api.getPrintTemplates).toHaveBeenCalledWith('m', 5);
+    expect(has(w, 'print-menu')).toBe(true);
+    w.unmount();
   });
 
   it('record 404 on first load shows history only', async () => {

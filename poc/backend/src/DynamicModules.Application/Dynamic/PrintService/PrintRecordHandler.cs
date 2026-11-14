@@ -21,7 +21,7 @@ namespace DynamicModules.Application.Dynamic.PrintService;
 /// </summary>
 public class PrintRecordHandler(
     IModuleRepository modules, IRecordRepository records, IPrintTemplateRepository templates, IDynamicAccessGuard guard,
-    ReferenceResolver resolver, IPermissionRepository permissions, IBusinessTime time)
+    ReferenceResolver resolver, IPermissionRepository permissions, IBusinessTime time, ApprovalService.ApprovalReadGrant grant)
     : IRequestHandler<PrintRecordRequest, ServiceResult>
 {
     public async Task<ServiceResult> Handle(PrintRecordRequest request, CancellationToken ct)
@@ -31,13 +31,15 @@ public class PrintRecordHandler(
         var module = await modules.GetByIdAsync(record.ModuleId, includeChildren: true, ct);
         if (!module.IsReadable() || ModuleRelations.IsDetail(module)) return ServiceResult.NotFound(RecordMapper.RecordNotFound);
         // Read 與 PrintExport 缺一不可（被撤銷 Read 就不能靠列印取得資料）；兩者的資料範圍可能不同（共用主檔逐動作範圍），要同時符合
-        var access = await guard.AuthorizeAsync(module!, PermissionAction.Read, ct);
-        if (access.Permissions is not { } readPerms) return access.Denied!;
-        var printAccess = await guard.AuthorizeAsync(module!, PermissionAction.PrintExport, ct);
-        if (printAccess.Permissions is not { } printPerms) return printAccess.Denied!;
-        var perms = readPerms.Within(printPerms);
-        if (perms.OwnerUserIds is not null && !perms.OwnerUserIds.Contains(record.OwnerUserId))
-            return ServiceResult.NotFound(RecordMapper.RecordNotFound);
+        var perms = await NormalPathAsync(module!, record, ct);
+        var granted = perms.Permissions is null;
+        if (granted)
+        {
+            // 簽核人的臨時讀取（簽核設計 §10.1）：這一筆 open 待簽的可動作者，以臨時讀取的權限輸出；都不成立回一般路徑的拒絕
+            if (await grant.ForRecordAsync(module!, record, ct) is not { } g) return perms.Denied!;
+            perms = (g, null);
+        }
+        var effective = perms.Permissions!;
 
         var template = await templates.GetAsync(module!.Id, request.TemplateKey, ct);
         if (template is not { Active: true }) return ServiceResult.NotFound(PrintTemplateRules.NotFound);
@@ -50,9 +52,9 @@ public class PrintRecordHandler(
         var placeholders = PrintTemplateEngine.Placeholders(body);
         var userNames = (await permissions.ListUsersAsync(ct)).ToDictionary(u => u.UserId, u => u.DisplayName);
 
-        var refs = await resolver.ResolveAsync(module, perms, [record], ct);
+        var refs = await resolver.ResolveAsync(module, effective, [record], ct);
         var headerValues = RecordValueProcessor.Parse(record.ValuesJson);
-        var visible = VisibleFields(module, perms);
+        var visible = VisibleFields(module, effective);
         var titleVisible = module.TitleFieldId is not null && module.TitleFieldIds().All(id => visible.Values.Any(f => f.Id == id));
 
         string? Header(string key) => key switch
@@ -70,8 +72,10 @@ public class PrintRecordHandler(
             {
                 var child = children.FirstOrDefault(c => c.Key == moduleKey);
                 if (child is null) continue;
-                var childAccess = await guard.AuthorizeDetailAsync(module, child, PermissionAction.Read, ct);
-                if (childAccess.Permissions is not { } childPerms) continue;
+                var childPerms = granted
+                    ? await grant.ForDetailAsync(module, child, ct)
+                    : (await guard.AuthorizeDetailAsync(module, child, PermissionAction.Read, ct)).Permissions;
+                if (childPerms is null) continue;
                 var parentField = ModuleRelations.DetailFieldOf(child)!;
                 var rows = await records.ListByRefAsync(parentField.Id, record.Id.ToString(), ct);
                 var rowRefs = await resolver.ResolveAsync(child, childPerms, rows, ct);
@@ -89,6 +93,18 @@ public class PrintRecordHandler(
         var html = PrintTemplateSanitizer.Sanitize(PrintTemplateEngine.Render(body, Header, key => loops.GetValueOrDefault(key) ?? []));
         var title = WebUtility.HtmlEncode(template.NameI18n.Resolve(locale));
         return ServiceResult.Success(new PrintedDocument(PrintDocument.Wrap(title, html, locale)));
+    }
+
+    private async Task<(EffectivePermissions? Permissions, ServiceResult? Denied)> NormalPathAsync(Module module, Record record, CancellationToken ct)
+    {
+        var access = await guard.AuthorizeAsync(module, PermissionAction.Read, ct);
+        if (access.Permissions is not { } readPerms) return (null, access.Denied!);
+        var printAccess = await guard.AuthorizeAsync(module, PermissionAction.PrintExport, ct);
+        if (printAccess.Permissions is not { } printPerms) return (null, printAccess.Denied!);
+        var perms = readPerms.Within(printPerms);
+        return perms.OwnerUserIds is not null && !perms.OwnerUserIds.Contains(record.OwnerUserId)
+            ? (null, ServiceResult.NotFound(RecordMapper.RecordNotFound))
+            : (perms, null);
     }
 
     private static Dictionary<string, Field> VisibleFields(Module module, EffectivePermissions perms) =>

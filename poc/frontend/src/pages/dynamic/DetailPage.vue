@@ -136,7 +136,7 @@ async function onDelete() {
           v-for="to in submitTargets" :key="to" color="primary" icon="rule" :label="t('approval.submitTo', { state: stateLabel(to) })"
           :data-testid="`submit-approval-${to}`" @click="submitTo = to"
         />
-        <PrintMenu v-if="!grant" :module-key="moduleKey" :record-id="recordId" />
+        <PrintMenu :module-key="moduleKey" :record-id="recordId" :grant="grant" />
         <q-btn v-if="canEdit" color="primary" :label="t('dynamic.edit')" :to="`/dynamic/${moduleKey}/${recordId}/edit`" />
         <q-btn v-if="canDelete" color="negative" outline :label="t('dynamic.delete')" @click="confirming = true" />
       </div>
