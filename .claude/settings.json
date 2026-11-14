@@ -1,4 +1,10 @@
 {
+  "skillOverrides": {
+    "dotnet-test:writing-mstest-tests": "off",
+    "dotnet-test:mtp-hot-reload": "off",
+    "dotnet-test:code-testing": "off",
+    "dotnet-test:code-testing-agent": "off"
+  },
   "hooks": {
     "SessionStart": [
       {
@@ -24,21 +30,22 @@
       }
     ]
   },
+  "enabledPlugins": {
+    "dotnet-test@dotnet-agent-skills": true,
+    "lifecycle@plugharbor": true
+  },
   "extraKnownMarketplaces": {
     "dotnet-agent-skills": {
       "source": {
         "source": "github",
         "repo": "dotnet/skills"
       }
+    },
+    "plugharbor": {
+      "source": {
+        "source": "git",
+        "url": "https://github.com/KerryHuang/plugharbor.git"
+      }
     }
-  },
-  "enabledPlugins": {
-    "dotnet-test@dotnet-agent-skills": true
-  },
-  "skillOverrides": {
-    "dotnet-test:writing-mstest-tests": "off",
-    "dotnet-test:mtp-hot-reload": "off",
-    "dotnet-test:code-testing": "off",
-    "dotnet-test:code-testing-agent": "off"
   }
 }
