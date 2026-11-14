@@ -180,6 +180,60 @@ public class TaskMoveTests : TaskBoardTestBase
     }
 
     [Fact]
+    public async Task Move_StaleVersion_NothingWritten_NoSideEffects()
+    {
+        var task = await SeedTask("準備報價", createdBy: "sales01", assignee: "sales01", ruleId: 1);
+        var stale = TaskVersion.Of(await Load(task.Id));
+        Card(await Move("sales01", task, "status", "inProgress"));
+        var before = await SideEffects(task.Id);
+
+        var r = await Move("sales01", task, "status", "done", version: stale);
+
+        r.IsConflict.Should().BeTrue();
+        (await SideEffects(task.Id)).Should().Be(before);
+        (await Load(task.Id)).Status.Should().Be(TaskItemStatus.InProgress);
+    }
+
+    /// <summary>
+    /// 模擬兩個請求都讀到版本 V：這個請求的 context 已追蹤舊列，另一個請求在它讀完之後、寫入之前已把版本推進。
+    /// 記憶體比較仍通過，寫入端的條件式更新必須擋下：409，且沒有系統記錄、通知、覆寫旗標。
+    /// </summary>
+    [Fact]
+    public async Task Move_VersionChangedAfterRead_409_NoSideEffects()
+    {
+        var task = await SeedTask("準備報價", createdBy: "sales01", assignee: "sales01", ruleId: 1, due: D(20));
+        var version = TaskVersion.Of(await Load(task.Id));
+        var tracked = await Db.Context.Set<TaskItem>().SingleAsync(t => t.Id == task.Id);
+        tracked.Status.Should().Be(TaskItemStatus.Todo);
+        var other = new DateTime(2026, 11, 4, 9, 30, 0);
+        await Db.Context.Set<TaskItem>().Where(t => t.Id == task.Id)
+            .ExecuteUpdateAsync(s => s.SetProperty(t => t.Status, TaskItemStatus.Done).SetProperty(t => t.ModifiedTime, other));
+        var before = await SideEffects(task.Id, reload: false);
+
+        As("sales01");
+        var r = await Send(new MoveTaskRequest(task.Id, "dueBucket", "none", null, version));
+        As("admin");
+
+        r.IsConflict.Should().BeTrue();
+        r.Code.Should().Be("stale");
+        Db.Context.ChangeTracker.Clear();
+        (await SideEffects(task.Id)).Should().Be(before);
+        var after = await Load(task.Id);
+        after.DueDate.Should().Be(D(20));
+        after.DueOverridden.Should().BeFalse();
+        after.Status.Should().Be(TaskItemStatus.Done);
+    }
+
+    private async Task<(int Comments, int Notifications, bool Overridden)> SideEffects(long id, bool reload = true)
+    {
+        if (reload) Db.Context.ChangeTracker.Clear();
+        var db = Db.Context;
+        return (await db.Set<TaskComment>().AsNoTracking().CountAsync(c => c.TaskId == id && c.Kind == TaskCommentKind.System),
+            await db.Set<Notification>().AsNoTracking().CountAsync(),
+            await db.Set<TaskItem>().AsNoTracking().Where(t => t.Id == id).Select(t => t.DueOverridden || t.AssigneeOverridden).SingleAsync());
+    }
+
+    [Fact]
     public async Task Move_Frozen_409()
     {
         var t = await BuildTarget();

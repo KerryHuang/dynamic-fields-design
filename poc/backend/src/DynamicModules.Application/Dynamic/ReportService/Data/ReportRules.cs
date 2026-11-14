@@ -17,7 +17,7 @@ public static class ReportRules
     public const int DrillLimit = 500;
     public const int DetailLimit = 1000;
 
-    private const int MaxDays = 3650, MaxListItems = 50, MaxTextLength = 440;
+    private const int MaxDays = ReportDateRange.MaxN, MaxListItems = 50, MaxTextLength = 440;
 
     private static readonly string[] Vizs = ["table", "indicator", "line", "bar", "donut"];
     private static readonly string[] Buckets = ["day", "week", "month", "quarter", "year"];

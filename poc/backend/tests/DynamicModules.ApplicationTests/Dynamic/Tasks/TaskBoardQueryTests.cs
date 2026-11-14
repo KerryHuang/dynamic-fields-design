@@ -222,6 +222,44 @@ public class TaskBoardQueryTests : TaskBoardTestBase
         (await SendAs("sales01", new GetTaskBoardColumnsRequest(view.Id, J("""{"version":1,"groupBy":"status","scope":"visible"}""")))).IsInvalid.Should().BeTrue();
     }
 
+    [Theory]
+    [InlineData("assignee")]
+    [InlineData("dueBucket")]
+    [InlineData("status")]
+    public async Task Probing_ByAssigneeCreatorDue_NeverLeaksInvisibleTasks(string groupBy)
+    {
+        var mine = await SeedTask("業務一的", createdBy: "sales01", assignee: "sales01", due: Today);
+        for (var i = 0; i < 55; i++) await SeedTask($"業務二的{i}", createdBy: "sales02", assignee: "sales02", due: Today);
+        var filters = new[]
+        {
+            """{"assigneeUserIds":["sales02"]}""",
+            """{"creatorUserIds":["sales02"]}""",
+            """{"dueRange":{"kind":"today"}}""",
+            """{"assigneeUserIds":["sales01","sales02"],"creatorUserIds":["sales02"],"dueRange":{"kind":"today"}}""",
+        };
+        foreach (var f in filters)
+        {
+            var config = $$"""{"version":1,"groupBy":"{{groupBy}}","scope":"visible","filters":{{f}}}""";
+            var b = await Board("sales01", config);
+
+            var cards = b.Columns.SelectMany(c => c.Cards).ToList();
+            cards.Where(c => c.Title != "業務一的").Should().BeEmpty(f);
+            b.Columns.Sum(c => c.Total).Should().BeLessThanOrEqualTo(1, f);
+            b.Columns.Where(c => c.UserId == "sales02").Should().BeEmpty(f);
+            b.Columns.Any(c => c.Cards.Any(x => x.AssigneeUserId == "sales02")).Should().BeFalse(f);
+            foreach (var col in b.Columns)
+            {
+                var page = await SendAs("sales01", new GetTaskBoardColumnPageRequest(col.Key, null, J(config), 50));
+                page.IsSuccess.Should().BeTrue(f);
+                var p = (TaskBoardPageResponse)page.Data!;
+                p.Cards.Should().BeEmpty(f);
+                p.Total.Should().BeLessThanOrEqualTo(1, f);
+            }
+        }
+        (await Board("sales01", $$"""{"version":1,"groupBy":"{{groupBy}}","scope":"visible"}""")).Columns.SelectMany(c => c.Cards)
+            .Should().ContainSingle(c => c.Id == mine.Id);
+    }
+
     [Fact]
     public async Task Config_ReferencesInactiveUser_StillLoads()
     {

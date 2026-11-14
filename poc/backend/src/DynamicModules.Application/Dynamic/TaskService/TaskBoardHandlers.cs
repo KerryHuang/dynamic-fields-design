@@ -264,6 +264,8 @@ public class MoveTaskHandler(ITaskRepository tasks, TaskAccess access, TaskSuppo
         var from = task.AssigneeUserId;
         if (edit is not null)
         {
+            // 版本比對與寫入要原子：另一個請求在上面的讀取後已改過這一列時，認領失敗，整筆交易回滾（沒有事件、通知、旗標）
+            if (!await tasks.TryClaimVersionAsync(task, ct)) return ServiceResult.Conflict(MessageRef.Literal(TaskMessages.Stale), "stale");
             await writer.ApplyAsync(task, edit, ct);
             await writer.FlushAsync(ct);
         }

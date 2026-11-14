@@ -20,7 +20,6 @@ public sealed record TaskBoardConfig(
     public const int MaxExplicitAssignees = 50;
     /// <summary>關鍵字長度（格式）。</summary>
     public const int MaxKeyword = 100;
-    private const int MaxRangeN = 3650;
 
     public const string ByStatus = "status", ByAssignee = "assignee", ByDueBucket = "dueBucket";
     public const string ScopeAssigned = "assigned", ScopeInvolved = "involved", ScopeSubordinates = "subordinates", ScopeVisible = "visible";
@@ -181,7 +180,7 @@ public sealed record TaskBoardConfig(
     /// <summary>到期日區間沿用報表的相對區間（以今天解析）；null 代表合法。</summary>
     private static string? RangeError(ReportDateRange r)
     {
-        if (r.N is { } n && (n < 1 || n > MaxRangeN)) return $"到期日區間的 N 必須介於 1 到 {MaxRangeN}";
+        if (r.N is { } n && (n < 1 || n > ReportDateRange.MaxN)) return $"到期日區間的 N 必須介於 1 到 {ReportDateRange.MaxN}";
         try { ReportDates.Resolve(r, new DateOnly(2026, 1, 1), DayOfWeek.Monday); }
         catch (ArgumentException) { return "到期日區間種類不正確"; }
         if (r.N is null && r.Kind is "lastDays" or "lastWeeks" or "lastMonths") return "到期日區間需要 N";

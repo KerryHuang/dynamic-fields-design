@@ -30,6 +30,24 @@ public class TaskBoardApiTests : IDisposable
         return await JsonOf(res);
     }
 
+    [Theory]
+    [InlineData("[null]")]
+    [InlineData("""[{"kind":"user","id":"sales01"},null]""")]
+    public async Task TaskViewShares_NullElement_400_NothingChanged(string body)
+    {
+        var manager = _app.AsUser("manager01");
+        var created = await Ok(await manager.PostAsync($"{Base}/task-views", Json($$"""{"kind":"board","name":"業務部任務","config":{{StatusBoard}}}""")), HttpStatusCode.Created);
+        var id = created.GetProperty("id").GetInt64();
+        var shared = await Ok(await manager.PutAsync($"{Base}/task-views/{id}/shares", Json("""[{"kind":"user","id":"sales01"}]""")));
+        var rowVersion = shared.GetProperty("rowVersion").GetString();
+
+        (await manager.PutAsync($"{Base}/task-views/{id}/shares", Json(body))).StatusCode.Should().Be(HttpStatusCode.BadRequest);
+
+        var after = await Ok(await manager.GetAsync($"{Base}/task-views/{id}"));
+        after.GetProperty("rowVersion").GetString().Should().Be(rowVersion);
+        after.GetProperty("shares").GetArrayLength().Should().Be(1);
+    }
+
     [Fact]
     [Trait("Category", "Postgres")]
     public async Task TaskViews_Crud_Http()
