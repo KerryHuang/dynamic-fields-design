@@ -82,6 +82,116 @@ public class TaskRepository(DynamicDbContext db) : ITaskRepository
     public Task<List<long>> ListVisibleIdsAsync(TaskVisibility visibility, CancellationToken ct) =>
         TaskVisibilityQuery.Visible(db, visibility).Select(t => t.Id).OrderBy(id => id).ToListAsync(ct);
 
+    /// <summary>可見條件＋範圍＋篩選（看板設計 §5.7）。所有範圍都再 AND 可見條件（縱深防禦）。</summary>
+    private IQueryable<TaskItem> BoardBase(TaskBoardQuery q)
+    {
+        var query = TaskVisibilityQuery.Visible(db, q.Visibility);
+        var me = q.Visibility.UserId;
+        query = q.Scope switch
+        {
+            TaskBoardConfig.ScopeAssigned => query.Where(t => t.AssigneeUserId == me),
+            TaskBoardConfig.ScopeInvolved => query.Where(t => t.Participants.Any(p => p.UserId == me)),
+            TaskBoardConfig.ScopeSubordinates => query.Where(SubordinateTasks.Of(q.Subordinates)),
+            _ => query,
+        };
+        if (q.Statuses is { } statuses)
+        {
+            var list = statuses.ToArray();
+            query = query.Where(t => list.Contains(t.Status));
+        }
+        if (q.AssigneeUserIds is { Count: > 0 } assignees)
+        {
+            var ids = assignees.ToArray();
+            var unassigned = q.IncludeUnassigned == true;
+            query = query.Where(t => (t.AssigneeUserId != null && ids.Contains(t.AssigneeUserId)) || (unassigned && t.AssigneeUserId == null));
+        }
+        else if (q.IncludeUnassigned == false) query = query.Where(t => t.AssigneeUserId != null);
+        if (q.CreatorUserIds is { Count: > 0 } creators)
+        {
+            var ids = creators.ToArray();
+            query = query.Where(t => t.CreatedBy != null && ids.Contains(t.CreatedBy));
+        }
+        if (q.Sources is { Count: > 0 } sources)
+        {
+            var personal = sources.Contains(TaskBoardConfig.SourcePersonal);
+            var record = sources.Contains(TaskBoardConfig.SourceRecord);
+            var rule = sources.Contains(TaskBoardConfig.SourceRule);
+            query = query.Where(t => (personal && t.RecordId == null) || (record && t.RecordId != null && t.RuleId == null) || (rule && t.RuleId != null));
+        }
+        if (q.DueFrom is { } from && q.DueTo is { } to) query = query.Where(t => t.DueDate != null && t.DueDate >= from && t.DueDate <= to);
+        if (q.Keyword is { Length: > 0 } keyword)
+        {
+            var k = keyword.ToLower();
+            query = query.Where(t => t.Title.ToLower().Contains(k));
+        }
+        return query;
+    }
+
+    private static IQueryable<TaskItem> InColumn(IQueryable<TaskItem> query, TaskBoardQuery q, string column)
+    {
+        switch (q.GroupBy)
+        {
+            case TaskBoardConfig.ByStatus:
+                if (!TaskBoardConfig.TryParseStatus(column, out var status)) throw new ArgumentException($"未知的狀態欄：{column}", nameof(column));
+                return query.Where(t => t.Status == status);
+            case TaskBoardConfig.ByDueBucket:
+                return query.Where(TaskDueBuckets.Condition(column, q.Today, q.WeekEnd));
+            default:
+                if (column == TaskBoardConfig.Unassigned) return query.Where(t => t.AssigneeUserId == null);
+                if (!column.StartsWith(TaskBoardConfig.UserColumnPrefix, StringComparison.Ordinal))
+                    throw new ArgumentException($"未知的負責人欄：{column}", nameof(column));
+                var userId = column[TaskBoardConfig.UserColumnPrefix.Length..];
+                return query.Where(t => t.AssigneeUserId == userId);
+        }
+    }
+
+    public async Task<Dictionary<string, int>> CountBoardColumnsAsync(TaskBoardQuery q, IReadOnlyCollection<string> columns, CancellationToken ct)
+    {
+        var query = BoardBase(q);
+        switch (q.GroupBy)
+        {
+            case TaskBoardConfig.ByStatus:
+                return (await query.GroupBy(t => t.Status).Select(g => new { g.Key, Count = g.Count() }).ToListAsync(ct))
+                    .ToDictionary(x => TaskBoardConfig.StatusKey(x.Key), x => x.Count);
+            case TaskBoardConfig.ByAssignee:
+                return (await query.GroupBy(t => t.AssigneeUserId).Select(g => new { g.Key, Count = g.Count() }).ToListAsync(ct))
+                    .ToDictionary(x => x.Key is null ? TaskBoardConfig.Unassigned : TaskBoardConfig.UserColumnPrefix + x.Key, x => x.Count);
+            default:
+                var result = new Dictionary<string, int>();
+                foreach (var column in columns)
+                    if (await InColumn(query, q, column).CountAsync(ct) is > 0 and var n) result[column] = n;
+                return result;
+        }
+    }
+
+    public Task<List<TaskItem>> QueryBoardColumnAsync(TaskBoardQuery q, string column, int offset, int take, CancellationToken ct)
+    {
+        var query = InColumn(BoardBase(q), q, column);
+        var desc = q.SortDescending;
+        IOrderedQueryable<TaskItem> ordered = q.GroupBy == TaskBoardConfig.ByStatus && column == TaskBoardConfig.StatusKey(TaskItemStatus.Done)
+            // 「完成」欄固定完成時間新到舊；null 明確排最後（PostgreSQL 的 DESC 預設把 null 排最前）
+            ? query.OrderBy(t => t.CompletedTime == null).ThenByDescending(t => t.CompletedTime)
+            : q.SortKey switch
+            {
+                "createdTime" => desc ? query.OrderByDescending(t => t.CreatedTime) : query.OrderBy(t => t.CreatedTime),
+                "title" => desc ? query.OrderByDescending(t => t.Title) : query.OrderBy(t => t.Title),
+                // 到期日：空的不論方向都排最後
+                _ => desc ? query.OrderBy(t => t.DueDate == null).ThenByDescending(t => t.DueDate)
+                    : query.OrderBy(t => t.DueDate == null).ThenBy(t => t.DueDate),
+            };
+        return ordered.ThenBy(t => t.Id).Include(t => t.Participants).Skip(offset).Take(take).ToListAsync(ct);
+    }
+
+    public async Task<Dictionary<long, int>> CountCommentsAsync(IReadOnlyCollection<long> taskIds, CancellationToken ct)
+    {
+        var ids = taskIds.Distinct().ToArray();
+        if (ids.Length == 0) return [];
+        return await db.Set<TaskComment>().AsNoTracking()
+            .Where(c => ids.Contains(c.TaskId) && c.Kind == TaskCommentKind.Comment && !c.Withdrawn)
+            .GroupBy(c => c.TaskId).Select(g => new { g.Key, Count = g.Count() })
+            .ToDictionaryAsync(x => x.Key, x => x.Count, ct);
+    }
+
     public Task<string?> GetRuleKeyAsync(long ruleId, CancellationToken ct) =>
         db.Set<TaskRule>().AsNoTracking().Where(r => r.Id == ruleId).Select(r => (string?)r.Key).FirstOrDefaultAsync(ct);
 

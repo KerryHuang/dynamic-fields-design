@@ -18,11 +18,17 @@ public abstract class TaskViewTestBase : TaskTestBase
         await DemoPeople.EnsureOrganizationAsync(Db.Context, SeedTime);
     }
 
+    /// <summary>以某人身分送一個請求；前後清掉共用 DbContext 的追蹤器，與正式環境每個請求一個 DbContext 一樣。</summary>
     protected async Task<ServiceResult> SendAs(string user, MediatR.IRequest<ServiceResult> request)
     {
+        Db.Context.ChangeTracker.Clear();
         As(user);
         try { return await Send(request); }
-        finally { As("admin"); }
+        finally
+        {
+            As("admin");
+            Db.Context.ChangeTracker.Clear();
+        }
     }
 
     protected async Task<TaskViewDetail> CreateView(string owner, string name = "業務部任務", string config = StatusConfig)
