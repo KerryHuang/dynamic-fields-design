@@ -24,7 +24,7 @@ function rerouteText(a: ApprovalActionView): string {
 function targetsText(a: ApprovalActionView): string {
   if (a.action !== 'transfer' && a.action !== 'reassign') return '';
   const names = a.targetNames?.length ? a.targetNames : a.targetUserIds;
-  return names.length ? t('approval.panel.targets', { names: names.join('、') }) : '';
+  return names.length ? t('approval.panel.targets', { names: names.join(t('common.listSeparator')) }) : '';
 }
 
 interface Change { fieldId: number; label: string; before: string; after: string }

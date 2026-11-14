@@ -10,17 +10,17 @@ const inst = (tasks: ApprovalTaskView[]): ApprovalInstanceView => ({
   rowVersion: 'iv', stages: [{ id: 1, seq: 1, stageCode: 's', name: {}, mode: 'all', status: 'active', skipReason: null, dueTime: null, tasks, editableFieldKeys: [] }],
   actions: [], canWithdraw: false, canCancel: false, titleSnapshot: '',
 });
-const users = ['me', 'init', 'peer', 'away', 'delegate', 'boss', 'back'].map((userId) => ({ userId, displayName: userId.toUpperCase() }));
+const users = ['me', 'init', 'peer', 'away', 'delegate', 'boss', 'back', 'gone'].map((userId) => ({ userId, displayName: userId.toUpperCase() }));
 const values = (o: { value: string }[]) => o.map((x) => x.value);
 
 describe('targetCandidates', () => {
   it('excludes me, the initiator and seat holders but keeps transferred-out holders', () => {
     const i = inst([
       task({ id: 1, assigneeUserId: 'me', canAct: true }), task({ id: 2, assigneeUserId: 'peer' }),
-      task({ id: 3, assigneeUserId: 'away', status: 'transferred' }), task({ id: 4, assigneeUserId: 'boss', status: 'approved' }),
+      task({ id: 3, assigneeUserId: 'away', status: 'transferred' }), task({ id: 6, assigneeUserId: 'gone', status: 'reassigned' }), task({ id: 4, assigneeUserId: 'boss', status: 'approved' }),
       task({ id: 5, assigneeUserId: 'delegate', originalUserId: 'back', reason: 'delegated' }),
     ]);
-    expect(values(targetCandidates(users, i, 'me', false))).toEqual(['away']);
+    expect(values(targetCandidates(users, i, 'me', false))).toEqual(['away', 'gone']);
   });
 
   it('keeps the initiator when allowed', () => {

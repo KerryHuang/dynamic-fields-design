@@ -86,6 +86,17 @@ describe('ReassignDialog', () => {
     w.unmount();
   });
 
+  it('candidates include the manager but not the initiator or this stage holders', async () => {
+    const w = await mountDialog(inst([task(11, 'gm', '進銷存主管'), task(12, 'fin1', '財務一')]));
+    const items = (await search('reassign-user', '')).map((e) => e.textContent);
+    expect(items).toContain('系統管理員');
+    expect(items).toContain('業務主管');
+    expect(items).not.toContain('發起人');
+    expect(items).not.toContain('進銷存主管');
+    expect(items).not.toContain('財務一');
+    w.unmount();
+  });
+
   it('sends the chosen task id', async () => {
     const w = await mountDialog(inst([task(11, 'gm', '進銷存主管'), task(12, 'fin1', '財務一')]));
     await click('reassign-send');

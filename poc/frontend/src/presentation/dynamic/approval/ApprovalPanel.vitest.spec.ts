@@ -64,6 +64,18 @@ describe('ApprovalPanel', () => {
     expect(w.find('[data-testid="task-2"] [data-testid="task-original"]').exists()).toBe(false);
   });
 
+  it('a reassigned task reads 改派, never 轉交, for both the old and the new holder', () => {
+    const w = mountPanel(approval(instance({ stages: [stage({ tasks: [
+      task({ id: 1, assigneeName: '王主管', status: 'reassigned', reason: 'resolved' }),
+      task({ id: 2, assigneeName: '李財務', reason: 'reassigned', originalName: '王主管' }),
+    ] })] })));
+    expect(text(w, 'task-1')).toContain('已改派');
+    expect(text(w, 'task-1')).not.toContain('轉交');
+    expect(text(w, 'task-2')).toContain('改派');
+    expect(text(w, 'task-2')).not.toContain('轉交');
+    expect(w.find('[data-testid="task-2"] [data-testid="task-original"]').text()).toBe('原簽核人 王主管');
+  });
+
   it('shows the stage mode (all sign / any sign)', () => {
     const w = mountPanel(approval(instance({ stages: [stage({ mode: 'any' })] })));
     expect(text(w, 'stage-1')).toContain('或簽');

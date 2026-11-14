@@ -29,7 +29,7 @@ const overdue = (s: ApprovalStageView) => s.status === 'active' && !!s.dueTime &
         <span class="approval-wrap">{{ k.assigneeName }}</span>
         <q-badge v-if="k.reason === 'fallback'" outline color="warning" :label="t('approval.reason.fallback')" data-testid="task-fallback" />
         <q-badge v-else-if="k.reason !== 'resolved'" outline color="muted" :label="labelOf('approval.reason', k.reason, t, te)" />
-        <span v-if="k.reason === 'transferred' && k.originalName" class="text-muted approval-wrap" data-testid="task-original">{{ t('approval.panel.originalUser', { name: k.originalName }) }}</span>
+        <span v-if="(k.reason === 'transferred' || k.reason === 'reassigned') && k.originalName" class="text-muted approval-wrap" data-testid="task-original">{{ t('approval.panel.originalUser', { name: k.originalName }) }}</span>
         <span class="text-muted">{{ labelOf('approval.taskStatus', k.status, t, te) }}</span>
         <span v-if="k.actedTime" class="text-muted">{{ timeText(k.actedTime) }}</span>
       </div>
