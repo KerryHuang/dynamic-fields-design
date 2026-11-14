@@ -485,7 +485,8 @@ export const dynamicApi = {
     http.post<ImportPreview>(`/modules/${key}/import`, importForm(file), { params: { commit: false } }).then(data),
   commitImport: (key: string, file: File, idempotencyKey?: string) =>
     http.post<ImportResult>(`/modules/${key}/import`, importForm(file), { params: { commit: true }, ...idem(idempotencyKey) }).then(data),
-  getPrintTemplates: (moduleKey: string) => http.get<PrintTemplateOption[]>(`/modules/${moduleKey}/print-templates`).then(data),
+  getPrintTemplates: (moduleKey: string, recordId?: number) =>
+    http.get<PrintTemplateOption[]>(`/modules/${moduleKey}/print-templates`, { params: recordId === undefined ? undefined : { recordId } }).then(data),
   getPrintTemplateDefinitions: (moduleKey: string) =>
     http.get<PrintTemplateDefinition[]>(`/modules/${moduleKey}/print-templates/definitions`).then(data),
   createPrintTemplate: (moduleKey: string, body: PrintTemplateDefinition) =>

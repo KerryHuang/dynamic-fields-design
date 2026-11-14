@@ -29,8 +29,11 @@ public record DeletePrintTemplateRequest(string ModuleKey, string Key) : IReques
     public PermissionAction RequiredDesignerAction => PermissionAction.Edit;
 }
 
-/// <summary>某個模組目前使用者可以選的列印範本（啟用的；需要該模組的列印／匯出權限）。</summary>
-public record GetPrintTemplatesRequest(string ModuleKey) : IRequest<ServiceResult>;
+/// <summary>
+/// 某個模組目前使用者可以選的列印範本（啟用的；需要該模組的列印／匯出權限）。
+/// 帶 RecordId 時，一般權限不成立的簽核人可用臨時讀取（簽核設計 §10.1）列出這一筆的範本。
+/// </summary>
+public record GetPrintTemplatesRequest(string ModuleKey, long? RecordId = null) : IRequest<ServiceResult>;
 
 /// <summary>算出一筆記錄的列印結果（完整 HTML 文件）。</summary>
 public record PrintRecordRequest(long RecordId, string TemplateKey, string? Locale) : IRequest<ServiceResult>;

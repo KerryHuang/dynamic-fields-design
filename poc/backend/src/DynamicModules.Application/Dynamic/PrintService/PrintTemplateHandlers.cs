@@ -91,17 +91,24 @@ public class DeletePrintTemplateHandler(IModuleRepository modules, IPrintTemplat
     }
 }
 
-public class GetPrintTemplatesHandler(IModuleRepository modules, IPrintTemplateRepository templates, IDynamicAccessGuard guard)
-    : IRequestHandler<GetPrintTemplatesRequest, ServiceResult>
+public class GetPrintTemplatesHandler(
+    IModuleRepository modules, IPrintTemplateRepository templates, IDynamicAccessGuard guard, IRecordRepository records,
+    ApprovalService.ApprovalReadGrant grant) : IRequestHandler<GetPrintTemplatesRequest, ServiceResult>
 {
     public async Task<ServiceResult> Handle(GetPrintTemplatesRequest request, CancellationToken ct)
     {
         var module = await modules.GetByKeyAsync(request.ModuleKey, includeChildren: true, ct);
         if (!module.IsReadable() || ModuleRelations.IsDetail(module)) return ServiceResult.NotFound(RecordMapper.ModuleNotFound);
         var readAccess = await guard.AuthorizeAsync(module, PermissionAction.Read, ct);
-        if (readAccess.Permissions is null) return readAccess.Denied!;
-        var access = await guard.AuthorizeAsync(module, PermissionAction.PrintExport, ct);
-        if (access.Permissions is null) return access.Denied!;
+        var access = readAccess.Permissions is null ? readAccess : await guard.AuthorizeAsync(module, PermissionAction.PrintExport, ct);
+        if (access.Permissions is null)
+        {
+            // 簽核人的臨時讀取（簽核設計 §10.1）：只在一般權限不成立、而且指定了一筆記錄時；不存在、別的模組、不是可動作者都回原本的拒絕
+            if (request.RecordId is not { } recordId) return access.Denied!;
+            var record = await records.GetAsync(recordId, ct);
+            if (record is null || record.ModuleId != module!.Id) return access.Denied!;
+            if (await grant.ForRecordAsync(module, record, ct) is null) return access.Denied!;
+        }
         var active = (await templates.ListByModuleAsync(module!.Id, ct)).Where(t => t.Active).Select(t => new PrintTemplateOption(t.Key, t.NameI18n));
         return ServiceResult.Success(active.ToList());
     }
