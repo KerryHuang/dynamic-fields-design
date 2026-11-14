@@ -10,7 +10,7 @@ public sealed record GraphCheck(IReadOnlyList<GraphIssue> Errors, IReadOnlyList<
 /// <summary>政策上限：簽核節點數、每個分支節點的分支數；由 Application 讀政策後傳入，Domain 不寫死數字。</summary>
 public sealed record GraphPolicyLimits(int MaxApprovalNodes, int MaxBranches);
 
-/// <summary>流程圖結構驗證 G1–G8、G12、G13（流程圖設計 §9）。簽核人、條件語法、範本等需要模組資料的規則在 Application。</summary>
+/// <summary>流程圖結構驗證 G1–G8、G12、G13 與警告 W1–W3（流程圖設計 §9）。簽核人、條件語法、範本等需要模組資料的規則在 Application。</summary>
 public static class ApprovalGraphValidator
 {
     private static readonly HashSet<string> Kinds =
@@ -20,7 +20,7 @@ public static class ApprovalGraphValidator
     ];
 
     /// <summary>
-    /// previous：這條流程目前版本（sequence 先轉換，J16）；政策上限超過且比舊版大才擋。Warnings 在 fg1d 才填。
+    /// previous：這條流程目前版本（sequence 先轉換，J16）；政策上限超過且比舊版大才擋。Warnings 是 W1–W3，有 G1–G5 任一錯誤時不算。
     /// 局部錯誤（G1 屬性、G2 度數）不影響拓撲分析，其他規則照跑；只有可達（G3、G4）或環（G5）這類
     /// 「沒辦法可靠分析拓撲」的錯誤才跳過並行區分析（G7 區域、G8、G12、巢狀深度）。
     /// 匯合與分支的配對檢查只看節點本身，不依賴區域，一律執行。
@@ -139,7 +139,73 @@ public static class ApprovalGraphValidator
         // G13
         CheckCounts(d, m, limits, previous, NodeKey, Err);
 
-        return new GraphCheck([.. errors.Distinct()], []);
+        var broken = errors.Any(e => e.Rule is "G1" or "G2" or "G3" or "G4" or "G5");
+        return new GraphCheck([.. errors.Distinct()], broken ? [] : [.. CheckWarnings(m, pairs, NodeKey).Distinct()]);
+    }
+
+    /// <summary>
+    /// 警告 W1–W3（顯示但不擋發布）。「經過簽核」只看節點種類是不是簽核，有略過條件的簽核節點照樣算經過（略過條件另有 W3）；
+    /// 全部到齊的並行區只要區內任何地方有簽核節點，整段都算經過簽核（匯合要等每條分支，區內有人簽就停得住）。
+    /// </summary>
+    private static List<GraphIssue> CheckWarnings(
+        ApprovalGraphModel m, List<(ApprovalNodeDef Fork, ApprovalNodeDef Join)> joined, Func<ApprovalNodeDef, string> nodeKey)
+    {
+        var warnings = new List<GraphIssue>();
+        void Warn(ApprovalNodeDef n, string rule, string code) => warnings.Add(new GraphIssue(nodeKey(n), rule, code));
+
+        var gatedForks = joined
+            .Where(p => p.Join.Mode == ApprovalModes.All
+                && m.Reach(m.Out(p.Fork.Id).Select(e => e.Def.To), p.Join.Id).Any(id => m.ById[id].Kind == ApprovalNodeKinds.Approval))
+            .Select(p => p.Fork.Id).ToHashSet();
+
+        // 從 from 出發，不經任何簽核節點（也不穿過有簽核的全部到齊並行區）能不能走到符合 isTarget 的節點。
+        bool FreePath(string from, Func<ApprovalNodeDef, bool> isTarget)
+        {
+            var seen = new HashSet<string>();
+            var stack = new Stack<string>([from]);
+            while (stack.Count > 0)
+            {
+                var id = stack.Pop();
+                if (!seen.Add(id)) continue;
+                var n = m.ById[id];
+                if (isTarget(n)) return true;
+                if (n.Kind == ApprovalNodeKinds.Approval || gatedForks.Contains(id)) continue;
+                foreach (var e in m.Out(id)) stack.Push(e.Def.To);
+            }
+            return false;
+        }
+
+        // W1：任一到齊的並行區，有分支不經簽核節點就到達匯合（含空分支）
+        foreach (var (fork, join) in joined.Where(p => p.Join.Mode == ApprovalModes.Any))
+            if (m.Out(fork.Id).Any(e => FreePath(e.Def.To, n => n.Id == join.Id))) Warn(join, "W1", "anyJoinWithoutApproval");
+
+        // W2：條件節點的預設線之後，有路徑不經簽核節點就到結束
+        foreach (var c in m.OfKind(ApprovalNodeKinds.Condition))
+            if (m.Out(c.Id).Any(e => e.Def.Default == true && FreePath(e.Def.To, n => n.Kind == ApprovalNodeKinds.End)))
+                Warn(c, "W2", "defaultToEndWithoutApproval");
+
+        // W3：有略過條件的簽核節點，從條件節點某條出線出發、在下一個簽核節點或會合點之前就到得了它。
+        // 會合點是匯合節點，或有兩條以上入線的節點（互斥路徑在那裡會合，之後不再專屬某條出線）；出線直接指向的節點一定算在那條出線上。
+        foreach (var c in m.OfKind(ApprovalNodeKinds.Condition))
+            foreach (var edge in m.Out(c.Id))
+            {
+                var seen = new HashSet<string>();
+                var stack = new Stack<string>([edge.Def.To]);
+                while (stack.Count > 0)
+                {
+                    var id = stack.Pop();
+                    if (!seen.Add(id)) continue;
+                    var n = m.ById[id];
+                    if (id != edge.Def.To && (n.Kind == ApprovalNodeKinds.Join || m.In(id).Count > 1)) continue;
+                    if (n.Kind == ApprovalNodeKinds.Approval)
+                    {
+                        if (HasValue(n.When)) Warn(n, "W3", "skipConditionOnConditionBranch");
+                        continue;
+                    }
+                    foreach (var o in m.Out(id)) stack.Push(o.Def.To);
+                }
+            }
+        return warnings;
     }
 
     /// <summary>節點只能帶自己 kind 的屬性；放錯位置的屬性不會被參照收集讀到（只讀簽核節點），所以一律拒收。</summary>
