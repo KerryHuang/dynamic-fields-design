@@ -16,6 +16,10 @@ public sealed class ApprovalPolicies(IPolicyReader policies)
     /// <summary>一張單最多幾個加簽關卡（模組範圍）。</summary>
     public Task<int> MaxAddSignStagesAsync(long moduleId, CancellationToken ct) => policies.IntAsync(PolicyCatalog.ApprovalMaxAddSignStages, moduleId, ct);
 
+    /// <summary>逾期待簽的提醒間隔，小時（模組範圍）。</summary>
+    public Task<int> OverdueReminderHoursAsync(long moduleId, CancellationToken ct) =>
+        policies.IntAsync(PolicyCatalog.ApprovalOverdueReminderHours, moduleId, ct);
+
     /// <summary>發起人在關卡名單內時是否保留（模組範圍）。</summary>
     public Task<bool> AllowSelfApprovalAsync(long moduleId, CancellationToken ct) =>
         policies.BoolAsync(PolicyCatalog.ApprovalAllowSelfApproval, moduleId, ct);
