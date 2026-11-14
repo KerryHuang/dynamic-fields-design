@@ -65,7 +65,7 @@
 | mcp2b | MCP 高風險業務工具 | 未開始 | [MCP server](superpowers/specs/2026-11-11-mcp-server-design.md) §12 |
 | mcp3 | MCP 設計器工具（開工前另寫設計） | 未開始 | [MCP server](superpowers/specs/2026-11-11-mcp-server-design.md) §12 |
 | mcp4 | MCP OAuth 2.1（Claude.ai、ChatGPT 連接器；可視雲端版第一個客戶的需求提前） | 未開始 | [MCP server](superpowers/specs/2026-11-11-mcp-server-design.md) §12 |
-| s2d-1g | Demo 公司跨應用程式共用、移除模擬客戶 | 未開始 | [共用主檔](superpowers/specs/2026-11-10-shared-master-design.md) |
+| s2d-1g | Demo 公司跨應用程式共用、移除模擬客戶 | 進行中（migration 待 kb2 合併） | [共用主檔](superpowers/specs/2026-11-10-shared-master-design.md) |
 | s2d-1h | 主檔收尾：參照挑選器守衛、CRM 補測試等 | 未開始 | [共用主檔](superpowers/specs/2026-11-10-shared-master-design.md) |
 | s2d-2 | 品項共用主檔、移除模擬實體 | 未開始 | [共用主檔](superpowers/specs/2026-11-10-shared-master-design.md) |
 | s2e-a | 訂單到出貨：追溯與履約核心 | 未開始 | [訂單到出貨](superpowers/specs/2026-11-11-order-workorder-shipment-design.md) |
