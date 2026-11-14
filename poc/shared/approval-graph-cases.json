@@ -2,6 +2,7 @@
   "limits": {"maxApprovalNodes": 10, "maxBranches": 5},
   "cases": [
     {
+"id": "AG-001",
       "name": "通過 設計 7.1 範例",
       "definition": { "shape": "graph", "stages": [],
         "nodes": [
@@ -33,6 +34,7 @@
       "warnings": []
     },
     {
+"id": "AG-002",
       "name": "通過 sequence 轉換出的直線圖",
       "definition": { "shape": "graph", "stages": [],
         "nodes": [
@@ -54,6 +56,7 @@
       "warnings": []
     },
     {
+"id": "AG-003",
       "name": "通過 互斥路徑在簽核節點會合 (J1)",
       "definition": { "shape": "graph", "stages": [],
         "nodes": [
@@ -78,6 +81,7 @@
       "warnings": []
     },
     {
+"id": "AG-004",
       "name": "通過 巢狀兩層並行",
       "definition": { "shape": "graph", "stages": [],
         "nodes": [
@@ -109,6 +113,7 @@
       "warnings": []
     },
     {
+"id": "AG-005",
       "name": "通過 空分支直接連到匯合 (U7)",
       "definition": { "shape": "graph", "stages": [],
         "nodes": [
@@ -131,6 +136,7 @@
       "warnings": []
     },
     {
+"id": "AG-006",
       "name": "通過 並行兩分支可編輯欄位不重疊 (G12)",
       "definition": { "shape": "graph", "stages": [],
         "nodes": [
@@ -155,6 +161,7 @@
       "warnings": []
     },
     {
+"id": "AG-007",
       "name": "通過 互斥兩路可編輯欄位重疊 (G12 只管並行)",
       "definition": { "shape": "graph", "stages": [],
         "nodes": [
@@ -179,6 +186,7 @@
       "warnings": []
     },
     {
+"id": "AG-008",
       "name": "通過 簽核節點 10 個",
       "definition": { "shape": "graph", "stages": [],
         "nodes": [
@@ -214,6 +222,7 @@
       "warnings": []
     },
     {
+"id": "AG-009",
       "name": "通過 分支 5 條",
       "definition": { "shape": "graph", "stages": [],
         "nodes": [
@@ -247,6 +256,7 @@
       "warnings": []
     },
     {
+"id": "AG-010",
       "name": "通過 簽核節點超過政策但不比舊版多 (J16)",
       "definition": { "shape": "graph", "stages": [],
         "nodes": [
@@ -268,6 +278,7 @@
       "warnings": []
     },
     {
+"id": "AG-011",
       "name": "G1 stages 必須為空",
       "definition": { "shape": "graph", "stages": [{"code": "s1", "name": {"zh-TW": "s"}, "approvers": {"source": "manager", "level": 1}, "mode": "any", "editableFields": [], "onEmpty": "fallback"}],
         "nodes": [
@@ -285,6 +296,7 @@
       "warnings": []
     },
     {
+"id": "AG-012",
       "name": "G1 缺 nodes",
       "definition": { "shape": "graph", "stages": [] },
       "previous": null,
@@ -293,6 +305,7 @@
       "warnings": []
     },
     {
+"id": "AG-013",
       "name": "G1 代號格式不合法 (以索引定位)",
       "definition": { "shape": "graph", "stages": [],
         "nodes": [
@@ -311,6 +324,7 @@
       "warnings": []
     },
     {
+"id": "AG-014",
       "name": "G1 節點代號重複",
       "definition": { "shape": "graph", "stages": [],
         "nodes": [
@@ -329,6 +343,7 @@
       "warnings": []
     },
     {
+"id": "AG-015",
       "name": "G1 連線代號重複",
       "definition": { "shape": "graph", "stages": [],
         "nodes": [
@@ -347,6 +362,7 @@
       "warnings": []
     },
     {
+"id": "AG-016",
       "name": "G1 kind 不在列舉內",
       "definition": { "shape": "graph", "stages": [],
         "nodes": [
@@ -365,6 +381,7 @@
       "warnings": []
     },
     {
+"id": "AG-017",
       "name": "G1 自己連自己",
       "definition": { "shape": "graph", "stages": [],
         "nodes": [
@@ -383,6 +400,7 @@
       "warnings": []
     },
     {
+"id": "AG-018",
       "name": "G1 同一對節點重複的線",
       "definition": { "shape": "graph", "stages": [],
         "nodes": [
@@ -401,6 +419,7 @@
       "warnings": []
     },
     {
+"id": "AG-019",
       "name": "G1 連線指向不存在的節點",
       "definition": { "shape": "graph", "stages": [],
         "nodes": [
@@ -419,6 +438,7 @@
       "warnings": []
     },
     {
+"id": "AG-020",
       "name": "G1 通知節點帶了簽核節點的屬性",
       "definition": { "shape": "graph", "stages": [],
         "nodes": [
@@ -438,6 +458,7 @@
       "warnings": []
     },
     {
+"id": "AG-021",
       "name": "G1 簽核節點帶了匯合與通知的屬性",
       "definition": { "shape": "graph", "stages": [],
         "nodes": [
@@ -455,6 +476,7 @@
       "warnings": []
     },
     {
+"id": "AG-022",
       "name": "G2 兩個開始節點",
       "definition": { "shape": "graph", "stages": [],
         "nodes": [
@@ -474,6 +496,7 @@
       "warnings": []
     },
     {
+"id": "AG-023",
       "name": "G2 沒有結束節點",
       "definition": { "shape": "graph", "stages": [],
         "nodes": [
@@ -489,6 +512,7 @@
       "warnings": []
     },
     {
+"id": "AG-024",
       "name": "G2 簽核節點兩條出線",
       "definition": { "shape": "graph", "stages": [],
         "nodes": [
@@ -509,6 +533,7 @@
       "warnings": []
     },
     {
+"id": "AG-025",
       "name": "G2 匯合只有一條入線",
       "definition": { "shape": "graph", "stages": [],
         "nodes": [
@@ -530,10 +555,11 @@
         ] },
       "previous": null,
       "limits": null,
-      "errors": [["nodes.j", "G2", "inCount"]],
+      "errors": [["nodes.j", "G2", "inCount"], ["nodes.end2", "G8", "endInRegion"]],
       "warnings": []
     },
     {
+"id": "AG-026",
       "name": "G3 節點無法從開始到達",
       "definition": { "shape": "graph", "stages": [],
         "nodes": [
@@ -553,6 +579,7 @@
       "warnings": []
     },
     {
+"id": "AG-027",
       "name": "G4 節點走不到結束 (死路)",
       "definition": { "shape": "graph", "stages": [],
         "nodes": [
@@ -574,6 +601,7 @@
       "warnings": []
     },
     {
+"id": "AG-028",
       "name": "G5 有環",
       "definition": { "shape": "graph", "stages": [],
         "nodes": [
@@ -594,6 +622,7 @@
       "warnings": []
     },
     {
+"id": "AG-029",
       "name": "通過 條件節點一般形狀",
       "definition": { "shape": "graph", "stages": [],
         "nodes": [
@@ -616,6 +645,7 @@
       "warnings": []
     },
     {
+"id": "AG-030",
       "name": "G6 條件節點沒有預設線",
       "definition": { "shape": "graph", "stages": [],
         "nodes": [
@@ -638,6 +668,7 @@
       "warnings": []
     },
     {
+"id": "AG-031",
       "name": "G6 條件節點兩條預設線",
       "definition": { "shape": "graph", "stages": [],
         "nodes": [
@@ -660,6 +691,7 @@
       "warnings": []
     },
     {
+"id": "AG-032",
       "name": "G6 預設線有條件",
       "definition": { "shape": "graph", "stages": [],
         "nodes": [
@@ -682,6 +714,7 @@
       "warnings": []
     },
     {
+"id": "AG-033",
       "name": "G6 非預設線缺條件",
       "definition": { "shape": "graph", "stages": [],
         "nodes": [
@@ -704,6 +737,7 @@
       "warnings": []
     },
     {
+"id": "AG-034",
       "name": "G6 非預設線缺順序",
       "definition": { "shape": "graph", "stages": [],
         "nodes": [
@@ -726,6 +760,7 @@
       "warnings": []
     },
     {
+"id": "AG-035",
       "name": "G6 順序重複",
       "definition": { "shape": "graph", "stages": [],
         "nodes": [
@@ -751,6 +786,7 @@
       "warnings": []
     },
     {
+"id": "AG-036",
       "name": "G6 簽核節點出線帶 order",
       "definition": { "shape": "graph", "stages": [],
         "nodes": [
@@ -768,6 +804,7 @@
       "warnings": []
     },
     {
+"id": "AG-037",
       "name": "G6 簽核節點出線帶 when",
       "definition": { "shape": "graph", "stages": [],
         "nodes": [
@@ -785,6 +822,7 @@
       "warnings": []
     },
     {
+"id": "AG-038",
       "name": "G7 分支沒有匯合",
       "definition": { "shape": "graph", "stages": [],
         "nodes": [
@@ -807,6 +845,7 @@
       "warnings": []
     },
     {
+"id": "AG-039",
       "name": "G7 匯合 forkId 指向非分支節點",
       "definition": { "shape": "graph", "stages": [],
         "nodes": [
@@ -831,6 +870,7 @@
       "warnings": []
     },
     {
+"id": "AG-040",
       "name": "G7 匯合 forkId 指向不存在的節點",
       "definition": { "shape": "graph", "stages": [],
         "nodes": [
@@ -855,6 +895,7 @@
       "warnings": []
     },
     {
+"id": "AG-041",
       "name": "G7 匯合模式不合法",
       "definition": { "shape": "graph", "stages": [],
         "nodes": [
@@ -879,6 +920,7 @@
       "warnings": []
     },
     {
+"id": "AG-042",
       "name": "G7 區內連到區外 (區外節點被吸進區域，結束落在區內)",
       "definition": { "shape": "graph", "stages": [],
         "nodes": [
@@ -908,6 +950,7 @@
       "warnings": []
     },
     {
+"id": "AG-043",
       "name": "G7 區外連進區內",
       "definition": { "shape": "graph", "stages": [],
         "nodes": [
@@ -937,6 +980,7 @@
       "warnings": []
     },
     {
+"id": "AG-044",
       "name": "G7 匯合的入線來自區外",
       "definition": { "shape": "graph", "stages": [],
         "nodes": [
@@ -966,6 +1010,7 @@
       "warnings": []
     },
     {
+"id": "AG-045",
       "name": "G7 分支私下會合 (不經匯合)",
       "definition": { "shape": "graph", "stages": [],
         "nodes": [
@@ -995,6 +1040,7 @@
       "warnings": []
     },
     {
+"id": "AG-046",
       "name": "G7 交錯的並行區",
       "definition": { "shape": "graph", "stages": [],
         "nodes": [
@@ -1026,6 +1072,7 @@
       "warnings": []
     },
     {
+"id": "AG-047",
       "name": "G8 結束節點在並行區內",
       "definition": { "shape": "graph", "stages": [],
         "nodes": [
@@ -1054,6 +1101,7 @@
       "warnings": []
     },
     {
+"id": "AG-048",
       "name": "G12 並行兩分支可編輯欄位重疊",
       "definition": { "shape": "graph", "stages": [],
         "nodes": [
@@ -1078,6 +1126,7 @@
       "warnings": []
     },
     {
+"id": "AG-049",
       "name": "G13 沒有簽核節點 (U5)",
       "definition": { "shape": "graph", "stages": [],
         "nodes": [
@@ -1095,6 +1144,7 @@
       "warnings": []
     },
     {
+"id": "AG-050",
       "name": "G13 簽核節點 11 個",
       "definition": { "shape": "graph", "stages": [],
         "nodes": [
@@ -1132,6 +1182,7 @@
       "warnings": []
     },
     {
+"id": "AG-051",
       "name": "G13 分支 6 條",
       "definition": { "shape": "graph", "stages": [],
         "nodes": [
@@ -1168,6 +1219,7 @@
       "warnings": []
     },
     {
+"id": "AG-052",
       "name": "G13 簽核節點超過政策而且比舊版多 (J16)",
       "definition": { "shape": "graph", "stages": [],
         "nodes": [
@@ -1188,6 +1240,322 @@
       "previous": {"shape": "sequence", "stages": [{"code": "s0", "name": {"zh-TW": "s"}, "approvers": {"source": "manager", "level": 1}, "mode": "any", "editableFields": [], "onEmpty": "fallback"}, {"code": "s1", "name": {"zh-TW": "s"}, "approvers": {"source": "manager", "level": 1}, "mode": "any", "editableFields": [], "onEmpty": "fallback"}, {"code": "s2", "name": {"zh-TW": "s"}, "approvers": {"source": "manager", "level": 1}, "mode": "any", "editableFields": [], "onEmpty": "fallback"}]},
       "limits": {"maxApprovalNodes": 2, "maxBranches": 5},
       "errors": [["graph", "G13", "approvalNodesTooMany"]],
+      "warnings": []
+    },
+    {
+      "id": "AG-053",
+      "name": "G13 舊版同代號是六路條件節點，新版改成六分支 (J16 豁免只算舊版的分支)",
+      "definition": { "shape": "graph", "stages": [],
+        "nodes": [
+          {"id": "start", "kind": "start"},
+          {"id": "f", "kind": "fork"},
+          {"id": "j", "kind": "join", "forkId": "f", "mode": "all"},
+          {"id": "end", "kind": "end"},
+          {"id": "b1", "kind": "approval", "name": {"zh-TW": "b1"}},
+          {"id": "b2", "kind": "approval", "name": {"zh-TW": "b2"}},
+          {"id": "b3", "kind": "approval", "name": {"zh-TW": "b3"}},
+          {"id": "b4", "kind": "approval", "name": {"zh-TW": "b4"}},
+          {"id": "b5", "kind": "approval", "name": {"zh-TW": "b5"}},
+          {"id": "b6", "kind": "approval", "name": {"zh-TW": "b6"}}
+        ],
+        "edges": [
+          {"id": "e1", "from": "start", "to": "f"},
+          {"id": "e2", "from": "j", "to": "end"},
+          {"id": "f1", "from": "f", "to": "b1"},
+          {"id": "j1", "from": "b1", "to": "j"},
+          {"id": "f2", "from": "f", "to": "b2"},
+          {"id": "j2", "from": "b2", "to": "j"},
+          {"id": "f3", "from": "f", "to": "b3"},
+          {"id": "j3", "from": "b3", "to": "j"},
+          {"id": "f4", "from": "f", "to": "b4"},
+          {"id": "j4", "from": "b4", "to": "j"},
+          {"id": "f5", "from": "f", "to": "b5"},
+          {"id": "j5", "from": "b5", "to": "j"},
+          {"id": "f6", "from": "f", "to": "b6"},
+          {"id": "j6", "from": "b6", "to": "j"}
+        ] },
+      "previous": {"shape": "graph", "stages": [], "nodes": [{"id": "start", "kind": "start"}, {"id": "f", "kind": "condition"}, {"id": "end", "kind": "end"}, {"id": "b1", "kind": "approval", "name": {"zh-TW": "b1"}}, {"id": "b2", "kind": "approval", "name": {"zh-TW": "b2"}}, {"id": "b3", "kind": "approval", "name": {"zh-TW": "b3"}}, {"id": "b4", "kind": "approval", "name": {"zh-TW": "b4"}}, {"id": "b5", "kind": "approval", "name": {"zh-TW": "b5"}}, {"id": "b6", "kind": "approval", "name": {"zh-TW": "b6"}}], "edges": [{"id": "e1", "from": "start", "to": "f"}, {"id": "f1", "from": "f", "to": "b1", "order": 1, "when": {"all": [{"field": 1, "op": "gte", "value": 1}]}}, {"id": "x1", "from": "b1", "to": "end"}, {"id": "f2", "from": "f", "to": "b2", "order": 2, "when": {"all": [{"field": 1, "op": "gte", "value": 1}]}}, {"id": "x2", "from": "b2", "to": "end"}, {"id": "f3", "from": "f", "to": "b3", "order": 3, "when": {"all": [{"field": 1, "op": "gte", "value": 1}]}}, {"id": "x3", "from": "b3", "to": "end"}, {"id": "f4", "from": "f", "to": "b4", "order": 4, "when": {"all": [{"field": 1, "op": "gte", "value": 1}]}}, {"id": "x4", "from": "b4", "to": "end"}, {"id": "f5", "from": "f", "to": "b5", "order": 5, "when": {"all": [{"field": 1, "op": "gte", "value": 1}]}}, {"id": "x5", "from": "b5", "to": "end"}, {"id": "f6", "from": "f", "to": "b6", "default": true}, {"id": "x6", "from": "b6", "to": "end"}]},
+      "limits": null,
+      "errors": [["nodes.f", "G13", "branchesTooMany"]],
+      "warnings": []
+    },
+    {
+      "id": "AG-054",
+      "name": "G7 兩個匯合指向同一個分支",
+      "definition": { "shape": "graph", "stages": [],
+        "nodes": [
+          {"id": "start", "kind": "start"},
+          {"id": "f", "kind": "fork"},
+          {"id": "c1", "kind": "condition"},
+          {"id": "c2", "kind": "condition"},
+          {"id": "j1", "kind": "join", "forkId": "f", "mode": "all"},
+          {"id": "j2", "kind": "join", "forkId": "f", "mode": "all"},
+          {"id": "a1", "kind": "approval", "name": {"zh-TW": "a1"}},
+          {"id": "a2", "kind": "approval", "name": {"zh-TW": "a2"}},
+          {"id": "end", "kind": "end"}
+        ],
+        "edges": [
+          {"id": "e1", "from": "start", "to": "f"},
+          {"id": "e2", "from": "f", "to": "c1"},
+          {"id": "e3", "from": "f", "to": "c2"},
+          {"id": "e4", "from": "c1", "to": "j1", "order": 1, "when": {"all": [{"field": 1, "op": "gte", "value": 1}]}},
+          {"id": "e5", "from": "c1", "to": "j2", "default": true},
+          {"id": "e6", "from": "c2", "to": "j1", "order": 1, "when": {"all": [{"field": 1, "op": "gte", "value": 1}]}},
+          {"id": "e7", "from": "c2", "to": "j2", "default": true},
+          {"id": "e8", "from": "j1", "to": "a1"},
+          {"id": "e9", "from": "j2", "to": "a2"},
+          {"id": "e10", "from": "a1", "to": "end"},
+          {"id": "e11", "from": "a2", "to": "end"}
+        ] },
+      "previous": null,
+      "limits": null,
+      "errors": [["nodes.j2.forkId", "G7", "joinForkInvalid"], ["nodes.end", "G8", "endInRegion"], ["edges.e10", "G7", "edgeIntoRegion"], ["nodes.f", "G7", "branchesMerge"]],
+      "warnings": []
+    },
+    {
+      "id": "AG-055",
+      "name": "G6 非條件節點的出線帶 default:false",
+      "definition": { "shape": "graph", "stages": [],
+        "nodes": [
+          {"id": "start", "kind": "start"},
+          {"id": "a", "kind": "approval", "name": {"zh-TW": "a"}},
+          {"id": "end", "kind": "end"}
+        ],
+        "edges": [
+          {"id": "e1", "from": "start", "to": "a"},
+          {"id": "e2", "from": "a", "to": "end", "default": false}
+        ] },
+      "previous": null,
+      "limits": null,
+      "errors": [["edges.e2.default", "G6", "conditionAttrNotAllowed"]],
+      "warnings": []
+    },
+    {
+      "id": "AG-056",
+      "name": "G6 順序不是正整數 (0 與負數)",
+      "definition": { "shape": "graph", "stages": [],
+        "nodes": [
+          {"id": "start", "kind": "start"},
+          {"id": "c", "kind": "condition"},
+          {"id": "a", "kind": "approval", "name": {"zh-TW": "a"}},
+          {"id": "b", "kind": "approval", "name": {"zh-TW": "b"}},
+          {"id": "d", "kind": "approval", "name": {"zh-TW": "d"}},
+          {"id": "end", "kind": "end"}
+        ],
+        "edges": [
+          {"id": "e1", "from": "start", "to": "c"},
+          {"id": "e2", "from": "c", "to": "a", "order": 1, "when": {"all": [{"field": 1, "op": "gte", "value": 1}]}},
+          {"id": "e3", "from": "c", "to": "b", "order": 0, "when": {"all": [{"field": 2, "op": "gte", "value": 1}]}},
+          {"id": "e4", "from": "c", "to": "d", "order": -1, "when": {"all": [{"field": 3, "op": "gte", "value": 1}]}},
+          {"id": "e5", "from": "c", "to": "end", "default": true},
+          {"id": "e6", "from": "a", "to": "end"},
+          {"id": "e7", "from": "b", "to": "end"},
+          {"id": "e8", "from": "d", "to": "end"}
+        ] },
+      "previous": null,
+      "limits": null,
+      "errors": [["edges.e3.order", "G6", "orderInvalid"], ["edges.e4.order", "G6", "orderInvalid"]],
+      "warnings": []
+    },
+    {
+      "id": "AG-057",
+      "name": "G12 巢狀並行：內層分支的欄位與外層另一分支重疊",
+      "definition": { "shape": "graph", "stages": [],
+        "nodes": [
+          {"id": "start", "kind": "start"},
+          {"id": "f1", "kind": "fork"},
+          {"id": "x", "kind": "approval", "name": {"zh-TW": "x"}, "editableFields": [5]},
+          {"id": "f2", "kind": "fork"},
+          {"id": "y", "kind": "approval", "name": {"zh-TW": "y"}, "editableFields": [5]},
+          {"id": "z", "kind": "approval", "name": {"zh-TW": "z"}},
+          {"id": "j2", "kind": "join", "forkId": "f2", "mode": "all"},
+          {"id": "j1", "kind": "join", "forkId": "f1", "mode": "all"},
+          {"id": "end", "kind": "end"}
+        ],
+        "edges": [
+          {"id": "e1", "from": "start", "to": "f1"},
+          {"id": "e2", "from": "f1", "to": "x"},
+          {"id": "e3", "from": "f1", "to": "f2"},
+          {"id": "e4", "from": "x", "to": "j1"},
+          {"id": "e5", "from": "f2", "to": "y"},
+          {"id": "e6", "from": "f2", "to": "z"},
+          {"id": "e7", "from": "y", "to": "j2"},
+          {"id": "e8", "from": "z", "to": "j2"},
+          {"id": "e9", "from": "j2", "to": "j1"},
+          {"id": "e10", "from": "j1", "to": "end"}
+        ] },
+      "previous": null,
+      "limits": null,
+      "errors": [["nodes.y.editableFields", "G12", "editableOverlap"]],
+      "warnings": []
+    },
+    {
+      "id": "AG-058",
+      "name": "通過 同一分支先後重用欄位 (G12 只比不同分支)",
+      "definition": { "shape": "graph", "stages": [],
+        "nodes": [
+          {"id": "start", "kind": "start"},
+          {"id": "f", "kind": "fork"},
+          {"id": "a1", "kind": "approval", "name": {"zh-TW": "a1"}, "editableFields": [5]},
+          {"id": "a2", "kind": "approval", "name": {"zh-TW": "a2"}, "editableFields": [5]},
+          {"id": "b", "kind": "approval", "name": {"zh-TW": "b"}, "editableFields": [6]},
+          {"id": "j", "kind": "join", "forkId": "f", "mode": "all"},
+          {"id": "end", "kind": "end"}
+        ],
+        "edges": [
+          {"id": "e1", "from": "start", "to": "f"},
+          {"id": "e2", "from": "f", "to": "a1"},
+          {"id": "e3", "from": "a1", "to": "a2"},
+          {"id": "e4", "from": "a2", "to": "j"},
+          {"id": "e5", "from": "f", "to": "b"},
+          {"id": "e6", "from": "b", "to": "j"},
+          {"id": "e7", "from": "j", "to": "end"}
+        ] },
+      "previous": null,
+      "limits": null,
+      "errors": [],
+      "warnings": []
+    },
+    {
+      "id": "AG-059",
+      "name": "混合 G1 屬性、G8、G12 同時報出 (局部錯誤不遮蔽並行區規則)",
+      "definition": { "shape": "graph", "stages": [],
+        "nodes": [
+          {"id": "start", "kind": "start"},
+          {"id": "f", "kind": "fork"},
+          {"id": "a", "kind": "approval", "name": {"zh-TW": "a"}, "editableFields": [1]},
+          {"id": "b", "kind": "approval", "name": {"zh-TW": "b"}, "editableFields": [1]},
+          {"id": "c", "kind": "approval", "name": {"zh-TW": "c"}},
+          {"id": "n", "kind": "notify", "editableFields": [2]},
+          {"id": "j", "kind": "join", "forkId": "f", "mode": "all"},
+          {"id": "end2", "kind": "end"},
+          {"id": "end", "kind": "end"}
+        ],
+        "edges": [
+          {"id": "e1", "from": "start", "to": "f"},
+          {"id": "e2", "from": "f", "to": "a"},
+          {"id": "e3", "from": "f", "to": "b"},
+          {"id": "e4", "from": "f", "to": "c"},
+          {"id": "e5", "from": "a", "to": "n"},
+          {"id": "e6", "from": "n", "to": "j"},
+          {"id": "e7", "from": "b", "to": "j"},
+          {"id": "e8", "from": "c", "to": "end2"},
+          {"id": "e9", "from": "j", "to": "end"}
+        ] },
+      "previous": null,
+      "limits": null,
+      "errors": [["nodes.n.editableFields", "G1", "attrNotAllowed"], ["nodes.end2", "G8", "endInRegion"], ["nodes.b.editableFields", "G12", "editableOverlap"]],
+      "warnings": []
+    },
+    {
+      "id": "AG-060",
+      "name": "G1 匯合帶了不屬於它的屬性，G7 配對檢查照跑",
+      "definition": { "shape": "graph", "stages": [],
+        "nodes": [
+          {"id": "start", "kind": "start"},
+          {"id": "f", "kind": "fork"},
+          {"id": "a", "kind": "approval", "name": {"zh-TW": "a"}},
+          {"id": "b", "kind": "approval", "name": {"zh-TW": "b"}},
+          {"id": "j", "kind": "join", "forkId": "ghost", "mode": "bad", "recipients": []},
+          {"id": "end", "kind": "end"}
+        ],
+        "edges": [
+          {"id": "e1", "from": "start", "to": "f"},
+          {"id": "e2", "from": "f", "to": "a"},
+          {"id": "e3", "from": "f", "to": "b"},
+          {"id": "e4", "from": "a", "to": "j"},
+          {"id": "e5", "from": "b", "to": "j"},
+          {"id": "e6", "from": "j", "to": "end"}
+        ] },
+      "previous": null,
+      "limits": null,
+      "errors": [["nodes.j.recipients", "G1", "attrNotAllowed"], ["nodes.j.mode", "G7", "joinModeInvalid"], ["nodes.j.forkId", "G7", "joinForkInvalid"], ["nodes.f", "G7", "forkWithoutJoin"]],
+      "warnings": []
+    },
+    {
+      "id": "AG-061",
+      "name": "G3 有不可達節點時，匯合模式檢查仍然執行",
+      "definition": { "shape": "graph", "stages": [],
+        "nodes": [
+          {"id": "start", "kind": "start"},
+          {"id": "f", "kind": "fork"},
+          {"id": "a", "kind": "approval", "name": {"zh-TW": "a"}},
+          {"id": "b", "kind": "approval", "name": {"zh-TW": "b"}},
+          {"id": "x", "kind": "approval", "name": {"zh-TW": "x"}},
+          {"id": "j", "kind": "join", "forkId": "f", "mode": "bad"},
+          {"id": "end", "kind": "end"}
+        ],
+        "edges": [
+          {"id": "e1", "from": "start", "to": "f"},
+          {"id": "e2", "from": "f", "to": "a"},
+          {"id": "e3", "from": "f", "to": "b"},
+          {"id": "e4", "from": "a", "to": "j"},
+          {"id": "e5", "from": "b", "to": "j"},
+          {"id": "e6", "from": "j", "to": "end"},
+          {"id": "e7", "from": "x", "to": "end"}
+        ] },
+      "previous": null,
+      "limits": null,
+      "errors": [["nodes.x", "G2", "inCount"], ["nodes.x", "G3", "unreachable"], ["nodes.j.mode", "G7", "joinModeInvalid"]],
+      "warnings": []
+    },
+    {
+      "id": "AG-062",
+      "name": "G1 重複代號的第二筆節點仍檢查 kind (索引鍵)",
+      "definition": { "shape": "graph", "stages": [],
+        "nodes": [
+          {"id": "start", "kind": "start"},
+          {"id": "n", "kind": "notify", "editableFields": [31]},
+          {"id": "n", "kind": "magic"},
+          {"id": "a", "kind": "approval", "name": {"zh-TW": "a"}},
+          {"id": "end", "kind": "end"}
+        ],
+        "edges": [
+          {"id": "e1", "from": "start", "to": "n"},
+          {"id": "e2", "from": "n", "to": "a"},
+          {"id": "e3", "from": "a", "to": "end"}
+        ] },
+      "previous": null,
+      "limits": null,
+      "errors": [["nodes.n.editableFields", "G1", "attrNotAllowed"], ["nodes[2].id", "G1", "idDuplicate"], ["nodes[2].kind", "G1", "kindInvalid"]],
+      "warnings": []
+    },
+    {
+      "id": "AG-063",
+      "name": "G1 重複代號的第二筆節點仍檢查屬性 (索引鍵)",
+      "definition": { "shape": "graph", "stages": [],
+        "nodes": [
+          {"id": "start", "kind": "start"},
+          {"id": "a", "kind": "approval", "name": {"zh-TW": "a"}},
+          {"id": "a", "kind": "notify", "approvers": {"source": "manager", "level": 1}},
+          {"id": "end", "kind": "end"}
+        ],
+        "edges": [
+          {"id": "e1", "from": "start", "to": "a"},
+          {"id": "e2", "from": "a", "to": "end"}
+        ] },
+      "previous": null,
+      "limits": null,
+      "errors": [["nodes[2].id", "G1", "idDuplicate"], ["nodes[2].approvers", "G1", "attrNotAllowed"]],
+      "warnings": []
+    },
+    {
+      "id": "AG-064",
+      "name": "G1 重複代號的第二條連線仍檢查端點 (索引鍵)",
+      "definition": { "shape": "graph", "stages": [],
+        "nodes": [
+          {"id": "start", "kind": "start"},
+          {"id": "a", "kind": "approval", "name": {"zh-TW": "a"}},
+          {"id": "end", "kind": "end"}
+        ],
+        "edges": [
+          {"id": "e1", "from": "start", "to": "a"},
+          {"id": "e2", "from": "a", "to": "end"},
+          {"id": "e2", "from": "a", "to": "ghost"}
+        ] },
+      "previous": null,
+      "limits": null,
+      "errors": [["edges[2].id", "G1", "idDuplicate"], ["edges[2].to", "G1", "edgeEndpointMissing"]],
       "warnings": []
     }
   ]

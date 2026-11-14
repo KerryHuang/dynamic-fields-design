@@ -117,6 +117,24 @@ public class ApprovalGraphValidatorTests
     public void Branches_OverPolicy_NewFork_Error() =>
         Codes(Fork(6), new GraphPolicyLimits(10, 5), Chain(2)).Should().Equal("branchesTooMany");
 
+    /// <summary>start → f:condition → b1…bN（各一個簽核）→ end；只用來當舊版，不驗證它。</summary>
+    private static ApprovalDefinition ConditionFan(int branches)
+    {
+        var nodes = new List<ApprovalNodeDef> { new("start", ApprovalNodeKinds.Start), new("f", ApprovalNodeKinds.Condition), new("end", ApprovalNodeKinds.End) };
+        var edges = new List<ApprovalEdgeDef> { new("s1", "start", "f") };
+        for (var i = 1; i <= branches; i++)
+        {
+            nodes.Add(Appr($"b{i}"));
+            edges.Add(new($"f-b{i}", "f", $"b{i}", Order: i, Default: i == branches ? true : null));
+            edges.Add(new($"b{i}-end", $"b{i}", "end"));
+        }
+        return Def(nodes, edges);
+    }
+
+    [Fact]
+    public void Branches_OverPolicy_OldNodeWasConditionWithSameId_StillError() =>
+        Codes(Fork(6), new GraphPolicyLimits(10, 5), ConditionFan(6)).Should().Equal("branchesTooMany");
+
     [Fact]
     public void Branches_OverPolicy_ForkGrewBeyondPrevious_Error() =>
         Codes(Fork(7), new GraphPolicyLimits(10, 5), Fork(6)).Should().Equal("branchesTooMany");

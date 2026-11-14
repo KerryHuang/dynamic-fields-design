@@ -24,8 +24,15 @@ public class SharedApprovalGraphCasesTests
     {
         var data = new TheoryData<int, string>();
         var i = 0;
-        foreach (var c in Doc.GetProperty("cases").EnumerateArray()) data.Add(i++, c.GetProperty("name").GetString()!);
+        foreach (var c in Doc.GetProperty("cases").EnumerateArray()) data.Add(i++, c.GetProperty("id").GetString()!);
         return data;
+    }
+
+    [Fact]
+    public void CaseIds_AreUnique()
+    {
+        var ids = Doc.GetProperty("cases").EnumerateArray().Select(c => c.GetProperty("id").GetString()).ToList();
+        ids.Should().OnlyHaveUniqueItems().And.NotContainNulls();
     }
 
     private static GraphPolicyLimits LimitsOf(JsonElement e) =>
@@ -36,10 +43,11 @@ public class SharedApprovalGraphCasesTests
 
     [Theory]
     [MemberData(nameof(Cases))]
-    public void Case(int index, string name)
+    public void Case(int index, string id)
     {
         var c = Doc.GetProperty("cases")[index];
-        c.GetProperty("name").GetString().Should().Be(name);
+        c.GetProperty("id").GetString().Should().Be(id);
+        var name = $"{id} {c.GetProperty("name").GetString()}";
 
         var d = c.GetProperty("definition").Deserialize<ApprovalDefinition>(Web)!;
         var prev = c.GetProperty("previous") is { ValueKind: JsonValueKind.Object } p ? p.Deserialize<ApprovalDefinition>(Web) : null;

@@ -21,7 +21,10 @@ public static class ApprovalGraphValidator
 
     /// <summary>
     /// previous：這條流程目前版本（sequence 先轉換，J16）；政策上限超過且比舊版大才擋。Warnings 在 fg1d 才填。
-    /// 有格式（G1、G2）、可達（G3、G4）或環（G5）問題時不跑並行區規則（G7、G8、G12），避免連帶錯誤。
+    /// 局部錯誤（G1 屬性、G2 度數）不影響拓撲分析，其他規則照跑；只有可達（G3、G4）或環（G5）這類
+    /// 「沒辦法可靠分析拓撲」的錯誤才跳過並行區分析（G7 區域、G8、G12、巢狀深度）。
+    /// 匯合與分支的配對檢查只看節點本身，不依賴區域，一律執行。
+    /// 重複代號的第二筆不進圖模型，但仍檢查局部項目（kind、屬性、連線端點），錯誤鍵用陣列索引（nodes[2].kind）；第一筆維持代號鍵。
     /// </summary>
     public static GraphCheck Check(ApprovalDefinition d, GraphPolicyLimits limits, ApprovalDefinition? previous)
     {
@@ -44,7 +47,13 @@ public static class ApprovalGraphValidator
             var n = d.Nodes[i];
             nodeKey[i] = $"nodes[{i}]";
             if (n is null || !ApprovalCodes.IsValid(n.Id)) { Err($"nodes[{i}].id", "G1", "idInvalid"); continue; }
-            if (!seenNodes.Add(n.Id)) { Err($"nodes[{i}].id", "G1", "idDuplicate"); continue; }
+            if (!seenNodes.Add(n.Id))
+            {
+                Err($"nodes[{i}].id", "G1", "idDuplicate");
+                if (n.Kind is null || !Kinds.Contains(n.Kind)) Err($"nodes[{i}].kind", "G1", "kindInvalid");
+                else CheckAttributes(n, $"nodes[{i}]", Err);
+                continue;
+            }
             nodeKey[i] = $"nodes.{n.Id}";
             if (n.Kind is null || !Kinds.Contains(n.Kind)) Err(nodeKey[i], "G1", "kindInvalid");
             else CheckAttributes(n, nodeKey[i], Err);
@@ -62,12 +71,13 @@ public static class ApprovalGraphValidator
             var e = rawEdges[i];
             edgeKey[i] = $"edges[{i}]";
             if (e is null || !ApprovalCodes.IsValid(e.Id)) { Err($"edges[{i}].id", "G1", "idInvalid"); continue; }
-            if (!seenEdges.Add(e.Id)) { Err($"edges[{i}].id", "G1", "idDuplicate"); continue; }
-            edgeKey[i] = $"edges.{e.Id}";
+            var dupEdge = !seenEdges.Add(e.Id);
+            if (dupEdge) Err($"edges[{i}].id", "G1", "idDuplicate");
+            else edgeKey[i] = $"edges.{e.Id}";
             var ok = true;
             if (e.From is null || !seenNodes.Contains(e.From)) { Err($"{edgeKey[i]}.from", "G1", "edgeEndpointMissing"); ok = false; }
             if (e.To is null || !seenNodes.Contains(e.To)) { Err($"{edgeKey[i]}.to", "G1", "edgeEndpointMissing"); ok = false; }
-            if (!ok) continue;
+            if (!ok || dupEdge) continue;
             if (e.From == e.To) { Err(edgeKey[i], "G1", "selfLoop"); continue; }
             if (!seenPairs.Add((e.From!, e.To!))) { Err(edgeKey[i], "G1", "edgeDuplicate"); continue; }
             edges.Add((i, e));
@@ -115,9 +125,10 @@ public static class ApprovalGraphValidator
         // G6
         CheckConditions(m, edgeKey, nodeKey, Err);
 
-        // G7、G8、G12、巢狀深度
-        var structural = errors.Count > 0 && errors.Any(e => e.Rule is "G1" or "G2" or "G3" or "G4" or "G5");
-        if (!structural) CheckRegions(m, NodeKey, EdgeKey, Err);
+        // G7 配對（不依賴區域，一律跑）；G7 區域、G8、G12、巢狀深度只在拓撲可靠時跑。
+        var pairs = CheckPairing(m, NodeKey, Err);
+        var topologyUnreliable = errors.Any(e => e.Rule is "G3" or "G4" or "G5");
+        if (!topologyUnreliable) CheckRegions(m, pairs, NodeKey, EdgeKey, Err);
 
         // G13
         CheckCounts(d, m, limits, previous, NodeKey, Err);
@@ -185,11 +196,10 @@ public static class ApprovalGraphValidator
 
     private sealed record Pair(ApprovalNodeDef Fork, ApprovalNodeDef Join, HashSet<string> Region, List<HashSet<string>> Branches);
 
-    private static void CheckRegions(
-        ApprovalGraphModel m, Func<ApprovalNodeDef, string> nodeKey, Func<ApprovalGraphModel.Edge, string> edgeKey,
-        Action<string, string, string> err)
+    /// <summary>G7 配對：每個分支恰有一個匯合以 forkId 指向它；回傳配對成功的 (分支, 匯合)。</summary>
+    private static List<(ApprovalNodeDef Fork, ApprovalNodeDef Join)> CheckPairing(
+        ApprovalGraphModel m, Func<ApprovalNodeDef, string> nodeKey, Action<string, string, string> err)
     {
-        // G7 配對：每個分支恰有一個匯合以 forkId 指向它。
         var claimed = new HashSet<string>();
         var joined = new List<(ApprovalNodeDef Fork, ApprovalNodeDef Join)>();
         foreach (var j in m.OfKind(ApprovalNodeKinds.Join))
@@ -202,7 +212,14 @@ public static class ApprovalGraphValidator
         }
         foreach (var f in m.OfKind(ApprovalNodeKinds.Fork).Where(f => !claimed.Contains(f.Id)))
             err(nodeKey(f), "G7", "forkWithoutJoin");
+        return joined;
+    }
 
+    private static void CheckRegions(
+        ApprovalGraphModel m, List<(ApprovalNodeDef Fork, ApprovalNodeDef Join)> joined,
+        Func<ApprovalNodeDef, string> nodeKey, Func<ApprovalGraphModel.Edge, string> edgeKey,
+        Action<string, string, string> err)
+    {
         // 並行區：從分支出發、不經配對匯合能到的節點（不含分支與匯合）。
         var pairs = joined.OrderBy(p => m.NodeOrder[p.Fork.Id]).Select(p => new Pair(
             p.Fork, p.Join,
@@ -216,6 +233,8 @@ public static class ApprovalGraphValidator
             foreach (var e in m.Edges)
             {
                 var (from, to) = (e.Def.From, e.Def.To);
+                // 防線：目前推導上不會觸發。區域 R 是「不經匯合能到的節點」的閉包，from ∈ R 且 to ≠ J 時，to 必然也在 R；
+                // 繞過匯合的路徑在有限無環圖最後會走到結束，由 G8（endInRegion）報。保留是為了區域演算法日後改動時仍有守衛。
                 if (p.Region.Contains(from) && !p.Region.Contains(to) && to != p.Join.Id) err(edgeKey(e), "G7", "edgeOutOfRegion");
                 if (!p.Region.Contains(from) && from != p.Fork.Id && p.Region.Contains(to)) err(edgeKey(e), "G7", "edgeIntoRegion");
                 if (to == p.Join.Id && !p.Region.Contains(from) && from != p.Fork.Id) err(edgeKey(e), "G7", "joinInEdgeOutside");
@@ -271,7 +290,9 @@ public static class ApprovalGraphValidator
         foreach (var f in m.OfKind(ApprovalNodeKinds.Fork))
         {
             var count = m.Out(f.Id).Count;
-            var before = (old?.Edges ?? []).Count(e => e?.From == f.Id);
+            // 豁免只算舊版同代號而且也是分支的節點；舊版是條件節點等其他種類，新版的分支視為新分支。
+            var oldFork = oldNodes.FirstOrDefault(n => n?.Id == f.Id) is { Kind: ApprovalNodeKinds.Fork };
+            var before = oldFork ? (old?.Edges ?? []).Count(e => e?.From == f.Id) : 0;
             if (count > limits.MaxBranches && count > before) err(nodeKey(f), "G13", "branchesTooMany");
         }
     }
