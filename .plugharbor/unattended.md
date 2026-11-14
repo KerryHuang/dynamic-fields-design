@@ -12,7 +12,9 @@ GitHub Actions（`.github/workflows/gate.yml`）：先跑外洩掃描（三項 0
 - 背景指令不要在結尾加 `echo "exit=$?"`，那會讓背景工作永遠回 0。
 
 ## 外洩掃描
-`LEAK_DENYLIST=<repo 外的清單檔> bash scripts/unattended/leak-scan.sh`
+`LEAK_DENYLIST="$HOME/Work/projects/plugharbor/.leak-denylist" bash scripts/unattended/leak-scan.sh`
+
+- 清單檔在 plugharbor repo 根目錄（已 gitignore），路徑用 `$HOME` 起頭，不寫展開後的絕對路徑。
 
 - 三項筆數（diff、log、names）都要是 0。
 - 清單檔不進 repo；掃描只印筆數，不印字串。
