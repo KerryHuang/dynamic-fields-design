@@ -18,32 +18,42 @@ public sealed class MasterScenario(IReadOnlyCollection<string> openApps) : IDemo
     public int Seed => 20261110;
 
     /// <summary>
-    /// 已改用主檔的應用程式：要不要建聯絡人、由誰建立往來對象、負責人是誰、從今天前幾天開始建（要早於該應用程式最早引用它的單據）。
+    /// 已改用主檔的應用程式：要不要建聯絡人、由誰建立往來對象、從今天前幾天開始建（要早於該應用程式最早引用它的單據）。
     /// </summary>
-    private static readonly Dictionary<string, (bool Contacts, string[] Creators, string[] Owners, int FromDay)> Needs = new()
+    private static readonly Dictionary<string, (bool Contacts, string[] Creators, int FromDay)> Needs = new()
     {
-        [DemoCatalog.CrmAppId] = (true, ["sales01", "sales02"], ["sales01", "sales02"], -80),
-        [DemoCatalog.MesAppId] = (false, ["manager01"], ["sales01", "sales02"], -95),
-        [DemoCatalog.InventoryAppId] = (true, ["buyer01"], ["buyer01"], -100)
+        [DemoCatalog.CrmAppId] = (true, ["sales01", "sales02"], -80),
+        [DemoCatalog.MesAppId] = (false, ["manager01"], -95),
+        [DemoCatalog.InventoryAppId] = (true, ["buyer01"], -100)
     };
 
     /// <summary>
-    /// 公司：每家屬於原本用它的應用程式（只有該應用程式開啟時才建）。CRM 的十家客戶（其中一家也是供應商）、MES 的八家客戶、
-    /// 進銷存的三家供應商與四家客戶。進銷存的公司各帶一位聯絡人（沿用原本「聯絡人」文字欄位的稱呼）。
+    /// 負責人（只有一位使用者）：橫跨 CRM 或 MES 的公司由業務輪流負責（CRM 的「負責業務」與 MES 的「客戶業務窗口」是同一個欄位）；
+    /// 只有進銷存用的公司，客戶由進銷存主管、供應商由採購人員負責。
     /// </summary>
-    private static readonly (string Name, string Role, string App, string? Contact)[] Companies =
+    private static readonly string[] SalesOwners = ["sales01", "sales02"];
+    private const string InventoryCustomerOwner = "ops01", InventorySupplierOwner = "buyer01";
+
+    /// <summary>
+    /// 公司：每家列出用它的應用程式（只有其中一個開啟，就會建立）。共 18 家：CRM 的十家客戶（其中一家也是供應商）；
+    /// 前四家同時是 MES 的客戶，前三家也是進銷存的客戶（同一筆往來對象，角色合併）；MES 另有四家自己的客戶，
+    /// 進銷存另有三家供應商與一家客戶。進銷存的公司各帶一位聯絡人（沿用原本「聯絡人」文字欄位的稱呼）。
+    /// 每個應用程式的公司順序就是這張表的順序。
+    /// </summary>
+    private static readonly (string Name, string Role, string[] Apps, string? Contact)[] Companies =
     [
-        ("晨曦機械", "customer", DemoCatalog.CrmAppId, null), ("遠見電子", "customer", DemoCatalog.CrmAppId, null), ("新航物流", "customer", DemoCatalog.CrmAppId, null),
-        ("綠野食品", "customer", DemoCatalog.CrmAppId, null), ("恆展工業", "both", DemoCatalog.CrmAppId, null), ("藍海貿易", "customer", DemoCatalog.CrmAppId, null),
-        ("巨峰營造", "customer", DemoCatalog.CrmAppId, null), ("明日設計", "customer", DemoCatalog.CrmAppId, null), ("安泰五金", "customer", DemoCatalog.CrmAppId, null),
-        ("雲端製造", "customer", DemoCatalog.CrmAppId, null),
-        ("嵐岳精密", "customer", DemoCatalog.MesAppId, null), ("恆川機械", "customer", DemoCatalog.MesAppId, null), ("曜陽電子", "customer", DemoCatalog.MesAppId, null),
-        ("岳峰精機", "customer", DemoCatalog.MesAppId, null), ("澄川塑膠", "customer", DemoCatalog.MesAppId, null), ("瑞嶺零件", "customer", DemoCatalog.MesAppId, null),
-        ("拓明模具", "customer", DemoCatalog.MesAppId, null), ("禾晟電機", "customer", DemoCatalog.MesAppId, null),
-        ("昌盛鋼鐵", "supplier", DemoCatalog.InventoryAppId, "林經理"), ("宏達五金", "supplier", DemoCatalog.InventoryAppId, "陳小姐"),
-        ("精工模料", "supplier", DemoCatalog.InventoryAppId, "王先生"),
-        ("遠航機械", "customer", DemoCatalog.InventoryAppId, "張經理"), ("新昇塑膠", "customer", DemoCatalog.InventoryAppId, "李小姐"),
-        ("大成電子", "customer", DemoCatalog.InventoryAppId, "吳先生"), ("恆久工業", "customer", DemoCatalog.InventoryAppId, "黃經理")
+        ("晨曦機械", "customer", [DemoCatalog.CrmAppId, DemoCatalog.MesAppId, DemoCatalog.InventoryAppId], "張經理"),
+        ("遠見電子", "customer", [DemoCatalog.CrmAppId, DemoCatalog.MesAppId, DemoCatalog.InventoryAppId], "李小姐"),
+        ("新航物流", "customer", [DemoCatalog.CrmAppId, DemoCatalog.MesAppId, DemoCatalog.InventoryAppId], "吳先生"),
+        ("綠野食品", "customer", [DemoCatalog.CrmAppId, DemoCatalog.MesAppId], null),
+        ("恆展工業", "both", [DemoCatalog.CrmAppId], null), ("藍海貿易", "customer", [DemoCatalog.CrmAppId], null),
+        ("巨峰營造", "customer", [DemoCatalog.CrmAppId], null), ("明日設計", "customer", [DemoCatalog.CrmAppId], null),
+        ("安泰五金", "customer", [DemoCatalog.CrmAppId], null), ("雲端製造", "customer", [DemoCatalog.CrmAppId], null),
+        ("嵐岳精密", "customer", [DemoCatalog.MesAppId], null), ("恆川機械", "customer", [DemoCatalog.MesAppId], null),
+        ("曜陽電子", "customer", [DemoCatalog.MesAppId], null), ("岳峰精機", "customer", [DemoCatalog.MesAppId], null),
+        ("昌盛鋼鐵", "supplier", [DemoCatalog.InventoryAppId], "林經理"), ("宏達五金", "supplier", [DemoCatalog.InventoryAppId], "陳小姐"),
+        ("精工模料", "supplier", [DemoCatalog.InventoryAppId], "王先生"),
+        ("恆久工業", "customer", [DemoCatalog.InventoryAppId], "黃經理")
     ];
 
     private static readonly string[] Surnames = ["林", "陳", "王", "張", "李", "黃", "吳", "劉", "蔡", "楊"];
@@ -53,9 +63,10 @@ public sealed class MasterScenario(IReadOnlyCollection<string> openApps) : IDemo
     /// <summary>換過公司的 CRM 聯絡人：聯絡人序號 → 前一家公司的序號（任職經歷兩筆以上）。第 7 位待過兩家。</summary>
     private static readonly Dictionary<int, int[]> FormerCompanies = new() { [2] = [5], [4] = [8], [7] = [0, 3] };
 
-    /// <summary>某個應用程式的往來對象（依 <see cref="Companies"/> 的順序）；那個應用程式沒開時是空的。</summary>
+    /// <summary>某個應用程式的往來對象（依 <see cref="Companies"/> 的順序，橫跨多個應用程式的公司每個都會列到）；那個應用程式沒開時是空的。</summary>
     public static List<DemoRecord> ForApp(DemoPlan plan, string appId) =>
-        plan.Records.GetValueOrDefault(PartnerModule, []).Where(p => (string?)p.Facts.GetValueOrDefault("app") == appId).ToList();
+        plan.Records.GetValueOrDefault(PartnerModule, [])
+            .Where(p => p.Facts.GetValueOrDefault("apps") is string[] apps && apps.Contains(appId)).ToList();
 
     public void Plan(DemoPlan plan)
     {
@@ -64,16 +75,21 @@ public sealed class MasterScenario(IReadOnlyCollection<string> openApps) : IDemo
         var today = plan.Today;
 
         // ---- 往來對象 ----
+        // 一家公司只建一次：建立者與時間照它開啟中的應用程式裡最早開始用主檔的那一個（單據才不會早於公司）
         var partners = new Dictionary<int, DemoRecord>();
         var perApp = new Dictionary<string, int>();
+        var salesOwned = 0;
         for (var i = 0; i < Companies.Length; i++)
         {
-            var (name, role, app, _) = Companies[i];
-            if (!apps.Contains(app)) continue;
-            var k = perApp[app] = perApp.GetValueOrDefault(app) + 1;
-            var (_, creators, owners, fromDay) = Needs[app];
+            var (name, role, companyApps, _) = Companies[i];
+            var active = companyApps.Where(apps.Contains).ToArray();
+            if (active.Length == 0) continue;
+            var primary = active.MinBy(a => Needs[a].FromDay)!;
+            var k = perApp[primary] = perApp.GetValueOrDefault(primary) + 1;
+            var (_, creators, fromDay) = Needs[primary];
             var n = i;
-            var owner = owners[(k - 1) % owners.Length];
+            var owner = active.Any(a => a is DemoCatalog.CrmAppId or DemoCatalog.MesAppId) ? SalesOwners[salesOwned++ % SalesOwners.Length]
+                : role == "supplier" ? InventorySupplierOwner : InventoryCustomerOwner;
             var record = plan.Create(PartnerModule, plan.At(today.AddDays(fromDay + k - 1)), creators[(k - 1) % creators.Length], $"往來對象 {name} 建立", ctx =>
             {
                 var m = ctx.Masters!;
@@ -87,16 +103,18 @@ public sealed class MasterScenario(IReadOnlyCollection<string> openApps) : IDemo
             });
             record.Facts["name"] = name;
             record.Facts["role"] = role;
-            record.Facts["app"] = app;
+            record.Facts["owner"] = owner;
+            record.Facts["apps"] = active;
+            record.Facts["primary"] = primary;
             partners[i] = record;
         }
 
-        // ---- 帶聯絡人的公司（進銷存）：一家一位，任職經歷只有目前這一家 ----
-        foreach (var (i, partner) in partners.Where(p => Companies[p.Key].Contact is not null && Needs[Companies[p.Key].App].Contacts))
+        // ---- 帶聯絡人的公司（進銷存）：一家一位，任職經歷只有目前這一家；橫跨 CRM 的公司另有 CRM 的聯絡人 ----
+        var stock = Needs[DemoCatalog.InventoryAppId];
+        foreach (var (i, partner) in partners.Where(p => Companies[p.Key].Contact is not null && apps.Contains(DemoCatalog.InventoryAppId) && stock.Contacts))
         {
             var name = Companies[i].Contact!;
-            var creator = Needs[Companies[i].App].Creators[0];
-            var record = plan.Create(ContactModule, plan.At(today.AddDays(Needs[Companies[i].App].FromDay + 10)), creator,
+            var record = plan.Create(ContactModule, plan.At(today.AddDays(stock.FromDay + 10)), stock.Creators[0],
                 $"聯絡人 {Companies[i].Name} {name} 建立", ctx =>
                 {
                     var m = ctx.Masters!;
@@ -114,7 +132,7 @@ public sealed class MasterScenario(IReadOnlyCollection<string> openApps) : IDemo
         // ---- CRM 的聯絡人：掛在 CRM 的客戶公司下；幾位換過公司，任職經歷有兩筆以上 ----
         if (!apps.Contains(DemoCatalog.CrmAppId) || !Needs[DemoCatalog.CrmAppId].Contacts) return;
         var users = Needs[DemoCatalog.CrmAppId].Creators;
-        var companies = partners.Keys.Where(k => Companies[k].App == DemoCatalog.CrmAppId).Take(Surnames.Length).ToList();
+        var companies = partners.Keys.Where(k => Companies[k].Apps.Contains(DemoCatalog.CrmAppId)).Take(Surnames.Length).ToList();
         for (var c = 0; c < companies.Count; c++)
         {
             var n = c;
