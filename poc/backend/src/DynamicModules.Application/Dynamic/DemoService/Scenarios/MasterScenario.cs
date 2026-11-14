@@ -29,15 +29,15 @@ public sealed class MasterScenario(IReadOnlyCollection<string> openApps) : IDemo
 
     /// <summary>
     /// 負責人（只有一位使用者）：橫跨 CRM 或 MES 的公司由業務輪流負責（CRM 的「負責業務」與 MES 的「客戶業務窗口」是同一個欄位）；
-    /// 只有進銷存開啟時，客戶由進銷存主管、供應商由採購人員負責。
+    /// 只有進銷存用的公司，客戶由進銷存主管、供應商由採購人員負責。
     /// </summary>
     private static readonly string[] SalesOwners = ["sales01", "sales02"];
     private const string InventoryCustomerOwner = "ops01", InventorySupplierOwner = "buyer01";
 
     /// <summary>
-    /// 公司：每家列出用它的應用程式（只有其中一個開啟，就會建立）。共 17 家：CRM 的十家客戶（其中一家也是供應商）；
+    /// 公司：每家列出用它的應用程式（只有其中一個開啟，就會建立）。共 18 家：CRM 的十家客戶（其中一家也是供應商）；
     /// 前四家同時是 MES 與進銷存的客戶（同一筆往來對象，角色合併）；MES 另有四家自己的客戶，
-    /// 進銷存另有三家供應商。進銷存的公司各帶一位聯絡人（沿用原本「聯絡人」文字欄位的稱呼）。
+    /// 進銷存另有三家供應商與一家客戶。進銷存的公司各帶一位聯絡人（沿用原本「聯絡人」文字欄位的稱呼）。
     /// 每個應用程式的公司順序就是這張表的順序。
     /// </summary>
     private static readonly (string Name, string Role, string[] Apps, string? Contact)[] Companies =
@@ -52,7 +52,8 @@ public sealed class MasterScenario(IReadOnlyCollection<string> openApps) : IDemo
         ("嵐岳精密", "customer", [DemoCatalog.MesAppId], null), ("恆川機械", "customer", [DemoCatalog.MesAppId], null),
         ("曜陽電子", "customer", [DemoCatalog.MesAppId], null), ("岳峰精機", "customer", [DemoCatalog.MesAppId], null),
         ("昌盛鋼鐵", "supplier", [DemoCatalog.InventoryAppId], "林經理"), ("宏達五金", "supplier", [DemoCatalog.InventoryAppId], "陳小姐"),
-        ("精工模料", "supplier", [DemoCatalog.InventoryAppId], "王先生")
+        ("精工模料", "supplier", [DemoCatalog.InventoryAppId], "王先生"),
+        ("恆久工業", "customer", [DemoCatalog.InventoryAppId], "黃經理")
     ];
 
     private static readonly string[] Surnames = ["林", "陳", "王", "張", "李", "黃", "吳", "劉", "蔡", "楊"];
