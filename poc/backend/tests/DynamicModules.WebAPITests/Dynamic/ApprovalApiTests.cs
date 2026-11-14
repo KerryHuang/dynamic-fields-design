@@ -269,7 +269,7 @@ public class ApprovalApiTests : IDisposable
 
     [Fact]
     [Trait("Category", "Postgres")]
-    public async Task AddSign_IdempotencyReplay_OneQueuedRun()
+    public async Task AddSign_IdempotencyReplay_OneAddSignStage()
     {
         var r = await Arrange();
         var id = await Submitted(r);

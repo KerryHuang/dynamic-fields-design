@@ -204,11 +204,26 @@ public sealed class ApprovalEngine(
         return (fresh, outcome, null);
     }
 
-    /// <summary>退回上一關：用同一個關卡代號建新的關卡實例並重新解析簽核人（設計 §7.3）；新負責人收到 approvalReturned。</summary>
+    /// <summary>
+    /// 退回上一關：用同一個關卡代號建新的關卡實例並重新解析簽核人（設計 §7.3）；新負責人收到 approvalReturned。
+    /// 目標是加簽關卡時以同一組加簽人、對象、方式重來；是備援關卡時照建備援實例的寫法重新解析備援名單（a3c 審查 M2）。
+    /// </summary>
     public async Task<ServiceResult?> RestartStageAsync(ApprovalInstance inst, Module module, IReadOnlyDictionary<string, JsonElement?> values,
         ApprovalStageRun previous, int seq, CancellationToken ct)
     {
         if (DefinitionOf(inst) is not { } def) return ServiceResult.Conflict(ApprovalMessages.StageDefMissing);
+        if (previous.StageCode == FallbackStageCode)
+        {
+            var fallbackCtx = await resolver.ContextAsync(module, inst.InitiatorUserId, values, null, ct);
+            var fallback = ApproverResolver.ResolveFallback(fallbackCtx, def.FallbackApprovers);
+            if (fallback.Error is { } fallbackError) return ServiceResult.Conflict(fallbackError);
+            var restarted = new ApprovalStageRun
+            {
+                InstanceId = inst.Id, Seq = seq, StageCode = FallbackStageCode, NameSnapshot = ApprovalMessages.FallbackStageName, Mode = ApprovalModes.Any
+            };
+            await StartAsync(inst, restarted, fallback.Seats, null, ct, NotificationKinds.ApprovalReturned);
+            return null;
+        }
         if (previous.StageCode is null)
         {
             // 退回的目標是加簽關卡：同一組加簽人、同樣的方式，重新解析
@@ -217,7 +232,7 @@ public sealed class ApprovalEngine(
             var again = new ApprovalStageRun
             {
                 InstanceId = inst.Id, Seq = seq, StageCode = null, NameSnapshot = ApprovalMessages.AddSignStageName, Mode = previous.Mode,
-                AddedByUserId = previous.AddedByUserId, AddSignUserIds = previous.AddSignUserIds
+                AddedByUserId = previous.AddedByUserId, AddSignUserIds = [.. previous.AddSignUserIds ?? []]
             };
             await StartAsync(inst, again, seats, null, ct, NotificationKinds.ApprovalReturned);
             return null;

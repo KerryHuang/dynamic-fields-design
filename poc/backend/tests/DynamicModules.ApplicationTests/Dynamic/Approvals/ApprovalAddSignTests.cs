@@ -180,14 +180,100 @@ public class ApprovalAddSignTests : ApprovalTestBase
 
         Body(res).Outcome.Should().Be(ApprovalOutcomes.Returned);
         var runs = RunsOf(id);
-        runs.Last().StageCode.Should().Be("s1");
-        runs.Last().Status.Should().Be(ApprovalStageStatus.Active);
+        runs.Single(x => x.Status == ApprovalStageStatus.Active).StageCode.Should().Be("s1");
         TasksOf(id).Where(t => t.Status == ApprovalTaskStatus.Open).Select(t => t.AssigneeUserId).Should().Equal("mgrA");
 
-        // 第 1 關重來同意後，下一關是第 2 關（路徑函式截回），不是第 3 關也不是再加簽
+        // 被退回的加簽關卡排回隊伍（M1）：第 1 關重來同意後，先回到 emp2 的加簽關卡，再到第 2 關
+        runs.Where(x => x.Status == ApprovalStageStatus.Queued).Should().ContainSingle()
+            .Which.Should().Match<ApprovalStageRun>(x => x.StageCode == null && x.AddedByUserId == "mgrA");
+        ActionsOf(id).Count(a => a.Action == ApprovalActions.AddSign).Should().Be(1);   // 排回的複本不寫 add-sign
         await MustApprove(id, "mgrA");
+        RunsOf(id).Last(x => x.Status == ApprovalStageStatus.Active).StageCode.Should().BeNull();
+        TasksOf(id).Where(t => t.Status == ApprovalTaskStatus.Open).Select(t => t.AssigneeUserId).Should().Equal("emp2");
+        await MustApprove(id, "emp2");
         RunsOf(id).Last().StageCode.Should().Be("s2");
         TasksOf(id).Where(t => t.Status == ApprovalTaskStatus.Open).Select(t => t.AssigneeUserId).Should().BeEquivalentTo(["fin1", "fin2"]);
+    }
+
+    [Fact]
+    public async Task ReturnPrevious_FromSecondAddSign_RequeuedAfterRestart()
+    {
+        // 審查 M1 反例一：會簽兩人各自加簽，第二個加簽關卡退回上一關；fin2 的加簽要簽完才到 s3
+        var (_, id) = await Arrange();
+        await MustApprove(id, "mgrA");
+        await MustAddSign(id, "fin1", "emp1");
+        await MustAddSign(id, "fin2", "emp2");
+        await MustApprove(id, "emp1");
+        (await Return(id, "emp2")).IsSuccess.Should().BeTrue();
+
+        var runs = RunsOf(id);
+        runs.Single(x => x.Status == ApprovalStageStatus.Active).AddSignUserIds.Should().Equal("emp1");
+        var queued = runs.Single(x => x.Status == ApprovalStageStatus.Queued);
+        queued.AddedByUserId.Should().Be("fin2");
+        queued.AddSignUserIds.Should().Equal("emp2");
+        queued.Seq.Should().BeGreaterThan(runs.Single(x => x.Status == ApprovalStageStatus.Active).Seq);
+
+        await MustApprove(id, "emp1");
+        TasksOf(id).Where(t => t.Status == ApprovalTaskStatus.Open).Select(t => t.AssigneeUserId).Should().Equal("emp2");
+        await MustApprove(id, "emp2");
+        RunsOf(id).Last().StageCode.Should().Be("s3");
+        TasksOf(id).Where(t => t.Status == ApprovalTaskStatus.Open).Select(t => t.AssigneeUserId).Should().Equal("gm");
+        ActionsOf(id).Count(a => a.Action == ApprovalActions.AddSign).Should().Be(2);
+    }
+
+    [Fact]
+    public async Task ReturnPrevious_FromNestedAddSign_RequeuedAfterRestart()
+    {
+        // 審查 M1 反例二（巢狀）：emp3 退回 → emp2 重簽；emp2 只按同意，emp3 仍要再簽才到 s2
+        var (_, id) = await Arrange();
+        await MustAddSign(id, "mgrA", "emp2");
+        await MustAddSign(id, "emp2", "emp3");
+        (await Return(id, "emp3")).IsSuccess.Should().BeTrue();
+        TasksOf(id).Where(t => t.Status == ApprovalTaskStatus.Open).Select(t => t.AssigneeUserId).Should().Equal("emp2");
+
+        await MustApprove(id, "emp2");
+        TasksOf(id).Where(t => t.Status == ApprovalTaskStatus.Open).Select(t => t.AssigneeUserId).Should().Equal("emp3");
+        RunsOf(id).Single(x => x.Status == ApprovalStageStatus.Active).AddedByUserId.Should().Be("emp2");
+        await MustApprove(id, "emp3");
+        RunsOf(id).Last().StageCode.Should().Be("s2");
+    }
+
+    [Fact]
+    public async Task AddSign_NestedWhileOthersQueued_InsertedAfterCurrent()
+    {
+        // 審查 S1：fin1、fin2 各加簽得 A、B；A 裡 emp1 再加簽得 C → 順序 A → C → B，C 的上一關是 A
+        var (_, id) = await Arrange();
+        await MustApprove(id, "mgrA");
+        await MustAddSign(id, "fin1", "emp1");
+        await MustAddSign(id, "fin2", "emp2");
+        await MustAddSign(id, "emp1", "emp3");
+
+        var runs = RunsOf(id);
+        runs.Select(x => (x.StageCode, x.Status, x.AddedByUserId)).Should().Equal(
+            ("s1", "approved", null), ("s2", "approved", null), (null, "approved", "fin1"), (null, "active", "emp1"), (null, "queued", "fin2"));
+        runs.Select(x => x.Seq).Should().OnlyHaveUniqueItems();
+        ApprovalPath.Previous(runs, runs[3])!.Id.Should().Be(runs[2].Id);
+        TasksOf(id).Where(t => t.Status == ApprovalTaskStatus.Open).Select(t => t.AssigneeUserId).Should().Equal("emp3");
+
+        await MustApprove(id, "emp3");
+        TasksOf(id).Where(t => t.Status == ApprovalTaskStatus.Open).Select(t => t.AssigneeUserId).Should().Equal("emp2");
+        await MustApprove(id, "emp2");
+        RunsOf(id).Last().StageCode.Should().Be("s3");
+    }
+
+    [Fact]
+    public async Task AddSign_ThenApproveWithSameRowVersion_409()
+    {
+        // 審查 S3：加簽與同意用同一份畫面（同一個 rowVersion）同時送，後到的回 409
+        var (_, id) = await Arrange();
+        await MustApprove(id, "mgrA");
+        var rv = Inst(id).RowVersion;
+        (await AddSign(id, "fin1", ["emp1"], rowVersion: rv)).IsSuccess.Should().BeTrue();
+        As("fin2");
+        var late = await Send(new ApproveTaskRequest(Open(id, "fin2").Id, rv, null, null));
+        late.IsConflict.Should().BeTrue(Dump(late));
+        Open(id, "fin2").Status.Should().Be(ApprovalTaskStatus.Open);
+        RunsOf(id).Count(x => x.Status == ApprovalStageStatus.Queued).Should().Be(1);
     }
 
     [Fact]
@@ -459,6 +545,79 @@ public class ApprovalAddSignTests : ApprovalTestBase
         var emp2 = await View("emp2");
         emp2.CanAddSign.Should().BeFalse();   // 已經 1 次，到上限
         emp2.AddedBy.Should().Be("mgrA");
+    }
+
+    private ApprovalInstanceView CurrentView(long id, string user)
+    {
+        As(user);
+        var res = Send(new GetRecordApprovalRequest(Inst(id).RecordId)).GetAwaiter().GetResult();
+        res.IsSuccess.Should().BeTrue(Dump(res));
+        return ((RecordApprovalResponse)res.Data!).Current!;
+    }
+
+    [Fact]
+    public async Task RecordApproval_NoRead_CanReturnPrevious_And_CanAddSignFalseAtLimit()
+    {
+        // 審查 M3：加簽對象沒有模組 Read（靠臨時讀取），上一關與加簽上限仍以完整的關卡與歷程計算
+        var (r, id) = await Arrange();
+        As("admin");
+        await RevokeAll(r.Module);
+        await SetOverride(r, PolicyCatalog.ApprovalMaxAddSignStages, "1");
+        await MustAddSign(id, "mgrA", "emp2");
+
+        var view = CurrentView(id, "emp2");
+        view.Stages.Should().ContainSingle();   // 仍只看得到自己的關卡
+        var mine = view.Stages.SelectMany(s => s.Tasks).Single(t => t.AssigneeUserId == "emp2");
+        mine.CanAct.Should().BeTrue();
+        mine.CanReturnPrevious.Should().BeTrue();
+        mine.CanAddSign.Should().BeFalse();
+
+        (await Return(id, "emp2")).IsSuccess.Should().BeTrue();   // 畫面說可以，動作也真的可以
+        Open(id, "mgrA").Status.Should().Be(ApprovalTaskStatus.Open);
+    }
+
+    [Fact]
+    public async Task RecordApproval_QueuedAddSign_ShowsAddSignNames()
+    {
+        // 審查 S2：排隊中的加簽關卡還沒有任務，檢視帶出加簽對象姓名；啟動後以任務為準
+        var (_, id) = await Arrange();
+        await MustApprove(id, "mgrA");
+        await MustAddSign(id, "fin1", "emp1", "emp2");
+
+        var queued = CurrentView(id, "buyer1").Stages.Single(s => s.Status == ApprovalStageStatus.Queued);
+        queued.Tasks.Should().BeEmpty();
+        queued.AddSignNames.Should().Equal("emp1", "emp2");
+        CurrentView(id, "buyer1").Stages.Where(s => s.Status != ApprovalStageStatus.Queued).Should().OnlyContain(s => s.AddSignNames == null);
+    }
+
+    [Fact]
+    public async Task AddSign_FallbackRoute_ReturnPrevious_RestartsFallbackStage()
+    {
+        // 審查 M2：備援實例上的加簽關卡，上一關是備援關卡；檢視的 CanReturnPrevious 與實際動作一致
+        var r = await Scenario3();
+        As("buyer1");
+        var po = await NewPo(r, price: 50000);
+        var id = (await MustSubmit(po.Id, r.Confirmed)).InstanceId!.Value;
+        var title = TitleId(r.Extra);
+        (await Send(new DynamicModules.Application.Dynamic.RecordService.Commands.CreateRecord.CreateRecordRequest(
+            r.Extra, V((title, "折讓"), (r.ExtraRef, po.Id), (r.ExtraAmount, -45000m))))).IsCreated.Should().BeTrue();
+        await MustApprove(id, "buyer2");   // 重新比對 → 備援實例
+        var fresh = Db.Context.Set<ApprovalInstance>().AsNoTracking().Single(i => i.RecordId == po.Id && i.Status == ApprovalInstanceStatus.Pending);
+        await MustAddSign(fresh.Id, "admin", "emp2");
+
+        CurrentView(fresh.Id, "emp2").Stages.SelectMany(s => s.Tasks).Single(t => t.AssigneeUserId == "emp2").CanReturnPrevious.Should().BeTrue();
+        var res = await Return(fresh.Id, "emp2");
+
+        res.IsSuccess.Should().BeTrue(Dump(res));
+        Body(res).Outcome.Should().Be(ApprovalOutcomes.Returned);
+        RunsOf(fresh.Id).Select(x => (x.StageCode, x.Status)).Should().Equal(
+            (ApprovalEngine.FallbackStageCode, "approved"), (null, "returned"), (ApprovalEngine.FallbackStageCode, "active"), (null, "queued"));
+        Open(fresh.Id, "admin").Reason.Should().Be(ApprovalTaskReason.Fallback);
+
+        await MustApprove(fresh.Id, "admin");   // 備援關卡重簽 → 被退回的加簽關卡排回 → 同意後核准
+        var done = await Approve(fresh.Id, "emp2");
+        Body(done).Outcome.Should().Be(ApprovalOutcomes.Approved);
+        StateOf(r, po.Id).Should().Be(r.Confirmed);
     }
 }
 

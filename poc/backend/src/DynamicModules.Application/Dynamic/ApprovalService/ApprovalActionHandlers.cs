@@ -144,12 +144,17 @@ public sealed class ApprovalApprover(
                 data: values.Count > 0 ? JsonSerializer.Serialize(values.Keys) : null);
         else
         {
+            // 位置在寫這次的 add-sign 歷程之前算：同一關先前加簽出的關卡數
+            var priorAddSigns = (await repo.ListActionsAsync([inst.Id], ct)).Count(a => a.Action == ApprovalActions.AddSign && a.StageRunId == run.Id);
             engine.Log(inst, ApprovalActions.AddSign, user.UserId, run.Id, me.Id, ApproveTaskHandler.Clean(comment), targets: [.. addSign.UserIds],
                 data: values.Count > 0 ? JsonSerializer.Serialize(new { mode = addSign.Mode, editedKeys = values.Keys }) : JsonSerializer.Serialize(new { mode = addSign.Mode }));
-            // 排隊中的加簽關卡：這一關完成後、下一個定義關卡之前依 Seq 啟動（設計 §7.6）
+            // 排隊中的加簽關卡：這一關完成後、下一個定義關卡之前依 Seq 啟動（設計 §7.6「插在目前關卡之後」；a3c 審查 S1）。
+            // 位置緊接目前關卡與它先前加簽出的關卡（同一關先加簽的先簽）；排在後面的其他排隊關卡（例如巢狀加簽時，上一層其他人的加簽）順延一號
+            var seq = run.Seq + 1 + priorAddSigns;
+            foreach (var later in runs.Where(r => r.Status == ApprovalStageStatus.Queued && r.Seq >= seq)) later.Seq++;
             repo.AddRun(new ApprovalStageRun
             {
-                InstanceId = inst.Id, Seq = runs.Max(r => r.Seq) + 1, StageCode = null, NameSnapshot = ApprovalMessages.AddSignStageName, Mode = addSign.Mode,
+                InstanceId = inst.Id, Seq = seq, StageCode = null, NameSnapshot = ApprovalMessages.AddSignStageName, Mode = addSign.Mode,
                 Status = ApprovalStageStatus.Queued, AddedByUserId = user.UserId, AddSignUserIds = [.. addSign.UserIds]
             });
         }
@@ -285,8 +290,17 @@ public class RejectTaskHandler(
             Reject(me, run, tasks, runs, now, ApprovalStageStatus.Returned);
             engine.Log(inst, ApprovalActions.Return, user.UserId, run.Id, me.Id, request.Comment);
             await uow.CommitAsync(ct);
-            var restart = await engine.RestartStageAsync(inst, module, await support.ValuesAsync(inst.RecordId, ct), previous, runs.Max(r => r.Seq) + 1, ct);
+            var restartSeq = runs.Max(r => r.Seq) + 1;
+            var restart = await engine.RestartStageAsync(inst, module, await support.ValuesAsync(inst.RecordId, ct), previous, restartSeq, ct);
             if (restart is not null) return restart;
+            // 被退回的是加簽關卡：排回隊伍，退回目標重簽後再簽一次（a3c 審查 M1）。只是重排、不是新的加簽，所以不寫 add-sign 歷程、不計入關卡數上限；
+            // 再往前退時 CloseQueued 會把它關掉
+            if (run.StageCode is null)
+                repo.AddRun(new ApprovalStageRun
+                {
+                    InstanceId = inst.Id, Seq = restartSeq + 1, StageCode = null, NameSnapshot = ApprovalMessages.AddSignStageName, Mode = run.Mode,
+                    Status = ApprovalStageStatus.Queued, AddedByUserId = run.AddedByUserId, AddSignUserIds = [.. run.AddSignUserIds ?? []]
+                });
             // 設計 §12「被退回」：發起人也要知道（上一關的新負責人由 RestartStageAsync 通知）
             await notifier.NotifyAsync(NotificationKinds.ApprovalReturned, inst, [inst.InitiatorUserId], user.UserId, ct);
             await uow.CommitAsync(ct);

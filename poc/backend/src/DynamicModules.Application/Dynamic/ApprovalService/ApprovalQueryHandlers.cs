@@ -117,8 +117,11 @@ public class GetRecordApprovalHandler(
         var granted = read is null ? await grant.ForRecordAsync(module, record, ct) : null;
         var pendingId = instances.FirstOrDefault(i => i.Status == ApprovalInstanceStatus.Pending)?.Id;
         var visibleIds = visible.Select(i => i.Id).ToList();
-        var runs = (await repo.ListRunsAsync(visibleIds, ct)).Where(r => Shown(r.InstanceId, r.Id)).ToList();
-        var actions = (await repo.ListActionsAsync(visibleIds, ct)).Where(a => Shown(a.InstanceId, a.StageRunId)
+        // 未過濾的關卡實例與歷程只用來算「能不能退回上一關」「還能不能加簽」（a3c 審查 M3）：只輸出 bool，不帶出其他關卡的內容
+        var allRuns = await repo.ListRunsAsync(visibleIds, ct);
+        var allActions = await repo.ListActionsAsync(visibleIds, ct);
+        var runs = allRuns.Where(r => Shown(r.InstanceId, r.Id)).ToList();
+        var actions = allActions.Where(a => Shown(a.InstanceId, a.StageRunId)
             || granted is not null && a.InstanceId == pendingId && a.Action == ApprovalActions.ContentChanged).ToList();
         tasks = tasks.Where(t => Shown(t.InstanceId, t.StageRunId)).ToList();
         var names = await ApprovalViews.UserNamesAsync(permissions, ct);
@@ -128,7 +131,8 @@ public class GetRecordApprovalHandler(
         var hidden = await grant.HiddenFieldIdsAsync(module, read, granted, ct);
         var unwritable = await grant.UnwritableFieldIdsAsync(module, read, granted, ct);
         var addSignLimit = await policies.MaxAddSignStagesAsync(module.Id, ct);
-        var views = visible.Select(i => ApprovalViews.Instance(i, runs, tasks, actions, names, me, writable, manager, hidden, unwritable, module.Workflow, ShowTitle(i), addSignLimit)).ToList();
+        var views = visible.Select(i => ApprovalViews.Instance(i, runs, tasks, actions, names, me, writable, manager, hidden, unwritable, module.Workflow, ShowTitle(i), addSignLimit,
+            allRuns, allActions)).ToList();
         var pending = instances.Any(i => i.Status == ApprovalInstanceStatus.Pending);
         var targets = canRead ? await reader.SubmitTargetsAsync(module, record, pending, ct) : [];
         return ServiceResult.Success(new RecordApprovalResponse(
@@ -272,7 +276,8 @@ internal static class ApprovalViews
 
     public static ApprovalInstanceView Instance(ApprovalInstance i, IReadOnlyList<ApprovalStageRun> allRuns, IReadOnlyList<ApprovalTask> allTasks,
         IReadOnlyList<ApprovalAction> allActions, IReadOnlyDictionary<string, string> names, string me, bool writable, bool manager,
-        IReadOnlySet<long>? hiddenFieldIds, IReadOnlySet<long>? unwritableFieldIds, Workflow? workflow, bool showTitle, int addSignLimit)
+        IReadOnlySet<long>? hiddenFieldIds, IReadOnlySet<long>? unwritableFieldIds, Workflow? workflow, bool showTitle, int addSignLimit,
+        IReadOnlyList<ApprovalStageRun> unfilteredRuns, IReadOnlyList<ApprovalAction> unfilteredActions)
     {
         string Name(string id) => names.GetValueOrDefault(id) ?? id;
         var pending = i.Status == ApprovalInstanceStatus.Pending;
@@ -281,7 +286,9 @@ internal static class ApprovalViews
         var def = ApprovalEngine.DefinitionOf(i);
         // 可編輯欄位只給能動作的人，而且送出時的狀態不能是簽核鎖定狀態（設計 §8.5）
         var editableAllowed = workflow is not null && ApprovalRuntimeCheck.VerifyEditable(workflow, i.FromOptionId) is null;
-        var canAddSignMore = allActions.Count(a => a.InstanceId == i.Id && a.Action == ApprovalActions.AddSign) < addSignLimit;
+        // 上一關與加簽筆數用未過濾的資料算：只看得到自己關卡的簽核人（沒有 Read）也要和 handler 的判斷一致
+        var pathRuns = unfilteredRuns.Where(r => r.InstanceId == i.Id).ToList();
+        var canAddSignMore = unfilteredActions.Count(a => a.InstanceId == i.Id && a.Action == ApprovalActions.AddSign) < addSignLimit;
         var stages = runs.Select(r =>
         {
             var views = tasks.Where(t => t.StageRunId == r.Id).Select(t =>
@@ -289,11 +296,13 @@ internal static class ApprovalViews
                 var canAct = pending && writable && t.Status == ApprovalTaskStatus.Open && ApprovalActionRules.IsActor(t, me)
                     && !ApprovalActionSupport.AlreadyApprovedInStage(tasks, t, me);
                 return new ApprovalTaskView(t.Id, t.AssigneeUserId, Name(t.AssigneeUserId), t.OriginalUserId, t.Reason, t.Status, t.ActedTime, canAct,
-                    pending && ApprovalPath.Previous(runs, r) is not null,
+                    pending && ApprovalPath.Previous(pathRuns, r) is not null,
                     t.OriginalUserId != t.AssigneeUserId ? Name(t.OriginalUserId) : null, canAct && canAddSignMore);
             }).ToList();
             return new ApprovalStageView(r.Id, r.Seq, r.StageCode, r.NameSnapshot ?? new I18nText(), r.Mode, r.Status, r.SkipReason, r.DueTime, views,
-                EditableKeys(def, r, views.Any(v => v.CanAct), editableAllowed, unwritableFieldIds), r.AddedByUserId is { } addedBy ? Name(addedBy) : null);
+                EditableKeys(def, r, views.Any(v => v.CanAct), editableAllowed, unwritableFieldIds), r.AddedByUserId is { } addedBy ? Name(addedBy) : null,
+                // 排隊中的加簽關卡還沒有任務，列出加簽對象；啟動後以任務為準（a3c 審查 S2）
+                r.Status == ApprovalStageStatus.Queued ? (r.AddSignUserIds ?? []).Select(Name).ToList() : null);
         }).ToList();
         var actions = allActions.Where(a => a.InstanceId == i.Id).OrderBy(a => a.Id).Select(a => new ApprovalActionView(a.Action, a.ActorUserId, Name(a.ActorUserId),
             a.OnBehalfOfUserId, a.TargetUserIds ?? [], a.Comment, Data(a, hiddenFieldIds), a.CreatedTime,

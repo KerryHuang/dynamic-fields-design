@@ -126,4 +126,20 @@ public class ApprovalPathTests
         var runs = new[] { Run(1, "s1", Ok), Run(2, "s2", Act), Run(3, null, Queued, "a"), Run(4, null, Closed, "b") };
         ApprovalPath.Effective(runs).Select(r => r.Seq).Should().Equal(1);
     }
+
+    [Fact]
+    public void Effective_ReturnedAddSign_RequeuedAfterTarget()
+    {
+        // a3c 審查 M1：s2 會簽兩人各自加簽 A、B；B 退回上一關 → A 重來（A'），B 排回成 queued 複本（B'），Seq 在重來之後
+        var def = Def("s1", "s2", "s3");
+        var waiting = new[] { Run(1, "s1", Ok), Run(2, "s2", Ok), Run(3, null, Ok, "fin1"), Run(4, null, Ret, "fin2"), Run(5, null, Act, "fin1"), Run(6, null, Queued, "fin2") };
+        ApprovalPath.Previous(waiting, waiting[4])!.Seq.Should().Be(2);   // A' 的上一關是 s2
+        ApprovalPath.Effective(waiting).Select(r => r.Seq).Should().Equal(1, 2);
+
+        var requeued = new[] { Run(1, "s1", Ok), Run(2, "s2", Ok), Run(3, null, Ok, "fin1"), Run(4, null, Ret, "fin2"), Run(5, null, Ok, "fin1"), Run(6, null, Act, "fin2") };
+        ApprovalPath.Previous(requeued, requeued[5])!.Seq.Should().Be(5);   // 排回的 B' 上一關是 A'
+        requeued[5].Status = Ok;
+        ApprovalPath.Effective(requeued).Select(r => r.Seq).Should().Equal(1, 2, 5, 6);
+        ApprovalPath.NextStageIndex(def, requeued).Should().Be(2);   // B' 簽完才到 s3
+    }
 }

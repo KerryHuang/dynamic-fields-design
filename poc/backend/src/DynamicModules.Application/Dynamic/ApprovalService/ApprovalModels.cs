@@ -60,7 +60,8 @@ public sealed record ApprovalTaskView(long Id, string AssigneeUserId, string Ass
     DateTime? ActedTime, bool CanAct, bool CanReturnPrevious = false, string? OriginalName = null, bool CanAddSign = false);
 
 public sealed record ApprovalStageView(long Id, int Seq, string? StageCode, I18nText Name, string Mode, string Status, string? SkipReason,
-    DateTime? DueTime, IReadOnlyList<ApprovalTaskView> Tasks, IReadOnlyList<string> EditableFieldKeys, string? AddedByName = null);
+    DateTime? DueTime, IReadOnlyList<ApprovalTaskView> Tasks, IReadOnlyList<string> EditableFieldKeys, string? AddedByName = null,
+    IReadOnlyList<string>? AddSignNames = null);
 
 public sealed record ApprovalActionView(string Action, string ActorUserId, string ActorName, string? OnBehalfOfUserId, IReadOnlyList<string> TargetUserIds,
     string? Comment, JsonElement? Data, DateTime CreatedTime, IReadOnlyList<string>? TargetNames = null);

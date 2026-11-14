@@ -11,6 +11,9 @@ public static class ApprovalPath
     /// <summary>
     /// 目前有效的路徑（Seq 升冪）：approved、skipped 的關卡實例加入；returned 的關卡實例不加入，而且它之後的下一個關卡實例
     /// （closed 的排隊關卡不算）是退回目標的重來——路徑先截到退回目標之前。active、queued、closed 的不在路徑上。
+    /// 依賴的不變式：只有 RejectTaskHandler 的退回上一關會產生 returned，而且同一交易內接著以 Seq = max + 1 建重來
+    /// （重來失敗整筆回滾）；被退回的加簽關卡另排一筆 queued 複本，Seq 在重來之後，不會插在 returned 與重來之間。
+    /// 新增其他寫入 returned 的路徑，或讓別的關卡實例排在重來之前時，要一起檢查這裡。
     /// </summary>
     public static IReadOnlyList<ApprovalStageRun> Effective(IReadOnlyList<ApprovalStageRun> runs)
     {
