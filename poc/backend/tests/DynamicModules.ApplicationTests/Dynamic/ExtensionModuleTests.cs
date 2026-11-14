@@ -22,7 +22,6 @@ using DynamicModules.Application.Dynamic.RecordService.Queries.GetRecordByHost;
 using DynamicModules.Application.Dynamic.References;
 using DynamicModules.ApplicationTests.Persistence;
 using DynamicModules.Domain.Entities.Dynamic;
-using DynamicModules.Domain.Entities.Mock;
 using DynamicModules.Domain.ValueObjects;
 using DynamicModules.Persistence;
 using DynamicModules.Persistence.Seed;
