@@ -77,7 +77,12 @@ public class ApprovalGraphPathTests
         [new[] { Run(1, "s1", "", Ok), Run(2, null, "", Ok, addSign: true), Run(3, "s2", "", Ret), Run(4, null, "", Ok, addSign: true), Run(5, "s2", "", Act) }],
         // 略過與 closed 的排隊關卡
         [new[] { Run(1, "a", "", Ok), Run(2, "b", "", Skip), Run(3, "c", "", Closed), Run(4, "d", "", Ret), Run(5, "a", "", Act), Run(6, "b", "", ApprovalStageStatus.Queued) }],
+        // 真正的 sequence 列：NodeKind、BranchKey 都是 null
+        [new[] { NullShaped(1, "a", Ok), NullShaped(2, "b", Ok), NullShaped(3, "c", Ret), NullShaped(4, "b", Ok), NullShaped(5, "c", Act) }],
     ];
+
+    private static ApprovalStageRun NullShaped(int seq, string code, string status) =>
+        new() { Id = seq, Seq = seq, StageCode = code, Status = status };
 
     [Theory]
     [MemberData(nameof(SequenceShapedRuns))]
@@ -98,7 +103,7 @@ public class ApprovalGraphPathTests
     }
 
     [Fact]
-    public void Segment_OnlyThatBranch_IncludesPassedAndCutsReturned()
+    public void Segment_OnlyThatBranch_CutsReturned()
     {
         var runs = new[]
         {
@@ -108,6 +113,27 @@ public class ApprovalGraphPathTests
         // 退回上一關的目標是 a（路徑上最近的 approved），截到它之前；e2 的列不在段內。
         ApprovalGraphPath.Segment(runs, "e1").Should().BeEmpty();
         ApprovalGraphPath.Segment(runs, "e2").Select(r => r.Seq).Should().Equal(2);
+    }
+
+    [Fact]
+    public void Segment_IncludesPassedConditionAndFork()
+    {
+        var runs = new[] { Run(1, "a", "", Ok), Run(2, "c", "", Passed, ApprovalNodeKinds.Condition, "e2"), Fork(3, "f", ""), Run(4, "b", "", Act) };
+        ApprovalGraphPath.Segment(runs, "").Select(r => r.Seq).Should().Equal(1, 2, 3);
+    }
+
+    [Fact]
+    public void Previous_InnerSegment_BarrierPerSegment()
+    {
+        var runs = new[]
+        {
+            Fork(1, "f", ""), Run(2, "x", "e1", Ok), Fork(3, "f2", "e1"), Run(4, "y", "e1/e9", Ok), Run(5, "z", "e1/e10", Ok),
+            JoinRun(6, "j2", "e1", Passed, "yj2"), JoinRun(7, "j2", "e1", Passed, "zj2"), Run(8, "w", "e1", Act), Run(9, "y2", "e1/e9", Act)
+        };
+        // 內層匯合之後的第一個：段 e1 的最後一列匯合是 7，之前的 x 不算。
+        ApprovalGraphPath.Previous(runs, runs[7]).Should().BeNull();
+        // 內層分支內：段 e1/e9 沒有分支或匯合列，找得到同段的 y。
+        ApprovalGraphPath.Previous(runs, runs[8])!.Seq.Should().Be(4);
     }
 
     // ---- CancelledRoots、ArrivedArms ----
@@ -220,6 +246,14 @@ public class ApprovalGraphPathTests
         var runs = new[] { JoinRun(1, "j", "fx", Waiting, "aj"), JoinRun(2, "j", "fy", Waiting, "bj"), JoinRun(3, "j", "fx", Waiting, "cj") };
         ApprovalGraphPath.ArrivedArms(g, runs, "j", "fx").Should().BeEquivalentTo(new[] { "fa", "fc" });
         ApprovalGraphPath.ArrivedArms(g, runs, "j", "fy").Should().BeEquivalentTo(new[] { "fb" });
+    }
+
+    [Fact]
+    public void ArrivedArms_ClosedArrivalRow_NotCounted()
+    {
+        var g = ThreeArms(ApprovalModes.All);
+        var runs = new[] { JoinRun(1, "j", "", Closed, "aj"), JoinRun(2, "j", "", Waiting, "bj") };
+        ApprovalGraphPath.ArrivedArms(g, runs, "j", "").Should().BeEquivalentTo(new[] { "fb" });
     }
 
     [Fact]

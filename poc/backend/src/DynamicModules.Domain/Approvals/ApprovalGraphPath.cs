@@ -11,6 +11,8 @@ public static class ApprovalGraphPath
 {
     private static string Key(ApprovalStageRun r) => r.BranchKey ?? "";
 
+    // 分支列總是被配對匯合的到達列蓋過（匯合列的 BranchKey 是外層段，J4），所以把分支當 barrier 是冗餘的；
+    // 照 J12 字面保留，並防將來改 BranchKey 約定。
     private static bool IsBarrier(ApprovalStageRun r) => r.NodeKind is ApprovalNodeKinds.Fork or ApprovalNodeKinds.Join;
 
     /// <summary>段內有效路徑（Seq 升冪；approved、skipped、passed 進路徑；returned 依 <see cref="ApprovalPath.Effective"/> 的規則截斷）。</summary>
@@ -29,7 +31,11 @@ public static class ApprovalGraphPath
         return Segment(before, key).LastOrDefault(r => r.Id != current.Id && r.Seq > barrier && r.Status == ApprovalStageStatus.Approved);
     }
 
-    /// <summary>J13：被任一到齊取消的分支段根（到達的分支以 ArmOf 識別；同一分支節點的其他出線開出的段）。</summary>
+    /// <summary>
+    /// J13：被任一到齊取消的分支段根（到達的分支以 ArmOf 識別；同一分支節點的其他出線開出的段）。
+    /// 前置條件：g 要從實例自己綁定的流程快照建出，runs 是以同一份定義推進出來的；NodeId、InEdgeId 不在圖內時丟 KeyNotFoundException，是刻意的
+    /// （不吞掉，免得引擎的不變式違反變得無聲）。
+    /// </summary>
     public static IReadOnlySet<string> CancelledRoots(ApprovalGraphRuntime g, IReadOnlyList<ApprovalStageRun> runs)
     {
         var roots = new HashSet<string>();
@@ -43,7 +49,10 @@ public static class ApprovalGraphPath
         return roots;
     }
 
-    /// <summary>J4：這個匯合在外層段 outerKey 已到達的分支（ArmOf 去重後；closed 的到達列不算）。</summary>
+    /// <summary>
+    /// J4：這個匯合在外層段 outerKey 已到達的分支（ArmOf 去重後；closed 的到達列不算）。
+    /// 前置條件同 <see cref="CancelledRoots"/>：g 與 runs 必須同源，InEdgeId 不在圖內時丟 KeyNotFoundException 是刻意的。
+    /// </summary>
     public static IReadOnlySet<string> ArrivedArms(ApprovalGraphRuntime g, IReadOnlyList<ApprovalStageRun> runs, string joinId, string outerKey) =>
         runs.Where(r => r.NodeKind == ApprovalNodeKinds.Join && r.NodeId == joinId && Key(r) == outerKey && r.Status != ApprovalStageStatus.Closed)
             .Select(r => g.ArmOf(joinId, r.InEdgeId!)).ToHashSet();

@@ -195,6 +195,14 @@ public class ApprovalGraphRuntimeTests
         ApprovalGraphRuntime.Within("e1", "e1/e9").Should().BeFalse();
     }
 
+    [Fact]
+    public void Within_RootCoversAll()
+    {
+        ApprovalGraphRuntime.Within("", "").Should().BeTrue();
+        ApprovalGraphRuntime.Within("e1", "").Should().BeTrue();
+        ApprovalGraphRuntime.Within("e1/e9", "").Should().BeTrue();
+    }
+
     /// <summary>start → c → a、b（兩條有條件的線，陣列順序與 order 可自訂）、預設線 → d → end。</summary>
     private static ApprovalGraphRuntime CondGraph(int orderToA, int orderToB) => Build(Def(
         [Plain("start", ApprovalNodeKinds.Start), Plain("c", ApprovalNodeKinds.Condition), Appr("a"), Appr("b"), Appr("d"), Plain("end", ApprovalNodeKinds.End)],
