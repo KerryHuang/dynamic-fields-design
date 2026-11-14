@@ -2,6 +2,7 @@ using DynamicModules.Domain.Data;
 using DynamicModules.Domain.Entities.Dynamic;
 using DynamicModules.Domain.Repositories.Dynamic;
 using DynamicModules.Domain.Rules;
+using DynamicModules.Domain.Tasks;
 using Microsoft.EntityFrameworkCore;
 
 namespace DynamicModules.Persistence.Repositories.Dynamic;
@@ -30,10 +31,14 @@ public class TaskRepository(DynamicDbContext db) : ITaskRepository
     public async Task<(List<TaskItem> Items, int Total)> QueryMineAsync(TaskListQuery q, CancellationToken ct)
     {
         var query = db.Set<TaskItem>().AsNoTracking();
+        var subordinates = (q.Subordinates ?? new HashSet<string>()).ToArray();
         query = q.Tab switch
         {
             TaskListTab.Assigned => query.Where(t => t.AssigneeUserId == q.UserId),
             TaskListTab.Created => query.Where(t => t.CreatedBy == q.UserId),
+            TaskListTab.Subordinates => query.Where(t =>
+                (t.AssigneeUserId != null && subordinates.Contains(t.AssigneeUserId))
+                || (t.AssigneeUserId == null && t.CreatedBy != null && subordinates.Contains(t.CreatedBy))),
             _ => query.Where(t => db.Set<TaskParticipant>().Any(
                 p => p.TaskId == t.Id && p.UserId == q.UserId && p.Reason == TaskParticipantReason.Mentioned)),
         };
@@ -71,6 +76,18 @@ public class TaskRepository(DynamicDbContext db) : ITaskRepository
     public Task<TaskRecordStub?> GetRecordStubAsync(long recordId, CancellationToken ct) =>
         db.Set<Record>().AsNoTracking().Where(r => r.Id == recordId)
             .Select(r => new TaskRecordStub(r.Id, r.ModuleId, r.OwnerUserId, r.Title, r.DeleteFlag)).FirstOrDefaultAsync(ct);
+
+    public async Task<Dictionary<long, TaskRecordStub>> ListRecordStubsAsync(IReadOnlyCollection<long> recordIds, CancellationToken ct)
+    {
+        var ids = recordIds.Distinct().ToArray();
+        if (ids.Length == 0) return [];
+        return await db.Set<Record>().AsNoTracking().Where(r => ids.Contains(r.Id))
+            .Select(r => new TaskRecordStub(r.Id, r.ModuleId, r.OwnerUserId, r.Title, r.DeleteFlag))
+            .ToDictionaryAsync(s => s.Id, ct);
+    }
+
+    public Task<List<long>> ListVisibleIdsAsync(TaskVisibility visibility, CancellationToken ct) =>
+        TaskVisibilityQuery.Visible(db, visibility).Select(t => t.Id).OrderBy(id => id).ToListAsync(ct);
 
     public Task<string?> GetRuleKeyAsync(long ruleId, CancellationToken ct) =>
         db.Set<TaskRule>().AsNoTracking().Where(r => r.Id == ruleId).Select(r => (string?)r.Key).FirstOrDefaultAsync(ct);

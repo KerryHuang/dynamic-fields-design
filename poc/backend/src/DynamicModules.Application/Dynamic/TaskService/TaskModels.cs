@@ -1,5 +1,6 @@
 using System.Text.Json;
 using DynamicModules.Domain.Entities.Dynamic;
+using DynamicModules.Domain.Tasks;
 using DynamicModules.Domain.ValueObjects;
 
 namespace DynamicModules.Application.Dynamic.TaskService;
@@ -10,11 +11,12 @@ public sealed record TaskInput(string Title, string? Description, string? Assign
 public sealed record TaskDetailResponse(
     long Id, string Title, string? Description, TaskItemStatus Status, string? AssigneeUserId, string? AssigneeName, bool AssigneeActive,
     DateOnly? DueDate, bool Overdue, TaskRecordRef? Record, string? CreatedBy, string? CreatedByName, DateTime CreatedTime,
-    DateTime? CompletedTime, string? RuleKey, bool RuleDeleted, bool CanEdit, bool CanComment, bool CanDelete, bool Frozen);
+    DateTime? CompletedTime, string? RuleKey, bool RuleDeleted, bool CanEdit, bool CanComment, bool CanDelete, bool Frozen,
+    bool CanReassign, bool Supervised, string Version);
 
 public sealed record TaskSummaryResponse(
     long Id, string Title, TaskItemStatus Status, string? AssigneeUserId, string? AssigneeName, bool AssigneeActive,
-    DateOnly? DueDate, bool Overdue, TaskRecordRef? Record, bool FromRule, bool CanEdit);
+    DateOnly? DueDate, bool Overdue, TaskRecordRef? Record, bool FromRule, bool CanEdit, bool CanReassign, bool Supervised, string Version);
 
 /// <summary>ManualRules：這筆記錄可手動套用的任務規則（啟用中、manual、應用程式開啟中）。</summary>
 public sealed record RecordTasksResponse(IReadOnlyList<TaskSummaryResponse> Items, bool CanAdd, IReadOnlyList<ManualRuleResponse> ManualRules);
@@ -44,14 +46,16 @@ internal static class TaskViews
         return new TaskDetailResponse(
             t.Id, t.Title, t.Description, t.Status, t.AssigneeUserId, assignee?.DisplayName, assignee is { IsActive: true },
             t.DueDate, Overdue(t, today), p.Record, t.CreatedBy, creator?.DisplayName, t.CreatedTime, t.CompletedTime,
-            ruleKey, t.RuleId is not null && ruleKey is null, p.CanEdit, p.CanComment, p.CanDelete, p.Frozen);
+            ruleKey, t.RuleId is not null && ruleKey is null, p.CanEdit, p.CanComment, p.CanDelete, p.Frozen,
+            p.CanReassign, p.Supervised, TaskVersion.Of(t));
     }
 
     public static TaskSummaryResponse ToSummary(TaskItem t, TaskPermissions p, IReadOnlyDictionary<string, AppUser> users, DateOnly today)
     {
         var assignee = t.AssigneeUserId is null ? null : users.GetValueOrDefault(t.AssigneeUserId);
         return new TaskSummaryResponse(t.Id, t.Title, t.Status, t.AssigneeUserId, assignee?.DisplayName, assignee is { IsActive: true },
-            t.DueDate, Overdue(t, today), p.Record, t.RuleId is not null, p.CanEdit);
+            t.DueDate, Overdue(t, today), p.Record, t.RuleId is not null, p.CanEdit,
+            p.CanReassign, p.Supervised, TaskVersion.Of(t));
     }
 
     /// <summary>

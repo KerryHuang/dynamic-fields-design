@@ -1,4 +1,5 @@
 using DynamicModules.Domain.Entities.Dynamic;
+using DynamicModules.Domain.Tasks;
 
 namespace DynamicModules.Domain.Repositories.Dynamic;
 
@@ -20,6 +21,10 @@ public interface ITaskRepository
     Task<bool> IsParticipantAsync(long taskId, string userId, CancellationToken ct);
     /// <summary>含軟刪除的記錄；不存在時回 null。</summary>
     Task<TaskRecordStub?> GetRecordStubAsync(long recordId, CancellationToken ct);
+    /// <summary>一次取多筆記錄 stub（含軟刪除）；不存在的記錄不在結果裡。</summary>
+    Task<Dictionary<long, TaskRecordStub>> ListRecordStubsAsync(IReadOnlyCollection<long> recordIds, CancellationToken ct);
+    /// <summary>符合可見條件的任務 Id（單一資料庫查詢，條件與 <c>TaskAccess</c> 的逐筆判斷一致）。</summary>
+    Task<List<long>> ListVisibleIdsAsync(TaskVisibility visibility, CancellationToken ct);
     /// <summary>規則已刪除時回 null。</summary>
     Task<string?> GetRuleKeyAsync(long ruleId, CancellationToken ct);
     /// <summary>這個模組的任務留言附件的儲存鍵（模組清除時刪檔用）。</summary>
@@ -93,11 +98,13 @@ public interface ITaskRuleRepository
 
 public sealed record TaskRecordStub(long Id, long ModuleId, string OwnerUserId, string Title, bool Deleted);
 
-public enum TaskListTab { Assigned, Created, Mentioned }
+public enum TaskListTab { Assigned, Created, Mentioned, Subordinates }
 
 public enum TaskListFilter { Open, Overdue, Today, ThisWeek, All }
 
-public sealed record TaskListQuery(string UserId, TaskListTab Tab, TaskListFilter Filter, DateOnly Today, DateOnly WeekEnd, int Page, int Size);
+/// <param name="Subordinates">Tab 為 Subordinates 時的部屬名單（負責人在名單內，或未指派且建立者在名單內）；其他分頁忽略。</param>
+public sealed record TaskListQuery(string UserId, TaskListTab Tab, TaskListFilter Filter, DateOnly Today, DateOnly WeekEnd, int Page, int Size,
+    IReadOnlySet<string>? Subordinates = null);
 
 /// <summary>
 /// 提醒條件（由政策算出）：到期日在 <see cref="DueSoonDates"/> 內的任務是「即將到期」候選；

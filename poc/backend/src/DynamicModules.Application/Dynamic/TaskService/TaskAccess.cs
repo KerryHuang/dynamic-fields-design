@@ -9,16 +9,19 @@ namespace DynamicModules.Application.Dynamic.TaskService;
 /// <summary>Accessible=false 時其餘全是 null：看不到記錄的人連模組代號、記錄 Id、標題都拿不到（設計 §7）。</summary>
 public sealed record TaskRecordRef(bool Accessible, string? ModuleKey, long? RecordId, string? Title, bool Deleted);
 
-public sealed record TaskPermissions(bool CanSee, bool CanEdit, bool CanComment, bool CanDelete, bool Frozen, TaskRecordRef? Record);
+/// <param name="CanReassign">可以改負責人：一般可編輯，或是部屬任務的主管（凍結時一律 false）。</param>
+/// <param name="Supervised">因主管範圍而可重派、但沒有一般編輯權（前端據此只開放負責人欄並顯示說明）。</param>
+public sealed record TaskPermissions(bool CanSee, bool CanEdit, bool CanComment, bool CanDelete, bool Frozen, TaskRecordRef? Record,
+    bool CanReassign = false, bool Supervised = false);
 
 public sealed record RecordTaskAccess(Record Record, Module Module, bool CanAdd, bool CanEditTasks, bool TitleVisible);
 
 /// <summary>
-/// 任務的檢視與修改權限（設計 §7）。看得到：系統管理員、參與者、看得到記錄的人（Read 加資料範圍，已刪除的記錄用 stub 判斷）。
-/// 不保留跨呼叫的狀態：模組權限只在單次 <see cref="EvaluateManyAsync"/> 內快取。
+/// 任務的檢視與修改權限（設計 §7）。看得到：系統管理員、參與者、看得到記錄的人（Read 加資料範圍，已刪除的記錄用 stub 判斷）、
+/// 部屬任務的主管（看板設計 §4）。記錄 stub 一次批次取得；模組權限只在單次 <see cref="EvaluateManyAsync"/> 內快取，查詢次數不隨任務數成長。
 /// </summary>
 public sealed class TaskAccess(ITaskRepository tasks, IModuleRepository modules, IRecordRepository records,
-    IDynamicAccessGuard guard, IPermissionRepository permissions, ICurrentUser user)
+    IDynamicAccessGuard guard, IPermissionRepository permissions, ICurrentUser user, TaskVisibilityService visibility)
 {
     private static readonly TaskRecordRef Hidden = new(false, null, null, null, false);
 
@@ -30,15 +33,17 @@ public sealed class TaskAccess(ITaskRepository tasks, IModuleRepository modules,
     public async Task<IReadOnlyList<TaskPermissions>> EvaluateManyAsync(IReadOnlyList<TaskItem> items, CancellationToken ct)
     {
         var admin = await IsSystemAdminAsync(ct);
+        var subordinates = admin ? new HashSet<string>() : await visibility.SubordinatesAsync(ct);
+        var stubs = await tasks.ListRecordStubsAsync(items.Where(t => t.RecordId is not null).Select(t => t.RecordId!.Value).ToList(), ct);
         var byModule = new Dictionary<long, ModuleAccess?>();
         var result = new List<TaskPermissions>(items.Count);
         foreach (var task in items)
-            result.Add(await EvaluateOneAsync(task, admin, byModule, ct));
+            result.Add(await EvaluateOneAsync(task, admin, subordinates, stubs, byModule, ct));
         return result;
     }
 
-    private async Task<TaskPermissions> EvaluateOneAsync(
-        TaskItem task, bool admin, Dictionary<long, ModuleAccess?> byModule, CancellationToken ct)
+    private async Task<TaskPermissions> EvaluateOneAsync(TaskItem task, bool admin, IReadOnlySet<string> subordinates,
+        IReadOnlyDictionary<long, TaskRecordStub> stubs, Dictionary<long, ModuleAccess?> byModule, CancellationToken ct)
     {
         var me = user.UserId;
         var participant = task.Participants.Any(p => p.UserId == me);
@@ -51,7 +56,7 @@ public sealed class TaskAccess(ITaskRepository tasks, IModuleRepository modules,
         var frozen = false;
         if (task.RecordId is { } recordId)
         {
-            var stub = await tasks.GetRecordStubAsync(recordId, ct);
+            var stub = stubs.GetValueOrDefault(recordId);
             var access = stub is null ? null : await ModuleAccessAsync(stub.ModuleId, byModule, ct);
             frozen = access is null || !access.Module.IsWritable();
             recordVisible = stub is not null && access?.Read is { } read && InScope(read, stub.OwnerUserId);
@@ -63,11 +68,14 @@ public sealed class TaskAccess(ITaskRepository tasks, IModuleRepository modules,
                 : Hidden;
         }
 
-        var canSee = admin || participant || recordVisible;
+        // 部屬任務的主管：負責人是部屬，或未指派而建立者是部屬（看板設計 §4.2）
+        var supervised = task.AssigneeUserId is { } a ? subordinates.Contains(a) : task.CreatedBy is { } c && subordinates.Contains(c);
+        var canSee = admin || participant || recordVisible || supervised;
         if (!canSee) return new TaskPermissions(false, false, false, false, frozen, Hidden);
         var canEdit = !frozen && (creator || assignee || admin || recordEditable);
         var canDelete = task.RuleId is null && !frozen && (creator || admin);
-        return new TaskPermissions(true, canEdit, !frozen, canDelete, frozen, recordRef);
+        var canReassign = !frozen && (canEdit || supervised);
+        return new TaskPermissions(true, canEdit, !frozen, canDelete, frozen, recordRef, canReassign, supervised && !canEdit);
     }
 
     /// <summary>null 代表 404：記錄不存在、屬於明細模組、模組不可讀、沒有 Read、記錄在範圍外。</summary>
