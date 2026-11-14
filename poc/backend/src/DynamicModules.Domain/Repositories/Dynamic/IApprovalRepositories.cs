@@ -15,8 +15,11 @@ public interface IApprovalFlowRepository
     /// <summary>流程所在模組的代號；找不到流程回 null。</summary>
     Task<string?> ModuleKeyOfAsync(string flowKey, CancellationToken ct);
 
-    /// <summary>模組上所有流程（含停用）與目前版本的定義；不追蹤，依目標狀態、優先序排序。</summary>
+    /// <summary>模組上所有有已發布版本的流程（含停用）與目前版本的定義；不追蹤，依目標狀態、優先序排序。沒有已發布版本的流程不在裡面，比對、約束、快照、試算、匯出都用這個。</summary>
     Task<List<FlowState>> ListCurrentByModuleAsync(long moduleId, CancellationToken ct);
+
+    /// <summary>模組上的全部流程列（含沒有已發布版本的），依目標狀態、優先序排序；不追蹤。只給設計器清單與優先序檢查用，比對與約束一律用 <see cref="ListCurrentByModuleAsync"/>。</summary>
+    Task<List<(ApprovalFlow Flow, ApprovalFlowVersion? Version)>> ListByModuleAsync(long moduleId, CancellationToken ct);
 
     /// <summary>同一目標狀態上的流程；追蹤（重排優先序用）。</summary>
     Task<List<ApprovalFlow>> ListByTargetTrackedAsync(long moduleId, long toOptionId, CancellationToken ct);

@@ -495,6 +495,26 @@ public class AppFormat8Tests : IDisposable
         states.Where(st => (string?)st!["option"] != "cancelled").Should().OnlyContain(st => st!["editable"] == null, "沒標可編輯的狀態不多寫屬性");
     }
 
+    [Fact]
+    public async Task Export_SkipsFlowWithoutPublishedVersion()
+    {
+        // 流程圖設計 §10.8：只有草稿的流程（沒有已發布版本）不進套件
+        await ImportOpenAsync();
+        _rig.Db(db =>
+        {
+            var large = db.Set<ApprovalFlow>().Single(f => f.Key == Large);
+            db.Add(new ApprovalFlow
+            {
+                Key = "t8-po-draft-only", NameI18n = new(), ModuleId = large.ModuleId, ToOptionId = large.ToOptionId, Priority = 9, Active = true,
+                DraftJson = """{"shape":"graph"}""", CreatedUserId = "admin", CreatedTime = DateTime.UtcNow
+            });
+        });
+
+        var (package, _) = await _rig.ExportAsync(AppId);
+
+        package.GetProperty("approvalFlows").EnumerateArray().Select(f => f.GetProperty("code").GetString()).Should().Equal(Large, Mid);
+    }
+
     /// <summary>第三個流程掛在沒有需簽核轉移進入的「已取消」上（設計器允許、套件只警告，主控裁決 S2），而且是停用的。</summary>
     private const string SpareFlow = """
         { "code": "t8-po-spare", "name": { "zh-TW": "採購單取消（備用）" }, "active": false,

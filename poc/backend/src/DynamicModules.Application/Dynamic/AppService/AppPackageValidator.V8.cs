@@ -287,7 +287,8 @@ public static partial class AppPackageValidator
             new ApprovalFlow { Key = f.Code, NameI18n = f.Name, ToOptionId = ids[f.To], Priority = f.Priority, Active = f.Active },
             new ApprovalDefinition(ApprovalShapes.Sequence, null, f.RejectTo is { } rt ? ids[rt] : null, null,
                 (f.Stages ?? []).Where(s => s is not null).Select(s => new ApprovalStageDef(s.Code, s.Name, null, new ApproverSource(ApprovalSources.Group),
-                    s.Mode, (s.EditableFields ?? []).Count > 0 ? [-1] : [], null, ApprovalOnEmpty.Fallback)).ToList()))).ToList();
+                    s.Mode, (s.EditableFields ?? []).Count > 0 ? [-1] : [], null, ApprovalOnEmpty.Fallback)).ToList()),
+            0)).ToList();
 
         var presence = status.Options.Where(o => o?.Label is not null && incomplete.Contains(o.Code)).Select(o => o.Label.Resolve(I18nText.FallbackLocale))
             .SelectMany(l => new[] { ApprovalMessages.NoFlow(l), ApprovalMessages.DirectNeedsActive(l) }).ToHashSet();

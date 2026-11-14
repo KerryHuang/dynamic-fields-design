@@ -33,9 +33,9 @@ public class DesignCaseFlowTests(DemoGeneratedFixture fx)
         flow.Active.Should().BeTrue();
         flow.Version.Should().Be(1);
         flow.Priority.Should().Be(1);
-        flow.Definition.RejectTo.Should().Be(await Option("設計中"));
-        flow.Definition.When.Should().BeNull();
-        flow.Definition.FallbackApprovers.Should().BeNull("省略時由系統管理員頂替");
+        flow.Definition!.RejectTo.Should().Be(await Option("設計中"));
+        flow.Definition!.When.Should().BeNull();
+        flow.Definition!.FallbackApprovers.Should().BeNull("省略時由系統管理員頂替");
         var stage = flow.Definition.Stages.Should().ContainSingle().Subject;
         stage.Code.Should().Be("owner-manager");
         stage.Approvers.Source.Should().Be("manager");

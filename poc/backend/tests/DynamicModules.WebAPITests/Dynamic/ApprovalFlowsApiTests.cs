@@ -1,6 +1,9 @@
 using System.Net;
 using System.Net.Http.Json;
+using DynamicModules.Domain.Data;
+using DynamicModules.Domain.Entities.Dynamic;
 using FluentAssertions;
+using Microsoft.Extensions.DependencyInjection;
 using static DynamicModules.WebAPITests.Dynamic.ApiTestKit;
 
 namespace DynamicModules.WebAPITests.Dynamic;
@@ -198,6 +201,35 @@ public class ApprovalFlowsApiTests
             new { to = s.Done, recordRowVersion = created.GetProperty("rowVersion").GetString() });
         submit.StatusCode.Should().Be(HttpStatusCode.Created, await submit.Content.ReadAsStringAsync());
         (await JsonOf(await c.GetAsync($"{Flows}/big"))).GetProperty("currentVersionUsed").GetBoolean().Should().BeTrue();
+    }
+
+    [Fact]
+    [Trait("Category", "Postgres")]
+    public async Task Get_UnpublishedFlow_VersionNull()
+    {
+        using var app = new TestApp();
+        var c = app.AsUser();
+        var s = await SeedApproval(c);
+        using (var scope = app.Services.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<DynamicDbContext>();
+            var moduleId = db.Set<Module>().Single(m => m.Key == s.Key).Id;
+            db.Add(new ApprovalFlow
+            {
+                Key = "draft-only", NameI18n = new([KeyValuePair.Create("zh-TW", "只有草稿")]), ModuleId = moduleId, ToOptionId = s.Done, Priority = 9,
+                Active = false, DraftJson = """{"shape":"graph"}""", CreatedUserId = "admin", CreatedTime = DateTime.UtcNow
+            });
+            db.SaveChanges();
+        }
+
+        var one = await JsonOf(await c.GetAsync($"{Flows}/draft-only"));
+        // API 的 JSON 省略 null：version、definition 要不是沒有這個鍵、就是 null
+        foreach (var name in new[] { "version", "definition" })
+            (!one.TryGetProperty(name, out var v) || v.ValueKind == System.Text.Json.JsonValueKind.Null).Should().BeTrue(name);
+        one.GetProperty("draft").GetProperty("shape").GetString().Should().Be("graph");
+        (await JsonOf(await c.GetAsync($"{Flows}?module={s.Key}"))).EnumerateArray().Select(f => f.GetProperty("key").GetString())
+            .Should().Contain("draft-only");
+        (await c.PutAsJsonAsync($"{Flows}/draft-only", Flow("draft-only", s.Done, 9, s.Group))).StatusCode.Should().Be(HttpStatusCode.Conflict);
     }
 
     private static async Task<(HttpStatusCode Status, System.Text.Json.JsonElement Body)> PutEdited(

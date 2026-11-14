@@ -110,5 +110,5 @@ public sealed record FlowSnapshotEntry(long FlowId, long FlowVersionId, int Prio
 /// <summary>某模組目前生效的簽核上限（來自政策，存流程時檢查用）。</summary>
 public sealed record ApprovalLimitSet(int MaxStages, int MaxApprovers, int MaxDueHours, int MaxManagerLevel);
 
-/// <summary>流程與它目前版本的定義；入口約束與鎖定計算的輸入。</summary>
-public sealed record FlowState(Entities.Dynamic.ApprovalFlow Flow, ApprovalDefinition Definition);
+/// <summary>流程與它目前（已發布）版本的定義；入口約束與鎖定計算的輸入。VersionId 是目前版本的 Id，尚未存檔的提議流程給 0。</summary>
+public sealed record FlowState(Entities.Dynamic.ApprovalFlow Flow, ApprovalDefinition Definition, long VersionId);

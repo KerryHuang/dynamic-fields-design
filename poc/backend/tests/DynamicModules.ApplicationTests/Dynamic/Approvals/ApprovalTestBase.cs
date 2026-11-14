@@ -201,6 +201,21 @@ public abstract class ApprovalTestBase : EffectsTestBase, IAsyncLifetime
         return flow;
     }
 
+    /// <summary>直接在 Db 建只有草稿的流程（沒有任何版本，<c>CurrentVersionId</c> 為 null），不經過驗證。</summary>
+    protected async Task<ApprovalFlow> SeedUnpublishedFlow(PurchaseRig r, string key, long to, int priority, string? draftJson = null, bool active = false)
+    {
+        var flow = new ApprovalFlow
+        {
+            Key = key, NameI18n = Text(key), ModuleId = r.ModuleId, ToOptionId = to, Priority = priority, Active = active,
+            DraftJson = draftJson, DraftUpdatedBy = draftJson is null ? null : "admin", DraftUpdatedTime = draftJson is null ? null : SeedTime,
+            CreatedUserId = "admin", CreatedTime = SeedTime
+        };
+        Db.Context.Add(flow);
+        await Db.Context.SaveChangesAsync();
+        Db.Context.ChangeTracker.Clear();
+        return flow;
+    }
+
     // ───────── 記錄 ─────────
 
     protected static readonly string[] OrgUsers = ["gm", "mgrA", "emp1", "emp2", "lead1", "emp3", "buyer1", "buyer2", "fin1", "fin2"];

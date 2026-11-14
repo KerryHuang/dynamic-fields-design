@@ -72,7 +72,7 @@ public sealed class ApprovalPreviewer(
         IReadOnlyList<(string Key, FlowSnapshotEntry Entry)>? flowSet = null)
     {
         flowSet ??= (await flows.ListCurrentByModuleAsync(module.Id, ct)).Where(f => f.Flow.ToOptionId == to)
-            .Select(f => (f.Flow.Key, new FlowSnapshotEntry(f.Flow.Id, f.Flow.CurrentVersionId!.Value, f.Flow.Priority, f.Flow.Active, f.Flow.NameI18n, f.Definition)))
+            .Select(f => (f.Flow.Key, new FlowSnapshotEntry(f.Flow.Id, f.VersionId, f.Flow.Priority, f.Flow.Active, f.Flow.NameI18n, f.Definition)))
             .ToList();
         var snapshot = flowSet.Select(x => x.Entry).ToList();
         var userIds = await modules.ListUserIdsAsync(ct);

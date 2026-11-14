@@ -24,8 +24,20 @@ public class ApprovalFlowRepository(DynamicDbContext db) : IApprovalFlowReposito
             join v in db.Set<ApprovalFlowVersion>().AsNoTracking() on f.CurrentVersionId equals v.Id
             where f.ModuleId == moduleId
             orderby f.ToOptionId, f.Priority
-            select new { f, v.Definition }).ToListAsync(ct);
-        return rows.Select(x => new FlowState(x.f, x.Definition)).ToList();
+            select new { f, v.Definition, VersionId = v.Id }).ToListAsync(ct);
+        return rows.Select(x => new FlowState(x.f, x.Definition, x.VersionId)).ToList();
+    }
+
+    public async Task<List<(ApprovalFlow Flow, ApprovalFlowVersion? Version)>> ListByModuleAsync(long moduleId, CancellationToken ct)
+    {
+        var rows = await (
+            from f in db.Set<ApprovalFlow>().AsNoTracking()
+            join v in db.Set<ApprovalFlowVersion>().AsNoTracking() on f.CurrentVersionId equals v.Id into versions
+            from v in versions.DefaultIfEmpty()
+            where f.ModuleId == moduleId
+            orderby f.ToOptionId, f.Priority
+            select new { f, v }).ToListAsync(ct);
+        return rows.Select(x => (x.f, (ApprovalFlowVersion?)x.v)).ToList();
     }
 
     public Task<List<ApprovalFlow>> ListByTargetTrackedAsync(long moduleId, long toOptionId, CancellationToken ct) =>

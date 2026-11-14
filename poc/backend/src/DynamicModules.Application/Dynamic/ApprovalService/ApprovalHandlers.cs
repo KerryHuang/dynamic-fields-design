@@ -39,7 +39,7 @@ public class SubmitApprovalHandler(
         Dictionary<string, MessageRef[]> Bad(MessageRef message) => new() { [wf.StatusFieldKey] = [message] };
 
         var snapshot = (await flows.ListCurrentByModuleAsync(module.Id, ct)).Where(f => f.Flow.ToOptionId == request.To)
-            .Select(f => new FlowSnapshotEntry(f.Flow.Id, f.Flow.CurrentVersionId!.Value, f.Flow.Priority, f.Flow.Active, f.Flow.NameI18n, f.Definition))
+            .Select(f => new FlowSnapshotEntry(f.Flow.Id, f.VersionId, f.Flow.Priority, f.Flow.Active, f.Flow.NameI18n, f.Definition))
             .ToList();
         var userIds = await modules.ListUserIdsAsync(ct);
         var (match, undecidable) = ApprovalRouter.Match(snapshot, module, values, registry, time.Today, userIds);
@@ -203,8 +203,8 @@ public class PreviewApprovalDraftHandler(IApprovalFlowRepository flows, IModuleR
         var (values, failure) = await DesignerPreviewInputs.ValuesAsync(records, guard, module, request.RecordId, request.Values, ct);
         if (failure is not null) return failure;
         var flowSet = current.Where(f => f.Flow.ToOptionId == draft.ToOptionId && f.Flow.Key != draft.Key)
-            .Select(f => (f.Flow.Key, new FlowSnapshotEntry(f.Flow.Id, f.Flow.CurrentVersionId!.Value, f.Flow.Priority, f.Flow.Active, f.Flow.NameI18n, f.Definition)))
-            .Append((draft.Key, new FlowSnapshotEntry(existing?.Flow.Id ?? 0, existing?.Flow.CurrentVersionId ?? 0, draft.Priority, true, draft.Name, draft.Definition)))
+            .Select(f => (f.Flow.Key, new FlowSnapshotEntry(f.Flow.Id, f.VersionId, f.Flow.Priority, f.Flow.Active, f.Flow.NameI18n, f.Definition)))
+            .Append((draft.Key, new FlowSnapshotEntry(existing?.Flow.Id ?? 0, existing?.VersionId ?? 0, draft.Priority, true, draft.Name, draft.Definition)))
             .ToList();
         var approval = DesignerPreviewInputs.ApprovalFor(wf, values!, draft.ToOptionId);
         return await previewer.PreviewAsync(module, draft.ToOptionId, approval, values!, request.InitiatorUserId, designer: true, ct, flowSet);
