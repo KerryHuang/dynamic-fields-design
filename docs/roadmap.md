@@ -6,7 +6,7 @@
 
 ## 工作段
 
-表格列序就是開發順序：已上線的段在最前，其後依使用者裁決排序。
+表格列序是偏好的開發順序：已上線的段在最前，其後依使用者裁決排序。非等不可的前置寫在功能清單項目的 `⛔ 等：`，不靠列序表達。
 
 | 工作段 | 內容 | 狀態 | 設計 |
 |---|---|---|---|
@@ -22,7 +22,6 @@
 | p1d | 附件政策：A20（含部署設定檔當出廠值） | 已上線 | [政策設定](superpowers/specs/2026-11-11-policy-settings-design.md) §9 |
 | a2d1 | 簽核鎖定寫入：鎖定狀態、鎖定欄位與明細的寫入守衛（只驗 SQLite，PostgreSQL 在 pg0 後補驗） | 已上線（2026-11-12，ef3c00ab） | [簽核流程](superpowers/specs/2026-11-10-approval-workflow-design.md)、[政策設定](superpowers/specs/2026-11-11-policy-settings-design.md) §9 |
 | a4b | 前端：送簽畫面與簽核中心 | 已上線（2026-11-12，6ac7ec80） | [簽核流程](superpowers/specs/2026-11-10-approval-workflow-design.md) |
-| a4c | 清單頁系統篩選「簽核中」（記錄清單查詢加簽核實例子查詢）；排在 pg0 合併之後，讓兩種資料庫一次驗證（使用者 11-12 裁決 U2） | 未開始 | [簽核流程](superpowers/specs/2026-11-10-approval-workflow-design.md) §13.4 |
 | a6 | CRM 設計案與簽核 Demo、文件 | 已上線（2026-11-12，026620fd） | [簽核流程](superpowers/specs/2026-11-10-approval-workflow-design.md) |
 | a2d2 | 附件：上傳改走記錄寫入管線、失敗不留檔；簽核中、鎖定、已記帳的單據不能上傳（只驗 SQLite，PostgreSQL 在 pg0 後補驗） | 已上線（2026-11-12，be0dda9e） | [簽核流程](superpowers/specs/2026-11-10-approval-workflow-design.md) §8.5 |
 | a2d3 | 整批重算：固定簽核中、鎖定狀態的單據與其明細列，欄位對話框提示保留筆數（只驗 SQLite，PostgreSQL 在 pg0 後補驗） | 已上線（2026-11-13，2a596156） | [簽核流程](superpowers/specs/2026-11-10-approval-workflow-design.md) §8.6 |
@@ -34,30 +33,33 @@
 | ci1 | gate 加速：合併前總檢查搬到 GitHub Actions、分路平行；依改動決定範圍（只改文件不跑、只改前端只跑前端、動到後端全跑）；功能分支外洩掃描通過才推（使用者 11-13 裁決） | 已上線（2026-11-13，c3d12146） | — |
 | tz1 | 報表「今天、本月」等日期區間與無時區日期時間改用營運時區（Asia/Taipei），不依主機時區；修好後 CI 拿掉 `TZ` 覆寫。ci1 在 UTC 的 GitHub 機器上抓到：SQL 路徑依主機時區計算，Render 也是 UTC | 已上線（2026-11-13，b51c169d） | — |
 | a5 | 套件格式 8：簽核流程；接手 CRM 設計案流程：套件內建，刪 `DemoApprovals`；採購單金額門檻的 Demo 在這裡驗收 | 已上線（2026-11-14，ef66fda7） | [簽核流程](superpowers/specs/2026-11-10-approval-workflow-design.md) |
-| a3 | 轉交、加簽、代理、逾期提醒；個人代理設定、管理員終止與改派、臨時讀取的列印預覽（使用者 11-12 裁決） | 未開始 | [簽核流程](superpowers/specs/2026-11-10-approval-workflow-design.md) |
+| a3 | 轉交、管理員終止與改派、後加簽、個人代理設定、逾期提醒、臨時讀取的列印預覽（使用者 11-12 裁決） | 已上線（2026-11-14，a3a–a3d 3f584c8a、6a5dc263 等；a3e、a3f affc0766） | [簽核流程](superpowers/specs/2026-11-10-approval-workflow-design.md) |
+| a3g | a3 收尾：Demo 補採購單列印範本、a3 裁決寫回設計文件、手冊總收 | 未開始 | [簽核流程](superpowers/specs/2026-11-10-approval-workflow-design.md) |
 | fg1 | 簽核流程圖地基：圖形定義型別、結構驗證、sequence → graph 轉換、migration、分支數政策；API 仍不收 graph | 未開始 | [簽核流程圖](superpowers/specs/2026-11-13-approval-flowgraph-design.md) §17 |
 | fg2 | 流程圖執行引擎：並行分支、全部到齊／任一到齊匯合、分支取消、退回與撤回延伸、同一單據動作序列化 | 未開始 | [簽核流程圖](superpowers/specs/2026-11-13-approval-flowgraph-design.md) §17 |
 | fg3 | 拖拉式流程圖設計器（Vue Flow）：草稿與發布、四種寬度（手機只看圖＋改屬性），移除舊關卡編輯 | 未開始 | [簽核流程圖](superpowers/specs/2026-11-13-approval-flowgraph-design.md) §17 |
-| fg4 | 單據頁唯讀進度流程圖、並行時簽核摘要列出進行中的關（可與 fg3 平行） | 未開始 | [簽核流程圖](superpowers/specs/2026-11-13-approval-flowgraph-design.md) §17 |
+| fg4 | 單據頁唯讀進度流程圖、並行時簽核摘要列出進行中的關 | 未開始 | [簽核流程圖](superpowers/specs/2026-11-13-approval-flowgraph-design.md) §17 |
 | fg5 | 通知節點：站內通知、收件人解析、範本帶欄位值並依收件人權限遮蔽 | 未開始 | [簽核流程圖](superpowers/specs/2026-11-13-approval-flowgraph-design.md) §17 |
 | fg6 | 流程圖收尾：既有流程批次轉換、套件格式升版、手冊與文件 | 未開始 | [簽核流程圖](superpowers/specs/2026-11-13-approval-flowgraph-design.md) §17 |
-| kb1、kb2、kb3 | 任務看板：主管看部屬任務與重派、看板資料表與 API、清單／看板切換、拖拉改值、自訂看板與分享 | 進行中：kb1 已合併；kb2（看板資料表、存檔與分享 API、欄查詢與移動 API）實作完成待審；kb3 未開始 | [任務看板、報表與甘特圖](superpowers/specs/2026-11-13-task-board-reports-gantt-design.md) §20 |
-| kr1、kr2、kr3 | 任務報表：任務進報表資料來源、條件量值與中位數、內建任務統計報表（kr 只依賴 kb1） | 未開始 | [任務看板、報表與甘特圖](superpowers/specs/2026-11-13-task-board-reports-gantt-design.md) §20 |
+| kb1、kb2 | 主管看部屬任務與重派；看板資料表、存檔與分享 API、欄查詢與移動 API | 已上線（2026-11-14，kb1 3d56fc56、kb2 74616b3f） | [任務看板、報表與甘特圖](superpowers/specs/2026-11-13-task-board-reports-gantt-design.md) §20 |
+| kb3 | 任務看板畫面：清單／看板切換、拖拉改值、自訂看板與分享 | 未開始 | [任務看板、報表與甘特圖](superpowers/specs/2026-11-13-task-board-reports-gantt-design.md) §20 |
+| kr1、kr2、kr3 | 任務報表：任務進報表資料來源、條件量值與中位數、內建任務統計報表 | 未開始 | [任務看板、報表與甘特圖](superpowers/specs/2026-11-13-task-board-reports-gantt-design.md) §20 |
 | st1、st2 | 子任務（一層、父任務顯示進度） | 未開始 | [任務看板、報表與甘特圖](superpowers/specs/2026-11-13-task-board-reports-gantt-design.md) §20 |
 | gt1、gt2 | 甘特圖：任務開始日、甘特檢視與拖拉調整日期 | 未開始 | [任務看板、報表與甘特圖](superpowers/specs/2026-11-13-task-board-reports-gantt-design.md) §20 |
 | O1 | 維運地基：結構化 log 與 request id、health live／ready、版本端點、前端錯誤收集、背景排程器（o1a、o1b、o1c）；任務「即將到期」提醒改為到期前 N 天內補一次、同一任務只補一次（使用者 2026-11-12 裁決，排進 o1b） | 進行中：o1a（觀測地基）已上線（2026-11-12），o1b、o1c 未開始（使用者裁決排在簽核主線之後） | [維運與觀測](superpowers/specs/2026-11-11-ops-observability-design.md) §9、§10 |
-| un1 | 列表、匯出、篩選的使用者欄位顯示姓名（小段穿插，使用者 11-11 裁決；位置是主控判斷，2026-11-12 排定） | 未開始 | — |
-| pg0a | PostgreSQL provider 抽象：依 `Database:Provider` 選資料庫，SQLite 行為不變、不加 migration；排在 O1 之後（使用者裁決 O1 → pg0），但沒有硬依賴，可視資源與 O1 並行 | 未開始 | [PostgreSQL provider](superpowers/specs/2026-11-12-postgres-provider-design.md) |
+| un1 | 列表、匯出、篩選的使用者欄位顯示姓名（小段穿插，使用者 11-11 裁決；位置是主控判斷） | 未開始 | — |
+| pg0a | PostgreSQL provider 抽象：依 `Database:Provider` 選資料庫，SQLite 行為不變、不加 migration | 未開始 | [PostgreSQL provider](superpowers/specs/2026-11-12-postgres-provider-design.md) |
 | pg0 | （pg0b–pg0d）PostgreSQL provider 與 migration＋可在 PostgreSQL 跑的測試環境；驗收要含 O1 的排程器（兩實例搶同一工作）與通知維護（兩條路徑並行不重複）在 PostgreSQL 上通過；pg0a 另列 | 未開始 | [PostgreSQL provider](superpowers/specs/2026-11-12-postgres-provider-design.md) |
-| 權限軸 | 設計與授權分成兩條權限軸（使用者 11-11 裁決排在簽核主線之後；開工前再寫設計） | 未開始 | — |
-| pg1 | 報表資料庫端聚合 SQL 路徑的 PostgreSQL 改寫（pg0 期間 PostgreSQL 上報表強制走記憶體路徑；使用者 11-12 裁決排在簽核 a6 之後、O2 之前） | 未開始 | [PostgreSQL provider](superpowers/specs/2026-11-12-postgres-provider-design.md) |
+| a4c | 清單頁系統篩選「簽核中」（記錄清單查詢加簽核實例子查詢）；要在兩種資料庫一次驗證，等 pg0（使用者 11-12 裁決 U2） | 未開始 | [簽核流程](superpowers/specs/2026-11-10-approval-workflow-design.md) §13.4 |
+| 權限軸 | 設計與授權分成兩條權限軸（開工前再寫設計） | 未開始 | — |
+| pg1 | 報表資料庫端聚合 SQL 路徑的 PostgreSQL 改寫（pg0 期間 PostgreSQL 上報表強制走記憶體路徑） | 未開始 | [PostgreSQL provider](superpowers/specs/2026-11-12-postgres-provider-design.md) |
 | O2 | 事件中心：健康檢查、維運事件、稽核表（與 MCP 共用）、告警通道、監控頁、規則失控自動暫停 | 未開始 | [維運與觀測](superpowers/specs/2026-11-11-ops-observability-design.md) §9 |
-| p2、p3 | 設計與處理上限；地區與組織政策（使用者 2026-11-12 確認排在 O2 之後、mcp1a 之前） | 未開始 | [政策設定](superpowers/specs/2026-11-11-policy-settings-design.md) §9、§3.7 |
-| i3、i4 | 多語系：名稱欄位多語（儀表板、報表名稱），套件格式隨升版；翻譯匯出、匯入（Excel，只含設計資料，介面固定文字不開放覆寫），兩件一起做（使用者 2026-11-12 排在 p3 之後） | 未開始 | — |
+| p2、p3 | 設計與處理上限；地區與組織政策 | 未開始 | [政策設定](superpowers/specs/2026-11-11-policy-settings-design.md) §9、§3.7 |
+| i3、i4 | 多語系：名稱欄位多語（儀表板、報表名稱），套件格式隨升版；翻譯匯出、匯入（Excel，只含設計資料，介面固定文字不開放覆寫），兩件一起做 | 未開始 | — |
 | mcp1a | MCP 後端地基：權杖、範圍、工具分級與確認碼、稽核寫入點、速率限制、12 個唯讀工具；權杖與確認碼的 repository 測試在 PostgreSQL 與 SQLite 各跑一次 | 未開始 | [MCP server](superpowers/specs/2026-11-11-mcp-server-design.md) §12 |
 | mcp1b | MCP 畫面：個人「AI 存取權杖」頁、管理員「AI 連線」頁、設計器欄位旗標、手冊 | 未開始 | [MCP server](superpowers/specs/2026-11-11-mcp-server-design.md) §12 |
 | O3 | 廠商維運中心（Cloudflare Workers＋D1）、外部探測、匿名回報與新版本通知、告警推播 | 未開始 | [維運與觀測](superpowers/specs/2026-11-11-ops-observability-design.md) §9 |
-| pkg1 | 套件更新入口：把新版內建應用程式套到客戶已開啟的應用程式（排在 O3 之後，先寫設計；第一個客戶上線前必須有結論） | 未開始（設計待寫） | — |
+| pkg1 | 套件更新入口：把新版內建應用程式套到客戶已開啟的應用程式（先寫設計；第一個客戶上線前必須有結論） | 未開始（設計待寫） | — |
 | O4、mcpO1 | agent L1 唯讀診斷；產品端維運唯讀工具與維運服務帳號 | 未開始 | [維運與觀測](superpowers/specs/2026-11-11-ops-observability-design.md) §9、[MCP server](superpowers/specs/2026-11-11-mcp-server-design.md) §12 |
 | O5 | agent L3 修正 PR、CI gate | 未開始 | [維運與觀測](superpowers/specs/2026-11-11-ops-observability-design.md) §9 |
 | O6、mcpO2 | 雲端版 L2 自動處置；產品端維運處置工具 | 未開始 | [維運與觀測](superpowers/specs/2026-11-11-ops-observability-design.md) §9、[MCP server](superpowers/specs/2026-11-11-mcp-server-design.md) §12 |
@@ -65,9 +67,9 @@
 | mcp2b | MCP 高風險業務工具 | 未開始 | [MCP server](superpowers/specs/2026-11-11-mcp-server-design.md) §12 |
 | mcp3 | MCP 設計器工具（開工前另寫設計） | 未開始 | [MCP server](superpowers/specs/2026-11-11-mcp-server-design.md) §12 |
 | mcp4 | MCP OAuth 2.1（Claude.ai、ChatGPT 連接器；可視雲端版第一個客戶的需求提前） | 未開始 | [MCP server](superpowers/specs/2026-11-11-mcp-server-design.md) §12 |
-| s2d-1g | Demo 公司跨應用程式共用、移除模擬客戶 | 進行中（migration 待 kb2 合併） | [共用主檔](superpowers/specs/2026-11-10-shared-master-design.md) |
+| s2d-1g | Demo 公司跨應用程式共用、移除模擬客戶與全部內建模擬實體 | 已上線（2026-11-14，8719cc5b） | [共用主檔](superpowers/specs/2026-11-10-shared-master-design.md) |
 | s2d-1h | 主檔收尾：參照挑選器守衛、CRM 補測試等 | 未開始 | [共用主檔](superpowers/specs/2026-11-10-shared-master-design.md) |
-| s2d-2 | 品項共用主檔、移除模擬實體 | 未開始 | [共用主檔](superpowers/specs/2026-11-10-shared-master-design.md) |
+| s2d-2 | 品項共用主檔 | 未開始 | [共用主檔](superpowers/specs/2026-11-10-shared-master-design.md) |
 | s2e-a | 訂單到出貨：追溯與履約核心 | 未開始 | [訂單到出貨](superpowers/specs/2026-11-11-order-workorder-shipment-design.md) |
 | s2e-b | 訂單到出貨：應用程式間整合 | 未開始 | [訂單到出貨](superpowers/specs/2026-11-11-order-workorder-shipment-design.md) |
 | s2f | 訂單變更單 | 未開始 | [訂單到出貨](superpowers/specs/2026-11-11-order-workorder-shipment-design.md) |
