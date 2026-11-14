@@ -161,6 +161,8 @@
 | A28 | 檢查試跑：回報違規組數、最多掃描組數 | 50、20000 | S | p2 |
 | A29 | 寫入後跨記錄驗證每次最多組數 | 500 | S | p2 |
 | A30 | 儲存檢查時回填索引最多筆數 | 200000 | S | p2 |
+| A32 | 任務：部門主管可看與重派部屬的任務（`task.supervisorScope`；編號與任務看板設計相同，與簽核 a3 的編號撞號時，後合併者順延） | 開 | S | kb1 |
+| A33 | 任務：主管範圍含下層部門（`task.supervisorScopeRecursive`） | 是 | S | kb1 |
 
 補盤（2026-11-11，使用者裁決補盤缺漏也要排進修正）另併入既有項：A31 營運時區 Asia/Taipei 的其他寫死處（`TaipeiBusinessTime.cs`、`FieldImportParser.cs`、`ReportRules.cs` 補 "+08:00"、前端 `field-type-registry.ts`、`FilterValueInput.vue`）併入 A17 一起改；A7 的「明天到期」另一處 `TaskRepositories.cs:105` 併入 p1 的 A6／A7。
 
