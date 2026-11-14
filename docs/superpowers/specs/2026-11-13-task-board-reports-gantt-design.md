@@ -222,6 +222,32 @@
 
 `ConfigJson` 引用使用者、部門用 Id；被引用的使用者停用或部門刪除時，篩選與欄照常存著，畫面顯示「（已停用）」或略過已刪除的部門，不讓看板壞掉（主控 T10）。
 
+**`ConfigJson` 的實際格式（kb2 實作，`Domain/Tasks/TaskBoardConfig.cs`）**，camelCase，沒給的選填欄位不輸出：
+
+```json
+{
+  "version": 1,
+  "groupBy": "status | assignee | dueBucket",
+  "scope": "assigned | involved | subordinates | visible",
+  "filters": {
+    "statuses": ["todo", "inProgress", "done", "cancelled"],
+    "assigneeUserIds": ["sales01"], "includeUnassigned": true,
+    "creatorUserIds": ["manager01"],
+    "sources": ["personal", "record", "rule"],
+    "dueRange": { "kind": "thisMonth", "n": null },
+    "keyword": "報價"
+  },
+  "columns": { "order": ["done"], "hidden": ["cancelled"], "assignees": ["sales01"], "autoAppendAssignees": true },
+  "sort": { "key": "dueDate | createdTime | title", "dir": "asc | desc" }
+}
+```
+
+- 欄鍵：狀態 `todo`、`inProgress`、`done`、`cancelled`；到期區間 `overdue`、`today`、`thisWeek`、`later`、`none`；負責人 `user:<帳號>`、`unassigned`。
+- `columns.order`、`columns.hidden` 只收該分欄依據的固定欄鍵（負責人看板只能隱藏 `unassigned`）；沒列進 `order` 的欄照預設順序補在後面。負責人看板的欄序固定是：明列的人 →「未指派」→ 範圍是部屬時的全部部屬 → 自動附加的人。
+- `filters.assigneeUserIds` 有值時只取這些負責人，`includeUnassigned: true` 另含未指派；沒列負責人時 `includeUnassigned: false` 代表排除未指派。`dueRange` 沿用報表的相對區間，以今天解析（不用報表基準日）。到期區間看板忽略 `statuses`，固定只取未完成。
+- **寫入**（建立、修改、欄查詢帶未存的設定）嚴格：未知屬性、型別不符（含字串形式的數字）、值不合法一律 400，擋打錯字。**讀取**（存過的設定）寬鬆：未知屬性忽略、不合法的值退回預設、整份解析不了就是預設看板，舊程式讀到新版本不壞。
+- **升版規則**：新增選填欄位（例如 st2 的 `showSubtasks`）不升 `version`；既有欄位的語意改變才升，並在 `Read` 裡把舊版本轉成新版本。寫入只收目前版本。
+
 ### 6.2 權限（使用者決定 4）
 
 - 建立者才能改設定、改分享、刪除。系統管理員可以刪除任何有分享的看板（同報表「避免離職者留下的共用報表沒人能管」），不能改。
@@ -673,9 +699,9 @@ kb1 是其餘各段的基礎（看板與報表都用同一個可見條件）；k
 ## 21. 留給實作者
 
 - 拖拉與甘特圖套件的選擇：授權免費、可商用、維護中，觸控可用；寫進計畫。甘特圖也可以不用套件，用 CSS grid 自畫。
-- `ConfigJson` 的欄位命名與 `version` 升級方式。
+- ~~`ConfigJson` 的欄位命名與 `version` 升級方式。~~ kb2 已定：見 §6.1 末段。
 - 報表資料來源介面的確切形狀（只要模組來源的行為與測試完全不變）。
-- 看板欄查詢是一次回全部欄，還是每欄各一個請求。
+- ~~看板欄查詢是一次回全部欄，還是每欄各一個請求。~~ kb2 已定：`POST /task-board/columns` 一次回全部欄的總數與第一頁 50 張（狀態、負責人看板一次 GROUP BY 算總數，到期區間每欄一次 COUNT；每個有任務的欄一次取頁、所有卡片一次批次評估權限），查詢次數隨欄數成長、不隨卡片數成長；`POST /task-board/columns/{column}/page` 載入更多。
 - 可見條件在 PostgreSQL 的執行計畫（`OR` 很多時要不要改 `UNION`），以雙跑與計畫輸出決定。
 - 內建報表的四語系名稱與說明文案、圖表配色。
 - 手機「移到…」是底部選單還是對話框。
