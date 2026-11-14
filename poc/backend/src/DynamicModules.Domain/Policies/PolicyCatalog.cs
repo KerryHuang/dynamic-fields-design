@@ -40,6 +40,14 @@ public static class PolicyCatalog
     public static readonly PolicyDefinition TaskNotifyCancelled =
         new("task.notify.cancelled", "notification", PolicyKind.RoleSet, PolicyScope.Module, "creator", Options: NotifyRoles);
 
+    /// <summary>A32：部門主管可看與重派部屬的任務（看板設計 §4）。</summary>
+    public static readonly PolicyDefinition TaskSupervisorScope =
+        new("task.supervisorScope", "task", PolicyKind.Boolean, PolicyScope.System, "true");
+
+    /// <summary>A33：主管範圍是否含下層部門（看板設計 §4）。</summary>
+    public static readonly PolicyDefinition TaskSupervisorScopeRecursive =
+        new("task.supervisorScopeRecursive", "task", PolicyKind.Boolean, PolicyScope.System, "true");
+
     /// <summary>A14：通知保留天數；超過的舊通知下次讀通知時清除。</summary>
     public static readonly PolicyDefinition NotificationRetentionDays =
         new("notification.retentionDays", "notification", PolicyKind.Integer, PolicyScope.System, "90", 1, 3650, Unit: "days");
@@ -133,6 +141,7 @@ public static class PolicyCatalog
     public static IReadOnlyList<PolicyDefinition> All { get; } =
         [TaskMaxRulesPerModule, TaskMaxTasksPerRule, TaskMaxRulesPerPackage,
          TaskReminderLeadDays, TaskRemindOverdue, TaskNotifyCommented, TaskNotifyCompleted, TaskNotifyCancelled,
+         TaskSupervisorScope, TaskSupervisorScopeRecursive,
          NotificationRetentionDays, CalendarWeekStart,
          AttachmentMaxFileBytes, AttachmentMaxFilesPerField, AttachmentAllowedExtensions, AttachmentMaxFilesPerComment,
          OpsSlowRequestMs, OpsClientErrorCollection,

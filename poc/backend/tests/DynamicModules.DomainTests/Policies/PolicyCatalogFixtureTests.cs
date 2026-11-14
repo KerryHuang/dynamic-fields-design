@@ -47,6 +47,10 @@ public class PolicyCatalogFixtureTests
         PolicyCatalog.TaskNotifyCommented.Factory.Should().Be("assignee,creator");
         PolicyCatalog.TaskNotifyCompleted.Factory.Should().Be("creator");
         PolicyCatalog.TaskNotifyCancelled.Factory.Should().Be("creator");
+        PolicyCatalog.TaskSupervisorScope.Factory.Should().Be("true");
+        PolicyCatalog.TaskSupervisorScope.Scope.Should().Be(PolicyScope.System);
+        PolicyCatalog.TaskSupervisorScopeRecursive.Factory.Should().Be("true");
+        PolicyCatalog.TaskSupervisorScopeRecursive.Scope.Should().Be(PolicyScope.System);
         PolicyCatalog.NotificationRetentionDays.Factory.Should().Be("90");
         PolicyCatalog.NotificationRetentionDays.Scope.Should().Be(PolicyScope.System);
         PolicyCatalog.CalendarWeekStart.Factory.Should().Be("monday");
