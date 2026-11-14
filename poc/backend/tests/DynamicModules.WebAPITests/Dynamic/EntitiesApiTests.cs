@@ -12,16 +12,16 @@ public class EntitiesApiTests : IClassFixture<TestApp>
     public EntitiesApiTests(TestApp app) => _app = app;
 
     [Fact]
-    public async Task List_Admin_ReturnsTwoEntities()
+    public async Task List_Admin_ReturnsOnlyTheTestEntities()
     {
         var res = await _app.AsUser("admin").GetAsync($"{Base}/entities");
 
         res.StatusCode.Should().Be(HttpStatusCode.OK);
         var items = (await JsonOf(res)).EnumerateArray().ToList();
-        // design.mold 已移除（s2d-0）；test.entity 是測試主機註冊的
-        items.Select(i => i.GetProperty("key").GetString()).Should().BeEquivalentTo("sales.customer", TestEntityProvider.Key);
-        items.Single(i => i.GetProperty("key").GetString() == "sales.customer").GetProperty("name").GetProperty("zh-TW")
-            .GetString().Should().Be("客戶");
+        // 產品不再有內建模擬實體（design.mold s2d-0、sales.customer s2d-1g 都已移除）；test.entity 與 test.host 是測試主機註冊的
+        items.Select(i => i.GetProperty("key").GetString()).Should().BeEquivalentTo(TestEntityProvider.Key, "test.host");
+        items.Single(i => i.GetProperty("key").GetString() == TestEntityProvider.Key).GetProperty("name").GetProperty("zh-TW")
+            .GetString().Should().Be("測試實體");
     }
 
     [Fact]

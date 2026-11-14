@@ -1,6 +1,5 @@
 using DynamicModules.Domain.Data;
 using DynamicModules.Domain.Entities.Dynamic;
-using DynamicModules.Domain.Entities.Mock;
 using DynamicModules.Domain.ValueObjects;
 using DynamicModules.Persistence.Seed;
 using FluentAssertions;
@@ -37,7 +36,6 @@ public class SeedDataTests
         users.Should().ContainSingle().Which.UserId.Should().Be("admin");
         users[0].IsSystemAdmin.Should().BeTrue();
         (await db.Context.Set<PermissionGroup>().CountAsync()).Should().Be(0);
-        (await db.Context.Set<MockCustomer>().CountAsync()).Should().Be(0);
     }
 
     [Fact]
@@ -102,21 +100,17 @@ public class SeedDataTests
         (await db.Context.Set<AppUser>().CountAsync()).Should().Be(14);
         (await db.Context.Set<AppUser>().Where(u => u.UserId != "admin").AllAsync(u => u.IsDemoAccount && u.PasswordHash == null))
             .Should().BeTrue();
-        (await db.Context.Set<MockCustomer>().Select(c => c.CustomerNo).ToListAsync())
-            .Should().BeEquivalentTo(Enumerable.Range(1, 8).Select(i => $"C-{i:D3}"));
     }
 
     [Fact]
     public async Task DemoPeople_DoesNotOverwriteExisting()
     {
         await using var db = await SqliteTestDb.CreateAsync();
-        db.Context.Set<MockCustomer>().Add(new MockCustomer { CustomerNo = "C-006", Name = "自訂名稱" });
         db.Context.Set<AppUser>().Add(new AppUser { UserId = "qa01", DisplayName = "自訂" });
         await db.Context.SaveChangesAsync();
 
         await DemoPeople.EnsureAsync(db.Context);
 
-        (await db.Context.Set<MockCustomer>().AsNoTracking().SingleAsync(c => c.CustomerNo == "C-006")).Name.Should().Be("自訂名稱");
         (await db.Context.Set<AppUser>().AsNoTracking().SingleAsync(u => u.UserId == "qa01")).DisplayName.Should().Be("自訂");
     }
 
