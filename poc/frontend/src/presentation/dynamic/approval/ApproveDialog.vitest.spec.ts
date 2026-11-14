@@ -266,6 +266,15 @@ describe('ApproveDialog add-sign', () => {
     w.unmount();
   });
 
+  it('a 400 on mode shows on top', async () => {
+    const w = await mountDialog({ addSign: true, reply: new HttpFail(400, { errors: { mode: ['加簽方式只能是會簽或或簽'] } }) });
+    await pickUser('財務一');
+    q('approve-send')!.click();
+    await settle();
+    expect(q('action-error')!.textContent).toContain('加簽方式只能是會簽或或簽');
+    w.unmount();
+  });
+
   it('approve mode unchanged: no add-sign fields and the approve endpoint', async () => {
     const w = await mountDialog();
     expect(q('add-sign-users')).toBeNull();

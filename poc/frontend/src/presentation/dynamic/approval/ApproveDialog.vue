@@ -44,7 +44,7 @@ const common = () => ({
   ...(Object.keys(changed).length > 0 && { values: changed }),
 });
 const action = useApprovalAction({
-  recordId: () => props.recordId, moduleKey: () => props.moduleKey, close, fieldKeys: () => [...(editable.value?.drawn ?? []), ...(props.addSign ? ['userIds', 'mode'] : [])],
+  recordId: () => props.recordId, moduleKey: () => props.moduleKey, close, fieldKeys: () => [...(editable.value?.drawn ?? []), ...(props.addSign ? ['userIds'] : [])],
   send: (idempotencyKey) => props.addSign
     ? addSignTask.mutateAsync({
       taskId: props.taskId, recordId: props.recordId, moduleKey: props.moduleKey, idempotencyKey,
