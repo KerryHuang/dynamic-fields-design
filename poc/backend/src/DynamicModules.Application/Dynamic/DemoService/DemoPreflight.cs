@@ -23,11 +23,11 @@ public sealed class DemoPreflight(AppCatalog catalog, IModuleRepository modules,
         foreach (var (masterId, m) in MasterModules())
             if (await apps.GetByKeyAsync(masterId, ct) is null && await modules.KeyExistsAsync(m.Key, ct))
                 conflicts.Add($"模組代碼 {m.Key} 已存在");
-        // 應用程式刪除後主檔會留下記錄；示範資料會再建同名公司與聯絡人，先擋下（要重跑請先清掉主檔記錄）
+        // 應用程式刪除後主檔會留下記錄（只算有效記錄，軟刪除的不算）；示範資料會再建同名公司與聯絡人，先擋下（要重跑請先清掉主檔記錄）
         foreach (var (masterId, m) in MasterModules())
             if (await apps.GetByKeyAsync(masterId, ct) is not null && await modules.GetByKeyAsync(m.Key, false, ct) is { } existing
-                && await records.AnyByModuleAsync(existing.Id, ct))
-                conflicts.Add($"共用主檔 {masterId} 的模組 {m.Key} 已有記錄");
+                && await records.CountByModuleAsync(existing.Id, ct) > 0)
+                conflicts.Add(DemoMessages.MasterHasRecords(masterId, m.Key));
         foreach (var name in DemoReports.Names)
             if (await reports.NameExistsAsync(name, ct)) conflicts.Add($"報表「{name}」已存在");
         foreach (var name in DemoDashboards.Names)
