@@ -49,6 +49,8 @@ public sealed class ApprovalActionSupport(
             return (null, module.Status == ModuleStatus.Closed ? ServiceResult.Conflict(ModuleGate.Closed) : ServiceResult.NotFound(ApprovalMessages.TaskNotFound));
         if (inst.Status != ApprovalInstanceStatus.Pending) return (null, ServiceResult.Conflict(ApprovalMessages.StageHandled));
         if (ApprovalEngine.DefinitionOf(inst) is not { } def) return (null, ServiceResult.Conflict(ApprovalMessages.FlowVersionMissing));
+        // 綁定的是 graph 定義（回退後遇到 fg2 留下的實例）：引擎還不會跑，任何任務與實例動作都擋，要在換 RowVersion、讀關卡之前
+        if (ApprovalShapeGate.Reject(inst.FlowSetSnapshot.FirstOrDefault(e => e.FlowVersionId == inst.FlowVersionId)) is { } gated) return (null, gated);
         var next = Guid.NewGuid().ToString();
         if (!await repo.TryBumpRowVersionAsync(inst.Id, rowVersion, next, ct))
             return (null, ServiceResult.Conflict(mine is { Status: ApprovalTaskStatus.Open } ? ApprovalMessages.StateChanged : ApprovalMessages.StageHandled,

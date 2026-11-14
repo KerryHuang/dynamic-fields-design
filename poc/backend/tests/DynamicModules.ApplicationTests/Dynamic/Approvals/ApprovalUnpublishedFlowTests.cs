@@ -225,4 +225,22 @@ public class ApprovalUnpublishedFlowTests : ApprovalTestBase
 
         l.FieldIds.Should().Contain(r.Total).And.NotContain([r.Memo, r.Discount]);
     }
+
+    [Theory]
+    [InlineData(150000, ApprovalPreviewOutcomes.Flow, "po-a")]
+    [InlineData(5000, ApprovalPreviewOutcomes.Blocked, null)]
+    public async Task PreviewSavedFlow_OfUnpublishedFlow_ComparesPublishedFlows_DraftNotRead(int price, string outcome, string? flowKey)
+    {
+        // 設計器對只有草稿的流程做「已存流程試算」：不讀 DraftJson、不當成候選，回報實際命中的已發布流程（沒命中時是 blocked）
+        var r = await WithUnpublishedFirst(ApprovalNoMatch.Block);
+        As("buyer1");
+        var po = await NewPo(r, price: price);
+        As("admin");
+
+        var res = await Send(new PreviewApprovalFlowRequest("po-u", po.Id, null, "buyer1"));
+
+        res.IsSuccess.Should().BeTrue(Dump(res));
+        var body = (ApprovalPreviewResponse)res.Data!;
+        (body.Outcome, body.FlowKey).Should().Be((outcome, flowKey));
+    }
 }
