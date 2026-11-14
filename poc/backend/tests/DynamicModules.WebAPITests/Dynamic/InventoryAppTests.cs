@@ -349,7 +349,7 @@ public class InventoryAppTests : IDisposable
         exported.GetProperty("ledgers").GetArrayLength().Should().Be(1);
         exported.GetProperty("conversions").GetArrayLength().Should().Be(1);
         exported.GetProperty("reports").GetArrayLength().Should().Be(5);
-        exported.GetProperty("printTemplates").GetArrayLength().Should().Be(1);
+        exported.GetProperty("printTemplates").GetArrayLength().Should().Be(2);
 
         // 匯入到另一個空資料庫：內建套件的代號不能被匯入佔用，所以換一個應用程式代號；模組、事件、檢查的鍵照舊
         var node = JsonNode.Parse(exported.GetRawText())!;
@@ -398,5 +398,22 @@ public class InventoryAppTests : IDisposable
         html.Should().NotContain("<img src=x").And.Contain("&lt;img");
         html.Should().Contain(">1,200<").And.Contain(">12,000<").And.Contain("合計（未稅）：12,000");
         html.Should().Contain("<td align=\"right\">10</td>");
+    }
+
+    [Fact]
+    public async Task PrintPo_HasHeaderLinesAndTotals()
+    {
+        var rig = await OpenAsync(_admin);
+        var item = await rig.ItemAsync("鋼板", price: 1000, unit: "kg");
+        var supplier = await rig.SupplierAsync("鑫盛鋼鐵");
+        var po = await rig.PoDraftAsync(supplier, item, 10);
+
+        var templates = await JsonOf(await _admin.GetAsync($"{Base}/modules/{rig.Key("po")}/print-templates"));
+        templates.EnumerateArray().Select(t => t.GetProperty("key").GetString()).Should().Contain("inv-po-sheet");
+        var res = await _admin.GetAsync($"{Base}/records/{Id(po)}/print/inv-po-sheet?locale=zh-TW");
+        res.StatusCode.Should().Be(HttpStatusCode.OK, await res.Content.ReadAsStringAsync());
+        var html = await res.Content.ReadAsStringAsync();
+        html.Should().Contain("PO-").And.Contain("鑫盛鋼鐵").And.Contain("鋼板");
+        html.Should().Contain(">10,000<").And.Contain("未稅小計：10,000").And.Contain("含稅總計：10,500");
     }
 }

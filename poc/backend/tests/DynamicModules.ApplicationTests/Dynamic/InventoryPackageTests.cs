@@ -71,7 +71,7 @@ public class InventoryPackageTests
         p.Ledgers.Should().ContainSingle().Which.Module.Should().Be("move");
         p.Conversions.Should().ContainSingle().Which.Code.Should().Be("inv-po-to-receipt");
         p.Reports.Should().HaveCount(5);
-        p.PrintTemplates.Should().ContainSingle().Which.Code.Should().Be("inv-ship-sheet");
+        p.PrintTemplates.Select(t => t.Code).Should().BeEquivalentTo("inv-ship-sheet", "inv-po-sheet");
         // 效果只寫入庫存異動，而庫存異動沒有任何事件：事件圖無環（validator 也會擋，這裡把設計前提釘住）
         p.Events.SelectMany(e => e.Effects).Should().OnlyContain(x => x.Target == "move");
         p.Events.Should().NotContain(e => e.Source == "move");

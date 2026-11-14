@@ -3313,6 +3313,18 @@
       },
       "active": true,
       "body": "<h1 align=\"center\">出貨單 {{no}}</h1><table width=\"100%\" cellpadding=\"4\"><tr><td>客戶：{{customer}}</td><td align=\"right\">出貨日期：{{shipDate}}</td></tr><tr><td>出庫倉：{{warehouse}}</td><td align=\"right\">狀態：{{status}}</td></tr></table><table width=\"100%\" border=\"1\" cellpadding=\"4\" style=\"border-collapse:collapse\"><thead><tr><th>項次</th><th>品名</th><th>單位</th><th align=\"right\">數量</th><th align=\"right\">單價</th><th align=\"right\">金額</th></tr></thead><tbody>{{#each shipment-line}}<tr><td>{{seq}}</td><td>{{itemName}}</td><td>{{unit}}</td><td align=\"right\">{{qty}}</td><td align=\"right\">{{price}}</td><td align=\"right\">{{amount}}</td></tr>{{/each}}</tbody></table><p align=\"right\"><strong>合計（未稅）：{{subtotal}}</strong></p><p>備註：{{remark}}</p><table width=\"100%\" cellpadding=\"12\"><tr><td>倉管：</td><td>客戶簽收：</td></tr></table>"
+    },
+    {
+      "module": "po",
+      "code": "inv-po-sheet",
+      "name": {
+        "zh-TW": "採購單",
+        "en-US": "Purchase order",
+        "th": "ใบสั่งซื้อ",
+        "vi": "Đơn mua hàng"
+      },
+      "active": true,
+      "body": "<h1 align=\"center\">採購單 {{no}}</h1><table width=\"100%\" cellpadding=\"4\"><tr><td>供應商：{{supplier}}</td><td align=\"right\">採購日期：{{orderDate}}</td></tr><tr><td>預定入庫倉：{{warehouse}}</td><td align=\"right\">預定交期：{{expectedDate}}</td></tr><tr><td colspan=\"2\">狀態：{{status}}</td></tr></table><table width=\"100%\" border=\"1\" cellpadding=\"4\" style=\"border-collapse:collapse\"><thead><tr><th>項次</th><th>品名</th><th>單位</th><th align=\"right\">數量</th><th align=\"right\">單價</th><th align=\"right\">金額</th></tr></thead><tbody>{{#each po-line}}<tr><td>{{seq}}</td><td>{{itemName}}</td><td>{{unit}}</td><td align=\"right\">{{qty}}</td><td align=\"right\">{{price}}</td><td align=\"right\">{{amount}}</td></tr>{{/each}}</tbody></table><p align=\"right\">未稅小計：{{subtotal}}　稅額：{{tax}}　<strong>含稅總計：{{total}}</strong></p><p>備註：{{remark}}</p><table width=\"100%\" cellpadding=\"12\"><tr><td>採購：</td><td>簽核：</td></tr></table>"
     }
   ],
   "contributions": [

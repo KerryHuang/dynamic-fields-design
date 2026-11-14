@@ -3,6 +3,7 @@ using DynamicModules.Application.Dynamic.ConversionService.Commands.ConvertRecor
 using DynamicModules.Application.Dynamic.ConversionService.Data;
 using DynamicModules.Application.Dynamic.RecordService.Commands.CreateRecord;
 using DynamicModules.Application.Dynamic.RecordService.Commands.UpdateRecord;
+using DynamicModules.Domain.Approvals;
 
 namespace DynamicModules.Application.Dynamic.DemoService.Scenarios;
 
@@ -12,7 +13,8 @@ namespace DynamicModules.Application.Dynamic.DemoService.Scenarios;
 /// 採購單的「草稿 → 已確認」由套件宣告成需簽核（金額門檻流程，簽核 a5c），所以一律由採購人員送簽、依組織找主管同意：
 /// 未稅小計 10,000 以上走一關（營運部主管 ops01）、100,000 以上再加第二關（總經理室主管 manager01）、不到門檻送出即確認（門檻比對未稅小計，不含 5% 稅）。
 /// 9 張的狀態：3 張一關核准後到貨結案、2 張一關核准的已確認（其中一張部分到貨）、1 張小額直接確認、1 張大額兩關核准、
-/// 1 張大額停在第二關（記錄仍是草稿，manager01 待簽）、1 張草稿。
+/// 1 張大額停在第二關（記錄仍是草稿，manager01 待簽）、1 張草稿（送簽後被 admin 終止）。
+/// 其中 4 張帶新動作的歷程（簽核 a3g）：35 天前轉交、12 天前同意並加簽、18 天前由代理人同意（代理期間已過）、9 天前被終止。
 /// 庫存異動由套件的事件在過帳、取消時自動寫入，全部走一般的建立、更新、轉換指令，權限與狀態機照常生效。
 /// 期初庫存每品每倉 500，出貨量遠低於庫存，所以不會出現負庫存。公司、人名、電話、Email 全是虛構（Email 一律 example.com）。
 /// </summary>
@@ -24,6 +26,8 @@ public sealed class InventoryScenario : IDemoScenario
     private const string Manager = "ops01";
     private const string Executive = "manager01";
     private const string Buyer = "buyer01";
+    private const string Sales = "sales01";
+    private const string Admin = "admin";
     private const string Keeper = "keeper01";
 
     private static readonly (string Name, string Category, string Unit, int Price, int Safety)[] Items =
@@ -40,19 +44,20 @@ public sealed class InventoryScenario : IDemoScenario
     /// <param name="Receipts">到貨批次各行比例（百分比）；空陣列＝尚未到貨。</param>
     /// <param name="End">draft／confirmed／closed／cancelled／pending（送簽後只同意 Approvers 列出的關卡，停在下一關）。</param>
     /// <param name="Approvers">送簽後依序同意的人；空陣列＝不經簽核直接確認（未稅小計低於門檻）。</param>
-    private sealed record PoSpec(int DaysAgo, int Supplier, (int Item, int Qty)[] Lines, int[][] Receipts, string End, string[] Approvers);
+    /// <param name="Twist">簽核過程的變化：transfer（第 1 關由 ops01 轉交 manager01）、addsign（第 1 關 ops01 同意並加簽 sales01）、cancel（送簽後由 admin 終止）、delegate（ops01 事先設代理 sales01，由代理人同意）。</param>
+    private sealed record PoSpec(int DaysAgo, int Supplier, (int Item, int Qty)[] Lines, int[][] Receipts, string End, string[] Approvers, string? Twist = null);
 
     private static readonly PoSpec[] Pos =
     [
         new(80, 0, [(0, 300), (1, 200)], [[100, 100]], "closed", [Manager]),
         new(66, 1, [(2, 100), (3, 100), (4, 40)], [[50, 50, 50], [50, 50, 50]], "closed", [Manager]),
         new(50, 2, [(5, 60), (6, 80)], [[100, 100]], "closed", [Manager]),
-        new(35, 0, [(0, 400), (1, 300)], [[60, 60]], "confirmed", [Manager]),
-        new(18, 1, [(2, 60), (4, 30)], [], "confirmed", [Manager]),
-        new(9, 2, [(7, 10)], [], "draft", []),
+        new(35, 0, [(0, 400), (1, 300)], [[60, 60]], "confirmed", [Manager], "transfer"),
+        new(18, 1, [(2, 60), (4, 30)], [], "confirmed", [Manager], "delegate"),
+        new(9, 2, [(7, 10)], [], "draft", [], "cancel"),
         // 簽核 a5c 加的三張（未稅小計）：小額 5,200 直接確認；大額 104,000 兩關核准；大額 130,000 停在第二關
         new(7, 1, [(5, 20)], [], "confirmed", []),
-        new(12, 0, [(7, 20)], [], "confirmed", [Manager, Executive]),
+        new(12, 0, [(7, 20)], [], "confirmed", [Manager, Executive], "addsign"),
         new(4, 2, [(7, 25)], [], "pending", [Manager])
     ];
 
@@ -124,15 +129,48 @@ public sealed class InventoryScenario : IDemoScenario
                     [ctx.Inventory.Ids.ModuleKeys["po-line"]] = spec.Lines.Select(l => new DetailRowInput(null,
                         ctx.Inventory.Values("po-line", ("item", items[l.Item].Id), ("qty", (decimal)l.Qty)), null)).ToList()
                 }));
-            if (spec.End == "draft") continue;
+            if (spec.End == "draft" && spec.Twist != "cancel") continue;
 
+            if (spec.Twist == "delegate")
+            {
+                // 送簽前一天 ops01 設代理 sales01（19 天前到 17 天前）；送簽時任務代理給 sales01，代理期間已過，今天沒有有效代理
+                var delegateAt = plan.At(date.AddDays(-1));
+                plan.Run(delegateAt, Manager, $"{label} ops01 設代理", (ctx, ct) =>
+                    DemoApprovalSteps.SetDelegate(ctx, Sales, today.AddDays(-19), today.AddDays(-17), ct));
+            }
             at = After(at, 0);
             plan.Run(at, Buyer, $"{label} 送簽", (ctx, ct) => DemoApprovalSteps.Submit(ctx, po,
-                ctx.Inventory!.Ids.OptionIds["po.confirmed"], spec.Approvers.Length == 0 ? null : "請核准採購", ct));
+                ctx.Inventory!.Ids.OptionIds["po.confirmed"], spec.Approvers.Length == 0 && spec.Twist != "cancel" ? null : "請核准採購", ct));
+            if (spec.Twist == "cancel")
+            {
+                at = After(at);
+                plan.Run(at, Admin, $"{label} 管理員終止", (ctx, ct) => DemoApprovalSteps.Cancel(ctx, po, "供應商報價已過期，請重新詢價後再送", ct));
+                continue;
+            }
             foreach (var approver in spec.Approvers)
             {
                 at = After(at);
-                plan.Run(at, approver, $"{label} {approver} 同意", (ctx, ct) => DemoApprovalSteps.Approve(ctx, po, "同意", ct));
+                var (who, twist) = (approver, approver == Manager ? spec.Twist : null);
+                switch (twist)
+                {
+                    case "transfer":
+                        plan.Run(at, who, $"{label} {who} 轉交", (ctx, ct) => DemoApprovalSteps.Transfer(ctx, po, Executive, "出差中，請代為處理", ct));
+                        at = After(at, 0);
+                        plan.Run(at, Executive, $"{label} {Executive} 同意", (ctx, ct) => DemoApprovalSteps.Approve(ctx, po, "同意", ct));
+                        break;
+                    case "addsign":
+                        plan.Run(at, who, $"{label} {who} 同意並加簽", (ctx, ct) =>
+                            DemoApprovalSteps.AddSign(ctx, po, [Sales], ApprovalModes.Any, "請確認客戶訂單數量", ct));
+                        at = After(at, 0);
+                        plan.Run(at, Sales, $"{label} {Sales} 同意", (ctx, ct) => DemoApprovalSteps.Approve(ctx, po, "同意", ct));
+                        break;
+                    case "delegate":
+                        plan.Run(at, Sales, $"{label} {Sales}（代 {who}）同意", (ctx, ct) => DemoApprovalSteps.Approve(ctx, po, "同意", ct));
+                        break;
+                    default:
+                        plan.Run(at, who, $"{label} {who} 同意", (ctx, ct) => DemoApprovalSteps.Approve(ctx, po, "同意", ct));
+                        break;
+                }
             }
             if (spec.End == "pending") continue;
             foreach (var percents in spec.Receipts)
