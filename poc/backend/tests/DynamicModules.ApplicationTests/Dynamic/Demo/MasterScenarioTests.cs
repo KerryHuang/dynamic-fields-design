@@ -20,6 +20,10 @@ public class MasterScenarioTests(DemoGeneratedFixture fx)
         return plan;
     }
 
+    /// <summary>規劃階段的 <see cref="MasterScenario.ForApp"/>：<see cref="DemoPlan.Records"/> 要等整份時間軸合併後才有，這裡直接讀這個情境建的記錄。</summary>
+    private static List<DemoRecord> Of(DemoPlan plan, string appId) =>
+        plan.Created.Where(r => r.ModuleCode == MasterScenario.PartnerModule && ((string[])r.Facts["apps"]!).Contains(appId)).ToList();
+
     [Fact]
     public void OnlyTheRolesTheOpenAppsNeed_AreCreated()
     {
@@ -28,7 +32,7 @@ public class MasterScenarioTests(DemoGeneratedFixture fx)
         var mes = PlanFor(DemoCatalog.MesAppId).Created;
         mes.Should().OnlyContain(r => r.ModuleCode == MasterScenario.PartnerModule, "MES 不用聯絡人");
         mes.Should().HaveCount(8).And.OnlyContain(p => (string)p.Facts["role"]! == "customer");
-        mes.Select(p => (string)p.Facts["name"]!).Should().StartWith("嵐岳精密", "沿用 MES 原本的虛構客戶名稱");
+        mes.Select(p => (string)p.Facts["name"]!).Should().Contain(["嵐岳精密", "岳峰精機"], "沿用 MES 原本的虛構客戶名稱").And.NotContain("禾晟電機", "減掉的四家改由 CRM 的客戶兼任");
 
         var crm = PlanFor(DemoCatalog.CrmAppId);
         var partners = crm.Created.Where(r => r.ModuleCode == MasterScenario.PartnerModule).ToList();
@@ -37,10 +41,45 @@ public class MasterScenarioTests(DemoGeneratedFixture fx)
 
         var inventory = PlanFor(DemoCatalog.InventoryAppId).Created;
         var stock = inventory.Where(r => r.ModuleCode == MasterScenario.PartnerModule).ToList();
-        stock.Select(p => (string)p.Facts["name"]!).Should().Equal(["昌盛鋼鐵", "宏達五金", "精工模料", "遠航機械", "新昇塑膠", "大成電子", "恆久工業"],
-            "沿用進銷存原本的虛構供應商與客戶名稱");
+        stock.Select(p => (string)p.Facts["name"]!).Should().Equal(["晨曦機械", "遠見電子", "新航物流", "昌盛鋼鐵", "宏達五金", "精工模料", "恆久工業"],
+            "三家供應商與一家只有進銷存用的客戶沿用原本的虛構名稱，其餘三家客戶由 CRM 的客戶兼任");
         stock.Count(p => (string)p.Facts["role"]! == "supplier").Should().Be(3);
         inventory.Count(r => r.ModuleCode == MasterScenario.ContactModule).Should().Be(7, "原本的聯絡人文字改成聯絡人主檔");
+    }
+
+    [Fact]
+    public void WithAllThreeApps_FourCrmCustomersAreAlsoMesAndThreeOfThemInventoryCustomers_EighteenCompaniesInTotal()
+    {
+        var plan = PlanFor(DemoCatalog.MesAppId, DemoCatalog.CrmAppId, DemoCatalog.InventoryAppId);
+        var partners = plan.Created.Where(r => r.ModuleCode == MasterScenario.PartnerModule).ToList();
+        partners.Should().HaveCount(18, "25 家降到 18 家");
+        partners.Select(p => (string)p.Facts["name"]!).Should().OnlyHaveUniqueItems();
+
+        var crm = Of(plan, DemoCatalog.CrmAppId);
+        var mes = Of(plan, DemoCatalog.MesAppId);
+        var inventory = Of(plan, DemoCatalog.InventoryAppId);
+        crm.Should().HaveCount(10);
+        mes.Should().HaveCount(8);
+        inventory.Should().HaveCount(7);
+        crm.Intersect(mes).Select(p => (string)p.Facts["name"]!).Should().Equal("晨曦機械", "遠見電子", "新航物流", "綠野食品");
+        crm.Intersect(inventory).Should().HaveCount(3);
+        mes.Intersect(inventory).Should().HaveCount(3);
+
+        // 同一筆往來對象只建一次，早於所有應用程式的第一張引用它的單據
+        partners.Should().OnlyContain(p => p.Facts.ContainsKey("apps"));
+        plan.Created.Count(r => r.ModuleCode == MasterScenario.ContactModule).Should().Be(17, "CRM 十位、進銷存七位");
+    }
+
+    [Fact]
+    public void Owners_SalesOwnTheCompaniesCrmOrMesUse_InventoryManagerOwnsTheInventoryOnlyCustomer()
+    {
+        var plan = PlanFor(DemoCatalog.MesAppId, DemoCatalog.CrmAppId, DemoCatalog.InventoryAppId);
+        var inventoryOnly = Of(plan, DemoCatalog.InventoryAppId)
+            .Where(p => !Of(plan, DemoCatalog.CrmAppId).Contains(p)).ToList();
+        inventoryOnly.Should().HaveCount(4);
+        inventoryOnly.Single(p => (string)p.Facts["role"]! == "customer").Facts["owner"].Should().Be("ops01", "進銷存客戶的負責人是進銷存主管，不是採購人員");
+        inventoryOnly.Where(p => (string)p.Facts["role"]! == "supplier").Select(p => (string)p.Facts["owner"]!).Should().OnlyContain(o => o == "buyer01");
+        Of(plan, DemoCatalog.CrmAppId).Select(p => (string)p.Facts["owner"]!).Should().OnlyContain(o => o == "sales01" || o == "sales02");
     }
 
     [Fact]
@@ -60,7 +99,7 @@ public class MasterScenarioTests(DemoGeneratedFixture fx)
         var role = await fx.Key(partner, "角色");
         var industry = await fx.Key(partner, "產業");
         var partners = await fx.Records(partner);
-        partners.Should().HaveCount(27, "CRM 十家、MES 八家、進銷存七家，加上兩筆由潛在客戶轉出的客戶");
+        partners.Should().HaveCount(20, "共 18 家（CRM 十家，其中四家兼 MES 客戶、三家兼進銷存客戶；MES 另四家、進銷存另四家），加上兩筆由潛在客戶轉出的客戶");
         var customer = await fx.Opt(partner, "角色", "客戶");
         var both = await fx.Opt(partner, "角色", "客戶與供應商");
         var supplier = await fx.Opt(partner, "角色", "供應商");

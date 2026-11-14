@@ -45,7 +45,7 @@ public class MoldCareQualityScenarioTests(DemoGeneratedFixture fx)
         customers.Select(c => DemoGeneratedFixture.Text(c, credit)).Distinct().Should().HaveCount(3);
         customers.Select(c => DemoGeneratedFixture.Text(c, site)).Should().OnlyHaveUniqueItems().And.OnlyContain(s => s!.EndsWith(".example.com"));
         var name = await fx.Key(partner, "名稱");
-        customers.Select(c => DemoGeneratedFixture.Text(c, name)).Should().Contain(["嵐岳精密", "禾晟電機"], "沿用原本的虛構名稱");
+        customers.Select(c => DemoGeneratedFixture.Text(c, name)).Should().Contain(["嵐岳精密", "晨曦機械"], "MES 自己的客戶沿用原本的虛構名稱，另外有與 CRM 共用的公司");
     }
 
     [Fact]

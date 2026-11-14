@@ -5,9 +5,9 @@ using DynamicModules.Domain.Repositories.Dynamic;
 
 namespace DynamicModules.Application.Dynamic.DemoService;
 
-/// <summary>產生前的衝突檢查：三個內建應用程式與還沒開的共用主檔的模組代碼、擴充模組的既有實體、應用程式是否已開啟、示範報表與儀表板名稱、示範人員與實體。</summary>
+/// <summary>產生前的衝突檢查：三個內建應用程式與還沒開的共用主檔的模組代碼、已開的共用主檔是否留有記錄、擴充模組的既有實體、應用程式是否已開啟、示範報表與儀表板名稱、示範人員與實體。</summary>
 public sealed class DemoPreflight(AppCatalog catalog, IModuleRepository modules, IDemoPeople people, IReportRepository reports,
-    IDashboardRepository dashboards, IAppRepository apps)
+    IDashboardRepository dashboards, IAppRepository apps, IRecordRepository records)
 {
     /// <summary>每一項衝突一則訊息；空清單表示可以產生。</summary>
     public async Task<IReadOnlyList<string>> ConflictsAsync(CancellationToken ct)
@@ -23,6 +23,11 @@ public sealed class DemoPreflight(AppCatalog catalog, IModuleRepository modules,
         foreach (var (masterId, m) in MasterModules())
             if (await apps.GetByKeyAsync(masterId, ct) is null && await modules.KeyExistsAsync(m.Key, ct))
                 conflicts.Add($"模組代碼 {m.Key} 已存在");
+        // 應用程式刪除後主檔會留下記錄；示範資料會再建同名公司與聯絡人，先擋下（要重跑請先清掉主檔記錄）
+        foreach (var (masterId, m) in MasterModules())
+            if (await apps.GetByKeyAsync(masterId, ct) is not null && await modules.GetByKeyAsync(m.Key, false, ct) is { } existing
+                && await records.AnyByModuleAsync(existing.Id, ct))
+                conflicts.Add($"共用主檔 {masterId} 的模組 {m.Key} 已有記錄");
         foreach (var name in DemoReports.Names)
             if (await reports.NameExistsAsync(name, ct)) conflicts.Add($"報表「{name}」已存在");
         foreach (var name in DemoDashboards.Names)
