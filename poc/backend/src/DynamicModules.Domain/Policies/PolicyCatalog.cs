@@ -124,6 +124,10 @@ public static class PolicyCatalog
     public static readonly PolicyDefinition ApprovalMaxAddSignStages =
         new("approval.maxAddSignStages", "approval", PolicyKind.Integer, PolicyScope.Module, "5", 1, 20, Unit: "count");
 
+    /// <summary>A36：逾期待簽的提醒間隔（設計 §12 的「超過 24 小時」）；負責人讀通知時，上次提醒已超過這個時數才補一則。</summary>
+    public static readonly PolicyDefinition ApprovalOverdueReminderHours =
+        new("approval.overdueReminderHours", "approval", PolicyKind.Integer, PolicyScope.Module, "24", 1, 720, Unit: "hours");
+
     /// <summary>A15：系統管理員是否略過狀態轉移上的群組限制（只管轉移群組，不影響其他權限）。</summary>
     public static readonly PolicyDefinition ApprovalAdminBypassTransitionGroups =
         new("approval.adminBypassTransitionGroups", "approval", PolicyKind.Boolean, PolicyScope.System, "true");
@@ -147,7 +151,7 @@ public static class PolicyCatalog
          OpsSlowRequestMs, OpsClientErrorCollection,
          ApprovalMaxStages, ApprovalMaxApprovers, ApprovalMaxDueHours, ApprovalMaxCommentLength, ApprovalMaxManagerLevel,
          ApprovalAllowSelfApproval, ApprovalAdminBypassTransitionGroups, ApprovalMaxAddSignUsers, ApprovalMaxAddSignStages,
-         ApprovalDefaultFallbackApprovers, ApprovalAlertRecipients];
+         ApprovalOverdueReminderHours, ApprovalDefaultFallbackApprovers, ApprovalAlertRecipients];
 
     public static PolicyDefinition? Find(string code) =>
         All.FirstOrDefault(d => string.Equals(d.Code, code, StringComparison.Ordinal));

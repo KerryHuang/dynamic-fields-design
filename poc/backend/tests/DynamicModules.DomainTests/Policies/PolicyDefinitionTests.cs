@@ -160,6 +160,21 @@ public class PolicyDefinitionTests
     }
 
     [Fact]
+    public void ApprovalOverdueReminderHours_FactoryRangeAndScope()
+    {
+        // 設計 §12 的「超過 24 小時」（A36）；技術上限 720 小時
+        var d = PolicyCatalog.ApprovalOverdueReminderHours;
+        d.Code.Should().Be("approval.overdueReminderHours");
+        d.Factory.Should().Be("24");
+        d.Scope.Should().Be(PolicyScope.Module);
+        d.Unit.Should().Be("hours");
+        d.Normalize("720").Should().Be("720");
+        d.Normalize("721").Should().BeNull();
+        d.Normalize("0").Should().BeNull();
+        PolicyCatalog.All.Should().Contain(d);
+    }
+
+    [Fact]
     public void ApprovalMaxApprovers_TechnicalMax50()
     {
         PolicyCatalog.ApprovalMaxApprovers.Scope.Should().Be(PolicyScope.Module);

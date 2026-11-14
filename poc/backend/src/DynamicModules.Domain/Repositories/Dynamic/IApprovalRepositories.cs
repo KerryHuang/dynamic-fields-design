@@ -109,6 +109,18 @@ public interface IApprovalInstanceRepository
     /// <summary>不追蹤：這位使用者可動作的 open 任務（負責人，或代理時的原簽核人）。</summary>
     Task<List<ApprovalTask>> ListOpenTasksOfAsync(string userId, CancellationToken ct);
 
+    /// <summary>
+    /// 逾期提醒的候選：負責人（AssigneeUserId，代理任務只算代理人）是這位使用者、任務 open、DueTime 早於 now、實例 pending，
+    /// 且 LastRemindedTime 為空或早於 remindedBefore（設計 §12）。
+    /// </summary>
+    Task<bool> AnyOverdueOpenAsync(string userId, DateTime now, DateTime remindedBefore, CancellationToken ct);
+
+    /// <summary>同 <see cref="AnyOverdueOpenAsync"/> 的條件（不看 LastRemindedTime）：逾期 open 任務所在的模組，去重。</summary>
+    Task<List<long>> ListOverdueOpenModuleIdsAsync(string userId, DateTime now, CancellationToken ct);
+
+    /// <summary>同 <see cref="AnyOverdueOpenAsync"/> 的條件，依 Id；track 為 true 時追蹤（要寫 LastRemindedTime）。</summary>
+    Task<List<ApprovalTask>> ListOverdueOpenAsync(string userId, DateTime now, DateTime remindedBefore, bool track, CancellationToken ct);
+
     /// <summary>這位使用者是這筆記錄某個 open 任務的可動作者：負責人，或 Reason = delegated 時的原簽核人（設計 §10.1）。</summary>
     Task<bool> IsOpenActorAsync(long recordId, string userId, CancellationToken ct);
 

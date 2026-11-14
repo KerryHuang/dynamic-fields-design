@@ -127,6 +127,7 @@ public static class DependencyInjection
         services.AddScoped<Dynamic.TaskService.TaskVisibilityService>();
         services.AddScoped<Dynamic.TaskService.ITaskNotifier, Dynamic.NotificationService.TaskNotificationWriter>();
         services.AddScoped<Dynamic.NotificationService.INotificationReminderSource, Dynamic.NotificationService.TaskReminderSource>();
+        services.AddScoped<Dynamic.NotificationService.INotificationReminderSource, Dynamic.ApprovalService.ApprovalReminderSource>();
         services.AddScoped<Dynamic.TaskRuleService.TaskRuleValidator>();
         services.AddScoped<Dynamic.TaskRuleService.TaskRuleEditor>();
         services.AddScoped<Dynamic.TaskRuleService.TaskRuleApplier>();

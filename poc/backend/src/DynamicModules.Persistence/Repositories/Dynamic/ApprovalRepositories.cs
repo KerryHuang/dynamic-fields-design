@@ -184,6 +184,23 @@ public class ApprovalInstanceRepository(DynamicDbContext db) : IApprovalInstance
         db.Set<ApprovalTask>().AsNoTracking().Where(t => t.Status == ApprovalTaskStatus.Open
             && (t.AssigneeUserId == userId || (t.OriginalUserId == userId && t.Reason == ApprovalTaskReason.Delegated))).ToListAsync(ct);
 
+    private IQueryable<ApprovalTask> OverdueOpen(string userId, DateTime now) =>
+        db.Set<ApprovalTask>().Where(t => t.Status == ApprovalTaskStatus.Open && t.AssigneeUserId == userId && t.DueTime != null && t.DueTime < now
+            && db.Set<ApprovalInstance>().Any(i => i.Id == t.InstanceId && i.Status == ApprovalInstanceStatus.Pending));
+
+    public Task<bool> AnyOverdueOpenAsync(string userId, DateTime now, DateTime remindedBefore, CancellationToken ct) =>
+        OverdueOpen(userId, now).AsNoTracking().AnyAsync(t => t.LastRemindedTime == null || t.LastRemindedTime < remindedBefore, ct);
+
+    public Task<List<long>> ListOverdueOpenModuleIdsAsync(string userId, DateTime now, CancellationToken ct) =>
+        OverdueOpen(userId, now).AsNoTracking()
+            .Select(t => db.Set<ApprovalInstance>().Where(i => i.Id == t.InstanceId).Select(i => i.ModuleId).First()).Distinct().ToListAsync(ct);
+
+    public Task<List<ApprovalTask>> ListOverdueOpenAsync(string userId, DateTime now, DateTime remindedBefore, bool track, CancellationToken ct)
+    {
+        var query = OverdueOpen(userId, now).Where(t => t.LastRemindedTime == null || t.LastRemindedTime < remindedBefore);
+        return (track ? query : query.AsNoTracking()).OrderBy(t => t.Id).ToListAsync(ct);
+    }
+
     public Task<bool> IsOpenActorAsync(long recordId, string userId, CancellationToken ct) =>
         db.Set<ApprovalTask>().AsNoTracking().AnyAsync(t => t.RecordId == recordId && t.Status == ApprovalTaskStatus.Open
             && (t.AssigneeUserId == userId || (t.OriginalUserId == userId && t.Reason == ApprovalTaskReason.Delegated)), ct);
