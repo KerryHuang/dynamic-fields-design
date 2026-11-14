@@ -1,3 +1,4 @@
+using DynamicModules.TestSupport;
 using DynamicModules.Application;
 using DynamicModules.Application.Common;
 using DynamicModules.Application.Common.Acting;
@@ -45,6 +46,7 @@ public sealed class DemoTestHost : IAsyncDisposable
         var services = new ServiceCollection();
         services.AddApplication();
         services.AddPersistenceRepositories();
+        services.AddTestEntities();
         services.AddScoped(_ => host._db.Context);
         services.AddScoped<ITransactionManager, EfTransactionManager>();
         services.AddScoped<IWorkSavepoints, EfWorkSavepoints>();

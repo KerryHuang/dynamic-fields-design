@@ -141,7 +141,7 @@ public class AppPackageFormatTests
     [Fact]
     public void References_DeclaredButUnusedRequirement_OnlyWarns()
     {
-        var json = AppTestPackages.Procure.Replace("\"name\": { \"zh-TW\": \"簡易採購\" } }", "\"name\": { \"zh-TW\": \"簡易採購\" }, \"requires\": { \"apps\": [ { \"id\": \"crm-lite\", \"modules\": [\"customer\"] } ], \"entities\": [\"sales.customer\"] } }");
+        var json = AppTestPackages.Procure.Replace("\"name\": { \"zh-TW\": \"簡易採購\" } }", "\"name\": { \"zh-TW\": \"簡易採購\" }, \"requires\": { \"apps\": [ { \"id\": \"crm-lite\", \"modules\": [\"customer\"] } ], \"entities\": [\"test.entity\"] } }");
         var result = Check(json);
         result.Errors.Should().BeEmpty();
         result.Warnings.Should().HaveCount(2);

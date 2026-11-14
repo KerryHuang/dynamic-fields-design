@@ -1180,8 +1180,8 @@ public class ReportsApiTests
         using var app = new TestApp();
         var w = await MakeWorld(app);
         var admin = app.AsUser();
-        var customer = await AddField(admin, w.Main, "reference", new { refTarget = new { kind = "entity", key = "sales.customer" } });
-        foreach (var key in new[] { "C-001", "C-001", "C-003" })
+        var customer = await AddField(admin, w.Main, "reference", new { refTarget = new { kind = "entity", key = "test.entity" } });
+        foreach (var key in new[] { "E-0001", "E-0001", "E-0003" })
             (await admin.PostAsJsonAsync($"{Base}/modules/{w.Main}/records", new
             {
                 values = new Dictionary<string, object> { [w.TitleKey] = "t", [w.AmountKey] = 10, [customer.Key] = key }
@@ -1201,15 +1201,15 @@ public class ReportsApiTests
             return TotalOf(await Run(admin, id), "n");
         }
 
-        (await CountWhere("eq", "C-003")).Should().Be(1);
-        (await CountWhere("ne", "C-003")).Should().Be(3);
-        (await CountWhere("in", new[] { "C-001" })).Should().Be(2);
+        (await CountWhere("eq", "E-0003")).Should().Be(1);
+        (await CountWhere("ne", "E-0003")).Should().Be(3);
+        (await CountWhere("in", new[] { "E-0001" })).Should().Be(2);
 
-        var ratio = await Create(admin, Def(w.Main, measures: [new { id = "r", kind = "ratio", field = (object?)null, condition = (object)new { field = via, op = "eq", value = "C-001" } }]));
+        var ratio = await Create(admin, Def(w.Main, measures: [new { id = "r", kind = "ratio", field = (object?)null, condition = (object)new { field = via, op = "eq", value = "E-0001" } }]));
         TotalOf(await Run(admin, ratio), "r").Should().Be(0.5m);
 
         // 文字運算子對鍵沒有意義，存檔就擋下
-        (await admin.PostAsJsonAsync(Reports, new { name = "x", definition = Def(w.Main, measures: [Count()], filters: [new { field = via, op = "contains", value = "C-" }]) }))
+        (await admin.PostAsJsonAsync(Reports, new { name = "x", definition = Def(w.Main, measures: [Count()], filters: [new { field = via, op = "contains", value = "E-" }]) }))
             .StatusCode.Should().Be(HttpStatusCode.BadRequest);
     }
 
@@ -1476,7 +1476,7 @@ public class ReportsApiTests
         using var app = new TestApp();
         var w = await MakeWorld(app, withChild: true);
         var admin = app.AsUser();
-        var customer = await AddField(admin, w.Main, "reference", new { refTarget = new { kind = "entity", key = "sales.customer" } });
+        var customer = await AddField(admin, w.Main, "reference", new { refTarget = new { kind = "entity", key = "test.entity" } });
         var first = await AddRecord(admin, w, 10, w.Options[0]);
         await AddRecord(admin, w, 20); // 沒有狀態：空白分組
         (await admin.PostAsJsonAsync($"{Base}/modules/{w.Child}/records", new

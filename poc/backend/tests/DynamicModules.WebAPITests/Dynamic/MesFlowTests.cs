@@ -303,10 +303,10 @@ public class MesFlowTests : IDisposable
     [Fact]
     public async Task Open_WhenACustomerExtensionModuleAlreadyExists_StillWorks_BecauseMesNoLongerExtendsTheCoreCustomer()
     {
-        // s2d-1f：MES 的客戶改用共用主檔往來對象，不再擴充核心實體 sales.customer，自建的客戶擴充不再擋下開啟
+        // s2d-1f：MES 的客戶改用共用主檔往來對象，不再擴充任何既有實體，自建的客戶擴充不再擋下開啟
         var res = await _admin.PostAsJsonAsync($"{Base}/modules", new
         {
-            key = "my-customer-ext", kind = "extension", hostEntityKey = "sales.customer", name = new Dictionary<string, string> { ["zh-TW"] = "自建客戶擴充" }
+            key = "my-customer-ext", kind = "extension", hostEntityKey = "test.entity", name = new Dictionary<string, string> { ["zh-TW"] = "自建客戶擴充" }
         });
         res.StatusCode.Should().Be(HttpStatusCode.Created, await res.Content.ReadAsStringAsync());
 
