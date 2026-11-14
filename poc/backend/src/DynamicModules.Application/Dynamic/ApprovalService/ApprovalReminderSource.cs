@@ -12,7 +12,7 @@ namespace DynamicModules.Application.Dynamic.ApprovalService;
 /// 以 <see cref="IBusinessTime.Now"/> 比對；<paramref name="today"/> 不用，因為間隔以小時計。
 /// </summary>
 public sealed class ApprovalReminderSource(
-    IApprovalInstanceRepository repo, IModuleRepository modules, ApprovalPolicies policies, ApprovalNotifier notifier, IBusinessTime time)
+    IApprovalInstanceRepository repo, ApprovalPolicies policies, ApprovalNotifier notifier, IBusinessTime time)
     : INotificationReminderSource
 {
     public async Task<bool> AnyDueAsync(string userId, DateOnly today, CancellationToken ct)
@@ -24,33 +24,36 @@ public sealed class ApprovalReminderSource(
         var shortest = int.MaxValue;
         foreach (var id in moduleIds) shortest = Math.Min(shortest, await policies.OverdueReminderHoursAsync(id, ct));
         if (!await repo.AnyOverdueOpenAsync(userId, now, now.AddHours(-shortest), ct)) return false;
-        return (await DueAsync(userId, now, track: false, ct)).Count > 0;
+        return (await DueAsync(userId, now, ct)).Count > 0;
     }
 
     public async Task AddDueAsync(string userId, DateOnly today, CancellationToken ct)
     {
         var now = time.Now;
         var notified = new HashSet<long>();
-        foreach (var (task, inst) in await DueAsync(userId, now, track: true, ct))
+        foreach (var (task, inst, interval) in await DueAsync(userId, now, ct))
         {
+            // 條件式認領：別的請求已先補過就不再寫通知（影響列數 1 才算數）
+            if (!await repo.TryClaimReminderAsync(task.Id, now, now.AddHours(-interval), ct)) continue;
             if (notified.Add(inst.Id)) await notifier.NotifyAsync(NotificationKinds.ApprovalOverdue, inst, [userId], exceptUserId: null, ct);
-            task.LastRemindedTime = now;
         }
     }
 
-    /// <summary>逐筆以任務所在模組的生效間隔與模組狀態確認；資料庫端先以最短可能的間隔（政策下限 1 小時）擋掉剛提醒過的。</summary>
-    private async Task<List<(ApprovalTask Task, ApprovalInstance Instance)>> DueAsync(string userId, DateTime now, bool track, CancellationToken ct)
+    /// <summary>
+    /// 候選任務（資料庫端已篩任務、實例與模組可寫）再逐筆以所在模組的生效間隔確認；實例一次載入、各模組的間隔經政策讀取器快取，不逐任務查。
+    /// 資料庫端先以最短可能的間隔（政策下限）擋掉剛提醒過的。
+    /// </summary>
+    private async Task<List<(ApprovalTask Task, ApprovalInstance Instance, int Interval)>> DueAsync(string userId, DateTime now, CancellationToken ct)
     {
-        var tasks = await repo.ListOverdueOpenAsync(userId, now, now.AddHours(-PolicyCatalog.ApprovalOverdueReminderHours.Min), track, ct);
+        var tasks = await repo.ListOverdueOpenAsync(userId, now, now.AddHours(-PolicyCatalog.ApprovalOverdueReminderHours.Min), ct);
         var instances = (await repo.ListInstancesAsync([.. tasks.Select(t => t.InstanceId).Distinct()], ct)).ToDictionary(i => i.Id);
-        var result = new List<(ApprovalTask, ApprovalInstance)>();
+        var result = new List<(ApprovalTask, ApprovalInstance, int)>();
         foreach (var task in tasks)
         {
             if (!instances.TryGetValue(task.InstanceId, out var inst)) continue;
             var interval = await policies.OverdueReminderHoursAsync(inst.ModuleId, ct);
             if (task.LastRemindedTime is { } last && last >= now.AddHours(-interval)) continue;
-            if (!(await modules.GetByIdAsync(inst.ModuleId, includeChildren: false, ct)).IsWritable()) continue;
-            result.Add((task, inst));
+            result.Add((task, inst, interval));
         }
         return result;
     }
