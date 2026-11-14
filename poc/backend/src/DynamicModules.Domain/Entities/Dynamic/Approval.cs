@@ -142,7 +142,14 @@ public static class ApprovalInstanceStatus
 
 public static class ApprovalStageStatus
 {
-    public const string Queued = "queued", Active = "active", Approved = "approved", Skipped = "skipped", Returned = "returned", Closed = "closed";
+    public const string Queued = "queued", Active = "active", Approved = "approved", Skipped = "skipped", Returned = "returned", Closed = "closed",
+        Passed = "passed", Waiting = "waiting";
+}
+
+/// <summary>graph 實例節點實例的關閉原因（流程圖設計 §8.3、§8.4）；sequence 實例不寫。</summary>
+public static class ApprovalCloseReasons
+{
+    public const string BranchCancelled = "branchCancelled", InstanceEnded = "instanceEnded";
 }
 
 public static class ApprovalTaskStatus
@@ -159,7 +166,7 @@ public static class ApprovalActions
 {
     public const string Submit = "submit", Approve = "approve", Reject = "reject", Return = "return", Withdraw = "withdraw",
         Transfer = "transfer", AddSign = "add-sign", Skip = "skip", Cancel = "cancel", Complete = "complete", Reroute = "reroute",
-        ContentChanged = "content-changed", Fallback = "fallback", NotDelegated = "not-delegated", Reassign = "reassign";
+        ContentChanged = "content-changed", Fallback = "fallback", NotDelegated = "not-delegated", Reassign = "reassign", BranchCancelled = "branch-cancelled";
 
     /// <summary>算「處理了任務」的動作（我已處理、結束後的歷程查看權）：同意、加簽、退回上一關、退回發起人、轉交；管理員改派、終止不算。</summary>
     public static readonly IReadOnlyList<string> TaskHandled = [Approve, AddSign, Return, Reject, Transfer];
