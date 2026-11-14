@@ -306,7 +306,7 @@ internal static class ApprovalViews
         }).ToList();
         var actions = allActions.Where(a => a.InstanceId == i.Id).OrderBy(a => a.Id).Select(a => new ApprovalActionView(a.Action, a.ActorUserId, Name(a.ActorUserId),
             a.OnBehalfOfUserId, a.TargetUserIds ?? [], a.Comment, Data(a, hiddenFieldIds), a.CreatedTime,
-            (a.TargetUserIds ?? []).Select(Name).ToList())).ToList();
+            (a.TargetUserIds ?? []).Select(Name).ToList(), a.OnBehalfOfUserId is { } behalf ? Name(behalf) : null)).ToList();
         // 撤回資格同 WithdrawApprovalHandler：目前關卡還沒有任何同意或退回
         var current = runs.FirstOrDefault(r => r.Id == i.CurrentStageRunId) ?? runs.LastOrDefault(r => r.Status == ApprovalStageStatus.Active);
         var canWithdraw = pending && writable && i.InitiatorUserId == me

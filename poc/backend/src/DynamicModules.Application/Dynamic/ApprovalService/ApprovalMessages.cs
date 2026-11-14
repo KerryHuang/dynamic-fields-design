@@ -129,6 +129,10 @@ public static class ApprovalMessages
     public static MessageRef AddSignTooManyUsers(int max) => MessageRef.Of(MessageText.ApprovalAddSignTooManyUsers, max);
     public static MessageRef AddSignLimit(int max) => MessageRef.Of(MessageText.ApprovalAddSignLimit, max);
     public static readonly MessageRef AddSignModeInvalid = MessageRef.Of(MessageText.ApprovalAddSignModeInvalid);
+    public static readonly MessageRef DelegateSelf = MessageRef.Of(MessageText.ApprovalDelegateSelf);
+    public static readonly MessageRef DelegateInactive = MessageRef.Of(MessageText.ApprovalDelegateInactive);
+    public static readonly MessageRef DelegatePeriod = MessageRef.Of(MessageText.ApprovalDelegatePeriod);
+    public static readonly MessageRef DelegateEnded = MessageRef.Of(MessageText.ApprovalDelegateEnded);
     public static readonly MessageRef RuntimeInvalid = MessageRef.Of(MessageText.ApprovalRuntimeInvalid);
     public static readonly MessageRef RecordGone = MessageRef.Of(MessageText.ApprovalRecordGone);
     public static readonly MessageRef NoWorkflow = MessageRef.Of(MessageText.ApprovalNoWorkflow);

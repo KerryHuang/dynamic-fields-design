@@ -121,3 +121,16 @@ public interface IApprovalInstanceRepository
     void AddAction(ApprovalAction a);
     void AddSnapshotRows(IEnumerable<ApprovalInstanceFlow> rows);
 }
+
+/// <summary>個人代理設定（設計 §7.7、§13.5）：一人一筆，起訖是營運日（含頭尾）。</summary>
+public interface IApprovalDelegateRepository
+{
+    /// <summary>追蹤。</summary>
+    Task<ApprovalDelegate?> GetAsync(string userId, CancellationToken ct);
+
+    /// <summary>這些使用者在 today 有效、代理人仍啟用的代理：userId → delegateUserId。</summary>
+    Task<Dictionary<string, string>> ActiveDelegatesAsync(IReadOnlyCollection<string> userIds, DateOnly today, CancellationToken ct);
+
+    void Add(ApprovalDelegate d);
+    void Remove(ApprovalDelegate d);
+}

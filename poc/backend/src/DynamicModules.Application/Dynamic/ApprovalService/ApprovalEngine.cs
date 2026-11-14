@@ -108,7 +108,11 @@ public sealed class ApprovalEngine(
         run.DueTime = dueHours is { } h ? now.AddHours(h) : null;
         if (run.Id == 0) repo.AddRun(run);   // 排隊中的加簽關卡已經存在，只改狀態
         await uow.CommitAsync(ct);
-        var created = await tasks.CreateAsync(inst, run, seats, ct);
+        var (created, notes) = await tasks.CreateAsync(inst, run, seats, ct);
+        // 代理沒有套用：Targets 是本人與代理人（畫面顯示兩人姓名），DataJson 帶原因（設計 §7.7、計畫 J11）
+        foreach (var note in notes)
+            Log(inst, ApprovalActions.NotDelegated, SystemActor, run.Id, targets: [note.UserId, note.DelegateUserId],
+                data: JsonSerializer.Serialize(new { userId = note.UserId, delegateUserId = note.DelegateUserId, reason = note.Reason }));
         foreach (var seat in seats.Where(x => x.Reason == ApprovalTaskReason.Fallback && x.FallbackFor is not null))
             // 畫面依 kind 用使用者語系組文字；comment 是固定繁中，只留給稽核
             Log(inst, ApprovalActions.Fallback, SystemActor, run.Id, comment: ApprovalMessages.FallbackNote(seat.FallbackFor!),

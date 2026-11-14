@@ -62,9 +62,12 @@ public sealed class ApprovalActionSupport(
 
     public static ServiceResult Bad(string key, MessageRef message) => ServiceResult.Invalid(key, message);
 
-    /// <summary>會簽一人一票（設計 §7.7）：同一人在同一關已經同意過，不能再處理（同意或退回）另一個任務。</summary>
+    /// <summary>
+    /// 會簽一人一票（設計 §7.7）：同一人在同一關已經同意過，不能再處理（同意或退回）另一個任務。
+    /// 「同意過」看負責人或代理任務的本人（計畫 J9）：不論以本人或代理身分，同一關只算一票。
+    /// </summary>
     public static bool AlreadyApprovedInStage(IEnumerable<ApprovalTask> tasks, ApprovalTask me, string userId) =>
-        tasks.Any(t => t.StageRunId == me.StageRunId && t.Id != me.Id && t.Status == ApprovalTaskStatus.Approved && t.AssigneeUserId == userId);
+        tasks.Any(t => t.StageRunId == me.StageRunId && t.Id != me.Id && t.Status == ApprovalTaskStatus.Approved && ApprovalActionRules.IsActor(t, userId));
 
     /// <summary>排隊中的加簽關卡改 closed（退回、撤回；設計 §7.6）。</summary>
     public static void CloseQueued(IEnumerable<ApprovalStageRun> runs, DateTime now)
@@ -137,17 +140,19 @@ public sealed class ApprovalApprover(
         }
 
         var now = time.Now;
+        var onBehalfOf = ApprovalActionRules.OnBehalfOf(me, user.UserId);
         me.Status = ApprovalTaskStatus.Approved;
         me.ActedTime = now;
         if (addSign is null)
             engine.Log(inst, ApprovalActions.Approve, user.UserId, run.Id, me.Id, ApproveTaskHandler.Clean(comment),
-                data: values.Count > 0 ? JsonSerializer.Serialize(values.Keys) : null);
+                data: values.Count > 0 ? JsonSerializer.Serialize(values.Keys) : null, onBehalfOf: onBehalfOf);
         else
         {
             // 位置在寫這次的 add-sign 歷程之前算：同一關先前加簽出的關卡數
             var priorAddSigns = (await repo.ListActionsAsync([inst.Id], ct)).Count(a => a.Action == ApprovalActions.AddSign && a.StageRunId == run.Id);
             engine.Log(inst, ApprovalActions.AddSign, user.UserId, run.Id, me.Id, ApproveTaskHandler.Clean(comment), targets: [.. addSign.UserIds],
-                data: values.Count > 0 ? JsonSerializer.Serialize(new { mode = addSign.Mode, editedKeys = values.Keys }) : JsonSerializer.Serialize(new { mode = addSign.Mode }));
+                data: values.Count > 0 ? JsonSerializer.Serialize(new { mode = addSign.Mode, editedKeys = values.Keys }) : JsonSerializer.Serialize(new { mode = addSign.Mode }),
+                onBehalfOf: onBehalfOf);
             // 排隊中的加簽關卡：這一關完成後、下一個定義關卡之前依 Seq 啟動（設計 §7.6「插在目前關卡之後」；a3c 審查 S1）。
             // 位置緊接目前關卡與它先前加簽出的關卡（同一關先加簽的先簽）；排在後面的其他排隊關卡（例如巢狀加簽時，上一層其他人的加簽）順延一號
             var seq = run.Seq + 1 + priorAddSigns;
@@ -282,13 +287,14 @@ public class RejectTaskHandler(
         if (ApprovalActionSupport.AlreadyApprovedInStage(tasks, me, user.UserId)) return ServiceResult.Conflict(ApprovalMessages.StageHandled);
         var run = runs.Single(r => r.Id == me.StageRunId);
         var now = time.Now;
+        var onBehalfOf = ApprovalActionRules.OnBehalfOf(me, user.UserId);
 
         if (request.To == ToPrevious)
         {
             var previous = ApprovalPath.Previous(runs, run);
             if (previous is null) return ApprovalActionSupport.Bad("to", ApprovalMessages.NoPreviousStage);
             Reject(me, run, tasks, runs, now, ApprovalStageStatus.Returned);
-            engine.Log(inst, ApprovalActions.Return, user.UserId, run.Id, me.Id, request.Comment);
+            engine.Log(inst, ApprovalActions.Return, user.UserId, run.Id, me.Id, request.Comment, onBehalfOf: onBehalfOf);
             await uow.CommitAsync(ct);
             var restartSeq = runs.Max(r => r.Seq) + 1;
             var restart = await engine.RestartStageAsync(inst, module, await support.ValuesAsync(inst.RecordId, ct), previous, restartSeq, ct);
@@ -312,7 +318,7 @@ public class RejectTaskHandler(
         inst.CompletedTime = now;
         inst.CurrentStageRunId = null;
         context.Touch(inst.RecordId);
-        engine.Log(inst, ApprovalActions.Reject, user.UserId, run.Id, me.Id, request.Comment);
+        engine.Log(inst, ApprovalActions.Reject, user.UserId, run.Id, me.Id, request.Comment, onBehalfOf: onBehalfOf);
         if (def.RejectTo is { } rt && rt != inst.FromOptionId)
         {
             // 執行前再驗（設計 §5.2、§8.3）：退回轉移已定義、不需簽核、不會讓單據不簽就進入鎖定狀態
@@ -397,7 +403,7 @@ public class TransferTaskHandler(
                 tasks.Where(t => t.StageRunId == me.StageRunId)) is { } bad)
             return ApprovalActionSupport.Bad("userId", bad);
 
-        await handover.HandOverAsync(inst, me, request.UserId, ApprovalActions.Transfer, user.UserId, null,
+        await handover.HandOverAsync(inst, me, request.UserId, ApprovalActions.Transfer, user.UserId, ApprovalActionRules.OnBehalfOf(me, user.UserId),
             ApproveTaskHandler.Clean(request.Comment), ct);
         await uow.CommitAsync(ct);
         return ServiceResult.Success(new ApprovalActionResponse(ApprovalOutcomes.Transferred, inst.Id, inst.RowVersion));

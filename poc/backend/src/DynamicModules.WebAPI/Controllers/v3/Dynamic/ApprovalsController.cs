@@ -19,6 +19,7 @@ public class ApprovalsController(IMediator mediator) : ControllerBase
     public sealed record CancelBody(string RowVersion, string Comment);
     public sealed record ReassignBody(string RowVersion, string UserId, string? Comment);
     public sealed record PreviewBody(long To);
+    public sealed record DelegateBody(string DelegateUserId, DateOnly StartDate, DateOnly EndDate);
 
     [HttpPost("approval-tasks/{id:long}/approve")]
     public async Task<IActionResult> Approve(long id, ApproveBody body) =>
@@ -47,6 +48,19 @@ public class ApprovalsController(IMediator mediator) : ControllerBase
     [HttpPost("approval-instances/{id:long}/cancel")]
     public async Task<IActionResult> Cancel(long id, CancelBody body) =>
         (await mediator.Send(new CancelApprovalRequest(id, body.RowVersion, body.Comment))).ToActionResult(this);
+
+    /// <summary>自己的代理設定；沒有設定時回 200、本文為空（設計 §13.5、計畫 J15）。</summary>
+    [HttpGet("me/approval-delegate")]
+    public async Task<IActionResult> GetMyDelegate() =>
+        (await mediator.Send(new GetMyApprovalDelegateRequest())).ToActionResult(this);
+
+    [HttpPut("me/approval-delegate")]
+    public async Task<IActionResult> SaveMyDelegate(DelegateBody body) =>
+        (await mediator.Send(new SaveMyApprovalDelegateRequest(body.DelegateUserId, body.StartDate, body.EndDate))).ToActionResult(this);
+
+    [HttpDelete("me/approval-delegate")]
+    public async Task<IActionResult> ClearMyDelegate() =>
+        (await mediator.Send(new ClearMyApprovalDelegateRequest())).ToActionResult(this);
 
     [HttpGet("records/{id:long}/approval")]
     public async Task<IActionResult> GetRecordApproval(long id) =>

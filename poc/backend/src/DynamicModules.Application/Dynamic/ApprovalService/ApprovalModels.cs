@@ -43,9 +43,13 @@ public static class ApprovalActionRules
             ? ApprovalMessages.TargetInStage : null;
     }
 
-    /// <summary>Assignee，或 Reason = delegated 時的 Original（a3 用）。</summary>
+    /// <summary>可動作者：Assignee，或 Reason = delegated 時的 Original（本人仍可自己處理，設計 §7.7）。</summary>
     public static bool IsActor(Domain.Entities.Dynamic.ApprovalTask t, string userId) =>
         t.AssigneeUserId == userId || (t.Reason == Domain.Entities.Dynamic.ApprovalTaskReason.Delegated && t.OriginalUserId == userId);
+
+    /// <summary>代辦歷程（計畫 J8）：代理人處理代理任務時回本人；本人自己處理或不是代理任務時回 null。</summary>
+    public static string? OnBehalfOf(Domain.Entities.Dynamic.ApprovalTask t, string userId) =>
+        t.Reason == Domain.Entities.Dynamic.ApprovalTaskReason.Delegated && t.AssigneeUserId == userId && t.OriginalUserId != userId ? t.OriginalUserId : null;
 }
 
 // ── 查詢（設計 §10.2、§13.3、§13.4、§15） ──
@@ -64,7 +68,7 @@ public sealed record ApprovalStageView(long Id, int Seq, string? StageCode, I18n
     IReadOnlyList<string>? AddSignNames = null);
 
 public sealed record ApprovalActionView(string Action, string ActorUserId, string ActorName, string? OnBehalfOfUserId, IReadOnlyList<string> TargetUserIds,
-    string? Comment, JsonElement? Data, DateTime CreatedTime, IReadOnlyList<string>? TargetNames = null);
+    string? Comment, JsonElement? Data, DateTime CreatedTime, IReadOnlyList<string>? TargetNames = null, string? OnBehalfOfName = null);
 
 public sealed record ApprovalInstanceView(long Id, string Status, string RouteKind, I18nText? FlowName, long FromOptionId, long ToOptionId,
     string InitiatorUserId, DateTime SubmittedTime, DateTime? CompletedTime, string RowVersion, IReadOnlyList<ApprovalStageView> Stages,

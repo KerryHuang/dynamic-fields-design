@@ -197,3 +197,22 @@ public class ApprovalInstanceRepository(DynamicDbContext db) : IApprovalInstance
     public void AddAction(ApprovalAction a) => db.Set<ApprovalAction>().Add(a);
     public void AddSnapshotRows(IEnumerable<ApprovalInstanceFlow> rows) => db.Set<ApprovalInstanceFlow>().AddRange(rows);
 }
+
+public class ApprovalDelegateRepository(DynamicDbContext db) : IApprovalDelegateRepository
+{
+    public Task<ApprovalDelegate?> GetAsync(string userId, CancellationToken ct) =>
+        db.Set<ApprovalDelegate>().FirstOrDefaultAsync(d => d.UserId == userId, ct);
+
+    public async Task<Dictionary<string, string>> ActiveDelegatesAsync(IReadOnlyCollection<string> userIds, DateOnly today, CancellationToken ct)
+    {
+        if (userIds.Count == 0) return [];
+        return await (
+            from d in db.Set<ApprovalDelegate>().AsNoTracking()
+            join u in db.Set<AppUser>().AsNoTracking() on d.DelegateUserId equals u.UserId
+            where userIds.Contains(d.UserId) && d.StartDate <= today && d.EndDate >= today && u.IsActive
+            select new { d.UserId, d.DelegateUserId }).ToDictionaryAsync(x => x.UserId, x => x.DelegateUserId, ct);
+    }
+
+    public void Add(ApprovalDelegate d) => db.Set<ApprovalDelegate>().Add(d);
+    public void Remove(ApprovalDelegate d) => db.Set<ApprovalDelegate>().Remove(d);
+}

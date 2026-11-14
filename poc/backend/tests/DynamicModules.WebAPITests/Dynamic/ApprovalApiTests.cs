@@ -543,4 +543,34 @@ public class ApprovalApiTests : IDisposable
         var bad = await _admin.GetAsync($"{Base}/approval-tasks?box=submitted&status=x");
         bad.StatusCode.Should().Be(HttpStatusCode.BadRequest);
     }
+    [Fact]
+    [Trait("Category", "Postgres")]
+    public async Task Delegate_PutGetDelete_JsonShape()
+    {
+        _app.Clock.Fixed = new DateTime(2026, 11, 4, 9, 0, 0);
+        var me = _app.AsUser("sales01");
+
+        var none = await me.GetAsync($"{Base}/me/approval-delegate");
+        none.StatusCode.Should().Be(HttpStatusCode.OK);
+        (await none.Content.ReadAsStringAsync()).Should().BeEmpty();   // 沒有設定：200、本文為空
+
+        var put = await me.PutAsJsonAsync($"{Base}/me/approval-delegate", new { delegateUserId = "sales02", startDate = "2026-11-04", endDate = "2026-11-06" });
+        put.StatusCode.Should().Be(HttpStatusCode.OK, await put.Content.ReadAsStringAsync());
+        var saved = await JsonOf(put);
+        saved.EnumerateObject().Select(p => p.Name).Should().BeEquivalentTo("delegateUserId", "delegateName", "startDate", "endDate", "active");
+        saved.GetProperty("delegateUserId").GetString().Should().Be("sales02");
+        saved.GetProperty("startDate").GetString().Should().Be("2026-11-04");
+        saved.GetProperty("endDate").GetString().Should().Be("2026-11-06");
+        saved.GetProperty("active").GetBoolean().Should().BeTrue();
+
+        var got = await JsonOf(await me.GetAsync($"{Base}/me/approval-delegate"));
+        got.GetProperty("delegateName").GetString().Should().Be(saved.GetProperty("delegateName").GetString());
+
+        var bad = await me.PutAsJsonAsync($"{Base}/me/approval-delegate", new { delegateUserId = "sales01", startDate = "2026-11-04", endDate = "2026-11-06" });
+        bad.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+        (await JsonOf(bad)).GetProperty("errors").TryGetProperty("delegateUserId", out _).Should().BeTrue();
+
+        (await me.DeleteAsync($"{Base}/me/approval-delegate")).StatusCode.Should().Be(HttpStatusCode.OK);
+        (await (await me.GetAsync($"{Base}/me/approval-delegate")).Content.ReadAsStringAsync()).Should().BeEmpty();
+    }
 }
