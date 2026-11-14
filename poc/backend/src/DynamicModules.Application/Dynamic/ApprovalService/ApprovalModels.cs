@@ -47,16 +47,16 @@ public static class ApprovalActionRules
     }
 
     /// <summary>
-    /// 轉交、改派、加簽對象的檢查，依序回第一個不符合的訊息：不存在或停用、是自己、是發起人（allowSelf 為 false 時）、
+    /// 轉交、改派、加簽對象的檢查，依序回第一個不符合的訊息：不存在或停用、是自己（actor 為 null 時不檢查，改派用）、是發起人（allowSelf 為 false 時）、
     /// 這一關已有票（任務不是 transferred 的負責人，或代理任務的本人）；通過回 null。
     /// </summary>
-    public static MessageRef? TargetError(string target, string actor, string initiator, bool allowSelf, IReadOnlySet<string> activeUsers,
+    public static MessageRef? TargetError(string target, string? actor, string initiator, bool allowSelf, IReadOnlySet<string> activeUsers,
         IEnumerable<Domain.Entities.Dynamic.ApprovalTask> stageTasks)
     {
         if (!activeUsers.Contains(target)) return ApprovalMessages.TargetInactive;
         if (target == actor) return ApprovalMessages.TargetSelf;
         if (!allowSelf && target == initiator) return ApprovalMessages.TargetInitiator;
-        return stageTasks.Any(t => t.Status != Domain.Entities.Dynamic.ApprovalTaskStatus.Transferred && (t.AssigneeUserId == target
+        return stageTasks.Any(t => t.Status is not (Domain.Entities.Dynamic.ApprovalTaskStatus.Transferred or Domain.Entities.Dynamic.ApprovalTaskStatus.Reassigned) && (t.AssigneeUserId == target
             || t is { Reason: Domain.Entities.Dynamic.ApprovalTaskReason.Delegated } && t.OriginalUserId == target))
             ? ApprovalMessages.TargetInStage : null;
     }

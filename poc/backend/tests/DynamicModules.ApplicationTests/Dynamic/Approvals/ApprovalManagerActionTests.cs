@@ -235,10 +235,10 @@ public class ApprovalManagerActionTests : ApprovalTestBase
         res.IsSuccess.Should().BeTrue(Dump(res));
         ((ApprovalActionResponse)res.Data!).Outcome.Should().Be(ApprovalOutcomes.Reassigned);
         var tasks = TasksOf(id);
-        tasks.Single(t => t.Id == old.Id).Status.Should().Be(ApprovalTaskStatus.Transferred);
+        tasks.Single(t => t.Id == old.Id).Status.Should().Be(ApprovalTaskStatus.Reassigned);
         var added = tasks.Single(t => t.AssigneeUserId == "fin1");
         added.Status.Should().Be(ApprovalTaskStatus.Open);
-        added.Reason.Should().Be(ApprovalTaskReason.Transferred);
+        added.Reason.Should().Be(ApprovalTaskReason.Reassigned);
         added.OriginalUserId.Should().Be("gm");
         added.SeatKey.Should().Be(old.SeatKey);
         added.DueTime.Should().Be(old.DueTime);
@@ -255,7 +255,7 @@ public class ApprovalManagerActionTests : ApprovalTestBase
     {
         var (_, id) = await Stage1();
         (await Reassign(id, "admin", "gm", "admin")).IsSuccess.Should().BeTrue();
-        Open(id, "admin").Reason.Should().Be(ApprovalTaskReason.Transferred);
+        Open(id, "admin").Reason.Should().Be(ApprovalTaskReason.Reassigned);
 
         var r = await Scenario3("pp");
         var own = await SubmitAs(r, "admin", 50000);   // 管理員自己送的單：總額 5 萬走 B 流程，採購主管 buyer2
@@ -301,6 +301,51 @@ public class ApprovalManagerActionTests : ApprovalTestBase
         var (_, id) = await Stage1();
         var res = await Reassign(id, "admin", "gm", "gm");   // 接手的人就是現在的負責人
         res.IsInvalid.Should().BeTrue(Dump(res));
+        res.Errors["userId"].Should().Equal(ApprovalMessages.TargetInStage.Resolve(null));
+    }
+
+    [Fact]
+    public async Task Reassign_StaleRowVersion_409()
+    {
+        var (_, id) = await Stage1();
+        var before = Inst(id).RowVersion;
+        var actions = ActionsOf(id).Count;
+
+        var res = await Reassign(id, "admin", "gm", "fin1", rowVersion: "stale");
+
+        res.IsConflict.Should().BeTrue(Dump(res));
+        TasksOf(id).Should().ContainSingle(t => t.AssigneeUserId == "gm" && t.Status == ApprovalTaskStatus.Open);
+        ActionsOf(id).Count.Should().Be(actions);
+        Inst(id).RowVersion.Should().Be(before);
+    }
+
+    [Fact]
+    public async Task Cancel_ClosedModule_NonManager_403()
+    {
+        var (r, id) = await Stage1();
+        As("admin");
+        await RevokeAll(r.Module);   // gm 沒有 Read、也沒有 Approve；任務的臨時讀取不算管理員
+        await Db.Context.Set<Module>().Where(m => m.Key == r.Module).ExecuteUpdateAsync(s => s.SetProperty(m => m.Status, ModuleStatus.Closed));
+        Db.Context.ChangeTracker.Clear();
+
+        var res = await Cancel(id, "gm");
+
+        res.IsForbidden.Should().BeTrue(Dump(res));
+        Inst(id).Status.Should().Be(ApprovalInstanceStatus.Pending);
+    }
+
+    [Fact]
+    public async Task Reassign_ClosedModule_NonManager_403()
+    {
+        var (r, id) = await Stage1();
+        As("admin");
+        await RevokeAll(r.Module);
+        await Db.Context.Set<Module>().Where(m => m.Key == r.Module).ExecuteUpdateAsync(s => s.SetProperty(m => m.Status, ModuleStatus.Closed));
+        Db.Context.ChangeTracker.Clear();
+
+        var res = await Reassign(id, "gm", "gm", "fin1");
+
+        res.IsForbidden.Should().BeTrue(Dump(res));
     }
 
     [Fact]

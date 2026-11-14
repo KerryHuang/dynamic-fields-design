@@ -62,6 +62,12 @@ public sealed class ApprovalReader(IApprovalInstanceRepository repo, IDynamicAcc
         module.IsReadable() && (await guard.AuthorizeAsync(module, PermissionAction.Approve, ct)).Permissions is { } approve
         && InScope(approve, record.OwnerUserId);
 
+    /// <summary>動作前的管理員閘門：模組已關閉時 guard 擋 Approve 軸，改看 Read（含資料範圍），讓讀得到的人得到 409、其他人 403。</summary>
+    public async Task<bool> ManagerGateAsync(Module module, Record record, CancellationToken ct) =>
+        module.Status == ModuleStatus.Closed
+            ? (await guard.AuthorizeAsync(module, PermissionAction.Read, ct)).Permissions is { } read && InScope(read, record.OwnerUserId)
+            : await IsManagerAsync(module, record, ct);
+
     public static bool InScope(EffectivePermissions p, string ownerUserId) => p.OwnerUserIds is null || p.OwnerUserIds.Contains(ownerUserId);
 }
 

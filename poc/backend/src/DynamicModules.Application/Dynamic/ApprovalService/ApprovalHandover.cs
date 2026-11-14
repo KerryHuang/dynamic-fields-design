@@ -5,20 +5,21 @@ using DynamicModules.Domain.Repositories.Dynamic;
 namespace DynamicModules.Application.Dynamic.ApprovalService;
 
 /// <summary>
-/// 交接（設計 §7.5、§7.8）：轉交與管理員改派共用。舊任務改 transferred（ActedTime = 現在）；新任務同席位、同期限，
-/// Reason = transferred，OriginalUserId 沿用最初的人；寫歷程並通知新負責人。新任務不套代理（點名的人就是那個人）。
+/// 交接（設計 §7.5、§7.8）：轉交與管理員改派共用。舊任務改 transferred（改派是 reassigned，ActedTime = 現在）；新任務同席位、同期限，
+/// Reason = transferred（改派是 reassigned），OriginalUserId 沿用最初的人；寫歷程並通知新負責人。新任務不套代理（點名的人就是那個人）。
 /// </summary>
 public sealed class ApprovalHandover(IApprovalInstanceRepository repo, ApprovalEngine engine, ApprovalNotifier notifier, IBusinessTime time)
 {
     public async Task<ApprovalTask> HandOverAsync(ApprovalInstance inst, ApprovalTask from, string toUserId, string action, string actor,
         string? onBehalfOf, string? comment, CancellationToken ct)
     {
-        from.Status = ApprovalTaskStatus.Transferred;
+        var reassign = action == ApprovalActions.Reassign;
+        from.Status = reassign ? ApprovalTaskStatus.Reassigned : ApprovalTaskStatus.Transferred;
         from.ActedTime = time.Now;
         var added = new ApprovalTask
         {
             StageRunId = from.StageRunId, InstanceId = from.InstanceId, RecordId = from.RecordId, AssigneeUserId = toUserId,
-            OriginalUserId = from.OriginalUserId, SeatKey = from.SeatKey, Reason = ApprovalTaskReason.Transferred,
+            OriginalUserId = from.OriginalUserId, SeatKey = from.SeatKey, Reason = reassign ? ApprovalTaskReason.Reassigned : ApprovalTaskReason.Transferred,
             Status = ApprovalTaskStatus.Open, CreatedTime = time.Now, DueTime = from.DueTime
         };
         repo.AddTask(added);

@@ -16,15 +16,15 @@ public sealed class ApprovalActionSupport(
     IApprovalInstanceRepository repo, IModuleRepository modules, IRecordRepository records, ApprovalPolicies policies, ApprovalReader reader)
 {
     /// <summary>
-    /// 呼叫者是這個實例的簽核管理員（設計 §7.8）；實例、模組或記錄不存在回 false，由 LoadAsync 回 404。
-    /// 已關閉的模組 guard 一律擋 Approve 軸，這裡放行，讓 LoadAsync 緊接著回 409（什麼都不寫）。
+    /// 呼叫者是這個實例的簽核管理員（設計 §7.8）；實例、模組或記錄不存在回 false（LoadAsync 的 authorize 回 403，實例不存在才 404）。
+    /// 已關閉的模組改看 Read 軸（見 <see cref="ApprovalReader.ManagerGateAsync"/>），fail closed。
     /// </summary>
     public async Task<bool> ManagerGateAsync(long instanceId, CancellationToken ct)
     {
         if (await repo.GetAsync(instanceId, ct) is not { } inst) return false;
         var module = await modules.GetByIdAsync(inst.ModuleId, includeChildren: false, ct);
         var record = await records.GetAsync(inst.RecordId, ct);
-        return module is not null && record is not null && (module.Status == ModuleStatus.Closed || await reader.IsManagerAsync(module, record, ct));
+        return module is not null && record is not null && await reader.ManagerGateAsync(module, record, ct);
     }
 
     /// <summary>意見檢查（字數上限讀政策）；通過回 null。</summary>
@@ -354,7 +354,7 @@ public class CancelApprovalHandler(
 
 /// <summary>
 /// 簽核管理員改派（設計 §7.8）：把某個 open 任務換成另一位使用者，離職或不在的人的待簽靠它搬走。對象規則同轉交，
-/// 但「自己」指任務現在的負責人（管理員可以改派給自己，除非他是發起人或這關已有票）。
+/// 管理員不是任務的負責人，所以沒有「不能交給自己」這條（可以改派給自己，除非他是發起人或這關已有票）。
 /// </summary>
 public class ReassignTaskHandler(
     IApprovalInstanceRepository repo, ApprovalActionSupport support, ApprovalHandover handover, ApprovalPolicies policies,
@@ -374,7 +374,7 @@ public class ReassignTaskHandler(
 
         var activeUsers = (await permissions.ListUsersAsync(ct)).Where(u => u.IsActive).Select(u => u.UserId).ToHashSet(StringComparer.Ordinal);
         var allowSelf = await policies.AllowSelfApprovalAsync(inst.ModuleId, ct);
-        if (ApprovalActionRules.TargetError(request.UserId, me.AssigneeUserId, inst.InitiatorUserId, allowSelf, activeUsers,
+        if (ApprovalActionRules.TargetError(request.UserId, null, inst.InitiatorUserId, allowSelf, activeUsers,
                 tasks.Where(t => t.StageRunId == me.StageRunId)) is { } bad)
             return ApprovalActionSupport.Bad("userId", bad);
 

@@ -138,12 +138,12 @@ public static class ApprovalStageStatus
 
 public static class ApprovalTaskStatus
 {
-    public const string Open = "open", Approved = "approved", Rejected = "rejected", Transferred = "transferred", Closed = "closed";
+    public const string Open = "open", Approved = "approved", Rejected = "rejected", Transferred = "transferred", Reassigned = "reassigned", Closed = "closed";
 }
 
 public static class ApprovalTaskReason
 {
-    public const string Resolved = "resolved", Delegated = "delegated", Transferred = "transferred", Added = "added", Fallback = "fallback";
+    public const string Resolved = "resolved", Delegated = "delegated", Transferred = "transferred", Reassigned = "reassigned", Added = "added", Fallback = "fallback";
 }
 
 public static class ApprovalActions
