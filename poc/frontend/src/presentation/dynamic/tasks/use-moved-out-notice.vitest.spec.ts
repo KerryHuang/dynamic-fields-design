@@ -1,7 +1,7 @@
 import { QueryClient, VueQueryPlugin } from '@tanstack/vue-query';
 import { flushPromises, mount } from '@vue/test-utils';
 import * as quasar from 'quasar';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { defineComponent } from 'vue';
 import { createI18n } from 'vue-i18n';
 import zhTW from 'src/i18n/zh-TW.json';
@@ -11,10 +11,13 @@ import { useMovedOutNotice } from './use-moved-out-notice';
 
 let calls: Call[];
 let notice!: ReturnType<typeof useMovedOutNotice>;
+let invalidated: () => string[];
 
 function mountHost(undoReply: unknown = taskDetailWire({ id: 5 })) {
   calls = mockHttp((c) => (c.url === '/tasks/5/undo-reassign' ? undoReply : []));
   const qc = new QueryClient();
+  const spy = vi.spyOn(qc, 'invalidateQueries');
+  invalidated = () => spy.mock.calls.map((c) => JSON.stringify((c[0] as { queryKey: unknown[] }).queryKey));
   return mount(defineComponent({ setup() { notice = useMovedOutNotice(); return () => null; } }), {
     attachTo: document.body,
     global: {
@@ -47,6 +50,7 @@ describe('useMovedOutNotice', () => {
     expect(post?.method).toBe('post');
     expect(bodyOf(post)).toEqual({ undoToken: 'tok-1' });
     expect(toasts().some((t) => t.includes('已復原'))).toBe(true);
+    expect(invalidated()).toEqual(expect.arrayContaining(['["tasks"]', '["task",5]']));
     w.unmount();
   });
 

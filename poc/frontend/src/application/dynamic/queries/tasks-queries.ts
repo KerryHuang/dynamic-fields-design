@@ -1,6 +1,6 @@
 import { keepPreviousData, useMutation, useQuery, useQueryClient, type QueryClient } from '@tanstack/vue-query';
 import { computed, toValue, type MaybeRefOrGetter } from 'vue';
-import type { TaskInput, TaskListFilter, TaskListTab, TaskPatch } from 'src/domain/dynamic/task-types';
+import { isTaskHidden, type TaskInput, type TaskListFilter, type TaskListTab, type TaskPatch } from 'src/domain/dynamic/task-types';
 import { dynamicApi } from 'src/services/api/dynamic-api';
 
 export function useMyTasks(tab: MaybeRefOrGetter<TaskListTab>, filter: MaybeRefOrGetter<TaskListFilter>, page: MaybeRefOrGetter<number>) {
@@ -83,7 +83,13 @@ export function useUpdateTask() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (i: { id: number; patch: TaskPatch }) => dynamicApi.updateTask(i.id, i.patch),
-    onSuccess: (_t, i) => invalidateTasks(qc, i.id),
+    onSuccess: (result, i) => {
+      if (!isTaskHidden(result)) return invalidateTasks(qc, i.id);
+      // Moved out of the caller's scope: refetching the task or its timeline would only 404, so drop them instead
+      qc.removeQueries({ queryKey: ['task', i.id] });
+      qc.removeQueries({ queryKey: ['task-comments', i.id] });
+      return invalidateTasks(qc);
+    },
   });
 }
 
