@@ -15,6 +15,7 @@ public class ApprovalFlowConfiguration : IEntityTypeConfiguration<ApprovalFlow>
         b.HasKey(x => x.Id);
         b.Property(x => x.Key).HasMaxLength(40).IsRequired();
         b.Property(x => x.NameI18n).HasJsonConversion();
+        b.Property(x => x.DraftUpdatedBy).HasMaxLength(50);
         b.HasIndex(x => x.Key).IsUnique();
         b.HasIndex(x => new { x.ModuleId, x.ToOptionId, x.Priority }).IsUnique();
         b.ConfigureAudit();
@@ -80,7 +81,10 @@ public class ApprovalStageRunConfiguration : IEntityTypeConfiguration<ApprovalSt
         b.Property(x => x.AddedByUserId).HasMaxLength(50);
         b.Property(x => x.AddSignUserIds).HasJsonNullableConversion();
         b.Property(x => x.NodeId).HasMaxLength(40);
-        b.Property(x => x.BranchKey).HasMaxLength(40);
+        b.Property(x => x.BranchKey).HasMaxLength(256);
+        b.Property(x => x.NodeKind).HasMaxLength(20);
+        b.Property(x => x.InEdgeId).HasMaxLength(40);
+        b.Property(x => x.CloseReason).HasMaxLength(20);
         b.HasIndex(x => new { x.InstanceId, x.Seq });
         b.HasOne<ApprovalInstance>().WithMany().HasForeignKey(x => x.InstanceId).OnDelete(DeleteBehavior.Cascade);
     }

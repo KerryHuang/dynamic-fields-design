@@ -10,6 +10,8 @@ public class Notification
     public string Link { get; set; } = "";
     public string? SourceType { get; set; }
     public long? SourceId { get; set; }
+    /// <summary>通知節點逐人遮蔽後的內容等結構化資料（流程圖設計 §7.6）；其他種類為 null。</summary>
+    public string? DataJson { get; set; }
     public DateTime? ReadTime { get; set; }
     public DateTime CreatedTime { get; set; }
 }

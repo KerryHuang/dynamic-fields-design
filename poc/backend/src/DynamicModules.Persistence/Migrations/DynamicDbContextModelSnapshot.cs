@@ -542,6 +542,16 @@ namespace DynamicModules.Persistence.Migrations
                     b.Property<long?>("CurrentVersionId")
                         .HasColumnType("INTEGER");
 
+                    b.Property<string>("DraftJson")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("DraftUpdatedBy")
+                        .HasMaxLength(50)
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTime?>("DraftUpdatedTime")
+                        .HasColumnType("TEXT");
+
                     b.Property<string>("Key")
                         .IsRequired()
                         .HasMaxLength(40)
@@ -598,6 +608,9 @@ namespace DynamicModules.Persistence.Migrations
 
                     b.Property<long>("FlowId")
                         .HasColumnType("INTEGER");
+
+                    b.Property<string>("LayoutJson")
+                        .HasColumnType("TEXT");
 
                     b.Property<int>("Version")
                         .HasColumnType("INTEGER");
@@ -733,13 +746,21 @@ namespace DynamicModules.Persistence.Migrations
                         .HasColumnType("TEXT");
 
                     b.Property<string>("BranchKey")
-                        .HasMaxLength(40)
+                        .HasMaxLength(256)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("CloseReason")
+                        .HasMaxLength(20)
                         .HasColumnType("TEXT");
 
                     b.Property<DateTime?>("CompletedTime")
                         .HasColumnType("TEXT");
 
                     b.Property<DateTime?>("DueTime")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("InEdgeId")
+                        .HasMaxLength(40)
                         .HasColumnType("TEXT");
 
                     b.Property<long>("InstanceId")
@@ -755,6 +776,10 @@ namespace DynamicModules.Persistence.Migrations
 
                     b.Property<string>("NodeId")
                         .HasMaxLength(40)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("NodeKind")
+                        .HasMaxLength(20)
                         .HasColumnType("TEXT");
 
                     b.Property<int>("Seq")
@@ -1780,6 +1805,9 @@ namespace DynamicModules.Persistence.Migrations
                         .HasColumnType("INTEGER");
 
                     b.Property<DateTime>("CreatedTime")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("DataJson")
                         .HasColumnType("TEXT");
 
                     b.Property<string>("Kind")
