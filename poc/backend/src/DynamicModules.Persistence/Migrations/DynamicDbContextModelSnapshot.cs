@@ -2761,25 +2761,6 @@ namespace DynamicModules.Persistence.Migrations
                     b.ToTable("Dynamic_Workflow", (string)null);
                 });
 
-            modelBuilder.Entity("DynamicModules.Domain.Entities.Mock.MockCustomer", b =>
-                {
-                    b.Property<string>("CustomerNo")
-                        .HasMaxLength(20)
-                        .HasColumnType("TEXT");
-
-                    b.Property<bool>("DeleteFlag")
-                        .HasColumnType("INTEGER");
-
-                    b.Property<string>("Name")
-                        .IsRequired()
-                        .HasMaxLength(100)
-                        .HasColumnType("TEXT");
-
-                    b.HasKey("CustomerNo");
-
-                    b.ToTable("Mock_Customer", (string)null);
-                });
-
             modelBuilder.Entity("DynamicModules.Domain.Entities.Dynamic.AppBlock", b =>
                 {
                     b.HasOne("DynamicModules.Domain.Entities.Dynamic.App", null)
