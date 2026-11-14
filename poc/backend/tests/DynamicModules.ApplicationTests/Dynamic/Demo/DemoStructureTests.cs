@@ -137,6 +137,23 @@ public class DemoStructureTests(DemoGeneratedFixture fx)
     }
 
     [Fact]
+    public async Task Preflight_SharedMasterWithLiveRecords_Conflicts_ButNotWhenAllSoftDeleted()
+    {
+        await using var host = await DemoTestHost.CreateAsync();
+        (await host.Send(new GenerateDemoDataRequest(DemoTestHost.Today))).IsSuccess.Should().BeTrue();
+        var preflight = host.Services.GetRequiredService<DemoPreflight>();
+        var db = host.Db.Context;
+        var masterModules = await db.Set<Module>().AsNoTracking().Where(m => m.Key.StartsWith("master-")).Select(m => m.Id).ToListAsync();
+
+        (await preflight.ConflictsAsync(CancellationToken.None)).Should().Contain(c => c == DemoMessages.MasterHasRecords("partner", "master-partner"),
+            "共用主檔還有有效記錄");
+
+        await db.Set<Domain.Entities.Dynamic.Record>().Where(r => masterModules.Contains(r.ModuleId)).ExecuteUpdateAsync(s => s.SetProperty(r => r.DeleteFlag, true));
+
+        (await preflight.ConflictsAsync(CancellationToken.None)).Should().NotContain(c => c.Contains("已有記錄"), "全部軟刪除後不算有記錄");
+    }
+
+    [Fact]
     public async Task Preflight_NothingBeforeGenerate()
     {
         await using var host = await DemoTestHost.CreateAsync();
