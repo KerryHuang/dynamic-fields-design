@@ -127,7 +127,7 @@ public class BuiltInAppsRuntimeTests : IDisposable
         (await PutPartnerAsync(_rig.App.AsUser(Keeper), customer, new() { [k["電話"]] = "02-5550-1000" })).StatusCode
             .Should().Be(HttpStatusCode.Forbidden, "倉管對往來對象只讀");
         (await _rig.App.AsUser(Viewer).GetAsync($"{Base}/records/{customer}")).StatusCode
-            .Should().Be(HttpStatusCode.Forbidden, "進銷存查詢群組只讀品項與倉庫，不讀往來對象");
+            .Should().Be(HttpStatusCode.NotFound, "進銷存查詢群組只讀品項與倉庫，不讀往來對象；沒有讀取權時與記錄不存在回應相同（a3d）");
         (await _rig.App.AsUser(Buyer).GetAsync($"{Base}/records/{customer}")).StatusCode.Should().Be(HttpStatusCode.OK);
     }
 
