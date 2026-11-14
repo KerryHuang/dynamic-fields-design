@@ -35,7 +35,7 @@
 | a5 | 套件格式 8：簽核流程；接手 CRM 設計案流程：套件內建，刪 `DemoApprovals`；採購單金額門檻的 Demo 在這裡驗收 | 已上線（2026-11-14，ef66fda7） | [簽核流程](superpowers/specs/2026-11-10-approval-workflow-design.md) |
 | a3 | 轉交、管理員終止與改派、後加簽、個人代理設定、逾期提醒、臨時讀取的列印預覽（使用者 11-12 裁決） | 已上線（2026-11-14，a3a–a3d 3f584c8a、6a5dc263 等；a3e、a3f affc0766） | [簽核流程](superpowers/specs/2026-11-10-approval-workflow-design.md) |
 | a3g | a3 收尾：Demo 補採購單列印範本、a3 裁決寫回設計文件、手冊總收 | 已完成（待上線） | [簽核流程](superpowers/specs/2026-11-10-approval-workflow-design.md) |
-| fg1 | 簽核流程圖地基（fg1a 資料欄位、只有草稿的流程、執行期守門、分支數政策；fg1b 型別、參照、轉換；fg1c 結構驗證與共用案例；fg1d 警告、Application 驗證、總收）：圖形定義型別、結構驗證、sequence → graph 轉換、migration、分支數政策；API 仍不收 graph（只驗 SQLite，PostgreSQL 在 pg0 後補驗） | 已完成（待上線） | [簽核流程圖](superpowers/specs/2026-11-13-approval-flowgraph-design.md) §17 |
+| fg1 | 簽核流程圖地基（fg1a 資料欄位、只有草稿的流程、執行期守門、分支數政策；fg1b 型別、參照、轉換；fg1c 結構驗證與共用案例；fg1d 警告、Application 驗證、總收）：圖形定義型別、結構驗證、sequence → graph 轉換、migration、分支數政策；API 仍不收 graph（只驗 SQLite，PostgreSQL 在 pg0 後補驗） | 已上線（2026-11-14，fg1a 301b0da1、fg1b＋fg1c 6a3681cb、fg1d d5ae6594） | [簽核流程圖](superpowers/specs/2026-11-13-approval-flowgraph-design.md) §17 |
 | fg2 | 流程圖執行引擎：並行分支、全部到齊／任一到齊匯合、分支取消、退回與撤回延伸、同一單據動作序列化 | 未開始 | [簽核流程圖](superpowers/specs/2026-11-13-approval-flowgraph-design.md) §17 |
 | fg3 | 拖拉式流程圖設計器（Vue Flow）：草稿與發布、四種寬度（手機只看圖＋改屬性），移除舊關卡編輯 | 未開始 | [簽核流程圖](superpowers/specs/2026-11-13-approval-flowgraph-design.md) §17 |
 | fg4 | 單據頁唯讀進度流程圖、並行時簽核摘要列出進行中的關 | 未開始 | [簽核流程圖](superpowers/specs/2026-11-13-approval-flowgraph-design.md) §17 |
