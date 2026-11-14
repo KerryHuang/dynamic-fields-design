@@ -212,6 +212,32 @@ public class ApprovalClosureRecheckTests : ApprovalTestBase
         res.IsSuccess.Should().BeTrue(Dump(res));
     }
 
+    /// <summary>流程圖格式：簽核節點的可編輯欄位也要擋鎖定帶值（RejectLockFillIntoEditableAsync 經 Steps 讀 graph 的簽核節點）。</summary>
+    [Fact]
+    public async Task AddRefField_LockFillIntoGraphApprovalNodeEditableField_Returns400()
+    {
+        await Rig();
+        var graph = new ApprovalDefinition(ApprovalShapes.Graph, null, null, null, [],
+        [
+            new ApprovalNodeDef("start", ApprovalNodeKinds.Start),
+            new ApprovalNodeDef("lead", ApprovalNodeKinds.Approval, Text("主管"), Approvers: Group(PurchaseLeadGroup), Mode: ApprovalModes.Any,
+                EditableFields: [_remark], OnEmpty: ApprovalOnEmpty.Fallback),
+            new ApprovalNodeDef("end", ApprovalNodeKinds.End),
+        ],
+        [new ApprovalEdgeDef("e1", "start", "lead"), new ApprovalEdgeDef("e2", "lead", "end")]);
+        var flow = await Db.Context.Set<ApprovalFlow>().SingleAsync(f => f.Key == "po-a");
+        var v2 = new ApprovalFlowVersion { FlowId = flow.Id, Version = 2, Definition = graph, CreatedBy = "admin", CreatedTime = SeedTime };
+        Db.Context.Add(v2);
+        await Db.Context.SaveChangesAsync();
+        flow.CurrentVersionId = v2.Id;
+        await Db.Context.SaveChangesAsync();
+        Db.Context.ChangeTracker.Clear();
+
+        var res = await Send(new AddFieldRequest(_r.Module, BlockOf(_r.Memo), FieldType.Reference, Text("第三供應商"),
+            RefTo(_r.Vendor) with { Fill = new FillConfig(FillConfig.Lock, [new FillMapping(_r.VendorName, _remark)]) }));
+        Rejected(res, FieldRules.FillKey, "核簽備註");
+    }
+
     /// <summary>預設帶值（default）不鎖欄位，指向可編輯欄位沒有衝突。</summary>
     [Fact]
     public async Task UpdateFill_DefaultModeIntoEditableField_Succeeds()

@@ -188,4 +188,59 @@ public class ApprovalDeleteGuardTests : ApprovalTestBase
         res.IsConflict.Should().BeTrue(Dump(res));
         res.Message.Should().Be("群組被簽核流程使用：po-g");
     }
+
+    /// <summary>流程 Y（已確認）v1 是 graph（條件線引用 edgeField、範本引用 templateField、通知群組 group），綁在一個實例的快照上；之後改成 v2 不再引用。</summary>
+    private async Task OldGraphVersionOnly(PurchaseRig r, long edgeField, long templateField, long group, string instanceStatus)
+    {
+        var y = await SeedFlow(r, "po-y", r.Confirmed, 1, NotifyGraph(edgeField, templateField, group));
+        await SeedInstance(r, y, instanceStatus, snapshotOnly: true);
+        var upd = await Send(new UpdateApprovalFlowRequest("po-y",
+            new ApprovalFlowInput("po-y", Text("po-y"), r.Confirmed, 1, true, Def(null, Stage("mgr", Manager(1))))));
+        upd.IsSuccess.Should().BeTrue(Dump(upd));
+        ((ApprovalFlowResponse)upd.Data!).Version.Should().Be(2);
+    }
+
+    [Theory]
+    [InlineData("edge")]
+    [InlineData("template")]
+    public async Task DeleteField_UsedOnlyByOldGraphVersionOfPendingInstance_Blocked(string where)
+    {
+        var (r, grade) = await RigWithGrade();
+        await OldGraphVersionOnly(r, where == "edge" ? grade : r.Total, where == "template" ? grade : r.Memo, BoardGroup, ApprovalInstanceStatus.Pending);
+
+        Flows(await CheckField(grade)).Should().ContainSingle().Which.Name.Should().Be("po-y");
+        (await Deactivate(grade)).IsConflict.Should().BeTrue();
+    }
+
+    [Theory]
+    [InlineData("edge")]
+    [InlineData("template")]
+    public async Task DeleteField_UsedOnlyByOldGraphVersionOfFinishedInstance_Allowed(string where)
+    {
+        var (r, grade) = await RigWithGrade();
+        await OldGraphVersionOnly(r, where == "edge" ? grade : r.Total, where == "template" ? grade : r.Memo, BoardGroup, ApprovalInstanceStatus.Approved);
+
+        Flows(await CheckField(grade)).Should().BeEmpty();
+        (await Deactivate(grade)).IsSuccess.Should().BeTrue();
+    }
+
+    [Fact]
+    public async Task DeleteGroup_OnlyOldGraphVersionOfPendingInstance_Blocked()
+    {
+        var r = await BuildPurchase();
+        await OldGraphVersionOnly(r, r.Total, r.Memo, BoardGroup, ApprovalInstanceStatus.Pending);
+
+        var res = await Send(new DeleteGroupRequest(BoardGroup));
+        res.IsConflict.Should().BeTrue(Dump(res));
+        res.Message.Should().Be("群組被簽核流程使用：po-y");
+    }
+
+    [Fact]
+    public async Task DeleteGroup_OnlyOldGraphVersionOfFinishedInstance_Allowed()
+    {
+        var r = await BuildPurchase();
+        await OldGraphVersionOnly(r, r.Total, r.Memo, BoardGroup, ApprovalInstanceStatus.Approved);
+
+        (await Send(new DeleteGroupRequest(BoardGroup))).IsSuccess.Should().BeTrue();
+    }
 }
