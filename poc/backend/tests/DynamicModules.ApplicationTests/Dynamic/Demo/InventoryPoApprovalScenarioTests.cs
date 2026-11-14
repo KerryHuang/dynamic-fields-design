@@ -1,5 +1,6 @@
 using DynamicModules.Application.Common;
 using DynamicModules.Application.Dynamic.ApprovalService;
+using DynamicModules.Application.Dynamic.PrintService;
 using DynamicModules.Application.Dynamic.RecordService.Data;
 using DynamicModules.Application.Dynamic.RecordService.Queries.GetRecord;
 using DynamicModules.Domain.Entities.Dynamic;
@@ -108,6 +109,23 @@ public class InventoryPoApprovalScenarioTests(DemoGeneratedFixture fx)
         detail.Values.GetValueOrDefault(await fx.Key(Po, "含稅總計")).Should().NotBeNull("臨時讀取連金額軸一起開放");
     }
 
+    [Fact]
+    public async Task PoSheet_PendingApprover_CanPrint_ThenRejectedOnceApproved()
+    {
+        var pos = await Pos();
+        var instances = await Instances();
+        var pending = pos.Single(p => p.Total >= LargeFrom && p.Status == "草稿" && instances.Any(i => i.Instance.RecordId == p.Record.Id && i.Instance.Status == ApprovalInstanceStatus.Pending));
+        var done = pos.First(p => p.Total >= LargeFrom && p.Status == "已確認");
+
+        // manager01 沒有任何進銷存模組權限：待簽期間靠臨時讀取列印採購單範本
+        var printed = await fx.As("manager01", new PrintRecordRequest(pending.Record.Id, "inv-po-sheet", "zh-TW"));
+        printed.IsSuccess.Should().BeTrue(printed.Message);
+        ((PrintedDocument)printed.Data!).Html.Should().Contain("採購單").And.Contain("含稅總計");
+
+        // 同一個人對已簽完的單據：任務已結束，臨時讀取收回
+        (await fx.As("manager01", new PrintRecordRequest(done.Record.Id, "inv-po-sheet", "zh-TW"))).IsForbidden.Should().BeTrue();
+    }
+
     private async Task<List<ApprovalAction>> ActionsOf(long instanceId) =>
         await fx.Host.Db.Context.Set<ApprovalAction>().AsNoTracking().Where(a => a.InstanceId == instanceId).OrderBy(a => a.Id).ToListAsync();
 
@@ -173,6 +191,9 @@ public class InventoryPoApprovalScenarioTests(DemoGeneratedFixture fx)
         fx.Generated();
         var delegates = await fx.Host.Db.Context.Set<ApprovalDelegate>().AsNoTracking().ToListAsync();
         delegates.Should().NotBeEmpty();
-        delegates.Should().OnlyContain(d => d.EndDate < DateOnly.FromDateTime(DateTime.Today));
+        var today = DemoTestHost.Today;   // fixture 的營運日，不用機器時鐘
+        delegates.Should().OnlyContain(d => d.EndDate < today);
+        delegates.Select(d => (Active: d.StartDate <= today && today <= d.EndDate, Upcoming: today < d.StartDate))
+            .Should().OnlyContain(s => !s.Active && !s.Upcoming);
     }
 }

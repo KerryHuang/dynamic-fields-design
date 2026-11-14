@@ -401,6 +401,7 @@ public class InventoryAppTests : IDisposable
     }
 
     [Fact]
+    [Trait("Category", "Postgres")]
     public async Task PrintPo_HasHeaderLinesAndTotals()
     {
         var rig = await OpenAsync(_admin);
