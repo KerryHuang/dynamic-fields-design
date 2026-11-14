@@ -22,7 +22,7 @@ function rerouteText(a: ApprovalActionView): string {
 
 /** "→ name" for hand-overs (transfer, reassign); falls back to the user ids when the server sent no names. */
 function targetsText(a: ApprovalActionView): string {
-  if (a.action !== 'transfer' && a.action !== 'reassign') return '';
+  if (a.action !== 'transfer' && a.action !== 'reassign' && a.action !== 'add-sign') return '';
   const names = a.targetNames?.length ? a.targetNames : a.targetUserIds;
   return names.length ? t('approval.panel.targets', { names: names.join(t('common.listSeparator')) }) : '';
 }
