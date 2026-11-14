@@ -256,6 +256,31 @@ public class ApprovalGraphDefinitionValidatorTests : ApprovalTestBase
         E(errors, "shape").Should().Be(ApprovalMessages.GraphNotAccepted);
     }
 
+    /// <summary>不合法並行區（共享案例 AG-090 的圖）：存檔驗證要回 G7／G8 錯誤，不能因警告分析無限遞迴而讓程序終止。</summary>
+    [Fact]
+    public async Task Graph_InvalidParallelRegion_ReturnsG7G8Errors_NoCrash()
+    {
+        ApprovalNodeDef N(string id) => new(id, ApprovalNodeKinds.Notify, Text(id), Recipients: [new(ApprovalNotifyRecipientKinds.Initiator)]);
+        ApprovalEdgeDef E1(string id, string from, string to) => new(id, from, to);
+        var d = new ApprovalDefinition(ApprovalShapes.Graph, null, null, null, [],
+        [
+            new("s", ApprovalNodeKinds.Start), new("f1", ApprovalNodeKinds.Fork), new("f2", ApprovalNodeKinds.Fork),
+            N("n1"), N("n2"), N("n4"), Approval("a", Manager(1), "a"),
+            new("j1", ApprovalNodeKinds.Join, ForkId: "f1", Mode: ApprovalModes.All),
+            new("j2", ApprovalNodeKinds.Join, ForkId: "f2", Mode: ApprovalModes.Any),
+            new("z", ApprovalNodeKinds.End)
+        ],
+        [
+            E1("e1", "s", "f1"), E1("e2", "f1", "f2"), E1("e3", "f1", "n1"), E1("e4", "n1", "f2"), E1("e5", "f2", "n2"),
+            E1("e6", "f2", "a"), E1("e7", "f2", "n4"), E1("e8", "n2", "j1"), E1("e9", "n4", "j1"), E1("e10", "a", "j2"),
+            E1("e11", "j1", "j2"), E1("e12", "j2", "z")
+        ]);
+        var errors = await Validate(d);
+        E(errors, "nodes.f1").Should().Be(ApprovalMessages.Graph("branchesMerge"));
+        E(errors, "edges.e11").Should().Be(ApprovalMessages.Graph("edgeIntoRegion"));
+        E(errors, "nodes.z").Should().Be(ApprovalMessages.Graph("endInRegion"));
+    }
+
     [Fact]
     public async Task Graph_NoApprovalNode_Rejected_U5()
     {

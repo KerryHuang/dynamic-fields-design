@@ -139,7 +139,8 @@ public static class ApprovalGraphValidator
         // G13
         CheckCounts(d, m, limits, previous, NodeKey, Err);
 
-        var broken = errors.Any(e => e.Rule is "G1" or "G2" or "G3" or "G4" or "G5");
+        // 警告建立在結構正確的圖上：並行區不合法（G7、G8）時，越過匯合的搜尋可能不會終止
+        var broken = errors.Any(e => e.Rule is "G1" or "G2" or "G3" or "G4" or "G5" or "G7" or "G8");
         return new GraphCheck([.. errors.Distinct()], broken ? [] : [.. CheckWarnings(m, pairs, NodeKey).Distinct()]);
     }
 
