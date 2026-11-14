@@ -144,21 +144,18 @@ public static class ApprovalGraphValidator
     }
 
     /// <summary>
-    /// 警告 W1–W3（顯示但不擋發布）。「經過簽核」只看節點種類是不是簽核，有略過條件的簽核節點照樣算經過（略過條件另有 W3）；
-    /// 全部到齊的並行區只要區內任何地方有簽核節點，整段都算經過簽核（匯合要等每條分支，區內有人簽就停得住）。
+    /// 警告 W1–W3（顯示但不擋發布）。「經過簽核」只看節點種類是不是簽核，有略過條件的簽核節點照樣算經過（略過條件另有 W3）。
+    /// W1、W2 找的是「可能不經簽核就通過」的路線：條件節點任一出線都可能被選中；並行區依匯合的完成語意——
+    /// 全部到齊要每條分支都能免簽到達匯合才算免簽，任一到齊只要有一條分支能免簽到達就算（巢狀區照同一規則遞迴）。
     /// </summary>
     private static List<GraphIssue> CheckWarnings(
         ApprovalGraphModel m, List<(ApprovalNodeDef Fork, ApprovalNodeDef Join)> joined, Func<ApprovalNodeDef, string> nodeKey)
     {
         var warnings = new List<GraphIssue>();
         void Warn(ApprovalNodeDef n, string rule, string code) => warnings.Add(new GraphIssue(nodeKey(n), rule, code));
+        var pairOf = joined.ToDictionary(p => p.Fork.Id, p => p.Join);
 
-        var gatedForks = joined
-            .Where(p => p.Join.Mode == ApprovalModes.All
-                && m.Reach(m.Out(p.Fork.Id).Select(e => e.Def.To), p.Join.Id).Any(id => m.ById[id].Kind == ApprovalNodeKinds.Approval))
-            .Select(p => p.Fork.Id).ToHashSet();
-
-        // 從 from 出發，不經任何簽核節點（也不穿過有簽核的全部到齊並行區）能不能走到符合 isTarget 的節點。
+        // 從 from 出發，有沒有一條不經簽核節點、符合並行區完成語意的路線走到符合 isTarget 的節點。
         bool FreePath(string from, Func<ApprovalNodeDef, bool> isTarget)
         {
             var seen = new HashSet<string>();
@@ -169,7 +166,15 @@ public static class ApprovalGraphValidator
                 if (!seen.Add(id)) continue;
                 var n = m.ById[id];
                 if (isTarget(n)) return true;
-                if (n.Kind == ApprovalNodeKinds.Approval || gatedForks.Contains(id)) continue;
+                // 沿一般連線走到匯合就停：匯合之後要看整個並行區是否完成，只能從分支節點整區一起判斷
+                if (n.Kind is ApprovalNodeKinds.Approval or ApprovalNodeKinds.Join) continue;
+                if (n.Kind == ApprovalNodeKinds.Fork && pairOf.TryGetValue(id, out var join))
+                {
+                    var free = m.Out(id).Select(e => FreePath(e.Def.To, x => x.Id == join.Id));
+                    if (join.Mode == ApprovalModes.All ? free.All(f => f) : free.Any(f => f))
+                        foreach (var e in m.Out(join.Id)) stack.Push(e.Def.To);
+                    continue;
+                }
                 foreach (var e in m.Out(id)) stack.Push(e.Def.To);
             }
             return false;
@@ -185,7 +190,7 @@ public static class ApprovalGraphValidator
                 Warn(c, "W2", "defaultToEndWithoutApproval");
 
         // W3：有略過條件的簽核節點，從條件節點某條出線出發、在下一個簽核節點或會合點之前就到得了它。
-        // 會合點是匯合節點，或有兩條以上入線的節點（互斥路徑在那裡會合，之後不再專屬某條出線）；出線直接指向的節點一定算在那條出線上。
+        // 會合點是匯合節點（連搜尋起點是匯合也停），或有兩條以上入線的節點（互斥路徑在那裡會合，之後不再專屬某條出線）；出線直接指向的非匯合節點一定算在那條出線上。
         foreach (var c in m.OfKind(ApprovalNodeKinds.Condition))
             foreach (var edge in m.Out(c.Id))
             {
@@ -196,7 +201,7 @@ public static class ApprovalGraphValidator
                     var id = stack.Pop();
                     if (!seen.Add(id)) continue;
                     var n = m.ById[id];
-                    if (id != edge.Def.To && (n.Kind == ApprovalNodeKinds.Join || m.In(id).Count > 1)) continue;
+                    if (n.Kind == ApprovalNodeKinds.Join || (id != edge.Def.To && m.In(id).Count > 1)) continue;
                     if (n.Kind == ApprovalNodeKinds.Approval)
                     {
                         if (HasValue(n.When)) Warn(n, "W3", "skipConditionOnConditionBranch");

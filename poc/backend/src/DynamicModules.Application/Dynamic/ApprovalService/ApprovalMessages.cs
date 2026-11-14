@@ -79,7 +79,7 @@ public static class ApprovalMessages
         "edgesTooMany" => $"連線總數不能超過 {ApprovalGraphLimits.MaxEdges} 條",
         "nestingTooDeep" => $"並行區最多巢狀 {ApprovalGraphLimits.MaxNesting} 層",
         // 警告 W1–W3（發布回應在 fg3 才帶出）
-        "anyJoinWithoutApproval" => "有分支不經任何簽核就能到達匯合，送出時會立即通過",
+        "anyJoinWithoutApproval" => "此並行區可能不需簽核就通過",
         "defaultToEndWithoutApproval" => "預設路線不經任何簽核就結束",
         "skipConditionOnConditionBranch" => "這個簽核節點同時有略過條件，又在條件節點的出線上，請確認是刻意的",
         _ => $"流程圖結構不正確（{code}）"

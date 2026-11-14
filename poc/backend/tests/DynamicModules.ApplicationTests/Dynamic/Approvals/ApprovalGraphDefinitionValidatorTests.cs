@@ -211,8 +211,8 @@ public class ApprovalGraphDefinitionValidatorTests : ApprovalTestBase
         var d = await DesignAsync();
         E(await Validate(Mod(d, "tell-hr", n => n with { Recipients = [new(ApprovalNotifyRecipientKinds.InitiatorManager, Level: 6)] })),
             "nodes.tell-hr.recipients").Should().Be(ApprovalMessages.ManagerLevel(5));
-        E(await Validate(Mod(d, "tell-hr", n => n with { Recipients = [new(ApprovalNotifyRecipientKinds.InitiatorManager)] })),
-            "nodes.tell-hr.recipients").Should().Be(ApprovalMessages.ManagerLevel(5));
+        // 沒填層數照設計 §12.1 預設第 1 層（再驗政策上限）
+        (await Validate(Mod(d, "tell-hr", n => n with { Recipients = [new(ApprovalNotifyRecipientKinds.InitiatorManager)] }))).Keys.Should().Equal("shape");
         (await Validate(Mod(d, "tell-hr", n => n with { Recipients = [new(ApprovalNotifyRecipientKinds.InitiatorManager, Level: 5)] }))).Keys.Should().Equal("shape");
     }
 
@@ -316,7 +316,7 @@ public class ApprovalGraphDefinitionValidatorTests : ApprovalTestBase
         // 案例檔沒覆蓋到的代碼（程式防線或案例太大）一併列出
         var codes = doc.GetProperty("cases").EnumerateArray()
             .SelectMany(c => c.GetProperty("errors").EnumerateArray().Concat(c.GetProperty("warnings").EnumerateArray()))
-            .Select(t => t[2].GetString()!).Concat(["edgeOutOfRegion", "joinForkInvalid"]).Distinct().ToList();
+            .Select(t => t[2].GetString()!).Concat(["edgeOutOfRegion", "joinForkInvalid", "nodesTooMany", "edgesTooMany", "nestingTooDeep"]).Distinct().ToList();
         codes.Should().HaveCountGreaterThan(30);
         foreach (var code in codes)
             ApprovalMessages.Graph(code).Should().NotContain("流程圖結構不正確", $"代碼 {code} 要有訊息對照");
