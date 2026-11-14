@@ -17,13 +17,15 @@ public sealed partial class ApprovalDefinitionValidator(
     IPermissionRepository permissions, FieldTypeRegistry registry, ApprovalEditableFields editableFields,
     ISharedMasterRepository shared, ApprovalPolicies approvalPolicies)
 {
-    /// <summary>previous 是這個流程目前版本的定義（新流程為 null）：數值上限「改嚴只管之後」，超過上限而且比舊版大才擋（政策設計 §3.5）。</summary>
+    /// <summary>
+    /// previous 是這個流程目前版本的定義（新流程為 null）：數值上限「改嚴只管之後」，超過上限而且比舊版大才擋（政策設計 §3.5）。
+    /// shape 是 graph 時走 ApprovalDefinitionValidator.Graph.cs，最後固定加一則 shape 錯誤（fg1 還不收流程圖，fg2 刪那一行）。
+    /// </summary>
     public async Task<Dictionary<string, string[]>> ValidateAsync(
         Module module, Workflow wf, ApprovalDefinition d, ApprovalDefinition? previous, CancellationToken ct)
     {
         var limits = await approvalPolicies.LimitsAsync(module.Id, ct);
         var errors = new Dictionary<string, string[]>();
-        void Err(string key, string message) => errors.TryAdd(key, [message]);
 
         var users = await permissions.ListUsersAsync(ct);
         var activeUsers = users.Where(u => u.IsActive).Select(u => u.UserId).ToHashSet();
@@ -31,33 +33,66 @@ public sealed partial class ApprovalDefinitionValidator(
         var groupIds = (await permissions.ListGroupsAsync(ct)).Select(g => g.Id).ToHashSet();
         var fields = module.Blocks.SelectMany(b => b.Fields).ToDictionary(f => f.Id);
 
-        if (d.Shape != ApprovalShapes.Sequence) Err("shape", ApprovalMessages.ShapeInvalid);
-        if (ConditionError(d.When) is { } we) Err("when", ApprovalMessages.WhenInvalid(we));
-        if (d.RejectTo is { } rt && wf.States.All(s => s.OptionId != rt)) Err("rejectTo", ApprovalMessages.RejectToInvalidState);
-        if (d.FallbackApprovers is { } fb)
-        {
-            if (fb.Source is not (ApprovalSources.Users or ApprovalSources.Group or ApprovalSources.Manager)) Err("fallbackApprovers", ApprovalMessages.FallbackSourceInvalid);
-            else if (SourceError(fb, previous?.FallbackApprovers) is { } fe) Err("fallbackApprovers", fe);
-        }
-
-        var stages = d.Stages ?? [];
-        if (stages.Count == 0 || (stages.Count > limits.MaxStages && stages.Count > (previous?.Stages?.Count ?? 0)))
-            Err("stages", ApprovalMessages.StagesCount(limits.MaxStages, previous is not null));
-        else if (stages.Select(s => s.Code).Distinct().Count() != stages.Count) Err("stages", ApprovalMessages.StageCodeDuplicate);
-
         var nonEditable = await editableFields.NonEditableAsync(module, wf, ct);
         var hiddenRows = (await permissions.LoadModuleRowsAsync(module, ct)).FieldPermissions.Where(p => p.Access == FieldAccess.Hidden).ToList();
         var restricted = fields.Values.Where(f => f.VisibilityRestricted).ToList();
         var grants = restricted.Count == 0 ? [] : (await shared.ListFieldGrantsAsync(restricted.Select(f => f.Id).ToList(), ct))
             .GroupBy(g => g.FieldId).ToDictionary(g => g.Key, g => g.Select(x => x.GroupId).ToHashSet());
         var groupsOf = (await permissions.ListMembershipsAsync(ct)).ToLookup(m => m.UserId, m => m.GroupId);
+        var x = new Run(module, d, previous, limits, registry, errors, allUserIds, activeUsers, groupIds, fields, nonEditable, hiddenRows, grants, groupsOf, restricted);
+
+        if (d.Shape is not (ApprovalShapes.Sequence or ApprovalShapes.Graph)) x.Err("shape", ApprovalMessages.ShapeInvalid);
+        if (x.ConditionError(d.When) is { } we) x.Err("when", ApprovalMessages.WhenInvalid(we));
+        if (d.RejectTo is { } rt && wf.States.All(s => s.OptionId != rt)) x.Err("rejectTo", ApprovalMessages.RejectToInvalidState);
+        if (d.FallbackApprovers is { } fb)
+        {
+            if (fb.Source is not (ApprovalSources.Users or ApprovalSources.Group or ApprovalSources.Manager)) x.Err("fallbackApprovers", ApprovalMessages.FallbackSourceInvalid);
+            else if (x.SourceError(fb, previous?.FallbackApprovers) is { } fe) x.Err("fallbackApprovers", fe);
+        }
+
+        if (d.Shape == ApprovalShapes.Graph) GraphErrors(x);
+        else SequenceErrors(x);
+        return errors;
+    }
+
+    private static void SequenceErrors(Run x)
+    {
+        var (d, previous, limits) = (x.D, x.Previous, x.Limits);
+        var stages = d.Stages ?? [];
+        if (stages.Count == 0 || (stages.Count > limits.MaxStages && stages.Count > (previous?.Stages?.Count ?? 0)))
+            x.Err("stages", ApprovalMessages.StagesCount(limits.MaxStages, previous is not null));
+        else if (stages.Select(s => s.Code).Distinct().Count() != stages.Count) x.Err("stages", ApprovalMessages.StageCodeDuplicate);
+
         for (var i = 0; i < stages.Count; i++)
         {
             var s = stages[i];
             var p = $"stages[{i}]";
-            var before = s.Code is null ? null : previous?.Stages?.FirstOrDefault(x => x.Code == s.Code);
-            if (!ApprovalCodes.IsValid(s.Code)) Err($"{p}.code", ApprovalMessages.StageCodeInvalid);
-            if (s.Name is null || !s.Name.IsValid(out _)) Err($"{p}.name", ApprovalMessages.StageNameRequired);
+            var before = s.Code is null ? null : previous?.Stages?.FirstOrDefault(y => y.Code == s.Code);
+            if (!ApprovalCodes.IsValid(s.Code)) x.Err($"{p}.code", ApprovalMessages.StageCodeInvalid);
+            if (s.Name is null || !s.Name.IsValid(out _)) x.Err($"{p}.name", ApprovalMessages.StageNameRequired);
+            x.StageErrors(s, p, before);
+        }
+    }
+
+    /// <summary>一次驗證要用的資料與檢查方法：sequence 的關卡與 graph 的簽核節點共用同一組屬性規則（G9）。</summary>
+    private sealed class Run(
+        Module module, ApprovalDefinition d, ApprovalDefinition? previous, ApprovalLimitSet limits, FieldTypeRegistry registry,
+        Dictionary<string, string[]> errors, HashSet<string> allUserIds, HashSet<string> activeUsers, HashSet<long> groupIds,
+        Dictionary<long, Field> fields, HashSet<long> nonEditable, List<FieldPermission> hiddenRows,
+        Dictionary<long, HashSet<long>> grants, ILookup<string, long> groupsOf, List<Field> restricted)
+    {
+        public ApprovalDefinition D => d;
+        public ApprovalDefinition? Previous => previous;
+        public ApprovalLimitSet Limits => limits;
+        public Dictionary<long, Field> Fields => fields;
+        public HashSet<string> ActiveUsers => activeUsers;
+        public HashSet<long> GroupIds => groupIds;
+
+        public void Err(string key, string message) => errors.TryAdd(key, [message]);
+
+        /// <summary>關卡（或簽核節點）從略過條件起的屬性檢查；p 是錯誤鍵前綴，before 是舊版同一關（改嚴只管之後）。代號與名稱由呼叫端檢查。</summary>
+        public void StageErrors(ApprovalStageDef s, string p, ApprovalStageDef? before)
+        {
             if (ConditionError(s.When) is { } se) Err($"{p}.when", ApprovalMessages.WhenInvalid(se));
             if (s.Approvers is null) Err($"{p}.approvers", ApprovalMessages.SourceInvalid);
             else if (SourceError(s.Approvers, before?.Approvers) is { } ae) Err($"{p}.approvers", ae);
@@ -72,15 +107,14 @@ public sealed partial class ApprovalDefinitionValidator(
             else if (s.Approvers is not null && (s.EditableFields ?? []).Count > 0
                      && (s.EditableFields ?? []).Any(HiddenForDerivable(s, d.FallbackApprovers, hiddenRows, grants, groupsOf, restricted).Contains)) Err($"{p}.editableFields", ApprovalMessages.EditableFieldHidden);
         }
-        return errors;
 
-        string? ConditionError(JsonElement? when)
+        public string? ConditionError(JsonElement? when)
         {
             if (when is not { } w || w.ValueKind == JsonValueKind.Null) return null;
             return ConditionParser.Parse(w, module, registry, ConditionUsage.Rule, allUserIds).Error;
         }
 
-        string? SourceError(ApproverSource a, ApproverSource? old)
+        public string? SourceError(ApproverSource a, ApproverSource? old)
         {
             switch (a.Source)
             {

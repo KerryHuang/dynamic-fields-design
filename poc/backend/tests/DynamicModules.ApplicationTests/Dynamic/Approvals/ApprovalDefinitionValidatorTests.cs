@@ -84,8 +84,8 @@ public class ApprovalDefinitionValidatorTests : ApprovalTestBase
     }
 
     [Fact]
-    public async Task Shape_Graph_400() =>
-        E(await Validate(Valid() with { Shape = "graph" }), "shape").Should().Be(ApprovalMessages.ShapeInvalid);
+    public async Task Shape_Unknown_400() =>
+        E(await Validate(Valid() with { Shape = "mesh" }), "shape").Should().Be(ApprovalMessages.ShapeInvalid);
 
     [Fact]
     public async Task When_UnknownField_400()
