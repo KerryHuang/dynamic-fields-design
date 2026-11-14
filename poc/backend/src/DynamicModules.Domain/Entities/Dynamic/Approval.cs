@@ -16,6 +16,10 @@ public class ApprovalFlow : AuditableEntity
     public int Priority { get; set; }
     public bool Active { get; set; } = true;
     public long? CurrentVersionId { get; set; }
+    /// <summary>流程圖設計器的草稿（流程圖設計 §7.6、§10.8）；沒有草稿時為 null。</summary>
+    public string? DraftJson { get; set; }
+    public string? DraftUpdatedBy { get; set; }
+    public DateTime? DraftUpdatedTime { get; set; }
 }
 
 /// <summary>流程版本：被實例綁定或出現在快照裡之後不再修改。</summary>
@@ -25,6 +29,8 @@ public class ApprovalFlowVersion
     public long FlowId { get; set; }
     public int Version { get; set; }
     public ApprovalDefinition Definition { get; set; } = null!;
+    /// <summary>設計器的節點座標（不參與執行）；sequence 版本為 null。</summary>
+    public string? LayoutJson { get; set; }
     public string CreatedBy { get; set; } = "";
     public DateTime CreatedTime { get; set; }
 }
@@ -79,6 +85,9 @@ public class ApprovalStageRun
     public DateTime? DueTime { get; set; }
     public string? NodeId { get; set; }
     public string? BranchKey { get; set; }
+    public string? NodeKind { get; set; }
+    public string? InEdgeId { get; set; }
+    public string? CloseReason { get; set; }
 }
 
 /// <summary>指派給一位使用者的待簽核。</summary>
