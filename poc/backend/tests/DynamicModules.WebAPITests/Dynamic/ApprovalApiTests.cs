@@ -269,6 +269,31 @@ public class ApprovalApiTests : IDisposable
 
     [Fact]
     [Trait("Category", "Postgres")]
+    public async Task Reassign_IdempotencyReplay_PreviousAssigneeNotifiedOnce()
+    {
+        var r = await Arrange();
+        var id = await Submitted(r);
+        var current = await Current(_admin, id);
+        var body = new { rowVersion = current.GetProperty("rowVersion").GetString(), userId = "floor01", comment = "交接" };
+        HttpRequestMessage Request()
+        {
+            var req = new HttpRequestMessage(HttpMethod.Post, $"{Base}/approval-tasks/{TaskOf(current, "sales01")}/reassign") { Content = JsonContent.Create(body) };
+            req.Headers.Add("Idempotency-Key", "reassign-once-1");
+            return req;
+        }
+
+        var first = await _admin.SendAsync(Request());
+        first.StatusCode.Should().Be(HttpStatusCode.OK, await first.Content.ReadAsStringAsync());
+        var second = await _admin.SendAsync(Request());
+        second.StatusCode.Should().Be(HttpStatusCode.OK);
+        second.Headers.GetValues("Idempotent-Replay").Should().ContainSingle("true");
+
+        (await Notices("sales01", "approvalReassignedAway")).Should().Be(1);
+        (await Notices("floor01", "approvalReassignedAway")).Should().Be(0);
+    }
+
+    [Fact]
+    [Trait("Category", "Postgres")]
     public async Task Cancel_IdempotencyReplay_OneNotificationEach()
     {
         var r = await Arrange();

@@ -251,6 +251,39 @@ public class ApprovalManagerActionTests : ApprovalTestBase
     }
 
     [Fact]
+    public async Task Reassign_NotifiesPreviousAssignee_OnlyNumberAndTargetName_NoLink()
+    {
+        var (_, id) = await Stage1();
+        var targetName = Db.Context.Set<AppUser>().AsNoTracking().Single(u => u.UserId == "fin1").DisplayName;
+
+        (await Reassign(id, "admin", "gm", "fin1")).IsSuccess.Should().BeTrue();
+
+        Notices("gm", NotificationKinds.ApprovalReassignedAway).Should().Be(1);
+        Notices("fin1", NotificationKinds.ApprovalReassignedAway).Should().Be(0);
+        Notices("admin", NotificationKinds.ApprovalReassignedAway).Should().Be(0);
+        var n = Db.Context.Set<Notification>().AsNoTracking().Single(x => x.UserId == "gm" && x.Kind == NotificationKinds.ApprovalReassignedAway);
+        n.TitleSnapshot.Should().Be($"{Inst(id).TitleSnapshot} → {targetName}");   // 只有單號與對象姓名
+        n.Link.Should().BeEmpty();   // 前負責人已失去讀取權，不給連結
+        n.SourceId.Should().Be(id);
+    }
+
+    [Fact]
+    public async Task Reassign_ThenReassignedAwayUserCanBeTargetAgain()
+    {
+        var (_, id) = await Stage1();
+        (await Reassign(id, "admin", "gm", "fin1")).IsSuccess.Should().BeTrue();
+        // gm 的任務狀態是 reassigned：之後可以再被選為改派對象
+        (await Reassign(id, "admin", "fin1", "gm")).IsSuccess.Should().BeTrue();
+        Open(id, "gm").Reason.Should().Be(ApprovalTaskReason.Reassigned);
+        // 也可以被選為轉交對象
+        (await Reassign(id, "admin", "gm", "fin2")).IsSuccess.Should().BeTrue();
+        As("fin2");
+        var res = await Send(new TransferTaskRequest(Open(id, "fin2").Id, Inst(id).RowVersion, "gm", null));
+        res.IsSuccess.Should().BeTrue(Dump(res));
+        TasksOf(id).Single(t => t.Status == ApprovalTaskStatus.Open).AssigneeUserId.Should().Be("gm");
+    }
+
+    [Fact]
     public async Task Reassign_ToSelf_AllowedUnlessInitiator()
     {
         var (_, id) = await Stage1();

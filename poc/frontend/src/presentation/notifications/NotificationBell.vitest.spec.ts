@@ -137,9 +137,9 @@ describe('NotificationBell', () => {
 describe('notification kinds', () => {
   const APPROVAL = [
     'approvalPending', 'approvalTransferred', 'approvalAddSigned', 'approvalRejected', 'approvalReturned', 'approvalApproved',
-    'approvalWithdrawn', 'approvalCancelled', 'approvalRerouted', 'approvalOverdue', 'approvalAdminAlert',
+    'approvalWithdrawn', 'approvalCancelled', 'approvalReassignedAway', 'approvalRerouted', 'approvalOverdue', 'approvalAdminAlert',
   ];
-  it('NOTIFICATION_KINDS lists all 11 approval kinds the server writes', () => {
+  it('NOTIFICATION_KINDS lists all 12 approval kinds the server writes', () => {
     for (const k of APPROVAL) expect(NOTIFICATION_KINDS as readonly string[]).toContain(k);
   });
   it('every NOTIFICATION_KINDS entry has a label in all four locales, and the foreign ones hold no Chinese', () => {

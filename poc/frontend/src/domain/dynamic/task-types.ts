@@ -119,7 +119,7 @@ export const taskStatusColor = (s: TaskStatus): string => (s === 'done' ? 'posit
 export const NOTIFICATION_KINDS = [
   'taskAssigned', 'taskMentioned', 'taskCommented', 'taskDueSoon', 'taskOverdue', 'taskCompleted', 'taskCancelled',
   'approvalPending', 'approvalTransferred', 'approvalAddSigned', 'approvalRejected', 'approvalReturned', 'approvalApproved',
-  'approvalWithdrawn', 'approvalCancelled', 'approvalRerouted', 'approvalOverdue', 'approvalAdminAlert',
+  'approvalWithdrawn', 'approvalCancelled', 'approvalReassignedAway', 'approvalRerouted', 'approvalOverdue', 'approvalAdminAlert',
 ] as const;
 
 export interface NotificationItem {

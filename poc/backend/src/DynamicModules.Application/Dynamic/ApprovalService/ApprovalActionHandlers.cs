@@ -355,9 +355,10 @@ public class CancelApprovalHandler(
 /// <summary>
 /// 簽核管理員改派（設計 §7.8）：把某個 open 任務換成另一位使用者，離職或不在的人的待簽靠它搬走。對象規則同轉交，
 /// 管理員不是任務的負責人，所以沒有「不能交給自己」這條（可以改派給自己，除非他是發起人或這關已有票）。
+/// 原負責人收到通知（使用者裁決 2026-11-14）：他已失去讀取權，所以只帶單號與對象姓名、不帶連結。
 /// </summary>
 public class ReassignTaskHandler(
-    IApprovalInstanceRepository repo, ApprovalActionSupport support, ApprovalHandover handover, ApprovalPolicies policies,
+    IApprovalInstanceRepository repo, ApprovalActionSupport support, ApprovalHandover handover, ApprovalPolicies policies, ApprovalNotifier notifier,
     IPermissionRepository permissions, ICurrentUser user, IUnitOfWork uow) : IRequestHandler<ReassignTaskRequest, ServiceResult>
 {
     public async Task<ServiceResult> Handle(ReassignTaskRequest request, CancellationToken ct)
@@ -372,14 +373,19 @@ public class ReassignTaskHandler(
         var me = tasks.Single(t => t.Id == task.Id);
         if (me.Status != ApprovalTaskStatus.Open) return ServiceResult.Conflict(ApprovalMessages.StageHandled);
 
-        var activeUsers = (await permissions.ListUsersAsync(ct)).Where(u => u.IsActive).Select(u => u.UserId).ToHashSet(StringComparer.Ordinal);
+        var users = await permissions.ListUsersAsync(ct);
+        var activeUsers = users.Where(u => u.IsActive).Select(u => u.UserId).ToHashSet(StringComparer.Ordinal);
         var allowSelf = await policies.AllowSelfApprovalAsync(inst.ModuleId, ct);
         if (ApprovalActionRules.TargetError(request.UserId, null, inst.InitiatorUserId, allowSelf, activeUsers,
                 tasks.Where(t => t.StageRunId == me.StageRunId)) is { } bad)
             return ApprovalActionSupport.Bad("userId", bad);
 
+        var previous = me.AssigneeUserId;
         await handover.HandOverAsync(inst, me, request.UserId, ApprovalActions.Reassign, user.UserId, null,
             ApproveTaskHandler.Clean(request.Comment), ct);
+        var targetName = users.FirstOrDefault(u => u.UserId == request.UserId)?.DisplayName ?? request.UserId;
+        await notifier.NotifyAsync(NotificationKinds.ApprovalReassignedAway, inst, [previous], user.UserId, ct,
+            title: $"{inst.TitleSnapshot} → {targetName}", withLink: false);
         await uow.CommitAsync(ct);
         return ServiceResult.Success(new ApprovalActionResponse(ApprovalOutcomes.Reassigned, inst.Id, inst.RowVersion));
     }

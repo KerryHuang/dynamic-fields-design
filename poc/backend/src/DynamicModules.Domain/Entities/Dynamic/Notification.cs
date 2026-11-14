@@ -31,6 +31,7 @@ public static class NotificationKinds
     public const string ApprovalApproved = "approvalApproved";
     public const string ApprovalWithdrawn = "approvalWithdrawn";
     public const string ApprovalCancelled = "approvalCancelled";
+    public const string ApprovalReassignedAway = "approvalReassignedAway";
     public const string ApprovalRerouted = "approvalRerouted";
     public const string ApprovalOverdue = "approvalOverdue";
     public const string ApprovalAdminAlert = "approvalAdminAlert";

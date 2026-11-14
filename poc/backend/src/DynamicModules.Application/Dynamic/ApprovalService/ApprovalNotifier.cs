@@ -9,9 +9,9 @@ public sealed class ApprovalNotifier(INotificationRepository notifications, IBus
 {
     public const string SourceType = "approval";
 
-    /// <summary>去重；exceptUserId（這次動作的人）不通知。title 省略時用實例的標題快照。</summary>
+    /// <summary>去重；exceptUserId（這次動作的人）不通知。title 省略時用實例的標題快照；withLink 為 false 時不帶連結（收件人已無讀取權）。</summary>
     public async Task NotifyAsync(string kind, ApprovalInstance inst, IEnumerable<string> userIds, string? exceptUserId, CancellationToken ct,
-        string? title = null)
+        string? title = null, bool withLink = true)
     {
         var recipients = userIds.Where(u => u != exceptUserId).Distinct(StringComparer.Ordinal).ToList();
         if (recipients.Count == 0) return;
@@ -19,7 +19,7 @@ public sealed class ApprovalNotifier(INotificationRepository notifications, IBus
         foreach (var userId in recipients)
             notifications.Add(new Notification
             {
-                UserId = userId, Kind = kind, TitleSnapshot = title ?? inst.TitleSnapshot, Link = $"/dynamic/{module?.Key}/{inst.RecordId}",
+                UserId = userId, Kind = kind, TitleSnapshot = title ?? inst.TitleSnapshot, Link = withLink ? $"/dynamic/{module?.Key}/{inst.RecordId}" : "",
                 SourceType = SourceType, SourceId = inst.Id, CreatedTime = time.Now
             });
     }
