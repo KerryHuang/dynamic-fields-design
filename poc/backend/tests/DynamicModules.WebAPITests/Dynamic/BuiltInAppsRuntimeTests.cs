@@ -150,23 +150,49 @@ public class BuiltInAppsRuntimeTests : IDisposable
     }
 
     [Fact]
-    public async Task ConvertingAPo_ToAReceipt_Is400_WhenTheSupplierIsNoLongerASupplier()
+    public async Task ConvertingAPo_ToAReceipt_Is400OnTheSupplierField_WhenTheSupplierIsNoLongerASupplier()
     {
         var inv = await OpenInventoryAsync();
         var (k, fields) = await PartnerSchemaAsync();
         var supplier = await inv.SupplierAsync("昌盛鋼鐵");
         var item = await inv.ItemAsync("導柱");
-        await inv.WarehouseAsync("A", "主倉");
-        var draft = await inv.PoDraftAsync(supplier, item, 5);
-        var po = await inv.ConfirmPoAsync(_rig.Admin, draft, _rig.Admin, "admin");
+        var warehouse = await inv.WarehouseAsync("A", "主倉");
+        var po = await ConfirmedPoWithWarehouseAsync(inv, supplier, item, warehouse);
         var lineId = po.GetProperty("details").GetProperty(inv.Key("po-line"))[0].GetProperty("id").GetInt64();
+        var url = $"{Base}/records/{InventoryRig.Id(po)}/conversions/inv-po-to-receipt/convert";
+        var body = new { lines = new[] { new { sourceLineId = lineId, quantity = 5 } } };
 
-        // 角色後來被改成客戶：原本合格的採購單轉到貨單時，到貨單的供應商守衛擋下
+        // 對照：預定入庫倉有效、供應商角色合法時，轉換成功
+        var ok = await _rig.Admin.PostAsJsonAsync(url, body);
+        ok.StatusCode.Should().Be(HttpStatusCode.Created, await ok.Content.ReadAsStringAsync());
+
+        // 另一張同條件的採購單，角色後來被改成客戶：只有供應商守衛會擋（入庫倉有效）
+        var po2 = await ConfirmedPoWithWarehouseAsync(inv, supplier, item, warehouse);
+        var line2 = po2.GetProperty("details").GetProperty(inv.Key("po-line"))[0].GetProperty("id").GetInt64();
         var flip = await PutPartnerAsync(_rig.Admin, supplier, new() { [k["角色"]] = OptionOf(fields, "角色", "客戶") });
         flip.StatusCode.Should().Be(HttpStatusCode.OK, await flip.Content.ReadAsStringAsync());
 
-        var res = await _rig.Admin.PostAsJsonAsync($"{Base}/records/{InventoryRig.Id(po)}/conversions/inv-po-to-receipt/convert",
-            new { lines = new[] { new { sourceLineId = lineId, quantity = 5 } } });
-        res.StatusCode.Should().Be(HttpStatusCode.BadRequest, await res.Content.ReadAsStringAsync());
+        var res = await _rig.Admin.PostAsJsonAsync($"{Base}/records/{InventoryRig.Id(po2)}/conversions/inv-po-to-receipt/convert",
+            new { lines = new[] { new { sourceLineId = line2, quantity = 5 } } });
+        var text = await res.Content.ReadAsStringAsync();
+        res.StatusCode.Should().Be(HttpStatusCode.BadRequest, text);
+        var receiptFields = await inv.F("receipt");
+        text.Should().Contain(receiptFields["供應商"], "錯誤落在進貨單的供應商欄位").And.Contain("目標記錄的狀態不符", "是角色守衛訊息");
+        text.Should().NotContain(receiptFields["入庫倉"], "入庫倉有效，不應有錯");
+    }
+
+    private async Task<JsonElement> ConfirmedPoWithWarehouseAsync(InventoryRig inv, long supplier, long item, long warehouse)
+    {
+        var h = await inv.F("po");
+        var l = await inv.F("po-line");
+        var draft = await InventoryRig.PostOk(_rig.Admin, $"{Base}/modules/{inv.Key("po")}/records", new
+        {
+            values = new Dictionary<string, object> { [h["供應商"]] = supplier, [h["預定入庫倉"]] = warehouse },
+            details = new Dictionary<string, object[]>
+            {
+                [inv.Key("po-line")] = [new { values = new Dictionary<string, object> { [l["品項"]] = item, [l["數量"]] = 5 } }]
+            }
+        });
+        return await inv.ConfirmPoAsync(_rig.Admin, draft, _rig.Admin, "admin");
     }
 }
