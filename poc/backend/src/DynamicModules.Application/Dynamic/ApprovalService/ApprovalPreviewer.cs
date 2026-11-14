@@ -82,6 +82,8 @@ public sealed class ApprovalPreviewer(
             return ServiceResult.Success(new ApprovalPreviewResponse(
                 approval.NoMatch == ApprovalNoMatch.Direct ? ApprovalPreviewOutcomes.Direct : ApprovalPreviewOutcomes.Blocked, null, [], []));
 
+        if (ApprovalShapeGate.Reject(match) is { } gated) return gated;
+
         var users = await permissions.ListUsersAsync(ct);
         var names = users.ToDictionary(u => u.UserId, u => string.IsNullOrEmpty(u.DisplayName) ? u.UserId : u.DisplayName);
         UserRef Ref(string id) => new(id, names.GetValueOrDefault(id) ?? id);
