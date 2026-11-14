@@ -130,6 +130,7 @@ public sealed class ApprovalApprover(
         var current = await support.ValuesAsync(inst.RecordId, ct);
         var check = ApprovalRouter.Recheck(inst, runs, module, current, registry, time.Today, await modules.ListUserIdsAsync(ct));
         if (check.Undecidable is { } undecidable) return ServiceResult.Conflict(ApprovalMessages.FlowConditionUndecidable(undecidable.Name));
+        if (ApprovalShapeGate.Reject(check.NewFlow) is { } gated) return gated;
         if (check.Changed)
         {
             // 這次同意不計入；回 200 讓交易提交，重來的實例才建得起來

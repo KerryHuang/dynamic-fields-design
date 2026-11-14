@@ -51,6 +51,8 @@ public class SubmitApprovalHandler(
             return direct.IsSuccess ? ServiceResult.Success(new SubmitApprovalResponse(ApprovalOutcomes.Direct, null, record.RowVersion)) : direct;
         }
 
+        if (ApprovalShapeGate.Reject(match) is { } gated) return gated;
+
         var picks = request.Picks ?? [];
         var ctx = await resolver.ContextAsync(module, user.UserId, values, null, ct);
         if (PickErrors(match.Definition, picks, ctx) is { Count: > 0 } pickErrors) return ServiceResult.Invalid(pickErrors);
