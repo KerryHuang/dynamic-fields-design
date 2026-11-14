@@ -2576,6 +2576,79 @@ namespace DynamicModules.Persistence.Migrations
                     b.ToTable("Dynamic_TaskRuleTask", (string)null);
                 });
 
+            modelBuilder.Entity("DynamicModules.Domain.Entities.Dynamic.TaskView", b =>
+                {
+                    b.Property<long>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("ConfigJson")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTime>("CreatedTime")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("CreatedUserId")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Kind")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTime?>("ModifiedTime")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("ModifiedUserId")
+                        .HasMaxLength(50)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("OwnerUserId")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("RowVersion")
+                        .IsConcurrencyToken()
+                        .IsRequired()
+                        .HasMaxLength(36)
+                        .HasColumnType("TEXT");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("OwnerUserId");
+
+                    b.ToTable("Dynamic_TaskView", (string)null);
+                });
+
+            modelBuilder.Entity("DynamicModules.Domain.Entities.Dynamic.TaskViewShare", b =>
+                {
+                    b.Property<long>("ViewId")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("TargetKind")
+                        .HasMaxLength(20)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("TargetId")
+                        .HasMaxLength(50)
+                        .HasColumnType("TEXT");
+
+                    b.HasKey("ViewId", "TargetKind", "TargetId");
+
+                    b.HasIndex("TargetKind", "TargetId");
+
+                    b.ToTable("Dynamic_TaskViewShare", (string)null);
+                });
+
             modelBuilder.Entity("DynamicModules.Domain.Entities.Dynamic.UserDepartment", b =>
                 {
                     b.Property<string>("UserId")
@@ -3173,6 +3246,15 @@ namespace DynamicModules.Persistence.Migrations
                         .IsRequired();
                 });
 
+            modelBuilder.Entity("DynamicModules.Domain.Entities.Dynamic.TaskViewShare", b =>
+                {
+                    b.HasOne("DynamicModules.Domain.Entities.Dynamic.TaskView", null)
+                        .WithMany("Shares")
+                        .HasForeignKey("ViewId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
             modelBuilder.Entity("DynamicModules.Domain.Entities.Dynamic.UserDepartment", b =>
                 {
                     b.HasOne("DynamicModules.Domain.Entities.Dynamic.Department", null)
@@ -3247,6 +3329,11 @@ namespace DynamicModules.Persistence.Migrations
             modelBuilder.Entity("DynamicModules.Domain.Entities.Dynamic.TaskRule", b =>
                 {
                     b.Navigation("Tasks");
+                });
+
+            modelBuilder.Entity("DynamicModules.Domain.Entities.Dynamic.TaskView", b =>
+                {
+                    b.Navigation("Shares");
                 });
 #pragma warning restore 612, 618
         }
