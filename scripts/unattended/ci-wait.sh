@@ -12,7 +12,9 @@ for _ in $(seq 1 60); do
 done
 [ -n "$id" ] || { echo "找不到 $sha 的 gate run（分支推上去了嗎？）"; echo timeout; exit 1; }
 gh run watch "$id" --interval 30 >/dev/null 2>&1
-gh run view "$id" --json jobs -q '.jobs[] | "\(.name)\t\(.conclusion)\t\(((.completedAt|fromdate) - (.startedAt|fromdate)) / 60 | floor)m"'
+# watch 可能因網路中斷或睡眠提早返回：確認整個 run 完成才往下讀結果
+until [ "$(gh run view "$id" --json status -q .status 2>/dev/null)" = completed ]; do sleep 30; done
+gh run view "$id" --json jobs -q '.jobs[] | "\(.name)\t\(.conclusion)\t\(if (.startedAt|startswith("0001")) or (.completedAt|startswith("0001")) then "-" else (((.completedAt|fromdate) - (.startedAt|fromdate)) / 60 | floor | tostring) + "m" end)"'
 gh run view "$id" --json jobs -q '.jobs[] | select(.conclusion == "failure") | .name' | sed 's/^/FAILED /'
 c=$(gh run view "$id" --json jobs -q '.jobs[] | select(.name == "gate") | .conclusion')
 echo "${c:-unknown}"
