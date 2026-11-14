@@ -18,5 +18,6 @@ public static class DemoCatalog
     /// </summary>
     public static IReadOnlyList<IDemoScenario> Scenarios { get; } =
         [new MasterScenario(AppIds), new OrderScenario(), new MoldCareScenario(), new RepairScenario(), new QualityScenario(), new CrmScenario(), new DesignCaseScenario(),
-         new MesQuoteScenario(), new InventoryScenario(), new MesProductionScenario()];
+         new MesQuoteScenario(), new InventoryScenario(), new MesProductionScenario(),
+         new TaskBoardScenario()];
 }
