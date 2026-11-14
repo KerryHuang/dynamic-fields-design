@@ -16,4 +16,6 @@ public static class TaskMessages
     public const string SystemEntryNoWithdraw = "系統記錄不能撤回";
     public static string TooManyFiles(int max) => $"一則留言最多 {max} 個附件";
     public const string AttachmentNotFound = "找不到附件";
+    public const string UndoInvalid = "這次變更已無法復原";
+    public const string SupervisorOnlyAssignee = "你以主管身分只能改負責人";
 }

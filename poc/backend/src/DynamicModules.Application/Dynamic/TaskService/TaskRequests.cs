@@ -14,10 +14,16 @@ public sealed record UpdateTaskRequest(long Id, JsonElement Patch) : IRequest<Se
 
 public sealed record DeleteTaskRequest(long Id) : IRequest<ServiceResult>, ITransactionalRequest;
 
-/// <summary>Tab：assigned、created、mentioned；Filter：open、overdue、today、thisWeek、all。</summary>
+/// <summary>Tab：assigned、created、mentioned、subordinates；Filter：open、overdue、today、thisWeek、all。</summary>
 public sealed record GetMyTasksRequest(string Tab, string Filter, int CurrentPage, int PagesSize) : IRequest<ServiceResult>;
 
 public sealed record GetTaskSummaryRequest : IRequest<ServiceResult>;
+
+/// <summary>成功時 Data 是 <see cref="TaskCapabilitiesResponse"/>。</summary>
+public sealed record GetTaskCapabilitiesRequest : IRequest<ServiceResult>;
+
+/// <summary>復原主管重派（憑證見 <see cref="ITaskUndoTokens"/>）：成功回復原後的任務詳細。</summary>
+public sealed record UndoReassignRequest(long Id, string Token) : IRequest<ServiceResult>, ITransactionalRequest;
 
 public sealed record GetTaskRequest(long Id) : IRequest<ServiceResult>;
 

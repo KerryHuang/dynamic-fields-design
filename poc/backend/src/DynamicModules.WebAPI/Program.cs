@@ -49,6 +49,7 @@ builder.Services.AddScoped<ICurrentUser, ClaimsCurrentUser>();
 builder.Services.AddScoped<DynamicModules.Application.Common.ICurrentLocale, HeaderCurrentLocale>();
 builder.Services.AddSingleton<IPasswordService, PasswordService>();
 builder.Services.AddSingleton<ClientIpResolver>();
+builder.Services.AddSingleton<DynamicModules.Application.Dynamic.TaskService.ITaskUndoTokens, DynamicModules.WebAPI.Security.DataProtectionTaskUndoTokens>();
 builder.Services.AddSingleton<ClientErrorThrottle>();
 // 維運資訊：這個程序的身分與建置／部署資訊
 builder.Services.AddSingleton<DynamicModules.Application.Dynamic.OpsService.IOpsEnvironment, OpsEnvironment>();
