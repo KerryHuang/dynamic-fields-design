@@ -83,8 +83,8 @@ public class InventoryPoApprovalScenarioTests(DemoGeneratedFixture fx)
         var large = pos.Single(p => p.Total >= LargeFrom && p.Status == "已確認");
         var instance = (await Instances()).Single(i => i.Instance.RecordId == large.Record.Id).Instance;
         (await TasksOf(instance.Id)).Should().Equal(
-            [("buyer-lead", "ops01", ApprovalTaskStatus.Approved), ("gm", "manager01", ApprovalTaskStatus.Approved)],
-            "第 1 關營運部主管、第 2 關總經理室主管，依序同意");
+            [("buyer-lead", "ops01", ApprovalTaskStatus.Approved), ("", "sales01", ApprovalTaskStatus.Approved), ("gm", "manager01", ApprovalTaskStatus.Approved)],
+            "第 1 關營運部主管同意並加簽業務一（加簽關卡沒有關卡代碼）、第 2 關總經理室主管，依序同意");
     }
 
     [Fact]
@@ -106,5 +106,73 @@ public class InventoryPoApprovalScenarioTests(DemoGeneratedFixture fx)
         read.IsSuccess.Should().BeTrue(read.Message);
         var detail = (DynamicRecordResponse)read.Data!;
         detail.Values.GetValueOrDefault(await fx.Key(Po, "含稅總計")).Should().NotBeNull("臨時讀取連金額軸一起開放");
+    }
+
+    private async Task<List<ApprovalAction>> ActionsOf(long instanceId) =>
+        await fx.Host.Db.Context.Set<ApprovalAction>().AsNoTracking().Where(a => a.InstanceId == instanceId).OrderBy(a => a.Id).ToListAsync();
+
+    private async Task<long> InstanceWithAction(string action)
+    {
+        fx.Generated();
+        var ids = await fx.Host.Db.Context.Set<ApprovalAction>().AsNoTracking().Where(a => a.Action == action).Select(a => a.InstanceId).Distinct().ToListAsync();
+        return ids.Should().ContainSingle($"Demo 只有一張採購單有 {action}").Subject;
+    }
+
+    [Fact]
+    public async Task Demo_TransferredPo_HistoryHasTransferToManager01()
+    {
+        var id = await InstanceWithAction(ApprovalActions.Transfer);
+        var actions = await ActionsOf(id);
+        var transfer = actions.Single(a => a.Action == ApprovalActions.Transfer);
+        transfer.ActorUserId.Should().Be("ops01");
+        transfer.TargetUserIds.Should().Equal("manager01");
+        actions.Single(a => a.Action == ApprovalActions.Approve).ActorUserId.Should().Be("manager01");
+        (await Instances()).Single(i => i.Instance.Id == id).Instance.Status.Should().Be(ApprovalInstanceStatus.Approved);
+    }
+
+    [Fact]
+    public async Task Demo_AddSignPo_AddSignStageBySales01()
+    {
+        var id = await InstanceWithAction(ApprovalActions.AddSign);
+        var db = fx.Host.Db.Context;
+        var run = await db.Set<ApprovalStageRun>().AsNoTracking().SingleAsync(r => r.InstanceId == id && r.AddedByUserId == "ops01");
+        run.Status.Should().Be(ApprovalStageStatus.Approved);
+        (await db.Set<ApprovalTask>().AsNoTracking().Where(t => t.StageRunId == run.Id).ToListAsync())
+            .Should().ContainSingle(t => t.AssigneeUserId == "sales01" && t.Status == ApprovalTaskStatus.Approved);
+        var gm = (await TasksOf(id)).Single(t => t.Stage == "gm");
+        (gm.User, gm.Status).Should().Be(("manager01", ApprovalTaskStatus.Approved));
+        (await Instances()).Single(i => i.Instance.Id == id).Instance.Status.Should().Be(ApprovalInstanceStatus.Approved);
+    }
+
+    [Fact]
+    public async Task Demo_CancelledDraftPo_InstanceCancelled_RecordDraft()
+    {
+        var id = await InstanceWithAction(ApprovalActions.Cancel);
+        var instance = (await Instances()).Single(i => i.Instance.Id == id).Instance;
+        instance.Status.Should().Be(ApprovalInstanceStatus.Cancelled);
+        instance.InitiatorUserId.Should().Be("buyer01");
+        var cancel = (await ActionsOf(id)).Single(a => a.Action == ApprovalActions.Cancel);
+        cancel.ActorUserId.Should().Be("admin");
+        cancel.Comment.Should().NotBeNullOrWhiteSpace();
+        (await Pos()).Single(p => p.Record.Id == instance.RecordId).Status.Should().Be("草稿");
+    }
+
+    [Fact]
+    public async Task Demo_PastDelegation_TaskDelegatedToSales01_OnBehalfOfOps01()
+    {
+        fx.Generated();
+        var db = fx.Host.Db.Context;
+        var task = await db.Set<ApprovalTask>().AsNoTracking().SingleAsync(t => t.Reason == ApprovalTaskReason.Delegated);
+        (task.AssigneeUserId, task.OriginalUserId, task.Status).Should().Be(("sales01", "ops01", ApprovalTaskStatus.Approved));
+        (await ActionsOf(task.InstanceId)).Single(a => a.Action == ApprovalActions.Approve).OnBehalfOfUserId.Should().Be("ops01");
+    }
+
+    [Fact]
+    public async Task Demo_NoActiveDelegationToday()
+    {
+        fx.Generated();
+        var delegates = await fx.Host.Db.Context.Set<ApprovalDelegate>().AsNoTracking().ToListAsync();
+        delegates.Should().NotBeEmpty();
+        delegates.Should().OnlyContain(d => d.EndDate < DateOnly.FromDateTime(DateTime.Today));
     }
 }

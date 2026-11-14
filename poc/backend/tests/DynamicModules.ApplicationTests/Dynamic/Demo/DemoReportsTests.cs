@@ -126,6 +126,7 @@ public class DemoReportsTests(DemoGeneratedFixture fx)
         await using var host = await DemoTestHost.CreateAsync(configure: s =>
         {
             s.AddSingleton<IBusinessTime>(clock);
+            s.AddActingOverrides();   // 覆寫過的時鐘要重新包 Acting 裝飾器，產生器排程的過去時間才有效（簽核 a3g 的代理設定看營運日）
             s.AddSingleton(new AuthSettings(demoLogin));
         });
         (await host.Send(new GenerateDemoDataRequest(DemoTestHost.Today))).IsSuccess.Should().BeTrue();
