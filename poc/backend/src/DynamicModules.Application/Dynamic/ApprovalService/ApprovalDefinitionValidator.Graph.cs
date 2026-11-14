@@ -98,8 +98,8 @@ public sealed partial class ApprovalDefinitionValidator
                 return hasUsers || hasGroups || hasLevel ? ApprovalMessages.NotifyRecipientInvalid : null;
             case ApprovalNotifyRecipientKinds.InitiatorManager:
                 if (hasUsers || hasGroups) return ApprovalMessages.NotifyRecipientInvalid;
-                // 層數沒填不當預設值：明確寫出幾層才知道通知誰
-                return r.Level is { } lv && lv >= 1 && (lv <= x.Limits.MaxManagerLevel || lv <= oldLevel)
+                // 層數沒填照設計 §12.1 預設第 1 層，再驗政策上限
+                return (r.Level ?? 1) is var lv && lv >= 1 && (lv <= x.Limits.MaxManagerLevel || lv <= oldLevel)
                     ? null : ApprovalMessages.ManagerLevel(x.Limits.MaxManagerLevel, x.Previous is not null);
             default:
                 return ApprovalMessages.NotifyRecipientInvalid;

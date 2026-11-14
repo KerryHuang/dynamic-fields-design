@@ -232,17 +232,12 @@ public class ApprovalFlowsApiTests
         (await c.PutAsJsonAsync($"{Flows}/draft-only", Flow("draft-only", s.Done, 9, s.Group))).StatusCode.Should().Be(HttpStatusCode.Conflict);
     }
 
-    [Fact]
-    [Trait("Category", "Postgres")]
-    public async Task Create_Graph_400_ShapeGateAndNodeKeys()
+    private static object GraphBody(string key, (string Key, long Status, long Amount, string AmountKey, long Draft, long Done, long Group) s, string mode = "bad")
     {
-        using var app = new TestApp();
-        var c = app.AsUser();
-        var s = await SeedApproval(c);
         object Node(string id, string kind, object? more = null) => more ?? new { id, kind };
-        var body = new
+        return new
         {
-            key = "graph-one", name = Zh("流程圖"), toOptionId = s.Done, priority = 5, active = true,
+            key, name = Zh("流程圖"), toOptionId = s.Done, priority = 5, active = true,
             definition = new
             {
                 shape = "graph", stages = Array.Empty<object>(),
@@ -252,19 +247,103 @@ public class ApprovalFlowsApiTests
                     Node("a", "approval", new
                     {
                         id = "a", kind = "approval", name = Zh("主管"), approvers = new { source = "group", groupIds = new[] { s.Group } },
-                        mode = "bad", editableFields = Array.Empty<long>(), onEmpty = "fallback"
+                        mode, editableFields = Array.Empty<long>(), onEmpty = "fallback"
                     }),
                     Node("end", "end")
                 },
                 edges = new object[] { new { id = "e1", from = "start", to = "a" }, new { id = "e2", from = "a", to = "end" } }
             }
         };
-        var res = await c.PostAsJsonAsync($"{Flows}?module={s.Key}", body);
+    }
+
+    [Fact]
+    [Trait("Category", "Postgres")]
+    public async Task Create_Graph_400_ShapeGateAndNodeKeys()
+    {
+        using var app = new TestApp();
+        var c = app.AsUser();
+        var s = await SeedApproval(c);
+        var res = await c.PostAsJsonAsync($"{Flows}?module={s.Key}", GraphBody("graph-one", s));
         res.StatusCode.Should().Be(HttpStatusCode.BadRequest);
         var errors = (await JsonOf(res)).GetProperty("errors");
         errors.TryGetProperty("definition.shape", out _).Should().BeTrue("fg2 之前流程圖一律拒收");
         errors.TryGetProperty("definition.nodes.a.mode", out _).Should().BeTrue("屬性錯誤用節點代號定位");
         (await c.GetAsync($"{Flows}/graph-one")).StatusCode.Should().Be(HttpStatusCode.NotFound);
+    }
+
+    [Fact]
+    [Trait("Category", "Postgres")]
+    public async Task Update_Graph_400_ShapeGate_FlowUnchanged()
+    {
+        using var app = new TestApp();
+        var c = app.AsUser();
+        var s = await SeedApproval(c);
+        var before = await JsonOf(await c.GetAsync($"{Flows}/big"));
+        var res = await c.PutAsJsonAsync($"{Flows}/big", GraphBody("big", s, mode: "all"));
+        res.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+        (await JsonOf(res)).GetProperty("errors").TryGetProperty("definition.shape", out _).Should().BeTrue();
+        var after = await JsonOf(await c.GetAsync($"{Flows}/big"));
+        after.GetProperty("version").GetInt32().Should().Be(before.GetProperty("version").GetInt32());
+        after.GetProperty("definition").GetProperty("shape").GetString().Should().Be("sequence");
+    }
+
+    [Fact]
+    [Trait("Category", "Postgres")]
+    public async Task DraftPreview_Graph_400_ShapeGate()
+    {
+        using var app = new TestApp();
+        var c = app.AsUser();
+        var s = await SeedApproval(c);
+        var res = await c.PostAsJsonAsync($"{Flows}/preview?module={s.Key}", new { draft = GraphBody("draft-graph", s, mode: "all"), initiatorUserId = "sales01" });
+        res.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+        (await JsonOf(res)).GetProperty("errors").TryGetProperty("definition.shape", out _).Should().BeTrue();
+    }
+
+    /// <summary>已知例外（設計 §7.2）：資料庫裡已有的 graph 只改 active=false 可以存（不重跑驗證，讓設計者能先停掉引用壞掉的流程）；一改定義就被拒。</summary>
+    [Fact]
+    [Trait("Category", "Postgres")]
+    public async Task Update_ExistingGraph_OnlyDeactivate_Allowed_DefinitionChange_Rejected()
+    {
+        using var app = new TestApp();
+        var c = app.AsUser();
+        var s = await SeedApproval(c);
+        using (var scope = app.Services.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<DynamicDbContext>();
+            var moduleId = db.Set<Module>().Single(m => m.Key == s.Key).Id;
+            var flow = new ApprovalFlow
+            {
+                Key = "legacy-graph", NameI18n = new([KeyValuePair.Create("zh-TW", "既有流程圖")]), ModuleId = moduleId, ToOptionId = s.Done, Priority = 9,
+                Active = true, CreatedUserId = "admin", CreatedTime = DateTime.UtcNow
+            };
+            db.Add(flow);
+            db.SaveChanges();
+            var version = new ApprovalFlowVersion
+            {
+                FlowId = flow.Id, Version = 1, CreatedBy = "admin", CreatedTime = DateTime.UtcNow,
+                Definition = new DynamicModules.Domain.Approvals.ApprovalDefinition("graph", null, null, null, [])
+            };
+            db.Add(version);
+            db.SaveChanges();
+            flow.CurrentVersionId = version.Id;
+            db.SaveChanges();
+        }
+
+        object Body(bool active, string name) => new
+        {
+            key = "legacy-graph", name = Zh(name), toOptionId = s.Done, priority = 9, active,
+            definition = new { shape = "graph", stages = Array.Empty<object>() }
+        };
+        var changed = await c.PutAsJsonAsync($"{Flows}/legacy-graph", new
+        {
+            key = "legacy-graph", name = Zh("既有流程圖"), toOptionId = s.Done, priority = 9, active = false,
+            definition = new { shape = "graph", stages = Array.Empty<object>(), nodes = new[] { new { id = "start", kind = "start" } } }
+        });
+        changed.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+
+        var ok = await c.PutAsJsonAsync($"{Flows}/legacy-graph", Body(false, "既有流程圖"));
+        ok.StatusCode.Should().Be(HttpStatusCode.OK, await ok.Content.ReadAsStringAsync());
+        (await JsonOf(ok)).GetProperty("active").GetBoolean().Should().BeFalse();
     }
 
     private static async Task<(HttpStatusCode Status, System.Text.Json.JsonElement Body)> PutEdited(

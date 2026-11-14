@@ -1955,6 +1955,78 @@
       "limits": null,
       "errors": [["nodes.x", "G2", "inCount"], ["nodes.x", "G3", "unreachable"]],
       "warnings": []
+    },
+    {
+      "id": "AG-082",
+      "name": "W1、W2 條件路線讓全部到齊的並行區免簽：區內有簽核節點，預設線仍可能不經簽核就通過",
+      "definition": { "shape": "graph", "stages": [],
+        "nodes": [
+          {"id": "s", "kind": "start"},
+          {"id": "c0", "kind": "condition"},
+          {"id": "a0", "kind": "approval", "name": {"zh-TW": "a0"}},
+          {"id": "f1", "kind": "fork"},
+          {"id": "a1", "kind": "approval", "name": {"zh-TW": "a1"}},
+          {"id": "j1", "kind": "join", "forkId": "f1", "mode": "any"},
+          {"id": "f2", "kind": "fork"},
+          {"id": "c2", "kind": "condition"},
+          {"id": "n2", "kind": "notify", "name": {"zh-TW": "n2"}, "recipients": [{"kind": "initiator"}]},
+          {"id": "a2", "kind": "approval", "name": {"zh-TW": "a2"}},
+          {"id": "n1", "kind": "notify", "name": {"zh-TW": "n1"}, "recipients": [{"kind": "initiator"}]},
+          {"id": "j2", "kind": "join", "forkId": "f2", "mode": "all"},
+          {"id": "z", "kind": "end"}
+        ],
+        "edges": [
+          {"id": "e1", "from": "s", "to": "c0"},
+          {"id": "e2", "from": "c0", "to": "a0", "order": 1, "when": {"all": [{"field": 1, "op": "gte", "value": 1}]}},
+          {"id": "e3", "from": "c0", "to": "f1", "default": true},
+          {"id": "e4", "from": "a0", "to": "z"},
+          {"id": "e5", "from": "f1", "to": "a1"},
+          {"id": "e6", "from": "a1", "to": "j1"},
+          {"id": "e7", "from": "f1", "to": "f2"},
+          {"id": "e8", "from": "f2", "to": "c2"},
+          {"id": "e9", "from": "f2", "to": "n2"},
+          {"id": "e10", "from": "c2", "to": "a2", "order": 1, "when": {"all": [{"field": 1, "op": "gte", "value": 1}]}},
+          {"id": "e11", "from": "c2", "to": "n1", "default": true},
+          {"id": "e12", "from": "a2", "to": "j2"},
+          {"id": "e13", "from": "n1", "to": "j2"},
+          {"id": "e14", "from": "n2", "to": "j2"},
+          {"id": "e15", "from": "j2", "to": "j1"},
+          {"id": "e16", "from": "j1", "to": "z"}
+        ] },
+      "previous": null,
+      "limits": null,
+      "errors": [],
+      "warnings": [["nodes.j1", "W1", "anyJoinWithoutApproval"], ["nodes.c0", "W2", "defaultToEndWithoutApproval"]]
+    },
+    {
+      "id": "AG-083",
+      "name": "通過 W3 遇到匯合節點就停止：條件節點的出線直接到匯合，匯合之後的略過條件不警告",
+      "definition": { "shape": "graph", "stages": [],
+        "nodes": [
+          {"id": "s", "kind": "start"},
+          {"id": "f", "kind": "fork"},
+          {"id": "c", "kind": "condition"},
+          {"id": "a", "kind": "approval", "name": {"zh-TW": "a"}},
+          {"id": "b", "kind": "approval", "name": {"zh-TW": "b"}},
+          {"id": "j", "kind": "join", "forkId": "f", "mode": "all"},
+          {"id": "x", "kind": "approval", "name": {"zh-TW": "x"}, "when": {"all": [{"field": 1, "op": "gte", "value": 1}]}},
+          {"id": "z", "kind": "end"}
+        ],
+        "edges": [
+          {"id": "e1", "from": "s", "to": "f"},
+          {"id": "e2", "from": "f", "to": "c"},
+          {"id": "e3", "from": "f", "to": "b"},
+          {"id": "e4", "from": "c", "to": "a", "order": 1, "when": {"all": [{"field": 1, "op": "gte", "value": 1}]}},
+          {"id": "e5", "from": "c", "to": "j", "default": true},
+          {"id": "e6", "from": "a", "to": "j"},
+          {"id": "e7", "from": "b", "to": "j"},
+          {"id": "e8", "from": "j", "to": "x"},
+          {"id": "e9", "from": "x", "to": "z"}
+        ] },
+      "previous": null,
+      "limits": null,
+      "errors": [],
+      "warnings": []
     }
   ]
 }
