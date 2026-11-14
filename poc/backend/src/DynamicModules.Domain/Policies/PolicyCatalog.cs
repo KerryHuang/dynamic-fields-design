@@ -40,11 +40,11 @@ public static class PolicyCatalog
     public static readonly PolicyDefinition TaskNotifyCancelled =
         new("task.notify.cancelled", "notification", PolicyKind.RoleSet, PolicyScope.Module, "creator", Options: NotifyRoles);
 
-    /// <summary>A32：部門主管可看與重派部屬的任務（看板設計 §4）。</summary>
+    /// <summary>A33：部門主管可看與重派部屬的任務（看板設計 §4）。</summary>
     public static readonly PolicyDefinition TaskSupervisorScope =
         new("task.supervisorScope", "task", PolicyKind.Boolean, PolicyScope.System, "true");
 
-    /// <summary>A33：主管範圍是否含下層部門（看板設計 §4）。</summary>
+    /// <summary>A34：主管範圍是否含下層部門（看板設計 §4）。</summary>
     public static readonly PolicyDefinition TaskSupervisorScopeRecursive =
         new("task.supervisorScopeRecursive", "task", PolicyKind.Boolean, PolicyScope.System, "true");
 

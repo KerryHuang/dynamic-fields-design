@@ -143,15 +143,15 @@ public class TaskVisibilityEquivalenceTests : TaskTestBase
 
         await SetPolicy(PolicyCatalog.TaskSupervisorScopeRecursive, "false");
         foreach (var who in people)
-            (await ViaPredicate(who)).Should().BeEquivalentTo(await ViaEvaluate(who), $"A33 關閉，身分 {who}");
+            (await ViaPredicate(who)).Should().BeEquivalentTo(await ViaEvaluate(who), $"A34 關閉，身分 {who}");
         foreach (var who in new[] { "manager01", "ops01" })
-            await AssertSubordinatesTab(who, $"A33 關閉，部屬分頁，身分 {who}");
+            await AssertSubordinatesTab(who, $"A34 關閉，部屬分頁，身分 {who}");
 
         await SetPolicy(PolicyCatalog.TaskSupervisorScope, "false");
         foreach (var who in new[] { "manager01", "ops01" })
         {
-            (await ViaPredicate(who)).Should().BeEquivalentTo(await ViaEvaluate(who), $"A32 關閉，身分 {who}");
-            await AssertSubordinatesTab(who, $"A32 關閉，部屬分頁，身分 {who}");
+            (await ViaPredicate(who)).Should().BeEquivalentTo(await ViaEvaluate(who), $"A33 關閉，身分 {who}");
+            await AssertSubordinatesTab(who, $"A33 關閉，部屬分頁，身分 {who}");
         }
     }
 
