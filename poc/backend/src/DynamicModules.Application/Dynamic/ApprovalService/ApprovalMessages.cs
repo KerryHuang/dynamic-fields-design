@@ -14,6 +14,7 @@ public static class ApprovalMessages
     public const string TargetStateInvalid = "目標狀態必須是狀態機的狀態，而且不是起始狀態";
     public const string DefinitionMissing = "缺少流程定義";
     public const string FlowKeyReserved = "流程代碼 order 是保留字，請改用其他代碼";
+    public const string FlowNotPublished = "這條流程還沒有發布的版本，請先發布";
     public static string StagesCount(int max, bool existing = false) => $"關卡必須有 1 到 {max} 關{KeepOld(existing)}";
     public const string StageCodeInvalid = "關卡代號只能用小寫英文、數字、連字號，英文開頭，最多 40 字";
     public const string StageCodeDuplicate = "關卡代號不能重複";

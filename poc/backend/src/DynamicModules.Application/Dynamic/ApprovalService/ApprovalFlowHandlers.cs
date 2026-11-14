@@ -1,3 +1,4 @@
+using System.Text.Json;
 using System.Text.RegularExpressions;
 using DynamicModules.Application.Common;
 using DynamicModules.Application.Common.Security;
@@ -50,16 +51,17 @@ public sealed class ApprovalFlowEditor(IApprovalFlowRepository flows, ApprovalDe
             if (errors.Count > 0) return ServiceResult.Invalid(errors);
         }
 
-        var current = await flows.ListCurrentByModuleAsync(module.Id, ct);
-        if (current.Any(f => f.Flow.Id != self?.Id && f.Flow.ToOptionId == input.ToOptionId && f.Flow.Priority == input.Priority))
+        // 優先序唯一索引含沒有已發布版本的流程，所以這裡要看全部流程列；入口約束只看已發布的
+        if ((await flows.ListByModuleAsync(module.Id, ct)).Any(f => f.Flow.Id != self?.Id && f.Flow.ToOptionId == input.ToOptionId && f.Flow.Priority == input.Priority))
             return ServiceResult.Invalid(new Dictionary<string, string[]> { ["priority"] = ["同一目標狀態上的流程優先序不能重複"] });
 
+        var current = await flows.ListCurrentByModuleAsync(module.Id, ct);
         var proposed = new ApprovalFlow
         {
             Id = self?.Id ?? 0, Key = input.Key!, NameI18n = input.Name!, ModuleId = module.Id, ToOptionId = input.ToOptionId,
             Priority = input.Priority, Active = input.Active
         };
-        var set = current.Where(f => f.Flow.Id != self?.Id).Append(new FlowState(proposed, input.Definition!)).ToList();
+        var set = current.Where(f => f.Flow.Id != self?.Id).Append(new FlowState(proposed, input.Definition!, 0)).ToList();
         return Constraints(module, set);
     }
 
@@ -72,10 +74,11 @@ public sealed class ApprovalFlowEditor(IApprovalFlowRepository flows, ApprovalDe
 
     public async Task<ApprovalFlowResponse> ResponseAsync(ApprovalFlow f, string moduleKey, CancellationToken ct)
     {
-        var v = (await flows.GetVersionAsync(f.CurrentVersionId!.Value, ct))!;
-        return new ApprovalFlowResponse(f.Key, f.NameI18n, moduleKey, f.ToOptionId, f.Priority, f.Active, v.Version,
-            await flows.IsUsedAsync(f.Id, ct), await flows.CountPendingAsync(f.Id, ct), v.Definition,
-            await flows.IsVersionUsedAsync(v.Id, ct));
+        var v = f.CurrentVersionId is { } vid ? await flows.GetVersionAsync(vid, ct) : null;
+        var draft = f.DraftJson is null ? (JsonElement?)null : JsonSerializer.Deserialize<JsonElement>(f.DraftJson);
+        return new ApprovalFlowResponse(f.Key, f.NameI18n, moduleKey, f.ToOptionId, f.Priority, f.Active, v?.Version,
+            await flows.IsUsedAsync(f.Id, ct), await flows.CountPendingAsync(f.Id, ct), v?.Definition,
+            v is not null && await flows.IsVersionUsedAsync(v.Id, ct), draft);
     }
 }
 
@@ -118,6 +121,7 @@ public class UpdateApprovalFlowHandler(
     {
         var flow = await flows.GetByKeyAsync(request.Key, ct);
         if (flow is null) return ServiceResult.NotFound("找不到流程");
+        if (flow.CurrentVersionId is null) return ServiceResult.Conflict(ApprovalMessages.FlowNotPublished);
         var input = request.Input;
         if (input.Key != flow.Key) return ServiceResult.Invalid(new Dictionary<string, string[]> { ["key"] = ["流程代碼不能更改"] });
         var module = (await modules.GetByIdAsync(flow.ModuleId, includeChildren: true, ct))!;
@@ -210,7 +214,7 @@ public class GetApprovalFlowsHandler(IModuleRepository modules, IApprovalFlowRep
         var module = await modules.GetByKeyAsync(request.ModuleKey, includeChildren: false, ct);
         if (module is null) return ServiceResult.NotFound("找不到模組");
         var result = new List<ApprovalFlowResponse>();
-        foreach (var f in await flows.ListCurrentByModuleAsync(module.Id, ct)) result.Add(await editor.ResponseAsync(f.Flow, module.Key, ct));
+        foreach (var (flow, _) in await flows.ListByModuleAsync(module.Id, ct)) result.Add(await editor.ResponseAsync(flow, module.Key, ct));
         return ServiceResult.Success((IReadOnlyList<ApprovalFlowResponse>)result);
     }
 
