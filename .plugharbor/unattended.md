@@ -7,6 +7,7 @@ GitHub Actions（`.github/workflows/gate.yml`）：先跑外洩掃描（三項 0
 
 - 範圍依改動決定：只改文件不跑；只改前端只跑前端 test／typecheck／build；動到後端、`poc/shared/`、Dockerfile 或 workflow 全跑（使用者 2026-11-13 裁決）。
 - 最後一行 `success` 才算通過；失敗的 job 會列 `FAILED`，用 `gh run view <id> --log-failed` 看原因。
+- 完整套件只在這一步跑，交給 CI；實作與修正輪的 subagent 本機只跑相關測試類別（`dotnet test --filter`、指定 vitest 檔）加 typecheck、build（使用者 2026-11-14 裁決）。
 - 等 CI 時可以同時做本機走查；本機 `bash scripts/unattended/gate.sh <worktree>` 只在 GitHub 不能用時當備援。
 - 背景指令不要在結尾加 `echo "exit=$?"`，那會讓背景工作永遠回 0。
 
@@ -39,9 +40,12 @@ main push 會自動部署 Demo（Render），但只在 `poc/` 有變更時才觸
 - 做完清掉 emulate，導回 about:blank。
 
 ## 不並行的工作
+- 共用檔：i18n 語系檔（`poc/frontend/src/i18n/*.json`）、前端路由與選單、後端 DI 註冊、DbContext 與 EF migration、`poc/backend/apps/*.app.json`。單元計畫要列出會碰到哪幾個；兩條平行線碰到同一個就照順序做，不並行實作。
+- 平行線（另一個 worktree）只能做和進行中單元沒有共用檔的工作，例如簽核 a3 進行中時做任務看板 kb；兩條線的重測試錯開，不同時跑（使用者 2026-11-14 裁決）。
 - 兩件會加 EF migration 的實作：model snapshot 會衝突。
 - 兩件都動 `poc/backend/apps/*.app.json` 的工作。
-- 全套 WebAPI 測試，跟另一個吃 CPU 的測試同時跑：DemoData 測試會逾時。必須同時跑前端測試時，vitest 加 `--maxWorkers=2`。
+- 全套 WebAPI 測試，跟另一個吃 CPU 的測試同時跑：DemoData 測試會逾時。
+- 有牆鐘上限的測試（如 `CachedSystemPolicyTests`）不和其他重測試同時跑：xUnit 工作執行緒被佔滿會讓逾時後的接續等太久（2026-11-14 CI 兩次失敗）。必須同時跑前端測試時，vitest 加 `--maxWorkers=2`。
 
 ## 電源與睡眠
 - 開場：用 `pmset -g batt` 看有沒有接電源。使用者離開前提醒接電源、別蓋螢幕。`caffeinate` 擋不住蓋螢幕。
