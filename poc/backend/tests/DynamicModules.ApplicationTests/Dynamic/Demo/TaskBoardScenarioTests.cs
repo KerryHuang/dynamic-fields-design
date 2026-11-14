@@ -28,11 +28,18 @@ public class TaskBoardScenarioTests(DemoGeneratedFixture fx)
             .Where(t => titles.Contains(t.Title)).OrderBy(t => t.Id).ToListAsync();
     }
 
+    /// <summary>逐頁讀到底：Demo 任務變多時，這批任務可能落在第 2 頁之後。</summary>
     private async Task<List<TaskSummaryResponse>> Subordinates(string user)
     {
-        var r = await fx.As(user, new GetMyTasksRequest("subordinates", "all", 1, 100));
-        r.IsSuccess.Should().BeTrue(r.Message);
-        return ((PagedResponse<TaskSummaryResponse>)r.Data!).Items.ToList();
+        var all = new List<TaskSummaryResponse>();
+        for (var page = 1; ; page++)
+        {
+            var r = await fx.As(user, new GetMyTasksRequest("subordinates", "all", page, 100));
+            r.IsSuccess.Should().BeTrue(r.Message);
+            var data = (PagedResponse<TaskSummaryResponse>)r.Data!;
+            all.AddRange(data.Items);
+            if (data.Items.Count == 0 || all.Count >= data.TotalCount) return all;
+        }
     }
 
     [Fact]
