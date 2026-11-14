@@ -124,6 +124,7 @@ public static class DependencyInjection
         services.AddScoped<Dynamic.TaskService.TaskAccess>();
         services.AddScoped<Dynamic.TaskService.TaskSupport>();
         services.AddScoped<Dynamic.TaskService.TaskWriter>();
+        services.AddScoped<Dynamic.TaskService.TaskVisibilityService>();
         services.AddScoped<Dynamic.TaskService.ITaskNotifier, Dynamic.NotificationService.TaskNotificationWriter>();
         services.AddScoped<Dynamic.NotificationService.INotificationReminderSource, Dynamic.NotificationService.TaskReminderSource>();
         services.AddScoped<Dynamic.TaskRuleService.TaskRuleValidator>();

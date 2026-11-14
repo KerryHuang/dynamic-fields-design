@@ -11,6 +11,8 @@ public sealed class SqliteTestDb : IAsyncDisposable
 
     public SqliteConnection Connection => _connection;
     public DynamicDbContext Context { get; private set; } = null!;
+    /// <summary>這個資料庫送出的 SQL 命令數，測試用前後差量計算查詢次數。</summary>
+    public CountingCommandInterceptor Counter { get; } = new();
 
     /// <param name="migrate">false 時不套 migration，由測試自己依序套用（驗證既有資料升級）。</param>
     public static async Task<SqliteTestDb> CreateAsync(bool migrate = true)
@@ -19,6 +21,7 @@ public sealed class SqliteTestDb : IAsyncDisposable
         await db._connection.OpenAsync();
         db.Context = new DynamicDbContext(new DbContextOptionsBuilder<DynamicDbContext>()
             .UseSqlite(db._connection, b => b.MigrationsAssembly("DynamicModules.Persistence"))
+            .AddInterceptors(db.Counter)
             .Options);
         if (migrate) await db.Context.Database.MigrateAsync();
         return db;
