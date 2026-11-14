@@ -5,7 +5,7 @@ import { dynamicApi } from 'src/services/api/dynamic-api';
 
 /**
  * Templates a user can print with; a 403 (no print permission) leaves `data` empty and the print button hidden.
- * `recordId` is passed only for an approver's temporary read (approval grant), which the backend checks per record.
+ * `recordId` is always the current record: the backend takes the normal route (Read + PrintExport) or, failing that, the one-record approval grant.
  */
 export function usePrintTemplates(moduleKey: MaybeRefOrGetter<string>, recordId?: MaybeRefOrGetter<number | undefined>) {
   return useQuery({

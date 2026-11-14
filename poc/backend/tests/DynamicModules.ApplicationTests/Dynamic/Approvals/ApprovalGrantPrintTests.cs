@@ -3,6 +3,8 @@ using DynamicModules.Application.Dynamic.ApprovalService;
 using DynamicModules.Application.Dynamic.PermissionService.Commands.SaveModulePermissions;
 using DynamicModules.Application.Dynamic.PermissionService.Data;
 using DynamicModules.Application.Dynamic.PrintService;
+using DynamicModules.Application.Dynamic.RecordService.Commands.CreateRecord;
+using DynamicModules.Application.Dynamic.RecordService.Data;
 using DynamicModules.Domain.Entities.Dynamic;
 using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
@@ -161,6 +163,124 @@ public class ApprovalGrantPrintTests : ApprovalTestBase
         (await Print("fin1", po)).IsSuccess.Should().BeTrue();   // 本人
         (await Print("emp2", po)).IsSuccess.Should().BeTrue();   // 代理人
         (await Print("emp1", po)).IsForbidden.Should().BeTrue();
+    }
+
+    private async Task AssertNoPrint(long po, params string[] users)
+    {
+        foreach (var u in users)
+        {
+            (await Print(u, po)).IsForbidden.Should().BeTrue($"{u} print");
+            (await Templates(u, po)).IsForbidden.Should().BeTrue($"{u} templates");
+        }
+    }
+
+    [Fact]
+    public async Task Print_AfterReassign_OldAssigneeRejected_NewOneAllowed()
+    {
+        await Rig();
+        var (po, id) = await Pending();
+        var taskId = TasksOf(id).Single(t => t.AssigneeUserId == "fin1").Id;
+        As("admin");
+        (await Send(new ReassignTaskRequest(taskId, Inst(id).RowVersion, "emp2", null))).IsSuccess.Should().BeTrue();
+
+        await AssertNoPrint(po, "fin1");
+        (await Print("emp2", po)).IsSuccess.Should().BeTrue();
+        (await Templates("emp2", po)).IsSuccess.Should().BeTrue();
+    }
+
+    [Fact]
+    public async Task Print_AfterCancel_EveryoneRejected()
+    {
+        await Rig();
+        var (po, id) = await Pending();
+        (await Print("fin1", po)).IsSuccess.Should().BeTrue();
+        As("admin");
+        (await Send(new CancelApprovalRequest(id, Inst(id).RowVersion, "供應商報價已過期"))).IsSuccess.Should().BeTrue();
+
+        await AssertNoPrint(po, "fin1", "fin2");
+    }
+
+    [Fact]
+    public async Task Print_DelegatedTaskEnds_OriginalAndDelegateRejected()
+    {
+        await Rig();
+        var (po, id) = await Pending();
+        await Db.Context.Set<ApprovalTask>().Where(t => t.InstanceId == id && t.AssigneeUserId == "fin1")
+            .ExecuteUpdateAsync(s => s.SetProperty(t => t.AssigneeUserId, "emp2").SetProperty(t => t.Reason, ApprovalTaskReason.Delegated));
+        Db.Context.ChangeTracker.Clear();
+        As("emp2");
+        var task = TasksOf(id).Single(t => t.AssigneeUserId == "emp2");
+        (await Send(new ApproveTaskRequest(task.Id, Inst(id).RowVersion, null, null))).IsSuccess.Should().BeTrue();
+
+        await AssertNoPrint(po, "fin1", "emp2", "fin2");
+    }
+
+    private const string VendorTitle = "神祕供應商公司";
+
+    /// <summary>採購單的供應商參照指向一筆主檔；加一個只印供應商的範本。回傳（單據 Id）。</summary>
+    private async Task<long> PendingWithSupplier(Func<Task> restrict)
+    {
+        await Rig();
+        var moduleId = Db.Context.Set<Module>().AsNoTracking().Single(m => m.Key == _r.Module).Id;
+        Db.Context.Add(new PrintTemplate { ModuleId = moduleId, Key = "po-sup", NameI18n = Text("供應商"), Body = $"<p>供應商：{{{{f_{_r.Supplier}}}}}</p>", Active = true });
+        await Db.Context.SaveChangesAsync();
+        Db.Context.ChangeTracker.Clear();
+        As("admin");
+        var titleField = (await Detail(_r.Vendor)).TitleFieldId!.Value;
+        var vendor = (DynamicRecordResponse)(await Send(new CreateRecordRequest(_r.Vendor, V((titleField, VendorTitle))))).Data!;
+        await restrict();
+        As("admin");
+        var po = await NewPo(_r, extra: V((_r.Supplier, vendor.Id)));
+        await MustSubmit(po.Id, _r.Confirmed);
+        return po.Id;
+    }
+
+    private async Task<string> PrintSupplier(long po)
+    {
+        As("fin1");
+        var res = await Send(new PrintRecordRequest(po, "po-sup", "zh-TW"));
+        res.IsSuccess.Should().BeTrue(Dump(res));
+        return Html(res);
+    }
+
+    [Fact]
+    public async Task Print_ReferenceTarget_NoRead_ShowsNoPermission_NoTitle()
+    {
+        var po = await PendingWithSupplier(() => Task.CompletedTask);   // fin1 對供應商主檔沒有任何權限；臨時讀取不傳遞給參照目標
+
+        var html = await PrintSupplier(po);
+
+        html.Should().Contain("（無權限）").And.NotContain(VendorTitle);
+    }
+
+    [Fact]
+    public async Task Print_ReferenceTarget_OutsideOwnerScope_ShowsNoPermission()
+    {
+        var po = await PendingWithSupplier(async () =>
+        {
+            As("admin");
+            (await Send(new SaveModulePermissionsRequest(_r.Vendor, new ModulePermissionsDto(
+                [new GroupPermissionDto(FinanceGroup, new PrivilegesDto(true, false, false, false, false, false, false), DataScope.Own)], [], [], []))))
+                .IsSuccess.Should().BeTrue();
+        });   // 供應商記錄的 Owner 是 admin，fin1 只能看自己的
+
+        var html = await PrintSupplier(po);
+
+        html.Should().Contain("（無權限）").And.NotContain(VendorTitle);
+    }
+
+    [Fact]
+    public async Task Print_ReferenceTarget_Readable_ShowsTitle()
+    {
+        var po = await PendingWithSupplier(async () =>
+        {
+            As("admin");
+            (await Send(new SaveModulePermissionsRequest(_r.Vendor, new ModulePermissionsDto(
+                [new GroupPermissionDto(FinanceGroup, new PrivilegesDto(true, false, false, false, false, false, false), DataScope.All)], [], [], []))))
+                .IsSuccess.Should().BeTrue();
+        });   // 對照組：目標有 Read、標題可見、範圍夠，才看得到標題
+
+        (await PrintSupplier(po)).Should().Contain(VendorTitle);
     }
 
     [Fact]
