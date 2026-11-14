@@ -31,14 +31,11 @@ public class TaskRepository(DynamicDbContext db) : ITaskRepository
     public async Task<(List<TaskItem> Items, int Total)> QueryMineAsync(TaskListQuery q, CancellationToken ct)
     {
         var query = db.Set<TaskItem>().AsNoTracking();
-        var subordinates = (q.Subordinates ?? new HashSet<string>()).ToArray();
         query = q.Tab switch
         {
             TaskListTab.Assigned => query.Where(t => t.AssigneeUserId == q.UserId),
             TaskListTab.Created => query.Where(t => t.CreatedBy == q.UserId),
-            TaskListTab.Subordinates => query.Where(t =>
-                (t.AssigneeUserId != null && subordinates.Contains(t.AssigneeUserId))
-                || (t.AssigneeUserId == null && t.CreatedBy != null && subordinates.Contains(t.CreatedBy))),
+            TaskListTab.Subordinates => query.Where(SubordinateTasks.Of(q.Subordinates ?? new HashSet<string>())),
             _ => query.Where(t => db.Set<TaskParticipant>().Any(
                 p => p.TaskId == t.Id && p.UserId == q.UserId && p.Reason == TaskParticipantReason.Mentioned)),
         };
@@ -72,10 +69,6 @@ public class TaskRepository(DynamicDbContext db) : ITaskRepository
 
     public Task<bool> IsParticipantAsync(long taskId, string userId, CancellationToken ct) =>
         db.Set<TaskParticipant>().AsNoTracking().AnyAsync(p => p.TaskId == taskId && p.UserId == userId, ct);
-
-    public Task<TaskRecordStub?> GetRecordStubAsync(long recordId, CancellationToken ct) =>
-        db.Set<Record>().AsNoTracking().Where(r => r.Id == recordId)
-            .Select(r => new TaskRecordStub(r.Id, r.ModuleId, r.OwnerUserId, r.Title, r.DeleteFlag)).FirstOrDefaultAsync(ct);
 
     public async Task<Dictionary<long, TaskRecordStub>> ListRecordStubsAsync(IReadOnlyCollection<long> recordIds, CancellationToken ct)
     {

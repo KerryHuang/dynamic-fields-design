@@ -3,7 +3,7 @@ using Microsoft.EntityFrameworkCore.Diagnostics;
 
 namespace DynamicModules.ApplicationTests.Persistence;
 
-/// <summary>計算送到資料庫的 SQL 命令數（查詢次數是否隨資料筆數成長）。</summary>
+/// <summary>計算送到資料庫的讀取查詢數（只攔 Reader；EF 的查詢都走 Reader，用來看查詢次數是否隨資料筆數成長）。</summary>
 public sealed class CountingCommandInterceptor : DbCommandInterceptor
 {
     private int _count;

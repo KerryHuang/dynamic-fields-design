@@ -55,6 +55,25 @@ public class TaskVisibilityEquivalenceTests : TaskTestBase
         return all.Where((_, i) => perms[i].CanSee).Select(t => t.Id).ToHashSet();
     }
 
+    /// <summary>部屬的任務分頁（不分狀態、一次讀完）與獨立寫出的定義（§4.2）比對，並且必須是看得到的任務的子集。</summary>
+    private async Task AssertSubordinatesTab(string user, string because)
+    {
+        Db.Context.ChangeTracker.Clear();
+        var all = await Db.Context.Set<TaskItem>().AsNoTracking().OrderBy(t => t.Id).ToListAsync();
+        As(user);
+        using var scope = NewScope();
+        var subs = await scope.ServiceProvider.GetRequiredService<TaskVisibilityService>().SubordinatesAsync(default);
+        var today = new DateOnly(2026, 11, 4);
+        var (items, total) = await scope.ServiceProvider.GetRequiredService<ITaskRepository>().QueryMineAsync(
+            new TaskListQuery(user, TaskListTab.Subordinates, TaskListFilter.All, today, today.AddDays(6), 1, 10_000, subs), default);
+        As("admin");
+        var expected = all.Where(t => t.AssigneeUserId is { } a ? subs.Contains(a) : t.CreatedBy is { } c && subs.Contains(c))
+            .Select(t => t.Id).ToHashSet();
+        items.Select(t => t.Id).Should().BeEquivalentTo(expected, because);
+        total.Should().Be(expected.Count, because);
+        expected.IsSubsetOf(await ViaEvaluate(user)).Should().BeTrue(because);
+    }
+
     [Fact]
     public async Task Matrix_PredicateMatchesEvaluateMany()
     {
@@ -96,17 +115,44 @@ public class TaskVisibilityEquivalenceTests : TaskTestBase
         await SeedTask("未指派", createdBy: "keeper01");
         await SeedTask("只被提到", createdBy: "sales02", mentioned: ["buyer01"]);
         await SeedTask("記錄不存在", createdBy: "floor01", moduleId: t.ModuleId, recordId: 99999);
+        await SeedTask("主管同時被提到", createdBy: "sales01", assignee: "sales01", mentioned: ["manager01"]);
+        var frozenSupervised = await SeedTask("凍結模組的部屬任務", createdBy: "sales01", assignee: "sales01", target: frozen, recordId: recFrozen);
 
-        foreach (var who in new[] { "admin", "admin2", "floor01", "sales01", "sales02", "manager01", "ops01", "buyer01", "keeper01", "nobody" })
+        var people = new[] { "admin", "admin2", "floor01", "sales01", "sales02", "manager01", "ops01", "buyer01", "keeper01", "nobody" };
+        foreach (var who in people)
             (await ViaPredicate(who)).Should().BeEquivalentTo(await ViaEvaluate(who), $"身分 {who}");
+        foreach (var who in new[] { "manager01", "ops01", "sales01" })
+            await AssertSubordinatesTab(who, $"部屬分頁，身分 {who}");
 
-        (await ViaPredicate("admin")).Count.Should().Be(11);
-        (await ViaPredicate("sales01")).Count.Should().BeGreaterThan(3).And.BeLessThan(11);
+        (await ViaPredicate("admin")).Count.Should().Be(13);
+        (await ViaPredicate("sales01")).Count.Should().BeGreaterThan(3).And.BeLessThan(13);
         (await ViaPredicate("manager01")).Should().Contain(await ViaPredicate("sales01"));
+
+        // 主管＋凍結模組的部屬任務：看得到，但不能重派、也不算主管身分（S1）
+        Db.Context.ChangeTracker.Clear();
+        var frozenTask = await Db.Context.Set<TaskItem>().AsNoTracking().Include(x => x.Participants).SingleAsync(x => x.Id == frozenSupervised.Id);
+        As("manager01");
+        using (var scope = NewScope())
+        {
+            var p = (await scope.ServiceProvider.GetRequiredService<TaskAccess>().EvaluateManyAsync([frozenTask], default))[0];
+            p.CanSee.Should().BeTrue();
+            p.CanReassign.Should().BeFalse();
+            p.Supervised.Should().BeFalse();
+        }
+        As("admin");
+
+        await SetPolicy(PolicyCatalog.TaskSupervisorScopeRecursive, "false");
+        foreach (var who in people)
+            (await ViaPredicate(who)).Should().BeEquivalentTo(await ViaEvaluate(who), $"A33 關閉，身分 {who}");
+        foreach (var who in new[] { "manager01", "ops01" })
+            await AssertSubordinatesTab(who, $"A33 關閉，部屬分頁，身分 {who}");
 
         await SetPolicy(PolicyCatalog.TaskSupervisorScope, "false");
         foreach (var who in new[] { "manager01", "ops01" })
+        {
             (await ViaPredicate(who)).Should().BeEquivalentTo(await ViaEvaluate(who), $"A32 關閉，身分 {who}");
+            await AssertSubordinatesTab(who, $"A32 關閉，部屬分頁，身分 {who}");
+        }
     }
 
     [Fact]

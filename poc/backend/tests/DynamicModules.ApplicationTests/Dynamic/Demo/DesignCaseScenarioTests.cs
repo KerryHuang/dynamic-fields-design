@@ -188,7 +188,8 @@ public class DesignCaseScenarioTests(DemoGeneratedFixture fx)
             sp.GetRequiredService<DynamicModules.Application.Dynamic.EventService.EffectBudget>(),
             sp.GetRequiredService<DynamicModules.Application.Dynamic.ApprovalService.ApprovalWriteContext>(),
             sp.GetRequiredService<DynamicModules.Application.Dynamic.ApprovalService.ApprovalLockService>(),
-            sp.GetRequiredService<DynamicModules.Application.Dynamic.AttachmentService.AttachmentUploadTracker>());
+            sp.GetRequiredService<DynamicModules.Application.Dynamic.AttachmentService.AttachmentUploadTracker>(),
+            sp.GetRequiredService<DynamicModules.Application.Dynamic.TaskService.TaskVisibilityService>());
         using var _ = ActingScope.Begin(user);
         return await host.Send(request);
     }
