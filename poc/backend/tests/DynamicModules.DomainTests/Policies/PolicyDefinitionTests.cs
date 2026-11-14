@@ -143,6 +143,23 @@ public class PolicyDefinitionTests
     }
 
     [Fact]
+    public void ApprovalAddSignLimits_FactoryRangeAndScope()
+    {
+        // 設計 §7.6：一到五位、至多 5 個加簽關卡（A32）；技術上限 20
+        foreach (var d in new[] { PolicyCatalog.ApprovalMaxAddSignUsers, PolicyCatalog.ApprovalMaxAddSignStages })
+        {
+            d.Factory.Should().Be("5");
+            d.Scope.Should().Be(PolicyScope.Module);
+            d.Max.Should().Be(20);
+            d.Unit.Should().Be("count");
+            d.Normalize("20").Should().Be("20");
+            d.Normalize("21").Should().BeNull();
+            d.Normalize("0").Should().BeNull();
+            PolicyCatalog.All.Should().Contain(d);
+        }
+    }
+
+    [Fact]
     public void ApprovalMaxApprovers_TechnicalMax50()
     {
         PolicyCatalog.ApprovalMaxApprovers.Scope.Should().Be(PolicyScope.Module);

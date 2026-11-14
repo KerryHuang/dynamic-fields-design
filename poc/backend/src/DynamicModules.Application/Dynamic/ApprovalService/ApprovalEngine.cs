@@ -43,6 +43,10 @@ public sealed class ApprovalEngine(
     {
         if (DefinitionOf(inst) is not { } def) return (null, ServiceResult.Conflict(ApprovalMessages.FlowVersionMissing));
         var runs = await repo.ListRunsAsync(inst.Id, ct);
+        // 這一關完成後，先啟動排隊中的加簽關卡（Seq 小的先，設計 §7.6）；備援實例沒有加簽就是最後一關
+        if (runs.Where(r => r.Status == ApprovalStageStatus.Queued).MinBy(r => r.Seq) is { } queued)
+            return await ActivateQueuedAsync(inst, module, def, queued, values, ct);
+        if (inst.RouteKind == ApprovalRouteKind.Fallback) return (null, null);
         var start = ApprovalPath.NextStageIndex(def, runs);
         var seq = runs.Count == 0 ? 0 : runs.Max(r => r.Seq);
         var userIds = await modules.ListUserIdsAsync(ct);
@@ -72,6 +76,28 @@ public sealed class ApprovalEngine(
         return (null, null);
     }
 
+    /// <summary>
+    /// 啟動排隊中的加簽關卡（計畫 J3）：以 users 來源解析加簽對象，所以停用帳號改備援、發起人依 A12 移除、人數技術上限都照既有規則；
+    /// 席位 Reason 改成 added（備援席位維持 fallback）；沒有逾期時數；通知 approvalAddSigned。
+    /// </summary>
+    private async Task<(ApprovalStageRun? Run, ServiceResult? Failure)> ActivateQueuedAsync(
+        ApprovalInstance inst, Module module, ApprovalDefinition def, ApprovalStageRun queued, IReadOnlyDictionary<string, JsonElement?> values, CancellationToken ct)
+    {
+        var (seats, failure) = await ResolveAddSignAsync(inst, module, def, queued, values, ct);
+        if (failure is not null) return (null, failure);
+        return (await StartAsync(inst, queued, seats, null, ct, NotificationKinds.ApprovalAddSigned), null);
+    }
+
+    private async Task<(IReadOnlyList<SeatPlan> Seats, ServiceResult? Failure)> ResolveAddSignAsync(
+        ApprovalInstance inst, Module module, ApprovalDefinition def, ApprovalStageRun addSign, IReadOnlyDictionary<string, JsonElement?> values, CancellationToken ct)
+    {
+        var ctx = await resolver.ContextAsync(module, inst.InitiatorUserId, values, null, ct);
+        var source = new ApproverSource(ApprovalSources.Users, UserIds: [.. addSign.AddSignUserIds ?? []]);
+        var resolution = ApproverResolver.Resolve(ctx, ApprovalMessages.AddSignStageName, addSign.Mode, source, def.FallbackApprovers, ApprovalOnEmpty.Fallback);
+        if (resolution.Error is { } error) return ([], ServiceResult.Conflict(error));
+        return ([.. resolution.Seats.Select(s => s.Reason == ApprovalTaskReason.Resolved ? s with { Reason = ApprovalTaskReason.Added } : s)], null);
+    }
+
     /// <summary>啟動一個關卡：建 StageRun、任務、備援說明，通知新任務的負責人（不通知這次動作的人自己）。</summary>
     public async Task<ApprovalStageRun> StartAsync(ApprovalInstance inst, ApprovalStageRun run, IReadOnlyList<SeatPlan> seats, int? dueHours,
         CancellationToken ct, string kind = NotificationKinds.ApprovalPending)
@@ -80,7 +106,7 @@ public sealed class ApprovalEngine(
         run.Status = ApprovalStageStatus.Active;
         run.ActivatedTime = now;
         run.DueTime = dueHours is { } h ? now.AddHours(h) : null;
-        repo.AddRun(run);
+        if (run.Id == 0) repo.AddRun(run);   // 排隊中的加簽關卡已經存在，只改狀態
         await uow.CommitAsync(ct);
         var created = await tasks.CreateAsync(inst, run, seats, ct);
         foreach (var seat in seats.Where(x => x.Reason == ApprovalTaskReason.Fallback && x.FallbackFor is not null))
@@ -182,8 +208,21 @@ public sealed class ApprovalEngine(
     public async Task<ServiceResult?> RestartStageAsync(ApprovalInstance inst, Module module, IReadOnlyDictionary<string, JsonElement?> values,
         ApprovalStageRun previous, int seq, CancellationToken ct)
     {
-        if (DefinitionOf(inst) is not { } def || def.Stages.FirstOrDefault(s => s.Code == previous.StageCode) is not { } s)
-            return ServiceResult.Conflict(ApprovalMessages.StageDefMissing);
+        if (DefinitionOf(inst) is not { } def) return ServiceResult.Conflict(ApprovalMessages.StageDefMissing);
+        if (previous.StageCode is null)
+        {
+            // 退回的目標是加簽關卡：同一組加簽人、同樣的方式，重新解析
+            var (seats, failure) = await ResolveAddSignAsync(inst, module, def, previous, values, ct);
+            if (failure is not null) return failure;
+            var again = new ApprovalStageRun
+            {
+                InstanceId = inst.Id, Seq = seq, StageCode = null, NameSnapshot = ApprovalMessages.AddSignStageName, Mode = previous.Mode,
+                AddedByUserId = previous.AddedByUserId, AddSignUserIds = previous.AddSignUserIds
+            };
+            await StartAsync(inst, again, seats, null, ct, NotificationKinds.ApprovalReturned);
+            return null;
+        }
+        if (def.Stages.FirstOrDefault(s => s.Code == previous.StageCode) is not { } s) return ServiceResult.Conflict(ApprovalMessages.StageDefMissing);
         var ctx = await resolver.ContextAsync(module, inst.InitiatorUserId, values, inst.Picks.GetValueOrDefault(s.Code), ct);
         var resolution = ApproverResolver.Resolve(ctx, s.Name, s.Mode, s.Approvers, def.FallbackApprovers, s.OnEmpty);
         if (resolution.Error is { } error) return ServiceResult.Conflict(error);

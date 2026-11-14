@@ -124,6 +124,11 @@ public static class ApprovalMessages
     public static readonly MessageRef TargetSelf = MessageRef.Of(MessageText.ApprovalTargetSelf);
     public static readonly MessageRef TargetInitiator = MessageRef.Of(MessageText.ApprovalTargetInitiator);
     public static readonly MessageRef TargetInStage = MessageRef.Of(MessageText.ApprovalTargetInStage);
+    public static readonly I18nText AddSignStageName = MessageText.AsI18n(MessageText.ApprovalAddSignStage);
+    public static readonly MessageRef AddSignUsersRequired = MessageRef.Of(MessageText.ApprovalAddSignUsersRequired);
+    public static MessageRef AddSignTooManyUsers(int max) => MessageRef.Of(MessageText.ApprovalAddSignTooManyUsers, max);
+    public static MessageRef AddSignLimit(int max) => MessageRef.Of(MessageText.ApprovalAddSignLimit, max);
+    public static readonly MessageRef AddSignModeInvalid = MessageRef.Of(MessageText.ApprovalAddSignModeInvalid);
     public static readonly MessageRef RuntimeInvalid = MessageRef.Of(MessageText.ApprovalRuntimeInvalid);
     public static readonly MessageRef RecordGone = MessageRef.Of(MessageText.ApprovalRecordGone);
     public static readonly MessageRef NoWorkflow = MessageRef.Of(MessageText.ApprovalNoWorkflow);

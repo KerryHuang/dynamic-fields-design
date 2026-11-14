@@ -10,6 +10,12 @@ public sealed class ApprovalPolicies(IPolicyReader policies)
     /// <summary>意見字數上限（全系統，上限 1000 是資料庫欄位長度）。</summary>
     public Task<int> CommentLengthAsync(CancellationToken ct) => policies.IntAsync(PolicyCatalog.ApprovalMaxCommentLength, null, ct);
 
+    /// <summary>同意並加簽一次最多幾位加簽對象（模組範圍）。</summary>
+    public Task<int> MaxAddSignUsersAsync(long moduleId, CancellationToken ct) => policies.IntAsync(PolicyCatalog.ApprovalMaxAddSignUsers, moduleId, ct);
+
+    /// <summary>一張單最多幾個加簽關卡（模組範圍）。</summary>
+    public Task<int> MaxAddSignStagesAsync(long moduleId, CancellationToken ct) => policies.IntAsync(PolicyCatalog.ApprovalMaxAddSignStages, moduleId, ct);
+
     /// <summary>發起人在關卡名單內時是否保留（模組範圍）。</summary>
     public Task<bool> AllowSelfApprovalAsync(long moduleId, CancellationToken ct) =>
         policies.BoolAsync(PolicyCatalog.ApprovalAllowSelfApproval, moduleId, ct);

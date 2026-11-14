@@ -14,6 +14,7 @@ public class ApprovalsController(IMediator mediator) : ControllerBase
     public sealed record ApproveBody(string RowVersion, string? Comment, Dictionary<string, System.Text.Json.JsonElement?>? Values);
     public sealed record RejectBody(string RowVersion, string Comment, string To);
     public sealed record WithdrawBody(string RowVersion, string? Comment);
+    public sealed record AddSignBody(string RowVersion, string? Comment, Dictionary<string, System.Text.Json.JsonElement?>? Values, List<string>? UserIds, string? Mode);
     public sealed record TransferBody(string RowVersion, string UserId, string? Comment);
     public sealed record CancelBody(string RowVersion, string Comment);
     public sealed record ReassignBody(string RowVersion, string UserId, string? Comment);
@@ -26,6 +27,10 @@ public class ApprovalsController(IMediator mediator) : ControllerBase
     [HttpPost("approval-tasks/{id:long}/reject")]
     public async Task<IActionResult> Reject(long id, RejectBody body) =>
         (await mediator.Send(new RejectTaskRequest(id, body.RowVersion, body.Comment, body.To))).ToActionResult(this);
+
+    [HttpPost("approval-tasks/{id:long}/add-sign")]
+    public async Task<IActionResult> AddSign(long id, AddSignBody body) =>
+        (await mediator.Send(new AddSignTaskRequest(id, body.RowVersion, body.Comment, body.Values, body.UserIds ?? [], body.Mode ?? ""))).ToActionResult(this);
 
     [HttpPost("approval-tasks/{id:long}/transfer")]
     public async Task<IActionResult> Transfer(long id, TransferBody body) =>

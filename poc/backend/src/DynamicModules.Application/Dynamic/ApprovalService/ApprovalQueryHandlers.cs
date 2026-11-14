@@ -77,7 +77,7 @@ public sealed class ApprovalReader(IApprovalInstanceRepository repo, IDynamicAcc
 /// </summary>
 public class GetRecordApprovalHandler(
     IRecordRepository records, IModuleRepository modules, IApprovalInstanceRepository repo, IDynamicAccessGuard guard,
-    IPermissionRepository permissions, ApprovalReader reader, ApprovalReadGrant grant, ICurrentUser user)
+    IPermissionRepository permissions, ApprovalReader reader, ApprovalReadGrant grant, ICurrentUser user, ApprovalPolicies policies)
     : IRequestHandler<GetRecordApprovalRequest, ServiceResult>
 {
     public async Task<ServiceResult> Handle(GetRecordApprovalRequest request, CancellationToken ct)
@@ -127,7 +127,8 @@ public class GetRecordApprovalHandler(
         // 讀不到權限輸入是 null（全部遮蔽）
         var hidden = await grant.HiddenFieldIdsAsync(module, read, granted, ct);
         var unwritable = await grant.UnwritableFieldIdsAsync(module, read, granted, ct);
-        var views = visible.Select(i => ApprovalViews.Instance(i, runs, tasks, actions, names, me, writable, manager, hidden, unwritable, module.Workflow, ShowTitle(i))).ToList();
+        var addSignLimit = await policies.MaxAddSignStagesAsync(module.Id, ct);
+        var views = visible.Select(i => ApprovalViews.Instance(i, runs, tasks, actions, names, me, writable, manager, hidden, unwritable, module.Workflow, ShowTitle(i), addSignLimit)).ToList();
         var pending = instances.Any(i => i.Status == ApprovalInstanceStatus.Pending);
         var targets = canRead ? await reader.SubmitTargetsAsync(module, record, pending, ct) : [];
         return ServiceResult.Success(new RecordApprovalResponse(
@@ -271,7 +272,7 @@ internal static class ApprovalViews
 
     public static ApprovalInstanceView Instance(ApprovalInstance i, IReadOnlyList<ApprovalStageRun> allRuns, IReadOnlyList<ApprovalTask> allTasks,
         IReadOnlyList<ApprovalAction> allActions, IReadOnlyDictionary<string, string> names, string me, bool writable, bool manager,
-        IReadOnlySet<long>? hiddenFieldIds, IReadOnlySet<long>? unwritableFieldIds, Workflow? workflow, bool showTitle)
+        IReadOnlySet<long>? hiddenFieldIds, IReadOnlySet<long>? unwritableFieldIds, Workflow? workflow, bool showTitle, int addSignLimit)
     {
         string Name(string id) => names.GetValueOrDefault(id) ?? id;
         var pending = i.Status == ApprovalInstanceStatus.Pending;
@@ -280,16 +281,19 @@ internal static class ApprovalViews
         var def = ApprovalEngine.DefinitionOf(i);
         // 可編輯欄位只給能動作的人，而且送出時的狀態不能是簽核鎖定狀態（設計 §8.5）
         var editableAllowed = workflow is not null && ApprovalRuntimeCheck.VerifyEditable(workflow, i.FromOptionId) is null;
+        var canAddSignMore = allActions.Count(a => a.InstanceId == i.Id && a.Action == ApprovalActions.AddSign) < addSignLimit;
         var stages = runs.Select(r =>
         {
-            var views = tasks.Where(t => t.StageRunId == r.Id).Select(t => new ApprovalTaskView(t.Id, t.AssigneeUserId, Name(t.AssigneeUserId), t.OriginalUserId,
-                t.Reason, t.Status, t.ActedTime,
-                pending && writable && t.Status == ApprovalTaskStatus.Open && ApprovalActionRules.IsActor(t, me)
-                && !ApprovalActionSupport.AlreadyApprovedInStage(tasks, t, me),
-                pending && ApprovalPath.Previous(runs, r) is not null,
-                t.OriginalUserId != t.AssigneeUserId ? Name(t.OriginalUserId) : null)).ToList();
+            var views = tasks.Where(t => t.StageRunId == r.Id).Select(t =>
+            {
+                var canAct = pending && writable && t.Status == ApprovalTaskStatus.Open && ApprovalActionRules.IsActor(t, me)
+                    && !ApprovalActionSupport.AlreadyApprovedInStage(tasks, t, me);
+                return new ApprovalTaskView(t.Id, t.AssigneeUserId, Name(t.AssigneeUserId), t.OriginalUserId, t.Reason, t.Status, t.ActedTime, canAct,
+                    pending && ApprovalPath.Previous(runs, r) is not null,
+                    t.OriginalUserId != t.AssigneeUserId ? Name(t.OriginalUserId) : null, canAct && canAddSignMore);
+            }).ToList();
             return new ApprovalStageView(r.Id, r.Seq, r.StageCode, r.NameSnapshot ?? new I18nText(), r.Mode, r.Status, r.SkipReason, r.DueTime, views,
-                EditableKeys(def, r, views.Any(v => v.CanAct), editableAllowed, unwritableFieldIds));
+                EditableKeys(def, r, views.Any(v => v.CanAct), editableAllowed, unwritableFieldIds), r.AddedByUserId is { } addedBy ? Name(addedBy) : null);
         }).ToList();
         var actions = allActions.Where(a => a.InstanceId == i.Id).OrderBy(a => a.Id).Select(a => new ApprovalActionView(a.Action, a.ActorUserId, Name(a.ActorUserId),
             a.OnBehalfOfUserId, a.TargetUserIds ?? [], a.Comment, Data(a, hiddenFieldIds), a.CreatedTime,

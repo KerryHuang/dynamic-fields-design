@@ -108,6 +108,14 @@ public static class PolicyCatalog
     public static readonly PolicyDefinition ApprovalAllowSelfApproval =
         new("approval.allowSelfApproval", "approval", PolicyKind.Boolean, PolicyScope.Module, "false");
 
+    /// <summary>A32：同意並加簽時一次最多指定幾位加簽對象（設計 §7.6 的「一到五位」）；技術上限 20。</summary>
+    public static readonly PolicyDefinition ApprovalMaxAddSignUsers =
+        new("approval.maxAddSignUsers", "approval", PolicyKind.Integer, PolicyScope.Module, "5", 1, 20, Unit: "count");
+
+    /// <summary>A32：一張單最多加簽幾個關卡（設計 §7.6 的「至多 5 個」，退回後重來的不重複計）；技術上限 20。</summary>
+    public static readonly PolicyDefinition ApprovalMaxAddSignStages =
+        new("approval.maxAddSignStages", "approval", PolicyKind.Integer, PolicyScope.Module, "5", 1, 20, Unit: "count");
+
     /// <summary>A15：系統管理員是否略過狀態轉移上的群組限制（只管轉移群組，不影響其他權限）。</summary>
     public static readonly PolicyDefinition ApprovalAdminBypassTransitionGroups =
         new("approval.adminBypassTransitionGroups", "approval", PolicyKind.Boolean, PolicyScope.System, "true");
@@ -129,7 +137,7 @@ public static class PolicyCatalog
          AttachmentMaxFileBytes, AttachmentMaxFilesPerField, AttachmentAllowedExtensions, AttachmentMaxFilesPerComment,
          OpsSlowRequestMs, OpsClientErrorCollection,
          ApprovalMaxStages, ApprovalMaxApprovers, ApprovalMaxDueHours, ApprovalMaxCommentLength, ApprovalMaxManagerLevel,
-         ApprovalAllowSelfApproval, ApprovalAdminBypassTransitionGroups,
+         ApprovalAllowSelfApproval, ApprovalAdminBypassTransitionGroups, ApprovalMaxAddSignUsers, ApprovalMaxAddSignStages,
          ApprovalDefaultFallbackApprovers, ApprovalAlertRecipients];
 
     public static PolicyDefinition? Find(string code) =>

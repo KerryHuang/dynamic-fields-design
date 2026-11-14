@@ -57,10 +57,10 @@ public sealed record RecordApprovalSummary(string Status, I18nText? StageName, i
 public sealed record RecordApprovalLock(IReadOnlyList<string> FieldKeys, bool DetailRowsLocked);
 
 public sealed record ApprovalTaskView(long Id, string AssigneeUserId, string AssigneeName, string OriginalUserId, string Reason, string Status,
-    DateTime? ActedTime, bool CanAct, bool CanReturnPrevious = false, string? OriginalName = null);
+    DateTime? ActedTime, bool CanAct, bool CanReturnPrevious = false, string? OriginalName = null, bool CanAddSign = false);
 
 public sealed record ApprovalStageView(long Id, int Seq, string? StageCode, I18nText Name, string Mode, string Status, string? SkipReason,
-    DateTime? DueTime, IReadOnlyList<ApprovalTaskView> Tasks, IReadOnlyList<string> EditableFieldKeys);
+    DateTime? DueTime, IReadOnlyList<ApprovalTaskView> Tasks, IReadOnlyList<string> EditableFieldKeys, string? AddedByName = null);
 
 public sealed record ApprovalActionView(string Action, string ActorUserId, string ActorName, string? OnBehalfOfUserId, IReadOnlyList<string> TargetUserIds,
     string? Comment, JsonElement? Data, DateTime CreatedTime, IReadOnlyList<string>? TargetNames = null);

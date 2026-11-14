@@ -269,6 +269,39 @@ public class ApprovalApiTests : IDisposable
 
     [Fact]
     [Trait("Category", "Postgres")]
+    public async Task AddSign_IdempotencyReplay_OneQueuedRun()
+    {
+        var r = await Arrange();
+        var id = await Submitted(r);
+        var s1 = _app.AsUser("sales01");
+        var current = await Current(s1, id);
+        var body = new { rowVersion = current.GetProperty("rowVersion").GetString(), userIds = new[] { "floor01" }, mode = "any", comment = "請確認數量" };
+        HttpRequestMessage Request()
+        {
+            var req = new HttpRequestMessage(HttpMethod.Post, $"{Base}/approval-tasks/{TaskOf(current, "sales01")}/add-sign") { Content = JsonContent.Create(body) };
+            req.Headers.Add("Idempotency-Key", "add-sign-once-1");
+            return req;
+        }
+
+        var first = await s1.SendAsync(Request());
+        first.StatusCode.Should().Be(HttpStatusCode.OK, await first.Content.ReadAsStringAsync());
+        (await JsonOf(first)).GetProperty("outcome").GetString().Should().Be("advanced");
+        var second = await s1.SendAsync(Request());
+        second.StatusCode.Should().Be(HttpStatusCode.OK);
+        second.Headers.GetValues("Idempotent-Replay").Should().ContainSingle("true");
+        (await second.Content.ReadAsStringAsync()).Should().Be(await first.Content.ReadAsStringAsync());
+
+        var after = await Current(_admin, id);
+        var stages = after.GetProperty("stages").EnumerateArray().ToList();
+        stages.Should().HaveCount(2);   // 原本一關加一個加簽關卡，重送沒有再多
+        stages[1].GetProperty("addedByName").GetString().Should().NotBeNullOrEmpty();
+        stages[1].GetProperty("tasks").EnumerateArray().Count(t => t.GetProperty("assigneeUserId").GetString() == "floor01").Should().Be(1);
+        after.GetProperty("actions").EnumerateArray().Count(a => a.GetProperty("action").GetString() == "add-sign").Should().Be(1);
+        (await Notices("floor01", "approvalAddSigned")).Should().Be(1);
+    }
+
+    [Fact]
+    [Trait("Category", "Postgres")]
     public async Task Reassign_IdempotencyReplay_PreviousAssigneeNotifiedOnce()
     {
         var r = await Arrange();

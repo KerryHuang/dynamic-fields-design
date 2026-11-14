@@ -144,6 +144,7 @@ public static class DependencyInjection
         services.AddScoped<Dynamic.ApprovalService.ApprovalNotifier>();
         services.AddScoped<Dynamic.ApprovalService.ApprovalHandover>();
         services.AddScoped<Dynamic.ApprovalService.ApprovalEngine>();
+        services.AddScoped<Dynamic.ApprovalService.ApprovalApprover>();
         services.AddScoped<Dynamic.ApprovalService.ApprovalActionSupport>();
         services.AddScoped<Dynamic.ApprovalService.ApprovalReader>();
         services.AddScoped<Dynamic.ApprovalService.ApprovalHiddenFields>();

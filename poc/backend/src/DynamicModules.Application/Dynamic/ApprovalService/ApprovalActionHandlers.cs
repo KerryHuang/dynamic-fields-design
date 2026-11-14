@@ -66,6 +66,16 @@ public sealed class ApprovalActionSupport(
     public static bool AlreadyApprovedInStage(IEnumerable<ApprovalTask> tasks, ApprovalTask me, string userId) =>
         tasks.Any(t => t.StageRunId == me.StageRunId && t.Id != me.Id && t.Status == ApprovalTaskStatus.Approved && t.AssigneeUserId == userId);
 
+    /// <summary>排隊中的加簽關卡改 closed（退回、撤回；設計 §7.6）。</summary>
+    public static void CloseQueued(IEnumerable<ApprovalStageRun> runs, DateTime now)
+    {
+        foreach (var r in runs.Where(r => r.Status == ApprovalStageStatus.Queued))
+        {
+            r.Status = ApprovalStageStatus.Closed;
+            r.CompletedTime = now;
+        }
+    }
+
     /// <summary>open 任務改 closed（已由他人處理、撤回、退回）。</summary>
     public static void CloseOpen(IEnumerable<ApprovalTask> tasks)
     {
@@ -73,19 +83,25 @@ public sealed class ApprovalActionSupport(
     }
 }
 
-/// <summary>同意（設計 §7.2、§8.2）：或簽任一人、會簽全部席位；關卡完成就推進，沒有下一關就核准並執行轉移。</summary>
-public class ApproveTaskHandler(
+/// <summary>加簽計畫：加簽對象（已去重）與方式（all 會簽、any 或簽）。</summary>
+public sealed record AddSignPlan(IReadOnlyList<string> UserIds, string Mode);
+
+/// <summary>
+/// 同意的核心（設計 §7.2、§8.2；計畫 J5）：或簽任一人、會簽全部席位；關卡完成就推進，沒有下一關就核准並執行轉移。
+/// 加簽（設計 §7.6）是同意的一種：同樣的可編輯欄位、重新比對、一人一票，只是歷程寫 add-sign、並多建一筆排隊的加簽關卡。
+/// </summary>
+public sealed class ApprovalApprover(
     IApprovalInstanceRepository repo, ApprovalActionSupport support, ApprovalEngine engine, ApprovalTransitionRunner runner,
     ICurrentUser user, IBusinessTime time, IUnitOfWork uow, IModuleRepository modules, FieldTypeRegistry registry,
     IDynamicAccessGuard guard, IRecordRepository records, ApprovalReadGrant grant)
-    : IRequestHandler<ApproveTaskRequest, ServiceResult>
 {
-    public async Task<ServiceResult> Handle(ApproveTaskRequest request, CancellationToken ct)
+    public async Task<ServiceResult> ApproveAsync(long taskId, string rowVersion, string? comment, Dictionary<string, JsonElement?>? requestValues,
+        AddSignPlan? addSign, CancellationToken ct)
     {
-        var task = await repo.GetTaskAsync(request.TaskId, ct);
+        var task = await repo.GetTaskAsync(taskId, ct);
         if (task is null) return ServiceResult.NotFound(ApprovalMessages.TaskNotFound);
-        if (await support.CommentErrorAsync(request.Comment, required: false, ct) is { } ce) return ApprovalActionSupport.Bad("comment", ce);
-        var (loaded, failure) = await support.LoadAsync(task.InstanceId, request.RowVersion, ct,
+        if (await support.CommentErrorAsync(comment, required: false, ct) is { } ce) return ApprovalActionSupport.Bad("comment", ce);
+        var (loaded, failure) = await support.LoadAsync(task.InstanceId, rowVersion, ct,
             _ => ApprovalActionRules.IsActor(task, user.UserId) ? null : ServiceResult.Forbidden(), task);
         if (failure is not null) return failure;
         var (inst, module, def, runs, tasks) = loaded!;
@@ -95,7 +111,7 @@ public class ApproveTaskHandler(
         var stageTasks = tasks.Where(t => t.StageRunId == run.Id).ToList();
         if (ApprovalActionSupport.AlreadyApprovedInStage(tasks, me, user.UserId)) return ServiceResult.Conflict(ApprovalMessages.StageHandled);
 
-        var values = request.Values ?? [];
+        var values = requestValues ?? [];
         var stageDef = def.Stages.FirstOrDefault(s => s.Code == run.StageCode);
         var editable = (stageDef?.EditableFields ?? []).Select(id => $"f_{id}").ToHashSet();
         var outside = values.Keys.Where(k => !editable.Contains(k)).ToList();
@@ -123,8 +139,20 @@ public class ApproveTaskHandler(
         var now = time.Now;
         me.Status = ApprovalTaskStatus.Approved;
         me.ActedTime = now;
-        engine.Log(inst, ApprovalActions.Approve, user.UserId, run.Id, me.Id, Clean(request.Comment),
-            data: values.Count > 0 ? JsonSerializer.Serialize(values.Keys) : null);
+        if (addSign is null)
+            engine.Log(inst, ApprovalActions.Approve, user.UserId, run.Id, me.Id, ApproveTaskHandler.Clean(comment),
+                data: values.Count > 0 ? JsonSerializer.Serialize(values.Keys) : null);
+        else
+        {
+            engine.Log(inst, ApprovalActions.AddSign, user.UserId, run.Id, me.Id, ApproveTaskHandler.Clean(comment), targets: [.. addSign.UserIds],
+                data: values.Count > 0 ? JsonSerializer.Serialize(new { mode = addSign.Mode, editedKeys = values.Keys }) : JsonSerializer.Serialize(new { mode = addSign.Mode }));
+            // 排隊中的加簽關卡：這一關完成後、下一個定義關卡之前依 Seq 啟動（設計 §7.6）
+            repo.AddRun(new ApprovalStageRun
+            {
+                InstanceId = inst.Id, Seq = runs.Max(r => r.Seq) + 1, StageCode = null, NameSnapshot = ApprovalMessages.AddSignStageName, Mode = addSign.Mode,
+                Status = ApprovalStageStatus.Queued, AddedByUserId = user.UserId, AddSignUserIds = [.. addSign.UserIds]
+            });
+        }
 
         bool complete;
         if (run.Mode == ApprovalModes.All)
@@ -144,10 +172,8 @@ public class ApproveTaskHandler(
             run.Status = ApprovalStageStatus.Approved;
             run.CompletedTime = now;
             await uow.CommitAsync(ct);
-            // 備援實例只有一關：重新比對沒有流程符合，就核准並轉移（設計 §5.5 第 5 點）
-            var (next, nextFailure) = inst.RouteKind == ApprovalRouteKind.Fallback
-                ? (null, null)
-                : await engine.ActivateNextAsync(inst, module, current, ct);
+            // 先啟動排隊的加簽關卡；備援實例沒有排隊的就核准並轉移（設計 §5.5 第 5 點）——兩者都在 ActivateNextAsync 裡處理
+            var (next, nextFailure) = await engine.ActivateNextAsync(inst, module, current, ct);
             if (nextFailure is not null) return nextFailure;
             if (next is null)
             {
@@ -181,8 +207,51 @@ public class ApproveTaskHandler(
         }
         return blocked;
     }
+}
+
+/// <summary>同意（設計 §7.2、§8.2）；實際流程在 <see cref="ApprovalApprover"/>。</summary>
+public class ApproveTaskHandler(ApprovalApprover approver) : IRequestHandler<ApproveTaskRequest, ServiceResult>
+{
+    public Task<ServiceResult> Handle(ApproveTaskRequest request, CancellationToken ct) =>
+        approver.ApproveAsync(request.TaskId, request.RowVersion, request.Comment, request.Values, null, ct);
 
     internal static string? Clean(string? comment) => string.IsNullOrWhiteSpace(comment) ? null : comment;
+}
+
+/// <summary>
+/// 同意並加簽（設計 §7.6）：輸入檢查（人數、方式、對象、關卡數上限）在載入實例之前做完，400 不換 rowVersion；
+/// 對象規則用 <see cref="ApprovalActionRules.TargetError"/> 的前三條（存在且啟用、不是自己、發起人依 A12），「這關已有票」不適用——加簽是新的一關。
+/// </summary>
+public class AddSignTaskHandler(
+    IApprovalInstanceRepository repo, ApprovalApprover approver, ApprovalPolicies policies, IPermissionRepository permissions, ICurrentUser user)
+    : IRequestHandler<AddSignTaskRequest, ServiceResult>
+{
+    public async Task<ServiceResult> Handle(AddSignTaskRequest request, CancellationToken ct)
+    {
+        var task = await repo.GetTaskAsync(request.TaskId, ct);
+        if (task is null) return ServiceResult.NotFound(ApprovalMessages.TaskNotFound);
+        if (!ApprovalActionRules.IsActor(task, user.UserId)) return ServiceResult.Forbidden();
+        if (request.Mode is not (ApprovalModes.All or ApprovalModes.Any)) return ApprovalActionSupport.Bad("mode", ApprovalMessages.AddSignModeInvalid);
+        var userIds = request.UserIds.Where(u => !string.IsNullOrWhiteSpace(u)).Distinct(StringComparer.Ordinal).ToList();
+        if (userIds.Count == 0) return ApprovalActionSupport.Bad("userIds", ApprovalMessages.AddSignUsersRequired);
+        var inst = await repo.GetAsync(task.InstanceId, ct);
+        if (inst is null) return ServiceResult.NotFound(ApprovalMessages.TaskNotFound);
+        var maxUsers = await policies.MaxAddSignUsersAsync(inst.ModuleId, ct);
+        if (userIds.Count > maxUsers) return ApprovalActionSupport.Bad("userIds", ApprovalMessages.AddSignTooManyUsers(maxUsers));
+
+        var activeUsers = (await permissions.ListUsersAsync(ct)).Where(u => u.IsActive).Select(u => u.UserId).ToHashSet(StringComparer.Ordinal);
+        var allowSelf = await policies.AllowSelfApprovalAsync(inst.ModuleId, ct);
+        foreach (var target in userIds)
+            if (ApprovalActionRules.TargetError(target, user.UserId, inst.InitiatorUserId, allowSelf, activeUsers, []) is { } bad)
+                return ApprovalActionSupport.Bad("userIds", bad);
+
+        // 關卡數以歷程的 add-sign 筆數計（J4）：退回後重來的加簽關卡不再算一次
+        var maxStages = await policies.MaxAddSignStagesAsync(inst.ModuleId, ct);
+        if ((await repo.ListActionsAsync([inst.Id], ct)).Count(a => a.Action == ApprovalActions.AddSign) >= maxStages)
+            return ApprovalActionSupport.Bad("userIds", ApprovalMessages.AddSignLimit(maxStages));
+
+        return await approver.ApproveAsync(request.TaskId, request.RowVersion, request.Comment, request.Values, new AddSignPlan(userIds, request.Mode), ct);
+    }
 }
 
 /// <summary>退回發起人或上一關（設計 §7.3、§8.3）；意見必填。</summary>
@@ -213,7 +282,7 @@ public class RejectTaskHandler(
         {
             var previous = ApprovalPath.Previous(runs, run);
             if (previous is null) return ApprovalActionSupport.Bad("to", ApprovalMessages.NoPreviousStage);
-            Reject(me, run, tasks, now, ApprovalStageStatus.Returned);
+            Reject(me, run, tasks, runs, now, ApprovalStageStatus.Returned);
             engine.Log(inst, ApprovalActions.Return, user.UserId, run.Id, me.Id, request.Comment);
             await uow.CommitAsync(ct);
             var restart = await engine.RestartStageAsync(inst, module, await support.ValuesAsync(inst.RecordId, ct), previous, runs.Max(r => r.Seq) + 1, ct);
@@ -224,7 +293,7 @@ public class RejectTaskHandler(
             return ServiceResult.Success(new ApprovalActionResponse(ApprovalOutcomes.Returned, inst.Id, inst.RowVersion));
         }
 
-        Reject(me, run, tasks, now, ApprovalStageStatus.Closed);
+        Reject(me, run, tasks, runs, now, ApprovalStageStatus.Closed);
         inst.Status = ApprovalInstanceStatus.Rejected;
         inst.CompletedTime = now;
         inst.CurrentStageRunId = null;
@@ -242,13 +311,14 @@ public class RejectTaskHandler(
         return ServiceResult.Success(new ApprovalActionResponse(ApprovalOutcomes.Rejected, inst.Id, inst.RowVersion));
     }
 
-    private static void Reject(ApprovalTask me, ApprovalStageRun run, List<ApprovalTask> tasks, DateTime now, string runStatus)
+    private static void Reject(ApprovalTask me, ApprovalStageRun run, List<ApprovalTask> tasks, List<ApprovalStageRun> runs, DateTime now, string runStatus)
     {
         me.Status = ApprovalTaskStatus.Rejected;
         me.ActedTime = now;
         ApprovalActionSupport.CloseOpen(tasks);
         run.Status = runStatus;
         run.CompletedTime = now;
+        ApprovalActionSupport.CloseQueued(runs, now);
     }
 }
 
@@ -277,6 +347,7 @@ public class WithdrawApprovalHandler(
             current.Status = ApprovalStageStatus.Closed;
             current.CompletedTime = now;
         }
+        ApprovalActionSupport.CloseQueued(runs, now);
         inst.Status = ApprovalInstanceStatus.Withdrawn;
         inst.CompletedTime = now;
         inst.CurrentStageRunId = null;

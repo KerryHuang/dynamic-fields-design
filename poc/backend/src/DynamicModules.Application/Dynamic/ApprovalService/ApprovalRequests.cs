@@ -15,6 +15,10 @@ public record ApproveTaskRequest(long TaskId, string RowVersion, string? Comment
 /// <summary>To：initiator（退回發起人）或 previous（退回上一關）。</summary>
 public record RejectTaskRequest(long TaskId, string RowVersion, string Comment, string To) : IRequest<ServiceResult>, IRecordWriteRequest;
 
+/// <summary>同意並加簽（設計 §7.6）：同意這個任務，並在這一關完成後、下一關之前插入由 UserIds 簽核的加簽關卡；Mode 是 all（會簽）或 any（或簽）。</summary>
+public record AddSignTaskRequest(long TaskId, string RowVersion, string? Comment, Dictionary<string, JsonElement?>? Values, List<string> UserIds, string Mode)
+    : IRequest<ServiceResult>, IRecordWriteRequest;
+
 /// <summary>轉交（設計 §7.5）：UserId 是接手的人。</summary>
 public record TransferTaskRequest(long TaskId, string RowVersion, string UserId, string? Comment) : IRequest<ServiceResult>, IRecordWriteRequest;
 
