@@ -9,7 +9,7 @@ namespace DynamicModules.Persistence.Repositories.Dynamic;
 
 /// <summary>
 /// 把 <see cref="TaskVisibility"/> 轉成單一 EF LINQ 條件（不寫 raw SQL）。管理員不加條件；其他人看得到：參與者、
-/// 負責人是部屬、未指派但建立者是部屬、記錄在可讀模組的資料範圍內（含軟刪除的記錄，與 stub 判斷一致）。
+/// 部屬的任務（<see cref="SubordinateTasks"/>）、記錄在可讀模組的資料範圍內（含軟刪除的記錄，與 stub 判斷一致）。
 /// </summary>
 internal static class TaskVisibilityQuery
 {
@@ -19,19 +19,17 @@ internal static class TaskVisibilityQuery
         if (v.Admin) return tasks;
 
         var me = v.UserId;
-        var subordinates = v.Subordinates.ToArray();
-        Expression<Func<TaskItem, bool>> direct = t =>
-            t.Participants.Any(p => p.UserId == me)
-            || (t.AssigneeUserId != null && subordinates.Contains(t.AssigneeUserId))
-            || (t.AssigneeUserId == null && t.CreatedBy != null && subordinates.Contains(t.CreatedBy));
+        Expression<Func<TaskItem, bool>> participant = t => t.Participants.Any(p => p.UserId == me);
+        var t = participant.Parameters[0];
+        Expression body = Expression.OrElse(participant.Body, Inline(SubordinateTasks.Of(v.Subordinates), t));
 
         var recordClause = RecordClause(db, v);
-        if (recordClause is null) return tasks.Where(direct);
-
-        var t = direct.Parameters[0];
-        var body = Expression.OrElse(direct.Body, ReplacingExpressionVisitor.Replace(recordClause.Parameters[0], t, recordClause.Body));
+        if (recordClause is not null) body = Expression.OrElse(body, Inline(recordClause, t));
         return tasks.Where(Expression.Lambda<Func<TaskItem, bool>>(body, t));
     }
+
+    private static Expression Inline(Expression<Func<TaskItem, bool>> e, ParameterExpression t) =>
+        ReplacingExpressionVisitor.Replace(e.Parameters[0], t, e.Body);
 
     /// <summary>t => EXISTS(記錄 r：r.Id == t.RecordId 且 r 在某個可讀模組的範圍內)；沒有任何可讀模組回 null。</summary>
     private static Expression<Func<TaskItem, bool>>? RecordClause(DynamicDbContext db, TaskVisibility v)

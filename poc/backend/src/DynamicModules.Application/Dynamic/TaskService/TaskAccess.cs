@@ -3,6 +3,7 @@ using DynamicModules.Application.Dynamic.RecordService.Data;
 using DynamicModules.Domain.Entities.Dynamic;
 using DynamicModules.Domain.Modules;
 using DynamicModules.Domain.Repositories.Dynamic;
+using DynamicModules.Domain.Tasks;
 
 namespace DynamicModules.Application.Dynamic.TaskService;
 
@@ -34,15 +35,16 @@ public sealed class TaskAccess(ITaskRepository tasks, IModuleRepository modules,
     {
         var admin = await IsSystemAdminAsync(ct);
         var subordinates = admin ? new HashSet<string>() : await visibility.SubordinatesAsync(ct);
+        var isSubordinateTask = SubordinateTasks.Of(subordinates).Compile();
         var stubs = await tasks.ListRecordStubsAsync(items.Where(t => t.RecordId is not null).Select(t => t.RecordId!.Value).ToList(), ct);
         var byModule = new Dictionary<long, ModuleAccess?>();
         var result = new List<TaskPermissions>(items.Count);
         foreach (var task in items)
-            result.Add(await EvaluateOneAsync(task, admin, subordinates, stubs, byModule, ct));
+            result.Add(await EvaluateOneAsync(task, admin, isSubordinateTask, stubs, byModule, ct));
         return result;
     }
 
-    private async Task<TaskPermissions> EvaluateOneAsync(TaskItem task, bool admin, IReadOnlySet<string> subordinates,
+    private async Task<TaskPermissions> EvaluateOneAsync(TaskItem task, bool admin, Func<TaskItem, bool> isSubordinateTask,
         IReadOnlyDictionary<long, TaskRecordStub> stubs, Dictionary<long, ModuleAccess?> byModule, CancellationToken ct)
     {
         var me = user.UserId;
@@ -68,14 +70,15 @@ public sealed class TaskAccess(ITaskRepository tasks, IModuleRepository modules,
                 : Hidden;
         }
 
-        // 部屬任務的主管：負責人是部屬，或未指派而建立者是部屬（看板設計 §4.2）
-        var supervised = task.AssigneeUserId is { } a ? subordinates.Contains(a) : task.CreatedBy is { } c && subordinates.Contains(c);
+        // 部屬任務的主管（看板設計 §4.2），條件與批次查詢、部屬分頁共用
+        var supervised = isSubordinateTask(task);
         var canSee = admin || participant || recordVisible || supervised;
         if (!canSee) return new TaskPermissions(false, false, false, false, frozen, Hidden);
         var canEdit = !frozen && (creator || assignee || admin || recordEditable);
         var canDelete = task.RuleId is null && !frozen && (creator || admin);
         var canReassign = !frozen && (canEdit || supervised);
-        return new TaskPermissions(true, canEdit, !frozen, canDelete, frozen, recordRef, canReassign, supervised && !canEdit);
+        // 只有真的能重派時才算主管身分：凍結時 canReassign=false，不顯示主管說明
+        return new TaskPermissions(true, canEdit, !frozen, canDelete, frozen, recordRef, canReassign, canReassign && !canEdit);
     }
 
     /// <summary>null 代表 404：記錄不存在、屬於明細模組、模組不可讀、沒有 Read、記錄在範圍外。</summary>

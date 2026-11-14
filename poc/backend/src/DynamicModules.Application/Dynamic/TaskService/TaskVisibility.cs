@@ -12,13 +12,21 @@ namespace DynamicModules.Application.Dynamic.TaskService;
 
 /// <summary>
 /// 算出一位使用者的任務可見條件（看板設計 §4.4）：部屬名單（政策 task.supervisorScope 關閉時不載入組織）與各可讀模組的資料範圍。
-/// 同一個請求內依使用者快取；讀不到就當成沒有（fail closed）。
+/// 同一個請求內依使用者快取；讀不到就當成沒有（fail closed）。一個 scope 跑多個請求時（Demo 產生器、測試），
+/// 每個請求之間要呼叫 <see cref="Reset"/>（<c>DemoStructure.ResetPerRequestState</c> 會呼叫）。
 /// </summary>
 public sealed class TaskVisibilityService(ICurrentUser user, IPolicyReader policies, OrgSnapshotLoader org,
     IPermissionRepository permissions, IModuleRepository modules, IDynamicAccessGuard guard)
 {
     private readonly Dictionary<string, IReadOnlySet<string>> _subordinates = [];
     private readonly Dictionary<string, TaskVisibility> _visibility = [];
+
+    /// <summary>清掉快取，下一次重新讀政策與組織。</summary>
+    public void Reset()
+    {
+        _subordinates.Clear();
+        _visibility.Clear();
+    }
 
     /// <summary>目前使用者的部屬名單；政策關閉或沒有部屬時是空集合。</summary>
     public async Task<IReadOnlySet<string>> SubordinatesAsync(CancellationToken ct)

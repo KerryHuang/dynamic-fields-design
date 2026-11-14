@@ -19,8 +19,6 @@ public interface ITaskRepository
     Task<(int DueToday, int Overdue)> CountMineDueAsync(string userId, DateOnly today, CancellationToken ct);
     Task<List<TaskParticipant>> ListParticipantsAsync(long taskId, CancellationToken ct);
     Task<bool> IsParticipantAsync(long taskId, string userId, CancellationToken ct);
-    /// <summary>含軟刪除的記錄；不存在時回 null。</summary>
-    Task<TaskRecordStub?> GetRecordStubAsync(long recordId, CancellationToken ct);
     /// <summary>一次取多筆記錄 stub（含軟刪除）；不存在的記錄不在結果裡。</summary>
     Task<Dictionary<long, TaskRecordStub>> ListRecordStubsAsync(IReadOnlyCollection<long> recordIds, CancellationToken ct);
     /// <summary>符合可見條件的任務 Id（單一資料庫查詢，條件與 <c>TaskAccess</c> 的逐筆判斷一致）。</summary>

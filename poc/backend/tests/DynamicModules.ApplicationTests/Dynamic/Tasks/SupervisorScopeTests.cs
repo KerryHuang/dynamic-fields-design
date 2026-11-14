@@ -1,11 +1,16 @@
 using System.Text.Json;
 using DynamicModules.Application.Dynamic.TaskService;
 using DynamicModules.Application.Common;
+using DynamicModules.Application.Dynamic.ApprovalService;
+using DynamicModules.Application.Dynamic.AttachmentService;
+using DynamicModules.Application.Dynamic.DemoService;
+using DynamicModules.Application.Dynamic.EventService;
 using DynamicModules.Domain.Entities.Dynamic;
 using DynamicModules.Domain.Policies;
 using DynamicModules.Persistence.Seed;
 using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.DependencyInjection;
 
 namespace DynamicModules.ApplicationTests.Dynamic.Tasks;
 
@@ -118,6 +123,66 @@ public class SupervisorScopeTests : TaskTestBase
 
         r.IsConflict.Should().BeTrue();
         (await Load(task.Id)).AssigneeUserId.Should().Be("sales01");
+    }
+
+    [Fact]
+    public async Task FrozenSubordinateTask_NotSupervised()
+    {
+        var t = await BuildTarget();
+        var rec = await NewRecord(t, "sales01");
+        var task = await SeedTask("掛記錄", createdBy: "sales01", assignee: "sales01", target: t, recordId: rec);
+        await Db.Context.Set<Module>().Where(m => m.Key == t.Key).ExecuteUpdateAsync(s => s.SetProperty(m => m.Status, ModuleStatus.Closed));
+        Db.Context.ChangeTracker.Clear();
+
+        As("manager01");
+        var r = await Send(new GetTaskRequest(task.Id));
+
+        r.IsSuccess.Should().BeTrue(r.Message);
+        var detail = (TaskDetailResponse)r.Data!;
+        detail.Frozen.Should().BeTrue();
+        detail.CanReassign.Should().BeFalse();
+        detail.Supervised.Should().BeFalse("凍結時不能重派，不該顯示主管說明");
+    }
+
+    [Fact]
+    public async Task Reassign_ToSelf_TakesOver_CanEditAfterwards()
+    {
+        // 主管把部屬任務派給自己＝接手（裁決 S2）：之後以負責人身分可改全部欄位
+        var task = await SeedTask("整理名片", createdBy: "sales01", assignee: "sales01");
+
+        var take = await Patch("manager01", task.Id, """{"assigneeUserId":"manager01"}""");
+        var status = await Patch("manager01", task.Id, """{"status":"done"}""");
+
+        take.IsSuccess.Should().BeTrue(take.Message);
+        var detail = (TaskDetailResponse)take.Data!;
+        detail.AssigneeUserId.Should().Be("manager01");
+        detail.CanEdit.Should().BeTrue();
+        detail.Supervised.Should().BeFalse();
+        status.IsSuccess.Should().BeTrue(status.Message);
+        (await Load(task.Id)).Status.Should().Be(TaskItemStatus.Done);
+    }
+
+    [Fact]
+    public async Task SameScope_OrgChanged_ResetRefreshesSubordinates()
+    {
+        // Demo 產生器整段共用一個 scope：每一步之間的重設要讓部屬名單重算（S4）
+        As("ops01");
+        using var scope = NewScope();
+        var sp = scope.ServiceProvider;
+        var visibility = sp.GetRequiredService<TaskVisibilityService>();
+        (await visibility.SubordinatesAsync(default)).Should().Contain("keeper01");
+        (await visibility.ForCurrentUserAsync(default)).Subordinates.Should().Contain("keeper01");
+
+        await Db.Context.Set<Department>().Where(d => d.ManagerUserId == "ops01")
+            .ExecuteUpdateAsync(s => s.SetProperty(d => d.ManagerUserId, (string?)null));
+        Db.Context.ChangeTracker.Clear();
+        DemoStructure.ResetPerRequestState(sp.GetRequiredService<IWriteJournal>(), sp.GetRequiredService<EffectBudget>(),
+            sp.GetRequiredService<ApprovalWriteContext>(), sp.GetRequiredService<ApprovalLockService>(),
+            sp.GetRequiredService<AttachmentUploadTracker>(), visibility);
+
+        (await visibility.SubordinatesAsync(default)).Should().BeEmpty();
+        (await visibility.ForCurrentUserAsync(default)).Subordinates.Should().BeEmpty();
+        As("admin");
     }
 
     [Fact]
