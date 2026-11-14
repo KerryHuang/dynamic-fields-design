@@ -6,6 +6,7 @@ using DynamicModules.Domain.Policies;
 using DynamicModules.Domain.Repositories.Dynamic;
 using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.DependencyInjection;
 
 namespace DynamicModules.ApplicationTests.Dynamic.Approvals;
 
@@ -52,6 +53,20 @@ public class ApprovalPolicyLimitsTests : ApprovalTestBase
         public bool Ok => R.IsSuccess;
         public string Text(string key) => R.Errors.TryGetValue(key, out var e) ? e[0] : "";
         public string All => Dump(R);
+    }
+
+    [Fact]
+    public async Task Limits_MaxBranches_FactoryAndModuleOverride()
+    {
+        var r = await BuildPurchase();
+        // 政策讀值在同一個 scope 內快取，覆寫前後各用一個新的 scope 讀
+        using (var before = NewScope())
+            (await before.ServiceProvider.GetRequiredService<ApprovalPolicies>().LimitsAsync(r.ModuleId, default)).MaxBranches.Should().Be(5);
+
+        await SetOverride(r, PolicyCatalog.ApprovalMaxBranches, "3");
+
+        using var after = NewScope();
+        (await after.ServiceProvider.GetRequiredService<ApprovalPolicies>().LimitsAsync(r.ModuleId, default)).MaxBranches.Should().Be(3);
     }
 
     [Fact]

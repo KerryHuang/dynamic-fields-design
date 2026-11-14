@@ -96,6 +96,10 @@ public static class PolicyCatalog
     public static readonly PolicyDefinition ApprovalMaxStages =
         new("approval.maxStages", "approval", PolicyKind.Integer, PolicyScope.Module, "10", 1, 20, Unit: "count");
 
+    /// <summary>A37：流程圖中每個分支節點的分支數（流程圖設計 §15）；技術範圍 2 到 10。</summary>
+    public static readonly PolicyDefinition ApprovalMaxBranches =
+        new("approval.maxBranches", "approval", PolicyKind.Integer, PolicyScope.Module, "5", 2, 10, Unit: "count");
+
     /// <summary>A3：一關的簽核人數（固定名單執行期只受技術上限 <c>Max</c> 管）。</summary>
     public static readonly PolicyDefinition ApprovalMaxApprovers =
         new("approval.maxApprovers", "approval", PolicyKind.Integer, PolicyScope.Module, "20", 1, 50, Unit: "count");
@@ -149,7 +153,7 @@ public static class PolicyCatalog
          NotificationRetentionDays, CalendarWeekStart,
          AttachmentMaxFileBytes, AttachmentMaxFilesPerField, AttachmentAllowedExtensions, AttachmentMaxFilesPerComment,
          OpsSlowRequestMs, OpsClientErrorCollection,
-         ApprovalMaxStages, ApprovalMaxApprovers, ApprovalMaxDueHours, ApprovalMaxCommentLength, ApprovalMaxManagerLevel,
+         ApprovalMaxStages, ApprovalMaxBranches, ApprovalMaxApprovers, ApprovalMaxDueHours, ApprovalMaxCommentLength, ApprovalMaxManagerLevel,
          ApprovalAllowSelfApproval, ApprovalAdminBypassTransitionGroups, ApprovalMaxAddSignUsers, ApprovalMaxAddSignStages,
          ApprovalOverdueReminderHours, ApprovalDefaultFallbackApprovers, ApprovalAlertRecipients];
 
