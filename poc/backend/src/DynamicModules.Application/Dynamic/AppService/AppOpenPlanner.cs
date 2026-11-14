@@ -240,7 +240,8 @@ public sealed partial class AppOpenPlanner(
     /// <summary>簽核上限的系統層生效值（模組 null）；預覽、開啟、匯入共用。</summary>
     internal static async Task<Domain.Approvals.ApprovalLimitSet> SystemApprovalLimitsAsync(IPolicyReader policies, CancellationToken ct) => new(
         await policies.IntAsync(PolicyCatalog.ApprovalMaxStages, null, ct), await policies.IntAsync(PolicyCatalog.ApprovalMaxApprovers, null, ct),
-        await policies.IntAsync(PolicyCatalog.ApprovalMaxDueHours, null, ct), await policies.IntAsync(PolicyCatalog.ApprovalMaxManagerLevel, null, ct));
+        await policies.IntAsync(PolicyCatalog.ApprovalMaxDueHours, null, ct), await policies.IntAsync(PolicyCatalog.ApprovalMaxManagerLevel, null, ct),
+        await policies.IntAsync(PolicyCatalog.ApprovalMaxBranches, null, ct));
 
     /// <summary>
     /// 被簽核流程引用的欄位（條件、使用者欄位、可編輯欄位）與掛流程的模組的狀態欄位不能排除（§14.4 第一點）：

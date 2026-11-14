@@ -165,6 +165,7 @@
 | A33 | 任務：部門主管可看與重派部屬的任務（`task.supervisorScope`） | 開 | S | kb1 |
 | A34 | 任務：主管範圍含下層部門（`task.supervisorScopeRecursive`） | 是 | S | kb1 |
 | A36 | 簽核：逾期待簽的提醒間隔（設計 §12、§20.4 第 26 條；`approval.overdueReminderHours`，技術上限 720 小時，可依模組覆寫） | 24 小時 | M | a3e（已接上） |
+| A37 | 簽核：每個分支節點的分支數（流程圖設計 §15；`approval.maxBranches`，技術範圍 2–10，可依模組覆寫） | 5 | M | fg1a |
 
 補盤（2026-11-11，使用者裁決補盤缺漏也要排進修正）另併入既有項：A31 營運時區 Asia/Taipei 的其他寫死處（`TaipeiBusinessTime.cs`、`FieldImportParser.cs`、`ReportRules.cs` 補 "+08:00"、前端 `field-type-registry.ts`、`FilterValueInput.vue`）併入 A17 一起改；A7 的「明天到期」另一處 `TaskRepositories.cs:105` 併入 p1 的 A6／A7。
 

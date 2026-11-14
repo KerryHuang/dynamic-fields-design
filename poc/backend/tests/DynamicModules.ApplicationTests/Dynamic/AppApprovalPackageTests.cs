@@ -520,10 +520,10 @@ public class AppApprovalPackageTests
     public void ApprovalLimitErrors_UsesGivenLimits()
     {
         var p = AppJson.Parse(Package(Flows(LargeFlow, MidFlow))).V2!;
-        AppPackageValidator.ApprovalLimitErrors(p, new ApprovalLimitSet(1, 20, 8760, 5))
+        AppPackageValidator.ApprovalLimitErrors(p, new ApprovalLimitSet(1, 20, 8760, 5, 5))
             .Should().Equal($"approvalFlows[t8-po-large].stages: {ApprovalMessages.StagesCount(1)}");
-        AppPackageValidator.ApprovalLimitErrors(p, new ApprovalLimitSet(20, 20, 8760, 5)).Should().BeEmpty();
-        AppPackageValidator.ApprovalLimitErrors(p, new ApprovalLimitSet(20, 20, 24, 5))
+        AppPackageValidator.ApprovalLimitErrors(p, new ApprovalLimitSet(20, 20, 8760, 5, 5)).Should().BeEmpty();
+        AppPackageValidator.ApprovalLimitErrors(p, new ApprovalLimitSet(20, 20, 24, 5, 5))
             .Should().Equal($"approvalFlows[t8-po-large].stages[board].dueHours: {ApprovalMessages.DueHours(24)}");
     }
 }

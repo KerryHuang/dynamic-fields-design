@@ -175,6 +175,23 @@ public class PolicyDefinitionTests
     }
 
     [Fact]
+    public void ApprovalMaxBranches_FactoryRangeAndScope()
+    {
+        // 流程圖設計 §15 的「每個分支節點的分支數」（A37）；技術範圍 2 到 10
+        var d = PolicyCatalog.ApprovalMaxBranches;
+        d.Code.Should().Be("approval.maxBranches");
+        d.Factory.Should().Be("5");
+        d.Scope.Should().Be(PolicyScope.Module);
+        d.Unit.Should().Be("count");
+        (d.Min, d.Max).Should().Be((2, 10));
+        d.Normalize("2").Should().Be("2");
+        d.Normalize("10").Should().Be("10");
+        d.Normalize("1").Should().BeNull();
+        d.Normalize("11").Should().BeNull();
+        PolicyCatalog.All.Should().Contain(d);
+    }
+
+    [Fact]
     public void ApprovalMaxApprovers_TechnicalMax50()
     {
         PolicyCatalog.ApprovalMaxApprovers.Scope.Should().Be(PolicyScope.Module);

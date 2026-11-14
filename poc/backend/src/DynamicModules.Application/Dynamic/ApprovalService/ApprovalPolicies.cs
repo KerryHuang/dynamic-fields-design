@@ -36,5 +36,6 @@ public sealed class ApprovalPolicies(IPolicyReader policies)
         await policies.IntAsync(PolicyCatalog.ApprovalMaxStages, moduleId, ct),
         await policies.IntAsync(PolicyCatalog.ApprovalMaxApprovers, moduleId, ct),
         await policies.IntAsync(PolicyCatalog.ApprovalMaxDueHours, moduleId, ct),
-        await policies.IntAsync(PolicyCatalog.ApprovalMaxManagerLevel, moduleId, ct));
+        await policies.IntAsync(PolicyCatalog.ApprovalMaxManagerLevel, moduleId, ct),
+        await policies.IntAsync(PolicyCatalog.ApprovalMaxBranches, moduleId, ct));
 }
