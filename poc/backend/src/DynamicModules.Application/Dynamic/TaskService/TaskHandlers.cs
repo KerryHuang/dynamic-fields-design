@@ -5,7 +5,6 @@ using DynamicModules.Application.Dynamic.PolicyService;
 using DynamicModules.Application.Dynamic.RecordService.Data;
 using DynamicModules.Domain.Entities.Dynamic;
 using DynamicModules.Domain.Policies;
-using DynamicModules.Domain.Reports;
 using DynamicModules.Domain.Repositories.Dynamic;
 using DynamicModules.Domain.Tasks;
 using System.Text.Json;
@@ -200,7 +199,7 @@ public class GetMyTasksHandler(ITaskRepository tasks, TaskAccess access, IPermis
         // 政策關閉或沒有部屬時名單是空的，分頁回空清單（不回 400）
         var subordinates = tab == TaskListTab.Subordinates ? await visibility.SubordinatesAsync(ct) : null;
         var (items, total) = await tasks.QueryMineAsync(
-            new TaskListQuery(user.UserId, tab, filter, today, WeekEnd(today, weekStart), page, size, subordinates), ct);
+            new TaskListQuery(user.UserId, tab, filter, today, TaskDates.WeekEnd(today, weekStart), page, size, subordinates), ct);
         var perms = await access.EvaluateManyAsync(items, ct);
         var users = (await permissions.ListUsersAsync(ct)).ToDictionary(u => u.UserId);
         // 縱深防禦：分頁條件靠參與者表維持「抓到的都看得到」，這裡再濾一次；濾掉的也從總數扣掉，不洩漏筆數
@@ -208,10 +207,6 @@ public class GetMyTasksHandler(ITaskRepository tasks, TaskAccess access, IPermis
             .Select(x => TaskViews.ToSummary(x.t, x.p, users, today)).ToList();
         return ServiceResult.Success(new PagedResponse<TaskSummaryResponse>(rows, total - (items.Count - rows.Count), page, size));
     }
-
-    /// <summary>本週最後一天（本週起始日＋6 天；起始日見政策 calendar.weekStart）。</summary>
-    internal static DateOnly WeekEnd(DateOnly today, DayOfWeek weekStart) =>
-        ReportDates.WeekStart(today, weekStart).AddDays(6);
 }
 
 public class GetTaskCapabilitiesHandler(TaskVisibilityService visibility) : IRequestHandler<GetTaskCapabilitiesRequest, ServiceResult>
