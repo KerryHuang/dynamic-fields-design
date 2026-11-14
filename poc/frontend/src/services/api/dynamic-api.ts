@@ -10,7 +10,8 @@ import type { MeTheme, ThemeChoice, ThemeDefaults } from 'src/domain/theme/theme
 import type { Department, DepartmentInput } from 'src/domain/dynamic/organization';
 import type { CheckDefinition, LedgerBody, LedgerConfig, ModuleCheck, ModuleEvent, RecordEffects, RecordLedger } from 'src/domain/dynamic/events-ledger';
 import type {
-  NotificationList, RecordTasks, TaskComment, TaskCounts, TaskDetail, TaskInput, TaskListFilter, TaskListTab, TaskPage, TaskPatch,
+  NotificationList, RecordTasks, TaskCapabilities, TaskComment, TaskCounts, TaskDetail, TaskInput, TaskListFilter, TaskListTab, TaskPage, TaskPatch,
+  TaskUpdateResult,
 } from 'src/domain/dynamic/task-types';
 import type {
   ApprovalActionResult, ApprovalBox, ApprovalInboxFilter, ApprovalInboxItem, ApprovalPreview, ApproveBody, RecordApproval, RejectBody,
@@ -21,7 +22,8 @@ import type { TaskRule, TaskRuleInput } from 'src/domain/dynamic/task-rule-draft
 import type { EffectivePolicies, ModulePolicy, PolicyValue, SystemPolicy } from 'src/domain/dynamic/policy-types';
 import { handleAuthFailure, http, toApiError } from './http';
 import {
-  normalizeNotificationList, normalizeRecordTasks, normalizeTaskComment, normalizeTaskDetail, normalizeTaskPage, normalizeTaskRule,
+  normalizeNotificationList, normalizeRecordTasks, normalizeTaskCapabilities, normalizeTaskComment, normalizeTaskDetail, normalizeTaskPage,
+  normalizeTaskRule, normalizeTaskUpdate,
 } from './task-normalize';
 
 /** Request config for write calls: the key makes a retried request take effect once (server: Dynamic_Operation). */
@@ -514,8 +516,12 @@ export const dynamicApi = {
   markAllNotificationsRead: () => http.post('/notifications/read-all').then(data),
   getTask: (id: number) => http.get<TaskDetail>(`/tasks/${id}`).then(data).then(normalizeTaskDetail),
   createTask: (body: TaskInput) => http.post<TaskDetail>('/tasks', body).then(data).then(normalizeTaskDetail),
-  /** A property left out stays as it is; an explicit null clears it, so the patch is sent as given. */
-  updateTask: (id: number, patch: TaskPatch) => http.patch<TaskDetail>(`/tasks/${id}`, patch).then(data).then(normalizeTaskDetail),
+  /** A property left out stays as it is; an explicit null clears it, so the patch is sent as given. The reply is `visible: false` when the writer lost sight of the task. */
+  updateTask: (id: number, patch: TaskPatch) => http.patch<TaskDetail>(`/tasks/${id}`, patch).then(data).then(normalizeTaskUpdate),
+  getTaskCapabilities: () => http.get<TaskCapabilities>('/tasks/capabilities').then(data).then(normalizeTaskCapabilities),
+  /** Undo a manager's reassignment with the token from the PATCH reply (single use, 2 minutes, same user). */
+  undoReassign: (id: number, undoToken: string) =>
+    http.post<TaskDetail>(`/tasks/${id}/undo-reassign`, { undoToken }).then(data).then(normalizeTaskUpdate),
   deleteTask: (id: number) => http.delete(`/tasks/${id}`).then(data),
   getRecordTasks: (recordId: number) => http.get<RecordTasks>(`/records/${recordId}/tasks`).then(data).then(normalizeRecordTasks),
   createRecordTask: (recordId: number, body: TaskInput) =>

@@ -1,7 +1,7 @@
 import type { I18nText } from './types';
 
 export type TaskStatus = 'todo' | 'inProgress' | 'done' | 'cancelled';
-export type TaskListTab = 'assigned' | 'created' | 'mentioned';
+export type TaskListTab = 'assigned' | 'created' | 'mentioned' | 'subordinates';
 export type TaskListFilter = 'open' | 'overdue' | 'today' | 'thisWeek' | 'all';
 
 export interface TaskRecordRef {
@@ -24,6 +24,12 @@ export interface TaskSummary {
   record: TaskRecordRef | null;
   fromRule: boolean;
   canEdit: boolean;
+  /** The user may change the assignee: editors, or a manager of a subordinate's task (never when the record is frozen). */
+  canReassign: boolean;
+  /** The user sees and may reassign this task only as a manager (no normal edit right): only the assignee field opens up. */
+  supervised: boolean;
+  /** Task version string (yyyyMMddHHmmssfff, UTC); changes on every write. */
+  version: string;
 }
 
 export interface TaskDetail extends TaskSummary {
@@ -92,6 +98,22 @@ export type TaskPatch = {
   dueDate?: string | null;
   status?: TaskStatus;
 };
+
+/** PATCH reply when the writer can no longer see the task (a manager moved it out of scope): no task content, only a one-shot undo token. */
+export interface TaskHiddenAfterWrite {
+  id: number;
+  visible: false;
+  undoToken: string | null;
+}
+
+export type TaskUpdateResult = TaskDetail | TaskHiddenAfterWrite;
+
+export const isTaskHidden = (r: TaskUpdateResult): r is TaskHiddenAfterWrite => 'visible' in r && r.visible === false;
+
+export interface TaskCapabilities {
+  /** The subordinates tab is available: policy on and the user manages at least one other person. */
+  subordinates: boolean;
+}
 
 export interface TaskInput {
   title: string;

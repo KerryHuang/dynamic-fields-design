@@ -3,7 +3,7 @@ export const taskWire = (o: Record<string, unknown> = {}) => ({
   id: 5, title: '回電給客戶', status: 'todo', assigneeUserId: 'sales01', assigneeName: '業務一', assigneeActive: true,
   dueDate: '2026-12-01', overdue: false,
   record: { accessible: true, moduleKey: 'crm_customer', recordId: 9, title: '甲公司', deleted: false },
-  fromRule: false, canEdit: true, ...o,
+  fromRule: false, canEdit: true, canReassign: true, supervised: false, version: '20261101020000000', ...o,
 });
 
 export const taskDetailWire = (o: Record<string, unknown> = {}) => ({

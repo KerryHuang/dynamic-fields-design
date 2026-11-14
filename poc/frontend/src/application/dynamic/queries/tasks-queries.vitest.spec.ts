@@ -3,19 +3,19 @@ import { flushPromises, mount } from '@vue/test-utils';
 import { describe, expect, it, vi } from 'vitest';
 import { defineComponent } from 'vue';
 import { dynamicApi } from 'src/services/api/dynamic-api';
-import { useAddTaskComment, useDeleteTask, useUpdateTask } from './tasks-queries';
+import { useAddTaskComment, useDeleteTask, useUndoReassign, useUpdateTask } from './tasks-queries';
 
 vi.mock('src/services/api/dynamic-api', () => ({
-  dynamicApi: { updateTask: vi.fn(), deleteTask: vi.fn(), addTaskComment: vi.fn(), addTaskCommentWithFiles: vi.fn() },
+  dynamicApi: { updateTask: vi.fn(), undoReassign: vi.fn(), deleteTask: vi.fn(), addTaskComment: vi.fn(), addTaskCommentWithFiles: vi.fn() },
 }));
 const api = vi.mocked(dynamicApi);
 
 function setup() {
   const qc = new QueryClient();
   const spy = vi.spyOn(qc, 'invalidateQueries');
-  let composed!: { update: ReturnType<typeof useUpdateTask>; del: ReturnType<typeof useDeleteTask>; comment: ReturnType<typeof useAddTaskComment> };
+  let composed!: { update: ReturnType<typeof useUpdateTask>; del: ReturnType<typeof useDeleteTask>; comment: ReturnType<typeof useAddTaskComment>; undo: ReturnType<typeof useUndoReassign> };
   mount(defineComponent({
-    setup() { composed = { update: useUpdateTask(), del: useDeleteTask(), comment: useAddTaskComment() }; return () => null; },
+    setup() { composed = { update: useUpdateTask(), del: useDeleteTask(), comment: useAddTaskComment(), undo: useUndoReassign() }; return () => null; },
   }), { global: { plugins: [[VueQueryPlugin, { queryClient: qc }]] } });
   const keys = () => spy.mock.calls.map((c) => JSON.stringify((c[0] as { queryKey: unknown[] }).queryKey));
   return { composed, keys };
@@ -47,5 +47,14 @@ describe('task mutations invalidate everything that shows a task', () => {
     await composed.del.mutateAsync(7);
     await flushPromises();
     expect(keys()).toEqual(expect.arrayContaining(['["tasks"]', '["task-summary"]', '["record-tasks"]']));
+  });
+
+  it('undo reassign sends the token and refreshes lists, counters and the task', async () => {
+    api.undoReassign.mockResolvedValue({} as never);
+    const { composed, keys } = setup();
+    await composed.undo.mutateAsync({ id: 7, undoToken: 'tok' });
+    await flushPromises();
+    expect(api.undoReassign).toHaveBeenCalledWith(7, 'tok');
+    expect(keys()).toEqual(expect.arrayContaining(['["tasks"]', '["task-summary"]', '["task",7]', '["task-comments",7]']));
   });
 });

@@ -14,12 +14,13 @@ import MyTasksPage from './MyTasksPage.vue';
 
 let calls: Call[];
 
-async function mountPage(url: string, opts: { detailFails?: boolean; empty?: boolean } = {}) {
+async function mountPage(url: string, opts: { detailFails?: boolean; empty?: boolean; subordinates?: boolean } = {}) {
   const pinia = createPinia();
   setActivePinia(pinia);
   useIdentityStore().setSession('sales01');
   calls = mockHttp((c) => {
     if (c.url === '/tasks' && c.method === 'get') return opts.empty ? { items: [], totalCount: 0, currentPage: 1, pagesSize: 20 } : { items: [taskWire({ id: 1 }), taskWire({ id: 2, title: '寄合約' })], totalCount: 2, currentPage: 1, pagesSize: 20 };
+    if (c.url === '/tasks/capabilities') return { subordinates: !!opts.subordinates };
     if (c.url === '/tasks' && c.method === 'post') return taskDetailWire({ id: 99 });
     if (/^\/tasks\/\d+$/.test(c.url)) return opts.detailFails ? new HttpFail(404, { message: '找不到任務' }) : taskDetailWire({ id: 7 });
     if (/comments$/.test(c.url)) return [commentWire()];
@@ -54,6 +55,34 @@ describe('MyTasksPage', () => {
     const { w } = await mountPage('/tasks');
     expect(listCalls()[0].params).toEqual({ tab: 'assigned', filter: 'open', currentPage: 1, pagesSize: 20 });
     expect(w.findAll('[data-testid^="my-task-"]').filter((e) => /^my-task-\d+$/.test(e.attributes('data-testid')!))).toHaveLength(2);
+    w.unmount();
+  });
+
+  it('MyTasksPage shows the subordinates tab only when capabilities say so', async () => {
+    const without = await mountPage('/tasks');
+    expect(without.w.find('[data-testid="tab-subordinates"]').exists()).toBe(false);
+    expect(without.w.findAll('[data-testid^="tab-"]')).toHaveLength(3);
+    without.w.unmount();
+    const withTab = await mountPage('/tasks', { subordinates: true });
+    expect(withTab.w.find('[data-testid="tab-subordinates"]').exists()).toBe(true);
+    expect(withTab.w.get('[data-testid="tab-subordinates"]').text()).toContain('部屬的任務');
+    await withTab.w.get('[data-testid="tab-subordinates"]').trigger('click');
+    await flushPromises();
+    expect(listCalls().at(-1)!.params).toMatchObject({ tab: 'subordinates', filter: 'open', currentPage: 1 });
+    withTab.w.unmount();
+  });
+
+  it('a link to the subordinates tab falls back to assigned when the user has no subordinates', async () => {
+    const { w, router } = await mountPage('/tasks?tab=subordinates');
+    expect(listCalls().at(-1)!.params).toMatchObject({ tab: 'assigned' });
+    expect(w.find('[data-testid="tab-subordinates"]').exists()).toBe(false);
+    expect(router.currentRoute.value.query.tab).toBe('subordinates');
+    w.unmount();
+  });
+
+  it('subordinates tab rows show the assignee name', async () => {
+    const { w } = await mountPage('/tasks?tab=subordinates', { subordinates: true });
+    expect(w.get('[data-testid="my-task-assignee-1"]').text()).toBe('業務一');
     w.unmount();
   });
 

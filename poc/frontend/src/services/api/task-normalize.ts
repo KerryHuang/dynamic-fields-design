@@ -1,5 +1,6 @@
 import type {
-  ManualRule, NotificationItem, NotificationList, RecordTasks, TaskComment, TaskDetail, TaskPage, TaskRecordRef, TaskSummary,
+  ManualRule, NotificationItem, NotificationList, RecordTasks, TaskCapabilities, TaskComment, TaskDetail, TaskPage, TaskRecordRef, TaskSummary,
+  TaskUpdateResult,
 } from 'src/domain/dynamic/task-types';
 import type { TaskRule } from 'src/domain/dynamic/task-rule-draft';
 
@@ -27,6 +28,9 @@ export function normalizeTaskSummary(t: Wire<TaskSummary>): TaskSummary {
     record: normalizeRecord(t.record),
     fromRule: !!t.fromRule,
     canEdit: !!t.canEdit,
+    canReassign: !!t.canReassign,
+    supervised: !!t.supervised,
+    version: t.version ?? '',
   };
 }
 
@@ -45,6 +49,14 @@ export function normalizeTaskDetail(t: Wire<TaskDetail>): TaskDetail {
     frozen: !!t.frozen,
   };
 }
+
+/** `{ id, visible: false, undoToken }` carries no task content; anything else is the task detail. */
+export function normalizeTaskUpdate(r: Wire<TaskDetail> & { visible?: boolean; undoToken?: string | null }): TaskUpdateResult {
+  if (r.visible === false) return { id: r.id as number, visible: false, undoToken: r.undoToken ?? null };
+  return normalizeTaskDetail(r);
+}
+
+export const normalizeTaskCapabilities = (c: Partial<TaskCapabilities> | null | undefined): TaskCapabilities => ({ subordinates: !!c?.subordinates });
 
 export function normalizeTaskPage(p: Partial<Omit<TaskPage, 'items'>> & { items?: Wire<TaskSummary>[] }): TaskPage {
   return {

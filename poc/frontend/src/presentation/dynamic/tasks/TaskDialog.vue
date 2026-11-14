@@ -6,10 +6,11 @@ import { useUsers } from 'src/application/dynamic/queries/permissions-queries';
 import { useDeleteTask, useTask, useTaskComments, useUpdateTask } from 'src/application/dynamic/queries/tasks-queries';
 import DateSelect from 'src/components/framework/DateSelect.vue';
 import GenericSelect from 'src/components/framework/GenericSelect.vue';
-import type { TaskPatch, TaskStatus } from 'src/domain/dynamic/task-types';
+import { isTaskHidden, type TaskPatch, type TaskStatus } from 'src/domain/dynamic/task-types';
 import type { ApiError } from 'src/services/api/http';
 import MentionInput from './MentionInput.vue';
 import TaskTimeline from './TaskTimeline.vue';
+import { useMovedOutNotice } from './use-moved-out-notice';
 
 const props = defineProps<{ taskId: number | null }>();
 const emit = defineEmits<{ 'update:taskId': [value: number | null] }>();
@@ -20,6 +21,7 @@ const comments = useTaskComments(() => props.taskId);
 const users = useUsers();
 const update = useUpdateTask();
 const del = useDeleteTask();
+const movedOut = useMovedOutNotice();
 
 const data = computed(() => task.data.value);
 const missing = computed(() => !!task.error.value && !data.value);
@@ -41,6 +43,11 @@ const patch = computed<TaskPatch>(() => {
   if (!d) return {};
   const p: TaskPatch = {};
   const dr = draft.value;
+  // A manager (no normal edit right) may only change the assignee; everything else is read-only and never sent
+  if (!d.canEdit) {
+    if (dr.assignee !== d.assigneeUserId) p.assigneeUserId = dr.assignee;
+    return p;
+  }
   if (dr.title.trim() !== d.title) p.title = dr.title.trim();
   if ((dr.description.trim() || null) !== d.description) p.description = dr.description.trim() || null;
   if (dr.assignee !== d.assigneeUserId) p.assigneeUserId = dr.assignee;
@@ -50,12 +57,20 @@ const patch = computed<TaskPatch>(() => {
 });
 const dirty = computed(() => Object.keys(patch.value).length > 0);
 const readonly = computed(() => !data.value?.canEdit);
+/** The assignee stays open to a manager of a subordinate's task (canReassign) even when the rest is read-only. */
+const assigneeReadonly = computed(() => !data.value?.canEdit && !data.value?.canReassign);
 
 async function save() {
   if (!dirty.value || !draft.value.title.trim()) return;
   error.value = '';
   try {
-    await update.mutateAsync({ id: props.taskId!, patch: patch.value });
+    const id = props.taskId!;
+    const result = await update.mutateAsync({ id, patch: patch.value });
+    // The writer lost sight of the task (a manager handed it outside their scope): close and offer the undo
+    if (isTaskHidden(result)) {
+      emit('update:taskId', null);
+      movedOut.show(result.id, result.undoToken);
+    }
   } catch (e) {
     const err = e as ApiError;
     error.value = (err.errors ? Object.values(err.errors).flat().join(t('common.listSeparator')) : err.message) || t('tasks.saveFailed');
@@ -110,10 +125,11 @@ function goRecord() {
           <div v-if="data.ruleDeleted" class="text-caption text-warning q-mb-xs" data-testid="task-rule-deleted">{{ t('tasks.ruleDeleted') }}</div>
           <div class="q-gutter-y-sm">
             <q-input v-model="draft.title" :label="t('tasks.fields.title')" maxlength="200" outlined dense :readonly="readonly" data-testid="task-title" />
+            <div v-if="data.supervised" class="text-caption text-muted" data-testid="task-supervisor-hint">{{ t('tasks.supervisorHint') }}</div>
             <q-input v-model="draft.description" :label="t('tasks.fields.description')" type="textarea" autogrow maxlength="4000" outlined dense :readonly="readonly" data-testid="task-description" />
             <div class="row q-col-gutter-sm">
               <div class="col-12 col-sm-6">
-                <GenericSelect v-model="draft.assignee" :label="t('tasks.fields.assignee')" :options="userOptions" :readonly="readonly" @update:model-value="(v) => (draft.assignee = v as string | null)" />
+                <GenericSelect v-model="draft.assignee" :label="t('tasks.fields.assignee')" :options="userOptions" :readonly="assigneeReadonly" data-testid="task-assignee" @update:model-value="(v) => (draft.assignee = v as string | null)" />
               </div>
               <div class="col-12 col-sm-6">
                 <DateSelect v-model="draft.dueDate" :label="t('tasks.fields.dueDate')" :readonly="readonly" />
@@ -141,7 +157,7 @@ function goRecord() {
           <q-btn v-if="data.canDelete" flat color="negative" no-caps :label="t('tasks.delete')" data-testid="task-delete" @click="confirming = true" />
           <q-space />
           <q-btn flat no-caps :label="t('tasks.close')" v-close-popup />
-          <q-btn v-if="data.canEdit" color="primary" no-caps :label="t('tasks.save')" :disable="!dirty" :loading="update.isPending.value" data-testid="task-save" @click="save" />
+          <q-btn v-if="data.canEdit || data.canReassign" color="primary" no-caps :label="t('tasks.save')" :disable="!dirty" :loading="update.isPending.value" data-testid="task-save" @click="save" />
         </q-card-actions>
       </template>
       <q-dialog v-model="confirming">
