@@ -27,6 +27,8 @@ export interface ApprovalStageView {
 export interface ApprovalActionView {
   action: string; actorUserId: string; actorName: string; onBehalfOfUserId: string | null; targetUserIds: string[];
   comment: string | null; data: unknown; createdTime: string;
+  /** Display names of `targetUserIds` in the same order (transfer, reassign): the log shows "→ name". */
+  targetNames?: string[];
 }
 export interface ApprovalInstanceView {
   id: number; status: ApprovalInstanceStatus; routeKind: 'flow' | 'fallback'; flowName: I18nText | null;
@@ -54,10 +56,12 @@ export interface ApproveBody { rowVersion: string; comment?: string; values?: Re
 export interface RejectBody { rowVersion: string; comment: string; to: 'initiator' | 'previous' }
 export interface WithdrawBody { rowVersion: string; comment?: string }
 export interface TransferBody { rowVersion: string; userId: string; comment?: string }
+export interface CancelBody { rowVersion: string; comment: string }
+export interface ReassignBody { rowVersion: string; userId: string; comment?: string }
 
 export interface SubmitApprovalResult { outcome: 'submitted' | 'approved' | 'direct'; instanceId: number | null; recordRowVersion: string }
 export interface ApprovalActionResult {
-  outcome: 'advanced' | 'approved' | 'rerouted' | 'rejected' | 'returned' | 'withdrawn' | 'transferred';
+  outcome: 'advanced' | 'approved' | 'rerouted' | 'rejected' | 'returned' | 'withdrawn' | 'transferred' | 'reassigned' | 'cancelled';
   instanceId: number; instanceRowVersion: string; newFlowName?: I18nText | null;
   /** rerouted into a flow that needs the initiator's picks: no new instance, the initiator has to submit again. */
   needsResubmit?: boolean;

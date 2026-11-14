@@ -8,6 +8,8 @@ import type { DynamicRecord, ModuleSchema } from 'src/domain/dynamic/types';
 import { useIdentityStore } from 'src/stores/use-identity-store';
 import { currentStage, hasApprovalActions, myOpenTask } from './approval-actions';
 import ApproveDialog from './ApproveDialog.vue';
+import CancelApprovalDialog from './CancelApprovalDialog.vue';
+import ReassignDialog from './ReassignDialog.vue';
 import RejectDialog from './RejectDialog.vue';
 import TransferDialog from './TransferDialog.vue';
 import WithdrawDialog from './WithdrawDialog.vue';
@@ -19,7 +21,7 @@ const identity = useIdentityStore();
 
 const task = computed(() => myOpenTask(props.instance));
 const isInitiator = computed(() => !!identity.userId && props.instance.initiatorUserId === identity.userId);
-const dialog = ref<'approve' | 'reject' | 'transfer' | 'withdraw' | null>(null);
+const dialog = ref<'approve' | 'reject' | 'transfer' | 'withdraw' | 'reassign' | 'cancel' | null>(null);
 
 interface Btn { key: 'approve' | 'reject' | 'transfer' | 'withdraw'; color: string; outline?: boolean; disable?: boolean }
 const buttons = computed<Btn[]>(() => {
@@ -36,8 +38,16 @@ const mobile = computed(() => $q.screen.lt.sm);
 const inline = computed(() => (mobile.value ? buttons.value.slice(0, 2) : buttons.value));
 // The reason sits next to the button, so it shows only while the withdraw button is on the bar itself.
 const withdrawBlocked = computed(() => inline.value.some((b) => b.key === 'withdraw' && b.disable));
-const overflow = computed<RowAction[]>(() =>
-  (mobile.value ? buttons.value.slice(2).map((b) => ({ label: t(`approval.actions.${b.key}`), run: () => { dialog.value = b.key; }, disable: b.disable, testid: `approval-more-${b.key}` })) : []));
+// Manager actions (reassign, terminate) always live in the menu, at every width.
+const overflow = computed<RowAction[]>(() => {
+  const items: RowAction[] = mobile.value
+    ? buttons.value.slice(2).map((b) => ({ label: t(`approval.actions.${b.key}`), run: () => { dialog.value = b.key; }, disable: b.disable, testid: `approval-more-${b.key}` }))
+    : [];
+  if (props.instance.canCancel && props.instance.status === 'pending') {
+    for (const key of ['reassign', 'cancel'] as const) items.push({ label: t(`approval.actions.${key}`), run: () => { dialog.value = key; }, testid: `approval-more-${key}` });
+  }
+  return items;
+});
 </script>
 
 <template>
@@ -68,6 +78,13 @@ const overflow = computed<RowAction[]>(() =>
   />
   <TransferDialog
     v-if="dialog === 'transfer' && task" :model-value="true" :record-id="recordId" :module-key="moduleKey" :task-id="task.id" :instance="instance"
+    @update:model-value="dialog = null"
+  />
+  <ReassignDialog
+    v-if="dialog === 'reassign'" :model-value="true" :record-id="recordId" :module-key="moduleKey" :instance="instance" @update:model-value="dialog = null"
+  />
+  <CancelApprovalDialog
+    v-if="dialog === 'cancel'" :model-value="true" :record-id="recordId" :module-key="moduleKey" :instance-id="instance.id" :row-version="instance.rowVersion"
     @update:model-value="dialog = null"
   />
   <WithdrawDialog

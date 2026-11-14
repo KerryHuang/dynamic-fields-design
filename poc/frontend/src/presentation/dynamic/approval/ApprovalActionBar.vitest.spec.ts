@@ -381,4 +381,44 @@ describe('ApprovalActionBar', () => {
     expect(q('transfer-dialog')).not.toBeNull();
     w.unmount();
   });
+
+  const openMore = async () => { await click('approval-more'); };
+
+  it('ActionBar shows cancel and reassign in the menu for a manager without a task', async () => {
+    const w = await mountBar(inst({ stages: [stage({ tasks: [task({ canAct: false, assigneeUserId: 'gm' })] })], canCancel: true }), { user: 'admin' });
+    expect(q('action-approve')).toBeNull();
+    await openMore();
+    expect(q('approval-more-reassign')).not.toBeNull();
+    expect(q('approval-more-cancel')).not.toBeNull();
+    await click('approval-more-cancel');
+    expect(q('cancel-dialog')).not.toBeNull();
+    w.unmount();
+  });
+
+  it('ActionBar hides them when canCancel is false', async () => {
+    const w = await mountBar(inst(), { user: 'me' });
+    expect(q('approval-more')).toBeNull();
+    w.unmount();
+  });
+
+  it('manager who is also an approver sees both groups', async () => {
+    const w = await mountBar(inst({ canCancel: true }), { user: 'me' });
+    expect(q('action-approve')).not.toBeNull();
+    expect(q('action-transfer')).not.toBeNull();
+    await openMore();
+    expect(q('approval-more-reassign')).not.toBeNull();
+    expect(q('approval-more-cancel')).not.toBeNull();
+    await click('approval-more-reassign');
+    expect(q('reassign-dialog')).not.toBeNull();
+    w.unmount();
+  });
+
+  it('manager actions sit in the menu on a phone too', async () => {
+    const w = await mountBar(inst({ canCancel: true }), { user: 'me', width: 390 });
+    await openMore();
+    expect(q('approval-more-transfer')).not.toBeNull();
+    expect(q('approval-more-reassign')).not.toBeNull();
+    expect(q('approval-more-cancel')).not.toBeNull();
+    w.unmount();
+  });
 });

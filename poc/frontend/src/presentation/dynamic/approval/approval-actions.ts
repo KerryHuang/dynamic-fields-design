@@ -10,10 +10,10 @@ export const currentStage = (i: ApprovalInstanceView): ApprovalStageView | undef
 /** The first task of the current stage the signed-in user may act on (the server decides `canAct`). */
 export const myOpenTask = (i: ApprovalInstanceView): ApprovalTaskView | undefined => currentStage(i)?.tasks.find((k) => k.canAct);
 
-/** Whether the bar has anything to show: an approver with an open task, or the initiator of a running approval. */
+/** Whether the bar has anything to show: an approver with an open task, the initiator of a running approval, or an approval manager (`canCancel`). */
 export function hasApprovalActions(i: ApprovalInstanceView | null, userId: string): boolean {
   if (!i || i.status !== 'pending') return false;
-  return !!myOpenTask(i) || (!!userId && i.initiatorUserId === userId);
+  return !!myOpenTask(i) || i.canCancel || (!!userId && i.initiatorUserId === userId);
 }
 
 export interface ActionNotice { type: 'positive' | 'warning'; message: string }

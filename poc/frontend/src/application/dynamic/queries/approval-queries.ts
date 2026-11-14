@@ -1,7 +1,7 @@
 import { keepPreviousData, useMutation, useQuery, useQueryClient, type QueryClient } from '@tanstack/vue-query';
 import { computed, toValue, type MaybeRefOrGetter } from 'vue';
 import type {
-  ApprovalBox, ApprovalInboxFilter, ApproveBody, RejectBody, SubmitApprovalBody, TransferBody, WithdrawBody,
+  ApprovalBox, ApprovalInboxFilter, ApproveBody, CancelBody, ReassignBody, RejectBody, SubmitApprovalBody, TransferBody, WithdrawBody,
 } from 'src/domain/dynamic/approval-types';
 import { dynamicApi } from 'src/services/api/dynamic-api';
 import { retryUnlessClientError } from './schema-queries';
@@ -77,6 +77,24 @@ export function useTransferTask() {
   return useMutation({
     mutationFn: (i: { taskId: number; recordId: number; moduleKey: string; body: TransferBody; idempotencyKey?: string }) =>
       dynamicApi.transferTask(i.taskId, i.body, i.idempotencyKey),
+    onSuccess: (_r, i) => invalidateApproval(qc, i.recordId, i.moduleKey),
+  });
+}
+
+export function useReassignTask() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (i: { taskId: number; recordId: number; moduleKey: string; body: ReassignBody; idempotencyKey?: string }) =>
+      dynamicApi.reassignTask(i.taskId, i.body, i.idempotencyKey),
+    onSuccess: (_r, i) => invalidateApproval(qc, i.recordId, i.moduleKey),
+  });
+}
+
+export function useCancelApproval() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (i: { instanceId: number; recordId: number; moduleKey: string; body: CancelBody; idempotencyKey?: string }) =>
+      dynamicApi.cancelApproval(i.instanceId, i.body, i.idempotencyKey),
     onSuccess: (_r, i) => invalidateApproval(qc, i.recordId, i.moduleKey),
   });
 }

@@ -36,6 +36,7 @@ describe('approval-actions', () => {
     expect(hasApprovalActions(inst([stage()]), 'a')).toBe(true);
     expect(hasApprovalActions(inst([stage()]), 'x')).toBe(false);
     expect(hasApprovalActions(inst([stage()], { status: 'approved' }), 'a')).toBe(false);
+    expect(hasApprovalActions({ ...inst([stage()]), canCancel: true }, 'x')).toBe(true);   // a manager without a task
     expect(hasApprovalActions(null, 'a')).toBe(false);
   });
 

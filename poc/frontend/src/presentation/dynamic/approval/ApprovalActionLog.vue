@@ -20,6 +20,13 @@ function rerouteText(a: ApprovalActionView): string {
   return t(`approval.panel.reroute.${kind && ['flow', 'fallback', 'pick'].includes(kind) ? kind : 'generic'}`);
 }
 
+/** "→ name" for hand-overs (transfer, reassign); falls back to the user ids when the server sent no names. */
+function targetsText(a: ApprovalActionView): string {
+  if (a.action !== 'transfer' && a.action !== 'reassign') return '';
+  const names = a.targetNames?.length ? a.targetNames : a.targetUserIds;
+  return names.length ? t('approval.panel.targets', { names: names.join('、') }) : '';
+}
+
 interface Change { fieldId: number; label: string; before: string; after: string }
 /** Fields the schema does not know are left out (the server already hides what the reader may not see). */
 function changes(a: ApprovalActionView): Change[] {
@@ -42,7 +49,8 @@ function changes(a: ApprovalActionView): Change[] {
       </div>
       <div v-if="a.action === 'reroute'" class="q-pl-sm" data-testid="log-reroute">{{ rerouteText(a) }}</div>
       <div v-else-if="a.action === 'fallback'" class="q-pl-sm" data-testid="log-fallback">{{ t('approval.panel.fallbackNote') }}</div>
-      <div v-else-if="a.comment" class="q-pl-sm" data-testid="log-comment">{{ a.comment }}</div>
+      <div v-if="targetsText(a)" class="q-pl-sm" data-testid="log-targets">{{ targetsText(a) }}</div>
+      <div v-if="a.action !== 'reroute' && a.action !== 'fallback' && a.comment" class="q-pl-sm" data-testid="log-comment">{{ a.comment }}</div>
       <ul v-if="changes(a).length" class="q-my-none">
         <li v-for="c in changes(a)" :key="c.fieldId">{{ t('approval.panel.changed', { field: c.label, before: c.before || '—', after: c.after || '—' }) }}</li>
       </ul>

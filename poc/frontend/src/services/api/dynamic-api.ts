@@ -14,7 +14,7 @@ import type {
 } from 'src/domain/dynamic/task-types';
 import type {
   ApprovalActionResult, ApprovalBox, ApprovalInboxFilter, ApprovalInboxItem, ApprovalPreview, ApproveBody, RecordApproval, RejectBody,
-  SubmitApprovalBody, SubmitApprovalResult, TransferBody, WithdrawBody,
+  SubmitApprovalBody, SubmitApprovalResult, TransferBody, WithdrawBody, CancelBody, ReassignBody,
 } from 'src/domain/dynamic/approval-types';
 import type { ApprovalDraftPreviewBody, ApprovalFlow, ApprovalFlowInput } from 'src/domain/dynamic/approval-flow-types';
 import type { TaskRule, TaskRuleInput } from 'src/domain/dynamic/task-rule-draft';
@@ -334,6 +334,10 @@ export const dynamicApi = {
     http.post<ApprovalActionResult>(`/approval-tasks/${taskId}/reject`, body, idem(key)).then(data),
   transferTask: (taskId: number, body: TransferBody, key?: string) =>
     http.post<ApprovalActionResult>(`/approval-tasks/${taskId}/transfer`, body, idem(key)).then(data),
+  reassignTask: (taskId: number, body: ReassignBody, key?: string) =>
+    http.post<ApprovalActionResult>(`/approval-tasks/${taskId}/reassign`, body, idem(key)).then(data),
+  cancelApproval: (instanceId: number, body: CancelBody, key?: string) =>
+    http.post<ApprovalActionResult>(`/approval-instances/${instanceId}/cancel`, body, idem(key)).then(data),
   withdrawApproval: (instanceId: number, body: WithdrawBody, key?: string) =>
     http.post<ApprovalActionResult>(`/approval-instances/${instanceId}/withdraw`, body, idem(key)).then(data),
   getApprovalInbox: (box: ApprovalBox, filter: ApprovalInboxFilter, page: number, size = 20) =>
