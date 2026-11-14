@@ -119,6 +119,45 @@ describe('DetailPage temporary read', () => {
     w.unmount();
   });
 
+  it('Read without PrintExport, open task, approvalGrant=false: print button shows and prints', async () => {
+    const readOnly = { ...grantSchema(), permissions: { read: true, add: false, edit: false, delete: false, printExport: false, pricing: false } };
+    const w = await mountPage(() => {
+      api.getModuleSchema.mockResolvedValue(readOnly);
+      api.getRecord.mockResolvedValue(record(false));
+      api.getRecordApproval.mockResolvedValue(approvalOf(instance()));
+      // The backend lists templates for this user only when the request names the record (the open task is the right to print).
+      api.getPrintTemplates.mockImplementation((_k, recordId) => Promise.resolve(recordId === 5 ? [{ key: 'sheet', name: { 'zh-TW': '採購單' } }] : []));
+      api.printRecord.mockResolvedValue('<p>預覽</p>');
+    });
+    expect(api.getPrintTemplates).toHaveBeenCalledWith('m', 5);
+    expect(has(w, 'print-menu')).toBe(true);
+    (w.find('[data-testid="print-menu"]').element as HTMLElement).click();
+    await settle();
+    dlg('print-sheet')!.click();
+    await settle();
+    expect(api.printRecord).toHaveBeenCalledWith(5, 'sheet', 'zh-TW');
+    w.unmount();
+  });
+
+  it('print button disappears once the task has ended (page turns history only)', async () => {
+    const ended = instance({ status: 'approved', completedTime: '2026-11-12T09:00:00' });
+    const w = await mountPage(() => {
+      api.getModuleSchema.mockImplementation((_k, recordId) => (recordId === undefined ? gone(403) : Promise.resolve(grantSchema())));
+      api.getRecord.mockResolvedValue(record(true));
+      api.getRecordApproval.mockResolvedValue(approvalOf(instance()));
+      api.getPrintTemplates.mockResolvedValue([{ key: 'sheet', name: { 'zh-TW': '採購單' } }]);
+    });
+    expect(has(w, 'print-menu')).toBe(true);
+    api.getRecord.mockImplementation(() => gone(403));
+    api.getRecordApproval.mockResolvedValue(approvalOf(null, [ended]));
+    api.getPrintTemplates.mockImplementation(() => gone(403));
+    await qc.invalidateQueries();
+    await settle();
+    expect(has(w, 'approval-history-only')).toBe(true);
+    expect(has(w, 'print-menu')).toBe(false);
+    w.unmount();
+  });
+
   it('record 404 on first load shows history only', async () => {
     const ended = instance({ status: 'approved', completedTime: '2026-11-12T09:00:00' });
     const w = await mountPage(() => {

@@ -10,10 +10,10 @@ import PrintMenu from './PrintMenu.vue';
 vi.mock('src/services/api/dynamic-api', () => ({ dynamicApi: { getPrintTemplates: vi.fn(), printRecord: vi.fn() } }));
 const api = vi.mocked(dynamicApi);
 
-async function mountMenu(props: { grant?: boolean }) {
+async function mountMenu() {
   const i18n = createI18n({ legacy: false, locale: 'zh-TW', messages: { 'zh-TW': zhTW } });
   const w = mount(PrintMenu, {
-    props: { moduleKey: 'quote', recordId: 5, ...props },
+    props: { moduleKey: 'quote', recordId: 5 },
     global: { plugins: [[quasar.Quasar, { components: quasar, directives: quasar, plugins: { Notify: quasar.Notify } }], i18n, [VueQueryPlugin, { queryClient: new QueryClient() }]] },
   });
   await flushPromises();
@@ -26,20 +26,20 @@ describe('PrintMenu', () => {
     api.getPrintTemplates.mockResolvedValue([{ key: 'sheet', name: { 'zh-TW': '報價單' } }]);
   });
 
-  it('PrintMenu passes recordId under grant', async () => {
-    const w = await mountMenu({ grant: true });
+  it('PrintMenu passes recordId, for every user', async () => {
+    const w = await mountMenu();
     expect(api.getPrintTemplates).toHaveBeenCalledWith('quote', 5);
     expect(w.find('[data-testid="print-menu"]').exists()).toBe(true);
   });
 
-  it('does not pass recordId on the normal path', async () => {
-    await mountMenu({});
-    expect(api.getPrintTemplates).toHaveBeenCalledWith('quote', undefined);
+  it('passes recordId on the normal path too: the backend picks the normal or the temporary route', async () => {
+    await mountMenu();
+    expect(api.getPrintTemplates).toHaveBeenCalledWith('quote', 5);
   });
 
   it('shows nothing when the backend lists no templates', async () => {
     api.getPrintTemplates.mockResolvedValue([]);
-    const w = await mountMenu({ grant: true });
+    const w = await mountMenu();
     expect(w.find('[data-testid="print-menu"]').exists()).toBe(false);
   });
 });
