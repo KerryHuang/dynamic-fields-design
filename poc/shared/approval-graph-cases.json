@@ -1,0 +1,1194 @@
+{
+  "limits": {"maxApprovalNodes": 10, "maxBranches": 5},
+  "cases": [
+    {
+      "name": "通過 設計 7.1 範例",
+      "definition": { "shape": "graph", "stages": [],
+        "nodes": [
+          {"id": "start", "kind": "start"},
+          {"id": "mgr", "kind": "approval", "name": {"zh-TW": "mgr"}, "approvers": {"source": "manager", "level": 1}, "mode": "any", "editableFields": [], "dueHours": 24, "onEmpty": "fallback"},
+          {"id": "amount", "kind": "condition", "name": {"zh-TW": "金額分級"}},
+          {"id": "split", "kind": "fork"},
+          {"id": "legal", "kind": "approval", "name": {"zh-TW": "legal"}, "editableFields": []},
+          {"id": "fin", "kind": "approval", "name": {"zh-TW": "fin"}, "editableFields": [31]},
+          {"id": "merge", "kind": "join", "forkId": "split", "mode": "all"},
+          {"id": "tell-hr", "kind": "notify", "name": {"zh-TW": "知會人事"}, "recipients": [{"kind": "initiator"}]},
+          {"id": "end", "kind": "end"}
+        ],
+        "edges": [
+          {"id": "e1", "from": "start", "to": "mgr"},
+          {"id": "e2", "from": "mgr", "to": "amount"},
+          {"id": "e3", "from": "amount", "to": "split", "order": 1, "when": {"all": [{"field": 1, "op": "gte", "value": 1}]}, "label": {"zh-TW": "十萬以上"}},
+          {"id": "e4", "from": "amount", "to": "tell-hr", "default": true},
+          {"id": "e5", "from": "split", "to": "legal"},
+          {"id": "e6", "from": "split", "to": "fin"},
+          {"id": "e7", "from": "legal", "to": "merge"},
+          {"id": "e8", "from": "fin", "to": "merge"},
+          {"id": "e9", "from": "merge", "to": "tell-hr"},
+          {"id": "e10", "from": "tell-hr", "to": "end"}
+        ] },
+      "previous": null,
+      "limits": null,
+      "errors": [],
+      "warnings": []
+    },
+    {
+      "name": "通過 sequence 轉換出的直線圖",
+      "definition": { "shape": "graph", "stages": [],
+        "nodes": [
+          {"id": "start", "kind": "start"},
+          {"id": "a1", "kind": "approval", "name": {"zh-TW": "a1"}},
+          {"id": "a2", "kind": "approval", "name": {"zh-TW": "a2"}},
+          {"id": "a3", "kind": "approval", "name": {"zh-TW": "a3"}},
+          {"id": "end", "kind": "end"}
+        ],
+        "edges": [
+          {"id": "e1", "from": "start", "to": "a1"},
+          {"id": "e2", "from": "a1", "to": "a2"},
+          {"id": "e3", "from": "a2", "to": "a3"},
+          {"id": "e4", "from": "a3", "to": "end"}
+        ] },
+      "previous": null,
+      "limits": null,
+      "errors": [],
+      "warnings": []
+    },
+    {
+      "name": "通過 互斥路徑在簽核節點會合 (J1)",
+      "definition": { "shape": "graph", "stages": [],
+        "nodes": [
+          {"id": "start", "kind": "start"},
+          {"id": "c", "kind": "condition"},
+          {"id": "a", "kind": "approval", "name": {"zh-TW": "a"}},
+          {"id": "b", "kind": "approval", "name": {"zh-TW": "b"}},
+          {"id": "z", "kind": "approval", "name": {"zh-TW": "z"}},
+          {"id": "end", "kind": "end"}
+        ],
+        "edges": [
+          {"id": "e1", "from": "start", "to": "c"},
+          {"id": "e2", "from": "c", "to": "a", "order": 1, "when": {"all": [{"field": 1, "op": "gte", "value": 1}]}},
+          {"id": "e3", "from": "c", "to": "b", "default": true},
+          {"id": "e4", "from": "a", "to": "z"},
+          {"id": "e5", "from": "b", "to": "z"},
+          {"id": "e6", "from": "z", "to": "end"}
+        ] },
+      "previous": null,
+      "limits": null,
+      "errors": [],
+      "warnings": []
+    },
+    {
+      "name": "通過 巢狀兩層並行",
+      "definition": { "shape": "graph", "stages": [],
+        "nodes": [
+          {"id": "start", "kind": "start"},
+          {"id": "f1", "kind": "fork"},
+          {"id": "x", "kind": "approval", "name": {"zh-TW": "x"}},
+          {"id": "f2", "kind": "fork"},
+          {"id": "y", "kind": "approval", "name": {"zh-TW": "y"}},
+          {"id": "z", "kind": "approval", "name": {"zh-TW": "z"}},
+          {"id": "j2", "kind": "join", "forkId": "f2", "mode": "all"},
+          {"id": "j1", "kind": "join", "forkId": "f1", "mode": "all"},
+          {"id": "end", "kind": "end"}
+        ],
+        "edges": [
+          {"id": "e1", "from": "start", "to": "f1"},
+          {"id": "e2", "from": "f1", "to": "x"},
+          {"id": "e3", "from": "f1", "to": "f2"},
+          {"id": "e4", "from": "f2", "to": "y"},
+          {"id": "e5", "from": "f2", "to": "z"},
+          {"id": "e6", "from": "y", "to": "j2"},
+          {"id": "e7", "from": "z", "to": "j2"},
+          {"id": "e8", "from": "j2", "to": "j1"},
+          {"id": "e9", "from": "x", "to": "j1"},
+          {"id": "e10", "from": "j1", "to": "end"}
+        ] },
+      "previous": null,
+      "limits": null,
+      "errors": [],
+      "warnings": []
+    },
+    {
+      "name": "通過 空分支直接連到匯合 (U7)",
+      "definition": { "shape": "graph", "stages": [],
+        "nodes": [
+          {"id": "start", "kind": "start"},
+          {"id": "f", "kind": "fork"},
+          {"id": "a", "kind": "approval", "name": {"zh-TW": "a"}},
+          {"id": "j", "kind": "join", "forkId": "f", "mode": "all"},
+          {"id": "end", "kind": "end"}
+        ],
+        "edges": [
+          {"id": "e1", "from": "start", "to": "f"},
+          {"id": "e2", "from": "f", "to": "a"},
+          {"id": "e3", "from": "f", "to": "j"},
+          {"id": "e4", "from": "a", "to": "j"},
+          {"id": "e5", "from": "j", "to": "end"}
+        ] },
+      "previous": null,
+      "limits": null,
+      "errors": [],
+      "warnings": []
+    },
+    {
+      "name": "通過 並行兩分支可編輯欄位不重疊 (G12)",
+      "definition": { "shape": "graph", "stages": [],
+        "nodes": [
+          {"id": "start", "kind": "start"},
+          {"id": "f", "kind": "fork"},
+          {"id": "j", "kind": "join", "forkId": "f", "mode": "all"},
+          {"id": "a", "kind": "approval", "name": {"zh-TW": "a"}, "editableFields": [31]},
+          {"id": "b", "kind": "approval", "name": {"zh-TW": "b"}, "editableFields": [32]},
+          {"id": "end", "kind": "end"}
+        ],
+        "edges": [
+          {"id": "s1", "from": "start", "to": "f"},
+          {"id": "f-a", "from": "f", "to": "a"},
+          {"id": "f-b", "from": "f", "to": "b"},
+          {"id": "a-j", "from": "a", "to": "j"},
+          {"id": "b-j", "from": "b", "to": "j"},
+          {"id": "j1", "from": "j", "to": "end"}
+        ] },
+      "previous": null,
+      "limits": null,
+      "errors": [],
+      "warnings": []
+    },
+    {
+      "name": "通過 互斥兩路可編輯欄位重疊 (G12 只管並行)",
+      "definition": { "shape": "graph", "stages": [],
+        "nodes": [
+          {"id": "start", "kind": "start"},
+          {"id": "c", "kind": "condition"},
+          {"id": "a", "kind": "approval", "name": {"zh-TW": "a"}, "editableFields": [31]},
+          {"id": "b", "kind": "approval", "name": {"zh-TW": "b"}, "editableFields": [31]},
+          {"id": "z", "kind": "approval", "name": {"zh-TW": "z"}},
+          {"id": "end", "kind": "end"}
+        ],
+        "edges": [
+          {"id": "e1", "from": "start", "to": "c"},
+          {"id": "e2", "from": "c", "to": "a", "order": 1, "when": {"all": [{"field": 1, "op": "gte", "value": 1}]}},
+          {"id": "e3", "from": "c", "to": "b", "default": true},
+          {"id": "e4", "from": "a", "to": "z"},
+          {"id": "e5", "from": "b", "to": "z"},
+          {"id": "e6", "from": "z", "to": "end"}
+        ] },
+      "previous": null,
+      "limits": null,
+      "errors": [],
+      "warnings": []
+    },
+    {
+      "name": "通過 簽核節點 10 個",
+      "definition": { "shape": "graph", "stages": [],
+        "nodes": [
+          {"id": "start", "kind": "start"},
+          {"id": "a1", "kind": "approval", "name": {"zh-TW": "a1"}},
+          {"id": "a2", "kind": "approval", "name": {"zh-TW": "a2"}},
+          {"id": "a3", "kind": "approval", "name": {"zh-TW": "a3"}},
+          {"id": "a4", "kind": "approval", "name": {"zh-TW": "a4"}},
+          {"id": "a5", "kind": "approval", "name": {"zh-TW": "a5"}},
+          {"id": "a6", "kind": "approval", "name": {"zh-TW": "a6"}},
+          {"id": "a7", "kind": "approval", "name": {"zh-TW": "a7"}},
+          {"id": "a8", "kind": "approval", "name": {"zh-TW": "a8"}},
+          {"id": "a9", "kind": "approval", "name": {"zh-TW": "a9"}},
+          {"id": "a10", "kind": "approval", "name": {"zh-TW": "a10"}},
+          {"id": "end", "kind": "end"}
+        ],
+        "edges": [
+          {"id": "e1", "from": "start", "to": "a1"},
+          {"id": "e2", "from": "a1", "to": "a2"},
+          {"id": "e3", "from": "a2", "to": "a3"},
+          {"id": "e4", "from": "a3", "to": "a4"},
+          {"id": "e5", "from": "a4", "to": "a5"},
+          {"id": "e6", "from": "a5", "to": "a6"},
+          {"id": "e7", "from": "a6", "to": "a7"},
+          {"id": "e8", "from": "a7", "to": "a8"},
+          {"id": "e9", "from": "a8", "to": "a9"},
+          {"id": "e10", "from": "a9", "to": "a10"},
+          {"id": "e11", "from": "a10", "to": "end"}
+        ] },
+      "previous": null,
+      "limits": null,
+      "errors": [],
+      "warnings": []
+    },
+    {
+      "name": "通過 分支 5 條",
+      "definition": { "shape": "graph", "stages": [],
+        "nodes": [
+          {"id": "start", "kind": "start"},
+          {"id": "f", "kind": "fork"},
+          {"id": "j", "kind": "join", "forkId": "f", "mode": "all"},
+          {"id": "b1", "kind": "approval", "name": {"zh-TW": "b1"}},
+          {"id": "b2", "kind": "approval", "name": {"zh-TW": "b2"}},
+          {"id": "b3", "kind": "approval", "name": {"zh-TW": "b3"}},
+          {"id": "b4", "kind": "approval", "name": {"zh-TW": "b4"}},
+          {"id": "b5", "kind": "approval", "name": {"zh-TW": "b5"}},
+          {"id": "end", "kind": "end"}
+        ],
+        "edges": [
+          {"id": "s1", "from": "start", "to": "f"},
+          {"id": "f-b1", "from": "f", "to": "b1"},
+          {"id": "f-b2", "from": "f", "to": "b2"},
+          {"id": "f-b3", "from": "f", "to": "b3"},
+          {"id": "f-b4", "from": "f", "to": "b4"},
+          {"id": "f-b5", "from": "f", "to": "b5"},
+          {"id": "b1-j", "from": "b1", "to": "j"},
+          {"id": "b2-j", "from": "b2", "to": "j"},
+          {"id": "b3-j", "from": "b3", "to": "j"},
+          {"id": "b4-j", "from": "b4", "to": "j"},
+          {"id": "b5-j", "from": "b5", "to": "j"},
+          {"id": "j1", "from": "j", "to": "end"}
+        ] },
+      "previous": null,
+      "limits": null,
+      "errors": [],
+      "warnings": []
+    },
+    {
+      "name": "通過 簽核節點超過政策但不比舊版多 (J16)",
+      "definition": { "shape": "graph", "stages": [],
+        "nodes": [
+          {"id": "start", "kind": "start"},
+          {"id": "a1", "kind": "approval", "name": {"zh-TW": "a1"}},
+          {"id": "a2", "kind": "approval", "name": {"zh-TW": "a2"}},
+          {"id": "a3", "kind": "approval", "name": {"zh-TW": "a3"}},
+          {"id": "end", "kind": "end"}
+        ],
+        "edges": [
+          {"id": "e1", "from": "start", "to": "a1"},
+          {"id": "e2", "from": "a1", "to": "a2"},
+          {"id": "e3", "from": "a2", "to": "a3"},
+          {"id": "e4", "from": "a3", "to": "end"}
+        ] },
+      "previous": {"shape": "sequence", "stages": [{"code": "s0", "name": {"zh-TW": "s"}, "approvers": {"source": "manager", "level": 1}, "mode": "any", "editableFields": [], "onEmpty": "fallback"}, {"code": "s1", "name": {"zh-TW": "s"}, "approvers": {"source": "manager", "level": 1}, "mode": "any", "editableFields": [], "onEmpty": "fallback"}, {"code": "s2", "name": {"zh-TW": "s"}, "approvers": {"source": "manager", "level": 1}, "mode": "any", "editableFields": [], "onEmpty": "fallback"}]},
+      "limits": {"maxApprovalNodes": 2, "maxBranches": 5},
+      "errors": [],
+      "warnings": []
+    },
+    {
+      "name": "G1 stages 必須為空",
+      "definition": { "shape": "graph", "stages": [{"code": "s1", "name": {"zh-TW": "s"}, "approvers": {"source": "manager", "level": 1}, "mode": "any", "editableFields": [], "onEmpty": "fallback"}],
+        "nodes": [
+          {"id": "start", "kind": "start"},
+          {"id": "a1", "kind": "approval", "name": {"zh-TW": "a1"}},
+          {"id": "end", "kind": "end"}
+        ],
+        "edges": [
+          {"id": "e1", "from": "start", "to": "a1"},
+          {"id": "e2", "from": "a1", "to": "end"}
+        ] },
+      "previous": null,
+      "limits": null,
+      "errors": [["graph", "G1", "stagesNotAllowed"]],
+      "warnings": []
+    },
+    {
+      "name": "G1 缺 nodes",
+      "definition": { "shape": "graph", "stages": [] },
+      "previous": null,
+      "limits": null,
+      "errors": [["graph", "G1", "nodesMissing"]],
+      "warnings": []
+    },
+    {
+      "name": "G1 代號格式不合法 (以索引定位)",
+      "definition": { "shape": "graph", "stages": [],
+        "nodes": [
+          {"id": "start", "kind": "start"},
+          {"id": "a", "kind": "approval", "name": {"zh-TW": "a"}},
+          {"id": "end", "kind": "end"},
+          {"id": "Bad Id", "kind": "approval", "name": {"zh-TW": "Bad Id"}}
+        ],
+        "edges": [
+          {"id": "e1", "from": "start", "to": "a"},
+          {"id": "e2", "from": "a", "to": "end"}
+        ] },
+      "previous": null,
+      "limits": null,
+      "errors": [["nodes[3].id", "G1", "idInvalid"]],
+      "warnings": []
+    },
+    {
+      "name": "G1 節點代號重複",
+      "definition": { "shape": "graph", "stages": [],
+        "nodes": [
+          {"id": "start", "kind": "start"},
+          {"id": "a", "kind": "approval", "name": {"zh-TW": "a"}},
+          {"id": "a", "kind": "approval", "name": {"zh-TW": "a"}},
+          {"id": "end", "kind": "end"}
+        ],
+        "edges": [
+          {"id": "e1", "from": "start", "to": "a"},
+          {"id": "e2", "from": "a", "to": "end"}
+        ] },
+      "previous": null,
+      "limits": null,
+      "errors": [["nodes[2].id", "G1", "idDuplicate"]],
+      "warnings": []
+    },
+    {
+      "name": "G1 連線代號重複",
+      "definition": { "shape": "graph", "stages": [],
+        "nodes": [
+          {"id": "start", "kind": "start"},
+          {"id": "a", "kind": "approval", "name": {"zh-TW": "a"}},
+          {"id": "end", "kind": "end"}
+        ],
+        "edges": [
+          {"id": "e1", "from": "start", "to": "a"},
+          {"id": "e2", "from": "a", "to": "end"},
+          {"id": "e2", "from": "a", "to": "end"}
+        ] },
+      "previous": null,
+      "limits": null,
+      "errors": [["edges[2].id", "G1", "idDuplicate"]],
+      "warnings": []
+    },
+    {
+      "name": "G1 kind 不在列舉內",
+      "definition": { "shape": "graph", "stages": [],
+        "nodes": [
+          {"id": "start", "kind": "start"},
+          {"id": "a", "kind": "approval", "name": {"zh-TW": "a"}},
+          {"id": "end", "kind": "end"},
+          {"id": "x", "kind": "foo"}
+        ],
+        "edges": [
+          {"id": "e1", "from": "start", "to": "a"},
+          {"id": "e2", "from": "a", "to": "end"}
+        ] },
+      "previous": null,
+      "limits": null,
+      "errors": [["nodes.x", "G1", "kindInvalid"], ["nodes.x", "G3", "unreachable"], ["nodes.x", "G4", "deadEnd"]],
+      "warnings": []
+    },
+    {
+      "name": "G1 自己連自己",
+      "definition": { "shape": "graph", "stages": [],
+        "nodes": [
+          {"id": "start", "kind": "start"},
+          {"id": "a", "kind": "approval", "name": {"zh-TW": "a"}},
+          {"id": "end", "kind": "end"}
+        ],
+        "edges": [
+          {"id": "e1", "from": "start", "to": "a"},
+          {"id": "e2", "from": "a", "to": "end"},
+          {"id": "e3", "from": "a", "to": "a"}
+        ] },
+      "previous": null,
+      "limits": null,
+      "errors": [["edges.e3", "G1", "selfLoop"]],
+      "warnings": []
+    },
+    {
+      "name": "G1 同一對節點重複的線",
+      "definition": { "shape": "graph", "stages": [],
+        "nodes": [
+          {"id": "start", "kind": "start"},
+          {"id": "a", "kind": "approval", "name": {"zh-TW": "a"}},
+          {"id": "end", "kind": "end"}
+        ],
+        "edges": [
+          {"id": "e1", "from": "start", "to": "a"},
+          {"id": "e2", "from": "a", "to": "end"},
+          {"id": "e3", "from": "a", "to": "end"}
+        ] },
+      "previous": null,
+      "limits": null,
+      "errors": [["edges.e3", "G1", "edgeDuplicate"]],
+      "warnings": []
+    },
+    {
+      "name": "G1 連線指向不存在的節點",
+      "definition": { "shape": "graph", "stages": [],
+        "nodes": [
+          {"id": "start", "kind": "start"},
+          {"id": "a", "kind": "approval", "name": {"zh-TW": "a"}},
+          {"id": "end", "kind": "end"}
+        ],
+        "edges": [
+          {"id": "e1", "from": "start", "to": "a"},
+          {"id": "e2", "from": "a", "to": "end"},
+          {"id": "e3", "from": "a", "to": "ghost"}
+        ] },
+      "previous": null,
+      "limits": null,
+      "errors": [["edges.e3.to", "G1", "edgeEndpointMissing"]],
+      "warnings": []
+    },
+    {
+      "name": "G1 通知節點帶了簽核節點的屬性",
+      "definition": { "shape": "graph", "stages": [],
+        "nodes": [
+          {"id": "start", "kind": "start"},
+          {"id": "n", "kind": "notify", "when": {"all": [{"field": 1, "op": "gte", "value": 1}]}, "approvers": {"source": "manager", "level": 1}, "editableFields": [1]},
+          {"id": "a", "kind": "approval", "name": {"zh-TW": "a"}},
+          {"id": "end", "kind": "end"}
+        ],
+        "edges": [
+          {"id": "e1", "from": "start", "to": "n"},
+          {"id": "e2", "from": "n", "to": "a"},
+          {"id": "e3", "from": "a", "to": "end"}
+        ] },
+      "previous": null,
+      "limits": null,
+      "errors": [["nodes.n.when", "G1", "attrNotAllowed"], ["nodes.n.approvers", "G1", "attrNotAllowed"], ["nodes.n.editableFields", "G1", "attrNotAllowed"]],
+      "warnings": []
+    },
+    {
+      "name": "G1 簽核節點帶了匯合與通知的屬性",
+      "definition": { "shape": "graph", "stages": [],
+        "nodes": [
+          {"id": "start", "kind": "start"},
+          {"id": "a", "kind": "approval", "name": {"zh-TW": "a"}, "forkId": "x", "recipients": [{"kind": "initiator"}]},
+          {"id": "end", "kind": "end"}
+        ],
+        "edges": [
+          {"id": "e1", "from": "start", "to": "a"},
+          {"id": "e2", "from": "a", "to": "end"}
+        ] },
+      "previous": null,
+      "limits": null,
+      "errors": [["nodes.a.forkId", "G1", "attrNotAllowed"], ["nodes.a.recipients", "G1", "attrNotAllowed"]],
+      "warnings": []
+    },
+    {
+      "name": "G2 兩個開始節點",
+      "definition": { "shape": "graph", "stages": [],
+        "nodes": [
+          {"id": "start", "kind": "start"},
+          {"id": "start2", "kind": "start"},
+          {"id": "a", "kind": "approval", "name": {"zh-TW": "a"}},
+          {"id": "end", "kind": "end"}
+        ],
+        "edges": [
+          {"id": "e1", "from": "start", "to": "a"},
+          {"id": "e2", "from": "start2", "to": "a"},
+          {"id": "e3", "from": "a", "to": "end"}
+        ] },
+      "previous": null,
+      "limits": null,
+      "errors": [["graph", "G2", "startCount"]],
+      "warnings": []
+    },
+    {
+      "name": "G2 沒有結束節點",
+      "definition": { "shape": "graph", "stages": [],
+        "nodes": [
+          {"id": "start", "kind": "start"},
+          {"id": "a", "kind": "approval", "name": {"zh-TW": "a"}}
+        ],
+        "edges": [
+          {"id": "e1", "from": "start", "to": "a"}
+        ] },
+      "previous": null,
+      "limits": null,
+      "errors": [["graph", "G2", "endMissing"], ["nodes.a", "G2", "outCount"]],
+      "warnings": []
+    },
+    {
+      "name": "G2 簽核節點兩條出線",
+      "definition": { "shape": "graph", "stages": [],
+        "nodes": [
+          {"id": "start", "kind": "start"},
+          {"id": "a", "kind": "approval", "name": {"zh-TW": "a"}},
+          {"id": "b", "kind": "approval", "name": {"zh-TW": "b"}},
+          {"id": "end", "kind": "end"}
+        ],
+        "edges": [
+          {"id": "e1", "from": "start", "to": "a"},
+          {"id": "e2", "from": "a", "to": "end"},
+          {"id": "e3", "from": "a", "to": "b"},
+          {"id": "e4", "from": "b", "to": "end"}
+        ] },
+      "previous": null,
+      "limits": null,
+      "errors": [["nodes.a", "G2", "outCount"]],
+      "warnings": []
+    },
+    {
+      "name": "G2 匯合只有一條入線",
+      "definition": { "shape": "graph", "stages": [],
+        "nodes": [
+          {"id": "start", "kind": "start"},
+          {"id": "f", "kind": "fork"},
+          {"id": "a", "kind": "approval", "name": {"zh-TW": "a"}},
+          {"id": "b", "kind": "approval", "name": {"zh-TW": "b"}},
+          {"id": "j", "kind": "join", "forkId": "f", "mode": "all"},
+          {"id": "end2", "kind": "end"},
+          {"id": "end", "kind": "end"}
+        ],
+        "edges": [
+          {"id": "e1", "from": "start", "to": "f"},
+          {"id": "e2", "from": "f", "to": "a"},
+          {"id": "e3", "from": "f", "to": "b"},
+          {"id": "e4", "from": "a", "to": "j"},
+          {"id": "e5", "from": "b", "to": "end2"},
+          {"id": "e6", "from": "j", "to": "end"}
+        ] },
+      "previous": null,
+      "limits": null,
+      "errors": [["nodes.j", "G2", "inCount"]],
+      "warnings": []
+    },
+    {
+      "name": "G3 節點無法從開始到達",
+      "definition": { "shape": "graph", "stages": [],
+        "nodes": [
+          {"id": "start", "kind": "start"},
+          {"id": "a", "kind": "approval", "name": {"zh-TW": "a"}},
+          {"id": "x", "kind": "approval", "name": {"zh-TW": "x"}},
+          {"id": "end", "kind": "end"}
+        ],
+        "edges": [
+          {"id": "e1", "from": "start", "to": "a"},
+          {"id": "e2", "from": "a", "to": "end"},
+          {"id": "e3", "from": "x", "to": "end"}
+        ] },
+      "previous": null,
+      "limits": null,
+      "errors": [["nodes.x", "G2", "inCount"], ["nodes.x", "G3", "unreachable"]],
+      "warnings": []
+    },
+    {
+      "name": "G4 節點走不到結束 (死路)",
+      "definition": { "shape": "graph", "stages": [],
+        "nodes": [
+          {"id": "start", "kind": "start"},
+          {"id": "c", "kind": "condition"},
+          {"id": "a", "kind": "approval", "name": {"zh-TW": "a"}},
+          {"id": "x", "kind": "approval", "name": {"zh-TW": "x"}},
+          {"id": "end", "kind": "end"}
+        ],
+        "edges": [
+          {"id": "e1", "from": "start", "to": "c"},
+          {"id": "e2", "from": "c", "to": "a", "order": 1, "when": {"all": [{"field": 1, "op": "gte", "value": 1}]}},
+          {"id": "e3", "from": "c", "to": "x", "default": true},
+          {"id": "e4", "from": "a", "to": "end"}
+        ] },
+      "previous": null,
+      "limits": null,
+      "errors": [["nodes.x", "G2", "outCount"], ["nodes.x", "G4", "deadEnd"]],
+      "warnings": []
+    },
+    {
+      "name": "G5 有環",
+      "definition": { "shape": "graph", "stages": [],
+        "nodes": [
+          {"id": "start", "kind": "start"},
+          {"id": "a", "kind": "approval", "name": {"zh-TW": "a"}},
+          {"id": "c", "kind": "condition"},
+          {"id": "end", "kind": "end"}
+        ],
+        "edges": [
+          {"id": "e1", "from": "start", "to": "a"},
+          {"id": "e2", "from": "a", "to": "c"},
+          {"id": "e3", "from": "c", "to": "a", "order": 1, "when": {"all": [{"field": 1, "op": "gte", "value": 1}]}},
+          {"id": "e4", "from": "c", "to": "end", "default": true}
+        ] },
+      "previous": null,
+      "limits": null,
+      "errors": [["graph", "G5", "cycle"]],
+      "warnings": []
+    },
+    {
+      "name": "通過 條件節點一般形狀",
+      "definition": { "shape": "graph", "stages": [],
+        "nodes": [
+          {"id": "start", "kind": "start"},
+          {"id": "c", "kind": "condition"},
+          {"id": "a", "kind": "approval", "name": {"zh-TW": "a"}},
+          {"id": "b", "kind": "approval", "name": {"zh-TW": "b"}},
+          {"id": "end", "kind": "end"}
+        ],
+        "edges": [
+          {"id": "e1", "from": "start", "to": "c"},
+          {"id": "e2", "from": "c", "to": "a", "order": 1, "when": {"all": [{"field": 1, "op": "gte", "value": 1}]}},
+          {"id": "e3", "from": "c", "to": "b", "default": true},
+          {"id": "e4", "from": "a", "to": "end"},
+          {"id": "e5", "from": "b", "to": "end"}
+        ] },
+      "previous": null,
+      "limits": null,
+      "errors": [],
+      "warnings": []
+    },
+    {
+      "name": "G6 條件節點沒有預設線",
+      "definition": { "shape": "graph", "stages": [],
+        "nodes": [
+          {"id": "start", "kind": "start"},
+          {"id": "c", "kind": "condition"},
+          {"id": "a", "kind": "approval", "name": {"zh-TW": "a"}},
+          {"id": "b", "kind": "approval", "name": {"zh-TW": "b"}},
+          {"id": "end", "kind": "end"}
+        ],
+        "edges": [
+          {"id": "e1", "from": "start", "to": "c"},
+          {"id": "e2", "from": "c", "to": "a", "order": 1, "when": {"all": [{"field": 1, "op": "gte", "value": 1}]}},
+          {"id": "e3", "from": "c", "to": "b", "order": 2, "when": {"all": [{"field": 1, "op": "gte", "value": 1}]}},
+          {"id": "e4", "from": "a", "to": "end"},
+          {"id": "e5", "from": "b", "to": "end"}
+        ] },
+      "previous": null,
+      "limits": null,
+      "errors": [["nodes.c", "G6", "defaultCount"]],
+      "warnings": []
+    },
+    {
+      "name": "G6 條件節點兩條預設線",
+      "definition": { "shape": "graph", "stages": [],
+        "nodes": [
+          {"id": "start", "kind": "start"},
+          {"id": "c", "kind": "condition"},
+          {"id": "a", "kind": "approval", "name": {"zh-TW": "a"}},
+          {"id": "b", "kind": "approval", "name": {"zh-TW": "b"}},
+          {"id": "end", "kind": "end"}
+        ],
+        "edges": [
+          {"id": "e1", "from": "start", "to": "c"},
+          {"id": "e2", "from": "c", "to": "a", "default": true},
+          {"id": "e3", "from": "c", "to": "b", "default": true},
+          {"id": "e4", "from": "a", "to": "end"},
+          {"id": "e5", "from": "b", "to": "end"}
+        ] },
+      "previous": null,
+      "limits": null,
+      "errors": [["nodes.c", "G6", "defaultCount"]],
+      "warnings": []
+    },
+    {
+      "name": "G6 預設線有條件",
+      "definition": { "shape": "graph", "stages": [],
+        "nodes": [
+          {"id": "start", "kind": "start"},
+          {"id": "c", "kind": "condition"},
+          {"id": "a", "kind": "approval", "name": {"zh-TW": "a"}},
+          {"id": "b", "kind": "approval", "name": {"zh-TW": "b"}},
+          {"id": "end", "kind": "end"}
+        ],
+        "edges": [
+          {"id": "e1", "from": "start", "to": "c"},
+          {"id": "e2", "from": "c", "to": "a", "order": 1, "when": {"all": [{"field": 1, "op": "gte", "value": 1}]}},
+          {"id": "e3", "from": "c", "to": "b", "default": true, "when": {"all": [{"field": 1, "op": "gte", "value": 1}]}},
+          {"id": "e4", "from": "a", "to": "end"},
+          {"id": "e5", "from": "b", "to": "end"}
+        ] },
+      "previous": null,
+      "limits": null,
+      "errors": [["edges.e3.when", "G6", "defaultHasWhen"]],
+      "warnings": []
+    },
+    {
+      "name": "G6 非預設線缺條件",
+      "definition": { "shape": "graph", "stages": [],
+        "nodes": [
+          {"id": "start", "kind": "start"},
+          {"id": "c", "kind": "condition"},
+          {"id": "a", "kind": "approval", "name": {"zh-TW": "a"}},
+          {"id": "b", "kind": "approval", "name": {"zh-TW": "b"}},
+          {"id": "end", "kind": "end"}
+        ],
+        "edges": [
+          {"id": "e1", "from": "start", "to": "c"},
+          {"id": "e2", "from": "c", "to": "a", "order": 1},
+          {"id": "e3", "from": "c", "to": "b", "default": true},
+          {"id": "e4", "from": "a", "to": "end"},
+          {"id": "e5", "from": "b", "to": "end"}
+        ] },
+      "previous": null,
+      "limits": null,
+      "errors": [["edges.e2.when", "G6", "whenMissing"]],
+      "warnings": []
+    },
+    {
+      "name": "G6 非預設線缺順序",
+      "definition": { "shape": "graph", "stages": [],
+        "nodes": [
+          {"id": "start", "kind": "start"},
+          {"id": "c", "kind": "condition"},
+          {"id": "a", "kind": "approval", "name": {"zh-TW": "a"}},
+          {"id": "b", "kind": "approval", "name": {"zh-TW": "b"}},
+          {"id": "end", "kind": "end"}
+        ],
+        "edges": [
+          {"id": "e1", "from": "start", "to": "c"},
+          {"id": "e2", "from": "c", "to": "a", "when": {"all": [{"field": 1, "op": "gte", "value": 1}]}},
+          {"id": "e3", "from": "c", "to": "b", "default": true},
+          {"id": "e4", "from": "a", "to": "end"},
+          {"id": "e5", "from": "b", "to": "end"}
+        ] },
+      "previous": null,
+      "limits": null,
+      "errors": [["edges.e2.order", "G6", "orderInvalid"]],
+      "warnings": []
+    },
+    {
+      "name": "G6 順序重複",
+      "definition": { "shape": "graph", "stages": [],
+        "nodes": [
+          {"id": "start", "kind": "start"},
+          {"id": "c", "kind": "condition"},
+          {"id": "a", "kind": "approval", "name": {"zh-TW": "a"}},
+          {"id": "b", "kind": "approval", "name": {"zh-TW": "b"}},
+          {"id": "d", "kind": "approval", "name": {"zh-TW": "d"}},
+          {"id": "end", "kind": "end"}
+        ],
+        "edges": [
+          {"id": "e1", "from": "start", "to": "c"},
+          {"id": "e2", "from": "c", "to": "a", "order": 1, "when": {"all": [{"field": 1, "op": "gte", "value": 1}]}},
+          {"id": "e3", "from": "c", "to": "b", "order": 1, "when": {"all": [{"field": 1, "op": "gte", "value": 1}]}},
+          {"id": "e4", "from": "c", "to": "d", "default": true},
+          {"id": "e5", "from": "a", "to": "end"},
+          {"id": "e6", "from": "b", "to": "end"},
+          {"id": "e7", "from": "d", "to": "end"}
+        ] },
+      "previous": null,
+      "limits": null,
+      "errors": [["edges.e3.order", "G6", "orderDuplicate"]],
+      "warnings": []
+    },
+    {
+      "name": "G6 簽核節點出線帶 order",
+      "definition": { "shape": "graph", "stages": [],
+        "nodes": [
+          {"id": "start", "kind": "start"},
+          {"id": "a1", "kind": "approval", "name": {"zh-TW": "a1"}},
+          {"id": "end", "kind": "end"}
+        ],
+        "edges": [
+          {"id": "e1", "from": "start", "to": "a1"},
+          {"id": "e2", "from": "a1", "to": "end", "order": 1}
+        ] },
+      "previous": null,
+      "limits": null,
+      "errors": [["edges.e2.order", "G6", "conditionAttrNotAllowed"]],
+      "warnings": []
+    },
+    {
+      "name": "G6 簽核節點出線帶 when",
+      "definition": { "shape": "graph", "stages": [],
+        "nodes": [
+          {"id": "start", "kind": "start"},
+          {"id": "a1", "kind": "approval", "name": {"zh-TW": "a1"}},
+          {"id": "end", "kind": "end"}
+        ],
+        "edges": [
+          {"id": "e1", "from": "start", "to": "a1"},
+          {"id": "e2", "from": "a1", "to": "end", "when": {"all": [{"field": 1, "op": "gte", "value": 1}]}}
+        ] },
+      "previous": null,
+      "limits": null,
+      "errors": [["edges.e2.when", "G6", "conditionAttrNotAllowed"]],
+      "warnings": []
+    },
+    {
+      "name": "G7 分支沒有匯合",
+      "definition": { "shape": "graph", "stages": [],
+        "nodes": [
+          {"id": "start", "kind": "start"},
+          {"id": "f", "kind": "fork"},
+          {"id": "a", "kind": "approval", "name": {"zh-TW": "a"}},
+          {"id": "b", "kind": "approval", "name": {"zh-TW": "b"}},
+          {"id": "end", "kind": "end"}
+        ],
+        "edges": [
+          {"id": "e1", "from": "start", "to": "f"},
+          {"id": "e2", "from": "f", "to": "a"},
+          {"id": "e3", "from": "f", "to": "b"},
+          {"id": "e4", "from": "a", "to": "end"},
+          {"id": "e5", "from": "b", "to": "end"}
+        ] },
+      "previous": null,
+      "limits": null,
+      "errors": [["nodes.f", "G7", "forkWithoutJoin"]],
+      "warnings": []
+    },
+    {
+      "name": "G7 匯合 forkId 指向非分支節點",
+      "definition": { "shape": "graph", "stages": [],
+        "nodes": [
+          {"id": "start", "kind": "start"},
+          {"id": "f", "kind": "fork"},
+          {"id": "j", "kind": "join", "forkId": "a", "mode": "all"},
+          {"id": "a", "kind": "approval", "name": {"zh-TW": "a"}},
+          {"id": "b", "kind": "approval", "name": {"zh-TW": "b"}},
+          {"id": "end", "kind": "end"}
+        ],
+        "edges": [
+          {"id": "s1", "from": "start", "to": "f"},
+          {"id": "f-a", "from": "f", "to": "a"},
+          {"id": "f-b", "from": "f", "to": "b"},
+          {"id": "a-j", "from": "a", "to": "j"},
+          {"id": "b-j", "from": "b", "to": "j"},
+          {"id": "j1", "from": "j", "to": "end"}
+        ] },
+      "previous": null,
+      "limits": null,
+      "errors": [["nodes.j.forkId", "G7", "joinForkInvalid"], ["nodes.f", "G7", "forkWithoutJoin"]],
+      "warnings": []
+    },
+    {
+      "name": "G7 匯合 forkId 指向不存在的節點",
+      "definition": { "shape": "graph", "stages": [],
+        "nodes": [
+          {"id": "start", "kind": "start"},
+          {"id": "f", "kind": "fork"},
+          {"id": "j", "kind": "join", "forkId": "ghost", "mode": "all"},
+          {"id": "a", "kind": "approval", "name": {"zh-TW": "a"}},
+          {"id": "b", "kind": "approval", "name": {"zh-TW": "b"}},
+          {"id": "end", "kind": "end"}
+        ],
+        "edges": [
+          {"id": "s1", "from": "start", "to": "f"},
+          {"id": "f-a", "from": "f", "to": "a"},
+          {"id": "f-b", "from": "f", "to": "b"},
+          {"id": "a-j", "from": "a", "to": "j"},
+          {"id": "b-j", "from": "b", "to": "j"},
+          {"id": "j1", "from": "j", "to": "end"}
+        ] },
+      "previous": null,
+      "limits": null,
+      "errors": [["nodes.j.forkId", "G7", "joinForkInvalid"], ["nodes.f", "G7", "forkWithoutJoin"]],
+      "warnings": []
+    },
+    {
+      "name": "G7 匯合模式不合法",
+      "definition": { "shape": "graph", "stages": [],
+        "nodes": [
+          {"id": "start", "kind": "start"},
+          {"id": "f", "kind": "fork"},
+          {"id": "j", "kind": "join", "forkId": "f", "mode": "most"},
+          {"id": "a", "kind": "approval", "name": {"zh-TW": "a"}},
+          {"id": "b", "kind": "approval", "name": {"zh-TW": "b"}},
+          {"id": "end", "kind": "end"}
+        ],
+        "edges": [
+          {"id": "s1", "from": "start", "to": "f"},
+          {"id": "f-a", "from": "f", "to": "a"},
+          {"id": "f-b", "from": "f", "to": "b"},
+          {"id": "a-j", "from": "a", "to": "j"},
+          {"id": "b-j", "from": "b", "to": "j"},
+          {"id": "j1", "from": "j", "to": "end"}
+        ] },
+      "previous": null,
+      "limits": null,
+      "errors": [["nodes.j.mode", "G7", "joinModeInvalid"]],
+      "warnings": []
+    },
+    {
+      "name": "G7 區內連到區外 (區外節點被吸進區域，結束落在區內)",
+      "definition": { "shape": "graph", "stages": [],
+        "nodes": [
+          {"id": "start", "kind": "start"},
+          {"id": "f", "kind": "fork"},
+          {"id": "a", "kind": "approval", "name": {"zh-TW": "a"}},
+          {"id": "b", "kind": "approval", "name": {"zh-TW": "b"}},
+          {"id": "c", "kind": "approval", "name": {"zh-TW": "c"}},
+          {"id": "z", "kind": "approval", "name": {"zh-TW": "z"}},
+          {"id": "j", "kind": "join", "forkId": "f", "mode": "all"},
+          {"id": "end", "kind": "end"}
+        ],
+        "edges": [
+          {"id": "e1", "from": "start", "to": "f"},
+          {"id": "e2", "from": "f", "to": "a"},
+          {"id": "e3", "from": "f", "to": "b"},
+          {"id": "e4", "from": "f", "to": "c"},
+          {"id": "e5", "from": "a", "to": "j"},
+          {"id": "e6", "from": "c", "to": "j"},
+          {"id": "e7", "from": "b", "to": "z"},
+          {"id": "e8", "from": "j", "to": "z"},
+          {"id": "e9", "from": "z", "to": "end"}
+        ] },
+      "previous": null,
+      "limits": null,
+      "errors": [["edges.e8", "G7", "edgeIntoRegion"], ["nodes.end", "G8", "endInRegion"]],
+      "warnings": []
+    },
+    {
+      "name": "G7 區外連進區內",
+      "definition": { "shape": "graph", "stages": [],
+        "nodes": [
+          {"id": "start", "kind": "start"},
+          {"id": "c", "kind": "condition"},
+          {"id": "f", "kind": "fork"},
+          {"id": "x", "kind": "approval", "name": {"zh-TW": "x"}},
+          {"id": "a", "kind": "approval", "name": {"zh-TW": "a"}},
+          {"id": "b", "kind": "approval", "name": {"zh-TW": "b"}},
+          {"id": "j", "kind": "join", "forkId": "f", "mode": "all"},
+          {"id": "end", "kind": "end"}
+        ],
+        "edges": [
+          {"id": "e1", "from": "start", "to": "c"},
+          {"id": "e2", "from": "c", "to": "f", "order": 1, "when": {"all": [{"field": 1, "op": "gte", "value": 1}]}},
+          {"id": "e3", "from": "c", "to": "x", "default": true},
+          {"id": "e4", "from": "f", "to": "a"},
+          {"id": "e5", "from": "f", "to": "b"},
+          {"id": "e6", "from": "x", "to": "a"},
+          {"id": "e7", "from": "a", "to": "j"},
+          {"id": "e8", "from": "b", "to": "j"},
+          {"id": "e9", "from": "j", "to": "end"}
+        ] },
+      "previous": null,
+      "limits": null,
+      "errors": [["edges.e6", "G7", "edgeIntoRegion"]],
+      "warnings": []
+    },
+    {
+      "name": "G7 匯合的入線來自區外",
+      "definition": { "shape": "graph", "stages": [],
+        "nodes": [
+          {"id": "start", "kind": "start"},
+          {"id": "c", "kind": "condition"},
+          {"id": "f", "kind": "fork"},
+          {"id": "x", "kind": "approval", "name": {"zh-TW": "x"}},
+          {"id": "a", "kind": "approval", "name": {"zh-TW": "a"}},
+          {"id": "b", "kind": "approval", "name": {"zh-TW": "b"}},
+          {"id": "j", "kind": "join", "forkId": "f", "mode": "all"},
+          {"id": "end", "kind": "end"}
+        ],
+        "edges": [
+          {"id": "e1", "from": "start", "to": "c"},
+          {"id": "e2", "from": "c", "to": "f", "order": 1, "when": {"all": [{"field": 1, "op": "gte", "value": 1}]}},
+          {"id": "e3", "from": "c", "to": "x", "default": true},
+          {"id": "e4", "from": "f", "to": "a"},
+          {"id": "e5", "from": "f", "to": "b"},
+          {"id": "e6", "from": "x", "to": "j"},
+          {"id": "e7", "from": "a", "to": "j"},
+          {"id": "e8", "from": "b", "to": "j"},
+          {"id": "e9", "from": "j", "to": "end"}
+        ] },
+      "previous": null,
+      "limits": null,
+      "errors": [["edges.e6", "G7", "joinInEdgeOutside"]],
+      "warnings": []
+    },
+    {
+      "name": "G7 分支私下會合 (不經匯合)",
+      "definition": { "shape": "graph", "stages": [],
+        "nodes": [
+          {"id": "start", "kind": "start"},
+          {"id": "f", "kind": "fork"},
+          {"id": "a", "kind": "approval", "name": {"zh-TW": "a"}},
+          {"id": "b", "kind": "approval", "name": {"zh-TW": "b"}},
+          {"id": "c", "kind": "approval", "name": {"zh-TW": "c"}},
+          {"id": "m", "kind": "approval", "name": {"zh-TW": "m"}},
+          {"id": "j", "kind": "join", "forkId": "f", "mode": "all"},
+          {"id": "end", "kind": "end"}
+        ],
+        "edges": [
+          {"id": "e1", "from": "start", "to": "f"},
+          {"id": "e2", "from": "f", "to": "a"},
+          {"id": "e3", "from": "f", "to": "b"},
+          {"id": "e4", "from": "f", "to": "c"},
+          {"id": "e5", "from": "a", "to": "m"},
+          {"id": "e6", "from": "b", "to": "m"},
+          {"id": "e7", "from": "m", "to": "j"},
+          {"id": "e8", "from": "c", "to": "j"},
+          {"id": "e9", "from": "j", "to": "end"}
+        ] },
+      "previous": null,
+      "limits": null,
+      "errors": [["nodes.f", "G7", "branchesMerge"]],
+      "warnings": []
+    },
+    {
+      "name": "G7 交錯的並行區",
+      "definition": { "shape": "graph", "stages": [],
+        "nodes": [
+          {"id": "start", "kind": "start"},
+          {"id": "f1", "kind": "fork"},
+          {"id": "x", "kind": "approval", "name": {"zh-TW": "x"}},
+          {"id": "f2", "kind": "fork"},
+          {"id": "y", "kind": "approval", "name": {"zh-TW": "y"}},
+          {"id": "z", "kind": "approval", "name": {"zh-TW": "z"}},
+          {"id": "j1", "kind": "join", "forkId": "f1", "mode": "all"},
+          {"id": "j2", "kind": "join", "forkId": "f2", "mode": "all"},
+          {"id": "end", "kind": "end"}
+        ],
+        "edges": [
+          {"id": "e1", "from": "start", "to": "f1"},
+          {"id": "e2", "from": "f1", "to": "x"},
+          {"id": "e3", "from": "f1", "to": "f2"},
+          {"id": "e4", "from": "f2", "to": "y"},
+          {"id": "e5", "from": "f2", "to": "z"},
+          {"id": "e6", "from": "x", "to": "j1"},
+          {"id": "e7", "from": "y", "to": "j1"},
+          {"id": "e8", "from": "z", "to": "j2"},
+          {"id": "e9", "from": "j1", "to": "j2"},
+          {"id": "e10", "from": "j2", "to": "end"}
+        ] },
+      "previous": null,
+      "limits": null,
+      "errors": [["nodes.end", "G8", "endInRegion"], ["edges.e9", "G7", "edgeIntoRegion"], ["edges.e6", "G7", "edgeIntoRegion"], ["nodes.f1", "G7", "regionCross"]],
+      "warnings": []
+    },
+    {
+      "name": "G8 結束節點在並行區內",
+      "definition": { "shape": "graph", "stages": [],
+        "nodes": [
+          {"id": "start", "kind": "start"},
+          {"id": "f", "kind": "fork"},
+          {"id": "a", "kind": "approval", "name": {"zh-TW": "a"}},
+          {"id": "b", "kind": "approval", "name": {"zh-TW": "b"}},
+          {"id": "c", "kind": "approval", "name": {"zh-TW": "c"}},
+          {"id": "j", "kind": "join", "forkId": "f", "mode": "all"},
+          {"id": "end2", "kind": "end"},
+          {"id": "end", "kind": "end"}
+        ],
+        "edges": [
+          {"id": "e1", "from": "start", "to": "f"},
+          {"id": "e2", "from": "f", "to": "a"},
+          {"id": "e3", "from": "f", "to": "b"},
+          {"id": "e4", "from": "f", "to": "c"},
+          {"id": "e5", "from": "a", "to": "j"},
+          {"id": "e6", "from": "c", "to": "j"},
+          {"id": "e7", "from": "b", "to": "end2"},
+          {"id": "e8", "from": "j", "to": "end"}
+        ] },
+      "previous": null,
+      "limits": null,
+      "errors": [["nodes.end2", "G8", "endInRegion"]],
+      "warnings": []
+    },
+    {
+      "name": "G12 並行兩分支可編輯欄位重疊",
+      "definition": { "shape": "graph", "stages": [],
+        "nodes": [
+          {"id": "start", "kind": "start"},
+          {"id": "f", "kind": "fork"},
+          {"id": "j", "kind": "join", "forkId": "f", "mode": "all"},
+          {"id": "a", "kind": "approval", "name": {"zh-TW": "a"}, "editableFields": [31]},
+          {"id": "b", "kind": "approval", "name": {"zh-TW": "b"}, "editableFields": [31]},
+          {"id": "end", "kind": "end"}
+        ],
+        "edges": [
+          {"id": "s1", "from": "start", "to": "f"},
+          {"id": "f-a", "from": "f", "to": "a"},
+          {"id": "f-b", "from": "f", "to": "b"},
+          {"id": "a-j", "from": "a", "to": "j"},
+          {"id": "b-j", "from": "b", "to": "j"},
+          {"id": "j1", "from": "j", "to": "end"}
+        ] },
+      "previous": null,
+      "limits": null,
+      "errors": [["nodes.b.editableFields", "G12", "editableOverlap"]],
+      "warnings": []
+    },
+    {
+      "name": "G13 沒有簽核節點 (U5)",
+      "definition": { "shape": "graph", "stages": [],
+        "nodes": [
+          {"id": "start", "kind": "start"},
+          {"id": "n", "kind": "notify"},
+          {"id": "end", "kind": "end"}
+        ],
+        "edges": [
+          {"id": "e1", "from": "start", "to": "n"},
+          {"id": "e2", "from": "n", "to": "end"}
+        ] },
+      "previous": null,
+      "limits": null,
+      "errors": [["graph", "G13", "approvalNodesNone"]],
+      "warnings": []
+    },
+    {
+      "name": "G13 簽核節點 11 個",
+      "definition": { "shape": "graph", "stages": [],
+        "nodes": [
+          {"id": "start", "kind": "start"},
+          {"id": "a1", "kind": "approval", "name": {"zh-TW": "a1"}},
+          {"id": "a2", "kind": "approval", "name": {"zh-TW": "a2"}},
+          {"id": "a3", "kind": "approval", "name": {"zh-TW": "a3"}},
+          {"id": "a4", "kind": "approval", "name": {"zh-TW": "a4"}},
+          {"id": "a5", "kind": "approval", "name": {"zh-TW": "a5"}},
+          {"id": "a6", "kind": "approval", "name": {"zh-TW": "a6"}},
+          {"id": "a7", "kind": "approval", "name": {"zh-TW": "a7"}},
+          {"id": "a8", "kind": "approval", "name": {"zh-TW": "a8"}},
+          {"id": "a9", "kind": "approval", "name": {"zh-TW": "a9"}},
+          {"id": "a10", "kind": "approval", "name": {"zh-TW": "a10"}},
+          {"id": "a11", "kind": "approval", "name": {"zh-TW": "a11"}},
+          {"id": "end", "kind": "end"}
+        ],
+        "edges": [
+          {"id": "e1", "from": "start", "to": "a1"},
+          {"id": "e2", "from": "a1", "to": "a2"},
+          {"id": "e3", "from": "a2", "to": "a3"},
+          {"id": "e4", "from": "a3", "to": "a4"},
+          {"id": "e5", "from": "a4", "to": "a5"},
+          {"id": "e6", "from": "a5", "to": "a6"},
+          {"id": "e7", "from": "a6", "to": "a7"},
+          {"id": "e8", "from": "a7", "to": "a8"},
+          {"id": "e9", "from": "a8", "to": "a9"},
+          {"id": "e10", "from": "a9", "to": "a10"},
+          {"id": "e11", "from": "a10", "to": "a11"},
+          {"id": "e12", "from": "a11", "to": "end"}
+        ] },
+      "previous": null,
+      "limits": null,
+      "errors": [["graph", "G13", "approvalNodesTooMany"]],
+      "warnings": []
+    },
+    {
+      "name": "G13 分支 6 條",
+      "definition": { "shape": "graph", "stages": [],
+        "nodes": [
+          {"id": "start", "kind": "start"},
+          {"id": "f", "kind": "fork"},
+          {"id": "j", "kind": "join", "forkId": "f", "mode": "all"},
+          {"id": "b1", "kind": "approval", "name": {"zh-TW": "b1"}},
+          {"id": "b2", "kind": "approval", "name": {"zh-TW": "b2"}},
+          {"id": "b3", "kind": "approval", "name": {"zh-TW": "b3"}},
+          {"id": "b4", "kind": "approval", "name": {"zh-TW": "b4"}},
+          {"id": "b5", "kind": "approval", "name": {"zh-TW": "b5"}},
+          {"id": "b6", "kind": "approval", "name": {"zh-TW": "b6"}},
+          {"id": "end", "kind": "end"}
+        ],
+        "edges": [
+          {"id": "s1", "from": "start", "to": "f"},
+          {"id": "f-b1", "from": "f", "to": "b1"},
+          {"id": "f-b2", "from": "f", "to": "b2"},
+          {"id": "f-b3", "from": "f", "to": "b3"},
+          {"id": "f-b4", "from": "f", "to": "b4"},
+          {"id": "f-b5", "from": "f", "to": "b5"},
+          {"id": "f-b6", "from": "f", "to": "b6"},
+          {"id": "b1-j", "from": "b1", "to": "j"},
+          {"id": "b2-j", "from": "b2", "to": "j"},
+          {"id": "b3-j", "from": "b3", "to": "j"},
+          {"id": "b4-j", "from": "b4", "to": "j"},
+          {"id": "b5-j", "from": "b5", "to": "j"},
+          {"id": "b6-j", "from": "b6", "to": "j"},
+          {"id": "j1", "from": "j", "to": "end"}
+        ] },
+      "previous": null,
+      "limits": null,
+      "errors": [["nodes.f", "G13", "branchesTooMany"]],
+      "warnings": []
+    },
+    {
+      "name": "G13 簽核節點超過政策而且比舊版多 (J16)",
+      "definition": { "shape": "graph", "stages": [],
+        "nodes": [
+          {"id": "start", "kind": "start"},
+          {"id": "a1", "kind": "approval", "name": {"zh-TW": "a1"}},
+          {"id": "a2", "kind": "approval", "name": {"zh-TW": "a2"}},
+          {"id": "a3", "kind": "approval", "name": {"zh-TW": "a3"}},
+          {"id": "a4", "kind": "approval", "name": {"zh-TW": "a4"}},
+          {"id": "end", "kind": "end"}
+        ],
+        "edges": [
+          {"id": "e1", "from": "start", "to": "a1"},
+          {"id": "e2", "from": "a1", "to": "a2"},
+          {"id": "e3", "from": "a2", "to": "a3"},
+          {"id": "e4", "from": "a3", "to": "a4"},
+          {"id": "e5", "from": "a4", "to": "end"}
+        ] },
+      "previous": {"shape": "sequence", "stages": [{"code": "s0", "name": {"zh-TW": "s"}, "approvers": {"source": "manager", "level": 1}, "mode": "any", "editableFields": [], "onEmpty": "fallback"}, {"code": "s1", "name": {"zh-TW": "s"}, "approvers": {"source": "manager", "level": 1}, "mode": "any", "editableFields": [], "onEmpty": "fallback"}, {"code": "s2", "name": {"zh-TW": "s"}, "approvers": {"source": "manager", "level": 1}, "mode": "any", "editableFields": [], "onEmpty": "fallback"}]},
+      "limits": {"maxApprovalNodes": 2, "maxBranches": 5},
+      "errors": [["graph", "G13", "approvalNodesTooMany"]],
+      "warnings": []
+    }
+  ]
+}
