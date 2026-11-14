@@ -15,3 +15,4 @@
 - 讓簽核臨時讀取時參照欄位能顯示（a4b 既有）：manager01 臨時讀取採購單時「品項」顯示「無權限檢視」
 - 查簽核臨時讀取時 schema 先回 403 再重抓成功（a4b 既有）：畫面最終正常，但多一次失敗請求
 - 檢查 xUnit 測試是否還有依賴牆鐘短上限的寫法：CachedSystemPolicyTests 曾因工作執行緒被佔滿而 CI 失敗兩次（ef66fda7 已修該筆）
+- 補 MessageText 四語（任務看板 kb1 審查 N1）：a3 合併後把 SupervisorOnlyAssignee（主管只能改負責人的 403 訊息）、UndoInvalid（復原憑證無效）加進 MessageText 表；kb 段不能碰與 a3 共用的 MessageText.cs
