@@ -8,7 +8,7 @@ using static DynamicModules.WebAPITests.Dynamic.InventoryRig;
 namespace DynamicModules.WebAPITests.Dynamic;
 
 /// <summary>
-/// 內建進銷存（apps/inventory.app.json 1.1.0）的採購單預設簽核流程（簽核 a5c）：草稿 → 已確認 需簽核，
+/// 內建進銷存（apps/inventory.app.json 1.2.0）的採購單預設簽核流程（簽核 a5c）：草稿 → 已確認 需簽核，
 /// 未稅小計 100000 以上走兩關（採購主管、總經理）、10000 以上走一關、不到門檻送出即確認（門檻不含稅，稅率改了不影響簽幾關）。
 /// 組織（全部虛構）：總部〔主管 sales03〕→ 營運部〔主管 ops01〕→ 採購部〔主管空缺，成員 sales01 = 採購〕；進銷存主管群組 = manager01。
 /// 品項單價 1000、稅率 5%：數量 4 → 未稅 4,000（直接確認）、40 → 40,000（一關）、110 → 110,000（兩關）。
