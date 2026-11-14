@@ -27,6 +27,13 @@ describe('ApprovalActionLog', () => {
     expect(logs[1]!.find('[data-testid="log-comment"]').exists()).toBe(false);
   });
 
+  it('shows the add-sign users of an add-sign entry', () => {
+    const w = render([action({ action: 'add-sign', targetUserIds: ['s1', 's2'], targetNames: ['業務一', '業務二'], comment: '請確認數量', data: { mode: 'any' } })]);
+    const log = w.find('[data-testid="approval-log"] > li');
+    expect(log.find('[data-testid="log-targets"]').text()).toBe('→ 業務一、業務二');
+    expect(log.find('[data-testid="log-comment"]').text()).toBe('請確認數量');
+  });
+
   it('falls back to the user ids without names, and shows no target for other actions', () => {
     const w = render([action({ action: 'transfer', targetUserIds: ['mgr'] }), action({ action: 'approve', targetUserIds: ['x'], comment: '好' })]);
     expect(w.findAll('[data-testid="log-targets"]').map((e) => e.text())).toEqual(['→ mgr']);

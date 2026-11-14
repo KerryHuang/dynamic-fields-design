@@ -71,6 +71,17 @@ describe('ApprovalPanel', () => {
     expect(w.find('[data-testid="stage-1"] [data-testid="stage-added-by"]').exists()).toBe(false);
   });
 
+  it('StageList lists the add-sign users of a queued add-sign stage that has no tasks yet', () => {
+    const w = mountPanel(approval(instance({
+      stages: [
+        stage({ id: 1, seq: 1, status: 'active', tasks: [task({})] }),
+        stage({ id: 2, seq: 2, stageCode: null, name: { 'zh-TW': '加簽' }, status: 'queued', addedByName: '財務一', addSignNames: ['業務一', '業務二'], tasks: [] }),
+      ],
+    })));
+    expect(w.find('[data-testid="stage-2"] [data-testid="stage-add-sign-to"]').text()).toBe('加簽對象：業務一、業務二');
+    expect(w.find('[data-testid="stage-1"] [data-testid="stage-add-sign-to"]').exists()).toBe(false);
+  });
+
   it('a transferred task shows the original approver; a plain one does not', () => {
     const w = mountPanel(approval(instance({ stages: [stage({ tasks: [
       task({ id: 1, assigneeName: '李財務', reason: 'transferred', originalName: '王主管' }), task({ id: 2, assigneeName: '陳業務' }),

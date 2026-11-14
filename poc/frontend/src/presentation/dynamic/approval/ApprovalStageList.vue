@@ -26,6 +26,9 @@ const overdue = (s: ApprovalStageView) => s.status === 'active' && !!s.dueTime &
         <span v-if="s.tasks.length > 1 || s.mode === 'any'"> · {{ t(`approval.mode.${s.mode}`) }}</span>
         <span v-if="s.status === 'skipped' && s.skipReason"> · {{ labelOf('approval.skipReason', s.skipReason, t, te) }}</span>
       </template>
+      <div v-if="s.status === 'queued' && !s.tasks.length && s.addSignNames?.length" class="text-body2 approval-wrap q-mb-xs" data-testid="stage-add-sign-to">
+        {{ t('approval.panel.addSignTo', { names: s.addSignNames.join(t('common.listSeparator')) }) }}
+      </div>
       <div v-for="k in s.tasks" :key="k.id" class="row items-center q-gutter-x-sm q-mb-xs" :data-testid="`task-${k.id}`">
         <span class="approval-wrap">{{ k.assigneeName }}</span>
         <q-badge v-if="k.reason === 'fallback'" outline color="warning" :label="t('approval.reason.fallback')" data-testid="task-fallback" />

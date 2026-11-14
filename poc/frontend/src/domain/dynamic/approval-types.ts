@@ -27,6 +27,8 @@ export interface ApprovalStageView {
   skipReason: string | null; dueTime: string | null; tasks: ApprovalTaskView[]; editableFieldKeys: string[];
   /** Display name of whoever added this stage (add-sign stages have `stageCode` null); null for flow stages. */
   addedByName?: string | null;
+  /** 排隊中的加簽關卡的加簽對象姓名（還沒有任務時才有）。 */
+  addSignNames?: string[] | null;
 }
 export interface ApprovalActionView {
   action: string; actorUserId: string; actorName: string; onBehalfOfUserId: string | null; targetUserIds: string[];

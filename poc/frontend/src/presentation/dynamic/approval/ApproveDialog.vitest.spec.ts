@@ -257,12 +257,12 @@ describe('ApproveDialog add-sign', () => {
   });
 
   it('defaults to any and shows a 400 on userIds under the select', async () => {
-    const w = await mountDialog({ addSign: true, reply: new HttpFail(400, { errors: { userIds: ['這位使用者在這一關已經有簽核任務'] } }) });
+    const w = await mountDialog({ addSign: true, reply: new HttpFail(400, { errors: { userIds: ['不能交給發起人'] } }) });
     await pickUser('財務一');
     q('approve-send')!.click();
     await settle();
     expect(bodyOf(posts()[0]!)).toMatchObject({ mode: 'any' });
-    expect(q('add-sign-users')!.textContent).toContain('這位使用者在這一關已經有簽核任務');
+    expect(q('add-sign-users')!.textContent).toContain('不能交給發起人');
     w.unmount();
   });
 

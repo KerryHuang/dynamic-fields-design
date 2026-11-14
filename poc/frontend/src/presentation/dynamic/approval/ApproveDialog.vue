@@ -93,7 +93,7 @@ async function send() {
           </div>
           <div class="q-mb-md" data-testid="add-sign-mode">
             <div class="text-caption text-muted">{{ t('approval.actions.addSignMode') }}</div>
-            <q-option-group v-model="addMode" :options="modeOptions" type="radio" inline />
+            <q-option-group v-model="addMode" :options="modeOptions" type="radio" inline :aria-label="t('approval.actions.addSignMode')" />
           </div>
         </template>
         <ApprovalEditableFields
