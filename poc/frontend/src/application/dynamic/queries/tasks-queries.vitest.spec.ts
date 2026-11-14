@@ -13,12 +13,14 @@ const api = vi.mocked(dynamicApi);
 function setup() {
   const qc = new QueryClient();
   const spy = vi.spyOn(qc, 'invalidateQueries');
+  const removeSpy = vi.spyOn(qc, 'removeQueries');
   let composed!: { update: ReturnType<typeof useUpdateTask>; del: ReturnType<typeof useDeleteTask>; comment: ReturnType<typeof useAddTaskComment>; undo: ReturnType<typeof useUndoReassign> };
   mount(defineComponent({
     setup() { composed = { update: useUpdateTask(), del: useDeleteTask(), comment: useAddTaskComment(), undo: useUndoReassign() }; return () => null; },
   }), { global: { plugins: [[VueQueryPlugin, { queryClient: qc }]] } });
   const keys = () => spy.mock.calls.map((c) => JSON.stringify((c[0] as { queryKey: unknown[] }).queryKey));
-  return { composed, keys };
+  const removed = () => removeSpy.mock.calls.map((c) => JSON.stringify((c[0] as { queryKey: unknown[] }).queryKey));
+  return { composed, keys, removed };
 }
 
 describe('task mutations invalidate everything that shows a task', () => {
@@ -28,6 +30,17 @@ describe('task mutations invalidate everything that shows a task', () => {
     await composed.update.mutateAsync({ id: 7, patch: { status: 'done' } });
     await flushPromises();
     expect(keys()).toEqual(expect.arrayContaining(['["tasks"]', '["task-summary"]', '["record-tasks"]', '["task",7]', '["task-comments",7]']));
+  });
+
+  it('update that moves the task out of scope drops the task and its timeline instead of refetching them (they would 404)', async () => {
+    api.updateTask.mockResolvedValue({ id: 7, visible: false, undoToken: 'tok' } as never);
+    const { composed, keys, removed } = setup();
+    await composed.update.mutateAsync({ id: 7, patch: { assigneeUserId: 'sales02' } });
+    await flushPromises();
+    expect(removed()).toEqual(expect.arrayContaining(['["task",7]', '["task-comments",7]']));
+    expect(keys()).toEqual(expect.arrayContaining(['["tasks"]', '["task-summary"]', '["record-tasks"]']));
+    expect(keys()).not.toContain('["task",7]');
+    expect(keys()).not.toContain('["task-comments",7]');
   });
 
   it('comment with files uses the multipart call, without files the JSON one', async () => {
