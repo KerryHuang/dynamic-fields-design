@@ -3,7 +3,7 @@
   "cases": [
     {
 "id": "AG-001",
-      "name": "通過 設計 7.1 範例",
+      "name": "通過 設計 7.1 範例（預設線經通知節點直接到結束，只有 W2 警告）",
       "definition": { "shape": "graph", "stages": [],
         "nodes": [
           {"id": "start", "kind": "start"},
@@ -31,7 +31,7 @@
       "previous": null,
       "limits": null,
       "errors": [],
-      "warnings": []
+      "warnings": [["nodes.amount", "W2", "defaultToEndWithoutApproval"]]
     },
     {
 "id": "AG-002",
@@ -1355,7 +1355,7 @@
       "previous": null,
       "limits": null,
       "errors": [["edges.e3.order", "G6", "orderInvalid"], ["edges.e4.order", "G6", "orderInvalid"]],
-      "warnings": []
+      "warnings": [["nodes.c", "W2", "defaultToEndWithoutApproval"]]
     },
     {
       "id": "AG-057",
@@ -1620,6 +1620,340 @@
       "previous": null,
       "limits": null,
       "errors": [["nodes.a", "G2", "outCount"], ["nodes.f", "G7", "branchesMerge"]],
+      "warnings": []
+    },
+    {
+      "id": "AG-068",
+      "name": "W1 任一到齊的空分支（分支直接連到匯合）",
+      "definition": { "shape": "graph", "stages": [],
+        "nodes": [
+          {"id": "start", "kind": "start"},
+          {"id": "f", "kind": "fork"},
+          {"id": "a", "kind": "approval", "name": {"zh-TW": "a"}},
+          {"id": "j", "kind": "join", "forkId": "f", "mode": "any"},
+          {"id": "end", "kind": "end"}
+        ],
+        "edges": [
+          {"id": "e1", "from": "start", "to": "f"},
+          {"id": "e2", "from": "f", "to": "a"},
+          {"id": "e3", "from": "f", "to": "j"},
+          {"id": "e4", "from": "a", "to": "j"},
+          {"id": "e5", "from": "j", "to": "end"}
+        ] },
+      "previous": null,
+      "limits": null,
+      "errors": [],
+      "warnings": [["nodes.j", "W1", "anyJoinWithoutApproval"]]
+    },
+    {
+      "id": "AG-069",
+      "name": "W1 任一到齊的分支只有通知節點",
+      "definition": { "shape": "graph", "stages": [],
+        "nodes": [
+          {"id": "start", "kind": "start"},
+          {"id": "f", "kind": "fork"},
+          {"id": "a", "kind": "approval", "name": {"zh-TW": "a"}},
+          {"id": "n", "kind": "notify", "name": {"zh-TW": "n"}, "recipients": [{"kind": "initiator"}]},
+          {"id": "j", "kind": "join", "forkId": "f", "mode": "any"},
+          {"id": "end", "kind": "end"}
+        ],
+        "edges": [
+          {"id": "e1", "from": "start", "to": "f"},
+          {"id": "e2", "from": "f", "to": "a"},
+          {"id": "e3", "from": "f", "to": "n"},
+          {"id": "e4", "from": "a", "to": "j"},
+          {"id": "e5", "from": "n", "to": "j"},
+          {"id": "e6", "from": "j", "to": "end"}
+        ] },
+      "previous": null,
+      "limits": null,
+      "errors": [],
+      "warnings": [["nodes.j", "W1", "anyJoinWithoutApproval"]]
+    },
+    {
+      "id": "AG-070",
+      "name": "通過 全部到齊的空分支不警告 (W1 只管任一到齊)",
+      "definition": { "shape": "graph", "stages": [],
+        "nodes": [
+          {"id": "start", "kind": "start"},
+          {"id": "f", "kind": "fork"},
+          {"id": "a", "kind": "approval", "name": {"zh-TW": "a"}},
+          {"id": "j", "kind": "join", "forkId": "f", "mode": "all"},
+          {"id": "end", "kind": "end"}
+        ],
+        "edges": [
+          {"id": "e1", "from": "start", "to": "f"},
+          {"id": "e2", "from": "f", "to": "a"},
+          {"id": "e3", "from": "f", "to": "j"},
+          {"id": "e4", "from": "a", "to": "j"},
+          {"id": "e5", "from": "j", "to": "end"}
+        ] },
+      "previous": null,
+      "limits": null,
+      "errors": [],
+      "warnings": []
+    },
+    {
+      "id": "AG-071",
+      "name": "通過 任一到齊的每條分支都經過簽核節點",
+      "definition": { "shape": "graph", "stages": [],
+        "nodes": [
+          {"id": "start", "kind": "start"},
+          {"id": "f", "kind": "fork"},
+          {"id": "a", "kind": "approval", "name": {"zh-TW": "a"}},
+          {"id": "b", "kind": "approval", "name": {"zh-TW": "b"}},
+          {"id": "j", "kind": "join", "forkId": "f", "mode": "any"},
+          {"id": "end", "kind": "end"}
+        ],
+        "edges": [
+          {"id": "e1", "from": "start", "to": "f"},
+          {"id": "e2", "from": "f", "to": "a"},
+          {"id": "e3", "from": "f", "to": "b"},
+          {"id": "e4", "from": "a", "to": "j"},
+          {"id": "e5", "from": "b", "to": "j"},
+          {"id": "e6", "from": "j", "to": "end"}
+        ] },
+      "previous": null,
+      "limits": null,
+      "errors": [],
+      "warnings": []
+    },
+    {
+      "id": "AG-072",
+      "name": "通過 任一到齊的分支裡有全部到齊的巢狀並行區，內層有簽核就算經過簽核",
+      "definition": { "shape": "graph", "stages": [],
+        "nodes": [
+          {"id": "start", "kind": "start"},
+          {"id": "f1", "kind": "fork"},
+          {"id": "a1", "kind": "approval", "name": {"zh-TW": "a1"}},
+          {"id": "f2", "kind": "fork"},
+          {"id": "a2", "kind": "approval", "name": {"zh-TW": "a2"}},
+          {"id": "j2", "kind": "join", "forkId": "f2", "mode": "all"},
+          {"id": "j1", "kind": "join", "forkId": "f1", "mode": "any"},
+          {"id": "end", "kind": "end"}
+        ],
+        "edges": [
+          {"id": "e1", "from": "start", "to": "f1"},
+          {"id": "e2", "from": "f1", "to": "a1"},
+          {"id": "e3", "from": "f1", "to": "f2"},
+          {"id": "e4", "from": "f2", "to": "a2"},
+          {"id": "e5", "from": "f2", "to": "j2"},
+          {"id": "e6", "from": "a2", "to": "j2"},
+          {"id": "e7", "from": "a1", "to": "j1"},
+          {"id": "e8", "from": "j2", "to": "j1"},
+          {"id": "e9", "from": "j1", "to": "end"}
+        ] },
+      "previous": null,
+      "limits": null,
+      "errors": [],
+      "warnings": []
+    },
+    {
+      "id": "AG-073",
+      "name": "W2 條件節點的預設線直接到結束（小額免簽）",
+      "definition": { "shape": "graph", "stages": [],
+        "nodes": [
+          {"id": "start", "kind": "start"},
+          {"id": "c", "kind": "condition"},
+          {"id": "a", "kind": "approval", "name": {"zh-TW": "a"}},
+          {"id": "end", "kind": "end"}
+        ],
+        "edges": [
+          {"id": "e1", "from": "start", "to": "c"},
+          {"id": "e2", "from": "c", "to": "a", "order": 1, "when": {"all": [{"field": 1, "op": "gte", "value": 1}]}},
+          {"id": "e3", "from": "c", "to": "end", "default": true},
+          {"id": "e4", "from": "a", "to": "end"}
+        ] },
+      "previous": null,
+      "limits": null,
+      "errors": [],
+      "warnings": [["nodes.c", "W2", "defaultToEndWithoutApproval"]]
+    },
+    {
+      "id": "AG-074",
+      "name": "通過 條件節點的預設線先過簽核節點再結束",
+      "definition": { "shape": "graph", "stages": [],
+        "nodes": [
+          {"id": "start", "kind": "start"},
+          {"id": "c", "kind": "condition"},
+          {"id": "a", "kind": "approval", "name": {"zh-TW": "a"}},
+          {"id": "b", "kind": "approval", "name": {"zh-TW": "b"}},
+          {"id": "end", "kind": "end"}
+        ],
+        "edges": [
+          {"id": "e1", "from": "start", "to": "c"},
+          {"id": "e2", "from": "c", "to": "a", "order": 1, "when": {"all": [{"field": 1, "op": "gte", "value": 1}]}},
+          {"id": "e3", "from": "c", "to": "b", "default": true},
+          {"id": "e4", "from": "a", "to": "end"},
+          {"id": "e5", "from": "b", "to": "end"}
+        ] },
+      "previous": null,
+      "limits": null,
+      "errors": [],
+      "warnings": []
+    },
+    {
+      "id": "AG-075",
+      "name": "W2 預設線只經過通知節點到結束仍然警告",
+      "definition": { "shape": "graph", "stages": [],
+        "nodes": [
+          {"id": "start", "kind": "start"},
+          {"id": "c", "kind": "condition"},
+          {"id": "a", "kind": "approval", "name": {"zh-TW": "a"}},
+          {"id": "n", "kind": "notify", "name": {"zh-TW": "n"}, "recipients": [{"kind": "initiator"}]},
+          {"id": "end", "kind": "end"}
+        ],
+        "edges": [
+          {"id": "e1", "from": "start", "to": "c"},
+          {"id": "e2", "from": "c", "to": "a", "order": 1, "when": {"all": [{"field": 1, "op": "gte", "value": 1}]}},
+          {"id": "e3", "from": "c", "to": "n", "default": true},
+          {"id": "e4", "from": "a", "to": "end"},
+          {"id": "e5", "from": "n", "to": "end"}
+        ] },
+      "previous": null,
+      "limits": null,
+      "errors": [],
+      "warnings": [["nodes.c", "W2", "defaultToEndWithoutApproval"]]
+    },
+    {
+      "id": "AG-076",
+      "name": "W3 條件節點出線上的簽核節點有略過條件",
+      "definition": { "shape": "graph", "stages": [],
+        "nodes": [
+          {"id": "start", "kind": "start"},
+          {"id": "c", "kind": "condition"},
+          {"id": "a", "kind": "approval", "name": {"zh-TW": "a"}, "when": {"all": [{"field": 1, "op": "gte", "value": 1}]}},
+          {"id": "b", "kind": "approval", "name": {"zh-TW": "b"}},
+          {"id": "end", "kind": "end"}
+        ],
+        "edges": [
+          {"id": "e1", "from": "start", "to": "c"},
+          {"id": "e2", "from": "c", "to": "a", "order": 1, "when": {"all": [{"field": 1, "op": "gte", "value": 1}]}},
+          {"id": "e3", "from": "c", "to": "b", "default": true},
+          {"id": "e4", "from": "a", "to": "end"},
+          {"id": "e5", "from": "b", "to": "end"}
+        ] },
+      "previous": null,
+      "limits": null,
+      "errors": [],
+      "warnings": [["nodes.a", "W3", "skipConditionOnConditionBranch"]]
+    },
+    {
+      "id": "AG-077",
+      "name": "通過 直線上的略過條件不警告 (W3)",
+      "definition": { "shape": "graph", "stages": [],
+        "nodes": [
+          {"id": "start", "kind": "start"},
+          {"id": "a", "kind": "approval", "name": {"zh-TW": "a"}, "when": {"all": [{"field": 1, "op": "gte", "value": 1}]}},
+          {"id": "end", "kind": "end"}
+        ],
+        "edges": [
+          {"id": "e1", "from": "start", "to": "a"},
+          {"id": "e2", "from": "a", "to": "end"}
+        ] },
+      "previous": null,
+      "limits": null,
+      "errors": [],
+      "warnings": []
+    },
+    {
+      "id": "AG-078",
+      "name": "W3 條件出線先經過通知節點才到有略過條件的簽核節點",
+      "definition": { "shape": "graph", "stages": [],
+        "nodes": [
+          {"id": "start", "kind": "start"},
+          {"id": "c", "kind": "condition"},
+          {"id": "n", "kind": "notify", "name": {"zh-TW": "n"}, "recipients": [{"kind": "initiator"}]},
+          {"id": "a", "kind": "approval", "name": {"zh-TW": "a"}, "when": {"all": [{"field": 1, "op": "gte", "value": 1}]}},
+          {"id": "b", "kind": "approval", "name": {"zh-TW": "b"}},
+          {"id": "end", "kind": "end"}
+        ],
+        "edges": [
+          {"id": "e1", "from": "start", "to": "c"},
+          {"id": "e2", "from": "c", "to": "n", "order": 1, "when": {"all": [{"field": 1, "op": "gte", "value": 1}]}},
+          {"id": "e3", "from": "c", "to": "b", "default": true},
+          {"id": "e4", "from": "n", "to": "a"},
+          {"id": "e5", "from": "a", "to": "end"},
+          {"id": "e6", "from": "b", "to": "end"}
+        ] },
+      "previous": null,
+      "limits": null,
+      "errors": [],
+      "warnings": [["nodes.a", "W3", "skipConditionOnConditionBranch"]]
+    },
+    {
+      "id": "AG-079",
+      "name": "通過 條件出線後已有另一個簽核節點，之後的略過條件不警告",
+      "definition": { "shape": "graph", "stages": [],
+        "nodes": [
+          {"id": "start", "kind": "start"},
+          {"id": "c", "kind": "condition"},
+          {"id": "x", "kind": "approval", "name": {"zh-TW": "x"}},
+          {"id": "a", "kind": "approval", "name": {"zh-TW": "a"}, "when": {"all": [{"field": 1, "op": "gte", "value": 1}]}},
+          {"id": "b", "kind": "approval", "name": {"zh-TW": "b"}},
+          {"id": "end", "kind": "end"}
+        ],
+        "edges": [
+          {"id": "e1", "from": "start", "to": "c"},
+          {"id": "e2", "from": "c", "to": "x", "order": 1, "when": {"all": [{"field": 1, "op": "gte", "value": 1}]}},
+          {"id": "e3", "from": "c", "to": "b", "default": true},
+          {"id": "e4", "from": "x", "to": "a"},
+          {"id": "e5", "from": "a", "to": "end"},
+          {"id": "e6", "from": "b", "to": "end"}
+        ] },
+      "previous": null,
+      "limits": null,
+      "errors": [],
+      "warnings": []
+    },
+    {
+      "id": "AG-080",
+      "name": "通過 互斥路徑會合之後的略過條件不警告",
+      "definition": { "shape": "graph", "stages": [],
+        "nodes": [
+          {"id": "start", "kind": "start"},
+          {"id": "c", "kind": "condition"},
+          {"id": "n1", "kind": "notify", "name": {"zh-TW": "n1"}, "recipients": [{"kind": "initiator"}]},
+          {"id": "n2", "kind": "notify", "name": {"zh-TW": "n2"}, "recipients": [{"kind": "initiator"}]},
+          {"id": "a", "kind": "approval", "name": {"zh-TW": "a"}, "when": {"all": [{"field": 1, "op": "gte", "value": 1}]}},
+          {"id": "end", "kind": "end"}
+        ],
+        "edges": [
+          {"id": "e1", "from": "start", "to": "c"},
+          {"id": "e2", "from": "c", "to": "n1", "order": 1, "when": {"all": [{"field": 1, "op": "gte", "value": 1}]}},
+          {"id": "e3", "from": "c", "to": "n2", "default": true},
+          {"id": "e4", "from": "n1", "to": "a"},
+          {"id": "e5", "from": "n2", "to": "a"},
+          {"id": "e6", "from": "a", "to": "end"}
+        ] },
+      "previous": null,
+      "limits": null,
+      "errors": [],
+      "warnings": []
+    },
+    {
+      "id": "AG-081",
+      "name": "有結構錯誤 (G2、G3) 時不算警告",
+      "definition": { "shape": "graph", "stages": [],
+        "nodes": [
+          {"id": "start", "kind": "start"},
+          {"id": "f", "kind": "fork"},
+          {"id": "a", "kind": "approval", "name": {"zh-TW": "a"}},
+          {"id": "x", "kind": "approval", "name": {"zh-TW": "x"}},
+          {"id": "j", "kind": "join", "forkId": "f", "mode": "any"},
+          {"id": "end", "kind": "end"}
+        ],
+        "edges": [
+          {"id": "e1", "from": "start", "to": "f"},
+          {"id": "e2", "from": "f", "to": "a"},
+          {"id": "e3", "from": "f", "to": "j"},
+          {"id": "e4", "from": "a", "to": "j"},
+          {"id": "e5", "from": "j", "to": "end"},
+          {"id": "e6", "from": "x", "to": "end"}
+        ] },
+      "previous": null,
+      "limits": null,
+      "errors": [["nodes.x", "G2", "inCount"], ["nodes.x", "G3", "unreachable"]],
       "warnings": []
     }
   ]
