@@ -88,6 +88,28 @@ describe('ApprovalActionBar', () => {
     w.unmount();
   });
 
+  it('ActionBar shows add-sign only when canAddSign', async () => {
+    const w = await mountBar(inst({ stages: [stage({ tasks: [task({ canAddSign: true })] })] }));
+    expect(q('action-addSign')!.textContent).toContain('同意並加簽');
+    await click('action-addSign');
+    expect(q('approve-dialog')!.textContent).toContain('加簽對象');
+    w.unmount();
+    document.body.innerHTML = '';
+    const none = await mountBar(inst({ stages: [stage({ tasks: [task({ canAddSign: false })] })] }));
+    expect(q('action-approve')).not.toBeNull();
+    expect(q('action-addSign')).toBeNull();
+    none.unmount();
+  });
+
+  it('add-sign goes to the menu on a phone', async () => {
+    const w = await mountBar(inst({ stages: [stage({ tasks: [task({ canAddSign: true })] })] }), { width: 390 });
+    expect(q('action-addSign')).toBeNull();
+    await click('approval-more');
+    await click('approval-more-addSign');
+    expect(q('approve-dialog')!.textContent).toContain('加簽對象');
+    w.unmount();
+  });
+
   it('approver sees approve and reject; others see none', async () => {
     const w = await mountBar(inst());
     expect(q('action-approve')).not.toBeNull();

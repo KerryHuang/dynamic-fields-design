@@ -19,6 +19,7 @@ const overdue = (s: ApprovalStageView) => s.status === 'active' && !!s.dueTime &
     >
       <template #title>
         <span class="approval-wrap">{{ resolveI18n(s.name, locale) }}</span>
+        <span v-if="s.addedByName" class="approval-wrap text-body2 text-muted" data-testid="stage-added-by"> · {{ t('approval.panel.addedBy', { name: s.addedByName }) }}</span>
       </template>
       <template #subtitle>
         <span>{{ labelOf('approval.stageStatus', s.status, t, te) }}</span>

@@ -55,6 +55,22 @@ describe('ApprovalPanel', () => {
     expect(text(w, 'stage-2')).toContain('李財務');
   });
 
+  it('StageList shows who added the stage and queued status', () => {
+    const w = mountPanel(approval(instance({
+      stages: [
+        stage({ id: 1, seq: 1, status: 'approved', tasks: [task({ status: 'approved' })] }),
+        stage({ id: 2, seq: 2, stageCode: null, name: { 'zh-TW': '加簽' }, mode: 'any', status: 'active', addedByName: '進銷存主管', tasks: [task({ id: 2, assigneeName: '業務一', reason: 'added' })] }),
+        stage({ id: 3, seq: 3, stageCode: null, name: { 'zh-TW': '加簽' }, status: 'queued', addedByName: '業務主管', tasks: [] }),
+      ],
+    })));
+    expect(text(w, 'stage-2')).toContain('加簽');
+    expect(text(w, 'stage-2')).toContain('由 進銷存主管 加簽');
+    expect(text(w, 'stage-2')).toContain('業務一');
+    expect(text(w, 'stage-3')).toContain('等待中');
+    expect(text(w, 'stage-3')).toContain('由 業務主管 加簽');
+    expect(w.find('[data-testid="stage-1"] [data-testid="stage-added-by"]').exists()).toBe(false);
+  });
+
   it('a transferred task shows the original approver; a plain one does not', () => {
     const w = mountPanel(approval(instance({ stages: [stage({ tasks: [
       task({ id: 1, assigneeName: '李財務', reason: 'transferred', originalName: '王主管' }), task({ id: 2, assigneeName: '陳業務' }),

@@ -19,10 +19,14 @@ export interface ApprovalTaskView {
   canReturnPrevious: boolean;
   /** The first holder of the seat when it was handed over (transfer): shown as "original approver". Null when the holder is the original. */
   originalName?: string | null;
+  /** Server rule: can act, and the instance has not reached the add-sign stage limit (policy `approval.maxAddSignStages`). */
+  canAddSign?: boolean;
 }
 export interface ApprovalStageView {
   id: number; seq: number; stageCode: string | null; name: I18nText; mode: 'all' | 'any'; status: string;
   skipReason: string | null; dueTime: string | null; tasks: ApprovalTaskView[]; editableFieldKeys: string[];
+  /** Display name of whoever added this stage (add-sign stages have `stageCode` null); null for flow stages. */
+  addedByName?: string | null;
 }
 export interface ApprovalActionView {
   action: string; actorUserId: string; actorName: string; onBehalfOfUserId: string | null; targetUserIds: string[];
@@ -54,6 +58,7 @@ export interface ApprovalPreview {
 export interface SubmitApprovalBody { to: number; recordRowVersion: string; picks?: Record<string, string[]>; comment?: string }
 export interface ApproveBody { rowVersion: string; comment?: string; values?: Record<string, unknown> }
 export interface RejectBody { rowVersion: string; comment: string; to: 'initiator' | 'previous' }
+export interface AddSignBody { rowVersion: string; userIds: string[]; mode: 'all' | 'any'; comment?: string; values?: Record<string, unknown> }
 export interface WithdrawBody { rowVersion: string; comment?: string }
 export interface TransferBody { rowVersion: string; userId: string; comment?: string }
 export interface CancelBody { rowVersion: string; comment: string }

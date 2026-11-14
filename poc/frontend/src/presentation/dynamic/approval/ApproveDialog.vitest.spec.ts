@@ -1,11 +1,13 @@
 import { QueryClient, VueQueryPlugin } from '@tanstack/vue-query';
 import { flushPromises, mount } from '@vue/test-utils';
-import { createPinia } from 'pinia';
+import { createPinia, setActivePinia } from 'pinia';
 import * as quasar from 'quasar';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createI18n } from 'vue-i18n';
 import type { DynamicRecord, ModuleSchema, SchemaField } from 'src/domain/dynamic/types';
+import type { ApprovalInstanceView } from 'src/domain/dynamic/approval-types';
 import zhTW from 'src/i18n/zh-TW.json';
+import { useIdentityStore } from 'src/stores/use-identity-store';
 import { bodyOf, HttpFail, mockHttp, type Call } from 'src/test-utils/mock-http';
 import ApproveDialog from './ApproveDialog.vue';
 import { changedValues } from './approval-actions';
@@ -23,6 +25,23 @@ const record: DynamicRecord = {
   modifiedUserId: 'a', modifiedTime: '', rowVersion: 'rv1', references: {}, hostKey: null,
 };
 
+const inst: ApprovalInstanceView = {
+  id: 7, status: 'pending', routeKind: 'flow', flowName: null, fromOptionId: 1, toOptionId: 2, initiatorUserId: 'init', submittedTime: '', completedTime: null,
+  rowVersion: 'iv1', actions: [], canWithdraw: false, canCancel: false, titleSnapshot: '',
+  stages: [{
+    id: 1, seq: 1, stageCode: 's', name: {}, mode: 'all', status: 'active', skipReason: null, dueTime: null, editableFieldKeys: ['f_2'],
+    tasks: [
+      { id: 11, assigneeUserId: 'me', assigneeName: '我', originalUserId: 'me', reason: 'resolved', status: 'open', actedTime: null, canAct: true, canReturnPrevious: false },
+      { id: 12, assigneeUserId: 'peer', assigneeName: '同僚', originalUserId: 'peer', reason: 'resolved', status: 'open', actedTime: null, canAct: true, canReturnPrevious: false },
+    ],
+  }],
+};
+const users = [
+  { userId: 'me', displayName: '我' }, { userId: 'init', displayName: '發起人' }, { userId: 'peer', displayName: '同僚' },
+  { userId: 'fin1', displayName: '財務一' }, { userId: 'fin2', displayName: '財務二' }, { userId: 'fin3', displayName: '財務三' },
+];
+Element.prototype.scrollTo = () => {}; // jsdom has no scrollTo; the Quasar menu calls it
+
 let calls: Call[];
 const body = () => document.body;
 const q = (id: string) => body().querySelector<HTMLElement>(`[data-testid="${id}"]`);
@@ -31,17 +50,23 @@ const inputOf = (label: string) => [...body().querySelectorAll<HTMLInputElement>
 const type = async (label: string, v: string) => { const i = inputOf(label); i.value = v; i.dispatchEvent(new Event('input')); await settle(); };
 const posts = () => calls.filter((c) => c.method === 'post');
 
-async function mountDialog(o: { keys?: string[]; reply?: unknown; schema?: ModuleSchema; record?: DynamicRecord } = {}) {
+async function mountDialog(o: { keys?: string[]; reply?: unknown; schema?: ModuleSchema; record?: DynamicRecord; addSign?: boolean; values?: Record<string, unknown> } = {}) {
+  setActivePinia(createPinia());
+  useIdentityStore().setSession('me');
   calls = mockHttp((c) => {
     if (c.method === 'post') return o.reply ?? { outcome: 'advanced', instanceId: 7, instanceRowVersion: 'iv2' };
-    if (c.url === '/policies/effective') return { values: {} };
+    if (c.url === '/policies/effective') return { values: o.values ?? {} };
+    if (c.url === '/users') return users;
     return {};
   });
   const i18n = createI18n({ legacy: false, locale: 'zh-TW', messages: { 'zh-TW': zhTW } });
   const w = mount(ApproveDialog, {
     attachTo: document.body,
-    props: { modelValue: true, recordId: 9, moduleKey: 'po', taskId: 11, rowVersion: 'iv1', editableFieldKeys: o.keys ?? [], schema: o.schema ?? schema, record: o.record ?? record },
-    global: { plugins: [[quasar.Quasar, { components: quasar, directives: quasar, plugins: { Notify: quasar.Notify } }], createPinia(), i18n, [VueQueryPlugin, { queryClient: new QueryClient() }]] },
+    props: {
+      modelValue: true, recordId: 9, moduleKey: 'po', taskId: 11, rowVersion: 'iv1', editableFieldKeys: o.keys ?? [], schema: o.schema ?? schema, record: o.record ?? record,
+      ...(o.addSign && { addSign: true, instance: inst }),
+    },
+    global: { plugins: [[quasar.Quasar, { components: quasar, directives: quasar, plugins: { Notify: quasar.Notify } }], i18n, [VueQueryPlugin, { queryClient: new QueryClient() }]] },
   });
   await settle();
   return w;
@@ -164,5 +189,91 @@ describe('changedValues', () => {
   it('lists only keys whose value differs, treating undefined and null as the same', () => {
     expect(changedValues(['a', 'b', 'c'], { a: 1, b: null, c: 'x' }, { a: 2, b: undefined, c: 'x' })).toEqual({ a: 2 });
     expect(changedValues(['a'], { a: [1] }, { a: [1] })).toEqual({});
+  });
+});
+
+/** Types into the add-sign user select the way a user does and returns the menu items. */
+async function searchUsers(text: string) {
+  const input = q('add-sign-users')!.querySelector('input') as HTMLInputElement;
+  input.focus();
+  input.value = text;
+  input.dispatchEvent(new Event('input'));
+  await new Promise((r) => setTimeout(r, 150));
+  await settle();
+  return [...body().querySelectorAll<HTMLElement>('.q-item')];
+}
+async function pickUser(label: string) {
+  (await searchUsers(label)).find((e) => e.textContent?.includes(label))!.click();
+  await settle();
+}
+
+describe('ApproveDialog add-sign', () => {
+  beforeEach(() => { document.body.innerHTML = ''; vi.stubGlobal('ResizeObserver', class { observe() {} unobserve() {} disconnect() {} }); });
+  afterEach(() => { document.body.innerHTML = ''; });
+
+  it('add-sign mode requires at least one user', async () => {
+    const w = await mountDialog({ addSign: true });
+    expect(q('approve-dialog')!.textContent).toContain('同意並加簽');
+    q('approve-send')!.click();
+    await settle();
+    expect(posts()).toHaveLength(0);
+    expect(body().textContent).toContain('請選擇至少一位加簽對象');
+    w.unmount();
+  });
+
+  it('caps the users at the policy value', async () => {
+    const w = await mountDialog({ addSign: true, values: { 'approval.maxAddSignUsers': 2 } });
+    expect(q('add-sign-cap')!.textContent).toContain('最多 2 位');
+    await pickUser('財務一');
+    await pickUser('財務二');
+    const items = await searchUsers('財務');
+    const third = items.find((e) => e.textContent?.includes('財務三'))!;
+    expect(third.getAttribute('aria-disabled') === 'true' || third.classList.contains('disabled')).toBe(true);
+    w.unmount();
+  });
+
+  it('offers seat holders of the current stage, but not me or the initiator', async () => {
+    const w = await mountDialog({ addSign: true });
+    expect((await searchUsers('同僚')).map((e) => e.textContent)).toEqual(['同僚']);   // a new stage: holding a vote here does not exclude
+    expect((await searchUsers('發起')).map((e) => e.textContent)).toEqual(['沒有符合的選項']);
+    expect((await searchUsers('我')).map((e) => e.textContent)).toEqual(['沒有符合的選項']);
+    w.unmount();
+  });
+
+  it('sends userIds, mode and only changed values', async () => {
+    const w = await mountDialog({ addSign: true, keys: ['f_2'] });
+    await pickUser('財務一');
+    await pickUser('財務二');
+    await type('核定金額', 'new');
+    expect(q('add-sign-mode')!.textContent).toContain('或簽');
+    (q('add-sign-mode')!.querySelectorAll('.q-radio')[1] as HTMLElement).click();   // 會簽
+    await settle();
+    q('approve-send')!.click();
+    await settle();
+    expect(posts()).toHaveLength(1);
+    expect(posts()[0]!.url).toBe('/approval-tasks/11/add-sign');
+    expect(bodyOf(posts()[0]!)).toEqual({ rowVersion: 'iv1', userIds: ['fin1', 'fin2'], mode: 'all', values: { f_2: 'new' } });
+    w.unmount();
+  });
+
+  it('defaults to any and shows a 400 on userIds under the select', async () => {
+    const w = await mountDialog({ addSign: true, reply: new HttpFail(400, { errors: { userIds: ['這位使用者在這一關已經有簽核任務'] } }) });
+    await pickUser('財務一');
+    q('approve-send')!.click();
+    await settle();
+    expect(bodyOf(posts()[0]!)).toMatchObject({ mode: 'any' });
+    expect(q('add-sign-users')!.textContent).toContain('這位使用者在這一關已經有簽核任務');
+    w.unmount();
+  });
+
+  it('approve mode unchanged: no add-sign fields and the approve endpoint', async () => {
+    const w = await mountDialog();
+    expect(q('add-sign-users')).toBeNull();
+    expect(q('approve-send')!.textContent).toContain('同意');
+    q('approve-send')!.click();
+    await settle();
+    expect(posts()[0]!.url).toBe('/approval-tasks/11/approve');
+    expect(bodyOf(posts()[0]!)).toEqual({ rowVersion: 'iv1' });
+    w.unmount();
   });
 });

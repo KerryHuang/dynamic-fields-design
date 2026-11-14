@@ -23,6 +23,11 @@ describe('targetCandidates', () => {
     expect(values(targetCandidates(users, i, 'me', false))).toEqual(['away', 'gone']);
   });
 
+  it('ignoreHolders (add-sign) keeps seat holders and delegated originals, still excludes me and the initiator', () => {
+    const i = inst([task({ id: 1, assigneeUserId: 'me', canAct: true }), task({ id: 2, assigneeUserId: 'peer' }), task({ id: 5, assigneeUserId: 'delegate', originalUserId: 'back', reason: 'delegated' })]);
+    expect(values(targetCandidates(users, i, 'me', false, true))).toEqual(['peer', 'away', 'delegate', 'boss', 'back', 'gone']);
+  });
+
   it('keeps the initiator when allowed', () => {
     const i = inst([task({ canAct: true })]);
     expect(values(targetCandidates(users, i, 'me', true))).toContain('init');

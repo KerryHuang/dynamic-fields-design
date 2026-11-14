@@ -21,12 +21,16 @@ const identity = useIdentityStore();
 
 const task = computed(() => myOpenTask(props.instance));
 const isInitiator = computed(() => !!identity.userId && props.instance.initiatorUserId === identity.userId);
-const dialog = ref<'approve' | 'reject' | 'transfer' | 'withdraw' | 'reassign' | 'cancel' | null>(null);
+const dialog = ref<'approve' | 'addSign' | 'reject' | 'transfer' | 'withdraw' | 'reassign' | 'cancel' | null>(null);
 
-interface Btn { key: 'approve' | 'reject' | 'transfer' | 'withdraw'; color: string; outline?: boolean; disable?: boolean }
+interface Btn { key: 'approve' | 'addSign' | 'reject' | 'transfer' | 'withdraw'; color: string; outline?: boolean; disable?: boolean }
 const buttons = computed<Btn[]>(() => {
   const list: Btn[] = [];
-  if (task.value) list.push({ key: 'approve', color: 'primary' }, { key: 'reject', color: 'negative', outline: true }, { key: 'transfer', color: 'primary', outline: true });
+  if (task.value) {
+    list.push({ key: 'approve', color: 'primary' }, { key: 'reject', color: 'negative', outline: true });
+    if (task.value.canAddSign) list.push({ key: 'addSign', color: 'primary', outline: true });
+    list.push({ key: 'transfer', color: 'primary', outline: true });
+  }
   if (isInitiator.value && props.instance.status === 'pending') list.push({ key: 'withdraw', color: 'primary', outline: true, disable: !props.instance.canWithdraw });
   return list;
 });
@@ -56,8 +60,8 @@ const overflow = computed<RowAction[]>(() => {
     v-bind="mobile ? { position: 'bottom', expand: true, class: 'approval-sticky', style: 'margin: 0' } : {}"
   >
     <div
-      class="row items-center justify-end no-wrap"
-      :class="mobile ? 'full-width approval-mobile-bar' : 'q-gutter-sm'"
+      class="row items-center justify-end"
+      :class="mobile ? 'no-wrap full-width approval-mobile-bar' : 'q-gutter-sm'"
       :data-testid="mobile ? 'approval-mobile-bar' : 'approval-bar'"
     >
       <span v-if="withdrawBlocked" class="text-caption text-muted col" data-testid="withdraw-blocked">{{ t('approval.actions.withdrawBlocked') }}</span>
@@ -71,6 +75,11 @@ const overflow = computed<RowAction[]>(() => {
   <ApproveDialog
     v-if="dialog === 'approve' && task" :model-value="true" :record-id="recordId" :module-key="moduleKey" :task-id="task.id" :row-version="instance.rowVersion"
     :editable-field-keys="currentStage(instance)?.editableFieldKeys" :schema="schema" :record="record" @update:model-value="dialog = null"
+  />
+  <ApproveDialog
+    v-if="dialog === 'addSign' && task" add-sign :instance="instance" :model-value="true" :record-id="recordId" :module-key="moduleKey" :task-id="task.id"
+    :row-version="instance.rowVersion" :editable-field-keys="currentStage(instance)?.editableFieldKeys" :schema="schema" :record="record"
+    @update:model-value="dialog = null"
   />
   <RejectDialog
     v-if="dialog === 'reject' && task" :model-value="true" :record-id="recordId" :module-key="moduleKey" :task-id="task.id" :row-version="instance.rowVersion"
