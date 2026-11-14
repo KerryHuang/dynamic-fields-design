@@ -15,6 +15,8 @@ public class ApprovalsController(IMediator mediator) : ControllerBase
     public sealed record RejectBody(string RowVersion, string Comment, string To);
     public sealed record WithdrawBody(string RowVersion, string? Comment);
     public sealed record TransferBody(string RowVersion, string UserId, string? Comment);
+    public sealed record CancelBody(string RowVersion, string Comment);
+    public sealed record ReassignBody(string RowVersion, string UserId, string? Comment);
     public sealed record PreviewBody(long To);
 
     [HttpPost("approval-tasks/{id:long}/approve")]
@@ -32,6 +34,14 @@ public class ApprovalsController(IMediator mediator) : ControllerBase
     [HttpPost("approval-instances/{id:long}/withdraw")]
     public async Task<IActionResult> Withdraw(long id, WithdrawBody body) =>
         (await mediator.Send(new WithdrawApprovalRequest(id, body.RowVersion, body.Comment))).ToActionResult(this);
+
+    [HttpPost("approval-tasks/{id:long}/reassign")]
+    public async Task<IActionResult> Reassign(long id, ReassignBody body) =>
+        (await mediator.Send(new ReassignTaskRequest(id, body.RowVersion, body.UserId, body.Comment))).ToActionResult(this);
+
+    [HttpPost("approval-instances/{id:long}/cancel")]
+    public async Task<IActionResult> Cancel(long id, CancelBody body) =>
+        (await mediator.Send(new CancelApprovalRequest(id, body.RowVersion, body.Comment))).ToActionResult(this);
 
     [HttpGet("records/{id:long}/approval")]
     public async Task<IActionResult> GetRecordApproval(long id) =>

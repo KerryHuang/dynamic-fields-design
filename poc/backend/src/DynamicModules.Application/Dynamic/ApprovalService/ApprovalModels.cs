@@ -14,7 +14,8 @@ public sealed record ApprovalActionResponse(string Outcome, long InstanceId, str
 public static class ApprovalOutcomes
 {
     public const string Submitted = "submitted", Direct = "direct", Advanced = "advanced", Approved = "approved", Rerouted = "rerouted",
-        Rejected = "rejected", Returned = "returned", Withdrawn = "withdrawn", Transferred = "transferred";
+        Rejected = "rejected", Returned = "returned", Withdrawn = "withdrawn", Transferred = "transferred",
+        Reassigned = "reassigned", Cancelled = "cancelled";
 }
 
 /// <summary>動作的共同規則（設計 §7.1、§7.7）。</summary>
@@ -80,7 +81,7 @@ public sealed record ApprovalStageView(long Id, int Seq, string? StageCode, I18n
     DateTime? DueTime, IReadOnlyList<ApprovalTaskView> Tasks, IReadOnlyList<string> EditableFieldKeys);
 
 public sealed record ApprovalActionView(string Action, string ActorUserId, string ActorName, string? OnBehalfOfUserId, IReadOnlyList<string> TargetUserIds,
-    string? Comment, JsonElement? Data, DateTime CreatedTime);
+    string? Comment, JsonElement? Data, DateTime CreatedTime, IReadOnlyList<string>? TargetNames = null);
 
 public sealed record ApprovalInstanceView(long Id, string Status, string RouteKind, I18nText? FlowName, long FromOptionId, long ToOptionId,
     string InitiatorUserId, DateTime SubmittedTime, DateTime? CompletedTime, string RowVersion, IReadOnlyList<ApprovalStageView> Stages,

@@ -13,8 +13,20 @@ namespace DynamicModules.Application.Dynamic.ApprovalService;
 
 /// <summary>動作的共同前置與載入（設計 §7、§8.4）。</summary>
 public sealed class ApprovalActionSupport(
-    IApprovalInstanceRepository repo, IModuleRepository modules, IRecordRepository records, ApprovalPolicies policies)
+    IApprovalInstanceRepository repo, IModuleRepository modules, IRecordRepository records, ApprovalPolicies policies, ApprovalReader reader)
 {
+    /// <summary>
+    /// 呼叫者是這個實例的簽核管理員（設計 §7.8）；實例、模組或記錄不存在回 false，由 LoadAsync 回 404。
+    /// 已關閉的模組 guard 一律擋 Approve 軸，這裡放行，讓 LoadAsync 緊接著回 409（什麼都不寫）。
+    /// </summary>
+    public async Task<bool> ManagerGateAsync(long instanceId, CancellationToken ct)
+    {
+        if (await repo.GetAsync(instanceId, ct) is not { } inst) return false;
+        var module = await modules.GetByIdAsync(inst.ModuleId, includeChildren: false, ct);
+        var record = await records.GetAsync(inst.RecordId, ct);
+        return module is not null && record is not null && (module.Status == ModuleStatus.Closed || await reader.IsManagerAsync(module, record, ct));
+    }
+
     /// <summary>意見檢查（字數上限讀政策）；通過回 null。</summary>
     public async Task<MessageRef?> CommentErrorAsync(string? comment, bool required, CancellationToken ct) =>
         ApprovalActionRules.CommentError(comment, required, await policies.CommentLengthAsync(ct));
@@ -304,5 +316,71 @@ public class TransferTaskHandler(
             ApproveTaskHandler.Clean(request.Comment), ct);
         await uow.CommitAsync(ct);
         return ServiceResult.Success(new ApprovalActionResponse(ApprovalOutcomes.Transferred, inst.Id, inst.RowVersion));
+    }
+}
+
+/// <summary>簽核管理員終止（設計 §7.8）：全部 open 任務與 active、queued 關卡實例關閉；記錄狀態不動；意見必填（U4）。</summary>
+public class CancelApprovalHandler(
+    ApprovalActionSupport support, ApprovalEngine engine, ApprovalNotifier notifier, ApprovalWriteContext context,
+    ICurrentUser user, IBusinessTime time, IUnitOfWork uow) : IRequestHandler<CancelApprovalRequest, ServiceResult>
+{
+    public async Task<ServiceResult> Handle(CancelApprovalRequest request, CancellationToken ct)
+    {
+        if (await support.CommentErrorAsync(request.Comment, required: true, ct) is { } ce) return ApprovalActionSupport.Bad("comment", ce);
+        var manager = await support.ManagerGateAsync(request.InstanceId, ct);
+        var (loaded, failure) = await support.LoadAsync(request.InstanceId, request.RowVersion, ct, _ => manager ? null : ServiceResult.Forbidden());
+        if (failure is not null) return failure;
+        var (inst, _, _, runs, tasks) = loaded!;
+
+        var now = time.Now;
+        var currentRun = inst.CurrentStageRunId;
+        var notify = tasks.Where(t => t.Status == ApprovalTaskStatus.Open).Select(t => t.AssigneeUserId).Append(inst.InitiatorUserId).ToList();
+        ApprovalActionSupport.CloseOpen(tasks);
+        foreach (var run in runs.Where(r => r.Status is ApprovalStageStatus.Active or ApprovalStageStatus.Queued))
+        {
+            run.Status = ApprovalStageStatus.Closed;
+            run.CompletedTime = now;
+        }
+        inst.Status = ApprovalInstanceStatus.Cancelled;
+        inst.CompletedTime = now;
+        inst.CurrentStageRunId = null;
+        context.Touch(inst.RecordId);
+        engine.Log(inst, ApprovalActions.Cancel, user.UserId, currentRun, comment: ApproveTaskHandler.Clean(request.Comment));
+        await notifier.NotifyAsync(NotificationKinds.ApprovalCancelled, inst, notify, user.UserId, ct);
+        await uow.CommitAsync(ct);
+        return ServiceResult.Success(new ApprovalActionResponse(ApprovalOutcomes.Cancelled, inst.Id, inst.RowVersion));
+    }
+}
+
+/// <summary>
+/// 簽核管理員改派（設計 §7.8）：把某個 open 任務換成另一位使用者，離職或不在的人的待簽靠它搬走。對象規則同轉交，
+/// 但「自己」指任務現在的負責人（管理員可以改派給自己，除非他是發起人或這關已有票）。
+/// </summary>
+public class ReassignTaskHandler(
+    IApprovalInstanceRepository repo, ApprovalActionSupport support, ApprovalHandover handover, ApprovalPolicies policies,
+    IPermissionRepository permissions, ICurrentUser user, IUnitOfWork uow) : IRequestHandler<ReassignTaskRequest, ServiceResult>
+{
+    public async Task<ServiceResult> Handle(ReassignTaskRequest request, CancellationToken ct)
+    {
+        var task = await repo.GetTaskAsync(request.TaskId, ct);
+        if (task is null) return ServiceResult.NotFound(ApprovalMessages.TaskNotFound);
+        if (await support.CommentErrorAsync(request.Comment, required: false, ct) is { } ce) return ApprovalActionSupport.Bad("comment", ce);
+        var manager = await support.ManagerGateAsync(task.InstanceId, ct);
+        var (loaded, failure) = await support.LoadAsync(task.InstanceId, request.RowVersion, ct, _ => manager ? null : ServiceResult.Forbidden(), task);
+        if (failure is not null) return failure;
+        var (inst, _, _, _, tasks) = loaded!;
+        var me = tasks.Single(t => t.Id == task.Id);
+        if (me.Status != ApprovalTaskStatus.Open) return ServiceResult.Conflict(ApprovalMessages.StageHandled);
+
+        var activeUsers = (await permissions.ListUsersAsync(ct)).Where(u => u.IsActive).Select(u => u.UserId).ToHashSet(StringComparer.Ordinal);
+        var allowSelf = await policies.AllowSelfApprovalAsync(inst.ModuleId, ct);
+        if (ApprovalActionRules.TargetError(request.UserId, me.AssigneeUserId, inst.InitiatorUserId, allowSelf, activeUsers,
+                tasks.Where(t => t.StageRunId == me.StageRunId)) is { } bad)
+            return ApprovalActionSupport.Bad("userId", bad);
+
+        await handover.HandOverAsync(inst, me, request.UserId, ApprovalActions.Reassign, user.UserId, null,
+            ApproveTaskHandler.Clean(request.Comment), ct);
+        await uow.CommitAsync(ct);
+        return ServiceResult.Success(new ApprovalActionResponse(ApprovalOutcomes.Reassigned, inst.Id, inst.RowVersion));
     }
 }

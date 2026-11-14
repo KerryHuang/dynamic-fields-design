@@ -57,6 +57,11 @@ public sealed class ApprovalReader(IApprovalInstanceRepository repo, IDynamicAcc
         return new RecordApprovalSummary(latest?.Status ?? NoInstance, run?.NameSnapshot, run?.Seq, targets.Count > 0);
     }
 
+    /// <summary>模組可讀、Approve 動作軸、記錄在資料範圍內（簽核管理員，設計 §7.8）。</summary>
+    public async Task<bool> IsManagerAsync(Module module, Record record, CancellationToken ct) =>
+        module.IsReadable() && (await guard.AuthorizeAsync(module, PermissionAction.Approve, ct)).Permissions is { } approve
+        && InScope(approve, record.OwnerUserId);
+
     public static bool InScope(EffectivePermissions p, string ownerUserId) => p.OwnerUserIds is null || p.OwnerUserIds.Contains(ownerUserId);
 }
 
@@ -79,9 +84,8 @@ public class GetRecordApprovalHandler(
         var me = user.UserId;
         var readable = module.IsReadable();
         var read = readable ? (await guard.AuthorizeAsync(module, PermissionAction.Read, ct)).Permissions : null;
-        var approve = readable ? (await guard.AuthorizeAsync(module, PermissionAction.Approve, ct)).Permissions : null;
         var canRead = read is not null && ApprovalReader.InScope(read, record.OwnerUserId);
-        var manager = approve is not null && ApprovalReader.InScope(approve, record.OwnerUserId);
+        var manager = await reader.IsManagerAsync(module, record, ct);
 
         var instances = await repo.ListByRecordAsync(record.Id, ct);
         var ids = instances.Select(i => i.Id).ToList();
@@ -282,7 +286,8 @@ internal static class ApprovalViews
                 EditableKeys(def, r, views.Any(v => v.CanAct), editableAllowed, unwritableFieldIds));
         }).ToList();
         var actions = allActions.Where(a => a.InstanceId == i.Id).OrderBy(a => a.Id).Select(a => new ApprovalActionView(a.Action, a.ActorUserId, Name(a.ActorUserId),
-            a.OnBehalfOfUserId, a.TargetUserIds ?? [], a.Comment, Data(a, hiddenFieldIds), a.CreatedTime)).ToList();
+            a.OnBehalfOfUserId, a.TargetUserIds ?? [], a.Comment, Data(a, hiddenFieldIds), a.CreatedTime,
+            (a.TargetUserIds ?? []).Select(Name).ToList())).ToList();
         // 撤回資格同 WithdrawApprovalHandler：目前關卡還沒有任何同意或退回
         var current = runs.FirstOrDefault(r => r.Id == i.CurrentStageRunId) ?? runs.LastOrDefault(r => r.Status == ApprovalStageStatus.Active);
         var canWithdraw = pending && writable && i.InitiatorUserId == me

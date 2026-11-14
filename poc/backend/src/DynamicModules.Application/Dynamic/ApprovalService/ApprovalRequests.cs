@@ -18,6 +18,12 @@ public record RejectTaskRequest(long TaskId, string RowVersion, string Comment, 
 /// <summary>轉交（設計 §7.5）：UserId 是接手的人。</summary>
 public record TransferTaskRequest(long TaskId, string RowVersion, string UserId, string? Comment) : IRequest<ServiceResult>, IRecordWriteRequest;
 
+/// <summary>簽核管理員終止（設計 §7.8）：意見必填。</summary>
+public record CancelApprovalRequest(long InstanceId, string RowVersion, string Comment) : IRequest<ServiceResult>, IRecordWriteRequest;
+
+/// <summary>簽核管理員改派（設計 §7.8）：UserId 是接手的人；意見選填。</summary>
+public record ReassignTaskRequest(long TaskId, string RowVersion, string UserId, string? Comment) : IRequest<ServiceResult>, IRecordWriteRequest;
+
 public record WithdrawApprovalRequest(long InstanceId, string RowVersion, string? Comment) : IRequest<ServiceResult>, IRecordWriteRequest;
 
 public record GetRecordApprovalRequest(long RecordId) : IRequest<ServiceResult>;

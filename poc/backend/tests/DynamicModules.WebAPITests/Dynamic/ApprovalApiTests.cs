@@ -263,6 +263,68 @@ public class ApprovalApiTests : IDisposable
         view.GetProperty("status").GetString().Should().Be(transferWon ? "pending" : "approved");
     }
 
+    private async Task<int> Notices(string user, string kind) =>
+        (await JsonOf(await _app.AsUser(user).GetAsync($"{Base}/notifications?take=50"))).GetProperty("items").EnumerateArray()
+            .Count(i => i.GetProperty("kind").GetString() == kind);
+
+    [Fact]
+    [Trait("Category", "Postgres")]
+    public async Task Cancel_IdempotencyReplay_OneNotificationEach()
+    {
+        var r = await Arrange();
+        var id = await Submitted(r);
+        var current = await Current(_admin, id);
+        var instanceId = current.GetProperty("id").GetInt64();
+        var body = new { rowVersion = current.GetProperty("rowVersion").GetString(), comment = "供應商報價已過期" };
+        HttpRequestMessage Request()
+        {
+            var req = new HttpRequestMessage(HttpMethod.Post, $"{Base}/approval-instances/{instanceId}/cancel") { Content = JsonContent.Create(body) };
+            req.Headers.Add("Idempotency-Key", "cancel-once-1");
+            return req;
+        }
+
+        var first = await _admin.SendAsync(Request());
+        first.StatusCode.Should().Be(HttpStatusCode.OK, await first.Content.ReadAsStringAsync());
+        (await JsonOf(first)).GetProperty("outcome").GetString().Should().Be("cancelled");
+        var second = await _admin.SendAsync(Request());
+        second.StatusCode.Should().Be(HttpStatusCode.OK);
+        second.Headers.GetValues("Idempotent-Replay").Should().ContainSingle("true");
+        (await second.Content.ReadAsStringAsync()).Should().Be(await first.Content.ReadAsStringAsync());
+
+        var finished = (await JsonOf(await _admin.GetAsync($"{Base}/records/{id}/approval"))).GetProperty("previous").EnumerateArray().Single();
+        finished.GetProperty("status").GetString().Should().Be("cancelled");
+        finished.GetProperty("actions").EnumerateArray().Count(a => a.GetProperty("action").GetString() == "cancel").Should().Be(1);
+        // 原本 open 任務的負責人各收一則；管理員（也是發起人）自己不收；重送沒有再寫
+        (await Notices("sales01", "approvalCancelled")).Should().Be(1);
+        (await Notices("sales02", "approvalCancelled")).Should().Be(1);
+        (await Notices("admin", "approvalCancelled")).Should().Be(0);
+    }
+
+    [Fact]
+    [Trait("Category", "Postgres")]
+    public async Task ReassignAndApprove_Concurrent_OneWins()
+    {
+        var r = await Arrange();
+        var id = await Submitted(r);
+        var s1 = _app.AsUser("sales01");
+        var current = await Current(s1, id);
+        var rv = current.GetProperty("rowVersion").GetString();
+        var taskId = TaskOf(current, "sales01");
+
+        var results = await Task.WhenAll(
+            _app.AsUser().PostAsJsonAsync($"{Base}/approval-tasks/{taskId}/reassign", new { rowVersion = rv, userId = "floor01" }),
+            s1.PostAsJsonAsync($"{Base}/approval-tasks/{taskId}/approve", new { rowVersion = rv }));
+        results.Select(x => x.StatusCode).Should().BeEquivalentTo([HttpStatusCode.OK, HttpStatusCode.Conflict]);
+
+        var record = await JsonOf(await _admin.GetAsync($"{Base}/records/{id}/approval"));
+        var view = record.TryGetProperty("current", out var c) ? c : record.GetProperty("previous").EnumerateArray().Single();
+        var actions = view.GetProperty("actions").EnumerateArray().Select(a => a.GetProperty("action").GetString()).ToList();
+        var reassignWon = results[0].StatusCode == HttpStatusCode.OK;
+        (actions.Contains("reassign") && actions.Contains("approve")).Should().BeFalse(string.Join(",", actions));
+        actions.Contains(reassignWon ? "reassign" : "approve").Should().BeTrue(string.Join(",", actions));
+        view.GetProperty("status").GetString().Should().Be(reassignWon ? "pending" : "approved");
+    }
+
     [Fact]
     public async Task EnUs_submit_blocked_when_no_approver_is_found()
     {
