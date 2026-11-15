@@ -36,9 +36,9 @@
 | a3 | 轉交、管理員終止與改派、後加簽、個人代理設定、逾期提醒、臨時讀取的列印預覽（使用者 11-12 裁決） | 已上線（2026-11-14，a3a–a3d 3f584c8a、6a5dc263 等；a3e、a3f affc0766） | [簽核流程](superpowers/specs/2026-11-10-approval-workflow-design.md) |
 | a3g | a3 收尾：Demo 補採購單列印範本、a3 裁決寫回設計文件、手冊總收 | 已完成（待上線） | [簽核流程](superpowers/specs/2026-11-10-approval-workflow-design.md) |
 | fg1 | 簽核流程圖地基（fg1a 資料欄位、只有草稿的流程、執行期守門、分支數政策；fg1b 型別、參照、轉換；fg1c 結構驗證與共用案例；fg1d 警告、Application 驗證、總收）：圖形定義型別、結構驗證、sequence → graph 轉換、migration、分支數政策；API 仍不收 graph（只驗 SQLite，PostgreSQL 在 pg0 後補驗） | 已上線（2026-11-14，fg1a 301b0da1、fg1b＋fg1c 6a3681cb、fg1d d5ae6594） | [簽核流程圖](superpowers/specs/2026-11-13-approval-flowgraph-design.md) §17 |
-| fg2 | 流程圖執行引擎（fg2a1–fg2g2 九段）：並行分支、全部到齊／任一到齊匯合、分支取消、退回與撤回延伸、重新比對、預覽與試算預計路徑、同一單據動作序列化、與 sequence 的等價性；API 開始接受 graph 存檔（沒有畫面，只能從 API 建立）、已存的 graph 流程可送出與簽核；通知節點、匯出仍不收 | 已完成（待上線）；回退下限 fg2g2 | [簽核流程圖](superpowers/specs/2026-11-13-approval-flowgraph-design.md) §17 |
+| fg2 | 流程圖執行引擎（fg2a1–fg2g2 九段）：並行分支、全部到齊／任一到齊匯合、分支取消、退回與撤回延伸、重新比對、預覽與試算預計路徑、同一單據動作序列化、與 sequence 的等價性；API 開始接受 graph 存檔（沒有畫面，只能從 API 建立）、已存的 graph 流程可送出與簽核；通知節點、匯出仍不收 | 已上線（2026-11-15，9f3a7cb6）；回退下限 fg2g2 | [簽核流程圖](superpowers/specs/2026-11-13-approval-flowgraph-design.md) §17 |
+| fg4 | 單據頁唯讀進度流程圖（使用者 11-15 裁決提前到 fg3 之前，首次引入 Vue Flow；寬螢幕左到右排版）、並行時簽核摘要列出進行中的關 | 未開始 | [簽核流程圖](superpowers/specs/2026-11-13-approval-flowgraph-design.md) §17 |
 | fg3 | 拖拉式流程圖設計器（Vue Flow）：草稿與發布、四種寬度（手機只看圖＋改屬性），移除舊關卡編輯 | 未開始 | [簽核流程圖](superpowers/specs/2026-11-13-approval-flowgraph-design.md) §17 |
-| fg4 | 單據頁唯讀進度流程圖、並行時簽核摘要列出進行中的關 | 未開始 | [簽核流程圖](superpowers/specs/2026-11-13-approval-flowgraph-design.md) §17 |
 | fg5 | 通知節點：站內通知、收件人解析、範本帶欄位值並依收件人權限遮蔽 | 未開始 | [簽核流程圖](superpowers/specs/2026-11-13-approval-flowgraph-design.md) §17 |
 | fg6 | 流程圖收尾：既有流程批次轉換、套件格式升版、手冊與文件 | 未開始 | [簽核流程圖](superpowers/specs/2026-11-13-approval-flowgraph-design.md) §17 |
 | kb1、kb2 | 主管看部屬任務與重派；看板資料表、存檔與分享 API、欄查詢與移動 API | 已上線（2026-11-14，kb1 3d56fc56、kb2 74616b3f） | [任務看板、報表與甘特圖](superpowers/specs/2026-11-13-task-board-reports-gantt-design.md) §20 |
