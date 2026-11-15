@@ -3,6 +3,7 @@ using DynamicModules.Domain.Data;
 using DynamicModules.Domain.Entities.Dynamic;
 using DynamicModules.Domain.Repositories.Dynamic;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.ChangeTracking;
 
 namespace DynamicModules.Persistence.Repositories.Dynamic;
 
@@ -145,6 +146,20 @@ public class ApprovalInstanceRepository(DynamicDbContext db) : IApprovalInstance
             p.OriginalValue = next;
         }
         return true;
+    }
+
+    public Task<string?> GetRowVersionAsync(long instanceId, CancellationToken ct) =>
+        db.Set<ApprovalInstance>().AsNoTracking().Where(i => i.Id == instanceId).Select(i => i.RowVersion).FirstOrDefaultAsync(ct);
+
+    public async Task ReloadTrackedAsync(long instanceId, CancellationToken ct)
+    {
+        // 只重載已存在於資料庫的（Unchanged、Modified）；Added 還沒有資料列，Detached 不在追蹤中
+        static bool Loaded(EntityEntry e) => e.State is EntityState.Unchanged or EntityState.Modified;
+        var entries = db.ChangeTracker.Entries<ApprovalInstance>().Where(e => e.Entity.Id == instanceId).Select(e => (EntityEntry)e)
+            .Concat(db.ChangeTracker.Entries<ApprovalTask>().Where(e => e.Entity.InstanceId == instanceId))
+            .Concat(db.ChangeTracker.Entries<ApprovalStageRun>().Where(e => e.Entity.InstanceId == instanceId))
+            .Where(Loaded).ToList();
+        foreach (var entry in entries) await entry.ReloadAsync(ct);
     }
 
     public Task<List<ApprovalStageRun>> ListRunsAsync(long instanceId, CancellationToken ct) =>

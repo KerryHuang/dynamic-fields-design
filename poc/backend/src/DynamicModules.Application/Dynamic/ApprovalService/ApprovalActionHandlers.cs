@@ -11,6 +11,9 @@ using MediatR;
 
 namespace DynamicModules.Application.Dynamic.ApprovalService;
 
+/// <summary>graph 實例動作取得處理權的範圍（計畫 fg2 J16）：Task 不比對請求的版本、資料庫目前值條件更新並重試；Instance 比對請求版本、不重試。sequence 不看這個。</summary>
+public enum ClaimScope { Task, Instance }
+
 /// <summary>動作的共同前置與載入（設計 §7、§8.4）。</summary>
 public sealed class ApprovalActionSupport(
     IApprovalInstanceRepository repo, IModuleRepository modules, IRecordRepository records, ApprovalPolicies policies, ApprovalReader reader,
@@ -53,11 +56,30 @@ public sealed class ApprovalActionSupport(
             : null;
 
     /// <summary>
+    /// graph 實例的晚到動作（實例不是 pending、或自己的任務已不是 open）選哪一則 409（U13、J17）：
+    /// 實例已退回 → 「單據已退回」；自己的任務因任一到齊被取消 → 「其他分支已完成，不需處理」；其他 → 「這一關已由他人處理」。
+    /// me 為 null（實例層動作）時只看實例。sequence 不呼叫，仍一律 <see cref="ApprovalMessages.StageHandled"/>。
+    /// </summary>
+    public static ServiceResult LateConflict(ApprovalInstance inst, ApprovalTask? me, IReadOnlyList<ApprovalStageRun> runs)
+    {
+        if (inst.Status == ApprovalInstanceStatus.Rejected) return ServiceResult.Conflict(ApprovalMessages.InstanceReturned);
+        if (me is not null && runs.FirstOrDefault(r => r.Id == me.StageRunId)?.CloseReason == ApprovalCloseReasons.BranchCancelled)
+            return ServiceResult.Conflict(ApprovalMessages.BranchCompleted);
+        return ServiceResult.Conflict(ApprovalMessages.StageHandled);
+    }
+
+    /// <summary>自己的任務已不是 open（已由他人處理）的 409：graph 走 <see cref="LateConflict"/>，sequence 照第一版。</summary>
+    public static ServiceResult TaskNotOpen(ApprovalInstance inst, ApprovalDefinition def, ApprovalTask me, IReadOnlyList<ApprovalStageRun> runs) =>
+        ApprovalGraphMode.Applies(inst, def) ? LateConflict(inst, me, runs) : ServiceResult.Conflict(ApprovalMessages.StageHandled);
+
+    /// <summary>
     /// 不存在 404；模組 Closed 409；實例不是 pending 409；RowVersion 條件更新失敗 409。成功時實例的 RowVersion 已換新。
     /// mine：呼叫者自己的任務；版本對不上而這個任務仍是 open，代表是拿舊畫面（例如會簽另一席剛同意），回「請重新整理」而不是「已由他人處理」。
+    /// graph 實例（計畫 fg2 J16、J17）：處理權依 scope 取得（任務層不比對請求版本、重試；實例層比對請求版本、不重試），取得後先 reload 這個實例
+    /// 追蹤中的全部物件再判斷實例是否仍 pending，所有狀態檢查都在處理權之後。sequence 的順序與訊息完全照第一版。
     /// </summary>
     public async Task<(Loaded? Value, ServiceResult? Failure)> LoadAsync(long instanceId, string rowVersion, CancellationToken ct,
-        Func<ApprovalInstance, ServiceResult?>? authorize = null, ApprovalTask? mine = null)
+        Func<ApprovalInstance, ServiceResult?>? authorize = null, ApprovalTask? mine = null, ClaimScope scope = ClaimScope.Instance)
     {
         var inst = await repo.GetAsync(instanceId, ct);
         if (inst is null) return (null, ServiceResult.NotFound(ApprovalMessages.TaskNotFound));
@@ -66,19 +88,52 @@ public sealed class ApprovalActionSupport(
         if (module is null) return (null, ServiceResult.NotFound(ApprovalMessages.TaskNotFound));
         if (!module.IsWritable())
             return (null, module.Status == ModuleStatus.Closed ? ServiceResult.Conflict(ModuleGate.Closed) : ServiceResult.NotFound(ApprovalMessages.TaskNotFound));
-        if (inst.Status != ApprovalInstanceStatus.Pending) return (null, ServiceResult.Conflict(ApprovalMessages.StageHandled));
-        if (ApprovalEngine.DefinitionOf(inst) is not { } def) return (null, ServiceResult.Conflict(ApprovalMessages.FlowVersionMissing));
+        // 判斷是不是 graph 要先取定義；但 sequence 維持「先判 pending、再取定義」的原順序，
+        // 免得「已結束而且快照找不到綁定版本」的 sequence 實例從 StageHandled 變成 FlowVersionMissing（審查 plan-rev2 S1）
+        var def = ApprovalEngine.DefinitionOf(inst);
+        var graph = def is not null && ApprovalGraphMode.Applies(inst, def);
+        if (!graph && inst.Status != ApprovalInstanceStatus.Pending) return (null, ServiceResult.Conflict(ApprovalMessages.StageHandled));
+        if (def is null) return (null, ServiceResult.Conflict(ApprovalMessages.FlowVersionMissing));
         // 綁定的是 graph 定義（回退後遇到 fg2 留下的實例）：引擎還不會跑，任何任務與實例動作都擋，要在換 RowVersion、讀關卡之前
         if (gate.Reject(inst.FlowSetSnapshot.FirstOrDefault(e => e.FlowVersionId == inst.FlowVersionId)) is { } gated) return (null, gated);
         var next = Guid.NewGuid().ToString();
+        if (graph)
+        {
+            if (await ClaimAsync(inst, rowVersion, next, scope, ct) is { } lost) return (null, lost);
+            // 處理權之後：先把追蹤中的物件換成資料庫目前的值（EF 不會用查詢結果覆蓋已追蹤的物件），再判斷實例是否仍在簽核中
+            await repo.ReloadTrackedAsync(inst.Id, ct);
+            var graphRuns = await repo.ListRunsAsync(inst.Id, ct);
+            if (inst.Status != ApprovalInstanceStatus.Pending) return (null, LateConflict(inst, mine, graphRuns));
+            var runtime = ApprovalGraphRuntime.Build(def, ApprovalGraphMode.SupportedKinds, out var errors);
+            return (new Loaded(inst, module, def, graphRuns, await repo.ListTasksAsync(inst.Id, ct)) { Runtime = runtime, RuntimeErrors = errors }, null);
+        }
         if (!await repo.TryBumpRowVersionAsync(inst.Id, rowVersion, next, ct))
             return (null, ServiceResult.Conflict(mine is { Status: ApprovalTaskStatus.Open } ? ApprovalMessages.StateChanged : ApprovalMessages.StageHandled,
                 mine is { Status: ApprovalTaskStatus.Open } ? "stale" : null));
         inst.RowVersion = next;
-        var loaded = new Loaded(inst, module, def, await repo.ListRunsAsync(inst.Id, ct), await repo.ListTasksAsync(inst.Id, ct));
-        if (!ApprovalGraphMode.Applies(inst, def)) return (loaded, null);
-        var runtime = ApprovalGraphRuntime.Build(def, ApprovalGraphMode.SupportedKinds, out var errors);
-        return (loaded with { Runtime = runtime, RuntimeErrors = errors }, null);
+        return (new Loaded(inst, module, def, await repo.ListRunsAsync(inst.Id, ct), await repo.ListTasksAsync(inst.Id, ct)), null);
+    }
+
+    /// <summary>
+    /// graph 實例的處理權（J16）：換掉實例的 RowVersion，同一張單同時只有一個請求能往下寫。成功回 null，失敗回要給使用者的 409。
+    /// 任務層：每次讀資料庫目前的版本再條件更新，失敗退避後重試，用完回 <see cref="ApprovalMessages.Busy"/>。
+    /// 實例層（撤回、終止）：比對請求的版本、不重試；失敗時先 reload 實例，已不在簽核中回晚到訊息，否則請使用者重新整理。
+    /// </summary>
+    private async Task<ServiceResult?> ClaimAsync(ApprovalInstance inst, string requestRowVersion, string next, ClaimScope scope, CancellationToken ct)
+    {
+        if (scope == ClaimScope.Instance)
+        {
+            if (await repo.TryBumpRowVersionAsync(inst.Id, requestRowVersion, next, ct)) return null;
+            await repo.ReloadTrackedAsync(inst.Id, ct);
+            return inst.Status != ApprovalInstanceStatus.Pending ? LateConflict(inst, null, []) : ServiceResult.Conflict(ApprovalMessages.InstanceChanged);
+        }
+        for (var attempt = 1; ; attempt++)
+        {
+            if (await repo.GetRowVersionAsync(inst.Id, ct) is not { } current) return ServiceResult.NotFound(ApprovalMessages.TaskNotFound);
+            if (await repo.TryBumpRowVersionAsync(inst.Id, current, next, ct)) return null;
+            if (attempt >= ApprovalGraphLimits.MaxClaimAttempts) return ServiceResult.Conflict(ApprovalMessages.Busy);
+            await Task.Delay(ApprovalGraphLimits.ClaimBackoffMs << (attempt - 1), ct);
+        }
     }
 
     public async Task<Dictionary<string, JsonElement?>> ValuesAsync(long recordId, CancellationToken ct) =>
@@ -134,7 +189,7 @@ public sealed record AddSignPlan(IReadOnlyList<string> UserIds, string Mode);
 public sealed class ApprovalApprover(
     IApprovalInstanceRepository repo, ApprovalActionSupport support, ApprovalEngine engine, ApprovalTransitionRunner runner,
     ICurrentUser user, IBusinessTime time, IUnitOfWork uow, IModuleRepository modules, FieldTypeRegistry registry,
-    IDynamicAccessGuard guard, IRecordRepository records, ApprovalReadGrant grant, ApprovalShapeGate gate)
+    IDynamicAccessGuard guard, IRecordRepository records, ApprovalReadGrant grant, ApprovalShapeGate gate, ApprovalPolicies policies)
 {
     public async Task<ServiceResult> ApproveAsync(long taskId, string rowVersion, string? comment, Dictionary<string, JsonElement?>? requestValues,
         AddSignPlan? addSign, CancellationToken ct)
@@ -143,16 +198,19 @@ public sealed class ApprovalApprover(
         if (task is null) return ServiceResult.NotFound(ApprovalMessages.TaskNotFound);
         if (await support.CommentErrorAsync(comment, required: false, ct) is { } ce) return ApprovalActionSupport.Bad("comment", ce);
         var (loaded, failure) = await support.LoadAsync(task.InstanceId, rowVersion, ct,
-            _ => ApprovalActionRules.IsActor(task, user.UserId) ? null : ServiceResult.Forbidden(), task);
+            _ => ApprovalActionRules.IsActor(task, user.UserId) ? null : ServiceResult.Forbidden(), task, ClaimScope.Task);
         if (failure is not null) return failure;
         var (inst, module, def, runs, tasks) = loaded!;
         var me = tasks.Single(t => t.Id == task.Id);
-        if (me.Status != ApprovalTaskStatus.Open) return ServiceResult.Conflict(ApprovalMessages.StageHandled);
+        if (me.Status != ApprovalTaskStatus.Open) return ApprovalActionSupport.TaskNotOpen(inst, def, me, runs);
         var run = runs.Single(r => r.Id == me.StageRunId);
         var stageTasks = tasks.Where(t => t.StageRunId == run.Id).ToList();
         if (ApprovalActionSupport.AlreadyApprovedInStage(tasks, me, user.UserId)) return ServiceResult.Conflict(ApprovalMessages.StageHandled);
         // graph：同意與加簽都要重新比對路線、沿出線推進，結構再驗不過就先停（J7、U11）
         if (ApprovalActionSupport.RequireRuntime(loaded!, engine) is { } invalid) return invalid;
+        // 加簽總數在處理權之後再算一次（J16 第 3 點）：載入前那一次只是快速失敗，兩條分支同時加簽時各自都看到「上限減一」；
+        // sequence 的處理權比對請求版本，前後看到同一份資料，結果必然相同
+        if (addSign is not null && await AddSignLimitErrorAsync(inst, ct) is { } limit) return limit;
 
         var values = requestValues ?? [];
         var stageDef = ApprovalDefinitionRefs.Steps(def).FirstOrDefault(s => s.Code == run.StageCode);
@@ -254,6 +312,15 @@ public sealed class ApprovalApprover(
         return ServiceResult.Success(new ApprovalActionResponse(outcome, inst.Id, inst.RowVersion));
     }
 
+    /// <summary>關卡數以歷程的 add-sign 筆數計（J4）：退回後重來的加簽關卡不再算一次；達上限回 400。</summary>
+    internal async Task<ServiceResult?> AddSignLimitErrorAsync(ApprovalInstance inst, CancellationToken ct)
+    {
+        var maxStages = await policies.MaxAddSignStagesAsync(inst.ModuleId, ct);
+        return (await repo.ListActionsAsync([inst.Id], ct)).Count(a => a.Action == ApprovalActions.AddSign) >= maxStages
+            ? ApprovalActionSupport.Bad("userIds", ApprovalMessages.AddSignLimit(maxStages))
+            : null;
+    }
+
     /// <summary>
     /// 這位簽核人不能寫的鍵（設計 §9.2「欄位對該簽核人隱藏時，不能編輯」；裁決 22 執行期；a4b4 審查 U3 加上唯讀）：隱藏回隱藏的訊息，
     /// 欄位例外唯讀或應用程式關閉而凍結回唯讀的訊息。與簽核檢視共用同一個來源（有 Read 用 Read、沒有用臨時讀取權、再沒有用自己的欄位例外；
@@ -314,10 +381,8 @@ public class AddSignTaskHandler(
             if (ApprovalActionRules.TargetError(target, user.UserId, inst.InitiatorUserId, allowSelf, activeUsers, []) is { } bad)
                 return ApprovalActionSupport.Bad("userIds", bad);
 
-        // 關卡數以歷程的 add-sign 筆數計（J4）：退回後重來的加簽關卡不再算一次
-        var maxStages = await policies.MaxAddSignStagesAsync(inst.ModuleId, ct);
-        if ((await repo.ListActionsAsync([inst.Id], ct)).Count(a => a.Action == ApprovalActions.AddSign) >= maxStages)
-            return ApprovalActionSupport.Bad("userIds", ApprovalMessages.AddSignLimit(maxStages));
+        // 載入實例之前先快速失敗（sequence 的回應順序因此不變）；graph 的防線是處理權之後再算的那一次（J16 第 3 點）
+        if (await approver.AddSignLimitErrorAsync(inst, ct) is { } limit) return limit;
 
         return await approver.ApproveAsync(request.TaskId, request.RowVersion, request.Comment, request.Values, new AddSignPlan(userIds, request.Mode), ct);
     }
@@ -338,11 +403,11 @@ public class RejectTaskHandler(
         if (await support.CommentErrorAsync(request.Comment, required: true, ct) is { } ce) return ApprovalActionSupport.Bad("comment", ce);
         if (request.To is not (ToInitiator or ToPrevious)) return ApprovalActionSupport.Bad("to", ApprovalMessages.RejectTargetInvalid);
         var (loaded, failure) = await support.LoadAsync(task.InstanceId, request.RowVersion, ct,
-            _ => ApprovalActionRules.IsActor(task, user.UserId) ? null : ServiceResult.Forbidden(), task);
+            _ => ApprovalActionRules.IsActor(task, user.UserId) ? null : ServiceResult.Forbidden(), task, ClaimScope.Task);
         if (failure is not null) return failure;
         var (inst, module, def, runs, tasks) = loaded!;
         var me = tasks.Single(t => t.Id == task.Id);
-        if (me.Status != ApprovalTaskStatus.Open) return ServiceResult.Conflict(ApprovalMessages.StageHandled);
+        if (me.Status != ApprovalTaskStatus.Open) return ApprovalActionSupport.TaskNotOpen(inst, def, me, runs);
         if (ApprovalActionSupport.AlreadyApprovedInStage(tasks, me, user.UserId)) return ServiceResult.Conflict(ApprovalMessages.StageHandled);
         var run = runs.Single(r => r.Id == me.StageRunId);
         var now = time.Now;
@@ -483,11 +548,11 @@ public class TransferTaskHandler(
         if (task is null) return ServiceResult.NotFound(ApprovalMessages.TaskNotFound);
         if (await support.CommentErrorAsync(request.Comment, required: false, ct) is { } ce) return ApprovalActionSupport.Bad("comment", ce);
         var (loaded, failure) = await support.LoadAsync(task.InstanceId, request.RowVersion, ct,
-            _ => ApprovalActionRules.IsActor(task, user.UserId) ? null : ServiceResult.Forbidden(), task);
+            _ => ApprovalActionRules.IsActor(task, user.UserId) ? null : ServiceResult.Forbidden(), task, ClaimScope.Task);
         if (failure is not null) return failure;
-        var (inst, _, _, runs, tasks) = loaded!;
+        var (inst, _, def, runs, tasks) = loaded!;
         var me = tasks.Single(t => t.Id == task.Id);
-        if (me.Status != ApprovalTaskStatus.Open) return ServiceResult.Conflict(ApprovalMessages.StageHandled);
+        if (me.Status != ApprovalTaskStatus.Open) return ApprovalActionSupport.TaskNotOpen(inst, def, me, runs);
         if (ApprovalActionSupport.AlreadyApprovedInStage(tasks, me, user.UserId)) return ServiceResult.Conflict(ApprovalMessages.StageHandled);
 
         var activeUsers = (await permissions.ListUsersAsync(ct)).Where(u => u.IsActive).Select(u => u.UserId).ToHashSet(StringComparer.Ordinal);
@@ -553,11 +618,11 @@ public class ReassignTaskHandler(
         if (task is null) return ServiceResult.NotFound(ApprovalMessages.TaskNotFound);
         if (await support.CommentErrorAsync(request.Comment, required: false, ct) is { } ce) return ApprovalActionSupport.Bad("comment", ce);
         var manager = await support.ManagerGateAsync(task.InstanceId, ct);
-        var (loaded, failure) = await support.LoadAsync(task.InstanceId, request.RowVersion, ct, _ => manager ? null : ServiceResult.Forbidden(), task);
+        var (loaded, failure) = await support.LoadAsync(task.InstanceId, request.RowVersion, ct, _ => manager ? null : ServiceResult.Forbidden(), task, ClaimScope.Task);
         if (failure is not null) return failure;
-        var (inst, _, _, _, tasks) = loaded!;
+        var (inst, _, def, runs, tasks) = loaded!;   // 保留 runs 給晚到訊息用（審查 plan-rev2 S2）
         var me = tasks.Single(t => t.Id == task.Id);
-        if (me.Status != ApprovalTaskStatus.Open) return ServiceResult.Conflict(ApprovalMessages.StageHandled);
+        if (me.Status != ApprovalTaskStatus.Open) return ApprovalActionSupport.TaskNotOpen(inst, def, me, runs);
 
         var users = await permissions.ListUsersAsync(ct);
         var activeUsers = users.Where(u => u.IsActive).Select(u => u.UserId).ToHashSet(StringComparer.Ordinal);

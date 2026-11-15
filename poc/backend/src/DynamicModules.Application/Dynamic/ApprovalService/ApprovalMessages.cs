@@ -210,6 +210,14 @@ public static class ApprovalMessages
     public static MessageRef GraphPreviewInvalid(object flow) => MessageRef.Of(MessageText.ApprovalGraphPreviewInvalid, flow);
     /// <summary>條件節點的出線無法判斷（引用的欄位或選項已不在）：409 並登記異常通知，不走預設線（流程圖設計 §8.8；J8）。name 是節點名稱（I18nText）或代號。</summary>
     public static MessageRef ConditionNodeUndecidable(object name) => MessageRef.Of(MessageText.ApprovalConditionNodeUndecidable, name);
+    /// <summary>graph 處理權在重試次數內拿不到（同一張單同時有太多人動作；流程圖設計 §8.13、J16）。</summary>
+    public static readonly MessageRef Busy = MessageRef.Of(MessageText.ApprovalBusy);
+    /// <summary>graph 實例層動作（撤回、終止）帶的版本已過期，而單據仍在簽核中：請重新整理（U13 ③）。</summary>
+    public static readonly MessageRef InstanceChanged = MessageRef.Of(MessageText.ApprovalInstanceChanged);
+    /// <summary>graph 晚到動作：自己的任務因任一到齊被取消（U13 ②）。</summary>
+    public static readonly MessageRef BranchCompleted = MessageRef.Of(MessageText.ApprovalBranchCompleted);
+    /// <summary>graph 晚到動作：單據已被退回（U13 ①）。</summary>
+    public static readonly MessageRef InstanceReturned = MessageRef.Of(MessageText.ApprovalInstanceReturned);
     /// <summary>任一到齊通過、取消其他分支的歷程 comment：固定繁中、只給資料庫與稽核；畫面依 DataJson 組字（U8）。</summary>
     public static string BranchCancelledNote(string name) => $"分支「{name}」已完成，其他分支自動取消";
     public static readonly MessageRef RecordGone = MessageRef.Of(MessageText.ApprovalRecordGone);

@@ -128,6 +128,9 @@ public class TestApp : WebApplicationFactory<Program>
         public override void Write(byte[] buffer, int offset, int count) => throw new NotSupportedException();
     }
 
+    /// <summary>在 <c>ConfigureServices</c> 末尾執行的服務替換（要在第一次用到 host 之前設定；例如把簽核擋門換成開啟版）。預設 null，既有測試不受影響。</summary>
+    internal Action<IServiceCollection>? ExtraServices { get; set; }
+
     protected override void ConfigureWebHost(IWebHostBuilder builder)
     {
         builder.UseSetting("ConnectionStrings:Dynamic", _connectionString);
@@ -157,6 +160,7 @@ public class TestApp : WebApplicationFactory<Program>
             s.RemoveAll<IBusinessTime>();
             // RemoveAll 也拿掉了 Program 註冊的 Acting 裝飾器，這裡補回去
             s.AddSingleton<IBusinessTime>(new ActingBusinessTime(Clock));
+            ExtraServices?.Invoke(s);
         });
     }
 

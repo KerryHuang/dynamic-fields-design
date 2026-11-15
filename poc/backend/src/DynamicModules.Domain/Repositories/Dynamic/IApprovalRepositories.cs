@@ -76,6 +76,15 @@ public interface IApprovalInstanceRepository
     /// <summary>條件更新 RowVersion（WHERE RowVersion = expected）；沒有更新到回 false。</summary>
     Task<bool> TryBumpRowVersionAsync(long instanceId, string expected, string next, CancellationToken ct);
 
+    /// <summary>不追蹤：資料庫目前的 RowVersion（graph 任務層動作取處理權前讀，計畫 fg2 J16）；實例不存在回 null。</summary>
+    Task<string?> GetRowVersionAsync(long instanceId, CancellationToken ct);
+
+    /// <summary>
+    /// 把追蹤中屬於這個實例的 ApprovalInstance、ApprovalTask、ApprovalStageRun 全部以資料庫目前的值重新載入（EF 不會用查詢結果覆蓋已追蹤的物件）。
+    /// 取得處理權之後、讀狀態之前呼叫：處理權之前讀過的物件可能已被別的請求改掉（J16 第 1 點）。
+    /// </summary>
+    Task ReloadTrackedAsync(long instanceId, CancellationToken ct);
+
     /// <summary>追蹤，依 Seq。</summary>
     Task<List<ApprovalStageRun>> ListRunsAsync(long instanceId, CancellationToken ct);
 
