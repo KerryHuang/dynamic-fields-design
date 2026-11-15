@@ -254,7 +254,8 @@ public sealed class ApprovalEngine(
             if (fallback.Error is { } fallbackError) return ServiceResult.Conflict(fallbackError);
             var restarted = new ApprovalStageRun
             {
-                InstanceId = inst.Id, Seq = seq, StageCode = FallbackStageCode, NameSnapshot = ApprovalMessages.FallbackStageName, Mode = ApprovalModes.Any
+                InstanceId = inst.Id, Seq = seq, StageCode = FallbackStageCode, NameSnapshot = ApprovalMessages.FallbackStageName, Mode = ApprovalModes.Any,
+                NodeId = previous.NodeId, NodeKind = previous.NodeKind, BranchKey = previous.BranchKey, InEdgeId = previous.InEdgeId
             };
             await StartAsync(inst, restarted, fallback.Seats, null, ct, NotificationKinds.ApprovalReturned);
             return null;
@@ -267,19 +268,34 @@ public sealed class ApprovalEngine(
             var again = new ApprovalStageRun
             {
                 InstanceId = inst.Id, Seq = seq, StageCode = null, NameSnapshot = ApprovalMessages.AddSignStageName, Mode = previous.Mode,
-                AddedByUserId = previous.AddedByUserId, AddSignUserIds = [.. previous.AddSignUserIds ?? []]
+                AddedByUserId = previous.AddedByUserId, AddSignUserIds = [.. previous.AddSignUserIds ?? []],
+                NodeId = previous.NodeId, NodeKind = previous.NodeKind, BranchKey = previous.BranchKey, InEdgeId = previous.InEdgeId
             };
             await StartAsync(inst, again, seats, null, ct, NotificationKinds.ApprovalReturned);
+            await RefreshCurrentAsync(inst, def, ct);
             return null;
         }
-        if (def.Stages.FirstOrDefault(s => s.Code == previous.StageCode) is not { } s) return ServiceResult.Conflict(ApprovalMessages.StageDefMissing);
+        if (ApprovalDefinitionRefs.Steps(def).FirstOrDefault(s => s.Code == previous.StageCode) is not { } s) return ServiceResult.Conflict(ApprovalMessages.StageDefMissing);
         var ctx = await resolver.ContextAsync(module, inst.InitiatorUserId, values, inst.Picks.GetValueOrDefault(s.Code), ct);
         var resolution = ApproverResolver.Resolve(ctx, s.Name, s.Mode, s.Approvers, def.FallbackApprovers, s.OnEmpty);
         if (resolution.Error is { } error) return ServiceResult.Conflict(error);
         if (resolution.AllUnitsEmpty) return ServiceResult.Conflict(ApprovalMessages.NoApprover(s.Name, s.Code));
-        var run = new ApprovalStageRun { InstanceId = inst.Id, Seq = seq, StageCode = s.Code, NameSnapshot = s.Name, Mode = s.Mode };
+        // graph 欄位從被退回的目標複製（J10）；sequence 都是 null
+        var run = new ApprovalStageRun
+        {
+            InstanceId = inst.Id, Seq = seq, StageCode = s.Code, NameSnapshot = s.Name, Mode = s.Mode,
+            NodeId = previous.NodeId, NodeKind = previous.NodeKind, BranchKey = previous.BranchKey, InEdgeId = previous.InEdgeId
+        };
         await StartAsync(inst, run, resolution.Seats, s.DueHours, ct, NotificationKinds.ApprovalReturned);
+        await RefreshCurrentAsync(inst, def, ct);
         return null;
+    }
+
+    /// <summary>graph 實例的目前關卡是 Seq 最小的 active（J15）；StartAsync 一律把剛啟動的那列設成目前，並行時不對，重啟後要重算。sequence 不動。</summary>
+    private async Task RefreshCurrentAsync(ApprovalInstance inst, ApprovalDefinition def, CancellationToken ct)
+    {
+        if (!ApprovalGraphMode.Applies(inst, def)) return;
+        inst.CurrentStageRunId = (await repo.ListRunsAsync(inst.Id, ct)).Where(r => r.Status == ApprovalStageStatus.Active).MinBy(r => r.Seq)?.Id;
     }
 
     public async Task SkipAsync(ApprovalInstance inst, ApprovalStageRun run, string reason, CancellationToken ct)

@@ -333,12 +333,16 @@ public class RejectTaskHandler(
         var run = runs.Single(r => r.Id == me.StageRunId);
         var now = time.Now;
         var onBehalfOf = ApprovalActionRules.OnBehalfOf(me, user.UserId);
+        var graph = ApprovalGraphMode.Applies(inst, def);
 
         if (request.To == ToPrevious)
         {
-            var previous = ApprovalPath.Previous(runs, run);
+            // graph：上一關要讀圖，結構再驗不過就先停（J7）；退回發起人不讀圖，不在這裡擋（U11）
+            if (ApprovalActionSupport.RequireRuntime(loaded!, engine) is { } invalid) return invalid;
+            var previous = graph ? ApprovalGraphPath.Previous(runs, run) : ApprovalPath.Previous(runs, run);
             if (previous is null) return ApprovalActionSupport.Bad("to", ApprovalMessages.NoPreviousStage);
-            Reject(me, run, tasks, runs, now, ApprovalStageStatus.Returned);
+            if (graph) ReturnInBranch(me, run, tasks, runs, now);
+            else Reject(me, run, tasks, runs, now, ApprovalStageStatus.Returned);
             engine.Log(inst, ApprovalActions.Return, user.UserId, run.Id, me.Id, request.Comment, onBehalfOf: onBehalfOf);
             await uow.CommitAsync(ct);
             var restartSeq = runs.Max(r => r.Seq) + 1;
@@ -350,7 +354,8 @@ public class RejectTaskHandler(
                 repo.AddRun(new ApprovalStageRun
                 {
                     InstanceId = inst.Id, Seq = restartSeq + 1, StageCode = null, NameSnapshot = ApprovalMessages.AddSignStageName, Mode = run.Mode,
-                    Status = ApprovalStageStatus.Queued, AddedByUserId = run.AddedByUserId, AddSignUserIds = [.. run.AddSignUserIds ?? []]
+                    Status = ApprovalStageStatus.Queued, AddedByUserId = run.AddedByUserId, AddSignUserIds = [.. run.AddSignUserIds ?? []],
+                    NodeId = run.NodeId, NodeKind = run.NodeKind, BranchKey = run.BranchKey   // graph 欄位（J10）；sequence 都是 null
                 });
             // 設計 §12「被退回」：發起人也要知道（上一關的新負責人由 RestartStageAsync 通知）
             await notifier.NotifyAsync(NotificationKinds.ApprovalReturned, inst, [inst.InitiatorUserId], user.UserId, ct);
@@ -358,7 +363,8 @@ public class RejectTaskHandler(
             return ServiceResult.Success(new ApprovalActionResponse(ApprovalOutcomes.Returned, inst.Id, inst.RowVersion));
         }
 
-        Reject(me, run, tasks, runs, now, ApprovalStageStatus.Closed);
+        if (graph) RejectInstance(me, tasks, runs, now);
+        else Reject(me, run, tasks, runs, now, ApprovalStageStatus.Closed);
         inst.Status = ApprovalInstanceStatus.Rejected;
         inst.CompletedTime = now;
         inst.CurrentStageRunId = null;
@@ -374,6 +380,29 @@ public class RejectTaskHandler(
         await notifier.NotifyAsync(NotificationKinds.ApprovalRejected, inst, [inst.InitiatorUserId], user.UserId, ct);
         await uow.CommitAsync(ct);
         return ServiceResult.Success(new ApprovalActionResponse(ApprovalOutcomes.Rejected, inst.Id, inst.RowVersion));
+    }
+
+    /// <summary>
+    /// graph 退回上一關（§8.4）：只關這一列的 open 任務與同段同主節點的排隊加簽，被退回的列 returned；
+    /// 第一版的 Reject 以整個實例為範圍，並行時會把別條分支的待簽一起關掉。
+    /// </summary>
+    private static void ReturnInBranch(ApprovalTask me, ApprovalStageRun run, List<ApprovalTask> tasks, List<ApprovalStageRun> runs, DateTime now)
+    {
+        me.Status = ApprovalTaskStatus.Rejected;
+        me.ActedTime = now;
+        ApprovalActionSupport.CloseOpen(tasks.Where(t => t.StageRunId == run.Id));
+        run.Status = ApprovalStageStatus.Returned;
+        run.CompletedTime = now;
+        ApprovalActionSupport.CloseQueued(runs.Where(r => r.NodeId == run.NodeId && (r.BranchKey ?? "") == (run.BranchKey ?? "")), now);
+    }
+
+    /// <summary>graph 退回發起人（§8.4）：整張單據結束，所有 open 任務與還在走的執行線（含被退回的這一列）都關閉，原因 instanceEnded。</summary>
+    private static void RejectInstance(ApprovalTask me, List<ApprovalTask> tasks, List<ApprovalStageRun> runs, DateTime now)
+    {
+        me.Status = ApprovalTaskStatus.Rejected;
+        me.ActedTime = now;
+        ApprovalActionSupport.CloseOpen(tasks);
+        ApprovalActionSupport.CloseLive(runs, now);
     }
 
     private static void Reject(ApprovalTask me, ApprovalStageRun run, List<ApprovalTask> tasks, List<ApprovalStageRun> runs, DateTime now, string runStatus)
@@ -398,21 +427,26 @@ public class WithdrawApprovalHandler(
         var (loaded, failure) = await support.LoadAsync(request.InstanceId, request.RowVersion, ct,
             i => i.InitiatorUserId == user.UserId ? null : ServiceResult.Forbidden());
         if (failure is not null) return failure;
-        var (inst, _, _, runs, tasks) = loaded!;
+        var (inst, _, def, runs, tasks) = loaded!;
+        var graph = ApprovalGraphMode.Applies(inst, def);   // 撤回不讀圖（U11）：結構壞掉也能撤回，資格只看節點實例與任務
         var current = runs.FirstOrDefault(r => r.Id == inst.CurrentStageRunId) ?? runs.LastOrDefault(r => r.Status == ApprovalStageStatus.Active);
         var currentTasks = tasks.Where(t => t.StageRunId == current?.Id).ToList();
-        if (currentTasks.Any(t => t.Status is ApprovalTaskStatus.Approved or ApprovalTaskStatus.Rejected))
-            return ServiceResult.Conflict(ApprovalMessages.CannotWithdraw);
+        var acted = graph ? !ApprovalGraphPath.CanWithdraw(runs, tasks) : currentTasks.Any(t => t.Status is ApprovalTaskStatus.Approved or ApprovalTaskStatus.Rejected);
+        if (acted) return ServiceResult.Conflict(ApprovalMessages.CannotWithdraw);
 
         var now = time.Now;
         var notify = tasks.Where(t => t.Status == ApprovalTaskStatus.Open).Select(t => t.AssigneeUserId).ToList();
         ApprovalActionSupport.CloseOpen(tasks);
-        if (current is not null)
+        if (graph) ApprovalActionSupport.CloseLive(runs, now);
+        else
         {
-            current.Status = ApprovalStageStatus.Closed;
-            current.CompletedTime = now;
+            if (current is not null)
+            {
+                current.Status = ApprovalStageStatus.Closed;
+                current.CompletedTime = now;
+            }
+            ApprovalActionSupport.CloseQueued(runs, now);
         }
-        ApprovalActionSupport.CloseQueued(runs, now);
         inst.Status = ApprovalInstanceStatus.Withdrawn;
         inst.CompletedTime = now;
         inst.CurrentStageRunId = null;
@@ -466,17 +500,19 @@ public class CancelApprovalHandler(
         var manager = await support.ManagerGateAsync(request.InstanceId, ct);
         var (loaded, failure) = await support.LoadAsync(request.InstanceId, request.RowVersion, ct, _ => manager ? null : ServiceResult.Forbidden());
         if (failure is not null) return failure;
-        var (inst, _, _, runs, tasks) = loaded!;
+        var (inst, _, def, runs, tasks) = loaded!;
 
         var now = time.Now;
         var currentRun = inst.CurrentStageRunId;
         var notify = tasks.Where(t => t.Status == ApprovalTaskStatus.Open).Select(t => t.AssigneeUserId).Append(inst.InitiatorUserId).ToList();
         ApprovalActionSupport.CloseOpen(tasks);
-        foreach (var run in runs.Where(r => r.Status is ApprovalStageStatus.Active or ApprovalStageStatus.Queued))
-        {
-            run.Status = ApprovalStageStatus.Closed;
-            run.CompletedTime = now;
-        }
+        if (ApprovalGraphMode.Applies(inst, def)) ApprovalActionSupport.CloseLive(runs, now);   // 連匯合等待中的列一起關；終止不讀圖（U11）
+        else
+            foreach (var run in runs.Where(r => r.Status is ApprovalStageStatus.Active or ApprovalStageStatus.Queued))
+            {
+                run.Status = ApprovalStageStatus.Closed;
+                run.CompletedTime = now;
+            }
         inst.Status = ApprovalInstanceStatus.Cancelled;
         inst.CompletedTime = now;
         inst.CurrentStageRunId = null;
