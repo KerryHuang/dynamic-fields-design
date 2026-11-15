@@ -107,41 +107,68 @@ public sealed class ApprovalPreviewer(
             var (min, max) = ApproverResolver.PickRange(ctx, s.Approvers);
             picks.Add(new PickRequirement(s.Code, s.Name, min, max, candidates));
         }
-        foreach (var s in def.Stages)
+        // 一關（sequence 的關卡或 graph 的簽核節點）在預覽裡的樣子；略過的標 Skip，由呼叫端決定列不列（只有設計器列）
+        PreviewStage Evaluate(ApprovalStageDef s)
         {
-            // 送出驗證（PickErrors）對所有自選關卡都要求人選，不論條件是否成立、是否引用隱藏欄位：預覽一律列出人選要求（只說要選人、不說會不會進入）
-            if (!designer && s.Approvers.Source == ApprovalSources.InitiatorPick && !s.Approvers.CandidatesUnmatched) AddPick(s);
             // 條件引用隱藏欄位，或簽核人取自隱藏的使用者欄位 → conditional、不列簽核人
             if (!designer && (s.When is { ValueKind: JsonValueKind.Object } w && (hidden is null || RuleReferences.ConditionFieldIdsOf(w).Any(hidden.Contains))
                 || s.Approvers is { Source: ApprovalSources.UserField, FieldId: var fid } && (hidden is null || fid is { } f && hidden.Contains(f))))
-            {
-                stages.Add(new PreviewStage(s.Code, s.Name, PreviewStatuses.Conditional, [], false));
-                continue;
-            }
+                return new PreviewStage(s.Code, s.Name, PreviewStatuses.Conditional, [], false);
             if (!ApprovalRouter.Holds(s.When, module, values, registry, time.Today, userIds))
-            {
-                if (designer) stages.Add(new PreviewStage(s.Code, s.Name, PreviewStatuses.Skip, [], false));
-                continue;
-            }
+                return new PreviewStage(s.Code, s.Name, PreviewStatuses.Skip, [], false);
             if (s.Approvers.Source == ApprovalSources.InitiatorPick && !s.Approvers.CandidatesUnmatched)
-            {
-                AddPick(s);
-                stages.Add(new PreviewStage(s.Code, s.Name, PreviewStatuses.Pick, [], false));
-                continue;
-            }
+                return new PreviewStage(s.Code, s.Name, PreviewStatuses.Pick, [], false);
             var resolution = ApproverResolver.Resolve(ctx, s.Name, s.Mode, s.Approvers, def.FallbackApprovers, s.OnEmpty);
-            if (resolution.AllUnitsEmpty)
-            {
-                if (designer) stages.Add(new PreviewStage(s.Code, s.Name, PreviewStatuses.Skip, [], false));
-                continue;
-            }
+            if (resolution.AllUnitsEmpty) return new PreviewStage(s.Code, s.Name, PreviewStatuses.Skip, [], false);
             // 解析失敗（找不到人、超過上限）送出時會回 409；預覽照列這一關、不列簽核人
             var approvers = resolution.Seats.SelectMany(x => x.UserIds).Distinct(StringComparer.Ordinal).Select(Ref).ToList();
-            stages.Add(new PreviewStage(s.Code, s.Name, PreviewStatuses.Enter, approvers,
+            return new PreviewStage(s.Code, s.Name, PreviewStatuses.Enter, approvers,
                 resolution.Seats.Any(x => x.Reason == ApprovalTaskReason.Fallback),
-                designer && resolution.Error is { } err ? ProblemOf(err) : null));
+                designer && resolution.Error is { } err ? ProblemOf(err) : null);
         }
+        bool NeedsPick(ApprovalStageDef s) => !designer && s.Approvers.Source == ApprovalSources.InitiatorPick && !s.Approvers.CandidatesUnmatched;
+
         var flowKey = designer ? flowSet.First(x => x.Entry.FlowId == match.FlowId).Key : null;
+        if (def.Shape == ApprovalShapes.Graph)
+        {
+            // 結構不合法或含不支援的節點型別：預覽不寫入、不登記異常通知（U12）；送出時才通知
+            var g = ApprovalGraphRuntime.Build(def, ApprovalGraphMode.SupportedKinds, out _);
+            if (g is null) return ServiceResult.Conflict(ApprovalMessages.GraphPreviewInvalid(match.Name));
+            var evaluated = new Dictionary<string, PreviewStage>();
+            PreviewStage NodeStage(string id) => evaluated.TryGetValue(id, out var e) ? e : evaluated[id] = Evaluate(g.Node(id).AsStage());
+            // 條件節點的出線引用發起人看不到的欄位（讀不到權限輸入時都當成看不到）；設計器沒有隱藏
+            bool Hidden(JsonElement w) => !designer && (hidden is null || RuleReferences.ConditionFieldIdsOf(w).Any(hidden.Contains));
+            var walk = ApprovalGraphPreview.Walk(g, ApprovalGraphMode.Eval(module, values, registry, time.Today, userIds), Hidden,
+                n => NodeStage(n.Id).Status == PreviewStatuses.Skip);
+            if (walk.UndecidableNodeId is not null) return ServiceResult.Conflict(ApprovalMessages.FlowConditionUndecidable(match.Name));
+            // 送出驗證要求定義中每一個自選節點都選人（J25），不只路徑上的
+            foreach (var n in def.Nodes!.Where(n => n.Kind == ApprovalNodeKinds.Approval && NeedsPick(n.AsStage()))) AddPick(n.AsStage());
+            foreach (var step in walk.Steps)
+            {
+                if (step.Undecided)
+                {
+                    // U9：只標「依條件決定」，不帶條件內容；名稱是節點名稱，沒有就空（前端顯示「依條件決定」）
+                    stages.Add(new PreviewStage(step.NodeId, g.Node(step.NodeId).Name ?? new I18nText(), PreviewStatuses.Conditional, [], false, AnyGroup: step.AnyGroup));
+                    continue;
+                }
+                var stage = NodeStage(step.NodeId);
+                if (stage.Status == PreviewStatuses.Skip && !designer) continue;
+                if (stage.Status == PreviewStatuses.Pick) AddPick(g.Node(step.NodeId).AsStage());
+                stages.Add(stage with { AnyGroup = step.AnyGroup });
+            }
+            return ServiceResult.Success(new ApprovalPreviewResponse(ApprovalPreviewOutcomes.Flow, match.Name, stages, picks, flowKey,
+                new PreviewPath(walk.NodeIds, walk.EdgeIds)));
+        }
+
+        foreach (var s in def.Stages)
+        {
+            // 送出驗證（PickErrors）對所有自選關卡都要求人選，不論條件是否成立、是否引用隱藏欄位：預覽一律列出人選要求（只說要選人、不說會不會進入）
+            if (NeedsPick(s)) AddPick(s);
+            var stage = Evaluate(s);
+            if (stage.Status == PreviewStatuses.Skip && !designer) continue;
+            if (stage.Status == PreviewStatuses.Pick) AddPick(s);
+            stages.Add(stage);
+        }
         return ServiceResult.Success(new ApprovalPreviewResponse(ApprovalPreviewOutcomes.Flow, match.Name, stages, picks, flowKey));
     }
 

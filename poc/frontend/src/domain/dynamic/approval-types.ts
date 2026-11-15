@@ -51,12 +51,16 @@ export interface PreviewStage {
   code: string | null; name: I18nText; status: 'enter' | 'skip' | 'conditional' | 'pick'; approvers: UserRef[]; usesFallback: boolean;
   /** Designer trial only (absent = no problem): this stage would fail when the request is submitted or reaches it. */
   problem?: 'noApprover' | 'tooManyApprovers' | null;
+  /** Flow graph only: the any-join this item belongs to; items sharing a code read as "any one branch finishing is enough". */
+  anyGroup?: string | null;
 }
 export interface PickRequirement { stageCode: string; name: I18nText; min: number; max: number; candidates: UserRef[] }
 export interface ApprovalPreview {
   outcome: 'flow' | 'direct' | 'blocked'; flowName: I18nText | null; stages: PreviewStage[]; picks: PickRequirement[];
   /** Designer trial only: the key of the flow that matched (it may be another flow than the one being edited). */
   flowKey?: string | null;
+  /** Flow graph only: the nodes and edges the request is expected to pass (absent for a sequence flow). */
+  path?: { nodeIds: string[]; edgeIds: string[] } | null;
 }
 
 export interface SubmitApprovalBody { to: number; recordRowVersion: string; picks?: Record<string, string[]>; comment?: string }

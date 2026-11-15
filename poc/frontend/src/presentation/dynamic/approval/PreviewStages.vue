@@ -5,8 +5,14 @@ import { resolveI18n } from 'src/domain/dynamic/i18n-text';
 import { joinList } from 'src/i18n/translate';
 
 /** `designer`: the designer's trial reads the pick stage as the initiator's later choice, not the viewer's. */
-defineProps<{ stages: PreviewStage[]; designer?: boolean }>();
+const props = defineProps<{ stages: PreviewStage[]; designer?: boolean }>();
 const { t, locale } = useI18n();
+
+/** The first item of an any-join group carries the note; the rest of the group (and sequence previews) show nothing. */
+const startsAnyGroup = (i: number) => {
+  const group = props.stages[i]?.anyGroup;
+  return !!group && props.stages.findIndex((s) => s.anyGroup === group) === i;
+};
 </script>
 
 <template>
@@ -15,6 +21,7 @@ const { t, locale } = useI18n();
       v-for="(s, i) in stages" :key="s.code ?? i" :title="resolveI18n(s.name, locale)" :data-testid="`preview-stage-${s.code ?? i}`"
       :icon="s.status === 'pick' ? 'how_to_reg' : s.status === 'conditional' ? 'rule' : 'person'"
     >
+      <div v-if="startsAnyGroup(i)" class="text-muted q-mb-xs" :data-testid="`preview-any-group-${s.anyGroup}`">{{ t('approval.submit.stageAnyGroup') }}</div>
       <div v-if="s.status === 'conditional'" class="text-muted">{{ t('approval.submit.stageConditional') }}</div>
       <div v-else-if="s.status === 'pick'" class="text-muted">{{ t(designer ? 'approval.designer.trial.stagePick' : 'approval.submit.stagePick') }}</div>
       <div v-else-if="s.status === 'skip'" class="text-muted">{{ t('approval.submit.stageSkip') }}</div>

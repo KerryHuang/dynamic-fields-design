@@ -101,13 +101,20 @@ public static class ApprovalInstanceStatuses
 // ── 預覽與試算（設計 §5.4） ──
 
 /// <summary>Status：enter（會進入）、skip（跳過，只在設計器試算）、conditional（條件引用對發起人隱藏的欄位）、pick（需發起人自選）。
-/// Problem 只在設計器試算填：這一關送出時會解析失敗的原因（<see cref="PreviewProblems"/>），送出前預覽一律為 null。</summary>
-public sealed record PreviewStage(string? Code, I18nText Name, string Status, IReadOnlyList<UserRef> Approvers, bool UsesFallback, string? Problem = null);
+/// Problem 只在設計器試算填：這一關送出時會解析失敗的原因（<see cref="PreviewProblems"/>），送出前預覽一律為 null。
+/// AnyGroup 只有流程圖：任一到齊匯合的代號，同一代號的項目是「任一條完成即可」的分支（U10），null 不寫出。</summary>
+public sealed record PreviewStage(string? Code, I18nText Name, string Status, IReadOnlyList<UserRef> Approvers, bool UsesFallback, string? Problem = null,
+    string? AnyGroup = null);
 
 /// <summary>Outcome：flow（會用 FlowName 這個流程）、direct（沒有流程符合、直接轉移）、blocked（沒有流程符合、送出會被擋）。
-/// FlowKey：命中的流程代碼，只在設計器試算填，送出前預覽為 null。</summary>
+/// FlowKey：命中的流程代碼，只在設計器試算填，送出前預覽為 null。
+/// Path：預計經過的節點與連線，只有流程圖有（J19），sequence 為 null、不寫出。</summary>
 public sealed record ApprovalPreviewResponse(
-    string Outcome, I18nText? FlowName, IReadOnlyList<PreviewStage> Stages, IReadOnlyList<PickRequirement> Picks, string? FlowKey = null);
+    string Outcome, I18nText? FlowName, IReadOnlyList<PreviewStage> Stages, IReadOnlyList<PickRequirement> Picks, string? FlowKey = null,
+    PreviewPath? Path = null);
+
+/// <summary>流程圖預計路徑經過的節點代號與連線代號（依走訪順序；分支依定義順序逐條列出，不代表先後）。</summary>
+public sealed record PreviewPath(IReadOnlyList<string> NodeIds, IReadOnlyList<string> EdgeIds);
 
 public sealed record UserRef(string UserId, string DisplayName);
 
