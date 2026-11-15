@@ -174,11 +174,13 @@ public sealed class ApprovalEngine(
         var notify = tasks.Where(t => t.Status == ApprovalTaskStatus.Approved).Select(t => t.AssigneeUserId)
             .Prepend(user.UserId).Prepend(old.InitiatorUserId).ToList();
         foreach (var t in tasks.Where(t => t.Status == ApprovalTaskStatus.Open)) t.Status = ApprovalTaskStatus.Closed;
-        foreach (var r in runs.Where(r => r.Status is ApprovalStageStatus.Active or ApprovalStageStatus.Queued))
-        {
-            r.Status = ApprovalStageStatus.Closed;
-            r.CompletedTime = now;
-        }
+        if (DefinitionOf(old) is { } oldDef && ApprovalGraphMode.Applies(old, oldDef)) ApprovalActionSupport.CloseLive(runs, now);   // 連匯合等待中的列一起關（J14）
+        else
+            foreach (var r in runs.Where(r => r.Status is ApprovalStageStatus.Active or ApprovalStageStatus.Queued))
+            {
+                r.Status = ApprovalStageStatus.Closed;
+                r.CompletedTime = now;
+            }
         old.Status = ApprovalInstanceStatus.Rerouted;
         old.CompletedTime = now;
         old.CurrentStageRunId = null;

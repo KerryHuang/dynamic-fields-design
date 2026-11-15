@@ -7,6 +7,7 @@ using DynamicModules.Domain.Approvals;
 using DynamicModules.Domain.Entities.Dynamic;
 using DynamicModules.Domain.FieldTypes;
 using DynamicModules.Domain.Repositories.Dynamic;
+using DynamicModules.Domain.ValueObjects;
 using MediatR;
 
 namespace DynamicModules.Application.Dynamic.ApprovalService;
@@ -32,7 +33,25 @@ public sealed class ApprovalActionSupport(
     public async Task<MessageRef?> CommentErrorAsync(string? comment, bool required, CancellationToken ct) =>
         ApprovalActionRules.CommentError(comment, required, await policies.CommentLengthAsync(ct));
 
-    public sealed record Loaded(ApprovalInstance Inst, Module Module, ApprovalDefinition Definition, List<ApprovalStageRun> Runs, List<ApprovalTask> Tasks);
+    /// <summary>
+    /// Runtime、RuntimeErrors：graph 實例（<see cref="ApprovalGraphMode.Applies"/>）載入時做的結構再驗與能力守門（計畫 fg2 J7）；通過才有 Runtime。
+    /// sequence 與備援實例兩者都是 null、空。用 init 屬性而不是 positional 參數，免得所有 5 元解構都要改。
+    /// </summary>
+    public sealed record Loaded(ApprovalInstance Inst, Module Module, ApprovalDefinition Definition, List<ApprovalStageRun> Runs, List<ApprovalTask> Tasks)
+    {
+        public ApprovalGraphRuntime? Runtime { get; init; }
+        public IReadOnlyList<GraphIssue> RuntimeErrors { get; init; } = [];
+    }
+
+    /// <summary>
+    /// 要讀圖才能做的動作（同意、加簽、退回上一關）的前置（J7、U11）：graph 實例結構再驗不過，就在任何寫入之前登記異常通知並回 409。
+    /// 撤回、終止、退回發起人、轉交、改派不呼叫它，結構壞掉也照常做，否則這張單會永遠停在簽核中。sequence 與結構有效回 null。
+    /// </summary>
+    public static ServiceResult? RequireRuntime(Loaded loaded, ApprovalEngine engine) =>
+        loaded.Runtime is null && ApprovalGraphMode.Applies(loaded.Inst, loaded.Definition)
+            ? engine.RuntimeInvalid(loaded.Inst, $"流程圖結構不合法：{string.Join("、", loaded.RuntimeErrors.Select(e => $"{e.Code} {e.Key}"))}",
+                ApprovalMessages.GraphRuntimeInvalid)
+            : null;
 
     /// <summary>
     /// 不存在 404；模組 Closed 409；實例不是 pending 409；RowVersion 條件更新失敗 409。成功時實例的 RowVersion 已換新。
@@ -57,7 +76,10 @@ public sealed class ApprovalActionSupport(
             return (null, ServiceResult.Conflict(mine is { Status: ApprovalTaskStatus.Open } ? ApprovalMessages.StateChanged : ApprovalMessages.StageHandled,
                 mine is { Status: ApprovalTaskStatus.Open } ? "stale" : null));
         inst.RowVersion = next;
-        return (new Loaded(inst, module, def, await repo.ListRunsAsync(inst.Id, ct), await repo.ListTasksAsync(inst.Id, ct)), null);
+        var loaded = new Loaded(inst, module, def, await repo.ListRunsAsync(inst.Id, ct), await repo.ListTasksAsync(inst.Id, ct));
+        if (!ApprovalGraphMode.Applies(inst, def)) return (loaded, null);
+        var runtime = ApprovalGraphRuntime.Build(def, ApprovalGraphMode.SupportedKinds, out var errors);
+        return (loaded with { Runtime = runtime, RuntimeErrors = errors }, null);
     }
 
     public async Task<Dictionary<string, JsonElement?>> ValuesAsync(long recordId, CancellationToken ct) =>
@@ -78,6 +100,20 @@ public sealed class ApprovalActionSupport(
         foreach (var r in runs.Where(r => r.Status == ApprovalStageStatus.Queued))
         {
             r.Status = ApprovalStageStatus.Closed;
+            r.CompletedTime = now;
+        }
+    }
+
+    /// <summary>
+    /// graph 實例結束時（退回發起人、撤回、終止、重來）：還在走的執行線（active、waiting、queued）全部 closed，原因 instanceEnded（計畫 fg2 J14）。
+    /// sequence 不呼叫，仍照第一版只關 active、queued 且不寫原因。
+    /// </summary>
+    public static void CloseLive(IEnumerable<ApprovalStageRun> runs, DateTime now)
+    {
+        foreach (var r in ApprovalGraphPath.Live(runs))
+        {
+            r.Status = ApprovalStageStatus.Closed;
+            r.CloseReason = ApprovalCloseReasons.InstanceEnded;
             r.CompletedTime = now;
         }
     }
@@ -116,9 +152,14 @@ public sealed class ApprovalApprover(
         var run = runs.Single(r => r.Id == me.StageRunId);
         var stageTasks = tasks.Where(t => t.StageRunId == run.Id).ToList();
         if (ApprovalActionSupport.AlreadyApprovedInStage(tasks, me, user.UserId)) return ServiceResult.Conflict(ApprovalMessages.StageHandled);
+        // graph：同意要重新比對路線、沿出線推進，結構再驗不過就先停（J7）；加簽的寫入要到 fg2d 才支援，在任何寫入前擋下
+        if (ApprovalActionSupport.RequireRuntime(loaded!, engine) is { } invalid) return invalid;
+        if (addSign is not null && ApprovalGraphMode.Applies(inst, def))
+            return ServiceResult.Conflict(ApprovalMessages.GraphNotSupported(
+                inst.FlowSetSnapshot.First(e => e.FlowVersionId == inst.FlowVersionId).Name.Resolve(I18nText.FallbackLocale)));
 
         var values = requestValues ?? [];
-        var stageDef = def.Stages.FirstOrDefault(s => s.Code == run.StageCode);
+        var stageDef = ApprovalDefinitionRefs.Steps(def).FirstOrDefault(s => s.Code == run.StageCode);
         var editable = (stageDef?.EditableFields ?? []).Select(id => $"f_{id}").ToHashSet();
         var outside = values.Keys.Where(k => !editable.Contains(k)).ToList();
         if (outside.Count > 0) return ServiceResult.Invalid(outside.ToDictionary(k => k, _ => new[] { ApprovalMessages.NotEditableField }));
@@ -131,8 +172,12 @@ public sealed class ApprovalApprover(
         // 先寫可編輯欄位，再用當下的記錄值重新比對路線（設計 §5.5 第 1 點、§8.2 第 1、2 步）
         if (values.Count > 0 && await runner.RunAsync(inst, null, values, ct) is { IsSuccess: false } written) return written;
         var current = await support.ValuesAsync(inst.RecordId, ct);
-        var check = ApprovalRouter.Recheck(inst, runs, module, current, registry, time.Today, await modules.ListUserIdsAsync(ct));
+        var check = ApprovalRouter.Recheck(inst, runs, module, current, registry, time.Today, await modules.ListUserIdsAsync(ct), loaded!.Runtime);
         if (check.Undecidable is { } undecidable) return ServiceResult.Conflict(ApprovalMessages.FlowConditionUndecidable(undecidable.Name));
+        // graph 的條件節點無法判斷（而且路線沒有別處改變）：不走預設線，停下並通知系統管理員（§8.8）；這次同意不寫入，整筆回滾
+        if (check.UndecidableNode is { } badNode)
+            return engine.RuntimeInvalid(inst, $"重新比對時條件節點 {badNode.Id} 無法判斷（引用的欄位或選項已不在）",
+                ApprovalMessages.ConditionNodeUndecidable((object?)badNode.Name ?? badNode.Id));
         if (gate.Reject(check.NewFlow) is { } gated) return gated;
         if (check.Changed)
         {

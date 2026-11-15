@@ -8,8 +8,10 @@ using DynamicModules.Domain.Rules;
 namespace DynamicModules.Application.Dynamic.ApprovalService;
 
 /// <summary>重新比對的結果：Changed＝路線不同；NewFlow 為 null 代表快照裡沒有流程符合（改走備援）；NeedsPick＝新流程含發起人自選；
-/// Undecidable 非 null＝輪到的流程條件解析不了，呼叫端回 409（主控裁決 26）。</summary>
-public sealed record RouteCheck(bool Changed, FlowSnapshotEntry? NewFlow, bool NeedsPick, FlowSnapshotEntry? Undecidable = null);
+/// Undecidable 非 null＝輪到的流程條件解析不了，呼叫端回 409（主控裁決 26）；
+/// UndecidableNode 非 null＝graph 實例的條件節點解析不了、而且路線沒有別處改變（計畫 fg2 J8、§8.8），呼叫端回 409 並登記異常通知。</summary>
+public sealed record RouteCheck(bool Changed, FlowSnapshotEntry? NewFlow, bool NeedsPick, FlowSnapshotEntry? Undecidable = null,
+    ApprovalNodeDef? UndecidableNode = null);
 
 /// <summary>依快照比對流程（設計 §5.2、§5.5）。</summary>
 public static class ApprovalRouter
@@ -48,17 +50,25 @@ public static class ApprovalRouter
     /// 每次同意的重新比對（設計 §5.5 第 2、3 點）：只看實例的流程快照。
     /// 一般實例：比到的流程或版本不同 → Changed；相同時，目前關卡之前每個 SkipReason = condition 的關卡用目前值重算 when，有任何一個變成立 → Changed。
     /// 備援實例（RouteKind = fallback）：快照裡有流程符合就 Changed（改走那個流程），沒有就照常核准。
+    /// graph 實例同流程同版本時改比圖內部的路線（<see cref="ApprovalGraphRoute.Changed"/>，計畫 fg2 §8.7）：runtime 必須是實例自己綁定的快照建出來的圖，
+    /// 條件求值與推進共用 <see cref="ApprovalGraphMode.Eval"/>。
     /// </summary>
     public static RouteCheck Recheck(ApprovalInstance inst, IReadOnlyList<ApprovalStageRun> runs, Module module, IReadOnlyDictionary<string, JsonElement?> values,
-        FieldTypeRegistry registry, DateOnly today, IReadOnlySet<string> userIds)
+        FieldTypeRegistry registry, DateOnly today, IReadOnlySet<string> userIds, ApprovalGraphRuntime? runtime = null)
     {
         var (match, undecidable) = Match(inst.FlowSetSnapshot, module, values, registry, today, userIds);
         if (undecidable is not null) return new(false, null, false, undecidable);
-        static bool Picks(FlowSnapshotEntry? f) => f?.Definition.Stages.Any(s => s.Approvers.Source == ApprovalSources.InitiatorPick) == true;
+        static bool Picks(FlowSnapshotEntry? f) => f is not null && ApprovalDefinitionRefs.Steps(f.Definition).Any(s => s.Approvers.Source == ApprovalSources.InitiatorPick);
         if (inst.RouteKind == ApprovalRouteKind.Fallback)
             return match is null ? new(false, null, false) : new(true, match, Picks(match));
         if (match is null) return new(true, null, false);
         if (match.FlowId != inst.FlowId || match.FlowVersionId != inst.FlowVersionId) return new(true, match, Picks(match));
+        if (runtime is not null)
+        {
+            var route = ApprovalGraphRoute.Changed(runtime, runs, ApprovalGraphMode.Eval(module, values, registry, today, userIds));
+            if (route.Changed) return new(true, match, Picks(match));
+            return new(false, match, false, UndecidableNode: route.UndecidableNodeId is { } node ? runtime.Node(node) : null);
+        }
 
         var current = runs.FirstOrDefault(r => r.Id == inst.CurrentStageRunId)?.Seq ?? int.MaxValue;
         var stages = match.Definition.Stages;
