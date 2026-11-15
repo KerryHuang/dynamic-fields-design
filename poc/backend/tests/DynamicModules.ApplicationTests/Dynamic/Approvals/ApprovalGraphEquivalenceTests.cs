@@ -61,14 +61,19 @@ public class ApprovalGraphEquivalenceTests : ApprovalTestBase
         var graph = await Arrange("pg", flows, graph: true);
 
         await script(seq);
+        var expected = Snapshot(seq);   // graph 腳本開始前先取：共用的時鐘、代理設定不會讓 sequence 一側多出資料
         await script(graph);
-
-        var expected = Snapshot(seq);
         var actual = Snapshot(graph);
+        Snapshot(seq).Should().Equal(expected, "graph 腳本不能動到 sequence 一側的資料");
+        Db.Context.Set<ApprovalStageRun>().AsNoTracking().Any(x => x.NodeKind == ApprovalNodeKinds.Start && x.InstanceId != 0
+            && Db.Context.Set<ApprovalInstance>().Any(i => i.Id == x.InstanceId && i.ModuleId == graph.R.ModuleId))
+            .Should().BeTrue("graph 一側必須真的走圖引擎（有開始節點的節點實例），否則比較退化成 sequence 對 sequence");
         expected.Should().Contain(l => l.StartsWith("run"), "情境至少要產生關卡實例，否則比較沒有意義");
         actual.Should().Equal(expected, "sequence 與轉換後的 graph 流程在同一腳本下必須逐項相同");
 
         // 防空轉：快照裡一定要看得到這個情境想驗的東西，劇本改壞或兩邊都沒做事時不會默默通過
+        if (scenario == nameof(Overdue_ReminderNotice))
+            expected.Count(l => l.StartsWith("notice approvalOverdue user=mgrA")).Should().Be(2);
         foreach (var fragment in Expected[scenario])
             expected.Should().Contain(l => l.Contains(fragment), $"{scenario} 的快照要包含「{fragment}」");
     }
@@ -99,6 +104,9 @@ public class ApprovalGraphEquivalenceTests : ApprovalTestBase
         [nameof(AllMode_TwoSeats)] = ["mode=all", "assignee=fin1", "assignee=fin2", "inst0 status=approved"],
         [nameof(FallbackApprovers_Used)] = ["action0 fallback", "assignee=gm original=gm reason=fallback", "inst0 status=approved"],
         [nameof(Fallback_NoFallbackApprovers_AdminUsed)] = ["action0 fallback", "assignee=admin original=admin reason=fallback", "inst0 status=approved"],
+        [nameof(InitiatorPick_ThenApprove)] = ["picks={\"pick\":[\"fin2\",\"fin1\"]}", "assignee=fin2", "assignee=fin1", "inst0 status=approved"],
+        [nameof(Reroute_NewFlowNeedsPick_NeedsResubmit)] = ["+resubmit", "inst0 status=rerouted", "\"kind\":\"pick\""],
+        [nameof(AddSign_TwoTargets_AllMode)] = ["addSign=emp1,emp2", "mode=all addedBy=mgrA", "inst0 status=approved"],
         [nameof(Overdue_ReminderNotice)] = ["notice approvalOverdue user=mgrA", "notice approvalOverdue user=fin1", "inst0 status=pending"]
     };
 
@@ -146,45 +154,62 @@ public class ApprovalGraphEquivalenceTests : ApprovalTestBase
         return (po.Id, ((SubmitApprovalResponse)res.Data!).InstanceId ?? 0);
     }
 
+    /// <summary>每個動作之後記下實例狀態與目前關卡的正規化編號，中間狀態也納入比較。</summary>
+    private void Mark(Side s, long id)
+    {
+        var inst = Inst(id);
+        var runs = Db.Context.Set<ApprovalStageRun>().AsNoTracking().Where(x => x.InstanceId == id && (x.NodeKind == null || x.NodeKind == ApprovalNodeKinds.Approval))
+            .OrderBy(x => x.Seq).Select(x => x.Id).ToList();
+        s.Steps.Add($"  state {inst.Status} current={(inst.CurrentStageRunId is { } c ? runs.IndexOf(c).ToString() : "-")}");
+    }
+
     private ApprovalTask Open(long id, string user) =>
         TasksOf(id).Single(t => t.AssigneeUserId == user && t.Status == ApprovalTaskStatus.Open);
 
-    private Task Approve(Side s, long id, string user)
+    private async Task Approve(Side s, long id, string user)
     {
         As(user);
-        return Step(s, $"approve {user}", Send(new ApproveTaskRequest(Open(id, user).Id, Inst(id).RowVersion, null, null)));
+        await Step(s, $"approve {user}", Send(new ApproveTaskRequest(Open(id, user).Id, Inst(id).RowVersion, null, null)));
+        Mark(s, id);
     }
 
-    private Task AddSign(Side s, long id, string user, params string[] to)
+    private Task AddSign(Side s, long id, string user, params string[] to) => AddSignMode(s, id, user, ApprovalModes.Any, to);
+
+    private async Task AddSignMode(Side s, long id, string user, string mode, params string[] to)
     {
         As(user);
-        return Step(s, $"add-sign {user}->{string.Join(",", to)}",
-            Send(new AddSignTaskRequest(Open(id, user).Id, Inst(id).RowVersion, null, null, [.. to], ApprovalModes.Any)));
+        await Step(s, $"add-sign {user}->{string.Join(",", to)} {mode}",
+            Send(new AddSignTaskRequest(Open(id, user).Id, Inst(id).RowVersion, null, null, [.. to], mode)));
+        Mark(s, id);
     }
 
-    private Task Return(Side s, long id, string user)
+    private async Task Return(Side s, long id, string user)
     {
         As(user);
-        return Step(s, $"return {user}", Send(new RejectTaskRequest(Open(id, user).Id, Inst(id).RowVersion, "請重看", RejectTaskHandler.ToPrevious)));
+        await Step(s, $"return {user}", Send(new RejectTaskRequest(Open(id, user).Id, Inst(id).RowVersion, "請重看", RejectTaskHandler.ToPrevious)));
+        Mark(s, id);
     }
 
-    private Task Reject(Side s, long id, string user)
+    private async Task Reject(Side s, long id, string user)
     {
         As(user);
-        return Step(s, $"reject {user}", Send(new RejectTaskRequest(Open(id, user).Id, Inst(id).RowVersion, "請補報價", RejectTaskHandler.ToInitiator)));
+        await Step(s, $"reject {user}", Send(new RejectTaskRequest(Open(id, user).Id, Inst(id).RowVersion, "請補報價", RejectTaskHandler.ToInitiator)));
+        Mark(s, id);
     }
 
-    private Task Transfer(Side s, long id, string user, string to)
+    private async Task Transfer(Side s, long id, string user, string to)
     {
         As(user);
-        return Step(s, $"transfer {user}->{to}", Send(new TransferTaskRequest(Open(id, user).Id, Inst(id).RowVersion, to, null)));
+        await Step(s, $"transfer {user}->{to}", Send(new TransferTaskRequest(Open(id, user).Id, Inst(id).RowVersion, to, null)));
+        Mark(s, id);
     }
 
-    private Task Reassign(Side s, long id, string assignee, string to)
+    private async Task Reassign(Side s, long id, string assignee, string to)
     {
         var taskId = Open(id, assignee).Id;
         As("admin");
-        return Step(s, $"reassign {assignee}->{to}", Send(new ReassignTaskRequest(taskId, Inst(id).RowVersion, to, null)));
+        await Step(s, $"reassign {assignee}->{to}", Send(new ReassignTaskRequest(taskId, Inst(id).RowVersion, to, null)));
+        Mark(s, id);
     }
 
     private async Task SetDelegate(string user, string to)
@@ -467,6 +492,44 @@ public class ApprovalGraphEquivalenceTests : ApprovalTestBase
             var (_, id) = await Go(s, "buyer1");
             await Approve(s, id, "fin1");
             await Approve(s, id, "gm");
+        });
+
+    [Fact]
+    public async Task AddSign_TwoTargets_AllMode() => await Run(
+        _ => Def(null, Stage("s1", Users("mgrA")), Stage("s2", Users("fin1"))),
+        async s =>
+        {
+            var (_, id) = await Go(s, "buyer1");
+            await AddSignMode(s, id, "mgrA", ApprovalModes.All, "emp1", "emp2");   // 一次加兩人、會簽
+            await Approve(s, id, "emp2");
+            await Approve(s, id, "emp1");
+            await Approve(s, id, "fin1");
+        });
+
+    // ───────── 情境：發起人自選 ─────────
+
+    [Fact]
+    public async Task InitiatorPick_ThenApprove() => await Run(
+        _ => Def(null, Stage("pick", new ApproverSource(ApprovalSources.InitiatorPick, CandidateGroupIds: [FinanceGroup], Min: 1, Max: 2),
+            mode: ApprovalModes.All), Stage("s2", Users("gm"))),
+        async s =>
+        {
+            var (_, id) = await Go(s, "buyer1", picks: new() { ["pick"] = ["fin2", "fin1"] });   // 刻意倒序：鎖住 Picks 的值與任務建立順序
+            await Approve(s, id, "fin1");
+            await Approve(s, id, "fin2");
+            await Approve(s, id, "gm");
+        });
+
+    [Fact]
+    public async Task Reroute_NewFlowNeedsPick_NeedsResubmit() => await Run(
+        r => [new Spec("k", 1, Def(Cond(r.Total, "gte", 100000),
+                  Stage("pick", new ApproverSource(ApprovalSources.InitiatorPick, CandidateGroupIds: [BoardGroup], Min: 1, Max: 1)))),
+              new Spec("b", 2, Def(Cond(r.Total, "gte", 10000), Stage("lead", Group(PurchaseLeadGroup))))],
+        async s =>
+        {
+            var (po, id) = await Go(s, "buyer1", 50000);
+            await AddExtra(s, po, 120000);   // 總額 170000：改配到有自選節點的流程
+            await Approve(s, id, "buyer2");  // rerouted＋NeedsResubmit，沒有新實例
         });
 
     // ───────── 情境：重新比對 ─────────
