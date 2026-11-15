@@ -186,14 +186,10 @@ public sealed class ApprovalApprover(
             run.Status = ApprovalStageStatus.Approved;
             run.CompletedTime = now;
             await uow.CommitAsync(ct);
-            // 先啟動排隊的加簽關卡；備援實例沒有排隊的就核准並轉移（設計 §5.5 第 5 點）——兩者都在 ActivateNextAsync 裡處理
-            var (next, nextFailure) = await engine.ActivateNextAsync(inst, module, current, ct);
-            if (nextFailure is not null) return nextFailure;
-            if (next is null)
-            {
-                if (await engine.CompleteAsync(inst, ct) is { } completeFailure) return completeFailure;
-                outcome = ApprovalOutcomes.Approved;
-            }
+            // 先啟動排隊的加簽關卡；備援實例沒有排隊的就核准並轉移（設計 §5.5 第 5 點）；graph 沿節點的出線推進——都在 AdvanceAsync 裡處理
+            var (completed, advanceFailure) = await engine.AdvanceAsync(inst, module, current, run, ct);
+            if (advanceFailure is not null) return advanceFailure;
+            if (completed) outcome = ApprovalOutcomes.Approved;
         }
         await uow.CommitAsync(ct);
         return ServiceResult.Success(new ApprovalActionResponse(outcome, inst.Id, inst.RowVersion));

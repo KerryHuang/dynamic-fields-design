@@ -80,14 +80,9 @@ public class SubmitApprovalHandler(
         instances.AddSnapshotRows(snapshot.Select(e => new ApprovalInstanceFlow { InstanceId = inst.Id, FlowId = e.FlowId, FlowVersionId = e.FlowVersionId }));
         engine.Log(inst, ApprovalActions.Submit, user.UserId, comment: string.IsNullOrWhiteSpace(request.Comment) ? null : request.Comment);
 
-        var (run, failure) = await engine.ActivateNextAsync(inst, module, values, ct);
+        var (completed, failure) = await engine.AdvanceAsync(inst, module, values, null, ct);
         if (failure is not null) return failure;
-        var outcome = ApprovalOutcomes.Submitted;
-        if (run is null)
-        {
-            if (await engine.CompleteAsync(inst, ct) is { } completeFailure) return completeFailure;
-            outcome = ApprovalOutcomes.Approved;
-        }
+        var outcome = completed ? ApprovalOutcomes.Approved : ApprovalOutcomes.Submitted;
         await uow.CommitAsync(ct);
         return ServiceResult.Created(new SubmitApprovalResponse(outcome, inst.Id, record.RowVersion));
     }
@@ -99,7 +94,7 @@ public class SubmitApprovalHandler(
     private static Dictionary<string, MessageRef[]> PickErrors(ApprovalDefinition def, Dictionary<string, List<string>> picks, ResolveContext ctx)
     {
         var errors = new Dictionary<string, MessageRef[]>();
-        var pickStages = def.Stages.Where(s => s.Approvers.Source == ApprovalSources.InitiatorPick).ToDictionary(s => s.Code);
+        var pickStages = ApprovalDefinitionRefs.Steps(def).Where(s => s.Approvers.Source == ApprovalSources.InitiatorPick).ToDictionary(s => s.Code);
         foreach (var code in picks.Keys.Where(k => !pickStages.ContainsKey(k))) errors[$"picks.{code}"] = [ApprovalMessages.PickInvalid];
         foreach (var (code, stage) in pickStages)
         {
@@ -126,7 +121,7 @@ public class SubmitApprovalHandler(
         ResolveContext ctx)
     {
         var errors = new Dictionary<string, MessageRef[]>();
-        foreach (var stage in def.Stages.Where(s => s.Approvers.Source == ApprovalSources.UserField))
+        foreach (var stage in ApprovalDefinitionRefs.Steps(def).Where(s => s.Approvers.Source == ApprovalSources.UserField))
         {
             var field = module.Blocks.SelectMany(b => b.Fields).FirstOrDefault(f => f.Id == stage.Approvers.FieldId);
             if (field is null || !values.TryGetValue(field.Key, out var v) || v is not { ValueKind: JsonValueKind.String } s || s.GetString() is not { } who)

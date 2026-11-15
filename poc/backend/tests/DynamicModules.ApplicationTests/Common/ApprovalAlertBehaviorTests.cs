@@ -1,9 +1,11 @@
 using DynamicModules.Application.Common;
 using DynamicModules.Application.Common.Behaviors;
 using DynamicModules.Application.Dynamic.ApprovalService;
+using DynamicModules.Domain.Entities.Dynamic;
 using DynamicModules.Domain.Repositories.Dynamic;
 using FluentAssertions;
 using MediatR;
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 
 namespace DynamicModules.ApplicationTests.Common;
@@ -43,14 +45,23 @@ public class ApprovalAlertBehaviorTests
         public Task<ITransactionScopeHandle> BeginAsync(CancellationToken ct) => throw new NotSupportedException();
     }
 
+    private sealed class CapturingLogger<T> : ILogger<T>
+    {
+        public List<(LogLevel Level, string Message)> Entries { get; } = [];
+        public IDisposable? BeginScope<TState>(TState state) where TState : notnull => null;
+        public bool IsEnabled(LogLevel logLevel) => true;
+        public void Log<TState>(LogLevel logLevel, EventId eventId, TState state, Exception? exception, Func<TState, Exception?, string> formatter) =>
+            Entries.Add((logLevel, formatter(state, exception)));
+    }
+
     private static (ApprovalAlertBehavior<ApproveCommand, ServiceResult> Behavior, ApprovalAlert Alert, FakeSender Sender, FakeUow Uow) Build(
-        bool nested, Func<object, object?>? handle = null)
+        bool nested, Func<object, object?>? handle = null, ILogger<ApprovalAlertBehavior<ApproveCommand, ServiceResult>>? logger = null)
     {
         var alert = new ApprovalAlert();
         var sender = new FakeSender(handle ?? (_ => ServiceResult.Success()));
         var uow = new FakeUow();
         return (new ApprovalAlertBehavior<ApproveCommand, ServiceResult>(alert, sender, uow, new FakeTransactions(nested),
-            NullLogger<ApprovalAlertBehavior<ApproveCommand, ServiceResult>>.Instance), alert, sender, uow);
+            logger ?? NullLogger<ApprovalAlertBehavior<ApproveCommand, ServiceResult>>.Instance), alert, sender, uow);
     }
 
     private static Task<ServiceResult> Fail(ApprovalAlertBehavior<ApproveCommand, ServiceResult> b, ApprovalAlert alert) =>
@@ -59,6 +70,42 @@ public class ApprovalAlertBehaviorTests
             alert.Raise(7, "原因");
             return Task.FromResult(ServiceResult.Conflict("x"));
         }, CancellationToken.None);
+
+    private static readonly ApprovalInstance Rolled = new() { Id = 7, RecordId = 3, ModuleId = 2, TitleSnapshot = "單據" };
+
+    [Fact]
+    public async Task Outermost_RaiseWithInstance_SendsSnapshotForRolledBackInstance()
+    {
+        // 實例是這次請求才建的、主交易回滾後資料庫裡已經沒有它：警示帶快照，handler 才組得出通知與連結（J20）
+        var (b, alert, sender, _) = Build(nested: false);
+        var res = await b.Handle(new ApproveCommand(), () =>
+        {
+            alert.Raise(Rolled, "原因");
+            return Task.FromResult(ServiceResult.Conflict("x"));
+        }, CancellationToken.None);
+
+        res.IsConflict.Should().BeTrue();
+        sender.Sent.Should().ContainSingle().Which.Should().Be(new WriteApprovalAlertRequest(7, "原因", new ApprovalAlertSnapshot(3, 2, "單據")));
+        alert.Pending.Should().BeNull();
+        alert.Snapshot.Should().BeNull();
+    }
+
+    [Fact]
+    public async Task AlertResultFails_Logged_AndReturnsOriginalResponse()
+    {
+        // 警示寫入回失敗結果（找不到實例等）不是例外，過去完全沒有紀錄；現在要記 log，使用者照樣收到原本的回應
+        var logger = new CapturingLogger<ApprovalAlertBehavior<ApproveCommand, ServiceResult>>();
+        var (b, alert, _, _) = Build(nested: false, _ => ServiceResult.NotFound("找不到"), logger);
+        var res = await b.Handle(new ApproveCommand(), () =>
+        {
+            alert.Raise(Rolled, "原因");
+            return Task.FromResult(ServiceResult.Conflict("x"));
+        }, CancellationToken.None);
+
+        res.IsConflict.Should().BeTrue();
+        res.Message.Should().Be("x");
+        logger.Entries.Should().ContainSingle(e => e.Level == LogLevel.Error && e.Message.Contains("7") && e.Message.Contains("原因"));
+    }
 
     [Fact]
     public async Task Outermost_SendsAlert()

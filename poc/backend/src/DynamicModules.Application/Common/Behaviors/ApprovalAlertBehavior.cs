@@ -19,11 +19,14 @@ public class ApprovalAlertBehavior<TReq, TRes>(ApprovalAlert alert, ISender send
         var response = await next();
         if (nested || request is WriteApprovalAlertRequest || response is not ServiceResult { IsSuccess: false } || alert.Pending is not { } pending)
             return response;
+        var snapshot = alert.Snapshot;
         alert.Clear();
         uow.Discard();
         try
         {
-            await sender.Send(new WriteApprovalAlertRequest(pending.InstanceId, pending.Reason), ct);
+            // 失敗結果（找不到實例等）不是例外，過去完全沒有紀錄；警示送不出去也只記 log，使用者照樣收到原本的回應
+            if (await sender.Send(new WriteApprovalAlertRequest(pending.InstanceId, pending.Reason, snapshot), ct) is { IsSuccess: false } failed)
+                logger.LogError("簽核警示寫入失敗：實例 {InstanceId}，原因 {Reason}，結果 {Result}", pending.InstanceId, pending.Reason, failed.Message);
         }
         catch (Exception ex) when (!ct.IsCancellationRequested)
         {

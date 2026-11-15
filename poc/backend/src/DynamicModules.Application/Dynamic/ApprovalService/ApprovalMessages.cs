@@ -208,6 +208,10 @@ public static class ApprovalMessages
     public static readonly MessageRef GraphRuntimeInvalid = MessageRef.Of(MessageText.ApprovalGraphRuntimeInvalid);
     /// <summary>預覽與設計器試算遇到結構不合法的流程圖：預覽不寫入、不通知，所以只請發起人聯絡管理員（U12）。</summary>
     public static MessageRef GraphPreviewInvalid(object flow) => MessageRef.Of(MessageText.ApprovalGraphPreviewInvalid, flow);
+    /// <summary>條件節點的出線無法判斷（引用的欄位或選項已不在）：409 並登記異常通知，不走預設線（流程圖設計 §8.8；J8）。name 是節點名稱（I18nText）或代號。</summary>
+    public static MessageRef ConditionNodeUndecidable(object name) => MessageRef.Of(MessageText.ApprovalConditionNodeUndecidable, name);
+    /// <summary>任一到齊通過、取消其他分支的歷程 comment：固定繁中、只給資料庫與稽核；畫面依 DataJson 組字（U8）。</summary>
+    public static string BranchCancelledNote(string name) => $"分支「{name}」已完成，其他分支自動取消";
     public static readonly MessageRef RecordGone = MessageRef.Of(MessageText.ApprovalRecordGone);
     public static readonly MessageRef NoWorkflow = MessageRef.Of(MessageText.ApprovalNoWorkflow);
     public static readonly MessageRef FlowVersionMissing = MessageRef.Of(MessageText.ApprovalFlowVersionMissing);

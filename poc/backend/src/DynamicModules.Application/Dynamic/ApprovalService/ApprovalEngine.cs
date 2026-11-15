@@ -13,11 +13,13 @@ namespace DynamicModules.Application.Dynamic.ApprovalService;
 /// <summary>
 /// 關卡推進、重新比對後的重來與完成（設計 §5.5、§6.3、§7.2、§8.2）。
 /// 系統動作（跳過、完成、備援說明）的歷程以 <see cref="SystemActor"/> 記錄。
+/// <see cref="AdvanceAsync"/> 是送出、同意、重來三條路徑上唯一呼叫 <see cref="CompleteAsync"/> 的地方（計畫 fg2 J22）；
+/// graph 實例交給 <see cref="ApprovalGraphEngine"/>，它不注入本類別，單關步驟經 <see cref="IApprovalStageSteps"/> 以參數傳入。
 /// </summary>
 public sealed class ApprovalEngine(
     IApprovalInstanceRepository repo, ApproverResolver resolver, ApprovalTaskFactory tasks, ApprovalNotifier notifier,
     ApprovalTransitionRunner runner, FieldTypeRegistry registry, IModuleRepository modules, IBusinessTime time, ICurrentUser user,
-    IOperationContext op, IUnitOfWork uow, ApprovalWriteContext context, ApprovalAlert alert)
+    IOperationContext op, IUnitOfWork uow, ApprovalWriteContext context, ApprovalAlert alert, ApprovalGraphEngine graph) : IApprovalStageSteps
 {
     public const string SystemActor = "system";
 
@@ -37,8 +39,35 @@ public sealed class ApprovalEngine(
         return a;
     }
 
+    /// <summary>
+    /// 推進到停住為止；走到底就由這裡呼叫唯一一次 <see cref="CompleteAsync"/>（J22）。done：剛完成的關卡（送出、重來傳 null）。
+    /// sequence（含備援）：ActivateNextAsync，沒有下一關就完成；graph：交給圖引擎，圖引擎回報走到結束才完成。
+    /// Completed 為 true 代表已核准並執行轉移；Failure 非 null 時呼叫端回給使用者、整筆回滾。
+    /// </summary>
+    public async Task<(bool Completed, ServiceResult? Failure)> AdvanceAsync(ApprovalInstance inst, Module module,
+        IReadOnlyDictionary<string, JsonElement?> values, ApprovalStageRun? done, CancellationToken ct)
+    {
+        bool reachedEnd;
+        if (DefinitionOf(inst) is { } def && ApprovalGraphMode.Applies(inst, def))
+        {
+            var (result, graphFailure) = done is null
+                ? await graph.StartAsync(inst, module, values, this, ct)
+                : await graph.AfterApprovedAsync(inst, module, done, values, this, ct);
+            if (graphFailure is not null) return (false, graphFailure);
+            reachedEnd = result == GraphAdvance.ReachedEnd;
+        }
+        else
+        {
+            var (run, failure) = await ActivateNextAsync(inst, module, values, ct);
+            if (failure is not null) return (false, failure);
+            reachedEnd = run is null;
+        }
+        if (!reachedEnd) return (false, null);
+        return await CompleteAsync(inst, ct) is { } completeFailure ? (false, completeFailure) : (true, null);
+    }
+
     /// <summary>從目前位置之後找下一關：when 不成立寫 skip(condition)；AllUnitsEmpty 寫 skip(empty)；成立就建 StageRun 與任務。沒有下一關回 null。</summary>
-    public async Task<(ApprovalStageRun? Run, ServiceResult? Failure)> ActivateNextAsync(
+    private async Task<(ApprovalStageRun? Run, ServiceResult? Failure)> ActivateNextAsync(
         ApprovalInstance inst, Module module, IReadOnlyDictionary<string, JsonElement?> values, CancellationToken ct)
     {
         if (DefinitionOf(inst) is not { } def) return (null, ServiceResult.Conflict(ApprovalMessages.FlowVersionMissing));
@@ -88,7 +117,7 @@ public sealed class ApprovalEngine(
         return (await StartAsync(inst, queued, seats, null, ct, NotificationKinds.ApprovalAddSigned), null);
     }
 
-    private async Task<(IReadOnlyList<SeatPlan> Seats, ServiceResult? Failure)> ResolveAddSignAsync(
+    public async Task<(IReadOnlyList<SeatPlan> Seats, ServiceResult? Failure)> ResolveAddSignAsync(
         ApprovalInstance inst, Module module, ApprovalDefinition def, ApprovalStageRun addSign, IReadOnlyDictionary<string, JsonElement?> values, CancellationToken ct)
     {
         var ctx = await resolver.ContextAsync(module, inst.InitiatorUserId, values, null, ct);
@@ -98,9 +127,12 @@ public sealed class ApprovalEngine(
         return ([.. resolution.Seats.Select(s => s.Reason == ApprovalTaskReason.Resolved ? s with { Reason = ApprovalTaskReason.Added } : s)], null);
     }
 
-    /// <summary>啟動一個關卡：建 StageRun、任務、備援說明，通知新任務的負責人（不通知這次動作的人自己）。</summary>
+    /// <summary>
+    /// 啟動一個關卡：建 StageRun、任務、備援說明，通知新任務的負責人（不通知這次動作的人自己）。
+    /// defer 不為 null（graph 的一次推進，J6）時不立刻寫通知，只把任務記進清單，由圖引擎在推進結束時只寫仍是 open 的；sequence 不傳，照舊立即寫。
+    /// </summary>
     public async Task<ApprovalStageRun> StartAsync(ApprovalInstance inst, ApprovalStageRun run, IReadOnlyList<SeatPlan> seats, int? dueHours,
-        CancellationToken ct, string kind = NotificationKinds.ApprovalPending)
+        CancellationToken ct, string kind = NotificationKinds.ApprovalPending, List<PendingNotice>? defer = null)
     {
         var now = time.Now;
         run.Status = ApprovalStageStatus.Active;
@@ -119,7 +151,8 @@ public sealed class ApprovalEngine(
                 targets: [.. seat.UserIds], data: JsonSerializer.Serialize(new { kind = "fallback" }));
         inst.CurrentStageRunId = run.Id;
         await uow.CommitAsync(ct);
-        await notifier.NotifyAsync(kind, inst, created.Select(t => t.AssigneeUserId), user.UserId, ct);
+        if (defer is not null) defer.Add(new PendingNotice(kind, [.. created.Select(t => t.Id)], user.UserId));
+        else await notifier.NotifyAsync(kind, inst, created.Select(t => t.AssigneeUserId), user.UserId, ct);
         return run;
     }
 
@@ -195,14 +228,10 @@ public sealed class ApprovalEngine(
         }
         else
         {
-            var (run, failure) = await ActivateNextAsync(fresh, module, values, ct);
+            // 新流程的關卡全部跳過（或圖直接走到結束）：照送出時的規則直接核准
+            var (completed, failure) = await AdvanceAsync(fresh, module, values, null, ct);
             if (failure is not null) return (null, outcome, failure);
-            if (run is null)
-            {
-                // 新流程的關卡全部跳過：照送出時的規則直接核准
-                if (await CompleteAsync(fresh, ct) is { } completeFailure) return (null, outcome, completeFailure);
-                outcome = ApprovalOutcomes.Approved;
-            }
+            if (completed) outcome = ApprovalOutcomes.Approved;
         }
         await notifier.NotifyAsync(NotificationKinds.ApprovalRerouted, old, notify, null, ct);
         return (fresh, outcome, null);
@@ -251,7 +280,7 @@ public sealed class ApprovalEngine(
         return null;
     }
 
-    private async Task SkipAsync(ApprovalInstance inst, ApprovalStageRun run, string reason, CancellationToken ct)
+    public async Task SkipAsync(ApprovalInstance inst, ApprovalStageRun run, string reason, CancellationToken ct)
     {
         run.Status = ApprovalStageStatus.Skipped;
         run.SkipReason = reason;
@@ -261,15 +290,18 @@ public sealed class ApprovalEngine(
         Log(inst, ApprovalActions.Skip, SystemActor, run.Id, data: JsonSerializer.Serialize(new { reason }));
     }
 
-    /// <summary>執行期再驗失敗：登記警示（回滾後另開交易通知系統管理員），回 409（設計 §5.2 末段）。</summary>
-    public ServiceResult RuntimeInvalid(ApprovalInstance inst, string reason)
+    /// <summary>
+    /// 執行期再驗失敗：登記警示（回滾後另開交易通知系統管理員），回 409（設計 §5.2 末段）。
+    /// message 為 null 時回第一版的 <see cref="ApprovalMessages.RuntimeInvalid"/>（sequence 行為不變）；graph 傳圖專用的訊息（J7、J22）。
+    /// </summary>
+    public ServiceResult RuntimeInvalid(ApprovalInstance inst, string reason, MessageRef? message = null)
     {
-        alert.Raise(inst.Id, reason);
-        return ServiceResult.Conflict(ApprovalMessages.RuntimeInvalid);
+        alert.Raise(inst, reason);
+        return ServiceResult.Conflict(message ?? ApprovalMessages.RuntimeInvalid);
     }
 
     /// <summary>實例 approved、寫 complete、以 runner 執行 From → To；失敗回結果（呼叫端回給使用者，整筆回滾）。</summary>
-    public async Task<ServiceResult?> CompleteAsync(ApprovalInstance inst, CancellationToken ct)
+    private async Task<ServiceResult?> CompleteAsync(ApprovalInstance inst, CancellationToken ct)
     {
         inst.Status = ApprovalInstanceStatus.Approved;
         inst.CompletedTime = time.Now;
