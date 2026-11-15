@@ -23,4 +23,10 @@
 - 補直接請求被隱藏負責人欄的負面測試（任務看板 kb2 審查 S2）
 - 查 Demo 已確認的採購單無法改成已取消（demo.md §15 步驟 7）：confirmed→cancelled 只限 manager 群組，必要時改 demo.md 的步驟
 - 讓產品啟動時明確設 SQLite WAL：部署時若已有空的 .db 檔，EF Migrate 不會設 WAL，長交易期間其他請求會「database is locked」（demolock 根因）
-- 追蹤停用 graph 流程時略過驗證的例外（fg1d）：規則已寫進設計，fg2 之後確認仍成立
+- 查 AttachmentApiTests 偶發的 SQLite handle 已釋放（ObjectDisposedException）：fg2 各段 CI 前後出現過，與簽核無關，先找出是哪個測試結束後仍有請求在用連線
+- 查簽核中心非系統管理員開啟「全部」分頁時 console 出現 403：畫面最終正常，疑似多送了一次無權限的探測請求；確認前端是否該先判斷身分再發請求
+- 請母語者審簽核流程圖的泰文、越南文新文案：fg2a2 兩則流程圖定義訊息、fg2b 條件節點無法判斷、fg2d 四句（分支取消、時間軸取消原因）、fg2e 任一到齊註記、fg2f 四則併發訊息；現在只驗佔位符與沒有中文，措辭未經審
+- 補 PostgreSQL 的並發真交錯驗證：fg2f、fg2g2 的併發測試標了 `Postgres` trait，但 TestApp 寫死 SQLite；pg0 加上 provider 切換後要實跑，並確認 `TryBumpRowVersionAsync` 在 READ COMMITTED 下等前一筆提交再回 0 列的行為（重試依賴它） ⛔ 等：pg0
+- 讓 sequence 定義驗證擋掉夾帶的 `nodes`、`edges`（fg2c 審查 S5）：現在存得進去，`ApprovalDefinitionRefs.Steps` 會把夾帶的簽核節點算進去，夾帶自選節點的 sequence 流程在重新比對後會要求重新送出；正常資料不會發生
+- 整理 `CloseLive` 的依賴方向與重複的 reason 字串（fg2c 審查 nit）：不影響行為
+- 評估等價性測試的穩定代號（fg2g1 審查建議 3、4）：flowId、fieldId 換成穩定代號、NormalizeData 改有邊界的替換；現在只可能造成假紅，優先度低

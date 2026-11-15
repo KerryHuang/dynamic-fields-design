@@ -241,8 +241,9 @@ ERP 對照的觀察：
 | `Id`、`InstanceId`、`Seq` | `Seq` 依實際執行順序遞增，退回重來會產生新列 |
 | `StageCode` | 對應定義的關卡；後加簽產生的關卡為 null |
 | `Mode` | `all`、`any` |
-| `Status` | `active`、`approved`、`skipped`、`returned`、`closed` |
+| `Status` | `queued`（排隊中的後加簽關卡）、`active`、`approved`、`skipped`、`returned`、`closed`；流程圖實例（[流程圖設計](2026-11-13-approval-flowgraph-design.md)）另有 `passed`（瞬間節點已通過）、`waiting`（匯合節點等其他分支） |
 | `SkipReason` | `condition`、`empty`；只在跳過時有值 |
+| `NodeId`、`NodeKind`、`BranchKey`、`InEdgeId`、`CloseReason` | 只有流程圖實例寫入，sequence 實例為 null。`CloseReason`：`branchCancelled`（被任一到齊取消的分支）、`instanceEnded`（整張單結束時仍開著的節點）；詳見流程圖設計 §7.6、§8.3 |
 | `AddedByUserId` | 後加簽的人；定義內的關卡為 null |
 | `ActivatedTime`、`CompletedTime`、`DueTime` | |
 
@@ -617,6 +618,7 @@ D 排在 A 之後，所以從變更中送出的單只要總額 ≥ 100000，照�
 - **或簽的兩人同時同意**：動作請求帶實例的 `rowVersion`；handler 在交易一開始就把實例的 `RowVersion` 換新值（`WHERE RowVersion = 舊值`），做法同單據轉換（單據能力設計 §4.4）。後到的那個回 409「這一關已由他人處理」，畫面重新讀取。
 - **送出時鎖住記錄**：送出會換記錄的 `RowVersion`，正在編輯該記錄的人存檔會收到 409（舊畫面上的修改不能在送簽後偷偷生效）。
 - 正確性來自 SQLite 交易一開始就持有寫入鎖，同事件設計 §7；換資料庫時由實例的 `RowVersion` 條件更新與部分唯一索引保證，不依賴 `WriteGate`。
+- **流程圖實例（fg2，主控裁決，待使用者確認）**：上述比對版本的做法只適用 sequence 實例。graph 實例的任務層動作（同意、退回、轉交、後加簽、改派）不比對畫面的實例 `rowVersion`，改以實例列條件更新取得處理權、失敗自動重試（最多 5 次、退避 20 ms 起加倍，用完 409「單據正忙」）；撤回與終止仍比對請求帶的版本，不符回 409「單據已有變動，請重新整理」、不重試。細節見流程圖設計 §8.13。
 
 ### 8.5 簽核期間與簽核鎖定的其他寫入
 
