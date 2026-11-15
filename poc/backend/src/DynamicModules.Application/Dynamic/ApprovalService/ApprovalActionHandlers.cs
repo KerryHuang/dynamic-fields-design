@@ -13,7 +13,8 @@ namespace DynamicModules.Application.Dynamic.ApprovalService;
 
 /// <summary>動作的共同前置與載入（設計 §7、§8.4）。</summary>
 public sealed class ApprovalActionSupport(
-    IApprovalInstanceRepository repo, IModuleRepository modules, IRecordRepository records, ApprovalPolicies policies, ApprovalReader reader)
+    IApprovalInstanceRepository repo, IModuleRepository modules, IRecordRepository records, ApprovalPolicies policies, ApprovalReader reader,
+    ApprovalShapeGate gate)
 {
     /// <summary>
     /// 呼叫者是這個實例的簽核管理員（設計 §7.8）；實例、模組或記錄不存在回 false（LoadAsync 的 authorize 回 403，實例不存在才 404）。
@@ -50,7 +51,7 @@ public sealed class ApprovalActionSupport(
         if (inst.Status != ApprovalInstanceStatus.Pending) return (null, ServiceResult.Conflict(ApprovalMessages.StageHandled));
         if (ApprovalEngine.DefinitionOf(inst) is not { } def) return (null, ServiceResult.Conflict(ApprovalMessages.FlowVersionMissing));
         // 綁定的是 graph 定義（回退後遇到 fg2 留下的實例）：引擎還不會跑，任何任務與實例動作都擋，要在換 RowVersion、讀關卡之前
-        if (ApprovalShapeGate.Reject(inst.FlowSetSnapshot.FirstOrDefault(e => e.FlowVersionId == inst.FlowVersionId)) is { } gated) return (null, gated);
+        if (gate.Reject(inst.FlowSetSnapshot.FirstOrDefault(e => e.FlowVersionId == inst.FlowVersionId)) is { } gated) return (null, gated);
         var next = Guid.NewGuid().ToString();
         if (!await repo.TryBumpRowVersionAsync(inst.Id, rowVersion, next, ct))
             return (null, ServiceResult.Conflict(mine is { Status: ApprovalTaskStatus.Open } ? ApprovalMessages.StateChanged : ApprovalMessages.StageHandled,
@@ -98,7 +99,7 @@ public sealed record AddSignPlan(IReadOnlyList<string> UserIds, string Mode);
 public sealed class ApprovalApprover(
     IApprovalInstanceRepository repo, ApprovalActionSupport support, ApprovalEngine engine, ApprovalTransitionRunner runner,
     ICurrentUser user, IBusinessTime time, IUnitOfWork uow, IModuleRepository modules, FieldTypeRegistry registry,
-    IDynamicAccessGuard guard, IRecordRepository records, ApprovalReadGrant grant)
+    IDynamicAccessGuard guard, IRecordRepository records, ApprovalReadGrant grant, ApprovalShapeGate gate)
 {
     public async Task<ServiceResult> ApproveAsync(long taskId, string rowVersion, string? comment, Dictionary<string, JsonElement?>? requestValues,
         AddSignPlan? addSign, CancellationToken ct)
@@ -132,7 +133,7 @@ public sealed class ApprovalApprover(
         var current = await support.ValuesAsync(inst.RecordId, ct);
         var check = ApprovalRouter.Recheck(inst, runs, module, current, registry, time.Today, await modules.ListUserIdsAsync(ct));
         if (check.Undecidable is { } undecidable) return ServiceResult.Conflict(ApprovalMessages.FlowConditionUndecidable(undecidable.Name));
-        if (ApprovalShapeGate.Reject(check.NewFlow) is { } gated) return gated;
+        if (gate.Reject(check.NewFlow) is { } gated) return gated;
         if (check.Changed)
         {
             // 這次同意不計入；回 200 讓交易提交，重來的實例才建得起來

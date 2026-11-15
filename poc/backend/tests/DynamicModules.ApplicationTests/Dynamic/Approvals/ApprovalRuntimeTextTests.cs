@@ -44,6 +44,8 @@ public class ApprovalRuntimeTextTests
         { MessageText.ApprovalFieldReadOnlyForApprover, "這個欄位對你是唯讀，不能在簽核時修改", [] },
         { MessageText.ApprovalRejectTargetInvalid, "退回對象只能是 initiator 或 previous", [] },
         { MessageText.ApprovalRuntimeInvalid, "簽核設定與狀態機不一致，已停止並通知系統管理員", [] },
+        { MessageText.ApprovalGraphRuntimeInvalid, "流程圖定義不完整，已停止並通知系統管理員", [] },
+        { MessageText.ApprovalGraphPreviewInvalid, "簽核流程「F」的流程圖定義不完整，請系統管理員檢查流程設定", ["F"] },
         { MessageText.ApprovalRecordGone, "找不到簽核的記錄（可能已被刪除）", [] },
         { MessageText.ApprovalNoWorkflow, "記錄所在模組沒有狀態機", [] },
         { MessageText.ApprovalFlowVersionMissing, "找不到實例綁定的流程版本", [] },

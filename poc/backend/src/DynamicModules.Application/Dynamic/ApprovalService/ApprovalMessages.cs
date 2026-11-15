@@ -204,6 +204,10 @@ public static class ApprovalMessages
     public static readonly MessageRef DelegatePeriod = MessageRef.Of(MessageText.ApprovalDelegatePeriod);
     public static readonly MessageRef DelegateEnded = MessageRef.Of(MessageText.ApprovalDelegateEnded);
     public static readonly MessageRef RuntimeInvalid = MessageRef.Of(MessageText.ApprovalRuntimeInvalid);
+    /// <summary>graph 實例的結構再驗不過（送出、同意、加簽、退回上一關）：回 409 並登記異常通知，所以文字說已通知（計畫 fg2 J7、U11）。</summary>
+    public static readonly MessageRef GraphRuntimeInvalid = MessageRef.Of(MessageText.ApprovalGraphRuntimeInvalid);
+    /// <summary>預覽與設計器試算遇到結構不合法的流程圖：預覽不寫入、不通知，所以只請發起人聯絡管理員（U12）。</summary>
+    public static MessageRef GraphPreviewInvalid(object flow) => MessageRef.Of(MessageText.ApprovalGraphPreviewInvalid, flow);
     public static readonly MessageRef RecordGone = MessageRef.Of(MessageText.ApprovalRecordGone);
     public static readonly MessageRef NoWorkflow = MessageRef.Of(MessageText.ApprovalNoWorkflow);
     public static readonly MessageRef FlowVersionMissing = MessageRef.Of(MessageText.ApprovalFlowVersionMissing);

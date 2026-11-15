@@ -201,6 +201,13 @@ public abstract class ApprovalTestBase : EffectsTestBase, IAsyncLifetime
         return flow;
     }
 
+    /// <summary>同 <see cref="SeedFlow"/>，定義必須是流程圖格式（graph 的測試以 <see cref="ApprovalGraphTestKit"/> 組定義）。</summary>
+    protected Task<ApprovalFlow> SeedGraphFlow(PurchaseRig r, string key, long to, int priority, ApprovalDefinition graph, bool active = true)
+    {
+        graph.Shape.Should().Be(ApprovalShapes.Graph);
+        return SeedFlow(r, key, to, priority, graph, active);
+    }
+
     /// <summary>直接在 Db 建只有草稿的流程（沒有任何版本，<c>CurrentVersionId</c> 為 null），不經過驗證。</summary>
     protected async Task<ApprovalFlow> SeedUnpublishedFlow(PurchaseRig r, string key, long to, int priority, string? draftJson = null, bool active = false)
     {
