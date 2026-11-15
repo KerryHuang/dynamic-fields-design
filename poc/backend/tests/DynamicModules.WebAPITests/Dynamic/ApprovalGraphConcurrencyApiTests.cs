@@ -19,6 +19,8 @@ namespace DynamicModules.WebAPITests.Dynamic;
 /// 流程圖實例的併發經 HTTP（計畫 fg2 Task 10；J16、J17、J18）：檔案型 SQLite，同一張單的動作真正同時到達。
 /// SQLite 上寫入請求被 WriteGate 整筆排隊，這裡驗的是「排隊之後結果正確」（沒有 409 誤擋、匯合只推進一次、加簽總數不超過上限），
 /// 不是交錯提交；真正的交錯提交與重試只有 PostgreSQL 驗得到，所以整個類別標 Postgres（TestApp 目前寫死 SQLite，pg0 補 provider 切換前是「未驗證」）。
+/// 提醒：在 SQLite 上本類別只證明「排隊之後結果正確」；處理權、重試與 reload 的正確性由 ApplicationTests 的替身守住
+/// （ApprovalGraphConcurrencyTests，J18），完全不取處理權或不 reload 時，這裡仍全綠。
 /// 流程圖版本由測試直接寫進資料庫（API 到 fg2g2 才收 graph），擋門以 <see cref="TestApp.ExtraServices"/> 換成開啟版。
 /// </summary>
 [Trait("Category", "Postgres")]

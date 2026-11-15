@@ -37,9 +37,9 @@ public class ApprovalGraphConcurrencyTests : ApprovalTestBase
     /// 讓處理權的條件更新（<see cref="IApprovalInstanceRepository.TryBumpRowVersionAsync"/>）前幾次回 false 的替身。
     /// 用 DispatchProxy 轉送其他所有成員，之後儲存庫介面加方法也不必同步修改；onFirstFail 在第一次失敗、回 false 之前執行，用來模擬「別人剛提交」。
     /// </summary>
-    private sealed class ClaimControl
+    internal sealed class ClaimControl
     {
-        public int FailuresLeft, Calls;
+        public int FailuresLeft, Calls, GuardCalls;
         public Func<Task>? OnFirstFail;
 
         public void Arm(int failures, Func<Task>? onFirstFail = null)
@@ -50,7 +50,7 @@ public class ApprovalGraphConcurrencyTests : ApprovalTestBase
         }
     }
 
-    private class FlakyClaimRepository : DispatchProxy
+    internal class FlakyClaimRepository : DispatchProxy
     {
         private IApprovalInstanceRepository _inner = null!;
         private ClaimControl _control = null!;
@@ -67,6 +67,8 @@ public class ApprovalGraphConcurrencyTests : ApprovalTestBase
         protected override object? Invoke(MethodInfo? method, object?[]? args)
         {
             if (method!.Name == nameof(IApprovalInstanceRepository.TryBumpRowVersionAsync)) return TryBumpAsync(args!);
+            if (method.Name is nameof(IApprovalInstanceRepository.GetRowVersionAsync) or nameof(IApprovalInstanceRepository.ReloadTrackedAsync))
+                _control.GuardCalls++;
             try { return method.Invoke(_inner, args); }
             catch (TargetInvocationException e) { throw e.InnerException!; }
         }
@@ -514,6 +516,93 @@ public class ApprovalGraphConcurrencyTests : ApprovalTestBase
         Inst(id).Status.Should().Be(ApprovalInstanceStatus.Pending);
     }
 
+    // ───────── 審查 fg2f：晚到訊息優先序、實例層 reload、擋門順序、pending 防線 ─────────
+
+    [Fact]
+    public async Task LateApprove_BranchCancelledThenInstanceRejected_InstanceReturnedBeatsBranchCompleted()
+    {
+        // U13 ① 優先於 ②：任一到齊，fin1 同意（buyer2 那條被取消）→ gm 退回發起人 → buyer2 在舊畫面按同意。
+        // 自己那列是 branchCancelled（滿足 ②）、單據又已退回（滿足 ①），必須回「單據已退回」
+        var (_, id) = await Boot(ForkJoin(ApprovalModes.Any));
+        var late = Open(id, "buyer2").Id;
+        var rv = Inst(id).RowVersion;
+        await MustApprove(id, "fin1");
+        (await RejectToInitiator(Open(id, "gm").Id, "gm", Inst(id).RowVersion)).IsSuccess.Should().BeTrue();
+
+        var res = await Approve(late, "buyer2", rv);
+
+        ShouldConflict(res, ApprovalMessages.InstanceReturned);
+    }
+
+    [Fact]
+    public async Task Withdraw_ClaimFails_InstanceRejectedMeanwhile_409InstanceReturned()
+    {
+        // 實例層處理權失敗後要先 reload 再判斷（J17 第 2 點）。共用單例 DbContext 下，前一個請求若已把實例追蹤成 rejected，不 reload 也看得到，
+        // 所以這裡不先做退回請求：撤回自己的 GetAsync 追蹤到 pending，失敗當下才用 ExecuteUpdate 改成 rejected，沒有 reload 就會回「請重新整理」
+        var (_, id) = await Boot(ForkJoin(ApprovalModes.All));
+        _claim.Arm(1, () => Db.Context.Set<ApprovalInstance>().Where(i => i.Id == id)
+            .ExecuteUpdateAsync(s => s.SetProperty(i => i.Status, ApprovalInstanceStatus.Rejected)));
+
+        var res = await Withdraw(id, Inst(id).RowVersion);
+
+        ShouldConflict(res, ApprovalMessages.InstanceReturned);
+    }
+
+    [Fact]
+    public async Task Cancel_ClaimFails_InstanceRejectedMeanwhile_409InstanceReturned()
+    {
+        var (_, id) = await Boot(ForkJoin(ApprovalModes.All));
+        _claim.Arm(1, () => Db.Context.Set<ApprovalInstance>().Where(i => i.Id == id)
+            .ExecuteUpdateAsync(s => s.SetProperty(i => i.Status, ApprovalInstanceStatus.Rejected)));
+
+        As("admin");
+        var res = await Send(new CancelApprovalRequest(id, Inst(id).RowVersion, "終止"));
+
+        ShouldConflict(res, ApprovalMessages.InstanceReturned);
+    }
+
+    [Fact]
+    public async Task Withdraw_FreshRowVersion_InstanceRejected_409InstanceReturned_Untouched()
+    {
+        // 處理權之後的 pending 判斷是撤回的唯一防線（撤回沒有 me.Status 檢查，沒有 active 列時 CanWithdraw 為 true）：帶最新版本也不能撤回已退回的單
+        var (_, id) = await Boot(ForkJoin(ApprovalModes.All));
+        (await RejectToInitiator(Open(id, "fin1").Id, "fin1", Inst(id).RowVersion)).IsSuccess.Should().BeTrue();
+
+        var res = await Withdraw(id, Inst(id).RowVersion);
+
+        ShouldConflict(res, ApprovalMessages.InstanceReturned);
+        Inst(id).Status.Should().Be(ApprovalInstanceStatus.Rejected);
+    }
+
+    [Fact]
+    public async Task Cancel_FreshRowVersion_InstanceApproved_409StageHandled_Untouched()
+    {
+        // 同上，終止也只靠這道判斷：帶最新版本也不能終止已核准的單
+        var (_, id) = await Boot(OrSign());
+        await MustApprove(id, "fin1");
+        Inst(id).Status.Should().Be(ApprovalInstanceStatus.Approved);
+
+        As("admin");
+        var res = await Send(new CancelApprovalRequest(id, Inst(id).RowVersion, "終止"));
+
+        ShouldConflict(res, ApprovalMessages.StageHandled);
+        Inst(id).Status.Should().Be(ApprovalInstanceStatus.Approved);
+    }
+
+    [Fact]
+    public async Task LateReassign_BranchCancelled_409BranchCompleted()
+    {
+        // 改派要把本人的節點實例（runs）一併傳給 TaskNotOpen，晚到訊息才認得出「分支被取消」
+        var (_, id) = await Boot(ForkJoin(ApprovalModes.Any));
+        var late = Open(id, "buyer2").Id;
+        await MustApprove(id, "fin1");
+
+        As("admin");
+        var res = await Send(new ReassignTaskRequest(late, Inst(id).RowVersion, "emp1", null));
+
+        ShouldConflict(res, ApprovalMessages.BranchCompleted);
+    }
+
     // ───────── sequence 完全照第一版 ─────────
 
     private static ApprovalDefinition SequenceTwoApprovers() =>
@@ -592,5 +681,58 @@ public class ApprovalGraphConcurrencyTests : ApprovalTestBase
 
         res.IsConflict.Should().BeFalse();
         res.Errors["userIds"].Should().Equal(ApprovalMessages.AddSignLimit(1).Resolve(null));
+    }
+}
+
+/// <summary>
+/// 擋門在處理權之前（J1）：正式 DI（擋門關閉）下，綁了流程圖的實例，6 種動作都在處理權之前回 409，
+/// 條件更新、讀版本、reload 一次都不該被呼叫。ApprovalShapeGateTests 只比對資料，擋門晚到（交易回滾）看不出差別，所以另用計數替身守順序。
+/// </summary>
+public class ApprovalGraphGateOrderTests : ApprovalTestBase
+{
+    protected override bool ScopePerRequest => true;
+
+    private readonly ApprovalGraphConcurrencyTests.ClaimControl _claim = new();
+
+    protected override void ConfigureServices(IServiceCollection services) =>
+        services.Replace(ServiceDescriptor.Scoped<IApprovalInstanceRepository>(_ =>
+            ApprovalGraphConcurrencyTests.FlakyClaimRepository.Wrap(new ApprovalInstanceRepository(Db.Context), _claim)));
+
+    [Fact]
+    public async Task BoundGraphInstance_AllActions_409BeforeAnyClaim()
+    {
+        var r = await BuildPurchase();
+        await SeedFlow(r, "po-s", r.Confirmed, 1, Def(null, Stage("s1", Users("fin1"))));
+        (await SaveWorkflow(r, [Needs(r.Draft, r.Confirmed), Plain(r.Confirmed, r.Partial), Plain(r.Partial, r.Received),
+            Plain(r.Confirmed, r.Cancelled)])).IsSuccess.Should().BeTrue();
+        await GrantEveryone(r.Module, r.Extra);
+        As("buyer1");
+        var po = await NewPo(r, price: 5000);
+        var id = (await MustSubmit(po.Id, r.Confirmed)).InstanceId!.Value;
+        // 開著的擋門只認「定義是 graph」：把快照裡綁定版本的定義換成流程圖，其餘照正式 DI
+        var inst = Db.Context.Set<ApprovalInstance>().Single(i => i.Id == id);
+        var graph = G(
+            [Start(), Fork("f"), Approval("a", Users("fin1")), Approval("b", Users("buyer2")), Join("j", "f", ApprovalModes.All), End()],
+            [E("e0", "start", "f"), E("fa", "f", "a"), E("fb", "f", "b"), E("aj", "a", "j"), E("bj", "b", "j"), E("je", "j", "end")]);
+        inst.FlowSetSnapshot = inst.FlowSetSnapshot
+            .Select(e => e.FlowVersionId == inst.FlowVersionId ? e with { Definition = graph } : e).ToList();
+        await Db.Context.SaveChangesAsync();
+        Db.Context.ChangeTracker.Clear();
+        var task = TasksOf(id).Single(t => t.Status == ApprovalTaskStatus.Open);
+        var rv = Inst(id).RowVersion;
+        _claim.Calls = 0;
+        _claim.GuardCalls = 0;
+
+        As("fin1");
+        (await Send(new ApproveTaskRequest(task.Id, rv, null, null))).IsConflict.Should().BeTrue();
+        (await Send(new RejectTaskRequest(task.Id, rv, "x", RejectTaskHandler.ToInitiator))).IsConflict.Should().BeTrue();
+        (await Send(new TransferTaskRequest(task.Id, rv, "emp2", null))).IsConflict.Should().BeTrue();
+        As("buyer1");
+        (await Send(new WithdrawApprovalRequest(id, rv, null))).IsConflict.Should().BeTrue();
+        As("admin");
+        (await Send(new CancelApprovalRequest(id, rv, "x"))).IsConflict.Should().BeTrue();
+        (await Send(new ReassignTaskRequest(task.Id, rv, "emp2", null))).IsConflict.Should().BeTrue();
+
+        (_claim.Calls + _claim.GuardCalls).Should().Be(0, "擋門要在取得處理權之前");
     }
 }
