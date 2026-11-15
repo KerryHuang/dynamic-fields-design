@@ -189,6 +189,8 @@ public class ApprovalGraphAddSignTests : ApprovalTestBase
         OpenUsers(id).Should().Equal("buyer2", "emp1");
         Inst(id).CurrentStageRunId.Should().Be(runs.Where(x => x.Status == ApprovalStageStatus.Active).MinBy(x => x.Seq)!.Id);
         runs.Should().NotContain(x => x.NodeId == "j" && x.NodeKind == ApprovalNodeKinds.Join);   // 還沒有執行線到匯合
+        runs.Select(x => x.Seq).Should().OnlyHaveUniqueItems();   // 審查 fg2d S3：Seq 不撞別條分支的列
+        added.Seq.Should().BeGreaterThan(runs.Single(x => x.NodeId == "b").Seq);   // 加簽列排在別條分支的列之後（a 的 Seq 本來比 b 小）
 
         await MustApprove(id, "emp1");   // 加簽完成才沿 a 的出線到匯合
         RunsOf(id).Single(x => x.NodeKind == ApprovalNodeKinds.Join).Status.Should().Be(ApprovalStageStatus.Waiting);
@@ -210,6 +212,8 @@ public class ApprovalGraphAddSignTests : ApprovalTestBase
         TasksOf(id).Single(t => t.Id == bBefore).Status.Should().Be(ApprovalTaskStatus.Approved);
         Inst(id).Status.Should().Be(ApprovalInstanceStatus.Pending);
         RunsOf(id).Single(x => x.StageCode is null).Status.Should().Be(ApprovalStageStatus.Active);
+        RunsOf(id).Select(x => x.Seq).Should().OnlyHaveUniqueItems();   // 審查 fg2d S3
+        RunsOf(id).Single(x => x.StageCode is null).Seq.Should().BeGreaterThan(RunsOf(id).Single(x => x.NodeId == "b").Seq);
         await MustApprove(id, "emp1");
         OpenUsers(id).Should().Equal("gm");
     }
@@ -266,6 +270,32 @@ public class ApprovalGraphAddSignTests : ApprovalTestBase
         await MustApprove(id, "emp2");
         OpenUsers(id).Should().Equal("buyer2", "gm");   // 加簽都簽完才進 s3
         RunsOf(id).Last(x => x.StageCode is not null).StageCode.Should().Be("s3");
+    }
+
+    [Fact]
+    public async Task AddSign_RequeuedAfterReturn_ThenNestedAddSigns_OrderSameAsSequence()
+    {
+        // 審查 fg2d S4（偏離 4 的邊角）：fin1 在 a 加簽 A（emp1、emp2 會簽）→ emp1 在 A 加簽 C → emp2 同意，A 完成、C 啟動
+        // → emp3 在 C 退回上一關，A 重啟成 A′、C 重排成 C2 → emp1 在 A′ 加簽 D、emp2 加簽 E；順序與第一版的數字算法相同：D → E → C2 → c
+        var (_, id) = await Boot(Linear());
+        (await AddSign(id, "fin1", ["emp1", "emp2"], ApprovalModes.All)).IsSuccess.Should().BeTrue();
+        await MustAddSign(id, "emp1", "emp3");
+        await MustApprove(id, "emp2");
+        OpenUsers(id).Should().Equal("emp3");
+        (await Return(id, "emp3")).IsSuccess.Should().BeTrue();
+        OpenUsers(id).Should().Equal("emp1", "emp2");
+
+        await MustAddSign(id, "emp1", "mgrA");   // D
+        await MustAddSign(id, "emp2", "fin2");   // E；A′ 完成，D 啟動
+
+        RunsOf(id).Select(x => x.Seq).Should().OnlyHaveUniqueItems();
+        OpenUsers(id).Should().Equal("mgrA");
+        await MustApprove(id, "mgrA");
+        OpenUsers(id).Should().Equal("fin2");
+        await MustApprove(id, "fin2");
+        OpenUsers(id).Should().Equal("emp3");
+        await MustApprove(id, "emp3");
+        OpenUsers(id).Should().Equal("gm");
     }
 
     [Fact]

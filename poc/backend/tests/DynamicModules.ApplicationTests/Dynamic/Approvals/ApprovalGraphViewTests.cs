@@ -37,6 +37,13 @@ public class ApprovalGraphViewTests : ApprovalTestBase
         [E("e0", "start", "f"), E("fa", "f", "a1"), E("fb", "f", "b"), E("a12", "a1", "a2"), E("a2j", "a2", "j"), E("bj", "b", "j"),
          E("jc", "j", "c"), E("ce", "c", "end")]);
 
+    /// <summary>start → s0（mgrA，根段）→ fork f → 分支 a（fin1）、b（buyer2）→ join j → c（gm）→ end：根段在匯合之前有已同意的簽核節點。</summary>
+    private static ApprovalDefinition RootThenFork() => G(
+        [Start(), Approval("s0", Users("mgrA")), Fork("f"), Approval("a", Users("fin1")), Approval("b", Users("buyer2")), Join("j", "f"),
+         Approval("c", Users("gm")), End()],
+        [E("e0", "start", "s0"), E("sf", "s0", "f"), E("fa", "f", "a"), E("fb", "f", "b"), E("aj", "a", "j"), E("bj", "b", "j"),
+         E("jc", "j", "c"), E("ce", "c", "end")]);
+
     private async Task<PurchaseRig> Rig(Func<PurchaseRig, ApprovalDefinition> graph)
     {
         var r = await BuildPurchase();
@@ -168,6 +175,23 @@ public class ApprovalGraphViewTests : ApprovalTestBase
         (await TaskViewOf(id, "buyer1", "gm")).CanReturnPrevious.Should().BeFalse();
         As("gm");
         var res = await Send(new RejectTaskRequest(Open(id, "gm").Id, Inst(id).RowVersion, "請重看", RejectTaskHandler.ToPrevious));
+        res.Errors["to"].Should().Equal(ApprovalMessages.NoPreviousStage.Resolve(null));
+    }
+
+    [Fact]
+    public async Task View_CanReturnPrevious_FirstAfterJoin_WithRootApproval_False_HandlerRejects()
+    {
+        // 審查 fg2d S1：根段有已同意的 s0 時，匯合後的 c 仍沒有上一關；檢視的上一關要用含匯合列的未過濾節點實例，
+        // 過濾成只剩簽核列就會越過匯合找到 s0，檢視回 true、handler 卻拒絕
+        var (_, id) = await Boot(RootThenFork());
+        await MustApprove(id, "mgrA");
+        await MustApprove(id, "fin1");
+        await MustApprove(id, "buyer2");
+
+        (await TaskViewOf(id, "buyer1", "gm")).CanReturnPrevious.Should().BeFalse();
+        As("gm");
+        var res = await Send(new RejectTaskRequest(Open(id, "gm").Id, Inst(id).RowVersion, "請重看", RejectTaskHandler.ToPrevious));
+        res.IsSuccess.Should().BeFalse();
         res.Errors["to"].Should().Equal(ApprovalMessages.NoPreviousStage.Resolve(null));
     }
 
@@ -305,6 +329,16 @@ public class ApprovalGraphViewTests : ApprovalTestBase
         await Boot(ForkJoin());
 
         (await Inbox("buyer1", ApprovalInboxBoxes.Submitted)).Items.Single().StageName!.Resolve("zh-TW").Should().Be("a");
+    }
+
+    [Fact]
+    public async Task Inbox_Done_Graph_ShowsCurrentNotOwnNode()
+    {
+        // 審查 fg2d S2：U5 只改「待簽」；「已處理」照舊取實例的目前關卡（Seq 最小的 active 是 b），不是自己處理過的 a
+        var (_, id) = await Boot(ForkJoin());
+        await MustApprove(id, "fin1");
+
+        (await Inbox("fin1", ApprovalInboxBoxes.Done)).Items.Single().StageName!.Resolve("zh-TW").Should().Be("b");
     }
 
     [Fact]
