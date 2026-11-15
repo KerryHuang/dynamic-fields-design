@@ -601,22 +601,4 @@ public class ApprovalGraphApproveTests : ApprovalTestBase
         ok.IsSuccess.Should().BeTrue(Dump(ok));
         Rec(po).Values[$"f_{r.DueDate}"]!.Value.GetString().Should().Be("2026-12-01");
     }
-
-    [Fact]
-    public async Task AddSign_OnGraphInstance_StillRejected409()
-    {
-        // graph 的加簽到 fg2d 才支援：同意並加簽在寫入任何東西之前就回 409
-        var r = await Rig(Linear2());
-        var (_, id) = await SubmitAs(r);
-        var task = Open(id, "fin1");
-        var before = (Inst(id).RowVersion, ActionsOf(id).Count, RunsOf(id).Count);
-        As("fin1");
-
-        var res = await Send(new AddSignTaskRequest(task.Id, Inst(id).RowVersion, null, null, ["emp1"], ApprovalModes.All));
-
-        res.IsConflict.Should().BeTrue(Dump(res));
-        res.Message.Should().Be(ApprovalMessages.GraphNotSupported("po-g").Resolve(null));
-        (Inst(id).RowVersion, ActionsOf(id).Count, RunsOf(id).Count).Should().Be(before);
-        Open(id, "fin1").Status.Should().Be(ApprovalTaskStatus.Open);
-    }
 }

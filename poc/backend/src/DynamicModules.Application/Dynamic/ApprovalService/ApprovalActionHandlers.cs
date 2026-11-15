@@ -7,7 +7,6 @@ using DynamicModules.Domain.Approvals;
 using DynamicModules.Domain.Entities.Dynamic;
 using DynamicModules.Domain.FieldTypes;
 using DynamicModules.Domain.Repositories.Dynamic;
-using DynamicModules.Domain.ValueObjects;
 using MediatR;
 
 namespace DynamicModules.Application.Dynamic.ApprovalService;
@@ -152,11 +151,8 @@ public sealed class ApprovalApprover(
         var run = runs.Single(r => r.Id == me.StageRunId);
         var stageTasks = tasks.Where(t => t.StageRunId == run.Id).ToList();
         if (ApprovalActionSupport.AlreadyApprovedInStage(tasks, me, user.UserId)) return ServiceResult.Conflict(ApprovalMessages.StageHandled);
-        // graph：同意要重新比對路線、沿出線推進，結構再驗不過就先停（J7）；加簽的寫入要到 fg2d 才支援，在任何寫入前擋下
+        // graph：同意與加簽都要重新比對路線、沿出線推進，結構再驗不過就先停（J7、U11）
         if (ApprovalActionSupport.RequireRuntime(loaded!, engine) is { } invalid) return invalid;
-        if (addSign is not null && ApprovalGraphMode.Applies(inst, def))
-            return ServiceResult.Conflict(ApprovalMessages.GraphNotSupported(
-                inst.FlowSetSnapshot.First(e => e.FlowVersionId == inst.FlowVersionId).Name.Resolve(I18nText.FallbackLocale)));
 
         var values = requestValues ?? [];
         var stageDef = ApprovalDefinitionRefs.Steps(def).FirstOrDefault(s => s.Code == run.StageCode);
@@ -204,13 +200,31 @@ public sealed class ApprovalApprover(
                 onBehalfOf: onBehalfOf);
             // 排隊中的加簽關卡：這一關完成後、下一個定義關卡之前依 Seq 啟動（設計 §7.6「插在目前關卡之後」；a3c 審查 S1）。
             // 位置緊接目前關卡與它先前加簽出的關卡（同一關先加簽的先簽）；排在後面的其他排隊關卡（例如巢狀加簽時，上一層其他人的加簽）順延一號
-            var seq = run.Seq + 1 + priorAddSigns;
-            foreach (var later in runs.Where(r => r.Status == ApprovalStageStatus.Queued && r.Seq >= seq)) later.Seq++;
-            repo.AddRun(new ApprovalStageRun
+            var added = new ApprovalStageRun
             {
-                InstanceId = inst.Id, Seq = seq, StageCode = null, NameSnapshot = ApprovalMessages.AddSignStageName, Mode = addSign.Mode,
+                InstanceId = inst.Id, StageCode = null, NameSnapshot = ApprovalMessages.AddSignStageName, Mode = addSign.Mode,
                 Status = ApprovalStageStatus.Queued, AddedByUserId = user.UserId, AddSignUserIds = [.. addSign.UserIds]
-            });
+            };
+            if (ApprovalGraphMode.Applies(inst, def))
+            {
+                // graph（J10、J11）：加簽列掛在主節點（這一關若本身是加簽，主節點沿用它的）、同一分支段，StageCode 維持 null。
+                // 並行時別條分支的列也在後面，不能用「目前關卡之後只有排隊關卡」的位置算法：只重排同段同主節點的排隊加簽，
+                // 目標順序與第一版相同（先前加簽的在前、新的緊接其後、其餘排在後面），再依序編成目前最大 Seq 之後的號碼，Seq 只增不減
+                added.NodeId = run.NodeId;
+                added.NodeKind = ApprovalNodeKinds.Approval;
+                added.BranchKey = run.BranchKey;
+                var line = runs.Where(r => r.Status == ApprovalStageStatus.Queued && r.NodeId == run.NodeId && (r.BranchKey ?? "") == (run.BranchKey ?? ""))
+                    .OrderBy(r => r.Seq).ToList();
+                line.Insert(Math.Min(priorAddSigns, line.Count), added);
+                var tail = runs.Max(r => r.Seq);
+                foreach (var r in line) r.Seq = ++tail;
+            }
+            else
+            {
+                added.Seq = run.Seq + 1 + priorAddSigns;
+                foreach (var later in runs.Where(r => r.Status == ApprovalStageStatus.Queued && r.Seq >= added.Seq)) later.Seq++;
+            }
+            repo.AddRun(added);
         }
 
         bool complete;

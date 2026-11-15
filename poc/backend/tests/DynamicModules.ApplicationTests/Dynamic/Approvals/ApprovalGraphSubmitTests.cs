@@ -843,7 +843,7 @@ public class ApprovalGraphSubmitTests : ApprovalTestBase
     [Fact]
     public async Task Approve_QueuedAddSignWithoutNodeId_409_RuntimeInvalid_NothingChanged()
     {
-        // 暫時防線：graph 的加簽寫入在 fg2d 才完整，排隊列沒有 NodeId 不能默默跳過（少簽，a → b 會直接啟動 b），改回 409＋異常通知
+        // fail-closed 防線：加簽列一律帶 NodeId（fg2d），排隊列沒有 NodeId 是資料不一致，不能默默跳過（少簽，a → b 會直接啟動 b），改回 409＋異常通知
         var r = await Rig(G([Start(), Approval("a", Users("fin1")), Approval("b", Users("buyer2")), End()],
             [E("e0", "start", "a"), E("ab", "a", "b"), E("be", "b", "end")]));
         var (_, id, _) = await SubmitAs(r);

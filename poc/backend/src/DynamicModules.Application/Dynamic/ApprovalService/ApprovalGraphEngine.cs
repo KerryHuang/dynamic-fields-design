@@ -98,7 +98,8 @@ public sealed class ApprovalGraphEngine(IApprovalInstanceRepository repo, Approv
     private async Task<ServiceResult?> AfterApprovedAsync(Pass p, ApprovalStageRun done)
     {
         if (done.NodeId is null) return p.Steps.RuntimeInvalid(p.Inst, "完成的節點實例沒有 NodeId", ApprovalMessages.GraphRuntimeInvalid);
-        // 暫時防線（graph 的加簽寫入在 fg2d 才完整）：排隊加簽列沒有 NodeId 就無從判斷屬於哪個節點，照舊往下走會少簽，改回 409
+        // fail-closed 防線：graph 的加簽列一律帶主節點的 NodeId（fg2d，J10），所以排隊列沒有 NodeId 只會是資料不一致；
+        // 無從判斷屬於哪個節點，照舊往下走會少簽，改回 409＋異常通知
         if (p.Runs.Any(r => r.Status == ApprovalStageStatus.Queued && r.NodeId is null))
             return p.Steps.RuntimeInvalid(p.Inst, "排隊中的加簽列沒有 NodeId", ApprovalMessages.GraphRuntimeInvalid);
         var key = KeyOf(done);
