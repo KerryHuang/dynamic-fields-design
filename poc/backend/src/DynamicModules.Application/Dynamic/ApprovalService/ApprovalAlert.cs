@@ -18,6 +18,7 @@ public sealed class ApprovalAlert
     /// <summary>實例的快照（J20）：實例是這次請求才建的，主交易回滾後資料庫裡已經沒有它，警示要靠這份快照組通知與連結。</summary>
     public ApprovalAlertSnapshot? Snapshot { get; private set; }
 
+    /// <summary>只供沒有實例物件的呼叫端與既有測試；引擎一律用 <see cref="Raise(ApprovalInstance, string)"/>（帶快照）。</summary>
     public void Raise(long instanceId, string reason)
     {
         Pending = (instanceId, reason);
@@ -37,7 +38,10 @@ public sealed class ApprovalAlert
     }
 }
 
-/// <summary>警示登記當下的實例快照：記錄、模組與標題，給找不到實例時組通知用。</summary>
+/// <summary>
+/// 警示登記當下的實例快照：記錄、模組與標題，給找不到實例時組通知用。
+/// 用快照寫出的通知，SourceId 是已回滾的實例 id（SQLite 回滾後 id 可能被下一個實例重用），不可拿它回頭找實例；連結指向記錄。
+/// </summary>
 public sealed record ApprovalAlertSnapshot(long RecordId, long ModuleId, string Title);
 
 /// <summary>通知異常通知對象政策（出廠為全部啟用中的系統管理員）解析出的人 approvalAdminAlert；標題帶記錄標題與原因（通知沒有內文欄位）。</summary>

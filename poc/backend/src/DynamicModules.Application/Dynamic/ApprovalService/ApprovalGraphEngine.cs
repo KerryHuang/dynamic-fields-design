@@ -98,6 +98,9 @@ public sealed class ApprovalGraphEngine(IApprovalInstanceRepository repo, Approv
     private async Task<ServiceResult?> AfterApprovedAsync(Pass p, ApprovalStageRun done)
     {
         if (done.NodeId is null) return p.Steps.RuntimeInvalid(p.Inst, "完成的節點實例沒有 NodeId", ApprovalMessages.GraphRuntimeInvalid);
+        // 暫時防線（graph 的加簽寫入在 fg2d 才完整）：排隊加簽列沒有 NodeId 就無從判斷屬於哪個節點，照舊往下走會少簽，改回 409
+        if (p.Runs.Any(r => r.Status == ApprovalStageStatus.Queued && r.NodeId is null))
+            return p.Steps.RuntimeInvalid(p.Inst, "排隊中的加簽列沒有 NodeId", ApprovalMessages.GraphRuntimeInvalid);
         var key = KeyOf(done);
         // J11：只看同段（BranchKey）同主節點的排隊加簽，Seq 小的先；其他分支或其他節點的排隊加簽一律不碰
         if (p.Runs.Where(r => r.Status == ApprovalStageStatus.Queued && r.NodeId == done.NodeId && KeyOf(r) == key).MinBy(r => r.Seq) is { } queued)
@@ -264,8 +267,11 @@ public sealed class ApprovalGraphEngine(IApprovalInstanceRepository repo, Approv
             ApprovalActionSupport.CloseOpen((await repo.ListTasksAsync(p.Inst.Id, p.Ct)).Where(t => ids.Contains(t.StageRunId)));
         }
 
+        // 「最後一個」依 Seq；段內已被取消的內層分支（到達列已 passed 後才算得出來）不在這次到達的路徑上，名稱不從那裡取
+        var gone = ApprovalGraphPath.CancelledRoots(p.G, p.Runs);
         var last = p.Runs.Where(r => r.NodeKind == ApprovalNodeKinds.Approval && r.StageCode is not null
-                && r.Status is ApprovalStageStatus.Approved or ApprovalStageStatus.Skipped && ApprovalGraphRuntime.Within(KeyOf(r), armKey))
+                && r.Status is ApprovalStageStatus.Approved or ApprovalStageStatus.Skipped && ApprovalGraphRuntime.Within(KeyOf(r), armKey)
+                && !gone.Any(root => ApprovalGraphRuntime.Within(KeyOf(r), root)))
             .MaxBy(r => r.Seq);
         var name = new[] { last?.NameSnapshot, p.G.Edge(arm).Label }.FirstOrDefault(n => n is not null && n.Resolve(I18nText.FallbackLocale) != "");
         var data = new Dictionary<string, object> { ["forkId"] = fork.Id, ["joinId"] = join.Id, ["arrived"] = armKey, ["cancelled"] = cancelledKeys };

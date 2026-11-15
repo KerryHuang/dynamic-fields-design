@@ -1,6 +1,7 @@
 using System.Text.Json;
 using DynamicModules.Application.Common;
 using DynamicModules.Application.Dynamic.ApprovalService;
+using DynamicModules.Application.Dynamic.RecordService.Commands.CreateRecord;
 using DynamicModules.Domain.Approvals;
 using DynamicModules.Domain.Entities.Dynamic;
 using FluentAssertions;
@@ -764,6 +765,161 @@ public class ApprovalGraphSubmitTests : ApprovalTestBase
         Db.Context.Set<Notification>().AsNoTracking().Count(x => x.Kind == NotificationKinds.ApprovalAdminAlert).Should().Be(0);
     }
 
+    // ───────── fg2b 審查修正 ─────────
+
+    [Fact]
+    public async Task Approve_NestedAnyJoin_HistoryNameIsArrivedPath_NotCancelledInnerBranch()
+    {
+        // U8：外層任一到齊 f（fa → 內層任一到齊 f2；fb → y）。f2z → z（先展開）、f2s → s（略過）→ x。
+        // z 核准：內層 j2 通過（取消 x）、外層 j 通過（取消 y）；外層歷程的名稱是到達路徑上的 z，不是被取消的內層分支上略過的 s
+        var r = await Rig(r0 => G(
+            [Start(), Fork("f"), Fork("f2"), Approval("z", Users("fin1")), Approval("s", Users("gm"), when: Cond(r0.Total, "gt", 1000000)),
+             Approval("x", Users("emp1")), Join("j2", "f2", ApprovalModes.Any), Approval("y", Users("buyer2")), Join("j", "f", ApprovalModes.Any), End()],
+            [E("e0", "start", "f"), E("fa", "f", "f2"), E("fb", "f", "y"), E("f2z", "f2", "z"), E("f2s", "f2", "s"), E("sx", "s", "x"),
+             E("zj2", "z", "j2"), E("xj2", "x", "j2"), E("j2j", "j2", "j"), E("yj", "y", "j"), E("je", "j", "end")]));
+        var (_, id, _) = await SubmitAs(r);
+        RunsOf(id).Single(x => x.NodeId == "s").Status.Should().Be(ApprovalStageStatus.Skipped);
+
+        await MustApprove(id, "fin1");
+
+        var notes = ActionsOf(id).Where(a => a.Action == ApprovalActions.BranchCancelled).OrderBy(a => a.Id).ToList();
+        notes.Select(a => a.Comment).Should().Equal("分支「z」已完成，其他分支自動取消", "分支「z」已完成，其他分支自動取消");
+        DataOf(notes[1]).GetProperty("name").GetProperty("zh-TW").GetString().Should().Be("z");
+    }
+
+    [Fact]
+    public async Task Approve_AnyJoin_NameTakenFromSkippedLastNodeOnArrivedPath()
+    {
+        // U8：到達分支最後一個「已核准或略過」的簽核節點；fa：a → s（略過）→ j，核准 a 後 s 略過、到達，名稱取 s
+        var r = await Rig(r0 => G(
+            [Start(), Fork("f"), Approval("a", Users("fin1")), Approval("s", Users("gm"), when: Cond(r0.Total, "gt", 1000000)),
+             Approval("b", Users("buyer2")), Join("j", "f", ApprovalModes.Any), End()],
+            [E("e0", "start", "f"), E("fa", "f", "a"), E("fb", "f", "b"), E("as", "a", "s"), E("sj", "s", "j"), E("bj", "b", "j"), E("je", "j", "end")]));
+        var (_, id, _) = await SubmitAs(r);
+
+        await MustApprove(id, "fin1");
+
+        Inst(id).Status.Should().Be(ApprovalInstanceStatus.Approved);
+        ActionsOf(id).Single(a => a.Action == ApprovalActions.BranchCancelled).Comment.Should().Be("分支「s」已完成，其他分支自動取消");
+    }
+
+    [Fact]
+    public async Task Approve_AnyJoin_ClosesNestedForkInsideCancelledArm()
+    {
+        // §8.3：外層任一到齊 f（fa → a；fb → 內層全部到齊 f2 的 p、q）。p 先核准，j2 有一列 waiting；a 核准後被取消的 fb 內 q、j2 也要關閉、任務關掉
+        var r = await Rig(_ => G(
+            [Start(), Fork("f"), Approval("a", Users("fin1")), Fork("f2"), Approval("p", Users("gm")), Approval("q", Users("emp1")),
+             Join("j2", "f2"), Join("j", "f", ApprovalModes.Any), End()],
+            [E("e0", "start", "f"), E("fa", "f", "a"), E("fb", "f", "f2"), E("f2p", "f2", "p"), E("f2q", "f2", "q"),
+             E("pj2", "p", "j2"), E("qj2", "q", "j2"), E("aj", "a", "j"), E("j2j", "j2", "j"), E("je", "j", "end")]));
+        var (_, id, _) = await SubmitAs(r);
+        await MustApprove(id, "gm");
+        RunsOf(id).Single(x => x.NodeId == "j2").Status.Should().Be(ApprovalStageStatus.Waiting);
+
+        await MustApprove(id, "fin1");
+
+        Inst(id).Status.Should().Be(ApprovalInstanceStatus.Approved);
+        RunsOf(id).Where(x => x.NodeId is "q" or "j2").Should()
+            .OnlyContain(x => x.Status == ApprovalStageStatus.Closed && x.CloseReason == ApprovalCloseReasons.BranchCancelled);
+        TasksOf(id).Single(t => t.AssigneeUserId == "emp1").Status.Should().Be(ApprovalTaskStatus.Closed);
+    }
+
+    [Fact]
+    public async Task Approve_DeferredNotice_StillExceptsActor()
+    {
+        // 偏離 1 的 ExceptUserId：fin1 核准 a 後啟動的 b 也有 fin1，延後寫的待簽通知仍不通知動作者本人
+        var r = await Rig(G([Start(), Approval("a", Users("fin1")), Approval("b", Users("fin1", "gm")), End()],
+            [E("e0", "start", "a"), E("ab", "a", "b"), E("be", "b", "end")]));
+        var (_, id, _) = await SubmitAs(r);
+        Notices("fin1", NotificationKinds.ApprovalPending).Should().Be(1);
+
+        await MustApprove(id, "fin1");
+
+        TasksOf(id).Should().Contain(t => t.AssigneeUserId == "fin1" && t.Status == ApprovalTaskStatus.Open);
+        Notices("fin1", NotificationKinds.ApprovalPending).Should().Be(1);
+        Notices("gm", NotificationKinds.ApprovalPending).Should().Be(1);
+    }
+
+    [Fact]
+    public async Task Approve_QueuedAddSignWithoutNodeId_409_RuntimeInvalid_NothingChanged()
+    {
+        // 暫時防線：graph 的加簽寫入在 fg2d 才完整，排隊列沒有 NodeId 不能默默跳過（少簽，a → b 會直接啟動 b），改回 409＋異常通知
+        var r = await Rig(G([Start(), Approval("a", Users("fin1")), Approval("b", Users("buyer2")), End()],
+            [E("e0", "start", "a"), E("ab", "a", "b"), E("be", "b", "end")]));
+        var (_, id, _) = await SubmitAs(r);
+        await AddRows(new ApprovalStageRun
+        {
+            InstanceId = id, Seq = 99, StageCode = null, NodeId = null, NodeKind = "approval", BranchKey = null, Status = ApprovalStageStatus.Queued,
+            Mode = ApprovalModes.Any, AddedByUserId = "fin1", AddSignUserIds = ["emp1"]
+        });
+        var before = (Inst(id).RowVersion, ActionsOf(id).Count, RunsOf(id).Count);
+
+        var res = await Approve(id, "fin1");
+
+        res.IsConflict.Should().BeTrue(Dump(res));
+        res.Message.Should().Be(ApprovalMessages.GraphRuntimeInvalid.Resolve(null));
+        (Inst(id).RowVersion, ActionsOf(id).Count, RunsOf(id).Count).Should().Be(before);
+        Inst(id).Status.Should().Be(ApprovalInstanceStatus.Pending);
+        Open(id, "fin1").Status.Should().Be(ApprovalTaskStatus.Open);
+        Notices("admin", NotificationKinds.ApprovalAdminAlert).Should().Be(1);
+    }
+
+    [Fact]
+    public async Task Approve_QueuedAddSignSameSegmentOtherNode_NotStarted()
+    {
+        // J11：同段但主節點不同（排的是 b）的加簽，a 完成時不啟動；照常往下走到 b
+        var r = await Rig(G([Start(), Approval("a", Users("fin1")), Approval("b", Users("buyer2")), End()],
+            [E("e0", "start", "a"), E("ab", "a", "b"), E("be", "b", "end")]));
+        var (_, id, _) = await SubmitAs(r);
+        await AddRows(new ApprovalStageRun
+        {
+            InstanceId = id, Seq = 99, StageCode = null, NodeId = "b", NodeKind = "approval", BranchKey = "", Status = ApprovalStageStatus.Queued,
+            Mode = ApprovalModes.Any, AddedByUserId = "buyer2", AddSignUserIds = ["emp1"]
+        });
+
+        await MustApprove(id, "fin1");
+
+        RunsOf(id).Single(x => x.Seq == 99).Status.Should().Be(ApprovalStageStatus.Queued);
+        TasksOf(id).Should().NotContain(t => t.AssigneeUserId == "emp1");
+        Open(id, "buyer2").Status.Should().Be(ApprovalTaskStatus.Open);
+    }
+
+    // ───────── sequence 實例回滾後警示照送 ─────────
+
+    private async Task ReplaceTransitions(PurchaseRig r, Func<List<WorkflowTransition>, List<WorkflowTransition>> change)
+    {
+        var wf = Db.Context.Set<Workflow>().Single(w => w.ModuleId == r.ModuleId);
+        wf.Transitions = change([.. wf.Transitions]);
+        await Db.Context.SaveChangesAsync();
+        Db.Context.ChangeTracker.Clear();
+    }
+
+    [Fact]
+    public async Task Alert_SequenceRerouteRolledBack_StillNotifiesAdmins()
+    {
+        // 重來路徑：追加單讓金額變動、改選另一條關卡全略過的 sequence 流程；轉移被拿掉所以新實例完成時再驗失敗，
+        // 新實例隨主交易回滾而消失，警示靠快照照送（J20）
+        var r = await BuildPurchase();
+        await SeedFlow(r, "po-a", r.Confirmed, 1, Def(Cond(r.Total, "gte", 100000), Stage("x", Users("fin1"), when: Cond(r.Total, "gt", 1000000))));
+        await SeedFlow(r, "po-b", r.Confirmed, 2, Def(Cond(r.Total, "gte", 10000), Stage("lead", Group(PurchaseLeadGroup))));
+        (await SaveWorkflow(r, [Needs(r.Draft, r.Confirmed), Plain(r.Confirmed, r.Partial), Plain(r.Partial, r.Received),
+            Plain(r.Confirmed, r.Cancelled)])).IsSuccess.Should().BeTrue();
+        await GrantEveryone(r.Module, r.Extra);
+        As("buyer1");
+        var po = await NewPo(r, price: 50000);
+        var id = (await MustSubmit(po.Id, r.Confirmed)).InstanceId!.Value;
+        (await Send(new CreateRecordRequest(r.Extra, V((TitleId(r.Extra), "追加"), (r.ExtraRef, po.Id), (r.ExtraAmount, 120000m))))).IsCreated.Should().BeTrue();
+        await ReplaceTransitions(r, t => t.Where(x => !(x.From == r.Draft && x.To == r.Confirmed)).ToList());
+
+        var res = await Approve(id, "buyer2");
+
+        res.IsConflict.Should().BeTrue(Dump(res));
+        res.Message.Should().Be(ApprovalMessages.RuntimeInvalid.Resolve(null));
+        Inst(id).Status.Should().Be(ApprovalInstanceStatus.Pending);
+        Db.Context.Set<ApprovalInstance>().AsNoTracking().Count(i => i.RestartedFromInstanceId == id).Should().Be(0);
+        Notices("admin", NotificationKinds.ApprovalAdminAlert).Should().Be(1);
+    }
+
     // ───────── DI ─────────
 
     [Fact]
@@ -776,5 +932,13 @@ public class ApprovalGraphSubmitTests : ApprovalTestBase
         sp.GetRequiredService<ApprovalApprover>().Should().NotBeNull();
         sp.GetRequiredService<IRequestHandler<SubmitApprovalRequest, ServiceResult>>().Should().NotBeNull();
         sp.GetRequiredService<IRequestHandler<ApproveTaskRequest, ServiceResult>>().Should().NotBeNull();
+        sp.GetRequiredService<IRequestHandler<ApproveTaskRequest, ServiceResult>>().Should().NotBeNull();
+        // J22：每個動作 handler 都解析得出來（含退回、撤回、終止、加簽、轉交、改派）
+        var handlers = typeof(ApprovalEngine).Assembly.GetTypes()
+            .Where(t => t is { IsAbstract: false, Namespace: "DynamicModules.Application.Dynamic.ApprovalService" } && t.Name.EndsWith("Handler"))
+            .SelectMany(t => t.GetInterfaces().Where(i => i.IsGenericType && i.GetGenericTypeDefinition() == typeof(IRequestHandler<,>)))
+            .ToList();
+        handlers.Should().NotBeEmpty();
+        foreach (var h in handlers) sp.GetRequiredService(h).Should().NotBeNull(h.ToString());
     }
 }
