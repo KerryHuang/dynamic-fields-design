@@ -67,4 +67,14 @@ describe('ApprovalActionLog', () => {
     const w = render([action({ action: 'branch-cancelled', data: { name: { 'zh-TW': '財務' } } })], 'en-US');
     expect(w.find('[data-testid="log-branch-cancelled-note"]').text()).toBe('Branch "財務" finished; the other branches were cancelled');
   });
+
+  it('ActionLog_SystemActor_Translated: the engine user id "system" reads as the locale word, real users keep their display name', () => {
+    const sys = action({ action: 'branch-cancelled', actorUserId: 'system', actorName: 'system' });
+    const user = action({ action: 'approve', actorUserId: 'fin1', actorName: '財務一' });
+    const zh = render([sys, user]).findAll('[data-testid="approval-log"] > li');
+    expect(zh[0]!.text()).toContain('· 系統 ·');
+    expect(zh[0]!.text()).not.toContain('system');
+    expect(zh[1]!.text()).toContain('· 財務一 ·');
+    expect(render([sys], 'en-US').find('[data-testid="approval-log"] > li').text()).toContain('· System ·');
+  });
 });

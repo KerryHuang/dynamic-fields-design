@@ -12,6 +12,9 @@ const props = defineProps<{ actions: ApprovalActionView[]; schema: ModuleSchema 
 const { t, te, locale } = useI18n();
 const timeText = (iso: string) => date.formatDate(new Date(iso), 'YYYY-MM-DD HH:mm');
 
+/** The server writes this user id for actions the engine takes itself (skip, complete, fallback, branch cancel); it is not a real user, so it has no display name. */
+const SYSTEM_ACTOR = 'system';
+
 const fields = computed(() => new Map((props.schema?.blocks ?? []).flatMap((b) => b.fields).map((f) => [f.id, f])));
 
 /** The server stores a Traditional Chinese note for audit; the screen words a reroute or a fallback hand-over in the reader's language. */
@@ -61,7 +64,7 @@ function changes(a: ApprovalActionView): Change[] {
     <li v-for="(a, i) in actions" :key="i" class="q-mb-sm approval-wrap" :data-testid="`log-${a.action}`">
       <div>
         <span class="text-weight-medium">{{ labelOf('approval.action', a.action, t, te) }}</span>
-        <span class="text-muted"> · {{ a.actorName }}</span>
+        <span class="text-muted"> · {{ a.actorUserId === SYSTEM_ACTOR ? t('approval.panel.systemActor') : a.actorName }}</span>
         <span v-if="a.onBehalfOfUserId" class="text-muted" data-testid="log-on-behalf"> · {{ t('approval.panel.onBehalfOf', { name: a.onBehalfOfName || a.onBehalfOfUserId }) }}</span>
         <span class="text-muted"> · {{ timeText(a.createdTime) }}</span>
       </div>

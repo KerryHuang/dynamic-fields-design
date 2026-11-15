@@ -34,7 +34,7 @@ const groupOf = (code: string | null | undefined) => groups.value.find((g) => g.
   <q-timeline color="primary" class="q-pl-sm" data-testid="preview-stages">
     <template v-for="(s, i) in stages" :key="s.code ?? i">
       <q-timeline-entry
-        v-if="startsAnyGroup(i)" heading :data-testid="`preview-any-group-${s.anyGroup}`"
+        v-if="startsAnyGroup(i)" heading tag="div" class="preview-any-heading" :data-testid="`preview-any-group-${s.anyGroup}`"
         :style="{ paddingLeft: `${(groupOf(s.anyGroup)?.depth ?? 0) * 16}px` }"
       >{{ t('approval.submit.stageAnyGroup') }}</q-timeline-entry>
       <q-timeline-entry
@@ -58,3 +58,8 @@ const groupOf = (code: string | null | undefined) => groups.value.find((g) => g.
     </template>
   </q-timeline>
 </template>
+
+<style scoped>
+/* Quasar renders the heading as an h3 (3rem, 48px): keep it a group label, smaller than the stage names, wrapping at 390px in every locale */
+.preview-any-heading :deep(.q-timeline__heading-title) { padding: 8px 0; font-size: 1rem; font-weight: 700; overflow-wrap: anywhere; }
+</style>

@@ -40,6 +40,13 @@ describe('PreviewStages', () => {
     for (const code of ['legal', 'fin']) expect(w.find(`[data-testid="preview-stage-${code}"]`).find(`[data-testid="preview-any-badge-${code}"]`).text()).toBe('任一分支');
     for (const code of ['mgr', 'gm']) expect(w.find(`[data-testid="preview-any-badge-${code}"]`).exists()).toBe(false);
   });
+  it('the any-join heading is a small group label, not Quasar\'s default h3 (48px)', () => {
+    const w = mountIt([stage({ code: 'legal', anyGroup: 'merge' }), stage({ code: 'fin', anyGroup: 'merge' })]);
+    const head = w.find('[data-testid="preview-any-group-merge"]');
+    expect(head.find('h3').exists()).toBe(false);
+    expect(head.find('.q-timeline__heading-title').element.tagName).toBe('DIV');
+    expect(head.classes()).toContain('preview-any-heading');
+  });
   it('a nested group is indented deeper than its outer group and the items after it fall back to the outer group', () => {
     const w = mountIt([
       stage({ code: 'a', anyGroup: 'j' }),
