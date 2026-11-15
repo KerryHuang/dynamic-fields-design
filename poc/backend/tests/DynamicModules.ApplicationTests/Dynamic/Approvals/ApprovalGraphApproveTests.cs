@@ -532,6 +532,32 @@ public class ApprovalGraphApproveTests : ApprovalTestBase
         PendingOf(po).Should().BeNull();
     }
 
+    [Fact]
+    public async Task Recheck_SameGraphFlowRouteChanged_PickNodeOffPath_NeedsResubmit()
+    {
+        // 同流程同版本、圖內路線改變，且流程含發起人自選節點：不直接建新實例，要發起人重新送出（NeedsPick 取新流程的自選判斷）
+        var r = await Rig(r0 => G(
+            [Start(), Condition("c"), Approval("p", new ApproverSource(ApprovalSources.InitiatorPick, CandidateGroupIds: [FinanceGroup], Min: 1, Max: 1)),
+             Approval("b", Users("buyer2")), End()],
+            [E("e0", "start", "c"), E("cp", "c", "p", Cond(r0.Total, "gte", 100000), order: 1), E("cb", "c", "b", isDefault: true),
+             E("pe", "p", "end"), E("be", "b", "end")]));
+        As("buyer1");
+        var po0 = await NewPo(r, price: 50000);
+        var sub = await Submit(po0.Id, r.Confirmed, new() { ["p"] = ["fin1"] });
+        sub.IsCreated.Should().BeTrue(Dump(sub));
+        var id = ((SubmitApprovalResponse)sub.Data!).InstanceId!.Value;
+        RunOf(id, "b").Status.Should().Be(ApprovalStageStatus.Active);
+        await AddExtra(r, po0.Id, 120000);
+
+        var res = await Approve(id, "buyer2");
+
+        res.IsSuccess.Should().BeTrue(Dump(res));
+        Body(res).Outcome.Should().Be(ApprovalOutcomes.Rerouted);
+        Body(res).NeedsResubmit.Should().BeTrue();
+        Inst(id).Status.Should().Be(ApprovalInstanceStatus.Rerouted);
+        PendingOf(po0.Id).Should().BeNull();
+    }
+
     // ───────── 結構再驗、可編輯欄位、加簽 ─────────
 
     [Fact]

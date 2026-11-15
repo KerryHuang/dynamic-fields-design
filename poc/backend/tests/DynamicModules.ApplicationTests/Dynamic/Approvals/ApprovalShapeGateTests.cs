@@ -190,4 +190,16 @@ public class ApprovalShapeGateTests : ApprovalTestBase
         AssertRejectedUntouched(await Send(new CancelApprovalRequest(id, rv, "終止")), before, r, recordId, id);
         AssertRejectedUntouched(await Send(new ReassignTaskRequest(task.Id, rv, "emp2", null)), before, r, recordId, id);
     }
+
+    [Fact]
+    public async Task BoundGraphInstance_ReturnPrevious_409_Untouched()
+    {
+        var (r, recordId, id, task) = await BoundGraphInstance();
+        var before = Capture(r, recordId, id);
+        As(task.AssigneeUserId);
+
+        var res = await Send(new RejectTaskRequest(task.Id, before.Instance.RowVersion, "退回", RejectTaskHandler.ToPrevious));
+
+        AssertRejectedUntouched(res, before, r, recordId, id);
+    }
 }

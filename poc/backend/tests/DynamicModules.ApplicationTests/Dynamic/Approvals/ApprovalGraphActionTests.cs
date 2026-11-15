@@ -554,4 +554,80 @@ public class ApprovalGraphActionTests : ApprovalTestBase
         ApprovalGraphPath.Live(RunsOf(id)).Should().BeEmpty();
         Notices("admin", NotificationKinds.ApprovalAdminAlert).Should().Be(0);
     }
+
+    // ───────── fg2c 審查補測（M1、S1–S3）─────────
+
+    [Fact]
+    public async Task Withdraw_PartialApprovalInLaterBranch_409()
+    {
+        // 分支 fa：a（buyer2）沒人動作、Seq 較小所以是 CurrentStageRunId；分支 fb：b 是財務會簽，fin2 已同意一席 → 不能撤回
+        var g = G([Start(), Fork("f"), Approval("a", Users("buyer2")), Approval("b", Group(FinanceGroup), mode: ApprovalModes.All), Join("j", "f"),
+            End()], [E("e0", "start", "f"), E("fa", "f", "a"), E("fb", "f", "b"), E("aj", "a", "j"), E("bj", "b", "j"), E("je", "j", "end")]);
+        var r = await Rig(g);
+        var (_, id) = await SubmitAs(r);
+        await MustApprove(id, "fin2");
+        RunOf(id, "b").Status.Should().Be(ApprovalStageStatus.Active);
+        Inst(id).CurrentStageRunId.Should().Be(RunOf(id, "a").Id);
+
+        var res = await Withdraw(id);
+
+        res.IsConflict.Should().BeTrue(Dump(res));
+        res.Message.Should().Be(ApprovalMessages.CannotWithdraw.Resolve(null));
+    }
+
+    [Fact]
+    public async Task ReturnPrevious_OtherBranchQueuedAddSign_Kept()
+    {
+        var r = await Rig(BranchSerial());
+        var (_, id) = await SubmitAs(r);
+        await MustApprove(id, "fin1");
+        var b = RunOf(id, "b");
+        await AddRun(new ApprovalStageRun
+        {
+            InstanceId = id, Seq = RunsOf(id).Max(x => x.Seq) + 1, StageCode = null, NodeId = "b", NodeKind = "approval", BranchKey = b.BranchKey,
+            Status = ApprovalStageStatus.Queued, Mode = ApprovalModes.Any, AddedByUserId = "buyer2", AddSignUserIds = ["emp1"]
+        });
+
+        (await Reject(id, "fin2", RejectTaskHandler.ToPrevious)).IsSuccess.Should().BeTrue();
+
+        RunsOf(id).Single(x => x.StageCode == null && x.NodeId == "b").Status.Should().Be(ApprovalStageStatus.Queued);
+    }
+
+    [Fact]
+    public async Task AddSign_BrokenGraph_409_GraphRuntimeInvalid_Alert()
+    {
+        var r = await Rig(Linear2());
+        var (_, id) = await SubmitAs(r);
+        var task = Open(id, "fin1");
+        await BreakDefinition(r, id);
+        As("fin1");
+
+        var res = await Send(new AddSignTaskRequest(task.Id, Inst(id).RowVersion, null, null, ["emp1"], ApprovalModes.All));
+
+        res.IsConflict.Should().BeTrue(Dump(res));
+        res.Message.Should().Be(ApprovalMessages.GraphRuntimeInvalid.Resolve(null));
+        Notices("admin", NotificationKinds.ApprovalAdminAlert).Should().Be(1);
+    }
+
+    [Fact]
+    public async Task ReturnPrevious_ToAddSign_CurrentRecomputedToMinSeqActive()
+    {
+        // 分支 fa：a1 已同意、a1 的加簽（手寫）已同意、a2 進行中；a2 退回上一關 → 重啟加簽；目前關卡要重算成另一條分支 Seq 較小的 b
+        var r = await Rig(BranchSerial());
+        var (_, id) = await SubmitAs(r);
+        await MustApprove(id, "fin1");
+        var a2 = RunOf(id, "a2");
+        await Db.Context.Set<ApprovalStageRun>().Where(x => x.Id == a2.Id).ExecuteUpdateAsync(s => s.SetProperty(x => x.Seq, a2.Seq + 1));
+        await AddRun(new ApprovalStageRun
+        {
+            InstanceId = id, Seq = a2.Seq, StageCode = null, NodeId = "a1", NodeKind = "approval", BranchKey = "fa", InEdgeId = null,
+            Status = ApprovalStageStatus.Approved, Mode = ApprovalModes.Any, AddedByUserId = "fin1", AddSignUserIds = ["emp1"]
+        });
+
+        var res = await Reject(id, "fin2", RejectTaskHandler.ToPrevious);
+
+        res.IsSuccess.Should().BeTrue(Dump(res));
+        RunsOf(id).Last().Should().Match<ApprovalStageRun>(x => x.StageCode == null && x.Status == "active");
+        Inst(id).CurrentStageRunId.Should().Be(RunOf(id, "b").Id);
+    }
 }
