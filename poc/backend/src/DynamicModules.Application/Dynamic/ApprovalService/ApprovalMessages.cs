@@ -16,7 +16,7 @@ public static class ApprovalMessages
     public const string DefinitionMissing = "缺少流程定義";
     public const string FlowKeyReserved = "流程代碼 order 是保留字，請改用其他代碼";
     public const string FlowNotPublished = "這條流程還沒有發布的版本，請先發布";
-    /// <summary>fg2 引擎上線前，執行期選到流程圖格式的流程時的 409 訊息（ApprovalShapeGate）。</summary>
+    /// <summary>fg2g2 之前，執行期選到流程圖格式的流程時的 409 訊息（ApprovalShapeGate）。</summary>
     public static MessageRef GraphNotSupported(string flowName) => MessageRef.Literal($"流程「{flowName}」使用流程圖格式，這個版本的系統還不能執行");
     /// <summary>fg2 之前流程圖格式一律不收（ApprovalDefinitionValidator.Graph.cs 最後固定加這一則；fg2 刪除）。</summary>
     public const string GraphNotAccepted = "流程圖格式尚未開放，請繼續使用關卡設定";

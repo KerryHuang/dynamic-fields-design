@@ -49,6 +49,15 @@ public class ApprovalGraphModeTests : ApprovalTestBase
         ApprovalGraphMode.Applies(inst, SequenceDef()).Should().BeFalse();
     }
 
+    // ───────── 兩層共用的常數 ─────────
+
+    [Fact]
+    public void SkipReasonCondition_DomainAndApplicationAgree()
+    {
+        // ApprovalGraphRoute 靠 Domain 的常數辨認「因條件略過」的節點實例，引擎寫入的是 Application 的常數；值不同就會少簽
+        ApprovalGraphRoute.SkipByCondition.Should().Be(ApprovalSkipReasons.Condition);
+    }
+
     // ───────── SupportedKinds ─────────
 
     [Fact]

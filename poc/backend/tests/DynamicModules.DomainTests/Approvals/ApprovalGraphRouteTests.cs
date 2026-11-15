@@ -123,14 +123,14 @@ public class ApprovalGraphRouteTests
     }
 
     [Fact]
-    public void ConditionNodeUndecidable_NotTreatedAsHolds()
+    public void SkippedNodeHolds_UndecidableCondition_ChangedWins()
     {
-        // 同一個 eval：略過條件的節點把 Undecidable 當成立，條件節點的出線則回 UndecidableNodeId，而且不算 Changed
+        // 同一個 eval：略過條件的節點把 Undecidable 當成立 → 路線已變；條件節點的出線無法判斷。路線已變優先（主控裁決 B1），不回 UndecidableNodeId
         var g = Build(
             [Plain("start", ApprovalNodeKinds.Start), Appr("s", "undec"), Plain("c", ApprovalNodeKinds.Condition), Appr("a"), Appr("b"), Plain("end", ApprovalNodeKinds.End)],
             [E("e1", "start", "s"), E("e2", "s", "c"), Case("e3", "c", "a", "undec", 1), Default("e4", "c", "b"), E("e5", "a", "end"), E("e6", "b", "end")]);
         var runs = new[] { SkippedByCondition(1, "s", "", "e1"), Cond(2, "c", "", "e2"), Run(3, "b", "", Act, inEdge: "e4") };
-        ApprovalGraphRoute.Changed(g, runs, Ev()).Should().Be(new GraphRouteCheck(false, "c"));
+        ApprovalGraphRoute.Changed(g, runs, Ev()).Should().Be(new GraphRouteCheck(true, null));
     }
 
     [Fact]
@@ -138,6 +138,52 @@ public class ApprovalGraphRouteTests
     {
         var runs = new[] { Run(1, "m", "", Ok, inEdge: "e1"), Cond(2, "c", "", "e2"), Run(3, "b", "", Act, inEdge: "e4") };
         ApprovalGraphRoute.Changed(Choice(), runs, Undec("big")).Should().Be(new GraphRouteCheck(false, "c"));
+    }
+
+    /// <summary>start → m → c1（big → c2；預設 → b）；c2（f → x；預設 → y）→ end。c2 在 c1 的下游。</summary>
+    private static ApprovalGraphRuntime TwoLevels() => Build(
+        [Plain("start", ApprovalNodeKinds.Start), Appr("m"), Plain("c1", ApprovalNodeKinds.Condition), Plain("c2", ApprovalNodeKinds.Condition),
+         Appr("b"), Appr("x"), Appr("y"), Plain("end", ApprovalNodeKinds.End)],
+        [E("e0", "start", "m"), E("em", "m", "c1"), Case("e1", "c1", "c2", "big", 1), Default("e2", "c1", "b"), Case("e3", "c2", "x", "f", 1), Default("e4", "c2", "y"),
+         E("xe", "x", "end"), E("ye", "y", "end"), E("be", "b", "end")]);
+
+    private static ApprovalStageRun[] TwoLevelsRuns() =>
+        [Run(1, "m", "", Ok, inEdge: "e0"), Cond(2, "c1", "", "em"), Cond(3, "c2", "", "e1"), Run(4, "x", "", Act, inEdge: "e3")];
+
+    [Fact]
+    public void ChangedUpstream_UndecidableDownstream_ChangedWins()
+    {
+        // 審查反例：c1 現在改選預設線（路線已變），下游的 c2 因欄位被刪而無法判斷，但照新路線 c2 已不在路線上 → 判成 Changed 重來
+        ApprovalGraphRoute.Changed(TwoLevels(), TwoLevelsRuns(), (je) => je.GetProperty("k").GetString() == "f" ? ConditionTruth.Undecidable : ConditionTruth.Fails)
+            .Should().Be(new GraphRouteCheck(true, null));
+    }
+
+    [Fact]
+    public void UndecidableStillOnRoute_NothingElseChanged_ReportsUndecidable()
+    {
+        // 對照組：c1 仍選 c2 那條（沒變），c2 無法判斷 → 維持回無法判斷
+        ApprovalGraphRoute.Changed(TwoLevels(), TwoLevelsRuns(), (je) => je.GetProperty("k").GetString() switch
+            {
+                "big" => ConditionTruth.Holds, "f" => ConditionTruth.Undecidable, _ => ConditionTruth.Fails
+            })
+            .Should().Be(new GraphRouteCheck(false, "c2"));
+    }
+
+    [Fact]
+    public void MultipleUndecidable_ReportsSmallestSeq()
+    {
+        // c1（Seq 2）與 c2（Seq 3）都無法判斷，也沒有別處改變 → 回 Seq 最小的 c1
+        var eval = Undec("big", "f");
+        ApprovalGraphRoute.Changed(TwoLevels(), TwoLevelsRuns(), eval).Should().Be(new GraphRouteCheck(false, "c1"));
+    }
+
+    [Fact]
+    public void ChosenEdgeRowMissing_ThrowsInvariantViolation()
+    {
+        // 條件節點之後沒有任何一列的進線屬於它的出線：不變式被違反（J10 每一列都要帶 InEdgeId），丟例外而不是當成路線沒變
+        var runs = new[] { Run(1, "m", "", Ok, inEdge: "e1"), Cond(2, "c", "", "e2") };
+        var act = () => ApprovalGraphRoute.Changed(Choice(), runs, Ev());
+        act.Should().Throw<InvalidOperationException>().WithMessage("*c*");
     }
 
     [Fact]
