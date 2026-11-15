@@ -585,6 +585,36 @@ public class ApprovalGraphApproveTests : ApprovalTestBase
         Open(fresh.Id, "fin1").Should().NotBeNull();
     }
 
+    [Fact]
+    public async Task Approve_RecheckSelectsBrokenGraphFlow_409_Rollback_Alert()
+    {
+        // 原擋門測試 Approve_RecheckSelectsGraphFlow_409_Rollback 的回滾語意：重新比對選到結構壞掉的 graph，重來時 409＋異常通知、整筆回滾（J7 第一列）
+        var r = await Scenario3();
+        As("buyer1");
+        var po = await NewPo(r, price: 150000);
+        var id = (await MustSubmit(po.Id, r.Confirmed)).InstanceId!.Value;
+        var broken = new ApprovalDefinition(ApprovalShapes.Graph, null, null, null, []);
+        var graphFlow = await SeedGraphFlow(r, "po-g", r.Confirmed, 99, broken);
+        var inst = Db.Context.Set<ApprovalInstance>().Single(i => i.Id == id);
+        inst.FlowSetSnapshot = [new FlowSnapshotEntry(graphFlow.Id, graphFlow.CurrentVersionId!.Value, 0, true, Text("po-g"), broken), .. inst.FlowSetSnapshot];
+        await Db.Context.SaveChangesAsync();
+        Db.Context.ChangeTracker.Clear();
+        var task = TasksOf(id).Single(t => t.Status == ApprovalTaskStatus.Open);
+        var before = (Inst(id).RowVersion, ActionsOf(id).Count);
+        As(task.AssigneeUserId);
+
+        var res = await Send(new ApproveTaskRequest(task.Id, Inst(id).RowVersion, null, null));
+
+        res.IsConflict.Should().BeTrue(Dump(res));
+        res.Message.Should().Be(ApprovalMessages.GraphRuntimeInvalid.Resolve(null));
+        Inst(id).Status.Should().Be(ApprovalInstanceStatus.Pending);
+        (Inst(id).RowVersion, ActionsOf(id).Count).Should().Be(before);
+        TasksOf(id).Single(t => t.Id == task.Id).Status.Should().Be(ApprovalTaskStatus.Open);
+        Db.Context.Set<ApprovalInstance>().AsNoTracking().Count(i => i.RestartedFromInstanceId == id).Should().Be(0);
+        Notices("admin", NotificationKinds.ApprovalAdminAlert).Should().Be(1);
+        StateOf(r, po.Id).Should().Be(r.Draft);
+    }
+
     // ───────── 結構再驗、可編輯欄位、加簽 ─────────
 
     [Fact]

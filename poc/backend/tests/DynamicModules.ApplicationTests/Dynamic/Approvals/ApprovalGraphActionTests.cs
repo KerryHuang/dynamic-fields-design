@@ -131,6 +131,30 @@ public class ApprovalGraphActionTests : ApprovalTestBase
         Db.Context.ChangeTracker.Clear();
     }
 
+    // ───────── 權限（授權在處理權之前；graph 路徑不能跳過授權） ─────────
+
+    [Fact]
+    public async Task GraphInstance_NotAuthorized_403_NothingClaimed()
+    {
+        // 非任務負責人同意、非發起人撤回、非簽核管理員終止：都回 403，實例的 RowVersion 與任務狀態不變
+        var r = await Rig(Linear2());
+        var (_, id) = await SubmitAs(r);
+        var task = Open(id, "fin1");
+        var rv = Inst(id).RowVersion;
+        As("buyer2");
+
+        var approve = await Send(new ApproveTaskRequest(task.Id, rv, null, null));
+        var withdraw = await Send(new WithdrawApprovalRequest(id, rv, null));
+        var cancel = await Send(new CancelApprovalRequest(id, rv, "不是管理員"));
+
+        approve.IsForbidden.Should().BeTrue(Dump(approve));
+        withdraw.IsForbidden.Should().BeTrue(Dump(withdraw));
+        cancel.IsForbidden.Should().BeTrue(Dump(cancel));
+        Inst(id).RowVersion.Should().Be(rv);
+        Inst(id).Status.Should().Be(ApprovalInstanceStatus.Pending);
+        TasksOf(id).Single(t => t.Id == task.Id).Status.Should().Be(ApprovalTaskStatus.Open);
+    }
+
     // ───────── 退回發起人 ─────────
 
     [Fact]

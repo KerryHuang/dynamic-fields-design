@@ -159,6 +159,8 @@ public sealed class ApprovalPreviewer(
                 new PreviewPath(walk.NodeIds, walk.EdgeIds)));
         }
 
+        // 形狀不是 sequence 也不是 graph：預覽不回空的成功結果（送出時回 409＋異常通知）
+        if (def.Shape != ApprovalShapes.Sequence) return ServiceResult.Conflict(ApprovalMessages.GraphPreviewInvalid(match.Name));
         foreach (var s in def.Stages)
         {
             // 送出驗證（PickErrors）對所有自選關卡都要求人選，不論條件是否成立、是否引用隱藏欄位：預覽一律列出人選要求（只說要選人、不說會不會進入）

@@ -602,6 +602,29 @@ public class ApprovalGraphSubmitTests : ApprovalTestBase
     }
 
     [Fact]
+    public async Task Submit_UnknownShape_409_RuntimeInvalid_AlertWritten_NothingWritten()
+    {
+        // 形狀既不是 sequence 也不是 graph（資料庫被改或日後新增形狀後回退）：fail closed，不能讀空的 Stages 當成零關卡直接核准（原擋門的保證）
+        var r = await BuildPurchase();
+        await SeedFlow(r, "po-x", r.Confirmed, 1, new ApprovalDefinition("graph2", null, null, null, []));
+        (await SaveWorkflow(r, [Needs(r.Draft, r.Confirmed), Plain(r.Confirmed, r.Partial), Plain(r.Partial, r.Received),
+            Plain(r.Confirmed, r.Cancelled)])).IsSuccess.Should().BeTrue();
+        await GrantEveryone(r.Module, r.Extra);
+        As("buyer1");
+        var po = await NewPo(r, price: 5000);
+        var rowVersion = Rec(po.Id).Row.RowVersion;
+
+        var res = await Submit(po.Id, r.Confirmed);
+
+        res.IsConflict.Should().BeTrue($"{Dump(res)} state={StateOf(r, po.Id)}");
+        res.Message.Should().Be(ApprovalMessages.RuntimeInvalid.Resolve(null));
+        Db.Context.Set<ApprovalInstance>().AsNoTracking().Count().Should().Be(0);
+        Db.Context.Set<ApprovalTask>().AsNoTracking().Count().Should().Be(0);
+        (StateOf(r, po.Id), Rec(po.Id).Row.RowVersion).Should().Be((r.Draft, rowVersion));
+        Notices("admin", NotificationKinds.ApprovalAdminAlert).Should().Be(1);
+    }
+
+    [Fact]
     public async Task Submit_NotifyNode_409_Unsupported_AlertWritten_NothingWritten()
     {
         var def = G([Start(), Notify("tell"), End()], [E("e0", "start", "tell"), E("e1", "tell", "end")]);

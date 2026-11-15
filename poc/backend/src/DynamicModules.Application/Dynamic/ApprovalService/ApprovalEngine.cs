@@ -58,6 +58,9 @@ public sealed class ApprovalEngine(
         }
         else
         {
+            // fail-closed 防線（擋門刪除後）：走流程的實例，形狀不是 sequence 也不是 graph 就停，不讀空的 Stages 直接核准
+            if (inst.RouteKind == ApprovalRouteKind.Flow && DefinitionOf(inst) is { Shape: not ApprovalShapes.Sequence } bad)
+                return (false, RuntimeInvalid(inst, $"流程形狀不支援：{bad.Shape}"));
             var (run, failure) = await ActivateNextAsync(inst, module, values, ct);
             if (failure is not null) return (false, failure);
             reachedEnd = run is null;

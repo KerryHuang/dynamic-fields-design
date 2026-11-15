@@ -273,6 +273,25 @@ public class ApprovalGraphPreviewerTests : ApprovalTestBase
     }
 
     [Fact]
+    public async Task Preview_UnknownShape_409_PreviewInvalid_NoAlert()
+    {
+        // 形狀既不是 sequence 也不是 graph：預覽不回空的成功結果，也不登記異常通知（U12）
+        var r = await BuildPurchase();
+        await SeedFlow(r, "po-x", r.Confirmed, 1, new ApprovalDefinition("graph2", null, null, null, []));
+        (await SaveWorkflow(r, [Needs(r.Draft, r.Confirmed), Plain(r.Confirmed, r.Partial), Plain(r.Partial, r.Received),
+            Plain(r.Confirmed, r.Cancelled)])).IsSuccess.Should().BeTrue();
+        await GrantEveryone(r.Module);
+        As("buyer1");
+        var po = await NewPo(r);
+
+        var res = await Send(new PreviewRecordApprovalRequest(po.Id, r.Confirmed));
+
+        res.IsConflict.Should().BeTrue(Dump(res));
+        res.Message.Should().Be(ApprovalMessages.GraphPreviewInvalid("po-x").Resolve(null));
+        AdminAlerts().Should().Be(0);
+    }
+
+    [Fact]
     public async Task Designer_Graph_BrokenGraph_409_PreviewInvalid()
     {
         await WithGraph(_ => NoDefaultEdge());

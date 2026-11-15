@@ -146,6 +146,24 @@ public class ApprovalGraphFlowApiTests : ApprovalTestBase
         Versions("po-g").Should().ContainSingle();
     }
 
+    [Fact]
+    public async Task Update_Graph_OverLoweredLimit_Unchanged_Allowed_Growing_Rejected()
+    {
+        // 數值上限「改嚴只管之後」（政策設計 §3.5）在 API 層也適用於 graph：新舊版都是 graph，編輯器要把舊版定義傳給驗證器
+        var r = await Rig();
+        ApprovalDefinition Linear(int n) => G(
+            [Start(), .. Enumerable.Range(1, n).Select(i => Approval($"s{i}", Users("fin1"))), End()],
+            [E("e0", "start", "s1"), .. Enumerable.Range(1, n - 1).Select(i => E($"e{i}", $"s{i}", $"s{i + 1}")), E($"e{n}", $"s{n}", "end")]);
+        await SeedGraphFlow(r, "po-g", r.Confirmed, 1, Linear(12));   // 政策上限 10，舊版直接寫入 12 個簽核節點
+
+        var same = await Send(new UpdateApprovalFlowRequest("po-g", new("po-g", Text("改名"), r.Confirmed, 1, true, Linear(12))));
+        var grow = await Send(new UpdateApprovalFlowRequest("po-g", new("po-g", Text("改名"), r.Confirmed, 1, true, Linear(13))));
+
+        same.IsSuccess.Should().BeTrue(Dump(same));
+        grow.IsInvalid.Should().BeTrue(Dump(grow));
+        grow.Errors.Keys.Should().Contain("definition.graph");
+    }
+
     // ───────── U4：graph 不能存回 sequence ─────────
 
     [Fact]
