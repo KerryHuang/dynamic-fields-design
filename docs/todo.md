@@ -48,3 +48,6 @@
 - 查前端 vitest 偶發的 unhandled error（Quasar timer）：測試全過但 vitest 以 exit 1 結束，CI 需重跑
 - 啟用 Demo 流程圖範例流程並實際送簽展示（使用者 11-16 裁決）：「採購單（流程圖範例）」改啟用；它目前優先序 0、未稅小計 ≥ 10000，啟用後會攔下 1 萬以上所有採購單，要重排 InventoryScenario 既有送簽情境（大額／一萬以上兩條流程的 Demo 單據），並加幾張走並行分支的送簽單讓進度圖看得到並行
 - 實機看設計頁試算時，有警告的線是否保持警告色（只改了 CSS，未實機驗）
+- 把 .tmp/ 加進 .gitignore：使用者層規則把計畫與暫存放 .tmp/，前提是已 ignore；lifecycle 3.0.0 試用時 S5、S7 都出現 `?? .tmp/`（2026-11-15）
+- 處理專案設定啟用但沒安裝的 dotnet-test plugin：每次 `claude -p` 開頭都印一行警告；裝上或從 .claude/settings.json 拿掉（lifecycle 3.0.0 試用，2026-11-15）
+- 替 .claude/rules/docs.md:9 與 AGENTS.md:49 的清單腳本補退路：沒裝 lifecycle 時沒有 feature_checklist.py，規則又禁手改統計行，只能卡住（lifecycle 3.0.0 試用 S5，2026-11-15）
