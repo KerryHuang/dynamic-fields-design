@@ -24,19 +24,37 @@ describe('PreviewStages', () => {
     expect(mountIt([pick]).text()).toContain('由你選擇');
     expect(mountIt([pick], true).text()).toContain('由發起人送出時選擇');
   });
-  it('any-join note shows once above the first item of each group, not for other items', () => {
+  it('any-join heading shows once per group above its first item; every item of the group has a badge, the item after the group does not', () => {
     const w = mountIt([
       stage({ code: 'mgr' }),
       stage({ code: 'legal', anyGroup: 'merge' }), stage({ code: 'fin', anyGroup: 'merge' }),
-      stage({ code: 'z' }),
-      stage({ code: 'p', anyGroup: 'other' }),
+      stage({ code: 'gm' }),
     ]);
-    const notes = w.findAll('[data-testid^="preview-any-group-"]');
-    expect(notes.map((n) => n.attributes('data-testid'))).toEqual(['preview-any-group-merge', 'preview-any-group-other']);
-    expect(notes[0].text()).toBe('以下分支任一條完成即可');
-    // the note sits on the first item of the group
-    expect(w.find('[data-testid="preview-stage-legal"]').find('[data-testid="preview-any-group-merge"]').exists()).toBe(true);
-    expect(w.find('[data-testid="preview-stage-fin"]').find('[data-testid^="preview-any-group-"]').exists()).toBe(false);
+    const heads = w.findAll('[data-testid^="preview-any-group-"]');
+    expect(heads.map((n) => n.attributes('data-testid'))).toEqual(['preview-any-group-merge']);
+    expect(heads[0].text()).toBe('以下分支任一條完成即可');
+    // the heading is its own entry placed before the first item, so "below" includes that item
+    const html = w.html();
+    expect(html.indexOf('preview-any-group-merge')).toBeLessThan(html.indexOf('preview-stage-legal'));
+    expect(html.indexOf('preview-any-group-merge')).toBeGreaterThan(html.indexOf('preview-stage-mgr'));
+    for (const code of ['legal', 'fin']) expect(w.find(`[data-testid="preview-stage-${code}"]`).find(`[data-testid="preview-any-badge-${code}"]`).text()).toBe('任一分支');
+    for (const code of ['mgr', 'gm']) expect(w.find(`[data-testid="preview-any-badge-${code}"]`).exists()).toBe(false);
+  });
+  it('a nested group is indented deeper than its outer group and the items after it fall back to the outer group', () => {
+    const w = mountIt([
+      stage({ code: 'a', anyGroup: 'j' }),
+      stage({ code: 'p', anyGroup: 'j2' }), stage({ code: 'q', anyGroup: 'j2' }),
+      stage({ code: 'b', anyGroup: 'j' }), stage({ code: 'c', anyGroup: 'j' }),
+      stage({ code: 'z' }),
+    ]);
+    expect(w.findAll('[data-testid^="preview-any-group-"]').map((n) => n.attributes('data-testid'))).toEqual(['preview-any-group-j', 'preview-any-group-j2']);
+    expect(w.find('[data-testid="preview-any-group-j"]').attributes('style')).toContain('padding-left: 0px');
+    expect(w.find('[data-testid="preview-any-group-j2"]').attributes('style')).toContain('padding-left: 16px');
+    expect(w.findAll('[data-testid^="preview-any-badge-"]').map((n) => n.attributes('data-testid')))
+      .toEqual(['a', 'p', 'q', 'b', 'c'].map((c) => `preview-any-badge-${c}`));
+    // inner and outer groups use different colours
+    expect(w.find('[data-testid="preview-any-badge-p"]').classes().join(' ')).not.toBe(w.find('[data-testid="preview-any-badge-a"]').classes().join(' '));
+    expect(w.find('[data-testid="preview-any-badge-b"]').classes().join(' ')).toBe(w.find('[data-testid="preview-any-badge-a"]').classes().join(' '));
   });
   it('a sequence preview has no any-group note', () => {
     expect(mountIt([stage({ code: 'a' }), stage({ code: 'b' })]).find('[data-testid^="preview-any-group-"]').exists()).toBe(false);
