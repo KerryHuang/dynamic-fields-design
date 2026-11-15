@@ -266,7 +266,9 @@ public class GetApprovalTasksHandler(
         {
             var module = await ModuleOf(r.Inst.ModuleId);
             var pending = r.Inst.Status == ApprovalInstanceStatus.Pending;
-            var stage = pending && r.Inst.CurrentStageRunId is { } runId && runById.TryGetValue(runId, out var run) ? run.NameSnapshot : null;
+            // 「待簽」列取自己任務所在的關卡（U5）：sequence 的待簽任務一定在目前關卡，結果不變；graph 並行時目前關卡可能是另一條分支的節點。其餘照舊取目前關卡
+            var runId = request.Box == ApprovalInboxBoxes.Todo && r.Task is { } mine ? mine.StageRunId : r.Inst.CurrentStageRunId;
+            var stage = pending && runId is { } rid && runById.TryGetValue(rid, out var run) ? run.NameSnapshot : null;
             items.Add(new ApprovalInboxItem(r.Task?.Id ?? 0, r.Inst.Id, r.Inst.RecordId, module?.Key ?? "", module?.NameI18n ?? new I18nText(),
                 r.Inst.TitleSnapshot, stage, r.Inst.InitiatorUserId, names.GetValueOrDefault(r.Inst.InitiatorUserId) ?? r.Inst.InitiatorUserId,
                 r.Inst.SubmittedTime, r.Due, pending && r.Due < now, module is null || !module.IsWritable(), r.Inst.Status));
@@ -312,6 +314,10 @@ internal static class ApprovalViews
         var runs = allRuns.Where(r => r.InstanceId == i.Id).OrderBy(r => r.Seq).ToList();
         var tasks = allTasks.Where(t => t.InstanceId == i.Id).OrderBy(t => t.Id).ToList();
         var def = ApprovalEngine.DefinitionOf(i);
+        // graph：關卡列只放簽核節點與加簽（U6）；退回上一關要讀圖，結構不合法回 false，和 handler 一致（U11）
+        var graph = def is not null && ApprovalGraphMode.Applies(i, def);
+        var runtime = graph ? ApprovalGraphRuntime.Build(def!, ApprovalGraphMode.SupportedKinds, out _) : null;
+        if (graph) runs = runs.Where(r => r.NodeKind == ApprovalNodeKinds.Approval).ToList();
         // 可編輯欄位只給能動作的人，而且送出時的狀態不能是簽核鎖定狀態（設計 §8.5）
         var editableAllowed = workflow is not null && ApprovalRuntimeCheck.VerifyEditable(workflow, i.FromOptionId) is null;
         // 上一關與加簽筆數用未過濾的資料算：只看得到自己關卡的簽核人（沒有 Read）也要和 handler 的判斷一致
@@ -324,21 +330,23 @@ internal static class ApprovalViews
                 var canAct = pending && writable && t.Status == ApprovalTaskStatus.Open && ApprovalActionRules.IsActor(t, me)
                     && !ApprovalActionSupport.AlreadyApprovedInStage(tasks, t, me);
                 return new ApprovalTaskView(t.Id, t.AssigneeUserId, Name(t.AssigneeUserId), t.OriginalUserId, t.Reason, t.Status, t.ActedTime, canAct,
-                    pending && ApprovalPath.Previous(pathRuns, r) is not null,
+                    pending && (graph ? runtime is not null && ApprovalGraphPath.Previous(pathRuns, r) is not null : ApprovalPath.Previous(pathRuns, r) is not null),
                     t.OriginalUserId != t.AssigneeUserId ? Name(t.OriginalUserId) : null, canAct && canAddSignMore);
             }).ToList();
             return new ApprovalStageView(r.Id, r.Seq, r.StageCode, r.NameSnapshot ?? new I18nText(), r.Mode, r.Status, r.SkipReason, r.DueTime, views,
                 EditableKeys(def, r, views.Any(v => v.CanAct), editableAllowed, unwritableFieldIds), r.AddedByUserId is { } addedBy ? Name(addedBy) : null,
                 // 排隊中的加簽關卡還沒有任務，列出加簽對象；啟動後以任務為準（a3c 審查 S2）
-                r.Status == ApprovalStageStatus.Queued ? (r.AddSignUserIds ?? []).Select(Name).ToList() : null);
+                r.Status == ApprovalStageStatus.Queued ? (r.AddSignUserIds ?? []).Select(Name).ToList() : null,
+                graph ? r.NodeId : null, graph ? r.BranchKey : null, graph ? r.CloseReason : null);
         }).ToList();
         var actions = allActions.Where(a => a.InstanceId == i.Id).OrderBy(a => a.Id).Select(a => new ApprovalActionView(a.Action, a.ActorUserId, Name(a.ActorUserId),
             a.OnBehalfOfUserId, a.TargetUserIds ?? [], a.Comment, Data(a, hiddenFieldIds), a.CreatedTime,
             (a.TargetUserIds ?? []).Select(Name).ToList(), a.OnBehalfOfUserId is { } behalf ? Name(behalf) : null)).ToList();
-        // 撤回資格同 WithdrawApprovalHandler：目前關卡還沒有任何同意或退回
+        // 撤回資格同 WithdrawApprovalHandler：sequence 是目前關卡還沒有任何同意或退回；graph 是每個 active 的簽核節點都還沒有（不讀圖，U11）
         var current = runs.FirstOrDefault(r => r.Id == i.CurrentStageRunId) ?? runs.LastOrDefault(r => r.Status == ApprovalStageStatus.Active);
         var canWithdraw = pending && writable && i.InitiatorUserId == me
-            && !tasks.Any(t => t.StageRunId == current?.Id && t.Status is ApprovalTaskStatus.Approved or ApprovalTaskStatus.Rejected);
+            && (graph ? ApprovalGraphPath.CanWithdraw(pathRuns, tasks)
+                : !tasks.Any(t => t.StageRunId == current?.Id && t.Status is ApprovalTaskStatus.Approved or ApprovalTaskStatus.Rejected));
         var flowName = i.FlowSetSnapshot.FirstOrDefault(e => e.FlowId == i.FlowId)?.Name;
         return new ApprovalInstanceView(i.Id, i.Status, i.RouteKind, flowName, i.FromOptionId, i.ToOptionId, i.InitiatorUserId, i.SubmittedTime, i.CompletedTime,
             i.RowVersion, stages, actions, canWithdraw, pending && writable && manager, showTitle ? i.TitleSnapshot : "");
@@ -352,7 +360,7 @@ internal static class ApprovalViews
         IReadOnlySet<long>? unwritable)
     {
         if (def is null || unwritable is null || !canAct || !editableAllowed || run.Status != ApprovalStageStatus.Active) return [];
-        var stage = def.Stages.FirstOrDefault(s => s.Code == run.StageCode);
+        var stage = ApprovalDefinitionRefs.Steps(def).FirstOrDefault(s => s.Code == run.StageCode);
         return (stage?.EditableFields ?? []).Where(id => !unwritable.Contains(id)).Select(id => $"f_{id}").ToList();
     }
 }

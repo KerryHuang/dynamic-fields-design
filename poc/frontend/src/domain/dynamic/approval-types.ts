@@ -29,6 +29,11 @@ export interface ApprovalStageView {
   addedByName?: string | null;
   /** 排隊中的加簽關卡的加簽對象姓名（還沒有任務時才有）。 */
   addSignNames?: string[] | null;
+  /** Flow graph only (absent for a sequence flow): the node and branch segment this stage run belongs to. */
+  nodeId?: string | null;
+  branchKey?: string | null;
+  /** Flow graph only: why a closed stage was closed. `branchCancelled` = another branch finished an any-join first; `instanceEnded` = the whole request ended. */
+  closeReason?: 'branchCancelled' | 'instanceEnded' | null;
 }
 export interface ApprovalActionView {
   action: string; actorUserId: string; actorName: string; onBehalfOfUserId: string | null; targetUserIds: string[];

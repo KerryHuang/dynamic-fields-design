@@ -25,6 +25,8 @@ const overdue = (s: ApprovalStageView) => s.status === 'active' && !!s.dueTime &
         <span>{{ labelOf('approval.stageStatus', s.status, t, te) }}</span>
         <span v-if="s.tasks.length > 1 || s.mode === 'any'"> · {{ t(`approval.mode.${s.mode}`) }}</span>
         <span v-if="s.status === 'skipped' && s.skipReason"> · {{ labelOf('approval.skipReason', s.skipReason, t, te) }}</span>
+        <!-- Flow graph: an any-join finished through another branch, so this stage needs no action. `instanceEnded` adds nothing: "Closed" already says it. -->
+        <span v-if="s.closeReason === 'branchCancelled'" data-testid="stage-close-reason"> · {{ t('approval.stageCloseReason.branchCancelled') }}</span>
       </template>
       <div v-if="s.status === 'queued' && !s.tasks.length && s.addSignNames?.length" class="text-body2 approval-wrap q-mb-xs" data-testid="stage-add-sign-to">
         {{ t('approval.panel.addSignTo', { names: s.addSignNames.join(t('common.listSeparator')) }) }}

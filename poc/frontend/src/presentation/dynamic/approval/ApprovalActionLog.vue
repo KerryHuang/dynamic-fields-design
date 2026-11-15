@@ -4,7 +4,7 @@ import { computed } from 'vue';
 import { useI18n } from 'vue-i18n';
 import type { ApprovalActionView } from 'src/domain/dynamic/approval-types';
 import { resolveI18n } from 'src/domain/dynamic/i18n-text';
-import type { ModuleSchema } from 'src/domain/dynamic/types';
+import type { I18nText, ModuleSchema } from 'src/domain/dynamic/types';
 import { fieldTypeRegistry } from 'src/presentation/dynamic/field-type-registry';
 import { labelOf } from './approval-display';
 
@@ -18,6 +18,15 @@ const fields = computed(() => new Map((props.schema?.blocks ?? []).flatMap((b) =
 function rerouteText(a: ApprovalActionView): string {
   const kind = (a.data as { kind?: string } | null)?.kind;
   return t(`approval.panel.reroute.${kind && ['flow', 'fallback', 'pick'].includes(kind) ? kind : 'generic'}`);
+}
+
+/**
+ * A branch cancellation (flow graph): the server's comment is a Traditional Chinese note for audit only, so the screen words it from `data.name`
+ * (the node name as an I18nText) in the reader's language; no name, or none in that language and zh-TW, reads as an unnamed branch.
+ */
+function branchCancelledText(a: ApprovalActionView): string {
+  const name = resolveI18n((a.data as { name?: I18nText } | null)?.name, locale.value);
+  return t('approval.panel.branchCancelled', { name: name || t('approval.panel.branchUnnamed') });
 }
 
 /** Why a seat stayed with its own holder (design 7.7): the targets are the holder and the delegate, in that order. */
@@ -58,9 +67,10 @@ function changes(a: ApprovalActionView): Change[] {
       </div>
       <div v-if="a.action === 'reroute'" class="q-pl-sm" data-testid="log-reroute">{{ rerouteText(a) }}</div>
       <div v-else-if="a.action === 'fallback'" class="q-pl-sm" data-testid="log-fallback">{{ t('approval.panel.fallbackNote') }}</div>
+      <div v-else-if="a.action === 'branch-cancelled'" class="q-pl-sm" data-testid="log-branch-cancelled-note">{{ branchCancelledText(a) }}</div>
       <div v-else-if="a.action === 'not-delegated' && notDelegatedText(a)" class="q-pl-sm" data-testid="log-not-delegated-note">{{ notDelegatedText(a) }}</div>
       <div v-if="targetsText(a)" class="q-pl-sm" data-testid="log-targets">{{ targetsText(a) }}</div>
-      <div v-if="a.action !== 'reroute' && a.action !== 'fallback' && a.comment" class="q-pl-sm" data-testid="log-comment">{{ a.comment }}</div>
+      <div v-if="a.action !== 'reroute' && a.action !== 'fallback' && a.action !== 'branch-cancelled' && a.comment" class="q-pl-sm" data-testid="log-comment">{{ a.comment }}</div>
       <ul v-if="changes(a).length" class="q-my-none">
         <li v-for="c in changes(a)" :key="c.fieldId">{{ t('approval.panel.changed', { field: c.label, before: c.before || '—', after: c.after || '—' }) }}</li>
       </ul>

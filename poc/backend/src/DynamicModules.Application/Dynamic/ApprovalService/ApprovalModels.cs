@@ -63,9 +63,10 @@ public sealed record RecordApprovalLock(IReadOnlyList<string> FieldKeys, bool De
 public sealed record ApprovalTaskView(long Id, string AssigneeUserId, string AssigneeName, string OriginalUserId, string Reason, string Status,
     DateTime? ActedTime, bool CanAct, bool CanReturnPrevious = false, string? OriginalName = null, bool CanAddSign = false);
 
+/// <summary>NodeId、BranchKey、CloseReason 只有流程圖實例填（J24），sequence 為 null、JSON 不寫出；CloseReason 是 <see cref="Domain.Entities.Dynamic.ApprovalCloseReasons"/>。</summary>
 public sealed record ApprovalStageView(long Id, int Seq, string? StageCode, I18nText Name, string Mode, string Status, string? SkipReason,
     DateTime? DueTime, IReadOnlyList<ApprovalTaskView> Tasks, IReadOnlyList<string> EditableFieldKeys, string? AddedByName = null,
-    IReadOnlyList<string>? AddSignNames = null);
+    IReadOnlyList<string>? AddSignNames = null, string? NodeId = null, string? BranchKey = null, string? CloseReason = null);
 
 public sealed record ApprovalActionView(string Action, string ActorUserId, string ActorName, string? OnBehalfOfUserId, IReadOnlyList<string> TargetUserIds,
     string? Comment, JsonElement? Data, DateTime CreatedTime, IReadOnlyList<string>? TargetNames = null, string? OnBehalfOfName = null);
