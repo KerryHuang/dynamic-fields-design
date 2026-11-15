@@ -2,6 +2,8 @@ using System.Text.Json;
 using System.Text.Json.Serialization;
 using DynamicModules.Application.Common;
 using DynamicModules.Application.Dynamic.ApprovalService;
+using DynamicModules.Application.Dynamic.RecordService.Data;
+using DynamicModules.Application.Dynamic.RecordService.Queries.GetRecord;
 using DynamicModules.Domain.Approvals;
 using DynamicModules.Domain.Entities.Dynamic;
 using FluentAssertions;
@@ -362,5 +364,29 @@ public class ApprovalGraphViewTests : ApprovalTestBase
 
         (await Inbox("gm", ApprovalInboxBoxes.Todo)).Items.Single().StageName!.Resolve("zh-TW").Should().Be(current).And.Be("mgr");
         (await Inbox("buyer1", ApprovalInboxBoxes.Submitted)).Items.Single().StageName!.Resolve("zh-TW").Should().Be("mgr");
+    }
+
+    [Fact]
+    public async Task RecordSummary_Graph_StageSeqCountsApprovalNodesOnly()
+    {
+        // 標頭「第 N 關」：graph 的 Seq 含開始、分支、匯合等結構節點，序號改成簽核節點的順位，與時間軸一致；sequence 不變（GetRecord_HasApprovalSummary）
+        var (r, id) = await Boot(ForkJoin());
+        var recordId = Inst(id).RecordId;
+        async Task<RecordApprovalSummary> Summary() => ((DynamicRecordResponse)(await Send(new GetRecordRequest(recordId))).Data!).Approval!;
+        int SeqOf(long inst, string node) => Db.Context.Set<ApprovalStageRun>().AsNoTracking().Single(x => x.InstanceId == inst && x.NodeId == node).Seq;
+        As("buyer1");
+
+        var first = await Summary();
+        first.StageName!.Resolve("zh-TW").Should().Be("a");
+        first.StageSeq.Should().Be(1);                         // a：開始、分支不算；run.Seq 本身是 3
+        SeqOf(id, "a").Should().BeGreaterThan(1);
+        await MustApprove(id, "fin1");
+        await MustApprove(id, "buyer2");
+
+        var last = await Summary();
+        last.StageName!.Resolve("zh-TW").Should().Be("c");
+        last.StageSeq.Should().Be(3);                          // c：a、b、c 三個簽核節點的第三個；匯合節點不算
+        (await ViewAs(id, "buyer1")).Stages.Select(s => s.NodeId).Should().Equal("a", "b", "c");
+        SeqOf(id, "c").Should().BeGreaterThan(3);
     }
 }

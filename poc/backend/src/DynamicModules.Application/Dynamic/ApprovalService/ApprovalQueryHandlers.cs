@@ -53,8 +53,13 @@ public sealed class ApprovalReader(IApprovalInstanceRepository repo, IDynamicAcc
         var pending = latest is { Status: ApprovalInstanceStatus.Pending } ? latest : null;
         var targets = await SubmitTargetsAsync(module, record, pending is not null, ct);
         if (latest is null && targets.Count == 0) return null;
-        var run = pending?.CurrentStageRunId is { } runId ? (await repo.ListRunsAsync([pending.Id], ct)).FirstOrDefault(r => r.Id == runId) : null;
-        return new RecordApprovalSummary(latest?.Status ?? NoInstance, run?.NameSnapshot, run?.Seq, targets.Count > 0);
+        var runs = pending is null ? [] : await repo.ListRunsAsync([pending.Id], ct);
+        var run = runs.FirstOrDefault(r => r.Id == pending?.CurrentStageRunId);
+        var seq = run?.Seq;
+        // graph：序號只數簽核節點，和時間軸（只列簽核節點，U6）看到的順序一致；Seq 把開始、分支、匯合等結構節點也算進去，不能直接給使用者
+        if (run is not null && ApprovalEngine.DefinitionOf(pending!) is { } def && ApprovalGraphMode.Applies(pending!, def))
+            seq = runs.Count(r => r.NodeKind == ApprovalNodeKinds.Approval && r.Seq <= run.Seq);
+        return new RecordApprovalSummary(latest?.Status ?? NoInstance, run?.NameSnapshot, seq, targets.Count > 0);
     }
 
     /// <summary>模組可讀、Approve 動作軸、記錄在資料範圍內（簽核管理員，設計 §7.8）。</summary>
