@@ -153,6 +153,7 @@ public sealed class ApprovalPreviewer(
                 }
                 var stage = NodeStage(step.NodeId);
                 if (stage.Status == PreviewStatuses.Skip && !designer) continue;
+                // 設計器只列路徑上會進入的自選節點（同 sequence）；FlowTrialPanel 不顯示 picks，所以與「全列」在畫面上沒有差別
                 if (stage.Status == PreviewStatuses.Pick) AddPick(g.Node(step.NodeId).AsStage());
                 stages.Add(stage with { AnyGroup = step.AnyGroup });
             }

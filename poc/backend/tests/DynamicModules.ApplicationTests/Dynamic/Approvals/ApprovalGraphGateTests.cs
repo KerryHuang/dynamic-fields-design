@@ -149,4 +149,17 @@ public class ApprovalGraphGateTests : ApprovalTestBase
         res.IsConflict.Should().BeTrue(Dump(res));
         res.Message.Should().Be(ApprovalMessages.GraphNotSupported("po-g").Resolve(null));
     }
+
+    [Fact]
+    public async Task Designer_ValidGraphFlow_ProductionDi_409_NoAlert()
+    {
+        var r = await WithGraphFlow();
+        As("admin");
+
+        var res = await Send(new PreviewApprovalFlowRequest("po-g", null, null, "buyer1"));
+
+        res.IsConflict.Should().BeTrue(Dump(res));
+        res.Message.Should().Be(ApprovalMessages.GraphNotSupported("po-g").Resolve(null));
+        Db.Context.Set<Notification>().AsNoTracking().Count(n => n.Kind == NotificationKinds.ApprovalAdminAlert).Should().Be(0);
+    }
 }

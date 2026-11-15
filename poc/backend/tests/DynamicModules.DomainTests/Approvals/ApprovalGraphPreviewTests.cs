@@ -241,6 +241,35 @@ public class ApprovalGraphPreviewTests
     }
 
     [Fact]
+    public void Walk_NestedAnyJoinInsideAnyGroup_KeepsInnerGroup()
+    {
+        // 外層任一到齊：分支 1 是 A → 內層任一到齊（P、Q）→ B，分支 2 是 C。內層項目保留內層代號，外層只補沒有代號的
+        var g = Build([Start(), Fork("f"), Appr("a"), Fork("f2"), Appr("p"), Appr("q"), Join("j2", "f2", ApprovalModes.Any), Appr("b"), Appr("c"),
+                Join("j", "f", ApprovalModes.Any), End()],
+            [E("e0", "start", "f"), E("fa", "f", "a"), E("fc", "f", "c"), E("af2", "a", "f2"), E("f2p", "f2", "p"), E("f2q", "f2", "q"),
+             E("pj2", "p", "j2"), E("qj2", "q", "j2"), E("j2b", "j2", "b"), E("bj", "b", "j"), E("cj", "c", "j"), E("je", "j", "end")]);
+
+        var w = Walk(g);
+
+        Ids(w).Should().Equal("a", "p", "q", "b", "c");
+        w.Steps.Select(s => s.AnyGroup).Should().Equal("j", "j2", "j2", "j", "j");
+    }
+
+    [Fact]
+    public void Walk_AnyJoin_HiddenConditionInBranch_NeverImmediate_EvenIfPassesSaysSo()
+    {
+        // 守住「確定立即到達」不得含依條件決定的項目：即使 passes 對條件節點也回 true，帶隱藏條件的分支仍不算立即到達
+        var g = Build([Start(), Fork("f"), Cond("c"), Appr("x"), Appr("b"), Join("j", "f", ApprovalModes.Any), End()],
+            [E("e0", "start", "f"), E("fc", "f", "c"), C("cx", "c", "x", "yes", 1, hidden: true), D("cj", "c", "j"),
+             E("xj", "x", "j"), E("fb", "f", "b"), E("bj", "b", "j"), E("je", "j", "end")]);
+
+        var w = Walk(g, "c", "x");
+
+        Ids(w).Should().Equal("c", "b");
+        w.Steps.Select(s => s.AnyGroup).Should().Equal("j", "j");
+    }
+
+    [Fact]
     public void Walk_UndecidableCondition_Reported()
     {
         var g = Build([Start(), Cond("c"), Appr("a"), Appr("b"), End(), End("end2")],

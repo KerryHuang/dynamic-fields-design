@@ -152,6 +152,42 @@ public class ApprovalGraphPreviewerTests : ApprovalTestBase
     }
 
     [Fact]
+    public async Task Preview_Graph_AnyJoin_ConditionalApprovalNode_NotImmediate_Grouped()
+    {
+        // 財務那條的略過條件引用發起人看不到的欄位：不確定會不會略過，不能當成立即到達（條件成立時兩個任務都會建）
+        var r = await WithGraph(x => G(
+            [Start(), Approval("mgr", Users("emp1")), Fork("f"), Approval("legal", Users("emp2")),
+             Approval("fin", Users("fin1"), when: Cond(x.Discount, "gt", 0)), Join("merge", "f", ApprovalModes.Any), End()],
+            [E("e1", "start", "mgr"), E("e2", "mgr", "f"), E("e3", "f", "legal"), E("e4", "f", "fin"), E("e5", "legal", "merge"), E("e6", "fin", "merge"),
+             E("e7", "merge", "end")]));
+        await HideFor(r.Module, r.Discount, EveryoneGroup());
+
+        var p = await Preview(r);
+
+        p.Stages.Select(s => (s.Code, s.Status, s.AnyGroup)).Should().Equal(
+            ("mgr", PreviewStatuses.Enter, null), ("legal", PreviewStatuses.Enter, "merge"), ("fin", PreviewStatuses.Conditional, "merge"));
+    }
+
+    [Fact]
+    public async Task Designer_Graph_ConditionNode_Evaluated()
+    {
+        // 設計器試算沒有隱藏的概念：條件節點照常求值，不出現「依條件決定」；同一張單的記錄預覽才是 conditional
+        var r = await WithGraph(x => G(
+            [Start(), Condition("c"), Approval("big", Users("gm")), Approval("small", Users("emp1")), End(), End("end2")],
+            [E("e1", "start", "c"), E("e2", "c", "big", Cond(x.Discount, "gt", 0), order: 1), E("e3", "c", "small", isDefault: true),
+             E("e4", "big", "end"), E("e5", "small", "end2")]));
+        await HideFor(r.Module, r.Discount, EveryoneGroup());
+
+        var yes = await Designer(V((r.Discount, 5)));
+        var no = await Designer(V((r.Discount, 0)));
+        var record = await Preview(r);
+
+        yes.Stages.Select(s => (s.Code, s.Status)).Should().Equal(("big", PreviewStatuses.Enter));
+        no.Stages.Select(s => (s.Code, s.Status)).Should().Equal(("small", PreviewStatuses.Enter));
+        record.Stages.Select(s => (s.Code, s.Status)).Should().Equal(("c", PreviewStatuses.Conditional));
+    }
+
+    [Fact]
     public async Task Preview_Graph_PickListsAllPickNodes()
     {
         // 自選節點不論在不在預計路徑上都要列人選要求（送出驗證要求每一個）

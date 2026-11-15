@@ -93,6 +93,7 @@ public static class ApprovalGraphPreview
                         continue;
                     }
                     case ApprovalNodeKinds.Join:
+                        // 防線：結構驗證保證並行區單一出口、結束不在區內，正常走不到別的匯合
                         return seg;
                     default:
                     {
