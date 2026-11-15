@@ -108,6 +108,8 @@ public static class AppMessages
     public static string ExportFlowError(string flow, string detail) => $"簽核流程「{flow}」{detail}";
     public static string ExportFlowStageAt(string stage) => $"關卡「{stage}」";
     public const string ExportFlowFallbackAt = "的備援簽核人";
+    /// <summary>流程圖格式在套件格式升版（fg6）前不能匯出（U3）；fg6 刪除。</summary>
+    public const string ExportFlowGraph = "使用流程圖格式，套件格式升版前不能匯出";
     public static string ExportFlowUsers(string where) => $"{where}指定了具體使用者，帳號屬於這個資料庫，套件不收";
     public static string ExportFlowUnmatched(string where) => $"{where}有開啟套件時略過的群組，請先在設計器移除或補上群組";
     public const string ExportFlowFieldMissing = "引用了停用或未匯出的欄位";

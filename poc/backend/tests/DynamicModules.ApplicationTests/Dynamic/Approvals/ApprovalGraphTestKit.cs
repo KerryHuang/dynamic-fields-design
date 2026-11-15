@@ -1,15 +1,11 @@
 using System.Text.Json;
-using DynamicModules.Application.Dynamic.ApprovalService;
 using DynamicModules.Domain.Approvals;
 using DynamicModules.Domain.ValueObjects;
-using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Extensions.DependencyInjection.Extensions;
 
 namespace DynamicModules.ApplicationTests.Dynamic.Approvals;
 
 /// <summary>
-/// graph 測試的共用輔助（計畫 fg2 Global Constraints「測試輔助集中一次」）：組流程圖定義的建構函式與擋門開關。
-/// 跑 graph 引擎的測試類覆寫 <c>ConfigureServices</c> 呼叫 <see cref="OpenGate"/>；沒有呼叫的測試主機走正式的 DI 組態，擋門維持關閉。
+/// graph 測試的共用輔助（計畫 fg2 Global Constraints「測試輔助集中一次」）：組流程圖定義的建構函式。
 /// </summary>
 public static class ApprovalGraphTestKit
 {
@@ -42,13 +38,4 @@ public static class ApprovalGraphTestKit
 
     public static ApprovalDefinition G(List<ApprovalNodeDef> nodes, List<ApprovalEdgeDef> edges, JsonElement? when = null) =>
         new(ApprovalShapes.Graph, when, null, null, [], nodes, edges);
-
-    /// <summary>把擋門換成開啟版（只有測試能這樣做：正式環境沒有設定檔、環境變數可以開，計畫 J1）。要在 <c>AddApplication()</c> 之後呼叫。</summary>
-    public static void OpenGate(IServiceCollection services) =>
-        services.Replace(ServiceDescriptor.Singleton<ApprovalShapeGate, OpenShapeGate>());
-
-    internal sealed class OpenShapeGate : ApprovalShapeGate
-    {
-        public override bool Open => true;
-    }
 }

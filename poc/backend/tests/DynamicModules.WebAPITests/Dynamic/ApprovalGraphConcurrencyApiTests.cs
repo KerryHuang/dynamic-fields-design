@@ -1,7 +1,6 @@
 using System.Net;
 using System.Net.Http.Json;
 using System.Text.Json;
-using DynamicModules.Application.Dynamic.ApprovalService;
 using DynamicModules.Domain.Approvals;
 using DynamicModules.Domain.Data;
 using DynamicModules.Domain.Entities.Dynamic;
@@ -10,7 +9,6 @@ using DynamicModules.Domain.ValueObjects;
 using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Extensions.DependencyInjection.Extensions;
 using static DynamicModules.WebAPITests.Dynamic.ApiTestKit;
 
 namespace DynamicModules.WebAPITests.Dynamic;
@@ -21,7 +19,7 @@ namespace DynamicModules.WebAPITests.Dynamic;
 /// 不是交錯提交；真正的交錯提交與重試只有 PostgreSQL 驗得到，所以整個類別標 Postgres（TestApp 目前寫死 SQLite，pg0 補 provider 切換前是「未驗證」）。
 /// 提醒：在 SQLite 上本類別只證明「排隊之後結果正確」；處理權、重試與 reload 的正確性由 ApplicationTests 的替身守住
 /// （ApprovalGraphConcurrencyTests，J18），完全不取處理權或不 reload 時，這裡仍全綠。
-/// 流程圖版本由測試直接寫進資料庫（API 到 fg2g2 才收 graph），擋門以 <see cref="TestApp.ExtraServices"/> 換成開啟版。
+/// 流程圖版本由測試直接寫進資料庫（先以一關的 sequence 存檔、再換定義，簽核人用 users 來源）。
 /// </summary>
 [Trait("Category", "Postgres")]
 public class ApprovalGraphConcurrencyApiTests : IDisposable
@@ -31,17 +29,12 @@ public class ApprovalGraphConcurrencyApiTests : IDisposable
 
     public ApprovalGraphConcurrencyApiTests()
     {
-        _app = new TestApp(fileDatabase: true) { ExtraServices = s => s.Replace(ServiceDescriptor.Singleton<ApprovalShapeGate, OpenShapeGate>()) };
+        _app = new TestApp(fileDatabase: true);
         _app.Settings["Logging:LogLevel:Default"] = "Warning";
         _admin = _app.AsUser();
     }
 
     public void Dispose() => _app.Dispose();
-
-    private sealed class OpenShapeGate : ApprovalShapeGate
-    {
-        public override bool Open => true;
-    }
 
     private static Dictionary<string, string> Zh(string s) => new() { ["zh-TW"] = s };
 

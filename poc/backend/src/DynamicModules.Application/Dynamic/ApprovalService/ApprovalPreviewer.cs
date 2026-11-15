@@ -64,7 +64,7 @@ public sealed class ApprovalSubmitEligibility(
 /// </summary>
 public sealed class ApprovalPreviewer(
     IApprovalFlowRepository flows, IModuleRepository modules, ApproverResolver resolver, IPermissionRepository permissions,
-    FieldTypeRegistry registry, IBusinessTime time, IDynamicAccessGuard guard, ApprovalHiddenFields hiddenFields, ApprovalShapeGate gate)
+    FieldTypeRegistry registry, IBusinessTime time, IDynamicAccessGuard guard, ApprovalHiddenFields hiddenFields)
 {
     /// <summary>flowSet 省略時用目標狀態上目前的流程；設計器試算草稿時由呼叫端給（Key 對應 FlowKey 回報）。</summary>
     public async Task<ServiceResult> PreviewAsync(Module module, long to, TransitionApproval approval,
@@ -81,8 +81,6 @@ public sealed class ApprovalPreviewer(
         if (match is null)
             return ServiceResult.Success(new ApprovalPreviewResponse(
                 approval.NoMatch == ApprovalNoMatch.Direct ? ApprovalPreviewOutcomes.Direct : ApprovalPreviewOutcomes.Blocked, null, [], []));
-
-        if (gate.Reject(match) is { } gated) return gated;
 
         var users = await permissions.ListUsersAsync(ct);
         var names = users.ToDictionary(u => u.UserId, u => string.IsNullOrEmpty(u.DisplayName) ? u.UserId : u.DisplayName);

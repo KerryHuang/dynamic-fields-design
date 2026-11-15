@@ -19,7 +19,7 @@ public sealed partial class ApprovalDefinitionValidator(
 {
     /// <summary>
     /// previous 是這個流程目前版本的定義（新流程為 null）：數值上限「改嚴只管之後」，超過上限而且比舊版大才擋（政策設計 §3.5）。
-    /// shape 是 graph 時走 ApprovalDefinitionValidator.Graph.cs，最後固定加一則 shape 錯誤（fg1 還不收流程圖，fg2 刪那一行）。
+    /// shape 是 graph 時走 ApprovalDefinitionValidator.Graph.cs。
     /// </summary>
     public async Task<Dictionary<string, string[]>> ValidateAsync(
         Module module, Workflow wf, ApprovalDefinition d, ApprovalDefinition? previous, CancellationToken ct)

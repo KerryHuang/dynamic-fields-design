@@ -635,6 +635,36 @@ public class AppFormat8Tests : IDisposable
     }
 
     [Fact]
+    public async Task Export_WithGraphFlow_409()
+    {
+        // U3：套件格式 fg6 才升版，流程圖流程現在匯出會變成沒有關卡的流程，整份擋下並指名流程
+        await ImportOpenAsync();
+        var group = _rig.GroupId("ops-manager");
+        await UpdateFlowAsync(Large, d =>
+        {
+            d["shape"] = "graph";
+            d["stages"] = new JsonArray();
+            d["nodes"] = new JsonArray(
+                new JsonObject { ["id"] = "start", ["kind"] = "start" },
+                new JsonObject
+                {
+                    ["id"] = "a", ["kind"] = "approval", ["name"] = new JsonObject { ["zh-TW"] = "主管" },
+                    ["approvers"] = new JsonObject { ["source"] = "group", ["groupIds"] = new JsonArray(group) },
+                    ["mode"] = "any", ["editableFields"] = new JsonArray(), ["onEmpty"] = "fallback"
+                },
+                new JsonObject { ["id"] = "end", ["kind"] = "end" });
+            d["edges"] = new JsonArray(
+                new JsonObject { ["id"] = "e1", ["from"] = "start", ["to"] = "a" },
+                new JsonObject { ["id"] = "e2", ["from"] = "a", ["to"] = "end" });
+        });
+
+        var res = await ExportRawAsync();
+
+        res.StatusCode.Should().Be(HttpStatusCode.Conflict);
+        (await res.Content.ReadAsStringAsync()).Should().Contain("簽核流程「採購單（大額）」使用流程圖格式，套件格式升版前不能匯出");
+    }
+
+    [Fact]
     public async Task Export_UnmatchedUnits_409()
     {
         await ImportOpenAsync(null, "board");

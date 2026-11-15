@@ -116,6 +116,9 @@ public static partial class AppApprovalFlowCodec
     public static (AppApprovalFlow? Flow, List<string> Errors) ToPackage(
         ApprovalFlow flow, ApprovalDefinition current, string moduleCode, long statusFieldId, AppReportCodec.Names n, Func<long, string?> groupCode)
     {
+        // 套件格式還沒有流程圖（fg6 升版）：照 stages 匯出會變成沒有關卡的流程，所以整份擋下並指名流程（U3）
+        if (current.Shape == ApprovalShapes.Graph)
+            return (null, [AppMessages.ExportFlowError(flow.NameI18n.Resolve(I18nText.FallbackLocale), AppMessages.ExportFlowGraph)]);
         var details = new List<string>();
         string Option(long id) => n.Option(statusFieldId, id) ?? Add(AppMessages.ExportFlowStateMissing);
         string Field(long id) => n.Field(id) ?? Add(AppMessages.ExportFlowFieldMissing);

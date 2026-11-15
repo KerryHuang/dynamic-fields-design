@@ -194,8 +194,10 @@ public class ApprovalDeleteGuardTests : ApprovalTestBase
     {
         var y = await SeedFlow(r, "po-y", r.Confirmed, 1, NotifyGraph(edgeField, templateField, group));
         await SeedInstance(r, y, instanceStatus, snapshotOnly: true);
-        var upd = await Send(new UpdateApprovalFlowRequest("po-y",
-            new ApprovalFlowInput("po-y", Text("po-y"), r.Confirmed, 1, true, Def(null, Stage("mgr", Manager(1))))));
+        // 目前版本是流程圖就不能存回關卡格式（U4），所以 v2 也是流程圖，只是不再引用欄位與群組
+        var v2 = ApprovalGraphTestKit.G([ApprovalGraphTestKit.Start(), ApprovalGraphTestKit.Approval("mgr", Manager(1)), ApprovalGraphTestKit.End()],
+            [ApprovalGraphTestKit.E("e1", "start", "mgr"), ApprovalGraphTestKit.E("e2", "mgr", "end")]);
+        var upd = await Send(new UpdateApprovalFlowRequest("po-y", new ApprovalFlowInput("po-y", Text("po-y"), r.Confirmed, 1, true, v2)));
         upd.IsSuccess.Should().BeTrue(Dump(upd));
         ((ApprovalFlowResponse)upd.Data!).Version.Should().Be(2);
     }

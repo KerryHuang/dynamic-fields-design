@@ -16,8 +16,7 @@ public enum ClaimScope { Task, Instance }
 
 /// <summary>動作的共同前置與載入（設計 §7、§8.4）。</summary>
 public sealed class ApprovalActionSupport(
-    IApprovalInstanceRepository repo, IModuleRepository modules, IRecordRepository records, ApprovalPolicies policies, ApprovalReader reader,
-    ApprovalShapeGate gate)
+    IApprovalInstanceRepository repo, IModuleRepository modules, IRecordRepository records, ApprovalPolicies policies, ApprovalReader reader)
 {
     /// <summary>
     /// 呼叫者是這個實例的簽核管理員（設計 §7.8）；實例、模組或記錄不存在回 false（LoadAsync 的 authorize 回 403，實例不存在才 404）。
@@ -94,8 +93,6 @@ public sealed class ApprovalActionSupport(
         var graph = def is not null && ApprovalGraphMode.Applies(inst, def);
         if (!graph && inst.Status != ApprovalInstanceStatus.Pending) return (null, ServiceResult.Conflict(ApprovalMessages.StageHandled));
         if (def is null) return (null, ServiceResult.Conflict(ApprovalMessages.FlowVersionMissing));
-        // 綁定的是 graph 定義（回退後遇到 fg2 留下的實例）：引擎還不會跑，任何任務與實例動作都擋，要在換 RowVersion、讀關卡之前
-        if (gate.Reject(inst.FlowSetSnapshot.FirstOrDefault(e => e.FlowVersionId == inst.FlowVersionId)) is { } gated) return (null, gated);
         var next = Guid.NewGuid().ToString();
         if (graph)
         {
@@ -189,7 +186,7 @@ public sealed record AddSignPlan(IReadOnlyList<string> UserIds, string Mode);
 public sealed class ApprovalApprover(
     IApprovalInstanceRepository repo, ApprovalActionSupport support, ApprovalEngine engine, ApprovalTransitionRunner runner,
     ICurrentUser user, IBusinessTime time, IUnitOfWork uow, IModuleRepository modules, FieldTypeRegistry registry,
-    IDynamicAccessGuard guard, IRecordRepository records, ApprovalReadGrant grant, ApprovalShapeGate gate, ApprovalPolicies policies)
+    IDynamicAccessGuard guard, IRecordRepository records, ApprovalReadGrant grant, ApprovalPolicies policies)
 {
     public async Task<ServiceResult> ApproveAsync(long taskId, string rowVersion, string? comment, Dictionary<string, JsonElement?>? requestValues,
         AddSignPlan? addSign, CancellationToken ct)
@@ -232,7 +229,6 @@ public sealed class ApprovalApprover(
         if (check.UndecidableNode is { } badNode)
             return engine.RuntimeInvalid(inst, $"重新比對時條件節點 {badNode.Id} 無法判斷（引用的欄位或選項已不在）",
                 ApprovalMessages.ConditionNodeUndecidable((object?)badNode.Name ?? badNode.Id));
-        if (gate.Reject(check.NewFlow) is { } gated) return gated;
         if (check.Changed)
         {
             // 這次同意不計入；回 200 讓交易提交，重來的實例才建得起來

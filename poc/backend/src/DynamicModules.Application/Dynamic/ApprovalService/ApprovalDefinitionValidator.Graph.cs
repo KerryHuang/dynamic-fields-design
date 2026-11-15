@@ -38,6 +38,8 @@ public sealed partial class ApprovalDefinitionValidator
                     x.StageErrors(n.AsStage(), p, before is { Kind: ApprovalNodeKinds.Approval } ? before.AsStage() : null);
                     break;
                 case ApprovalNodeKinds.Notify:
+                    // 引擎到 fg5 才會推進通知節點：存檔先拒收（U2，fg5 刪這一行）
+                    x.Err(p, ApprovalMessages.NotifyNodeNotYet);
                     NotifyErrors(x, n, p, before is { Kind: ApprovalNodeKinds.Notify } ? before : null);
                     break;
                 default:
@@ -60,9 +62,6 @@ public sealed partial class ApprovalDefinitionValidator
                 && x.ConditionError(w) is { } we)
                 x.Err($"{k}.when", ApprovalMessages.WhenInvalid(we));
         }
-
-        // fg2 之前流程圖一律不收；fg2 刪這一行就開放（計畫 J9）
-        x.Err("shape", ApprovalMessages.GraphNotAccepted);
     }
 
     /// <summary>通知節點（G10）：名稱必填、收件人 1 到 20 項且參數合法、範本標題與內文語法正確並只引用本模組啟用中的欄位。</summary>

@@ -28,7 +28,6 @@ public class ApprovalGraphConcurrencyTests : ApprovalTestBase
 
     protected override void ConfigureServices(IServiceCollection services)
     {
-        OpenGate(services);
         services.Replace(ServiceDescriptor.Scoped<IApprovalInstanceRepository>(_ =>
             FlakyClaimRepository.Wrap(new ApprovalInstanceRepository(Db.Context), _claim)));
     }
@@ -516,7 +515,7 @@ public class ApprovalGraphConcurrencyTests : ApprovalTestBase
         Inst(id).Status.Should().Be(ApprovalInstanceStatus.Pending);
     }
 
-    // ───────── 審查 fg2f：晚到訊息優先序、實例層 reload、擋門順序、pending 防線 ─────────
+    // ───────── 審查 fg2f：晚到訊息優先序、實例層 reload、pending 防線 ─────────
 
     [Fact]
     public async Task LateApprove_BranchCancelledThenInstanceRejected_InstanceReturnedBeatsBranchCompleted()
@@ -681,58 +680,5 @@ public class ApprovalGraphConcurrencyTests : ApprovalTestBase
 
         res.IsConflict.Should().BeFalse();
         res.Errors["userIds"].Should().Equal(ApprovalMessages.AddSignLimit(1).Resolve(null));
-    }
-}
-
-/// <summary>
-/// 擋門在處理權之前（J1）：正式 DI（擋門關閉）下，綁了流程圖的實例，6 種動作都在處理權之前回 409，
-/// 條件更新、讀版本、reload 一次都不該被呼叫。ApprovalShapeGateTests 只比對資料，擋門晚到（交易回滾）看不出差別，所以另用計數替身守順序。
-/// </summary>
-public class ApprovalGraphGateOrderTests : ApprovalTestBase
-{
-    protected override bool ScopePerRequest => true;
-
-    private readonly ApprovalGraphConcurrencyTests.ClaimControl _claim = new();
-
-    protected override void ConfigureServices(IServiceCollection services) =>
-        services.Replace(ServiceDescriptor.Scoped<IApprovalInstanceRepository>(_ =>
-            ApprovalGraphConcurrencyTests.FlakyClaimRepository.Wrap(new ApprovalInstanceRepository(Db.Context), _claim)));
-
-    [Fact]
-    public async Task BoundGraphInstance_AllActions_409BeforeAnyClaim()
-    {
-        var r = await BuildPurchase();
-        await SeedFlow(r, "po-s", r.Confirmed, 1, Def(null, Stage("s1", Users("fin1"))));
-        (await SaveWorkflow(r, [Needs(r.Draft, r.Confirmed), Plain(r.Confirmed, r.Partial), Plain(r.Partial, r.Received),
-            Plain(r.Confirmed, r.Cancelled)])).IsSuccess.Should().BeTrue();
-        await GrantEveryone(r.Module, r.Extra);
-        As("buyer1");
-        var po = await NewPo(r, price: 5000);
-        var id = (await MustSubmit(po.Id, r.Confirmed)).InstanceId!.Value;
-        // 開著的擋門只認「定義是 graph」：把快照裡綁定版本的定義換成流程圖，其餘照正式 DI
-        var inst = Db.Context.Set<ApprovalInstance>().Single(i => i.Id == id);
-        var graph = G(
-            [Start(), Fork("f"), Approval("a", Users("fin1")), Approval("b", Users("buyer2")), Join("j", "f", ApprovalModes.All), End()],
-            [E("e0", "start", "f"), E("fa", "f", "a"), E("fb", "f", "b"), E("aj", "a", "j"), E("bj", "b", "j"), E("je", "j", "end")]);
-        inst.FlowSetSnapshot = inst.FlowSetSnapshot
-            .Select(e => e.FlowVersionId == inst.FlowVersionId ? e with { Definition = graph } : e).ToList();
-        await Db.Context.SaveChangesAsync();
-        Db.Context.ChangeTracker.Clear();
-        var task = TasksOf(id).Single(t => t.Status == ApprovalTaskStatus.Open);
-        var rv = Inst(id).RowVersion;
-        _claim.Calls = 0;
-        _claim.GuardCalls = 0;
-
-        As("fin1");
-        (await Send(new ApproveTaskRequest(task.Id, rv, null, null))).IsConflict.Should().BeTrue();
-        (await Send(new RejectTaskRequest(task.Id, rv, "x", RejectTaskHandler.ToInitiator))).IsConflict.Should().BeTrue();
-        (await Send(new TransferTaskRequest(task.Id, rv, "emp2", null))).IsConflict.Should().BeTrue();
-        As("buyer1");
-        (await Send(new WithdrawApprovalRequest(id, rv, null))).IsConflict.Should().BeTrue();
-        As("admin");
-        (await Send(new CancelApprovalRequest(id, rv, "x"))).IsConflict.Should().BeTrue();
-        (await Send(new ReassignTaskRequest(task.Id, rv, "emp2", null))).IsConflict.Should().BeTrue();
-
-        (_claim.Calls + _claim.GuardCalls).Should().Be(0, "擋門要在取得處理權之前");
     }
 }

@@ -15,8 +15,6 @@ public class ApprovalGraphPreviewerTests : ApprovalTestBase
 {
     protected override bool ScopePerRequest => true;
 
-    protected override void ConfigureServices(IServiceCollection services) => OpenGate(services);
-
     private long EveryoneGroup() => Db.Context.Set<PermissionGroup>().AsNoTracking().Single(g => g.Key == "everyone").Id;
 
     /// <summary>草稿 → 已確認需簽核（沒有流程符合就擋），已確認只有這一條流程圖。</summary>
@@ -249,6 +247,21 @@ public class ApprovalGraphPreviewerTests : ApprovalTestBase
     public async Task Preview_Graph_BrokenGraph_409_PreviewInvalid_NoAlert()
     {
         var r = await WithGraph(_ => NoDefaultEdge());
+        As("buyer1");
+        var po = await NewPo(r);
+
+        var res = await Send(new PreviewRecordApprovalRequest(po.Id, r.Confirmed));
+
+        res.IsConflict.Should().BeTrue(Dump(res));
+        res.Message.Should().Be(ApprovalMessages.GraphPreviewInvalid("po-g").Resolve(null));
+        AdminAlerts().Should().Be(0);
+    }
+
+    [Fact]
+    public async Task Preview_GraphWithoutNodes_409_PreviewInvalid()
+    {
+        // 只有 shape、沒有節點與連線（繞過驗證寫入）：原擋門測試 Preview_MatchedGraphFlow_409 搬家，訊息改成預覽專用
+        var r = await WithGraph(_ => new ApprovalDefinition(ApprovalShapes.Graph, null, null, null, []));
         As("buyer1");
         var po = await NewPo(r);
 

@@ -11,14 +11,12 @@ using static DynamicModules.ApplicationTests.Dynamic.Approvals.ApprovalGraphTest
 namespace DynamicModules.ApplicationTests.Dynamic.Approvals;
 
 /// <summary>
-/// 流程圖的退回、撤回、終止（計畫 fg2 Task 6；流程圖設計 §8.4–§8.6；U11 結構不合法時的動作對照）：測試主機換成開啟的擋門，graph 才跑得到引擎。
+/// 流程圖的退回、撤回、終止（計畫 fg2 Task 6；流程圖設計 §8.4–§8.6；U11 結構不合法時的動作對照）。
 /// 簽核人：a、a1＝fin1、a2＝fin2、b＝buyer2、c＝gm；發起人 buyer1。
 /// </summary>
 public class ApprovalGraphActionTests : ApprovalTestBase
 {
     protected override bool ScopePerRequest => true;
-
-    protected override void ConfigureServices(IServiceCollection services) => OpenGate(services);
 
     // ───────── 圖與情境 ─────────
 

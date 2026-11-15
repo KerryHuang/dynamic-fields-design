@@ -10,7 +10,7 @@ using Microsoft.Extensions.DependencyInjection;
 
 namespace DynamicModules.ApplicationTests.Dynamic.Approvals;
 
-/// <summary>流程圖格式的定義驗證（流程圖設計 §9 G6 語法、G9、G10、G13 政策）；fg1 期間 graph 一律再加一則 shape 錯誤（計畫 J9）。</summary>
+/// <summary>流程圖格式的定義驗證（流程圖設計 §9 G6 語法、G9、G10、G13 政策）；fg2g2 起 API 收 graph，只有通知節點在 fg5 之前多一則暫時錯誤（鍵 nodes.{id}，U2）。</summary>
 public class ApprovalGraphDefinitionValidatorTests : ApprovalTestBase
 {
     protected override bool ScopePerRequest => true;
@@ -74,11 +74,24 @@ public class ApprovalGraphDefinitionValidatorTests : ApprovalTestBase
     private static ApprovalNodeDef Notify(ApprovalNodeDef n, Func<NotifyTemplateDef, NotifyTemplateDef> f) => n with { Template = f(n.Template!) };
 
     [Fact]
-    public async Task Graph_DesignExample_OnlyShapeGateError()
+    public async Task Graph_DesignExample_OnlyNotifyNotYetError()
     {
+        // 設計範例含通知節點 tell-hr：fg5 之前只有這一則暫時錯誤（U2）
         var errors = await Validate(await DesignAsync());
-        errors.Keys.Should().Equal("shape");
-        errors["shape"][0].Should().Be(ApprovalMessages.GraphNotAccepted);
+        errors.Keys.Should().Equal("nodes.tell-hr");
+        errors["nodes.tell-hr"][0].Should().Be(ApprovalMessages.NotifyNodeNotYet);
+    }
+
+    [Fact]
+    public async Task Graph_WithoutNotifyNode_NoErrors()
+    {
+        var d = await DesignAsync();
+        var noNotify = d with
+        {
+            Nodes = [.. d.Nodes!.Where(n => n.Id != "tell-hr")],
+            Edges = [.. d.Edges!.Where(e => e.To != "tell-hr" && e.From != "tell-hr"), new("e4", "amount", "end", Default: true), new("e9", "merge", "end")]
+        };
+        (await Validate(noNotify)).Should().BeEmpty();
     }
 
     [Fact]
@@ -155,7 +168,7 @@ public class ApprovalGraphDefinitionValidatorTests : ApprovalTestBase
         E(await Validate(Mod(d, "tell-hr", n => n with { Recipients = [.. Enumerable.Range(0, max + 1).Select(_ => new NotifyRecipientDef(ApprovalNotifyRecipientKinds.Initiator))] })),
             "nodes.tell-hr.recipients").Should().Be(ApprovalMessages.NotifyRecipientsCount(max));
         (await Validate(Mod(d, "tell-hr", n => n with { Recipients = [.. Enumerable.Range(0, max).Select(_ => new NotifyRecipientDef(ApprovalNotifyRecipientKinds.Initiator))] })))
-            .Keys.Should().Equal("shape");
+            .Keys.Should().Equal("nodes.tell-hr");
     }
 
     [Fact]
@@ -166,7 +179,7 @@ public class ApprovalGraphDefinitionValidatorTests : ApprovalTestBase
 
         // 單獨的大括號照字面，不是錯誤（U8）
         d = Mod(d, "tell-hr", n => Notify(n, t => t with { Body = Text("收到 :-}") }));
-        (await Validate(d)).Keys.Should().Equal("shape");
+        (await Validate(d)).Keys.Should().Equal("nodes.tell-hr");
     }
 
     [Fact]
@@ -189,7 +202,7 @@ public class ApprovalGraphDefinitionValidatorTests : ApprovalTestBase
         var title = ApprovalGraphLimits.MaxTemplateTitleLength;
         E(await Validate(Mod(d, "tell-hr", n => Notify(n, t => t with { Title = Text(new string('字', title + 1)) }))),
             "nodes.tell-hr.template.title").Should().Be(ApprovalMessages.TemplateTooLong(title));
-        (await Validate(Mod(d, "tell-hr", n => Notify(n, t => t with { Title = Text(new string('字', title)) })))).Keys.Should().Equal("shape");
+        (await Validate(Mod(d, "tell-hr", n => Notify(n, t => t with { Title = Text(new string('字', title)) })))).Keys.Should().Equal("nodes.tell-hr");
         E(await Validate(Mod(d, "tell-hr", n => Notify(n, t => t with { Body = Text(new string('字', ApprovalGraphLimits.MaxTemplateBodyLength + 1)) }))),
             "nodes.tell-hr.template.body").Should().Be(ApprovalMessages.TemplateTooLong(ApprovalGraphLimits.MaxTemplateBodyLength));
     }
@@ -212,8 +225,8 @@ public class ApprovalGraphDefinitionValidatorTests : ApprovalTestBase
         E(await Validate(Mod(d, "tell-hr", n => n with { Recipients = [new(ApprovalNotifyRecipientKinds.InitiatorManager, Level: 6)] })),
             "nodes.tell-hr.recipients").Should().Be(ApprovalMessages.ManagerLevel(5));
         // 沒填層數照設計 §12.1 預設第 1 層（再驗政策上限）
-        (await Validate(Mod(d, "tell-hr", n => n with { Recipients = [new(ApprovalNotifyRecipientKinds.InitiatorManager)] }))).Keys.Should().Equal("shape");
-        (await Validate(Mod(d, "tell-hr", n => n with { Recipients = [new(ApprovalNotifyRecipientKinds.InitiatorManager, Level: 5)] }))).Keys.Should().Equal("shape");
+        (await Validate(Mod(d, "tell-hr", n => n with { Recipients = [new(ApprovalNotifyRecipientKinds.InitiatorManager)] }))).Keys.Should().Equal("nodes.tell-hr");
+        (await Validate(Mod(d, "tell-hr", n => n with { Recipients = [new(ApprovalNotifyRecipientKinds.InitiatorManager, Level: 5)] }))).Keys.Should().Equal("nodes.tell-hr");
     }
 
     [Fact]
@@ -221,7 +234,7 @@ public class ApprovalGraphDefinitionValidatorTests : ApprovalTestBase
     {
         var d = await DesignAsync();
         var old = Mod(d, "tell-hr", n => n with { Recipients = [new(ApprovalNotifyRecipientKinds.InitiatorManager, Level: 6)] });
-        (await Validate(old, old)).Keys.Should().Equal("shape");
+        (await Validate(old, old)).Keys.Should().Equal("nodes.tell-hr");
         var higher = Mod(d, "tell-hr", n => n with { Recipients = [new(ApprovalNotifyRecipientKinds.InitiatorManager, Level: 7)] });
         E(await Validate(higher, old), "nodes.tell-hr.recipients").Should().Contain("沿用原本的數字");
     }
@@ -232,7 +245,7 @@ public class ApprovalGraphDefinitionValidatorTests : ApprovalTestBase
         var d = await DesignAsync();
         // 分支、條件、匯合名稱可以省略（U6）
         var noOptional = Mod(Mod(Mod(d, "split", n => n with { Name = null }), "amount", n => n with { Name = null }), "merge", n => n with { Name = null });
-        (await Validate(noOptional)).Keys.Should().Equal("shape");
+        (await Validate(noOptional)).Keys.Should().Equal("nodes.tell-hr");
 
         var errors = await Validate(Mod(Mod(Mod(d, "mgr", n => n with { Name = null }), "tell-hr", n => n with { Name = null }),
             "split", n => n with { Name = new I18nText([KeyValuePair.Create("en-US", "x")]) }));
@@ -253,7 +266,7 @@ public class ApprovalGraphDefinitionValidatorTests : ApprovalTestBase
         };
         var errors = await Validate(d);
         E(errors, "nodes.x3").Should().Be(ApprovalMessages.Graph("unreachable"));
-        E(errors, "shape").Should().Be(ApprovalMessages.GraphNotAccepted);
+        errors.Keys.Should().NotContain("shape");
     }
 
     /// <summary>不合法並行區（共享案例 AG-090 的圖）：存檔驗證要回 G7／G8 錯誤，不能因警告分析無限遞迴而讓程序終止。</summary>
@@ -298,7 +311,7 @@ public class ApprovalGraphDefinitionValidatorTests : ApprovalTestBase
             Nodes = [.. d.Nodes!, Approval("ops", Group(BoardGroup), "營運")],
             Edges = [.. d.Edges!, new("e11", "split", "ops"), new("e12", "ops", "merge")]
         };
-        (await Validate(d)).Keys.Should().Equal("shape");   // 三條分支，出廠上限 5
+        (await Validate(d)).Keys.Should().Equal("nodes.tell-hr");   // 三條分支，出廠上限 5
 
         Db.Context.Add(new ModulePolicy { ModuleId = _r.ModuleId, Code = PolicyCatalog.ApprovalMaxBranches.Code, Value = "2", ModifiedUserId = "admin" });
         await Db.Context.SaveChangesAsync();
@@ -317,7 +330,7 @@ public class ApprovalGraphDefinitionValidatorTests : ApprovalTestBase
 
         E(await Validate(Linear(13)), "graph").Should().Be(ApprovalMessages.Graph("approvalNodesTooMany", 10, 5));
         E(await Validate(Linear(13), previous), "graph").Should().Be(ApprovalMessages.Graph("approvalNodesTooMany", 10, 5));
-        (await Validate(Linear(12), previous)).Keys.Should().Equal("shape");
+        (await Validate(Linear(12), previous)).Should().BeEmpty();
         E(await Validate(Linear(12)), "graph").Should().Be(ApprovalMessages.Graph("approvalNodesTooMany", 10, 5));
     }
 

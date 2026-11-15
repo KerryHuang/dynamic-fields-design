@@ -12,14 +12,12 @@ using static DynamicModules.ApplicationTests.Dynamic.Approvals.ApprovalGraphTest
 namespace DynamicModules.ApplicationTests.Dynamic.Approvals;
 
 /// <summary>
-/// 流程圖實例的檢視與簽核中心（計畫 fg2 Task 8；U5、U6、J24；設計 §8.5）：測試主機換成開啟的擋門，graph 才跑得到引擎。
+/// 流程圖實例的檢視與簽核中心（計畫 fg2 Task 8；U5、U6、J24；設計 §8.5）。
 /// 簽核人：a、a1＝fin1、a2＝fin2、b＝buyer2、c＝gm；發起人 buyer1。
 /// </summary>
 public class ApprovalGraphViewTests : ApprovalTestBase
 {
     protected override bool ScopePerRequest => true;
-
-    protected override void ConfigureServices(IServiceCollection services) => OpenGate(services);
 
     // ───────── 圖與情境 ─────────
 

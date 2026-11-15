@@ -216,6 +216,19 @@ public class AppApprovalFlowCodecTests
     }
 
     [Fact]
+    public void ToPackage_GraphFlow_Error()
+    {
+        // U3：流程圖格式在套件格式升版（fg6）前不能匯出；整份擋下，不略過流程
+        var input = Imported(Flow(null, Stage("lead", Group("purchaseLead"))));
+        var graph = input with { Definition = input.Definition with { Shape = ApprovalShapes.Graph, Stages = [] } };
+
+        var (flow, errors) = Export(graph);
+
+        flow.Should().BeNull();
+        errors.Should().Equal("簽核流程「採購單（大額）」使用流程圖格式，套件格式升版前不能匯出");
+    }
+
+    [Fact]
     public void ToPackage_UnmatchedUnits_Error()
     {
         var userField = new AppApproverSource("userField", null, null, "po.buyer", ["board"], null, null);

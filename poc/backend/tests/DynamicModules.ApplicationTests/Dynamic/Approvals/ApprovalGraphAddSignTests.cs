@@ -12,8 +12,7 @@ using static DynamicModules.ApplicationTests.Dynamic.Approvals.ApprovalGraphTest
 namespace DynamicModules.ApplicationTests.Dynamic.Approvals;
 
 /// <summary>
-/// 流程圖分支內的後加簽、轉交、改派與代理（計畫 fg2 Task 7；流程圖設計 §8.6、J10、J11、U11；審查 fg2b S1 的探針收成正式測試）：
-/// 測試主機換成開啟的擋門，graph 才跑得到引擎。簽核人：a、a1＝fin1、a2＝fin2、b＝buyer2、c＝gm；發起人 buyer1。
+/// 流程圖分支內的後加簽、轉交、改派與代理（計畫 fg2 Task 7；流程圖設計 §8.6、J10、J11、U11；審查 fg2b S1 的探針收成正式測試）。簽核人：a、a1＝fin1、a2＝fin2、b＝buyer2、c＝gm；發起人 buyer1。
 /// </summary>
 public class ApprovalGraphAddSignTests : ApprovalTestBase
 {
@@ -27,7 +26,6 @@ public class ApprovalGraphAddSignTests : ApprovalTestBase
 
     protected override void ConfigureServices(IServiceCollection services)
     {
-        OpenGate(services);
         services.AddSingleton<IBusinessTime>(new Clock());
     }
 

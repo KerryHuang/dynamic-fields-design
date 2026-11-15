@@ -232,7 +232,8 @@ public class ApprovalFlowsApiTests
         (await c.PutAsJsonAsync($"{Flows}/draft-only", Flow("draft-only", s.Done, 9, s.Group))).StatusCode.Should().Be(HttpStatusCode.Conflict);
     }
 
-    private static object GraphBody(string key, (string Key, long Status, long Amount, string AmountKey, long Draft, long Done, long Group) s, string mode = "bad")
+    private static object GraphBody(string key, (string Key, long Status, long Amount, string AmountKey, long Draft, long Done, long Group) s, string mode = "bad",
+        bool badEdgeLabel = false)
     {
         object Node(string id, string kind, object? more = null) => more ?? new { id, kind };
         return new
@@ -251,52 +252,202 @@ public class ApprovalFlowsApiTests
                     }),
                     Node("end", "end")
                 },
-                edges = new object[] { new { id = "e1", from = "start", to = "a" }, new { id = "e2", from = "a", to = "end" } }
+                edges = new object[]
+                {
+                    // 連線標籤沒有繁體中文：錯誤鍵 edges.e1.label
+                    new { id = "e1", from = "start", to = "a", label = badEdgeLabel ? new Dictionary<string, string> { ["en-US"] = "x" } : null },
+                    new { id = "e2", from = "a", to = "end" }
+                }
             }
         };
     }
 
     [Fact]
     [Trait("Category", "Postgres")]
-    public async Task Create_Graph_400_ShapeGateAndNodeKeys()
+    public async Task Create_GraphInvalid_400_NodeKeys()
     {
         using var app = new TestApp();
         var c = app.AsUser();
         var s = await SeedApproval(c);
-        var res = await c.PostAsJsonAsync($"{Flows}?module={s.Key}", GraphBody("graph-one", s));
+        var res = await c.PostAsJsonAsync($"{Flows}?module={s.Key}", GraphBody("graph-one", s, badEdgeLabel: true));
         res.StatusCode.Should().Be(HttpStatusCode.BadRequest);
         var errors = (await JsonOf(res)).GetProperty("errors");
-        errors.TryGetProperty("definition.shape", out _).Should().BeTrue("fg2 之前流程圖一律拒收");
+        errors.TryGetProperty("definition.shape", out _).Should().BeFalse("fg2g2 起 API 收流程圖，不再有格式擋門");
         errors.TryGetProperty("definition.nodes.a.mode", out _).Should().BeTrue("屬性錯誤用節點代號定位");
+        errors.TryGetProperty("definition.edges.e1.label", out _).Should().BeTrue("連線錯誤用連線代號定位");
         (await c.GetAsync($"{Flows}/graph-one")).StatusCode.Should().Be(HttpStatusCode.NotFound);
     }
 
     [Fact]
     [Trait("Category", "Postgres")]
-    public async Task Update_Graph_400_ShapeGate_FlowUnchanged()
+    public async Task Create_Graph_201_AndSubmitApprove_EndToEnd()
     {
         using var app = new TestApp();
         var c = app.AsUser();
         var s = await SeedApproval(c);
-        var before = await JsonOf(await c.GetAsync($"{Flows}/big"));
-        var res = await c.PutAsJsonAsync($"{Flows}/big", GraphBody("big", s, mode: "all"));
-        res.StatusCode.Should().Be(HttpStatusCode.BadRequest);
-        (await JsonOf(res)).GetProperty("errors").TryGetProperty("definition.shape", out _).Should().BeTrue();
-        var after = await JsonOf(await c.GetAsync($"{Flows}/big"));
-        after.GetProperty("version").GetInt32().Should().Be(before.GetProperty("version").GetInt32());
-        after.GetProperty("definition").GetProperty("shape").GetString().Should().Be("sequence");
+        app.GrantBusinessGroups(s.Key);
+        // 主管 sales01 → 法務 sales02、財務 floor01 全部到齊 → 結束；API 直接存成目前版本
+        var created = await c.PostAsJsonAsync($"{Flows}?module={s.Key}", AnyJoinBody("graph-one", s, "all"));
+        created.StatusCode.Should().Be(HttpStatusCode.Created, await created.Content.ReadAsStringAsync());
+        var body = await JsonOf(created);
+        body.GetProperty("version").GetInt32().Should().Be(1);
+        body.GetProperty("definition").GetProperty("shape").GetString().Should().Be("graph");
+
+        var id = await SubmitGraphRecord(c, s);
+        var current = await CurrentOf(c, id);
+        var mgr = TaskOf(current, "sales01");
+        (await ApproveAs(app, "sales01", mgr, current)).StatusCode.Should().Be(HttpStatusCode.OK);
+        current = await CurrentOf(c, id);
+        (await ApproveAs(app, "sales02", TaskOf(current, "sales02"), current)).StatusCode.Should().Be(HttpStatusCode.OK);
+        (await CurrentOf(c, id)).GetProperty("status").GetString().Should().Be("pending", "全部到齊：還差財務");
+        (await ApproveAs(app, "floor01", TaskOf(current, "floor01"), current)).StatusCode.Should().Be(HttpStatusCode.OK);
+
+        var record = await JsonOf(await c.GetAsync($"{Base}/records/{id}"));
+        record.GetProperty("approval").GetProperty("status").GetString().Should().Be("approved");
     }
 
     [Fact]
     [Trait("Category", "Postgres")]
-    public async Task DraftPreview_Graph_400_ShapeGate()
+    public async Task RecordApproval_GraphInstance_StagesHaveCloseReason()
+    {
+        // 任一到齊：法務先核准，財務那一列被取消，回應帶 closeReason 與 nodeId、branchKey（U6）
+        using var app = new TestApp();
+        var c = app.AsUser();
+        var s = await SeedApproval(c);
+        app.GrantBusinessGroups(s.Key);
+        (await c.PostAsJsonAsync($"{Flows}?module={s.Key}", AnyJoinBody("graph-any", s, "any"))).StatusCode.Should().Be(HttpStatusCode.Created);
+        var id = await SubmitGraphRecord(c, s);
+        var current = await CurrentOf(c, id);
+        (await ApproveAs(app, "sales01", TaskOf(current, "sales01"), current)).StatusCode.Should().Be(HttpStatusCode.OK);
+        current = await CurrentOf(c, id);
+        (await ApproveAs(app, "sales02", TaskOf(current, "sales02"), current)).StatusCode.Should().Be(HttpStatusCode.OK);
+
+        var after = await JsonOf(await c.GetAsync($"{Base}/records/{id}/approval"));
+        var stages = (after.TryGetProperty("current", out var cur) ? cur : after.GetProperty("previous").EnumerateArray().Single()).GetProperty("stages")
+            .EnumerateArray().ToList();
+        var cancelled = stages.Single(x => x.GetProperty("nodeId").GetString() == "fin");
+        cancelled.GetProperty("closeReason").GetString().Should().Be("branchCancelled");
+        cancelled.GetProperty("branchKey").GetString().Should().Be("ff");
+        stages.Single(x => x.GetProperty("nodeId").GetString() == "legal").TryGetProperty("closeReason", out _).Should().BeFalse("沒有原因時省略");
+    }
+
+    /// <summary>主管 sales01 → 分支（法務 sales02、財務 floor01）→ 匯合（joinMode）→ 結束。</summary>
+    private static object AnyJoinBody(string key, (string Key, long Status, long Amount, string AmountKey, long Draft, long Done, long Group) s, string joinMode)
+    {
+        object Approver(string id, string user) => new
+        {
+            id, kind = "approval", name = Zh(id), approvers = new { source = "users", userIds = new[] { user } },
+            mode = "any", editableFields = Array.Empty<long>(), onEmpty = "fallback"
+        };
+        return new
+        {
+            key, name = Zh("會簽"), toOptionId = s.Done, priority = 5, active = true,
+            definition = new
+            {
+                shape = "graph", stages = Array.Empty<object>(),
+                nodes = new object[]
+                {
+                    new { id = "start", kind = "start" }, Approver("mgr", "sales01"), new { id = "f", kind = "fork", name = Zh("法務與財務") },
+                    Approver("legal", "sales02"), Approver("fin", "floor01"), new { id = "j", kind = "join", forkId = "f", mode = joinMode }, new { id = "end", kind = "end" }
+                },
+                edges = new object[]
+                {
+                    new { id = "e0", from = "start", to = "mgr" }, new { id = "e1", from = "mgr", to = "f" }, new { id = "fl", from = "f", to = "legal" },
+                    new { id = "ff", from = "f", to = "fin" }, new { id = "lj", from = "legal", to = "j" }, new { id = "fj", from = "fin", to = "j" },
+                    new { id = "je", from = "j", to = "end" }
+                }
+            }
+        };
+    }
+
+    private static async Task<long> SubmitGraphRecord(HttpClient c, (string Key, long Status, long Amount, string AmountKey, long Draft, long Done, long Group) s)
+    {
+        var created = await JsonOf(await c.PostAsJsonAsync($"{Base}/modules/{s.Key}/records",
+            new { values = new Dictionary<string, object> { [await TitleKey(c, s.Key)] = "單據" } }));
+        var id = created.GetProperty("id").GetInt64();
+        var submit = await c.PostAsJsonAsync($"{Base}/records/{id}/approval/submit", new { to = s.Done, recordRowVersion = created.GetProperty("rowVersion").GetString() });
+        submit.StatusCode.Should().Be(HttpStatusCode.Created, await submit.Content.ReadAsStringAsync());
+        return id;
+    }
+
+    private static async Task<System.Text.Json.JsonElement> CurrentOf(HttpClient c, long recordId) =>
+        (await JsonOf(await c.GetAsync($"{Base}/records/{recordId}/approval"))).GetProperty("current");
+
+    private static long TaskOf(System.Text.Json.JsonElement current, string user) =>
+        current.GetProperty("stages").EnumerateArray().SelectMany(x => x.GetProperty("tasks").EnumerateArray())
+            .Single(t => t.GetProperty("assigneeUserId").GetString() == user && t.GetProperty("status").GetString() == "open").GetProperty("id").GetInt64();
+
+    private static Task<HttpResponseMessage> ApproveAs(TestApp app, string user, long taskId, System.Text.Json.JsonElement current) =>
+        app.AsUser(user).PostAsJsonAsync($"{Base}/approval-tasks/{taskId}/approve", new { rowVersion = current.GetProperty("rowVersion").GetString() });
+
+    [Fact]
+    [Trait("Category", "Postgres")]
+    public async Task Create_GraphWithNotifyNode_400()
+    {
+        using var app = new TestApp();
+        var c = app.AsUser();
+        var s = await SeedApproval(c);
+        var body = System.Text.Json.Nodes.JsonNode.Parse(System.Text.Json.JsonSerializer.Serialize(GraphBody("graph-notify", s, mode: "any")))!;
+        var nodes = body["definition"]!["nodes"]!.AsArray();
+        nodes.Add(System.Text.Json.Nodes.JsonNode.Parse("""{"id":"tell","kind":"notify","name":{"zh-TW":"知會"},"recipients":[{"kind":"initiator"}],"template":{"title":{"zh-TW":"t"},"body":{"zh-TW":"b"}}}"""));
+        var edges = body["definition"]!["edges"]!.AsArray();
+        edges.Last()!["to"] = "tell";
+        edges.Add(System.Text.Json.Nodes.JsonNode.Parse("""{"id":"e3","from":"tell","to":"end"}"""));
+
+        var res = await c.PostAsync($"{Flows}?module={s.Key}", new StringContent(body.ToJsonString(), System.Text.Encoding.UTF8, "application/json"));
+
+        res.StatusCode.Should().Be(HttpStatusCode.BadRequest, await res.Content.ReadAsStringAsync());
+        (await JsonOf(res)).GetProperty("errors").GetProperty("definition.nodes.tell")[0].GetString().Should().Be("通知節點尚未開放");
+    }
+
+    [Fact]
+    [Trait("Category", "Postgres")]
+    public async Task Update_SequenceToGraph_200_ThenGraphToSequence_400()
+    {
+        using var app = new TestApp();
+        var c = app.AsUser();
+        var s = await SeedApproval(c);
+        var toGraph = await c.PutAsJsonAsync($"{Flows}/big", GraphBody("big", s, mode: "all") );
+        toGraph.StatusCode.Should().Be(HttpStatusCode.OK, await toGraph.Content.ReadAsStringAsync());
+        (await JsonOf(toGraph)).GetProperty("definition").GetProperty("shape").GetString().Should().Be("graph");
+
+        var back = await c.PutAsJsonAsync($"{Flows}/big", Flow("big", s.Done, 5, s.Group, s.Amount, 1000));
+
+        back.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+        (await JsonOf(back)).GetProperty("errors").GetProperty("definition.shape")[0].GetString().Should().Be("這條流程已是流程圖格式，不能改回關卡格式");
+        (await JsonOf(await c.GetAsync($"{Flows}/big"))).GetProperty("definition").GetProperty("shape").GetString().Should().Be("graph");
+    }
+
+    [Fact]
+    [Trait("Category", "Postgres")]
+    public async Task Toggle_GraphFlow_SameDefinition_Ok()
+    {
+        using var app = new TestApp();
+        var c = app.AsUser();
+        var s = await SeedApproval(c);
+        (await c.PostAsJsonAsync($"{Flows}?module={s.Key}", AnyJoinBody("graph-one", s, "all"))).EnsureSuccessStatusCode();
+        var flow = await JsonOf(await c.GetAsync($"{Flows}/graph-one"));
+        var node = System.Text.Json.Nodes.JsonNode.Parse(flow.GetRawText())!;
+        node["active"] = false;
+
+        var res = await c.PutAsync($"{Flows}/graph-one", new StringContent(node.ToJsonString(), System.Text.Encoding.UTF8, "application/json"));
+
+        res.StatusCode.Should().Be(HttpStatusCode.OK, await res.Content.ReadAsStringAsync());
+        (await JsonOf(res)).GetProperty("active").GetBoolean().Should().BeFalse();
+    }
+
+    [Fact]
+    [Trait("Category", "Postgres")]
+    public async Task DraftPreview_Graph_PathReturned()
     {
         using var app = new TestApp();
         var c = app.AsUser();
         var s = await SeedApproval(c);
         var res = await c.PostAsJsonAsync($"{Flows}/preview?module={s.Key}", new { draft = GraphBody("draft-graph", s, mode: "all"), initiatorUserId = "sales01" });
-        res.StatusCode.Should().Be(HttpStatusCode.BadRequest);
-        (await JsonOf(res)).GetProperty("errors").TryGetProperty("definition.shape", out _).Should().BeTrue();
+        res.StatusCode.Should().Be(HttpStatusCode.OK, await res.Content.ReadAsStringAsync());
+        var body = await JsonOf(res);
+        body.GetProperty("flowKey").GetString().Should().Be("draft-graph");
+        body.GetProperty("path").GetProperty("nodeIds").EnumerateArray().Select(x => x.GetString()).Should().Contain("a");
     }
 
     /// <summary>已知例外（設計 §7.2）：資料庫裡已有的 graph 只改 active=false 可以存（不重跑驗證，讓設計者能先停掉引用壞掉的流程）；一改定義就被拒。</summary>

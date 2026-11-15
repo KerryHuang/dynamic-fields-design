@@ -13,14 +13,12 @@ using static DynamicModules.ApplicationTests.Dynamic.Approvals.ApprovalGraphTest
 namespace DynamicModules.ApplicationTests.Dynamic.Approvals;
 
 /// <summary>
-/// 流程圖引擎的送出與推進（計畫 fg2 Task 4；流程圖設計 §8.1–§8.3、§8.8）：測試主機換成開啟的擋門，graph 才跑得到引擎。
+/// 流程圖引擎的送出與推進（計畫 fg2 Task 4；流程圖設計 §8.1–§8.3、§8.8）。
 /// 簽核人：a＝fin1、b＝buyer2、c＝gm、z＝emp1；發起人 buyer1。
 /// </summary>
 public class ApprovalGraphSubmitTests : ApprovalTestBase
 {
     protected override bool ScopePerRequest => true;
-
-    protected override void ConfigureServices(IServiceCollection services) => OpenGate(services);
 
     // ───────── 圖與情境 ─────────
 
@@ -594,6 +592,13 @@ public class ApprovalGraphSubmitTests : ApprovalTestBase
             [E("e0", "start", "c"), E("ca", "c", "a", Cond(1, "gte", 1), order: 1), E("cb", "c", "end", Cond(2, "gte", 1), order: 2), E("ae", "a", "end")]);
         await SubmitExpect409(def, ApprovalMessages.GraphRuntimeInvalid.Resolve(null)!);
         ApprovalMessages.GraphRuntimeInvalid.Resolve(null).Should().NotBe(ApprovalMessages.RuntimeInvalid.Resolve(null));
+    }
+
+    [Fact]
+    public async Task Submit_GraphWithoutNodes_409_GraphRuntimeInvalid_NothingWritten()
+    {
+        // 只有 shape、沒有節點與連線（繞過驗證寫入）：原擋門測試 Submit_MatchedGraphFlow_409_NothingWritten 搬家，訊息改成圖專用的 409＋異常通知
+        await SubmitExpect409(new ApprovalDefinition(ApprovalShapes.Graph, null, null, null, []), ApprovalMessages.GraphRuntimeInvalid.Resolve(null)!);
     }
 
     [Fact]

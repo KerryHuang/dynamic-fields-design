@@ -43,6 +43,9 @@ public sealed class ApprovalFlowEditor(IApprovalFlowRepository flows, ApprovalDe
         if (errors.Count > 0) return ServiceResult.Invalid(errors);
 
         var previous = self?.CurrentVersionId is { } vid ? (await flows.GetVersionAsync(vid, ct))?.Definition : null;
+        // 目前版本是流程圖就不能存回關卡格式（U4）：舊的流程對話框存檔一律組 sequence，會靜默把整張圖換成一串關卡
+        if (previous is { Shape: ApprovalShapes.Graph } && input.Definition!.Shape != ApprovalShapes.Graph)
+            return ServiceResult.Invalid(new Dictionary<string, string[]> { ["definition.shape"] = [ApprovalMessages.GraphCannotRevert] });
         // 定義沒變、而且是從啟用改成停用：定義裡引用的群組或欄位可能已被刪除或停用，這時仍要讓設計者先把流程停下來，所以不重跑定義驗證。啟用時照常驗證。
         var deactivatingOnly = self is { Active: true } && !input.Active && previous is not null && ApprovalDefinitionJson.SameAs(previous, input.Definition!);
         if (!deactivatingOnly)

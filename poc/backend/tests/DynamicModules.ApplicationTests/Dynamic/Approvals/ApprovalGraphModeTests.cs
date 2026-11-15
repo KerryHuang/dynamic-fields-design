@@ -91,6 +91,26 @@ public class ApprovalGraphModeTests : ApprovalTestBase
         errors.Should().BeEmpty();
     }
 
+    // ───────── 測試輔助 ─────────
+
+    [Fact]
+    public void KitBuilds_DesignExample_PassesValidator()
+    {
+        // 流程圖設計 §7.1 的範例（含通知節點）；欄位與群組代號是假的，這裡只驗結構
+        var def = G(
+            [Start(), Approval("mgr", Manager(1)), Condition("amount"), Fork("split"), Approval("legal", Group(5)), Approval("fin", Group(6), editable: [31]),
+             Join("merge", "split"), Notify("tell-hr"), End()],
+            [E("e1", "start", "mgr"), E("e2", "mgr", "amount"),
+             E("e3", "amount", "split", Cond(21, "gte", 100000), order: 1), E("e4", "amount", "tell-hr", isDefault: true),
+             E("e5", "split", "legal"), E("e6", "split", "fin"), E("e7", "legal", "merge"), E("e8", "fin", "merge"),
+             E("e9", "merge", "tell-hr"), E("e10", "tell-hr", "end")]);
+
+        var check = ApprovalGraphValidator.Check(def, new GraphPolicyLimits(int.MaxValue, int.MaxValue), previous: null);
+
+        check.Errors.Should().BeEmpty();
+        def.Shape.Should().Be(ApprovalShapes.Graph);
+    }
+
     // ───────── Eval ─────────
 
     private async Task<(PurchaseRig R, Module Module, FieldTypeRegistry Registry)> Setup()

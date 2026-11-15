@@ -37,7 +37,6 @@ public class ApprovalGraphEquivalenceTests : ApprovalTestBase
 
     protected override void ConfigureServices(IServiceCollection services)
     {
-        OpenGate(services);
         services.AddSingleton<IBusinessTime>(_clock);
     }
 

@@ -20,7 +20,7 @@ public class SubmitApprovalHandler(
     IModuleRepository modules, ApprovalSubmitEligibility eligibility, ICurrentUser user,
     IBusinessTime time, IOperationContext op, IApprovalFlowRepository flows, IApprovalInstanceRepository instances, ApprovalEngine engine,
     ApprovalTransitionRunner runner, ApproverResolver resolver, ApprovalWriteContext context, FieldTypeRegistry registry, IUnitOfWork uow,
-    ApprovalPolicies policies, ApprovalShapeGate gate)
+    ApprovalPolicies policies)
     : IRequestHandler<SubmitApprovalRequest, ServiceResult>
 {
     public async Task<ServiceResult> Handle(SubmitApprovalRequest request, CancellationToken ct)
@@ -50,8 +50,6 @@ public class SubmitApprovalHandler(
             var direct = await runner.RunAsync(new ApprovalInstance { RecordId = record.Id, ModuleId = module.Id }, request.To, null, ct);
             return direct.IsSuccess ? ServiceResult.Success(new SubmitApprovalResponse(ApprovalOutcomes.Direct, null, record.RowVersion)) : direct;
         }
-
-        if (gate.Reject(match) is { } gated) return gated;
 
         var picks = request.Picks ?? [];
         var ctx = await resolver.ContextAsync(module, user.UserId, values, null, ct);

@@ -15,14 +15,12 @@ using static DynamicModules.ApplicationTests.Dynamic.Approvals.ApprovalGraphTest
 namespace DynamicModules.ApplicationTests.Dynamic.Approvals;
 
 /// <summary>
-/// 流程圖的同意後推進與每次同意的重新比對（計畫 fg2 Task 5；流程圖設計 §8.2、§8.7）：測試主機換成開啟的擋門，graph 才跑得到引擎。
+/// 流程圖的同意後推進與每次同意的重新比對（計畫 fg2 Task 5；流程圖設計 §8.2、§8.7）。
 /// 簽核人：a＝fin1、b＝buyer2、c＝gm、z＝emp1；發起人 buyer1。
 /// </summary>
 public class ApprovalGraphApproveTests : ApprovalTestBase
 {
     protected override bool ScopePerRequest => true;
-
-    protected override void ConfigureServices(IServiceCollection services) => OpenGate(services);
 
     // ───────── 圖與情境 ─────────
 
@@ -556,6 +554,35 @@ public class ApprovalGraphApproveTests : ApprovalTestBase
         Body(res).NeedsResubmit.Should().BeTrue();
         Inst(id).Status.Should().Be(ApprovalInstanceStatus.Rerouted);
         PendingOf(po0.Id).Should().BeNull();
+    }
+
+    [Fact]
+    public async Task Approve_RecheckSelectsGraphFlow_ReroutesToGraphInstance()
+    {
+        // 原擋門測試 Approve_RecheckSelectsGraphFlow_409_Rollback 搬家：sequence 實例的快照裡出現優先序更前的 graph 流程，
+        // 同意後的重新比對選到它，改成重來並建出 graph 實例（不再 409）
+        var r = await Scenario3();
+        As("buyer1");
+        var po = await NewPo(r, price: 150000);
+        var id = (await MustSubmit(po.Id, r.Confirmed)).InstanceId!.Value;
+        var graphFlow = await SeedGraphFlow(r, "po-g", r.Confirmed, 99, Linear2());   // 真的流程列，重來建出的實例才有外鍵可指
+        var inst = Db.Context.Set<ApprovalInstance>().Single(i => i.Id == id);
+        inst.FlowSetSnapshot = [new FlowSnapshotEntry(graphFlow.Id, graphFlow.CurrentVersionId!.Value, 0, true, Text("po-g"), Linear2()), .. inst.FlowSetSnapshot];
+        await Db.Context.SaveChangesAsync();
+        Db.Context.ChangeTracker.Clear();
+        var task = TasksOf(id).Single(t => t.Status == ApprovalTaskStatus.Open);
+        As(task.AssigneeUserId);
+
+        var res = await Send(new ApproveTaskRequest(task.Id, Inst(id).RowVersion, null, null));
+
+        res.IsSuccess.Should().BeTrue(Dump(res));
+        Body(res).Outcome.Should().Be(ApprovalOutcomes.Rerouted);
+        Inst(id).Status.Should().Be(ApprovalInstanceStatus.Rerouted);
+        TasksOf(id).Should().NotContain(t => t.Status == ApprovalTaskStatus.Approved);   // 這次同意不計入
+        var fresh = PendingOf(po.Id)!;
+        fresh.RestartedFromInstanceId.Should().Be(id);
+        RunsOf(fresh.Id).Select(x => (x.NodeId, x.Status)).Should().Equal(("start", "passed"), ("a", "active"));
+        Open(fresh.Id, "fin1").Should().NotBeNull();
     }
 
     // ───────── 結構再驗、可編輯欄位、加簽 ─────────

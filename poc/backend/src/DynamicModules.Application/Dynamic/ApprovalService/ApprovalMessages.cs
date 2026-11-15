@@ -8,7 +8,7 @@ namespace DynamicModules.Application.Dynamic.ApprovalService;
 public static class ApprovalMessages
 {
     // ── 定義結構 ──
-    public const string ShapeInvalid = "流程形狀只能是 sequence";
+    public const string ShapeInvalid = "流程形狀只能是 sequence 或 graph";
     public static string WhenInvalid(string reason) => $"條件不正確：{reason}";
     public const string RejectToInvalidState = "退回狀態必須是狀態機的狀態";
     public const string FallbackSourceInvalid = "備援簽核人只能是指定使用者、群組或主管";
@@ -16,10 +16,10 @@ public static class ApprovalMessages
     public const string DefinitionMissing = "缺少流程定義";
     public const string FlowKeyReserved = "流程代碼 order 是保留字，請改用其他代碼";
     public const string FlowNotPublished = "這條流程還沒有發布的版本，請先發布";
-    /// <summary>fg2g2 之前，執行期選到流程圖格式的流程時的 409 訊息（ApprovalShapeGate）。</summary>
-    public static MessageRef GraphNotSupported(string flowName) => MessageRef.Literal($"流程「{flowName}」使用流程圖格式，這個版本的系統還不能執行");
-    /// <summary>fg2 之前流程圖格式一律不收（ApprovalDefinitionValidator.Graph.cs 最後固定加這一則；fg2 刪除）。</summary>
-    public const string GraphNotAccepted = "流程圖格式尚未開放，請繼續使用關卡設定";
+    /// <summary>通知節點在 fg5 之前存檔拒收（U2）；執行期另由能力守門擋。fg5 刪除。</summary>
+    public const string NotifyNodeNotYet = "通知節點尚未開放";
+    /// <summary>目前版本已是流程圖格式的流程，存檔時不能換回關卡格式（U4）。</summary>
+    public const string GraphCannotRevert = "這條流程已是流程圖格式，不能改回關卡格式";
     public const string NodeNameRequired = "節點名稱必須有繁體中文";
     public const string EdgeLabelInvalid = "連線標籤必須有繁體中文";
     public static string NotifyRecipientsCount(int max) => $"通知收件人設定必須有 1 到 {max} 項";
