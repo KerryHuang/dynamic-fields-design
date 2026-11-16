@@ -111,6 +111,10 @@ export function useGraphDesigner(canEdit: () => boolean) {
   function markSaved() { if (snapshot.value) savedJson.value = JSON.stringify(snapshot.value); lastKey = null; }
 
   const select = (s: Selection) => { selection.value = s; };
+  /** 409 之後「覆蓋」要用的新基準（回應 params 帶的權杖與版本）。 */
+  function setTokens(t: { draftRev?: string | null; versionId?: number | null }) {
+    server.value = { ...server.value, ...(t.draftRev !== undefined ? { draftRev: t.draftRev } : {}), ...(t.versionId !== undefined ? { versionId: t.versionId } : {}) };
+  }
 
   /** 送出的定義與版面（所見即所得：全部節點的座標都送，J73）；編輯中還沒填完的條件列在這裡剪掉，空條件送 null。 */
   function output(): { definition: GraphDefinition; layout: ApprovalFlowLayout } | null {
@@ -127,7 +131,7 @@ export function useGraphDesigner(canEdit: () => boolean) {
 
   return {
     loaded, snapshot, state, meta, dirty, undoable, redoable, server, selection, issues, canEdit: computed(canEdit),
-    load, apply, edit, editMeta, move, undo: undoStep, redo: redoStep, clearHistory, markSaved, select, output, replaceServer,
+    load, apply, edit, editMeta, move, undo: undoStep, redo: redoStep, clearHistory, markSaved, select, output, replaceServer, setTokens,
   };
 }
 

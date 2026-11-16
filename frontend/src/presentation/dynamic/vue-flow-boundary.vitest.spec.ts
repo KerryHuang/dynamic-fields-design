@@ -90,7 +90,7 @@ describe('vue flow boundary', () => {
   });
 
   it('the designer composable and graph mapper never call useVueFlow', () => {
-    for (const f of ['presentation/dynamic/approval-designer/graph/use-graph-designer.ts', 'presentation/dynamic/approval-designer/graph/designer-graph.ts']) {
+    for (const f of ['use-graph-designer.ts', 'use-designer-actions.ts', 'designer-graph.ts'].map((n) => `presentation/dynamic/approval-designer/graph/${n}`)) {
       expect(read(f), f).not.toContain('useVueFlow');
     }
   });

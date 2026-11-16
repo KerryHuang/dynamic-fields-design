@@ -185,3 +185,23 @@ export function flowErrors(issues: GraphIssue[] | undefined): { basic: FlowBasic
   }
   return { basic, other };
 }
+
+export interface IssueRow { severity: 'error' | 'warning'; target: Selection; title: string; message: string; code?: string }
+
+/** 錯誤與警告清單的列（DesignerIssues）：流程層、節點、線依序；點一列要選取的目標放在 `target`。錯誤在前、警告在後。 */
+export function issueRows(issues: GraphIssueMap | null, def: GraphDefinition, ctx: Pick<GraphContext, 'locale' | 't'>): IssueRow[] {
+  if (!issues) return [];
+  const rows: IssueRow[] = [];
+  const nodeTitle = (id: string) => { const n = def.nodes.find((x) => x.id === id); return n ? nodeLabel(n, ctx.locale, ctx.t) : id; };
+  const edgeTitle = (id: string) => {
+    const e = def.edges.find((x) => x.id === id);
+    return e ? `${nodeTitle(e.from)} → ${nodeTitle(e.to)}` : id;
+  };
+  for (const severity of ['error', 'warning'] as const) {
+    const m = severity === 'error' ? issues.errors : issues.warnings;
+    for (const i of m.flow) rows.push({ severity, target: FLOW_SELECTION, title: ctx.t('approval.designer.graph.flowLevel'), message: i.message, ...(i.code ? { code: i.code } : {}) });
+    for (const n of def.nodes) for (const i of m.nodes[n.id] ?? []) rows.push({ severity, target: { kind: 'node', id: n.id }, title: nodeTitle(n.id), message: i.message, ...(i.code ? { code: i.code } : {}) });
+    for (const e of def.edges) for (const i of m.edges[e.id] ?? []) rows.push({ severity, target: { kind: 'edge', id: e.id }, title: edgeTitle(e.id), message: i.message, ...(i.code ? { code: i.code } : {}) });
+  }
+  return rows;
+}

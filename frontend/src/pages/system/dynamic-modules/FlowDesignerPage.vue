@@ -3,16 +3,20 @@ import { useQuasar } from 'quasar';
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { onBeforeRouteLeave, useRoute, useRouter } from 'vue-router';
-import { useApprovalFlow } from 'src/application/dynamic/queries/approval-flow-queries';
+import { useApprovalFlow, useApprovalFlows } from 'src/application/dynamic/queries/approval-flow-queries';
 import { useModuleDetail } from 'src/application/dynamic/queries/modules-queries';
 import { useMe } from 'src/application/dynamic/queries/permissions-queries';
 import { useWorkflowQuery } from 'src/application/dynamic/queries/workflow-queries';
 import { resolveI18n } from 'src/domain/dynamic/i18n-text';
 import { toSchemaFields } from 'src/presentation/dynamic/designer/schema-fields';
+import DesignerIssues from 'src/presentation/dynamic/approval-designer/graph/DesignerIssues.vue';
+import DraftConflictDialog from 'src/presentation/dynamic/approval-designer/graph/DraftConflictDialog.vue';
+import PublishDialog from 'src/presentation/dynamic/approval-designer/graph/PublishDialog.vue';
 import DesignerCanvas from 'src/presentation/dynamic/approval-designer/graph/DesignerCanvas.vue';
 import DesignerPropertyPanel from 'src/presentation/dynamic/approval-designer/graph/DesignerPropertyPanel.vue';
 import DesignerToolbar from 'src/presentation/dynamic/approval-designer/graph/DesignerToolbar.vue';
 import { FLOW_SELECTION, toVueFlow } from 'src/presentation/dynamic/approval-designer/graph/designer-graph';
+import { useDesignerActions } from 'src/presentation/dynamic/approval-designer/graph/use-designer-actions';
 import { useGraphDesigner } from 'src/presentation/dynamic/approval-designer/graph/use-graph-designer';
 import type { ApiError } from 'src/services/api/http';
 
@@ -30,6 +34,7 @@ const target = computed(() => (route.query.target ? Number(route.query.target) :
 const moduleQuery = useModuleDetail(moduleKey);
 const workflow = useWorkflowQuery(moduleKey);
 const flowQuery = useApprovalFlow(flowKey);
+const flowsQuery = useApprovalFlows(moduleKey);
 const me = useMe();
 
 /** U62：只有讀取權的設計者可以進來看，畫布與面板唯讀。 */
@@ -54,6 +59,20 @@ watch([() => flowQuery.data.value, flowKey, () => !!me.data.value], ([flow, key,
 }, { immediate: true });
 
 const meta = designer.meta;
+
+// ---- 存草稿、驗證、發布、捨棄（Task 10）----
+let suppressRedirect = false;
+const actions = useDesignerActions(designer, {
+  moduleKey: () => moduleKey.value,
+  flows: () => flowsQuery.data.value ?? [],
+  reload: async () => (await flowQuery.refetch()).data,
+  onCreated: (key) => { if (!suppressRedirect) void router.replace({ name: 'flow-designer', params: { moduleKey: moduleKey.value, flowKey: key }, query: route.query }); },
+  onDeleted: () => back(),
+  notify: (type, message) => $q.notify({ type, message }),
+  t,
+});
+const confirmDiscard = ref(false);
+const confirmDelete = ref(false);
 const title = computed(() => {
   if (!designer.loaded.value) return t('approval.designer.graph.title');
   const name = resolveI18n(meta.value?.name, locale.value);
@@ -73,7 +92,7 @@ const canvas = ref<{ fitAll(): void; focusNode(id: string, rightInset?: number):
 const vf = computed(() => {
   const state = designer.state.value;
   if (!state) return { nodes: [], edges: [] };
-  return toVueFlow(state, { locale: locale.value, t, fields: fields.value, issues: null, selection: selection.value }, { draggable: canEdit.value && !phone.value });
+  return toVueFlow(state, { locale: locale.value, t, fields: fields.value, issues: designer.issues.value, selection: selection.value }, { draggable: canEdit.value && !phone.value });
 });
 const canvasId = computed(() => (designer.server.value.isNew ? 'designer-new' : `designer-${designer.server.value.key}`));
 
@@ -81,6 +100,10 @@ async function open(sel: typeof selection.value) {
   designer.select(sel);
   if (!docked.value) panelOpen.value = true;
   if (sel.kind === 'node' && tablet.value) { await nextTick(); canvas.value?.focusNode(sel.id, panelWidth.value); }
+}
+async function pickIssue(sel: typeof selection.value) {
+  await open(sel);
+  if (sel.kind === 'node') canvas.value?.focusNode(sel.id, tablet.value ? panelWidth.value : 0);
 }
 const onPaneClick = () => { designer.select(FLOW_SELECTION); if (!docked.value) panelOpen.value = false; };
 const openFlowProps = () => { designer.select(FLOW_SELECTION); panelOpen.value = true; };
@@ -95,6 +118,15 @@ onBeforeRouteLeave(() => {
   if (!designer.dirty.value) return true;
   return new Promise<boolean>((resolve) => { leaving.value = (go) => { leaving.value = null; resolve(go); }; });
 });
+/** 「儲存草稿並離開」：存成功才離開；新流程存完不換網址（要走的是使用者原本要去的地方）。 */
+async function saveAndLeave() {
+  const go = leaving.value;
+  if (!go) return;
+  suppressRedirect = true;
+  const saved = await actions.saveDraft();
+  suppressRedirect = false;
+  if (saved) go(true);
+}
 function onBeforeUnload(e: BeforeUnloadEvent) {
   if (!designer.dirty.value) return;
   e.preventDefault();
@@ -122,11 +154,16 @@ onBeforeUnmount(() => window.removeEventListener('beforeunload', onBeforeUnload)
         <q-badge v-if="designer.dirty.value" color="warning" text-color="dark" class="q-mr-sm" :label="t('approval.designer.graph.unsaved')" data-testid="de-unsaved" />
         <DesignerToolbar
           :readonly="!canEdit" :phone="phone" :show-flow-props="!docked" :undoable="designer.undoable.value" :redoable="designer.redoable.value"
+          :dirty="designer.dirty.value" :busy="actions.busy.value" :error-count="actions.errorCount.value"
+          :can-discard="designer.server.value.published && designer.server.value.hasDraft" :can-delete="!designer.server.value.isNew && !designer.server.value.published"
           @fit="canvas?.fitAll()" @flow-props="openFlowProps" @undo="designer.undo()" @redo="designer.redo()"
+          @validate="actions.validate()" @save="actions.saveDraft()" @publish="actions.requestPublish()" @issues="actions.issuesOpen.value = true"
+          @discard="confirmDiscard = true" @delete-flow="confirmDelete = true"
         />
       </div>
       <q-banner v-if="!canEdit" dense class="bg-info-soft" data-testid="de-readonly">{{ t('approval.designer.graph.readonlyBanner') }}</q-banner>
 
+      <DesignerIssues v-if="actions.issuesOpen.value" :designer="designer" @pick="pickIssue" @close="actions.issuesOpen.value = false" />
       <div class="col row no-wrap de-body">
         <div class="col de-canvas-wrap">
           <DesignerCanvas
@@ -150,6 +187,28 @@ onBeforeUnmount(() => window.removeEventListener('beforeunload', onBeforeUnload)
       </q-dialog>
     </template>
 
+    <PublishDialog :info="actions.publishInfo.value" :busy="actions.busy.value" @confirm="actions.confirmPublish()" @cancel="actions.cancelPublish()" />
+    <DraftConflictDialog :conflict="actions.conflict.value" :busy="actions.busy.value" @resolve="actions.resolveConflict" />
+    <q-dialog v-model="confirmDiscard" aria-labelledby="de-discard-title">
+      <q-card style="min-width: min(420px, 92vw)" data-testid="discard-dialog">
+        <q-card-section id="de-discard-title" class="text-h6 q-pb-none">{{ t('approval.designer.graph.discard') }}</q-card-section>
+        <q-card-section>{{ t('approval.designer.graph.discardConfirm') }}</q-card-section>
+        <q-card-actions align="right">
+          <q-btn v-close-popup flat no-caps :label="t('approval.designer.graph.cancel')" data-testid="discard-cancel" />
+          <q-btn v-close-popup color="negative" unelevated no-caps :label="t('approval.designer.graph.discard')" data-testid="discard-confirm" @click="actions.discard()" />
+        </q-card-actions>
+      </q-card>
+    </q-dialog>
+    <q-dialog v-model="confirmDelete" aria-labelledby="de-delete-title">
+      <q-card style="min-width: min(420px, 92vw)" data-testid="delete-dialog">
+        <q-card-section id="de-delete-title" class="text-h6 q-pb-none">{{ t('approval.designer.graph.deleteFlow') }}</q-card-section>
+        <q-card-section>{{ title }}</q-card-section>
+        <q-card-actions align="right">
+          <q-btn v-close-popup flat no-caps :label="t('approval.designer.graph.cancel')" />
+          <q-btn v-close-popup color="negative" unelevated no-caps :label="t('approval.designer.graph.deleteFlow')" data-testid="delete-confirm" @click="actions.deleteFlow()" />
+        </q-card-actions>
+      </q-card>
+    </q-dialog>
     <q-dialog :model-value="leaving !== null" persistent aria-labelledby="de-leave-title">
       <q-card>
         <q-card-section id="de-leave-title" class="text-h6 q-pb-none">{{ t('approval.designer.graph.leaveTitle') }}</q-card-section>
@@ -157,6 +216,7 @@ onBeforeUnmount(() => window.removeEventListener('beforeunload', onBeforeUnload)
         <q-card-actions align="right">
           <q-btn flat no-caps :label="t('approval.designer.graph.leaveCancel')" data-testid="de-leave-cancel" @click="leaving?.(false)" />
           <q-btn flat no-caps color="negative" :label="t('approval.designer.graph.leaveDiscard')" data-testid="de-leave-discard" @click="leaving?.(true)" />
+          <q-btn v-if="canEdit" color="primary" unelevated no-caps :loading="actions.busy.value" :label="t('approval.designer.graph.leaveSave')" data-testid="de-leave-save" @click="saveAndLeave" />
         </q-card-actions>
       </q-card>
     </q-dialog>

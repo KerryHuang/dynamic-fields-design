@@ -13,7 +13,7 @@ import { dynamicApi } from 'src/services/api/dynamic-api';
 import FlowDesignerPage from './FlowDesignerPage.vue';
 
 vi.mock('src/services/api/dynamic-api', () => ({
-  dynamicApi: { getModule: vi.fn(), getWorkflow: vi.fn(), getApprovalFlow: vi.fn(), getApprovalFlows: vi.fn(), getMe: vi.fn(), getUsers: vi.fn(), getGroups: vi.fn(), getEffectivePolicies: vi.fn(), getModulePolicies: vi.fn() },
+  dynamicApi: { getModule: vi.fn(), getWorkflow: vi.fn(), getApprovalFlow: vi.fn(), getApprovalFlows: vi.fn(), getMe: vi.fn(), getUsers: vi.fn(), getGroups: vi.fn(), getEffectivePolicies: vi.fn(), getModulePolicies: vi.fn(), validateApprovalFlow: vi.fn(), saveApprovalFlowDraft: vi.fn(), createApprovalFlowDraft: vi.fn(), discardApprovalFlowDraft: vi.fn(), deleteApprovalFlow: vi.fn(), publishApprovalFlow: vi.fn() },
 }));
 const api = vi.mocked(dynamicApi);
 
@@ -242,5 +242,78 @@ describe('FlowDesignerPage', () => {
     const after = new Event('beforeunload', { cancelable: true });
     window.dispatchEvent(after);
     expect(after.defaultPrevented).toBe(false);
+  });
+
+  const nodeError = { errors: { 'definition.nodes[1].approvers': ['請選簽核人'] }, warnings: [], newVersion: false, pendingCount: 0 };
+
+  it('validate marks the node and lists the issue; clicking the issue selects the node, pans to it and opens its panel', async () => {
+    api.validateApprovalFlow.mockResolvedValue(nodeError);
+    const w = await mountAt(url());
+    expect(w.find('[data-testid="de-issues"]').exists()).toBe(false);
+    await w.get('[data-testid="tb-validate"]').trigger('click');
+    await flushPromises();
+    expect(w.get('[data-testid="tb-errors"]').text()).toContain('1');
+    expect(w.find('[data-testid="de-issues"]').exists()).toBe(true);
+    await w.get('[data-testid="de-issue-0"]').trigger('click');
+    await flushPromises();
+    expect(canvasCalls.focusNode).toHaveBeenCalledWith('a', 0);
+    expect(w.get('[data-testid="de-panel-title"]').text()).toBe('財務');
+    expect(w.get('[data-testid="de-panel"]').text()).toContain('請選簽核人');
+    w.unmount();
+  });
+
+  it('save draft from the toolbar sends the working copy and clears the unsaved mark', async () => {
+    api.saveApprovalFlowDraft.mockResolvedValue(flow({ draft: { definition: def() }, draftRev: 'r2' }) as never);
+    const w = await mountAt(url());
+    await w.get('[data-testid="move-a"]').trigger('click');
+    expect(w.find('[data-testid="de-unsaved"]').exists()).toBe(true);
+    await w.get('[data-testid="tb-save"]').trigger('click');
+    await flushPromises();
+    expect(api.saveApprovalFlowDraft).toHaveBeenCalledTimes(1);
+    const body = api.saveApprovalFlowDraft.mock.calls[0][1];
+    expect(body.layout?.nodes.a).toMatchObject({ x: 500 });
+    expect(w.find('[data-testid="de-unsaved"]').exists()).toBe(false);
+    w.unmount();
+  });
+
+  it('a flow that was published and has a draft can discard it after a confirmation', async () => {
+    api.discardApprovalFlowDraft.mockResolvedValue(flow() as never);
+    const w = await mountAt(url(), { flow: flow({ draft: { definition: def('草稿財務') }, draftRev: 'r1' }) });
+    await w.get('[data-testid="tb-more"]').trigger('click');
+    await new Promise((r) => setTimeout(r, 50));
+    (document.body.querySelector('[data-testid="tb-discard"]') as HTMLElement).click();
+    await flushPromises();
+    expect(api.discardApprovalFlowDraft).not.toHaveBeenCalled();
+    (document.body.querySelector('[data-testid="discard-confirm"]') as HTMLElement).click();
+    await flushPromises();
+    expect(api.discardApprovalFlowDraft).toHaveBeenCalledWith('po', 'r1', undefined);
+    w.unmount();
+  });
+
+  it('the leave dialog can save the draft and leave', async () => {
+    api.saveApprovalFlowDraft.mockResolvedValue(flow({ draft: { definition: def() }, draftRev: 'r2' }) as never);
+    const w = await mountAt(url());
+    await w.get('[data-testid="move-a"]').trigger('click');
+    void router.push('/system/dynamic-modules/doc');
+    await flushPromises();
+    (document.body.querySelector('[data-testid="de-leave-save"]') as HTMLElement).click();
+    await flushPromises();
+    expect(api.saveApprovalFlowDraft).toHaveBeenCalledTimes(1);
+    expect(router.currentRoute.value.name).toBe('editor');
+    w.unmount();
+  });
+
+  it('saving a new flow replaces the url with the flow key', async () => {
+    api.createApprovalFlowDraft.mockResolvedValue(flow({ key: 'new-flow', version: null, versionId: null, draft: { definition: def() }, draftRev: 'r0' }) as never);
+    const w = await mountAt('/system/dynamic-modules/doc/approval-flows/_new?target=12');
+    const fields = w.findComponent({ name: 'FlowBasicFields' });
+    fields.vm.$emit('patch', { key: 'new-flow', name: { 'zh-TW': '新流程' } });
+    await flushPromises();
+    await w.get('[data-testid="tb-save"]').trigger('click');
+    await flushPromises();
+    expect(api.createApprovalFlowDraft).toHaveBeenCalledTimes(1);
+    expect(router.currentRoute.value.name).toBe('flow-designer');
+    expect(router.currentRoute.value.params.flowKey).toBe('new-flow');
+    w.unmount();
   });
 });
