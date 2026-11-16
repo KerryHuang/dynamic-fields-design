@@ -284,6 +284,30 @@ describe('ApprovalPanel', () => {
       expect(w.find('.approval-stages').exists()).toBe(true);
     });
 
+    it('the timeline stays below the thumbnail on a phone, and the thumbnail replaces the inline graph', async () => {
+      const original = window.innerWidth;
+      vi.restoreAllMocks(); // Quasar 的 Screen 讀 documentElement.clientWidth，先拿掉 beforeEach 的假寬度，量完再換成手機的框寬
+      window.innerWidth = 390;
+      window.dispatchEvent(new Event('resize'));
+      await new Promise((r) => setTimeout(r, 80)); // Quasar 的 Screen 有 50 毫秒節流
+      vi.spyOn(HTMLElement.prototype, 'clientWidth', 'get').mockReturnValue(358);
+      try {
+        const w = mountPanel(approval(instance({ graph: graph() })));
+        await flushPromises();
+        const html = w.get('[data-testid="approval-panel"]').html();
+        expect(w.find('[data-testid="pg-thumb"]').exists()).toBe(true);
+        expect(w.find('[data-testid="canvas-stub"]').exists()).toBe(true);
+        expect(html.indexOf('data-testid="pg-thumb"')).toBeGreaterThan(-1);
+        expect(html.indexOf('data-testid="pg-thumb"')).toBeLessThan(html.indexOf('approval-stages'));
+        expect(html.indexOf('data-testid="pg-thumb"')).toBeLessThan(html.indexOf('data-testid="approval-log"'));
+        expect(text(w, 'stage-1')).toContain('主管'); // 時間軸照舊
+      } finally {
+        window.innerWidth = original;
+        window.dispatchEvent(new Event('resize'));
+        await new Promise((r) => setTimeout(r, 80));
+      }
+    });
+
     it('previous instances draw their graph only after expanding', async () => {
       const w = mountPanel(approval(instance({ graph: graph() }), [ended(5, 'rejected', { graph: graph() })]));
       await flushPromises();

@@ -17,10 +17,13 @@ const edgeProps = {
   label: '金額大…', data: { bendX: 350, fullLabel: '金額大於十萬' },
 };
 // 把傳給 VueFlow 的屬性寫進 data-props，直接斷言唯讀設定（真實的平移、縮放只能在瀏覽器驗）。
+const nodeData = { kind: 'approval', runIds: [1], clickable: true, small: false, width: 168, height: 84, label: '主管', kindIcon: 'person', stateIcon: null, color: null, frame: 'solid', strike: false, dim: false, statusText: '', joinModeText: null, overdue: false, overdueText: '', ariaLabel: '主管' };
 const VueFlowStub = defineComponent({
   name: 'VueFlow', inheritAttrs: false,
   // 線的插槽放在 <svg> 裡渲染，才會建立 SVG 元素（BaseEdge 會量文字框）。
-  setup: (_, { attrs, slots }) => () => h('div', { 'data-testid': 'vf', 'data-props': JSON.stringify(Object.fromEntries(Object.entries(attrs).map(([k, v]) => [camelize(k), v]))) }, [h('svg', slots['edge-progress']?.(edgeProps))]),
+  setup: (_, { attrs, slots }) => () => h('div', { 'data-testid': 'vf', 'data-props': JSON.stringify(Object.fromEntries(Object.entries(attrs).map(([k, v]) => [camelize(k), v]))) }, [
+    h('svg', slots['edge-progress']?.(edgeProps)), slots['node-progress']?.({ id: 'n1', data: nodeData }), slots['node-addSign']?.({ id: 'as-9', data: { ...nodeData, kind: 'addSign', small: true } }),
+  ]),
 });
 const plan = (p: Partial<ViewportPlan> = {}): ViewportPlan => ({ zoom: 0.8, center: { x: 400, y: 42 }, minZoom: 0.2, fit: 0.5, ...p });
 
@@ -28,7 +31,7 @@ function mountCanvas(p: { instanceId?: number; mode?: 'inline' | 'thumb' | 'full
   const i18n = createI18n({ legacy: false, locale: 'zh-TW', messages: { 'zh-TW': zhTW } });
   return mount(ProgressGraphCanvas, {
     props: { instanceId: p.instanceId ?? 7, mode: p.mode ?? 'inline', nodes: [] as Node<ProgressNodeData>[], edges: [] as Edge[], plan: p.plan ?? plan(), width: 800, height: 200 },
-    global: { plugins: [[quasar.Quasar, { components: quasar }], i18n], stubs: { VueFlow: VueFlowStub } },
+    global: { plugins: [[quasar.Quasar, { components: quasar }], i18n], stubs: { VueFlow: VueFlowStub, Handle: true } },
   });
 }
 const flowProps = (w: ReturnType<typeof mountCanvas>) => JSON.parse(w.get('[data-testid="vf"]').attributes('data-props')!) as Record<string, unknown>;
@@ -94,5 +97,26 @@ describe('ProgressGraphCanvas', () => {
     await w.setProps({ plan: plan({ zoom: 0.5 }) });
     expect(flowFns.setViewport).toHaveBeenCalledTimes(2);
     expect(flowFns.setViewport).toHaveBeenLastCalledWith({ x: 450 - 400 * 0.5, y: 100 - 42 * 0.5, zoom: 0.5 });
+  });
+  it('opening a node reports its id, for approval and add-sign nodes alike', async () => {
+    const w = mountCanvas();
+    const nodes = w.findAll('[data-testid="pg-node"]');
+    await nodes[0].trigger('click');
+    await nodes[1].trigger('keydown', { key: 'Enter' });
+    expect(w.emitted('node-open')).toEqual([['n1'], ['as-9']]);
+  });
+
+  it('a thumbnail is hidden from keyboard and screen readers, and its nodes do nothing', async () => {
+    const w = mountCanvas({ mode: 'thumb' });
+    const root = w.get('[data-testid="pg-canvas"]');
+    expect(root.attributes('aria-hidden')).toBe('true');
+    expect(root.attributes('inert')).toBeDefined();
+    expect(root.classes()).toContain('pg-thumb');
+    expect(w.get('[data-testid="pg-node"]').attributes('tabindex')).toBeUndefined();
+    await w.get('[data-testid="pg-node"]').trigger('click');
+    expect(w.emitted('node-open')).toBeUndefined();
+    const live = mountCanvas({ mode: 'full' }).get('[data-testid="pg-canvas"]');
+    expect(live.attributes('aria-hidden')).toBeUndefined();
+    expect(live.attributes('inert')).toBeUndefined();
   });
 });

@@ -38,7 +38,7 @@ const earlierStatus = (i: ApprovalInstanceView) => (i.status === 'rerouted' ? t(
     </q-card-section>
     <q-card-section class="q-pt-none">
       <div class="text-caption text-muted">{{ t('approval.panel.submitted', { time: timeText(main.submittedTime) }) }}</div>
-      <ApprovalProgressGraph v-if="main.graph" :graph="main.graph" :stages="main.stages" :instance-id="main.id" class="q-mt-sm" />
+      <ApprovalProgressGraph v-if="main.graph" :graph="main.graph" :stages="main.stages" :actions="main.actions" :schema="schema" :instance-id="main.id" class="q-mt-sm" />
       <ApprovalStageList :stages="main.stages" />
       <ApprovalActionLog :actions="main.actions" :schema="schema" />
     </q-card-section>
@@ -51,7 +51,7 @@ const earlierStatus = (i: ApprovalInstanceView) => (i.status === 'rerouted' ? t(
           <q-badge outline color="muted" :label="earlierStatus(p)" />
           <span class="text-muted approval-wrap">{{ heading(p) }} · {{ timeText(p.submittedTime) }}</span>
         </div>
-        <ApprovalProgressGraph v-if="previousOpen && p.graph" :graph="p.graph" :stages="p.stages" :instance-id="p.id" />
+        <ApprovalProgressGraph v-if="previousOpen && p.graph" :graph="p.graph" :stages="p.stages" :actions="p.actions" :schema="schema" :instance-id="p.id" />
         <ApprovalStageList :stages="p.stages" />
         <ApprovalActionLog :actions="p.actions" :schema="schema" />
       </q-card-section>

@@ -186,6 +186,24 @@ describe('buildProgressGraph', () => {
     expect(g.nodes[0].data!.overdue).toBe(false);
   });
 
+  it('only approval and add-sign nodes that are shown and have runs are clickable; they carry their run ids', () => {
+    const g = {
+      nodes: [
+        node('s', 'start', 'passed'), node('a', 'approval', 'active', { runIds: [1, 4] }), node('as', 'addSign', 'notReached', { runIds: [5], hostId: 'a' }),
+        node('c', 'condition', 'passed'), node('f', 'fork', 'passed'), node('j', 'join', 'active', { joinMode: 'all' }), node('n', 'notify', 'passed'),
+        node('h', 'approval', 'hidden'), node('x', 'approval', 'changed', { runIds: [2] }), node('u', 'approval', 'notReached'), node('e', 'end', 'notReached'),
+      ],
+      edges: [],
+    };
+    const byId = Object.fromEntries(buildProgressGraph(g, [], ctx).nodes.map((n) => [n.id, n.data]));
+    expect(Object.fromEntries(Object.entries(byId).map(([k, v]) => [k, v!.clickable]))).toEqual({
+      s: false, a: true, as: true, c: false, f: false, j: false, n: false, h: false, x: true, u: false, e: false,
+    });
+    expect(byId.a!.runIds).toEqual([1, 4]);
+    expect(byId.as!.runIds).toEqual([5]);
+    expect(byId.s!.runIds).toEqual([]);
+  });
+
   it('the layout runs left to right with parallel branches stacked', () => {
     const g = buildProgressGraph(parallel(), stagesOf, ctx);
     const pos = Object.fromEntries(g.nodes.map((n) => [n.id, n.position]));

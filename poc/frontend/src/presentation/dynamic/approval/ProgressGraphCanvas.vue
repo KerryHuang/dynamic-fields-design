@@ -11,6 +11,7 @@ const props = defineProps<{
   instanceId: number; mode: GraphMode; nodes: Node<ProgressNodeData>[]; edges: Edge[];
   plan: ViewportPlan; width: number; height: number;
 }>();
+const emit = defineEmits<{ 'node-open': [nodeId: string] }>();
 const { t } = useI18n();
 const id = computed(() => `progress-${props.instanceId}-${props.mode}`);
 // useVueFlow 與 <VueFlow> 用同一個 id 共用 store；每個畫布各自一份，主實例、先前的簽核、縮圖與全螢幕不會互相影響。
@@ -40,7 +41,11 @@ const zoomOut = () => { void flow.zoomOut({ duration: 150 }); };
 </script>
 
 <template>
-  <div class="pg-canvas" role="group" :aria-label="t('approval.graph.label')" data-testid="pg-canvas">
+  <!-- 縮圖不能操作，也不讓讀屏與鍵盤進去：整個畫布 inert、aria-hidden，由外層的「放大檢視」按鈕代表它。 -->
+  <div
+    class="pg-canvas" :class="{ 'pg-thumb': !interactive }" role="group" :aria-label="t('approval.graph.label')" :aria-hidden="interactive ? undefined : 'true'"
+    :inert="interactive ? undefined : true" data-testid="pg-canvas"
+  >
     <VueFlow
       :id="id" :nodes="nodes" :edges="edges" :default-viewport="transform" :min-zoom="plan.minZoom" :max-zoom="MAX_ZOOM"
       :nodes-draggable="false" :nodes-connectable="false" :elements-selectable="false" :nodes-focusable="false" :edges-focusable="false"
@@ -49,8 +54,8 @@ const zoomOut = () => { void flow.zoomOut({ duration: 150 }); };
       :multi-selection-key-code="null"
       @pane-ready="apply"
     >
-      <template #node-progress="p"><ProgressGraphNode :data="p.data" /></template>
-      <template #node-addSign="p"><ProgressGraphNode :data="p.data" /></template>
+      <template #node-progress="p"><ProgressGraphNode :data="p.data" :interactive="interactive" @open="emit('node-open', p.id)" /></template>
+      <template #node-addSign="p"><ProgressGraphNode :data="p.data" :interactive="interactive" @open="emit('node-open', p.id)" /></template>
       <template #edge-progress="p"><ProgressEdge v-bind="p" /></template>
     </VueFlow>
     <div v-if="interactive" class="pg-toolbar">
@@ -64,6 +69,7 @@ const zoomOut = () => { void flow.zoomOut({ duration: 150 }); };
 <style>
 /* 不載入 Vue Flow 的 theme-default.css；線、文字與底色都用主題 token，深色主題一併生效。 */
 .pg-canvas { position: relative; width: 100%; height: 100%; }
+.pg-canvas.pg-thumb { pointer-events: none; }
 .pg-canvas .vue-flow { background: transparent; }
 .pg-canvas .vue-flow__pane.draggable { cursor: grab; }
 .pg-canvas .vue-flow__edge { cursor: inherit; }

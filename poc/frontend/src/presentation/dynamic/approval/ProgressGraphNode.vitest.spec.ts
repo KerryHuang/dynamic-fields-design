@@ -7,11 +7,11 @@ import ProgressGraphNode from './ProgressGraphNode.vue';
 
 const data = (p: Partial<ProgressNodeData> = {}): ProgressNodeData => ({
   kind: 'approval', small: false, width: NODE_W, height: NODE_H, label: '主管', kindIcon: 'person', stateIcon: 'hourglass_top', color: 'warning',
-  frame: 'solid', strike: false, dim: false, statusText: '簽核中', joinModeText: null, overdue: false, overdueText: '', ariaLabel: '主管 · 簽核中', ...p,
+  frame: 'solid', strike: false, dim: false, statusText: '簽核中', joinModeText: null, overdue: false, overdueText: '', ariaLabel: '主管 · 簽核中', runIds: [], clickable: false, ...p,
 });
 // 真的 Handle 會呼叫 useNode()，不在 Vue Flow 裡會丟 TypeError，所以換成 stub。
-const mountNode = (d: ProgressNodeData) => mount(ProgressGraphNode, {
-  props: { data: d },
+const mountNode = (d: ProgressNodeData, interactive = true) => mount(ProgressGraphNode, {
+  props: { data: d, interactive },
   global: { plugins: [[quasar.Quasar, { components: quasar }]], stubs: { Handle: true } },
 });
 
@@ -61,5 +61,42 @@ describe('ProgressGraphNode', () => {
   it('a not reached node is dimmed and a skipped node has a dashed frame', () => {
     expect(mountNode(data({ dim: true, stateIcon: null, color: null, statusText: '' })).classes()).toContain('pg-dim');
     expect(mountNode(data({ frame: 'dashed', color: 'muted' })).classes()).toContain('pg-frame-dashed');
+  });
+  describe('clickable nodes', () => {
+    it('condition, fork, join, start, end and hidden nodes are not clickable and not focusable; an approval node is a focusable button', () => {
+      const on = mountNode(data({ clickable: true, runIds: [1] }));
+      expect(on.attributes('role')).toBe('button');
+      expect(on.attributes('tabindex')).toBe('0');
+      expect(on.attributes('aria-label')).toBe('主管 · 簽核中');
+      for (const kind of ['condition', 'fork', 'join', 'start', 'end', 'hidden']) {
+        const off = mountNode(data({ kind, clickable: false }));
+        expect(off.attributes('tabindex')).toBeUndefined();
+        expect(off.attributes('role')).toBe('img');
+      }
+    });
+
+    it('Enter or Space on a focused approval node opens the detail, and so does a click; other keys do nothing', async () => {
+      const w = mountNode(data({ clickable: true, runIds: [1] }));
+      await w.trigger('click');
+      await w.trigger('keydown', { key: 'Enter' });
+      await w.trigger('keydown', { key: ' ' });
+      await w.trigger('keydown', { key: 'a' });
+      expect(w.emitted('open')).toHaveLength(3);
+    });
+
+    it('a node that is not clickable does not emit', async () => {
+      const w = mountNode(data({ clickable: false }));
+      await w.trigger('click');
+      await w.trigger('keydown', { key: 'Enter' });
+      expect(w.emitted('open')).toBeUndefined();
+    });
+
+    it('in a thumbnail (not interactive) nothing is focusable or clickable', async () => {
+      const w = mountNode(data({ clickable: true, runIds: [1] }), false);
+      expect(w.attributes('tabindex')).toBeUndefined();
+      expect(w.attributes('role')).toBe('img');
+      await w.trigger('click');
+      expect(w.emitted('open')).toBeUndefined();
+    });
   });
 });

@@ -65,6 +65,10 @@ const KNOWN_KIND = new Set(Object.keys(KIND_ICON));
 
 export interface ProgressNodeData {
   kind: string;
+  /** 點開細節要用：這個節點的執行（對應 stages[].id，舊的在前）。 */
+  runIds: number[];
+  /** U6：只有簽核節點與加簽小節點、而且不是 hidden、有執行紀錄可看時才能點開細節。 */
+  clickable: boolean;
   small: boolean;
   width: number;
   height: number;
@@ -137,8 +141,9 @@ function nodeData(n: ApprovalProgressNode, stagesById: Map<number, ApprovalStage
   // 沒走到的節點雖然畫面不寫字，名稱後面仍念「未走到」；hidden 只念名稱。
   const spoken = n.state === 'notReached' ? t('approval.graph.state.notReached') : statusText;
   const ariaLabel = [label, joinModeText, spoken].filter(Boolean).join(' · ');
+  const runIds = n.runIds ?? [];
   return {
-    kind: n.kind, small, width: small ? ADDSIGN_W : NODE_W, height: small ? ADDSIGN_H : NODE_H,
+    kind: n.kind, runIds, clickable: (n.kind === 'approval' || n.kind === 'addSign') && n.state !== 'hidden' && runIds.length > 0, small, width: small ? ADDSIGN_W : NODE_W, height: small ? ADDSIGN_H : NODE_H,
     label, kindIcon: KIND_ICON[n.kind] ?? 'help_outline', stateIcon: view.icon, color: view.color, frame: view.frame, strike: view.strike, dim: view.dim,
     statusText, joinModeText, overdue, overdueText: overdue ? t('approval.panel.overdue') : '', ariaLabel,
   };

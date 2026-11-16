@@ -1,15 +1,21 @@
 <script setup lang="ts">
 import { Handle, Position } from '@vue-flow/core';
+import { computed } from 'vue';
 import type { ProgressNodeData } from './progress-graph';
 
 // 唯讀進度圖的節點。尺寸由排版檔的常數決定（外層 Vue Flow 節點的 style 與這裡的 inline style 讀同一組）。
-defineProps<{ data: ProgressNodeData }>();
+const props = withDefaults(defineProps<{ data: ProgressNodeData; interactive?: boolean }>(), { interactive: true });
+const emit = defineEmits<{ open: [] }>();
+// U6：只有簽核節點與加簽小節點能開細節。可點的才是 button 並進 Tab 順序，其他節點沒有 tabindex；縮圖整張都不可操作。
+const clickable = computed(() => props.interactive && props.data.clickable);
+function open() { if (clickable.value) emit('open'); }
 </script>
 
 <template>
   <div
-    class="pg-node" :class="[`pg-frame-${data.frame}`, data.color ? `pg-c-${data.color}` : 'pg-c-none', { 'pg-dim': data.dim, 'pg-small': data.small }]"
-    :style="{ width: `${data.width}px`, height: `${data.height}px` }" :aria-label="data.ariaLabel" role="img" data-testid="pg-node"
+    class="pg-node" :class="[`pg-frame-${data.frame}`, data.color ? `pg-c-${data.color}` : 'pg-c-none', { 'pg-dim': data.dim, 'pg-small': data.small, 'pg-clickable': clickable }]"
+    :style="{ width: `${data.width}px`, height: `${data.height}px` }" :aria-label="data.ariaLabel" :role="clickable ? 'button' : 'img'" :tabindex="clickable ? 0 : undefined"
+    data-testid="pg-node" @click="open" @keydown.enter.prevent="open" @keydown.space.prevent="open"
   >
     <Handle type="target" :position="Position.Left" :connectable="false" class="pg-handle" />
     <div class="pg-head">
@@ -41,6 +47,8 @@ defineProps<{ data: ProgressNodeData }>();
 .pg-c-primary { border-color: var(--t-primary); }
 .pg-c-muted { border-color: var(--t-muted); }
 .pg-dim { opacity: 0.55; }
+.pg-clickable { cursor: pointer; }
+.pg-clickable:focus-visible { outline: 2px solid var(--t-primary); outline-offset: 2px; }
 .pg-head { display: flex; align-items: flex-start; gap: 4px; min-height: 0; overflow: hidden; }
 .pg-kind { flex: none; margin-top: 1px; }
 .pg-text { min-width: 0; flex: 1; }
