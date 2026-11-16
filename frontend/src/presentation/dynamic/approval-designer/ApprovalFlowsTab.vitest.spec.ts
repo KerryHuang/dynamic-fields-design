@@ -40,6 +40,14 @@ const flow = (key: string, toOptionId: number, priority: number, extra: Partial<
   ...extra,
 });
 
+/** A flow that was never published, as the backend sends it: null is not written, so there is no `version`, `definition` or `versionId` key at all. */
+const draftOnly = (key: string, toOptionId: number, priority: number, extra: Partial<ApprovalFlow> = {}): ApprovalFlow => {
+  const f = flow(key, toOptionId, priority, extra);
+  delete f.version;
+  delete f.definition;
+  return f;
+};
+
 async function mountTab(flows: ApprovalFlow[], opts: { workflow?: Workflow | null; edit?: boolean; focusTarget?: number | null; m?: ModuleDetail } = {}) {
   api.getWorkflow.mockImplementation(async () => {
     if (opts.workflow === null) throw { status: 404 };
@@ -104,15 +112,17 @@ describe('ApprovalFlowsTab', () => {
   });
 
   it('flows tab renders a draft-only flow without a definition', async () => {
-    const w = await mountTab([flow('a', 12, 1), flow('d', 12, 2, { definition: null, version: null, draft: { definition: { shape: 'graph', stages: [], nodes: [], edges: [] } } })]);
+    const w = await mountTab([flow('a', 12, 1), draftOnly('d', 12, 2, { draft: { definition: { shape: 'graph', stages: [], nodes: [], edges: [] } } })]);
     const card = w.find('[data-testid="flow-card-d"]').text();
     expect(card).toContain('流程d');
     expect(card).not.toContain('關');
+    expect(card).not.toContain('第');
+    expect(card).not.toContain('undefined');
     w.unmount();
   });
 
   it('toggling a draft-only flow is not sent', async () => {
-    const w = await mountTab([flow('d', 12, 1, { definition: null, version: null, active: false })]);
+    const w = await mountTab([draftOnly('d', 12, 1, { active: false })]);
     await w.find('[data-testid="flow-active-d"]').trigger('click');
     await flushPromises();
     expect(api.updateApprovalFlow).not.toHaveBeenCalled();
@@ -130,6 +140,7 @@ describe('ApprovalFlowsTab', () => {
     await flushPromises();
     expect(w.findComponent(FlowEditorDialog).exists()).toBe(false);
     notified('這條流程用新版設計器編輯，目前還不能在這裡開啟');
+    expect(notify.mock.calls.at(-1)![0]).toMatchObject({ type: 'info' }); // 不是使用者做錯事，不用紅色錯誤
     w.unmount();
   });
 

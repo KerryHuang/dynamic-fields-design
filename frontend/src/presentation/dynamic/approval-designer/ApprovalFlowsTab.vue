@@ -133,7 +133,7 @@ function openCreate(toOptionId: number | null) {
 function openEdit(f: ApprovalFlow) {
   if (readonly.value) return;
   // Until the graph designer page exists, graph flows and draft-only flows cannot be edited here (fg3c switches the entry).
-  if (!isSequenceFlow(f)) { $q.notify({ type: 'negative', message: t('approval.designer.list.graphOnlyEditor') }); return; }
+  if (!isSequenceFlow(f)) { $q.notify({ type: 'info', message: t('approval.designer.list.graphOnlyEditor') }); return; }
   opener = document.activeElement as HTMLElement | null;
   editing.value = f;
   preset.value = null;
@@ -211,7 +211,7 @@ const actionsOf = (list: ApprovalFlow[], f: ApprovalFlow, i: number) => [
             <div class="text-caption q-mt-xs" style="overflow-wrap: anywhere">{{ t('approval.designer.list.condition') }}：{{ summary(f) }}</div>
             <div class="row q-gutter-xs q-mt-xs">
               <q-badge v-if="stageCount(f) !== null" outline color="primary" :label="t('approval.designer.list.stages', { n: stageCount(f) })" />
-              <q-badge v-if="f.version !== null" outline color="primary" :label="t('approval.designer.list.version', { v: f.version })" />
+              <q-badge v-if="f.version != null" outline color="primary" :label="t('approval.designer.list.version', { v: f.version })" />
               <q-badge outline :color="f.pendingCount ? 'warning' : 'primary'" :label="t('approval.designer.list.pending', { n: f.pendingCount })" :data-testid="`flow-pending-${f.key}`" />
               <q-badge v-if="!f.active" outline color="negative" :label="t('approval.designer.list.inactive')" :data-testid="`flow-inactive-${f.key}`" />
             </div>

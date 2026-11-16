@@ -6,6 +6,8 @@ import type { ApproverLimits } from './approver-source';
 export interface FlowLimits extends ApproverLimits {
   maxStages?: number;
   maxDueHours?: number;
+  /** Branches of one fork (approval.maxBranches); the graph designer disables adding past it, the backend still answers 400. */
+  maxBranches?: number;
 }
 
 const num = (v: PolicyValue | undefined): number | undefined => (typeof v === 'number' ? v : undefined);
@@ -22,7 +24,7 @@ export function useApprovalLimits(moduleKey: MaybeRefOrGetter<string>) {
     const v = effective.data.value?.values ?? {};
     const tech = modulePolicies.data.value?.find((p) => p.code === 'approval.maxApprovers')?.max;
     return {
-      maxStages: num(v['approval.maxStages']), maxApprovers: num(v['approval.maxApprovers']), maxDueHours: num(v['approval.maxDueHours']),
+      maxStages: num(v['approval.maxStages']), maxApprovers: num(v['approval.maxApprovers']), maxDueHours: num(v['approval.maxDueHours']), maxBranches: num(v['approval.maxBranches']),
       maxManagerLevel: num(v['approval.maxManagerLevel']), techMaxApprovers: tech,
     };
   });

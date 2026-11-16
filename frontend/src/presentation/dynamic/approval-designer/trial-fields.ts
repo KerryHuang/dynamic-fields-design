@@ -33,7 +33,7 @@ function definitionFields(d: ApprovalDefinition, into: Set<number>) {
  * Fields the trial asks for: the ones that decide which flow matches and who approves, over all flows of the draft's target state
  * (the draft replaces the saved flow of the same key; a draft-only flow has no definition and does not match yet). Fields that are not in the module any more are left to the caller to drop.
  */
-export function trialFieldIds(flows: { key: string; toOptionId: number; definition: ApprovalDefinition | null }[], draft: ApprovalFlowInput): number[] {
+export function trialFieldIds(flows: { key: string; toOptionId: number; definition?: ApprovalDefinition | null }[], draft: ApprovalFlowInput): number[] {
   const ids = new Set<number>();
   for (const f of flows) if (f.definition && f.toOptionId === draft.toOptionId && f.key !== draft.key) definitionFields(f.definition, ids);
   definitionFields(draft.definition, ids);

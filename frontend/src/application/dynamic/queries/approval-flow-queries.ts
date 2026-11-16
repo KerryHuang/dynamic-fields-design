@@ -42,10 +42,10 @@ function useFlowWrite<V>(moduleKey: MaybeRefOrGetter<string>, fn: (module: strin
 
 export const useSaveApprovalFlow = (moduleKey: MaybeRefOrGetter<string>) =>
   useFlowWrite<{ key?: string; input: ApprovalFlowInput }>(moduleKey, (m, v) =>
-    (v.key ? dynamicApi.updateApprovalFlow(v.key, v.input) : dynamicApi.createApprovalFlow(m, v.input)));
+    (v.key ? dynamicApi.updateApprovalFlow(v.key, v.input) : dynamicApi.createApprovalFlow(m, v.input)), (v) => v.key);
 
 export const useDeleteApprovalFlow = (moduleKey: MaybeRefOrGetter<string>) =>
-  useFlowWrite<string>(moduleKey, (_m, key) => dynamicApi.deleteApprovalFlow(key));
+  useFlowWrite<string>(moduleKey, (_m, key) => dynamicApi.deleteApprovalFlow(key), (key) => key);
 
 export const useReorderApprovalFlows = (moduleKey: MaybeRefOrGetter<string>) =>
   useFlowWrite<{ toOptionId: number; keys: string[] }>(moduleKey, (m, v) => dynamicApi.reorderApprovalFlows(m, v.toOptionId, v.keys));

@@ -103,7 +103,7 @@ export function insertOnEdge(state: GraphState, edgeId: string, kind: ApprovalNo
   return s;
 }
 
-/** U63：從面板放到空白處；分支帶配對匯合與兩條分支（不接外面的線），匯合與開始不提供。 */
+/** U63：從面板放到空白處；分支帶配對匯合與兩條分支（不接外面的線），匯合與開始不提供。面板只列四種節點（簽核、條件、分支、結束）：通知節點這裡接受，但後端在 fg5 之前一律回「通知節點尚未開放」，由 UI 負責不提供。 */
 export function addNode(state: GraphState, kind: ApprovalNodeKind, at: Position, opts: EditOptions = {}): GraphState {
   if (kind === 'join' || kind === 'start') return state;
   const s = clone(state);
@@ -141,17 +141,20 @@ export function conditionOutEdges(def: GraphDefinition, id: string): ApprovalEdg
 }
 
 /**
- * 連線。從條件節點拉出的線：節點還沒有預設線時，這一條成為預設線，否則是下一個 order 的條件線（條件待填）。
+ * 連線。從條件節點拉出的線：節點還沒有預設線時，這一條成為預設線，否則是下一個 order 的條件線（條件待填），
+ * 標籤與 insertOnEdge 一致（U49「條件 n」，由 `opts.names.conditionLabel` 提供）。
  */
-export function connect(state: GraphState, from: string, to: string): GraphState {
+export function connect(state: GraphState, from: string, to: string, opts: EditOptions = {}): GraphState {
   if (canConnect(state.definition, from, to)) return state;
   const s = clone(state);
   const a = allocator(s.definition);
   const e: ApprovalEdgeDef = { id: a.edge(), from, to };
   if (s.definition.nodes.find((n) => n.id === from)!.kind === 'condition') {
     const outs = s.definition.edges.filter((x) => x.from === from);
-    if (outs.some((x) => x.default)) e.order = Math.max(0, ...outs.map((x) => x.order ?? 0)) + 1;
-    else e.default = true;
+    if (outs.some((x) => x.default)) {
+      e.order = Math.max(0, ...outs.map((x) => x.order ?? 0)) + 1;
+      if (opts.names?.conditionLabel) e.label = opts.names.conditionLabel(e.order);
+    } else e.default = true;
   }
   s.definition.edges.push(e);
   return s;
@@ -159,7 +162,7 @@ export function connect(state: GraphState, from: string, to: string): GraphState
 
 /**
  * U50：刪節點。簽核、通知節點恰一進一出時，前一個節點直接連到後一個節點（線的標籤與條件留在前一段），接回會重複時不接；
- * 條件、分支、匯合、結束不自動接。`withJoin`：刪分支時一併刪配對的匯合與之間的節點。開始節點不能刪。
+ * 條件、分支、匯合、結束不自動接。`withJoin`：刪分支時一併刪配對的匯合與之間的節點（兩者之間走得通的節點，不含區塊外的）。開始節點不能刪。
  */
 export function removeNode(state: GraphState, id: string, opts: { withJoin?: boolean } = {}): GraphState {
   const node = state.definition.nodes.find((n) => n.id === id);
@@ -170,12 +173,22 @@ export function removeNode(state: GraphState, id: string, opts: { withJoin?: boo
     const join = s.definition.nodes.find((n) => n.kind === 'join' && n.forkId === id);
     if (join) {
       gone.add(join.id);
-      const queue = [id];
-      for (let i = 0; i < queue.length; i++) {
-        for (const e of s.definition.edges) {
-          if (e.from === queue[i] && !gone.has(e.to)) { gone.add(e.to); queue.push(e.to); }
+      // 「之間」＝從分支往後走得到（到匯合為止）、而且從匯合往回走得到（到分支為止）的節點；編輯到一半沒收進匯合的分支會走到區塊外，不能刪
+      const reach = (start: string, stop: string, next: (e: ApprovalEdgeDef) => [string, string]) => {
+        const seen = new Set([start]);
+        const queue = [start];
+        for (let i = 0; i < queue.length; i++) {
+          if (queue[i] === stop) continue;
+          for (const e of s.definition.edges) {
+            const [from, to] = next(e);
+            if (from === queue[i] && !seen.has(to)) { seen.add(to); queue.push(to); }
+          }
         }
-      }
+        return seen;
+      };
+      const after = reach(id, join.id, (e) => [e.from, e.to]);
+      const before = reach(join.id, id, (e) => [e.to, e.from]);
+      for (const n of after) if (before.has(n)) gone.add(n);
     }
   }
   if (node.kind === 'approval' || node.kind === 'notify') {

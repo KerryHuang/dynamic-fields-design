@@ -2,7 +2,7 @@ import { QueryClient, VueQueryPlugin } from '@tanstack/vue-query';
 import { flushPromises, mount } from '@vue/test-utils';
 import { describe, expect, it, vi } from 'vitest';
 import { defineComponent } from 'vue';
-import type { ApprovalFlowDraftInput, ApprovalFlowInput } from 'src/domain/dynamic/approval-flow-types';
+import type { ApprovalFlow, ApprovalFlowDraftInput, ApprovalFlowInput, DraftConflictInfo } from 'src/domain/dynamic/approval-flow-types';
 import { bodyOf, HttpFail, mockHttp } from 'src/test-utils/mock-http';
 import {
   useApprovalFlow, useCreateFlowDraft, useDeleteApprovalFlow, useDiscardFlowDraft, usePublishFlow, useReorderApprovalFlows,
@@ -46,6 +46,15 @@ describe('approval flow mutations', () => {
     expect(bodyOf(calls[0])).toEqual({ module: 'po', toOptionId: 12, keys: ['b', 'a'] });
   });
 
+  it('update and delete also invalidate the single-flow cache of that key (its `active`, version and draft go stale)', async () => {
+    mockHttp(() => ({}));
+    const { m, keys } = setup();
+    await m.save.mutateAsync({ key: 'po-review', input });
+    await m.del.mutateAsync('po-old');
+    await flushPromises();
+    expect(keys()).toEqual(expect.arrayContaining([JSON.stringify(['approval-flow', 'po-review']), JSON.stringify(['approval-flow', 'po-old'])]));
+  });
+
   it.each(['save', 'del', 'order'] as const)('%s invalidates approval-flows and workflow of the module', async (which) => {
     mockHttp(() => ({}));
     const { m, keys } = setup();
@@ -63,6 +72,9 @@ const draftInput: ApprovalFlowDraftInput = {
   layout: { nodes: { start: { x: 0, y: 0 }, end: { x: 224, y: 0 } } },
   baseRev: 'abc123', baseVersionId: 7,
 };
+
+/** The error a call rejects with (an ApiError after the interceptor). */
+const rejection = async <T>(p: Promise<unknown>): Promise<T> => p.then(() => { throw new Error('expected a rejection'); }, (e: unknown) => e as T);
 
 function setupDraft() {
   const qc = new QueryClient();
@@ -104,12 +116,52 @@ describe('approval flow draft endpoints', () => {
     expect(calls[1].params).toEqual({ baseRev: 'abc123', force: true });
   });
 
-  it('a 409 draft conflict surfaces the code and what the backend says about the current editor', async () => {
-    mockHttp(() => new HttpFail(409, { code: 'DraftConflict', message: 'conflict', params: { name: '王小明', time: '2026-11-16T08:00:00Z' } }));
+  it('a 409 draft conflict surfaces the code and the current editor from params (the shape the backend sends)', async () => {
+    // 後端 ServiceResult.Conflict(msg, "DraftConflict", DraftConflictInfo)：code 與 params 在本文最上層，toApiError 只留這兩個
+    const info: DraftConflictInfo = {
+      draftUpdatedBy: 'wang', draftUpdatedByName: '王小明', draftUpdatedTime: '2026-11-16T08:00:00Z', draftRev: 'rev-2', versionId: 7,
+    };
+    mockHttp(() => new HttpFail(409, { message: 'conflict', code: 'DraftConflict', params: info }));
     const { m } = setupDraft();
-    await expect(m.save.mutateAsync({ key: 'po-big', input: draftInput })).rejects.toMatchObject({
-      status: 409, code: 'DraftConflict', params: { name: '王小明', time: '2026-11-16T08:00:00Z' },
-    });
+    const err = await rejection<{ status: number; code: string; params: DraftConflictInfo }>(m.save.mutateAsync({ key: 'po-big', input: draftInput }));
+    expect(err).toMatchObject({ status: 409, code: 'DraftConflict', params: info });
+    // 「覆蓋」要送的基準就在 params 裡
+    expect(err.params.draftRev).toBe('rev-2');
+    expect(err.params.versionId).toBe(7);
+  });
+
+  it('a draft-only flow\'s 409 params omit versionId (null is not written)', async () => {
+    mockHttp(() => new HttpFail(409, { message: 'conflict', code: 'DraftConflict', params: { draftUpdatedBy: 'wang', draftUpdatedByName: '王小明', draftUpdatedTime: '2026-11-16T08:00:00Z', draftRev: 'rev-2' } }));
+    const { m } = setupDraft();
+    const err = await rejection<{ params: DraftConflictInfo }>(m.save.mutateAsync({ key: 'po-big', input: draftInput }));
+    expect(err.params.versionId).toBeUndefined();
+  });
+
+  it('a duplicate key on POST draft is a 409 with code FlowKeyTaken', async () => {
+    mockHttp(() => new HttpFail(409, { message: 'taken', code: 'FlowKeyTaken' }));
+    const { m } = setupDraft();
+    await expect(m.create.mutateAsync(draftInput)).rejects.toMatchObject({ status: 409, code: 'FlowKeyTaken' });
+  });
+
+  it('the versionId the backend returns with a flow is what goes into baseVersionId', async () => {
+    // 後端單筆流程回應帶 versionId（目前版本 Id）；沒有它，已發布流程的每次存草稿都會 409
+    const flow: Partial<ApprovalFlow> = { key: 'po-big', versionId: 7, draftRev: 'rev-1' };
+    const calls = mockHttp((c) => (c.method === 'get' ? flow : {}));
+    const qc = new QueryClient();
+    let q!: ReturnType<typeof useApprovalFlow>;
+    let m!: ReturnType<typeof useSaveFlowDraft>;
+    mount(defineComponent({ setup() { q = useApprovalFlow(() => 'po-big'); m = useSaveFlowDraft('po'); return () => null; } }), { global: { plugins: [[VueQueryPlugin, { queryClient: qc }]] } });
+    await flushPromises();
+    const loaded = q.data.value!;
+    await m.mutateAsync({ key: 'po-big', input: { ...draftInput, baseRev: loaded.draftRev, baseVersionId: loaded.versionId } });
+    expect(bodyOf(calls.find((c) => c.method === 'put'))).toMatchObject({ baseRev: 'rev-1', baseVersionId: 7 });
+  });
+
+  it('validate\'s nextVersion may be absent (the backend omits null)', async () => {
+    mockHttp(() => ({ errors: {}, warnings: [], newVersion: false, pendingCount: 0 }));
+    const { m } = setupDraft();
+    const got = await m.validate.mutateAsync({ key: null, input: draftInput });
+    expect(got.nextVersion).toBeUndefined();
   });
 
   it('validate passes the flow key only for an existing flow', async () => {

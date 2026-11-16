@@ -55,7 +55,7 @@ export function emptyFlowDraft(toOptionId: number | null, priority: number): Flo
 }
 
 /** The old dialog only edits published sequence flows; graph flows and draft-only flows (no definition) go to the graph designer. */
-export const isSequenceFlow = (f: ApprovalFlow): f is SequenceFlow => f.definition?.shape === 'sequence' && f.version !== null;
+export const isSequenceFlow = (f: ApprovalFlow): f is SequenceFlow => f.definition?.shape === 'sequence' && f.version != null;
 
 export function draftFromFlow(f: SequenceFlow): FlowDraft {
   const d = f.definition;

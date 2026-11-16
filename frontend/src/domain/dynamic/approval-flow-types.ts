@@ -99,8 +99,21 @@ export interface ApprovalFlowValidation {
   errors: Record<string, string[]>;
   warnings: ApprovalFlowWarning[];
   newVersion: boolean;
-  nextVersion: number | null;
+  /** Omitted by the backend (null is not written) unless the current version is used and the definition changed. */
+  nextVersion?: number | null;
   pendingCount: number;
+}
+
+/**
+ * What a 409 `DraftConflict` carries, in `ApiError.params`: who saved the draft now stored (with no draft left, who last changed the flow),
+ * and the token and version the caller must send to overwrite (`baseRev` / `baseVersionId`). Null values are omitted by the backend.
+ */
+export interface DraftConflictInfo {
+  draftUpdatedBy?: string | null;
+  draftUpdatedByName?: string | null;
+  draftUpdatedTime?: string | null;
+  draftRev?: string | null;
+  versionId?: number | null;
 }
 
 /** Body of draft create / save, publish and validate. `baseRev` / `baseVersionId` are what the editor loaded (optimistic lock); `force` overwrites. */
@@ -132,15 +145,20 @@ export interface ApprovalFlowInput {
 
 export interface ApprovalFlow extends Omit<ApprovalFlowInput, 'definition'> {
   moduleKey: string;
-  /** null = never published (a draft-only flow). */
-  version: number | null;
-  definition: ApprovalDefinition | null;
+  /**
+   * The backend omits null (WhenWritingNull): a draft-only flow has no `version`, `definition`, `versionId` at all, so test `!= null`,
+   * never `!== null` (undefined would pass).
+   */
+  version?: number | null;
+  /** Id of the current version; the only source of `baseVersionId` for the optimistic lock. */
+  versionId?: number | null;
+  definition?: ApprovalDefinition | null;
   /** Single GET only: a sequence flow converted to a graph (what the designer edits). */
   graph?: GraphDefinition | null;
   /** Layout of the current version. */
   layout?: ApprovalFlowLayout | null;
   draft?: ApprovalFlowDraft | null;
-  /** Random token of the stored draft; null when there is none or it cannot be read. */
+  /** Optimistic-lock token: also set after a publish or discard (no draft content then); omitted for a flow that never had a draft. */
   draftRev?: string | null;
   draftUpdatedBy?: string | null;
   draftUpdatedByName?: string | null;

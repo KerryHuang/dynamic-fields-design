@@ -215,6 +215,16 @@ describe('connect and canConnect', () => {
     expect(outs[1].when).toBeUndefined();
   });
 
+  it('a condition edge dragged out gets the same "條件 n" label as one made by insertOnEdge; the default edge has none', () => {
+    const s = addNode(line(), 'condition', { x: 0, y: 0 }, opts);
+    const c = s.definition.nodes.at(-1)!.id;
+    const t = connect(connect(connect(s, c, 'end', opts), c, 'ceo', opts), c, 'fin', opts);
+    const outs = conditionOutEdges(t.definition, c);
+    expect(outs.map((e) => e.label)).toEqual([{ 'zh-TW': '條件 1' }, { 'zh-TW': '條件 2' }, undefined]);
+    const inserted = insertOnEdge(line(), 'e2', 'condition', opts);
+    expect(inserted.definition.edges.find((e) => e.order === 1)!.label).toEqual(outs[0].label);
+  });
+
   it('the first out edge of a fresh condition becomes its default edge', () => {
     const s = addNode(line(), 'condition', { x: 0, y: 0 }, opts);
     const c = s.definition.nodes.at(-1)!.id;
@@ -269,6 +279,27 @@ describe('removeNode', () => {
     expect(ids(t)).toEqual(['start', 'mgr', 'fin', 'ceo', 'end']);
     expect(pairs(t)).toEqual(['ceo>end', 'fin>ceo', 'start>mgr']);
     for (const k of Object.keys(t.positions)) expect(ids(t)).toContain(k);
+  });
+
+  it('an unclosed fork block: removing it with its join only removes the nodes between them, not the rest of the main line or the end node', () => {
+    // 編輯到一半：f 的分支 b 沒有接到匯合 j，直接走到 end；j 之後是 ceo → end
+    const s = mk(
+      [node('start', 'start'), node('f', 'fork'), appr('a'), appr('b'), node('j', 'join', { forkId: 'f', mode: 'all' }), appr('ceo'), node('end', 'end')],
+      [edge('e1', 'start', 'f'), edge('e2', 'f', 'a'), edge('e3', 'a', 'j'), edge('e4', 'f', 'b'), edge('e5', 'b', 'end'), edge('e6', 'j', 'ceo'), edge('e7', 'ceo', 'end')],
+    );
+    const t = removeNode(s, 'f', { withJoin: true });
+    expect(ids(t).sort()).toEqual(['b', 'ceo', 'end', 'start']);
+    expect(pairs(t)).toEqual(['b>end', 'ceo>end']);
+    for (const k of Object.keys(t.positions)) expect(ids(t)).toContain(k);
+  });
+
+  it('a fork whose branch ends in a dead end: the dead-end node is outside the block and stays', () => {
+    const s = mk(
+      [node('start', 'start'), node('f', 'fork'), appr('a'), appr('b'), node('j', 'join', { forkId: 'f', mode: 'all' }), node('end', 'end')],
+      [edge('e1', 'start', 'f'), edge('e2', 'f', 'a'), edge('e3', 'a', 'j'), edge('e4', 'f', 'b'), edge('e5', 'j', 'end')],
+    );
+    const t = removeNode(s, 'f', { withJoin: true });
+    expect(ids(t).sort()).toEqual(['b', 'end', 'start']);
   });
 
   it('removing a fork without its join keeps the rest', () => {
