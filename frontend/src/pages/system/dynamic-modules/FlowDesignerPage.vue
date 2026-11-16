@@ -9,6 +9,7 @@ import { useMe } from 'src/application/dynamic/queries/permissions-queries';
 import { useWorkflowQuery } from 'src/application/dynamic/queries/workflow-queries';
 import { resolveI18n } from 'src/domain/dynamic/i18n-text';
 import { toSchemaFields } from 'src/presentation/dynamic/designer/schema-fields';
+import DesignerNodeList from 'src/presentation/dynamic/approval-designer/graph/DesignerNodeList.vue';
 import DesignerIssues from 'src/presentation/dynamic/approval-designer/graph/DesignerIssues.vue';
 import DraftConflictDialog from 'src/presentation/dynamic/approval-designer/graph/DraftConflictDialog.vue';
 import PublishDialog from 'src/presentation/dynamic/approval-designer/graph/PublishDialog.vue';
@@ -72,6 +73,7 @@ const actions = useDesignerActions(designer, {
   t,
 });
 const confirmDiscard = ref(false);
+const listOpen = ref(false);
 const confirmDelete = ref(false);
 const title = computed(() => {
   if (!designer.loaded.value) return t('approval.designer.graph.title');
@@ -154,15 +156,16 @@ onBeforeUnmount(() => window.removeEventListener('beforeunload', onBeforeUnload)
         <q-badge v-if="designer.dirty.value" color="warning" text-color="dark" class="q-mr-sm" :label="t('approval.designer.graph.unsaved')" data-testid="de-unsaved" />
         <DesignerToolbar
           :readonly="!canEdit" :phone="phone" :show-flow-props="!docked" :undoable="designer.undoable.value" :redoable="designer.redoable.value"
-          :dirty="designer.dirty.value" :busy="actions.busy.value" :error-count="actions.errorCount.value"
+          :list-open="listOpen" :dirty="designer.dirty.value" :busy="actions.busy.value" :error-count="actions.errorCount.value"
           :can-discard="designer.server.value.published && designer.server.value.hasDraft" :can-delete="!designer.server.value.isNew && !designer.server.value.published"
           @fit="canvas?.fitAll()" @flow-props="openFlowProps" @undo="designer.undo()" @redo="designer.redo()"
-          @validate="actions.validate()" @save="actions.saveDraft()" @publish="actions.requestPublish()" @issues="actions.issuesOpen.value = true"
+          @validate="actions.validate()" @save="actions.saveDraft()" @publish="actions.requestPublish()" @issues="actions.issuesOpen.value = true" @node-list="listOpen = !listOpen"
           @discard="confirmDiscard = true" @delete-flow="confirmDelete = true"
         />
       </div>
       <q-banner v-if="!canEdit" dense class="bg-info-soft" data-testid="de-readonly">{{ t('approval.designer.graph.readonlyBanner') }}</q-banner>
 
+      <DesignerNodeList v-if="listOpen" :designer="designer" :selection="selection" @pick="(id: string) => pickIssue({ kind: 'node', id })" @close="listOpen = false" />
       <DesignerIssues v-if="actions.issuesOpen.value" :designer="designer" @pick="pickIssue" @close="actions.issuesOpen.value = false" />
       <div class="col row no-wrap de-body">
         <div class="col de-canvas-wrap">

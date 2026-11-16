@@ -27,8 +27,15 @@ const mod: ModuleDetail = { id: 1, key: 'doc', programCode: 'P', name: { 'zh-TW'
 const wf: WorkflowResponse = { statusFieldId: 5, initialOptionId: 11, states: [{ optionId: 11, readOnly: false }, { optionId: 12, readOnly: false }], transitions: [], editableFieldIds: [7] };
 const def = (): GraphDefinition => ({
   shape: 'graph', stages: [],
-  nodes: [{ id: 's', kind: 'start' }, { id: 'a', kind: 'approval', name: { 'zh-TW': '財務' }, approvers: { source: 'manager', level: 1 }, mode: 'all', editableFields: [], onEmpty: 'fallback' }, { id: 'n', kind: 'notify' }, { id: 'e', kind: 'end' }],
-  edges: [{ id: 'e1', from: 's', to: 'a', label: { 'zh-TW': '送出' } }, { id: 'e2', from: 'a', to: 'e' }],
+  nodes: [
+    { id: 's', kind: 'start' }, { id: 'a', kind: 'approval', name: { 'zh-TW': '財務' }, approvers: { source: 'manager', level: 1 }, mode: 'all', editableFields: [], onEmpty: 'fallback' }, { id: 'n', kind: 'notify' },
+    { id: 'c', kind: 'condition' }, { id: 'f', kind: 'fork' }, { id: 'j', kind: 'join', mode: 'all', forkId: 'f' }, { id: 'e', kind: 'end' },
+  ],
+  edges: [
+    { id: 'e1', from: 's', to: 'a', label: { 'zh-TW': '送出' } }, { id: 'e2', from: 'a', to: 'e' },
+    { id: 'c1', from: 'c', to: 'a', order: 1, label: { 'zh-TW': '大額' } }, { id: 'c2', from: 'c', to: 'f', order: 2 }, { id: 'c3', from: 'c', to: 'e', default: true },
+    { id: 'f1', from: 'f', to: 'a' }, { id: 'f2', from: 'f', to: 'j' },
+  ],
 });
 const flow = (p: Partial<ApprovalFlow> = {}): ApprovalFlow => ({
   key: 'po', name: { 'zh-TW': '採購' }, toOptionId: 12, priority: 1, active: true, used: false, pendingCount: 0, moduleKey: 'doc', version: 1, versionId: 3, definition: def(), graph: def(), ...p,
@@ -187,6 +194,78 @@ describe('DesignerPropertyPanel', () => {
     await flushPromises();
     expect(w.findComponent(ApprovalStageFields).props('errors')).toMatchObject({ approvers: '請選簽核人', _: '這個節點不能到達' });
     expect(w.text()).toContain('這個節點不能到達');
+    w.unmount();
+  });
+
+  const edgeIds = (d: ReturnType<typeof useGraphDesigner>, from: string) => d.state.value!.definition.edges.filter((e) => e.from === from && !e.default).sort((x, y) => (x.order ?? 0) - (y.order ?? 0)).map((e) => e.id);
+
+  it('condition panel lists the outgoing edges, reorders them and keeps the default last with no condition editor', async () => {
+    const { w, designer } = mountPanel({ kind: 'node', id: 'c' });
+    await flushPromises();
+    expect(w.find('[data-testid="condition-node-panel"]').exists()).toBe(true);
+    expect(w.find('[data-testid="cond-up-c1"]').attributes('disabled')).toBeDefined();
+    expect(w.find('[data-testid="cond-down-c2"]').attributes('disabled')).toBeDefined();
+    expect(w.find('[data-testid="cond-up-c3"]').exists()).toBe(false);
+    expect(w.find('[data-testid="cond-down-c3"]').exists()).toBe(false);
+    expect(w.find('[data-testid="cond-default-c3"]').exists()).toBe(true);
+    expect(w.get('[data-testid="cond-edge-c3"]').findComponent({ name: 'ConditionEditor' }).exists()).toBe(false);
+    expect(w.get('[data-testid="cond-edge-c1"]').findComponent({ name: 'ConditionEditor' }).exists()).toBe(true);
+    await w.get('[data-testid="cond-down-c1"]').trigger('click');
+    expect(edgeIds(designer, 'c')).toEqual(['c2', 'c1']);
+    // 預設線仍在最後
+    const shown = w.findAll('[data-testid^="cond-edge-"]').map((x) => x.attributes('data-testid'));
+    expect(shown).toEqual(['cond-edge-c2', 'cond-edge-c1', 'cond-edge-c3']);
+    designer.undo();
+    expect(edgeIds(designer, 'c')).toEqual(['c1', 'c2']);
+    w.unmount();
+  });
+
+  it('a condition edge is edited through its condition editor as one history step per field', async () => {
+    const { w, designer } = mountPanel({ kind: 'node', id: 'c' });
+    await flushPromises();
+    const ed = w.get('[data-testid="cond-edge-c2"]').findComponent({ name: 'ConditionEditor' });
+    ed.vm.$emit('update:modelValue', { all: [{ field: 7, op: 'gte', value: 100 }] });
+    expect(designer.state.value!.definition.edges.find((e) => e.id === 'c2')!.when).toBeTruthy();
+    expect(designer.dirty.value).toBe(true);
+    w.unmount();
+  });
+
+  it('selecting a condition out-edge shows its condition and order controls; another edge shows only the label', async () => {
+    const cond = mountPanel({ kind: 'edge', id: 'c2' });
+    await flushPromises();
+    expect(cond.w.find('[data-testid="cond-up-c2"]').exists()).toBe(true);
+    expect(cond.w.findComponent({ name: 'ConditionEditor' }).exists()).toBe(true);
+    cond.w.unmount();
+    const plain = mountPanel({ kind: 'edge', id: 'e2' });
+    await flushPromises();
+    expect(plain.w.findComponent({ name: 'ConditionEditor' }).exists()).toBe(false);
+    expect(plain.w.find('[data-testid="cond-up-e2"]').exists()).toBe(false);
+    plain.w.unmount();
+  });
+
+  it('fork panel lists the branches read-only and tells how to add one', async () => {
+    const { w } = mountPanel({ kind: 'node', id: 'f' });
+    await flushPromises();
+    expect(w.findAll('[data-testid^="fork-branch-"]').map((x) => x.text())).toEqual(['財務', '匯合']);
+    expect(w.get('[data-testid="fork-hint"]').text()).toBe('要新增分支，請從分支節點再拉一條線');
+    w.unmount();
+  });
+
+  it('join panel switches all/any and explains that the other branches are cancelled when any', async () => {
+    const { w, designer } = mountPanel({ kind: 'node', id: 'j' });
+    await flushPromises();
+    expect(w.find('[data-testid="join-any-hint"]').exists()).toBe(false);
+    w.findComponent({ name: 'QOptionGroup' }).vm.$emit('update:modelValue', 'any');
+    await flushPromises();
+    expect(designer.state.value!.definition.nodes.find((n) => n.id === 'j')!.mode).toBe('any');
+    expect(w.get('[data-testid="join-any-hint"]').text()).toBe('第一條分支到達後，其他分支自動取消');
+    w.unmount();
+  });
+
+  it('a read-only panel is wrapped in a disabled fieldset', async () => {
+    const { w } = mountPanel({ kind: 'node', id: 'c' }, { canEdit: false });
+    await flushPromises();
+    expect(w.get('fieldset').attributes('disabled')).toBeDefined();
     w.unmount();
   });
 });

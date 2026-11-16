@@ -316,4 +316,16 @@ describe('FlowDesignerPage', () => {
     expect(router.currentRoute.value.params.flowKey).toBe('new-flow');
     w.unmount();
   });
+
+  it('the node list opens from the toolbar (also read-only), and picking an item selects the node, pans to it and opens its panel', async () => {
+    const w = await mountAt(url(), { edit: false });
+    expect(w.find('[data-testid="de-nodelist"]').exists()).toBe(false);
+    await w.get('[data-testid="tb-nodelist"]').trigger('click');
+    expect(w.find('[data-testid="de-nodelist"]').exists()).toBe(true);
+    await w.get('[data-testid="de-nodelist-a"]').trigger('click');
+    await flushPromises();
+    expect(canvasCalls.focusNode).toHaveBeenCalledWith('a', 0);
+    expect(w.get('[data-testid="de-panel-title"]').text()).toBe('財務');
+    w.unmount();
+  });
 });

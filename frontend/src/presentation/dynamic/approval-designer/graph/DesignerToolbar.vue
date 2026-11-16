@@ -5,15 +5,19 @@ import { useI18n } from 'vue-i18n';
 // 捨棄草稿只在「已發布過、而且有草稿」時出現；只有草稿、從未發布的流程沒有版本可回，改在更多選單提供「刪除流程」（U64）。
 defineProps<{
   readonly: boolean; phone: boolean; showFlowProps: boolean; undoable: boolean; redoable: boolean; dirty: boolean; busy: boolean;
-  errorCount: number; canDiscard: boolean; canDelete: boolean;
+  errorCount: number; canDiscard: boolean; canDelete: boolean; listOpen?: boolean;
 }>();
-const emit = defineEmits<{ fit: []; flowProps: []; undo: []; redo: []; validate: []; save: []; publish: []; discard: []; deleteFlow: []; issues: [] }>();
+const emit = defineEmits<{ fit: []; flowProps: []; undo: []; redo: []; validate: []; save: []; publish: []; discard: []; deleteFlow: []; issues: []; nodeList: [] }>();
 const { t } = useI18n();
 </script>
 
 <template>
   <div class="row items-center no-wrap q-gutter-x-xs de-toolbar" role="toolbar" :aria-label="t('approval.designer.graph.title')" data-testid="de-toolbar">
     <q-btn flat dense no-caps icon="fit_screen" :label="phone ? undefined : t('approval.designer.graph.fit')" :aria-label="t('approval.designer.graph.fit')" data-testid="tb-fit" @click="emit('fit')" />
+    <q-btn
+      flat dense no-caps icon="format_list_numbered" :label="phone ? undefined : t('approval.designer.graph.nodeList')" :aria-label="t('approval.designer.graph.nodeList')" :aria-pressed="listOpen ? 'true' : 'false'"
+      :class="{ 'bg-grey-3': listOpen }" data-testid="tb-nodelist" @click="emit('nodeList')"
+    />
     <slot name="after-fit" />
     <q-btn
       v-if="showFlowProps" flat dense no-caps icon="tune" :label="phone ? undefined : t('approval.designer.graph.flowProps')" :aria-label="t('approval.designer.graph.flowProps')"

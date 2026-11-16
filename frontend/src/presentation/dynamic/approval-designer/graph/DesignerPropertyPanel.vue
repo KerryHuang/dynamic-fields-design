@@ -3,9 +3,13 @@ import { computed } from 'vue';
 import { useI18n } from 'vue-i18n';
 import type { ModuleDetail, WorkflowResponse } from 'src/domain/dynamic/types';
 import ApprovalNodePanel from './ApprovalNodePanel.vue';
+import ConditionNodePanel from './ConditionNodePanel.vue';
 import EdgePanel from './EdgePanel.vue';
 import FlowPropsPanel from './FlowPropsPanel.vue';
+import ForkNodePanel from './ForkNodePanel.vue';
+import JoinNodePanel from './JoinNodePanel.vue';
 import NodeAdvancedFields from './NodeAdvancedFields.vue';
+import NotifyNodePanel from './NotifyNodePanel.vue';
 import { fieldErrors, nodeLabel, type Selection } from './designer-graph';
 import type { GraphDesigner } from './use-graph-designer';
 
@@ -32,15 +36,24 @@ const nodeErrors = computed(() => (node.value ? fieldErrors(props.designer.issue
     </div>
     <q-separator />
     <div class="col scroll q-pa-sm" :style="{ minHeight: 0 }">
-      <div v-if="nodeErrors" class="text-negative q-mb-sm">{{ nodeErrors }}</div>
-      <FlowPropsPanel v-if="selection.kind === 'flow'" :designer="designer" :module="module" :workflow="workflow" />
-      <EdgePanel v-else-if="edge" :designer="designer" :edge="edge" />
-      <template v-else-if="node">
-        <ApprovalNodePanel v-if="node.kind === 'approval'" :designer="designer" :node="node" :module="module" :workflow="workflow" />
-        <div v-else-if="node.kind === 'notify'" class="text-muted" data-testid="notify-panel">{{ t('approval.designer.graph.notifyNotYet') }}</div>
-        <div v-else class="text-muted" data-testid="no-props">{{ t('approval.graph.kind.' + node.kind) }}</div>
-        <NodeAdvancedFields class="q-mt-md" :designer="designer" :node="node" />
-      </template>
+      <fieldset class="de-fieldset" :disabled="!designer.canEdit.value">
+        <div v-if="nodeErrors" class="text-negative q-mb-sm">{{ nodeErrors }}</div>
+        <FlowPropsPanel v-if="selection.kind === 'flow'" :designer="designer" :module="module" :workflow="workflow" />
+        <EdgePanel v-else-if="edge" :designer="designer" :edge="edge" :module="module" />
+        <template v-else-if="node">
+          <ApprovalNodePanel v-if="node.kind === 'approval'" :designer="designer" :node="node" :module="module" :workflow="workflow" />
+          <ConditionNodePanel v-else-if="node.kind === 'condition'" :designer="designer" :node="node" :module="module" />
+          <ForkNodePanel v-else-if="node.kind === 'fork'" :designer="designer" :node="node" />
+          <JoinNodePanel v-else-if="node.kind === 'join'" :designer="designer" :node="node" />
+          <NotifyNodePanel v-else-if="node.kind === 'notify'" />
+          <div v-else class="text-muted" data-testid="no-props">{{ t('approval.graph.kind.' + node.kind) }}</div>
+          <NodeAdvancedFields class="q-mt-md" :designer="designer" :node="node" />
+        </template>
+      </fieldset>
     </div>
   </div>
 </template>
+
+<style scoped>
+.de-fieldset { border: 0; margin: 0; padding: 0; min-width: 0; }
+</style>
