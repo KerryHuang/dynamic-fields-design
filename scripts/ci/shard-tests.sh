@@ -19,7 +19,7 @@ dotnet test "$dir" --no-build --list-tests 2>/dev/null | sed -n '/^The following
   | sed 's/^ *//' | grep -v '^$' > "$out/tests.txt"
 
 # class<TAB>測試數<TAB>shard，由 awk 一次算完
-# 權重 = shard-weights.tsv 記的實測秒數（量過的重類別），其餘類別以每筆 0.25 秒估算
+# 權重 = shard-weights.tsv 記的實測秒數（量過的重類別），其餘類別以每筆 0.5 秒估算
 awk -v n="$total" -v proj="$proj" -v wf="$here/shard-weights.tsv" '
   BEGIN { while ((getline l < wf) > 0) { split(l, a, "\t"); sec[a[1]] = a[2] } }
   { name=$0; sub(/\(.*/,"",name); c=name; sub(/\.[^.]*$/,"",c); cnt[c]++; all++ }
@@ -27,7 +27,7 @@ awk -v n="$total" -v proj="$proj" -v wf="$here/shard-weights.tsv" '
     k=0
     for (c in cnt) {
       key=c; sub(/^DynamicModules\./,"",key)
-      w[c] = (key in sec) ? sec[key] : cnt[c]*0.25
+      w[c] = (key in sec) ? sec[key] : cnt[c]*0.5
       us[++k]=c
     }
     # 權重大到小、同權重依名稱
@@ -56,10 +56,10 @@ set -e
 
 # 各類別耗時前 15 名，供下次調整切法
 if [ -f "$out/result.trx" ]; then
-  { echo "### $proj $idx/$total 最耗時的類別（秒）"
+  { echo "### $proj $idx/$total 各類別耗時前 40 名（秒，更新 shard-weights.tsv 用）"
     grep -o 'testName="[^"]*" computerName="[^"]*" duration="[^"]*"' "$out/result.trx" \
       | sed -E 's/testName="([^"(]*)[^"]*" computerName="[^"]*" duration="([0-9]+):([0-9]+):([0-9.]+)"/\1 \2 \3 \4/' \
-      | awk '{c=$1; sub(/\.[^.]*$/,"",c); t[c]+=$2*3600+$3*60+$4} END{for(k in t) printf "%8.1f %s\n", t[k], k}' | sort -nr | head -15
+      | awk '{c=$1; sub(/\.[^.]*$/,"",c); t[c]+=$2*3600+$3*60+$4} END{for(k in t) printf "%8.1f %s\n", t[k], k}' | sort -nr | head -40
   } | tee -a "${GITHUB_STEP_SUMMARY:-/dev/null}"
 fi
 
