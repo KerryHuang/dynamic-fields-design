@@ -89,7 +89,7 @@ docker run -p 8080:8080 -e Auth__InitialAdminPassword=請改成你的密碼 dyna
 - [Demo 腳本](docs/demo.md)：每個情境用哪個身分、示範哪項能力
 - [部署指南](docs/deploy.md)：Demo 部署、容器、環境變數
 - [開發指南](CONTRIBUTING.md)：本機啟動、測試、目錄結構
-- 問題與建議：請到 [GitHub Issues](https://github.com/KerryHuang/dynamic-fields-design/issues)
+- 問題與建議：請到 [GitHub Issues](https://github.com/KerryHuang/formwright/issues)
 
 ## 授權
 

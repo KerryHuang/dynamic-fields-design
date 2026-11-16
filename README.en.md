@@ -89,7 +89,7 @@ Open `http://localhost:8080` and sign in as `admin`.
 - [Demo script](docs/demo.md) (zh-TW): which identity to use for each scenario
 - [Deployment guide](docs/deploy.md) (zh-TW): demo deployment, container, environment variables
 - [Contributing](CONTRIBUTING.md) (zh-TW): local setup, tests, directory layout
-- Questions and suggestions: [GitHub Issues](https://github.com/KerryHuang/dynamic-fields-design/issues)
+- Questions and suggestions: [GitHub Issues](https://github.com/KerryHuang/formwright/issues)
 
 ## License
 

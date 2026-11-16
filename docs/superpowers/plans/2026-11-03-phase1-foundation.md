@@ -36,7 +36,7 @@
 
 ## Global Constraints
 
-- 所有路徑都相對於 repo 根目錄 `dynamic-fields-design/`；後端在 `poc/backend/`，前端在 `poc/frontend/`。
+- 所有路徑都相對於 repo 根目錄 `formwright/`；後端在 `poc/backend/`，前端在 `poc/frontend/`。
 - API 基底路徑是 `/api/v3/dynamic`，路由一律小寫。
 - SQLite 檔案是 `poc/backend/data/poc.db`。表名用 `Dynamic_` 前綴，例如 `Dynamic_Module`。
 - `Field.Key` 一律 `f_<Field.Id>`，由系統產生，不接受輸入。

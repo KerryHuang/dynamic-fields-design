@@ -1,6 +1,6 @@
 # 動態模組與自訂欄位 設計文件
 
-> 2026-11-03｜目錄 `dynamic-fields-design`｜前置研究：[vtiger 研究](../../research/vtiger-dynamic-fields.md)
+> 2026-11-03｜目錄 `formwright`｜前置研究：[vtiger 研究](../../research/vtiger-dynamic-fields.md)
 > 標「（我的判斷）」的是我代為決定、可以改的；其餘是使用者或 PO 已拍板的決策。
 
 ## 1. 意圖
@@ -465,7 +465,7 @@ public sealed class DynamicRecordResponse {
 **目錄**（在本 repo）：
 
 ```
-dynamic-fields-design/
+formwright/
   poc/backend/   .NET 8 solution，分層為：Domain／Application／Persistence／WebAPI／Tests
   poc/frontend/  Vue 3 + Quasar + TanStack Query + vee-validate + zod，分層對應後端的 Clean Architecture 分層
   docs/
