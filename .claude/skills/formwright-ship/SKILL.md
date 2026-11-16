@@ -19,7 +19,7 @@ bash scripts/unattended/ci-wait.sh <sha>
 - `ci-wait.sh` 背景跑，最後一行 `success` 才算過；之前幾行是各 job 的結論與分鐘數，失敗的 job 另列 `FAILED`。
 - 範圍依改動自動決定：只改文件不跑；只改 `frontend/` 只跑前端 test／typecheck／build；動到 `backend/`、`shared/`、Dockerfile 或 workflow 就全跑。
 - 失敗先看 log（`gh run view <id> --log-failed`）：真的壞就修、推上去重跑；逾時型、單獨重跑會過的照 `docs/ai/testing.md`「異常判讀」處理，重跑用 `gh run rerun <id> --failed`。
-- 本機的 `bash scripts/unattended/gate.sh <worktree>` 留作備援（GitHub 不能用時），不再每段跑。
+- 本機的 `bash scripts/unattended/gate.sh <worktree>` 只在 GitHub 不能用時當備援。
 
 ## 1.5 本機走查（有畫面的改動）
 
@@ -64,7 +64,7 @@ bash scripts/unattended/wait-deploy.sh <sha>
 
 ## 5. Demo 冒煙檢查
 
-本機已走查過，Demo 上只做冒煙檢查：用 `formwright-demo-verify` skill 開這次動到的頁面一次，確認載得出來、沒有 console 錯誤。版面要量的話，只量最容易出問題的那個寬度。沒有做本機走查的變更（例如純後端），照原本的完整驗證做。
+本機已走查過，Demo 上只做冒煙檢查：用 `formwright-demo-verify` skill 開這次動到的頁面一次，確認載得出來、沒有 console 錯誤。版面要量的話，只量最容易出問題的那個寬度。沒有做本機走查的變更（例如純後端），在 Demo 上照 `formwright-demo-verify` 做完整驗證，四種寬度都量。
 
 ## 6. 收尾
 

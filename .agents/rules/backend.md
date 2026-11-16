@@ -12,6 +12,6 @@ trigger: always_on
 - **migration**：只用 EF 產生，不手改；一個工作段最多一個。會加 migration 的兩項工作不並行（model snapshot 會衝突）。
 - **PostgreSQL 相容**：正式版資料庫是 PostgreSQL，SQLite 只用於研發與 Demo。新程式不加 SQLite 專屬寫法：raw SQL 走 `ISqlDialect`、識別字不靠大小寫折疊、不用 `INDEXED BY`／`PRAGMA`／`strftime`、不 catch `SqliteException` 做業務判斷、部分索引 filter 不寫 `= 0／= 1` 當布林；DateTime 一律 `Kind` 明確。非寫不可時隔離在 provider 專屬類別並在交付說明列出。
 - **業務政策不寫死**（AGENTS.md 鐵則 2）：後端的寫法是把上限、預設值、天數、通知對象放進可設定的資料，handler 讀設定；不寫成 `const`／`static readonly`。可寫死的寫了要在交付說明列出。
-- **使用者看得到的訊息**：集中在同功能的 `*Messages.cs`（例：`TaskService/TaskMessages.cs`），不散寫在 handler。目前後端訊息只有中文、尚未本地化。
+- **使用者看得到的訊息**：集中在同功能的 `*Messages.cs`（例：`TaskService/TaskMessages.cs`），不散寫在 handler。WebAPI 依 `X-Locale` 回傳語系，四語字串表在 `Application/Common/MessageText.cs`；字面值是表內某句的繁中原文才會被翻譯，其餘照中文回傳（還沒搬完）。
 - **改種子或共用 fixture 前**，先 grep 既有測試對那筆資料的斷言（例：新增 Demo 使用者會改變群組成員與提及候選的筆數）。
 - **測試**：xUnit，`tests/DynamicModules.{Domain,Application,WebAPI}Tests`；開發中只跑 `--filter` 窄範圍，WebAPI 全套留給 gate。測試資料全部虛構。
