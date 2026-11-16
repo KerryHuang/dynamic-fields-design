@@ -2,7 +2,7 @@
 import { useQuasar } from 'quasar';
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
-import { onBeforeRouteLeave, useRoute, useRouter } from 'vue-router';
+import { onBeforeRouteLeave, onBeforeRouteUpdate, useRoute, useRouter } from 'vue-router';
 import { useApprovalFlow, useApprovalFlows } from 'src/application/dynamic/queries/approval-flow-queries';
 import { useModuleDetail } from 'src/application/dynamic/queries/modules-queries';
 import { useMe } from 'src/application/dynamic/queries/permissions-queries';
@@ -129,10 +129,13 @@ function back() {
 
 // ---- 未儲存保護（U52）：站內換頁跳自訂對話框；關分頁、重新整理只有瀏覽器原生提示 ----
 const leaving = ref<((go: boolean) => void) | null>(null);
-onBeforeRouteLeave(() => {
+function confirmLeave() {
   if (!designer.dirty.value) return true;
   return new Promise<boolean>((resolve) => { leaving.value = (go) => { leaving.value = null; resolve(go); }; });
-});
+}
+onBeforeRouteLeave(confirmLeave);
+// 同一個路由 record 只換參數（設計頁 A 換到設計頁 B）不會觸發 leave，用同一套確認
+onBeforeRouteUpdate(confirmLeave);
 /** 「儲存草稿並離開」：存成功才離開；新流程存完不換網址（要走的是使用者原本要去的地方）。 */
 async function saveAndLeave() {
   const go = leaving.value;
@@ -141,6 +144,7 @@ async function saveAndLeave() {
   const saved = await actions.saveDraft();
   suppressRedirect = false;
   if (saved) go(true);
+  else if (actions.conflict.value) go(false); // 409：關掉離開對話框，只留衝突對話框；解決後使用者再離開一次
 }
 function onBeforeUnload(e: BeforeUnloadEvent) {
   if (!designer.dirty.value) return;

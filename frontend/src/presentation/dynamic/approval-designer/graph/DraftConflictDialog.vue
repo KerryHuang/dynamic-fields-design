@@ -3,7 +3,7 @@ import { computed } from 'vue';
 import { useI18n } from 'vue-i18n';
 import type { Conflict } from './use-designer-actions';
 
-// 草稿衝突（409 DraftConflict）：誰在什麼時候存了新的草稿；覆蓋／重新載入／取消。
+// 草稿衝突（409 DraftConflict）：誰在什麼時候更新了這條流程（可能是存草稿、發布或捨棄，文案不限定）；覆蓋／重新載入／取消。
 const props = defineProps<{ conflict: Conflict | null; busy: boolean }>();
 const emit = defineEmits<{ resolve: [choice: 'overwrite' | 'reload' | 'cancel'] }>();
 const { t, locale } = useI18n();

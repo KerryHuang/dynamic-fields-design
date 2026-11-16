@@ -133,7 +133,7 @@ export function useDesignerActions(designer: GraphDesigner, ctx: ActionContext) 
 
   // ---- 存草稿 ----
   /** 回傳存好的流程；失敗回 undefined。 */
-  async function saveDraft(opts: { force?: boolean } = {}): Promise<ApprovalFlow | undefined> {
+  async function saveDraft(opts: { force?: boolean; silent?: boolean } = {}): Promise<ApprovalFlow | undefined> {
     const built = buildInput(opts.force);
     if (!built || !designer.canEdit.value) return undefined;
     const s = designer.server.value;
@@ -142,7 +142,7 @@ export function useDesignerActions(designer: GraphDesigner, ctx: ActionContext) 
       designer.replaceServer(flow);
       designer.markSaved(built.sentJson); // 請求期間的修改仍算未存
       if (s.isNew) ctx.onCreated(flow.key);
-      ctx.notify('positive', ctx.t('approval.designer.graph.draftSaved'));
+      if (!opts.silent) ctx.notify('positive', ctx.t('approval.designer.graph.draftSaved'));
       return flow;
     } catch (err) {
       fail(err, 'save', built.sent);
@@ -163,7 +163,7 @@ export function useDesignerActions(designer: GraphDesigner, ctx: ActionContext) 
     const wasNew = designer.server.value.isNew;
     publishInfo.value = null;
     if (wasNew) { // 新流程：先建列（POST draft）、換網址，再發布
-      const created = await saveDraft();
+      const created = await saveDraft({ silent: true }); // 之後會跳「已發布」，不重複通知
       if (!created) return;
     }
     const built = buildInput(opts.force);

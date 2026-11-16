@@ -20,7 +20,7 @@ const { t } = useI18n();
         <div v-if="info.newVersion && info.nextVersion != null" data-testid="publish-version">
           {{ info.pendingCount > 0 ? t('approval.designer.graph.publishNewVersion', { v: info.nextVersion, n: info.pendingCount }) : t('approval.designer.graph.publishNewVersionNone', { v: info.nextVersion }) }}
         </div>
-        <div v-if="!info.warnings.length && !info.newVersion" data-testid="publish-ask">{{ t('approval.designer.graph.publishAsk') }}</div>
+        <div v-if="!info.warnings.length && !(info.newVersion && info.nextVersion != null)" data-testid="publish-ask">{{ t('approval.designer.graph.publishAsk') }}</div>
       </q-card-section>
       <q-card-actions align="right">
         <q-btn flat no-caps :label="t('approval.designer.graph.cancel')" data-testid="publish-cancel" @click="emit('cancel')" />

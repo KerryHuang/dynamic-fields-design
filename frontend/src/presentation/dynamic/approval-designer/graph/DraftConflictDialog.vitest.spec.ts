@@ -17,7 +17,7 @@ describe('DraftConflictDialog', () => {
   it('names the editor and the time, and offers overwrite, reload and cancel', async () => {
     const w = show({ action: 'save', info: { draftUpdatedByName: 'Amy', draftUpdatedTime: '2026-11-16T08:00:00Z', draftRev: 'r9' } });
     await new Promise((r) => setTimeout(r, 30));
-    expect(el('conflict-body')?.textContent).toMatch(/^Amy 在 .+ 存了新的草稿$/);
+    expect(el('conflict-body')?.textContent).toMatch(/^Amy 在 .+ 更新了這條流程$/);
     expect(el('conflict-overwrite')?.textContent).toContain('覆蓋');
     el('conflict-overwrite')!.click();
     el('conflict-reload')!.click();

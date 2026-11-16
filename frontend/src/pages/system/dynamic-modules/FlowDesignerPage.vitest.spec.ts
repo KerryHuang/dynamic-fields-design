@@ -346,6 +346,33 @@ describe('FlowDesignerPage', () => {
     w.unmount();
   });
 
+  it('the leave dialog: a 409 while saving closes it and leaves only the conflict dialog', async () => {
+    api.saveApprovalFlowDraft.mockRejectedValue({ status: 409, code: 'DraftConflict', params: { draftRev: 'r9', draftUpdatedByName: 'Amy' } });
+    const w = await mountAt(url());
+    await w.get('[data-testid="move-a"]').trigger('click');
+    void router.push('/system/dynamic-modules/doc');
+    await flushPromises();
+    (document.body.querySelector('[data-testid="de-leave-save"]') as HTMLElement).click();
+    await flushPromises();
+    expect(document.body.querySelector('[data-testid="conflict-dialog"]')).not.toBeNull();
+    expect(document.body.querySelector('[data-testid="de-leave-save"]')).toBeNull();
+    expect(router.currentRoute.value.name).toBe('flow-designer');
+    w.unmount();
+  });
+
+  it('switching to another flow in the same route record asks about unsaved changes too', async () => {
+    const w = await mountAt(url());
+    await w.get('[data-testid="move-a"]').trigger('click');
+    void router.push(url('other'));
+    await flushPromises();
+    expect(router.currentRoute.value.params.flowKey).toBe('po');
+    expect(document.body.querySelector('[data-testid="de-leave-cancel"]')).not.toBeNull();
+    (document.body.querySelector('[data-testid="de-leave-cancel"]') as HTMLElement).click();
+    await flushPromises();
+    expect(router.currentRoute.value.params.flowKey).toBe('po');
+    w.unmount();
+  });
+
   it('saving a new flow replaces the url with the flow key', async () => {
     api.createApprovalFlowDraft.mockResolvedValue(flow({ key: 'new-flow', version: null, versionId: null, draft: { definition: def() }, draftRev: 'r0' }) as never);
     const w = await mountAt('/system/dynamic-modules/doc/approval-flows/_new?target=12');

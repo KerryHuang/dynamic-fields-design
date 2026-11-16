@@ -34,6 +34,14 @@ describe('PublishDialog', () => {
     w.unmount();
   });
 
+  it('a new version without a next version number falls back to the one-line confirmation (never an empty body)', async () => {
+    const w = show({ warnings: [], newVersion: true, nextVersion: null, pendingCount: 2 });
+    await new Promise((r) => setTimeout(r, 30));
+    expect(body('publish-version')).toBeNull();
+    expect(body('publish-ask')?.textContent).toBe('確認發布這條流程？');
+    w.unmount();
+  });
+
   it('warnings are listed and the confirm button says publish anyway; confirm and cancel emit', async () => {
     const w = show({ warnings: [{ key: 'definition.nodes[1]', code: 'W1', message: '可能略過' }], newVersion: false, pendingCount: 0 });
     await new Promise((r) => setTimeout(r, 30));

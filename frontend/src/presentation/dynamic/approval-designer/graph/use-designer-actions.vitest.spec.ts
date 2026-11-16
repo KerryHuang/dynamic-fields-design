@@ -132,6 +132,8 @@ describe('useDesignerActions', () => {
     expect(order).toEqual(['create', 'replace', 'publish']);
     expect(sentOf(api.publishApprovalFlow)[0]).toBe('po');
     expect(sentOf(api.createApprovalFlowDraft)[0]).toBe('doc');
+    // 新流程發布只通知一次「已發布」，中間那次建草稿不另外跳「草稿已儲存」
+    expect(ctx.notify.mock.calls.map((c) => c[1])).toEqual(['approval.designer.graph.published']);
   });
 
   it('a publish 400 after a clean validate opens the same issue list', async () => {
