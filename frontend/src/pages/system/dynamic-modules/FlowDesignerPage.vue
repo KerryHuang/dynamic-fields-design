@@ -113,7 +113,8 @@ onBeforeUnmount(() => window.removeEventListener('beforeunload', onBeforeUnload)
     <div v-else-if="loadFailed || flowQuery.isError.value || moduleQuery.isError.value" class="q-pa-md text-negative" data-testid="de-load-failed">
       {{ t('approval.designer.graph.loadFailed') }}
     </div>
-    <div v-else-if="!designer.loaded.value" class="q-pa-md text-muted">{{ t('designer.loading') }}</div>
+    <div v-else-if="workflow.data.value === null" class="q-pa-md text-muted" data-testid="de-no-workflow">{{ t('approval.designer.list.noWorkflow') }}</div>
+    <div v-else-if="!designer.loaded.value || !moduleQuery.data.value || !workflow.data.value" class="q-pa-md text-muted">{{ t('designer.loading') }}</div>
     <template v-else>
       <div class="row items-center no-wrap q-pa-xs de-header">
         <q-btn flat dense round icon="arrow_back" :aria-label="t('approval.designer.graph.back')" data-testid="de-back" @click="back" />
@@ -134,17 +135,17 @@ onBeforeUnmount(() => window.removeEventListener('beforeunload', onBeforeUnload)
             @node-move="(id: string, to: { x: number; y: number }) => designer.move(id, to)"
           />
           <aside v-if="tablet && panelOpen" class="de-drawer" :style="{ width: `${panelWidth}px` }" data-testid="de-drawer">
-            <DesignerPropertyPanel :designer="designer" :selection="selection" closable @close="panelOpen = false" />
+            <DesignerPropertyPanel :designer="designer" :selection="selection" :module="moduleQuery.data.value!" :workflow="workflow.data.value!" closable @close="panelOpen = false" />
           </aside>
         </div>
         <aside v-if="docked" class="de-dock" :style="{ width: `${panelWidth}px` }" data-testid="de-dock">
-          <DesignerPropertyPanel :designer="designer" :selection="selection" :closable="false" />
+          <DesignerPropertyPanel :designer="designer" :selection="selection" :module="moduleQuery.data.value!" :workflow="workflow.data.value!" :closable="false" />
         </aside>
       </div>
 
       <q-dialog :model-value="phone && showPanel" maximized @update:model-value="panelOpen = false">
         <q-card class="column no-wrap" data-testid="de-phone-panel">
-          <DesignerPropertyPanel :designer="designer" :selection="selection" closable @close="panelOpen = false" />
+          <DesignerPropertyPanel :designer="designer" :selection="selection" :module="moduleQuery.data.value!" :workflow="workflow.data.value!" closable @close="panelOpen = false" />
         </q-card>
       </q-dialog>
     </template>

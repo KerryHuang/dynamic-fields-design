@@ -1,5 +1,7 @@
 import { computed, ref, shallowRef } from 'vue';
-import type { ApprovalFlow, ApprovalFlowLayout, GraphDefinition } from 'src/domain/dynamic/approval-flow-types';
+import { pruneCondition } from 'src/domain/dynamic/condition';
+import type { GraphIssueMap } from 'src/domain/dynamic/approval-graph-errors';
+import type { ApprovalFlow, ApprovalFlowLayout, ApproverSource, GraphDefinition } from 'src/domain/dynamic/approval-flow-types';
 import { moveNode, type EditOptions, type GraphState, type Position } from 'src/domain/dynamic/approval-graph-edit';
 import { canRedo, canUndo, clear, createHistory, push, redo, undo, type History } from 'src/domain/dynamic/approval-graph-history';
 import type { I18nText } from 'src/domain/dynamic/types';
@@ -23,11 +25,15 @@ export interface ServerInfo {
   draftRev: string | null;
   /** 已發布版本用過的節點代號：新節點不重用（J72）。 */
   reserved: string[];
+  /** 已發布版本裡各簽核節點的簽核人（「沿用舊值」的主管層級判斷用）。 */
+  publishedApprovers: Record<string, ApproverSource>;
+  /** 被用過的流程不能換目標狀態。 */
+  used: boolean;
   priority: number;
   toOptionId: number | null;
 }
 
-const blank = (): ServerInfo => ({ isNew: true, key: '', hasDraft: false, published: false, versionId: null, draftRev: null, reserved: [], priority: 1, toOptionId: null });
+const blank = (): ServerInfo => ({ isNew: true, key: '', hasDraft: false, published: false, versionId: null, draftRev: null, reserved: [], publishedApprovers: {}, used: false, priority: 1, toOptionId: null });
 
 /** 新節點的預設名稱（U51、U49）：四語各一份。 */
 export const editOptions = (reserved: string[]): EditOptions => ({ reserved, names: { approval: approvalNames, conditionLabel: conditionLabels } });
@@ -37,6 +43,8 @@ export function useGraphDesigner(canEdit: () => boolean) {
   const savedJson = ref('');
   const server = ref<ServerInfo>(blank());
   const selection = ref<Selection>(FLOW_SELECTION);
+  /** 後端驗證的結果（乾跑、發布或存檔的 400）；null = 還沒驗過，不標錯（U54）。 */
+  const issues = shallowRef<GraphIssueMap | null>(null);
   let lastKey: string | null = null;
 
   const loaded = computed(() => history.value !== null);
@@ -51,8 +59,9 @@ export function useGraphDesigner(canEdit: () => boolean) {
     // 已發布版本的圖：graph 定義本身，或 sequence 版本轉換後的 graph（只有單筆 GET 帶；寫入回應沒有，沿用原本的）
     const pub = flow.definition ? (flow.definition.shape === 'graph' ? flow.definition : flow.graph ?? null) : null;
     const reserved = pub ? pub.nodes.map((n) => n.id) : flow.version != null ? server.value.reserved : [];
+    const publishedApprovers: Record<string, ApproverSource> = pub ? Object.fromEntries(pub.nodes.filter((n) => n.approvers).map((n) => [n.id, n.approvers!])) : flow.version != null ? server.value.publishedApprovers : {};
     server.value = {
-      isNew: false, key: flow.key, hasDraft: flow.draft != null, published: flow.version != null, versionId: flow.versionId ?? null,
+      isNew: false, used: flow.used, publishedApprovers, key: flow.key, hasDraft: flow.draft != null, published: flow.version != null, versionId: flow.versionId ?? null,
       draftRev: flow.draftRev ?? null, reserved, priority: flow.priority, toOptionId: flow.toOptionId,
     };
   }
@@ -76,6 +85,7 @@ export function useGraphDesigner(canEdit: () => boolean) {
     history.value = createHistory(snap);
     savedJson.value = JSON.stringify(snap);
     selection.value = FLOW_SELECTION;
+    issues.value = null;
     lastKey = null;
     return true;
   }
@@ -102,15 +112,21 @@ export function useGraphDesigner(canEdit: () => boolean) {
 
   const select = (s: Selection) => { selection.value = s; };
 
-  /** 送出的定義與版面（所見即所得：全部節點的座標都送，J73）。 */
+  /** 送出的定義與版面（所見即所得：全部節點的座標都送，J73）；編輯中還沒填完的條件列在這裡剪掉，空條件送 null。 */
   function output(): { definition: GraphDefinition; layout: ApprovalFlowLayout } | null {
     const g = state.value;
     if (!g) return null;
-    return { definition: g.definition, layout: { nodes: Object.fromEntries(Object.entries(g.positions).map(([id, p]) => [id, { x: p.x, y: p.y }])) } };
+    const d = g.definition;
+    const definition: GraphDefinition = {
+      ...d, when: pruneCondition(d.when ?? undefined) ?? null,
+      nodes: d.nodes.map((n) => (n.when === undefined ? n : { ...n, when: pruneCondition(n.when ?? undefined) ?? null })),
+      edges: d.edges.map((e) => (e.when === undefined ? e : { ...e, when: pruneCondition(e.when ?? undefined) ?? null })),
+    };
+    return { definition, layout: { nodes: Object.fromEntries(Object.entries(g.positions).map(([id, p]) => [id, { x: p.x, y: p.y }])) } };
   }
 
   return {
-    loaded, snapshot, state, meta, dirty, undoable, redoable, server, selection, canEdit: computed(canEdit),
+    loaded, snapshot, state, meta, dirty, undoable, redoable, server, selection, issues, canEdit: computed(canEdit),
     load, apply, edit, editMeta, move, undo: undoStep, redo: redoStep, clearHistory, markSaved, select, output, replaceServer,
   };
 }

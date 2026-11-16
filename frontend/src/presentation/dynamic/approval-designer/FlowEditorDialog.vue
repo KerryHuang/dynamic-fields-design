@@ -6,18 +6,11 @@ import { useSaveApprovalFlow } from 'src/application/dynamic/queries/approval-fl
 import {
   buildFlowInput, definitionChanged, draftFromFlow, emptyFlowDraft, nextPriority, type FlowDraft,
 } from 'src/domain/dynamic/approval-flow-draft';
-import type { ApprovalFlow, ApproverSource, SequenceFlow } from 'src/domain/dynamic/approval-flow-types';
-import { resolveI18n } from 'src/domain/dynamic/i18n-text';
-import { policyValueText } from 'src/domain/dynamic/policy-types';
+import type { ApprovalFlow, SequenceFlow } from 'src/domain/dynamic/approval-flow-types';
 import type { ModuleDetail, WorkflowResponse } from 'src/domain/dynamic/types';
-import { useRecipientNames } from 'src/presentation/policies/useRecipientNames';
-import I18nTextInput from 'src/presentation/dynamic/designer/I18nTextInput.vue';
 import { errorFor } from 'src/presentation/dynamic/designer/api-error';
-import { toSchemaFields } from 'src/presentation/dynamic/designer/schema-fields';
-import ConditionEditor from 'src/presentation/dynamic/list/ConditionEditor.vue';
 import type { ApiError } from 'src/services/api/http';
-import ApproverSourceEditor from './ApproverSourceEditor.vue';
-import { defaultSourceOf, FALLBACK_SOURCE_KINDS } from './approver-source';
+import FlowBasicFields, { type FlowBasic } from './FlowBasicFields.vue';
 import FlowStagesEditor from './FlowStagesEditor.vue';
 import FlowTrialPanel from './FlowTrialPanel.vue';
 import { useApprovalLimits } from './use-approval-limits';
@@ -31,7 +24,7 @@ const props = defineProps<{
   presetTarget?: number | null;
 }>();
 const emit = defineEmits<{ 'update:modelValue': [open: boolean]; saved: [flow: ApprovalFlow | undefined] }>();
-const { t, locale } = useI18n();
+const { t } = useI18n();
 const $q = useQuasar();
 const mobile = computed(() => $q.screen.lt.sm);
 
@@ -40,9 +33,7 @@ const section = ref<'basic' | 'stages' | 'trial'>('basic');
 const form = ref<FlowDraft>(emptyFlowDraft(null, 1));
 const error = ref<ApiError | null>(null);
 const targetMissing = ref(false);
-// Switching the fallback to inherit and back keeps what was there (the draft's custom value, else the saved one).
-let lastCustom: ApproverSource | null = null;
-const nameInput = ref<{ validate(): Promise<boolean> } | null>(null);
+const basicFields = ref<{ validate(): Promise<boolean> } | null>(null);
 
 watch(() => [props.modelValue, props.flow?.key, props.presetTarget] as const, ([open]) => {
   if (!open) return;
@@ -52,26 +43,12 @@ watch(() => [props.modelValue, props.flow?.key, props.presetTarget] as const, ([
   const preset = props.presetTarget ?? null;
   form.value = f ? draftFromFlow(f) : emptyFlowDraft(preset, preset === null ? 1 : nextPriority(props.flows, preset));
   error.value = null;
-  lastCustom = null;
 }, { immediate: true });
 // Server errors point at indexes and values that an edit moves, so any edit clears them (as the rules tab does).
 watch(form, () => { error.value = null; }, { deep: true });
 
-const { limits, fallbackPolicy } = useApprovalLimits(() => props.module.key);
-const recipients = useRecipientNames();
+const { limits } = useApprovalLimits(() => props.module.key);
 
-// ---- states ----
-const statusField = computed(() => props.module.blocks.flatMap((b) => b.fields).find((f) => f.id === props.workflow.statusFieldId));
-const stateLabel = (id: number) => { const o = statusField.value?.options.find((x) => x.id === id); return o ? resolveI18n(o.label, locale.value) : String(id); };
-const hasEntry = (id: number) => props.workflow.transitions.some((tr) => tr.to === id && tr.approval?.required);
-const targetOptions = computed(() => props.workflow.states.filter((s) => s.optionId !== props.workflow.initialOptionId).map((s) => ({
-  value: s.optionId,
-  label: t(hasEntry(s.optionId) ? 'approval.designer.basic.targetHasEntry' : 'approval.designer.basic.targetNoEntry', { state: stateLabel(s.optionId) }),
-})));
-const rejectOptions = computed(() => [
-  { value: null, label: t('approval.designer.basic.rejectStay') },
-  ...props.workflow.states.map((s) => ({ value: s.optionId as number | null, label: stateLabel(s.optionId) })),
-]);
 const targetLocked = computed(() => !!props.flow?.used);
 
 function setTarget(id: number) {
@@ -80,19 +57,11 @@ function setTarget(id: number) {
   // Same target as saved keeps its place; a new target goes to the end of that target's list.
   form.value.priority = props.flow && props.flow.toOptionId === id ? props.flow.priority : nextPriority(props.flows, id, props.flow?.key);
 }
-
-// ---- fallback: null inherits the module default ----
-const fallbackMode = computed(() => (form.value.fallback ? 'custom' : 'inherit'));
-const setFallbackMode = (m: 'inherit' | 'custom') => {
-  if (m === 'inherit') { lastCustom = form.value.fallback ?? lastCustom; form.value.fallback = null; return; }
-  form.value.fallback = lastCustom ?? props.flow?.definition.fallbackApprovers ?? defaultSourceOf('users');
-};
-const inheritText = computed(() => {
-  const p = fallbackPolicy.value;
-  const v = p?.effective;
-  if (!p || !Array.isArray(v) || !v.length) return t('approval.designer.basic.fallbackInheritNone');
-  return t('approval.designer.basic.fallbackInherit', { names: policyValueText(p, v, t, recipients.names.value) });
-});
+function onBasicPatch(p: Partial<FlowBasic>) {
+  const { toOptionId, ...rest } = p;
+  Object.assign(form.value, rest);
+  if (toOptionId !== undefined && toOptionId !== null) setTarget(toOptionId);
+}
 
 // ---- banner ----
 const versionUsed = computed(() => !!props.flow && (props.flow.currentVersionUsed ?? props.flow.used));
@@ -109,13 +78,13 @@ const banner = computed(() => {
 
 // ---- save ----
 const save = useSaveApprovalFlow(() => props.module.key);
-const fields = computed(() => toSchemaFields(props.module));
 const errs = computed(() => error.value?.errors);
 const stageKey = /^definition\.stages\[\d+\]/;
 const own = /^(key|name|toOptionId|priority|definition\.(when|rejectTo|fallbackApprovers))(\.|\[|$)/;
 const keyError = computed(() => errorFor(error.value, 'key') ?? (error.value?.status === 409 && !isEdit.value && !Object.keys(errs.value ?? {}).length ? error.value.message : undefined));
 const nameError = computed(() => errorFor(error.value, 'name'));
 const targetError = computed(() => (targetMissing.value ? t('approval.designer.basic.targetRequired') : errorFor(error.value, 'toOptionId')));
+const basicErrors = computed(() => ({ key: keyError.value, name: nameError.value, toOptionId: targetError.value, priority: priorityError.value, when: whenError.value, rejectTo: rejectError.value, fallback: fallbackError.value }));
 const whenError = computed(() => errorFor(error.value, 'definition.when'));
 const rejectError = computed(() => errorFor(error.value, 'definition.rejectTo'));
 const fallbackError = computed(() => errorFor(error.value, 'definition.fallbackApprovers'));
@@ -124,7 +93,7 @@ const topErrors = computed(() => Object.entries(errs.value ?? {}).filter(([k]) =
 const stageErrorCount = computed(() => Object.keys(errs.value ?? {}).filter((k) => stageKey.test(k)).length);
 
 async function submit() {
-  if (!(await nameInput.value?.validate())) { section.value = 'basic'; return; }
+  if (!(await basicFields.value?.validate())) { section.value = 'basic'; return; }
   const body = buildFlowInput(form.value);
   if (!body) { targetMissing.value = true; section.value = 'basic'; return; }
   error.value = null;
@@ -172,41 +141,10 @@ const title = computed(() => (isEdit.value ? t('approval.designer.dialog.edit') 
           </div>
 
           <div v-show="section === 'basic'" class="column no-wrap q-gutter-y-md" data-testid="flow-basic">
-            <q-input
-              v-model="form.key" :label="t('approval.designer.basic.key')" :hint="t('approval.designer.basic.keyHint')" :readonly="isEdit" dense outlined
-              data-testid="flow-key" :error="!!keyError || undefined" :error-message="keyError"
+            <FlowBasicFields
+              ref="basicFields" :model-value="form" :module="module" :workflow="workflow" :key-readonly="isEdit" :target-locked="targetLocked"
+              :saved-fallback="flow?.definition.fallbackApprovers" :errors="basicErrors" @patch="onBasicPatch"
             />
-            <I18nTextInput ref="nameInput" v-model="form.name" :label="t('approval.designer.basic.name')" :error="nameError" />
-            <q-select
-              :model-value="form.toOptionId" :options="targetOptions" :label="t('approval.designer.basic.target')" emit-value map-options dense outlined
-              :disable="targetLocked" :hint="targetLocked ? t('approval.designer.basic.targetUsedLocked') : undefined"
-              :error="!!targetError || undefined" :error-message="targetError" data-testid="flow-target" @update:model-value="setTarget"
-            />
-            <div v-if="priorityError" class="text-caption text-negative">{{ priorityError }}</div>
-            <div>
-              <div class="text-caption text-muted">{{ t('approval.designer.basic.when') }}</div>
-              <ConditionEditor :fields="fields" allow-field-ref :model-value="form.when" @update:model-value="(v) => { form.when = v; }" />
-              <div class="text-caption text-muted">{{ t('approval.designer.basic.whenHint') }}</div>
-              <div v-if="whenError" class="text-caption text-negative">{{ whenError }}</div>
-            </div>
-            <q-select
-              v-model="form.rejectTo" :options="rejectOptions" :label="t('approval.designer.basic.rejectTo')" emit-value map-options dense outlined
-              :error="!!rejectError || undefined" :error-message="rejectError" data-testid="flow-reject"
-            />
-            <div class="column no-wrap q-gutter-y-sm" data-testid="flow-fallback">
-              <div class="text-subtitle2">{{ t('approval.designer.basic.fallback') }}</div>
-              <q-option-group
-                style="overflow-wrap: anywhere" :model-value="fallbackMode" type="radio" role="radiogroup" :aria-label="t('approval.designer.basic.fallback')" data-testid="flow-fallback-mode"
-                :options="[{ value: 'inherit', label: inheritText }, { value: 'custom', label: t('approval.designer.basic.fallbackCustom') }]"
-                @update:model-value="setFallbackMode"
-              />
-              <ApproverSourceEditor
-                v-if="form.fallback" :model-value="form.fallback" :module="module" :allowed="FALLBACK_SOURCE_KINDS" :limits="limits" fallback
-                :saved="flow?.definition.fallbackApprovers" :label="t('approval.designer.basic.fallbackSource')" :error="fallbackError"
-                @update:model-value="(v) => { form.fallback = v; }"
-              />
-              <div v-else-if="fallbackError" class="text-caption text-negative">{{ fallbackError }}</div>
-            </div>
             <q-toggle v-if="!isEdit" v-model="form.active" :label="t('approval.designer.basic.active')" data-testid="flow-active" />
           </div>
 

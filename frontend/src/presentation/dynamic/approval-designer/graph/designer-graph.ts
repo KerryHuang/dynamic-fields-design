@@ -5,6 +5,7 @@ import type { GraphIssue, GraphIssueMap } from 'src/domain/dynamic/approval-grap
 import { COL_GAP, NODE_H, NODE_W, edgeBendX, manualGapAfter } from 'src/domain/dynamic/approval-graph-layout';
 import { resolveI18n } from 'src/domain/dynamic/i18n-text';
 import type { SchemaField } from 'src/domain/dynamic/types';
+import type { FlowBasicErrors } from '../FlowBasicFields.vue';
 import { truncateEdgeLabel } from 'src/presentation/dynamic/approval/progress-graph';
 import { conditionSummary } from 'src/presentation/dynamic/rules/condition-summary';
 import { tFor, type Translate } from 'src/i18n/translate';
@@ -163,4 +164,24 @@ export function toVueFlow(state: GraphState, ctx: GraphContext, opts: { draggabl
     };
   });
   return { nodes, edges };
+}
+
+/** 節點或線的問題 → 面板欄位的錯誤文字：`approvers.userIds` 歸到 `approvers`，整個節點或線的問題（欄位為 null）歸到 `_`。同一欄只取第一則。 */
+export function fieldErrors(issues: GraphIssue[] | undefined): Record<string, string> {
+  const out: Record<string, string> = {};
+  for (const i of issues ?? []) out[(i.field ?? '_').split(/[.[]/)[0]] ??= i.message;
+  return out;
+}
+
+/** 流程層的問題 → 流程屬性面板：欄位錯誤，以及對不到欄位的其他訊息（例如 `graph`、`active`）。 */
+export function flowErrors(issues: GraphIssue[] | undefined): { basic: FlowBasicErrors; other: string[] } {
+  const basic: FlowBasicErrors = {};
+  const other: string[] = [];
+  const slot: Record<string, keyof FlowBasicErrors> = { key: 'key', name: 'name', toOptionId: 'toOptionId', priority: 'priority', when: 'when', rejectTo: 'rejectTo', fallbackApprovers: 'fallback' };
+  for (const i of issues ?? []) {
+    const k = slot[(i.field ?? '').split(/[.[]/)[0]];
+    if (k) basic[k] ??= i.message;
+    else other.push(i.message);
+  }
+  return { basic, other };
 }
