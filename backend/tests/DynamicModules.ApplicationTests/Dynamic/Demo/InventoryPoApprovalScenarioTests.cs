@@ -1,5 +1,7 @@
 using DynamicModules.Application.Common;
+using DynamicModules.Application.Dynamic.AppService.Queries;
 using DynamicModules.Application.Dynamic.ApprovalService;
+using DynamicModules.Application.Dynamic.DemoService.Scenarios;
 using DynamicModules.Application.Dynamic.PrintService;
 using DynamicModules.Application.Dynamic.RecordService.Data;
 using DynamicModules.Application.Dynamic.RecordService.Queries.GetRecord;
@@ -53,7 +55,7 @@ public class InventoryPoApprovalScenarioTests(DemoGeneratedFixture fx)
     {
         fx.Generated();
         var db = fx.Host.Db.Context;
-        var flow = await db.Set<ApprovalFlow>().AsNoTracking().SingleAsync(f => f.Key == "inv-po-graph-example");
+        var flow = await db.Set<ApprovalFlow>().AsNoTracking().SingleAsync(f => f.Key == InventoryScenario.GraphExampleKey);
         flow.Active.Should().BeFalse("範例只給設計頁與試算，不影響既有送簽情境");
         flow.CurrentVersionId.Should().NotBeNull("已發布第 1 版");
         flow.NameI18n.Resolve("zh-TW").Should().Be("採購單（流程圖範例）");
@@ -65,13 +67,26 @@ public class InventoryPoApprovalScenarioTests(DemoGeneratedFixture fx)
         var version = await db.Set<ApprovalFlowVersion>().AsNoTracking().SingleAsync(v => v.Id == flow.CurrentVersionId);
         version.Version.Should().Be(1);
         version.Definition.Shape.Should().Be("graph");
+        version.Definition.When.Should().NotBeNull("流程層啟動條件 subtotal ≥ 10,000，與 inv-po-medium 同門檻，誤啟用也不影響小額單");
         version.Definition.Nodes!.Select(n => n.Kind).Should().BeEquivalentTo(["start", "condition", "fork", "approval", "approval", "join", "approval", "approval", "end"]);
         version.Definition.Nodes!.Single(n => n.Kind == "join").Mode.Should().Be("all");
         version.Definition.Edges!.Count(e => e.From == "amount").Should().Be(2, "條件節點一條有條件、一條預設");
 
         var others = await db.Set<ApprovalFlow>().AsNoTracking().Where(f => f.ToOptionId == flow.ToOptionId && f.Key != flow.Key).ToListAsync();
         others.Should().OnlyContain(f => f.Active, "既有兩條關卡格式流程維持啟用");
-        (await Instances()).Should().NotContain(i => i.FlowKey == "inv-po-graph-example");
+        (await Instances()).Should().NotContain(i => i.FlowKey == InventoryScenario.GraphExampleKey);
+    }
+
+    [Fact]
+    public async Task ExportInventoryApp_SkipsInactiveGraphFlow_WithWarning()
+    {
+        fx.Generated();
+        var result = await fx.As("admin", new ExportAppRequest("inventory"));
+
+        result.IsSuccess.Should().BeTrue("停用的流程圖流程略過，不再擋下整份匯出");
+        var export = (AppExportResult)result.Data!;
+        export.Warnings.Should().Contain(w => w.Contains("採購單（流程圖範例）") && w.Contains("已略過"));
+        System.Text.Encoding.UTF8.GetString(export.File.Content).Should().NotContain(InventoryScenario.GraphExampleKey);
     }
 
     [Fact]

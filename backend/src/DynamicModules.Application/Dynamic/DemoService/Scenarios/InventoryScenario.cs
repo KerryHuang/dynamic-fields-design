@@ -285,6 +285,7 @@ public sealed class InventoryScenario : IDemoScenario
             Approval("lead-only", lead, manager, ApprovalModes.Any),
             new("end", ApprovalNodeKinds.End)
         };
+        var atLeast = JsonSerializer.SerializeToElement(new { all = new[] { new { field = subtotal, op = "gte", value = 10000 } } }); // 與 inv-po-medium 同門檻，小額單維持直接確認
         var edges = new List<ApprovalEdgeDef>
         {
             new("e1", "start", "amount"),
@@ -293,7 +294,7 @@ public sealed class InventoryScenario : IDemoScenario
             new("e4", "split", "lead"), new("e5", "split", "ops"), new("e6", "lead", "merge"), new("e7", "ops", "merge"),
             new("e8", "merge", "gm"), new("e9", "gm", "end"), new("e10", "lead-only", "end")
         };
-        var definition = new ApprovalDefinition(ApprovalShapes.Graph, null, null, new ApproverSource(ApprovalSources.Group, GroupIds: [demo.GroupIds["ops-manager"]]), [], nodes, edges);
+        var definition = new ApprovalDefinition(ApprovalShapes.Graph, atLeast, null, new ApproverSource(ApprovalSources.Group, GroupIds: [demo.GroupIds["ops-manager"]]), [], nodes, edges);
         var input = new ApprovalFlowDraftInput(GraphExampleKey,
             Text("採購單（流程圖範例）", "Purchase order (flow graph example)", "ใบสั่งซื้อ (ตัวอย่างแผนภาพโฟลว์)", "Đơn mua hàng (ví dụ sơ đồ luồng)"),
             ctx.Ids.OptionIds["po.confirmed"], 0, definition);

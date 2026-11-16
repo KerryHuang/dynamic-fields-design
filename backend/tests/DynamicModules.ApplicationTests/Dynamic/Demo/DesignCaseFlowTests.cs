@@ -2,6 +2,7 @@ using DynamicModules.Application.Common.Acting;
 using DynamicModules.Application.Dynamic.AppService;
 using DynamicModules.Application.Dynamic.ApprovalService;
 using DynamicModules.Application.Dynamic.DemoService;
+using DynamicModules.Application.Dynamic.DemoService.Scenarios;
 using DynamicModules.Application.Dynamic.RecordService.Commands.CreateRecord;
 using DynamicModules.Application.Dynamic.WorkflowService.Data;
 using DynamicModules.Application.Dynamic.WorkflowService.Queries.GetWorkflow;
@@ -67,7 +68,7 @@ public class DesignCaseFlowTests(DemoGeneratedFixture fx)
         var expected = AppCatalog.Load(AppCatalog.DefaultDirectory).BuiltIns
             .Where(p => DemoCatalog.AppIds.Contains(p.Manifest.Id)).SelectMany(p => p.ApprovalFlows).Select(f => f.Code).ToList();
         expected.Should().Contain(DesignCaseFlowKey);
-        expected.Add(DynamicModules.Application.Dynamic.DemoService.Scenarios.InventoryScenario.GraphExampleKey); // fg3d：Demo 另建的停用範例，其餘仍只有套件流程
+        expected.Add(InventoryScenario.GraphExampleKey); // fg3d：Demo 另建的停用範例，其餘仍只有套件流程
         var keys = await fx.Host.Db.Context.Set<ApprovalFlow>().AsNoTracking().Select(f => f.Key).ToListAsync();
         keys.Should().BeEquivalentTo(expected);
     }
