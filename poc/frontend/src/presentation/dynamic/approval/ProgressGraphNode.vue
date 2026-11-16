@@ -9,7 +9,7 @@ defineProps<{ data: ProgressNodeData }>();
 <template>
   <div
     class="pg-node" :class="[`pg-frame-${data.frame}`, data.color ? `pg-c-${data.color}` : 'pg-c-none', { 'pg-dim': data.dim, 'pg-small': data.small }]"
-    :style="{ width: `${data.width}px`, height: `${data.height}px` }" :title="data.ariaLabel" :aria-label="data.ariaLabel" role="img" data-testid="pg-node"
+    :style="{ width: `${data.width}px`, height: `${data.height}px` }" :aria-label="data.ariaLabel" role="img" data-testid="pg-node"
   >
     <Handle type="target" :position="Position.Left" :connectable="false" class="pg-handle" />
     <div class="pg-head">

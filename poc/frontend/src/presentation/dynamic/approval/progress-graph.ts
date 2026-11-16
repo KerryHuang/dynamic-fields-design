@@ -3,7 +3,7 @@
 // 狀態只在後端算；這裡只做「狀態 → 顏色、圖示、文字」的對照，顏色與圖示和時間軸共用 approval-display.ts 那一份。
 import type { Edge, Node } from '@vue-flow/core';
 import type { ApprovalProgressGraph, ApprovalProgressNode, ApprovalProgressState, ApprovalStageView } from 'src/domain/dynamic/approval-types';
-import { ADDSIGN_H, ADDSIGN_W, layoutLeftToRight, NODE_H, NODE_W, type LayoutResult } from 'src/domain/dynamic/approval-graph-layout';
+import { ADDSIGN_H, ADDSIGN_W, COL_GAP, edgeBendX, layoutLeftToRight, NODE_H, NODE_W, type LayoutResult } from 'src/domain/dynamic/approval-graph-layout';
 import { resolveI18n } from 'src/domain/dynamic/i18n-text';
 import { stageColor, stageIcon } from './approval-display';
 
@@ -85,6 +85,29 @@ export interface ProgressNodeData {
   ariaLabel: string;
 }
 
+/** 自訂線（type 'progress'）要用的資料：轉折點 x（圖座標）與沒被截斷的完整標籤。 */
+export interface ProgressEdgeData { bendX: number; fullLabel: string }
+
+/** 標籤可用寬度：欄距扣掉底色左右內距（每側 4px）。 */
+export const EDGE_LABEL_MAX_PX = COL_GAP - 8;
+const CJK_PX = 11;
+const LATIN_PX = 6.5;
+const charPx = (ch: string) => ((ch.codePointAt(0) ?? 0) >= 0x2e80 ? CJK_PX : LATIN_PX);
+
+/** 依欄距估算寬度（11px 字：CJK 約 11px、其他約 6.5px），放不下就截斷並加「…」，讓讀者知道字不完整。 */
+export function truncateEdgeLabel(text: string, maxPx: number = EDGE_LABEL_MAX_PX): string {
+  const chars = [...text];
+  if (chars.reduce((w, c) => w + charPx(c), 0) <= maxPx) return text;
+  let w = CJK_PX; // 「…」
+  let out = '';
+  for (const c of chars) {
+    w += charPx(c);
+    if (w > maxPx) break;
+    out += c;
+  }
+  return `${out}…`;
+}
+
 export interface BuiltProgressGraph {
   nodes: Node<ProgressNodeData>[];
   edges: Edge[];
@@ -134,11 +157,18 @@ export function buildProgressGraph(graph: ApprovalProgressGraph, stages: Approva
       style: { width: `${data.width}px`, height: `${data.height}px` },
     };
   });
-  const edges: Edge[] = graph.edges.map((e) => {
-    const label = resolveI18n(e.label ?? undefined, ctx.locale);
+  const outDegree = new Map<string, number>();
+  for (const e of graph.edges) outDegree.set(e.from, (outDegree.get(e.from) ?? 0) + 1);
+  const edges: Edge<ProgressEdgeData>[] = graph.edges.map((e) => {
+    const full = resolveI18n(e.label ?? undefined, ctx.locale);
+    const from = layout.positions[e.from] ?? { x: 0, y: 0 };
+    const to = layout.positions[e.to] ?? { x: 0, y: 0 };
     return {
-      id: e.id, source: e.from, target: e.to, type: 'smoothstep', selectable: false, focusable: false, interactionWidth: 0,
-      class: e.traversed ? 'pg-edge pg-edge-on' : 'pg-edge pg-edge-off', ...(label ? { label } : {}),
+      id: e.id, source: e.from, target: e.to, type: 'progress', selectable: false, focusable: false, interactionWidth: 0,
+      // 線的資訊由節點的 aria-label 表達；Vue Flow 預設會念「Edge from <內部代號> to <內部代號>」，所以整條線從可及性樹拿掉。
+      ariaLabel: null, domAttributes: { 'aria-hidden': 'true' },
+      class: e.traversed ? 'pg-edge pg-edge-on' : 'pg-edge pg-edge-off', ...(full ? { label: truncateEdgeLabel(full) } : {}),
+      data: { bendX: edgeBendX(from, to, (outDegree.get(e.from) ?? 0) >= 2), fullLabel: full },
     };
   });
   return { nodes, edges, layout, focus: focusPoint(graph, stages, layout) };
@@ -148,12 +178,12 @@ const REACHED = new Set<string>(['passed', 'returned', 'skipped', 'ended', 'chan
 
 /**
  * 視角要對準的節點：最早進入的進行中節點；沒有進行中就是最後走到的節點（被退回或結束的那個）。
- * 進入先後看節點最舊一次執行的 `seq`（匯合等待沒有執行，排在有執行的後面）；沒有走到的與被取消的不算「走到」。
+ * 進入先後看節點最新一次執行（目前這一次，被退回重跑的節點看重跑那次）的 `seq`（匯合等待沒有執行，排在有執行的後面）；沒有走到的與被取消的不算「走到」。
  */
 export function focusNodeId(graph: ApprovalProgressGraph, stages: ApprovalStageView[], layout: LayoutResult): string | null {
   const seqOf = new Map(stages.map((s) => [s.id, s.seq]));
   const active = graph.nodes
-    .map((n, i) => ({ n, i, seq: Math.min(...(n.runIds ?? []).map((r) => seqOf.get(r) ?? Infinity), Infinity) }))
+    .map((n, i) => ({ n, i, seq: seqOf.get((n.runIds ?? []).at(-1) as number) ?? Infinity }))
     .filter((x) => x.n.state === 'active')
     .sort((a, b) => a.seq - b.seq || a.i - b.i);
   if (active.length) return active[0].n.id;

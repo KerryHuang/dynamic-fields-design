@@ -6,12 +6,12 @@ import type { ApprovalProgressGraph, ApprovalStageView } from 'src/domain/dynami
 import zhTW from 'src/i18n/zh-TW.json';
 import ApprovalProgressGraphView from './ApprovalProgressGraph.vue';
 
-const loads = vi.hoisted(() => ({ canvas: 0 }));
-// 真的畫布會載入 Vue Flow；這裡換成會把收到的屬性寫出來的替身，並記下載入次數。
+// 畫布只有在需要畫圖時才會被動態載入並掛載；替身記下掛載次數，沒畫圖的情況要斷言它是 0。
+const loads = vi.hoisted(() => ({ mounted: 0 }));
+// 真的畫布會載入 Vue Flow；這裡換成會把收到的屬性寫出來的替身。
 vi.mock('./ProgressGraphCanvas.vue', async () => {
   const { defineComponent, h } = await import('vue');
-  loads.canvas++;
-  return { __esModule: true, default: defineComponent({ name: 'CanvasStub', props: ['instanceId', 'mode', 'nodes', 'edges', 'plan', 'width', 'height'], setup: (p) => () => h('div', { 'data-testid': 'canvas-stub', 'data-height': p.height, 'data-width': p.width, 'data-mode': p.mode }) }) };
+  return { __esModule: true, default: defineComponent({ name: 'CanvasStub', props: ['instanceId', 'mode', 'nodes', 'edges', 'plan', 'width', 'height'], setup: (p) => { loads.mounted++; return () => h('div', { 'data-testid': 'canvas-stub', 'data-height': p.height, 'data-width': p.width, 'data-mode': p.mode }); } }) };
 });
 
 const stage = (id: number, seq: number, p: Partial<ApprovalStageView> = {}): ApprovalStageView => ({
@@ -45,7 +45,7 @@ function mountGraph(graph: ApprovalProgressGraph, boxWidth: number) {
 
 describe('ApprovalProgressGraph', () => {
   const original = { w: window.innerWidth, h: window.innerHeight };
-  beforeEach(() => { vi.stubGlobal('ResizeObserver', class { observe() {} unobserve() {} disconnect() {} }); loads.canvas = 0; });
+  beforeEach(() => { vi.stubGlobal('ResizeObserver', class { observe() {} unobserve() {} disconnect() {} }); loads.mounted = 0; });
   afterEach(async () => { vi.restoreAllMocks(); window.innerWidth = original.w; window.innerHeight = original.h; await setWidth(original.w); });
 
   it('renders nothing below 600px in this segment', async () => {
@@ -54,6 +54,7 @@ describe('ApprovalProgressGraph', () => {
     await flushPromises();
     expect(w.find('[data-testid="approval-progress-graph"]').exists()).toBe(false);
     expect(w.find('[data-testid="canvas-stub"]').exists()).toBe(false);
+    expect(loads.mounted).toBe(0); // 畫布根本沒被載入
   });
 
   it('draws at 600px and wider', async () => {
@@ -63,6 +64,7 @@ describe('ApprovalProgressGraph', () => {
     expect(w.find('[data-testid="approval-progress-graph"]').exists()).toBe(true);
     expect(w.get('[data-testid="canvas-stub"]').attributes('data-mode')).toBe('inline');
     expect(w.get('[data-testid="canvas-stub"]').attributes('data-width')).toBe('780');
+    expect(loads.mounted).toBe(1);
   });
 
   it('height is clamped between 160px and 60% of the viewport', async () => {

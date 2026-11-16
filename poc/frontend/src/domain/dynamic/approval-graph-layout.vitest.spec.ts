@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import cases from '../../../../shared/approval-graph-cases.json';
 import {
   ADDSIGN_H, ADDSIGN_W, NODE_H, NODE_W,
-  layoutLeftToRight, type LayoutEdge, type LayoutNode, type LayoutResult,
+  edgeBendX, layoutLeftToRight, type LayoutEdge, type LayoutNode, type LayoutResult,
 } from './approval-graph-layout';
 
 interface CaseNode { id: string; kind: string }
@@ -28,6 +28,29 @@ function overlaps(r: LayoutResult, nodes: LayoutNode[]): string[] {
   return bad;
 }
 
+/** 線的折線近似（和畫布的自訂線一致）：水平到轉折點 x、垂直、再水平；回傳穿過「別的」節點框內部的節點。 */
+function crossings(r: LayoutResult, nodes: LayoutNode[], edges: LayoutEdge[]): string[] {
+  const outDeg = new Map<string, number>();
+  for (const ed of edges) outDeg.set(ed.from, (outDeg.get(ed.from) ?? 0) + 1);
+  const byId = new Map(nodes.map((x) => [x.id, x]));
+  const bad: string[] = [];
+  for (const ed of edges) {
+    const a = r.positions[ed.from], b = r.positions[ed.to];
+    const sa = size(byId.get(ed.from)!), sb = size(byId.get(ed.to)!);
+    const y1 = a.y + sa.h / 2, y2 = b.y + sb.h / 2, x1 = a.x + sa.w, x2 = b.x;
+    const bx = edgeBendX(a, b, (outDeg.get(ed.from) ?? 0) >= 2);
+    const segs = [[x1, y1, bx, y1], [bx, y1, bx, y2], [bx, y2, x2, y2]];
+    for (const x of nodes) {
+      if (x.id === ed.from || x.id === ed.to) continue;
+      const p = r.positions[x.id], sz = size(x);
+      const hit = segs.some(([ax, ay, bx2, by2]) => Math.max(ax, bx2) > p.x && Math.min(ax, bx2) < p.x + sz.w && Math.max(ay, by2) > p.y && Math.min(ay, by2) < p.y + sz.h);
+      if (hit) bad.push(`${ed.id}:${x.id}`);
+    }
+  }
+  return bad;
+}
+const edgeIds = (list: LayoutEdge[]) => list.map((x, i) => ({ ...x, id: x.id || `e${i}` }));
+
 describe('approval graph layout', () => {
   it('has 35 valid shared cases', () => {
     expect(valid).toHaveLength(35);
@@ -42,6 +65,38 @@ describe('approval graph layout', () => {
   it.each(valid.map((c) => [c.name, c] as const))('every valid shared case: every edge goes left to right (%s)', (_n, c) => {
     const r = layoutLeftToRight(c.definition.nodes, c.definition.edges);
     for (const ed of c.definition.edges) expect(r.positions[ed.to].x).toBeGreaterThan(r.positions[ed.from].x);
+  });
+
+  it.each(valid.map((c) => [c.name, c] as const))('every valid shared case: no edge path crosses another node box (%s)', (_n, c) => {
+    const r = layoutLeftToRight(c.definition.nodes, c.definition.edges);
+    expect(crossings(r, c.definition.nodes, edgeIds(c.definition.edges))).toEqual([]);
+  });
+
+  it('the default line of a condition runs through the empty lane, not through a sibling branch (AG-001 shape)', () => {
+    const nodes = [n('s', 'start'), n('c', 'condition'), n('f', 'fork'), n('law'), n('fin'), n('j', 'join'), n('hr'), n('t', 'end')];
+    const edges = [e('s', 'c'), e('c', 'f'), e('c', 'hr'), e('f', 'law'), e('f', 'fin'), e('law', 'j'), e('fin', 'j'), e('j', 'hr'), e('hr', 't')];
+    const r = layoutLeftToRight(nodes, edges);
+    expect(crossings(r, nodes, edges)).toEqual([]);
+    expect(cy(r, nodes, 'c')).toBe(cy(r, nodes, 'hr'));
+    expect(overlaps(r, nodes)).toEqual([]);
+  });
+
+  it('a shorter lane joining a later column bends in the last column gap, not over the neighbour lane', () => {
+    const nodes = [n('s', 'start'), n('f', 'fork'), n('a'), n('b1'), n('b2'), n('c'), n('j', 'join'), n('t', 'end')];
+    const edges = [e('s', 'f'), e('f', 'a'), e('f', 'b1'), e('f', 'c'), e('b1', 'b2'), e('a', 'j'), e('b2', 'j'), e('c', 'j'), e('j', 't')];
+    const r = layoutLeftToRight(nodes, edges);
+    expect(crossings(r, nodes, edges)).toEqual([]);
+    // 默認的「中點轉折」會切過 b2；轉折點改在 join 左邊的欄距
+    expect(edgeBendX(r.positions.a, r.positions.j, false)).toBe(r.positions.j.x - 28);
+  });
+
+  it('edgeBendX: branching edges bend in the first gap after the source, others in the last gap before the target', () => {
+    const col = (k: number) => k * (NODE_W + 56);
+    expect(edgeBendX({ x: col(1) }, { x: col(4) }, true)).toBe(col(1) + NODE_W + 28);
+    expect(edgeBendX({ x: col(1) }, { x: col(4) }, false)).toBe(col(4) - 28);
+    // 加簽小節點在欄內置中，轉折點仍在欄距
+    expect(edgeBendX({ x: col(2) + 28 }, { x: col(3) + 28 }, false)).toBe(col(3) - 28);
+    expect(edgeBendX({ x: col(2) + 28 }, { x: col(3) }, true)).toBe(col(2) + NODE_W + 28);
   });
 
   it('a straight line keeps one row', () => {
@@ -109,7 +164,10 @@ describe('approval graph layout', () => {
     const nodes = [n('s', 'start'), n('f', 'fork'), n('a'), n('j', 'join'), n('t', 'end')];
     const r = layoutLeftToRight(nodes, [e('s', 'f'), e('f', 'a'), e('f', 'j'), e('a', 'j'), e('j', 't')]);
     expect(r.height).toBe(NODE_H * 2 + 24);
-    expect(cy(r, nodes, 'f')).toBe(r.height / 2);
+    // 主幹走在空泳道（第二條）的中心，直線不會穿過另一條泳道的節點
+    expect(cy(r, nodes, 'f')).toBe(NODE_H + 24 + NODE_H / 2);
+    expect(cy(r, nodes, 'j')).toBe(cy(r, nodes, 'f'));
+    expect(crossings(r, nodes, [e('s', 'f'), e('f', 'a'), e('f', 'j'), e('a', 'j'), e('j', 't')])).toEqual([]);
     expect(overlaps(r, nodes)).toEqual([]);
   });
 

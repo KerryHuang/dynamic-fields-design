@@ -4,7 +4,7 @@ import { ADDSIGN_H, ADDSIGN_W, NODE_H, NODE_W } from 'src/domain/dynamic/approva
 import enUS from 'src/i18n/en-US.json';
 import zhTW from 'src/i18n/zh-TW.json';
 import { stageColor, stageIcon } from './approval-display';
-import { buildProgressGraph, focusNodeId, graphHeight, initialViewport, stateView, viewportTransform } from './progress-graph';
+import { buildProgressGraph, EDGE_LABEL_MAX_PX, focusNodeId, graphHeight, initialViewport, stateView, truncateEdgeLabel, viewportTransform } from './progress-graph';
 
 const lookup = (messages: Record<string, unknown>) => (key: string) => key.split('.').reduce<unknown>((o, k) => (o as Record<string, unknown> | undefined)?.[k], messages) as string ?? key;
 const t = lookup(zhTW);
@@ -85,7 +85,32 @@ describe('buildProgressGraph', () => {
     const cls = Object.fromEntries(g.edges.map((e) => [e.id, e.class]));
     expect(cls['1']).toContain('pg-edge-on');
     expect(cls['5']).toContain('pg-edge-off');
-    expect(g.edges.every((e) => e.type === 'smoothstep' && e.focusable === false)).toBe(true);
+    expect(g.edges.every((e) => e.type === 'progress' && e.focusable === false)).toBe(true);
+  });
+
+  it('every edge is hidden from the accessibility tree: no Vue Flow English text with internal node ids', () => {
+    const g = buildProgressGraph(parallel(), stagesOf, ctx);
+    expect(g.edges).toHaveLength(7);
+    for (const e of g.edges) {
+      expect(e.ariaLabel).toBeNull();
+      expect(e.domAttributes).toEqual({ 'aria-hidden': 'true' });
+    }
+  });
+
+  it('edges bend in a column gap: branching edges after the source, the others before the target', () => {
+    const g = buildProgressGraph(parallel(), stagesOf, ctx);
+    const pos = Object.fromEntries(g.nodes.map((n) => [n.id, n.position]));
+    const bend = Object.fromEntries(g.edges.map((e) => [e.id, (e.data as { bendX: number }).bendX]));
+    expect(bend['3']).toBe(pos.f.x + NODE_W + 28); // f 有兩條出線
+    expect(bend['4']).toBe(pos.f.x + NODE_W + 28);
+    expect(bend['5']).toBe(pos.j.x - 28); // l → j
+    expect(bend['2']).toBe(pos.f.x - 28); // m → f
+  });
+
+  it('a node that is not reached is read as not reached; the screen shows no text for it', () => {
+    const d = buildProgressGraph(parallel(), stagesOf, ctx).nodes.find((n) => n.id === 'e')!.data!;
+    expect(d.statusText).toBe('');
+    expect(d.ariaLabel).toBe('結束 · 未走到');
   });
 
   it('add-sign nodes come from the API as nodes and use the small size', () => {
@@ -131,11 +156,29 @@ describe('buildProgressGraph', () => {
     expect('label' in buildProgressGraph(graph, [], ctx).edges[1]).toBe(false);
   });
 
+  it('long edge labels are cut to the column gap and ended with an ellipsis; the full text stays in the data', () => {
+    const full = '金額大於十萬且非急件';
+    const graph = { nodes: [node('c', 'condition', 'passed'), node('a', 'end', 'passed')], edges: [edge('1', 'c', 'a', true, { label: { 'zh-TW': full } })] };
+    const e = buildProgressGraph(graph, [], ctx).edges[0];
+    expect(e.label).toBe('金額大…');
+    expect((e.data as { fullLabel: string }).fullLabel).toBe(full);
+    const short = buildProgressGraph({ ...graph, edges: [edge('1', 'c', 'a', true, { label: { 'zh-TW': '稅率' } })] }, [], ctx).edges[0];
+    expect(short.label).toBe('稅率');
+    expect((short.data as { fullLabel: string }).fullLabel).toBe('稅率');
+  });
+
   it('overdue active node shows the overdue badge data on the status row', () => {
     const graph = { nodes: [node('m', 'approval', 'active', { runIds: [1] }), node('n', 'approval', 'active', { runIds: [2] })], edges: [] };
     const g = buildProgressGraph(graph, [stage(1, 1, { dueTime: '2026-11-16T08:00:00Z' }), stage(2, 2, { dueTime: '2026-11-17T08:00:00Z' })], ctx);
     expect(g.nodes[0].data).toMatchObject({ overdue: true, overdueText: '逾期' });
     expect(g.nodes[1].data!.overdue).toBe(false);
+  });
+
+  it('a node whose latest run is no longer active is not overdue, even past its due time', () => {
+    const graph = { nodes: [node('m', 'approval', 'passed', { runIds: [1] })], edges: [] };
+    const g = buildProgressGraph(graph, [stage(1, 1, { status: 'approved', dueTime: '2026-11-16T08:00:00Z' })], ctx);
+    expect(g.nodes[0].data!.overdue).toBe(false);
+    expect(g.nodes[0].data!.overdueText).toBe('');
   });
 
   it('a node without runIds is read as an empty list', () => {
@@ -152,8 +195,33 @@ describe('buildProgressGraph', () => {
   });
 });
 
+describe('truncateEdgeLabel', () => {
+  const width = (text: string) => [...text].reduce((w, c) => w + ((c.codePointAt(0) ?? 0) >= 0x2e80 ? 11 : 6.5), 0);
+  it('keeps text that fits the gap', () => {
+    expect(EDGE_LABEL_MAX_PX).toBe(48);
+    expect(truncateEdgeLabel('稅率')).toBe('稅率');
+    expect(truncateEdgeLabel('金額大於')).toBe('金額大於'); // 44px
+    expect(truncateEdgeLabel('Large')).toBe('Large'); // 32.5px
+  });
+  it('cuts CJK and Latin text by estimated width and adds an ellipsis that still fits', () => {
+    expect(truncateEdgeLabel('稅率一以上')).toBe('稅率一…');
+    expect(truncateEdgeLabel('Amount above 100k')).toBe('Amoun…');
+    for (const text of ['金額大於十萬且非急件', 'Amount above 100k and not urgent', '大 Large amount']) {
+      const cut = truncateEdgeLabel(text);
+      expect(cut.endsWith('…')).toBe(true);
+      expect(width(cut)).toBeLessThanOrEqual(EDGE_LABEL_MAX_PX);
+    }
+  });
+});
+
 describe('focus node', () => {
-  it('picks the earliest active node by the oldest run seq', () => {
+  it('a node re-run after a return is ordered by its current (latest) run, not its oldest run', () => {
+    const g = parallel();
+    g.nodes[3].runIds = [2, 6]; // 法務：先前被退回，目前是第 6 筆執行
+    const stages = [stage(1, 1), stage(2, 2), stage(3, 4), stage(6, 7)];
+    expect(focusNodeId(g, stages, buildProgressGraph(g, [], ctx).layout)).toBe('c');
+  });
+  it('picks the earliest active node by its run seq', () => {
     const g = parallel();
     expect(focusNodeId(g, [stage(1, 1), stage(2, 5), stage(3, 4)], buildProgressGraph(g, [], ctx).layout)).toBe('c');
   });

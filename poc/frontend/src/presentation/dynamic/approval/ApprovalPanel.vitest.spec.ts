@@ -8,9 +8,11 @@ import zhTW from 'src/i18n/zh-TW.json';
 import ApprovalPanel from './ApprovalPanel.vue';
 
 // 真的畫布會載入 Vue Flow；這裡換成替身（Vue Flow 的行為在 ProgressGraphCanvas 自己的 spec 與瀏覽器走查驗）。
+// 掛載次數：沒畫圖的情況（沒有圖、先前的簽核未展開）要斷言畫布沒被載入。
+const loads = vi.hoisted(() => ({ mounted: 0 }));
 vi.mock('./ProgressGraphCanvas.vue', async () => {
   const { defineComponent, h } = await import('vue');
-  return { __esModule: true, default: defineComponent({ name: 'CanvasStub', props: ['instanceId'], setup: (p) => () => h('div', { 'data-testid': 'canvas-stub', 'data-instance': p.instanceId }) }) };
+  return { __esModule: true, default: defineComponent({ name: 'CanvasStub', props: ['instanceId'], setup: (p) => { loads.mounted++; return () => h('div', { 'data-testid': 'canvas-stub', 'data-instance': p.instanceId }); } }) };
 });
 
 const task = (p: Partial<ApprovalTaskView> = {}): ApprovalTaskView => ({
@@ -254,6 +256,7 @@ describe('ApprovalPanel', () => {
       edges: [{ id: 'e1', from: 's', to: 'm', traversed: true }, { id: 'e2', from: 'm', to: 'e', traversed: false }],
     });
     beforeEach(() => {
+      loads.mounted = 0;
       vi.stubGlobal('ResizeObserver', class { observe() {} unobserve() {} disconnect() {} });
       // jsdom 不排版：讓量到的框寬是 800
       vi.spyOn(HTMLElement.prototype, 'clientWidth', 'get').mockReturnValue(800);
@@ -277,6 +280,7 @@ describe('ApprovalPanel', () => {
       await flushPromises();
       expect(w.find('[data-testid="approval-progress-graph"]').exists()).toBe(false);
       expect(w.find('[data-testid="canvas-stub"]').exists()).toBe(false);
+      expect(loads.mounted).toBe(0);
       expect(w.find('.approval-stages').exists()).toBe(true);
     });
 
@@ -284,9 +288,11 @@ describe('ApprovalPanel', () => {
       const w = mountPanel(approval(instance({ graph: graph() }), [ended(5, 'rejected', { graph: graph() })]));
       await flushPromises();
       expect(w.findAll('[data-testid="approval-progress-graph"]')).toHaveLength(1); // 只有主實例
+      expect(loads.mounted).toBe(1);
       await w.find('[data-testid="approval-previous"] .q-item').trigger('click');
       await flushPromises();
       expect(w.findAll('[data-testid="approval-progress-graph"]')).toHaveLength(2);
+      expect(loads.mounted).toBe(2);
       expect(w.find('[data-testid="previous-5"] [data-testid="approval-progress-graph"]').exists()).toBe(true);
       expect(w.findAll('[data-testid="canvas-stub"]').map((c) => c.attributes('data-instance'))).toEqual(['7', '5']);
     });

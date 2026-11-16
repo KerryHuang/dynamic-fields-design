@@ -1,17 +1,26 @@
 import { mount } from '@vue/test-utils';
 import * as quasar from 'quasar';
 import { camelize, defineComponent, h } from 'vue';
-import { describe, expect, it } from 'vitest';
+import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createI18n } from 'vue-i18n';
 import type { Edge, Node } from '@vue-flow/core';
 import zhTW from 'src/i18n/zh-TW.json';
 import ProgressGraphCanvas from './ProgressGraphCanvas.vue';
 import type { ProgressNodeData, ViewportPlan } from './progress-graph';
 
+// 真正的 store 只在瀏覽器裡驗；這裡換成會記錄呼叫的替身（其餘匯出，例如 BaseEdge、getSmoothStepPath，仍用真的）。
+const flowFns = vi.hoisted(() => ({ setViewport: vi.fn(), fitView: vi.fn(), zoomIn: vi.fn(), zoomOut: vi.fn() }));
+vi.mock('@vue-flow/core', async (orig) => ({ ...(await orig<typeof import('@vue-flow/core')>()), useVueFlow: () => flowFns }));
+
+const edgeProps = {
+  id: 'e1', sourceX: 100, sourceY: 50, targetX: 400, targetY: 140, sourcePosition: 'right', targetPosition: 'left',
+  label: '金額大…', data: { bendX: 350, fullLabel: '金額大於十萬' },
+};
 // 把傳給 VueFlow 的屬性寫進 data-props，直接斷言唯讀設定（真實的平移、縮放只能在瀏覽器驗）。
 const VueFlowStub = defineComponent({
   name: 'VueFlow', inheritAttrs: false,
-  setup: (_, { attrs }) => () => h('div', { 'data-testid': 'vf', 'data-props': JSON.stringify(Object.fromEntries(Object.entries(attrs).map(([k, v]) => [camelize(k), v]))) }),
+  // 線的插槽放在 <svg> 裡渲染，才會建立 SVG 元素（BaseEdge 會量文字框）。
+  setup: (_, { attrs, slots }) => () => h('div', { 'data-testid': 'vf', 'data-props': JSON.stringify(Object.fromEntries(Object.entries(attrs).map(([k, v]) => [camelize(k), v]))) }, [h('svg', slots['edge-progress']?.(edgeProps))]),
 });
 const plan = (p: Partial<ViewportPlan> = {}): ViewportPlan => ({ zoom: 0.8, center: { x: 400, y: 42 }, minZoom: 0.2, fit: 0.5, ...p });
 
@@ -23,6 +32,9 @@ function mountCanvas(p: { instanceId?: number; mode?: 'inline' | 'thumb' | 'full
   });
 }
 const flowProps = (w: ReturnType<typeof mountCanvas>) => JSON.parse(w.get('[data-testid="vf"]').attributes('data-props')!) as Record<string, unknown>;
+
+beforeAll(() => { (SVGElement.prototype as unknown as { getBBox: () => object }).getBBox = () => ({ x: 0, y: 0, width: 40, height: 12 }); });
+beforeEach(() => { Object.values(flowFns).forEach((f) => f.mockClear()); });
 
 describe('ProgressGraphCanvas', () => {
   it('passes readonly props: no drag, connect, select, focus, keyboard a11y, wheel zoom or scroll capture', () => {
@@ -58,5 +70,29 @@ describe('ProgressGraphCanvas', () => {
     expect(w.get('[data-testid="pg-zoom-out"]').attributes('aria-label')).toBe('縮小');
     expect(w.get('[data-testid="pg-fit"]').attributes('aria-label')).toBe('全圖');
     expect(w.get('[data-testid="pg-canvas"]').attributes('aria-label')).toBe('簽核進度圖');
+  });
+
+  it('draws edges with the bend point from the layout (in a column gap), not the midpoint', () => {
+    const d = (w: ReturnType<typeof mountCanvas>) => w.get('path.vue-flow__edge-path').attributes('d');
+    expect(d(mountCanvas())).toMatch(/350,/);
+    expect(d(mountCanvas())).not.toMatch(/250,/); // 兩端的中點 (100 + 400) / 2
+  });
+
+  it('a cut edge label keeps the full text in an SVG title', () => {
+    const w = mountCanvas();
+    expect(w.get('text.vue-flow__edge-text').text()).toContain('金額大…');
+    expect(w.get('text.vue-flow__edge-text title').text()).toBe('金額大於十萬');
+  });
+
+  it('re-applies the viewport when the size changes but not when the plan is recomputed with the same numbers', async () => {
+    const w = mountCanvas();
+    await w.setProps({ plan: plan({ minZoom: 0.15 }) });
+    await w.setProps({ plan: plan() }); // 新物件、數字一樣（例如只有視窗高度的事件讓 plan 重算）
+    expect(flowFns.setViewport).not.toHaveBeenCalled();
+    await w.setProps({ width: 900 });
+    expect(flowFns.setViewport).toHaveBeenCalledTimes(1);
+    await w.setProps({ plan: plan({ zoom: 0.5 }) });
+    expect(flowFns.setViewport).toHaveBeenCalledTimes(2);
+    expect(flowFns.setViewport).toHaveBeenLastCalledWith({ x: 450 - 400 * 0.5, y: 100 - 42 * 0.5, zoom: 0.5 });
   });
 });

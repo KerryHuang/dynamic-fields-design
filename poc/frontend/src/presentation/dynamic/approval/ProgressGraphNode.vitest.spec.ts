@@ -43,9 +43,9 @@ describe('ProgressGraphNode', () => {
     expect(mountNode(data()).find('[data-testid="pg-overdue"]').exists()).toBe(false);
   });
 
-  it('title and aria-label carry name and state', () => {
+  it('aria-label carries name and state; no duplicate title for screen readers', () => {
     const w = mountNode(data());
-    expect(w.attributes('title')).toBe('主管 · 簽核中');
+    expect(w.attributes('title')).toBeUndefined();
     expect(w.attributes('aria-label')).toBe('主管 · 簽核中');
   });
 

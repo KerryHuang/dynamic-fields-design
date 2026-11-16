@@ -1,10 +1,10 @@
 <script setup lang="ts">
 import '@vue-flow/core/dist/style.css';
-import { VueFlow, useVueFlow, type Edge, type Node } from '@vue-flow/core';
-import { computed, watch } from 'vue';
+import { BaseEdge, VueFlow, getSmoothStepPath, useVueFlow, type Edge, type EdgeProps, type Node } from '@vue-flow/core';
+import { computed, h, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
 import ProgressGraphNode from './ProgressGraphNode.vue';
-import { MAX_ZOOM, viewportTransform, type GraphMode, type ProgressNodeData, type ViewportPlan } from './progress-graph';
+import { MAX_ZOOM, viewportTransform, type GraphMode, type ProgressEdgeData, type ProgressNodeData, type ViewportPlan } from './progress-graph';
 
 // 唯讀的進度圖畫布（fg4 計畫 J12）。Vue Flow 只在這個檔案與 ProgressGraphNode.vue 出現，由 ApprovalProgressGraph 動態載入。
 const props = defineProps<{
@@ -19,8 +19,21 @@ const transform = computed(() => viewportTransform(props.plan, props.width, prop
 const interactive = computed(() => props.mode !== 'thumb');
 
 function apply() { void flow.setViewport(transform.value); }
-// 寬度、高度或圖本身改變（轉向、換語系）就重新對準；使用者拖曳過的視角會被重置，這是預期的。
-watch(() => [transform.value.x, transform.value.y, transform.value.zoom, props.plan.minZoom], apply);
+// 寬度、高度或圖本身改變（轉向、換語系）就重新對準。分開監看三個數字：值沒變（例如只是 plan 重算）就不重置使用者拖曳過的視角。
+watch([() => transform.value.x, () => transform.value.y, () => transform.value.zoom], apply);
+
+// 線：內建 smoothstep，但轉折點由 progress-graph 算好（data.bendX，永遠落在欄距），線才不會切過別條泳道的節點。
+// 標籤被截斷時，完整文字放進 SVG <title>（滑鼠移上去可看）。
+function ProgressEdge(p: EdgeProps<ProgressEdgeData>) {
+  const [path, labelX, labelY] = getSmoothStepPath({
+    sourceX: p.sourceX, sourceY: p.sourceY, sourcePosition: p.sourcePosition,
+    targetX: p.targetX, targetY: p.targetY, targetPosition: p.targetPosition, centerX: p.data?.bendX,
+  });
+  const short = typeof p.label === 'string' ? p.label : '';
+  const full = p.data?.fullLabel ?? short;
+  const label = short && full !== short ? () => [h('title', full), short] : short;
+  return h(BaseEdge, { id: p.id, path, labelX, labelY, label: label || undefined, interactionWidth: 0, labelBgPadding: [4, 2] });
+}
 const fit = () => { void flow.fitView({ padding: 0.08, duration: 200 }); };
 const zoomIn = () => { void flow.zoomIn({ duration: 150 }); };
 const zoomOut = () => { void flow.zoomOut({ duration: 150 }); };
@@ -38,6 +51,7 @@ const zoomOut = () => { void flow.zoomOut({ duration: 150 }); };
     >
       <template #node-progress="p"><ProgressGraphNode :data="p.data" /></template>
       <template #node-addSign="p"><ProgressGraphNode :data="p.data" /></template>
+      <template #edge-progress="p"><ProgressEdge v-bind="p" /></template>
     </VueFlow>
     <div v-if="interactive" class="pg-toolbar">
       <q-btn dense flat round size="sm" icon="add" :aria-label="t('approval.graph.zoomIn')" :title="t('approval.graph.zoomIn')" data-testid="pg-zoom-in" @click="zoomIn" />

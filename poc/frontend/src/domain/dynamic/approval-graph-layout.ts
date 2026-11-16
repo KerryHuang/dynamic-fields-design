@@ -115,7 +115,8 @@ function immediatePostDominators(g: Graph, reach: string[]): Map<string, string 
   return ipdom;
 }
 
-interface Segment { height: number; items: Array<[string, number]> } // 中心 y，相對區段頂端
+// 中心 y 都相對區段頂端。anchor 是這一段「主幹」穿過的水平線：串接時各段依 anchor 對齊，前後節點因此在同一條線上。
+interface Segment { height: number; anchor: number; items: Array<[string, number]> }
 
 function layoutRows(g: Graph, start: string, reach: string[]): { centers: Map<string, number>; height: number } {
   const ipdom = immediatePostDominators(g, reach);
@@ -132,26 +133,29 @@ function layoutRows(g: Graph, start: string, reach: string[]): { centers: Map<st
       const outs: string[] = g.out.get(cur)!;
       if (outs.length >= 2) {
         const join: string | null = ipdom.get(cur) ?? null;
-        const lanes: Segment[] = outs.map((t) => (t === join ? { height: NODE_H, items: [] } : chain(t, join)));
+        const lanes: Segment[] = outs.map((t) => (t === join ? { height: NODE_H, anchor: NODE_H / 2, items: [] } : chain(t, join)));
         const total = lanes.reduce((s, l) => s + l.height, 0) + ROW_GAP * (lanes.length - 1);
-        const items: Array<[string, number]> = [[cur, total / 2]];
+        const tops: number[] = [];
         let top = 0;
-        for (const l of lanes) {
-          for (const [id, c] of l.items) items.push([id, top + c]);
-          top += l.height + ROW_GAP;
-        }
-        segs.push({ height: total, items });
+        for (const l of lanes) { tops.push(top); top += l.height + ROW_GAP; }
+        // 有空泳道（分支直接接匯合）時，主幹走在空泳道上，那條線才不會穿過別條泳道的節點；否則在區塊正中。
+        const empty = outs.findIndex((t) => t === join);
+        const anchor = empty >= 0 ? tops[empty] + NODE_H / 2 : total / 2;
+        const items: Array<[string, number]> = [[cur, anchor]];
+        lanes.forEach((l, i) => { for (const [id, c] of l.items) items.push([id, tops[i] + c]); });
+        segs.push({ height: total, anchor, items });
         cur = join;
       } else {
-        segs.push({ height: heightOf(node), items: [[cur, heightOf(node) / 2]] });
+        segs.push({ height: heightOf(node), anchor: heightOf(node) / 2, items: [[cur, heightOf(node) / 2]] });
         cur = outs.length ? outs[0] : null;
       }
     }
     if (stop !== null && cur !== stop) throw new Undecomposable();
-    const height = Math.max(0, ...segs.map((s) => s.height));
+    const above = Math.max(0, ...segs.map((s) => s.anchor));
+    const below = Math.max(0, ...segs.map((s) => s.height - s.anchor));
     const items: Array<[string, number]> = [];
-    for (const s of segs) for (const [id, c] of s.items) items.push([id, height / 2 - s.height / 2 + c]);
-    return { height, items };
+    for (const s of segs) for (const [id, c] of s.items) items.push([id, above - s.anchor + c]);
+    return { height: above + below, anchor: above, items };
   };
 
   const main = chain(start, null);
@@ -215,4 +219,16 @@ export function layoutLeftToRight(nodes: LayoutNode[], edges: LayoutEdge[]): Lay
     }
   }
   return layoutFallback(g, nodes, start, reach);
+}
+
+const COL_W = NODE_W + COL_GAP;
+
+/**
+ * 線的轉折點 x（圖座標）：從分支、條件（兩條以上出線）出發的線在起點右邊第一個欄距轉折，
+ * 其他線在終點左邊最後一個欄距轉折。轉折點永遠落在欄距，水平段都走在自己的泳道上，不會切過別條泳道的節點。
+ */
+export function edgeBendX(fromPos: { x: number }, toPos: { x: number }, branching: boolean): number {
+  return branching
+    ? Math.floor(fromPos.x / COL_W) * COL_W + NODE_W + COL_GAP / 2
+    : Math.floor(toPos.x / COL_W) * COL_W - COL_GAP / 2;
 }
