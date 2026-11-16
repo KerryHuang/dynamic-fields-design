@@ -65,7 +65,7 @@ export function useDesignerActions(designer: GraphDesigner, ctx: ActionContext) 
   }
 
   /** 送出的內容；目標狀態沒選就不送（回 null，標在流程層）。優先序：目標狀態沒變用目前的，換了排到那個目標狀態的最後。 */
-  function buildInput(force = false): { input: ApprovalFlowDraftInput; sent: NonNullable<ReturnType<GraphDesigner['output']>> } | null {
+  function buildInput(force = false): { input: ApprovalFlowDraftInput; sent: NonNullable<ReturnType<GraphDesigner['output']>>; sentJson: string } | null {
     const out = designer.output();
     const m = designer.meta.value;
     if (!out || !m) return null;
@@ -77,7 +77,7 @@ export function useDesignerActions(designer: GraphDesigner, ctx: ActionContext) 
       key: s.isNew ? m.key : s.key, name: m.name, toOptionId: m.toOptionId, priority, definition: out.definition, layout: out.layout,
       baseRev: s.draftRev, baseVersionId: s.versionId, ...(force ? { force: true } : {}),
     };
-    return { input, sent: out };
+    return { input, sent: out, sentJson: designer.snapshotJson() };
   }
 
   /** 400 的 errors 與驗證回應用同一套對照（J77），以送出的那一份定義對回節點與線。 */
@@ -138,7 +138,7 @@ export function useDesignerActions(designer: GraphDesigner, ctx: ActionContext) 
     try {
       const flow = (s.isNew ? await createDraft.mutateAsync(built.input) : await saveDraftM.mutateAsync({ key: s.key, input: built.input })) as ApprovalFlow;
       designer.replaceServer(flow);
-      designer.markSaved();
+      designer.markSaved(built.sentJson); // 請求期間的修改仍算未存
       if (s.isNew) ctx.onCreated(flow.key);
       ctx.notify('positive', ctx.t('approval.designer.graph.draftSaved'));
       return flow;
@@ -169,7 +169,7 @@ export function useDesignerActions(designer: GraphDesigner, ctx: ActionContext) 
     try {
       const r = (await publishM.mutateAsync({ key: designer.server.value.key, input: built.input })) as ApprovalFlowPublishResult;
       designer.replaceServer(r.flow);
-      designer.markSaved();
+      designer.markSaved(built.sentJson);
       designer.clearHistory();
       ctx.notify('positive', ctx.t('approval.designer.graph.published'));
     } catch (err) {

@@ -107,8 +107,10 @@ export function useGraphDesigner(canEdit: () => boolean) {
   function redoStep() { if (history.value && canEdit()) { history.value = redo(history.value); lastKey = null; } }
   /** 發布或捨棄草稿後清空（U60）；存草稿不清。 */
   function clearHistory() { if (history.value) history.value = clear(history.value); lastKey = null; }
-  /** 存檔成功：目前內容就是已存的內容（復原堆疊保留，U60）。 */
-  function markSaved() { if (snapshot.value) savedJson.value = JSON.stringify(snapshot.value); lastKey = null; }
+  /** 目前內容的序列化；送出前記下來，存檔成功時交給 markSaved（送出期間的修改不算已存）。 */
+  const snapshotJson = () => JSON.stringify(snapshot.value);
+  /** 存檔成功：`sent`（送出時的 snapshotJson）就是已存的內容；沒給就用目前內容。復原堆疊保留（U60）。 */
+  function markSaved(sent?: string) { if (snapshot.value) savedJson.value = sent ?? JSON.stringify(snapshot.value); lastKey = null; }
 
   const select = (s: Selection) => { selection.value = s; };
   /** 409 之後「覆蓋」要用的新基準（回應 params 帶的權杖與版本）。 */
@@ -131,7 +133,7 @@ export function useGraphDesigner(canEdit: () => boolean) {
 
   return {
     loaded, snapshot, state, meta, dirty, undoable, redoable, server, selection, issues, canEdit: computed(canEdit),
-    load, apply, edit, editMeta, move, undo: undoStep, redo: redoStep, clearHistory, markSaved, select, output, replaceServer, setTokens,
+    load, apply, edit, editMeta, move, undo: undoStep, redo: redoStep, clearHistory, snapshotJson, markSaved, select, output, replaceServer, setTokens,
   };
 }
 

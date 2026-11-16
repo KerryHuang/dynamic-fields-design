@@ -154,6 +154,32 @@ describe('useDesignerActions', () => {
     expect(designer.server.value.draftRev).toBe('r2');
   });
 
+  it('edits made while a save or publish request is in flight stay unsaved (only the sent snapshot is marked saved)', async () => {
+    let done!: (v: unknown) => void;
+    api.saveApprovalFlowDraft.mockReturnValueOnce(new Promise((r) => { done = r; }) as never);
+    const { designer, actions } = setup(flow());
+    rename(designer, 'sent');
+    const saving = actions.saveDraft();
+    rename(designer, 'edited while saving');
+    done(flow({ draft: { definition: def() }, draftRev: 'r2' }));
+    await saving;
+    expect(designer.dirty.value).toBe(true);
+    await vi.advanceTimersByTimeAsync(0);
+    api.saveApprovalFlowDraft.mockResolvedValueOnce(flow({ draftRev: 'r3' }) as never);
+    await actions.saveDraft();
+    expect(designer.dirty.value).toBe(false);
+
+    // 發布同理，而且發布成功後復原堆疊清空、未存的修改仍在
+    api.validateApprovalFlow.mockResolvedValue(ok);
+    api.publishApprovalFlow.mockReturnValueOnce(new Promise((r) => { done = r; }) as never);
+    rename(designer, 'to publish');
+    const publishing = actions.confirmPublish();
+    rename(designer, 'edited while publishing');
+    done({ flow: flow({ version: 2, versionId: 4, draft: null, draftRev: 'r4' }), warnings: [] });
+    await publishing;
+    expect(designer.dirty.value).toBe(true);
+  });
+
   it('a new flow without a target state is not sent and is marked on the flow level', async () => {
     const { designer, actions } = setup(null);
     designer.editMeta({ toOptionId: null });
