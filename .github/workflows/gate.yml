@@ -57,13 +57,15 @@ jobs:
       matrix:
         include:
           - { name: DomainTests, project: DomainTests, shard: 1, shards: 1 }
-          - { name: ApplicationTests 1/4, project: ApplicationTests, shard: 1, shards: 4 }
-          - { name: ApplicationTests 2/4, project: ApplicationTests, shard: 2, shards: 4 }
-          - { name: ApplicationTests 3/4, project: ApplicationTests, shard: 3, shards: 4 }
-          - { name: ApplicationTests 4/4, project: ApplicationTests, shard: 4, shards: 4 }
-          - { name: WebAPITests 1/3, project: WebAPITests, shard: 1, shards: 3 }
-          - { name: WebAPITests 2/3, project: WebAPITests, shard: 2, shards: 3 }
-          - { name: WebAPITests 3/3, project: WebAPITests, shard: 3, shards: 3 }
+          - { name: ApplicationTests 1/5, project: ApplicationTests, shard: 1, shards: 5 }
+          - { name: ApplicationTests 2/5, project: ApplicationTests, shard: 2, shards: 5 }
+          - { name: ApplicationTests 3/5, project: ApplicationTests, shard: 3, shards: 5 }
+          - { name: ApplicationTests 4/5, project: ApplicationTests, shard: 4, shards: 5 }
+          - { name: ApplicationTests 5/5, project: ApplicationTests, shard: 5, shards: 5 }
+          - { name: WebAPITests 1/4, project: WebAPITests, shard: 1, shards: 4 }
+          - { name: WebAPITests 2/4, project: WebAPITests, shard: 2, shards: 4 }
+          - { name: WebAPITests 3/4, project: WebAPITests, shard: 3, shards: 4 }
+          - { name: WebAPITests 4/4, project: WebAPITests, shard: 4, shards: 4 }
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-dotnet@v4

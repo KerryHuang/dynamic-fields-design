@@ -2,12 +2,14 @@
 # 把一個測試專案依「測試類別」切成 N 份，只跑第 i 份：
 #   bash scripts/ci/shard-tests.sh <專案名，如 ApplicationTests> <第幾份，從 1 起> <共幾份>
 # 切法從 dotnet test --list-tests 的實際清單算出（不寫死類別名），所以新增類別會自動歸某一份、不會漏測：
-#   1. 以類別為單位、以測試數為權重，由大到小貪婪分配給目前最輕的一份（同權重照名稱排序，結果固定）。
-#   2. Demo 命名空間（共用 DemoGeneratedFixture）整組視為一個單位，避免昂貴 fixture 在多份重複建立。
+#   以類別為單位，權重取 shard-weights.tsv 的實測秒數（沒記的類別按測試數估），由大到小貪婪分配給目前最輕的一份（結果固定）。
+#   Demo 類別各自獨立分配：DemoGeneratedFixture 在每份各建一次，換得 Demo 測試（同 collection、只能序列跑）能分散。
+#   某份又明顯變慢時，從該份輸出的「最耗時的類別」更新 shard-weights.tsv 即可。
 # 驗證：本份實際執行的 Total 必須等於清單中分給本份的測試數；各份的 expected 加總 = 清單總數（見輸出的 sum 行）。
 # 本機只想看分配、不跑測試：DRY_RUN=1。
 set -euo pipefail
 proj="${1:?專案名}"; idx="${2:?第幾份}"; total="${3:?共幾份}"
+here="$(cd "$(dirname "$0")" && pwd)"
 cd "$(git rev-parse --show-toplevel)/backend"
 dir="tests/DynamicModules.$proj"
 out="${RUNNER_TEMP:-${TMPDIR:-/tmp}}/shard-$proj-$idx"; mkdir -p "$out"
@@ -16,19 +18,24 @@ dotnet build "$dir" --nologo -v q
 dotnet test "$dir" --no-build --list-tests 2>/dev/null | sed -n '/^The following Tests are available:/,$p' | tail -n +2 \
   | sed 's/^ *//' | grep -v '^$' > "$out/tests.txt"
 
-# class<TAB>unit<TAB>shard，由 awk 一次算完
-awk -v n="$total" '
-  { name=$0; sub(/\(.*/,"",name); c=name; sub(/\.[^.]*$/,"",c)
-    u=c; if (match(c,/\.Demo(\.|$)/)) u=substr(c,1,RSTART+4)
-    cnt[c]++; unit[c]=u; w[u]++; all++ }
+# class<TAB>測試數<TAB>shard，由 awk 一次算完
+# 權重 = shard-weights.tsv 記的實測秒數（量過的重類別），其餘類別以每筆 0.25 秒估算
+awk -v n="$total" -v proj="$proj" -v wf="$here/shard-weights.tsv" '
+  BEGIN { while ((getline l < wf) > 0) { split(l, a, "\t"); sec[a[1]] = a[2] } }
+  { name=$0; sub(/\(.*/,"",name); c=name; sub(/\.[^.]*$/,"",c); cnt[c]++; all++ }
   END {
-    k=0; for (u in w) us[++k]=u
+    k=0
+    for (c in cnt) {
+      key=c; sub(/^DynamicModules\./,"",key)
+      w[c] = (key in sec) ? sec[key] : cnt[c]*0.25
+      us[++k]=c
+    }
     # 權重大到小、同權重依名稱
     for (i=2;i<=k;i++){v=us[i]; j=i-1; while(j>0 && (w[us[j]]<w[v] || (w[us[j]]==w[v] && us[j]>v))){us[j+1]=us[j]; j--} us[j+1]=v}
     for (s=1;s<=n;s++) load[s]=0
-    for (i=1;i<=k;i++){ b=1; for(s=2;s<=n;s++) if(load[s]<load[b]) b=s; load[b]+=w[us[i]]; sh[us[i]]=b }
-    for (c in cnt) printf "%s\t%d\t%d\n", c, cnt[c], sh[unit[c]]
-    for (s=1;s<=n;s++) printf "第 %d 份預期 %d 筆\n", s, load[s] > "/dev/stderr"
+    for (i=1;i<=k;i++){ b=1; for(s=2;s<=n;s++) if(load[s]<load[b]) b=s; load[b]+=w[us[i]]; sh[us[i]]=b; ld[b]+=cnt[us[i]] }
+    for (c in cnt) printf "%s\t%d\t%d\n", c, cnt[c], sh[c]
+    for (s=1;s<=n;s++) printf "第 %d 份預估 %d 秒、%d 筆\n", s, load[s], ld[s] > "/dev/stderr"
   }' "$out/tests.txt" 2> "$out/load.txt" | sort > "$out/map.tsv"
 
 all=$(wc -l < "$out/tests.txt" | tr -d ' ')
