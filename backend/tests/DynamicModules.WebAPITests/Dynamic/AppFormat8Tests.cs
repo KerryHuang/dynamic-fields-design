@@ -506,7 +506,7 @@ public class AppFormat8Tests : IDisposable
             db.Add(new ApprovalFlow
             {
                 Key = "t8-po-draft-only", NameI18n = new(), ModuleId = large.ModuleId, ToOptionId = large.ToOptionId, Priority = 9, Active = true,
-                DraftJson = """{"shape":"graph"}""", CreatedUserId = "admin", CreatedTime = DateTime.UtcNow
+                DraftJson = """{"rev":"seed-rev","definition":{"shape":"graph"},"layout":null}""", CreatedUserId = "admin", CreatedTime = DateTime.UtcNow
             });
         });
 

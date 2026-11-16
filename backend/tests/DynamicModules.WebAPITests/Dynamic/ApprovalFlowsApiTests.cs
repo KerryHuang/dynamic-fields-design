@@ -217,7 +217,7 @@ public class ApprovalFlowsApiTests
             db.Add(new ApprovalFlow
             {
                 Key = "draft-only", NameI18n = new([KeyValuePair.Create("zh-TW", "只有草稿")]), ModuleId = moduleId, ToOptionId = s.Done, Priority = 9,
-                Active = false, DraftJson = """{"shape":"graph"}""", CreatedUserId = "admin", CreatedTime = DateTime.UtcNow
+                Active = false, DraftJson = """{"rev":"seed-rev","definition":{"shape":"graph"},"layout":null}""", CreatedUserId = "admin", CreatedTime = DateTime.UtcNow
             });
             db.SaveChanges();
         }
@@ -226,10 +226,12 @@ public class ApprovalFlowsApiTests
         // API 的 JSON 省略 null：version、definition 要不是沒有這個鍵、就是 null
         foreach (var name in new[] { "version", "definition" })
             (!one.TryGetProperty(name, out var v) || v.ValueKind == System.Text.Json.JsonValueKind.Null).Should().BeTrue(name);
-        one.GetProperty("draft").GetProperty("shape").GetString().Should().Be("graph");
+        one.GetProperty("draft").GetProperty("definition").GetProperty("shape").GetString().Should().Be("graph");
+        one.GetProperty("draftRev").GetString().Should().Be("seed-rev");
         (await JsonOf(await c.GetAsync($"{Flows}?module={s.Key}"))).EnumerateArray().Select(f => f.GetProperty("key").GetString())
             .Should().Contain("draft-only");
-        (await c.PutAsJsonAsync($"{Flows}/draft-only", Flow("draft-only", s.Done, 9, s.Group))).StatusCode.Should().Be(HttpStatusCode.Conflict);
+        // 沒有版本的流程啟用是 400（先發布，§10.8）
+        (await c.PutAsJsonAsync($"{Flows}/draft-only", Flow("draft-only", s.Done, 9, s.Group))).StatusCode.Should().Be(HttpStatusCode.BadRequest);
     }
 
     private static object GraphBody(string key, (string Key, long Status, long Amount, string AmountKey, long Draft, long Done, long Group) s, string mode = "bad",
@@ -539,5 +541,167 @@ public class ApprovalFlowsApiTests
         status.Should().Be(HttpStatusCode.OK);
         after.GetProperty("version").GetInt32().Should().Be(2);
         after.GetProperty("currentVersionUsed").GetBoolean().Should().BeFalse();
+    }
+
+    // ───────── fg3a：草稿、乾跑驗證（J64、J65） ─────────
+
+    private static object DraftBody(
+        string key, (string Key, long Status, long Amount, string AmountKey, long Draft, long Done, long Group) s, string? baseRev = null,
+        long? baseVersionId = null, bool force = false, int priority = 5, string approverMode = "any") => new
+    {
+        key, name = Zh(key), toOptionId = s.Done, priority, baseRev, baseVersionId, force,
+        definition = new
+        {
+            shape = "graph", stages = Array.Empty<object>(),
+            nodes = new object[]
+            {
+                new { id = "start", kind = "start" },
+                new
+                {
+                    id = "a", kind = "approval", name = Zh("主管"), approvers = new { source = "group", groupIds = new[] { s.Group } },
+                    mode = approverMode, editableFields = Array.Empty<long>(), onEmpty = "fallback"
+                },
+                new { id = "end", kind = "end" }
+            },
+            edges = new object[] { new { id = "e1", from = "start", to = "a" }, new { id = "e2", from = "a", to = "end" } }
+        },
+        layout = new { nodes = new { start = new { x = 0, y = 0 }, a = new { x = 200, y = 0 }, end = new { x = 400, y = 0 } } }
+    };
+
+    [Fact]
+    [Trait("Category", "Postgres")]
+    public async Task Draft_Routes_CamelCase_NullsOmitted()
+    {
+        using var app = new TestApp();
+        var c = app.AsUser();
+        var s = await SeedApproval(c);
+
+        var created = await c.PostAsJsonAsync($"{Flows}/draft?module={s.Key}", DraftBody("g-one", s));
+        created.StatusCode.Should().Be(HttpStatusCode.Created, await created.Content.ReadAsStringAsync());
+        var body = await JsonOf(created);
+        // API 的 JSON 省略 null：沒有版本的流程沒有 version、definition、versionId
+        foreach (var name in new[] { "version", "definition", "versionId", "graph", "layout" }) body.TryGetProperty(name, out _).Should().BeFalse(name);
+        body.GetProperty("active").GetBoolean().Should().BeFalse();
+        var rev = body.GetProperty("draftRev").GetString()!;
+        body.GetProperty("draft").GetProperty("definition").GetProperty("nodes")[1].GetProperty("approvers").GetProperty("source").GetString().Should().Be("group");
+        body.GetProperty("draft").GetProperty("layout").GetProperty("nodes").GetProperty("a").GetProperty("x").GetDouble().Should().Be(200);
+        body.GetProperty("draftUpdatedBy").GetString().Should().Be("admin");
+        body.GetProperty("draftUpdatedByName").GetString().Should().NotBeNullOrEmpty();
+        body.TryGetProperty("draftUpdatedTime", out _).Should().BeTrue();
+
+        var saved = await c.PutAsJsonAsync($"{Flows}/g-one/draft", DraftBody("g-one", s, baseRev: rev, approverMode: "all"));
+        saved.StatusCode.Should().Be(HttpStatusCode.OK, await saved.Content.ReadAsStringAsync());
+        (await JsonOf(saved)).GetProperty("draftRev").GetString().Should().NotBe(rev);
+
+        // 過期的權杖：409，本文帶 code 與目前草稿的修改者
+        var stale = await c.PutAsJsonAsync($"{Flows}/g-one/draft", DraftBody("g-one", s, baseRev: rev));
+        stale.StatusCode.Should().Be(HttpStatusCode.Conflict);
+        var conflict = await JsonOf(stale);
+        conflict.GetProperty("code").GetString().Should().Be("DraftConflict");
+        conflict.GetProperty("draftUpdatedByName").GetString().Should().NotBeNullOrEmpty();
+        conflict.TryGetProperty("draftUpdatedTime", out _).Should().BeTrue();
+
+        // 從未發布的流程不能捨棄草稿
+        var discard = await c.DeleteAsync($"{Flows}/g-one/draft?baseRev={rev}");
+        discard.StatusCode.Should().Be(HttpStatusCode.Conflict);
+        (await JsonOf(discard)).GetProperty("code").GetString().Should().Be("DraftOnlyUseDelete");
+
+        var one = await JsonOf(await c.GetAsync($"{Flows}/g-one"));
+        one.GetProperty("draftRev").GetString().Should().NotBeNullOrEmpty();
+
+        // 已發布的流程：捨棄草稿回到已發布的版本
+        var big = await JsonOf(await c.GetAsync($"{Flows}/big"));
+        var version = big.GetProperty("versionId").GetInt64();
+        big.GetProperty("graph").GetProperty("shape").GetString().Should().Be("graph", "舊流程單筆回轉換後的直線圖");
+        (await JsonOf(await c.GetAsync($"{Flows}?module={s.Key}"))).EnumerateArray().Select(f => f.TryGetProperty("graph", out var g) ? g : default)
+            .Should().OnlyContain(g => g.ValueKind == System.Text.Json.JsonValueKind.Undefined, "清單端點不帶 graph");
+        var bigDraft = await c.PutAsJsonAsync($"{Flows}/big/draft", DraftBody("big", s, baseVersionId: version, priority: 1));
+        bigDraft.StatusCode.Should().Be(HttpStatusCode.OK, await bigDraft.Content.ReadAsStringAsync());
+        var bigRev = (await JsonOf(bigDraft)).GetProperty("draftRev").GetString();
+        var cleared = await c.DeleteAsync($"{Flows}/big/draft?baseRev={bigRev}");
+        cleared.StatusCode.Should().Be(HttpStatusCode.OK, await cleared.Content.ReadAsStringAsync());
+        (await JsonOf(cleared)).TryGetProperty("draft", out _).Should().BeFalse();
+    }
+
+    [Fact]
+    [Trait("Category", "Postgres")]
+    public async Task Draft_ReadOnlyDesigner_403()
+    {
+        using var app = new TestApp();
+        var s = await SeedApproval(app.AsUser());
+        using (var scope = app.Services.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<DynamicDbContext>();
+            db.Add(new UserProgramPrivilege { UserId = "sales01", ProgramCode = "DYN00000", CanRead = true });
+            db.SaveChanges();
+        }
+        var reader = app.AsUser("sales01");
+
+        (await reader.GetAsync($"{Flows}?module={s.Key}")).StatusCode.Should().Be(HttpStatusCode.OK, "唯讀設計者看得到流程");
+        (await reader.PostAsJsonAsync($"{Flows}/draft?module={s.Key}", DraftBody("g-one", s))).StatusCode.Should().Be(HttpStatusCode.Forbidden);
+        (await reader.PutAsJsonAsync($"{Flows}/big/draft", DraftBody("big", s))).StatusCode.Should().Be(HttpStatusCode.Forbidden);
+        (await reader.DeleteAsync($"{Flows}/big/draft?force=true")).StatusCode.Should().Be(HttpStatusCode.Forbidden);
+        (await reader.PostAsJsonAsync($"{Flows}/validate?module={s.Key}", DraftBody("g-one", s))).StatusCode.Should().Be(HttpStatusCode.Forbidden);
+    }
+
+    [Fact]
+    public async Task Draft_MasterModule_NonAdmin_403()
+    {
+        using var rig = new SharedMasterRig();
+        await rig.ImportAllAsync();
+        rig.Db(db => db.Set<UserProgramPrivilege>().Add(new UserProgramPrivilege
+        {
+            UserId = "planner01", ProgramCode = "DYN00000", CanRead = true, CanAdd = true, CanEdit = true, CanDelete = true
+        }));
+        var designer = rig.App.AsUser("planner01");
+        var body = new { key = "m-flow", name = Zh("x"), toOptionId = 1L, priority = 1, definition = new { shape = "graph", stages = Array.Empty<object>() } };
+
+        (await designer.PostAsJsonAsync($"{Flows}/draft?module=master-bp-partner", body)).StatusCode.Should().Be(HttpStatusCode.Forbidden);
+        (await designer.PostAsJsonAsync($"{Flows}/validate?module=master-bp-partner", body)).StatusCode.Should().Be(HttpStatusCode.Forbidden);
+        // 系統管理員過得了這一關（這個模組沒有狀態機，之後由流程自己的檢查擋下，不一定是哪個狀態碼）
+        (await rig.Admin.PostAsJsonAsync($"{Flows}/draft?module=master-bp-partner", body)).StatusCode.Should().NotBe(HttpStatusCode.Forbidden);
+    }
+
+    [Fact]
+    [Trait("Category", "Postgres")]
+    public async Task Flows_KeyedDraftValidateNew_RouteNormally()
+    {
+        // 代碼叫 draft、validate、new 的流程：字面路由段與 {key} 不衝突（不加保留字）
+        using var app = new TestApp();
+        var c = app.AsUser();
+        var s = await SeedApproval(c);
+        var priority = 10;
+        foreach (var key in new[] { "draft", "validate", "new" })
+        {
+            var created = await c.PostAsJsonAsync($"{Flows}/draft?module={s.Key}", DraftBody(key, s, priority: priority++));
+            created.StatusCode.Should().Be(HttpStatusCode.Created, key + await created.Content.ReadAsStringAsync());
+            var rev = (await JsonOf(created)).GetProperty("draftRev").GetString();
+
+            (await JsonOf(await c.GetAsync($"{Flows}/{key}"))).GetProperty("key").GetString().Should().Be(key);
+            var saved = await c.PutAsJsonAsync($"{Flows}/{key}/draft", DraftBody(key, s, baseRev: rev, priority: priority));
+            saved.StatusCode.Should().Be(HttpStatusCode.OK, key + await saved.Content.ReadAsStringAsync());
+            (await c.PutAsJsonAsync($"{Flows}/{key}", Flow(key, s.Done, 77, s.Group))).StatusCode.Should().Be(HttpStatusCode.BadRequest, "沒有版本的 PUT 要啟用回 400（J64）");
+            var validated = await c.PostAsJsonAsync($"{Flows}/validate?module={s.Key}&key={key}", DraftBody(key, s, priority: priority));
+            validated.StatusCode.Should().Be(HttpStatusCode.OK, key + await validated.Content.ReadAsStringAsync());
+            (await JsonOf(validated)).GetProperty("errors").EnumerateObject().Should().BeEmpty();
+        }
+    }
+
+    [Fact]
+    [Trait("Category", "Postgres")]
+    public async Task SaveDraft_Concurrent_OneWinsOneConflicts()
+    {
+        // 兩個請求讀到同一個 rev、同時存：恰一個 200、一個 409（SQLite 上寫入由 WriteGate 排隊，只有 PostgreSQL 的結果算數）
+        using var app = new TestApp(fileDatabase: true);
+        var c = app.AsUser();
+        var s = await SeedApproval(c);
+        var created = await c.PostAsJsonAsync($"{Flows}/draft?module={s.Key}", DraftBody("g-one", s));
+        var rev = (await JsonOf(created)).GetProperty("draftRev").GetString();
+
+        var results = await Task.WhenAll(
+            app.AsUser().PutAsJsonAsync($"{Flows}/g-one/draft", DraftBody("g-one", s, baseRev: rev, approverMode: "all")),
+            app.AsUser().PutAsJsonAsync($"{Flows}/g-one/draft", DraftBody("g-one", s, baseRev: rev, approverMode: "any")));
+
+        results.Select(r => r.StatusCode).Order().Should().Equal(HttpStatusCode.OK, HttpStatusCode.Conflict);
     }
 }

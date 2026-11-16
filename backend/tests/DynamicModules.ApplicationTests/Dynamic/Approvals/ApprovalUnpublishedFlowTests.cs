@@ -18,7 +18,7 @@ public class ApprovalUnpublishedFlowTests : ApprovalTestBase
 {
     protected override bool ScopePerRequest => true;
 
-    private const string DraftBody = """{"shape":"graph","nodes":[],"edges":[]}""";
+    private const string DraftBody = """{"rev":"seed-rev","definition":{"shape":"graph","nodes":[],"edges":[]},"layout":null}""";
 
     private static ApprovalFlowInput Input(string key, long to, int priority, ApprovalDefinition d, bool active = true) =>
         new(key, Text(key), to, priority, active, d);
@@ -50,7 +50,9 @@ public class ApprovalUnpublishedFlowTests : ApprovalTestBase
         list.Select(f => f.Key).Should().Equal("po-a", "po-u", "po-n");
         var u = list.Single(f => f.Key == "po-u");
         (u.Version, u.Definition, u.Used, u.PendingCount, u.CurrentVersionUsed).Should().Be(((int?)null, (ApprovalDefinition?)null, false, 0, false));
-        u.Draft!.Value.GetRawText().Should().Be(DraftBody);
+        u.Draft!.Definition.Shape.Should().Be(ApprovalShapes.Graph);
+        u.Draft.Layout.Should().BeNull();
+        u.DraftRev.Should().Be("seed-rev");
         list.Single(f => f.Key == "po-n").Draft.Should().BeNull();
         list.Single(f => f.Key == "po-a").Version.Should().Be(1);
     }
@@ -70,7 +72,7 @@ public class ApprovalUnpublishedFlowTests : ApprovalTestBase
     [Theory]
     [InlineData(true)]
     [InlineData(false)]
-    public async Task Update_UnpublishedFlow_409_NothingWritten(bool active)
+    public async Task Update_UnpublishedFlow_NothingWritten(bool active)
     {
         var r = await BuildPurchase();
         await SeedUnpublishedFlow(r, "po-u", r.Confirmed, 1, DraftBody, active: !active);
@@ -79,8 +81,13 @@ public class ApprovalUnpublishedFlowTests : ApprovalTestBase
         var res = await Send(new UpdateApprovalFlowRequest("po-u",
             Input("po-u", r.Confirmed, 5, Def(null, Stage("lead", Group(PurchaseLeadGroup))), active)));
 
-        res.IsConflict.Should().BeTrue(Dump(res));
-        res.Message.Should().Be(ApprovalMessages.FlowNotPublished);
+        // 啟用是 400（先發布，§10.8），其餘維持 fg1 的 409
+        if (active) res.Errors["active"].Should().Equal(ApprovalMessages.FlowNotPublished);
+        else
+        {
+            res.IsConflict.Should().BeTrue(Dump(res));
+            res.Message.Should().Be(ApprovalMessages.FlowNotPublished);
+        }
         Flow("po-u").Should().BeEquivalentTo(before);
         Db.Context.Set<ApprovalFlowVersion>().AsNoTracking().Count().Should().Be(0);
     }
@@ -216,7 +223,10 @@ public class ApprovalUnpublishedFlowTests : ApprovalTestBase
     {
         // 草稿寫了可編輯欄位與條件欄位：沒發布的內容不能把欄位鎖起來（U3）
         var r = await WithUnpublishedFirst(ApprovalNoMatch.Direct);
-        var draft = JsonSerializer.Serialize(new { shape = "graph", editable = new[] { r.Memo, r.Discount } });
+        var draft = JsonSerializer.Serialize(new
+        {
+            rev = "seed-rev", definition = new { shape = "graph", editable = new[] { r.Memo, r.Discount } }, layout = (object?)null
+        });
         await Db.Context.Set<ApprovalFlow>().Where(f => f.Key == "po-u").ExecuteUpdateAsync(s => s.SetProperty(f => f.DraftJson, draft));
         using var scope = NewScope();
         var module = (await scope.ServiceProvider.GetRequiredService<IModuleRepository>().GetByKeyAsync(r.Module, includeChildren: true, default))!;

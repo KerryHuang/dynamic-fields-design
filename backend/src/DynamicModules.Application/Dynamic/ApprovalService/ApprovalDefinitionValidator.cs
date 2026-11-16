@@ -22,10 +22,16 @@ public sealed partial class ApprovalDefinitionValidator(
     /// shape 是 graph 時走 ApprovalDefinitionValidator.Graph.cs。
     /// </summary>
     public async Task<Dictionary<string, string[]>> ValidateAsync(
+        Module module, Workflow wf, ApprovalDefinition d, ApprovalDefinition? previous, CancellationToken ct) =>
+        (await ValidateWithWarningsAsync(module, wf, d, previous, ct)).Errors;
+
+    /// <summary>同 <see cref="ValidateAsync"/>，另回警告 W1–W3（鍵不含 definition. 前綴，同錯誤鍵）；有任何錯誤時警告為空。</summary>
+    public async Task<(Dictionary<string, string[]> Errors, List<ApprovalFlowWarning> Warnings)> ValidateWithWarningsAsync(
         Module module, Workflow wf, ApprovalDefinition d, ApprovalDefinition? previous, CancellationToken ct)
     {
         var limits = await approvalPolicies.LimitsAsync(module.Id, ct);
         var errors = new Dictionary<string, string[]>();
+        var warnings = new List<ApprovalFlowWarning>();
 
         var users = await permissions.ListUsersAsync(ct);
         var activeUsers = users.Where(u => u.IsActive).Select(u => u.UserId).ToHashSet();
@@ -39,7 +45,7 @@ public sealed partial class ApprovalDefinitionValidator(
         var grants = restricted.Count == 0 ? [] : (await shared.ListFieldGrantsAsync(restricted.Select(f => f.Id).ToList(), ct))
             .GroupBy(g => g.FieldId).ToDictionary(g => g.Key, g => g.Select(x => x.GroupId).ToHashSet());
         var groupsOf = (await permissions.ListMembershipsAsync(ct)).ToLookup(m => m.UserId, m => m.GroupId);
-        var x = new Run(module, d, previous, limits, registry, errors, allUserIds, activeUsers, groupIds, fields, nonEditable, hiddenRows, grants, groupsOf, restricted);
+        var x = new Run(module, d, previous, limits, registry, errors, allUserIds, activeUsers, groupIds, fields, nonEditable, hiddenRows, grants, groupsOf, restricted, warnings);
 
         if (d.Shape is not (ApprovalShapes.Sequence or ApprovalShapes.Graph)) x.Err("shape", ApprovalMessages.ShapeInvalid);
         if (x.ConditionError(d.When) is { } we) x.Err("when", ApprovalMessages.WhenInvalid(we));
@@ -52,7 +58,7 @@ public sealed partial class ApprovalDefinitionValidator(
 
         if (d.Shape == ApprovalShapes.Graph) GraphErrors(x);
         else SequenceErrors(x);
-        return errors;
+        return (errors, errors.Count > 0 ? [] : warnings);
     }
 
     private static void SequenceErrors(Run x)
@@ -79,7 +85,7 @@ public sealed partial class ApprovalDefinitionValidator(
         Module module, ApprovalDefinition d, ApprovalDefinition? previous, ApprovalLimitSet limits, FieldTypeRegistry registry,
         Dictionary<string, string[]> errors, HashSet<string> allUserIds, HashSet<string> activeUsers, HashSet<long> groupIds,
         Dictionary<long, Field> fields, HashSet<long> nonEditable, List<FieldPermission> hiddenRows,
-        Dictionary<long, HashSet<long>> grants, ILookup<string, long> groupsOf, List<Field> restricted)
+        Dictionary<long, HashSet<long>> grants, ILookup<string, long> groupsOf, List<Field> restricted, List<ApprovalFlowWarning> warnings)
     {
         public ApprovalDefinition D => d;
         public ApprovalDefinition? Previous => previous;
@@ -89,6 +95,8 @@ public sealed partial class ApprovalDefinitionValidator(
         public HashSet<long> GroupIds => groupIds;
 
         public void Err(string key, string message) => errors.TryAdd(key, [message]);
+
+        public void Warn(string key, string rule, string message) => warnings.Add(new ApprovalFlowWarning(key, rule, message));
 
         /// <summary>關卡（或簽核節點）從略過條件起的屬性檢查；p 是錯誤鍵前綴，before 是舊版同一關（改嚴只管之後）。代號與名稱由呼叫端檢查。</summary>
         public void StageErrors(ApprovalStageDef s, string p, ApprovalStageDef? before)

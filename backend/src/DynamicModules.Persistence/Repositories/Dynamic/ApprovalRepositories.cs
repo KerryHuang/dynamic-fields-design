@@ -107,6 +107,34 @@ public class ApprovalFlowRepository(DynamicDbContext db) : IApprovalFlowReposito
     public void Add(ApprovalFlow f) => db.Set<ApprovalFlow>().Add(f);
     public void AddVersion(ApprovalFlowVersion v) => db.Set<ApprovalFlowVersion>().Add(v);
 
+    public async Task<bool> TryReplaceDraftAsync(
+        long flowId, string? expectedDraftJson, long? expectedVersionId, string? newDraftJson, string? by, DateTime? time, CancellationToken ct)
+    {
+        // 比整段字串（一般文字欄）與目前版本；null 對 null 以 EF 的 null 語意視為相等，SQLite 與 PostgreSQL 的結果一致
+        var rows = await db.Set<ApprovalFlow>()
+            .Where(f => f.Id == flowId && f.DraftJson == expectedDraftJson && f.CurrentVersionId == expectedVersionId)
+            .ExecuteUpdateAsync(s => s.SetProperty(f => f.DraftJson, newDraftJson).SetProperty(f => f.DraftUpdatedBy, by)
+                .SetProperty(f => f.DraftUpdatedTime, time), ct);
+        if (rows != 1) return false;
+        // 已追蹤的流程同步新值，之後的 SaveChanges 不會把它當成待寫入的變更
+        if (db.Set<ApprovalFlow>().Local.FirstOrDefault(f => f.Id == flowId) is { } tracked)
+        {
+            tracked.DraftJson = newDraftJson;
+            tracked.DraftUpdatedBy = by;
+            tracked.DraftUpdatedTime = time;
+            var entry = db.Entry(tracked);
+            foreach (var name in new[] { nameof(ApprovalFlow.DraftJson), nameof(ApprovalFlow.DraftUpdatedBy), nameof(ApprovalFlow.DraftUpdatedTime) })
+            {
+                var p = entry.Property(name);
+                p.OriginalValue = p.CurrentValue;
+                p.IsModified = false;
+            }
+        }
+        return true;
+    }
+
+    public Task ReloadAsync(ApprovalFlow flow, CancellationToken ct) => db.Entry(flow).ReloadAsync(ct);
+
     public async Task RemoveAsync(ApprovalFlow f, CancellationToken ct)
     {
         f.CurrentVersionId = null;

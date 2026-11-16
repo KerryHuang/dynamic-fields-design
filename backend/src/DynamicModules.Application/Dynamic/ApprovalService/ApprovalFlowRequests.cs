@@ -43,3 +43,44 @@ public record ReorderApprovalFlowsRequest(string ModuleKey, long ToOptionId, Lis
     public IReadOnlyList<MasterDesignTarget> MasterTargets => [new(ModuleKey: ModuleKey)];
     public PermissionAction RequiredDesignerAction => PermissionAction.Edit;
 }
+
+/// <summary>乾跑驗證（J64）：跑與發布相同的檢查、不寫入。Key 有值＝既有流程（必須屬於 ModuleKey）；沒值＝新流程。</summary>
+public record ValidateApprovalFlowRequest(string ModuleKey, string? Key, ApprovalFlowDraftInput Input)
+    : IRequest<ServiceResult>, IDesignerRequest, IMasterDesignRequest
+{
+    public IReadOnlyList<MasterDesignTarget> MasterTargets =>
+        Key is null ? [new(ModuleKey: ModuleKey)] : [new(ModuleKey: ModuleKey), new(ApprovalFlowKey: Key)];
+    public PermissionAction RequiredDesignerAction => PermissionAction.Edit;
+}
+
+/// <summary>建立只有草稿的新流程（沒有版本、強制停用）。</summary>
+public record CreateApprovalFlowDraftRequest(string ModuleKey, ApprovalFlowDraftInput Input)
+    : IRequest<ServiceResult>, ITransactionalRequest, IDesignerRequest, IMasterDesignRequest
+{
+    public IReadOnlyList<MasterDesignTarget> MasterTargets => [new(ModuleKey: ModuleKey)];
+    public PermissionAction RequiredDesignerAction => PermissionAction.Edit;
+}
+
+/// <summary>儲存草稿，同時套用名稱與目標狀態（U53）。</summary>
+public record SaveApprovalFlowDraftRequest(string Key, ApprovalFlowDraftInput Input)
+    : IRequest<ServiceResult>, ITransactionalRequest, IDesignerRequest, IMasterDesignRequest
+{
+    public IReadOnlyList<MasterDesignTarget> MasterTargets => [new(ApprovalFlowKey: Key)];
+    public PermissionAction RequiredDesignerAction => PermissionAction.Edit;
+}
+
+/// <summary>捨棄草稿，回到已發布的版本；BaseRev 不符且不是 Force 回 409。</summary>
+public record DiscardApprovalFlowDraftRequest(string Key, string? BaseRev, bool Force)
+    : IRequest<ServiceResult>, ITransactionalRequest, IDesignerRequest, IMasterDesignRequest
+{
+    public IReadOnlyList<MasterDesignTarget> MasterTargets => [new(ApprovalFlowKey: Key)];
+    public PermissionAction RequiredDesignerAction => PermissionAction.Edit;
+}
+
+/// <summary>以請求內容發布（§9 全部規則），清掉草稿。</summary>
+public record PublishApprovalFlowRequest(string Key, ApprovalFlowDraftInput Input)
+    : IRequest<ServiceResult>, ITransactionalRequest, IDesignerRequest, IMasterDesignRequest
+{
+    public IReadOnlyList<MasterDesignTarget> MasterTargets => [new(ApprovalFlowKey: Key)];
+    public PermissionAction RequiredDesignerAction => PermissionAction.Edit;
+}

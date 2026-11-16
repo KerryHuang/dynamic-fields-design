@@ -45,6 +45,31 @@ public class ApprovalFlowsController(IMediator mediator) : ControllerBase
     public async Task<IActionResult> Preview(string key, PreviewBody body) =>
         (await mediator.Send(new PreviewApprovalFlowRequest(key, body.RecordId, body.Values, body.InitiatorUserId))).ToActionResult(this);
 
+    /// <summary>乾跑驗證（J64）：跑與發布相同的檢查，不寫入。key 有值＝既有流程。</summary>
+    [HttpPost("approval-flows/validate")]
+    public async Task<IActionResult> Validate([FromQuery] string module, [FromQuery] string? key, ApprovalFlowDraftInput body) =>
+        (await mediator.Send(new ValidateApprovalFlowRequest(module, key, body))).ToActionResult(this);
+
+    /// <summary>建立只有草稿的新流程（沒有版本、強制停用，J64）。</summary>
+    [HttpPost("approval-flows/draft")]
+    public async Task<IActionResult> CreateDraft([FromQuery] string module, ApprovalFlowDraftInput body) =>
+        (await mediator.Send(new CreateApprovalFlowDraftRequest(module, body))).ToActionResult(this);
+
+    /// <summary>儲存草稿，同時套用名稱與目標狀態（U53）；樂觀鎖衝突回 409。</summary>
+    [HttpPut("approval-flows/{key}/draft")]
+    public async Task<IActionResult> SaveDraft(string key, ApprovalFlowDraftInput body) =>
+        (await mediator.Send(new SaveApprovalFlowDraftRequest(key, body))).ToActionResult(this);
+
+    /// <summary>捨棄草稿，回到已發布的版本。</summary>
+    [HttpDelete("approval-flows/{key}/draft")]
+    public async Task<IActionResult> DiscardDraft(string key, [FromQuery] string? baseRev, [FromQuery] bool force = false) =>
+        (await mediator.Send(new DiscardApprovalFlowDraftRequest(key, baseRev, force))).ToActionResult(this);
+
+    /// <summary>以請求內容發布（§9 全部規則），清掉草稿；回流程與警告 W1–W3。</summary>
+    [HttpPost("approval-flows/{key}/publish")]
+    public async Task<IActionResult> Publish(string key, ApprovalFlowDraftInput body) =>
+        (await mediator.Send(new PublishApprovalFlowRequest(key, body))).ToActionResult(this);
+
     [HttpDelete("approval-flows/{key}")]
     public async Task<IActionResult> Delete(string key) =>
         (await mediator.Send(new DeleteApprovalFlowRequest(key))).ToActionResult(this);

@@ -139,6 +139,7 @@ public static class DependencyInjection
         services.AddScoped<Dynamic.ApprovalService.ApprovalDefinitionValidator>();
         services.AddScoped<Dynamic.ApprovalService.ApprovalEditableFields>();
         services.AddScoped<Dynamic.ApprovalService.ApprovalFlowEditor>();
+        services.AddScoped<Dynamic.ApprovalService.ApprovalDraftGate>();
         services.AddScoped<Dynamic.PolicyService.RecipientResolver>();
         services.AddScoped<Dynamic.ApprovalService.ApproverResolver>();
         services.AddScoped<Dynamic.ApprovalService.ApprovalWriteContext>();

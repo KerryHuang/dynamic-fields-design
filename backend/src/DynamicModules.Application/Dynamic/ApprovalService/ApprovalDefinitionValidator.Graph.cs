@@ -8,7 +8,7 @@ namespace DynamicModules.Application.Dynamic.ApprovalService;
 /// 流程圖格式的定義驗證（流程圖設計 §9）：結構規則交給 Domain 的 ApprovalGraphValidator（只回鍵、規則、代碼，這裡轉成訊息），
 /// 這裡補需要模組資料的規則：簽核節點屬性（G9，與關卡同一組）、條件語法（G6）、通知節點參數與範本（G10）。
 /// 錯誤鍵：nodes.{id}.{屬性}、edges.{id}.{屬性}、graph；代號不合法或重複的那一筆用陣列索引（nodes[2].kind），與 Domain 一致。
-/// 警告 W1–W3 不在這裡回傳（fg3 的發布回應才帶）。
+/// 警告 W1–W3 由 ValidateWithWarningsAsync 一併回傳（fg3a 的乾跑驗證與發布回應帶出）；ValidateAsync 只回錯誤。
 /// </summary>
 public sealed partial class ApprovalDefinitionValidator
 {
@@ -16,8 +16,10 @@ public sealed partial class ApprovalDefinitionValidator
     {
         var (d, limits) = (x.D, x.Limits);
         // 結構錯誤先加：同一個鍵有多則時取第一則，結構問題比屬性細節更根本。
-        foreach (var issue in ApprovalGraphValidator.Check(d, new GraphPolicyLimits(limits.MaxStages, limits.MaxBranches), x.Previous).Errors)
+        var check = ApprovalGraphValidator.Check(d, new GraphPolicyLimits(limits.MaxStages, limits.MaxBranches), x.Previous);
+        foreach (var issue in check.Errors)
             x.Err(issue.Key, ApprovalMessages.Graph(issue.Code, limits.MaxStages, limits.MaxBranches));
+        foreach (var w in check.Warnings) x.Warn(w.Key, w.Rule, ApprovalMessages.Graph(w.Code));
 
         var old = x.Previous is null ? null : ApprovalGraphConversion.FromSequence(x.Previous);
         var kindOf = new Dictionary<string, string?>();

@@ -50,6 +50,16 @@ public interface IApprovalFlowRepository
     void Add(ApprovalFlow f);
     void AddVersion(ApprovalFlowVersion v);
 
+    /// <summary>
+    /// 條件更新草稿（設計器的樂觀鎖，J65）：只有 DraftJson 仍等於 expectedDraftJson（兩者皆 null 也算相等）、而且 CurrentVersionId 仍等於
+    /// expectedVersionId 時才寫入 newDraftJson 與修改者、時間，回 true；受影響 0 列回 false、什麼都不寫。已追蹤的流程同步新值。
+    /// </summary>
+    Task<bool> TryReplaceDraftAsync(
+        long flowId, string? expectedDraftJson, long? expectedVersionId, string? newDraftJson, string? by, DateTime? time, CancellationToken ct);
+
+    /// <summary>條件更新失敗後重讀這條流程的資料列（已追蹤的實體以資料庫為準）。</summary>
+    Task ReloadAsync(ApprovalFlow flow, CancellationToken ct);
+
     /// <summary>連同所有版本一起刪除（呼叫端已確認沒被用過）。</summary>
     Task RemoveAsync(ApprovalFlow f, CancellationToken ct);
 }

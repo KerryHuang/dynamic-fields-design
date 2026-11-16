@@ -20,6 +20,14 @@ public static class ApprovalMessages
     public const string NotifyNodeNotYet = "通知節點尚未開放";
     /// <summary>目前版本已是流程圖格式的流程，存檔時不能換回關卡格式（U4）。</summary>
     public const string GraphCannotRevert = "這條流程已是流程圖格式，不能改回關卡格式";
+    // ── 設計器草稿、發布與乾跑驗證（fg3a，J64–J67） ──
+    public const string DraftConflict = "草稿已被其他人修改或這條流程的版本已變動，請重新載入，或選擇覆蓋";
+    public static readonly string DraftTooLarge = $"流程圖草稿太大，不能超過 {ApprovalGraphLimits.MaxDraftBytes / 1024} KB";
+    public const string DraftShapeInvalid = "設計器只接受流程圖格式（shape 必須是 graph）";
+    public const string LayoutInvalid = "版面座標格式不正確：整段不超過 64 KB、節點代號合法、座標是 ±100000 以內的數字";
+    public const string DraftOnlyUseDelete = "這條流程從未發布過，沒有可以回到的版本，請改用刪除流程";
+    public const string FlowKeyTaken = "流程代碼已存在";
+    public const string FlowNotInModule = "這條流程不屬於這個模組";
     public const string NodeNameRequired = "節點名稱必須有繁體中文";
     public const string EdgeLabelInvalid = "連線標籤必須有繁體中文";
     public static string NotifyRecipientsCount(int max) => $"通知收件人設定必須有 1 到 {max} 項";
