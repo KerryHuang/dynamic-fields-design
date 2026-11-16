@@ -83,8 +83,8 @@ function openNode(id: string) {
       </template>
     </div>
 
-    <q-dialog v-model="fullOpen" maximized @show="fullShown = true" @hide="fullShown = false">
-      <q-card class="pg-full column no-wrap" role="dialog" :aria-label="t('approval.graph.label')" data-testid="pg-full">
+    <q-dialog v-model="fullOpen" maximized :aria-label="t('approval.graph.label')" @show="fullShown = true" @hide="fullShown = false">
+      <q-card class="pg-full column no-wrap" data-testid="pg-full">
         <q-card-section class="row items-center no-wrap q-py-sm">
           <div class="text-subtitle1 col">{{ t('approval.graph.label') }}</div>
           <q-btn flat round dense icon="close" :aria-label="t('approval.graph.close')" data-testid="pg-full-close" @click="fullOpen = false" />

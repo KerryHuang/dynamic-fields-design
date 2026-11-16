@@ -4,6 +4,7 @@ import { describe, expect, it } from 'vitest';
 import type { ProgressNodeData } from './progress-graph';
 import { ADDSIGN_H, ADDSIGN_W, NODE_H, NODE_W } from 'src/domain/dynamic/approval-graph-layout';
 import ProgressGraphNode from './ProgressGraphNode.vue';
+import nodeSource from './ProgressGraphNode.vue?raw';
 
 const data = (p: Partial<ProgressNodeData> = {}): ProgressNodeData => ({
   kind: 'approval', small: false, width: NODE_W, height: NODE_H, label: '主管', kindIcon: 'person', stateIcon: 'hourglass_top', color: 'warning',
@@ -98,5 +99,11 @@ describe('ProgressGraphNode', () => {
       await w.trigger('click');
       expect(w.emitted('open')).toBeUndefined();
     });
+  });
+
+  // jsdom 沒有版面與 CSS 命中測試。Vue Flow 把不可選、不可拖的節點外層設成 pointer-events: none，沒有這條規則節點收不到點擊
+  // （走查才抓到過一次），所以直接守原始碼。
+  it('a clickable node takes its pointer events back from the Vue Flow wrapper', () => {
+    expect(nodeSource).toMatch(/\.pg-clickable\s*\{[^}]*pointer-events:\s*auto/);
   });
 });

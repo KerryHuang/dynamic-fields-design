@@ -92,4 +92,12 @@ describe('ProgressNodeDetail', () => {
     expect(body().querySelector('.q-dialog__inner--bottom')).not.toBeNull();
     expect(body().querySelector('.pg-detail-bottom')).not.toBeNull();
   });
+
+  it('the dialog itself carries the accessible name, and the card adds no second dialog role', async () => {
+    mountDetail({ stages: [stage(2, 2)] });
+    await flushPromises();
+    const dialogs = body().querySelectorAll('[role="dialog"]');
+    expect(dialogs).toHaveLength(1);
+    expect(dialogs[0].getAttribute('aria-label')).toBe('財務二 · 簽核中');
+  });
 });

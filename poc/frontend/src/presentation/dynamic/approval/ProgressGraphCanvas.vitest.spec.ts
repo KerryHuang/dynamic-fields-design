@@ -6,6 +6,7 @@ import { createI18n } from 'vue-i18n';
 import type { Edge, Node } from '@vue-flow/core';
 import zhTW from 'src/i18n/zh-TW.json';
 import ProgressGraphCanvas from './ProgressGraphCanvas.vue';
+import canvasSource from './ProgressGraphCanvas.vue?raw';
 import type { ProgressNodeData, ViewportPlan } from './progress-graph';
 
 // 真正的 store 只在瀏覽器裡驗；這裡換成會記錄呼叫的替身（其餘匯出，例如 BaseEdge、getSmoothStepPath，仍用真的）。
@@ -118,5 +119,10 @@ describe('ProgressGraphCanvas', () => {
     const live = mountCanvas({ mode: 'full' }).get('[data-testid="pg-canvas"]');
     expect(live.attributes('aria-hidden')).toBeUndefined();
     expect(live.attributes('inert')).toBeUndefined();
+  });
+
+  // 同 ProgressGraphNode：縮圖的畫布要吃掉所有指標事件，手勢才到不了畫布；jsdom 看不到 CSS，所以守原始碼。
+  it('a thumbnail canvas ignores pointer events in CSS', () => {
+    expect(canvasSource).toMatch(/\.pg-canvas\.pg-thumb\s*\{[^}]*pointer-events:\s*none/);
   });
 });

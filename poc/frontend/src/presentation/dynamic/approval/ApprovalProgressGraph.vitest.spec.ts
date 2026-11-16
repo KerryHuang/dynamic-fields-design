@@ -183,6 +183,17 @@ describe('ApprovalProgressGraph', () => {
     expect(w.get('.pg-frame').attributes('style')).toContain('height: 160px');
   });
 
+  it('the full-screen dialog is one named dialog', async () => {
+    await setWidth(390);
+    const w = mountGraph(line(3), 358);
+    await flushPromises();
+    await w.get('[data-testid="pg-expand"]').trigger('click');
+    await new Promise((r) => setTimeout(r, 500));
+    const dialogs = document.querySelectorAll('[role="dialog"]');
+    expect(dialogs).toHaveLength(1);
+    expect(dialogs[0].getAttribute('aria-label')).toBe('簽核進度圖');
+  });
+
   describe('node detail', () => {
     // start → 主管（兩次執行）→ 加簽 → 條件 → 結束
     const flow = (): ApprovalProgressGraph => ({

@@ -12,7 +12,7 @@ import ApprovalPanel from './ApprovalPanel.vue';
 const loads = vi.hoisted(() => ({ mounted: 0 }));
 vi.mock('./ProgressGraphCanvas.vue', async () => {
   const { defineComponent, h } = await import('vue');
-  return { __esModule: true, default: defineComponent({ name: 'CanvasStub', props: ['instanceId'], setup: (p) => { loads.mounted++; return () => h('div', { 'data-testid': 'canvas-stub', 'data-instance': p.instanceId }); } }) };
+  return { __esModule: true, default: defineComponent({ name: 'CanvasStub', props: ['instanceId', 'nodes'], emits: ['node-open'], setup: (p, { emit }) => { loads.mounted++; return () => h('div', { 'data-testid': 'canvas-stub', 'data-instance': p.instanceId }, (p.nodes as { id: string }[]).map((n) => h('button', { 'data-testid': `open-${p.instanceId}-${n.id}`, onClick: () => emit('node-open', n.id) }))); } }) };
 });
 
 const task = (p: Partial<ApprovalTaskView> = {}): ApprovalTaskView => ({
@@ -273,6 +273,20 @@ describe('ApprovalPanel', () => {
       expect(html.indexOf('approval-progress-graph')).toBeLessThan(html.indexOf('approval-stages'));
       // 時間軸與歷程照舊
       expect(text(w, 'stage-1')).toContain('主管');
+    });
+
+    it('hands the instance actions and the schema to the graph, so a node detail shows its comments', async () => {
+      const w = mountPanel(approval(
+        instance({ graph: graph(), stages: [stage({ id: 1 })], actions: [action({ stageRunId: 1, comment: '主實例的意見' })] }),
+        [ended(5, 'rejected', { graph: graph(), stages: [stage({ id: 1 })], actions: [action({ stageRunId: 1, comment: '舊實例的意見' })] })],
+      ), { attachTo: document.body });
+      await flushPromises();
+      await w.get('[data-testid="open-7-m"]').trigger('click');
+      await flushPromises();
+      const log = () => [...document.querySelectorAll('[data-testid="pg-detail"] [data-testid="log-comment"]')].map((e) => e.textContent);
+      expect(log()).toEqual(['主實例的意見']);
+      w.unmount();
+      document.body.innerHTML = '';
     });
 
     it('no graph, no progress graph and no async load', async () => {

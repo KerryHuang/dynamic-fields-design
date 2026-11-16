@@ -23,8 +23,8 @@ const title = computed(() => (props.state ? t('approval.graph.detailTitle', { na
 </script>
 
 <template>
-  <q-dialog :model-value="modelValue" :position="bottom ? 'bottom' : 'standard'" @update:model-value="emit('update:modelValue', $event)">
-    <q-card class="pg-detail" :class="{ 'pg-detail-bottom': bottom }" role="dialog" :aria-label="title" data-testid="pg-detail">
+  <q-dialog :model-value="modelValue" :position="bottom ? 'bottom' : 'standard'" :aria-label="title" @update:model-value="emit('update:modelValue', $event)">
+    <q-card class="pg-detail" :class="{ 'pg-detail-bottom': bottom }" data-testid="pg-detail">
       <q-card-section class="row items-center no-wrap q-pb-none">
         <div class="text-subtitle1 col pg-detail-title" data-testid="pg-detail-title">{{ title }}</div>
         <q-btn flat round dense icon="close" :aria-label="t('approval.graph.close')" data-testid="pg-detail-close" @click="emit('update:modelValue', false)" />

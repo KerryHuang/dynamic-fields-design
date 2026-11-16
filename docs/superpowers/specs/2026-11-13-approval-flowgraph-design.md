@@ -570,14 +570,14 @@
 | 被退回 | `returned`，或退回發起人的那個節點（graph 是被退回任務所在的 `closed` 列） | 負向色、退回圖示 |
 | 已略過 | `skipped` | 灰色虛線框 |
 | 已取消 | `closed` 且 `branchCancelled`；被任一到齊取消的分支段裡沒有節點實例的節點（U41） | 灰色、刪除線、`block` 圖示、寫「已取消」 |
-| 已結束 | 其他 `closed`（整張單結束時一併關閉：撤回、終止、退回發起人時另一條分支在簽的節點，U41） | 灰色實線框、`block` 圖示、沒有刪除線、寫「已結束」 |
+| 已結束 | 其他 `closed`（整張單結束時一併關閉：撤回、終止、退回發起人時另一條分支在簽的節點，U41） | 灰色實線框、`block` 圖示（主控裁決，與時間軸 `closed` 一致，J60；計畫 U5 原定 `stop_circle`）、沒有刪除線、寫「已結束」 |
 | 未走到 | 沒有節點實例；排隊中的加簽 | 淡灰；排隊中的加簽寫「等待中」，其他不寫字（讀屏念「未走到」） |
 | 已處理（之後有變動） | 只看得到自己關卡的讀者，自己處理過、之後被重跑改由別人處理的節點（U37） | 中性灰框、歷史圖示、寫「已處理（之後有變動）」 |
 | 隱藏 | 只看得到自己關卡的讀者看不到的節點與所有結構節點（U37） | 中性灰框、不寫狀態 |
 
 - 匯合節點在名稱下加一行小字「全部到齊」或「任一到齊」（U43）。
 - 走過的線（某個節點實例的 `InEdgeId`）加粗上色；同一節點被重跑多次（退回上一關）時，以最新一次的狀態上色，點節點看全部紀錄。
-- 點節點：只有簽核節點與加簽小節點能點（不是 `hidden`、有執行紀錄），開出該節點每一次執行的細節（任務負責人、代理與轉交、動作時間、期限與逾期、那幾段的意見），原樣重用時間軸元件、與時間軸同一份資料，順序同時間軸（舊的在上）；桌機與平板是置中對話框，手機是全螢幕檢視裡的底部抽屜；可點的節點是 `role=button`、可用 Tab 與 Enter、空白鍵操作，其他節點不進 Tab 順序（U42）。開始、條件、分支、匯合、結束、通知只顯示名稱與狀態。
+- 點節點：只有簽核節點與加簽小節點能點（不是 `hidden`；還沒有任何執行紀錄的簽核節點也不能點，主控裁決，J61），開出該節點每一次執行的細節（任務負責人、代理與轉交、動作時間、期限與逾期、那幾段的意見），原樣重用時間軸元件、與時間軸同一份資料，順序同時間軸（舊的在上）；桌機與平板是置中對話框，手機是全螢幕檢視裡的底部抽屜；可點的節點是 `role=button`、可用 Tab 與 Enter、空白鍵操作，其他節點不進 Tab 順序（U42）。開始、條件、分支、匯合、結束、通知只顯示名稱與狀態。
 - 「先前的簽核」（被退回、重來、撤回的舊實例）維持收合；展開時同樣有自己的圖（展開後才排版與載入畫布）。
 - 備援實例（重新比對後沒有任何流程符合、改由備援簽核人處理）畫成「開始 → 備援簽核 → 結束」三個節點（U44）。
 
@@ -770,7 +770,7 @@
 | fg1 | （實作切成 fg1a 資料欄位、只有草稿的流程、執行期守門、分支數政策；fg1b Domain 型別、參照、轉換；fg1c 結構驗證與共用案例；fg1d 警告、Application 驗證、總收）圖形定義地基：Domain 型別、結構驗證 G1–G13 與警告、共用案例檔、sequence → graph 轉換、閉包與鎖定欄位讀 graph、migration `ApprovalGraph`、政策 `approval.maxBranches`；後端允許流程列沒有已發布版本（§10.8 列的程式假設）；API 仍拒收 graph | 無 | 政策頁多一項 |
 | fg2 | 圖形執行引擎：推進、並行、兩種匯合、分支取消、退回與撤回的延伸、重新比對、預覽、以實例序列化的併發（兩種資料庫的並發測試）；API 接受 graph 存檔與試算；後加簽、轉交在分支內的行為（實作切成 fg2a1 Domain 執行期地基、fg2a2 路線比較與測試輔助、fg2b 推進引擎與送出、fg2c 同意與重新比對與退回撤回終止、fg2d 加簽轉交改派與檢視、fg2e 預覽與試算路徑、fg2f 以實例序列化的併發、fg2g1 等價性、fg2g2 開放 API 與收尾） | fg1 | 只有 API（單據頁時間軸的取消說明與送出前預覽的任一到齊註記，隨 API 建的 graph 單據出現） |
 | fg3 | 流程圖設計器：Vue Flow、設計頁、節點面板、屬性面板、驗證標示、試算疊圖、自動排版、四種寬度、草稿與發布（依 U6）；移除舊關卡編輯 | fg2 | 是 |
-| fg4 | 單據頁進度圖：記錄簽核回應加 `graph`、舊實例轉直線圖、四種寬度、並行時的簽核摘要文字（實作切成 fg4a 並行摘要文案、fg4b 後端進度圖資料、fg4c Vue Flow 與寬螢幕進度圖、fg4d 手機縮圖與全螢幕、節點細節、文件總收） | fg2；使用者 2026-11-15 決定排在 fg3 之前，Vue Flow 由 fg4 引入 | 是 |
+| fg4 | 單據頁進度圖：記錄簽核回應加 `graph`、舊實例轉直線圖、四種寬度、並行時的簽核摘要文字（實作切成 fg4a 並行摘要文案、fg4b 後端進度圖資料、fg4c Vue Flow 與寬螢幕進度圖、fg4d 手機縮圖與全螢幕、節點細節、文件總收；fg4b、fg4c 超過 1000 行，主控裁決不再切） | fg2；使用者 2026-11-15 決定排在 fg3 之前，Vue Flow 由 fg4 引入 | 是 |
 | fg5 | 通知節點：驗證、推進、收件人解析、範本與逐人遮蔽、`Notification.DataJson` 與前端顯示、設計器節點與範本編輯 | fg2、fg3 | 是 |
 | fg6 | 收尾：既有流程批次轉換、套件格式升版（graph 進套件、舊格式轉換）、`app.schema.json`、手冊章節、簽核設計的其餘對應段落（§20.1；B27 與簽核設計 §4.3、§8.4 已於 fg2g2 完成）、功能清單 | fg3、a5 | 是（版本號加一） |
 
@@ -905,24 +905,27 @@
 - **J42** 預覽的共同必經後繼：在圖上加虛擬終點、把每個結束節點接過去，以反向圖做後必經節點的迭代計算，取條件節點的直接後必經節點；結果是虛擬終點就回 null（預覽到此為止）；整張圖算一次、預覽內共用，執行期不用（U30）。
 - **J43** 條件求值轉接只有一個，兩種條件在呼叫端分流：推進、重新比對、預覽都用同一個 `Eval`（與第一版 `ApprovalRouter` 同一組解析與求值呼叫，不新增規則）。條件節點出線無法判斷 → 409（§8.8）；簽核節點的略過條件無法判斷 → 視為成立、不略過，與第一版一致。
 
-**fg4 計畫與實作階段的技術決定（主控決定，可推翻；計畫內編號 J2–J16）：**
+**fg4 計畫與實作階段的技術決定（主控決定，可推翻；依計畫 J2–J16 重組，每條標對應的計畫編號）：**
 
-- **J44** Vue Flow 鎖 `@vue-flow/core` 1.48.2（不加 `^`），只裝 core；縮放按鈕用 Quasar `q-btn` 呼叫 `useVueFlow` 的 `zoomIn`、`zoomOut`、`fitView`，不裝 `@vue-flow/controls`；`vue-demi` 的 postinstall 被擋是預期，不加 `trustedDependencies`；相依樹授權為 MIT、ISC（`d3-ease` 為 BSD-3-Clause），與公開 repo 相容（§10.1）。
-- **J45** 動態載入邊界：`ApprovalPanel` 靜態 import 輕量的 `ApprovalProgressGraph.vue`（不 import Vue Flow），它用 `defineAsyncComponent` 載入 `ProgressGraphCanvas.vue`；Vue Flow 只在 `ProgressGraphCanvas.vue`、`ProgressGraphNode.vue` 兩個檔案 runtime import；build 後以 `vue-flow__pane` 只出現在非同步塊為硬門檻。排版與對照純函式留在詳情頁的塊裡，外層才能在畫布載入前算出圖高、骨架不跳動（§10.1）。
-- **J46** `defineAsyncComponent` 是**新慣例**：既有的重套件（echarts）靠路由層動態載入，詳情頁的路由是所有模組共用的，所以在元件層切；實測 `DetailPage` 塊 gzip 增量約 +5.6 KB、非同步塊約 49.7 KB。
-- **J47** 節點顯示狀態在後端 Domain `ApprovalGraphProgress.Of` 算（純函式、全函式）；顯示用定義的判斷順序：先看 `RouteKind`（`fallback` 用三節點），再看 graph，最後 sequence 經 `FromSequence`；加簽小節點是 `Nodes` 裡的節點、串線是 `Edges` 裡的線，身分 = 主節點＋加簽人＋對象集合＋方式（§11.3）。
-- **J48** 回應形狀 `ApprovalProgressGraph`（`Nodes`、`Edges`）；`ApprovalActionView` 加可為 null 的 `StageRunId`，供節點細節依執行篩歷程（§11.3）。
-- **J49** 遮蔽在 Application 用同一個 `Shown` 做：算圖吃未過濾的列，再依讀者範圍把節點改 `changed`／`hidden`、線歸零（U37）。
-- **J50** 壞資料不擋時間軸：`Of` 遇到重複代號、線端點不存在、節點實例指向不存在的節點回 null，`graph` 為 null，`stages`、`actions` 照常回。
-- **J51** `LayoutJson` 延到 fg3：fg4 不讀版本表的 `LayoutJson`、回應不加 `layout`；fg3 定格式後在回應加 `layout`、在前端有完整座標時改用它（與 §11.3 原稿字面不同）。
-- **J52** LR 自動排版：欄由開始節點的最長路徑層數決定，列以「區塊」遞迴放置（分支與有兩條以上出線的條件節點，區塊到其直接後必經節點），分解不了的形狀退回逐欄排；節點 168×84、加簽小節點 112×48、欄距 56、列距 24，由排版檔 export、節點 CSS 讀同一組常數；分支或條件出線在起點右側第一個欄距轉折、其餘在終點左側最後一個欄距轉折，線才不穿過別條泳道的節點。
-- **J53** 唯讀畫布設定：不可拖、連、選、聚焦，`disableKeyboardA11y`、滾輪不縮放不攔截、雙擊不縮放、`minZoom` 綁初始視角算出的值、`maxZoom` 1.5、線型 `progress`（走過的線實線加粗、沒走過的細虛線）；每個畫布有唯一 id `progress-{實例 id}-{inline|thumb|full}`，同一頁的主實例、舊實例、縮圖與全螢幕不共用 store。
-- **J54** 前端測試策略：純函式完整測；畫布 spec 以替身斷言每個唯讀設定；真實 Vue Flow 的平移、縮放、`fitView`、點擊命中只在瀏覽器走查驗（走查抓到：Vue Flow 對不可選、不可拖的節點把外層設成 `pointer-events: none`，可點節點要自己接回 `pointer-events: auto`）。
-- **J55** 並行摘要由後端回節點清單 `ApprovalActiveStage`（名稱、是否加簽），前端 `activeStagesText` 組字，徽章與簽核中心共用（U45、U46）。
-- **J56** 「先前的簽核」展開才畫圖（展開是高度動畫、寬度不變，視角可直接算）。
-- **J57** 走過的線與開始、結束：graph 以節點實例的 `InEdgeId` 為準；sequence 與備援轉成直線後，第 k 條線在第 k 個節點有任何列時算走過；進入結束的線在實例 `approved` 時算走過。
-- **J58** 狀態字彙（`passed`、`active`、`returned`、`skipped`、`cancelled`、`ended`、`notReached`、`changed`、`hidden`）與顏色、圖示、文字鍵的對照見 §11.1；同一節點多列取 `Seq` 最大的一列（匯合有任一列 `passed` 就是 `passed`）；逾期由前端依該節點最新一列的 `dueTime` 判斷，與時間軸同一條規則。
-- **J59** 手機全螢幕檢視：用 Quasar `q-dialog maximized`，對話框 `@show` 之後才量尺寸、套初始視角（開啟動畫期間容器沒有尺寸）；縮圖整張蓋一層點擊區，所以畫布收不到手勢、頁面照常捲動，畫布本身 `aria-hidden` 且 `inert`，鍵盤與讀屏用「放大檢視」按鈕。
+- **J44** Vue Flow 鎖 `@vue-flow/core` 1.48.2（不加 `^`），只裝 core；縮放按鈕用 Quasar `q-btn` 呼叫 `useVueFlow` 的 `zoomIn`、`zoomOut`、`fitView`，不裝 `@vue-flow/controls`；`vue-demi` 的 postinstall 被擋是預期，不加 `trustedDependencies`；相依樹授權為 MIT、ISC（`d3-ease` 為 BSD-3-Clause），與公開 repo 相容（§10.1）。（計畫 J2）
+- **J45** 動態載入邊界：`ApprovalPanel` 靜態 import 輕量的 `ApprovalProgressGraph.vue`（不 import Vue Flow），它用 `defineAsyncComponent` 載入 `ProgressGraphCanvas.vue`；Vue Flow 只在 `ProgressGraphCanvas.vue`、`ProgressGraphNode.vue` 兩個檔案 runtime import；build 後以 `vue-flow__pane` 只出現在非同步塊為硬門檻。排版與對照純函式留在詳情頁的塊裡，外層才能在畫布載入前算出圖高、骨架不跳動（§10.1）。（計畫 J3）
+- **J46** `defineAsyncComponent` 是**新慣例**：既有的重套件（echarts）靠路由層動態載入，詳情頁的路由是所有模組共用的，所以在元件層切；實測 `DetailPage` 塊 gzip 增量約 +5.6 KB、非同步塊約 49.7 KB。（計畫 J3、建議 7）
+- **J47** 節點顯示狀態在後端 Domain `ApprovalGraphProgress.Of` 算（純函式、全函式）；顯示用定義的判斷順序：先看 `RouteKind`（`fallback` 用三節點），再看 graph，最後 sequence 經 `FromSequence`；加簽小節點是 `Nodes` 裡的節點、串線是 `Edges` 裡的線，身分 = 主節點＋加簽人＋對象集合＋方式（§11.3）。（計畫 J4、J10）
+- **J48** 回應形狀 `ApprovalProgressGraph`（`Nodes`、`Edges`）；`ApprovalActionView` 加可為 null 的 `StageRunId`，供節點細節依執行篩歷程（§11.3）。（計畫 J5、J6）
+- **J49** 遮蔽在 Application 用同一個 `Shown` 做：算圖吃未過濾的列，再依讀者範圍把節點改 `changed`／`hidden`、線歸零（U37）。（計畫 J7）
+- **J50** 壞資料不擋時間軸：`Of` 遇到重複代號、線端點不存在、節點實例指向不存在的節點回 null，`graph` 為 null，`stages`、`actions` 照常回。（計畫 Global 約束「壞資料不擋時間軸」、M8）
+- **J51** `LayoutJson` 延到 fg3：fg4 不讀版本表的 `LayoutJson`、回應不加 `layout`；fg3 定格式後在回應加 `layout`、在前端有完整座標時改用它（與 §11.3 原稿字面不同）。（計畫 J8）
+- **J52** LR 自動排版：欄由開始節點的最長路徑層數決定，列以「區塊」遞迴放置（分支與有兩條以上出線的條件節點，區塊到其直接後必經節點），分解不了的形狀退回逐欄排；節點 168×84、加簽小節點 112×48、欄距 56、列距 24，由排版檔 export、節點 CSS 讀同一組常數；分支或條件出線在起點右側第一個欄距轉折、其餘在終點左側最後一個欄距轉折，線才不穿過別條泳道的節點。（計畫 J9）
+- **J53** 唯讀畫布設定：不可拖、連、選、聚焦，`disableKeyboardA11y`、滾輪不縮放不攔截、雙擊不縮放、`minZoom` 綁初始視角算出的值、`maxZoom` 1.5、線型 `progress`（走過的線實線加粗、沒走過的細虛線）；每個畫布有唯一 id `progress-{實例 id}-{inline|thumb|full}`，同一頁的主實例、舊實例、縮圖與全螢幕不共用 store。（計畫 J12）
+- **J54** 前端測試策略：純函式完整測；畫布 spec 以替身斷言每個唯讀設定；真實 Vue Flow 的平移、縮放、`fitView`、點擊命中只在瀏覽器走查驗（走查抓到：Vue Flow 對不可選、不可拖的節點把外層設成 `pointer-events: none`，可點節點要自己接回 `pointer-events: auto`）。（計畫 J13）
+- **J55** 並行摘要由後端回節點清單 `ApprovalActiveStage`（名稱、是否加簽），前端 `activeStagesText` 組字，徽章與簽核中心共用（U45、U46）。（計畫 J11）
+- **J56** 「先前的簽核」展開才畫圖（展開是高度動畫、寬度不變，視角可直接算）。（計畫 J14）
+- **J57** 走過的線與開始、結束：graph 以節點實例的 `InEdgeId` 為準；sequence 與備援轉成直線後，第 k 條線在第 k 個節點有任何列時算走過；進入結束的線在實例 `approved` 時算走過。（計畫 J15）
+- **J58** 狀態字彙（`passed`、`active`、`returned`、`skipped`、`cancelled`、`ended`、`notReached`、`changed`、`hidden`）與顏色、圖示、文字鍵的對照見 §11.1；同一節點多列取 `Seq` 最大的一列（匯合有任一列 `passed` 就是 `passed`）；逾期由前端依該節點最新一列的 `dueTime` 判斷，與時間軸同一條規則。（計畫 J16）
+- **J59** 手機全螢幕檢視：用 Quasar `q-dialog maximized`，對話框 `@show` 之後才量尺寸、套初始視角（開啟動畫期間容器沒有尺寸）；縮圖整張蓋一層點擊區，所以畫布收不到手勢、頁面照常捲動，畫布本身 `aria-hidden` 且 `inert`，鍵盤與讀屏用「放大檢視」按鈕。（計畫 U4、Task 8）
+- **J60** 「已結束」與「已取消」都用時間軸 `closed` 的 `block` 圖示，差別靠刪除線（只有已取消）與狀態字；主控裁決，偏離使用者確認的計畫 U5 所寫的 `stop_circle`（理由：與下方時間軸一致，U48 的精神）。推翻時改 `progress-graph.ts` 的狀態對照（fg4c 實作偏離 3）。
+- **J61** 還沒有任何執行紀錄（`runIds` 為空）的簽核節點，例如未來的關卡，不能點、不進 Tab 順序（主控裁決，U42 沒寫這種情況）：點開只會是空對話框；「誰會簽」屬於預覽，不是時間軸資料，本段不做。推翻時拿掉 `progress-graph.ts` 的 `runIds.length > 0`（fg4d 實作偏離 2）。
+- **J62** 邊線標籤（條件出線的 `label`）依欄距（56px 扣底色內距）估寬截斷並加「…」，完整文字放在 SVG `<title>`；線本身 `aria-hidden`、不進可及性樹（避免 Vue Flow 寫死、帶內部代號的英文 `Edge from … to …`）；加寬有標籤的欄距留到 fg3 定版型，目前截斷後約 3 個中文字。主控裁決（fg4c 審查必修 2；§20.2 fg3 交接）。
 
 ## 20. 留給實作者決定的事
 
@@ -946,7 +949,7 @@
 
 ### 20.2 與後續段的關係
 
-- **fg3（流程圖設計器）**：沿用 fg4 引入的 `@vue-flow/core` 1.48.2 與 `layoutLeftToRight`（U47，由左到右；要加編輯用參數只能加選用參數、LR 預設輸出不變，fg4 的排版測試不改就通過）；定 `LayoutJson` 格式後在 `GET records/{id}/approval` 回應加 `layout`、在 `progress-graph.ts` 有完整座標時改用它（J51，只改這一處）；設計 §10.1 的「820 寬觸控連線技術驗證」仍是 fg3 開工第一步（fg4 只驗了平移與縮放）。檔案界線：fg3 **不碰** `ApprovalProgressGraph.vue`、`ProgressGraphCanvas.vue`、`ProgressGraphNode.vue`、`ProgressNodeDetail.vue`、`ApprovalGraphProgress.cs`；設計器節點元件另寫在 fg3 自己的資料夾，要共用節點外觀時由 fg3 抽出並保持進度圖測試不改斷言；設計器畫布若要鍵盤操作，自己開 `nodesFocusable`，不要改進度圖畫布的設定。`package.json`、`bun.lock`、四語 i18n、`approval-types.ts` 兩段都會改，fg3 從 fg4 合併後的 main 開。
+- **fg3（流程圖設計器）**：沿用 fg4 引入的 `@vue-flow/core` 1.48.2 與 `layoutLeftToRight`（U47，由左到右；要加編輯用參數只能加選用參數、LR 預設輸出不變，fg4 的排版測試不改就通過）；定 `LayoutJson` 格式後在 `GET records/{id}/approval` 回應加 `layout`、在 `progress-graph.ts` 有完整座標時改用它（J51，只改這一處）；設計 §10.1 的「820 寬觸控連線技術驗證」仍是 fg3 開工第一步（fg4 只驗了平移與縮放）。檔案界線：fg3 **不碰** `ApprovalProgressGraph.vue`、`ProgressGraphCanvas.vue`、`ProgressGraphNode.vue`、`ProgressNodeDetail.vue`、`ApprovalGraphProgress.cs`；設計器節點元件另寫在 fg3 自己的資料夾，要共用節點外觀時由 fg3 抽出並保持進度圖測試不改斷言；設計器畫布若要鍵盤操作，自己開 `nodesFocusable`，不要改進度圖畫布的設定。`package.json`、`bun.lock`、四語 i18n、`approval-types.ts` 兩段都會改，fg3 從 fg4 合併後的 main 開。邊線標籤加寬：fg3 定版型時一併接手（J62）。
 - **權限軸**（路線表，簽核主線之後）：若把「設計」與「授權」拆成兩條權限軸，發布權是否獨立在那時決定（U7）。
 - **a5 套件格式 8**：fg6 的套件格式建立在 a5 之上。
 - **O1 背景排程器**：通知節點不需要排程器；逾期提醒照第一版的讀取時補寫。
