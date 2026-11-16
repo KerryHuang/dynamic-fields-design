@@ -95,7 +95,12 @@ describe('FlowDesignerPage', () => {
     document.body.innerHTML = '';
     vi.stubGlobal('ResizeObserver', class { observe() {} unobserve() {} disconnect() {} });
   });
-  afterEach(() => { window.innerWidth = 1366; window.dispatchEvent(new Event('resize')); });
+  // Quasar Screen 以 setTimeout 延後處理 resize；等它跑完，避免檔案結束、jsdom 拆掉後才觸發而丟 window is not defined
+  afterEach(async () => {
+    window.innerWidth = 1366;
+    window.dispatchEvent(new Event('resize'));
+    await new Promise((r) => setTimeout(r, 100));
+  });
 
   it('loads the draft when there is one, else the published graph', async () => {
     const withDraft = await mountAt(url(), { flow: flow({ draft: { definition: def('草稿財務') }, draftRev: 'r1' }) });
