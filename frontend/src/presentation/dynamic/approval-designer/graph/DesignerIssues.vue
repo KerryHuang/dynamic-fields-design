@@ -21,7 +21,7 @@ const rows = computed(() => (props.designer.state.value ? issueRows(props.design
     <q-list v-else dense separator>
       <q-item v-for="(r, i) in rows" :key="i" clickable class="de-issue" :data-testid="`de-issue-${i}`" :data-severity="r.severity" @click="emit('pick', r.target)">
         <q-item-section avatar>
-          <q-icon :name="r.severity === 'error' ? 'error' : 'warning'" :color="r.severity === 'error' ? 'negative' : 'warning'" size="18px" />
+          <q-icon :name="r.severity === 'error' ? 'error' : 'warning'" :color="r.severity === 'warning' ? 'warning' : 'negative'" size="18px" />
         </q-item-section>
         <q-item-section>
           <q-item-label>{{ r.title }}</q-item-label>

@@ -49,8 +49,8 @@ const rows = computed(() => {
   display: flex; align-items: center; gap: 8px; width: 100%; min-height: 40px; padding: 4px 8px; text-align: left;
   background: transparent; border: 0; border-radius: 4px; color: inherit; cursor: pointer; font: inherit;
 }
-.de-nodelist-btn:hover { background: var(--t-hover, rgba(0, 0, 0, 0.05)); }
+.de-nodelist-btn:hover { background: var(--t-selected-bg); }
 .de-nodelist-btn:focus-visible { outline: 2px solid var(--q-primary); outline-offset: -2px; }
-.de-nodelist-sel { background: var(--t-hover, rgba(0, 0, 0, 0.08)); font-weight: 600; }
+.de-nodelist-sel { background: var(--t-selected-bg); font-weight: 600; }
 .de-nodelist-idx { flex: none; min-width: 1.5em; text-align: right; color: var(--t-muted, inherit); }
 </style>

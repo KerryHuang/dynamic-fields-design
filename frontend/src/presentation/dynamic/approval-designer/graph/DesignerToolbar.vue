@@ -16,7 +16,7 @@ const { t } = useI18n();
     <q-btn flat dense no-caps icon="fit_screen" :label="phone ? undefined : t('approval.designer.graph.fit')" :aria-label="t('approval.designer.graph.fit')" data-testid="tb-fit" @click="emit('fit')" />
     <q-btn
       flat dense no-caps icon="format_list_numbered" :label="phone ? undefined : t('approval.designer.graph.nodeList')" :aria-label="t('approval.designer.graph.nodeList')" :aria-pressed="listOpen ? 'true' : 'false'"
-      :class="{ 'bg-grey-3': listOpen }" data-testid="tb-nodelist" @click="emit('nodeList')"
+      :style="listOpen ? { background: 'var(--t-selected-bg)' } : undefined" data-testid="tb-nodelist" @click="emit('nodeList')"
     />
     <slot name="after-fit" />
     <q-btn
