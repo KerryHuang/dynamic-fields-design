@@ -1,5 +1,5 @@
 import { readdirSync, readFileSync } from 'node:fs';
-import { basename, join, relative, resolve } from 'node:path';
+import { basename, dirname, join, relative, resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
 
 // Vue Flow 動態載入邊界（fg3 J69 第 1 層）：runtime 引用 @vue-flow 只允許出現在下面這份清單，
@@ -39,6 +39,29 @@ export function importsOf(source: string, name: string): { dynamic: boolean }[] 
   return out;
 }
 
+/** `import.meta.glob(…)` 的 pattern 字串（第一個參數，字串或字串陣列）。 */
+export function globPatternsOf(source: string): string[] {
+  const out: string[] = [];
+  for (const m of source.matchAll(/import\.meta\.glob\(\s*(\[[^\]]*\]|'[^']*'|"[^"]*"|`[^`]*`)/g)) {
+    for (const s of m[1].matchAll(/['"`]([^'"`]+)['"`]/g)) out.push(s[1]);
+  }
+  return out;
+}
+/** 簡化的 glob → RegExp：`**`、`*`、`?`、`{a,b}`；夠用來判斷 pattern 有沒有涵蓋某個檔案。 */
+export function globToRegExp(glob: string): RegExp {
+  let re = '';
+  for (let i = 0; i < glob.length; i++) {
+    const c = glob[i];
+    if (c === '*') { if (glob[i + 1] === '*') { re += '.*'; i++; if (glob[i + 1] === '/') i++; } else re += '[^/]*'; }
+    else if (c === '?') re += '[^/]';
+    else if (c === '{') re += '(?:';
+    else if (c === '}') re += ')';
+    else if (c === ',') re += /\{[^}]*$/.test(glob.slice(0, i)) ? '|' : ',';
+    else re += c.replace(/[.+^$()|[\]\\]/g, '\\$&');
+  }
+  return new RegExp(`^${re}$`);
+}
+
 describe('hasRuntimeVueFlow', () => {
   it.each([
     ["import { VueFlow } from '@vue-flow/core';", true],
@@ -49,6 +72,21 @@ describe('hasRuntimeVueFlow', () => {
     ["import type {\n  Node,\n  Edge,\n} from '@vue-flow/core'", false],
     ["import { ref } from 'vue';", false],
   ])('%s', (src, expected) => { expect(hasRuntimeVueFlow(src)).toBe(expected); });
+});
+
+describe('globPatternsOf and globToRegExp', () => {
+  it('reads string and array arguments', () => {
+    expect(globPatternsOf("const a = import.meta.glob('./x/*.vue', { eager: true });")).toEqual(['./x/*.vue']);
+    expect(globPatternsOf('import.meta.glob(["./a/*.ts", "!./a/b.ts"])')).toEqual(['./a/*.ts', '!./a/b.ts']);
+    expect(globPatternsOf("import { ref } from 'vue';")).toEqual([]);
+  });
+  it.each([
+    ['approval-designer/graph/*.vue', 'approval-designer/graph/DesignerCanvas.vue', true],
+    ['approval-designer/**/*.vue', 'approval-designer/graph/DesignerCanvas.vue', true],
+    ['**/Designer{Canvas,Node}.vue', 'approval-designer/graph/DesignerNode.vue', true],
+    ['approval-designer/*.vue', 'approval-designer/graph/DesignerCanvas.vue', false],
+    ['pages/**/*.vue', 'approval-designer/graph/DesignerCanvas.vue', false],
+  ])('%s vs %s', (glob, file, expected) => { expect(globToRegExp(glob).test(file)).toBe(expected); });
 });
 
 describe('vue flow boundary', () => {
@@ -68,15 +106,31 @@ describe('vue flow boundary', () => {
     }
   });
 
-  it('the progress canvas is only reached through defineAsyncComponent', () => {
+  it('the progress canvas and node are only reached from the allowlist or the host, and the host only dynamically', () => {
     for (const f of ALLOWED.filter((x) => x.includes('approval/Progress'))) {
       for (const o of files.filter((x) => x !== f)) {
         const hits = importsOf(read(o), basename(f));
         if (!hits.length) continue;
         expect([...ALLOWED, PROGRESS_HOST], `${o} imports ${f}`).toContain(o);
-        if (o === PROGRESS_HOST && basename(f) === 'ProgressGraphCanvas.vue') expect(hits.every((h) => h.dynamic)).toBe(true);
+        // 宿主（詳情頁塊）對清單內任何檔案的引用都必須是動態 import：靜態引用 Node 一樣會把 Vue Flow 拉進詳情頁
+        if (o === PROGRESS_HOST) expect(hits.every((h) => h.dynamic), `${o} must import ${f} dynamically`).toBe(true);
       }
     }
+  });
+
+  it('no import.meta.glob pattern covers an allowlisted file, the designer page or the designer graph folder (an eager glob would bypass the import checks)', () => {
+    const guarded = [...new Set([...ALLOWED, DESIGNER_PAGE, ...files.filter((f) => f.startsWith('presentation/dynamic/approval-designer/graph/'))])];
+    const hits: string[] = [];
+    for (const f of files) {
+      for (const raw of globPatternsOf(read(f))) {
+        if (raw.startsWith('!')) continue;
+        // pattern 相對於引用它的檔案；'/…' 是專案根（frontend/），其餘（含 'src/…'）當作專案根下
+        const abs = raw.startsWith('.') ? resolve(dirname(join(SRC, f)), raw) : resolve(SRC, '..', raw.replace(/^\//, ''));
+        const rel = relative(SRC, abs);
+        for (const g of guarded) if (globToRegExp(rel).test(g)) hits.push(`${f}: ${raw} covers ${g}`);
+      }
+    }
+    expect(hits).toEqual([]);
   });
 
   it('the designer page is only reached through a lazy route', () => {
