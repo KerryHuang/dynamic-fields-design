@@ -7,8 +7,10 @@ import { useApprovalFlow, useApprovalFlows } from 'src/application/dynamic/queri
 import { useModuleDetail } from 'src/application/dynamic/queries/modules-queries';
 import { useMe } from 'src/application/dynamic/queries/permissions-queries';
 import { useWorkflowQuery } from 'src/application/dynamic/queries/workflow-queries';
+import { isSequenceFlow } from 'src/domain/dynamic/approval-flow-draft';
 import { resolveI18n } from 'src/domain/dynamic/i18n-text';
 import { toSchemaFields } from 'src/presentation/dynamic/designer/schema-fields';
+import ForbiddenNotice from 'src/components/framework/ForbiddenNotice.vue';
 import DesignerNodeList from 'src/presentation/dynamic/approval-designer/graph/DesignerNodeList.vue';
 import DesignerIssues from 'src/presentation/dynamic/approval-designer/graph/DesignerIssues.vue';
 import DraftConflictDialog from 'src/presentation/dynamic/approval-designer/graph/DraftConflictDialog.vue';
@@ -19,7 +21,7 @@ import DesignerToolbar from 'src/presentation/dynamic/approval-designer/graph/De
 import { FLOW_SELECTION, toVueFlow } from 'src/presentation/dynamic/approval-designer/graph/designer-graph';
 import { useDesignerActions } from 'src/presentation/dynamic/approval-designer/graph/use-designer-actions';
 import { useGraphDesigner } from 'src/presentation/dynamic/approval-designer/graph/use-graph-designer';
-import type { ApiError } from 'src/services/api/http';
+import { isForbidden, type ApiError } from 'src/services/api/http';
 
 // 流程圖設計頁（§10.2）：路由層動態載入的獨立頁面，Vue Flow 只在畫布、節點、線三個檔案。
 const { t, locale } = useI18n();
@@ -46,6 +48,8 @@ const fields = computed(() => (moduleQuery.data.value ? toSchemaFields(moduleQue
 // ---- 載入：第一次拿到資料、或換了另一條流程時載入；之後的重抓（存檔後 invalidate）不覆蓋工作副本 ----
 const loadFailed = ref(false);
 const notFound = computed(() => (flowQuery.error.value as ApiError | null)?.status === 404);
+/** 沒有權限：讀不到流程或模組（403），或沒有編輯權的人進「新增流程」。 */
+const forbidden = computed(() => isForbidden(flowQuery.error.value) || isForbidden(moduleQuery.error.value) || (isNewRoute.value && !!me.data.value && !canEdit.value));
 watch([() => flowQuery.data.value, flowKey, () => !!me.data.value], ([flow, key, ready]) => {
   if (!ready) return;
   if (key === null) {
@@ -55,6 +59,12 @@ watch([() => flowQuery.data.value, flowKey, () => !!me.data.value], ([flow, key,
   if (!flow || flow.key !== key) return;
   // 網址的模組和流程實際所屬模組不一致（流程代碼全站唯一）：換到正確網址
   if (flow.moduleKey !== moduleKey.value) { void router.replace({ name: 'flow-designer', params: { moduleKey: flow.moduleKey, flowKey: key }, query: route.query }); return; }
+  // U57：關卡格式的流程只有舊對話框一個編輯入口（卡片同樣的判斷）；網址直接進來的導回流程分頁
+  if (isSequenceFlow(flow)) {
+    $q.notify({ type: 'info', message: t('approval.designer.graph.sequenceRedirect') });
+    void router.replace({ path: `/system/dynamic-modules/${flow.moduleKey}`, query: { tab: 'approvalFlows', target: String(flow.toOptionId) } });
+    return;
+  }
   if (designer.loaded.value && designer.server.value.key === key) return;
   loadFailed.value = !designer.load(flow);
 }, { immediate: true });
@@ -140,11 +150,12 @@ onBeforeUnmount(() => window.removeEventListener('beforeunload', onBeforeUnload)
 
 <template>
   <q-page class="column no-wrap de-page" :style-fn="(offset: number, height: number) => ({ height: `${height - offset}px`, minHeight: 0 })" data-testid="flow-designer">
-    <div v-if="notFound" class="q-pa-md column items-start q-gutter-y-md" data-testid="de-not-found">
+    <ForbiddenNotice v-if="forbidden" class="q-pa-md" />
+    <div v-else-if="notFound" class="q-pa-md column items-start q-gutter-y-md" data-testid="de-not-found">
       <div class="text-h6">{{ t('approval.designer.graph.notFound') }}</div>
       <q-btn flat no-caps icon="arrow_back" :label="t('approval.designer.graph.back')" data-testid="de-back" @click="back" />
     </div>
-    <div v-else-if="loadFailed || flowQuery.isError.value || moduleQuery.isError.value" class="q-pa-md text-negative" data-testid="de-load-failed">
+    <div v-else-if="loadFailed || flowQuery.isError.value || moduleQuery.isError.value || me.isError.value" class="q-pa-md text-negative" data-testid="de-load-failed">
       {{ t('approval.designer.graph.loadFailed') }}
     </div>
     <div v-else-if="workflow.data.value === null" class="q-pa-md text-muted" data-testid="de-no-workflow">{{ t('approval.designer.list.noWorkflow') }}</div>

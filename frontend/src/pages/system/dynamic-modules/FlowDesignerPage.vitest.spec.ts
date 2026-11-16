@@ -49,15 +49,16 @@ const flow = (p: Partial<ApprovalFlow> = {}): ApprovalFlow => ({
 });
 
 let router: ReturnType<typeof createRouter>;
-async function mountAt(url: string, opts: { flow?: ApprovalFlow | 404; edit?: boolean; width?: number } = {}) {
+async function mountAt(url: string, opts: { flow?: ApprovalFlow | 404; edit?: boolean; width?: number; flowError?: number; moduleError?: number; meError?: boolean } = {}) {
   window.innerWidth = opts.width ?? 1366;
   window.dispatchEvent(new Event('resize'));
-  api.getModule.mockResolvedValue(mod);
+  if (opts.moduleError) api.getModule.mockRejectedValue({ status: opts.moduleError }); else api.getModule.mockResolvedValue(mod);
   api.getWorkflow.mockResolvedValue(wf as never);
-  if (opts.flow === 404) api.getApprovalFlow.mockRejectedValue({ status: 404 });
+  if (opts.flow === 404 || opts.flowError) api.getApprovalFlow.mockRejectedValue({ status: opts.flowError ?? 404 });
   else api.getApprovalFlow.mockResolvedValue((opts.flow ?? flow()) as never);
   api.getApprovalFlows.mockResolvedValue([]);
-  api.getMe.mockResolvedValue({ designer: { read: true, add: true, edit: opts.edit ?? true, delete: true } } as never);
+  if (opts.meError) api.getMe.mockRejectedValue({ status: 500 });
+  else api.getMe.mockResolvedValue({ designer: { read: true, add: true, edit: opts.edit ?? true, delete: true } } as never);
   api.getUsers.mockResolvedValue([]);
   api.getGroups.mockResolvedValue([]);
   api.getEffectivePolicies.mockResolvedValue({ values: {} } as never);
@@ -192,6 +193,36 @@ describe('FlowDesignerPage', () => {
   it('a missing flow shows not found with a back button', async () => {
     const w = await mountAt(url('zzz'), { flow: 404 });
     expect(w.get('[data-testid="de-not-found"]').text()).toContain('找不到流程');
+    w.unmount();
+  });
+
+  it('no permission shows the forbidden notice, not "load failed" (flow 403, module 403, read-only on _new)', async () => {
+    for (const o of [{ flowError: 403 }, { moduleError: 403 }]) {
+      const w = await mountAt(url(), o);
+      expect(w.find('[data-testid="forbidden"]').exists()).toBe(true);
+      expect(w.find('[data-testid="de-load-failed"]').exists()).toBe(false);
+      w.unmount();
+    }
+    const ro = await mountAt('/system/dynamic-modules/doc/approval-flows/_new?target=12', { edit: false });
+    expect(ro.find('[data-testid="forbidden"]').exists()).toBe(true);
+    expect(ro.find('[data-testid="canvas"]').exists()).toBe(false);
+    ro.unmount();
+    const rw = await mountAt('/system/dynamic-modules/doc/approval-flows/_new?target=12');
+    expect(rw.find('[data-testid="forbidden"]').exists()).toBe(false);
+    rw.unmount();
+  });
+
+  it('a failed permission lookup is a load failure, not an endless spinner', async () => {
+    const w = await mountAt(url(), { meError: true });
+    expect(w.find('[data-testid="de-load-failed"]').exists()).toBe(true);
+    w.unmount();
+  });
+
+  it('a stage-format (sequence) flow opened by url goes back to the flows tab; its only editor is the old dialog (U57)', async () => {
+    const seq = flow({ definition: { shape: 'sequence', stages: [] } as never, graph: def() });
+    const w = await mountAt(url(), { flow: seq });
+    expect(router.currentRoute.value.fullPath).toBe('/system/dynamic-modules/doc?tab=approvalFlows&target=12');
+    expect(w.find('[data-testid="canvas"]').exists()).toBe(false);
     w.unmount();
   });
 
