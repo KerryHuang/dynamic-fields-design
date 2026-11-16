@@ -12,3 +12,12 @@ dist/
 
 # 本機研究筆記，不進版控
 docs/research/*-survey.md
+
+# 影片製作的產出與本機執行檔
+video/**/out/
+video/**/.build/
+video/**/data/
+video/**/node_modules/
+video/**/server.log
+video/.data/
+video/**/.tts-cache/
