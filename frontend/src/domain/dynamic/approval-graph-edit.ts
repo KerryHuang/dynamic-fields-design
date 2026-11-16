@@ -28,7 +28,8 @@ const CODE = /^[a-z][a-z0-9-]{0,39}$/;
 const PREFIX: Record<ApprovalNodeKind, string> = { start: 'start', approval: 'approval', condition: 'cond', fork: 'fork', join: 'join', end: 'end', notify: 'notify' };
 /** 只能有一條出線的型別（§6.2）。 */
 const SINGLE_OUT = new Set<ApprovalNodeKind>(['start', 'approval', 'notify', 'join']);
-const clone = (s: GraphState): GraphState => structuredClone(s);
+// JSON 往返而不是 structuredClone：畫面傳進來的值可能是 Vue 的 reactive 代理，structuredClone 會丟 DataCloneError。
+const clone = (s: GraphState): GraphState => JSON.parse(JSON.stringify(s));
 
 function allocator(def: GraphDefinition, reserved: string[] = []) {
   const nodes = new Set([...def.nodes.map((n) => n.id), ...reserved]);

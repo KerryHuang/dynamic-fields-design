@@ -4,7 +4,7 @@
       <q-toolbar>
         <!-- 手機與平板（Quasar md 斷點以下）選單是覆蓋式抽屜，要有開關；筆電以上常駐，不需要 -->
         <q-btn
-          v-if="$q.screen.lt.md" flat dense round icon="menu" class="q-mr-xs" :aria-label="t('menu.toggle')"
+          v-if="$q.screen.lt.md || collapseDrawer" flat dense round icon="menu" class="q-mr-xs" :aria-label="t('menu.toggle')"
           :aria-expanded="drawerOpen" data-testid="menu-toggle" @click="drawerOpen = !drawerOpen"
         />
         <q-toolbar-title><router-link to="/" class="brand-link" data-testid="brand">Formwright</router-link></q-toolbar-title>
@@ -27,7 +27,7 @@
       <AppBreadcrumb v-if="theme.effective.style === 'enterprise'" :menu="menu ?? []" />
     </q-header>
 
-    <q-drawer v-model="drawerOpen" show-if-above bordered :width="theme.sidebarWidth" :breakpoint="1024">
+    <q-drawer v-model="drawerOpen" :show-if-above="!collapseDrawer" :no-swipe-open="collapseDrawer" bordered :width="theme.sidebarWidth" :breakpoint="1024">
       <q-list @click="closeWhenOverlay">
         <q-item clickable exact to="/" data-testid="home-menu">
           <q-item-section avatar><q-icon name="home" /></q-item-section>
@@ -118,6 +118,9 @@ function onEscape(e: KeyboardEvent) { if (e.key === 'Escape' && overlayMode.valu
 onMounted(() => window.addEventListener('keydown', onEscape));
 onBeforeUnmount(() => window.removeEventListener('keydown', onEscape));
 const router = useRouter();
+// 路由 meta `collapseDrawer`（流程圖設計頁）：選單預設收起、可再打開，滑動不會拉出選單（平板的畫布手勢不被搶）；換到沒有這個 meta 的路由恢復原行為。
+const collapseDrawer = computed(() => router.currentRoute.value.meta.collapseDrawer === true);
+watch(collapseDrawer, (c) => { drawerOpen.value = c ? false : !overlayMode.value; });
 const logoutMutation = useLogout();
 
 const { data: menu } = useMenu();

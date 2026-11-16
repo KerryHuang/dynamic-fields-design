@@ -24,13 +24,13 @@ const detail: ModuleDetail = {
   status: 'Active', version: 3, blocks: [],
 };
 
-async function mountPage(d: ModuleDetail = detail, canDelete = true, canRead = true, canEdit = true) {
+async function mountPage(d: ModuleDetail = detail, canDelete = true, canRead = true, canEdit = true, url = '/m/m') {
   api.getModule.mockResolvedValue(d);
   api.getMe.mockResolvedValue({ designer: { read: canRead, add: true, edit: canEdit, delete: canDelete } } as never);
   api.entities.mockResolvedValue([{ key: 'test.entity', name: { 'zh-TW': '測試實體' } }]);
   api.updateModule.mockResolvedValue({} as never);
   const router = createRouter({ history: createMemoryHistory(), routes: [{ path: '/m/:moduleKey', component: ModuleEditorPage }] });
-  await router.push('/m/m');
+  await router.push(url);
   const i18n = createI18n({ legacy: false, locale: 'zh-TW', messages: { 'zh-TW': zhTW } });
   const Host = { render: () => h(quasar.QLayout, null, () => h(quasar.QPageContainer, null, () => h(ModuleEditorPage))) };
   const w = mount(Host, {
@@ -56,6 +56,17 @@ describe('ModuleEditorPage', () => {
     const w2 = await mountPage({ ...detail, detailOf: 'parent' });
     expect(w2.find('[data-testid="tab-policies"]').exists()).toBe(false);
     w2.unmount();
+  });
+
+  it('?tab=approvalFlows&target= opens the flows tab and focuses the target', async () => {
+    const w = await mountPage(detail, true, true, true, '/m/m?tab=approvalFlows&target=12');
+    expect(w.findComponent(ApprovalFlowsTab).exists()).toBe(true);
+    expect(w.findComponent(ApprovalFlowsTab).props('focusTarget')).toBe(12);
+    w.unmount();
+    const plain = await mountPage(detail, true, true, true, '/m/m?tab=approvalFlows');
+    expect(plain.findComponent(ApprovalFlowsTab).exists()).toBe(true);
+    expect(plain.findComponent(ApprovalFlowsTab).props('focusTarget')).toBeFalsy();
+    plain.unmount();
   });
 
   it('approval flows tab hidden for detail and extension modules', async () => {

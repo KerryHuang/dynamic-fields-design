@@ -14,7 +14,7 @@ const USERS = [{ userId: 'admin', displayName: 'admin' }];
 const ME = { userId: 'admin', displayName: 'admin', isSystemAdmin: false, groups: [], designer: { read: false, add: false, edit: false, delete: false } };
 
 /** 手機 390、平板 820、筆電 1366、桌機 1920；Quasar 的 md 斷點是 1024，低於它選單是覆蓋式抽屜。 */
-async function mountAtWidth(width: number, locale: 'zh-TW' | 'en-US' = 'zh-TW') {
+async function mountAtWidth(width: number, locale: 'zh-TW' | 'en-US' = 'zh-TW', start = '/') {
   window.innerWidth = width;
   // Quasar 的 Screen 是單例，只在 resize 時重新量測（有 50 毫秒的節流）
   window.dispatchEvent(new Event('resize'));
@@ -25,8 +25,8 @@ async function mountAtWidth(width: number, locale: 'zh-TW' | 'en-US' = 'zh-TW') 
     data: config.url === '/me' ? ME : config.url === '/users' ? USERS : config.url === '/notifications' ? { items: [], unreadCount: 3 } : [], status: 200, statusText: 'OK', headers: {}, config,
   });
   const stub = { template: '<i/>' };
-  const router = createRouter({ history: createMemoryHistory(), routes: [{ path: '/', component: stub }, { path: '/reports', component: stub }] });
-  await router.push('/');
+  const router = createRouter({ history: createMemoryHistory(), routes: [{ path: '/', component: stub }, { path: '/reports', component: stub }, { path: '/designer', component: stub, meta: { collapseDrawer: true } }] });
+  await router.push(start);
   const i18n = createI18n({ legacy: false, locale, messages: { 'zh-TW': zhTW, 'en-US': enUS } });
   const w = mount(MainLayout, {
     attachTo: document.body,
@@ -130,6 +130,24 @@ describe('MainLayout 響應式選單', () => {
   it('無障礙標籤隨語系：英文版也有', async () => {
     const { w } = await mountAtWidth(390, 'en-US');
     expect(w.find('[data-testid="menu-toggle"]').attributes('aria-label')).toBe(enUS.menu.toggle);
+    w.unmount();
+  });
+
+  it.each([[820], [1366]])('%ipx：路由 meta collapseDrawer 時選單預設收起、關掉滑動開啟、有 ☰ 鈕；離開後恢復原行為', async (width) => {
+    const { w, router } = await mountAtWidth(width, 'zh-TW', '/designer');
+    expect(drawerOpen()).toBe(false);
+    expect(w.find('[data-testid="menu-toggle"]').exists()).toBe(true);
+    const drawer = w.findComponent(quasar.QDrawer);
+    expect(drawer.props('modelValue')).toBe(false);
+    expect(drawer.props('noSwipeOpen')).toBe(true);
+    expect(drawer.props('showIfAbove')).toBe(false);
+    await router.push('/');
+    await flushPromises();
+    expect(drawer.props('noSwipeOpen')).toBe(false);
+    if (width >= 1024) {
+      expect(drawer.props('modelValue')).toBe(true);
+      expect(w.find('[data-testid="menu-toggle"]').exists()).toBe(false);
+    } else expect(drawerOpen()).toBe(false);
     w.unmount();
   });
 });

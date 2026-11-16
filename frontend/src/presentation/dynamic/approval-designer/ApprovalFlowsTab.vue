@@ -2,6 +2,7 @@
 import { useQuasar } from 'quasar';
 import { computed, nextTick, ref, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
+import { useRouter } from 'vue-router';
 import { useApprovalFlows, useDeleteApprovalFlow, useReorderApprovalFlows, useSaveApprovalFlow } from 'src/application/dynamic/queries/approval-flow-queries';
 import { useMe } from 'src/application/dynamic/queries/permissions-queries';
 import { useWorkflowQuery } from 'src/application/dynamic/queries/workflow-queries';
@@ -21,6 +22,7 @@ import { groupFlows, moveKeys, moveKeyTo } from './flow-groups';
 const props = defineProps<{ module: ModuleDetail; focusTarget?: number | null }>();
 const { t, locale } = useI18n();
 const $q = useQuasar();
+const router = useRouter();
 const mobile = computed(() => $q.screen.lt.sm);
 
 const key = computed(() => props.module.key);
@@ -130,12 +132,14 @@ function openCreate(toOptionId: number | null) {
   preset.value = toOptionId;
   dialogOpen.value = true;
 }
+/** 流程圖格式與只有草稿的流程走設計頁（U57），唯讀者也進得去看（U62）；關卡格式照舊走對話框，唯讀時不開。 */
+const opensDesigner = (f: ApprovalFlow) => !isSequenceFlow(f);
+const clickable = (f: ApprovalFlow) => !readonly.value || opensDesigner(f);
 function openEdit(f: ApprovalFlow) {
+  if (opensDesigner(f)) { void router.push({ name: 'flow-designer', params: { moduleKey: key.value, flowKey: f.key } }); return; }
   if (readonly.value) return;
-  // Until the graph designer page exists, graph flows and draft-only flows cannot be edited here (fg3c switches the entry).
-  if (!isSequenceFlow(f)) { $q.notify({ type: 'info', message: t('approval.designer.list.graphOnlyEditor') }); return; }
   opener = document.activeElement as HTMLElement | null;
-  editing.value = f;
+  editing.value = f as SequenceFlow;
   preset.value = null;
   dialogOpen.value = true;
 }
@@ -199,8 +203,8 @@ const actionsOf = (list: ApprovalFlow[], f: ApprovalFlow, i: number) => [
       />
 
       <q-card
-        v-for="(f, i) in g.flows" :key="f.key" flat bordered class="q-mt-sm q-pa-sm" :class="{ 'flow-card--off': !f.active, 'flow-card--open': !readonly }" :data-testid="`flow-card-${f.key}`"
-        :tabindex="readonly ? undefined : 0" :aria-label="readonly ? undefined : `${t('approval.designer.list.edit')} ${nameOf(f)}`" @click="openEdit(f)" @keydown.enter.self.prevent="openEdit(f)" @keydown.space.self.prevent="openEdit(f)"
+        v-for="(f, i) in g.flows" :key="f.key" flat bordered class="q-mt-sm q-pa-sm" :class="{ 'flow-card--off': !f.active, 'flow-card--open': clickable(f) }" :data-testid="`flow-card-${f.key}`"
+        :tabindex="clickable(f) ? 0 : undefined" :aria-label="clickable(f) ? `${t(readonly ? 'approval.designer.graph.view' : 'approval.designer.list.edit')} ${nameOf(f)}` : undefined" @click="openEdit(f)" @keydown.enter.self.prevent="openEdit(f)" @keydown.space.self.prevent="openEdit(f)"
         :draggable="!mobile && !readonly && !busy && g.flows.length > 1" @dragstart="dragging = { key: f.key, toOptionId: g.toOptionId }"
         @dragover.prevent @drop.prevent="onDrop(g.toOptionId, g.flows, f)" @dragend="dragging = null"
       >

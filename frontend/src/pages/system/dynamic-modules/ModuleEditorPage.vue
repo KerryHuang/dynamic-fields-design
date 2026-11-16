@@ -54,6 +54,13 @@ const tab = ref<'fields' | 'rules' | 'taskRules' | 'policies' | 'workflow' | 'ap
 const showEventsLedger = computed(() => !!useMeData.value?.designer.read);
 const query = useModuleDetail(moduleKey);
 const mod = computed(() => query.data.value);
+// 流程圖設計頁的返回鈕帶 ?tab=approvalFlows&target=<狀態選項代號>：切到「簽核流程」分頁並聚焦那個目標狀態
+watch([() => route.query.tab, () => route.query.target, hasApprovalFlows], ([q, target, ok]) => {
+  if (q !== 'approvalFlows' || !ok) return;
+  const id = target ? Number(target) : NaN;
+  if (Number.isFinite(id)) void openFlows(id);
+  else tab.value = 'approvalFlows';
+}, { immediate: true });
 const forbidden = computed(() => isForbidden(query.error.value));
 const notFound = computed(() => (query.error.value as ApiError | null)?.status === 404);
 

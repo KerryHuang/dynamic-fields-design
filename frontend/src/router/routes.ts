@@ -22,6 +22,15 @@ export const routes: RouteRecordRaw[] = [
       { path: 'dashboards/:id(\\d+)?', component: () => import('src/pages/dashboards/DashboardPage.vue') },
       { path: 'system/dashboards', component: () => import('src/pages/system/DashboardsAdminPage.vue') },
       { path: 'system/dynamic-modules', component: () => import('src/pages/system/dynamic-modules/ModuleListPage.vue') },
+      // 流程圖設計頁（fg3c）：新流程用 `_new`，底線不在流程代碼規則內，所以代碼叫 `new` 的流程照常打得開。側邊選單預設收起（collapseDrawer）。
+      {
+        path: 'system/dynamic-modules/:moduleKey/approval-flows/_new', name: 'flow-designer-new', meta: { collapseDrawer: true },
+        component: () => import('src/pages/system/dynamic-modules/FlowDesignerPage.vue'),
+      },
+      {
+        path: 'system/dynamic-modules/:moduleKey/approval-flows/:flowKey', name: 'flow-designer', meta: { collapseDrawer: true },
+        component: () => import('src/pages/system/dynamic-modules/FlowDesignerPage.vue'),
+      },
       { path: 'system/dynamic-modules/:moduleKey', component: () => import('src/pages/system/dynamic-modules/ModuleEditorPage.vue') },
       { path: 'system/conversions', component: () => import('src/pages/system/ConversionsPage.vue') },
       { path: 'system/users', component: () => import('src/pages/system/UsersPage.vue') },

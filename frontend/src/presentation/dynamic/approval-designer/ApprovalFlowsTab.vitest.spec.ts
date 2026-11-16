@@ -4,6 +4,7 @@ import { createPinia } from 'pinia';
 import * as quasar from 'quasar';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createI18n } from 'vue-i18n';
+import { createMemoryHistory, createRouter } from 'vue-router';
 import type { ApprovalFlow } from 'src/domain/dynamic/approval-flow-types';
 import type { DesignerField, ModuleDetail, Workflow } from 'src/domain/dynamic/types';
 import zhTW from 'src/i18n/zh-TW.json';
@@ -63,10 +64,12 @@ async function mountTab(flows: ApprovalFlow[], opts: { workflow?: Workflow | nul
   api.reorderApprovalFlows.mockResolvedValue([] as never);
   api.deleteApprovalFlow.mockResolvedValue(undefined as never);
   const i18n = createI18n({ legacy: false, locale: 'zh-TW', messages: { 'zh-TW': zhTW } });
+  router = createRouter({ history: createMemoryHistory(), routes: [{ path: '/', component: { template: '<i/>' } }, { path: '/d/:moduleKey/:flowKey', name: 'flow-designer', component: { template: '<i/>' } }] });
+  await router.push('/');
   const w = mount(ApprovalFlowsTab, {
     attachTo: document.body,
     props: { module: opts.m ?? mod(), focusTarget: opts.focusTarget },
-    global: { plugins: [[quasar.Quasar, { components: quasar, directives: quasar, plugins: { Notify: quasar.Notify } }], createPinia(), i18n,
+    global: { plugins: [[quasar.Quasar, { components: quasar, directives: quasar, plugins: { Notify: quasar.Notify } }], createPinia(), i18n, router,
       [VueQueryPlugin, { queryClient: new QueryClient({ defaultOptions: { queries: { retry: false } } }) }]] },
   });
   notify = vi.fn();
@@ -76,6 +79,7 @@ async function mountTab(flows: ApprovalFlow[], opts: { workflow?: Workflow | nul
 }
 // Notify does not render under jsdom, so $q.notify is replaced by a spy after mount.
 let notify: ReturnType<typeof vi.fn>;
+let router: ReturnType<typeof createRouter>;
 const notified = (text: string) => expect(notify.mock.calls.map((c) => (c[0] as { message: string }).message).join('|')).toContain(text);
 const body = (id: string) => document.body.querySelector(`[data-testid="${id}"]`) as HTMLElement | null;
 
@@ -129,18 +133,49 @@ describe('ApprovalFlowsTab', () => {
     w.unmount();
   });
 
-  it('a graph flow counts approval nodes as its stages and opening it in the old dialog is refused', async () => {
-    const g: ApprovalFlow['definition'] = {
-      shape: 'graph', stages: [],
-      nodes: [{ id: 'start', kind: 'start' }, { id: 'a', kind: 'approval' }, { id: 'b', kind: 'approval' }, { id: 'end', kind: 'end' }], edges: [],
-    };
-    const w = await mountTab([flow('g', 12, 1, { definition: g })], { edit: true });
+  const graphDef: ApprovalFlow['definition'] = {
+    shape: 'graph', stages: [],
+    nodes: [{ id: 'start', kind: 'start' }, { id: 'a', kind: 'approval' }, { id: 'b', kind: 'approval' }, { id: 'end', kind: 'end' }], edges: [],
+  };
+
+  it('graph flow card opens the designer route, sequence card still opens the dialog', async () => {
+    const w = await mountTab([flow('g', 12, 1, { definition: graphDef }), flow('s', 12, 2)], { edit: true });
     expect(w.find('[data-testid="flow-card-g"]').text()).toContain('2 關');
     await w.find('[data-testid="flow-edit-g"]').trigger('click');
     await flushPromises();
     expect(w.findComponent(FlowEditorDialog).exists()).toBe(false);
-    notified('這條流程用新版設計器編輯，目前還不能在這裡開啟');
-    expect(notify.mock.calls.at(-1)![0]).toMatchObject({ type: 'info' }); // 不是使用者做錯事，不用紅色錯誤
+    expect(router.currentRoute.value.fullPath).toBe('/d/doc/g');
+    await router.push('/');
+    await w.find('[data-testid="flow-card-s"]').trigger('click');
+    await flushPromises();
+    expect(w.findComponent(FlowEditorDialog).exists()).toBe(true);
+    expect(router.currentRoute.value.fullPath).toBe('/');
+    w.unmount();
+  });
+
+  it('a draft-only flow card opens the designer route', async () => {
+    const w = await mountTab([draftOnly('d', 12, 1, { draft: { definition: { shape: 'graph', stages: [], nodes: [], edges: [] } } })]);
+    await w.find('[data-testid="flow-card-d"]').trigger('click');
+    await flushPromises();
+    expect(router.currentRoute.value.fullPath).toBe('/d/doc/d');
+    w.unmount();
+  });
+
+  it('read-only user can open a graph flow card (labelled view) but not a sequence one', async () => {
+    const w = await mountTab([flow('g', 12, 1, { definition: graphDef }), flow('s', 12, 2)], { edit: false });
+    const g = w.find('[data-testid="flow-card-g"]');
+    expect(g.attributes('aria-label')).toBe('檢視 流程g');
+    expect(g.attributes('tabindex')).toBe('0');
+    await g.trigger('click');
+    await flushPromises();
+    expect(router.currentRoute.value.fullPath).toBe('/d/doc/g');
+    const s = w.find('[data-testid="flow-card-s"]');
+    expect(s.attributes('tabindex')).toBeUndefined();
+    await router.push('/');
+    await s.trigger('click');
+    await flushPromises();
+    expect(w.findComponent(FlowEditorDialog).exists()).toBe(false);
+    expect(router.currentRoute.value.fullPath).toBe('/');
     w.unmount();
   });
 
