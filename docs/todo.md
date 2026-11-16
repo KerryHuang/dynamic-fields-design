@@ -44,3 +44,7 @@
 - 補 PostgreSQL 的草稿條件更新與 `IsVersionUsedAsync` 競爭（fg3a 審查 🟡4，與既有 PUT 同一種寫法） ⛔ 等：pg0
 - 驗 render.yaml 的 buildFilter：第一次只改文件的 push 到 main 後，確認 Render 沒有重新部署
 - 前端改動的驗收一律跑完整 `bun run test`（約 2 分鐘）：fg3c 只跑篩選範圍，漏掉 no-hardcoded-colors 守門，CI 才擋下
+- 拆開 DemoDataApiTests：單一類別要 12 分以上且只能序列跑，是 CI 最慢的一份（WebAPITests 1/4 約 14.7 分）
+- 查前端 vitest 偶發的 unhandled error（Quasar timer）：測試全過但 vitest 以 exit 1 結束，CI 需重跑
+- 確認 Demo 流程圖範例流程（採購單（流程圖範例），停用、優先序 0、未稅小計 ≥ 10000）是否要啟用做送簽展示：啟用前要和既有兩條採購單流程排好優先序
+- 實機看設計頁試算時，有警告的線是否保持警告色（只改了 CSS，未實機驗）
