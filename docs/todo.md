@@ -30,3 +30,5 @@
 - 讓 sequence 定義驗證擋掉夾帶的 `nodes`、`edges`（fg2c 審查 S5）：現在存得進去，`ApprovalDefinitionRefs.Steps` 會把夾帶的簽核節點算進去，夾帶自選節點的 sequence 流程在重新比對後會要求重新送出；正常資料不會發生
 - 整理 `CloseLive` 的依賴方向與重複的 reason 字串（fg2c 審查 nit）：不影響行為
 - 評估等價性測試的穩定代號（fg2g1 審查建議 3、4）：flowId、fieldId 換成穩定代號、NormalizeData 改有邊界的替換；現在只可能造成假紅，優先度低
+- 簽核中心「已處理」分頁的並行名稱改成按模組批次判斷可見性（fg4a 審查建議）：現在每列最多多打 2 次 `ListVisibleIdsAsync`，size 100 時最壞多 200 次查詢；POC 規模可接受
+- 請母語者審 fg4a 並行摘要的泰文、越南文（`approval.badge.pendingMany`、`approval.stagesMore`、`approval.addSignOf`）
