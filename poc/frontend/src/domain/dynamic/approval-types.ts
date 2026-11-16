@@ -47,12 +47,35 @@ export interface ApprovalActionView {
   targetNames?: string[];
   /** Display name of `onBehalfOfUserId`: a delegate acted for that person (design 7.7). */
   onBehalfOfName?: string | null;
+  /** The stage run this action belongs to (stage actions only; submit has none). Points to `stages[].id` of the same instance. */
+  stageRunId?: number | null;
 }
+/**
+ * Display state of a progress-graph node, computed by the backend (the frontend only maps state to style and text).
+ * `changed` / `hidden` appear only for a reader who sees just their own stages.
+ */
+export type ApprovalProgressState =
+  | 'passed' | 'active' | 'returned' | 'skipped' | 'cancelled' | 'ended' | 'notReached' | 'changed' | 'hidden';
+/** The seven definition kinds plus `addSign`, a display-only small node attached to a stage (see `hostId`). */
+export type ApprovalProgressKind = 'start' | 'approval' | 'condition' | 'fork' | 'join' | 'end' | 'notify' | 'addSign';
+export interface ApprovalProgressNode {
+  id: string; kind: ApprovalProgressKind; name?: I18nText | null; state: ApprovalProgressState;
+  /** `approval` and `addSign` only: points to `stages[].id` of the same instance, oldest first. */
+  runIds?: number[];
+  /** `join` only: whether all arms or any one arm must arrive. */
+  joinMode?: 'all' | 'any';
+  /** `addSign` only: the id of the approval node it is attached to. */
+  hostId?: string;
+}
+export interface ApprovalProgressEdge { id: string; from: string; to: string; label?: I18nText | null; traversed: boolean }
+export interface ApprovalProgressGraph { nodes: ApprovalProgressNode[]; edges: ApprovalProgressEdge[] }
 export interface ApprovalInstanceView {
   id: number; status: ApprovalInstanceStatus; routeKind: 'flow' | 'fallback'; flowName: I18nText | null;
   fromOptionId: number; toOptionId: number; initiatorUserId: string; submittedTime: string; completedTime: string | null;
   rowVersion: string; stages: ApprovalStageView[]; actions: ApprovalActionView[]; canWithdraw: boolean; canCancel: boolean;
   titleSnapshot: string;
+  /** Progress graph; absent when the flow snapshot is missing or inconsistent (the timeline still works). */
+  graph?: ApprovalProgressGraph | null;
 }
 export interface RecordApproval { current: ApprovalInstanceView | null; previous: ApprovalInstanceView[]; submitTargets: number[] }
 

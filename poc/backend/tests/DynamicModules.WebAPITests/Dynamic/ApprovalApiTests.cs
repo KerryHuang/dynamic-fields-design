@@ -610,6 +610,33 @@ public class ApprovalApiTests : IDisposable
 
     [Fact]
     [Trait("Category", "Postgres")]
+    public async Task RecordApproval_Graph_JsonShape_CamelCase_NullsOmitted()
+    {
+        // 進度圖（fg4 J5）：sequence 實例也回直線圖；欄位 camelCase，null 不寫出；歷程的 stageRunId 只給關卡動作
+        var r = await Arrange();
+        var id = await Submitted(r);
+
+        var current = await Current(_admin, id);
+
+        var graph = current.GetProperty("graph");
+        var nodes = graph.GetProperty("nodes").EnumerateArray().ToList();
+        nodes.Select(n => n.GetProperty("id").GetString()).Should().Equal("start", "lead", "end");
+        nodes.Select(n => n.GetProperty("state").GetString()).Should().Equal("passed", "active", "notReached");
+        nodes[0].GetProperty("kind").GetString().Should().Be("start");
+        foreach (var absent in new[] { "name", "runIds", "joinMode", "hostId" })
+            nodes[0].TryGetProperty(absent, out _).Should().BeFalse(absent);
+        nodes[1].GetProperty("runIds").GetArrayLength().Should().Be(1);
+        nodes[1].GetProperty("name").GetProperty("zh-TW").GetString().Should().Be("業務");
+        var edges = graph.GetProperty("edges").EnumerateArray().ToList();
+        edges.Select(e => (e.GetProperty("from").GetString(), e.GetProperty("to").GetString(), e.GetProperty("traversed").GetBoolean()))
+            .Should().Equal(("start", "lead", true), ("lead", "end", false));
+        edges[0].TryGetProperty("label", out _).Should().BeFalse();
+        current.GetProperty("actions").EnumerateArray().Single(a => a.GetProperty("action").GetString() == "submit")
+            .TryGetProperty("stageRunId", out _).Should().BeFalse();
+    }
+
+    [Fact]
+    [Trait("Category", "Postgres")]
     public async Task Print_GrantPath_KeepsLockedHeaders()
     {
         // 簽核人沒有模組的任何權限：靠臨時讀取列印預覽，回應標頭照樣把文件鎖成只能顯示

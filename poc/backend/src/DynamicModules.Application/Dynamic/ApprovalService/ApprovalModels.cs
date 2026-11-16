@@ -76,11 +76,24 @@ public sealed record ApprovalStageView(long Id, int Seq, string? StageCode, I18n
     IReadOnlyList<string>? AddSignNames = null, string? NodeId = null, string? BranchKey = null, string? CloseReason = null);
 
 public sealed record ApprovalActionView(string Action, string ActorUserId, string ActorName, string? OnBehalfOfUserId, IReadOnlyList<string> TargetUserIds,
-    string? Comment, JsonElement? Data, DateTime CreatedTime, IReadOnlyList<string>? TargetNames = null, string? OnBehalfOfName = null);
+    string? Comment, JsonElement? Data, DateTime CreatedTime, IReadOnlyList<string>? TargetNames = null, string? OnBehalfOfName = null,
+    long? StageRunId = null);
 
 public sealed record ApprovalInstanceView(long Id, string Status, string RouteKind, I18nText? FlowName, long FromOptionId, long ToOptionId,
     string InitiatorUserId, DateTime SubmittedTime, DateTime? CompletedTime, string RowVersion, IReadOnlyList<ApprovalStageView> Stages,
-    IReadOnlyList<ApprovalActionView> Actions, bool CanWithdraw, bool CanCancel, string TitleSnapshot);
+    IReadOnlyList<ApprovalActionView> Actions, bool CanWithdraw, bool CanCancel, string TitleSnapshot, ApprovalProgressGraph? Graph = null);
+
+/// <summary>
+/// 進度圖（計畫 fg4 J5）：節點與線的顯示狀態都由後端算好，不帶條件內容、簽核人來源設定、通知範本。
+/// Kind 是定義的七種加只供顯示的 addSign；RunIds 只給 approval 與 addSign（指向同實例 stages[].id，Seq 升冪）；JoinMode 只給 join；HostId 只給 addSign。
+/// State 見 <see cref="Domain.Approvals.ApprovalProgressStates"/>。
+/// </summary>
+public sealed record ApprovalProgressGraph(IReadOnlyList<ApprovalProgressNode> Nodes, IReadOnlyList<ApprovalProgressEdge> Edges);
+
+public sealed record ApprovalProgressNode(string Id, string Kind, I18nText? Name, string State, IReadOnlyList<long>? RunIds = null, string? JoinMode = null,
+    string? HostId = null);
+
+public sealed record ApprovalProgressEdge(string Id, string From, string To, I18nText? Label, bool Traversed);
 
 /// <summary>Current：進行中的實例；Previous：其他看得到的實例（送出時間降冪）；SubmitTargets：現在能送簽的目標狀態。</summary>
 public sealed record RecordApprovalResponse(ApprovalInstanceView? Current, IReadOnlyList<ApprovalInstanceView> Previous, IReadOnlyList<long> SubmitTargets);

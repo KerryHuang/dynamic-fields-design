@@ -189,6 +189,8 @@ public class GetRecordApprovalHandler(
         var runs = allRuns.Where(r => Shown(r.InstanceId, r.Id)).ToList();
         var actions = allActions.Where(a => Shown(a.InstanceId, a.StageRunId)
             || granted is not null && a.InstanceId == pendingId && a.Action == ApprovalActions.ContentChanged).ToList();
+        // 進度圖的狀態要看全部任務（退回發起人時被退回的那列是 closed，只能靠被退回的任務認出來）；遮蔽在 ApprovalViews.Instance 依 ownStages 做
+        var rejectedRunIds = tasks.Where(t => t.Status == ApprovalTaskStatus.Rejected).Select(t => t.StageRunId).ToHashSet();
         tasks = tasks.Where(t => Shown(t.InstanceId, t.StageRunId)).ToList();
         var names = await ApprovalViews.UserNamesAsync(permissions, ct);
         var writable = module.IsWritable();
@@ -198,7 +200,7 @@ public class GetRecordApprovalHandler(
         var unwritable = await grant.UnwritableFieldIdsAsync(module, read, granted, ct);
         var addSignLimit = await policies.MaxAddSignStagesAsync(module.Id, ct);
         var views = visible.Select(i => ApprovalViews.Instance(i, runs, tasks, actions, names, me, writable, manager, hidden, unwritable, module.Workflow, ShowTitle(i), addSignLimit,
-            allRuns, allActions)).ToList();
+            allRuns, allActions, rejectedRunIds, ownStages.GetValueOrDefault(i.Id))).ToList();
         var pending = instances.Any(i => i.Status == ApprovalInstanceStatus.Pending);
         var targets = canRead ? await reader.SubmitTargetsAsync(module, record, pending, ct) : [];
         return ServiceResult.Success(new RecordApprovalResponse(
@@ -364,7 +366,8 @@ internal static class ApprovalViews
     public static ApprovalInstanceView Instance(ApprovalInstance i, IReadOnlyList<ApprovalStageRun> allRuns, IReadOnlyList<ApprovalTask> allTasks,
         IReadOnlyList<ApprovalAction> allActions, IReadOnlyDictionary<string, string> names, string me, bool writable, bool manager,
         IReadOnlySet<long>? hiddenFieldIds, IReadOnlySet<long>? unwritableFieldIds, Workflow? workflow, bool showTitle, int addSignLimit,
-        IReadOnlyList<ApprovalStageRun> unfilteredRuns, IReadOnlyList<ApprovalAction> unfilteredActions)
+        IReadOnlyList<ApprovalStageRun> unfilteredRuns, IReadOnlyList<ApprovalAction> unfilteredActions,
+        IReadOnlySet<long> rejectedRunIds, IReadOnlySet<long>? ownRunIds)
     {
         string Name(string id) => names.GetValueOrDefault(id) ?? id;
         var pending = i.Status == ApprovalInstanceStatus.Pending;
@@ -398,7 +401,7 @@ internal static class ApprovalViews
         }).ToList();
         var actions = allActions.Where(a => a.InstanceId == i.Id).OrderBy(a => a.Id).Select(a => new ApprovalActionView(a.Action, a.ActorUserId, Name(a.ActorUserId),
             a.OnBehalfOfUserId, a.TargetUserIds ?? [], a.Comment, Data(a, hiddenFieldIds), a.CreatedTime,
-            (a.TargetUserIds ?? []).Select(Name).ToList(), a.OnBehalfOfUserId is { } behalf ? Name(behalf) : null)).ToList();
+            (a.TargetUserIds ?? []).Select(Name).ToList(), a.OnBehalfOfUserId is { } behalf ? Name(behalf) : null, a.StageRunId)).ToList();
         // 撤回資格同 WithdrawApprovalHandler：sequence 是目前關卡還沒有任何同意或退回；graph 是每個 active 的簽核節點都還沒有（不讀圖，U11）
         var current = runs.FirstOrDefault(r => r.Id == i.CurrentStageRunId) ?? runs.LastOrDefault(r => r.Status == ApprovalStageStatus.Active);
         var canWithdraw = pending && writable && i.InitiatorUserId == me
@@ -406,7 +409,45 @@ internal static class ApprovalViews
                 : !tasks.Any(t => t.StageRunId == current?.Id && t.Status is ApprovalTaskStatus.Approved or ApprovalTaskStatus.Rejected));
         var flowName = i.FlowSetSnapshot.FirstOrDefault(e => e.FlowId == i.FlowId)?.Name;
         return new ApprovalInstanceView(i.Id, i.Status, i.RouteKind, flowName, i.FromOptionId, i.ToOptionId, i.InitiatorUserId, i.SubmittedTime, i.CompletedTime,
-            i.RowVersion, stages, actions, canWithdraw, pending && writable && manager, showTitle ? i.TitleSnapshot : "");
+            i.RowVersion, stages, actions, canWithdraw, pending && writable && manager, showTitle ? i.TitleSnapshot : "",
+            ProgressGraph(i, def, pathRuns, rejectedRunIds, ownRunIds));
+    }
+
+    /// <summary>備援實例的進度圖定義（U8）：開始 → 備援簽核 → 結束；節點實例以 StageCode = <see cref="ApprovalEngine.FallbackStageCode"/> 對應。</summary>
+    private static readonly ApprovalDefinition FallbackDefinition = new(ApprovalShapes.Graph, null, null, null, [],
+        [new(StartId, ApprovalNodeKinds.Start), new(ApprovalEngine.FallbackStageCode, ApprovalNodeKinds.Approval, ApprovalMessages.FallbackStageName, Mode: ApprovalModes.Any),
+         new(EndId, ApprovalNodeKinds.End)],
+        [new("e1", StartId, ApprovalEngine.FallbackStageCode), new("e2", ApprovalEngine.FallbackStageCode, EndId)]);
+
+    private const string StartId = "start", EndId = "end";
+
+    /// <summary>
+    /// 進度圖（J5、J10）：顯示用的定義先看路線類型（備援不論綁定哪種版本都是三個節點，否則 FromSequence 會把 graph 原樣回傳、畫出整張沒走的舊圖），
+    /// 再看形狀。資料對不上或快照遺失回 null，時間軸照常。ownRunIds 非 null 是只看得到自己關卡的讀者：照 J7 遮蔽，判斷與時間軸用同一組 Shown。
+    /// </summary>
+    private static ApprovalProgressGraph? ProgressGraph(ApprovalInstance i, ApprovalDefinition? def, IReadOnlyList<ApprovalStageRun> runs,
+        IReadOnlySet<long> rejectedRunIds, IReadOnlySet<long>? ownRunIds)
+    {
+        if (def is null) return null;
+        var byStageCode = i.RouteKind == ApprovalRouteKind.Fallback || def.Shape != ApprovalShapes.Graph;
+        var shown = i.RouteKind == ApprovalRouteKind.Fallback ? FallbackDefinition : ApprovalGraphConversion.FromSequence(def);
+        if (ApprovalGraphProgress.Of(shown, runs, rejectedRunIds, byStageCode, i.Status == ApprovalInstanceStatus.Approved) is not { } p) return null;
+        return new ApprovalProgressGraph(
+            [.. p.Nodes.Select(n => ProgressNodeView(n, ownRunIds))],
+            [.. p.Edges.Select(e => new ApprovalProgressEdge(e.Id, e.From, e.To, e.Label, ownRunIds is null && e.Traversed))]);
+    }
+
+    /// <summary>
+    /// J7、U1：簽核與加簽節點最新一列讀者看得到 → 照實際狀態；只看得到較早的幾列 → changed（已處理，之後有變動）；一列都看不到 → hidden；
+    /// 開始、條件、分支、匯合、結束一律 hidden。runIds 只留看得到的（對得上 stages）。名稱、型別、匯合方式、掛點是結構，照留。
+    /// </summary>
+    private static ApprovalProgressNode ProgressNodeView(ProgressNode n, IReadOnlySet<long>? own)
+    {
+        var hasRuns = n.Kind is ApprovalNodeKinds.Approval or ApprovalProgressKinds.AddSign;
+        if (own is null) return new ApprovalProgressNode(n.Id, n.Kind, n.Name, n.State, hasRuns ? n.RunIds : null, n.JoinMode, n.HostId);
+        var seen = hasRuns ? n.RunIds.Where(own.Contains).ToList() : [];
+        var state = seen.Count == 0 ? ApprovalProgressStates.Hidden : own.Contains(n.RunIds[^1]) ? n.State : ApprovalProgressStates.Changed;
+        return new ApprovalProgressNode(n.Id, n.Kind, n.Name, state, seen.Count == 0 ? null : seen, n.JoinMode, n.HostId);
     }
 
     /// <summary>
