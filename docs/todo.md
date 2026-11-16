@@ -32,8 +32,15 @@
 - 評估等價性測試的穩定代號（fg2g1 審查建議 3、4）：flowId、fieldId 換成穩定代號、NormalizeData 改有邊界的替換；現在只可能造成假紅，優先度低
 - 簽核中心「已處理」分頁的並行名稱改成按模組批次判斷可見性（fg4a 審查建議）：現在每列最多多打 2 次 `ListVisibleIdsAsync`，size 100 時最壞多 200 次查詢；POC 規模可接受
 - 請母語者審 fg4a 並行摘要的泰文、越南文（`approval.badge.pendingMany`、`approval.stagesMore`、`approval.addSignOf`）
-- 加寬進度圖的邊線標籤欄距（留 fg3）：標籤在 56px 欄距裡只剩約 3 個中文字，其餘截斷成「…」，完整文字只在 SVG title
+- 加寬進度圖的邊線標籤欄距（fg3g）：排版參數 fg3b 已備好、設計頁已用；單據頁進度圖要到 fg3g 才傳標籤線
 - 讓進度圖長名稱節點 hover 能看全名（可用 Quasar tooltip）：節點拿掉原生 title 以免讀屏重複念，名稱超過兩行會被截斷、畫面上看不到全名
 - 在實體 iPad 驗進度圖：平板網址列收合時的視角、820 直向單指在圖上平移與在圖外的時間軸捲頁面、手機縮圖上往下捲頁面（目前只用 DevTools 觸控模擬與合成觸控事件驗過）
 - 請母語者審 fg4 新文案的泰文、越南文：`approval.graph.*`（狀態字、匯合到齊方式、縮放按鈕、放大檢視、關閉、細節標題）
 - 讓鍵盤 Tab 到畫面外的進度圖節點時視角跟著移動：長流程以 0.8 倍顯示時，焦點會落在看不到的節點上，視角不會自動平移
+- fg3e 開工前問使用者：條件節點拉出的第一條線是否自動成為「其他（預設）」線（fg3b 現行實作是會；fg3b 審查 🟡6）
+- 設計頁手機首屏聚焦前 3 個節點時左右各被切約 14px（minZoom 0.6 的副作用）：考慮改成 padding 或依寬度算 minZoom
+- 設計頁返回鈕回到模組設計頁的預設分頁而非「簽核流程」分頁：分頁要先進網址（`?tab=`）才能用 router.back
+- 實機驗唯讀設計者進設計頁（U62）：Demo 沒有只有 designer.read 的帳號，目前只有 spec 覆蓋
+- 補 PostgreSQL 的草稿條件更新與 `IsVersionUsedAsync` 競爭（fg3a 審查 🟡4，與既有 PUT 同一種寫法） ⛔ 等：pg0
+- 驗 render.yaml 的 buildFilter：第一次只改文件的 push 到 main 後，確認 Render 沒有重新部署
+- 前端改動的驗收一律跑完整 `bun run test`（約 2 分鐘）：fg3c 只跑篩選範圍，漏掉 no-hardcoded-colors 守門，CI 才擋下
