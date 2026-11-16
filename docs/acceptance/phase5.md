@@ -8,13 +8,13 @@
 
 | 指令 | 結果 |
 |---|---|
-| `dotnet test poc/backend --filter Phase5_Scenario` | 通過（1/1） |
-| `dotnet test poc/backend` | 通過：DomainTests 676、ApplicationTests 340、WebAPITests 93，共 1109，失敗 0 |
-| `cd poc/frontend && bunx vitest run` | 通過：35 個檔案、681 個測試 |
-| `cd poc/frontend && bunx vue-tsc --noEmit` | 通過（無錯誤） |
-| `cd poc/frontend && bunx quasar build` | 通過（SPA 編譯成功） |
+| `dotnet test backend --filter Phase5_Scenario` | 通過（1/1） |
+| `dotnet test backend` | 通過：DomainTests 676、ApplicationTests 340、WebAPITests 93，共 1109，失敗 0 |
+| `cd frontend && bunx vitest run` | 通過：35 個檔案、681 個測試 |
+| `cd frontend && bunx vue-tsc --noEmit` | 通過（無錯誤） |
+| `cd frontend && bunx quasar build` | 通過（SPA 編譯成功） |
 
-`Phase5_Scenario`（`poc/backend/tests/DynamicModules.WebAPITests/Phase5AcceptanceTests.cs`）固定時鐘為 2026-11-04，以 API 走完下列情境，每步皆斷言：
+`Phase5_Scenario`（`backend/tests/DynamicModules.WebAPITests/Phase5AcceptanceTests.cs`）固定時鐘為 2026-11-04，以 API 走完下列情境，每步皆斷言：
 
 1. `admin` 建模組 `repair-req`（模具維修申請）：申請人（標題）、模具（`reference` → `entity:design.mold`，必填）、故障說明（`textarea`），啟用
 2. 建 `repair-log`（維修紀錄）：處理內容（標題）、申請單（`reference` → `module:repair-req`，`onDelete = restrict`）、工時（`decimal`），啟用
@@ -28,7 +28,7 @@
 
 ## 實機走查
 
-2026-11-04 以 `poc/start.command` 啟動，在 Chrome 走完下列 8 項。走查用的模組：`p5-req`（P5 模具維修申請，模具參照 `design.mold`、必填）、`p5-log`（P5 維修紀錄，申請單參照 `p5-req`、禁止刪除）、`p5-mold-ext`（P5 模具擴充，宿主 `design.mold`）；`floor` 群組對 `p5-req` 有讀取（全部）、對 `p5-log` 有讀取／新增／編輯（本人）。
+2026-11-04 以 `./start.command` 啟動，在 Chrome 走完下列 8 項。走查用的模組：`p5-req`（P5 模具維修申請，模具參照 `design.mold`、必填）、`p5-log`（P5 維修紀錄，申請單參照 `p5-req`、禁止刪除）、`p5-mold-ext`（P5 模具擴充，宿主 `design.mold`）；`floor` 群組對 `p5-req` 有讀取（全部）、對 `p5-log` 有讀取／新增／編輯（本人）。
 
 | # | 項目 | 結果 | 截圖 |
 |---|---|---|---|

@@ -21,7 +21,7 @@ export interface FieldTypeEntry {
   props(field: SchemaField, locale: string): Record<string, unknown>;
   zod(field: SchemaField): ZodTypeAny;
   format(value: unknown, field: SchemaField, locale: string): string;
-  /** Operators allowed in a filter; mirrors poc/shared/filter-operators.json. */
+  /** Operators allowed in a filter; mirrors shared/filter-operators.json. */
   operators: FilterOperator[];
   /**
    * Input for the filter value; undefined when the operator takes no value.

@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// PostToolUse（Edit|Write|MultiEdit）：改 poc 產品程式碼時，若新內容疑似把業務政策寫死，提醒 agent 判斷。
+// PostToolUse（Edit|Write|MultiEdit）：改產品程式碼（backend/src、frontend/src）時，若新內容疑似把業務政策寫死，提醒 agent 判斷。
 // 只提醒、不擋：一律 exit 0；讀不到輸入或解析失敗就靜默結束（fail-open）。
 let raw = "";
 process.stdin.setEncoding("utf8");
@@ -9,7 +9,7 @@ process.stdin.on("end", () => {
   try { input = JSON.parse(raw); } catch { return; }
   const ti = input.tool_input ?? {};
   const file = String(ti.file_path ?? "").replace(/\\/g, "/");
-  if (!/(^|\/)poc\/(backend\/src|frontend\/src)\//.test(file)) return;
+  if (!/(^|\/)(backend\/src|frontend\/src)\//.test(file)) return;
   if (/(\.spec\.|\.test\.|\.vitest\.|Tests?\.cs$|\/tests?\/|\/__tests__\/|\/i18n\/)/.test(file)) return;
 
   const text = [ti.content, ti.new_string, ...(ti.edits ?? []).map((e) => e?.new_string)]
@@ -31,7 +31,7 @@ process.stdin.on("end", () => {
   if (hits.length === 0) return;
 
   const msg =
-    `寫死規則提醒（${file.slice(file.lastIndexOf("poc/"))}）：${hits.join("、")}。` +
+    `寫死規則提醒（${file.slice(file.search(/(backend|frontend)\/src\//))}）：${hits.join("、")}。` +
     "依 AGENTS.md 鐵則：業務政策（上限、預設值、天數、模組特例）要可設定、單一來源；" +
     "若是完整性守衛、安全檢查或技術限制可以留下，但要列進設計文件的「可寫死清單」。";
   process.stdout.write(

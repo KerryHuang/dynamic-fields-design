@@ -13,7 +13,7 @@ description: Use when designing, planning, reviewing, or about to merge a Formwr
 2. **寫死掃描**（審查 diff 時）：
 
    ```bash
-   git diff origin/main...HEAD -- poc/backend/src poc/frontend/src \
+   git diff origin/main...HEAD -- backend/src frontend/src \
      | grep -E '^\+.*(Key|key)\s*===?\s*["'"'"'][a-z]+-|^\+.*const \w+ (Max|Min|Default)|^\+.*readonly .*(Max|Min|Default)|^\+.*(MAX|MIN|DEFAULT)_[A-Z_]+\s*='
    ```
 

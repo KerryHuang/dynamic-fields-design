@@ -28,7 +28,7 @@ namespace DynamicModules.ApplicationTests.Persistence;
 
 /// <summary>
 /// 效能基準（spec §15 風險 9）：1 萬筆記錄、30 個可篩選可排序欄位。預設不跑，
-/// 用 <c>dotnet test poc/backend --filter Category=Benchmark</c> 執行。只斷言筆數，不斷言時間。
+/// 用 <c>dotnet test backend --filter Category=Benchmark</c> 執行。只斷言筆數，不斷言時間。
 /// </summary>
 [Trait("Category", "Benchmark")]
 public class ListBenchmarkTests(ITestOutputHelper output)

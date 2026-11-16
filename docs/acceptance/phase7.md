@@ -8,13 +8,13 @@
 
 | 指令 | 結果 |
 |---|---|
-| `dotnet test poc/backend --filter Phase7` | 通過（1/1） |
-| `dotnet test poc/backend` | 通過：DomainTests 693、ApplicationTests 602、WebAPITests 109，共 1404，失敗 0 |
-| `cd poc/frontend && bunx vitest run` | 通過：48 個檔案、796 個測試 |
-| `cd poc/frontend && bunx vue-tsc --noEmit` | 通過（無錯誤） |
-| `cd poc/frontend && bunx quasar build` | 通過（SPA 編譯成功） |
+| `dotnet test backend --filter Phase7` | 通過（1/1） |
+| `dotnet test backend` | 通過：DomainTests 693、ApplicationTests 602、WebAPITests 109，共 1404，失敗 0 |
+| `cd frontend && bunx vitest run` | 通過：48 個檔案、796 個測試 |
+| `cd frontend && bunx vue-tsc --noEmit` | 通過（無錯誤） |
+| `cd frontend && bunx quasar build` | 通過（SPA 編譯成功） |
 
-`Phase7_Scenario`（`poc/backend/tests/DynamicModules.WebAPITests/Phase7AcceptanceTests.cs`）從 2026-11-05 09:00 起，每一步把假時鐘往前推一分鐘，讓歷程的先後分得出來。以 API 走完下列情境，每步皆斷言：
+`Phase7_Scenario`（`backend/tests/DynamicModules.WebAPITests/Phase7AcceptanceTests.cs`）從 2026-11-05 09:00 起，每一步把假時鐘往前推一分鐘，讓歷程的先後分得出來。以 API 走完下列情境，每步皆斷言：
 
 1. 建 `order`（訂單）與 `order-line`（訂單明細），欄位同第 6 階段的精簡版：
    - 訂單：訂單編號（自動編號，當標題）、客戶、訂單日期、狀態（草稿、已確認）、未稅合計（彙總）。

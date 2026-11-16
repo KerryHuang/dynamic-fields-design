@@ -1,6 +1,6 @@
 ---
 paths:
-  - "poc/backend/**"
+  - "backend/**"
 ---
 
 # 後端（.NET 8）

@@ -1,13 +1,13 @@
 # Render Demo 站專用：建置時就產生好 Demo 資料，休眠喚醒後不必等。客戶部署用 Dockerfile，不含示範資料。
 # 代價：資料日期停在建置那天，重新部署才會更新。
-# 建置內容：poc/（在 poc/ 目錄執行 docker build -f Dockerfile.demo .）。
+# 建置內容：repo 根目錄（在根目錄執行 docker build -f Dockerfile.demo .）。
 
 FROM oven/bun:1.4.0 AS frontend
-# 保留 poc/ 的相對位置：前端以 ../../../../shared 引用前後端共用的 JSON
-WORKDIR /poc/frontend
+# 保留 frontend 與 shared 的相對位置：前端以 ../../../../shared 引用前後端共用的 JSON
+WORKDIR /work/frontend
 COPY frontend/package.json frontend/bun.lock ./
 RUN bun install --frozen-lockfile --ignore-scripts
-COPY shared/ /poc/shared/
+COPY shared/ /work/shared/
 COPY frontend/ ./
 RUN bunx quasar prepare && bunx quasar build
 
@@ -26,7 +26,7 @@ RUN COMMIT="${GIT_COMMIT:-$RENDER_GIT_COMMIT}"; BUILT="${BUILD_TIME:-$(date -u +
 FROM mcr.microsoft.com/dotnet/aspnet:8.0
 WORKDIR /app
 COPY --from=backend /app ./
-COPY --from=frontend /poc/frontend/dist/spa ./wwwroot
+COPY --from=frontend /work/frontend/dist/spa ./wwwroot
 ENV ConnectionStrings__Dynamic="Data Source=/app/data/poc.db" \
     ASPNETCORE_ENVIRONMENT=Production \
     Demo__LoginEnabled=true \

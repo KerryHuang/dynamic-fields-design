@@ -5,7 +5,7 @@ using Xunit;
 
 namespace DynamicModules.DomainTests.Approvals;
 
-/// <summary>讀 poc/shared/approval-graph-cases.json：流程圖結構驗證的唯一真相，前端（fg3）讀同一份。斷言 (鍵, 規則, 代碼) 的集合，不看順序與語言。</summary>
+/// <summary>讀 shared/approval-graph-cases.json：流程圖結構驗證的唯一真相，前端（fg3）讀同一份。斷言 (鍵, 規則, 代碼) 的集合，不看順序與語言。</summary>
 public class SharedApprovalGraphCasesTests
 {
     private static readonly JsonSerializerOptions Web = new(JsonSerializerDefaults.Web);
@@ -14,10 +14,10 @@ public class SharedApprovalGraphCasesTests
     private static JsonElement Load()
     {
         var dir = new DirectoryInfo(AppContext.BaseDirectory);
-        while (dir is not null && !File.Exists(Path.Combine(dir.FullName, "poc", "shared", "approval-graph-cases.json")))
+        while (dir is not null && !File.Exists(Path.Combine(dir.FullName, "shared", "approval-graph-cases.json")))
             dir = dir.Parent;
-        if (dir is null) throw new FileNotFoundException("找不到 poc/shared/approval-graph-cases.json");
-        return JsonDocument.Parse(File.ReadAllText(Path.Combine(dir.FullName, "poc", "shared", "approval-graph-cases.json"))).RootElement.Clone();
+        if (dir is null) throw new FileNotFoundException("找不到 shared/approval-graph-cases.json");
+        return JsonDocument.Parse(File.ReadAllText(Path.Combine(dir.FullName, "shared", "approval-graph-cases.json"))).RootElement.Clone();
     }
 
     public static TheoryData<int, string> Cases()

@@ -28,10 +28,11 @@ ERP 是產品目標，也是核心的壓力測試：做不出來的地方，就�
 
 目錄、啟動、測試指令見 `CONTRIBUTING.md`。重點：
 
-- 後端 `poc/backend/src`：`Domain`（欄位型別、公式、條件，純函式）→ `Application`（MediatR handler，依功能分在 `Dynamic/<功能>Service/`）→ `Persistence`（EF Core＋SQLite、migration、種子）→ `WebAPI`。
-- 前端 `poc/frontend/src`：`domain`（型別、規則引擎）、`application`（查詢）、`presentation`（動態表單、列表、設計器，依功能分資料夾）、`pages`、`i18n`（四語 JSON）。
-- 內建應用程式套件：`poc/backend/apps/*.app.json`。
-- 前後端共用的判斷案例：`poc/shared/`（規則語意以 `rule-cases.json` 為準，兩邊測試都跑）。
+- 後端 `backend/src`：`Domain`（欄位型別、公式、條件，純函式）→ `Application`（MediatR handler，依功能分在 `Dynamic/<功能>Service/`）→ `Persistence`（EF Core＋SQLite、migration、種子）→ `WebAPI`。
+- 前端 `frontend/src`：`domain`（型別、規則引擎）、`application`（查詢）、`presentation`（動態表單、列表、設計器，依功能分資料夾）、`pages`、`i18n`（四語 JSON）。
+- 內建應用程式套件：`backend/apps/*.app.json`。
+- 前後端共用的判斷案例：`shared/`（規則語意以 `rule-cases.json` 為準，兩邊測試都跑）。
+- 2026-11-16 起程式碼從 `poc/` 移到根目錄，舊計畫與設計文件中的 `poc/...` 即現在根目錄下的同名路徑。
 
 依路徑自動載入的細則在 `.claude/rules/`（後端、前端、套件、文件各一份）；改那些目錄前先讀對應的那份。
 

@@ -9,8 +9,8 @@
 需要 .NET 8 SDK 與 Bun 1.4 以上。
 
 ```bash
-cd poc/frontend && bun install && cd ../..   # 第一次才需要
-poc/start.command                            # macOS；Windows 用 poc\start.cmd
+cd frontend && bun install && cd ..   # 第一次才需要
+./start.command                            # macOS；Windows 用 start.cmd
 ```
 
 後端在 `http://127.0.0.1:5180`、前端在 `http://127.0.0.1:9180`，就緒後自動開瀏覽器。macOS 按 Ctrl-C 停止；Windows 關掉兩個視窗即停止。
@@ -21,7 +21,7 @@ poc/start.command                            # macOS；Windows 用 poc\start.cmd
 
 - 設了環境變數 `Auth__InitialAdminPassword`，就用它（至少 8 碼，太短站台啟動失敗並說明原因）。
 - 沒設，系統產生隨機密碼，只在啟動 log 以 Warning 印一次，沒抄到就得重來（見下面的緊急救援）。
-- 本機用 `poc/start.command` 啟動時是 Development 環境，初始密碼為 `admin1234`。Windows 的 `poc\start.cmd` 沒有設定 Development，`admin1234` 不適用：請自己設 `Auth__InitialAdminPassword`，或到啟動 log 找系統產生的隨機密碼。
+- 本機用 `./start.command` 啟動時是 Development 環境，初始密碼為 `admin1234`。Windows 的 `start.cmd` 沒有設定 Development，`admin1234` 不適用：請自己設 `Auth__InitialAdminPassword`，或到啟動 log 找系統產生的隨機密碼。
 
 第一次用 `admin` 登入，系統會要求改密碼。引導只在「資料庫裡沒有任何啟用中且已設密碼的系統管理員」時執行，之後改環境變數不會覆寫既有密碼。
 
@@ -46,7 +46,7 @@ poc/start.command                            # macOS；Windows 用 poc\start.cmd
 
 ### 重設資料
 
-停止服務後刪除 `poc/backend/data/poc.db`（旁邊的 `keys` 目錄是登入用的金鑰，可一併刪除），下次啟動會重建資料庫，只剩 `admin`，模組、使用者、群組都要重新建。
+停止服務後刪除 `backend/data/poc.db`（旁邊的 `keys` 目錄是登入用的金鑰，可一併刪除），下次啟動會重建資料庫，只剩 `admin`，模組、使用者、群組都要重新建。
 
 ## 2. 建立模組
 
@@ -725,8 +725,8 @@ poc/start.command                            # macOS；Windows 用 poc\start.cmd
 
 - 要有設計器的新增與修改權限才能按；沒有時按鈕顯示但停用。
 - 只在三個內建應用程式的模組代碼都不存在、三個應用程式都還沒開啟時才產生；共用主檔還沒開啟的話，它的模組代碼（`master-partner`、`master-contact`、`master-employment`）也不能已被別的模組用掉。任何一項不符就整批不做，並列出衝突項目，例如「模組代碼 master-partner 已存在」，不覆寫既有資料。
-- 部署時設環境變數 `Demo__SeedOnStartup=true`，站台啟動後會在背景自動產生（本機預設關閉）。失敗只寫 log，不影響站台啟動。Render 改用 `poc/Dockerfile.demo`，在建置映像時執行 `--generate-demo-data` 產生好資料，失敗就建置失敗、舊版繼續運作；代價是資料日期停在建置那天。
-- 沒有清除或重設按鈕：本機停止服務後刪 `poc/backend/data/poc.db`；Render 重啟就回到映像裡的 Demo 資料。
+- 部署時設環境變數 `Demo__SeedOnStartup=true`，站台啟動後會在背景自動產生（本機預設關閉）。失敗只寫 log，不影響站台啟動。Render 改用 `Dockerfile.demo`，在建置映像時執行 `--generate-demo-data` 產生好資料，失敗就建置失敗、舊版繼續運作；代價是資料日期停在建置那天。
+- 沒有清除或重設按鈕：本機停止服務後刪 `backend/data/poc.db`；Render 重啟就回到映像裡的 Demo 資料。
 
 Demo 登入：設環境變數 `Demo__LoginEnabled=true`（Render 設定檔已開啟，預設關閉，啟動時 log 會印 Warning）。登入頁會多列一份帳號清單，點一下就以該身分登入，不驗密碼；換人要先登出再點另一個帳號。清單只列啟用中的 Demo 帳號加上 `admin`。Demo 資料還在產生時，清單只有 `admin`，並顯示「正在產生 Demo 資料，完成後這裡會出現可用的帳號」。Demo 模式下 `admin` 不會被強制改密碼。Demo 帳號沒有密碼，不能用密碼登入。
 
@@ -1089,7 +1089,7 @@ Demo 站（任何訪客以 admin 登入）對應用程式沒有額外限制：�
 
 ### 匯入套件
 
-按右上角「匯入套件」，選一個 `.json` 套件檔（內建套件附在 `poc/backend/apps/`）。成功顯示「已匯入套件」，套件出現在清單裡；失敗顯示「匯入失敗」與原因。
+按右上角「匯入套件」，選一個 `.json` 套件檔（內建套件附在 `backend/apps/`）。成功顯示「已匯入套件」，套件出現在清單裡；失敗顯示「匯入失敗」與原因。
 
 - 檔案上限 1 MiB，必須是 UTF-8。套件格式不對、語系鍵不是繁中／English／ไทย／Tiếng Việt，或應用程式之間的「需要」形成循環，都會被拒絕。
 - 套件若附有警告，會以不自動消失的提示列出，看完按關閉。

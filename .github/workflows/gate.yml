@@ -41,9 +41,9 @@ jobs:
           files=$(git diff --name-only "$base" HEAD)
           echo "$files"
           be=false; fe=false
-          if echo "$files" | grep -qE '^(poc/shared/|poc/Dockerfile|\.github/workflows/)'; then be=true; fe=true; fi
-          if echo "$files" | grep -qE '^poc/backend/'; then be=true; fi
-          if echo "$files" | grep -qE '^poc/frontend/'; then fe=true; fi
+          if echo "$files" | grep -qE '^(shared/|Dockerfile|\.github/workflows/)'; then be=true; fe=true; fi
+          if echo "$files" | grep -qE '^backend/'; then be=true; fi
+          if echo "$files" | grep -qE '^frontend/'; then fe=true; fi
           echo "backend=$be" >> "$GITHUB_OUTPUT"; echo "frontend=$fe" >> "$GITHUB_OUTPUT"
 
   backend:
@@ -59,14 +59,14 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-dotnet@v4
         with:
-          global-json-file: poc/backend/global.json
+          global-json-file: backend/global.json
       - uses: actions/cache@v4
         with:
           path: ~/.nuget/packages
-          key: nuget-${{ runner.os }}-${{ hashFiles('poc/backend/**/*.csproj', 'poc/backend/Directory.Build.props') }}
+          key: nuget-${{ runner.os }}-${{ hashFiles('backend/**/*.csproj', 'backend/Directory.Build.props') }}
           restore-keys: nuget-${{ runner.os }}-
       - name: dotnet test
-        working-directory: poc/backend
+        working-directory: backend
         run: dotnet test tests/DynamicModules.${{ matrix.project }} --logger "console;verbosity=minimal"
 
   frontend:
@@ -80,7 +80,7 @@ jobs:
         step: [test, typecheck, build]
     defaults:
       run:
-        working-directory: poc/frontend
+        working-directory: frontend
     steps:
       - uses: actions/checkout@v4
       - uses: oven-sh/setup-bun@v2
@@ -89,7 +89,7 @@ jobs:
       - uses: actions/cache@v4
         with:
           path: ~/.bun/install/cache
-          key: bun-${{ runner.os }}-${{ hashFiles('poc/frontend/bun.lock') }}
+          key: bun-${{ runner.os }}-${{ hashFiles('frontend/bun.lock') }}
           restore-keys: bun-${{ runner.os }}-
       - run: bun install --frozen-lockfile
       - run: bun run ${{ matrix.step }}

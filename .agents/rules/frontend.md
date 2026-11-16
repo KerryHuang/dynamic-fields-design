@@ -1,6 +1,6 @@
 ---
 paths:
-  - "poc/frontend/**"
+  - "frontend/**"
 trigger: always_on
 ---
 

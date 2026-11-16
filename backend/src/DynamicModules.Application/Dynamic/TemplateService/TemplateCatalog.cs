@@ -5,7 +5,7 @@ namespace DynamicModules.Application.Dynamic.TemplateService;
 /// <summary>內建範本（singleton）。站台啟動時由 Load 讀入並驗證，有錯就拒絕啟動；測試可直接用套件清單建構。</summary>
 public sealed class TemplateCatalog(IReadOnlyList<TemplatePackage> builtIns)
 {
-    /// <summary>站台輸出目錄下的 templates/（由 WebAPI csproj 從 poc/backend/templates 複製）。</summary>
+    /// <summary>站台輸出目錄下的 templates/（由 WebAPI csproj 從 backend/templates 複製）。</summary>
     public static string DefaultDirectory => Path.Combine(AppContext.BaseDirectory, "templates");
 
     public IReadOnlyList<TemplatePackage> BuiltIns { get; } = builtIns;

@@ -5,3 +5,14 @@
 **/.quasar
 backend/data
 backend/tests
+# build context 是整個 repo：下列目錄不進映像，排除以縮小傳給 Docker 的內容
+.git
+.github
+.claude
+.agents
+.codex
+.plugharbor
+.superpowers
+.tmp
+docs
+scripts

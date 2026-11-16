@@ -8,7 +8,7 @@ using FluentAssertions;
 
 namespace DynamicModules.DomainTests.Rules;
 
-/// <summary>讀 poc/shared/rule-cases.json：規則語意的唯一真相，前端 vitest 讀同一份。</summary>
+/// <summary>讀 shared/rule-cases.json：規則語意的唯一真相，前端 vitest 讀同一份。</summary>
 public class SharedRuleCasesTests
 {
     private static readonly FieldTypeRegistry Registry = FieldTypeRegistry.CreateDefault();
@@ -17,10 +17,10 @@ public class SharedRuleCasesTests
     private static JsonElement Load()
     {
         var dir = new DirectoryInfo(AppContext.BaseDirectory);
-        while (dir is not null && !File.Exists(Path.Combine(dir.FullName, "poc", "shared", "rule-cases.json")))
+        while (dir is not null && !File.Exists(Path.Combine(dir.FullName, "shared", "rule-cases.json")))
             dir = dir.Parent;
-        if (dir is null) throw new FileNotFoundException("找不到 poc/shared/rule-cases.json");
-        return JsonDocument.Parse(File.ReadAllText(Path.Combine(dir.FullName, "poc", "shared", "rule-cases.json"))).RootElement.Clone();
+        if (dir is null) throw new FileNotFoundException("找不到 shared/rule-cases.json");
+        return JsonDocument.Parse(File.ReadAllText(Path.Combine(dir.FullName, "shared", "rule-cases.json"))).RootElement.Clone();
     }
 
     private static DateOnly Today => DateOnly.Parse(Doc.GetProperty("today").GetString()!);

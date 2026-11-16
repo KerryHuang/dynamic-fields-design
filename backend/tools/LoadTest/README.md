@@ -5,7 +5,7 @@
 MediatR 請求（與 WebAPI 相同的服務組態、每個請求一個 DbContext 與連線），所以不含 HTTP 的成本。
 
 ```bash
-cd poc/backend
+cd backend
 dotnet build tools/LoadTest -c Release
 T=tools/LoadTest/bin/Release/net8.0/LoadTest.dll
 

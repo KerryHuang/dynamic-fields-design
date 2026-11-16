@@ -26,7 +26,7 @@ namespace DynamicModules.ApplicationTests.Persistence;
 
 /// <summary>
 /// 效能基準（spec §5）：1 萬筆主記錄、每筆 3 列子記錄、含分組與去重，5 次中位數要在 1 秒內。
-/// 預設不跑，用 <c>dotnet test poc/backend --filter Category=Benchmark</c> 執行。
+/// 預設不跑，用 <c>dotnet test backend --filter Category=Benchmark</c> 執行。
 /// </summary>
 [Trait("Category", "Benchmark")]
 public class ReportBenchmarkTests(ITestOutputHelper output)

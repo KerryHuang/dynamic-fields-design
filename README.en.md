@@ -65,7 +65,7 @@ The accounts appear on the login page under their Chinese display names. See the
 **Self-hosting**: use the container, two commands. Environment variables, volumes and production notes are in the [deployment guide](docs/deploy.md) (zh-TW).
 
 ```bash
-cd poc && docker build -t dynamic-modules .
+docker build -t dynamic-modules .
 docker run -p 8080:8080 -e Auth__InitialAdminPassword=choose-a-password dynamic-modules
 ```
 

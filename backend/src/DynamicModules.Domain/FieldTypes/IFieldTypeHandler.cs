@@ -7,7 +7,7 @@ public interface IFieldTypeHandler
 {
     FieldType Type { get; }
 
-    /// <summary>此型別可用的篩選運算子（順序即 poc/shared/filter-operators.json 的順序）。</summary>
+    /// <summary>此型別可用的篩選運算子（順序即 shared/filter-operators.json 的順序）。</summary>
     IReadOnlyList<FilterOperator> Operators { get; }
 
     /// <summary>依欄位設定決定的運算子；預設同 Operators，公式依結果型別覆寫。</summary>

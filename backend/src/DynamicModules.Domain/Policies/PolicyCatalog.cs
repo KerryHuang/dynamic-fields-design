@@ -2,7 +2,7 @@ namespace DynamicModules.Domain.Policies;
 
 /// <summary>
 /// 業務政策的唯一登記處：出廠值（等於政策化之前寫死的值）與技術上下限只寫在這裡。
-/// 程式一律透過讀值服務取生效值，不另寫常數。前端文案的代碼清單見 <c>poc/shared/policy-catalog.json</c>。
+/// 程式一律透過讀值服務取生效值，不另寫常數。前端文案的代碼清單見 <c>shared/policy-catalog.json</c>。
 /// </summary>
 public static class PolicyCatalog
 {

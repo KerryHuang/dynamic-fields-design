@@ -8,13 +8,13 @@
 
 | 指令 | 結果 |
 |---|---|
-| `dotnet test poc/backend --filter Phase2_Scenario` | 通過（1/1） |
-| `dotnet test poc/backend`（不含 Benchmark） | 通過：DomainTests 120、ApplicationTests 137、WebAPITests 37，共 294，失敗 0 |
-| `dotnet test poc/backend --filter Category=Benchmark` | 通過（1/1），結果見下方「效能基準」 |
-| `cd poc/frontend && bunx vitest run` | 通過：19 個檔案、75 個測試 |
-| `cd poc/frontend && bunx vue-tsc --noEmit` | 通過（無錯誤） |
+| `dotnet test backend --filter Phase2_Scenario` | 通過（1/1） |
+| `dotnet test backend`（不含 Benchmark） | 通過：DomainTests 120、ApplicationTests 137、WebAPITests 37，共 294，失敗 0 |
+| `dotnet test backend --filter Category=Benchmark` | 通過（1/1），結果見下方「效能基準」 |
+| `cd frontend && bunx vitest run` | 通過：19 個檔案、75 個測試 |
+| `cd frontend && bunx vue-tsc --noEmit` | 通過（無錯誤） |
 
-`Phase2_Scenario`（`poc/backend/tests/DynamicModules.WebAPITests/Phase2AcceptanceTests.cs`）以 API 走完下列情境，每步皆斷言：
+`Phase2_Scenario`（`backend/tests/DynamicModules.WebAPITests/Phase2AcceptanceTests.cs`）以 API 走完下列情境，每步皆斷言：
 
 1. 建立模組 `repair-request` 並加欄位：申請日（`date`，可篩選、可排序）、故障類別（`enum`，三個選項，可篩選、可排序）、檢查項目（`multienum`，可篩選）、預估費用（`currency`，可篩選、可排序）、承辦人（`user`，可篩選）、說明（`textarea`）、標題欄（`text`，可排序）
 2. 啟用模組後建 15 筆記錄，其中 3 筆不填故障類別
@@ -27,7 +27,7 @@
 
 ## 效能基準
 
-指令：`dotnet test poc/backend --filter Category=Benchmark`（`ListBenchmarkTests.List_10k_Records_30_IndexedFields`，預設不跑）。
+指令：`dotnet test backend --filter Category=Benchmark`（`ListBenchmarkTests.List_10k_Records_30_IndexedFields`，預設不跑）。
 
 資料：一個模組、30 個可篩選且可排序的欄位（8 個整數、8 個文字、7 個日期、7 個 `enum`，每個 `enum` 5 個選項），1 萬筆記錄全部經 `CreateRecordHandler` 建立（走正式索引路徑，每筆寫 30 列索引，共約 30 萬列）。資料庫是 SQLite in-memory（`SqliteTestDb`），分頁每頁 20 筆；每項量測跑 5 次取中位數，測試只斷言筆數，不斷言時間。
 
@@ -68,7 +68,7 @@
 
 ## 實機走查
 
-執行 `poc/start.command` 後在瀏覽器走 Step 1 的情境（`repair-request`，9 筆記錄，身分 admin／sales01／sales02）。截圖存於 `docs/acceptance/phase2/`。
+執行 `./start.command` 後在瀏覽器走 Step 1 的情境（`repair-request`，9 筆記錄，身分 admin／sales01／sales02）。截圖存於 `docs/acceptance/phase2/`。
 
 | # | 項目 | 結果 | 截圖 |
 |---|---|---|---|
@@ -101,5 +101,5 @@ Console 無 error，只有缺陷 A 的 intlify 警告；xhr／fetch 全為 200�
 - **C. 標題欄設為可排序，表頭仍不能點**：列表的標題欄沒有帶 `sortable`，只能從排序編輯器選。已修：標題欄以欄位 key 為 name 並帶 `sortable`，表頭可排序。
 - **檢視名稱在按鈕上顯示成大寫**：Quasar `q-btn` 預設大寫，`sales01` 顯示成 `SALES01`。已修：按鈕加 `no-caps`。
 - **篩選下拉列出已停用的選項（「外包」）**：刻意如此，見裁決 R9。新增頁不列停用選項，但既有記錄仍可能存著它，篩選要能找到這些記錄。
-- **multienum 沒有「含全部」**：運算子表（`poc/shared/filter-operators.json`）本來就只有 `in`、`notIn`、`isEmpty`、`isNotEmpty`，屬範圍外。
+- **multienum 沒有「含全部」**：運算子表（`shared/filter-operators.json`）本來就只有 `in`、`notIn`、`isEmpty`、`isNotEmpty`，屬範圍外。
 - **自動化操作偶發選單選了沒生效**：重選即生效，判斷是腳本點擊時機，不列缺陷。

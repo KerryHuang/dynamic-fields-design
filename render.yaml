@@ -4,9 +4,16 @@ services:
     name: dynamic-modules-demo
     runtime: docker
     plan: free
-    rootDir: poc
     dockerfilePath: ./Dockerfile.demo
     dockerContext: .
+    # 只有映像用到的路徑變更才部署（原本靠 rootDir 限縮在子目錄達成；只改 docs、.claude/ 等不重新部署）
+    buildFilter:
+      paths:
+        - backend/**
+        - frontend/**
+        - shared/**
+        - Dockerfile.demo
+        - .dockerignore
     healthCheckPath: /api/health/ready
     autoDeploy: true
     envVars:

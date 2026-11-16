@@ -349,8 +349,8 @@ public class ApprovalGraphDefinitionValidatorTests : ApprovalTestBase
     public void GraphMessages_CoverEveryCode()
     {
         var dir = new DirectoryInfo(AppContext.BaseDirectory);
-        while (dir is not null && !File.Exists(Path.Combine(dir.FullName, "poc", "shared", "approval-graph-cases.json"))) dir = dir.Parent;
-        var doc = JsonDocument.Parse(File.ReadAllText(Path.Combine(dir!.FullName, "poc", "shared", "approval-graph-cases.json"))).RootElement;
+        while (dir is not null && !File.Exists(Path.Combine(dir.FullName, "shared", "approval-graph-cases.json"))) dir = dir.Parent;
+        var doc = JsonDocument.Parse(File.ReadAllText(Path.Combine(dir!.FullName, "shared", "approval-graph-cases.json"))).RootElement;
         // 案例檔沒覆蓋到的代碼（程式防線或案例太大）一併列出
         var codes = doc.GetProperty("cases").EnumerateArray()
             .SelectMany(c => c.GetProperty("errors").EnumerateArray().Concat(c.GetProperty("warnings").EnumerateArray()))

@@ -8,12 +8,12 @@
 
 | 指令 | 結果 |
 |---|---|
-| `dotnet test poc/backend/tests/DynamicModules.ApplicationTests --filter "ReportRunner\|ReportPermissionMatrix"` | 通過（147/147） |
-| `dotnet test poc/backend --filter "Category!=Benchmark"` | 通過：DomainTests 745、ApplicationTests 857、WebAPITests 242，失敗 0 |
+| `dotnet test backend/tests/DynamicModules.ApplicationTests --filter "ReportRunner\|ReportPermissionMatrix"` | 通過（147/147） |
+| `dotnet test backend --filter "Category!=Benchmark"` | 通過：DomainTests 745、ApplicationTests 857、WebAPITests 242，失敗 0 |
 
 ## 效能基準
 
-`dotnet test poc/backend/tests/DynamicModules.ApplicationTests --filter FullyQualifiedName~ReportBenchmark`（`Category=Benchmark`，`ReportBenchmarkTests`）
+`dotnet test backend/tests/DynamicModules.ApplicationTests --filter FullyQualifiedName~ReportBenchmark`（`Category=Benchmark`，`ReportBenchmarkTests`）
 
 資料：1 萬筆主記錄、每筆 3 列子記錄（共 3 萬筆）。報表依子模組欄位分 5 組，量值是主模組金額加總（去重）、子模組數量加總、主記錄筆數。每次都斷言總計數字。環境是 Apple Silicon、.NET 8.0.30、SQLite 記憶體資料庫。
 
@@ -140,9 +140,9 @@
 
 ### 完整測試
 
-走查修正後（2026-11-06）：`dotnet test poc/backend --filter "Category!=Benchmark"` 通過，DomainTests 745、ApplicationTests 867、WebAPITests 322，失敗 0；`bunx vitest run` 67 個檔 1001 個測試通過；`bunx vue-tsc --noEmit` 無錯誤；`bunx quasar build` 成功。
+走查修正後（2026-11-06）：`dotnet test backend --filter "Category!=Benchmark"` 通過，DomainTests 745、ApplicationTests 867、WebAPITests 322，失敗 0；`bunx vitest run` 67 個檔 1001 個測試通過；`bunx vue-tsc --noEmit` 無錯誤；`bunx quasar build` 成功。
 
-修正輪後（2026-11-06）：`dotnet test poc/backend --filter "Category!=Benchmark"` 通過，DomainTests 745、ApplicationTests 868、WebAPITests 325，失敗 0；`bunx vitest run` 67 個檔 1003 個測試通過；`bunx vue-tsc --noEmit` 無錯誤；`bunx quasar build` 成功。
+修正輪後（2026-11-06）：`dotnet test backend --filter "Category!=Benchmark"` 通過，DomainTests 745、ApplicationTests 868、WebAPITests 325，失敗 0；`bunx vitest run` 67 個檔 1003 個測試通過；`bunx vue-tsc --noEmit` 無錯誤；`bunx quasar build` 成功。
 
 ### 最終修正走查（2026-11-06）
 
@@ -165,13 +165,13 @@
 
 ### 最終修正後的完整測試
 
-2026-11-06：`dotnet test poc/backend --filter "Category!=Benchmark"` 通過，DomainTests 756、ApplicationTests 892、WebAPITests 341，失敗 0；`bunx vitest run` 67 個檔 1007 個測試通過；`bunx vue-tsc --noEmit` 無錯誤；`bunx quasar build` 成功。
+2026-11-06：`dotnet test backend --filter "Category!=Benchmark"` 通過，DomainTests 756、ApplicationTests 892、WebAPITests 341，失敗 0；`bunx vitest run` 67 個檔 1007 個測試通過；`bunx vue-tsc --noEmit` 無錯誤；`bunx quasar build` 成功。
 
 ## 第二段：儀表板（2026-11-06）
 
 ### 自動測試
 
-- `dotnet test poc/backend/DynamicModules.sln`：DomainTests 769、ApplicationTests 903、WebAPITests 402，失敗 0。
+- `dotnet test backend/DynamicModules.sln`：DomainTests 769、ApplicationTests 903、WebAPITests 402，失敗 0。
 - `bun run test`：90 個檔 1275 個測試通過；`bun run typecheck` 無錯誤；`bun run build` 成功。
 - 涵蓋：版面格式與卡片選項驗證、個人版與 `hasUpdate`、還原、指派與排序、版本衝突 409、管理員路由 403、看不到的報表不能放上卡片、前 N 名／累計占比／與前幾期比較的計算、卡片狀態（`unshared`、`reportGone`、無權限）、刪除報表的引用檢查、Demo 儀表板（各角色可見性與卡片可執行）；前端另有首頁嵌入與回退、最近開啟紀錄（含 `localStorage` 丟例外）、拖放存檔、暫時篩選不存檔、還原確認、窄螢幕單欄、管理頁指派與排序、四語系鍵值一致。
 

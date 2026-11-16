@@ -12,11 +12,11 @@ public class PolicyCatalogFixtureTests
     private static string FixturePath()
     {
         var dir = new DirectoryInfo(AppContext.BaseDirectory);
-        while (dir is not null && !File.Exists(Path.Combine(dir.FullName, "poc", "shared", "policy-catalog.json")))
+        while (dir is not null && !File.Exists(Path.Combine(dir.FullName, "shared", "policy-catalog.json")))
             dir = dir.Parent;
         return dir is null
-            ? throw new FileNotFoundException("找不到 poc/shared/policy-catalog.json")
-            : Path.Combine(dir.FullName, "poc", "shared", "policy-catalog.json");
+            ? throw new FileNotFoundException("找不到 shared/policy-catalog.json")
+            : Path.Combine(dir.FullName, "shared", "policy-catalog.json");
     }
 
     [Fact]

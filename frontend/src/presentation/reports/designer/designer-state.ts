@@ -52,7 +52,7 @@ export function toDefinition(s: DesignerState): ReportDefinition {
   };
 }
 
-/** 運算子取自 poc/shared/filter-operators.json；日期結果的公式與彙總用 `:date` 版本。 */
+/** 運算子取自 shared/filter-operators.json；日期結果的公式與彙總用 `:date` 版本。 */
 export function operatorsOf(f: Pick<CatalogField, 'type' | 'isDate'>): FilterOperator[] {
   const table = sharedOperators as Record<string, FilterOperator[]>;
   return table[(f.type === 'formula' || f.type === 'rollup') && f.isDate ? `${f.type}:date` : f.type] ?? [];

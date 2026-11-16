@@ -1,6 +1,6 @@
 ---
 paths:
-  - "poc/backend/**"
+  - "backend/**"
 trigger: always_on
 ---
 

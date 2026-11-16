@@ -16,7 +16,7 @@ export interface RuleState {
   failedValidations: { targets: number[]; message?: I18nText }[];
 }
 
-// Semantics mirror the backend ConditionEvaluator / RuleEngine; poc/shared/rule-cases.json is the single truth.
+// Semantics mirror the backend ConditionEvaluator / RuleEngine; shared/rule-cases.json is the single truth.
 
 type Kind = 'number' | 'date' | 'text';
 interface IndexValue { kind: Kind; value: number | string }

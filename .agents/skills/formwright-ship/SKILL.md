@@ -17,13 +17,13 @@ bash scripts/unattended/ci-wait.sh <sha>
 ```
 
 - `ci-wait.sh` 背景跑，最後一行 `success` 才算過；之前幾行是各 job 的結論與分鐘數，失敗的 job 另列 `FAILED`。
-- 範圍依改動自動決定：只改文件不跑；只改 `poc/frontend/` 只跑前端 test／typecheck／build；動到 `poc/backend/`、`poc/shared/`、Dockerfile 或 workflow 就全跑。
+- 範圍依改動自動決定：只改文件不跑；只改 `frontend/` 只跑前端 test／typecheck／build；動到 `backend/`、`shared/`、Dockerfile 或 workflow 就全跑。
 - 失敗先看 log（`gh run view <id> --log-failed`）：真的壞就修、推上去重跑；逾時型、單獨重跑會過的照 `docs/ai/testing.md`「異常判讀」處理，重跑用 `gh run rerun <id> --failed`。
 - 本機的 `bash scripts/unattended/gate.sh <worktree>` 留作備援（GitHub 不能用時），不再每段跑。
 
 ## 1.5 本機走查（有畫面的改動）
 
-`poc/frontend` 有變更、或後端改到畫面讀的 API 時要做；純後端、純文件跳過。
+`frontend` 有變更、或後端改到畫面讀的 API 時要做；純後端、純文件跳過。
 
 ```bash
 bash scripts/unattended/local-demo.sh <worktree 絕對路徑>
@@ -48,13 +48,13 @@ LEAK_DENYLIST=<repo 外的清單檔> bash scripts/unattended/leak-scan.sh origin
 git fetch -q && git merge-base --is-ancestor origin/main HEAD && git push -q origin HEAD:main
 ```
 
-- 不成立就 rebase 到 origin/main；rebase 後 `poc/` 有變，推上分支讓 CI 重跑，只有文件衝突就不重跑。
+- 不成立就 rebase 到 origin/main；rebase 後 `backend/`、`frontend/`、`shared/` 有變，推上分支讓 CI 重跑，只有文件衝突就不重跑。
 - 不用 merge commit、不 force push。推完 `git rev-parse origin/main` 確認等於 HEAD。
-- 推進 main 的 commit 必須就是 CI 通過的那個 sha（fast-forward 保證這點）。沒動到 `poc/` 的變更 CI 會略過測試，外洩掃描照跑。
+- 推進 main 的 commit 必須就是 CI 通過的那個 sha（fast-forward 保證這點）。沒動到 `backend/`、`frontend/`、`shared/`、Dockerfile 或 workflow 的變更 CI 會略過測試，外洩掃描照跑。
 
 ## 4. 等部署
 
-`poc/` 有變更才會觸發 Render 部署；只改 docs、`.claude/` 等不會部署，跳過這步。
+`backend/`、`frontend/`、`shared/` 或 `Dockerfile.demo` 有變更才會觸發 Render 部署（`render.yaml` 的 `buildFilter`）；只改 docs、`.claude/` 等不會部署，跳過這步。
 
 ```bash
 bash scripts/unattended/wait-deploy.sh <sha>

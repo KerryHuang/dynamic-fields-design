@@ -4,7 +4,7 @@
 # 前景執行到被停止為止（請用背景執行）；就緒時印 READY。資料庫另放 local-e2e.db，不碰 poc.db。
 set -u
 ROOT="${1:-$(git rev-parse --show-toplevel)}"
-cd "$ROOT/poc" || exit 2
+cd "$ROOT" || exit 2
 
 for port in 5180 9180; do
   if lsof -nP -iTCP:"$port" -sTCP:LISTEN >/dev/null 2>&1; then
@@ -14,7 +14,7 @@ for port in 5180 9180; do
 done
 [ -d frontend/node_modules ] || (cd frontend && bun install) || exit 1
 
-DB="$ROOT/poc/backend/data/local-e2e.db"
+DB="$ROOT/backend/data/local-e2e.db"
 rm -f "$DB" "$DB-shm" "$DB-wal"
 export ConnectionStrings__Dynamic="Data Source=$DB" ASPNETCORE_ENVIRONMENT=Development
 API=backend/src/DynamicModules.WebAPI
@@ -23,7 +23,7 @@ echo "產生 Demo 資料 ..."
 dotnet run --project "$API" -- --generate-demo-data >/dev/null 2>&1 || { echo "Demo 資料產生失敗" >&2; exit 1; }
 
 # 後端輸出寫到 local-e2e.log（走查要看 JSON log 時加環境變數 Logging__Console__FormatterName=json 啟動）
-LOG="$ROOT/poc/backend/data/local-e2e.log"
+LOG="$ROOT/backend/data/local-e2e.log"
 rm -f "$LOG"
 Demo__LoginEnabled=true dotnet run --no-build --project "$API" >"$LOG" 2>&1 &
 BACKEND=$!

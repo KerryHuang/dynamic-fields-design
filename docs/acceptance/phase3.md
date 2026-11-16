@@ -8,12 +8,12 @@
 
 | 指令 | 結果 |
 |---|---|
-| `dotnet test poc/backend --filter Phase3_Scenario` | 通過（1/1） |
-| `dotnet test poc/backend`（不含 Benchmark） | 通過：DomainTests 120、ApplicationTests 220、WebAPITests 47，共 387，失敗 0 |
-| `cd poc/frontend && bunx vitest run` | 通過：27 個檔案、110 個測試 |
-| `cd poc/frontend && bunx vue-tsc --noEmit` | 通過（無錯誤） |
+| `dotnet test backend --filter Phase3_Scenario` | 通過（1/1） |
+| `dotnet test backend`（不含 Benchmark） | 通過：DomainTests 120、ApplicationTests 220、WebAPITests 47，共 387，失敗 0 |
+| `cd frontend && bunx vitest run` | 通過：27 個檔案、110 個測試 |
+| `cd frontend && bunx vue-tsc --noEmit` | 通過（無錯誤） |
 
-`Phase3_Scenario`（`poc/backend/tests/DynamicModules.WebAPITests/Phase3AcceptanceTests.cs`）以 API 走完下列情境，每步皆斷言：
+`Phase3_Scenario`（`backend/tests/DynamicModules.WebAPITests/Phase3AcceptanceTests.cs`）以 API 走完下列情境，每步皆斷言：
 
 1. `admin` 建模組 `repair-request` 並啟用：申請人（標題欄，`text`）、故障類別（`enum`，選項「模具損壞」「機台異常」「外包」）、預估費用（`currency`，必填、可排序）、說明（`textarea`）
 2. 用 `PUT /modules/repair-request/permissions` 設定：`sales` 為 `Read`／`Add`／`Edit`、範圍 `Own`、沒有 `Pricing`；`sales-manager` 為 `Read`／`Add`／`Edit`／`Delete`／`Pricing`、範圍 `All`；`floor` 為 `Read`／`Add`／`Edit`、範圍 `Own`，「說明」唯讀；選項「外包」只給 `sales-manager`
@@ -27,7 +27,7 @@
 
 ## 實機走查
 
-執行 `poc/start.command` 後在瀏覽器走上述情境。截圖將存於 `docs/acceptance/phase3/`。
+執行 `./start.command` 後在瀏覽器走上述情境。截圖將存於 `docs/acceptance/phase3/`。
 
 | # | 項目 | 結果 | 截圖 |
 |---|---|---|---|

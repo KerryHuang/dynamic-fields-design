@@ -1,6 +1,6 @@
 ---
 paths:
-  - "poc/frontend/**"
+  - "frontend/**"
 ---
 
 # 前端（Vue 3＋Quasar＋bun）

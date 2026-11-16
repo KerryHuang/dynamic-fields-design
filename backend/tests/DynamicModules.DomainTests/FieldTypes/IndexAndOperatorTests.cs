@@ -15,11 +15,11 @@ public class IndexAndOperatorTests
     private static string FixturePath()
     {
         var dir = new DirectoryInfo(AppContext.BaseDirectory);
-        while (dir is not null && !File.Exists(Path.Combine(dir.FullName, "poc", "shared", "filter-operators.json")))
+        while (dir is not null && !File.Exists(Path.Combine(dir.FullName, "shared", "filter-operators.json")))
             dir = dir.Parent;
         return dir is null
-            ? throw new FileNotFoundException("找不到 poc/shared/filter-operators.json")
-            : Path.Combine(dir.FullName, "poc", "shared", "filter-operators.json");
+            ? throw new FileNotFoundException("找不到 shared/filter-operators.json")
+            : Path.Combine(dir.FullName, "shared", "filter-operators.json");
     }
 
     private static string CamelCase(FilterOperator op) => char.ToLowerInvariant(op.ToString()[0]) + op.ToString()[1..];

@@ -6,20 +6,20 @@
 
 | 專案 | 位置 | 內容 |
 |---|---|---|
-| DomainTests | `poc/backend/tests/DynamicModules.DomainTests` | 純領域邏輯，最快 |
-| ApplicationTests | `poc/backend/tests/DynamicModules.ApplicationTests` | 服務層、EF＋SQLite |
-| WebAPITests | `poc/backend/tests/DynamicModules.WebAPITests` | 整合測試，最慢、最怕 CPU 爭用 |
-| 前端 | `poc/frontend`（`*.vitest.spec.ts`） | vitest、vue-tsc、quasar build |
+| DomainTests | `backend/tests/DynamicModules.DomainTests` | 純領域邏輯，最快 |
+| ApplicationTests | `backend/tests/DynamicModules.ApplicationTests` | 服務層、EF＋SQLite |
+| WebAPITests | `backend/tests/DynamicModules.WebAPITests` | 整合測試，最慢、最怕 CPU 爭用 |
+| 前端 | `frontend`（`*.vitest.spec.ts`） | vitest、vue-tsc、quasar build |
 
 ## 開發時：只跑窄範圍
 
 ```bash
 # 後端：指定一個專案＋filter，不跑整個 sln
-cd poc/backend
+cd backend
 dotnet test tests/DynamicModules.ApplicationTests --filter "FullyQualifiedName~TaskRule"
 
 # 前端：指定檔案，限制 worker 數
-cd poc/frontend
+cd frontend
 bunx vitest run src/application/dynamic/queries --maxWorkers=2
 bun run typecheck
 ```

@@ -33,7 +33,7 @@
   </ItemGroup>
 
   <ItemGroup>
-    <!-- 內建應用程式套件（poc/backend/apps/*.app.json）複製到輸出目錄的 apps/；目前出貨 crm-sales，目錄也可以是空的 -->
+    <!-- 內建應用程式套件（backend/apps/*.app.json）複製到輸出目錄的 apps/；目前出貨 crm-sales，目錄也可以是空的 -->
     <None Include="..\..\apps\*.app.json" Link="apps\%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 

@@ -8,13 +8,13 @@
 
 | 指令 | 結果 |
 |---|---|
-| `dotnet test poc/backend --filter Phase8` | 通過（2/2） |
-| `dotnet test poc/backend` | 通過：DomainTests 693、ApplicationTests 649、WebAPITests 143，共 1485，失敗 0 |
-| `cd poc/frontend && bunx vitest run` | 通過：50 個檔案、823 個測試 |
-| `cd poc/frontend && bunx vue-tsc --noEmit` | 通過（無錯誤） |
-| `cd poc/frontend && bunx quasar build` | 通過（SPA 編譯成功） |
+| `dotnet test backend --filter Phase8` | 通過（2/2） |
+| `dotnet test backend` | 通過：DomainTests 693、ApplicationTests 649、WebAPITests 143，共 1485，失敗 0 |
+| `cd frontend && bunx vitest run` | 通過：50 個檔案、823 個測試 |
+| `cd frontend && bunx vue-tsc --noEmit` | 通過（無錯誤） |
+| `cd frontend && bunx quasar build` | 通過（SPA 編譯成功） |
 
-兩個情境都在 `poc/backend/tests/DynamicModules.WebAPITests/Phase8AcceptanceTests.cs`，每個測試用一個新的資料庫（內建範本的模組代碼固定，共用會互相撞），假時鐘固定在 2026-11-05 09:00。
+兩個情境都在 `backend/tests/DynamicModules.WebAPITests/Phase8AcceptanceTests.cs`，每個測試用一個新的資料庫（內建範本的模組代碼固定，共用會互相撞），假時鐘固定在 2026-11-05 09:00。
 
 `Phase8_DemoScenario1` 對應 spec §13.2 的 Demo 情境一，以 API 走完下列步驟，每步皆斷言：
 

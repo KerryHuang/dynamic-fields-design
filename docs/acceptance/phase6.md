@@ -8,13 +8,13 @@
 
 | 指令 | 結果 |
 |---|---|
-| `dotnet test poc/backend --filter Phase6_Scenario` | 通過（1/1） |
-| `dotnet test poc/backend` | 通過：DomainTests 693、ApplicationTests 450、WebAPITests 101，共 1244，失敗 0 |
-| `cd poc/frontend && bunx vitest run` | 通過：44 個檔案、762 個測試 |
-| `cd poc/frontend && bunx vue-tsc --noEmit` | 通過（無錯誤） |
-| `cd poc/frontend && bunx quasar build` | 通過（SPA 編譯成功） |
+| `dotnet test backend --filter Phase6_Scenario` | 通過（1/1） |
+| `dotnet test backend` | 通過：DomainTests 693、ApplicationTests 450、WebAPITests 101，共 1244，失敗 0 |
+| `cd frontend && bunx vitest run` | 通過：44 個檔案、762 個測試 |
+| `cd frontend && bunx vue-tsc --noEmit` | 通過（無錯誤） |
+| `cd frontend && bunx quasar build` | 通過（SPA 編譯成功） |
 
-`Phase6_Scenario`（`poc/backend/tests/DynamicModules.WebAPITests/Phase6AcceptanceTests.cs`）固定時鐘為 2026-11-05，以 API 走完下列情境，每步皆斷言：
+`Phase6_Scenario`（`backend/tests/DynamicModules.WebAPITests/Phase6AcceptanceTests.cs`）固定時鐘為 2026-11-05，以 API 走完下列情境，每步皆斷言：
 
 1. `admin` 建 `order`（訂單）：
    - 訂單編號：自動編號 `SO-{yyyyMM}-{0000}`，當標題。
@@ -55,7 +55,7 @@
 
 ## 實機走查
 
-2026-11-04 以 `poc/start.command` 啟動，在 Chrome 走完下列 9 項。走查用的模組以 API 建立，設定與 `Phase6_Scenario` 相同：
+2026-11-04 以 `./start.command` 啟動，在 Chrome 走完下列 9 項。走查用的模組以 API 建立，設定與 `Phase6_Scenario` 相同：
 
 - `p6-order`（P6 訂單）
 - `p6-line`（P6 訂單明細，明細關聯到 `p6-order`）

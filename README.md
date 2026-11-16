@@ -65,7 +65,7 @@ Formwright 讓你在畫面上自己定義模組與欄位，系統自動長出列
 **自己架設**：用容器，兩條指令。環境變數、volume 與正式環境注意事項見[部署指南](docs/deploy.md)。
 
 ```bash
-cd poc && docker build -t dynamic-modules .
+docker build -t dynamic-modules .
 docker run -p 8080:8080 -e Auth__InitialAdminPassword=請改成你的密碼 dynamic-modules
 ```
 

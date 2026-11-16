@@ -6,7 +6,7 @@ using LoadTest;
 using Microsoft.EntityFrameworkCore;
 
 // 用法：
-//   dotnet run --project poc/backend/tools/LoadTest -c Release -- seed --db <path> [--years 10] [--per-year 300000] [--accounts 300] [--customers 20000]
+//   dotnet run --project backend/tools/LoadTest -c Release -- seed --db <path> [--years 10] [--per-year 300000] [--accounts 300] [--customers 20000]
 //   ... -- run --db <path> [--users 20] [--duration 60] [--phases solo,mixed,stress,writes] [--out report.json]
 //   ... -- check --db <path>        印出 pragma、檔案大小、筆數
 //   ... -- selfcheck                驗證批次灌入的列與 CreateRecordHandler 產生的一致

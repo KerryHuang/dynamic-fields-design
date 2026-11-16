@@ -21,7 +21,7 @@ public class NoBusinessWordsTests
     {
         var dir = new DirectoryInfo(AppContext.BaseDirectory);
         while (dir is not null && !Directory.Exists(Path.Combine(dir.FullName, "src", "DynamicModules.Application"))) dir = dir.Parent;
-        return dir?.FullName ?? throw new DirectoryNotFoundException("找不到 poc/backend");
+        return dir?.FullName ?? throw new DirectoryNotFoundException("找不到 backend");
     }
 
     private static IEnumerable<string> Files()

@@ -6,7 +6,7 @@ using DynamicModules.Domain.FieldTypes;
 namespace DynamicModules.Domain.Rules;
 
 /// <summary>
-/// 對記錄值求值已解析的條件（語意見 poc/shared/rule-cases.json，前端有同樣的實作）。
+/// 對記錄值求值已解析的條件（語意見 shared/rule-cases.json，前端有同樣的實作）。
 /// 左邊欄位沒有值時只有 isEmpty、ne、notIn 成立；fieldRef 的對方沒有值時只有 ne 成立。
 /// </summary>
 public static class ConditionEvaluator

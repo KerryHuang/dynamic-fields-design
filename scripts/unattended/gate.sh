@@ -6,7 +6,7 @@ set -u
 ROOT="${1:-$(git rev-parse --show-toplevel)}"
 fail=0
 
-cd "$ROOT/poc/backend" || exit 2
+cd "$ROOT/backend" || exit 2
 for p in DomainTests ApplicationTests WebAPITests; do
   start=$(date +%s)
   dotnet test "tests/DynamicModules.$p" 2>&1 | grep -E "^(Passed|Failed)!|^ +Failed [A-Za-z]" | tail -6
@@ -15,7 +15,7 @@ for p in DomainTests ApplicationTests WebAPITests; do
   [ "$code" -ne 0 ] && fail=1
 done
 
-cd "$ROOT/poc/frontend" || exit 2
+cd "$ROOT/frontend" || exit 2
 bun run test 2>&1 | grep -E "Tests +[0-9]|^ *(FAIL|×) " | tail -6; code=${PIPESTATUS[0]}; echo "test exit=$code"; [ "$code" -ne 0 ] && fail=1
 bun run typecheck >/dev/null 2>&1; code=$?; echo "typecheck exit=$code"; [ "$code" -ne 0 ] && fail=1
 bun run build >/dev/null 2>&1; code=$?; echo "build exit=$code"; [ "$code" -ne 0 ] && fail=1

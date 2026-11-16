@@ -8,12 +8,12 @@
 
 | 指令 | 結果 |
 |---|---|
-| `dotnet test poc/backend --filter Phase1_Scenario` | 通過（1/1） |
-| `dotnet test poc/backend` | 通過：DomainTests 69、ApplicationTests 86、WebAPITests 28，共 183，失敗 0 |
-| `cd poc/frontend && bunx vitest run` | 通過：9 個檔案、35 個測試 |
-| `cd poc/frontend && bunx vue-tsc --noEmit` | 通過（無錯誤） |
+| `dotnet test backend --filter Phase1_Scenario` | 通過（1/1） |
+| `dotnet test backend` | 通過：DomainTests 69、ApplicationTests 86、WebAPITests 28，共 183，失敗 0 |
+| `cd frontend && bunx vitest run` | 通過：9 個檔案、35 個測試 |
+| `cd frontend && bunx vue-tsc --noEmit` | 通過（無錯誤） |
 
-`Phase1_Scenario`（`poc/backend/tests/DynamicModules.WebAPITests/Phase1AcceptanceTests.cs`）以 API 走完下列情境，每步皆斷言：
+`Phase1_Scenario`（`backend/tests/DynamicModules.WebAPITests/Phase1AcceptanceTests.cs`）以 API 走完下列情境，每步皆斷言：
 
 1. 建立模組 `repair-request`（模具維修申請），代碼為 `DYN00001`
 2. 加區塊「故障資訊」
@@ -26,7 +26,7 @@
 
 ## 實機步驟
 
-執行 `poc/start.command` 後在瀏覽器手動走同一情境。截圖存於 `docs/acceptance/phase1/`。
+執行 `./start.command` 後在瀏覽器手動走同一情境。截圖存於 `docs/acceptance/phase1/`。
 
 | # | 步驟 | 結果 | 截圖 |
 |---|---|---|---|
