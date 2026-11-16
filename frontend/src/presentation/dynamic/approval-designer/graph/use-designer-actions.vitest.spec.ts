@@ -77,6 +77,22 @@ describe('useDesignerActions', () => {
     expect(designer.issues.value?.errors.nodes.a).toHaveLength(1);
   });
 
+  it('live validation of a flow without a target state marks it quietly: no selection jump, no issue list', async () => {
+    const { designer, actions } = setup(null);
+    designer.editMeta({ toOptionId: null });
+    designer.select({ kind: 'node', id: 'approval-1' });
+    await actions.validate(); // 按驗證：有明確動作，拉回流程層並開清單
+    expect(designer.selection.value).toEqual({ kind: 'flow' });
+    expect(actions.issuesOpen.value).toBe(true);
+    designer.select({ kind: 'node', id: 'approval-1' });
+    actions.issuesOpen.value = false;
+    designer.editMeta({ name: { 'zh-TW': 'x' } }); // 之後的修改停 0.8 秒重驗
+    await vi.advanceTimersByTimeAsync(REVALIDATE_MS);
+    expect(designer.issues.value?.errors.flow.length).toBeGreaterThan(0);
+    expect(designer.selection.value).toEqual({ kind: 'node', id: 'approval-1' });
+    expect(actions.issuesOpen.value).toBe(false);
+  });
+
   it('publish with errors does not publish and opens the list', async () => {
     api.validateApprovalFlow.mockResolvedValue(nodeError);
     const { actions } = setup(flow());

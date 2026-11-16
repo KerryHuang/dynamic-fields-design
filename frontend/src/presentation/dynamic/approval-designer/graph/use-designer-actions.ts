@@ -56,20 +56,22 @@ export function useDesignerActions(designer: GraphDesigner, ctx: ActionContext) 
     return e ? Object.values(e.nodes).flat().length + Object.values(e.edges).flat().length + e.flow.length : 0;
   });
 
-  function setFlowIssue(errors: Record<string, string[]>) {
+  /** 標在流程層。`quiet`（即時驗證）只更新標示，不搶選取、不開錯誤清單。 */
+  function setFlowIssue(errors: Record<string, string[]>, quiet = false) {
     const def = designer.state.value?.definition;
     if (!def) return;
     designer.issues.value = mapGraphIssues(errors, [], def);
+    if (quiet) return;
     designer.select({ kind: 'flow' });
     issuesOpen.value = true;
   }
 
   /** 送出的內容；目標狀態沒選就不送（回 null，標在流程層）。優先序：目標狀態沒變用目前的，換了排到那個目標狀態的最後。 */
-  function buildInput(force = false): { input: ApprovalFlowDraftInput; sent: NonNullable<ReturnType<GraphDesigner['output']>>; sentJson: string } | null {
+  function buildInput(force = false, quiet = false): { input: ApprovalFlowDraftInput; sent: NonNullable<ReturnType<GraphDesigner['output']>>; sentJson: string } | null {
     const out = designer.output();
     const m = designer.meta.value;
     if (!out || !m) return null;
-    if (m.toOptionId == null) { setFlowIssue({ toOptionId: [ctx.t('approval.designer.basic.targetRequired')] }); return null; }
+    if (m.toOptionId == null) { setFlowIssue({ toOptionId: [ctx.t('approval.designer.basic.targetRequired')] }, quiet); return null; }
     const s = designer.server.value;
     const priority = s.isNew ? nextPriority(ctx.flows(), m.toOptionId)
       : m.toOptionId === s.toOptionId ? s.priority : nextPriority(ctx.flows(), m.toOptionId, s.key);
@@ -97,7 +99,7 @@ export function useDesignerActions(designer: GraphDesigner, ctx: ActionContext) 
 
   /** 乾跑驗證；回應序號過期（又有新的請求）就丟掉。`quiet` 不開錯誤清單（即時驗證）。 */
   async function validate(quiet = false): Promise<ApprovalFlowValidation | null> {
-    const built = buildInput();
+    const built = buildInput(false, quiet);
     if (!built) return null;
     const mine = ++seq;
     try {
