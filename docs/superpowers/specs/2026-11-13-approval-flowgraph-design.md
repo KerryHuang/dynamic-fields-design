@@ -427,7 +427,7 @@
 - G7 補一條：同一分支節點的各分支不得共用節點、只能在配對的匯合會合（`branchesMerge`），否則共用的節點在執行時會被到達兩次（J21）。
 - 兩道閘門是兩件事。區域分析的閘門：只有 G3／G4／G5（可達、可結束、環）任一錯誤才略過並行區的分析（G7 區域、G8、G12、巢狀深度），因為拓撲不可靠時區域推導沒意義；G1、G2 的錯誤不影響它（例如 G1 `attrNotAllowed` 可以跟 G8、G12 同時回報，共用案例 AG-059），G6、G7 配對、G13 數量也照跑。警告的閘門：G1–G5、G7、G8 任一錯誤就不算警告（警告建立在結構正確的圖上；並行區不合法時，W1、W2 越過匯合的搜尋可能不會終止，存檔驗證路徑就會 StackOverflow，AG-090 固定這個情況）。
 - G13 增補：流程圖至少一個簽核節點（`approvalNodesNone`，U19）；簽核節點數與每個分支節點的分支數「超過政策而且比舊版大才擋」，舊版是 sequence 時先用 §7.8 轉換再比（節點代號＝關卡代號，J26）。
-- W1–W3 的實作解讀（J27）：「經過簽核」只看節點種類是不是簽核節點，有略過條件的簽核節點照樣算經過；W1、W2 找「可能不經簽核就通過」的路線：條件節點任一出線都可能被選中；並行區依匯合的完成語意——全部到齊要每條分支都能免簽到達匯合才算免簽，任一到齊只要有一條分支能免簽就算，巢狀並行區照同一規則遞迴；搜尋從並行區內抵達配對匯合時（例如區內條件節點的預設線直通匯合），同樣依完成語意判斷能否越過：全部到齊要其餘每條兄弟分支也能免簽到達，任一到齊本分支到達即可，通過後從匯合的出線繼續往結束走，巢狀時逐層同理（AG-084 至 AG-089、AG-091（兄弟是空分支）、AG-092（外層任一到齊、內層全部到齊）固定；AG-082 另含內層條件節點的 W2）。共用案例 AG-082 固定這個語意；W3 的「會合點」是匯合節點（連搜尋起點是匯合也停，AG-083）或有兩條以上入線的節點，出線直接指向的非匯合節點一定算在那條出線上。警告只出現在共用案例與 Domain 的回傳，Application 的存檔回應不帶（fg3 的發布回應才帶）；有 G1–G5、G7、G8 錯誤時不算警告。設計 §7.1 的範例其預設線經通知節點直接到結束，所以會有一則 W2。
+- W1–W3 的實作解讀（J27）：「經過簽核」只看節點種類是不是簽核節點，有略過條件的簽核節點照樣算經過；W1、W2 找「可能不經簽核就通過」的路線：條件節點任一出線都可能被選中；並行區依匯合的完成語意——全部到齊要每條分支都能免簽到達匯合才算免簽，任一到齊只要有一條分支能免簽就算，巢狀並行區照同一規則遞迴；搜尋從並行區內抵達配對匯合時（例如區內條件節點的預設線直通匯合），同樣依完成語意判斷能否越過：全部到齊要其餘每條兄弟分支也能免簽到達，任一到齊本分支到達即可，通過後從匯合的出線繼續往結束走，巢狀時逐層同理（AG-084 至 AG-089、AG-091（兄弟是空分支）、AG-092（外層任一到齊、內層全部到齊）固定；AG-082 另含內層條件節點的 W2）。共用案例 AG-082 固定這個語意；W3 的「會合點」是匯合節點（連搜尋起點是匯合也停，AG-083）或有兩條以上入線的節點，出線直接指向的非匯合節點一定算在那條出線上。警告只出現在共用案例、Domain 的回傳，以及 fg3a 起的乾跑驗證與發布回應（`ApprovalDefinitionValidator.ValidateWithWarningsAsync`，有任何錯誤時為空，鍵加 `definition.` 前綴）；既有的存檔回應（`PUT approval-flows/{key}`）仍不帶；有 G1–G5、G7、G8 錯誤時不算警告。設計 §7.1 的範例其預設線經通知節點直接到結束，所以會有一則 W2。
 - 通知範本語法（U21，Domain `ApprovalNotifyTemplate`）：`{title}`、`{flow}`、`{initiator}`、`{node}`、`{f:<數字>}` 是佔位符；其他「左大括號、不含大括號的文字、右大括號」是錯誤，單獨的大括號照字面，不提供跳脫語法。通知節點的 `initiatorManager` 收件人沒填層數時照 §12.1 預設第 1 層，再驗政策上限。
 - fg1 期間 graph 在 Application 驗證跑完整規則之後，固定再加一則 `shape` 錯誤擋住（J22），執行期另有守門（J23）；兩者都已在 fg2g2 刪除，API 現在接受 graph。例外仍成立（主控裁決，技術；fg2g2 以測試確認）：資料庫裡已有的 graph 只把 `active` 由啟用改成停用、定義沒變時，既有的「只停用」路徑不重跑定義驗證（讓設計者能先停掉引用壞掉的流程）；一旦定義有改就照常驗證，不合法就被拒。測試 `Update_ExistingGraph_OnlyDeactivate_Allowed_DefinitionChange_Rejected` 固定這個行為。
 
@@ -769,7 +769,7 @@
 |---|---|---|---|
 | fg1 | （實作切成 fg1a 資料欄位、只有草稿的流程、執行期守門、分支數政策；fg1b Domain 型別、參照、轉換；fg1c 結構驗證與共用案例；fg1d 警告、Application 驗證、總收）圖形定義地基：Domain 型別、結構驗證 G1–G13 與警告、共用案例檔、sequence → graph 轉換、閉包與鎖定欄位讀 graph、migration `ApprovalGraph`、政策 `approval.maxBranches`；後端允許流程列沒有已發布版本（§10.8 列的程式假設）；API 仍拒收 graph | 無 | 政策頁多一項 |
 | fg2 | 圖形執行引擎：推進、並行、兩種匯合、分支取消、退回與撤回的延伸、重新比對、預覽、以實例序列化的併發（兩種資料庫的並發測試）；API 接受 graph 存檔與試算；後加簽、轉交在分支內的行為（實作切成 fg2a1 Domain 執行期地基、fg2a2 路線比較與測試輔助、fg2b 推進引擎與送出、fg2c 同意與重新比對與退回撤回終止、fg2d 加簽轉交改派與檢視、fg2e 預覽與試算路徑、fg2f 以實例序列化的併發、fg2g1 等價性、fg2g2 開放 API 與收尾） | fg1 | 只有 API（單據頁時間軸的取消說明與送出前預覽的任一到齊註記，隨 API 建的 graph 單據出現） |
-| fg3 | 流程圖設計器：Vue Flow、設計頁、節點面板、屬性面板、驗證標示、試算疊圖、自動排版、四種寬度、草稿與發布（依 U6）；移除舊關卡編輯 | fg2 | 是 |
+| fg3 | 流程圖設計器：Vue Flow、設計頁、節點面板、屬性面板、驗證標示、試算疊圖、自動排版、四種寬度、草稿與發布（依 U6）；移除舊關卡編輯（實作切成 fg3a 後端草稿、發布、乾跑驗證端點；fg3b 前端地基；fg3c 設計頁看圖與改屬性；fg3d 試算疊圖；fg3e 結構編輯；fg3f 切換、移除舊對話框與文件總收；fg3g 進度圖讀手排版面，見 J63） | fg2 | 是（fg3a、fg3b 畫面不變） |
 | fg4 | 單據頁進度圖：記錄簽核回應加 `graph`、舊實例轉直線圖、四種寬度、並行時的簽核摘要文字（實作切成 fg4a 並行摘要文案、fg4b 後端進度圖資料、fg4c Vue Flow 與寬螢幕進度圖、fg4d 手機縮圖與全螢幕、節點細節、文件總收；fg4b、fg4c 超過 1000 行，主控裁決不再切） | fg2；使用者 2026-11-15 決定排在 fg3 之前，Vue Flow 由 fg4 引入 | 是 |
 | fg5 | 通知節點：驗證、推進、收件人解析、範本與逐人遮蔽、`Notification.DataJson` 與前端顯示、設計器節點與範本編輯 | fg2、fg3 | 是 |
 | fg6 | 收尾：既有流程批次轉換、套件格式升版（graph 進套件、舊格式轉換）、`app.schema.json`、手冊章節、簽核設計的其餘對應段落（§20.1；B27 與簽核設計 §4.3、§8.4 已於 fg2g2 完成）、功能清單 | fg3、a5 | 是（版本號加一） |
@@ -792,7 +792,7 @@
 
 ## 19. 主控代為決定的事
 
-### 19.1 使用者行為類（U1–U13 使用者於 2026-11-13 確認；U14–U36 使用者於 2026-11-15 確認；U37–U48 使用者於 2026-11-16 確認）
+### 19.1 使用者行為類（U1–U13 使用者於 2026-11-13 確認；U14–U36 使用者於 2026-11-15 確認；U37–U64 使用者於 2026-11-16 確認）
 
 - **U1** 簽核節點保留「略過條件」，舊流程的關卡條件轉成這個屬性，才能轉成直線圖（§7.3）。
 - **U2** 不允許迴圈，流程圖必須無環（§8.11）。
@@ -853,6 +853,25 @@
 - **U48** 進度圖「進行中」沿用時間軸的橙色（`warning`）與沙漏，其他有對應的狀態也取同一份對照；§11.1 狀態表原稿的「主色、時鐘」作廢。
 
 
+**fg3 計畫階段的行為決定（使用者已確認，2026-11-16，全部照推薦；推翻時改對應程式與案例；fg3 計畫的 U49–U64 直接沿用編號）：**
+
+- **U49** 在線上插入節點時自動帶出結構：分支插在 A→B 上產生「A → 分支 → 兩條分支各含一個新簽核節點 → 匯合（全部到齊）→ B」，條件插在 A→B 上產生「A → 條件 → 預設線直接到 B；另一條出線（標籤「條件 1」）經一個新簽核節點再到 B」（互斥路徑在 B 會合，不需匯合，J1）；不帶「兩條空分支」，因為同一對節點之間只能有一條線、一個分支最多一條空分支（G1、U20）。條件 1 的線先顯示灰色「未設定條件」，第一次按「驗證」或「發布」後才標紅（與 U54 一致）（§10.3）。
+- **U50** 刪除只有一條入線、一條出線的簽核、通知節點時，前一個節點直接連到後一個節點，線的標籤與條件留在前一段那條線上；接回會和既有的線重複（同一對節點已經有線）時不接、只刪。條件、分支、匯合節點刪除不自動接（分支刪除照設計詢問是否一併刪除配對的匯合與其間節點）；刪線不自動接（§10.3）。
+- **U51** 「新增流程」打開設計頁時已有「開始 → 簽核 1（直屬主管第 1 層、或簽）→ 結束」；新放的簽核節點名稱預填「簽核 n」（四語）、簽核人「直屬主管第 1 層」，條件、分支、匯合名稱留空；代碼、名稱、目標狀態在流程層面板填，第一次「儲存草稿」或「發布」才建立流程列（強制停用）；手機的「新增流程」得到同一張起始圖，只能改屬性（§10.2、§10.8）。
+- **U52** 未儲存的變更：手動「儲存草稿」、不自動存；有未存變更時工具列標「未儲存」，站內換頁（返回鈕、選單）跳自訂對話框「儲存草稿並離開／不存離開／取消」，關分頁、重新整理只有瀏覽器原生提示（§10.8）。
+- **U53** 名稱與目標狀態放流程層面板，隨「儲存草稿」或「發布」同一個請求送出、立即生效（旁標「立即生效，不等發布」）；代碼只在第一次儲存前可改。已發布的流程換目標狀態時，後端先用已發布版本的定義檢查放到新目標狀態上合不合法（入口約束），不合法整筆不存（草稿也不存），錯誤顯示在流程層面板（§10.8；後端 J65）。
+- **U54** 錯誤標示的時機：打開設計頁時不標錯；第一次按「驗證」或「發布」之後，每次修改停 0.8 秒重新向後端驗證、更新紅框與錯誤數徽章；拉線時不合法的連線當下就不給放（前端本地判斷）（§10.3）。
+- **U55** 發布：先乾跑驗證；有錯誤就不發布、展開錯誤清單；只有警告時跳確認對話框列出警告，按「仍要發布」才寫入；後端判斷這次發布會開新版本時，同一對話框加「發布後產生第 n 版，進行中的 N 張單照舊版走完」（n、N 由後端回，前端不自己比對）；只改座標或版本沒被用過不顯示；舊的關卡格式流程第一次在設計頁發布一律算「定義有改」（§10.8）。
+- **U56** 設計頁仍在主版面內（保留頂端列與通知鈴），側邊選單預設收起、可再打開，平板關閉選單的滑動開啟手勢，左上返回鈕回到「簽核流程」分頁；畫布滾輪與觸控板雙指滑動都是縮放、拖曳空白處平移、捏合也縮放（Vue Flow 預設）。不做 Figma 式（滾輪平移、Ctrl＋滾輪縮放）（§10.2）。
+- **U57** 分段上線期間的入口：fg3c 到 fg3e 只有流程圖格式的流程與只有草稿的流程走新設計頁，關卡格式照舊走舊對話框；fg3f 一次切換並移除舊對話框。每一條流程在任何時點只有一個編輯入口（§4、§17）。
+- **U58** 進度圖使用手排版面時，加簽小節點放在主節點右側一個欄距處、垂直置中，主節點右側的所有節點一起往右挪「小節點寬＋欄距」，同一主節點多個小節點依序排開；版面沒涵蓋定義裡的每個節點整張退回自動排版（§11.2）。
+- **U59** 條件出線標籤的欄距：自動排版只把「有標籤的線」起點右側第一個欄距加寬到 136px（約 8 個中文字），其餘維持 56px；以選用參數提供，不傳時輸出和現在完全相同；設計器從 fg3c 起用，進度圖 fg3g 起用（改變 fg4 已上線進度圖外觀，只限有條件標籤的圖）；手排版面下標籤寬度上限 160px，超過截斷、完整文字在滑鼠提示與屬性面板（§11.2；J62）。
+- **U60** 復原：結構、移動、屬性修改都算一步；連續在同一個文字欄打字只算一步（離開欄位時才記）；存草稿後仍可復原，發布或捨棄草稿後清空；上限 50 步（§10.3）。
+- **U61** 流程圖格式的卡片把「n 關」換成「n 個簽核節點」，有並行或條件時多一個「含分支」徽章，只有草稿的流程版本徽章寫「尚未發布」；狀態機分頁「目標狀態已掛 n 個流程」只算已發布的，另有只有草稿的寫「（另有 m 個未發布）」（§10.7）。
+- **U62** 只有讀取權的設計者可以進設計頁：畫布與所有面板唯讀（欄位停用、不能拖、沒有節點面板與把手），工具列只留「全圖」「節點清單」「試算」，不顯示儲存、發布、捨棄、驗證（§10.2、U7）。
+- **U63** 節點面板只列簽核、條件、分支、結束四種，不列匯合（匯合只隨分支自動產生，選取既有匯合仍可改到齊方式）；分支放到空白處同樣帶出配對匯合與兩條各含一個簽核節點的分支，只是不接前後的線，條件放到空白處只放條件節點本身（§10.3）。
+- **U64** 只有草稿、從未發布的流程，工具列不顯示「捨棄草稿」（後端也拒絕，409 `DraftOnlyUseDelete`），改在更多選單顯示「刪除流程」，確認後刪除並回到流程分頁（§10.8）。
+
 ### 19.2 技術類（主控決定）
 
 - **J1** 互斥路徑可以直接在同一節點會合，並行分支才需要匯合節點（§6.2）。
@@ -864,12 +883,12 @@
 - **J7** graph 的路線比較：條件節點改選出線即視為不同（§8.7）。
 - **J8** 送出時要求所有自選簽核節點都選好人（§8.9）。
 - **J9**（已由 J18 取代）初稿的節點實例層 `RowVersion`。
-- **J10** 驗證錯誤鍵以節點、線代號定位；前後端共用判斷案例檔（§9）。
+- **J10** 驗證錯誤鍵以節點、線代號定位；前後端共用判斷案例檔（§9）。（fg3：前端不移植結構驗證器，即時提示走後端乾跑驗證，見 J68）
 - **J11** 流程圖函式庫用 Vue Flow，動態載入、鎖定版本（§10.1）。
 - **J12** 自動排版自寫遞迴分層排版，不引入排版函式庫（§10.1）。
 - **J13** 流程圖設計器是全螢幕獨立路由，取代對話框的「關卡」段（§10.2）。
 - **J14** sequence → graph 轉換只在後端實作，設計器讀後端轉好的圖（§10.7）。
-- **J15** 草稿用樂觀鎖，後存者 409 可選擇覆蓋（§10.8）。
+- **J15** 草稿用樂觀鎖，後存者 409 可選擇覆蓋（§10.8）。（fg3：改用草稿隨機權杖加條件更新，不用流程的修改時間，見 J65）
 - **J16** 通知範本的欄位值逐人判斷：沒有這張單的讀取權（含資料範圍）只收標題快照與連結；欄位隱藏或金額遮罩顯示「（無權限）」；不給臨時讀取權（§12.3）。
 - **J17** 通知加 `DataJson` 存範本與遮蔽後的值，前端依語系組字（§12.5）。
 - **J18** 同一張單的動作以實例為單位序列化：實例列條件更新取得處理權、失敗自動重試（上限列 §15）；分支同意不比對畫面的實例版本；匯合判斷在處理權內做；撤回、終止仍比對實例版本，變了回 409；SQLite 與 PostgreSQL 都要有並發測試（§8.13）。
@@ -881,7 +900,7 @@
 - **J21** 同一分支節點的各分支不得共用節點，只能在配對的匯合會合（§9 G7）。
 - **J22**（fg2g2 已移除）graph 驗證放在 `ApprovalDefinitionValidator` 的 partial 檔，跑完整驗證後固定再加一則 `shape` 錯誤；fg2 刪那一行就開放（§9）。
 - **J23**（fg2g2 已移除）執行期守門 `ApprovalShapeGate`：送出、預覽、草稿試算、重新比對選中、以及實例綁定的快照是 graph 時的所有動作（退回、轉交、加簽、撤回、終止、改派）一律回 409，fg2 刪除。目的是 §13 第 7 點的回退安全：回退到 fg1 的程式時，graph 流程回 409，而不是讀 `def.Stages` 得到空清單、直接核准（少簽）。409 之後不留下變更：入口守門在任何寫入之前擋下；重新比對選中 graph 時，409 之前同一個交易已有寫入，由整筆交易回滾，結果同樣不留下變更。
-- **J24** 只有草稿的流程：`ListCurrentByModuleAsync` 語意不變（只含已發布），新增 `ListByModuleAsync` 給設計器清單與優先序檢查；回應的 `version`、`definition` 可為空並加 `draft`，API 的 JSON 對空值省略鍵；`PUT approval-flows/{key}` 對沒有版本的流程回 409（§10.8）。
+- **J24** 只有草稿的流程：`ListCurrentByModuleAsync` 語意不變（只含已發布），新增 `ListByModuleAsync` 給設計器清單與優先序檢查；回應的 `version`、`definition` 可為空並加 `draft`，API 的 JSON 對空值省略鍵；`PUT approval-flows/{key}` 對沒有版本的流程回 409（§10.8）。（fg3a：要啟用改回 400 鍵 `active`，其餘仍 409，見 J64）
 - **J25** 錯誤鍵規則：代號合法且不重複用代號鍵，否則用陣列索引鍵，整體結構用 `graph`（§9）。
 - **J26** 舊版是 sequence 時的「改嚴只管之後」：先用 §7.8 轉成 graph，再以節點代號對應舊節點。
 - **J27** 警告 W1–W3 的判定方式（§9 實作註記）。
@@ -926,6 +945,31 @@
 - **J60** 「已結束」與「已取消」都用時間軸 `closed` 的 `block` 圖示，差別靠刪除線（只有已取消）與狀態字；主控裁決，偏離使用者確認的計畫 U5 所寫的 `stop_circle`（理由：與下方時間軸一致，U48 的精神）。推翻時改 `progress-graph.ts` 的狀態對照（fg4c 實作偏離 3）。
 - **J61** 還沒有任何執行紀錄（`runIds` 為空）的簽核節點，例如未來的關卡，不能點、不進 Tab 順序（主控裁決，U42 沒寫這種情況）：點開只會是空對話框；「誰會簽」屬於預覽，不是時間軸資料，本段不做。推翻時拿掉 `progress-graph.ts` 的 `runIds.length > 0`（fg4d 實作偏離 2）。
 - **J62** 邊線標籤（條件出線的 `label`）依欄距（56px 扣底色內距）估寬截斷並加「…」，完整文字放在 SVG `<title>`；線本身 `aria-hidden`、不進可及性樹（避免 Vue Flow 寫死、帶內部代號的英文 `Edge from … to …`）；加寬有標籤的欄距留到 fg3 定版型，目前截斷後約 3 個中文字。主控裁決（fg4c 審查必修 2；§20.2 fg3 交接）。
+
+**fg3 計畫與實作階段的技術決定（規劃者決定、主控採用，可推翻；fg3 計畫的 J63–J84 直接沿用編號；fg3a 的實作偏離見各條）：**
+
+- **J63** 切七段、依序合併：fg3a 後端草稿與發布端點、fg3b 前端地基、fg3c 設計頁、fg3d 試算疊圖、fg3e 結構編輯、fg3f 切換與移除舊對話框、fg3g 進度圖讀手排版面。fg3g 只依賴 fg3a、fg3b、fg3c，可以和 fg3d、fg3e 平行開發，但合併排在 fg3f 之後，避免同時改四語 i18n 與 `approval-types.ts`（§17）。
+- **J64** 端點形狀（全部 `IDesignerRequest`＋`IMasterDesignRequest`，寫入的加 `ITransactionalRequest`，權限照 U7：設計器 Edit，共用主檔模組另需系統管理員）：`POST approval-flows/draft?module=` 建立只有草稿的流程（201；沒有版本、強制停用）；`PUT approval-flows/{key}/draft` 儲存草稿並套用名稱與目標狀態；`DELETE approval-flows/{key}/draft?baseRev=&force=` 捨棄草稿；`POST approval-flows/{key}/publish` 以請求內容發布，回 `{ flow, warnings }`；`POST approval-flows/validate?module=&key=` 乾跑驗證，不寫入，請求本文是完整的 `ApprovalFlowDraftInput`，跑與發布相同的檢查（流程列、G1–G13、U25、入口約束 G14），只差樂觀鎖，回 `{ errors, warnings, newVersion, nextVersion, pendingCount }`（有錯誤時警告為空；`key` 有值＝既有流程，必須存在且屬於 `module`，本文 `Key` 必須相同，否則 400 鍵 `key`；`key` 沒值＝新流程，代碼已被使用時回錯誤鍵 `key`）。衝突回 409，本文帶 `code`（`DraftConflict`、`DraftOnlyUseDelete`）與目前草稿的修改者名稱與時間。`ReservedKeys` **不加**新字（維持 `order`）：只有同一個動詞同時有字面段與 `{key}` 的路由才衝突，新端點都沒有這種情況，加字會讓既有代碼剛好是 `preview` 的流程存不了檔；前端新流程路由因此用 `…/approval-flows/_new`（J70）。`PUT approval-flows/{key}` 保留（卡片啟停）：對沒有版本的流程，`Active = true` 回 400 鍵 `active`，其餘維持 fg1 的 409。新流程按「發布」＝前端先 `POST draft` 建列、`router.replace` 到 `…/:flowKey`，再 `POST {key}/publish`；publish 失敗時留下只有草稿的流程（§10.8）。（fg3a 實作補充：流程回應加 `versionId`，前端才填得出 `baseVersionId`）
+- **J65** 草稿格式與樂觀鎖：`DraftJson` 存 `{ "rev": "<GUID，N 格式>", "definition": {...}, "layout": {...} }`，只檢查能反序列化、`shape = graph`、UTF-8 大小 ≤ 256 KB、`layout` 格式（J66），不跑 §9。`rev` 是每次儲存新產生的隨機權杖（不是計數，所以捨棄後別人再存沒有 ABA）；捨棄與發布清掉整個 `DraftJson`。`DraftJson` 讀不懂（舊格式、壞 JSON、definition 反序列化失敗）時回應的 `draft`、`draftRev` 為 null、不丟例外（Domain `ApprovalFlowDraft.TryParse`）。handler 先做邏輯比對（請求 `BaseRev` 對讀到的 `rev`，`BaseVersionId` 對 `CurrentVersionId`），不符且 `Force = false` 回 409；通過後以條件更新寫入（`IApprovalFlowRepository.TryReplaceDraftAsync`，`WHERE Id、DraftJson 等於讀到的原字串、CurrentVersionId 等於讀到的值`，受影響 0 列回 409，樣板是 `TryBumpRowVersionAsync`）；比整段字串，SQLite 與 PostgreSQL 都成立，不需要 migration（PostgreSQL 並發版標 `Postgres` trait，未驗證）。不用 J15 寫的流程修改時間（卡片啟停、排序也會改它造成假衝突；PostgreSQL 微秒與 .NET 100 奈秒精度不同）。已發布流程換目標狀態（`ToOptionId` 有變且有版本）時，以已發布版本的定義呼叫 `ApprovalFlowEditor.ValidateAsync`（G9–G13 與入口約束），不過就 400、整筆不寫；目標狀態沒變不重驗；只有草稿的流程不參與約束；被用過的流程換目標狀態照既有訊息 400。優先序只在換目標狀態時採用請求值。回應帶 `draftRev`、`draftUpdatedBy`、`draftUpdatedByName`（沿用 `ApprovalViews.UserNamesAsync`）、`draftUpdatedTime`。
+- **J66** 版面格式 `{ "nodes": { "<節點代號>": { "x", "y" } } }`，不存畫布視角（§7.5 的「視角」不做：設計頁打開一律「全圖」，進度圖有自己的視角規則 U38）。Domain 純函式 `ApprovalFlowLayout.Parse/Validate/Prune`：64 KB、座標是有限數字且絕對值 ≤ 100000、節點代號合法；不存在於定義的代號在發布時丟掉、不報錯（§9 末段）；缺座標的節點允許（前端自動排）。
+- **J67** 發布的版本規則：定義有改——目前版本被用過就開新版本（含 `LayoutJson`），沒被用過就原地覆寫；定義沒改、只有版面改——原地改寫目前版本的 `LayoutJson`，被用過也不開新版（J4）；只有草稿的流程第一次發布建第 1 版、`Active` 維持停用。交易內順序：讀 → 樂觀鎖邏輯比對 → 驗證（不過 400、什麼都不寫、草稿保留）→ 條件更新清草稿（0 列回 409）→ 寫版本與 `CurrentVersionId` → 提交。`PUT approval-flows/{key}` 開新版本時沿用目前版本的 `LayoutJson` 並 `Prune`。
+- **J68** 前端不移植結構驗證器：即時提示呼叫乾跑驗證端點（U54 的時機、0.8 秒防抖、以請求序號丟掉過期回應），前端只做拉線當下的本地判斷（`canConnect`：§6.2 的入出線數、不連進開始、不從結束拉出、不自連、同一對節點不重複、簽核與通知節點只有一條出線）。理由：G7 並行區、W1–W3 的判定在後端約 500 行，移植一份就是兩個來源；發布時本來就以後端為準。代價：即時提示要連線、延遲約一個請求來回。`shared/approval-graph-cases.json` 在前端只給排版與編輯不變式測試用（§9、§20）。
+- **J69** Vue Flow 動態載入邊界擴成清單並加守門：runtime import `@vue-flow/` 只允許 `ProgressGraphCanvas.vue`、`ProgressGraphNode.vue`、`approval-designer/graph/DesignerCanvas.vue`、`DesignerNode.vue`、`DesignerEdge.vue`；設計頁 `FlowDesignerPage.vue` 由路由 `import()` 載入；`ApprovalFlowsTab.vue` 只用 `router.push`。守門兩層：原始碼守門測試（`vue-flow-boundary.vitest.spec.ts`，只有整句 `import type … from '@vue-flow/…'` 不算 runtime，行內 `type` 與 `import('@vue-flow/…')` 都算；`use-graph-designer.ts`、`designer-graph.ts` 不得 `useVueFlow`）與 build 硬門檻（`scripts/unattended/vue-flow-chunks.js`：從 `index-*`、`DetailPage-*`、`ModuleEditorPage-*` 沿靜態 import 遞移展開，任何塊含 `vue-flow__pane` 就失敗）。取代 J45 的「只在兩個檔案」（§10.1）。
+- **J70** 檔案配置與路由：設計頁 `frontend/src/pages/system/dynamic-modules/FlowDesignerPage.vue`；設計器元件在 `frontend/src/presentation/dynamic/approval-designer/graph/`；純函式 `approval-graph-edit.ts`、`approval-graph-history.ts`、`approval-graph-errors.ts`。路由 `system/dynamic-modules/:moduleKey/approval-flows/_new`（`?target=<optionId>`）與 `…/approval-flows/:flowKey`，都帶 `meta: { collapseDrawer: true }`；新流程用 `_new`，因為底線不在流程代碼規則內，不會和合法代碼 `new` 撞上；網址的 `moduleKey` 與流程實際模組不一致時 `router.replace` 到正確網址。不碰 fg4 的進度圖元件與 `ApprovalGraphProgress.cs`；fg3 改到的 fg4 相關檔只有 `progress-graph.ts`、`approval-graph-layout.ts`（只加選用參數與欄位）、`approval-types.ts` 的 `ApprovalProgressGraph`（加選用 `layout`）與後端 `ApprovalModels.cs` 的 `ApprovalProgressGraph`（加選用 `Layout`）（§20.2）。
+- **J71** 編輯狀態：`use-graph-designer.ts` 持有一份工作副本 `{ definition, positions }`，載入時取 `draft ?? (graph ?? definition)` 與 `draft.layout ?? layout`，沒有座標的節點用 `layoutLeftToRight` 補；所有修改走純函式（回新物件）並推一筆快照進復原堆疊（上限 50，U60；整份快照，不做差分）；`dirty` 比對最後一次存檔的快照；伺服器狀態（TanStack Query）與工作副本分開；唯讀模式由 `canEdit` 決定。
+- **J72** 代號與名稱：新節點代號依型別 `approval-n`、`cond-n`、`fork-n`、`join-n`、`end-n`，線 `e-n`，取最小未用的 n，並保留已發布版本用過的代號不重用（G13「改嚴只管之後」以代號對應）；改代號沿用 a4a 規則：已發布過的代號改掉時警告「會被當成新節點」（§10.4）。
+- **J73** 座標一律存：儲存草稿與發布都送全部節點的座標（所見即所得）；「整理排版」＝用 `layoutLeftToRight`（帶 U59 的標籤線）重算全部座標（一步可復原）；舊流程、沒有版面的流程打開時自動排，發布後就有版面。
+- **J74** 線的畫法由座標推算，設計頁與進度圖共用：`approval-graph-layout.ts` 的 `edgeBendX` 改吃節點框（`width` 預設 `NODE_W`，欄位框由節點中心推回），兩條以上出線的分支或條件在「起點欄位框右緣 ＋ 欄距/2」轉折，其他線在「終點欄位框左緣 － 欄距/2」轉折；自動排版的結果與 fg4 的 `Math.floor` 寫法逐點相同（含置中的加簽小節點）；手排時起點右側欄距取到最近一個右側出線終點的距離，夾在 56–136px；設計器用自訂線 `DesignerEdge.vue`，進度圖照舊由 `progress-graph.ts` 算好 `data.bendX`。這是為了手排不帶轉折點時「線不穿過節點」不退化（§11.2、J52、J62）。
+- **J75** 畫布設定：平板以上 `nodesDraggable`、`nodesConnectable`（fg3e 起）、可選取、可聚焦；`connectOnClick`（點把手再點目標把手，觸控用）；`isValidConnection` 接 `canConnect`；`snapToGrid` 8px；`deleteKeyCode = null`（刪除走自己的動作，才能套 U50、分支詢問與復原堆疊）；滾輪依 U56。手機與唯讀不能拖、連、刪，點節點開屬性。畫布 id 既有流程 `designer-${flowKey}`、新流程 `designer-new`。
+- **J76** 節點外觀：尺寸沿用排版常數（單一來源），型別圖示＋名稱一行、摘要一行、徽章列（略過條件、錯誤數、警告數、試算時的簽核人）；顏色只用語意 token，型別另有圖示與文字（§10.3）。
+- **J77** 錯誤鍵對照：`approval-graph-errors.ts` 把 `definition.nodes.{id}[.*]`、`definition.edges.{id}[.*]` 對到節點與線，`definition.nodes[i]`、`definition.edges[i]` 依送出那一份的陣列索引對回；`definition.graph`、`definition.when`、`definition.rejectTo`、`definition.fallbackApprovers`、對不到節點與線的其他 `definition.*`（例如 J65 換目標狀態時已發布版本的錯誤）與流程列欄位歸到流程層。乾跑驗證與發布的 400 用同一套對照；錯誤清單點一項會選取、畫布移到該節點並開屬性面板。
+- **J78** 面板元件抽共用、不複製：fg3c 從 `FlowStagesEditor.vue` 抽出 `ApprovalStageFields.vue`、從 `FlowEditorDialog.vue` 的「基本」抽出 `FlowBasicFields.vue`，放 `approval-designer/`（不碰 Vue Flow）；fg3f 刪舊對話框後只剩新面板用。
+- **J79** 節點面板拖放用 pointer events，不用 HTML5 drag and drop（觸控不可靠）；觸控的主要新增方式是線上「＋」（§10.3）。
+- **J80** 試算沿用既有端點：`POST approval-flows/preview` 已收 graph 並回 `path`、`anyGroup`（J38），權限是讀取；疊圖由前端把 `path.nodeIds`、`path.edgeIds` 與 `stages` 對到節點與線；試算條件欄位擴充讀 graph（§10.6）。
+- **J81** 政策上限：前端 `use-approval-limits.ts` 加 `maxBranches`（`approval.maxBranches`），簽核節點數用 `maxStages`，只用來停用「＋」選項與提示，後端照常擋。
+- **J82** 前端測試策略：純函式完整測；元件 spec 以替身換掉 `VueFlow`、`Handle`、`BaseEdge`、`useVueFlow`（沿用 J54）；真實拖拉、點選連線、縮放、觸控只在瀏覽器走查驗。
+- **J83** i18n 命名空間：新文字放 `approval.designer.graph.*`；沿用既有 `approval.designer.*`、`approval.graph.kind.*`、`approval.stageStatus.*`。
+- **J84** 進度圖讀版面（fg3g）：版面放進圖物件、不放實例——後端 `ApprovalProgressGraph(Nodes, Edges, ApprovalFlowLayout? Layout = null)`、前端 `ApprovalProgressGraph { nodes; edges; layout? }`，`ApprovalProgressGraph.vue` 本來就把 `props.graph` 整包傳進 `buildProgressGraph`，所以前端只改 `progress-graph.ts`、fg4 的 Vue 檔一行不動。只有 graph 實例、`RouteKind = flow` 才帶，從實例 `FlowVersionId` 的 `LayoutJson` 批次讀；sequence 與備援為 null；只看得到自己關卡的讀者在 `ProgressGraph()` 重建圖物件，所以由呼叫端 `graph with { Layout = layout }` 補上（座標不是進度，遮蔽讀者照樣給）。前端版面涵蓋定義裡每一個節點才用，加簽小節點照 U58 安插，否則照舊自動排版（傳標籤線，U59）；轉折點一律走 J74。取代 J51 寫的「`GET records/{id}/approval` 回應加 `layout`」字面（§11.3、§20.2）。
 
 ## 20. 留給實作者決定的事
 
