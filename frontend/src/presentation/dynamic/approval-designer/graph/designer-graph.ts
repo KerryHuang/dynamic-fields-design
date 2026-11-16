@@ -8,7 +8,8 @@ import type { SchemaField } from 'src/domain/dynamic/types';
 import type { FlowBasicErrors } from '../FlowBasicFields.vue';
 import { truncateEdgeLabel } from 'src/presentation/dynamic/approval/progress-graph';
 import { conditionSummary } from 'src/presentation/dynamic/rules/condition-summary';
-import { tFor, type Translate } from 'src/i18n/translate';
+import { joinList, tFor, type Translate } from 'src/i18n/translate';
+import type { EdgeTrialState, NodeTrial, TrialOverlay } from './designer-trial';
 
 // 工作副本 → Vue Flow 的節點與線（J70、J74、J76）。只 import type Vue Flow，不碰 runtime。
 
@@ -35,6 +36,8 @@ export interface DesignerNodeData {
   warnings: number;
   selected: boolean;
   ariaLabel: string;
+  /** 試算疊圖（J80）：沒有試算結果時沒有這個欄位。 */
+  trial?: NodeTrial | null;
 }
 
 export interface DesignerEdgeData {
@@ -46,6 +49,7 @@ export interface DesignerEdgeData {
   errors: number;
   warnings: number;
   selected: boolean;
+  trial?: EdgeTrialState | null;
 }
 
 export interface GraphContext {
@@ -54,6 +58,8 @@ export interface GraphContext {
   fields: SchemaField[];
   issues: GraphIssueMap | null;
   selection: Selection;
+  /** 試算結果疊圖；null 或沒給就不疊。 */
+  trial?: TrialOverlay | null;
 }
 
 export const kindIcon = (k: ApprovalNodeKind) => KIND_ICON[k] ?? 'help_outline';
@@ -108,6 +114,17 @@ export function nodeLabel(n: ApprovalNodeDef, locale: string, t: Translate): str
   return resolveI18n(n.name ?? undefined, locale) || t(`approval.graph.kind.${n.kind}`);
 }
 
+/** 給讀屏的試算狀態：預計會走到、不需簽核、依條件決定、不會走到；有問題與任一分支的再加一句。 */
+function trialAria(tr: NodeTrial | null, locale: string, t: Translate): string {
+  if (!tr) return '';
+  return [
+    t(`approval.designer.trialPanel.state.${tr.state}`),
+    tr.approvers.length ? joinList(tr.approvers, locale) : '',
+    tr.problem ? t(`approval.designer.trial.problem.${tr.problem}`) : '',
+    tr.anyGroup ? t('approval.submit.stageAnyBranch') : '',
+  ].filter(Boolean).join(' · ');
+}
+
 function summaryOf(n: ApprovalNodeDef, def: GraphDefinition, t: Translate): string {
   switch (n.kind) {
     case 'approval': return [approverText(n.approvers, t), n.mode ? t(n.mode === 'all' ? 'approval.designer.graph.modeAllShort' : 'approval.designer.graph.modeAnyShort') : ''].filter(Boolean).join(' · ');
@@ -134,13 +151,15 @@ export function toVueFlow(state: GraphState, ctx: GraphContext, opts: { draggabl
   const { t, locale, issues, selection } = ctx;
   const nodes: Node<DesignerNodeData>[] = def.nodes.map((n) => {
     const label = nodeLabel(n, locale, t);
+    const trial = ctx.trial?.nodes[n.id] ?? null;
     const errors = count(issues?.errors.nodes[n.id]);
     const warnings = count(issues?.warnings.nodes[n.id]);
     const summary = summaryOf(n, def, t);
     const data: DesignerNodeData = {
       kind: n.kind, label, summary, icon: kindIcon(n.kind), width: NODE_W, height: NODE_H, skip: n.kind === 'approval' && !!n.when,
       errors, warnings, selected: selection.kind === 'node' && selection.id === n.id,
-      ariaLabel: [label, t(`approval.graph.kind.${n.kind}`), summary, errors ? t('approval.designer.graph.errorCount', { n: errors }) : ''].filter(Boolean).join(' · '),
+      ariaLabel: [label, t(`approval.graph.kind.${n.kind}`), summary, errors ? t('approval.designer.graph.errorCount', { n: errors }) : '', trialAria(trial, locale, t)].filter(Boolean).join(' · '),
+      ...(trial ? { trial } : {}),
     };
     const p = positions[n.id] ?? { x: 0, y: 0 };
     return { id: n.id, type: 'designer', position: { x: p.x, y: p.y }, data, draggable: opts.draggable, style: { width: `${NODE_W}px`, height: `${NODE_H}px` } };
@@ -157,10 +176,11 @@ export function toVueFlow(state: GraphState, ctx: GraphContext, opts: { draggabl
     const errors = count(issues?.errors.edges[e.id]);
     const warnings = count(issues?.warnings.edges[e.id]);
     const selected = selection.kind === 'edge' && selection.id === e.id;
+    const trial = ctx.trial?.edges[e.id] ?? null;
     return {
       id: e.id, source: e.from, target: e.to, type: 'designer', ...(text ? { label: truncateEdgeLabel(text, maxPx) } : {}),
-      class: ['de-edge', selected && 'de-edge-selected', errors && 'de-edge-error', warnings && 'de-edge-warn', hint && 'de-edge-hint'].filter(Boolean).join(' '),
-      data: { bendX: edgeBendX(box(e.from), box(e.to), branching, gap), fullLabel: text, hint, errors, warnings, selected },
+      class: ['de-edge', selected && 'de-edge-selected', errors && 'de-edge-error', warnings && 'de-edge-warn', hint && 'de-edge-hint', trial && `de-edge-trial-${trial}`].filter(Boolean).join(' '),
+      data: { bendX: edgeBendX(box(e.from), box(e.to), branching, gap), fullLabel: text, hint, errors, warnings, selected, ...(trial ? { trial } : {}) },
     };
   });
   return { nodes, edges };

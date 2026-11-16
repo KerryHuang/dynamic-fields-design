@@ -72,6 +72,8 @@ const editable = computed(() => props.draggable);
 .de-canvas .de-edge-selected .vue-flow__edge-path { stroke: var(--t-primary); stroke-width: 2.5; }
 .de-canvas .de-edge-warn .vue-flow__edge-path { stroke: var(--t-warning); stroke-width: 2.5; }
 .de-canvas .de-edge-error .vue-flow__edge-path { stroke: var(--t-negative); stroke-width: 2.5; }
+.de-canvas .de-edge-trial-path .vue-flow__edge-path { stroke: var(--t-primary); stroke-width: 3; }
+.de-canvas .de-edge-trial-off { opacity: 0.3; }
 .de-canvas .vue-flow__edge-text { fill: var(--t-text); font-size: 11px; }
 .de-canvas .de-edge-hint .vue-flow__edge-text { fill: var(--t-muted); font-style: italic; }
 .de-canvas .de-edge-error .vue-flow__edge-text { fill: var(--t-negative); }

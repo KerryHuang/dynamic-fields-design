@@ -1,13 +1,13 @@
 <script setup lang="ts">
 import { useI18n } from 'vue-i18n';
 
-// 設計頁工具列（§10.2）：唯讀者只有「全圖」（節點清單、試算隨後續段加入）；手機只留圖示。
+// 設計頁工具列（§10.2）：唯讀者只有「全圖」、節點清單、試算；手機只留圖示。
 // 捨棄草稿只在「已發布過、而且有草稿」時出現；只有草稿、從未發布的流程沒有版本可回，改在更多選單提供「刪除流程」（U64）。
 defineProps<{
   readonly: boolean; phone: boolean; showFlowProps: boolean; undoable: boolean; redoable: boolean; dirty: boolean; busy: boolean;
-  errorCount: number; canDiscard: boolean; canDelete: boolean; listOpen?: boolean;
+  errorCount: number; canDiscard: boolean; canDelete: boolean; listOpen?: boolean; trialOpen?: boolean;
 }>();
-const emit = defineEmits<{ fit: []; flowProps: []; undo: []; redo: []; validate: []; save: []; publish: []; discard: []; deleteFlow: []; issues: []; nodeList: [] }>();
+const emit = defineEmits<{ fit: []; flowProps: []; undo: []; redo: []; validate: []; save: []; publish: []; discard: []; deleteFlow: []; issues: []; nodeList: []; trial: [] }>();
 const { t } = useI18n();
 </script>
 
@@ -17,6 +17,10 @@ const { t } = useI18n();
     <q-btn
       flat dense no-caps icon="format_list_numbered" :label="phone ? undefined : t('approval.designer.graph.nodeList')" :aria-label="t('approval.designer.graph.nodeList')" :aria-pressed="listOpen ? 'true' : 'false'"
       :style="listOpen ? { background: 'var(--t-selected-bg)' } : undefined" data-testid="tb-nodelist" @click="emit('nodeList')"
+    />
+    <q-btn
+      flat dense no-caps icon="play_circle_outline" :label="phone ? undefined : t('approval.designer.graph.trial')" :aria-label="t('approval.designer.graph.trial')" :aria-pressed="trialOpen ? 'true' : 'false'"
+      :style="trialOpen ? { background: 'var(--t-selected-bg)' } : undefined" data-testid="tb-trial" @click="emit('trial')"
     />
     <slot name="after-fit" />
     <q-btn

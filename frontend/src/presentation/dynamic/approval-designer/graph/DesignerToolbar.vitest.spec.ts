@@ -5,7 +5,7 @@ import { createI18n } from 'vue-i18n';
 import zhTW from 'src/i18n/zh-TW.json';
 import DesignerToolbar from './DesignerToolbar.vue';
 
-const base = { readonly: false, phone: false, showFlowProps: false, undoable: false, redoable: false, dirty: false, busy: false, errorCount: 0, canDiscard: false, canDelete: false };
+const base = { readonly: false, phone: false, showFlowProps: false, undoable: false, redoable: false, dirty: false, busy: false, errorCount: 0, canDiscard: false, canDelete: false, trialOpen: false };
 function mountBar(props: Partial<typeof base> = {}) {
   const i18n = createI18n({ legacy: false, locale: 'zh-TW', messages: { 'zh-TW': zhTW } });
   return mount(DesignerToolbar, { props: { ...base, ...props }, attachTo: document.body, global: { plugins: [[quasar.Quasar, { components: quasar }], i18n] } });
@@ -17,6 +17,18 @@ describe('DesignerToolbar', () => {
     const w = mountBar({ readonly: true });
     expect(w.find('[data-testid="tb-fit"]').exists()).toBe(true);
     for (const id of ['tb-save', 'tb-publish', 'tb-validate', 'tb-undo', 'tb-more']) expect(w.find(`[data-testid="${id}"]`).exists()).toBe(false);
+  });
+
+  it('trial is offered to everyone, read-only included; it emits and shows pressed while on', async () => {
+    const ro = mountBar({ readonly: true });
+    expect(ro.find('[data-testid="tb-trial"]').exists()).toBe(true);
+    await ro.get('[data-testid="tb-trial"]').trigger('click');
+    expect(ro.emitted('trial')).toHaveLength(1);
+    expect(ro.get('[data-testid="tb-trial"]').attributes('aria-pressed')).toBe('false');
+    expect(mountBar({ trialOpen: true }).get('[data-testid="tb-trial"]').attributes('aria-pressed')).toBe('true');
+    const phone = mountBar({ phone: true });
+    expect(phone.get('[data-testid="tb-trial"]').text()).not.toContain('試算');
+    expect(phone.get('[data-testid="tb-trial"]').attributes('aria-label')).toBe('試算');
   });
 
   it('save is highlighted only when there are unsaved changes', () => {

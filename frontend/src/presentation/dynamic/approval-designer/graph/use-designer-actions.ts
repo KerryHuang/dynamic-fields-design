@@ -34,6 +34,12 @@ export interface ActionContext {
 
 const asApiError = (e: unknown) => e as ApiError;
 
+/** 優先序：新流程排到目標狀態的最後；目標狀態沒變用目前的，換了排到那個目標狀態的最後。存檔與試算送同一個值。 */
+export function draftPriority(server: { isNew: boolean; key: string; priority: number; toOptionId: number | null }, toOptionId: number, flows: ApprovalFlow[]): number {
+  if (server.isNew) return nextPriority(flows, toOptionId);
+  return toOptionId === server.toOptionId ? server.priority : nextPriority(flows, toOptionId, server.key);
+}
+
 export function useDesignerActions(designer: GraphDesigner, ctx: ActionContext) {
   const mk = () => ctx.moduleKey();
   const createDraft = useCreateFlowDraft(mk);
@@ -73,8 +79,7 @@ export function useDesignerActions(designer: GraphDesigner, ctx: ActionContext) 
     if (!out || !m) return null;
     if (m.toOptionId == null) { setFlowIssue({ toOptionId: [ctx.t('approval.designer.basic.targetRequired')] }, quiet); return null; }
     const s = designer.server.value;
-    const priority = s.isNew ? nextPriority(ctx.flows(), m.toOptionId)
-      : m.toOptionId === s.toOptionId ? s.priority : nextPriority(ctx.flows(), m.toOptionId, s.key);
+    const priority = draftPriority(s, m.toOptionId, ctx.flows());
     const input: ApprovalFlowDraftInput = {
       key: s.isNew ? m.key : s.key, name: m.name, toOptionId: m.toOptionId, priority, definition: out.definition, layout: out.layout,
       baseRev: s.draftRev, baseVersionId: s.versionId, ...(force ? { force: true } : {}),

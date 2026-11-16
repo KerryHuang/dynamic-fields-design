@@ -3,6 +3,7 @@ import type { ApprovalFlow, GraphDefinition } from 'src/domain/dynamic/approval-
 import { edgeBendX, layoutLeftToRight, NODE_H, NODE_W } from 'src/domain/dynamic/approval-graph-layout';
 import { mapGraphIssues } from 'src/domain/dynamic/approval-graph-errors';
 import zhTW from 'src/i18n/zh-TW.json';
+import type { TrialOverlay } from './designer-trial';
 import { initialState, newFlowState, sourceOf, toVueFlow, FLOW_SELECTION, type GraphContext } from './designer-graph';
 
 const msg = (k: string, p?: Record<string, unknown>) => {
@@ -99,6 +100,33 @@ describe('designer-graph', () => {
     const { nodes, edges } = toVueFlow(initialState(def(), null), ctx({ issues, selection: { kind: 'node', id: 'a' } }), { draggable: true });
     expect(nodes.find((n) => n.id === 'a')!.data).toMatchObject({ errors: 1, warnings: 1, selected: true });
     expect(edges.find((e) => e.id === 'e3')!.class).toContain('de-edge-error');
+  });
+
+  it('a trial overlay lands on nodes and edges: data, edge class and the screen-reader state', () => {
+    const trial: TrialOverlay = {
+      nodes: {
+        s: { state: 'path', approvers: [], pick: false, fallback: false, problem: null, anyGroup: null },
+        c: { state: 'path', approvers: [], pick: false, fallback: false, problem: null, anyGroup: null },
+        a: { state: 'path', approvers: ['王小明', '李小華'], pick: false, fallback: false, problem: null, anyGroup: null },
+        e: { state: 'off', approvers: [], pick: false, fallback: false, problem: null, anyGroup: null },
+      },
+      edges: { e1: 'path', e2: 'off', e3: 'path', e4: 'path' },
+    };
+    const { nodes, edges } = toVueFlow(initialState(def(), null), ctx({ trial }), { draggable: true });
+    const a = nodes.find((n) => n.id === 'a')!;
+    expect(a.data!.trial).toBe(trial.nodes.a);
+    expect(a.data!.ariaLabel).toContain('預計會走到');
+    expect(a.data!.ariaLabel).toContain('王小明、李小華');
+    expect(nodes.find((n) => n.id === 'e')!.data!.ariaLabel).toContain('預計不會走到');
+    expect(edges.find((e) => e.id === 'e3')!.class).toContain('de-edge-trial-path');
+    expect(edges.find((e) => e.id === 'e2')!.class).toContain('de-edge-trial-off');
+    expect(edges.find((e) => e.id === 'e2')!.data!.trial).toBe('off');
+  });
+
+  it('without a trial nothing is added to nodes and edges', () => {
+    const { nodes, edges } = toVueFlow(initialState(def(), null), ctx(), { draggable: true });
+    for (const n of nodes) expect(n.data).not.toHaveProperty('trial');
+    for (const e of edges) { expect(e.class).not.toContain('trial'); expect(e.data).not.toHaveProperty('trial'); }
   });
 
   it('a new flow starts as start, approval 1, end (U51)', () => {

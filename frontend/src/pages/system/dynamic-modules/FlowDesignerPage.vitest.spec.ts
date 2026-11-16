@@ -13,7 +13,7 @@ import { dynamicApi } from 'src/services/api/dynamic-api';
 import FlowDesignerPage from './FlowDesignerPage.vue';
 
 vi.mock('src/services/api/dynamic-api', () => ({
-  dynamicApi: { getModule: vi.fn(), getWorkflow: vi.fn(), getApprovalFlow: vi.fn(), getApprovalFlows: vi.fn(), getMe: vi.fn(), getUsers: vi.fn(), getGroups: vi.fn(), getEffectivePolicies: vi.fn(), getModulePolicies: vi.fn(), validateApprovalFlow: vi.fn(), saveApprovalFlowDraft: vi.fn(), createApprovalFlowDraft: vi.fn(), discardApprovalFlowDraft: vi.fn(), deleteApprovalFlow: vi.fn(), publishApprovalFlow: vi.fn() },
+  dynamicApi: { getModule: vi.fn(), getWorkflow: vi.fn(), getApprovalFlow: vi.fn(), getApprovalFlows: vi.fn(), getMe: vi.fn(), getUsers: vi.fn(), getGroups: vi.fn(), getEffectivePolicies: vi.fn(), getModulePolicies: vi.fn(), validateApprovalFlow: vi.fn(), saveApprovalFlowDraft: vi.fn(), createApprovalFlowDraft: vi.fn(), discardApprovalFlowDraft: vi.fn(), deleteApprovalFlow: vi.fn(), publishApprovalFlow: vi.fn(), previewApprovalDraft: vi.fn(), getPagedRecords: vi.fn() },
 }));
 const api = vi.mocked(dynamicApi);
 
@@ -27,6 +27,7 @@ const CanvasStub = defineComponent({
       ...p.nodes.map((n: { id: string; data: { label: string }; position: { x: number } }) => h('button', { 'data-testid': `n-${n.id}`, 'data-x': n.position.x, onClick: () => emit('node-open', n.id) }, n.data.label)),
       h('button', { 'data-testid': 'move-a', onClick: () => emit('node-move', 'a', { x: 500, y: 40 }) }),
       h('button', { 'data-testid': 'pane', onClick: () => emit('pane-click') }),
+      h('div', { 'data-testid': 'trial-states', 'data-nodes': JSON.stringify(Object.fromEntries(p.nodes.map((n: { id: string; data: { trial?: { state: string } } }) => [n.id, n.data.trial?.state ?? null]))), 'data-edges': p.edges.map((e: { class: string }) => e.class).join('|') }),
       h('button', { 'data-testid': 'edge-e1', onClick: () => emit('edge-open', 'e1') }),
     ]);
   },
@@ -397,5 +398,88 @@ describe('FlowDesignerPage', () => {
     expect(canvasCalls.focusNode).toHaveBeenCalledWith('a', 0);
     expect(w.get('[data-testid="de-panel-title"]').text()).toBe('財務');
     w.unmount();
+  });
+
+  describe('trial overlay (fg3d, §10.6)', () => {
+    const result = {
+      outcome: 'flow', flowName: { 'zh-TW': '採購流程' }, flowKey: 'po', picks: [],
+      stages: [{ code: 'a', name: { 'zh-TW': '財務' }, status: 'enter', approvers: [{ userId: 'u1', displayName: '王小明' }], usesFallback: false }],
+      path: { nodeIds: ['s', 'a', 'e'], edgeIds: ['e1', 'e2'] },
+    };
+    const hidden = (w: Awaited<ReturnType<typeof mountAt>>, id: string) => (w.get(`[data-testid="${id}"]`).attributes('style') ?? '').includes('display: none');
+    async function tryIt(w: Awaited<ReturnType<typeof mountAt>>) {
+      w.findAllComponents(quasar.QSelect).find((c) => c.props('label') === '發起人')!.vm.$emit('update:modelValue', 'u1');
+      await flushPromises();
+      (document.body.querySelector('[data-testid="trial-run"]') as HTMLElement).click();
+      await flushPromises();
+    }
+    const states = (w: Awaited<ReturnType<typeof mountAt>>) => JSON.parse(w.get('[data-testid="trial-states"]').attributes('data-nodes')!) as Record<string, string | null>;
+
+    beforeEach(() => { api.previewApprovalDraft.mockResolvedValue(result as never); });
+
+    it('the toolbar opens the trial in place of the property panel, the result is overlaid on the canvas, ending it clears the overlay', async () => {
+      const w = await mountAt(url());
+      expect(w.find('[data-testid="de-trial-aside"]').exists()).toBe(false);
+      await w.get('[data-testid="tb-trial"]').trigger('click');
+      expect(hidden(w, 'de-dock')).toBe(true);
+      expect(hidden(w, 'de-trial-aside')).toBe(false);
+      expect(states(w)).toEqual({ s: null, a: null, e: null });
+      await tryIt(w);
+      expect(states(w)).toEqual({ s: 'path', a: 'path', e: 'path' });
+      expect(w.get('[data-testid="trial-states"]').attributes('data-edges')).toContain('de-edge-trial-path');
+      // the body of the trial is posted from the page's working copy
+      expect(api.previewApprovalDraft.mock.calls[0][1]).toMatchObject({ initiatorUserId: 'u1', draft: { key: 'po', toOptionId: 12 } });
+      await w.get('[data-testid="de-trial-close"]').trigger('click');
+      expect(states(w)).toEqual({ s: null, a: null, e: null });
+      expect(hidden(w, 'de-dock')).toBe(false);
+      expect(w.get('[data-testid="tb-trial"]').attributes('aria-pressed')).toBe('false');
+      w.unmount();
+    });
+
+    it('toggling the toolbar button again ends the trial; clicking a node during the trial selects it but opens no property panel', async () => {
+      const w = await mountAt(url(), { width: 820 });
+      await w.get('[data-testid="tb-trial"]').trigger('click');
+      await tryIt(w);
+      await w.get('[data-testid="n-a"]').trigger('click');
+      await flushPromises();
+      expect(w.find('[data-testid="de-drawer"]').exists()).toBe(false);
+      expect(states(w).a).toBe('path');
+      await w.get('[data-testid="tb-trial"]').trigger('click');
+      expect(states(w).a).toBeNull();
+      w.unmount();
+    });
+
+    it('read-only designer can run a trial and see the overlay', async () => {
+      const w = await mountAt(url(), { edit: false });
+      await w.get('[data-testid="tb-trial"]').trigger('click');
+      await tryIt(w);
+      expect(api.previewApprovalDraft).toHaveBeenCalledTimes(1);
+      expect(states(w).a).toBe('path');
+      w.unmount();
+    });
+
+    it('phone: the sheet covers the canvas with the list view; "view on the graph" folds it away behind a bar that goes back or ends the trial', async () => {
+      const w = await mountAt(url(), { width: 390 });
+      await w.get('[data-testid="tb-trial"]').trigger('click');
+      expect(hidden(w, 'de-trial-aside')).toBe(false);
+      await tryIt(w);
+      expect(document.body.querySelector('[data-testid="preview-stages"]')).not.toBeNull();
+      (document.body.querySelector('[data-testid="trial-show-on-canvas"]') as HTMLElement).click();
+      await flushPromises();
+      expect(hidden(w, 'de-trial-aside')).toBe(true);
+      expect(states(w).a).toBe('path');
+      expect(w.find('[data-testid="de-trial-bar"]').exists()).toBe(true);
+      await w.get('[data-testid="de-trial-back"]').trigger('click');
+      expect(hidden(w, 'de-trial-aside')).toBe(false);
+      expect(w.find('[data-testid="de-trial-bar"]').exists()).toBe(false);
+      // the initiator and the result survived being folded away
+      expect(document.body.querySelector('[data-testid="trial-result"]')).not.toBeNull();
+      (document.body.querySelector('[data-testid="trial-show-on-canvas"]') as HTMLElement).click();
+      await flushPromises();
+      await w.get('[data-testid="de-trial-end"]').trigger('click');
+      expect(states(w).a).toBeNull();
+      expect(w.find('[data-testid="de-trial-bar"]').exists()).toBe(false);
+      w.unmount();
+    });
   });
 });

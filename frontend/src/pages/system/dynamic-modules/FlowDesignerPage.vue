@@ -18,8 +18,10 @@ import DraftConflictDialog from 'src/presentation/dynamic/approval-designer/grap
 import PublishDialog from 'src/presentation/dynamic/approval-designer/graph/PublishDialog.vue';
 import DesignerCanvas from 'src/presentation/dynamic/approval-designer/graph/DesignerCanvas.vue';
 import DesignerPropertyPanel from 'src/presentation/dynamic/approval-designer/graph/DesignerPropertyPanel.vue';
+import DesignerTrialPanel from 'src/presentation/dynamic/approval-designer/graph/DesignerTrialPanel.vue';
 import DesignerToolbar from 'src/presentation/dynamic/approval-designer/graph/DesignerToolbar.vue';
 import { FLOW_SELECTION, toVueFlow } from 'src/presentation/dynamic/approval-designer/graph/designer-graph';
+import type { TrialOverlay } from 'src/presentation/dynamic/approval-designer/graph/designer-trial';
 import { useDesignerActions } from 'src/presentation/dynamic/approval-designer/graph/use-designer-actions';
 import { useGraphDesigner } from 'src/presentation/dynamic/approval-designer/graph/use-graph-designer';
 import { isForbidden, type ApiError } from 'src/services/api/http';
@@ -101,11 +103,27 @@ const panelOpen = ref(false);
 const showPanel = computed(() => docked.value || panelOpen.value);
 const selection = designer.selection;
 
+// ---- 試算（§10.6、J80）：試算模式開著時，右側（手機是整個畫布區）換成試算面板，結果疊在畫布上；結束試算清掉疊圖。
+// 手機的面板蓋住畫布，所以可以先收起來（`trialSheet`）看疊圖，用畫布下方的列回到面板或結束。面板開過就一直掛著（v-show），發起人與欄位值才不會因收起而重填。----
+const trialOpen = ref(false);
+const trialSheet = ref(true);
+const trialMounted = ref(false);
+const trialOverlay = ref<TrialOverlay | null>(null);
+const trialShown = computed(() => trialOpen.value && (!phone.value || trialSheet.value));
+function toggleTrial() {
+  if (trialOpen.value) { endTrial(); return; }
+  trialMounted.value = true;
+  trialOpen.value = true;
+  trialSheet.value = true;
+  panelOpen.value = false;
+}
+function endTrial() { trialOpen.value = false; trialOverlay.value = null; }
+
 const canvas = ref<{ fitAll(): void; focusNode(id: string, rightInset?: number): void } | null>(null);
 const vf = computed(() => {
   const state = designer.state.value;
   if (!state) return { nodes: [], edges: [] };
-  return toVueFlow(state, { locale: locale.value, t, fields: fields.value, issues: designer.issues.value, selection: selection.value }, { draggable: canEdit.value && !phone.value });
+  return toVueFlow(state, { locale: locale.value, t, fields: fields.value, issues: designer.issues.value, selection: selection.value, trial: trialOverlay.value }, { draggable: canEdit.value && !phone.value });
 });
 /** 手機的首屏只框住拓撲順序的前 3 個節點（J66，使用者 11-16 確認）；平板以上整張圖。 */
 const initialNodes = computed(() => (phone.value && designer.state.value ? topoOrder(designer.state.value.definition).slice(0, 3) : undefined));
@@ -113,6 +131,7 @@ const canvasId = computed(() => (designer.server.value.isNew ? 'designer-new' : 
 
 async function open(sel: typeof selection.value) {
   designer.select(sel);
+  if (trialOpen.value) return; // 試算中右側是試算面板，不開屬性（要改先結束試算）
   if (!docked.value) panelOpen.value = true;
   if (sel.kind === 'node' && tablet.value) { await nextTick(); canvas.value?.focusNode(sel.id, panelWidth.value); }
 }
@@ -174,10 +193,10 @@ onBeforeUnmount(() => window.removeEventListener('beforeunload', onBeforeUnload)
         <q-badge v-if="designer.dirty.value" color="warning" text-color="dark" class="q-mr-sm" :label="t('approval.designer.graph.unsaved')" data-testid="de-unsaved" />
         <DesignerToolbar
           :readonly="!canEdit" :phone="phone" :show-flow-props="!docked" :undoable="designer.undoable.value" :redoable="designer.redoable.value"
-          :list-open="listOpen" :dirty="designer.dirty.value" :busy="actions.busy.value" :error-count="actions.errorCount.value"
+          :list-open="listOpen" :trial-open="trialOpen" :dirty="designer.dirty.value" :busy="actions.busy.value" :error-count="actions.errorCount.value"
           :can-discard="designer.server.value.published && designer.server.value.hasDraft" :can-delete="!designer.server.value.isNew && !designer.server.value.published"
           @fit="canvas?.fitAll()" @flow-props="openFlowProps" @undo="designer.undo()" @redo="designer.redo()"
-          @validate="actions.validate()" @save="actions.saveDraft()" @publish="actions.requestPublish()" @issues="actions.issuesOpen.value = true" @node-list="listOpen = !listOpen"
+          @validate="actions.validate()" @save="actions.saveDraft()" @publish="actions.requestPublish()" @issues="actions.issuesOpen.value = true" @node-list="listOpen = !listOpen" @trial="toggleTrial"
           @discard="confirmDiscard = true" @delete-flow="confirmDelete = true"
         />
       </div>
@@ -192,16 +211,30 @@ onBeforeUnmount(() => window.removeEventListener('beforeunload', onBeforeUnload)
             @node-open="(id: string) => open({ kind: 'node', id })" @edge-open="(id: string) => open({ kind: 'edge', id })" @pane-click="onPaneClick"
             @node-move="(id: string, to: { x: number; y: number }) => designer.move(id, to)"
           />
-          <aside v-if="tablet && panelOpen" class="de-drawer" :style="{ width: `${panelWidth}px` }" data-testid="de-drawer">
+          <aside v-if="tablet && panelOpen && !trialOpen" class="de-drawer" :style="{ width: `${panelWidth}px` }" data-testid="de-drawer">
             <DesignerPropertyPanel :designer="designer" :selection="selection" :module="moduleQuery.data.value!" :workflow="workflow.data.value!" closable @close="panelOpen = false" />
           </aside>
         </div>
-        <aside v-if="docked" class="de-dock" :style="{ width: `${panelWidth}px` }" data-testid="de-dock">
+        <aside v-if="docked" v-show="!trialOpen" class="de-dock" :style="{ width: `${panelWidth}px` }" data-testid="de-dock">
           <DesignerPropertyPanel :designer="designer" :selection="selection" :module="moduleQuery.data.value!" :workflow="workflow.data.value!" :closable="false" />
         </aside>
+        <aside
+          v-if="trialMounted" v-show="trialShown" :class="docked ? 'de-trial-docked' : tablet ? 'de-drawer' : 'de-trial-phone'"
+          :style="phone ? undefined : { width: `${panelWidth}px` }" data-testid="de-trial-aside"
+        >
+          <DesignerTrialPanel
+            :designer="designer" :module="moduleQuery.data.value!" :flows="flowsQuery.data.value ?? []" :phone="phone" :open="trialOpen"
+            @overlay="(o: TrialOverlay | null) => (trialOverlay = o)" @close="endTrial" @show-on-canvas="trialSheet = false"
+          />
+        </aside>
+        <div v-if="phone && trialOpen && !trialSheet" class="de-trial-bar row items-center no-wrap q-pa-xs q-gutter-x-xs" data-testid="de-trial-bar">
+          <div class="col text-caption">{{ t('approval.designer.trialPanel.bar') }}</div>
+          <q-btn flat dense no-caps color="primary" :label="t('approval.designer.trialPanel.backToTrial')" data-testid="de-trial-back" @click="trialSheet = true" />
+          <q-btn flat dense no-caps :label="t('approval.designer.trialPanel.close')" data-testid="de-trial-end" @click="endTrial" />
+        </div>
       </div>
 
-      <q-dialog :model-value="phone && showPanel" maximized @update:model-value="panelOpen = false">
+      <q-dialog :model-value="phone && showPanel && !trialOpen" maximized @update:model-value="panelOpen = false">
         <q-card class="column no-wrap" data-testid="de-phone-panel">
           <DesignerPropertyPanel :designer="designer" :selection="selection" :module="moduleQuery.data.value!" :workflow="workflow.data.value!" closable @close="panelOpen = false" />
         </q-card>
@@ -247,9 +280,14 @@ onBeforeUnmount(() => window.removeEventListener('beforeunload', onBeforeUnload)
 <style scoped>
 .de-page { overflow: hidden; }
 .de-header { border-bottom: 1px solid var(--t-border); }
-.de-body { min-height: 0; }
+.de-body { position: relative; min-height: 0; }
 .de-canvas-wrap { position: relative; min-width: 0; min-height: 0; }
 .de-dock { flex: none; border-left: 1px solid var(--t-border); background: var(--t-panel); min-height: 0; overflow: hidden; }
+.de-trial-docked { flex: none; border-left: 1px solid var(--t-border); background: var(--t-panel); min-height: 0; overflow: hidden; }
+.de-trial-phone { position: absolute; inset: 0; z-index: 6; background: var(--t-panel); overflow: hidden; }
+.de-trial-bar {
+  position: absolute; left: 0; right: 0; bottom: 0; z-index: 6; background: var(--t-panel); border-top: 1px solid var(--t-border);
+}
 .de-drawer {
   position: absolute; top: 0; right: 0; bottom: 0; max-width: 100%; z-index: 6; background: var(--t-panel);
   border-left: 1px solid var(--t-border); overflow: hidden;
