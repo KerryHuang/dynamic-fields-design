@@ -39,7 +39,7 @@ const move = (delta: -1 | 1) => props.designer.edit((s) => reorderConditionEdge(
     <I18nTextInput :model-value="edge.label ?? {}" :label="t('approval.designer.graph.edgeLabel')" :hint="t('approval.designer.graph.edgeLabelHint')" optional @update:model-value="setLabel" />
     <div v-if="isDefault" class="text-caption text-muted" :data-testid="`cond-default-${edge.id}`">{{ t('approval.designer.graph.edgeDefaultHint') }}</div>
     <div v-else>
-      <ConditionEditor :fields="fields" allow-field-ref :model-value="edge.when ?? undefined" @update:model-value="setWhen" />
+      <ConditionEditor :fields="fields" allow-field-ref :disable="!edit" :model-value="edge.when ?? undefined" @update:model-value="setWhen" />
       <div v-if="errs.when || errs._" class="text-caption text-negative">{{ errs.when ?? errs._ }}</div>
     </div>
   </div>

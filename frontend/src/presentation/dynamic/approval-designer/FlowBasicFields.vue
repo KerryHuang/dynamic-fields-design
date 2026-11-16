@@ -94,7 +94,7 @@ const inheritText = computed(() => {
     <div v-if="err.priority" class="text-caption text-negative">{{ err.priority }}</div>
     <div>
       <div class="text-caption text-muted">{{ t('approval.designer.basic.when') }}</div>
-      <ConditionEditor :fields="fields" allow-field-ref :model-value="modelValue.when" @update:model-value="(v) => emit('patch', { when: v })" />
+      <ConditionEditor :fields="fields" allow-field-ref :disable="disable" :model-value="modelValue.when" @update:model-value="(v) => emit('patch', { when: v })" />
       <div class="text-caption text-muted">{{ t('approval.designer.basic.whenHint') }}</div>
       <div v-if="err.when" class="text-caption text-negative">{{ err.when }}</div>
     </div>

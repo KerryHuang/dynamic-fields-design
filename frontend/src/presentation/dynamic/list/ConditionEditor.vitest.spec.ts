@@ -4,6 +4,7 @@ import * as quasar from 'quasar';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { createI18n } from 'vue-i18n';
 import GenericSelect from 'src/components/framework/GenericSelect.vue';
+import TextInput from 'src/components/framework/TextInput.vue';
 import type { ConditionNode, SchemaField } from 'src/domain/dynamic/types';
 import zhTW from 'src/i18n/zh-TW.json';
 import ConditionEditor from './ConditionEditor.vue';
@@ -85,5 +86,30 @@ describe('ConditionEditor', () => {
     expect(w.findAllComponents(GenericSelect)).toHaveLength(1);
     await w.setProps({ modelValue: built as ConditionNode });
     expect(w.findAllComponents(GenericSelect)).toHaveLength(3);
+  });
+
+  it('disable: every select and value input is inert, and there is no add or remove button', () => {
+    const value: ConditionNode = { all: [{ field: 1, op: 'lte', value: 5 }] };
+    const on = mountEditor({ modelValue: value, allowFieldRef: true, disable: true } as never);
+    expect(on.findAllComponents(GenericSelect).length).toBeGreaterThan(0);
+    for (const s of on.findAllComponents(quasar.QSelect)) expect(s.props('disable')).toBe(true);
+    for (const i of on.findAllComponents(quasar.QInput)) expect(i.props('disable')).toBe(true);
+    expect(on.findAll('.q-field--disabled').length).toBeGreaterThanOrEqual(4);
+    expect(on.findAll('button')).toHaveLength(0);
+    const off = mountEditor({ modelValue: value, allowFieldRef: true });
+    expect(off.findAll('.q-field--disabled')).toHaveLength(0);
+    expect(off.findAll('button').length).toBeGreaterThan(0);
+  });
+
+  it('emits a deep copy: later edits to the editor rows never change a value it emitted earlier', async () => {
+    const w = mountEditor({ modelValue: { all: [{ field: 3, op: 'eq', value: 'a' }] } });
+    w.findAllComponents(GenericSelect)[2]!.vm.$emit('update:modelValue', 'eq'); // 第一次 publish
+    await w.vm.$nextTick();
+    const first = last(w) as { all: { value?: unknown }[] };
+    const snapshot = JSON.stringify(first);
+    w.findComponent(TextInput).vm.$emit('update:modelValue', 'b');
+    await w.vm.$nextTick();
+    expect(JSON.stringify(first)).toBe(snapshot);
+    expect(last(w)).not.toBe(first);
   });
 });

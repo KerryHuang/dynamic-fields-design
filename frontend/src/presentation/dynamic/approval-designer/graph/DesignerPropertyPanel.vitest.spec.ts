@@ -268,4 +268,24 @@ describe('DesignerPropertyPanel', () => {
     expect(w.get('fieldset').attributes('disabled')).toBeDefined();
     w.unmount();
   });
+
+  it('a read-only viewer cannot operate any condition editor (U62): flow start condition, approval skip condition, condition edges', async () => {
+    const cases: Selection[] = [{ kind: 'flow' }, { kind: 'node', id: 'a' }, { kind: 'node', id: 'c' }, { kind: 'edge', id: 'c1' }];
+    for (const sel of cases) {
+      const ro = mountPanel(sel, { canEdit: false });
+      await flushPromises();
+      const editors = ro.w.findAllComponents({ name: 'ConditionEditor' });
+      expect(editors.length, JSON.stringify(sel)).toBeGreaterThan(0);
+      for (const e of editors) {
+        expect(e.props('disable'), JSON.stringify(sel)).toBe(true);
+        expect(e.findAll('button')).toHaveLength(0); // 沒有新增、移除條件
+        for (const f of e.findAll('.q-field')) expect(f.classes(), JSON.stringify(sel)).toContain('q-field--disabled');
+      }
+      ro.w.unmount();
+      const rw = mountPanel(sel);
+      await flushPromises();
+      for (const e of rw.w.findAllComponents({ name: 'ConditionEditor' })) expect(e.props('disable')).toBeFalsy();
+      rw.w.unmount();
+    }
+  });
 });

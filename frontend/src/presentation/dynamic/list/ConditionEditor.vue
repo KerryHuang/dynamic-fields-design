@@ -17,9 +17,9 @@ interface Row { cond: FieldCondition; raw?: string }
 /**
  * Single-level all/any editor. It emits the unpruned condition on every change (rows still being filled stay in the editor);
  * the owner prunes when it applies or saves. `allowFieldRef` is the rule context: it adds "compare with another field"
- * and the rule operator table (textarea may use isEmpty/isNotEmpty); list filters leave it off.
+ * and the rule operator table (textarea may use isEmpty/isNotEmpty); list filters leave it off. `disable` makes every control inert (read-only viewers; a fieldset cannot reach q-select).
  */
-const props = defineProps<{ fields: SchemaField[]; modelValue?: ConditionNode; allowFieldRef?: boolean }>();
+const props = defineProps<{ fields: SchemaField[]; modelValue?: ConditionNode; allowFieldRef?: boolean; disable?: boolean }>();
 const emit = defineEmits<{ 'update:modelValue': [value: ConditionNode | undefined] }>();
 const { t, locale } = useI18n();
 
@@ -41,9 +41,9 @@ function load(n?: ConditionNode) {
 watch(() => props.modelValue, load, { immediate: true });
 
 function publish() {
-  const value = { [mode.value]: rows.value.map((r) => r.cond) } as ConditionNode;
-  emitted = JSON.stringify(value);
-  emit('update:modelValue', value);
+  // Emit a deep copy: `rows` keeps mutating its own objects, and the owner (undo history) must never share them.
+  emitted = JSON.stringify({ [mode.value]: rows.value.map((r) => r.cond) });
+  emit('update:modelValue', JSON.parse(emitted) as ConditionNode);
 }
 
 const opsOf = (f: SchemaField) => (props.allowFieldRef ? ruleOperatorsFor(f) : operatorsFor(f));
@@ -153,40 +153,40 @@ function setJson(v: string | null) {
 <template>
   <div v-if="complex" class="column q-gutter-sm">
     <div class="text-muted" data-testid="complex-notice">{{ t('designer.rules.jsonHint') }}</div>
-    <TextareaInput :model-value="json" :label="t('designer.rules.conditionJson')" data-testid="condition-json" @update:model-value="setJson" />
+    <TextareaInput :model-value="json" :label="t('designer.rules.conditionJson')" :disable="disable" data-testid="condition-json" @update:model-value="setJson" />
     <div v-if="jsonError" class="text-negative text-caption" data-testid="condition-json-error">{{ t('designer.rules.jsonInvalid') }}</div>
   </div>
   <div v-else class="column q-gutter-sm condition-editor">
     <div class="row items-start no-wrap q-gutter-x-sm">
       <GenericSelect
-        :model-value="mode" :label="t('dynamic.filter.title')" :options="modeOptions" required style="width: 12rem"
+        :model-value="mode" :label="t('dynamic.filter.title')" :options="modeOptions" required :disable="disable" style="width: 12rem"
         @update:model-value="(v) => { mode = v === 'any' ? 'any' : 'all'; publish(); }"
       />
-      <q-btn flat icon="add" no-caps :label="t('dynamic.filter.addCondition')" @click="addRow" />
+      <q-btn v-if="!disable" flat icon="add" no-caps :label="t('dynamic.filter.addCondition')" @click="addRow" />
     </div>
     <div v-for="(row, i) in rows" :key="i" class="row q-gutter-sm items-start condition-row">
       <GenericSelect
         :model-value="row.cond.field ? String(row.cond.field) : null" :label="t('dynamic.filter.field')"
-        :options="fieldOptions" class="col" @update:model-value="(v) => setField(row, v)"
+        :options="fieldOptions" :disable="disable" class="col" @update:model-value="(v) => setField(row, v)"
       />
       <template v-if="fieldOf(row.cond.field)">
         <GenericSelect
           :model-value="row.cond.op" :label="t('dynamic.filter.operator')" :options="operatorOptions(fieldOf(row.cond.field))"
-          required class="col" @update:model-value="(v) => setOp(row, v as FilterOperator)"
+          required :disable="disable" class="col" @update:model-value="(v) => setOp(row, v as FilterOperator)"
         />
         <template v-for="f in [fieldOf(row.cond.field)!]" :key="f.id">
           <GenericSelect
             v-if="canRef(f, row.cond.op)" :model-value="isRef(row.cond) ? 'field' : 'value'" :label="t('designer.rules.valueSource')"
-            :options="refModeOptions" required class="col" @update:model-value="(v) => setRefMode(row, v)"
+            :options="refModeOptions" required :disable="disable" class="col" @update:model-value="(v) => setRefMode(row, v)"
           />
           <GenericSelect
             v-if="canRef(f, row.cond.op) && isRef(row.cond)" :model-value="refId(row.cond) === '0' ? null : refId(row.cond)"
-            :label="t('designer.rules.refField')" :options="refCandidates(f)" class="col" @update:model-value="(v) => setRef(row, v)"
+            :label="t('designer.rules.refField')" :options="refCandidates(f)" :disable="disable" class="col" @update:model-value="(v) => setRef(row, v)"
           />
           <template v-else-if="inputOf(f, row.cond.op)">
             <div v-if="isTextList(f, row.cond.op)" class="col">
               <TextareaInput
-                :model-value="rawOf(row)" :label="t('dynamic.filter.listHint')"
+                :model-value="rawOf(row)" :label="t('dynamic.filter.listHint')" :disable="disable"
                 data-testid="value-list" @update:model-value="(v) => setRaw(row, v)"
               />
               <div v-if="truncated(row)" class="text-warning text-caption" data-testid="list-truncated">
@@ -195,22 +195,22 @@ function setJson(v: string | null) {
             </div>
             <template v-else-if="operatorNeedsValue(row.cond.op) === 'pair'">
               <component
-                :is="inputOf(f, row.cond.op)!.component" v-bind="inputOf(f, row.cond.op)!.props" class="col"
+                :is="inputOf(f, row.cond.op)!.component" v-bind="inputOf(f, row.cond.op)!.props" :disable="disable" class="col"
                 :model-value="pairPart(row, 0)" @update:model-value="(v: unknown) => setPair(row, 0, v)"
               />
               <component
-                :is="inputOf(f, row.cond.op)!.component" v-bind="inputOf(f, row.cond.op)!.props" class="col"
+                :is="inputOf(f, row.cond.op)!.component" v-bind="inputOf(f, row.cond.op)!.props" :disable="disable" class="col"
                 :model-value="pairPart(row, 1)" @update:model-value="(v: unknown) => setPair(row, 1, v)"
               />
             </template>
             <component
-              :is="inputOf(f, row.cond.op)!.component" v-else v-bind="inputOf(f, row.cond.op)!.props" class="col"
+              :is="inputOf(f, row.cond.op)!.component" v-else v-bind="inputOf(f, row.cond.op)!.props" :disable="disable" class="col"
               :model-value="row.cond.value ?? null" @update:model-value="(v: unknown) => setValue(row, v)"
             />
           </template>
         </template>
       </template>
-      <q-btn flat round dense icon="close" :aria-label="t('dynamic.filter.removeCondition')" @click="removeRow(i)" />
+      <q-btn v-if="!disable" flat round dense icon="close" :aria-label="t('dynamic.filter.removeCondition')" @click="removeRow(i)" />
     </div>
   </div>
 </template>

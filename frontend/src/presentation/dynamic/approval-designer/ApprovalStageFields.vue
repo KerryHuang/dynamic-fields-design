@@ -65,7 +65,7 @@ function setApprovers(v: ApproverSource) {
 
     <div>
       <div class="text-caption text-muted">{{ t('approval.designer.stage.when') }}</div>
-      <ConditionEditor :fields="fields" allow-field-ref :model-value="modelValue.when" @update:model-value="(v) => emit('patch', { when: v })" />
+      <ConditionEditor :fields="fields" allow-field-ref :disable="disable" :model-value="modelValue.when" @update:model-value="(v) => emit('patch', { when: v })" />
       <div class="text-caption text-muted">{{ t('approval.designer.stage.whenHint') }}</div>
       <div v-if="err.when" class="text-caption text-negative">{{ err.when }}</div>
     </div>
