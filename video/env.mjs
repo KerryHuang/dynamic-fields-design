@@ -35,10 +35,11 @@ export default {
     cmd: ['dotnet', 'DynamicModules.WebAPI.dll'],
     cwd: '.build/app',
     portEnv: 'PORT',
-    env: { ConnectionStrings__Dynamic: `Data Source=${db}`, ASPNETCORE_ENVIRONMENT: 'Production', Demo__LoginEnabled: 'true' },
+    env: { ConnectionStrings__Dynamic: `Data Source=${db}`, ASPNETCORE_ENVIRONMENT: 'Production', Demo__LoginEnabled: 'true', Attachments__UploadEnabled: 'true' },
     readyPath: '/api/health/ready',
     readyTimeoutMs: 120000,
   },
   ui: { menu: '.q-menu', dialog: '.q-dialog' },
-  tts: { provider: 'edge', licensed: false },
+  // 影片腳本用 azure-tts.mjs（Azure AI Speech，個人訂閱的 F0 資源）配音，屬正式商用授權
+  tts: { provider: 'custom', licensed: true },
 }

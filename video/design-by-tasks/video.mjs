@@ -37,9 +37,7 @@ const openOpp = async (a) => {
 }
 const taskRow = (a, title) => a.p.locator('.q-page .q-item').filter({ hasText: title }).first()
 const attach = async (a, file) => {
-  const chooser = a.p.waitForEvent('filechooser')
-  await a.click(dlg(a).getByRole('button', { name: /附加檔案/ }))
-  await (await chooser).setFiles(`files/${file}`)
+  await a.upload(dlg(a).getByRole('button', { name: /附加檔案/ }), `files/${file}`)
 }
 const comment = async (a, mention, text) => {
   const box = a.p.getByLabel('輸入留言，用 @ 提到同事')
@@ -58,9 +56,11 @@ const newTask = async (a, title, assignee, due) => {
   await taskRow(a, title).waitFor()
 }
 
+import { azureTts } from '../azure-tts.mjs'
+
 export default {
+  tts: azureTts,
   name: 'design-by-tasks',
-  base: 'http://127.0.0.1:5191/',
   voice: 'zh-TW-HsiaoChenNeural',
   viewport: { width: 1280, height: 720 },
   timeoutMs: 10000,

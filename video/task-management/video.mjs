@@ -15,9 +15,11 @@ const pick = async (a, label, option) => {
   await a.click(a.p.locator('.q-menu').last().getByText(option, { exact: true }))
 }
 
+import { azureTts } from '../azure-tts.mjs'
+
 export default {
+  tts: azureTts,
   name: 'task-management',
-  base: 'http://127.0.0.1:5180/',
   voice: 'zh-TW-HsiaoChenNeural',
   viewport: { width: 1280, height: 720 },
   timeoutMs: 10000,

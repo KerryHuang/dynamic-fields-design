@@ -4,7 +4,10 @@ const btn = (a, name) => a.p.getByRole('button', { name, exact: true })
 const tab = (a, name) => a.p.getByRole('tab', { name, exact: true })
 const dlg = (a) => a.p.locator('.q-dialog').last()
 
+import { azureTts } from '../azure-tts.mjs'
+
 export default {
+  tts: azureTts,
   name: 'pilot',
   viewport: { width: 1280, height: 720 },
   segments: [
