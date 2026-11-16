@@ -58,7 +58,7 @@ public class InventoryPoApprovalScenarioTests(DemoGeneratedFixture fx)
         flow.CurrentVersionId.Should().NotBeNull("已發布第 1 版");
         flow.NameI18n.Resolve("zh-TW").Should().Be("採購單（流程圖範例）");
         flow.NameI18n.Values.Keys.Should().BeEquivalentTo("zh-TW", "en-US", "th", "vi");
-        flow.Priority.Should().BeGreaterThan(2, "排在套件兩條關卡格式流程後面");
+        flow.Priority.Should().Be(0, "排在套件兩條關卡格式流程前面，設計頁試算才會先命中自己");
         ApprovalFlowDraft.TokenOf(flow.DraftJson).Should().NotBeNull();
         ApprovalFlowDraft.TryParse(flow.DraftJson).Should().BeNull("發布後草稿內容已清空");
 

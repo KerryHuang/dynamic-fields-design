@@ -44,7 +44,7 @@ public sealed class InventoryScenario : IDemoScenario
 
     private static readonly string[] Warehouses = ["主倉", "成品倉"];
 
-    /// <summary>流程圖格式的範例流程代碼；優先序接在套件兩條關卡格式流程（1、2）後面。</summary>
+    /// <summary>流程圖格式的範例流程代碼；優先序 0 排在套件兩條關卡格式流程（1、2）前面：流程停用所以不影響送簽，但設計頁試算時（編輯中的流程視為啟用）才會先命中自己，而不是被金額門檻較低的流程搶走。</summary>
     public const string GraphExampleKey = "inv-po-graph-example";
 
     /// <param name="Supplier">供應商編號。</param>
@@ -296,7 +296,7 @@ public sealed class InventoryScenario : IDemoScenario
         var definition = new ApprovalDefinition(ApprovalShapes.Graph, null, null, new ApproverSource(ApprovalSources.Group, GroupIds: [demo.GroupIds["ops-manager"]]), [], nodes, edges);
         var input = new ApprovalFlowDraftInput(GraphExampleKey,
             Text("採購單（流程圖範例）", "Purchase order (flow graph example)", "ใบสั่งซื้อ (ตัวอย่างแผนภาพโฟลว์)", "Đơn mua hàng (ví dụ sơ đồ luồng)"),
-            ctx.Ids.OptionIds["po.confirmed"], 3, definition);
+            ctx.Ids.OptionIds["po.confirmed"], 0, definition);
 
         var moduleKey = ctx.Ids.ModuleKeys["po"];
         var created = await demo.Sender.Send(new CreateApprovalFlowDraftRequest(moduleKey, input), ct);
