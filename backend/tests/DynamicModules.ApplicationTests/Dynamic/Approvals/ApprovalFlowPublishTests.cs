@@ -61,7 +61,11 @@ public class ApprovalFlowPublishTests : ApprovalTestBase
         got.Flow.Active.Should().BeFalse();
         got.Flow.Draft.Should().BeNull();
         var row = Flow("po-g");
-        (row.DraftJson, row.DraftUpdatedBy, row.DraftUpdatedTime, row.Active).Should().Be(((string?)null, (string?)null, (DateTime?)null, false));
+        (row.DraftUpdatedBy, row.DraftUpdatedTime, row.Active).Should().Be(((string?)null, (DateTime?)null, false));
+        // 草稿內容清掉，但留下一個新權杖（審查 🔴1）
+        ApprovalFlowDraft.TryParse(row.DraftJson).Should().BeNull();
+        ApprovalFlowDraft.TokenOf(row.DraftJson).Should().NotBeNullOrEmpty().And.NotBe(created.DraftRev);
+        got.Flow.DraftRev.Should().Be(ApprovalFlowDraft.TokenOf(row.DraftJson));
         row.CurrentVersionId.Should().Be(Versions("po-g").Single().Id);
         Versions("po-g").Single().Definition.Nodes!.Single(n => n.Id == "a").Approvers!.UserIds.Should().Equal("fin2");
         got.Flow.Layout!.Nodes["a"].Should().Be(new LayoutPoint(100, 50));
@@ -201,7 +205,7 @@ public class ApprovalFlowPublishTests : ApprovalTestBase
         var res = await Send(new PublishApprovalFlowRequest("po-g", Input("po-g", r.Confirmed, 1, Linear("emp1"), baseRev: rev, baseVersionId: v1)));
 
         res.IsConflict.Should().BeTrue(Dump(res));
-        var info = (DraftConflictInfo)res.Data!;
+        var info = (DraftConflictInfo)res.Params!;
         (info.DraftUpdatedBy, info.DraftRev).Should().Be(("fin1", "someone-else"));
         Versions("po-g").Should().ContainSingle();
         Flow("po-g").CurrentVersionId.Should().Be(v1);
@@ -292,5 +296,123 @@ public class ApprovalFlowPublishTests : ApprovalTestBase
         Versions("po-g").Select(v => v.Version).Should().Equal(1, 2);
         Versions("po-g")[1].LayoutJson.Should().Contain("\"a\"").And.NotContain("\"b\"");
         Versions("po-g")[0].LayoutJson.Should().Contain("\"b\"");
+    }
+
+    // ───────── 審查 🔴1：原地發布換權杖（ABA）─────────
+
+    [Fact]
+    public async Task Publish_InPlace_StaleBase_Conflicts()
+    {
+        var r = await Rig();
+        await SeedGraphFlow(r, "po-g", r.Confirmed, 1, Linear());
+        var v1 = Flow("po-g").CurrentVersionId;
+        // A、B 同時打開（沒有草稿，BaseRev = null、BaseVersionId = v1）；A 先發布（版本沒被用過，原地覆寫）
+        var a = await Publish("po-g", Input("po-g", r.Confirmed, 1, Linear("fin2"), baseVersionId: v1));
+
+        // B 以打開時的基準發布：要 409，不能覆蓋 A 剛發布的內容
+        var res = await Send(new PublishApprovalFlowRequest("po-g", Input("po-g", r.Confirmed, 1, Linear("emp1"), baseVersionId: v1)));
+
+        res.IsConflict.Should().BeTrue(Dump(res));
+        res.Code.Should().Be("DraftConflict");
+        a.Flow.VersionId.Should().Be(v1, "原地發布不開新版本，所以權杖要靠 rev 換新");
+        Versions("po-g").Single().Definition.Nodes!.Single(n => n.Id == "a").Approvers!.UserIds.Should().Equal("fin2");
+    }
+
+    [Fact]
+    public async Task Publish_InPlace_NewTokenFromResponse_Succeeds()
+    {
+        var r = await Rig();
+        await SeedGraphFlow(r, "po-g", r.Confirmed, 1, Linear());
+        var a = await Publish("po-g", Input("po-g", r.Confirmed, 1, Linear("fin2"), baseVersionId: Flow("po-g").CurrentVersionId));
+
+        var b = await Publish("po-g", Input("po-g", r.Confirmed, 1, Linear("emp1"), baseRev: a.Flow.DraftRev, baseVersionId: a.Flow.VersionId));
+
+        b.Flow.DraftRev.Should().NotBe(a.Flow.DraftRev);
+        Versions("po-g").Single().Definition.Nodes!.Single(n => n.Id == "a").Approvers!.UserIds.Should().Equal("emp1");
+    }
+
+    [Fact]
+    public async Task SaveDraft_AfterInPlacePublish_StaleBase_Conflicts()
+    {
+        var r = await Rig();
+        await SeedGraphFlow(r, "po-g", r.Confirmed, 1, Linear());
+        var v1 = Flow("po-g").CurrentVersionId;
+        await Publish("po-g", Input("po-g", r.Confirmed, 1, Linear("fin2"), baseVersionId: v1));
+
+        // B 的草稿基準是 A 發布前的定義
+        var res = await Send(new SaveApprovalFlowDraftRequest("po-g", Input("po-g", r.Confirmed, 1, Linear("emp1"), baseVersionId: v1)));
+
+        res.IsConflict.Should().BeTrue(Dump(res));
+    }
+
+    [Fact]
+    public async Task Publish_Conflict_AfterSomeonePublished_ReportsLastModifier()
+    {
+        // 草稿已被發布清掉，409 的修改者與時間改報流程最後的修改者，前端才說得出是誰發布的（審查 🟢3）
+        var r = await Rig();
+        await SeedGraphFlow(r, "po-g", r.Confirmed, 1, Linear());
+        var v1 = Flow("po-g").CurrentVersionId;
+        await Publish("po-g", Input("po-g", r.Confirmed, 1, Linear("fin2"), baseVersionId: v1));
+
+        var res = await Send(new PublishApprovalFlowRequest("po-g", Input("po-g", r.Confirmed, 1, Linear("emp1"), baseVersionId: v1)));
+
+        var info = (DraftConflictInfo)res.Params!;
+        info.DraftUpdatedBy.Should().Be("admin");
+        info.DraftUpdatedByName.Should().NotBeNullOrEmpty();
+        info.DraftUpdatedTime.Should().Be(Flow("po-g").ModifiedTime);
+        info.DraftRev.Should().Be(ApprovalFlowDraft.TokenOf(Flow("po-g").DraftJson));
+    }
+
+    [Fact]
+    public async Task Publish_WithoutLayout_KeepsCurrentLayout()
+    {
+        // 請求沒帶版面：沿用目前版本的版面並 Prune（與 PUT 一致，審查 🟢2）
+        var r = await Rig();
+        await SeedGraphFlow(r, "po-g", r.Confirmed, 1, Linear());
+        var first = await Publish("po-g", Input("po-g", r.Confirmed, 1, Linear(), Layout(("a", 7, 8)), baseVersionId: Flow("po-g").CurrentVersionId));
+
+        var got = await Publish("po-g", Input("po-g", r.Confirmed, 1, Linear("fin2"), baseRev: first.Flow.DraftRev, baseVersionId: first.Flow.VersionId));
+
+        got.Flow.Layout!.Nodes["a"].Should().Be(new LayoutPoint(7, 8));
+    }
+
+    [Fact]
+    public async Task Put_DefinitionChanged_InPlace_RotatesToken_ToggleDoesNot()
+    {
+        var r = await Rig();
+        await SeedGraphFlow(r, "po-g", r.Confirmed, 1, Linear(), active: false);
+        var v1 = Flow("po-g").CurrentVersionId;
+        var toOptionId = r.Confirmed;
+        (await Send(new SaveApprovalFlowDraftRequest("po-g", Input("po-g", toOptionId, 1, Linear("emp1"), baseVersionId: v1)))).IsSuccess.Should().BeTrue();
+        var draft = ApprovalFlowDraft.TryParse(Flow("po-g").DraftJson)!;
+
+        // 只切啟停：權杖不變（卡片啟停不造成假衝突）
+        (await Send(new UpdateApprovalFlowRequest("po-g", new("po-g", Text("po-g"), toOptionId, 1, true, Linear())))).IsSuccess.Should().BeTrue();
+        ApprovalFlowDraft.TokenOf(Flow("po-g").DraftJson).Should().Be(draft.Rev);
+
+        // 原地改定義（版本沒被用過、CurrentVersionId 不變）：換新權杖，草稿內容保留
+        (await Send(new UpdateApprovalFlowRequest("po-g", new("po-g", Text("po-g"), toOptionId, 1, true, Linear("fin2"))))).IsSuccess.Should().BeTrue();
+        Flow("po-g").CurrentVersionId.Should().Be(v1);
+        var after = ApprovalFlowDraft.TryParse(Flow("po-g").DraftJson)!;
+        after.Rev.Should().NotBe(draft.Rev);
+        after.Definition.Should().BeEquivalentTo(draft.Definition);
+
+        // 設計頁拿舊權杖存草稿：409
+        var stale = await Send(new SaveApprovalFlowDraftRequest("po-g", Input("po-g", toOptionId, 1, Linear("emp2"), baseRev: draft.Rev, baseVersionId: v1)));
+        stale.IsConflict.Should().BeTrue(Dump(stale));
+    }
+
+    [Fact]
+    public async Task Put_DefinitionChanged_NoDraft_StaleBaseDraftSave_Conflicts()
+    {
+        var r = await Rig();
+        await SeedGraphFlow(r, "po-g", r.Confirmed, 1, Linear());
+        var v1 = Flow("po-g").CurrentVersionId;
+
+        (await Send(new UpdateApprovalFlowRequest("po-g", new("po-g", Text("po-g"), r.Confirmed, 1, true, Linear("fin2"))))).IsSuccess.Should().BeTrue();
+
+        // 設計頁在 PUT 之前打開：基準是 (null, v1)
+        var res = await Send(new SaveApprovalFlowDraftRequest("po-g", Input("po-g", r.Confirmed, 1, Linear("emp1"), baseVersionId: v1)));
+        res.IsConflict.Should().BeTrue(Dump(res));
     }
 }

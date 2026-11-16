@@ -117,7 +117,7 @@ public sealed class ApprovalFlowEditor(IApprovalFlowRepository flows, ApprovalDe
 
     /// <summary>
     /// includeGraph：只有單筆 GET 帶，目前版本是 sequence 時附上轉換後的直線圖（J64，清單端點不帶）。names：使用者代號 → 顯示名稱，
-    /// 清單端點整批解析一次傳進來；沒傳而有草稿修改者時才查。草稿讀不懂（舊格式、壞 JSON）時 Draft、DraftRev 為 null，不丟例外（J65）。
+    /// 清單端點整批解析一次傳進來；沒傳而有草稿修改者時才查。草稿讀不懂（舊格式、壞 JSON）時 Draft 為 null，不丟例外（J65）；DraftRev 是樂觀鎖權杖，發布、捨棄後沒有草稿內容也有值。
     /// </summary>
     public async Task<ApprovalFlowResponse> ResponseAsync(
         ApprovalFlow f, string moduleKey, bool includeGraph, IReadOnlyDictionary<string, string>? names, CancellationToken ct)
@@ -129,7 +129,7 @@ public sealed class ApprovalFlowEditor(IApprovalFlowRepository flows, ApprovalDe
             await flows.IsUsedAsync(f.Id, ct), await flows.CountPendingAsync(f.Id, ct), v?.Definition,
             v is not null && await flows.IsVersionUsedAsync(v.Id, ct), draft is null ? null : new ApprovalFlowDraftView(draft.Definition, draft.Layout),
             v?.Id, includeGraph && v is { Definition.Shape: ApprovalShapes.Sequence } ? ApprovalGraphConversion.FromSequence(v.Definition) : null,
-            v?.LayoutJson is null ? null : ApprovalFlowLayout.Parse(v.LayoutJson), draft?.Rev,
+            v?.LayoutJson is null ? null : ApprovalFlowLayout.Parse(v.LayoutJson), ApprovalFlowDraft.TokenOf(f.DraftJson),
             f.DraftUpdatedBy, f.DraftUpdatedBy is null ? null : names!.GetValueOrDefault(f.DraftUpdatedBy, f.DraftUpdatedBy), f.DraftUpdatedTime);
     }
 
@@ -191,7 +191,10 @@ public class UpdateApprovalFlowHandler(
         var current = (await flows.GetVersionAsync(flow.CurrentVersionId!.Value, ct))!;
         // 目前版本已被用過、而且定義真的改了才開新版本；只改名稱、啟停、優先序不動版本。
         var versionUsed = await flows.IsVersionUsedAsync(current.Id, ct);
-        if (versionUsed && !ApprovalDefinitionJson.SameAs(current.Definition, input.Definition))
+        var definitionChanged = !ApprovalDefinitionJson.SameAs(current.Definition, input.Definition);
+        // 定義真的改了就換樂觀鎖權杖（原地改定義時 CurrentVersionId 不變，設計頁的舊基準要擋下來）；啟停、改名不換，不造成假衝突
+        if (definitionChanged) flow.DraftJson = ApprovalFlowDraft.WithNewRev(flow.DraftJson);
+        if (versionUsed && definitionChanged)
         {
             var next = new ApprovalFlowVersion
             {

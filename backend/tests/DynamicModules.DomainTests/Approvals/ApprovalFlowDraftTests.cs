@@ -73,4 +73,42 @@ public class ApprovalFlowDraftTests
         revs.Distinct().Should().HaveCount(100);
         revs.Should().OnlyContain(r => r.Length == 32 && r.All(char.IsAsciiHexDigitLower));
     }
+
+    [Fact]
+    public void TokenOnly_HasToken_ButNoDraft()
+    {
+        var json = ApprovalFlowDraft.TokenOnly("tok1");
+
+        ApprovalFlowDraft.TokenOf(json).Should().Be("tok1");
+        ApprovalFlowDraft.TryParse(json).Should().BeNull("只有權杖不算有草稿");
+    }
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("")]
+    [InlineData("not json")]
+    [InlineData("""{"definition":{"shape":"graph"}}""")]
+    [InlineData("""{"rev":""}""")]
+    [InlineData("""{"rev":5}""")]
+    [InlineData("[]")]
+    public void TokenOf_NoReadableRev_ReturnsNull(string? json) => ApprovalFlowDraft.TokenOf(json).Should().BeNull();
+
+    [Fact]
+    public void TokenOf_FullDraft_ReturnsRev() =>
+        ApprovalFlowDraft.TokenOf(new ApprovalFlowDraft("abc", Def(), null).Serialize()).Should().Be("abc");
+
+    [Fact]
+    public void WithNewRev_KeepsDraftContent_OrLeavesTokenOnly()
+    {
+        var full = new ApprovalFlowDraft("old", Def(), ApprovalFlowLayout.Parse("""{"nodes":{"start":{"x":1,"y":2}}}""")).Serialize();
+
+        var rotated = ApprovalFlowDraft.TryParse(ApprovalFlowDraft.WithNewRev(full))!;
+        var fromNothing = ApprovalFlowDraft.WithNewRev(null);
+
+        rotated.Rev.Should().NotBe("old");
+        ApprovalDefinitionJson.SameAs(rotated.Definition, Def()).Should().BeTrue();
+        rotated.Layout!.Nodes["start"].Should().Be(new LayoutPoint(1, 2));
+        ApprovalFlowDraft.TokenOf(fromNothing).Should().NotBeNullOrEmpty();
+        ApprovalFlowDraft.TryParse(fromNothing).Should().BeNull();
+    }
 }

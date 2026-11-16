@@ -29,6 +29,16 @@ public static class ApprovalDraftRules
     public static ApprovalFlowLayout? LayoutOf(ApprovalFlowDraftInput input) =>
         input.Layout is { ValueKind: System.Text.Json.JsonValueKind.Object } ? ApprovalFlowLayout.Parse(input.Layout) : null;
 
+    /// <summary>
+    /// 存草稿、乾跑驗證、發布共用的流程列：啟停沿用目前狀態（沒有流程列時停用）；優先序只在換目標狀態時採用請求值，
+    /// 原目標狀態上的位置不動（J65）。三個 handler 必須取同一份，乾跑驗證才與發布一致（J64）。
+    /// </summary>
+    public static ApprovalFlowInput RowFor(ApprovalFlow? flow, ApprovalFlowDraftInput input)
+    {
+        var row = input.ToFlowInput(flow?.Active ?? false);
+        return flow is not null && input.ToOptionId == flow.ToOptionId ? row with { Priority = flow.Priority } : row;
+    }
+
     private static ServiceResult Invalid(string key, string message) =>
         ServiceResult.Invalid(new Dictionary<string, string[]> { [key] = [message] });
 }
@@ -57,8 +67,8 @@ public class ValidateApprovalFlowHandler(IModuleRepository modules, IApprovalFlo
         IReadOnlyList<ApprovalFlowWarning> warnings = [];
         if (failure is null)
         {
-            // 發布不會改啟停：既有流程沿用目前狀態，新流程與只有草稿的流程第一次發布仍是停用
-            var check = await editor.CheckAsync(module, input.ToFlowInput(self?.Active ?? false), self, ct);
+            // 流程列照發布的取法（RowFor）：啟停沿用目前狀態，優先序只在換目標狀態時採用請求值
+            var check = await editor.CheckAsync(module, ApprovalDraftRules.RowFor(self, input), self, ct);
             (failure, warnings) = (check.Failure, check.Warnings);
         }
         var errors = failure is null ? [] : failure.Errors.ToDictionary(kv => kv.Key, kv => kv.Value);
@@ -82,24 +92,25 @@ public class ValidateApprovalFlowHandler(IModuleRepository modules, IApprovalFlo
     private static ServiceResult KeyError(string message) => ServiceResult.Invalid(new Dictionary<string, string[]> { ["key"] = [message] });
 }
 
-/// <summary>草稿與發布共用的寫入輔助：樂觀鎖比對、衝突回應。</summary>
+/// <summary>草稿與發布共用的寫入輔助：樂觀鎖比對、衝突回應。權杖一律用 <see cref="ApprovalFlowDraft.TokenOf"/>（發布、捨棄後只剩權杖）。</summary>
 public sealed class ApprovalDraftGate(IApprovalFlowRepository flows, ApprovalFlowEditor editor)
 {
     /// <summary>
-    /// 邏輯比對（J65）：請求的 BaseRev 對讀到的草稿權杖（讀不懂視為 null）、BaseVersionId 對 CurrentVersionId；
+    /// 邏輯比對（J65）：請求的 BaseRev 對讀到的權杖（沒有或讀不懂視為 null）、BaseVersionId 對 CurrentVersionId；
     /// 不符且不是 Force 回 409。條件更新另外擋「讀取之後才變」的情況。
     /// </summary>
     public async Task<ServiceResult?> CheckBaseAsync(ApprovalFlow flow, ApprovalFlowDraftInput input, CancellationToken ct) =>
-        input.Force || (input.BaseRev == ApprovalFlowDraft.TryParse(flow.DraftJson)?.Rev && input.BaseVersionId == flow.CurrentVersionId)
+        input.Force || (input.BaseRev == ApprovalFlowDraft.TokenOf(flow.DraftJson) && input.BaseVersionId == flow.CurrentVersionId)
             ? null
             : await ConflictAsync(flow, ct);
 
     public async Task<ServiceResult> ConflictAsync(ApprovalFlow flow, CancellationToken ct)
     {
-        var names = flow.DraftUpdatedBy is null ? null : await editor.NamesAsync(ct);
-        return ServiceResult.ConflictWith(ApprovalMessages.DraftConflict,
-            new DraftConflictInfo(flow.DraftUpdatedBy, flow.DraftUpdatedBy is null ? null : names!.GetValueOrDefault(flow.DraftUpdatedBy, flow.DraftUpdatedBy),
-                flow.DraftUpdatedTime, ApprovalFlowDraft.TryParse(flow.DraftJson)?.Rev, flow.CurrentVersionId), "DraftConflict");
+        // 草稿清掉（別人剛發布或捨棄）時沒有草稿修改者，改報流程最後的修改者與時間，前端才說得出是誰動的
+        var (by, time) = flow.DraftUpdatedBy is null ? (flow.ModifiedUserId, flow.ModifiedTime) : (flow.DraftUpdatedBy, flow.DraftUpdatedTime);
+        var names = by is null ? null : await editor.NamesAsync(ct);
+        return ServiceResult.Conflict(ApprovalMessages.DraftConflict, "DraftConflict",
+            new DraftConflictInfo(by, by is null ? null : names!.GetValueOrDefault(by, by), time, ApprovalFlowDraft.TokenOf(flow.DraftJson), flow.CurrentVersionId));
     }
 
     /// <summary>條件更新失敗：重讀資料列再回 409，修改者與時間才是別人剛存的那一份。</summary>
@@ -123,7 +134,7 @@ public class CreateApprovalFlowDraftHandler(
         var input = request.Input;
         if (ApprovalDraftRules.CheckFormat(input) is { } format) return format;
         if (await editor.ValidateRowAsync(module, input.ToFlowInput(false), null, ct) is { } invalid) return invalid;
-        if (await flows.GetByKeyAsync(input.Key, ct) is not null) return ServiceResult.Conflict(ApprovalMessages.FlowKeyTaken);
+        if (await flows.GetByKeyAsync(input.Key, ct) is not null) return ServiceResult.Conflict(ApprovalMessages.FlowKeyTaken, "FlowKeyTaken");
 
         var now = time.Now;
         var flow = new ApprovalFlow
@@ -158,9 +169,8 @@ public class SaveApprovalFlowDraftHandler(
         if (ApprovalFlowEditor.CheckModule(module) is { } bad) return bad;
         if (ApprovalDraftRules.CheckFormat(input) is { } format) return format;
 
-        // 優先序只在換目標狀態時採用請求值（原目標狀態上的位置不動）；啟停不由草稿決定
         var retargeted = input.ToOptionId != flow.ToOptionId;
-        var row = input.ToFlowInput(flow.Active) with { Priority = retargeted ? input.Priority : flow.Priority };
+        var row = ApprovalDraftRules.RowFor(flow, input);
         if (retargeted && await editor.CheckRetargetAsync(flow, input.ToOptionId, ct) is { } used) return used;
         if (await editor.ValidateRowAsync(module, row, flow, ct) is { } invalid) return invalid;
         // 已發布的流程換目標狀態：已發布版本的定義放到新目標狀態上要合法（含 G9–G13 與入口約束），否則整筆不寫（審查 🔴2）
@@ -191,7 +201,7 @@ public class SaveApprovalFlowDraftHandler(
         System.Text.Json.JsonSerializer.Serialize(flow.NameI18n) == System.Text.Json.JsonSerializer.Serialize(input.Name);
 }
 
-/// <summary>捨棄草稿，回到已發布的版本（J64）；從未發布的流程沒有版本可回，要改用刪除流程（U64）。</summary>
+/// <summary>捨棄草稿，回到已發布的版本（J64）；DraftJson 改成只有新權杖（J65）；從未發布的流程沒有版本可回，要改用刪除流程（U64）。</summary>
 public class DiscardApprovalFlowDraftHandler(
     IApprovalFlowRepository flows, IModuleRepository modules, ApprovalFlowEditor editor, ApprovalDraftGate gate)
     : IRequestHandler<DiscardApprovalFlowDraftRequest, ServiceResult>
@@ -201,8 +211,8 @@ public class DiscardApprovalFlowDraftHandler(
         var flow = await flows.GetByKeyAsync(request.Key, ct);
         if (flow is null) return ServiceResult.NotFound("找不到流程");
         if (flow.CurrentVersionId is null) return ServiceResult.Conflict(ApprovalMessages.DraftOnlyUseDelete, "DraftOnlyUseDelete");
-        if (!request.Force && request.BaseRev != ApprovalFlowDraft.TryParse(flow.DraftJson)?.Rev) return await gate.ConflictAsync(flow, ct);
-        if (!await flows.TryReplaceDraftAsync(flow.Id, flow.DraftJson, flow.CurrentVersionId, null, null, null, ct))
+        if (!request.Force && request.BaseRev != ApprovalFlowDraft.TokenOf(flow.DraftJson)) return await gate.ConflictAsync(flow, ct);
+        if (!await flows.TryReplaceDraftAsync(flow.Id, flow.DraftJson, flow.CurrentVersionId, ApprovalFlowDraft.TokenOnly(ApprovalFlowDraft.NewRev()), null, null, ct))
             return await gate.ConflictAfterLostRaceAsync(flow, ct);
         var moduleKey = (await modules.GetByIdAsync(flow.ModuleId, includeChildren: false, ct))!.Key;
         return ServiceResult.Success(await editor.ResponseAsync(flow, moduleKey, ct));
@@ -210,8 +220,8 @@ public class DiscardApprovalFlowDraftHandler(
 }
 
 /// <summary>
-/// 發布（§10.8、J67）：以請求內容跑 §9 全部規則，通過才寫入版本並清掉草稿。交易內順序：讀 → 樂觀鎖邏輯比對 → 驗證
-/// （不過 400、什麼都不寫、草稿保留）→ 條件更新清草稿（0 列回 409）→ 寫版本與 CurrentVersionId → 名稱與目標狀態 → 提交。
+/// 發布（§10.8、J67）：以請求內容跑 §9 全部規則，通過才寫入版本並清掉草稿內容（DraftJson 只留新權杖）。交易內順序：讀 → 樂觀鎖邏輯比對 → 驗證
+/// （不過 400、什麼都不寫、草稿保留）→ 條件更新清草稿內容並換新權杖（0 列回 409）→ 寫版本與 CurrentVersionId → 名稱與目標狀態 → 提交。
 /// 版本規則：沒有版本（只有草稿）→ 建第 1 版、仍停用；定義有改且目前版本被用過 → 開新版；定義有改沒被用過 → 原地覆寫；
 /// 定義沒改、只有版面 → 原地改寫目前版本的版面，被用過也不開新版（設計 J4）。
 /// </summary>
@@ -234,17 +244,19 @@ public class PublishApprovalFlowHandler(
         if (retargeted && await editor.CheckRetargetAsync(flow, input.ToOptionId, ct) is { } used) return used;
         if (await gate.CheckBaseAsync(flow, input, ct) is { } conflict) return conflict;
 
-        var row = input.ToFlowInput(flow.Active) with { Priority = retargeted ? input.Priority : flow.Priority };
+        var row = ApprovalDraftRules.RowFor(flow, input);
         var check = await editor.CheckAsync(module, row, flow, ct);
         if (check.Failure is { } invalid) return invalid;
 
         var layout = ApprovalDraftRules.LayoutOf(input);
-        var layoutJson = layout is null ? null : ApprovalFlowLayout.Prune(layout, input.Definition).ToJson();
         var current = flow.CurrentVersionId is { } vid ? await flows.GetVersionAsync(vid, ct) : null;
+        // 請求沒帶版面就沿用目前版本的版面（與 PUT 一致，J73），只留下新定義裡還存在的節點
+        var layoutJson = layout is null ? ApprovalDraftRules.PruneLayoutJson(current?.LayoutJson, input.Definition) : ApprovalFlowLayout.Prune(layout, input.Definition).ToJson();
         var usedVersion = current is not null && await flows.IsVersionUsedAsync(current.Id, ct);
         var definitionChanged = current is null || !ApprovalDefinitionJson.SameAs(current.Definition, input.Definition);
 
-        if (!await flows.TryReplaceDraftAsync(flow.Id, flow.DraftJson, flow.CurrentVersionId, null, null, null, ct))
+        // 清掉草稿內容但換一個新權杖：原地發布 CurrentVersionId 不變，沒有新權杖就會回到發布前的 (rev, versionId)（ABA，審查 🔴1）
+        if (!await flows.TryReplaceDraftAsync(flow.Id, flow.DraftJson, flow.CurrentVersionId, ApprovalFlowDraft.TokenOnly(ApprovalFlowDraft.NewRev()), null, null, ct))
             return await gate.ConflictAfterLostRaceAsync(flow, ct);
 
         var now = time.Now;

@@ -316,4 +316,33 @@ public class ApprovalFlowValidateTests : ApprovalTestBase
 
         res.Errors.Should().ContainKey("moduleKey");
     }
+
+    [Fact]
+    public async Task Validate_PriorityComesFromCurrentFlow_LikePublish()
+    {
+        // 目標狀態沒變：優先序沿用流程目前的值（與發布相同），請求帶的值不參與，所以不會報「優先序重複」（審查 🟡1）
+        var r = await Rig();
+        await SeedGraphFlow(r, "po-g", r.Confirmed, 1, Linear(1));
+        await SeedGraphFlow(r, "po-h", r.Confirmed, 2, Linear(1));
+        var input = Draft("po-g", r.Confirmed, 2, Linear(2));
+
+        var got = await Validate(r, input, key: "po-g");
+        var published = await Send(new PublishApprovalFlowRequest("po-g", input with { BaseVersionId = Flow("po-g").CurrentVersionId }));
+
+        got.Errors.Should().BeEmpty();
+        published.IsSuccess.Should().BeTrue(Dump(published));
+        Flow("po-g").Priority.Should().Be(1);
+    }
+
+    [Fact]
+    public async Task Validate_Retarget_TakesRequestedPriority_LikePublish()
+    {
+        var r = await Rig();
+        await SeedGraphFlow(r, "po-g", r.Confirmed, 1, Linear(1));
+        await SeedGraphFlow(r, "po-c", r.Cancelled, 5, Linear(1));
+
+        var dup = await Validate(r, Draft("po-g", r.Cancelled, 5, Linear(1)), key: "po-g");
+
+        dup.Errors.Keys.Should().Equal("priority");
+    }
 }

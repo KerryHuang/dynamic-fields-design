@@ -12,7 +12,7 @@ public sealed record ApprovalFlowInput(string Key, I18nText Name, long ToOptionI
 /// Used：任何版本被實例綁定或出現在快照裡；PendingCount：綁定這個流程的進行中實例數；CurrentVersionUsed：目前版本是否已被用過；
 /// 用過而且定義有改的存檔才會產生新版本（只改名稱、啟停、優先序不會）。
 /// 設計器欄位（J64、J65）：Graph 只有單筆 GET 帶、而且只有目前版本是 sequence 時才有（轉換後的直線圖）；Layout 是目前版本的節點座標；
-/// DraftRev 是草稿的樂觀鎖權杖（讀不懂的草稿為 null）；DraftUpdatedBy／ByName／Time 是草稿最後的修改者與時間。
+/// DraftRev 是樂觀鎖權杖（發布、捨棄後沒有草稿內容也有值；從沒存過草稿為 null）；DraftUpdatedBy／ByName／Time 是草稿最後的修改者與時間。
 /// </summary>
 public sealed record ApprovalFlowResponse(
     string Key, I18nText Name, string ModuleKey, long ToOptionId, int Priority, bool Active,
@@ -23,7 +23,7 @@ public sealed record ApprovalFlowResponse(
 /// <summary>草稿的內容：定義與版面（流程列屬性不進草稿，§10.8）。</summary>
 public sealed record ApprovalFlowDraftView(ApprovalDefinition Definition, ApprovalFlowLayout? Layout);
 
-/// <summary>草稿衝突（409）帶回的資訊：目前草稿是誰、何時存的，前端據以提示「覆蓋」。屬性展開到回應本文。</summary>
+/// <summary>草稿衝突（409）帶回的資訊：目前草稿是誰、何時存的（沒有草稿時是流程最後的修改者與時間），前端據以提示「覆蓋」。放在 409 本文的 params。</summary>
 public sealed record DraftConflictInfo(string? DraftUpdatedBy, string? DraftUpdatedByName, DateTime? DraftUpdatedTime, string? DraftRev, long? VersionId);
 
 /// <summary>發布的回應：發布後的流程與警告 W1–W3。</summary>

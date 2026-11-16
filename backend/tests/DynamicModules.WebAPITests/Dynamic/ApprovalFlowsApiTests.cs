@@ -593,13 +593,23 @@ public class ApprovalFlowsApiTests
         saved.StatusCode.Should().Be(HttpStatusCode.OK, await saved.Content.ReadAsStringAsync());
         (await JsonOf(saved)).GetProperty("draftRev").GetString().Should().NotBe(rev);
 
-        // 過期的權杖：409，本文帶 code 與目前草稿的修改者
+        // 過期的權杖：409，本文帶 code，目前草稿的修改者、時間、權杖放在 params（前端的 toApiError 只留 code 與 params）
         var stale = await c.PutAsJsonAsync($"{Flows}/g-one/draft", DraftBody("g-one", s, baseRev: rev));
         stale.StatusCode.Should().Be(HttpStatusCode.Conflict);
         var conflict = await JsonOf(stale);
         conflict.GetProperty("code").GetString().Should().Be("DraftConflict");
-        conflict.GetProperty("draftUpdatedByName").GetString().Should().NotBeNullOrEmpty();
-        conflict.TryGetProperty("draftUpdatedTime", out _).Should().BeTrue();
+        var info = conflict.GetProperty("params");
+        info.GetProperty("draftUpdatedBy").GetString().Should().Be("admin");
+        info.GetProperty("draftUpdatedByName").GetString().Should().NotBeNullOrEmpty();
+        info.TryGetProperty("draftUpdatedTime", out _).Should().BeTrue();
+        info.GetProperty("draftRev").GetString().Should().NotBeNullOrEmpty();
+        info.TryGetProperty("versionId", out _).Should().BeFalse("沒有版本的流程沒有 versionId");
+        conflict.TryGetProperty("draftUpdatedByName", out _).Should().BeFalse("不展開到本文最上層");
+
+        // 代碼重複：409 帶 code
+        var dup = await c.PostAsJsonAsync($"{Flows}/draft?module={s.Key}", DraftBody("g-one", s, priority: 6));
+        dup.StatusCode.Should().Be(HttpStatusCode.Conflict);
+        (await JsonOf(dup)).GetProperty("code").GetString().Should().Be("FlowKeyTaken");
 
         // 從未發布的流程不能捨棄草稿
         var discard = await c.DeleteAsync($"{Flows}/g-one/draft?baseRev={rev}");
@@ -620,7 +630,59 @@ public class ApprovalFlowsApiTests
         var bigRev = (await JsonOf(bigDraft)).GetProperty("draftRev").GetString();
         var cleared = await c.DeleteAsync($"{Flows}/big/draft?baseRev={bigRev}");
         cleared.StatusCode.Should().Be(HttpStatusCode.OK, await cleared.Content.ReadAsStringAsync());
-        (await JsonOf(cleared)).TryGetProperty("draft", out _).Should().BeFalse();
+        var clearedBody = await JsonOf(cleared);
+        clearedBody.TryGetProperty("draft", out _).Should().BeFalse();
+        clearedBody.GetProperty("draftRev").GetString().Should().NotBe(bigRev, "捨棄後沒有草稿內容，但權杖換新（原地發布與捨棄不回到舊權杖）");
+    }
+
+    [Fact]
+    [Trait("Category", "Postgres")]
+    public async Task Publish_Response_HasWarningsArray()
+    {
+        using var app = new TestApp();
+        var c = app.AsUser();
+        var s = await SeedApproval(c);
+        object Body(string? baseRev) => new
+        {
+            key = "g-warn", name = Zh("g-warn"), toOptionId = s.Done, priority = 5, baseRev,
+            definition = new
+            {
+                shape = "graph", stages = Array.Empty<object>(),
+                nodes = new object[]
+                {
+                    new { id = "start", kind = "start" },
+                    new { id = "c", kind = "condition", name = Zh("金額") },
+                    new
+                    {
+                        id = "a", kind = "approval", name = Zh("主管"), approvers = new { source = "group", groupIds = new[] { s.Group } },
+                        mode = "any", editableFields = Array.Empty<long>(), onEmpty = "fallback"
+                    },
+                    new { id = "end", kind = "end" }
+                },
+                edges = new object[]
+                {
+                    new { id = "e0", from = "start", to = "c" },
+                    new { id = "e1", from = "c", to = "a", when = new { all = new[] { new { field = s.Amount, op = "gte", value = 100 } } }, order = 1 },
+                    new { id = "e2", from = "c", to = "end", @default = true },
+                    new { id = "e3", from = "a", to = "end" }
+                }
+            }
+        };
+        var created = await c.PostAsJsonAsync($"{Flows}/draft?module={s.Key}", Body(null));
+        created.StatusCode.Should().Be(HttpStatusCode.Created, await created.Content.ReadAsStringAsync());
+        var rev = (await JsonOf(created)).GetProperty("draftRev").GetString();
+
+        var published = await c.PostAsJsonAsync($"{Flows}/g-warn/publish", Body(rev));
+
+        published.StatusCode.Should().Be(HttpStatusCode.OK, await published.Content.ReadAsStringAsync());
+        var body = await JsonOf(published);
+        body.GetProperty("flow").GetProperty("version").GetInt32().Should().Be(1);
+        body.GetProperty("flow").GetProperty("active").GetBoolean().Should().BeFalse();
+        body.GetProperty("flow").TryGetProperty("draft", out _).Should().BeFalse("發布後沒有草稿內容");
+        body.GetProperty("flow").GetProperty("draftRev").GetString().Should().NotBe(rev);
+        var warnings = body.GetProperty("warnings");
+        warnings.ValueKind.Should().Be(System.Text.Json.JsonValueKind.Array);
+        warnings.EnumerateArray().Select(w => w.GetProperty("code").GetString()).Should().Contain("W2");
     }
 
     [Fact]
@@ -666,7 +728,7 @@ public class ApprovalFlowsApiTests
     [Trait("Category", "Postgres")]
     public async Task Flows_KeyedDraftValidateNew_RouteNormally()
     {
-        // 代碼叫 draft、validate、new 的流程：字面路由段與 {key} 不衝突（不加保留字）
+        // 代碼叫 draft、validate、new 的流程：字面路由段與 {key} 不衝突（不加保留字），涵蓋 GET、PUT、PUT draft、publish、validate
         using var app = new TestApp();
         var c = app.AsUser();
         var s = await SeedApproval(c);
@@ -681,6 +743,10 @@ public class ApprovalFlowsApiTests
             var saved = await c.PutAsJsonAsync($"{Flows}/{key}/draft", DraftBody(key, s, baseRev: rev, priority: priority));
             saved.StatusCode.Should().Be(HttpStatusCode.OK, key + await saved.Content.ReadAsStringAsync());
             (await c.PutAsJsonAsync($"{Flows}/{key}", Flow(key, s.Done, 77, s.Group))).StatusCode.Should().Be(HttpStatusCode.BadRequest, "沒有版本的 PUT 要啟用回 400（J64）");
+            var savedRev = (await JsonOf(saved)).GetProperty("draftRev").GetString();
+            var published = await c.PostAsJsonAsync($"{Flows}/{key}/publish", DraftBody(key, s, baseRev: savedRev, priority: priority));
+            published.StatusCode.Should().Be(HttpStatusCode.OK, key + await published.Content.ReadAsStringAsync());
+            (await JsonOf(published)).GetProperty("flow").GetProperty("key").GetString().Should().Be(key);
             var validated = await c.PostAsJsonAsync($"{Flows}/validate?module={s.Key}&key={key}", DraftBody(key, s, priority: priority));
             validated.StatusCode.Should().Be(HttpStatusCode.OK, key + await validated.Content.ReadAsStringAsync());
             (await JsonOf(validated)).GetProperty("errors").EnumerateObject().Should().BeEmpty();

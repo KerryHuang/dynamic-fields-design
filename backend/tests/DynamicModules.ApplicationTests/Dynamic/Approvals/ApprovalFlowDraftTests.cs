@@ -184,7 +184,7 @@ public class ApprovalFlowDraftTests : ApprovalTestBase
 
         res.IsConflict.Should().BeTrue(Dump(res));
         res.Code.Should().Be("DraftConflict");
-        var info = (DraftConflictInfo)res.Data!;
+        var info = (DraftConflictInfo)res.Params!;
         (info.DraftUpdatedBy, info.DraftUpdatedByName, info.DraftUpdatedTime).Should().Be(("fin1", "fin1", before.DraftUpdatedTime));
         Flow("po-g").DraftJson.Should().Be(before.DraftJson);
     }
@@ -240,8 +240,8 @@ public class ApprovalFlowDraftTests : ApprovalTestBase
         await SeedGraphFlow(r, "po-g", r.Confirmed, 1, Linear());
         var v1 = Flow("po-g").CurrentVersionId;
         var x = await Save("po-g", Input("po-g", r.Confirmed, 1, Linear("fin2"), baseVersionId: v1));
-        (await Send(new DiscardApprovalFlowDraftRequest("po-g", x.DraftRev, false))).IsSuccess.Should().BeTrue();
-        var y = await Save("po-g", Input("po-g", r.Confirmed, 1, Linear("emp1"), baseVersionId: v1));
+        var discarded = await Ok(Send(new DiscardApprovalFlowDraftRequest("po-g", x.DraftRev, false)));
+        var y = await Save("po-g", Input("po-g", r.Confirmed, 1, Linear("emp1"), baseRev: discarded.DraftRev, baseVersionId: v1));
 
         var res = await Send(new SaveApprovalFlowDraftRequest("po-g", Input("po-g", r.Confirmed, 1, Linear("emp2"), baseRev: x.DraftRev, baseVersionId: v1)));
 
@@ -398,10 +398,13 @@ public class ApprovalFlowDraftTests : ApprovalTestBase
 
         var got = await Ok(Send(new DiscardApprovalFlowDraftRequest("po-g", saved.DraftRev, false)));
 
-        (got.Draft, got.DraftRev, got.DraftUpdatedBy, got.DraftUpdatedTime).Should().Be(((ApprovalFlowDraftView?)null, (string?)null, (string?)null, (DateTime?)null));
+        (got.Draft, got.DraftUpdatedBy, got.DraftUpdatedTime).Should().Be(((ApprovalFlowDraftView?)null, (string?)null, (DateTime?)null));
+        got.DraftRev.Should().NotBeNullOrEmpty().And.NotBe(saved.DraftRev, "捨棄後換一個新權杖，原地發布與捨棄都不回到舊權杖");
         got.Version.Should().Be(1);
         var row = Flow("po-g");
-        (row.DraftJson, row.DraftUpdatedBy, row.DraftUpdatedTime).Should().Be(((string?)null, (string?)null, (DateTime?)null));
+        (row.DraftUpdatedBy, row.DraftUpdatedTime).Should().Be(((string?)null, (DateTime?)null));
+        ApprovalFlowDraft.TryParse(row.DraftJson).Should().BeNull();
+        ApprovalFlowDraft.TokenOf(row.DraftJson).Should().Be(got.DraftRev);
     }
 
     [Fact]
@@ -427,7 +430,7 @@ public class ApprovalFlowDraftTests : ApprovalTestBase
         var got = await Ok(Send(new DiscardApprovalFlowDraftRequest("po-g", "old-rev", true)));
 
         got.Draft.Should().BeNull();
-        Flow("po-g").DraftJson.Should().BeNull();
+        ApprovalFlowDraft.TryParse(Flow("po-g").DraftJson).Should().BeNull();
     }
 
     [Fact]
@@ -538,5 +541,65 @@ public class ApprovalFlowDraftTests : ApprovalTestBase
         (await Send(new SaveApprovalFlowDraftRequest("po-g", Input("po-g", r.Confirmed, 1, Linear("fin2"))))).IsForbidden.Should().BeTrue();
         (await Send(new CreateApprovalFlowDraftRequest(r.Module, Input("po-h", r.Confirmed, 2, Linear())))).IsForbidden.Should().BeTrue();
         (await Send(new DiscardApprovalFlowDraftRequest("po-g", null, true))).IsForbidden.Should().BeTrue();
+    }
+
+    // ───────── 審查 🟡2、契約 ─────────
+
+    [Fact]
+    public async Task SaveDraft_Retarget_ValidatesWithPublishedDefinition_NotDraftDefinition()
+    {
+        // 已發布版本有可編輯欄位，搬到「從鎖定狀態進入」的目標狀態上不合法（EditableFromLocked）；草稿的定義沒有可編輯欄位、單看是合法的。
+        // 若實作誤用草稿的定義重驗，這筆就會通過。
+        var r = await Rig();
+        await SeedGraphFlow(r, "po-g", r.Confirmed, 1, G([Start(), Approval("a", Users("fin1"), editable: [r.DueDate]), End()], [E("e0", "start", "a"), E("e1", "a", "end")]));
+        await SeedGraphFlow(r, "po-a", r.Confirmed, 2, Linear());
+        await SeedGraphFlow(r, "po-c", r.Cancelled, 1, Linear());
+        (await SaveWorkflow(r, [Needs(r.Draft, r.Confirmed), Plain(r.Confirmed, r.Partial), Plain(r.Partial, r.Received),
+            Needs(r.Confirmed, r.Cancelled)])).IsSuccess.Should().BeTrue();
+        var before = Flow("po-g");
+
+        var res = await Send(new SaveApprovalFlowDraftRequest("po-g",
+            Input("po-g", r.Cancelled, 2, Linear("fin2"), baseVersionId: before.CurrentVersionId)));
+
+        res.IsInvalid.Should().BeTrue(Dump(res));
+        res.Errors.Keys.Should().Contain("flows[po-g]");
+        Flow("po-g").Should().BeEquivalentTo(before);
+    }
+
+    [Fact]
+    public async Task SaveDraft_SameTarget_DoesNotRevalidatePublishedDefinition()
+    {
+        // 已發布版本引用的群組後來被刪掉：目標狀態沒變就不重驗，草稿照存（J65 不重驗的理由）
+        var r = await Rig();
+        await SeedGraphFlow(r, "po-g", r.Confirmed, 1, G([Start(), Approval("a", Group(987654321)), End()], [E("e0", "start", "a"), E("e1", "a", "end")]));
+
+        var got = await Save("po-g", Input("po-g", r.Confirmed, 1, Linear("fin2"), baseVersionId: Flow("po-g").CurrentVersionId));
+
+        got.Draft.Should().NotBeNull();
+    }
+
+    [Fact]
+    public async Task CreateDraft_DuplicateKey_409WithCode()
+    {
+        var r = await Rig();
+        await CreateDraft(r, Input("po-g", r.Confirmed, 1, Linear()));
+
+        var res = await Send(new CreateApprovalFlowDraftRequest(r.Module, Input("po-g", r.Confirmed, 2, Linear())));
+
+        res.IsConflict.Should().BeTrue(Dump(res));
+        res.Code.Should().Be("FlowKeyTaken");
+    }
+
+    [Fact]
+    public async Task SaveDraft_Conflict_InfoIsInParams()
+    {
+        var r = await Rig();
+        var first = await CreateDraft(r, Input("po-g", r.Confirmed, 1, Linear()));
+        await Save("po-g", Input("po-g", r.Confirmed, 1, Linear("fin2"), baseRev: first.DraftRev));
+
+        var res = await Send(new SaveApprovalFlowDraftRequest("po-g", Input("po-g", r.Confirmed, 1, Linear("emp1"), baseRev: first.DraftRev)));
+
+        res.Params.Should().BeOfType<DraftConflictInfo>();
+        res.Data.Should().BeNull("資料放 params，不展開到本文最上層");
     }
 }
