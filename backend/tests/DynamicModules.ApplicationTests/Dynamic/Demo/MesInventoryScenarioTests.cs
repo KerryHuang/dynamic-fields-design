@@ -35,6 +35,9 @@ public class MesInventoryScenarioTests(DemoGeneratedFixture fx)
         var converted = (await fx.Records("mes-order")).Where(o => Ref(o, fromQuote) is not null).ToList();
         converted.Should().HaveCount(5);
         converted.Select(o => Ref(o, fromQuote)).Distinct().Should().HaveCount(4, "其中一張報價單分兩次轉單");
+
+        var due = await fx.Key("mes-order", "交期");
+        converted.Should().OnlyContain(o => !string.IsNullOrEmpty(DemoGeneratedFixture.Text(o, due)), "轉出的訂單確認時填交期（轉單日＋30 天）");
     }
 
     [Fact]

@@ -92,6 +92,7 @@ public sealed class MesQuoteScenario : IDemoScenario
                 at = After(at, 2);
                 plan.Refresh(quote, at, rep, $"{label} 轉單前重讀");
                 at = After(at, 0);
+                var dueDate = DateOnly.FromDateTime(at).AddDays(30);
                 var order = plan.Convert(OrderCode, at, rep, $"{label} 第 {c + 1} 次轉訂單", ctx =>
                 {
                     var rows = quote.DetailRows[ctx.Ids.ModuleKeys["quote-line"]];
@@ -103,7 +104,7 @@ public sealed class MesQuoteScenario : IDemoScenario
                 order.Facts["customer"] = customer;
                 at = After(at);
                 plan.Update(order, at, rep, $"{label} 轉出的訂單確認", (ctx, r) =>
-                    new UpdateRecordRequest(r.Id, ctx.Values("order", ("status", ctx.Opt("order", "confirmed"))), r.RowVersion));
+                    new UpdateRecordRequest(r.Id, ctx.Values("order", ("status", ctx.Opt("order", "confirmed")), ("dueDate", Iso(dueDate))), r.RowVersion));
             }
         }
     }
