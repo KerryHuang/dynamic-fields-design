@@ -4,7 +4,7 @@ import { createPinia } from 'pinia';
 import * as quasar from 'quasar';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { createI18n } from 'vue-i18n';
-import type { ApprovalFlow } from 'src/domain/dynamic/approval-flow-types';
+import type { SequenceFlow } from 'src/domain/dynamic/approval-flow-types';
 import type { DesignerField, ModuleDetail, WorkflowResponse } from 'src/domain/dynamic/types';
 import zhTW from 'src/i18n/zh-TW.json';
 import { dynamicApi } from 'src/services/api/dynamic-api';
@@ -34,13 +34,13 @@ const wf: WorkflowResponse = {
   transitions: [{ from: 11, to: 12, groupIds: [], approval: { required: true, noMatch: 'block' } }, { from: 12, to: 13, groupIds: [] }],
   editableFieldIds: [7],
 };
-const flow = (key: string, to: number, priority: number, extra: Partial<ApprovalFlow> = {}): ApprovalFlow => ({
+const flow = (key: string, to: number, priority: number, extra: Partial<SequenceFlow> = {}): SequenceFlow => ({
   key, name: { 'zh-TW': `流程${key}` }, toOptionId: to, priority, active: true, moduleKey: 'doc', version: 2, used: false, pendingCount: 0,
   definition: { shape: 'sequence', when: null, rejectTo: null, fallbackApprovers: null, stages: [{ code: 'stage-1', name: { 'zh-TW': 'A' }, when: null, approvers: { source: 'manager', level: 1 }, mode: 'any', editableFields: [], dueHours: null, onEmpty: 'fallback' }] },
   ...extra,
 });
 
-interface Opts { flow?: ApprovalFlow; flows?: ApprovalFlow[]; presetTarget?: number | null; users?: 'pending' | 'ok' }
+interface Opts { flow?: SequenceFlow; flows?: SequenceFlow[]; presetTarget?: number | null; users?: 'pending' | 'ok' }
 async function mountDialog(o: Opts = {}) {
   api.getUsers.mockImplementation(() => (o.users === 'pending' ? new Promise(() => {}) : Promise.resolve([{ userId: 'u1', displayName: '王小明' }] as never)));
   api.getGroups.mockResolvedValue([{ id: 3, key: 'mgr', name: { 'zh-TW': '主管群' }, members: [] }]);
@@ -152,7 +152,7 @@ describe('FlowEditorDialog', () => {
     select(w, '退回後的狀態').vm.$emit('update:modelValue', 13);
     await flushPromises();
   };
-  const usedFlow = (extra: Partial<ApprovalFlow> = {}) => flow('a', 12, 1, { used: true, currentVersionUsed: true, version: 2, ...extra });
+  const usedFlow = (extra: Partial<SequenceFlow> = {}) => flow('a', 12, 1, { used: true, currentVersionUsed: true, version: 2, ...extra });
 
   it('untouched used flow shows no new-version banner', async () => {
     const w = await mountDialog({ flow: usedFlow({ pendingCount: 3 }) });
@@ -294,7 +294,7 @@ describe('FlowEditorDialog', () => {
     m.unmount();
   });
   // Shaped like what the backend returns: single-condition root, null parameters, a group fallback, a single-person stage saved as mode all.
-  const backendShaped = (): ApprovalFlow => flow('a', 12, 3, {
+  const backendShaped = (): SequenceFlow => flow('a', 12, 3, {
     used: true, currentVersionUsed: true, version: 4, pendingCount: 2,
     definition: {
       shape: 'sequence', when: { field: 7, op: 'gte', value: 100 } as never, rejectTo: 13, fallbackApprovers: { source: 'group', groupIds: [3], userIds: null, level: null },

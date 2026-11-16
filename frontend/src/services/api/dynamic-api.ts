@@ -17,7 +17,7 @@ import type {
   ApprovalActionResult, ApprovalBox, ApprovalInboxFilter, ApprovalInboxItem, ApprovalPreview, ApproveBody, RecordApproval, RejectBody,
   SubmitApprovalBody, SubmitApprovalResult, TransferBody, WithdrawBody, CancelBody, ReassignBody, AddSignBody, ApprovalDelegate, ApprovalDelegateBody, MyApprovalDelegate,
 } from 'src/domain/dynamic/approval-types';
-import type { ApprovalDraftPreviewBody, ApprovalFlow, ApprovalFlowInput } from 'src/domain/dynamic/approval-flow-types';
+import type { ApprovalDraftPreviewBody, ApprovalFlow, ApprovalFlowDraftInput, ApprovalFlowInput, ApprovalFlowPublishResult, ApprovalFlowValidation } from 'src/domain/dynamic/approval-flow-types';
 import type { TaskRule, TaskRuleInput } from 'src/domain/dynamic/task-rule-draft';
 import type { EffectivePolicies, ModulePolicy, PolicyValue, SystemPolicy } from 'src/domain/dynamic/policy-types';
 import { handleAuthFailure, http, toApiError } from './http';
@@ -269,6 +269,19 @@ export const dynamicApi = {
   createApprovalFlow: (module: string, body: ApprovalFlowInput) => http.post<ApprovalFlow>('/approval-flows', body, { params: { module } }).then(data),
   updateApprovalFlow: (key: string, body: ApprovalFlowInput) => http.put<ApprovalFlow>(`/approval-flows/${encodeURIComponent(key)}`, body).then(data),
   deleteApprovalFlow: (key: string) => http.delete(`/approval-flows/${encodeURIComponent(key)}`).then(data),
+  /** Draft-only flow (no version yet): the row is created disabled and the body is kept as the draft. */
+  createApprovalFlowDraft: (module: string, body: ApprovalFlowDraftInput) =>
+    http.post<ApprovalFlow>('/approval-flows/draft', body, { params: { module } }).then(data),
+  /** Optimistic lock: the body carries `baseRev` and `baseVersionId` as loaded; 409 `DraftConflict` when they are stale, `force` overwrites. */
+  saveApprovalFlowDraft: (key: string, body: ApprovalFlowDraftInput) =>
+    http.put<ApprovalFlow>(`/approval-flows/${encodeURIComponent(key)}/draft`, body).then(data),
+  discardApprovalFlowDraft: (key: string, baseRev: string | null, force = false) =>
+    http.delete<ApprovalFlow>(`/approval-flows/${encodeURIComponent(key)}/draft`, { params: { baseRev: baseRev ?? undefined, force: force || undefined } }).then(data),
+  publishApprovalFlow: (key: string, body: ApprovalFlowDraftInput) =>
+    http.post<ApprovalFlowPublishResult>(`/approval-flows/${encodeURIComponent(key)}/publish`, body).then(data),
+  /** Dry run (nothing is written): `key` is only passed for an existing flow, which makes its current version the "tightened limits only apply later" baseline. */
+  validateApprovalFlow: (module: string, key: string | null, body: ApprovalFlowDraftInput) =>
+    http.post<ApprovalFlowValidation>('/approval-flows/validate', body, { params: { module, key: key ?? undefined } }).then(data),
   previewApprovalDraft: (module: string, body: ApprovalDraftPreviewBody) =>
     http.post<ApprovalPreview>('/approval-flows/preview', body, { params: { module } }).then(data),
   reorderApprovalFlows: (module: string, toOptionId: number, keys: string[]) =>

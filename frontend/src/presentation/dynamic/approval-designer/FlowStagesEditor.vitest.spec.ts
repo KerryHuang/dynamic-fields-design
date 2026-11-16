@@ -6,7 +6,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { createI18n } from 'vue-i18n';
 import type { StageDraft } from 'src/domain/dynamic/approval-flow-draft';
 import { buildFlowInput, draftFromFlow } from 'src/domain/dynamic/approval-flow-draft';
-import type { ApprovalFlow, ApprovalStageDef } from 'src/domain/dynamic/approval-flow-types';
+import type { ApprovalStageDef, SequenceFlow } from 'src/domain/dynamic/approval-flow-types';
 import type { DesignerField, ModuleDetail } from 'src/domain/dynamic/types';
 import zhTW from 'src/i18n/zh-TW.json';
 import { dynamicApi } from 'src/services/api/dynamic-api';
@@ -223,7 +223,7 @@ describe('FlowStagesEditor', () => {
   it('removing a person and adding them back keeps all-must-approve and the saved definition', async () => {
     const approvers = { source: 'users' as const, userIds: ['u1', 'u2'] };
     const def = savedDef('a', { approvers, mode: 'all' });
-    const flow = { key: 'k', name: {}, toOptionId: 12, priority: 1, active: true, definition: { shape: 'sequence' as const, when: null, stages: [def] } } as unknown as ApprovalFlow;
+    const flow = { key: 'k', name: {}, toOptionId: 12, priority: 1, active: true, definition: { shape: 'sequence' as const, when: null, stages: [def] } } as unknown as SequenceFlow;
     const draft = draftFromFlow(flow);
     const w = await mountEditor(draft.stages, { saved: [def] });
     const set = (ids: string[]) => w.findComponent(ApproverSourceEditor).vm.$emit('update:modelValue', { source: 'users', userIds: ids });

@@ -6,7 +6,8 @@ import { useApprovalFlows, useDeleteApprovalFlow, useReorderApprovalFlows, useSa
 import { useMe } from 'src/application/dynamic/queries/permissions-queries';
 import { useWorkflowQuery } from 'src/application/dynamic/queries/workflow-queries';
 import RowActionMenu from 'src/components/framework/RowActionMenu.vue';
-import type { ApprovalFlow } from 'src/domain/dynamic/approval-flow-types';
+import { isSequenceFlow } from 'src/domain/dynamic/approval-flow-draft';
+import type { ApprovalFlow, SequenceFlow } from 'src/domain/dynamic/approval-flow-types';
 import { resolveI18n } from 'src/domain/dynamic/i18n-text';
 import type { ModuleDetail } from 'src/domain/dynamic/types';
 import { joinList } from 'src/i18n/translate';
@@ -41,7 +42,9 @@ const optionLabel = (id: number) => {
   return o ? resolveI18n(o.label, locale.value) : String(id);
 };
 const groups = computed(() => groupFlows(flows.data.value ?? [], workflow.data.value ?? undefined, optionLabel, props.focusTarget));
-const summary = (f: ApprovalFlow) => conditionSummary(f.definition.when, fields.value, t, locale.value);
+const summary = (f: ApprovalFlow) => conditionSummary((f.definition ?? f.draft?.definition)?.when, fields.value, t, locale.value);
+/** Sequence: its stages; graph: its approval nodes; a draft-only flow has no definition, so no count. */
+const stageCount = (f: ApprovalFlow) => (!f.definition ? null : f.definition.shape === 'graph' ? f.definition.nodes.filter((n) => n.kind === 'approval').length : f.definition.stages.length);
 
 function fail(e: unknown) {
   const err = e as ApiError;
@@ -52,6 +55,8 @@ function fail(e: unknown) {
 // ---- toggle active: the whole flow goes back unchanged except `active` (the backend keeps the version when the definition is the same) ----
 const confirmingOff = ref<ApprovalFlow | null>(null);
 function setActive(f: ApprovalFlow, active: boolean) {
+  // A draft-only flow has no version to switch on; it is published from the designer first.
+  if (!f.definition) return;
   const { key: k, name, toOptionId, priority, definition } = f;
   saveFlow.mutate({ key: k, input: { key: k, name, toOptionId, priority, active, definition } }, {
     onSuccess: () => $q.notify({ type: 'positive', message: t(active ? 'approval.designer.list.activated' : 'approval.designer.list.deactivated') }),
@@ -116,7 +121,7 @@ watch(dialogOpen, async (open) => {
   target?.focus?.();
   opener = null;
 });
-const editing = ref<ApprovalFlow | undefined>();
+const editing = ref<SequenceFlow | undefined>();
 const preset = ref<number | null>(null);
 function openCreate(toOptionId: number | null) {
   if (readonly.value) return;
@@ -127,6 +132,8 @@ function openCreate(toOptionId: number | null) {
 }
 function openEdit(f: ApprovalFlow) {
   if (readonly.value) return;
+  // Until the graph designer page exists, graph flows and draft-only flows cannot be edited here (fg3c switches the entry).
+  if (!isSequenceFlow(f)) { $q.notify({ type: 'negative', message: t('approval.designer.list.graphOnlyEditor') }); return; }
   opener = document.activeElement as HTMLElement | null;
   editing.value = f;
   preset.value = null;
@@ -203,15 +210,15 @@ const actionsOf = (list: ApprovalFlow[], f: ApprovalFlow, i: number) => [
             <div class="text-caption text-muted">{{ f.key }}</div>
             <div class="text-caption q-mt-xs" style="overflow-wrap: anywhere">{{ t('approval.designer.list.condition') }}：{{ summary(f) }}</div>
             <div class="row q-gutter-xs q-mt-xs">
-              <q-badge outline color="primary" :label="t('approval.designer.list.stages', { n: f.definition.stages.length })" />
-              <q-badge outline color="primary" :label="t('approval.designer.list.version', { v: f.version })" />
+              <q-badge v-if="stageCount(f) !== null" outline color="primary" :label="t('approval.designer.list.stages', { n: stageCount(f) })" />
+              <q-badge v-if="f.version !== null" outline color="primary" :label="t('approval.designer.list.version', { v: f.version })" />
               <q-badge outline :color="f.pendingCount ? 'warning' : 'primary'" :label="t('approval.designer.list.pending', { n: f.pendingCount })" :data-testid="`flow-pending-${f.key}`" />
               <q-badge v-if="!f.active" outline color="negative" :label="t('approval.designer.list.inactive')" :data-testid="`flow-inactive-${f.key}`" />
             </div>
           </div>
           <div v-if="!readonly" class="row no-wrap items-center q-ml-sm" @click.stop @keydown.stop>
             <q-toggle
-              :model-value="f.active" :disable="busy" :aria-label="`${t('approval.designer.list.active')} ${resolveI18n(f.name, locale)}`"
+              :model-value="f.active" :disable="busy || !f.definition" :aria-label="`${t('approval.designer.list.active')} ${resolveI18n(f.name, locale)}`"
               :data-testid="`flow-active-${f.key}`" @update:model-value="(v: boolean) => onToggle(f, v)"
             />
             <RowActionMenu v-if="mobile" :actions="actionsOf(g.flows, f, i)" :testid="`flow-menu-${f.key}`" :aria-label="`${t('common.moreActions')} ${nameOf(f)}`" />

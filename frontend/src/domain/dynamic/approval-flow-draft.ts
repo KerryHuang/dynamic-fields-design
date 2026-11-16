@@ -1,4 +1,4 @@
-import type { ApprovalDefinition, ApprovalFlow, ApprovalFlowInput, ApproverSource } from './approval-flow-types';
+import type { ApprovalDefinition, ApprovalFlow, ApprovalFlowInput, ApproverSource, SequenceFlow } from './approval-flow-types';
 import { joinList } from 'src/i18n/translate';
 import { pruneCondition } from './condition';
 import type { ConditionNode, I18nText } from './types';
@@ -54,7 +54,10 @@ export function emptyFlowDraft(toOptionId: number | null, priority: number): Flo
   return { key: '', name: {}, toOptionId, priority, active: true, rejectTo: null, fallback: null, stages: [newStage([])] };
 }
 
-export function draftFromFlow(f: ApprovalFlow): FlowDraft {
+/** The old dialog only edits published sequence flows; graph flows and draft-only flows (no definition) go to the graph designer. */
+export const isSequenceFlow = (f: ApprovalFlow): f is SequenceFlow => f.definition?.shape === 'sequence' && f.version !== null;
+
+export function draftFromFlow(f: SequenceFlow): FlowDraft {
   const d = f.definition;
   return {
     key: f.key, name: { ...f.name }, toOptionId: f.toOptionId, priority: f.priority, active: f.active,
@@ -129,7 +132,7 @@ function sameValue(a: unknown, b: unknown): boolean {
 }
 
 /** True when saving the draft would change the saved flow's definition (only then does a used version turn into a new one). */
-export function definitionChanged(d: FlowDraft, saved: ApprovalFlow): boolean {
+export function definitionChanged(d: FlowDraft, saved: Pick<ApprovalFlow, 'definition'>): boolean {
   const built = buildFlowInput(d);
   return !built || !sameValue(built.definition, saved.definition);
 }

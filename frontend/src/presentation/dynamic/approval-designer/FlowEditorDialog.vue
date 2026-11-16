@@ -6,7 +6,7 @@ import { useSaveApprovalFlow } from 'src/application/dynamic/queries/approval-fl
 import {
   buildFlowInput, definitionChanged, draftFromFlow, emptyFlowDraft, nextPriority, type FlowDraft,
 } from 'src/domain/dynamic/approval-flow-draft';
-import type { ApprovalFlow, ApproverSource } from 'src/domain/dynamic/approval-flow-types';
+import type { ApprovalFlow, ApproverSource, SequenceFlow } from 'src/domain/dynamic/approval-flow-types';
 import { resolveI18n } from 'src/domain/dynamic/i18n-text';
 import { policyValueText } from 'src/domain/dynamic/policy-types';
 import type { ModuleDetail, WorkflowResponse } from 'src/domain/dynamic/types';
@@ -27,7 +27,7 @@ const props = defineProps<{
   module: ModuleDetail;
   workflow: WorkflowResponse;
   flows: ApprovalFlow[];
-  flow?: ApprovalFlow;
+  flow?: SequenceFlow;
   presetTarget?: number | null;
 }>();
 const emit = defineEmits<{ 'update:modelValue': [open: boolean]; saved: [flow: ApprovalFlow | undefined] }>();

@@ -1,10 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import type { ApprovalFlow } from './approval-flow-types';
+import type { SequenceFlow } from './approval-flow-types';
 import {
   buildFlowInput, definitionChanged, draftFromFlow, emptyFlowDraft, insertStage, moveStage, newStage, nextPriority, removeStage, stageErrors,
 } from './approval-flow-draft';
 
-const flow = (key: string, to: number, priority: number): ApprovalFlow => ({
+const flow = (key: string, to: number, priority: number): SequenceFlow => ({
   key, name: { 'zh-TW': key }, toOptionId: to, priority, active: true, moduleKey: 'm', version: 1, used: false, pendingCount: 0,
   definition: {
     shape: 'sequence', when: { all: [{ field: 7, op: 'gte', value: 100 }] } as never, rejectTo: 11, fallbackApprovers: { source: 'users', userIds: ['u1'] },

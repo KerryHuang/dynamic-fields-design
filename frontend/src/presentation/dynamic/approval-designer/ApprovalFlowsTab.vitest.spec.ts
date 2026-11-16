@@ -103,6 +103,36 @@ describe('ApprovalFlowsTab', () => {
     w.unmount();
   });
 
+  it('flows tab renders a draft-only flow without a definition', async () => {
+    const w = await mountTab([flow('a', 12, 1), flow('d', 12, 2, { definition: null, version: null, draft: { definition: { shape: 'graph', stages: [], nodes: [], edges: [] } } })]);
+    const card = w.find('[data-testid="flow-card-d"]').text();
+    expect(card).toContain('流程d');
+    expect(card).not.toContain('關');
+    w.unmount();
+  });
+
+  it('toggling a draft-only flow is not sent', async () => {
+    const w = await mountTab([flow('d', 12, 1, { definition: null, version: null, active: false })]);
+    await w.find('[data-testid="flow-active-d"]').trigger('click');
+    await flushPromises();
+    expect(api.updateApprovalFlow).not.toHaveBeenCalled();
+    w.unmount();
+  });
+
+  it('a graph flow counts approval nodes as its stages and opening it in the old dialog is refused', async () => {
+    const g: ApprovalFlow['definition'] = {
+      shape: 'graph', stages: [],
+      nodes: [{ id: 'start', kind: 'start' }, { id: 'a', kind: 'approval' }, { id: 'b', kind: 'approval' }, { id: 'end', kind: 'end' }], edges: [],
+    };
+    const w = await mountTab([flow('g', 12, 1, { definition: g })], { edit: true });
+    expect(w.find('[data-testid="flow-card-g"]').text()).toContain('2 關');
+    await w.find('[data-testid="flow-edit-g"]').trigger('click');
+    await flushPromises();
+    expect(w.findComponent(FlowEditorDialog).exists()).toBe(false);
+    notified('這條流程用新版設計器編輯，目前還不能在這裡開啟');
+    w.unmount();
+  });
+
   it('target without approval entries shows the no-entry warning', async () => {
     const w = await mountTab([flow('b', 13, 1)]);
     expect(w.find('[data-testid="flow-no-entry-13"]').text()).toBe('這個狀態還沒有需簽核的入口，流程不會被用到');

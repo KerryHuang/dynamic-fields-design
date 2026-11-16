@@ -5,9 +5,9 @@ import * as quasar from 'quasar';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { createI18n } from 'vue-i18n';
 import { emptyFlowDraft, type FlowDraft } from 'src/domain/dynamic/approval-flow-draft';
-import type { ApprovalFlow } from 'src/domain/dynamic/approval-flow-types';
+import type { ApprovalFlow, ApproverSource } from 'src/domain/dynamic/approval-flow-types';
 import type { ApprovalPreview } from 'src/domain/dynamic/approval-types';
-import type { DesignerField, ModuleDetail } from 'src/domain/dynamic/types';
+import type { ConditionNode, DesignerField, ModuleDetail } from 'src/domain/dynamic/types';
 import zhTW from 'src/i18n/zh-TW.json';
 import { dynamicApi } from 'src/services/api/dynamic-api';
 import { fieldTypeRegistry } from 'src/presentation/dynamic/field-type-registry';
@@ -26,9 +26,9 @@ const mod: ModuleDetail = {
   id: 1, key: 'doc', programCode: 'P', name: { 'zh-TW': '單據' }, status: 'Active', version: 1,
   blocks: [{ id: 1, label: { 'zh-TW': 'b' }, sequence: 1, collapsed: false, columns: 2, fields: [field(7, 'decimal', '總額'), field(8, 'decimal', '備註數')] }],
 };
-const stage = (code: string, approvers: ApprovalFlow['definition']['stages'][0]['approvers'] = { source: 'manager', level: 1 }) =>
+const stage = (code: string, approvers: ApproverSource = { source: 'manager', level: 1 }) =>
   ({ code, name: { 'zh-TW': code }, when: null, approvers, mode: 'any' as const, editableFields: [], dueHours: null, onEmpty: 'fallback' as const });
-const saved = (key: string, to: number, priority: number, when: ApprovalFlow['definition']['when'] = null): ApprovalFlow => ({
+const saved = (key: string, to: number, priority: number, when: ConditionNode | null = null): ApprovalFlow => ({
   key, name: { 'zh-TW': `流程${key}` }, toOptionId: to, priority, active: true, moduleKey: 'doc', version: 1, used: false, pendingCount: 0,
   definition: { shape: 'sequence', when, rejectTo: null, fallbackApprovers: null, stages: [stage('s1')] },
 });
