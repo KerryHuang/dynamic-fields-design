@@ -107,7 +107,7 @@ const columns = computed(() => [
     <div v-else-if="!items.length && !query.isFetching.value" class="text-muted q-py-md" data-testid="approval-empty">{{ t(`approval.center.empty.${tab}`) }}</div>
     <q-table
       v-else flat bordered :row-key="key" :rows="items" :columns="columns" :loading="query.isFetching.value"
-      :pagination="{ rowsPerPage: 0 }" :rows-per-page-options="[0]" hide-pagination :grid="$q.screen.lt.md"
+      :pagination="{ rowsPerPage: 0 }" :rows-per-page-options="[0]" hide-pagination :no-data-label="t('dynamic.noData')" :grid="$q.screen.lt.md"
     >
       <template #body="{ row, cols }">
         <q-tr

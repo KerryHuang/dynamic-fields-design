@@ -127,13 +127,13 @@ function confirm() {
         <template v-if="preview">
           <q-table
             flat bordered dense hide-pagination row-key="id" :rows="columnRows" :columns="columnCols"
-            :rows-per-page-options="[0]" data-testid="import-columns"
+            :rows-per-page-options="[0]" :no-data-label="t('dynamic.noData')" data-testid="import-columns"
           />
           <div data-testid="import-summary">{{ t('dynamic.import.summary', { total: preview.total, valid: preview.valid }) }}</div>
           <template v-if="hasErrors">
             <q-table
               flat bordered dense hide-pagination row-key="id" :rows="errorRows" :columns="errorCols"
-              :rows-per-page-options="[0]" data-testid="import-errors"
+              :rows-per-page-options="[0]" :no-data-label="t('dynamic.noData')" data-testid="import-errors"
             />
             <div class="text-negative">{{ t('dynamic.import.fixAndReselect') }}</div>
           </template>

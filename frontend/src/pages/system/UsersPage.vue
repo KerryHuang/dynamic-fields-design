@@ -145,7 +145,7 @@ function runSetActive(u: AdminUser, active: boolean) {
       </div>
       <q-table
         flat bordered row-key="userId" :rows="rows" :columns="columns" :loading="users.isFetching.value"
-        :rows-per-page-options="[0]" hide-pagination :grid="$q.screen.lt.sm"
+        :rows-per-page-options="[0]" hide-pagination :no-data-label="t('dynamic.noData')" :grid="$q.screen.lt.sm"
       >
         <template #body="{ row, cols }">
           <q-tr

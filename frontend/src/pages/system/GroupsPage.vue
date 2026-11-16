@@ -105,7 +105,7 @@ function confirmDelete() {
       </div>
       <q-table
         flat bordered row-key="id" :rows="groups.data.value ?? []" :columns="columns" :loading="groups.isFetching.value"
-        :rows-per-page-options="[0]" hide-pagination
+        :rows-per-page-options="[0]" hide-pagination :no-data-label="t('dynamic.noData')"
       >
         <template #body="{ row, cols }">
           <q-tr
