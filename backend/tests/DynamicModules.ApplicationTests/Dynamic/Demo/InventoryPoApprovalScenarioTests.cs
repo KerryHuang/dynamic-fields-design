@@ -3,6 +3,7 @@ using DynamicModules.Application.Dynamic.ApprovalService;
 using DynamicModules.Application.Dynamic.PrintService;
 using DynamicModules.Application.Dynamic.RecordService.Data;
 using DynamicModules.Application.Dynamic.RecordService.Queries.GetRecord;
+using DynamicModules.Domain.Approvals;
 using DynamicModules.Domain.Entities.Dynamic;
 using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
@@ -45,6 +46,32 @@ public class InventoryPoApprovalScenarioTests(DemoGeneratedFixture fx)
         var runs = await db.Set<ApprovalStageRun>().AsNoTracking().Where(r => r.InstanceId == instanceId).ToDictionaryAsync(r => r.Id);
         return [.. (await db.Set<ApprovalTask>().AsNoTracking().Where(t => t.InstanceId == instanceId).ToListAsync())
             .OrderBy(t => runs[t.StageRunId].Seq).Select(t => (runs[t.StageRunId].StageCode ?? "", t.AssigneeUserId, t.Status))];
+    }
+
+    [Fact]
+    public async Task GraphExampleFlow_IsPublishedGraphButInactive_AndNeverUsedBySubmissions()
+    {
+        fx.Generated();
+        var db = fx.Host.Db.Context;
+        var flow = await db.Set<ApprovalFlow>().AsNoTracking().SingleAsync(f => f.Key == "inv-po-graph-example");
+        flow.Active.Should().BeFalse("範例只給設計頁與試算，不影響既有送簽情境");
+        flow.CurrentVersionId.Should().NotBeNull("已發布第 1 版");
+        flow.NameI18n.Resolve("zh-TW").Should().Be("採購單（流程圖範例）");
+        flow.NameI18n.Values.Keys.Should().BeEquivalentTo("zh-TW", "en-US", "th", "vi");
+        flow.Priority.Should().BeGreaterThan(2, "排在套件兩條關卡格式流程後面");
+        ApprovalFlowDraft.TokenOf(flow.DraftJson).Should().NotBeNull();
+        ApprovalFlowDraft.TryParse(flow.DraftJson).Should().BeNull("發布後草稿內容已清空");
+
+        var version = await db.Set<ApprovalFlowVersion>().AsNoTracking().SingleAsync(v => v.Id == flow.CurrentVersionId);
+        version.Version.Should().Be(1);
+        version.Definition.Shape.Should().Be("graph");
+        version.Definition.Nodes!.Select(n => n.Kind).Should().BeEquivalentTo(["start", "condition", "fork", "approval", "approval", "join", "approval", "approval", "end"]);
+        version.Definition.Nodes!.Single(n => n.Kind == "join").Mode.Should().Be("all");
+        version.Definition.Edges!.Count(e => e.From == "amount").Should().Be(2, "條件節點一條有條件、一條預設");
+
+        var others = await db.Set<ApprovalFlow>().AsNoTracking().Where(f => f.ToOptionId == flow.ToOptionId && f.Key != flow.Key).ToListAsync();
+        others.Should().OnlyContain(f => f.Active, "既有兩條關卡格式流程維持啟用");
+        (await Instances()).Should().NotContain(i => i.FlowKey == "inv-po-graph-example");
     }
 
     [Fact]

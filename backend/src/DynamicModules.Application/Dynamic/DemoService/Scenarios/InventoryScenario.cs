@@ -1,9 +1,13 @@
 using System.Globalization;
+using System.Text.Json;
+using DynamicModules.Application.Common;
+using DynamicModules.Application.Dynamic.ApprovalService;
 using DynamicModules.Application.Dynamic.ConversionService.Commands.ConvertRecord;
 using DynamicModules.Application.Dynamic.ConversionService.Data;
 using DynamicModules.Application.Dynamic.RecordService.Commands.CreateRecord;
 using DynamicModules.Application.Dynamic.RecordService.Commands.UpdateRecord;
 using DynamicModules.Domain.Approvals;
+using DynamicModules.Domain.ValueObjects;
 
 namespace DynamicModules.Application.Dynamic.DemoService.Scenarios;
 
@@ -15,6 +19,7 @@ namespace DynamicModules.Application.Dynamic.DemoService.Scenarios;
 /// 9 張的狀態：3 張一關核准後到貨結案、2 張一關核准的已確認（其中一張部分到貨）、1 張小額直接確認、1 張大額兩關核准、
 /// 1 張大額停在第二關（記錄仍是草稿，manager01 待簽）、1 張草稿（送簽後被 admin 終止）。
 /// 其中 4 張帶新動作的歷程（簽核 a3g）：35 天前轉交、12 天前同意並加簽、18 天前由代理人同意（代理期間已過）、9 天前被終止。
+/// 另外有一條停用的「流程圖格式」範例流程（<see cref="GraphExampleKey"/>，已發布第 1 版、不參與比對），讓 Demo 能點進設計頁與試算，見 <see cref="CreateGraphExample"/>。
 /// 庫存異動由套件的事件在過帳、取消時自動寫入，全部走一般的建立、更新、轉換指令，權限與狀態機照常生效。
 /// 期初庫存每品每倉 500，出貨量遠低於庫存，所以不會出現負庫存。公司、人名、電話、Email 全是虛構（Email 一律 example.com）。
 /// </summary>
@@ -38,6 +43,9 @@ public sealed class InventoryScenario : IDemoScenario
     ];
 
     private static readonly string[] Warehouses = ["主倉", "成品倉"];
+
+    /// <summary>流程圖格式的範例流程代碼；優先序接在套件兩條關卡格式流程（1、2）後面。</summary>
+    public const string GraphExampleKey = "inv-po-graph-example";
 
     /// <param name="Supplier">供應商編號。</param>
     /// <param name="Lines">（品項編號, 數量）。</param>
@@ -110,6 +118,9 @@ public sealed class InventoryScenario : IDemoScenario
                 }));
             plan.Update(adjust, After(openingAt), Keeper, $"{Warehouses[w]} 期初盤點 過帳", Status("adjust", "posted"));
         }
+
+        // ---- 流程圖格式的範例流程（停用，只給設計頁與試算示範）----
+        plan.Run(plan.At(today.AddDays(-85)), Admin, "進銷存 流程圖範例流程 建立並發布", CreateGraphExample);
 
         // ---- 採購單與到貨 ----
         for (var i = 0; i < Pos.Length; i++)
@@ -244,6 +255,54 @@ public sealed class InventoryScenario : IDemoScenario
                 ]
             }));
         plan.Update(count, After(countAt, 0), Keeper, "盤點差異 過帳", Status("adjust", "posted"));
+    }
+
+    /// <summary>
+    /// 範例流程：開始 → 條件（未稅小計 ≥ 50,000 走並行、其他走預設線只過採購主管一關）→ 並行兩條（採購主管、進銷存管理組）→ 匯合（全部到齊）→ 總經理 → 結束。
+    /// 走設計器的草稿與發布（只驗格式，再跑完整規則），發布後仍停用：沒有版本的流程不能啟用，而範例不該影響既有的送簽情境，所以不啟用。座標不給，設計頁自動排版。
+    /// </summary>
+    private static async Task<ServiceResult> CreateGraphExample(DemoContext demo, CancellationToken ct)
+    {
+        var ctx = demo.Inventory!;
+        static I18nText Text(string zh, string en, string th, string vi) => new([new("zh-TW", zh), new("en-US", en), new("th", th), new("vi", vi)]);
+        var subtotal = ctx.Ids.FieldIds["po.subtotal"];
+        var big = JsonSerializer.SerializeToElement(new { all = new[] { new { field = subtotal, op = "gte", value = 50000 } } });
+        ApprovalNodeDef Approval(string id, I18nText name, ApproverSource who, string mode) =>
+            new(id, ApprovalNodeKinds.Approval, name, Approvers: who, Mode: mode, EditableFields: [], DueHours: 24, OnEmpty: ApprovalOnEmpty.Fallback);
+        var lead = Text("採購主管", "Purchasing manager", "หัวหน้าฝ่ายจัดซื้อ", "Trưởng bộ phận mua hàng");
+        var manager = new ApproverSource(ApprovalSources.Manager, Level: 1);
+
+        var nodes = new List<ApprovalNodeDef>
+        {
+            new("start", ApprovalNodeKinds.Start),
+            new("amount", ApprovalNodeKinds.Condition, Text("金額判斷", "Amount check", "ตรวจสอบจำนวนเงิน", "Kiểm tra số tiền")),
+            new("split", ApprovalNodeKinds.Fork),
+            Approval("lead", lead, manager, ApprovalModes.Any),
+            Approval("ops", Text("進銷存管理組", "Inventory management group", "กลุ่มบริหารคลังสินค้า", "Nhóm quản lý kho"),
+                new ApproverSource(ApprovalSources.Group, GroupIds: [demo.GroupIds["ops-manager"]]), ApprovalModes.Any),
+            new("merge", ApprovalNodeKinds.Join, Mode: ApprovalModes.All, ForkId: "split"),
+            Approval("gm", Text("總經理", "General manager", "ผู้จัดการทั่วไป", "Tổng giám đốc"), new ApproverSource(ApprovalSources.Manager, Level: 2), ApprovalModes.Any),
+            Approval("lead-only", lead, manager, ApprovalModes.Any),
+            new("end", ApprovalNodeKinds.End)
+        };
+        var edges = new List<ApprovalEdgeDef>
+        {
+            new("e1", "start", "amount"),
+            new("e2", "amount", "split", Text("未稅小計 ≥ 50,000", "Subtotal ≥ 50,000", "ยอดรวมก่อนภาษี ≥ 50,000", "Tạm tính ≥ 50.000"), big, Order: 1),
+            new("e3", "amount", "lead-only", Default: true),
+            new("e4", "split", "lead"), new("e5", "split", "ops"), new("e6", "lead", "merge"), new("e7", "ops", "merge"),
+            new("e8", "merge", "gm"), new("e9", "gm", "end"), new("e10", "lead-only", "end")
+        };
+        var definition = new ApprovalDefinition(ApprovalShapes.Graph, null, null, new ApproverSource(ApprovalSources.Group, GroupIds: [demo.GroupIds["ops-manager"]]), [], nodes, edges);
+        var input = new ApprovalFlowDraftInput(GraphExampleKey,
+            Text("採購單（流程圖範例）", "Purchase order (flow graph example)", "ใบสั่งซื้อ (ตัวอย่างแผนภาพโฟลว์)", "Đơn mua hàng (ví dụ sơ đồ luồng)"),
+            ctx.Ids.OptionIds["po.confirmed"], 3, definition);
+
+        var moduleKey = ctx.Ids.ModuleKeys["po"];
+        var created = await demo.Sender.Send(new CreateApprovalFlowDraftRequest(moduleKey, input), ct);
+        if (!created.IsSuccess) return created;
+        var draft = (ApprovalFlowResponse)created.Data!;
+        return await demo.Sender.Send(new PublishApprovalFlowRequest(GraphExampleKey, input with { BaseRev = draft.DraftRev, BaseVersionId = draft.VersionId }), ct);
     }
 
     private static CreateRecordRequest Create(DemoContext ctx, string module, params (string Code, object? Value)[] items) =>

@@ -61,12 +61,13 @@ public class DesignCaseFlowTests(DemoGeneratedFixture fx)
     }
 
     [Fact]
-    public async Task DemoFlows_AreExactlyTheBuiltInPackageFlows()
+    public async Task DemoFlows_AreTheBuiltInPackageFlowsPlusTheGraphExample()
     {
         fx.Generated();
         var expected = AppCatalog.Load(AppCatalog.DefaultDirectory).BuiltIns
             .Where(p => DemoCatalog.AppIds.Contains(p.Manifest.Id)).SelectMany(p => p.ApprovalFlows).Select(f => f.Code).ToList();
         expected.Should().Contain(DesignCaseFlowKey);
+        expected.Add(DynamicModules.Application.Dynamic.DemoService.Scenarios.InventoryScenario.GraphExampleKey); // fg3d：Demo 另建的停用範例，其餘仍只有套件流程
         var keys = await fx.Host.Db.Context.Set<ApprovalFlow>().AsNoTracking().Select(f => f.Key).ToListAsync();
         keys.Should().BeEquivalentTo(expected);
     }
