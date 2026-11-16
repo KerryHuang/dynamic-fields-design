@@ -1,11 +1,17 @@
-import { mount } from '@vue/test-utils';
+import { flushPromises, mount } from '@vue/test-utils';
 import * as quasar from 'quasar';
-import { describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createI18n } from 'vue-i18n';
-import type { ApprovalActionView, ApprovalInstanceView, ApprovalStageView, ApprovalTaskView, RecordApproval } from 'src/domain/dynamic/approval-types';
+import type { ApprovalActionView, ApprovalInstanceView, ApprovalProgressGraph, ApprovalStageView, ApprovalTaskView, RecordApproval } from 'src/domain/dynamic/approval-types';
 import type { ModuleSchema, SchemaField } from 'src/domain/dynamic/types';
 import zhTW from 'src/i18n/zh-TW.json';
 import ApprovalPanel from './ApprovalPanel.vue';
+
+// 真的畫布會載入 Vue Flow；這裡換成替身（Vue Flow 的行為在 ProgressGraphCanvas 自己的 spec 與瀏覽器走查驗）。
+vi.mock('./ProgressGraphCanvas.vue', async () => {
+  const { defineComponent, h } = await import('vue');
+  return { __esModule: true, default: defineComponent({ name: 'CanvasStub', props: ['instanceId'], setup: (p) => () => h('div', { 'data-testid': 'canvas-stub', 'data-instance': p.instanceId }) }) };
+});
 
 const task = (p: Partial<ApprovalTaskView> = {}): ApprovalTaskView => ({
   id: 1, assigneeUserId: 'u1', assigneeName: '王主管', originalUserId: 'u1', reason: 'resolved', status: 'open', actedTime: null, canAct: false, canReturnPrevious: false, ...p,
@@ -240,5 +246,49 @@ describe('ApprovalPanel', () => {
     expect(folded.find('[data-testid="previous-5"]').text()).not.toContain('請重新送出');
     const main = mountPanel(approval(null, [ended(5, 'rerouted')]));
     expect(main.find('[data-testid="approval-main-status"]').text()).toContain('請重新送出');
+  });
+
+  describe('progress graph', () => {
+    const graph = (): ApprovalProgressGraph => ({
+      nodes: [{ id: 's', kind: 'start', state: 'passed' }, { id: 'm', kind: 'approval', state: 'active', runIds: [1] }, { id: 'e', kind: 'end', state: 'notReached' }],
+      edges: [{ id: 'e1', from: 's', to: 'm', traversed: true }, { id: 'e2', from: 'm', to: 'e', traversed: false }],
+    });
+    beforeEach(() => {
+      vi.stubGlobal('ResizeObserver', class { observe() {} unobserve() {} disconnect() {} });
+      // jsdom 不排版：讓量到的框寬是 800
+      vi.spyOn(HTMLElement.prototype, 'clientWidth', 'get').mockReturnValue(800);
+    });
+    afterEach(() => { vi.restoreAllMocks(); vi.unstubAllGlobals(); });
+
+    it('shows the progress graph above the timeline when the instance has a graph', async () => {
+      const w = mountPanel(approval(instance({ graph: graph() })));
+      await flushPromises();
+      const html = w.get('[data-testid="approval-panel"]').html();
+      expect(w.find('[data-testid="approval-progress-graph"]').exists()).toBe(true);
+      expect(w.find('[data-testid="canvas-stub"]').attributes('data-instance')).toBe('7');
+      expect(html.indexOf('approval-progress-graph')).toBeGreaterThan(-1);
+      expect(html.indexOf('approval-progress-graph')).toBeLessThan(html.indexOf('approval-stages'));
+      // 時間軸與歷程照舊
+      expect(text(w, 'stage-1')).toContain('主管');
+    });
+
+    it('no graph, no progress graph and no async load', async () => {
+      const w = mountPanel(approval(instance()));
+      await flushPromises();
+      expect(w.find('[data-testid="approval-progress-graph"]').exists()).toBe(false);
+      expect(w.find('[data-testid="canvas-stub"]').exists()).toBe(false);
+      expect(w.find('.approval-stages').exists()).toBe(true);
+    });
+
+    it('previous instances draw their graph only after expanding', async () => {
+      const w = mountPanel(approval(instance({ graph: graph() }), [ended(5, 'rejected', { graph: graph() })]));
+      await flushPromises();
+      expect(w.findAll('[data-testid="approval-progress-graph"]')).toHaveLength(1); // 只有主實例
+      await w.find('[data-testid="approval-previous"] .q-item').trigger('click');
+      await flushPromises();
+      expect(w.findAll('[data-testid="approval-progress-graph"]')).toHaveLength(2);
+      expect(w.find('[data-testid="previous-5"] [data-testid="approval-progress-graph"]').exists()).toBe(true);
+      expect(w.findAll('[data-testid="canvas-stub"]').map((c) => c.attributes('data-instance'))).toEqual(['7', '5']);
+    });
   });
 });
