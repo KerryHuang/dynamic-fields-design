@@ -12,13 +12,21 @@ import type { DesignerEdgeData, DesignerNodeData } from './designer-graph';
 // 鍵盤：Vue Flow 內建的方向鍵移動只發 nodesChange、不發 nodeDragStop，不會寫回工作副本，所以整組關掉（disable-keyboard-a11y）；
 // 外層 wrapper 不再可聚焦（每個節點只剩 DesignerNode 內層一個 Tab 停點，Enter／Space 開面板），也不再帶「press delete」的描述。鍵盤移動留給 fg3e（要進復原堆疊、套 snap）。
 // 平移到某節點、fitView 一律由這裡以 defineExpose 提供（use-graph-designer 不碰 Vue Flow）。
-const props = defineProps<{ canvasId: string; nodes: Node<DesignerNodeData>[]; edges: Edge<DesignerEdgeData>[]; draggable: boolean }>();
+const props = defineProps<{ canvasId: string; nodes: Node<DesignerNodeData>[]; edges: Edge<DesignerEdgeData>[]; draggable: boolean; initialNodes?: string[] }>();
 const emit = defineEmits<{ 'node-open': [id: string]; 'edge-open': [id: string]; 'pane-click': []; 'node-move': [id: string, to: { x: number; y: number }] }>();
 const { t } = useI18n();
 const flow = useVueFlow(props.canvasId);
 const GRID = 8;
 const FIT_PADDING = 0.12;
 
+// 手機的首屏（J66，使用者 11-16 確認）：整張圖縮進 390px 只剩約 38px 寬的節點，所以改成只框住起點附近的 `initialNodes`（縮放 0.6–1）；
+// 節點量好尺寸後（nodesInitialized）才能 fitView，只做第一次。「全圖」鈕、平板以上不受影響。
+let fittedInitial = false;
+function fitInitial() {
+  if (fittedInitial || !props.initialNodes?.length) return;
+  fittedInitial = true;
+  void flow.fitView({ nodes: props.initialNodes, padding: 0.2, minZoom: 0.6, maxZoom: 1 });
+}
 const fitAll = () => { void flow.fitView({ padding: FIT_PADDING, duration: 200 }); };
 /** 把節點移到畫布可見區中央；`rightInset` 是右側被抽屜擋住的寬度（平板的屬性抽屜）。 */
 function focusNode(id: string, rightInset = 0) {
@@ -36,11 +44,11 @@ const editable = computed(() => props.draggable);
 <template>
   <div class="de-canvas" role="group" :aria-label="t('approval.designer.graph.canvasLabel')" data-testid="de-canvas">
     <VueFlow
-      :id="canvasId" :nodes="nodes" :edges="edges" :min-zoom="0.2" :max-zoom="1.5" :fit-view-on-init="true" :snap-to-grid="true" :snap-grid="[GRID, GRID]"
+      :id="canvasId" :nodes="nodes" :edges="edges" :min-zoom="0.2" :max-zoom="1.5" :fit-view-on-init="!initialNodes?.length" :snap-to-grid="true" :snap-grid="[GRID, GRID]"
       :nodes-draggable="editable" :nodes-connectable="false" :elements-selectable="true" :nodes-focusable="false" :edges-focusable="false" :disable-keyboard-a11y="true"
       :zoom-on-scroll="true" :pan-on-scroll="false" :zoom-on-pinch="true" :pan-on-drag="true" :zoom-on-double-click="false" :delete-key-code="null"
       :selection-key-code="null" :multi-selection-key-code="null"
-      @node-click="(e) => emit('node-open', e.node.id)" @edge-click="(e) => emit('edge-open', e.edge.id)" @pane-click="emit('pane-click')"
+      @node-click="(e) => emit('node-open', e.node.id)" @edge-click="(e) => emit('edge-open', e.edge.id)" @pane-click="emit('pane-click')" @nodes-initialized="fitInitial"
       @node-drag-stop="(e) => emit('node-move', e.node.id, { x: e.node.position.x, y: e.node.position.y })"
     >
       <template #node-designer="p"><DesignerNode :data="p.data" @open="emit('node-open', p.id)" /></template>

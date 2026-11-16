@@ -20,10 +20,10 @@ const api = vi.mocked(dynamicApi);
 const canvasCalls = vi.hoisted(() => ({ fitAll: vi.fn(), focusNode: vi.fn() }));
 // 真實的畫布只在瀏覽器驗；這裡的替身把收到的節點與線寫成文字，並提供觸發事件的按鈕。
 const CanvasStub = defineComponent({
-  name: 'DesignerCanvas', props: ['canvasId', 'nodes', 'edges', 'draggable'], emits: ['node-open', 'edge-open', 'pane-click', 'node-move'],
+  name: 'DesignerCanvas', props: ['canvasId', 'nodes', 'edges', 'draggable', 'initialNodes'], emits: ['node-open', 'edge-open', 'pane-click', 'node-move'],
   setup(p, { emit, expose }) {
     expose(canvasCalls);
-    return () => h('div', { 'data-testid': 'canvas', 'data-id': p.canvasId, 'data-draggable': String(p.draggable) }, [
+    return () => h('div', { 'data-testid': 'canvas', 'data-id': p.canvasId, 'data-draggable': String(p.draggable), 'data-initial': JSON.stringify(p.initialNodes ?? null) }, [
       ...p.nodes.map((n: { id: string; data: { label: string }; position: { x: number } }) => h('button', { 'data-testid': `n-${n.id}`, 'data-x': n.position.x, onClick: () => emit('node-open', n.id) }, n.data.label)),
       h('button', { 'data-testid': 'move-a', onClick: () => emit('node-move', 'a', { x: 500, y: 40 }) }),
       h('button', { 'data-testid': 'pane', onClick: () => emit('pane-click') }),
@@ -155,6 +155,18 @@ describe('FlowDesignerPage', () => {
     await flushPromises();
     expect(document.body.querySelector('[data-testid="de-phone-panel"]')).not.toBeNull();
     w.unmount();
+  });
+
+  it('phone first screen frames the first 3 nodes in topological order; tablet and up frame the whole graph (J66)', async () => {
+    const phone = await mountAt(url(), { width: 390 });
+    expect(JSON.parse(phone.get('[data-testid="canvas"]').attributes('data-initial')!)).toEqual(['s', 'a', 'e']);
+    phone.unmount();
+    const long = await mountAt(url(), { width: 390, flow: flow({ definition: { ...def(), nodes: [...def().nodes, { id: 'x', kind: 'notify' }], edges: [{ id: 'e1', from: 's', to: 'a' }, { id: 'e3', from: 'a', to: 'x' }, { id: 'e4', from: 'x', to: 'e' }] }, graph: undefined }) });
+    expect(JSON.parse(long.get('[data-testid="canvas"]').attributes('data-initial')!)).toEqual(['s', 'a', 'x']);
+    long.unmount();
+    const tablet = await mountAt(url(), { width: 820 });
+    expect(tablet.get('[data-testid="canvas"]').attributes('data-initial')).toBe('null');
+    tablet.unmount();
   });
 
   it('tablet: the panel is a drawer that opens on a node and closes on the empty canvas, and the node is scrolled into view', async () => {

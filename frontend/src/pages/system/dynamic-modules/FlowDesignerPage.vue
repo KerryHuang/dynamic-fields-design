@@ -8,6 +8,7 @@ import { useModuleDetail } from 'src/application/dynamic/queries/modules-queries
 import { useMe } from 'src/application/dynamic/queries/permissions-queries';
 import { useWorkflowQuery } from 'src/application/dynamic/queries/workflow-queries';
 import { isSequenceFlow } from 'src/domain/dynamic/approval-flow-draft';
+import { topoOrder } from 'src/domain/dynamic/approval-graph-edit';
 import { resolveI18n } from 'src/domain/dynamic/i18n-text';
 import { toSchemaFields } from 'src/presentation/dynamic/designer/schema-fields';
 import ForbiddenNotice from 'src/components/framework/ForbiddenNotice.vue';
@@ -106,6 +107,8 @@ const vf = computed(() => {
   if (!state) return { nodes: [], edges: [] };
   return toVueFlow(state, { locale: locale.value, t, fields: fields.value, issues: designer.issues.value, selection: selection.value }, { draggable: canEdit.value && !phone.value });
 });
+/** 手機的首屏只框住拓撲順序的前 3 個節點（J66，使用者 11-16 確認）；平板以上整張圖。 */
+const initialNodes = computed(() => (phone.value && designer.state.value ? topoOrder(designer.state.value.definition).slice(0, 3) : undefined));
 const canvasId = computed(() => (designer.server.value.isNew ? 'designer-new' : `designer-${designer.server.value.key}`));
 
 async function open(sel: typeof selection.value) {
@@ -181,7 +184,7 @@ onBeforeUnmount(() => window.removeEventListener('beforeunload', onBeforeUnload)
       <div class="col row no-wrap de-body">
         <div class="col de-canvas-wrap">
           <DesignerCanvas
-            ref="canvas" :canvas-id="canvasId" :nodes="vf.nodes" :edges="vf.edges" :draggable="canEdit && !phone"
+            ref="canvas" :canvas-id="canvasId" :nodes="vf.nodes" :edges="vf.edges" :draggable="canEdit && !phone" :initial-nodes="initialNodes"
             @node-open="(id: string) => open({ kind: 'node', id })" @edge-open="(id: string) => open({ kind: 'edge', id })" @pane-click="onPaneClick"
             @node-move="(id: string, to: { x: number; y: number }) => designer.move(id, to)"
           />

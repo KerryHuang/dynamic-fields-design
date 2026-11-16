@@ -14,13 +14,13 @@ vi.mock('@vue-flow/core', async (orig) => ({ ...(await orig<typeof import('@vue-
 
 const VueFlowStub = defineComponent({
   name: 'VueFlow', inheritAttrs: false,
-  setup: (_, { attrs }) => () => h('div', { 'data-testid': 'vf', 'data-props': JSON.stringify(Object.fromEntries(Object.entries(attrs).filter(([k]) => !/^on[A-Z]/.test(k)).map(([k, v]) => [camelize(k), v]))), onClick: () => (attrs.onNodeClick as (e: unknown) => void)({ node: { id: 'a' } }) }),
+  setup: (_, { attrs }) => () => h('div', { 'data-testid': 'vf', 'data-props': JSON.stringify(Object.fromEntries(Object.entries(attrs).filter(([k]) => !/^on[A-Z]/.test(k)).map(([k, v]) => [camelize(k), v]))), onClick: () => (attrs.onNodeClick as (e: unknown) => void)({ node: { id: 'a' } }), onDblclick: () => (attrs.onNodesInitialized as () => void)() }),
 });
 const nodes = [{ id: 'a', position: { x: 100, y: 50 }, data: {} }] as unknown as Node<DesignerNodeData>[];
-function mountCanvas(draggable = true) {
+function mountCanvas(draggable = true, initialNodes?: string[]) {
   const i18n = createI18n({ legacy: false, locale: 'zh-TW', messages: { 'zh-TW': zhTW } });
   return mount(DesignerCanvas, {
-    props: { canvasId: 'designer-po', nodes, edges: [] as Edge<DesignerEdgeData>[], draggable },
+    props: { canvasId: 'designer-po', nodes, edges: [] as Edge<DesignerEdgeData>[], draggable, initialNodes },
     global: { plugins: [[quasar.Quasar, { components: quasar }], i18n], stubs: { VueFlow: VueFlowStub } },
   });
 }
@@ -51,6 +51,25 @@ describe('DesignerCanvas', () => {
     expect(flowFns.setCenter).toHaveBeenLastCalledWith(100 + 84 + 180, 50 + 42, expect.anything());
     api.focusNode('missing');
     expect(flowFns.setCenter).toHaveBeenCalledTimes(2);
+  });
+
+  it('phone first screen: with initialNodes it fits only those nodes (zoom 0.6–1) once nodes are measured, instead of the whole graph', async () => {
+    const w = mountCanvas(false, ['a', 'b', 'c']);
+    expect(props(w)).toMatchObject({ fitViewOnInit: false });
+    expect(flowFns.fitView).not.toHaveBeenCalled(); // 節點還沒量好
+    await w.get('[data-testid="vf"]').trigger('dblclick'); // nodesInitialized
+    expect(flowFns.fitView).toHaveBeenCalledWith({ nodes: ['a', 'b', 'c'], padding: 0.2, minZoom: 0.6, maxZoom: 1 });
+    await w.get('[data-testid="vf"]').trigger('dblclick'); // 之後加節點再觸發也不重框
+    expect(flowFns.fitView).toHaveBeenCalledTimes(1);
+    (w.vm as unknown as { fitAll(): void }).fitAll(); // 「全圖」鈕不變
+    expect(flowFns.fitView).toHaveBeenLastCalledWith({ padding: 0.12, duration: 200 });
+  });
+
+  it('without initialNodes (tablet and up) the whole graph is fitted on init as before', async () => {
+    const w = mountCanvas();
+    expect(props(w)).toMatchObject({ fitViewOnInit: true });
+    await w.get('[data-testid="vf"]').trigger('dblclick');
+    expect(flowFns.fitView).not.toHaveBeenCalled();
   });
 
   it('a node click reports the node id', async () => {
