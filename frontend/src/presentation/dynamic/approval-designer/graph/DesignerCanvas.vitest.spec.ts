@@ -31,7 +31,7 @@ beforeEach(() => { Object.values(flowFns).forEach((f) => f.mockClear()); });
 describe('DesignerCanvas', () => {
   it('passes the designer settings (J75, U56 a): wheel zooms, drag pans, pinch zooms, snap 8px, no delete key, no connecting yet', () => {
     expect(props(mountCanvas())).toMatchObject({
-      id: 'designer-po', nodesDraggable: true, nodesConnectable: false, elementsSelectable: true, nodesFocusable: true, edgesFocusable: true,
+      id: 'designer-po', nodesDraggable: true, nodesConnectable: false, elementsSelectable: true, nodesFocusable: false, edgesFocusable: false, disableKeyboardA11y: true,
       zoomOnScroll: true, panOnScroll: false, zoomOnPinch: true, panOnDrag: true, snapToGrid: true, snapGrid: [8, 8], deleteKeyCode: null, fitViewOnInit: true,
     });
   });

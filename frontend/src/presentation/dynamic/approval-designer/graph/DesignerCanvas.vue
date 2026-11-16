@@ -9,6 +9,8 @@ import DesignerNode from './DesignerNode.vue';
 import type { DesignerEdgeData, DesignerNodeData } from './designer-graph';
 
 // 設計頁的畫布（J69、J75）。Vue Flow 只在 DesignerCanvas / DesignerNode / DesignerEdge 出現，整個設計頁是路由層動態載入的獨立塊。
+// 鍵盤：Vue Flow 內建的方向鍵移動只發 nodesChange、不發 nodeDragStop，不會寫回工作副本，所以整組關掉（disable-keyboard-a11y）；
+// 外層 wrapper 不再可聚焦（每個節點只剩 DesignerNode 內層一個 Tab 停點，Enter／Space 開面板），也不再帶「press delete」的描述。鍵盤移動留給 fg3e（要進復原堆疊、套 snap）。
 // 平移到某節點、fitView 一律由這裡以 defineExpose 提供（use-graph-designer 不碰 Vue Flow）。
 const props = defineProps<{ canvasId: string; nodes: Node<DesignerNodeData>[]; edges: Edge<DesignerEdgeData>[]; draggable: boolean }>();
 const emit = defineEmits<{ 'node-open': [id: string]; 'edge-open': [id: string]; 'pane-click': []; 'node-move': [id: string, to: { x: number; y: number }] }>();
@@ -35,7 +37,7 @@ const editable = computed(() => props.draggable);
   <div class="de-canvas" role="group" :aria-label="t('approval.designer.graph.canvasLabel')" data-testid="de-canvas">
     <VueFlow
       :id="canvasId" :nodes="nodes" :edges="edges" :min-zoom="0.2" :max-zoom="1.5" :fit-view-on-init="true" :snap-to-grid="true" :snap-grid="[GRID, GRID]"
-      :nodes-draggable="editable" :nodes-connectable="false" :elements-selectable="true" :nodes-focusable="true" :edges-focusable="true"
+      :nodes-draggable="editable" :nodes-connectable="false" :elements-selectable="true" :nodes-focusable="false" :edges-focusable="false" :disable-keyboard-a11y="true"
       :zoom-on-scroll="true" :pan-on-scroll="false" :zoom-on-pinch="true" :pan-on-drag="true" :zoom-on-double-click="false" :delete-key-code="null"
       :selection-key-code="null" :multi-selection-key-code="null"
       @node-click="(e) => emit('node-open', e.node.id)" @edge-click="(e) => emit('edge-open', e.edge.id)" @pane-click="emit('pane-click')"
