@@ -18,5 +18,5 @@ const label = computed(() => {
 </script>
 
 <template>
-  <BaseEdge :id="id" :path="geometry[0]" :label-x="geometry[1]" :label-y="geometry[2]" :label="label" :interaction-width="20" :label-bg-padding="[4, 2]" />
+  <BaseEdge :id="id" :path="geometry[0]" :label-x="geometry[1]" :label-y="geometry[2]" :label="label" :interaction-width="20" :label-show-bg="true" :label-bg-padding="[4, 2]" :label-bg-border-radius="3" />
 </template>

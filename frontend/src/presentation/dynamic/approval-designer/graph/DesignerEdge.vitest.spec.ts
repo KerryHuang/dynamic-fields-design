@@ -26,4 +26,8 @@ describe('DesignerEdge', () => {
     expect(w.find('title').exists()).toBe(false);
     expect(w.text()).toContain('其他');
   });
+
+  it('a labelled edge draws a background so the line does not cross the text', () => {
+    expect(draw({ label: '其他', data: { bendX: 350, fullLabel: '其他' } }).find('.vue-flow__edge-textbg').exists()).toBe(true);
+  });
 });
