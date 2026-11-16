@@ -31,16 +31,9 @@
     ]
   },
   "enabledPlugins": {
-    "dotnet-test@dotnet-agent-skills": true,
     "lifecycle@plugharbor": true
   },
   "extraKnownMarketplaces": {
-    "dotnet-agent-skills": {
-      "source": {
-        "source": "github",
-        "repo": "dotnet/skills"
-      }
-    },
     "plugharbor": {
       "source": {
         "source": "git",
