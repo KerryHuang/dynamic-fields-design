@@ -1,12 +1,26 @@
-import type { RecordApprovalSummary } from 'src/domain/dynamic/approval-types';
+import type { ApprovalActiveStage, RecordApprovalSummary } from 'src/domain/dynamic/approval-types';
 import { resolveI18n } from 'src/domain/dynamic/i18n-text';
 import type { I18nText } from 'src/domain/dynamic/types';
 
 type Translate = (key: string, params?: Record<string, unknown>) => string;
 
+/** True when the server sent a parallel node list (two or more different nodes in progress). */
+export const isParallel = (stages: ApprovalActiveStage[] | null | undefined): stages is ApprovalActiveStage[] => (stages?.length ?? 0) >= 2;
+
+/** Names of the in-progress nodes, in the order they were entered: two are listed, three or more show the first and the total. */
+export function activeStagesText(stages: ApprovalActiveStage[], locale: string, t: Translate): string {
+  const names = stages.map((s) => {
+    const name = resolveI18n(s.name, locale);
+    return s.addSign ? t('approval.addSignOf', { name }) : name;
+  });
+  if (names.length <= 2) return names.join(t('common.listSeparator'));
+  return t('approval.stagesMore', { first: names[0], count: names.length, rest: names.length - 1 });
+}
+
 /** Header badge text; null when the record has never been through an approval. */
 export function badgeText(s: RecordApprovalSummary, locale: string, t: Translate): string | null {
   if (s.status === 'none') return null;
+  if (s.status === 'pending' && isParallel(s.activeStages)) return t('approval.badge.pendingMany', { stages: activeStagesText(s.activeStages, locale, t) });
   if (s.status === 'pending' && s.stageSeq != null && s.stageName) {
     return t('approval.badge.pending', { seq: s.stageSeq, stage: resolveI18n(s.stageName, locale) });
   }

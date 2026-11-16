@@ -13,7 +13,7 @@ import ApprovalInboxFilters from 'src/presentation/approvals/ApprovalInboxFilter
 import DelegateBanner from 'src/presentation/approvals/DelegateBanner.vue';
 import DelegateSettingsDialog from 'src/presentation/approvals/DelegateSettingsDialog.vue';
 import { INBOX_STATUSES } from 'src/presentation/approvals/inbox-filter';
-import { instanceTitle } from 'src/presentation/dynamic/approval/approval-display';
+import { activeStagesText, instanceTitle, isParallel } from 'src/presentation/dynamic/approval/approval-display';
 
 const BOXES: ApprovalBox[] = ['todo', 'done', 'submitted'];
 const SIZE = 20;
@@ -71,7 +71,11 @@ const setFilter = (f: ApprovalInboxFilter) => go({ module: f.module, status: f.s
 
 const key = (r: ApprovalInboxItem) => `${r.taskId}:${r.instanceId}`;
 const title = (r: ApprovalInboxItem) => instanceTitle(r.titleSnapshot, r.moduleName, r.recordId, locale.value);
-const stage = (r: ApprovalInboxItem) => (r.status === 'pending' ? (resolveI18n(r.stageName ?? undefined, locale.value) || '—') : t(`approval.status.${r.status}`));
+const stage = (r: ApprovalInboxItem) => {
+  if (r.status !== 'pending') return t(`approval.status.${r.status}`);
+  if (isParallel(r.activeStages)) return activeStagesText(r.activeStages, locale.value, t);
+  return resolveI18n(r.stageName ?? undefined, locale.value) || '—';
+};
 const moment = (v: string | null) => (v ? date.formatDate(new Date(v), 'YYYY-MM-DD HH:mm') : '—');
 const open = (r: ApprovalInboxItem) => { void router.push(`/dynamic/${r.moduleKey}/${r.recordId}`); };
 

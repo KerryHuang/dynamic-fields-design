@@ -78,6 +78,28 @@ describe('ApprovalCenterPage', () => {
     w.unmount();
   });
 
+  it('center stage column lists parallel stages without the in-approval wrapper', async () => {
+    const stages = (...names: string[]) => names.map((n) => ({ name: { 'zh-TW': n }, addSign: false }));
+    const { w } = await mountPage('/approvals?tab=submitted', { items: [
+      item({ taskId: 0, instanceId: 5, stageName: { 'zh-TW': '法務' }, activeStages: stages('法務', '財務') }),
+      item({ taskId: 0, instanceId: 6, recordId: 10, stageName: { 'zh-TW': '法務' }, activeStages: stages('法務', '財務', '稽核') }),
+      item({ taskId: 0, instanceId: 7, recordId: 11, stageName: { 'zh-TW': '總經理' } }),
+      item({ taskId: 0, instanceId: 8, recordId: 12, stageName: { 'zh-TW': '法務' }, status: 'approved', activeStages: stages('法務', '財務') }),
+    ] });
+    expect(q('approval-row-5')!.textContent).toContain('法務、財務');
+    expect(q('approval-row-5')!.textContent).not.toContain('簽核中');
+    expect(q('approval-row-6')!.textContent).toContain('法務等 3 個');
+    expect(q('approval-row-7')!.textContent).toContain('總經理');
+    expect(q('approval-row-8')!.textContent).not.toContain('法務、財務');
+    w.unmount();
+  });
+
+  it('center todo row keeps its own stage name', async () => {
+    const { w } = await mountPage('/approvals');   // U26: the server never sends activeStages on the todo tab, so the row shows its own node
+    expect(q('approval-row-5')!.textContent).toContain('財務審核');
+    w.unmount();
+  });
+
   const d = (o: Partial<ApprovalDelegate> = {}): ApprovalDelegate => ({
     delegateUserId: 'sales01', delegateName: '業務一', startDate: '2026-11-17', endDate: '2026-11-21', active: false, upcoming: false, ...o,
   });

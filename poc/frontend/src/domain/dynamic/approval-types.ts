@@ -2,12 +2,17 @@ import type { I18nText } from './types';
 
 export type ApprovalInstanceStatus = 'pending' | 'approved' | 'rejected' | 'withdrawn' | 'cancelled' | 'rerouted';
 
+/** One in-progress node while two or more different nodes run in parallel; `addSign` marks an added approver on that node. */
+export interface ApprovalActiveStage { name: I18nText; addSign: boolean }
+
 /** Summary on GET records/{id}; `none` = never submitted but a submit is possible. */
 export interface RecordApprovalSummary {
   status: ApprovalInstanceStatus | 'none';
   stageName: I18nText | null;
   stageSeq: number | null;
   canSubmit: boolean;
+  /** Only sent for parallel graph instances and readers who see the whole graph; absent otherwise. */
+  activeStages?: ApprovalActiveStage[] | null;
 }
 
 export interface RecordApprovalLock { fieldKeys: string[]; detailRowsLocked: boolean }
@@ -95,5 +100,7 @@ export interface ApprovalInboxItem {
   taskId: number; instanceId: number; recordId: number; moduleKey: string; moduleName: I18nText; titleSnapshot: string;
   stageName: I18nText | null; initiatorUserId: string; initiatorName: string; submittedTime: string; dueTime: string | null;
   overdue: boolean; moduleClosed: boolean; status: ApprovalInstanceStatus;
+  /** Same rule as the summary; never sent on the todo tab. */
+  activeStages?: ApprovalActiveStage[] | null;
 }
 export interface ApprovalInboxFilter { module?: string; status?: ApprovalInstanceStatus; from?: string; to?: string }

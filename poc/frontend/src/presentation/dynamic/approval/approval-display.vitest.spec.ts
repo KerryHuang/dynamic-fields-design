@@ -1,9 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import { createI18n } from 'vue-i18n';
+import enUS from 'src/i18n/en-US.json';
 import zhTW from 'src/i18n/zh-TW.json';
 import { badgeColor, badgeText, instanceTitle } from './approval-display';
 
 const { t } = createI18n({ legacy: false, locale: 'zh-TW', messages: { 'zh-TW': zhTW } }).global;
+const en = createI18n({ legacy: false, locale: 'en-US', messages: { 'en-US': enUS } }).global.t;
 const summary = (status: string, extra = {}) => ({ status, stageName: null, stageSeq: null, canSubmit: false, ...extra }) as never;
 
 describe('badgeText', () => {
@@ -22,6 +24,31 @@ describe('badgeText', () => {
   });
   it('none shows nothing', () => {
     expect(badgeText(summary('none'), 'zh-TW', t)).toBeNull();
+  });
+
+  const stages = (...names: string[]) => names.map((n) => ({ name: { 'zh-TW': n, 'en-US': `${n}-en` }, addSign: false }));
+  const parallel = (activeStages: unknown) => summary('pending', { stageSeq: 2, stageName: { 'zh-TW': '法務' }, activeStages });
+
+  it('badgeText lists two parallel stages', () => {
+    expect(badgeText(parallel(stages('法務', '財務')), 'zh-TW', t)).toBe('簽核中（法務、財務）');
+    expect(badgeText(parallel(stages('法務', '財務')), 'en-US', en)).toBe('In approval (法務-en, 財務-en)');
+  });
+  it('badgeText shows the first stage and the total for three or more', () => {
+    expect(badgeText(parallel(stages('法務', '財務', '稽核')), 'zh-TW', t)).toBe('簽核中（法務等 3 個）');
+    expect(badgeText(parallel(stages('Legal', 'Finance', 'Audit')), 'en-US', en)).toBe('In approval (Legal-en + 2 more)');
+  });
+  it('badgeText marks add-sign items with their host name', () => {
+    const added = [{ name: { 'zh-TW': '財務' }, addSign: true }, { name: { 'zh-TW': '法務' }, addSign: true }];
+    expect(badgeText(parallel(added), 'zh-TW', t)).toBe('簽核中（財務（加簽）、法務（加簽））');
+    expect(badgeText(parallel([{ name: { 'en-US': 'Finance' }, addSign: true }, ...stages('Legal')]), 'en-US', en)).toBe('In approval (Finance (added approver), Legal-en)');
+  });
+  it('badgeText keeps the numbered text when activeStages is absent', () => {
+    expect(badgeText(parallel(undefined), 'zh-TW', t)).toBe('簽核中（第 2 關／法務）');
+    expect(badgeText(parallel(null), 'zh-TW', t)).toBe('簽核中（第 2 關／法務）');
+    expect(badgeText(parallel(stages('法務')), 'zh-TW', t)).toBe('簽核中（第 2 關／法務）');
+  });
+  it('badgeText ignores activeStages once the instance is no longer pending', () => {
+    expect(badgeText(summary('approved', { activeStages: stages('法務', '財務') }), 'zh-TW', t)).toBe('已核准');
   });
 });
 
