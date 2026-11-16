@@ -457,6 +457,25 @@ public class ApprovalProgressGraphTests : ApprovalTestBase
     }
 
     [Fact]
+    public async Task Progress_OwnStageReader_KeptAddSign_RenumberedFromOne()
+    {
+        // 原本是 a 上的第 2 個小節點（as-a-2）：留給 emp2 的代號從 1 起，不透露同一主節點上還有別人的加簽；串線代號跟著改
+        var (r, id) = await Boot(ForkJoin());
+        await MustAddSign(id, "fin1", "emp1");
+        await MustAddSign(id, "emp1", "emp2");
+        await RevokeRead(r);
+        (await ViewAs(id, "buyer1")).Graph!.Nodes.Where(n => n.Kind == ApprovalProgressKinds.AddSign).Select(n => n.Id).Should().Equal("as-a-1", "as-a-2");
+
+        var view = await ViewAs(id, "emp2");
+
+        var small = view.Graph!.Nodes.Single(n => n.Kind == ApprovalProgressKinds.AddSign);
+        small.Id.Should().Be("as-a-1");
+        view.Graph.Edges.Single(e => e.To == "as-a-1").Id.Should().Be("as-a-1-in");
+        view.Graph.Edges.Single(e => e.Id == "aj").From.Should().Be("as-a-1");
+        JsonSerializer.Serialize(view.Graph, Web).Should().NotContain("as-a-2");
+    }
+
+    [Fact]
     public async Task Progress_OwnStageReader_ContentChangedAction_NoStageRunId()
     {
         // 臨時讀取權看得到進行中實例的 content-changed，它掛在別人的關卡：不帶出那一列的代號

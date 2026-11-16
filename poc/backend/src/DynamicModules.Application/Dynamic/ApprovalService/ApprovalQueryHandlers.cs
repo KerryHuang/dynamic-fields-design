@@ -441,12 +441,27 @@ internal static class ApprovalViews
         // 加簽是執行中才產生的資料、不是流程結構：只看得到自己關卡的讀者，只留他至少看得到一列的加簽小節點；
         // 其他的拿掉，串線一起拿掉，後面的線改回從前一個還在的節點出發（不然多一個框就洩漏「那一關有人加簽」）
         var dropped = nodes.Where(n => n.Kind == ApprovalProgressKinds.AddSign && n.State == ApprovalProgressStates.Hidden).Select(n => n.Id).ToHashSet();
-        if (dropped.Count == 0) return new ApprovalProgressGraph(nodes, edges);
         var before = edges.Where(e => dropped.Contains(e.To)).ToDictionary(e => e.To, e => e.From);
         string Resolve(string from) { while (dropped.Contains(from)) from = before[from]; return from; }
+
+        // 留下的小節點在每個主節點上重新從 1 編號：原本的序號會透露同一主節點上還有別人的加簽
+        var smallIds = nodes.Where(n => n.Kind == ApprovalProgressKinds.AddSign).Select(n => n.Id).ToHashSet();
+        var taken = nodes.Where(n => !smallIds.Contains(n.Id)).Select(n => n.Id).Concat(edges.Where(e => !smallIds.Contains(e.To)).Select(e => e.Id)).ToHashSet();
+        var renamed = new Dictionary<string, string>();
+        foreach (var group in nodes.Where(n => n.Kind == ApprovalProgressKinds.AddSign && !dropped.Contains(n.Id)).GroupBy(n => n.HostId))
+        {
+            var ordinal = 1;
+            foreach (var n in group)
+            {
+                while (taken.Contains($"as-{group.Key}-{ordinal}") || taken.Contains($"as-{group.Key}-{ordinal}-in")) ordinal++;
+                renamed[n.Id] = $"as-{group.Key}-{ordinal++}";
+            }
+        }
+        string Rename(string id) => renamed.GetValueOrDefault(id, id);
         return new ApprovalProgressGraph(
-            [.. nodes.Where(n => !dropped.Contains(n.Id))],
-            [.. edges.Where(e => !dropped.Contains(e.To)).Select(e => e with { From = Resolve(e.From) })]);
+            [.. nodes.Where(n => !dropped.Contains(n.Id)).Select(n => n with { Id = Rename(n.Id) })],
+            [.. edges.Where(e => !dropped.Contains(e.To)).Select(e =>
+                e with { Id = renamed.TryGetValue(e.To, out var to) && e.Id.EndsWith("-in", StringComparison.Ordinal) ? $"{to}-in" : e.Id, From = Rename(Resolve(e.From)), To = Rename(e.To) })]);
     }
 
     /// <summary>
