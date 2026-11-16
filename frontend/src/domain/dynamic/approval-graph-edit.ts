@@ -28,8 +28,9 @@ const CODE = /^[a-z][a-z0-9-]{0,39}$/;
 const PREFIX: Record<ApprovalNodeKind, string> = { start: 'start', approval: 'approval', condition: 'cond', fork: 'fork', join: 'join', end: 'end', notify: 'notify' };
 /** 只能有一條出線的型別（§6.2）。 */
 const SINGLE_OUT = new Set<ApprovalNodeKind>(['start', 'approval', 'notify', 'join']);
-// JSON 往返而不是 structuredClone：畫面傳進來的值可能是 Vue 的 reactive 代理，structuredClone 會丟 DataCloneError。
-const clone = (s: GraphState): GraphState => JSON.parse(JSON.stringify(s));
+/** 從畫面收到的值先深複製再放進狀態：它可能是 Vue 的 reactive 代理，也可能是編輯器之後還會原地修改的物件（復原堆疊不能共用）。 */
+export const deepCopy = <T>(v: T): T => (v === undefined ? v : (JSON.parse(JSON.stringify(v)) as T));
+const clone = (s: GraphState): GraphState => structuredClone(s);
 
 function allocator(def: GraphDefinition, reserved: string[] = []) {
   const nodes = new Set([...def.nodes.map((n) => n.id), ...reserved]);
@@ -224,7 +225,8 @@ export function moveNode(state: GraphState, id: string, to: Position): GraphStat
 
 /** 合併欄位；值為 undefined 的欄位刪掉（讓後端的 null 省略規則成立）。 */
 function patched<T extends object>(target: T, patch: Partial<T> | Partial<Omit<T, 'id'>>): T {
-  const out = { ...target, ...patch } as Record<string, unknown>;
+  const out = { ...target } as Record<string, unknown>;
+  for (const [k, v] of Object.entries(patch)) out[k] = deepCopy(v);
   for (const k of Object.keys(out)) if (out[k] === undefined) delete out[k];
   return out as T;
 }

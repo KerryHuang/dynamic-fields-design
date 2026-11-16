@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed } from 'vue';
+import { deepCopy } from 'src/domain/dynamic/approval-graph-edit';
 import type { ModuleDetail, WorkflowResponse } from 'src/domain/dynamic/types';
 import FlowBasicFields, { type FlowBasic } from '../FlowBasicFields.vue';
 import { flowErrors } from './designer-graph';
@@ -17,11 +18,11 @@ const errs = computed(() => flowErrors(d.issues.value?.errors.flow));
 function onPatch(p: Partial<FlowBasic>) {
   const { key, name, toOptionId, when, rejectTo, fallback } = p;
   if (key !== undefined) d.editMeta({ key }, 'flow:key');
-  if (name !== undefined) d.editMeta({ name }, 'flow:name');
+  if (name !== undefined) d.editMeta({ name: deepCopy(name) }, 'flow:name');
   if (toOptionId !== undefined) d.editMeta({ toOptionId });
-  if ('when' in p) d.edit((s) => ({ ...s, definition: { ...s.definition, when } }), 'flow:when');
-  if (rejectTo !== undefined) d.edit((s) => ({ ...s, definition: { ...s.definition, rejectTo } }));
-  if (fallback !== undefined) d.edit((s) => ({ ...s, definition: { ...s.definition, fallbackApprovers: fallback } }));
+  if ('when' in p) d.edit((s) => ({ ...s, definition: { ...s.definition, when: deepCopy(when) } }), 'flow:when');
+  if (rejectTo !== undefined) d.edit((s) => ({ ...s, definition: { ...s.definition, rejectTo: deepCopy(rejectTo) } }));
+  if (fallback !== undefined) d.edit((s) => ({ ...s, definition: { ...s.definition, fallbackApprovers: deepCopy(fallback) } }));
 }
 </script>
 

@@ -1,10 +1,12 @@
 import { describe, expect, it } from 'vitest';
+import { reactive } from 'vue';
 import cases from '../../../../shared/approval-graph-cases.json';
 import type { ApprovalEdgeDef, ApprovalNodeDef, GraphDefinition } from './approval-flow-types';
 import {
   addNode, canConnect, conditionOutEdges, connect, insertOnEdge, moveNode, nextCode, relayout, removeEdge, removeNode, renameCode,
   reorderConditionEdge, setEdge, setNode, topoOrder, type EditOptions, type GraphState,
 } from './approval-graph-edit';
+import { createHistory, push, undo } from './approval-graph-history';
 import { layoutLeftToRight } from './approval-graph-layout';
 
 const names: EditOptions['names'] = { approval: (n) => ({ 'zh-TW': `簽核 ${n}` }), conditionLabel: (n) => ({ 'zh-TW': `條件 ${n}` }) };
@@ -455,5 +457,32 @@ describe('invariants over the shared valid cases', () => {
         expect(t.definition.edges.filter((e) => e.from === n.id || e.to === n.id)).toEqual([]);
       }
     }
+  });
+});
+
+describe('patch values are copied at the source (U60 regression)', () => {
+  const whenOf = (s: GraphState) => edgeOf(s, 'c', 'x').when as { all: { value: unknown }[] };
+
+  it('undo after: edit condition, edit label, edit condition again goes back to the first condition value', () => {
+    // ConditionEditor 之後還會原地修改它發出去的那個物件；復原堆疊不能跟它共用
+    const row = { cond: { field: 1, op: 'eq' as const, value: 1 } };
+    let h = createHistory(cond());
+    h = push(h, setEdge(h.present, 'e3', { when: { all: [row.cond] } }));
+    h = push(h, setEdge(h.present, 'e3', { label: { 'zh-TW': 'L' } }));
+    row.cond.value = 2;
+    h = push(h, setEdge(h.present, 'e3', { when: { all: [row.cond] } }));
+    expect(whenOf(h.present).all[0].value).toBe(2);
+    h = undo(h);
+    h = undo(h);
+    expect(whenOf(h.present).all[0].value).toBe(1);
+  });
+
+  it('a patch made of Vue reactive proxies neither throws nor stays shared', () => {
+    const when = reactive({ all: [{ field: 1, op: 'eq', value: 5 }] });
+    const next = setEdge(cond(), 'e3', { when: when as never });
+    when.all[0].value = 6;
+    expect(whenOf(next).all[0].value).toBe(5);
+    expect(() => setNode(next, 'x', { name: reactive({ 'zh-TW': 'n' }) })).not.toThrow();
+    expect(() => moveNode(setEdge(next, 'e3', { label: undefined }), 'x', { x: 1, y: 1 })).not.toThrow();
   });
 });
