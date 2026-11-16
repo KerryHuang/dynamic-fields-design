@@ -59,7 +59,40 @@ public sealed class ApprovalReader(IApprovalInstanceRepository repo, IDynamicAcc
         // graph：序號只數簽核節點，和時間軸（只列簽核節點，U6）看到的順序一致；Seq 把開始、分支、匯合等結構節點也算進去，不能直接給使用者
         if (run is not null && ApprovalEngine.DefinitionOf(pending!) is { } def && ApprovalGraphMode.Applies(pending!, def))
             seq = runs.Count(r => r.NodeKind == ApprovalNodeKinds.Approval && r.Seq <= run.Seq);
-        return new RecordApprovalSummary(latest?.Status ?? NoInstance, run?.NameSnapshot, seq, targets.Count > 0);
+        // 並行時列出進行中的節點（fg4 U9）；只給看得到整張圖的讀者（M2）：有臨時讀取權的簽核人維持單一名稱，和圖的遮蔽一致
+        var active = pending is not null && ApprovalEngine.DefinitionOf(pending) is { } graphDef && ApprovalGraphMode.Applies(pending, graphDef)
+            ? ActiveStages(graphDef, runs) : null;
+        if (active is not null && !await SeesWholeAsync(module, record, pending!, ct)) active = null;
+        
+        return new RecordApprovalSummary(latest?.Status ?? NoInstance, run?.NameSnapshot, seq, targets.Count > 0, active);
+    }
+
+    /// <summary>
+    /// graph 實例進行中的簽核節點與加簽（依 Seq 排），兩個以上不同節點才回清單、否則 null（U9）。
+    /// 以（節點代號、是否為加簽）去重：只有同一個節點不重複列，名稱相同但不同節點各列；加簽項目的名稱是它掛的簽核節點名稱。
+    /// </summary>
+    internal static List<ApprovalActiveStage>? ActiveStages(ApprovalDefinition? def, IEnumerable<ApprovalStageRun> runsOfInstance)
+    {
+        var active = runsOfInstance.Where(r => r.NodeKind == ApprovalNodeKinds.Approval && r.Status == ApprovalStageStatus.Active)
+            .OrderBy(r => r.Seq).DistinctBy(r => (r.NodeId, AddSign: r.StageCode is null)).ToList();
+        if (active.Count < 2) return null;
+        return active.Select(r =>
+        {
+            var addSign = r.StageCode is null;
+            var name = addSign ? def?.Nodes?.FirstOrDefault(n => n.Id == r.NodeId)?.Name ?? r.NameSnapshot : r.NameSnapshot;
+            return new ApprovalActiveStage(name ?? new I18nText(), addSign);
+        }).ToList();
+    }
+
+    /// <summary>
+    /// 讀者看得到這個實例的整張圖：記錄在 Read 範圍內、簽核管理員、或發起人；條件是 <see cref="GetRecordApprovalHandler"/> 的 ownStages 的反面。
+    /// 只因任務取得臨時讀取權的簽核人不算（只看得到自己的關卡）。
+    /// </summary>
+    private async Task<bool> SeesWholeAsync(Module module, Record record, ApprovalInstance inst, CancellationToken ct)
+    {
+        if (inst.InitiatorUserId == user.UserId) return true;
+        if (module.IsReadable() && (await guard.AuthorizeAsync(module, PermissionAction.Read, ct)).Permissions is { } read && InScope(read, record.OwnerUserId)) return true;
+        return await IsManagerAsync(module, record, ct);
     }
 
     /// <summary>模組可讀、Approve 動作軸、記錄在資料範圍內（簽核管理員，設計 §7.8）。</summary>
@@ -267,6 +300,21 @@ public class GetApprovalTasksHandler(
         var names = await ApprovalViews.UserNamesAsync(permissions, ct);
         var now = time.Now;
         var items = new List<ApprovalInboxItem>();
+        var runsByInstance = runs.ToLookup(x => x.InstanceId);
+        var scopeCache = new Dictionary<(long, PermissionAction), EffectivePermissions?>();
+        // 「已處理」列要逐列判斷讀者看不看得到整張圖：發起人，或對該記錄有 Read／Approve 的資料範圍（同「全部」分頁的 ListVisibleIdsAsync）
+        async Task<bool> SeesWhole(ApprovalInstance inst)
+        {
+            if (inst.InitiatorUserId == me) return true;
+            if (await ModuleOf(inst.ModuleId) is not { } m || !m.IsReadable()) return false;
+            foreach (var action in new[] { PermissionAction.Read, PermissionAction.Approve })
+            {
+                if (!scopeCache.TryGetValue((m.Id, action), out var p))
+                    scopeCache[(m.Id, action)] = p = (await guard.AuthorizeAsync(m, action, ct)).Permissions;
+                if (p is not null && (await records.ListVisibleIdsAsync(m.Id, [inst.RecordId], p.OwnerUserIds, ct)).Contains(inst.RecordId)) return true;
+            }
+            return false;
+        }
         foreach (var r in rows.Skip((page - 1) * size).Take(size))
         {
             var module = await ModuleOf(r.Inst.ModuleId);
@@ -274,9 +322,13 @@ public class GetApprovalTasksHandler(
             // 「待簽」列取自己任務所在的關卡（U5）：sequence 的待簽任務一定在目前關卡，結果不變；graph 並行時目前關卡可能是另一條分支的節點。其餘照舊取目前關卡
             var runId = request.Box == ApprovalInboxBoxes.Todo && r.Task is { } mine ? mine.StageRunId : r.Inst.CurrentStageRunId;
             var stage = pending && runId is { } rid && runById.TryGetValue(rid, out var run) ? run.NameSnapshot : null;
+            // 並行時三個分頁列出進行中的節點（fg4 U10）；「待簽」維持自己的節點（U26），「已處理」只給看得到整張圖的讀者（M2）
+            var def = pending && request.Box != ApprovalInboxBoxes.Todo ? ApprovalEngine.DefinitionOf(r.Inst) : null;
+            var active = def is not null && ApprovalGraphMode.Applies(r.Inst, def) ? ApprovalReader.ActiveStages(def, runsByInstance[r.Inst.Id]) : null;
+            if (active is not null && request.Box == ApprovalInboxBoxes.Done && !await SeesWhole(r.Inst)) active = null;
             items.Add(new ApprovalInboxItem(r.Task?.Id ?? 0, r.Inst.Id, r.Inst.RecordId, module?.Key ?? "", module?.NameI18n ?? new I18nText(),
                 r.Inst.TitleSnapshot, stage, r.Inst.InitiatorUserId, names.GetValueOrDefault(r.Inst.InitiatorUserId) ?? r.Inst.InitiatorUserId,
-                r.Inst.SubmittedTime, r.Due, pending && r.Due < now, module is null || !module.IsWritable(), r.Inst.Status));
+                r.Inst.SubmittedTime, r.Due, pending && r.Due < now, module is null || !module.IsWritable(), r.Inst.Status, active));
         }
         return ServiceResult.Success(new PagedResponse<ApprovalInboxItem>(items, rows.Count, page, size));
     }

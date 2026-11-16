@@ -55,7 +55,14 @@ public static class ApprovalActionRules
 // ── 查詢（設計 §10.2、§13.3、§13.4、§15） ──
 
 /// <summary>記錄詳情的簽核摘要（GET records/{id} 的 approval）。Status：最近一個實例的狀態，沒有實例但能送出時是 none。</summary>
-public sealed record RecordApprovalSummary(string Status, I18nText? StageName, int? StageSeq, bool CanSubmit);
+public sealed record RecordApprovalSummary(string Status, I18nText? StageName, int? StageSeq, bool CanSubmit,
+    IReadOnlyList<ApprovalActiveStage>? ActiveStages = null);
+
+/// <summary>
+/// 並行時進行中的一個簽核節點（計畫 fg4 J11）：Name 是節點名稱（加簽是它掛的簽核節點名稱），AddSign 為 true 表示這項是該節點上的加簽。
+/// 只在兩個以上不同節點同時進行、而且讀者看得到整張圖時才回（<see cref="ApprovalReader.ActiveStages"/>）。
+/// </summary>
+public sealed record ApprovalActiveStage(I18nText Name, bool AddSign);
 
 /// <summary>記錄處於簽核鎖定狀態時，讀者看得到的鎖定欄位 key 與明細列是否一起鎖（GET records/{id} 的 approvalLock）。</summary>
 public sealed record RecordApprovalLock(IReadOnlyList<string> FieldKeys, bool DetailRowsLocked);
@@ -81,7 +88,7 @@ public sealed record RecordApprovalResponse(ApprovalInstanceView? Current, IRead
 /// <summary>簽核中心的一列。TaskId：todo／done 是任務，submitted／all 是 0（以實例為單位）。Status 一律是實例狀態。</summary>
 public sealed record ApprovalInboxItem(long TaskId, long InstanceId, long RecordId, string ModuleKey, I18nText ModuleName, string TitleSnapshot,
     I18nText? StageName, string InitiatorUserId, string InitiatorName, DateTime SubmittedTime, DateTime? DueTime, bool Overdue, bool ModuleClosed,
-    string Status);
+    string Status, IReadOnlyList<ApprovalActiveStage>? ActiveStages = null);
 
 public static class ApprovalInboxBoxes
 {
