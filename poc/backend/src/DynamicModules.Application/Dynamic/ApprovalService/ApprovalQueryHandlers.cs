@@ -401,7 +401,9 @@ internal static class ApprovalViews
         }).ToList();
         var actions = allActions.Where(a => a.InstanceId == i.Id).OrderBy(a => a.Id).Select(a => new ApprovalActionView(a.Action, a.ActorUserId, Name(a.ActorUserId),
             a.OnBehalfOfUserId, a.TargetUserIds ?? [], a.Comment, Data(a, hiddenFieldIds), a.CreatedTime,
-            (a.TargetUserIds ?? []).Select(Name).ToList(), a.OnBehalfOfUserId is { } behalf ? Name(behalf) : null, a.StageRunId)).ToList();
+            (a.TargetUserIds ?? []).Select(Name).ToList(), a.OnBehalfOfUserId is { } behalf ? Name(behalf) : null,
+            // 只看得到自己關卡的讀者：看不到的那一列（例如臨時讀取權看到的 content-changed 掛在別人的關卡）不帶出它的代號
+            ownRunIds is not null && a.StageRunId is { } actionRun && !ownRunIds.Contains(actionRun) ? null : a.StageRunId)).ToList();
         // 撤回資格同 WithdrawApprovalHandler：sequence 是目前關卡還沒有任何同意或退回；graph 是每個 active 的簽核節點都還沒有（不讀圖，U11）
         var current = runs.FirstOrDefault(r => r.Id == i.CurrentStageRunId) ?? runs.LastOrDefault(r => r.Status == ApprovalStageStatus.Active);
         var canWithdraw = pending && writable && i.InitiatorUserId == me
@@ -432,9 +434,19 @@ internal static class ApprovalViews
         var byStageCode = i.RouteKind == ApprovalRouteKind.Fallback || def.Shape != ApprovalShapes.Graph;
         var shown = i.RouteKind == ApprovalRouteKind.Fallback ? FallbackDefinition : ApprovalGraphConversion.FromSequence(def);
         if (ApprovalGraphProgress.Of(shown, runs, rejectedRunIds, byStageCode, i.Status == ApprovalInstanceStatus.Approved) is not { } p) return null;
+        var nodes = p.Nodes.Select(n => ProgressNodeView(n, ownRunIds)).ToList();
+        var edges = p.Edges.Select(e => new ApprovalProgressEdge(e.Id, e.From, e.To, e.Label, ownRunIds is null && e.Traversed)).ToList();
+        if (ownRunIds is null) return new ApprovalProgressGraph(nodes, edges);
+
+        // 加簽是執行中才產生的資料、不是流程結構：只看得到自己關卡的讀者，只留他至少看得到一列的加簽小節點；
+        // 其他的拿掉，串線一起拿掉，後面的線改回從前一個還在的節點出發（不然多一個框就洩漏「那一關有人加簽」）
+        var dropped = nodes.Where(n => n.Kind == ApprovalProgressKinds.AddSign && n.State == ApprovalProgressStates.Hidden).Select(n => n.Id).ToHashSet();
+        if (dropped.Count == 0) return new ApprovalProgressGraph(nodes, edges);
+        var before = edges.Where(e => dropped.Contains(e.To)).ToDictionary(e => e.To, e => e.From);
+        string Resolve(string from) { while (dropped.Contains(from)) from = before[from]; return from; }
         return new ApprovalProgressGraph(
-            [.. p.Nodes.Select(n => ProgressNodeView(n, ownRunIds))],
-            [.. p.Edges.Select(e => new ApprovalProgressEdge(e.Id, e.From, e.To, e.Label, ownRunIds is null && e.Traversed))]);
+            [.. nodes.Where(n => !dropped.Contains(n.Id))],
+            [.. edges.Where(e => !dropped.Contains(e.To)).Select(e => e with { From = Resolve(e.From) })]);
     }
 
     /// <summary>

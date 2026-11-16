@@ -38,6 +38,13 @@ public class ApprovalProgressGraphTests : ApprovalTestBase
         [Start(), Condition("c"), Approval("a", Users("fin1"), editable: [r.DueDate]) with { DueHours = 24 }, End()],
         [E("e0", "start", "c"), E("ca", "c", "a", Cond(r.Total, "gte", 1), order: 1), E("cd", "c", "end", isDefault: true), E("ae", "a", "end")]);
 
+    /// <summary>外層 f（任一到齊）：fx 是 x（fin1）；fb 是 b1（buyer2）→ 內層 f2 → y（gm）、z（emp1）→ j2（全部）→ j。</summary>
+    private static ApprovalDefinition NestedInCancelled() => G(
+        [Start(), Fork("f"), Approval("x", Users("fin1")), Approval("b1", Users("buyer2")), Fork("f2"), Approval("y", Users("gm")), Approval("z", Users("emp1")),
+         Join("j2", "f2"), Join("j", "f", ApprovalModes.Any), End()],
+        [E("e0", "start", "f"), E("fx", "f", "x"), E("fb", "f", "b1"), E("b1f2", "b1", "f2"), E("f2y", "f2", "y"), E("f2z", "f2", "z"),
+         E("yj2", "y", "j2"), E("zj2", "z", "j2"), E("j2j", "j2", "j"), E("xj", "x", "j"), E("je", "j", "end")]);
+
     private async Task<PurchaseRig> Rig(Func<PurchaseRig, ApprovalDefinition> graph)
     {
         var r = await BuildPurchase();
@@ -289,6 +296,69 @@ public class ApprovalProgressGraphTests : ApprovalTestBase
         State(view, "_fallback").Should().Be(ApprovalProgressStates.Active);
     }
 
+    // ───────── 真流程：引擎行為的假設（Domain 測試用手造資料，這裡守住） ─────────
+
+    [Fact]
+    public async Task Progress_Sequence_ReturnPreviousToAddSign_RestartedJoinsSameSmallNode()
+    {
+        // s1 加簽 emp1、emp1 同意、s2 退回上一關 → 引擎重建 emp1 的加簽（複製加簽人、對象、方式）：兩列同一個小節點，掛在 s1
+        var (_, id) = await BootSequence();
+        await MustAddSign(id, "fin1", "emp1");
+        await MustApprove(id, "emp1");
+        await MustReject(id, "gm", RejectTaskHandler.ToPrevious);
+
+        var view = await ViewAs(id, "buyer1");
+
+        var small = view.Graph!.Nodes.Single(n => n.Kind == ApprovalProgressKinds.AddSign);
+        small.HostId.Should().Be("s1");
+        small.RunIds.Should().HaveCount(2);
+        small.State.Should().Be(ApprovalProgressStates.Active);
+        State(view, "s2").Should().Be(ApprovalProgressStates.Returned);
+
+        await MustApprove(id, "emp1");
+        var again = await ViewAs(id, "buyer1");
+        again.Graph!.Nodes.Single(n => n.Kind == ApprovalProgressKinds.AddSign).State.Should().Be(ApprovalProgressStates.Passed);
+        again.Graph.Nodes.Count(n => n.Kind == ApprovalProgressKinds.AddSign).Should().Be(1);
+        State(again, "s2").Should().Be(ApprovalProgressStates.Active);
+        Node(again, "s2").RunIds.Should().HaveCount(2);
+
+        await MustApprove(id, "gm");
+        (await ViewAs(id, "buyer1")).Graph!.Edges.Should().OnlyContain(e => e.Traversed);
+    }
+
+    [Fact]
+    public async Task Progress_Graph_CancelledBranch_NestedForkNotEntered_AllUnreachedCancelled()
+    {
+        var (_, id) = await Boot(NestedInCancelled());
+        await MustApprove(id, "fin1");   // 外層任一到齊時，fb 分支的 b1 還沒簽
+
+        var view = await ViewAs(id, "buyer1");
+
+        view.Status.Should().Be(ApprovalInstanceStatus.Approved);
+        foreach (var n in new[] { "b1", "f2", "y", "z", "j2" }) State(view, n).Should().Be(ApprovalProgressStates.Cancelled, n);
+        State(view, "j").Should().Be(ApprovalProgressStates.Passed);
+        State(view, "end").Should().Be(ApprovalProgressStates.Passed);
+    }
+
+    [Fact]
+    public async Task Progress_Graph_CancelledBranch_NestedForkEntered_RealFlow()
+    {
+        // 內層已進入（BranchKey 帶斜線）：y 已簽過、z 被一併取消，沒走到的 j2 也標已取消
+        var (_, id) = await Boot(NestedInCancelled());
+        await MustApprove(id, "buyer2");
+        await MustApprove(id, "gm");
+        await MustApprove(id, "fin1");
+
+        var view = await ViewAs(id, "buyer1");
+
+        State(view, "b1").Should().Be(ApprovalProgressStates.Passed);
+        State(view, "f2").Should().Be(ApprovalProgressStates.Passed);
+        State(view, "y").Should().Be(ApprovalProgressStates.Passed);
+        State(view, "z").Should().Be(ApprovalProgressStates.Cancelled);
+        State(view, "j2").Should().Be(ApprovalProgressStates.Cancelled);
+        State(view, "j").Should().Be(ApprovalProgressStates.Passed);
+    }
+
     // ───────── 只看得到自己關卡的讀者（U1、J7） ─────────
 
     [Fact]
@@ -347,6 +417,67 @@ public class ApprovalProgressGraphTests : ApprovalTestBase
         view.Stages.Select(s => s.Id).Should().Equal(firstRun);
         State(view, "b").Should().Be(ApprovalProgressStates.Hidden);   // 不透露 b 被退回
         view.Graph!.Edges.Should().OnlyContain(e => !e.Traversed);
+    }
+
+    [Fact]
+    public async Task Progress_OwnStageReader_OthersAddSign_NotDrawn()
+    {
+        // 加簽是執行中才產生的資料：別的關卡有沒有人加簽，只看自己關卡的讀者不該知道；主節點的出線改回從主節點出發
+        var (r, id) = await Boot(ForkJoin());
+        await MustAddSign(id, "fin1", "emp1");
+        await RevokeRead(r);
+
+        var view = await ViewAs(id, "buyer2");
+
+        view.Graph!.Nodes.Select(n => n.Id).Should().Equal("start", "f", "a", "b", "j", "c", "end");
+        var edge = view.Graph.Edges.Single(e => e.Id == "aj");
+        edge.From.Should().Be("a");
+        view.Graph.Edges.Select(e => e.Id).Should().Equal("e0", "fa", "fb", "aj", "bj", "jc", "ce");
+        JsonSerializer.Serialize(view.Graph, Web).Should().NotContain("as-").And.NotContain("addSign");
+        State(view, "b").Should().Be(ApprovalProgressStates.Active);
+    }
+
+    [Fact]
+    public async Task Progress_OwnStageReader_OwnAddSignKept_OthersContractedAway()
+    {
+        // a 上先後兩個加簽小節點（fin1 → emp1，emp1 再加簽 emp2）：emp2 只留自己的那個，前一個拿掉後線改從主節點出發
+        var (r, id) = await Boot(ForkJoin());
+        await MustAddSign(id, "fin1", "emp1");
+        await MustAddSign(id, "emp1", "emp2");
+        await RevokeRead(r);
+
+        var view = await ViewAs(id, "emp2");
+
+        var smalls = view.Graph!.Nodes.Where(n => n.Kind == ApprovalProgressKinds.AddSign).ToList();
+        smalls.Should().ContainSingle().Which.State.Should().Be(ApprovalProgressStates.Active);
+        view.Graph.Edges.Single(e => e.To == smalls[0].Id).From.Should().Be("a");
+        view.Graph.Edges.Single(e => e.Id == "aj").From.Should().Be(smalls[0].Id);
+        view.Graph.Edges.Should().OnlyContain(e => !e.Traversed);
+        view.Graph.Edges.Select(e => e.From).Concat(view.Graph.Edges.Select(e => e.To)).Should().OnlyContain(n => view.Graph.Nodes.Any(x => x.Id == n));
+    }
+
+    [Fact]
+    public async Task Progress_OwnStageReader_ContentChangedAction_NoStageRunId()
+    {
+        // 臨時讀取權看得到進行中實例的 content-changed，它掛在別人的關卡：不帶出那一列的代號
+        var r = await Scenario3();
+        As("buyer1");
+        var po = await NewPo(r, price: 150000);
+        var id = (await MustSubmit(po.Id, r.Confirmed)).InstanceId!.Value;
+        (await Send(new CreateRecordRequest(r.Extra, V((TitleId(r.Extra), "追加"), (r.ExtraRef, po.Id), (r.ExtraAmount, 1000))))).IsCreated.Should().BeTrue();
+        await MustApprove(id, "gm");
+        await Db.Context.Set<UserGroupMapping>().Where(m => m.UserId == "buyer2"
+            && m.GroupId == Db.Context.Set<PermissionGroup>().Single(g => g.Key == "everyone").Id).ExecuteDeleteAsync();
+
+        var view = await ViewAs(id, "buyer2");
+
+        var own = view.Stages.Select(s => s.Id).ToHashSet();
+        var changed = view.Actions.Single(a => a.Action == ApprovalActions.ContentChanged);
+        changed.StageRunId.Should().BeNull();
+        view.Actions.Should().NotContain(a => a.StageRunId != null && !own.Contains(a.StageRunId.Value));
+        var stored = ActionsOf(id).Single(a => a.Action == ApprovalActions.ContentChanged).StageRunId;
+        stored.Should().NotBeNull();   // 資料庫裡有掛在某一關（別人的），遮蔽才是 null 的原因
+        own.Should().NotContain(stored!.Value);
     }
 
     [Fact]

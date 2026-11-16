@@ -278,8 +278,8 @@ public class ApprovalGraphProgressTests
     {
         var p = Of(Line(), [Gs(1, "a", Ok, "e1"), GA(2, "a", Act)]);
 
-        p.Nodes.Select(n => n.Id).Should().Equal("start", "a", "as-2", "b", "end");
-        var small = p.Nodes.Single(n => n.Id == "as-2");
+        p.Nodes.Select(n => n.Id).Should().Equal("start", "a", "as-a-1", "b", "end");
+        var small = p.Nodes.Single(n => n.Id == "as-a-1");
         small.Kind.Should().Be(ApprovalProgressKinds.AddSign);
         small.HostId.Should().Be("a");
         small.State.Should().Be(ApprovalProgressStates.Active);
@@ -287,8 +287,8 @@ public class ApprovalGraphProgressTests
         small.RunIds.Should().Equal(2);
         // 主節點原本的出線 e2 改從小節點出發；串線放在它的位置
         p.Edges.Select(e => (e.Id, e.From, e.To)).Should().Equal(
-            ("e1", "start", "a"), ("as-2-in", "a", "as-2"), ("e2", "as-2", "b"), ("e3", "b", "end"));
-        p.Edges.Single(e => e.Id == "as-2-in").Traversed.Should().BeTrue();
+            ("e1", "start", "a"), ("as-a-1-in", "a", "as-a-1"), ("e2", "as-a-1", "b"), ("e3", "b", "end"));
+        p.Edges.Single(e => e.Id == "as-a-1-in").Traversed.Should().BeTrue();
         p.Edges.Single(e => e.Id == "e2").Traversed.Should().BeFalse();
     }
 
@@ -300,10 +300,10 @@ public class ApprovalGraphProgressTests
 
         var smalls = p.Nodes.Where(n => n.Kind == ApprovalProgressKinds.AddSign).ToList();
         smalls.Should().ContainSingle();
-        smalls[0].Id.Should().Be("as-2");
+        smalls[0].Id.Should().Be("as-a-1");
         smalls[0].RunIds.Should().Equal(2, 4);
         smalls[0].State.Should().Be(ApprovalProgressStates.NotReached);   // 最新一列是排隊中
-        p.Edges.Single(e => e.Id == "as-2-in").Traversed.Should().BeTrue();   // 第一列啟動過
+        p.Edges.Single(e => e.Id == "as-a-1-in").Traversed.Should().BeTrue();   // 第一列啟動過
     }
 
     [Fact]
@@ -323,7 +323,7 @@ public class ApprovalGraphProgressTests
         var small = p.Nodes.Single(n => n.Kind == ApprovalProgressKinds.AddSign);
         small.State.Should().Be(ApprovalProgressStates.NotReached);
         small.RunIds.Should().Equal(2);
-        p.Edges.Single(e => e.Id == "as-2-in").Traversed.Should().BeFalse();
+        p.Edges.Single(e => e.Id == "as-a-1-in").Traversed.Should().BeFalse();
     }
 
     [Fact]
@@ -331,9 +331,37 @@ public class ApprovalGraphProgressTests
     {
         var p = Of(Line(), [Gs(1, "a", Ok, "e1"), GA(2, "a", Ok, to: ["x"]), GA(3, "a", Act, by: "n", to: ["y"])]);
 
-        p.Nodes.Select(n => n.Id).Should().Equal("start", "a", "as-2", "as-3", "b", "end");
+        p.Nodes.Select(n => n.Id).Should().Equal("start", "a", "as-a-1", "as-a-2", "b", "end");
         p.Edges.Select(e => (e.Id, e.From, e.To)).Should().Equal(
-            ("e1", "start", "a"), ("as-2-in", "a", "as-2"), ("as-3-in", "as-2", "as-3"), ("e2", "as-3", "b"), ("e3", "b", "end"));
+            ("e1", "start", "a"), ("as-a-1-in", "a", "as-a-1"), ("as-a-2-in", "as-a-1", "as-a-2"), ("e2", "as-a-2", "b"), ("e3", "b", "end"));
+    }
+
+    [Fact]
+    public void AddSign_SameAdderDifferentTargets_TwoSmallNodes()
+    {
+        // 主節點重跑後同一位簽核人改加簽另一個人：對象不同，是兩個小節點
+        var p = Of(Line(), [Gs(1, "a", Ok, "e1"), GA(2, "a", Ok, to: ["x"]), GA(3, "a", Act, to: ["y"])]);
+
+        p.Nodes.Where(n => n.Kind == ApprovalProgressKinds.AddSign).Select(n => (n.Id, n.RunIds.Single())).Should().Equal(("as-a-1", 2L), ("as-a-2", 3L));
+    }
+
+    [Fact]
+    public void AddSign_SameTargetsDifferentOrder_SameSmallNode()
+    {
+        var p = Of(Line(), [Gs(1, "a", Ok, "e1"), GA(2, "a", Ret, to: ["x", "y"]), Gs(3, "a", Act, "e1"), GA(4, "a", Queued, activated: false, to: ["y", "x"])]);
+
+        p.Nodes.Where(n => n.Kind == ApprovalProgressKinds.AddSign).Should().ContainSingle().Which.RunIds.Should().Equal(2, 4);
+    }
+
+    [Fact]
+    public void AddSign_Id_DoesNotCarryRunId_AndAvoidsDefinedIds()
+    {
+        // 代號是主節點加序號；定義裡剛好有同名的節點時往後找
+        var d = Line() with { Nodes = [.. Line().Nodes!, A("as-a-1")], Edges = [.. Line().Edges!, E("e9", "b", "as-a-1")] };
+
+        var p = Of(d, [Gs(1, "a", Ok, "e1"), GA(77, "a", Act)]);
+
+        p.Nodes.Single(n => n.Kind == ApprovalProgressKinds.AddSign).Id.Should().Be("as-a-2");
     }
 
     // ───────── sequence 與備援 ─────────
@@ -387,8 +415,8 @@ public class ApprovalGraphProgressTests
     {
         var p = Of(SeqDef("a", "b"), [S(1, "a", Ok), SA(2, Act)], byCode: true);
 
-        p.Nodes.Select(n => n.Id).Should().Equal("start", "a", "as-2", "b", "end");
-        p.Nodes.Single(n => n.Id == "as-2").HostId.Should().Be("a");
+        p.Nodes.Select(n => n.Id).Should().Equal("start", "a", "as-a-1", "b", "end");
+        p.Nodes.Single(n => n.Id == "as-a-1").HostId.Should().Be("a");
     }
 
     [Fact]
@@ -414,7 +442,7 @@ public class ApprovalGraphProgressTests
         small.RunIds.Should().Equal(2, 4);
         small.State.Should().Be(ApprovalProgressStates.Active);
         State(p, "b").Should().Be(ApprovalProgressStates.Returned);
-        p.Nodes.Select(n => n.Id).Should().Equal("start", "a", "as-2", "b", "end");
+        p.Nodes.Select(n => n.Id).Should().Equal("start", "a", "as-a-1", "b", "end");
     }
 
     [Fact]
@@ -435,10 +463,10 @@ public class ApprovalGraphProgressTests
 
         var p = Of(d, [S(1, "_fallback", Ok), SA(2, Act)], byCode: true);
 
-        p.Nodes.Select(n => n.Id).Should().Equal("start", "_fallback", "as-2", "end");
-        p.Nodes.Single(n => n.Id == "as-2").HostId.Should().Be("_fallback");
+        p.Nodes.Select(n => n.Id).Should().Equal("start", "_fallback", "as-_fallback-1", "end");
+        p.Nodes.Single(n => n.Id == "as-_fallback-1").HostId.Should().Be("_fallback");
         State(p, "_fallback").Should().Be(ApprovalProgressStates.Passed);
-        p.Edges.Select(e => (e.Id, e.From)).Should().Equal(("e1", "start"), ("as-2-in", "_fallback"), ("e2", "as-2"));
+        p.Edges.Select(e => (e.Id, e.From)).Should().Equal(("e1", "start"), ("as-_fallback-1-in", "_fallback"), ("e2", "as-_fallback-1"));
     }
 
     // ───────── 壞資料（M8）：回 null、不丟例外 ─────────
@@ -478,6 +506,21 @@ public class ApprovalGraphProgressTests
         var d = ForkJoin(ApprovalModes.Any);
 
         Raw(d, [G(1, "j", ApprovalNodeKinds.Join, Passed, "e0")]).Should().BeNull();
+    }
+
+    [Fact]
+    public void Of_InEdgeNotPointingToRunNode_ReturnsNull()
+    {
+        // e2 進入 b，不是 a
+        Raw(Line(), [Gs(1, "a", Act, "e2")]).Should().BeNull();
+    }
+
+    [Fact]
+    public void Of_NodeKindNull_ReturnsNull()
+    {
+        var d = Line() with { Nodes = [Start(), A("a"), A("b"), new ApprovalNodeDef("end", null!)] };
+
+        Raw(d, []).Should().BeNull();
     }
 
     [Fact]

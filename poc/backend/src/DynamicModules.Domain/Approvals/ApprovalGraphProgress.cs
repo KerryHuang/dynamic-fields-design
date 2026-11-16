@@ -48,10 +48,10 @@ public static class ApprovalGraphProgress
         // ── 一致性檢查（J4、M8）：之後的輔助才不會丟例外 ──
         var nodeById = new Dictionary<string, ApprovalNodeDef>();
         foreach (var n in nodes)
-            if (n.Id is null || !nodeById.TryAdd(n.Id, n)) return null;
-        var edgeIds = new HashSet<string>();
+            if (n.Id is null || n.Kind is null || !nodeById.TryAdd(n.Id, n)) return null;
+        var edgeById = new Dictionary<string, ApprovalEdgeDef>();
         foreach (var e in edges)
-            if (e.Id is null || !edgeIds.Add(e.Id) || e.From is null || e.To is null || !nodeById.ContainsKey(e.From) || !nodeById.ContainsKey(e.To)) return null;
+            if (e.Id is null || !edgeById.TryAdd(e.Id, e) || e.From is null || e.To is null || !nodeById.ContainsKey(e.From) || !nodeById.ContainsKey(e.To)) return null;
 
         var ordered = runs.OrderBy(r => r.Seq).ToList();
         foreach (var r in ordered)
@@ -67,7 +67,8 @@ public static class ApprovalGraphProgress
                 if (key is null || !nodeById.TryGetValue(key, out var node)) return null;
                 if (!byStageCode && r.NodeKind is not null && r.NodeKind != node.Kind) return null;
             }
-            if (!byStageCode && r.InEdgeId is not null && !edgeIds.Contains(r.InEdgeId)) return null;
+            // 進線要存在，而且指向這一列的節點（graph 的節點實例由進線進入節點）
+            if (!byStageCode && r.InEdgeId is not null && (!edgeById.TryGetValue(r.InEdgeId, out var inEdge) || inEdge.To != r.NodeId)) return null;
         }
 
         // ── 分組：主節點的列、加簽小節點 ──
@@ -89,7 +90,7 @@ public static class ApprovalGraphProgress
             var identity = (hostId, r.AddedByUserId, string.Join("\u0001", (r.AddSignUserIds ?? []).Order(StringComparer.Ordinal)), r.Mode);
             if (!smalls.TryGetValue(hostId, out var group)) smalls[hostId] = group = [];
             var small = group.FirstOrDefault(s => s.Identity == identity);
-            if (small is null) group.Add(small = new SmallNode(identity));
+            if (small is null) group.Add(small = new SmallNode(identity, FreeId(hostId, group.Count + 1, nodeById, edgeById)));
             small.Runs.Add(r);
         }
 
@@ -176,6 +177,13 @@ public static class ApprovalGraphProgress
         return new ApprovalProgress(outNodes, outEdges);
     }
 
+    /// <summary>小節點代號：主節點代號加序號（與節點實例的 Id 無關，免得遮蔽後還帶出看不到的列）；撞到定義裡的節點或線代號就往後找。</summary>
+    private static string FreeId(string host, int ordinal, Dictionary<string, ApprovalNodeDef> nodes, Dictionary<string, ApprovalEdgeDef> edges)
+    {
+        while (nodes.ContainsKey($"as-{host}-{ordinal}") || edges.ContainsKey($"as-{host}-{ordinal}-in")) ordinal++;
+        return $"as-{host}-{ordinal}";
+    }
+
     private static IEnumerable<ProgressEdge> Chain(string host, List<SmallNode> group)
     {
         var from = host;
@@ -190,10 +198,10 @@ public static class ApprovalGraphProgress
     private static string? HostOf(List<ApprovalStageRun> ordered, ApprovalStageRun addSign) =>
         ordered.LastOrDefault(r => r.Seq < addSign.Seq && r.StageCode is not null && r.Status != ApprovalStageStatus.Returned)?.StageCode;
 
-    private sealed class SmallNode((string Host, string? AddedBy, string Users, string Mode) identity)
+    private sealed class SmallNode((string Host, string? AddedBy, string Users, string Mode) identity, string id)
     {
         public (string Host, string? AddedBy, string Users, string Mode) Identity { get; } = identity;
         public List<ApprovalStageRun> Runs { get; } = [];
-        public string Id => $"as-{Runs[0].Id}";
+        public string Id { get; } = id;
     }
 }
