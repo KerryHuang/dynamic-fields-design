@@ -63,7 +63,7 @@ public sealed class ApprovalReader(IApprovalInstanceRepository repo, IDynamicAcc
         var active = pending is not null && ApprovalEngine.DefinitionOf(pending) is { } graphDef && ApprovalGraphMode.Applies(pending, graphDef)
             ? ActiveStages(graphDef, runs) : null;
         if (active is not null && !await SeesWholeAsync(module, record, pending!, ct)) active = null;
-        
+
         return new RecordApprovalSummary(latest?.Status ?? NoInstance, run?.NameSnapshot, seq, targets.Count > 0, active);
     }
 

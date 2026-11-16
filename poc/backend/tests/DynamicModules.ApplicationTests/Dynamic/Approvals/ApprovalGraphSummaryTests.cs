@@ -273,4 +273,72 @@ public class ApprovalGraphSummaryTests : ApprovalTestBase
         item.ActiveStages.Should().BeNull();
         item.StageName!.Resolve("zh-TW").Should().Be("b");
     }
+
+    // ───────── 審查補強（fg4a 審查）：資料範圍、排序、被取消分支、發起人沒有 Read ─────────
+
+    /// <summary>全員只剩「自己的記錄」範圍的 Read：單據擁有者是 buyer1，其他簽核人有 Read 但記錄在範圍外，只能靠任務的臨時讀取權打開。</summary>
+    private async Task OwnScopeReadOnly(PurchaseRig r)
+    {
+        As("admin");
+        var group = Db.Context.Set<PermissionGroup>().AsNoTracking().First(g => g.Key == "everyone");
+        var res = await Send(new SaveModulePermissionsRequest(r.Module, new ModulePermissionsDto(
+            [new GroupPermissionDto(group.Id, new PrivilegesDto(true, false, false, false, false, false, false), DataScope.Own)], [], [], [])));
+        res.IsSuccess.Should().BeTrue(Dump(res));
+    }
+
+    [Fact]
+    public async Task RecordSummary_Graph_ReadOutOfScope_GrantedActor_NoActiveStages()
+    {
+        // 有 Read 但記錄在資料範圍外：和沒有 Read 一樣只看得到自己的關卡（M2）
+        var (r, id) = await Boot(ForkJoin());
+        await OwnScopeReadOnly(r);
+
+        (await SummaryAs(id, "fin1")).ActiveStages.Should().BeNull();
+    }
+
+    [Fact]
+    public async Task Inbox_Done_ReadOutOfScope_NoActiveStages()
+    {
+        var (r, id) = await Boot(ThreeBranches());
+        await OwnScopeReadOnly(r);
+        await MustApprove(id, "fin1");
+
+        (await InboxItem("fin1", ApprovalInboxBoxes.Done)).ActiveStages.Should().BeNull();
+    }
+
+    [Fact]
+    public async Task RecordSummary_Graph_AddSignOnOneBranch_OrderedByEntry()
+    {
+        // 依進入先後（Seq）而不是節點代號或定義順序：只有 a 分支加簽，加簽列比 b 晚進入，排成 b、a（加簽）
+        var (_, id) = await Boot(ForkJoin());
+        await MustAddSign(id, "fin1", "emp1");
+
+        var stages = (await SummaryAs(id, "buyer1")).ActiveStages!;
+
+        Names(stages).Should().Equal("b", "a");
+        stages.Select(s => s.AddSign).Should().Equal(false, true);
+    }
+
+    [Fact]
+    public async Task RecordSummary_Graph_AnyJoin_OtherBranchCancelled_NoActiveStages()
+    {
+        // 任一到齊：fin1 同意後 b 被取消、流程走到 c，被取消的節點不列入
+        var (_, id) = await Boot(ForkJoin(ApprovalModes.Any));
+        await MustApprove(id, "fin1");
+
+        var summary = await SummaryAs(id, "buyer1");
+
+        summary.ActiveStages.Should().BeNull();
+        summary.StageName!.Resolve("zh-TW").Should().Be("c");
+    }
+
+    [Fact]
+    public async Task Inbox_Submitted_InitiatorWithoutRead_ListsActiveStages()
+    {
+        // 發起人一律看得到整張圖，與有沒有 Read 無關
+        var (r, _) = await Boot(ForkJoin());
+        await RevokeRead(r);
+
+        Names((await InboxItem("buyer1", ApprovalInboxBoxes.Submitted)).ActiveStages).Should().Equal("a", "b");
+    }
 }
