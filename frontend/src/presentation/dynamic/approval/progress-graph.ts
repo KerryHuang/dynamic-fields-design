@@ -162,12 +162,13 @@ export function buildProgressGraph(graph: ApprovalProgressGraph, stages: Approva
       style: { width: `${data.width}px`, height: `${data.height}px` },
     };
   });
+  const widthByNode = new Map(nodes.map((n) => [n.id, n.data!.width]));
   const outDegree = new Map<string, number>();
   for (const e of graph.edges) outDegree.set(e.from, (outDegree.get(e.from) ?? 0) + 1);
   const edges: Edge<ProgressEdgeData>[] = graph.edges.map((e) => {
     const full = resolveI18n(e.label ?? undefined, ctx.locale);
-    const from = layout.positions[e.from] ?? { x: 0, y: 0 };
-    const to = layout.positions[e.to] ?? { x: 0, y: 0 };
+    const from = { ...(layout.positions[e.from] ?? { x: 0 }), width: widthByNode.get(e.from) };
+    const to = { ...(layout.positions[e.to] ?? { x: 0 }), width: widthByNode.get(e.to) };
     return {
       id: e.id, source: e.from, target: e.to, type: 'progress', selectable: false, focusable: false, interactionWidth: 0,
       // 線的資訊由節點的 aria-label 表達；Vue Flow 預設會念「Edge from <內部代號> to <內部代號>」，所以整條線從可及性樹拿掉。

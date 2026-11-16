@@ -7,6 +7,8 @@ export const NODE_H = 84;
 export const ADDSIGN_W = 112;
 export const ADDSIGN_H = 48;
 export const COL_GAP = 56;
+/** 有條件標籤的線，起點右側第一個欄距（約 8 個中文字）；只在傳了 labeledEdgeIds 時使用。 */
+export const LABELED_COL_GAP = 136;
 export const ROW_GAP = 24;
 
 export interface LayoutNode { id: string; kind: string }
@@ -15,11 +17,32 @@ export interface LayoutResult {
   positions: Record<string, { x: number; y: number }>;
   width: number;
   height: number;
+  /** 節點代號 → 該節點所在欄右側的欄距；只在傳了 labeledEdgeIds 時有（給 edgeBendX 的 gapAfterFrom）。 */
+  gapAfter?: Record<string, number>;
+}
+export interface LayoutOptions {
+  /** 有標籤的線；它們起點右側第一個欄距加寬到 LABELED_COL_GAP。不傳時輸出與不加寬時逐位元相同。 */
+  labeledEdgeIds?: Set<string>;
 }
 
 const EXIT = '\0exit';
 const heightOf = (n: LayoutNode) => (n.kind === 'addSign' ? ADDSIGN_H : NODE_H);
 const widthOf = (n: LayoutNode) => (n.kind === 'addSign' ? ADDSIGN_W : NODE_W);
+
+/** 每欄右側的欄距與欄的左緣 x。不傳 labeledEdgeIds 時等於 k * (NODE_W + COL_GAP)。 */
+function columnGeometry(g: Graph, edges: LayoutEdge[], col: Map<string, number>, opts: LayoutOptions | undefined) {
+  const wide = new Set<number>();
+  if (opts?.labeledEdgeIds) {
+    for (const ed of edges) {
+      const c = col.get(ed.from);
+      if (opts.labeledEdgeIds.has(ed.id) && c !== undefined && g.byId.has(ed.from)) wide.add(c);
+    }
+  }
+  const gap = (c: number) => (wide.has(c) ? LABELED_COL_GAP : COL_GAP);
+  const xOf = (k: number) => { let x = 0; for (let j = 0; j < k; j++) x += NODE_W + gap(j); return x; };
+  const widthTo = (maxCol: number) => xOf(maxCol) + NODE_W;
+  return { gap, xOf, widthTo };
+}
 
 class Undecomposable extends Error {}
 
@@ -163,12 +186,13 @@ function layoutRows(g: Graph, start: string, reach: string[]): { centers: Map<st
   return { centers: new Map(main.items), height: main.height };
 }
 
-function layoutFallback(g: Graph, nodes: LayoutNode[], start: string, reach: string[]): LayoutResult {
+function layoutFallback(g: Graph, nodes: LayoutNode[], edges: LayoutEdge[], start: string, reach: string[], opts: LayoutOptions | undefined): LayoutResult {
   const { col } = columns(g, start, reach);
   let maxCol = Math.max(0, ...col.values());
   const byCol = new Map<number, string[]>();
   const put = (id: string, c: number) => byCol.set(c, [...(byCol.get(c) ?? []), id]);
   for (const id of reach) put(id, col.get(id) ?? 0);
+  const geo = columnGeometry(g, edges, col, opts);
   const placedIds = new Set(reach);
   const stray = nodes.filter((n) => !placedIds.has(n.id));
   if (stray.length) { maxCol += 1; for (const n of stray) put(n.id, maxCol); }
@@ -178,18 +202,20 @@ function layoutFallback(g: Graph, nodes: LayoutNode[], start: string, reach: str
   }
   const height = Math.max(0, ...heights.values());
   const positions: LayoutResult['positions'] = {};
+  const gapAfter: Record<string, number> = {};
   for (const [c, ids] of byCol) {
     let y = (height - heights.get(c)!) / 2;
     for (const id of ids) {
       const n = g.byId.get(id)!;
-      positions[id] = { x: c * (NODE_W + COL_GAP) + (NODE_W - widthOf(n)) / 2, y };
+      positions[id] = { x: geo.xOf(c) + (NODE_W - widthOf(n)) / 2, y };
+      gapAfter[id] = geo.gap(c);
       y += heightOf(n) + ROW_GAP;
     }
   }
-  return { positions, width: (maxCol + 1) * NODE_W + maxCol * COL_GAP, height };
+  return { positions, width: geo.widthTo(maxCol), height, ...(opts?.labeledEdgeIds ? { gapAfter } : {}) };
 }
 
-export function layoutLeftToRight(nodes: LayoutNode[], edges: LayoutEdge[]): LayoutResult {
+export function layoutLeftToRight(nodes: LayoutNode[], edges: LayoutEdge[], opts?: LayoutOptions): LayoutResult {
   if (nodes.length === 0) return { positions: {}, width: 0, height: 0 };
   const g = build(nodes, edges);
   if (!g) {
@@ -197,7 +223,7 @@ export function layoutLeftToRight(nodes: LayoutNode[], edges: LayoutEdge[]): Lay
     const seen = new Set<string>();
     const uniq = nodes.filter((n) => !seen.has(n.id) && !!seen.add(n.id));
     const ok = edges.filter((e) => seen.has(e.from) && seen.has(e.to));
-    return layoutLeftToRight(uniq, ok);
+    return layoutLeftToRight(uniq, ok, opts);
   }
   const start = findStart(nodes, g);
   const reach = discover(g, start);
@@ -205,30 +231,44 @@ export function layoutLeftToRight(nodes: LayoutNode[], edges: LayoutEdge[]): Lay
   if (acyclic && reach.length === nodes.length) {
     try {
       const { centers, height } = layoutRows(g, start, reach);
+      const geo = columnGeometry(g, edges, col, opts);
       const positions: LayoutResult['positions'] = {};
+      const gapAfter: Record<string, number> = {};
       let maxCol = 0;
       for (const [id, c] of centers) {
         const n = g.byId.get(id)!;
         const k = col.get(id)!;
         maxCol = Math.max(maxCol, k);
-        positions[id] = { x: k * (NODE_W + COL_GAP) + (NODE_W - widthOf(n)) / 2, y: c - heightOf(n) / 2 };
+        positions[id] = { x: geo.xOf(k) + (NODE_W - widthOf(n)) / 2, y: c - heightOf(n) / 2 };
+        gapAfter[id] = geo.gap(k);
       }
-      return { positions, width: (maxCol + 1) * NODE_W + maxCol * COL_GAP, height };
+      return { positions, width: geo.widthTo(maxCol), height, ...(opts?.labeledEdgeIds ? { gapAfter } : {}) };
     } catch (e) {
       if (!(e instanceof Undecomposable)) throw e;
     }
   }
-  return layoutFallback(g, nodes, start, reach);
+  return layoutFallback(g, nodes, edges, start, reach, opts);
 }
 
-const COL_W = NODE_W + COL_GAP;
+/** 節點框：x 是左上角，width 預設 NODE_W（加簽小節點是 ADDSIGN_W，在欄內置中）。 */
+export interface BoxX { x: number; width?: number }
+
+/** 節點所在「欄位框」的左緣：由節點中心推回，小節點與一般節點在同一欄得到同一個值。 */
+const slotLeft = (b: BoxX) => b.x + (b.width ?? NODE_W) / 2 - NODE_W / 2;
 
 /**
- * 線的轉折點 x（圖座標）：從分支、條件（兩條以上出線）出發的線在起點右邊第一個欄距轉折，
- * 其他線在終點左邊最後一個欄距轉折。轉折點永遠落在欄距，水平段都走在自己的泳道上，不會切過別條泳道的節點。
+ * 線的轉折點 x（圖座標）：從分支、條件（兩條以上出線）出發的線在起點欄位框右緣再過 gapAfterFrom 的一半處轉折，
+ * 其他線在終點欄位框左緣之前半個 COL_GAP 處轉折。自動排版時節點都在欄位格上，轉折點因此落在欄距；
+ * 手排時同一條規則直接吃座標（gapAfterFrom 由 manualGapAfter 或自動排版的 gapAfter 提供）。
  */
-export function edgeBendX(fromPos: { x: number }, toPos: { x: number }, branching: boolean): number {
-  return branching
-    ? Math.floor(fromPos.x / COL_W) * COL_W + NODE_W + COL_GAP / 2
-    : Math.floor(toPos.x / COL_W) * COL_W - COL_GAP / 2;
+export function edgeBendX(from: BoxX, to: BoxX, branching: boolean, gapAfterFrom: number = COL_GAP): number {
+  return branching ? slotLeft(from) + NODE_W + gapAfterFrom / 2 : slotLeft(to) - COL_GAP / 2;
+}
+
+/** 手排時起點右側的欄距：起點欄位框右緣到最近一個在右側的出線終點欄位框左緣，夾在 COL_GAP 到 LABELED_COL_GAP；沒有右側終點用 COL_GAP。 */
+export function manualGapAfter(from: BoxX, targets: BoxX[]): number {
+  const right = slotLeft(from) + NODE_W;
+  const dists = targets.map((t) => slotLeft(t) - right).filter((d) => d > 0);
+  if (!dists.length) return COL_GAP;
+  return Math.min(LABELED_COL_GAP, Math.max(COL_GAP, Math.min(...dists)));
 }

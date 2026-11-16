@@ -1,0 +1,4816 @@
+{
+ "通過 設計 7.1 範例（預設線經通知節點直接到結束，只有 W2 警告）": {
+  "nodes": [
+   {
+    "id": "start",
+    "kind": "start"
+   },
+   {
+    "id": "mgr",
+    "kind": "approval",
+    "name": {
+     "zh-TW": "mgr"
+    },
+    "approvers": {
+     "source": "manager",
+     "level": 1
+    },
+    "mode": "any",
+    "editableFields": [],
+    "dueHours": 24,
+    "onEmpty": "fallback"
+   },
+   {
+    "id": "amount",
+    "kind": "condition",
+    "name": {
+     "zh-TW": "金額分級"
+    }
+   },
+   {
+    "id": "split",
+    "kind": "fork"
+   },
+   {
+    "id": "legal",
+    "kind": "approval",
+    "name": {
+     "zh-TW": "legal"
+    },
+    "editableFields": []
+   },
+   {
+    "id": "fin",
+    "kind": "approval",
+    "name": {
+     "zh-TW": "fin"
+    },
+    "editableFields": [
+     31
+    ]
+   },
+   {
+    "id": "merge",
+    "kind": "join",
+    "forkId": "split",
+    "mode": "all"
+   },
+   {
+    "id": "tell-hr",
+    "kind": "notify",
+    "name": {
+     "zh-TW": "知會人事"
+    },
+    "recipients": [
+     {
+      "kind": "initiator"
+     }
+    ]
+   },
+   {
+    "id": "end",
+    "kind": "end"
+   }
+  ],
+  "edges": [
+   {
+    "id": "e1",
+    "from": "start",
+    "to": "mgr"
+   },
+   {
+    "id": "e2",
+    "from": "mgr",
+    "to": "amount"
+   },
+   {
+    "id": "e3",
+    "from": "amount",
+    "to": "split",
+    "order": 1,
+    "when": {
+     "all": [
+      {
+       "field": 1,
+       "op": "gte",
+       "value": 1
+      }
+     ]
+    },
+    "label": {
+     "zh-TW": "十萬以上"
+    }
+   },
+   {
+    "id": "e4",
+    "from": "amount",
+    "to": "tell-hr",
+    "default": true
+   },
+   {
+    "id": "e5",
+    "from": "split",
+    "to": "legal"
+   },
+   {
+    "id": "e6",
+    "from": "split",
+    "to": "fin"
+   },
+   {
+    "id": "e7",
+    "from": "legal",
+    "to": "merge"
+   },
+   {
+    "id": "e8",
+    "from": "fin",
+    "to": "merge"
+   },
+   {
+    "id": "e9",
+    "from": "merge",
+    "to": "tell-hr"
+   },
+   {
+    "id": "e10",
+    "from": "tell-hr",
+    "to": "end"
+   }
+  ],
+  "positions": {
+   "start": {
+    "x": 0,
+    "y": 216
+   },
+   "mgr": {
+    "x": 224,
+    "y": 216
+   },
+   "amount": {
+    "x": 448,
+    "y": 216
+   },
+   "split": {
+    "x": 672,
+    "y": 54
+   },
+   "legal": {
+    "x": 896,
+    "y": 0
+   },
+   "fin": {
+    "x": 896,
+    "y": 108
+   },
+   "merge": {
+    "x": 1120,
+    "y": 54
+   },
+   "tell-hr": {
+    "x": 1344,
+    "y": 216
+   },
+   "end": {
+    "x": 1568,
+    "y": 216
+   }
+  },
+  "width": 1736,
+  "height": 300,
+  "bends": {
+   "e1": 196,
+   "e2": 420,
+   "e3": 644,
+   "e4": 644,
+   "e5": 868,
+   "e6": 868,
+   "e7": 1092,
+   "e8": 1092,
+   "e9": 1316,
+   "e10": 1540
+  }
+ },
+ "通過 sequence 轉換出的直線圖": {
+  "nodes": [
+   {
+    "id": "start",
+    "kind": "start"
+   },
+   {
+    "id": "a1",
+    "kind": "approval",
+    "name": {
+     "zh-TW": "a1"
+    }
+   },
+   {
+    "id": "a2",
+    "kind": "approval",
+    "name": {
+     "zh-TW": "a2"
+    }
+   },
+   {
+    "id": "a3",
+    "kind": "approval",
+    "name": {
+     "zh-TW": "a3"
+    }
+   },
+   {
+    "id": "end",
+    "kind": "end"
+   }
+  ],
+  "edges": [
+   {
+    "id": "e1",
+    "from": "start",
+    "to": "a1"
+   },
+   {
+    "id": "e2",
+    "from": "a1",
+    "to": "a2"
+   },
+   {
+    "id": "e3",
+    "from": "a2",
+    "to": "a3"
+   },
+   {
+    "id": "e4",
+    "from": "a3",
+    "to": "end"
+   }
+  ],
+  "positions": {
+   "start": {
+    "x": 0,
+    "y": 0
+   },
+   "a1": {
+    "x": 224,
+    "y": 0
+   },
+   "a2": {
+    "x": 448,
+    "y": 0
+   },
+   "a3": {
+    "x": 672,
+    "y": 0
+   },
+   "end": {
+    "x": 896,
+    "y": 0
+   }
+  },
+  "width": 1064,
+  "height": 84,
+  "bends": {
+   "e1": 196,
+   "e2": 420,
+   "e3": 644,
+   "e4": 868
+  }
+ },
+ "通過 互斥路徑在簽核節點會合 (J1)": {
+  "nodes": [
+   {
+    "id": "start",
+    "kind": "start"
+   },
+   {
+    "id": "c",
+    "kind": "condition"
+   },
+   {
+    "id": "a",
+    "kind": "approval",
+    "name": {
+     "zh-TW": "a"
+    }
+   },
+   {
+    "id": "b",
+    "kind": "approval",
+    "name": {
+     "zh-TW": "b"
+    }
+   },
+   {
+    "id": "z",
+    "kind": "approval",
+    "name": {
+     "zh-TW": "z"
+    }
+   },
+   {
+    "id": "end",
+    "kind": "end"
+   }
+  ],
+  "edges": [
+   {
+    "id": "e1",
+    "from": "start",
+    "to": "c"
+   },
+   {
+    "id": "e2",
+    "from": "c",
+    "to": "a",
+    "order": 1,
+    "when": {
+     "all": [
+      {
+       "field": 1,
+       "op": "gte",
+       "value": 1
+      }
+     ]
+    }
+   },
+   {
+    "id": "e3",
+    "from": "c",
+    "to": "b",
+    "default": true
+   },
+   {
+    "id": "e4",
+    "from": "a",
+    "to": "z"
+   },
+   {
+    "id": "e5",
+    "from": "b",
+    "to": "z"
+   },
+   {
+    "id": "e6",
+    "from": "z",
+    "to": "end"
+   }
+  ],
+  "positions": {
+   "start": {
+    "x": 0,
+    "y": 54
+   },
+   "c": {
+    "x": 224,
+    "y": 54
+   },
+   "a": {
+    "x": 448,
+    "y": 0
+   },
+   "b": {
+    "x": 448,
+    "y": 108
+   },
+   "z": {
+    "x": 672,
+    "y": 54
+   },
+   "end": {
+    "x": 896,
+    "y": 54
+   }
+  },
+  "width": 1064,
+  "height": 192,
+  "bends": {
+   "e1": 196,
+   "e2": 420,
+   "e3": 420,
+   "e4": 644,
+   "e5": 644,
+   "e6": 868
+  }
+ },
+ "通過 巢狀兩層並行": {
+  "nodes": [
+   {
+    "id": "start",
+    "kind": "start"
+   },
+   {
+    "id": "f1",
+    "kind": "fork"
+   },
+   {
+    "id": "x",
+    "kind": "approval",
+    "name": {
+     "zh-TW": "x"
+    }
+   },
+   {
+    "id": "f2",
+    "kind": "fork"
+   },
+   {
+    "id": "y",
+    "kind": "approval",
+    "name": {
+     "zh-TW": "y"
+    }
+   },
+   {
+    "id": "z",
+    "kind": "approval",
+    "name": {
+     "zh-TW": "z"
+    }
+   },
+   {
+    "id": "j2",
+    "kind": "join",
+    "forkId": "f2",
+    "mode": "all"
+   },
+   {
+    "id": "j1",
+    "kind": "join",
+    "forkId": "f1",
+    "mode": "all"
+   },
+   {
+    "id": "end",
+    "kind": "end"
+   }
+  ],
+  "edges": [
+   {
+    "id": "e1",
+    "from": "start",
+    "to": "f1"
+   },
+   {
+    "id": "e2",
+    "from": "f1",
+    "to": "x"
+   },
+   {
+    "id": "e3",
+    "from": "f1",
+    "to": "f2"
+   },
+   {
+    "id": "e4",
+    "from": "f2",
+    "to": "y"
+   },
+   {
+    "id": "e5",
+    "from": "f2",
+    "to": "z"
+   },
+   {
+    "id": "e6",
+    "from": "y",
+    "to": "j2"
+   },
+   {
+    "id": "e7",
+    "from": "z",
+    "to": "j2"
+   },
+   {
+    "id": "e8",
+    "from": "j2",
+    "to": "j1"
+   },
+   {
+    "id": "e9",
+    "from": "x",
+    "to": "j1"
+   },
+   {
+    "id": "e10",
+    "from": "j1",
+    "to": "end"
+   }
+  ],
+  "positions": {
+   "start": {
+    "x": 0,
+    "y": 108
+   },
+   "f1": {
+    "x": 224,
+    "y": 108
+   },
+   "x": {
+    "x": 448,
+    "y": 0
+   },
+   "f2": {
+    "x": 448,
+    "y": 162
+   },
+   "y": {
+    "x": 672,
+    "y": 108
+   },
+   "z": {
+    "x": 672,
+    "y": 216
+   },
+   "j2": {
+    "x": 896,
+    "y": 162
+   },
+   "j1": {
+    "x": 1120,
+    "y": 108
+   },
+   "end": {
+    "x": 1344,
+    "y": 108
+   }
+  },
+  "width": 1512,
+  "height": 300,
+  "bends": {
+   "e1": 196,
+   "e2": 420,
+   "e3": 420,
+   "e4": 644,
+   "e5": 644,
+   "e6": 868,
+   "e7": 868,
+   "e8": 1092,
+   "e9": 1092,
+   "e10": 1316
+  }
+ },
+ "通過 空分支直接連到匯合 (U7)": {
+  "nodes": [
+   {
+    "id": "start",
+    "kind": "start"
+   },
+   {
+    "id": "f",
+    "kind": "fork"
+   },
+   {
+    "id": "a",
+    "kind": "approval",
+    "name": {
+     "zh-TW": "a"
+    }
+   },
+   {
+    "id": "j",
+    "kind": "join",
+    "forkId": "f",
+    "mode": "all"
+   },
+   {
+    "id": "end",
+    "kind": "end"
+   }
+  ],
+  "edges": [
+   {
+    "id": "e1",
+    "from": "start",
+    "to": "f"
+   },
+   {
+    "id": "e2",
+    "from": "f",
+    "to": "a"
+   },
+   {
+    "id": "e3",
+    "from": "f",
+    "to": "j"
+   },
+   {
+    "id": "e4",
+    "from": "a",
+    "to": "j"
+   },
+   {
+    "id": "e5",
+    "from": "j",
+    "to": "end"
+   }
+  ],
+  "positions": {
+   "start": {
+    "x": 0,
+    "y": 108
+   },
+   "f": {
+    "x": 224,
+    "y": 108
+   },
+   "a": {
+    "x": 448,
+    "y": 0
+   },
+   "j": {
+    "x": 672,
+    "y": 108
+   },
+   "end": {
+    "x": 896,
+    "y": 108
+   }
+  },
+  "width": 1064,
+  "height": 192,
+  "bends": {
+   "e1": 196,
+   "e2": 420,
+   "e3": 420,
+   "e4": 644,
+   "e5": 868
+  }
+ },
+ "通過 並行兩分支可編輯欄位不重疊 (G12)": {
+  "nodes": [
+   {
+    "id": "start",
+    "kind": "start"
+   },
+   {
+    "id": "f",
+    "kind": "fork"
+   },
+   {
+    "id": "j",
+    "kind": "join",
+    "forkId": "f",
+    "mode": "all"
+   },
+   {
+    "id": "a",
+    "kind": "approval",
+    "name": {
+     "zh-TW": "a"
+    },
+    "editableFields": [
+     31
+    ]
+   },
+   {
+    "id": "b",
+    "kind": "approval",
+    "name": {
+     "zh-TW": "b"
+    },
+    "editableFields": [
+     32
+    ]
+   },
+   {
+    "id": "end",
+    "kind": "end"
+   }
+  ],
+  "edges": [
+   {
+    "id": "s1",
+    "from": "start",
+    "to": "f"
+   },
+   {
+    "id": "f-a",
+    "from": "f",
+    "to": "a"
+   },
+   {
+    "id": "f-b",
+    "from": "f",
+    "to": "b"
+   },
+   {
+    "id": "a-j",
+    "from": "a",
+    "to": "j"
+   },
+   {
+    "id": "b-j",
+    "from": "b",
+    "to": "j"
+   },
+   {
+    "id": "j1",
+    "from": "j",
+    "to": "end"
+   }
+  ],
+  "positions": {
+   "start": {
+    "x": 0,
+    "y": 54
+   },
+   "f": {
+    "x": 224,
+    "y": 54
+   },
+   "a": {
+    "x": 448,
+    "y": 0
+   },
+   "b": {
+    "x": 448,
+    "y": 108
+   },
+   "j": {
+    "x": 672,
+    "y": 54
+   },
+   "end": {
+    "x": 896,
+    "y": 54
+   }
+  },
+  "width": 1064,
+  "height": 192,
+  "bends": {
+   "s1": 196,
+   "f-a": 420,
+   "f-b": 420,
+   "a-j": 644,
+   "b-j": 644,
+   "j1": 868
+  }
+ },
+ "通過 互斥兩路可編輯欄位重疊 (G12 只管並行)": {
+  "nodes": [
+   {
+    "id": "start",
+    "kind": "start"
+   },
+   {
+    "id": "c",
+    "kind": "condition"
+   },
+   {
+    "id": "a",
+    "kind": "approval",
+    "name": {
+     "zh-TW": "a"
+    },
+    "editableFields": [
+     31
+    ]
+   },
+   {
+    "id": "b",
+    "kind": "approval",
+    "name": {
+     "zh-TW": "b"
+    },
+    "editableFields": [
+     31
+    ]
+   },
+   {
+    "id": "z",
+    "kind": "approval",
+    "name": {
+     "zh-TW": "z"
+    }
+   },
+   {
+    "id": "end",
+    "kind": "end"
+   }
+  ],
+  "edges": [
+   {
+    "id": "e1",
+    "from": "start",
+    "to": "c"
+   },
+   {
+    "id": "e2",
+    "from": "c",
+    "to": "a",
+    "order": 1,
+    "when": {
+     "all": [
+      {
+       "field": 1,
+       "op": "gte",
+       "value": 1
+      }
+     ]
+    }
+   },
+   {
+    "id": "e3",
+    "from": "c",
+    "to": "b",
+    "default": true
+   },
+   {
+    "id": "e4",
+    "from": "a",
+    "to": "z"
+   },
+   {
+    "id": "e5",
+    "from": "b",
+    "to": "z"
+   },
+   {
+    "id": "e6",
+    "from": "z",
+    "to": "end"
+   }
+  ],
+  "positions": {
+   "start": {
+    "x": 0,
+    "y": 54
+   },
+   "c": {
+    "x": 224,
+    "y": 54
+   },
+   "a": {
+    "x": 448,
+    "y": 0
+   },
+   "b": {
+    "x": 448,
+    "y": 108
+   },
+   "z": {
+    "x": 672,
+    "y": 54
+   },
+   "end": {
+    "x": 896,
+    "y": 54
+   }
+  },
+  "width": 1064,
+  "height": 192,
+  "bends": {
+   "e1": 196,
+   "e2": 420,
+   "e3": 420,
+   "e4": 644,
+   "e5": 644,
+   "e6": 868
+  }
+ },
+ "通過 簽核節點 10 個": {
+  "nodes": [
+   {
+    "id": "start",
+    "kind": "start"
+   },
+   {
+    "id": "a1",
+    "kind": "approval",
+    "name": {
+     "zh-TW": "a1"
+    }
+   },
+   {
+    "id": "a2",
+    "kind": "approval",
+    "name": {
+     "zh-TW": "a2"
+    }
+   },
+   {
+    "id": "a3",
+    "kind": "approval",
+    "name": {
+     "zh-TW": "a3"
+    }
+   },
+   {
+    "id": "a4",
+    "kind": "approval",
+    "name": {
+     "zh-TW": "a4"
+    }
+   },
+   {
+    "id": "a5",
+    "kind": "approval",
+    "name": {
+     "zh-TW": "a5"
+    }
+   },
+   {
+    "id": "a6",
+    "kind": "approval",
+    "name": {
+     "zh-TW": "a6"
+    }
+   },
+   {
+    "id": "a7",
+    "kind": "approval",
+    "name": {
+     "zh-TW": "a7"
+    }
+   },
+   {
+    "id": "a8",
+    "kind": "approval",
+    "name": {
+     "zh-TW": "a8"
+    }
+   },
+   {
+    "id": "a9",
+    "kind": "approval",
+    "name": {
+     "zh-TW": "a9"
+    }
+   },
+   {
+    "id": "a10",
+    "kind": "approval",
+    "name": {
+     "zh-TW": "a10"
+    }
+   },
+   {
+    "id": "end",
+    "kind": "end"
+   }
+  ],
+  "edges": [
+   {
+    "id": "e1",
+    "from": "start",
+    "to": "a1"
+   },
+   {
+    "id": "e2",
+    "from": "a1",
+    "to": "a2"
+   },
+   {
+    "id": "e3",
+    "from": "a2",
+    "to": "a3"
+   },
+   {
+    "id": "e4",
+    "from": "a3",
+    "to": "a4"
+   },
+   {
+    "id": "e5",
+    "from": "a4",
+    "to": "a5"
+   },
+   {
+    "id": "e6",
+    "from": "a5",
+    "to": "a6"
+   },
+   {
+    "id": "e7",
+    "from": "a6",
+    "to": "a7"
+   },
+   {
+    "id": "e8",
+    "from": "a7",
+    "to": "a8"
+   },
+   {
+    "id": "e9",
+    "from": "a8",
+    "to": "a9"
+   },
+   {
+    "id": "e10",
+    "from": "a9",
+    "to": "a10"
+   },
+   {
+    "id": "e11",
+    "from": "a10",
+    "to": "end"
+   }
+  ],
+  "positions": {
+   "start": {
+    "x": 0,
+    "y": 0
+   },
+   "a1": {
+    "x": 224,
+    "y": 0
+   },
+   "a2": {
+    "x": 448,
+    "y": 0
+   },
+   "a3": {
+    "x": 672,
+    "y": 0
+   },
+   "a4": {
+    "x": 896,
+    "y": 0
+   },
+   "a5": {
+    "x": 1120,
+    "y": 0
+   },
+   "a6": {
+    "x": 1344,
+    "y": 0
+   },
+   "a7": {
+    "x": 1568,
+    "y": 0
+   },
+   "a8": {
+    "x": 1792,
+    "y": 0
+   },
+   "a9": {
+    "x": 2016,
+    "y": 0
+   },
+   "a10": {
+    "x": 2240,
+    "y": 0
+   },
+   "end": {
+    "x": 2464,
+    "y": 0
+   }
+  },
+  "width": 2632,
+  "height": 84,
+  "bends": {
+   "e1": 196,
+   "e2": 420,
+   "e3": 644,
+   "e4": 868,
+   "e5": 1092,
+   "e6": 1316,
+   "e7": 1540,
+   "e8": 1764,
+   "e9": 1988,
+   "e10": 2212,
+   "e11": 2436
+  }
+ },
+ "通過 分支 5 條": {
+  "nodes": [
+   {
+    "id": "start",
+    "kind": "start"
+   },
+   {
+    "id": "f",
+    "kind": "fork"
+   },
+   {
+    "id": "j",
+    "kind": "join",
+    "forkId": "f",
+    "mode": "all"
+   },
+   {
+    "id": "b1",
+    "kind": "approval",
+    "name": {
+     "zh-TW": "b1"
+    }
+   },
+   {
+    "id": "b2",
+    "kind": "approval",
+    "name": {
+     "zh-TW": "b2"
+    }
+   },
+   {
+    "id": "b3",
+    "kind": "approval",
+    "name": {
+     "zh-TW": "b3"
+    }
+   },
+   {
+    "id": "b4",
+    "kind": "approval",
+    "name": {
+     "zh-TW": "b4"
+    }
+   },
+   {
+    "id": "b5",
+    "kind": "approval",
+    "name": {
+     "zh-TW": "b5"
+    }
+   },
+   {
+    "id": "end",
+    "kind": "end"
+   }
+  ],
+  "edges": [
+   {
+    "id": "s1",
+    "from": "start",
+    "to": "f"
+   },
+   {
+    "id": "f-b1",
+    "from": "f",
+    "to": "b1"
+   },
+   {
+    "id": "f-b2",
+    "from": "f",
+    "to": "b2"
+   },
+   {
+    "id": "f-b3",
+    "from": "f",
+    "to": "b3"
+   },
+   {
+    "id": "f-b4",
+    "from": "f",
+    "to": "b4"
+   },
+   {
+    "id": "f-b5",
+    "from": "f",
+    "to": "b5"
+   },
+   {
+    "id": "b1-j",
+    "from": "b1",
+    "to": "j"
+   },
+   {
+    "id": "b2-j",
+    "from": "b2",
+    "to": "j"
+   },
+   {
+    "id": "b3-j",
+    "from": "b3",
+    "to": "j"
+   },
+   {
+    "id": "b4-j",
+    "from": "b4",
+    "to": "j"
+   },
+   {
+    "id": "b5-j",
+    "from": "b5",
+    "to": "j"
+   },
+   {
+    "id": "j1",
+    "from": "j",
+    "to": "end"
+   }
+  ],
+  "positions": {
+   "start": {
+    "x": 0,
+    "y": 216
+   },
+   "f": {
+    "x": 224,
+    "y": 216
+   },
+   "b1": {
+    "x": 448,
+    "y": 0
+   },
+   "b2": {
+    "x": 448,
+    "y": 108
+   },
+   "b3": {
+    "x": 448,
+    "y": 216
+   },
+   "b4": {
+    "x": 448,
+    "y": 324
+   },
+   "b5": {
+    "x": 448,
+    "y": 432
+   },
+   "j": {
+    "x": 672,
+    "y": 216
+   },
+   "end": {
+    "x": 896,
+    "y": 216
+   }
+  },
+  "width": 1064,
+  "height": 516,
+  "bends": {
+   "s1": 196,
+   "f-b1": 420,
+   "f-b2": 420,
+   "f-b3": 420,
+   "f-b4": 420,
+   "f-b5": 420,
+   "b1-j": 644,
+   "b2-j": 644,
+   "b3-j": 644,
+   "b4-j": 644,
+   "b5-j": 644,
+   "j1": 868
+  }
+ },
+ "通過 簽核節點超過政策但不比舊版多 (J16)": {
+  "nodes": [
+   {
+    "id": "start",
+    "kind": "start"
+   },
+   {
+    "id": "a1",
+    "kind": "approval",
+    "name": {
+     "zh-TW": "a1"
+    }
+   },
+   {
+    "id": "a2",
+    "kind": "approval",
+    "name": {
+     "zh-TW": "a2"
+    }
+   },
+   {
+    "id": "a3",
+    "kind": "approval",
+    "name": {
+     "zh-TW": "a3"
+    }
+   },
+   {
+    "id": "end",
+    "kind": "end"
+   }
+  ],
+  "edges": [
+   {
+    "id": "e1",
+    "from": "start",
+    "to": "a1"
+   },
+   {
+    "id": "e2",
+    "from": "a1",
+    "to": "a2"
+   },
+   {
+    "id": "e3",
+    "from": "a2",
+    "to": "a3"
+   },
+   {
+    "id": "e4",
+    "from": "a3",
+    "to": "end"
+   }
+  ],
+  "positions": {
+   "start": {
+    "x": 0,
+    "y": 0
+   },
+   "a1": {
+    "x": 224,
+    "y": 0
+   },
+   "a2": {
+    "x": 448,
+    "y": 0
+   },
+   "a3": {
+    "x": 672,
+    "y": 0
+   },
+   "end": {
+    "x": 896,
+    "y": 0
+   }
+  },
+  "width": 1064,
+  "height": 84,
+  "bends": {
+   "e1": 196,
+   "e2": 420,
+   "e3": 644,
+   "e4": 868
+  }
+ },
+ "通過 條件節點一般形狀": {
+  "nodes": [
+   {
+    "id": "start",
+    "kind": "start"
+   },
+   {
+    "id": "c",
+    "kind": "condition"
+   },
+   {
+    "id": "a",
+    "kind": "approval",
+    "name": {
+     "zh-TW": "a"
+    }
+   },
+   {
+    "id": "b",
+    "kind": "approval",
+    "name": {
+     "zh-TW": "b"
+    }
+   },
+   {
+    "id": "end",
+    "kind": "end"
+   }
+  ],
+  "edges": [
+   {
+    "id": "e1",
+    "from": "start",
+    "to": "c"
+   },
+   {
+    "id": "e2",
+    "from": "c",
+    "to": "a",
+    "order": 1,
+    "when": {
+     "all": [
+      {
+       "field": 1,
+       "op": "gte",
+       "value": 1
+      }
+     ]
+    }
+   },
+   {
+    "id": "e3",
+    "from": "c",
+    "to": "b",
+    "default": true
+   },
+   {
+    "id": "e4",
+    "from": "a",
+    "to": "end"
+   },
+   {
+    "id": "e5",
+    "from": "b",
+    "to": "end"
+   }
+  ],
+  "positions": {
+   "start": {
+    "x": 0,
+    "y": 54
+   },
+   "c": {
+    "x": 224,
+    "y": 54
+   },
+   "a": {
+    "x": 448,
+    "y": 0
+   },
+   "b": {
+    "x": 448,
+    "y": 108
+   },
+   "end": {
+    "x": 672,
+    "y": 54
+   }
+  },
+  "width": 840,
+  "height": 192,
+  "bends": {
+   "e1": 196,
+   "e2": 420,
+   "e3": 420,
+   "e4": 644,
+   "e5": 644
+  }
+ },
+ "通過 同一分支先後重用欄位 (G12 只比不同分支)": {
+  "nodes": [
+   {
+    "id": "start",
+    "kind": "start"
+   },
+   {
+    "id": "f",
+    "kind": "fork"
+   },
+   {
+    "id": "a1",
+    "kind": "approval",
+    "name": {
+     "zh-TW": "a1"
+    },
+    "editableFields": [
+     5
+    ]
+   },
+   {
+    "id": "a2",
+    "kind": "approval",
+    "name": {
+     "zh-TW": "a2"
+    },
+    "editableFields": [
+     5
+    ]
+   },
+   {
+    "id": "b",
+    "kind": "approval",
+    "name": {
+     "zh-TW": "b"
+    },
+    "editableFields": [
+     6
+    ]
+   },
+   {
+    "id": "j",
+    "kind": "join",
+    "forkId": "f",
+    "mode": "all"
+   },
+   {
+    "id": "end",
+    "kind": "end"
+   }
+  ],
+  "edges": [
+   {
+    "id": "e1",
+    "from": "start",
+    "to": "f"
+   },
+   {
+    "id": "e2",
+    "from": "f",
+    "to": "a1"
+   },
+   {
+    "id": "e3",
+    "from": "a1",
+    "to": "a2"
+   },
+   {
+    "id": "e4",
+    "from": "a2",
+    "to": "j"
+   },
+   {
+    "id": "e5",
+    "from": "f",
+    "to": "b"
+   },
+   {
+    "id": "e6",
+    "from": "b",
+    "to": "j"
+   },
+   {
+    "id": "e7",
+    "from": "j",
+    "to": "end"
+   }
+  ],
+  "positions": {
+   "start": {
+    "x": 0,
+    "y": 54
+   },
+   "f": {
+    "x": 224,
+    "y": 54
+   },
+   "a1": {
+    "x": 448,
+    "y": 0
+   },
+   "a2": {
+    "x": 672,
+    "y": 0
+   },
+   "b": {
+    "x": 448,
+    "y": 108
+   },
+   "j": {
+    "x": 896,
+    "y": 54
+   },
+   "end": {
+    "x": 1120,
+    "y": 54
+   }
+  },
+  "width": 1288,
+  "height": 192,
+  "bends": {
+   "e1": 196,
+   "e2": 420,
+   "e3": 644,
+   "e4": 868,
+   "e5": 420,
+   "e6": 868,
+   "e7": 1092
+  }
+ },
+ "W1 任一到齊的空分支（分支直接連到匯合）": {
+  "nodes": [
+   {
+    "id": "start",
+    "kind": "start"
+   },
+   {
+    "id": "f",
+    "kind": "fork"
+   },
+   {
+    "id": "a",
+    "kind": "approval",
+    "name": {
+     "zh-TW": "a"
+    }
+   },
+   {
+    "id": "j",
+    "kind": "join",
+    "forkId": "f",
+    "mode": "any"
+   },
+   {
+    "id": "end",
+    "kind": "end"
+   }
+  ],
+  "edges": [
+   {
+    "id": "e1",
+    "from": "start",
+    "to": "f"
+   },
+   {
+    "id": "e2",
+    "from": "f",
+    "to": "a"
+   },
+   {
+    "id": "e3",
+    "from": "f",
+    "to": "j"
+   },
+   {
+    "id": "e4",
+    "from": "a",
+    "to": "j"
+   },
+   {
+    "id": "e5",
+    "from": "j",
+    "to": "end"
+   }
+  ],
+  "positions": {
+   "start": {
+    "x": 0,
+    "y": 108
+   },
+   "f": {
+    "x": 224,
+    "y": 108
+   },
+   "a": {
+    "x": 448,
+    "y": 0
+   },
+   "j": {
+    "x": 672,
+    "y": 108
+   },
+   "end": {
+    "x": 896,
+    "y": 108
+   }
+  },
+  "width": 1064,
+  "height": 192,
+  "bends": {
+   "e1": 196,
+   "e2": 420,
+   "e3": 420,
+   "e4": 644,
+   "e5": 868
+  }
+ },
+ "W1 任一到齊的分支只有通知節點": {
+  "nodes": [
+   {
+    "id": "start",
+    "kind": "start"
+   },
+   {
+    "id": "f",
+    "kind": "fork"
+   },
+   {
+    "id": "a",
+    "kind": "approval",
+    "name": {
+     "zh-TW": "a"
+    }
+   },
+   {
+    "id": "n",
+    "kind": "notify",
+    "name": {
+     "zh-TW": "n"
+    },
+    "recipients": [
+     {
+      "kind": "initiator"
+     }
+    ]
+   },
+   {
+    "id": "j",
+    "kind": "join",
+    "forkId": "f",
+    "mode": "any"
+   },
+   {
+    "id": "end",
+    "kind": "end"
+   }
+  ],
+  "edges": [
+   {
+    "id": "e1",
+    "from": "start",
+    "to": "f"
+   },
+   {
+    "id": "e2",
+    "from": "f",
+    "to": "a"
+   },
+   {
+    "id": "e3",
+    "from": "f",
+    "to": "n"
+   },
+   {
+    "id": "e4",
+    "from": "a",
+    "to": "j"
+   },
+   {
+    "id": "e5",
+    "from": "n",
+    "to": "j"
+   },
+   {
+    "id": "e6",
+    "from": "j",
+    "to": "end"
+   }
+  ],
+  "positions": {
+   "start": {
+    "x": 0,
+    "y": 54
+   },
+   "f": {
+    "x": 224,
+    "y": 54
+   },
+   "a": {
+    "x": 448,
+    "y": 0
+   },
+   "n": {
+    "x": 448,
+    "y": 108
+   },
+   "j": {
+    "x": 672,
+    "y": 54
+   },
+   "end": {
+    "x": 896,
+    "y": 54
+   }
+  },
+  "width": 1064,
+  "height": 192,
+  "bends": {
+   "e1": 196,
+   "e2": 420,
+   "e3": 420,
+   "e4": 644,
+   "e5": 644,
+   "e6": 868
+  }
+ },
+ "通過 全部到齊的空分支不警告 (W1 只管任一到齊)": {
+  "nodes": [
+   {
+    "id": "start",
+    "kind": "start"
+   },
+   {
+    "id": "f",
+    "kind": "fork"
+   },
+   {
+    "id": "a",
+    "kind": "approval",
+    "name": {
+     "zh-TW": "a"
+    }
+   },
+   {
+    "id": "j",
+    "kind": "join",
+    "forkId": "f",
+    "mode": "all"
+   },
+   {
+    "id": "end",
+    "kind": "end"
+   }
+  ],
+  "edges": [
+   {
+    "id": "e1",
+    "from": "start",
+    "to": "f"
+   },
+   {
+    "id": "e2",
+    "from": "f",
+    "to": "a"
+   },
+   {
+    "id": "e3",
+    "from": "f",
+    "to": "j"
+   },
+   {
+    "id": "e4",
+    "from": "a",
+    "to": "j"
+   },
+   {
+    "id": "e5",
+    "from": "j",
+    "to": "end"
+   }
+  ],
+  "positions": {
+   "start": {
+    "x": 0,
+    "y": 108
+   },
+   "f": {
+    "x": 224,
+    "y": 108
+   },
+   "a": {
+    "x": 448,
+    "y": 0
+   },
+   "j": {
+    "x": 672,
+    "y": 108
+   },
+   "end": {
+    "x": 896,
+    "y": 108
+   }
+  },
+  "width": 1064,
+  "height": 192,
+  "bends": {
+   "e1": 196,
+   "e2": 420,
+   "e3": 420,
+   "e4": 644,
+   "e5": 868
+  }
+ },
+ "通過 任一到齊的每條分支都經過簽核節點": {
+  "nodes": [
+   {
+    "id": "start",
+    "kind": "start"
+   },
+   {
+    "id": "f",
+    "kind": "fork"
+   },
+   {
+    "id": "a",
+    "kind": "approval",
+    "name": {
+     "zh-TW": "a"
+    }
+   },
+   {
+    "id": "b",
+    "kind": "approval",
+    "name": {
+     "zh-TW": "b"
+    }
+   },
+   {
+    "id": "j",
+    "kind": "join",
+    "forkId": "f",
+    "mode": "any"
+   },
+   {
+    "id": "end",
+    "kind": "end"
+   }
+  ],
+  "edges": [
+   {
+    "id": "e1",
+    "from": "start",
+    "to": "f"
+   },
+   {
+    "id": "e2",
+    "from": "f",
+    "to": "a"
+   },
+   {
+    "id": "e3",
+    "from": "f",
+    "to": "b"
+   },
+   {
+    "id": "e4",
+    "from": "a",
+    "to": "j"
+   },
+   {
+    "id": "e5",
+    "from": "b",
+    "to": "j"
+   },
+   {
+    "id": "e6",
+    "from": "j",
+    "to": "end"
+   }
+  ],
+  "positions": {
+   "start": {
+    "x": 0,
+    "y": 54
+   },
+   "f": {
+    "x": 224,
+    "y": 54
+   },
+   "a": {
+    "x": 448,
+    "y": 0
+   },
+   "b": {
+    "x": 448,
+    "y": 108
+   },
+   "j": {
+    "x": 672,
+    "y": 54
+   },
+   "end": {
+    "x": 896,
+    "y": 54
+   }
+  },
+  "width": 1064,
+  "height": 192,
+  "bends": {
+   "e1": 196,
+   "e2": 420,
+   "e3": 420,
+   "e4": 644,
+   "e5": 644,
+   "e6": 868
+  }
+ },
+ "通過 任一到齊的分支裡有全部到齊的巢狀並行區，內層有簽核就算經過簽核": {
+  "nodes": [
+   {
+    "id": "start",
+    "kind": "start"
+   },
+   {
+    "id": "f1",
+    "kind": "fork"
+   },
+   {
+    "id": "a1",
+    "kind": "approval",
+    "name": {
+     "zh-TW": "a1"
+    }
+   },
+   {
+    "id": "f2",
+    "kind": "fork"
+   },
+   {
+    "id": "a2",
+    "kind": "approval",
+    "name": {
+     "zh-TW": "a2"
+    }
+   },
+   {
+    "id": "j2",
+    "kind": "join",
+    "forkId": "f2",
+    "mode": "all"
+   },
+   {
+    "id": "j1",
+    "kind": "join",
+    "forkId": "f1",
+    "mode": "any"
+   },
+   {
+    "id": "end",
+    "kind": "end"
+   }
+  ],
+  "edges": [
+   {
+    "id": "e1",
+    "from": "start",
+    "to": "f1"
+   },
+   {
+    "id": "e2",
+    "from": "f1",
+    "to": "a1"
+   },
+   {
+    "id": "e3",
+    "from": "f1",
+    "to": "f2"
+   },
+   {
+    "id": "e4",
+    "from": "f2",
+    "to": "a2"
+   },
+   {
+    "id": "e5",
+    "from": "f2",
+    "to": "j2"
+   },
+   {
+    "id": "e6",
+    "from": "a2",
+    "to": "j2"
+   },
+   {
+    "id": "e7",
+    "from": "a1",
+    "to": "j1"
+   },
+   {
+    "id": "e8",
+    "from": "j2",
+    "to": "j1"
+   },
+   {
+    "id": "e9",
+    "from": "j1",
+    "to": "end"
+   }
+  ],
+  "positions": {
+   "start": {
+    "x": 0,
+    "y": 108
+   },
+   "f1": {
+    "x": 224,
+    "y": 108
+   },
+   "a1": {
+    "x": 448,
+    "y": 0
+   },
+   "f2": {
+    "x": 448,
+    "y": 216
+   },
+   "a2": {
+    "x": 672,
+    "y": 108
+   },
+   "j2": {
+    "x": 896,
+    "y": 216
+   },
+   "j1": {
+    "x": 1120,
+    "y": 108
+   },
+   "end": {
+    "x": 1344,
+    "y": 108
+   }
+  },
+  "width": 1512,
+  "height": 300,
+  "bends": {
+   "e1": 196,
+   "e2": 420,
+   "e3": 420,
+   "e4": 644,
+   "e5": 644,
+   "e6": 868,
+   "e7": 1092,
+   "e8": 1092,
+   "e9": 1316
+  }
+ },
+ "W2 條件節點的預設線直接到結束（小額免簽）": {
+  "nodes": [
+   {
+    "id": "start",
+    "kind": "start"
+   },
+   {
+    "id": "c",
+    "kind": "condition"
+   },
+   {
+    "id": "a",
+    "kind": "approval",
+    "name": {
+     "zh-TW": "a"
+    }
+   },
+   {
+    "id": "end",
+    "kind": "end"
+   }
+  ],
+  "edges": [
+   {
+    "id": "e1",
+    "from": "start",
+    "to": "c"
+   },
+   {
+    "id": "e2",
+    "from": "c",
+    "to": "a",
+    "order": 1,
+    "when": {
+     "all": [
+      {
+       "field": 1,
+       "op": "gte",
+       "value": 1
+      }
+     ]
+    }
+   },
+   {
+    "id": "e3",
+    "from": "c",
+    "to": "end",
+    "default": true
+   },
+   {
+    "id": "e4",
+    "from": "a",
+    "to": "end"
+   }
+  ],
+  "positions": {
+   "start": {
+    "x": 0,
+    "y": 108
+   },
+   "c": {
+    "x": 224,
+    "y": 108
+   },
+   "a": {
+    "x": 448,
+    "y": 0
+   },
+   "end": {
+    "x": 672,
+    "y": 108
+   }
+  },
+  "width": 840,
+  "height": 192,
+  "bends": {
+   "e1": 196,
+   "e2": 420,
+   "e3": 420,
+   "e4": 644
+  }
+ },
+ "通過 條件節點的預設線先過簽核節點再結束": {
+  "nodes": [
+   {
+    "id": "start",
+    "kind": "start"
+   },
+   {
+    "id": "c",
+    "kind": "condition"
+   },
+   {
+    "id": "a",
+    "kind": "approval",
+    "name": {
+     "zh-TW": "a"
+    }
+   },
+   {
+    "id": "b",
+    "kind": "approval",
+    "name": {
+     "zh-TW": "b"
+    }
+   },
+   {
+    "id": "end",
+    "kind": "end"
+   }
+  ],
+  "edges": [
+   {
+    "id": "e1",
+    "from": "start",
+    "to": "c"
+   },
+   {
+    "id": "e2",
+    "from": "c",
+    "to": "a",
+    "order": 1,
+    "when": {
+     "all": [
+      {
+       "field": 1,
+       "op": "gte",
+       "value": 1
+      }
+     ]
+    }
+   },
+   {
+    "id": "e3",
+    "from": "c",
+    "to": "b",
+    "default": true
+   },
+   {
+    "id": "e4",
+    "from": "a",
+    "to": "end"
+   },
+   {
+    "id": "e5",
+    "from": "b",
+    "to": "end"
+   }
+  ],
+  "positions": {
+   "start": {
+    "x": 0,
+    "y": 54
+   },
+   "c": {
+    "x": 224,
+    "y": 54
+   },
+   "a": {
+    "x": 448,
+    "y": 0
+   },
+   "b": {
+    "x": 448,
+    "y": 108
+   },
+   "end": {
+    "x": 672,
+    "y": 54
+   }
+  },
+  "width": 840,
+  "height": 192,
+  "bends": {
+   "e1": 196,
+   "e2": 420,
+   "e3": 420,
+   "e4": 644,
+   "e5": 644
+  }
+ },
+ "W2 預設線只經過通知節點到結束仍然警告": {
+  "nodes": [
+   {
+    "id": "start",
+    "kind": "start"
+   },
+   {
+    "id": "c",
+    "kind": "condition"
+   },
+   {
+    "id": "a",
+    "kind": "approval",
+    "name": {
+     "zh-TW": "a"
+    }
+   },
+   {
+    "id": "n",
+    "kind": "notify",
+    "name": {
+     "zh-TW": "n"
+    },
+    "recipients": [
+     {
+      "kind": "initiator"
+     }
+    ]
+   },
+   {
+    "id": "end",
+    "kind": "end"
+   }
+  ],
+  "edges": [
+   {
+    "id": "e1",
+    "from": "start",
+    "to": "c"
+   },
+   {
+    "id": "e2",
+    "from": "c",
+    "to": "a",
+    "order": 1,
+    "when": {
+     "all": [
+      {
+       "field": 1,
+       "op": "gte",
+       "value": 1
+      }
+     ]
+    }
+   },
+   {
+    "id": "e3",
+    "from": "c",
+    "to": "n",
+    "default": true
+   },
+   {
+    "id": "e4",
+    "from": "a",
+    "to": "end"
+   },
+   {
+    "id": "e5",
+    "from": "n",
+    "to": "end"
+   }
+  ],
+  "positions": {
+   "start": {
+    "x": 0,
+    "y": 54
+   },
+   "c": {
+    "x": 224,
+    "y": 54
+   },
+   "a": {
+    "x": 448,
+    "y": 0
+   },
+   "n": {
+    "x": 448,
+    "y": 108
+   },
+   "end": {
+    "x": 672,
+    "y": 54
+   }
+  },
+  "width": 840,
+  "height": 192,
+  "bends": {
+   "e1": 196,
+   "e2": 420,
+   "e3": 420,
+   "e4": 644,
+   "e5": 644
+  }
+ },
+ "W3 條件節點出線上的簽核節點有略過條件": {
+  "nodes": [
+   {
+    "id": "start",
+    "kind": "start"
+   },
+   {
+    "id": "c",
+    "kind": "condition"
+   },
+   {
+    "id": "a",
+    "kind": "approval",
+    "name": {
+     "zh-TW": "a"
+    },
+    "when": {
+     "all": [
+      {
+       "field": 1,
+       "op": "gte",
+       "value": 1
+      }
+     ]
+    }
+   },
+   {
+    "id": "b",
+    "kind": "approval",
+    "name": {
+     "zh-TW": "b"
+    }
+   },
+   {
+    "id": "end",
+    "kind": "end"
+   }
+  ],
+  "edges": [
+   {
+    "id": "e1",
+    "from": "start",
+    "to": "c"
+   },
+   {
+    "id": "e2",
+    "from": "c",
+    "to": "a",
+    "order": 1,
+    "when": {
+     "all": [
+      {
+       "field": 1,
+       "op": "gte",
+       "value": 1
+      }
+     ]
+    }
+   },
+   {
+    "id": "e3",
+    "from": "c",
+    "to": "b",
+    "default": true
+   },
+   {
+    "id": "e4",
+    "from": "a",
+    "to": "end"
+   },
+   {
+    "id": "e5",
+    "from": "b",
+    "to": "end"
+   }
+  ],
+  "positions": {
+   "start": {
+    "x": 0,
+    "y": 54
+   },
+   "c": {
+    "x": 224,
+    "y": 54
+   },
+   "a": {
+    "x": 448,
+    "y": 0
+   },
+   "b": {
+    "x": 448,
+    "y": 108
+   },
+   "end": {
+    "x": 672,
+    "y": 54
+   }
+  },
+  "width": 840,
+  "height": 192,
+  "bends": {
+   "e1": 196,
+   "e2": 420,
+   "e3": 420,
+   "e4": 644,
+   "e5": 644
+  }
+ },
+ "通過 直線上的略過條件不警告 (W3)": {
+  "nodes": [
+   {
+    "id": "start",
+    "kind": "start"
+   },
+   {
+    "id": "a",
+    "kind": "approval",
+    "name": {
+     "zh-TW": "a"
+    },
+    "when": {
+     "all": [
+      {
+       "field": 1,
+       "op": "gte",
+       "value": 1
+      }
+     ]
+    }
+   },
+   {
+    "id": "end",
+    "kind": "end"
+   }
+  ],
+  "edges": [
+   {
+    "id": "e1",
+    "from": "start",
+    "to": "a"
+   },
+   {
+    "id": "e2",
+    "from": "a",
+    "to": "end"
+   }
+  ],
+  "positions": {
+   "start": {
+    "x": 0,
+    "y": 0
+   },
+   "a": {
+    "x": 224,
+    "y": 0
+   },
+   "end": {
+    "x": 448,
+    "y": 0
+   }
+  },
+  "width": 616,
+  "height": 84,
+  "bends": {
+   "e1": 196,
+   "e2": 420
+  }
+ },
+ "W3 條件出線先經過通知節點才到有略過條件的簽核節點": {
+  "nodes": [
+   {
+    "id": "start",
+    "kind": "start"
+   },
+   {
+    "id": "c",
+    "kind": "condition"
+   },
+   {
+    "id": "n",
+    "kind": "notify",
+    "name": {
+     "zh-TW": "n"
+    },
+    "recipients": [
+     {
+      "kind": "initiator"
+     }
+    ]
+   },
+   {
+    "id": "a",
+    "kind": "approval",
+    "name": {
+     "zh-TW": "a"
+    },
+    "when": {
+     "all": [
+      {
+       "field": 1,
+       "op": "gte",
+       "value": 1
+      }
+     ]
+    }
+   },
+   {
+    "id": "b",
+    "kind": "approval",
+    "name": {
+     "zh-TW": "b"
+    }
+   },
+   {
+    "id": "end",
+    "kind": "end"
+   }
+  ],
+  "edges": [
+   {
+    "id": "e1",
+    "from": "start",
+    "to": "c"
+   },
+   {
+    "id": "e2",
+    "from": "c",
+    "to": "n",
+    "order": 1,
+    "when": {
+     "all": [
+      {
+       "field": 1,
+       "op": "gte",
+       "value": 1
+      }
+     ]
+    }
+   },
+   {
+    "id": "e3",
+    "from": "c",
+    "to": "b",
+    "default": true
+   },
+   {
+    "id": "e4",
+    "from": "n",
+    "to": "a"
+   },
+   {
+    "id": "e5",
+    "from": "a",
+    "to": "end"
+   },
+   {
+    "id": "e6",
+    "from": "b",
+    "to": "end"
+   }
+  ],
+  "positions": {
+   "start": {
+    "x": 0,
+    "y": 54
+   },
+   "c": {
+    "x": 224,
+    "y": 54
+   },
+   "n": {
+    "x": 448,
+    "y": 0
+   },
+   "a": {
+    "x": 672,
+    "y": 0
+   },
+   "b": {
+    "x": 448,
+    "y": 108
+   },
+   "end": {
+    "x": 896,
+    "y": 54
+   }
+  },
+  "width": 1064,
+  "height": 192,
+  "bends": {
+   "e1": 196,
+   "e2": 420,
+   "e3": 420,
+   "e4": 644,
+   "e5": 868,
+   "e6": 868
+  }
+ },
+ "通過 條件出線後已有另一個簽核節點，之後的略過條件不警告": {
+  "nodes": [
+   {
+    "id": "start",
+    "kind": "start"
+   },
+   {
+    "id": "c",
+    "kind": "condition"
+   },
+   {
+    "id": "x",
+    "kind": "approval",
+    "name": {
+     "zh-TW": "x"
+    }
+   },
+   {
+    "id": "a",
+    "kind": "approval",
+    "name": {
+     "zh-TW": "a"
+    },
+    "when": {
+     "all": [
+      {
+       "field": 1,
+       "op": "gte",
+       "value": 1
+      }
+     ]
+    }
+   },
+   {
+    "id": "b",
+    "kind": "approval",
+    "name": {
+     "zh-TW": "b"
+    }
+   },
+   {
+    "id": "end",
+    "kind": "end"
+   }
+  ],
+  "edges": [
+   {
+    "id": "e1",
+    "from": "start",
+    "to": "c"
+   },
+   {
+    "id": "e2",
+    "from": "c",
+    "to": "x",
+    "order": 1,
+    "when": {
+     "all": [
+      {
+       "field": 1,
+       "op": "gte",
+       "value": 1
+      }
+     ]
+    }
+   },
+   {
+    "id": "e3",
+    "from": "c",
+    "to": "b",
+    "default": true
+   },
+   {
+    "id": "e4",
+    "from": "x",
+    "to": "a"
+   },
+   {
+    "id": "e5",
+    "from": "a",
+    "to": "end"
+   },
+   {
+    "id": "e6",
+    "from": "b",
+    "to": "end"
+   }
+  ],
+  "positions": {
+   "start": {
+    "x": 0,
+    "y": 54
+   },
+   "c": {
+    "x": 224,
+    "y": 54
+   },
+   "x": {
+    "x": 448,
+    "y": 0
+   },
+   "a": {
+    "x": 672,
+    "y": 0
+   },
+   "b": {
+    "x": 448,
+    "y": 108
+   },
+   "end": {
+    "x": 896,
+    "y": 54
+   }
+  },
+  "width": 1064,
+  "height": 192,
+  "bends": {
+   "e1": 196,
+   "e2": 420,
+   "e3": 420,
+   "e4": 644,
+   "e5": 868,
+   "e6": 868
+  }
+ },
+ "通過 互斥路徑會合之後的略過條件不警告": {
+  "nodes": [
+   {
+    "id": "start",
+    "kind": "start"
+   },
+   {
+    "id": "c",
+    "kind": "condition"
+   },
+   {
+    "id": "n1",
+    "kind": "notify",
+    "name": {
+     "zh-TW": "n1"
+    },
+    "recipients": [
+     {
+      "kind": "initiator"
+     }
+    ]
+   },
+   {
+    "id": "n2",
+    "kind": "notify",
+    "name": {
+     "zh-TW": "n2"
+    },
+    "recipients": [
+     {
+      "kind": "initiator"
+     }
+    ]
+   },
+   {
+    "id": "a",
+    "kind": "approval",
+    "name": {
+     "zh-TW": "a"
+    },
+    "when": {
+     "all": [
+      {
+       "field": 1,
+       "op": "gte",
+       "value": 1
+      }
+     ]
+    }
+   },
+   {
+    "id": "end",
+    "kind": "end"
+   }
+  ],
+  "edges": [
+   {
+    "id": "e1",
+    "from": "start",
+    "to": "c"
+   },
+   {
+    "id": "e2",
+    "from": "c",
+    "to": "n1",
+    "order": 1,
+    "when": {
+     "all": [
+      {
+       "field": 1,
+       "op": "gte",
+       "value": 1
+      }
+     ]
+    }
+   },
+   {
+    "id": "e3",
+    "from": "c",
+    "to": "n2",
+    "default": true
+   },
+   {
+    "id": "e4",
+    "from": "n1",
+    "to": "a"
+   },
+   {
+    "id": "e5",
+    "from": "n2",
+    "to": "a"
+   },
+   {
+    "id": "e6",
+    "from": "a",
+    "to": "end"
+   }
+  ],
+  "positions": {
+   "start": {
+    "x": 0,
+    "y": 54
+   },
+   "c": {
+    "x": 224,
+    "y": 54
+   },
+   "n1": {
+    "x": 448,
+    "y": 0
+   },
+   "n2": {
+    "x": 448,
+    "y": 108
+   },
+   "a": {
+    "x": 672,
+    "y": 54
+   },
+   "end": {
+    "x": 896,
+    "y": 54
+   }
+  },
+  "width": 1064,
+  "height": 192,
+  "bends": {
+   "e1": 196,
+   "e2": 420,
+   "e3": 420,
+   "e4": 644,
+   "e5": 644,
+   "e6": 868
+  }
+ },
+ "W1、W2 條件路線讓全部到齊的並行區免簽：區內有簽核節點，預設線仍可能不經簽核就通過": {
+  "nodes": [
+   {
+    "id": "s",
+    "kind": "start"
+   },
+   {
+    "id": "c0",
+    "kind": "condition"
+   },
+   {
+    "id": "a0",
+    "kind": "approval",
+    "name": {
+     "zh-TW": "a0"
+    }
+   },
+   {
+    "id": "f1",
+    "kind": "fork"
+   },
+   {
+    "id": "a1",
+    "kind": "approval",
+    "name": {
+     "zh-TW": "a1"
+    }
+   },
+   {
+    "id": "j1",
+    "kind": "join",
+    "forkId": "f1",
+    "mode": "any"
+   },
+   {
+    "id": "f2",
+    "kind": "fork"
+   },
+   {
+    "id": "c2",
+    "kind": "condition"
+   },
+   {
+    "id": "n2",
+    "kind": "notify",
+    "name": {
+     "zh-TW": "n2"
+    },
+    "recipients": [
+     {
+      "kind": "initiator"
+     }
+    ]
+   },
+   {
+    "id": "a2",
+    "kind": "approval",
+    "name": {
+     "zh-TW": "a2"
+    }
+   },
+   {
+    "id": "n1",
+    "kind": "notify",
+    "name": {
+     "zh-TW": "n1"
+    },
+    "recipients": [
+     {
+      "kind": "initiator"
+     }
+    ]
+   },
+   {
+    "id": "j2",
+    "kind": "join",
+    "forkId": "f2",
+    "mode": "all"
+   },
+   {
+    "id": "z",
+    "kind": "end"
+   }
+  ],
+  "edges": [
+   {
+    "id": "e1",
+    "from": "s",
+    "to": "c0"
+   },
+   {
+    "id": "e2",
+    "from": "c0",
+    "to": "a0",
+    "order": 1,
+    "when": {
+     "all": [
+      {
+       "field": 1,
+       "op": "gte",
+       "value": 1
+      }
+     ]
+    }
+   },
+   {
+    "id": "e3",
+    "from": "c0",
+    "to": "f1",
+    "default": true
+   },
+   {
+    "id": "e4",
+    "from": "a0",
+    "to": "z"
+   },
+   {
+    "id": "e5",
+    "from": "f1",
+    "to": "a1"
+   },
+   {
+    "id": "e6",
+    "from": "a1",
+    "to": "j1"
+   },
+   {
+    "id": "e7",
+    "from": "f1",
+    "to": "f2"
+   },
+   {
+    "id": "e8",
+    "from": "f2",
+    "to": "c2"
+   },
+   {
+    "id": "e9",
+    "from": "f2",
+    "to": "n2"
+   },
+   {
+    "id": "e10",
+    "from": "c2",
+    "to": "a2",
+    "order": 1,
+    "when": {
+     "all": [
+      {
+       "field": 1,
+       "op": "gte",
+       "value": 1
+      }
+     ]
+    }
+   },
+   {
+    "id": "e11",
+    "from": "c2",
+    "to": "n1",
+    "default": true
+   },
+   {
+    "id": "e12",
+    "from": "a2",
+    "to": "j2"
+   },
+   {
+    "id": "e13",
+    "from": "n1",
+    "to": "j2"
+   },
+   {
+    "id": "e14",
+    "from": "n2",
+    "to": "j2"
+   },
+   {
+    "id": "e15",
+    "from": "j2",
+    "to": "j1"
+   },
+   {
+    "id": "e16",
+    "from": "j1",
+    "to": "z"
+   }
+  ],
+  "positions": {
+   "s": {
+    "x": 0,
+    "y": 216
+   },
+   "c0": {
+    "x": 224,
+    "y": 216
+   },
+   "a0": {
+    "x": 448,
+    "y": 0
+   },
+   "f1": {
+    "x": 448,
+    "y": 270
+   },
+   "a1": {
+    "x": 672,
+    "y": 108
+   },
+   "f2": {
+    "x": 672,
+    "y": 324
+   },
+   "c2": {
+    "x": 896,
+    "y": 270
+   },
+   "a2": {
+    "x": 1120,
+    "y": 216
+   },
+   "n1": {
+    "x": 1120,
+    "y": 324
+   },
+   "n2": {
+    "x": 896,
+    "y": 432
+   },
+   "j2": {
+    "x": 1344,
+    "y": 324
+   },
+   "j1": {
+    "x": 1568,
+    "y": 270
+   },
+   "z": {
+    "x": 1792,
+    "y": 216
+   }
+  },
+  "width": 1960,
+  "height": 516,
+  "bends": {
+   "e1": 196,
+   "e2": 420,
+   "e3": 420,
+   "e4": 1764,
+   "e5": 644,
+   "e6": 1540,
+   "e7": 644,
+   "e8": 868,
+   "e9": 868,
+   "e10": 1092,
+   "e11": 1092,
+   "e12": 1316,
+   "e13": 1316,
+   "e14": 1316,
+   "e15": 1540,
+   "e16": 1764
+  }
+ },
+ "通過 W3 遇到匯合節點就停止：條件節點的出線直接到匯合，匯合之後的略過條件不警告": {
+  "nodes": [
+   {
+    "id": "s",
+    "kind": "start"
+   },
+   {
+    "id": "f",
+    "kind": "fork"
+   },
+   {
+    "id": "c",
+    "kind": "condition"
+   },
+   {
+    "id": "a",
+    "kind": "approval",
+    "name": {
+     "zh-TW": "a"
+    }
+   },
+   {
+    "id": "b",
+    "kind": "approval",
+    "name": {
+     "zh-TW": "b"
+    }
+   },
+   {
+    "id": "j",
+    "kind": "join",
+    "forkId": "f",
+    "mode": "all"
+   },
+   {
+    "id": "x",
+    "kind": "approval",
+    "name": {
+     "zh-TW": "x"
+    },
+    "when": {
+     "all": [
+      {
+       "field": 1,
+       "op": "gte",
+       "value": 1
+      }
+     ]
+    }
+   },
+   {
+    "id": "z",
+    "kind": "end"
+   }
+  ],
+  "edges": [
+   {
+    "id": "e1",
+    "from": "s",
+    "to": "f"
+   },
+   {
+    "id": "e2",
+    "from": "f",
+    "to": "c"
+   },
+   {
+    "id": "e3",
+    "from": "f",
+    "to": "b"
+   },
+   {
+    "id": "e4",
+    "from": "c",
+    "to": "a",
+    "order": 1,
+    "when": {
+     "all": [
+      {
+       "field": 1,
+       "op": "gte",
+       "value": 1
+      }
+     ]
+    }
+   },
+   {
+    "id": "e5",
+    "from": "c",
+    "to": "j",
+    "default": true
+   },
+   {
+    "id": "e6",
+    "from": "a",
+    "to": "j"
+   },
+   {
+    "id": "e7",
+    "from": "b",
+    "to": "j"
+   },
+   {
+    "id": "e8",
+    "from": "j",
+    "to": "x"
+   },
+   {
+    "id": "e9",
+    "from": "x",
+    "to": "z"
+   }
+  ],
+  "positions": {
+   "s": {
+    "x": 0,
+    "y": 108
+   },
+   "f": {
+    "x": 224,
+    "y": 108
+   },
+   "c": {
+    "x": 448,
+    "y": 108
+   },
+   "a": {
+    "x": 672,
+    "y": 0
+   },
+   "b": {
+    "x": 448,
+    "y": 216
+   },
+   "j": {
+    "x": 896,
+    "y": 108
+   },
+   "x": {
+    "x": 1120,
+    "y": 108
+   },
+   "z": {
+    "x": 1344,
+    "y": 108
+   }
+  },
+  "width": 1512,
+  "height": 300,
+  "bends": {
+   "e1": 196,
+   "e2": 420,
+   "e3": 420,
+   "e4": 644,
+   "e5": 644,
+   "e6": 868,
+   "e7": 868,
+   "e8": 1092,
+   "e9": 1316
+  }
+ },
+ "W2 並行區內的條件節點預設線直接到匯合，兄弟分支也免簽：全部到齊的匯合之後到結束，應警告": {
+  "nodes": [
+   {
+    "id": "s",
+    "kind": "start"
+   },
+   {
+    "id": "f",
+    "kind": "fork"
+   },
+   {
+    "id": "c",
+    "kind": "condition"
+   },
+   {
+    "id": "n",
+    "kind": "notify",
+    "name": {
+     "zh-TW": "n"
+    },
+    "recipients": [
+     {
+      "kind": "initiator"
+     }
+    ]
+   },
+   {
+    "id": "a",
+    "kind": "approval",
+    "name": {
+     "zh-TW": "a"
+    }
+   },
+   {
+    "id": "j",
+    "kind": "join",
+    "forkId": "f",
+    "mode": "all"
+   },
+   {
+    "id": "z",
+    "kind": "end"
+   }
+  ],
+  "edges": [
+   {
+    "id": "e1",
+    "from": "s",
+    "to": "f"
+   },
+   {
+    "id": "e2",
+    "from": "f",
+    "to": "c"
+   },
+   {
+    "id": "e3",
+    "from": "f",
+    "to": "n"
+   },
+   {
+    "id": "e4",
+    "from": "c",
+    "to": "a",
+    "order": 1,
+    "when": {
+     "all": [
+      {
+       "field": 1,
+       "op": "gte",
+       "value": 1
+      }
+     ]
+    }
+   },
+   {
+    "id": "e5",
+    "from": "c",
+    "to": "j",
+    "default": true
+   },
+   {
+    "id": "e6",
+    "from": "a",
+    "to": "j"
+   },
+   {
+    "id": "e7",
+    "from": "n",
+    "to": "j"
+   },
+   {
+    "id": "e8",
+    "from": "j",
+    "to": "z"
+   }
+  ],
+  "positions": {
+   "s": {
+    "x": 0,
+    "y": 108
+   },
+   "f": {
+    "x": 224,
+    "y": 108
+   },
+   "c": {
+    "x": 448,
+    "y": 108
+   },
+   "a": {
+    "x": 672,
+    "y": 0
+   },
+   "n": {
+    "x": 448,
+    "y": 216
+   },
+   "j": {
+    "x": 896,
+    "y": 108
+   },
+   "z": {
+    "x": 1120,
+    "y": 108
+   }
+  },
+  "width": 1288,
+  "height": 300,
+  "bends": {
+   "e1": 196,
+   "e2": 420,
+   "e3": 420,
+   "e4": 644,
+   "e5": 644,
+   "e6": 868,
+   "e7": 868,
+   "e8": 1092
+  }
+ },
+ "通過 W2 兄弟分支必經簽核：全部到齊的匯合要等它，不警告": {
+  "nodes": [
+   {
+    "id": "s",
+    "kind": "start"
+   },
+   {
+    "id": "f",
+    "kind": "fork"
+   },
+   {
+    "id": "c",
+    "kind": "condition"
+   },
+   {
+    "id": "b",
+    "kind": "approval",
+    "name": {
+     "zh-TW": "b"
+    }
+   },
+   {
+    "id": "a",
+    "kind": "approval",
+    "name": {
+     "zh-TW": "a"
+    }
+   },
+   {
+    "id": "j",
+    "kind": "join",
+    "forkId": "f",
+    "mode": "all"
+   },
+   {
+    "id": "z",
+    "kind": "end"
+   }
+  ],
+  "edges": [
+   {
+    "id": "e1",
+    "from": "s",
+    "to": "f"
+   },
+   {
+    "id": "e2",
+    "from": "f",
+    "to": "c"
+   },
+   {
+    "id": "e3",
+    "from": "f",
+    "to": "b"
+   },
+   {
+    "id": "e4",
+    "from": "c",
+    "to": "a",
+    "order": 1,
+    "when": {
+     "all": [
+      {
+       "field": 1,
+       "op": "gte",
+       "value": 1
+      }
+     ]
+    }
+   },
+   {
+    "id": "e5",
+    "from": "c",
+    "to": "j",
+    "default": true
+   },
+   {
+    "id": "e6",
+    "from": "a",
+    "to": "j"
+   },
+   {
+    "id": "e7",
+    "from": "b",
+    "to": "j"
+   },
+   {
+    "id": "e8",
+    "from": "j",
+    "to": "z"
+   }
+  ],
+  "positions": {
+   "s": {
+    "x": 0,
+    "y": 108
+   },
+   "f": {
+    "x": 224,
+    "y": 108
+   },
+   "c": {
+    "x": 448,
+    "y": 108
+   },
+   "a": {
+    "x": 672,
+    "y": 0
+   },
+   "b": {
+    "x": 448,
+    "y": 216
+   },
+   "j": {
+    "x": 896,
+    "y": 108
+   },
+   "z": {
+    "x": 1120,
+    "y": 108
+   }
+  },
+  "width": 1288,
+  "height": 300,
+  "bends": {
+   "e1": 196,
+   "e2": 420,
+   "e3": 420,
+   "e4": 644,
+   "e5": 644,
+   "e6": 868,
+   "e7": 868,
+   "e8": 1092
+  }
+ },
+ "W2 並行區內條件節點預設線經通知節點再到匯合，兄弟分支免簽，應警告": {
+  "nodes": [
+   {
+    "id": "s",
+    "kind": "start"
+   },
+   {
+    "id": "f",
+    "kind": "fork"
+   },
+   {
+    "id": "c",
+    "kind": "condition"
+   },
+   {
+    "id": "m",
+    "kind": "notify",
+    "name": {
+     "zh-TW": "m"
+    },
+    "recipients": [
+     {
+      "kind": "initiator"
+     }
+    ]
+   },
+   {
+    "id": "n",
+    "kind": "notify",
+    "name": {
+     "zh-TW": "n"
+    },
+    "recipients": [
+     {
+      "kind": "initiator"
+     }
+    ]
+   },
+   {
+    "id": "a",
+    "kind": "approval",
+    "name": {
+     "zh-TW": "a"
+    }
+   },
+   {
+    "id": "j",
+    "kind": "join",
+    "forkId": "f",
+    "mode": "all"
+   },
+   {
+    "id": "z",
+    "kind": "end"
+   }
+  ],
+  "edges": [
+   {
+    "id": "e1",
+    "from": "s",
+    "to": "f"
+   },
+   {
+    "id": "e2",
+    "from": "f",
+    "to": "c"
+   },
+   {
+    "id": "e3",
+    "from": "f",
+    "to": "n"
+   },
+   {
+    "id": "e4",
+    "from": "c",
+    "to": "a",
+    "order": 1,
+    "when": {
+     "all": [
+      {
+       "field": 1,
+       "op": "gte",
+       "value": 1
+      }
+     ]
+    }
+   },
+   {
+    "id": "e5",
+    "from": "c",
+    "to": "m",
+    "default": true
+   },
+   {
+    "id": "e6",
+    "from": "m",
+    "to": "j"
+   },
+   {
+    "id": "e7",
+    "from": "a",
+    "to": "j"
+   },
+   {
+    "id": "e8",
+    "from": "n",
+    "to": "j"
+   },
+   {
+    "id": "e9",
+    "from": "j",
+    "to": "z"
+   }
+  ],
+  "positions": {
+   "s": {
+    "x": 0,
+    "y": 108
+   },
+   "f": {
+    "x": 224,
+    "y": 108
+   },
+   "c": {
+    "x": 448,
+    "y": 54
+   },
+   "a": {
+    "x": 672,
+    "y": 0
+   },
+   "m": {
+    "x": 672,
+    "y": 108
+   },
+   "n": {
+    "x": 448,
+    "y": 216
+   },
+   "j": {
+    "x": 896,
+    "y": 108
+   },
+   "z": {
+    "x": 1120,
+    "y": 108
+   }
+  },
+  "width": 1288,
+  "height": 300,
+  "bends": {
+   "e1": 196,
+   "e2": 420,
+   "e3": 420,
+   "e4": 644,
+   "e5": 644,
+   "e6": 868,
+   "e7": 868,
+   "e8": 868,
+   "e9": 1092
+  }
+ },
+ "W2 任一到齊的匯合：本分支免簽到達就能通過，兄弟分支必經簽核也警告（同時 W1）": {
+  "nodes": [
+   {
+    "id": "s",
+    "kind": "start"
+   },
+   {
+    "id": "f",
+    "kind": "fork"
+   },
+   {
+    "id": "c",
+    "kind": "condition"
+   },
+   {
+    "id": "b",
+    "kind": "approval",
+    "name": {
+     "zh-TW": "b"
+    }
+   },
+   {
+    "id": "a",
+    "kind": "approval",
+    "name": {
+     "zh-TW": "a"
+    }
+   },
+   {
+    "id": "j",
+    "kind": "join",
+    "forkId": "f",
+    "mode": "any"
+   },
+   {
+    "id": "z",
+    "kind": "end"
+   }
+  ],
+  "edges": [
+   {
+    "id": "e1",
+    "from": "s",
+    "to": "f"
+   },
+   {
+    "id": "e2",
+    "from": "f",
+    "to": "c"
+   },
+   {
+    "id": "e3",
+    "from": "f",
+    "to": "b"
+   },
+   {
+    "id": "e4",
+    "from": "c",
+    "to": "a",
+    "order": 1,
+    "when": {
+     "all": [
+      {
+       "field": 1,
+       "op": "gte",
+       "value": 1
+      }
+     ]
+    }
+   },
+   {
+    "id": "e5",
+    "from": "c",
+    "to": "j",
+    "default": true
+   },
+   {
+    "id": "e6",
+    "from": "a",
+    "to": "j"
+   },
+   {
+    "id": "e7",
+    "from": "b",
+    "to": "j"
+   },
+   {
+    "id": "e8",
+    "from": "j",
+    "to": "z"
+   }
+  ],
+  "positions": {
+   "s": {
+    "x": 0,
+    "y": 108
+   },
+   "f": {
+    "x": 224,
+    "y": 108
+   },
+   "c": {
+    "x": 448,
+    "y": 108
+   },
+   "a": {
+    "x": 672,
+    "y": 0
+   },
+   "b": {
+    "x": 448,
+    "y": 216
+   },
+   "j": {
+    "x": 896,
+    "y": 108
+   },
+   "z": {
+    "x": 1120,
+    "y": 108
+   }
+  },
+  "width": 1288,
+  "height": 300,
+  "bends": {
+   "e1": 196,
+   "e2": 420,
+   "e3": 420,
+   "e4": 644,
+   "e5": 644,
+   "e6": 868,
+   "e7": 868,
+   "e8": 1092
+  }
+ },
+ "W2 巢狀並行區：內層與外層的兄弟分支都免簽，越過兩層匯合到結束，應警告": {
+  "nodes": [
+   {
+    "id": "s",
+    "kind": "start"
+   },
+   {
+    "id": "f1",
+    "kind": "fork"
+   },
+   {
+    "id": "f2",
+    "kind": "fork"
+   },
+   {
+    "id": "c",
+    "kind": "condition"
+   },
+   {
+    "id": "n2",
+    "kind": "notify",
+    "name": {
+     "zh-TW": "n2"
+    },
+    "recipients": [
+     {
+      "kind": "initiator"
+     }
+    ]
+   },
+   {
+    "id": "a",
+    "kind": "approval",
+    "name": {
+     "zh-TW": "a"
+    }
+   },
+   {
+    "id": "j2",
+    "kind": "join",
+    "forkId": "f2",
+    "mode": "all"
+   },
+   {
+    "id": "o",
+    "kind": "notify",
+    "name": {
+     "zh-TW": "o"
+    },
+    "recipients": [
+     {
+      "kind": "initiator"
+     }
+    ]
+   },
+   {
+    "id": "j1",
+    "kind": "join",
+    "forkId": "f1",
+    "mode": "all"
+   },
+   {
+    "id": "z",
+    "kind": "end"
+   }
+  ],
+  "edges": [
+   {
+    "id": "e1",
+    "from": "s",
+    "to": "f1"
+   },
+   {
+    "id": "e2",
+    "from": "f1",
+    "to": "f2"
+   },
+   {
+    "id": "e3",
+    "from": "f1",
+    "to": "o"
+   },
+   {
+    "id": "e4",
+    "from": "f2",
+    "to": "c"
+   },
+   {
+    "id": "e5",
+    "from": "f2",
+    "to": "n2"
+   },
+   {
+    "id": "e6",
+    "from": "c",
+    "to": "a",
+    "order": 1,
+    "when": {
+     "all": [
+      {
+       "field": 1,
+       "op": "gte",
+       "value": 1
+      }
+     ]
+    }
+   },
+   {
+    "id": "e7",
+    "from": "c",
+    "to": "j2",
+    "default": true
+   },
+   {
+    "id": "e8",
+    "from": "a",
+    "to": "j2"
+   },
+   {
+    "id": "e9",
+    "from": "n2",
+    "to": "j2"
+   },
+   {
+    "id": "e10",
+    "from": "j2",
+    "to": "j1"
+   },
+   {
+    "id": "e11",
+    "from": "o",
+    "to": "j1"
+   },
+   {
+    "id": "e12",
+    "from": "j1",
+    "to": "z"
+   }
+  ],
+  "positions": {
+   "s": {
+    "x": 0,
+    "y": 162
+   },
+   "f1": {
+    "x": 224,
+    "y": 162
+   },
+   "f2": {
+    "x": 448,
+    "y": 108
+   },
+   "c": {
+    "x": 672,
+    "y": 108
+   },
+   "a": {
+    "x": 896,
+    "y": 0
+   },
+   "n2": {
+    "x": 672,
+    "y": 216
+   },
+   "j2": {
+    "x": 1120,
+    "y": 108
+   },
+   "o": {
+    "x": 448,
+    "y": 324
+   },
+   "j1": {
+    "x": 1344,
+    "y": 162
+   },
+   "z": {
+    "x": 1568,
+    "y": 162
+   }
+  },
+  "width": 1736,
+  "height": 408,
+  "bends": {
+   "e1": 196,
+   "e2": 420,
+   "e3": 420,
+   "e4": 644,
+   "e5": 644,
+   "e6": 868,
+   "e7": 868,
+   "e8": 1092,
+   "e9": 1092,
+   "e10": 1316,
+   "e11": 1316,
+   "e12": 1540
+  }
+ },
+ "通過 W2 巢狀並行區：外層兄弟分支必經簽核，不警告": {
+  "nodes": [
+   {
+    "id": "s",
+    "kind": "start"
+   },
+   {
+    "id": "f1",
+    "kind": "fork"
+   },
+   {
+    "id": "f2",
+    "kind": "fork"
+   },
+   {
+    "id": "c",
+    "kind": "condition"
+   },
+   {
+    "id": "n2",
+    "kind": "notify",
+    "name": {
+     "zh-TW": "n2"
+    },
+    "recipients": [
+     {
+      "kind": "initiator"
+     }
+    ]
+   },
+   {
+    "id": "a",
+    "kind": "approval",
+    "name": {
+     "zh-TW": "a"
+    }
+   },
+   {
+    "id": "j2",
+    "kind": "join",
+    "forkId": "f2",
+    "mode": "all"
+   },
+   {
+    "id": "o",
+    "kind": "approval",
+    "name": {
+     "zh-TW": "o"
+    }
+   },
+   {
+    "id": "j1",
+    "kind": "join",
+    "forkId": "f1",
+    "mode": "all"
+   },
+   {
+    "id": "z",
+    "kind": "end"
+   }
+  ],
+  "edges": [
+   {
+    "id": "e1",
+    "from": "s",
+    "to": "f1"
+   },
+   {
+    "id": "e2",
+    "from": "f1",
+    "to": "f2"
+   },
+   {
+    "id": "e3",
+    "from": "f1",
+    "to": "o"
+   },
+   {
+    "id": "e4",
+    "from": "f2",
+    "to": "c"
+   },
+   {
+    "id": "e5",
+    "from": "f2",
+    "to": "n2"
+   },
+   {
+    "id": "e6",
+    "from": "c",
+    "to": "a",
+    "order": 1,
+    "when": {
+     "all": [
+      {
+       "field": 1,
+       "op": "gte",
+       "value": 1
+      }
+     ]
+    }
+   },
+   {
+    "id": "e7",
+    "from": "c",
+    "to": "j2",
+    "default": true
+   },
+   {
+    "id": "e8",
+    "from": "a",
+    "to": "j2"
+   },
+   {
+    "id": "e9",
+    "from": "n2",
+    "to": "j2"
+   },
+   {
+    "id": "e10",
+    "from": "j2",
+    "to": "j1"
+   },
+   {
+    "id": "e11",
+    "from": "o",
+    "to": "j1"
+   },
+   {
+    "id": "e12",
+    "from": "j1",
+    "to": "z"
+   }
+  ],
+  "positions": {
+   "s": {
+    "x": 0,
+    "y": 162
+   },
+   "f1": {
+    "x": 224,
+    "y": 162
+   },
+   "f2": {
+    "x": 448,
+    "y": 108
+   },
+   "c": {
+    "x": 672,
+    "y": 108
+   },
+   "a": {
+    "x": 896,
+    "y": 0
+   },
+   "n2": {
+    "x": 672,
+    "y": 216
+   },
+   "j2": {
+    "x": 1120,
+    "y": 108
+   },
+   "o": {
+    "x": 448,
+    "y": 324
+   },
+   "j1": {
+    "x": 1344,
+    "y": 162
+   },
+   "z": {
+    "x": 1568,
+    "y": 162
+   }
+  },
+  "width": 1736,
+  "height": 408,
+  "bends": {
+   "e1": 196,
+   "e2": 420,
+   "e3": 420,
+   "e4": 644,
+   "e5": 644,
+   "e6": 868,
+   "e7": 868,
+   "e8": 1092,
+   "e9": 1092,
+   "e10": 1316,
+   "e11": 1316,
+   "e12": 1540
+  }
+ },
+ "W2 兄弟是空分支（分支節點直連全部到齊的匯合）：預設線免簽、兄弟免簽，應警告": {
+  "nodes": [
+   {
+    "id": "s",
+    "kind": "start"
+   },
+   {
+    "id": "f",
+    "kind": "fork"
+   },
+   {
+    "id": "c",
+    "kind": "condition"
+   },
+   {
+    "id": "a",
+    "kind": "approval",
+    "name": {
+     "zh-TW": "a"
+    }
+   },
+   {
+    "id": "j",
+    "kind": "join",
+    "forkId": "f",
+    "mode": "all"
+   },
+   {
+    "id": "z",
+    "kind": "end"
+   }
+  ],
+  "edges": [
+   {
+    "id": "e1",
+    "from": "s",
+    "to": "f"
+   },
+   {
+    "id": "e2",
+    "from": "f",
+    "to": "c"
+   },
+   {
+    "id": "e3",
+    "from": "f",
+    "to": "j"
+   },
+   {
+    "id": "e4",
+    "from": "c",
+    "to": "a",
+    "order": 1,
+    "when": {
+     "all": [
+      {
+       "field": 1,
+       "op": "gte",
+       "value": 1
+      }
+     ]
+    }
+   },
+   {
+    "id": "e5",
+    "from": "c",
+    "to": "j",
+    "default": true
+   },
+   {
+    "id": "e6",
+    "from": "a",
+    "to": "j"
+   },
+   {
+    "id": "e7",
+    "from": "j",
+    "to": "z"
+   }
+  ],
+  "positions": {
+   "s": {
+    "x": 0,
+    "y": 216
+   },
+   "f": {
+    "x": 224,
+    "y": 216
+   },
+   "c": {
+    "x": 448,
+    "y": 108
+   },
+   "a": {
+    "x": 672,
+    "y": 0
+   },
+   "j": {
+    "x": 896,
+    "y": 216
+   },
+   "z": {
+    "x": 1120,
+    "y": 216
+   }
+  },
+  "width": 1288,
+  "height": 300,
+  "bends": {
+   "e1": 196,
+   "e2": 420,
+   "e3": 420,
+   "e4": 644,
+   "e5": 644,
+   "e6": 868,
+   "e7": 1092
+  }
+ },
+ "W2 外層任一到齊、內層全部到齊的混合巢狀：內層兄弟免簽、外層本分支到達即完成，應警告": {
+  "nodes": [
+   {
+    "id": "s",
+    "kind": "start"
+   },
+   {
+    "id": "f1",
+    "kind": "fork"
+   },
+   {
+    "id": "f2",
+    "kind": "fork"
+   },
+   {
+    "id": "c",
+    "kind": "condition"
+   },
+   {
+    "id": "n2",
+    "kind": "notify",
+    "name": {
+     "zh-TW": "n2"
+    },
+    "recipients": [
+     {
+      "kind": "initiator"
+     }
+    ]
+   },
+   {
+    "id": "a",
+    "kind": "approval",
+    "name": {
+     "zh-TW": "a"
+    }
+   },
+   {
+    "id": "o",
+    "kind": "approval",
+    "name": {
+     "zh-TW": "o"
+    }
+   },
+   {
+    "id": "j2",
+    "kind": "join",
+    "forkId": "f2",
+    "mode": "all"
+   },
+   {
+    "id": "j1",
+    "kind": "join",
+    "forkId": "f1",
+    "mode": "any"
+   },
+   {
+    "id": "z",
+    "kind": "end"
+   }
+  ],
+  "edges": [
+   {
+    "id": "e1",
+    "from": "s",
+    "to": "f1"
+   },
+   {
+    "id": "e2",
+    "from": "f1",
+    "to": "f2"
+   },
+   {
+    "id": "e3",
+    "from": "f1",
+    "to": "o"
+   },
+   {
+    "id": "e4",
+    "from": "f2",
+    "to": "c"
+   },
+   {
+    "id": "e5",
+    "from": "f2",
+    "to": "n2"
+   },
+   {
+    "id": "e6",
+    "from": "c",
+    "to": "a",
+    "order": 1,
+    "when": {
+     "all": [
+      {
+       "field": 1,
+       "op": "gte",
+       "value": 1
+      }
+     ]
+    }
+   },
+   {
+    "id": "e7",
+    "from": "c",
+    "to": "j2",
+    "default": true
+   },
+   {
+    "id": "e8",
+    "from": "a",
+    "to": "j2"
+   },
+   {
+    "id": "e9",
+    "from": "n2",
+    "to": "j2"
+   },
+   {
+    "id": "e10",
+    "from": "j2",
+    "to": "j1"
+   },
+   {
+    "id": "e11",
+    "from": "o",
+    "to": "j1"
+   },
+   {
+    "id": "e12",
+    "from": "j1",
+    "to": "z"
+   }
+  ],
+  "positions": {
+   "s": {
+    "x": 0,
+    "y": 162
+   },
+   "f1": {
+    "x": 224,
+    "y": 162
+   },
+   "f2": {
+    "x": 448,
+    "y": 108
+   },
+   "c": {
+    "x": 672,
+    "y": 108
+   },
+   "a": {
+    "x": 896,
+    "y": 0
+   },
+   "n2": {
+    "x": 672,
+    "y": 216
+   },
+   "j2": {
+    "x": 1120,
+    "y": 108
+   },
+   "o": {
+    "x": 448,
+    "y": 324
+   },
+   "j1": {
+    "x": 1344,
+    "y": 162
+   },
+   "z": {
+    "x": 1568,
+    "y": 162
+   }
+  },
+  "width": 1736,
+  "height": 408,
+  "bends": {
+   "e1": 196,
+   "e2": 420,
+   "e3": 420,
+   "e4": 644,
+   "e5": 644,
+   "e6": 868,
+   "e7": 868,
+   "e8": 1092,
+   "e9": 1092,
+   "e10": 1316,
+   "e11": 1316,
+   "e12": 1540
+  }
+ },
+ "synthetic: add-sign nodes": {
+  "nodes": [
+   {
+    "id": "s",
+    "kind": "start"
+   },
+   {
+    "id": "a",
+    "kind": "approval"
+   },
+   {
+    "id": "x",
+    "kind": "addSign"
+   },
+   {
+    "id": "b",
+    "kind": "approval"
+   },
+   {
+    "id": "t",
+    "kind": "end"
+   }
+  ],
+  "edges": [
+   {
+    "id": "e1",
+    "from": "s",
+    "to": "a"
+   },
+   {
+    "id": "e2",
+    "from": "a",
+    "to": "x"
+   },
+   {
+    "id": "e3",
+    "from": "x",
+    "to": "b"
+   },
+   {
+    "id": "e4",
+    "from": "b",
+    "to": "t"
+   }
+  ],
+  "positions": {
+   "s": {
+    "x": 0,
+    "y": 0
+   },
+   "a": {
+    "x": 224,
+    "y": 0
+   },
+   "x": {
+    "x": 476,
+    "y": 18
+   },
+   "b": {
+    "x": 672,
+    "y": 0
+   },
+   "t": {
+    "x": 896,
+    "y": 0
+   }
+  },
+  "width": 1064,
+  "height": 84,
+  "bends": {
+   "e1": 196,
+   "e2": 420,
+   "e3": 644,
+   "e4": 868
+  }
+ },
+ "synthetic: add-sign inside a fork": {
+  "nodes": [
+   {
+    "id": "s",
+    "kind": "start"
+   },
+   {
+    "id": "f",
+    "kind": "fork"
+   },
+   {
+    "id": "a",
+    "kind": "approval"
+   },
+   {
+    "id": "x",
+    "kind": "addSign"
+   },
+   {
+    "id": "b",
+    "kind": "approval"
+   },
+   {
+    "id": "j",
+    "kind": "join"
+   },
+   {
+    "id": "t",
+    "kind": "end"
+   }
+  ],
+  "edges": [
+   {
+    "id": "e1",
+    "from": "s",
+    "to": "f"
+   },
+   {
+    "id": "e2",
+    "from": "f",
+    "to": "a"
+   },
+   {
+    "id": "e3",
+    "from": "a",
+    "to": "x"
+   },
+   {
+    "id": "e4",
+    "from": "f",
+    "to": "b"
+   },
+   {
+    "id": "e5",
+    "from": "x",
+    "to": "j"
+   },
+   {
+    "id": "e6",
+    "from": "b",
+    "to": "j"
+   },
+   {
+    "id": "e7",
+    "from": "j",
+    "to": "t"
+   }
+  ],
+  "positions": {
+   "s": {
+    "x": 0,
+    "y": 54
+   },
+   "f": {
+    "x": 224,
+    "y": 54
+   },
+   "a": {
+    "x": 448,
+    "y": 0
+   },
+   "x": {
+    "x": 700,
+    "y": 18
+   },
+   "b": {
+    "x": 448,
+    "y": 108
+   },
+   "j": {
+    "x": 896,
+    "y": 54
+   },
+   "t": {
+    "x": 1120,
+    "y": 54
+   }
+  },
+  "width": 1288,
+  "height": 192,
+  "bends": {
+   "e1": 196,
+   "e2": 420,
+   "e3": 644,
+   "e4": 420,
+   "e5": 868,
+   "e6": 868,
+   "e7": 1092
+  }
+ }
+}

@@ -1,8 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import cases from '../../../../shared/approval-graph-cases.json';
+import golden from './approval-graph-layout.golden.json';
 import {
-  ADDSIGN_H, ADDSIGN_W, NODE_H, NODE_W,
-  edgeBendX, layoutLeftToRight, type LayoutEdge, type LayoutNode, type LayoutResult,
+  ADDSIGN_H, ADDSIGN_W, COL_GAP, LABELED_COL_GAP, NODE_H, NODE_W,
+  edgeBendX, layoutLeftToRight, manualGapAfter, type LayoutEdge, type LayoutNode, type LayoutResult,
 } from './approval-graph-layout';
 
 interface CaseNode { id: string; kind: string }
@@ -95,8 +96,8 @@ describe('approval graph layout', () => {
     expect(edgeBendX({ x: col(1) }, { x: col(4) }, true)).toBe(col(1) + NODE_W + 28);
     expect(edgeBendX({ x: col(1) }, { x: col(4) }, false)).toBe(col(4) - 28);
     // 加簽小節點在欄內置中，轉折點仍在欄距
-    expect(edgeBendX({ x: col(2) + 28 }, { x: col(3) + 28 }, false)).toBe(col(3) - 28);
-    expect(edgeBendX({ x: col(2) + 28 }, { x: col(3) }, true)).toBe(col(2) + NODE_W + 28);
+    expect(edgeBendX({ x: col(2) + 28, width: ADDSIGN_W }, { x: col(3) + 28, width: ADDSIGN_W }, false)).toBe(col(3) - 28);
+    expect(edgeBendX({ x: col(2) + 28, width: ADDSIGN_W }, { x: col(3) }, true)).toBe(col(2) + NODE_W + 28);
   });
 
   it('a straight line keeps one row', () => {
@@ -202,5 +203,119 @@ describe('approval graph layout', () => {
     for (const c of valid) {
       expect(layoutLeftToRight(c.definition.nodes, c.definition.edges)).toEqual(layoutLeftToRight(c.definition.nodes, c.definition.edges));
     }
+  });
+});
+
+// ---- fg3b：標籤欄距與由節點框推算的轉折點（U59、J74）----
+interface Golden { nodes: LayoutNode[]; edges: LayoutEdge[]; positions: LayoutResult['positions']; width: number; height: number; bends: Record<string, number> }
+const goldens = Object.entries(golden as unknown as Record<string, Golden>);
+const widthOf = (k: string) => (k === 'addSign' ? ADDSIGN_W : NODE_W);
+
+describe('labeled column gaps and bend points from node boxes', () => {
+  const chain = [n('s', 'start'), n('a'), n('b'), n('t', 'end')];
+  const chainEdges = [e('s', 'a'), e('a', 'b'), e('b', 't')];
+
+  it('labeled edges widen only the first gap right of their source', () => {
+    const r = layoutLeftToRight(chain, chainEdges, { labeledEdgeIds: new Set(['a>b']) });
+    expect(r.positions.s.x).toBe(0);
+    expect(r.positions.a.x).toBe(NODE_W + COL_GAP);
+    expect(r.positions.b.x).toBe(r.positions.a.x + NODE_W + LABELED_COL_GAP);
+    expect(r.positions.t.x).toBe(r.positions.b.x + NODE_W + COL_GAP);
+    expect(r.width).toBe(4 * NODE_W + 2 * COL_GAP + LABELED_COL_GAP);
+    expect(r.gapAfter).toEqual({ s: COL_GAP, a: LABELED_COL_GAP, b: COL_GAP, t: COL_GAP });
+  });
+
+  it('LABELED_COL_GAP is 136', () => {
+    expect(LABELED_COL_GAP).toBe(136);
+  });
+
+  it('two labeled edges out of one column widen that gap once', () => {
+    const nodes = [n('s', 'start'), n('c', 'condition'), n('x'), n('y'), n('t', 'end')];
+    const edges = [e('s', 'c'), e('c', 'x'), e('c', 'y'), e('x', 't'), e('y', 't')];
+    const r = layoutLeftToRight(nodes, edges, { labeledEdgeIds: new Set(['c>x', 'c>y']) });
+    expect(r.positions.x.x - r.positions.c.x).toBe(NODE_W + LABELED_COL_GAP);
+    expect(r.positions.y.x).toBe(r.positions.x.x);
+    expect(r.positions.t.x - r.positions.x.x).toBe(NODE_W + COL_GAP);
+  });
+
+  it('labeled ids that match no edge change nothing but still report gapAfter', () => {
+    const plain = layoutLeftToRight(chain, chainEdges);
+    const r = layoutLeftToRight(chain, chainEdges, { labeledEdgeIds: new Set(['zzz']) });
+    expect(r.positions).toEqual(plain.positions);
+    expect(r.width).toBe(plain.width);
+    expect(r.gapAfter).toBeDefined();
+    expect(plain.gapAfter).toBeUndefined();
+  });
+
+  it.each(goldens)('without labeledEdgeIds the layout output is unchanged (%s)', (_name, g) => {
+    const r = layoutLeftToRight(g.nodes, g.edges);
+    expect(r.positions).toEqual(g.positions);
+    expect(r.width).toBe(g.width);
+    expect(r.height).toBe(g.height);
+    expect(Object.keys(r)).toEqual(['positions', 'width', 'height']);
+  });
+
+  it.each(goldens)('edgeBendX from node boxes equals the column rule on every auto-laid case (%s)', (_name, g) => {
+    const r = layoutLeftToRight(g.nodes, g.edges);
+    const kind = new Map(g.nodes.map((x) => [x.id, x.kind]));
+    const outDeg = new Map<string, number>();
+    for (const ed of g.edges) outDeg.set(ed.from, (outDeg.get(ed.from) ?? 0) + 1);
+    for (const ed of g.edges) {
+      const bx = edgeBendX(
+        { x: r.positions[ed.from].x, width: widthOf(kind.get(ed.from)!) }, { x: r.positions[ed.to].x, width: widthOf(kind.get(ed.to)!) },
+        (outDeg.get(ed.from) ?? 0) >= 2,
+      );
+      expect(bx).toBe(g.bends[ed.id]);
+    }
+  });
+
+  it.each(valid.map((c) => [c.name, c] as const))('with every edge labeled no edge path crosses another node box (%s)', (_n, c) => {
+    const ids = new Set(c.definition.edges.map((x) => x.id));
+    const r = layoutLeftToRight(c.definition.nodes, c.definition.edges, { labeledEdgeIds: ids });
+    expect(overlaps(r, c.definition.nodes)).toEqual([]);
+    const outDeg = new Map<string, number>();
+    for (const ed of c.definition.edges) outDeg.set(ed.from, (outDeg.get(ed.from) ?? 0) + 1);
+    const byId = new Map(c.definition.nodes.map((x) => [x.id, x]));
+    for (const ed of c.definition.edges) {
+      const a = r.positions[ed.from], b = r.positions[ed.to];
+      const bx = edgeBendX(a, b, (outDeg.get(ed.from) ?? 0) >= 2, r.gapAfter![ed.from]);
+      const y1 = a.y + NODE_H / 2, y2 = b.y + NODE_H / 2;
+      const segs = [[a.x + NODE_W, y1, bx, y1], [bx, y1, bx, y2], [bx, y2, b.x, y2]];
+      for (const x of c.definition.nodes) {
+        if (x.id === ed.from || x.id === ed.to) continue;
+        const p = r.positions[x.id];
+        const hit = segs.some(([ax, ay, cx, cy2]) => Math.max(ax, cx) > p.x && Math.min(ax, cx) < p.x + NODE_W && Math.max(ay, cy2) > p.y && Math.min(ay, cy2) < p.y + NODE_H);
+        expect(hit, `${ed.id}:${x.id} in ${byId.get(x.id)!.kind}`).toBe(false);
+      }
+    }
+  });
+
+  it('with a wide first gap a branching edge bends half of that gap past the source', () => {
+    const r = layoutLeftToRight(chain, chainEdges, { labeledEdgeIds: new Set(['a>b']) });
+    expect(edgeBendX(r.positions.a, r.positions.b, true, r.gapAfter!.a)).toBe(r.positions.a.x + NODE_W + LABELED_COL_GAP / 2);
+    expect(edgeBendX(r.positions.a, r.positions.b, false)).toBe(r.positions.b.x - COL_GAP / 2);
+  });
+
+  it('edgeBendX on hand-placed nodes bends half a gap past the source box for branching edges and before the target box otherwise', () => {
+    const from = { x: 100.5 };
+    const to = { x: 700 };
+    expect(edgeBendX(from, to, true)).toBe(100.5 + NODE_W + COL_GAP / 2);
+    expect(edgeBendX(from, to, true, 100)).toBe(100.5 + NODE_W + 50);
+    expect(edgeBendX(from, to, false)).toBe(700 - COL_GAP / 2);
+    // 寬度不同的節點：欄位框由中心推回
+    expect(edgeBendX({ x: 100.5 + 28, width: ADDSIGN_W }, to, true)).toBe(100.5 + NODE_W + COL_GAP / 2);
+  });
+
+  it('manual gap is clamped between 56 and 136', () => {
+    const src = { x: 0 };
+    expect(manualGapAfter(src, [{ x: NODE_W + 20 }])).toBe(COL_GAP);
+    expect(manualGapAfter(src, [{ x: NODE_W + 90 }])).toBe(90);
+    expect(manualGapAfter(src, [{ x: NODE_W + 500 }])).toBe(LABELED_COL_GAP);
+    // 取最近的右側目標；左邊或重疊的不算；沒有右側目標就用預設欄距
+    expect(manualGapAfter(src, [{ x: NODE_W + 400 }, { x: NODE_W + 80 }, { x: -300 }])).toBe(80);
+    expect(manualGapAfter(src, [{ x: -300 }])).toBe(COL_GAP);
+    expect(manualGapAfter(src, [])).toBe(COL_GAP);
+    // 加簽小節點的欄位框由中心推回
+    expect(manualGapAfter({ x: 28, width: ADDSIGN_W }, [{ x: NODE_W + 90 }])).toBe(90);
   });
 });
