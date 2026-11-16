@@ -47,7 +47,8 @@ function open() { if (clickable.value) emit('open'); }
 .pg-c-primary { border-color: var(--t-primary); }
 .pg-c-muted { border-color: var(--t-muted); }
 .pg-dim { opacity: 0.55; }
-.pg-clickable { cursor: pointer; }
+/* Vue Flow 對不可選、不可拖的節點把外層設成 pointer-events: none；可點的節點要自己接回來。 */
+.pg-clickable { cursor: pointer; pointer-events: auto; }
 .pg-clickable:focus-visible { outline: 2px solid var(--t-primary); outline-offset: 2px; }
 .pg-head { display: flex; align-items: flex-start; gap: 4px; min-height: 0; overflow: hidden; }
 .pg-kind { flex: none; margin-top: 1px; }

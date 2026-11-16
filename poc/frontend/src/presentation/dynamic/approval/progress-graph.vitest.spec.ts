@@ -191,7 +191,7 @@ describe('buildProgressGraph', () => {
       nodes: [
         node('s', 'start', 'passed'), node('a', 'approval', 'active', { runIds: [1, 4] }), node('as', 'addSign', 'notReached', { runIds: [5], hostId: 'a' }),
         node('c', 'condition', 'passed'), node('f', 'fork', 'passed'), node('j', 'join', 'active', { joinMode: 'all' }), node('n', 'notify', 'passed'),
-        node('h', 'approval', 'hidden'), node('x', 'approval', 'changed', { runIds: [2] }), node('u', 'approval', 'notReached'), node('e', 'end', 'notReached'),
+        node('h', 'approval', 'hidden', { runIds: [3] }), node('x', 'approval', 'changed', { runIds: [2] }), node('u', 'approval', 'notReached'), node('e', 'end', 'notReached'),
       ],
       edges: [],
     };
