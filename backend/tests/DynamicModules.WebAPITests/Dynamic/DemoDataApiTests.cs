@@ -188,15 +188,25 @@ public sealed class DemoDataApiTests
         me.GetProperty("userId").GetString().Should().Be("sales01");
     }
 
-    /// <summary>每 200 ms 輪詢，直到不是 running（最多 480 秒）。</summary>
+    /// <summary>
+    /// 每 200 ms 輪詢，直到不是 running。以「進度停滯」判定卡死（done 連續 StallLimit 沒前進才逾時），
+    /// 不以總耗時判定：機器負載高（多個專案／worktree 同時跑測試）時產生變慢但仍在前進，不算失敗。
+    /// 另設總時間上限防止無限等。
+    /// </summary>
     private static async Task<JsonElement> PollUntilDone(HttpClient admin)
     {
-        var deadline = DateTime.UtcNow.AddSeconds(480);
+        var stallLimit = TimeSpan.FromSeconds(120);
+        var hardDeadline = DateTime.UtcNow.AddMinutes(30);
+        var lastDone = -1;
+        var lastProgressAt = DateTime.UtcNow;
         while (true)
         {
             var s = await JsonOf(await admin.GetAsync(Status));
             if (s.GetProperty("state").GetString() != "running") return s;
-            if (DateTime.UtcNow > deadline) throw new TimeoutException("Demo 資料 480 秒內沒有產生完");
+            var done = s.TryGetProperty("done", out var d) && d.ValueKind == JsonValueKind.Number ? d.GetInt32() : 0;
+            if (done != lastDone) { lastDone = done; lastProgressAt = DateTime.UtcNow; }
+            if (DateTime.UtcNow - lastProgressAt > stallLimit) throw new TimeoutException($"Demo 資料產生停滯：done={done} 已 {stallLimit.TotalSeconds:0} 秒沒前進");
+            if (DateTime.UtcNow > hardDeadline) throw new TimeoutException("Demo 資料 30 分鐘內沒有產生完");
             await Task.Delay(200);
         }
     }
