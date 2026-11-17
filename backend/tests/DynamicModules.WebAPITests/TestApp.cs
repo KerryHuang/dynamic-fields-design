@@ -52,6 +52,8 @@ public class TestApp : WebApplicationFactory<Program>
         _realAuth = realAuth;
         _keepAlive = new SqliteConnection(_connectionString);
         _keepAlive.Open();
+        // 從已 migrate 的範本整份複製（host 啟動時的 MigrateAsync 只剩檢查歷程）；接別人的庫時對方已經有資料，不覆蓋
+        if (sharedConnectionString is null) MigratedDatabaseTemplate.RestoreInto(_keepAlive);
         if (fileDatabase) UseWal(_keepAlive);
     }
 
