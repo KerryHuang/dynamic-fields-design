@@ -2,7 +2,7 @@ import type { ReportDateRange } from './report-types';
 import type { I18nText } from './types';
 import type { TaskRecordRef, TaskStatus } from './task-types';
 
-/** 看板分欄依據；伺服器回應沒有帶設定，由看板設定給（見 groupByOf）。 */
+/** 看板分欄依據；欄查詢的回應帶著採用的設定（TaskBoardData.config）。 */
 export type BoardGroupBy = 'status' | 'assignee' | 'dueBucket';
 export type BoardColumnKind = 'status' | 'dueBucket' | 'user' | 'unassigned';
 /** 到期區間欄的欄鍵，順序與伺服器 TaskDueBuckets.Keys 相同。 */
@@ -62,6 +62,8 @@ export interface TaskBoardData {
   columns: BoardColumn[];
   /** 超過 50 欄而沒列出的負責人數。 */
   omittedAssignees: number;
+  /** 這份回應實際採用的看板設定（存檔的、未存的、預設的都帶）：分欄依據與預設看板的起點以它為準，前端不另存預設值。 */
+  config: TaskBoardConfig;
 }
 
 export interface BoardColumnPage {
@@ -181,13 +183,6 @@ export function visibleRange(page: number, perScreen: number, count: number): Vi
   const clamped = Math.min(Math.max(0, Math.floor(page) || 0), pageCount - 1);
   const start = Math.min(clamped * size, Math.max(0, count));
   return { page: clamped, pageCount, start, end: Math.min(start + size, Math.max(0, count)) };
-}
-
-/** 分欄依據：有看板設定就用設定的值；回應本身沒帶，沒有設定（還在載入）時才由欄的種類反推，沒有任何欄就退回依狀態。 */
-export function groupByOf(columns: readonly BoardColumn[], configured?: BoardGroupBy | null): BoardGroupBy {
-  if (configured) return configured;
-  const kind = columns[0]?.kind;
-  return kind === 'dueBucket' ? 'dueBucket' : kind === 'user' || kind === 'unassigned' ? 'assignee' : 'status';
 }
 
 /** 欄不能放的原因代碼；unavailable 是前端還不認得的欄規則（後端新增時的備援）。 */

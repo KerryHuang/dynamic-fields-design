@@ -4,26 +4,31 @@ import * as quasar from 'quasar';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createI18n } from 'vue-i18n';
 import zhTW from 'src/i18n/zh-TW.json';
+import { normalizeViewDetail } from 'src/services/api/task-normalize';
 import { bodyOf, HttpFail, mockHttp, type Call } from 'src/test-utils/mock-http';
 import { shareTargetsWire, viewDetailWire } from './board-fixtures';
 import TaskViewShareDialog from './TaskViewShareDialog.vue';
 
 let calls: Call[];
 let mounted: ReturnType<typeof mount> | undefined;
+let client: QueryClient;
 const q = (id: string) => document.body.querySelector<HTMLElement>(`[data-testid="${id}"]`);
 
-async function mountDialog(detail: Record<string, unknown> = {}, opts: { targetsFail?: boolean; putFails?: boolean } = {}) {
+async function mountDialog(detail: Record<string, unknown> = {}, opts: { targetsFail?: boolean; putFails?: boolean; put404?: boolean; cached?: Record<string, unknown> } = {}) {
   calls = mockHttp((c) => {
     if (c.url === '/task-views/share-targets') return opts.targetsFail ? new HttpFail(500, {}) : shareTargetsWire();
     if (c.url === '/task-views/5' && c.method === 'get') return viewDetailWire(detail);
-    if (c.url === '/task-views/5/shares') return opts.putFails ? new HttpFail(400, { errors: { shares: ['對象不存在'] } }) : viewDetailWire(detail);
+    if (c.url === '/task-views/5/shares') return opts.put404 ? new HttpFail(404, { message: '找不到看板' }) : opts.putFails ? new HttpFail(400, { errors: { shares: ['對象不存在'] } }) : viewDetailWire(detail);
     return [];
   });
+  const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  if (opts.cached) queryClient.setQueryData(['task-view', 5], normalizeViewDetail(viewDetailWire(opts.cached) as never));
+  client = queryClient;
   mounted = mount(TaskViewShareDialog, {
     props: { viewId: 5, open: true },
     attachTo: document.body,
     global: { plugins: [[quasar.Quasar, { components: quasar, directives: quasar, plugins: { Notify: quasar.Notify } }], createI18n({ legacy: false, locale: 'zh-TW', messages: { 'zh-TW': zhTW } }),
-      [VueQueryPlugin, { queryClient: new QueryClient({ defaultOptions: { queries: { retry: false } } }) }]] },
+      [VueQueryPlugin, { queryClient }]] },
   });
   await flushPromises();
 }
@@ -72,6 +77,36 @@ describe('TaskViewShareDialog', () => {
     await click('task-share-save');
     expect(q('task-share-error')!.textContent).toContain(zhTW.taskBoard.share.saveFailed);
     expect(document.body.textContent).not.toContain('對象不存在');
+  });
+
+  it('seeds from the fresh share list, not from an older cached copy (another device may have changed it)', async () => {
+    const stale = [{ kind: 'user', id: 'sales03', displayName: '業務三', inactive: false }];
+    const fresh = [{ kind: 'user', id: 'sales02', displayName: '業務二', inactive: false }];
+    await mountDialog({ shares: fresh }, { cached: { shares: stale } });
+    expect(q('task-share-user-sales02')!.getAttribute('aria-checked')).toBe('true');
+    expect(q('task-share-user-sales03')!.getAttribute('aria-checked')).toBe('false');
+    await click('task-share-save');
+    expect(bodyOf(puts()[0])).toEqual([{ kind: 'user', id: 'sales02' }]);
+  });
+
+  it('the scroll area does not wrap into columns (no-wrap) and the checkboxes sit in a named group', async () => {
+    await mountDialog();
+    const body = q('task-share-body')!;
+    expect(body.classList.contains('column')).toBe(true);
+    expect(body.classList.contains('no-wrap')).toBe(true);
+    const group = q('task-share-list')!;
+    expect(group.getAttribute('role')).toBe('group');
+    expect(group.getAttribute('aria-label')).toBe(zhTW.taskBoard.share.users);
+    await click('task-share-tab-department');
+    expect(q('task-share-list')!.getAttribute('aria-label')).toBe(zhTW.taskBoard.share.departments);
+  });
+
+  it('a 404 on save (the board is gone) shows the failure and refreshes the board list', async () => {
+    await mountDialog({}, { put404: true });
+    client.setQueryData(['task-views', 'board'], { mine: [], shared: [] });
+    await click('task-share-save');
+    expect(q('task-share-error')).not.toBeNull();
+    expect(client.getQueryState(['task-views', 'board'])?.isInvalidated).toBe(true);
   });
 
   it('a load failure shows retry and cannot save', async () => {

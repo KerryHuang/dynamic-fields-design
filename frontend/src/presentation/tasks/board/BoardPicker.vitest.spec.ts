@@ -6,7 +6,7 @@ import { createI18n } from 'vue-i18n';
 import type { TaskBoardConfig, TaskViewList } from 'src/domain/dynamic/task-board-types';
 import zhTW from 'src/i18n/zh-TW.json';
 import { normalizeViewList } from 'src/services/api/task-normalize';
-import { bodyOf, mockHttp, type Call } from 'src/test-utils/mock-http';
+import { bodyOf, HttpFail, mockHttp, type Call } from 'src/test-utils/mock-http';
 import { configWire, viewDetailWire, viewSummaryWire } from './board-fixtures';
 import BoardPicker from './BoardPicker.vue';
 
@@ -19,8 +19,9 @@ const views = (): TaskViewList => normalizeViewList({
 });
 const config = configWire({ groupBy: 'dueBucket' }) as unknown as TaskBoardConfig;
 
-async function mountPicker(o: Partial<{ isAdmin: boolean; hasSubordinates: boolean; currentId: number | null; currentName: string; unsaved: boolean; config: TaskBoardConfig }> = {}) {
+async function mountPicker(o: Partial<{ deleteFails: number; isAdmin: boolean; hasSubordinates: boolean; currentId: number | null; currentName: string; unsaved: boolean; config: TaskBoardConfig }> = {}) {
   calls = mockHttp((c) => {
+    if (c.method === 'delete' && o.deleteFails) return new HttpFail(o.deleteFails, { message: '伺服器訊息' });
     if (c.url === '/task-views' && c.method === 'post') return viewDetailWire({ id: 11, name: (bodyOf(c) as { name: string }).name });
     return [];
   });
@@ -139,6 +140,36 @@ describe('BoardPicker', () => {
     await mountPicker({ currentId: 5, currentName: '我的到期', unsaved: true });
     expect(q('board-picker')!.textContent).toContain('我的到期');
     expect(q('board-picker')!.textContent).toContain('（未儲存）');
+  });
+
+  it('the button has no aria-label that would hide the board name and the unsaved mark from a screen reader', async () => {
+    await mountPicker({ currentId: 5, currentName: '我的到期', unsaved: true });
+    const button = q('board-picker')!;
+    expect(button.hasAttribute('aria-label')).toBe(false);
+    expect(button.getAttribute('aria-haspopup')).toBe('menu');
+    // 可及名稱來自按鈕內文：看板名稱與「（未儲存）」都在裡面
+    expect(button.textContent).toContain('我的到期');
+    expect(button.textContent).toContain('（未儲存）');
+  });
+
+  it('deleting a board somebody else already deleted (404) counts as deleted', async () => {
+    const w = await mountPicker({ isAdmin: true, deleteFails: 404 });
+    q('picker-delete-8')!.click();
+    await flushPromises();
+    q('picker-delete-ok')!.click();
+    await flushPromises();
+    expect(w.emitted('deleted')).toEqual([[8]]);
+    expect(q('picker-delete-error')).toBeNull();
+  });
+
+  it('another delete failure keeps the dialog open with the localized message', async () => {
+    const w = await mountPicker({ isAdmin: true, deleteFails: 500 });
+    q('picker-delete-8')!.click();
+    await flushPromises();
+    q('picker-delete-ok')!.click();
+    await flushPromises();
+    expect(w.emitted('deleted')).toBeUndefined();
+    expect(q('picker-delete-error')!.textContent).toContain(zhTW.taskBoard.picker.deleteFailed);
   });
 
   it('closing the delete dialog puts the focus back on the picker button (the menu item that opened it is gone)', async () => {

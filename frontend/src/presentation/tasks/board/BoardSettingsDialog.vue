@@ -5,8 +5,8 @@ import { useI18n } from 'vue-i18n';
 import { useCreateTaskView, useUpdateTaskView } from 'src/application/dynamic/queries/task-board-queries';
 import { useUsers } from 'src/application/dynamic/queries/permissions-queries';
 import {
-  BOARD_DUE_RANGES, BOARD_RANGES_WITH_N, BOARD_SORT_KEYS, BOARD_SOURCES, BOARD_STATUSES, buildBoardConfig, changeGroupBy, formFromConfig,
-  MAX_BOARD_NAME, MAX_EXPLICIT_ASSIGNEES, MAX_KEYWORD, moveInList, scopeOptions, setFilterAssignees, type BoardForm,
+  BOARD_DUE_RANGES, BOARD_RANGES_WITH_N, BOARD_SORT_KEYS, BOARD_SOURCES, BOARD_STATUSES, buildBoardConfig, changeGroupBy, DEFAULT_RANGE_N, formFromConfig,
+  MAX_BOARD_NAME, MAX_EXPLICIT_ASSIGNEES, MAX_KEYWORD, MAX_RANGE_N, moveInList, rangeNInvalid, saveAsConfig, scopeOptions, setFilterAssignees, type BoardForm,
 } from 'src/domain/dynamic/task-board-config';
 import type { BoardGroupBy, TaskBoardConfig, TaskViewDetail } from 'src/domain/dynamic/task-board-types';
 import GenericSelect from 'src/components/framework/GenericSelect.vue';
@@ -15,7 +15,9 @@ import type { ApiError } from 'src/services/api/http';
 /**
  * 看板設定（D4）。「套用」只影響目前畫面（不寫回、頁面標「（未儲存）」）；「儲存」才寫回，只有自己的存檔看板有；
  * 預設看板與分享給我的看板只有「套用」與「另存為新看板」。欄順序用上下移按鈕、不拖拉。
- * 沒有部屬的人沒有「部屬的任務」範圍，原本是這個範圍的設定開成「指派給我」（D7）。伺服器的錯誤文字不顯示。
+ * 範圍照原設定保留（D7）：沒有部屬的人不能「新選」部屬的任務，但原本就是這個範圍的設定仍列出它、套用與儲存都不改範圍，
+ * 只有「另存為新看板」才換成「指派給我」。伺服器的錯誤文字不顯示。
+ * 儲存用的 rowVersion 是開啟當下的版本：409 之後頁面會重抓，開著的對話框不偷偷改用新版本，重新開啟才會拿到。
  */
 const props = defineProps<{
   modelValue: boolean;
@@ -39,15 +41,17 @@ const users = useUsers();
 const update = useUpdateTaskView();
 const create = useCreateTaskView();
 
-const form = reactive<BoardForm>(formFromConfig(props.config, props.hasSubordinates));
+const form = reactive<BoardForm>(formFromConfig(props.config));
+let openedRowVersion = props.rowVersion;
 const nameDraft = ref(props.name);
 const error = ref('');
-const scopeSwapped = ref(false);
+const rangeError = ref('');
 function reset() {
-  Object.assign(form, formFromConfig(props.config, props.hasSubordinates));
+  Object.assign(form, formFromConfig(props.config));
+  openedRowVersion = props.rowVersion;
   nameDraft.value = props.name;
   error.value = '';
-  scopeSwapped.value = props.config.scope === 'subordinates' && form.scope !== 'subordinates';
+  rangeError.value = '';
 }
 watch(() => props.modelValue, (open) => { if (open) reset(); }, { immediate: true });
 
@@ -60,7 +64,9 @@ const userLabel = (id: string) => users.data.value?.find((u) => u.userId === id)
 const userOptions = computed(() => (users.data.value ?? []).map((u) => ({ value: u.userId, label: u.displayName })));
 const columnLabel = (key: string) => (key === 'unassigned' ? t('tasks.unassigned') : form.groupBy === 'status' ? t(`tasks.status.${key}`) : t(`taskBoard.due.${key}`));
 const GROUPS: BoardGroupBy[] = ['status', 'assignee', 'dueBucket'];
-const scopes = computed(() => scopeOptions(props.hasSubordinates));
+const scopes = computed(() => scopeOptions(props.hasSubordinates, props.config.scope));
+const noSubordinates = computed(() => !props.hasSubordinates && form.scope === 'subordinates');
+const scopeLabel = (s: string) => (s === 'subordinates' && !props.hasSubordinates ? t('taskBoard.settings.scopeOptionNoSubordinates') : t(`taskBoard.settings.scopeOption.${s}`));
 const rangeOptions = computed(() => [{ value: '', label: t('taskBoard.settings.dueRangeNone') }, ...BOARD_DUE_RANGES.map((k) => ({ value: k, label: t(`reports.designer.range.${k}`) }))]);
 const sortKeyOptions = computed(() => BOARD_SORT_KEYS.map((k) => ({ value: k, label: t(`taskBoard.settings.sortKey.${k}`) })));
 const addableUsers = computed(() => userOptions.value.filter((u) => !form.assignees.includes(u.value)));
@@ -68,14 +74,20 @@ const addableUsers = computed(() => userOptions.value.filter((u) => !form.assign
 const toggle = (list: string[], key: string) => { const i = list.indexOf(key); if (i >= 0) list.splice(i, 1); else list.push(key); };
 const isShown = (key: string) => !form.hidden.includes(key);
 const pickRange = (kind: string) => {
-  form.dueRange = kind ? { kind, n: BOARD_RANGES_WITH_N.includes(kind) ? (form.dueRange?.n ?? 30) : null } : null;
+  form.dueRange = kind ? { kind, n: BOARD_RANGES_WITH_N.includes(kind) ? (form.dueRange?.n ?? DEFAULT_RANGE_N) : null } : null;
 };
 function addAssignee(v: string | string[] | null) {
   if (typeof v === 'string' && v && form.assignees.length < MAX_EXPLICIT_ASSIGNEES && !form.assignees.includes(v)) form.assignees.push(v);
 }
 const close = () => emit('update:modelValue', false);
 
+/** 「近 N 天」的 N 不合格就不送出（後端會回 400），在欄位上說明。 */
+function rangeOk(): boolean {
+  rangeError.value = rangeNInvalid(form) ? t('taskBoard.settings.rangeNInvalid') : '';
+  return !rangeError.value;
+}
 function apply() {
+  if (!rangeOk()) return;
   emit('apply', built.value);
   close();
 }
@@ -88,17 +100,17 @@ function requireName(): boolean {
   return !nameError.value;
 }
 function save() {
-  if (props.viewId === null || !requireName()) return;
+  if (props.viewId === null || !requireName() || !rangeOk()) return;
   error.value = '';
-  update.mutate({ id: props.viewId, name: trimmedName.value, config: built.value, rowVersion: props.rowVersion }, {
+  update.mutate({ id: props.viewId, name: trimmedName.value, config: built.value, rowVersion: openedRowVersion }, {
     onSuccess: (detail) => { Notify.create({ type: 'positive', message: t('taskBoard.settings.saved') }); emit('saved', detail); close(); },
     onError: (e) => { error.value = failure(e); },
   });
 }
 function saveAs() {
-  if (!requireName()) return;
+  if (!requireName() || !rangeOk()) return;
   error.value = '';
-  create.mutate({ name: trimmedName.value, config: built.value }, {
+  create.mutate({ name: trimmedName.value, config: saveAsConfig(built.value, props.hasSubordinates) }, {
     onSuccess: (detail) => { Notify.create({ type: 'positive', message: t('taskBoard.picker.created', { name: detail.name }) }); emit('savedAsNew', detail); close(); },
     onError: (e) => { error.value = failure(e); },
   });
@@ -109,7 +121,7 @@ function saveAs() {
   <q-dialog :model-value="modelValue" :maximized="$q.screen.lt.sm" @update:model-value="(v) => emit('update:modelValue', v)">
     <q-card :style="$q.screen.lt.sm ? undefined : 'width: 640px; max-width: 95vw'" class="column no-wrap" data-testid="board-settings">
       <q-card-section class="text-h6">{{ t('taskBoard.settings.title') }}</q-card-section>
-      <q-card-section class="col scroll q-pt-none column q-gutter-y-md" style="overflow-x: hidden">
+      <q-card-section class="col scroll q-pt-none column no-wrap q-gutter-y-md" style="overflow-x: hidden" data-testid="settings-body">
         <div v-if="!canSave" class="text-caption text-muted" data-testid="settings-readonly-note">{{ t('taskBoard.settings.readonlyNote') }}</div>
 
         <q-input
@@ -130,9 +142,9 @@ function saveAs() {
         <fieldset class="settings-group">
           <legend class="text-subtitle2">{{ t('taskBoard.settings.scope') }}</legend>
           <div class="row q-gutter-x-md">
-            <q-radio v-for="s in scopes" :key="s" v-model="form.scope" :val="s" dense :label="t(`taskBoard.settings.scopeOption.${s}`)" :data-testid="`settings-scope-${s}`" />
+            <q-radio v-for="s in scopes" :key="s" v-model="form.scope" :val="s" dense :label="scopeLabel(s)" :data-testid="`settings-scope-${s}`" />
           </div>
-          <div v-if="scopeSwapped" class="text-caption text-muted q-mt-xs" data-testid="settings-scope-swapped">{{ t('taskBoard.settings.scopeSwapped') }}</div>
+          <div v-if="noSubordinates" class="text-caption text-muted q-mt-xs" data-testid="settings-scope-note">{{ t('taskBoard.settings.scopeNoSubordinates') }}</div>
         </fieldset>
 
         <fieldset class="settings-group">
@@ -172,9 +184,9 @@ function saveAs() {
                 :model-value="form.dueRange?.kind ?? ''" data-testid="settings-due-range" @update:model-value="pickRange"
               />
               <q-input
-                v-if="form.dueRange && BOARD_RANGES_WITH_N.includes(form.dueRange.kind)" class="col-12 col-sm-3" dense outlined type="number" min="1"
-                :label="t('reports.designer.rangeN')" :model-value="form.dueRange.n ?? ''" data-testid="settings-due-range-n"
-                @update:model-value="(v) => (form.dueRange!.n = v === '' || v === null ? null : Number(v))"
+                v-if="form.dueRange && BOARD_RANGES_WITH_N.includes(form.dueRange.kind)" class="col-12 col-sm-3" dense outlined type="number" min="1" :max="MAX_RANGE_N"
+                :label="t('reports.designer.rangeN')" :model-value="form.dueRange.n ?? ''" :error="!!rangeError" :error-message="rangeError" data-testid="settings-due-range-n"
+                @update:model-value="(v) => { form.dueRange!.n = v === '' || v === null ? null : Number(v); rangeError = ''; }"
               />
             </div>
             <q-input v-model="form.keyword" dense outlined :maxlength="MAX_KEYWORD" :label="t('taskBoard.settings.keyword')" data-testid="settings-keyword" />

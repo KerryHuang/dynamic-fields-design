@@ -36,7 +36,7 @@ const writes = () => calls.filter((c) => c.method === 'put' || c.method === 'pos
 
 describe('BoardSettingsDialog', () => {
   beforeEach(() => { document.body.innerHTML = ''; vi.stubGlobal('ResizeObserver', class { observe() {} unobserve() {} disconnect() {} }); });
-  afterEach(() => { mounted?.unmount(); document.body.innerHTML = ''; vi.unstubAllGlobals(); });
+  afterEach(() => { mounted?.unmount(); document.body.innerHTML = ''; vi.unstubAllGlobals(); window.innerWidth = 1024; window.dispatchEvent(new Event('resize')); });
 
   it('BoardSettingsDialog hides the subordinates scope without capability', async () => {
     await mountDialog({ hasSubordinates: false });
@@ -49,11 +49,56 @@ describe('BoardSettingsDialog', () => {
     expect(q('settings-scope-subordinates')).not.toBeNull();
   });
 
-  it('a subordinates scope without the capability opens as assigned, with a note (D7)', async () => {
+  it('a subordinates scope without the capability is kept: listed with a note, apply and save leave it alone, only save-as swaps it (D7)', async () => {
     const w = await mountDialog({ hasSubordinates: false, config: config({ groupBy: 'assignee', scope: 'subordinates' }) });
-    expect(q('settings-scope-swapped')).not.toBeNull();
+    expect(q('settings-scope-subordinates')).not.toBeNull();
+    expect(q('settings-scope-subordinates')!.textContent).toContain('你目前沒有部屬');
+    expect((q('settings-scope-subordinates') as HTMLElement).getAttribute('aria-checked')).toBe('true');
+    expect(q('settings-scope-note')!.textContent).toContain(zhTW.taskBoard.settings.scopeNoSubordinates);
     await click('settings-apply');
-    expect((w.emitted('apply')![0][0] as TaskBoardConfig).scope).toBe('assigned');
+    expect((w.emitted('apply')![0][0] as TaskBoardConfig).scope).toBe('subordinates');
+    await click('settings-save');
+    expect((bodyOf(calls.find((c) => c.method === 'put')) as { config: TaskBoardConfig }).config.scope).toBe('subordinates');
+    await click('settings-save-as');
+    expect((bodyOf(calls.find((c) => c.method === 'post')) as { config: TaskBoardConfig }).config.scope).toBe('assigned');
+  });
+
+  it('the subordinates note goes away once another scope is picked, and the scope can be picked back', async () => {
+    await mountDialog({ hasSubordinates: false, config: config({ scope: 'subordinates' }) });
+    await click('settings-scope-visible');
+    expect(q('settings-scope-note')).toBeNull();
+    await click('settings-scope-subordinates');
+    expect(q('settings-scope-note')).not.toBeNull();
+  });
+
+  it('the scroll area does not wrap into a second column (no-wrap), so the later groups stay reachable', async () => {
+    await mountDialog();
+    const body = q('settings-body')!;
+    expect(body.classList.contains('column')).toBe(true);
+    expect(body.classList.contains('no-wrap')).toBe(true);
+    expect(body.classList.contains('scroll')).toBe(true);
+    expect(body.querySelectorAll('fieldset').length).toBeGreaterThanOrEqual(5);
+  });
+
+  it('a range N that is zero or negative blocks apply, save and save-as with a field error', async () => {
+    const w = await mountDialog({ config: config({ filters: { dueRange: { kind: 'lastDays', n: 7 } } }) });
+    const n = q('settings-due-range-n') as HTMLInputElement;
+    for (const bad of ['0', '-3']) {
+      n.value = bad;
+      n.dispatchEvent(new Event('input'));
+      await flushPromises();
+      await click('settings-apply');
+      expect(document.body.textContent).toContain(zhTW.taskBoard.settings.rangeNInvalid);
+    }
+    await click('settings-save');
+    await click('settings-save-as');
+    expect(w.emitted('apply')).toBeUndefined();
+    expect(writes()).toEqual([]);
+    n.value = '7';
+    n.dispatchEvent(new Event('input'));
+    await flushPromises();
+    await click('settings-apply');
+    expect(w.emitted('apply')![0][0]).toMatchObject({ filters: { dueRange: { kind: 'lastDays', n: 7 } } });
   });
 
   it('BoardSettingsDialog apply does not save', async () => {
@@ -94,6 +139,15 @@ describe('BoardSettingsDialog', () => {
     expect(q('settings-error')!.textContent).toContain(zhTW.taskBoard.settings.stale);
     expect(document.body.textContent).not.toContain('伺服器訊息');
     expect(w.emitted('saved')).toBeUndefined();
+  });
+
+  it('a 409 refetches the saved board, and the retry in the same dialog still sends the version it opened with', async () => {
+    const w = await mountDialog({ saveFails: 409 });
+    await click('settings-save');
+    // 頁面的看板查詢被失效、重抓到新版本；開著的對話框仍是舊版本的畫面，不默默拿新版本去蓋掉別人的修改
+    await w.setProps({ rowVersion: 'v9' });
+    await click('settings-save');
+    expect(calls.filter((c) => c.method === 'put').map((c) => (bodyOf(c) as { rowVersion: string }).rowVersion)).toEqual(['v1', 'v1']);
   });
 
   it('BoardSettingsDialog shared board offers only apply and save-as', async () => {
@@ -174,8 +228,20 @@ describe('BoardSettingsDialog', () => {
     expect(w.emitted('apply')![0][0]).toMatchObject({ filters: { statuses: ['todo'], sources: ['rule'], keyword: '報價' }, sort: { key: 'dueDate', dir: 'desc' } });
   });
 
-  it('is maximized on a phone and offers the name field only when it can be saved', async () => {
+  it('always offers the name field, even when the board cannot be saved', async () => {
     await mountDialog({ canSave: false, viewId: null });
     expect(q('settings-name')).not.toBeNull();
+  });
+
+  it('is maximized on a phone and not on a laptop', async () => {
+    const resizeTo = async (width: number) => { window.innerWidth = width; window.dispatchEvent(new Event('resize')); await new Promise((r) => setTimeout(r, 150)); };
+    await resizeTo(390);
+    await mountDialog();
+    expect(document.body.querySelector('.q-dialog__inner--maximized')).not.toBeNull();
+    mounted!.unmount();
+    document.body.innerHTML = '';
+    await resizeTo(1366);
+    await mountDialog();
+    expect(document.body.querySelector('.q-dialog__inner--maximized')).toBeNull();
   });
 });

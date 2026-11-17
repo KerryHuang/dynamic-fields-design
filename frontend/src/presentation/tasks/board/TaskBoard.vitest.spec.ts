@@ -9,7 +9,7 @@ import zhTW from 'src/i18n/zh-TW.json';
 import type { InternalAxiosRequestConfig } from 'axios';
 import { http } from 'src/services/api/http';
 import { bodyOf, HttpFail, mockHttp, type Call } from 'src/test-utils/mock-http';
-import { assigneeBoardWire, boardWire, cardWire, columnWire, dueBoardWire, nineStatusLikeColumns } from './board-fixtures';
+import { assigneeBoardWire, assigneeConfigWire, boardWire, cardWire, columnWire, dueBoardWire, nineStatusLikeColumns } from './board-fixtures';
 import TaskBoard from './TaskBoard.vue';
 
 let resize: ((width: number) => void) | undefined;
@@ -94,7 +94,7 @@ describe('TaskBoard', () => {
   });
 
   it('pager moves by one screen', async () => {
-    const { w } = await mountBoard(boardWire({ columns: nineStatusLikeColumns() }), 1126);
+    const { w } = await mountBoard(boardWire({ config: assigneeConfigWire(), columns: nineStatusLikeColumns() }), 1126);
     expect(w.get('[data-testid="board-grid"]').attributes('style')).toContain('repeat(4, minmax(0, 1fr))');
     expect(shownKeys(w)).toEqual(['user:u1', 'user:u2', 'user:u3', 'user:u4']);
     expect(w.get('[data-testid="board-range"]').text()).toBe('第 1–4 欄，共 9 欄');
@@ -124,7 +124,7 @@ describe('TaskBoard', () => {
 
   it('never shows more columns than the width allows at 390, 820, 1366 and 1920', async () => {
     for (const [viewport, expected] of [[390, 1], [820, 3], [1366, 4], [1920, 6]] as const) {
-      const { w } = await mountBoard(boardWire({ columns: nineStatusLikeColumns() }), viewport - (viewport >= 1024 ? 208 : 0) - 32);
+      const { w } = await mountBoard(boardWire({ config: assigneeConfigWire(), columns: nineStatusLikeColumns() }), viewport - (viewport >= 1024 ? 208 : 0) - 32);
       expect(shownKeys(w), String(viewport)).toHaveLength(expected);
       w.unmount();
     }
@@ -141,7 +141,7 @@ describe('TaskBoard', () => {
     expect(tablet.w.find('[data-testid="board-pager"]').exists()).toBe(false);
     tablet.w.unmount();
     // 9 columns, 4 per screen: the last group has one column but the grid still has 4 tracks
-    const { w } = await mountBoard(boardWire({ columns: nineStatusLikeColumns() }), 1126);
+    const { w } = await mountBoard(boardWire({ config: assigneeConfigWire(), columns: nineStatusLikeColumns() }), 1126);
     await w.get('[data-testid="board-next"]').trigger('click');
     await w.get('[data-testid="board-next"]').trigger('click');
     expect(shownKeys(w)).toHaveLength(1);
@@ -295,6 +295,13 @@ describe('TaskBoard moving', () => {
     await d.drop();
     await settle();
     expect(live(w)).toBe('已移到「進行中」');
+    expect(w.findAll('[aria-live], [role="status"], [role="alert"]')).toHaveLength(1);
+    w.unmount();
+  });
+
+  it('keeps a single aria-live node even when the pager shows "columns 1-4 of 9"', async () => {
+    const { w } = await mountBoard(boardWire({ config: assigneeConfigWire(), columns: nineStatusLikeColumns() }), 1126);
+    expect(w.find('[data-testid="board-range"]').exists()).toBe(true);
     expect(w.findAll('[aria-live], [role="status"], [role="alert"]')).toHaveLength(1);
     w.unmount();
   });
@@ -508,7 +515,7 @@ describe('TaskBoard moving', () => {
     // 九欄、一屏四欄：第 9 欄不在畫面上，拖不到，但「移到…」選得到
     const cols = nineStatusLikeColumns();
     (cols[0] as { cards: unknown[]; total: number }).cards = [cardWire({ id: 1, assigneeUserId: 'u1' })];
-    const { w } = await mountBoard(boardWire({ columns: cols }), 1126, null, movedCard({ assigneeUserId: 'u9' }));
+    const { w } = await mountBoard(boardWire({ config: assigneeConfigWire(), columns: cols }), 1126, null, movedCard({ assigneeUserId: 'u9' }));
     expect(shownKeys(w)).not.toContain('user:u9');
     await w.get('[data-testid="board-card-move-1"]').trigger('click');
     await flushPromises();
@@ -631,7 +638,7 @@ describe('TaskBoard moving', () => {
       const cols = nineStatusLikeColumns();
       (cols[0] as { cards: unknown[]; total: number }).cards = cardIds.map((id) => cardWire({ id, assigneeUserId: 'u1' }));
       (cols[0] as { total: number }).total = cardIds.length;
-      const board = await mountBoard(boardWire({ columns: cols }), 1126);
+      const board = await mountBoard(boardWire({ config: assigneeConfigWire(), columns: cols }), 1126);
       return { ...board, held: holdMove() };
     }
     /** 用鍵盤路徑選欄；請求停在途中，這時看板是樂觀更新後的樣子。 */

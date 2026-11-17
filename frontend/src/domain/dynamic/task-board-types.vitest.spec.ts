@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import zhTW from 'src/i18n/zh-TW.json';
 import {
-  BOARD_COLUMN_GAP, BOARD_MIN_COLUMN_WIDTH, columnsPerScreen, groupByOf, gridTrackCount, isLaterDateAllowed, moveBlockKey, moveFlowOf, moveTargets, moveCardLocally, removeCardLocally, restoreCardLocally,
+  BOARD_COLUMN_GAP, BOARD_MIN_COLUMN_WIDTH, columnsPerScreen, gridTrackCount, isLaterDateAllowed, moveBlockKey, moveFlowOf, moveTargets, moveCardLocally, removeCardLocally, restoreCardLocally,
   visibleRange, type BoardCard, type BoardColumn, type TaskBoardData,
 } from './task-board-types';
 
@@ -41,20 +41,6 @@ describe('task-board-types', () => {
     expect(visibleRange(-3, 4, 9).page).toBe(0);
     expect(visibleRange(0, 4, 0)).toEqual({ page: 0, pageCount: 1, start: 0, end: 0 });
     expect(visibleRange(0, 4, 3)).toEqual({ page: 0, pageCount: 1, start: 0, end: 3 });
-  });
-
-  it('groupByOf reads the grouping from the column kinds', () => {
-    expect(groupByOf([column({ kind: 'status' })])).toBe('status');
-    expect(groupByOf([column({ kind: 'dueBucket' })])).toBe('dueBucket');
-    expect(groupByOf([column({ kind: 'unassigned' })])).toBe('assignee');
-    expect(groupByOf([column({ kind: 'user' })])).toBe('assignee');
-    expect(groupByOf([])).toBe('status');
-  });
-
-  it('groupByOf prefers the configured group-by over the column kinds', () => {
-    expect(groupByOf([column({ kind: 'status' })], 'assignee')).toBe('assignee');
-    expect(groupByOf([], 'dueBucket')).toBe('dueBucket');
-    expect(groupByOf([column({ kind: 'dueBucket' })], null)).toBe('dueBucket');
   });
 
   it('moveTargets marks overdue and thisWeek-on-weekend as not droppable with a reason', () => {
@@ -140,6 +126,7 @@ describe('task-board-types', () => {
 
   const board = (): TaskBoardData => ({
     today: '2026-11-17', weekEnd: '2026-11-22', laterDefault: '2026-11-29', scopeAvailable: true, omittedAssignees: 0,
+    config: { version: 1, groupBy: 'status', scope: 'assigned' },
     columns: [
       column({ key: 'todo', total: 2, cards: [card({ id: 1 }), card({ id: 2 })] }),
       column({ key: 'done', total: 0 }),

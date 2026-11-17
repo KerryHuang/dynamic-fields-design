@@ -11,14 +11,6 @@ export type BoardScope = TaskBoardConfig['scope'];
 export type BoardSortKey = NonNullable<TaskBoardConfig['sort']>['key'];
 export type TaskSourceKind = 'personal' | 'record' | 'rule';
 
-/**
- * 預設看板的設定：與後端 `TaskBoardConfig.Default` 相同（依狀態、指派給我、隱藏「取消」、到期日遞增）。
- * 預設看板實際長什麼樣由伺服器決定；這份只用來當「看板設定」「另存為新看板」的起點，後端調整預設時要同步。
- */
-export const DEFAULT_BOARD_CONFIG: TaskBoardConfig = {
-  version: 1, groupBy: 'status', scope: 'assigned', columns: { hidden: ['cancelled'] }, sort: { key: 'dueDate', dir: 'asc' },
-};
-
 /** 各分欄依據的固定欄鍵與預設順序（與後端 TaskBoardConfig.FixedColumnsOf 相同）；負責人看板只有「未指派」。 */
 export const BOARD_FIXED_COLUMNS: Record<BoardGroupBy, string[]> = {
   status: ['todo', 'inProgress', 'done', 'cancelled'],
@@ -32,12 +24,13 @@ export const BOARD_SORT_KEYS: BoardSortKey[] = ['dueDate', 'createdTime', 'title
 /** 到期日區間的種類（沿用報表的相對區間）；`lastDays`、`lastWeeks`、`lastMonths` 需要 N。 */
 export const BOARD_DUE_RANGES = ['today', 'thisWeek', 'lastWeek', 'thisMonth', 'lastMonth', 'thisYear', 'lastYear', 'lastDays', 'lastWeeks', 'lastMonths'];
 export const BOARD_RANGES_WITH_N = ['lastDays', 'lastWeeks', 'lastMonths'];
-/** 技術限制（與後端相同）：明列的負責人、關鍵字長度、看板名稱長度。 */
+/** 技術限制（與後端相同）：明列的負責人、關鍵字長度、看板名稱長度、區間 N 的上限（ReportDateRange.MaxN）。 */
 export const MAX_EXPLICIT_ASSIGNEES = 50;
 export const MAX_KEYWORD = 100;
 export const MAX_BOARD_NAME = 100;
+export const MAX_RANGE_N = 3650;
 /** 「近 N 天」等區間第一次選到時的 N。 */
-const DEFAULT_RANGE_N = 30;
+export const DEFAULT_RANGE_N = 30;
 
 export interface BoardForm {
   groupBy: BoardGroupBy;
@@ -62,11 +55,14 @@ export interface BoardForm {
 /** 沒明確設定時「含未指派」的預設：沒列負責人就是全部（含未指派），列了負責人就只看那些人。 */
 export const includeUnassignedDefault = (assigneeUserIds: readonly string[]) => assigneeUserIds.length === 0;
 
-/** 這位使用者能選的範圍；沒有部屬時沒有「部屬的任務」（D7）。 */
-export const scopeOptions = (hasSubordinates: boolean): BoardScope[] => BOARD_SCOPES.filter((s) => hasSubordinates || s !== 'subordinates');
+/**
+ * 這位使用者能選的範圍：沒有部屬時不提供「部屬的任務」（新選的時候）；原本就是這個範圍的設定要原樣保留，所以 `current` 是它時仍列出（D7）。
+ */
+export const scopeOptions = (hasSubordinates: boolean, current?: BoardScope): BoardScope[] =>
+  BOARD_SCOPES.filter((s) => hasSubordinates || s !== 'subordinates' || current === 'subordinates');
 
-/** 設定 → 表單。沒有部屬時，範圍是「部屬的任務」的設定開成「指派給我」（D7）。 */
-export function formFromConfig(config: TaskBoardConfig, hasSubordinates: boolean): BoardForm {
+/** 設定 → 表單；範圍照抄，不替使用者換掉（D7）。 */
+export function formFromConfig(config: TaskBoardConfig): BoardForm {
   const f = config.filters ?? {};
   const c = config.columns ?? {};
   const fixed = BOARD_FIXED_COLUMNS[config.groupBy];
@@ -75,7 +71,7 @@ export function formFromConfig(config: TaskBoardConfig, hasSubordinates: boolean
   const assigneeUserIds = [...(f.assigneeUserIds ?? [])];
   return {
     groupBy: config.groupBy,
-    scope: scopeOptions(hasSubordinates).includes(config.scope) ? config.scope : 'assigned',
+    scope: config.scope,
     statuses: [...(f.statuses ?? [])],
     assigneeUserIds,
     includeUnassigned: f.includeUnassigned ?? includeUnassignedDefault(assigneeUserIds),
@@ -136,6 +132,13 @@ export function buildBoardConfig(form: BoardForm): TaskBoardConfig {
     ...(Object.keys(columns).length ? { columns } : {}),
     sort: { key: form.sortKey, dir: form.sortDir },
   };
+}
+
+/** 「近 N 天」等需要 N 的區間，N 不是 1 到上限的整數（後端會回 400）。 */
+export function rangeNInvalid(form: BoardForm): boolean {
+  const r = form.dueRange;
+  if (!r || !BOARD_RANGES_WITH_N.includes(r.kind)) return false;
+  return !Number.isInteger(r.n) || (r.n as number) < 1 || (r.n as number) > MAX_RANGE_N;
 }
 
 /** 把清單裡的一項往前（-1）或往後（1）移一格；已在頭尾就原樣回傳。 */

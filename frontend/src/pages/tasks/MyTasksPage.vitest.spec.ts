@@ -6,7 +6,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { h } from 'vue';
 import { createI18n } from 'vue-i18n';
 import { createMemoryHistory, createRouter } from 'vue-router';
-import { boardWire, configWire, shareTargetsWire, viewDetailWire, viewSummaryWire } from 'src/presentation/tasks/board/board-fixtures';
+import { assigneeBoardWire, boardWire, cardWire, columnWire, configWire, dueBoardWire, shareTargetsWire, viewDetailWire, viewSummaryWire } from 'src/presentation/tasks/board/board-fixtures';
 import zhTW from 'src/i18n/zh-TW.json';
 import { commentWire, taskDetailWire, taskWire, USERS } from 'src/presentation/dynamic/tasks/task-fixtures';
 import { useIdentityStore } from 'src/stores/use-identity-store';
@@ -15,7 +15,9 @@ import MyTasksPage from './MyTasksPage.vue';
 
 let calls: Call[];
 
-async function mountPage(url: string, opts: { detailFails?: boolean; empty?: boolean; subordinates?: boolean; goneBoards?: number[]; defaultBoardFails?: boolean; admin?: boolean; noScope?: boolean } = {}) {
+async function mountPage(url: string, opts: { detailFails?: boolean; empty?: boolean; subordinates?: boolean; goneBoards?: number[]; defaultBoardFails?: boolean; admin?: boolean; noScope?: boolean; defaultConfig?: Record<string, unknown>; putConflict?: boolean } = {}) {
+  let detailVersion = 'v1';
+  let conflicted = false;
   const pinia = createPinia();
   setActivePinia(pinia);
   useIdentityStore().setSession('sales01');
@@ -24,11 +26,23 @@ async function mountPage(url: string, opts: { detailFails?: boolean; empty?: boo
     if (c.url === '/task-board/columns') {
       const viewId = (bodyOf(c) as { viewId: number | null }).viewId;
       if (viewId === null && opts.defaultBoardFails) return new HttpFail(500, { message: '伺服器錯誤' });
-      return viewId !== null && opts.goneBoards?.includes(viewId) ? new HttpFail(404, { message: '找不到看板' }) : boardWire(opts.noScope ? { scopeAvailable: false } : {});
+      if (viewId !== null && opts.goneBoards?.includes(viewId)) return new HttpFail(404, { message: '找不到看板' });
+      // 欄查詢的回應帶著它採用的設定：未存的設定原樣回，看板 8 是依到期區間，預設看板用伺服器決定的預設
+      const sent = (bodyOf(c) as { config: Record<string, unknown> | null }).config;
+      const cfg = sent ?? (viewId === 8 ? configWire({ groupBy: 'dueBucket', scope: 'visible' }) : opts.defaultConfig ?? configWire());
+      if (sent?.filters && (sent.filters as { keyword?: string }).keyword === 'BAD') return new HttpFail(400, { message: '設定無效' });
+      const base = cfg.groupBy === 'dueBucket' ? dueBoardWire() : cfg.groupBy === 'assignee' ? assigneeBoardWire() : boardWire();
+      if (viewId === 8) base.columns = base.columns.map((col) => (col.key === 'overdue' ? { ...col, total: 1, cards: [cardWire({ id: 31, title: '逾期的報價', overdue: true })] } : col));
+      return { ...base, config: cfg, ...(opts.noScope ? { scopeAvailable: false } : {}) };
     }
     if (c.url === '/task-views' && c.method === 'get') return { mine: [viewSummaryWire({ id: 5, name: '我的到期' })], shared: [viewSummaryWire({ id: 8, name: '業務部任務', isOwner: false, ownerUserId: 'manager01', ownerName: '業務主管', shareCount: 1 })] };
     if (c.url === '/task-views' && c.method === 'post') return viewDetailWire({ id: 11, name: (bodyOf(c) as { name: string }).name, config: (bodyOf(c) as { config: unknown }).config });
-    if (c.url === '/task-views/5' && c.method === 'get') return viewDetailWire();
+    if (c.url === '/task-views/5' && c.method === 'get') return viewDetailWire({ rowVersion: detailVersion });
+    if (c.url === '/task-views/5' && c.method === 'put') {
+      // 第一次儲存撞 409，之後重抓看板就是別人改過的新版本（v2）
+      if (opts.putConflict && !conflicted) { conflicted = true; detailVersion = 'v2'; return new HttpFail(409, { message: '伺服器訊息' }); }
+      return viewDetailWire({ ...(bodyOf(c) as object), rowVersion: 'v3' });
+    }
     if (c.url === '/task-views/8' && c.method === 'get') return viewDetailWire({ id: 8, name: '業務部任務', isOwner: false, canEdit: false, canDelete: false, config: configWire({ groupBy: 'dueBucket', scope: 'visible' }) });
     if (/^\/task-views\/\d+$/.test(c.url) && c.method === 'delete') return {};
     if (c.url === '/task-views/share-targets') return shareTargetsWire();
@@ -433,11 +447,76 @@ describe('MyTasksPage', () => {
       ok.w.unmount();
     });
 
-    it('moving a card on a board uses the configured group-by', async () => {
+    it('moving a card on a board uses the group-by of the config that came with the columns', async () => {
       const { w } = await mountPage('/tasks?view=board&board=8');
-      // 看板 8 的設定是依到期區間；欄資料是狀態欄（測試資料），移動請求帶設定的分欄依據
-      expect(w.findComponent({ name: 'TaskBoard' }).props('groupBy')).toBe('dueBucket');
+      // 看板 8 依到期區間；欄與設定來自同一份回應，移動請求帶的分欄依據一定和欄一致
+      await w.get('[data-testid="board-card-move-31"]').trigger('click');
+      await flushPromises();
+      document.body.querySelector<HTMLElement>('[data-testid="move-item-none"]')!.click();
+      await flushPromises();
+      const move = calls.find((c) => c.url === '/tasks/31/move')!;
+      expect(bodyOf(move)).toMatchObject({ groupBy: 'dueBucket', toColumn: 'none' });
       w.unmount();
+    });
+
+    it('the default board settings start from the config the server answered, not from a copy in the page', async () => {
+      const { w } = await mountPage('/tasks?view=board', { defaultConfig: configWire({ sort: { key: 'title', dir: 'desc' }, scope: 'involved' }) });
+      await click('board-settings');
+      // 預設看板另存時名稱不預填「預設看板」
+      expect((body('settings-name') as HTMLInputElement).value).toBe('');
+      const input = body('settings-name') as HTMLInputElement;
+      input.value = '我的新看板';
+      input.dispatchEvent(new Event('input'));
+      await flushPromises();
+      await click('settings-save-as');
+      expect(bodyOf(calls.find((c) => c.method === 'post' && c.url === '/task-views'))).toMatchObject({
+        name: '我的新看板', config: { scope: 'involved', sort: { key: 'title', dir: 'desc' } },
+      });
+      w.unmount();
+    });
+
+    it('a 409 on save refetches the board, so reopening the settings sends the new rowVersion', async () => {
+      const { w } = await mountPage('/tasks?view=board&board=5', { putConflict: true });
+      await click('board-settings');
+      await click('settings-save');
+      expect(body('settings-error')!.textContent).toContain(zhTW.taskBoard.settings.stale);
+      await click('settings-cancel');
+      await new Promise((r) => setTimeout(r, 400));
+      await click('board-settings');
+      await click('settings-save');
+      const puts = calls.filter((c) => c.method === 'put' && c.url === '/task-views/5');
+      expect(puts.map((c) => (bodyOf(c) as { rowVersion: string }).rowVersion)).toEqual(['v1', 'v2']);
+      w.unmount();
+    });
+
+    it('an unsaved config the server rejects (400) says so and offers to discard it, instead of retrying forever', async () => {
+      const { w } = await mountPage('/tasks?view=board&board=5');
+      await click('board-settings');
+      const kw = body('settings-keyword') as HTMLInputElement;
+      kw.value = 'BAD';
+      kw.dispatchEvent(new Event('input'));
+      await flushPromises();
+      await click('settings-apply');
+      await new Promise((r) => setTimeout(r, 50));
+      await flushPromises();
+      expect(w.find('[data-testid="board-invalid"]').text()).toContain(zhTW.taskBoard.invalidConfig);
+      expect(w.find('[data-testid="board-load-failed"]').exists()).toBe(false);
+      await w.get('[data-testid="board-discard-draft"]').trigger('click');
+      await flushPromises();
+      expect(w.find('[data-testid="board-invalid"]').exists()).toBe(false);
+      expect(pickerText(w)).toBe('我的到期');
+      expect(w.find('[data-testid="task-board"]').exists()).toBe(true);
+      w.unmount();
+    });
+
+    it('the unsaved config is dropped whenever the board in the url changes, even by a path that does not clear it itself', async () => {
+      const { w, router } = await mountPage('/tasks?view=board&board=5');
+      await click('board-settings');
+      await click('settings-apply');
+      expect(pickerText(w)).toContain('（未儲存）');
+      await router.push('/tasks?view=board&board=8');
+      await flushPromises();
+      expect(pickerText(w)).toBe('業務部任務');
     });
   });
 });

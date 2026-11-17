@@ -10,9 +10,13 @@ export const columnWire = (o: Record<string, unknown> = {}) => ({
   key: 'todo', kind: 'status', total: 1, cards: [cardWire()], hasMore: false, truncated: false, droppable: true, ...o,
 });
 
+/** 看板設定（預設看板的樣子），伺服器回應的形狀；欄查詢與存檔看板的詳細資料都帶它。 */
+export const configWire = (o: Record<string, unknown> = {}) => ({
+  version: 1, groupBy: 'status', scope: 'assigned', columns: { hidden: ['cancelled'] }, sort: { key: 'dueDate', dir: 'asc' }, ...o,
+});
 /** 預設看板：待辦、進行中、已完成三欄（隱藏「取消」）。 */
 export const boardWire = (o: Record<string, unknown> = {}) => ({
-  today: '2026-11-17', weekEnd: '2026-11-22', laterDefault: '2026-11-29', scopeAvailable: true, omittedAssignees: 0,
+  today: '2026-11-17', weekEnd: '2026-11-22', laterDefault: '2026-11-29', scopeAvailable: true, omittedAssignees: 0, config: configWire(),
   columns: [
     columnWire({ key: 'todo', total: 2, cards: [cardWire({ id: 1 }), cardWire({ id: 2, title: '寄合約', record: null })] }),
     columnWire({ key: 'inProgress', total: 1, cards: [cardWire({ id: 3, title: '整理名片', status: 'inProgress', overdue: true })] }),
@@ -21,8 +25,11 @@ export const boardWire = (o: Record<string, unknown> = {}) => ({
   ...o,
 });
 
+/** 依負責人分欄的設定。 */
+export const assigneeConfigWire = () => configWire({ groupBy: 'assignee', columns: undefined });
 /** 依負責人分欄：未指派欄與兩位使用者（其中一位已停用，不能放）。 */
 export const assigneeBoardWire = () => boardWire({
+  config: assigneeConfigWire(),
   columns: [
     columnWire({ key: 'unassigned', kind: 'unassigned', total: 0, cards: [] }),
     columnWire({ key: 'user:sales01', kind: 'user', userId: 'sales01', name: '業務一', inactive: false, total: 1, cards: [cardWire({ id: 1 })] }),
@@ -32,6 +39,7 @@ export const assigneeBoardWire = () => boardWire({
 
 /** 到期區間分欄；今天是本週最後一天時「本週」欄不能放。 */
 export const dueBoardWire = () => boardWire({
+  config: configWire({ groupBy: 'dueBucket', columns: undefined }),
   columns: ['overdue', 'today', 'thisWeek', 'later', 'none'].map((key) => columnWire({
     key, kind: 'dueBucket', total: 0, cards: [],
     ...(key === 'overdue' ? { droppable: false } : {}),
@@ -42,10 +50,7 @@ export const nineStatusLikeColumns = () => Array.from({ length: 9 }, (_, i) => c
   key: `user:u${i + 1}`, kind: 'user', userId: `u${i + 1}`, name: `同事${i + 1}`, inactive: false, total: i, cards: [],
 }));
 
-/** 看板設定（預設看板的樣子）與存檔看板的詳細資料／摘要，皆為伺服器回應的形狀。 */
-export const configWire = (o: Record<string, unknown> = {}) => ({
-  version: 1, groupBy: 'status', scope: 'assigned', columns: { hidden: ['cancelled'] }, sort: { key: 'dueDate', dir: 'asc' }, ...o,
-});
+/** 存檔看板的詳細資料與摘要，伺服器回應的形狀。 */
 export const viewDetailWire = (o: Record<string, unknown> = {}) => ({
   id: 5, kind: 'board', name: '我的到期', ownerUserId: 'sales01', ownerName: '業務一', ownerActive: true, isOwner: true, canEdit: true, canDelete: true,
   config: configWire(), shares: [], rowVersion: 'v1', ...o,

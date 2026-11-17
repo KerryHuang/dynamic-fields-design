@@ -114,7 +114,7 @@ describe('dynamicApi tasks', () => {
 
   it('board columns posts the source, an empty one means the default board, and null properties are filled in', async () => {
     const seen = stub({
-      today: '2026-11-17', weekEnd: '2026-11-22', laterDefault: '2026-11-29', columns: [
+      today: '2026-11-17', weekEnd: '2026-11-22', laterDefault: '2026-11-29', config: { version: 1, groupBy: 'dueBucket', scope: 'visible' }, columns: [
         { key: 'todo', kind: 'status', total: 1, cards: [{ id: 3, title: 'A', status: 'todo', record: { accessible: false, deleted: false } }], hasMore: false, truncated: false, droppable: true },
         { key: 'user:sales01', kind: 'user', userId: 'sales01', total: 0, inactive: true, droppable: false },
       ],
@@ -124,6 +124,8 @@ describe('dynamicApi tasks', () => {
     expect(JSON.parse(seen.body as string)).toEqual({ viewId: null, config: null });
     expect(board.scopeAvailable).toBe(true);
     expect(board.omittedAssignees).toBe(0);
+    // 伺服器採用的設定原樣帶回，分欄依據以它為準
+    expect(board.config).toEqual({ version: 1, groupBy: 'dueBucket', scope: 'visible' });
     expect(board.columns[0].cards[0]).toMatchObject({ assigneeUserId: null, dueDate: null, commentCount: 0, record: { accessible: false, moduleKey: null } });
     expect(board.columns[1]).toMatchObject({ name: null, inactive: true, cards: [], droppable: false });
     await dynamicApi.getBoardColumns({ viewId: 7 });

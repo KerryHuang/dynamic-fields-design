@@ -6,7 +6,6 @@ import { clearLastTaskBoard, readLastTaskBoard, writeLastTaskBoard } from 'src/a
 import { useMe } from 'src/application/dynamic/queries/permissions-queries';
 import { useBoardColumns, useTaskView, useTaskViews } from 'src/application/dynamic/queries/task-board-queries';
 import { useMyTasks, useTaskCapabilities } from 'src/application/dynamic/queries/tasks-queries';
-import { DEFAULT_BOARD_CONFIG } from 'src/domain/dynamic/task-board-config';
 import type { BoardSource, TaskBoardConfig, TaskViewDetail } from 'src/domain/dynamic/task-board-types';
 import { taskStatusColor, type TaskListFilter, type TaskListTab } from 'src/domain/dynamic/task-types';
 import type { ApiError } from 'src/services/api/http';
@@ -55,9 +54,9 @@ const boardQuery = useBoardColumns(boardSource, isBoard);
 const views = useTaskViews(isBoard);
 const me = useMe();
 const isAdmin = computed(() => !!me.data.value?.isSystemAdmin);
-// 預設看板沒有存檔，設定用 DEFAULT_BOARD_CONFIG（與伺服器的預設看板相同）
+// 預設看板沒有存檔，設定的起點用欄查詢回應帶的設定（伺服器決定預設值，前端不另存一份）；存檔的看板讀自己的詳細資料（要 rowVersion 與權限）
 const detail = useTaskView(boardId, isBoard);
-const savedConfig = computed<TaskBoardConfig | null>(() => (boardId.value === null ? DEFAULT_BOARD_CONFIG : detail.data.value?.config ?? null));
+const savedConfig = computed<TaskBoardConfig | null>(() => (boardId.value === null ? boardQuery.data.value?.config ?? null : detail.data.value?.config ?? null));
 const config = computed(() => draft.value ?? savedConfig.value);
 const canSave = computed(() => boardId.value !== null && !!detail.data.value?.canEdit);
 const canShare = computed(() => boardId.value !== null && !!detail.data.value?.isOwner);
@@ -118,6 +117,8 @@ const picker = ref<InstanceType<typeof BoardPicker> | null>(null);
 const shareOpen = ref(false);
 const shareId = ref<number | null>(null);
 function openShare(id: number) { shareId.value = id; shareOpen.value = true; }
+// 未儲存的設定屬於它當下的看板：網址的看板一變就丟掉（各入口也會自己清，這裡擋住以後新增的路徑，例如通知連結帶 board）
+watch(boardId, () => { draft.value = null; });
 watch(() => [isBoard.value, boardParam.value, boardId.value] as const, ([board, param, id]) => {
   if (board && param !== null && id === null) fallbackToDefault({ forget: false });
 }, { immediate: true });
@@ -127,7 +128,9 @@ watch(() => boardQuery.error.value, (e) => {
 watch(() => [boardId.value, boardQuery.isSuccess.value] as const, ([id, ok]) => {
   if (id !== null && ok) writeLastTaskBoard(identity.userId, id);
 }, { immediate: true });
-const boardFailed = computed(() => !!boardQuery.error.value && !boardQuery.data.value
+// 未儲存的設定本身無效（例如「近 N 天」的 N 不合格）時，欄查詢回 400，重試一定失敗：改提示設定無效，並給「捨棄未儲存的設定」
+const draftInvalid = computed(() => draft.value !== null && !boardQuery.data.value && (boardQuery.error.value as unknown as ApiError | null)?.status === 400);
+const boardFailed = computed(() => !!boardQuery.error.value && !boardQuery.data.value && !draftInvalid.value
   && ![403, 404].includes((boardQuery.error.value as unknown as ApiError).status));
 </script>
 
@@ -159,12 +162,16 @@ const boardFailed = computed(() => !!boardQuery.error.value && !boardQuery.data.
       <q-banner v-if="boardQuery.data.value && !boardQuery.data.value.scopeAvailable" dense rounded class="bg-info-soft q-mb-sm" role="status" data-testid="scope-unavailable-notice">
         {{ t('taskBoard.scopeUnavailable') }}
       </q-banner>
-      <div v-if="boardFailed" class="text-negative q-py-sm" data-testid="board-load-failed">
+      <div v-if="draftInvalid" class="text-negative q-py-sm" role="alert" data-testid="board-invalid">
+        {{ t('taskBoard.invalidConfig') }}
+        <q-btn flat dense no-caps color="primary" :label="t('taskBoard.discardDraft')" data-testid="board-discard-draft" @click="draft = null" />
+      </div>
+      <div v-else-if="boardFailed" class="text-negative q-py-sm" data-testid="board-load-failed">
         {{ t('taskBoard.loadFailed') }}
         <q-btn flat dense no-caps color="primary" :label="t('taskBoard.retry')" data-testid="board-retry" @click="boardQuery.refetch()" />
       </div>
       <q-linear-progress v-else-if="boardQuery.isLoading.value" indeterminate class="q-my-sm" data-testid="board-loading" />
-      <TaskBoard v-if="boardQuery.data.value" :board="boardQuery.data.value" :source="boardSource" :group-by="config?.groupBy" @open="setOpen" />
+      <TaskBoard v-if="boardQuery.data.value" :board="boardQuery.data.value" :source="boardSource" @open="setOpen" />
     </template>
     <template v-else>
       <q-tabs :model-value="tab" dense align="left" narrow-indicator class="text-primary" @update:model-value="(v) => setTab(v as TaskListTab)">
@@ -204,7 +211,7 @@ const boardFailed = computed(() => !!boardQuery.error.value && !boardQuery.data.
       </div>
     </template>
     <BoardSettingsDialog
-      v-if="config" v-model="settingsOpen" :config="config" :name="boardName" :view-id="canSave ? boardId : null" :row-version="detail.data.value?.rowVersion ?? ''"
+      v-if="config" v-model="settingsOpen" :config="config" :name="boardId === null ? '' : boardName" :view-id="canSave ? boardId : null" :row-version="detail.data.value?.rowVersion ?? ''"
       :can-save="canSave" :has-subordinates="hasSubordinates" @apply="(c) => (draft = c)" @saved="onSaved" @saved-as-new="onSavedAsNew"
     />
     <TaskViewShareDialog :view-id="shareId" :open="shareOpen" @close="shareOpen = false" @hidden="picker?.focusButton()" />

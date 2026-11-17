@@ -41,7 +41,7 @@ const goto = (page: number) => emit('update:start', visibleRange(page, props.per
         @click="goto(range.page - 1)"
       />
       <q-space />
-      <div class="text-caption text-muted" aria-live="polite" data-testid="board-range">{{ text }}</div>
+      <div class="text-caption text-muted" data-testid="board-range">{{ text }}</div>
       <q-space />
       <q-btn
         flat dense no-caps icon-right="chevron_right" :label="t('taskBoard.pager.next')" :disable="range.page >= range.pageCount - 1"

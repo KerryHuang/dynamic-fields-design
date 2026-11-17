@@ -26,14 +26,15 @@ const search = ref('');
 const error = ref('');
 const key = (kind: TaskViewShareKind, id: string) => `${kind}:${id}`;
 
-// 每次開啟都從目前的分享狀態起算；已不存在的對象（兩個名稱都是 null）送出一定被伺服器拒絕，起算時就丟掉
-let seeded = false;
-watch(() => props.open, (o) => { seeded = false; if (o) { tab.value = 'user'; search.value = ''; error.value = ''; seedFrom(); } }, { immediate: true });
-watch(() => view.data.value, seedFrom);
+// 每次開啟都從目前的分享狀態起算，而且要等這次開啟的重抓結果回來（快取裡可能是舊的，分享是整批取代，用舊的起算會蓋掉別處的修改）；
+// 已不存在的對象（兩個名稱都是 null）送出一定被伺服器拒絕，起算時就丟掉
+const seeded = ref(false);
+watch(() => props.open, (o) => { seeded.value = false; if (o) { tab.value = 'user'; search.value = ''; error.value = ''; seedFrom(); } }, { immediate: true });
+watch(() => [view.data.value, view.isFetching.value], seedFrom);
 function seedFrom() {
   const d = view.data.value;
-  if (!props.open || seeded || !d || d.id !== props.viewId) return;
-  seeded = true;
+  if (!props.open || seeded.value || view.isFetching.value || !d || d.id !== props.viewId) return;
+  seeded.value = true;
   selected.value = d.shares.filter((s) => s.displayName !== null || s.nameI18n !== null).map((s) => key(s.kind, s.id));
 }
 
@@ -67,7 +68,7 @@ function submit() {
   const order = (k: string) => KINDS.indexOf(k.slice(0, k.indexOf(':')) as TaskViewShareKind);
   const shares = [...selected.value].sort((a, b) => order(a) - order(b)).map((k) => {
     const i = k.indexOf(':');
-    return { kind: k.slice(0, i) as TaskViewShareKind, id: String(k.slice(i + 1)) };
+    return { kind: k.slice(0, i) as TaskViewShareKind, id: k.slice(i + 1) };
   });
   save.mutate({ id: props.viewId, shares }, {
     onSuccess: () => { Notify.create({ type: 'positive', message: t('taskBoard.share.saved') }); emit('close'); },
@@ -75,7 +76,8 @@ function submit() {
     onError: () => { error.value = t('taskBoard.share.saveFailed'); },
   });
 }
-const loading = computed(() => view.isLoading.value || targets.isLoading.value);
+// 還沒起算好之前不能儲存：此時送出的是空名單，會把分享全部清掉
+const loading = computed(() => targets.isLoading.value || (props.open && props.viewId !== null && !seeded.value && !view.isError.value));
 const failed = computed(() => targets.isError.value || view.isError.value);
 function retry() {
   if (targets.isError.value) void targets.refetch();
@@ -93,7 +95,7 @@ function retry() {
         </q-tab>
       </q-tabs>
       <q-separator />
-      <q-card-section class="col column" style="min-height: 120px; overflow-y: auto">
+      <q-card-section class="col column no-wrap" style="min-height: 120px; overflow-y: auto" data-testid="task-share-body">
         <div v-if="failed" class="text-negative" role="alert" data-testid="task-share-load-error">
           {{ t('taskBoard.share.loadFailed') }}
           <q-btn flat dense no-caps color="primary" :label="t('taskBoard.share.retry')" data-testid="task-share-retry" @click="retry" />
@@ -102,10 +104,12 @@ function retry() {
         <template v-else>
           <div v-if="tab === 'department'" class="text-caption text-muted q-mb-sm" data-testid="task-share-dept-note">{{ t('taskBoard.share.departmentNote') }}</div>
           <q-input v-if="tab === 'user'" v-model="search" dense outlined clearable class="q-mb-sm" :label="t('taskBoard.share.search')" data-testid="task-share-search" />
-          <q-checkbox
-            v-for="r in rows" :key="`${tab}:${r.id}`" v-model="selected" :val="key(tab, r.id)" dense class="q-py-xs"
-            :label="r.label" :data-testid="`task-share-${tab}-${r.id}`"
-          />
+          <div role="group" :aria-label="t(`taskBoard.share.${tab === 'user' ? 'users' : tab === 'department' ? 'departments' : 'groups'}`)" class="column no-wrap" data-testid="task-share-list">
+            <q-checkbox
+              v-for="r in rows" :key="`${tab}:${r.id}`" v-model="selected" :val="key(tab, r.id)" dense class="q-py-xs"
+              :label="r.label" :data-testid="`task-share-${tab}-${r.id}`"
+            />
+          </div>
           <div v-if="!rowsOf(tab).length" class="text-muted">
             {{ t(`taskBoard.share.${tab === 'user' ? 'noUsers' : tab === 'department' ? 'noDepartments' : 'noGroups'}`) }}
           </div>

@@ -4,6 +4,7 @@ import {
   moveCardLocally, removeCardLocally, restoreCardLocally, type BoardCard, type BoardColumn, type BoardGroupBy, type BoardSource, type TaskBoardConfig, type TaskBoardData, type TaskMoveResult, type TaskViewShareKind,
 } from 'src/domain/dynamic/task-board-types';
 import { dynamicApi } from 'src/services/api/dynamic-api';
+import type { ApiError } from 'src/services/api/http';
 import { invalidateTasks } from './tasks-queries';
 
 /** `invalidateTasks`（tasks-queries）以 `['task-board']` 前綴一併失效；任務有任何變動，看板欄跟著重抓。 */
@@ -129,6 +130,20 @@ export function useCreateTaskView() {
   });
 }
 
+const statusOf = (e: unknown) => (e as ApiError | null)?.status;
+
+/**
+ * 看板在別處被改了（409）或已被刪掉（404）：頁面一直掛著這個看板的查詢、全域又關掉視窗焦點重抓，不主動失效的話
+ * 重開設定拿到的還是舊的 rowVersion，會一直撞 409。404 失效後欄查詢回 404，頁面走 D6 回預設看板。
+ */
+function refreshStaleView(qc: ReturnType<typeof useQueryClient>, id: number, e: unknown) {
+  const status = statusOf(e);
+  if (status !== 409 && status !== 404) return;
+  void qc.invalidateQueries({ queryKey: ['task-view', id] });
+  void qc.invalidateQueries({ queryKey: ['task-board'] });
+  void qc.invalidateQueries({ queryKey: ['task-views'] });
+}
+
 /** 儲存目前看板（名稱與設定）；rowVersion 不符回 409。成功後該看板的欄資料重抓。 */
 export function useUpdateTaskView() {
   const qc = useQueryClient();
@@ -140,6 +155,7 @@ export function useUpdateTaskView() {
       void qc.invalidateQueries({ queryKey: ['task-board'] });
       return qc.invalidateQueries({ queryKey: ['task-views'] });
     },
+    onError: (e, v) => refreshStaleView(qc, v.id, e),
   });
 }
 
@@ -152,6 +168,8 @@ export function useDeleteTaskView() {
       qc.removeQueries({ queryKey: ['task-board', 'columns', id] });
       return qc.invalidateQueries({ queryKey: ['task-views'] });
     },
+    // 已被別人刪掉：清單重抓（呼叫端把它當成已刪除）
+    onError: (e) => { if (statusOf(e) === 404) void qc.invalidateQueries({ queryKey: ['task-views'] }); },
   });
 }
 
@@ -164,5 +182,6 @@ export function useSetTaskViewShares() {
       qc.setQueryData(['task-view', detail.id], detail);
       return qc.invalidateQueries({ queryKey: ['task-views'] });
     },
+    onError: (e, v) => refreshStaleView(qc, v.id, e),
   });
 }

@@ -4,12 +4,13 @@ import { computed, ref } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { useCreateTaskView, useDeleteTaskView } from 'src/application/dynamic/queries/task-board-queries';
 import { MAX_BOARD_NAME, saveAsConfig } from 'src/domain/dynamic/task-board-config';
+import type { ApiError } from 'src/services/api/http';
 import type { TaskBoardConfig, TaskViewDetail, TaskViewList, TaskViewSummary } from 'src/domain/dynamic/task-board-types';
 
 /**
  * 看板選擇器：預設看板、我的看板、分享給我的（帶建立者姓名）、另存為新看板。
  * 自己的看板可以分享與刪除；分享給我的看板只有系統管理員能刪（管理員看得到所有有分享的看板，只有刪除，不能分享或改設定）。
- * 每一列的「選這個看板」與動作按鈕是並排的兄弟節點，不互相包含。
+ * 按鈕沒有 aria-label：看板名稱與「（未儲存）」就是它的可及名稱。每一列的「選這個看板」與動作按鈕是並排的兄弟節點，不互相包含。
  */
 const props = defineProps<{
   views: TaskViewList | undefined;
@@ -87,14 +88,18 @@ function confirmDelete() {
       Notify.create({ type: 'positive', message: t('taskBoard.picker.deleted') });
       emit('deleted', v.id);
     },
-    onError: () => { deleteError.value = t('taskBoard.picker.deleteFailed'); },
+    onError: (e) => {
+      // 已被別人刪掉：目的達成，當成已刪除（清單由 mutation 重抓）
+      if ((e as unknown as ApiError).status === 404) { deleting.value = null; emit('deleted', v.id); return; }
+      deleteError.value = t('taskBoard.picker.deleteFailed');
+    },
   });
 }
 </script>
 
 <template>
   <div class="board-picker">
-    <q-btn ref="button" outline dense no-caps icon-right="arrow_drop_down" class="board-picker-btn" :aria-label="t('taskBoard.picker.label')" data-testid="board-picker">
+    <q-btn ref="button" outline dense no-caps icon-right="arrow_drop_down" class="board-picker-btn" aria-haspopup="menu" data-testid="board-picker">
       <span class="ellipsis board-picker-name">{{ currentName }}</span>
       <span v-if="unsaved" class="q-ml-xs text-muted text-no-wrap" data-testid="board-unsaved">{{ t('taskBoard.unsaved') }}</span>
       <q-menu class="board-picker-menu" data-testid="picker-menu">

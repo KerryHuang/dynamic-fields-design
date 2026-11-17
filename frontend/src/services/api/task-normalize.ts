@@ -158,7 +158,7 @@ export function normalizeBoardColumn(c: Wire<Omit<BoardColumn, 'cards'>> & { car
   };
 }
 
-export function normalizeBoard(b: Wire<Omit<TaskBoardData, 'columns'>> & { columns?: Parameters<typeof normalizeBoardColumn>[0][] | null }): TaskBoardData {
+export function normalizeBoard(b: Wire<Omit<TaskBoardData, 'columns' | 'config'>> & { columns?: Parameters<typeof normalizeBoardColumn>[0][] | null; config?: TaskBoardConfig }): TaskBoardData {
   return {
     today: b.today ?? '',
     weekEnd: b.weekEnd ?? '',
@@ -166,6 +166,8 @@ export function normalizeBoard(b: Wire<Omit<TaskBoardData, 'columns'>> & { colum
     scopeAvailable: b.scopeAvailable !== false,
     columns: (b.columns ?? []).map(normalizeBoardColumn),
     omittedAssignees: b.omittedAssignees ?? 0,
+    // 伺服器一定會帶（存檔、未存、預設三種都一樣），這裡不補預設值
+    config: b.config as TaskBoardConfig,
   };
 }
 
