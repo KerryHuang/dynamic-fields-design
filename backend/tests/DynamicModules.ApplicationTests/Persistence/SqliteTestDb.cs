@@ -1,4 +1,5 @@
 using DynamicModules.Domain.Data;
+using DynamicModules.TestSupport;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
 
@@ -19,6 +20,8 @@ public sealed class SqliteTestDb : IAsyncDisposable
     {
         var db = new SqliteTestDb();
         await db._connection.OpenAsync();
+        // 從已 migrate 的範本整份複製，不必每個測試重跑 75 個 migration；後面的 MigrateAsync 只剩檢查歷程
+        if (migrate) MigratedDatabaseTemplate.RestoreInto(db._connection);
         db.Context = new DynamicDbContext(new DbContextOptionsBuilder<DynamicDbContext>()
             .UseSqlite(db._connection, b => b.MigrationsAssembly("DynamicModules.Persistence"))
             .AddInterceptors(db.Counter)

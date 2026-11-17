@@ -40,6 +40,8 @@
   <ItemGroup>
     <!-- 只在測試專案註冊的既有實體提供者（test.entity），ApplicationTests 與 WebAPITests 共用 -->
     <Compile Include="..\Fixtures\TestEntityProvider.cs" Link="TestSupport\TestEntityProvider.cs" />
+    <!-- 已 migrate 的 SQLite 範本：每個測試行程建一次，各測試整份複製，省掉每測試的完整 migrate -->
+    <Compile Include="..\Fixtures\MigratedDatabaseTemplate.cs" Link="TestSupport\MigratedDatabaseTemplate.cs" />
   </ItemGroup>
 
 </Project>
