@@ -18,8 +18,10 @@ public static class ReportReferences
         }
     }
 
+    /// <summary>任務資料來源的欄位是固定負數代碼，不引用任何模組或欄位。</summary>
     public static ReportRefs Of(ReportDefinition d)
     {
+        if (!ReportDatasets.IsModule(d.Dataset)) return new ReportRefs(new HashSet<string>(), new HashSet<long>());
         var modules = new HashSet<string> { d.MainModuleKey };
         var fields = new HashSet<long>();
         void Add(ReportFieldRef? r)

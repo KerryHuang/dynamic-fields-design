@@ -49,4 +49,22 @@ public class ReportDefinitionTests
 
         json.Should().Contain("\"mainModuleKey\":\"orders\"").And.Contain("\"fieldId\":1").And.Contain("\"viz\":\"table\"");
     }
+
+    [Fact]
+    public void ModuleDefinition_SerializesWithoutDataset()
+    {
+        const string json = """{"version":1,"mainModuleKey":"orders","child":null,"columns":[{"source":"main","fieldId":1,"viaFieldId":null}],"groups":[],"measures":[],"filters":[],"primaryDateField":null,"dateRange":null,"sort":[],"viz":"table"}""";
+        var def = ReportDefinition.Parse(json);
+        def.Dataset.Should().BeNull();
+        ReportDefinition.Serialize(def).Should().Be(json).And.NotContain("dataset");
+    }
+
+    [Fact]
+    public void TaskDefinition_RoundTripsDataset()
+    {
+        var def = new ReportDefinition(1, "", null, [MainRef(-1)], [], [], [], null, null, [], "table", ReportDatasets.Tasks);
+        var json = ReportDefinition.Serialize(def);
+        json.Should().Contain("\"dataset\":\"tasks\"");
+        ReportDefinition.Parse(json).Dataset.Should().Be("tasks");
+    }
 }
