@@ -67,7 +67,12 @@ public static class ReportRules
     {
         var errors = new List<string>();
         if (d.Version != ReportDefinition.CurrentVersion) errors.Add($"定義版本必須是 {ReportDefinition.CurrentVersion}");
-        if (string.IsNullOrWhiteSpace(d.MainModuleKey)) errors.Add("主模組必填");
+        var task = ReportDatasets.IsTask(d.Dataset);
+        if (!task && !ReportDatasets.IsModule(d.Dataset)) errors.Add("資料來源只能是 module、tasks、taskEvents");
+        // 任務資料來源沒有主模組：不能合併子模組、不能帶出欄位（看板設計 §7.1）
+        if (task && !string.IsNullOrWhiteSpace(d.MainModuleKey)) errors.Add("任務資料來源不能指定主模組");
+        if (task && d.Child is not null) errors.Add("任務資料來源不能合併子模組");
+        if (!task && string.IsNullOrWhiteSpace(d.MainModuleKey)) errors.Add("主模組必填");
         if (d.Viz is null || !Vizs.Contains(d.Viz)) errors.Add("圖表種類不合法");
         if (d.Columns is null || d.Groups is null || d.Measures is null || d.Filters is null || d.Sort is null)
         {
@@ -85,6 +90,7 @@ public static class ReportRules
         if (ReportRunner.AllRefs(d).Concat(d.PrimaryDateField is null ? [] : [d.PrimaryDateField])
             .Any(r => r.Source is not ("main" or "child") || (r.Source == "child" && d.Child is null)))
             errors.Add("欄位來源必須是主模組，或已合併子模組時的子模組");
+        if (task && ReportRunner.AllRefs(d).Any(r => r.ViaFieldId is not null)) errors.Add("任務資料來源不能帶出欄位");
         if (d.Columns.Count == 0 && d.Measures.Count == 0) errors.Add("至少要選一個欄位或量值");
 
         if (d.Measures.Select(m => m.Id).Distinct().Count() != d.Measures.Count || d.Measures.Any(m => m.Id.Length == 0))
@@ -155,8 +161,13 @@ public static class ReportRules
             return field;
         }
 
+        var task = ReportDatasets.IsTask(d.Dataset);
         foreach (var r in ReportRunner.AllRefs(d).DistinctBy(ReportCalculator.KeyOf))
-            Resolve(r);
+        {
+            // 任務目錄含下鑽固定欄，定義只能引用這個資料來源可選的欄位
+            if (task && !TaskReportFields.Selectable(d.Dataset!).Contains(r.FieldId)) errors.Add($"欄位 {r.FieldId} 不能用於這個資料來源");
+            else Resolve(r);
+        }
 
         foreach (var g in d.Groups)
         {
@@ -192,7 +203,13 @@ public static class ReportRules
 
         var filters = d.Filters.Select(Normalize).ToList();
         var measures = d.Measures.Select(m => m.Condition is null ? m : m with { Condition = Normalize(m.Condition) ?? m.Condition }).ToList();
-        return errors.Count > 0 ? (errors, null) : (errors, d with { Filters = filters.Select(f => f!).ToList(), Measures = measures });
+        if (errors.Count > 0) return (errors, null);
+        // 明寫 module 存成 null、任務資料來源的主模組存成 ""：與不帶 dataset 的定義逐字相同（J23）
+        return (errors, d with
+        {
+            Filters = filters.Select(f => f!).ToList(), Measures = measures,
+            Dataset = task ? d.Dataset : null, MainModuleKey = task ? "" : d.MainModuleKey,
+        });
     }
 
     /// <summary>正規化後的條件值；Value 為 null 表示沒有值（isEmpty 類）。</summary>

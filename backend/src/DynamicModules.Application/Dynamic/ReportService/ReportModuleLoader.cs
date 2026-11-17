@@ -15,7 +15,7 @@ public sealed record ReportSide(Module Module, EffectivePermissions Perms);
 public sealed record ReportModuleSet(ReportSide? Main, ReportSide? Child, IReadOnlyDictionary<string, ReportSide> Targets);
 
 /// <summary>載入報表涉及的模組並逐一授權（與 <see cref="ReportRunner"/> 同一套路徑：明細子模組走表頭授權）。</summary>
-public class ReportModuleLoader(IModuleRepository modules, IDynamicAccessGuard guard)
+public class ReportModuleLoader(IModuleRepository modules, IDynamicAccessGuard guard, TaskReportSource taskReports)
 {
     /// <summary>
     /// 任何涉及的模組沒有 <paramref name="action"/> 權限就回 Denied。<paramref name="lenient"/> 時改為逐模組判斷：沒權限的模組不放進結果，
@@ -24,6 +24,10 @@ public class ReportModuleLoader(IModuleRepository modules, IDynamicAccessGuard g
     public async Task<(ReportModuleSet? Set, ServiceResult? Denied)> LoadAsync(
         ReportDefinition d, PermissionAction action, CancellationToken ct, bool lenient = false)
     {
+        // 任務資料來源：虛擬模組，權限照任務可見範圍（載入時套），不看動作與 lenient（驗證、遮蔽、匯出都走這裡）
+        if (ReportDatasets.IsTask(d.Dataset))
+            return (new ReportModuleSet(new ReportSide(await taskReports.CatalogAsync(d.Dataset!, ct), TaskReportSource.Permissions), null,
+                new Dictionary<string, ReportSide>()), null);
         var withReferenceTargets = lenient || action == PermissionAction.PrintExport;
         var main = await ActiveAsync(d.MainModuleKey, ct);
         ReportSide? mainSide = null;
