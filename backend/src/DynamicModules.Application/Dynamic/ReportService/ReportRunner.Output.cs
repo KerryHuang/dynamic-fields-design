@@ -57,11 +57,37 @@ public partial class ReportRunner
             "countMain" => (ReportText.Get(locale, ReportText.Count, main.Module.NameI18n.Resolve(locale)), "number"),
             "countChild" => (ReportText.Get(locale, ReportText.Count, (child ?? main).Module.NameI18n.Resolve(locale)), "number"),
             "ratio" => (ReportText.Get(locale, ReportText.Ratio, m.Condition is null ? "" : FieldLabel(m.Condition.Field)), "ratio"),
-            _ => (ReportText.Get(locale, m.Kind switch { "sum" => ReportText.Sum, "avg" => ReportText.Avg, "min" => ReportText.Min, _ => ReportText.Max }, m.Field is null ? "" : FieldLabel(m.Field)),
+            "countIf" => (CountIfLabel(m.Condition, bound, locale, FieldLabel), "number"),
+            _ => (ReportText.Get(locale, m.Kind switch { "sum" => ReportText.Sum, "avg" => ReportText.Avg, "median" => ReportText.Median, "min" => ReportText.Min, _ => ReportText.Max }, m.Field is null ? "" : FieldLabel(m.Field)),
                 m.Field is not null && m.Kind is "min" or "max" && ValueTypeOf(bound[ReportCalculator.KeyOf(m.Field!)].Field) is "date" or "dateTime" ? "dayNumber"
                 : m.Field is not null && ValueTypeOf(bound[ReportCalculator.KeyOf(m.Field)].Field) == "percent" ? "percent" : "number"),
         };
+        if (m.Condition is { } cond && m.Kind is "sum" or "avg" or "median")
+            label = EqLabel(cond, bound, locale) is { } v
+                ? ReportText.Get(locale, ReportText.ConditionalEq, label, FieldLabel(cond.Field), v)
+                : ReportText.Get(locale, ReportText.Conditional, label);
         return new ReportColumn(m.Id, label, "measure", type);
+    }
+
+    private static string CountIfLabel(ReportFilter? cond, IReadOnlyDictionary<string, Bound> bound, string locale, Func<ReportFieldRef, string> fieldLabel)
+    {
+        if (cond is null) return ReportText.Get(locale, ReportText.CountIf, "");
+        return EqLabel(cond, bound, locale) is { } v
+            ? ReportText.Get(locale, ReportText.CountIfEq, fieldLabel(cond.Field), v)
+            : ReportText.Get(locale, ReportText.CountIf, fieldLabel(cond.Field));
+    }
+
+    /// <summary>
+    /// 欄名帶出條件值（B4）：只有單一值的 eq 且值轉得成標籤才有；in、gte、多值、使用者與參照欄位等回 null，欄名退回「符合條件」字樣。
+    /// </summary>
+    private static string? EqLabel(ReportFilter cond, IReadOnlyDictionary<string, Bound> bound, string locale)
+    {
+        if (cond.Op != "eq" || cond.Value is not { ValueKind: JsonValueKind.String or JsonValueKind.Number or JsonValueKind.True or JsonValueKind.False } value) return null;
+        var field = bound[ReportCalculator.KeyOf(cond.Field)].Field;
+        if (field.Type is not (FieldType.Enum or FieldType.Boolean or FieldType.Text or FieldType.Integer or FieldType.Decimal or FieldType.Currency
+            or FieldType.Percent or FieldType.Date or FieldType.DateTime)) return null;
+        var text = FieldDisplay.Format(field, value, locale, null, new Dictionary<string, string>());
+        return text.Length == 0 ? null : text;
     }
 
     private static List<ReportGroupResult> LabeledGroups(

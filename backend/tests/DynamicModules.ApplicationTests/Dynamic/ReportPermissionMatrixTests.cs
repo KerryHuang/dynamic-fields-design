@@ -23,7 +23,7 @@ public class ReportPermissionMatrixTests : ReportTestBase
     }
 
     public static TheoryData<string> Positions =>
-        new() { "column", "group", "measure", "filter", "sort", "via", "primaryDate", "measureCondition" };
+        new() { "column", "group", "measure", "filter", "sort", "via", "primaryDate", "measureCondition", "countIfCondition", "avgCondition", "medianField" };
 
     private ReportDefinition HiddenAt(string position) => position switch
     {
@@ -35,6 +35,9 @@ public class ReportPermissionMatrixTests : ReportTestBase
         "via" => Def(columns: [new ReportFieldRef(Main, CustomerSecret.Id, CustomerRef.Id)]),
         "primaryDate" => Def(measures: [M("n", "countMain")], primary: MainF(SecretDate)),
         "measureCondition" => Def(measures: [M("r", "ratio", cond: F(MainF(Secret), "eq", "猜"))]),
+        "countIfCondition" => Def(measures: [M("c", "countIf", cond: F(MainF(Secret), "eq", "猜"))]),
+        "avgCondition" => Def(measures: [M("a", "avg", MainF(Amount), F(MainF(Secret), "eq", "猜"))]),
+        "medianField" => Def(measures: [M("m", "median", MainF(SecretNum))]),
         _ => throw new ArgumentException(position),
     };
 

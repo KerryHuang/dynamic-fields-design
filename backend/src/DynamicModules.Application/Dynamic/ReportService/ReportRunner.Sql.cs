@@ -228,6 +228,9 @@ public partial class ReportRunner
         var measures = new List<ReportSqlMeasure>();
         foreach (var m in d.Measures)
         {
+            // Task 3 之前 SQL 路徑只會算沒有條件的 sum、avg、min、max、count 與 ratio
+            if (m.Kind is "countIf" or "median") reasons.Add($"measureNotSupported:{m.Kind}");
+            else if (m.Kind is "sum" or "avg" && m.Condition is not null) reasons.Add($"measureConditionNotSupported:{m.Id}");
             ReportSqlField? mf = null;
             ReportSqlCondition? cond = null;
             if (m.Kind == "ratio")

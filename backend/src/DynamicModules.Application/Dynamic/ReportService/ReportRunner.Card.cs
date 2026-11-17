@@ -7,7 +7,7 @@ namespace DynamicModules.Application.Dynamic.ReportService;
 
 public partial class ReportRunner
 {
-    private static readonly string[] AdditiveKinds = ["sum", "countMain", "countChild"];
+    private static readonly string[] AdditiveKinds = ["sum", "countMain", "countChild", "countIf"];
 
     /// <summary>
     /// 儀表板卡片的執行：<see cref="RunAsync"/> 加上卡片選項（spec §4）。前 N 名與累計占比靠排序後的分組，期間比較每期各跑一次，

@@ -21,7 +21,7 @@ public static class ReportRules
 
     private static readonly string[] Vizs = ["table", "indicator", "line", "bar", "donut"];
     private static readonly string[] Buckets = ["day", "week", "month", "quarter", "year"];
-    private static readonly string[] Kinds = ["sum", "avg", "min", "max", "countMain", "countChild", "ratio"];
+    private static readonly string[] Kinds = ["sum", "avg", "median", "min", "max", "countMain", "countChild", "countIf", "ratio"];
     private static readonly string[] RangeKinds =
         ["today", "thisWeek", "lastWeek", "thisMonth", "lastMonth", "thisYear", "lastYear", "lastDays", "lastWeeks", "lastMonths"];
     private static readonly string[] LastKinds = ["lastDays", "lastWeeks", "lastMonths"];
@@ -81,9 +81,11 @@ public static class ReportRules
         foreach (var m in d.Measures)
         {
             if (!Kinds.Contains(m.Kind)) errors.Add($"量值 {m.Id} 的種類不合法");
-            else if (m.Kind is "sum" or "avg" or "min" or "max" && m.Field is null) errors.Add($"量值 {m.Id} 需要欄位");
-            else if (m.Kind == "ratio" && m.Condition is null) errors.Add($"量值 {m.Id} 需要條件");
+            else if (m.Kind is "sum" or "avg" or "median" or "min" or "max" && m.Field is null) errors.Add($"量值 {m.Id} 需要欄位");
+            else if (m.Kind is "ratio" or "countIf" && m.Condition is null) errors.Add($"量值 {m.Id} 需要條件");
             else if (m.Kind == "countChild" && d.Child is null) errors.Add($"量值 {m.Id} 需要合併子模組");
+            else if (m.Kind is "min" or "max" or "countMain" or "countChild" && m.Condition is not null) errors.Add($"量值 {m.Id} 不能帶條件");
+            else if (m.Field?.Source == "main" && m.Condition?.Field.Source == "child") errors.Add($"量值 {m.Id} 的條件不能用子模組欄位");
         }
 
         foreach (var g in d.Groups)
@@ -155,7 +157,7 @@ public static class ReportRules
         foreach (var m in d.Measures.Where(m => m.Field is not null))
         {
             if (Resolve(m.Field!) is not { } f) continue;
-            if (m.Kind is "sum" or "avg" && !ReportFieldEligibility.CanSum(f)) errors.Add($"量值 {m.Id} 的欄位不能加總或平均");
+            if (m.Kind is "sum" or "avg" or "median" && !ReportFieldEligibility.CanSum(f)) errors.Add($"量值 {m.Id} 的欄位不能加總、平均或取中位數");
             if (m.Kind is "min" or "max" && !ReportFieldEligibility.CanMinMax(f)) errors.Add($"量值 {m.Id} 的欄位不能取最小或最大");
         }
         if (d.PrimaryDateField is not null && Resolve(d.PrimaryDateField) is { } primary && !IsDateLike(primary))
