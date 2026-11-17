@@ -15,7 +15,8 @@ public class DrillReportHandler(ReportAccess access, ReportRunner runner) : IReq
             return ServiceResult.Invalid(ReportRules.ToErrors("range", [error]));
 
         var result = await runner.RunAsync(
-            ReportDefinition.Parse(report.DefinitionJson), new ReportRunOptions(request.Range, request.GroupKeys, request.Locale), ct);
+            ReportDefinition.Parse(report.DefinitionJson), new ReportRunOptions(request.Range, request.GroupKeys, request.Locale,
+                DepartmentIds: request.DepartmentIds, IncludeSubDepartments: request.IncludeSubDepartments), ct);
         if (result.DetailRows is not { Count: > ReportRules.DrillLimit }) return ServiceResult.Success(new DrillResult(result, false));
         return ServiceResult.Success(new DrillResult(ReportRules.TakeDetail(result, ReportRules.DrillLimit), true));
     }

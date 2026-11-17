@@ -183,6 +183,163 @@ public class TaskReportsApiTests : IDisposable
         DashboardTestKit.TotalOf(await DashboardTestKit.RunCard(_app.AsUser("sales02"), dashboard, "c1"), "n").Should().Be(1);
     }
 
+    private async Task<long> Department(HttpClient admin, string code, string name, long? parent)
+    {
+        var res = await admin.PostAsJsonAsync($"{Base}/departments", new
+        {
+            code, name = new Dictionary<string, string> { ["zh-TW"] = name }, parentId = parent, managerUserId = (string?)null, sortOrder = 0, active = true
+        });
+        res.StatusCode.Should().Be(HttpStatusCode.Created, await res.Content.ReadAsStringAsync());
+        return (await JsonOf(res)).GetProperty("id").GetInt64();
+    }
+
+    /// <summary>總部 → 業務部 → 業務一課；業務一在業務一課（2 件）、業務二在業務部（1 件）、未指派 1 件。</summary>
+    private async Task<(long Report, long Hq, long Sales, long Sales1)> ArrangeDepartmentsAsync(HttpClient admin)
+    {
+        var hq = await Department(admin, "hq", "總部", null);
+        var sales = await Department(admin, "sales", "業務部", hq);
+        var sales1 = await Department(admin, "sales1", "業務一課", sales);
+        (await admin.PutAsJsonAsync($"{Base}/admin/users/sales01/department", new { departmentId = sales1 })).StatusCode.Should().Be(HttpStatusCode.OK);
+        (await admin.PutAsJsonAsync($"{Base}/admin/users/sales02/department", new { departmentId = sales })).StatusCode.Should().Be(HttpStatusCode.OK);
+        await CreateTask(admin, $"{Base}/tasks", new { title = "一課甲", assigneeUserId = "sales01" });
+        await CreateTask(admin, $"{Base}/tasks", new { title = "一課乙", assigneeUserId = "sales01" });
+        await CreateTask(admin, $"{Base}/tasks", new { title = "業務部", assigneeUserId = "sales02" });
+        await CreateTask(admin, $"{Base}/tasks", new { title = "未指派", assigneeUserId = (string?)null });
+        var def = WorkloadDef();
+        def["primaryDateField"] = Ref(-7);
+        return (await CreateReport(admin, def), hq, sales, sales1);
+    }
+
+    private static decimal N(JsonElement run) => run.GetProperty("total").GetProperty("n").GetDecimal();
+
+    [Fact]
+    public async Task DepartmentFilter_Run_Http()
+    {
+        var admin = _app.AsUser();
+        var (id, hq, sales, sales1) = await ArrangeDepartmentsAsync(admin);
+
+        N(await Post(admin, $"{Reports}/{id}/run", new { })).Should().Be(4, "不選部門就不篩，未指派也算");
+        N(await Post(admin, $"{Reports}/{id}/run", new { departmentIds = Array.Empty<long>() })).Should().Be(4);
+        N(await Post(admin, $"{Reports}/{id}/run", new { departmentIds = new[] { hq } })).Should().Be(3, "預設包含下層，未指派的排除");
+        N(await Post(admin, $"{Reports}/{id}/run", new { departmentIds = new[] { sales } })).Should().Be(3);
+        N(await Post(admin, $"{Reports}/{id}/run", new { departmentIds = new[] { sales }, includeSubDepartments = false })).Should().Be(1);
+        N(await Post(admin, $"{Reports}/{id}/run", new { departmentIds = new[] { sales1 }, includeSubDepartments = false })).Should().Be(2);
+        N(await Post(admin, $"{Reports}/{id}/run", new { departmentIds = new[] { sales1, sales }, includeSubDepartments = false })).Should().Be(3);
+    }
+
+    [Fact]
+    public async Task DepartmentFilter_IncludesInactiveDepartmentTree_Http()
+    {
+        var admin = _app.AsUser();
+        var (id, hq, sales, _) = await ArrangeDepartmentsAsync(admin);
+        var res = await admin.PutAsJsonAsync($"{Base}/departments/{sales}", new
+        {
+            code = "sales", name = new Dictionary<string, string> { ["zh-TW"] = "業務部" }, parentId = hq, managerUserId = (string?)null, sortOrder = 0, active = false
+        });
+        res.StatusCode.Should().Be(HttpStatusCode.OK, await res.Content.ReadAsStringAsync());
+
+        N(await Post(admin, $"{Reports}/{id}/run", new { departmentIds = new[] { sales } })).Should().Be(3, "停用部門仍可選、下層照算");
+    }
+
+    [Fact]
+    public async Task DepartmentFilter_Drill_AndTotals_Http()
+    {
+        var admin = _app.AsUser();
+        var def = TaskDef([new { id = "n", kind = "countMain", field = (object?)null, condition = (object?)null }],
+            columns: [Ref(-1), Ref(-3)]);
+        var (_, _, sales, sales1) = await ArrangeDepartmentsAsync(admin);
+        var id = await CreateReport(admin, def);
+
+        var all = await Post(admin, $"{Reports}/{id}/drill", new { groupKeys = Array.Empty<string>() });
+        all.GetProperty("detailRows").GetArrayLength().Should().Be(4);
+
+        var drill = await Post(admin, $"{Reports}/{id}/drill", new { groupKeys = Array.Empty<string>(), departmentIds = new[] { sales1 } });
+        drill.GetProperty("detailRows").GetArrayLength().Should().Be(2);
+        drill.GetProperty("taskIds").GetArrayLength().Should().Be(2, "taskIds 與明細逐列對齊");
+        N(drill).Should().Be(2);
+
+        var onlySales = await Post(admin, $"{Reports}/{id}/drill",
+            new { groupKeys = Array.Empty<string>(), departmentIds = new[] { sales }, includeSubDepartments = false });
+        onlySales.GetProperty("detailRows").GetArrayLength().Should().Be(1);
+    }
+
+    [Fact]
+    public async Task DepartmentFilter_TaskEvents_BothRowKinds_Http()
+    {
+        var admin = _app.AsUser();
+        var (_, _, _, sales1) = await ArrangeDepartmentsAsync(admin);
+        var done = await CreateTask(admin, $"{Base}/tasks", new { title = "做完", assigneeUserId = "sales01" });
+        (await admin.PatchAsync($"{Base}/tasks/{done}", new StringContent("""{"status":"done"}""", Encoding.UTF8, "application/json")))
+            .StatusCode.Should().Be(HttpStatusCode.OK);
+        var def = new Dictionary<string, object?>(TaskDef([new { id = "n", kind = "countMain", field = (object?)null, condition = (object?)null }]))
+        {
+            ["dataset"] = "taskEvents"
+        };
+        var id = await CreateReport(admin, def);
+
+        N(await Post(admin, $"{Reports}/{id}/run", new { })).Should().Be(6, "5 個任務建立 5 列＋完成 1 列");
+        N(await Post(admin, $"{Reports}/{id}/run", new { departmentIds = new[] { sales1 } })).Should().Be(4, "一課 3 個任務的建立列＋完成列");
+    }
+
+    [Fact]
+    public async Task Range_Run_AppliesToPrimaryDate_Http()
+    {
+        var admin = _app.AsUser();
+        var (id, _, _, _) = await ArrangeDepartmentsAsync(admin);
+
+        N(await Post(admin, $"{Reports}/{id}/run", new { range = new { kind = "thisMonth" } })).Should().Be(4);
+        var last = await Post(admin, $"{Reports}/{id}/run", new { range = new { kind = "lastMonth" } });
+        last.GetProperty("state").GetString().Should().Be("empty");
+        (await admin.PostAsJsonAsync($"{Reports}/{id}/run", new { range = new { kind = "bogus" } })).StatusCode.Should().Be(HttpStatusCode.BadRequest);
+    }
+
+    [Fact]
+    public async Task Export_AppliesCurrentFilters_Http()
+    {
+        var admin = _app.AsUser();
+        var (_, _, sales, sales1) = await ArrangeDepartmentsAsync(admin);
+        var def = TaskDef([new { id = "n", kind = "countMain", field = (object?)null, condition = (object?)null }],
+            columns: [Ref(-1)]);
+        def["primaryDateField"] = Ref(-7);
+        var id = await CreateReport(admin, def);
+
+        async Task<int> DataRows(string query)
+        {
+            var res = await admin.GetAsync($"{Reports}/{id}/export{query}");
+            res.StatusCode.Should().Be(HttpStatusCode.OK, await res.Content.ReadAsStringAsync());
+            using var wb = new XLWorkbook(new MemoryStream(await res.Content.ReadAsByteArrayAsync()));
+            // 第 1 列是表頭；明細下方有空列與總計，只數標題欄有內容、且是任務標題的列
+            return wb.Worksheets.Single().RowsUsed().Skip(1).Count(r => r.Cell(1).GetString() is "一課甲" or "一課乙" or "業務部" or "未指派");
+        }
+
+        (await DataRows("")).Should().Be(4);
+        (await DataRows($"?departmentIds={sales1}")).Should().Be(2);
+        (await DataRows($"?departmentIds={sales}&includeSubDepartments=false")).Should().Be(1);
+        (await DataRows($"?departmentIds={sales}&departmentIds={sales1}&includeSubDepartments=false")).Should().Be(3);
+        (await DataRows("?rangeKind=thisMonth")).Should().Be(4);
+        (await DataRows("?rangeKind=lastMonth")).Should().Be(0);
+        (await admin.GetAsync($"{Reports}/{id}/export?rangeKind=bogus")).StatusCode.Should().Be(HttpStatusCode.BadRequest);
+    }
+
+    [Fact]
+    public async Task DepartmentFilter_ModuleReport_IsIgnored_Http()
+    {
+        var admin = _app.AsUser();
+        var module = await CreateModule(admin);
+        await Activate(admin, module);
+        var title = await TitleKey(admin, module);
+        await admin.PostAsJsonAsync($"{Base}/modules/{module}/records", new { values = new Dictionary<string, object> { [title] = "甲" } });
+        var def = new Dictionary<string, object?>
+        {
+            ["version"] = 1, ["mainModuleKey"] = module, ["child"] = null, ["columns"] = Array.Empty<object>(), ["groups"] = Array.Empty<object>(),
+            ["measures"] = new object[] { new { id = "n", kind = "countMain", field = (object?)null, condition = (object?)null } },
+            ["filters"] = Array.Empty<object>(), ["primaryDateField"] = null, ["dateRange"] = null, ["sort"] = Array.Empty<object>(), ["viz"] = "table"
+        };
+        var id = await CreateReport(admin, def);
+
+        N(await Post(admin, $"{Reports}/{id}/run", new { departmentIds = new[] { 999L } })).Should().Be(1, "模組資料來源收到部門參數就忽略");
+    }
+
     [Fact]
     public async Task ModuleCatalog_Unchanged_Http()
     {

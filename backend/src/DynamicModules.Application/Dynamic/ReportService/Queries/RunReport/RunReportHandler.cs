@@ -15,7 +15,8 @@ public class RunReportHandler(ReportAccess access, ReportRunner runner) : IReque
         if (ReportRules.CheckRange(request.Range) is { } error)
             return ServiceResult.Invalid(ReportRules.ToErrors("range", [error]));
 
-        var result = await runner.RunAsync(ReportDefinition.Parse(report.DefinitionJson), new ReportRunOptions(request.Range, null, request.Locale), ct);
+        var result = await runner.RunAsync(ReportDefinition.Parse(report.DefinitionJson), new ReportRunOptions(request.Range, null, request.Locale,
+                DepartmentIds: request.DepartmentIds, IncludeSubDepartments: request.IncludeSubDepartments), ct);
         return ServiceResult.Success(ReportRules.CapDetail(result));
     }
 }

@@ -2,6 +2,7 @@ using DynamicModules.Application.Common.Security;
 using DynamicModules.Application.Dynamic.TaskService;
 using DynamicModules.Domain.Entities.Dynamic;
 using DynamicModules.Domain.Modules;
+using DynamicModules.Domain.Organization;
 using DynamicModules.Domain.Reports;
 using DynamicModules.Domain.Repositories.Dynamic;
 
@@ -45,6 +46,13 @@ public sealed class TaskReportSource(ITaskRepository tasks, ITaskRuleRepository 
         var catalog = TaskReportFields.Build(dataset, await org.ListAsync(ct), list, ruleList);
         _catalogs[key] = catalog;
         return catalog;
+    }
+
+    /// <summary>部門篩選展開成部門 Id 集合（所選部門，含下層時整棵樹，停用部門照走）；整棵樹用全部部門，不看啟用狀態。</summary>
+    public async Task<IReadOnlySet<long>> ExpandDepartmentsAsync(IEnumerable<long> selected, bool includeSub, CancellationToken ct)
+    {
+        var departments = (await org.ListAsync(ct)).ToDictionary(d => d.Id, d => new OrgDepartment(d.Id, d.ParentId, d.ManagerUserId, d.Active));
+        return DepartmentScope.Expand(departments, selected, includeSub);
     }
 
     /// <summary>
