@@ -1,5 +1,6 @@
 using DynamicModules.Application.Common;
 using DynamicModules.Application.Dynamic.TaskService;
+using DynamicModules.Application.Dynamic.TaskViewService;
 using DynamicModules.Domain.Entities.Dynamic;
 using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
@@ -111,5 +112,67 @@ public class TaskBoardScenarioTests(DemoGeneratedFixture fx)
         // 掛記錄的人（業務一）自己看得到記錄
         var mine = await fx.As("sales01", new GetMyTasksRequest("assigned", "all", 1, 100));
         ((PagedResponse<TaskSummaryResponse>)mine.Data!).Items.Single(t => t.Title == "確認標準導柱庫存").Record!.Accessible.Should().BeTrue();
+    }
+
+    private async Task<TaskViewListResponse> ViewsOf(string user)
+    {
+        var r = await fx.As(user, new GetTaskViewsRequest("board"));
+        r.IsSuccess.Should().BeTrue(r.Message);
+        return (TaskViewListResponse)r.Data!;
+    }
+
+    private async Task<TaskViewDetail> DetailOf(string user, long id)
+    {
+        var r = await fx.As(user, new GetTaskViewRequest(id));
+        r.IsSuccess.Should().BeTrue(r.Message);
+        return (TaskViewDetail)r.Data!;
+    }
+
+    [Fact]
+    public async Task Manager01_HasTwoBoards_OneSharedToSalesDepartment()
+    {
+        fx.Generated();
+        var mine = (await ViewsOf("manager01")).Mine;
+
+        mine.Select(v => v.Name).Should().BeEquivalentTo(["業務部負載", "業務部任務"]);
+        mine.Single(v => v.Name == "業務部負載").ShareCount.Should().Be(0);
+        mine.Single(v => v.Name == "業務部任務").ShareCount.Should().Be(1);
+
+        var load = await DetailOf("manager01", mine.Single(v => v.Name == "業務部負載").Id);
+        load.Config.GetProperty("groupBy").GetString().Should().Be("assignee");
+        load.Config.GetProperty("scope").GetString().Should().Be("subordinates");
+        var columns = load.Config.GetProperty("columns");
+        columns.GetProperty("assignees").EnumerateArray().Select(e => e.GetString()).Should().Equal("sales01", "sales02", "sales03");
+        columns.GetProperty("autoAppendAssignees").GetBoolean().Should().BeTrue();
+
+        var tasks = await DetailOf("manager01", mine.Single(v => v.Name == "業務部任務").Id);
+        tasks.Config.GetProperty("groupBy").GetString().Should().Be("status");
+        tasks.Config.GetProperty("scope").GetString().Should().Be("visible");
+        tasks.Config.GetProperty("filters").GetProperty("assigneeUserIds").EnumerateArray().Select(e => e.GetString())
+            .Should().Equal("sales01", "sales02", "sales03");
+        var share = tasks.Shares.Should().ContainSingle().Subject;
+        share.Kind.Should().Be("department");
+        share.NameI18n!.Resolve("zh-TW").Should().Be("業務部");
+    }
+
+    [Fact]
+    public async Task Sales01_SeesSharedBoard_OnlyOwnVisibleTasks()
+    {
+        fx.Generated();
+        var views = await ViewsOf("sales01");
+
+        views.Mine.Should().BeEmpty();
+        var shared = views.Shared.Should().ContainSingle(v => v.Name == "業務部任務").Subject;
+        shared.OwnerUserId.Should().Be("manager01");
+        views.Shared.Should().NotContain(v => v.Name == "業務部負載");
+
+        var r = await fx.As("sales01", new GetTaskBoardColumnsRequest(shared.Id, null));
+        r.IsSuccess.Should().BeTrue(r.Message);
+        var cards = ((TaskBoardResponse)r.Data!).Columns.SelectMany(c => c.Cards).ToList();
+        var titles = cards.Select(c => c.Title).ToList();
+        titles.Should().Contain(["整理名片", "回覆恆川機械樣品問題"]);
+        // 業務二、業務三的個人任務與無負責人的任務，業務一看不到，也不在篩選的負責人裡
+        titles.Should().NotContain(Expected.Where(e => e.Owner is "sales02" or "sales03").Select(e => e.Title).Append("整理樣品櫃"));
+        cards.Should().OnlyContain(c => c.AssigneeUserId == "sales01" || c.AssigneeUserId == "sales02" || c.AssigneeUserId == "sales03");
     }
 }

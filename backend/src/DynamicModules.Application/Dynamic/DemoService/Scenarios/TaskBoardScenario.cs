@@ -1,5 +1,8 @@
+using System.Globalization;
 using System.Text.Json;
+using DynamicModules.Application.Common;
 using DynamicModules.Application.Dynamic.TaskService;
+using DynamicModules.Application.Dynamic.TaskViewService;
 using DynamicModules.Domain.Policies;
 using DynamicModules.Domain.Tasks;
 
@@ -10,6 +13,7 @@ namespace DynamicModules.Application.Dynamic.DemoService.Scenarios;
 /// 每個任務都由負責人自己建立（不產生「指派給你」通知）；到期日相對 plan.Today，建立與後續變更都在昨天上班時間內。
 /// 「整理樣品櫃」建立後清空負責人，留下「未指派、建立者是部屬」的情況；「確認標準導柱庫存」掛在進銷存品號記錄上，
 /// 業務主管讀不到那個模組，示範「相關記錄（無權限查看）」。
+/// 業務主管另建兩個看板：「業務部負載」（依負責人、不分享）與「業務部任務」（依狀態、分享給業務部）。
 /// </summary>
 public sealed class TaskBoardScenario : IDemoScenario
 {
@@ -78,6 +82,42 @@ public sealed class TaskBoardScenario : IDemoScenario
                 ctx.Sender.Send(new CreateRecordTaskRequest(item.Id,
                     new TaskInput("確認標準導柱庫存", null, "sales01", today.AddDays(2))), ct));
         }
+
+        PlanBoards(plan, Next);
+    }
+
+    private static readonly string[] SalesPeople = ["sales01", "sales02", "sales03"];
+    private const string SalesDepartment = "業務部";
+
+    /// <summary>業務主管的兩個看板；部門與負責人是示範組織裡的虛構資料。</summary>
+    private static void PlanBoards(DemoPlan plan, Func<DateTime> next)
+    {
+        var board = new Holder();
+        plan.Run(next(), "manager01", "看板 業務部負載 建立", (ctx, ct) => ctx.Sender.Send(new CreateTaskViewRequest("board", "業務部負載",
+            JsonSerializer.SerializeToElement(new
+            {
+                version = 1, groupBy = "assignee", scope = "subordinates",
+                columns = new { assignees = SalesPeople, autoAppendAssignees = true }
+            })), ct));
+        plan.Run(next(), "manager01", "看板 業務部任務 建立", async (ctx, ct) =>
+        {
+            var r = await ctx.Sender.Send(new CreateTaskViewRequest("board", "業務部任務",
+                JsonSerializer.SerializeToElement(new
+                {
+                    version = 1, groupBy = "status", scope = "visible",
+                    filters = new { assigneeUserIds = SalesPeople }
+                })), ct);
+            if (r.IsCreated) board.Id = ((TaskViewDetail)r.Data!).Id;
+            return r;
+        });
+        plan.Run(next(), "manager01", "看板 業務部任務 分享給業務部", async (ctx, ct) =>
+        {
+            var targets = (TaskViewShareTargets)(await ctx.Sender.Send(new GetTaskViewShareTargetsRequest(), ct)).Data!;
+            var department = targets.Departments.FirstOrDefault(d => d.Name.Resolve("zh-TW") == SalesDepartment);
+            if (department is null) return ServiceResult.Invalid(new Dictionary<string, string[]> { ["department"] = [$"找不到部門「{SalesDepartment}」"] });
+            return await ctx.Sender.Send(new SetTaskViewSharesRequest(board.Id,
+                [new TaskViewShareInput("department", department.Id.ToString(CultureInfo.InvariantCulture))]), ct);
+        });
     }
 
     /// <summary>步驟之間傳遞建立後才知道的任務 Id。</summary>
