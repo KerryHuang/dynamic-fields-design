@@ -1,6 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import zhTW from 'src/i18n/zh-TW.json';
-import { BOARD_COLUMN_GAP, BOARD_MIN_COLUMN_WIDTH, columnsPerScreen, groupByOf, gridTrackCount, moveBlockKey, moveTargets, visibleRange, type BoardCard, type BoardColumn } from './task-board-types';
+import {
+  BOARD_COLUMN_GAP, BOARD_MIN_COLUMN_WIDTH, columnsPerScreen, groupByOf, gridTrackCount, isLaterDateAllowed, moveBlockKey, moveFlowOf, moveTargets, moveCardLocally, removeCardLocally,
+  visibleRange, type BoardCard, type BoardColumn, type TaskBoardData,
+} from './task-board-types';
 
 const card = (o: Partial<BoardCard> = {}): BoardCard => ({
   id: 1, title: 'T', status: 'todo', assigneeUserId: 'sales01', assigneeName: '業務一', assigneeActive: true, dueDate: null, overdue: false,
@@ -102,5 +105,69 @@ describe('task-board-types', () => {
     const supervised = card({ canEdit: false, canReassign: true });
     expect(moveTargets(supervised, columns, 'status').every((t) => t.reason?.kind === 'noPermission')).toBe(true);
     expect(moveTargets(supervised, columns, 'assignee').every((t) => t.droppable)).toBe(true);
+  });
+
+  it('moveTargets lets an assignee board move a card the user can edit even without the reassign right', () => {
+    const columns = [column({ key: 'unassigned', kind: 'unassigned' }), column({ key: 'user:a', kind: 'user' })];
+    expect(moveTargets(card({ canEdit: true, canReassign: false }), columns, 'assignee').every((t) => t.droppable)).toBe(true);
+    expect(moveTargets(card({ canEdit: false, canReassign: false }), columns, 'assignee').every((t) => t.reason?.kind === 'noPermission')).toBe(true);
+  });
+
+  it('moveFlowOf picks the confirmation each drop needs', () => {
+    const cancelled = column({ key: 'cancelled' });
+    const none = column({ key: 'none', kind: 'dueBucket' });
+    expect(moveFlowOf(card(), cancelled, 'status')).toBe('confirmCancel');
+    expect(moveFlowOf(card(), column({ key: 'done' }), 'status')).toBe('direct');
+    expect(moveFlowOf(card({ fromRule: true }), none, 'dueBucket')).toBe('confirmClearRuleDue');
+    expect(moveFlowOf(card({ fromRule: false }), none, 'dueBucket')).toBe('direct');
+    expect(moveFlowOf(card(), column({ key: 'later', kind: 'dueBucket' }), 'dueBucket')).toBe('pickDate');
+    expect(moveFlowOf(card({ fromRule: true }), column({ key: 'user:a', kind: 'user' }), 'assignee')).toBe('direct');
+  });
+
+  it('isLaterDateAllowed accepts only dates after the end of the week', () => {
+    expect(isLaterDateAllowed('2026-11-22', '2026-11-22')).toBe(false);
+    expect(isLaterDateAllowed('2026-11-21', '2026-11-22')).toBe(false);
+    expect(isLaterDateAllowed('2026-11-23', '2026-11-22')).toBe(true);
+    expect(isLaterDateAllowed('', '2026-11-22')).toBe(false);
+    expect(isLaterDateAllowed(null, '2026-11-22')).toBe(false);
+  });
+
+  const board = (): TaskBoardData => ({
+    today: '2026-11-17', weekEnd: '2026-11-22', laterDefault: '2026-11-29', scopeAvailable: true, omittedAssignees: 0,
+    columns: [
+      column({ key: 'todo', total: 2, cards: [card({ id: 1 }), card({ id: 2 })] }),
+      column({ key: 'done', total: 0 }),
+    ],
+  });
+
+  it('moveCardLocally moves the card to the top of the target column, adjusts both totals and the card fields', () => {
+    const next = moveCardLocally(board(), 1, 'done', 'status', undefined)!;
+    expect(next.columns.map((c) => [c.key, c.total, c.cards.map((x) => x.id)])).toEqual([['todo', 1, [2]], ['done', 1, [1]]]);
+    expect(next.columns[1].cards[0].status).toBe('done');
+    // 原本的看板資料不被改動
+    expect(board().columns[0].cards).toHaveLength(2);
+  });
+
+  it('moveCardLocally rewrites the due date or the assignee for the other groupings', () => {
+    const b = board();
+    b.columns = [
+      column({ key: 'today', kind: 'dueBucket', cards: [card({ id: 1, dueDate: '2026-11-17', dueToday: true })], total: 1 }),
+      column({ key: 'later', kind: 'dueBucket' }), column({ key: 'none', kind: 'dueBucket' }),
+    ];
+    expect(moveCardLocally(b, 1, 'later', 'dueBucket', '2026-12-01')!.columns[1].cards[0]).toMatchObject({ dueDate: '2026-12-01', dueToday: false, overdue: false });
+    expect(moveCardLocally(b, 1, 'none', 'dueBucket', undefined)!.columns[2].cards[0].dueDate).toBeNull();
+    const a = board();
+    a.columns = [column({ key: 'unassigned', kind: 'unassigned', cards: [card({ id: 1 })], total: 1 }), column({ key: 'user:bob', kind: 'user', userId: 'bob', name: '小波', inactive: false })];
+    expect(moveCardLocally(a, 1, 'user:bob', 'assignee', undefined)!.columns[1].cards[0]).toMatchObject({ assigneeUserId: 'bob', assigneeName: '小波', assigneeActive: true });
+    const back = moveCardLocally(a, 1, 'user:bob', 'assignee', undefined)!;
+    expect(moveCardLocally(back, 1, 'unassigned', 'assignee', undefined)!.columns[0].cards[0]).toMatchObject({ assigneeUserId: null, assigneeName: null });
+  });
+
+  it('moveCardLocally returns null when the card or the column is not on the loaded board; removeCardLocally drops it', () => {
+    expect(moveCardLocally(board(), 99, 'done', 'status', undefined)).toBeNull();
+    expect(moveCardLocally(board(), 1, 'nope', 'status', undefined)).toBeNull();
+    const next = removeCardLocally(board(), 1);
+    expect(next.columns[0]).toMatchObject({ total: 1 });
+    expect(next.columns[0].cards.map((x) => x.id)).toEqual([2]);
   });
 });

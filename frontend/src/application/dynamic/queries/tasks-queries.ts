@@ -59,7 +59,7 @@ export function useMentionCandidates(keyword: MaybeRefOrGetter<string | null>) {
 }
 
 /** Every task change touches the lists, the counters, the open task, the record block and the timeline. */
-function invalidateTasks(qc: QueryClient, id?: number) {
+export function invalidateTasks(qc: QueryClient, id?: number) {
   return Promise.all([
     qc.invalidateQueries({ queryKey: ['tasks'] }),
     qc.invalidateQueries({ queryKey: ['task-summary'] }),

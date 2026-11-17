@@ -11,7 +11,7 @@ import TaskCard from './TaskCard.vue';
 function mountCard(groupBy: BoardGroupBy, wire: Record<string, unknown> = {}) {
   const i18n = createI18n({ legacy: false, locale: 'zh-TW', messages: { 'zh-TW': zhTW } });
   return mount(TaskCard, {
-    props: { card: normalizeBoardCard(cardWire(wire) as never), groupBy },
+    props: { card: normalizeBoardCard(cardWire(wire) as never), groupBy, columns: [], labelOf: (k: string) => k, phone: false },
     global: { plugins: [[quasar.Quasar, { components: quasar }], i18n] },
   });
 }
@@ -66,7 +66,7 @@ describe('TaskCard', () => {
     expect(full.get('[data-testid="board-card-rule"] .q-icon').attributes('aria-hidden')).toBe('true');
   });
 
-  it('the card is a plain container and the title is the only button, so a later move button is not nested in a button', () => {
+  it('the card is a plain container; the open button and the move-to button are siblings, not nested', () => {
     const w = mountCard('status');
     const root = w.get('[data-testid="board-card-1"]');
     expect(root.element.tagName).toBe('DIV');
@@ -76,7 +76,8 @@ describe('TaskCard', () => {
     expect(open.element.tagName).toBe('BUTTON');
     expect(open.attributes('type')).toBe('button');
     expect(open.text()).toBe('回覆恆川機械樣品問題');
-    expect(w.findAll('button')).toHaveLength(1);
+    // 只有開啟按鈕與同層的「移到…」兩個按鈕
+    expect(w.findAll('button').map((b) => b.classes().includes('board-card-open') || b.attributes('data-testid') === 'board-card-move-1')).toEqual([true, true]);
   });
 
   it('a long assignee name is cut off inside the card', () => {
@@ -90,5 +91,34 @@ describe('TaskCard', () => {
     const w = mountCard('status');
     await w.get('[data-testid="board-card-open-1"]').trigger('click');
     expect(w.emitted('open')).toEqual([[1]]);
+  });
+
+  it('a movable card has one move-to button that is named after the task and sits outside the open button', () => {
+    const w = mountCard('status', { title: '寄合約' });
+    const move = w.get('[data-testid="board-card-move-1"]');
+    expect(move.attributes('aria-label')).toBe('移動「寄合約」到…');
+    expect(move.attributes('title')).toBe('移到…');
+    expect(move.element.closest('.board-card-open')).toBeNull();
+    // 開啟按鈕與「移到…」是同一層的兩個按鈕，沒有互相巢狀
+    expect(w.findAll('button').filter((b) => b.element.querySelector('button'))).toHaveLength(0);
+    expect(w.get('[data-testid="board-card-1"]').classes()).not.toContain('is-locked');
+  });
+
+  it('a frozen card, or one the user cannot edit, has no move-to button and a not-allowed look', () => {
+    for (const wire of [{ frozen: true }, { canEdit: false, canReassign: false }]) {
+      const w = mountCard('status', wire);
+      expect(w.find('[data-testid="board-card-move-1"]').exists()).toBe(false);
+      expect(w.get('[data-testid="board-card-1"]').classes()).toContain('is-locked');
+    }
+  });
+
+  it('pointerdown on the card starts a drag request, but not when it lands on the move-to button or the card is locked', async () => {
+    const w = mountCard('status');
+    await w.get('[data-testid="board-card-1"]').trigger('pointerdown');
+    await w.get('[data-testid="board-card-move-1"]').trigger('pointerdown');
+    expect(w.emitted('dragStart')).toHaveLength(1);
+    const locked = mountCard('status', { frozen: true });
+    await locked.get('[data-testid="board-card-1"]').trigger('pointerdown');
+    expect(locked.emitted('dragStart')).toBeUndefined();
   });
 });

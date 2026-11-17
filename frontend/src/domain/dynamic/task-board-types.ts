@@ -207,6 +207,9 @@ export const moveBlockKey = (b: MoveBlock) => `taskBoard.drop.${b.kind === 'colu
 /** 格線欄數：全部欄一屏放得下時用實際欄數（撐滿寬度）；要分段平移時固定一屏欄數，最後一組右邊留空。 */
 export const gridTrackCount = (columnCount: number, perScreen: number) => Math.max(1, Math.min(columnCount, perScreen));
 
+/** 拖拉中一欄的樣子：能不能放、指標是否正在上面、不能放的原因（已翻譯成介面語言）。 */
+export interface ColumnDrop { allowed: boolean; over: boolean; reason: string | null }
+
 export interface MoveTarget {
   key: string;
   /** 卡片現在就在這一欄。 */
@@ -215,17 +218,74 @@ export interface MoveTarget {
   reason: MoveBlock | null;
 }
 
+/** 這張卡整張能不能動；null＝可以。凍結不能動；依負責人分欄看「可編輯或可重派」，其他看「可編輯」（與後端 MoveTaskHandler 相同）。 */
+export function cardMoveBlock(card: BoardCard, groupBy: BoardGroupBy): MoveBlock | null {
+  if (card.frozen) return { kind: 'frozen' };
+  return (groupBy === 'assignee' ? card.canEdit || card.canReassign : card.canEdit) ? null : { kind: 'noPermission' };
+}
+
 /**
- * 每一欄這張卡能不能放、不能放的原因。依負責人分欄看「可重派」，其他看「可編輯」；凍結的卡整張不能動；
+ * 每一欄這張卡能不能放、不能放的原因。卡片整張不能動時每欄都帶同一個原因；
  * 其餘是欄本身不能放（原因見 dropReasonOf；能不能放由伺服器的 droppable 決定）。
  */
 export function moveTargets(card: BoardCard, columns: readonly BoardColumn[], groupBy: BoardGroupBy): MoveTarget[] {
-  const cardBlock: MoveBlock | null = card.frozen
-    ? { kind: 'frozen' }
-    : (groupBy === 'assignee' ? card.canReassign : card.canEdit) ? null : { kind: 'noPermission' };
+  const cardBlock = cardMoveBlock(card, groupBy);
   return columns.map((c) => {
     const current = c.cards.some((x) => x.id === card.id);
     const reason: MoveBlock | null = cardBlock ?? (c.droppable ? null : { kind: 'column', reason: dropReasonOf(c) });
     return { key: c.key, current, droppable: reason === null, reason };
   });
+}
+
+/** 放進這一欄前要走的流程：直接送出、先確認取消（U5）、先確認清空規則任務的到期日（U5）、先選日期（「之後」）。 */
+export type MoveFlow = 'direct' | 'confirmCancel' | 'confirmClearRuleDue' | 'pickDate';
+export function moveFlowOf(card: BoardCard, to: BoardColumn, groupBy: BoardGroupBy): MoveFlow {
+  if (groupBy === 'status' && to.key === 'cancelled') return 'confirmCancel';
+  if (groupBy === 'dueBucket' && to.key === 'none' && card.fromRule) return 'confirmClearRuleDue';
+  if (groupBy === 'dueBucket' && to.key === 'later') return 'pickDate';
+  return 'direct';
+}
+
+/** 「之後」只能選本週最後一天之後的日期（yyyy-MM-dd 字串可直接比大小）。 */
+export const isLaterDateAllowed = (date: string | null | undefined, weekEnd: string) => !!date && date > weekEnd;
+
+/** 樂觀更新用：把卡片搬到目標欄最上面並改相關欄位，兩欄總數跟著動；找不到卡片或欄時回 null（不動快取）。不改傳入的物件。 */
+export function moveCardLocally(
+  board: TaskBoardData, cardId: number, toKey: string, groupBy: BoardGroupBy, dueDate: string | undefined,
+): TaskBoardData | null {
+  const from = board.columns.find((c) => c.cards.some((x) => x.id === cardId));
+  const to = board.columns.find((c) => c.key === toKey);
+  const card = from?.cards.find((x) => x.id === cardId);
+  if (!from || !to || !card) return null;
+  const moved: BoardCard = { ...card };
+  if (groupBy === 'status') moved.status = toKey as TaskStatus;
+  else if (groupBy === 'assignee') {
+    moved.assigneeUserId = to.userId;
+    moved.assigneeName = to.name;
+    moved.assigneeActive = !to.inactive;
+  } else {
+    const date = toKey === 'today' ? board.today : toKey === 'thisWeek' ? board.weekEnd : toKey === 'later' ? (dueDate ?? null) : null;
+    moved.dueDate = date;
+    moved.overdue = false;
+    moved.dueToday = toKey === 'today';
+  }
+  if (from.key === to.key) return board;
+  return {
+    ...board,
+    columns: board.columns.map((c) => {
+      if (c.key === from.key) return { ...c, total: Math.max(0, c.total - 1), cards: c.cards.filter((x) => x.id !== cardId) };
+      if (c.key === to.key) return { ...c, total: c.total + 1, cards: [moved, ...c.cards] };
+      return c;
+    }),
+  };
+}
+
+/** 移動後看不到這張任務了：從畫面上拿掉。 */
+export function removeCardLocally(board: TaskBoardData, cardId: number): TaskBoardData {
+  return {
+    ...board,
+    columns: board.columns.map((c) => (c.cards.some((x) => x.id === cardId)
+      ? { ...c, total: Math.max(0, c.total - 1), cards: c.cards.filter((x) => x.id !== cardId) }
+      : c)),
+  };
 }

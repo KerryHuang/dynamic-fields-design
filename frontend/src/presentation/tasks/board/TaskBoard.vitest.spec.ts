@@ -8,7 +8,7 @@ import { useBoardColumns } from 'src/application/dynamic/queries/task-board-quer
 import zhTW from 'src/i18n/zh-TW.json';
 import type { InternalAxiosRequestConfig } from 'axios';
 import { http } from 'src/services/api/http';
-import { bodyOf, mockHttp, type Call } from 'src/test-utils/mock-http';
+import { bodyOf, HttpFail, mockHttp, type Call } from 'src/test-utils/mock-http';
 import { assigneeBoardWire, boardWire, cardWire, columnWire, dueBoardWire, nineStatusLikeColumns } from './board-fixtures';
 import TaskBoard from './TaskBoard.vue';
 
@@ -27,9 +27,9 @@ function stubResizeObserver() {
 }
 
 /** 和頁面一樣由 useBoardColumns 供應資料，「載入更多」才會經由快取回到畫面上。 */
-async function mountBoard(wire: Record<string, unknown>, width: number, pageReply: unknown = null) {
+async function mountBoard(wire: Record<string, unknown>, width: number, pageReply: unknown = null, moveReply: unknown = null) {
   const source = {};
-  calls = mockHttp((c) => (c.url === '/task-board/columns' ? wire : pageReply));
+  calls = mockHttp((c) => (c.url === '/task-board/columns' ? wire : /\/move$/.test(c.url) ? moveReply : pageReply));
   const Host = defineComponent({
     setup() {
       const q = useBoardColumns(source);
@@ -37,7 +37,7 @@ async function mountBoard(wire: Record<string, unknown>, width: number, pageRepl
     },
   });
   const i18n = createI18n({ legacy: false, locale: 'zh-TW', messages: { 'zh-TW': zhTW } });
-  const w = mount(Host, { attachTo: document.body, global: { plugins: [[quasar.Quasar, { components: quasar }], i18n, [VueQueryPlugin, { queryClient: new QueryClient() }]] } });
+  const w = mount(Host, { attachTo: document.body, global: { plugins: [[quasar.Quasar, { components: quasar, directives: quasar, plugins: { Notify: quasar.Notify } }], i18n, [VueQueryPlugin, { queryClient: new QueryClient() }]] } });
   await flushPromises();
   resize?.(width);
   await flushPromises();
@@ -46,8 +46,8 @@ async function mountBoard(wire: Record<string, unknown>, width: number, pageRepl
 const shownKeys = (w: ReturnType<typeof mount>) => w.findAll('[data-board-column]').map((e) => e.attributes('data-board-column'));
 
 describe('TaskBoard', () => {
-  beforeEach(() => { document.body.innerHTML = ''; resize = undefined; stubResizeObserver(); });
-  afterEach(() => { vi.unstubAllGlobals(); document.body.innerHTML = ''; });
+  beforeEach(() => { resize = undefined; stubResizeObserver(); });
+  afterEach(() => { vi.unstubAllGlobals(); });
 
   it('TaskBoard renders columns with totals and load-more', async () => {
     const wire = boardWire({ columns: [
@@ -212,6 +212,264 @@ describe('TaskBoard', () => {
     const { w } = await mountBoard(boardWire(), 1126);
     await w.get('[data-testid="board-card-open-3"]').trigger('click');
     expect(w.findComponent(TaskBoard).emitted('open')).toEqual([[3]]);
+    w.unmount();
+  });
+});
+
+// ---- 拖拉、「移到…」、確認與樂觀更新（Task 9） ----
+const moveCalls = () => calls.filter((c) => /\/move$/.test(c.url));
+const ids = (w: ReturnType<typeof mount>, col: string) => w.findAll(`[data-testid="board-column-${col}"] [data-testid^="board-card-"]`)
+  .map((e) => e.attributes('data-testid')!).filter((t) => /card-\d+$/.test(t)).map((t) => Number(t.replace('board-card-', '')));
+const live = (w: ReturnType<typeof mount>) => w.get('[data-testid="board-live"]').text();
+const toasts = () => [...document.body.querySelectorAll('.q-notification')].map((n) => n.textContent ?? '');
+
+const settle = async () => { await flushPromises(); await new Promise((r) => setTimeout(r, 30)); await flushPromises(); };
+
+/** 以滑鼠把卡片拖到指定欄放開；elementFromPoint 在 jsdom 沒有版面，這裡指定指標底下是哪一欄的元素。 */
+async function dragTo(w: ReturnType<typeof mount>, cardId: number, columnKey: string | null) {
+  const target = columnKey === null ? null : w.get(`[data-testid="board-column-${columnKey}"]`).element;
+  document.elementFromPoint = (() => target) as never;
+  const fire = (type: string, x: number, y: number, on: EventTarget = window) => {
+    const e = new MouseEvent(type, { clientX: x, clientY: y, bubbles: true });
+    Object.assign(e, { pointerType: 'mouse', pointerId: 1 });
+    on.dispatchEvent(e);
+  };
+  fire('pointerdown', 10, 10, w.get(`[data-testid="board-card-${cardId}"]`).element);
+  fire('pointermove', 80, 40);
+  await flushPromises();
+  return {
+    drop: async () => { fire('pointerup', 80, 40); await flushPromises(); },
+    fire,
+  };
+}
+
+/** 讓 /move 請求停住，由測試決定何時、怎麼回；其他請求照舊。 */
+function holdMove() {
+  const base = http.defaults.adapter as (c: InternalAxiosRequestConfig) => Promise<unknown>;
+  let settleMove!: { ok: (data: unknown) => void; fail: (status: number, data?: unknown) => void };
+  http.defaults.adapter = ((config: InternalAxiosRequestConfig) => {
+    if (!/\/move$/.test(String(config.url))) return base(config);
+    calls.push({ method: String(config.method), url: String(config.url), params: config.params, data: config.data });
+    return new Promise((resolve, reject) => {
+      settleMove = {
+        ok: (data) => resolve({ data, status: 200, statusText: 'OK', headers: {}, config }),
+        fail: (status, data) => reject({ config, response: { status, data, headers: {}, config } }),
+      };
+    });
+  }) as never;
+  return { ok: (d: unknown) => settleMove.ok(d), fail: (s: number, d?: unknown) => settleMove.fail(s, d) };
+}
+const movedCard = (o: Record<string, unknown> = {}) => ({ visible: true, card: cardWire({ id: 1, status: 'inProgress', version: '20261102000000000', ...o }), undoToken: null });
+
+// Notify keeps one document-level container for the whole file, so the body is never reset in this file; every test unmounts its own board.
+describe('TaskBoard moving', () => {
+  beforeEach(() => { resize = undefined; stubResizeObserver(); });
+  afterEach(() => { vi.unstubAllGlobals(); });
+
+  it('TaskBoard moves optimistically and rolls back on 400', async () => {
+    const { w } = await mountBoard(boardWire(), 1126);
+    const held = holdMove();
+    const d = await dragTo(w, 1, 'inProgress');
+    await d.drop();
+    // 還沒回應就已經在目標欄
+    expect(ids(w, 'inProgress')).toEqual([1, 3]);
+    expect(ids(w, 'todo')).toEqual([2]);
+    expect(w.get('[data-testid="board-column-inProgress"] [data-testid="board-column-total"]').text()).toBe('2');
+    expect(bodyOf(moveCalls()[0])).toEqual({ groupBy: 'status', toColumn: 'inProgress', expectedVersion: '20261101020000000' });
+    expect(moveCalls()[0].url).toBe('/tasks/1/move');
+    held.fail(400, { title: 'x', errors: { toColumn: ['看板欄不正確'] } });
+    await settle();
+    expect(ids(w, 'todo')).toEqual([1, 2]);
+    expect(ids(w, 'inProgress')).toEqual([3]);
+    expect(live(w)).toBe('看板欄不正確');
+    expect(toasts().some((t) => t.includes('看板欄不正確'))).toBe(true);
+    w.unmount();
+  });
+
+  it('announces a successful move once through the single aria-live node', async () => {
+    const { w } = await mountBoard(boardWire(), 1126, null, movedCard());
+    // Quasar 的徽章預設是 role=status（隱含 aria-live），欄頭總數改成 img，整個看板只留下這一個播報節點
+    expect(w.findAll('[aria-live], [role="status"], [role="alert"]')).toHaveLength(1);
+    const d = await dragTo(w, 1, 'inProgress');
+    await d.drop();
+    await settle();
+    expect(live(w)).toBe('已移到「進行中」');
+    expect(w.findAll('[aria-live], [role="status"], [role="alert"]')).toHaveLength(1);
+    w.unmount();
+  });
+
+  it('TaskBoard 409 refetches and shows the stale message', async () => {
+    const { w } = await mountBoard(boardWire(), 1126, null, new HttpFail(409, { code: 'stale', message: '任務已被別人修改，已重新整理' }));
+    const before = calls.filter((c) => c.url === '/task-board/columns').length;
+    const d = await dragTo(w, 1, 'inProgress');
+    await d.drop();
+    await settle();
+    expect(live(w)).toBe('任務已被別人修改，已重新整理');
+    expect(toasts().some((t) => t.includes('任務已被別人修改'))).toBe(true);
+    expect(calls.filter((c) => c.url === '/task-board/columns').length).toBeGreaterThan(before);
+    expect(ids(w, 'todo')).toEqual([1, 2]);
+    w.unmount();
+  });
+
+  it('TaskBoard visible false shows the moved-out notice', async () => {
+    const wire = assigneeBoardWire();
+    (wire.columns as { key: string }[]).splice(2, 1, columnWire({ key: 'user:sales02', kind: 'user', userId: 'sales02', name: '業務二', inactive: false, total: 0, cards: [] }));
+    const { w } = await mountBoard(wire, 1126, null, { visible: false, card: null, undoToken: 'tok' });
+    const d = await dragTo(w, 1, 'user:sales02');
+    await d.drop();
+    await settle();
+    expect(moveCalls()).toHaveLength(1);
+    expect(bodyOf(moveCalls()[0])).toMatchObject({ groupBy: 'assignee', toColumn: 'user:sales02' });
+    expect(toasts().some((t) => t.includes('已移出你的範圍') && t.includes('復原'))).toBe(true);
+    // 卡片不會出現在目標欄（從畫面拿掉的細節由 useMoveTask 的 spec 驗證；這裡的假伺服器每次重抓都回同一份看板）
+    expect(ids(w, 'user:sales02')).toEqual([]);
+    w.unmount();
+  });
+
+  it('TaskBoard cancel column asks for confirmation', async () => {
+    const wire = boardWire({ columns: [columnWire({ key: 'todo', total: 1, cards: [cardWire({ id: 1 })] }), columnWire({ key: 'cancelled', total: 0, cards: [] })] });
+    const { w } = await mountBoard(wire, 1126, null, movedCard({ status: 'cancelled' }));
+    let d = await dragTo(w, 1, 'cancelled');
+    await d.drop();
+    await settle();
+    expect(moveCalls()).toHaveLength(0);
+    const dialog = document.body.querySelector('[data-testid="move-confirm"]')!;
+    expect(dialog.textContent).toContain('取消這個任務？');
+    expect(dialog.textContent).toContain('規則產生的任務取消後不會自動恢復');
+    expect(ids(w, 'todo')).toEqual([1]);
+    document.body.querySelector<HTMLElement>('[data-testid="move-confirm-cancel"]')!.click();
+    await settle();
+    expect(moveCalls()).toHaveLength(0);
+    d = await dragTo(w, 1, 'cancelled');
+    await d.drop();
+    await settle();
+    document.body.querySelector<HTMLElement>('[data-testid="move-confirm-ok"]')!.click();
+    await settle();
+    expect(moveCalls()).toHaveLength(1);
+    expect(bodyOf(moveCalls()[0])).toMatchObject({ groupBy: 'status', toColumn: 'cancelled' });
+    w.unmount();
+  });
+
+  function dueWire(cardOverrides: Record<string, unknown>) {
+    const wire = dueBoardWire() as { columns: { key: string; cards: unknown[]; total: number }[] };
+    const today = wire.columns.find((c) => c.key === 'today')!;
+    today.cards = [cardWire({ id: 1, dueDate: '2026-11-17', dueToday: true, ...cardOverrides })];
+    today.total = 1;
+    return wire as unknown as Record<string, unknown>;
+  }
+
+  it('TaskBoard clearing a rule task due date shows the sync warning', async () => {
+    const { w } = await mountBoard(dueWire({ fromRule: true }), 1680, null, movedCard({ dueDate: null }));
+    const d = await dragTo(w, 1, 'none');
+    await d.drop();
+    await settle();
+    expect(moveCalls()).toHaveLength(0);
+    const dialog = document.body.querySelector('[data-testid="move-confirm"]')!;
+    expect(dialog.textContent).toContain('清空後不再隨記錄日期同步');
+    document.body.querySelector<HTMLElement>('[data-testid="move-confirm-ok"]')!.click();
+    await settle();
+    expect(bodyOf(moveCalls()[0])).toMatchObject({ groupBy: 'dueBucket', toColumn: 'none' });
+    w.unmount();
+  });
+
+  it('clearing the due date of a task that is not from a rule moves straight away', async () => {
+    const { w } = await mountBoard(dueWire({ fromRule: false }), 1680, null, movedCard({ dueDate: null }));
+    const d = await dragTo(w, 1, 'none');
+    await d.drop();
+    await settle();
+    expect(document.body.querySelector('[data-testid="move-confirm"]')).toBeNull();
+    expect(moveCalls()).toHaveLength(1);
+    w.unmount();
+  });
+
+  it('dropping on Later opens the date picker; cancel puts nothing on the wire, a pick sends the date', async () => {
+    const { w } = await mountBoard(dueWire({}), 1680, null, movedCard({ dueDate: '2026-12-01' }));
+    let d = await dragTo(w, 1, 'later');
+    await d.drop();
+    await settle();
+    expect(document.body.querySelector('[data-testid="due-pick"]')).not.toBeNull();
+    document.body.querySelector<HTMLElement>('[data-testid="due-pick-cancel"]')!.click();
+    await settle();
+    expect(moveCalls()).toHaveLength(0);
+    expect(ids(w, 'today')).toEqual([1]);
+    d = await dragTo(w, 1, 'later');
+    await d.drop();
+    await settle();
+    document.body.querySelector<HTMLElement>('[data-testid="due-pick-ok"]')!.click();
+    await settle();
+    // 預設是伺服器給的 laterDefault
+    expect(bodyOf(moveCalls()[0])).toMatchObject({ groupBy: 'dueBucket', toColumn: 'later', dueDate: '2026-11-29' });
+    w.unmount();
+  });
+
+  it('shows the reason on blocked columns while dragging and says it when a card is dropped there', async () => {
+    const { w } = await mountBoard(dueWire({}), 1680);
+    const d = await dragTo(w, 1, 'overdue');
+    expect(w.get('[data-testid="board-column-overdue"]').classes()).toContain('drop-blocked');
+    expect(w.get('[data-testid="board-column-overdue"] [data-testid="board-column-drop-reason"]').text()).toBe('不能放進逾期');
+    expect(w.get('[data-testid="board-column-later"]').classes()).toContain('drop-ok');
+    expect(w.find('[data-testid="board-ghost"]').exists()).toBe(true);
+    await d.drop();
+    expect(moveCalls()).toHaveLength(0);
+    expect(live(w)).toBe('不能放進逾期');
+    expect(w.find('[data-testid="board-ghost"]').exists()).toBe(false);
+    expect(w.find('[data-testid="board-column-drop-reason"]').exists()).toBe(false);
+    w.unmount();
+  });
+
+  it('Esc during a drag sends nothing', async () => {
+    const { w } = await mountBoard(boardWire(), 1126);
+    const d = await dragTo(w, 1, 'inProgress');
+    window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }));
+    await flushPromises();
+    expect(w.find('[data-testid="board-ghost"]').exists()).toBe(false);
+    await d.drop();
+    expect(moveCalls()).toHaveLength(0);
+    w.unmount();
+  });
+
+  it('TaskBoard non-draggable card has no move-to button', async () => {
+    const wire = boardWire({ columns: [columnWire({ key: 'todo', total: 3, cards: [
+      cardWire({ id: 1 }), cardWire({ id: 2, frozen: true }), cardWire({ id: 3, canEdit: false, canReassign: false }),
+    ] }), columnWire({ key: 'done', total: 0, cards: [] })] });
+    const { w } = await mountBoard(wire, 1126);
+    expect(w.find('[data-testid="board-card-move-1"]').exists()).toBe(true);
+    expect(w.find('[data-testid="board-card-move-2"]').exists()).toBe(false);
+    expect(w.find('[data-testid="board-card-move-3"]').exists()).toBe(false);
+    // 拖也拖不動
+    const d = await dragTo(w, 2, 'done');
+    expect(w.find('[data-testid="board-ghost"]').exists()).toBe(false);
+    await d.drop();
+    expect(moveCalls()).toHaveLength(0);
+    w.unmount();
+  });
+
+  it('the move-to menu moves a card to a column that is not on screen', async () => {
+    // 九欄、一屏四欄：第 9 欄不在畫面上，拖不到，但「移到…」選得到
+    const cols = nineStatusLikeColumns();
+    (cols[0] as { cards: unknown[]; total: number }).cards = [cardWire({ id: 1, assigneeUserId: 'u1' })];
+    const { w } = await mountBoard(boardWire({ columns: cols }), 1126, null, movedCard({ assigneeUserId: 'u9' }));
+    expect(shownKeys(w)).not.toContain('user:u9');
+    await w.get('[data-testid="board-card-move-1"]').trigger('click');
+    await flushPromises();
+    document.body.querySelector<HTMLElement>('[data-testid="move-item-user:u9"]')!.click();
+    await settle();
+    expect(bodyOf(moveCalls()[0])).toMatchObject({ groupBy: 'assignee', toColumn: 'user:u9' });
+    expect(live(w)).toBe('已移到「同事9」');
+    w.unmount();
+  });
+
+  it('on a phone there is no dragging, only the bottom sheet', async () => {
+    const { w } = await mountBoard(boardWire(), 358, null, movedCard());
+    const d = await dragTo(w, 1, 'todo');
+    expect(w.find('[data-testid="board-ghost"]').exists()).toBe(false);
+    await d.drop();
+    await w.get('[data-testid="board-card-move-1"]').trigger('click');
+    await flushPromises();
+    expect(document.body.querySelector('[data-testid="move-sheet"]')).not.toBeNull();
+    document.body.querySelector<HTMLElement>('[data-testid="move-item-inProgress"]')!.click();
+    await settle();
+    expect(bodyOf(moveCalls()[0])).toMatchObject({ toColumn: 'inProgress' });
     w.unmount();
   });
 });

@@ -1,12 +1,16 @@
 <script setup lang="ts">
 import { computed } from 'vue';
 import { useI18n } from 'vue-i18n';
-import type { BoardCard, BoardGroupBy } from 'src/domain/dynamic/task-board-types';
+import { cardMoveBlock, type BoardCard, type BoardColumn, type BoardGroupBy } from 'src/domain/dynamic/task-board-types';
 import { taskStatusColor } from 'src/domain/dynamic/task-types';
+import MoveToMenu from './MoveToMenu.vue';
 
-/** 看板卡片（設計 §5.9）。依負責人分欄時省略負責人，依狀態分欄時省略狀態；點卡片（標題上的原生按鈕）開任務詳細。 */
-const props = defineProps<{ card: BoardCard; groupBy: BoardGroupBy }>();
-const emit = defineEmits<{ open: [id: number] }>();
+/**
+ * 看板卡片（設計 §5.9）。依負責人分欄時省略負責人，依狀態分欄時省略狀態；點卡片（標題上的原生按鈕）開任務詳細。
+ * 能移動的卡片（沒凍結、有權限）右上角有「移到…」，按下滑鼠或長按觸控可拖；不能動的卡片游標是 not-allowed、沒有「移到…」。
+ */
+const props = defineProps<{ card: BoardCard; groupBy: BoardGroupBy; columns: readonly BoardColumn[]; labelOf: (key: string) => string; phone: boolean; dragging?: boolean }>();
+const emit = defineEmits<{ open: [id: number]; move: [card: BoardCard, columnKey: string]; dragStart: [event: PointerEvent, card: BoardCard] }>();
 const { t } = useI18n();
 
 const assigneeLabel = computed(() => {
@@ -22,13 +26,23 @@ const recordLabel = computed(() => {
   if (r.deleted) return t('tasks.recordDeleted', { title: r.title ?? '' });
   return r.title || t('tasks.recordFallback', { id: r.recordId });
 });
+const movable = computed(() => cardMoveBlock(props.card, props.groupBy) === null);
+function onPointerDown(e: PointerEvent) {
+  // 「移到…」按鈕自己處理，不要被當成拖拉的起點
+  if (!movable.value || (e.target as Element | null)?.closest('.board-card-move')) return;
+  emit('dragStart', e, props.card);
+}
 const closed = computed(() => props.card.status === 'done' || props.card.status === 'cancelled');
 const dueClass = computed(() => (props.card.overdue ? 'text-negative' : props.card.dueToday ? 'text-warning' : ''));
 </script>
 
 <template>
-  <div class="board-card q-pa-sm rounded-borders" :data-testid="`board-card-${card.id}`">
-    <div class="text-body2">
+  <div
+    class="board-card q-pa-sm rounded-borders" :class="{ 'is-locked': !movable, 'is-dragging': dragging }" :data-testid="`board-card-${card.id}`"
+    @pointerdown="onPointerDown"
+  >
+    <MoveToMenu v-if="movable" :card="card" :columns="columns" :group-by="groupBy" :label-of="labelOf" :phone="phone" @move="emit('move', card, $event)" />
+    <div class="text-body2" :class="{ 'board-card-head': movable }">
       <!-- 原生按鈕負責開啟；::after 撐滿整張卡，滑鼠點卡片任何地方都開。之後「移到…」是同層的另一個按鈕，不會巢狀在按鈕裡 -->
       <button type="button" class="board-card-open" :data-testid="`board-card-open-${card.id}`" @click="emit('open', card.id)">
         <span class="board-card-title" :class="{ 'text-strike text-muted': closed }" data-testid="board-card-title">{{ card.title }}</span>
@@ -57,6 +71,8 @@ const dueClass = computed(() => (props.card.overdue ? 'text-negative' : props.ca
 <style scoped>
 .board-card {
   position: relative;
+  user-select: none;
+  -webkit-touch-callout: none;
   border: 1px solid var(--t-border);
   background: var(--t-panel);
 }
@@ -72,6 +88,9 @@ const dueClass = computed(() => (props.card.overdue ? 'text-negative' : props.ca
   text-align: left;
   cursor: pointer;
 }
+.board-card.is-locked, .board-card.is-locked .board-card-open { cursor: not-allowed; }
+.board-card.is-dragging { opacity: 0.45; }
+.board-card-head { padding-right: 28px; }
 .board-card-open:focus-visible { outline: none; }
 .board-card-open::after { content: ''; position: absolute; inset: 0; }
 .board-card-title {

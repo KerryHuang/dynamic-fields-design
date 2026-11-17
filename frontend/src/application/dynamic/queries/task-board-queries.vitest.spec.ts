@@ -6,9 +6,9 @@ import type { BoardColumnPage, BoardSource, TaskBoardData } from 'src/domain/dyn
 import { boardWire, cardWire, columnWire } from 'src/presentation/tasks/board/board-fixtures';
 import { dynamicApi } from 'src/services/api/dynamic-api';
 import { normalizeBoard, normalizeBoardPage } from 'src/services/api/task-normalize';
-import { boardKey, useLoadMoreColumn } from './task-board-queries';
+import { boardKey, useLoadMoreColumn, useMoveTask } from './task-board-queries';
 
-vi.mock('src/services/api/dynamic-api', () => ({ dynamicApi: { getBoardColumnPage: vi.fn() } }));
+vi.mock('src/services/api/dynamic-api', () => ({ dynamicApi: { getBoardColumnPage: vi.fn(), moveTask: vi.fn() } }));
 const api = vi.mocked(dynamicApi);
 
 const board = (cardId: number) => normalizeBoard(boardWire({ columns: [columnWire({ key: 'todo', total: 60, hasMore: true, cards: [cardWire({ id: cardId })] })] }) as never);
@@ -34,5 +34,62 @@ describe('useLoadMoreColumn', () => {
 
     expect(ids(qc, { viewId: 1 })).toEqual([1, 99]);
     expect(ids(qc, { viewId: 2 })).toEqual([2]);
+  });
+});
+
+describe('useMoveTask', () => {
+  const twoColumns = (cardId: number) => normalizeBoard(boardWire({ columns: [
+    columnWire({ key: 'todo', total: 1, cards: [cardWire({ id: cardId })] }), columnWire({ key: 'done', total: 0, cards: [] }),
+  ] }) as never);
+  const column = (qc: QueryClient, source: BoardSource, key: string) => qc.getQueryData<TaskBoardData>(boardKey(source))!.columns.find((c) => c.key === key)!;
+
+  function mountMove(qc: QueryClient, source: { value: BoardSource }) {
+    let move!: ReturnType<typeof useMoveTask>;
+    mount(defineComponent({ setup() { move = useMoveTask(() => source.value); return () => null; } }), { global: { plugins: [[VueQueryPlugin, { queryClient: qc }]] } });
+    return () => move;
+  }
+  const vars = (qc: QueryClient, source: BoardSource) => ({ card: column(qc, source, 'todo').cards[0], groupBy: 'status' as const, toColumn: 'done' });
+
+  it('moves the card in the cache before the server answers and keeps the server card afterwards', async () => {
+    const qc = new QueryClient();
+    qc.setQueryData(boardKey({ viewId: 1 }), twoColumns(1));
+    const move = mountMove(qc, ref<BoardSource>({ viewId: 1 }));
+    let answer!: (r: unknown) => void;
+    api.moveTask.mockReturnValue(new Promise((r) => { answer = r; }) as never);
+    const done = move().mutateAsync(vars(qc, { viewId: 1 }));
+    await flushPromises();
+    expect(column(qc, { viewId: 1 }, 'done').cards.map((c) => c.id)).toEqual([1]);
+    expect(column(qc, { viewId: 1 }, 'todo').total).toBe(0);
+    expect(api.moveTask).toHaveBeenCalledWith(1, { groupBy: 'status', toColumn: 'done', expectedVersion: '20261101020000000' });
+    answer({ visible: true, card: { ...cardWire({ id: 1, status: 'done', version: 'v2' }), assigneeActive: true, record: null }, undoToken: null });
+    await done;
+    expect(column(qc, { viewId: 1 }, 'done').cards[0].version).toBe('v2');
+  });
+
+  it('puts the card back into the board it was moved on when the request fails after the board was switched', async () => {
+    const qc = new QueryClient();
+    qc.setQueryData(boardKey({ viewId: 1 }), twoColumns(1));
+    qc.setQueryData(boardKey({ viewId: 2 }), twoColumns(2));
+    const source = ref<BoardSource>({ viewId: 1 });
+    const move = mountMove(qc, source);
+    let fail!: (e: unknown) => void;
+    api.moveTask.mockReturnValue(new Promise((_, r) => { fail = r; }) as never);
+    const done = move().mutateAsync(vars(qc, { viewId: 1 })).catch((e) => e);
+    await flushPromises();
+    source.value = { viewId: 2 };
+    fail({ status: 400 });
+    await done;
+    expect(column(qc, { viewId: 1 }, 'todo').cards.map((c) => c.id)).toEqual([1]);
+    expect(column(qc, { viewId: 2 }, 'todo').cards.map((c) => c.id)).toEqual([2]);
+    expect(column(qc, { viewId: 2 }, 'done').cards).toHaveLength(0);
+  });
+
+  it('drops the card from the board when the server says it is no longer visible', async () => {
+    const qc = new QueryClient();
+    qc.setQueryData(boardKey({ viewId: 1 }), twoColumns(1));
+    const move = mountMove(qc, ref<BoardSource>({ viewId: 1 }));
+    api.moveTask.mockResolvedValue({ visible: false, card: null, undoToken: 'tok' });
+    await move().mutateAsync(vars(qc, { viewId: 1 }));
+    expect(qc.getQueryData<TaskBoardData>(boardKey({ viewId: 1 }))!.columns.flatMap((c) => c.cards)).toHaveLength(0);
   });
 });
