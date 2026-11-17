@@ -36,7 +36,7 @@ watch(() => props.open, (o) => { if (o) { ticked.value = [...props.selected]; su
         <q-linear-progress v-else-if="departments.isLoading.value" indeterminate />
         <div v-else-if="!nodes.length" class="text-muted" data-testid="dept-filter-empty">{{ t('reports.filter.noDepartments') }}</div>
         <q-tree
-          v-else v-model:ticked="ticked" :nodes="nodes" node-key="id" tick-strategy="none" default-expand-all no-nodes-label=""
+          v-else v-model:ticked="ticked" :nodes="nodes" node-key="id" tick-strategy="strict" default-expand-all no-nodes-label=""
           data-testid="dept-filter-tree"
         />
       </q-card-section>

@@ -79,6 +79,8 @@ describe('ReportFilterBar', () => {
     expect(tree).toContain('總部');
     expect(tree).toContain('業務部（已停用）');
     expect(tree).toContain('業務一課');
+    // tick-strategy 不是 strict 時 q-tree 不畫勾選框（單元測試直接 emit 事件抓不到），每個節點都要有自己的勾選框
+    expect(q('dept-filter-tree')!.querySelectorAll('.q-checkbox')).toHaveLength(3);
     const treeComp = mounted!.findComponent(quasar.QTree);
     treeComp.vm.$emit('update:ticked', [2]);
     await flushPromises();
