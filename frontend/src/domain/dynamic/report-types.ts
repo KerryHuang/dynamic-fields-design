@@ -17,6 +17,9 @@ export interface ReportColumn { key: string; label: string; role: 'group' | 'mea
 export interface ReportGroupResult { groupKeys: string[]; groupLabels: string[]; values: Record<string, number | null> }
 export interface ReportAppliedRange { from: string; to: string; kind: string; n?: number | null }
 export interface ReportDateRange { kind: string; n?: number | null }
+/** 「近 N 天／週／月」的 N：上限與後端 ReportDateRange.MaxN 相同，預設值是各處選到 last* 時的起始 N。 */
+export const REPORT_RANGE_MAX_N = 3650;
+export const REPORT_RANGE_DEFAULT_N = 30;
 
 export interface ReportResult {
   state: ReportState;

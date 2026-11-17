@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue';
 import { useI18n } from 'vue-i18n';
-import type { ModuleCatalog, ReportFieldRef } from 'src/domain/dynamic/report-types';
+import { REPORT_RANGE_DEFAULT_N, type ModuleCatalog, type ReportFieldRef } from 'src/domain/dynamic/report-types';
 import { listFields, refKey } from '../report-catalog';
 import { LAST_RANGE_KINDS, needsN, REPORT_RANGE_KINDS, operatorsOf, setPrimaryDate, type DesignerState, type Unavailable } from './designer-state';
 import FilterRow from './FilterRow.vue';
@@ -26,7 +26,7 @@ function pickPrimary(key: string | null) {
 }
 const rangeOptions = computed(() => [{ value: '', label: t('reports.designer.none') }, ...REPORT_RANGE_KINDS.map((k) => ({ value: k, label: t(`reports.designer.range.${k}`) }))]);
 function pickRange(kind: string) {
-  s.dateRange = kind ? { kind, n: LAST_RANGE_KINDS.includes(kind) ? (s.dateRange?.n ?? 30) : null } : null;
+  s.dateRange = kind ? { kind, n: LAST_RANGE_KINDS.includes(kind) ? (s.dateRange?.n ?? REPORT_RANGE_DEFAULT_N) : null } : null;
 }
 </script>
 

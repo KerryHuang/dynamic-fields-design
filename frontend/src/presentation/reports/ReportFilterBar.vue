@@ -1,7 +1,7 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue';
+import { computed, onBeforeUnmount, ref, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
-import { NO_RUN_FILTER, type ReportRunFilter } from 'src/domain/dynamic/report-types';
+import { NO_RUN_FILTER, REPORT_RANGE_DEFAULT_N, REPORT_RANGE_MAX_N, type ReportRunFilter } from 'src/domain/dynamic/report-types';
 import { needsN, REPORT_RANGE_KINDS } from './designer/designer-state';
 import DepartmentTickDialog from './DepartmentTickDialog.vue';
 
@@ -18,16 +18,32 @@ const rangeOptions = computed(() => [
   { value: '', label: t('reports.filter.periodDefault') },
   ...REPORT_RANGE_KINDS.map((k) => ({ value: k, label: t(`reports.designer.range.${k}`) })),
 ]);
-const DEFAULT_N = 30;
 function pickRange(k: string) {
-  emit('update:modelValue', { ...props.modelValue, range: k ? { kind: k, n: needsN({ kind: k }) ? (props.modelValue.range?.n ?? DEFAULT_N) : null } : null });
+  emit('update:modelValue', { ...props.modelValue, range: k ? { kind: k, n: needsN({ kind: k }) ? (props.modelValue.range?.n ?? REPORT_RANGE_DEFAULT_N) : null } : null });
 }
-// N 不是正整數時不套用，維持上一個有效的區間
-function setN(v: string | number | null) {
-  const n = Number(v);
-  if (!props.modelValue.range || !Number.isInteger(n) || n < 1) return;
-  emit('update:modelValue', { ...props.modelValue, range: { ...props.modelValue.range, n } });
+// N 打字時只改輸入框，停 500ms 或離開輸入框、按 Enter 才套用（避免每個按鍵都重跑報表）；
+// 超出 1 到上限的整數直接夾進範圍，空白或不是整數就還原成目前有效的 N
+const N_DEBOUNCE_MS = 500;
+const nDraft = ref<string | number>(props.modelValue.range?.n ?? '');
+watch(() => props.modelValue.range?.n, (n) => { nDraft.value = n ?? ''; });
+let nTimer: ReturnType<typeof setTimeout> | undefined;
+const clearNTimer = () => { if (nTimer !== undefined) { clearTimeout(nTimer); nTimer = undefined; } };
+function commitN() {
+  clearNTimer();
+  const range = props.modelValue.range;
+  if (!range) return;
+  const raw = Number(nDraft.value);
+  if (nDraft.value === '' || !Number.isInteger(raw)) { nDraft.value = range.n ?? ''; return; }
+  const n = Math.min(REPORT_RANGE_MAX_N, Math.max(1, raw));
+  nDraft.value = n;
+  if (n !== range.n) emit('update:modelValue', { ...props.modelValue, range: { ...range, n } });
 }
+function typeN(v: string | number | null) {
+  nDraft.value = v ?? '';
+  clearNTimer();
+  nTimer = setTimeout(commitN, N_DEBOUNCE_MS);
+}
+onBeforeUnmount(clearNTimer);
 
 const deptOpen = ref(false);
 const count = computed(() => props.modelValue.departmentIds.length);
@@ -50,8 +66,8 @@ const clearAll = () => emit('update:modelValue', { ...NO_RUN_FILTER });
     </div>
     <div v-if="modelValue.range && needsN(modelValue.range)" class="col-6 col-sm-3 col-md-2">
       <q-input
-        dense outlined type="number" min="1" :label="t('reports.designer.rangeN')" :model-value="modelValue.range.n ?? ''"
-        data-testid="filter-range-n" @update:model-value="setN"
+        dense outlined type="number" min="1" :max="REPORT_RANGE_MAX_N" :label="t('reports.designer.rangeN')" :model-value="nDraft"
+        data-testid="filter-range-n" @update:model-value="typeN" @blur="commitN" @keyup.enter="commitN"
       />
     </div>
     <div v-if="showDepartment" class="col-12 col-sm-auto">

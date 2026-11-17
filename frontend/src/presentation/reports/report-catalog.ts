@@ -38,8 +38,12 @@ export function findEntry(entries: FieldEntry[], ref: ReportFieldRef | null | un
 }
 
 /** 選項 id 換成標籤；停用的選項加上標記。目錄裡找不到的值維持原樣。 */
-export function valueText(value: unknown, field: CatalogField | undefined, inactiveMark: string): string {
+export function valueText(value: unknown, field: CatalogField | undefined, inactiveMark: string, boolText?: { yes: string; no: string }): string {
   if (value === undefined || value === null) return '';
+  // 是否欄位的條件值是 true／false，摘要顯示「是／否」而不是原始值
+  if (boolText && field?.type === 'boolean' && (typeof value === 'boolean' || value === 'true' || value === 'false')) {
+    return value === true || value === 'true' ? boolText.yes : boolText.no;
+  }
   const one = (v: unknown) => {
     const o = field?.options?.find((x) => x.id === v);
     return o ? (o.active ? o.label : `${o.label}${inactiveMark}`) : typeof v === 'string' ? v : JSON.stringify(v);

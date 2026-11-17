@@ -43,6 +43,7 @@ const RESULT: ReportResult = {
 const OPT = (id: string, label: string, active = true) => ({ id, label, active });
 const CATALOG: ModuleCatalog = {
   fields: [
+    { id: 9, label: '是否逾期', type: 'boolean', canGroup: true, canSum: false, canMinMax: false, isDate: false, options: null },
     { id: 5, label: '狀態', type: 'enum', canGroup: true, canSum: false, canMinMax: false, isDate: false, options: [OPT('opt_1', '進行中'), OPT('opt_2', '舊狀態', false)] },
   ],
   via: [{ fieldId: 6, label: '客戶', targetKey: 'e', fields: [{ id: 0, label: '標題', type: 'text', canGroup: true, canSum: false, canMinMax: false, isDate: false, options: null }] }],
@@ -194,6 +195,8 @@ describe('ReportViewPage', () => {
       { field: { source: 'main', fieldId: 0, viaFieldId: 6 }, op: 'eq', value: 'ACME' },
       { field: { source: 'main', fieldId: 99 }, op: 'eq', value: 'x' },
       { field: { source: 'main', fieldId: 4 }, op: 'eq', hidden: true },
+      { field: { source: 'main', fieldId: 9 }, op: 'eq', value: true },
+      { field: { source: 'main', fieldId: 9 }, op: 'eq', value: false },
     ] };
     await mountPage({ ...DETAIL(true), definition: def });
     expect(api.getReportCatalog).toHaveBeenCalledWith('orders', 'zh-TW');
@@ -204,6 +207,8 @@ describe('ReportViewPage', () => {
     expect(texts[1]).toBe('客戶．標題 等於 ACME');
     expect(texts[2]).toBe('欄位 #99 等於 x');
     expect(q('condition-hidden')!.textContent!.trim()).toBe('隱藏條件');
+    expect(texts[3]).toBe('是否逾期 等於 是');
+    expect(texts[4]).toBe('是否逾期 等於 否');
   });
 
   describe('暫時篩選與任務下鑽', () => {

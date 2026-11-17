@@ -31,7 +31,7 @@ watch(() => props.open, (o) => { if (o) { ticked.value = [...props.selected]; su
   <q-dialog :model-value="open" :maximized="$q.screen.lt.sm" @update:model-value="emit('close')">
     <q-card :style="$q.screen.lt.sm ? undefined : 'width: 420px; max-width: 95vw'" class="column no-wrap" data-testid="dept-filter-dialog">
       <q-card-section class="text-h6">{{ t('reports.filter.departmentTitle') }}</q-card-section>
-      <q-card-section class="col scroll" style="min-height: 120px; max-height: 60vh">
+      <q-card-section class="col scroll" :style="$q.screen.lt.sm ? 'min-height: 120px' : 'min-height: 120px; max-height: 60vh'">
         <div v-if="departments.isError.value" class="text-negative" data-testid="dept-filter-error">{{ t('reports.loadFailed') }}</div>
         <q-linear-progress v-else-if="departments.isLoading.value" indeterminate />
         <div v-else-if="!nodes.length" class="text-muted" data-testid="dept-filter-empty">{{ t('reports.filter.noDepartments') }}</div>

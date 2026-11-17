@@ -57,7 +57,8 @@ public partial class ReportRunner
         // MemoryOnly 是對照用的純記憶體路徑，不縮小（同模組來源，審查 G3）
         var narrowing = options.Engine == ReportEngineMode.MemoryOnly ? new TaskReportNarrowing(null, null, null, null) : Narrowing(d, resolved);
         var (items, overLimit) = await taskReports.LoadAsync(narrowing, options.MaxLoadRows + 1, ct);
-        if (overLimit) return Fail(TooManyState, ReportText.Get(locale, ReportText.TooMany));
+        // 部門篩選在這道上限判斷之後才套用（記憶體過濾），所以選部門救不了載入量，訊息提示改縮小期間（kr2 審查）
+        if (overLimit) return Fail(TooManyState, ReportText.Get(locale, ReportText.TooManyTasks));
 
         // 部門暫時篩選（§8.2）：只算負責人目前部門在所選範圍內的任務，未指派的排除；作用在列，總計、下鑽、匯出跟著列走
         var departmentScope = o.DepartmentIds is { Count: > 0 } selected

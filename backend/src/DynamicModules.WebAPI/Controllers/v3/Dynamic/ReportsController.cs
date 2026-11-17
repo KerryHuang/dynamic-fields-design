@@ -115,6 +115,8 @@ public class ReportsController(IMediator mediator) : ControllerBase
     public async Task<IActionResult> Export(long id, [FromQuery] string locale = "zh-TW", [FromQuery] string? rangeKind = null,
         [FromQuery] int? rangeN = null, [FromQuery] List<long>? departmentIds = null, [FromQuery] bool includeSubDepartments = true)
     {
+        // 只給 rangeN 不給 rangeKind 是呼叫端的錯，明確回 400，不靜默忽略
+        if (rangeKind is null && rangeN is not null) return Bad("rangeKind", "指定 rangeN 時必須同時指定 rangeKind");
         var range = rangeKind is null ? null : new ReportDateRange(rangeKind, rangeN);
         var result = await mediator.Send(new ExportReportRequest(id, locale, range, departmentIds, includeSubDepartments));
         return result.IsSuccess && result.Data is ExportFile file

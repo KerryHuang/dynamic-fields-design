@@ -2,7 +2,7 @@
 import { computed, ref, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { DEFAULT_CARD_OPTIONS, type CardOptions, type DashboardCard } from 'src/domain/dynamic/dashboard-types';
-import type { ReportColumn, ReportViz } from 'src/domain/dynamic/report-types';
+import { REPORT_RANGE_DEFAULT_N, type ReportColumn, type ReportViz } from 'src/domain/dynamic/report-types';
 
 /**
  * 卡片設定：標題、呈現方式與 spec §4 的卡片選項。排序依據只能選這張卡片目前查得到的欄（columns），
@@ -35,7 +35,7 @@ watch(() => props.card, (c) => {
   title.value = c.title ?? '';
   viz.value = c.viz;
   rangeKind.value = c.options.range?.kind ?? null;
-  rangeN.value = c.options.range?.n ?? 30;
+  rangeN.value = c.options.range?.n ?? REPORT_RANGE_DEFAULT_N;
   topN.value = c.options.topN ?? null;
   sortKey.value = c.options.sortKey ?? null;
   sortDesc.value = c.options.sortDesc;
