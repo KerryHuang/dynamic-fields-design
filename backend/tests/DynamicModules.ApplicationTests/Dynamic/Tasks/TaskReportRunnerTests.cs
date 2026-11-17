@@ -2,6 +2,7 @@ using System.Text.Encodings.Web;
 using ClosedXML.Excel;
 using System.Text.Json;
 using System.Text.Unicode;
+using DynamicModules.Application.Common.Time;
 using DynamicModules.Application.Dynamic.PermissionService.Commands.SaveModulePermissions;
 using DynamicModules.Application.Dynamic.PermissionService.Data;
 using DynamicModules.Application.Dynamic.ReportService;
@@ -31,6 +32,16 @@ namespace DynamicModules.ApplicationTests.Dynamic.Tasks;
 public class TaskReportRunnerTests : TaskTestBase
 {
     protected override bool ScopePerRequest => true;
+
+    private sealed class Clock : IBusinessTime
+    {
+        public DateTime Now { get; set; } = new(2026, 11, 4, 9, 0, 0);
+        public DateOnly Today => DateOnly.FromDateTime(Now);
+    }
+
+    private readonly Clock _clock = new();
+
+    protected override void ConfigureServices(IServiceCollection services) => services.AddSingleton<IBusinessTime>(_clock);
 
     private static readonly DateOnly Nov4 = new(2026, 11, 4);
 
@@ -473,8 +484,10 @@ public class TaskReportRunnerTests : TaskTestBase
     public async Task TaskEvents_ReopenedKeepsLastCompletionOnly()
     {
         var task = await SeedTask("完成又重開", assignee: "admin");
+        var days = 0;
         foreach (var status in new[] { "done", "todo", "done" })
         {
+            _clock.Now = new DateTime(2026, 11, 4, 9, 0, 0).AddDays(days++);
             var r = await Send(new UpdateTaskRequest(task.Id, JsonSerializer.SerializeToElement(new { status })));
             r.IsSuccess.Should().BeTrue(r.Message);
         }
@@ -484,6 +497,10 @@ public class TaskReportRunnerTests : TaskTestBase
 
         result.Total!["n"].Should().Be(2, "一列建立、一列（最後一次）完成");
         result.Total["done"].Should().Be(1);
+
+        var detail = await Run(EventDef([M("n", "countMain")]) with { Columns = [T(F.EventKind), T(F.EventDate)] });
+        detail.DetailRows!.Where(row => (string)row[0]! == "完成").Select(row => (string)row[1]!).Should()
+            .ContainSingle().Which.Should().Be("2026-11-06 09:00", "留下的是最後一次完成的時間，不是第一次的 11-04");
     }
 
     [Fact]

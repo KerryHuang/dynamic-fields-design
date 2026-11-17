@@ -3,7 +3,11 @@ using System.Net.Http.Json;
 using System.Text;
 using System.Text.Json;
 using ClosedXML.Excel;
+using DynamicModules.Domain.Data;
+using DynamicModules.Domain.Entities.Dynamic;
+using DynamicModules.Domain.ValueObjects;
 using FluentAssertions;
+using Microsoft.Extensions.DependencyInjection;
 using static DynamicModules.WebAPITests.Dynamic.ApiTestKit;
 
 namespace DynamicModules.WebAPITests.Dynamic;
@@ -85,6 +89,17 @@ public class TaskReportsApiTests : IDisposable
         var module = await CreateModule(admin);
         await Activate(admin, module);
         var title = await TitleKey(admin, module);
+        var moduleId = (await JsonOf(await admin.GetAsync($"{Base}/modules/{module}"))).GetProperty("id").GetInt64();
+        using (var scope = _app.Services.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<DynamicDbContext>();
+            db.Set<TaskRule>().Add(new TaskRule
+            {
+                Key = "api-secret-rule", NameI18n = new([KeyValuePair.Create("zh-TW", "機密規則")]), ModuleId = moduleId,
+                CreatedUserId = "admin", CreatedTime = DateTime.UtcNow
+            });
+            await db.SaveChangesAsync();
+        }
         var record = await JsonOf(await admin.PostAsJsonAsync($"{Base}/modules/{module}/records",
             new { values = new Dictionary<string, object> { [title] = "機密案件" } }));
         var recordId = record.GetProperty("id").GetInt64();
@@ -94,6 +109,15 @@ public class TaskReportsApiTests : IDisposable
         (await sales.PatchAsync($"{Base}/tasks/{done}", new StringContent("""{"status":"done"}""", Encoding.UTF8, "application/json")))
             .StatusCode.Should().Be(HttpStatusCode.OK);
         await CreateTask(admin, $"{Base}/tasks", new { title = "別人的", assigneeUserId = "sales02" });
+
+        // 目錄選項依觀看者（J14）：業務一沒有該模組的讀取權，看不到模組與其規則；管理員看得到（對照）
+        static string Catalog(JsonElement c) => c.GetRawText();
+        var salesCatalog = await JsonOf(await sales.GetAsync($"{Reports}/datasets/tasks/catalog"));
+        Catalog(salesCatalog).Should().NotContain("測試模組").And.NotContain("機密規則");
+        var salesEvents = await JsonOf(await sales.GetAsync($"{Reports}/datasets/taskEvents/catalog"));
+        Catalog(salesEvents).Should().NotContain("測試模組").And.NotContain("機密規則");
+        var adminCatalog = await JsonOf(await admin.GetAsync($"{Reports}/datasets/tasks/catalog"));
+        Catalog(adminCatalog).Should().Contain("測試模組").And.Contain("機密規則");
 
         var id = await CreateReport(sales, WorkloadDef());
         var run = await Post(sales, $"{Reports}/{id}/run", new { });
@@ -113,7 +137,9 @@ public class TaskReportsApiTests : IDisposable
         var hiddenRow = rows[taskIds.IndexOf(hidden)];
         hiddenRow[0].GetString().Should().Be("看不到記錄的任務");
         hiddenRow[5].GetString().Should().Be("（無權限）");
-        drill.GetRawText().Should().NotContain(module).And.NotContain("機密案件");
+        // 畫面顯示的是模組名稱（不是代號），所以兩個都要比；對照斷言確認序列化不跳脫中文，NotContain 才有意義
+        drill.GetRawText().Should().Contain("看不到記錄的任務")
+            .And.NotContain(module).And.NotContain("測試模組").And.NotContain("機密案件").And.NotContain("機密規則");
 
         var export = await sales.GetAsync($"{Reports}/{id}/export");
         export.StatusCode.Should().Be(HttpStatusCode.OK);
@@ -128,7 +154,8 @@ public class TaskReportsApiTests : IDisposable
         rec.GetProperty("accessible").GetBoolean().Should().BeFalse();
         (rec.TryGetProperty("moduleKey", out var mk) ? mk.ValueKind : JsonValueKind.Null).Should().Be(JsonValueKind.Null);
         (rec.TryGetProperty("recordId", out var rid) ? rid.ValueKind : JsonValueKind.Null).Should().Be(JsonValueKind.Null);
-        body.GetRawText().Should().NotContain(module).And.NotContain("機密案件");
+        body.GetRawText().Should().Contain("看不到記錄的任務")
+            .And.NotContain(module).And.NotContain("測試模組").And.NotContain("機密案件");
         (await _app.AsUser("sales02").GetAsync($"{Base}/tasks/{hidden}")).StatusCode.Should().Be(HttpStatusCode.NotFound);
         foreach (var t in taskIds) (await sales.GetAsync($"{Base}/tasks/{t}")).StatusCode.Should().Be(HttpStatusCode.OK);
     }
