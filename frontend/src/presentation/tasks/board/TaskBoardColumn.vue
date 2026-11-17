@@ -14,10 +14,10 @@ const showTruncated = computed(() => props.column.truncated && !props.column.has
 </script>
 
 <template>
-  <section class="board-column column no-wrap rounded-borders" :data-board-column="column.key" :data-testid="`board-column-${column.key}`" :aria-label="label">
+  <div class="board-column column no-wrap rounded-borders" role="group" :data-board-column="column.key" :data-testid="`board-column-${column.key}`" :aria-label="label">
     <header class="row items-center no-wrap q-pa-sm">
       <div class="text-subtitle2 ellipsis col" data-testid="board-column-label">{{ label }}</div>
-      <q-badge color="primary" rounded :label="column.total" :aria-label="String(column.total)" data-testid="board-column-total" />
+      <q-badge color="primary" rounded :label="column.total" :aria-label="t('taskBoard.column.total', { n: column.total })" data-testid="board-column-total" />
     </header>
     <div class="board-cards q-px-sm q-pb-sm">
       <div v-if="!column.cards.length" class="text-caption text-muted q-pa-sm" data-testid="board-column-empty">{{ t('taskBoard.emptyColumn') }}</div>
@@ -28,7 +28,7 @@ const showTruncated = computed(() => props.column.truncated && !props.column.has
       />
       <div v-if="showTruncated" class="text-caption text-muted" data-testid="board-truncated">{{ t('taskBoard.truncated', { n: hiddenCount }) }}</div>
     </div>
-  </section>
+  </div>
 </template>
 
 <style scoped>

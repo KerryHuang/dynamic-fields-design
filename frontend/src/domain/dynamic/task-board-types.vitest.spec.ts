@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { columnsPerScreen, groupByOf, moveTargets, visibleRange, type BoardCard, type BoardColumn } from './task-board-types';
+import zhTW from 'src/i18n/zh-TW.json';
+import { BOARD_COLUMN_GAP, BOARD_MIN_COLUMN_WIDTH, columnsPerScreen, groupByOf, gridTrackCount, moveBlockKey, moveTargets, visibleRange, type BoardCard, type BoardColumn } from './task-board-types';
 
 const card = (o: Partial<BoardCard> = {}): BoardCard => ({
   id: 1, title: 'T', status: 'todo', assigneeUserId: 'sales01', assigneeName: '業務一', assigneeActive: true, dueDate: null, overdue: false,
@@ -7,24 +8,26 @@ const card = (o: Partial<BoardCard> = {}): BoardCard => ({
 });
 const column = (o: Partial<BoardColumn> = {}): BoardColumn => ({
   key: 'todo', kind: 'status', userId: null, name: null, inactive: false, total: 0, cards: [], hasMore: false, truncated: false,
-  droppable: true, dropReason: null, ...o,
+  droppable: true, ...o,
 });
 
 describe('task-board-types', () => {
   it('columnsPerScreen gives 1 on phone and fits four status columns at 1366', () => {
     expect(columnsPerScreen(390 - 32)).toBe(1);
     expect(columnsPerScreen(0)).toBe(1);
-    expect(columnsPerScreen(820 - 32)).toBe(2);
+    // 820 寬的平板：內容寬 788，放得下三欄狀態欄
+    expect(columnsPerScreen(820 - 32)).toBe(3);
     // 1366 寬：扣掉最寬的側欄 208 與頁面左右 padding 32
     expect(columnsPerScreen(1366 - 208 - 32)).toBe(4);
     expect(columnsPerScreen(1920 - 208 - 32)).toBeGreaterThanOrEqual(4);
   });
 
   it('every perScreen it returns fits its columns inside the width', () => {
-    for (const w of [1, 259, 260, 271, 272, 358, 788, 1126, 1680]) {
+    for (const w of [1, 239, 240, 251, 252, 358, 788, 1126, 1680]) {
       const n = columnsPerScreen(w);
-      expect(n * 260 + (n - 1) * 12 <= Math.max(w, 260)).toBe(true);
+      expect(n * BOARD_MIN_COLUMN_WIDTH + (n - 1) * BOARD_COLUMN_GAP <= Math.max(w, BOARD_MIN_COLUMN_WIDTH)).toBe(true);
     }
+    expect(BOARD_MIN_COLUMN_WIDTH).toBe(240);
   });
 
   it('visibleRange clamps at the end', () => {
@@ -47,18 +50,49 @@ describe('task-board-types', () => {
 
   it('moveTargets marks overdue and thisWeek-on-weekend as not droppable with a reason', () => {
     const columns = [
-      column({ key: 'overdue', kind: 'dueBucket', droppable: false, dropReason: '不能放進逾期' }),
+      column({ key: 'overdue', kind: 'dueBucket', droppable: false }),
       column({ key: 'today', kind: 'dueBucket', cards: [card({ id: 1 })] }),
-      column({ key: 'thisWeek', kind: 'dueBucket', droppable: false, dropReason: '今天已是本週最後一天' }),
+      column({ key: 'thisWeek', kind: 'dueBucket', droppable: false }),
       column({ key: 'later', kind: 'dueBucket' }),
     ];
     const targets = moveTargets(card({ id: 1 }), columns, 'dueBucket');
     expect(targets.map((t) => [t.key, t.droppable, t.current])).toEqual([
       ['overdue', false, false], ['today', true, true], ['thisWeek', false, false], ['later', true, false],
     ]);
-    expect(targets[0].reason).toEqual({ kind: 'column', text: '不能放進逾期' });
-    expect(targets[2].reason).toEqual({ kind: 'column', text: '今天已是本週最後一天' });
+    expect(targets[0].reason).toEqual({ kind: 'column', reason: 'overdue' });
+    expect(targets[2].reason).toEqual({ kind: 'column', reason: 'thisWeekEmpty' });
     expect(targets[3].reason).toBeNull();
+  });
+
+  it('moveTargets derives the reason from the column, never from server text; an inactive assignee column says so', () => {
+    const columns = [
+      column({ key: 'user:old01', kind: 'user', inactive: true, droppable: false }),
+      column({ key: 'later', kind: 'dueBucket', droppable: false }),
+    ];
+    const targets = moveTargets(card(), columns, 'assignee');
+    expect(targets[0].reason).toEqual({ kind: 'column', reason: 'inactiveAssignee' });
+    expect(targets[1].reason).toEqual({ kind: 'column', reason: 'unavailable' });
+  });
+
+  it('every move block has a message in all four locales (taskBoard.drop.*)', async () => {
+    const blocks = [
+      { kind: 'column', reason: 'overdue' }, { kind: 'column', reason: 'thisWeekEmpty' }, { kind: 'column', reason: 'inactiveAssignee' },
+      { kind: 'column', reason: 'unavailable' }, { kind: 'noPermission' }, { kind: 'frozen' },
+    ] as const;
+    const locales = [zhTW, (await import('src/i18n/en-US.json')).default, (await import('src/i18n/th.json')).default, (await import('src/i18n/vi.json')).default];
+    for (const b of blocks) {
+      for (const m of locales) {
+        const text = moveBlockKey(b).split('.').reduce<unknown>((o, k) => (o as Record<string, unknown>)?.[k], m);
+        expect(typeof text, moveBlockKey(b)).toBe('string');
+      }
+    }
+  });
+
+  it('gridTrackCount fills the width when every column fits and keeps the fixed count when it has to page', () => {
+    expect(gridTrackCount(3, 4)).toBe(3);
+    expect(gridTrackCount(3, 3)).toBe(3);
+    expect(gridTrackCount(9, 4)).toBe(4);
+    expect(gridTrackCount(1, 1)).toBe(1);
   });
 
   it('moveTargets blocks every column for a frozen card or a missing right, depending on the grouping', () => {

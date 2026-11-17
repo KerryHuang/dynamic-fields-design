@@ -26,7 +26,7 @@ export const assigneeBoardWire = () => boardWire({
   columns: [
     columnWire({ key: 'unassigned', kind: 'unassigned', total: 0, cards: [] }),
     columnWire({ key: 'user:sales01', kind: 'user', userId: 'sales01', name: '業務一', inactive: false, total: 1, cards: [cardWire({ id: 1 })] }),
-    columnWire({ key: 'user:old01', kind: 'user', userId: 'old01', name: '老王', inactive: true, total: 0, cards: [], droppable: false, dropReason: '這位負責人已停用，不能指派' }),
+    columnWire({ key: 'user:old01', kind: 'user', userId: 'old01', name: '老王', inactive: true, total: 0, cards: [], droppable: false }),
   ],
 });
 
@@ -34,7 +34,7 @@ export const assigneeBoardWire = () => boardWire({
 export const dueBoardWire = () => boardWire({
   columns: ['overdue', 'today', 'thisWeek', 'later', 'none'].map((key) => columnWire({
     key, kind: 'dueBucket', total: 0, cards: [],
-    ...(key === 'overdue' ? { droppable: false, dropReason: '到期日已過，不能放進逾期' } : {}),
+    ...(key === 'overdue' ? { droppable: false } : {}),
   })),
 });
 

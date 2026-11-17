@@ -32,8 +32,8 @@ const goto = (page: number) => emit('update:start', visibleRange(page, props.per
     <div v-if="chips" class="row q-gutter-xs" role="group" :aria-label="t('taskBoard.pager.chips')" data-testid="board-chips">
       <q-chip
         v-for="(c, i) in columns" :key="c.key" clickable dense :outline="i !== range.start" color="primary" :text-color="i === range.start ? 'white' : 'primary'"
-        :aria-pressed="i === range.start" :data-testid="`board-chip-${c.key}`" @click="emit('update:start', i)"
-      >{{ c.label }} ({{ c.total }})</q-chip>
+        :aria-pressed="i === range.start" :title="`${c.label} (${c.total})`" style="max-width: 100%" :data-testid="`board-chip-${c.key}`" @click="emit('update:start', i)"
+      ><span class="ellipsis" style="min-width: 0">{{ c.label }} ({{ c.total }})</span></q-chip>
     </div>
     <template v-else>
       <q-btn

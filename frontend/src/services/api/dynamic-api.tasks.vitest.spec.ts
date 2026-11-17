@@ -116,7 +116,7 @@ describe('dynamicApi tasks', () => {
     const seen = stub({
       today: '2026-11-17', weekEnd: '2026-11-22', laterDefault: '2026-11-29', columns: [
         { key: 'todo', kind: 'status', total: 1, cards: [{ id: 3, title: 'A', status: 'todo', record: { accessible: false, deleted: false } }], hasMore: false, truncated: false, droppable: true },
-        { key: 'user:sales01', kind: 'user', userId: 'sales01', total: 0, inactive: true, droppable: false, dropReason: '已停用' },
+        { key: 'user:sales01', kind: 'user', userId: 'sales01', total: 0, inactive: true, droppable: false },
       ],
     });
     const board = await dynamicApi.getBoardColumns({});
@@ -125,7 +125,7 @@ describe('dynamicApi tasks', () => {
     expect(board.scopeAvailable).toBe(true);
     expect(board.omittedAssignees).toBe(0);
     expect(board.columns[0].cards[0]).toMatchObject({ assigneeUserId: null, dueDate: null, commentCount: 0, record: { accessible: false, moduleKey: null } });
-    expect(board.columns[1]).toMatchObject({ name: null, inactive: true, cards: [], droppable: false, dropReason: '已停用' });
+    expect(board.columns[1]).toMatchObject({ name: null, inactive: true, cards: [], droppable: false });
     await dynamicApi.getBoardColumns({ viewId: 7 });
     expect(JSON.parse(seen.body as string)).toEqual({ viewId: 7, config: null });
   });

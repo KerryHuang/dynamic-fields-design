@@ -74,23 +74,24 @@ function setView(v: ViewMode) {
 }
 
 // D6: a board that is gone or no longer shared (404/403), or a board id that makes no sense, falls back to the default board
-// with a notice; the remembered "last board" goes too so the next visit does not hit it again.
-function fallbackToDefault() {
-  clearLastTaskBoard(identity.userId);
+// with a notice. The remembered "last board" goes too when it is the board that failed, so the next visit does not hit it again;
+// a malformed link says nothing about the remembered board, so that one stays.
+function fallbackToDefault({ forget }: { forget: boolean }) {
+  if (forget) clearLastTaskBoard(identity.userId);
   boardGone.value = true;
   go({ board: undefined });
 }
 watch(() => [isBoard.value, boardParam.value, boardId.value] as const, ([board, param, id]) => {
-  if (board && param !== null && id === null) fallbackToDefault();
+  if (board && param !== null && id === null) fallbackToDefault({ forget: false });
 }, { immediate: true });
 watch(() => boardQuery.error.value, (e) => {
-  if (isBoard.value && boardId.value !== null && [403, 404].includes((e as ApiError | null)?.status ?? 0)) fallbackToDefault();
+  if (isBoard.value && boardId.value !== null && [403, 404].includes((e as ApiError | null)?.status ?? 0)) fallbackToDefault({ forget: true });
 }, { immediate: true });
 watch(() => [boardId.value, boardQuery.isSuccess.value] as const, ([id, ok]) => {
   if (id !== null && ok) writeLastTaskBoard(identity.userId, id);
 }, { immediate: true });
-const boardFailed = computed(() => !!boardQuery.error.value && !boardQuery.data.value && !boardGone.value
-  && ![403, 404].includes((boardQuery.error.value as ApiError).status));
+const boardFailed = computed(() => !!boardQuery.error.value && !boardQuery.data.value
+  && ![403, 404].includes((boardQuery.error.value as unknown as ApiError).status));
 </script>
 
 <template>
@@ -98,7 +99,7 @@ const boardFailed = computed(() => !!boardQuery.error.value && !boardQuery.data.
     <div class="row items-center q-mb-sm" style="gap: 8px">
       <div class="text-h6">{{ t('tasks.myTitle') }}</div>
       <q-btn-toggle
-        :model-value="mode" :options="viewOptions" dense no-caps unelevated toggle-color="primary" :aria-label="t('taskBoard.view.label')"
+        :model-value="mode" :options="viewOptions" dense no-caps unelevated toggle-color="primary" :aria-label="t('taskBoard.view.label')" role="group"
         data-testid="view-toggle" @update:model-value="(v) => setView(v as ViewMode)"
       />
       <q-space />

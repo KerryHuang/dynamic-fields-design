@@ -3,14 +3,14 @@ import { computed, ref } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { useLoadMoreColumn } from 'src/application/dynamic/queries/task-board-queries';
 import {
-  BOARD_COLUMN_GAP, columnsPerScreen, groupByOf, visibleRange, type BoardColumn, type BoardSource, type TaskBoardData,
+  BOARD_COLUMN_GAP, columnsPerScreen, gridTrackCount, groupByOf, visibleRange, type BoardColumn, type BoardSource, type TaskBoardData,
 } from 'src/domain/dynamic/task-board-types';
 import BoardColumnPager from './BoardColumnPager.vue';
 import TaskBoardColumn from './TaskBoardColumn.vue';
 import { useElementWidth } from './use-element-width';
 
 /**
- * 看板：欄依容器寬度分段顯示（D1），不換行也不橫向捲動。`source` 只用來把「載入更多」接回同一份快取。
+ * 看板：欄依容器寬度分段顯示（D1），不換行也不橫向捲動；全部欄一屏放得下時撐滿寬度，要分段時固定一屏欄數。`source` 只用來把「載入更多」接回同一份快取。
  */
 const props = defineProps<{ board: TaskBoardData; source: BoardSource }>();
 const emit = defineEmits<{ open: [id: number] }>();
@@ -35,15 +35,15 @@ function labelOf(c: BoardColumn): string {
 const pagerColumns = computed(() => columns.value.map((c) => ({ key: c.key, label: labelOf(c), total: c.total })));
 
 const loadMore = useLoadMoreColumn(() => props.source);
-const loadingKey = ref<string | null>(null);
+const loadingKeys = ref<string[]>([]);
 async function onLoadMore(column: BoardColumn) {
-  loadingKey.value = column.key;
+  loadingKeys.value = [...loadingKeys.value, column.key];
   try {
     await loadMore.mutateAsync(column);
   } catch {
     // 失敗時按鈕恢復可按；錯誤提示由下面的 loadMoreFailed 顯示
   } finally {
-    loadingKey.value = null;
+    loadingKeys.value = loadingKeys.value.filter((k) => k !== column.key);
   }
 }
 </script>
@@ -58,9 +58,9 @@ async function onLoadMore(column: BoardColumn) {
       {{ t('taskBoard.loadMoreFailed') }}
     </div>
     <div v-if="!columns.length" class="text-muted q-py-md" data-testid="board-empty">{{ t('tasks.empty') }}</div>
-    <div v-else class="board-grid" :style="{ gridTemplateColumns: `repeat(${perScreen}, minmax(0, 1fr))`, gap: `${BOARD_COLUMN_GAP}px` }" data-testid="board-grid">
+    <div v-else class="board-grid" :style="{ gridTemplateColumns: `repeat(${gridTrackCount(columns.length, perScreen)}, minmax(0, 1fr))`, gap: `${BOARD_COLUMN_GAP}px` }" data-testid="board-grid">
       <TaskBoardColumn
-        v-for="c in shown" :key="c.key" :column="c" :label="labelOf(c)" :group-by="groupBy" :loading-more="loadingKey === c.key"
+        v-for="c in shown" :key="c.key" :column="c" :label="labelOf(c)" :group-by="groupBy" :loading-more="loadingKeys.includes(c.key)"
         @open="emit('open', $event)" @load-more="onLoadMore"
       />
     </div>

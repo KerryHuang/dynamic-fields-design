@@ -6,6 +6,8 @@ import { defineComponent, h } from 'vue';
 import { createI18n } from 'vue-i18n';
 import { useBoardColumns } from 'src/application/dynamic/queries/task-board-queries';
 import zhTW from 'src/i18n/zh-TW.json';
+import type { InternalAxiosRequestConfig } from 'axios';
+import { http } from 'src/services/api/http';
 import { bodyOf, mockHttp, type Call } from 'src/test-utils/mock-http';
 import { assigneeBoardWire, boardWire, cardWire, columnWire, dueBoardWire, nineStatusLikeColumns } from './board-fixtures';
 import TaskBoard from './TaskBoard.vue';
@@ -113,7 +115,7 @@ describe('TaskBoard', () => {
     const { w } = await mountBoard(boardWire(), 1126);
     expect(w.find('[data-testid="board-pager"]').exists()).toBe(false);
     expect(shownKeys(w)).toHaveLength(3);
-    resize?.(788);
+    resize?.(600);
     await flushPromises();
     expect(shownKeys(w)).toHaveLength(2);
     expect(w.find('[data-testid="board-pager"]').exists()).toBe(true);
@@ -121,11 +123,76 @@ describe('TaskBoard', () => {
   });
 
   it('never shows more columns than the width allows at 390, 820, 1366 and 1920', async () => {
-    for (const [viewport, expected] of [[390, 1], [820, 2], [1366, 4], [1920, 6]] as const) {
+    for (const [viewport, expected] of [[390, 1], [820, 3], [1366, 4], [1920, 6]] as const) {
       const { w } = await mountBoard(boardWire({ columns: nineStatusLikeColumns() }), viewport - (viewport >= 1024 ? 208 : 0) - 32);
       expect(shownKeys(w), String(viewport)).toHaveLength(expected);
       w.unmount();
     }
+  });
+
+  it('fills the width when every column fits, and keeps the fixed count (last group left open) when it has to page', async () => {
+    const fits = await mountBoard(boardWire(), 1126);
+    expect(fits.w.get('[data-testid="board-grid"]').attributes('style')).toContain('repeat(3, minmax(0, 1fr))');
+    fits.w.unmount();
+    // 820 viewport: three status columns fit at once, no pager
+    const tablet = await mountBoard(boardWire(), 788);
+    expect(tablet.w.get('[data-testid="board-grid"]').attributes('style')).toContain('repeat(3, minmax(0, 1fr))');
+    expect(shownKeys(tablet.w)).toHaveLength(3);
+    expect(tablet.w.find('[data-testid="board-pager"]').exists()).toBe(false);
+    tablet.w.unmount();
+    // 9 columns, 4 per screen: the last group has one column but the grid still has 4 tracks
+    const { w } = await mountBoard(boardWire({ columns: nineStatusLikeColumns() }), 1126);
+    await w.get('[data-testid="board-next"]').trigger('click');
+    await w.get('[data-testid="board-next"]').trigger('click');
+    expect(shownKeys(w)).toHaveLength(1);
+    expect(w.get('[data-testid="board-grid"]').attributes('style')).toContain('repeat(4, minmax(0, 1fr))');
+    w.unmount();
+  });
+
+  it('column totals read as a count, columns are labelled groups and chips cut long names', async () => {
+    const { w } = await mountBoard(boardWire(), 1126);
+    const total = w.get('[data-testid="board-column-todo"] [data-testid="board-column-total"]');
+    expect(total.attributes('aria-label')).toBe('共 2 筆');
+    const col = w.get('[data-testid="board-column-todo"]');
+    expect(col.element.tagName).toBe('DIV');
+    expect(col.attributes('role')).toBe('group');
+    expect(col.attributes('aria-label')).toBe('待辦');
+    w.unmount();
+    const phone = await mountBoard(boardWire(), 358);
+    const chip = phone.w.get('[data-testid="board-chip-todo"]');
+    expect(chip.attributes('title')).toBe('待辦 (2)');
+    expect(chip.get('.ellipsis').text()).toBe('待辦 (2)');
+    phone.w.unmount();
+  });
+
+  it('two columns loading more at once keep their own spinners', async () => {
+    const wire = boardWire({ columns: [
+      columnWire({ key: 'todo', total: 60, hasMore: true, cards: [cardWire({ id: 1 })] }),
+      columnWire({ key: 'inProgress', total: 60, hasMore: true, cards: [cardWire({ id: 3 })] }),
+    ] });
+    const { w } = await mountBoard(wire, 1126, null);
+    // hold the page requests until the test releases them
+    const release: Record<string, () => void> = {};
+    const base = http.defaults.adapter as (c: InternalAxiosRequestConfig) => Promise<unknown>;
+    http.defaults.adapter = ((config: InternalAxiosRequestConfig) => {
+      const key = /columns\/([^/]+)\/page$/.exec(String(config.url))?.[1];
+      if (!key) return base(config);
+      return new Promise((resolve) => {
+        release[key] = () => resolve({ data: { key, total: 60, cards: [cardWire({ id: key === 'todo' ? 11 : 33 })], hasMore: false, truncated: false }, status: 200, statusText: 'OK', headers: {}, config });
+      });
+    }) as never;
+    const loading = (key: string) => w.get(`[data-testid="board-column-${key}"] [data-testid="board-load-more"]`).find('.q-spinner').exists();
+    await w.get('[data-testid="board-column-todo"] [data-testid="board-load-more"]').trigger('click');
+    await w.get('[data-testid="board-column-inProgress"] [data-testid="board-load-more"]').trigger('click');
+    await flushPromises();
+    expect([loading('todo'), loading('inProgress')]).toEqual([true, true]);
+    release.todo();
+    await flushPromises();
+    expect(w.find('[data-testid="board-column-todo"] [data-testid="board-load-more"]').exists()).toBe(false);
+    expect(loading('inProgress')).toBe(true);
+    release.inProgress();
+    await flushPromises();
+    w.unmount();
   });
 
   it('labels columns by kind: statuses, due buckets, unassigned, inactive users; and notes omitted assignees', async () => {
@@ -143,7 +210,7 @@ describe('TaskBoard', () => {
 
   it('opens a card by emitting its id', async () => {
     const { w } = await mountBoard(boardWire(), 1126);
-    await w.get('[data-testid="board-card-3"]').trigger('click');
+    await w.get('[data-testid="board-card-open-3"]').trigger('click');
     expect(w.findComponent(TaskBoard).emitted('open')).toEqual([[3]]);
     w.unmount();
   });

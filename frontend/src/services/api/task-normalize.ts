@@ -155,7 +155,6 @@ export function normalizeBoardColumn(c: Wire<Omit<BoardColumn, 'cards'>> & { car
     hasMore: !!c.hasMore,
     truncated: !!c.truncated,
     droppable: c.droppable !== false,
-    dropReason: c.dropReason ?? null,
   };
 }
 

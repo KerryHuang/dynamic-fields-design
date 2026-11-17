@@ -29,7 +29,7 @@ describe('task mutations invalidate everything that shows a task', () => {
     const { composed, keys } = setup();
     await composed.update.mutateAsync({ id: 7, patch: { status: 'done' } });
     await flushPromises();
-    expect(keys()).toEqual(expect.arrayContaining(['["tasks"]', '["task-summary"]', '["record-tasks"]', '["task",7]', '["task-comments",7]']));
+    expect(keys()).toEqual(expect.arrayContaining(['["tasks"]', '["task-summary"]', '["task-board"]', '["record-tasks"]', '["task",7]', '["task-comments",7]']));
   });
 
   it('update that moves the task out of scope drops the task and its timeline instead of refetching them (they would 404)', async () => {
@@ -38,7 +38,7 @@ describe('task mutations invalidate everything that shows a task', () => {
     await composed.update.mutateAsync({ id: 7, patch: { assigneeUserId: 'sales02' } });
     await flushPromises();
     expect(removed()).toEqual(expect.arrayContaining(['["task",7]', '["task-comments",7]']));
-    expect(keys()).toEqual(expect.arrayContaining(['["tasks"]', '["task-summary"]', '["record-tasks"]']));
+    expect(keys()).toEqual(expect.arrayContaining(['["tasks"]', '["task-summary"]', '["task-board"]', '["record-tasks"]']));
     expect(keys()).not.toContain('["task",7]');
     expect(keys()).not.toContain('["task-comments",7]');
   });
@@ -46,9 +46,11 @@ describe('task mutations invalidate everything that shows a task', () => {
   it('comment with files uses the multipart call, without files the JSON one', async () => {
     api.addTaskComment.mockResolvedValue({} as never);
     api.addTaskCommentWithFiles.mockResolvedValue({} as never);
-    const { composed } = setup();
+    const { composed, keys } = setup();
     await composed.comment.mutateAsync({ id: 7, body: 'a', files: [] });
     expect(api.addTaskComment).toHaveBeenCalledWith(7, 'a');
+    await flushPromises();
+    expect(keys()).toContain('["task-board"]');
     const f = new File(['x'], 'x.txt');
     await composed.comment.mutateAsync({ id: 7, body: 'b', files: [f] });
     expect(api.addTaskCommentWithFiles).toHaveBeenCalledWith(7, 'b', [f]);
@@ -59,7 +61,7 @@ describe('task mutations invalidate everything that shows a task', () => {
     const { composed, keys } = setup();
     await composed.del.mutateAsync(7);
     await flushPromises();
-    expect(keys()).toEqual(expect.arrayContaining(['["tasks"]', '["task-summary"]', '["record-tasks"]']));
+    expect(keys()).toEqual(expect.arrayContaining(['["tasks"]', '["task-summary"]', '["task-board"]', '["record-tasks"]']));
   });
 
   it('undo reassign sends the token and refreshes lists, counters and the task', async () => {
@@ -68,6 +70,6 @@ describe('task mutations invalidate everything that shows a task', () => {
     await composed.undo.mutateAsync({ id: 7, undoToken: 'tok' });
     await flushPromises();
     expect(api.undoReassign).toHaveBeenCalledWith(7, 'tok');
-    expect(keys()).toEqual(expect.arrayContaining(['["tasks"]', '["task-summary"]', '["task",7]', '["task-comments",7]']));
+    expect(keys()).toEqual(expect.arrayContaining(['["tasks"]', '["task-summary"]', '["task-board"]', '["task",7]', '["task-comments",7]']));
   });
 });

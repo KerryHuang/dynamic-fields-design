@@ -15,7 +15,7 @@ import MyTasksPage from './MyTasksPage.vue';
 
 let calls: Call[];
 
-async function mountPage(url: string, opts: { detailFails?: boolean; empty?: boolean; subordinates?: boolean; goneBoards?: number[] } = {}) {
+async function mountPage(url: string, opts: { detailFails?: boolean; empty?: boolean; subordinates?: boolean; goneBoards?: number[]; defaultBoardFails?: boolean } = {}) {
   const pinia = createPinia();
   setActivePinia(pinia);
   useIdentityStore().setSession('sales01');
@@ -23,6 +23,7 @@ async function mountPage(url: string, opts: { detailFails?: boolean; empty?: boo
     if (c.url === '/tasks' && c.method === 'get') return opts.empty ? { items: [], totalCount: 0, currentPage: 1, pagesSize: 20 } : { items: [taskWire({ id: 1 }), taskWire({ id: 2, title: '寄合約' })], totalCount: 2, currentPage: 1, pagesSize: 20 };
     if (c.url === '/task-board/columns') {
       const viewId = (bodyOf(c) as { viewId: number | null }).viewId;
+      if (viewId === null && opts.defaultBoardFails) return new HttpFail(500, { message: '伺服器錯誤' });
       return viewId !== null && opts.goneBoards?.includes(viewId) ? new HttpFail(404, { message: '找不到看板' }) : boardWire();
     }
     if (c.url === '/task-views') return { mine: [{ id: 5, name: '我的到期', isOwner: true }], shared: [] };
@@ -41,7 +42,7 @@ async function mountPage(url: string, opts: { detailFails?: boolean; empty?: boo
   const Host = { render: () => h(quasar.QLayout, null, () => h(quasar.QPageContainer, null, () => h(MyTasksPage))) };
   const w = mount(Host, {
     attachTo: document.body,
-    global: { plugins: [[quasar.Quasar, { components: quasar, directives: quasar }], pinia, router, i18n, [VueQueryPlugin, { queryClient: new QueryClient() }]] },
+    global: { plugins: [[quasar.Quasar, { components: quasar, directives: quasar }], pinia, router, i18n, [VueQueryPlugin, { queryClient: new QueryClient({ defaultOptions: { queries: { retry: false, refetchOnWindowFocus: false } } }) }]] },
   });
   await flushPromises();
   await new Promise((r) => setTimeout(r, 20));
@@ -233,8 +234,10 @@ describe('MyTasksPage', () => {
     w.unmount();
   });
 
-  it('a board id that is not a number also falls back with the notice', async () => {
+  it('a board id that is not a number also falls back with the notice, but keeps the remembered board (the link was bad, not the memory)', async () => {
+    localStorage.setItem('taskBoard.last.sales01', '5');
     const { w, router } = await mountPage('/tasks?view=board&board=abc');
+    expect(localStorage.getItem('taskBoard.last.sales01')).toBe('5');
     expect(router.currentRoute.value.query.board).toBeUndefined();
     expect(w.find('[data-testid="board-gone-notice"]').exists()).toBe(true);
     expect(calls.filter((c) => c.url === '/task-board/columns').every((c) => (bodyOf(c) as { viewId: number | null }).viewId === null)).toBe(true);
@@ -250,6 +253,39 @@ describe('MyTasksPage', () => {
     expect(router.currentRoute.value.query.board).toBeUndefined();
     expect(w.find('[data-testid="board-gone-notice"]').exists()).toBe(true);
     expect(localStorage.getItem('taskBoard.last.sales01')).toBeNull();
+    w.unmount();
+  });
+
+  it('when the default board also fails after falling back, the notice and the retry button show together', async () => {
+    const { w } = await mountPage('/tasks?view=board&board=7', { goneBoards: [7], defaultBoardFails: true });
+    expect(w.find('[data-testid="board-gone-notice"]').exists()).toBe(true);
+    expect(w.find('[data-testid="board-load-failed"]').exists()).toBe(true);
+    expect(w.find('[data-testid="board-retry"]').exists()).toBe(true);
+    w.unmount();
+  });
+
+  it('the view switch is a labelled group', async () => {
+    const { w } = await mountPage('/tasks');
+    const toggle = w.get('[data-testid="view-toggle"]');
+    expect(toggle.attributes('role')).toBe('group');
+    expect(toggle.attributes('aria-label')).toBe('檢視方式');
+    w.unmount();
+  });
+
+  it('saving a task from the dialog on the board reloads the board columns', async () => {
+    const { w } = await mountPage('/tasks?view=board&open=7');
+    const boardCalls = () => calls.filter((c) => c.url === '/task-board/columns').length;
+    const before = boardCalls();
+    const title = document.body.querySelector<HTMLInputElement>('input[data-testid="task-title"]')!;
+    title.value = '改過的標題';
+    title.dispatchEvent(new Event('input'));
+    await flushPromises();
+    document.body.querySelector<HTMLElement>('[data-testid="task-save"]')!.click();
+    await flushPromises();
+    await new Promise((r) => setTimeout(r, 20));
+    await flushPromises();
+    expect(calls.some((c) => /^\/tasks\/7$/.test(c.url) && c.method !== 'get')).toBe(true);
+    expect(boardCalls()).toBe(before + 1);
     w.unmount();
   });
 

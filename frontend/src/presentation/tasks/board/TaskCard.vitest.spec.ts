@@ -53,13 +53,42 @@ describe('TaskCard', () => {
     expect(full.get('[data-testid="board-card-comments"]').text()).toContain('3');
   });
 
-  it('labels an unassigned or inactive assignee, and opens on click and on Enter', async () => {
+  it('the rule, frozen and comment markers have a name that assistive technology can read (not hidden)', () => {
+    const full = mountCard('status', { fromRule: true, frozen: true, commentCount: 3 });
+    const names = ['rule', 'frozen', 'comments'].map((id) => full.get(`[data-testid="board-card-${id}"]`));
+    expect(names.map((n) => n.attributes('aria-label'))).toEqual(['由規則產生', '相關記錄已鎖定', '3 則留言']);
+    for (const n of names) {
+      expect(n.attributes('role')).toBe('img');
+      // the named node and every ancestor up to the card must not be aria-hidden
+      for (let el: Element | null = n.element; el && el !== full.element; el = el.parentElement) expect(el.getAttribute('aria-hidden')).not.toBe('true');
+    }
+    // the icon inside stays decorative
+    expect(full.get('[data-testid="board-card-rule"] .q-icon').attributes('aria-hidden')).toBe('true');
+  });
+
+  it('the card is a plain container and the title is the only button, so a later move button is not nested in a button', () => {
+    const w = mountCard('status');
+    const root = w.get('[data-testid="board-card-1"]');
+    expect(root.element.tagName).toBe('DIV');
+    expect(root.attributes('role')).toBeUndefined();
+    expect(root.attributes('tabindex')).toBeUndefined();
+    const open = w.get('[data-testid="board-card-open-1"]');
+    expect(open.element.tagName).toBe('BUTTON');
+    expect(open.attributes('type')).toBe('button');
+    expect(open.text()).toBe('回覆恆川機械樣品問題');
+    expect(w.findAll('button')).toHaveLength(1);
+  });
+
+  it('a long assignee name is cut off inside the card', () => {
+    const el = mountCard('status', { assigneeName: 'a-very-long-account-name' }).get('[data-testid="board-card-assignee"]');
+    expect(el.get('.ellipsis').text()).toBe('a-very-long-account-name');
+  });
+
+  it('labels an unassigned or inactive assignee, and opens from the title button', async () => {
     expect(mountCard('status', { assigneeUserId: null, assigneeName: null }).get('[data-testid="board-card-assignee"]').text()).toContain('未指派');
     expect(mountCard('status', { assigneeActive: false }).get('[data-testid="board-card-assignee"]').text()).toContain('業務一（已停用）');
     const w = mountCard('status');
-    await w.get('[data-testid="board-card-1"]').trigger('click');
-    await w.get('[data-testid="board-card-1"]').trigger('keydown.enter');
-    expect(w.emitted('open')).toEqual([[1], [1]]);
-    expect(w.get('[data-testid="board-card-1"]').attributes('tabindex')).toBe('0');
+    await w.get('[data-testid="board-card-open-1"]').trigger('click');
+    expect(w.emitted('open')).toEqual([[1]]);
   });
 });

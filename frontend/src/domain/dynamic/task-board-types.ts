@@ -1,3 +1,4 @@
+import type { ReportDateRange } from './report-types';
 import type { I18nText } from './types';
 import type { TaskRecordRef, TaskStatus } from './task-types';
 
@@ -8,7 +9,7 @@ export type BoardColumnKind = 'status' | 'dueBucket' | 'user' | 'unassigned';
 export type DueBucketKey = 'overdue' | 'today' | 'thisWeek' | 'later' | 'none';
 
 /** 版面規則（技術限制，不是業務政策）：每欄最小寬度與欄間距，決定一屏放幾欄（D1）。 */
-export const BOARD_MIN_COLUMN_WIDTH = 260;
+export const BOARD_MIN_COLUMN_WIDTH = 240;
 export const BOARD_COLUMN_GAP = 12;
 
 export interface BoardCard {
@@ -47,9 +48,8 @@ export interface BoardColumn {
   hasMore: boolean;
   /** 總數超過畫面上限；此時最後一頁之後顯示「還有 N 筆」。 */
   truncated: boolean;
+  /** 不能放的原因由前端依欄種類與欄鍵推出代碼再翻譯（dropReasonOf），不顯示伺服器文字。 */
   droppable: boolean;
-  /** 伺服器已依語系寫好的禁止放置原因。 */
-  dropReason: string | null;
 }
 
 export interface TaskBoardData {
@@ -104,7 +104,7 @@ export interface TaskBoardConfig {
     includeUnassigned?: boolean;
     creatorUserIds?: string[];
     sources?: ('personal' | 'record' | 'rule')[];
-    dueRange?: Record<string, unknown>;
+    dueRange?: ReportDateRange;
     keyword?: string;
   };
   columns?: { order?: string[]; hidden?: string[]; assignees?: string[]; autoAppendAssignees?: boolean };
@@ -189,7 +189,23 @@ export function groupByOf(columns: readonly BoardColumn[]): BoardGroupBy {
   return kind === 'dueBucket' ? 'dueBucket' : kind === 'user' || kind === 'unassigned' ? 'assignee' : 'status';
 }
 
-export type MoveBlock = { kind: 'column'; text: string } | { kind: 'noPermission' } | { kind: 'frozen' };
+/** 欄不能放的原因代碼；unavailable 是前端還不認得的欄規則（後端新增時的備援）。 */
+export type DropReason = 'overdue' | 'thisWeekEmpty' | 'inactiveAssignee' | 'unavailable';
+export type MoveBlock = { kind: 'column'; reason: DropReason } | { kind: 'noPermission' } | { kind: 'frozen' };
+
+/** 不能放的欄：逾期欄、今天已是本週最後一天的本週欄、已停用的負責人欄；其他視為 unavailable。 */
+export function dropReasonOf(c: BoardColumn): DropReason {
+  if (c.kind === 'dueBucket' && c.key === 'overdue') return 'overdue';
+  if (c.kind === 'dueBucket' && c.key === 'thisWeek') return 'thisWeekEmpty';
+  if (c.kind === 'user') return 'inactiveAssignee';
+  return 'unavailable';
+}
+
+/** 原因文字的 i18n 鍵（taskBoard.drop.*）。 */
+export const moveBlockKey = (b: MoveBlock) => `taskBoard.drop.${b.kind === 'column' ? b.reason : b.kind}`;
+
+/** 格線欄數：全部欄一屏放得下時用實際欄數（撐滿寬度）；要分段平移時固定一屏欄數，最後一組右邊留空。 */
+export const gridTrackCount = (columnCount: number, perScreen: number) => Math.max(1, Math.min(columnCount, perScreen));
 
 export interface MoveTarget {
   key: string;
@@ -201,7 +217,7 @@ export interface MoveTarget {
 
 /**
  * 每一欄這張卡能不能放、不能放的原因。依負責人分欄看「可重派」，其他看「可編輯」；凍結的卡整張不能動；
- * 其餘是伺服器依欄算好的（到期區間的「逾期」、今天是本週最後一天時的「本週」、已停用的負責人）。
+ * 其餘是欄本身不能放（原因見 dropReasonOf；能不能放由伺服器的 droppable 決定）。
  */
 export function moveTargets(card: BoardCard, columns: readonly BoardColumn[], groupBy: BoardGroupBy): MoveTarget[] {
   const cardBlock: MoveBlock | null = card.frozen
@@ -209,7 +225,7 @@ export function moveTargets(card: BoardCard, columns: readonly BoardColumn[], gr
     : (groupBy === 'assignee' ? card.canReassign : card.canEdit) ? null : { kind: 'noPermission' };
   return columns.map((c) => {
     const current = c.cards.some((x) => x.id === card.id);
-    const reason: MoveBlock | null = cardBlock ?? (c.droppable ? null : { kind: 'column', text: c.dropReason ?? '' });
+    const reason: MoveBlock | null = cardBlock ?? (c.droppable ? null : { kind: 'column', reason: dropReasonOf(c) });
     return { key: c.key, current, droppable: reason === null, reason };
   });
 }
