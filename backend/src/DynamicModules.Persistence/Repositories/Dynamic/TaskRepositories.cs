@@ -91,6 +91,31 @@ public class TaskRepository(DynamicDbContext db) : ITaskRepository
     public Task<List<long>> ListVisibleIdsAsync(TaskVisibility visibility, CancellationToken ct) =>
         TaskVisibilityQuery.Visible(db, visibility).Select(t => t.Id).OrderBy(id => id).ToListAsync(ct);
 
+    public Task<List<TaskItem>> ListForReportAsync(TaskVisibility visibility, TaskReportNarrowing narrowing, int take, CancellationToken ct)
+    {
+        IQueryable<TaskItem> query = TaskVisibilityQuery.Visible(db, visibility).Include(t => t.Participants);
+        if (narrowing.Statuses is { } statuses)
+        {
+            var list = statuses.ToList();
+            query = query.Where(t => list.Contains(t.Status));
+        }
+        if (narrowing is { DateField: { } field, From: { } from, ToInclusive: { } to })
+        {
+            // 牆上時間的半開區間，Kind Unspecified 與寫入一致（PostgreSQL timestamp without time zone）
+            var start = from.ToDateTime(TimeOnly.MinValue);
+            var end = to.AddDays(1).ToDateTime(TimeOnly.MinValue);
+            query = field switch
+            {
+                "due" => query.Where(t => t.DueDate >= from && t.DueDate <= to),
+                "created" => query.Where(t => t.CreatedTime >= start && t.CreatedTime < end),
+                "completed" => query.Where(t => t.CompletedTime >= start && t.CompletedTime < end),
+                "createdOrCompleted" => query.Where(t => (t.CreatedTime >= start && t.CreatedTime < end) || (t.CompletedTime >= start && t.CompletedTime < end)),
+                _ => throw new ArgumentException($"不支援的日期欄位：{field}", nameof(narrowing)),
+            };
+        }
+        return query.OrderBy(t => t.Id).Take(take).ToListAsync(ct);
+    }
+
     /// <summary>可見條件＋範圍＋篩選（看板設計 §5.7）。所有範圍都再 AND 可見條件（縱深防禦）。</summary>
     private IQueryable<TaskItem> BoardBase(TaskBoardQuery q)
     {

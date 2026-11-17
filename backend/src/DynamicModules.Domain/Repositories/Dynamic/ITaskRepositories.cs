@@ -3,6 +3,13 @@ using DynamicModules.Domain.Tasks;
 
 namespace DynamicModules.Domain.Repositories.Dynamic;
 
+/// <summary>
+/// 任務報表在資料庫端的縮小條件（看板設計 §7.7）：只放證明精確的條件，記憶體路徑照舊重套全部條件。
+/// Statuses 為 null 不限狀態、空集合是一筆都不要。DateField 是 due|created|completed|createdOrCompleted，null 不縮小日期；
+/// From、ToInclusive 是營運日期，含頭含尾。
+/// </summary>
+public sealed record TaskReportNarrowing(IReadOnlyCollection<TaskItemStatus>? Statuses, string? DateField, DateOnly? From, DateOnly? ToInclusive);
+
 public interface ITaskRepository
 {
     /// <summary>追蹤，含參與者。</summary>
@@ -28,6 +35,8 @@ public interface ITaskRepository
     Task<Dictionary<long, TaskRecordStub>> ListRecordStubsAsync(IReadOnlyCollection<long> recordIds, CancellationToken ct);
     /// <summary>符合可見條件的任務 Id（單一資料庫查詢，條件與 <c>TaskAccess</c> 的逐筆判斷一致）。</summary>
     Task<List<long>> ListVisibleIdsAsync(TaskVisibility visibility, CancellationToken ct);
+    /// <summary>任務報表的列：可見條件＋縮小條件，不追蹤、含參與者，依 Id；最多 take 筆。</summary>
+    Task<List<TaskItem>> ListForReportAsync(TaskVisibility visibility, TaskReportNarrowing narrowing, int take, CancellationToken ct);
     /// <summary>
     /// 看板各欄的任務數（可見條件＋範圍＋篩選＋欄條件）。狀態看板一次 GROUP BY 狀態、負責人看板一次 GROUP BY 負責人（回所有有任務的負責人，
     /// 鍵 user:&lt;帳號&gt; 與 unassigned，忽略 columns），到期區間看板每欄一次 COUNT；沒有任務的欄不在結果裡。
