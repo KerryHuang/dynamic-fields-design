@@ -1,14 +1,17 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue';
+import { useQueryClient } from '@tanstack/vue-query';
+import { computed, ref, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { useRoute, useRouter } from 'vue-router';
 import { useMe } from 'src/application/dynamic/queries/permissions-queries';
-import { useCopyReport, useDeleteReport, useReport, useReportCatalog, useRunReport } from 'src/application/dynamic/queries/reports-queries';
+import { useCopyReport, useDeleteReport, useReport, useRunReport, useSourceCatalog } from 'src/application/dynamic/queries/reports-queries';
 import ForbiddenNotice from 'src/components/framework/ForbiddenNotice.vue';
-import type { ReportFilter } from 'src/domain/dynamic/report-types';
+import { NO_RUN_FILTER, type ReportFilter, type ReportRunFilter } from 'src/domain/dynamic/report-types';
 import { dynamicApi } from 'src/services/api/dynamic-api';
 import { isForbidden, type ApiError } from 'src/services/api/http';
+import TaskDialog from 'src/presentation/dynamic/tasks/TaskDialog.vue';
 import DrillDialog from 'src/presentation/reports/DrillDialog.vue';
+import ReportFilterBar from 'src/presentation/reports/ReportFilterBar.vue';
 import ReportResultView from 'src/presentation/reports/ReportResultView.vue';
 import { findEntry, listFields, valueText } from 'src/presentation/reports/report-catalog';
 import ShareDialog from 'src/presentation/reports/ShareDialog.vue';
@@ -18,7 +21,10 @@ const route = useRoute();
 const router = useRouter();
 const id = computed(() => Number(route.params.id));
 const report = useReport(id);
-const run = useRunReport(id, locale);
+// 暫時篩選（期間、部門）只存頁面狀態，不進網址、不存檔；換報表就重置（看板設計 §8.2）
+const runFilter = ref<ReportRunFilter>({ ...NO_RUN_FILTER });
+watch(id, () => { runFilter.value = { ...NO_RUN_FILTER }; drillKeys.value = null; openTaskId.value = null; });
+const run = useRunReport(id, locale, runFilter);
 const forbidden = computed(() => isForbidden(report.error.value));
 const notFound = computed(() => (report.error.value as ApiError | null)?.status === 404);
 const detail = computed(() => report.data.value);
@@ -33,7 +39,10 @@ const filters = computed<ReportFilter[]>(() => [
 ]);
 const opText = (op: string) => t(`dynamic.op.${op}`, op);
 // 欄位名稱與選項標籤取自欄位目錄；目錄沒有的欄位（被刪、不可讀）退回 #id
-const catalog = useReportCatalog(computed(() => detail.value?.definition.mainModuleKey), locale);
+const catalog = useSourceCatalog(computed(() => detail.value?.definition.dataset), computed(() => detail.value?.definition.mainModuleKey), locale);
+// 部門篩選只有任務資料來源有；期間篩選要報表有主要日期欄位才作用
+const isTaskSource = computed(() => !!detail.value?.definition.dataset && detail.value.definition.dataset !== 'module');
+const rangeAvailable = computed(() => !!detail.value?.definition.primaryDateField);
 const entries = computed(() => (catalog.data.value ? listFields(catalog.data.value, detail.value?.definition.child, t('reports.titleField')) : []));
 const filterText = (f: ReportFilter) => {
   const e = findEntry(entries.value, f.field);
@@ -41,6 +50,13 @@ const filterText = (f: ReportFilter) => {
 };
 
 const drillKeys = ref<string[] | null>(null);
+// 點明細列（任務資料來源）在原頁開任務詳細；下鑽清單留在底下，關掉就回到它。任務改過數字會變，關閉時重算
+const openTaskId = ref<number | null>(null);
+const qc = useQueryClient();
+function setOpenTask(v: number | null) {
+  openTaskId.value = v;
+  if (v === null) void Promise.all([qc.invalidateQueries({ queryKey: ['report-run'] }), qc.invalidateQueries({ queryKey: ['report-drill'] })]);
+}
 const shareOpen = ref(false);
 
 const exporting = ref(false);
@@ -49,7 +65,7 @@ async function exportXlsx() {
   exporting.value = true;
   exportError.value = '';
   try {
-    const { blob, fileName } = await dynamicApi.exportReport(id.value, locale.value);
+    const { blob, fileName } = await dynamicApi.exportReport(id.value, locale.value, runFilter.value);
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
@@ -123,14 +139,22 @@ function doDelete() {
         </ul>
       </q-expansion-item>
 
+      <ReportFilterBar v-model="runFilter" :show-department="isTaskSource" :range-available="rangeAvailable" />
+
       <q-inner-loading :showing="run.isFetching.value" />
       <div v-if="run.isError.value" class="text-negative" data-testid="run-error">
         {{ t('reports.loadFailed') }}
         <q-btn flat dense color="primary" :label="t('reports.retry')" data-testid="run-retry" @click="run.refetch()" />
       </div>
-      <ReportResultView v-else-if="run.data.value" drillable :result="run.data.value" :viz="detail.definition.viz" @drill="drillKeys = $event" />
+      <ReportResultView
+        v-else-if="run.data.value" drillable openable-tasks :result="run.data.value" :viz="detail.definition.viz" @drill="drillKeys = $event"
+        @open-task="setOpenTask"
+      />
 
-      <DrillDialog :report-id="detail.id" :group-keys="drillKeys" @close="drillKeys = null" />
+      <DrillDialog
+        :report-id="detail.id" :group-keys="drillKeys" :filter="runFilter" openable-tasks @close="drillKeys = null" @open-task="setOpenTask"
+      />
+      <TaskDialog :task-id="openTaskId" :unavailable-text="t('reports.drillTaskUnavailable')" @update:task-id="setOpenTask" />
       <ShareDialog :report-id="detail.id" :open="shareOpen" :group-ids="detail.sharedGroupIds" @close="shareOpen = false" />
       <q-dialog v-model="confirmDelete">
         <q-card style="width: 420px; max-width: 95vw">

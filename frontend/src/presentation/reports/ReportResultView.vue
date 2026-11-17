@@ -6,8 +6,10 @@ import type { ReportColumn, ReportResult } from 'src/domain/dynamic/report-types
 import ReportChart from './ReportChart.vue';
 import { formatValue } from './report-format';
 
-const props = defineProps<{ result: ReportResult; viz: string; chartHeight?: string; drillable?: boolean }>();
-const emit = defineEmits<{ drill: [groupKeys: string[]] }>();
+/** openableTasks：任務資料來源的明細列可以點開任務（taskIds 逐列對齊）；儀表板卡片不開。 */
+const props = defineProps<{ result: ReportResult; viz: string; chartHeight?: string; drillable?: boolean; openableTasks?: boolean }>();
+const emit = defineEmits<{ drill: [groupKeys: string[]]; openTask: [taskId: number] }>();
+const taskIdAt = (ri: number) => (props.openableTasks ? (props.result.taskIds?.[ri] ?? null) : null);
 const { t, locale } = useI18n();
 
 const STATE_KEYS = { empty: 'reports.state.empty', restricted: 'reports.state.restricted', fieldMissing: 'reports.state.fieldMissing',
@@ -96,7 +98,12 @@ const countText = (n: number | null | undefined) => (n ?? 0).toLocaleString(loca
             <tr><th v-for="c in fieldCols" :key="c.key" class="text-left">{{ c.label }}</th></tr>
           </thead>
           <tbody>
-            <tr v-for="(row, ri) in result.detailRows" :key="ri">
+            <tr
+              v-for="(row, ri) in result.detailRows" :key="ri" :class="{ 'row-clickable': taskIdAt(ri) !== null }" :data-testid="`detail-row-${ri}`"
+              :tabindex="taskIdAt(ri) !== null ? 0 : undefined" :role="taskIdAt(ri) !== null ? 'button' : undefined"
+              @click="taskIdAt(ri) !== null && emit('openTask', taskIdAt(ri)!)"
+              @keydown.enter.prevent="taskIdAt(ri) !== null && emit('openTask', taskIdAt(ri)!)"
+            >
               <td v-for="(c, ci) in fieldCols" :key="c.key">{{ fmt(row[ci], c) }}</td>
             </tr>
           </tbody>

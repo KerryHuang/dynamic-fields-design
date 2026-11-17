@@ -1,7 +1,7 @@
 import sharedOperators from '../../../../../shared/filter-operators.json';
 import { operatorNeedsValue } from 'src/domain/dynamic/condition';
 import type {
-  CatalogField, ModuleCatalog, ReportChild, ReportDateRange, ReportDefinition, ReportFieldRef, ReportFilter, ReportMeasure, ReportSort, ReportViz,
+  CatalogField, ModuleCatalog, ReportChild, ReportDataset, ReportDateRange, ReportDefinition, ReportFieldRef, ReportFilter, ReportMeasure, ReportSort, ReportViz,
 } from 'src/domain/dynamic/report-types';
 import type { FilterOperator } from 'src/domain/dynamic/types';
 import { findChild, listFields, refKey } from '../report-catalog';
@@ -10,6 +10,8 @@ export type DesignerStep = 0 | 1 | 2 | 3 | 4;
 
 export interface DesignerState {
   name: string;
+  /** module 是動態模組報表（要選 mainModuleKey），tasks、taskEvents 是系統資料來源（mainModuleKey 為空）。 */
+  dataset: ReportDataset;
   mainModuleKey: string | null;
   child: ReportChild | null;
   columns: ReportFieldRef[];
@@ -24,11 +26,14 @@ export interface DesignerState {
   hasHidden: boolean;
 }
 
+/** 可以帶條件的量值：ratio、countIf 必填，sum、avg、median 選填；其他種類（min、max、countMain、countChild）後端一律丟掉條件。 */
+export const CONDITION_KINDS = ['ratio', 'countIf', 'sum', 'avg', 'median'];
+
 const clone = <T>(v: T): T => JSON.parse(JSON.stringify(v)) as T;
 
 export function emptyState(): DesignerState {
   return {
-    name: '', mainModuleKey: null, child: null, columns: [], groups: [], measures: [], filters: [],
+    name: '', dataset: 'module', mainModuleKey: null, child: null, columns: [], groups: [], measures: [], filters: [],
     primaryDateField: null, dateRange: null, sort: [], viz: 'table', hasHidden: false,
   };
 }
@@ -36,7 +41,7 @@ export function emptyState(): DesignerState {
 export function fromDefinition(def: ReportDefinition, name = ''): DesignerState {
   const d = clone(def);
   return {
-    name, mainModuleKey: d.mainModuleKey, child: d.child ?? null, columns: d.columns, groups: d.groups, measures: d.measures,
+    name, dataset: d.dataset ?? 'module', mainModuleKey: d.mainModuleKey, child: d.child ?? null, columns: d.columns, groups: d.groups, measures: d.measures,
     filters: d.filters, primaryDateField: d.primaryDateField ?? null, dateRange: d.dateRange ?? null, sort: d.sort ?? [], viz: d.viz,
     hasHidden: d.filters.some((f) => f.hidden) || d.measures.some((m) => m.condition?.hidden),
   };
@@ -46,8 +51,9 @@ export function toDefinition(s: DesignerState): ReportDefinition {
   const s2 = clone(s);
   const plain = (f: ReportFilter): ReportFilter => ({ field: f.field, op: f.op, ...(f.value === undefined ? {} : { value: f.value }) });
   return {
-    version: 1, mainModuleKey: s2.mainModuleKey ?? '', child: s2.child, columns: s2.columns, groups: s2.groups,
-    measures: s2.measures.map((m) => (m.condition ? { ...m, condition: plain(m.condition) } : m)),
+    version: 1, ...(s2.dataset === 'module' ? {} : { dataset: s2.dataset }), mainModuleKey: s2.mainModuleKey ?? '', child: s2.child, columns: s2.columns, groups: s2.groups,
+    // min、max 不支援條件（J19，存檔時後端也會丟掉），不送出去
+    measures: s2.measures.map((m) => (m.condition && CONDITION_KINDS.includes(m.kind) ? { ...m, condition: plain(m.condition) } : { ...m, condition: null })),
     filters: s2.filters.map(plain), primaryDateField: s2.primaryDateField, dateRange: s2.dateRange, sort: s2.sort, viz: s2.viz,
   };
 }
@@ -61,10 +67,13 @@ export function operatorsOf(f: Pick<CatalogField, 'type' | 'isDate'>): FilterOpe
 const isChild = (r: ReportFieldRef | null | undefined) => r?.source === 'child';
 const measureUsesChild = (m: ReportMeasure) => m.kind === 'countChild' || isChild(m.field) || isChild(m.condition?.field);
 
-export function setMainModule(s: DesignerState, key: string | null) {
-  if (s.mainModuleKey === key) return;
-  Object.assign(s, { ...emptyState(), name: s.name, viz: s.viz, mainModuleKey: key });
+/** 換資料來源：模組報表給模組鍵，系統資料來源（tasks、taskEvents）鍵為 null。內容不同才清空設定，名稱與圖形保留。 */
+export function setSource(s: DesignerState, dataset: ReportDataset, key: string | null) {
+  if (s.dataset === dataset && (s.mainModuleKey || null) === (key || null)) return;
+  Object.assign(s, { ...emptyState(), name: s.name, viz: s.viz, dataset, mainModuleKey: key });
 }
+
+export const setMainModule = (s: DesignerState, key: string | null) => setSource(s, 'module', key);
 
 /** 有設定內容（改主模組會清掉）。 */
 export function hasContent(s: DesignerState): boolean {
@@ -123,17 +132,26 @@ function filterComplete(f: ReportFilter): boolean {
 /** 需要 N 的區間種類，與後端 ReportRules.LastKinds 相同；其他 last* 開頭的（lastWeek 等）不需要。 */
 export const LAST_RANGE_KINDS = ['lastDays', 'lastWeeks', 'lastMonths'];
 export const needsN = (r: Pick<ReportDateRange, 'kind'>) => LAST_RANGE_KINDS.includes(r.kind);
+/** 日期區間的全部種類（設計器的區間選單與報表頁的期間篩選共用），與後端 ReportRules 的 RangeKinds 相同。 */
+export const REPORT_RANGE_KINDS = ['today', 'thisWeek', 'lastWeek', 'thisMonth', 'lastMonth', 'thisYear', 'lastYear', ...LAST_RANGE_KINDS];
+
+/** 欄位：sum、avg、median、min、max 必填；條件：ratio、countIf 必填，sum、avg、median 有帶就要完整。 */
+function measureComplete(m: ReportMeasure): boolean {
+  if (['sum', 'avg', 'median', 'min', 'max'].includes(m.kind) && !m.field) return false;
+  if (m.kind === 'ratio' || m.kind === 'countIf') return !!m.condition && filterComplete(m.condition);
+  return !m.condition || !CONDITION_KINDS.includes(m.kind) || filterComplete(m.condition);
+}
 
 export function canAdvance(s: DesignerState, step: DesignerStep): boolean {
   switch (step) {
-    case 0: return !!s.mainModuleKey;
+    case 0: return s.dataset !== 'module' || !!s.mainModuleKey;
     case 1: return true;
     case 2:
       return s.filters.every(filterComplete)
         && (!s.dateRange || (!!s.primaryDateField && (!needsN(s.dateRange) || (s.dateRange.n ?? 0) >= 1)));
     case 3:
       return s.columns.length + s.measures.length > 0 && (s.groups.length === 0 || s.measures.length > 0)
-        && s.measures.every((m) => (['sum', 'avg', 'min', 'max'].includes(m.kind) ? !!m.field : m.kind === 'ratio' ? !!m.condition && filterComplete(m.condition) : true));
+        && s.measures.every(measureComplete);
     default: return false;
   }
 }
@@ -154,7 +172,7 @@ export function unavailableRefs(s: DesignerState, catalog: ModuleCatalog): Unava
     measures: idx(s.measures, (m) => missing(m.field) || missing(m.condition?.field) || (m.kind === 'countChild' && !findChild(catalog, s.child))),
     filters: idx(s.filters, (f) => missing(f.field)),
     // sort 的鍵不是量值 Id 時是欄位鍵（source:fieldId:via）；其他字串後端忽略
-    sort: idx(s.sort, (x) => !s.measures.some((m) => m.id === x.key) && /^\w+:\d+:\d*$/.test(x.key) && !known.has(x.key)),
+    sort: idx(s.sort, (x) => !s.measures.some((m) => m.id === x.key) && /^\w+:-?\d+:\d*$/.test(x.key) && !known.has(x.key)),
     primaryDate: missing(s.primaryDateField),
     any: false,
   };

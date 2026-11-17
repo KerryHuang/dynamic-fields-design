@@ -172,4 +172,34 @@ describe('report-format', () => {
     expect(formatValue(12.5, 'number', 'zh-TW')).toBe('12.5');
     expect(formatValue(null, 'number', 'zh-TW')).toBe('—');
   });
+
+  describe('任務明細列', () => {
+    const TASKS: ReportResult = {
+      state: 'ok', rowMeaning: '一個任務', dedupedNote: false, basisDate: '2026-11-05', total: {},
+      columns: [{ key: 'main:-1:', label: '標題', role: 'field', valueType: 'text' }],
+      detailRows: [['寫報告'], ['訂機票']], taskIds: [41, 42],
+    };
+    const mountTasks = (openable: boolean, result = TASKS) => {
+      const i18n = createI18n({ legacy: false, locale: 'zh-TW', messages: { 'zh-TW': zhTW } });
+      return mount(ReportResultView, { props: { result, viz: 'table', openableTasks: openable }, global: { plugins: [[quasar.Quasar, { components: quasar }], i18n] } });
+    };
+
+    it('clicking or pressing Enter on a row emits that row task id', async () => {
+      const w = mountTasks(true);
+      await w.find('[data-testid="detail-row-1"]').trigger('click');
+      await w.find('[data-testid="detail-row-0"]').trigger('keydown', { key: 'Enter' });
+      expect(w.emitted('openTask')).toEqual([[42], [41]]);
+      expect(w.find('[data-testid="detail-row-0"]').classes()).toContain('row-clickable');
+    });
+
+    it('rows are inert without openableTasks, without taskIds (module reports, dashboard cards)', async () => {
+      const off = mountTasks(false);
+      await off.find('[data-testid="detail-row-0"]').trigger('click');
+      expect(off.emitted('openTask')).toBeUndefined();
+      expect(off.find('[data-testid="detail-row-0"]').classes()).not.toContain('row-clickable');
+      const none = mountTasks(true, { ...TASKS, taskIds: null });
+      await none.find('[data-testid="detail-row-0"]').trigger('click');
+      expect(none.emitted('openTask')).toBeUndefined();
+    });
+  });
 });

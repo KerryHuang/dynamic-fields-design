@@ -15,6 +15,7 @@ vi.mock('src/services/api/dynamic-api', () => ({
   dynamicApi: {
     getReport: vi.fn(), runReport: vi.fn(), drillReport: vi.fn(), copyReport: vi.fn(), deleteReport: vi.fn(),
     exportReport: vi.fn(), getReportCatalog: vi.fn(), setReportShares: vi.fn(), getGroups: vi.fn(), getMe: vi.fn(),
+    getReportDatasetCatalog: vi.fn(), getDepartments: vi.fn(), getTask: vi.fn(), getTaskComments: vi.fn(), getUsers: vi.fn(),
   },
 }));
 vi.mock('./../../presentation/reports/ReportChart.vue', () => ({ default: { template: '<i />' } }));
@@ -47,6 +48,10 @@ const CATALOG: ModuleCatalog = {
   via: [{ fieldId: 6, label: '客戶', targetKey: 'e', fields: [{ id: 0, label: '標題', type: 'text', canGroup: true, canSum: false, canMinMax: false, isDate: false, options: null }] }],
   children: [],
 };
+const DEPARTMENTS = [
+  { id: 1, code: 'hq', name: { 'zh-TW': '總部' }, parentId: null, managerUserId: null, sortOrder: 1, active: true, memberUserIds: [] },
+  { id: 2, code: 'sales', name: { 'zh-TW': '業務部' }, parentId: 1, managerUserId: null, sortOrder: 2, active: false, memberUserIds: [] },
+];
 const q = (id: string) => document.body.querySelector(`[data-testid="${id}"]`) as HTMLElement | null;
 let mounted: ReturnType<typeof mount> | undefined;
 let router: ReturnType<typeof createRouter>;
@@ -55,6 +60,10 @@ async function mountPage(detail: ReportDetail, isSystemAdmin = false) {
   api.getMe.mockResolvedValue({ userId: 'u', displayName: 'u', isSystemAdmin, mustChangePassword: false, groups: [], designer: { read: false, add: false, edit: false, delete: false }, theme: FACTORY_ME_THEME });
   api.getReport.mockResolvedValue(detail);
   api.getReportCatalog.mockResolvedValue(CATALOG);
+  api.getReportDatasetCatalog.mockResolvedValue(CATALOG);
+  api.getDepartments.mockResolvedValue(DEPARTMENTS);
+  api.getUsers.mockResolvedValue([]);
+  api.getTaskComments.mockResolvedValue([]);
   api.runReport.mockResolvedValue(RESULT);
   router = createRouter({
     history: createMemoryHistory(),
@@ -175,7 +184,7 @@ describe('ReportViewPage', () => {
     api.drillReport.mockResolvedValue({ ...RESULT, truncated: false, groups: null, columns: [{ key: 'main:5:', label: '單號', role: 'field', valueType: 'text' }], detailRows: [['SO-1']] });
     q('group-row-0')!.click();
     await flushPromises();
-    expect(api.drillReport).toHaveBeenCalledWith(7, ['a'], null, 'zh-TW');
+    expect(api.drillReport).toHaveBeenCalledWith(7, ['a'], null, 'zh-TW', { range: null, departmentIds: [], includeSubDepartments: true });
     expect(q('report-detail-table')!.textContent).toContain('SO-1');
   });
 
@@ -195,5 +204,114 @@ describe('ReportViewPage', () => {
     expect(texts[1]).toBe('客戶．標題 等於 ACME');
     expect(texts[2]).toBe('欄位 #99 等於 x');
     expect(q('condition-hidden')!.textContent!.trim()).toBe('隱藏條件');
+  });
+
+  describe('暫時篩選與任務下鑽', () => {
+    const TASK_DEF: ReportDetail['definition'] = {
+      version: 1, dataset: 'tasks', mainModuleKey: '', columns: [], measures: [{ id: 'm1', kind: 'countMain', field: null, condition: null }],
+      groups: [{ field: { source: 'main', fieldId: -3 } }], viz: 'table', filters: [], primaryDateField: { source: 'main', fieldId: -6 },
+    };
+    const TASK_DETAIL: ReportDetail = { ...DETAIL(true), mainModuleKey: '', definition: TASK_DEF };
+    const DRILL = {
+      ...RESULT, truncated: false, groups: null, total: null, taskIds: [41, 42],
+      columns: [{ key: 'main:-1:', label: '標題', role: 'field' as const, valueType: 'text' }], detailRows: [['寫報告'], ['訂機票']],
+    };
+    const lastRun = () => api.runReport.mock.calls.at(-1)!;
+    const rangeSelect = () => mounted!.findAllComponents(quasar.QSelect).find((c) => c.element.contains(q('filter-range')))!;
+    async function pickRange(kind: string) { rangeSelect().vm.$emit('update:modelValue', kind); await flushPromises(); }
+    async function pickDepartments(ids: number[], includeSub = true) {
+      q('filter-department')!.click();
+      await flushPromises();
+      mounted!.findComponent(quasar.QTree).vm.$emit('update:ticked', ids);
+      mounted!.findAllComponents(quasar.QCheckbox).find((c) => c.element.contains(q('dept-filter-sub')))!.vm.$emit('update:modelValue', includeSub);
+      await flushPromises();
+      q('dept-filter-apply')!.click();
+      await flushPromises();
+    }
+    it('a task report loads the dataset catalog and shows the department filter, a module report only the period', async () => {
+      await mountPage(TASK_DETAIL);
+      expect(api.getReportDatasetCatalog).toHaveBeenCalledWith('tasks', 'zh-TW');
+      expect(api.getReportCatalog).not.toHaveBeenCalled();
+      expect(q('filter-department')).not.toBeNull();
+      mounted!.unmount();
+      document.body.innerHTML = '';
+      await mountPage(DETAIL(true));
+      expect(q('filter-range')).not.toBeNull();
+      expect(q('filter-department')).toBeNull();
+    });
+
+    it('the period filter is disabled for a report without a primary date field', async () => {
+      await mountPage(DETAIL(true));
+      expect(rangeSelect().props('disable')).toBe(true);
+    });
+
+    it('choosing a period and departments reruns the report with them, nothing goes into the url', async () => {
+      await mountPage(TASK_DETAIL);
+      expect(lastRun()).toEqual([7, null, 'zh-TW', { range: null, departmentIds: [], includeSubDepartments: true }]);
+      await pickRange('lastMonth');
+      expect(lastRun()[1]).toEqual({ kind: 'lastMonth', n: null });
+      await pickDepartments([1, 2], false);
+      expect(lastRun()[3]).toEqual({ range: { kind: 'lastMonth', n: null }, departmentIds: [1, 2], includeSubDepartments: false });
+      expect(router.currentRoute.value.fullPath).toBe('/reports/7');
+    });
+
+    it('export carries the current filter', async () => {
+      api.exportReport.mockRejectedValue({ status: 500 });
+      await mountPage(TASK_DETAIL);
+      await pickRange('thisMonth');
+      await pickDepartments([2]);
+      q('report-export')!.click();
+      await flushPromises();
+      expect(api.exportReport).toHaveBeenCalledWith(7, 'zh-TW', { range: { kind: 'thisMonth', n: null }, departmentIds: [2], includeSubDepartments: true });
+    });
+
+    it('drill uses the same filter', async () => {
+      await mountPage(TASK_DETAIL);
+      await pickDepartments([1]);
+      api.drillReport.mockResolvedValue(DRILL);
+      q('group-row-0')!.click();
+      await flushPromises();
+      expect(api.drillReport).toHaveBeenCalledWith(7, ['a'], null, 'zh-TW', { range: null, departmentIds: [1], includeSubDepartments: true });
+    });
+
+    it('switching to another report resets the filter', async () => {
+      await mountPage(TASK_DETAIL);
+      await pickRange('lastMonth');
+      await pickDepartments([1]);
+      await router.push('/reports/8');
+      await flushPromises();
+      expect(lastRun()[0]).toBe(8);
+      expect(lastRun()[3]).toEqual({ range: null, departmentIds: [], includeSubDepartments: true });
+    });
+
+    it('clicking a drill row opens the task dialog on the same page; closing returns to the drill list and reruns the report', async () => {
+      api.getTask.mockResolvedValue({ id: 42, title: '訂機票' } as never);
+      await mountPage(TASK_DETAIL);
+      api.drillReport.mockResolvedValue(DRILL);
+      q('group-row-0')!.click();
+      await flushPromises();
+      (q('detail-row-1') as HTMLElement).click();
+      await flushPromises();
+      expect(api.getTask).toHaveBeenCalledWith(42);
+      expect(q('task-dialog')).not.toBeNull();
+      expect(router.currentRoute.value.fullPath).toBe('/reports/7');
+      const runs = api.runReport.mock.calls.length;
+      mounted!.findComponent({ name: 'TaskDialog' }).vm.$emit('update:taskId', null);
+      await flushPromises();
+      expect(q('report-detail-table')).not.toBeNull();
+      expect(q('drill-close')).not.toBeNull();
+      expect(api.runReport.mock.calls.length).toBeGreaterThan(runs);
+    });
+
+    it.each([403, 404])('a task the server no longer lets the viewer see (%i) shows the unavailable message', async (status) => {
+      api.getTask.mockRejectedValue({ status, message: 'x' });
+      await mountPage(TASK_DETAIL);
+      api.drillReport.mockResolvedValue(DRILL);
+      q('group-row-0')!.click();
+      await flushPromises();
+      (q('detail-row-0') as HTMLElement).click();
+      await flushPromises();
+      expect(q('task-not-found')!.textContent).toContain('這筆任務已無法查看');
+    });
   });
 });

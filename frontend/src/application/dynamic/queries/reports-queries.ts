@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/vue-query';
 import { toValue, type MaybeRef } from 'vue';
-import type { ReportDateRange, ReportDefinition } from 'src/domain/dynamic/report-types';
+import { NO_RUN_FILTER, type ReportDataset, type ReportDefinition, type ReportRunFilter } from 'src/domain/dynamic/report-types';
 import { dynamicApi } from 'src/services/api/dynamic-api';
 
 export function useReports() {
@@ -12,11 +12,11 @@ export function useReport(id: MaybeRef<number>) {
   return useQuery({ queryKey: ['report', id], queryFn: () => dynamicApi.getReport(toValue(id)), enabled: () => !Number.isNaN(toValue(id)) });
 }
 
-/** 結果每次進頁都重算：報表依賴的記錄隨時在變，不吃快取。 */
-export function useRunReport(id: MaybeRef<number>, locale: MaybeRef<string>) {
+/** 結果每次進頁都重算：報表依賴的記錄隨時在變，不吃快取。filter 是報表頁的暫時篩選，變動就重跑。 */
+export function useRunReport(id: MaybeRef<number>, locale: MaybeRef<string>, filter: MaybeRef<ReportRunFilter> = NO_RUN_FILTER) {
   return useQuery({
-    queryKey: ['report-run', id, locale],
-    queryFn: () => dynamicApi.runReport(toValue(id), null, toValue(locale)),
+    queryKey: ['report-run', id, locale, filter],
+    queryFn: () => dynamicApi.runReport(toValue(id), toValue(filter).range, toValue(locale), toValue(filter)),
     staleTime: 0,
     gcTime: 0,
     retry: false,
@@ -24,10 +24,12 @@ export function useRunReport(id: MaybeRef<number>, locale: MaybeRef<string>) {
 }
 
 /** 下鑽：groupKeys 為 null 時不查。 */
-export function useDrillReport(id: MaybeRef<number>, groupKeys: MaybeRef<string[] | null>, locale: MaybeRef<string>) {
+export function useDrillReport(
+  id: MaybeRef<number>, groupKeys: MaybeRef<string[] | null>, locale: MaybeRef<string>, filter: MaybeRef<ReportRunFilter> = NO_RUN_FILTER,
+) {
   return useQuery({
-    queryKey: ['report-drill', id, groupKeys, locale],
-    queryFn: () => dynamicApi.drillReport(toValue(id), toValue(groupKeys)!, null, toValue(locale)),
+    queryKey: ['report-drill', id, groupKeys, locale, filter],
+    queryFn: () => dynamicApi.drillReport(toValue(id), toValue(groupKeys)!, toValue(filter).range, toValue(locale), toValue(filter)),
     enabled: () => toValue(groupKeys) !== null,
     staleTime: 0,
     gcTime: 0,
@@ -73,6 +75,28 @@ export function useReportCatalog(moduleKey: MaybeRef<string | null | undefined>,
     queryKey: ['report-catalog', moduleKey, locale],
     queryFn: () => dynamicApi.getReportCatalog(toValue(moduleKey)!, toValue(locale)),
     enabled: () => !!toValue(moduleKey),
+    staleTime: 0,
+    retry: false,
+  });
+}
+
+/** 系統資料來源（任務、任務事件）；空系統也有。 */
+export function useReportDatasets(locale: MaybeRef<string>) {
+  return useQuery({ queryKey: ['report-datasets', locale], queryFn: () => dynamicApi.getReportDatasets(toValue(locale)) });
+}
+
+/**
+ * 依資料來源取欄位目錄：模組報表取模組目錄（moduleKey 為空時不查），系統資料來源取該來源的目錄。
+ * 設計器與報表檢視頁共用；目錄隨設計變動，每次進頁重取。
+ */
+export function useSourceCatalog(dataset: MaybeRef<ReportDataset | undefined>, moduleKey: MaybeRef<string | null | undefined>, locale: MaybeRef<string>) {
+  const isModule = () => (toValue(dataset) ?? 'module') === 'module';
+  return useQuery({
+    queryKey: ['report-source-catalog', dataset, moduleKey, locale],
+    queryFn: () => (isModule()
+      ? dynamicApi.getReportCatalog(toValue(moduleKey)!, toValue(locale))
+      : dynamicApi.getReportDatasetCatalog(toValue(dataset)!, toValue(locale))),
+    enabled: () => (isModule() ? !!toValue(moduleKey) : true),
     staleTime: 0,
     retry: false,
   });
