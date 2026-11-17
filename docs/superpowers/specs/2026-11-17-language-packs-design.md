@@ -1,19 +1,20 @@
 # 語系包與自訂語系 設計文件（改寫 i4）
 
 > 2026-11-17｜平台共用能力｜前置：[政策設定](2026-11-11-policy-settings-design.md)（§3.7、A18）、[p3 計畫](../plans/2026-11-11-policy-settings-p3.md)（p3b 語系）、[維運與觀測](2026-11-11-ops-observability-design.md)（O2 稽核）、i3（名稱欄位多語，設計待寫）
-> 狀態：使用者 2026-11-17 裁決 U1–U10（全照建議）；待審查。這次只寫設計，不改程式。路線位置維持 i3、i4（p3 之後，使用者 2026-11-12 排定）。
-> 標記：「（使用者裁決）」是使用者 2026-11-17 已拍板的；「（U#）」是使用者行為類事項，主控提推薦、使用者 2026-11-17 全部照推薦裁決；「（T#）」是技術類決定，主控可推翻。全部彙整在 §17。
-> 參考研究：`.tmp/20261117-i18n-langpack/vtiger-language-packs.md`（vtiger 7.4 語言包機制與「給 Formwright 的啟示」）。
+> 狀態：使用者 2026-11-17 裁決 U1–U10（全照建議）；已依審查修正（4 項必修、多項應修，主控裁決見 §17.4）。這次只寫設計，不改程式。路線位置維持 i3、i4（p3 之後，使用者 2026-11-12 排定）。
+> 標記：「（使用者裁決）」是使用者 2026-11-17 已拍板的；「（U#）」是使用者行為類事項，主控提推薦、使用者 2026-11-17 全部照推薦裁決；「（T#）」是技術類決定，主控可推翻；「（M#）」是審查後主控新增的行為類裁決，待使用者確認。全部彙整在 §17。
+> 參考研究：vtiger 7.4 語言包機制（研究檔在本機暫存、不進版控，要點摘要在 §16）。
 
 ## 1. 意圖與原因
 
-Formwright 現在只有四種語系（zh-TW、en-US、th、vi），清單在五個地方各寫一份：
+Formwright 現在只有四種語系（zh-TW、en-US、th、vi），清單寫死在下列地方（2026-11-17 main 的位置；i4a 驗收時逐條勾，行號會位移，以符號名為準）：
 
-- 前端 `frontend/src/i18n/locale.ts` 的 `LocaleCode`、`LOCALES`、Quasar 語言包 glob；另外 `PrintTab.vue`、`LedgerTab.vue`、`designer-graph.ts` 各有一份 `LOCALES` 陣列，`domain/dynamic/types.ts` 的 `Locale` 型別也寫死四種。
-- 前端介面文字 `frontend/src/i18n/*.json`（每語約 1844 句），隨前端打包，`locales.vitest.spec.ts` 檢查四份鍵一致。
-- 後端 `I18nText.SupportedLocales` 與退回 zh-TW；`HeaderCurrentLocale` 用它驗 `X-Locale`。
-- 後端訊息 `MessageText.cs`（約 137 句）與 `ReportText.cs`（約 31 句），每句是 `(Zh, En, Th, Vi)` 四個 C# 欄位。
-- 套件格式 `backend/apps/app.schema.json` 的 `i18n` 用 `propertyNames enum` 限定四種。
+- **前端清單**：`frontend/src/i18n/locale.ts` 的 `LocaleCode`、`LOCALES`、Quasar 語言包 glob；`PrintTab.vue`、`LedgerTab.vue`、`designer-graph.ts` 各有一份 `LOCALES` 陣列；`domain/dynamic/types.ts` 的 `Locale` 型別；`I18nTextInput.vue` 的 `others: Locale[] = ['en-US','th','vi']`。
+- **前端政策選項名稱**：`PolicyValueEditor.vue` 用 `t('policies.choices.<選項>')` 顯示選項名稱。語系選項改動態後，`ja` 會直接顯示成鍵名；`policy-i18n.vitest.spec.ts` 也要求每個 choice 都有四語文案。語系類選項（`locale.default`、`locale.enabled`、`locale.requiredText`）的名稱改用 `NativeName`，並從該測試的 choice 檢查中排除。
+- **前端介面文字**：`frontend/src/i18n/*.json`（每語 1990 句，以當下基準鍵數計），隨前端打包，`locales.vitest.spec.ts` 檢查四份鍵一致。
+- **後端清單**：`I18nText.SupportedLocales` 在正式程式有 8 處使用：`ModuleRules`、`CreateGroupValidator`、`RenameGroupValidator`、`AppPackageValidator.V7`、`TaskRuleValidator`、`FieldImportParser`、`MessageText`、`HeaderCurrentLocale`（用它驗 `X-Locale`）；`ICurrentLocale` 的註解也寫死四語。另有 17 個驗證點呼叫 `I18nText.IsValid`（欄位、模組、事件、檢查、簽核定義、組織等）。
+- **後端訊息**：`MessageText.cs`（137 句）與 `ReportText.cs`（31 句），每句是 `(Zh, En, Th, Vi)` 四個 C# 欄位。
+- **套件格式**：`backend/apps/app.schema.json` 的 `i18n` 用 `propertyNames enum` 限定四種（正式程式不讀這份 schema，只有 `AppSchemaTests` 讀；真正擋鍵的是 C# 驗證器 `TemplateValidator.HasZhTw`、`AppPackageValidator.CheckText`，兩邊要一起改）。
 
 三個缺口：
 
@@ -27,7 +28,7 @@ Formwright 現在只有四種語系（zh-TW、en-US、th、vi），清單在五�
 
 **目標**
 
-1. 語系清單變成資料：已安裝語系（代碼、自稱、方向、Quasar 語言包、數字格式語系、上層語系）存在資料庫，前後端都從同一個來源取（§4）。
+1. 語系清單變成資料：已安裝語系（代碼、自稱、Quasar 語言包、上層語系）存在資料庫，前後端都從同一個來源取（§4）。
 2. 系統管理員可匯入語系包新增語系，或覆寫既有語系的部分句子；匯入前預覽、驗證，一次全成功或全不動，可回到上一版（§5、§6）。
 3. 任一語系可匯出成翻譯樣板（JSON、Excel），翻好再匯入（§7）。
 4. 介面文字改成執行期從伺服器載入，登入前可用，載入失敗有退回（§8）。
@@ -46,26 +47,27 @@ Formwright 現在只有四種語系（zh-TW、en-US、th、vi），清單在五�
 
 **反目標（做了也算失敗）**
 
-- 語系包能帶可執行內容：任何 JS、HTML、CSS、字型、zip 內的檔案路徑。vtiger 的語言包是含 PHP 的 zip，管理員帳號被盜就等於遠端執行（研究 §5 第 1、2 點）。
+- 語系包能帶可執行內容：任何 JS、HTML、CSS、字型、zip 內的檔案路徑。vtiger 的語言包是含 PHP 的 zip，管理員帳號被盜就等於遠端執行（§16）。
 - 匯入一份壞檔讓整個介面壞掉：訊息編譯失敗讓元件渲染中斷、`string.Format` 丟例外讓 API 500、缺鍵直接顯示 `menu.home` 這種代碼。
 - 匯入到一半失敗留下半套翻譯。
 - 平台升級蓋掉客戶自己的翻譯（vtiger 靠 `custom/` 目錄做到的事，Formwright 要做到且不靠手放檔）。
-- 語系狀態欄只留不用（vtiger 的 `isdefault`、`sequence`、`active` 大多空轉，研究 §1.1）：每一欄都要有行為與畫面。
+- 語系狀態欄只留不用（vtiger 的 `isdefault`、`sequence`、`active` 大多空轉，§16）：每一欄都要有行為與畫面，沒有行為或入口的欄位不放進語系表。
 - 「啟用」在語系表與政策各存一份。
 
 ## 3. 限制與既有事實
 
 - **多租戶是每客戶一套**（動態模組產品方向）：一個部署一個資料庫，語系表、語系包都屬於這一套，不需要租戶欄。Demo 站是公開的，任何人登入管理員帳號都看得到（§14 Demo 開關）。
-- **p3 尚未實作**，計畫已定：`locale.default`（Choice）、`locale.enabled`、`locale.requiredText`（RoleSet），`Options` 都是 `I18nText.SupportedLocales`；三者存檔互相約束；`GET auth/options` 回 `defaultLocale`、`enabledLocales` 給登入前；`SystemPolicySnapshot` 是全系統政策的 singleton 快照，60 秒過期重載。本設計接在 p3 之後，要把三個政策的 `Options` 改成動態（§4.3、§18）。
-- **退回規則**：`I18nText.Resolve` 缺值退回 zh-TW；p3 判斷 13 改成「要求的語系 → 繁中 → `SupportedLocales` 順序第一個有值的」；前端 `resolveI18n` 同規則。
+- **p3 尚未實作**，計畫已定：`locale.default`（Choice）、`locale.enabled`、`locale.requiredText`（RoleSet），`Options` 都是 `I18nText.SupportedLocales`；三者存檔互相約束；`GET auth/options` 回 `defaultLocale`、`enabledLocales`（代碼陣列，`AuthApiTests.Options_IncludesLocaleSettings` 鎖了這個形狀）給登入前；`SystemPolicySnapshot` 是全系統政策的 singleton 快照，60 秒過期重載。本設計接在 p3 之後，要把三個政策的 `Options` 改成動態（§4.3、§18）。
+- **退回規則**：`I18nText.Resolve` 缺值退回 zh-TW；p3 判斷 13 改成「要求的語系 → 繁中 → `SupportedLocales` 順序第一個有值的」；前端 `resolveI18n` 同規則。p3 判斷 15「伺服器連不上時維持繁中」也被 U3、U4 影響（§18）。
 - **套件要求繁中**：`TemplateValidator.HasZhTw`、`AppPackageValidator.CheckText` 與 schema 的 `required: ["zh-TW"]`；p3 判斷 12 維持（使用者 2026-11-12 確認）。
-- **後端訊息集中在一個解析點**：`ServiceResultExtensions` 依 `ICurrentLocale` 解析 `MessageRef`；另有約 20 個檔直接呼叫 `MessageText.Get`／`ReportText.Get`，`AsI18n` 有 5 處（把一句訊息展成四語 I18nText 存進資料，例如「第 2 層主管」）。
-- **前端在執行期產生多語標籤**：`LedgerTab.vue`（沖銷欄位標籤）與 `designer-graph.ts`（新簽核節點、條件節點名稱）用 `tFor(l)` 對每個語系各翻一次。介面文字改成只載入目前語系後，這兩處要先載入各語系（§8.4）。
+- **後端訊息集中在一個解析點**：`ServiceResultExtensions` 依 `ICurrentLocale` 解析 `MessageRef`；另有 20 個檔直接呼叫 `MessageText.Get`／`ReportText.Get`；`AsI18n`（把一句訊息展成四語 I18nText 存進資料，例如「第 2 層主管」）有 4 個呼叫點（`ApprovalMessages.cs`），其中 3 個是 `static readonly` 欄位，型別初始化時只算一次，接不了 DI。
+- **前端在執行期產生多語標籤**：`LedgerTab.vue`（沖銷欄位標籤）與 `designer-graph.ts`（新簽核節點、條件節點名稱；它是同步純函式）用 `tFor(l)` 對每個語系各翻一次。介面文字改成只載入目前語系後，這兩處要先載入各語系（§8.4）。p3 判斷 14 已定「分錄沖銷欄位標籤仍產生四語（不是輸入）」（使用者 2026-11-12 確認 Q12），本設計要維持這個精神（§8.4、M3）。
 - **vue-i18n 11** 未用 unplugin 預編譯，JSON 在執行期由 message compiler 編譯（不需 `eval`）。所以執行期載入的 JSON 與現在打包進來的走同一條路。`locales.vitest.spec.ts` 已用 `baseCompile` 檢查每句能編譯，註解寫明「正式版編譯失敗會讓整個元件渲染中斷」。
 - **介面沒有把翻譯當 HTML 渲染**：前端沒有 `v-html`，Quasar `Notify` 沒用 `html: true`。介面文字裡沒有用到 vue-i18n 的 linked message（`@:`）與複數（`|`）。
 - **Quasar 內建 74 種語言包**（`node_modules/quasar/lang/*.js`），現在只 glob 四種。語言包是 JS 程式碼，只能隨前端打包，不能放進語系包。Quasar 的 RTL 要在建置時開 `rtl`，執行期切不了。
-- **數字格式**：`field-type-registry.ts`、`report-format.ts` 用 `toLocaleString(locale)`，瀏覽器 Intl 直接吃 BCP 47 代碼。
-- **ClosedXML** 已是後端依賴（匯出用），Excel 讀寫不必新增套件。
+- **數字格式**：`field-type-registry.ts`、`report-format.ts`、`DemoDataPage.vue`、`DraftConflictDialog.vue`、`ReportChart.vue`、`DashboardCardView.vue`、`ReportResultView.vue` 都直接拿 `locale.value` 呼叫 `toLocaleString`。語系代碼本身就是合法的 BCP 47，瀏覽器 Intl 直接吃，不需要另存「數字格式語系」欄。
+- **ClosedXML** 0.104.2 已是後端 Application 的依賴（匯出用），Excel 讀寫不必新增套件。
+- **後端目前不讀 `shared/`**：`shared/*.json` 在後端只有測試在讀（`SharedRuleCasesTests`、`PolicyCatalogFixtureTests` 等）；`filter-operators.json` 的正式程式引用只在前端（`rule-engine.ts`）。兩份 Dockerfile（`Dockerfile`、`Dockerfile.demo`）的後端 stage 只 `COPY backend/`，`shared/` 只複製到前端 stage。後端要內嵌 `shared/i18n/**`，部署檔要跟著改（§8.1）。
 - **稽核**：O2 會建稽核表（設計、權限、系統設定、政策的變更），排在 p2、p3 之前，i4 時已存在。
 - **使用者語系偏好**存在瀏覽器 `localStorage`（`formwright.locale`），不在伺服器。登入頁與頁首都有語言切換器（手冊 §20）。
 
@@ -79,42 +81,46 @@ Formwright 現在只有四種語系（zh-TW、en-US、th、vi），清單在五�
 |---|---|---|
 | `Code` | 字串 PK | BCP 47 子集，見下 |
 | `NativeName` | 字串 | 語言切換器顯示的自稱（「日本語」） |
-| `Direction` | `ltr`／`rtl` | `<html dir>`；本版只接受 `ltr`（U10） |
 | `QuasarLang` | 字串，可空 | 日期選擇器、表格分頁用的 Quasar 語言包；空＝用 en-US 的 |
-| `IntlLocale` | 字串，可空 | 數字、千分位的 Intl 語系；空＝同 `Code` |
 | `FallbackCode` | 字串，可空 | 上層語系，缺字時先退到這裡（如 `zh-HK` → `zh-TW`、`pt-BR` → `pt`） |
 | `Origin` | `builtin`／`installed` | 內建（隨程式出貨）或匯入 |
-| `SortOrder` | 整數 | 語言切換器與輸入框的排序 |
 | 建立、修改時間與人 | | 照慣例 |
 
+- **不存的欄位**（審查後刪除，每一欄都要有行為與入口）：`Direction`（本版只接受 ltr，是恆定值；語系包的 `direction` 只用來拒收 rtl，不存，U10）、`IntlLocale`（代碼本身就是 BCP 47，瀏覽器 Intl 直接吃）、`SortOrder`（沒有設定入口）。
+- **排序**：語言切換器與輸入框的順序固定為「內建四語（zh-TW、en-US、th、vi）→ 匯入的依安裝時間」，不另存排序欄。
 - **代碼格式**：`語言[-文字][-地區]`，語言 2–3 個小寫字母、文字 4 個字母首字大寫、地區 2 個大寫字母或 3 位數字（`ja`、`zh-Hant-HK`、`es-419`）。存檔時正規化大小寫。這是格式守衛，寫死（§14）。
-- **`QuasarLang`** 只能從前端建置時打包的清單挑（Quasar 74 種）；清單由前端建置產生一份 JSON 給後端驗（T2）。
+- **`QuasarLang`** 只能從前端打包的 Quasar 語言包清單挑（74 種）；清單 `shared/quasar-langs.json` 手動 commit，另有一個 vitest 比對它和 `node_modules/quasar/lang/*.js` 是否一致，後端內嵌這份清單驗（T2）。
 - **`FallbackCode`**：必須是已安裝語系、不能指自己、鏈長最多 3 層、不能成環。
 
 內建四語在啟動時依程式內嵌的 manifest 同步成 `Origin = builtin` 的四列（新增、欄位變更才寫，不變不寫，同任務看板設計 T17 的做法）。內建語系不能刪，只能停用。
 
 ### 4.2 語系快照（T3）
 
-`LocaleRegistry`（singleton）保存已安裝語系清單、各語系合併後的介面文字雜湊、後端訊息的合併表。與 p3 的 `SystemPolicySnapshot` 同一套換新方式：啟動載入、語系相關寫入的交易提交後立即換新、每個請求發現超過 60 秒就重載（多台部署時其他台最多晚 60 秒）。同步程式（`I18nText.IsValid`、`ICurrentLocale`、FluentValidation）都從它取，不 await 資料庫。
+`LocaleRegistry`（singleton）保存已安裝語系清單、各語系沿退回鏈合併後的介面文字與雜湊（§8.2）、後端訊息的合併表。與 p3 的 `SystemPolicySnapshot` 同一套換新方式：啟動載入、語系相關寫入的交易提交後立即換新、每個請求發現超過 60 秒就檢查（多台部署時其他台最多晚 60 秒）。同步程式（`ICurrentLocale`、`HeaderCurrentLocale`、FluentValidation 裡要列已安裝語系的地方）都從它取，不 await 資料庫。
+
+- **便宜的版本戳記**：過期時先查一個版本戳記（`Dynamic_Locale` 與 `Dynamic_LocalePack` 的最大更新時間與筆數），沒變就只延長有效期，**不整份重讀**。每個語系有兩版整份覆寫層（泰文約 170 KB），每分鐘重讀太浪費；有變才重讀並重算合併表與雜湊。
+- 合併表依「語系＋當時的預設語系」快取（退回鏈含系統預設語系，§8.3）；`locale.default` 政策變動時對應重算。
+- `I18nText.IsValid` **不依賴 `LocaleRegistry`**（Domain 不碰 IO，§10.1）。
 
 ### 4.3 與 p3 三政策的接法
 
-- `locale.default`、`locale.enabled`、`locale.requiredText` 的 `Options` 改成「目前已安裝語系」，由 `LocaleRegistry` 提供（政策目錄要支援動態選項，§18 第 2 點）。
+- `locale.default`、`locale.enabled`、`locale.requiredText` 的 `Options` 改成「目前已安裝語系」，由 `LocaleRegistry` 提供（政策目錄要支援動態選項，§18 第 2 點）；選項在畫面上的名稱用語系的 `NativeName`（§1）。
 - p3 的互相約束照舊，再加一條：**不能移除啟用中、預設或必填的語系**，訊息「請先在政策設定停用這個語系」。
 - 啟用清單裡的語系被移除（只可能發生在資料修補）時，讀取端把它當成沒啟用，不報錯。
 - 出廠值不變：預設 zh-TW、啟用四種、必填 zh-TW。只升級、不匯入任何語系包的客戶，行為和 p3 完全相同。
 
 ### 4.4 前後端取用
 
-- **登入前**：`GET auth/options`（p3 已公開）把 `enabledLocales` 從代碼陣列改成物件陣列 `{ code, nativeName, direction, quasarLang, intlLocale, uiHash }`，另回 `defaultLocale`。`uiHash` 給 §8 的快取用。
-- **登入後**：同一份資料隨 `GET policies/effective` 的語系區塊回傳，前端不另存一份。
-- **前端型別**：`LocaleCode`、`Locale` 從字面聯集改成 `string`（品牌型別），`LOCALES`、`PrintTab`、`LedgerTab`、`designer-graph` 的寫死陣列一律改從 `useLocales()` 取。
+- **登入前**：`GET auth/options`（p3 已公開）**保留** `enabledLocales` 代碼陣列與 `defaultLocale`，**另外加** `locales` 物件陣列 `{ code, nativeName, quasarLang, uiHash }`（只含啟用中的語系）。這是加欄位，不是改形狀，p3 的 `AuthApiTests.Options_IncludesLocaleSettings` 照過。`uiHash` 是該語系沿退回鏈合併後的雜湊（§8.2），給快取用。
+- **登入後**：同一份資料隨 `GET policies/effective` 的語系區塊回傳（另含已安裝但未啟用的語系，供管理員試看，§12），前端不另存一份。
+- **前端型別**：`LocaleCode`、`Locale` 從字面聯集改成 `string`（品牌型別），`LOCALES`、`PrintTab`、`LedgerTab`、`designer-graph`、`I18nTextInput` 的寫死陣列一律改從 `useLocales()` 取。
 - **`X-Locale`**：值必須是啟用中的語系，否則當預設語系（p3 判斷 14 照舊，只是清單來源換了）。
 
 ### 4.5 移除語系
 
 - 只有 `installed` 語系可移除，且不能是啟用、預設或必填（§4.3）。
-- 移除會刪掉它的語系包版本，**設計資料裡該語系的文字保留不刪**（同 A18「停用後已存的文字保留」）。之後再裝同一代碼，舊文字會再出現。
+- 不能是其他已安裝語系的**上層語系**（`FallbackCode` 指向它的），訊息「請先改掉〇〇的上層語系」。
+- 移除會刪掉它的語系包版本，**設計資料裡該語系的文字保留不刪**（同 A18「停用後已存的文字保留」）；因為 `I18nText.IsValid` 不看已安裝（§10.1），含該語系文字的模組、欄位照常可編輯。之後再裝同一代碼，舊文字會再出現。
 - 移除前確認框寫明：「介面翻譯會刪除；模組、欄位等名稱裡的〇〇文字會保留，重新安裝後會再出現」。
 
 ## 5. 語系包格式
@@ -132,7 +138,6 @@ Formwright 現在只有四種語系（zh-TW、en-US、th、vi），清單在五�
     "nativeName": "日本語",
     "direction": "ltr",
     "quasarLang": "ja",
-    "intlLocale": "ja-JP",
     "fallback": "en-US"
   },
   "pack": {
@@ -149,10 +154,10 @@ Formwright 現在只有四種語系（zh-TW、en-US、th、vi），清單在五�
 }
 ```
 
-- **`locale`**：§4.1 的欄位。匯入既有語系時，這段可以只帶 `code`，其他欄位沿用；有帶就更新。
-- **`pack.version`**：匯入者自訂的版本字串，只顯示、不比大小。`builtFor` 是產生樣板時的平台版本，只用來提示（§5.2）。`baseLocale` 是翻譯時參照的原文語系。
+- **`locale`**：§4.1 的欄位。匯入既有語系時，這段可以只帶 `code`，其他欄位沿用；有帶就更新。`direction` 只用來拒收（`rtl` 整包拒收，U10），不存；缺省視為 `ltr`。
+- **`pack.version`**：匯入者自訂的版本字串，只顯示、不比大小（最長 50 字元）。`builtFor` 是產生樣板時的平台版本，只用來提示（§5.2；最長 20 字元）。`baseLocale` 是翻譯時參照的原文語系。`note` 最長 500 字元。
 - **`ui`**：前端介面文字，**扁平鍵**（`a.b.c`），鍵順序依字母排序，方便 diff。值是 vue-i18n 訊息，語法限制見 §13.2。
-- **`server`**：後端訊息，鍵是 `MessageText` 常數名；`ReportText` 的鍵加 `report.` 前綴（兩張表有同名鍵，如 `Yes`）。值是 `string.Format` 範本，參數 `{0}`、`{1}`。
+- **`server`**：後端訊息，鍵是 `MessageText` 常數名；`ReportText` 的鍵加 `report.` 前綴當命名空間（目前兩張表沒有同名鍵，前綴是為了讓兩張表日後各自加鍵不會撞名，也讓語系包一眼分得出來源）。值是 `string.Format` 範本，參數 `{0}`、`{1}`。**鍵是語系包的公開契約**：`MessageText`、`ReportText` 的註解要寫明「鍵改名要留別名」，否則舊語系包的句子會默默失效。
 - **`designData`**（選填）：設計資料翻譯，鍵是 §10.2 的路徑，`text` 是譯文，`source` 是翻譯當時的原文（用來偵測「原文已改」，§10.4）。官方或廠商可以用這段替內建應用程式出譯名。
 - 三段都可以缺；值是空字串代表「沒翻」，匯入時略過、不算錯（樣板就靠這個，§7）。
 
@@ -161,8 +166,8 @@ Formwright 現在只有四種語系（zh-TW、en-US、th、vi），清單在五�
 不靠版本號判斷相容，**靠鍵比對**：匯入時拿語系包的鍵和「這台伺服器的基準鍵集」（內建 zh-TW 的 `ui`、`server` 全部鍵）比。
 
 - **缺鍵**：允許，執行期走退回鏈（§8.3）。報告列出缺幾句、哪幾個分類缺最多。
-- **多鍵**（基準沒有的鍵，多半是舊版留下的）：丟掉不存，報告列出。
-- **佔位符不一致**：該句拒收（不是整包拒收），報告列出。例：基準 `已選 {n} 筆`，譯文寫成 `{count} 件選択`。
+- **多鍵**（基準沒有的鍵，多半是舊版留下的）：丟掉不存，報告列出。這和「已存覆寫的鍵後來被平台改名或刪掉而失效」是兩件事，後者見 §6.5。
+- **佔位符不一致**：該句拒收（不是整包拒收），報告列出。例：基準 `已選 {n} 筆`，譯文寫成 `{count} 件選択`。比對前先去掉字面量跳脫（`{'{{欄位}}'}` 這種包大括號的寫法，內建有 `print.hint` 等 9 句，沿用 `locales.vitest.spec.ts` 的處理），共用案例檔要收這類案例。
 - **語法錯**：該句拒收，同上。
 - **`builtFor` 與目前版本不同**：只提示「這份語系包是 2026.10 版產生的，目前是 2026.11，缺 42 句」，不擋。
 - **`formatVersion`** 比目前支援的新：整包拒收。舊的照讀（格式升版時寫轉換）。
@@ -190,16 +195,17 @@ Formwright 現在只有四種語系（zh-TW、en-US、th、vi），清單在五�
 2. **預覽**（`POST i18n/packs/preview`，不寫入）：伺服器解析、驗證，回報告：
    - 語系：新安裝或更新既有；`locale` 欄位的變動。
    - 每段的筆數：新增、變更、不變、略過（空字串）、拒收（附原因與前 50 筆的鍵）、多餘鍵。
-   - 合併後的完整度：介面 1790／1844（97%）、後端訊息 160／168。
+   - 合併後的完整度：介面 1790／1990（90%）、後端訊息 160／168。
    - `designData`：會改幾個名稱、找不到幾個、原文已改幾個（§10.4）。
-   - 預覽結果以檔案雜湊記住 10 分鐘（存伺服器暫存，`previewId`），確認時不必再傳一次檔。
-3. **確認**（`POST i18n/packs/apply`，帶 `previewId`）：一個交易內寫入語系列、新版本、`designData` 的變更與稽核；任何一步失敗整批回滾，什麼都不留。
-4. **完成**：顯示結果；新語系還沒啟用時，提供「現在啟用」按鈕（寫 `locale.enabled` 政策，走政策 API 與它的約束），不自動啟用（U2）。
-5. 交易提交後 `LocaleRegistry` 換新；其他已開著的瀏覽器在下次取 `auth/options` 或生效政策時看到新的 `uiHash` 才重新載入（§8.2）。
+   - 預覽結果以檔案雜湊記住 10 分鐘（存伺服器暫存，`previewId`），確認時不必再傳一次檔。`previewId` 綁定建立者（別人拿不到），並記下預覽當時的**語系版本**（`Dynamic_Locale`／`Dynamic_LocalePack` 的版本戳記）與 `designData` 各目標物件的**更新時間**。
+   - 同時暫存的預覽筆數有技術上限（§14），超過時最舊的先丟；Demo 站匯入關閉（§13.4）時預覽只回報告、**不暫存** `previewId`，避免公開站任何人重複上傳 5 MB 檔吃光記憶體。
+3. **確認**（`POST i18n/packs/apply`，帶 `previewId`）：先比對上面記下的語系版本與各目標更新時間，**任何一項和現在不一致就回 409**，要求重新預覽（兩人同時匯入同一語系時後者即是這種情況）；一致才在一個交易內寫入語系列、新版本、`designData` 的變更與稽核；任何一步失敗整批回滾，什麼都不留。
+4. **完成**：顯示結果；新語系還沒啟用時，提供「現在啟用」按鈕（寫 `locale.enabled` 政策，走政策 API 與它的約束），不自動啟用（U2）；同時提供「以此語系預覽」（§12，M2）。
+5. 交易提交後 `LocaleRegistry` 換新；其他已開著的瀏覽器在下次取 `auth/options` 或生效政策時看到新的 `uiHash` 才重新載入（§8.2）。多台部署時其他台最多晚 60 秒，快取機制要在這段時間內不出錯（§8.2）。
 
 ### 6.4 版本與回到上一版（T7）
 
-- `Dynamic_LocalePack` 存每次匯入後的**整份覆寫層**（`ui`、`server` 兩個 JSON 欄、檔案雜湊、`pack` 資訊、報告、匯入人與時間），一個語系保留**目前版與上一版**兩份。
+- `Dynamic_LocalePack` 存每次匯入後的**整份覆寫層**（`ui`、`server` 兩個 JSON 欄、檔案雜湊、`pack` 資訊、報告、匯入人與時間），一個語系保留**目前版與上一版**兩份。每句另記下匯入當時**基準原文的雜湊**（逐句，不是整層一個，§6.5）。
 - 「回到上一版」把上一版設成目前版，原本的目前版變成上一版（可以再切回來）。只動介面與後端訊息；`designData` 已寫進設計資料，不跟著回滾，確認框寫明（設計資料改錯要靠再匯入一次翻譯）。
 - 不做無限版本歷史：整份檔案就在管理員手上，要更早的版本就重新匯入那個檔。
 
@@ -208,8 +214,9 @@ Formwright 現在只有四種語系（zh-TW、en-US、th、vi），清單在五�
 「系統管理 → 語系」，只有系統管理員看得到（U7）：
 
 - 清單：每個已安裝語系一列，顯示自稱、代碼、來源（內建／匯入）、是否啟用／預設（讀政策，連到政策頁）、介面完整度、後端訊息完整度、覆寫句數、目前版本與匯入時間。
-- 列上動作：匯出樣板（§7）、匯入、回到上一版、移除覆寫（整層清空，內建語系回到出廠翻譯）、移除語系（只限匯入的）。
-- 內建語系的覆寫句子在升級後若「內建原文已變」（匯入時記下的內建層雜湊與現在不同），完整度旁顯示「N 句覆寫的原文已更新」，匯出樣板時這些句子標記出來。
+- 列上動作：匯出樣板（§7）、匯入、以此語系預覽（§12，只限尚未啟用的語系）、回到上一版、移除覆寫（整層清空，內建語系回到出廠翻譯）、移除語系（只限匯入的）。
+- 內建語系的覆寫句子在升級後若「內建原文已變」（**逐句**比對匯入時記下的該句基準原文雜湊與現在的內建原文，不是整層一個雜湊），完整度旁顯示「N 句覆寫的原文已更新」，匯出樣板時這些句子標記出來。
+- 另顯示「N 句覆寫已失效（鍵已不存在）」：前端常改鍵名，覆寫會默默失效，管理員要看得到；這些句子匯出樣板時列出、供改鍵後重新對應。
 - 四種寬度都要能用（390 寬以卡片列出）。
 
 ## 7. 匯出與翻譯樣板
@@ -230,41 +237,50 @@ Formwright 現在只有四種語系（zh-TW、en-US、th、vi），清單在五�
 
 ### 7.2 Excel 的限制
 
-- 只讀儲存格的值，不執行公式（ClosedXML 讀 `Value`，公式格取快取值；公式格整句拒收並提示）。
+- 只讀儲存格的值，不執行公式：含公式的儲存格**整句拒收**並提示（不取快取值，避免讀到的和使用者看到的不一致）。
 - 檔案大小同語系包上限（政策 A38）；工作表數、列數有技術上限（§14）。
-- 匯出時開頭是 `=`、`+`、`-`、`@` 的原文前面加 `'`，避免使用者用 Excel 開啟時被當公式（同既有匯出的處理）。
+- 匯出時開頭是 `=`、`+`、`-`、`@` 的原文前面加 `'`，避免使用者用 Excel 開啟時被當公式（同既有匯出 `CsvWriter.EscapeFormula` 的處理）。**匯入時要去掉**：譯文以 `'` 開頭且第二個字元是 `=`、`+`、`-`、`@` 時，去掉開頭的 `'`（同 `FieldImportParser` 既有的去除邏輯）。不去掉的話譯文會多一個 `'`，`source` 比對（U8）也會誤判成「原文已改」。測試要有「匯出 → Excel → 匯入」來回不變的案例。
 
 ## 8. 介面文字執行期載入
 
 ### 8.1 來源搬家（T8）
 
-- 內建四語的介面文字從 `frontend/src/i18n/*.json` 搬到 `shared/i18n/<code>/ui.json`，後端訊息日後也放 `shared/i18n/<code>/server.json`（§9），語系資訊放 `shared/i18n/<code>/locale.json`。`shared/` 已是前後端共用的地方（`filter-operators.json` 已被正式程式碼引用）。
-- 後端把 `shared/i18n/**` 內嵌成資源，當內建層。
-- 前端**只把 zh-TW 打包進去**，當最後退回與第一畫面；其他語系執行期取。前端包體少約 350 KB。
+- 內建四語的介面文字從 `frontend/src/i18n/*.json` 搬到 `shared/i18n/<code>/ui.json`，後端訊息日後也放 `shared/i18n/<code>/server.json`（§9），語系資訊放 `shared/i18n/<code>/locale.json`。`shared/` 已是前後端共用的地方，但目前後端正式程式沒讀它（§3），所以要補下面三件事。
+- 後端把 `shared/i18n/**` 內嵌成資源，當內建層。**部署與建置要一起改**（不改的話 Demo 會悄悄全部變繁中：MSBuild 的 `EmbeddedResource` 找不到檔不會報錯，內建層變空，本機與 CI 單元測試在 repo 根目錄跑看得到 `shared/` 所以照樣過）：
+  1. 兩份 Dockerfile（`Dockerfile`、`Dockerfile.demo`）的後端 stage 多一行 `COPY shared/ /shared/`，路徑要讓 csproj 的 `..\..\..\shared` 解析得到。`quasar-langs.json` 同理。
+  2. csproj 加建置檢查：內嵌的 `ui.json` 少於 4 份就讓建置失敗。
+  3. 啟動時自檢內建四語的鍵集完整且一致，不齊就 fail fast，不默默退回。
+- 前端**只把 zh-TW 打包進去**，當最後退回與第一畫面；其他語系執行期取。未壓縮的包體少約 374 KB（en 87、th 178、vi 109；gzip 後約四分之一）。
+- **搬檔的改動面**：目前有 139 個檔 import 四語 JSON（大多是 spec，另有 `boot/i18n.ts`、`dashboard-test-kit.ts`）。用 Vite／vitest alias，或在 `src/i18n/*.json` 留轉出口，避免一個巨型 diff。
 - `locales.vitest.spec.ts` 改讀 `shared/i18n/*/ui.json`，四份內建檔仍要鍵完全一致（內建層必須完整，匯入的語系才允許缺）。
 
 ### 8.2 載入與快取（T9）
 
-- `GET i18n/ui/{code}?v={uiHash}`：**公開**（登入頁要用），只回啟用中的語系，內容是覆寫層＋內建層合併後的扁平 JSON。`uiHash` 是合併結果的雜湊，網址帶雜湊所以可以 `Cache-Control: public, max-age=31536000, immutable`；內容變了雜湊就變，網址跟著變。伺服器端在 `LocaleRegistry` 裡快取合併結果，不每次組。
+- `GET i18n/ui/{code}?v={uiHash}`：登入前（匿名）只回**啟用中**的語系（登入頁要用）；已登入的人可取**任何已安裝**的語系（給 `ensureLocaleMessages` 與管理員試看，§8.4、§12）。內容是**伺服器沿退回鏈逐鍵補齊後**的扁平 JSON：該語系的覆寫層＋內建層 → 上層語系（可多層）→ 系統預設語系 → zh-TW，缺的鍵由下一層補上（§8.3）。前端不靠 vue-i18n 的 `fallbackLocale` 走多層（它只會退到已 `setLocaleMessage` 過的語系，上層與預設語系的文字從來沒載入過），`fallbackLocale` 只留打包的 zh-TW，給載入失敗時用。
+- **`uiHash`**：補齊後結果的雜湊，**輸入包含鏈上每一層的雜湊與 `locale.default`**，所以預設語系改了、或上層語系的翻譯改了，下游語系的 `uiHash` 都會跟著變。伺服器在 `LocaleRegistry` 裡快取合併結果，不每次組。
+- **快取標頭（多台部署安全）**：只有請求的 `v` 等於**這台伺服器目前**的 `uiHash` 時才回 `Cache-Control: public, max-age=31536000, immutable`；不等（例如打到還沒換新的另一台，最多晚 60 秒）就回這台目前的內容、`Cache-Control: no-store`，並在回應標頭帶 `X-UI-Hash` 讓前端知道拿到的是哪一版。否則舊內容會被當成新網址永久快取在瀏覽器。已登入取未啟用語系的回應用 `private, no-cache`。
 - zh-TW 也走這支：客戶可能覆寫了繁中（U1），所以繁中使用者也要取一次覆寫層。
-- **啟動順序**：boot 讀 `localStorage` 的語系（沒有就等 `auth/options` 的預設）→ 取 `auth/options` 拿 `uiHash` → 取語系文字 → `setLocaleMessage` → 掛載 App。取文字最多等 3 秒（技術上限），超過就先用下面的退回掛載，背景取到後再換上。
+- **啟動順序**（stale-while-revalidate）：boot 讀 `localStorage` 的語系（沒有就等 `auth/options` 的預設）→ 有 `localStorage` 快取（下一條）就**先用快取掛載**，背景再取 `auth/options`、比對 `uiHash`，不同才取新文字並 `setLocaleMessage`，回訪的人不必等兩趟請求；沒有快取就取 `auth/options` 拿 `uiHash` → 取語系文字 → `setLocaleMessage` → 掛載 App。**3 秒是 `auth/options` 加文字兩趟合計的技術上限**，超過就先用下面的退回掛載，背景取到後再換上。`auth/options` 與 p3 判斷 15 的 auth guard 取的是同一份，共用 TanStack Query 快取，不打兩次。
 - **瀏覽器快取**：取到的文字另存一份在 `localStorage`（鍵含代碼與雜湊，只留目前語系一份，存不下就不存）。下次啟動若 `auth/options` 失敗或逾時，用這份。
 - **已開著的頁面**：p3 主框架每 60 秒重取生效政策；發現目前語系的 `uiHash` 變了，就背景重取並 `setLocaleMessage`，不重新整理頁面、不跳提示（介面文字換掉不會讓表單資料遺失）。
 - **切換語系**：先取文字（顯示載入中），取到才切；失敗就提示「無法載入〇〇，請稍後再試」並停在原語系。
 
 ### 8.3 缺字與載入失敗的退回（U3、U4）
 
-- **一句缺字**：使用者語系 → 該語系的上層語系（`FallbackCode`，可多層）→ 系統預設語系 → zh-TW → 顯示鍵。前端用 vue-i18n 的 `fallbackLocale` 陣列，後端訊息與設計資料用同一條鏈（§9、§10.1）。
+- **一句缺字**：使用者語系 → 該語系的上層語系（`FallbackCode`，可多層）→ 系統預設語系 → zh-TW → 顯示鍵。**介面文字由伺服器照這條鏈補齊**（§8.2），後端訊息（`IMessageCatalog`）與設計資料（`I18nText` 解析）在後端逐層走同一條鏈（§9、§10.1），三處同結果（同一組案例測，§19）。
+- **前端的縱深防禦**：取到文字後，先用 vue-i18n 的 `messageCompiler`（或 `baseCompile` 加 `onError`）逐句預編譯，壞的句子丟掉、改用打包的 zh-TW 那一句，不要只靠後端驗證（vue-i18n 11 的 esm-bundler 版沒有用到 `new Function`，執行期編譯可行）。
 - **整份載入失敗**：用瀏覽器快取的上一份 → 打包的 zh-TW。
-- 前端開發模式下把缺鍵印在 console；正式環境不印。
+- 前端開發模式下把缺鍵印在 console（前端自己拿取到的文字對打包的 zh-TW 鍵集比對即可，不需要 API 另附清單）；正式環境不印。
 
 ### 8.4 一次要多個語系的地方
 
-`LedgerTab.vue` 的沖銷欄位標籤、`designer-graph.ts` 的新節點名稱要為每個啟用語系各產生一句。改成先 `await ensureLocaleMessages(啟用語系)`（逐一取、各自快取）再產生；取不到的語系就不填那一格（I18nText 缺值本來就走退回）。`tFor(locale)` 用在純函式時，呼叫端負責先 `ensure`，`tFor` 本身不 await。
+`LedgerTab.vue` 的沖銷欄位標籤、`designer-graph.ts` 的新節點名稱要為**每個已安裝語系**各產生一句（不是只有啟用的：p3 判斷 14 與使用者 2026-11-12 確認的 Q12 是「分錄沖銷欄位標籤仍產生四語」，停用語系的資料照樣產生；`AsI18n` 也是對已安裝語系，§9.1，兩種產生點口徑一致，M3）。已登入，所以 `ensureLocaleMessages` 走已登入的 `GET i18n/ui/{code}`，可取已安裝但未啟用的語系；各語系取一次、各自快取，已安裝數受 A39 限制。取不到的語系就不填那一格（I18nText 缺值本來就走退回）。
+
+`tFor(locale)` 是同步純函式，**不 await**：`LedgerTab` 在開啟時先 `await ensureLocaleMessages(已安裝語系)`；`designer-graph.ts` 的函式也是同步純函式，改在簽核設計器**頁面掛載時**先 `ensureLocaleMessages`，比在每個呼叫端 await 簡單。
 
 ### 8.5 Quasar 語言包
 
-glob 改成 `quasar/lang/*.js`（每個是獨立的 lazy chunk，只在用到時下載）。語系的 `QuasarLang` 為空或載入失敗時用 en-US 的。建置時產生 `quasar-langs.json`（可用清單），後端用它驗 `QuasarLang`（T2）。
+glob 改成 `quasar/lang/*.js`（每個是獨立的 lazy chunk，只在用到時下載）。語系的 `QuasarLang` 為空或載入失敗時用 en-US 的。可用清單 `shared/quasar-langs.json` 手動 commit（不由前端建置產生，避免跨 Docker stage 的相依），vitest 比對它和 `node_modules/quasar/lang/*.js` 是否一致；後端內嵌這份清單驗 `QuasarLang`（T2）。
 
 ## 9. 後端訊息可擴充
 
@@ -274,12 +290,12 @@ glob 改成 `quasar/lang/*.js`（每個是獨立的 lazy chunk，只在用到時
 
 ```csharp
 string Get(string locale, string key, params object[] args);   // 走 §8.3 退回鏈
-I18nText AsI18n(string key, params object[] args);              // 對每個已安裝語系各產生一句
+I18nText AsI18n(string key, params object[] args);              // 對每個已安裝語系各產生一句（與 §8.4 同口徑）
 ```
 
 - **內建層**第一步仍是現有的 C# 四語表（`MessageText.Table`、`ReportText.Table`），不搬；新語系與覆寫只來自資料庫的覆寫層。新語系不必改 C#。
-- **解析點**：`ServiceResultExtensions` 的 `MessageIn`／`ErrorsIn` 改從 DI 取 `IMessageCatalog`。約 20 個直接呼叫 `MessageText.Get`／`ReportText.Get` 的檔改成注入 `IMessageCatalog`；還沒改到的仍用靜態 `Get`（只認內建四語，其他語系退回繁中），所以可以分段改。
-- `AsI18n` 存進資料的多語標籤（「第 2 層主管」）改成對**當時已安裝**的語系各產生一句；之後才裝的語系看到的是退回值，列已知限制。
+- **解析點**：`ServiceResultExtensions` 的 `MessageIn`／`ErrorsIn` 改從 DI 取 `IMessageCatalog`。20 個直接呼叫 `MessageText.Get`／`ReportText.Get` 的檔改成注入 `IMessageCatalog`；還沒改到的仍用靜態 `Get`（只認內建四語，其他語系退回繁中），所以可以分段改。
+- `AsI18n` 存進資料的多語標籤（「第 2 層主管」）改成對**當時已安裝**的語系各產生一句；之後才裝的語系看到的是退回值，列已知限制。**實作上**：4 個呼叫點（`ApprovalMessages.cs`）中 3 個是 `static readonly` 欄位，型別初始化時只算一次、接不了 DI、也做不到「當時已安裝」，i4c 要把它們改成方法並從 `IMessageCatalog` 取。
 - `TranslateLiteral`（繁中原文換成鍵）照舊。
 
 ### 9.2 第二步（可選，T11）
@@ -288,48 +304,51 @@ I18nText AsI18n(string key, params object[] args);              // 對每個已�
 
 ### 9.3 後端文字的語法
 
-`server` 的值是 `string.Format` 範本。驗證：參數編號集合要和內建 zh-TW 相同；大括號要成對（`{{`、`}}` 是跳脫）；用假參數實跑一次 `string.Format` 不能丟例外。不合的句子拒收（§5.2）。
+`server` 的值是 `string.Format` 範本。驗證：**只收 `{n}`（n 是參數編號）與 `{{`、`}}` 跳脫**，**禁止對齊與格式子句**（`{0,100000000}`、`{0:D99999}` 這類能通過「實跑不丟例外」卻會在執行期產生巨大字串）；參數編號集合要和內建 zh-TW 相同；大括號要成對；用假參數實跑一次 `string.Format` 不能丟例外。不合的句子拒收（§5.2）。這條不會誤傷內建文字：內建 168 句後端訊息的參數集合四語一致，沒有任何對齊或格式子句。
 
 ## 10. 設計資料
 
 ### 10.1 I18nText 接受新語系（T12）
 
-- `I18nText.SupportedLocales` 拿掉，`IsValid` 改成對 `LocaleRegistry` 的已安裝語系驗：鍵必須是已安裝語系。
+- `I18nText.SupportedLocales` 拿掉（8 處使用點見 §1）。**`IsValid` 只驗兩件事：代碼格式（§4.1 的 BCP 47 子集守衛，寫死）＋必填語系**（p3 的 `locale.requiredText`，出廠繁中）。它仍是純函式，不依賴 `LocaleRegistry`：`I18nText` 是 Domain 的值物件，Domain 不碰 IO，也讀不到 Application 的 singleton。
+  - 理由：`IsValid` 在 17 個驗證點每次新增、更新都呼叫，前端 `I18nTextInput.set()` 又會把整包（含沒列出的語系）送回後端。如果它「只認已安裝語系」，含 `ja` 文字的欄位、模組、選項只要改一次名稱就被擋，錯誤訊息還是誤導人的「名稱必須有繁體中文」；降版、移除語系後也一樣改不了。（審查 R1，M1）
+  - 「已安裝」只用在兩個地方：**輸入框列哪些語系**（已安裝∩啟用中，p3 判斷 14），以及 **`designData` 匯入的目標語系**（§10.3）。
+  - 這樣 U6（套件含未安裝語系照存）**不需要任何例外**，§10.5、§18 第 5 點相應改寫。
 - `FallbackLocale = "zh-TW"` 保留為**平台基準語系**：套件仍要求繁中（p3 判斷 12），退回鏈最後一步是它。
-- `Resolve(locale)` 改走 §8.3 的鏈：要求的語系 → 上層語系 → 系統預設語系 → zh-TW → 已安裝語系順序中第一個有值的。前端 `resolveI18n` 同規則，鏈由 API 給（§4.4）。
-- 多語文字輸入框（`I18nTextInput`）列出**啟用中**的語系（p3 判斷 14），順序依 `SortOrder`。
+- `Resolve` 走 §8.3 的鏈：要求的語系 → 上層語系 → 系統預設語系 → zh-TW → 已安裝語系順序中第一個有值的。鏈由呼叫端（Application，從 `LocaleRegistry` 取）組好傳入 `Resolve`，Domain 不碰 registry。前端 `resolveI18n` 同規則，鏈隨 `locales`／生效政策給（§4.4）。
+- 多語文字輸入框（`I18nTextInput`）列出**已安裝且啟用中**的語系（p3 判斷 14），順序見 §4.1；已存但沒列出的語系，值原樣保留。
 - 長度上限沿用每語 200 字（套件 schema 與既有驗證），新語系一樣。
 
 ### 10.2 可翻譯項目與路徑（T13）
 
-設計資料翻譯匯出匯入需要每段多語文字有一個**穩定、跨客戶一致**的路徑，才能讓「廠商替內建應用程式翻的日文」套到任何開過該應用程式的客戶。路徑用代碼不用 Id：
+設計資料翻譯匯出匯入需要每段多語文字有一個**穩定、跨客戶一致**的路徑，才能讓「廠商替內建應用程式翻的日文」套到任何開過該應用程式的客戶。
+
+**現況限制**：`Block`、`FieldOption`、`ListView`、`Rule`、`DynamicProgram` 等實體沒有 Key／Code，只有 Id；穩定代碼只存在於**應用程式綁定**（`AppBindings` 的 Fields／Blocks／Options；`AppExporter.ContributionCodeBook` 用它把 Id 對回代碼，客戶自己建的選項匯出時才臨時產生 `o_{Id}`）。選項標籤又是設計資料翻譯的大宗，所以「沒有代碼」是常態、不是例外。路徑規則因此是：
+
+1. **應用程式綁定代碼優先**，路徑以應用程式為根：
 
 ```
-module:{moduleKey}/name
-module:{moduleKey}/field:{fieldKey}/label
-module:{moduleKey}/field:{fieldKey}/option:{optionCode}/label
-module:{moduleKey}/block:{blockKey}/name
-module:{moduleKey}/view:{viewKey}/name
-module:{moduleKey}/state:{stateCode}/name
-module:{moduleKey}/transition:{code}/name
-module:{moduleKey}/check:{code}/message
-section:{code}/name
-group:{code}/name
-department:{code}/name
-report:{code}/name、dashboard:{code}/name（i3 之後）
-approvalFlow:{code}/stage:{code}/name
-……
+app:{appKey}/module:{moduleCode}/name
+app:{appKey}/module:{moduleCode}/field:{fieldCode}/label
+app:{appKey}/module:{moduleCode}/field:{fieldCode}/option:{optionCode}/label
+app:{appKey}/module:{moduleCode}/block:{blockCode}/name
+app:{appKey}/module:{moduleCode}/view:{viewCode}/name
+app:{appKey}/module:{moduleCode}/state:{stateCode}/name
+app:{appKey}/module:{moduleCode}/check:{code}/message
+app:{appKey}/approvalFlow:{code}/stage:{code}/name
 ```
 
-- 每種設計物件實作一個「可翻譯來源」（列出路徑與 I18nText、套用更新），登記在一個清單裡；確切清單在實作計畫逐一盤點（任何存 I18nText 的設計資料都要在裡面，用測試掃 `I18nText` 型別的欄位確保沒漏）。
-- 沒有代碼的物件（若有）用 Id 當退路，只在同一套系統內有效，匯出時標記。
+2. **平台資料有自己代碼的**直接用：`section:{code}/name`、`group:{code}/name`、`department:{code}/name`、`report:{code}/name`、`dashboard:{code}/name`（i3 之後）。
+3. **沒有綁定的客戶自建物件**才用 Id：`local:{type}:{id}/…`，**只在本系統有效**，匯出時在「備註」欄標記，匯入時只套到同一套系統。T13 說的「廠商的翻譯可以套到任何開過同一應用程式的客戶」，靠的就是第 1 點的綁定。
+
+- 每種設計物件實作一個「可翻譯來源」（列出路徑與 I18nText、套用更新），登記在一個清單裡；確切清單在實作計畫逐一盤點（任何存 I18nText 的設計資料都要在裡面，用測試掃 `I18nText` 型別的欄位確保沒漏；**執行期快照欄位（例如 `ApprovalStage.NameSnapshot`）要明列排除**，它記的是當時的值、不該被翻）。
 
 ### 10.3 原 i4 併入的方式
 
 原 i4「設計資料 Excel 翻譯匯出匯入」就是 §7 匯出時勾「設計資料」範圍、§6 匯入時帶 `designData` 段。不另做一套畫面：
 
 - 只翻設計資料的人，在語系頁對目標語系按匯出、只勾「設計資料」，拿到 Excel，翻完匯入。
-- 目標語系必須已安裝（設計資料不能存未安裝語系的文字，§10.1）。
+- 目標語系必須已安裝（匯入設計資料的目標只列已安裝語系，§10.1；未安裝的語系文字只會經套件開啟路徑存進來，§10.5）。
 - 匯入設計資料只改對應語系那一格，不動其他語系；寫入經過各物件既有的驗證（長度、必填語系）。必填語系的檢查照 §3.5「改了那段文字才檢查」：只改日文那一格，不會因為缺英文被擋。
 
 ### 10.4 原文已改（U8）
@@ -338,8 +357,9 @@ approvalFlow:{code}/stage:{code}/name
 
 ### 10.5 應用程式套件（T14、U6）
 
-- **schema**：`$defs/i18n` 的 `propertyNames` 從四語 `enum` 改成 §4.1 的代碼格式；`required: ["zh-TW"]` 保留。這是格式變更，要升 `formatVersion`。i3 也要升版（名稱欄位多語），**建議兩件併在同一次升版**（§18 第 6 點）。
-- **開啟套件時含未安裝語系的文字**：保留存進資料庫、不顯示，開啟預覽列出「套件含未安裝的語系：ja（42 段文字），已保留，安裝後會顯示」（U6）。這是 §10.1「只能存已安裝語系」的唯一例外，只在套件開啟路徑放行。
+- **schema**：`$defs/i18n` 的 `propertyNames` 從四語 `enum` 改成 §4.1 的代碼格式；`required: ["zh-TW"]` 保留。這是格式變更，要升 `formatVersion`。i3 也要升版（名稱欄位多語），**建議兩件併在同一次升版**（§18 第 6 點）。`app.schema.json` 正式程式不讀，真正擋鍵的是 `TemplateValidator.HasZhTw`、`AppPackageValidator.CheckText` 等 C# 驗證器，要一起改。
+- **舊格式不放寬**：`.claude/rules/app-packages.md` 要求確認舊格式帶新欄位會被擋。目前的 `formatVersion`（2–8）仍只收四語鍵，**新版才放寬**；測試要有「舊 `formatVersion` 帶 `ja` 鍵被拒、新版收」的案例。
+- **開啟套件時含未安裝語系的文字**：照存進資料庫、不顯示，開啟預覽列出「套件含未安裝的語系：ja（42 段文字），已保留，安裝後會顯示」（U6）。因為 `I18nText.IsValid` 只驗代碼格式（§10.1），**這條不需要任何放行例外**，同一條驗證路徑就行。
 - **匯出套件**：帶出資料庫裡該段文字的所有語系（含匯入的新語系、含已停用的）。
 - **內建應用程式**（`backend/apps/*.app.json`）仍只出四語。要替內建應用程式出新語系譯名，用語系包的 `designData` 段，不改套件檔。
 - **先裝語系包、後開應用程式**：`designData` 只在匯入當下套用到已存在的設計資料，找不到的列報告為「找不到」。之後才開的應用程式不會自動得到譯名，要再匯入一次（只勾設計資料也行）。列已知限制，💡「開啟應用程式時自動套用已匯入的 `designData`」。
@@ -348,20 +368,20 @@ approvalFlow:{code}/stage:{code}/name
 ## 11. 權限、稽核
 
 - 匯入、預覽、回到上一版、移除覆寫、移除語系、匯出：**只限系統管理員**（U7）。與政策設定、應用程式開啟同一級。後端每支 API 驗權限，fail closed。
-- `GET i18n/ui/{code}` 公開（登入頁要用），只回啟用語系的介面文字，不含後端訊息與設計資料。介面文字本來就打包在前端、任何人都下載得到，公開不增加洩漏面；客戶自己覆寫的句子會被看到，語系頁說明寫明「介面文字是公開的，不要放機密」。
-- **稽核**（O2 的稽核表）：`locale.pack.import`、`locale.pack.rollback`、`locale.pack.clear`、`locale.remove`、`locale.install`。內容記：語系、檔名、檔案雜湊、各段筆數、`designData` 改了幾段；**不記整份內容**（版本表已存）。`designData` 對每個設計物件的變更另照設計變更的稽核慣例記。
+- `GET i18n/ui/{code}` 對匿名者公開（登入頁要用），只回啟用語系的介面文字，不含後端訊息與設計資料；已登入者可取任何已安裝語系的介面文字（§8.2，未啟用的半成品譯文對已登入者可見，不含機密）。介面文字本來就打包在前端、任何人都下載得到，公開不增加洩漏面；客戶自己覆寫的句子會被看到，語系頁說明寫明「介面文字是公開的，不要放機密」。
+- **稽核**（O2 的稽核表）：`locale.pack.import`、`locale.pack.rollback`、`locale.pack.clear`、`locale.remove`、`locale.install`（管理員試看不稽核）。內容記：語系、檔名、檔案雜湊、各段筆數、`designData` 改了幾段；**不記整份內容**（版本表已存）。`designData` 對每個設計物件的變更另照設計變更的稽核慣例記。
 - 啟用、預設、必填照 p3／O2 的政策稽核。
 
 ## 12. 開關組合下誰負責
 
 | 情況 | 介面文字 | 後端訊息 | 設計資料 |
 |---|---|---|---|
-| 語系已安裝、未啟用 | 不列在切換器；公開端點不回 | `X-Locale` 當預設語系 | 輸入框不列；已存的保留 |
+| 語系已安裝、未啟用 | 一般使用者不列在切換器、匿名端點不回；系統管理員的切換器另列「未啟用」項目供試看（M2） | `X-Locale` 當預設語系（試看時後端訊息仍是預設語系） | 輸入框不列；已存的保留；管理員試看時依該語系解析 |
 | 已啟用、有覆寫層 | 覆寫 → 內建 → 退回鏈 | 同左 | 該語系 → 退回鏈 |
 | 已啟用、新語系、缺句 | 缺的句子走退回鏈 | 同左 | 同左 |
 | 匯入的語系被移除 | 不能（要先停用） | — | 文字保留 |
 | 伺服器連不上 | 瀏覽器快取 → 打包的 zh-TW | — | — |
-| Demo 站（匯入關閉） | 可預覽、可匯出，不能套用 | — | — |
+| Demo 站（匯入關閉） | 可預覽（不暫存 `previewId`）、可匯出，不能套用 | — | — |
 | 沒開任何應用程式 | 正常 | 正常 | 匯出只有群組、部門、選單分區等平台資料 |
 
 ## 13. 安全
@@ -369,7 +389,7 @@ approvalFlow:{code}/stage:{code}/name
 ### 13.1 檔案
 
 - 只收 `.langpack.json`（`application/json`）與 `.xlsx`；以內容判斷（JSON 解析、xlsx 簽章），不信副檔名。
-- 大小上限是政策 A38（出廠 5 MB，技術上限 20 MB）；JSON 解析設最大深度（16）；每句最長 2000 字元；`ui`、`server` 的鍵數不能超過基準鍵數（多的本來就丟，超過一定倍數直接拒收，防灌爆記憶體）。
+- 大小上限是政策 `locale.packMaxBytes`（A38，出廠 5 MB，技術上限 20 MB）；JSON 解析設最大深度（16）；每句最長 2000 字元；`pack.version` 50、`pack.note` 500、`builtFor` 20 字元；`ui`、`server` 的鍵數超過基準鍵數的 **2 倍**直接整包拒收（沒超過的多鍵本來就丟，防灌爆記憶體）。
 - xlsx 用 ClosedXML 開啟前先檢查壓縮比與解壓後大小（防壓縮炸彈），只讀值。
 - 語系代碼過格式守衛後才拿來組任何鍵或檔名；本設計沒有任何以代碼組檔案路徑的地方（語系包存資料庫）。
 
@@ -377,7 +397,11 @@ approvalFlow:{code}/stage:{code}/name
 
 vue-i18n 會編譯訊息：`@:key` 會引用另一句（可做出循環引用）、`|` 是複數分隔、未配對的 `{` 會讓編譯失敗，正式環境編譯失敗會讓整個元件渲染中斷。介面文字目前都沒用到這些語法，所以**語系包只允許**：一般文字、`{名稱}` 插值（名稱集合要和基準相同）、`{'字面'}` 跳脫。出現裸 `@`、`|`、`%{`、未配對大括號就拒收該句，提示「請把 @ 寫成 {'@'}」。
 
-前後端各有一份檢查（後端 C# 驗匯入、前端 vitest 用 `baseCompile` 驗內建檔），用共用的案例檔 `shared/i18n-message-cases.json` 讓兩邊跑同一批案例，同 `rule-cases.json` 的做法（T15）。
+**Unicode 控制字元**：`ui`、`server` 的值與 `designData` 的 `text` 一律拒收 Unicode 雙向控制字元（U+202A–202E、U+2066–2069）與其他控制字元（換行、tab 除外），防止有人在登入頁用它們偽裝文字（本版本來就不支援 RTL）。前後端都檢查。
+
+前端另有縱深防禦：取到文字後逐句預編譯，壞句丟掉（§8.3）。
+
+前後端各有一份檢查（後端 C# 驗匯入、前端 vitest 用 `baseCompile` 驗內建檔），用共用的案例檔 `shared/i18n-message-cases.json` 讓兩邊跑同一批案例，同 `rule-cases.json` 的做法（T15）。案例要收 `{'{{欄位}}'}` 這種字面量包大括號的內建寫法與雙向控制字元。
 
 ### 13.3 XSS 與其他輸出
 
@@ -387,15 +411,15 @@ vue-i18n 會編譯訊息：`@:key` 會引用另一句（可做出循環引用）
 
 ### 13.4 Demo 站
 
-Demo 站公開，任何人都能用 Demo 管理員登入。若開放匯入，一個人就能把所有訪客的登入頁改掉。加部署開關 `Localization__PackImportEnabled`（Demo 站設 `false`，同 `Attachments__UploadEnabled` 的做法）：關閉時預覽、匯出照常，「套用」「回到上一版」「移除」回 403，畫面說明「這個環境不允許匯入語系包」。
+Demo 站公開，任何人都能用 Demo 管理員登入。若開放匯入，一個人就能把所有訪客的登入頁改掉。加部署開關 `Localization__PackImportEnabled`（Demo 站設 `false`，同 `Attachments__UploadEnabled` 的做法）：關閉時預覽（不暫存，§6.3）、匯出照常，「套用」「回到上一版」「移除」回 403，畫面說明「這個環境不允許匯入語系包」。
 
 ## 14. 可寫死清單（新增）
 
 **資料完整性**
 
-- 語系代碼格式（BCP 47 子集）與正規化。
+- 語系代碼格式（BCP 47 子集）與正規化；`I18nText.IsValid` 只驗代碼格式與必填語系。
 - 內建語系不能移除；啟用、預設、必填中的語系不能移除。
-- 上層語系必須已安裝、不成環、最多 3 層。
+- 上層語系必須已安裝、不成環、最多 3 層；被當成上層語系的不能移除。
 - zh-TW 是平台基準語系：退回鏈最後一步、套件必填（p3 判斷 12）。
 - 內建層必須完整（四份內建檔鍵一致）；匯入層可以不完整。
 - 每語系保留目前版與上一版兩份覆寫層。
@@ -403,9 +427,10 @@ Demo 站公開，任何人都能用 Demo 管理員登入。若開放匯入，一
 **安全**
 
 - 語系包只收單一 JSON 或 xlsx；不收 zip、不收任何可執行或樣式內容。
-- 訊息語法白名單（§13.2）；後端範本參數與基準一致、實跑不丟例外。
+- 訊息語法白名單（§13.2）；後端範本只收 `{n}` 與跳脫、參數與基準一致、實跑不丟例外；拒收雙向控制字元。
 - 翻譯一律當純文字輸出。
-- JSON 深度 16、每句 2000 字元、xlsx 壓縮比與解壓大小檢查。
+- JSON 深度 16、每句 2000 字元、`pack.version`／`pack.note`／`builtFor` 長度上限、鍵數上限為基準的 2 倍、xlsx 壓縮比與解壓大小檢查。
+- 預覽併發：套用時語系版本與設計資料更新時間不一致就 409；`previewId` 綁定建立者。
 - 匯入相關寫入只限系統管理員；Demo 站可用部署開關關閉。
 - 介面文字公開端點只回啟用語系、只回介面文字。
 
@@ -413,14 +438,15 @@ Demo 站公開，任何人都能用 Demo 管理員登入。若開放匯入，一
 
 - 只支援由左至右語系（Quasar RTL 要建置時開）。
 - `QuasarLang` 只能從前端打包的清單挑。
-- 啟動時等語系文字最多 3 秒；預覽結果保留 10 分鐘。
-- `LocaleRegistry` 60 秒過期重載（與 `SystemPolicySnapshot` 相同）。
+- 啟動時 `auth/options` 加語系文字合計最多等 3 秒；預覽結果保留 10 分鐘；同時暫存的預覽最多 5 筆（超過時最舊的先丟）。
+- 內建層完整性：建置時內嵌的 `ui.json` 少於 4 份建置失敗，啟動自檢不齊 fail fast（§8.1）。
+- `LocaleRegistry` 60 秒過期檢查（與 `SystemPolicySnapshot` 相同），先比版本戳記、有變才重讀（§4.2）。
 - Excel 樣板每張工作表最多 20000 列。
 
-**新政策（不寫死，編號暫定，寫進政策設計時確認）**
+**新政策（不寫死；編號 A38、A39 暫定，以合併時 main 上下一個未用的編號為準，有 kb1／a3 撞號的前例；寫進政策設計時確認）**
 
-- **A38 語系包檔案大小上限**：出廠 5 MB，技術上限 20 MB，只限全系統（S）。Excel 樣板共用。
-- **A39 已安裝語系數上限**：出廠 10（含內建四種），技術上限 30，S。每個語系都在伺服器記憶體裡留一份合併表，也會出現在每個輸入框；改嚴只擋新安裝（§3.5）。
+- **A38 語系包檔案大小上限**（政策代碼 `locale.packMaxBytes`）：出廠 5 MB，技術上限 20 MB，只限全系統（S）。Excel 樣板共用。
+- **A39 已安裝語系數上限**（政策代碼 `locale.maxInstalled`）：出廠 10（含內建四種），技術上限 30，S。每個語系都在伺服器記憶體裡留一份合併表，也會出現在每個輸入框；改嚴只擋新安裝（§3.5）。
 
 ## 15. 已知限制
 
@@ -431,8 +457,17 @@ Demo 站公開，任何人都能用 Demo 管理員登入。若開放匯入，一
 - 多台部署時，匯入後其他台最多 60 秒才看到新翻譯。
 - 新語系的字型靠使用者的作業系統（緬甸文、高棉文等可能缺字型）。
 - 使用者語系偏好仍存在瀏覽器，換電腦要重選。
+- 管理員「試看」未啟用語系時，只有前端介面文字與設計資料名稱依該語系；後端訊息仍用預設語系（`X-Locale` 對未啟用語系照 p3 判斷 14 當預設語系，M2）。
+- `FieldImportParser` 匯入布林值時比對四語的「是／否」，新語系的「はい」認不得（改用 `IMessageCatalog` 比對是之後的事）。
 - 後端訊息第一步只有改過的呼叫點支援新語系；還沒改到 `IMessageCatalog` 的少數直接呼叫（§9.1），新語系的使用者看到繁中（i4c 收尾時列出剩餘清單）。
 - 管理類訊息（#19–#21）本來就還是繁中字面值，語系包翻不到它們；它們搬進 `MessageText` 之後才翻得到。
+
+### 15.1 部署回滾（降版）
+
+- **不支援降到 i4a 之前的版本**。真要降（例如新版出問題）：新表（`Dynamic_Locale`、`Dynamic_LocalePack`）留著不影響舊版（舊版不讀它們），但有兩個後果。
+- **政策**：裝過 `ja` 並啟用後，`locale.enabled` 含 `ja`，舊版的 `PolicyDefinition.Normalize` 會判成無效、退回出廠值（預設 zh-TW、啟用四種、必填 zh-TW）。升回新版後要重新啟用。
+- **設計資料**：舊版的 `I18nText.IsValid` 擋四語以外的鍵，含 `ja` 文字的欄位、模組、選項在舊版**無法編輯**（可以看、不能存）。降版前要先評估；要降就得由維運先清掉該語系的文字，或接受那些物件暫時唯讀。這是「新語系文字存在 `I18nText` 裡」這個決定的必然代價，R1 的修正只讓新版不再有這個問題。
+- 降版前建議：先從語系頁匯出所有匯入語系的語系包留存，升回後可重新匯入。
 
 ## 16. ERP 對照
 
@@ -457,7 +492,8 @@ Formwright 的取捨：
 1. 要能自行新增語系。
 2. 要有語系包可匯入。
 3. 寫成一份設計、併入 i4，改寫 i4 範圍；路線位置維持 i3、i4（p3 之後）。
-4. U1–U10 全部照推薦裁決（見 §17.2）。技術類 T1–T16 維持「主控決定，可推翻」（§17.3）。
+4. U1–U10 全部照推薦裁決（見 §17.2）。技術類 T1–T19 維持「主控決定，可推翻」（§17.3）。
+5. 審查（2026-11-17）後主控新增的裁決見 §17.4，其中 M2 待使用者確認。
 
 ### 17.2 使用者行為類（使用者裁決，2026-11-17，U1–U10 全照推薦）
 
@@ -514,82 +550,102 @@ Formwright 的取捨：
 ### 17.3 技術類（主控決定，可推翻）
 
 - **T1** 語系表只存「裝了什麼」，啟用、預設、必填仍在 p3 政策。理由：單一來源，避免 vtiger 的 `active` 欄空轉。
-- **T2** `QuasarLang` 驗證清單由前端建置產生、後端讀取。理由：語言包是 JS，只能用打包裡有的。
+- **T2** `QuasarLang` 驗證清單 `shared/quasar-langs.json` 手動 commit，前端用 vitest 比對 `node_modules/quasar/lang`，後端內嵌讀取。理由：語言包是 JS，只能用打包裡有的；手動 commit 避免跨 Docker stage 相依。
 - **T3** `LocaleRegistry` 為 singleton 快照，換新方式與 `SystemPolicySnapshot` 相同。理由：同步呼叫點多，與 p3 判斷 3 同理。
 - **T4** 語系包是單一 JSON，不收 zip。理由：沒有路徑就沒有穿越與炸彈；翻譯工具普遍吃扁平 JSON。
 - **T5** 相容性靠鍵比對與佔位符比對，版本字串只提示。理由：平台目前沒有正式版號機制；鍵比對直接回答「會缺幾句」。
 - **T6** 內建層（程式內嵌）＋覆寫層（資料庫）兩層合併。理由：升級不蓋掉客戶翻譯，且內建層不必寫資料庫。
 - **T7** 覆寫層每次匯入存整份，保留兩版。理由：回滾簡單可靠；整份檔案在管理員手上，不需要無限歷史。
-- **T8** 內建四語搬到 `shared/i18n/<code>/`，前端只打包 zh-TW。理由：前後端同一個來源；包體變小。
-- **T9** 介面文字網址帶雜湊、長期快取；瀏覽器另存一份給離線；啟動最多等 3 秒。理由：同時顧到快、改了立即生效、斷線可用。
+- **T8** 內建四語搬到 `shared/i18n/<code>/`，前端只打包 zh-TW；兩份 Dockerfile、csproj 建置檢查、啟動自檢一起做（§8.1）。理由：前後端同一個來源；包體變小；內建層不能默默變空。
+- **T9** 介面文字網址帶雜湊；只有雜湊等於該台目前版本才回 `immutable`，否則 `no-store`（多台部署安全）；瀏覽器另存一份給離線並 stale-while-revalidate；啟動 `auth/options` 加文字合計最多等 3 秒。理由：同時顧到快、改了立即生效、斷線可用、不把舊內容永久快取。
 - **T10** `IMessageCatalog` 第一步沿用 C# 四語表當內建層，呼叫點可分段改。理由：不必一次動 170 句與 20 個檔。
 - **T11** C# 表搬 JSON 是可選的第二步，不排進 i4。
-- **T12** `I18nText` 驗已安裝語系；zh-TW 保留為平台基準語系。
+- **T12** `I18nText.IsValid` 只驗代碼格式與必填語系，不驗已安裝（見 M1）；zh-TW 保留為平台基準語系。
 - **T13** 設計資料翻譯用代碼路徑定位，每種物件一個「可翻譯來源」，測試掃型別確保不漏。理由：跨客戶一致，廠商的翻譯可套到任何開過同一應用程式的客戶。
 - **T14** 套件 schema 的語系鍵改代碼格式，建議與 i3 同一次升版。
 - **T15** 訊息語法前後端共用案例檔。理由：同 `rule-cases.json`，避免兩邊規則漂移。
-- **T16** 預覽與確認分兩支 API，預覽結果以 `previewId` 暫存 10 分鐘。理由：大檔不必傳兩次，確認時內容保證和預覽一致。
+- **T16** 預覽與確認分兩支 API，預覽結果以 `previewId` 暫存 10 分鐘，綁定建立者並記下語系版本與目標更新時間，套用時不一致回 409。理由：大檔不必傳兩次，確認時內容保證和預覽一致，並發匯入不互相覆蓋。
+- **T17** 介面文字退回鏈由伺服器合併，`uiHash` 含鏈上各層與預設語系，前端 `fallbackLocale` 只留 zh-TW（見 M4）。
+- **T18** `LocaleRegistry` 先比版本戳記、有變才重讀。理由：覆寫層整份重讀成本高。
+- **T19** 語系表不放 `Direction`、`IntlLocale`、`SortOrder`。理由：沒有行為或入口的欄位是空轉欄（反目標）；排序固定為內建在前、匯入依安裝時間。
+
+### 17.4 審查後主控新增裁決（2026-11-17）
+
+- **M1（技術）`I18nText.IsValid` 只驗代碼格式與必填語系，「已安裝」只決定輸入框列哪些語系與 `designData` 匯入目標。** 依據：審查 R1，`IsValid` 有 17 個驗證點、Domain 不碰 IO、含未安裝語系的物件改名會被擋。結果：U6 不需要例外。
+- **M2（行為，待使用者確認）系統管理員的語言選單另列「已安裝但未啟用」的語系，標「未啟用」，只有管理員自己能切過去試看。** 範圍：只在該分頁生效（存 `sessionStorage`，不寫 `localStorage` 的 `formwright.locale`）；只影響前端介面文字與設計資料名稱，後端訊息仍用預設語系；語系頁的列上另有「以此語系預覽」捷徑。理由：U2 的例子是「先匯入 60% 的日文試看，補到 95% 再啟用」，但未啟用的語系不在切換器、公開端點也不回，試看沒有路可走；選項放在管理員自己的選單，不增加一般使用者看到半成品的風險。選錯代價：選「不提供試看」，管理員只能啟用後才看得到效果，半成品會暴露給所有人，違背 U2 的本意；選「提供」的代價是多一個選單項目與一條前端狀態（分頁內語系覆蓋）。
+- **M3（行為，依據既有使用者裁決，不需再確認）分錄沖銷欄位標籤改為「每個已安裝語系」各產生一句。** 依據：p3 判斷 14（使用者 2026-11-12 確認 Q12）「分錄沖銷欄位標籤仍產生四語」，預設已安裝語系即四語，行為與現況相同；停用的語系資料照樣產生，與 `AsI18n` 對已安裝語系的口徑一致。原稿寫成「啟用語系」會默默改掉這項已裁決的行為。如果之後想改成只產生啟用語系，要另列待決問使用者。
+- **M4（技術）介面文字退回鏈由伺服器合併好再回。** 依據：審查 R2，前端 vue-i18n 的 fallback 只退到已載入的語系，U3「日文缺的 30 句顯示系統預設的泰文」做不到。
+- **M5（技術）i4b 範圍含兩份 Dockerfile、建置檢查與啟動自檢。** 依據：審查 R3，不做的話 Demo 會悄悄全部變繁中而本機與 CI 測試都過。
 
 ## 18. 與既有程式或設計的矛盾
 
-1. **路線與功能清單的 i4**：原文「翻譯匯出、匯入（Excel，只含設計資料，介面固定文字不開放覆寫）」。本設計擴大到介面文字與後端訊息、新增語系，且開放覆寫內建語系（U1 已裁決可以）。`docs/roadmap.md` 第 58、106 行（並加一行使用者裁決）與 `docs/feature.md` 多語系一節的 i4 項目要改寫（2026-11-17 已隨設計一併改）。
-2. **政策設計 A18 與 p3 計畫**：「SupportedLocales 四種是平台已有翻譯的語系」、三個語系政策的 `Options = I18nText.SupportedLocales`（p3 Task 7）。改成「已安裝語系」，政策目錄要支援動態選項（目前 `PolicyDefinition.Options` 是靜態清單，`shared/policy-catalog.json` 也是靜態）。p3 若照原計畫先做，i4a 再改；或在 p3 實作時先留一個選項提供者的接口，省一次改動。這兩份既有文件不改內文，只在 p3 計畫檔頂端加一行提醒，實作 p3 時先留接口。
-3. **p3 判斷 13 的退回順序**：「要求的語系 → 繁中 → 第一個有值的」。U3 已裁決，中間加入上層語系與系統預設語系。
-4. **p3 判斷 15**：「伺服器連不上時維持繁中」。本設計前面多一層瀏覽器快取（U4），繁中仍是最後退回，不衝突但要更新說明。
-5. **`I18nText.IsValid`**：「不得出現不支援的語系鍵」→ 改成已安裝語系；套件開啟路徑例外保留未安裝語系（U6），是新的例外。
-6. **套件格式**：`app.schema.json` 的 `propertyNames enum` 四語、手冊「語系鍵不是繁中／English／ไทย／Tiếng Việt 會被拒絕」（手冊第 1094 行）要改；i3 也要升版，兩者最好合成一次 `formatVersion` 升版，避免客戶看到連續兩次格式變更。
+1. **路線與功能清單的 i4**：原文「翻譯匯出、匯入（Excel，只含設計資料，介面固定文字不開放覆寫）」。本設計擴大到介面文字與後端訊息、新增語系，且開放覆寫內建語系（U1 已裁決可以）。`docs/roadmap.md` 的 i3、i4 列與開發順序第 2 點（並加一行使用者裁決）與 `docs/feature.md` 多語系一節的 i4 項目要改寫（2026-11-17 已隨設計一併改）。
+2. **政策設計 A18 與 p3 計畫**：「SupportedLocales 四種是平台已有翻譯的語系」、三個語系政策的 `Options = I18nText.SupportedLocales`（p3 Task 7）。改成「已安裝語系」，政策目錄要支援動態選項（目前 `PolicyDefinition.Options` 是靜態清單，`shared/policy-catalog.json` 也是靜態）。p3 若照原計畫先做，i4a 再改；或在 p3 實作時先留一個選項提供者的接口，省一次改動。這兩份既有文件不改內文，只在 p3 計畫檔頂端加提醒，實作 p3 時先留接口。
+3. **p3 判斷 13 的退回順序**：「要求的語系 → 繁中 → 第一個有值的」。U3 已裁決，中間加入上層語系與系統預設語系。p3 計畫頂端的提醒要寫明：判斷 13 直接做成「要求的語系 → 系統預設 → 繁中 → 第一個有值的」，上層語系留到 i4a 再加，免得 p3 做完 i4a 再改一次。
+4. **p3 判斷 15**：「伺服器連不上時維持繁中」。本設計前面多一層瀏覽器快取（U4），繁中仍是最後退回，不衝突但要更新說明。**`GET auth/options` 只加欄位**（`locales` 物件陣列），不改 `enabledLocales` 的形狀，不破壞 p3 的測試（§4.4）。
+5. **`I18nText.IsValid`**：「不得出現不支援的語系鍵」→ 只驗代碼格式與必填語系，不再驗「支援清單」（M1）。U6 因此不需要例外。
+6. **套件格式**：`app.schema.json` 的 `propertyNames enum` 四語、`TemplateValidator.HasZhTw`／`AppPackageValidator.CheckText` 的 C# 驗證、手冊「語系鍵不是繁中／English／ไทย／Tiếng Việt 會被拒絕」（手冊第 1123 行）要改；舊 `formatVersion`（2–8）仍只收四語鍵，新版才放寬（`.claude/rules/app-packages.md`）；i3 也要升版，兩者最好合成一次 `formatVersion` 升版，避免客戶看到連續兩次格式變更。
 7. **pkg1（套件更新入口，設計待寫）**：更新內建應用程式時多語文字必須依語系合併，否則會蓋掉客戶匯入的語系文字。這是 pkg1 的新前提。
 8. **`locales.vitest.spec.ts`**：「四份鍵完全相同」只對內建層成立；匯入的語系允許缺鍵。測試保留，但檔案位置改到 `shared/i18n/`。
 9. **`MessageText` 註解**「四語系，形式同 ReportText」：第一步內建層形狀不變，但多一層覆寫，註解與 `AsI18n` 的「展成四語」要改成「已安裝語系」。
 10. **手冊 §20 與第 39、62 行**「介面有四種語言」「名稱和其他顯示文字都有 4 個語系」要改成依已安裝、啟用語系。
+11. **專案規則與地圖要跟著改**（i4b、i4c 完成時同步）：`.claude/rules/frontend.md` 的 i18n 條目（四語 JSON 位置、「新增句子要給四語」）、`.claude/rules/backend.md` 的「四語字串表在 `MessageText.cs`」、`AGENTS.md` 架構地圖的「i18n（四語 JSON）」；`MessageText`、`ReportText` 註解加「鍵是語系包契約，改名要留別名」（§5.1）。
+12. **p3 的測試**：`AuthApiTests.Options_IncludesLocaleSettings` 等不因 `auth/options` 加欄位而失敗（§4.4）；`policy-i18n.vitest.spec.ts` 的 choice 四語文案檢查要排除語系類政策（§1）。
 
 ## 19. 測試重點
 
 - **語系表**：內建四語啟動同步（新增、欄位變更、不變不寫）；代碼格式與正規化（`JA` → `ja`、`zh-hant-hk` → `zh-Hant-HK`）；上層語系成環、超過 3 層、指向未安裝被拒；移除內建、移除啟用中被拒；SQLite 與 PostgreSQL 雙跑。
-- **p3 接法**：三個政策的選項跟著安裝清單變；裝了 `ja` 後可設為啟用、預設；`ja` 啟用中時移除被拒；不裝任何語系包時行為與 p3 出廠完全相同（同一組 p3 測試照跑）。
-- **語系包驗證**：缺鍵、多鍵、佔位符不一致（`{n}` vs `{count}`）、裸 `@`、`|`、未配對大括號、`{'@'}` 合法、後端 `{0}` 缺漏、`{{` 跳脫、空字串略過、超長句、JSON 深度、檔案過大（A38）、`formatVersion` 太新、`direction: rtl` 被拒；前後端共用案例檔兩邊都跑。
-- **匯入交易**：`designData` 某列寫入失敗時語系列、版本、其他設計資料都沒留下；預覽後檔案被改（`previewId` 對不上）拒絕；`previewId` 逾時；兩人同時匯入同一語系（後者以版本衝突 409）。
+- **p3 接法**：三個政策的選項跟著安裝清單變；裝了 `ja` 後可設為啟用、預設；`ja` 啟用中時移除被拒；被當成上層語系時移除被拒；不裝任何語系包時行為與 p3 出廠完全相同（同一組 p3 測試照跑，含 `Options_IncludesLocaleSettings`）；語系類政策選項顯示自稱而不是 `policies.choices.ja` 這種鍵。
+- **`IsValid`（M1）**：含未安裝語系鍵（如 `ja`）的欄位、模組、選項可以改名；移除語系後含該語系文字的模組照常編輯；代碼格式不對的鍵被拒；缺必填語系被拒。
+- **語系包驗證**：缺鍵、多鍵、佔位符不一致（`{n}` vs `{count}`）、裸 `@`、`|`、未配對大括號、`{'@'}` 合法、`{'{{欄位}}'}` 內建寫法合法、後端 `{0}` 缺漏、`{{` 跳脫、後端 `{0,100000000}`／`{0:D99999}` 被拒、雙向控制字元被拒、空字串略過、超長句、`pack.version` 超長、鍵數超過基準 2 倍整包拒收、JSON 深度、檔案過大（A38）、`formatVersion` 太新、`direction: rtl` 被拒；前後端共用案例檔兩邊都跑。
+- **匯入交易**：`designData` 某列寫入失敗時語系列、版本、其他設計資料都沒留下；預覽後檔案被改（`previewId` 對不上）拒絕；`previewId` 逾時、他人的 `previewId` 被拒；兩人同時匯入同一語系（後者因語系版本不一致回 409）；預覽後 `designData` 目標被別人改過（更新時間不一致）回 409；Demo 匯入關閉時預覽不暫存 `previewId`；暫存筆數超過上限時最舊的被丟。語系列、版本表、匯入交易、合併與回滾、移除語系的 repository 測試都標 `Category=Postgres`，SQLite 與 PostgreSQL 雙跑。
 - **合併與回滾**：U5 的 30＋20 句情境；回到上一版再切回；移除覆寫後回到內建翻譯；升級（換內建層）後覆寫層不變、「原文已更新」計數正確。
-- **退回鏈**：`ja` 缺句 → 上層 `en-US` → 預設 `th` → zh-TW → 鍵；介面、後端訊息、設計資料三處同結果（同一組案例）。
-- **執行期載入**：登入前取得預設語系文字；網址雜湊改變才重取；`auth/options` 失敗用 localStorage 快取；快取也沒有用打包的 zh-TW；3 秒逾時先掛載再換；已開頁面 60 秒內換上新翻譯；切語系失敗停在原語系；`LedgerTab`、`designer-graph` 對每個啟用語系都產生文字（含執行期載入的 `ja`）。
-- **安全**：非管理員呼叫匯入、預覽、移除回 403；Demo 開關關閉時套用回 403、預覽可用；覆寫一句含 `<script>` 與開頭 `=` 的後端訊息（`report.Yes`），列印 HTML 被編碼、CSV／Excel 匯出被跳脫；公開端點不回未啟用語系、不回後端訊息；xlsx 壓縮炸彈被拒；含公式的格子被拒。
-- **設計資料**：路徑覆蓋所有 I18nText 欄位（掃型別的測試）；原文已改的列預設略過、勾選後套用；只改日文不觸發英文必填；找不到的路徑列報告；套件含未安裝語系時開啟成功並保留、安裝後顯示；匯出套件帶出所有語系。
+- **退回鏈**：`ja` 缺句 → 上層 `en-US` → 預設 `th` → zh-TW → 鍵；介面、後端訊息、設計資料三處同結果（同一組案例）；**前端拿到的 `i18n/ui/ja` 就是沿鏈補齊後的結果**（缺的句子是泰文，不是繁中）；上層語系未啟用時前端照樣拿得到補齊結果；預設語系改變時 `uiHash` 跟著變。
+- **執行期載入**：登入前取得預設語系文字；網址雜湊改變才重取；有 localStorage 快取時先用快取掛載、背景驗雜湊；`auth/options` 失敗用 localStorage 快取；快取也沒有用打包的 zh-TW；3 秒（兩趟合計）逾時先掛載再換；已開頁面 60 秒內換上新翻譯；切語系失敗停在原語系；前端預編譯丟掉壞句改用 zh-TW 該句；`LedgerTab`、`designer-graph` 對**每個已安裝語系**（含未啟用的）都產生文字（含執行期載入的 `ja`）。
+- **多台部署的雜湊競態**：請求的 `v` 不等於該台目前雜湊時回 `no-store` 與 `X-UI-Hash`，不回 `immutable`；模擬 A 台已換新、B 台未換新，瀏覽器不會永久快取舊內容。
+- **內建層完整性**：建置檢查（內嵌 `ui.json` 少於 4 份建置失敗）；啟動自檢不齊 fail fast；**Docker 映像冒煙**：用 `Dockerfile.demo` 建的映像，`GET i18n/ui/th`、`GET i18n/ui/en-US` 內建層鍵數與 repo 內一致；Demo 冒煙加「登入頁切 English、ไทย，看到的是該語言」。
+- **試看（M2）**：一般使用者的語言選單不列未啟用語系；管理員的選單列「未啟用」項目、切過去只在該分頁生效（`sessionStorage`）、重新整理分頁後回到原語系。
+- **安全**：非管理員呼叫匯入、預覽、移除回 403；Demo 開關關閉時套用回 403、預覽可用；覆寫一句含 `<script>` 與開頭 `=` 的後端訊息（`report.Yes`），列印 HTML 被編碼、CSV／Excel 匯出被跳脫；匿名請求不回未啟用語系、不回後端訊息；xlsx 壓縮炸彈被拒；含公式的格子整句被拒；Excel 匯出再匯入來回後，開頭 `'` 已去掉、`source` 比對不誤判。
+- **設計資料**：路徑覆蓋所有 I18nText 欄位（掃型別的測試，執行期快照欄位明列排除）；綁定代碼優先、客戶自建物件用 `local:` 路徑並標記；原文已改的列預設略過、勾選後套用；只改日文不觸發英文必填；找不到的路徑列報告；套件含未安裝語系時開啟成功並保留、安裝後顯示；匯出套件帶出所有語系。
 - **稽核**：每種動作一筆，內容含雜湊與筆數、不含整份翻譯。
 - **畫面**：語系頁、匯入預覽、匯出對話框在 390、820、1366、1920 四種寬度沒有橫向捲動；登入頁切換器列出新語系；`ja` 的日期選擇器用 Quasar 日文包。
 
 ## 20. 建議切段
 
-每段可獨立合併、Demo 不壞。前提：**p3 已合併**（三個語系政策存在）。
+每段可獨立合併、Demo 不壞。前提：**p3 已合併**（三個語系政策存在）。審查後 i4d 拆成 i4d1、i4d2（原 i4d 一段包了十幾項）。
 
 | 段 | 內容 | Demo 上看得到 | 依賴 |
 |---|---|---|---|
-| i4a | `Dynamic_Locale` 與 migration（兩種資料庫）、內建四語同步、`LocaleRegistry`、`I18nText` 驗已安裝語系與新退回鏈、`X-Locale`、p3 三政策改動態選項、`auth/options` 回語系物件、前端所有寫死的 `LOCALES` 改從 API 取、Quasar glob 全開 | 無變化（仍是四語） | p3 |
-| i4b | 內建介面文字搬 `shared/i18n/`、後端內嵌、`GET i18n/ui/{code}`、前端只打包 zh-TW、啟動載入、瀏覽器快取、退回、`ensureLocaleMessages` 與兩個多語產生點 | 無變化（首屏多一次請求） | i4a |
-| i4c | `IMessageCatalog`、解析點改 DI、直接呼叫點改注入（列出剩餘清單）、`AsI18n` 改已安裝語系 | 無變化 | i4a（可與 i4b 平行） |
-| i4d | 語系包格式 v1、驗證器與共用案例檔、預覽／套用、覆寫層版本表與回滾、移除覆寫、安裝與移除語系、語系頁、JSON 匯出樣板、稽核、Demo 開關、A38、A39、手冊 | 語系頁；Demo 站可預覽、可匯出、不能套用 | i4b、i4c、O2 |
-| i4e | 可翻譯來源清單與路徑、`designData` 段、Excel 匯出匯入（三張工作表，U9）、原文已改偵測、只翻設計資料的入口 | 匯出 Excel 翻譯樣板 | i4d；i3（報表、儀表板名稱多語才翻得到） |
-| i4f | 套件 schema 語系鍵改代碼格式、開啟保留未安裝語系（U6）、匯出帶所有語系、手冊與套件文件 | 無變化 | i4a；**與 i3 的套件升版合併成一次** |
+| i4a | `Dynamic_Locale` 與 migration（兩種資料庫）、內建四語同步、`LocaleRegistry`（版本戳記）、`I18nText.IsValid` 改只驗格式與必填（M1）與新退回鏈、`X-Locale`、p3 三政策改動態選項（選項名稱用自稱）、`auth/options` 加 `locales`、**§1 列的寫死清單逐條改完並勾驗**（後端 8 處 `SupportedLocales`、前端 6 處 `LOCALES`／型別／`I18nTextInput`、`PolicyValueEditor`）、Quasar glob 全開 | 無變化（仍是四語） | p3 |
+| i4b | 內建介面文字搬 `shared/i18n/`（**影響 139 個 import 檔**，用 alias 或轉出口降低 diff）、後端內嵌＋**兩份 Dockerfile、建置檢查、啟動自檢**、`quasar-langs.json`、`GET i18n/ui/{code}`（伺服器合併退回鏈、快取標頭規則）、前端只打包 zh-TW、啟動載入與 stale-while-revalidate、瀏覽器快取、前端預編譯、`ensureLocaleMessages` 與兩個多語產生點（每個已安裝語系）、管理員試看（M2） | 無變化（首屏多一次請求）；冒煙：登入頁切 English、ไทย | i4a |
+| i4c | `IMessageCatalog`、解析點改 DI、直接呼叫點改注入（列出剩餘清單）、`AsI18n` 改已安裝語系（3 個 `static readonly` 改方法） | 無變化 | i4a（可與 i4b 平行） |
+| i4d1 | 後端：語系包格式 v1、驗證器與共用案例檔、預覽／套用（併發 409、暫存上限）、覆寫層版本表（migration）與回滾、移除覆寫、安裝與移除語系、稽核、Demo 開關、A38、A39；加一個最小的匯入畫面（上傳 → 報告 → 套用） | 最小匯入畫面；Demo 站可預覽、不能套用 | i4b、i4c、O2 |
+| i4d2 | 語系頁完整版（四種寬度）、JSON 匯出樣板、完整度與「原文已更新」「覆寫已失效」、「以此語系預覽」、手冊 | 語系頁；Demo 站可預覽、可匯出、不能套用 | i4d1 |
+| i4e | 可翻譯來源清單與路徑（綁定代碼優先）、`designData` 段、Excel 匯出匯入（三張工作表，U9）、原文已改偵測、只翻設計資料的入口 | 匯出 Excel 翻譯樣板 | i4d2；i3（報表、儀表板名稱多語才翻得到） |
+| i4f | 套件 schema 與 C# 驗證器語系鍵改代碼格式（舊 `formatVersion` 仍只收四語）、匯出帶所有語系、手冊與套件文件 | 無變化 | i4a；**與 i3 的套件升版合併成一次** |
 
-- i4a 是其他各段的基礎；i4b、i4c 可平行；i4d 要等兩者。
-- i3 與 i4 的關係：i4a–i4d 不依賴 i3；i4e 依賴 i3（否則報表、儀表板名稱翻不到）；i4f 建議與 i3 的格式升版放同一段或緊接著合併。路線順序維持「p3 → i3、i4」，段內可排 i4a → i4b／i4c → i3 → i4d → i4e、i4f。
-- 之後（不排進 i4）：§9.2 後端訊息搬 JSON、線上逐句翻譯編輯、開啟應用程式時自動套用已匯入的 `designData`、RTL。
+- i4a 是其他各段的基礎；i4b、i4c 可平行；i4d1 要等兩者；i4d2 接 i4d1。依賴本身：p3 → i4a → i4b／i4c → i4d1（加 O2）→ i4d2 → i4e（加 i3）；i4f 與 i3 一起升格式版本。
+- **migration**：每段一個符合 `.claude/rules/backend.md`：i4a 一個（`Dynamic_Locale`）、i4d1 一個（`Dynamic_LocalePack`；`previewId` 若存資料庫再加一個）。i4d1 不能和其他會加 migration 的段平行。
+- i3 與 i4 的關係：i4a–i4d2 不依賴 i3；i4e 依賴 i3（否則報表、儀表板名稱翻不到）；i4f 建議與 i3 的格式升版放同一段或緊接著合併。路線順序維持「p3 → i3、i4」，段內可排 i4a → i4b／i4c → i3 → i4d1 → i4d2 → i4e、i4f。
+- 之後（不排進 i4，已列 `docs/feature.md` 💡）：§9.2 後端訊息搬 JSON、線上逐句翻譯編輯、開啟應用程式時自動套用已匯入的 `designData`、RTL。
 
 ## 21. 宗旨檢查（formwright-purpose-check）
 
 1. **機制還是政策**：通過。語系表、兩層合併、驗證是平台機制；檔案大小、已安裝數是政策 A38、A39；啟用、預設、必填沿用 p3 政策。
 2. **寫死掃描**：設計階段不適用；新的寫死項目已列 §14。
-3. **單一來源**：通過。語系清單只在 `Dynamic_Locale`（內建列由 `shared/i18n` 同步），啟用只在政策；前端從 API 取。前端打包一份 zh-TW 是退回用的副本，由同一個來源檔產生，不是另一份手寫清單。
+3. **單一來源**：通過。語系清單只在 `Dynamic_Locale`（內建列由 `shared/i18n` 同步），啟用只在政策；前端從 API 取；語系表不放沒有行為的欄位（T19）。前端打包一份 zh-TW 是退回用的副本，由同一個來源檔產生，不是另一份手寫清單。
 4. **兩個應用程式**：通過。語系與翻譯是全平台能力，CRM、進銷存、MES 都用得上。
 5. **空系統**：通過。沒開任何應用程式也能裝語系、翻介面；設計資料翻譯只是項目少。
 6. **套件只用定義組成**：通過。內建應用程式的新語系譯名用 `designData` 這個通用機制，沒有替特定應用程式開後門。
 7. **ERP 對照**：通過，見 §16。
-8. **權限 fail closed、驗證不只在前端、沒有執行期 DDL**：通過。所有匯入 API 後端驗管理員；語法與佔位符在後端驗；新語系不加欄位（I18nText 是 JSON），只有 i4a 一個 EF migration。
+8. **權限 fail closed、驗證不只在前端、沒有執行期 DDL**：通過。所有匯入 API 後端驗管理員；語法與佔位符在後端驗；新語系不加欄位（I18nText 是 JSON），EF migration 是 i4a（`Dynamic_Locale`）與 i4d1（`Dynamic_LocalePack`，`previewId` 若存資料庫再加一個），各段一個（§20）。
 
 ## 22. 留給實作者
 
 - `Dynamic_LocalePack` 的確切欄位與 JSON 欄的壓縮與否（泰文介面約 170 KB）。
-- 可翻譯來源的完整清單與路徑命名（§10.2 只列樣板）；沒有代碼的物件怎麼處理。
-- 前端建置產生 `quasar-langs.json` 的方式（Quasar 設定裡的小外掛，或一支 node 腳本）。
-- `previewId` 暫存放記憶體或資料庫（多台部署時要能跨台）。
+- 可翻譯來源的完整清單與路徑命名（§10.2 只列樣板與規則）；`AppBindings` 沒覆蓋到的物件類型。
+- `quasar-langs.json` 的產生方式（一支手動執行的 node 腳本，commit 結果；vitest 比對一致性）。
+- `previewId` 暫存放記憶體或資料庫（多台部署時要能跨台；放資料庫則多一個 migration，§20）。
+- 前端 import 搬家用 alias 還是轉出口（§8.1）。
 - 語系頁、匯入預覽、匯出對話框的版面與文案（四語）。
 - `shared/i18n/` 搬家時 git 歷史的保留方式（`git mv`）。

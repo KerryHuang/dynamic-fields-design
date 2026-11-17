@@ -1,6 +1,9 @@
 # 政策設定 p3 Implementation Plan
 
-> ⚠️ 2026-11-17 語系包設計（2026-11-17-language-packs-design.md §18）要求語系選項改為已安裝語系，實作 p3 時先留接口。
+> ⚠️ 2026-11-17 語系包設計（2026-11-17-language-packs-design.md §18）要求語系選項改為已安裝語系，實作 p3 時先留接口。同一份設計也影響下列判斷，p3 照原文做完 i4a 就得再改一次：
+> - **判斷 13**（退回順序）：直接做成「要求的語系 → 系統預設語系 → 繁中 → 第一個有值的」，上層語系留到 i4a 再加。
+> - **判斷 15**（連不上時維持繁中）：i4b 起前面多一層瀏覽器快取（繁中仍是最後退回）。`GET auth/options` 之後只**加**欄位（`locales` 物件陣列），不改 `enabledLocales` 代碼陣列的形狀，`AuthApiTests.Options_IncludesLocaleSettings` 照過。
+> - **判斷 14**（停用語系）：分錄沖銷欄位標籤仍產生四語，之後改成「每個已安裝語系」（使用者 2026-11-12 確認 Q12 的精神不變）。
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
