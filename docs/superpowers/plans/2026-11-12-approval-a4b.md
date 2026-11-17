@@ -12,7 +12,7 @@
 
 **Spec:**
 - `docs/superpowers/specs/2026-11-10-approval-workflow-design.md`：§7（動作）、§9（鎖定與可編輯欄位）、§10（權限）、§12（通知）、§13.2–§13.4（畫面）、§15（API）、§17.5 前端、§17.7（設計案劇本）、§18、§20.4。
-- a2d 計畫 `../.tmp/plans/20261112-approval-a2d/plan.md`（檔尾使用者裁決優先）：Task 1 `ApprovalLockService`、Task 3 鎖定 400 鍵、Task 6 附件 409、Task 17 `approval.maxCommentLength`。
+- a2d 計畫 `../formwright/.tmp/plans/20261112-approval-a2d/plan.md`（檔尾使用者裁決優先）：Task 1 `ApprovalLockService`、Task 3 鎖定 400 鍵、Task 6 附件 409、Task 17 `approval.maxCommentLength`。
 - repo 規範：`AGENTS.md`、`.claude/rules/frontend.md`、`.claude/rules/backend.md`、`.claude/rules/docs.md`、`docs/ai/testing.md`。
 
 **路徑慣例：** 後端相對 `poc/backend/`，前端相對 `poc/frontend/`，文件與腳本相對 repo 根目錄。worktree：`../dynamic-fields-design.a4b`（分支 `feature/a4b`，Task 0 依 workspace:worktree 建立）。本計畫引用的行號以 origin/main `18168a47` 為準，Task 0 會重新核對。
@@ -171,7 +171,7 @@ a2d 已涵蓋、a4b 只接不改：鎖定欄位的寫入擋（400 鍵 `f_{id}`�
 - **後端**：使用者看得到的新訊息進 `MessageText` 四語表；新測試類 `protected override bool ScopePerRequest => true;`；不寫 SQLite 專屬語法；新 WebAPI 測試標 `[Trait("Category", "Postgres")]`。
 - **測試**：只跑窄範圍；前端 vitest 一律 `--maxWorkers=2`；改完跑 `bun run typecheck`；改 i18n 另跑 `src/i18n`。gate 一次一個，期間不跑其他測試。
 - **git**：逐檔 `git add`，commit 前 `git status`；不用 `--no-verify`、不 force push、不 merge commit；Conventional Commits，scope `approval`；不 push，由主控決定。公開 repo 不寫公司字串、個人絕對路徑、內網 IP；走查腳本不進 repo。
-- **不碰** `../.tmp/plans/20261112-approval-a6/`（另一個 agent 在寫）。
+- **不碰** `../formwright/.tmp/plans/20261112-approval-a6/`（另一個 agent 在寫）。
 
 ---
 
@@ -199,7 +199,7 @@ a2d 已涵蓋、a4b 只接不改：鎖定欄位的寫入擋（400 鍵 `f_{id}`�
   - `PolicyCatalog` 的 `approval.maxCommentLength` 出現在 `GET policies/effective`（a2d 判斷 21 只排除收件人類）；前端 `EffectivePolicies` 的讀法。
   - 鎖定欄位 400 的鍵與訊息鍵（a2d Task 3）、附件 409 訊息（Task 6）。
   - 本計畫引用的檔案與行號：`GetRecordHandler.cs`、`RecordResponses.cs`、`GetModuleSchemaHandler.cs`、`SchemaController.cs`、`ApprovalQueryHandlers.cs`、`ApprovalModels.cs`、`ApprovalRequests.cs`、`ApprovalsController.cs`、`MessageText.cs`；前端 `DetailPage.vue`、`FormPage.vue`、`DynamicForm.vue`、`DynamicDetail.vue`、`workflow.ts`、`types.ts`、`dynamic-api.ts`、`task-types.ts`、`MainLayout.vue`、`routes.ts`。
-- [ ] **Step 4：寫走查腳本** `../.tmp/plans/20261112-approval-a4b/walkthrough-setup.sh`（不進 repo）：對 `scripts/unattended/local-demo.sh` 起的本機 Demo（5180），以系統管理員登入後：
+- [ ] **Step 4：寫走查腳本** `../formwright/.tmp/plans/20261112-approval-a4b/walkthrough-setup.sh`（不進 repo）：對 `scripts/unattended/local-demo.sh` 起的本機 Demo（5180），以系統管理員登入後：
   1. 選一個 Demo 已開啟、有狀態機的模組（優先 CRM 報價單：`draft → pending` 設為需簽核、`noMatch=block`；`pending` 會成為鎖定狀態，`approved`、`rejected` 延伸鎖定，`draft` 是起始狀態不受影響）。用 `GET modules/{key}/workflow` 取回目前狀態機，只改那一條轉移，`PUT` 回去。
   2. `POST approval-flows` 建一個流程：目標狀態 `pending`、一關、來源群組（Demo 裡有成員、且不含送出者的群組，用 `GET groups` 確認）、或簽；另建一個含 `initiatorPick` 關卡的變體（優先序較後、`when` 用金額欄位區分）供送出對話框走查。
   3. 印出送出者與簽核人的帳號，供走查切換登入。
@@ -758,4 +758,4 @@ pg0 合併後，以 `docs/ai/testing.md` 的 PostgreSQL 雙跑指令補跑本段
 
 ## 排程變更（使用者 2026-11-12，優先於 Task 0「等 a2d 七段合併」）
 
-順序改為 a2d1 → **a4b** → a6 → a2d2–a2d7 → a4a → a5 → a3。a4b 只等 a2d1 合併（`ApprovalLockService`、`ApprovalFieldLocked` 訊息、`IWriteJournal` 輸入界線已在 a2d1）。Task 0 改為：rebase 到含 a2d1 的 main，核對 a2d1 實際介面（見 ../.tmp/plans/20261112-approval-a2d/a2d1-result.md）；凡依賴 a2d2–a2d7 才有的東西（附件鎖定 409、定義守衛、政策值、收件人政策），a4b 只接既有錯誤碼的通用顯示，不做專屬 UI，並列進交付說明。鎖定違規錯誤鍵：表頭 `f_{id}`、明細 `details.{明細模組key}`；訊息帶欄位名稱後綴。
+順序改為 a2d1 → **a4b** → a6 → a2d2–a2d7 → a4a → a5 → a3。a4b 只等 a2d1 合併（`ApprovalLockService`、`ApprovalFieldLocked` 訊息、`IWriteJournal` 輸入界線已在 a2d1）。Task 0 改為：rebase 到含 a2d1 的 main，核對 a2d1 實際介面（見 ../formwright/.tmp/plans/20261112-approval-a2d/a2d1-result.md）；凡依賴 a2d2–a2d7 才有的東西（附件鎖定 409、定義守衛、政策值、收件人政策），a4b 只接既有錯誤碼的通用顯示，不做專屬 UI，並列進交付說明。鎖定違規錯誤鍵：表頭 `f_{id}`、明細 `details.{明細模組key}`；訊息帶欄位名稱後綴。

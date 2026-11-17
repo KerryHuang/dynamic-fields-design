@@ -12,7 +12,7 @@
 - `docs/superpowers/specs/2026-11-13-approval-flowgraph-design.md`（下稱「流程圖設計」）：§6.2 節點型別、§6.3、§7（資料模型，尤其 §7.1–§7.8）、§9 G1–G14 與 W1–W3、§10.8（只有草稿的流程、程式假設清單）、§12.1–§12.2（收件人與範本語法，只取驗證）、§13 第 1、7 點、§14 Domain 測試、§15 政策與可寫死清單、§16 介面預留、§17 fg1 列、§19、§20。
 - `docs/superpowers/specs/2026-11-10-approval-workflow-design.md`（下稱「簽核設計」）：§4.3、§4.4、§5.2、§6.1、§8.6、§9.2、§9.3。
 - `docs/superpowers/specs/2026-11-11-policy-settings-design.md` §3.5（改嚴只管之後）、§4 政策目錄。
-- a3 計畫「與流程圖的銜接」：`../.tmp/plans/20261114-approval-a3/plan.md` 788–795 行。
+- a3 計畫「與流程圖的銜接」：`../formwright/.tmp/plans/20261114-approval-a3/plan.md` 788–795 行。
 - 樣板：`ApprovalDefinitionValidator`（逐關檢查）、`SharedRuleCasesTests`（讀 `poc/shared/` 案例）、`SharedMasterSchemaTests`（migrate 到前一版再升級的 schema 測試）、`PolicyDefinitionTests` 的 `ApprovalOverdueReminderHours_FactoryRangeAndScope`、`ApprovalTestBase.SeedFlow`。
 - repo 規範：`AGENTS.md`、`.claude/rules/backend.md`、`docs.md`、`.claude/skills/formwright-purpose-check/SKILL.md`、`docs/ai/testing.md`。
 

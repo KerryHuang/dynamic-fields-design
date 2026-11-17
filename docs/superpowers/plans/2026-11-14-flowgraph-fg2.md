@@ -12,8 +12,8 @@
 - `docs/superpowers/specs/2026-11-13-approval-flowgraph-design.md`（下稱「流程圖設計」）：§2 反目標、§6.2、§7.6（節點實例欄位語意）、§7.7、§8 全節（§8.1–§8.14）、§9 G8（引擎依賴的不變式）、§12.4（不擋流程）、§13 第 2、7 點、§14 Application 測試的並行、退回、撤回、重新比對、條件無法判斷、併發、等價性、草稿以外各項、§15（可寫死清單、B27）、§16 第一點（引擎不得引入範本概念）、§17 fg2 列、§19、§20、§20.1。fg1d 寫回的 §9「實作註記」、§19.1 U14–U21、§19.2 J19–J27（已在 main）。
 - `docs/superpowers/specs/2026-11-10-approval-workflow-design.md`（下稱「簽核設計」）：§4.3、§4.4、§5.2、§5.4、§5.5、§6.5、§7.2–§7.8、§8.2–§8.4、§10.1、§12。
 - `docs/superpowers/specs/2026-11-11-policy-settings-design.md` §10（B27）。
-- fg1 計畫與結果：`../.tmp/plans/20261114-flowgraph-fg1/plan.md`、`fg1a-result.md`、`fg1b-result.md`、`fg1c-result.md`、`fg1c-fix1-result.md`、`fg1d-result.md`（與 fix1–fix3）。fg2 本身：`fg2a1-result.md`（fg2a1 的結果與偏離）。
-- a3 計畫「與流程圖的銜接」：`../.tmp/plans/20261114-approval-a3/plan.md` 788–795 行。
+- fg1 計畫與結果：`../formwright/.tmp/plans/20261114-flowgraph-fg1/plan.md`、`fg1a-result.md`、`fg1b-result.md`、`fg1c-result.md`、`fg1c-fix1-result.md`、`fg1d-result.md`（與 fix1–fix3）。fg2 本身：`fg2a1-result.md`（fg2a1 的結果與偏離）。
+- a3 計畫「與流程圖的銜接」：`../formwright/.tmp/plans/20261114-approval-a3/plan.md` 788–795 行。
 - 樣板：`ApprovalEngine`（推進與 `StartAsync`）、`ApprovalPath`（有效路徑與退回截斷）、`ApprovalRouter.Recheck`、`ApprovalActionSupport.LoadAsync`、`ApprovalShapeGateTests`（「409 且什麼都沒動」的逐項比對寫法）、`InventoryConcurrencyTests`（檔案型 SQLite 的真並行）、`EventRuntimeTests.ConfigureServices`（測試換服務註冊）。
 - repo 規範：`AGENTS.md`、`.claude/rules/backend.md`、`docs.md`、`.claude/skills/formwright-purpose-check/SKILL.md`、`docs/ai/testing.md`。
 

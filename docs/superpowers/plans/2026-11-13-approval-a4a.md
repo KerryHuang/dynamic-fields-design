@@ -13,8 +13,8 @@
 **Spec:**
 - `docs/superpowers/specs/2026-11-10-approval-workflow-design.md`：§13.1（本段範圍）；§4.3、§4.4（定義與版本）、§5.2（入口約束、`noMatch`、`direct` 說明文字）、§6.1（來源與主管層級上限讀政策）、§6.5（備援、`onEmpty`）、§8.6（進行中實例守衛）、§9.2（可編輯欄位限制）、§9.3（鎖定狀態、鎖定欄位、「核准之後建議唯讀」提示）、§10.4（設計器權限）、§20.4（第 3、9、11、16、27、37、38 條）。
 - `docs/superpowers/specs/2026-11-11-policy-settings-design.md`：§3.5（改嚴只管之後）、§3.6（前端取用生效值）、§4 A3、A10、§10 可寫死清單。
-- a2d 計畫 `../.tmp/plans/20261112-approval-a2d/plan.md`：判斷 15–17、21，政策登記表，可寫死清單，使用者裁決 1–17；a2d7 重審 `a2d7-rereview.md` 的 N-M1、N-M2。
-- a4b 計畫 `../.tmp/plans/20261112-approval-a4b/plan.md`：J9（設計器存檔保留 `approval`／`editable`，a4a 加介面）、J23（預覽時間軸的呈現）。
+- a2d 計畫 `../formwright/.tmp/plans/20261112-approval-a2d/plan.md`：判斷 15–17、21，政策登記表，可寫死清單，使用者裁決 1–17；a2d7 重審 `a2d7-rereview.md` 的 N-M1、N-M2。
+- a4b 計畫 `../formwright/.tmp/plans/20261112-approval-a4b/plan.md`：J9（設計器存檔保留 `approval`／`editable`，a4a 加介面）、J23（預覽時間軸的呈現）。
 - repo 規範：`AGENTS.md`、`.claude/rules/frontend.md`、`backend.md`、`docs.md`、`docs/ai/testing.md`。
 
 **路徑慣例：** 後端相對 `poc/backend/`，前端相對 `poc/frontend/`，文件與腳本相對 repo 根目錄。worktree：`../dynamic-fields-design.a4a`（分支 `feature/a4a`，已建）。行號以 main `3f0849d0` 為準，Task 0 重新核對。
@@ -192,7 +192,7 @@
 
 - [ ] **Step 1：** `git -C ../dynamic-fields-design.a4a fetch && git log --oneline -1 origin/main`；main 若已前進，確認 `git status --short` 乾淨後 `git rebase origin/main`。
 - [ ] **Step 2：** 核對本計畫引用的型別與檔案，有出入先改計畫：`ApprovalFlowResponse`、`ApprovalFlowInput`、`UpdateApprovalFlowHandler`、`ApprovalFlowEditor.ResponseAsync`、`IApprovalFlowRepository.IsVersionUsedAsync`、`WorkflowResponse`／`WorkflowMapper.ToResponse`、`ApprovalDefinitionValidator.NonEditableFieldIdsAsync`、`ApprovalPreviewer.PreviewAsync`、`PreviewApprovalFlowHandler`、`ApprovalPreviewResponse`、`PreviewStage`、`StageResolution`；前端 `WorkflowTab.vue`、`workflow.ts`、`ModuleEditorPage.vue`、`RulesTab.vue`、`ConditionEditor.vue`、`PreviewStages.vue`、`PolicyValueEditor.vue`、`useRecipientNames.ts`、`permissions-queries.ts`、`policies-queries.ts`、`dynamic-api.ts`。
-- [ ] **Step 3：** 寫 `../.tmp/plans/20261113-approval-a4a/walkthrough-check.sh`（不進 repo）：對 `scripts/unattended/local-demo.sh` 起的本機 Demo（後端 5180），以系統管理員登入後 `GET approval-flows?module=<設計案模組鍵>`，印出流程鍵、版本、`used`、`pendingCount`，確認 `crm-design-case-review` 存在；另印出 CRM 業務群組的一位一般設計者帳號（走查唯讀模式用，沒有就註明）。只讀，跑一次確認能用。
+- [ ] **Step 3：** 寫 `../formwright/.tmp/plans/20261113-approval-a4a/walkthrough-check.sh`（不進 repo）：對 `scripts/unattended/local-demo.sh` 起的本機 Demo（後端 5180），以系統管理員登入後 `GET approval-flows?module=<設計案模組鍵>`，印出流程鍵、版本、`used`、`pendingCount`，確認 `crm-design-case-review` 存在；另印出 CRM 業務群組的一位一般設計者帳號（走查唯讀模式用，沒有就註明）。只讀，跑一次確認能用。
 - [ ] **Step 4：** 計畫頂端加修訂紀錄一行「Task 0 核對完成：<日期>、<改了哪些引用>」。
 
 ---

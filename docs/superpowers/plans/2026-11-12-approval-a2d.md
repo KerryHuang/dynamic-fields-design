@@ -178,7 +178,7 @@
 - 後端測試只跑 `--filter` 窄範圍；WebAPI 全套留給 gate。前端 vitest 一律 `--maxWorkers=2`。
 - i18n 四語鍵集合一致、單行 JSON；`poc/shared/policy-catalog.json` 與 `PolicyCatalog` 一致（`PolicyCatalogFixtureTests` 把關），前端 `policy-i18n.vitest.spec.ts` 驗四語文案。
 - commit 逐檔 `git add`，訊息用 Conventional Commits，scope `approval` 或 `policy`；不 push，由主控決定。
-- 不碰 `../.tmp/plans/20261111-policy-settings-p2/`、`-p3/`。
+- 不碰 `../formwright/.tmp/plans/20261111-policy-settings-p2/`、`-p3/`。
 
 ### 政策登記表（a2d 新增，出廠值＝現值）
 
@@ -234,7 +234,7 @@ A15 的名稱是「系統管理員可以略過狀態轉移的群組限制」（�
 
 ## Task 0：開工前 rebase 並重新核對（阻塞解除後第一件事）
 
-**Files:** 只改本計畫（`../.tmp/plans/20261112-approval-a2d/plan.md`），不改程式碼。
+**Files:** 只改本計畫（`../formwright/.tmp/plans/20261112-approval-a2d/plan.md`），不改程式碼。
 
 - [ ] **Step 1：確認前置條件 1–3。** 不符就停下回報。
 - [ ] **Step 2：rebase。** `git fetch && git rebase origin/main`（在 `feature/a2d`）；`git status --short` 乾淨。
