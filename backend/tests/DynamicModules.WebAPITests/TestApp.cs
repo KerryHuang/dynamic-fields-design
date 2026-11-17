@@ -143,6 +143,9 @@ public class TestApp : WebApplicationFactory<Program>
             l.AddProvider(Logs);
             // 2xx 的請求結束行是 Debug；provider 專屬規則優先於 appsettings 的 Default: Information
             l.AddFilter<TestLogSink>("DynamicModules.WebAPI.Ops", LogLevel.Debug);
+            // Development 設定會把每條 EF SQL 以 Information 寫進 stdout／trx（一個類別數百 MB）並被 TestLogSink 收進記憶體；沒有測試斷言 SQL log，測試主機只留 Warning 以上
+            l.AddFilter("Microsoft.EntityFrameworkCore.Database.Command", LogLevel.Warning);
+            l.AddFilter("Microsoft.EntityFrameworkCore.Migrations", LogLevel.Warning);
         });
         builder.ConfigureServices(s =>
         {
