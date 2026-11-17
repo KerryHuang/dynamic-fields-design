@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { ModuleCatalog, ReportDefinition } from 'src/domain/dynamic/report-types';
 import {
-  addMeasure, canAdvance, canSave, emptyState, fromDefinition, hasContent, LAST_RANGE_KINDS, operatorsOf, removeColumn, removeGroup, removeMeasure, setChild, setMainModule, setPrimaryDate, toDefinition, unavailableRefs,
+  addMeasure, canAdvance, canSave, emptyState, fromDefinition, hasContent, LAST_RANGE_KINDS, operatorsOf, removeColumn, removeGroup, removeMeasure, setChild, setMainModule, setPrimaryDate, setSource, toDefinition, unavailableRefs,
 } from './designer-state';
 
 const F = (id: number, label: string, o: Partial<ModuleCatalog['fields'][number]> = {}) => ({
@@ -153,5 +153,93 @@ describe('designer-state', () => {
     expect(s.columns).toHaveLength(2);
     expect(hasContent(s)).toBe(true);
     expect(hasContent(emptyState())).toBe(false);
+  });
+
+  describe('任務資料來源（dataset）', () => {
+    const TASK_DEF: ReportDefinition = {
+      version: 1, dataset: 'tasks', mainModuleKey: '', child: null, columns: [], groups: [{ field: MAIN(-3), bucket: null }],
+      measures: [{ id: 'm1', kind: 'countMain', field: null, condition: null }], filters: [], primaryDateField: MAIN(-6), dateRange: null, sort: [], viz: 'bar',
+    };
+
+    it('round trips dataset with an empty main module, and module definitions stay without dataset', () => {
+      const s = fromDefinition(TASK_DEF, '任務');
+      expect(s).toMatchObject({ dataset: 'tasks', mainModuleKey: '' });
+      expect(toDefinition(s)).toEqual(TASK_DEF);
+      expect(fromDefinition(DEF).dataset).toBe('module');
+      expect('dataset' in JSON.parse(JSON.stringify(toDefinition(fromDefinition(DEF))))).toBe(false);
+    });
+
+    it('a system dataset needs no module key, a module report still does', () => {
+      const s = emptyState();
+      expect(canAdvance(s, 0)).toBe(false);
+      setSource(s, 'tasks', null);
+      expect(canAdvance(s, 0)).toBe(true);
+      expect(toDefinition(s)).toMatchObject({ dataset: 'tasks', mainModuleKey: '' });
+    });
+
+    it('switching the source clears settings and the child, keeping name and viz', () => {
+      const s = fromDefinition(DEF, '月報');
+      setSource(s, 'taskEvents', null);
+      expect(s).toMatchObject({ dataset: 'taskEvents', mainModuleKey: null, child: null, columns: [], groups: [], measures: [], name: '月報', viz: 'bar' });
+      setSource(s, 'module', 'orders');
+      expect(s).toMatchObject({ dataset: 'module', mainModuleKey: 'orders' });
+    });
+
+    it('choosing the same source again keeps the settings', () => {
+      const s = fromDefinition(TASK_DEF, 'x');
+      setSource(s, 'tasks', null);
+      expect(s.groups).toHaveLength(1);
+    });
+
+    it('negative field ids: a sort key for a missing task field is reported, a known one is not', () => {
+      const catalog: ModuleCatalog = { fields: [F(-3, '負責人', { type: 'user' })], via: [], children: [] };
+      const s = fromDefinition({ ...TASK_DEF, sort: [{ key: 'main:-3:', desc: false }, { key: 'main:-9:', desc: false }, { key: 'm1', desc: true }] }, 'x');
+      expect(unavailableRefs(s, catalog).sort).toEqual([1]);
+    });
+  });
+
+  describe('量值：countIf、median、帶條件', () => {
+    const base = () => fromDefinition({ ...DEF, child: null, measures: [], groups: [], columns: [MAIN(3)], filters: [], primaryDateField: null, dateRange: null, sort: [] }, 'x');
+    const cond = (value?: unknown) => ({ field: MAIN(1), op: 'eq', value });
+
+    it('countIf needs a complete condition', () => {
+      const s = base();
+      addMeasure(s, 'countIf', null, cond());
+      expect(canAdvance(s, 3)).toBe(false);
+      s.measures[0]!.condition = cond('x');
+      expect(canAdvance(s, 3)).toBe(true);
+    });
+
+    it('median needs a field like sum', () => {
+      const s = base();
+      addMeasure(s, 'median', null);
+      expect(canAdvance(s, 3)).toBe(false);
+      s.measures[0]!.field = MAIN(2);
+      expect(canAdvance(s, 3)).toBe(true);
+    });
+
+    it('sum, avg and median may carry an optional condition, which must then be complete', () => {
+      for (const kind of ['sum', 'avg', 'median']) {
+        const s = base();
+        addMeasure(s, kind, MAIN(2), cond());
+        expect(canAdvance(s, 3)).toBe(false);
+        s.measures[0]!.condition = cond('x');
+        expect(canAdvance(s, 3)).toBe(true);
+        s.measures[0]!.condition = null;
+        expect(canAdvance(s, 3)).toBe(true);
+      }
+    });
+
+    it('min and max never keep a condition when saved', () => {
+      const s = base();
+      addMeasure(s, 'max', MAIN(2), cond('x'));
+      expect(toDefinition(s).measures[0]!.condition).toBeFalsy();
+    });
+
+    it('a condition on a missing field marks the measure unavailable', () => {
+      const s = base();
+      addMeasure(s, 'countIf', null, { field: MAIN(99), op: 'eq', value: 'x' });
+      expect(unavailableRefs(s, CATALOG).measures).toEqual([0]);
+    });
   });
 });

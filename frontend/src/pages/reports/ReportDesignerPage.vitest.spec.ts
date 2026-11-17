@@ -14,7 +14,7 @@ import ReportDesignerPage from './ReportDesignerPage.vue';
 
 vi.mock('src/services/api/dynamic-api', () => ({
   dynamicApi: {
-    getReportCatalogModules: vi.fn(), getReportCatalog: vi.fn(), previewReport: vi.fn(), createReport: vi.fn(), updateReport: vi.fn(),
+    getReportCatalogModules: vi.fn(), getReportCatalog: vi.fn(), getReportDatasets: vi.fn(), getReportDatasetCatalog: vi.fn(), previewReport: vi.fn(), createReport: vi.fn(), updateReport: vi.fn(),
     getReport: vi.fn(), getUsers: vi.fn(), getRecord: vi.fn(),
   },
 }));
@@ -41,9 +41,10 @@ const q = (id: string) => document.body.querySelector(`[data-testid="${id}"]`) a
 let mounted: ReturnType<typeof mount> | undefined;
 let router: ReturnType<typeof createRouter>;
 
-async function mountAt(path: string, catalog: ModuleCatalog = CATALOG) {
+async function mountAt(path: string, catalog: ModuleCatalog = CATALOG, datasets: { dataset: string; name: string }[] = []) {
   api.getReportCatalogModules.mockResolvedValue([{ key: 'orders', name: '訂單' }]);
   api.getReportCatalog.mockResolvedValue(catalog);
+  api.getReportDatasets.mockResolvedValue(datasets as never);
   api.getUsers.mockResolvedValue([]);
   api.previewReport.mockResolvedValue(RESULT);
   router = createRouter({
@@ -83,7 +84,7 @@ describe('ReportDesignerPage', () => {
   it('next is disabled until a main module is chosen, then shows fields in three groups', async () => {
     await mountAt('/reports/new');
     expect((q('designer-next') as HTMLButtonElement).disabled).toBe(true);
-    await pick('main-module', 'orders');
+    await pick('main-module', 'module:orders');
     expect(api.getReportCatalog).toHaveBeenCalledWith('orders', 'zh-TW');
     await pick('child-module', 'shipments:20');
     await click('designer-next');
@@ -94,7 +95,7 @@ describe('ReportDesignerPage', () => {
   it('the dedupe note comes only from the backend preview, the designer has no rule of its own', async () => {
     await mountAt('/reports/new');
     api.previewReport.mockResolvedValue({ ...RESULT, dedupedNote: true });
-    await pick('main-module', 'orders');
+    await pick('main-module', 'module:orders');
     await pick('child-module', 'shipments:20');
     for (let i = 0; i < 3; i++) await click('designer-next');
     await pick('measure-field', 'main:2:');
@@ -106,7 +107,7 @@ describe('ReportDesignerPage', () => {
 
   it('measure fields follow the backend canSum flag', async () => {
     await mountAt('/reports/new');
-    await pick('main-module', 'orders');
+    await pick('main-module', 'module:orders');
     for (let i = 0; i < 3; i++) await click('designer-next');
     const options = (comp('measure-field').props() as unknown as { options: { value: string }[] }).options;
     expect(options.map((o) => o.value)).toEqual(['main:2:']);
@@ -115,7 +116,7 @@ describe('ReportDesignerPage', () => {
   it('preview posts current definition and save posts and navigates', async () => {
     api.createReport.mockResolvedValue(detail(DEF));
     await mountAt('/reports/new');
-    await pick('main-module', 'orders');
+    await pick('main-module', 'module:orders');
     await click('designer-next');
     await click('field-main:1:');
     await click('designer-next');
@@ -135,7 +136,7 @@ describe('ReportDesignerPage', () => {
   it('shows the backend 400 messages instead of swallowing them', async () => {
     api.createReport.mockRejectedValue({ status: 400, errors: { definition: ['設定日期區間需要選主要日期欄位'] } });
     await mountAt('/reports/new');
-    await pick('main-module', 'orders');
+    await pick('main-module', 'module:orders');
     await click('designer-next');
     await click('field-main:1:');
     for (let i = 0; i < 3; i++) await click('designer-next');
@@ -146,7 +147,7 @@ describe('ReportDesignerPage', () => {
 
   it('date range is disabled until a primary date field is chosen', async () => {
     await mountAt('/reports/new');
-    await pick('main-module', 'orders');
+    await pick('main-module', 'module:orders');
     await click('designer-next');
     await click('designer-next');
     expect((comp('date-range').props() as unknown as { disable: boolean }).disable).toBe(true);
@@ -224,7 +225,7 @@ describe('ReportDesignerPage review fixes', () => {
 
   it('ratio measures can be added, need a complete condition, and show the condition text', async () => {
     await mountAt('/reports/new', CAT2);
-    await pick('main-module', 'orders');
+    await pick('main-module', 'module:orders');
     await goTo(3);
     await pick('measure-kind', 'ratio');
     await pick('ratio-field', 'main:2:');
@@ -336,20 +337,20 @@ describe('ReportDesignerPage review fixes', () => {
     api.getReportCatalogModules.mockResolvedValue([{ key: 'orders', name: '訂單' }, { key: 'tickets', name: '工單' }]);
     await mountAt('/reports/7/edit');
     api.getReportCatalogModules.mockResolvedValue([{ key: 'orders', name: '訂單' }, { key: 'tickets', name: '工單' }]);
-    await pick('main-module', 'tickets');
+    await pick('main-module', 'module:tickets');
     expect(q('main-change-confirm')).not.toBeNull();
     await click('main-change-cancel');
     await goTo(1);
     expect(q('field-main:1:')).not.toBeNull();
     await click('designer-prev');
-    await pick('main-module', 'tickets');
+    await pick('main-module', 'module:tickets');
     await click('main-change-confirm');
     expect(api.getReportCatalog).toHaveBeenLastCalledWith('tickets', 'zh-TW');
   });
 
   it('choosing a main module on an empty designer does not ask', async () => {
     await mountAt('/reports/new');
-    await pick('main-module', 'orders');
+    await pick('main-module', 'module:orders');
     expect(q('main-change-confirm')).toBeNull();
   });
 
@@ -440,5 +441,114 @@ describe('FilterValueInput', () => {
     expect(show('2026-11-01T00:30:00Z')).toBe('2026-11-01T08:30');
     expect(show('2026-11-01T08:30')).toBe('2026-11-01T08:30');
     expect(show('2026-11-01')).toBe('2026-11-01T00:00');
+  });
+});
+
+const TASK_CATALOG: ModuleCatalog = {
+  fields: [
+    F(-2, '狀態', { type: 'enum', options: [{ id: 'opt_1', label: '待辦', active: true }, { id: 'opt_3', label: '已完成', active: true }] }),
+    F(-3, '負責人', { type: 'user' }),
+    F(-6, '到期日', { type: 'date', isDate: true }),
+    F(-14, '完成天數', { type: 'integer', canGroup: false, canSum: true }),
+  ],
+  via: [], children: [],
+};
+const DATASETS = [{ dataset: 'tasks', name: '任務' }, { dataset: 'taskEvents', name: '任務事件（建立或完成）' }];
+const optionsOf = (id: string) => (comp(id).props() as unknown as { options: { value: string; label: string; header?: boolean }[] }).options;
+
+describe('ReportDesignerPage 任務資料來源與新量值', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.stubGlobal('ResizeObserver', class { observe() {} unobserve() {} disconnect() {} });
+    api.getReportDatasetCatalog.mockResolvedValue(TASK_CATALOG);
+  });
+  afterEach(() => { mounted?.unmount(); document.body.innerHTML = ''; });
+
+  it('lists system sources and modules in one dropdown with group headers', async () => {
+    await mountAt('/reports/new', CATALOG, DATASETS as never);
+    expect(optionsOf('main-module').map((o) => (o.header ? `#${o.label}` : o.value))).toEqual(
+      ['#系統資料來源', 'dataset:tasks', 'dataset:taskEvents', '#動態模組', 'module:orders']);
+  });
+
+  it('an empty system (no modules) can still pick tasks, loads the dataset catalog and saves dataset with an empty module key', async () => {
+    api.getReportCatalogModules.mockResolvedValue([]);
+    await mountAt('/reports/new', CATALOG, DATASETS as never);
+    api.getReportCatalogModules.mockResolvedValue([]);
+    expect(optionsOf('main-module').some((o) => o.value === 'dataset:tasks')).toBe(true);
+    expect((q('designer-next') as HTMLButtonElement).disabled).toBe(true);
+    await pick('main-module', 'dataset:tasks');
+    expect(api.getReportDatasetCatalog).toHaveBeenCalledWith('tasks', 'zh-TW');
+    expect(api.getReportCatalog).not.toHaveBeenCalled();
+    expect(q('child-module')).toBeNull();
+    expect(q('dataset-hint')!.textContent).toContain('每列是一個任務');
+    expect((q('designer-next') as HTMLButtonElement).disabled).toBe(false);
+    await goTo(3);
+    await pick('measure-kind', 'countMain');
+    await click('measure-add');
+    await click('designer-next');
+    expect(api.previewReport.mock.calls[0]![0]).toMatchObject({ dataset: 'tasks', mainModuleKey: '', child: null });
+  });
+
+  it('primary date choices follow the catalog isDate flag', async () => {
+    await mountAt('/reports/new', CATALOG, DATASETS as never);
+    await pick('main-module', 'dataset:tasks');
+    await goTo(2);
+    expect(optionsOf('primary-date').map((o) => o.value)).toEqual(['main:-6:']);
+  });
+
+  it('switching the source with settings asks first, then clears', async () => {
+    await mountAt('/reports/new', CATALOG, DATASETS as never);
+    await pick('main-module', 'module:orders');
+    await click('designer-next');
+    await click('field-main:1:');
+    await click('designer-prev');
+    await pick('main-module', 'dataset:tasks');
+    expect(q('main-change-confirm')).not.toBeNull();
+    expect(api.getReportDatasetCatalog).not.toHaveBeenCalled();
+    await click('main-change-confirm');
+    expect(api.getReportDatasetCatalog).toHaveBeenCalledWith('tasks', 'zh-TW');
+  });
+
+  it('countIf needs a complete condition before the designer advances', async () => {
+    await mountAt('/reports/new', CATALOG, DATASETS as never);
+    await pick('main-module', 'dataset:tasks');
+    await goTo(3);
+    await pick('measure-kind', 'countIf');
+    await pick('ratio-field', 'main:-2:');
+    await click('measure-add');
+    expect(q('measure-text-0')!.textContent).toContain('符合條件的筆數');
+    expect(q('measure-text-0')!.textContent).toContain('狀態');
+    expect(q('measure-cond-0')).not.toBeNull();
+    expect(q('measure-cond-0-remove')).toBeNull();
+    expect((q('designer-next') as HTMLButtonElement).disabled).toBe(true);
+  });
+
+  it('median needs a numeric field and sum, avg and median take an optional condition that can be removed', async () => {
+    await mountAt('/reports/new', CATALOG, DATASETS as never);
+    await pick('main-module', 'dataset:tasks');
+    await goTo(3);
+    await pick('measure-kind', 'median');
+    expect(optionsOf('measure-field').map((o) => o.value)).toEqual(['main:-14:']);
+    expect((q('measure-add') as HTMLButtonElement).disabled).toBe(true);
+    await pick('measure-field', 'main:-14:');
+    await click('measure-add');
+    expect(q('measure-text-0')!.textContent).toContain('中位數');
+    expect(q('measure-cond-0')).toBeNull();
+    await pick('measure-cond-add-0', 'main:-2:');
+    expect(q('measure-cond-0')).not.toBeNull();
+    expect((q('designer-next') as HTMLButtonElement).disabled).toBe(true);
+    await click('measure-cond-0-remove');
+    expect(q('measure-cond-0')).toBeNull();
+    expect((q('designer-next') as HTMLButtonElement).disabled).toBe(false);
+  });
+
+  it('min and max offer no condition block', async () => {
+    await mountAt('/reports/new', CATALOG, DATASETS as never);
+    await pick('main-module', 'dataset:tasks');
+    await goTo(3);
+    await pick('measure-kind', 'max');
+    await pick('measure-field', 'main:-14:');
+    await click('measure-add');
+    expect(q('measure-cond-add-0')).toBeNull();
   });
 });

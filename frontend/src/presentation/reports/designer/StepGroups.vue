@@ -3,7 +3,7 @@ import { computed, ref } from 'vue';
 import { useI18n } from 'vue-i18n';
 import type { ModuleCatalog, ReportFieldRef } from 'src/domain/dynamic/report-types';
 import { findEntry, listFields, refKey, valueText } from '../report-catalog';
-import { addMeasure, operatorsOf, removeGroup, removeMeasure, type DesignerState, type Unavailable } from './designer-state';
+import { addMeasure, CONDITION_KINDS, operatorsOf, removeGroup, removeMeasure, type DesignerState, type Unavailable } from './designer-state';
 import FilterRow from './FilterRow.vue';
 
 const props = defineProps<{ state: DesignerState; catalog: ModuleCatalog; unavailable: Unavailable }>();
@@ -27,21 +27,30 @@ const bucketOptions = computed(() => [{ value: '', label: t('reports.designer.bu
 // 量值的欄位選項依後端旗標限制：加總與平均限 canSum，最小與最大限 canMinMax；條件占比選條件欄位
 const kind = ref('sum');
 const measureField = ref<string | null>(null);
-const needsField = (k: string) => ['sum', 'avg', 'min', 'max'].includes(k);
-const kinds = computed(() => ['sum', 'avg', 'min', 'max', 'countMain', ...(s.child ? ['countChild'] : []), 'ratio'].map((k) => ({ value: k, label: t(`reports.designer.kind.${k}`) })));
+const needsField = (k: string) => ['sum', 'avg', 'median', 'min', 'max'].includes(k);
+// 必填條件的量值（符合條件的筆數、條件占比）選的是條件欄位；加總、平均、中位數的條件是選填，加進去後在該列設定
+const needsCondition = (k: string) => k === 'ratio' || k === 'countIf';
+const optionalCondition = (k: string) => ['sum', 'avg', 'median'].includes(k);
+const kinds = computed(() => ['sum', 'avg', 'median', 'min', 'max', 'countMain', ...(s.child ? ['countChild'] : []), 'countIf', 'ratio']
+  .map((k) => ({ value: k, label: t(`reports.designer.kind.${k}`) })));
 const fieldChoices = computed(() => entries.value
-  .filter((e) => (kind.value === 'sum' || kind.value === 'avg' ? e.field.canSum : e.field.canMinMax)).map(choice));
+  .filter((e) => (['sum', 'avg', 'median'].includes(kind.value) ? e.field.canSum : e.field.canMinMax)).map(choice));
 const conditionChoices = computed(() => entries.value.filter((e) => operatorsOf(e.field).length > 0).map(choice));
 function pickKind(k: string) { kind.value = k; measureField.value = null; }
-const canAddMeasure = computed(() => (!needsField(kind.value) && kind.value !== 'ratio') || !!measureField.value);
+const canAddMeasure = computed(() => (!needsField(kind.value) && !needsCondition(kind.value)) || !!measureField.value);
 function add() {
   const e = entries.value.find((x) => refKey(x.ref) === measureField.value);
-  if (kind.value === 'ratio') {
-    if (e) addMeasure(s, 'ratio', null, { field: e.ref, op: operatorsOf(e.field)[0]!, value: undefined });
+  if (needsCondition(kind.value)) {
+    if (e) addMeasure(s, kind.value, null, { field: e.ref, op: operatorsOf(e.field)[0]!, value: undefined });
   } else {
     addMeasure(s, kind.value, needsField(kind.value) ? (e?.ref ?? null) : null);
   }
   measureField.value = null;
+}
+// 加總、平均、中位數的選填條件：選條件欄位後掛到該量值；移除就回到不帶條件
+function addCondition(i: number, key: string | null) {
+  const e = entries.value.find((x) => refKey(x.ref) === key);
+  if (e) s.measures[i]!.condition = { field: e.ref, op: operatorsOf(e.field)[0]!, value: undefined };
 }
 const fieldText = (r: ReportFieldRef) => {
   const e = findEntry(entries.value, r);
@@ -84,7 +93,15 @@ const measureText = (i: number) => {
         <span :class="{ 'text-negative': unavailable.measures.includes(i) }" :data-testid="`measure-text-${i}`">{{ measureText(i) }}</span>
         <q-btn flat dense round icon="close" :aria-label="t('reports.designer.remove')" :data-testid="`measure-remove-${i}`" @click="removeMeasure(s, i)" />
       </div>
-      <FilterRow v-if="m.kind === 'ratio' && m.condition" class="q-ml-md" :filter="m.condition" :entries="entries" :tid="`measure-cond-${i}`" :removable="false" />
+      <FilterRow
+        v-if="CONDITION_KINDS.includes(m.kind) && m.condition" class="q-ml-md" :filter="m.condition" :entries="entries" :tid="`measure-cond-${i}`"
+        :removable="optionalCondition(m.kind)" @remove="m.condition = null"
+      />
+      <q-select
+        v-else-if="optionalCondition(m.kind)" dense outlined emit-value map-options class="q-ml-md" style="max-width: 24rem"
+        :label="t('reports.designer.measureConditionAdd')" :options="conditionChoices" :model-value="null" :data-testid="`measure-cond-add-${i}`"
+        @update:model-value="addCondition(i, $event)"
+      />
     </div>
     <div class="row q-gutter-x-sm items-start">
       <q-select
@@ -95,7 +112,7 @@ const measureText = (i: number) => {
         :model-value="measureField" data-testid="measure-field" @update:model-value="measureField = $event"
       />
       <q-select
-        v-else-if="kind === 'ratio'" dense outlined emit-value map-options class="col" :label="t('reports.designer.ratioField')" :options="conditionChoices"
+        v-else-if="needsCondition(kind)" dense outlined emit-value map-options class="col" :label="t('reports.designer.ratioField')" :options="conditionChoices"
         :model-value="measureField" data-testid="ratio-field" @update:model-value="measureField = $event"
       />
       <q-btn outline no-caps :label="t('reports.designer.addMeasure')" :disable="!canAddMeasure" data-testid="measure-add" @click="add" />

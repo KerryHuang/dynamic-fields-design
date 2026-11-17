@@ -2,7 +2,7 @@
 import { computed, reactive, ref, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { useRoute, useRouter } from 'vue-router';
-import { useReport, useReportCatalog, useReportCatalogModules, usePreviewReport, useSaveReport } from 'src/application/dynamic/queries/reports-queries';
+import { useReport, useReportCatalogModules, useReportDatasets, usePreviewReport, useSaveReport, useSourceCatalog } from 'src/application/dynamic/queries/reports-queries';
 import ForbiddenNotice from 'src/components/framework/ForbiddenNotice.vue';
 import { isForbidden, type ApiError } from 'src/services/api/http';
 import { canAdvance, canSave, emptyState, fromDefinition, toDefinition, unavailableRefs, type DesignerStep } from 'src/presentation/reports/designer/designer-state';
@@ -47,7 +47,8 @@ const notOwner = computed(() => !!report.data.value && !report.data.value.isOwne
 const hiddenBlocked = computed(() => loaded.value && state.hasHidden);
 
 const modules = useReportCatalogModules(locale);
-const catalogQuery = useReportCatalog(computed(() => state.mainModuleKey), locale);
+const datasets = useReportDatasets(locale);
+const catalogQuery = useSourceCatalog(computed(() => state.dataset), computed(() => state.mainModuleKey), locale);
 const catalog = computed(() => catalogQuery.data.value ?? null);
 const unavailable = computed(() => (catalog.value ? unavailableRefs(state, catalog.value) : unavailableRefs(state, { fields: [], via: [], children: [] })));
 
@@ -101,7 +102,7 @@ function doSave() {
         <div v-if="unavailable.any" class="text-negative q-mb-md" data-testid="designer-unavailable">{{ t('reports.designer.unavailableBanner') }}</div>
         <div v-if="catalogQuery.isError.value" class="text-negative q-mb-md" data-testid="catalog-error">{{ t('reports.designer.catalogFailed') }}</div>
 
-        <StepSource v-if="step === 0" :state="state" :modules="modules.data.value ?? []" :catalog="catalog" :unavailable="unavailable" />
+        <StepSource v-if="step === 0" :state="state" :modules="modules.data.value ?? []" :datasets="datasets.data.value ?? []" :catalog="catalog" :unavailable="unavailable" />
         <template v-else-if="catalog">
           <StepFields v-if="step === 1" :state="state" :catalog="catalog" :unavailable="unavailable" />
           <StepFilters v-else-if="step === 2" :state="state" :catalog="catalog" :unavailable="unavailable" />

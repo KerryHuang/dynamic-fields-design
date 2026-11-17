@@ -4,6 +4,13 @@ import type { I18nText } from './types';
 /** unshared（卡片的報表已不再分享給他）與 reportGone（報表已不存在）只會出現在儀表板卡片。 */
 export type ReportState = 'ok' | 'empty' | 'restricted' | 'fieldMissing' | 'moduleDisabled' | 'tooMany' | 'unshared' | 'reportGone';
 export type ReportViz = 'table' | 'indicator' | 'line' | 'bar' | 'donut';
+/** 報表資料來源：module 是動態模組（缺省），tasks、taskEvents 是系統資料來源（看板設計 §7.1）。 */
+export type ReportDataset = 'module' | 'tasks' | 'taskEvents';
+/** GET /reports/datasets 的一筆。 */
+export interface ReportDatasetItem { dataset: Exclude<ReportDataset, 'module'>; name: string }
+/** 報表頁上方的暫時篩選（不存檔）：期間取代報表設定的區間，部門只有任務資料來源看（看板設計 §8.2）。 */
+export interface ReportRunFilter { range: ReportDateRange | null; departmentIds: number[]; includeSubDepartments: boolean }
+export const NO_RUN_FILTER: ReportRunFilter = { range: null, departmentIds: [], includeSubDepartments: true };
 
 /** Role: group|measure|field；ValueType: text|number|percent|date|dateTime|ratio|dayNumber（DayNumber 為 DateOnly.DayNumber）。 */
 export interface ReportColumn { key: string; label: string; role: 'group' | 'measure' | 'field'; valueType: string }
@@ -29,6 +36,8 @@ export interface ReportResult {
   /** basisDate 與後端的今天不同（Demo 資料日期停在產生那天）。 */
   basisIsFrozen?: boolean;
   appliedRange?: ReportAppliedRange | null;
+  /** 只有任務資料來源且有明細時有值，與 detailRows 逐列對齊（taskEvents 同一任務的兩列對回同一個 Id）。 */
+  taskIds?: number[] | null;
 }
 export interface DrillResult extends ReportResult { truncated: boolean }
 
@@ -49,6 +58,8 @@ export interface ReportChild { moduleKey: string; linkFieldId: number }
 export interface ReportSort { key: string; desc: boolean }
 export interface ReportDefinition {
   version: number;
+  /** 省略等於 module；任務資料來源的 mainModuleKey 為空字串。 */
+  dataset?: ReportDataset;
   mainModuleKey: string;
   child?: ReportChild | null;
   columns: ReportFieldRef[];

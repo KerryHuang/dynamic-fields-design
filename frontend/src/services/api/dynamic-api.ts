@@ -5,7 +5,9 @@ import type {
 import type {
   AdminDashboardDetail, AdminDashboardItem, CardResult, DashboardCard, DashboardDetail, DashboardLayout, DashboardList,
 } from 'src/domain/dynamic/dashboard-types';
-import type { CatalogModule, DrillResult, ModuleCatalog, ReportDateRange, ReportDefinition, ReportDetail, ReportItem, ReportResult, ReportShareTarget } from 'src/domain/dynamic/report-types';
+import type {
+  CatalogModule, DrillResult, ModuleCatalog, ReportDatasetItem, ReportDateRange, ReportDefinition, ReportDetail, ReportItem, ReportResult, ReportRunFilter, ReportShareTarget,
+} from 'src/domain/dynamic/report-types';
 import type { MeTheme, ThemeChoice, ThemeDefaults } from 'src/domain/theme/theme-model';
 import type { Department, DepartmentInput } from 'src/domain/dynamic/organization';
 import type { CheckDefinition, LedgerBody, LedgerConfig, ModuleCheck, ModuleEvent, RecordEffects, RecordLedger } from 'src/domain/dynamic/events-ledger';
@@ -205,6 +207,15 @@ const importForm = (file: File) => {
 export type RecordValues = Record<string, unknown>;
 export type DetailsPayload = Record<string, DetailRowPayload[]>;
 const data = <T>(r: { data: T }) => r.data;
+
+/** 部門篩選只在有選部門時送；includeSubDepartments 跟著部門一起送。 */
+const departmentBody = (f?: ReportRunFilter) =>
+  f && f.departmentIds.length ? { departmentIds: f.departmentIds, includeSubDepartments: f.includeSubDepartments } : {};
+/** 匯出是 GET：期間用 rangeKind、rangeN，部門用重複的 departmentIds（paramsSerializer indexes: null）。 */
+const exportParams = (f?: ReportRunFilter) => ({
+  ...(f?.range ? { rangeKind: f.range.kind, ...(f.range.n != null ? { rangeN: f.range.n } : {}) } : {}),
+  ...(f && f.departmentIds.length ? { departmentIds: f.departmentIds, includeSubDepartments: f.includeSubDepartments } : {}),
+});
 
 const boardSourceBody = (s: BoardSource) => ({ viewId: s.viewId ?? null, config: s.config ?? null });
 /** The server omits null properties; roots and vacant managers come back without parentId / managerUserId. */
@@ -444,10 +455,14 @@ export const dynamicApi = {
   getReportShareTargets: () => http.get<ReportShareTarget[]>('/reports/share-targets').then(data),
   getReports: () => http.get<ReportItem[]>('/reports').then(data),
   getReport: (id: number) => http.get<ReportDetail>(`/reports/${id}`).then(data),
-  runReport: (id: number, range: ReportDateRange | null, locale: string) =>
-    http.post<ReportResult>(`/reports/${id}/run`, { range }, { params: { locale } }).then(data),
-  drillReport: (id: number, groupKeys: string[], range: ReportDateRange | null, locale: string) =>
-    http.post<DrillResult>(`/reports/${id}/drill`, { groupKeys, range }, { params: { locale } }).then(data),
+  /** filter 是報表頁的暫時篩選；沒有部門時不送部門欄位（模組報表一律不送）。 */
+  runReport: (id: number, range: ReportDateRange | null, locale: string, filter?: ReportRunFilter) =>
+    http.post<ReportResult>(`/reports/${id}/run`, { range, ...departmentBody(filter) }, { params: { locale } }).then(data),
+  drillReport: (id: number, groupKeys: string[], range: ReportDateRange | null, locale: string, filter?: ReportRunFilter) =>
+    http.post<DrillResult>(`/reports/${id}/drill`, { groupKeys, range, ...departmentBody(filter) }, { params: { locale } }).then(data),
+  getReportDatasets: (locale: string) => http.get<ReportDatasetItem[]>('/reports/datasets', { params: { locale } }).then(data),
+  getReportDatasetCatalog: (dataset: string, locale: string) =>
+    http.get<ModuleCatalog>(`/reports/datasets/${encodeURIComponent(dataset)}/catalog`, { params: { locale } }).then(data),
   getReportCatalogModules: (locale: string) => http.get<CatalogModule[]>('/reports/catalog', { params: { locale } }).then(data),
   getReportCatalog: (moduleKey: string, locale: string) =>
     http.get<ModuleCatalog>(`/reports/catalog/${encodeURIComponent(moduleKey)}`, { params: { locale } }).then(data),
@@ -460,8 +475,10 @@ export const dynamicApi = {
   deleteReport: (id: number) => http.delete(`/reports/${id}`).then(data),
   setReportShares: (id: number, groupIds: number[]) => http.put(`/reports/${id}/shares`, { groupIds }).then(data),
   /** 同 exportRecords：validateStatus 繞過 interceptor，錯誤本文（Blob）在這裡解析。 */
-  exportReport: async (id: number, locale: string) => {
-    const r = await http.get<Blob>(`/reports/${id}/export`, { params: { locale }, responseType: 'blob', validateStatus: () => true });
+  exportReport: async (id: number, locale: string, filter?: ReportRunFilter) => {
+    const r = await http.get<Blob>(`/reports/${id}/export`, {
+      params: { locale, ...exportParams(filter) }, paramsSerializer: { indexes: null }, responseType: 'blob', validateStatus: () => true,
+    });
     if (r.status >= 400) {
       let body: unknown;
       try { body = JSON.parse(await r.data.text()); } catch { body = undefined; }

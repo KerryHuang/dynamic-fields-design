@@ -12,7 +12,8 @@ import MentionInput from './MentionInput.vue';
 import TaskTimeline from './TaskTimeline.vue';
 import { useMovedOutNotice } from './use-moved-out-notice';
 
-const props = defineProps<{ taskId: number | null }>();
+/** unavailableText：讀不到任務（403、404）時顯示的文字，沒給就用預設訊息；報表的下鑽用它說「這筆任務已無法查看」。 */
+const props = defineProps<{ taskId: number | null; unavailableText?: string }>();
 const emit = defineEmits<{ 'update:taskId': [value: number | null] }>();
 const { t } = useI18n();
 const router = useRouter();
@@ -109,7 +110,7 @@ function goRecord() {
     <q-card style="width: 640px; max-width: 100vw" class="column no-wrap" data-testid="task-dialog">
       <template v-if="missing || !data">
         <q-card-section v-if="missing" class="text-negative" data-testid="task-not-found">
-          {{ (task.error.value as ApiError | null)?.status === 404 ? t('tasks.notFound') : t('tasks.loadFailed') }}
+          {{ unavailableText && [403, 404].includes((task.error.value as ApiError | null)?.status ?? 0) ? unavailableText : (task.error.value as ApiError | null)?.status === 404 ? t('tasks.notFound') : t('tasks.loadFailed') }}
         </q-card-section>
         <q-card-section v-else class="text-muted">
           <q-spinner size="sm" />
