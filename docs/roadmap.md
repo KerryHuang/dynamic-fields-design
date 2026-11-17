@@ -42,7 +42,7 @@
 | fg5 | 通知節點：站內通知、收件人解析、範本帶欄位值並依收件人權限遮蔽 | 未開始 | [簽核流程圖](superpowers/specs/2026-11-13-approval-flowgraph-design.md) §17 |
 | fg6 | 流程圖收尾：既有流程批次轉換、套件格式升版、手冊與文件 | 未開始 | [簽核流程圖](superpowers/specs/2026-11-13-approval-flowgraph-design.md) §17 |
 | kb1、kb2 | 主管看部屬任務與重派；看板資料表、存檔與分享 API、欄查詢與移動 API | 已上線（2026-11-14，kb1 3d56fc56、kb2 74616b3f） | [任務看板、報表與甘特圖](superpowers/specs/2026-11-13-task-board-reports-gantt-design.md) §20 |
-| kb3 | 任務看板畫面：清單／看板切換、拖拉改值、自訂看板與分享 | 未開始 | [任務看板、報表與甘特圖](superpowers/specs/2026-11-13-task-board-reports-gantt-design.md) §20 |
+| kb3 | 任務看板畫面：清單／看板切換、拖拉改值、自訂看板與分享 | 已上線（2026-11-17，a9b9894d）；看板欄查詢回應多帶 `config`，沒有 migration，回退到 kb2 安全 | [任務看板、報表與甘特圖](superpowers/specs/2026-11-13-task-board-reports-gantt-design.md) §20 |
 | kr1、kr2、kr3 | 任務報表：任務進報表資料來源、條件量值與中位數、內建任務統計報表 | 未開始 | [任務看板、報表與甘特圖](superpowers/specs/2026-11-13-task-board-reports-gantt-design.md) §20 |
 | st1、st2 | 子任務（一層、父任務顯示進度） | 未開始 | [任務看板、報表與甘特圖](superpowers/specs/2026-11-13-task-board-reports-gantt-design.md) §20 |
 | gt1、gt2 | 甘特圖：任務開始日、甘特檢視與拖拉調整日期 | 未開始 | [任務看板、報表與甘特圖](superpowers/specs/2026-11-13-task-board-reports-gantt-design.md) §20 |
