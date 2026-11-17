@@ -76,7 +76,7 @@ public abstract class TaskTestBase : DesignerTestBase
         { Encoder = System.Text.Encodings.Web.JavaScriptEncoder.UnsafeRelaxedJsonEscaping };
 
     /// <summary>照 API 的 camelCase 序列化、不跳脫中文，供「回應不含某字串」的斷言用。</summary>
-    protected static string Json(object o) => System.Text.Json.JsonSerializer.Serialize(o, WireJson);
+    protected static string WireText(object o) => System.Text.Json.JsonSerializer.Serialize(o, WireJson);
 
     /// <summary>直接在 Db 建一條任務規則（只要代碼與名稱，供回應遮蔽的測試用）。</summary>
     protected async Task<long> SeedRule(Target t, string key, string name)

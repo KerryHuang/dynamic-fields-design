@@ -146,7 +146,7 @@ public class SupervisorScopeTests : TaskTestBase
             d.RuleKey.Should().BeNull();
             d.RuleDeleted.Should().BeFalse();
             d.Record!.Accessible.Should().BeFalse();
-            Json(d).Should().NotContain("secret-rule").And.NotContain("機密規則").And.NotContain("secretmod").And.NotContain("機密案件")
+            WireText(d).Should().NotContain("secret-rule").And.NotContain("機密規則").And.NotContain("secretmod").And.NotContain("機密案件")
                 .And.Contain("規則任務");
         }
     }
