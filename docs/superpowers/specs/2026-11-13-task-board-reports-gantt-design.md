@@ -449,17 +449,19 @@
 
 - 看得到父任務就看得到全部子任務（§4.4 第 5 項）；子任務本身的參與者另外看得到子任務。只看得到子任務的人，看得到父任務的標題（顯示在子任務上方），點進去照父任務自己的權限判斷，看不到就 404（U13，使用者裁決照建議）。
 - 改子任務：子任務自己的四種身分，加上能改父任務的人（主控 T19）。
+- 刪子任務：子任務建立者、父任務建立者、系統管理員（ST-Q2，主控裁決（待使用者確認），§10.7.2）。
 
 ### 10.4 父子狀態連動（U14，使用者裁決照建議）
 
 | 事件 | 連動 |
 |---|---|
 | 子任務變成進行中，父任務是待辦 | 父任務自動變成進行中 |
-| 最後一個未完成的子任務完成 | 父任務不自動完成；父任務負責人收到「子任務已全部完成」通知，留言串寫系統記錄 |
+| 最後一個未完成的子任務收尾（沒有未完成、且至少一個已完成；ST-Q5） | 父任務不自動完成；依政策 A40 通知（出廠只通知父任務負責人，ST-Q6），留言串寫系統記錄 |
 | 父任務改成完成，還有未完成的子任務 | 確認框三選一：一併完成、一併取消、取消操作 |
 | 父任務改成取消 | 未完成的子任務一併取消，設 `CancelledByParent` |
 | 父任務從取消恢復 | 因父任務取消的子任務恢復成待辦；人手動取消的不恢復 |
 | 已完成的父任務底下，子任務被重開 | 父任務改回進行中，寫系統記錄 |
+| 已取消的父任務底下，子任務被重開 | 擋下，提示「父任務已取消，請先恢復父任務」（ST-Q3） |
 | 父任務是完成或取消 | 不能新增子任務 |
 
 - 規則自動取消父任務（條件不再符合，任務設計 §5.2）同樣連帶取消子任務；父任務被規則恢復時，因父任務取消的子任務一併恢復。
@@ -470,13 +472,242 @@
 ### 10.5 進度與顯示
 
 - 父任務進度＝完成的子任務數 ÷（子任務數 − 取消的子任務數）；全部取消或沒有子任務時不顯示進度（主控 T20）。
-- 清單、看板卡片、甘特圖列都顯示「完成數／總數」與進度條。
+- 清單、看板卡片、甘特圖列都顯示「完成數／（總數 − 取消數）」與進度條，例如「2／4」；有取消時滑過提示「另有 N 個已取消」（ST-Q1，主控裁決（待使用者確認））。
 - 看板「顯示子任務」預設開：子任務自己是一張卡，照自己的狀態、負責人、到期日分欄，上方顯示父任務標題。關閉時只列父任務與獨立任務。
 - 報表：子任務照常各算一筆（它是另一件工作）；要只算頂層，用「層級」欄位篩選。內建報表不篩，負載報表說明列「子任務各算一筆」（U14，使用者裁決照建議 的一部分）。
 
 ### 10.6 不做
 
 多層子任務、子任務的子任務進度彙總、規則產生子任務、子任務範本、拖拉改父子關係。
+
+### 10.7 st1 細則（2026-11-18 併入 st1 設計補充草稿）
+
+標記：「（ST-T#）」是技術裁決（主控可推翻）；「（ST-Q#，主控裁決（待使用者確認））」是行為類待決點，主控照草稿推薦先定、使用者確認前不算使用者裁決；其餘沒標的是設計已寫或可由既有條文推出。
+
+#### 10.7.1 st1 與 st2 的分界
+
+原則：st1 交出完整、可用 API 驗收的後端契約，加上讓既有畫面不壞的最小前端改動；st2 只做畫面與 Demo 資料。
+
+| 項目 | 歸屬 |
+|---|---|
+| 回應 DTO 新欄位（父任務、層級、進度、子任務清單、`canAddSubtask`） | st1 |
+| 前端型別 `task-types.ts`、`task-board-types.ts`、`task-normalize.ts` 預設值、`dynamic-api.ts` 新端點與 `cascade` 參數 | st1 |
+| i18n：`tasks.system.<新事件>`、`notifications.kind.<新種類>`、`policies.items.task.<A35／A40>` | st1 |
+| 看板設定 `showSubtasks` 欄位與後端篩選（新增選填欄位不升 `version`，§6.1） | st1 |
+| 記錄頁只列頂層（ST-Q4） | st1 |
+| 看板設定對話框的「顯示子任務」開關、任務詳細的子任務區塊、進度條、三選一確認框、卡片上的父標題 | st2 |
+| Demo 子任務資料 | st2 |
+| 手冊 | st1 只寫政策頁的 A35、A40；子任務操作說明在 st2 |
+
+st1 唯一看得到的變化：政策設定頁依 `PolicyCatalog.All` 多出 A35（st1a）與 A40（st1b）。
+
+#### 10.7.2 後端契約
+
+路由都在 `api/v3/dynamic` 下，寫入一律 `ITransactionalRequest`。
+
+**新增子任務 `POST /tasks/{id}/subtasks`**
+
+- 請求沿用 `TaskInput`：`{ title, description?, assigneeUserId?, dueDate? }`。畫面只給標題、負責人、到期日（§10.2）；API 收 `description` 不擋（之後本來就能用 PATCH 改）。
+- 負責人預設值由 st2 表單預填父任務的負責人（父任務負責人停用時預填空白），後端不補預設、送什麼存什麼（ST-T2）：`TaskInput` 分不出「沒送」與「送 null」；預填值來自已載入的父任務詳細，不是另一份常數。
+- 建立者＝操作者；參與者＝建立者、負責人（同 `TaskWriter.Create`）。`ModuleId`、`RecordId`、`RecordTitleSnapshot` 從父任務複製，請求不收。
+- 成功 201，回子任務的 `TaskDetailResponse`。
+
+檢查順序與錯誤（ST-T3，訊息放 `TaskMessages`）：
+
+| 順序 | 條件 | 回應 | 訊息 |
+|---|---|---|---|
+| 1 | 父任務不存在或看不到 | 404 | `NotFound`「找不到任務」 |
+| 2 | 凍結（應用程式關閉） | 409 | `ModuleGate.ClosedMessage` |
+| 3 | 父任務掛記錄，且模組 `TasksEnabled=false` | 409 | `MessageText.TasksDisabled`（§9：`TasksEnabled` 管新增） |
+| 4 | 沒有父任務的一般編輯權（含只有主管身分 `Supervised`） | 403 | `SubtaskNeedsParentEdit`「要能修改這個任務才能新增子任務」 |
+| 5 | 父任務本身是子任務 | 400，鍵 `parent` | `SubtaskOneLevel`「子任務不能再有子任務」 |
+| 6 | 父任務是完成或取消 | 409，code `parentClosed` | `SubtaskParentClosed`「已完成或已取消的任務不能新增子任務」 |
+| 7 | 子任務數已達 A35 | 400，鍵 `subtasks` | `TooManySubtasks(max)`「一個任務最多 {max} 個子任務」 |
+| 8 | 輸入驗證（標題、說明、負責人） | 400 | 同 `ValidateInputAsync` |
+
+- 第 4 項在 5、6 之前：沒權限的人不該從錯誤得知父任務的層級與狀態；他已看得到父任務，順序只影響訊息，不是安全問題。
+- 第 6 項用 409：是狀態衝突、不是輸入錯；§10.1 的「回 400」只指一層限制。
+- 上限計數：父任務底下現有的全部子任務，含已完成、已取消，刪掉的不算（A35 是「子任務數上限」，進度 `total` 也含取消）。改嚴後既有超過的不處理，只擋新增。
+- 「已有子任務的任務不能變成別人的子任務」（§10.1）：第一版沒有搬移父子關係的入口（T18），子任務只能用這支 API 新建，不需額外檢查，寫進註解。
+- 父任務是規則任務時可以加子任務（§10.2）；子任務 `RuleId` 是 null，不進規則唯一索引。
+
+**讀取：子任務清單與進度**
+
+不另開 `GET /tasks/{id}/subtasks`，子任務清單內嵌在父任務的 `TaskDetailResponse`（ST-T1）：看得到父任務就看得到全部子任務，不必逐筆過濾；上限 200 筆（A35 技術上限），內嵌負擔小。
+
+`TaskDetailResponse` 尾端加：
+
+| 欄位 | 型別 | 說明 |
+|---|---|---|
+| `parentTaskId` | long? | 子任務才有 |
+| `parentTitle` | string? | 子任務才有；只看得到子任務的人也拿得到（U13） |
+| `parentVisible` | bool | 操作者看得到父任務；前端據此決定父標題能不能點 |
+| `level` | string | `standalone`、`parent`、`child`（§10.7.4） |
+| `progress` | `{ done, cancelled, total }`? | 父任務才有；沒有子任務時是 null |
+| `subtasks` | `TaskSummaryResponse[]` | 父任務才有內容，其他是空陣列；依建立時間、Id 排序 |
+| `canAddSubtask` | bool | `canEdit` 且不是子任務、不是完成或取消、未凍結、模組任務開啟；不含上限判斷（到上限由 400 告知） |
+
+- `TaskSummaryResponse`（清單、記錄頁）與 `TaskCardResponse`（看板卡片）加 `parentTaskId`、`parentTitle`、`level`、`progress`，不加 `subtasks`。
+- 進度只回三個原始數字，文字與分母由前端組（ST-T10）。顯示（ST-Q1，主控裁決（待使用者確認））：寫「完成數／（總數 − 取消數）」，例如 5 個子任務 2 完成 1 取消時寫「2／4」，與進度條同分母；有取消時滑過提示「另有 1 個已取消」。全部取消時不顯示進度（T20）。
+- 子任務詳細的 `record` 照子任務自己的權限判斷；同一筆記錄，結果與父任務相同。看不到記錄時照既有遮蔽（`ruleKey` null、`ruleDeleted` false）。
+- 父標題外露的範圍：只給標題，不給父任務的狀態、負責人、規則代號。外露程度與「參與者但看不到記錄」看得到任務標題相同，屬 U13 接受的範圍。
+- `GET /tasks/{parentId}` 照父任務自己的權限，看不到就 404（既有 `GetTaskHandler`）。
+
+**改狀態的連動確認 `cascade`（st1b）**
+
+- `PATCH /tasks/{id}` 主體多收 `cascade`（`complete`｜`cancel`）；`POST /tasks/{id}/move` 主體加同名選填欄位，只在依狀態分欄時有作用。解析放 `TaskEditParser`（`TaskEdit` 加 `Cascade`），值不對回 400 鍵 `cascade`、訊息 `BadCascade`「連動方式必須是 complete 或 cancel」。
+- 改成完成、且有未完成的子任務時：沒帶 `cascade` → 409，code `subtasksOpen`，params `{ count }`，訊息 `SubtasksOpen(n)`「還有 {n} 個未完成的子任務」，不寫入任何東西（前端三選一，「取消操作」就是不重送）；`cascade=complete` → 未完成的子任務全部改成完成；`cascade=cancel` → 全部改成取消，不設 `CancelledByParent`（父任務不是取消，之後重開父任務也不恢復它們，ST-T5）。
+- 改成取消：不需確認、`cascade` 被忽略；未完成的子任務一併取消並設 `CancelledByParent`。看板拖到取消欄本來就有 U5 的確認框，st2 在框裡寫出子任務數。
+- 其他情況帶了 `cascade`（沒有未完成的子任務、不是改狀態、是子任務）一律忽略、不報錯（ST-T4）。主管身分帶 `cascade` 也被既有的「只能改負責人」擋下（403）。
+- 看板移動先做版本檢查（`expectedVersion`、`TryClaimVersionAsync`），再做 409 `subtasksOpen`；重送時用同一個版本。409 的判斷與連動在同一交易內讀資料；兩次請求之間最後一個子任務被別人完成時，重送的 `cascade` 只是被忽略。
+
+**刪除**
+
+- 刪除父任務：權限照現行 `CanDelete`（建立者或系統管理員、非規則任務）；子任務全部一併刪除，含別人建的、已完成的、有留言的；每個子任務的通知用 `RemoveBySourceAsync` 一起清掉。st2 確認框的子任務數取 `progress.total`。
+- 刪除子任務（ST-Q2，主控裁決（待使用者確認））：子任務建立者、父任務建立者、系統管理員可刪；父任務負責人與其他能改父任務的人不能刪，只能取消。成功時父任務留言串寫 `subtaskDeleted`。
+- 回應不變（200 無內容）。
+
+**看板與清單**
+
+- 看板設定 `TaskBoardConfig` 加選填 `showSubtasks`（bool?，沒給＝true）；false 時欄查詢與欄計數加 `ParentTaskId == null`。不升 `version`（§6.1）。
+- 「我的任務」各分頁、摘要卡「今天到期／已逾期」、到期提醒含子任務，不加參數（子任務是負責人自己要做的事，§13）。
+- 「部屬的任務」分頁與看板部屬範圍依任務自己的負責人或建立者判斷（§4.2）：父任務是部屬的任務、子任務負責人不是部屬時，主管看得到這個子任務（繼承），但它不在「部屬的任務」範圍內、也不能重派。
+- 記錄頁 `GET /records/{id}/tasks`（ST-Q4，主控裁決（待使用者確認））：只列頂層任務，父任務那一列顯示進度；子任務在父任務詳細裡看。
+
+**權限判定**
+
+可見（§4.4 第 5 項）：父子掛同一筆記錄，「看得到記錄」那一支天然相同，只補兩支：操作者是父任務的參與者（建立者、負責人、被 @）；父任務是操作者的部屬任務（A33 開啟時，依父任務的負責人／建立者判斷）。
+
+- `TaskVisibilityQuery` 加第四個 OR：`t.ParentTaskId != null && 父任務（子查詢）滿足參與者 EXISTS 或部屬條件`，仍是單一 EF LINQ 條件。
+- `TaskAccess.EvaluateManyAsync` 先一次批次載入這批任務的父任務（含參與者），查詢次數不隨筆數成長。`TaskVisibilityEquivalenceTests` 加子任務情境。
+- 可改（T19）：子任務的 `canEdit`＝自己的四種身分，或操作者是父任務的建立者、負責人（系統管理員、能改記錄的人與子任務自己的判斷相同）。
+- 主管身分 `Supervised` 只看子任務自己的負責人／建立者是不是部屬，不從父任務繼承：主管看得到部屬父任務下別人的子任務，但不能重派它。
+- 可留言同現行（看得到且未凍結）；留言通知照子任務自己的 A13 收件人，不通知父任務的人。
+- 讀取時父任務查不到（資料不一致）就當成獨立任務：`parentTaskId` 照回、`parentTitle` null、`parentVisible` false，不丟例外。
+
+**新增的 `TaskMessages`**
+
+`SubtaskNeedsParentEdit`、`SubtaskOneLevel`、`SubtaskParentClosed`、`TooManySubtasks(max)`（st1a）；`SubtasksOpen(n)`、`BadCascade`、`ParentCancelledReopen`「父任務已取消，請先恢復父任務」（st1b）。
+
+**政策**
+
+| # | 代碼 | 種類 | 範圍 | 出廠 | 範圍值 | 段 |
+|---|---|---|---|---|---|---|
+| A35 | `task.maxSubtasksPerTask` | Integer | S | 50 | 1–200，unit count | st1a |
+| A40 | `task.notify.subtasksDone` | RoleSet（`assignee`、`creator`） | M（依父任務所屬模組） | `assignee` | — | st1b |
+
+- 「子任務已全部完成」的收件人做成與 A13 `task.notify.*` 同型的政策（ST-T9）：§10.4 原寫死「父任務負責人」，與鐵則 2「通知對象要能設定」牴觸。編號 A38、A39 已被語系包設計暫用，A40 是 2026-11-18 main 上下一個空號。
+- 出廠收件人（ST-Q6，主控裁決（待使用者確認））：只通知父任務的負責人；沒有負責人時沒人收到，系統管理員可在政策頁加上「建立者」。
+
+#### 10.7.3 資料
+
+- `Dynamic_Task`（`TaskItem`）加 `ParentTaskId`（long?，索引）、`CancelledByParent`（bool，非空，預設 false）。既有任務升級後是 null／false，行為不變。
+- 不建自參照 FK，只建索引，同 `RuleId`、`RecordId` 的既有慣例（ST-T7）：`DeletionRepository.PurgeModuleAsync` 一次 `ExecuteDelete` 整個模組的任務、不靠資料庫 Cascade；子任務複製 `ModuleId` 所以同批刪除，PostgreSQL 對 Restrict／NoAction 自參照 FK 的檢查時機與 SQLite 不同，沒有 FK 就沒有這個風險。完整性由程式守：`DeleteTaskHandler` 刪父任務時先刪子任務（同一交易）。
+- Migration `TaskParent`（§16），只用 EF 產生。repo 目前只有 SQLite 一份 Migrations，PostgreSQL 那份等 pg0，§16「各一份」的落差寫進 roadmap 備註。
+- Repository 新方法：`ListChildrenAsync(parentId)`（追蹤，連動與刪除用）、`ListByIdsAsync(ids)`（批次父任務，含參與者）、`CountChildrenAsync(parentId)`（A35）、`SubtaskProgressAsync(parentIds)`（一次 GROUP BY `ParentTaskId, Status`，仿 `CountCommentsAsync`，避免卡片 N+1）；記錄頁與看板查詢加「只要頂層」的選項。
+- 系統記錄事件（ST-T8，前端以 `tasks.system.<代碼>` 取字）：
+
+| 代碼 | 寫在 | 作者 | `SystemData` | 段 |
+|---|---|---|---|---|
+| `subtaskAdded` | 父任務 | 操作者 | `{ subtaskId, subtaskTitle }` | st1a |
+| `subtaskDeleted` | 父任務 | 操作者 | `{ subtaskId, subtaskTitle }` | st1a |
+| `bySubtask` | 父任務 | null | `{ from, to, subtaskId, subtaskTitle }` | st1b |
+| `subtasksAllDone` | 父任務 | null | `{ subtaskId, subtaskTitle }`（最後收尾的那一個） | st1b |
+| `byParent` | 子任務 | null 或操作者（§10.7.4） | `{ from, to, parentId, parentTitle }` | st1b |
+
+- `subtaskAdded`／`subtaskDeleted` 是稽核軌跡：只加系統記錄、不 `Touch`，不改父任務版本，看板上別人拿舊版本拖父卡不會 409。不加的話子任務被刪後，父任務留言串看不出曾經有過。
+- `TaskChangeKind` 加 `SubtasksDone`；`NotificationKinds` 加 `taskSubtasksDone`；前端 `notifications.kind.taskSubtasksDone` 四語（st1b）。
+
+#### 10.7.4 連動規則（§10.4 展開，st1b）
+
+全部寫在 `TaskWriter`（唯一寫入出口），同一交易內完成。「系統」指作者 null、`ModifiedBy` null（T25）。連動只走一層：父任務被子任務帶動改狀態時，不再反過來連動其他子任務（ST-T11）。
+
+1. **子任務變成進行中**：父任務是待辦 → 父任務改成進行中（系統），父任務寫 `bySubtask`。父任務是進行中、完成、取消 → 不動。不檢查操作者對父任務的權限（T25），不發通知。
+2. **子任務全部收尾**（ST-Q5，主控裁決（待使用者確認））：沒有未完成的子任務、且至少一個已完成時觸發，最後一個是完成或取消都算；全部取消不通知（沒有東西做完）。觸發時父任務不改狀態，寫 `subtasksAllDone`（系統），依 A40 通知，不通知操作者本人。父任務已完成或取消時不觸發；刪除子任務不觸發（只看狀態變化）。
+3. **父任務改成完成，還有未完成的子任務**：見「`cascade`」。選 `complete`／`cancel` 是操作者自己的操作，要有父任務編輯權，子任務不另外檢查（T19）；子任務的 `ModifiedBy`＝操作者，`byParent` 的作者＝操作者。每個子任務照 A13 各自通知（已知結果：10 個子任務同一建立者時，他收到 10 則「任務已完成」，自己是操作者時不收；之後若嫌吵另議彙總）。
+4. **已完成的父任務底下，子任務被重開**：子任務從完成或取消改回待辦或進行中，且父任務是完成 → 父任務改成進行中（系統），寫 `bySubtask`。
+5. **父任務已取消時重開子任務**（ST-Q3，主控裁決（待使用者確認））：擋下，409，訊息 `ParentCancelledReopen`「父任務已取消，請先恢復父任務」，子任務不變。
+6. **父任務改成取消（任何來源）**：人手動取消、規則條件不成立（`ConditionUnmet`）：未完成的子任務一併取消、設 `CancelledByParent=true`（系統），子任務寫 `byParent`；已完成、已取消的不動；每個被取消的子任務照 A13 發「已取消」通知。**記錄刪除**（`RecordDeleted`）不走連動：子任務與父任務掛同一筆記錄，`TaskRecordStage` 本來就逐筆取消，事件是 `recordDeleted`、`CancelledByParent=false`（記錄刪除不可恢復，ST-T6）。
+7. **父任務從取消恢復（任何來源）**：人手動、`RestoreByRule` 都算 → `CancelledByParent=true` 的子任務改回待辦、清旗標（系統），寫 `byParent`；原本進行中的恢復後也是待辦；人手動取消的（旗標 false）不恢復；恢復不發通知。父任務從取消**直接**改成完成：子任務不恢復、旗標一律清掉（ST-T5：恢復成待辦會造成「完成的父任務底下有未完成的子任務」）。
+8. **旗標清除**：人手動改子任務狀態時清 `CancelledByParent`，同現行清 `CancelledByRule`。規則恢復只看 `CancelledByRule`；子任務沒有 `RuleId`，`TaskRuleApplier` 不改。
+9. **層級**（報表 -16 與 DTO 的 `level` 同一個定義）：有 `ParentTaskId` → 子任務；沒有但底下至少一個子任務（任何狀態）→ 父任務；其餘 → 獨立任務。子任務全刪後父任務回到獨立任務。這是資料屬性，不隨觀看者變。
+10. **其他**：連動不提供復原；主管重派子任務走既有 undo。子任務的建立者、負責人不成為父任務的參與者，父任務的人也不成為子任務的參與者（§10.3：只看得到子任務的人點父任務 404）。子任務到期日晚於父任務、父任務沒有到期日都不檢查（U12）。連動改了父任務的 `ModifiedTime`，別人拿舊版本拖父卡得 409 stale，屬預期。規則路徑（`TaskRuleStage`）與記錄刪除路徑（`TaskRecordStage`）是寫入管線的一段，與記錄寫入同一交易，以「連動中途丟例外、整筆回滾」的測試確認。
+11. **報表**（st1c）：子任務各算一筆；`-16 層級` 加進 `tasks` 與 `taskEvents` 的可選欄位，選項 Id 固定 `1 獨立任務、2 父任務、3 子任務`，四語寫在 `TaskReportFields`；不加進固定六欄的下鑽（ST-T12）。§14 的「-1～-15、-18、-19（-16、-17 保留）」到 st1c 改成「-1～-16、-18、-19（-17 保留）」。
+12. **畫面數字**：「我的任務」、摘要卡、看板（`showSubtasks` 預設 true）都把子任務算一筆；記錄頁只列頂層（ST-Q4）。
+
+#### 10.7.5 驗收案例
+
+身分沿用測試基底：`admin`（系統管理員）、`sales01`、`sales02`（業務部成員，模組有 Read／Edit）、`manager01`（主管，A33 開，管業務部）、`outsider`（與任務無關、看不到該記錄的使用者）。「記錄任務」指掛在 sales 群組可讀的記錄上。
+
+建立與限制（st1a）
+
+- **C1 建立**：sales01 建的記錄任務 P（負責人 sales02）。sales02 `POST /tasks/P/subtasks {title:"訂場地", assigneeUserId:"sales01"}` → 201；子任務 `parentTaskId=P`、`moduleId/recordId` 同 P、`createdBy=sales02`、`level=child`；P 的詳細 `level=parent`、`progress={done:0,cancelled:0,total:1}`、`subtasks` 一筆；P 留言串多一筆 `subtaskAdded`、P 的版本不變。
+- **C2 個人任務**：sales01 的個人任務加子任務 → 子任務也是個人任務（`record` null）。
+- **C3 一層**：對子任務 C `POST /subtasks` → 400 鍵 `parent`「子任務不能再有子任務」。
+- **C4 父任務關閉**：P 已完成 → 409 code `parentClosed`；P 取消時同。
+- **C5 上限**：A35 設為 2，P 已有 1 個完成、1 個取消的子任務，再加一個 → 400 鍵 `subtasks`「一個任務最多 2 個子任務」。
+- **C6 改嚴只擋新增**：P 有 3 個子任務，A35 改成 2 → P 的詳細照常、3 個都可改狀態；新增被 400。
+- **C7 沒有編輯權**：manager01 只因主管範圍看得到 P（`supervised=true`）→ 加子任務 403「要能修改這個任務才能新增子任務」；詳細的 `canAddSubtask=false`。
+- **C8 看不到**：outsider 對 P 加子任務 → 404。
+- **C9 凍結**：P 所在應用程式關閉 → 409 `ModuleGate.ClosedMessage`。
+- **C10 模組關任務**：P 所在模組 `TasksEnabled=false` → 409 `TasksDisabled`。
+- **C11 規則任務可加**：P 是規則產生的任務 → 201，子任務 `ruleKey` null、`fromRule=false`。
+
+可見與權限（st1a）
+
+- **C12 只看得到子任務**：sales01 的個人任務 P（參與者只有 sales01），sales01 建子任務 C 指派給 sales02。sales02 讀 C → 200，`parentTitle`＝P 的標題、`parentVisible=false`；sales02 讀 P → 404。
+- **C13 繼承**：個人任務 P（sales01 的），sales01 在 P 留言 @ sales02；C 由 sales01 建、指派給 sales01。sales02 讀 C → 200，`parentVisible=true`；sales02 的「被提到」分頁有 P、沒有 C。
+- **C14 主管繼承可見但不可重派**：P 是 sales01 負責的記錄任務、掛在 manager01 看不到的記錄上；C 指派給範圍外的 outsider。manager01 讀 C → 200、`record.accessible=false`、`canReassign=false`、`supervised=false`；PATCH C 的負責人 → 403。
+- **C15 主管對部屬自己的子任務**：C 指派給 sales02（部屬）。manager01 讀 C → `supervised=true`，可改負責人、改狀態 403。
+- **C16 能改父任務的人能改子任務**：C 由 sales02 建、指派給 sales02；P 的負責人是 sales01。sales01 PATCH C 標題 → 200。
+- **C17 等價**：`TaskVisibilityEquivalenceTests` 加入父子、主管、看不到記錄的組合，批次條件與 `EvaluateManyAsync` 結果相同。
+- **C18 查詢次數**：看板一次 50 張卡含 25 個子任務、25 個父任務，查詢次數與沒有子任務時相同量級（不隨卡片數成長）。
+- **C19 列表不洩漏**：outsider 的「我的任務」各分頁、看板「全部看得到的」範圍都不含 C 與 P。
+
+連動（st1b）
+
+- **C20 子任務開工帶動父任務**：P 待辦、C 待辦，C 的負責人 sales02 不能改 P。sales02 把 C 改成進行中 → P 變進行中、P 的 `modifiedBy` null、P 留言串有 `bySubtask`（帶 C 的 Id 與標題、作者 null）。
+- **C21 全部完成通知**：P（負責人 sales01）有 C1 完成、C2 進行中。sales02 完成 C2 → P 狀態不變、P 有 `subtasksAllDone`；sales01 收到 `taskSubtasksDone` 一則。由 sales01 自己完成 C2 → 系統記錄照寫、不收通知。C1 完成、C2 被取消收尾 → 同樣觸發；全部子任務都取消 → 不觸發（ST-Q5）。
+- **C22 完成要確認**：P 有 2 個未完成子任務。sales01 PATCH `{status:"done"}` → 409 code `subtasksOpen`、`count=2`，P 與子任務都沒變、沒有新留言。
+- **C23 一併完成**：同上帶 `cascade:"complete"` → P 完成；2 個子任務完成、`modifiedBy=sales01`、各有 `byParent`（作者 sales01）；每個子任務照 A13 發「已完成」通知（扣掉 sales01 自己）。
+- **C24 一併取消**：帶 `cascade:"cancel"` → 子任務取消、`CancelledByParent=false`；之後把 P 改回進行中，子任務仍是取消。
+- **C25 看板拖到完成**：依狀態分欄的看板把 P 拖到完成欄，沒帶 `cascade` → 409 `subtasksOpen`；帶 `cascade:"complete"` 且版本相同 → 200，回卡片 `progress.done=2`。
+- **C26 父任務取消**：P 有 C1 完成、C2 進行中、C3 被人手動取消。sales01 取消 P → C2 取消且 `CancelledByParent=true`、`modifiedBy` null、留言 `byParent`；C1、C3 不動。
+- **C27 父任務恢復**：接 C26，把 P 改回待辦 → C2 變待辦（不是進行中）、旗標清掉；C3 仍取消。
+- **C28 取消直接改完成**：接 C26，把 P 從取消改成完成 → C2 仍取消、旗標清掉；再把 P 改回進行中，C2 不恢復。
+- **C29 規則取消與恢復**：規則任務 P 底下有人加的 C（進行中）。記錄改到條件不成立 → P `conditionUnmet` 取消、C 取消且 `CancelledByParent=true`；改回條件成立 → P 恢復待辦、C 恢復待辦。
+- **C30 手動取消規則任務後再恢復**：規則任務 P 由人手動取消（`CancelledByRule=false`），C 隨之取消；人把 P 改回待辦 → C 恢復待辦。
+- **C31 記錄刪除**：記錄上有 P（進行中）與 C（進行中）。刪除記錄 → 兩者都 `recordDeleted` 取消、C 的 `CancelledByParent=false`；記錄復原（若有）也不恢復 C。
+- **C32 重開完成父任務的子任務**：P 完成（子任務全完成）。sales02 把 C1 改回待辦 → P 進行中、`modifiedBy` null、`bySubtask`。
+- **C33 父任務取消時重開子任務**：P 已取消、C 隨之取消。C 的負責人把 C 改回待辦 → 409「父任務已取消，請先恢復父任務」，C 不變（ST-Q3）。
+- **C34 交易回滾**：連動途中模擬失敗 → 父子都不變、沒有通知。
+
+刪除（st1a）
+
+- **C35 刪父任務**：sales01 建 P，P 有 sales02 建的 C1（完成、有留言、有附件）與 C2。sales01 刪 P → P、C1、C2 都不存在；三者的通知都清掉；附件資料列隨任務刪除。
+- **C36 規則父任務不能刪**：規則任務 P → 409「規則產生的任務不能刪除，只能取消」，子任務不動。
+- **C37 刪子任務**（ST-Q2）：子任務建立者可刪、父任務建立者可刪、系統管理員可刪、父任務負責人（不是任一建立者）403、其他能改子任務的人 403；成功時 P 留言有 `subtaskDeleted`、`progress.total` 減一。
+- **C38 模組清除**：模組內有父子任務，`PurgeModuleAsync` 成功且無殘留（SQLite；PostgreSQL 隨 pg0 雙跑）。
+
+清單、看板、報表
+
+- **C39 看板 `showSubtasks=false`**（st1a）：P 與 C 都指派給 sales01；看板設定 `showSubtasks:false` → 只有 P；不給或 true → 兩張卡，C 卡 `parentTitle`＝P。舊的看板設定（沒有這個欄位）讀出來是 true、`version` 不變。
+- **C40 我的任務與摘要卡**（st1a）：C 指派給 sales02、今天到期 → sales02「指派給我」含 C；摘要卡「今天到期」計 1。
+- **C41 記錄頁**（st1a，ST-Q4）：記錄上有 P（2 個子任務）與獨立任務 S → 記錄頁列 P、S 兩列，P 列帶 `progress`、`level=parent`；子任務不在清單裡，在 P 的詳細 `subtasks` 裡。
+- **C42 進度**（st1a）：P 有 5 個子任務：2 完成、1 取消、2 未完成 → `progress={done:2,cancelled:1,total:5}`；全部取消 → `{0,5,5}`（前端不顯示進度）；沒有子任務 → `progress` null。
+- **C43 報表層級**（st1c）：tasks 資料來源依 -16 分組：獨立、父、子各算正確筆數；子任務全刪後 P 算獨立任務；`taskEvents` 也能用 -16 篩。看不到 P 只看得到 C 的人，C 的層級仍是「子任務」。
+- **C44 舊畫面不壞（前端）**：normalize 對沒有新欄位的回應補預設（`level=standalone`、`progress=null`、`subtasks=[]`、`parentVisible=false`）；四語 i18n 鍵一致（`locales.vitest.spec.ts`）；時間軸能顯示新事件（st1a 的兩個與 st1b 的三個）。
+
+#### 10.7.6 切段
+
+| 段 | 範圍 | 驗收 | 依賴 |
+|---|---|---|---|
+| st1a 資料與可見性 | `TaskParent` migration、A35、`POST /subtasks`（全部錯誤）、可見性第 5 項（Query＋TaskAccess＋等價測試）、T19 編輯繼承、刪父任務連刪、刪子任務權限（ST-Q2）、`subtaskAdded`／`subtaskDeleted` 系統記錄、DTO 新欄位與批次進度、看板 `showSubtasks`、記錄頁頂層（ST-Q4）、前端型別／normalize／API 函式、對應 i18n 與手冊政策頁 | C1–C19、C35–C42、C44（st1a 的兩個事件） | 權限修正已進 main |
+| st1b 連動 | `cascade`（PATCH、move）、§10.7.4 第 1–8 項、記錄刪除與規則路徑、`bySubtask`／`byParent`／`subtasksAllDone`、新通知種類與 A40、對應 i18n | C20–C34、C44 的時間軸部分 | st1a |
+| st1c 報表層級 | -16 欄位（`TaskReportFields`、`TaskReportValues.LevelOf`、`TaskCell`、`TaskReportSource` 批次查「有子任務的父任務 Id」）、§14 改字 | C43；`TaskReportApiTests` 洩漏斷言照跑 | st1a；kr2 已合併 |
+
+- st1a 合併後到 st1b 合併前，用 API 建的子任務沒有狀態連動；沒有畫面能建，Demo 不受影響，roadmap 註明。
+- ST-Q1 只影響 st2。
 
 ## 11. 甘特圖
 
@@ -585,7 +816,7 @@ Formwright 的取捨：
 - 任務資料來源只走記憶體路徑（`datasetMemoryOnly`）；`median` 在 SQL 路徑退回（`measureNotSupported:median`）。
 - 空值顯示字（未指派、（無部門）、系統、（無））四語寫在 `TaskReportFields.BlankLabels`；狀態選項文字與前端 `status.*` 同字，兩邊一起改（UI 文字）。
 
-**新政策（不寫死）**：A33 主管範圍開關、A34 含下層部門、A35 每個父任務的子任務數上限。看板的在製品上限若之後要做，也列為政策。
+**新政策（不寫死）**：A33 主管範圍開關、A34 含下層部門、A35 每個父任務的子任務數上限、A40「子任務已全部完成」通知誰（§10.7.2）。看板的在製品上限若之後要做，也列為政策。
 
 ## 15. 已知限制
 
@@ -772,8 +1003,10 @@ kr2 的決定（使用者 11-17 裁決，除標「主控裁決」者）：
 - **負號欄位 Id**：設計器 `unavailableRefs` 判斷排序鍵的正則原本不吃負號（`^\w+:\d+:\d*$`），任務欄位（負數 Id）失效的排序鍵會被漏掉；改為 `^\w+:-?\d+:\d*$`，先寫失敗測試確認。
 - **下鑽點任務**：明細列點一筆在原頁開任務詳細對話框（`TaskDialog`；`TaskFormDialog` 是建立對話框，不是詳細），關掉回到報表與下鑽清單，並重算報表（任務可能被改）；伺服器取詳情回 403／404 時顯示「這筆任務已無法查看」。`restricted` 列照 kr1 規則顯示（所屬模組「（無權限）」），列仍可點，由伺服器再驗。前端 `ReportResult.taskIds` 與 `detailRows` 逐列對齊（後端 kr1 已回）。
 | kr3 | `ReportBuiltIn` migration、內建五份報表與啟動同步、「內建報表」區、Demo 儀表板放一張負載卡片、手冊 | 內建報表 |
-| st1 | `TaskParent` migration、子任務 API、一層限制、A35、狀態連動、可見性繼承、報表「層級」欄位 | 無畫面變化 |
-| st2 | 任務詳細的子任務區塊、進度、連動確認框、看板「顯示子任務」、Demo 在行銷活動任務下加子任務 | 子任務 |
+| st1a | `TaskParent` migration、A35、子任務 API 與一層限制、可見性繼承、刪除、DTO 與進度、看板 `showSubtasks`、記錄頁只列頂層（§10.7.6） | 政策頁多 A35 |
+| st1b | `cascade`、父子狀態連動、新系統記錄與「子任務已全部完成」通知、A40（§10.7.6） | 政策頁多 A40 |
+| st1c | 報表「層級」欄位 -16（§10.7.6） | 任務報表多一個可選欄位 |
+| st2 | 任務詳細的子任務區塊、進度（ST-Q1）、連動確認框、看板設定的「顯示子任務」開關、卡片上的父標題、Demo 在行銷活動任務下加子任務 | 子任務 |
 | gt1 | `TaskStartDate` migration、開始日驗證與規則同步、甘特 API、檢視存 `gantt` | 任務詳細多開始日 |
 | gt2 | 甘特圖檢視、拖拉、依父子與負責人分組、未排程、四種寬度 | 甘特圖 |
 
