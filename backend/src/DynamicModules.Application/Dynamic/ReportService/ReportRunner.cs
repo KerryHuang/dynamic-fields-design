@@ -52,15 +52,27 @@ public partial class ReportRunner(
     }
 
     /// <summary>定義裡的欄位引用解析後的結果。Via、Target 只有帶出動態模組的欄位才有值；實體目標當成來源模組的參照欄位，Field 就是該參照欄位。</summary>
-    private sealed record Bound(ReportFieldRef Ref, string Key, Side Source, Field Field, Field? Via, Side? Target)
+    /// <remarks>Restrictable：資料來源自己標記格子可能是 restricted、missing 的欄位（任務的所屬模組、任務規則）；模組來源一律 false。</remarks>
+    private sealed record Bound(ReportFieldRef Ref, string Key, Side Source, Field Field, Field? Via, Side? Target, bool Restrictable = false)
     {
-        public bool MayBeUnavailable => Via is not null || Field.Type == FieldType.Reference;
+        public bool MayBeUnavailable => Via is not null || Field.Type == FieldType.Reference || Restrictable;
     }
 
-    /// <summary>一次執行的上下文：語系、使用者姓名、參照標題（key 是欄位鍵與參照鍵）。</summary>
+    /// <summary>一次執行的上下文：語系、使用者姓名、參照標題（key 是欄位鍵與參照鍵）、空值的顯示字（key 是欄位鍵；模組來源為空）。</summary>
     private sealed record RunContext(
         string Locale, IReadOnlyDictionary<string, string> UserNames, Dictionary<(string, string), string> Titles,
-        IReadOnlyDictionary<string, string> Buckets);
+        IReadOnlyDictionary<string, string> Buckets, IReadOnlyDictionary<string, string> BlankLabels);
+
+    /// <summary>資料來源載入並套完條件後的列，以及共用尾段（下鑽、計算、輸出）需要的上下文。RowModule 決定「每列代表什麼」。</summary>
+    private sealed record SourceRows(
+        IReadOnlyDictionary<string, Bound> Bound, List<ReportRow> Rows, Side Main, Side? Child, Module RowModule,
+        RunContext Ctx, ReportAppliedRange? Applied, List<string> FallbackReasons);
+
+    /// <summary>Done 不為 null 時直接回它（早退、SQL 路徑的結果）；否則 Rows 交給共用尾段。</summary>
+    private sealed record SourceLoad(ReportResult? Done, SourceRows? Rows);
+
+    private static ReportResult FailResult(string state, string message, DateOnly basis, bool frozen) =>
+        new(state, message, "", [], null, null, null, false, basis, null, frozen);
 
     /// <summary>報表的基準日：Demo 登入開啟且產生器留有產生日期時用它（Demo 資料日期停在建置那天），否則是今天。</summary>
     public async Task<DateOnly> BasisDateAsync(CancellationToken ct)
@@ -79,7 +91,19 @@ public partial class ReportRunner(
         var basis = await BasisDateAsync(ct);
         var frozen = basis != time.Today;
         var locale = string.IsNullOrEmpty(o.Locale) ? I18nText.FallbackLocale : o.Locale;
-        ReportResult Fail(string state, string message) => new(state, message, "", [], null, null, null, false, basis, null, frozen);
+
+        // 1–6 由資料來源載入、組格子、套條件；不認得的資料來源 fail closed
+        var load = ReportDatasets.IsModule(d.Dataset)
+            ? await LoadModuleAsync(d, o, basis, frozen, locale, ct)
+            : new SourceLoad(FailResult(ModuleDisabledState, ReportText.Get(locale, ReportText.ModuleDisabled), basis, frozen), null);
+        if (load.Done is { } done) return done;
+        return Finish(d, o, basis, frozen, locale, load.Rows!);
+    }
+
+    /// <summary>模組來源：步驟 1–6（授權、綁欄位、SQL 路徑、載入、組格子、套條件）。</summary>
+    private async Task<SourceLoad> LoadModuleAsync(ReportDefinition d, ReportRunOptions o, DateOnly basis, bool frozen, string locale, CancellationToken ct)
+    {
+        SourceLoad Fail(string state, string message) => new(FailResult(state, message, basis, frozen), null);
         string T(string key, params object[] args) => ReportText.Get(locale, key, args);
         var disabled = () => Fail(ModuleDisabledState, T(ReportText.ModuleDisabled));
         var hiddenField = () => Fail(Restricted, HiddenMessage(locale));
@@ -176,27 +200,15 @@ public partial class ReportRunner(
             return Fail(FieldMissingState, T(ReportText.TypeChanged, ColumnLabel(changed, locale)));
 
         // 日期區間與執行上下文在載入前就定好：SQL 路徑與記憶體路徑共用
-        var range = (o.RangeOverride ?? d.DateRange) is { } rangeDef && d.PrimaryDateField is not null ? rangeDef : null;
-        // 只有真的要依區間換算（沒有固定區間）時才讀政策
-        var weekStart = o.Window is null && range is not null
-            ? PolicyCatalog.WeekStartOf(await policies.ChoiceAsync(PolicyCatalog.CalendarWeekStart, null, ct))
-            : DayOfWeek.Monday;
-        (DateOnly, DateOnly)? resolved = d.PrimaryDateField is null ? null
-            : o.Window is { } fixedWindow ? fixedWindow
-            : range is null ? null : ReportDates.Resolve(range, basis, weekStart);
-        ReportAppliedRange? applied = range is null ? null : new ReportAppliedRange(resolved!.Value.Item1, resolved.Value.Item2, range.Kind, range.N);
-        var userNames = bound.Values.Any(b => b.Field.Type == FieldType.User)
-            ? (await permissions.ListUsersAsync(ct)).ToDictionary(u => u.UserId, u => u.DisplayName)
-            : new Dictionary<string, string>();
-        var buckets = d.Groups.Where(g => g.Bucket is not null).ToDictionary(g => ReportCalculator.KeyOf(g.Field), g => g.Bucket!);
-        var ctx = new RunContext(locale, userNames, [], buckets);
+        var (_, resolved, applied) = await ResolveRangeAsync(d, o, basis, ct);
+        var ctx = new RunContext(locale, await UserNamesAsync(bound.Values, ct), [], BucketsOf(d), new Dictionary<string, string>());
 
         // 5a. 能在資料庫端聚合就不載入記錄；不能（或證明不了與記憶體路徑相同）就帶著原因走記憶體路徑
         var fallbackReasons = new List<string>();
         if (options.Engine != ReportEngineMode.MemoryOnly)
         {
             var sqlResult = await TrySqlAsync(d, o, bound, mainSide, childSide, ctx, basis, resolved, frozen, applied, fallbackReasons, ct);
-            if (sqlResult is not null) return sqlResult;
+            if (sqlResult is not null) return new SourceLoad(sqlResult, null);
         }
         if (options.Engine == ReportEngineMode.SqlOnly)
             throw new InvalidOperationException($"SqlOnly 模式下報表無法走 SQL 路徑：{string.Join(", ", fallbackReasons)}");
@@ -206,7 +218,7 @@ public partial class ReportRunner(
         // 縮小：只載入符合主模組精確條件的記錄（設計 §8.1）；MemoryOnly 是對照用的純記憶體路徑，不縮小
         var narrowed = options.Engine == ReportEngineMode.MemoryOnly ? null
             : await TryNarrowAsync(d, o, bound, mainSide, childSide, link, basis, resolved, fallbackReasons, ct);
-        if (narrowed?.FallbackReason == ReportSqlOutcome.TimeoutReason) return SqlTimeoutResult(locale, basis, frozen);
+        if (narrowed?.FallbackReason == ReportSqlOutcome.TimeoutReason) return new SourceLoad(SqlTimeoutResult(locale, basis, frozen), null);
         IReadOnlyList<Record> mainRows = narrowed?.Main
             ?? await records.ListForReportAsync(main.Id, mainSide.Perms!.OwnerUserIds, options.MaxLoadRows + 1, ct);
         if (mainRows.Count > options.MaxLoadRows) return tooManyToLoad();
@@ -249,6 +261,14 @@ public partial class ReportRunner(
         }
         // 合併且套用條件後的列數才是 spec §5 的上限，這裡縮小條件有用
         if (rows.Count > options.MaxRows) return Fail(TooManyState, T(ReportText.TooMany));
+        return new SourceLoad(null, new SourceRows(bound, rows, mainSide, childSide, childSide?.Module ?? main, ctx, applied, fallbackReasons));
+    }
+
+    /// <summary>共用尾段（步驟 7 以後）：下鑽、計算、欄位與分組標籤。資料來源只要交出套完條件的列。</summary>
+    private static ReportResult Finish(ReportDefinition d, ReportRunOptions o, DateOnly basis, bool frozen, string locale, SourceRows source)
+    {
+        var (bound, rows, mainSide, childSide, rowModule, ctx, applied, fallbackReasons) = source;
+        string T(string key, params object[] args) => ReportText.Get(locale, key, args);
 
         // 7. 下鑽只留該分組的列；各欄位值的 key 判斷與分組相同
         var drilling = o.DrillGroupKeys is not null;
@@ -260,7 +280,6 @@ public partial class ReportRunner(
         var multiGroup = d.Groups.Any(g => bound[ReportCalculator.KeyOf(g.Field)].Field.Type == FieldType.MultiEnum);
         var calc = ReportCalculator.Calculate(rows, drilling ? [] : d.Groups, d.Measures, d.Child is not null, (f, c) => Matches(f, c, basis), multiGroup);
 
-        var rowModule = childSide?.Module ?? main;
         var fieldColumns = FieldColumnsFor(d, drilling).Select(r => bound[ReportCalculator.KeyOf(r)]).ToList();
         var columns = new List<ReportColumn>();
         if (!drilling)
@@ -280,6 +299,30 @@ public partial class ReportRunner(
             groups, calc.Total, detail, calc.DedupedNote, basis, applied, frozen, detail?.Count,
             Engine: "memory", FallbackReasons: fallbackReasons);
     }
+
+    /// <summary>日期區間：沒有主要日期欄位就沒有；固定區間（Window）優先，否則依基準日換算，只有要換算時才讀一週起始日。</summary>
+    private async Task<(ReportDateRange? Range, (DateOnly, DateOnly)? Resolved, ReportAppliedRange? Applied)> ResolveRangeAsync(
+        ReportDefinition d, ReportRunOptions o, DateOnly basis, CancellationToken ct)
+    {
+        var range = (o.RangeOverride ?? d.DateRange) is { } rangeDef && d.PrimaryDateField is not null ? rangeDef : null;
+        // 只有真的要依區間換算（沒有固定區間）時才讀政策
+        var weekStart = o.Window is null && range is not null
+            ? PolicyCatalog.WeekStartOf(await policies.ChoiceAsync(PolicyCatalog.CalendarWeekStart, null, ct))
+            : DayOfWeek.Monday;
+        (DateOnly, DateOnly)? resolved = d.PrimaryDateField is null ? null
+            : o.Window is { } fixedWindow ? fixedWindow
+            : range is null ? null : ReportDates.Resolve(range, basis, weekStart);
+        ReportAppliedRange? applied = range is null ? null : new ReportAppliedRange(resolved!.Value.Item1, resolved.Value.Item2, range.Kind, range.N);
+        return (range, resolved, applied);
+    }
+
+    private async Task<IReadOnlyDictionary<string, string>> UserNamesAsync(IEnumerable<Bound> bound, CancellationToken ct) =>
+        bound.Any(b => b.Field.Type == FieldType.User)
+            ? (await permissions.ListUsersAsync(ct)).ToDictionary(u => u.UserId, u => u.DisplayName)
+            : new Dictionary<string, string>();
+
+    private static Dictionary<string, string> BucketsOf(ReportDefinition d) =>
+        d.Groups.Where(g => g.Bucket is not null).ToDictionary(g => ReportCalculator.KeyOf(g.Field), g => g.Bucket!);
 
     private async Task<Module?> ActiveModuleAsync(string key, CancellationToken ct) =>
         await modules.GetByKeyAsync(key, includeChildren: true, ct) is { } m && m.IsReadable() ? m : null;

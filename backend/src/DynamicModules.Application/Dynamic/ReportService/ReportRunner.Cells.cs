@@ -53,15 +53,18 @@ public partial class ReportRunner
                 var cell = b.Via is null
                     ? ValueCell(b, b.Field, values.GetValueOrDefault(b.Field.Key), refs.GetValueOrDefault(record.Id)?.GetValueOrDefault(b.Field.Key), ctx)
                     : ViaCell(b, values.GetValueOrDefault(b.Via.Key), viaLookups[b.Via.Id], ctx);
-                // 分桶鍵放 Text，Date 留著給區間與 min/max
-                if (ctx.Buckets.TryGetValue(b.Key, out var bucket) && cell is { State: Ok, Date: { } date })
-                    cell = cell with { Text = ReportDates.BucketKey(date, bucket) };
-                cells[b.Key] = cell;
+                cells[b.Key] = ApplyBucket(b, cell, ctx);
             }
             result[record.Id] = cells;
         }
         return result;
     }
+
+    /// <summary>分桶鍵放 Text，Date 留著給區間與 min/max。</summary>
+    private static ReportCell ApplyBucket(Bound b, ReportCell cell, RunContext ctx) =>
+        ctx.Buckets.TryGetValue(b.Key, out var bucket) && cell is { State: Ok, Date: { } date }
+            ? cell with { Text = ReportDates.BucketKey(date, bucket) }
+            : cell;
 
     private sealed record ViaLookup(
         IReadOnlyDictionary<long, (Record Record, Dictionary<string, JsonElement?> Values)> Records,
