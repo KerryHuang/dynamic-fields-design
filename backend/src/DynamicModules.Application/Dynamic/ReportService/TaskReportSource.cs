@@ -47,12 +47,16 @@ public sealed class TaskReportSource(ITaskRepository tasks, ITaskRuleRepository 
         return catalog;
     }
 
-    /// <summary>可見條件＋縮小條件載入，最多 take 筆（呼叫端多取一筆判斷是否超過上限）。</summary>
-    public async Task<IReadOnlyList<TaskReportItem>> LoadAsync(TaskReportNarrowing narrowing, int take, CancellationToken ct)
+    /// <summary>
+    /// 可見條件＋縮小條件載入，最多 take 筆（呼叫端多取一筆判斷是否超過上限）。OverLimit 以縱深防禦丟列之前的原始筆數判斷，
+    /// 丟過列也不會把「撈滿 take 筆」誤當成沒超過、回部分結果（kr1b 審查 Y1）。
+    /// </summary>
+    public async Task<(IReadOnlyList<TaskReportItem> Items, bool OverLimit)> LoadAsync(TaskReportNarrowing narrowing, int take, CancellationToken ct)
     {
         var v = await visibility.ForCurrentUserAsync(ct);
         var items = await tasks.ListForReportAsync(v, narrowing, take, ct);
-        if (items.Count == 0) return [];
+        var overLimit = items.Count >= take;
+        if (items.Count == 0) return ([], overLimit);
         var perms = await access.EvaluateManyAsync(items, ct);
         var departments = items.Any(t => t.AssigneeUserId is not null) ? await org.ListUserDepartmentsAsync(ct) : [];
         var result = new List<TaskReportItem>(items.Count);
@@ -64,6 +68,6 @@ public sealed class TaskReportSource(ITaskRepository tasks, ITaskRuleRepository 
             result.Add(new TaskReportItem(t, perms[i].Record?.Accessible == true,
                 t.AssigneeUserId is { } a && departments.TryGetValue(a, out var dept) ? dept : null));
         }
-        return result;
+        return (result, overLimit);
     }
 }

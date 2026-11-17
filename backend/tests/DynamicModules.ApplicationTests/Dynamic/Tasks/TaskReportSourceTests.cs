@@ -34,7 +34,7 @@ public class TaskReportSourceTests : TaskTestBase
     {
         As(user);
         using var scope = NewScope();
-        var items = await scope.ServiceProvider.GetRequiredService<TaskReportSource>().LoadAsync(narrowing ?? None, 10_000, default);
+        var (items, _) = await scope.ServiceProvider.GetRequiredService<TaskReportSource>().LoadAsync(narrowing ?? None, 10_000, default);
         As("admin");
         return items;
     }
@@ -98,22 +98,58 @@ public class TaskReportSourceTests : TaskTestBase
         await SeedTask("部屬的未指派任務", createdBy: "keeper01");
     }
 
+    private const string Personal = "個人", OwnRecord = "自己範圍內的記錄", OtherRecord = "範圍外的記錄", DeletedRecord = "已刪除記錄上的任務",
+        Frozen = "凍結模組", RestrictedSub = "受限模組的部屬任務", Mentioned = "只被提到", SubUnassigned = "部屬的未指派任務";
+
+    /// <summary>
+    /// 每個身分應該看到的任務（標題，照 Seed 手算，審查 Y3）與其中看不到記錄的任務。
+    /// manager01 管總經理室（含下層全部部門，遞迴預設開），其他人都是部屬；ops01 管營運部（keeper01、採購、生產部）；
+    /// 軟刪除記錄與關閉模組的記錄仍在 Read 範圍內就看得到；tk2 只有業務 Own，manager01 看不到那筆記錄。
+    /// </summary>
+    public static TheoryData<string, string[], string[]> Personas => new()
+    {
+        { "admin", [Personal, OwnRecord, OtherRecord, DeletedRecord, Frozen, RestrictedSub, Mentioned, SubUnassigned], [] },
+        { "sales01", [Personal, OwnRecord, DeletedRecord, Frozen, RestrictedSub], [] },
+        { "sales02", [OtherRecord, Mentioned], [] },
+        { "manager01", [Personal, OwnRecord, OtherRecord, DeletedRecord, Frozen, RestrictedSub, Mentioned, SubUnassigned], [RestrictedSub] },
+        { "ops01", [OwnRecord, OtherRecord, DeletedRecord, Frozen, Mentioned, SubUnassigned], [OwnRecord, OtherRecord, DeletedRecord, Frozen] },
+        { "floor01", [OwnRecord, OtherRecord, DeletedRecord, Frozen, RestrictedSub], [OwnRecord, OtherRecord, DeletedRecord, Frozen, RestrictedSub] },
+        { "keeper01", [SubUnassigned], [] },
+        { "nobody", [], [] },
+    };
+
     [Theory]
-    [InlineData("admin")]
-    [InlineData("sales01")]
-    [InlineData("sales02")]
-    [InlineData("manager01")]
-    [InlineData("ops01")]
-    [InlineData("floor01")]
-    public async Task Load_EqualsVisibleIds_ForEveryPersona(string user)
+    [MemberData(nameof(Personas))]
+    public async Task Load_EqualsVisibleIds_ForEveryPersona(string user, string[] visible, string[] recordHidden)
     {
         await SeedPersonas();
 
         var items = await LoadAs(user);
 
+        items.Select(i => i.Task.Title).Should().BeEquivalentTo(visible, $"身分 {user}");
+        items.Where(i => i.Task.RecordId is not null && !i.RecordAccessible).Select(i => i.Task.Title).Should().BeEquivalentTo(recordHidden, $"身分 {user}");
+        // 報表＝看板：與看板的可見 Id、逐筆記錄判斷一致
         items.Select(i => i.Task.Id).Should().BeEquivalentTo(await VisibleIds(user), $"身分 {user}");
         items.Where(i => i.RecordAccessible).Select(i => i.Task.Id).Should().BeEquivalentTo(await RecordAccessibleIds(user), $"身分 {user}");
         items.Select(i => i.Task.Id).Should().BeInAscendingOrder();
+    }
+
+    [Fact]
+    public async Task Load_OverLimit_JudgedOnRawCount()
+    {
+        await SeedTask("一");
+        await SeedTask("二");
+        await SeedTask("三");
+        using var scope = NewScope();
+        var source = scope.ServiceProvider.GetRequiredService<TaskReportSource>();
+
+        var (items, over) = await source.LoadAsync(None, 2, default);
+        var (all, notOver) = await source.LoadAsync(None, 4, default);
+
+        over.Should().BeTrue();
+        items.Should().HaveCount(2);
+        notOver.Should().BeFalse();
+        all.Should().HaveCount(3);
     }
 
     [Fact]
@@ -190,7 +226,7 @@ public class TaskReportSourceTests : TaskTestBase
             using var scope = NewScope();
             var source = scope.ServiceProvider.GetRequiredService<TaskReportSource>();
             var before = Db.Counter.Count;
-            var items = await source.LoadAsync(None, 10_000, default);
+            var (items, _) = await source.LoadAsync(None, 10_000, default);
             var used = Db.Counter.Count - before;
             As("admin");
             items.Should().HaveCount(taskCount);

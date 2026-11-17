@@ -178,7 +178,8 @@ public class SupervisorScopeTests : TaskTestBase
         Db.Context.ChangeTracker.Clear();
         DemoStructure.ResetPerRequestState(sp.GetRequiredService<IWriteJournal>(), sp.GetRequiredService<EffectBudget>(),
             sp.GetRequiredService<ApprovalWriteContext>(), sp.GetRequiredService<ApprovalLockService>(),
-            sp.GetRequiredService<AttachmentUploadTracker>(), visibility);
+            sp.GetRequiredService<AttachmentUploadTracker>(), visibility,
+            sp.GetRequiredService<DynamicModules.Application.Dynamic.ReportService.TaskReportSource>());
 
         (await visibility.SubordinatesAsync(default)).Should().BeEmpty();
         (await visibility.ForCurrentUserAsync(default)).Subordinates.Should().BeEmpty();

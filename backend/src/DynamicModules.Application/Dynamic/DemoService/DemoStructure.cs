@@ -32,7 +32,7 @@ public sealed class DemoStructure(
     public static void ResetPerRequestState(IWriteJournal journal, EventService.EffectBudget budget,
         ApprovalService.ApprovalWriteContext approvalContext, ApprovalService.ApprovalLockService approvalLock,
         AttachmentService.AttachmentUploadTracker uploadTracker, TaskService.TaskVisibilityService taskVisibility,
-        ReportService.TaskReportSource? taskReports = null)
+        ReportService.TaskReportSource taskReports)
     {
         journal.Clear();
         budget.Reset();
@@ -40,7 +40,7 @@ public sealed class DemoStructure(
         approvalLock.Reset();
         uploadTracker.Forget();
         taskVisibility.Reset();
-        taskReports?.Reset();
+        taskReports.Reset();
     }
 
     public async Task<(DemoContext? Context, ServiceResult? Failed)> BuildAsync(DateOnly today, CancellationToken ct)

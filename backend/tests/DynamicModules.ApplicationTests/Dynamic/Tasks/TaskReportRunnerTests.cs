@@ -178,22 +178,29 @@ public class TaskReportRunnerTests : TaskTestBase
         return (tk, tk2);
     }
 
-    [Fact]
-    public async Task PermissionMatrix_CountsPerPersona()
+    /// <summary>每個身分應該數到的任務（標題寫死，照 Seed 手算，審查 Y3）與「所屬模組」是（無權限）的任務；推導見 TaskReportSourceTests.Personas。</summary>
+    public static TheoryData<string, string[], string[]> Personas => TaskReportSourceTests.Personas;
+
+    [Theory]
+    [MemberData(nameof(Personas))]
+    public async Task PermissionMatrix_CountsPerPersona(string who, string[] visible, string[] recordHidden)
     {
         await SeedPersonas();
-        foreach (var who in new[] { "admin", "sales01", "sales02", "manager01", "ops01", "floor01", "nobody" })
+
+        var r = await Run(TaskDef([M("n", "countMain")]) with { Columns = [T(F.Title), T(F.Module)] }, who);
+
+        (r.Total?["n"] ?? 0).Should().Be(visible.Length, $"身分 {who}");
+        var rows = r.DetailRows ?? [];
+        rows.Select(row => (string)row[0]!).Should().BeEquivalentTo(visible, $"身分 {who}");
+        rows.Where(row => (string?)row[1] == "（無權限）").Select(row => (string)row[0]!).Should().BeEquivalentTo(recordHidden, $"身分 {who}");
+        // 對照：報表＝看板的可見 Id 數
+        As(who);
+        using (var scope = NewScope())
         {
-            As(who);
-            int expected;
-            using (var scope = NewScope())
-            {
-                var v = await scope.ServiceProvider.GetRequiredService<TaskVisibilityService>().ForCurrentUserAsync(default);
-                expected = (await scope.ServiceProvider.GetRequiredService<ITaskRepository>().ListVisibleIdsAsync(v, default)).Count;
-            }
-            var r = await Run(TaskDef([M("n", "countMain")]), who);
-            (r.Total?["n"] ?? 0).Should().Be(expected, $"身分 {who}");
+            var v = await scope.ServiceProvider.GetRequiredService<TaskVisibilityService>().ForCurrentUserAsync(default);
+            (await scope.ServiceProvider.GetRequiredService<ITaskRepository>().ListVisibleIdsAsync(v, default)).Should().HaveCount(visible.Length);
         }
+        As("admin");
     }
 
     [Fact]
@@ -373,6 +380,50 @@ public class TaskReportRunnerTests : TaskTestBase
     }
 
     [Fact]
+    public async Task OverMaxRows_AfterConditions_TooMany()
+    {
+        await SeedTask("一", assignee: "sales01");
+        await SeedTask("二", assignee: "sales01");
+        await SeedTask("三", assignee: "sales02");
+        Svc<ReportOptions>().MaxLoadRows = 10;
+        Svc<ReportOptions>().MaxRows = 1;
+
+        var two = await Run(TaskDef([M("n", "countMain")], filters: [Fl(F.Assignee, "eq", "sales01")]));
+        var one = await Run(TaskDef([M("n", "countMain")], filters: [Fl(F.Assignee, "eq", "sales02")]));
+
+        two.State.Should().Be("tooMany");
+        two.Message.Should().Be("資料太多，請縮小條件");
+        one.State.Should().Be("ok", one.Message);
+    }
+
+    /// <summary>資料庫端縮小（J7）只會多撈：三種主要日期、邊界時刻、重開後留著完成時間的待辦、沒有到期日，Default 與不縮小的 MemoryOnly 數字相同（審查 G3）。</summary>
+    [Theory]
+    [InlineData(F.DueDate)]
+    [InlineData(F.CreatedTime)]
+    [InlineData(F.CompletedTime)]
+    public async Task Narrowing_MatchesUnnarrowed(long primary)
+    {
+        await SeedTask("到期邊界", due: Day(1), created: Wall(10, 31, 23), status: TaskItemStatus.Done, completed: new DateTime(2026, 11, 1, 0, 0, 0));
+        await SeedTask("月底最後一刻", due: Day(30), created: new DateTime(2026, 11, 30, 23, 59, 0), status: TaskItemStatus.Done,
+            completed: new DateTime(2026, 11, 30, 23, 59, 0));
+        await SeedTask("下月第一刻", due: new DateOnly(2026, 12, 1), created: new DateTime(2026, 12, 1, 0, 0, 0), status: TaskItemStatus.Done,
+            completed: new DateTime(2026, 12, 1, 0, 0, 0));
+        await SeedTask("重開後的待辦", due: Day(10), created: Wall(11, 5), completed: Wall(11, 6));
+        await SeedTask("沒有到期日", created: Wall(11, 7));
+        await SeedTask("上月", due: new DateOnly(2026, 10, 31), created: Wall(10, 1), status: TaskItemStatus.Done, completed: Wall(10, 31, 23));
+        var d = TaskDef([M("n", "countMain"), M("todo", "countIf", cond: Fl(F.Status, "eq", Opt(1)))], [G(F.Status)],
+            [Fl(F.Status, "in", new[] { Opt(1), Opt(3) })], primary, new ReportDateRange("thisMonth", null));
+
+        var narrowed = await Run(d);
+        Svc<ReportOptions>().Engine = ReportEngineMode.MemoryOnly;
+        var plain = await Run(d);
+
+        narrowed.State.Should().Be("ok", narrowed.Message);
+        narrowed.Total.Should().BeEquivalentTo(plain.Total);
+        narrowed.Groups!.Select(g => (g.GroupKeys[0], g.Values["n"])).Should().Equal(plain.Groups!.Select(g => (g.GroupKeys[0], g.Values["n"])));
+    }
+
+    [Fact]
     public async Task UnknownDataset_ModuleDisabled()
     {
         await SeedTask("待辦");
@@ -380,6 +431,7 @@ public class TaskReportRunnerTests : TaskTestBase
         // 被直接改壞的定義（tasks 不能用的欄位、帶出）一律 fail closed，不回數字
         (await Run(TaskDef([M("n", "countMain")], [G(F.EventKind)]))).State.Should().Be("fieldMissing");
         (await Run(TaskDef([M("n", "countMain")], [new ReportGroup(new ReportFieldRef("main", F.Module, F.Rule), null)]))).State.Should().Be("fieldMissing");
+        (await Run(TaskDef([M("n", "countMain")]) with { Child = new ReportChild("tk", 1) })).State.Should().Be("fieldMissing");
     }
 
     [Fact]

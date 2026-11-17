@@ -20,6 +20,8 @@ public partial class ReportRunner
     {
         SourceLoad Fail(string state, string message) => new(FailResult(state, message, basis, frozen), null);
         var dataset = d.Dataset!;
+        // 存檔驗證擋掉的子模組出現在這裡代表定義被直接改壞；不擋的話尾段會用 d.Child 算去重，數字沒有定義（審查 G2）
+        if (d.Child is not null) return Fail(FieldMissingState, ReportText.Get(locale, ReportText.FieldGone));
         var side = new Side(await taskReports.CatalogAsync(dataset, ct), TaskReportSource.Permissions);
 
         var selectable = F.Selectable(dataset);
@@ -41,9 +43,11 @@ public partial class ReportRunner
             return Fail(FieldMissingState, ReportText.Get(locale, ReportText.TypeChanged, ColumnLabel(changed, locale)));
 
         var (_, resolved, applied) = await ResolveRangeAsync(d, o, basis, ct);
-        // 多取一筆才分得出是否超過上限；資料庫端只用證明精確的條件縮小，載入後照舊重套全部條件（J7）
-        var items = await taskReports.LoadAsync(Narrowing(d, resolved), options.MaxLoadRows + 1, ct);
-        if (items.Count > options.MaxLoadRows) return Fail(TooManyState, ReportText.Get(locale, ReportText.TooMany));
+        // 多取一筆才分得出是否超過上限；資料庫端只用證明精確的條件縮小，載入後照舊重套全部條件（J7）。
+        // MemoryOnly 是對照用的純記憶體路徑，不縮小（同模組來源，審查 G3）
+        var narrowing = options.Engine == ReportEngineMode.MemoryOnly ? new TaskReportNarrowing(null, null, null, null) : Narrowing(d, resolved);
+        var (items, overLimit) = await taskReports.LoadAsync(narrowing, options.MaxLoadRows + 1, ct);
+        if (overLimit) return Fail(TooManyState, ReportText.Get(locale, ReportText.TooMany));
 
         var blanks = bound.Values.Where(b => F.BlankLabels.ContainsKey(b.Field.Id))
             .ToDictionary(b => b.Key, b => F.BlankLabels[b.Field.Id].Resolve(locale));

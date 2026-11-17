@@ -71,6 +71,7 @@ public static class TaskReportFields
         [EventDate] = (FieldType.DateTime, "eventDate", T("事件日期", "Event date", "วันที่ของเหตุการณ์", "Ngày sự kiện")),
     };
 
+    // 與前端 status.* 同字（K2），改時兩邊一起改
     private static readonly (long Id, I18nText Label)[] StatusOptions =
     [
         (StatusOption(TaskItemStatus.Todo), T("待辦", "To do", "รอดำเนินการ", "Cần làm")),

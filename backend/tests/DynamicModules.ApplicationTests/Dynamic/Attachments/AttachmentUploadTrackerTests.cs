@@ -49,7 +49,8 @@ public class AttachmentUploadTrackerTests
     [Fact]
     public void ResetPerRequestState_SignatureIncludesTracker() =>
         typeof(DemoStructure).GetMethod(nameof(DemoStructure.ResetPerRequestState))!.GetParameters()
-            .Select(p => p.ParameterType).Should().Contain(typeof(AttachmentUploadTracker));
+            .Select(p => p.ParameterType).Should().Contain(typeof(AttachmentUploadTracker))
+            .And.Contain(typeof(DynamicModules.Application.Dynamic.ReportService.TaskReportSource));
 
     [Fact]
     public void DeleteAll_IOException_DoesNotThrow_AndKeepsDeletingTheRest()
