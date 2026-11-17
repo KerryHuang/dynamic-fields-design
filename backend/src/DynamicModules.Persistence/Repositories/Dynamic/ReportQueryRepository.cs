@@ -143,7 +143,7 @@ public class ReportQueryRepository(DynamicDbContext db, ISqlDialect dialect, Rep
                         }
                         i++;
                         break;
-                    case "ratio":
+                    case "ratio" or "countIf":
                         hit = reader.IsDBNull(i) ? 0 : reader.GetInt64(i);
                         i++;
                         break;

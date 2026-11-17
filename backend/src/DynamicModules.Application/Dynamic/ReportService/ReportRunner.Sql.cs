@@ -228,16 +228,14 @@ public partial class ReportRunner
         var measures = new List<ReportSqlMeasure>();
         foreach (var m in d.Measures)
         {
-            // Task 3 之前 SQL 路徑只會算沒有條件的 sum、avg、min、max、count 與 ratio
-            if (m.Kind is "countIf" or "median") reasons.Add($"measureNotSupported:{m.Kind}");
-            else if (m.Kind is "sum" or "avg" && m.Condition is not null) reasons.Add($"measureConditionNotSupported:{m.Id}");
+            // median 要排序全部值，不是 SQL 能精確聚合的形狀，退回記憶體路徑
+            if (m.Kind == "median") { reasons.Add("measureNotSupported:median"); continue; }
             ReportSqlField? mf = null;
             ReportSqlCondition? cond = null;
-            if (m.Kind == "ratio")
-                cond = planner.Condition(m.Condition!);
-            else if (m.Field is not null)
-                mf = planner.Field(m.Field, checkText: false);
-            if ((m.Kind == "ratio" && cond is null) || (m.Field is not null && m.Kind != "ratio" && mf is null)) continue;
+            var conditioned = m.Kind is "ratio" or "countIf" || (m.Kind is "sum" or "avg" && m.Condition is not null);
+            if (conditioned) cond = planner.Condition(m.Condition!);
+            if (m.Kind != "ratio" && m.Field is not null) mf = planner.Field(m.Field, checkText: false);
+            if ((conditioned && cond is null) || (m.Kind != "ratio" && m.Field is not null && mf is null)) continue;
             measures.Add(new ReportSqlMeasure(m.Id, m.Kind, mf, cond));
         }
 
@@ -396,6 +394,7 @@ public partial class ReportRunner
                 "countMain" => row.RowCount,
                 "countChild" => 0,
                 "ratio" => row.RowCount == 0 ? null : (decimal)raw.Hit / row.RowCount,
+                "countIf" => raw.Hit,
                 "sum" => raw.Count == 0 ? null : Normalize(Sum(raw) / Pow10(m.Field!.Scale)),
                 "avg" => raw.Count == 0 ? null : Normalize(Sum(raw) / Pow10(m.Field!.Scale) / raw.Count),
                 _ => m.Field!.Kind == ReportSqlKind.Date

@@ -177,6 +177,12 @@ public static class ReportQueryBuilder
             }
             switch (m.Kind)
             {
+                case "sum" or "avg" when m.Condition is { } cond:
+                    // 只加總符合條件的列；除法與餘數用整數常數 Split（不寫浮點常值，否則 hi 帶小數、15 位數金額不精確）。謂詞各自產生，別名與參數獨立
+                    select.Add($"COUNT(CASE WHEN {Predicate(cond, "r.Id", ctx, ref aliasCounter)} THEN {a}.ScaledValue END) AS n{j}");
+                    select.Add($"SUM(CASE WHEN {Predicate(cond, "r.Id", ctx, ref aliasCounter)} THEN {a}.ScaledValue / {Split} END) AS hi{j}");
+                    select.Add($"SUM(CASE WHEN {Predicate(cond, "r.Id", ctx, ref aliasCounter)} THEN {a}.ScaledValue % {Split} END) AS lo{j}");
+                    break;
                 case "sum" or "avg":
                     select.Add($"COUNT({a}.ScaledValue) AS n{j}");
                     select.Add($"SUM({a}.ScaledValue / {Split}) AS hi{j}");
@@ -186,7 +192,7 @@ public static class ReportQueryBuilder
                     var fn = m.Kind == "min" ? "MIN" : "MAX";
                     select.Add(m.Field!.Kind == ReportSqlKind.Date ? $"{fn}({a}.DateValue) AS v{j}" : $"{fn}({a}.ScaledValue) AS v{j}");
                     break;
-                case "ratio":
+                case "ratio" or "countIf":
                     select.Add($"SUM(CASE WHEN {Predicate(m.Condition!, "r.Id", ctx, ref aliasCounter)} THEN 1 ELSE 0 END) AS hit{j}");
                     break;
             }

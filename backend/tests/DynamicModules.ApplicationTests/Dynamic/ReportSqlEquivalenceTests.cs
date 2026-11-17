@@ -463,6 +463,55 @@ public class ReportSqlEquivalenceTests : ReportTestBase
     }
 
     [Fact]
+    public async Task ConditionalMeasures_MatchMemoryPath()
+    {
+        await Prepare();
+        await SeedOrders();   // 金額含負數與 999999999999.99：條件 gte 100 的符合列帶極值，驗整數 hi／lo 加總與記憶體路徑逐位相同
+        var done = F(MainF(Status), "eq", OptDone);
+        var measureSets = new Dictionary<string, List<ReportMeasure>>
+        {
+            ["countIf-enum"] = [M("c", "countIf", cond: done), M("n", "countMain")],
+            ["countIf-number"] = [M("c", "countIf", cond: F(MainF(Amount), "gte", 100))],
+            ["countIf-bool"] = [M("c", "countIf", cond: F(MainF(Done), "eq", true))],
+            ["countIf-beforeToday"] = [M("c", "countIf", cond: F(MainF(Due), "beforeToday"))],
+            ["avg-enum"] = [M("a", "avg", MainF(Amount), done), M("s", "sum", MainF(Amount), done), M("plain", "avg", MainF(Amount))],
+            ["sum-user"] = [M("s", "sum", MainF(Price), F(MainF(Sales), "in", new[] { "sales01" }))],
+            ["sum-negative"] = [M("s", "sum", MainF(Amount), F(MainF(Amount), "lt", 0)), M("a", "avg", MainF(Amount), F(MainF(Amount), "lt", 0))],
+            ["sum-extreme"] = [M("s", "sum", MainF(Amount), F(MainF(Amount), "gte", 100)), M("a", "avg", MainF(Amount), F(MainF(Amount), "gte", 100))],
+            ["noMatch"] = [M("s", "sum", MainF(Amount), F(MainF(Amount), "gt", 999999999999.99m)), M("c", "countIf", cond: F(MainF(Amount), "gt", 999999999999.99m))],
+        };
+        foreach (var (name, measures) in measureSets)
+        {
+            foreach (var (shape, groups) in new (string, List<ReportGroup>)[] { ("total", []), ("sales", [G(MainF(Sales))]), ("dueWeek", [G(MainF(Due), "week")]) })
+            {
+                var (memory, sql) = await Both(Def(groups: groups, measures: measures));
+                ShouldMatch(memory, sql, $"{name}/{shape}");
+            }
+        }
+    }
+
+    [Fact]
+    public async Task Median_FallsBack_WithReason()
+    {
+        await Prepare();
+        await SeedOrders();
+        var def = Def(measures: [M("m", "median", MainF(Amount))]);
+        var (memory, auto) = await Both(def, second: ReportEngineMode.Auto);
+        ShouldMatch(memory, auto, "median", expectedEngine: "memory");
+        auto.FallbackReasons.Should().Contain("measureNotSupported:median");
+    }
+
+    [Fact]
+    public async Task ConditionalAvg_TruncatedTextCondition_FallsBack()
+    {
+        await Prepare();
+        var a = new string('a', 440);
+        await Seed("order", "admin", (Note, a), (Amount, 10m));
+        await Seed("order", "admin", (Note, a + "b"), (Amount, 20m));
+        await AssertFallsBackWithSameResult(Def(measures: [M("a", "avg", MainF(Amount), F(MainF(Note), "eq", a))]), "textTruncated");
+    }
+
+    [Fact]
     public async Task TruncatedIndexText_NeAndGroup_FallBack()
     {
         await Prepare();
