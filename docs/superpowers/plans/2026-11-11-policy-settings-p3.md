@@ -1,5 +1,7 @@
 # 政策設定 p3 Implementation Plan
 
+> ⚠️ 2026-11-17 語系包設計（2026-11-17-language-packs-design.md §18）要求語系選項改為已安裝語系，實作 p3 時先留接口。
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** 部門層數（A5）、營運時區（A17，含補盤 A31 各處）、預設／啟用／必填語系（A18）改成可設定，前端時區與語系改從 API 取；出廠值等於現值，部署後沒人改設定時行為不變。
