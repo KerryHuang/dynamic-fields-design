@@ -110,7 +110,7 @@ const countText = (n: number | null | undefined) => (n ?? 0).toLocaleString(loca
             >
               <td v-for="(c, ci) in fieldCols" :key="c.key">{{ fmt(row[ci], c) }}</td>
               <td v-if="hasTaskLinks" class="task-link-col text-right">
-                <q-icon v-if="taskIdAt(ri) !== null" name="chevron_right" color="grey-6" aria-hidden="true" data-testid="task-chevron" />
+                <q-icon v-if="taskIdAt(ri) !== null" name="chevron_right" color="muted" aria-hidden="true" data-testid="task-chevron" />
               </td>
             </tr>
           </tbody>
