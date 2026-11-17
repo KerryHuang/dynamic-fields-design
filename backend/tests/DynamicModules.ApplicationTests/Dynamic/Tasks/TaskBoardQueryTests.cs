@@ -44,6 +44,23 @@ public class TaskBoardQueryTests : TaskBoardTestBase
     }
 
     [Fact]
+    public async Task Response_CarriesTheConfigItWasBuiltFrom()
+    {
+        var b = await Board("sales01");   // 沒帶看板、沒帶設定 → 預設看板
+        b.Config.GetProperty("groupBy").GetString().Should().Be("status");
+        b.Config.GetProperty("scope").GetString().Should().Be("assigned");
+        b.Config.GetProperty("columns").GetProperty("hidden").EnumerateArray().Select(x => x.GetString()).Should().Equal("cancelled");
+
+        var custom = await Board("sales01", """{"version":1,"groupBy":"dueBucket","scope":"involved","sort":{"key":"title","dir":"desc"}}""");
+        custom.Config.GetProperty("groupBy").GetString().Should().Be("dueBucket");
+        custom.Config.GetProperty("scope").GetString().Should().Be("involved");
+        custom.Config.GetProperty("sort").GetProperty("key").GetString().Should().Be("title");
+
+        var saved = await CreateView("sales01", "存檔看板", """{"version":1,"groupBy":"assignee","scope":"visible"}""");
+        (await Board("sales01", viewId: saved.Id)).Config.GetProperty("groupBy").GetString().Should().Be("assignee");
+    }
+
+    [Fact]
     public async Task AssigneeBoard_ExplicitInactiveAutoAppend_Capped50()
     {
         var tasks = new List<TaskItem>();

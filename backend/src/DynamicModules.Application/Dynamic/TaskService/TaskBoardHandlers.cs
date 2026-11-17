@@ -129,7 +129,8 @@ public class GetTaskBoardColumnsHandler(ITaskRepository tasks, TaskBoardService 
             return new TaskBoardColumnResponse(s.Key, s.Kind, s.UserId, s.Name, s.Inactive, total, list,
                 Math.Min(total, TaskBoardService.MaxCards) > list.Count, total > TaskBoardService.MaxCards, s.Droppable, s.DropReason);
         }).ToList();
-        return ServiceResult.Success(new TaskBoardResponse(q.Today, q.WeekEnd, TaskDueBuckets.LaterDefault(q.WeekEnd), scopeAvailable, columns, omitted));
+        return ServiceResult.Success(new TaskBoardResponse(q.Today, q.WeekEnd, TaskDueBuckets.LaterDefault(q.WeekEnd), scopeAvailable, columns, omitted,
+            JsonDocument.Parse(c.Serialize()).RootElement.Clone()));
     }
 
     private static Spec FixedColumn(string groupBy, string key, TaskBoardQuery q)
