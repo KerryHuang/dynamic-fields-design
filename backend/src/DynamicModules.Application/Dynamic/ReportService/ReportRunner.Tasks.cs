@@ -59,6 +59,11 @@ public partial class ReportRunner
         var (items, overLimit) = await taskReports.LoadAsync(narrowing, options.MaxLoadRows + 1, ct);
         if (overLimit) return Fail(TooManyState, ReportText.Get(locale, ReportText.TooMany));
 
+        // 部門暫時篩選（§8.2）：只算負責人目前部門在所選範圍內的任務，未指派的排除；作用在列，總計、下鑽、匯出跟著列走
+        var departmentScope = o.DepartmentIds is { Count: > 0 } selected
+            ? await taskReports.ExpandDepartmentsAsync(selected, o.IncludeSubDepartments, ct) : null;
+        if (departmentScope is not null) items = [.. items.Where(i => i.AssigneeDepartmentId is { } dept && departmentScope.Contains(dept))];
+
         var blanks = bound.Values.Where(b => F.BlankLabels.ContainsKey(b.Field.Id))
             .ToDictionary(b => b.Key, b => F.BlankLabels[b.Field.Id].Resolve(locale));
         var ctx = new RunContext(locale, await UserNamesAsync(bound.Values, ct), [], BucketsOf(d), blanks);

@@ -12,7 +12,7 @@ namespace DynamicModules.Application.Dynamic.ReportService.Queries.ExportReport;
 
 /// <summary>
 /// 匯出 xlsx：要有所有涉及模組的 PrintExport，否則報表會變成繞過匯出權限的路（spec §7）。數字取自 runner，與畫面一致。
-/// 有明細欄位就匯出明細，否則匯出分組表（最後一列總計）。
+/// 有明細欄位就匯出明細，否則匯出分組表（最後一列總計）。帶報表頁目前的期間與部門篩選（與畫面一致）。
 /// </summary>
 public class ExportReportHandler(ReportAccess access, ReportModuleLoader loader, ReportRunner runner, IBusinessTime time)
     : IRequestHandler<ExportReportRequest, ServiceResult>
@@ -24,12 +24,16 @@ public class ExportReportHandler(ReportAccess access, ReportModuleLoader loader,
         var (report, _) = await access.FindAsync(request.Id, ct);
         if (report is null) return ServiceResult.NotFound(ReportRules.ReportNotFound);
 
+        if (ReportRules.CheckRange(request.Range) is { } rangeError)
+            return ServiceResult.Invalid(ReportRules.ToErrors("range", [rangeError]));
+
         var definition = ReportDefinition.Parse(report.DefinitionJson);
         var (set, denied) = await loader.LoadAsync(definition, PermissionAction.PrintExport, ct);
         if (set is null) return denied!;
 
         // 載入時只驗了有沒有 PrintExport；資料範圍交給 runner 同時套用讀取與列印匯出的範圍（審查必修 2）
-        var result = await runner.RunAsync(definition, new ReportRunOptions(null, null, request.Locale, ForExport: true), ct);
+        var result = await runner.RunAsync(definition, new ReportRunOptions(request.Range, null, request.Locale, ForExport: true,
+            DepartmentIds: request.DepartmentIds, IncludeSubDepartments: request.IncludeSubDepartments), ct);
         if (result.State is not ("ok" or "empty"))
             return ServiceResult.Invalid(new Dictionary<string, string[]> { ["report"] = [result.Message ?? result.State] });
 

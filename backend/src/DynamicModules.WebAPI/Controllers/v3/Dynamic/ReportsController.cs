@@ -29,9 +29,9 @@ public class ReportsController(IMediator mediator) : ControllerBase
 
     public record SharesBody(List<long>? GroupIds);
 
-    public record RunBody(ReportDateRange? Range);
+    public record RunBody(ReportDateRange? Range, List<long>? DepartmentIds = null, bool? IncludeSubDepartments = null);
 
-    public record DrillBody(List<string>? GroupKeys, ReportDateRange? Range);
+    public record DrillBody(List<string>? GroupKeys, ReportDateRange? Range, List<long>? DepartmentIds = null, bool? IncludeSubDepartments = null);
 
     private IActionResult Bad(string key, string message) =>
         ServiceResult.Invalid(new Dictionary<string, string[]> { [key] = [message] }).ToActionResult(this);
@@ -96,7 +96,7 @@ public class ReportsController(IMediator mediator) : ControllerBase
 
     [HttpPost("{id:long}/run")]
     public async Task<IActionResult> Run(long id, RunBody body, [FromQuery] string locale = "zh-TW") =>
-        (await mediator.Send(new RunReportRequest(id, body.Range, locale))).ToActionResult(this);
+        (await mediator.Send(new RunReportRequest(id, body.Range, locale, body.DepartmentIds, body.IncludeSubDepartments ?? true))).ToActionResult(this);
 
     [HttpPost("preview")]
     public async Task<IActionResult> Preview(JsonElement? body, [FromQuery] string locale = "zh-TW") =>
@@ -108,12 +108,15 @@ public class ReportsController(IMediator mediator) : ControllerBase
     public async Task<IActionResult> Drill(long id, DrillBody body, [FromQuery] string locale = "zh-TW") =>
         body.GroupKeys is null
             ? Bad("groupKeys", "必填")
-            : (await mediator.Send(new DrillReportRequest(id, body.GroupKeys, body.Range, locale))).ToActionResult(this);
+            : (await mediator.Send(new DrillReportRequest(id, body.GroupKeys, body.Range, locale, body.DepartmentIds, body.IncludeSubDepartments ?? true))).ToActionResult(this);
 
+    /// <summary>匯出帶報表頁目前的暫時篩選：rangeKind／rangeN、departmentIds（可重複）、includeSubDepartments（預設 true）。</summary>
     [HttpGet("{id:long}/export")]
-    public async Task<IActionResult> Export(long id, [FromQuery] string locale = "zh-TW")
+    public async Task<IActionResult> Export(long id, [FromQuery] string locale = "zh-TW", [FromQuery] string? rangeKind = null,
+        [FromQuery] int? rangeN = null, [FromQuery] List<long>? departmentIds = null, [FromQuery] bool includeSubDepartments = true)
     {
-        var result = await mediator.Send(new ExportReportRequest(id, locale));
+        var range = rangeKind is null ? null : new ReportDateRange(rangeKind, rangeN);
+        var result = await mediator.Send(new ExportReportRequest(id, locale, range, departmentIds, includeSubDepartments));
         return result.IsSuccess && result.Data is ExportFile file
             ? File(file.Content, file.ContentType, file.FileName)
             : result.ToActionResult(this);
