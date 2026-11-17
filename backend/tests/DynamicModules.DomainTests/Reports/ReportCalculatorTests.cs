@@ -10,6 +10,8 @@ public class ReportCalculatorTests
     private static readonly ReportFieldRef Qty = new("child", 2, null);
     private static readonly ReportFieldRef Warehouse = new("child", 3, null);
     private static readonly ReportFieldRef Tags = new("main", 4, null);
+    private static readonly ReportFieldRef Status = new("main", 5, null);
+    private static readonly ReportFieldRef Delay = new("main", 6, null);
 
     private static ReportCell Num(decimal n) => new("ok", n, null, null, null);
     private static ReportCell Txt(string t) => new("ok", null, t, null, null);
@@ -25,9 +27,12 @@ public class ReportCalculatorTests
     private static ReportFilter Gte(ReportFieldRef f, decimal v) =>
         new(f, "gte", JsonSerializer.SerializeToElement(v));
 
-    /// <summary>測試用的條件判斷：只支援 gte。</summary>
+    private static ReportFilter Eq(ReportFieldRef f, string v) =>
+        new(f, "eq", JsonSerializer.SerializeToElement(v));
+
+    /// <summary>測試用的條件判斷：只支援 gte（數字）與 eq（文字）。</summary>
     private static bool Matches(ReportFilter f, ReportCell c) =>
-        c.State == "ok" && c.Number >= f.Value!.Value.GetDecimal();
+        c.State == "ok" && (f.Op == "eq" ? c.Text == f.Value!.Value.GetString() : c.Number >= f.Value!.Value.GetDecimal());
 
     private static string K(ReportFieldRef f) => ReportCalculator.KeyOf(f);
 
@@ -170,10 +175,12 @@ public class ReportCalculatorTests
     [InlineData("min", false, false)]       // 最小、最大不是相加出來的
     [InlineData("max", false, false)]
     [InlineData("ratio", false, false)]
+    [InlineData("countIf", false, true)]    // 合併、條件在主模組：主記錄只算一次
+    [InlineData("median", true, true)]      // 與 avg 同
     public void DedupedNote_Merged_ByKind(string kind, bool multiGroup, bool expected)
     {
-        var field = kind is "min" or "max" ? Amount : null;
-        var cond = kind == "ratio" ? new ReportFilter(Amount, "gt", null) : null;
+        var field = kind is "min" or "max" or "median" ? Amount : null;
+        var cond = kind is "ratio" or "countIf" ? new ReportFilter(Amount, "gt", null) : null;
         var m = new ReportMeasure(kind, kind, field, cond);
         ReportCalculator.Calculate(TwoOrders(), [], [m], true, (_, _) => true, multiGroup).DedupedNote.Should().Be(expected);
     }
@@ -184,12 +191,104 @@ public class ReportCalculatorTests
     [InlineData("countMain", true)]
     [InlineData("min", false)]
     [InlineData("max", false)]
+    [InlineData("countIf", true)]
+    [InlineData("median", true)]
     public void DedupedNote_NotMerged_MultiSelectGroup(string kind, bool expected)
     {
-        var field = kind == "countMain" ? null : Amount;
-        var m = new ReportMeasure(kind, kind, field, null);
+        var field = kind is "countMain" or "countIf" ? null : Amount;
+        var m = new ReportMeasure(kind, kind, field, kind == "countIf" ? Gte(Amount, 1) : null);
         ReportCalculator.Calculate(TwoOrders(), [], [m], false, Matches, multiGroup: true).DedupedNote.Should().Be(expected);
         ReportCalculator.Calculate(TwoOrders(), [], [m], false, Matches).DedupedNote.Should().BeFalse();
+    }
+
+    [Fact]
+    public void CountIf_MainCondition_DedupesByMain()
+    {
+        var m = M("countIf", null, Gte(Amount, 100));
+        Calc(TwoOrders(), [], [m]).Total["countIf"].Should().Be(1m);
+        Calc([], [], [m]).Total["countIf"].Should().Be(0m);   // 範圍空是 0，不是 null
+    }
+
+    [Fact]
+    public void CountIf_ChildCondition_CountsChildRows() =>
+        Calc(TwoOrders(), [], [M("countIf", null, Gte(Qty, 2))]).Total["countIf"].Should().Be(2m);
+
+    [Fact]
+    public void CountIf_NoMatches_IsZero() =>
+        Calc(TwoOrders(), [], [M("countIf", null, Gte(Amount, 1000))]).Total["countIf"].Should().Be(0m);
+
+    [Fact]
+    public void CountIf_WithoutMatcher_Throws()
+    {
+        var act = () => ReportCalculator.Calculate(TwoOrders(), [], [M("countIf", null, Gte(Amount, 1))], true, null);
+        act.Should().Throw<ArgumentException>();
+    }
+
+    [Theory]
+    [InlineData(new[] { 1, 3, 2 }, 2.0)]
+    [InlineData(new[] { 1, 2, 3, 10 }, 2.5)]
+    public void Median_OddAndEven(int[] values, double expected)
+    {
+        var rows = values.Select((v, i) => Row(i + 1, null, (Amount, Num(v)))).ToList();
+        Calc(rows, [], [M("median", Amount)]).Total["median"].Should().Be((decimal)expected);
+    }
+
+    [Fact]
+    public void Median_EmptyCellsSkipped_NoneIsNull()
+    {
+        var some = new List<ReportRow> { Row(1, null, (Amount, Empty())), Row(2, null, (Amount, Num(7))) };
+        Calc(some, [], [M("median", Amount)]).Total["median"].Should().Be(7m);
+        var none = new List<ReportRow> { Row(1, null, (Amount, Empty())) };
+        Calc(none, [], [M("median", Amount)]).Total["median"].Should().BeNull();
+    }
+
+    [Fact]
+    public void Median_MainField_Merged_DedupesByMain() =>
+        Calc(TwoOrders(), [], [M("median", Amount)]).Total["median"].Should().Be(75m);   // 100 只算一次、50
+
+    /// <summary>設計 §19：延遲天數 2、4、6 的完成狀況是 opt_2（逾期完成），0、0 是 opt_1（準時）。</summary>
+    private static List<ReportRow> DelayRows() =>
+        new[] { (1, 2m, "opt_2"), (2, 4m, "opt_2"), (3, 6m, "opt_2"), (4, 0m, "opt_1"), (5, 0m, "opt_1") }
+            .Select(x => Row(x.Item1, null, (Delay, Num(x.Item2)), (Status, Txt(x.Item3)))).ToList();
+
+    [Fact]
+    public void ConditionalMeasures_SpecExample()
+    {
+        var cond = Eq(Status, "opt_2");
+        var r = Calc(DelayRows(), [], [M("avg", Delay, cond) with { Id = "ac" }, M("avg", Delay) with { Id = "a" },
+            M("sum", Delay, cond) with { Id = "sc" }, M("median", Delay, cond) with { Id = "mc" }]);
+        r.Total["ac"].Should().Be(4m);
+        r.Total["a"].Should().Be(2.4m);
+        r.Total["sc"].Should().Be(12m);
+        r.Total["mc"].Should().Be(4m);
+    }
+
+    [Fact]
+    public void ConditionalSum_NoMatches_IsNull()
+    {
+        var cond = Eq(Status, "opt_9");
+        var r = Calc(DelayRows(), [], [M("sum", Delay, cond) with { Id = "s" }, M("avg", Delay, cond) with { Id = "a" }, M("median", Delay, cond) with { Id = "m" }]);
+        r.Total["s"].Should().BeNull();
+        r.Total["a"].Should().BeNull();
+        r.Total["m"].Should().BeNull();
+    }
+
+    [Fact]
+    public void ConditionalSum_MatchButEmptyValue_NotCounted()
+    {
+        var rows = new List<ReportRow>
+        {
+            Row(1, null, (Delay, Empty()), (Status, Txt("opt_2"))),
+            Row(2, null, (Delay, Num(5)), (Status, Txt("opt_2"))),
+        };
+        Calc(rows, [], [M("avg", Delay, Eq(Status, "opt_2"))]).Total["avg"].Should().Be(5m);
+    }
+
+    [Fact]
+    public void ConditionalMeasure_WithoutMatcher_Throws()
+    {
+        var act = () => ReportCalculator.Calculate(DelayRows(), [], [M("avg", Delay, Eq(Status, "opt_2"))], false, null);
+        act.Should().Throw<ArgumentException>();
     }
 
     [Fact]

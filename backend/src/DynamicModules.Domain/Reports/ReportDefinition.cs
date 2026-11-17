@@ -4,7 +4,7 @@ namespace DynamicModules.Domain.Reports;
 
 /// <summary>
 /// 報表定義（存進 Report.DefinitionJson，camelCase）。Source 是 main|child；Bucket 是 day|week|month|quarter|year；
-/// Kind 是 sum|avg|min|max|countMain|countChild|ratio；Viz 是 table|indicator|line|bar|donut。
+/// Kind 是 sum|avg|median|min|max|countMain|countChild|countIf|ratio；Viz 是 table|indicator|line|bar|donut。
 /// Filters 為 AND 清單，Op 沿用 FilterOperator 的 camelCase 名稱。
 /// </summary>
 public record ReportDefinition(
