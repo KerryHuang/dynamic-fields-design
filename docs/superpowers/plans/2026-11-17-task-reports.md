@@ -24,7 +24,9 @@
 
 ### 使用者行為類（實作照推薦；使用者推翻時改對應 Task）
 
-**B1 取消的任務：「是否逾期」為否、「延遲天數」空白、「完成狀況」是「未完成」。**
+> 審查（`plan-review.md` R4）指出 B1、B3 與設計字面衝突。**B1、B3 已由使用者在 2026-11-17 確認（內容不變）**，kr1 總收時寫回設計 §7.3、§7.5、§17.2。B3 的 `taskEvents` 下鑽欄（審查 Y7）與 B4 欄名（審查 Y13）是主控裁決、標「待使用者確認」；被推翻時改對應 Task（Y7：Task 4、9；B4：Task 2；皆不影響 Task 1、3 的計算與 SQL）。
+
+**B1（使用者裁決，2026-11-17）取消的任務：「是否逾期」為否、「延遲天數」空白、「完成狀況」是「未完成」。**
 - 推薦：是否逾期＝狀態是待辦或進行中、且到期日早於報表基準日；延遲天數只算完成的任務（完成日減到期日）與待辦／進行中的任務（基準日減到期日），取消的任務空白；完成狀況照設計把取消算「未完成」。
 - 理由：設計 §7.3 字面「未完成且到期日早於基準日」把取消也算進去，會讓報表的逾期件數比看板「逾期」欄（只列未完成的待辦、進行中）多，正好踩反目標「報表與看板對同一批任務計數不一致」。
 - 選錯代價：照字面時，負載報表的「逾期件數」含已取消的任務，主管會追一件已經不用做的事。
@@ -36,17 +38,17 @@
 - 選錯代價：只改分組不改明細時，同一個任務在分組叫「未指派」、在下鑽列是空格。
 - 例子：依負責人分組的報表有一組「未指派」3 件；下鑽那一組，負責人欄顯示「未指派」；依任務規則分組時，個人任務落在「（無）」。
 
-**B3 下鑽固定列六欄：標題、狀態、負責人、到期日、完成時間、所屬模組；不給記錄標題，每列附任務 Id。**
-- 推薦：任務資料來源的下鑽一律用這六欄（不看報表自己的明細欄），「所屬模組」看不到記錄時是「（無權限）」；回應多帶 `taskIds`（與列對齊），kr2 畫面點列開任務詳細，伺服器照常再驗可見性。
+**B3（使用者裁決，2026-11-17）下鑽固定列六欄：標題、狀態、負責人、到期日、完成時間、所屬模組；不給記錄標題，每列附任務 Id。**
+- 推薦：任務資料來源的下鑽一律用這六欄（不看報表自己的明細欄；`taskEvents` 因為同一任務的「建立」「完成」兩列內容會完全相同，六欄改成「事件種類、事件日期、標題、狀態、負責人、所屬模組」，Y7，`taskEvents` 這一組待使用者確認），「所屬模組」看不到記錄時是「（無權限）」；回應多帶 `taskIds`（與列對齊），kr2 畫面點列開任務詳細，伺服器照常再驗可見性。
 - 理由：設計 §7.5 寫下鑽列「相關記錄（§4.3 的顯示）」，但 §7.3 規定報表不提供記錄標題（見「矛盾」1）；用「所屬模組」守住「報表永遠拿不到記錄內容」，記錄標題在任務詳細裡照既有權限顯示。
 - 選錯代價：下鑽給記錄標題時，報表就成了另一條拿記錄標題的路，之後要多一套遮蔽測試；不給時，使用者要點進任務才看到是哪筆單據。
 - 例子：manager01 下鑽「業務一／逾期」→ 3 列，其中一列「所屬模組」是「（無權限）」（記錄在他的資料範圍外），點進去看得到任務，相關記錄顯示「相關記錄（無權限查看）」。
 
-**B4 新量值的欄名：`countIf` 是「{條件欄位} 符合條件筆數」、`median` 是「{欄位} 中位數」、帶條件的 `sum`／`avg`／`median` 在原欄名後加「（符合條件）」。**
-- 推薦：沿用 `ratio` 的「{條件欄位} 條件占比」格式，四語系寫在 `ReportText`。
-- 理由：量值沒有自訂名稱欄位（見「矛盾」6），欄名只能由種類與欄位組成；加「（符合條件）」讓同一張表上帶條件與不帶條件的平均分得出來。
-- 選錯代價：不加後綴時，「延遲天數 平均」有兩欄、數字不同，使用者分不出哪個是只算逾期完成的。
-- 例子：`avg(延遲天數)` 帶條件「完成狀況＝逾期完成」→ 欄名「延遲天數 平均（符合條件）」；`countIf` 條件「狀態＝待辦」→「狀態 符合條件筆數」。
+**B4（主控裁決，待使用者確認；採審查 Y13）新量值的欄名帶出條件值。** `median` 是「{欄位} 中位數」；`countIf` 條件是單一值的 `eq` 時為「{條件欄位}＝{值} 筆數」；帶條件的 `sum`／`avg`／`median` 為「{欄位} 平均（{條件欄位}＝{值}）」；條件不是單一值的 `eq`（`in`、`gte`、多值、使用者欄位等）退回「{條件欄位} 符合條件筆數」與原欄名後加「（符合條件）」。
+- 推薦：值用觀看者語系的選項標籤（Enum、Boolean、Text 可轉；轉不出來就退回後備字樣），四語系寫在 `ReportText`。
+- 理由：量值沒有自訂名稱欄位（見「矛盾」6）；條件欄位觀看者一定看得到（看不到時整張已被擋下），把值放進欄名就能分開同一欄位的多個 `countIf`，內建負載報表的三個 `countIf` 不必等 kr3 的自訂名稱。
+- 選錯代價：不帶值時，同一欄位的兩個 `countIf` 欄名相同，使用者分不出哪欄是待辦、哪欄是進行中。
+- 例子：`countIf` 條件「狀態＝待辦」→「狀態＝待辦 筆數」；`avg(延遲天數)` 帶條件「完成狀況＝逾期完成」→「延遲天數 平均（完成狀況＝逾期完成）」；條件是 `Amount gte 100` → 「訂單金額 符合條件筆數」。
 
 ### 技術類（主控決定，可推翻）
 
@@ -58,8 +60,9 @@
 - **J6 restricted 判斷。** 用 `TaskAccess.EvaluateManyAsync` 的 `TaskPermissions.Record.Accessible`，與看板卡片同一個判斷（設計 §4.3「一律用同一個判斷」）；規則已刪除時「任務規則」是 `missing`。
 - **J7 縮小載入。** 資料庫端只用兩種「證明精確」的條件：「狀態」的 `eq`／`in`、主要日期欄位（到期日、建立時間、完成時間；`taskEvents` 是建立或完成任一落在區間）的區間；載入後照舊重套全部條件。
 - **J8 量值條件的來源。** 主模組欄位的量值不能帶子模組欄位的條件（存檔 400「量值條件不能用子模組欄位」）：主欄位每個主記錄只算一次，帶子條件時要挑哪一列沒有定義。條件只准出現在 `ratio`、`countIf`、`sum`、`avg`、`median`。
+- **J19 既有定義的行為改變（Y3 查證）。** 存檔驗證現在不擋 `sum`／`avg`／`min`／`max`／`countMain` 帶 `Condition`（`CheckShape` 只要求 `ratio` 有條件），記憶體路徑與 SQL 路徑都忽略它；設計器（`StepGroups.vue` 只有 `ratio` 會帶條件）、內建應用程式套件、Demo 報表都不會產生這種定義，只有直接呼叫 API 才存得出來，所以「既有資料受影響」的範圍是零到極少數。處理：`sum`／`avg` 先前存的條件**從 kr1a 起開始生效**（使用者存條件的本意就是只算符合的列，沿用現有存檔、不做遷移）；`min`／`max`／`countMain`／`countChild` 新存檔改為 400，**已存在的舊定義執行時照舊忽略條件**（執行不重驗）。`formwright-ship` 前跑一條唯讀查詢（`ReportDefinitions.DefinitionJson` 非 `ratio` 量值帶 `condition` 的筆數）寫進交付說明；筆數不為 0 時列出報表 Id 給使用者。
 - **J9 去重說明與累計。** `countIf` 與 `countMain` 同列進 `NeedsDedupedNote`（合併且條件在主模組、或依多選分組）；`median` 與 `avg` 同列；`countIf` 進卡片的 `AdditiveKinds`（可算累計占比、期間比較缺值當 0）。
-- **J10 SQL 帶條件量值。** `COUNT(CASE WHEN p THEN a.ScaledValue END)`、`SUM(CASE WHEN p THEN a.ScaledValue / 1e9 END)`、`SUM(CASE WHEN p THEN a.ScaledValue % 1e9 END)`，謂詞產生三次（各自別名與參數），不另外 join 旗標欄；`countIf` 同 `ratio` 的 `hit` 欄。
+- **J10 SQL 帶條件量值。** `COUNT(CASE WHEN {p} THEN {a}.ScaledValue END)`、`SUM(CASE WHEN {p} THEN {a}.ScaledValue / {Split} END)`、`SUM(CASE WHEN {p} THEN {a}.ScaledValue % {Split} END)`；`{Split}` 沿用 `ReportQueryBuilder` 現有的整數常數 `Split = 1_000_000_000`（`:30`，現行 `:182-183` 就是這樣用），**不寫 `1e9` 這類浮點常值**（SQLite、PostgreSQL 都會變成 REAL 除法，hi 帶小數、`GetInt64` 截斷，15 位數金額會和記憶體路徑對不上）。謂詞產生三次（各自別名與參數），不另外 join 旗標欄；`countIf` 同 `ratio` 的 `hit` 欄。效能見 Task 3 的基準案例（Y4），超出既有基準才改成先算一次旗標欄。
 - **J11 目錄端點。** 新增 `GET /api/v3/dynamic/reports/datasets`（`[{ dataset, name }]`）與 `GET /reports/datasets/{dataset}/catalog`（同 `ModuleCatalog` 形狀，只列可選欄位與觀看者的選項）；**不改** `GET /reports/catalog`（現在的設計器直接拿它當模組清單，多兩筆會被當成模組點進去壞掉），kr2 做設計器時再合併。理由見「範圍確認」。
 - **J12 `TaskIds`。** `ReportResult` 末尾加 `IReadOnlyList<long>? TaskIds`（只有任務資料來源且有明細時有值；`WhenWritingNull` 不輸出，模組回應不變）；`CapDetail`、`DrillReportHandler`、`DashboardCardRunner` 三處截斷統一改呼叫 `ReportRules.TakeDetail(result, n)`，`TaskIds` 跟著截。
 - **J13 定義 JSON。** `ReportDefinition` 末尾加 `[property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? Dataset = null`；模組報表重新存檔的 JSON 與現在逐字相同，`Version` 維持 1。
@@ -68,6 +71,11 @@
 - **J16 超過載入上限的訊息** 用 `ReportText.TooMany`（「資料太多，請縮小條件」，設計 §7.7），不用模組專用、叫人設可篩選的 `TooManyToLoad`。
 - **J17 雙跑集。** 新的 EF LINQ 測試類（`TaskReportSourceTests`、`TaskReportRunnerTests`、`TaskReportsApiTests`）整類標 `[Trait("Category", "Postgres")]`；SQL 路徑的新案例放進 `ReportSqlEquivalenceTests`、不標（整類在 pg1 加入雙跑集，PostgreSQL 設計 §6.4）。pg0 還沒做，標了也只在 SQLite 跑，PostgreSQL 標「未驗證」。
 - **J18 未知的 `dataset`** 存檔時 400；執行時（資料被直接改壞）回 `moduleDisabled` 狀態，fail closed。
+- **J20 `TaskReportSource` 的快取（Y5）。** `CatalogAsync` 的快取鍵含 `UserId` 與 dataset（同 `TaskVisibilityService` 依使用者快取），並提供 `Reset()`，接到 `DemoStructure.ResetPerRequestState`（`DemoService/DemoStructure.cs:31`）。測試的 `Svc<ReportRunner>()` 一律從根 scope 取（`DesignerTestBase.cs:96`），在 `As(...)` 切身分或改政策後會共用快取，所以任務報表的測試一律照 `TaskVisibilityEquivalenceTests.cs:36-44` 用 `using var scope = NewScope()` 取 runner 與 source。
+- **J21 任務報表欄位名稱與逾期定義單一來源（Y8）。** `IsOverdue` 放 Domain 的 `TaskReportValues`，既有 `TaskModels.Overdue`（`Application/Dynamic/TaskService/TaskModels.cs:45`）改成呼叫它，看板與報表只有一份「逾期」定義。
+- **J22 欄位目錄的規則名稱揭露（Y12，接受）。** 規則清單現在只給設計器（`IDesignerRequest`），記錄頁只露可手動套用的規則；J14 讓任何有模組 Read 的人從 `datasets/tasks/catalog` 看到該模組全部規則名稱。風險低（規則名稱不是記錄內容），接受並列入設計 §14「安全」；不採「只列觀看者看得到的任務實際用到的規則」，因為會讓存檔的條件值正規化隨資料變動。
+- **J23 存檔正規化（G8）。** 存檔時 `dataset: "module"` 正規化成 null，任務資料來源的 `mainModuleKey` null 正規化成 `""`，J13「JSON 逐字相同」才對明寫 `"module"` 的請求也成立，`ReportModuleLoader` 也不會收到 null key。
+- **J24 J7 狀態縮小遇到不存在的選項值（`opt_9`）時略過、不丟例外；`in` 全部無效時 Statuses 為空集合（結果本來就是 0 筆）（G10）。**
 
 ---
 
@@ -76,7 +84,7 @@
 - **業務政策不寫死**（鐵則 2）：kr1 沒有新的業務數字。載入上限沿用 `Reports:MaxLoadRows`、`Reports:MaxRows`（`ReportOptions`，可設定）；下鑽 500 筆、畫面明細 1000 筆沿用 `ReportRules.DrillLimit`／`DetailLimit` 單一來源（p2 的 A24 會改成政策，見「矛盾」3）；一週起始日讀 `calendar.weekStart`；基準日用 `ReportRunner.BasisDateAsync`。
 - **fail closed**：看不到的任務不進列（載入時套 `TaskVisibility`，不是載入後丟）；記錄判斷不出來就當看不到（`restricted`）；`restricted`、`missing` 的格子對任何條件都不符合（含 `ne`、`notIn`）。
 - **反目標**（設計 §2）是測試對象：任務報表不提供說明、留言、附件、記錄標題；條件「所屬模組＝X」不能推出看不到的記錄屬於哪個模組；匯出內容與畫面相同。
-- **模組報表行為完全不變**：不帶 `dataset` 的定義、所有既有測試原樣通過；沒帶條件的 `sum`／`avg` 與現行結果相同；SQL 路徑只多出 `countIf`、帶條件量值兩種形狀。
+- **模組報表行為完全不變**：不帶 `dataset` 的定義、所有既有測試原樣通過；沒帶條件的 `sum`／`avg` 與現行結果相同；SQL 路徑只多出 `countIf`、帶條件量值兩種形狀。**唯一接受的行為改變是 J19**（舊 API 存的 `sum`／`avg` 帶條件開始生效，設計器不會產生這種定義）。
 - **日期**：營運時區的日曆天；`CreatedTime`、`CompletedTime` 是 `IBusinessTime.Now` 寫入的台北牆上時間，取日期用 `DateOnly.FromDateTime`，不經主機時區；動到日期的測試另跑 `TZ=UTC`。
 - **PostgreSQL 相容**：任務載入只用 EF LINQ，不寫 raw SQL；DateTime 參數 `Kind` 明確（`Unspecified` 牆上時間，與寫入一致）；不改 `ReportQueryBuilder` 的 SQLite 專屬片段（pg1 的事）。
 - **i18n**：使用者看得到的新字串（欄位名、選項名、資料來源名、量值欄名、B2 空值名）放後端四語表（`ReportText` 與 `TaskReportFields` 的標籤表），泰文、越南文沿用「待母語者校對」；沒有前端 i18n 改動。
@@ -95,7 +103,8 @@
 | 任務資料來源只走記憶體路徑（`datasetMemoryOnly`）；`median` 在 SQL 路徑退回（`measureNotSupported:median`） | — | 技術限制 |
 | 量值條件只准出現在 `ratio`、`countIf`、`sum`、`avg`、`median`；主模組欄位的量值不能帶子模組條件 | 400 | 資料完整性 |
 | 任務資料來源不能合併子模組、不能帶出欄位、`mainModuleKey` 必須為空 | 400 | 資料完整性 |
-| 任務下鑽固定六欄（B3） | — | 安全（不給記錄內容） |
+| 任務下鑽固定六欄（B3；`taskEvents` 另一組六欄） | — | 安全（不給記錄內容） |
+| 目錄端點列出可讀模組的全部規則名稱（J22） | — | 安全（接受的揭露） |
 | 狀態、來源、完成狀況、事件種類的選項 Id（J3） | — | 技術限制（存檔的條件值靠它） |
 
 ---
@@ -104,8 +113,8 @@
 
 測試最可能沒覆蓋、但最可能咬人的五個情境；每條的測試已加進負責的 Task。
 
-1. **拆 `RunAsync` 改到模組報表。** 搬移時漏掉一個早退（`moduleDisabled`、`restricted`、`tooMany`、SQL 逾時）、`Passes` 的子模組語意、或 `fallbackReasons` 的順序。→ Task 5 不寫新測試，以五個既有類別當安全網（`ReportRunnerTests`、`ReportRunnerSqlTests`、`ReportPermissionMatrixTests`、`ReportSqlEquivalenceTests`、`DemoReportsTests`）全數不改斷言通過；另加 `ModuleDefinition_SerializesWithoutDataset`（J13）。
-2. **用條件或分組推出看不到的記錄。** 「所屬模組」用 `eq`、`ne`、`in`、`notIn`、`isEmpty`、`isNotEmpty` 當篩選與 `countIf` 條件，依「所屬模組」分組與排序，下鑽 `__restricted` 那一組，匯出。→ Task 7 `ModuleCondition_RestrictedNeverMatches_EveryOperator`、`GroupByModule_RestrictedOwnGroup_SortedLast`；Task 9 `Drill_RestrictedGroup_ModuleColumnNoPermission`、`Export_RestrictedCell_NoPermissionText`。
+1. **拆 `RunAsync` 改到模組報表。** 搬移時漏掉一個早退（`moduleDisabled`、`restricted`、`tooMany`、SQL 逾時）、`Passes` 的子模組語意、或 `fallbackReasons` 的順序。→ Task 5 不寫新測試，以既有類別當安全網全數不改斷言通過：ApplicationTests 的 `ReportRunnerTests`、`ReportRunnerSqlTests`、`ReportPermissionMatrix`（含 `ReportPermissionMatrixTests` 與繼承來的 `ReportPermissionMatrixSqlTests`，filter 用不含尾字的 `ReportPermissionMatrix`）、`ReportSqlEquivalenceTests`、`DemoReportsTests`、`SafeDeleteTests`；WebAPITests 的 `ReportsApiTests`（含匯出的 `ForExport` 範圍，ApplicationTests 沒有對應測試）、`SharedMasterPermissionTests`、`Dashboard`（儀表板測試都在 WebAPITests）、`ClosedModuleTests`、`ReportCatalogApiTests`；另加 `ModuleDefinition_SerializesWithoutDataset`（J13）。兩個專案的通過數都要記下。
+2. **用條件或分組推出看不到的記錄。** 「所屬模組」用 `eq`、`ne`、`in`、`notIn`、`isEmpty`、`isNotEmpty` 當篩選與 `countIf` 條件，依「所屬模組」分組與排序，下鑽 `__restricted` 那一組，匯出。→ Task 7 `ModuleCondition_RestrictedNeverMatches_EveryOperator`、`GroupByModule_RestrictedOwnGroup_SortedLast`；Task 7 `RestrictedRecord_RuleCell_IsRestricted_NotMissingNorOk`；Task 9 `Drill_RestrictedGroup_ModuleColumnNoPermission`、`Export_RestrictedCell_NoPermissionText`。
 3. **報表的列與「看得到的任務」不一致。** 軟刪除記錄的任務、凍結模組、資料範圍 Own、只被 @ 的人、主管（A33 關閉時）、管理員。→ Task 6 `Load_EqualsVisibleIds_ForEveryPersona`（每個身分的列 Id 集合＝`ListVisibleIdsAsync`）；Task 7 `PermissionMatrix_CountsPerPersona`。
 4. **日界與基準日。** 23:59 與 00:10 完成、主機在 UTC、Demo 凍結基準日時逾期與延遲天數用基準日而不是今天。→ Task 4 `TaskReportValuesTests.Completion_AcrossMidnight`（Theory）；Task 7 `Overdue_UsesBasisDate`；本機加跑 `TZ=UTC`。
 5. **帶條件量值的空值與 SQL／記憶體一致。** 沒有任何符合的列（`sum`／`avg`／`median` 是 null、`countIf` 是 0）、符合但值為空、負數與 15 位數金額、條件欄位是會被截斷的文字。→ Task 1 `ConditionalSum_NoMatches_IsNull`、`CountIf_NoMatches_IsZero`；Task 3 `ConditionalMeasures_MatchMemoryPath`（含負數、極值、文字條件退回）。
@@ -208,7 +217,7 @@ public void Median_OddAndEven(int[] values, double expected)   // 每值一筆�
 [Fact] public void ConditionalSum_MatchButEmptyValue_NotCounted() // 符合的一列值為空、另一列 5 → avg 5
 ```
 
-`NeedsDedupedNote` 的兩個既有 Theory 各加資料列：
+`NeedsDedupedNote` 的兩個既有 Theory（`ReportCalculatorTests.cs:173-178`、`:186-191`）不能只加 `InlineData`，本體要改：它們依 kind 決定 field／cond，`countIf` 現在會拿到 `cond=null`、`median` 拿到 `field=null`（前者 `NeedsDedupedNote` 得 false、後者 `MeasureOne` 丟「沒有欄位」）。選法：`countIf` → `field = null`、`cond = Gte(Amount, 1)`；`median` → `field = Amount`、`cond = null`；multiGroup 那個 Theory 的 `countIf` 同樣要 `cond = Gte(Amount, 1)`、不帶欄位。再各加資料列：
 
 ```csharp
 [InlineData("countIf", false, true)]   // 合併、條件在主模組：主記錄只算一次
@@ -246,23 +255,24 @@ git commit -m "feat(report): 量值新增 countIf、median 與帶條件的 sum�
 - Modify: `src/DynamicModules.Application/Dynamic/ReportService/ReportRunner.Output.cs`（`MeasureColumn`）
 - Modify: `src/DynamicModules.Application/Dynamic/ReportService/ReportRunner.Card.cs`（`AdditiveKinds` 加 `countIf`）
 - Modify: `src/DynamicModules.Application/Dynamic/ReportService/ReportRunner.Sql.cs`（`PlanAggregate` 暫時退回）
-- Modify: `src/DynamicModules.Application/Dynamic/ReportService/Data/ReportText.cs`（`CountIf`、`Median`、`Conditional` 三個鍵，四語）
+- Modify: `src/DynamicModules.Application/Dynamic/ReportService/Data/ReportText.cs`（`CountIf`、`CountIfEq`、`Median`、`Conditional`、`ConditionalEq` 五個鍵，四語）
 - Test: `tests/DynamicModules.ApplicationTests/Dynamic/ReportRunnerTests.cs`、`tests/DynamicModules.ApplicationTests/Dynamic/ReportPermissionMatrixTests.cs`
 
 **Interfaces:**
 - Consumes：Task 1 的量值語意。
-- Produces：存檔／預覽驗證規則（J8）；欄名（B4）：`countIf` → `ReportText.CountIf`「{0} 符合條件筆數」（{0}＝條件欄位欄名，ValueType `number`）；`median` → `ReportText.Median`「{0} 中位數」（ValueType 同 `avg`：`number` 或 `percent`）；`sum`／`avg`／`median` 帶條件時外包 `ReportText.Conditional`「{0}（符合條件）」。SQL 路徑退回原因：`measureNotSupported:countIf`、`measureNotSupported:median`、`measureConditionNotSupported:<量值 Id>`（Task 3 拿掉第一與第三個）。
+- Produces：存檔／預覽驗證規則（J8）；欄名（B4／Y13）：`median` → `ReportText.Median`「{0} 中位數」（ValueType 同 `avg`：`number` 或 `percent`）；`countIf` 條件是單一值的 `eq` 且值轉得成標籤時 → `ReportText.CountIfEq`「{0}＝{1} 筆數」，否則 `ReportText.CountIf`「{0} 符合條件筆數」（ValueType `number`）；`sum`／`avg`／`median` 帶條件時，條件是可轉標籤的單一值 `eq` → 原欄名加 `ReportText.ConditionalEq`「（{0}＝{1}）」，否則加 `ReportText.Conditional`「（符合條件）」。值轉標籤用 `FieldDisplay.Format`（Enum、Boolean、Text；使用者欄位等轉不出來就走後備字樣），整個邏輯集中在 `MeasureColumn` 旁一個小函式，B4 被推翻時只改這一處。SQL 路徑退回原因：`measureNotSupported:countIf`、`measureNotSupported:median`、`measureConditionNotSupported:<量值 Id>`（Task 3 拿掉第一與第三個）。
 
 - [ ] **Step 1: 寫失敗測試**
 
 `ReportRunnerTests`（會自動在 `ReportRunnerSqlTests` 再跑一次 SQL 版本）：
 
 ```csharp
-[Fact] public async Task CountIf_And_ConditionalAvg_HandComputed()
+[Fact] public async Task CountIf_And_ConditionalAvg_HandComputed()   // 不含 median，Task 3 之後 SQL 版本真的走 SQL
 // Arrange()；order 四筆（sales01）：金額 10／OptDone、20／OptDone、30／OptOpen、空／OptDone
-// Def(measures: [M("done","countIf",cond:F(MainF(Status),"eq",OptDone)), M("a","avg",MainF(Amount),F(MainF(Status),"eq",OptDone)),
-//                M("med","median",MainF(Amount)), M("s","sum",MainF(Amount))])
-// Total: done=3、a=15、med=20、s=60；Columns 欄名：「狀態 符合條件筆數」「訂單金額 平均（符合條件）」「訂單金額 中位數」「訂單金額 加總」
+// Def(measures: [M("done","countIf",cond:F(MainF(Status),"eq",OptDone)), M("a","avg",MainF(Amount),F(MainF(Status),"eq",OptDone)), M("s","sum",MainF(Amount))])
+// Total: done=3、a=15、s=60；Columns 欄名（B4／Y13）：「狀態＝已完成 筆數」「訂單金額 平均（狀態＝已完成）」「訂單金額 加總」
+[Fact] public async Task Median_HandComputed()                        // 獨立一張報表（median 永遠退回記憶體路徑）：M("med","median",MainF(Amount)) → 20；欄名「訂單金額 中位數」
+[Fact] public async Task MeasureColumnNames_FallbackWording()         // countIf 條件 Amount gte 100 → 「訂單金額 符合條件筆數」；avg 帶 Amount gte 100 → 「訂單金額 平均（符合條件）」；`in` 兩值同退回
 [Fact] public async Task Save_InvalidConditionPlacement_400()
 // 經 CreateReportRequest：min 帶條件、countMain 帶條件、countIf 沒條件、median 沒欄位、median 用文字欄位、
 // 主模組欄位 sum 帶子模組條件（Shipments、ChildF(Warehouse)）→ 每個都 IsInvalid，訊息含「量值」
@@ -280,12 +290,12 @@ git commit -m "feat(report): 量值新增 countIf、median 與帶條件的 sum�
 
 - [ ] **Step 2: 跑測試確認失敗**
 
-Run: `dotnet test tests/DynamicModules.ApplicationTests --filter "FullyQualifiedName~ReportRunnerTests|FullyQualifiedName~ReportRunnerSqlTests|FullyQualifiedName~ReportPermissionMatrixTests"`
+Run: `dotnet test tests/DynamicModules.ApplicationTests --filter "FullyQualifiedName~ReportRunnerTests|FullyQualifiedName~ReportRunnerSqlTests|FullyQualifiedName~ReportPermissionMatrix"`（`ReportPermissionMatrix` 同時比對 `ReportPermissionMatrixTests` 與繼承來的 `ReportPermissionMatrixSqlTests`；filter 寫完用 `dotnet test --list-tests --filter …` 確認兩個類別都在清單裡）
 Expected: 新案例 FAIL（存檔被拒「量值種類不合法」；SQL 版本的 `MeasureValues` 把未知種類當 min/max）。
 
 - [ ] **Step 3: 實作**
 
-`ReportRules.Kinds` 加 `countIf`、`median`；`CheckShape`：`countIf` 沒條件 →「量值 {Id} 需要條件」；`median` 沒欄位 →「量值 {Id} 需要欄位」；`Condition` 出現在 `min`、`max`、`countMain`、`countChild` →「量值 {Id} 不能帶條件」；`m.Field?.Source == "main" && m.Condition?.Field.Source == "child"` →「量值 {Id} 的條件不能用子模組欄位」。`Check`：`median` 與 `sum`／`avg` 同一個 `CanSum` 檢查。`PlanAggregate` 的量值迴圈前：`countIf`、`median` 加 `measureNotSupported:{kind}`；`sum`／`avg` 帶條件加 `measureConditionNotSupported:{m.Id}`。
+`ReportRules.Kinds` 加 `countIf`、`median`；`MeasureColumn` 欄名照 Produces；`CheckShape`：`countIf` 沒條件 →「量值 {Id} 需要條件」；`median` 沒欄位 →「量值 {Id} 需要欄位」；`Condition` 出現在 `min`、`max`、`countMain`、`countChild` →「量值 {Id} 不能帶條件」；`m.Field?.Source == "main" && m.Condition?.Field.Source == "child"` →「量值 {Id} 的條件不能用子模組欄位」。`Check`：`median` 與 `sum`／`avg` 同一個 `CanSum` 檢查。`PlanAggregate` 的量值迴圈前：`countIf`、`median` 加 `measureNotSupported:{kind}`；`sum`／`avg` 帶條件加 `measureConditionNotSupported:{m.Id}`。
 
 - [ ] **Step 4: 跑測試確認通過**
 
@@ -316,7 +326,7 @@ git commit -m "feat(report): countIf、median 與量值條件的存檔驗證、�
 ```csharp
 [Fact] public async Task ConditionalMeasures_MatchMemoryPath()
 // cases：countIf（Status eq OptDone、Amount gte 100、Done eq true、Due beforeToday）、
-//        sum／avg 帶條件（Amount 帶 Status eq OptDone；Price 帶 Sales in [sales01]；Amount 帶 Amount lt 0 → 只算負數）、
+//        sum／avg 帶條件（Amount 帶 Status eq OptDone；Price 帶 Sales in [sales01]；Amount 帶 Amount lt 0 → 只算負數；Amount 帶 Amount gte 100 → 符合列含 999999999999.99，驗 J10 的整數 `{Split}` 加總與記憶體路徑逐位相同，R1）、
 //        依 Sales 與 Due 週分桶分組各跑一次；每個 case ShouldMatch(memory, sql, name)
 [Fact] public async Task Median_FallsBack_WithReason()
 // Both(Def(measures:[M("m","median",MainF(Amount))]), second: Auto) → sql.Engine == "memory"、FallbackReasons 含 "measureNotSupported:median"、數字同記憶體
@@ -331,12 +341,13 @@ Expected: `ConditionalMeasures_MatchMemoryPath` FAIL（SqlOnly 丟「無法走 S
 
 - [ ] **Step 3: 實作**
 
-`PlanAggregate`：拿掉 Task 2 加的 `countIf` 與 `measureConditionNotSupported` 退回；`countIf` 同 `ratio` 呼叫 `planner.Condition(m.Condition!)`；`sum`／`avg` 帶條件時 `mf` 與 `cond` 都要規劃成功才加量值。`ReportQueryBuilder.Aggregate`：`countIf` 同 `ratio` 輸出 `SUM(CASE WHEN … THEN 1 ELSE 0 END) AS hit{j}`；`sum`／`avg` 的 `m.Condition` 不為 null 時三個欄改成 J10 的 `CASE WHEN` 形式（每個 `CASE` 各自呼叫一次 `Predicate`）。`ReadAsync`：`case "ratio" or "countIf"`。`MeasureValues`：`"countIf" => raw.Hit`。
+`PlanAggregate`：拿掉 Task 2 加的 `countIf` 與 `measureConditionNotSupported` 退回；`countIf` 同 `ratio` 呼叫 `planner.Condition(m.Condition!)`；`sum`／`avg` 帶條件時 `mf` 與 `cond` 都要規劃成功才加量值。`ReportQueryBuilder.Aggregate`：`countIf` 同 `ratio` 輸出 `SUM(CASE WHEN … THEN 1 ELSE 0 END) AS hit{j}`；`sum`／`avg` 的 `m.Condition` 不為 null 時三個欄改成 J10 的 `CASE WHEN` 形式（每個 `CASE` 各自呼叫一次 `Predicate`；除法與餘數一律用整數常數 `{Split}`，不寫 `1e9`）。`ReadAsync`：`case "ratio" or "countIf"`。`MeasureValues`：`"countIf" => raw.Hit`。
 
 - [ ] **Step 4: 跑測試確認通過**
 
 Run: `dotnet test tests/DynamicModules.ApplicationTests --filter "FullyQualifiedName~ReportSqlEquivalenceTests|FullyQualifiedName~ReportRunnerSqlTests"`
-Expected: PASS；`ReportRunnerSqlTests` 裡 Task 2 的新案例現在走 SQL。
+另跑 `dotnet test tests/DynamicModules.ApplicationTests --filter "FullyQualifiedName~ReportBenchmarkTests"`，並在其中加一個「帶條件 avg」情境記錄耗時（Y4；超出既有基準時，改成子查詢先算一次旗標欄 `CASE WHEN p THEN 1 END AS c{j}`，外層三個聚合共用）。
+Expected: PASS；`ReportRunnerSqlTests` 裡 Task 2 的 `CountIf_And_ConditionalAvg_HandComputed` 現在走 SQL（含 `median` 的 `Median_HandComputed` 仍走記憶體路徑，不在此預期內，Y1）。
 
 - [ ] **Step 5: Commit**
 
@@ -357,6 +368,7 @@ git commit -m "feat(report): SQL 路徑支援 countIf 與帶條件的 sum、avg�
 - Create: `src/DynamicModules.Domain/Reports/TaskReportFields.cs`
 - Create: `src/DynamicModules.Domain/Reports/TaskReportValues.cs`
 - Modify: `src/DynamicModules.Domain/Reports/ReportReferences.cs`（資料來源不是模組時回空集合）
+- Modify: `src/DynamicModules.Application/Dynamic/TaskService/TaskModels.cs`（`Overdue` 改呼叫 `TaskReportValues.IsOverdue`，J21）
 - Test: `tests/DynamicModules.DomainTests/Reports/TaskReportFieldsTests.cs`、`tests/DynamicModules.DomainTests/Reports/TaskReportValuesTests.cs`、`tests/DynamicModules.DomainTests/Reports/ReportDefinitionTests.cs`、`tests/DynamicModules.DomainTests/Reports/ReportReferencesTests.cs`
 
 **Interfaces:**
@@ -381,16 +393,16 @@ public static class TaskReportFields
     public const long EventCreated = 1, EventCompleted = 2;
     public static IReadOnlySet<long> Selectable(string dataset);       // tasks：-1..-15；taskEvents：-18、-19、-2、-3、-4、-5、-9、-10、-11
     public static IReadOnlySet<long> Restrictable { get; }             // {-10, -11}
-    public static IReadOnlyList<long> DrillColumns { get; }            // [-1, -2, -3, -6, -8, -10]（B3）
+    public static IReadOnlyList<long> DrillColumns(string dataset);    // tasks：[-1, -2, -3, -6, -8, -10]（B3）；taskEvents：[-18, -19, -1, -2, -3, -10]（Y7）
     public static IReadOnlyDictionary<long, I18nText> BlankLabels { get; } // -3 未指派、-4（無部門）、-5 系統、-10（無）、-11（無）（B2）
-    /// <summary>不入庫的模組：Id 0、Key ""、NameI18n 是資料來源名；欄位含 Selectable 與 DrillColumns 的聯集，選項依傳入的實體。</summary>
+    /// <summary>不入庫的模組：Id 0、Key ""、NameI18n 是資料來源名；欄位含 Selectable 與 DrillColumns(dataset) 的聯集，選項依傳入的實體。</summary>
     public static Module Build(string dataset, IReadOnlyList<Department> departments, IReadOnlyList<Module> modules, IReadOnlyList<TaskRule> rules);
 }
 
 public static class TaskReportValues
 {
     public static long SourceOf(TaskItem t);                                    // RuleId → 規則；RecordId → 記錄；否則個人
-    public static bool IsOverdue(TaskItem t, DateOnly basis);                   // IsOpen && DueDate < basis（B1）
+    public static bool IsOverdue(TaskItem t, DateOnly basis);                   // IsOpen && DueDate < basis（B1）；`TaskModels.Overdue` 改呼叫它（J21）
     public static long? CompletionOf(TaskItem t);                               // Done 且 CompletedTime 為 null → null（J15）
     public static int? CompletionDays(TaskItem t);                              // 完成日 − 建立日（日曆天）；未完成 null
     public static int? DelayDays(TaskItem t, DateOnly basis);                   // B1；不小於 0；沒有到期日 null
@@ -411,12 +423,13 @@ public void Completion_AcrossMidnight(string completed, string due, long complet
 [Fact] public void CompletionDays_SameDayIsZero_OpenIsNull()          // 建立 11-02 09:00、完成 11-02 18:00 → 0；建立 11-01、完成 11-04 → 3
 [Fact] public void DelayDays_ByStatus()                               // 完成晚 2 天 → 2；完成提早 → 0；待辦到期 11-01 → 3；取消 → null；沒到期日 → null
 [Fact] public void IsOverdue_OnlyOpenBeforeBasis()                    // 待辦 11-03 → true；到期 11-04 → false；取消 11-01 → false
+[Fact] public void CompletionDays_And_DelayDays_DoneWithoutCompletedTime_AreNull() // J15、G12：Done 但 CompletedTime null → 完成天數、延遲天數都 null
 [Fact] public void SourceOf_ThreeKinds()
 
 // TaskReportFieldsTests
 [Fact] public void Build_Tasks_FieldsNegativeAndTyped()               // 欄位 Id 集合＝-1..-15；-1 是 Textarea；-12 Boolean；全部 Active
-[Fact] public void Build_TaskEvents_ContainsSelectableAndDrill()      // 含 -18、-19 與 DrillColumns；不含 -12..-15
-[Fact] public void Build_Options_FromEntities()                       // 兩個部門（一個停用 → Active=false）、兩個模組、一條規則 → 選項 Id 對應實體 Id
+[Fact] public void Build_TaskEvents_ContainsSelectableAndDrill()      // 含 -18、-19 與 DrillColumns("taskEvents")；不含 -12..-15
+[Fact] public void Build_Options_FromEntities()                       // 兩個部門（一個停用 → Active=false）、兩個模組、一條規則 → 選項 Id 對應實體 Id；狀態、來源、完成狀況、事件種類的選項都明設 Active=true（`FieldOption.Active` 預設 false，G5）
 [Fact] public void Title_CannotGroup()                                // ReportFieldEligibility.CanGroup(標題欄位) == false
 [Fact] public void Labels_FourLocales()                               // 每個欄位與選項的 LabelI18n 在 zh-TW、en-US、th、vi 都非空
 
@@ -435,12 +448,12 @@ Expected: 編譯失敗（型別不存在）。
 
 - [ ] **Step 3: 實作** 上列三個新檔與兩處修改；日期一律 `DateOnly.FromDateTime(t.CreatedTime)`／`CompletedTime`。
 
-- [ ] **Step 4: 跑測試確認通過**（另跑一次 `TZ=UTC dotnet test …` 同一 filter）。Expected: PASS。
+- [ ] **Step 4: 跑測試確認通過**（另跑一次 `TZ=UTC dotnet test …` 同一 filter）。`ReportReferences` 的使用者在 ApplicationTests，再跑 `dotnet test tests/DynamicModules.ApplicationTests --filter "FullyQualifiedName~SafeDeleteTests|FullyQualifiedName~TaskBoard|FullyQualifiedName~TaskService"`（`SafeDeleteTests` 用 `ReportReferences`；後兩個確認 `TaskModels.Overdue` 改呼叫後看板計數不變，filter 以 `--list-tests` 確認比對得到）。Expected: PASS。
 
 - [ ] **Step 5: Commit**
 
 ```bash
-git add src/DynamicModules.Domain/Reports/ReportDefinition.cs src/DynamicModules.Domain/Reports/ReportDatasets.cs src/DynamicModules.Domain/Reports/TaskReportFields.cs src/DynamicModules.Domain/Reports/TaskReportValues.cs src/DynamicModules.Domain/Reports/ReportReferences.cs tests/DynamicModules.DomainTests/Reports/TaskReportFieldsTests.cs tests/DynamicModules.DomainTests/Reports/TaskReportValuesTests.cs tests/DynamicModules.DomainTests/Reports/ReportDefinitionTests.cs tests/DynamicModules.DomainTests/Reports/ReportReferencesTests.cs
+git add src/DynamicModules.Application/Dynamic/TaskService/TaskModels.cs src/DynamicModules.Domain/Reports/ReportDefinition.cs src/DynamicModules.Domain/Reports/ReportDatasets.cs src/DynamicModules.Domain/Reports/TaskReportFields.cs src/DynamicModules.Domain/Reports/TaskReportValues.cs src/DynamicModules.Domain/Reports/ReportReferences.cs tests/DynamicModules.DomainTests/Reports/TaskReportFieldsTests.cs tests/DynamicModules.DomainTests/Reports/TaskReportValuesTests.cs tests/DynamicModules.DomainTests/Reports/ReportDefinitionTests.cs tests/DynamicModules.DomainTests/Reports/ReportReferencesTests.cs
 git commit -m "feat(report): 報表定義加 dataset，任務資料來源的欄位目錄與衍生值"
 ```
 
@@ -471,8 +484,11 @@ private static ReportCell ApplyBucket(Bound b, ReportCell cell, RunContext ctx);
 
 - [ ] **Step 1: 確認安全網是綠的**（這個 Task 不加新測試：行為不變，五個既有類別就是測試）
 
-Run: `dotnet test tests/DynamicModules.ApplicationTests --filter "FullyQualifiedName~ReportRunnerTests|FullyQualifiedName~ReportRunnerSqlTests|FullyQualifiedName~ReportPermissionMatrixTests|FullyQualifiedName~ReportSqlEquivalenceTests|FullyQualifiedName~DemoReportsTests"`
-Expected: PASS，記下通過數。
+Run（兩個專案各一行，通過數都記下）：
+`dotnet test tests/DynamicModules.ApplicationTests --filter "FullyQualifiedName~ReportRunnerTests|FullyQualifiedName~ReportRunnerSqlTests|FullyQualifiedName~ReportPermissionMatrix|FullyQualifiedName~ReportSqlEquivalenceTests|FullyQualifiedName~DemoReportsTests|FullyQualifiedName~SafeDeleteTests"`
+`dotnet test tests/DynamicModules.WebAPITests --filter "FullyQualifiedName~ReportsApiTests|FullyQualifiedName~SharedMasterPermissionTests|FullyQualifiedName~Dashboard|FullyQualifiedName~ClosedModuleTests|FullyQualifiedName~ReportCatalogApiTests"`
+（`ReportPermissionMatrix` 同時涵蓋 `ReportPermissionMatrixTests` 與繼承來的 `ReportPermissionMatrixSqlTests`；`Dashboard` 涵蓋 `DashboardCardsApiTests`、`DashboardReviewFixesApiTests`、`AdminDashboardPreviewApiTests`。filter 寫好後用 `dotnet test --list-tests --filter …` 確認這些類別都在清單裡；匯出的 `ForExport` 資料範圍在 ApplicationTests 沒有測試，靠 WebAPITests 的 `ReportsApiTests`、`SharedMasterPermissionTests`。）
+Expected: PASS，記下兩個專案的通過數。
 
 - [ ] **Step 2: 搬移**
 
@@ -480,7 +496,7 @@ Expected: PASS，記下通過數。
 
 - [ ] **Step 3: 跑安全網**
 
-Run: 同 Step 1。Expected: 通過數與 Step 1 相同，沒有任何斷言被改。
+Run: 同 Step 1（兩個專案）。Expected: 通過數與 Step 1 相同，沒有任何斷言被改。
 
 - [ ] **Step 4: Commit**
 
@@ -496,7 +512,8 @@ git commit -m "refactor(report): 報表執行拆成資料來源載入與共用�
 - Modify: `src/DynamicModules.Persistence/Repositories/Dynamic/TaskRepositories.cs`
 - Create: `src/DynamicModules.Application/Dynamic/ReportService/TaskReportSource.cs`
 - Modify: `src/DynamicModules.Application/DependencyInjection.cs`（一行）
-- Modify: `src/DynamicModules.Application/Dynamic/ReportService/ReportModuleLoader.cs`（資料來源分支）
+- Modify: `src/DynamicModules.Application/Dynamic/ReportService/ReportModuleLoader.cs`（資料來源分支；建構子（`:18`）加 `TaskReportSource` 相依，已確認沒有手動 `new ReportModuleLoader(`／`new ReportRunner(`，只走 DI、不會循環相依，G2）
+- Modify: `src/DynamicModules.Application/Dynamic/DemoService/DemoStructure.cs`（`ResetPerRequestState` 呼叫 `TaskReportSource.Reset()`，J20）
 - Modify: `src/DynamicModules.Application/Dynamic/ReportService/Data/ReportRules.cs`（`CheckShape` 資料來源規則、`Check` 可選欄位）
 - Test: `tests/DynamicModules.ApplicationTests/Dynamic/Tasks/TaskReportSourceTests.cs`、`tests/DynamicModules.ApplicationTests/Dynamic/Tasks/TaskTestBase.cs`（`SeedTask` 加 `DateTime? created = null, DateTime? completed = null`，預設值行為不變）
 
@@ -513,12 +530,13 @@ Task<List<TaskItem>> ListForReportAsync(TaskVisibility visibility, TaskReportNar
 
 // TaskReportSource.cs
 public sealed record TaskReportItem(TaskItem Task, bool RecordAccessible, long? AssigneeDepartmentId);
-public sealed class TaskReportSource(ITaskRepository tasks, ITaskRuleRepository rules, IOrganizationRepository org, OrgSnapshotLoader orgLoader,
+public sealed class TaskReportSource(ITaskRepository tasks, ITaskRuleRepository rules, IOrganizationRepository org,
     IModuleRepository modules, TaskVisibilityService visibility, TaskAccess access)
 {
     /// <summary>不帶隱藏欄位、動作含 Read 與 PrintExport、範圍 All 的權限（U9：任務報表沒有模組的匯出權限可查）。</summary>
     public static EffectivePermissions Permissions { get; }
-    public Task<Module> CatalogAsync(string dataset, CancellationToken ct);     // J14 的選項；同一請求內快取
+    public Task<Module> CatalogAsync(string dataset, CancellationToken ct);     // J14 的選項；快取鍵含 UserId 與 dataset（J20）
+    public void Reset();                                                         // 清快取；接到 DemoStructure.ResetPerRequestState
     public Task<IReadOnlyList<TaskReportItem>> LoadAsync(TaskReportNarrowing narrowing, int take, CancellationToken ct);
 }
 ```
@@ -534,8 +552,11 @@ public async Task Load_EqualsVisibleIds_ForEveryPersona(string user)
 // 資料：個人任務、記錄任務（Own 範圍內外各一）、軟刪除記錄的任務、凍結模組的任務、只被 @ 的任務、部屬的未指派任務
 // LoadAsync(無縮小) 的 Task.Id 集合 == ListVisibleIdsAsync(ForCurrentUserAsync) 的集合；
 // RecordAccessible == EvaluateManyAsync(...)[i].Record?.Accessible == true
-[Fact] public async Task Load_SupervisorPolicyOff_DropsSubordinateTasks()    // task.supervisorScope=false → manager01 少了部屬的任務
+[Fact] public async Task Load_SupervisorPolicyOff_DropsSubordinateTasks()    // task.supervisorScope=false → manager01 少了部屬的任務（用 `using var scope = NewScope()` 取 source，J20；改政策後同一 scope 會讀到舊值）
+[Fact] public async Task Catalog_CacheIsPerUser_AndReset()                  // 同一 source 先後以 sales01、admin 取目錄選項不同；Reset() 後重新讀取（J20）
 [Fact] public async Task Load_QueryCount_DoesNotGrowWithTaskCount()          // 照 Evaluate_QueryCount_DoesNotGrowWithTaskCount：10 筆與 40 筆查詢次數相同
+[Fact] public async Task Validate_ModuleDatasetNormalized_Http()             // 請求明寫 dataset "module" → 存檔 JSON 與不帶 dataset 逐字相同；任務資料來源 mainModuleKey null → ""（J23）
+[Fact] public async Task Load_Narrowing_UnknownStatusOption_Ignored() // J24：opt_9 略過不丟例外；`in` 全部無效 → 0 筆
 [Fact] public async Task Load_Narrowing_StatusAndDates()                     // Statuses=[Done]、completed 11-01..11-03 → 只回區間內完成的；createdOrCompleted 取聯集；邊界日含頭含尾
 [Fact] public async Task Catalog_OptionsFollowViewer()                       // sales01 的所屬模組選項只有可讀模組；admin 有全部非明細模組；部門含停用部門
 [Fact] public async Task Validate_TaskDefinitionShape_400()
@@ -546,19 +567,21 @@ public async Task Load_EqualsVisibleIds_ForEveryPersona(string user)
 
 - [ ] **Step 2: 跑測試確認失敗**
 
+（資料用的 `SeedTask` 新增的 `created`／`completed` 用 `DateTimeKind.Unspecified`：既有 `SeedTime` 是 `Kind=Utc`（`TaskTestBase.cs:17`），Npgsql 寫 `timestamp without time zone` 會丟例外；新測試的基準時間也用 Unspecified，G6。）
+
 Run: `dotnet test tests/DynamicModules.ApplicationTests --filter "FullyQualifiedName~TaskReportSourceTests"`
 Expected: 編譯失敗（`TaskReportSource`、`ListForReportAsync` 不存在）。
 
 - [ ] **Step 3: 實作**
 
-`ListForReportAsync`：`TaskVisibilityQuery.Visible(db, v).Include(t => t.Participants)`，`Statuses` 不為 null 時 `Where(t => statuses.Contains(t.Status))`；日期用 `from.ToDateTime(TimeOnly.MinValue)` 與 `to.AddDays(1).ToDateTime(TimeOnly.MinValue)`（`Kind` Unspecified）做半開區間；`due` 用 `DateOnly` 比較；`OrderBy(t => t.Id).Take(take)`。`TaskReportSource.LoadAsync`：取 `visibility.ForCurrentUserAsync`、呼叫 repository、`access.EvaluateManyAsync(items)` 取 `Record?.Accessible == true`、`orgLoader.LoadAsync` 的 `UserDepartment` 查負責人部門。`CatalogAsync`：可讀模組（J14）、這些模組的規則（逐模組 `rules.ListByModuleAsync`）、`org.ListAsync()`，交給 `TaskReportFields.Build`。
+`ListForReportAsync`：`TaskVisibilityQuery.Visible(db, v).Include(t => t.Participants)`，`Statuses` 不為 null 時 `Where(t => statuses.Contains(t.Status))`；日期用 `from.ToDateTime(TimeOnly.MinValue)` 與 `to.AddDays(1).ToDateTime(TimeOnly.MinValue)`（`Kind` Unspecified）做半開區間；`due` 用 `DateOnly` 比較；`OrderBy(t => t.Id).Take(take)`。`TaskReportSource.LoadAsync`：取 `visibility.ForCurrentUserAsync`、呼叫 repository、`access.EvaluateManyAsync(items)` 取 `Record?.Accessible == true`、`org.ListUserDepartmentsAsync`（`IOrganizationRepository.cs:20`）查負責人部門（不用 `OrgSnapshotLoader`，它會多載入全部部門與使用者，G3）；`EvaluateManyAsync` 判為 `CanSee=false` 的任務再丟掉（縱深防禦，st1 的子任務可見性進來後兩邊若分歧也 fail closed，G11）。`CatalogAsync`：可讀模組（J14）、這些模組的規則（逐模組 `rules.ListByModuleAsync`，查詢數隨可讀模組數成長，接受；要固定次數再加 `ListByModulesAsync(ids)`，不在 kr1 做，G4）、`org.ListAsync()`，交給 `TaskReportFields.Build`。存檔時照 J23 正規化 `dataset`／`mainModuleKey`（寫在 `ReportRules.Check` 的正規化段）。
 
 - [ ] **Step 4: 跑測試確認通過**（另跑 `TZ=UTC`）。Expected: PASS。
 
 - [ ] **Step 5: Commit**
 
 ```bash
-git add src/DynamicModules.Domain/Repositories/Dynamic/ITaskRepositories.cs src/DynamicModules.Persistence/Repositories/Dynamic/TaskRepositories.cs src/DynamicModules.Application/Dynamic/ReportService/TaskReportSource.cs src/DynamicModules.Application/DependencyInjection.cs src/DynamicModules.Application/Dynamic/ReportService/ReportModuleLoader.cs src/DynamicModules.Application/Dynamic/ReportService/Data/ReportRules.cs tests/DynamicModules.ApplicationTests/Dynamic/Tasks/TaskReportSourceTests.cs tests/DynamicModules.ApplicationTests/Dynamic/Tasks/TaskTestBase.cs
+git add src/DynamicModules.Application/Dynamic/DemoService/DemoStructure.cs src/DynamicModules.Domain/Repositories/Dynamic/ITaskRepositories.cs src/DynamicModules.Persistence/Repositories/Dynamic/TaskRepositories.cs src/DynamicModules.Application/Dynamic/ReportService/TaskReportSource.cs src/DynamicModules.Application/DependencyInjection.cs src/DynamicModules.Application/Dynamic/ReportService/ReportModuleLoader.cs src/DynamicModules.Application/Dynamic/ReportService/Data/ReportRules.cs tests/DynamicModules.ApplicationTests/Dynamic/Tasks/TaskReportSourceTests.cs tests/DynamicModules.ApplicationTests/Dynamic/Tasks/TaskTestBase.cs
 git commit -m "feat(report): 任務資料來源的載入、欄位目錄與定義驗證"
 ```
 
@@ -573,9 +596,9 @@ git commit -m "feat(report): 任務資料來源的載入、欄位目錄與定義
 - Consumes：Task 5 的 `SourceLoad`／`SourceRows`／`Bound.Restrictable`／`RunContext.BlankLabels`／`ResolveRangeAsync`／`UserNamesAsync`／`ApplyBucket`；Task 6 的 `TaskReportSource`、`TaskReportNarrowing`。
 - Produces：`private Task<SourceLoad> LoadTasksAsync(ReportDefinition d, ReportRunOptions o, DateOnly basis, bool frozen, string locale, CancellationToken ct)`；`private ReportCell TaskCell(long code, TaskReportItem item, Module catalog, DateOnly basis)`（Task 8 擴充事件欄）；結果 `Engine = "memory"`、`FallbackReasons = ["datasetMemoryOnly"]`。
 
-做法：`CatalogAsync` → `Side(catalog, TaskReportSource.Permissions)` → 用現有 `Bind` 綁 `AllRefs`（-10、-11 設 `Restrictable`）→ `UnusableMessage`、`FieldWithChangedType` 照跑 → `ResolveRangeAsync` → 縮小條件（J7）→ `LoadAsync(narrowing, MaxLoadRows + 1)`，超過回 `TooMany`（J16）→ 逐任務組格子（-7、-8 用 `TimedCell`；-10 看不到記錄是 `RestrictedCell`、`ModuleId` 為 null 是空；-11 規則不在選項是 `MissingCell`；分桶走 `ApplyBucket`）→ 篩選與主要日期區間（同模組來源 `Passes("main")` 的語意）→ `MaxRows` 檢查 → `SourceRows(RowModule: catalog, TaskIdOf: 任務 Id 對任務 Id)`。
+做法：`CatalogAsync` → `Side(catalog, TaskReportSource.Permissions)` → 用現有 `Bind` 綁 `AllRefs`（-10、-11 設 `Restrictable`）→ `UnusableMessage`、`FieldWithChangedType` 照跑 → `ResolveRangeAsync` → 縮小條件（J7）→ `LoadAsync(narrowing, MaxLoadRows + 1)`，超過回 `TooMany`（J16）→ 逐任務組格子（-7、-8 用 `TimedCell`；格子判斷順序寫死（R3；判斷錯了會把看不到的記錄的規則名稱或模組可讀性漏出去，`TaskCell` 註解保留這段）：-10 `ModuleId is null` → 空；`!RecordAccessible` → `RestrictedCell`；模組不在選項 → `MissingCell`；其餘 `opt_{ModuleId}`。-11 `RuleId is null` → 空；`!RecordAccessible` → `RestrictedCell`（先於「規則不在選項」，否則記錄看不到、規則屬於可讀模組時會變 ok、帶出規則名稱）；規則不在選項 → `MissingCell`；其餘 `opt_{RuleId}`。分桶走 `ApplyBucket`）→ 篩選與主要日期區間（同模組來源 `Passes("main")` 的語意）→ `MaxRows` 檢查 → `SourceRows(RowModule: catalog, TaskIdOf: 任務 Id 對任務 Id)`。
 
-- [ ] **Step 1: 寫失敗測試**（`TaskReportRunnerTests : TaskTestBase`，`[Trait("Category", "Postgres")]`、`ScopePerRequest => true`；用 `ReportRunner.RunAsync` 直接跑定義；資料以 `SeedTask(created:, completed:)` 建，基準日 2026-11-04）
+- [ ] **Step 1: 寫失敗測試**（`TaskReportRunnerTests : TaskTestBase`，`[Trait("Category", "Postgres")]`、`ScopePerRequest => true`；用 `ReportRunner.RunAsync` 直接跑定義，runner 與 `TaskReportSource` 一律在 `using var scope = NewScope()` 取（J20）；資料以 `SeedTask(created:, completed:)` 建，基準日 2026-11-04。`TaskTestBase` 沒有報表 helper，類別內自備（Y6）：`static ReportDefinition TaskDef(string dataset, IReadOnlyList<ReportMeasure> measures, IReadOnlyList<ReportGroup>? groups = null, IReadOnlyList<ReportFilter>? filters = null, ...)`、`static ReportFieldRef T(long code) => new("main", code, null)`、`static ReportMeasure M(string id, string kind, long? field = null, ReportFilter? cond = null)`、`static ReportFilter F(long code, string op, object? value)`，簽章仿 `ReportTestBase`（`ReportRunnerTests.cs:38-50`）。）
 
 ```csharp
 [Fact] public async Task SpecExample_AvgDelayAndOnTimeRate()
@@ -591,10 +614,16 @@ git commit -m "feat(report): 任務資料來源的載入、欄位目錄與定義
 [Fact] public async Task GroupByModule_RestrictedOwnGroup_SortedLast()
 // manager01 對 tk2 無權限、但 tk2 有他部屬的任務 → 依 -10 分組：「（無權限）」一組排最後、「（無）」是個人任務；restricted 組不含模組名稱
 [Theory]
-[InlineData("eq")] [InlineData("ne")] [InlineData("in")] [InlineData("notIn")] [InlineData("isEmpty")] [InlineData("isNotEmpty")]
-public async Task ModuleCondition_RestrictedNeverMatches_EveryOperator(string op)
+[InlineData(-10, "eq")] [InlineData(-10, "ne")] [InlineData(-10, "in")] [InlineData(-10, "notIn")] [InlineData(-10, "isEmpty")] [InlineData(-10, "isNotEmpty")]
+[InlineData(-11, "eq")] [InlineData(-11, "ne")] [InlineData(-11, "in")] [InlineData(-11, "notIn")] [InlineData(-11, "isEmpty")] [InlineData(-11, "isNotEmpty")]
+public async Task ModuleOrRuleCondition_RestrictedNeverMatches_EveryOperator(long field, string op)
 // 同上資料；條件放 filters 與 countIf 各一次：restricted 的任務在任何運算子下都不計入
-[Fact] public async Task DeletedRule_IsMissingGroup()              // 規則刪除後依 -11 分組 → 「（已刪除）」
+[Fact] public async Task DeletedRule_IsMissingGroup()              // 規則刪除後依 -11 分組 → 「（已刪除）」（看得到記錄的任務）
+[Fact] public async Task RestrictedRecord_RuleCell_IsRestricted_NotMissingNorOk()
+// 記錄看不到的規則任務，兩種情形：規則已刪除、規則屬於觀看者可讀的模組 → 依 -11 分組都是「（無權限）」；
+// JsonSerializer.Serialize(result) 不含規則名稱、不含 `opt_{ruleId}`；個人任務（ModuleId null）的 -10 是「（無）」而不是 restricted
+[Fact] public async Task EmptySystem_PersonalTasksOnly()
+// 不建任何模組、沒有部門：個人任務照樣能跑；依 -4 分組是「（無部門）」；-10、-11 的目錄選項為空，依 -10 分組只有「（無）」（purpose-check 第 5 項）
 [Fact] public async Task Creator_RuleTask_IsSystem()               // CreatedBy null → 依 -5 分組標籤「系統」；條件 -5 isEmpty 命中
 [Fact] public async Task DateRange_OnCompletedTime_AndWeekBuckets() // primary -8、range thisMonth；依 -8 週分桶分組，週鍵同 ReportDates.BucketKey
 [Fact] public async Task SqlOnly_StillRunsInMemory()               // ReportOptions.Engine = SqlOnly → 不丟例外、Engine "memory"
@@ -602,6 +631,7 @@ public async Task ModuleCondition_RestrictedNeverMatches_EveryOperator(string op
 [Fact] public async Task UnknownDataset_ModuleDisabled()           // 定義直接帶 dataset "foo"（繞過驗證）→ State "moduleDisabled"
 [Fact] public async Task SavedReport_SharedToGroup_EachViewerOwnNumbers()
 // admin 建 tasks 報表分享給業務群組；sales01、sales02 RunReportRequest 各自只算自己看得到的
+[Fact] public async Task Card_TaskReport_OnDashboard()               // 任務報表放儀表板卡片（RunCardAsync）：tasks 依 -3 分組有數字；觀看者各算各的（Y10；設計 §2 目標 3）
 ```
 
 `DemoReportsTests` 加：
@@ -620,7 +650,7 @@ Expected: 新案例 FAIL（`moduleDisabled`：Task 5 的暫時分派）。
 
 - [ ] **Step 4: 跑測試確認通過**，再跑一次 Task 5 的安全網（模組行為不變）與 `TZ=UTC`：
 
-Run: `dotnet test tests/DynamicModules.ApplicationTests --filter "FullyQualifiedName~TaskReport|FullyQualifiedName~ReportRunner|FullyQualifiedName~ReportPermissionMatrixTests|FullyQualifiedName~ReportSqlEquivalenceTests|FullyQualifiedName~DemoReportsTests"`
+Run: `dotnet test tests/DynamicModules.ApplicationTests --filter "FullyQualifiedName~TaskReport|FullyQualifiedName~ReportRunner|FullyQualifiedName~ReportPermissionMatrix|FullyQualifiedName~ReportSqlEquivalenceTests|FullyQualifiedName~DemoReportsTests|FullyQualifiedName~SafeDeleteTests"`，並跑 Task 5 Step 1 的 WebAPITests 那一行。
 Expected: PASS。
 
 - [ ] **Step 5: Commit**
@@ -651,7 +681,8 @@ git commit -m "feat(report): 任務資料來源可執行，看不到記錄的所
 // 一件 11-02 建立、11-03 完成；一件 11-03 建立未完成 → countMain 3；countIf(-18 eq opt_1) 2、countIf(-18 eq opt_2) 1
 [Fact] public async Task TaskEvents_WeeklyTrend()
 // primary -19、range lastWeeks 2；依 -19 week 分組；每週建立件數、完成件數與手算相同；跨週完成的任務兩列落在不同週
-[Fact] public async Task TaskEvents_ReopenedKeepsLastCompletionOnly()   // 完成→重開→再完成：只有最後一次完成一列（設計 §15）
+[Fact] public async Task TaskEvents_ReopenedKeepsLastCompletionOnly()   // 經 `TaskWriter`（重開會清掉 `CompletedTime`，`TaskWriter.cs:196`）或 `PATCH /tasks/{id}` 走完「完成→重開→再完成」，不用 `SeedTask`（它只能放一個 CompletedTime，等於沒測到，G7）：只有最後一次完成一列（設計 §15）
+[Fact] public async Task Card_TaskEvents_ComparePeriods()               // RunCardAsync：taskEvents 依週分組、ComparePeriods=2、countIf 缺值當 0（Y10）
 [Fact] public async Task TaskEvents_DoneWithoutCompletedTime_NoCompletionRow() // J15
 ```
 
@@ -691,10 +722,11 @@ git commit -m "feat(report): 任務事件資料來源，一列代表一次建立
 ```csharp
 [Fact] public async Task Drill_FixedColumns_WithTaskIds()
 // 依 -3 分組的報表下鑽 ["sales01"] → Columns 標籤依序 標題、狀態、負責人、到期日、完成時間、所屬模組；TaskIds 與該組任務 Id 集合相同、與列對齊（用標題對）
+// taskEvents 下鑽（Y7）→ Columns 依序 事件種類、事件日期、標題、狀態、負責人、所屬模組；同一任務的建立列與完成列內容不同
 [Fact] public async Task Drill_RestrictedGroup_ModuleColumnNoPermission()
 // manager01 下鑽 -10 的 "__restricted" 組 → 每列所屬模組是「（無權限）」；DetailRows 不含任何記錄標題或模組名稱
 [Fact] public async Task Drill_TaskEvents_MapsToTaskIds()           // 同一任務的建立與完成兩列都對回同一個 Id
-[Fact] public async Task Drill_OverLimit_TruncatesTaskIdsToo()      // DrillReportRequest，501 列 → Truncated、DetailRows 與 TaskIds 都是 500
+[Fact] public async Task Drill_OverLimit_TruncatesTaskIdsToo()      // DrillReportRequest，501 列 → Truncated、DetailRows 與 TaskIds 都是 500；資料用 `AddRange` 一次寫入，不逐筆 `SeedTask`（每筆一次 SaveChanges，G13）
 [Fact] public async Task Export_RestrictedCell_NoPermissionText()
 // ExportReportRequest（明細欄 -1、-10）→ xlsx 用 ClosedXML 讀：看不到記錄的列「（無權限）」；sales01 沒有任何模組的 PrintExport 也能匯出（U9）
 [Fact] public async Task Detail_TaskReport_CanExportTrue()          // GetReportRequest → CanExport true、Definition 條件值未被遮蔽
@@ -706,12 +738,14 @@ git commit -m "feat(report): 任務事件資料來源，一列代表一次建立
 Run: `dotnet test tests/DynamicModules.ApplicationTests --filter "FullyQualifiedName~TaskReportRunnerTests"`
 Expected: 新案例 FAIL（下鑽欄位是分組欄而不是六欄；`TaskIds` 不存在）。
 
-- [ ] **Step 3: 實作** `FieldColumnsFor` 在任務來源下鑽時回 `DrillColumns`（`ReportFieldRef("main", code, null)`）；`DetailRows` 回 `(values, orderedRows)`，尾段在 `TaskIdOf` 不為 null 時以 `orderedRows` 的 `MainId` 換出 `TaskIds`；三處截斷改 `TakeDetail`。
+- [ ] **Step 3: 實作** `FieldColumnsFor` 在任務來源下鑽時回 `DrillColumns(dataset)`（`ReportFieldRef("main", code, null)`）；`DetailRows` 回 `(values, orderedRows)`，尾段在 `TaskIdOf` 不為 null 時以 `orderedRows` 的 `MainId` 換出 `TaskIds`；三處截斷改 `TakeDetail`。
 
 - [ ] **Step 4: 跑測試確認通過**，加跑儀表板與報表 handler：
 
-Run: `dotnet test tests/DynamicModules.ApplicationTests --filter "FullyQualifiedName~TaskReport|FullyQualifiedName~ReportRunner|FullyQualifiedName~Dashboard"`
-Expected: PASS。
+Run（儀表板測試都在 WebAPITests，ApplicationTests 的 `Dashboard` filter 比對不到）：
+`dotnet test tests/DynamicModules.ApplicationTests --filter "FullyQualifiedName~TaskReport|FullyQualifiedName~ReportRunner"`
+`dotnet test tests/DynamicModules.WebAPITests --filter "FullyQualifiedName~Dashboard|FullyQualifiedName~ReportsApiTests"`
+Expected: PASS（`DashboardCardRunner` 的截斷改 `TakeDetail` 要被這個 filter 實際跑到，`--list-tests` 確認）。
 
 - [ ] **Step 5: Commit**
 
@@ -723,11 +757,11 @@ git commit -m "feat(report): 任務報表下鑽固定列任務並附任務 Id，
 ### Task 10: 資料來源目錄端點、WebAPI 驗收與文件寫回
 
 **Files:**
-- Create: `src/DynamicModules.Application/Dynamic/ReportService/Queries/GetReportCatalog/GetReportDatasetsHandler.cs`（兩個 request 與 handler）
+- Create: `src/DynamicModules.Application/Dynamic/ReportService/Queries/GetReportCatalog/GetReportDatasetsRequest.cs`、`GetReportDatasetsHandler.cs`、`GetReportDatasetCatalogRequest.cs`、`GetReportDatasetCatalogHandler.cs`（慣例 request 與 handler 分檔，樣板 `GetReportCatalogRequest.cs`／`GetReportCatalogHandler.cs`，G9）
 - Modify: `src/DynamicModules.Application/Dynamic/ReportService/Queries/GetReportCatalog/GetReportCatalogHandler.cs`（`ToField` 改 `internal static`）
 - Modify: `src/DynamicModules.WebAPI/Controllers/v3/Dynamic/ReportsController.cs`（`GET datasets`、`GET datasets/{dataset}/catalog`）
 - Test: `tests/DynamicModules.WebAPITests/Dynamic/TaskReportsApiTests.cs`
-- Docs: `docs/superpowers/specs/2026-11-13-task-board-reports-gantt-design.md`（§7.3 代碼 -18、-19 與 B1／B2、§7.5 下鑽 B3、§7.4 欄名 B4、§12 目錄端點、§14 本計畫的可寫死清單、§17.3 加 J 系列中改變設計的幾條（J1、J2、J11、J12）、§18 本計畫的矛盾 1–6）、`docs/roadmap.md` 第 46 列、`docs/feature.md` 第 228 行（kr1 部分完成的說明，跑 `feature_checklist.py docs/feature.md --write`）
+- Docs: `docs/superpowers/specs/2026-11-13-task-board-reports-gantt-design.md`（§7.3 代碼 -18、-19 與 B1／B2、§7.5 下鑽 B3、§7.4 欄名 B4、§12 目錄端點、§14 本計畫的可寫死清單、§17.3 加 J 系列中改變設計的幾條（J1、J2、J11、J12）、§18 本計畫的矛盾 1–6）、`docs/roadmap.md` 第 46 列、`docs/feature.md` 第 228 行（kr1 部分完成的說明，跑 `python3 ~/.claude/plugins/marketplaces/plugharbor/plugins/lifecycle/scripts/feature_checklist.py docs/feature.md --write`，路徑依 `.claude/rules/docs.md:9`，G1）；§15 已知限制加：分享給群組的報表若帶「-10＝觀看者不可讀的模組」，詳情會回 `opt_{moduleId}`（只露 Id、不露名稱，`ReportMasking` 對任務欄位一律視為看得到，G14）；§14「安全」加規則名稱揭露（J22）
 
 **Interfaces:**
 - Consumes：Task 6 的 `TaskReportSource.CatalogAsync`、`TaskReportFields.Selectable`。
@@ -743,6 +777,7 @@ git commit -m "feat(report): 任務報表下鑽固定列任務並附任務 Id，
 // POST /reports（dataset tasks、groups -3、measures countMain＋countIf 狀態待辦）→ 201；POST /reports/{id}/run → state ok、engine memory；
 // POST /reports/{id}/drill → taskIds 長度＝detailRows；GET /reports/{id}/export → 200 xlsx；
 // POST /reports/preview 同定義 → 與 run 相同 total
+// 點任務伺服器再驗（Y11）：拿 taskIds[i] 呼叫 GET /tasks/{id}，觀看者回 200；restricted 那列的 record.accessible=false 且回應不含模組代號與記錄 Id；換一個看不到該任務的使用者回 404
 [Fact] public async Task TaskReport_OtherUser_SeesOwnNumbers_Http()   // 分享給群組後另一個使用者 run 的 total 只含他看得到的
 [Fact] public async Task ModuleCatalog_Unchanged_Http()               // GET /reports/catalog 的回應不含 tasks（J11）
 ```
@@ -762,7 +797,7 @@ Expected: PASS。推分支後等 CI 跑完整 gate；`formwright-purpose-check` 
 - [ ] **Step 5: Commit**
 
 ```bash
-git add src/DynamicModules.Application/Dynamic/ReportService/Queries/GetReportCatalog/GetReportDatasetsHandler.cs src/DynamicModules.Application/Dynamic/ReportService/Queries/GetReportCatalog/GetReportCatalogHandler.cs src/DynamicModules.WebAPI/Controllers/v3/Dynamic/ReportsController.cs tests/DynamicModules.WebAPITests/Dynamic/TaskReportsApiTests.cs
+git add src/DynamicModules.Application/Dynamic/ReportService/Queries/GetReportCatalog/GetReportDatasetsRequest.cs src/DynamicModules.Application/Dynamic/ReportService/Queries/GetReportCatalog/GetReportDatasetsHandler.cs src/DynamicModules.Application/Dynamic/ReportService/Queries/GetReportCatalog/GetReportDatasetCatalogRequest.cs src/DynamicModules.Application/Dynamic/ReportService/Queries/GetReportCatalog/GetReportDatasetCatalogHandler.cs src/DynamicModules.Application/Dynamic/ReportService/Queries/GetReportCatalog/GetReportCatalogHandler.cs src/DynamicModules.WebAPI/Controllers/v3/Dynamic/ReportsController.cs tests/DynamicModules.WebAPITests/Dynamic/TaskReportsApiTests.cs
 git commit -m "feat(report): 任務資料來源目錄端點與 API 驗收測試"
 git add docs/superpowers/specs/2026-11-13-task-board-reports-gantt-design.md docs/roadmap.md docs/feature.md
 git commit -m "docs: kr1 任務報表資料來源的裁決寫回設計、路線圖與功能清單"
