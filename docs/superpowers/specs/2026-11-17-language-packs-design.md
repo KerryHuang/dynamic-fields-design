@@ -14,6 +14,7 @@ Formwright 現在只有四種語系（zh-TW、en-US、th、vi），清單寫死�
 - **前端介面文字**：`frontend/src/i18n/*.json`（每語 1990 句，以當下基準鍵數計），隨前端打包，`locales.vitest.spec.ts` 檢查四份鍵一致。
 - **後端清單**：`I18nText.SupportedLocales` 在正式程式有 8 處使用：`ModuleRules`、`CreateGroupValidator`、`RenameGroupValidator`、`AppPackageValidator.V7`、`TaskRuleValidator`、`FieldImportParser`、`MessageText`、`HeaderCurrentLocale`（用它驗 `X-Locale`）；`ICurrentLocale` 的註解也寫死四語。另有 17 個驗證點呼叫 `I18nText.IsValid`（欄位、模組、事件、檢查、簽核定義、組織等）。
 - **後端訊息**：`MessageText.cs`（137 句）與 `ReportText.cs`（31 句），每句是 `(Zh, En, Th, Vi)` 四個 C# 欄位。
+- **任務報表欄位表**：`backend/src/DynamicModules.Domain/Reports/TaskReportFields.cs`（kr1 新增，在 Domain）有第三張寫死四語的表：欄位名、狀態／來源／完成狀況／事件種類選項、空值字（`BlankLabels`）、資料來源名，約 37 句，以虛擬模組的 `I18nText` 輸出。不改的話新語系的任務報表欄位名與選項會退回繁中，語系包也匯不出這些句子。
 - **套件格式**：`backend/apps/app.schema.json` 的 `i18n` 用 `propertyNames enum` 限定四種（正式程式不讀這份 schema，只有 `AppSchemaTests` 讀；真正擋鍵的是 C# 驗證器 `TemplateValidator.HasZhTw`、`AppPackageValidator.CheckText`，兩邊要一起改）。
 
 三個缺口：
@@ -618,7 +619,7 @@ Formwright 的取捨：
 |---|---|---|---|
 | i4a | `Dynamic_Locale` 與 migration（兩種資料庫）、內建四語同步、`LocaleRegistry`（版本戳記）、`I18nText.IsValid` 改只驗格式與必填（M1）與新退回鏈、`X-Locale`、p3 三政策改動態選項（選項名稱用自稱）、`auth/options` 加 `locales`、**§1 列的寫死清單逐條改完並勾驗**（後端 8 處 `SupportedLocales`、前端 6 處 `LOCALES`／型別／`I18nTextInput`、`PolicyValueEditor`）、Quasar glob 全開 | 無變化（仍是四語） | p3 |
 | i4b | 內建介面文字搬 `shared/i18n/`（**影響 139 個 import 檔**，用 alias 或轉出口降低 diff）、後端內嵌＋**兩份 Dockerfile、建置檢查、啟動自檢**、`quasar-langs.json`、`GET i18n/ui/{code}`（伺服器合併退回鏈、快取標頭規則）、前端只打包 zh-TW、啟動載入與 stale-while-revalidate、瀏覽器快取、前端預編譯、`ensureLocaleMessages` 與兩個多語產生點（每個已安裝語系）、管理員試看（M2） | 無變化（首屏多一次請求）；冒煙：登入頁切 English、ไทย | i4a |
-| i4c | `IMessageCatalog`、解析點改 DI、直接呼叫點改注入（列出剩餘清單）、`AsI18n` 改已安裝語系（3 個 `static readonly` 改方法） | 無變化 | i4a（可與 i4b 平行） |
+| i4c | `IMessageCatalog`、解析點改 DI、直接呼叫點改注入（列出剩餘清單）、**`TaskReportFields` 的四語表也一併改成走 `IMessageCatalog`（它在 Domain，要想辦法讓 Domain 取得解析，例如由 Application 層組裝欄位時傳入）**、`AsI18n` 改已安裝語系（3 個 `static readonly` 改方法） | 無變化 | i4a（可與 i4b 平行） |
 | i4d1 | 後端：語系包格式 v1、驗證器與共用案例檔、預覽／套用（併發 409、暫存上限）、覆寫層版本表（migration）與回滾、移除覆寫、安裝與移除語系、稽核、Demo 開關、A38、A39；加一個最小的匯入畫面（上傳 → 報告 → 套用） | 最小匯入畫面；Demo 站可預覽、不能套用 | i4b、i4c、O2 |
 | i4d2 | 語系頁完整版（四種寬度）、JSON 匯出樣板、完整度與「原文已更新」「覆寫已失效」、「以此語系預覽」、手冊 | 語系頁；Demo 站可預覽、可匯出、不能套用 | i4d1 |
 | i4e | 可翻譯來源清單與路徑（綁定代碼優先）、`designData` 段、Excel 匯出匯入（三張工作表，U9）、原文已改偵測、只翻設計資料的入口 | 匯出 Excel 翻譯樣板 | i4d2；i3（報表、儀表板名稱多語才翻得到） |
