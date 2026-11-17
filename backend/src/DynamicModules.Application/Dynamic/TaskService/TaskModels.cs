@@ -1,5 +1,6 @@
 using System.Text.Json;
 using DynamicModules.Domain.Entities.Dynamic;
+using DynamicModules.Domain.Reports;
 using DynamicModules.Domain.Tasks;
 using DynamicModules.Domain.ValueObjects;
 
@@ -42,7 +43,7 @@ public sealed record TaskCommentResponse(long Id, TaskCommentKind Kind, string? 
 
 internal static class TaskViews
 {
-    public static bool Overdue(TaskItem t, DateOnly today) => t.IsOpen && t.DueDate is { } d && d < today;
+    public static bool Overdue(TaskItem t, DateOnly today) => TaskReportValues.IsOverdue(t, today);
 
     public static TaskDetailResponse ToDetail(TaskItem t, TaskPermissions p, IReadOnlyDictionary<string, AppUser> users,
         DateOnly today, string? ruleKey)

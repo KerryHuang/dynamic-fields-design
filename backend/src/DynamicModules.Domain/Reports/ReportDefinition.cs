@@ -1,4 +1,5 @@
 using System.Text.Json;
+using System.Text.Json.Serialization;
 
 namespace DynamicModules.Domain.Reports;
 
@@ -6,12 +7,14 @@ namespace DynamicModules.Domain.Reports;
 /// 報表定義（存進 Report.DefinitionJson，camelCase）。Source 是 main|child；Bucket 是 day|week|month|quarter|year；
 /// Kind 是 sum|avg|median|min|max|countMain|countChild|countIf|ratio；Viz 是 table|indicator|line|bar|donut。
 /// Filters 為 AND 清單，Op 沿用 FilterOperator 的 camelCase 名稱。
+/// Dataset 見 <see cref="ReportDatasets"/>：null 是模組報表，序列化時不輸出，舊定義的 JSON 逐字不變（看板設計 §7.1）。
 /// </summary>
 public record ReportDefinition(
     int Version, string MainModuleKey, ReportChild? Child,
     List<ReportFieldRef> Columns, List<ReportGroup> Groups, List<ReportMeasure> Measures,
     List<ReportFilter> Filters, ReportFieldRef? PrimaryDateField, ReportDateRange? DateRange,
-    List<ReportSort> Sort, string Viz)
+    List<ReportSort> Sort, string Viz,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? Dataset = null)
 {
     public const int CurrentVersion = 1;
 

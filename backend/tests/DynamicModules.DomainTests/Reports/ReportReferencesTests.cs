@@ -54,4 +54,16 @@ public class ReportReferencesTests
     {
         DashboardReferences.TryFieldIdsOf("{ not json").Should().BeNull();
     }
+
+    [Fact]
+    public void TaskDataset_ReferencesNothing()
+    {
+        var value = JsonDocument.Parse("\"opt_3\"").RootElement.Clone();
+        var d = new ReportDefinition(1, "", null, [], [new ReportGroup(new ReportFieldRef("main", -3, null), null)],
+            [new ReportMeasure("m1", "countMain", null, null)], [new ReportFilter(new ReportFieldRef("main", -10, null), "eq", value)],
+            null, null, [new ReportSort("main:-3:", false)], "table", ReportDatasets.Tasks);
+        var refs = ReportReferences.Of(d);
+        refs.ModuleKeys.Should().BeEmpty();
+        refs.FieldIds.Should().BeEmpty();
+    }
 }
