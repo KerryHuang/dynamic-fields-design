@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { useQuasar } from 'quasar';
-import { computed, nextTick, ref } from 'vue';
+import { computed, nextTick, onBeforeUnmount, ref, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { useLoadMoreColumn, useMoveTask } from 'src/application/dynamic/queries/task-board-queries';
 import {
@@ -104,14 +104,36 @@ function focusPlanOf(card: BoardCard): FocusPlan | null {
 async function restoreFocus(plan: FocusPlan) {
   await new Promise((r) => setTimeout(r));
   await nextTick();
+  applyFocus(plan);
+}
+function applyFocus(plan: FocusPlan): boolean {
   const active = document.activeElement;
-  if (active && active !== document.body && !active.closest('[data-testid="move-list"]')) return;
+  if (active && active !== document.body && !active.closest('[data-testid="move-list"]')) return false;
   const el = root.value;
-  if (!el) return;
+  if (!el) return false;
   const moveButton = (id: number | null) => (id === null ? null : el.querySelector<HTMLElement>(`[data-testid="board-card-move-${id}"]`));
   const column = [...el.querySelectorAll<HTMLElement>('[data-board-column]')].find((c) => c.getAttribute('data-board-column') === plan.fromKey);
   (moveButton(plan.cardId) ?? moveButton(plan.nextId) ?? moveButton(plan.prevId) ?? column)?.focus();
+  return true;
 }
+/**
+ * 移動結束後的重抓結果可能讓卡片換位置（例如伺服器把它排在目標欄後面）；瀏覽器搬動有焦點的節點會讓焦點掉到 body。
+ * 重抓比 restoreFocus 的等待慢，所以移動結束後短時間內，看板資料一變就再放一次；使用者已去別處就停。
+ */
+let followPlan: FocusPlan | null = null;
+let followTimer: ReturnType<typeof setTimeout> | undefined;
+function followFocus(plan: FocusPlan) {
+  followPlan = plan;
+  clearTimeout(followTimer);
+  followTimer = setTimeout(() => { followPlan = null; }, 5000);
+}
+watch(() => props.board, async () => {
+  const plan = followPlan;
+  if (!plan) return;
+  await nextTick();
+  if (!applyFocus(plan)) followPlan = null;
+});
+onBeforeUnmount(() => clearTimeout(followTimer));
 
 async function doMove(card: BoardCard, to: BoardColumn, dueDate?: string, focus: FocusPlan | null = null) {
   if (moving.has(card.id)) return;
@@ -129,7 +151,10 @@ async function doMove(card: BoardCard, to: BoardColumn, dueDate?: string, focus:
     $q.notify({ type: 'negative', message: failureMessage(e), position: 'bottom' });
   } finally {
     moving.delete(card.id);
-    if (focus) void restoreFocus(focus);
+    if (focus) {
+      void restoreFocus(focus);
+      followFocus(focus);
+    }
   }
 }
 

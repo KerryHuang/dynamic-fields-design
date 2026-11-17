@@ -711,6 +711,47 @@ describe('TaskBoard moving', () => {
       w.unmount();
     });
 
+    it('keeps focus on the card after the refetch reorders the target column (moved into the first column)', async () => {
+      const wire = boardWire({ columns: [
+        columnWire({ key: 'todo', total: 2, cards: [cardWire({ id: 2 }), cardWire({ id: 3 })] }),
+        columnWire({ key: 'inProgress', total: 1, cards: [cardWire({ id: 1, status: 'inProgress' })] }),
+      ] });
+      const { w } = await mountBoard(wire, 1126);
+      const held = holdMove();
+      // a real refetch answers well after the move itself does
+      const held2 = http.defaults.adapter as (c: InternalAxiosRequestConfig) => Promise<unknown>;
+      http.defaults.adapter = (async (c: InternalAxiosRequestConfig) => {
+        if (c.url === '/task-board/columns') await new Promise((r) => setTimeout(r, 120));
+        return held2(c);
+      }) as never;
+      // jsdom keeps focus when a node is re-inserted; real browsers drop it, so mimic that
+      const realInsert = Node.prototype.insertBefore;
+      const insertSpy = vi.spyOn(Node.prototype, 'insertBefore').mockImplementation(function (this: Node, node: Node, ref: Node | null) {
+        const focused = document.activeElement;
+        const lost = focused && node.contains(focused) && node.parentNode !== null;
+        const out = realInsert.call(this, node, ref);
+        if (lost) (focused as HTMLElement).blur();
+        return out;
+      } as never);
+      await pickFromMenu(w, 1, 'todo');
+      expect(ids(w, 'todo')).toEqual([1, 2, 3]);
+      expect(document.activeElement).toBe(moveButton(w, 'todo', 1));
+      // the server sorts the moved card below the others, so the refetch moves its DOM node
+      const cols = wire.columns as { cards: unknown[]; total: number }[];
+      cols[0].cards = [cardWire({ id: 2 }), cardWire({ id: 3 }), cardWire({ id: 1, version: 'v2' })];
+      cols[0].total = 3;
+      cols[1].cards = [];
+      cols[1].total = 0;
+      held.ok({ visible: true, card: cardWire({ id: 1, version: 'v2' }), undoToken: null });
+      await settle();
+      await new Promise((r) => setTimeout(r, 250));
+      await flushPromises();
+      expect(ids(w, 'todo')).toEqual([2, 3, 1]);
+      insertSpy.mockRestore();
+      expect(document.activeElement).toBe(moveButton(w, 'todo', 1));
+      w.unmount();
+    });
+
     it('does not pull focus away from where the user has gone in the meantime', async () => {
       const { w, held } = await mountNine([1, 2]);
       await pickFromMenu(w, 1, 'user:u9');
