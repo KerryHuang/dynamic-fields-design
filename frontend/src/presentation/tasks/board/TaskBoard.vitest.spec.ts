@@ -752,6 +752,42 @@ describe('TaskBoard moving', () => {
       w.unmount();
     });
 
+    it('follows the last moved card when a second card is moved right after the first', async () => {
+      const wire = boardWire({ columns: [
+        columnWire({ key: 'todo', total: 3, cards: [cardWire({ id: 1 }), cardWire({ id: 2 }), cardWire({ id: 3 })] }),
+        columnWire({ key: 'inProgress', total: 0, cards: [] }),
+        columnWire({ key: 'done', total: 0, cards: [] }),
+      ] });
+      const { w } = await mountBoard(wire, 1126);
+      const held = holdMove();
+      const cols = wire.columns as { cards: unknown[]; total: number }[];
+      const pick = async (id: number, key: string) => {
+        (w.get(`[data-testid="board-card-move-${id}"]`).element as HTMLElement).focus();
+        await w.get(`[data-testid="board-card-move-${id}"]`).trigger('click');
+        await new Promise((r) => setTimeout(r, 50));
+        document.body.querySelector<HTMLElement>(`[data-testid="move-item-${key}"]`)!.click();
+        await settle();
+      };
+      await pick(1, 'inProgress');
+      cols[0].cards = [cardWire({ id: 2 }), cardWire({ id: 3 })];
+      cols[0].total = 2;
+      cols[1].cards = [cardWire({ id: 1, version: 'v2' })];
+      cols[1].total = 1;
+      held.all[0].ok({ visible: true, card: cardWire({ id: 1, version: 'v2' }), undoToken: null });
+      await settle();
+      expect(document.activeElement).toBe(moveButton(w, 'inProgress', 1));
+      // still inside the follow window: open another card's menu and move it
+      await pick(3, 'done');
+      cols[0].cards = [cardWire({ id: 2 })];
+      cols[0].total = 1;
+      cols[2].cards = [cardWire({ id: 3, version: 'v2' })];
+      cols[2].total = 1;
+      held.all[1].ok({ visible: true, card: cardWire({ id: 3, version: 'v2' }), undoToken: null });
+      await settle();
+      expect(document.activeElement).toBe(moveButton(w, 'done', 3));
+      w.unmount();
+    });
+
     it('does not pull focus away from where the user has gone in the meantime', async () => {
       const { w, held } = await mountNine([1, 2]);
       await pickFromMenu(w, 1, 'user:u9');

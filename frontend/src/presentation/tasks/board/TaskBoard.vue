@@ -106,9 +106,10 @@ async function restoreFocus(plan: FocusPlan) {
   await nextTick();
   applyFocus(plan);
 }
-function applyFocus(plan: FocusPlan): boolean {
+/** `inMenu`：焦點還停在正在關閉的選單裡也算沒人接手；追蹤階段（移動已結束）不算，那是使用者在開下一張卡的選單。 */
+function applyFocus(plan: FocusPlan, inMenu = true): boolean {
   const active = document.activeElement;
-  if (active && active !== document.body && !active.closest('[data-testid="move-list"]')) return false;
+  if (active && active !== document.body && !(inMenu && active.closest('[data-testid="move-list"]'))) return false;
   const el = root.value;
   if (!el) return false;
   const moveButton = (id: number | null) => (id === null ? null : el.querySelector<HTMLElement>(`[data-testid="board-card-move-${id}"]`));
@@ -131,12 +132,13 @@ watch(() => props.board, async () => {
   const plan = followPlan;
   if (!plan) return;
   await nextTick();
-  if (!applyFocus(plan)) followPlan = null;
+  if (!applyFocus(plan, false)) followPlan = null;
 });
 onBeforeUnmount(() => clearTimeout(followTimer));
 
 async function doMove(card: BoardCard, to: BoardColumn, dueDate?: string, focus: FocusPlan | null = null) {
   if (moving.has(card.id)) return;
+  followPlan = null;
   moving.add(card.id);
   try {
     const run = move.mutateAsync({ card, groupBy: groupBy.value, toColumn: to.key, dueDate });
