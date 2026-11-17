@@ -64,10 +64,13 @@ public partial class ReportRunner(
         string Locale, IReadOnlyDictionary<string, string> UserNames, Dictionary<(string, string), string> Titles,
         IReadOnlyDictionary<string, string> Buckets, IReadOnlyDictionary<string, string> BlankLabels);
 
-    /// <summary>資料來源載入並套完條件後的列，以及共用尾段（下鑽、計算、輸出）需要的上下文。RowModule 決定「每列代表什麼」。</summary>
+    /// <summary>
+    /// 資料來源載入並套完條件後的列，以及共用尾段（下鑽、計算、輸出）需要的上下文。RowModule 決定「每列代表什麼」。
+    /// TaskIdOf 只有任務資料來源有：把列的 MainId 對回任務 Id（taskEvents 一個任務兩列）；模組來源為 null。
+    /// </summary>
     private sealed record SourceRows(
         IReadOnlyDictionary<string, Bound> Bound, List<ReportRow> Rows, Side Main, Side? Child, Module RowModule,
-        RunContext Ctx, ReportAppliedRange? Applied, List<string> FallbackReasons);
+        RunContext Ctx, ReportAppliedRange? Applied, List<string> FallbackReasons, Func<long, long>? TaskIdOf = null);
 
     /// <summary>Done 不為 null 時直接回它（早退、SQL 路徑的結果）；否則 Rows 交給共用尾段。</summary>
     private sealed record SourceLoad(ReportResult? Done, SourceRows? Rows);
@@ -93,9 +96,9 @@ public partial class ReportRunner(
         var frozen = basis != time.Today;
         var locale = string.IsNullOrEmpty(o.Locale) ? I18nText.FallbackLocale : o.Locale;
 
-        // 1–6 由資料來源載入、組格子、套條件；不認得的資料來源 fail closed（taskEvents 的事件列在 kr1c 才接上，在那之前同樣不回數字）
+        // 1–6 由資料來源載入、組格子、套條件；不認得的資料來源 fail closed
         var load = ReportDatasets.IsModule(d.Dataset) ? await LoadModuleAsync(d, o, basis, frozen, locale, ct)
-            : d.Dataset == ReportDatasets.Tasks ? await LoadTasksAsync(d, o, basis, frozen, locale, ct)
+            : ReportDatasets.IsTask(d.Dataset) ? await LoadTasksAsync(d, o, basis, frozen, locale, ct)
             : new SourceLoad(FailResult(ModuleDisabledState, ReportText.Get(locale, ReportText.ModuleDisabled), basis, frozen), null);
         if (load.Done is { } done) return done;
         return Finish(d, o, basis, frozen, locale, load.Rows!);
@@ -268,7 +271,7 @@ public partial class ReportRunner(
     /// <summary>共用尾段（步驟 7 以後）：下鑽、計算、欄位與分組標籤。資料來源只要交出套完條件的列。</summary>
     private static ReportResult Finish(ReportDefinition d, ReportRunOptions o, DateOnly basis, bool frozen, string locale, SourceRows source)
     {
-        var (bound, rows, mainSide, childSide, rowModule, ctx, applied, fallbackReasons) = source;
+        var (bound, rows, mainSide, childSide, rowModule, ctx, applied, fallbackReasons, _) = source;
         string T(string key, params object[] args) => ReportText.Get(locale, key, args);
 
         // 7. 下鑽只留該分組的列；各欄位值的 key 判斷與分組相同

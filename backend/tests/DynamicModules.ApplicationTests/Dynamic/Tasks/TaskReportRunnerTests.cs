@@ -423,6 +423,95 @@ public class TaskReportRunnerTests : TaskTestBase
         narrowed.Groups!.Select(g => (g.GroupKeys[0], g.Values["n"])).Should().Equal(plain.Groups!.Select(g => (g.GroupKeys[0], g.Values["n"])));
     }
 
+    // ---- taskEvents ----
+
+    private static ReportDefinition EventDef(List<ReportMeasure> measures, List<ReportGroup>? groups = null, long? primary = null, ReportDateRange? range = null) =>
+        TaskDef(measures, groups, primary: primary, range: range, dataset: ReportDatasets.TaskEvents);
+
+    private static ReportFilter IsEvent(long kind) => Fl(F.EventKind, "eq", Opt(kind));
+
+    [Fact]
+    public async Task TaskEvents_OneTaskTwoRows()
+    {
+        await SeedTask("建立後完成", status: TaskItemStatus.Done, created: Wall(11, 2), completed: Wall(11, 3));
+        await SeedTask("只建立", created: Wall(11, 3));
+
+        var r = await Run(EventDef([M("n", "countMain"), M("created", "countIf", cond: IsEvent(F.EventCreated)), M("done", "countIf", cond: IsEvent(F.EventCompleted))]));
+
+        r.State.Should().Be("ok", r.Message);
+        r.Total!["n"].Should().Be(3);
+        r.Total["created"].Should().Be(2);
+        r.Total["done"].Should().Be(1);
+        r.RowMeaning.Should().Be("一筆任務事件（建立或完成）");
+        r.FallbackReasons.Should().Equal("datasetMemoryOnly");
+    }
+
+    [Fact]
+    public async Task TaskEvents_WeeklyTrend()
+    {
+        // 基準日 11-04（週三，週一起始）：本週 11-02～11-08、上週 10-26～11-01
+        await SeedTask("上週建立本週完成", status: TaskItemStatus.Done, created: Wall(10, 27), completed: Wall(11, 3));
+        await SeedTask("上週建立上週完成", status: TaskItemStatus.Done, created: Wall(10, 28), completed: Wall(11, 1, 23));
+        await SeedTask("本週建立", created: Wall(11, 2));
+        await SeedTask("兩週前建立", created: Wall(10, 20));
+
+        var r = await Run(EventDef([M("created", "countIf", cond: IsEvent(F.EventCreated)), M("done", "countIf", cond: IsEvent(F.EventCompleted))],
+            [G(F.EventDate, "week")], F.EventDate, new ReportDateRange("lastWeeks", 2)));
+
+        r.State.Should().Be("ok", r.Message);
+        r.Groups!.Select(g => (g.GroupKeys[0], g.Values["created"], g.Values["done"])).Should().Equal(
+            (ReportDates.BucketKey(new DateOnly(2026, 10, 26), "week"), 2m, 1m),
+            (ReportDates.BucketKey(Day(2), "week"), 1m, 1m));
+    }
+
+    [Fact]
+    public async Task TaskEvents_ReopenedKeepsLastCompletionOnly()
+    {
+        var task = await SeedTask("完成又重開", assignee: "admin");
+        foreach (var status in new[] { "done", "todo", "done" })
+        {
+            var r = await Send(new UpdateTaskRequest(task.Id, JsonSerializer.SerializeToElement(new { status })));
+            r.IsSuccess.Should().BeTrue(r.Message);
+        }
+        (await Load(task.Id)).CompletedTime.Should().NotBeNull();
+
+        var result = await Run(EventDef([M("n", "countMain"), M("done", "countIf", cond: IsEvent(F.EventCompleted))]));
+
+        result.Total!["n"].Should().Be(2, "一列建立、一列（最後一次）完成");
+        result.Total["done"].Should().Be(1);
+    }
+
+    [Fact]
+    public async Task TaskEvents_DoneWithoutCompletedTime_NoCompletionRow()
+    {
+        await SeedTask("舊資料的完成", status: TaskItemStatus.Done, completed: null);
+        await SeedTask("重開後留著完成時間", status: TaskItemStatus.Todo, completed: Wall(11, 3));
+
+        var r = await Run(EventDef([M("n", "countMain"), M("done", "countIf", cond: IsEvent(F.EventCompleted))]));
+
+        r.Total!["n"].Should().Be(2, "只有兩列建立");
+        r.Total["done"].Should().Be(0);
+    }
+
+    [Fact]
+    public async Task Card_TaskEvents_ComparePeriods()
+    {
+        // 本週（11-02～11-08）完成 1 件；前兩週（10-26～11-01、10-19～10-25）各 2、0 件 → 平均 1，countIf 缺值當 0
+        await SeedTask("本週完成", status: TaskItemStatus.Done, created: Wall(10, 1), completed: Wall(11, 3));
+        await SeedTask("上週完成一", status: TaskItemStatus.Done, created: Wall(10, 1), completed: Wall(10, 27));
+        await SeedTask("上週完成二", status: TaskItemStatus.Done, created: Wall(10, 1), completed: Wall(10, 30));
+        var d = EventDef([M("done", "countIf", cond: IsEvent(F.EventCompleted))], [G(F.EventDate, "week")], F.EventDate, new ReportDateRange("thisWeek", null));
+
+        As("admin");
+        using var scope = NewScope();
+        var r = await scope.ServiceProvider.GetRequiredService<ReportRunner>().RunCardAsync(d, new ReportRunOptions(null, null, ComparePeriods: 2), default);
+
+        r.State.Should().Be("ok", r.Message);
+        r.Total!["done"].Should().Be(1);
+        r.Compare.Should().NotBeNull();
+        r.Compare!.PreviousAverage.Should().Be(1);
+    }
+
     [Fact]
     public async Task UnknownDataset_ModuleDisabled()
     {

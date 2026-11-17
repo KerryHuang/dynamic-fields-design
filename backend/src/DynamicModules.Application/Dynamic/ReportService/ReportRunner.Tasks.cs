@@ -52,17 +52,32 @@ public partial class ReportRunner
         var blanks = bound.Values.Where(b => F.BlankLabels.ContainsKey(b.Field.Id))
             .ToDictionary(b => b.Key, b => F.BlankLabels[b.Field.Id].Resolve(locale));
         var ctx = new RunContext(locale, await UserNamesAsync(bound.Values, ct), [], BucketsOf(d), blanks);
+        // tasks 一個任務一列；taskEvents 每個任務一列「建立」，完成（且有完成時間，J15）再一列「完成」。
+        // 事件列的 MainId 是 taskId*2（建立）、taskId*2+1（完成），每列不重複、去重照舊；TaskIdOf 對回任務 Id
+        var events = dataset == ReportDatasets.TaskEvents;
         var rows = new List<ReportRow>();
-        foreach (var item in items)
+        void Add(long mainId, TaskReportItem item, TaskEvent? ev)
         {
             var cells = new Dictionary<string, ReportCell>(bound.Count);
-            foreach (var b in bound.Values) cells[b.Key] = ApplyBucket(b, TaskCell(b.Field.Id, item, side, basis), ctx);
-            if (!d.Filters.All(f => Matches(f, cells[ReportCalculator.KeyOf(f.Field)], basis))) continue;
-            if (resolved is { } window && !ReportDates.Contains(window, cells[ReportCalculator.KeyOf(d.PrimaryDateField!)])) continue;
-            rows.Add(new ReportRow(item.Task.Id, null, cells));
+            foreach (var b in bound.Values) cells[b.Key] = ApplyBucket(b, TaskCell(b.Field.Id, item, side, basis, ev), ctx);
+            if (!d.Filters.All(f => Matches(f, cells[ReportCalculator.KeyOf(f.Field)], basis))) return;
+            if (resolved is { } window && !ReportDates.Contains(window, cells[ReportCalculator.KeyOf(d.PrimaryDateField!)])) return;
+            rows.Add(new ReportRow(mainId, null, cells));
+        }
+        foreach (var item in items)
+        {
+            var t = item.Task;
+            if (!events)
+            {
+                Add(t.Id, item, null);
+                continue;
+            }
+            Add(t.Id * 2, item, new TaskEvent(F.EventCreated, t.CreatedTime));
+            if (t.Status == TaskItemStatus.Done && t.CompletedTime is { } done) Add(t.Id * 2 + 1, item, new TaskEvent(F.EventCompleted, done));
         }
         if (rows.Count > options.MaxRows) return Fail(TooManyState, ReportText.Get(locale, ReportText.TooMany));
-        return new SourceLoad(null, new SourceRows(bound, rows, side, null, side.Module, ctx, applied, [DatasetMemoryOnly]));
+        Func<long, long> taskIdOf = events ? id => id / 2 : id => id;
+        return new SourceLoad(null, new SourceRows(bound, rows, side, null, side.Module, ctx, applied, [DatasetMemoryOnly], taskIdOf));
     }
 
     /// <summary>
@@ -70,7 +85,10 @@ public partial class ReportRunner
     /// restricted 一定要先於「不在選項」：記錄看不到、但模組或規則屬於觀看者可讀的模組時，先查選項會變成 ok，帶出模組或規則名稱；
     /// 規則屬於不可讀的模組時則變成 missing，等於洩漏模組可讀性。個人任務（ModuleId 為 null）先判斷成空，不是 restricted。
     /// </summary>
-    private static ReportCell TaskCell(long code, TaskReportItem item, Side side, DateOnly basis)
+    /// <summary>taskEvents 的一個事件：種類（-18 的選項 Id）與發生時間（-19）。</summary>
+    private sealed record TaskEvent(long Kind, DateTime At);
+
+    private static ReportCell TaskCell(long code, TaskReportItem item, Side side, DateOnly basis, TaskEvent? ev)
     {
         var t = item.Task;
         ReportCell Opt(long id) => new(Ok, null, $"opt_{id}", null, null);
@@ -101,13 +119,15 @@ public partial class ReportRunner
             F.Completion => TaskReportValues.CompletionOf(t) is { } c ? Opt(c) : EmptyCell,
             F.CompletionDays => Number(TaskReportValues.CompletionDays(t)),
             F.DelayDays => Number(TaskReportValues.DelayDays(t, basis)),
+            F.EventKind => ev is null ? EmptyCell : Opt(ev.Kind),
+            F.EventDate => ev is null ? EmptyCell : new TimedCell(ev.At),
             _ => EmptyCell,
         };
     }
 
     /// <summary>
     /// 資料庫端的縮小條件（J7）：狀態的 eq／in（多個條件取交集；不存在的選項值略過，in 全部無效時是空集合，J24），
-    /// 與主要日期欄位（到期日、建立時間、完成時間）的區間。兩者都只會多撈、不會少撈。
+    /// 與主要日期欄位（到期日、建立時間、完成時間；事件日期是建立或完成任一落在區間）的區間。兩者都只會多撈、不會少撈。
     /// </summary>
     private static TaskReportNarrowing Narrowing(ReportDefinition d, (DateOnly From, DateOnly To)? resolved)
     {
@@ -123,6 +143,7 @@ public partial class ReportRunner
             F.DueDate => "due",
             F.CreatedTime => "created",
             F.CompletedTime => "completed",
+            F.EventDate => "createdOrCompleted",
             _ => null,
         };
         return new TaskReportNarrowing(statuses, dateField, dateField is null ? null : resolved!.Value.From, dateField is null ? null : resolved!.Value.To);
