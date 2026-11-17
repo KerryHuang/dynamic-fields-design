@@ -106,7 +106,7 @@ const boardFailed = computed(() => !!boardQuery.error.value && !boardQuery.data.
       <q-btn color="primary" no-caps icon="add" :label="t('tasks.add')" data-testid="my-task-add" @click="adding = true" />
     </div>
     <template v-if="isBoard">
-      <q-banner v-if="boardGone" dense rounded class="bg-warning text-white q-mb-sm" role="status" data-testid="board-gone-notice">
+      <q-banner v-if="boardGone" dense rounded class="bg-info-soft q-mb-sm" role="status" data-testid="board-gone-notice">
         {{ t('taskBoard.gone') }}
         <template #action><q-btn flat dense no-caps :label="t('tasks.close')" data-testid="board-gone-close" @click="boardGone = false" /></template>
       </q-banner>
