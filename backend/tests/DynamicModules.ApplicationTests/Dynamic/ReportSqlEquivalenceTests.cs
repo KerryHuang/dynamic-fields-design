@@ -491,6 +491,31 @@ public class ReportSqlEquivalenceTests : ReportTestBase
     }
 
     [Fact]
+    public async Task MinMax_WithLegacyCondition_IgnoresConditionOnBothPaths()   // R1／J19：繞過驗證器直接塞舊定義，兩條路徑都忽略條件
+    {
+        await Prepare();
+        await SeedOrders();
+        var done = F(MainF(Status), "eq", OptDone);
+        foreach (var shape in new (string, List<ReportGroup>)[] { ("total", []), ("sales", [G(MainF(Sales))]) })
+        {
+            var (memory, sql) = await Both(Def(groups: shape.Item2, measures: [M("lo", "min", MainF(Amount), done), M("hi", "max", MainF(Amount), done), M("n", "countMain", cond: done)]));
+            ShouldMatch(memory, sql, "minmax/" + shape.Item1);
+            var (plainMemory, _) = await Both(Def(groups: shape.Item2, measures: [M("lo", "min", MainF(Amount)), M("hi", "max", MainF(Amount)), M("n", "countMain")]));
+            memory.Total!["lo"].Should().Be(plainMemory.Total!["lo"], "條件被忽略，與不帶條件相同");
+            memory.Total["hi"].Should().Be(plainMemory.Total["hi"]);
+        }
+    }
+
+    [Fact]
+    public async Task CountIf_WithStrayField_StaysOnSqlPath()   // G6：countIf 不需要欄位，帶了也不該讓整張報表退回記憶體路徑
+    {
+        await Prepare();
+        await SeedOrders();
+        var (memory, sql) = await Both(Def(measures: [M("c", "countIf", RegionVia, F(MainF(Status), "eq", OptDone))]));
+        ShouldMatch(memory, sql, "countIf-stray-field");
+    }
+
+    [Fact]
     public async Task Median_FallsBack_WithReason()
     {
         await Prepare();

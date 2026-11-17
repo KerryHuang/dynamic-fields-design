@@ -13,6 +13,7 @@ public class ReportDefinitionValidator(ReportModuleLoader loader, IModuleReposit
     /// <param name="name">null 表示不檢查名稱（預覽）。</param>
     public async Task<(ReportDefinition? Definition, ServiceResult? Failure)> ValidateAsync(string? name, ReportDefinition definition, CancellationToken ct)
     {
+        definition = ReportRules.DropIgnoredConditions(definition);
         var errors = new Dictionary<string, string[]>();
         if (name is not null && ReportRules.CheckName(name) is { } nameError) errors["name"] = [nameError];
         var shape = ReportRules.CheckShape(definition);

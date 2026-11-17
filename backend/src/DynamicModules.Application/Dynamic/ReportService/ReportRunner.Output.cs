@@ -84,8 +84,10 @@ public partial class ReportRunner
     {
         if (cond.Op != "eq" || cond.Value is not { ValueKind: JsonValueKind.String or JsonValueKind.Number or JsonValueKind.True or JsonValueKind.False } value) return null;
         var field = bound[ReportCalculator.KeyOf(cond.Field)].Field;
+        // 日期時間欄位沒有 eq 運算子，不在清單內；選項已刪除的列舉值轉不出標籤，走後備字樣
         if (field.Type is not (FieldType.Enum or FieldType.Boolean or FieldType.Text or FieldType.Integer or FieldType.Decimal or FieldType.Currency
-            or FieldType.Percent or FieldType.Date or FieldType.DateTime)) return null;
+            or FieldType.Percent or FieldType.Date)) return null;
+        if (field.Type == FieldType.Enum && !field.Options.Any(o => $"opt_{o.Id}" == value.GetString())) return null;
         var text = FieldDisplay.Format(field, value, locale, null, new Dictionary<string, string>());
         return text.Length == 0 ? null : text;
     }

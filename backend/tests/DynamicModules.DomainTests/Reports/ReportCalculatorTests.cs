@@ -185,6 +185,10 @@ public class ReportCalculatorTests
         ReportCalculator.Calculate(TwoOrders(), [], [m], true, (_, _) => true, multiGroup).DedupedNote.Should().Be(expected);
     }
 
+    [Fact]
+    public void DedupedNote_Merged_CountIfChildCondition_IsFalse() =>   // G3：條件在子模組是逐子記錄計數，不需要去重說明
+        ReportCalculator.Calculate(TwoOrders(), [], [M("countIf", null, Gte(Qty, 1))], true, Matches).DedupedNote.Should().BeFalse();
+
     [Theory]
     [InlineData("sum", true)]
     [InlineData("avg", true)]
@@ -282,6 +286,38 @@ public class ReportCalculatorTests
             Row(2, null, (Delay, Num(5)), (Status, Txt("opt_2"))),
         };
         Calc(rows, [], [M("avg", Delay, Eq(Status, "opt_2"))]).Total["avg"].Should().Be(5m);
+    }
+
+    [Fact]
+    public void MinMax_WithCondition_IgnoresCondition()   // J19 舊定義：min、max 的條件一律忽略，與 SQL 路徑一致
+    {
+        var r = Calc(TwoOrders(), [], [M("min", Amount, Gte(Amount, 100)) with { Id = "lo" }, M("max", Amount, Eq(Status, "x")) with { Id = "hi" }]);
+        r.Total["lo"].Should().Be(50m);
+        r.Total["hi"].Should().Be(100m);
+    }
+
+    [Fact]
+    public void MainFieldMeasure_WithChildCondition_IgnoresCondition()   // Y1：舊定義的主欄位量值帶子模組條件，比照 J19 忽略
+    {
+        var r = Calc(TwoOrders(), [], [M("sum", Amount, Gte(Qty, 3)) with { Id = "s" }, M("avg", Amount, Gte(Qty, 3)) with { Id = "a" },
+            M("median", Amount, Gte(Qty, 3)) with { Id = "m" }]);
+        r.Total["s"].Should().Be(150m);
+        r.Total["a"].Should().Be(75m);
+        r.Total["m"].Should().Be(75m);
+    }
+
+    [Fact]
+    public void ConditionalSum_MainFieldMainCondition_Merged_DedupesByMain()   // G2
+    {
+        var r = Calc(TwoOrders(), [], [M("sum", Amount, Gte(Amount, 100))]);
+        r.Total["sum"].Should().Be(100m);   // 100 那筆有 3 列子記錄，只算一次
+    }
+
+    [Fact]
+    public void ConditionalAvg_ChildFieldMainCondition_Merged_PerChildRow()   // G2
+    {
+        var r = Calc(TwoOrders(), [], [M("avg", Qty, Gte(Amount, 100))]);
+        r.Total["avg"].Should().Be(2m);   // 子記錄 1、2、3 逐列算；訂單 B 不符合
     }
 
     [Fact]

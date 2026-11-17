@@ -45,7 +45,7 @@
 - 例子：manager01 下鑽「業務一／逾期」→ 3 列，其中一列「所屬模組」是「（無權限）」（記錄在他的資料範圍外），點進去看得到任務，相關記錄顯示「相關記錄（無權限查看）」。
 
 **B4（主控裁決，待使用者確認；採審查 Y13）新量值的欄名帶出條件值。** `median` 是「{欄位} 中位數」；`countIf` 條件是單一值的 `eq` 時為「{條件欄位}＝{值} 筆數」；帶條件的 `sum`／`avg`／`median` 為「{欄位} 平均（{條件欄位}＝{值}）」；條件不是單一值的 `eq`（`in`、`gte`、多值、使用者欄位等）退回「{條件欄位} 符合條件筆數」與原欄名後加「（符合條件）」。
-- 推薦：值用觀看者語系的選項標籤（Enum、Boolean、Text 可轉；轉不出來就退回後備字樣），四語系寫在 `ReportText`。
+- 推薦：值用觀看者語系的選項標籤（Enum、Boolean、Text 可轉；轉不出來就退回後備字樣），四語系寫在 `ReportText`。實作的可帶值型別比這裡寫的多：Integer、Decimal、Currency、Percent、Date 也可以（值本身就是可讀的字面）；日期時間欄位沒有 `eq` 運算子所以不會出現；選項已被刪除的 Enum 值轉不出標籤，退回後備字樣。
 - 理由：量值沒有自訂名稱欄位（見「矛盾」6）；條件欄位觀看者一定看得到（看不到時整張已被擋下），把值放進欄名就能分開同一欄位的多個 `countIf`，內建負載報表的三個 `countIf` 不必等 kr3 的自訂名稱。
 - 選錯代價：不帶值時，同一欄位的兩個 `countIf` 欄名相同，使用者分不出哪欄是待辦、哪欄是進行中。
 - 例子：`countIf` 條件「狀態＝待辦」→「狀態＝待辦 筆數」；`avg(延遲天數)` 帶條件「完成狀況＝逾期完成」→「延遲天數 平均（完成狀況＝逾期完成）」；條件是 `Amount gte 100` → 「訂單金額 符合條件筆數」。
@@ -59,10 +59,24 @@
 - **J5 兩個小擴充。** `Bound` 加 `Restrictable`（-10、-11 為 true，讓 `KeyRank`／`GroupLabel` 認得 `__restricted`、`__missing`）；`RunContext` 加 `BlankLabels`（B2）。模組來源一律 `false`／空字典，輸出不變。
 - **J6 restricted 判斷。** 用 `TaskAccess.EvaluateManyAsync` 的 `TaskPermissions.Record.Accessible`，與看板卡片同一個判斷（設計 §4.3「一律用同一個判斷」）；規則已刪除時「任務規則」是 `missing`。
 - **J7 縮小載入。** 資料庫端只用兩種「證明精確」的條件：「狀態」的 `eq`／`in`、主要日期欄位（到期日、建立時間、完成時間；`taskEvents` 是建立或完成任一落在區間）的區間；載入後照舊重套全部條件。
-- **J8 量值條件的來源。** 主模組欄位的量值不能帶子模組欄位的條件（存檔 400「量值條件不能用子模組欄位」）：主欄位每個主記錄只算一次，帶子條件時要挑哪一列沒有定義。條件只准出現在 `ratio`、`countIf`、`sum`、`avg`、`median`。
-- **J19 既有定義的行為改變（Y3 查證）。** 存檔驗證現在不擋 `sum`／`avg`／`min`／`max`／`countMain` 帶 `Condition`（`CheckShape` 只要求 `ratio` 有條件），記憶體路徑與 SQL 路徑都忽略它；設計器（`StepGroups.vue` 只有 `ratio` 會帶條件）、內建應用程式套件、Demo 報表都不會產生這種定義，只有直接呼叫 API 才存得出來，所以「既有資料受影響」的範圍是零到極少數。處理：`sum`／`avg` 先前存的條件**從 kr1a 起開始生效**（使用者存條件的本意就是只算符合的列，沿用現有存檔、不做遷移）；`min`／`max`／`countMain`／`countChild` 新存檔改為 400，**已存在的舊定義執行時照舊忽略條件**（執行不重驗）。`formwright-ship` 前跑一條唯讀查詢（`ReportDefinitions.DefinitionJson` 非 `ratio` 量值帶 `condition` 的筆數）寫進交付說明；筆數不為 0 時列出報表 Id 給使用者。
+- **J8 量值條件的來源。** 主模組欄位的量值不能帶子模組欄位的條件（存檔 400「量值條件不能用子模組欄位」）：主欄位每個主記錄只算一次，帶子條件時要挑哪一列沒有定義。條件只准出現在 `ratio`、`countIf`、`sum`、`avg`、`median`（其他種類存檔時丟掉條件，見 J19）。
+- **J19 既有定義的行為改變（Y3 查證；kr1a 審查 R1、Y1、Y2 修正）。** 存檔驗證原本不擋 `sum`／`avg`／`min`／`max`／`countMain` 帶 `Condition`，記憶體路徑與 SQL 路徑都忽略它；設計器（`StepGroups.vue` 只有 `ratio` 會帶條件）、內建應用程式套件、Demo 報表都不會產生這種定義，只有直接呼叫 API 才存得出來，所以「既有資料受影響」的範圍是零到極少數。處理：
+  - `sum`／`avg`／`median` 先前存的條件**從 kr1a 起開始生效**（使用者存條件的本意就是只算符合的列，沿用現有存檔、不做遷移）。
+  - `min`／`max`／`countMain`／`countChild` **不支援條件：存檔時正規化，直接丟掉 `Condition`，不回 400**（`ReportRules.DropIgnoredConditions`，在結構與欄位檢查之前做，被丟掉的條件不再驗證）。原本的 400 會讓舊定義另存（`CopyReport` 重驗整份）與設計器重存（`designer-state.ts` 原樣保留 `condition`，畫面上卻看不到可刪的地方）失敗。**已存在、還沒重存的舊定義**執行時照舊忽略條件：記憶體路徑只對 `sum`／`avg`／`median`（以及 `ratio`、`countIf`）套用條件，`min`／`max` 與 SQL 路徑一致。
+  - 主模組欄位的量值帶子模組欄位的條件（J8 新存檔 400）：舊定義執行時同樣忽略條件，不會用「第一筆子記錄」決定整筆主記錄算不算。
+  - **出貨前跑一條唯讀查詢**（`formwright-ship` 前，Demo 與正式資料庫各一次；SQLite 語法，PostgreSQL 改用 `jsonb_array_elements`），結果寫進交付說明。筆數不為 0 時列出報表 Id 給使用者，這些報表的數字不會變（本來就忽略條件），只是下次存檔時條件會被丟掉：
+
+    ```sql
+    SELECT r.Id, r.Name, json_extract(m.value, '$.id') AS MeasureId, json_extract(m.value, '$.kind') AS Kind,
+           CASE WHEN json_extract(m.value, '$.kind') IN ('min', 'max', 'countMain', 'countChild')
+                THEN 'condition-dropped-on-save' ELSE 'main-field-with-child-condition' END AS Why
+    FROM Dynamic_Report r, json_each(r.DefinitionJson, '$.measures') m
+    WHERE json_type(m.value, '$.condition') = 'object'
+      AND (json_extract(m.value, '$.kind') NOT IN ('ratio', 'sum', 'avg', 'median', 'countIf')
+        OR (json_extract(m.value, '$.field.source') = 'main' AND json_extract(m.value, '$.condition.field.source') = 'child'));
+    ```
 - **J9 去重說明與累計。** `countIf` 與 `countMain` 同列進 `NeedsDedupedNote`（合併且條件在主模組、或依多選分組）；`median` 與 `avg` 同列；`countIf` 進卡片的 `AdditiveKinds`（可算累計占比、期間比較缺值當 0）。
-- **J10 SQL 帶條件量值。** `COUNT(CASE WHEN {p} THEN {a}.ScaledValue END)`、`SUM(CASE WHEN {p} THEN {a}.ScaledValue / {Split} END)`、`SUM(CASE WHEN {p} THEN {a}.ScaledValue % {Split} END)`；`{Split}` 沿用 `ReportQueryBuilder` 現有的整數常數 `Split = 1_000_000_000`（`:30`，現行 `:182-183` 就是這樣用），**不寫 `1e9` 這類浮點常值**（SQLite、PostgreSQL 都會變成 REAL 除法，hi 帶小數、`GetInt64` 截斷，15 位數金額會和記憶體路徑對不上）。謂詞產生三次（各自別名與參數），不另外 join 旗標欄；`countIf` 同 `ratio` 的 `hit` 欄。效能見 Task 3 的基準案例（Y4），超出既有基準才改成先算一次旗標欄。
+- **J10 SQL 帶條件量值。** `COUNT(CASE WHEN {p} THEN {a}.ScaledValue END)`、`SUM(CASE WHEN {p} THEN {a}.ScaledValue / {Split} END)`、`SUM(CASE WHEN {p} THEN {a}.ScaledValue % {Split} END)`；`{Split}` 沿用 `ReportQueryBuilder` 現有的整數常數 `Split = 1_000_000_000`（`:30`，現行 `:182-183` 就是這樣用），**不寫 `1e9` 這類浮點常值**（SQLite、PostgreSQL 都會變成 REAL 除法，hi 帶小數、`GetInt64` 截斷，15 位數金額會和記憶體路徑對不上）。謂詞產生三次（各自別名與參數），不另外 join 旗標欄；`countIf` 同 `ratio` 的 `hit` 欄。效能見 Task 3 的基準案例（Y4），超出既有基準才改成先算一次旗標欄。**kr1a 審查 Y5：實測 10k 筆，不帶條件 avg 9 ms、帶條件 avg 23 ms（2.5 倍）、帶條件 avg＋sum＋countIf 41 ms（4.5 倍）、ratio 10 ms，成本可接受，不改成旗標欄；要到數百萬筆的規模再重測。**
 - **J11 目錄端點。** 新增 `GET /api/v3/dynamic/reports/datasets`（`[{ dataset, name }]`）與 `GET /reports/datasets/{dataset}/catalog`（同 `ModuleCatalog` 形狀，只列可選欄位與觀看者的選項）；**不改** `GET /reports/catalog`（現在的設計器直接拿它當模組清單，多兩筆會被當成模組點進去壞掉），kr2 做設計器時再合併。理由見「範圍確認」。
 - **J12 `TaskIds`。** `ReportResult` 末尾加 `IReadOnlyList<long>? TaskIds`（只有任務資料來源且有明細時有值；`WhenWritingNull` 不輸出，模組回應不變）；`CapDetail`、`DrillReportHandler`、`DashboardCardRunner` 三處截斷統一改呼叫 `ReportRules.TakeDetail(result, n)`，`TaskIds` 跟著截。
 - **J13 定義 JSON。** `ReportDefinition` 末尾加 `[property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? Dataset = null`；模組報表重新存檔的 JSON 與現在逐字相同，`Version` 維持 1。
@@ -84,7 +98,7 @@
 - **業務政策不寫死**（鐵則 2）：kr1 沒有新的業務數字。載入上限沿用 `Reports:MaxLoadRows`、`Reports:MaxRows`（`ReportOptions`，可設定）；下鑽 500 筆、畫面明細 1000 筆沿用 `ReportRules.DrillLimit`／`DetailLimit` 單一來源（p2 的 A24 會改成政策，見「矛盾」3）；一週起始日讀 `calendar.weekStart`；基準日用 `ReportRunner.BasisDateAsync`。
 - **fail closed**：看不到的任務不進列（載入時套 `TaskVisibility`，不是載入後丟）；記錄判斷不出來就當看不到（`restricted`）；`restricted`、`missing` 的格子對任何條件都不符合（含 `ne`、`notIn`）。
 - **反目標**（設計 §2）是測試對象：任務報表不提供說明、留言、附件、記錄標題；條件「所屬模組＝X」不能推出看不到的記錄屬於哪個模組；匯出內容與畫面相同。
-- **模組報表行為完全不變**：不帶 `dataset` 的定義、所有既有測試原樣通過；沒帶條件的 `sum`／`avg` 與現行結果相同；SQL 路徑只多出 `countIf`、帶條件量值兩種形狀。**唯一接受的行為改變是 J19**（舊 API 存的 `sum`／`avg` 帶條件開始生效，設計器不會產生這種定義）。
+- **模組報表行為完全不變**：不帶 `dataset` 的定義、所有既有測試原樣通過；沒帶條件的 `sum`／`avg` 與現行結果相同；SQL 路徑只多出 `countIf`、帶條件量值兩種形狀。**唯一接受的行為改變是 J19**（舊 API 存的 `sum`／`avg` 帶條件開始生效，`min`／`max`／`countMain`／`countChild` 的條件存檔時丟掉，設計器不會產生這種定義）。
 - **日期**：營運時區的日曆天；`CreatedTime`、`CompletedTime` 是 `IBusinessTime.Now` 寫入的台北牆上時間，取日期用 `DateOnly.FromDateTime`，不經主機時區；動到日期的測試另跑 `TZ=UTC`。
 - **PostgreSQL 相容**：任務載入只用 EF LINQ，不寫 raw SQL；DateTime 參數 `Kind` 明確（`Unspecified` 牆上時間，與寫入一致）；不改 `ReportQueryBuilder` 的 SQLite 專屬片段（pg1 的事）。
 - **i18n**：使用者看得到的新字串（欄位名、選項名、資料來源名、量值欄名、B2 空值名）放後端四語表（`ReportText` 與 `TaskReportFields` 的標籤表），泰文、越南文沿用「待母語者校對」；沒有前端 i18n 改動。
@@ -260,7 +274,7 @@ git commit -m "feat(report): 量值新增 countIf、median 與帶條件的 sum�
 
 **Interfaces:**
 - Consumes：Task 1 的量值語意。
-- Produces：存檔／預覽驗證規則（J8）；欄名（B4／Y13）：`median` → `ReportText.Median`「{0} 中位數」（ValueType 同 `avg`：`number` 或 `percent`）；`countIf` 條件是單一值的 `eq` 且值轉得成標籤時 → `ReportText.CountIfEq`「{0}＝{1} 筆數」，否則 `ReportText.CountIf`「{0} 符合條件筆數」（ValueType `number`）；`sum`／`avg`／`median` 帶條件時，條件是可轉標籤的單一值 `eq` → 原欄名加 `ReportText.ConditionalEq`「（{0}＝{1}）」，否則加 `ReportText.Conditional`「（符合條件）」。值轉標籤用 `FieldDisplay.Format`（Enum、Boolean、Text；使用者欄位等轉不出來就走後備字樣），整個邏輯集中在 `MeasureColumn` 旁一個小函式，B4 被推翻時只改這一處。SQL 路徑退回原因：`measureNotSupported:countIf`、`measureNotSupported:median`、`measureConditionNotSupported:<量值 Id>`（Task 3 拿掉第一與第三個）。
+- Produces：存檔／預覽驗證規則（J8）；欄名（B4／Y13）：`median` → `ReportText.Median`「{0} 中位數」（ValueType 同 `avg`：`number` 或 `percent`）；`countIf` 條件是單一值的 `eq` 且值轉得成標籤時 → `ReportText.CountIfEq`「{0}＝{1} 筆數」，否則 `ReportText.CountIf`「{0} 符合條件筆數」（ValueType `number`）；`sum`／`avg`／`median` 帶條件時，條件是可轉標籤的單一值 `eq` → 原欄名加 `ReportText.ConditionalEq`「（{0}＝{1}）」，否則加 `ReportText.Conditional`「（符合條件）」。值轉標籤用 `FieldDisplay.Format`（Enum、Boolean、Text、Integer、Decimal、Currency、Percent、Date；使用者欄位、已刪除的選項等轉不出來就走後備字樣），整個邏輯集中在 `MeasureColumn` 旁一個小函式，B4 被推翻時只改這一處。SQL 路徑退回原因：`measureNotSupported:countIf`、`measureNotSupported:median`、`measureConditionNotSupported:<量值 Id>`（Task 3 拿掉第一與第三個）。
 
 - [ ] **Step 1: 寫失敗測試**
 
@@ -295,7 +309,7 @@ Expected: 新案例 FAIL（存檔被拒「量值種類不合法」；SQL 版本�
 
 - [ ] **Step 3: 實作**
 
-`ReportRules.Kinds` 加 `countIf`、`median`；`MeasureColumn` 欄名照 Produces；`CheckShape`：`countIf` 沒條件 →「量值 {Id} 需要條件」；`median` 沒欄位 →「量值 {Id} 需要欄位」；`Condition` 出現在 `min`、`max`、`countMain`、`countChild` →「量值 {Id} 不能帶條件」；`m.Field?.Source == "main" && m.Condition?.Field.Source == "child"` →「量值 {Id} 的條件不能用子模組欄位」。`Check`：`median` 與 `sum`／`avg` 同一個 `CanSum` 檢查。`PlanAggregate` 的量值迴圈前：`countIf`、`median` 加 `measureNotSupported:{kind}`；`sum`／`avg` 帶條件加 `measureConditionNotSupported:{m.Id}`。
+`ReportRules.Kinds` 加 `countIf`、`median`；`MeasureColumn` 欄名照 Produces；`CheckShape`：`countIf` 沒條件 →「量值 {Id} 需要條件」；`median` 沒欄位 →「量值 {Id} 需要欄位」；`Condition` 出現在 `min`、`max`、`countMain`、`countChild` → **不報錯，存檔前由 `DropIgnoredConditions` 丟掉**（J19）；`m.Field?.Source == "main" && m.Condition?.Field.Source == "child"` →「量值 {Id} 的條件不能用子模組欄位」。`Check`：`median` 與 `sum`／`avg` 同一個 `CanSum` 檢查。`PlanAggregate` 的量值迴圈前：`countIf`、`median` 加 `measureNotSupported:{kind}`；`sum`／`avg` 帶條件加 `measureConditionNotSupported:{m.Id}`。
 
 - [ ] **Step 4: 跑測試確認通過**
 

@@ -1309,8 +1309,6 @@ public class ReportRunnerTests : ReportTestBase
         var cond = F(MainF(Amount), "gte", 1);
         var bad = new[]
         {
-            M("m", "min", MainF(Amount), cond),
-            M("m", "countMain", cond: cond),
             M("m", "countIf"),
             M("m", "median"),
             M("m", "median", MainF(Note)),
@@ -1329,14 +1327,71 @@ public class ReportRunnerTests : ReportTestBase
     }
 
     [Fact]
+    public async Task Save_ConditionOnMinMaxCount_IsDroppedNotRejected()   // Y2：不支援條件的量值種類存檔時丟掉 Condition，另存與設計器重存才不會失敗
+    {
+        await Arrange();
+        var validator = Svc<ReportDefinitionValidator>();
+        var cond = F(MainF(Amount), "gte", 1);
+        var ghost = F(new ReportFieldRef(Main, 999999, null), "gte", 1);   // 條件欄位不存在也沒關係，反正會被丟掉
+        var kept = M("k", "sum", MainF(Amount), cond);
+        var measures = new[]
+        {
+            M("a", "min", MainF(Amount), cond), M("b", "max", MainF(Amount), cond),
+            M("c", "countMain", cond: cond), M("d", "countChild", cond: ghost), kept,
+        };
+        var (definition, failure) = await validator.ValidateAsync(null, Def(Shipments, measures: [.. measures]), CancellationToken.None);
+        failure.Should().BeNull();
+        definition!.Measures.Where(m => m.Id is "a" or "b" or "c" or "d").Should().OnlyContain(m => m.Condition == null);
+        definition.Measures.Single(m => m.Id == "k").Condition.Should().NotBeNull("sum 的條件照舊保留");
+    }
+
+    [Fact]
     public async Task Card_CountIf_CumulativePercent()
     {
         await Arrange();
         await SeedStatusOrders();
         var d = Def(groups: [G(MainF(Sales))], measures: [M("c", "countIf", cond: F(MainF(Status), "eq", OptDone))]);
         var r = await Svc<ReportRunner>().RunCardAsync(d, new ReportRunOptions(null, null, Cumulative: true), CancellationToken.None);
-        r.Cumulative.Should().NotBeNull();
-        r.Cumulative!.Last().Should().Be(100m);
+        r.Groups!.Select(g => g.GroupKeys[0]).Should().Equal("sales01", "sales02");   // 已完成：sales01 兩筆、sales02 一筆，由大到小
+        r.Groups!.Select(g => g.Values["c"]).Should().Equal(2m, 1m);
+        r.Cumulative.Should().HaveCount(2);
+        r.Cumulative![0].Should().BeApproximately(66.67m, 0.01m);
+        r.Cumulative[1].Should().Be(100m);
+    }
+
+    [Fact]
+    public async Task Card_CountIf_PeriodCompare_MissingPreviousIsZero()
+    {
+        await Arrange();
+        await Insert("order", "admin", (Due, "2026-11-02"), (Status, OptDone));
+        await Insert("order", "admin", (Due, "2026-11-03"), (Status, OptOpen));
+        var d = Def(measures: [M("c", "countIf", cond: F(MainF(Status), "eq", OptDone))], primary: MainF(Due), range: new ReportDateRange("thisMonth", null));
+        var r = await Svc<ReportRunner>().RunCardAsync(d, new ReportRunOptions(null, null, ComparePeriods: 1), CancellationToken.None);
+        r.Total!["c"].Should().Be(1m);
+        r.Compare!.PreviousAverage.Should().Be(0m, "前期沒有任何資料，countIf 缺值當 0 而不是 null");
+    }
+
+    [Fact]
+    public async Task MeasureColumnName_DateEq_ShowsDateOnly_DateTimeHasNoEq()   // Y3：日期時間欄位沒有 eq 運算子，欄名不會出現「00:00」；日期欄位的 eq 只顯示日期
+    {
+        await Arrange();
+        await Insert("order", "admin", (Due, "2026-11-01"), (At, "2026-11-01T09:00:00+08:00"));
+        var r = await Run(Def(measures: [M("c", "countIf", cond: F(MainF(Due), "eq", "2026-11-01"))]));
+        r.Columns.Single().Label.Should().Be("交期＝2026-11-01 筆數");
+        r.Total!["c"].Should().Be(1m);
+        var (definition, failure) = await Svc<ReportDefinitionValidator>().ValidateAsync(
+            null, Def(measures: [M("c", "countIf", cond: F(MainF(At), "eq", "2026-11-01"))]), CancellationToken.None);
+        definition.Should().BeNull();
+        failure!.IsInvalid.Should().BeTrue();
+    }
+
+    [Fact]
+    public async Task MeasureColumnName_EnumOptionGone_FallsBackToPlainWording()   // G4
+    {
+        await Arrange();
+        await Insert("order", "admin", (Status, OptDone));
+        var r = await Run(Def(measures: [M("c", "countIf", cond: F(MainF(Status), "eq", "opt_ghost"))]));
+        r.Columns.Single().Label.Should().Be("狀態 符合條件筆數");
     }
 
 }

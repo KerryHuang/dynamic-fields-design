@@ -51,6 +51,17 @@ public static class ReportRules
         return null;
     }
 
+    /// <summary>
+    /// 存檔時的正規化（J19、Y2）：只有 ratio、countIf、sum、avg、median 用得到條件，其他量值種類帶的 Condition 直接丟掉，
+    /// 不回 400，舊定義另存、設計器重存才不會失敗。要在結構與欄位檢查之前做，被丟掉的條件就不會再被驗證。
+    /// </summary>
+    public static ReportDefinition DropIgnoredConditions(ReportDefinition d) =>
+        d.Measures is { } measures && measures.Any(IsIgnoredCondition)
+            ? d with { Measures = [.. measures.Select(m => IsIgnoredCondition(m) ? m with { Condition = null } : m)] }
+            : d;
+
+    private static bool IsIgnoredCondition(ReportMeasure? m) => m is { Condition: not null, Kind: "min" or "max" or "countMain" or "countChild" };
+
     /// <summary>結構檢查：版本、清單與引用不可缺、量值 Id 唯一、量值與分組的組合合法。通過後才能載入模組做後續檢查。</summary>
     public static List<string> CheckShape(ReportDefinition d)
     {
@@ -84,7 +95,6 @@ public static class ReportRules
             else if (m.Kind is "sum" or "avg" or "median" or "min" or "max" && m.Field is null) errors.Add($"量值 {m.Id} 需要欄位");
             else if (m.Kind is "ratio" or "countIf" && m.Condition is null) errors.Add($"量值 {m.Id} 需要條件");
             else if (m.Kind == "countChild" && d.Child is null) errors.Add($"量值 {m.Id} 需要合併子模組");
-            else if (m.Kind is "min" or "max" or "countMain" or "countChild" && m.Condition is not null) errors.Add($"量值 {m.Id} 不能帶條件");
             else if (m.Field?.Source == "main" && m.Condition?.Field.Source == "child") errors.Add($"量值 {m.Id} 的條件不能用子模組欄位");
         }
 
