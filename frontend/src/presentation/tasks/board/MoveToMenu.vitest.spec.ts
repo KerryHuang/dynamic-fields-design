@@ -39,7 +39,7 @@ describe('MoveToMenu', () => {
     const byKey = (k: string) => document.body.querySelector<HTMLElement>(`[data-testid="move-item-${k}"]`)!;
     expect(items().map((i) => i.querySelector('.move-label')?.textContent)).toEqual(['逾期', '今天', '本週', '之後', '無到期日']);
     expect(byKey('overdue').getAttribute('aria-disabled')).toBe('true');
-    expect(byKey('overdue').textContent).toContain('不能放進逾期');
+    expect(byKey('overdue').textContent).toContain('不能改成過去的日期，請開任務詳細');
     expect(byKey('later').getAttribute('aria-disabled')).toBe('false');
     expect(byKey('thisWeek').getAttribute('aria-disabled')).toBe('false');
     // 選不能放的欄什麼都不發生，選能放的欄送出並關閉
@@ -101,8 +101,55 @@ describe('MoveToMenu', () => {
     await flushPromises();
     const sheet = document.body.querySelector('[data-testid="move-sheet"]')!;
     expect(sheet.classList.contains('full-width')).toBe(true);
-    expect(sheet.textContent).toContain('移到…');
+    expect(sheet.textContent).toContain('到…');
     expect(sheet.querySelectorAll('[role="menuitem"]').length).toBe(3);
+    w.unmount();
+  });
+
+  it('a disabled column does not close the menu; Esc still does', async () => {
+    const w = mountMenu({ wire: dueWithCard() });
+    await w.get('[data-testid="board-card-move-1"]').trigger('click');
+    await flushPromises();
+    document.body.querySelector<HTMLElement>('[data-testid="move-item-overdue"]')!.click();
+    await flushPromises();
+    expect(document.body.querySelector('[role="menu"]')).not.toBeNull();
+    expect(w.emitted('move')).toBeUndefined();
+    w.unmount();
+  });
+
+  it('only the current item is a Tab stop (roving tabindex), and Tab closes the menu', async () => {
+    const w = mountMenu({ wire: dueWithCard() });
+    await w.get('[data-testid="board-card-move-1"]').trigger('click');
+    await new Promise((r) => setTimeout(r, 50));
+    const tabbable = () => items().filter((i) => i.getAttribute('tabindex') !== '-1');
+    expect(tabbable()).toEqual([document.activeElement]);
+    const list = document.body.querySelector<HTMLElement>('[role="menu"]')!;
+    list.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown', bubbles: true, cancelable: true }));
+    await flushPromises();
+    expect(tabbable()).toEqual([document.activeElement]);
+    expect(tabbable()).toHaveLength(1);
+    list.dispatchEvent(new KeyboardEvent('keydown', { key: 'Tab', bubbles: true, cancelable: true }));
+    await flushPromises();
+    expect(document.body.querySelector('[role="menu"]')).toBeNull();
+    w.unmount();
+  });
+
+  it('the button says what it opens: a menu on desktop, a dialog on a phone', async () => {
+    const desktop = mountMenu();
+    expect(desktop.get('[data-testid="board-card-move-1"]').attributes('aria-haspopup')).toBe('menu');
+    desktop.unmount();
+    const phone = mountMenu({ phone: true });
+    expect(phone.get('[data-testid="board-card-move-1"]').attributes('aria-haspopup')).toBe('dialog');
+    phone.unmount();
+  });
+
+  it('the sheet title reuses the translated "move X to" sentence instead of gluing words with a full-width space', async () => {
+    const w = mountMenu({ phone: true, card: { title: '寄合約' } });
+    await w.get('[data-testid="board-card-move-1"]').trigger('click');
+    await flushPromises();
+    const sheet = document.body.querySelector('[data-testid="move-sheet"]')!;
+    expect(sheet.textContent).toContain('移動「寄合約」到…');
+    expect(sheet.textContent).not.toContain('\u3000');
     w.unmount();
   });
 });

@@ -5,20 +5,24 @@ import { moveBlockKey, type MoveTarget } from 'src/domain/dynamic/task-board-typ
 
 /** 「移到…」選單／對話框共用的欄清單（鍵盤：方向鍵與 Home／End 移動焦點，Enter 或空白鍵選取）。不能放的欄灰掉但仍可聚焦，原因寫在項目裡讓報讀器讀得到。 */
 const props = defineProps<{ targets: MoveTarget[]; labelOf: (key: string) => string }>();
-const emit = defineEmits<{ pick: [key: string] }>();
+const emit = defineEmits<{ pick: [key: string]; close: [] }>();
 const { t } = useI18n();
 
 const list = ref<HTMLElement | null>(null);
 // 目前所在的欄也不能選（移到原地沒有意義），但仍可聚焦、讀得到「目前所在」
 const unavailable = (x: MoveTarget) => !x.droppable || x.current;
 const firstEnabled = () => props.targets.findIndex((x) => !unavailable(x));
+// roving tabindex：只有目前這一項是 Tab 停留點，其餘用方向鍵到；Tab 本身離開清單（見 onKey）
+const current = ref(Math.max(0, firstEnabled()));
 // 選單／對話框開啟後焦點進到第一個能選的欄（沒有就第一項），方向鍵才有地方起步
 onMounted(() => nextTick(() => {
   const items = list.value?.querySelectorAll<HTMLElement>('[role="menuitem"]');
-  items?.[Math.max(0, firstEnabled())]?.focus();
+  items?.[current.value]?.focus();
 }));
 
 function onKey(e: KeyboardEvent) {
+  // Tab 會把焦點帶出清單；清單不能開在原地，一起關掉（焦點由選單／對話框歸還給按鈕）
+  if (e.key === 'Tab') return emit('close');
   const items = [...(list.value?.querySelectorAll<HTMLElement>('[role="menuitem"]') ?? [])];
   if (!items.length) return;
   const at = items.indexOf(document.activeElement as HTMLElement);
@@ -38,8 +42,8 @@ function pick(x: MoveTarget) {
   <div ref="list" role="menu" class="move-list column no-wrap" :aria-label="t('taskBoard.moveTo.title')" data-testid="move-list" @keydown="onKey">
     <button
       v-for="(x, i) in targets" :key="x.key" type="button" role="menuitem" class="move-item text-left" :class="{ 'is-disabled': unavailable(x) }"
-      :aria-disabled="unavailable(x)" :aria-current="x.current ? 'true' : undefined" :data-autofocus="i === firstEnabled() ? '' : undefined"
-      :data-testid="`move-item-${x.key}`" @click="pick(x)"
+      :tabindex="i === current ? 0 : -1" :aria-disabled="unavailable(x)" :aria-current="x.current ? 'true' : undefined" :data-autofocus="i === firstEnabled() ? '' : undefined"
+      :data-testid="`move-item-${x.key}`" @focus="current = i" @click="pick(x)"
     >
       <span class="move-label">{{ labelOf(x.key) }}</span>
       <span v-if="x.current" class="move-note text-caption text-muted">{{ t('taskBoard.moveTo.current') }}</span>

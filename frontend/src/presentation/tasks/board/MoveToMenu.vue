@@ -24,15 +24,15 @@ function pick(key: string) {
 <template>
   <q-btn
     flat round dense size="sm" icon="drive_file_move" class="board-card-move" :aria-label="t('taskBoard.moveTo.buttonFor', { title: card.title })"
-    :title="t('taskBoard.moveTo.button')" aria-haspopup="menu" :aria-expanded="open" :data-testid="`board-card-move-${card.id}`" @click="phone && (open = true)"
+    :title="t('taskBoard.moveTo.button')" :aria-haspopup="phone ? 'dialog' : 'menu'" :aria-expanded="open" :data-testid="`board-card-move-${card.id}`" @click="phone && (open = true)"
   >
-    <q-menu v-if="!phone" v-model="open" auto-close anchor="bottom right" self="top right">
-      <MoveTargetList :targets="targets" :label-of="labelOf" @pick="pick" />
+    <q-menu v-if="!phone" v-model="open" anchor="bottom right" self="top right">
+      <MoveTargetList :targets="targets" :label-of="labelOf" @pick="pick" @close="open = false" />
     </q-menu>
     <q-dialog v-else v-model="open" position="bottom">
       <q-card class="full-width move-sheet" data-testid="move-sheet">
-        <q-card-section class="text-subtitle1 ellipsis-2-lines">{{ t('taskBoard.moveTo.title') }}　{{ card.title }}</q-card-section>
-        <MoveTargetList :targets="targets" :label-of="labelOf" @pick="pick" />
+        <q-card-section class="text-subtitle1 ellipsis-2-lines">{{ t('taskBoard.moveTo.buttonFor', { title: card.title }) }}</q-card-section>
+        <MoveTargetList :targets="targets" :label-of="labelOf" @pick="pick" @close="open = false" />
         <q-card-actions align="right"><q-btn v-close-popup flat no-caps :label="t('tasks.cancel')" /></q-card-actions>
       </q-card>
     </q-dialog>

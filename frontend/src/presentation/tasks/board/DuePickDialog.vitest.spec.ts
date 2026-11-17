@@ -70,4 +70,26 @@ describe('DuePickDialog', () => {
     expect(w.findComponent(quasar.QDate).props('modelValue')).toBe('2026-11-29');
     w.unmount();
   });
+
+  describe('on a phone width', () => {
+    afterEach(() => { quasar.Screen.lt.sm = false; });
+    const maximized = () => document.body.querySelector('.q-dialog__inner--maximized') !== null;
+    const cardStyle = () => document.body.querySelector<HTMLElement>('[data-testid="due-pick"]')!.getAttribute('style') ?? '';
+
+    it('fills the screen below 600px, and keeps its fixed width above', async () => {
+      quasar.Screen.lt.sm = true;
+      const phone = mountDialog();
+      await flushPromises();
+      expect(maximized()).toBe(true);
+      expect(cardStyle()).not.toContain('width: 340px');
+      phone.unmount();
+      document.body.innerHTML = '';
+      quasar.Screen.lt.sm = false;
+      const desktop = mountDialog();
+      await flushPromises();
+      expect(maximized()).toBe(false);
+      expect(cardStyle()).toContain('width: 340px');
+      desktop.unmount();
+    });
+  });
 });

@@ -8,8 +8,8 @@ const { t } = useI18n();
 </script>
 
 <template>
-  <q-dialog :model-value="modelValue" @update:model-value="(v) => emit('update:modelValue', v)">
-    <q-card style="width: 360px; max-width: 95vw" data-testid="move-confirm">
+  <q-dialog :model-value="modelValue" :maximized="$q.screen.lt.sm" @update:model-value="(v) => emit('update:modelValue', v)">
+    <q-card :style="$q.screen.lt.sm ? undefined : 'width: 360px; max-width: 95vw'" data-testid="move-confirm">
       <q-card-section class="text-h6">{{ title }}</q-card-section>
       <q-card-section class="q-pt-none" data-testid="move-confirm-body">{{ body }}</q-card-section>
       <q-card-actions align="right">

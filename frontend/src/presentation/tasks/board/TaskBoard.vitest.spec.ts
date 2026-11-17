@@ -229,9 +229,9 @@ const settle = async () => { await flushPromises(); await new Promise((r) => set
 async function dragTo(w: ReturnType<typeof mount>, cardId: number, columnKey: string | null) {
   const target = columnKey === null ? null : w.get(`[data-testid="board-column-${columnKey}"]`).element;
   document.elementFromPoint = (() => target) as never;
-  const fire = (type: string, x: number, y: number, on: EventTarget = window) => {
-    const e = new MouseEvent(type, { clientX: x, clientY: y, bubbles: true });
-    Object.assign(e, { pointerType: 'mouse', pointerId: 1 });
+  const fire = (type: string, x: number, y: number, on: EventTarget = window, extra: Record<string, unknown> = {}) => {
+    const e = new MouseEvent(type, { clientX: x, clientY: y, buttons: 1, bubbles: true });
+    Object.assign(e, { pointerType: 'mouse', pointerId: 1, isPrimary: true }, extra);
     on.dispatchEvent(e);
   };
   fire('pointerdown', 10, 10, w.get(`[data-testid="board-card-${cardId}"]`).element);
@@ -246,18 +246,19 @@ async function dragTo(w: ReturnType<typeof mount>, cardId: number, columnKey: st
 /** 讓 /move 請求停住，由測試決定何時、怎麼回；其他請求照舊。 */
 function holdMove() {
   const base = http.defaults.adapter as (c: InternalAxiosRequestConfig) => Promise<unknown>;
-  let settleMove!: { ok: (data: unknown) => void; fail: (status: number, data?: unknown) => void };
+  const all: { ok: (data: unknown) => void; fail: (status: number, data?: unknown) => void }[] = [];
   http.defaults.adapter = ((config: InternalAxiosRequestConfig) => {
     if (!/\/move$/.test(String(config.url))) return base(config);
     calls.push({ method: String(config.method), url: String(config.url), params: config.params, data: config.data });
     return new Promise((resolve, reject) => {
-      settleMove = {
+      all.push({
         ok: (data) => resolve({ data, status: 200, statusText: 'OK', headers: {}, config }),
         fail: (status, data) => reject({ config, response: { status, data, headers: {}, config } }),
-      };
+      });
     });
   }) as never;
-  return { ok: (d: unknown) => settleMove.ok(d), fail: (s: number, d?: unknown) => settleMove.fail(s, d) };
+  // ok / fail answer the latest request; all[i] answers the i-th
+  return { all, ok: (d: unknown) => all.at(-1)!.ok(d), fail: (s: number, d?: unknown) => all.at(-1)!.fail(s, d) };
 }
 const movedCard = (o: Record<string, unknown> = {}) => ({ visible: true, card: cardWire({ id: 1, status: 'inProgress', version: '20261102000000000', ...o }), undoToken: null });
 
@@ -277,12 +278,12 @@ describe('TaskBoard moving', () => {
     expect(w.get('[data-testid="board-column-inProgress"] [data-testid="board-column-total"]').text()).toBe('2');
     expect(bodyOf(moveCalls()[0])).toEqual({ groupBy: 'status', toColumn: 'inProgress', expectedVersion: '20261101020000000' });
     expect(moveCalls()[0].url).toBe('/tasks/1/move');
-    held.fail(400, { title: 'x', errors: { toColumn: ['看板欄不正確'] } });
+    held.fail(400, { title: 'x', errors: { toColumn: ['SERVER-TEXT 看板欄不正確'] } });
     await settle();
     expect(ids(w, 'todo')).toEqual([1, 2]);
     expect(ids(w, 'inProgress')).toEqual([3]);
-    expect(live(w)).toBe('看板欄不正確');
-    expect(toasts().some((t) => t.includes('看板欄不正確'))).toBe(true);
+    expect(toasts().some((t) => t.includes('這一欄不能放'))).toBe(true);
+    expect(toasts().some((t) => t.includes('SERVER-TEXT'))).toBe(false);
     w.unmount();
   });
 
@@ -298,14 +299,73 @@ describe('TaskBoard moving', () => {
     w.unmount();
   });
 
+  const announcing = (text: string) => [...document.body.querySelectorAll('[role="alert"], [role="status"], [aria-live]')].filter((n) => (n.textContent ?? '').includes(text)).length;
+
+  it('a failed move is read out once: by the notification, not also by the live region', async () => {
+    const { w } = await mountBoard(boardWire(), 1126, null, new HttpFail(403, { message: 'SERVER-TEXT' }));
+    const before = announcing('移動失敗');
+    const d = await dragTo(w, 1, 'inProgress');
+    await d.drop();
+    await settle();
+    expect(announcing('移動失敗') - before).toBe(1);
+    expect(live(w)).toBe('');
+    w.unmount();
+  });
+
+  it('moving out of scope is read out once, by the notification', async () => {
+    const wire = assigneeBoardWire();
+    (wire.columns as { key: string }[]).splice(2, 1, columnWire({ key: 'user:sales02', kind: 'user', userId: 'sales02', name: '業務二', inactive: false, total: 0, cards: [] }));
+    const { w } = await mountBoard(wire, 1126, null, { visible: false, card: null, undoToken: 'tok' });
+    const before = announcing('已移出你的範圍');
+    const d = await dragTo(w, 1, 'user:sales02');
+    await d.drop();
+    await settle();
+    expect(announcing('已移出你的範圍') - before).toBe(1);
+    expect(live(w)).toBe('');
+    w.unmount();
+  });
+
+  it('the same result twice in a row is announced again (the live node is rewritten, not left untouched)', async () => {
+    const wire = boardWire({ columns: [
+      columnWire({ key: 'todo', total: 2, cards: [cardWire({ id: 1 }), cardWire({ id: 2 })] }), columnWire({ key: 'inProgress', total: 0, cards: [] }),
+    ] });
+    const { w } = await mountBoard(wire, 1126, null, movedCard());
+    let d = await dragTo(w, 1, 'inProgress');
+    await d.drop();
+    await settle();
+    const first = w.get('[data-testid="board-live"]').element.firstChild;
+    expect(live(w)).toBe('已移到「進行中」');
+    d = await dragTo(w, 2, 'inProgress');
+    await d.drop();
+    await settle();
+    expect(live(w)).toBe('已移到「進行中」');
+    expect(w.get('[data-testid="board-live"]').element.firstChild).not.toBe(first);
+    w.unmount();
+  });
+
+  it('dropping twice on a column that cannot take the card announces the reason both times', async () => {
+    const { w } = await mountBoard(dueWire({}), 1680);
+    let d = await dragTo(w, 1, 'overdue');
+    await d.drop();
+    const first = w.get('[data-testid="board-live"]').element.firstChild;
+    await settle();
+    expect(live(w)).toBe('不能改成過去的日期，請開任務詳細');
+    d = await dragTo(w, 1, 'overdue');
+    await d.drop();
+    await settle();
+    expect(live(w)).toBe('不能改成過去的日期，請開任務詳細');
+    expect(w.get('[data-testid="board-live"]').element.firstChild).not.toBe(first);
+    w.unmount();
+  });
+
   it('TaskBoard 409 refetches and shows the stale message', async () => {
-    const { w } = await mountBoard(boardWire(), 1126, null, new HttpFail(409, { code: 'stale', message: '任務已被別人修改，已重新整理' }));
+    const { w } = await mountBoard(boardWire(), 1126, null, new HttpFail(409, { code: 'stale', message: 'SERVER-TEXT' }));
     const before = calls.filter((c) => c.url === '/task-board/columns').length;
     const d = await dragTo(w, 1, 'inProgress');
     await d.drop();
     await settle();
-    expect(live(w)).toBe('任務已被別人修改，已重新整理');
     expect(toasts().some((t) => t.includes('任務已被別人修改'))).toBe(true);
+    expect(toasts().some((t) => t.includes('SERVER-TEXT'))).toBe(false);
     expect(calls.filter((c) => c.url === '/task-board/columns').length).toBeGreaterThan(before);
     expect(ids(w, 'todo')).toEqual([1, 2]);
     w.unmount();
@@ -406,12 +466,12 @@ describe('TaskBoard moving', () => {
     const { w } = await mountBoard(dueWire({}), 1680);
     const d = await dragTo(w, 1, 'overdue');
     expect(w.get('[data-testid="board-column-overdue"]').classes()).toContain('drop-blocked');
-    expect(w.get('[data-testid="board-column-overdue"] [data-testid="board-column-drop-reason"]').text()).toBe('不能放進逾期');
+    expect(w.get('[data-testid="board-column-overdue"] [data-testid="board-column-drop-reason"]').text()).toBe('不能改成過去的日期，請開任務詳細');
     expect(w.get('[data-testid="board-column-later"]').classes()).toContain('drop-ok');
     expect(w.find('[data-testid="board-ghost"]').exists()).toBe(true);
     await d.drop();
     expect(moveCalls()).toHaveLength(0);
-    expect(live(w)).toBe('不能放進逾期');
+    expect(live(w)).toBe('不能改成過去的日期，請開任務詳細');
     expect(w.find('[data-testid="board-ghost"]').exists()).toBe(false);
     expect(w.find('[data-testid="board-column-drop-reason"]').exists()).toBe(false);
     w.unmount();
@@ -471,5 +531,194 @@ describe('TaskBoard moving', () => {
     await settle();
     expect(bodyOf(moveCalls()[0])).toMatchObject({ toColumn: 'inProgress' });
     w.unmount();
+  });
+
+  it.each([
+    ['400 on the column', 400, { title: 'x', errors: { toColumn: ['SERVER-TEXT'] } }, '這一欄不能放'],
+    ['400 on the due date', 400, { title: 'x', errors: { dueDate: ['SERVER-TEXT'] } }, '日期必須晚於 2026-11-22'],
+    ['400 on something else', 400, { title: 'x', errors: { groupBy: ['SERVER-TEXT'] } }, '移動失敗'],
+    ['403', 403, { message: 'SERVER-TEXT' }, '移動失敗'],
+    ['404', 404, { message: 'SERVER-TEXT' }, '找不到這個任務，或你沒有權限查看'],
+    ['409 without a code (record locked)', 409, { message: 'SERVER-TEXT' }, '相關記錄已鎖定，不能移動'],
+    ['500', 500, { message: 'SERVER-TEXT' }, '移動失敗'],
+  ])('failure messages come from the interface language, never the server text: %s', async (_name, status, body, expected) => {
+    const { w } = await mountBoard(boardWire(), 1126, null, new HttpFail(status, body));
+    const d = await dragTo(w, 1, 'inProgress');
+    await d.drop();
+    await settle();
+    expect(toasts().some((t) => t.includes(expected))).toBe(true);
+    expect(toasts().some((t) => t.includes('SERVER-TEXT'))).toBe(false);
+    expect(ids(w, 'todo')).toEqual([1, 2]);
+    w.unmount();
+  });
+
+  it('a card that was just dragged does not open its detail when the pointer is released', async () => {
+    const { w } = await mountBoard(boardWire(), 1126, null, movedCard());
+    const d = await dragTo(w, 1, 'inProgress');
+    // the browser sends the click right after pointerup, before anything else runs
+    const open = w.get('[data-testid="board-card-open-1"]').element;
+    const click = () => open.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
+    d.fire('pointerup', 80, 40);
+    click();
+    await flushPromises();
+    expect(w.findComponent(TaskBoard).emitted('open')).toBeUndefined();
+    // the next click is an ordinary click again
+    await new Promise((r) => setTimeout(r, 10));
+    await w.get('[data-testid="board-card-open-1"]').trigger('click');
+    expect(w.findComponent(TaskBoard).emitted('open')).toEqual([[1]]);
+    w.unmount();
+  });
+
+  it('a second finger releasing over another column does not drop the card being dragged', async () => {
+    const { w } = await mountBoard(boardWire(), 1126);
+    const d = await dragTo(w, 1, 'todo');
+    document.elementFromPoint = (() => w.get('[data-testid="board-column-done"]').element) as never;
+    d.fire('pointermove', 300, 40, window, { pointerId: 2, isPrimary: false });
+    d.fire('pointerup', 300, 40, window, { pointerId: 2, isPrimary: false });
+    await flushPromises();
+    expect(moveCalls()).toHaveLength(0);
+    expect(w.find('[data-testid="board-ghost"]').exists()).toBe(true);
+    d.fire('pointercancel', 80, 40);
+    await flushPromises();
+    expect(w.find('[data-testid="board-ghost"]').exists()).toBe(false);
+    expect(moveCalls()).toHaveLength(0);
+    w.unmount();
+  });
+
+  it('a card whose move has not been answered yet cannot be moved again, by drag or by the menu', async () => {
+    const { w } = await mountBoard(boardWire(), 1126);
+    const held = holdMove();
+    let d = await dragTo(w, 1, 'inProgress');
+    await d.drop();
+    expect(moveCalls()).toHaveLength(1);
+    d = await dragTo(w, 1, 'done');
+    expect(w.find('[data-testid="board-ghost"]').exists()).toBe(false);
+    await d.drop();
+    await w.get('[data-testid="board-card-move-1"]').trigger('click');
+    await flushPromises();
+    document.body.querySelector<HTMLElement>('[data-testid="move-item-done"]')!.click();
+    await settle();
+    expect(moveCalls()).toHaveLength(1);
+    // another card is not held back
+    d = await dragTo(w, 2, 'done');
+    await d.drop();
+    expect(moveCalls()).toHaveLength(2);
+    held.all[0].ok(movedCard());
+    held.all[1].ok(movedCard({ id: 2, status: 'done' }));
+    await settle();
+    // once it is answered the card can move again
+    d = await dragTo(w, 1, 'done');
+    await d.drop();
+    expect(moveCalls()).toHaveLength(3);
+    w.unmount();
+  });
+
+  it('a status board shows no move-to button on a card the user cannot edit, even when it can be reassigned', async () => {
+    const wire = boardWire({ columns: [columnWire({ key: 'todo', total: 1, cards: [cardWire({ id: 1, canEdit: false, canReassign: true })] }), columnWire({ key: 'done', total: 0, cards: [] })] });
+    const status = await mountBoard(wire, 1126);
+    expect(status.w.find('[data-testid="board-card-move-1"]').exists()).toBe(false);
+    status.w.unmount();
+    const byAssignee = assigneeBoardWire();
+    (byAssignee.columns as { cards: unknown[] }[])[1].cards = [cardWire({ id: 1, canEdit: false, canReassign: true })];
+    const who = await mountBoard(byAssignee, 1126);
+    expect(who.w.find('[data-testid="board-card-move-1"]').exists()).toBe(true);
+    who.w.unmount();
+  });
+
+  describe('keyboard focus after a move-to', () => {
+    /** 九欄一屏四欄；u1 欄有 cards 指定的卡，第 9 欄在畫面外。 */
+    async function mountNine(cardIds: number[]) {
+      const cols = nineStatusLikeColumns();
+      (cols[0] as { cards: unknown[]; total: number }).cards = cardIds.map((id) => cardWire({ id, assigneeUserId: 'u1' }));
+      (cols[0] as { total: number }).total = cardIds.length;
+      const board = await mountBoard(boardWire({ columns: cols }), 1126);
+      return { ...board, held: holdMove() };
+    }
+    /** 用鍵盤路徑選欄；請求停在途中，這時看板是樂觀更新後的樣子。 */
+    const pickFromMenu = async (w: ReturnType<typeof mount>, cardId: number, columnKey: string) => {
+      (w.get(`[data-testid="board-card-move-${cardId}"]`).element as HTMLElement).focus();
+      await w.get(`[data-testid="board-card-move-${cardId}"]`).trigger('click');
+      await new Promise((r) => setTimeout(r, 50));
+      document.body.querySelector<HTMLElement>(`[data-testid="move-item-${columnKey}"]`)!.click();
+      await settle();
+    };
+    const moveButton = (w: ReturnType<typeof mount>, column: string, id: number) => w.get(`[data-testid="board-column-${column}"] [data-testid="board-card-move-${id}"]`).element;
+    const moved = (id: number, user: string) => ({ visible: true, card: { ...cardWire({ id, assigneeUserId: user, version: 'v2' }) }, undoToken: null });
+
+    it('lands on the next card when the card went to a column that is not on screen', async () => {
+      const { w, held } = await mountNine([1, 2]);
+      await pickFromMenu(w, 1, 'user:u9');
+      expect(ids(w, 'user:u1')).toEqual([2]);
+      expect(document.activeElement).toBe(moveButton(w, 'user:u1', 2));
+      held.ok(moved(1, 'u9'));
+      await settle();
+      expect(document.activeElement).toBe(moveButton(w, 'user:u1', 2));
+      w.unmount();
+    });
+
+    it('lands on the previous card when the moved card was the last one', async () => {
+      const { w, held } = await mountNine([1, 2]);
+      await pickFromMenu(w, 2, 'user:u9');
+      expect(ids(w, 'user:u1')).toEqual([1]);
+      expect(document.activeElement).toBe(moveButton(w, 'user:u1', 1));
+      held.ok(moved(2, 'u9'));
+      await settle();
+      w.unmount();
+    });
+
+    it('lands on the column itself when it was the only card and the target is off screen', async () => {
+      const { w, held } = await mountNine([1]);
+      await pickFromMenu(w, 1, 'user:u9');
+      const column = w.get('[data-testid="board-column-user:u1"]');
+      expect(column.attributes('tabindex')).toBe('-1');
+      expect(document.activeElement).toBe(column.element);
+      held.ok(moved(1, 'u9'));
+      await settle();
+      w.unmount();
+    });
+
+    it('stays on the same card (now in its new column) when the target column is on screen', async () => {
+      const { w, held } = await mountNine([1, 2]);
+      await pickFromMenu(w, 1, 'user:u2');
+      expect(ids(w, 'user:u2')).toEqual([1]);
+      expect(document.activeElement).toBe(moveButton(w, 'user:u2', 1));
+      held.ok(moved(1, 'u2'));
+      await settle();
+      w.unmount();
+    });
+
+    it('returns to the card in its old column when the move fails and the card rolls back', async () => {
+      const { w, held } = await mountNine([1, 2]);
+      await pickFromMenu(w, 1, 'user:u2');
+      // while the request is out the focus is somewhere sensible; the user then tabs to another card
+      (w.get('[data-testid="board-card-open-2"]').element as HTMLElement).focus();
+      held.fail(400, { title: 'x', errors: { toColumn: ['x'] } });
+      await settle();
+      expect(ids(w, 'user:u1')).toEqual([1, 2]);
+      // focus was moved on purpose, so the rollback leaves it alone
+      expect(document.activeElement).toBe(w.get('[data-testid="board-card-open-2"]').element);
+      w.unmount();
+    });
+
+    it('puts focus back on the rolled-back card when nothing else has focus', async () => {
+      const { w, held } = await mountNine([1, 2]);
+      await pickFromMenu(w, 1, 'user:u9');
+      (document.activeElement as HTMLElement).blur();
+      held.fail(400, { title: 'x', errors: { toColumn: ['x'] } });
+      await settle();
+      expect(ids(w, 'user:u1')).toEqual([1, 2]);
+      expect(document.activeElement).toBe(moveButton(w, 'user:u1', 1));
+      w.unmount();
+    });
+
+    it('does not pull focus away from where the user has gone in the meantime', async () => {
+      const { w, held } = await mountNine([1, 2]);
+      await pickFromMenu(w, 1, 'user:u9');
+      (w.get('[data-testid="board-card-open-2"]').element as HTMLElement).focus();
+      held.ok(moved(1, 'u9'));
+      await settle();
+      expect(document.activeElement).toBe(w.get('[data-testid="board-card-open-2"]').element);
+      w.unmount();
+    });
   });
 });

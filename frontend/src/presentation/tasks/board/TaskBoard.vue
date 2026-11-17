@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { useQuasar } from 'quasar';
-import { computed, ref } from 'vue';
+import { computed, nextTick, ref } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { useLoadMoreColumn, useMoveTask } from 'src/application/dynamic/queries/task-board-queries';
 import {
@@ -68,78 +68,128 @@ const move = useMoveTask(() => props.source);
 const movedOut = useMovedOutNotice();
 const liveText = ref('');
 const findCard = (id: number) => columns.value.flatMap((c) => c.cards).find((c) => c.id === id);
+// 請求還沒回來的卡片：同一張卡在上一次移動完成前不能再移（版本已經換了，再送一定 409）
+const moving = new Set<number>();
 
-function failureMessage(e: unknown): string {
-  const err = e as ApiError;
-  if (err.status === 409 && (err.code === 'stale' || !err.message)) return t('taskBoard.stale');
-  return Object.values(err.errors ?? {})[0]?.[0] || err.message || t('taskBoard.moveFailed');
+/** 只念、不跳通知的結果（成功、拖到不能放的欄）才走這裡；先清空再寫，連續兩次相同結果第二次也會被念出來。有通知的路徑由通知（role=alert）負責念，不要再寫這裡。 */
+async function announce(text: string) {
+  liveText.value = '';
+  await nextTick();
+  liveText.value = text;
 }
 
-async function doMove(card: BoardCard, to: BoardColumn, dueDate?: string) {
+/** 失敗訊息一律由介面語言決定，不顯示伺服器的中文字串；失敗後看板會重抓，禁止狀態很快就會正確，所以只說通用原因。 */
+function failureMessage(e: unknown): string {
+  const err = e as ApiError;
+  if (err.status === 409) return err.code === 'stale' ? t('taskBoard.stale') : t('taskBoard.drop.frozen');
+  if (err.status === 404) return t('tasks.notFound');
+  if (err.status === 400 && err.errors?.dueDate) return t('taskBoard.duePick.invalid', { date: props.board.weekEnd });
+  if (err.status === 400 && err.errors?.toColumn) return t('taskBoard.drop.unavailable');
+  return t('taskBoard.moveFailed');
+}
+
+// ---- 「移到…」之後的鍵盤焦點 ----
+// 樂觀更新會讓原本那張卡換欄（重新掛載），焦點所在的按鈕跟著消失；記住原欄的鄰居，之後把焦點放回去（WCAG 2.4.3）。
+interface FocusPlan { cardId: number; fromKey: string; nextId: number | null; prevId: number | null }
+function focusPlanOf(card: BoardCard): FocusPlan | null {
+  const col = columns.value.find((c) => c.cards.some((x) => x.id === card.id));
+  if (!col) return null;
+  const i = col.cards.findIndex((x) => x.id === card.id);
+  return { cardId: card.id, fromKey: col.key, nextId: col.cards[i + 1]?.id ?? null, prevId: col.cards[i - 1]?.id ?? null };
+}
+/**
+ * 焦點掉到 body、或還停在正在關閉的選單裡（卡片被換掉了）才處理；使用者已經去別處就不搶。
+ * 先等一個 macrotask，樂觀更新（onMutate 是非同步的）與重新 render 都完成後再找。順序：這張卡的「移到…」→ 原欄下一張 → 上一張 → 原欄本身。
+ */
+async function restoreFocus(plan: FocusPlan) {
+  await new Promise((r) => setTimeout(r));
+  await nextTick();
+  const active = document.activeElement;
+  if (active && active !== document.body && !active.closest('[data-testid="move-list"]')) return;
+  const el = root.value;
+  if (!el) return;
+  const moveButton = (id: number | null) => (id === null ? null : el.querySelector<HTMLElement>(`[data-testid="board-card-move-${id}"]`));
+  const column = [...el.querySelectorAll<HTMLElement>('[data-board-column]')].find((c) => c.getAttribute('data-board-column') === plan.fromKey);
+  (moveButton(plan.cardId) ?? moveButton(plan.nextId) ?? moveButton(plan.prevId) ?? column)?.focus();
+}
+
+async function doMove(card: BoardCard, to: BoardColumn, dueDate?: string, focus: FocusPlan | null = null) {
+  if (moving.has(card.id)) return;
+  moving.add(card.id);
   try {
-    const result = await move.mutateAsync({ card, groupBy: groupBy.value, toColumn: to.key, dueDate });
-    if (!result.visible) movedOut.show(card.id, result.undoToken);
-    liveText.value = result.visible ? t('taskBoard.moved', { column: columnLabel(to) }) : t('tasks.movedOut');
+    const run = move.mutateAsync({ card, groupBy: groupBy.value, toColumn: to.key, dueDate });
+    if (focus) void restoreFocus(focus);
+    const result = await run;
+    if (!result.visible) {
+      movedOut.show(card.id, result.undoToken);
+      liveText.value = '';
+    } else void announce(t('taskBoard.moved', { column: columnLabel(to) }));
   } catch (e) {
-    const message = failureMessage(e);
-    liveText.value = message;
-    $q.notify({ type: 'negative', message, position: 'bottom' });
+    liveText.value = '';
+    $q.notify({ type: 'negative', message: failureMessage(e), position: 'bottom' });
+  } finally {
+    moving.delete(card.id);
+    if (focus) void restoreFocus(focus);
   }
 }
 
 // 確認框與日期選擇框的資料另外留著，不跟著開關清掉：按「確定」時 v-close-popup 與 confirm 事件誰先跑都不影響
 const confirmOpen = ref(false);
-const confirmFor = ref<{ card: BoardCard; to: BoardColumn; flow: MoveFlow } | null>(null);
+const confirmFor = ref<{ card: BoardCard; to: BoardColumn; flow: MoveFlow; focus: FocusPlan | null } | null>(null);
 const dueOpen = ref(false);
-const dueFor = ref<{ card: BoardCard; to: BoardColumn } | null>(null);
+const dueFor = ref<{ card: BoardCard; to: BoardColumn; focus: FocusPlan | null } | null>(null);
 const confirmTitle = computed(() => (confirmFor.value?.flow === 'confirmCancel' ? t('taskBoard.confirm.cancelTitle') : t('taskBoard.confirm.clearDueTitle')));
 const confirmBody = computed(() => (confirmFor.value?.flow === 'confirmCancel' ? t('taskBoard.confirm.cancelBody') : t('taskBoard.confirm.clearDueBody')));
 
-function requestMove(card: BoardCard, columnKey: string) {
+function requestMove(card: BoardCard, columnKey: string, via: 'drag' | 'menu' = 'drag') {
+  if (moving.has(card.id)) return;
   const to = columns.value.find((c) => c.key === columnKey);
   const target = moveTargets(card, columns.value, groupBy.value).find((x) => x.key === columnKey);
   if (!to || !target || target.current) return;
   if (!target.droppable) {
-    liveText.value = target.reason ? t(moveBlockKey(target.reason)) : t('taskBoard.drop.unavailable');
+    void announce(target.reason ? t(moveBlockKey(target.reason)) : t('taskBoard.drop.unavailable'));
     return;
   }
+  const focus = via === 'menu' ? focusPlanOf(card) : null;
   const flow = moveFlowOf(card, to, groupBy.value);
-  if (flow === 'direct') return void doMove(card, to);
+  if (flow === 'direct') return void doMove(card, to, undefined, focus);
   if (flow === 'pickDate') {
-    dueFor.value = { card, to };
+    dueFor.value = { card, to, focus };
     dueOpen.value = true;
     return;
   }
-  confirmFor.value = { card, to, flow };
+  confirmFor.value = { card, to, flow, focus };
   confirmOpen.value = true;
 }
 function onConfirm() {
   const f = confirmFor.value;
-  if (f) void doMove(f.card, f.to);
+  if (f) void doMove(f.card, f.to, undefined, f.focus);
 }
 function onDuePicked(date: string) {
   const f = dueFor.value;
-  if (f) void doMove(f.card, f.to, date);
+  if (f) void doMove(f.card, f.to, date, f.focus);
 }
 
 const drag = useCardDrag({
   enabled: () => !phone.value,
+  touchRoot: root,
   onDrop: (cardId, key) => {
     const card = findCard(cardId);
     if (card) requestMove(card, key);
   },
 });
 const draggedCard = computed(() => (drag.state.value ? findCard(drag.state.value.cardId) : undefined));
+// 只依賴被拖的卡與欄，指標移動時不重算；指標在哪一欄另外用 over 傳，這樣每次移動只有前後兩欄要重新 render
 const dropByKey = computed(() => {
   const card = draggedCard.value;
-  const over = drag.state.value?.overKey ?? null;
   const map = new Map<string, ColumnDrop>();
   if (!card) return map;
   for (const x of moveTargets(card, columns.value, groupBy.value)) {
-    map.set(x.key, { allowed: x.droppable || x.current, over: over === x.key, reason: x.reason ? t(moveBlockKey(x.reason)) : null });
+    map.set(x.key, { allowed: x.droppable || x.current, reason: x.reason ? t(moveBlockKey(x.reason)) : null });
   }
   return map;
 });
+const overKey = computed(() => drag.state.value?.overKey ?? null);
 </script>
 
 <template>
@@ -155,8 +205,8 @@ const dropByKey = computed(() => {
     <div v-else class="board-grid" :style="{ gridTemplateColumns: `repeat(${gridTrackCount(columns.length, perScreen)}, minmax(0, 1fr))`, gap: `${BOARD_COLUMN_GAP}px` }" data-testid="board-grid">
       <TaskBoardColumn
         v-for="c in shown" :key="c.key" :column="c" :label="columnLabel(c)" :group-by="groupBy" :loading-more="loadingKeys.includes(c.key)"
-        :columns="columns" :label-of="labelOfKey" :phone="phone" :drop="dropByKey.get(c.key) ?? null" :dragging-card-id="drag.state.value?.cardId ?? null"
-        @open="emit('open', $event)" @load-more="onLoadMore" @move="requestMove" @drag-start="(e, card) => drag.start(e, card.id)"
+        :columns="columns" :label-of="labelOfKey" :phone="phone" :drop="dropByKey.get(c.key) ?? null" :over="overKey === c.key" :dragging-card-id="drag.state.value?.cardId ?? null"
+        @open="emit('open', $event)" @load-more="onLoadMore" @move="(card, key) => requestMove(card, key, 'menu')" @drag-start="(e, card) => { if (!moving.has(card.id)) drag.start(e, card.id); }"
       />
     </div>
     <div v-if="draggedCard && drag.state.value" class="board-ghost rounded-borders q-pa-sm text-body2" :style="{ left: `${drag.state.value.x + 12}px`, top: `${drag.state.value.y + 12}px` }" aria-hidden="true" data-testid="board-ghost">

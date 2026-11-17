@@ -21,8 +21,8 @@ function submit() {
 </script>
 
 <template>
-  <q-dialog :model-value="modelValue" @update:model-value="(v) => emit('update:modelValue', v)">
-    <q-card style="width: 340px; max-width: 95vw" data-testid="due-pick">
+  <q-dialog :model-value="modelValue" :maximized="$q.screen.lt.sm" @update:model-value="(v) => emit('update:modelValue', v)">
+    <q-card :style="$q.screen.lt.sm ? undefined : 'width: 340px; max-width: 95vw'" data-testid="due-pick">
       <q-card-section class="text-h6">{{ t('taskBoard.duePick.title') }}</q-card-section>
       <q-card-section class="q-pt-none">
         <div class="text-caption text-muted q-mb-sm">{{ t('taskBoard.duePick.hint', { date: weekEnd }) }}</div>

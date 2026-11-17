@@ -92,4 +92,71 @@ describe('useMoveTask', () => {
     await move().mutateAsync(vars(qc, { viewId: 1 }));
     expect(qc.getQueryData<TaskBoardData>(boardKey({ viewId: 1 }))!.columns.flatMap((c) => c.cards)).toHaveLength(0);
   });
+
+  describe('two moves in flight at once', () => {
+    const threeCards = () => normalizeBoard(boardWire({ columns: [
+      columnWire({ key: 'todo', total: 3, cards: [cardWire({ id: 1 }), cardWire({ id: 2 }), cardWire({ id: 3 })] }), columnWire({ key: 'done', total: 0, cards: [] }),
+    ] }) as never);
+    const idsOf = (qc: QueryClient, key: string) => column(qc, { viewId: 1 }, key).cards.map((c) => c.id);
+    const boardInvalidations = (spy: { mock: { calls: unknown[][] } }) => spy.mock.calls
+      .filter((c) => JSON.stringify((c[0] as { queryKey?: unknown })?.queryKey) === JSON.stringify(['task-board'])).length;
+
+    function start() {
+      const qc = new QueryClient();
+      qc.setQueryData(boardKey({ viewId: 1 }), threeCards());
+      const move = mountMove(qc, ref<BoardSource>({ viewId: 1 }));
+      const answers: Record<number, { ok: (r: unknown) => void; fail: (e: unknown) => void }> = {};
+      api.moveTask.mockImplementation(((id: number) => new Promise((ok, fail) => { answers[id] = { ok, fail }; })) as never);
+      const run = (id: number) => move().mutateAsync({ card: column(qc, { viewId: 1 }, 'todo').cards.find((c) => c.id === id)!, groupBy: 'status', toColumn: 'done' }).catch((e) => e);
+      return { qc, answers, run, spy: vi.spyOn(qc, 'invalidateQueries') };
+    }
+
+    it('a failed move puts back only its own card; the other card keeps its optimistic place until it is answered', async () => {
+      const { qc, answers, run } = start();
+      const a = run(1);
+      const b = run(3);
+      await flushPromises();
+      expect(idsOf(qc, 'done')).toEqual([3, 1]);
+      answers[1].fail({ status: 400 });
+      await a;
+      // A is back where it was (first in todo); B is still in done
+      expect(idsOf(qc, 'todo')).toEqual([1, 2]);
+      expect(idsOf(qc, 'done')).toEqual([3]);
+      expect(column(qc, { viewId: 1 }, 'todo').total).toBe(2);
+      expect(column(qc, { viewId: 1 }, 'done').total).toBe(1);
+      answers[3].ok({ visible: true, card: { ...cardWire({ id: 3, status: 'done', version: 'v3' }), assigneeActive: true, record: null }, undoToken: null });
+      await b;
+      expect(idsOf(qc, 'done')).toEqual([3]);
+      expect(column(qc, { viewId: 1 }, 'done').cards[0].version).toBe('v3');
+    });
+
+    it('the board is refetched only once the last move in flight has settled', async () => {
+      const { qc, answers, run, spy } = start();
+      const a = run(1);
+      const b = run(3);
+      await flushPromises();
+      answers[1].ok({ visible: true, card: { ...cardWire({ id: 1, status: 'done', version: 'v2' }), assigneeActive: true, record: null }, undoToken: null });
+      await a;
+      await flushPromises();
+      expect(boardInvalidations(spy)).toBe(0);
+      // the task lists and counters still refresh right away
+      expect(spy.mock.calls.some((c) => JSON.stringify((c[0] as { queryKey?: unknown })?.queryKey) === JSON.stringify(['tasks']))).toBe(true);
+      expect(idsOf(qc, 'done')).toEqual([3, 1]);
+      answers[3].fail({ status: 409, code: 'stale' });
+      await b;
+      await flushPromises();
+      expect(boardInvalidations(spy)).toBe(1);
+    });
+
+    it('a single move still refetches the board when it fails', async () => {
+      const { answers, run, spy } = start();
+      const a = run(1);
+      await flushPromises();
+      answers[1].fail({ status: 500 });
+      await a;
+      await flushPromises();
+      expect(boardInvalidations(spy)).toBe(1);
+    });
+  });
 });
+

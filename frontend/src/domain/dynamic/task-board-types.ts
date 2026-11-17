@@ -207,8 +207,8 @@ export const moveBlockKey = (b: MoveBlock) => `taskBoard.drop.${b.kind === 'colu
 /** 格線欄數：全部欄一屏放得下時用實際欄數（撐滿寬度）；要分段平移時固定一屏欄數，最後一組右邊留空。 */
 export const gridTrackCount = (columnCount: number, perScreen: number) => Math.max(1, Math.min(columnCount, perScreen));
 
-/** 拖拉中一欄的樣子：能不能放、指標是否正在上面、不能放的原因（已翻譯成介面語言）。 */
-export interface ColumnDrop { allowed: boolean; over: boolean; reason: string | null }
+/** 拖拉中一欄的樣子：能不能放、不能放的原因（已翻譯成介面語言）；指標在不在上面是另外的 over，才不會每次移動都重算全部欄。 */
+export interface ColumnDrop { allowed: boolean; reason: string | null }
 
 export interface MoveTarget {
   key: string;
@@ -275,6 +275,28 @@ export function moveCardLocally(
     columns: board.columns.map((c) => {
       if (c.key === from.key) return { ...c, total: Math.max(0, c.total - 1), cards: c.cards.filter((x) => x.id !== cardId) };
       if (c.key === to.key) return { ...c, total: c.total + 1, cards: [moved, ...c.cards] };
+      return c;
+    }),
+  };
+}
+
+/**
+ * 樂觀更新失敗時只放回這一張卡：把原本的卡片物件放回原欄原位置，兩欄總數跟著動，其他欄與其他卡（可能有別的移動還在進行）不碰。
+ * 卡片已經回到原欄、已不在看板上（被移出範圍或換頁重抓了）或原欄不見時不動。
+ */
+export function restoreCardLocally(board: TaskBoardData, original: BoardCard, fromKey: string, index: number): TaskBoardData {
+  const now = board.columns.find((c) => c.cards.some((x) => x.id === original.id));
+  const home = board.columns.find((c) => c.key === fromKey);
+  if (!now || !home || now.key === home.key) return board;
+  return {
+    ...board,
+    columns: board.columns.map((c) => {
+      if (c.key === now.key) return { ...c, total: Math.max(0, c.total - 1), cards: c.cards.filter((x) => x.id !== original.id) };
+      if (c.key === home.key) {
+        const cards = [...c.cards];
+        cards.splice(Math.min(index, cards.length), 0, original);
+        return { ...c, total: c.total + 1, cards };
+      }
       return c;
     }),
   };

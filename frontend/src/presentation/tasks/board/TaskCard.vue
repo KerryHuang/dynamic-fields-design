@@ -7,7 +7,7 @@ import MoveToMenu from './MoveToMenu.vue';
 
 /**
  * 看板卡片（設計 §5.9）。依負責人分欄時省略負責人，依狀態分欄時省略狀態；點卡片（標題上的原生按鈕）開任務詳細。
- * 能移動的卡片（沒凍結、有權限）右上角有「移到…」，按下滑鼠或長按觸控可拖；不能動的卡片游標是 not-allowed、沒有「移到…」。
+ * 能移動的卡片（沒凍結、有權限）右上角有「移到…」，按下滑鼠或長按觸控可拖；不能動的卡片沒有「移到…」，按下時游標是 not-allowed（平常仍是可點開詳細的 pointer）。
  */
 const props = defineProps<{ card: BoardCard; groupBy: BoardGroupBy; columns: readonly BoardColumn[]; labelOf: (key: string) => string; phone: boolean; dragging?: boolean }>();
 const emit = defineEmits<{ open: [id: number]; move: [card: BoardCard, columnKey: string]; dragStart: [event: PointerEvent, card: BoardCard] }>();
@@ -41,13 +41,14 @@ const dueClass = computed(() => (props.card.overdue ? 'text-negative' : props.ca
     class="board-card q-pa-sm rounded-borders" :class="{ 'is-locked': !movable, 'is-dragging': dragging }" :data-testid="`board-card-${card.id}`"
     @pointerdown="onPointerDown"
   >
-    <MoveToMenu v-if="movable" :card="card" :columns="columns" :group-by="groupBy" :label-of="labelOf" :phone="phone" @move="emit('move', card, $event)" />
     <div class="text-body2" :class="{ 'board-card-head': movable }">
       <!-- 原生按鈕負責開啟；::after 撐滿整張卡，滑鼠點卡片任何地方都開。之後「移到…」是同層的另一個按鈕，不會巢狀在按鈕裡 -->
       <button type="button" class="board-card-open" :data-testid="`board-card-open-${card.id}`" @click="emit('open', card.id)">
         <span class="board-card-title" :class="{ 'text-strike text-muted': closed }" data-testid="board-card-title">{{ card.title }}</span>
       </button>
     </div>
+    <!-- 放在開啟按鈕之後，Tab 順序才是先卡片、再「移到…」；按鈕是絕對定位，畫面位置不受影響 -->
+    <MoveToMenu v-if="movable" :card="card" :columns="columns" :group-by="groupBy" :label-of="labelOf" :phone="phone" @move="emit('move', card, $event)" />
     <div v-if="recordLabel" class="text-caption text-muted ellipsis" data-testid="board-card-record">{{ recordLabel }}</div>
     <div class="row items-center q-gutter-x-sm q-mt-xs text-caption">
       <span v-if="card.dueDate" :class="dueClass" data-testid="board-card-due">
@@ -88,7 +89,7 @@ const dueClass = computed(() => (props.card.overdue ? 'text-negative' : props.ca
   text-align: left;
   cursor: pointer;
 }
-.board-card.is-locked, .board-card.is-locked .board-card-open { cursor: not-allowed; }
+.board-card.is-locked:active, .board-card.is-locked:active .board-card-open { cursor: not-allowed; }
 .board-card.is-dragging { opacity: 0.45; }
 .board-card-head { padding-right: 28px; }
 .board-card-open:focus-visible { outline: none; }

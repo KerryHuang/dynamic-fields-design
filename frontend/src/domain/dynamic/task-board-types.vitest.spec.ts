@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import zhTW from 'src/i18n/zh-TW.json';
 import {
-  BOARD_COLUMN_GAP, BOARD_MIN_COLUMN_WIDTH, columnsPerScreen, groupByOf, gridTrackCount, isLaterDateAllowed, moveBlockKey, moveFlowOf, moveTargets, moveCardLocally, removeCardLocally,
+  BOARD_COLUMN_GAP, BOARD_MIN_COLUMN_WIDTH, columnsPerScreen, groupByOf, gridTrackCount, isLaterDateAllowed, moveBlockKey, moveFlowOf, moveTargets, moveCardLocally, removeCardLocally, restoreCardLocally,
   visibleRange, type BoardCard, type BoardColumn, type TaskBoardData,
 } from './task-board-types';
 
@@ -169,5 +169,24 @@ describe('task-board-types', () => {
     const next = removeCardLocally(board(), 1);
     expect(next.columns[0]).toMatchObject({ total: 1 });
     expect(next.columns[0].cards.map((x) => x.id)).toEqual([2]);
+  });
+
+  it('restoreCardLocally puts the original card back at its place and touches nothing else', () => {
+    const original = board().columns[0].cards[0];
+    const other = moveCardLocally(board(), 2, 'done', 'status', undefined)!;
+    const both = moveCardLocally(other, 1, 'done', 'status', undefined)!;
+    const back = restoreCardLocally(both, original, 'todo', 0);
+    // card 2 stays in done (its own move is still in flight); card 1 is the one that went back, with its original fields
+    expect(back.columns.map((c) => [c.key, c.total, c.cards.map((x) => x.id)])).toEqual([['todo', 1, [1]], ['done', 1, [2]]]);
+    expect(back.columns[0].cards[0]).toBe(original);
+  });
+
+  it('restoreCardLocally leaves the board alone when the card is already home, gone, or its home column is gone', () => {
+    const original = board().columns[0].cards[0];
+    const b = board();
+    expect(restoreCardLocally(b, original, 'todo', 0)).toBe(b);
+    expect(restoreCardLocally(removeCardLocally(b, 1), original, 'todo', 0).columns[0].cards.map((x) => x.id)).toEqual([2]);
+    const moved = moveCardLocally(b, 1, 'done', 'status', undefined)!;
+    expect(restoreCardLocally(moved, original, 'gone', 0)).toBe(moved);
   });
 });

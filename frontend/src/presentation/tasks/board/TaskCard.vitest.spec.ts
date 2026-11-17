@@ -80,6 +80,12 @@ describe('TaskCard', () => {
     expect(w.findAll('button').map((b) => b.classes().includes('board-card-open') || b.attributes('data-testid') === 'board-card-move-1')).toEqual([true, true]);
   });
 
+  it('Tab reaches the card (open button) first and the move-to button second', () => {
+    const w = mountCard('status');
+    const buttons = w.findAll('button').map((b) => b.attributes('data-testid'));
+    expect(buttons).toEqual(['board-card-open-1', 'board-card-move-1']);
+  });
+
   it('a long assignee name is cut off inside the card', () => {
     const el = mountCard('status', { assigneeName: 'a-very-long-account-name' }).get('[data-testid="board-card-assignee"]');
     expect(el.get('.ellipsis').text()).toBe('a-very-long-account-name');

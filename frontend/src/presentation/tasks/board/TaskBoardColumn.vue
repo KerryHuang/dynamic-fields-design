@@ -6,7 +6,7 @@ import TaskCard from './TaskCard.vue';
 
 const props = defineProps<{
   column: BoardColumn; label: string; groupBy: BoardGroupBy; loadingMore: boolean;
-  columns: readonly BoardColumn[]; labelOf: (key: string) => string; phone: boolean; drop: ColumnDrop | null; draggingCardId: number | null;
+  columns: readonly BoardColumn[]; labelOf: (key: string) => string; phone: boolean; drop: ColumnDrop | null; over: boolean; draggingCardId: number | null;
 }>();
 const emit = defineEmits<{
   open: [id: number]; loadMore: [column: BoardColumn]; move: [card: BoardCard, columnKey: string]; dragStart: [event: PointerEvent, card: BoardCard];
@@ -20,8 +20,8 @@ const showTruncated = computed(() => props.column.truncated && !props.column.has
 
 <template>
   <div
-    class="board-column column no-wrap rounded-borders" :class="{ 'drop-ok': drop?.allowed, 'drop-blocked': drop && !drop.allowed, 'drop-over': drop?.over }"
-    role="group" :data-board-column="column.key" :data-testid="`board-column-${column.key}`" :aria-label="label">
+    class="board-column column no-wrap rounded-borders" :class="{ 'drop-ok': drop?.allowed, 'drop-blocked': drop && !drop.allowed, 'drop-over': drop && over }"
+    role="group" tabindex="-1" :data-board-column="column.key" :data-testid="`board-column-${column.key}`" :aria-label="label">
     <header class="row items-center no-wrap q-pa-sm">
       <div class="text-subtitle2 ellipsis col" data-testid="board-column-label">{{ label }}</div>
       <q-badge color="primary" rounded role="img" :label="column.total" :aria-label="t('taskBoard.column.total', { n: column.total })" data-testid="board-column-total" />
