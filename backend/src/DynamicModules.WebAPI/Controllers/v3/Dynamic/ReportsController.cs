@@ -58,6 +58,15 @@ public class ReportsController(IMediator mediator) : ControllerBase
     public async Task<IActionResult> ModuleCatalog(string moduleKey, [FromQuery] string locale = "zh-TW") =>
         (await mediator.Send(new GetReportCatalogRequest(moduleKey, locale))).ToActionResult(this);
 
+    /// <summary>系統資料來源（任務、任務事件）；不併進 catalog，現在的設計器拿 catalog 當主模組選單（J11）。</summary>
+    [HttpGet("datasets")]
+    public async Task<IActionResult> Datasets([FromQuery] string locale = "zh-TW") =>
+        (await mediator.Send(new GetReportDatasetsRequest(locale))).ToActionResult(this);
+
+    [HttpGet("datasets/{dataset}/catalog")]
+    public async Task<IActionResult> DatasetCatalog(string dataset, [FromQuery] string locale = "zh-TW") =>
+        (await mediator.Send(new GetReportDatasetCatalogRequest(dataset, locale))).ToActionResult(this);
+
     [HttpGet("{id:long}")]
     public async Task<IActionResult> Get(long id) => (await mediator.Send(new GetReportRequest(id))).ToActionResult(this);
 

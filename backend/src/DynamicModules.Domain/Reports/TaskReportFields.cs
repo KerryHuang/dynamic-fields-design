@@ -101,7 +101,8 @@ public static class TaskReportFields
         (EventCompleted, T("完成", "Completed", "เสร็จ", "Hoàn thành")),
     ];
 
-    private static readonly Dictionary<string, I18nText> DatasetNames = new()
+    /// <summary>資料來源名（目錄端點、「每列代表什麼」）。</summary>
+    public static IReadOnlyDictionary<string, I18nText> DatasetNames { get; } = new Dictionary<string, I18nText>
     {
         [ReportDatasets.Tasks] = T("任務", "Task", "งาน", "Công việc"),
         [ReportDatasets.TaskEvents] = T("任務事件（建立或完成）", "Task event (created or completed)", "เหตุการณ์ของงาน (สร้างหรือเสร็จ)", "Sự kiện công việc (tạo hoặc hoàn thành)"),

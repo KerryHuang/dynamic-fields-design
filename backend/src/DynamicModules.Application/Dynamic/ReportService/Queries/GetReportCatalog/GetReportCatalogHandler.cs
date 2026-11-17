@@ -112,7 +112,7 @@ public class GetReportCatalogHandler(IModuleRepository modules, IDynamicAccessGu
     private static CatalogField EntityTitle(string entityKey, string locale) =>
         new(ReportRunner.EntityTitleFieldId, ReportText.Get(locale, ReportText.Title), FieldType.Reference, true, false, false, false, null, ReferenceTarget.EntityKind, entityKey);
 
-    private static CatalogField ToField(Field f, string locale) =>
+    internal static CatalogField ToField(Field f, string locale) =>
         new(f.Id, f.LabelI18n.Resolve(locale), f.Type, ReportFieldEligibility.CanGroup(f), ReportFieldEligibility.CanSum(f),
             ReportFieldEligibility.CanMinMax(f),
             f.Type is FieldType.Date or FieldType.DateTime || (f.Type == FieldType.Formula && f.Config.ResultType == "date"),
