@@ -60,6 +60,7 @@
 | mcp1b | MCP 畫面：個人「AI 存取權杖」頁、管理員「AI 連線」頁、設計器欄位旗標、手冊 | 未開始 | [MCP server](superpowers/specs/2026-11-11-mcp-server-design.md) §12 |
 | O3 | 廠商維運中心（Cloudflare Workers＋D1）、外部探測、匿名回報與新版本通知、告警推播 | 未開始 | [維運與觀測](superpowers/specs/2026-11-11-ops-observability-design.md) §9 |
 | pkg1 | 套件更新入口：把新版內建應用程式套到客戶已開啟的應用程式（先寫設計；第一個客戶上線前必須有結論；方向為升級預覽與逐項套用，使用者 11-17 裁決） | 未開始（設計待寫） | — |
+| au1 | 帳號安全：核心寄信能力（SMTP 設定與寄信佇列）、寄信重設密碼、雙因素登入 TOTP（使用者 11-17 裁決，雲端版對外開放前必須有；開工前先寫設計） | 未開始（設計待寫） | [ERP 路線](superpowers/specs/2026-11-06-erp-roadmap-design.md) 2026-11-17 一節 |
 | O4、mcpO1 | agent L1 唯讀診斷；產品端維運唯讀工具與維運服務帳號 | 未開始 | [維運與觀測](superpowers/specs/2026-11-11-ops-observability-design.md) §9、[MCP server](superpowers/specs/2026-11-11-mcp-server-design.md) §12 |
 | O5 | agent L3 修正 PR、CI gate | 未開始 | [維運與觀測](superpowers/specs/2026-11-11-ops-observability-design.md) §9 |
 | O6、mcpO2 | 雲端版 L2 自動處置；產品端維運處置工具 | 未開始 | [維運與觀測](superpowers/specs/2026-11-11-ops-observability-design.md) §9、[MCP server](superpowers/specs/2026-11-11-mcp-server-design.md) §12 |
@@ -69,14 +70,18 @@
 | mcp4 | MCP OAuth 2.1（Claude.ai、ChatGPT 連接器；可視雲端版第一個客戶的需求提前） | 未開始 | [MCP server](superpowers/specs/2026-11-11-mcp-server-design.md) §12 |
 | s2d-1g | Demo 公司跨應用程式共用、移除模擬客戶與全部內建模擬實體 | 已上線（2026-11-14，8719cc5b） | [共用主檔](superpowers/specs/2026-11-10-shared-master-design.md) |
 | s2d-1h | 主檔收尾：參照挑選器守衛、CRM 補測試等 | 未開始 | [共用主檔](superpowers/specs/2026-11-10-shared-master-design.md) |
-| s2d-2 | 品項共用主檔 | 未開始 | [共用主檔](superpowers/specs/2026-11-10-shared-master-design.md) |
+| s2d-2 | 品項共用主檔；併入品項實物／服務類型、預留所屬款式參照、往來對象多送貨地址（使用者 11-17 裁決，開工前先更新共用主檔設計） | 未開始 | [共用主檔](superpowers/specs/2026-11-10-shared-master-design.md) |
+| mg1 | MES 改為通用生產管理：應用程式改名、製程與不良原因選項通用化、完工入庫不限單一末道、模具模組改範例、Demo 與手冊同步（使用者 11-17 裁決，排在 s2e 前避免重工；開工前先寫設計） | 未開始（設計待寫） | [ERP 路線](superpowers/specs/2026-11-06-erp-roadmap-design.md) 2026-11-17 一節 |
 | s2e-a | 訂單到出貨：追溯與履約核心 | 未開始 | [訂單到出貨](superpowers/specs/2026-11-11-order-workorder-shipment-design.md) |
 | s2e-b | 訂單到出貨：應用程式間整合 | 未開始 | [訂單到出貨](superpowers/specs/2026-11-11-order-workorder-shipment-design.md) |
-| s2f | 訂單變更單 | 未開始 | [訂單到出貨](superpowers/specs/2026-11-11-order-workorder-shipment-design.md) |
+| s2f | 訂單變更單；併入可設定的超交容許量（使用者 11-17 裁決） | 未開始 | [訂單到出貨](superpowers/specs/2026-11-11-order-workorder-shipment-design.md) |
+| s2g | 進銷存補強：單位換算、銷貨與採購退回、庫存預留與可用量、批號與有效期（使用者 11-17 裁決，庫存異動結構一次改完；開工前先寫設計） | 未開始（設計待寫） | [ERP 路線](superpowers/specs/2026-11-06-erp-roadmap-design.md) 2026-11-17 一節 |
+| s2h | 多幣別完整版：單據幣別、匯率表自動更新、入帳換算、收付款匯差、期末重估（使用者 11-17 裁決；匯差與重估需會計專業確認） | 未開始（設計待寫） | [ERP 路線](superpowers/specs/2026-11-06-erp-roadmap-design.md) 2026-11-17 一節 |
 | s3b | 期間鎖定、分組小計、損益表列結構、Top N | 未開始 | [ERP 資料模型](superpowers/specs/2026-11-10-erp-data-model-design.md) |
 | s3c | 會計應用程式 | 未開始 | [ERP 資料模型](superpowers/specs/2026-11-10-erp-data-model-design.md) |
+| s4p | 生產與採購：依欄位分組拆單 → 多層 BOM 與版本 → 安全庫存補貨 → 簡化 MRP（使用者 11-17 裁決，排在 s3c 後、HRM 前；開工前再切段並寫設計） | 未開始（設計待寫） | [ERP 路線](superpowers/specs/2026-11-06-erp-roadmap-design.md) 2026-11-17 一節 |
 | HRM | 階段 4：員工主檔、請假、出勤、費用報支，含依部門的資料範圍；開工前再切段 | 未開始 | — |
-| 階段5 | 檢視與收尾：看板、日曆、專案與工時、客服工單、應用程式管理畫面補齊（含應用程式匯出畫面）、備份還原；開工前再切段 | 未開始 | — |
+| 階段5 | 檢視與收尾：看板、日曆、專案與工時、客服工單、應用程式管理畫面補齊（含應用程式匯出畫面）、備份還原、已刪除記錄還原、客戶 Logo 與主色（後兩項使用者 11-17 裁決）；開工前再切段 | 未開始 | — |
 
 HRM（階段 4）與階段 5 先用佔位列排序，開工前再切成正式工作段。
 
@@ -99,9 +104,9 @@ HRM（階段 4）與階段 5 先用佔位列排序，開工前再切成正式工
 
 1. **任務管理與簽核**（含 CRM 設計案情境）。簽核後端一條線；任務畫面與規則平行。
 2. **多語系**（穿插進行）：模組選單分區多語系化；全面盤點後修補高、中兩級；之後做翻譯匯出／匯入（Excel，只含設計資料，介面固定文字不開放覆寫）。
-3. **共用主檔收尾**：s2d-1g（Demo 公司跨應用程式共用等）、s2d-1h、s2d-2（品項共用、移除模擬實體）。
-4. **訂單到出貨整合**：s2e-a 追溯與履約核心 → s2e-b 應用程式間整合 → s2f 訂單變更單。
-5. **會計**：s3b 期間鎖定、分組小計、損益表列結構、Top N → s3c 會計應用程式。
+3. **共用主檔收尾**：s2d-1g（Demo 公司跨應用程式共用等）、s2d-1h、s2d-2（品項共用、移除模擬實體；併入品項實物／服務、所屬款式、多送貨地址，使用者 11-17 裁決）→ mg1 MES 改通用生產管理（11-17 插入，在 s2e 前）。
+4. **訂單到出貨整合**：s2e-a 追溯與履約核心 → s2e-b 應用程式間整合 → s2f 訂單變更單（含超交容許量）→ s2g 進銷存補強 → s2h 多幣別（s2g、s2h 為 11-17 插入的會計前置）。
+5. **會計**：s3b 期間鎖定、分組小計、損益表列結構、Top N → s3c 會計應用程式（含銷貨與進貨折讓）→ s4p 生產與採購（11-17 插入，在 HRM 前）。
 6. **HRM**：依部門的資料範圍，以及員工、請假、出勤、費用報支。
 7. **階段 5 其餘**：看板與日曆、專案與工時、客服與 IT 工單、應用程式開啟頁面、刪除應用程式、手動群組對應、備份還原。
 
@@ -111,7 +116,7 @@ HRM（階段 4）與階段 5 先用佔位列排序，開工前再切成正式工
 
 設計：[政策設定](superpowers/specs/2026-11-11-policy-settings-design.md)、[維運、觀測與告警派工 agent](superpowers/specs/2026-11-11-ops-observability-design.md)、[MCP server](superpowers/specs/2026-11-11-mcp-server-design.md)。這幾段插在上面第 1 項「任務管理與簽核」的簽核主線中間。
 
-順序：**p1 → o1a → 簽核 a2d1 → a4b → a6 → a2d2–a2d7 → a4a → ci1 → tz1 → a5 → a3 → fg1–fg6 → kb1–kb3、kr1–kr3 → st1、st2 → gt1、gt2 → o1b、o1c → un1 → pg0 → O2 → p2、p3 → i3、i4 → mcp1（mcp1a → mcp1b）→ O3 → pkg1 → O4–O6**，MCP 後續段 mcp2a → mcp2b → mcp3 → mcp4 依進度與 O4–O6 穿插。
+順序：**p1 → o1a → 簽核 a2d1 → a4b → a6 → a2d2–a2d7 → a4a → ci1 → tz1 → a5 → a3 → fg1–fg6 → kb1–kb3、kr1–kr3 → st1、st2 → gt1、gt2 → o1b、o1c → un1 → pg0 → O2 → p2、p3 → i3、i4 → mcp1（mcp1a → mcp1b）→ O3 → pkg1 → au1 → O4–O6**，MCP 後續段 mcp2a → mcp2b → mcp3 → mcp4 依進度與 O4–O6 穿插。
 
 - 使用者裁決（2026-11-11）：p1 → O1 → pg0 → a2d–a6 → O2 → mcp1 → O3…；O1 在 p1 之後、a2d 之前；O2 以後視情況穿插；pg0 在 O1 之後，之後的功能兩種資料庫都驗，其餘 PostgreSQL 改寫排在簽核之後；MCP 地基 mcp1 在簽核與 O2 之後，業務寫入、設計器工具、OAuth 後續分段，維運 O4、O6 直接用 MCP 工具；列表的使用者欄位顯示姓名用小段穿插。
 - 使用者確認（2026-11-12）：p2、p3 排在 O2 之後、mcp1a 之前；O3 → O4 → O5 → O6 的先後；mcp1 之後是 mcp1a → mcp1b → mcp2a → mcp2b → mcp3 → mcp4，mcpO1 隨 O4、mcpO2 隨 O6，mcp4 可視雲端版第一個客戶的需求提前。
