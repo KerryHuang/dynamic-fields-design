@@ -117,36 +117,6 @@ public class DemoReportsTests(DemoGeneratedFixture fx)
         manager.BasisIsFrozen.Should().BeFalse();
     }
 
-    [Theory]
-    [InlineData(true, "ok", true)]
-    [InlineData(false, "empty", false)]
-    public async Task Run_120DaysAfterGeneration_DemoLoginDecidesBasis(bool demoLogin, string state, bool frozen)
-    {
-        var clock = new MutableTime(DemoTestHost.Today);
-        await using var host = await DemoTestHost.CreateAsync(configure: s =>
-        {
-            s.AddSingleton<IBusinessTime>(clock);
-            s.AddActingOverrides();   // 覆寫過的時鐘要重新包 Acting 裝飾器，產生器排程的過去時間才有效（簽核 a3g 的代理設定看營運日）
-            s.AddSingleton(new AuthSettings(demoLogin));
-        });
-        (await host.Send(new GenerateDemoDataRequest(DemoTestHost.Today))).IsSuccess.Should().BeTrue();
-        var report = await host.Db.Context.Set<Report>().AsNoTracking().SingleAsync(r => r.Name == "近 90 天訂單狀態分布");
-
-        clock.Today = DemoTestHost.Today.AddDays(120);
-        using var _ = ActingScope.Begin("manager01");
-        var result = (ReportResult)(await host.Send(new RunReportRequest(report.Id, null, "zh-TW"))).Data!;
-
-        result.State.Should().Be(state);
-        result.BasisDate.Should().Be(demoLogin ? DemoTestHost.Today : clock.Today);
-        result.BasisIsFrozen.Should().Be(frozen);
-    }
-
-    private sealed class MutableTime(DateOnly today) : IBusinessTime
-    {
-        public DateOnly Today { get; set; } = today;
-        public DateTime Now => Today.ToDateTime(new TimeOnly(10, 0));
-    }
-
     [Fact]
     public async Task BasisDate_DemoLoginOff_UsesToday()
     {
@@ -227,4 +197,47 @@ public class DemoReportsTests(DemoGeneratedFixture fx)
             .SetAsync(SystemSetting.DemoGeneratedOn, value, CancellationToken.None);
         await host.Db.Context.SaveChangesAsync();
     }
+}
+
+/// <summary>產生 Demo 資料後再過 120 天跑報表，基準日看是否開 Demo 登入。兩個案例各自一個類別（各產生一次），才不在同一類別內串行。</summary>
+internal static class DemoReportsAfter120Days
+{
+    public static async Task Run(bool demoLogin, string state, bool frozen)
+    {
+        var clock = new MutableTime(DemoTestHost.Today);
+        await using var host = await DemoTestHost.CreateAsync(configure: s =>
+        {
+            s.AddSingleton<IBusinessTime>(clock);
+            s.AddActingOverrides();   // 覆寫過的時鐘要重新包 Acting 裝飾器，產生器排程的過去時間才有效（簽核 a3g 的代理設定看營運日）
+            s.AddSingleton(new AuthSettings(demoLogin));
+        });
+        (await host.Send(new GenerateDemoDataRequest(DemoTestHost.Today))).IsSuccess.Should().BeTrue();
+        var report = await host.Db.Context.Set<Report>().AsNoTracking().SingleAsync(r => r.Name == "近 90 天訂單狀態分布");
+
+        clock.Today = DemoTestHost.Today.AddDays(120);
+        using var _ = ActingScope.Begin("manager01");
+        var result = (ReportResult)(await host.Send(new RunReportRequest(report.Id, null, "zh-TW"))).Data!;
+
+        result.State.Should().Be(state);
+        result.BasisDate.Should().Be(demoLogin ? DemoTestHost.Today : clock.Today);
+        result.BasisIsFrozen.Should().Be(frozen);
+    }
+
+    private sealed class MutableTime(DateOnly today) : IBusinessTime
+    {
+        public DateOnly Today { get; set; } = today;
+        public DateTime Now => Today.ToDateTime(new TimeOnly(10, 0));
+    }
+}
+
+public class DemoReportsDemoLoginOnTests
+{
+    [Fact]
+    public Task Run_120DaysAfterGeneration_DemoLoginOn_FrozenOnGeneratedDay() => DemoReportsAfter120Days.Run(true, "ok", true);
+}
+
+public class DemoReportsDemoLoginOffTests
+{
+    [Fact]
+    public Task Run_120DaysAfterGeneration_DemoLoginOff_UsesToday() => DemoReportsAfter120Days.Run(false, "empty", false);
 }

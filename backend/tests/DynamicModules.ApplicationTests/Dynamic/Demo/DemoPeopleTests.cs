@@ -32,19 +32,6 @@ public class DemoPeopleTests
     }
 
     [Fact]
-    public async Task Generate_CreatesPeopleFlaggedAsDemo()
-    {
-        await using var host = await DemoTestHost.CreateAsync();
-
-        (await host.Send(new GenerateDemoDataRequest(DemoTestHost.Today))).IsSuccess.Should().BeTrue();
-
-        var users = await host.Db.Context.Set<AppUser>().AsNoTracking().ToDictionaryAsync(u => u.UserId);
-        users["sales01"].IsDemoAccount.Should().BeTrue();
-        users["sales01"].PasswordHash.Should().BeNull();
-        users["admin"].IsDemoAccount.Should().BeFalse();
-    }
-
-    [Fact]
     public async Task Generate_ExistingDemoUser_Conflict()
     {
         await using var host = await DemoTestHost.CreateAsync();

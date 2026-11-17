@@ -46,53 +46,34 @@ internal static class DemoDb
     public static DateOnly Date(string? s) => DateOnly.ParseExact(s!, "yyyy-MM-dd", CultureInfo.InvariantCulture);
 }
 
-/// <summary>各自建新庫產生（確定性、跨年、回滾）。</summary>
-public class DemoGenerationTests
+/// <summary>建新庫並產生 Demo 資料，失敗時把訊息帶進斷言。</summary>
+internal static class DemoGenerated
 {
-    private static async Task<DemoTestHost> Generated(DateOnly today)
+    public static async Task<DemoTestHost> Create(DateOnly today)
     {
         var host = await DemoTestHost.CreateAsync(today);
         var r = await host.Send(new GenerateDemoDataRequest(today));
         r.IsSuccess.Should().BeTrue(r.Message + string.Join(";", r.Errors.Select(e => $"{e.Key}:{string.Join(",", e.Value)}")));
         return host;
     }
+}
+
+/// <summary>各自建新庫產生（確定性、回滾）；一個類別最多產生一次（xUnit 類別內序列，多次產生會串成關鍵路徑）。</summary>
+public class DemoGenerationTests
+{
+    private static Task<DemoTestHost> Generated(DateOnly today) => DemoGenerated.Create(today);
 
     [Fact]
     public async Task Generate_SameToday_TwiceOnFreshDbs_IdenticalSnapshot()
     {
-        await using var a = await Generated(DemoTestHost.Today);
-        await using var b = await Generated(DemoTestHost.Today);
+        // 兩份各自獨立的庫；Sqlite 的 async 實為同步，不用 Task.Run 就會依序跑
+        var (hostA, hostB) = (Task.Run(() => Generated(DemoTestHost.Today)), Task.Run(() => Generated(DemoTestHost.Today)));
+        await using var a = await hostA;
+        await using var b = await hostB;
 
         var snapshot = await DemoDb.Snapshot(a.Db.Context);
         snapshot.Should().HaveCountGreaterThan(300);
         snapshot.Should().Equal(await DemoDb.Snapshot(b.Db.Context));
-    }
-
-    [Fact]
-    public async Task Generate_OnNewYearsDay_SucceedsWithDistributions()
-    {
-        var today = new DateOnly(2027, 1, 1);
-        await using var host = await Generated(today);
-        var db = host.Db.Context;
-
-        var status = await DemoDb.FieldKey(db, "mes-order", "狀態");
-        var due = await DemoDb.FieldKey(db, "mes-order", "交期");
-        var orderDate = await DemoDb.FieldKey(db, "mes-order", "訂單日期");
-        var open = (await db.Set<FieldOption>().AsNoTracking().ToListAsync())
-            .Where(o => o.LabelI18n.Resolve("zh-TW") is "已確認" or "出貨中").Select(o => $"opt_{o.Id}").ToHashSet();
-        // 報價單轉出的訂單沒有交期與訂單日期，不在這個分布裡
-        var orders = (await DemoDb.Records(db, "mes-order")).Where(o => DemoDb.Text(o, orderDate) != null && DemoDb.Text(o, due) != null).ToList();
-        orders.Count(o => DemoDb.Date(DemoDb.Text(o, due)) < today && open.Contains(DemoDb.Text(o, status)!))
-            .Should().BeGreaterThanOrEqualTo(4);
-        var december = orders.Where(o => DemoDb.Date(DemoDb.Text(o, orderDate)).Month == 12).ToList();
-        december.Should().NotBeEmpty().And.OnlyContain(o => o.Title.StartsWith("SO-202612-"));
-
-        var mold = await DemoDb.FieldKey(db, "mes-mold-care", "模具");
-        var careDate = await DemoDb.FieldKey(db, "mes-mold-care", "保養日期");
-        var next = await DemoDb.FieldKey(db, "mes-mold-care", "下次保養日");
-        (await DemoDb.Records(db, "mes-mold-care")).GroupBy(c => JsonDocument.Parse(c.ValuesJson).RootElement.GetProperty(mold).GetInt64())
-            .Select(g => DemoDb.Date(DemoDb.Text(g.MaxBy(c => DemoDb.Date(DemoDb.Text(c, careDate)))!, next)))
-            .Count(d => d >= today && d <= today.AddDays(6)).Should().BeGreaterThanOrEqualTo(2);
     }
 
     [Fact]
@@ -115,6 +96,37 @@ public class DemoGenerationTests
         (await db.Set<Module>().AsNoTracking().CountAsync()).Should().Be(modules);
         (await db.Set<Record>().AsNoTracking().CountAsync()).Should().Be(records);
         (await db.Set<NumberSequence>().AsNoTracking().CountAsync()).Should().Be(sequences);
+    }
+}
+
+/// <summary>跨年那天產生：分布仍成立（自己一個類別，才不和同類別的其他產生串行）。</summary>
+public class DemoGenerationNewYearsTests
+{
+    [Fact]
+    public async Task Generate_OnNewYearsDay_SucceedsWithDistributions()
+    {
+        var today = new DateOnly(2027, 1, 1);
+        await using var host = await DemoGenerated.Create(today);
+        var db = host.Db.Context;
+
+        var status = await DemoDb.FieldKey(db, "mes-order", "狀態");
+        var due = await DemoDb.FieldKey(db, "mes-order", "交期");
+        var orderDate = await DemoDb.FieldKey(db, "mes-order", "訂單日期");
+        var open = (await db.Set<FieldOption>().AsNoTracking().ToListAsync())
+            .Where(o => o.LabelI18n.Resolve("zh-TW") is "已確認" or "出貨中").Select(o => $"opt_{o.Id}").ToHashSet();
+        // 報價單轉出的訂單沒有交期與訂單日期，不在這個分布裡
+        var orders = (await DemoDb.Records(db, "mes-order")).Where(o => DemoDb.Text(o, orderDate) != null && DemoDb.Text(o, due) != null).ToList();
+        orders.Count(o => DemoDb.Date(DemoDb.Text(o, due)) < today && open.Contains(DemoDb.Text(o, status)!))
+            .Should().BeGreaterThanOrEqualTo(4);
+        var december = orders.Where(o => DemoDb.Date(DemoDb.Text(o, orderDate)).Month == 12).ToList();
+        december.Should().NotBeEmpty().And.OnlyContain(o => o.Title.StartsWith("SO-202612-"));
+
+        var mold = await DemoDb.FieldKey(db, "mes-mold-care", "模具");
+        var careDate = await DemoDb.FieldKey(db, "mes-mold-care", "保養日期");
+        var next = await DemoDb.FieldKey(db, "mes-mold-care", "下次保養日");
+        (await DemoDb.Records(db, "mes-mold-care")).GroupBy(c => JsonDocument.Parse(c.ValuesJson).RootElement.GetProperty(mold).GetInt64())
+            .Select(g => DemoDb.Date(DemoDb.Text(g.MaxBy(c => DemoDb.Date(DemoDb.Text(c, careDate)))!, next)))
+            .Count(d => d >= today && d <= today.AddDays(6)).Should().BeGreaterThanOrEqualTo(2);
     }
 }
 
@@ -147,21 +159,14 @@ public class DemoGenerationSharedTests(DemoGeneratedFixture fx)
     }
 
     [Fact]
-    public async Task Generate_ShiftedToday_SameRelativeDates()
+    public async Task Generate_CreatesPeopleFlaggedAsDemo()
     {
         fx.Generated();
-        var shifted = DemoTestHost.Today.AddDays(10);
-        await using var host = await DemoTestHost.CreateAsync(shifted);
-        (await host.Send(new GenerateDemoDataRequest(shifted))).IsSuccess.Should().BeTrue();
 
-        async Task<List<DateOnly>> OrderDates(DynamicDbContext db)
-        {
-            var key = await DemoDb.FieldKey(db, "mes-order", "訂單日期");
-            return (await DemoDb.Records(db, "mes-order")).Where(o => DemoDb.Text(o, key) != null).Select(o => DemoDb.Date(DemoDb.Text(o, key))).ToList();
-        }
-        var before = await OrderDates(fx.Host.Db.Context);
-        var after = await OrderDates(host.Db.Context);
-        after.Should().HaveCount(before.Count).And.Equal(before.Select(d => d.AddDays(10)));
+        var users = await fx.Host.Db.Context.Set<AppUser>().AsNoTracking().ToDictionaryAsync(u => u.UserId);
+        users["sales01"].IsDemoAccount.Should().BeTrue();
+        users["sales01"].PasswordHash.Should().BeNull();
+        users["admin"].IsDemoAccount.Should().BeFalse();
     }
 
     [Fact]
@@ -173,5 +178,27 @@ public class DemoGenerationSharedTests(DemoGeneratedFixture fx)
         fx.Progress.Should().HaveCount(steps);
         fx.Progress[^1].Should().Be((steps, steps));
         fx.Progress.Should().OnlyContain(p => p.Total == steps);
+    }
+}
+
+/// <summary>平移今天 10 天後，各筆日期同步平移。自己產生兩份（基準與平移後，Task.Run 平行），不掛共用 collection，才不拖長共用產生結果那條串行鏈。</summary>
+public class DemoGenerationShiftedTodayTests
+{
+    [Fact]
+    public async Task Generate_ShiftedToday_SameRelativeDates()
+    {
+        var shifted = DemoTestHost.Today.AddDays(10);
+        var (baseTask, shiftedTask) = (Task.Run(() => DemoGenerated.Create(DemoTestHost.Today)), Task.Run(() => DemoGenerated.Create(shifted)));
+        await using var baseHost = await baseTask;
+        await using var host = await shiftedTask;
+
+        async Task<List<DateOnly>> OrderDates(DynamicDbContext db)
+        {
+            var key = await DemoDb.FieldKey(db, "mes-order", "訂單日期");
+            return (await DemoDb.Records(db, "mes-order")).Where(o => DemoDb.Text(o, key) != null).Select(o => DemoDb.Date(DemoDb.Text(o, key))).ToList();
+        }
+        var before = await OrderDates(baseHost.Db.Context);
+        var after = await OrderDates(host.Db.Context);
+        after.Should().HaveCount(before.Count).And.Equal(before.Select(d => d.AddDays(10)));
     }
 }
