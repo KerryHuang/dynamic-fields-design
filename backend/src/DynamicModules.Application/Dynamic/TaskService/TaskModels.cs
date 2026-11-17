@@ -50,10 +50,12 @@ internal static class TaskViews
     {
         var assignee = t.AssigneeUserId is null ? null : users.GetValueOrDefault(t.AssigneeUserId);
         var creator = t.CreatedBy is null ? null : users.GetValueOrDefault(t.CreatedBy);
+        // 看不到記錄時不給規則代碼與是否已刪除：規則屬於模組，推得出記錄在哪個模組（看板設計 §4.3）
+        var ruleHidden = p.Record is { Accessible: false };
         return new TaskDetailResponse(
             t.Id, t.Title, t.Description, t.Status, t.AssigneeUserId, assignee?.DisplayName, assignee is { IsActive: true },
             t.DueDate, Overdue(t, today), p.Record, t.CreatedBy, creator?.DisplayName, t.CreatedTime, t.CompletedTime,
-            ruleKey, t.RuleId is not null && ruleKey is null, p.CanEdit, p.CanComment, p.CanDelete, p.Frozen,
+            ruleHidden ? null : ruleKey, !ruleHidden && t.RuleId is not null && ruleKey is null, p.CanEdit, p.CanComment, p.CanDelete, p.Frozen,
             p.CanReassign, p.Supervised, TaskVersion.Of(t));
     }
 

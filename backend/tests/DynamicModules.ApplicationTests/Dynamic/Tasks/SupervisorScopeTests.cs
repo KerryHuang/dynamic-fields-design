@@ -125,6 +125,32 @@ public class SupervisorScopeTests : TaskTestBase
         (await Load(task.Id)).AssigneeUserId.Should().Be("sales01");
     }
 
+    /// <summary>主管看得到部屬任務、對記錄沒有 Read：詳情與重派後的回應都不帶規則代碼（看板設計 §4.3）。</summary>
+    [Fact]
+    public async Task Supervisor_RecordNoAccess_DetailAndReassignWithoutRuleKey()
+    {
+        var t = await BuildTarget("secretmod");
+        var rec = await NewRecord(t, "sales01", "機密案件");
+        var rule = await SeedRule(t, "secret-rule", "機密規則");
+        var task = await SeedTask("規則任務", createdBy: null, assignee: "keeper01", target: t, recordId: rec, ruleId: rule);
+
+        As("ops01");
+        var get = await Send(new GetTaskRequest(task.Id));
+        var patched = await Patch("ops01", task.Id, """{"assigneeUserId":"floor01"}""");
+
+        get.IsSuccess.Should().BeTrue(get.Message);
+        patched.IsSuccess.Should().BeTrue(patched.Message);
+        foreach (var d in new[] { (TaskDetailResponse)get.Data!, (TaskDetailResponse)patched.Data! })
+        {
+            d.Supervised.Should().BeTrue();
+            d.RuleKey.Should().BeNull();
+            d.RuleDeleted.Should().BeFalse();
+            d.Record!.Accessible.Should().BeFalse();
+            Json(d).Should().NotContain("secret-rule").And.NotContain("機密規則").And.NotContain("secretmod").And.NotContain("機密案件")
+                .And.Contain("規則任務");
+        }
+    }
+
     [Fact]
     public async Task FrozenSubordinateTask_NotSupervised()
     {

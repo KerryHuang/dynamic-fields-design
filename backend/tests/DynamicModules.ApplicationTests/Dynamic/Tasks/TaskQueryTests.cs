@@ -157,6 +157,29 @@ public class TaskQueryTests : TaskTestBase
         detail.CanDelete.Should().BeFalse();
     }
 
+    /// <summary>參與者看得到任務、看不到記錄：詳情不帶規則代碼（推得出模組，看板設計 §4.3）；看得到記錄的人照舊。</summary>
+    [Fact]
+    public async Task GetTask_RecordNoAccess_NoRuleKeyOrRecordRef()
+    {
+        var t = await BuildTarget("secretmod");
+        var rec = await NewRecord(t, "sales02", "機密案件");
+        var rule = await SeedRule(t, "secret-rule", "機密規則");
+        var seeded = await SeedTask("規則任務", createdBy: null, assignee: "sales01", target: t, recordId: rec, ruleId: rule);
+
+        As("sales01");
+        var detail = (TaskDetailResponse)(await Send(new GetTaskRequest(seeded.Id))).Data!;
+        As("admin");
+        var full = (TaskDetailResponse)(await Send(new GetTaskRequest(seeded.Id))).Data!;
+
+        detail.RuleKey.Should().BeNull();
+        detail.RuleDeleted.Should().BeFalse("看不到記錄時不透露規則狀態，也不誤報已刪除");
+        detail.Record.Should().Be(new TaskRecordRef(false, null, null, null, false));
+        Json(detail).Should().NotContain("secret-rule").And.NotContain("機密規則")
+            .And.NotContain("secretmod").And.NotContain("機密案件").And.NotContain($"\"recordId\":{rec}");
+        full.RuleKey.Should().Be("secret-rule");
+        Json(full).Should().Contain("secret-rule").And.Contain("secretmod").And.Contain("機密案件").And.Contain($"\"recordId\":{rec}");
+    }
+
     [Fact]
     public async Task MyTasks_SkipsTasksWithoutParticipantRow()
     {
