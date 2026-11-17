@@ -504,7 +504,7 @@ describe('MainLayout menu', () => {
     w.unmount();
   });
 
-  it('has the My tasks menu item right after Home', async () => {
+  it('MainLayout menu says Tasks and sits right after Home', async () => {
     const pinia = createPinia();
     setActivePinia(pinia);
     http.defaults.adapter = async (config) => ({
@@ -517,7 +517,8 @@ describe('MainLayout menu', () => {
     });
     await flushPromises();
     const item = w.get('[data-testid="my-tasks-menu"]');
-    expect(item.text()).toContain('我的任務');
+    expect(item.text()).toContain('任務');
+    expect(item.text()).not.toContain('我的任務');
     expect(item.attributes('href')).toBe('/tasks');
     expect(w.get('[data-testid="home-menu"]').element.nextElementSibling).toBe(item.element);
     w.unmount();

@@ -3,10 +3,11 @@ import { computed, toValue, type MaybeRefOrGetter } from 'vue';
 import { isTaskHidden, type TaskInput, type TaskListFilter, type TaskListTab, type TaskPatch } from 'src/domain/dynamic/task-types';
 import { dynamicApi } from 'src/services/api/dynamic-api';
 
-export function useMyTasks(tab: MaybeRefOrGetter<TaskListTab>, filter: MaybeRefOrGetter<TaskListFilter>, page: MaybeRefOrGetter<number>) {
+export function useMyTasks(tab: MaybeRefOrGetter<TaskListTab>, filter: MaybeRefOrGetter<TaskListFilter>, page: MaybeRefOrGetter<number>, enabled: MaybeRefOrGetter<boolean> = true) {
   return useQuery({
     queryKey: computed(() => ['tasks', toValue(tab), toValue(filter), toValue(page)]),
     queryFn: () => dynamicApi.getMyTasks(toValue(tab), toValue(filter), toValue(page)),
+    enabled: computed(() => toValue(enabled)),
     placeholderData: keepPreviousData,
   });
 }
@@ -62,6 +63,7 @@ function invalidateTasks(qc: QueryClient, id?: number) {
   return Promise.all([
     qc.invalidateQueries({ queryKey: ['tasks'] }),
     qc.invalidateQueries({ queryKey: ['task-summary'] }),
+    qc.invalidateQueries({ queryKey: ['task-board'] }),
     qc.invalidateQueries({ queryKey: ['record-tasks'] }),
     ...(id === undefined ? [] : [
       qc.invalidateQueries({ queryKey: ['task', id] }),

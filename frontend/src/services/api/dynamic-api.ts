@@ -18,10 +18,15 @@ import type {
   SubmitApprovalBody, SubmitApprovalResult, TransferBody, WithdrawBody, CancelBody, ReassignBody, AddSignBody, ApprovalDelegate, ApprovalDelegateBody, MyApprovalDelegate,
 } from 'src/domain/dynamic/approval-types';
 import type { ApprovalDraftPreviewBody, ApprovalFlow, ApprovalFlowDraftInput, ApprovalFlowInput, ApprovalFlowPublishResult, ApprovalFlowValidation } from 'src/domain/dynamic/approval-flow-types';
+import type {
+  BoardColumnPage, BoardSource, TaskBoardConfig, TaskBoardData, TaskMoveBody, TaskMoveResult, TaskViewDetail, TaskViewList, TaskViewShareKind,
+  TaskViewShareTargets,
+} from 'src/domain/dynamic/task-board-types';
 import type { TaskRule, TaskRuleInput } from 'src/domain/dynamic/task-rule-draft';
 import type { EffectivePolicies, ModulePolicy, PolicyValue, SystemPolicy } from 'src/domain/dynamic/policy-types';
 import { handleAuthFailure, http, toApiError } from './http';
 import {
+  normalizeBoard, normalizeBoardPage, normalizeMoveResult, normalizeShareTargets, normalizeViewDetail, normalizeViewList,
   normalizeNotificationList, normalizeRecordTasks, normalizeTaskCapabilities, normalizeTaskComment, normalizeTaskDetail, normalizeTaskPage,
   normalizeTaskRule, normalizeTaskUpdate,
 } from './task-normalize';
@@ -200,6 +205,8 @@ const importForm = (file: File) => {
 export type RecordValues = Record<string, unknown>;
 export type DetailsPayload = Record<string, DetailRowPayload[]>;
 const data = <T>(r: { data: T }) => r.data;
+
+const boardSourceBody = (s: BoardSource) => ({ viewId: s.viewId ?? null, config: s.config ?? null });
 /** The server omits null properties; roots and vacant managers come back without parentId / managerUserId. */
 const withNulls = (d: Department): Department => ({ ...d, parentId: d.parentId ?? null, managerUserId: d.managerUserId ?? null });
 
@@ -547,6 +554,26 @@ export const dynamicApi = {
   undoReassign: (id: number, undoToken: string) =>
     http.post<TaskDetail>(`/tasks/${id}/undo-reassign`, { undoToken }).then(data).then(normalizeTaskUpdate),
   deleteTask: (id: number) => http.delete(`/tasks/${id}`).then(data),
+  /** Board endpoints: `source` is a saved board (viewId) or an unsaved config; neither means the default board the server decides. */
+  getBoardColumns: (source: BoardSource) =>
+    http.post<TaskBoardData>('/task-board/columns', boardSourceBody(source)).then(data).then(normalizeBoard),
+  getBoardColumnPage: (column: string, source: BoardSource, offset: number) =>
+    http.post<BoardColumnPage>(`/task-board/columns/${encodeURIComponent(column)}/page`, { ...boardSourceBody(source), offset }).then(data).then(normalizeBoardPage),
+  moveTask: (id: number, body: TaskMoveBody) =>
+    http.post<TaskMoveResult>(`/tasks/${id}/move`, body).then(data).then(normalizeMoveResult),
+  getTaskViews: (kind = 'board') => http.get<TaskViewList>('/task-views', { params: { kind } }).then(data).then(normalizeViewList),
+  getTaskView: (id: number) => http.get<TaskViewDetail>(`/task-views/${id}`).then(data).then(normalizeViewDetail),
+  createTaskView: (body: { kind?: string; name: string; config?: TaskBoardConfig }) =>
+    http.post<TaskViewDetail>('/task-views', body).then(data).then(normalizeViewDetail),
+  /** `rowVersion` is the version read with the board; a stale one comes back as 409 (code stale). */
+  updateTaskView: (id: number, body: { name?: string; config?: TaskBoardConfig; rowVersion: string }) =>
+    http.put<TaskViewDetail>(`/task-views/${id}`, body).then(data).then(normalizeViewDetail),
+  deleteTaskView: (id: number) => http.delete(`/task-views/${id}`).then(data),
+  copyTaskView: (id: number) => http.post<TaskViewDetail>(`/task-views/${id}/copy`).then(data).then(normalizeViewDetail),
+  /** Replaces the whole share list. */
+  setTaskViewShares: (id: number, shares: { kind: TaskViewShareKind; id: string }[]) =>
+    http.put<TaskViewDetail>(`/task-views/${id}/shares`, shares).then(data).then(normalizeViewDetail),
+  getTaskViewShareTargets: () => http.get<TaskViewShareTargets>('/task-views/share-targets').then(data).then(normalizeShareTargets),
   getRecordTasks: (recordId: number) => http.get<RecordTasks>(`/records/${recordId}/tasks`).then(data).then(normalizeRecordTasks),
   createRecordTask: (recordId: number, body: TaskInput) =>
     http.post<TaskDetail>(`/records/${recordId}/tasks`, body).then(data).then(normalizeTaskDetail),

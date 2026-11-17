@@ -111,4 +111,52 @@ describe('dynamicApi tasks', () => {
     expect(undo).toMatchObject({ method: 'post', url: '/api/v3/dynamic/tasks/5/undo-reassign' });
     expect(JSON.parse(undo.body as string)).toEqual({ undoToken: 'tok' });
   });
+
+  it('board columns posts the source, an empty one means the default board, and null properties are filled in', async () => {
+    const seen = stub({
+      today: '2026-11-17', weekEnd: '2026-11-22', laterDefault: '2026-11-29', columns: [
+        { key: 'todo', kind: 'status', total: 1, cards: [{ id: 3, title: 'A', status: 'todo', record: { accessible: false, deleted: false } }], hasMore: false, truncated: false, droppable: true },
+        { key: 'user:sales01', kind: 'user', userId: 'sales01', total: 0, inactive: true, droppable: false, dropReason: '已停用' },
+      ],
+    });
+    const board = await dynamicApi.getBoardColumns({});
+    expect(seen).toMatchObject({ method: 'post', url: '/api/v3/dynamic/task-board/columns' });
+    expect(JSON.parse(seen.body as string)).toEqual({ viewId: null, config: null });
+    expect(board.scopeAvailable).toBe(true);
+    expect(board.omittedAssignees).toBe(0);
+    expect(board.columns[0].cards[0]).toMatchObject({ assigneeUserId: null, dueDate: null, commentCount: 0, record: { accessible: false, moduleKey: null } });
+    expect(board.columns[1]).toMatchObject({ name: null, inactive: true, cards: [], droppable: false, dropReason: '已停用' });
+    await dynamicApi.getBoardColumns({ viewId: 7 });
+    expect(JSON.parse(seen.body as string)).toEqual({ viewId: 7, config: null });
+  });
+
+  it('board column page posts the offset to the encoded column key; move posts the target and the version', async () => {
+    const page = stub({ key: 'user:a b', total: 80, cards: [{ id: 9, title: 'X', status: 'done' }], hasMore: true });
+    const r = await dynamicApi.getBoardColumnPage('user:a b', { viewId: 2 }, 50);
+    expect(page.url).toBe('/api/v3/dynamic/task-board/columns/user%3Aa%20b/page');
+    expect(JSON.parse(page.body as string)).toEqual({ viewId: 2, config: null, offset: 50 });
+    expect(r).toMatchObject({ total: 80, hasMore: true, truncated: false });
+    const move = stub({ visible: false, undoToken: 'tok' });
+    const m = await dynamicApi.moveTask(5, { groupBy: 'assignee', toColumn: 'user:sales02', expectedVersion: 'v1' });
+    expect(move).toMatchObject({ method: 'post', url: '/api/v3/dynamic/tasks/5/move' });
+    expect(m).toEqual({ visible: false, card: null, undoToken: 'tok' });
+  });
+
+  it('task views: list, detail, save, copy, shares and share targets use the task-views endpoints', async () => {
+    const list = stub({ mine: [{ id: 1, name: 'A', isOwner: true }] });
+    expect((await dynamicApi.getTaskViews()).shared).toEqual([]);
+    expect(list.url).toBe('/api/v3/dynamic/task-views?kind=board');
+    const detail = stub({ id: 1, name: 'A', config: { version: 1, groupBy: 'status', scope: 'assigned' }, rowVersion: 'r1' });
+    expect((await dynamicApi.getTaskView(1)).shares).toEqual([]);
+    expect(detail.url).toBe('/api/v3/dynamic/task-views/1');
+    await dynamicApi.updateTaskView(1, { name: 'B', rowVersion: 'r1' });
+    expect(detail).toMatchObject({ method: 'put', url: '/api/v3/dynamic/task-views/1' });
+    await dynamicApi.copyTaskView(1);
+    expect(detail).toMatchObject({ method: 'post', url: '/api/v3/dynamic/task-views/1/copy' });
+    await dynamicApi.setTaskViewShares(1, [{ kind: 'department', id: '3' }]);
+    expect(detail).toMatchObject({ method: 'put', url: '/api/v3/dynamic/task-views/1/shares' });
+    expect(JSON.parse(detail.body as string)).toEqual([{ kind: 'department', id: '3' }]);
+    stub({});
+    expect(await dynamicApi.getTaskViewShareTargets()).toEqual({ users: [], departments: [], groups: [] });
+  });
 });
