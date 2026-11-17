@@ -11,6 +11,14 @@ GitHub Actions（`.github/workflows/gate.yml`）：先跑外洩掃描（三項 0
 - 等 CI 時可以同時做本機走查；本機 `bash scripts/unattended/gate.sh <worktree>` 只在 GitHub 不能用時當備援。
 - 背景指令不要在結尾加 `echo "exit=$?"`，那會讓背景工作永遠回 0。
 
+## 單元流程（使用者 2026-11-17 裁決，加速）
+- 設計夠細（寫到欄位、算法、測試重點）的段：不另寫實作計畫、不審計畫；整段派一個實作 subagent 讀設計、在分支上列簡短待辦後直接做到底。設計不夠細才照舊寫計畫。
+- 每段只做一次程式碼審查（整段完成後讀整份 diff）、修一輪、跑一次 CI 就合併；權限或安全類的段審出 🔴 時，修完再審一次。
+- 審查者只讀 diff，不跑測試；測試交給 CI。
+- 實作者本機只跑自己新增或修改的測試類別加 build；「既有功能沒被改壞」的安全網測試交給 CI。
+- 固定兩條線：主線加一條和主線沒有共用檔（見下方「不並行的工作」）的平行線，各自一個 worktree。
+- 模型照派工等級表：權限、安全、DB 結構的段實作用 opus，其餘實作用 sonnet。
+
 ## 外洩掃描
 `LEAK_DENYLIST="$HOME/Work/projects/plugharbor/.leak-denylist" bash scripts/unattended/leak-scan.sh`
 
