@@ -3,11 +3,17 @@ import { computed, ref, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { useRoute, useRouter } from 'vue-router';
 import { clearLastTaskBoard, readLastTaskBoard, writeLastTaskBoard } from 'src/application/dynamic/last-task-board';
-import { useBoardColumns, useTaskViews } from 'src/application/dynamic/queries/task-board-queries';
+import { useMe } from 'src/application/dynamic/queries/permissions-queries';
+import { useBoardColumns, useTaskView, useTaskViews } from 'src/application/dynamic/queries/task-board-queries';
 import { useMyTasks, useTaskCapabilities } from 'src/application/dynamic/queries/tasks-queries';
+import { DEFAULT_BOARD_CONFIG } from 'src/domain/dynamic/task-board-config';
+import type { BoardSource, TaskBoardConfig, TaskViewDetail } from 'src/domain/dynamic/task-board-types';
 import { taskStatusColor, type TaskListFilter, type TaskListTab } from 'src/domain/dynamic/task-types';
 import type { ApiError } from 'src/services/api/http';
+import BoardPicker from 'src/presentation/tasks/board/BoardPicker.vue';
+import BoardSettingsDialog from 'src/presentation/tasks/board/BoardSettingsDialog.vue';
 import TaskBoard from 'src/presentation/tasks/board/TaskBoard.vue';
+import TaskViewShareDialog from 'src/presentation/tasks/board/TaskViewShareDialog.vue';
 import TaskDialog from 'src/presentation/dynamic/tasks/TaskDialog.vue';
 import TaskFormDialog from 'src/presentation/dynamic/tasks/TaskFormDialog.vue';
 import { useIdentityStore } from 'src/stores/use-identity-store';
@@ -42,13 +48,23 @@ const viewOptions = computed(() => (['list', 'board'] as const).map((v) => ({ va
 // board=<id>: a whole number; no board means the default board, which the server defines. Anything else counts as unreadable (D6).
 const boardParam = computed(() => (route.query.board === undefined ? null : String(route.query.board)));
 const boardId = computed(() => (boardParam.value !== null && /^[1-9]\d*$/.test(boardParam.value) ? Number(boardParam.value) : null));
-const boardSource = computed(() => ({ viewId: boardId.value }));
+// 「套用」的設定只影響這個畫面（D4）：有未儲存的設定時改用設定查詢，網址仍帶原看板，重新整理就回到存好的版本。
+const draft = ref<TaskBoardConfig | null>(null);
+const boardSource = computed<BoardSource>(() => (draft.value ? { config: draft.value } : { viewId: boardId.value }));
 const boardQuery = useBoardColumns(boardSource, isBoard);
 const views = useTaskViews(isBoard);
+const me = useMe();
+const isAdmin = computed(() => !!me.data.value?.isSystemAdmin);
+// 預設看板沒有存檔，設定用 DEFAULT_BOARD_CONFIG（與伺服器的預設看板相同）
+const detail = useTaskView(boardId, isBoard);
+const savedConfig = computed<TaskBoardConfig | null>(() => (boardId.value === null ? DEFAULT_BOARD_CONFIG : detail.data.value?.config ?? null));
+const config = computed(() => draft.value ?? savedConfig.value);
+const canSave = computed(() => boardId.value !== null && !!detail.data.value?.canEdit);
+const canShare = computed(() => boardId.value !== null && !!detail.data.value?.isOwner);
 const boardName = computed(() => {
   if (boardId.value === null) return t('taskBoard.defaultName');
   const all = [...(views.data.value?.mine ?? []), ...(views.data.value?.shared ?? [])];
-  return all.find((v) => v.id === boardId.value)?.name ?? '';
+  return detail.data.value?.name ?? all.find((v) => v.id === boardId.value)?.name ?? '';
 });
 const boardGone = ref(false);
 
@@ -68,6 +84,7 @@ function setFilter(v: TaskListFilter) { page.value = 1; go({ filter: v }); }
 const setOpen = (id: number | null) => go({ open: id === null ? undefined : String(id) });
 function setView(v: ViewMode) {
   boardGone.value = false;
+  draft.value = null;
   if (v === 'list') return go({ view: undefined, board: undefined });
   const last = readLastTaskBoard(identity.userId);
   go({ view: 'board', board: last === null ? undefined : String(last) });
@@ -79,8 +96,28 @@ function setView(v: ViewMode) {
 function fallbackToDefault({ forget }: { forget: boolean }) {
   if (forget) clearLastTaskBoard(identity.userId);
   boardGone.value = true;
+  draft.value = null;
   go({ board: undefined });
 }
+
+// 選看板：預設看板清掉網址的 board 與「上次的看板」記憶；其他看板的記憶由載入成功時寫入。換看板就丟掉未儲存的設定。
+function selectBoard(id: number | null) {
+  boardGone.value = false;
+  draft.value = null;
+  if (id === null) clearLastTaskBoard(identity.userId);
+  go({ board: id === null ? undefined : String(id) });
+}
+function onBoardDeleted(id: number) {
+  if (readLastTaskBoard(identity.userId) === id) clearLastTaskBoard(identity.userId);
+  if (id === boardId.value) selectBoard(null);
+}
+const onSavedAsNew = (d: TaskViewDetail) => selectBoard(d.id);
+function onSaved() { draft.value = null; }
+const settingsOpen = ref(false);
+const picker = ref<InstanceType<typeof BoardPicker> | null>(null);
+const shareOpen = ref(false);
+const shareId = ref<number | null>(null);
+function openShare(id: number) { shareId.value = id; shareOpen.value = true; }
 watch(() => [isBoard.value, boardParam.value, boardId.value] as const, ([board, param, id]) => {
   if (board && param !== null && id === null) fallbackToDefault({ forget: false });
 }, { immediate: true });
@@ -110,14 +147,24 @@ const boardFailed = computed(() => !!boardQuery.error.value && !boardQuery.data.
         {{ t('taskBoard.gone') }}
         <template #action><q-btn flat dense no-caps :label="t('tasks.close')" data-testid="board-gone-close" @click="boardGone = false" /></template>
       </q-banner>
-      <!-- Task 10 puts the board picker here -->
-      <div class="q-mb-sm text-subtitle2" data-testid="board-picker-slot">{{ boardName }}</div>
+      <div class="row items-center q-mb-sm" style="gap: 8px">
+        <BoardPicker
+          ref="picker" :views="views.data.value" :failed="views.isError.value" :current-id="boardId" :current-name="boardName" :unsaved="draft !== null"
+          :is-admin="isAdmin" :has-subordinates="hasSubordinates" :config="config"
+          @select="selectBoard" @share="openShare" @deleted="onBoardDeleted" @created="onSavedAsNew" @retry="views.refetch()"
+        />
+        <q-btn flat dense no-caps icon="tune" :label="t('taskBoard.settingsButton')" :disable="!config" data-testid="board-settings" @click="settingsOpen = true" />
+        <q-btn v-if="canShare" flat dense no-caps icon="share" :label="t('taskBoard.shareButton')" data-testid="board-share" @click="openShare(boardId!)" />
+      </div>
+      <q-banner v-if="boardQuery.data.value && !boardQuery.data.value.scopeAvailable" dense rounded class="bg-info-soft q-mb-sm" role="status" data-testid="scope-unavailable-notice">
+        {{ t('taskBoard.scopeUnavailable') }}
+      </q-banner>
       <div v-if="boardFailed" class="text-negative q-py-sm" data-testid="board-load-failed">
         {{ t('taskBoard.loadFailed') }}
         <q-btn flat dense no-caps color="primary" :label="t('taskBoard.retry')" data-testid="board-retry" @click="boardQuery.refetch()" />
       </div>
       <q-linear-progress v-else-if="boardQuery.isLoading.value" indeterminate class="q-my-sm" data-testid="board-loading" />
-      <TaskBoard v-if="boardQuery.data.value" :board="boardQuery.data.value" :source="boardSource" @open="setOpen" />
+      <TaskBoard v-if="boardQuery.data.value" :board="boardQuery.data.value" :source="boardSource" :group-by="config?.groupBy" @open="setOpen" />
     </template>
     <template v-else>
       <q-tabs :model-value="tab" dense align="left" narrow-indicator class="text-primary" @update:model-value="(v) => setTab(v as TaskListTab)">
@@ -156,6 +203,11 @@ const boardFailed = computed(() => !!boardQuery.error.value && !boardQuery.data.
         <q-pagination v-model="page" :max="pageCount" :max-pages="5" direction-links data-testid="tasks-pagination" />
       </div>
     </template>
+    <BoardSettingsDialog
+      v-if="config" v-model="settingsOpen" :config="config" :name="boardName" :view-id="canSave ? boardId : null" :row-version="detail.data.value?.rowVersion ?? ''"
+      :can-save="canSave" :has-subordinates="hasSubordinates" @apply="(c) => (draft = c)" @saved="onSaved" @saved-as-new="onSavedAsNew"
+    />
+    <TaskViewShareDialog :view-id="shareId" :open="shareOpen" @close="shareOpen = false" @hidden="picker?.focusButton()" />
     <TaskFormDialog v-model="adding" :default-assignee="identity.userId" />
     <TaskDialog :task-id="openId" @update:task-id="setOpen" />
   </q-page>

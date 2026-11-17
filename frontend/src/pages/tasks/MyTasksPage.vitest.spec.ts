@@ -6,7 +6,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { h } from 'vue';
 import { createI18n } from 'vue-i18n';
 import { createMemoryHistory, createRouter } from 'vue-router';
-import { boardWire } from 'src/presentation/tasks/board/board-fixtures';
+import { boardWire, configWire, shareTargetsWire, viewDetailWire, viewSummaryWire } from 'src/presentation/tasks/board/board-fixtures';
 import zhTW from 'src/i18n/zh-TW.json';
 import { commentWire, taskDetailWire, taskWire, USERS } from 'src/presentation/dynamic/tasks/task-fixtures';
 import { useIdentityStore } from 'src/stores/use-identity-store';
@@ -15,7 +15,7 @@ import MyTasksPage from './MyTasksPage.vue';
 
 let calls: Call[];
 
-async function mountPage(url: string, opts: { detailFails?: boolean; empty?: boolean; subordinates?: boolean; goneBoards?: number[]; defaultBoardFails?: boolean } = {}) {
+async function mountPage(url: string, opts: { detailFails?: boolean; empty?: boolean; subordinates?: boolean; goneBoards?: number[]; defaultBoardFails?: boolean; admin?: boolean; noScope?: boolean } = {}) {
   const pinia = createPinia();
   setActivePinia(pinia);
   useIdentityStore().setSession('sales01');
@@ -24,9 +24,15 @@ async function mountPage(url: string, opts: { detailFails?: boolean; empty?: boo
     if (c.url === '/task-board/columns') {
       const viewId = (bodyOf(c) as { viewId: number | null }).viewId;
       if (viewId === null && opts.defaultBoardFails) return new HttpFail(500, { message: '伺服器錯誤' });
-      return viewId !== null && opts.goneBoards?.includes(viewId) ? new HttpFail(404, { message: '找不到看板' }) : boardWire();
+      return viewId !== null && opts.goneBoards?.includes(viewId) ? new HttpFail(404, { message: '找不到看板' }) : boardWire(opts.noScope ? { scopeAvailable: false } : {});
     }
-    if (c.url === '/task-views') return { mine: [{ id: 5, name: '我的到期', isOwner: true }], shared: [] };
+    if (c.url === '/task-views' && c.method === 'get') return { mine: [viewSummaryWire({ id: 5, name: '我的到期' })], shared: [viewSummaryWire({ id: 8, name: '業務部任務', isOwner: false, ownerUserId: 'manager01', ownerName: '業務主管', shareCount: 1 })] };
+    if (c.url === '/task-views' && c.method === 'post') return viewDetailWire({ id: 11, name: (bodyOf(c) as { name: string }).name, config: (bodyOf(c) as { config: unknown }).config });
+    if (c.url === '/task-views/5' && c.method === 'get') return viewDetailWire();
+    if (c.url === '/task-views/8' && c.method === 'get') return viewDetailWire({ id: 8, name: '業務部任務', isOwner: false, canEdit: false, canDelete: false, config: configWire({ groupBy: 'dueBucket', scope: 'visible' }) });
+    if (/^\/task-views\/\d+$/.test(c.url) && c.method === 'delete') return {};
+    if (c.url === '/task-views/share-targets') return shareTargetsWire();
+    if (c.url === '/me') return { userId: 'sales01', isSystemAdmin: !!opts.admin };
     if (c.url === '/tasks/capabilities') return { subordinates: !!opts.subordinates };
     if (c.url === '/tasks' && c.method === 'post') return taskDetailWire({ id: 99 });
     if (/^\/tasks\/\d+$/.test(c.url)) return opts.detailFails ? new HttpFail(404, { message: '找不到任務' }) : taskDetailWire({ id: 7 });
@@ -42,13 +48,15 @@ async function mountPage(url: string, opts: { detailFails?: boolean; empty?: boo
   const Host = { render: () => h(quasar.QLayout, null, () => h(quasar.QPageContainer, null, () => h(MyTasksPage))) };
   const w = mount(Host, {
     attachTo: document.body,
-    global: { plugins: [[quasar.Quasar, { components: quasar, directives: quasar }], pinia, router, i18n, [VueQueryPlugin, { queryClient: new QueryClient({ defaultOptions: { queries: { retry: false, refetchOnWindowFocus: false } } }) }]] },
+    global: { plugins: [[quasar.Quasar, { components: quasar, directives: quasar, plugins: { Notify: quasar.Notify } }], pinia, router, i18n, [VueQueryPlugin, { queryClient: new QueryClient({ defaultOptions: { queries: { retry: false, refetchOnWindowFocus: false } } }) }]] },
   });
   await flushPromises();
   await new Promise((r) => setTimeout(r, 20));
   await flushPromises();
   return { w, router };
 }
+/** 選擇器按鈕的文字（去掉下拉箭頭圖示的字）。 */
+const pickerText = (w: { get: (s: string) => { text: () => string } }) => w.get('[data-testid="board-picker"]').text().replace('arrow_drop_down', '');
 const listCalls = () => calls.filter((c) => c.url === '/tasks' && c.method === 'get');
 
 describe('MyTasksPage', () => {
@@ -196,7 +204,7 @@ describe('MyTasksPage', () => {
     expect(bodyOf(boardCalls().at(-1))).toEqual({ viewId: null, config: null });
     expect(w.find('[data-testid="task-board"]').exists()).toBe(true);
     expect(w.find('[data-testid="tab-assigned"]').exists()).toBe(false);
-    expect(w.get('[data-testid="board-picker-slot"]').text()).toBe('預設看板');
+    expect(pickerText(w)).toBe('預設看板');
     expect(listCalls()).toHaveLength(listCallsBefore);
     await w.get('[data-testid="view-list"]').trigger('click');
     await flushPromises();
@@ -209,7 +217,7 @@ describe('MyTasksPage', () => {
   it('a board id in the url loads that board, shows its name and is remembered; switching to the board again reopens it', async () => {
     const { w, router } = await mountPage('/tasks?view=board&board=5');
     expect(bodyOf(calls.filter((c) => c.url === '/task-board/columns').at(-1))).toEqual({ viewId: 5, config: null });
-    expect(w.get('[data-testid="board-picker-slot"]').text()).toBe('我的到期');
+    expect(pickerText(w)).toBe('我的到期');
     expect(localStorage.getItem('taskBoard.last.sales01')).toBe('5');
     await w.get('[data-testid="view-list"]').trigger('click');
     await flushPromises();
@@ -294,5 +302,142 @@ describe('MyTasksPage', () => {
     expect(calls.some((c) => c.url === '/tasks/7')).toBe(true);
     expect(document.body.querySelector('[data-testid="task-dialog"]')).not.toBeNull();
     w.unmount();
+  });
+
+  describe('board picker, settings and sharing', () => {
+    const lastBoardBody = () => bodyOf(calls.filter((c) => c.url === '/task-board/columns').at(-1)) as { viewId: number | null; config: Record<string, unknown> | null };
+    const body = (id: string) => document.body.querySelector<HTMLElement>(`[data-testid="${id}"]`);
+    const click = async (id: string) => { body(id)!.click(); await flushPromises(); await new Promise((r) => setTimeout(r, 20)); await flushPromises(); };
+
+    it('MyTasksPage picking a board puts it in the url and loads it', async () => {
+      const { w, router } = await mountPage('/tasks?view=board');
+      await click('board-picker');
+      await click('picker-item-8');
+      expect(router.currentRoute.value.query.board).toBe('8');
+      expect(lastBoardBody()).toEqual({ viewId: 8, config: null });
+      expect(pickerText(w)).toBe('業務部任務');
+      w.unmount();
+    });
+
+    it('MyTasksPage choosing the default board clears the board param and the remembered board', async () => {
+      const { w, router } = await mountPage('/tasks?view=board&board=5');
+      expect(localStorage.getItem('taskBoard.last.sales01')).toBe('5');
+      await click('board-picker');
+      await click('picker-item-default');
+      expect(router.currentRoute.value.query.board).toBeUndefined();
+      expect(localStorage.getItem('taskBoard.last.sales01')).toBeNull();
+      expect(lastBoardBody()).toEqual({ viewId: null, config: null });
+      w.unmount();
+    });
+
+    it('MyTasksPage apply loads the board by the unsaved config and marks it unsaved, saving nothing', async () => {
+      const { w, router } = await mountPage('/tasks?view=board&board=5');
+      await click('board-settings');
+      await click('settings-group-dueBucket');
+      await click('settings-apply');
+      expect(lastBoardBody().viewId).toBeNull();
+      expect(lastBoardBody().config).toMatchObject({ groupBy: 'dueBucket', scope: 'assigned' });
+      expect(pickerText(w)).toBe('我的到期（未儲存）');
+      expect(calls.some((c) => c.method === 'put')).toBe(false);
+      // 網址仍帶原看板：重新整理會回到存好的版本
+      expect(router.currentRoute.value.query.board).toBe('5');
+      w.unmount();
+    });
+
+    it('picking another board drops the unsaved config', async () => {
+      const { w } = await mountPage('/tasks?view=board&board=5');
+      await click('board-settings');
+      await click('settings-apply');
+      expect(pickerText(w)).toContain('（未儲存）');
+      await click('board-picker');
+      await click('picker-item-default');
+      expect(pickerText(w)).toBe('預設看板');
+      expect(lastBoardBody()).toEqual({ viewId: null, config: null });
+      w.unmount();
+    });
+
+    it('saving from the settings dialog writes back with rowVersion and clears the unsaved mark', async () => {
+      const { w } = await mountPage('/tasks?view=board&board=5');
+      await click('board-settings');
+      await click('settings-scope-visible');
+      await click('settings-save');
+      const put = calls.find((c) => c.method === 'put' && c.url === '/task-views/5')!;
+      expect(bodyOf(put)).toMatchObject({ rowVersion: 'v1', config: { scope: 'visible' } });
+      expect(pickerText(w)).toBe('我的到期');
+      w.unmount();
+    });
+
+    it('the settings dialog offers save only on your own saved board', async () => {
+      const own = await mountPage('/tasks?view=board&board=5');
+      await click('board-settings');
+      expect(body('settings-save')).not.toBeNull();
+      own.w.unmount();
+      document.body.innerHTML = '';
+      const shared = await mountPage('/tasks?view=board&board=8');
+      await click('board-settings');
+      expect(body('settings-apply')).not.toBeNull();
+      expect(body('settings-save')).toBeNull();
+      shared.w.unmount();
+      document.body.innerHTML = '';
+      const def = await mountPage('/tasks?view=board');
+      await click('board-settings');
+      expect(body('settings-save')).toBeNull();
+      expect(body('settings-save-as')).not.toBeNull();
+      def.w.unmount();
+    });
+
+    it('a board saved as new from the picker becomes the current board', async () => {
+      const { w, router } = await mountPage('/tasks?view=board');
+      await click('board-picker');
+      await click('picker-save-as');
+      const input = body('picker-name') as HTMLInputElement;
+      input.value = '我的新看板';
+      input.dispatchEvent(new Event('input'));
+      await flushPromises();
+      await click('picker-name-ok');
+      expect(router.currentRoute.value.query.board).toBe('11');
+      expect(bodyOf(calls.find((c) => c.method === 'post' && c.url === '/task-views'))).toMatchObject({ kind: 'board', name: '我的新看板' });
+      w.unmount();
+    });
+
+    it('deleting the board you are on goes back to the default board and forgets it', async () => {
+      const { w, router } = await mountPage('/tasks?view=board&board=5');
+      await click('board-picker');
+      await click('picker-delete-5');
+      await click('picker-delete-ok');
+      expect(calls.some((c) => c.method === 'delete' && c.url === '/task-views/5')).toBe(true);
+      expect(router.currentRoute.value.query.board).toBeUndefined();
+      expect(localStorage.getItem('taskBoard.last.sales01')).toBeNull();
+      expect(w.find('[data-testid="board-gone-notice"]').exists()).toBe(false);
+      w.unmount();
+    });
+
+    it('the share button exists only on your own saved board and opens the share dialog', async () => {
+      const shared = await mountPage('/tasks?view=board&board=8');
+      expect(shared.w.find('[data-testid="board-share"]').exists()).toBe(false);
+      shared.w.unmount();
+      document.body.innerHTML = '';
+      const { w } = await mountPage('/tasks?view=board&board=5');
+      await click('board-share');
+      expect(body('task-share')).not.toBeNull();
+      w.unmount();
+    });
+
+    it('MyTasksPage shows the no-subordinates notice when the scope is unavailable (D7), and keeps the board open', async () => {
+      const { w } = await mountPage('/tasks?view=board&board=5', { noScope: true });
+      expect(w.get('[data-testid="scope-unavailable-notice"]').text()).toContain('這個看板的範圍是「部屬的任務」，你目前沒有部屬');
+      expect(w.find('[data-testid="task-board"]').exists()).toBe(true);
+      w.unmount();
+      const ok = await mountPage('/tasks?view=board&board=5');
+      expect(ok.w.find('[data-testid="scope-unavailable-notice"]').exists()).toBe(false);
+      ok.w.unmount();
+    });
+
+    it('moving a card on a board uses the configured group-by', async () => {
+      const { w } = await mountPage('/tasks?view=board&board=8');
+      // 看板 8 的設定是依到期區間；欄資料是狀態欄（測試資料），移動請求帶設定的分欄依據
+      expect(w.findComponent({ name: 'TaskBoard' }).props('groupBy')).toBe('dueBucket');
+      w.unmount();
+    });
   });
 });

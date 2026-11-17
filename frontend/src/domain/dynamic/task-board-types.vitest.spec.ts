@@ -51,6 +51,12 @@ describe('task-board-types', () => {
     expect(groupByOf([])).toBe('status');
   });
 
+  it('groupByOf prefers the configured group-by over the column kinds', () => {
+    expect(groupByOf([column({ kind: 'status' })], 'assignee')).toBe('assignee');
+    expect(groupByOf([], 'dueBucket')).toBe('dueBucket');
+    expect(groupByOf([column({ kind: 'dueBucket' })], null)).toBe('dueBucket');
+  });
+
   it('moveTargets marks overdue and thisWeek-on-weekend as not droppable with a reason', () => {
     const columns = [
       column({ key: 'overdue', kind: 'dueBucket', droppable: false }),

@@ -1,7 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/vue-query';
 import { computed, toValue, type MaybeRefOrGetter } from 'vue';
 import {
-  moveCardLocally, removeCardLocally, restoreCardLocally, type BoardCard, type BoardColumn, type BoardGroupBy, type BoardSource, type TaskBoardData, type TaskMoveResult,
+  moveCardLocally, removeCardLocally, restoreCardLocally, type BoardCard, type BoardColumn, type BoardGroupBy, type BoardSource, type TaskBoardConfig, type TaskBoardData, type TaskMoveResult, type TaskViewShareKind,
 } from 'src/domain/dynamic/task-board-types';
 import { dynamicApi } from 'src/services/api/dynamic-api';
 import { invalidateTasks } from './tasks-queries';
@@ -98,7 +98,71 @@ export function useMoveTask(source: MaybeRefOrGetter<BoardSource>) {
   });
 }
 
-/** 我的看板與分享給我的看板；Task 10 的選擇器使用。 */
+/** 我的看板與分享給我的看板（選擇器用）。 */
 export function useTaskViews(enabled: MaybeRefOrGetter<boolean> = true) {
   return useQuery({ queryKey: ['task-views', 'board'], queryFn: () => dynamicApi.getTaskViews('board'), enabled: computed(() => toValue(enabled)) });
+}
+
+/** 一個存檔看板的設定、權限與（擁有者／管理員才有的）分享對象。 */
+export function useTaskView(id: MaybeRefOrGetter<number | null>, enabled: MaybeRefOrGetter<boolean> = true) {
+  return useQuery({
+    queryKey: computed(() => ['task-view', toValue(id)]),
+    queryFn: () => dynamicApi.getTaskView(toValue(id)!),
+    enabled: computed(() => toValue(id) !== null && toValue(enabled)),
+  });
+}
+
+/** 分享對話框的選項：使用者、部門、群組；任何登入者都讀得到。 */
+export function useTaskViewShareTargets(enabled: MaybeRefOrGetter<boolean> = true) {
+  return useQuery({ queryKey: ['task-view-share-targets'], queryFn: () => dynamicApi.getTaskViewShareTargets(), enabled: computed(() => toValue(enabled)) });
+}
+
+/** 另存為新看板；清單失效，由呼叫端決定要不要切過去。 */
+export function useCreateTaskView() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (v: { name: string; config: TaskBoardConfig }) => dynamicApi.createTaskView({ kind: 'board', ...v }),
+    onSuccess: (detail) => {
+      qc.setQueryData(['task-view', detail.id], detail);
+      return qc.invalidateQueries({ queryKey: ['task-views'] });
+    },
+  });
+}
+
+/** 儲存目前看板（名稱與設定）；rowVersion 不符回 409。成功後該看板的欄資料重抓。 */
+export function useUpdateTaskView() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (v: { id: number; name: string; config: TaskBoardConfig; rowVersion: string }) =>
+      dynamicApi.updateTaskView(v.id, { name: v.name, config: v.config, rowVersion: v.rowVersion }),
+    onSuccess: (detail) => {
+      qc.setQueryData(['task-view', detail.id], detail);
+      void qc.invalidateQueries({ queryKey: ['task-board'] });
+      return qc.invalidateQueries({ queryKey: ['task-views'] });
+    },
+  });
+}
+
+export function useDeleteTaskView() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: number) => dynamicApi.deleteTaskView(id),
+    onSuccess: (_r, id) => {
+      qc.removeQueries({ queryKey: ['task-view', id] });
+      qc.removeQueries({ queryKey: ['task-board', 'columns', id] });
+      return qc.invalidateQueries({ queryKey: ['task-views'] });
+    },
+  });
+}
+
+/** 整批取代分享對象；id 一律是字串（使用者帳號，或部門、群組的數字 id 轉字串）。 */
+export function useSetTaskViewShares() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (v: { id: number; shares: { kind: TaskViewShareKind; id: string }[] }) => dynamicApi.setTaskViewShares(v.id, v.shares),
+    onSuccess: (detail) => {
+      qc.setQueryData(['task-view', detail.id], detail);
+      return qc.invalidateQueries({ queryKey: ['task-views'] });
+    },
+  });
 }

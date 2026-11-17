@@ -41,3 +41,20 @@ export const dueBoardWire = () => boardWire({
 export const nineStatusLikeColumns = () => Array.from({ length: 9 }, (_, i) => columnWire({
   key: `user:u${i + 1}`, kind: 'user', userId: `u${i + 1}`, name: `同事${i + 1}`, inactive: false, total: i, cards: [],
 }));
+
+/** 看板設定（預設看板的樣子）與存檔看板的詳細資料／摘要，皆為伺服器回應的形狀。 */
+export const configWire = (o: Record<string, unknown> = {}) => ({
+  version: 1, groupBy: 'status', scope: 'assigned', columns: { hidden: ['cancelled'] }, sort: { key: 'dueDate', dir: 'asc' }, ...o,
+});
+export const viewDetailWire = (o: Record<string, unknown> = {}) => ({
+  id: 5, kind: 'board', name: '我的到期', ownerUserId: 'sales01', ownerName: '業務一', ownerActive: true, isOwner: true, canEdit: true, canDelete: true,
+  config: configWire(), shares: [], rowVersion: 'v1', ...o,
+});
+export const viewSummaryWire = (o: Record<string, unknown> = {}) => ({
+  id: 5, kind: 'board', name: '我的到期', ownerUserId: 'sales01', ownerName: '業務一', ownerActive: true, isOwner: true, shareCount: 0, modifiedTime: '2026-11-16T09:00:00', ...o,
+});
+export const shareTargetsWire = () => ({
+  users: [{ id: 'sales02', name: '業務二' }, { id: 'sales03', name: '業務三' }],
+  departments: [{ id: 3, name: { 'zh-TW': '業務部' } }],
+  groups: [{ id: 4, name: { 'zh-TW': '業務' } }],
+});

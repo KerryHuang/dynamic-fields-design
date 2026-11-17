@@ -5,7 +5,7 @@ import { useI18n } from 'vue-i18n';
 import { useLoadMoreColumn, useMoveTask } from 'src/application/dynamic/queries/task-board-queries';
 import {
   BOARD_COLUMN_GAP, columnsPerScreen, gridTrackCount, groupByOf, moveBlockKey, moveFlowOf, moveTargets, visibleRange,
-  type BoardCard, type BoardColumn, type BoardSource, type ColumnDrop, type MoveFlow, type TaskBoardData,
+  type BoardCard, type BoardColumn, type BoardGroupBy, type BoardSource, type ColumnDrop, type MoveFlow, type TaskBoardData,
 } from 'src/domain/dynamic/task-board-types';
 import { useMovedOutNotice } from 'src/presentation/dynamic/tasks/use-moved-out-notice';
 import type { ApiError } from 'src/services/api/http';
@@ -21,7 +21,7 @@ import { useElementWidth } from './use-element-width';
  * `source` 用來把「載入更多」與移動的樂觀更新接回同一份快取。移動有兩條路：拖拉（一屏有多欄才啟用，D2）與每張卡的「移到…」，
  * 兩條都走 requestMove；結果用唯一的 aria-live 念出。
  */
-const props = defineProps<{ board: TaskBoardData; source: BoardSource }>();
+const props = defineProps<{ board: TaskBoardData; source: BoardSource; /** 看板設定的分欄依據；還沒讀到設定時不給，由欄的種類反推。 */ groupBy?: BoardGroupBy | null }>();
 const emit = defineEmits<{ open: [id: number] }>();
 const { t } = useI18n();
 const $q = useQuasar();
@@ -33,7 +33,7 @@ const perScreen = computed(() => columnsPerScreen(width.value));
 const phone = computed(() => perScreen.value <= 1);
 const start = ref(0);
 const columns = computed(() => props.board.columns);
-const groupBy = computed(() => groupByOf(columns.value));
+const groupBy = computed(() => groupByOf(columns.value, props.groupBy));
 const range = computed(() => visibleRange(Math.floor(start.value / perScreen.value), perScreen.value, columns.value.length));
 const shown = computed(() => columns.value.slice(range.value.start, range.value.end));
 

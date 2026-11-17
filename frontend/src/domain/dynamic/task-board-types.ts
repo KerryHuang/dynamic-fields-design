@@ -2,7 +2,7 @@ import type { ReportDateRange } from './report-types';
 import type { I18nText } from './types';
 import type { TaskRecordRef, TaskStatus } from './task-types';
 
-/** 看板分欄依據；伺服器回應沒有帶設定，所以由欄的種類反推（見 groupByOf）。 */
+/** 看板分欄依據；伺服器回應沒有帶設定，由看板設定給（見 groupByOf）。 */
 export type BoardGroupBy = 'status' | 'assignee' | 'dueBucket';
 export type BoardColumnKind = 'status' | 'dueBucket' | 'user' | 'unassigned';
 /** 到期區間欄的欄鍵，順序與伺服器 TaskDueBuckets.Keys 相同。 */
@@ -183,8 +183,9 @@ export function visibleRange(page: number, perScreen: number, count: number): Vi
   return { page: clamped, pageCount, start, end: Math.min(start + size, Math.max(0, count)) };
 }
 
-/** 伺服器沒有回分欄依據，由欄的種類反推；沒有任何欄時退回依狀態。 */
-export function groupByOf(columns: readonly BoardColumn[]): BoardGroupBy {
+/** 分欄依據：有看板設定就用設定的值；回應本身沒帶，沒有設定（還在載入）時才由欄的種類反推，沒有任何欄就退回依狀態。 */
+export function groupByOf(columns: readonly BoardColumn[], configured?: BoardGroupBy | null): BoardGroupBy {
+  if (configured) return configured;
   const kind = columns[0]?.kind;
   return kind === 'dueBucket' ? 'dueBucket' : kind === 'user' || kind === 'unassigned' ? 'assignee' : 'status';
 }
