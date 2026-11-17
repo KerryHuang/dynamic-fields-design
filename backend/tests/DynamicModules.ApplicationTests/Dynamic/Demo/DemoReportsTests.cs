@@ -192,6 +192,35 @@ public class DemoReportsTests(DemoGeneratedFixture fx)
         (await host.Db.Context.Set<Report>().CountAsync()).Should().Be(0);
     }
 
+    [Fact]
+    public async Task TaskReport_OverdueUsesBasisDate()
+    {
+        // 今天 11-20、Demo 資料產生日 11-05：逾期與延遲天數用基準日，與今天無關
+        await using var host = await DemoTestHost.CreateAsync(new DateOnly(2026, 11, 20), s => s.AddSingleton(new AuthSettings(true)));
+        await SetGeneratedOn(host, "2026-11-05");
+        var task = new TaskItem
+        {
+            Title = "到期 11-04 的待辦", CreatedBy = "admin", DueDate = new DateOnly(2026, 11, 4),
+            CreatedTime = new DateTime(2026, 11, 1, 9, 0, 0, DateTimeKind.Unspecified),
+        };
+        task.Participants.Add(new TaskParticipant { UserId = "admin", Reason = TaskParticipantReason.Creator });
+        host.Db.Context.Add(task);
+        await host.Db.Context.SaveChangesAsync();
+        ReportFieldRef T(long code) => new("main", code, null);
+        var d = new ReportDefinition(1, "", null, [], [],
+            [new ReportMeasure("late", "countIf", null, new ReportFilter(T(TaskReportFields.Overdue), "eq", System.Text.Json.JsonSerializer.SerializeToElement(true))),
+             new ReportMeasure("delay", "sum", T(TaskReportFields.DelayDays), null)],
+            [], null, null, [], "table", ReportDatasets.Tasks);
+
+        var result = await host.Services.GetRequiredService<ReportRunner>().RunAsync(d, new ReportRunOptions(null, null), CancellationToken.None);
+
+        result.State.Should().Be("ok", result.Message);
+        result.BasisDate.Should().Be(new DateOnly(2026, 11, 5));
+        result.BasisIsFrozen.Should().BeTrue();
+        result.Total!["late"].Should().Be(1);
+        result.Total["delay"].Should().Be(1);
+    }
+
     private static async Task SetGeneratedOn(DemoTestHost host, string value)
     {
         await host.Services.GetRequiredService<ISystemSettingRepository>()

@@ -26,7 +26,8 @@ namespace DynamicModules.Application.Dynamic.ReportService;
 public partial class ReportRunner(
     IModuleRepository modules, IRecordRepository records, IPermissionRepository permissions, IDynamicAccessGuard guard,
     ReferenceResolver resolver, FieldTypeRegistry registry, IBusinessTime time, ReportOptions options,
-    AuthSettings auth, ISystemSettingRepository settings, IReportQueryRepository queries, IPolicyReader policies)
+    AuthSettings auth, ISystemSettingRepository settings, IReportQueryRepository queries, IPolicyReader policies,
+    TaskReportSource taskReports)
 {
     public const long EntityTitleFieldId = 0;
 
@@ -92,9 +93,9 @@ public partial class ReportRunner(
         var frozen = basis != time.Today;
         var locale = string.IsNullOrEmpty(o.Locale) ? I18nText.FallbackLocale : o.Locale;
 
-        // 1–6 由資料來源載入、組格子、套條件；不認得的資料來源 fail closed
-        var load = ReportDatasets.IsModule(d.Dataset)
-            ? await LoadModuleAsync(d, o, basis, frozen, locale, ct)
+        // 1–6 由資料來源載入、組格子、套條件；不認得的資料來源 fail closed（taskEvents 的事件列在 kr1c 才接上，在那之前同樣不回數字）
+        var load = ReportDatasets.IsModule(d.Dataset) ? await LoadModuleAsync(d, o, basis, frozen, locale, ct)
+            : d.Dataset == ReportDatasets.Tasks ? await LoadTasksAsync(d, o, basis, frozen, locale, ct)
             : new SourceLoad(FailResult(ModuleDisabledState, ReportText.Get(locale, ReportText.ModuleDisabled), basis, frozen), null);
         if (load.Done is { } done) return done;
         return Finish(d, o, basis, frozen, locale, load.Rows!);
