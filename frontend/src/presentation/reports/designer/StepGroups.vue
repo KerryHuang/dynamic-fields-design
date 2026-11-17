@@ -60,7 +60,7 @@ const measureText = (i: number) => {
   const m = s.measures[i]!;
   const c = m.condition;
   const cond = c
-    ? `${fieldText(c.field)} ${t(`dynamic.op.${c.op}`, c.op)} ${valueText(c.value, findEntry(entries.value, c.field)?.field, t('reports.inactiveMark'))}`.trim()
+    ? `${fieldText(c.field)} ${t(`dynamic.op.${c.op}`, c.op)} ${valueText(c.value, findEntry(entries.value, c.field)?.field, t('reports.inactiveMark'), { yes: t('reports.designer.yes'), no: t('reports.designer.no') })}`.trim()
     : '';
   return [t(`reports.designer.kind.${m.kind}`, m.kind), m.field ? fieldText(m.field) : '', cond].filter(Boolean).join(' ');
 };

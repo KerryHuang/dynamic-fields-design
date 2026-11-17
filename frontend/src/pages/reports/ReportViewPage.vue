@@ -44,9 +44,10 @@ const catalog = useSourceCatalog(computed(() => detail.value?.definition.dataset
 const isTaskSource = computed(() => !!detail.value?.definition.dataset && detail.value.definition.dataset !== 'module');
 const rangeAvailable = computed(() => !!detail.value?.definition.primaryDateField);
 const entries = computed(() => (catalog.data.value ? listFields(catalog.data.value, detail.value?.definition.child, t('reports.titleField')) : []));
+const boolText = computed(() => ({ yes: t('reports.designer.yes'), no: t('reports.designer.no') }));
 const filterText = (f: ReportFilter) => {
   const e = findEntry(entries.value, f.field);
-  return `${e ? e.label : t('reports.fieldNo', { id: f.field.fieldId })} ${opText(f.op)} ${valueText(f.value, e?.field, t('reports.inactiveMark'))}`.trim();
+  return `${e ? e.label : t('reports.fieldNo', { id: f.field.fieldId })} ${opText(f.op)} ${valueText(f.value, e?.field, t('reports.inactiveMark'), boolText.value)}`.trim();
 };
 
 const drillKeys = ref<string[] | null>(null);

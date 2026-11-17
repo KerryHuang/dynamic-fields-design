@@ -322,6 +322,42 @@ public class TaskReportsApiTests : IDisposable
     }
 
     [Fact]
+    public async Task DepartmentFilter_NonAdmin_NeverExceedsVisibleTasks_Http()
+    {
+        var admin = _app.AsUser();
+        var (_, hq, sales, sales1) = await ArrangeDepartmentsAsync(admin);
+        var sales02 = _app.AsUser("sales02");
+        var id = await CreateReport(sales02, WorkloadDef());
+
+        N(await Post(sales02, $"{Reports}/{id}/run", new { })).Should().Be(1, "業務二只看得到指派給自己的一件");
+        N(await Post(sales02, $"{Reports}/{id}/run", new { departmentIds = new[] { hq } })).Should().Be(1, "選總部（含下層）不會多看到別人的任務");
+        N(await Post(sales02, $"{Reports}/{id}/run", new { departmentIds = new[] { sales } })).Should().Be(1);
+        (await Post(sales02, $"{Reports}/{id}/run", new { departmentIds = new[] { sales1 } })).GetProperty("state").GetString()
+            .Should().Be("empty", "他的任務在業務部，不在業務一課");
+        var drill = await Post(sales02, $"{Reports}/{id}/drill", new { groupKeys = new[] { "sales02" }, departmentIds = new[] { hq } });
+        drill.GetProperty("taskIds").GetArrayLength().Should().Be(1);
+    }
+
+    [Fact]
+    public async Task Export_BadFilterParameters_Return400_Http()
+    {
+        var admin = _app.AsUser();
+        var (id, _, _, _) = await ArrangeDepartmentsAsync(admin);
+
+        async Task Expect400(string query)
+        {
+            var res = await admin.GetAsync($"{Reports}/{id}/export{query}");
+            res.StatusCode.Should().Be(HttpStatusCode.BadRequest, query + " " + await res.Content.ReadAsStringAsync());
+        }
+        await Expect400("?rangeKind=lastDays&rangeN=3651");
+        await Expect400("?rangeKind=lastDays&rangeN=0");
+        await Expect400("?rangeKind=lastDays");
+        await Expect400("?departmentIds=abc");
+        await Expect400("?rangeN=7");
+        (await admin.GetAsync($"{Reports}/{id}/export?rangeKind=lastDays&rangeN=3650")).StatusCode.Should().Be(HttpStatusCode.OK);
+    }
+
+    [Fact]
     public async Task DepartmentFilter_ModuleReport_IsIgnored_Http()
     {
         var admin = _app.AsUser();

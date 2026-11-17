@@ -392,7 +392,7 @@ public class TaskReportRunnerTests : TaskTestBase
         var r = await Run(TaskDef([M("n", "countMain")]));
 
         r.State.Should().Be("tooMany");
-        r.Message.Should().Be("資料太多，請縮小條件");
+        r.Message.Should().Be("資料太多，請縮小條件；部門篩選不會減少載入量，請縮小期間");
     }
 
     [Fact]

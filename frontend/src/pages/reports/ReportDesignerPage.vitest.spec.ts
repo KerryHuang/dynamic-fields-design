@@ -448,6 +448,7 @@ const TASK_CATALOG: ModuleCatalog = {
   fields: [
     F(-2, '狀態', { type: 'enum', options: [{ id: 'opt_1', label: '待辦', active: true }, { id: 'opt_3', label: '已完成', active: true }] }),
     F(-3, '負責人', { type: 'user' }),
+    F(-12, '是否逾期', { type: 'boolean' }),
     F(-6, '到期日', { type: 'date', isDate: true }),
     F(-14, '完成天數', { type: 'integer', canGroup: false, canSum: true }),
   ],
@@ -540,6 +541,16 @@ describe('ReportDesignerPage 任務資料來源與新量值', () => {
     await click('measure-cond-0-remove');
     expect(q('measure-cond-0')).toBeNull();
     expect((q('designer-next') as HTMLButtonElement).disabled).toBe(false);
+  });
+
+  it('a saved countIf on a boolean field shows yes/no in the measure text, not true', async () => {
+    api.getReport.mockResolvedValue(detail({
+      ...DEF, dataset: 'tasks', mainModuleKey: '', columns: [],
+      measures: [{ id: 'm1', kind: 'countIf', field: null, condition: { field: MAIN(-12), op: 'eq', value: true } }],
+    }));
+    await mountAt('/reports/7/edit', CATALOG, DATASETS as never);
+    await goTo(3);
+    expect(q('measure-text-0')!.textContent).toBe('符合條件的筆數 是否逾期 等於 是');
   });
 
   it('min and max offer no condition block', async () => {

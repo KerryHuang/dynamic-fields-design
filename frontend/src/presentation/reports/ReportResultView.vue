@@ -9,6 +9,7 @@ import { formatValue } from './report-format';
 /** openableTasks：任務資料來源的明細列可以點開任務（taskIds 逐列對齊）；儀表板卡片不開。 */
 const props = defineProps<{ result: ReportResult; viz: string; chartHeight?: string; drillable?: boolean; openableTasks?: boolean }>();
 const emit = defineEmits<{ drill: [groupKeys: string[]]; openTask: [taskId: number] }>();
+const hasTaskLinks = computed(() => !!props.openableTasks && !!props.result.taskIds?.length);
 const taskIdAt = (ri: number) => (props.openableTasks ? (props.result.taskIds?.[ri] ?? null) : null);
 const { t, locale } = useI18n();
 
@@ -95,7 +96,10 @@ const countText = (n: number | null | undefined) => (n ?? 0).toLocaleString(loca
         </div>
         <q-markup-table v-if="hasDetail" flat bordered dense data-testid="report-detail-table">
           <thead>
-            <tr><th v-for="c in fieldCols" :key="c.key" class="text-left">{{ c.label }}</th></tr>
+            <tr>
+              <th v-for="c in fieldCols" :key="c.key" class="text-left">{{ c.label }}</th>
+              <th v-if="hasTaskLinks" class="task-link-col" aria-hidden="true" />
+            </tr>
           </thead>
           <tbody>
             <tr
@@ -105,6 +109,9 @@ const countText = (n: number | null | undefined) => (n ?? 0).toLocaleString(loca
               @keydown.enter.prevent="taskIdAt(ri) !== null && emit('openTask', taskIdAt(ri)!)"
             >
               <td v-for="(c, ci) in fieldCols" :key="c.key">{{ fmt(row[ci], c) }}</td>
+              <td v-if="hasTaskLinks" class="task-link-col text-right">
+                <q-icon v-if="taskIdAt(ri) !== null" name="chevron_right" color="grey-6" aria-hidden="true" data-testid="task-chevron" />
+              </td>
             </tr>
           </tbody>
         </q-markup-table>

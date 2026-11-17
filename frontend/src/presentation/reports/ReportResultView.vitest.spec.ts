@@ -192,6 +192,13 @@ describe('report-format', () => {
       expect(w.find('[data-testid="detail-row-0"]').classes()).toContain('row-clickable');
     });
 
+    it('openable rows end with a chevron, inert rows and results without task ids do not', () => {
+      const chevrons = (w: ReturnType<typeof mount>) => w.findAll('[data-testid="task-chevron"]').length;
+      expect(chevrons(mountTasks(true))).toBe(2);
+      expect(chevrons(mountTasks(false))).toBe(0);
+      expect(chevrons(mountTasks(true, { ...TASKS, taskIds: null }))).toBe(0);
+    });
+
     it('rows are inert without openableTasks, without taskIds (module reports, dashboard cards)', async () => {
       const off = mountTasks(false);
       await off.find('[data-testid="detail-row-0"]').trigger('click');

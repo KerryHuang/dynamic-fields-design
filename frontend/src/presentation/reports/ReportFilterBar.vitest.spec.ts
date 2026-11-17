@@ -46,15 +46,64 @@ describe('ReportFilterBar', () => {
     expect(emitted()[2]![0]).toMatchObject({ range: null });
   });
 
-  it('N applies only when it is a positive integer', async () => {
-    await mountBar({ modelValue: { ...NO_RUN_FILTER, range: { kind: 'lastDays', n: 30 } } });
-    const input = mounted!.findAllComponents(quasar.QInput).find((c) => c.element.contains(q('filter-range-n')))!;
-    input.vm.$emit('update:modelValue', '0');
-    input.vm.$emit('update:modelValue', '2.5');
-    input.vm.$emit('update:modelValue', '');
-    expect(emitted()).toBeUndefined();
-    input.vm.$emit('update:modelValue', '7');
-    expect(emitted()[0]![0]).toMatchObject({ range: { kind: 'lastDays', n: 7 } });
+  describe('期間 N', () => {
+    const nInput = () => mounted!.findAllComponents(quasar.QInput).find((c) => c.element.contains(q('filter-range-n')))!;
+    const nNative = () => q('filter-range-n') as HTMLInputElement;
+    beforeEach(() => vi.useFakeTimers());
+    afterEach(() => vi.useRealTimers());
+    const mountN = () => mountBar({ modelValue: { ...NO_RUN_FILTER, range: { kind: 'lastDays', n: 30 } } });
+
+    it('typing only edits the box; the filter applies after 500ms without further typing, once', async () => {
+      await mountN();
+      nInput().vm.$emit('update:modelValue', '7');
+      nInput().vm.$emit('update:modelValue', '75');
+      vi.advanceTimersByTime(499);
+      expect(emitted()).toBeUndefined();
+      vi.advanceTimersByTime(2);
+      expect(emitted()).toHaveLength(1);
+      expect(emitted()[0]![0]).toMatchObject({ range: { kind: 'lastDays', n: 75 } });
+    });
+
+    it('blur and Enter apply immediately', async () => {
+      await mountN();
+      nInput().vm.$emit('update:modelValue', '12');
+      nInput().vm.$emit('blur');
+      expect(emitted()[0]![0]).toMatchObject({ range: { kind: 'lastDays', n: 12 } });
+      nInput().vm.$emit('update:modelValue', '8');
+      nNative().dispatchEvent(new KeyboardEvent('keyup', { key: 'Enter' }));
+      expect(emitted()[1]![0]).toMatchObject({ range: { kind: 'lastDays', n: 8 } });
+      vi.advanceTimersByTime(1000);
+      expect(emitted()).toHaveLength(2);
+    });
+
+    it('out-of-range values are clamped to 1..3650 instead of being sent', async () => {
+      await mountN();
+      expect(nNative().max).toBe('3650');
+      nInput().vm.$emit('update:modelValue', '99999');
+      nInput().vm.$emit('blur');
+      expect(emitted()[0]![0]).toMatchObject({ range: { kind: 'lastDays', n: 3650 } });
+      nInput().vm.$emit('update:modelValue', '0');
+      nInput().vm.$emit('blur');
+      expect(emitted()[1]![0]).toMatchObject({ range: { kind: 'lastDays', n: 1 } });
+    });
+
+    it('an empty or fractional N reverts to the applied value and sends nothing', async () => {
+      await mountN();
+      nInput().vm.$emit('update:modelValue', '');
+      nInput().vm.$emit('blur');
+      nInput().vm.$emit('update:modelValue', '2.5');
+      vi.advanceTimersByTime(600);
+      expect(emitted()).toBeUndefined();
+      expect(nNative().value).toBe('30');
+    });
+
+    it('a pending edit is dropped when the bar goes away', async () => {
+      await mountN();
+      nInput().vm.$emit('update:modelValue', '9');
+      mounted!.unmount();
+      vi.advanceTimersByTime(1000);
+      expect(emitted()).toBeUndefined();
+    });
   });
 
   it('is disabled with a hint when the report has no primary date field', async () => {

@@ -9,7 +9,7 @@ public static class ReportText
     public const string
         ModuleDisabled = nameof(ModuleDisabled), DetailAsMain = nameof(DetailAsMain), NoModuleRead = nameof(NoModuleRead), NoChildRead = nameof(NoChildRead),
         FieldGone = nameof(FieldGone), FieldGoneNamed = nameof(FieldGoneNamed), TypeChanged = nameof(TypeChanged), NoPermissionTo = nameof(NoPermissionTo),
-        HiddenField = nameof(HiddenField), NotUsable = nameof(NotUsable), TooMany = nameof(TooMany), TooManyToLoad = nameof(TooManyToLoad), SqlTimeout = nameof(SqlTimeout),
+        HiddenField = nameof(HiddenField), NotUsable = nameof(NotUsable), TooMany = nameof(TooMany), TooManyTasks = nameof(TooManyTasks), TooManyToLoad = nameof(TooManyToLoad), SqlTimeout = nameof(SqlTimeout),
         RowMeaning = nameof(RowMeaning), Count = nameof(Count), Sum = nameof(Sum), Avg = nameof(Avg), Min = nameof(Min), Max = nameof(Max), Ratio = nameof(Ratio),
         CountIf = nameof(CountIf), CountIfEq = nameof(CountIfEq), Median = nameof(Median), Conditional = nameof(Conditional), ConditionalEq = nameof(ConditionalEq),
         Title = nameof(Title), FieldPath = nameof(FieldPath), Deleted = nameof(Deleted), NoPermission = nameof(NoPermission), Blank = nameof(Blank),
@@ -29,6 +29,8 @@ public static class ReportText
         [HiddenField] = ("隱藏欄位", "Hidden field", "ฟิลด์ที่ถูกซ่อน", "Trường bị ẩn"),
         [NotUsable] = ("這個欄位不能用於報表：{0}", "This field cannot be used in reports: {0}", "ฟิลด์นี้ใช้ในรายงานไม่ได้: {0}", "Trường này không dùng được trong báo cáo: {0}"),
         [TooMany] = ("資料太多，請縮小條件", "Too much data, please narrow the conditions", "ข้อมูลมากเกินไป โปรดจำกัดเงื่อนไข", "Dữ liệu quá nhiều, vui lòng thu hẹp điều kiện"),
+        [TooManyTasks] = ("資料太多，請縮小條件；部門篩選不會減少載入量，請縮小期間", "Too much data, please narrow the conditions. The department filter does not reduce what is loaded; narrow the period instead",
+            "ข้อมูลมากเกินไป โปรดจำกัดเงื่อนไข ตัวกรองแผนกไม่ได้ลดปริมาณข้อมูลที่โหลด โปรดจำกัดช่วงเวลา", "Dữ liệu quá nhiều, vui lòng thu hẹp điều kiện. Bộ lọc phòng ban không giảm lượng dữ liệu được tải, hãy thu hẹp kỳ"),
         [TooManyToLoad] = ("來源資料超過系統的載入上限，而且這份報表的條件與欄位無法在資料庫端處理；請把用到的欄位設為可篩選，或聯絡管理員",
             "The source data exceeds the system's load limit, and this report's conditions and fields cannot be processed in the database. Mark the fields it uses as filterable, or contact an administrator",
             "ข้อมูลต้นทางเกินขีดจำกัดการโหลดของระบบ และเงื่อนไขกับฟิลด์ของรายงานนี้ประมวลผลในฐานข้อมูลไม่ได้ โปรดตั้งฟิลด์ที่ใช้เป็นกรองได้ หรือติดต่อผู้ดูแลระบบ",
