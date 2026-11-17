@@ -349,7 +349,7 @@ public partial class ReportRunner(
         foreach (var m in d.Measures.Where(m => m.Field is not null))
         {
             var b = Of(m.Field!);
-            if ((m.Kind is "sum" or "avg" && !ReportFieldEligibility.CanSum(b.Field))
+            if ((m.Kind is "sum" or "avg" or "median" && !ReportFieldEligibility.CanSum(b.Field))
                 || (m.Kind is "min" or "max" && !ReportFieldEligibility.CanMinMax(b.Field))) return b;
         }
         if (d.PrimaryDateField is not null && !ReportRules.IsDateLike(Of(d.PrimaryDateField).Field)) return Of(d.PrimaryDateField);

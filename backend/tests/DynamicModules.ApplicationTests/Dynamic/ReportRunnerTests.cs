@@ -1224,6 +1224,121 @@ public class ReportRunnerTests : ReportTestBase
         r.Groups.Should().BeEmpty();
         r.DetailRows.Should().BeNull();
     }
+
+    // ---- countIf、median、帶條件量值（kr1a） ----
+
+    private async Task SeedStatusOrders()
+    {
+        await Insert("order", "admin", (Amount, 10m), (Status, OptDone), (Sales, "sales01"));
+        await Insert("order", "admin", (Amount, 20m), (Status, OptDone), (Sales, "sales01"));
+        await Insert("order", "admin", (Amount, 30m), (Status, OptOpen), (Sales, "sales02"));
+        await Insert("order", "admin", (Status, OptDone), (Sales, "sales02"));
+    }
+
+    [Fact]
+    public async Task CountIf_And_ConditionalAvg_HandComputed()
+    {
+        await Arrange();
+        await SeedStatusOrders();
+        var done = F(MainF(Status), "eq", OptDone);
+        var r = await Run(Def(measures:
+        [
+            M("done", "countIf", cond: done), M("a", "avg", MainF(Amount), done), M("s", "sum", MainF(Amount)),
+        ]));
+        r.State.Should().Be("ok");
+        r.Total!["done"].Should().Be(3m);
+        r.Total["a"].Should().Be(15m);
+        r.Total["s"].Should().Be(60m);
+        r.Columns.Select(c => c.Label).Should().Equal("狀態＝已完成 筆數", "訂單金額 平均（狀態＝已完成）", "訂單金額 加總");
+    }
+
+    [Fact]
+    public async Task CountIf_NoMatches_IsZero_And_ConditionalSum_IsNull()
+    {
+        await Arrange();
+        await SeedStatusOrders();
+        var none = F(MainF(Amount), "gte", 1000);
+        var r = await Run(Def(measures: [M("c", "countIf", cond: none), M("s", "sum", MainF(Amount), none)]));
+        r.Total!["c"].Should().Be(0m);
+        r.Total["s"].Should().BeNull();
+    }
+
+    [Fact]
+    public async Task ConditionalAvg_ByGroup_UsesGroupRowsOnly()
+    {
+        await Arrange();
+        await SeedStatusOrders();
+        var r = await Run(Def(groups: [G(MainF(Sales))],
+            measures: [M("a", "avg", MainF(Amount), F(MainF(Status), "eq", OptDone)), M("c", "countIf", cond: F(MainF(Status), "eq", OptOpen))]));
+        var s1 = r.Groups!.Single(g => g.GroupKeys[0] == "sales01");
+        var s2 = r.Groups!.Single(g => g.GroupKeys[0] == "sales02");
+        s1.Values["a"].Should().Be(15m);
+        s1.Values["c"].Should().Be(0m);
+        s2.Values["a"].Should().BeNull();   // sales02 的已完成訂單金額為空
+        s2.Values["c"].Should().Be(1m);
+    }
+
+    [Fact]
+    public async Task Median_HandComputed()   // median 永遠走記憶體路徑，不和上面的案例放同一張報表
+    {
+        await Arrange();
+        await SeedStatusOrders();
+        var r = await Run(Def(measures: [M("med", "median", MainF(Amount))]));
+        r.Total!["med"].Should().Be(20m);
+        r.Columns.Single().Label.Should().Be("訂單金額 中位數");
+    }
+
+    [Fact]
+    public async Task MeasureColumnNames_FallbackWording()
+    {
+        await Arrange();
+        await Insert("order", "admin", (Amount, 100m), (Status, OptDone));
+        var r = await Run(Def(measures:
+        [
+            M("c", "countIf", cond: F(MainF(Amount), "gte", 100)), M("a", "avg", MainF(Amount), F(MainF(Amount), "gte", 100)),
+            M("i", "countIf", cond: F(MainF(Status), "in", new[] { OptDone, OptOpen })),
+        ]));
+        r.Columns.Select(c => c.Label).Should().Equal("訂單金額 符合條件筆數", "訂單金額 平均（符合條件）", "狀態 符合條件筆數");
+    }
+
+    [Fact]
+    public async Task Save_InvalidConditionPlacement_IsInvalid()
+    {
+        await Arrange();
+        var validator = Svc<ReportDefinitionValidator>();
+        var cond = F(MainF(Amount), "gte", 1);
+        var bad = new[]
+        {
+            M("m", "min", MainF(Amount), cond),
+            M("m", "countMain", cond: cond),
+            M("m", "countIf"),
+            M("m", "median"),
+            M("m", "median", MainF(Note)),
+            M("m", "sum", MainF(Amount), F(ChildF(Qty), "gte", 1)),
+        };
+        foreach (var m in bad)
+        {
+            var (definition, failure) = await validator.ValidateAsync(null, Def(Shipments, measures: [m]), CancellationToken.None);
+            definition.Should().BeNull(m.Kind + (m.Condition is null ? "" : "+條件"));
+            failure!.IsInvalid.Should().BeTrue();
+            failure.Errors["definition"].Should().Contain(e => e.Contains("量值"));
+        }
+        var ok = new[] { M("a", "countIf", cond: cond), M("b", "median", MainF(Amount)), M("c", "sum", MainF(Amount), cond), M("d", "avg", ChildF(Qty), cond) };
+        foreach (var m in ok)
+            (await validator.ValidateAsync(null, Def(Shipments, measures: [m]), CancellationToken.None)).Failure.Should().BeNull(m.Kind);
+    }
+
+    [Fact]
+    public async Task Card_CountIf_CumulativePercent()
+    {
+        await Arrange();
+        await SeedStatusOrders();
+        var d = Def(groups: [G(MainF(Sales))], measures: [M("c", "countIf", cond: F(MainF(Status), "eq", OptDone))]);
+        var r = await Svc<ReportRunner>().RunCardAsync(d, new ReportRunOptions(null, null, Cumulative: true), CancellationToken.None);
+        r.Cumulative.Should().NotBeNull();
+        r.Cumulative!.Last().Should().Be(100m);
+    }
+
 }
 
 /// <summary>
