@@ -159,7 +159,7 @@ public partial class ReportRunner
 
     private static string GroupLabel(Bound b, string key, RunContext ctx)
     {
-        if (key.Length == 0) return ReportText.Get(ctx.Locale, ReportText.Blank);
+        if (key.Length == 0) return ctx.BlankLabels.GetValueOrDefault(b.Key) ?? ReportText.Get(ctx.Locale, ReportText.Blank);
         if (b.MayBeUnavailable && key == ReportCalculator.MissingKey) return ReportText.Get(ctx.Locale, ReportText.Deleted);
         if (b.MayBeUnavailable && key == ReportCalculator.RestrictedKey) return ReportText.Get(ctx.Locale, ReportText.NoPermission);
         return ValueLabel(b, key, ctx);
@@ -216,7 +216,7 @@ public partial class ReportRunner
         {
             case Restricted: return ReportText.Get(ctx.Locale, ReportText.NoPermission);
             case Missing: return ReportText.Get(ctx.Locale, ReportText.Deleted);
-            case Empty: return null;
+            case Empty: return ctx.BlankLabels.GetValueOrDefault(b.Key);
         }
         if (c.Number is { } n) return n;
         if (c is TimedCell t) return t.At.ToString("yyyy-MM-dd HH:mm", CultureInfo.InvariantCulture);
