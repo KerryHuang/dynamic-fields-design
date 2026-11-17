@@ -234,8 +234,9 @@ public partial class ReportRunner
             ReportSqlCondition? cond = null;
             var conditioned = m.Kind is "ratio" or "countIf" || (m.Kind is "sum" or "avg" && m.Condition is not null);
             if (conditioned) cond = planner.Condition(m.Condition!);
-            if (m.Kind != "ratio" && m.Field is not null) mf = planner.Field(m.Field, checkText: false);
-            if ((conditioned && cond is null) || (m.Kind != "ratio" && m.Field is not null && mf is null)) continue;
+            var usesField = m.Kind is not ("ratio" or "countIf") && m.Field is not null;   // ratio、countIf 只看條件，帶了欄位也忽略
+            if (usesField) mf = planner.Field(m.Field!, checkText: false);
+            if ((conditioned && cond is null) || (usesField && mf is null)) continue;
             measures.Add(new ReportSqlMeasure(m.Id, m.Kind, mf, cond));
         }
 

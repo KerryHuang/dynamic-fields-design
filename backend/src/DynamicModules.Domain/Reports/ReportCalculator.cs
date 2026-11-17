@@ -17,7 +17,8 @@ public static class ReportCalculator
     /// 分組依第一次出現的順序，排序由呼叫端做。沒有分組時 Groups 為空，數字都在 Total。
     /// 日期分組的桶（週、月…）由呼叫端先寫進 cell.Text。主模組欄位的量值在每個分組內以 MainId 去重，子模組欄位逐列算。
     /// sum、avg、median、min、max 沒有任何值時是 null；countMain、countChild、countIf 是 0；ratio 分母為 0 時是 null。
-    /// sum、avg、median 帶條件時只計符合條件的列（列沒有該條件欄位的格子視為不符合）。
+    /// sum、avg、median 帶條件時只計符合條件的列（列沒有該條件欄位的格子視為不符合）。min、max 的 Condition 一律忽略（J19 舊定義）；
+    /// 主模組欄位的量值帶子模組欄位的條件也忽略（存檔時已擋，這裡只處理舊定義）。
     /// </remarks>
     public static ReportCalcResult Calculate(
         IReadOnlyList<ReportRow> rows, IReadOnlyList<ReportGroup> groups, IReadOnlyList<ReportMeasure> measures, bool merged,
@@ -129,7 +130,9 @@ public static class ReportCalculator
 
         var field = m.Field ?? throw new ArgumentException($"量值 {m.Id} 沒有欄位。");
         var scoped = Scope(rows, field.Source);
-        if (m.Condition is { } filter) scoped = scoped.Where(r => Hit(r, filter, matches!)).ToList();
+        // 條件只對 sum、avg、median 生效；min、max 一律忽略（J19 舊定義），主模組欄位帶子模組條件也忽略（Y1，要挑哪一列沒有定義），SQL 路徑同
+        if (m.Condition is { } filter && m.Kind is "sum" or "avg" or "median" && !(field.Source == "main" && filter.Field.Source == "child"))
+            scoped = scoped.Where(r => Hit(r, filter, matches!)).ToList();
         var cells = scoped
             .Select(r => r.Cells.GetValueOrDefault(KeyOf(field)))
             .Where(c => c is { State: "ok" })
