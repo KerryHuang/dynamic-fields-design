@@ -1,4 +1,5 @@
 using System.Text.Encodings.Web;
+using ClosedXML.Excel;
 using System.Text.Json;
 using System.Text.Unicode;
 using DynamicModules.Application.Dynamic.PermissionService.Commands.SaveModulePermissions;
@@ -7,6 +8,10 @@ using DynamicModules.Application.Dynamic.ReportService;
 using DynamicModules.Application.Dynamic.ReportService.Commands.CreateReport;
 using DynamicModules.Application.Dynamic.ReportService.Commands.SetReportShares;
 using DynamicModules.Application.Dynamic.ReportService.Data;
+using DynamicModules.Application.Dynamic.ExportService.Queries.ExportRecords;
+using DynamicModules.Application.Dynamic.ReportService.Queries.DrillReport;
+using DynamicModules.Application.Dynamic.ReportService.Queries.ExportReport;
+using DynamicModules.Application.Dynamic.ReportService.Queries.GetReport;
 using DynamicModules.Application.Dynamic.ReportService.Queries.RunReport;
 using DynamicModules.Application.Dynamic.TaskService;
 using DynamicModules.Domain.Entities.Dynamic;
@@ -510,6 +515,158 @@ public class TaskReportRunnerTests : TaskTestBase
         r.Total!["done"].Should().Be(1);
         r.Compare.Should().NotBeNull();
         r.Compare!.PreviousAverage.Should().Be(1);
+    }
+
+    // ---- 下鑽、TaskIds、匯出 ----
+
+    private async Task<ReportResult> Drill(ReportDefinition d, string user, params string[] keys)
+    {
+        As(user);
+        using var scope = NewScope();
+        var result = await scope.ServiceProvider.GetRequiredService<ReportRunner>().RunAsync(d, new ReportRunOptions(null, keys), default);
+        As("admin");
+        return result;
+    }
+
+    private async Task<long> SaveReport(ReportDefinition d, string owner)
+    {
+        As(owner);
+        var created = await Send(new CreateReportRequest("任務報表", d));
+        As("admin");
+        created.IsCreated.Should().BeTrue(created.Message);
+        return ((ReportDetail)created.Data!).Id;
+    }
+
+    private static string[] FieldLabels(ReportResult r) => [.. r.Columns.Where(c => c.Role == "field").Select(c => c.Label)];
+
+    [Fact]
+    public async Task Drill_FixedColumns_WithTaskIds()
+    {
+        var a = await SeedTask("業務一甲", assignee: "sales01", due: Day(9));
+        var b = await SeedTask("業務一乙", assignee: "sales01", status: TaskItemStatus.Done, created: Wall(11, 2), completed: Wall(11, 3));
+        await SeedTask("業務二", assignee: "sales02");
+
+        var r = await Drill(TaskDef([M("n", "countMain")], [G(F.Assignee)]), "admin", "sales01");
+
+        r.State.Should().Be("ok", r.Message);
+        FieldLabels(r).Should().Equal("標題", "狀態", "負責人", "到期日", "完成時間", "所屬模組");
+        r.TaskIds.Should().BeEquivalentTo([a.Id, b.Id]);
+        r.DetailRows!.Select(row => (string)row[0]!).Zip(r.TaskIds!).Should().BeEquivalentTo([("業務一甲", a.Id), ("業務一乙", b.Id)]);
+        r.DetailRows!.Single(row => (string)row[0]! == "業務一乙").Should().Equal("業務一乙", "已完成", "業務一", null, "2026-11-03 09:00", "（無）");
+
+        var ev = await Drill(EventDef([M("n", "countMain")], [G(F.Assignee)]), "admin", "sales01");
+
+        FieldLabels(ev).Should().Equal("事件種類", "事件日期", "標題", "狀態", "負責人", "所屬模組");
+        var rowsOfB = ev.DetailRows!.Where(row => (string)row[2]! == "業務一乙").ToList();
+        rowsOfB.Select(row => ((string)row[0]!, (string)row[1]!)).Should().BeEquivalentTo([("建立", "2026-11-02 09:00"), ("完成", "2026-11-03 09:00")]);
+    }
+
+    [Fact]
+    public async Task Drill_RestrictedGroup_ModuleColumnNoPermission()
+    {
+        await SeedPersonas();
+
+        var r = await Drill(TaskDef([M("n", "countMain")], [G(F.Module)]), "manager01", ReportCalculator.RestrictedKey);
+
+        r.State.Should().Be("ok", r.Message);
+        r.DetailRows!.Should().ContainSingle().Which[0].Should().Be("受限模組的部屬任務");
+        r.DetailRows!.Should().OnlyContain(row => (string?)row[5] == "（無權限）");
+        Json(r.DetailRows!).Should().NotContain("案件甲").And.NotContain("tk2");
+        r.TaskIds.Should().ContainSingle();
+    }
+
+    [Fact]
+    public async Task Drill_TaskEvents_MapsToTaskIds()
+    {
+        var done = await SeedTask("完成的", assignee: "sales01", status: TaskItemStatus.Done, created: Wall(11, 2), completed: Wall(11, 3));
+
+        var r = await Drill(EventDef([M("n", "countMain")], [G(F.Assignee)]), "admin", "sales01");
+
+        r.DetailRows!.Should().HaveCount(2);
+        r.TaskIds.Should().Equal(done.Id, done.Id);
+    }
+
+    [Fact]
+    public async Task Drill_OverLimit_TruncatesTaskIdsToo()
+    {
+        Db.Context.AddRange(Enumerable.Range(0, ReportRules.DrillLimit + 1).Select(i => new TaskItem
+        {
+            Title = $"任務{i}", CreatedBy = "admin", AssigneeUserId = "sales01", Status = TaskItemStatus.Todo, CreatedTime = SeedTime,
+        }));
+        await Db.Context.SaveChangesAsync();
+        Db.Context.ChangeTracker.Clear();
+        var id = await SaveReport(TaskDef([M("n", "countMain")], [G(F.Assignee)]), "admin");
+
+        var r = await Send(new DrillReportRequest(id, ["sales01"], null, "zh-TW"));
+
+        r.IsSuccess.Should().BeTrue(r.Message);
+        var drill = (DrillResult)r.Data!;
+        drill.Truncated.Should().BeTrue();
+        drill.DetailRows!.Should().HaveCount(ReportRules.DrillLimit);
+        drill.TaskIds!.Should().HaveCount(ReportRules.DrillLimit).And.OnlyHaveUniqueItems();
+    }
+
+    [Fact]
+    public async Task Export_RestrictedCell_NoPermissionText()
+    {
+        await SeedPersonas();
+        var d = TaskDef([M("n", "countMain")]) with { Columns = [T(F.Title), T(F.Module)] };
+
+        async Task<Dictionary<string, string>> ExportAs(string user)
+        {
+            var id = await SaveReport(d, user);
+            As(user);
+            var r = await Send(new ExportReportRequest(id, "zh-TW"));
+            As("admin");
+            r.IsSuccess.Should().BeTrue($"{user}：{r.Message}");
+            using var wb = new XLWorkbook(new MemoryStream(((ExportFile)r.Data!).Content));
+            var ws = wb.Worksheets.Single();
+            ws.Row(1).Cell(1).GetString().Should().Be("標題");
+            ws.Row(1).Cell(2).GetString().Should().Be("所屬模組");
+            // 明細下方空一列接總計（量值名稱、數字），只取明細列
+            return ws.RowsUsed().Skip(1).Where(row => row.Cell(2).DataType != XLDataType.Number)
+                .ToDictionary(row => row.Cell(1).GetString(), row => row.Cell(2).GetString());
+        }
+
+        var manager = await ExportAs("manager01");
+        manager["受限模組的部屬任務"].Should().Be("（無權限）");
+        manager["自己範圍內的記錄"].Should().Be("tk");
+        manager["個人"].Should().Be("（無）");
+        manager.Should().HaveCount(8);
+        // U9：sales01 沒有任何模組的 PrintExport，看得到報表就能匯出看得到的任務
+        (await ExportAs("sales01")).Keys.Should().BeEquivalentTo(["個人", "自己範圍內的記錄", "已刪除記錄上的任務", "凍結模組", "受限模組的部屬任務"]);
+    }
+
+    [Fact]
+    public async Task Detail_TaskReport_CanExportTrue()
+    {
+        var (tk, _) = await SeedPersonas();
+        var id = await SaveReport(TaskDef([M("n", "countMain")], filters: [Fl(F.Module, "eq", Opt(tk.ModuleId))]), "manager01");
+
+        As("manager01");
+        var r = await Send(new GetReportRequest(id));
+        As("admin");
+
+        r.IsSuccess.Should().BeTrue(r.Message);
+        var detail = (ReportDetail)r.Data!;
+        detail.CanExport.Should().BeTrue();
+        detail.Definition.GetRawText().Should().Contain(Opt(tk.ModuleId));
+    }
+
+    [Fact]
+    public async Task ModuleDrill_TaskIdsNull()
+    {
+        var tk = await BuildTarget("tk");
+        await NewRecord(tk, "sales01");
+        var d = new ReportDefinition(1, "tk", null, [], [new ReportGroup(new ReportFieldRef("main", tk.UserFieldId, null), null)],
+            [new ReportMeasure("n", "countMain", null, null)], [], null, null, [], "table");
+
+        var r = await Drill(d, "admin", "");
+
+        r.State.Should().Be("ok", r.Message);
+        r.DetailRows.Should().NotBeEmpty();
+        r.TaskIds.Should().BeNull();
+        JsonSerializer.Serialize(r).Should().NotContain("taskIds").And.NotContain("TaskIds");
     }
 
     [Fact]

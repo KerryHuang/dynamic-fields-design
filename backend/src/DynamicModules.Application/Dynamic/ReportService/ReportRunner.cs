@@ -271,7 +271,7 @@ public partial class ReportRunner(
     /// <summary>共用尾段（步驟 7 以後）：下鑽、計算、欄位與分組標籤。資料來源只要交出套完條件的列。</summary>
     private static ReportResult Finish(ReportDefinition d, ReportRunOptions o, DateOnly basis, bool frozen, string locale, SourceRows source)
     {
-        var (bound, rows, mainSide, childSide, rowModule, ctx, applied, fallbackReasons, _) = source;
+        var (bound, rows, mainSide, childSide, rowModule, ctx, applied, fallbackReasons, taskIdOf) = source;
         string T(string key, params object[] args) => ReportText.Get(locale, key, args);
 
         // 7. 下鑽只留該分組的列；各欄位值的 key 判斷與分組相同
@@ -284,7 +284,9 @@ public partial class ReportRunner(
         var multiGroup = d.Groups.Any(g => bound[ReportCalculator.KeyOf(g.Field)].Field.Type == FieldType.MultiEnum);
         var calc = ReportCalculator.Calculate(rows, drilling ? [] : d.Groups, d.Measures, d.Child is not null, (f, c) => Matches(f, c, basis), multiGroup);
 
-        var fieldColumns = FieldColumnsFor(d, drilling).Select(r => bound[ReportCalculator.KeyOf(r)]).ToList();
+        // 任務資料來源下鑽固定列任務（使用者裁決 B3），不看報表自己的明細欄
+        var fieldColumns = (drilling && taskIdOf is not null ? TaskDrillColumns(d) : FieldColumnsFor(d, drilling))
+            .Select(r => bound[ReportCalculator.KeyOf(r)]).ToList();
         var columns = new List<ReportColumn>();
         if (!drilling)
         {
@@ -298,10 +300,11 @@ public partial class ReportRunner(
         columns.AddRange(fieldColumns.Select(b => new ReportColumn(b.Key, ColumnLabel(b, locale), "field", ValueTypeOf(b.Field))));
 
         IReadOnlyList<ReportGroupResult>? groups = drilling ? null : LabeledGroups(calc.Groups, d, bound, ctx);
-        IReadOnlyList<IReadOnlyList<object?>>? detail = fieldColumns.Count == 0 ? null : DetailRows(rows, fieldColumns, d, bound, ctx);
+        var (detail, ordered) = fieldColumns.Count == 0 ? (null, null) : DetailRows(rows, fieldColumns, d, bound, ctx);
+        IReadOnlyList<long>? taskIds = taskIdOf is null || ordered is null ? null : ordered.Select(r => taskIdOf(r.MainId)).ToList();
         return new ReportResult(rows.Count == 0 ? Empty : Ok, null, T(ReportText.RowMeaning, rowModule.NameI18n.Resolve(locale)), columns,
             groups, calc.Total, detail, calc.DedupedNote, basis, applied, frozen, detail?.Count,
-            Engine: "memory", FallbackReasons: fallbackReasons);
+            Engine: "memory", FallbackReasons: fallbackReasons, TaskIds: taskIds);
     }
 
     /// <summary>日期區間：沒有主要日期欄位就沒有；固定區間（Window）優先，否則依基準日換算，只有要換算時才讀一週起始日。</summary>

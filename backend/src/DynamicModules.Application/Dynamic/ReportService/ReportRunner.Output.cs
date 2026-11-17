@@ -179,7 +179,8 @@ public partial class ReportRunner
         return b.Field.Type == FieldType.Reference ? ctx.Titles.GetValueOrDefault((b.Key, key), key) : key;
     }
 
-    private static List<IReadOnlyList<object?>> DetailRows(
+    /// <summary>明細的顯示值與排序後的列（同順序；任務來源用列換出 TaskIds）。</summary>
+    private static (List<IReadOnlyList<object?>> Values, List<ReportRow> Ordered) DetailRows(
         IReadOnlyList<ReportRow> rows, IReadOnlyList<Bound> columns, ReportDefinition d, IReadOnlyDictionary<string, Bound> bound, RunContext ctx)
     {
         var sorts = d.Sort.Where(s => bound.ContainsKey(s.Key) && d.Measures.All(m => m.Id != s.Key)).ToList();
@@ -194,7 +195,8 @@ public partial class ReportRunner
                 }
                 return 0;
             }));
-        return ordered.Select(r => (IReadOnlyList<object?>)columns.Select(b => Display(b, r.Cells[b.Key], ctx)).ToList()).ToList();
+        var list = ordered.ToList();
+        return (list.Select(r => (IReadOnlyList<object?>)columns.Select(b => Display(b, r.Cells[b.Key], ctx)).ToList()).ToList(), list);
     }
 
     private static int CompareCells(Bound b, ReportCell x, ReportCell y, bool desc)

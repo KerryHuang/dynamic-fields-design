@@ -33,7 +33,14 @@ public static class ReportRules
 
     /// <summary>畫面上的明細最多 <see cref="DetailLimit"/> 列，幾萬列的 DOM 打不開；總計與 DetailTotal 仍是全部列，要看全部用匯出。</summary>
     public static ReportResult CapDetail(ReportResult r) =>
-        r.DetailRows is { Count: > DetailLimit } rows ? r with { DetailRows = rows.Take(DetailLimit).ToList(), DetailTruncated = true } : r;
+        r.DetailRows is { Count: > DetailLimit } ? TakeDetail(r, DetailLimit) with { DetailTruncated = true } : r;
+
+    /// <summary>明細截到 n 列，TaskIds 跟著截（J12）；其餘欄位不動。下鑽、卡片、畫面上限都走這裡。</summary>
+    public static ReportResult TakeDetail(ReportResult r, int n) => r with
+    {
+        DetailRows = r.DetailRows is { } rows ? rows.Take(n).ToList() : null,
+        TaskIds = r.TaskIds is { } ids ? ids.Take(n).ToList() : null,
+    };
 
     public static Dictionary<string, string[]> ToErrors(string key, IReadOnlyList<string> messages) =>
         new() { [key] = messages.ToArray() };

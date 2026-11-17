@@ -76,7 +76,7 @@ public class DashboardCardRunner(DashboardAccess access, ReportAccess reportAcce
     private static ServiceResult Result(IReadOnlyList<string>? drill, ReportResult result)
     {
         if (drill is null) return ServiceResult.Success(ReportRules.CapDetail(result));
-        if (result.DetailRows is not { Count: > ReportRules.DrillLimit } rows) return ServiceResult.Success(new DrillResult(result, false));
-        return ServiceResult.Success(new DrillResult(result with { DetailRows = rows.Take(ReportRules.DrillLimit).ToList() }, true));
+        if (result.DetailRows is not { Count: > ReportRules.DrillLimit }) return ServiceResult.Success(new DrillResult(result, false));
+        return ServiceResult.Success(new DrillResult(ReportRules.TakeDetail(result, ReportRules.DrillLimit), true));
     }
 }

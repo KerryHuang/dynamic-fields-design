@@ -1,4 +1,5 @@
 using System.Text.Json;
+using System.Text.Json.Serialization;
 using DynamicModules.Domain.Entities.Dynamic;
 using DynamicModules.Domain.Reports;
 using DynamicModules.Domain.ValueObjects;
@@ -22,6 +23,8 @@ public record ReportRunOptions(
 /// Cumulative 對齊 Groups，是第一個量值的累計占比（百分比）。IgnoresDateFilter 表示畫面送了日期篩選但這張卡片沒有採用（沒有主要日期欄位，或卡片有自己的區間）。
 /// Engine 是 sql|memory（這次實際走的路徑），FallbackReasons 是走記憶體路徑的原因代碼（走 SQL 時為空），例如 fieldNotIndexed:12。
 /// DetailRows 每列的順序對齊 Columns 中 Role 為 field 的欄。DetailTotal 是明細全部的列數；DetailTruncated 表示畫面上限截掉了部分列（<see cref="ReportRules.CapDetail"/>），Total 不受影響。
+/// TaskIds 只有任務資料來源且有明細時有值，與 DetailRows 逐列對齊（taskEvents 同一任務的兩列對回同一個 Id）；模組報表為 null、不輸出（J12）。
+/// 截斷明細一律走 <see cref="ReportRules.TakeDetail"/>，兩者才會一起截。
 /// </summary>
 public record ReportResult(
     string State, string? Message, string RowMeaning, IReadOnlyList<ReportColumn> Columns,
@@ -29,7 +32,8 @@ public record ReportResult(
     IReadOnlyList<IReadOnlyList<object?>>? DetailRows, bool DedupedNote, DateOnly BasisDate, ReportAppliedRange? AppliedRange, bool BasisIsFrozen = false,
     int? DetailTotal = null, bool DetailTruncated = false,
     IReadOnlyList<decimal?>? Cumulative = null, ReportCompare? Compare = null, bool IgnoresDateFilter = false,
-    string? Engine = null, IReadOnlyList<string>? FallbackReasons = null);
+    string? Engine = null, IReadOnlyList<string>? FallbackReasons = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<long>? TaskIds = null);
 
 /// <summary>與前幾期平均的比較：PreviousAverage 是前 N 期第一個量值的平均，DeltaPercent 是目前值相對它的百分比（平均為 0 時為 null）。</summary>
 public record ReportCompare(decimal? PreviousAverage, decimal? DeltaPercent);

@@ -16,7 +16,7 @@ public class DrillReportHandler(ReportAccess access, ReportRunner runner) : IReq
 
         var result = await runner.RunAsync(
             ReportDefinition.Parse(report.DefinitionJson), new ReportRunOptions(request.Range, request.GroupKeys, request.Locale), ct);
-        if (result.DetailRows is not { Count: > ReportRules.DrillLimit } rows) return ServiceResult.Success(new DrillResult(result, false));
-        return ServiceResult.Success(new DrillResult(result with { DetailRows = rows.Take(ReportRules.DrillLimit).ToList() }, true));
+        if (result.DetailRows is not { Count: > ReportRules.DrillLimit }) return ServiceResult.Success(new DrillResult(result, false));
+        return ServiceResult.Success(new DrillResult(ReportRules.TakeDetail(result, ReportRules.DrillLimit), true));
     }
 }

@@ -37,6 +37,16 @@ public partial class ReportRunner
             if (b is null) return Fail(FieldMissingState, problem!);
             bound[key] = b with { Restrictable = F.Restrictable.Contains(r.FieldId) };
         }
+        // 下鑽的固定欄（B3）另外綁；taskEvents 的固定欄含標題，不在可選欄位裡，所以不走上面的可選檢查
+        if (o.DrillGroupKeys is not null)
+            foreach (var r in TaskDrillColumns(d))
+            {
+                var key = ReportCalculator.KeyOf(r);
+                if (bound.ContainsKey(key)) continue;
+                var (b, problem) = Bind(r, key, side, null, new Dictionary<string, Side>(), locale);
+                if (b is null) return Fail(FieldMissingState, problem!);
+                bound[key] = b with { Restrictable = F.Restrictable.Contains(r.FieldId) };
+            }
         foreach (var b in bound.Values)
             if (UnusableMessage(b, locale) is { } message) return Fail(Restricted, message);
         if (FieldWithChangedType(d, bound) is { } changed)
@@ -85,6 +95,10 @@ public partial class ReportRunner
     /// restricted 一定要先於「不在選項」：記錄看不到、但模組或規則屬於觀看者可讀的模組時，先查選項會變成 ok，帶出模組或規則名稱；
     /// 規則屬於不可讀的模組時則變成 missing，等於洩漏模組可讀性。個人任務（ModuleId 為 null）先判斷成空，不是 restricted。
     /// </summary>
+    /// <summary>任務資料來源下鑽的固定欄（使用者裁決 B3；taskEvents 另一組，Y7）。</summary>
+    private static IEnumerable<ReportFieldRef> TaskDrillColumns(ReportDefinition d) =>
+        F.DrillColumns(d.Dataset!).Select(code => new ReportFieldRef("main", code, null));
+
     /// <summary>taskEvents 的一個事件：種類（-18 的選項 Id）與發生時間（-19）。</summary>
     private sealed record TaskEvent(long Kind, DateTime At);
 
