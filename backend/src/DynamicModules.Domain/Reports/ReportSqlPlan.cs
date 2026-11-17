@@ -19,7 +19,10 @@ public enum ReportSqlOp { Eq, In, Gt, Gte, Lt, Lte, Between, Range, Empty, NotEm
 /// <summary>Args 的型別依欄位種類：Text／Ref 是 string、Boolean／Number 是 long、Date 是 DateTime?。</summary>
 public sealed record ReportSqlCondition(ReportSqlField Field, ReportSqlOp Op, IReadOnlyList<object?> Args, bool Negated = false);
 
-/// <summary>Kind 同 <see cref="ReportMeasure.Kind"/>：sum|avg|min|max|countMain|countChild|ratio。</summary>
+/// <summary>
+/// Kind 同 <see cref="ReportMeasure.Kind"/>：sum|avg|min|max|countMain|countChild|ratio|countIf（median 不在其中，退回記憶體路徑）。
+/// Condition：ratio、countIf 必有；sum、avg 有值時只加總符合條件的記錄。
+/// </summary>
 public sealed record ReportSqlMeasure(string Id, string Kind, ReportSqlField? Field, ReportSqlCondition? Condition);
 
 /// <summary>一個模組的範圍：OwnerUserIds 為 null 表示全部，空集合表示沒有任何記錄（與 ListForReportAsync 一致）。</summary>
