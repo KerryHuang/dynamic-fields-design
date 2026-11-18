@@ -1,5 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/vue-query';
 import { computed, type Ref } from 'vue';
+import type { ApprovalListFilter } from 'src/domain/dynamic/approval-types';
 import { serializeFilter } from 'src/domain/dynamic/condition';
 import type { ConditionNode, DynamicRecord, ViewSort } from 'src/domain/dynamic/types';
 import { dynamicApi, type DetailsPayload, type RecordValues } from 'src/services/api/dynamic-api';
@@ -10,6 +11,7 @@ export interface RecordsState {
   filter?: ConditionNode;
   sort: ViewSort[];
   q?: string;
+  approval?: ApprovalListFilter;
 }
 
 /** The whole state object is part of the queryKey; `enabled` lets the page wait for the default view. */
@@ -19,7 +21,7 @@ export function usePagedRecords(key: Ref<string>, state: Ref<RecordsState>, enab
     queryFn: () => {
       const s = state.value;
       return dynamicApi.getPagedRecords(key.value, {
-        currentPage: s.page, pagesSize: s.size, filter: serializeFilter(s.filter), sort: s.sort, q: s.q,
+        currentPage: s.page, pagesSize: s.size, filter: serializeFilter(s.filter), sort: s.sort, q: s.q, approval: s.approval,
       });
     },
     // keep the previous rows while loading or after a 400, but never across modules

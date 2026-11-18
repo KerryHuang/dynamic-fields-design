@@ -196,6 +196,8 @@ export interface ModuleSchema {
   ledger?: boolean;
   /** Absent means on. */
   tasksEnabled?: boolean;
+  /** The workflow has a transition that needs approval: the list offers the "in approval" system filter (approval design §13.4.1). */
+  approvalEnabled?: boolean;
   blocks: SchemaBlock[];
   rules: SchemaRule[];
   /** Active detail modules of this header; absent when there are none. */

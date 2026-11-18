@@ -119,6 +119,8 @@ export interface ApprovalActionResult {
 }
 
 export type ApprovalBox = 'todo' | 'done' | 'submitted' | 'all';
+/** Record list system filter (approval design §13.4.1): has an open instance / has none. */
+export type ApprovalListFilter = 'pending' | 'none';
 export interface ApprovalInboxItem {
   taskId: number; instanceId: number; recordId: number; moduleKey: string; moduleName: I18nText; titleSnapshot: string;
   stageName: I18nText | null; initiatorUserId: string; initiatorName: string; submittedTime: string; dueTime: string | null;

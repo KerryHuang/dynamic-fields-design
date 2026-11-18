@@ -325,4 +325,77 @@ describe('ListPage', () => {
     expect(byText('10').classes()).toContain('cell-code');
     expect(byText('x').classes()).not.toContain('cell-code');
   });
+
+  describe('approval system filter (approval design 13.4.1)', () => {
+    const toggle = (w: Awaited<ReturnType<typeof mountPage>>) => w.findComponent(quasar.QBtnToggle);
+
+    it('A4C-F1: no switch row when the module has no approval transition', async () => {
+      const w = await mountPage();
+      expect(w.find('[data-testid="approval-filter"]').exists()).toBe(false);
+    });
+
+    it('A4C-F2: picking in-approval sends approval=pending on page 1; all drops the parameter', async () => {
+      schemaPatch = { approvalEnabled: true };
+      const w = await mountPage();
+      expect(w.get('[data-testid="approval-filter"]').text()).toContain('簽核');
+      expect(w.findAll('[data-testid="approval-toggle"] button').map((b) => b.text())).toEqual(['全部', '簽核中', '未在簽核']);
+      expect(lastCall().approval).toBeUndefined();
+      w.findComponent(quasar.QTable).vm.$emit('update:pagination', { page: 3, rowsPerPage: 20 });
+      await flushPromises();
+      expect(lastCall().currentPage).toBe(3);
+      toggle(w).vm.$emit('update:modelValue', 'pending');
+      await flushPromises();
+      expect(lastCall().approval).toBe('pending');
+      expect(lastCall().currentPage).toBe(1);
+      toggle(w).vm.$emit('update:modelValue', 'none');
+      await flushPromises();
+      expect(lastCall().approval).toBe('none');
+      toggle(w).vm.$emit('update:modelValue', 'all');
+      await flushPromises();
+      expect(lastCall().approval).toBeUndefined();
+    });
+
+    it('A4C-F3: switching modules puts the switch back to all', async () => {
+      schemaPatch = { approvalEnabled: true };
+      const w = await mountPage();
+      toggle(w).vm.$emit('update:modelValue', 'pending');
+      await flushPromises();
+      api.getPagedRecords.mockClear();
+      await router.push('/dynamic/n');
+      await flushPromises();
+      const forN = api.getPagedRecords.mock.calls.filter(([k]) => k === 'n');
+      expect(forN.length).toBeGreaterThan(0);
+      for (const [, q] of forN) expect(q.approval).toBeUndefined();
+      expect(toggle(w).props('modelValue')).toBe('all');
+    });
+
+    it('A4C-F4: the export menu carries the switch', async () => {
+      schemaPatch = { approvalEnabled: true };
+      const w = await mountPage();
+      toggle(w).vm.$emit('update:modelValue', 'pending');
+      await flushPromises();
+      expect(w.findComponent(ExportMenu).props('query')).toMatchObject({ approval: 'pending' });
+    });
+
+    it('A4C-F5: the filter panel clear button leaves the switch alone', async () => {
+      schemaPatch = { approvalEnabled: true };
+      const w = await mountPage();
+      toggle(w).vm.$emit('update:modelValue', 'pending');
+      await flushPromises();
+      w.findComponent(FilterPanel).vm.$emit('update:modelValue', undefined);
+      await flushPromises();
+      expect(lastCall().approval).toBe('pending');
+      expect(toggle(w).props('modelValue')).toBe('pending');
+    });
+
+    it('applying a saved view does not touch the switch (views never store it)', async () => {
+      schemaPatch = { approvalEnabled: true };
+      const w = await mountPage([view({ id: 5, columns: [2] })]);
+      toggle(w).vm.$emit('update:modelValue', 'none');
+      await flushPromises();
+      w.findComponent(ViewMenu).vm.$emit('select', 5);
+      await flushPromises();
+      expect(lastCall().approval).toBe('none');
+    });
+  });
 });

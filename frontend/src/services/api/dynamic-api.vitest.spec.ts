@@ -31,6 +31,19 @@ describe('dynamicApi.getPagedRecords', () => {
     expect(url).not.toContain('%5B');
   });
 
+  it('sends the approval system filter and exports with it', async () => {
+    const urls: string[] = [];
+    http.defaults.adapter = async (config) => {
+      urls.push(http.getUri(config));
+      return { data: new Blob(['x']), status: 200, statusText: 'OK', headers: {}, config };
+    };
+    await dynamicApi.getPagedRecords('crm', { currentPage: 1, pagesSize: 10, approval: 'pending' });
+    expect(new URL(urls[0]!, 'http://x').searchParams.get('approval')).toBe('pending');
+    await dynamicApi.exportRecords('crm', 'csv', { approval: 'none' }, 'zh-TW');
+    expect(urls[1]).toContain('/modules/crm/export?');
+    expect(new URL(urls[1]!, 'http://x').searchParams.get('approval')).toBe('none');
+  });
+
   it('omits optional params when absent', async () => {
     let url = '';
     http.defaults.adapter = async (config) => {

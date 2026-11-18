@@ -16,7 +16,7 @@ import type {
   TaskUpdateResult,
 } from 'src/domain/dynamic/task-types';
 import type {
-  ApprovalActionResult, ApprovalBox, ApprovalInboxFilter, ApprovalInboxItem, ApprovalPreview, ApproveBody, RecordApproval, RejectBody,
+  ApprovalActionResult, ApprovalBox, ApprovalInboxFilter, ApprovalListFilter, ApprovalInboxItem, ApprovalPreview, ApproveBody, RecordApproval, RejectBody,
   SubmitApprovalBody, SubmitApprovalResult, TransferBody, WithdrawBody, CancelBody, ReassignBody, AddSignBody, ApprovalDelegate, ApprovalDelegateBody, MyApprovalDelegate,
 } from 'src/domain/dynamic/approval-types';
 import type { ApprovalDraftPreviewBody, ApprovalFlow, ApprovalFlowDraftInput, ApprovalFlowInput, ApprovalFlowPublishResult, ApprovalFlowValidation } from 'src/domain/dynamic/approval-flow-types';
@@ -177,6 +177,8 @@ export interface PagedRecordsQuery {
   filter?: string;
   sort?: ViewSort[];
   q?: string;
+  /** System filter of the list (approval design §13.4.1): has an open approval instance / has none. Absent = no filter. */
+  approval?: ApprovalListFilter;
 }
 
 export interface ViewBody {
@@ -345,10 +347,10 @@ export const dynamicApi = {
   saveMyTheme: (c: ThemeChoice) => http.put<MeTheme>('/me/theme', c).then(data),
   saveSiteTheme: (d: ThemeDefaults) => http.put<ThemeDefaults>('/system/theme', d).then(data),
 
-  getPagedRecords: (key: string, { currentPage, pagesSize, filter, sort, q }: PagedRecordsQuery) =>
+  getPagedRecords: (key: string, { currentPage, pagesSize, filter, sort, q, approval }: PagedRecordsQuery) =>
     http.get<PagedResponse<DynamicRecord>>(`/modules/${key}/records/paged`, {
       params: {
-        currentPage, pagesSize, filter, q,
+        currentPage, pagesSize, filter, q, approval,
         sortBy: sort?.length ? sort.map((s) => `f_${s.field}`) : undefined,
         sortOrder: sort?.length ? sort.map((s) => s.order) : undefined,
       },
@@ -408,10 +410,10 @@ export const dynamicApi = {
   deleteRecord: (id: number, rowVersion: string, idempotencyKey?: string) =>
     http.delete<void>(`/records/${id}`, { params: { rowVersion }, ...idem(idempotencyKey) }).then(data),
   /** Blob download through axios (session cookie, base URL); validateStatus bypasses the interceptor, so the error body (a Blob) is parsed here and passed to handleAuthFailure by hand. */
-  exportRecords: async (key: string, format: 'csv' | 'xlsx', { filter, sort, q }: ExportQuery, locale: string) => {
+  exportRecords: async (key: string, format: 'csv' | 'xlsx', { filter, sort, q, approval }: ExportQuery, locale: string) => {
     const r = await http.get<Blob>(`/modules/${key}/export`, {
       params: {
-        format, filter, q, locale,
+        format, filter, q, locale, approval,
         sortBy: sort?.length ? sort.map((s) => `f_${s.field}`) : undefined,
         sortOrder: sort?.length ? sort.map((s) => s.order) : undefined,
       },

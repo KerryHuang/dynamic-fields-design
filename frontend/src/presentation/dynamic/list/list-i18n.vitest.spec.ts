@@ -10,7 +10,7 @@ const leaves = (t: Tree, prefix = ''): string[] =>
 const dyn = (l: unknown, group: string) => (l as { dynamic: Record<string, Tree> }).dynamic[group] ?? {};
 
 describe('list UI strings exist in all four locales', () => {
-  for (const group of ['filter', 'sort', 'columns', 'view', 'export', 'import']) {
+  for (const group of ['filter', 'approvalFilter', 'sort', 'columns', 'view', 'export', 'import']) {
     it(`dynamic.${group}`, () => {
       const expected = leaves(dyn(zhTW, group)).sort();
       expect(expected.length).toBeGreaterThan(0);

@@ -1,6 +1,6 @@
 <script setup lang="ts">
 // POC uses a plain q-table; when merged into the main system, swap it for the framework's DataTable.
-import { date, Notify, type QTableColumn } from 'quasar';
+import { date, Notify, useQuasar, type QTableColumn } from 'quasar';
 import { computed, ref, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { useRoute, useRouter } from 'vue-router';
@@ -10,6 +10,7 @@ import {
   pickDefaultView, useCreateView, useDeleteView, useUpdateView, useViews,
 } from 'src/application/dynamic/queries/views-queries';
 import { pruneCondition, serializeFilter } from 'src/domain/dynamic/condition';
+import type { ApprovalListFilter } from 'src/domain/dynamic/approval-types';
 import { resolveI18n } from 'src/domain/dynamic/i18n-text';
 import type { ConditionNode, DynamicRecord, FieldType, I18nText, ListView, PagedResponse, ViewSort } from 'src/domain/dynamic/types';
 import { referenceView } from 'src/presentation/dynamic/reference-display';
@@ -24,6 +25,7 @@ import ForbiddenNotice from 'src/components/framework/ForbiddenNotice.vue';
 import { isForbidden, type ApiError } from 'src/services/api/http';
 
 const { t, locale } = useI18n();
+const $q = useQuasar();
 const route = useRoute();
 const router = useRouter();
 const moduleKey = computed(() => String(route.params.moduleKey));
@@ -33,6 +35,8 @@ const page = ref(1);
 const filter = ref<ConditionNode>();
 const sort = ref<ViewSort[]>([]);
 const q = ref('');
+/** System filter (approval design §13.4.1); not part of a saved view. Undefined = all. */
+const approval = ref<ApprovalListFilter>();
 /** null = the schema's ShowInList fields. */
 const columnIds = ref<number[] | null>(null);
 const currentViewId = ref<number | null>(null);
@@ -49,9 +53,11 @@ const views = computed(() => viewsQuery.data.value ?? []);
 const currentView = computed(() => views.value.find((v) => v.id === currentViewId.value));
 
 const state = computed<RecordsState>(() => ({
-  page: page.value, size, filter: pruneCondition(filter.value), sort: sort.value, q: q.value.trim() || undefined,
+  page: page.value, size, filter: pruneCondition(filter.value), sort: sort.value, q: q.value.trim() || undefined, approval: approval.value,
 }));
-const exportQuery = computed(() => ({ filter: serializeFilter(filter.value), sort: sort.value, q: q.value.trim() || undefined }));
+const exportQuery = computed(() => ({
+  filter: serializeFilter(filter.value), sort: sort.value, q: q.value.trim() || undefined, approval: approval.value,
+}));
 const importing = ref(false);
 // 擴充模組的記錄掛在既有實體上，後端不支援匯入（決策 6）
 const canImport = computed(() => !!schema.value?.permissions.add && schema.value.kind !== 'extension');
@@ -75,6 +81,7 @@ function applyView(v?: ListView) {
 function resetAll() {
   applyView();
   q.value = '';
+  approval.value = undefined;
   initializedFor.value = null;
   lastGood.value = undefined;
 }
@@ -184,6 +191,8 @@ function onPagination(p: { page?: number; sortBy?: string | null; descending?: b
 function setFilter(v: ConditionNode | undefined) { filter.value = v; page.value = 1; }
 function setSort(v: ViewSort[]) { sort.value = v; page.value = 1; }
 function setQ(v: string | number | null) { q.value = v == null ? '' : String(v); page.value = 1; }
+const approvalOptions = computed(() => (['all', 'pending', 'none'] as const).map((value) => ({ value, label: t(`dynamic.approvalFilter.${value}`) })));
+function setApproval(v: 'all' | ApprovalListFilter) { approval.value = v === 'all' ? undefined : v; page.value = 1; }
 
 const createView = useCreateView();
 const updateView = useUpdateView();
@@ -252,6 +261,14 @@ const rowClass = () => 'row-clickable row-chevron';
       </div>
       <div v-if="currentView?.staleFieldIds.length" class="text-warning q-mb-sm" data-testid="stale-notice">
         {{ t('dynamic.view.stale', { n: currentView.staleFieldIds.length }) }}
+      </div>
+      <div v-if="schema.approvalEnabled" class="row items-center q-mb-sm" style="gap: 8px" data-testid="approval-filter">
+        <span class="text-muted">{{ t('dynamic.approvalFilter.label') }}</span>
+        <q-btn-toggle
+          :model-value="approval ?? 'all'" :options="approvalOptions" :dense="!$q.screen.lt.sm" no-caps unelevated toggle-color="primary"
+          :aria-label="t('dynamic.approvalFilter.label')" role="group" data-testid="approval-toggle"
+          @update:model-value="(v) => setApproval(v as 'all' | ApprovalListFilter)"
+        />
       </div>
       <FilterPanel :schema="schema" :model-value="filter" class="q-mb-sm" @update:model-value="setFilter" />
       <q-expansion-item dense icon="sort" :label="t('dynamic.sort.title')" class="q-mb-sm">
