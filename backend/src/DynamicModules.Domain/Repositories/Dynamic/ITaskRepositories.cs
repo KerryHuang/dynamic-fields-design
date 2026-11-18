@@ -68,14 +68,23 @@ public interface ITaskRepository
     Task<TaskCommentAttachment?> GetAttachmentAsync(long taskId, long commentId, long attachmentId, CancellationToken ct);
     /// <summary>
     /// 可能要提醒的任務所屬的模組（null 代表沒有所屬模組），不重複：負責人是 userId、未完成、DueDate 不為 null、所屬模組沒關閉，而且
-    /// (today &lt;= DueDate &lt;= today+maxLeadDays 且 LastDueSoonNotified != today) 或 (DueDate &lt; today 且 LastOverdueNotified != today)。
+    /// (today &lt;= DueDate &lt;= today+maxLeadDays 且 LastDueSoonNotified 為 null) 或 (DueDate &lt; today 且 LastOverdueNotified != today)。
     /// 呼叫端用它依政策算出 <see cref="ReminderFilter"/>。
     /// </summary>
     Task<List<long?>> ListReminderModuleIdsAsync(string userId, DateOnly today, int maxLeadDays, CancellationToken ct);
     /// <summary>有沒有符合 <paramref name="filter"/> 的提醒任務（資料庫端 EXISTS）。</summary>
     Task<bool> AnyReminderDueAsync(string userId, DateOnly today, ReminderFilter filter, CancellationToken ct);
-    /// <summary>條件同 <see cref="AnyReminderDueAsync"/>，依 Id 排序；track 為 true 時追蹤。</summary>
-    Task<List<TaskItem>> ListReminderDueAsync(string userId, DateOnly today, ReminderFilter filter, bool track, CancellationToken ct);
+    /// <summary>條件同 <see cref="AnyReminderDueAsync"/>，依 Id 排序，不追蹤。</summary>
+    Task<List<TaskItem>> ListReminderDueAsync(string userId, DateOnly today, ReminderFilter filter, CancellationToken ct);
+    /// <summary>條件式蓋「即將到期」戳記：只在還沒提醒過（LastDueSoonNotified 為 null）時寫入 today，影響列數 1 才回 true。</summary>
+    Task<bool> TryMarkDueSoonNotifiedAsync(long taskId, DateOnly today, CancellationToken ct);
+    /// <summary>條件式蓋「逾期」戳記：只在今天還沒蓋過時寫入 today，影響列數 1 才回 true。</summary>
+    Task<bool> TryMarkOverdueNotifiedAsync(long taskId, DateOnly today, CancellationToken ct);
+    /// <summary>
+    /// 改到期日或換負責人後重新計提醒（O1 計畫裁決 D2）：清掉「即將到期」戳記，overdueToo 時連「逾期」戳記一起清；
+    /// 一定寫進這次存檔（值本來就是 null 也照寫，蓋掉並行請求剛蓋上的戳記）。
+    /// </summary>
+    void ResetReminderStamps(TaskItem task, bool overdueToo);
     /// <summary>這條規則在這筆記錄第 occurrence 次觸發產生的任務；追蹤，含參與者。</summary>
     Task<List<TaskItem>> ListByRuleOccurrenceAsync(long ruleId, long recordId, int occurrence, CancellationToken ct);
     /// <summary>這條規則在這筆記錄上是否還有未完成（待辦、進行中）的任務，不分第幾次觸發。</summary>
@@ -101,6 +110,8 @@ public interface INotificationRepository
     Task PurgeOlderThanAsync(string userId, DateTime cutoff, CancellationToken ct);
     /// <summary>來源被刪除時，刪掉所有人指向它的通知。</summary>
     Task RemoveBySourceAsync(string sourceType, long sourceId, CancellationToken ct);
+    /// <summary>這個人有沒有指向這個來源、這種通知、還沒讀的通知。</summary>
+    Task<bool> AnyUnreadBySourceAsync(string userId, string sourceType, long sourceId, string kind, CancellationToken ct);
 }
 
 /// <summary>任務規則（設計 §5）。含 Tasks 的方法都依 SortOrder 排序。</summary>
@@ -148,8 +159,8 @@ public sealed record TaskBoardQuery(TaskVisibility Visibility, string GroupBy, s
     DateOnly Today, DateOnly WeekEnd, string SortKey, bool SortDescending, bool TopLevelOnly = false);
 
 /// <summary>
-/// 提醒條件（由政策算出）：到期日在 <see cref="DueSoonDates"/> 內的任務是「即將到期」候選；
+/// 提醒條件（由政策算出）：到期日在今天到 <see cref="DueSoonUntil"/> 之間、還沒提醒過的任務是「即將到期」候選（null 代表沒有候選）；
 /// 已逾期的任務只有所屬模組開啟逾期提醒（沒有所屬模組的看 <see cref="OverdueWithoutModule"/>）才算。
-/// <see cref="DueSoonDates"/> 是各模組「今天＋提醒天數」的聯集，只做資料庫端預先篩選，逐筆仍由呼叫端依該任務模組的政策再判斷。
+/// <see cref="DueSoonUntil"/> 是各模組「今天＋提醒天數」的最大值，只做資料庫端預先篩選，逐筆仍由呼叫端依該任務模組的政策再判斷。
 /// </summary>
-public sealed record ReminderFilter(IReadOnlyCollection<DateOnly> DueSoonDates, IReadOnlyCollection<long> OverdueModuleIds, bool OverdueWithoutModule);
+public sealed record ReminderFilter(DateOnly? DueSoonUntil, IReadOnlyCollection<long> OverdueModuleIds, bool OverdueWithoutModule);

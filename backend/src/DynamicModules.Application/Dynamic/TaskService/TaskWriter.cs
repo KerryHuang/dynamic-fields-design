@@ -305,6 +305,8 @@ public sealed class TaskWriter(ICurrentUser user, IBusinessTime time, ITaskRepos
     {
         var from = task.AssigneeUserId;
         task.AssigneeUserId = to;
+        // 換負責人後提醒重新計（O1 計畫裁決 D2）：新負責人在範圍內會再收到「即將到期」與今天的逾期提醒
+        tasks.ResetReminderStamps(task, overdueToo: true);
         AddSystemEntry(task, TaskSystemEvents.AssigneeChanged, author, FromTo(from, to));
         // 舊負責人保留為參與者（他可能還在留言串裡）
         if (to is not null)
@@ -318,6 +320,8 @@ public sealed class TaskWriter(ICurrentUser user, IBusinessTime time, ITaskRepos
     {
         var from = task.DueDate;
         task.DueDate = to;
+        // 改到期日後「即將到期」重新計（D2）；逾期一天最多一則不受影響
+        tasks.ResetReminderStamps(task, overdueToo: false);
         AddSystemEntry(task, TaskSystemEvents.DueChanged, author, FromTo(DateText(from), DateText(to)));
     }
 

@@ -293,17 +293,18 @@ public class TaskRepository(DynamicDbContext db) : ITaskRepository
     {
         var last = today.AddDays(maxLeadDays);
         return ReminderBase(userId).AsNoTracking()
-            .Where(t => (t.DueDate >= today && t.DueDate <= last && t.LastDueSoonNotified != today)
+            .Where(t => (t.DueDate >= today && t.DueDate <= last && t.LastDueSoonNotified == null)
                 || (t.DueDate < today && t.LastOverdueNotified != today))
             .Select(t => t.ModuleId).Distinct().ToListAsync(ct);
     }
 
     private IQueryable<TaskItem> ReminderDue(string userId, DateOnly today, ReminderFilter filter)
     {
-        var dates = filter.DueSoonDates.ToArray();
+        var hasDueSoon = filter.DueSoonUntil is not null;
+        var until = filter.DueSoonUntil ?? today;
         var overdueModules = filter.OverdueModuleIds.ToArray();
         var overdueNoModule = filter.OverdueWithoutModule;
-        return ReminderBase(userId).Where(t => (dates.Contains(t.DueDate!.Value) && t.LastDueSoonNotified != today)
+        return ReminderBase(userId).Where(t => (hasDueSoon && t.DueDate >= today && t.DueDate <= until && t.LastDueSoonNotified == null)
             || (t.DueDate < today && t.LastOverdueNotified != today
                 && (t.ModuleId == null ? overdueNoModule : overdueModules.Contains(t.ModuleId.Value))));
     }
@@ -311,10 +312,26 @@ public class TaskRepository(DynamicDbContext db) : ITaskRepository
     public Task<bool> AnyReminderDueAsync(string userId, DateOnly today, ReminderFilter filter, CancellationToken ct) =>
         ReminderDue(userId, today, filter).AsNoTracking().AnyAsync(ct);
 
-    public Task<List<TaskItem>> ListReminderDueAsync(string userId, DateOnly today, ReminderFilter filter, bool track, CancellationToken ct)
+    public Task<List<TaskItem>> ListReminderDueAsync(string userId, DateOnly today, ReminderFilter filter, CancellationToken ct) =>
+        ReminderDue(userId, today, filter).AsNoTracking().OrderBy(t => t.Id).ToListAsync(ct);
+
+    public async Task<bool> TryMarkDueSoonNotifiedAsync(long taskId, DateOnly today, CancellationToken ct) =>
+        await db.Set<TaskItem>().Where(t => t.Id == taskId && t.LastDueSoonNotified == null)
+            .ExecuteUpdateAsync(s => s.SetProperty(t => t.LastDueSoonNotified, today), ct) == 1;
+
+    public async Task<bool> TryMarkOverdueNotifiedAsync(long taskId, DateOnly today, CancellationToken ct) =>
+        await db.Set<TaskItem>().Where(t => t.Id == taskId && (t.LastOverdueNotified == null || t.LastOverdueNotified != today))
+            .ExecuteUpdateAsync(s => s.SetProperty(t => t.LastOverdueNotified, today), ct) == 1;
+
+    public void ResetReminderStamps(TaskItem task, bool overdueToo)
     {
-        var query = ReminderDue(userId, today, filter);
-        return (track ? query : query.AsNoTracking()).OrderBy(t => t.Id).ToListAsync(ct);
+        task.LastDueSoonNotified = null;
+        if (overdueToo) task.LastOverdueNotified = null;
+        var entry = db.Entry(task);
+        if (entry.State is EntityState.Added or EntityState.Detached) return;
+        // 只把 null 設回 null 時 EF 判定沒變、不送 UPDATE；強制寫入，蓋掉並行請求剛蓋上的戳記
+        entry.Property(t => t.LastDueSoonNotified).IsModified = true;
+        if (overdueToo) entry.Property(t => t.LastOverdueNotified).IsModified = true;
     }
 
     public Task<List<TaskItem>> ListByRuleOccurrenceAsync(long ruleId, long recordId, int occurrence, CancellationToken ct) =>
@@ -400,4 +417,8 @@ public class NotificationRepository(DynamicDbContext db) : INotificationReposito
 
     public Task RemoveBySourceAsync(string sourceType, long sourceId, CancellationToken ct) =>
         db.Set<Notification>().Where(n => n.SourceType == sourceType && n.SourceId == sourceId).ExecuteDeleteAsync(ct);
+
+    public Task<bool> AnyUnreadBySourceAsync(string userId, string sourceType, long sourceId, string kind, CancellationToken ct) =>
+        db.Set<Notification>().AsNoTracking().AnyAsync(n => n.SourceType == sourceType && n.SourceId == sourceId
+            && n.UserId == userId && n.Kind == kind && n.ReadTime == null, ct);
 }
