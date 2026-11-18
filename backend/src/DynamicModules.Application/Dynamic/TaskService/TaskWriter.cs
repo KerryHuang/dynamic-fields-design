@@ -9,14 +9,16 @@ namespace DynamicModules.Application.Dynamic.TaskService;
 
 public sealed record NewTask(string Title, string? Description, string? AssigneeUserId, DateOnly? DueDate,
     long? ModuleId, long? RecordId, string? RecordTitle, long? RuleId, int? RuleOccurrence, string? RuleTaskCode, string? CreatedBy,
-    long? ParentTaskId = null);
+    long? ParentTaskId = null, DateOnly? StartDate = null);
 
 /// <summary>
 /// Set* 為 false 代表沒送、不改；為 true 時值可以是 null（清除）。Title、Status 為 null 代表不改。
 /// Cascade：父任務改成完成、還有未完成的子任務時，子任務一併完成或一併取消（看板設計 §10.7.2）；其他情況忽略。
+/// SetStartDate／StartDate 放最後並給預設值，既有的位置參數呼叫不用改（gt1a）。
 /// </summary>
 public sealed record TaskEdit(string? Title, bool SetDescription, string? Description, bool SetAssignee, string? AssigneeUserId,
-    bool SetDueDate, DateOnly? DueDate, TaskItemStatus? Status, TaskCascade? Cascade = null);
+    bool SetDueDate, DateOnly? DueDate, TaskItemStatus? Status, TaskCascade? Cascade = null,
+    bool SetStartDate = false, DateOnly? StartDate = null);
 
 /// <summary>父任務改成完成時，未完成的子任務要怎麼處理（PATCH／move 的 cascade：complete、cancel）。</summary>
 public enum TaskCascade { Complete, Cancel }
@@ -36,6 +38,7 @@ public sealed class TaskWriter(ICurrentUser user, IBusinessTime time, ITaskRepos
         var task = new TaskItem
         {
             Title = input.Title, Description = input.Description, AssigneeUserId = input.AssigneeUserId, DueDate = input.DueDate,
+            StartDate = input.StartDate,
             ModuleId = input.ModuleId, RecordId = input.RecordId, RecordTitleSnapshot = input.RecordTitle,
             RuleId = input.RuleId, RuleOccurrence = input.RuleOccurrence, RuleTaskCode = input.RuleTaskCode, CreatedBy = input.CreatedBy, CreatedTime = now,
             ParentTaskId = input.ParentTaskId
@@ -55,10 +58,15 @@ public sealed class TaskWriter(ICurrentUser user, IBusinessTime time, ITaskRepos
     /// 人手動修改：規則任務改到負責人或到期日時設 Overridden 旗標，改狀態時清掉 CancelledByRule、CancelledByParent。
     /// 改狀態另依父子關係連動（看板設計 §10.7.4，同一交易）；不能寫入時回 409、不改任何值：
     /// 父任務已取消時重開子任務（ST-Q3）、父任務改成完成還有未完成的子任務卻沒帶 cascade。
+    /// 日期看寫入後的那一對值（看板設計 §11.5.2.2）：有送開始日而開始日晚於到期日時 400、不改任何值；
+    /// 只送到期日而早於現有開始日時，開始日跟著改成新到期日（startFollowedDue，GT-Q1；看板拖拉走同一條路，GT-T6）。
     /// </summary>
     public async Task<ServiceResult?> ApplyAsync(TaskItem task, TaskEdit edit, CancellationToken ct)
     {
         var actor = user.UserId;
+        var dueAfter = edit.SetDueDate ? edit.DueDate : task.DueDate;
+        if (edit.SetStartDate && TaskEditParser.StartAfterDue(edit.StartDate, dueAfter))
+            return ServiceResult.Invalid("startDate", MessageRef.Literal(TaskMessages.StartAfterDue));
         TaskItem? parent = null;
         List<TaskItem> children = [];
         if (edit.Status is { } target && target != task.Status)
@@ -100,6 +108,13 @@ public sealed class TaskWriter(ICurrentUser user, IBusinessTime time, ITaskRepos
         {
             ChangeDue(task, edit.DueDate, actor);
             if (task.RuleId is not null) task.DueOverridden = true;
+            if (!edit.SetStartDate) FollowDue(task, actor);
+            changed = true;
+        }
+        if (edit.SetStartDate && edit.StartDate != task.StartDate)
+        {
+            // 開始日沒有覆寫旗標（設計 §11.1）
+            ChangeStart(task, edit.StartDate, actor, TaskSystemEvents.StartChanged);
             changed = true;
         }
         if (edit.Status is { } status && status != task.Status)
@@ -116,7 +131,10 @@ public sealed class TaskWriter(ICurrentUser user, IBusinessTime time, ITaskRepos
         return null;
     }
 
-    /// <summary>規則同步（未完成、沒手動改過的才會被呼叫）：系統記錄的作者為 null，不設 Overridden 旗標。</summary>
+    /// <summary>
+    /// 規則同步（未完成、沒手動改過的才會被呼叫）：系統記錄的作者為 null，不設 Overridden 旗標。
+    /// 到期日改得比開始日早時開始日跟著移（T21，startFollowedDue）；往後移或清空到期日不動開始日。
+    /// </summary>
     public Task SyncFromRuleAsync(TaskItem task, bool setAssignee, string? assignee, bool setDue, DateOnly? due, CancellationToken ct)
     {
         var changed = false;
@@ -128,6 +146,7 @@ public sealed class TaskWriter(ICurrentUser user, IBusinessTime time, ITaskRepos
         if (setDue && due != task.DueDate)
         {
             ChangeDue(task, due, null);
+            FollowDue(task, null);
             changed = true;
         }
         if (changed) Touch(task, null);
@@ -323,6 +342,20 @@ public sealed class TaskWriter(ICurrentUser user, IBusinessTime time, ITaskRepos
         // 改到期日後「即將到期」重新計（D2）；逾期一天最多一則不受影響
         tasks.ResetReminderStamps(task, overdueToo: false);
         AddSystemEntry(task, TaskSystemEvents.DueChanged, author, FromTo(DateText(from), DateText(to)));
+    }
+
+    private void ChangeStart(TaskItem task, DateOnly? to, string? author, string systemEvent)
+    {
+        var from = task.StartDate;
+        task.StartDate = to;
+        AddSystemEntry(task, systemEvent, author, FromTo(DateText(from), DateText(to)));
+    }
+
+    /// <summary>到期日已改：開始日晚於新到期日時推到新到期日（startFollowedDue）。</summary>
+    private void FollowDue(TaskItem task, string? author)
+    {
+        if (TaskEditParser.StartAfterDue(task.StartDate, task.DueDate))
+            ChangeStart(task, task.DueDate, author, TaskSystemEvents.StartFollowedDue);
     }
 
     private void ChangeStatus(TaskItem task, TaskItemStatus to, string? author, string systemEvent) =>

@@ -6,7 +6,9 @@ import { useUsers } from 'src/application/dynamic/queries/permissions-queries';
 import { useDeleteTask, useTask, useTaskComments, useUpdateTask } from 'src/application/dynamic/queries/tasks-queries';
 import DateSelect from 'src/components/framework/DateSelect.vue';
 import GenericSelect from 'src/components/framework/GenericSelect.vue';
-import { isParentCancelled, isTaskHidden, subtasksOpenCount, type TaskCascade, type TaskPatch, type TaskStatus } from 'src/domain/dynamic/task-types';
+import {
+  isParentCancelled, isTaskHidden, startAfterDue, subtasksOpenCount, type TaskCascade, type TaskPatch, type TaskStatus,
+} from 'src/domain/dynamic/task-types';
 import type { ApiError } from 'src/services/api/http';
 import MentionInput from './MentionInput.vue';
 import SubtaskSection from './SubtaskSection.vue';
@@ -28,14 +30,18 @@ const movedOut = useMovedOutNotice();
 
 const data = computed(() => task.data.value);
 const missing = computed(() => !!task.error.value && !data.value);
-const draft = ref({ title: '', description: '', assignee: null as string | null, dueDate: null as string | null, status: 'todo' as TaskStatus });
+const draft = ref({
+  title: '', description: '', assignee: null as string | null, startDate: null as string | null, dueDate: null as string | null, status: 'todo' as TaskStatus,
+});
 const error = ref('');
 const confirming = ref(false);
 // 父任務改完成、還有未完成子任務：後端回 409 subtasksOpen，三選一後帶 cascade 重送
 const openCount = ref(0);
 const openChoice = ref(false);
 
-const draftOf = (d: NonNullable<typeof data.value>) => ({ title: d.title, description: d.description ?? '', assignee: d.assigneeUserId, dueDate: d.dueDate, status: d.status });
+const draftOf = (d: NonNullable<typeof data.value>) => ({
+  title: d.title, description: d.description ?? '', assignee: d.assigneeUserId, startDate: d.startDate, dueDate: d.dueDate, status: d.status,
+});
 // 同一個任務重抓（例如新增子任務後）只同步沒被使用者改過的欄位，改到一半的內容不能被蓋掉；換成別的任務才整份重新初始化
 watch(data, (d, prev) => {
   if (!d) return;
@@ -69,10 +75,20 @@ const patch = computed<TaskPatch>(() => {
   if ((dr.description.trim() || null) !== d.description) p.description = dr.description.trim() || null;
   if (dr.assignee !== d.assigneeUserId) p.assigneeUserId = dr.assignee;
   if (dr.dueDate !== d.dueDate) p.dueDate = dr.dueDate;
+  if (dr.startDate !== d.startDate) p.startDate = dr.startDate;
   if (dr.status !== d.status) p.status = dr.status;
   return p;
 });
 const dirty = computed(() => Object.keys(patch.value).length > 0);
+// 送了開始日就看寫入後的整對值，矛盾時伺服器回 400；只改到期日、早於開始日時伺服器把開始日推到新到期日（GT-Q1），儲存前先提示
+const startServerError = ref('');
+watch(() => [draft.value.startDate, draft.value.dueDate], () => { startServerError.value = ''; });
+const startError = computed(() => {
+  if (patch.value.startDate === undefined) return startServerError.value;
+  return startAfterDue(draft.value.startDate, draft.value.dueDate) ? t('tasks.startAfterDue') : startServerError.value;
+});
+const startFollows = computed(() => patch.value.startDate === undefined && patch.value.dueDate !== undefined
+  && startAfterDue(draft.value.startDate, draft.value.dueDate));
 const readonly = computed(() => !data.value?.canEdit);
 /** The assignee stays open to a manager of a subordinate's task (canReassign) even when the rest is read-only. */
 const assigneeReadonly = computed(() => !data.value?.canEdit && !data.value?.canReassign);
@@ -80,11 +96,15 @@ const assigneeReadonly = computed(() => !data.value?.canEdit && !data.value?.can
 function failureText(e: unknown): string {
   const err = e as ApiError;
   if (isParentCancelled(err)) return t('tasks.subtask.parentCancelled');
-  return (err.errors ? Object.values(err.errors).flat().join(t('common.listSeparator')) : err.message) || t('tasks.saveFailed');
+  // 開始日的伺服器訊息掛在欄位下，不重複顯示在底下
+  const { startDate: startErrors, ...others } = err.errors ?? {};
+  startServerError.value = startErrors?.[0] ?? '';
+  const text = err.errors ? Object.values(others).flat().join(t('common.listSeparator')) : err.message;
+  return text || (startErrors ? '' : t('tasks.saveFailed'));
 }
 
 async function save(cascade?: TaskCascade) {
-  if (!dirty.value || !draft.value.title.trim()) return;
+  if (!dirty.value || !draft.value.title.trim() || startError.value) return;
   error.value = '';
   try {
     const id = props.taskId!;
@@ -167,7 +187,11 @@ function goRecord() {
                 <GenericSelect v-model="draft.assignee" :label="t('tasks.fields.assignee')" :options="userOptions" :readonly="assigneeReadonly" data-testid="task-assignee" @update:model-value="(v) => (draft.assignee = v as string | null)" />
               </div>
               <div class="col-12 col-sm-6">
-                <DateSelect v-model="draft.dueDate" :label="t('tasks.fields.dueDate')" :readonly="readonly" />
+                <DateSelect v-model="draft.startDate" :label="t('tasks.fields.startDate')" :readonly="readonly" :error="startError" data-testid="task-start" />
+              </div>
+              <div class="col-12 col-sm-6">
+                <DateSelect v-model="draft.dueDate" :label="t('tasks.fields.dueDate')" :readonly="readonly" data-testid="task-due" />
+                <div v-if="startFollows" class="text-caption text-muted" data-testid="task-start-follows">{{ t('tasks.startFollows', { date: draft.dueDate }) }}</div>
               </div>
               <div class="col-12 col-sm-6">
                 <GenericSelect v-model="draft.status" :label="t('tasks.fields.status')" :options="statusOptions" :readonly="readonly" required @update:model-value="(v) => (draft.status = v as TaskStatus)" />
@@ -196,7 +220,7 @@ function goRecord() {
           <q-btn v-if="data.canDelete" flat color="negative" no-caps :label="t('tasks.delete')" data-testid="task-delete" @click="confirming = true" />
           <q-space />
           <q-btn flat no-caps :label="t('tasks.close')" v-close-popup />
-          <q-btn v-if="data.canEdit || data.canReassign" color="primary" no-caps :label="t('tasks.save')" :disable="!dirty" :loading="update.isPending.value" data-testid="task-save" @click="save()" />
+          <q-btn v-if="data.canEdit || data.canReassign" color="primary" no-caps :label="t('tasks.save')" :disable="!dirty || !!startError" :loading="update.isPending.value" data-testid="task-save" @click="save()" />
         </q-card-actions>
       </template>
       <q-dialog v-model="confirming">

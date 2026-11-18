@@ -5,7 +5,7 @@ using DynamicModules.Domain.Entities.Dynamic;
 namespace DynamicModules.Application.Dynamic.TaskService;
 
 /// <summary>
-/// PATCH 主體解析：沒送的欄位（Undefined）不改，送 null 代表清除。status 用 camelCase 字串，dueDate 用 yyyy-MM-dd。
+/// PATCH 主體解析：沒送的欄位（Undefined）不改，送 null 代表清除。status 用 camelCase 字串，dueDate、startDate 用 yyyy-MM-dd。
 /// 錯誤鍵是小寫開頭的欄位名。負責人是否為啟用中的使用者由呼叫端檢查。cascade 只在父任務改成完成、還有未完成的子任務時有作用，
 /// 其他情況由寫入端忽略（ST-T4）。
 /// </summary>
@@ -56,6 +56,15 @@ public static class TaskEditParser
             else if (dd.ValueKind != JsonValueKind.Null) errors["dueDate"] = [TaskMessages.BadDate];
         }
 
+        var setStart = false;
+        DateOnly? start = null;
+        if (Get(patch, "startDate") is { } sd)
+        {
+            setStart = true;
+            if (sd.ValueKind == JsonValueKind.String && TryParseDate(sd.GetString(), out var parsed)) start = parsed;
+            else if (sd.ValueKind != JsonValueKind.Null) errors["startDate"] = [TaskMessages.BadDate];
+        }
+
         TaskItemStatus? status = null;
         if (Get(patch, "status") is { } s)
         {
@@ -72,7 +81,7 @@ public static class TaskEditParser
 
         return errors.Count > 0
             ? (null, errors)
-            : (new TaskEdit(title, setDescription, description, setAssignee, assignee, setDue, due, status, cascade), errors);
+            : (new TaskEdit(title, setDescription, description, setAssignee, assignee, setDue, due, status, cascade, setStart, start), errors);
     }
 
     /// <summary>連動方式（看板設計 §10.7.2）：只認 complete、cancel，其他（含空字串）都是錯；沒帶由呼叫端自己判斷。</summary>
@@ -89,6 +98,9 @@ public static class TaskEditParser
         : null;
 
     public static string? NullIfBlank(string? s) => string.IsNullOrWhiteSpace(s) ? null : s;
+
+    /// <summary>開始日與到期日都有值、開始日晚於到期日（看板設計 §11.5.2.2）。</summary>
+    public static bool StartAfterDue(DateOnly? start, DateOnly? due) => start is { } s && due is { } d && s > d;
 
     public static bool TryParseDate(string? s, out DateOnly date) =>
         DateOnly.TryParseExact(s, "yyyy-MM-dd", CultureInfo.InvariantCulture, DateTimeStyles.None, out date);

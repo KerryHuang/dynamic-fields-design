@@ -150,7 +150,12 @@ async function doMove(card: BoardCard, to: BoardColumn, dueDate?: string, focus:
     if (!result.visible) {
       movedOut.show(card.id, result.undoToken);
       liveText.value = '';
-    } else void announce(t('taskBoard.moved', { column: columnLabel(to) }));
+    } else {
+      void announce(t('taskBoard.moved', { column: columnLabel(to) }));
+      // 到期日拖到比開始日早的區間：伺服器把開始日一併推到新到期日（U12），比對前後值提示
+      const start = result.card?.startDate ?? null;
+      if (start !== card.startDate && start) $q.notify({ type: 'info', message: t('taskBoard.startFollowed', { date: start }), position: 'bottom' });
+    }
   } catch (e) {
     liveText.value = '';
     const open = subtasksOpenCount(e);

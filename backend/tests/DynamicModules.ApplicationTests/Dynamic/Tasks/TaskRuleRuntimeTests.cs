@@ -363,6 +363,111 @@ public class TaskRuleRuntimeTests : TaskTestBase
         (await Db.Context.Set<Notification>().AsNoTracking().CountAsync()).Should().Be(notifications);
     }
 
+    // ───────── 開始日（T21，看板設計 §11.5.2.3、G9、G13–G17） ─────────
+
+    /// <summary>規劃任務（到期日＝活動開始日 −62 天，記錄開始日 2027-02-01 → 2026-12-01），人手動填開始日 2026-11-25。</summary>
+    private async Task<(long Record, long Plan)> PlanWithStart(Rig r)
+    {
+        await CreateRule(r, RuleInput("cp-tasks", OnCreate, CampaignTasks(r)));
+        var rec = await NewRecord(r, Campaign(r, r.Exhibition));
+        var plan = Code(await Tasks(rec), "plan").Id;
+        await Patch(plan, """{"startDate":"2026-11-25"}""");
+        return (rec, plan);
+    }
+
+    private async Task<List<TaskComment>> Entries(long taskId) =>
+        await Db.Context.Set<TaskComment>().AsNoTracking().Where(c => c.TaskId == taskId && c.Kind == TaskCommentKind.System)
+            .OrderBy(c => c.Id).ToListAsync();
+
+    [Fact]
+    public async Task G9_RuleTask_PatchStart_NoOverrideFlags_DueStillSyncs()
+    {
+        var r = await BuildRig();
+        var (rec, planId) = await PlanWithStart(r);
+
+        var plan = Code(await Tasks(rec), "plan");
+        plan.StartDate.Should().Be(new DateOnly(2026, 11, 25));
+        plan.DueOverridden.Should().BeFalse();
+        plan.AssigneeOverridden.Should().BeFalse();
+
+        await Change(rec, Vals((r.Start, S("2027-03-01"))));
+        Code(await Tasks(rec), "plan").DueDate.Should().Be(new DateOnly(2026, 12, 29), "改開始日不影響到期日同步");
+    }
+
+    [Fact]
+    public async Task G13_SyncDueBeforeStart_PushesStart_AuthorNull()
+    {
+        var r = await BuildRig();
+        var (rec, planId) = await PlanWithStart(r);
+        var before = (await Entries(planId)).Count;
+
+        await Change(rec, Vals((r.Start, S("2027-01-20"))), "sales01");
+
+        var plan = Code(await Tasks(rec), "plan");
+        plan.DueDate.Should().Be(new DateOnly(2026, 11, 19));
+        plan.StartDate.Should().Be(new DateOnly(2026, 11, 19));
+        plan.ModifiedBy.Should().BeNull();
+        plan.DueOverridden.Should().BeFalse();
+        var added = (await Entries(planId)).Skip(before).ToList();
+        added.Select(c => c.SystemEvent).Should().Equal(TaskSystemEvents.DueChanged, TaskSystemEvents.StartFollowedDue);
+        added.Should().OnlyContain(c => c.AuthorUserId == null);
+        J(added[1].SystemData!).GetRawText().Should().Be("""{"from":"2026-11-25","to":"2026-11-19"}""");
+    }
+
+    [Fact]
+    public async Task G14_G15_SyncDueLaterOrCleared_StartUntouched()
+    {
+        var r = await BuildRig();
+        var (rec, planId) = await PlanWithStart(r);
+
+        await Change(rec, Vals((r.Start, S("2027-03-01"))));
+        var plan = Code(await Tasks(rec), "plan");
+        plan.DueDate.Should().Be(new DateOnly(2026, 12, 29));
+        plan.StartDate.Should().Be(new DateOnly(2026, 11, 25));
+
+        await Change(rec, Vals((r.Start, null)));
+        plan = Code(await Tasks(rec), "plan");
+        plan.DueDate.Should().BeNull();
+        plan.StartDate.Should().Be(new DateOnly(2026, 11, 25));
+        (await Entries(planId)).Select(c => c.SystemEvent).Should().NotContain(TaskSystemEvents.StartFollowedDue);
+    }
+
+    [Fact]
+    public async Task G16_DueOverridden_SyncMovesNeither()
+    {
+        var r = await BuildRig();
+        var (rec, planId) = await PlanWithStart(r);
+        await Patch(planId, """{"dueDate":"2026-12-05"}""");
+
+        await Change(rec, Vals((r.Start, S("2027-01-20"))));
+
+        var plan = Code(await Tasks(rec), "plan");
+        plan.DueDate.Should().Be(new DateOnly(2026, 12, 5));
+        plan.StartDate.Should().Be(new DateOnly(2026, 11, 25));
+    }
+
+    [Fact]
+    public async Task G17_FailureDuringSync_RollsBackDueStartAndEntries()
+    {
+        var r = await BuildRig();
+        var (rec, planId) = await PlanWithStart(r);
+        var version = await RowVersion(rec);
+        var entries = (await Entries(planId)).Count;
+        // 同步同時改負責人才會送通知；通知途中失敗，整筆（含記錄寫入）回滾
+        _fail.FailWhen = c => c.Task.Id == planId;
+
+        var act = () => Run(new UpdateRecordRequest(rec, Vals((r.Start, S("2027-01-20")), (r.PlanOwner, S("sales02"))), version));
+
+        await act.Should().ThrowAsync<InvalidOperationException>();
+        _fail.FailWhen = null;
+        (await RowVersion(rec)).Should().Be(version);
+        var plan = Code(await Tasks(rec), "plan");
+        plan.DueDate.Should().Be(new DateOnly(2026, 12, 1));
+        plan.StartDate.Should().Be(new DateOnly(2026, 11, 25));
+        plan.AssigneeUserId.Should().Be("sales01");
+        (await Entries(planId)).Should().HaveCount(entries);
+    }
+
     // ───────── 觸發方式 ─────────
 
     [Fact]

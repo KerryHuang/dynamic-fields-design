@@ -54,11 +54,12 @@ public abstract class TaskTestBase : DesignerTestBase
     /// </summary>
     protected async Task<TaskItem> SeedTask(string title = "準備資料", string? createdBy = "admin", string? assignee = null,
         Target? target = null, long? recordId = null, DateOnly? due = null, TaskItemStatus status = TaskItemStatus.Todo,
-        long? ruleId = null, string[]? mentioned = null, long? moduleId = null, DateTime? created = null, DateTime? completed = null)
+        long? ruleId = null, string[]? mentioned = null, long? moduleId = null, DateTime? created = null, DateTime? completed = null,
+        DateOnly? start = null)
     {
         var task = new TaskItem
         {
-            Title = title, CreatedBy = createdBy, AssigneeUserId = assignee, DueDate = due, Status = status,
+            Title = title, CreatedBy = createdBy, AssigneeUserId = assignee, DueDate = due, StartDate = start, Status = status,
             ModuleId = moduleId ?? (recordId is null ? null : target!.ModuleId), RecordId = recordId,
             RecordTitleSnapshot = recordId is null ? null : "案件甲", RuleId = ruleId, RuleOccurrence = ruleId is null ? null : 1,
             RuleTaskCode = ruleId is null ? null : "t1", CreatedTime = created ?? SeedTime, CompletedTime = completed

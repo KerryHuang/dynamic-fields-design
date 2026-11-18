@@ -87,6 +87,18 @@ public class SupervisorScopeTests : TaskTestBase
     }
 
     [Fact]
+    public async Task G10_Supervisor_PatchStartDate_403()
+    {
+        var task = await SeedTask("整理名片", createdBy: "sales01", assignee: "sales01", due: new DateOnly(2026, 11, 25));
+
+        var r = await Patch("manager01", task.Id, """{"startDate":"2026-11-20"}""");
+
+        r.IsForbidden.Should().BeTrue();
+        r.Message.Should().Be(TaskMessages.SupervisorOnlyAssignee);
+        (await Load(task.Id)).StartDate.Should().BeNull();
+    }
+
+    [Fact]
     public async Task Reassign_NewAssigneeNotified_OldStaysParticipant()
     {
         var task = await SeedTask("整理名片", createdBy: "sales01", assignee: "sales01");

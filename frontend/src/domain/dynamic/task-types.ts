@@ -44,6 +44,9 @@ export const isParentCancelled = (e: unknown): boolean => {
   return err?.status === 409 && err.code === 'parentCancelled';
 };
 
+/** Both set and the start is after the due date (yyyy-MM-dd strings compare in date order); the server rejects this with 400 on `startDate`. */
+export const startAfterDue = (start: string | null, due: string | null): boolean => !!start && !!due && start > due;
+
 export interface TaskSummary {
   id: number;
   title: string;
@@ -52,6 +55,8 @@ export interface TaskSummary {
   assigneeName: string | null;
   assigneeActive: boolean;
   dueDate: string | null;
+  /** yyyy-MM-dd; never later than dueDate when both are set. */
+  startDate: string | null;
   overdue: boolean;
   record: TaskRecordRef | null;
   fromRule: boolean;
@@ -146,6 +151,8 @@ export type TaskPatch = {
   description?: string | null;
   assigneeUserId?: string | null;
   dueDate?: string | null;
+  /** Sending only an earlier dueDate pushes startDate along; sending startDate later than dueDate is a 400 on `startDate`. */
+  startDate?: string | null;
   status?: TaskStatus;
   /** Only used when a parent with open subtasks is marked done; ignored otherwise. */
   cascade?: TaskCascade;
@@ -172,6 +179,7 @@ export interface TaskInput {
   description?: string | null;
   assigneeUserId?: string | null;
   dueDate?: string | null;
+  startDate?: string | null;
 }
 
 export interface TaskPage {

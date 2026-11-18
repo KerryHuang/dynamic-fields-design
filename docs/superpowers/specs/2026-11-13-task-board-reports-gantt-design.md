@@ -817,6 +817,15 @@ st1 唯一看得到的變化：政策設定頁依 `PolicyCatalog.All` 多出 A35
 - 另立 `startFollowedDue`，不併進 `startChanged`：留言串要讓人看出開始日不是有人刻意改的，尤其規則同步時作者是「系統」。
 - 一次 schedule 同時改兩個日期時寫兩筆（`dueChanged`、`startChanged`），同 PATCH 改多欄位時各寫一筆的現行做法（設計 T7：拖拉不另立事件種類）。
 
+〔gt1a 實作補記〕
+- 日期驗證放在 `TaskWriter.ApplyAsync` 最前面（狀態連動的 409 之前），400 時不改任何值；建立的三支 API 在 `TaskSupport.ValidateInputAsync` 與其他欄位錯誤一起回。`TaskEdit` 的 `SetStartDate`、`StartDate` 與 `NewTask` 的 `StartDate` 都加在尾端給預設值。
+- 「有送開始日」就看整對值：PATCH 送了與現值相同的開始日、同時把到期日改得比它早，仍是 400（前端只送改過的欄位，畫面上走不到這條）。
+- 一次 PATCH 同時改兩個日期時系統記錄順序是 `dueChanged`、`startChanged`；跟隨時是 `dueChanged`、`startFollowedDue`。
+- 時間軸開始日是 null 時顯示「無開始日」（新鍵 `tasks.noStart`，同 `tasks.noDue`）。
+- ★ 任務詳細只改到期日、早於開始日時不擋，到期日欄下先提示「儲存後開始日會一併改為 {date}」（新鍵 `tasks.startFollows`）；前端即時錯誤只在開始日也要送出時判斷。
+- ★ 看板 U12 提示的日期照卡片既有寫法用 yyyy-MM-dd（「開始日已一併改為 2026-11-18」，鍵 `taskBoard.startFollowed`），不用 11/18。
+- 語系檔以 repo 現有為準：zh-TW、en-US、vi、th。
+
 ##### 11.5.2.5 `POST /tasks/gantt`
 
 **請求**

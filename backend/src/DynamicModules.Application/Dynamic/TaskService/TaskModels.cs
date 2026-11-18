@@ -6,7 +6,8 @@ using DynamicModules.Domain.ValueObjects;
 
 namespace DynamicModules.Application.Dynamic.TaskService;
 
-public sealed record TaskInput(string Title, string? Description, string? AssigneeUserId, DateOnly? DueDate);
+/// <summary>StartDate 放最後並給預設值（GT-T2）：既有的位置參數呼叫不用改。</summary>
+public sealed record TaskInput(string Title, string? Description, string? AssigneeUserId, DateOnly? DueDate, DateOnly? StartDate = null);
 
 /// <summary>
 /// 不含任何記錄欄位值；Record 依檢視者的權限遮蔽（設計 §7）。子任務欄位見看板設計 §10.7.2：ParentTitle 只看得到子任務的人也拿得到，
@@ -18,12 +19,12 @@ public sealed record TaskDetailResponse(
     DateTime? CompletedTime, string? RuleKey, bool RuleDeleted, bool CanEdit, bool CanComment, bool CanDelete, bool Frozen,
     bool CanReassign, bool Supervised, string Version,
     long? ParentTaskId, string? ParentTitle, bool ParentVisible, string Level, TaskProgress? Progress,
-    IReadOnlyList<TaskSummaryResponse> Subtasks, bool CanAddSubtask);
+    IReadOnlyList<TaskSummaryResponse> Subtasks, bool CanAddSubtask, DateOnly? StartDate);
 
 public sealed record TaskSummaryResponse(
     long Id, string Title, TaskItemStatus Status, string? AssigneeUserId, string? AssigneeName, bool AssigneeActive,
     DateOnly? DueDate, bool Overdue, TaskRecordRef? Record, bool FromRule, bool CanEdit, bool CanReassign, bool Supervised, string Version,
-    long? ParentTaskId, string? ParentTitle, string Level, TaskProgress? Progress);
+    long? ParentTaskId, string? ParentTitle, string Level, TaskProgress? Progress, DateOnly? StartDate);
 
 /// <summary>ManualRules：這筆記錄可手動套用的任務規則（啟用中、manual、應用程式開啟中）。</summary>
 public sealed record RecordTasksResponse(IReadOnlyList<TaskSummaryResponse> Items, bool CanAdd, IReadOnlyList<ManualRuleResponse> ManualRules);
@@ -70,7 +71,7 @@ internal static class TaskViews
             t.DueDate, Overdue(t, today), p.Record, t.CreatedBy, creator?.DisplayName, t.CreatedTime, t.CompletedTime,
             ruleHidden ? null : ruleKey, !ruleHidden && t.RuleId is not null && ruleKey is null, p.CanEdit, p.CanComment, p.CanDelete, p.Frozen,
             p.CanReassign, p.Supervised, TaskVersion.Of(t),
-            t.ParentTaskId, p.Parent?.Title, p.Parent?.Visible == true, LevelOf(t, progress), progress, subtasks, CanAddSubtask(t, p));
+            t.ParentTaskId, p.Parent?.Title, p.Parent?.Visible == true, LevelOf(t, progress), progress, subtasks, CanAddSubtask(t, p), t.StartDate);
     }
 
     public static TaskSummaryResponse ToSummary(TaskItem t, TaskPermissions p, IReadOnlyDictionary<string, AppUser> users, DateOnly today,
@@ -79,7 +80,7 @@ internal static class TaskViews
         var assignee = t.AssigneeUserId is null ? null : users.GetValueOrDefault(t.AssigneeUserId);
         return new TaskSummaryResponse(t.Id, t.Title, t.Status, t.AssigneeUserId, assignee?.DisplayName, assignee is { IsActive: true },
             t.DueDate, Overdue(t, today), p.Record, t.RuleId is not null, p.CanEdit,
-            p.CanReassign, p.Supervised, TaskVersion.Of(t), t.ParentTaskId, p.Parent?.Title, LevelOf(t, progress), progress);
+            p.CanReassign, p.Supervised, TaskVersion.Of(t), t.ParentTaskId, p.Parent?.Title, LevelOf(t, progress), progress, t.StartDate);
     }
 
     /// <summary>

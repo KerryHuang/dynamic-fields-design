@@ -11,6 +11,8 @@ public class TaskItem
     public string? Description { get; set; }
     public string? AssigneeUserId { get; set; }
     public DateOnly? DueDate { get; set; }
+    /// <summary>甘特圖用的開始日（選填，gt1a）；與到期日都有值時不晚於到期日。沒有覆寫旗標：人改開始日不影響規則同步（看板設計 §11.5.2）。</summary>
+    public DateOnly? StartDate { get; set; }
     public TaskItemStatus Status { get; set; } = TaskItemStatus.Todo;
 
     public long? ModuleId { get; set; }
@@ -93,6 +95,10 @@ public static class TaskSystemEvents
     public const string Created = "created";
     public const string AssigneeChanged = "assigneeChanged";
     public const string DueChanged = "dueChanged";
+    /// <summary>人直接改開始日（SystemData 帶 from、to，yyyy-MM-dd 或 null；看板設計 §11.5.2.4）。</summary>
+    public const string StartChanged = "startChanged";
+    /// <summary>到期日改得比開始日早，開始日被推到新到期日（SystemData 帶 from、to）；規則同步時作者 null。</summary>
+    public const string StartFollowedDue = "startFollowedDue";
     public const string StatusChanged = "statusChanged";
     public const string ConditionUnmet = "conditionUnmet";
     public const string ConditionRestored = "conditionRestored";

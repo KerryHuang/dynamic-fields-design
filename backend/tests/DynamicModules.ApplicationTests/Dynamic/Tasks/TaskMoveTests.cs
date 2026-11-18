@@ -98,6 +98,22 @@ public class TaskMoveTests : TaskBoardTestBase
     }
 
     [Fact]
+    public async Task G18_DueBucketEarlier_PushesStart_CardHasStartDate()
+    {
+        var task = await SeedTask("佈置展場", createdBy: "sales01", assignee: "sales01", due: D(12), start: D(6));
+
+        var week = Card(await Move("sales01", task, "dueBucket", "thisWeek"));
+        (week.DueDate, week.StartDate).Should().Be((D(8), D(6)), "本週最後一天仍不早於開始日，開始日不動");
+
+        var today = Card(await Move("sales01", task, "dueBucket", "today"));
+        (today.DueDate, today.StartDate).Should().Be((Today, Today));
+        var follow = await Db.Context.Set<TaskComment>().AsNoTracking()
+            .Where(c => c.TaskId == task.Id && c.SystemEvent == TaskSystemEvents.StartFollowedDue).ToListAsync();
+        follow.Should().ContainSingle().Which.AuthorUserId.Should().Be("sales01");
+        J(follow[0].SystemData!).GetRawText().Should().Be("""{"from":"2026-11-06","to":"2026-11-04"}""");
+    }
+
+    [Fact]
     public async Task Due_Today_ThisWeek_Later_None_Values()
     {
         var task = await SeedTask("準備報價", createdBy: "sales01", assignee: "sales01", due: D(20));

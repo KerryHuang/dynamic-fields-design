@@ -9,7 +9,7 @@ public sealed record TaskCardResponse(
     long Id, string Title, TaskItemStatus Status, string? AssigneeUserId, string? AssigneeName, bool AssigneeActive,
     DateOnly? DueDate, bool Overdue, bool DueToday, TaskRecordRef? Record, bool FromRule, bool Frozen, int CommentCount,
     DateTime? CompletedTime, string Version, bool CanEdit, bool CanReassign,
-    long? ParentTaskId, string? ParentTitle, string Level, TaskProgress? Progress);
+    long? ParentTaskId, string? ParentTitle, string Level, TaskProgress? Progress, DateOnly? StartDate);
 
 /// <summary>
 /// Kind：status、dueBucket、user、unassigned。UserId、Name、Inactive 只有 user 欄有。Total 是整欄總數（不受已載入張數限制）；

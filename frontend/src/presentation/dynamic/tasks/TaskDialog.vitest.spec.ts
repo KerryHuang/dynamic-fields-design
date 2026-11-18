@@ -296,6 +296,64 @@ describe('TaskDialog', () => {
     w.unmount();
   });
 
+  describe('開始日（G12）', () => {
+    const input = (w: Awaited<ReturnType<typeof mountDialog>>, label: string) => w.findAllComponents(quasar.QInput).find((i) => i.props('label') === label)!;
+    const save = () => body().querySelector<HTMLButtonElement>('[data-testid="task-save"]')!;
+
+    it('有開始日欄位，改開始日只送 startDate', async () => {
+      const w = await mountDialog();
+      input(w, '開始日').vm.$emit('update:modelValue', '2026-11-20');
+      await flushPromises();
+      save().click();
+      await flushPromises();
+      expect(bodyOf(calls.find((c) => c.method === 'patch'))).toEqual({ startDate: '2026-11-20' });
+      w.unmount();
+    });
+
+    it('開始日晚於到期日時欄位下即時顯示錯誤、不能儲存', async () => {
+      const w = await mountDialog();
+      input(w, '開始日').vm.$emit('update:modelValue', '2026-12-05');
+      await flushPromises();
+      expect(body().querySelector('[data-testid="task-start"]')!.closest('.q-field')!.textContent).toContain('開始日不能晚於到期日');
+      expect(save().disabled || save().classList.contains('disabled')).toBe(true);
+      w.unmount();
+    });
+
+    it('只把到期日改得比開始日早：不擋，提示開始日會一併改', async () => {
+      const w = await mountDialog({ task: { startDate: '2026-11-20' } });
+      input(w, '到期日').vm.$emit('update:modelValue', '2026-11-19');
+      await flushPromises();
+      expect(body().querySelector('[data-testid="task-start-follows"]')!.textContent).toContain('儲存後開始日會一併改為 2026-11-19');
+      save().click();
+      await flushPromises();
+      expect(bodyOf(calls.find((c) => c.method === 'patch'))).toEqual({ dueDate: '2026-11-19' });
+      w.unmount();
+    });
+
+    it('伺服器 400 的 startDate 訊息掛在開始日欄位下', async () => {
+      const w = await mountDialog({ onPatch: () => new HttpFail(400, { errors: { startDate: ['開始日不能晚於到期日'] } }) });
+      input(w, '開始日').vm.$emit('update:modelValue', '2026-11-20');
+      await flushPromises();
+      save().click();
+      await flushPromises();
+      expect(body().querySelector('[data-testid="task-start"]')!.closest('.q-field')!.textContent).toContain('開始日不能晚於到期日');
+      expect(body().querySelector('[data-testid="task-error"]')).toBeNull();
+      w.unmount();
+    });
+
+    it('時間軸顯示 startChanged、startFollowedDue', async () => {
+      const w = await mountDialog({
+        comments: [
+          commentWire({ id: 3, kind: 'system', body: '', systemEvent: 'startChanged', systemData: { from: null, to: '2026-11-20' } }),
+          commentWire({ id: 4, kind: 'system', body: '', systemEvent: 'startFollowedDue', systemData: { from: '2026-11-20', to: '2026-11-19' } }),
+        ],
+      });
+      expect(body().querySelector('[data-testid="comment-3"]')!.textContent).toContain('開始日從「無開始日」改為「2026-11-20」');
+      expect(body().querySelector('[data-testid="comment-4"]')!.textContent).toContain('到期日提前，開始日從「2026-11-20」改為「2026-11-19」');
+      w.unmount();
+    });
+  });
+
   it('撤回留言失敗時跳出錯誤提示', async () => {
     const w = await mountDialog({
       comments: [commentWire({ id: 8, canWithdraw: true })],

@@ -25,7 +25,7 @@ describe('dynamicApi tasks', () => {
     stub({ id: 1, title: 'T', status: 'todo', assigneeActive: false, overdue: false, fromRule: false, canEdit: true });
     const t = await dynamicApi.getTask(1);
     expect(t).toMatchObject({
-      assigneeUserId: null, assigneeName: null, dueDate: null, record: null, description: null,
+      assigneeUserId: null, assigneeName: null, dueDate: null, startDate: null, record: null, description: null,
       createdBy: null, createdByName: null, completedTime: null, ruleKey: null,
     });
   });
@@ -60,11 +60,20 @@ describe('dynamicApi tasks', () => {
     expect(t).toMatchObject({ id: 7, parentTaskId: 3, parentVisible: true, level: 'child' });
   });
 
+  it('keeps startDate on the detail, its subtasks and a board card', async () => {
+    stub({ id: 1, title: 'T', status: 'todo', startDate: '2026-11-20', dueDate: '2026-11-25', subtasks: [{ id: 2, title: 'S', status: 'todo', startDate: '2026-11-21' }] });
+    const t = await dynamicApi.getTask(1);
+    expect(t.startDate).toBe('2026-11-20');
+    expect(t.subtasks[0].startDate).toBe('2026-11-21');
+    stub({ today: '2026-11-04', columns: [{ key: 'todo', cards: [{ id: 4, title: 'C', status: 'todo', startDate: '2026-11-20' }] }], config: { version: 1, groupBy: 'status', scope: 'assigned' } });
+    expect((await dynamicApi.getBoardColumns({})).columns[0].cards[0].startDate).toBe('2026-11-20');
+  });
+
   it('normalizes the subtask fields of a board card', async () => {
     stub({ today: '2026-11-04', columns: [{ key: 'todo', cards: [{ id: 4, title: 'C', status: 'todo', parentTaskId: 3, parentTitle: 'P', level: 'child' }, { id: 3, title: 'P', status: 'todo' }] }], config: { version: 1, groupBy: 'status', scope: 'assigned' } });
     const b = await dynamicApi.getBoardColumns({});
     expect(b.columns[0].cards[0]).toMatchObject({ parentTaskId: 3, parentTitle: 'P', level: 'child', progress: null });
-    expect(b.columns[0].cards[1]).toMatchObject({ parentTaskId: null, parentTitle: null, level: 'standalone', progress: null });
+    expect(b.columns[0].cards[1]).toMatchObject({ parentTaskId: null, parentTitle: null, level: 'standalone', progress: null, startDate: null });
   });
 
   it('normalizes the record ref and the list page', async () => {

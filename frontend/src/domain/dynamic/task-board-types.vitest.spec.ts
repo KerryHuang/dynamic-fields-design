@@ -6,8 +6,8 @@ import {
 } from './task-board-types';
 
 const card = (o: Partial<BoardCard> = {}): BoardCard => ({
-  id: 1, title: 'T', status: 'todo', assigneeUserId: 'sales01', assigneeName: '業務一', assigneeActive: true, dueDate: null, overdue: false,
-  dueToday: false, record: null, fromRule: false, frozen: false, commentCount: 0, completedTime: null, version: 'v1', canEdit: true, canReassign: true,
+  id: 1, title: 'T', status: 'todo', assigneeUserId: 'sales01', assigneeName: '業務一', assigneeActive: true, dueDate: null, startDate: null,
+  overdue: false, dueToday: false, record: null, fromRule: false, frozen: false, commentCount: 0, completedTime: null, version: 'v1', canEdit: true, canReassign: true,
   parentTaskId: null, parentTitle: null, level: 'standalone', progress: null, ...o,
 });
 const column = (o: Partial<BoardColumn> = {}): BoardColumn => ({

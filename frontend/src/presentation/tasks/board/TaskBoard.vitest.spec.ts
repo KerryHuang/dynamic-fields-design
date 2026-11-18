@@ -515,6 +515,29 @@ describe('TaskBoard moving', () => {
     w.unmount();
   });
 
+  it('U12：拖到較早的到期區間、伺服器把開始日一併改掉時提示；開始日沒變就不提示（G18）', async () => {
+    const wire = dueBoardWire() as { columns: { key: string; cards: unknown[]; total: number }[] };
+    const later = wire.columns.find((c) => c.key === 'later')!;
+    later.cards = [cardWire({ id: 1, dueDate: '2026-11-25', startDate: '2026-11-20' })];
+    later.total = 1;
+    const hint = () => toasts().filter((t) => t.includes('開始日已一併改為 2026-11-18')).length;
+    let { w } = await mountBoard(wire as unknown as Record<string, unknown>, 1680, null, movedCard({ dueDate: '2026-11-18', startDate: '2026-11-18' }));
+    const before = hint();
+    let d = await dragTo(w, 1, 'today');
+    await d.drop();
+    await settle();
+    expect(hint()).toBe(before + 1);
+    w.unmount();
+
+    ({ w } = await mountBoard(wire as unknown as Record<string, unknown>, 1680, null, movedCard({ dueDate: '2026-11-22', startDate: '2026-11-20' })));
+    const all = toasts().length;
+    d = await dragTo(w, 1, 'thisWeek');
+    await d.drop();
+    await settle();
+    expect(toasts().length).toBe(all);
+    w.unmount();
+  });
+
   it('dropping on Later opens the date picker; cancel puts nothing on the wire, a pick sends the date', async () => {
     const { w } = await mountBoard(dueWire({}), 1680, null, movedCard({ dueDate: '2026-12-01' }));
     let d = await dragTo(w, 1, 'later');

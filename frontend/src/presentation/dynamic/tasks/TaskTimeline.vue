@@ -33,6 +33,10 @@ function systemText(c: TaskComment) {
   const due = (v: unknown) => (v ? String(v) : t('tasks.noDue'));
   if (ev === 'assigneeChanged') return t('tasks.system.assigneeChanged', { from: nameOf(from), to: nameOf(to) });
   if (ev === 'dueChanged') return t('tasks.system.dueChanged', { from: due(from), to: due(to) });
+  if (ev === 'startChanged' || ev === 'startFollowedDue') {
+    const start = (v: unknown) => (v ? String(v) : t('tasks.noStart'));
+    return t(`tasks.system.${ev}`, { from: start(from), to: start(to) });
+  }
   if (ev === 'statusChanged') return t('tasks.system.statusChanged', { from: status(from), to: status(to) });
   if (ev === 'subtaskAdded' || ev === 'subtaskDeleted' || ev === 'subtasksAllDone')
     return t(`tasks.system.${ev}`, { title: String(c.systemData?.subtaskTitle ?? '') });

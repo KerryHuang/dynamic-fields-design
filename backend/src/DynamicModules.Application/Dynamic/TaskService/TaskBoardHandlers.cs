@@ -90,7 +90,7 @@ public sealed class TaskBoardService(ITaskRepository tasks, TaskAccess access, T
         var assignee = t.AssigneeUserId is null ? null : users.GetValueOrDefault(t.AssigneeUserId);
         return new TaskCardResponse(t.Id, t.Title, t.Status, t.AssigneeUserId, assignee?.DisplayName, assignee is { IsActive: true },
             t.DueDate, TaskViews.Overdue(t, today), t.IsOpen && t.DueDate == today, p.Record, t.RuleId is not null, p.Frozen, comments,
-            t.CompletedTime, TaskVersion.Of(t), p.CanEdit, p.CanReassign, t.ParentTaskId, p.Parent?.Title, TaskViews.LevelOf(t, progress), progress);
+            t.CompletedTime, TaskVersion.Of(t), p.CanEdit, p.CanReassign, t.ParentTaskId, p.Parent?.Title, TaskViews.LevelOf(t, progress), progress, t.StartDate);
     }
 }
 

@@ -11,6 +11,7 @@ import zhTW from 'src/i18n/zh-TW.json';
 import { commentWire, taskDetailWire, taskWire, USERS } from 'src/presentation/dynamic/tasks/task-fixtures';
 import { useIdentityStore } from 'src/stores/use-identity-store';
 import { bodyOf, HttpFail, mockHttp, type Call } from 'src/test-utils/mock-http';
+import DateSelect from 'src/components/framework/DateSelect.vue';
 import MyTasksPage from './MyTasksPage.vue';
 
 let calls: Call[];
@@ -191,6 +192,31 @@ describe('MyTasksPage', () => {
     await flushPromises();
     const post = calls.find((c) => c.url === '/tasks' && c.method === 'post');
     expect(bodyOf(post)).toMatchObject({ title: '整理客戶清單', assigneeUserId: 'sales01' });
+    w.unmount();
+  });
+
+  it('新增對話框有開始日：晚於到期日時欄位下顯示錯誤、不送出，改好後一併送出（G12）', async () => {
+    const { w } = await mountPage('/tasks');
+    await w.get('[data-testid="my-task-add"]').trigger('click');
+    await flushPromises();
+    const title = document.body.querySelector<HTMLInputElement>('input[data-testid="task-form-title"]')!;
+    title.value = '佈置展場';
+    title.dispatchEvent(new Event('input'));
+    const dates = w.findAllComponents(DateSelect);
+    const start = dates.find((d) => d.props('label') === '開始日')!;
+    const due = dates.find((d) => d.props('label') === '到期日')!;
+    start.vm.$emit('update:modelValue', '2026-11-26');
+    due.vm.$emit('update:modelValue', '2026-11-25');
+    await flushPromises();
+    expect(document.body.querySelector('[data-testid="task-form-start"]')!.closest('.q-field')!.textContent).toContain('開始日不能晚於到期日');
+    document.body.querySelector<HTMLElement>('[data-testid="task-form-submit"]')!.click();
+    await flushPromises();
+    expect(calls.find((c) => c.url === '/tasks' && c.method === 'post')).toBeUndefined();
+    start.vm.$emit('update:modelValue', '2026-11-20');
+    await flushPromises();
+    document.body.querySelector<HTMLElement>('[data-testid="task-form-submit"]')!.click();
+    await flushPromises();
+    expect(bodyOf(calls.find((c) => c.url === '/tasks' && c.method === 'post'))).toMatchObject({ startDate: '2026-11-20', dueDate: '2026-11-25' });
     w.unmount();
   });
 

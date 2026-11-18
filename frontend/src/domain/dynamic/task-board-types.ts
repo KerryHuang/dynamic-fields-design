@@ -20,6 +20,8 @@ export interface BoardCard {
   assigneeName: string | null;
   assigneeActive: boolean;
   dueDate: string | null;
+  /** 到期日拖到比它早的區間時，伺服器把開始日一併推到新到期日（U12）。 */
+  startDate: string | null;
   overdue: boolean;
   dueToday: boolean;
   /** 看不到記錄時只有 accessible=false，其餘是 null（設計 §7）。 */

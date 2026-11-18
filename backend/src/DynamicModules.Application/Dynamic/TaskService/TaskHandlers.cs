@@ -23,6 +23,7 @@ public sealed class TaskSupport(ITaskRepository tasks, IPermissionRepository per
         if (input.Description is { Length: > TaskEditParser.DescriptionMax }) errors["description"] = [TaskMessages.DescriptionTooLong];
         var assignee = TaskEditParser.NullIfBlank(input.AssigneeUserId);
         if (assignee is not null && !await IsActiveUserAsync(assignee, ct)) errors["assigneeUserId"] = [TaskMessages.AssigneeInvalid];
+        if (TaskEditParser.StartAfterDue(input.StartDate, input.DueDate)) errors["startDate"] = [TaskMessages.StartAfterDue];
         return errors;
     }
 
@@ -80,7 +81,8 @@ public class CreateTaskHandler(TaskSupport support, TaskWriter writer, TaskAcces
         var input = request.Input;
         if (await support.ValidateInputAsync(input, ct) is { Count: > 0 } errors) return ServiceResult.Invalid(errors);
         var task = writer.Create(new NewTask(input.Title.Trim(), TaskEditParser.NullIfBlank(input.Description),
-            TaskEditParser.NullIfBlank(input.AssigneeUserId), input.DueDate, null, null, null, null, null, null, user.UserId));
+            TaskEditParser.NullIfBlank(input.AssigneeUserId), input.DueDate, null, null, null, null, null, null, user.UserId,
+            StartDate: input.StartDate));
         await writer.FlushAsync(ct);
         return ServiceResult.Created(await support.DetailAsync(task, await access.EvaluateAsync(task, ct), ct));
     }
@@ -99,7 +101,7 @@ public class CreateRecordTaskHandler(TaskSupport support, TaskWriter writer, Tas
         if (await support.ValidateInputAsync(input, ct) is { Count: > 0 } errors) return ServiceResult.Invalid(errors);
         var task = writer.Create(new NewTask(input.Title.Trim(), TaskEditParser.NullIfBlank(input.Description),
             TaskEditParser.NullIfBlank(input.AssigneeUserId), input.DueDate,
-            target.Module.Id, target.Record.Id, target.Record.Title, null, null, null, user.UserId));
+            target.Module.Id, target.Record.Id, target.Record.Title, null, null, null, user.UserId, StartDate: input.StartDate));
         await writer.FlushAsync(ct);
         return ServiceResult.Created(await support.DetailAsync(task, await access.EvaluateAsync(task, ct), ct));
     }
@@ -131,7 +133,7 @@ public class CreateSubtaskHandler(ITaskRepository tasks, TaskSupport support, Ta
         if (await support.ValidateInputAsync(input, ct) is { Count: > 0 } errors) return ServiceResult.Invalid(errors);
         var child = writer.Create(new NewTask(input.Title.Trim(), TaskEditParser.NullIfBlank(input.Description),
             TaskEditParser.NullIfBlank(input.AssigneeUserId), input.DueDate, parent.ModuleId, parent.RecordId, parent.RecordTitleSnapshot,
-            null, null, null, user.UserId, parent.Id));
+            null, null, null, user.UserId, parent.Id, input.StartDate));
         await writer.FlushAsync(ct);
         writer.AddSubtaskEntry(parent, TaskSystemEvents.SubtaskAdded, child);
         await writer.FlushAsync(ct);
