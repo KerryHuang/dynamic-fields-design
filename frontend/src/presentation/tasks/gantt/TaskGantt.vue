@@ -56,8 +56,6 @@ const source = computed<GanttSource>(() => (mode.value === 'phone'
   }));
 const query = useGantt(source);
 const data = computed(() => query.data.value ?? null);
-// 換甘特圖（或套用新設定）：回到它的預設刻度與時間窗；上一個甘特圖的資料（保留中的畫面）不能當成新的起點
-watch(() => [props.viewId, props.draft] as const, () => { scale.value = null; win.value = null; base.value = null; });
 watch(data, (d) => {
   if (!d || base.value || query.isPlaceholderData.value) return;
   base.value = d.config;
@@ -73,10 +71,23 @@ const busy = computed(() => query.isPlaceholderData.value);
 // ---- 手機週清單（§11.5.4.7） ----
 const phoneData = ref<TaskGanttData | null>(null);
 watch([data, mode], ([d, m]) => {
-  if (m !== 'phone' || !d) return;
+  // 保留中的上一段（或上一個甘特圖）的資料不算數：時間窗與清單都要等這次的回應
+  if (m !== 'phone' || !d || query.isPlaceholderData.value) return;
   if (!phoneWin.value) phoneWin.value = phoneWindow(d.today, d.weekStart);
   else if (d.window.from === phoneWin.value.from && d.window.to === phoneWin.value.to) phoneData.value = d;
 }, { immediate: true });
+
+// 換甘特圖（或套用新設定）：回到它的預設刻度與時間窗，手機回到本週起的 4 週；上一個甘特圖的資料（保留中的畫面）不能當成新的起點，
+// 新的查詢失敗時也不能還顯示上一個的任務。儲存成功時頁面用 rebase 交回存好的設定當新的基準（之後換刻度照新設定送），工具列一樣重設。
+function reset(next: TaskGanttConfig | null) {
+  scale.value = null;
+  win.value = null;
+  base.value = next;
+  phoneWin.value = null;
+  phoneData.value = null;
+}
+watch(() => [props.viewId, props.draft] as const, () => reset(null));
+defineExpose({ rebase: (config: TaskGanttConfig) => reset(config) });
 // 忙碌看實際請求：新的一段還在查（畫面保留上一段）或「今天」正在問伺服器；請求失敗就不算忙，導覽鈕與重試都可按
 const todayPending = ref(false);
 const phoneBusy = computed(() => !!phoneData.value && (query.isPlaceholderData.value || todayPending.value));

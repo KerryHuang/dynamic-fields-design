@@ -838,7 +838,7 @@ describe('TaskGantt drag (gt2b2)', () => {
 
 describe('TaskGantt saved Gantt charts (gt2c)', () => {
   beforeEach(() => { document.body.innerHTML = ''; });
-  afterEach(() => { document.body.innerHTML = ''; });
+  afterEach(() => { quasar.Screen.lt.md = false; quasar.Screen.lt.sm = false; vi.restoreAllMocks(); document.body.innerHTML = ''; });
   // 存檔甘特圖 12、13 各有自己的設定；99 讀不到
   const saved = (body: ReturnType<typeof lastBody>) => {
     if (body.viewId === 99) return new HttpFail(404, { message: '這個甘特圖已刪除或不再分享給你' });
@@ -874,6 +874,72 @@ describe('TaskGantt saved Gantt charts (gt2c)', () => {
     await flushPromises();
     expect(lastBody()).toEqual({ viewId: null, config: draft, window: null });
     expect(w.get('[data-testid="gantt-scale-week"]').attributes('aria-pressed')).toBe('true');
+    w.unmount();
+  });
+
+  // 手機：甘特圖 12 的任務是「寄合約」(8)，13 是「回覆報價」(9)；500 是查詢失敗的甘特圖
+  const phoneSaved = (body: ReturnType<typeof lastBody>) => {
+    if (body.viewId === 500) return new HttpFail(500, {});
+    const id = body.viewId === 13 ? 9 : 8;
+    return ganttWire({ rows: ganttWire().rows.filter((r) => r.id === id), spans: [], total: 1, window: body.window ?? { from: '2026-11-16', to: '2027-02-14' } });
+  };
+  const phoneItems = (w: VueWrapper) => w.findAll('[data-testid^="gantt-week-item-"]').map((e) => e.attributes('data-testid'));
+
+  it('G72 phone: switching to another Gantt chart, or applying a config, goes back to the four weeks from this week and drops the old tasks', async () => {
+    quasar.Screen.lt.sm = true;
+    quasar.Screen.lt.md = true;
+    const w = await mountGantt(phoneSaved, 'zh-TW', undefined, { viewId: 12 });
+    await w.get('[data-testid="gantt-next"]').trigger('click');
+    await flushPromises();
+    expect(lastBody().window).toEqual({ from: '2026-12-14', to: '2027-01-10' });
+    await w.setProps({ viewId: 13 });
+    await flushPromises();
+    expect(lastBody()).toEqual({ viewId: 13, config: null, window: { from: '2026-11-16', to: '2026-12-13' } });
+    expect(w.findAll('[data-testid="gantt-week-title"]')[0].text()).toBe('11/16 – 11/22');
+    expect(phoneItems(w)).toEqual(['gantt-week-item-9']);
+    await w.get('[data-testid="gantt-next"]').trigger('click');
+    await flushPromises();
+    const draft = ganttConfigWire({ groupBy: 'none', scope: 'involved' }) as unknown as TaskGanttConfig;
+    await w.setProps({ draft });
+    await flushPromises();
+    expect(lastBody()).toEqual({ viewId: null, config: draft, window: { from: '2026-11-16', to: '2026-12-13' } });
+    expect(w.findAll('[data-testid="gantt-week-title"]')[0].text()).toBe('11/16 – 11/22');
+    w.unmount();
+  });
+
+  it('G72 phone: when the next Gantt chart fails to load, the failure shows without the previous chart\'s tasks', async () => {
+    quasar.Screen.lt.sm = true;
+    quasar.Screen.lt.md = true;
+    const w = await mountGantt(phoneSaved, 'zh-TW', undefined, { viewId: 12 });
+    expect(phoneItems(w)).toEqual(['gantt-week-item-8']);
+    // 甘特圖 500 的回應先壓著：查詢途中保留的是 12 的資料，也不能拿來顯示
+    const real = dynamicApi.getGantt.bind(dynamicApi);
+    const pending: Array<(e: unknown) => void> = [];
+    vi.spyOn(dynamicApi, 'getGantt').mockImplementation((src) => (src?.viewId === 500 ? new Promise((_ok, no) => { pending.push(no); }) : real(src)));
+    await w.setProps({ viewId: 500 });
+    await flushPromises();
+    expect(pending.length).toBeGreaterThan(0);
+    expect(phoneItems(w)).toEqual([]);
+    expect(w.find('[data-testid="gantt-loading"]').exists()).toBe(true);
+    pending.forEach((no) => no(Object.assign(new Error('boom'), { status: 500 })));
+    await flushPromises();
+    expect(w.find('[data-testid="gantt-load-failed"]').exists()).toBe(true);
+    expect(phoneItems(w)).toEqual([]);
+    expect(w.find('[data-testid="gantt-week-title"]').exists()).toBe(false);
+    w.unmount();
+  });
+
+  it('G73 rebase (after a save) makes the saved config the base: the scale switch sends it, and the scale and window go back to its default', async () => {
+    const w = await mountGantt(saved, 'zh-TW', undefined, { viewId: 12 });
+    await w.get('[data-testid="gantt-next"]').trigger('click');
+    await flushPromises();
+    const next = ganttConfigWire({ groupBy: 'assignee', scale: 'month', filters: { statuses: ['todo'], keyword: '展覽' } }) as unknown as TaskGanttConfig;
+    (w.vm as unknown as { rebase: (c: TaskGanttConfig) => void }).rebase(next);
+    await flushPromises();
+    expect(lastBody()).toEqual({ viewId: 12, config: null, window: null });
+    await w.get('[data-testid="gantt-scale-week"]').trigger('click');
+    await flushPromises();
+    expect(lastBody()).toMatchObject({ viewId: null, config: { ...next, scale: 'week' } });
     w.unmount();
   });
 

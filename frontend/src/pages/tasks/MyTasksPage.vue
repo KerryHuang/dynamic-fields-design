@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue';
+import { computed, nextTick, ref, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { useRoute, useRouter } from 'vue-router';
 import { clearLastTaskBoard, readLastTaskBoard, writeLastTaskBoard } from 'src/application/dynamic/last-task-board';
@@ -128,7 +128,13 @@ function onBoardDeleted(id: number) {
   if (id === boardId.value) selectBoard(null);
 }
 const onSavedAsNew = (d: { id: number }) => selectBoard(d.id);
-function onSaved() { draft.value = null; }
+// 甘特圖儲存後：把存好的設定交給甘特元件當新的基準（換刻度要照它送），並重設刻度與時間窗。等丟掉未儲存設定的那次更新跑完再交，
+// 否則元件換來源時的重設會把基準清掉、改用快取裡儲存前的舊設定。
+const gantt = ref<InstanceType<typeof TaskGantt> | null>(null);
+function onSaved(d: TaskViewDetail<TaskViewConfig>) {
+  draft.value = null;
+  if (isGantt.value) void nextTick(() => gantt.value?.rebase(d.config as TaskGanttConfig));
+}
 const settingsOpen = ref(false);
 const picker = ref<InstanceType<typeof BoardPicker> | null>(null);
 const shareOpen = ref(false);
@@ -202,7 +208,7 @@ const boardFailed = computed(() => !!boardQuery.error.value && !boardQuery.data.
       <TaskBoard v-if="boardQuery.data.value" :board="boardQuery.data.value" :source="boardSource" @open="setOpen" />
     </template>
     <TaskGantt
-      v-else-if="isGantt" :view-id="boardId" :draft="(draft as TaskGanttConfig | null)" @open="setOpen" @loaded="onGanttLoaded" @not-found="onGanttNotFound"
+      v-else-if="isGantt" ref="gantt" :view-id="boardId" :draft="(draft as TaskGanttConfig | null)" @open="setOpen" @loaded="onGanttLoaded" @not-found="onGanttNotFound"
     />
     <template v-else>
       <q-tabs :model-value="tab" dense align="left" narrow-indicator class="text-primary" @update:model-value="(v) => setTab(v as TaskListTab)">
