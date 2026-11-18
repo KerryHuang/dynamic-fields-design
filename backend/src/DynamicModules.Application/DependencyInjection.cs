@@ -131,6 +131,8 @@ public static class DependencyInjection
         services.AddScoped<Dynamic.TaskService.ITaskNotifier, Dynamic.NotificationService.TaskNotificationWriter>();
         services.AddScoped<Dynamic.NotificationService.INotificationReminderSource, Dynamic.NotificationService.TaskReminderSource>();
         services.AddScoped<Dynamic.NotificationService.NotificationUpkeepProbe>();
+        // 背景排程的工作（JobRunner 依代碼排序依序跑）
+        services.AddSingleton<Dynamic.OpsService.Scheduling.IScheduledJob, Dynamic.NotificationService.NotificationUpkeepJob>();
         services.AddScoped<Dynamic.NotificationService.INotificationReminderSource, Dynamic.ApprovalService.ApprovalReminderSource>();
         services.AddScoped<Dynamic.TaskRuleService.TaskRuleValidator>();
         services.AddScoped<Dynamic.TaskRuleService.TaskRuleEditor>();

@@ -14,6 +14,9 @@ public interface IAccountRepository
 
     Task<bool> UserExistsAsync(string userId, CancellationToken ct);
 
+    /// <summary>啟用中的使用者帳號，依 UserId 排序；唯讀（背景排程逐人補提醒用）。</summary>
+    Task<IReadOnlyList<string>> ListActiveUserIdsAsync(CancellationToken ct);
+
     /// <summary>啟用中的系統管理員人數；在交易內呼叫，判斷「最後一位」才不會被並行請求繞過。</summary>
     Task<int> CountActiveAdminsAsync(CancellationToken ct);
 

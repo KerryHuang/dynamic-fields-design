@@ -18,11 +18,11 @@ public static class PolicyCatalog
     public static readonly PolicyDefinition TaskMaxRulesPerPackage =
         new("task.maxRulesPerPackage", "task", PolicyKind.Integer, PolicyScope.System, "50", 1, 500, Unit: "count");
 
-    /// <summary>A6：到期日正好是今天＋N 天時提醒一次（N=1 是「明天到期」）。</summary>
+    /// <summary>A6：到期日在今天到今天＋N 天之間（含到期當天）時補一則「即將到期」，每個任務只補一次；改到期日或換負責人後重新計（維運設計 §10.2.9）。</summary>
     public static readonly PolicyDefinition TaskReminderLeadDays =
         new("task.reminderLeadDays", "task", PolicyKind.Integer, PolicyScope.Module, "1", 1, 30, Unit: "days");
 
-    /// <summary>A6：逾期未完成的任務是否每天提醒負責人。</summary>
+    /// <summary>A6：逾期未完成的任務是否提醒負責人：每天最多一則，上一則還沒讀就不再新增。</summary>
     public static readonly PolicyDefinition TaskRemindOverdue =
         new("task.remindOverdue", "task", PolicyKind.Boolean, PolicyScope.Module, "true");
 
@@ -56,9 +56,13 @@ public static class PolicyCatalog
     public static readonly PolicyDefinition TaskMaxSubtasksPerTask =
         new("task.maxSubtasksPerTask", "task", PolicyKind.Integer, PolicyScope.System, "50", 1, 200, Unit: "count");
 
-    /// <summary>A14：通知保留天數；超過的舊通知下次讀通知時清除。</summary>
+    /// <summary>A14：通知保留天數；超過的舊通知由背景排程或下次讀通知時清除。</summary>
     public static readonly PolicyDefinition NotificationRetentionDays =
         new("notification.retentionDays", "notification", PolicyKind.Integer, PolicyScope.System, "90", 1, 3650, Unit: "days");
+
+    /// <summary>O1：背景排程替所有人補到期提醒、清理舊通知的間隔（分鐘；維運設計 §10.6）。改值從下一次排程開始生效。</summary>
+    public static readonly PolicyDefinition NotificationReminderScanMinutes =
+        new("notification.reminderScanMinutes", "notification", PolicyKind.Integer, PolicyScope.System, "60", 5, 1440, Unit: "minutes");
 
     /// <summary>A7：一週從星期幾開始（影響本週篩選與報表、儀表板的本週、上週、近 N 週）。</summary>
     public static readonly PolicyDefinition CalendarWeekStart =
@@ -158,7 +162,7 @@ public static class PolicyCatalog
         [TaskMaxRulesPerModule, TaskMaxTasksPerRule, TaskMaxRulesPerPackage,
          TaskReminderLeadDays, TaskRemindOverdue, TaskNotifyCommented, TaskNotifyCompleted, TaskNotifyCancelled, TaskNotifySubtasksDone,
          TaskSupervisorScope, TaskSupervisorScopeRecursive, TaskMaxSubtasksPerTask,
-         NotificationRetentionDays, CalendarWeekStart,
+         NotificationRetentionDays, NotificationReminderScanMinutes, CalendarWeekStart,
          AttachmentMaxFileBytes, AttachmentMaxFilesPerField, AttachmentAllowedExtensions, AttachmentMaxFilesPerComment,
          OpsSlowRequestMs, OpsClientErrorCollection,
          ApprovalMaxStages, ApprovalMaxBranches, ApprovalMaxApprovers, ApprovalMaxDueHours, ApprovalMaxCommentLength, ApprovalMaxManagerLevel,

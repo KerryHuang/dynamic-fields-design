@@ -19,8 +19,8 @@ namespace DynamicModules.WebAPITests.Ops;
 /// </summary>
 public sealed class SchedulerTests : IDisposable
 {
-    private static readonly PolicyDefinition Interval = PolicyCatalog.NotificationRetentionDays;
-    private const int IntervalMinutes = 90;
+    private static readonly PolicyDefinition Interval = PolicyCatalog.NotificationReminderScanMinutes;
+    private const int IntervalMinutes = 60;
 
     private readonly FileDatabaseApp _app = new();
     private readonly RenewSpy _spy = new();
