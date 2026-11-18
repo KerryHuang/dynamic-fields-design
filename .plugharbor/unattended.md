@@ -2,6 +2,11 @@
 
 有人在場時的上線流程見 `formwright-ship` skill；兩邊步驟改了要一起改。
 
+## 授權 repo
+- 本 repo（formwright）：改、commit、push、照「合併」一節合併。
+- plugharbor（`~/Work/projects/plugharbor`）：處理本專案收集的 skill 回饋——每個工作單元結束後，主控自行開 herdr pane 派 worker 過去（不等 plugharbor session、不叫使用者轉達），worker 可改、commit、push、發版，照 plugharbor 自己的測試、審查與發版流程；回報附 commit 與版本號（使用者 2026-11-18 裁決）。
+- 其他 repo 一律不動，發現的問題只寫進回來報告。
+
 ## 閘門
 GitHub Actions（`.github/workflows/gate.yml`）：先跑外洩掃描（三項 0），再 `git push -u origin <功能分支>`，然後 `bash scripts/unattended/ci-wait.sh <sha>` 用 run_in_background 跑、等通知。
 
