@@ -263,14 +263,28 @@ describe('DynamicForm', () => {
       });
     });
 
-    it('shows a server _record error at the top of the form', async () => {
+    // 表單第一次驗證、改欄位都會重算 vee-validate 的錯誤表；_record 不能放在裡面，否則會被洗掉（CI 偶發失敗的根因）。
+    const recordErrorAfter = async (w: ReturnType<typeof mountForm>) => {
+      await new Promise((r) => setTimeout(r, 50));
+      await flushPromises();
+      return w.find('[data-testid="record-error"]');
+    };
+
+    it('shows a server _record error at the top of the form and keeps it after the first validation', async () => {
       const w = mountForm({});
       await w.setProps({ serverErrors: { _record: ['此記錄目前不可修改'] } });
+      expect((await recordErrorAfter(w)).text()).toContain('此記錄目前不可修改');
+    });
+
+    it('keeps a server _record error while the user edits a field, clears it on the next submit', async () => {
+      const w = mountForm({});
       await flushPromises();
-      // CI 機器慢時表單第一次渲染會超過 waitFor 預設的 1 秒，放寬等待上限。
-      await vi.waitFor(() => expect(w.find('[data-testid="record-error"]').text()).toContain('此記錄目前不可修改'), { timeout: 5000 });
-      // 測試本身的上限要大於上面 waitFor 的 5 秒，否則 CI 慢時整個測試先逾時（2026-11-18 兩次）。
-    }, 15000);
+      await w.setProps({ serverErrors: { _record: ['此記錄目前不可修改'] } });
+      await w.find('input').setValue('zzz');
+      expect((await recordErrorAfter(w)).text()).toContain('此記錄目前不可修改');
+      await submit(w);
+      expect((await recordErrorAfter(w)).exists()).toBe(false);
+    });
 
     it('a hidden field whose value changed is still submitted (decision 8)', async () => {
       const s = rulesSchema([rule({ kind: 'visibility', targets: ['field:2'], condition: { field: 1, op: 'ne', value: 'hideme' } })]);
