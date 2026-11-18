@@ -917,6 +917,12 @@ st1 唯一看得到的變化：政策設定頁依 `PolicyCatalog.All` 多出 A35
 - **回應**：`{ card: TaskCardResponse }`。不回 `visible`、`undoToken`：改日期不改參與者、記錄、負責人，可見性不會變（推得出：設計 §4.4 的可見條件與日期無關）。
 - 平板的日期對話框、每列的「編輯日期」、未排程的「排程」都走這支；任務詳細對話框照舊走 PATCH（沒有版本檢查是既有行為，不在 gt 範圍，見 11.5.9）。
 
+〔gt1b 實作補記〕
+- `ScheduleTaskHandler` 放在 `TaskBoardHandlers.cs`、路由在 `TaskBoardController`（與 `move` 同處）；回應 `TaskScheduleResponse { card }`。
+- 主管身分的 403 帶「你以主管身分只能改負責人」（`SupervisorOnlyAssignee`），與 PATCH 送日期時相同；其他沒有編輯權的情況回一般的 403。
+- 開始日晚於到期日的 400 用 gt1a 的 `MessageText.TaskStartAfterDue`；檢查用同一個 `TaskEditParser.StartAfterDue`，寫入走 `ApplyAsync`（`SetStartDate`、`SetDueDate` 都為 true），所以不會觸發「開始日跟著到期日」，也不另寫日期規則。只改開始日時到期日原值帶進去、沒變，不寫 `dueChanged`、不設 `DueOverridden`。
+- ★ 請求少了 `startDate` 或 `dueDate` 鍵時當成 null（清除），不另回 400：契約已規定兩個一律都送，前端一定帶整對值；格式錯（如 `2026/11/21`）由模型繫結回 400。
+
 ##### 11.5.2.7 甘特設定 `TaskGanttConfig` 與 `task-views kind=gantt`
 
 **格式**（`Domain/Tasks/TaskGanttConfig.cs`，camelCase，沒給的選填欄位不輸出；GT-T8）
@@ -958,9 +964,19 @@ st1 唯一看得到的變化：政策設定頁依 `PolicyCatalog.All` 多出 A35
 - `version` 與 `RowVersion`：`ConfigJson` 裡的 `version` 是格式版本（1）；`Dynamic_TaskView.RowVersion` 是併發版本，`PUT` 不符回 409 `stale`（同看板）。
 - `TaskViewMessages` 的字目前全寫「看板」；甘特檢視用另一組字（「這個甘特圖已刪除或不再分享給你」「甘特圖名稱必填」等），`KindInvalid` 改成「檢視種類必須是 board 或 gantt」。看板既有的字不動（GT-T9）。
 
+〔gt1b 實作補記〕
+- 甘特用字與甘特設定的驗證錯誤都放 `MessageText`（四語，依 X-Locale 回；鍵 `TaskViewKindInvalid`、`TaskGantt*`）；Domain 的 `TaskGanttConfig.Parse` 只帶鍵與參數（`TaskGanttConfigErrors`，同 `FieldErrors`，`MessageTextTests` 檢查每個鍵都有文字）。看板既有的字仍是 `TaskViewMessages` 的中文字面值，沒搬。`TaskViewMessages.KindInvalid` 這個字面值拿掉，改用 `MessageText.TaskViewKindInvalid`。
+- 依種類挑字的有：名稱必填、名稱太長、分享對象太多、設定錯誤。
+- ★ 「這個甘特圖已刪除或不再分享給你」gt1b 沒有用到的地方，所以沒加：`GET/PUT/DELETE /task-views/{id}`、`copy`、`shares` 找不到或看不到時不知道種類（看不到就不能透露它是甘特圖），沿用看板那句；看板端點拿到甘特 Id 也回看板那句（呼叫端在看板）。甘特專用的 404 字隨 gt1c 的 `POST /tasks/gantt`（帶看板 Id、或已刪除、不再分享）加。
+- 寫入時 `scale` 與 `groupBy`、`scope` 一樣必填（技術決定：同看板「必要欄位缺了 400」）；`showSubtasks`、`filters` 選填。甘特設定沒有 `sort`、`columns`，帶了是未知屬性 400。
+- 讀取時 `dueRange` 一律丟掉、關鍵字 trim，其餘同看板的寬鬆讀取。
+- `GET /task-views` 沒帶 `kind` 時照舊是 `board`。
+
 ##### 11.5.2.8 新增的 `TaskMessages`
 
 `StartAfterDue`「開始日不能晚於到期日」（gt1a）；`GanttWindowInvalid`「時間範圍的開始不能晚於結束」、`GanttWindowTooLong(max)`「時間範圍最多 {max} 天」、`GanttNoDueRange`「甘特圖用時間範圍，不用到期日區間」（gt1b／gt1c）。
+
+〔gt1b 實作補記〕`GanttNoDueRange` 同 gt1a 的 `StartAfterDue`，放在 `MessageText.TaskGanttNoDueRange`（四語），不在 `TaskMessages`；`GanttWindowInvalid`、`GanttWindowTooLong` 隨 gt1c。
 
 ##### 11.5.2.9 政策
 
