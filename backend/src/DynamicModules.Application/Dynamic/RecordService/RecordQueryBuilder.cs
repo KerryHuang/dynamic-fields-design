@@ -17,15 +17,30 @@ public static class RecordQueryBuilder
 
     public static async Task<RecordQuery?> BuildAsync(
         IModuleRepository modules, FieldTypeRegistry registry, Module module, EffectivePermissions perms,
-        string? filterText, IReadOnlyList<string> sortBy, IReadOnlyList<string> sortOrder, string? q,
+        string? filterText, IReadOnlyList<string> sortBy, IReadOnlyList<string> sortOrder, string? q, string? approval,
         DateOnly today, int page, int size, Dictionary<string, string[]> errors, CancellationToken ct)
     {
         var filter = await ParseFilter(modules, registry, filterText, module, perms, errors, ct);
         var sorts = ParseSorts(sortBy, sortOrder, module, perms, errors);
         var keyword = string.IsNullOrEmpty(q) || !module.TitleVisibleTo(perms) ? null : q;
         if (keyword is { Length: > MaxKeywordLength }) errors["q"] = ["關鍵字最多 100 個字元"];
+        var approvalFilter = ParseApproval(approval, errors);
         if (errors.Count > 0) return null;
-        return new RecordQuery(module.Id, filter, sorts, keyword, today, page, size, perms.OwnerUserIds);
+        return new RecordQuery(module.Id, filter, sorts, keyword, today, page, size, perms.OwnerUserIds, approvalFilter);
+    }
+
+    /// <summary>簽核系統篩選（簽核設計 §13.4.1）：空白＝不篩；其餘只認 pending、none。</summary>
+    private static ApprovalListFilter? ParseApproval(string? approval, Dictionary<string, string[]> errors)
+    {
+        if (string.IsNullOrEmpty(approval)) return null;
+        switch (approval)
+        {
+            case "pending": return ApprovalListFilter.Pending;
+            case "none": return ApprovalListFilter.None;
+            default:
+                errors["approval"] = ["簽核篩選只能是 pending 或 none"];
+                return null;
+        }
     }
 
     private static async Task<ConditionNode?> ParseFilter(

@@ -41,6 +41,13 @@ public static class DynamicQueryBuilder
             }
         }
         if (q.Filter is not null) where.Append(" AND ").Append(Node(q.Filter, ctx, q.Today));
+        if (q.Approval is { } approval)
+        {
+            // 簽核中是「有進行中實例」這個事實（簽核設計 §13.4.1）：非相關子查詢，走 (ModuleId, Status) 索引；RecordId 為 NOT NULL，NOT IN 不會踩到 NULL
+            where.Append($" AND r.\"Id\" {(approval == ApprovalListFilter.Pending ? "IN" : "NOT IN")} "
+                + "(SELECT a.\"RecordId\" FROM \"Dynamic_ApprovalInstance\" a WHERE a.\"ModuleId\" = @m AND a.\"Status\" = @apStatus)");
+            ctx.Parameters.Add("apStatus", ApprovalInstanceStatus.Pending);
+        }
         if (q.Keyword is not null)
         {
             where.Append(" AND ").Append(dialect.LikeIgnoreCase("r.\"Title\"", "@q"));

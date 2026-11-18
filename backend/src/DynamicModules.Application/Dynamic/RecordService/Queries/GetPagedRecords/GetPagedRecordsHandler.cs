@@ -31,7 +31,7 @@ public class GetPagedRecordsHandler(
         var size = request.PagesSize <= 0 ? DefaultPagesSize : Math.Min(request.PagesSize, PagedRequest.MaxPagesSize);
         var errors = new Dictionary<string, string[]>();
         var query = await RecordQueryBuilder.BuildAsync(modules, registry, module, perms, request.Filter, request.SortBy,
-            request.SortOrder, request.Q, time.Today, page, size, errors, ct);
+            request.SortOrder, request.Q, request.Approval, time.Today, page, size, errors, ct);
         if (query is null) return ServiceResult.Invalid(errors);
 
         var (items, total) = await records.QueryAsync(query, ct);

@@ -4,10 +4,14 @@ using DynamicModules.Domain.FieldTypes;
 
 namespace DynamicModules.Domain.Repositories.Dynamic;
 
-/// <summary>清單查詢：Filter 為 null 表示不篩選；Keyword 對 Title 做 contains；Today 供 withinXxxDays 使用；OwnerUserIds 為 null 表示不限擁有者，空集合表示什麼都看不到。</summary>
+/// <summary>清單查詢：Filter 為 null 表示不篩選；Keyword 對 Title 做 contains；Today 供 withinXxxDays 使用；OwnerUserIds 為 null 表示不限擁有者，空集合表示什麼都看不到；
+/// Approval 為 null 表示不看簽核（簽核設計 §13.4.1）。</summary>
 public sealed record RecordQuery(
     long ModuleId, ConditionNode? Filter, IReadOnlyList<RecordSort> Sorts, string? Keyword,
-    DateOnly Today, int Page, int Size, IReadOnlySet<string>? OwnerUserIds = null);
+    DateOnly Today, int Page, int Size, IReadOnlySet<string>? OwnerUserIds = null, ApprovalListFilter? Approval = null);
+
+/// <summary>清單的簽核系統篩選：Pending＝有進行中的簽核實例，None＝沒有（簽核設計 §13.4.1）。以實例表子查詢現算，不是記錄上的欄位。</summary>
+public enum ApprovalListFilter { Pending, None }
 
 /// <summary>ByTitle：依持久化的 Record.Title 排序（模組有標題樣板時，標題欄位代表組好的標題）。</summary>
 public sealed record RecordSort(Field Field, bool Descending, bool ByTitle = false);

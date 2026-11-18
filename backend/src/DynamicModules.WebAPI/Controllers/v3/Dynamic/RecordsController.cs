@@ -25,9 +25,9 @@ public class RecordsController(IMediator mediator) : ControllerBase
     public async Task<IActionResult> Paged(
         string key, [FromQuery] int currentPage = 1, [FromQuery] int pagesSize = 10, [FromQuery] string? filter = null,
         [FromQuery(Name = "sortBy")] string[]? sortBy = null, [FromQuery(Name = "sortOrder")] string[]? sortOrder = null,
-        [FromQuery] string? q = null) =>
+        [FromQuery] string? q = null, [FromQuery] string? approval = null) =>
         (await mediator.Send(new GetPagedRecordsRequest(
-            key, currentPage, pagesSize, filter, sortBy ?? [], sortOrder ?? [], q))).ToActionResult(this);
+            key, currentPage, pagesSize, filter, sortBy ?? [], sortOrder ?? [], q, approval))).ToActionResult(this);
 
     [HttpGet("modules/{key}/records/light")]
     public async Task<IActionResult> Light(string key, [FromQuery] string? keyword = null, [FromQuery] int page = 1, [FromQuery] int size = 20) =>

@@ -120,6 +120,37 @@ public class InventoryApprovalTests : IDisposable
     }
 
     [Fact]
+    public async Task ListApprovalFilter_QueryString_PagedExportAndSchemaFlag()
+    {
+        // 簽核設計 §13.4.1（a4c）：approval=pending|none 走查詢字串，清單與匯出都認，schema 帶 approvalEnabled
+        var (rig, supplier, item) = await ArrangeAsync();
+        var buyer = _app.AsUser(Buyer);
+        var pending = await rig.PoDraftAsync(supplier, item, 40, buyer);
+        (await rig.SubmitPoAsync(buyer, pending)).StatusCode.Should().Be(HttpStatusCode.Created);
+        var draft = await rig.PoDraftAsync(supplier, item, 4, buyer);
+        var po = rig.Key("po");
+
+        async Task<JsonElement> Paged(string query) => await JsonOf(await _admin.GetAsync($"{Base}/modules/{po}/records/paged{query}"));
+        var inFlight = await Paged("?approval=pending");
+        inFlight.GetProperty("totalCount").GetInt32().Should().Be(1);
+        inFlight.GetProperty("items")[0].GetProperty("id").GetInt64().Should().Be(Id(pending));
+        var rest = await Paged("?approval=none");
+        rest.GetProperty("items").EnumerateArray().Select(i => i.GetProperty("id").GetInt64()).Should().Equal([Id(draft)]);
+        (await Paged("")).GetProperty("totalCount").GetInt32().Should().Be(2);
+
+        var bad = await _admin.GetAsync($"{Base}/modules/{po}/records/paged?approval=foo");
+        bad.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+        (await bad.Content.ReadAsStringAsync()).Should().Contain("approval");
+
+        var csv = await _admin.GetAsync($"{Base}/modules/{po}/export?format=csv&approval=pending");
+        csv.StatusCode.Should().Be(HttpStatusCode.OK);
+        (await csv.Content.ReadAsStringAsync()).Split("\r\n", StringSplitOptions.RemoveEmptyEntries).Should().HaveCount(2, "標題列加一筆");
+
+        (await JsonOf(await _admin.GetAsync($"{Base}/modules/{po}/schema"))).GetProperty("approvalEnabled").GetBoolean().Should().BeTrue();
+        (await JsonOf(await _admin.GetAsync($"{Base}/modules/{rig.Key("item")}/schema"))).GetProperty("approvalEnabled").GetBoolean().Should().BeFalse();
+    }
+
+    [Fact]
     public async Task Medium_OneStage_ManagerLevel1()
     {
         var (rig, supplier, item) = await ArrangeAsync();

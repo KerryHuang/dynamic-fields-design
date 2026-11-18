@@ -39,7 +39,7 @@ public class ExportRecordsHandler(
         var isCsv = request.Format == "csv";
         if (!isCsv && request.Format != "xlsx") errors["format"] = ["格式只能是 csv 或 xlsx"];
         var query = await RecordQueryBuilder.BuildAsync(modules, registry, module, perms, request.Filter, request.SortBy,
-            request.SortOrder, request.Q, time.Today, 1, 1, errors, ct);
+            request.SortOrder, request.Q, request.Approval, time.Today, 1, 1, errors, ct);
         if (query is null) return ServiceResult.Invalid(errors);
 
         // 先只查總數，超過上限就不載入資料列

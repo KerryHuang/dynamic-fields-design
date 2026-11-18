@@ -6,12 +6,13 @@ using DynamicModules.Domain.ValueObjects;
 namespace DynamicModules.Application.Dynamic.SchemaService.Data;
 
 /// <summary>Ledger：不可修改的分錄模組，修改與刪除權限同時被壓成 false。ReadOnly：模組所屬應用程式已關閉。Permissions 的新增、修改、刪除同時被壓成 false，前端照權限就會藏起按鈕。
-/// HasTitleTemplate：標題由樣板組成，列表的標題欄叫「標題」，依標題欄位排序就是依組好的標題排序。</summary>
+/// HasTitleTemplate：標題由樣板組成，列表的標題欄叫「標題」，依標題欄位排序就是依組好的標題排序。
+/// ApprovalEnabled：狀態機有需簽核的轉移，清單頁才提供「簽核中」系統篩選（簽核設計 §13.4.1）；與使用者能不能做那條轉移無關。</summary>
 public record ModuleSchemaResponse(
     string Key, string ProgramCode, I18nText Name, string? Icon, string? TitleFieldKey, int Version, List<SchemaBlock> Blocks,
     SchemaPermissions Permissions, List<SchemaRule> Rules,
     ModuleKind Kind, string? HostEntityKey, List<SchemaDetail>? Details = null, SchemaWorkflow? Workflow = null, bool ReadOnly = false,
-    bool Ledger = false, bool HasTitleTemplate = false, bool TasksEnabled = true)
+    bool Ledger = false, bool HasTitleTemplate = false, bool TasksEnabled = true, bool ApprovalEnabled = false)
 {
     /// <summary>ETag 用的版本：表頭 Version 接上每個明細模組的 Version（依 Key 排序），以 . 串接；不序列化。</summary>
     [JsonIgnore]

@@ -45,6 +45,23 @@ public class DynamicQueryBuilderTests
     }
 
     [Theory]
+    [InlineData(ApprovalListFilter.Pending, "IN")]
+    [InlineData(ApprovalListFilter.None, "NOT IN")]
+    public void Build_ApprovalFilter_IsQuotedSubqueryWithParameterizedStatus(ApprovalListFilter filter, string op)
+    {
+        // 簽核設計 §13.4.1：簽核中是實例表的子查詢，識別字加雙引號、狀態走參數，兩種方言同一份字串
+        foreach (ISqlDialect dialect in new ISqlDialect[] { new SqliteDialect(), new PostgresDialect() })
+        {
+            var (countSql, pageSql, parameters) = DynamicQueryBuilder.Build(Q() with { Approval = filter }, dialect);
+            foreach (var sql in new[] { countSql, pageSql })
+                sql.Should().Contain($"r.\"Id\" {op} (SELECT a.\"RecordId\" FROM \"Dynamic_ApprovalInstance\" a WHERE a.\"ModuleId\" = @m AND a.\"Status\" = @apStatus)")
+                    .And.NotContain("pending");
+            parameters.Get<string>("apStatus").Should().Be("pending");
+        }
+        DynamicQueryBuilder.Build(Q(), new SqliteDialect()).countSql.Should().NotContain("Dynamic_ApprovalInstance");
+    }
+
+    [Theory]
     [InlineData(FieldType.Formula, "number", "NumberValue")]
     [InlineData(FieldType.Formula, "currency", "NumberValue")]
     [InlineData(FieldType.Formula, "date", "DateValue")]
