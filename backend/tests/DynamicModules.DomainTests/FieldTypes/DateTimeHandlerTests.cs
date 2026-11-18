@@ -37,6 +37,16 @@ public class DateTimeHandlerTests
         r.Value!.Value.GetString().Should().Be("2026-11-03T09:00:00+08:00");
     }
 
+    [Theory]
+    [InlineData("\"9999-12-31T23:59:00Z\"")]
+    [InlineData("\"9999-12-31T23:59:00-05:00\"")]
+    [InlineData("\"0001-01-01T00:00:00+14:00\"")]
+    public void DateTimeHandler_OutOfRangeAfterTimezoneShift_IsFieldError(string json)
+    {
+        var r = Run(FieldType.DateTime, json);
+        (r.IsValid, r.Error).Should().Be((false, FieldErrors.DateTimeFormat));
+    }
+
     [Fact]
     public void DateTimeHandler_ConvertsOtherOffsets_AndCrossesMidnight()
     {

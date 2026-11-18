@@ -27,6 +27,9 @@ public sealed class DateTimeHandler : IFieldTypeHandler
         var s = input.Value.GetString()!;
         if (!Iso.IsMatch(s) || !DateTimeOffset.TryParse(s, CultureInfo.InvariantCulture, DateTimeStyles.None, out var dto))
             return FieldValueResult.Fail(error);
+        // 換成台北時間後超出 DateTime 範圍（9999 年尾）要回欄位錯誤；下限方向 +8 小時不會溢位，
+        // 但負偏移的字串在 TryParse 就會被擋下。
+        if (dto.UtcDateTime > DateTime.MaxValue - Taipei) return FieldValueResult.Fail(error);
         var text = dto.ToOffset(Taipei).ToString("yyyy-MM-dd\\THH:mm:ss", CultureInfo.InvariantCulture) + "+08:00";
         return FieldValueResult.Ok(HandlerHelpers.ToElement(text));
     }
