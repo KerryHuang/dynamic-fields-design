@@ -67,6 +67,20 @@ public static class PostgresTestServer
         return new NpgsqlConnectionStringBuilder(admin) { Database = name }.ConnectionString;
     }
 
+    /// <summary>
+    /// 整份複製一個測試資料庫（例如已產生 Demo 資料的快照），回傳新庫的連線字串。來源先清掉連線池：
+    /// <c>CREATE DATABASE … TEMPLATE</c> 時來源不能有連線，複製期間也不能有人連進去。
+    /// </summary>
+    public static async Task<string> CloneDatabaseAsync(string sourceConnectionString)
+    {
+        await using (var pooled = new NpgsqlConnection(sourceConnectionString)) NpgsqlConnection.ClearPool(pooled);
+        var source = new NpgsqlConnectionStringBuilder(sourceConnectionString).Database;
+        var admin = await Admin.Value;
+        var name = $"fw_{Guid.NewGuid():N}";
+        await ExecuteAsync(admin, $"CREATE DATABASE \"{name}\" TEMPLATE \"{source}\" STRATEGY {CloneStrategy}");
+        return new NpgsqlConnectionStringBuilder(admin) { Database = name }.ConnectionString;
+    }
+
     /// <summary>同步版本：給建構函式（TestApp）用。在執行緒池上跑，理由同 <see cref="Admin"/>。</summary>
     public static string CreateDatabase(bool migrated = true) => Task.Run(() => CreateDatabaseAsync(migrated)).GetAwaiter().GetResult();
 

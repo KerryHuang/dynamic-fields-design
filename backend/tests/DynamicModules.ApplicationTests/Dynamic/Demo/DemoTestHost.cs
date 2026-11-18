@@ -14,7 +14,7 @@ using Microsoft.Extensions.DependencyInjection;
 
 namespace DynamicModules.ApplicationTests.Dynamic.Demo;
 
-/// <summary>Demo 產生器測試用：已種子的 SQLite、admin 身分、固定營運時間，最後掛上 AddActingOverrides。</summary>
+/// <summary>Demo 產生器測試用：已種子的測試資料庫（SQLite 或 PostgreSQL）、admin 身分、固定營運時間，最後掛上 AddActingOverrides。</summary>
 public sealed class DemoTestHost : IAsyncDisposable
 {
     public static readonly DateOnly Today = new(2026, 11, 5);
@@ -46,7 +46,12 @@ public sealed class DemoTestHost : IAsyncDisposable
 
     internal static async Task<DemoTestHost> CreateAsync(DateOnly? today, Action<IServiceCollection>? configure, DemoSnapshot? snapshot)
     {
-        var host = new DemoTestHost { _db = await TestDb.CreateAsync(restore: snapshot is null ? null : snapshot.RestoreDatabase) };
+        var host = new DemoTestHost
+        {
+            _db = snapshot is null ? await TestDb.CreateAsync()
+                : snapshot.PostgresSource is { } source ? await TestDb.CreateAsync(postgresSource: source)
+                : await TestDb.CreateAsync(restore: snapshot.RestoreDatabase),
+        };
         // 快照已含種子與產生的資料，附件檔案跟著複製；沒有快照才種子
         if (snapshot is null) await SeedData.EnsureSeededAsync(host._db.Context);
         else snapshot.CopyFilesTo(host._attachmentRoot);

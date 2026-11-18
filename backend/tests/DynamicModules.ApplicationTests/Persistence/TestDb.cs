@@ -32,13 +32,16 @@ public sealed class TestDb : IAsyncDisposable
 
     /// <param name="migrate">false 時不套 migration，由測試自己依序套用（驗證既有資料升級；只在 SQLite 有意義，§5.3）。</param>
     /// <param name="restore">給了就用它把資料整份複製進這個庫，取代 migration 範本（例如已產生 Demo 資料的快照；只支援 SQLite）。</param>
-    public static async Task<TestDb> CreateAsync(bool migrate = true, Action<SqliteConnection>? restore = null)
+    /// <param name="postgresSource">PostgreSQL 模式的對應：從這個資料庫（連線字串）整份複製，取代 migration 樣板。</param>
+    public static async Task<TestDb> CreateAsync(bool migrate = true, Action<SqliteConnection>? restore = null, string? postgresSource = null)
     {
         var db = new TestDb();
         if (TestDatabase.IsPostgres)
         {
-            if (restore is not null) throw new NotSupportedException("TestDb 的 restore（SQLite 快照）在 PostgreSQL 模式不支援");
-            db._postgres = await PostgresTestServer.CreateDatabaseAsync(migrated: migrate);
+            if (restore is not null) throw new NotSupportedException("TestDb 的 restore（SQLite 快照）在 PostgreSQL 模式不支援，改給 postgresSource");
+            db._postgres = postgresSource is not null
+                ? await PostgresTestServer.CloneDatabaseAsync(postgresSource)
+                : await PostgresTestServer.CreateDatabaseAsync(migrated: migrate);
             db.Context = new DynamicDbContext((DbContextOptions<DynamicDbContext>)PostgresDatabase.Configure(
                     new DbContextOptionsBuilder<DynamicDbContext>(), db._postgres, PostgresSettings)
                 .AddInterceptors(db.Counter, WriteGuardInterceptor.Instance)
@@ -46,6 +49,7 @@ public sealed class TestDb : IAsyncDisposable
             return db;
         }
 
+        if (postgresSource is not null) throw new NotSupportedException("postgresSource 只在 PostgreSQL 模式使用");
         db._sqlite = new SqliteConnection("DataSource=:memory:");
         await db._sqlite.OpenAsync();
         // 從已 migrate 的範本整份複製，不必每個測試重跑 75 個 migration；後面的 MigrateAsync 只剩檢查歷程
