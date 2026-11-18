@@ -235,7 +235,7 @@ WebAPITests.Dynamic.ConversionFixedValueTests	18
 WebAPITests.Dynamic.CrmDesignCaseAppTests	135
 WebAPITests.Dynamic.CrmMasterTests	58
 WebAPITests.Dynamic.CrmSalesAppTests	98
-WebAPITests.Dynamic.DemoDataApiTests	529
+WebAPITests.Dynamic.DemoDataApiTests	230
 WebAPITests.Dynamic.DemoTemplatesTests	50
 WebAPITests.Dynamic.DepartmentsApiTests	7
 WebAPITests.Dynamic.EntitiesApiTests	7

@@ -27,12 +27,69 @@ public sealed class DemoGenerationCollection
 }
 
 /// <summary>Demo 資料的背景產生、狀態與產生端點、啟動時自動產生。</summary>
-/// <remarks>每個測試自己的 TestApp：Demo 模組代碼固定，共用會互相撞。</remarks>
+/// <remarks>
+/// Demo 模組代碼固定，不同 TestApp 不能共用資料庫，所以分兩類：
+/// 需要完整產生結果、只讀它的測試共用類別 fixture 的一份產生（<see cref="DemoGeneratedFixture"/>，把「產生中」的觀察與放行階段都在那一次產生裡做完）；
+/// 不需要產生的測試、與必須從啟動設定觸發產生的 <c>SeedOnStartup_True</c> 各自建 TestApp。
+/// </remarks>
 [Collection(DemoGenerationCollection.Name)]
-public sealed class DemoDataApiTests
+public sealed class DemoDataApiTests(DemoDataApiTests.DemoGeneratedFixture gen) : IClassFixture<DemoDataApiTests.DemoGeneratedFixture>
 {
     private const string Status = $"{Base}/demo-data";
     private const string Generate = $"{Base}/demo-data/generate";
+
+    /// <summary>
+    /// 整個類別只產生一次的 Demo：POST 觸發，並依序停在兩個關卡錄下「產生中」的觀察（重複觸發 409、狀態 running、背景身分與時間），
+    /// 放行後等到 generated。觀察值只記錄、不在這裡斷言，由各測試各自斷言（初始化期間只有逾時等基礎設施錯誤會拋出）。
+    /// </summary>
+    public sealed class DemoGeneratedFixture : IAsyncLifetime
+    {
+        internal DemoApp App { get; } = new(fileDatabase: true);
+        internal HttpClient Admin { get; private set; } = null!;
+
+        public HttpStatusCode FirstPostStatus { get; private set; }
+        public JsonElement FirstPostBody { get; private set; }
+        public HttpStatusCode SecondPostStatus { get; private set; }
+        public JsonElement SecondPostBody { get; private set; }
+        public JsonElement StatusWhileRunning { get; private set; }
+        public (string? UserId, DateTime? Now, bool HasHttpContext, string? RequestMarker) Inside { get; private set; }
+        public JsonElement Probe { get; private set; }
+        public DateTime ProbeAt { get; private set; }
+        public JsonElement Final { get; private set; }
+
+        public async Task InitializeAsync()
+        {
+            App.AddUsers("guest01"); // 產生器自己會建 sales01，產生中還看不到，探針用先建好的帳號
+            App.Gate.When = r => r is GenerateDemoDataRequest; // 關卡一：交易開始、還沒寫入就停住
+            App.Gate2.When = _ => ActingScope.Now is not null; // 關卡二：時間線第一步，身分與時間都被覆寫
+            Admin = App.AsUser();
+
+            var first = await Admin.PostAsync(Generate, null);
+            FirstPostStatus = first.StatusCode;
+            FirstPostBody = await JsonOf(first);
+            await App.Gate.Entered.Task.WaitAsync(TimeSpan.FromSeconds(30));
+
+            var second = await Admin.PostAsync(Generate, null);
+            SecondPostStatus = second.StatusCode;
+            SecondPostBody = await JsonOf(second);
+            StatusWhileRunning = await JsonOf(await Admin.GetAsync(Status));
+
+            App.Gate.Release.SetResult();
+            await App.Gate2.Entered.Task.WaitAsync(TimeSpan.FromSeconds(60));
+            Inside = App.Gate2.Seen;
+            Probe = await JsonOf(await App.AsUser("guest01").GetAsync(DemoApp.ProbePath));
+            ProbeAt = DateTime.Now;
+
+            App.Gate2.Release.SetResult();
+            Final = await PollUntilDone(Admin);
+        }
+
+        public Task DisposeAsync()
+        {
+            App.Dispose();
+            return Task.CompletedTask;
+        }
+    }
 
     [Fact]
     public async Task Status_FreshDb_NotGenerated()
@@ -48,41 +105,29 @@ public sealed class DemoDataApiTests
     [Fact]
     public async Task Generate_ThenPollUntilGenerated()
     {
-        using var app = new DemoApp(fileDatabase: true);
-        var admin = app.AsUser();
+        gen.FirstPostStatus.Should().Be(HttpStatusCode.OK);
+        gen.FirstPostBody.GetProperty("state").GetString().Should().Be("running");
 
-        var res = await admin.PostAsync(Generate, null);
-        res.StatusCode.Should().Be(HttpStatusCode.OK);
-        (await JsonOf(res)).GetProperty("state").GetString().Should().Be("running");
-
-        var s = await PollUntilDone(admin);
+        var s = gen.Final;
         s.GetProperty("state").GetString().Should().Be("generated", s.ToString());
         s.GetProperty("total").GetInt32().Should().BePositive();
         s.GetProperty("done").GetInt32().Should().Be(s.GetProperty("total").GetInt32());
 
-        var menu = (await JsonOf(await admin.GetAsync($"{Base}/menu"))).GetRawText();
+        var menu = (await JsonOf(await gen.Admin.GetAsync($"{Base}/menu"))).GetRawText();
         menu.Should().Contain("\"mes-repair\"").And.Contain("\"mes-quality\"");
-        (await app.AsUser("floor01").GetAsync($"{Base}/me")).StatusCode.Should().Be(HttpStatusCode.OK);
+        (await gen.App.AsUser("floor01").GetAsync($"{Base}/me")).StatusCode.Should().Be(HttpStatusCode.OK);
     }
 
     [Fact]
-    public async Task Generate_WhileRunning_409()
+    public void Generate_WhileRunning_409()
     {
-        using var app = new DemoApp(fileDatabase: true);
-        app.Gate.When = r => r is GenerateDemoDataRequest; // 交易開始、還沒寫入就停住
-        var admin = app.AsUser();
+        gen.FirstPostStatus.Should().Be(HttpStatusCode.OK);
+        gen.SecondPostStatus.Should().Be(HttpStatusCode.Conflict);
+        gen.SecondPostBody.GetProperty("message").GetString().Should().Be("Demo 資料產生中，請稍候");
+        gen.StatusWhileRunning.GetProperty("state").GetString().Should().Be("running");
 
-        (await admin.PostAsync(Generate, null)).StatusCode.Should().Be(HttpStatusCode.OK);
-        await app.Gate.Entered.Task.WaitAsync(TimeSpan.FromSeconds(30));
-
-        var second = await admin.PostAsync(Generate, null);
-        second.StatusCode.Should().Be(HttpStatusCode.Conflict);
-        (await JsonOf(second)).GetProperty("message").GetString().Should().Be("Demo 資料產生中，請稍候");
-        (await JsonOf(await admin.GetAsync(Status))).GetProperty("state").GetString().Should().Be("running");
-
-        app.Gate.Release.SetResult();
-        (await PollUntilDone(admin)).GetProperty("state").GetString().Should().Be("generated");
-        using var scope = app.Services.CreateScope();
+        gen.Final.GetProperty("state").GetString().Should().Be("generated");
+        using var scope = gen.App.Services.CreateScope();
         scope.ServiceProvider.GetRequiredService<DynamicDbContext>().Set<Module>().AsNoTracking()
             .Count(m => m.Key == "mes-order").Should().Be(1);
     }
@@ -90,12 +135,9 @@ public sealed class DemoDataApiTests
     [Fact]
     public async Task Generate_AfterGenerated_409WithConflicts()
     {
-        using var app = new DemoApp(fileDatabase: true);
-        var admin = app.AsUser();
-        (await admin.PostAsync(Generate, null)).EnsureSuccessStatusCode();
-        (await PollUntilDone(admin)).GetProperty("state").GetString().Should().Be("generated");
+        gen.Final.GetProperty("state").GetString().Should().Be("generated");
 
-        var res = await admin.PostAsync(Generate, null);
+        var res = await gen.Admin.PostAsync(Generate, null);
 
         res.StatusCode.Should().Be(HttpStatusCode.Conflict);
         var body = await JsonOf(res);
@@ -165,26 +207,17 @@ public sealed class DemoDataApiTests
     [Fact]
     public async Task WhileGenerating_OtherRequest_SeesOwnIdentityAndRealTime()
     {
-        using var app = new DemoApp(fileDatabase: true); // in-memory 共用快取會在產生中鎖住 Dynamic_AppUser，其他請求讀不到
-        app.AddUsers("guest01"); // 產生器自己會建 sales01，產生中還看不到，探針用先建好的帳號
-        app.Gate.When = _ => ActingScope.Now is not null; // 時間線第一步：身分與時間都被覆寫
-        var admin = app.AsUser();
-
-        (await admin.PostAsync(Generate, null)).StatusCode.Should().Be(HttpStatusCode.OK);
-        await app.Gate.Entered.Task.WaitAsync(TimeSpan.FromSeconds(60));
-        var inside = app.Gate.Seen;
+        var inside = gen.Inside; // 產生中（關卡二）錄下的背景流程所見
         inside.UserId.Should().NotBeNullOrEmpty();
         inside.Now!.Value.Should().BeBefore(DateTime.Today);
         inside.HasHttpContext.Should().BeFalse("背景流程不該帶著觸發它的 HTTP 請求");
         inside.RequestMarker.Should().BeNull("觸發端的 AsyncLocal 不該流進背景流程（ExecutionContext.SuppressFlow）");
 
-        var probe = await JsonOf(await app.AsUser("guest01").GetAsync(DemoApp.ProbePath));
-        probe.GetProperty("userId").GetString().Should().Be("guest01");
-        probe.GetProperty("now").GetDateTime().Should().BeCloseTo(DateTime.Now, TimeSpan.FromMinutes(1));
+        gen.Probe.GetProperty("userId").GetString().Should().Be("guest01");
+        gen.Probe.GetProperty("now").GetDateTime().Should().BeCloseTo(gen.ProbeAt, TimeSpan.FromMinutes(1));
 
-        app.Gate.Release.SetResult();
-        (await PollUntilDone(admin)).GetProperty("state").GetString().Should().Be("generated");
-        var me = await JsonOf(await app.AsUser("sales01").GetAsync($"{Base}/me"));
+        gen.Final.GetProperty("state").GetString().Should().Be("generated");
+        var me = await JsonOf(await gen.App.AsUser("sales01").GetAsync($"{Base}/me"));
         me.GetProperty("userId").GetString().Should().Be("sales01");
     }
 
@@ -212,7 +245,7 @@ public sealed class DemoDataApiTests
     }
 
     /// <summary>可設定 Demo:SeedOnStartup、可在 pipeline 裡卡住背景產生，並提供一個回報目前身分與時間的探針端點。</summary>
-    private sealed class DemoApp : TestApp
+    internal sealed class DemoApp : TestApp
     {
         public const string ProbePath = "/test/acting";
 
@@ -229,6 +262,7 @@ public sealed class DemoDataApiTests
 
         public bool SeedOnStartup { get; init; }
         public DemoGate Gate { get; } = new();
+        public DemoGate Gate2 { get; } = new();
 
         protected override void ConfigureWebHost(IWebHostBuilder builder)
         {
@@ -237,6 +271,7 @@ public sealed class DemoDataApiTests
             builder.ConfigureServices(s =>
             {
                 s.AddSingleton(Gate);
+                s.AddSingleton(Gate2);
                 s.AddTransient(typeof(IPipelineBehavior<,>), typeof(GateBehavior<,>));
                 s.AddTransient<IStartupFilter, ProbeStartupFilter>();
             });
@@ -244,12 +279,13 @@ public sealed class DemoDataApiTests
 
         protected override void Dispose(bool disposing)
         {
-            Gate.Release.TrySetResult(); // 測試中途失敗也不讓背景流程永遠卡住
+            Gate.Release.TrySetResult();
+            Gate2.Release.TrySetResult(); // 測試中途失敗也不讓背景流程永遠卡住
             base.Dispose(disposing);
         }
     }
 
-    private sealed class DemoGate
+    internal sealed class DemoGate
     {
         private int _hit;
 
@@ -270,13 +306,13 @@ public sealed class DemoDataApiTests
         }
     }
 
-    private sealed class GateBehavior<TReq, TRes>(DemoGate gate, IHttpContextAccessor http) : IPipelineBehavior<TReq, TRes>
+    private sealed class GateBehavior<TReq, TRes>(IEnumerable<DemoGate> gates, IHttpContextAccessor http) : IPipelineBehavior<TReq, TRes>
         where TReq : notnull
     {
         public async Task<TRes> Handle(TReq request, RequestHandlerDelegate<TRes> next, CancellationToken ct)
         {
             if (request is StartDemoDataRequest) DemoGate.RequestMarker.Value = "start-request";
-            await gate.PassAsync(request, http);
+            foreach (var gate in gates) await gate.PassAsync(request, http);
             return await next();
         }
     }
