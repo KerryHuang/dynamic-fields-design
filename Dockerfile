@@ -8,7 +8,14 @@ COPY frontend/package.json frontend/bun.lock ./
 RUN bun install --frozen-lockfile --ignore-scripts
 COPY shared/ /work/shared/
 COPY frontend/ ./
-RUN bunx quasar prepare && bunx quasar build
+# 前端版本與後端同一組 build-arg（quasar.config.ts 的 defineEnv；GIT_COMMIT 退回 RENDER_GIT_COMMIT）
+ARG APP_VERSION=""
+ARG GIT_COMMIT=""
+ARG BUILD_TIME=""
+ARG RENDER_GIT_COMMIT=""
+# source map（hidden）移出要對外提供的 dist/spa，另放 /work/sourcemaps 給維運還原呼叫框（設計 T9）
+RUN export BUILD_TIME="${BUILD_TIME:-$(date -u +%Y-%m-%dT%H:%M:%SZ)}" && bunx quasar prepare && bunx quasar build \
+    && cp -r dist/spa /work/sourcemaps && find /work/sourcemaps -type f ! -name '*.map' -delete && find dist/spa -name '*.map' -delete
 
 FROM mcr.microsoft.com/dotnet/sdk:8.0 AS backend
 WORKDIR /src
@@ -26,6 +33,7 @@ FROM mcr.microsoft.com/dotnet/aspnet:8.0
 WORKDIR /app
 COPY --from=backend /app ./
 COPY --from=frontend /work/frontend/dist/spa ./wwwroot
+COPY --from=frontend /work/sourcemaps ./sourcemaps
 # SQLite 放容器內：免費方案沒有永久磁碟，重啟後回到種子資料
 ENV ConnectionStrings__Dynamic="Data Source=/app/data/poc.db" \
     ASPNETCORE_ENVIRONMENT=Production \
