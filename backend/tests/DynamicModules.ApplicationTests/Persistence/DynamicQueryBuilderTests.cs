@@ -167,32 +167,56 @@ public class DynamicQueryBuilderTests
     }
 
     [Fact]
-    public async Task Build_DateParametersAreDateTime2()
+    public async Task Build_DateParametersAreDateTime2_AndMatchTheSameRowsAsBefore()
     {
-        // Dapper 預設把 DateTime 設成 DbType.DateTime，Npgsql 會當 timestamptz 而拒收牆上時間；日期篩選的參數一律 DateTime2（設計 §5.5）
-        var filter = new ConditionGroup(true,
-        [
-            new FieldCondition(F(1, FieldType.Date), FilterOperator.WithinNextDays, [], 7),
-            new FieldCondition(F(2, FieldType.DateTime), FilterOperator.BeforeToday, [], null),
-            new FieldCondition(F(3, FieldType.Date), FilterOperator.Eq, [new IndexValue(0, null, null, new DateTime(2026, 11, 3), null)], null),
-        ]);
-        var (_, pageSql, parameters) = DynamicQueryBuilder.Build(Q(filter), new SqliteDialect());
-
+        // Dapper 預設把 DateTime 設成 DbType.DateTime，Npgsql 會當 timestamptz 而拒收牆上時間；日期篩選的參數一律 DateTime2（設計 §5.5）。
+        // 資料用 EF 寫進 SQLite 的實際格式（yyyy-MM-dd HH:mm:ss.FFFFFFF，見 RecordQueryTests.Query_DateParameterMatchesEfStoredFormat）
         await using var connection = new CapturingConnection();
         await connection.OpenAsync();
         await connection.ExecuteAsync(
             """CREATE TABLE "Dynamic_Record" ("Id" INTEGER, "ModuleId" INTEGER, "DeleteFlag" INTEGER, "OwnerUserId" TEXT, "Title" TEXT)""");
         await connection.ExecuteAsync(
             """CREATE TABLE "Dynamic_RecordIndex" ("RecordId" INTEGER, "FieldId" INTEGER, "Seq" INTEGER, "TextValue" TEXT, "NumberValue" REAL, "DateValue" TEXT, "RefKey" TEXT)""");
-        connection.Captured = null;
-        await connection.QueryAsync(pageSql, parameters);
+        // 欄位 1 日期、2 日期時間、3 日期；今天 2026-11-03
+        (long Record, long Field, string Value)[] rows =
+        [
+            (1, 1, "2026-11-02 00:00:00"), (1, 2, "2026-11-02 23:59:00"), (1, 3, "2026-11-03 00:00:00"),
+            (2, 1, "2026-11-03 00:00:00"), (2, 2, "2026-11-03 00:00:00"), (2, 3, "2026-11-04 00:00:00"),
+            (3, 1, "2026-11-10 00:00:00"), (3, 2, "2026-11-02 23:59:59.5"),
+            (4, 1, "2026-11-11 00:00:00"), (4, 2, "2026-11-04 08:00:00"), (4, 3, "2026-11-02 00:00:00"),
+        ];
+        for (var id = 1; id <= 4; id++)
+            await connection.ExecuteAsync("""INSERT INTO "Dynamic_Record" VALUES (@id, 1, 0, 'admin', 't')""", new { id });
+        foreach (var (record, field, value) in rows)
+            await connection.ExecuteAsync("""INSERT INTO "Dynamic_RecordIndex" VALUES (@record, @field, 0, NULL, NULL, @value, NULL)""",
+                new { record, field, value });
 
-        var sent = connection.Captured!.Parameters.Cast<SqliteParameter>().ToDictionary(p => p.ParameterName.TrimStart('@'));
-        foreach (var name in new[] { "v0_0", "v0_1", "v1_0", "v2_0" })
+        async Task<long[]> Run(FieldCondition condition, params string[] dateParams)
         {
-            sent[name].Value.Should().BeOfType<DateTime>();
-            sent[name].DbType.Should().Be(DbType.DateTime2, name);
+            var (_, pageSql, parameters) = DynamicQueryBuilder.Build(Q(condition), new SqliteDialect());
+            connection.Captured = null;
+            var ids = (await connection.QueryAsync<long>(pageSql, parameters)).Order().ToArray();
+            var sent = connection.Captured!.Parameters.Cast<SqliteParameter>().ToDictionary(p => p.ParameterName.TrimStart('@'));
+            foreach (var name in dateParams)
+            {
+                sent[name].Value.Should().BeOfType<DateTime>();
+                sent[name].DbType.Should().Be(DbType.DateTime2, name);
+            }
+            // 改動前的參數（同值、不指定 DbType）命中同一批記錄
+            var before = new DynamicParameters();
+            foreach (var name in parameters.ParameterNames) before.Add(name, parameters.Get<object>(name));
+            (await connection.QueryAsync<long>(pageSql, before)).Order().Should().Equal(ids);
+            return ids;
         }
+
+        // >= 11-03 00:00 且 < 11-11 00:00：含今天、含第 7 天，不含昨天與第 8 天
+        (await Run(new FieldCondition(F(1, FieldType.Date), FilterOperator.WithinNextDays, [], 7), "v0_0", "v0_1"))
+            .Should().Equal(2, 3);
+        // < 11-03 00:00：前一天 23:59:59.5 算，今天 00:00 不算
+        (await Run(new FieldCondition(F(2, FieldType.DateTime), FilterOperator.BeforeToday, [], null), "v0_0"))
+            .Should().Equal(1, 3);
+        (await Run(new FieldCondition(F(3, FieldType.Date), FilterOperator.Eq, [new IndexValue(0, null, null, new DateTime(2026, 11, 3), null)], null), "v0_0"))
+            .Should().Equal(1);
     }
 
     /// <summary>記下 Dapper 建的最後一個指令，用來檢查參數實際送出的 DbType。</summary>

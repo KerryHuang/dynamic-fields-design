@@ -378,6 +378,7 @@ O1 若因為 PostgreSQL 的行為需要改程式（違反「pg0 完成後不改�
 - 新專案 `Persistence.Postgres`、Npgsql、`AddPostgresDatabase`、模型調整（型別、DateTime、collation、三個 filter）、baseline `InitialCreate`（O1 合併後產）、design-time factory、`scripts/db/add-migration.sh`。
 - `PostgresDialect`（`DateBucket` 先不支援）、PostgreSQL 的 `ITransactionManager`（先進 `WriteGate` 再開交易）、`AutoTransactionBehavior=Always` 與閘門的 `SaveChanges` 攔截器、全庫寫入鎖的交易攔截器（同步與非同步、取鎖失敗自己回滾）、`Database:LockTimeoutSeconds`、啟動串行鎖（專用連線、目標資料庫不存在就拒絕啟動）、報表強制 `MemoryOnly`。
 - 逐處確認交易外的 `ExecuteUpdate`／`ExecuteDelete`（§5.6）；池耗盡的例外形狀實測（§5.7）。
+- `CreateRecordHandler` 的擴充資料衝突改成只接 `IsUniqueViolation`（§4）：pg0a 審查時發現這會讓 SQLite 上非唯一鍵的儲存失敗（例如外鍵、觸發器）從 409 變 500，違反 pg0a「SQLite 行為不變」，所以 pg0a 保留原本「有 hostKey 時任何 `DbUpdateException` 都回衝突」，連同 `ExtensionModuleTests` 的對照測試一起在這段改。
 - 文件與規則：`.claude/rules/backend.md` 的 migration 條與「交易內接住非 `SaveChanges` 的資料庫錯誤後不再發 SQL」（§4）、AGENTS.md 架構地圖（Persistence 兩種 provider）、`CONTRIBUTING.md` 的設定說明。改 `.claude/` 後重產 `.agents/` 副本一起 commit。
 - 驗收：`MigrationConsistencyTests` 兩個 provider 都過；§8 第 5、6 項本機走查（手動起 PostgreSQL 容器）。
 - 前置：O1 的 o1b migration 已合併；pg0b 開發期間不和其他會加 migration 的工作並行。

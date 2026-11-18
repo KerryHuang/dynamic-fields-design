@@ -15,7 +15,8 @@ public sealed class DatabaseErrors : IDatabaseErrors
 
     // SQLite 主錯誤碼與擴充錯誤碼
     private const int SqliteBusy = 5, SqliteLocked = 6, SqliteInterrupt = 9, SqliteConstraint = 19;
-    private const int SqliteConstraintPrimaryKey = 1555, SqliteConstraintUnique = 2067;
+    // 三者的訊息都是 "UNIQUE constraint failed"（與改寫前比對訊息的判斷等價）；ROWID 是沒有 INTEGER PRIMARY KEY 的表 rowid 撞號
+    private const int SqliteConstraintPrimaryKey = 1555, SqliteConstraintUnique = 2067, SqliteConstraintRowId = 2579;
 
     // PostgreSQL SQLSTATE
     private const string PgUniqueViolation = "23505", PgNumericOverflow = "22003", PgQueryCanceled = "57014";
@@ -29,7 +30,7 @@ public sealed class DatabaseErrors : IDatabaseErrors
     public bool IsUniqueViolation(Exception exception) => Any(exception, e => e switch
     {
         SqliteException s => s.SqliteErrorCode == SqliteConstraint
-            && s.SqliteExtendedErrorCode is SqliteConstraintUnique or SqliteConstraintPrimaryKey,
+            && s.SqliteExtendedErrorCode is SqliteConstraintUnique or SqliteConstraintPrimaryKey or SqliteConstraintRowId,
         DbException d => d.SqlState == PgUniqueViolation,
         _ => false,
     });
