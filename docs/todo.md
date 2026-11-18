@@ -7,7 +7,7 @@
 自動駕駛等 CI、部署、審查時的空檔候選：依賴已滿足、範圍小、可隨時暫停。每項寫目標與驗收｜依賴｜基準 SHA｜預計路徑｜資源｜可暫停點｜狀態｜owner；做完刪掉，從下方「其他」挑新的補上。
 
 - 修正略過標記檢查註解引用的設計章節（a5d 複審 N5）：註解 §6.3 改 §6.1，build 過即可｜依賴：無｜基準 3c024feb｜backend/src（略過標記檢查處）｜CPU 輕｜任一 commit 後｜可開工｜未指派
-- 讓極端日期（如 9999 年）存檔回欄位錯誤而不是 500（tz1 審查 S4）：DateTimeHandler.Normalize 換時區超出範圍時回欄位錯誤，加一個單元測試紅轉綠｜依賴：無｜基準 3c024feb｜backend/src（DateTimeHandler）、backend/tests 對應測試｜本機單一測試類別｜測試寫完或修完｜可開工｜未指派
+- 把 .tmp/ 加進 .gitignore（lifecycle 3.0.0 試用 S5、S7）：使用者層規則把計畫與暫存放 .tmp/，需先 ignore；驗收 `git status` 不再出現 `?? .tmp/`｜依賴：無｜基準 64dfc23c｜.gitignore｜CPU 無｜任何時候｜可開工｜未指派
 - 檢查 xUnit 測試是否還有依賴牆鐘短上限的寫法：唯讀盤點，結果列回本檔｜依賴：無｜基準 3c024feb｜唯讀 backend/tests｜不吃 CPU｜任何時候｜可開工｜未指派
 
 ## 其他
@@ -56,6 +56,5 @@
 - 查前端 vitest 偶發的 unhandled error（Quasar timer）：測試全過但 vitest 以 exit 1 結束，CI 需重跑
 - 啟用 Demo 流程圖範例流程並實際送簽展示（使用者 11-16 裁決）：「採購單（流程圖範例）」改啟用；它目前優先序 0、未稅小計 ≥ 10000，啟用後會攔下 1 萬以上所有採購單，要重排 InventoryScenario 既有送簽情境（大額／一萬以上兩條流程的 Demo 單據），並加幾張走並行分支的送簽單讓進度圖看得到並行
 - 實機看設計頁試算時，有警告的線是否保持警告色（只改了 CSS，未實機驗）
-- 把 .tmp/ 加進 .gitignore：使用者層規則把計畫與暫存放 .tmp/，前提是已 ignore；lifecycle 3.0.0 試用時 S5、S7 都出現 `?? .tmp/`（2026-11-15）
 - 處理專案設定啟用但沒安裝的 dotnet-test plugin：每次 `claude -p` 開頭都印一行警告；裝上或從 .claude/settings.json 拿掉（lifecycle 3.0.0 試用，2026-11-15）
 - 替 .claude/rules/docs.md:9 與 AGENTS.md:49 的清單腳本補退路：沒裝 lifecycle 時沒有 feature_checklist.py，規則又禁手改統計行，只能卡住（lifecycle 3.0.0 試用 S5，2026-11-15）
