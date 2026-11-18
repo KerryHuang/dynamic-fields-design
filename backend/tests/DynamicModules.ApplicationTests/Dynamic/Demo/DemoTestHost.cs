@@ -20,13 +20,13 @@ public sealed class DemoTestHost : IAsyncDisposable
 {
     public static readonly DateOnly Today = new(2026, 11, 5);
 
-    private SqliteTestDb _db = null!;
+    private TestDb _db = null!;
     private ServiceProvider _sp = null!;
     private readonly string _attachmentRoot = Path.Combine(Path.GetTempPath(), $"dm-demo-att-{Guid.NewGuid():N}");
 
     public FakeUser User { get; } = new();
 
-    public SqliteTestDb Db => _db;
+    public TestDb Db => _db;
 
     public IServiceProvider Services => _sp;
 
@@ -42,7 +42,7 @@ public sealed class DemoTestHost : IAsyncDisposable
     /// <param name="configure">在 SP 建好前追加／覆寫註冊（最後註冊者勝出）。</param>
     public static async Task<DemoTestHost> CreateAsync(DateOnly? today = null, Action<IServiceCollection>? configure = null)
     {
-        var host = new DemoTestHost { _db = await SqliteTestDb.CreateAsync() };
+        var host = new DemoTestHost { _db = await TestDb.CreateAsync() };
         await SeedData.EnsureSeededAsync(host._db.Context);
         var services = new ServiceCollection();
         services.AddApplication();

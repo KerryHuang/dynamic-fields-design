@@ -12,7 +12,7 @@ public class ApprovalGraphSchemaTests
     [Fact]
     public async Task ApprovalGraphMigration_AddsColumns()
     {
-        await using var db = await SqliteTestDb.CreateAsync();
+        await using var db = await TestDb.CreateAsync();
         var expected = new Dictionary<string, string[]>
         {
             ["Dynamic_ApprovalFlowVersion"] = ["LayoutJson"],
@@ -35,7 +35,7 @@ public class ApprovalGraphSchemaTests
     [Fact]
     public async Task ApprovalGraphMigration_KeepsExistingStageRunsAndFlows()
     {
-        await using var db = await SqliteTestDb.CreateAsync(migrate: false);
+        await using var db = await TestDb.CreateAsync(migrate: false);
         var migrator = db.Context.GetService<IMigrator>();
         await migrator.MigrateAsync("RemoveMockCustomer");
         var sql = db.Context.Database;
@@ -73,7 +73,7 @@ public class ApprovalGraphSchemaTests
     [Fact]
     public async Task StageRun_BranchKey256_RoundTrips()
     {
-        await using var db = await SqliteTestDb.CreateAsync();
+        await using var db = await TestDb.CreateAsync();
         var branchKey = string.Concat(Enumerable.Repeat("b1/", 86))[..256];
         db.Context.Set<ApprovalInstance>().Add(new ApprovalInstance
         {

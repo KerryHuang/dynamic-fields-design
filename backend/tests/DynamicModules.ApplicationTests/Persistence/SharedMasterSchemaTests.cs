@@ -13,7 +13,7 @@ public class SharedMasterSchemaTests
     [Fact]
     public async Task Migrate_CreatesSharedMasterTablesWithKeys()
     {
-        await using var db = await SqliteTestDb.CreateAsync();
+        await using var db = await TestDb.CreateAsync();
         var expected = new Dictionary<string, string[]>
         {
             ["Dynamic_AppMasterUse"] = ["AppId", "MasterAppId"],
@@ -36,7 +36,7 @@ public class SharedMasterSchemaTests
     [Fact]
     public async Task ExistingApps_GetKindApp_ExistingFieldsAreNotRestricted()
     {
-        await using var db = await SqliteTestDb.CreateAsync(migrate: false);
+        await using var db = await TestDb.CreateAsync(migrate: false);
         var migrator = db.Context.GetService<IMigrator>();
         await migrator.MigrateAsync("RemoveMockMold");
         await db.Context.Database.ExecuteSqlRawAsync(
@@ -53,7 +53,7 @@ public class SharedMasterSchemaTests
     [Fact]
     public async Task Orphan_FieldAndOptionWithSameName_BothFit_DuplicateKindAndNameRejected()
     {
-        await using var db = await SqliteTestDb.CreateAsync();
+        await using var db = await TestDb.CreateAsync();
         var module = await AddModuleAsync(db);
         var field = module.Blocks[0].Fields[0];
         var option = field.Options[0];
@@ -75,7 +75,7 @@ public class SharedMasterSchemaTests
     [InlineData(true, true, false)]
     public async Task Orphan_MustPointAtExactlyOneThing(bool withField, bool withOption, bool withBlock)
     {
-        await using var db = await SqliteTestDb.CreateAsync();
+        await using var db = await TestDb.CreateAsync();
         var module = await AddModuleAsync(db);
         var field = module.Blocks[0].Fields[0];
         db.Context.Set<AppOrphan>().Add(new AppOrphan
@@ -90,7 +90,7 @@ public class SharedMasterSchemaTests
     [Fact]
     public async Task AppGrant_ManualHasNoApp_AppSourcesNeedOne_EachSourceUniquePerAction()
     {
-        await using var db = await SqliteTestDb.CreateAsync();
+        await using var db = await TestDb.CreateAsync();
         var module = await AddModuleAsync(db);
         var app = await AddAppAsync(db, "crm");
         var group = await AddGroupAsync(db, "sales");
@@ -114,7 +114,7 @@ public class SharedMasterSchemaTests
     [Fact]
     public async Task FieldGrant_ManualHasNoApp_UniquePerSource()
     {
-        await using var db = await SqliteTestDb.CreateAsync();
+        await using var db = await TestDb.CreateAsync();
         var module = await AddModuleAsync(db);
         var field = module.Blocks[0].Fields[0];
         var app = await AddAppAsync(db, "crm");
@@ -136,7 +136,7 @@ public class SharedMasterSchemaTests
     [Fact]
     public async Task DeletingGroup_CascadesGrantsAndActionScopes()
     {
-        await using var db = await SqliteTestDb.CreateAsync();
+        await using var db = await TestDb.CreateAsync();
         var module = await AddModuleAsync(db);
         var app = await AddAppAsync(db, "crm");
         var group = await AddGroupAsync(db, "sales");
@@ -158,7 +158,7 @@ public class SharedMasterSchemaTests
     [Fact]
     public async Task MasterUse_DeletingUserCascades_DeletingUsedMasterIsRestricted()
     {
-        await using var db = await SqliteTestDb.CreateAsync();
+        await using var db = await TestDb.CreateAsync();
         var user = await AddAppAsync(db, "crm");
         var master = await AddAppAsync(db, "partner", AppKind.Master);
         db.Context.Set<AppMasterUse>().Add(new AppMasterUse { AppId = user.Id, MasterAppId = master.Id });
@@ -171,12 +171,12 @@ public class SharedMasterSchemaTests
         (await db.Context.Set<App>().AsNoTracking().SingleAsync(a => a.Key == "partner")).Kind.Should().Be(AppKind.Master);
     }
 
-    private static async Task<List<string>> Columns(SqliteTestDb db, string table) =>
+    private static async Task<List<string>> Columns(TestDb db, string table) =>
         await db.Context.Database.SqlQuery<string>($"SELECT name AS Value FROM pragma_table_info({table})").ToListAsync();
 
     private static I18nText Text(string zh) => new([KeyValuePair.Create("zh-TW", zh)]);
 
-    private static async Task<Module> AddModuleAsync(SqliteTestDb db)
+    private static async Task<Module> AddModuleAsync(TestDb db)
     {
         db.Context.Set<DynamicProgram>().Add(new DynamicProgram { ProgramCode = "DYN00001" });
         var module = new Module { Key = "partner", ProgramCode = "DYN00001", NameI18n = Text("往來對象"), Blocks = [new Block()] };
@@ -192,7 +192,7 @@ public class SharedMasterSchemaTests
         return module;
     }
 
-    private static async Task<App> AddAppAsync(SqliteTestDb db, string key, AppKind kind = AppKind.App)
+    private static async Task<App> AddAppAsync(TestDb db, string key, AppKind kind = AppKind.App)
     {
         var app = new App { Key = key, Kind = kind, NameI18n = Text(key), PackageVersion = "1.0.0", FormatVersion = 6, Source = "builtIn", RowVersion = "x" };
         db.Context.Set<App>().Add(app);
@@ -200,7 +200,7 @@ public class SharedMasterSchemaTests
         return app;
     }
 
-    private static async Task<PermissionGroup> AddGroupAsync(SqliteTestDb db, string key)
+    private static async Task<PermissionGroup> AddGroupAsync(TestDb db, string key)
     {
         var group = new PermissionGroup { Key = key, NameI18n = Text(key) };
         db.Context.Set<PermissionGroup>().Add(group);

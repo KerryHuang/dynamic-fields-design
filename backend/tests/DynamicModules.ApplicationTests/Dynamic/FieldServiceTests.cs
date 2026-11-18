@@ -30,7 +30,7 @@ namespace DynamicModules.ApplicationTests.Dynamic;
 
 public class FieldServiceTests : IAsyncLifetime
 {
-    private SqliteTestDb _db = null!;
+    private TestDb _db = null!;
     private ServiceProvider _sp = null!;
 
     private sealed class FakeUser : ICurrentUser { public string UserId => "admin"; }
@@ -43,7 +43,7 @@ public class FieldServiceTests : IAsyncLifetime
 
     public async Task InitializeAsync()
     {
-        _db = await SqliteTestDb.CreateAsync();
+        _db = await TestDb.CreateAsync();
         await SeedData.EnsureSeededAsync(_db.Context);
         await DemoPeople.EnsureAsync(_db.Context);
         var services = new ServiceCollection();

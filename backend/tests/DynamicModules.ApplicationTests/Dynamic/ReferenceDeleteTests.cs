@@ -34,7 +34,7 @@ public class ReferenceDeleteTests : IAsyncLifetime
     private const string Blocked = "還有其他資料參照這筆記錄，不能刪除";
     private const string TooDeep = "連帶刪除超過 5 層，請先手動刪除下層資料";
 
-    private SqliteTestDb _db = null!;
+    private TestDb _db = null!;
     private ServiceProvider _sp = null!;
     private readonly FakeUser _user = new();
 
@@ -48,7 +48,7 @@ public class ReferenceDeleteTests : IAsyncLifetime
 
     public async Task InitializeAsync()
     {
-        _db = await SqliteTestDb.CreateAsync();
+        _db = await TestDb.CreateAsync();
         await SeedData.EnsureSeededAsync(_db.Context);
         await DemoPeople.EnsureAsync(_db.Context);
         var services = new ServiceCollection();

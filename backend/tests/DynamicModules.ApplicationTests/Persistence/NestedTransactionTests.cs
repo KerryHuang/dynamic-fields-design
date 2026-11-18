@@ -10,7 +10,7 @@ public class NestedTransactionTests
     [Fact]
     public async Task Nested_InnerHandleIsNoop_OuterRollbackUndoesAll()
     {
-        await using var db = await SqliteTestDb.CreateAsync();
+        await using var db = await TestDb.CreateAsync();
         var manager = new EfTransactionManager(db.Context);
 
         await using (var outer = await manager.BeginAsync(default))

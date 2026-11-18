@@ -14,7 +14,7 @@ public class SchemaTests
     [Fact]
     public async Task Migrate_CreatesAllDynamicTables()
     {
-        await using var db = await SqliteTestDb.CreateAsync();
+        await using var db = await TestDb.CreateAsync();
 
         var tables = await db.Context.Database
             .SqlQueryRaw<string>("SELECT name AS Value FROM sqlite_master WHERE type = 'table'")
@@ -29,7 +29,7 @@ public class SchemaTests
     [Fact]
     public async Task NumberSequence_Period_Allows20Chars()
     {
-        await using var db = await SqliteTestDb.CreateAsync();
+        await using var db = await TestDb.CreateAsync();
         db.Context.Model.FindEntityType(typeof(NumberSequence))!.FindProperty(nameof(NumberSequence.Period))!
             .GetMaxLength().Should().Be(20);
         db.Context.Set<NumberSequence>().Add(new NumberSequence { ModuleId = 1, FieldId = 1, Period = "p1234567890", NextValue = 1 });
@@ -40,7 +40,7 @@ public class SchemaTests
     [Fact]
     public async Task Schema_HasRecordIndexTableAndIndexes()
     {
-        await using var db = await SqliteTestDb.CreateAsync();
+        await using var db = await TestDb.CreateAsync();
 
         var pk = await db.Context.Database
             .SqlQueryRaw<string>("SELECT name AS Value FROM pragma_table_info('Dynamic_RecordIndex') WHERE pk > 0 ORDER BY pk")
@@ -59,7 +59,7 @@ public class SchemaTests
     [Fact]
     public async Task Schema_HasPermissionTables()
     {
-        await using var db = await SqliteTestDb.CreateAsync();
+        await using var db = await TestDb.CreateAsync();
         var expected = new Dictionary<string, string[]>
         {
             ["Dynamic_PermissionGroup"] = ["Id"],
@@ -87,7 +87,7 @@ public class SchemaTests
     [Fact]
     public async Task Schema_HasTaskTables()
     {
-        await using var db = await SqliteTestDb.CreateAsync();
+        await using var db = await TestDb.CreateAsync();
 
         var tables = await db.Context.Database
             .SqlQueryRaw<string>("SELECT name AS Value FROM sqlite_master WHERE type = 'table'")
@@ -110,7 +110,7 @@ public class SchemaTests
     [Fact]
     public async Task DuplicateRuleTask_SameOccurrenceAndCode_IsRejectedByUniqueIndex()
     {
-        await using var db = await SqliteTestDb.CreateAsync();
+        await using var db = await TestDb.CreateAsync();
         db.Context.Set<TaskItem>().Add(RuleTask(occurrence: 1));
         db.Context.Set<TaskItem>().Add(RuleTask(occurrence: 1));
 
@@ -122,7 +122,7 @@ public class SchemaTests
     [Fact]
     public async Task SameCode_DifferentOccurrence_IsAllowed()
     {
-        await using var db = await SqliteTestDb.CreateAsync();
+        await using var db = await TestDb.CreateAsync();
         db.Context.Set<TaskItem>().Add(RuleTask(occurrence: 1));
         db.Context.Set<TaskItem>().Add(RuleTask(occurrence: 2));
 
@@ -134,7 +134,7 @@ public class SchemaTests
     [Fact]
     public async Task Schema_HasOrganizationTables()
     {
-        await using var db = await SqliteTestDb.CreateAsync();
+        await using var db = await TestDb.CreateAsync();
 
         var tables = await db.Context.Database
             .SqlQueryRaw<string>("SELECT name AS Value FROM sqlite_master WHERE type = 'table'")
@@ -150,7 +150,7 @@ public class SchemaTests
     [Fact]
     public async Task DuplicateDepartmentCode_RejectedByUniqueIndex()
     {
-        await using var db = await SqliteTestDb.CreateAsync();
+        await using var db = await TestDb.CreateAsync();
         db.Context.Set<Department>().Add(new Department { Code = "sales", CreatedUserId = "admin" });
         db.Context.Set<Department>().Add(new Department { Code = "sales", CreatedUserId = "admin" });
 
@@ -162,7 +162,7 @@ public class SchemaTests
     [Fact]
     public async Task Schema_HasApprovalTables()
     {
-        await using var db = await SqliteTestDb.CreateAsync();
+        await using var db = await TestDb.CreateAsync();
 
         var tables = await db.Context.Database
             .SqlQueryRaw<string>("SELECT name AS Value FROM sqlite_master WHERE type = 'table'")
@@ -181,7 +181,7 @@ public class SchemaTests
     [Fact]
     public async Task TwoPendingInstances_SameRecord_Rejected()
     {
-        await using var db = await SqliteTestDb.CreateAsync();
+        await using var db = await TestDb.CreateAsync();
         db.Context.Set<ApprovalInstance>().Add(Instance(ApprovalInstanceStatus.Pending));
         db.Context.Set<ApprovalInstance>().Add(Instance(ApprovalInstanceStatus.Approved));
         await db.Context.SaveChangesAsync();
@@ -220,7 +220,7 @@ public class SchemaTests
     [Fact]
     public async Task Seed_IsIdempotent()
     {
-        await using var db = await SqliteTestDb.CreateAsync();
+        await using var db = await TestDb.CreateAsync();
 
         await SeedData.EnsureSeededAsync(db.Context);
         await SeedData.EnsureSeededAsync(db.Context);
@@ -252,7 +252,7 @@ public class JsonChangeTrackingTests
     [Fact]
     public async Task InPlaceI18nMutation_IsPersisted()
     {
-        await using var db = await SqliteTestDb.CreateAsync();
+        await using var db = await TestDb.CreateAsync();
         db.Context.Set<DynamicProgram>().Add(new DynamicProgram
         {
             ProgramCode = "DYN00001",
@@ -273,7 +273,7 @@ public class JsonChangeTrackingTests
     [Fact]
     public async Task StoredJson_I18nIsFlatObject_ConfigIsCamelCase()
     {
-        await using var db = await SqliteTestDb.CreateAsync();
+        await using var db = await TestDb.CreateAsync();
         db.Context.Set<DynamicProgram>().Add(new DynamicProgram { ProgramCode = "DYN00001" });
         var module = new Module
         {

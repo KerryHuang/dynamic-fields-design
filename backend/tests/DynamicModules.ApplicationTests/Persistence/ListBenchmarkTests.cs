@@ -63,7 +63,7 @@ public class ListBenchmarkTests(ITestOutputHelper output)
     [Fact]
     public async Task List_10k_Records_30_IndexedFields()
     {
-        await using var db = await SqliteTestDb.CreateAsync();
+        await using var db = await TestDb.CreateAsync();
         await SeedData.EnsureSeededAsync(db.Context);
         await DemoPeople.EnsureAsync(db.Context);
         var services = new ServiceCollection();
