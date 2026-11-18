@@ -20,12 +20,14 @@ public sealed class TestDb : IAsyncDisposable
     public CountingCommandInterceptor Counter { get; } = new();
 
     /// <param name="migrate">false 時不套 migration，由測試自己依序套用（驗證既有資料升級；只在 SQLite 有意義，§5.3）。</param>
-    public static async Task<TestDb> CreateAsync(bool migrate = true)
+    /// <param name="restore">給了就用它把資料整份複製進這個庫，取代 migration 範本（例如已產生 Demo 資料的快照）。</param>
+    public static async Task<TestDb> CreateAsync(bool migrate = true, Action<SqliteConnection>? restore = null)
     {
         var db = new TestDb();
         await db._connection.OpenAsync();
         // 從已 migrate 的範本整份複製，不必每個測試重跑 75 個 migration；後面的 MigrateAsync 只剩檢查歷程
-        if (migrate) MigratedDatabaseTemplate.RestoreInto(db._connection);
+        if (restore is not null) restore(db._connection);
+        else if (migrate) MigratedDatabaseTemplate.RestoreInto(db._connection);
         db.Context = new DynamicDbContext(new DbContextOptionsBuilder<DynamicDbContext>()
             .UseSqlite(db._connection, b => b.MigrationsAssembly("DynamicModules.Persistence"))
             .AddInterceptors(db.Counter, WriteGuardInterceptor.Instance)

@@ -157,14 +157,13 @@ public class DemoStructureTests(DemoGeneratedFixture fx)
     }
 }
 
-/// <summary>共用主檔有有效記錄時列為衝突（要軟刪記錄，自己產生一份，一個類別一次）。</summary>
+/// <summary>共用主檔有有效記錄時列為衝突（要軟刪記錄，複製共用的產生結果自己一份）。</summary>
 public class DemoStructureSharedMasterPreflightTests
 {
     [Fact]
     public async Task Preflight_SharedMasterWithLiveRecords_Conflicts_ButNotWhenAllSoftDeleted()
     {
-        await using var host = await DemoTestHost.CreateAsync();
-        (await host.Send(new GenerateDemoDataRequest(DemoTestHost.Today))).IsSuccess.Should().BeTrue();
+        await using var host = await DemoSnapshot.CreateHostAsync();
         var preflight = host.Services.GetRequiredService<DemoPreflight>();
         var db = host.Db.Context;
         var masterModules = await db.Set<Module>().AsNoTracking().Where(m => m.Key.StartsWith("master-")).Select(m => m.Id).ToListAsync();

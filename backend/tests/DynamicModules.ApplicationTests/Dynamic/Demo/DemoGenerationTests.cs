@@ -66,8 +66,9 @@ public class DemoGenerationTests
     [Fact]
     public async Task Generate_SameToday_TwiceOnFreshDbs_IdenticalSnapshot()
     {
-        // 兩份各自獨立的庫；Sqlite 的 async 實為同步，不用 Task.Run 就會依序跑
-        var (hostA, hostB) = (Task.Run(() => Generated(DemoTestHost.Today)), Task.Run(() => Generated(DemoTestHost.Today)));
+        // A 在新庫真的產生；B 是共用快照的複本（快照是另一次在新庫的完整產生），兩次產生結果要相同。
+        // Sqlite 的 async 實為同步，不用 Task.Run 就會依序跑
+        var (hostA, hostB) = (Task.Run(() => Generated(DemoTestHost.Today)), DemoSnapshot.CreateHostAsync());
         await using var a = await hostA;
         await using var b = await hostB;
 
@@ -188,7 +189,8 @@ public class DemoGenerationShiftedTodayTests
     public async Task Generate_ShiftedToday_SameRelativeDates()
     {
         var shifted = DemoTestHost.Today.AddDays(10);
-        var (baseTask, shiftedTask) = (Task.Run(() => DemoGenerated.Create(DemoTestHost.Today)), Task.Run(() => DemoGenerated.Create(shifted)));
+        // 基準（今天）用共用快照的複本，平移後的那份真的產生
+        var (baseTask, shiftedTask) = (DemoSnapshot.CreateHostAsync(), Task.Run(() => DemoGenerated.Create(shifted)));
         await using var baseHost = await baseTask;
         await using var host = await shiftedTask;
 

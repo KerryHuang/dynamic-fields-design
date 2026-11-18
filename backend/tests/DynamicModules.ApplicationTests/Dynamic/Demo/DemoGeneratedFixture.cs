@@ -1,7 +1,6 @@
 using System.Text.Json;
 using DynamicModules.Application.Common;
 using DynamicModules.Application.Common.Acting;
-using DynamicModules.Application.Dynamic.DemoService.Commands.GenerateDemoData;
 using DynamicModules.Application.Dynamic.ModuleService.Data;
 using DynamicModules.Application.Dynamic.ModuleService.Queries.GetModule;
 using DynamicModules.Application.Dynamic.RecordService.Data;
@@ -30,14 +29,11 @@ public sealed class DemoGeneratedFixture : IAsyncLifetime
 
     public async Task InitializeAsync()
     {
-        Host = await DemoTestHost.CreateAsync();
-        Result = await Host.Send(new GenerateDemoDataRequest(DemoTestHost.Today, new SyncProgress(Progress)));
-    }
-
-    /// <summary>Progress&lt;T&gt; 會丟到同步內容非同步回報，這裡用同步版。</summary>
-    private sealed class SyncProgress(List<(int, int)> into) : IProgress<(int, int)>
-    {
-        public void Report((int, int) value) => into.Add(value);
+        // 行程內只產生一次（DemoSnapshot）；這裡拿一份複本，產生結果與回報進度取自那次產生
+        var snapshot = await DemoSnapshot.GetAsync();
+        Result = snapshot.Result;
+        Progress.AddRange(snapshot.Progress);
+        Host = await DemoSnapshot.CreateHostAsync();
     }
 
     public async Task DisposeAsync() => await Host.DisposeAsync();

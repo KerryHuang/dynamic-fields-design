@@ -18,7 +18,7 @@ using Microsoft.Extensions.DependencyInjection;
 
 namespace DynamicModules.ApplicationTests.Dynamic.Demo;
 
-/// <summary>設計案寫入型情境（各自產生新庫、會寫入）共用的輔助。每個測試各自一個類別、各產生一次，才能和共用產生結果的類別平行。</summary>
+/// <summary>設計案寫入型情境（各自複製共用的產生結果、會寫入）共用的輔助。每個測試各自一個類別、各自一份複本，才能互相平行。</summary>
 internal static class DesignCasePlaybook
 {
     internal const string Case = "crm-design-case";
@@ -48,9 +48,7 @@ internal static class DesignCasePlaybook
 
     internal static async Task<(DemoTestHost Host, DynamicRecordResponse Rec, long Review)> PlaybookStart()
     {
-        var host = await DemoTestHost.CreateAsync();
-        var r = await host.Send(new GenerateDemoDataRequest(DemoTestHost.Today));
-        r.IsSuccess.Should().BeTrue(r.Message);
+        var host = await DemoSnapshot.CreateHostAsync();   // 複製共用的產生結果（產生本身另有測試），各自在複本上寫入
         var rec = await Find(host, "控制箱面板改版");
         var detail = (DynamicModules.Application.Dynamic.ModuleService.Data.ModuleDetailResponse)(await As(host, "admin", new DynamicModules.Application.Dynamic.ModuleService.Queries.GetModule.GetModuleRequest(Case))).Data!;
         var status = detail.Blocks.SelectMany(b => b.Fields).Single(f => f.Label.Resolve("zh-TW") == "狀態");
