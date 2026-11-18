@@ -1,6 +1,7 @@
 import { createPinia, setActivePinia } from 'pinia';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { i18n } from 'src/boot/i18n';
+import { recentFailedRequestId } from 'src/services/ops/last-failure';
 import { http, setAuthHandlers, toApiError } from './http';
 
 describe('http', () => {
@@ -131,5 +132,47 @@ describe('toApiError 網路失敗', () => {
   it('取消請求與非 axios 例外不顯示網路錯誤，保留原訊息', () => {
     expect(toApiError({ code: 'ERR_CANCELED', message: 'canceled' })).toEqual({ status: 0, message: 'canceled' });
     expect(toApiError(new TypeError('x is not a function'))).toEqual({ status: 0, message: 'x is not a function' });
+  });
+});
+
+describe('錯誤代碼（request id 前 8 碼）', () => {
+  const RID = '0123456789abcdef0123456789abcdef';
+  afterEach(() => { i18n.global.locale.value = 'zh-TW'; });
+
+  it('toApiError_500_appendsErrorCodeWithFirst8Chars', () => {
+    const e = toApiError({ response: { status: 500, headers: { 'x-request-id': RID }, data: { message: '系統發生錯誤，請稍後再試' } } });
+    expect(e).toEqual({ status: 500, message: '系統發生錯誤，請稍後再試（錯誤代碼：01234567）', requestId: RID });
+  });
+
+  it('toApiError_503_appendsErrorCode（標頭用 AxiosHeaders 的 get，四語）', () => {
+    i18n.global.locale.value = 'en-US';
+    const headers = { get: (n: string) => (n === 'x-request-id' ? RID : undefined) };
+    expect(toApiError({ response: { status: 503, headers, data: { message: 'Busy' } } }).message).toBe('Busy (Error code: 01234567)');
+  });
+
+  it('沒有標頭時取主體的 traceId', () => {
+    expect(toApiError({ response: { status: 500, data: { message: 'm', traceId: RID } } })).toMatchObject({ message: 'm（錯誤代碼：01234567）', requestId: RID });
+  });
+
+  it('toApiError_409_noErrorCode（4xx 不加，只帶 requestId）', () => {
+    expect(toApiError({ response: { status: 409, headers: { 'x-request-id': RID }, data: { message: 'conflict' } } }))
+      .toEqual({ status: 409, message: 'conflict', requestId: RID });
+  });
+
+  it('toApiError_network_noErrorCode（沒有回應就沒有代碼）', () => {
+    expect(toApiError({ code: 'ERR_NETWORK', message: 'Network Error' }).message).toBe('網路連線失敗，請檢查網路後再試');
+  });
+
+  it('toApiError_502WithoutMessage_fallsBackToServerError', () => {
+    const e = toApiError({ response: { status: 502, headers: { 'x-request-id': RID }, data: '<html>Bad Gateway</html>' } });
+    expect(e.message).toBe('系統發生錯誤，請稍後再試（錯誤代碼：01234567）');
+  });
+
+  it('interceptor_recordsFailedRequestId', async () => {
+    http.defaults.adapter = async (config) => Promise.reject({ config, response: { status: 404, headers: { 'x-request-id': RID }, data: {} } });
+    await expect(http.get('/x')).rejects.toMatchObject({ status: 404 });
+    const now = Date.now();
+    expect(recentFailedRequestId(now)).toBe(RID);
+    expect(recentFailedRequestId(now + 30_001)).toBeUndefined();
   });
 });
