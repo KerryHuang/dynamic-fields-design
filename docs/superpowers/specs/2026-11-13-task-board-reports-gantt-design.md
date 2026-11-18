@@ -743,18 +743,507 @@ st1 唯一看得到的變化：政策設定頁依 `PolicyCatalog.All` 多出 A35
 - **平板 820**：完整甘特圖，只能看；點長條開日期編輯對話框（觸控拖細長條容易誤觸）。
 - **手機 390**：不畫時間軸，改成依週分組的清單，每列顯示日期區間與進度，點開編輯。
 
+### 11.5 gt 細則（2026-11-18 併入甘特設計補充草稿）
+
+標記：「（GT-T#）」是技術裁決（主控可推翻）；「（GT-Q#）」是行為類決定，主控照草稿推薦先定、**待使用者確認 2026-11-18**（§11.5.7、§17.6）；其餘沒標的是設計已寫或可由既有條文推出。先決條件：st1、st2 已在 main；kb3 檢視框架已在 main。
+
+#### 11.5.1 gt1 與 gt2 的分界
+
+原則同 st1：**gt1 交出完整、可用 API 驗收的後端契約，加上「任務詳細多開始日」這個最小前端（設計 §20 的 Demo 欄）與既有畫面不壞所需的改動；gt2 只做甘特圖畫面與 Demo 資料。**
+
+| 項目 | 歸屬 |
+|---|---|
+| `Task.StartDate`、migration `TaskStartDate`、建立／修改／子任務建立收開始日、驗證、規則同步 T21 | gt1 |
+| 回應 DTO 加 `startDate`（詳細、清單列、看板卡片） | gt1 |
+| 看板到期區間拖拉推開始日（U12）與卡片提示 | gt1（後端自動發生，提示是看板既有畫面的一行通知） |
+| 任務詳細與新增對話框的「開始日」欄位、時間軸新事件文字 | gt1 |
+| 甘特設定 `TaskGanttConfig`、`task-views` 收 `kind=gantt` | gt1 |
+| `POST /tasks/gantt`、`POST /tasks/{id}/schedule` | gt1 |
+| 前端型別、normalize、`dynamic-api.ts` 新端點與 `kind` 參數 | gt1 |
+| i18n：`tasks.fields.startDate`、`tasks.system.startChanged`／`startFollowedDue`、看板提示一句 | gt1 |
+| 任務頁第三個檢視「甘特圖」、刻度、平移、分組、未排程、四種寬度、日期對話框 | gt2 |
+| 拖拉（整條、兩緣、菱形、未排程拖入、Esc） | gt2 |
+| 甘特檢視存檔、選擇器、設定、分享 | gt2 |
+| Demo 開始日資料 | gt2 |
+| 手冊 | gt1 寫任務詳細的開始日與「改到期日時開始日跟著移」；甘特圖操作在 gt2 |
+
+⚠️ 設計 §20 寫 gt1「任務詳細多開始日」：照這份分界，gt1 看得到的變化是任務詳細與新增對話框多一個欄位、時間軸多兩種記錄、看板拖到較早的到期區間時跳一行提示。
+
+#### 11.5.2 後端契約
+
+路由都在 `api/v3/dynamic` 下，寫入一律 `ITransactionalRequest`（設計）。
+
+##### 11.5.2.1 開始日欄位
+
+- **輸入**：`TaskInput` 尾端加選填 `StartDate`（`DateOnly?`，預設 null，GT-T2）。放最後並給預設值，Demo 與測試裡既有的位置參數呼叫不用改。`POST /tasks`、`POST /records/{id}/tasks`、`POST /tasks/{id}/subtasks` 都收；st2 的子任務表單照舊只給標題、負責人、到期日，API 收開始日不擋（同 st1 收 `description` 的理由）。
+- **PATCH**：`TaskEditParser` 加 `startDate`，寫法同 `dueDate`：沒送不改、送 null 清除、格式錯 400，鍵 `startDate`，訊息沿用 `BadDate`「日期格式必須是 yyyy-MM-dd」。`TaskEdit` 加 `SetStartDate`、`StartDate`。
+- **主管身分**：`Supervised` 只能改負責人，送 `startDate` 走既有的 403 `SupervisorOnlyAssignee`（推得出：U4 主管不能改日期）。
+- **回應**：`TaskDetailResponse`、`TaskSummaryResponse`、`TaskCardResponse` 加 `startDate`（`DateOnly?`）。前端 normalize 缺值補 null。
+
+##### 11.5.2.2 開始日與到期日驗證
+
+一律看**寫入後的那一對值**（GT-T3），兩者都有值且開始日晚於到期日時：
+
+| 情況 | 結果 |
+|---|---|
+| 建立（三支 API）帶的開始日晚於到期日 | 400，鍵 `startDate`，訊息 `StartAfterDue`「開始日不能晚於到期日」；什麼都不建 |
+| PATCH 同時送兩者、開始日晚於到期日 | 400，同上，不寫入 |
+| PATCH 只送開始日、晚於現有到期日 | 400，同上 |
+| PATCH 只送到期日、早於現有開始日 | **開始日跟著改成新到期日**，寫 `startFollowedDue`（GT-Q1） |
+| `schedule`（§11.5.2.6）兩者都送、開始日晚於到期日 | 400，同上 |
+| 清空到期日 | 開始日不動（任務進「未排程」） |
+| 清空開始日 | 照常 |
+
+- 400 用既有的欄位鍵格式（`ServiceResult.Invalid`，鍵 `startDate`），不另開 code；前端依鍵把訊息掛在開始日欄位下。
+- 「只送到期日」的跟隨寫在 `TaskWriter.ApplyAsync`（唯一寫入出口），所以看板到期區間拖拉（U12，設計 §5.3）自動得到同一個行為，不必在 `MoveTaskHandler` 另寫（GT-T6）。
+- 開始日沒有覆寫旗標（設計 §11.1）：人改開始日不設任何旗標；到期日照舊設 `DueOverridden`（規則任務）。開始日被到期日推動時，`DueOverridden` 照「到期日有沒有被人改」判斷，與開始日無關。
+
+##### 11.5.2.3 規則同步 T21
+
+- 只改 `TaskWriter.SyncFromRuleAsync`（規則同步唯一入口，`TaskRuleApplier.ReconcileAsync` 呼叫）：同步改了到期日之後，若 `StartDate > 新到期日`，開始日改成新到期日，寫 `startFollowedDue`（作者 null），與到期日的 `dueChanged` 同一次 `Touch`，`ModifiedBy` null（設計 T21）。
+- 同步把到期日往後移：開始日不動。同步清空到期日（記錄的到期基準欄位被清空）：開始日不動。
+- `DueOverridden=true` 的任務本來就不同步到期日，開始日也不會被動（推得出）。
+- 規則建立的任務沒有開始日（設計 §11.1）；`TaskRuleApplier.Create` 不改。人之後幫規則任務填開始日不設旗標，到期日仍隨記錄同步，同步時照上面推開始日。
+- 規則恢復（`restored` 強制同步）走同一個 `SyncFromRuleAsync`，行為相同。
+
+##### 11.5.2.4 系統記錄事件（GT-T4）
+
+| 代碼 | 時機 | 作者 | `SystemData` |
+|---|---|---|---|
+| `startChanged` | 人直接改開始日（PATCH、schedule、建立後不寫） | 操作者 | `{ from, to }`（yyyy-MM-dd 或 null） |
+| `startFollowedDue` | 到期日改早、開始日被推到新到期日（PATCH 只改到期日、看板拖拉、規則同步） | 操作者；規則同步是 null | `{ from, to }` |
+
+- 寫在 `TaskSystemEvents`；前端 `tasks.system.startChanged`「開始日從「{from}」改為「{to}」」、`tasks.system.startFollowedDue`「到期日提前，開始日從「{from}」改為「{to}」」，四語。
+- 另立 `startFollowedDue`，不併進 `startChanged`：留言串要讓人看出開始日不是有人刻意改的，尤其規則同步時作者是「系統」。
+- 一次 schedule 同時改兩個日期時寫兩筆（`dueChanged`、`startChanged`），同 PATCH 改多欄位時各寫一筆的現行做法（設計 T7：拖拉不另立事件種類）。
+
+##### 11.5.2.5 `POST /tasks/gantt`
+
+**請求**
+
+```json
+{
+  "viewId": 12,
+  "config": { "...": "TaskGanttConfig，見 §11.5.2.7" },
+  "window": { "from": "2026-11-16", "to": "2027-02-14" }
+}
+```
+
+- `viewId` 與 `config` 二擇一，都沒帶是預設甘特圖；兩者都帶 400（同看板 `ResolveAsync`，鍵 `config`，訊息 `SourceBoth`）。`viewId` 看不到或不是甘特檢視 → 404（GT-T9）。
+- `window` 選填（GT-T12）：
+  - 沒帶：伺服器依設定的刻度給預設時間窗，從**本週起始日**（政策 A7）或本月一日起算：日 14 天、週 13 週（91 天）、月 6 個月。
+  - 帶了：`from`、`to` 都要有（含頭含尾），`from <= to`，天數（含頭尾）最多 366。錯了 400，鍵 `window`，訊息 `GanttWindowInvalid`「時間範圍的開始不能晚於結束」或 `GanttWindowTooLong(366)`「時間範圍最多 366 天」。
+  - 上一段／下一段由前端把回應的 `window` 平移同樣長度後送出；「今天」按鈕不帶 `window`。
+  - 時間窗只是「看哪一段」，不是權限邊界，所以收瀏覽器的日期；「今天」由伺服器回（設計 T8 精神：今天不信任瀏覽器）。
+
+**列入條件**（全部都先 AND 可見條件，同看板 `BoardBase`，GT-T16）
+
+1. 可見條件（設計 §4.4，含子任務繼承）。
+2. 範圍：`assigned`、`involved`、`subordinates`、`visible`，相對於打開的人（同看板 §5.7）。
+3. 篩選：沿用看板的 `statuses`、`assigneeUserIds`＋`includeUnassigned`、`creatorUserIds`、`sources`、`keyword`；**不收 `dueRange`**（時間窗取代它，GT-T8）。
+4. `showSubtasks=false` 時只取頂層（同看板）。
+5. 分成兩批：
+   - **時間軸列**：`DueDate != null`，且 `[StartDate ?? DueDate, DueDate]` 與時間窗相交（`DueDate >= from && (StartDate ?? DueDate) <= to`）。有開始日是長條，只有到期日是菱形（設計 §11.2）。
+   - **未排程**：`DueDate == null`（只有開始日、或兩者都沒有），不看時間窗（設計 §11.2）。
+
+**排序**（GT-T14）：時間軸列依 `StartDate ?? DueDate` 遞增、再 `DueDate` 遞增、再 `Id`；未排程依建立時間、`Id`。甘特設定沒有排序選項。
+
+**上限**（GT-T13，技術限制，設計 §14 已列）：時間軸列最多 500 列，超過回前 500 列＋`total`＋`truncated=true`，畫面提示加篩選或縮短時間範圍；未排程最多 100 筆，同樣回 `unscheduledTotal`、`unscheduledTruncated`。
+
+**回應**
+
+```json
+{
+  "today": "2026-11-18",
+  "weekStart": "monday",
+  "window": { "from": "2026-11-16", "to": "2027-02-14" },
+  "scopeAvailable": true,
+  "config": { "...": "實際採用的甘特設定，正規化後" },
+  "rows": [ "TaskCardResponse（含 startDate）" ],
+  "total": 37,
+  "truncated": false,
+  "parents": [ { "id": 5, "title": "規劃活動內容", "visible": true, "row": null } ],
+  "spans": [ { "parentId": 5, "from": "2026-11-10", "to": "2026-12-02" } ],
+  "unscheduled": [ "TaskCardResponse" ],
+  "unscheduledTotal": 3,
+  "unscheduledTruncated": false
+}
+```
+
+- `rows`、`unscheduled` 直接用 `TaskCardResponse`（加 `startDate`），組裝走 `TaskBoardService.CardsAsync`：一次批次評估權限、記錄遮蔽、留言數、子任務進度，看不到的不回（縱深防禦），記錄遮蔽與看板卡片同一個判斷（設計 §4.3，GT-T11）。
+- `weekStart` 是政策 A7 的值，前端畫週刻度與手機週分組用，不另讀政策。
+- `scopeAvailable=false`：範圍是部屬但沒有部屬或 A33 關閉，照開、0 列（同看板 D7）。
+- **分組在前端做**（GT-T10）：伺服器回平鋪的 `rows`，前端依 `config.groupBy` 分組。伺服器只補分組要的兩樣東西：`parents` 與 `spans`。
+
+**`parents`：時間軸列裡的子任務，其父任務不在 `rows` 時才列**（只在 `groupBy=parent` 時回，其他分組回空陣列）
+
+| 父任務的狀況 | `parents[]` 內容 |
+|---|---|
+| 操作者看得到、符合範圍與篩選，只是不在時間窗內（或未排程） | `visible=true`，`row` 是完整的 `TaskCardResponse`（畫面照畫它自己的長條，超出時間窗的部分截掉並標箭頭） |
+| 操作者看得到，但被範圍或篩選排除 | `visible=true`，`row=null`，只有標題（GT-Q2） |
+| 操作者看不到（只看得到子任務，U13） | `visible=false`，`row=null`，只有標題 |
+
+- 標題來源是 `TaskPermissions.Parent`（st1 已有，只給標題與 visible，U13），不另查、不多給。
+- 「符合範圍與篩選」用同一個 `BoardBase` 條件加 `Id IN (父任務 Id)` 一次查，不另寫一套判斷。
+
+**`spans`：子任務跨度**（設計 §11.2；GT-T15）
+
+- 每個子任務的區間是 `[StartDate ?? DueDate, DueDate ?? StartDate]`；兩者都沒有的不算；**已取消的不算**（GT-Q4）。跨度＝最早的起點到最晚的終點；沒有任何可算的子任務就不回這個父任務。
+- **可見性**：
+  - 父任務操作者看得到 → 依設計 §10.3「看得到父任務就看得到全部子任務」，跨度用該父任務**全部**未取消的子任務算，含被篩選、範圍、時間窗排除的（跨度是父任務整件工作的範圍，不是畫面上那幾列的範圍）。資料庫一次 `GROUP BY ParentTaskId` 算 `MIN`／`MAX`。
+  - 父任務操作者看不到（`visible=false`）→ 跨度**只用這次回應 `rows` 裡屬於它的子任務**算，在記憶體裡算；不讀它其他子任務的日期，避免從跨度推出看不到的子任務日期。
+- 只回 `rows` 與 `parents` 裡出現的父任務。
+- SQLite 的 `DateOnly` 存 TEXT（yyyy-MM-dd，字典序就是日期序），PostgreSQL 是 `date`，`MIN`／`MAX` 兩邊結果相同；隨 pg0 雙跑。
+
+**查詢次數**：時間軸列一次、總數一次、未排程一次、未排程總數一次、父任務一次（`ListByIdsAsync`）加符合條件一次、跨度一次、`CardsAsync` 的批次評估與留言數與進度各一次；不隨列數成長（同看板 C18 的要求）。
+
+##### 11.5.2.6 拖拉改日期：`POST /tasks/{id}/schedule`（GT-T7）
+
+不沿用 PATCH：PATCH 目前**沒有版本檢查**（`UpdateTaskHandler` 不收版本，最後寫入者贏），設計 §11.3 要求「併發同 §5.6」。也不擠進 `move`：`move` 的語意是「看板欄」，甘特圖沒有欄。另開一支，寫法照 `MoveTaskHandler`。
+
+- **請求**：`{ startDate: "yyyy-MM-dd" | null, dueDate: "yyyy-MM-dd" | null, expectedVersion: "…" }`。兩個日期**一律都送**（甘特圖手上一定有整對值），null 代表清除；格式錯由模型繫結回 400。
+- **檢查順序**：任務不存在或看不到 404 → 凍結 409 `ModuleGate.ClosedMessage` → 缺 `expectedVersion` 400（`ExpectedVersionRequired`）→ 版本不符 409 code `stale`（`Stale`）→ 沒有編輯權 403（主管身分也是 403：U4 不能改日期）→ 開始日晚於到期日 400 鍵 `startDate`（`StartAfterDue`）→ 兩個值都沒變：不寫入、回 200 與原卡片 → `TryClaimVersionAsync` 認領失敗 409 `stale` → `writer.ApplyAsync`（`SetStartDate`、`SetDueDate` 都為 true）。
+- 到期日有變且是規則任務 → `DueOverridden=true`（設計 §11.3、§5.5，走 `ApplyAsync` 自然得到）；只改開始日不動旗標。
+- **回應**：`{ card: TaskCardResponse }`。不回 `visible`、`undoToken`：改日期不改參與者、記錄、負責人，可見性不會變（推得出：設計 §4.4 的可見條件與日期無關）。
+- 平板的日期對話框、每列的「編輯日期」、未排程的「排程」都走這支；任務詳細對話框照舊走 PATCH（沒有版本檢查是既有行為，不在 gt 範圍，見 11.5.9）。
+
+##### 11.5.2.7 甘特設定 `TaskGanttConfig` 與 `task-views kind=gantt`
+
+**格式**（`Domain/Tasks/TaskGanttConfig.cs`，camelCase，沒給的選填欄位不輸出；GT-T8）
+
+```json
+{
+  "version": 1,
+  "groupBy": "none | parent | assignee",
+  "scope": "assigned | involved | subordinates | visible",
+  "filters": {
+    "statuses": ["todo", "inProgress", "done"],
+    "assigneeUserIds": ["sales01"], "includeUnassigned": true,
+    "creatorUserIds": ["manager01"],
+    "sources": ["personal", "record", "rule"],
+    "keyword": "展"
+  },
+  "scale": "day | week | month",
+  "showSubtasks": true
+}
+```
+
+- `filters` 沿用 `TaskBoardFilters` 型別；寫入時帶 `dueRange` 一律 400「甘特圖用時間範圍，不用到期日區間」。
+- **預設甘特圖**（不存資料表、不能分享，同看板 §5.8）：`groupBy=parent`（設計 §11.2 的預設）、`scope=assigned`、`statuses=[todo, inProgress, done]`（不顯示取消，比照預設看板隱藏取消欄，推得出）、`scale=week`、`showSubtasks` 不給（＝true）。
+- **寫入嚴格、讀取寬鬆、升版規則**：全照設計 §6.1（未知屬性、型別不符、值不合法 400；讀取時忽略未知、不合法退回預設、整份壞掉就是預設甘特圖；新增選填欄位不升 `version`，語意改變才升）。
+- 收合狀態不存設定（GT-T19）：每次打開都展開，避免分享出去後每人的收合互相蓋掉。
+
+**`task-views` 改動**（GT-T9）
+
+| 端點 | 改法 |
+|---|---|
+| `GET /task-views?kind=` | 收 `board`、`gantt`；其他 400 |
+| `POST /task-views` | `kind` 決定用哪種設定解析；沒給設定時存該種的預設 |
+| `GET/PUT /task-views/{id}`、`copy` | 依資料列的 `Kind` 解析或讀取設定；`PUT` 不能改 `Kind` |
+| `PUT shares`、`DELETE`、`share-targets` | 不變（權限、分享對象與看板相同，設計 §6.2、§6.3） |
+| `POST /task-board/columns`、`…/page` 帶甘特檢視的 Id | 404（現在會把甘特設定當看板設定寬鬆讀成預設看板，必須擋） |
+| `POST /tasks/gantt` 帶看板檢視的 Id | 404 |
+
+- 404 而不是 400：前端照 D6 回預設檢視並提示，與「已刪除或不再分享」同一條路。
+- `version` 與 `RowVersion`：`ConfigJson` 裡的 `version` 是格式版本（1）；`Dynamic_TaskView.RowVersion` 是併發版本，`PUT` 不符回 409 `stale`（同看板）。
+- `TaskViewMessages` 的字目前全寫「看板」；甘特檢視用另一組字（「這個甘特圖已刪除或不再分享給你」「甘特圖名稱必填」等），`KindInvalid` 改成「檢視種類必須是 board 或 gantt」。看板既有的字不動（GT-T9）。
+
+##### 11.5.2.8 新增的 `TaskMessages`
+
+`StartAfterDue`「開始日不能晚於到期日」（gt1a）；`GanttWindowInvalid`「時間範圍的開始不能晚於結束」、`GanttWindowTooLong(max)`「時間範圍最多 {max} 天」、`GanttNoDueRange`「甘特圖用時間範圍，不用到期日區間」（gt1b／gt1c）。
+
+##### 11.5.2.9 政策
+
+**不新增政策**（GT-T13）。時間軸列 500、未排程 100、時間窗 366 天是畫面與查詢效能的技術上限，已列進 §14「技術限制」可寫死清單，與看板每欄 500 張（T9）同一類。
+
+⚠️ 主控裁決，待使用者確認 2026-11-18：這三個上限寫死、不做政策。若要可調，補政策 A41 `task.ganttMaxRows`（Integer、S、出廠 500、技術範圍 50–2000；`shared/policy-catalog.json` 與政策設計目前下一個空號是 A41，A38、A39 已被語系包設計暫用，A40 是 st1b 的 `task.notify.subtasksDone`）；時間窗上限不建議做成政策（366 天由「一屏一年」的畫面決定）。
+
+#### 11.5.3 資料
+
+- `Dynamic_Task`（`TaskItem`）加 `StartDate`（`DateOnly?`，SQLite TEXT、PostgreSQL `date`，可空）。既有任務升級後是 null，行為不變（設計 §16）。
+- Migration `TaskStartDate`（設計 §16 已定名），只用 EF 產生。repo 目前只有 SQLite 一份 Migrations，PostgreSQL 那份等 pg0，同 st1 `TaskParent` 的寫法：roadmap gt1 列註明「`TaskStartDate` 只有 SQLite 一份，PostgreSQL 那份隨 pg0」。
+- **不加索引**（GT-T1）：開始日永遠與到期日一起篩（相交條件以 `DueDate` 為主），而且甘特查詢先套可見條件；看板的到期區間查詢現在也沒有 `DueDate` 索引。pg0 雙跑看執行計畫再決定，寫進設計 §21。
+- Repository 新方法（`ITaskRepository`）：
+  - `QueryGanttAsync(TaskBoardQuery q, DateOnly from, DateOnly to, int take)` → `(Items, Total)`：不追蹤、含參與者，排序見 §11.5.2.5。
+  - `QueryUnscheduledAsync(TaskBoardQuery q, int take)` → `(Items, Total)`。
+  - `ListMatchingIdsAsync(TaskBoardQuery q, IReadOnlyCollection<long> ids)` → 符合範圍與篩選的 Id（給 `parents` 判斷）。
+  - `SubtaskSpanAsync(IReadOnlyCollection<long> parentIds)` → `Dictionary<long, (DateOnly From, DateOnly To)>`，一次 `GROUP BY ParentTaskId`，排除已取消。
+- `TaskBoardQuery` 直接重用（`GroupBy`、`SortKey` 在甘特查詢裡不讀）：甘特設定先轉成一份同範圍、同篩選的 `TaskBoardConfig`，交給既有的 `TaskBoardService.ContextAsync` 算可見條件、部屬名單、狀態篩選（GT-T16），不再寫第二套範圍與篩選。
+
+
+#### 11.5.4 畫面規則（gt2）
+
+##### 11.5.4.1 任務頁的第三個檢視
+
+- 標題列「清單／看板／甘特圖」三段切換（設計 §5.8）。網址 `view=gantt&gantt=<id>`，沒有 `gantt` 是預設甘特圖（GT-T20）。
+- 「上次打開哪個甘特圖」記在瀏覽器，鍵與看板分開（`taskGantt.last.<使用者>`），換裝置回預設甘特圖；網址指到的甘特圖讀不到時回預設並提示、清掉記憶（同 D6）。
+- 選擇器、設定、分享沿用看板的元件與規則（D4「套用」只改畫面並標「（未儲存）」、「儲存」才寫回；被分享者只能「另存」，設計 §6.2）。設定對話框的欄位：分組、範圍、篩選（沒有到期日區間）、顯示子任務、預設刻度。
+
+##### 11.5.4.2 版面與寬度（設計 §11.4、T22；GT-T17）
+
+寬度判斷用 Quasar 的視窗斷點，不用容器寬度：1366 開著左側選單時容器剛好落在 1024 附近，用容器寬度會在筆電上誤判成平板。
+
+| 寬度 | 判斷 | 行為 |
+|---|---|---|
+| 桌機 1920、筆電 1366 | `≥ 1024` 且指標是滑鼠或觸控筆 | 左欄任務列 280px＋右側時間軸填滿；可拖拉；點長條開任務詳細 |
+| 平板 820 | `600–1023`，或任何寬度下用觸控 | 左欄 200px＋時間軸；不能拖；點長條開「日期」對話框 |
+| 手機 390 | `< 600` | 不畫時間軸，依週分組的清單（§11.5.4.7） |
+
+- 整頁與時間軸內都不出現橫向捲動（任務設計 §8 第 6 點、設計 §19「畫面」）；任務名在左欄兩行截斷。
+- 列高 36px；500 列不做虛擬捲動，直向捲整頁（GT-T21）。
+- 時間軸用 CSS grid 自畫，不引入套件（設計 §21 允許；GT-T21）。
+
+##### 11.5.4.3 刻度與平移
+
+| 刻度 | 一屏 | 起點 | 上一段／下一段 | 刻度標示 |
+|---|---|---|---|---|
+| 日 | 14 天 | 本週起始日（A7） | ±14 天 | 上排月份、下排日期與星期 |
+| 週 | 13 週 | 本週起始日 | ±13 週 | 上排月份、下排每週起始日 |
+| 月 | 6 個月 | 本月一日 | ±6 個月 | 月份 |
+
+- 換刻度時以目前時間窗的起點所在週（或月）重新起算，不跳回今天；「今天」按鈕回到預設時間窗（不帶 `window`，伺服器算）。
+- 一天的寬度＝時間軸寬 ÷ 天數；長條最小寬 4px（月刻度一天不到 4px）。
+- 工具列顯示目前範圍「2026/11/16 – 2027/02/14」。
+
+##### 11.5.4.4 長條、菱形、今天線
+
+- 有開始日與到期日：長條，從開始日那天的左緣到到期日那天的右緣（含頭含尾）。只有到期日：到期日那天畫菱形。超出時間窗的部分截掉，邊緣畫小箭頭並在滑過時顯示實際日期。
+- 顏色：一般用主色；**逾期（未完成且到期日早於今天，`overdue=true`）標紅**；完成用灰色加刪除線標題；進行中與待辦同色（狀態在左欄標籤上看）。
+- 今天線：伺服器回的 `today` 落在時間窗內才畫，一條直線貫穿所有列，頂端標「今天」。
+- 長條上不寫字（窄長條放不下）；滑過顯示標題、日期區間、負責人、進度。
+
+##### 11.5.4.5 分組
+
+- **依父子**（預設）：父任務一列，子任務縮排在下，父任務列左邊有收合鈕（預設展開）。父任務畫自己的長條，另畫一條淡色、較細的「子任務跨度」（`spans`）；不自動改父任務日期（U12）。父任務列顯示進度「2／4」（設計 §10.5）。
+  - 子任務在結果裡、父任務不在：父任務以**淡色分組標題**出現，只有標題與子任務跨度，不畫自己的長條、不能拖、不算進列數；看得到父任務時點標題開父任務詳細，看不到時不能點（GT-Q2、U13）。
+  - 獨立任務是沒有子列的頂層列。
+- **依負責人**：每位負責人一組，組名是姓名（停用的加「（已停用）」），依姓名排序，「未指派」最後；只列有任務的人（甘特圖不能在組間拖，沒有「拖給閒的人」的需求，所以不比照看板 T6 列出全部部屬，推得出：設計 §11.3 拖拉只改日期）。
+- **不分組**：平鋪。
+- 組與組的順序：依組內第一列在伺服器排序裡的位置。
+
+##### 11.5.4.6 未排程
+
+- 時間軸下方「未排程（N）」區，列出 `unscheduled`；超過 100 筆提示「還有 N 筆，請加上篩選」。
+- 只有開始日的任務在標題旁標出開始日。
+- 桌機可把它拖進時間軸任一天：開始日與到期日都設成那天（設計 §11.2）；平板與鍵盤用每列的「排程」鈕開日期對話框；手機點開任務詳細。
+- 依父子分組時，沒有日期的父任務同時出現在「未排程」與它子任務的分組標題上（推得出：兩條設計規則都成立；分組標題只是脈絡）。
+
+##### 11.5.4.7 手機：依週分組的清單
+
+- 時間窗固定 4 週（從本週起始日起，上一段／下一段 ±4 週），不顯示刻度切換；分組設定在手機上不用（設計 §11.4 指定依週分組）。
+- 每週一個標題「11/16 – 11/22」（依 `weekStart`）。跨好幾週的任務**只出現在一週**：開始那週；開始日早於時間窗時放在第一週（GT-Q3）。
+- 每列：標題（兩行截斷）、日期區間「11/18 → 11/25」或里程碑「◆ 11/25」（逾期標紅）、狀態標籤、子任務進度；子任務上方小字顯示父任務標題（同看板卡片）。
+- 點一列開任務詳細（設計 §11.4「點開編輯」），在詳細裡改日期。
+- 最下方「未排程（N）」可展開。
+
+##### 11.5.4.8 拖拉（桌機、筆電）
+
+- **整條**：開始日與到期日一起平移同樣天數（設計 §11.3）。**左緣**改開始日、**右緣**改到期日；拖過另一端時夾在另一端（開始日＝到期日），不會出現開始日晚於到期日。**菱形**：改到期日。
+- 門檻、手感沿用看板 `use-card-drag.ts` 的常數（移動 5px 才算拖）；以天為單位對齊格線。
+- 拖拉中在指標旁顯示新日期小提示「11/20（三）→ 11/28（四）・9 天」；**Esc 取消**，長條回原位、不送請求（設計 §11.3）；`pointercancel` 同 Esc。
+- 放開：先樂觀更新長條，送 `schedule`（帶卡片的 `version`）；成功後用回傳的卡片取代，並重新整理甘特查詢（跨度要重算）；409 `stale` → 放回原位、提示「任務已被別人修改，已重新整理」、重新查詢；400／403 → 放回原位並顯示伺服器訊息（設計 §5.6）。
+- 同一個任務的請求沒回來前，再拖它不會送出（同 kb3 主控裁決）。
+- 不能改的列（`canEdit=false`：只有主管身分、沒有權限、凍結）：沒有拖拉把手，游標顯示禁止；點長條照常開任務詳細。
+- 上下拖不換組、不改負責人（設計 §11.3 只改日期）。
+- 改到期日的規則任務照設 `DueOverridden`（後端處理），甘特圖不另提示（看板只有「清空到期日」才提示，設計 §5.5）。
+
+##### 11.5.4.9 日期對話框（平板、鍵盤路徑）
+
+- 平板點長條、或任何寬度按列尾的「編輯日期」鈕（鍵盤可 Tab 到，是不拖拉時的路徑，比照看板 D2 的「移到…」）開啟。
+- 內容：開始日、到期日兩個日期欄（可清空），開始日晚於到期日時欄位下即時顯示「開始日不能晚於到期日」且「儲存」不能按。
+- 儲存走 `schedule`，409／400 的處理同 §11.5.4.8。兩個都清空＝移到「未排程」。
+- 未排程的「排程」鈕開同一個對話框。
+
+#### 11.5.5 驗收案例
+
+身分沿用測試基底：`admin`、`sales01`、`sales02`（業務部，模組有 Read／Edit）、`manager01`（主管，A33 開，管業務部）、`outsider`（看不到該記錄、與任務無關）。日期以「今天＝2026-11-18（星期三），A7＝星期一」為例。
+
+##### 11.5.5.1 開始日（gt1a）
+
+- **G1 建立帶開始日**：sales01 `POST /tasks {title, startDate:"2026-11-20", dueDate:"2026-11-25"}` → 201，詳細 `startDate=2026-11-20`；留言串只有 `created`。
+- **G2 建立時開始日晚於到期日**：`startDate:"2026-11-26", dueDate:"2026-11-25"` → 400 鍵 `startDate`「開始日不能晚於到期日」，沒有任務被建立。三支建立 API（個人、記錄、子任務）各驗一次。
+- **G3 只有開始日**：建立 `startDate` 有、`dueDate` 沒有 → 201。
+- **G4 格式錯**：`startDate:"2026/11/20"`（PATCH）→ 400 鍵 `startDate`「日期格式必須是 yyyy-MM-dd」。
+- **G5 PATCH 只改開始日、晚於到期日**：任務 11/20–11/25，PATCH `{startDate:"2026-11-27"}` → 400，任務不變。
+- **G6 PATCH 兩者都送、矛盾**：`{startDate:"2026-11-27", dueDate:"2026-11-26"}` → 400，任務不變。
+- **G7 PATCH 只改到期日、早於開始日**（GT-Q1）：任務 11/20–11/25，PATCH `{dueDate:"2026-11-19"}` → 200，`startDate=dueDate=2026-11-19`；留言串多 `dueChanged`、`startFollowedDue`（作者 sales01、`{from:"2026-11-20", to:"2026-11-19"}`）。
+- **G8 清空到期日**：PATCH `{dueDate:null}` → 開始日不變。
+- **G9 規則任務改開始日不設旗標**：規則任務 PATCH `{startDate:…}` → `DueOverridden`、`AssigneeOverridden` 都不變；之後記錄的到期基準改了，到期日照常同步。
+- **G10 主管不能改日期**：manager01 只因主管範圍看得到（`supervised=true`）→ PATCH `{startDate:…}` 403「你以主管身分只能改負責人」。
+- **G11 DTO**：詳細、「我的任務」清單列、看板卡片都有 `startDate`；升級前的任務是 null。
+- **G12 前端**：任務詳細與新增對話框有「開始日」；開始日晚於到期日時欄位下即時顯示錯誤、不能儲存；伺服器 400 的 `startDate` 訊息掛在欄位下；時間軸顯示 `startChanged`、`startFollowedDue`；四語 i18n 鍵一致（`locales.vitest.spec.ts`）；normalize 對沒有 `startDate` 的回應補 null。
+
+規則同步 T21（gt1a）
+
+- **G13 推開始日**：規則任務（沒被人改過到期日），人手動填開始日 11/20，到期日 11/25（來自記錄）。記錄的到期基準改成讓到期日變 11/18 → 到期日 11/18、開始日 11/18、`ModifiedBy` null；留言串 `dueChanged`（作者 null）與 `startFollowedDue`（作者 null）。
+- **G14 往後不動**：同上，到期日改成 11/30 → 開始日仍 11/20。
+- **G15 清空不動**：到期基準被清空 → 到期日 null、開始日 11/20。
+- **G16 覆寫過不動**：`DueOverridden=true` 的規則任務，記錄改日期 → 到期日、開始日都不變。
+- **G17 交易**：同步途中模擬失敗 → 到期日、開始日、系統記錄都沒寫入（與記錄寫入同一交易）。
+
+看板（gt1a，U12）
+
+- **G18 拖到較早的到期區間**：開始日 11/20、到期日 11/25 的任務在到期區間看板拖到「今天」→ 到期日 11/18、開始日 11/18、`startFollowedDue`；回傳卡片 `startDate=2026-11-18`；畫面提示「開始日已一併改為 11/18」。拖到「本週」（11/22）時開始日 11/20 不動、沒有提示。
+
+##### 11.5.5.2 甘特檢視存檔與 schedule（gt1b）
+
+- **G19 建立甘特檢視**：`POST /task-views {kind:"gantt", name:"展覽"}`（不帶設定）→ 201，`config` 是預設甘特圖（`groupBy=parent`、`scope=assigned`、`statuses=[todo,inProgress,done]`、`scale=week`）。
+- **G20 嚴格寫入**：`kind:"gantt"` 帶 `groupBy:"status"`、帶 `filters.dueRange`、帶未知屬性 `colour`、`version:2`、`scale:"year"` → 各 400 鍵 `config`。
+- **G21 列表分種類**：同一人有 2 個看板、1 個甘特圖 → `?kind=gantt` 只回 1 個、`?kind=board` 回 2 個；`?kind=list` 400。
+- **G22 修改與另存**：建立者 `PUT` 甘特檢視照甘特格式驗證、`RowVersion` 舊的 409；被分享者 `PUT` 403、`copy` 201 且 `kind=gantt`、不帶分享。
+- **G23 分享**：分享給業務部 → sales02 的 `?kind=gantt` 的 `shared` 有它；系統管理員可刪有分享的甘特檢視。
+- **G24 種類不符**：`POST /task-board/columns {viewId:<甘特檢視>}` → 404；`…/page` 同。
+- **G25 寬鬆讀取**：資料表裡的甘特設定帶未知屬性、`scale:"year"` → 讀出來忽略未知、`scale` 退回 `week`，`version` 仍是 1。
+
+schedule
+
+- **G26 成功**：sales01 對自己的任務 `schedule {startDate:"2026-11-21", dueDate:"2026-11-28", expectedVersion:<卡片版本>}` → 200，回卡片帶新日期與新版本；留言串 `startChanged`、`dueChanged`（作者 sales01）。
+- **G27 規則任務覆寫**：規則任務整條平移（兩個日期都變）→ `DueOverridden=true`；只改開始日 → `DueOverridden` 不變。
+- **G28 版本不符**：舊版本 → 409 code `stale`，任務不變；缺 `expectedVersion` → 400。
+- **G29 同時兩個請求**：同一版本兩個 `schedule` 並行 → 一個 200、一個 409（`TryClaimVersionAsync`），沒有重複的系統記錄。
+- **G30 矛盾**：`startDate` 晚於 `dueDate` → 400 鍵 `startDate`。
+- **G31 權限**：manager01 只有主管身分 → 403；outsider → 404；凍結 → 409；子任務的負責人、能改父任務的人 → 200（T19）。
+- **G32 沒有變化**：送一樣的日期 → 200，沒有新留言、版本不變。
+- **G33 清空**：兩個都送 null → 200，之後在甘特查詢裡進「未排程」。
+
+##### 11.5.5.3 甘特查詢（gt1c）
+
+- **G34 相交**：時間窗 11/16–11/29，任務 A 11/10–11/17（跨進）、B 只有到期日 11/20（菱形）、C 11/01–11/15（之前，不列）、D 只有開始日 11/18（未排程）、E 都沒有（未排程）、F 11/28–12/10（跨出）→ `rows` 依序是 A、B、F（依 `StartDate ?? DueDate`：A 11/10、B 11/20、F 11/28）；`unscheduled` 是 D、E。
+- **G35 時間窗驗證**：`from > to` → 400 鍵 `window`；`from` 到 `to` 367 天 → 400「時間範圍最多 366 天」；只帶 `from` → 400；不帶 `window`、`scale=week` → 回 `window={from:2026-11-16, to:2027-02-14}`（13 週）；`scale=day` → 11/16–11/29；`scale=month` → 11/01–2027/04/30。A7 改成星期日時起點跟著變。
+- **G36 範圍與篩選同看板**：同一批資料，`assigned`、`involved`、`subordinates`、`visible` 四種範圍與狀態、負責人、建立者、來源、關鍵字篩選的結果，與看板欄查詢（同範圍、同篩選、不分欄）相同。`showSubtasks:false` → `rows` 沒有子任務，`spans` 仍照算。
+- **G37 部屬範圍沒有部屬**：sales01 用部屬範圍 → `scopeAvailable=false`、`rows` 空、200。
+- **G38 不洩漏**：outsider 用 `visible` 範圍 → 不含別人的任務；manager01 看部屬掛在他看不到的記錄上的任務 → 卡片 `record.accessible=false`、沒有記錄標題與模組代號（同 §4.3）。
+- **G39 父任務標題**（GT-Q2）：時間軸列有子任務 C、父任務 P 被狀態篩選排除 → `parents` 有 `{id:P, title, visible:true, row:null}`；P 符合篩選但在時間窗外 → `row` 是 P 的完整卡片；P 本身在 `rows` 裡 → `parents` 不列 P；`groupBy=assignee` → `parents` 空陣列。
+- **G40 只看得到子任務**（U13）：sales01 的個人任務 P，子任務 C1 指派給 sales02（11/10–11/12）、C2 只有 sales01 參與（11/20–11/30）。sales02 的甘特（`involved`）→ `rows` 只有 C1；`parents` 有 `{id:P, title, visible:false, row:null}`；`spans` 的 P 是 11/10–11/12，**不是** 11/10–11/30。
+- **G41 看得到父任務時的跨度**：sales01 看同一個 P → `spans` 的 P 是 11/10–11/30，即使 `scope=assigned` 讓 C1 不在 `rows` 裡。
+- **G42 取消不算**（GT-Q4）：P 的子任務 C3 已取消、日期 12/01–12/20 → 跨度不含 C3；全部子任務都取消或都沒有日期 → `spans` 沒有 P。
+- **G43 上限**：501 筆符合 → `rows` 500 筆、`total=501`、`truncated=true`；未排程 101 筆 → 100 筆、`unscheduledTotal=101`、`unscheduledTruncated=true`。
+- **G44 查詢次數**：時間軸 50 列與 400 列（含子任務與父任務標題）的查詢次數相同。
+- **G45 逾期**：未完成、到期日 11/17 → `overdue=true`；已完成、到期日 11/17 → `false`。
+- **G46 檢視來源**：`viewId` 是看板檢視 → 404；`viewId` 與 `config` 都帶 → 400；都沒帶 → 預設甘特圖。
+- **G47 空系統**：沒有任何應用程式、沒有部門 → 個人任務照常出現，部屬範圍 `scopeAvailable=false`。
+- **G48 PostgreSQL**：新測試類標 `Category=Postgres`，pg0 之前只在 SQLite 跑（同 st1）。
+
+##### 11.5.5.4 甘特圖畫面（gt2）
+
+唯讀骨架（gt2a）
+
+- **G49 切換**：任務頁「清單／看板／甘特圖」三段；選甘特圖 → 網址 `view=gantt`；重新整理仍在甘特圖。
+- **G50 1920、1366**：左欄 280px＋時間軸填滿，整頁與時間軸都沒有橫向捲動；任務名兩行截斷。
+- **G51 刻度與平移**：日、週、月切換後一屏 14 天、13 週、6 個月；「下一段」送出的時間窗是目前的平移一段；「今天」回預設。
+- **G52 今天線**：今天在時間窗內才畫；平移到下一段（不含今天）時不畫。
+- **G53 圖形**：有兩個日期是長條、只有到期日是菱形、逾期標紅、完成是灰色；跨出時間窗的長條邊緣有箭頭、滑過顯示實際日期。
+- **G54 依父子**：子任務縮排、可收合；父任務有淡色跨度條與「2／4」進度；父任務被篩掉時是淡色標題（GT-Q2）且不能拖；看不到的父任務標題不能點。
+- **G55 依負責人、不分組**：負責人組依姓名、停用者標「（已停用）」、「未指派」最後。
+- **G56 未排程**：下方「未排程（N）」；只有開始日的標出開始日；超過 100 筆有提示。
+- **G57 超過 500 列**：上方提示加篩選或縮短時間範圍。
+- **G58 平板 820**：沒有拖拉把手；點長條開日期對話框；改日期儲存 → 長條移動；409 → 提示並重新整理。
+- **G59 手機 390**：沒有時間軸、依週分組；跨三週的任務只出現在開始那週（GT-Q3）；點一列開任務詳細；上一段／下一段 ±4 週；最下方未排程可展開；沒有橫向捲動。
+- **G60 鍵盤**：每列的「編輯日期」可 Tab 到、Enter 開對話框；未排程的「排程」同。
+- **G61 四語**：`locales.vitest.spec.ts` 鍵一致；刻度的月份與星期依語系格式化。
+- **G62 Demo**：行銷活動「春季工具機展」的任務有開始日，預設甘特圖（sales01）看得到長條、「規劃活動內容」的子任務與跨度。
+
+拖拉（gt2b）
+
+- **G63 整條**：拖整條往右 3 天 → 提示顯示新區間；放開後送 `schedule`（兩個日期各 +3、帶 `expectedVersion`），長條停在新位置，跨度更新。
+- **G64 兩緣**：拖左緣只改開始日；拖過右緣時夾在到期日（開始日＝到期日）；拖右緣只改到期日。
+- **G65 菱形**：拖菱形只改到期日。
+- **G66 未排程拖入**：把未排程的任務拖到 11/25 → 開始日、到期日都是 11/25，它從未排程區移到時間軸。
+- **G67 Esc**：拖到一半按 Esc → 回原位、沒有送出請求。
+- **G68 不能改**：manager01 以主管身分看部屬任務 → 沒有把手、游標禁止、不送請求；凍結任務同。
+- **G69 409**：另一個分頁先改了日期，再拖 → 長條放回原位、提示「任務已被別人修改，已重新整理」、列表重新整理。
+- **G70 請求中**：同一條長條的請求未回來前再拖 → 不送第二個請求。
+- **G71 觸控筆電**：1366 寬但用觸控 → 不拖，點長條開日期對話框。
+
+存檔檢視（gt2c）
+
+- **G72 選擇器**：「預設甘特圖」、我的、分享給我的、「另存為新甘特圖」；選了之後網址 `gantt=<id>`；看板與甘特圖的「上次打開」各記各的。
+- **G73 設定**：分組、範圍、篩選（沒有到期日區間）、顯示子任務、預設刻度；「套用」標「（未儲存）」、「儲存」寫回（D4）；預設甘特圖與別人分享的只有「套用」「另存」。
+- **G74 分享**：分享給 sales02 → 他看得到、不能改、可另存；同一個甘特圖 sales01 與 sales02 打開看到各自範圍內的任務，sales02 看到的不多於他自己的可見範圍（設計 §2 反目標）。
+- **G75 讀不到**：網址指到已刪除或不再分享的甘特圖 → 回預設甘特圖並提示、清掉「上次打開」。
+- **G76 部屬範圍沒有部屬**：照開、0 列並說明（D7）。
+- **G77 對話框四種寬度**：選擇器、設定、分享在 390、820、1366、1920 都沒有橫向捲動。
+
+#### 11.5.6 技術裁決彙整（主控可推翻）
+
+- **GT-T1** `StartDate` 是 `DateOnly?`，migration `TaskStartDate` 只加欄位、不加索引；PostgreSQL 那份隨 pg0。
+- **GT-T2** `TaskInput` 尾端加選填 `StartDate`（預設 null），三支建立 API 都收；子任務表單照舊不顯示。
+- **GT-T3** 驗證看寫入後的整對值，400 用欄位鍵 `startDate`＋`StartAfterDue`，不另開 code。
+- **GT-T4** 新系統事件 `startChanged`（人直接改）與 `startFollowedDue`（被到期日推動，人或規則）；一次改兩個日期各寫一筆。
+- **GT-T5** T21 只改 `TaskWriter.SyncFromRuleAsync`；往後移、清空到期日都不動開始日。
+- **GT-T6** 「只改到期日早於開始日 → 開始日跟著移」寫在 `ApplyAsync`，看板 U12 自動得到；卡片加 `startDate`，看板提示由前端比對前後值，不加新回應欄位。
+- **GT-T7** 拖拉與日期對話框走新的 `POST /tasks/{id}/schedule {startDate, dueDate, expectedVersion}`，兩個日期一律都送；版本檢查與認領照 `move`；不回 `visible`、`undoToken`。PATCH 不加版本檢查（既有行為不在範圍）。
+- **GT-T8** 甘特設定是獨立的 `TaskGanttConfig`（`groupBy` none／parent／assignee、`scale`、沿用 `TaskBoardFilters` 但禁止 `dueRange`、`showSubtasks`）；`version` 1，升版規則同 §6.1；預設甘特圖不顯示取消。
+- **GT-T9** `task-views` 依 `Kind` 解析設定；看板端點拿到甘特 Id、甘特端點拿到看板 Id 一律 404；甘特檢視用自己的一組訊息，看板的字不動。
+- **GT-T10** `POST /tasks/gantt` 回平鋪 `rows`＋`parents`＋`spans`＋`unscheduled`，分組在前端做（純函式，vitest 覆蓋）。
+- **GT-T11** 甘特列重用 `TaskCardResponse` 與 `TaskBoardService.CardsAsync`（批次權限、遮蔽、進度）。
+- **GT-T12** 時間窗選填：沒帶時伺服器依刻度給預設（日 14 天、週 13 週、月 6 個月，從本週起始日或本月一日）；帶了要 `from <= to` 且最多 366 天。
+- **GT-T13** 500 列、366 天、未排程 100 筆是技術上限，寫死並列進 §14，不做政策（主控裁決，待使用者確認 2026-11-18；見 §11.5.2.9，若要可調補政策 A41 `task.ganttMaxRows`）。
+- **GT-T14** 甘特排序固定（`StartDate ?? DueDate`、`DueDate`、`Id`），設定沒有排序選項。
+- **GT-T15** 子任務跨度：看得到父任務時用全部未取消子任務（資料庫 GROUP BY），看不到時只用回應裡的子任務列；區間用 `[Start ?? Due, Due ?? Start]`。
+- **GT-T16** 甘特查詢重用 `TaskBoardQuery`、`BoardBase`、`TaskBoardService.ContextAsync`（甘特設定轉成同範圍、同篩選的看板設定），不另寫範圍與篩選。
+- **GT-T17** 寬度用 Quasar 視窗斷點（`< 600` 手機、`< 1024` 平板）判斷，觸控一律不拖。
+- **GT-T18** 畫面常數（左欄 280／200px、列高 36px、長條最小 4px、各刻度一屏天數、手機 4 週）是技術限制，列進 §14。
+- **GT-T19** 父任務收合狀態不存設定，每次打開都展開。
+- **GT-T20** 網址 `view=gantt&gantt=<id>`；「上次打開」與看板分開記。
+- **GT-T21** 時間軸用 CSS grid 自畫、不引入套件；500 列不做虛擬捲動。
+- **GT-T22** 報表欄位 -17「開始日」（`TaskReportFields` 已註明保留給 gt1）放在可選的 gt1d：日期欄位、四語標籤；主要日期選它時 `TaskReportNarrowing` 加 `start`（現在未知欄位回 null 不縮小，不會壞），§14 改成「-1～-19」。
+- **GT-T23** Demo 的開始日用 `UpdateTaskRequest` 寫（規則任務改開始日不設旗標，不影響 Demo 的規則同步）。
+
+#### 11.5.7 使用者行為類裁決（主控裁決，照推薦，待使用者確認 2026-11-18）
+
+以下四題都是主控照設計補充草稿的推薦先定，使用者尚未確認；使用者推翻時，對應案例與條文要跟著改。已同步列入 §17.6。
+
+- **GT-Q1** 任務詳細把到期日改得比開始日早：開始日自動跟著移到新到期日，留言串記一筆 `startFollowedDue`（與看板拖拉、規則同步同一規則，三個入口一致）。不論如何，同時改兩個日期而互相矛盾、或只把開始日改得比到期日晚，一律擋下（400）。對應 G7。
+- **GT-Q2** 依父子分組時被篩選擋掉的父任務：以淡色標題帶出，只有標題與子任務跨度，不畫自己的長條、不能拖、不算進列數。看不到的父任務（U13）同樣只露標題。對應 G39、G54。
+- **GT-Q3** 手機週清單裡跨週任務只出現一次：放在開始那週；開始日早於畫面第一週時放第一週。對應 G59。
+- **GT-Q4** 已取消的子任務不算進子任務跨度（與進度分母不含取消同一想法，T20）；已完成的算。對應 G42。
+
+其餘由設計推得出或純技術的處理見 §11.5.6（GT-T1–T23）。
+
+#### 11.5.8 切段
+
+gt1 估計約 2,000 行 diff（不含 EF 產生的 migration Designer）、gt2 約 2,800 行（含測試與四語 i18n），兩段都遠超過 800 行，各拆三段。每段可獨立合併、Demo 不壞。
+
+| 段 | 範圍 | 驗收 | 依賴 | 估計 diff |
+|---|---|---|---|---|
+| gt1a 開始日 | `TaskStartDate` migration；`TaskInput`、`TaskEdit`、`TaskEditParser`、`TaskWriter`（驗證、跟隨、`startChanged`／`startFollowedDue`）；T21；三種 DTO 加 `startDate`；任務詳細與新增對話框的開始日欄位、時間軸、看板 U12 提示；四語 i18n；手冊任務詳細 | G1–G18 | main 7ea3ece3 | 約 750 |
+| gt1b 甘特設定與 schedule | `TaskGanttConfig`（解析、讀取、預設）；`task-views` 依種類處理與種類不符 404；`TaskViewMessages` 甘特用字；`POST /tasks/{id}/schedule`；前端型別、`dynamic-api.ts` 的 `kind` 參數與 `schedule` | G19–G33 | gt1a | 約 650 |
+| gt1c 甘特查詢 | `POST /tasks/gantt`（時間窗、範圍與篩選、未排程、`parents`、`spans`、上限）；repository 四個新方法；前端回應型別、normalize、API 函式 | G34–G48 | gt1b | 約 750 |
+| gt1d 報表開始日（可選） | 報表欄位 -17、縮小條件 `start`、§14 改字 | 報表 -17 分組與篩選、`TaskReportApiTests` 洩漏斷言照跑 | gt1a | 約 150 |
+| gt2a 甘特圖唯讀畫面 | 任務頁第三個檢視（預設甘特圖）、工具列（刻度、平移、今天）、時間軸、三種分組與收合、跨度、今天線、逾期、未排程區、超過上限提示、平板日期對話框與「編輯日期」鈕、手機週清單、Demo 開始日、四語 i18n、手冊甘特圖閱讀 | G49–G62 | gt1c | 約 1,300 |
+| gt2b 拖拉 | 整條、兩緣、菱形、未排程拖入、Esc、提示、樂觀更新與 409、請求中鎖、觸控不拖 | G63–G71 | gt2a | 約 600 |
+| gt2c 存檔甘特圖 | 選擇器與設定對話框（沿用看板元件）、分享、`gantt=<id>`、上次打開、D6、D7、手冊存檔與分享 | G72–G77 | gt2a（可與 gt2b 平行，但兩段都改 `MyTasksPage.vue` 與 i18n，建議依序） | 約 700 |
+
+- gt2a 仍超過 800 行。真的超出 subagent 的工作量時，把「手機週清單」與「日期對話框」移到 gt2b，gt2a 期間手機與平板顯示「甘特圖請用較寬的螢幕，或改用清單檢視」的說明（不是半成品，只是暫時不提供）。預設照上表，不拆。
+- gt1b 到 gt1c 之間，甘特檢視可以用 API 建立與分享，但沒有查詢；沒有畫面能建，Demo 不受影響，roadmap 註明。
+- gt1d 可延到 todo：開始日在報表裡只是多一個可選欄位，不擋甘特圖。
+- 熱點檔：gt1a 改 `TaskWriter.cs`、`TaskHandlers.cs`、`TaskEditParser.cs`、`TaskModels.cs`、`TaskBoardModels.cs`；gt1b、gt1c 改 `TaskViewHandlers.cs`、`TaskViewAccess.cs`、`TaskBoardHandlers.cs`、`TaskRepositories.cs`、`ITaskRepositories.cs`。這段期間別的段落最好不要碰這些檔。
+
+#### 11.5.9 與現有程式或設計的不一致（勘察發現）
+
+1. **PATCH 沒有版本檢查**：`UpdateTaskHandler` 不收版本，任務詳細改任何欄位都是最後寫入者贏；§11.3 要求拖拉「併發同 §5.6」，所以另開 `schedule`（GT-T7）。任務詳細改日期仍沒有併發保護，屬既有缺口，不在 gt 範圍，已在 `docs/todo.md`「其他」追蹤。
+2. **`task-views` 只認看板**：`TaskViewRules.KindError` 只收 `board`、`CreateTaskViewHandler` 寫死 `Kind = Board`、`Detail`／`Copy`／`Update` 一律 `TaskBoardConfig.Read`。更要緊的是看板的 `ResolveAsync` 不檢查 `view.Kind`：甘特檢視一出現，`POST /task-board/columns {viewId:<甘特>}` 會把甘特設定寬鬆讀成預設看板而不報錯。gt1b 修正：`ResolveAsync` 檢查 `view.Kind`，甘特 Id 一律 404。
+3. **`TaskViewMessages` 的字都是「看板」**：gt1b 另立一組甘特用字，看板既有的字不動。
+4. **§12 的 move 主體寫 `expectedModifiedTime`**，實作是 `expectedVersion`（`TaskVersion` 字串）：§12 原文已同步改成 `expectedVersion`，`schedule` 照實作。
+5. **§11.2「範圍與篩選同看板」**，但看板篩選有 `dueRange`，與甘特圖的時間窗重疊：甘特設定禁止 `dueRange`（GT-T8）。
+6. **§5.3 U12「在卡片上提示」**：`TaskCardResponse` 目前沒有 `startDate`，前端無從得知開始日被移；gt1a 加欄位。
+7. **報表欄位 -17**：`TaskReportFields` 註明「-17 開始日保留給 gt1」，但 §20 的 gt1 沒列報表；放進可選的 gt1d（GT-T22）。
+8. **§16「每段 migration 兩份」**：pg0 未做，`TaskStartDate` 只會有 SQLite 一份（同 st1），PostgreSQL 那份隨 pg0。
+
 ## 12. API（主控判斷，實作可調整命名）
 
 路由放在既有的 `api/v3/dynamic` 下。
 
 - `GET /task-views?kind=board|gantt`：我的與分享給我的。`POST /task-views`、`GET/PUT/DELETE /task-views/{id}`、`POST /task-views/{id}/copy`、`PUT /task-views/{id}/shares`、`GET /task-views/share-targets`（使用者、部門、群組的 Id 與名稱）。
 - `POST /task-board/columns`：收看板設定（存過的或未存的），回各欄總數與第一頁卡片。`POST /task-board/columns/{column}/page`：載入更多。
-- `POST /tasks/{id}/move`：`{ groupBy, toColumn, dueDate?, expectedModifiedTime }`，伺服器依欄算新值（§5.3），回更新後的卡片與 `visible`；`visible=false` 時另回一次性的 `undoToken`（§5.4）。
+- `POST /tasks/{id}/move`：`{ groupBy, toColumn, dueDate?, expectedVersion }`，伺服器依欄算新值（§5.3），回更新後的卡片與 `visible`；`visible=false` 時另回一次性的 `undoToken`（§5.4）。
 - `PATCH /tasks/{id}` 既有：主管重派走這裡，只允許改 `assigneeUserId`（§4.2），同樣回 `visible` 與 `undoToken`。
 - `POST /tasks/{id}/undo-reassign`：收 `undoToken`，把負責人改回原負責人。
 - `GET /tasks?tab=subordinates`：任務清單的「部屬的任務」分頁（§4.2）。
 - `POST /tasks/{id}/subtasks`；`PATCH /tasks/{id}` 的狀態連動選項（`cascade: complete|cancel`）。
-- `POST /tasks/gantt`：收甘特設定與時間窗，回任務列與日期。
+- `POST /tasks/gantt`：收甘特設定與時間窗，回時間軸列、未排程、父任務標題與子任務跨度（§11.5.2.5）。
+- `POST /tasks/{id}/schedule`：`{ startDate, dueDate, expectedVersion }`，拖拉與日期對話框改日期，版本檢查與認領照 `move`（§11.5.2.6）。
 - 報表沿用既有端點。系統資料來源另開 `GET /reports/datasets`（`[{ dataset, name }]`）與 `GET /reports/datasets/{dataset}/catalog`（同模組目錄的形狀，只列可選欄位與觀看者的選項，未知資料來源 404）；`GET /reports/catalog` kr1 不動（現在的設計器拿它當主模組選單），kr2 做設計器時再合併（J11）。執行與下鑽多收 `departmentIds`、`includeSubDepartments`（§8.2，kr2）。
 
 寫入一律 `ITransactionalRequest`。
@@ -800,7 +1289,8 @@ Formwright 的取捨：
 - 看板每欄每頁 50 張、每欄最多載入 500 張。
 - 看板畫面（kb3）：每欄最小寬 240px、欄間距 12px；拖拉門檻 5px、平板長按 400ms（容忍 10px 位移）；「移到…」選單最小寬 220px；設定裡相對日期「近 N」的 N 為 1～3650（與報表 `ReportDateRange` 相同）。
 - 看板名稱 100 字；明列的負責人欄最多 50 人；分享對象每個看板最多 200 個。
-- 甘特圖一次最多 500 列（超過提示加篩選）；時間窗最多 366 天。
+- 甘特圖時間軸列一次最多 500 列（超過提示加篩選）、未排程最多 100 筆、時間窗最多 366 天（GT-T13，主控裁決，待使用者確認 2026-11-18；若要可調，補政策 A41 `task.ganttMaxRows`）。
+- 甘特圖畫面常數：左欄 280px（平板 200px）、列高 36px、長條最小 4px、各刻度一屏天數（日 14 天、週 13 週、月 6 個月）、手機 4 週、寬度斷點 600／1024（GT-T17、GT-T18）。
 - 部屬名單超過 2000 人時查詢方式要改（§4.4，列為已知限制，不是使用者可調的值）。
 - 任務資料來源只走記憶體路徑；`median` 在 SQL 路徑退回記憶體路徑。
 - 內建報表的 `BuiltInCode` 格式同代碼格式（B7）。
@@ -907,6 +1397,17 @@ kb3 實作時的主控裁決（前三條使用者 2026-11-17 確認維持，第�
 - 移動被伺服器擋下（400）時統一顯示「這一欄不能放」，不分原因（後端沒有錯誤代碼）；可預先判斷的原因（逾期、本週已是最後一天、停用負責人、無權限、已鎖定）在拖拉與選單上先顯示。
 - 欄查詢回應帶採用的看板設定（`config`），前端不另存一份預設值。
 
+### 17.6 甘特圖 gt 細則（2026-11-18）
+
+行為類（主控裁決，照推薦，**待使用者確認 2026-11-18**；內容與案例見 §11.5.7）：
+
+- **GT-Q1** 任務詳細把到期日改得比開始日早時，開始日自動跟著移到新到期日，留言串記一筆。
+- **GT-Q2** 依父子分組時被篩選擋掉的父任務，以淡色標題帶出（只有標題與子任務跨度，不畫自己的長條、不能拖）。
+- **GT-Q3** 手機週清單裡跨週任務只出現一次：放開始那週；開始日早於畫面第一週放第一週。
+- **GT-Q4** 已取消的子任務不算子任務跨度。
+
+技術類（主控決定，可推翻）：GT-T1–T23 見 §11.5.6。其中 **GT-T13**（時間軸列 500、時間窗 366 天、未排程 100 筆寫死為技術上限，列進 §14）也是待使用者確認的主控裁決；要可調則補政策 A41。
+
 ### 17.3 技術類（主控決定，可推翻）
 
 - **T1** 停用部門的主管不因該部門取得範圍，遞迴照樣經過停用部門。
@@ -1008,8 +1509,8 @@ kr2 的決定（使用者 11-17 裁決，除標「主控裁決」者）：
 | st1b | `cascade`、父子狀態連動、新系統記錄與「子任務已全部完成」通知、A40（§10.7.6） | 政策頁多 A40 |
 | st1c | 報表「層級」欄位 -16（§10.7.6） | 任務報表多一個可選欄位 |
 | st2 | 任務詳細的子任務區塊、進度（ST-Q1）、連動確認框、看板設定的「顯示子任務」開關、卡片上的父標題、Demo 在行銷活動任務下加子任務 | 子任務 |
-| gt1 | `TaskStartDate` migration、開始日驗證與規則同步、甘特 API、檢視存 `gantt` | 任務詳細多開始日 |
-| gt2 | 甘特圖檢視、拖拉、依父子與負責人分組、未排程、四種寬度 | 甘特圖 |
+| gt1a、gt1b、gt1c（gt1d 可選） | 細項見 §11.5.8：gt1a 開始日（migration、驗證、規則同步 T21、DTO、任務詳細欄位）、gt1b 甘特設定與 `schedule`、gt1c 甘特查詢、gt1d 報表開始日 -17 | 任務詳細多開始日 |
+| gt2a、gt2b、gt2c | 細項見 §11.5.8：gt2a 唯讀畫面（分組、未排程、四種寬度）、gt2b 拖拉、gt2c 存檔甘特圖與分享 | 甘特圖 |
 
 kb1 是其餘各段的基礎（看板與報表都用同一個可見條件）；kr 系列只依賴 kb1，可與 kb2、kb3 平行；st、gt 依賴 kb3 的檢視框架。
 
@@ -1022,3 +1523,4 @@ kb1 是其餘各段的基礎（看板與報表都用同一個可見條件）；k
 - 可見條件在 PostgreSQL 的執行計畫（`OR` 很多時要不要改 `UNION`），以雙跑與計畫輸出決定。
 - 內建報表的四語系名稱與說明文案、圖表配色。
 - 手機「移到…」是底部選單還是對話框。
+- 開始日／到期日要不要加索引：看 pg0 雙跑的執行計畫再決定（GT-T1，§11.5.3）。

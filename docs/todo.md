@@ -28,6 +28,7 @@
 - 查其他端點以 403／404 區別洩漏記錄是否存在：history、upload、update、delete、print、關聯分頁、沖銷、關閉模組（schema 臨時讀取已改一律 403）
 - 替「我已處理」查詢加 (ActorUserId, TaskId) 索引：目前缺索引，資料量大時會慢
 - 補直接請求被隱藏負責人欄的負面測試（任務看板 kb2 審查 S2）
+- 讓 `PATCH /tasks/{id}` 加版本檢查（甘特圖 gt 設計勘察）：`UpdateTaskHandler` 不收版本，任務詳細改任何欄位都是最後寫入者贏；甘特拖拉另開 `schedule` 繞過，任務詳細改日期仍無併發保護
 - 查 Demo 已確認的採購單無法改成已取消（demo.md §15 步驟 7）：confirmed→cancelled 只限 manager 群組，必要時改 demo.md 的步驟
 - 讓產品啟動時明確設 SQLite WAL：部署時若已有空的 .db 檔，EF Migrate 不會設 WAL，長交易期間其他請求會「database is locked」（demolock 根因）
 - 查 AttachmentApiTests 偶發的 SQLite handle 已釋放（ObjectDisposedException）：fg2 各段 CI 前後出現過，與簽核無關，先找出是哪個測試結束後仍有請求在用連線
