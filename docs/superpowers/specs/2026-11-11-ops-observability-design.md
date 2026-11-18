@@ -2355,32 +2355,32 @@ O2 在 pg0 之後，合併前兩種資料庫都要驗（使用者裁決 §3 第 
 
 - 九張表照 §17.4 建（`OpsEventCenter`，兩個 provider 各一份），欄位名、可空、長度由 `OpsSchemaTests` 逐欄比對；列舉一律存 camelCase 文字（`CamelEnum`），`*Utc` 欄位讀回是 UTC（PostgreSQL 27 個 `timestamptz`）。與 §17.4 沒有欄位差異。
 - `AlertChannel` 照 O2-U14 加 `MailLocale`；收件人照 O2-U1 放在通道上，`AppUser` 不動。
-- ⚠️ `scripts/db/add-migration.sh` 最後一行的 echo 在 zsh／bash 的 `set -u` 下報 `name�: unbound variable`：`$name` 後面緊接全形「」」被當成變數名的一部分。migration 已正常產生，只是結尾訊息壞掉；改成 `${name}` 即可，這一段沒動腳本。
+- ⚠️ `scripts/db/add-migration.sh` 最後一行的 echo 在 zsh／bash 的 `set -u` 下報 `name�: unbound variable`：`$name` 後面緊接全形「」」被當成變數名的一部分。migration 已正常產生，只是結尾訊息壞掉；main 已另行修正（`52599f47`）。
 
 **稽核寫入（§17.2.1）**
 
-- 寫入點：`IAuditedRequest`（74 個請求，宣告動作代碼與目標）由 `AuditBehavior` 在交易內、handler 成功後寫一列，與變更同交易提交；稽核寫不進去整筆回滾（A02）。登入（`LoginHandler`、`DemoLoginHandler`）與排程工作不經 behavior，用 `IAuditLog.TryWriteNowAsync`／`Add`。
+- 寫入點：`IAuditedRequest`（73 個請求，宣告動作代碼與目標；`AuditActions` 共 77 個代碼：管理與設計 74、登入 2、清理 1）由 `AuditBehavior` 在交易內、handler 成功後寫一列，與變更同交易提交；稽核寫不進去整筆回滾（A02）。登入（`LoginHandler`、`DemoLoginHandler`）與排程工作不經 behavior，用 `IAuditLog.TryWriteNowAsync`／`Add`。
 - **偏離 1：巢狀的稽核請求只記最外層。** 開應用程式、整併主檔、整合重整這類流程會在一個請求裡再送幾十個設計請求；`AuditContext.Depth` 讓只有最外層寫一列（例如只記 `app.open`，不另記內層每個 `field.add`）。Demo 資料產生器本身不是稽核請求，所以它送的每個設計請求各記一列（Demo 資料的稽核時間本來就是模擬的）。
-- **偏離 2：權限變更的摘要只放有變的格子，最多 200 格**，另帶 `changeCount`（`PermissionAuditCells`）。格子的鍵是 `group:{id}.{動作}`、`group:{id}.scope`、`user:{id}.{動作}`、`field:{欄位}/group:{群組}`、`option:{id}`、`fieldGrant:{id}`。
-- **偏離 3：新建類的目標用請求帶的 key 或名稱**（建模組用 `Input.Key`，建群組、儀表板用名稱當 `TargetLabel`）；需要新產生的 id 時由 handler 呼叫 `AuditContext.Target(id)` 補上（建使用者）。
-- 登入失敗的 `ReasonCode`：`unknownAccount`、`inactive`、`locked`、`noPassword`、`wrongPassword`；Demo 登入另有 `notDemoAccount`。帳號不存在時目標留空，不記輸入的帳號字串（A03）。被節流擋下的嘗試不寫稽核，只加計數器 `formwright.login.throttled`。登入失敗與沒有身分的寫入記 `ActorKind = system`、`ActorUserId = null`。
-- 行為者覆寫（`ActorOverride`）只在 `AuditOrigin.BeginSignIn()` 範圍內允許；範圍內不取環境身分（舊 cookie），範圍外有身分又覆寫就丟 `InvalidOperationException`。`BeginSignIn` 的呼叫者只有兩個登入 handler，由 `AuditArchitectureTests` 掃原始碼把關（A10）。
+- **偏離 2：權限變更的摘要只放有變的格子，最多 200 格**，另帶 `changeCount`，超過 200 格時加 `truncated: true`（`PermissionAuditCells`）。格子的鍵是 `group:{id}.{動作}`、`group:{id}.scope`、`user:{id}.{動作}`、`field:{欄位}/group:{群組}`、`option:{id}`、`fieldGrant:{id}`。
+- **偏離 3：新建類的目標用請求帶的 key 或名稱**（建模組用 `Input.Key`，建群組、儀表板用名稱當 `TargetLabel`）；需要新產生的 id 時由 handler 呼叫 `AuditContext.Target(id)` 補上（建使用者）。兩種匯入（應用程式套件、範本）在解析成功後補套件或範本的代碼與繁中名稱。只在模組內唯一的代碼，目標帶模組：列印範本是 `模組代碼:範本代碼`，模組政策是 `模組代碼:政策代碼`（整合同理是 `應用程式:整合代碼`）；事件、檢查、轉單、任務規則、簽核流程的代碼全域唯一，直接用代碼。
+- 登入失敗的 `ReasonCode`：`unknownAccount`、`inactive`、`locked`、`noPassword`、`wrongPassword`；Demo 登入另有 `notDemoAccount`。帳號不存在時目標留空，不記輸入的帳號字串（A03）。被節流擋下的嘗試不寫稽核，只加計數器 `formwright.login.throttled`。Demo 一鍵登入與密碼登入共用同一個 `LoginThrottle`（同一組門檻與計數），公開 Demo 站的匿名者不能靠不存在的帳號無限新增稽核列；門檻是既有的安全守衛常數，沒有進 PolicyCatalog。登入失敗與沒有身分的寫入記 `ActorKind = system`、`ActorUserId = null`。
+- 行為者覆寫（`ActorOverride`）只在 `AuditOrigin.BeginSignIn()` 範圍內允許；範圍內不取環境身分（舊 cookie），範圍外有身分又覆寫就丟 `InvalidOperationException`。`BeginSignIn` 的呼叫者只有兩個登入 handler，由 `AuditArchitectureTests`（WebAPITests）掃五個產品組件的 IL 把關：`call`、`callvirt`、`newobj`、`ldftn`、`ldvirtftn` 都算，方法群組轉委派也抓得到，狀態機與 lambda 類別歸到最外層型別，白名單是型別全名；測試組件裡放了三個故意違規的替身，證明掃描器抓得到（A10）。
 - `WriteNowAsync`／`TryWriteNowAsync` 在交易內一律丟 `InvalidOperationException`，守衛在建立新 scope 之前（A09，以計數的 scope factory 驗證）。
 - 遮蔽：鍵名剛好是 `password`、`token`、`secret`（不分大小寫）的值，與 `fwp_`、`fwc_` 開頭的字串值都換成 `***`。超過 16000 字元時只留有變的鍵並標 `truncated`，仍超過就從最大的項目開始丟。
-- 覆蓋率：`AuditCoverageTests` 用反射找出所有交易型請求中屬於 `ISystemAdminRequest`、或 `IDesignerRequest` 且需要的設計權限不是唯讀的，每個都要實作 `IAuditedRequest`，例外清單目前是空的（A05）。
+- 覆蓋率：`AuditCoverageTests` 用反射找出所有交易型請求中屬於 `ISystemAdminRequest`、或 `IDesignerRequest` 且需要的設計權限不是唯讀的，每個都要實作 `IAuditedRequest`，例外清單目前是空的；反向也檢查：實作 `IAuditedRequest` 的（含 struct）都要是交易型、回 `ServiceResult`（A05）。巢狀成功、內層失敗、外層失敗、外層不是稽核請求四種情況由 `AuditBehaviorTests` 驗證；400、403 不留稽核。
 
 **查詢 API（§17.5）**
 
 - `GET system/ops/audit`、`system/ops/audit/{id}`、`system/ops/audit/actions`，只有系統管理員。
 - **偏離 4：repository 多一個 `GetAsync(id)`**（詳細頁用），§17.5 只列了分頁查詢與清理。
-- **偏離 5：時間範圍兩端都含。** 預設迄時是「現在」，剛寫入的列（同一個時間點）要查得到；§17.5 沒寫端點含不含。
+- **偏離 5：時間範圍兩端都含。** 預設迄時是「現在」，剛寫入的列（同一個時間點）要查得到；§17.5 沒寫端點含不含。日期早於 1970-01-01 回欄位錯誤 400（免得預設起日往前推 7 天溢位）。錯誤訊息登記在 `MessageText`（四語，範圍與筆數上限是參數），依 `X-Locale` 回應。
 - 動作與動作分組同時給時取交集；分組展開成動作清單查，不用 LIKE。開 Demo 登入時列表與詳細都不回 `clientIp`。
 
 **清理（§17.6、§17.9）**
 
 - 新工作 `ops.upkeep`，間隔政策 `ops.upkeepMinutes`（出廠 60，5–1440 分鐘），保留天數政策 `ops.auditRetentionDays`（出廠 365，90–3650 天）；兩個政策加進 `PolicyCatalog`、`shared/policy-catalog.json` 與四個語系。截止時間用排程器的時鐘（與租約同一個時間來源）。
 - 每批最多 5000 列（`OpsUpkeepOptions`，技術限制），每批一個交易型請求、帶租約檢查；租約丟了就停。
-- **偏離 6：`ops.retention.purge` 只在真的刪了列時寫**，摘要 `{"deleted":{"auditLog":n}}`；沒東西可刪就不寫，避免每小時一列空紀錄。
+- **偏離 6：`ops.retention.purge` 每批一列、與該批刪除同交易提交**，摘要 `{"deleted":{"auditLog":n}}`；後面的批次失敗、取消或丟了租約，已提交的批次仍有紀錄。沒東西可刪就不寫，避免每小時一列空紀錄。沒有另寫整體摘要列（各批的列加總就是整次的筆數）。
 
 **`IDatabaseErrors`（§17.2.9、§17.2.10）**
 
@@ -2388,6 +2388,6 @@ O2 在 pg0 之後，合併前兩種資料庫都要驗（使用者裁決 §3 第 
 
 **驗證（本機）**
 
-- 只跑受影響的類別，每種資料庫各一次（全套交 CI）。ApplicationTests 篩稽核、九張表、`DatabaseErrors`、migration 一致性、PostgreSQL 模型、交易與設計權限 behavior、權限服務：SQLite 103 過、PostgreSQL 103 過。
-- WebAPITests 篩 `Ops.*`（含新的 `AuditApiTests` 19 個）、登入、Demo 登入、使用者與群組管理、政策、應用程式、部門、欄位、主題、儀表板、簽核流程設定、Demo 資料、整合：SQLite 359 過 1 略過（4 分 23 秒），PostgreSQL 360 過（6 分 53 秒）。
+- 只跑受影響的類別，每種資料庫各一次（全套交 CI）。第一輪（審查前）：ApplicationTests SQLite 103、PostgreSQL 103 過；WebAPITests SQLite 359 過 1 略過（4 分 23 秒）、PostgreSQL 360 過（6 分 53 秒）。
+- 審查修正後（第二輪，範圍多了 `AuditBehaviorTests`、`MessageTextTests`、`LoginThrottleTests`、列印範本、範本匯入、語系）：ApplicationTests SQLite 115 過、PostgreSQL 115 過；WebAPITests SQLite 431 過 1 略過（4 分 29 秒）、PostgreSQL 432 過（8 分 2 秒）。
 - DomainTests 的政策類別 68 過；前端 `policy-i18n` 與語系檔 41 過，`vue-tsc` 型別檢查過。
