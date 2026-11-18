@@ -205,8 +205,8 @@ public class NotificationApiTests : TaskTestBase
         var task = await SeedTask(title: "明天交", assignee: "sales01", due: D(11, 5));
         var repo = Svc<DynamicModules.Domain.Repositories.Dynamic.ITaskRepository>();
 
-        (await repo.TryMarkDueSoonNotifiedAsync(task.Id, D(11, 4), CancellationToken.None)).Should().BeTrue();
-        (await repo.TryMarkDueSoonNotifiedAsync(task.Id, D(11, 5), CancellationToken.None)).Should().BeFalse();
+        (await repo.TryMarkDueSoonNotifiedAsync(task, D(11, 4), CancellationToken.None)).Should().BeTrue();
+        (await repo.TryMarkDueSoonNotifiedAsync(task, D(11, 5), CancellationToken.None)).Should().BeFalse();
         (await Load(task.Id)).LastDueSoonNotified.Should().Be(D(11, 4));
     }
 
@@ -216,9 +216,36 @@ public class NotificationApiTests : TaskTestBase
         var task = await SeedTask(title: "已逾期", assignee: "sales01", due: D(11, 3));
         var repo = Svc<DynamicModules.Domain.Repositories.Dynamic.ITaskRepository>();
 
-        (await repo.TryMarkOverdueNotifiedAsync(task.Id, D(11, 4), CancellationToken.None)).Should().BeTrue();
-        (await repo.TryMarkOverdueNotifiedAsync(task.Id, D(11, 4), CancellationToken.None)).Should().BeFalse();
-        (await repo.TryMarkOverdueNotifiedAsync(task.Id, D(11, 5), CancellationToken.None)).Should().BeTrue();
+        (await repo.TryMarkOverdueNotifiedAsync(task, D(11, 4), CancellationToken.None)).Should().BeTrue();
+        (await repo.TryMarkOverdueNotifiedAsync(task, D(11, 4), CancellationToken.None)).Should().BeFalse();
+        (await repo.TryMarkOverdueNotifiedAsync(task, D(11, 5), CancellationToken.None)).Should().BeTrue();
+    }
+
+    [Theory]
+    [InlineData("assignee")]
+    [InlineData("due")]
+    [InlineData("status")]
+    public async Task TryMark_TaskChangedAfterRead_False(string change)
+    {
+        var read = await SeedTask(title: "明天交", assignee: "sales01", due: D(11, 5));
+        var overdueRead = await SeedTask(title: "已逾期", assignee: "sales01", due: D(11, 3));
+        // 讀取之後、認領之前，並行的編輯已經提交
+        foreach (var id in new[] { read.Id, overdueRead.Id })
+        {
+            var q = Db.Context.Set<TaskItem>().Where(t => t.Id == id);
+            _ = change switch
+            {
+                "assignee" => await q.ExecuteUpdateAsync(x => x.SetProperty(t => t.AssigneeUserId, "sales02")),
+                "due" => await q.ExecuteUpdateAsync(x => x.SetProperty(t => t.DueDate, D(11, 20))),
+                _ => await q.ExecuteUpdateAsync(x => x.SetProperty(t => t.Status, TaskItemStatus.Done)),
+            };
+        }
+        var repo = Svc<DynamicModules.Domain.Repositories.Dynamic.ITaskRepository>();
+
+        (await repo.TryMarkDueSoonNotifiedAsync(read, D(11, 4), CancellationToken.None)).Should().BeFalse();
+        (await repo.TryMarkOverdueNotifiedAsync(overdueRead, D(11, 4), CancellationToken.None)).Should().BeFalse();
+        (await Load(read.Id)).LastDueSoonNotified.Should().BeNull("沒認領到，留給新的那一版重新判斷");
+        (await Load(overdueRead.Id)).LastOverdueNotified.Should().BeNull();
     }
 
     [Fact]
@@ -412,5 +439,80 @@ public class NotificationReminderSourceTests : TaskTestBase
         _probe.Due = true;
         (await Send(new GetNotificationsRequest())).IsSuccess.Should().BeTrue();
         _probe.Added.Should().Be(1);
+    }
+}
+
+/// <summary>
+/// 提醒讀到任務之後、認領之前，並行的交易改派給別人並清掉戳記（PostgreSQL 沒有序列化時會發生，審查 P1）：
+/// 舊負責人不能收到通知，新負責人的「只補一次」也不能被消耗掉。
+/// </summary>
+public class ReminderClaimRaceTests : TaskTestBase
+{
+    private Func<Task>? _beforeClaim;
+
+    protected override void ConfigureServices(IServiceCollection services) =>
+        services.AddScoped<DynamicModules.Domain.Repositories.Dynamic.ITaskRepository>(sp => BeforeCallProxy<DynamicModules.Domain.Repositories.Dynamic.ITaskRepository>.Create(
+            ActivatorUtilities.CreateInstance<DynamicModules.Persistence.Repositories.Dynamic.TaskRepository>(sp),
+            nameof(DynamicModules.Domain.Repositories.Dynamic.ITaskRepository.TryMarkDueSoonNotifiedAsync),
+            () => Interlocked.Exchange(ref _beforeClaim, null)?.Invoke() ?? Task.CompletedTask));
+
+    private static DateOnly D(int month, int day) => new(2026, month, day);
+
+    private async Task<List<Notification>> Notifications(string userId) =>
+        await Db.Context.Set<Notification>().AsNoTracking().Where(n => n.UserId == userId && n.Kind == NotificationKinds.TaskDueSoon).ToListAsync();
+
+    [Fact]
+    public async Task ReassignedBetweenReadAndClaim_OldAssigneeNotNotified_NewAssigneeStillReminded()
+    {
+        var task = await SeedTask(title: "明天交", assignee: "sales01", due: D(11, 5));
+        _beforeClaim = () => Db.Context.Set<TaskItem>().Where(t => t.Id == task.Id)
+            .ExecuteUpdateAsync(x => x.SetProperty(t => t.AssigneeUserId, "sales02").SetProperty(t => t.LastDueSoonNotified, (DateOnly?)null));
+
+        As("sales01");
+        (await Send(new GetNotificationsRequest())).IsSuccess.Should().BeTrue();
+        Db.Context.ChangeTracker.Clear();
+        (await Notifications("sales01")).Should().BeEmpty("讀到的那一版已不是現在的負責人");
+        (await Load(task.Id)).LastDueSoonNotified.Should().BeNull("沒有消耗新負責人的唯一提醒");
+
+        As("sales02");
+        (await Send(new GetNotificationsRequest())).IsSuccess.Should().BeTrue();
+        Db.Context.ChangeTracker.Clear();
+        (await Notifications("sales02")).Should().ContainSingle();
+    }
+}
+
+/// <summary>在指定方法（回傳 Task&lt;bool&gt;）執行前先跑一段交錯動作，其餘方法原樣轉給內層。</summary>
+public class BeforeCallProxy<T> : System.Reflection.DispatchProxy where T : class
+{
+    private T _inner = null!;
+    private string _method = "";
+    private Func<Task> _before = null!;
+
+    public static T Create(T inner, string method, Func<Task> before)
+    {
+        var proxy = Create<T, BeforeCallProxy<T>>();
+        var self = (BeforeCallProxy<T>)(object)proxy;
+        (self._inner, self._method, self._before) = (inner, method, before);
+        return proxy;
+    }
+
+    protected override object? Invoke(System.Reflection.MethodInfo? method, object?[]? args)
+    {
+        if (method!.Name == _method) return InvokeAfter(method, args);
+        try
+        {
+            return method.Invoke(_inner, args);
+        }
+        catch (System.Reflection.TargetInvocationException e)
+        {
+            System.Runtime.ExceptionServices.ExceptionDispatchInfo.Throw(e.InnerException!);
+            throw;
+        }
+    }
+
+    private async Task<bool> InvokeAfter(System.Reflection.MethodInfo method, object?[]? args)
+    {
+        await _before();
+        return await (Task<bool>)method.Invoke(_inner, args)!;
     }
 }

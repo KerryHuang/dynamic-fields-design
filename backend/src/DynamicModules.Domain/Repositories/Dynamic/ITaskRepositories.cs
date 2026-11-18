@@ -76,10 +76,13 @@ public interface ITaskRepository
     Task<bool> AnyReminderDueAsync(string userId, DateOnly today, ReminderFilter filter, CancellationToken ct);
     /// <summary>條件同 <see cref="AnyReminderDueAsync"/>，依 Id 排序，不追蹤。</summary>
     Task<List<TaskItem>> ListReminderDueAsync(string userId, DateOnly today, ReminderFilter filter, CancellationToken ct);
-    /// <summary>條件式蓋「即將到期」戳記：只在還沒提醒過（LastDueSoonNotified 為 null）時寫入 today，影響列數 1 才回 true。</summary>
-    Task<bool> TryMarkDueSoonNotifiedAsync(long taskId, DateOnly today, CancellationToken ct);
-    /// <summary>條件式蓋「逾期」戳記：只在今天還沒蓋過時寫入 today，影響列數 1 才回 true。</summary>
-    Task<bool> TryMarkOverdueNotifiedAsync(long taskId, DateOnly today, CancellationToken ct);
+    /// <summary>
+    /// 條件式蓋「即將到期」戳記：只在還沒提醒過（LastDueSoonNotified 為 null），而且負責人、到期日、狀態仍和 <paramref name="read"/>
+    /// （判斷時讀到的那一版）相同時寫入 today，影響列數 1 才回 true。讀取之後任務被改派、改期或完成，就不認領，留給下一輪重新判斷。
+    /// </summary>
+    Task<bool> TryMarkDueSoonNotifiedAsync(TaskItem read, DateOnly today, CancellationToken ct);
+    /// <summary>條件式蓋「逾期」戳記：只在今天還沒蓋過、而且負責人、到期日、狀態仍和 <paramref name="read"/> 相同時寫入 today，影響列數 1 才回 true。</summary>
+    Task<bool> TryMarkOverdueNotifiedAsync(TaskItem read, DateOnly today, CancellationToken ct);
     /// <summary>
     /// 改到期日或換負責人後重新計提醒（O1 計畫裁決 D2）：清掉「即將到期」戳記，overdueToo 時連「逾期」戳記一起清；
     /// 一定寫進這次存檔（值本來就是 null 也照寫，蓋掉並行請求剛蓋上的戳記）。

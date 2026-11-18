@@ -14,6 +14,7 @@ namespace DynamicModules.Application.Dynamic.NotificationService;
 /// <item>已逾期（taskOverdue）：該模組開啟逾期提醒（政策 task.remindOverdue）時每天最多一則；上一則逾期通知還沒讀就只蓋今天的戳記、不再新增。</item>
 /// </list>
 /// 去重靠戳記的條件式更新（影響列數 1 才新增通知）：兩條路徑或多個實例同時跑也不會重複，不依賴寫入排隊。
+/// 認領時一併比對讀到的負責人、到期日、狀態：讀取後才被改派、改期或完成的任務不認領，通知只發給認領成功那一版的負責人。
 /// </summary>
 public sealed class TaskReminderSource(ITaskRepository tasks, INotificationRepository notifications, IBusinessTime time, IPolicyReader policies)
     : INotificationReminderSource
@@ -33,10 +34,10 @@ public sealed class TaskReminderSource(ITaskRepository tasks, INotificationRepos
         foreach (var task in await tasks.ListReminderDueAsync(userId, today, await FilterAsync(userId, today, ct), ct))
         {
             var (dueSoon, overdue) = await DecideAsync(task, today, ct);
-            if (dueSoon && await tasks.TryMarkDueSoonNotifiedAsync(task.Id, today, ct))
+            if (dueSoon && await tasks.TryMarkDueSoonNotifiedAsync(task, today, ct))
                 notifications.Add(TaskNotificationWriter.For(task, userId, NotificationKinds.TaskDueSoon, time.Now));
             // 搶到今天的戳記才查未讀；還有沒讀的逾期通知時由它代表今天的提醒，讀過之後隔天才再補
-            if (overdue && await tasks.TryMarkOverdueNotifiedAsync(task.Id, today, ct)
+            if (overdue && await tasks.TryMarkOverdueNotifiedAsync(task, today, ct)
                 && !await notifications.AnyUnreadBySourceAsync(userId, TaskNotificationWriter.SourceType, task.Id, NotificationKinds.TaskOverdue, ct))
                 notifications.Add(TaskNotificationWriter.For(task, userId, NotificationKinds.TaskOverdue, time.Now));
         }
