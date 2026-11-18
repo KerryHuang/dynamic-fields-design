@@ -21,6 +21,7 @@ using MediatR;
 using Microsoft.Extensions.DependencyInjection;
 using Xunit.Abstractions;
 using Record = DynamicModules.Domain.Entities.Dynamic.Record;
+using DynamicModules.Persistence.Dynamic.Dialects;
 
 namespace DynamicModules.ApplicationTests.Persistence;
 
@@ -54,6 +55,7 @@ public class ReportBenchmarkTests(ITestOutputHelper output)
         var services = new ServiceCollection();
         services.AddApplication();
         services.AddPersistenceRepositories();
+        services.AddSingleton<ISqlDialect, SqliteDialect>();
         services.AddScoped(_ => db.Context);
         services.AddScoped<ITransactionManager, EfTransactionManager>();
         services.AddScoped<IWorkSavepoints, EfWorkSavepoints>();

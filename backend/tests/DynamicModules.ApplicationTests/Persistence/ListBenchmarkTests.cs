@@ -23,6 +23,7 @@ using MediatR;
 using Microsoft.Data.Sqlite;
 using Microsoft.Extensions.DependencyInjection;
 using Xunit.Abstractions;
+using DynamicModules.Persistence.Dynamic.Dialects;
 
 namespace DynamicModules.ApplicationTests.Persistence;
 
@@ -68,6 +69,7 @@ public class ListBenchmarkTests(ITestOutputHelper output)
         var services = new ServiceCollection();
         services.AddApplication();
         services.AddPersistenceRepositories();
+        services.AddSingleton<ISqlDialect, SqliteDialect>();
         services.AddScoped(_ => db.Context);
         services.AddScoped<ITransactionManager, EfTransactionManager>();
         services.AddScoped<IWorkSavepoints, EfWorkSavepoints>();

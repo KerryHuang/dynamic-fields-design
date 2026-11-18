@@ -53,7 +53,7 @@ public sealed class ManualTaskRules(ITaskRuleRepository rules, ITaskRepository t
 /// </summary>
 public class ApplyTaskRuleHandler(
     TaskAccess access, ManualTaskRules manual, ITaskRuleRepository rules, ITaskRepository tasks, IModuleRepository modules,
-    IPermissionRepository permissions, TaskRuleApplier applier, TaskWriter writer, TaskSupport support)
+    IPermissionRepository permissions, TaskRuleApplier applier, TaskWriter writer, TaskSupport support, IDatabaseErrors errors)
     : IRequestHandler<ApplyTaskRuleRequest, ServiceResult>
 {
     public async Task<ServiceResult> Handle(ApplyTaskRuleRequest request, CancellationToken ct)
@@ -79,7 +79,7 @@ public class ApplyTaskRuleHandler(
         {
             await writer.FlushAsync(ct);
         }
-        catch (DbUpdateException e) when (TaskRuleConflicts.IsUnique(e))
+        catch (DbUpdateException e) when (errors.IsUniqueViolation(e))
         {
             return ServiceResult.Conflict(MessageRef.Of(MessageText.TaskRuleAlreadyRun));
         }

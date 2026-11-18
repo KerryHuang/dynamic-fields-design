@@ -25,7 +25,7 @@ public class MmapSizeSettingTests : IDisposable
         if (mmapMb is not null) settings["Sqlite:MmapSizeMb"] = mmapMb;
         var config = new ConfigurationBuilder().AddInMemoryCollection(settings).Build();
         var services = new ServiceCollection();
-        services.AddPersistence(config);
+        services.AddSqliteDatabase(config);
         return services.BuildServiceProvider();
     }
 

@@ -20,7 +20,7 @@ public sealed record EffectRun(
 public class EffectApplier(
     IModuleRepository modules, IRecordRepository records, IEventFactRepository facts, ILedgerRepository ledgers,
     LedgerReverser reverser, IEffectHandlerRegistry handlers, EffectWriter writer, IOperationContext operation,
-    Common.Time.IBusinessTime time, IUnitOfWork uow)
+    Common.Time.IBusinessTime time, IUnitOfWork uow, IDatabaseErrors errors)
 {
     public const int MaxEachRows = 200;
 
@@ -183,7 +183,7 @@ public class EffectApplier(
         {
             await uow.CommitAsync(ct);
         }
-        catch (DbUpdateException e) when (e.InnerException?.Message.Contains("UNIQUE", StringComparison.OrdinalIgnoreCase) == true)
+        catch (DbUpdateException e) when (errors.IsUniqueViolation(e))
         {
             throw new InvalidOperationException("連動事件的事實重複（同一個事件對同一筆來源已經產生過連動記錄）", e);
         }

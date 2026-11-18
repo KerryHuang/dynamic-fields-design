@@ -22,6 +22,7 @@ using DynamicModules.TestSupport;
 using FluentAssertions;
 using MediatR;
 using Microsoft.Extensions.DependencyInjection;
+using DynamicModules.Persistence.Dynamic.Dialects;
 
 namespace DynamicModules.ApplicationTests.Dynamic;
 
@@ -64,6 +65,7 @@ public abstract class DesignerTestBase : IAsyncLifetime
         var services = new ServiceCollection();
         services.AddApplication();
         services.AddPersistenceRepositories();
+        services.AddSingleton<ISqlDialect, SqliteDialect>();
         services.AddTestEntities();
         services.AddSingleton(Db.Context);   // 執行個體註冊：scope 結束時容器不會把共用的 DbContext 釋放掉
         services.AddScoped<ITransactionManager, EfTransactionManager>();

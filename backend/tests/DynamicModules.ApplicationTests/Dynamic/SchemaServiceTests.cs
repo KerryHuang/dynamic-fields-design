@@ -26,6 +26,7 @@ using DynamicModules.TestSupport;
 using FluentAssertions;
 using MediatR;
 using Microsoft.Extensions.DependencyInjection;
+using DynamicModules.Persistence.Dynamic.Dialects;
 
 namespace DynamicModules.ApplicationTests.Dynamic;
 
@@ -52,6 +53,7 @@ public class SchemaServiceTests : IAsyncLifetime
         var services = new ServiceCollection();
         services.AddApplication();
         services.AddPersistenceRepositories();
+        services.AddSingleton<ISqlDialect, SqliteDialect>();
         services.AddTestEntities();
         services.AddScoped(_ => _db.Context);
         services.AddScoped<ITransactionManager, EfTransactionManager>();

@@ -27,10 +27,16 @@ using Microsoft.EntityFrameworkCore;
 
 var builder = WebApplication.CreateBuilder(args);
 
+// 資料庫種類由 Database:Provider 決定（預設 Sqlite）；PostgreSQL provider 在 pg0b 才提供，現在設了就拒絕啟動
+var databaseProvider = DatabaseProviders.Read(builder.Configuration);
+if (databaseProvider != DatabaseProvider.Sqlite)
+    throw new InvalidOperationException($"{DatabaseProviders.SettingKey}={databaseProvider} 尚未提供（PostgreSQL provider 在 pg0b 加入），目前只能用 Sqlite");
 // 相對路徑一律以 content root 解析成絕對路徑，建目錄與開檔用同一個位置。
 var dynamicConnection = SqliteConnectionStrings.ResolveDataSource(
     builder.Configuration.GetConnectionString("Dynamic")!, builder.Environment.ContentRootPath);
 builder.Configuration["ConnectionStrings:Dynamic"] = dynamicConnection;
+// 資料庫檔案所在目錄（SQLite 檔案型才有；記憶體資料庫是 null）：建目錄、預設金鑰目錄與附件目錄都依它
+var databaseDirectory = DatabaseProviders.FileDirectory(databaseProvider, dynamicConnection);
 // 雲端主機（如 Render）用 PORT 指定埠並要求聽所有介面；本機開發維持 127.0.0.1:5180。
 var port = Environment.GetEnvironmentVariable("PORT");
 builder.WebHost.UseUrls(port is null ? "http://127.0.0.1:5180" : $"http://0.0.0.0:{port}");
@@ -44,7 +50,7 @@ builder.Services.AddSingleton(new ReportOptions
     SqlTimeoutSeconds = builder.Configuration.GetValue("Reports:SqlTimeoutSeconds", 30.0),
 });
 builder.Services.AddHttpContextAccessor();
-builder.Services.AddPersistence(builder.Configuration);
+builder.Services.AddSqliteDatabase(builder.Configuration);
 builder.Services.AddScoped<ICurrentUser, ClaimsCurrentUser>();
 builder.Services.AddScoped<DynamicModules.Application.Common.ICurrentLocale, HeaderCurrentLocale>();
 builder.Services.AddSingleton<IPasswordService, PasswordService>();
@@ -56,7 +62,7 @@ builder.Services.AddSingleton<DynamicModules.Application.Dynamic.OpsService.IOps
 builder.Services.AddSingleton(sp => DynamicModules.Application.Dynamic.OpsService.OpsInstance.Create(sp.GetRequiredService<TimeProvider>()));
 builder.Services.AddSingleton(new AuthSettings(builder.Configuration.GetValue<bool>("Demo:LoginEnabled")));
 // 附件：預設放在資料庫旁的 attachments 目錄（記憶體資料庫則放暫存目錄）。Demo 登入開啟時預設不開放上傳，可用 Attachments:UploadEnabled 明確覆寫。
-var (attachmentSettings, policyDefaults, attachmentWarnings) = AttachmentSettingsFactory.Create(builder.Configuration, dynamicConnection);
+var (attachmentSettings, policyDefaults, attachmentWarnings) = AttachmentSettingsFactory.Create(builder.Configuration, databaseDirectory);
 builder.Services.AddSingleton(attachmentSettings);
 builder.Services.AddSingleton(policyDefaults);
 builder.Services.AddSingleton<IAttachmentStore>(new LocalAttachmentStore(attachmentSettings.Root));
@@ -86,11 +92,13 @@ if (trustForwardedHeaders)
         o.KnownNetworks.Clear();
         o.KnownProxies.Clear();
     });
-// 資料庫是檔案時，DataProtection 金鑰放在同一個目錄，重開站台後登入狀態不失效
-var dataSource = new Microsoft.Data.Sqlite.SqliteConnectionStringBuilder(dynamicConnection).DataSource;
-if (Path.IsPathRooted(dataSource))
-    builder.Services.AddDataProtection()
-        .PersistKeysToFileSystem(new DirectoryInfo(Path.Combine(Path.GetDirectoryName(dataSource)!, "keys")));
+// DataProtection 金鑰落地，重開站台後登入狀態不失效：有設 DataProtection:KeysDirectory 就用它（相對路徑以 content root 解析），
+// 否則資料庫是檔案時放在同一個目錄的 keys；都沒有（記憶體資料庫）就不落地
+var keysDirectory = builder.Configuration["DataProtection:KeysDirectory"] is { Length: > 0 } configuredKeys
+    ? Path.GetFullPath(configuredKeys, builder.Environment.ContentRootPath)
+    : databaseDirectory is null ? null : Path.Combine(databaseDirectory, "keys");
+if (keysDirectory is not null)
+    builder.Services.AddDataProtection().PersistKeysToFileSystem(new DirectoryInfo(keysDirectory));
 builder.Services.AddControllers().AddJsonOptions(o =>
 {
     o.JsonSerializerOptions.PropertyNamingPolicy = JsonNamingPolicy.CamelCase;
@@ -120,7 +128,7 @@ foreach (var warning in attachmentWarnings) app.Logger.LogWarning("{Warning}", w
 // 內建範本有錯就拒絕啟動（spec §13.1）：在碰資料庫之前先解析 singleton
 app.Services.GetRequiredService<TemplateCatalog>();
 app.Services.GetRequiredService<DynamicModules.Application.Dynamic.AppService.AppCatalog>();
-await InitializeDatabaseAsync(app, dynamicConnection);
+await InitializeDatabaseAsync(app, databaseDirectory);
 // 建置 Demo 映像時用（Dockerfile.demo）：產生完 Demo 資料就結束，失敗回非 0 讓建置失敗
 if (args.Contains("--generate-demo-data"))
 {
@@ -169,11 +177,9 @@ if (Directory.Exists(Path.Combine(app.Environment.ContentRootPath, "wwwroot")))
 app.Run();
 return 0;
 
-static async Task InitializeDatabaseAsync(WebApplication app, string dynamicConnection)
+static async Task InitializeDatabaseAsync(WebApplication app, string? databaseDirectory)
 {
-    var source = new Microsoft.Data.Sqlite.SqliteConnectionStringBuilder(dynamicConnection).DataSource;
-    if (Path.IsPathRooted(source))
-        Directory.CreateDirectory(Path.GetDirectoryName(source)!);
+    if (databaseDirectory is not null) Directory.CreateDirectory(databaseDirectory);
 
     using var scope = app.Services.CreateScope();
     var db = scope.ServiceProvider.GetRequiredService<DynamicDbContext>();
