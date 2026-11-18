@@ -16,7 +16,7 @@ fi
 cd "$ROOT/backend" || exit 2
 for p in DomainTests ApplicationTests WebAPITests; do
   start=$(date +%s)
-  dotnet test "tests/DynamicModules.$p" 2>&1 | grep -E "^(Passed|Failed)!|^ +Failed [A-Za-z]" | tail -6
+  FORMWRIGHT_TEST_DB=sqlite dotnet test "tests/DynamicModules.$p" 2>&1 | grep -E "^(Passed|Failed)!|^ +Failed [A-Za-z]" | tail -6
   code=${PIPESTATUS[0]}
   echo "$p exit=$code ($(( $(date +%s) - start ))s)"
   [ "$code" -ne 0 ] && fail=1

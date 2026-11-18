@@ -82,6 +82,8 @@ jobs:
       - name: dotnet test
         if: matrix.shards == 1 && !matrix.pg
         working-directory: backend
+        env:
+          FORMWRIGHT_TEST_DB: sqlite
         run: dotnet test tests/DynamicModules.${{ matrix.project }} --logger "console;verbosity=minimal"
       # 命令列 filter 會蓋掉 csproj 的 Category!=Benchmark，要自己再排除；同類別裡個別標 SqliteOnly／PgDeferred 的案例也排除
       - name: dotnet test (PostgreSQL)
@@ -95,6 +97,8 @@ jobs:
       # 依測試類別切份（scripts/ci/shard-tests.sh）：從實際清單算分配，並核對實際執行數＝預期，不會漏測
       - name: dotnet test (shard ${{ matrix.shard }}/${{ matrix.shards }})
         if: matrix.shards > 1
+        env:
+          FORMWRIGHT_TEST_DB: sqlite
         run: bash scripts/ci/shard-tests.sh ${{ matrix.project }} ${{ matrix.shard }} ${{ matrix.shards }}
 
   frontend:

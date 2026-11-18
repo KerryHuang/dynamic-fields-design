@@ -129,7 +129,13 @@ public class PostgresWriteLockTests : IAsyncLifetime
             await using var count = new NpgsqlCommand(
                 "SELECT count(*) FROM pg_stat_activity WHERE datname = @db AND wait_event_type = 'Lock' AND wait_event = 'advisory'", monitor);
             count.Parameters.AddWithValue("db", database);
-            // 取樣一秒：寫入都已發出，第一個在等鎖、其餘應該在閘門排隊
+            // 先等第一個 waiter 就緒（輪詢，上限 30 秒），再取樣一秒：其餘寫入應該在閘門排隊
+            var ready = Stopwatch.StartNew();
+            while ((int)(long)(await count.ExecuteScalarAsync())! < 1)
+            {
+                ready.Elapsed.Should().BeLessThan(TimeSpan.FromSeconds(30), "第一個寫入應該很快就卡在 advisory lock 上");
+                await Task.Delay(20);
+            }
             var watch = Stopwatch.StartNew();
             while (watch.Elapsed < TimeSpan.FromSeconds(1))
             {

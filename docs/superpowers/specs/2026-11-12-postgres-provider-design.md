@@ -355,7 +355,7 @@ O1 若因為 PostgreSQL 的行為需要改程式（違反「pg0 完成後不改�
 |---|---|---|
 | 1 | `bash scripts/unattended/gate.sh <worktree>` | 每步 `exit=0`，含兩個 PostgreSQL 步驟；PostgreSQL 兩步合計 ≤ 10 分鐘 |
 | 2 | `dotnet test tests/DynamicModules.ApplicationTests --filter "FullyQualifiedName~MigrationConsistencyTests"` | 通過：兩個 provider 都沒有待產生的 migration |
-| 3 | `FORMWRIGHT_TEST_DB=postgres dotnet test tests/DynamicModules.ApplicationTests --filter "FullyQualifiedName~Scheduler\|FullyQualifiedName~NotificationUpkeep"`（類名以 O1 實作為準） | 通過，含兩種鎖模式的案例（§7） |
+| 3 | `FORMWRIGHT_TEST_DB=postgres dotnet test tests/DynamicModules.WebAPITests --filter "FullyQualifiedName~Scheduler\|FullyQualifiedName~NotificationUpkeep"`（類名以 O1 實作為準） | 通過，含兩種鎖模式的案例（§7） |
 | 4 | §6.6 的兩行全套指令 | 0 失敗；`PgDeferred` 只含報表 SQL 路徑的測試，每個有原因 |
 | 5 | 本機用 Docker 起 `postgres:16`（`POSTGRES_DB` 先建好資料庫），以 `Database__Provider=Postgres`、`ConnectionStrings__Dynamic=<連線字串>` 啟動 WebAPI | 首次啟動自動建表與種子；連線字串指向不存在的資料庫時拒絕啟動並說明；`/api/health/ready` 回 200；登入、建模組、新增記錄、列表篩選與排序、匯出、報表（記憶體路徑）、送簽與同意都可用 |
 | 6 | 同一個資料庫同時啟動兩個 WebAPI 實例 | 兩個都啟動成功，`__EFMigrationsHistory` 只有一列 baseline，種子不重複 |

@@ -111,10 +111,20 @@ public static class PostgresTestServer
     {
         await ExecuteAsync(admin, $"CREATE DATABASE \"{TemplateName}\"");
         var template = new NpgsqlConnectionStringBuilder(admin) { Database = TemplateName }.ConnectionString;
-        await using (var db = new DynamicDbContext(
-            (DbContextOptions<DynamicDbContext>)PostgresDatabase.Configure(new DbContextOptionsBuilder<DynamicDbContext>(), template,
-                new PostgresWriteSettings(PostgresWriteSettings.DefaultLockTimeoutSeconds)).Options))
-            await db.Database.MigrateAsync();
+        try
+        {
+            await using (var db = new DynamicDbContext(
+                (DbContextOptions<DynamicDbContext>)PostgresDatabase.Configure(new DbContextOptionsBuilder<DynamicDbContext>(), template,
+                    new PostgresWriteSettings(PostgresWriteSettings.DefaultLockTimeoutSeconds)).Options))
+                await db.Database.MigrateAsync();
+        }
+        catch
+        {
+            // migration 失敗：還沒註冊清理就會拋出，先把半成品樣板刪掉再重拋
+            await using (var pooled = new NpgsqlConnection(template)) NpgsqlConnection.ClearPool(pooled);
+            try { await ExecuteAsync(admin, $"DROP DATABASE IF EXISTS \"{TemplateName}\" WITH (FORCE)"); } catch { /* 盡力而為 */ }
+            throw;
+        }
         // 樣板還有人連著就不能複製：清掉它的連線池
         await using (var pooled = new NpgsqlConnection(template)) NpgsqlConnection.ClearPool(pooled);
         if (Environment.GetEnvironmentVariable(ServerVariable) is { Length: > 0 })

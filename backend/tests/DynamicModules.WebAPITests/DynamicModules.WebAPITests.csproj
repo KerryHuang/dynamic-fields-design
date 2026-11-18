@@ -7,6 +7,8 @@
 
     <IsPackable>false</IsPackable>
     <IsTestProject>true</IsTestProject>
+    <!-- 預設不跑 Benchmark；命令列的 filter 會覆蓋這個值（要跑就明確指定 filter） -->
+    <VSTestTestCaseFilter>Category!=Benchmark</VSTestTestCaseFilter>
   </PropertyGroup>
 
   <ItemGroup>
