@@ -13,6 +13,7 @@
 
 ## 其他
 
+- gt2a 甘特圖畫面小問題與審查建議：時間窗第一天的菱形被左緣切掉一半；zh-TW 日刻度顯示「16日 週一」（Intl 預設帶「日」）；同鍵重抓時沒有「更新中」提示、失敗但保有舊資料時不顯示錯誤與重試；未排程區只有開始日時要帶年份；快取 Intl.DateTimeFormat 並量測 500 列首次呈現與切刻度耗時；TaskGantt.vitest.spec 補延遲回應、快速切刻度、平移失敗、任務修改後重抓案例
 - gt1c 審查建議（測試類）：TaskGanttQueryTests 補父子分組截斷案例（父任務排名超過 500 仍帶 row、看不到的父任務 row=null、跨度不含被截掉的子任務），並把「因截斷未進 rows」寫進 task-board-types.ts 與後端 DTO 註解；TaskBoardApiTests 甘特 HTTP 測試固定時鐘、斷言確切 today 與預設 window
 - o1b 審查留下的排程器建議：設定驗證 Lease > 2×Renew（目前只在設計補記寫 Renew<Lease，出廠值安全）；補「續租呼叫不理會取消」時排程迴圈卡在 finally 的測試與上限；JobLeaseFence.NowUtc 取送出時刻，註解改成實際保證；JobRunner.RenewRoundCompleted 改 internal
 - 查 WebAPI 測試偶發 ObjectDisposedException（SQLitePCL.sqlite3 handle 已釋放）：2026-11-18 run 44234545443 的 TaskCommentAttachmentsApiTests.ClosedModule_StillDownloads 開連線時失敗、rerun 即過；疑與共用 DB 範本（0823c4ac）或 DemoDataApiTests 類別 fixture（7553f9b6）的釋放順序有關，再出現時記 run id
