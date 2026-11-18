@@ -327,6 +327,7 @@ FORMWRIGHT_TEST_DB=postgres dotnet test tests/DynamicModules.WebAPITests --filte
 
 - pg0d 至少完整跑過一次並全數通過；之後在動到 Persistence、migration、交易或上線前手動跑。
 - 預估時間是 SQLite 全套的 1.2–2 倍（每個測試多一次資料庫複製），所以不進 gate。
+- **pg0d 實測（2026-11-19，macOS、Docker Desktop）**：ApplicationTests 3313 個測試全過，555 秒（測試本身 9 分 14 秒）；WebAPITests 1383 個測試全過，945 秒（測試本身 15 分 32 秒），合計約 25 分鐘。排除的 `PgDeferred` 是 ApplicationTests 的三個報表 SQL 路徑類別共 217 個；`SqliteOnly` 新增一個（`DatabaseProviderStartupTests.ExplicitSqlite_StartsAsBefore`）。WebAPITests 的時間主要花在平行的測試主機搶同一個測試容器：單跑一個開應用程式的測試約 8 秒，全套時同一個請求會超過 100 秒，所以 PostgreSQL 模式的測試主機把等鎖上限放寬到 300 秒、HttpClient 逾時放寬到 360 秒（只在測試，正式預設仍是 30 秒）。
 
 ## 7. O1 與 mcp1a 在 PostgreSQL 上的驗證
 
@@ -416,6 +417,11 @@ O1 若因為 PostgreSQL 的行為需要改程式（違反「pg0 完成後不改�
 - `.claude/rules/backend.md`「PostgreSQL 相容」條補三句：可空欄位排序要明寫 NULL 的位置；不依賴沒有 `ORDER BY` 時的回傳順序；列舉查詢結果時不在迴圈內再發查詢。
 - 驗收：§8 第 4 項。
 - 停損：第一次試跑後，非報表、非測試寫法造成的產品失敗若超過 50 個，先回報失敗分類與估計，由使用者決定是否切成更多段，不在 pg0d 裡硬做完。
+- **實作補記（2026-11-19）**：
+  - 第一次試跑：ApplicationTests 一開跑就整個卡住（82 條連線 idle in transaction、測試行程 CPU 0%）。原因是測試裡 4 處同步等非同步（`ApprovalTestBase`、`WorkflowTests` 的 `Opt`、`ApprovalAddSignTests.CurrentView`、`RacingFlowRepository` 的掛勾），和 pg0c 在 `TestApp` 遇到的同一種卡死；改在執行緒池上跑。WebAPITests 的 `AppFormat7Tests.ActiveRuleKeys` 同樣處理。
+  - 修正後第一輪：ApplicationTests 119 個失敗、WebAPITests 10 個。分類：報表 SQL 路徑 107＋5（日期分桶）＋2（ReportSqlEquivalenceTests 的 raw SQL），標 `PgDeferred`；測試寫法 13（raw SQL 識別字沒加引號 4、測試在列舉查詢結果時逐筆再查 8 —— "A command is already in progress"、ops info 斷言寫死 sqlite 1）；只在 SQLite 有意義 1；全套平行跑的負載逾時 8（開應用程式的 7 個請求超過 HttpClient 100 秒、50 筆並行出貨有 6 筆等鎖超過 30 秒回 503）。**產品在 PostgreSQL 上的錯：0**，產品程式沒有改。
+  - 預期中的可空欄位排序、長度守衛抓到的超長寫入、產品程式的同連線兩個讀取器，這一輪都沒有出現。沒有逐處盤點每個 LINQ `OrderBy`，只代表現有測試沒有踩到；看過的 `TaskRepositories` 已有 `x == null` 前置排序。新程式照 `.claude/rules/backend.md` 的規則明寫 NULL 位置。
+  - `TestDb.CreateAsync(restore:)` 的 Demo 快照：PostgreSQL 模式改成產生一次後複製成來源庫，每份 `CREATE DATABASE … TEMPLATE` 複製（`PostgresTestServer.CloneDatabaseAsync`、`TestDb.CreateAsync(postgresSource:)`），Demo 類測試照常在 PostgreSQL 跑，不標 `SqliteOnly`。
 
 pg0a 與 pg0b 改同一批 Persistence 檔，依序做；pg0c 依賴 pg0b；pg0d 依賴 pg0c。只有 pg0b 加 migration（只有 PostgreSQL 的 baseline，SQLite 沒有新 migration）。
 
