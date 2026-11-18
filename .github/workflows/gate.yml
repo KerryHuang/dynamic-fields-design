@@ -66,6 +66,9 @@ jobs:
           - { name: WebAPITests 2/4, project: WebAPITests, shard: 2, shards: 4 }
           - { name: WebAPITests 3/4, project: WebAPITests, shard: 3, shards: 4 }
           - { name: WebAPITests 4/4, project: WebAPITests, shard: 4, shards: 4 }
+          # PostgreSQL 雙跑集（PostgreSQL provider 設計 §6.4、§6.5）：Testcontainers 用 runner 內建的 Docker 起 postgres:16-alpine
+          - { name: ApplicationTests PostgreSQL, project: ApplicationTests, shard: 1, shards: 1, pg: true }
+          - { name: WebAPITests PostgreSQL, project: WebAPITests, shard: 1, shards: 1, pg: true }
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-dotnet@v4
@@ -77,9 +80,18 @@ jobs:
           key: nuget-${{ runner.os }}-${{ hashFiles('backend/**/*.csproj', 'backend/Directory.Build.props') }}
           restore-keys: nuget-${{ runner.os }}-
       - name: dotnet test
-        if: matrix.shards == 1
+        if: matrix.shards == 1 && !matrix.pg
         working-directory: backend
         run: dotnet test tests/DynamicModules.${{ matrix.project }} --logger "console;verbosity=minimal"
+      # 命令列 filter 會蓋掉 csproj 的 Category!=Benchmark，要自己再排除；同類別裡個別標 SqliteOnly／PgDeferred 的案例也排除
+      - name: dotnet test (PostgreSQL)
+        if: matrix.pg
+        working-directory: backend
+        env:
+          FORMWRIGHT_TEST_DB: postgres
+        run: >-
+          dotnet test tests/DynamicModules.${{ matrix.project }} --logger "console;verbosity=minimal"
+          --filter "Category=Postgres&Category!=SqliteOnly&Category!=PgDeferred&Category!=Benchmark"
       # 依測試類別切份（scripts/ci/shard-tests.sh）：從實際清單算分配，並核對實際執行數＝預期，不會漏測
       - name: dotnet test (shard ${{ matrix.shard }}/${{ matrix.shards }})
         if: matrix.shards > 1
