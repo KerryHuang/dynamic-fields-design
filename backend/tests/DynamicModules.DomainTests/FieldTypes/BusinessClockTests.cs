@@ -9,6 +9,17 @@ namespace DynamicModules.DomainTests.FieldTypes;
 /// <summary>日期時間的解析不依主機時區：無偏移＝台北牆上時間，帶偏移換到 +08:00。UTC 主機才分辨得出有沒有誤用主機時區：CI 跑 UTC，開發機是台北；改到這段時本機加跑 TZ=UTC。</summary>
 public class BusinessClockTests
 {
+    [Fact]
+    public void TryParseWallClock_NoOffsetNearMaxValue_ParsesWithoutShift()
+    {
+        BusinessClock.TryParseWallClock("9999-12-31T23:00:00", out var at).Should().BeTrue();
+        at.Should().Be(new DateTime(9999, 12, 31, 23, 0, 0));
+    }
+
+    [Fact]
+    public void TryParseWallClock_OffsetOverflowAfterShift_ReturnsFalse() =>
+        BusinessClock.TryParseWallClock("9999-12-31T16:00:00Z", out _).Should().BeFalse();
+
     [Theory]
     [InlineData("2026-11-04T23:00:00", "2026-11-04 23:00")]
     [InlineData("2026-11-04T23:00", "2026-11-04 23:00")]

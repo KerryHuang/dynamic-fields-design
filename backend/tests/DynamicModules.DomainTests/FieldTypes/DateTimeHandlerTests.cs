@@ -48,6 +48,22 @@ public class DateTimeHandlerTests
     }
 
     [Fact]
+    public void DateTimeHandler_UpperBoundary_ExactlyFitsAfterShift_IsAccepted()
+    {
+        // UTC 9999-12-31T15:59:59 + 8 小時 = 9999-12-31T23:59:59，剛好不溢位
+        Run(FieldType.DateTime, "\"9999-12-31T15:59:59Z\"").Value!.Value.GetString()
+            .Should().Be("9999-12-31T23:59:59+08:00");
+        Run(FieldType.DateTime, "\"9999-12-31T16:00:00Z\"").IsValid.Should().BeFalse();
+    }
+
+    [Fact]
+    public void DateTimeHandler_LowerBoundary_Valid_IsAccepted()
+    {
+        Run(FieldType.DateTime, "\"0001-01-01T00:00:00Z\"").Value!.Value.GetString()
+            .Should().Be("0001-01-01T08:00:00+08:00");
+    }
+
+    [Fact]
     public void DateTimeHandler_ConvertsOtherOffsets_AndCrossesMidnight()
     {
         Run(FieldType.DateTime, "\"2026-11-03T20:30+00:00\"").Value!.Value.GetString()
