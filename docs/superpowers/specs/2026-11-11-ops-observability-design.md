@@ -2346,3 +2346,48 @@ O2 在 pg0 之後，合併前兩種資料庫都要驗（使用者裁決 §3 第 
 - ⚠️ 「提交成功後丟例外」的測試注入方式（`DbTransactionInterceptor.TransactionCommitted` 拋例外）在兩種 provider 都會讓呼叫端收到例外、而資料已提交（C14；o2b 先試）。
 - ⚠️ 數值溢位在既有寫入流程是否已轉成 400（E13 矩陣最後一列；o2d 計畫時核對）。
 - 本節的檔案與行號（`EventStage.cs:67-68`、`CheckEvaluator.cs:40`、`EffectApplier.cs`、`TaskRuleStage.cs`、`ManualTaskRules.cs`、`LoginHandler.cs`、`UpdateSiteThemeHandler.cs`、`SessionMiddleware.cs`、`ClaimsCurrentUser.cs`、`AuthController.cs`、`DatabaseErrors.cs`、`Errors/*ExceptionHandler.cs`）是 2026-11-19 讀 `772e7a54`（第二輪讀 `fd71171a`）的結果，計畫階段再核對一次。
+
+### 17.11 o2a 實作補記（2026-11-19）
+
+範圍照 §17.1 o2a：九張表、稽核寫入與查詢、`IDatabaseErrors` 三個分類、稽核保留清理。健康檢查邏輯、事件記錄器、SMTP、自動暫停、前端頁面都不在這一段。
+
+**表與 migration**
+
+- 九張表照 §17.4 建（`OpsEventCenter`，兩個 provider 各一份），欄位名、可空、長度由 `OpsSchemaTests` 逐欄比對；列舉一律存 camelCase 文字（`CamelEnum`），`*Utc` 欄位讀回是 UTC（PostgreSQL 27 個 `timestamptz`）。與 §17.4 沒有欄位差異。
+- `AlertChannel` 照 O2-U14 加 `MailLocale`；收件人照 O2-U1 放在通道上，`AppUser` 不動。
+- ⚠️ `scripts/db/add-migration.sh` 最後一行的 echo 在 zsh／bash 的 `set -u` 下報 `name�: unbound variable`：`$name` 後面緊接全形「」」被當成變數名的一部分。migration 已正常產生，只是結尾訊息壞掉；改成 `${name}` 即可，這一段沒動腳本。
+
+**稽核寫入（§17.2.1）**
+
+- 寫入點：`IAuditedRequest`（74 個請求，宣告動作代碼與目標）由 `AuditBehavior` 在交易內、handler 成功後寫一列，與變更同交易提交；稽核寫不進去整筆回滾（A02）。登入（`LoginHandler`、`DemoLoginHandler`）與排程工作不經 behavior，用 `IAuditLog.TryWriteNowAsync`／`Add`。
+- **偏離 1：巢狀的稽核請求只記最外層。** 開應用程式、整併主檔、整合重整這類流程會在一個請求裡再送幾十個設計請求；`AuditContext.Depth` 讓只有最外層寫一列（例如只記 `app.open`，不另記內層每個 `field.add`）。Demo 資料產生器本身不是稽核請求，所以它送的每個設計請求各記一列（Demo 資料的稽核時間本來就是模擬的）。
+- **偏離 2：權限變更的摘要只放有變的格子，最多 200 格**，另帶 `changeCount`（`PermissionAuditCells`）。格子的鍵是 `group:{id}.{動作}`、`group:{id}.scope`、`user:{id}.{動作}`、`field:{欄位}/group:{群組}`、`option:{id}`、`fieldGrant:{id}`。
+- **偏離 3：新建類的目標用請求帶的 key 或名稱**（建模組用 `Input.Key`，建群組、儀表板用名稱當 `TargetLabel`）；需要新產生的 id 時由 handler 呼叫 `AuditContext.Target(id)` 補上（建使用者）。
+- 登入失敗的 `ReasonCode`：`unknownAccount`、`inactive`、`locked`、`noPassword`、`wrongPassword`；Demo 登入另有 `notDemoAccount`。帳號不存在時目標留空，不記輸入的帳號字串（A03）。被節流擋下的嘗試不寫稽核，只加計數器 `formwright.login.throttled`。登入失敗與沒有身分的寫入記 `ActorKind = system`、`ActorUserId = null`。
+- 行為者覆寫（`ActorOverride`）只在 `AuditOrigin.BeginSignIn()` 範圍內允許；範圍內不取環境身分（舊 cookie），範圍外有身分又覆寫就丟 `InvalidOperationException`。`BeginSignIn` 的呼叫者只有兩個登入 handler，由 `AuditArchitectureTests` 掃原始碼把關（A10）。
+- `WriteNowAsync`／`TryWriteNowAsync` 在交易內一律丟 `InvalidOperationException`，守衛在建立新 scope 之前（A09，以計數的 scope factory 驗證）。
+- 遮蔽：鍵名剛好是 `password`、`token`、`secret`（不分大小寫）的值，與 `fwp_`、`fwc_` 開頭的字串值都換成 `***`。超過 16000 字元時只留有變的鍵並標 `truncated`，仍超過就從最大的項目開始丟。
+- 覆蓋率：`AuditCoverageTests` 用反射找出所有交易型請求中屬於 `ISystemAdminRequest`、或 `IDesignerRequest` 且需要的設計權限不是唯讀的，每個都要實作 `IAuditedRequest`，例外清單目前是空的（A05）。
+
+**查詢 API（§17.5）**
+
+- `GET system/ops/audit`、`system/ops/audit/{id}`、`system/ops/audit/actions`，只有系統管理員。
+- **偏離 4：repository 多一個 `GetAsync(id)`**（詳細頁用），§17.5 只列了分頁查詢與清理。
+- **偏離 5：時間範圍兩端都含。** 預設迄時是「現在」，剛寫入的列（同一個時間點）要查得到；§17.5 沒寫端點含不含。
+- 動作與動作分組同時給時取交集；分組展開成動作清單查，不用 LIKE。開 Demo 登入時列表與詳細都不回 `clientIp`。
+
+**清理（§17.6、§17.9）**
+
+- 新工作 `ops.upkeep`，間隔政策 `ops.upkeepMinutes`（出廠 60，5–1440 分鐘），保留天數政策 `ops.auditRetentionDays`（出廠 365，90–3650 天）；兩個政策加進 `PolicyCatalog`、`shared/policy-catalog.json` 與四個語系。截止時間用排程器的時鐘（與租約同一個時間來源）。
+- 每批最多 5000 列（`OpsUpkeepOptions`，技術限制），每批一個交易型請求、帶租約檢查；租約丟了就停。
+- **偏離 6：`ops.retention.purge` 只在真的刪了列時寫**，摘要 `{"deleted":{"auditLog":n}}`；沒東西可刪就不寫，避免每小時一列空紀錄。
+
+**`IDatabaseErrors`（§17.2.9、§17.2.10）**
+
+- `IsReadOnly`：SQLite 8、PostgreSQL `25006`。`IsStorageFull`：SQLite 13、PostgreSQL `53100`。`IsUnavailable`：SQLite 14、10，PostgreSQL 類別 `08` 與 `57P01`–`57P03`，以及不帶 SQLSTATE、內層是 `SocketException`／`IOException` 的例外。連線池耗盡（內層 `TimeoutException`）仍歸忙碌。C11 用建構的例外驗證一個例外只歸一類；真的斷線時的例外形狀仍照 §17.10.6 待 o2b 實測。
+
+**驗證（本機）**
+
+- 只跑受影響的類別，每種資料庫各一次（全套交 CI）。ApplicationTests 篩稽核、九張表、`DatabaseErrors`、migration 一致性、PostgreSQL 模型、交易與設計權限 behavior、權限服務：SQLite 103 過、PostgreSQL 103 過。
+- WebAPITests 篩 `Ops.*`（含新的 `AuditApiTests` 19 個）、登入、Demo 登入、使用者與群組管理、政策、應用程式、部門、欄位、主題、儀表板、簽核流程設定、Demo 資料、整合：SQLite 359 過 1 略過（4 分 23 秒），PostgreSQL 360 過（6 分 53 秒）。
+- DomainTests 的政策類別 68 過；前端 `policy-i18n` 與語系檔 41 過，`vue-tsc` 型別檢查過。
