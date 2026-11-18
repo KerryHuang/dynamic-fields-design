@@ -164,6 +164,7 @@
 | A32 | 簽核：同意並加簽時每次最多幾位加簽對象、一張單最多幾個加簽關卡（設計 §7.6；技術上限各 20，可依模組覆寫） | 5、5 | M | a3c（已接上） |
 | A33 | 任務：部門主管可看與重派部屬的任務（`task.supervisorScope`） | 開 | S | kb1 |
 | A34 | 任務：主管範圍含下層部門（`task.supervisorScopeRecursive`） | 是 | S | kb1 |
+| A35 | 任務：每個父任務的子任務數（含已完成、已取消；`task.maxSubtasksPerTask`，技術上限 200；看板設計 §10.1） | 50 | S | st1a |
 | A36 | 簽核：逾期待簽的提醒間隔（設計 §12、§20.4 第 26 條；`approval.overdueReminderHours`，技術上限 720 小時，可依模組覆寫） | 24 小時 | M | a3e（已接上） |
 | A37 | 簽核：每個分支節點的分支數（流程圖設計 §15；`approval.maxBranches`，技術範圍 2–10，可依模組覆寫） | 5 | M | fg1a |
 
