@@ -344,6 +344,8 @@ public class TaskRuleRuntimeTests : TaskTestBase
         var (rec, parentId, childId) = await RuleParentWithChild(r);
         var version = await RowVersion(rec);
         var notifications = await Db.Context.Set<Notification>().AsNoTracking().CountAsync();
+        var parentEntries = (await Events(parentId)).Count;
+        var childEntries = (await Events(childId)).Count;
         _fail.FailWhen = c => c.Task.Id == childId;
 
         var act = () => Run(new UpdateRecordRequest(rec, Vals((r.Kind, Opt(r.Seminar))), version));
@@ -356,6 +358,8 @@ public class TaskRuleRuntimeTests : TaskTestBase
         var child = tasks.Single(t => t.Id == childId);
         child.Status.Should().Be(TaskItemStatus.InProgress);
         child.CancelledByParent.Should().BeFalse();
+        (await Events(parentId)).Should().HaveCount(parentEntries, "conditionUnmet 系統記錄一起回滾");
+        (await Events(childId)).Should().HaveCount(childEntries, "byParent 系統記錄一起回滾");
         (await Db.Context.Set<Notification>().AsNoTracking().CountAsync()).Should().Be(notifications);
     }
 

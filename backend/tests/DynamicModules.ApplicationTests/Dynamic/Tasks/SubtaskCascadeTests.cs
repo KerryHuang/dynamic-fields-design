@@ -550,6 +550,8 @@ public class SubtaskCascadeTests : TaskTestBase
         var rec = await NewRecord(t, "sales01");
         var parent = await SeedTask("辦行銷活動", createdBy: "sales02", assignee: "sales01", target: t, recordId: rec);
         var child = await SeedChild(parent, "訂場地", createdBy: "sales02", assignee: "sales01");
+        var parentEntries = (await SystemEntries(parent.Id)).Count;
+        var childEntries = (await SystemEntries(child.Id)).Count;
         _fail.FailWhen = c => c.Task.Id == child.Id;
 
         var act = async () => await Run("admin", new DeleteRecordRequest(rec, await RowVersion(rec)));
@@ -559,6 +561,31 @@ public class SubtaskCascadeTests : TaskTestBase
         (await Db.Context.Set<Record>().AsNoTracking().SingleAsync(r => r.Id == rec)).DeleteFlag.Should().BeFalse();
         (await Load(parent.Id)).Status.Should().Be(TaskItemStatus.Todo);
         (await Load(child.Id)).Status.Should().Be(TaskItemStatus.Todo);
+        (await SystemEntries(parent.Id)).Should().HaveCount(parentEntries, "recordDeleted 系統記錄一起回滾");
+        (await SystemEntries(child.Id)).Should().HaveCount(childEntries);
         (await Db.Context.Set<Notification>().AsNoTracking().CountAsync()).Should().Be(0);
+    }
+
+    [Fact]
+    public async Task C34_NotificationsAlreadySaved_ThenFailure_RollBackToo()
+    {
+        var parent = await SeedTask("辦行銷活動", createdBy: "admin", assignee: "sales01", status: TaskItemStatus.InProgress);
+        var child = await SeedChild(parent, "印海報", createdBy: "sales02", assignee: "sales02", status: TaskItemStatus.InProgress);
+        _fail.FailWhen = c => c.Task.Id == child.Id;
+        _fail.FailAfterSave = true;
+
+        var act = () => Patch("sales01", parent.Id, """{"status":"cancelled"}""");
+
+        await act.Should().ThrowAsync<InvalidOperationException>();
+        _fail.FailWhen = null;
+        _fail.FailAfterSave = false;
+        _fail.SavedBeforeFailure.Should().BeGreaterThanOrEqualTo(1, "真正的寫入端已寫通知並 SaveChanges（父任務建立者 admin、子任務建立者 sales02）");
+        (await Db.Context.Set<Notification>().AsNoTracking().CountAsync()).Should().Be(0, "已存進交易的通知也一起回滾");
+        (await Load(parent.Id)).Status.Should().Be(TaskItemStatus.InProgress);
+        var c = await Load(child.Id);
+        c.Status.Should().Be(TaskItemStatus.InProgress);
+        c.CancelledByParent.Should().BeFalse();
+        (await SystemEntries(parent.Id)).Should().BeEmpty();
+        (await SystemEntries(child.Id)).Should().BeEmpty();
     }
 }
