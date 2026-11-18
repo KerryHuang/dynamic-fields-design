@@ -5,6 +5,7 @@ using DynamicModules.Application.Dynamic.References;
 using DynamicModules.Domain.Data;
 using DynamicModules.Domain.Repositories.Dynamic;
 using DynamicModules.Persistence.Dynamic.Dialects;
+using DynamicModules.Persistence.Dynamic.Query;
 using DynamicModules.Persistence.Seed;
 using DynamicModules.Persistence.Repositories.Dynamic;
 using Microsoft.EntityFrameworkCore;
@@ -31,6 +32,7 @@ public static class DependencyInjection
             if (mmapBytes > 0) o.AddInterceptors(new SqliteMmapInterceptor(mmapBytes));
         });
         services.AddSingleton<ISqlDialect, SqliteDialect>();
+        services.AddSingleton<IReportSqlSnapshot, SqliteReportSqlSnapshot>();
         services.AddScoped<ITransactionManager, EfTransactionManager>();
         services.AddScoped<IWorkSavepoints, EfWorkSavepoints>();
         services.AddScoped<Application.Dynamic.OpsService.IDatabaseInfo, EfDatabaseInfo>();
@@ -38,7 +40,7 @@ public static class DependencyInjection
         return services.AddPersistenceRepositories();
     }
 
-    /// <summary>provider 無關的部分；<see cref="ISqlDialect"/>、DbContext、交易管理由 provider 專屬的註冊（或測試）提供。</summary>
+    /// <summary>provider 無關的部分；<see cref="ISqlDialect"/>、<see cref="IReportSqlSnapshot"/>、DbContext、交易管理由 provider 專屬的註冊（或測試）提供。</summary>
     public static IServiceCollection AddPersistenceRepositories(this IServiceCollection services)
     {
         services.AddSingleton<IDatabaseErrors, DatabaseErrors>();

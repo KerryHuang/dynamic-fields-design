@@ -21,7 +21,21 @@ public sealed class PostgresDialect : ISqlDialect
 
     public string StartsWithCaseSensitive(string column, string param) => $"left({column}, length({param})) = {param}";
 
-    /// <summary>報表 SQL 路徑在 pg1 才支援 PostgreSQL；pg0 的報表一律走記憶體路徑（設計 §5.9），這裡先擋住誤用。</summary>
-    public string DateBucket(string column, string? bucket) =>
-        throw new NotSupportedException("PostgreSQL 的日期分桶在 pg1 才提供；報表在 PostgreSQL 上走記憶體路徑");
+    /// <summary>
+    /// 與 SQLite 版逐字相同的分桶字串（等價測試把關）：ISO 週用 <c>IYYY</c>／<c>IW</c>（週一開始、該週星期四所在的年），
+    /// 週次固定兩位數；雙引號內是字面文字。欄位為 NULL 時 <c>to_char</c> 回 NULL。
+    /// </summary>
+    public string DateBucket(string column, string? bucket) => bucket switch
+    {
+        null or "day" => $"to_char({column}, 'YYYY-MM-DD')",
+        "week" => $"to_char({column}, 'IYYY-\"W\"IW')",
+        "month" => $"to_char({column}, 'YYYY-MM')",
+        "quarter" => $"to_char({column}, 'YYYY-\"Q\"Q')",
+        "year" => $"to_char({column}, 'YYYY')",
+        _ => throw new ArgumentException($"未知的分桶：{bucket}", nameof(bucket)),
+    };
+
+    public string IndexHint(string index) => "";
+
+    public string OrderedJoin() => "JOIN";
 }

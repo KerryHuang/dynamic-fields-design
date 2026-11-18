@@ -3,6 +3,7 @@ using DynamicModules.Application.Common;
 using DynamicModules.Domain.Data;
 using DynamicModules.Persistence;
 using DynamicModules.Persistence.Dynamic.Dialects;
+using DynamicModules.Persistence.Dynamic.Query;
 using DynamicModules.Persistence.Postgres;
 using DynamicModules.TestSupport;
 using Microsoft.Data.Sqlite;
@@ -67,7 +68,7 @@ public sealed class TestDb : IAsyncDisposable
     private static readonly PostgresWriteSettings PostgresSettings = new(PostgresWriteSettings.DefaultLockTimeoutSeconds);
 
     /// <summary>
-    /// 自己組 DI 的測試主機用：依目前的測試資料庫註冊 provider 專屬的方言與交易管理（與 AddSqliteDatabase／AddPostgresDatabase 相同的實作），
+    /// 自己組 DI 的測試主機用：依目前的測試資料庫註冊 provider 專屬的方言、報表讀取快照與交易管理（與 AddSqliteDatabase／AddPostgresDatabase 相同的實作），
     /// 其餘（repository、DbContext）照各測試自己的註冊。
     /// </summary>
     public static void AddProviderServices(IServiceCollection services)
@@ -75,12 +76,14 @@ public sealed class TestDb : IAsyncDisposable
         if (TestDatabase.IsPostgres)
         {
             services.AddSingleton<ISqlDialect, PostgresDialect>();
+            services.AddSingleton<IReportSqlSnapshot, PostgresReportSqlSnapshot>();
             services.AddSingleton(PostgresSettings);
             services.AddScoped<ITransactionManager, PostgresTransactionManager>();
         }
         else
         {
             services.AddSingleton<ISqlDialect, SqliteDialect>();
+            services.AddSingleton<IReportSqlSnapshot, SqliteReportSqlSnapshot>();
             services.AddScoped<ITransactionManager, EfTransactionManager>();
         }
     }

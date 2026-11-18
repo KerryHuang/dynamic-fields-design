@@ -9,7 +9,9 @@ namespace DynamicModules.Persistence.Postgres;
 /// 再 <c>pg_advisory_xact_lock</c>，交易結束自動釋放。隔離層級維持 Read Committed：鎖是 BEGIN 後的第一個陳述式，
 /// 持鎖者一定看得到所有先前寫入者提交的結果，效果等同 SQLite 的 BEGIN IMMEDIATE。
 /// 取鎖失敗時 EF 還沒把交易設成 CurrentTransaction，這裡自己回滾、釋放，再丟例外（逾時 55P03 轉成 <see cref="DatabaseBusyException"/>）。
-/// pg1 的報表唯讀快照若經 EF 開交易，要在這裡跳過（判斷方式在 pg1 定）。
+/// 只在 EF 自己開的交易（<c>TransactionStarted</c>）取鎖：報表唯讀快照（<see cref="PostgresReportSqlSnapshot"/>）直接在連線上開交易再交給
+/// EF <c>UseTransaction</c>，EF 只發 <c>TransactionUsed</c>，所以不取鎖、不被序列化（設計 §5.6 預留的判斷點，pg1 定案）。
+/// 這裡不要覆寫 <c>TransactionUsed</c>，否則唯讀快照也會被序列化（<c>PostgresReportSqlSnapshotTests</c> 把關）。
 /// </summary>
 public sealed class PostgresWriteLockInterceptor(PostgresWriteSettings settings) : DbTransactionInterceptor
 {

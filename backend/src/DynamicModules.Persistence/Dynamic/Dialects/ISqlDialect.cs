@@ -29,4 +29,16 @@ public interface ISqlDialect
     /// 欄位為 NULL 時運算式為 NULL，由呼叫端 COALESCE。
     /// </summary>
     string DateBucket(string column, string? bucket);
+
+    /// <summary>
+    /// 指定索引的提示，接在資料表別名之前（報表 SQL 路徑用）：SQLite 回 <c> INDEXED BY {index}</c>，索引不存在時 prepare 就丟錯；
+    /// PostgreSQL 沒有查詢層級的索引提示，回空字串、交給規劃器（PostgreSQL provider 設計 §5.9）。
+    /// </summary>
+    string IndexHint(string index);
+
+    /// <summary>
+    /// 依書寫順序連接的 JOIN 關鍵字，後面接 ON：SQLite 回 <c>CROSS JOIN</c>（規劃器不重排，左邊固定是驅動表）；
+    /// PostgreSQL 的 CROSS JOIN 不能帶 ON，回 <c>JOIN</c>，連接順序交給規劃器。
+    /// </summary>
+    string OrderedJoin();
 }

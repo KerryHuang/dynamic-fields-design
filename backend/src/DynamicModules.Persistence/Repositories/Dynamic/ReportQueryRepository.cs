@@ -1,47 +1,49 @@
-using System.Data;
+using System.Data.Common;
 using System.Globalization;
 using Dapper;
+using DynamicModules.Application.Common;
 using DynamicModules.Application.Dynamic.ReportService;
 using DynamicModules.Domain.Data;
 using DynamicModules.Domain.Reports;
 using DynamicModules.Domain.Repositories.Dynamic;
 using DynamicModules.Persistence.Dynamic.Dialects;
 using DynamicModules.Persistence.Dynamic.Query;
-using Microsoft.Data.Sqlite;
 using Microsoft.Extensions.Logging;
 
 namespace DynamicModules.Persistence.Repositories.Dynamic;
 
-public class ReportQueryRepository(DynamicDbContext db, ISqlDialect dialect, ReportOptions options, ILogger<ReportQueryRepository> logger) : IReportQueryRepository
+public class ReportQueryRepository(
+    DynamicDbContext db, ISqlDialect dialect, IReportSqlSnapshot snapshot, IDatabaseErrors errors, ReportOptions options,
+    ILogger<ReportQueryRepository> logger) : IReportQueryRepository
 {
     private static readonly int[] Caps = [1_000, 100_000];
 
     private TimeSpan Timeout => TimeSpan.FromSeconds(options.SqlTimeoutSeconds);
 
     /// <summary>
-    /// 探測與逐筆條件以 INDEXED BY 指定索引；實際 schema 沒有該索引（不是由 migration 建出的檔、索引改名）或規劃器用不上時，
-    /// SQLite 在 prepare 就丟錯。這種情形退回記憶體路徑並記 Warning，不讓整張報表變成 500。
-    /// 超過時間上限被中斷時回 <see cref="ReportSqlOutcome.TimeoutReason"/>；請求本身被取消則照常丟 <see cref="OperationCanceledException"/>。
+    /// 在讀取快照裡先重驗與探測，再跑 body（<see cref="IReportSqlSnapshot"/>）。
+    /// 超過時間上限被中斷時（SQLite 的 SQLITE_INTERRUPT、PostgreSQL 的 57014，PostgreSQL provider 設計 §5.7）回
+    /// <see cref="ReportSqlOutcome.TimeoutReason"/>；請求本身被取消則照常丟 <see cref="OperationCanceledException"/>。
+    /// 指定的索引不存在時的退回由 SQLite 的快照處理（<see cref="SqliteReportSqlSnapshot"/>）。
     /// </summary>
-    private async Task<string?> GuardAsync(Func<Task<string?>> run, CancellationToken ct)
+    private async Task<string?> RunInSnapshotAsync(
+        IReadOnlyList<ReportSqlConfigStamp> stamps, IReadOnlyList<ReportSqlCheck> checks, ReportSqlScope scope,
+        Func<DbConnection, DbTransaction, Task> body, CancellationToken ct)
     {
         try
         {
-            return await run();
+            return await snapshot.RunAsync(db, Timeout, async (connection, tx) =>
+            {
+                if (await ReportSqlSnapshot.VerifyAsync(db, connection, tx, stamps, checks, scope, dialect, ct) is { } reason) return reason;
+                await body(connection, tx);
+                return null;
+            }, ct);
         }
-        catch (SqliteException e) when (e.SqliteErrorCode == ReportSqlSnapshot.InterruptErrorCode)
+        catch (Exception e) when (errors.IsQueryCanceled(e))
         {
             ct.ThrowIfCancellationRequested();
             logger.LogWarning("報表 SQL 超過時間上限 {Seconds} 秒，已中斷", options.SqlTimeoutSeconds);
             return ReportSqlOutcome.TimeoutReason;
-        }
-        catch (SqliteException e) when (e.Message.Contains("no such index") || e.Message.Contains("no query solution"))
-        {
-            const string marker = "no such index: ";
-            var at = e.Message.IndexOf(marker, StringComparison.Ordinal);
-            var name = at < 0 ? "unknown" : e.Message[(at + marker.Length)..].TrimEnd('\'', '.', ' ');
-            logger.LogWarning(e, "報表 SQL 路徑找不到指定的索引 {Index}，改走記憶體路徑", name);
-            return $"indexMissing:{name}";
         }
     }
 
@@ -49,7 +51,7 @@ public class ReportQueryRepository(DynamicDbContext db, ISqlDialect dialect, Rep
     {
         IReadOnlyList<ReportSqlRow> groups = [];
         ReportSqlRow? total = null;
-        var reason = await GuardAsync(() => ReportSqlSnapshot.RunAsync(db, q.Stamps, q.Checks, q.Main, Timeout, async (connection, tx) =>
+        var reason = await RunInSnapshotAsync(q.Stamps, q.Checks, q.Main, async (connection, tx) =>
         {
             var driver = await ChooseDriverAsync(connection, tx, q.Filters, ct);
             if (q.Groups.Count > 0)
@@ -59,7 +61,7 @@ public class ReportQueryRepository(DynamicDbContext db, ISqlDialect dialect, Rep
             }
             var totalSql = ReportQueryBuilder.Aggregate(q, driver, total: true, dialect);
             total = (await ReadAsync(connection, tx, totalSql, q, hasKeys: false, ct)).Single();
-        }, ct), ct);
+        }, ct);
         return reason is null ? new ReportSqlOutcome(null, groups, total) : ReportSqlOutcome.Fallback(reason);
     }
 
@@ -67,15 +69,15 @@ public class ReportQueryRepository(DynamicDbContext db, ISqlDialect dialect, Rep
         ReportSqlScope main, ReportSqlNarrowing n, ReportSqlScope? child, long linkFieldId, int limit, CancellationToken ct)
     {
         IReadOnlyList<DynamicModules.Domain.Entities.Dynamic.Record> mains = [], kids = [];
-        var reason = await GuardAsync(() => ReportSqlSnapshot.RunAsync(db, n.Stamps, n.Checks, main, Timeout, async (connection, tx) =>
+        var reason = await RunInSnapshotAsync(n.Stamps, n.Checks, main, async (connection, tx) =>
         {
             var driver = await ChooseDriverAsync(connection, tx, n.Filters, ct);
-            var built = ReportQueryBuilder.Narrow(main, n.Filters, driver, limit);
+            var built = ReportQueryBuilder.Narrow(main, n.Filters, driver, limit, dialect);
             mains = (await connection.QueryAsync<DynamicModules.Domain.Entities.Dynamic.Record>(new CommandDefinition(built.Sql, built.Parameters, tx, cancellationToken: ct))).ToList();
             if (child is null) return;
-            var childBuilt = ReportQueryBuilder.NarrowChildren(main, n.Filters, driver, limit, child, linkFieldId);
+            var childBuilt = ReportQueryBuilder.NarrowChildren(main, n.Filters, driver, limit, child, linkFieldId, dialect);
             kids = (await connection.QueryAsync<DynamicModules.Domain.Entities.Dynamic.Record>(new CommandDefinition(childBuilt.Sql, childBuilt.Parameters, tx, cancellationToken: ct))).ToList();
-        }, ct), ct);
+        }, ct);
         return reason is null ? new ReportNarrowedRecords(null, mains, kids) : ReportNarrowedRecords.Fallback(reason);
     }
 

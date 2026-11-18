@@ -31,4 +31,8 @@ public sealed class SqliteDialect : ISqlDialect
             _ => throw new ArgumentException($"未知的分桶：{bucket}", nameof(bucket)),
         };
     }
+
+    public string IndexHint(string index) => $" INDEXED BY {index}";
+
+    public string OrderedJoin() => "CROSS JOIN";
 }

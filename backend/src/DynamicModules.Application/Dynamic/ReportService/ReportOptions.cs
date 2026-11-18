@@ -7,8 +7,9 @@ public sealed class ReportOptions
     public ReportEngineMode Engine { get; set; } = ReportEngineMode.Auto;
 
     /// <summary>
-    /// SQL 路徑（聚合與縮小後備）單次執行的時間上限（秒，可帶小數）。到期時中斷正在執行的 SQLite 查詢，
-    /// 回「報表執行逾時」，不退回記憶體路徑（退回會把負載放大）。
+    /// SQL 路徑（聚合與縮小後備）單次執行的時間上限（秒，可帶小數）。到期時中斷正在執行的查詢，
+    /// 回「報表執行逾時」，不退回記憶體路徑（退回會把負載放大）。SQLite 是整段計時；PostgreSQL 是 statement_timeout，
+    /// 每個陳述式各自計時（PostgreSQL provider 設計 §5.9）。
     /// </summary>
     public double SqlTimeoutSeconds { get; set; } = 30;
 

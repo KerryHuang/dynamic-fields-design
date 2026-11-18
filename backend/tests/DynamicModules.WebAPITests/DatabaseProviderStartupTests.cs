@@ -21,19 +21,6 @@ public class DatabaseProviderStartupTests
         act.Should().Throw<InvalidOperationException>().WithMessage("*SqlServer*");
     }
 
-    [Fact]
-    public void Postgres_WithSqlOnlyReports_RefusesToStart()
-    {
-        // 報表 SQL 路徑在 pg1 才支援 PostgreSQL（設計 §5.9）；在連資料庫之前就拒絕
-        using var app = new TestApp(seedDemoPeople: false);
-        app.Settings["Database:Provider"] = "Postgres";
-        app.Settings["Reports:Engine"] = "SqlOnly";
-
-        var act = () => app.CreateClient();
-
-        act.Should().Throw<InvalidOperationException>().WithMessage("*SqlOnly*");
-    }
-
     // SqliteOnly：驗的是明寫 Provider=Sqlite 時照舊啟動；PostgreSQL 模式的測試主機給的是 PostgreSQL 連線字串，配 Sqlite provider 沒有意義
     [Fact]
     [Trait("Category", "SqliteOnly")]

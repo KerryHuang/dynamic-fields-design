@@ -1,6 +1,7 @@
 using DynamicModules.Application.Common;
 using DynamicModules.Domain.Data;
 using DynamicModules.Persistence.Dynamic.Dialects;
+using DynamicModules.Persistence.Dynamic.Query;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 
@@ -21,6 +22,7 @@ public static class DependencyInjection
         // 設定從 DI 取：測試的無鎖模式替換這個單例（PostgresWriteSettings.Unserialized）
         services.AddDbContext<DynamicDbContext>((sp, o) => PostgresDatabase.Configure(o, connectionString, sp.GetRequiredService<PostgresWriteSettings>()));
         services.AddSingleton<ISqlDialect, PostgresDialect>();
+        services.AddSingleton<IReportSqlSnapshot, PostgresReportSqlSnapshot>();
         services.AddScoped<ITransactionManager, PostgresTransactionManager>();
         services.AddScoped<IWorkSavepoints, EfWorkSavepoints>();
         services.AddScoped<Application.Dynamic.OpsService.IDatabaseInfo, EfDatabaseInfo>();

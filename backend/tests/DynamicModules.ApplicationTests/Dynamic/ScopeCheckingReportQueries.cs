@@ -11,15 +11,20 @@ namespace DynamicModules.ApplicationTests.Dynamic;
 /// <summary>
 /// 報表資料庫端聚合設計 §6 保證方式第 2 項的 SQL 文字測試：報表測試裡每一次走到 SQL 路徑的計畫，
 /// 先用 <see cref="ReportQueryBuilder"/> 產生所有可能的 SQL（每個候選驅動條件、分組與總計、縮小的主記錄與子記錄、探測），
-/// 斷言每個 Dynamic_Record 別名都帶 ModuleId、DeleteFlag = 0 與該身分的範圍，值全在參數裡；通過才交給真正的 repository。
+/// 斷言每個 Dynamic_Record 別名都帶 ModuleId、DeleteFlag = false（布林走 dialect）與該身分的範圍，值全在參數裡；通過才交給真正的 repository。
 /// 掛在 <see cref="ReportTestBase"/> 上，所以權限矩陣的每個身分、每個情境都會檢查到。
 /// </summary>
 public sealed class ScopeCheckingReportQueries(ReportQueryRepository inner, ISqlDialect dialect) : IReportQueryRepository
 {
-    /// <summary>SQL 裡允許出現的字串常數：空字串、是否欄位的鍵、日期分桶的格式與修飾詞。條件值、擁有者 id 都必須是參數。</summary>
-    private static readonly HashSet<string> AllowedLiterals = ["", "true", "false", "-3 days", "weekday 4", "%Y", "%Y-%m", "%j", "%m", "-W", "-Q", "%02d"];
+    /// <summary>SQL 裡允許出現的字串常數：空字串、是否欄位的鍵、日期分桶的格式與修飾詞（SQLite 與 PostgreSQL 的 to_char）。條件值、擁有者 id 都必須是參數。</summary>
+    private static readonly HashSet<string> AllowedLiterals =
+    [
+        "", "true", "false", "-3 days", "weekday 4", "%Y", "%Y-%m", "%j", "%m", "-W", "-Q", "%02d",
+        "YYYY-MM-DD", "IYYY-\"W\"IW", "YYYY-MM", "YYYY-\"Q\"Q", "YYYY",
+    ];
 
-    private static readonly Regex RecordAlias = new(@"\bDynamic_Record\b\s+(?:INDEXED BY \w+\s+)?(\w+)", RegexOptions.Compiled);
+    // 引號可有可無：漏加引號的別名也要被抓來檢查範圍（fail-closed），不能因為認不出來就略過
+    private static readonly Regex RecordAlias = new(@"(?<!\w)""?Dynamic_Record""?\s+(?:INDEXED BY \w+\s+)?(\w+)", RegexOptions.Compiled);
     private static readonly Regex Literal = new("'([^']*)'", RegexOptions.Compiled);
 
     /// <summary>本次測試有幾次計畫通過檢查並送進資料庫（聚合、縮小）。</summary>
@@ -40,9 +45,9 @@ public sealed class ScopeCheckingReportQueries(ReportQueryRepository inner, ISql
     {
         foreach (var driver in Drivers(narrowing.Filters))
         {
-            ShouldBeScoped(ReportQueryBuilder.Narrow(main, narrowing.Filters, driver, limit), new() { ["r"] = main });
+            ShouldBeScoped(ReportQueryBuilder.Narrow(main, narrowing.Filters, driver, limit, dialect), new() { ["r"] = main });
             if (child is not null)
-                ShouldBeScoped(ReportQueryBuilder.NarrowChildren(main, narrowing.Filters, driver, limit, child, linkFieldId),
+                ShouldBeScoped(ReportQueryBuilder.NarrowChildren(main, narrowing.Filters, driver, limit, child, linkFieldId, dialect),
                     new() { ["r"] = main, ["c"] = child });
         }
         ProbesShouldBeScoped(narrowing.Checks, main);
@@ -54,13 +59,13 @@ public sealed class ScopeCheckingReportQueries(ReportQueryRepository inner, ISql
     private static IEnumerable<ReportSqlCondition?> Drivers(IReadOnlyList<ReportSqlCondition> filters) =>
         new ReportSqlCondition?[] { null }.Concat(filters.Where(ReportQueryBuilder.CanDrive));
 
-    private static void ProbesShouldBeScoped(IReadOnlyList<ReportSqlCheck> checks, ReportSqlScope scope)
+    private void ProbesShouldBeScoped(IReadOnlyList<ReportSqlCheck> checks, ReportSqlScope scope)
     {
         foreach (var check in checks)
-            ShouldBeScoped(ReportQueryBuilder.Probe(check, scope), new() { ["r"] = scope });
+            ShouldBeScoped(ReportQueryBuilder.Probe(check, scope, dialect), new() { ["r"] = scope });
     }
 
-    private static void ShouldBeScoped(ReportQueryBuilder.Built built, Dictionary<string, ReportSqlScope> scopes)
+    private void ShouldBeScoped(ReportQueryBuilder.Built built, Dictionary<string, ReportSqlScope> scopes)
     {
         var sql = built.Sql;
         var aliases = RecordAlias.Matches(sql).Select(m => m.Groups[1].Value).ToList();
@@ -74,11 +79,12 @@ public sealed class ScopeCheckingReportQueries(ReportQueryRepository inner, ISql
             {
                 null => "",
                 { Count: 0 } => " AND 1 = 0",
-                { Count: var n } => $@" AND {alias}\.OwnerUserId IN \(@p\d+{string.Concat(Enumerable.Repeat(@", @p\d+", n - 1))}\)",
+                { Count: var n } => $@" AND {alias}\.""OwnerUserId"" IN \(@p\d+{string.Concat(Enumerable.Repeat(@", @p\d+", n - 1))}\)",
             };
-            Regex.IsMatch(sql, $@"\b{alias}\.ModuleId = @p\d+ AND {alias}\.DeleteFlag = 0{owners}(?! OR )").Should().BeTrue($"{alias} 的範圍不完整（owners {scope.OwnerUserIds?.Count.ToString() ?? "null"}）：{sql}");
+            var notDeleted = Regex.Escape(dialect.Bool(false));
+            Regex.IsMatch(sql, $@"\b{alias}\.""ModuleId"" = @p\d+ AND {alias}\.""DeleteFlag"" = {notDeleted}{owners}(?! OR )").Should().BeTrue($"{alias} 的範圍不完整（owners {scope.OwnerUserIds?.Count.ToString() ?? "null"}）：{sql}");
             if (scope.OwnerUserIds is null)
-                sql.Should().NotContain($"{alias}.OwnerUserId", "範圍為全部時不加擁有者條件：" + sql);
+                sql.Should().NotContain($"{alias}.\"OwnerUserId\"", "範圍為全部時不加擁有者條件：" + sql);
         }
         sql.Should().NotContain(" OR ", "產生器不用 OR，出現就可能放寬範圍：" + sql);
         foreach (Match m in Literal.Matches(sql))

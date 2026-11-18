@@ -495,8 +495,8 @@ public class ReportPermissionMatrixTests : ReportTestBase
 }
 
 /// <summary>報表資料庫端聚合設計 §6 保證方式第 3 項：權限矩陣改走 SQL 聚合路徑再跑一次（做法同 <see cref="ReportRunnerSqlTests"/>）。</summary>
-// PgDeferred：報表 SQL 聚合路徑（ReportQueryBuilder、日期分桶）要等 pg1 才支援 PostgreSQL；pg0 在 PostgreSQL 上報表強制走記憶體路徑（PostgreSQL provider 設計 §5.9）
-[Trait("Category", "PgDeferred")]
+// 雙跑集：報表 SQL 聚合路徑是 raw SQL（PostgreSQL provider 設計 §5.9、§6.4）
+[Trait("Category", "Postgres")]
 public class ReportPermissionMatrixSqlTests : ReportPermissionMatrixTests
 {
     protected override bool FieldsFilterable => true;

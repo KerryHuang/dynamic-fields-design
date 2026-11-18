@@ -56,17 +56,11 @@ var port = Environment.GetEnvironmentVariable("PORT");
 builder.WebHost.UseUrls(port is null ? "http://127.0.0.1:5180" : $"http://0.0.0.0:{port}");
 builder.Services.Configure<RouteOptions>(o => o.LowercaseUrls = true);
 builder.Services.AddApplication();
-var reportEngine = builder.Configuration.GetValue("Reports:Engine", ReportEngineMode.Auto);
-// PostgreSQL 的報表 SQL 路徑在 pg1 才改寫：pg1 前一律走記憶體路徑，明確要求 SqlOnly 就拒絕啟動（設計 §5.9，可寫死清單第 7 項）
-if (databaseProvider == DatabaseProvider.Postgres)
-    reportEngine = reportEngine == ReportEngineMode.SqlOnly
-        ? throw new InvalidOperationException("Database:Provider=Postgres 時報表還不支援 Reports:Engine=SqlOnly（PostgreSQL 的報表 SQL 路徑在 pg1 提供），請改成 Auto 或 MemoryOnly")
-        : ReportEngineMode.MemoryOnly;
 builder.Services.AddSingleton(new ReportOptions
 {
     MaxRows = builder.Configuration.GetValue("Reports:MaxRows", 50_000),
     MaxLoadRows = builder.Configuration.GetValue("Reports:MaxLoadRows", 200_000),
-    Engine = reportEngine,
+    Engine = builder.Configuration.GetValue("Reports:Engine", ReportEngineMode.Auto),
     SqlTimeoutSeconds = builder.Configuration.GetValue("Reports:SqlTimeoutSeconds", 30.0),
 });
 builder.Services.AddHttpContextAccessor();
