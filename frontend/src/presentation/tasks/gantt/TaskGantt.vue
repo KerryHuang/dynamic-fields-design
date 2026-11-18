@@ -52,7 +52,11 @@ function setScale(s: GanttScale) {
   scale.value = s;
   if (data.value) win.value = windowFor(s, data.value.window.from, data.value.weekStart);
 }
-const goToday = () => { win.value = null; };
+// 已在預設時間窗時清成 null 不會改變查詢鍵；跨過午夜後「今天」要另外重抓，伺服器才會回新的今天與時間窗。
+const goToday = () => {
+  if (win.value === null) void query.refetch();
+  else win.value = null;
+};
 const scaleOptions = computed(() => (['day', 'week', 'month'] as const).map((v) => ({ value: v, label: t(`taskGantt.scale.${v}`), attrs: { 'data-testid': `gantt-scale-${v}` } })));
 
 const fullDate = (iso: string) => formatGanttDate(iso, locale.value, { year: 'numeric', month: '2-digit', day: '2-digit' });

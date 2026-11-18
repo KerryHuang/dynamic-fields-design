@@ -72,6 +72,17 @@ describe('TaskGantt', () => {
     expect(w.findAll('[data-testid="gantt-minor"]')).toHaveLength(13);
   });
 
+  it('pressing today on the default window asks the server again (a new day after midnight)', async () => {
+    let today = '2026-11-22';
+    const w = await mountGantt(() => ganttWire({ today }));
+    expect(ganttCalls()).toHaveLength(1);
+    today = '2026-11-23';
+    await w.get('[data-testid="gantt-today"]').trigger('click');
+    await flushPromises();
+    expect(ganttCalls()).toHaveLength(2);
+    expect(lastBody()).toEqual({ viewId: null, config: null, window: null });
+  });
+
   it('G52 draws the today line only while today is inside the window', async () => {
     const w = await mountGantt(serverLike);
     expect(w.find('[data-testid="gantt-today-line"]').exists()).toBe(true);

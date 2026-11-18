@@ -20,6 +20,12 @@ describe('甘特圖日期運算', () => {
     expect(addMonths('2026-11-30', 3)).toBe('2027-02-01');
   });
 
+  it('0001–0099 年照實際年份算，不被當成 19xx 年（DateOnly 從 0001 起都合法）', () => {
+    expect(windowDays({ from: '0099-12-31', to: '0100-01-01' })).toBe(2);
+    expect(addMonths('0099-11-15', 2)).toBe('0100-01-01');
+    expect(windowDays({ from: '0001-01-01', to: '0001-12-31' })).toBe(365);
+  });
+
   it('G51 一屏：日 14 天、週 13 週、月 6 個月', () => {
     expect(windowFor('day', '2026-11-18', 'monday')).toEqual({ from: '2026-11-16', to: '2026-11-29' });
     expect(windowFor('week', '2026-11-18', 'monday')).toEqual({ from: '2026-11-16', to: '2027-02-14' });

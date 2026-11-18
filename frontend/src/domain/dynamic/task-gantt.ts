@@ -17,15 +17,21 @@ export const GANTT_MONTH_SPAN = 6;
 const DAY_MS = 86_400_000;
 const WEEKDAYS = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];
 
+// Date.UTC 會把 0–99 年當成 1900–1999 年；用 setUTCFullYear 保留實際年份（DateOnly 合法範圍是 0001 起）。
+const utcMs = (y: number, monthIndex: number, d: number): number => {
+  const t = new Date(0);
+  t.setUTCFullYear(y, monthIndex, d);
+  return t.getTime();
+};
 export const dayNumber = (iso: string): number => {
   const [y, m, d] = iso.split('-').map(Number);
-  return Math.round(Date.UTC(y, m - 1, d) / DAY_MS);
+  return Math.round(utcMs(y, m - 1, d) / DAY_MS);
 };
 export const isoOfDay = (n: number): string => new Date(n * DAY_MS).toISOString().slice(0, 10);
 export const addDays = (iso: string, n: number): string => isoOfDay(dayNumber(iso) + n);
 export function addMonths(iso: string, n: number): string {
   const [y, m] = iso.split('-').map(Number);
-  return new Date(Date.UTC(y, m - 1 + n, 1)).toISOString().slice(0, 10);
+  return new Date(utcMs(y, m - 1 + n, 1)).toISOString().slice(0, 10);
 }
 export const startOfMonth = (iso: string): string => `${iso.slice(0, 8)}01`;
 /** 週起始日（政策值 monday、sunday…）所在那週的第一天；不認得的值當成星期一。 */
