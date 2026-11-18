@@ -88,6 +88,7 @@ public class WorkflowTests : DesignerTestBase
     }
 
     [Fact]
+    [Trait("Category", "Postgres")]
     public async Task Workflow_OldJson_ReadsWithDefaults()
     {
         var w = await Build();

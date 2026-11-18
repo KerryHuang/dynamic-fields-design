@@ -20,6 +20,7 @@ namespace DynamicModules.ApplicationTests.Dynamic.Approvals;
 /// 並在失敗當下以同一個 DbContext 的 ExecuteUpdate 直接改資料列（共用單例、同一個交易，繞過變更追蹤，已追蹤的物件因此真的變成舊值）。
 /// 簽核人：a、a1＝fin1、a2＝fin2、b＝buyer2、c＝gm；發起人 buyer1。
 /// </summary>
+[Trait("Category", "Postgres")]
 public class ApprovalGraphConcurrencyTests : ApprovalTestBase
 {
     protected override bool ScopePerRequest => true;

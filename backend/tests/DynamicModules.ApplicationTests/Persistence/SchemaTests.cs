@@ -277,6 +277,7 @@ public class JsonChangeTrackingTests
     }
 
     [Fact]
+    [Trait("Category", "Postgres")]
     public async Task StoredJson_I18nIsFlatObject_ConfigIsCamelCase()
     {
         await using var db = await TestDb.CreateAsync();

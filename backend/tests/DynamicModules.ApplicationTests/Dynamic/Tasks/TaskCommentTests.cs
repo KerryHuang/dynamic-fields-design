@@ -83,6 +83,7 @@ public class TaskCommentTests : TaskTestBase
     /// 寫入參與者時以資料庫為準，存在就略過，不得撞主鍵。
     /// </summary>
     [Fact]
+    [Trait("Category", "Postgres")]
     public async Task Comment_MentionedRowAddedConcurrently_NoConflict()
     {
         var task = await SeedTask(createdBy: "sales01");
