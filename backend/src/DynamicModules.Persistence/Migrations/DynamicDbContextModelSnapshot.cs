@@ -2250,6 +2250,44 @@ namespace DynamicModules.Persistence.Migrations
                     b.ToTable("Dynamic_Rule", (string)null);
                 });
 
+            modelBuilder.Entity("DynamicModules.Domain.Entities.Dynamic.ScheduledJob", b =>
+                {
+                    b.Property<string>("JobKey")
+                        .HasMaxLength(100)
+                        .HasColumnType("TEXT");
+
+                    b.Property<int>("ConsecutiveFailures")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("LastError")
+                        .HasMaxLength(1000)
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTime?>("LastFinishedUtc")
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTime?>("LastStartedUtc")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("LastStatus")
+                        .HasMaxLength(20)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("LeaseOwner")
+                        .HasMaxLength(100)
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTime?>("LeaseUntilUtc")
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTime>("NextDueUtc")
+                        .HasColumnType("TEXT");
+
+                    b.HasKey("JobKey");
+
+                    b.ToTable("Dynamic_ScheduledJob", (string)null);
+                });
+
             modelBuilder.Entity("DynamicModules.Domain.Entities.Dynamic.SystemSetting", b =>
                 {
                     b.Property<string>("Key")
