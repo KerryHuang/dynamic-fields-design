@@ -13,6 +13,7 @@
 
 ## 其他
 
+- 查 WebAPI 測試偶發 ObjectDisposedException（SQLitePCL.sqlite3 handle 已釋放）：2026-11-18 run 44234545443 的 TaskCommentAttachmentsApiTests.ClosedModule_StillDownloads 開連線時失敗、rerun 即過；疑與共用 DB 範本（0823c4ac）或 DemoDataApiTests 類別 fixture（7553f9b6）的釋放順序有關，再出現時記 run id
 - 建 Playwright 主線 e2e 測試：簽核前端 a4b 完成後做，5–8 條（登入、建記錄、送簽、同意、任務留言），放進 gate 防回歸（2026-11-11 使用者裁決）
 - 補事件設計器「轉回草稿前改鎖定欄位」的提示：a2d1 修正後的新問題 1，屬事件設計器，不在簽核設計器範圍
 - 補收件人名稱解析的後端測試（a2d7 N-M3）：政策收件人引用已停用或不存在帳號時的行為，a4a 前端部分已隨收件人 chip 修正補上
