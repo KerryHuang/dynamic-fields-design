@@ -210,6 +210,7 @@ public class ExtensionModuleTests : IAsyncLifetime
         r.Message.Should().Be("這筆既有資料已經有擴充資料");
     }
 
+    [Trait("Category", "SqliteOnly")]
     [Fact]
     public async Task CreateRecord_Extension_NonUniqueSaveFailure_StillHostConflict()
     {

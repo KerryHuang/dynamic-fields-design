@@ -4,6 +4,7 @@ using FluentAssertions;
 
 namespace DynamicModules.ApplicationTests.Persistence;
 
+[Trait("Category", "SqliteOnly")]
 public class WriteGateTests
 {
     // 整套測試並行時執行緒池會被擠壓；這些等待上限不是測試對象，放寬避免誤判

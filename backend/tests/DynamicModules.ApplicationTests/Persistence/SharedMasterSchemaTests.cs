@@ -10,6 +10,7 @@ namespace DynamicModules.ApplicationTests.Persistence;
 /// <summary>migration SharedMasters（共用主檔設計 §8）：新表的鍵、篩選式唯一索引、檢查約束與 cascade。</summary>
 public class SharedMasterSchemaTests
 {
+    [Trait("Category", "SqliteOnly")]
     [Fact]
     public async Task Migrate_CreatesSharedMasterTablesWithKeys()
     {
@@ -33,6 +34,7 @@ public class SharedMasterSchemaTests
         (await Columns(db, "Dynamic_Field")).Should().Contain("VisibilityRestricted");
     }
 
+    [Trait("Category", "SqliteOnly")]
     [Fact]
     public async Task ExistingApps_GetKindApp_ExistingFieldsAreNotRestricted()
     {

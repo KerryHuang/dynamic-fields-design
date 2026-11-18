@@ -5,6 +5,7 @@ using Microsoft.EntityFrameworkCore;
 
 namespace DynamicModules.ApplicationTests.Persistence;
 
+[Trait("Category", "SqliteOnly")]
 public class EfTransactionManagerTests
 {
     [Fact]

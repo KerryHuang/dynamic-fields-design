@@ -9,6 +9,7 @@ using Microsoft.Extensions.DependencyInjection;
 namespace DynamicModules.ApplicationTests.Persistence;
 
 /// <summary>SQLite 的 mmap_size 是設定項（Sqlite:MmapSizeMb），預設關閉；開啟時每條連線都要套用（PRAGMA 是逐連線的）。</summary>
+[Trait("Category", "SqliteOnly")]
 public class MmapSizeSettingTests : IDisposable
 {
     private readonly string _file = Path.Combine(Path.GetTempPath(), $"dm-mmap-{Guid.NewGuid():N}.db");
