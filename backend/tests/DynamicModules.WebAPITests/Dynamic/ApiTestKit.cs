@@ -41,8 +41,16 @@ internal static class ApiTestKit
     }
 
     /// <summary>新模組預設的必填標題欄位 key。</summary>
-    public static async Task<string> TitleKey(HttpClient c, string moduleKey) =>
-        "f_" + (await JsonOf(await c.GetAsync($"{Base}/modules/{moduleKey}"))).GetProperty("titleFieldId").GetInt64();
+    public static async Task<string> TitleKey(HttpClient c, string moduleKey)
+    {
+        var res = await c.GetAsync($"{Base}/modules/{moduleKey}");
+        if (!res.IsSuccessStatusCode)   // 同 AddField：帶回應內容，偶發失敗才查得到原因（ConversionApiTests flaky）
+            throw new HttpRequestException($"TitleKey {moduleKey} 失敗 {(int)res.StatusCode}：{await res.Content.ReadAsStringAsync()}");
+        var m = await JsonOf(res);
+        if (!m.TryGetProperty("titleFieldId", out var id) || id.ValueKind != JsonValueKind.Number)
+            throw new InvalidOperationException($"TitleKey {moduleKey}：回應沒有 titleFieldId：{m.GetRawText()[..Math.Min(500, m.GetRawText().Length)]}");
+        return "f_" + id.GetInt64();
+    }
 
     public static async Task Activate(HttpClient c, string moduleKey) =>
         (await c.PostAsync($"{Base}/modules/{moduleKey}/activate", null)).EnsureSuccessStatusCode();
