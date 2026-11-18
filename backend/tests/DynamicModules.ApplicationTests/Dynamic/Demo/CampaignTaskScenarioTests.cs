@@ -37,6 +37,27 @@ public class CampaignTaskScenarioTests(DemoGeneratedFixture fx)
         subs.Should().OnlyContain(t => t.RecordId == record.Id && t.ModuleId == plan.ModuleId);
     }
 
+    [Fact]
+    public async Task SpringExpo_TasksHaveStartDates_ForTheGanttChart()
+    {
+        // G62：預設甘特圖（sales01）看得到「規劃活動內容」的長條、子任務與跨度；規則任務補開始日不設覆寫旗標（GT-T23）
+        fx.Generated();
+        var nameKey = await fx.Key("crm-campaign", "名稱");
+        var record = (await fx.Records("crm-campaign")).Single(r => DemoGeneratedFixture.Text(r, nameKey) == "春季工具機展");
+        var all = await fx.Host.Db.Context.Set<TaskItem>().AsNoTracking().Where(t => t.RecordId == record.Id).OrderBy(t => t.Id).ToListAsync();
+
+        all.Where(t => t.ParentTaskId == null).Select(t => (t.RuleTaskCode, t.StartDate, t.DueDate, t.DueOverridden)).Should().Equal(
+            ("plan", new DateOnly(2026, 11, 3), new DateOnly(2026, 12, 1), false),
+            ("setup", new DateOnly(2027, 1, 27), new DateOnly(2027, 1, 31), false),
+            ("feedback", new DateOnly(2027, 2, 4), new DateOnly(2027, 2, 15), false));
+        var plan = all.Single(t => t.RuleTaskCode == "plan");
+        all.Where(t => t.ParentTaskId == plan.Id).OrderBy(t => t.Id).Select(t => (t.Title, t.StartDate, t.DueDate)).Should().Equal(
+            ("確認展位與預算", new DateOnly(2026, 11, 3), new DateOnly(2026, 11, 12)),
+            ("整理邀請客戶名單", new DateOnly(2026, 11, 8), new DateOnly(2026, 11, 19)),
+            ("準備展示樣品清單", new DateOnly(2026, 11, 15), new DateOnly(2026, 11, 26)),
+            ("訂購展示傳單", new DateOnly(2026, 11, 19), new DateOnly(2026, 11, 26)));
+    }
+
     private Task<List<Notification>> NotificationsOf(string userId) =>
         fx.Host.Db.Context.Set<Notification>().AsNoTracking().Where(n => n.UserId == userId).ToListAsync();
 

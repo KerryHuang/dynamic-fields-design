@@ -168,21 +168,30 @@ public sealed class CrmScenario : IDemoScenario
             ("name", "智慧製造研討會"), ("kind", ctx.Crm!.Opt("campaign", "seminar")), ("startDate", Iso(today.AddDays(60))),
             ("endDate", Iso(today.AddDays(60))), ("location", "線上與北區教育訓練室"), ("status", ctx.Crm.Opt("campaign", "planning")),
             ("planOwner", "sales02"), ("feedbackOwner", "sales03")));
-        plan.Run(plan.At(today.AddDays(-2)), "sales02", "展場佈置 留言", (ctx, ct) => Comment(ctx, expo, "展場佈置", "@{sales01} 攤位尺寸要再確認", ct));
-        plan.Run(plan.At(today.AddDays(-1)), "sales03", "活動回饋 留言", (ctx, ct) => Comment(ctx, expo, "活動回饋", "@{sales02} 回饋表單我先擬", ct));
+        var setupCommentAt = plan.At(today.AddDays(-2));
+        plan.Run(setupCommentAt, "sales02", "展場佈置 留言", (ctx, ct) => Comment(ctx, expo, "展場佈置", "@{sales01} 攤位尺寸要再確認", ct));
+        var feedbackCommentAt = plan.At(today.AddDays(-1));
+        plan.Run(feedbackCommentAt, "sales03", "活動回饋 留言", (ctx, ct) => Comment(ctx, expo, "活動回饋", "@{sales02} 回饋表單我先擬", ct));
+        // 開始日（甘特圖，看板設計 §11.5.4、G62）：規則任務沒有開始日，由各自的負責人在任務詳細補上（GT-T23：PATCH 改開始日不設覆寫旗標）。
+        // 時間接在留言後一分鐘，不多抽亂數，其他 Demo 資料的時間不受影響。
+        plan.Run(setupCommentAt.AddMinutes(1), "sales02", "展場佈置 排開始日", (ctx, ct) => SetStartDate(ctx, expo, "展場佈置", expoStart.AddDays(-5), ct));
+        plan.Run(feedbackCommentAt.AddMinutes(1), "sales03", "活動回饋 排開始日", (ctx, ct) => SetStartDate(ctx, expo, "活動回饋", expoStart.AddDays(3), ct));
 
         // ---- 子任務（看板設計 §10）：「規劃活動內容」底下四個子任務，讓進度「1／3」與「另有 1 個已取消」、父任務自動進行中都看得到 ----
         // 全部由 sales01（父任務的負責人）新增與處理，不產生指派通知；父任務還是待辦，第一個子任務開工時才由連動改成進行中。
         var subtaskAt = plan.At(today.AddDays(-2));
         var subtaskIds = new List<long>();
-        (string Title, int DueDays)[] subtasks = [("確認展位與預算", 7), ("整理邀請客戶名單", 14), ("準備展示樣品清單", 21), ("訂購展示傳單", 21)];
+        // 子任務都有開始日，甘特圖上看得到四條長條與父任務的子任務跨度（已取消的不算進跨度）
+        (string Title, int StartDays, int DueDays)[] subtasks = [("確認展位與預算", -2, 7), ("整理邀請客戶名單", 3, 14), ("準備展示樣品清單", 10, 21), ("訂購展示傳單", 14, 21)];
         plan.Run(subtaskAt, "sales01", "行銷活動 春季工具機展 加子任務", async (ctx, ct) =>
         {
             var parent = await FindTask(ctx, expo, "規劃活動內容", ct);
             if (parent.Failed is not null) return parent.Failed;
-            foreach (var (title, dueDays) in subtasks)
+            var started = await ctx.Sender.Send(new UpdateTaskRequest(parent.Task!.Id, JsonSerializer.SerializeToElement(new { startDate = Iso(today.AddDays(-2)) })), ct);
+            if (!started.IsSuccess) return started;
+            foreach (var (title, startDays, dueDays) in subtasks)
             {
-                var r = await ctx.Sender.Send(new CreateSubtaskRequest(parent.Task!.Id, new TaskInput(title, null, "sales01", today.AddDays(dueDays))), ct);
+                var r = await ctx.Sender.Send(new CreateSubtaskRequest(parent.Task!.Id, new TaskInput(title, null, "sales01", today.AddDays(dueDays), today.AddDays(startDays))), ct);
                 if (!r.IsCreated) return r;
                 subtaskIds.Add(((TaskDetailResponse)r.Data!).Id);
             }
@@ -325,6 +334,14 @@ public sealed class CrmScenario : IDemoScenario
         return task is null
             ? (null, ServiceResult.Invalid(new Dictionary<string, string[]> { ["task"] = [$"記錄上沒有任務「{taskTitle}」"] }))
             : (task, null);
+    }
+
+    /// <summary>補上記錄上頂層任務的開始日（走任務詳細的 PATCH，同使用者自己改）。</summary>
+    private static async Task<ServiceResult> SetStartDate(DemoContext ctx, DemoRecord record, string taskTitle, DateOnly startDate, CancellationToken ct)
+    {
+        var found = await FindTask(ctx, record, taskTitle, ct);
+        if (found.Failed is not null) return found.Failed;
+        return await ctx.Sender.Send(new UpdateTaskRequest(found.Task!.Id, JsonSerializer.SerializeToElement(new { startDate = Iso(startDate) })), ct);
     }
 
     private static Task<ServiceResult> SetSubtaskStatus(DemoContext ctx, List<long> ids, int index, string status, CancellationToken ct) =>
