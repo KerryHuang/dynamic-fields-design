@@ -20,6 +20,8 @@ let calls: Call[];
 async function mountPage(url: string, opts: { detailFails?: boolean; empty?: boolean; subordinates?: boolean; goneBoards?: number[]; defaultBoardFails?: boolean; admin?: boolean; noScope?: boolean; defaultConfig?: Record<string, unknown>; putConflict?: boolean; ganttViews?: number[]; goneGantts?: number[]; user?: string } = {}) {
   let detailVersion = 'v1';
   let conflicted = false;
+  // 存檔甘特圖存過的設定：PUT 之後，詳細資料與甘特查詢都照新設定回（像伺服器一樣）
+  const ganttSaved = new Map<number, Record<string, unknown>>();
   const pinia = createPinia();
   setActivePinia(pinia);
   useIdentityStore().setSession(opts.user ?? 'sales01');
@@ -41,7 +43,7 @@ async function mountPage(url: string, opts: { detailFails?: boolean; empty?: boo
       // 甘特查詢：存檔甘特圖讀不到 404；未存的設定原樣回；部屬範圍的列是部屬的任務（只有主管身分，canEdit=false，G68）
       const b = bodyOf(c) as { viewId: number | null; config: Record<string, unknown> | null };
       if (b.viewId !== null && (opts.goneGantts?.includes(b.viewId) || !opts.ganttViews?.includes(b.viewId))) return new HttpFail(404, { message: '這個甘特圖已刪除或不再分享給你' });
-      const cfg = b.config ?? (b.viewId !== null ? ganttConfigWire({ groupBy: 'none', scale: 'month' }) : ganttConfigWire());
+      const cfg = b.config ?? (b.viewId !== null ? ganttSaved.get(b.viewId) ?? ganttConfigWire({ groupBy: 'none', scale: 'month' }) : ganttConfigWire());
       const base = ganttWire({ config: cfg, ...(opts.noScope ? { scopeAvailable: false, rows: [], total: 0, spans: [], unscheduled: [], unscheduledTotal: 0 } : {}) });
       if (cfg.scope === 'subordinates' && !opts.noScope) base.rows = [cardWire({ id: 41, title: '部屬的任務', startDate: '2026-11-17', dueDate: '2026-11-20', canEdit: false, assigneeUserId: 'sales02' })];
       return base;
@@ -61,9 +63,12 @@ async function mountPage(url: string, opts: { detailFails?: boolean; empty?: boo
     const ganttId = opts.ganttViews?.find((id) => c.url === `/task-views/${id}`);
     if (ganttId !== undefined && c.method === 'get') {
       const shared = ganttId === 13 ? { name: '業務部甘特', isOwner: false, canEdit: false, canDelete: false, ownerUserId: 'manager01', ownerName: '業務主管' } : { name: '展覽' };
-      return viewDetailWire({ id: ganttId, kind: 'gantt', ...shared, config: ganttConfigWire({ groupBy: 'none', scale: 'month' }) });
+      return viewDetailWire({ id: ganttId, kind: 'gantt', ...shared, config: ganttSaved.get(ganttId) ?? ganttConfigWire({ groupBy: 'none', scale: 'month' }) });
     }
-    if (ganttId !== undefined && c.method === 'put') return viewDetailWire({ id: ganttId, kind: 'gantt', ...(bodyOf(c) as object), rowVersion: 'v3' });
+    if (ganttId !== undefined && c.method === 'put') {
+      ganttSaved.set(ganttId, (bodyOf(c) as { config: Record<string, unknown> }).config);
+      return viewDetailWire({ id: ganttId, kind: 'gantt', ...(bodyOf(c) as object), rowVersion: 'v3' });
+    }
     if (c.url === '/task-views' && c.method === 'post' && (bodyOf(c) as { kind: string }).kind === 'gantt') {
       return viewDetailWire({ id: 14, kind: 'gantt', name: (bodyOf(c) as { name: string }).name, config: (bodyOf(c) as { config: unknown }).config });
     }
@@ -700,6 +705,36 @@ describe('MyTasksPage', () => {
       expect(bodyOf(calls.find((c) => c.method === 'post' && c.url === '/task-views'))).toMatchObject({ kind: 'gantt', name: '業務部甘特' });
       expect(router.currentRoute.value.query.gantt).toBe('14');
       expect(ganttBodies().at(-1)).toMatchObject({ viewId: 14, config: null });
+      w.unmount();
+    });
+
+    it('G73 after saving, a scale switch sends the saved groups and filters, not the ones before the save (direct save, and apply then save)', async () => {
+      const { w } = await mountPage('/tasks?view=gantt&gantt=12', { ganttViews: [12] });
+      // 先平移、換刻度，儲存後工具列回到存好的預設刻度與預設時間窗
+      await w.get('[data-testid="gantt-next"]').trigger('click');
+      await flushPromises();
+      await click('board-settings');
+      await click('settings-gantt-group-parent');
+      const kw = body('settings-keyword') as HTMLInputElement;
+      kw.value = '展覽';
+      kw.dispatchEvent(new Event('input'));
+      await flushPromises();
+      await click('settings-save');
+      expect(bodyOf(calls.find((c) => c.method === 'put' && c.url === '/task-views/12'))).toMatchObject({ config: { groupBy: 'parent', filters: { keyword: '展覽' } } });
+      expect(ganttBodies().at(-1)).toEqual({ viewId: 12, config: null, window: null });
+      expect(w.get('[data-testid="gantt-scale-month"]').attributes('aria-pressed')).toBe('true');
+      await click('gantt-scale-week');
+      expect(ganttBodies().at(-1)).toMatchObject({ viewId: null, config: { groupBy: 'parent', scale: 'week', filters: { keyword: '展覽' } } });
+      // 套用後再儲存：同樣照存好的設定換刻度
+      await click('board-settings');
+      await click('settings-gantt-group-assignee');
+      await click('settings-apply');
+      expect(ganttBodies().at(-1)).toMatchObject({ viewId: null, config: { groupBy: 'assignee' } });
+      await click('board-settings');
+      await click('settings-save');
+      expect(ganttBodies().at(-1)).toEqual({ viewId: 12, config: null, window: null });
+      await click('gantt-scale-day');
+      expect(ganttBodies().at(-1)).toMatchObject({ viewId: null, config: { groupBy: 'assignee', scale: 'day', filters: { keyword: '展覽' } } });
       w.unmount();
     });
 
