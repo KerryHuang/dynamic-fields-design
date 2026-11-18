@@ -79,7 +79,7 @@ ApplicationTests.Dynamic.Demo.DemoGenerationTests	200
 ApplicationTests.Dynamic.Demo.DemoOrganizationSetupTests	1
 ApplicationTests.Dynamic.Demo.DemoPeopleTests	29
 ApplicationTests.Dynamic.Demo.DemoReportsDemoLoginOffTests	10
-ApplicationTests.Dynamic.Demo.DemoReportsDemoLoginOnTests	10
+ApplicationTests.Dynamic.Demo.DemoReportsDemoLoginOnTests	158
 ApplicationTests.Dynamic.Demo.DemoReportsTests	0
 ApplicationTests.Dynamic.Demo.DemoStructureSharedMasterPreflightTests	10
 ApplicationTests.Dynamic.Demo.DemoStructureTests	0

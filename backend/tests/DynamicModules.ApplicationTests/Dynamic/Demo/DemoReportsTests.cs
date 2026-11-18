@@ -205,13 +205,16 @@ internal static class DemoReportsAfter120Days
     public static async Task Run(bool demoLogin, string state, bool frozen)
     {
         var clock = new MutableTime(DemoTestHost.Today);
-        // 產生與時鐘、AuthSettings 無關，複製共用的產生結果（時鐘起點同產生日），再往後撥 120 天
-        await using var host = await DemoSnapshot.CreateHostAsync(configure: s =>
+        void Configure(IServiceCollection s)
         {
             s.AddSingleton<IBusinessTime>(clock);
             s.AddActingOverrides();   // 覆寫過的時鐘要重新包 Acting 裝飾器，產生器排程的過去時間才有效（簽核 a3g 的代理設定看營運日）
             s.AddSingleton(new AuthSettings(demoLogin));
-        });
+        }
+        // Demo 登入關閉＝快照的產生設定，複製共用的產生結果；開啟時產生設定不同，保留真的產生（零涵蓋損失）
+        var host = demoLogin ? await DemoTestHost.CreateAsync(configure: Configure) : await DemoSnapshot.CreateHostAsync(configure: Configure);
+        await using var _host = host;
+        if (demoLogin) (await host.Send(new GenerateDemoDataRequest(DemoTestHost.Today))).IsSuccess.Should().BeTrue();
         var report = await host.Db.Context.Set<Report>().AsNoTracking().SingleAsync(r => r.Name == "近 90 天訂單狀態分布");
 
         clock.Today = DemoTestHost.Today.AddDays(120);

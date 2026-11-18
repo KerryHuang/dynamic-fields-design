@@ -36,7 +36,7 @@ internal sealed class DemoSnapshot
     public static async Task<DemoTestHost> CreateHostAsync(DateOnly? today = null, Action<IServiceCollection>? configure = null)
     {
         var snapshot = await GetAsync();
-        snapshot.Result.IsSuccess.Should().BeTrue(snapshot.Result.Message);
+        snapshot.Result.IsSuccess.Should().BeTrue($"{snapshot.Result.Message} {string.Join("; ", snapshot.Result.Errors.Select(e => $"{e.Key}: {string.Join(" / ", e.Value)}"))}");
         return await DemoTestHost.CreateAsync(today, configure, snapshot);
     }
 
