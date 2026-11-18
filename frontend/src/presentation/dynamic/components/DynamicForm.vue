@@ -173,11 +173,15 @@ const blockLocks = (b: SchemaBlock) => [...new Set(b.fields.filter((f) => !hidde
 const visibleBlocks = computed(() => props.schema.blocks.filter((b) => b.fields.some((f) => !hiddenField(f))));
 const readOnlyForm = computed(() => ruleState.value.readOnlyAll);
 const canSave = computed(() => !readOnlyForm.value && (!workflowLocked.value || canAdvance(workflow.value, storedStatus.value)));
+// Server errors as last received. vee-validate rewrites its own error bag on every validation, so the ones that are
+// not shown inline (record-level, or keyed to a field that is not rendered) are kept here until the next submit.
+const serverBanner = ref<Record<string, string>>({});
 // Errors nobody can see inline (record-level, or keyed to a field that is not rendered) go to the top banner.
 const bannerLines = computed(() => {
   const shown = new Set(visibleBlocks.value.flatMap((b) => b.fields.filter((f) => !hiddenField(f)).map((f) => f.key)));
   const byKey = new Map(fields.value.map((f) => [f.key, f]));
-  return Object.entries(errors.value).flatMap(([key, msg]) => {
+  const kept = Object.fromEntries(Object.entries(serverBanner.value).filter(([k]) => !shown.has(k)));
+  return Object.entries({ ...errors.value, ...kept }).flatMap(([key, msg]) => {
     if (!msg) return [];
     if (key === '_record') return [msg];
     const f = byKey.get(key);
@@ -207,11 +211,15 @@ const submitValid = handleSubmit((parsed) => {
 });
 const onSubmit = (e?: Event) => {
   rowsTried.value = true;
+  serverBanner.value = {};
   return submitValid(e);
 };
 
 watch(() => props.serverErrors, (errs) => {
-  if (errs) setErrors(Object.fromEntries(Object.entries(errs).map(([k, v]) => [k, v.join('；')])));
+  if (!errs) return;
+  const joined = Object.fromEntries(Object.entries(errs).map(([k, v]) => [k, v.join('；')]));
+  serverBanner.value = joined;
+  setErrors(joined);
 });
 
 // A reloaded record (e.g. after a 409) replaces the form's values and the change-detection baseline.
