@@ -44,7 +44,7 @@ if [ "$pg_ready" -eq 1 ]; then
   for p in ApplicationTests WebAPITests; do
     start=$(date +%s)
     FORMWRIGHT_TEST_DB=postgres dotnet test "tests/DynamicModules.$p" \
-      --filter "Category=Postgres&Category!=SqliteOnly&Category!=PgDeferred&Category!=Benchmark" 2>&1 \
+      --filter "Category=Postgres&Category!=SqliteOnly&Category!=Benchmark" 2>&1 \
       | grep -E "^(Passed|Failed)!|^ +Failed [A-Za-z]|(已通過|失敗)!|^ +失敗 [A-Za-z]" | tail -6
     code=${PIPESTATUS[0]}
     echo "$p (PostgreSQL) exit=$code ($(( $(date +%s) - start ))s)"

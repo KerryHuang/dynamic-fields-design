@@ -85,7 +85,7 @@ jobs:
         env:
           FORMWRIGHT_TEST_DB: sqlite
         run: dotnet test tests/DynamicModules.${{ matrix.project }} --logger "console;verbosity=minimal"
-      # 命令列 filter 會蓋掉 csproj 的 Category!=Benchmark，要自己再排除；同類別裡個別標 SqliteOnly／PgDeferred 的案例也排除
+      # 命令列 filter 會蓋掉 csproj 的 Category!=Benchmark，要自己再排除；同類別裡個別標 SqliteOnly 的案例也排除
       - name: dotnet test (PostgreSQL)
         if: matrix.pg
         working-directory: backend
@@ -93,7 +93,7 @@ jobs:
           FORMWRIGHT_TEST_DB: postgres
         run: >-
           dotnet test tests/DynamicModules.${{ matrix.project }} --logger "console;verbosity=minimal"
-          --filter "Category=Postgres&Category!=SqliteOnly&Category!=PgDeferred&Category!=Benchmark"
+          --filter "Category=Postgres&Category!=SqliteOnly&Category!=Benchmark"
       # 依測試類別切份（scripts/ci/shard-tests.sh）：從實際清單算分配，並核對實際執行數＝預期，不會漏測
       - name: dotnet test (shard ${{ matrix.shard }}/${{ matrix.shards }})
         if: matrix.shards > 1
