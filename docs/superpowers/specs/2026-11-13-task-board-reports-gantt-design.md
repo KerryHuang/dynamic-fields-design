@@ -1132,6 +1132,16 @@ st1 唯一看得到的變化：政策設定頁依 `PolicyCatalog.All` 多出 A35
 - 審查修正：第二支指標（例如滑鼠拖 A 時觸控筆按 B）被 `useCardDrag.start` 拒絕時不換拖拉來源（`start` 改回傳是否接受），放下時再核對任務 Id；放開時用 pointerup 當下的座標重新判斷落點，不沿用最後一次 pointermove（放開位置不同、或拖動中捲動讓時間軸離開指標時，未排程的列不排程）——改在共用的 `useCardDrag`，看板一併適用。
 - 測試：G63–G71 在 `TaskGantt.vitest.spec.ts` 的「TaskGantt drag (gt2b2)」（用假的 `getBoundingClientRect` 指定時間軸位置），`dayAtX`、`draggedDates` 在 `task-gantt.vitest.spec.ts`。
 
+〔gt2c 實作補記〕（§11.5.4.1）
+- 共用：看板的 `BoardPicker`、`BoardSettingsDialog`、`TaskViewShareDialog` 加 `kind`（預設 `board`），不另做一份；用字由 `useViewText`（`presentation/tasks/board/view-text.ts`）挑：甘特圖有自己寫法的放 `taskGantt.views.<鍵>`（四語），沒有的用 `taskBoard.<鍵>`。`useTaskViews(kind)`（鍵 `['task-views', kind]`）、`useCreateTaskView` 帶 `kind`；「上次打開」`readLastTaskBoard(userId, kind)` 等三個函式加 `kind`，甘特圖鍵 `taskGantt.last.<使用者>`。設定表單共用看板的 `BoardForm`（範圍、篩選、顯示子任務），甘特專有的分組與刻度另放；`ganttFormFromConfig`／`buildGanttConfig`（`task-board-config.ts`）轉換，送出時一律不帶 `dueRange`。
+- 任務頁：看板與甘特圖共用同一組狀態（網址參數 `board` 或 `gantt`、未儲存的設定、詳細資料、D6 退回）；預設甘特圖的設定起點是 `TaskGantt` 第一次查詢回來的設定（`loaded` 事件，同看板用欄查詢回應的設定）；存檔甘特圖 404／403 由 `TaskGantt` 送 `notFound`，詳細資料的 `kind` 不是 `gantt` 時當成找不到，兩者都走 D6（清記憶）；`gantt=` 不是正整數時退回但保留記憶（同看板）。「上次打開」在該甘特圖第一次查詢成功時寫入。
+- ★ 工具列換刻度、平移只改目前畫面，不改甘特圖設定；換甘特圖或「套用」新設定時回到它的預設刻度與預設時間窗（設定裡的「預設刻度」才是存下來的）。
+- ★ 設定對話框分組選項順序「依父子、依負責人、不分組」（預設在前）；「顯示子任務」的說明改成「子任務自己是一列」。
+- ★ 從清單切回甘特圖時開上次打開的甘特圖（同看板）；切到清單時網址的 `board`、`gantt` 一併拿掉。
+- 技術：存檔甘特圖換了工具列刻度後，查詢改送「伺服器回的設定只改 `scale`」的 `config`、不帶 `viewId`（兩者只能帶一個，§11.5.2.5）；此時甘特圖在別處被刪不會立刻 404，換回原刻度、重新整理或換甘特圖時才走 D6。
+- 已知：甘特圖的未儲存設定被伺服器以 400 拒絕時，只顯示「甘特圖載入失敗」與重試，沒有看板那個「捨棄未儲存的設定」鈕（甘特設定對話框沒有會造成 400 的自由欄位，關鍵字有長度上限）。
+- 測試：G72–G76、G68 主管鎖住在 `MyTasksPage.vitest.spec.ts` 的「saved Gantt charts (gt2c)」；元件層在 `BoardPicker`、`BoardSettingsDialog`、`TaskViewShareDialog`、`TaskGantt`（「saved Gantt charts (gt2c)」）的 spec，表單轉換在 `task-board-config.vitest.spec.ts`。G77 在 jsdom 只驗手機全螢幕與設定內容 `overflow-x: hidden`，四種寬度的實際橫向捲動待實機走查。
+
 #### 11.5.5 驗收案例
 
 身分沿用測試基底：`admin`、`sales01`、`sales02`（業務部，模組有 Read／Edit）、`manager01`（主管，A33 開，管業務部）、`outsider`（看不到該記錄、與任務無關）。日期以「今天＝2026-11-18（星期三），A7＝星期一」為例。
