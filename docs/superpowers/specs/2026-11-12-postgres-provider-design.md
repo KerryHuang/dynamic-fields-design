@@ -183,7 +183,7 @@ SQLite 不改，是因為 SQLite 只在查詢條件能推出索引條件時才�
   - 兩段逾時各自以 `Database:LockTimeoutSeconds` 為上限，最壞等待約兩倍。單一實例時過了閘門通常立刻拿到鎖，只有多實例競爭時才會在第二段等。
   - **涵蓋範圍**：
     - `ITransactionalRequest` 的交易：經上面的 `ITransactionManager`，先排隊再開交易、取鎖。
-    - `SaveChanges` 自己開的交易：PostgreSQL 上把 `Database.AutoTransactionBehavior` 設成 `Always`（用 `SaveChanges` 攔截器在 `SavingChanges` 設定），連只發一個指令的 `SaveChanges` 也開交易、取鎖。EF 7 起只發一個指令時預設不開交易，不設的話這類寫入可以插進持鎖交易的兩個陳述式之間，與 SQLite 不等價。這類交易同樣要先過閘門：同一個攔截器在沒有外層交易時於 `SavingChanges` 進閘、`SavedChanges`／`SaveChangesFailed` 放開。
+    - `SaveChanges` 自己開的交易：PostgreSQL 上把 `Database.AutoTransactionBehavior` 設成 `Always`（用 `SaveChanges` 攔截器在 `SavingChanges` 設定），連只發一個指令的 `SaveChanges` 也開交易、取鎖。EF 7 起只發一個指令時預設不開交易，不設的話這類寫入可以插進持鎖交易的兩個陳述式之間，與 SQLite 不等價。這類交易同樣要先過閘門：同一個攔截器在沒有外層交易時於 `SavingChanges` 進閘，整次 SaveChanges 結束時由 `DynamicDbContext` 覆寫的 SaveChanges 在 finally 放開（不靠 `SavedChanges`／`SaveChangesFailed`，理由見 §9 pg0b 實作補記）。
     - 交易外的 `ExecuteUpdate`／`ExecuteDelete` 是自動提交的單一陳述式，不排隊也不取鎖。核對 `17d621fc`：`SeedData.cs:32,35` 在啟動流程（§5.8 的啟動鎖內）；`IndexBackfillJob` 在啟動時先 `ClearFieldIndexAsync`（交易外），之後每 1000 筆一個短交易；其餘在 repository 裡，抽查的通知與冪等呼叫端都是 `ITransactionalRequest`，在交易內（審查也抽查到同樣結果）。pg0b 逐處確認；之後新增的交易外寫入要在交付說明列出。
     - 唯讀查詢不取鎖（MVCC）。攔截器預留跳過的判斷點：pg1 的報表快照（`REPEATABLE READ READ ONLY` 交易）若經 EF 開交易，不能被序列化；判斷方式在 pg1 定。
   - **攔截器的實作要求**：
@@ -387,7 +387,7 @@ O1 若因為 PostgreSQL 的行為需要改程式（違反「pg0 完成後不改�
   - 池耗盡的例外形狀實測（§5.7）：Npgsql 8 是 `NpgsqlException`、`SqlState` 為 null、內層 `TimeoutException`，與設計的分類規則相符，不需要改用 Npgsql 型別（`PostgresPoolExhaustionTests`）。
   - 設計沒列到、走查時發現的 SQLite 寫法：檢查條件 `CK_AppOrphan_One` 用布林相加，PostgreSQL 沒有 `boolean + boolean`。比照部分索引 filter 依名稱覆寫成 `num_nonnulls("FieldId", "OptionId", "BlockId") = 1`（可寫死清單第 6 項的延伸）。
   - Npgsql 預設把 `JsonElement` 屬性一律改成 `jsonb`（`NpgsqlJsonElementHackConvention`），無視既有的值轉換；JSON 欄位維持 `text`（§5.4），所以 PostgreSQL 的慣例集拿掉這條慣例（`PostgresConventionSetBuilder`）。`PostgresModelTests` 檢查 JSON 轉換欄位是 `text`。
-  - SaveChanges 的閘門照 §5.6 在 `SavingChanges` 進閘（開連線之前），在儲存成功、失敗、取消、並行衝突四個結束事件放開。EF 的 `SavingChanges` 在 try 之外：排在它後面的 SaveChanges 攔截器若在 `SavingChanges` 丟例外，閘門放不掉，所以這個攔截器要排在其他 SaveChanges 攔截器之前（pg0c 疊測試守衛時注意順序）。
+  - SaveChanges 的閘門照 §5.6 在 `SavingChanges` 進閘（開連線之前），排到的寫入權交給 `DynamicDbContext.HoldUntilSaveEnds`，由 `DynamicDbContext` 覆寫的 `SaveChanges`／`SaveChangesAsync` 在 finally 放開，不靠 EF 的結束事件。原因（跨家族審查發現）：EF 8 的 `SavingChanges` 攔截器與 `DetectChanges` 都在 SaveChanges 的 try 之外，排在後面的攔截器或 `DetectChanges` 丟例外時 EF 不發任何結束事件，閘門會永遠占住，同行程後續寫入全部逾時（`LockTimeoutSeconds`≤0 時無限等）；只調整攔截器順序擋不住 `DetectChanges`。改成 finally 後攔截器註冊順序不影響釋放，SQLite 沒有人掛資源、行為不變（`PostgresSaveChangesGateTests`，同步與非同步、兩種前置例外，不需伺服器）。
   - 本機走查（§8 第 5、6 項）用 `postgres:16`：Demo 資料產生器整套在 PostgreSQL 跑完（1024 步）、27 張報表全走記憶體路徑；外部連線占住全庫鎖時寫入 3 秒後回 503 加 `Retry-After`，放開後成功、自動編號沒有跳號。
 
 **pg0c：PostgreSQL 測試環境與雙跑集**（約 M）
