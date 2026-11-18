@@ -907,6 +907,18 @@ st1 唯一看得到的變化：政策設定頁依 `PolicyCatalog.All` 多出 A35
 
 **查詢次數**：時間軸列一次、總數一次、未排程一次、未排程總數一次、父任務一次（`ListByIdsAsync`）加符合條件一次、跨度一次、`CardsAsync` 的批次評估與留言數與進度各一次；不隨列數成長（同看板 C18 的要求）。
 
+〔gt1c 實作補記〕
+- `GetTaskGanttHandler` 放在新檔 `TaskGanttHandlers.cs`（`TaskBoardHandlers.cs` 已三百多行），請求與回應型別照舊放 `TaskBoardRequests.cs`、`TaskBoardModels.cs`，路由在 `TaskBoardController`。上限常數 `MaxRows=500`、`MaxUnscheduled=100`、`MaxWindowDays=366` 在 handler 上，與 §14 一致。
+- 檢查順序：`viewId` 與 `config` 都帶 400 → `viewId` 不存在、看不到、是看板 404 → 設定嚴格驗證 400 → 時間窗 400。
+- 404 一律「這個甘特圖已刪除或不再分享給你」（`MessageText.TaskGanttNotFound`，四語）。★ 兩者都帶的 400 用甘特版的字「只能帶甘特圖 Id 或甘特圖設定其中一個」（`TaskGanttSourceBoth`），不沿用看板的 `SourceBoth`。
+- ★ 只帶 `from` 或 `to`、或 `window` 是空物件：400 鍵 `window`，訊息「時間範圍的開始與結束都必填」（`TaskGanttWindowRequired`，新增）；`window: null` 等於沒帶。366 天含頭含尾算（`to − from + 1`）。日期格式錯由模型繫結回 400。
+- 甘特設定轉成「依狀態分欄、同範圍、同篩選、同 `showSubtasks`」的看板設定交給 `ContextAsync`；`weekStart` 由 `ContextAsync` 算出的本週最後一天往回推，不多讀一次政策。
+- 父任務的 `visible` 與列、未排程放在**同一次** `CardsAsync` 批次評估（看不到的父任務算不出卡片，只用來判斷 `visible`，卡片不回）；看得到的標題取父任務自己的卡片，看不到的取子任務卡片的 `parentTitle`（即 `TaskPermissions.Parent`）。所以實際是「父任務一次、符合條件一次、批次評估一次」，比上面列的少一輪評估。
+- `parents` 依子任務在 `rows` 裡第一次出現的順序；`spans` 依 `parentId` 遞增。`spans` 與 `parents` 一樣只在 `groupBy=parent` 時有內容，其他分組回空陣列（技術決定：前端只在依父子分組時畫跨度）。
+- `total`、`unscheduledTotal` 是資料庫的符合筆數；時間軸列超過 500 時，排在 500 名之後、看得到又符合篩選的父任務出現在 `parents` 且帶 `row`（與「不在時間窗內」同一條路）。
+- 實測 SQLite：暖身後一次甘特查詢 18 條 SQL（含可見條件、部屬、權限、政策），50 列與 400 列相同（`G44_QueryCount_DoesNotGrowWithRows`）。
+- G33（gt1b 留下）：`schedule` 兩個都送 null 後，任務出現在 `unscheduled`（`TaskGanttQueryTests.G33_ScheduleClearsBoth_ThenUnscheduled`）。
+
 ##### 11.5.2.6 拖拉改日期：`POST /tasks/{id}/schedule`（GT-T7）
 
 不沿用 PATCH：PATCH 目前**沒有版本檢查**（`UpdateTaskHandler` 不收版本，最後寫入者贏），設計 §11.3 要求「併發同 §5.6」。也不擠進 `move`：`move` 的語意是「看板欄」，甘特圖沒有欄。另開一支，寫法照 `MoveTaskHandler`。
@@ -979,6 +991,8 @@ st1 唯一看得到的變化：政策設定頁依 `PolicyCatalog.All` 多出 A35
 `StartAfterDue`「開始日不能晚於到期日」（gt1a）；`GanttWindowInvalid`「時間範圍的開始不能晚於結束」、`GanttWindowTooLong(max)`「時間範圍最多 {max} 天」、`GanttNoDueRange`「甘特圖用時間範圍，不用到期日區間」（gt1b／gt1c）。
 
 〔gt1b 實作補記〕`GanttNoDueRange` 同 gt1a 的 `StartAfterDue`，放在 `MessageText.TaskGanttNoDueRange`（四語），不在 `TaskMessages`；`GanttWindowInvalid`、`GanttWindowTooLong` 隨 gt1c。
+
+〔gt1c 實作補記〕甘特查詢的字都放 `MessageText`（四語）：`TaskGanttWindowInvalid`、`TaskGanttWindowTooLong(366)`，另加 `TaskGanttWindowRequired`「時間範圍的開始與結束都必填」、`TaskGanttSourceBoth`「只能帶甘特圖 Id 或甘特圖設定其中一個」、`TaskGanttNotFound`「這個甘特圖已刪除或不再分享給你」。
 
 ##### 11.5.2.9 政策
 
