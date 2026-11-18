@@ -5,6 +5,8 @@ backend/data/*.db*
 # log 含使用者代碼、路徑與請求紀錄，公開 repo 不能誤提交
 backend/data/*.log
 backend/data/keys/
+# 附件內容是使用者上傳的檔案（本機 Demo 會產生），不能進版控
+backend/data/attachments/
 dist/
 .quasar/
 *.user
