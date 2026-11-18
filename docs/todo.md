@@ -51,7 +51,7 @@
 - 補 PostgreSQL 的草稿條件更新與 `IsVersionUsedAsync` 競爭（fg3a 審查 🟡4，與既有 PUT 同一種寫法） ⛔ 等：pg0
 - 驗 render.yaml 的 buildFilter：第一次只改文件的 push 到 main 後，確認 Render 沒有重新部署
 - 前端改動的驗收一律跑完整 `bun run test`（約 2 分鐘）：fg3c 只跑篩選範圍，漏掉 no-hardcoded-colors 守門，CI 才擋下
-- 拆開 DemoDataApiTests：單一類別要 12 分以上且只能序列跑，是 CI 最慢的一份（WebAPITests 1/4 約 14.7 分）
+- 讓 DemoDataApiTests 只做一次完整產生：需要完整產生結果的唯讀案例（輪詢到完成、已產生再產生 409 等）共用一份 fixture；並發與身分隔離案例照舊獨立產生（使用者 2026-11-18 同意，接受案例間連帶紅的代價）。原註：單一類別要 12 分以上且只能序列跑，是 CI 最慢的一份（WebAPITests 1/4 約 14.7 分）
 - 查前端 vitest 偶發的 unhandled error（Quasar timer）：測試全過但 vitest 以 exit 1 結束，CI 需重跑
 - 啟用 Demo 流程圖範例流程並實際送簽展示（使用者 11-16 裁決）：「採購單（流程圖範例）」改啟用；它目前優先序 0、未稅小計 ≥ 10000，啟用後會攔下 1 萬以上所有採購單，要重排 InventoryScenario 既有送簽情境（大額／一萬以上兩條流程的 Demo 單據），並加幾張走並行分支的送簽單讓進度圖看得到並行
 - 實機看設計頁試算時，有警告的線是否保持警告色（只改了 CSS，未實機驗）
