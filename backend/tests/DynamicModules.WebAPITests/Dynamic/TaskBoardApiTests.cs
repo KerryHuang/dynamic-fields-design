@@ -187,9 +187,13 @@ public class TaskBoardApiTests : IDisposable
         (await contradiction.Content.ReadAsStringAsync()).Should().Contain("startDate");
     }
 
+    /// <summary>
+    /// 兩個請求帶同一個 expectedVersion、依序送（可確定的交錯：第二個一定讀到第一個寫過的版本）→ 一個 200、一個 409 stale，
+    /// 系統記錄只有贏的那筆。讀完後才被別人推進版本、靠條件式認領擋下的情況見 ApplicationTests 的 TaskScheduleTests.G29。TestApp 是 SQLite。
+    /// </summary>
     [Fact]
     [Trait("Category", "Postgres")]
-    public async Task ScheduleAndSchedule_Concurrent_OneWins_NoDuplicateEntries()
+    public async Task Schedule_SameVersionTwice_SecondIsStale_EntriesOnce()
     {
         var sales = _app.AsUser("sales01");
         var other = _app.AsUser("sales01");
@@ -197,16 +201,19 @@ public class TaskBoardApiTests : IDisposable
         var id = task.GetProperty("id").GetInt64();
         var version = task.GetProperty("version").GetString();
 
-        var results = await Task.WhenAll(
-            sales.PostAsJsonAsync($"{Base}/tasks/{id}/schedule", new { startDate = "2026-11-21", dueDate = "2026-11-28", expectedVersion = version }),
-            other.PostAsJsonAsync($"{Base}/tasks/{id}/schedule", new { startDate = "2026-12-01", dueDate = "2026-12-05", expectedVersion = version }));
+        var first = await sales.PostAsJsonAsync($"{Base}/tasks/{id}/schedule", new { startDate = "2026-11-21", dueDate = "2026-11-28", expectedVersion = version });
+        var second = await other.PostAsJsonAsync($"{Base}/tasks/{id}/schedule", new { startDate = "2026-12-01", dueDate = "2026-12-05", expectedVersion = version });
 
-        results.Select(m => m.StatusCode).Should().BeEquivalentTo([HttpStatusCode.OK, HttpStatusCode.Conflict]);
-        (await JsonOf(results.Single(m => m.StatusCode == HttpStatusCode.Conflict))).GetProperty("code").GetString().Should().Be("stale");
-        var winner = (await JsonOf(results.Single(m => m.StatusCode == HttpStatusCode.OK))).GetProperty("card");
+        first.StatusCode.Should().Be(HttpStatusCode.OK, await first.Content.ReadAsStringAsync());
+        second.StatusCode.Should().Be(HttpStatusCode.Conflict);
+        (await JsonOf(second)).GetProperty("code").GetString().Should().Be("stale");
         var after = await Ok(await sales.GetAsync($"{Base}/tasks/{id}"));
-        after.GetProperty("startDate").GetString().Should().Be(winner.GetProperty("startDate").GetString());
-        var comments = await Ok(await sales.GetAsync($"{Base}/tasks/{id}/comments"));
-        comments.ToString().Split("startChanged").Length.Should().Be(2, "只有贏的那個請求寫了一筆 startChanged");
+        after.GetProperty("startDate").GetString().Should().Be("2026-11-21");
+        after.GetProperty("dueDate").GetString().Should().Be("2026-11-28");
+        var events = (await Ok(await sales.GetAsync($"{Base}/tasks/{id}/comments"))).EnumerateArray()
+            .Where(c => c.TryGetProperty("systemEvent", out var e) && e.ValueKind == JsonValueKind.String)
+            .Select(c => c.GetProperty("systemEvent").GetString()).ToList();
+        events.Count(e => e == "startChanged").Should().Be(1);
+        events.Count(e => e == "dueChanged").Should().Be(1);
     }
 }

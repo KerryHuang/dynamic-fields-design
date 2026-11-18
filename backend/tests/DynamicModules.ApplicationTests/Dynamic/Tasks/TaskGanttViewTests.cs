@@ -52,6 +52,20 @@ public class TaskGanttViewTests : TaskBoardTestBase
     }
 
     [Fact]
+    public async Task G20_NullDueRange_400_OnPostAndPut()
+    {
+        const string nullRange = """{"version":1,"groupBy":"parent","scope":"assigned","scale":"week","filters":{"dueRange":null}}""";
+
+        (await SendAs("sales01", new CreateTaskViewRequest("gantt", "展覽", J(nullRange)))).Errors["config"]
+            .Should().Equal("甘特圖用時間範圍，不用到期日區間");
+        var v = await CreateGantt("sales01");
+        (await SendAs("sales01", new UpdateTaskViewRequest(v.Id, "展覽", J(nullRange), v.RowVersion))).Errors["config"]
+            .Should().Equal("甘特圖用時間範圍，不用到期日區間");
+        (await SendAs("sales01", new UpdateTaskViewRequest(v.Id, "展覽", J("""{"version":1,"groupBy":"parent","scope":"assigned","scale":"week","sort":null}"""), v.RowVersion)))
+            .Errors.Should().ContainKey("config");
+    }
+
+    [Fact]
     public async Task G20_BoardConfigOnGantt_400_GanttNameMessages()
     {
         (await SendAs("sales01", new CreateTaskViewRequest("gantt", "展覽", J(StatusConfig)))).Errors.Should().ContainKey("config");

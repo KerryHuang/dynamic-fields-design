@@ -16,7 +16,7 @@ import MyTasksPage from './MyTasksPage.vue';
 
 let calls: Call[];
 
-async function mountPage(url: string, opts: { detailFails?: boolean; empty?: boolean; subordinates?: boolean; goneBoards?: number[]; defaultBoardFails?: boolean; admin?: boolean; noScope?: boolean; defaultConfig?: Record<string, unknown>; putConflict?: boolean } = {}) {
+async function mountPage(url: string, opts: { detailFails?: boolean; empty?: boolean; subordinates?: boolean; goneBoards?: number[]; defaultBoardFails?: boolean; admin?: boolean; noScope?: boolean; defaultConfig?: Record<string, unknown>; putConflict?: boolean; ganttViews?: number[] } = {}) {
   let detailVersion = 'v1';
   let conflicted = false;
   const pinia = createPinia();
@@ -43,6 +43,11 @@ async function mountPage(url: string, opts: { detailFails?: boolean; empty?: boo
       // 第一次儲存撞 409，之後重抓看板就是別人改過的新版本（v2）
       if (opts.putConflict && !conflicted) { conflicted = true; detailVersion = 'v2'; return new HttpFail(409, { message: '伺服器訊息' }); }
       return viewDetailWire({ ...(bodyOf(c) as object), rowVersion: 'v3' });
+    }
+    // 甘特檢視：詳細資料端點不分種類照回（欄查詢在這裡照常回，模擬它比詳細資料慢、404 還沒到）
+    const ganttId = opts.ganttViews?.find((id) => c.url === `/task-views/${id}`);
+    if (ganttId !== undefined && c.method === 'get') {
+      return viewDetailWire({ id: ganttId, kind: 'gantt', name: '展覽', config: { version: 1, groupBy: 'parent', scope: 'assigned', scale: 'week' } });
     }
     if (c.url === '/task-views/8' && c.method === 'get') return viewDetailWire({ id: 8, name: '業務部任務', isOwner: false, canEdit: false, canDelete: false, config: configWire({ groupBy: 'dueBucket', scope: 'visible' }) });
     if (/^\/task-views\/\d+$/.test(c.url) && c.method === 'delete') return {};
@@ -279,6 +284,18 @@ describe('MyTasksPage', () => {
     expect(w.find('[data-testid="board-load-failed"]').exists()).toBe(false);
     await w.get('[data-testid="board-gone-close"]').trigger('click');
     expect(w.find('[data-testid="board-gone-notice"]').exists()).toBe(false);
+    w.unmount();
+  });
+
+  it('a gantt view id in board= falls back to the default board even when its detail arrives before the board 404', async () => {
+    localStorage.setItem('taskBoard.last.sales01', '12');
+    const { w, router } = await mountPage('/tasks?view=board&board=12', { ganttViews: [12] });
+    await flushPromises();
+    expect(router.currentRoute.value.query.board).toBeUndefined();
+    expect(w.find('[data-testid="board-gone-notice"]').exists()).toBe(true);
+    expect(localStorage.getItem('taskBoard.last.sales01')).toBeNull();
+    expect(bodyOf(calls.filter((c) => c.url === '/task-board/columns').at(-1))).toEqual({ viewId: null, config: null });
+    expect(w.find('[data-testid="task-board"]').exists()).toBe(true);
     w.unmount();
   });
 

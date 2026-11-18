@@ -970,6 +970,8 @@ st1 唯一看得到的變化：政策設定頁依 `PolicyCatalog.All` 多出 A35
 - ★ 「這個甘特圖已刪除或不再分享給你」gt1b 沒有用到的地方，所以沒加：`GET/PUT/DELETE /task-views/{id}`、`copy`、`shares` 找不到或看不到時不知道種類（看不到就不能透露它是甘特圖），沿用看板那句；看板端點拿到甘特 Id 也回看板那句（呼叫端在看板）。甘特專用的 404 字隨 gt1c 的 `POST /tasks/gantt`（帶看板 Id、或已刪除、不再分享）加。
 - 寫入時 `scale` 與 `groupBy`、`scope` 一樣必填（技術決定：同看板「必要欄位缺了 400」）；`showSubtasks`、`filters` 選填。甘特設定沒有 `sort`、`columns`，帶了是未知屬性 400。
 - 讀取時 `dueRange` 一律丟掉、關鍵字 trim，其餘同看板的寬鬆讀取。
+- 寫入時只要 `filters` 裡有 `dueRange` 這個鍵就 400，不論值（含 `null`）、不分大小寫：它是 `TaskBoardFilters` 的已知屬性，`null` 會被反序列化接受，所以另看原始 JSON。`sort`、`columns` 等不屬於甘特設定的鍵帶 `null` 也是未知屬性 400。
+- `GET /task-views/{id}` 照舊不分種類（看不到就不透露種類）；任務頁 `?view=board&board=<甘特 Id>` 由前端擋：詳細資料的 `kind` 不是 `board` 時當成找不到，走 D6 回預設看板（不必等欄查詢的 404）。
 - `GET /task-views` 沒帶 `kind` 時照舊是 `board`。
 
 ##### 11.5.2.8 新增的 `TaskMessages`

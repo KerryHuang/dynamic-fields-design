@@ -51,6 +51,8 @@ public sealed record TaskGanttConfig(int Version, string GroupBy, string Scope, 
         catch (JsonException e) { return (null, [new(TaskGanttConfigErrors.Format, e.Path ?? "$")]); }
         if (config is null) return (null, [new(TaskGanttConfigErrors.Required)]);
         var errors = Validate(config);
+        // dueRange 是 TaskBoardFilters 的已知屬性，帶 null 也會被模型接受；看原始 JSON 有沒有這個鍵（不論值、不分大小寫，同反序列化）
+        if (HasDueRangeKey(json)) errors.Add(new(TaskGanttConfigErrors.NoDueRange));
         return errors.Count > 0 ? (null, errors) : (config, errors);
     }
 
@@ -79,6 +81,14 @@ public sealed record TaskGanttConfig(int Version, string GroupBy, string Scope, 
         };
     }
 
+    private static bool HasDueRangeKey(string json)
+    {
+        using var doc = JsonDocument.Parse(json);
+        var filters = doc.RootElement.EnumerateObject().FirstOrDefault(p => p.Name.Equals("filters", StringComparison.OrdinalIgnoreCase)).Value;
+        return filters.ValueKind == JsonValueKind.Object
+            && filters.EnumerateObject().Any(p => p.Name.Equals("dueRange", StringComparison.OrdinalIgnoreCase));
+    }
+
     private static List<TaskGanttConfigError> Validate(TaskGanttConfig c)
     {
         var errors = new List<TaskGanttConfigError>();
@@ -92,7 +102,6 @@ public sealed record TaskGanttConfig(int Version, string GroupBy, string Scope, 
             if (f.Sources?.Any(s => !TaskBoardConfig.Sources.Contains(s)) == true) errors.Add(new(TaskGanttConfigErrors.Sources));
             if (f.AssigneeUserIds?.Any(string.IsNullOrWhiteSpace) == true || f.CreatorUserIds?.Any(string.IsNullOrWhiteSpace) == true)
                 errors.Add(new(TaskGanttConfigErrors.PeopleBlank));
-            if (f.DueRange is not null) errors.Add(new(TaskGanttConfigErrors.NoDueRange));
             if (f.Keyword is { } k && k.Trim().Length > TaskBoardConfig.MaxKeyword) errors.Add(new(TaskGanttConfigErrors.KeywordTooLong, TaskBoardConfig.MaxKeyword));
         }
         return errors;

@@ -57,14 +57,16 @@ const me = useMe();
 const isAdmin = computed(() => !!me.data.value?.isSystemAdmin);
 // 預設看板沒有存檔，設定的起點用欄查詢回應帶的設定（伺服器決定預設值，前端不另存一份）；存檔的看板讀自己的詳細資料（要 rowVersion 與權限）
 const detail = useTaskView(boardId, isBoard);
-const savedConfig = computed<TaskBoardConfig | null>(() => (boardId.value === null ? boardQuery.data.value?.config ?? null : detail.data.value?.config ?? null));
+// 詳細資料端點不分種類：board= 帶到甘特檢視的 Id 時不能把甘特設定交給看板元件，當成找不到（同欄查詢的 404，D6）
+const boardDetail = computed(() => (detail.data.value?.kind === 'board' ? detail.data.value : null));
+const savedConfig = computed<TaskBoardConfig | null>(() => (boardId.value === null ? boardQuery.data.value?.config ?? null : boardDetail.value?.config ?? null));
 const config = computed(() => draft.value ?? savedConfig.value);
-const canSave = computed(() => boardId.value !== null && !!detail.data.value?.canEdit);
-const canShare = computed(() => boardId.value !== null && !!detail.data.value?.isOwner);
+const canSave = computed(() => boardId.value !== null && !!boardDetail.value?.canEdit);
+const canShare = computed(() => boardId.value !== null && !!boardDetail.value?.isOwner);
 const boardName = computed(() => {
   if (boardId.value === null) return t('taskBoard.defaultName');
   const all = [...(views.data.value?.mine ?? []), ...(views.data.value?.shared ?? [])];
-  return detail.data.value?.name ?? all.find((v) => v.id === boardId.value)?.name ?? '';
+  return boardDetail.value?.name ?? all.find((v) => v.id === boardId.value && v.kind === 'board')?.name ?? '';
 });
 const boardGone = ref(false);
 
@@ -122,6 +124,9 @@ function openShare(id: number) { shareId.value = id; shareOpen.value = true; }
 watch(boardId, () => { draft.value = null; });
 watch(() => [isBoard.value, boardParam.value, boardId.value] as const, ([board, param, id]) => {
   if (board && param !== null && id === null) fallbackToDefault({ forget: false });
+}, { immediate: true });
+watch(() => detail.data.value, (d) => {
+  if (isBoard.value && d && d.id === boardId.value && d.kind !== 'board') fallbackToDefault({ forget: true });
 }, { immediate: true });
 watch(() => boardQuery.error.value, (e) => {
   if (isBoard.value && boardId.value !== null && [403, 404].includes((e as ApiError | null)?.status ?? 0)) fallbackToDefault({ forget: true });
@@ -216,7 +221,7 @@ const boardFailed = computed(() => !!boardQuery.error.value && !boardQuery.data.
       </div>
     </template>
     <BoardSettingsDialog
-      v-if="config" v-model="settingsOpen" :config="config" :name="boardId === null ? '' : boardName" :view-id="canSave ? boardId : null" :row-version="detail.data.value?.rowVersion ?? ''"
+      v-if="config" v-model="settingsOpen" :config="config" :name="boardId === null ? '' : boardName" :view-id="canSave ? boardId : null" :row-version="boardDetail?.rowVersion ?? ''"
       :can-save="canSave" :has-subordinates="hasSubordinates" @apply="(c) => (draft = c)" @saved="onSaved" @saved-as-new="onSavedAsNew"
     />
     <TaskViewShareDialog :view-id="shareId" :open="shareOpen" @close="shareOpen = false" @hidden="picker?.focusButton()" />
