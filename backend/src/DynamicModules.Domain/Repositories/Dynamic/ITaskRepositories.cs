@@ -21,8 +21,16 @@ public interface ITaskRepository
     Task<bool> TryClaimVersionAsync(TaskItem task, CancellationToken ct);
     /// <summary>不追蹤，含參與者；只讀的檢查（例如上傳資格）用，避免把舊值留在追蹤器裡讓後面的處理器讀到。</summary>
     Task<TaskItem?> GetReadOnlyAsync(long id, CancellationToken ct);
-    /// <summary>追蹤，含參與者；DueDate 升冪、null 最後、再依 Id。</summary>
+    /// <summary>只列頂層任務（子任務在父任務詳細裡看，看板設計 §10.7.2）；追蹤，含參與者；DueDate 升冪、null 最後、再依 Id。</summary>
     Task<List<TaskItem>> ListByRecordAsync(long recordId, CancellationToken ct);
+    /// <summary>這個父任務底下的子任務；追蹤，含參與者；CreatedTime、Id 升冪。</summary>
+    Task<List<TaskItem>> ListChildrenAsync(long parentId, CancellationToken ct);
+    /// <summary>一次取多筆任務（不追蹤，含參與者）；不存在的不在結果裡。</summary>
+    Task<List<TaskItem>> ListByIdsAsync(IReadOnlyCollection<long> ids, CancellationToken ct);
+    /// <summary>這個父任務底下現有的子任務數（含已完成、已取消）。</summary>
+    Task<int> CountChildrenAsync(long parentId, CancellationToken ct);
+    /// <summary>一次算多個父任務的子任務數（GROUP BY 父任務、狀態）；沒有子任務的不在結果裡。</summary>
+    Task<Dictionary<long, TaskProgress>> SubtaskProgressAsync(IReadOnlyCollection<long> parentIds, CancellationToken ct);
     /// <summary>追蹤，含參與者。</summary>
     Task<List<TaskItem>> ListByRecordIdsAsync(IReadOnlyCollection<long> recordIds, CancellationToken ct);
     /// <summary>不追蹤，含參與者；排序同 <see cref="ListByRecordAsync"/>。</summary>
@@ -133,10 +141,11 @@ public sealed record TaskListQuery(string UserId, TaskListTab Tab, TaskListFilte
 /// <param name="Subordinates">Scope 為 subordinates 時的部屬名單（空集合＝沒有結果）。</param>
 /// <param name="Statuses">null 代表不篩狀態。</param>
 /// <param name="Sources">personal、record、rule；null 或空代表不篩。</param>
+/// <param name="TopLevelOnly">看板設定 showSubtasks=false：只列父任務與獨立任務。</param>
 public sealed record TaskBoardQuery(TaskVisibility Visibility, string GroupBy, string Scope, IReadOnlySet<string> Subordinates,
     IReadOnlyCollection<TaskItemStatus>? Statuses, IReadOnlyCollection<string>? AssigneeUserIds, bool? IncludeUnassigned,
     IReadOnlyCollection<string>? CreatorUserIds, IReadOnlyCollection<string>? Sources, DateOnly? DueFrom, DateOnly? DueTo, string? Keyword,
-    DateOnly Today, DateOnly WeekEnd, string SortKey, bool SortDescending);
+    DateOnly Today, DateOnly WeekEnd, string SortKey, bool SortDescending, bool TopLevelOnly = false);
 
 /// <summary>
 /// 提醒條件（由政策算出）：到期日在 <see cref="DueSoonDates"/> 內的任務是「即將到期」候選；

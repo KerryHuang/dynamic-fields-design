@@ -48,6 +48,10 @@ public static class PolicyCatalog
     public static readonly PolicyDefinition TaskSupervisorScopeRecursive =
         new("task.supervisorScopeRecursive", "task", PolicyKind.Boolean, PolicyScope.System, "true");
 
+    /// <summary>A35：每個父任務的子任務數（含已完成、已取消；看板設計 §10.1）；技術上限 200 是父任務詳細內嵌子任務清單的筆數。</summary>
+    public static readonly PolicyDefinition TaskMaxSubtasksPerTask =
+        new("task.maxSubtasksPerTask", "task", PolicyKind.Integer, PolicyScope.System, "50", 1, 200, Unit: "count");
+
     /// <summary>A14：通知保留天數；超過的舊通知下次讀通知時清除。</summary>
     public static readonly PolicyDefinition NotificationRetentionDays =
         new("notification.retentionDays", "notification", PolicyKind.Integer, PolicyScope.System, "90", 1, 3650, Unit: "days");
@@ -149,7 +153,7 @@ public static class PolicyCatalog
     public static IReadOnlyList<PolicyDefinition> All { get; } =
         [TaskMaxRulesPerModule, TaskMaxTasksPerRule, TaskMaxRulesPerPackage,
          TaskReminderLeadDays, TaskRemindOverdue, TaskNotifyCommented, TaskNotifyCompleted, TaskNotifyCancelled,
-         TaskSupervisorScope, TaskSupervisorScopeRecursive,
+         TaskSupervisorScope, TaskSupervisorScopeRecursive, TaskMaxSubtasksPerTask,
          NotificationRetentionDays, CalendarWeekStart,
          AttachmentMaxFileBytes, AttachmentMaxFilesPerField, AttachmentAllowedExtensions, AttachmentMaxFilesPerComment,
          OpsSlowRequestMs, OpsClientErrorCollection,

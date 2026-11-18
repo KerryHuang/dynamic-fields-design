@@ -27,6 +27,7 @@ public class TaskItemConfiguration : IEntityTypeConfiguration<TaskItem>
         b.HasIndex(x => new { x.AssigneeUserId, x.Status });
         b.HasIndex(x => x.CreatedBy);
         b.HasIndex(x => x.ModuleId);
+        b.HasIndex(x => x.ParentTaskId);
         b.HasOne<Module>().WithMany().HasForeignKey(x => x.ModuleId).OnDelete(DeleteBehavior.Restrict);
         b.HasMany(x => x.Comments).WithOne().HasForeignKey(x => x.TaskId).OnDelete(DeleteBehavior.Cascade);
         b.HasMany(x => x.Participants).WithOne().HasForeignKey(x => x.TaskId).OnDelete(DeleteBehavior.Cascade);

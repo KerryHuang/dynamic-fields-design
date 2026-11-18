@@ -29,24 +29,45 @@ public sealed class TaskSupport(ITaskRepository tasks, IPermissionRepository per
     public async Task<bool> IsActiveUserAsync(string userId, CancellationToken ct) =>
         await permissions.GetUserAsync(userId, ct) is { IsActive: true };
 
+    /// <summary>父任務另外內嵌全部子任務（看得到父任務就看得到全部子任務，§10.3；仍逐筆評估權限當縱深防禦）與進度。</summary>
     public async Task<TaskDetailResponse> DetailAsync(TaskItem task, TaskPermissions p, CancellationToken ct)
     {
+        var children = task.ParentTaskId is null ? await tasks.ListChildrenAsync(task.Id, ct) : [];
         var users = new Dictionary<string, AppUser>();
-        foreach (var id in new[] { task.AssigneeUserId, task.CreatedBy }.OfType<string>().Distinct())
-            if (await permissions.GetUserAsync(id, ct) is { } u) users[id] = u;
+        if (children.Count > 0) users = (await permissions.ListUsersAsync(ct)).ToDictionary(u => u.UserId);
+        else
+            foreach (var id in new[] { task.AssigneeUserId, task.CreatedBy }.OfType<string>().Distinct())
+                if (await permissions.GetUserAsync(id, ct) is { } u) users[id] = u;
         var ruleKey = task.RuleId is { } ruleId ? await tasks.GetRuleKeyAsync(ruleId, ct) : null;
-        return TaskViews.ToDetail(task, p, users, time.Today, ruleKey);
+        var today = time.Today;
+        IReadOnlyList<TaskSummaryResponse> subtasks = [];
+        if (children.Count > 0)
+        {
+            var perms = await access.EvaluateManyAsync(children, ct);
+            subtasks = children.Select((c, i) => (c, p: perms[i])).Where(x => x.p.CanSee)
+                .Select(x => TaskViews.ToSummary(x.c, x.p, users, today, null)).ToList();
+        }
+        var progress = children.Count == 0 ? null : Progress(children);
+        return TaskViews.ToDetail(task, p, users, today, ruleKey, progress, subtasks);
     }
 
-    /// <summary>記錄上看得到的任務，加上可手動套用的規則。</summary>
+    private static TaskProgress Progress(IReadOnlyCollection<TaskItem> children) => new(
+        children.Count(c => c.Status == TaskItemStatus.Done), children.Count(c => c.Status == TaskItemStatus.Cancelled), children.Count);
+
+    /// <summary>頂層任務的進度（子任務沒有子任務，不查）；一次查詢。</summary>
+    public Task<Dictionary<long, TaskProgress>> ProgressAsync(IReadOnlyCollection<TaskItem> items, CancellationToken ct) =>
+        tasks.SubtaskProgressAsync(items.Where(t => t.ParentTaskId is null).Select(t => t.Id).ToList(), ct);
+
+    /// <summary>記錄上看得到的頂層任務（子任務在父任務詳細裡，ST-Q4），加上可手動套用的規則。</summary>
     public async Task<RecordTasksResponse> RecordTasksAsync(RecordTaskAccess target, CancellationToken ct)
     {
         var items = await tasks.ListByRecordAsync(target.Record.Id, ct);
         var perms = await access.EvaluateManyAsync(items, ct);
         var users = (await permissions.ListUsersAsync(ct)).ToDictionary(u => u.UserId);
+        var progress = await ProgressAsync(items, ct);
         var today = time.Today;
         var rows = items.Select((t, i) => (t, p: perms[i])).Where(x => x.p.CanSee)
-            .Select(x => TaskViews.ToSummary(x.t, x.p, users, today)).ToList();
+            .Select(x => TaskViews.ToSummary(x.t, x.p, users, today, progress.GetValueOrDefault(x.t.Id))).ToList();
         return new RecordTasksResponse(rows, target.CanAdd && target.Module.TasksEnabled, await manualRules.ListAsync(target.Module, target.Record, ct));
     }
 }
@@ -81,6 +102,40 @@ public class CreateRecordTaskHandler(TaskSupport support, TaskWriter writer, Tas
             target.Module.Id, target.Record.Id, target.Record.Title, null, null, null, user.UserId));
         await writer.FlushAsync(ct);
         return ServiceResult.Created(await support.DetailAsync(task, await access.EvaluateAsync(task, ct), ct));
+    }
+}
+
+/// <summary>
+/// 新增子任務（看板設計 §10.7.2）：檢查順序 404 → 凍結 409 → 模組關任務 409 → 沒有父任務編輯權 403 → 一層限制 400 →
+/// 父任務已完成或取消 409 → 上限 A35 400 → 輸入 400。子任務只能用這支 API 新建、不能搬移（T18），所以「已有子任務的任務不能變成
+/// 別人的子任務」不必另外檢查。建立後在父任務留言串記 subtaskAdded（不改父任務版本）。
+/// </summary>
+public class CreateSubtaskHandler(ITaskRepository tasks, TaskSupport support, TaskWriter writer, TaskAccess access, IPolicyReader policies,
+    ICurrentUser user) : IRequestHandler<CreateSubtaskRequest, ServiceResult>
+{
+    public async Task<ServiceResult> Handle(CreateSubtaskRequest request, CancellationToken ct)
+    {
+        var parent = await tasks.GetAsync(request.ParentId, ct);
+        if (parent is null) return ServiceResult.NotFound(TaskMessages.NotFound);
+        var p = await access.EvaluateAsync(parent, ct);
+        if (!p.CanSee) return ServiceResult.NotFound(TaskMessages.NotFound);
+        if (p.Frozen) return ServiceResult.Conflict(ModuleGate.ClosedMessage);
+        if (!p.TasksEnabled) return ServiceResult.Conflict(MessageRef.Of(MessageText.TasksDisabled));
+        if (!p.CanEdit) return ServiceResult.Forbidden(MessageRef.Literal(TaskMessages.SubtaskNeedsParentEdit));
+        if (parent.ParentTaskId is not null) return ServiceResult.Invalid("parent", MessageRef.Literal(TaskMessages.SubtaskOneLevel));
+        if (!parent.IsOpen) return ServiceResult.Conflict(MessageRef.Literal(TaskMessages.SubtaskParentClosed), "parentClosed");
+        var max = await policies.IntAsync(PolicyCatalog.TaskMaxSubtasksPerTask, null, ct);
+        if (await tasks.CountChildrenAsync(parent.Id, ct) >= max)
+            return ServiceResult.Invalid("subtasks", MessageRef.Literal(TaskMessages.TooManySubtasks(max)));
+        var input = request.Input;
+        if (await support.ValidateInputAsync(input, ct) is { Count: > 0 } errors) return ServiceResult.Invalid(errors);
+        var child = writer.Create(new NewTask(input.Title.Trim(), TaskEditParser.NullIfBlank(input.Description),
+            TaskEditParser.NullIfBlank(input.AssigneeUserId), input.DueDate, parent.ModuleId, parent.RecordId, parent.RecordTitleSnapshot,
+            null, null, null, user.UserId, parent.Id));
+        await writer.FlushAsync(ct);
+        writer.AddSubtaskEntry(parent, TaskSystemEvents.SubtaskAdded, child);
+        await writer.FlushAsync(ct);
+        return ServiceResult.Created(await support.DetailAsync(child, await access.EvaluateAsync(child, ct), ct));
     }
 }
 
@@ -151,8 +206,11 @@ public class UndoReassignHandler(ITaskRepository tasks, TaskSupport support, Tas
     }
 }
 
-/// <summary>留言、參與者、附件資料列隨任務 cascade 刪除（實體檔交給清掃）；指向這筆任務的通知一起刪。</summary>
-public class DeleteTaskHandler(ITaskRepository tasks, INotificationRepository notifications, TaskAccess access, IUnitOfWork uow)
+/// <summary>
+/// 留言、參與者、附件資料列隨任務 cascade 刪除（實體檔交給清掃）；指向這筆任務的通知一起刪。父任務的子任務沒有 FK（ST-T7），
+/// 在同一交易裡先刪（含別人建的、已完成的），通知一起清；刪的是子任務時在父任務留言串記 subtaskDeleted。
+/// </summary>
+public class DeleteTaskHandler(ITaskRepository tasks, INotificationRepository notifications, TaskAccess access, TaskWriter writer, IUnitOfWork uow)
     : IRequestHandler<DeleteTaskRequest, ServiceResult>
 {
     public async Task<ServiceResult> Handle(DeleteTaskRequest request, CancellationToken ct)
@@ -164,7 +222,16 @@ public class DeleteTaskHandler(ITaskRepository tasks, INotificationRepository no
         if (p.Frozen) return ServiceResult.Conflict(ModuleGate.ClosedMessage);
         if (task.RuleId is not null) return ServiceResult.Conflict(TaskMessages.RuleTaskNoDelete);
         if (!p.CanDelete) return ServiceResult.Forbidden();
-        await notifications.RemoveBySourceAsync(NotificationService.TaskNotificationWriter.SourceType, task.Id, ct);
+        const string source = NotificationService.TaskNotificationWriter.SourceType;
+        if (task.ParentTaskId is null)
+            foreach (var child in await tasks.ListChildrenAsync(task.Id, ct))
+            {
+                await notifications.RemoveBySourceAsync(source, child.Id, ct);
+                tasks.Remove(child);
+            }
+        else if (await tasks.GetAsync(task.ParentTaskId.Value, ct) is { } parent)
+            writer.AddSubtaskEntry(parent, TaskSystemEvents.SubtaskDeleted, task);
+        await notifications.RemoveBySourceAsync(source, task.Id, ct);
         tasks.Remove(task);
         await uow.CommitAsync(ct);
         return ServiceResult.Success();
@@ -172,7 +239,7 @@ public class DeleteTaskHandler(ITaskRepository tasks, INotificationRepository no
 }
 
 public class GetMyTasksHandler(ITaskRepository tasks, TaskAccess access, IPermissionRepository permissions, ICurrentUser user, IBusinessTime time, IPolicyReader policies,
-    TaskVisibilityService visibility)
+    TaskVisibilityService visibility, TaskSupport support)
     : IRequestHandler<GetMyTasksRequest, ServiceResult>
 {
     private static readonly Dictionary<string, TaskListTab> Tabs = new()
@@ -202,9 +269,10 @@ public class GetMyTasksHandler(ITaskRepository tasks, TaskAccess access, IPermis
             new TaskListQuery(user.UserId, tab, filter, today, TaskDates.WeekEnd(today, weekStart), page, size, subordinates), ct);
         var perms = await access.EvaluateManyAsync(items, ct);
         var users = (await permissions.ListUsersAsync(ct)).ToDictionary(u => u.UserId);
+        var progress = await support.ProgressAsync(items, ct);
         // 縱深防禦：分頁條件靠參與者表維持「抓到的都看得到」，這裡再濾一次；濾掉的也從總數扣掉，不洩漏筆數
         var rows = items.Select((t, i) => (t, p: perms[i])).Where(x => x.p.CanSee)
-            .Select(x => TaskViews.ToSummary(x.t, x.p, users, today)).ToList();
+            .Select(x => TaskViews.ToSummary(x.t, x.p, users, today, progress.GetValueOrDefault(x.t.Id))).ToList();
         return ServiceResult.Success(new PagedResponse<TaskSummaryResponse>(rows, total - (items.Count - rows.Count), page, size));
     }
 }

@@ -12,8 +12,10 @@ namespace DynamicModules.Domain.Tasks;
 /// </summary>
 /// <param name="GroupBy">status、assignee、dueBucket。</param>
 /// <param name="Scope">assigned（負責人是我）、involved（我是參與者）、subordinates（部屬的任務）、visible（全部看得到的）。</param>
+/// <param name="ShowSubtasks">是否列出子任務；null 等於 true（看板設計 §10.5；選填欄位不升版本）。</param>
 public sealed record TaskBoardConfig(
-    int Version, string GroupBy, string Scope, TaskBoardFilters? Filters, TaskBoardColumns? Columns, TaskBoardSort? Sort)
+    int Version, string GroupBy, string Scope, TaskBoardFilters? Filters, TaskBoardColumns? Columns, TaskBoardSort? Sort,
+    bool? ShowSubtasks = null)
 {
     public const int CurrentVersion = 1;
     /// <summary>明列的負責人欄上限（技術限制：欄數決定查詢次數，可寫死清單）。</summary>

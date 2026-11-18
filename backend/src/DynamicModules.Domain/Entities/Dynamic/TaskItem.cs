@@ -24,6 +24,11 @@ public class TaskItem
     public bool AssigneeOverridden { get; set; }
     public bool CancelledByRule { get; set; }
 
+    /// <summary>子任務才有（只有一層，看板設計 §10）；不建自參照 FK，完整性由刪除流程維持（ST-T7）。</summary>
+    public long? ParentTaskId { get; set; }
+    /// <summary>因父任務取消而一併取消；父任務恢復時只恢復這些（看板設計 §10.4）。</summary>
+    public bool CancelledByParent { get; set; }
+
     public string? CreatedBy { get; set; }
     public DateTime CreatedTime { get; set; }
     public string? ModifiedBy { get; set; }
@@ -93,4 +98,8 @@ public static class TaskSystemEvents
     public const string ConditionRestored = "conditionRestored";
     public const string RecordDeleted = "recordDeleted";
     public const string RetriggerSkipped = "retriggerSkipped";
+    /// <summary>寫在父任務：新增了子任務（SystemData 帶 subtaskId、subtaskTitle）。</summary>
+    public const string SubtaskAdded = "subtaskAdded";
+    /// <summary>寫在父任務：刪除了子任務（SystemData 帶 subtaskId、subtaskTitle）。</summary>
+    public const string SubtaskDeleted = "subtaskDeleted";
 }

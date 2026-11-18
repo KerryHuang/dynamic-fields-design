@@ -27,4 +27,8 @@ public static class TaskMessages
     public const string DropInactiveAssignee = "停用的使用者不能指派";
     public const string LaterNeedsDate = "拖到「之後」要選日期";
     public const string LaterNotAfterWeekEnd = "日期必須晚於本週最後一天";
+    public const string SubtaskNeedsParentEdit = "要能修改這個任務才能新增子任務";
+    public const string SubtaskOneLevel = "子任務不能再有子任務";
+    public const string SubtaskParentClosed = "已完成或已取消的任務不能新增子任務";
+    public static string TooManySubtasks(int max) => $"一個任務最多 {max} 個子任務";
 }

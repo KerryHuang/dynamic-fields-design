@@ -28,7 +28,34 @@ public class TaskRepository(DynamicDbContext db) : ITaskRepository
         db.Set<TaskItem>().AsNoTracking().Include(t => t.Participants).FirstOrDefaultAsync(t => t.Id == id, ct);
 
     public Task<List<TaskItem>> ListByRecordAsync(long recordId, CancellationToken ct) =>
-        Sorted(db.Set<TaskItem>().Include(t => t.Participants).Where(t => t.RecordId == recordId)).ToListAsync(ct);
+        Sorted(db.Set<TaskItem>().Include(t => t.Participants).Where(t => t.RecordId == recordId && t.ParentTaskId == null)).ToListAsync(ct);
+
+    public Task<List<TaskItem>> ListChildrenAsync(long parentId, CancellationToken ct) =>
+        db.Set<TaskItem>().Include(t => t.Participants).Where(t => t.ParentTaskId == parentId)
+            .OrderBy(t => t.CreatedTime).ThenBy(t => t.Id).ToListAsync(ct);
+
+    public Task<List<TaskItem>> ListByIdsAsync(IReadOnlyCollection<long> ids, CancellationToken ct)
+    {
+        var list = ids.Distinct().ToArray();
+        return db.Set<TaskItem>().AsNoTracking().Include(t => t.Participants).Where(t => list.Contains(t.Id)).OrderBy(t => t.Id).ToListAsync(ct);
+    }
+
+    public Task<int> CountChildrenAsync(long parentId, CancellationToken ct) =>
+        db.Set<TaskItem>().AsNoTracking().CountAsync(t => t.ParentTaskId == parentId, ct);
+
+    public async Task<Dictionary<long, TaskProgress>> SubtaskProgressAsync(IReadOnlyCollection<long> parentIds, CancellationToken ct)
+    {
+        var ids = parentIds.Distinct().ToArray();
+        if (ids.Length == 0) return [];
+        var rows = await db.Set<TaskItem>().AsNoTracking()
+            .Where(t => t.ParentTaskId != null && ids.Contains(t.ParentTaskId.Value))
+            .GroupBy(t => new { Parent = t.ParentTaskId!.Value, t.Status }).Select(g => new { g.Key.Parent, g.Key.Status, Count = g.Count() })
+            .ToListAsync(ct);
+        return rows.GroupBy(r => r.Parent).ToDictionary(g => g.Key, g => new TaskProgress(
+            g.Where(r => r.Status == TaskItemStatus.Done).Sum(r => r.Count),
+            g.Where(r => r.Status == TaskItemStatus.Cancelled).Sum(r => r.Count),
+            g.Sum(r => r.Count)));
+    }
 
     public Task<List<TaskItem>> ListByRecordIdsAsync(IReadOnlyCollection<long> recordIds, CancellationToken ct)
     {
@@ -120,6 +147,7 @@ public class TaskRepository(DynamicDbContext db) : ITaskRepository
     private IQueryable<TaskItem> BoardBase(TaskBoardQuery q)
     {
         var query = TaskVisibilityQuery.Visible(db, q.Visibility);
+        if (q.TopLevelOnly) query = query.Where(t => t.ParentTaskId == null);
         var me = q.Visibility.UserId;
         query = q.Scope switch
         {

@@ -2370,6 +2370,9 @@ namespace DynamicModules.Persistence.Migrations
                         .HasMaxLength(50)
                         .HasColumnType("TEXT");
 
+                    b.Property<bool>("CancelledByParent")
+                        .HasColumnType("INTEGER");
+
                     b.Property<bool>("CancelledByRule")
                         .HasColumnType("INTEGER");
 
@@ -2409,6 +2412,9 @@ namespace DynamicModules.Persistence.Migrations
                     b.Property<long?>("ModuleId")
                         .HasColumnType("INTEGER");
 
+                    b.Property<long?>("ParentTaskId")
+                        .HasColumnType("INTEGER");
+
                     b.Property<long?>("RecordId")
                         .HasColumnType("INTEGER");
 
@@ -2441,6 +2447,8 @@ namespace DynamicModules.Persistence.Migrations
                     b.HasIndex("CreatedBy");
 
                     b.HasIndex("ModuleId");
+
+                    b.HasIndex("ParentTaskId");
 
                     b.HasIndex("RecordId");
 

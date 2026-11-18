@@ -155,6 +155,55 @@ public class TaskVisibilityEquivalenceTests : TaskTestBase
         }
     }
 
+    private async Task<TaskItem> SeedChild(TaskItem parent, string title, string? createdBy, string? assignee = null, string[]? mentioned = null)
+    {
+        var child = await SeedTask(title, createdBy: createdBy, assignee: assignee, mentioned: mentioned,
+            recordId: parent.RecordId, moduleId: parent.ModuleId);
+        await Db.Context.Set<TaskItem>().Where(t => t.Id == child.Id).ExecuteUpdateAsync(s => s.SetProperty(t => t.ParentTaskId, parent.Id));
+        return child;
+    }
+
+    /// <summary>子任務（看板設計 §4.4 第 5 項、§10.7 C17）：父任務的參與者、部屬父任務的主管、看不到記錄的組合，兩套判斷同結論。</summary>
+    [Fact]
+    public async Task Matrix_Subtasks_PredicateMatchesEvaluateMany()
+    {
+        await DemoPeople.EnsureOrganizationAsync(Db.Context, SeedTime);
+        Db.Context.Add(new AppUser { UserId = "outsider01", DisplayName = "外部人員", IsActive = true });
+        await Db.Context.SaveChangesAsync();
+        var t = await BuildTarget("tk");
+        var restricted = await BuildRestrictedTarget("tk2");
+        var rec = await NewRecord(t, "sales01");
+        var recRestricted = await NewRecord(restricted, "sales01");
+
+        var personal = await SeedTask("個人父任務", createdBy: "sales01", assignee: "sales01", mentioned: ["buyer01"]);
+        await SeedChild(personal, "指派給別人", createdBy: "sales01", assignee: "keeper01");
+        await SeedChild(personal, "自己的", createdBy: "sales01", assignee: "sales01");
+        var outsiderParent = await SeedTask("外部的父任務", createdBy: "outsider01", assignee: "outsider01");
+        await SeedChild(outsiderParent, "部屬的子任務", createdBy: "outsider01", assignee: "sales02");
+        await SeedChild(outsiderParent, "外部的子任務", createdBy: "outsider01", assignee: "outsider01");
+        var onRecord = await SeedTask("記錄父任務", createdBy: "floor01", target: t, recordId: rec);
+        await SeedChild(onRecord, "記錄子任務", createdBy: "floor01", assignee: "outsider01");
+        var onRestricted = await SeedTask("受限父任務", createdBy: "sales01", assignee: "sales01", target: restricted, recordId: recRestricted);
+        await SeedChild(onRestricted, "受限子任務", createdBy: "sales01", assignee: "outsider01");
+        var orphanParent = await SeedTask("被刪的父任務", createdBy: "sales01");
+        await SeedChild(orphanParent, "孤兒", createdBy: "outsider01");
+        await Db.Context.Set<TaskItem>().Where(x => x.Id == orphanParent.Id).ExecuteDeleteAsync();
+
+        var people = new[] { "admin", "sales01", "sales02", "manager01", "ops01", "buyer01", "keeper01", "floor01", "outsider01", "nobody" };
+        foreach (var who in people)
+            (await ViaPredicate(who)).Should().BeEquivalentTo(await ViaEvaluate(who), $"身分 {who}");
+
+        // 主管：部屬父任務下別人負責的子任務看得到（繼承）；外部父任務下部屬負責的子任務看得到（自己的部屬條件）
+        var titles = await Db.Context.Set<TaskItem>().AsNoTracking().ToDictionaryAsync(x => x.Id, x => x.Title);
+        (await ViaPredicate("manager01")).Select(id => titles[id]).Should()
+            .Contain(["指派給別人", "部屬的子任務", "受限子任務"]).And.NotContain(["外部的父任務", "外部的子任務"]);
+        (await ViaPredicate("buyer01")).Select(id => titles[id]).Should().BeEquivalentTo(["個人父任務", "指派給別人", "自己的"]);
+
+        await SetPolicy(PolicyCatalog.TaskSupervisorScope, "false");
+        foreach (var who in new[] { "manager01", "ops01" })
+            (await ViaPredicate(who)).Should().BeEquivalentTo(await ViaEvaluate(who), $"A33 關閉，身分 {who}");
+    }
+
     [Fact]
     public async Task Evaluate_QueryCount_DoesNotGrowWithTaskCount()
     {

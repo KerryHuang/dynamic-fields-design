@@ -9,6 +9,9 @@ public sealed record CreateTaskRequest(TaskInput Input) : IRequest<ServiceResult
 
 public sealed record CreateRecordTaskRequest(long RecordId, TaskInput Input) : IRequest<ServiceResult>, ITransactionalRequest;
 
+/// <summary>在 ParentId 底下新增子任務（看板設計 §10.7.2）；記錄與模組從父任務複製。</summary>
+public sealed record CreateSubtaskRequest(long ParentId, TaskInput Input) : IRequest<ServiceResult>, ITransactionalRequest;
+
 /// <summary>Patch 是原始 JSON：沒送的欄位不改，送 null 代表清除。</summary>
 public sealed record UpdateTaskRequest(long Id, JsonElement Patch) : IRequest<ServiceResult>, ITransactionalRequest;
 

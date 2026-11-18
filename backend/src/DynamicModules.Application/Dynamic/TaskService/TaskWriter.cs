@@ -7,7 +7,8 @@ using DynamicModules.Domain.Repositories.Dynamic;
 namespace DynamicModules.Application.Dynamic.TaskService;
 
 public sealed record NewTask(string Title, string? Description, string? AssigneeUserId, DateOnly? DueDate,
-    long? ModuleId, long? RecordId, string? RecordTitle, long? RuleId, int? RuleOccurrence, string? RuleTaskCode, string? CreatedBy);
+    long? ModuleId, long? RecordId, string? RecordTitle, long? RuleId, int? RuleOccurrence, string? RuleTaskCode, string? CreatedBy,
+    long? ParentTaskId = null);
 
 /// <summary>Set* 為 false 代表沒送、不改；為 true 時值可以是 null（清除）。Title、Status 為 null 代表不改。</summary>
 public sealed record TaskEdit(string? Title, bool SetDescription, string? Description, bool SetAssignee, string? AssigneeUserId,
@@ -29,7 +30,8 @@ public sealed class TaskWriter(ICurrentUser user, IBusinessTime time, ITaskRepos
         {
             Title = input.Title, Description = input.Description, AssigneeUserId = input.AssigneeUserId, DueDate = input.DueDate,
             ModuleId = input.ModuleId, RecordId = input.RecordId, RecordTitleSnapshot = input.RecordTitle,
-            RuleId = input.RuleId, RuleOccurrence = input.RuleOccurrence, RuleTaskCode = input.RuleTaskCode, CreatedBy = input.CreatedBy, CreatedTime = now
+            RuleId = input.RuleId, RuleOccurrence = input.RuleOccurrence, RuleTaskCode = input.RuleTaskCode, CreatedBy = input.CreatedBy, CreatedTime = now,
+            ParentTaskId = input.ParentTaskId
         };
         AddSystemEntry(task, TaskSystemEvents.Created, input.CreatedBy, null);
         if (input.CreatedBy is not null) AddParticipant(task, input.CreatedBy, TaskParticipantReason.Creator);
@@ -114,6 +116,14 @@ public sealed class TaskWriter(ICurrentUser user, IBusinessTime time, ITaskRepos
         task.CancelledByRule = false;
         Touch(task, null);
     }
+
+    /// <summary>
+    /// 父任務留言串的稽核記錄（subtaskAdded、subtaskDeleted，作者是操作者）：只加記錄、不 Touch，所以不改父任務版本，
+    /// 別人拿舊版本拖父卡不會 409（ST-T8）。子任務要先有 Id（新增時先 Flush）。
+    /// </summary>
+    public void AddSubtaskEntry(TaskItem parent, string systemEvent, TaskItem subtask) =>
+        AddSystemEntry(parent, systemEvent, user.UserId, JsonSerializer.Serialize(
+            new Dictionary<string, object> { ["subtaskId"] = subtask.Id, ["subtaskTitle"] = subtask.Title }, Json));
 
     /// <summary>只留一筆系統記錄（作者為 null），不改任務本身；例如規則再次符合、但上一輪任務尚未完成。</summary>
     public void AddSystemEntry(TaskItem task, string systemEvent) => AddSystemEntry(task, systemEvent, null, null);

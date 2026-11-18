@@ -1,13 +1,15 @@
 using System.Text.Json;
 using DynamicModules.Domain.Entities.Dynamic;
+using DynamicModules.Domain.Tasks;
 
 namespace DynamicModules.Application.Dynamic.TaskService;
 
-/// <summary>看板卡片；Record 依檢視者的權限遮蔽（看不到記錄時只有 Accessible=false，§5.9）。</summary>
+/// <summary>看板卡片；Record 依檢視者的權限遮蔽（看不到記錄時只有 Accessible=false，§5.9）。子任務欄位同 <see cref="TaskSummaryResponse"/>。</summary>
 public sealed record TaskCardResponse(
     long Id, string Title, TaskItemStatus Status, string? AssigneeUserId, string? AssigneeName, bool AssigneeActive,
     DateOnly? DueDate, bool Overdue, bool DueToday, TaskRecordRef? Record, bool FromRule, bool Frozen, int CommentCount,
-    DateTime? CompletedTime, string Version, bool CanEdit, bool CanReassign);
+    DateTime? CompletedTime, string Version, bool CanEdit, bool CanReassign,
+    long? ParentTaskId, string? ParentTitle, string Level, TaskProgress? Progress);
 
 /// <summary>
 /// Kind：status、dueBucket、user、unassigned。UserId、Name、Inactive 只有 user 欄有。Total 是整欄總數（不受已載入張數限制）；

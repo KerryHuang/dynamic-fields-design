@@ -44,6 +44,11 @@ public class TasksController(IMediator mediator) : ControllerBase
     public async Task<IActionResult> UndoReassign(long id, UndoReassignInput body) =>
         (await mediator.Send(new UndoReassignRequest(id, body.UndoToken ?? ""))).ToActionResult(this);
 
+    /// <summary>新增子任務（看板設計 §10.7.2）：成功 201 回子任務詳細。</summary>
+    [HttpPost("tasks/{id:long}/subtasks")]
+    public async Task<IActionResult> CreateSubtask(long id, TaskInput body) =>
+        (await mediator.Send(new CreateSubtaskRequest(id, body))).ToActionResult(this);
+
     [HttpDelete("tasks/{id:long}")]
     public async Task<IActionResult> Delete(long id) =>
         (await mediator.Send(new DeleteTaskRequest(id))).ToActionResult(this);

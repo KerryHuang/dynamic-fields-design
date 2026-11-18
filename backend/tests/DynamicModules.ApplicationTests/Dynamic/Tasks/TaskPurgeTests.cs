@@ -47,6 +47,37 @@ public class TaskPurgeTests : DesignerTestBase
         (await Db.Context.Set<Notification>().CountAsync()).Should().Be(0);
     }
 
+    /// <summary>子任務沒有自參照 FK（ST-T7）：整個模組一次清除，父子同批刪掉、無殘留（看板設計 §10.7 C38）。</summary>
+    [Fact]
+    public async Task RemovingModule_WithParentAndSubtasks_NoLeftovers()
+    {
+        await NewModule("projects", activate: true);
+        await CreateRecord("projects");
+        var module = await Db.Context.Set<Module>().AsNoTracking().SingleAsync(m => m.Key == "projects");
+        var record = await Db.Context.Set<DynamicModules.Domain.Entities.Dynamic.Record>().AsNoTracking().SingleAsync(r => r.ModuleId == module.Id);
+        var now = new DateTime(2026, 11, 4, 1, 0, 0, DateTimeKind.Unspecified);
+        TaskItem New(string title) => new()
+        {
+            Title = title, ModuleId = module.Id, RecordId = record.Id, CreatedBy = "admin", CreatedTime = now,
+            Participants = [new TaskParticipant { UserId = "admin", Reason = TaskParticipantReason.Creator }],
+            Comments = [new TaskComment { Kind = TaskCommentKind.Comment, AuthorUserId = "admin", Body = "備註", CreatedTime = now }]
+        };
+        var parent = New("辦說明會");
+        Db.Context.Add(parent);
+        await Db.Context.SaveChangesAsync();
+        var children = new[] { New("訂場地"), New("印海報") };
+        foreach (var c in children) c.ParentTaskId = parent.Id;
+        Db.Context.AddRange(children);
+        await Db.Context.SaveChangesAsync();
+        Db.Context.ChangeTracker.Clear();
+
+        await Svc<ModuleRemover>().RemoveAsync(module.Id, default);
+
+        (await Db.Context.Set<TaskItem>().CountAsync()).Should().Be(0);
+        (await Db.Context.Set<TaskComment>().CountAsync()).Should().Be(0);
+        (await Db.Context.Set<TaskParticipant>().CountAsync()).Should().Be(0);
+    }
+
     [Fact]
     public async Task RemovingModule_LeavesOtherModulesAndPersonalTasks()
     {

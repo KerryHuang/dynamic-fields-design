@@ -57,7 +57,7 @@ public sealed class TaskBoardService(ITaskRepository tasks, TaskAccess access, T
         DateOnly? from = null, to = null;
         if (f?.DueRange is { } range) (from, to) = ReportDates.Resolve(range, today, weekStart);
         var query = new TaskBoardQuery(v, c.GroupBy, c.Scope, subordinates, c.StatusFilter(), f?.AssigneeUserIds, f?.IncludeUnassigned,
-            f?.CreatorUserIds, f?.Sources, from, to, f?.Keyword?.Trim(), today, weekEnd, c.SortKey, c.SortDescending);
+            f?.CreatorUserIds, f?.Sources, from, to, f?.Keyword?.Trim(), today, weekEnd, c.SortKey, c.SortDescending, c.ShowSubtasks == false);
         return new Context(c, query, c.Scope != TaskBoardConfig.ScopeSubordinates || subordinates.Count > 0);
     }
 
@@ -79,16 +79,18 @@ public sealed class TaskBoardService(ITaskRepository tasks, TaskAccess access, T
         if (items.Count == 0) return [];
         var perms = await access.EvaluateManyAsync(items, ct);
         var comments = await tasks.CountCommentsAsync(items.Select(t => t.Id).ToList(), ct);
+        var progress = await tasks.SubtaskProgressAsync(items.Where(t => t.ParentTaskId is null).Select(t => t.Id).ToList(), ct);
         return items.Select((t, i) => (t, p: perms[i])).Where(x => x.p.CanSee)
-            .ToDictionary(x => x.t.Id, x => Card(x.t, x.p, users, today, comments.GetValueOrDefault(x.t.Id)));
+            .ToDictionary(x => x.t.Id, x => Card(x.t, x.p, users, today, comments.GetValueOrDefault(x.t.Id), progress.GetValueOrDefault(x.t.Id)));
     }
 
-    public static TaskCardResponse Card(TaskItem t, TaskPermissions p, IReadOnlyDictionary<string, AppUser> users, DateOnly today, int comments)
+    public static TaskCardResponse Card(TaskItem t, TaskPermissions p, IReadOnlyDictionary<string, AppUser> users, DateOnly today, int comments,
+        TaskProgress? progress)
     {
         var assignee = t.AssigneeUserId is null ? null : users.GetValueOrDefault(t.AssigneeUserId);
         return new TaskCardResponse(t.Id, t.Title, t.Status, t.AssigneeUserId, assignee?.DisplayName, assignee is { IsActive: true },
             t.DueDate, TaskViews.Overdue(t, today), t.IsOpen && t.DueDate == today, p.Record, t.RuleId is not null, p.Frozen, comments,
-            t.CompletedTime, TaskVersion.Of(t), p.CanEdit, p.CanReassign);
+            t.CompletedTime, TaskVersion.Of(t), p.CanEdit, p.CanReassign, t.ParentTaskId, p.Parent?.Title, TaskViews.LevelOf(t, progress), progress);
     }
 }
 
