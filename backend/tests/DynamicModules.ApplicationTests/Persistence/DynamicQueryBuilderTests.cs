@@ -1,3 +1,5 @@
+using System.Data;
+using Dapper;
 using DynamicModules.Domain.Conditions;
 using DynamicModules.Domain.Entities.Dynamic;
 using DynamicModules.Domain.FieldTypes;
@@ -5,6 +7,7 @@ using DynamicModules.Domain.Repositories.Dynamic;
 using DynamicModules.Persistence.Dynamic.Dialects;
 using DynamicModules.Persistence.Dynamic.Query;
 using FluentAssertions;
+using Microsoft.Data.Sqlite;
 
 namespace DynamicModules.ApplicationTests.Persistence;
 
@@ -27,7 +30,7 @@ public class DynamicQueryBuilderTests
 
         foreach (var sql in new[] { countSql, pageSql })
         {
-            sql.Should().Contain("r.OwnerUserId IN (@o0, @o1)").And.NotContain("sales0");
+            sql.Should().Contain("r.\"OwnerUserId\" IN (@o0, @o1)").And.NotContain("sales0");
         }
         parameters.Get<string>("o0").Should().Be("sales01");
         parameters.Get<string>("o1").Should().Be("sales02");
@@ -56,8 +59,8 @@ public class DynamicQueryBuilderTests
         var (countSql, pageSql, parameters) = DynamicQueryBuilder.Build(
             Q(filter, sorts: [new RecordSort(field, true)]), new SqliteDialect());
 
-        foreach (var sql in new[] { countSql, pageSql }) sql.Should().Contain($"i.{column} >= @v0_0").And.NotContain("TextValue");
-        pageSql.Should().Contain($"s0.{column}");
+        foreach (var sql in new[] { countSql, pageSql }) sql.Should().Contain($"i.\"{column}\" >= @v0_0").And.NotContain("TextValue");
+        pageSql.Should().Contain($"s0.\"{column}\"");
         parameters.Get<object>("v0_0").Should().NotBeNull();
     }
 
@@ -101,9 +104,9 @@ public class DynamicQueryBuilderTests
         foreach (var sql in new[] { countSql, pageSql })
         {
             sql.Should().NotContain("EXISTS");
-            sql.Should().Contain("r.Id IN (SELECT i.RecordId FROM Dynamic_RecordIndex i WHERE i.FieldId = @f0");
-            sql.Should().Contain("r.Id NOT IN (SELECT i.RecordId FROM Dynamic_RecordIndex i WHERE i.FieldId = @f1");
-            sql.Should().Contain("r.Id NOT IN (SELECT i.RecordId FROM Dynamic_RecordIndex i WHERE i.FieldId = @f2)");
+            sql.Should().Contain("r.\"Id\" IN (SELECT i.\"RecordId\" FROM \"Dynamic_RecordIndex\" i WHERE i.\"FieldId\" = @f0");
+            sql.Should().Contain("r.\"Id\" NOT IN (SELECT i.\"RecordId\" FROM \"Dynamic_RecordIndex\" i WHERE i.\"FieldId\" = @f1");
+            sql.Should().Contain("r.\"Id\" NOT IN (SELECT i.\"RecordId\" FROM \"Dynamic_RecordIndex\" i WHERE i.\"FieldId\" = @f2)");
         }
     }
 
@@ -115,10 +118,10 @@ public class DynamicQueryBuilderTests
         var (_, pageSql, _) = DynamicQueryBuilder.Build(Q(sorts: sorts), new SqliteDialect());
 
         pageSql.Should().NotContain("NULLS LAST");
-        pageSql.Should().Contain("CASE WHEN s0.NumberValue IS NULL THEN 1 ELSE 0 END, s0.NumberValue DESC");
-        pageSql.Should().Contain("CASE WHEN o1.Sequence IS NULL THEN 1 ELSE 0 END, o1.Sequence ASC");
-        pageSql.Should().Contain("LEFT JOIN Dynamic_FieldOption o1 ON o1.Id = s1.NumberValue");
-        pageSql.Should().EndWith("r.Id DESC LIMIT @limit OFFSET @offset");
+        pageSql.Should().Contain("CASE WHEN s0.\"NumberValue\" IS NULL THEN 1 ELSE 0 END, s0.\"NumberValue\" DESC");
+        pageSql.Should().Contain("CASE WHEN o1.\"Sequence\" IS NULL THEN 1 ELSE 0 END, o1.\"Sequence\" ASC");
+        pageSql.Should().Contain("LEFT JOIN \"Dynamic_FieldOption\" o1 ON o1.\"Id\" = s1.\"NumberValue\"");
+        pageSql.Should().EndWith("r.\"Id\" DESC LIMIT @limit OFFSET @offset");
     }
 
     [Fact]
@@ -129,6 +132,74 @@ public class DynamicQueryBuilderTests
         var (countSql, pageSql, _) = DynamicQueryBuilder.Build(Q(sorts: sorts), new SqliteDialect());
 
         countSql.Should().NotContain("JOIN").And.NotContain("ORDER BY");
-        pageSql.Should().Contain("LEFT JOIN Dynamic_RecordIndex s0");
+        pageSql.Should().Contain("LEFT JOIN \"Dynamic_RecordIndex\" s0");
+    }
+
+    [Fact]
+    public void Build_BooleanAndCaseInsensitiveLikeComeFromTheDialect()
+    {
+        // SQLite 的方言產出與改用方言前逐字相同：DeleteFlag 比 0、LIKE 帶 ESCAPE
+        var filter = new FieldCondition(F(4, FieldType.Text), FilterOperator.StartsWith, [new IndexValue(0, "ab", null, null, null)], null);
+
+        var (countSql, pageSql, _) = DynamicQueryBuilder.Build(Q(filter, keyword: "k"), new SqliteDialect());
+
+        foreach (var sql in new[] { countSql, pageSql })
+        {
+            sql.Should().Contain("r.\"ModuleId\" = @m AND r.\"DeleteFlag\" = 0");
+            sql.Should().Contain("r.\"Title\" LIKE @q ESCAPE '\\'");
+            sql.Should().Contain("i.\"TextValue\" LIKE @v0_0 ESCAPE '\\'");
+        }
+    }
+
+    [Fact]
+    public void BuildAggregate_CastsSumsAndConstantsToBigint()
+    {
+        var sum = new AggregateQuery(1, [], null, F(9, FieldType.Decimal), Today);
+        var count = sum with { SumField = null };
+
+        var (sumSql, _) = DynamicQueryBuilder.BuildAggregate(sum, new SqliteDialect());
+        var (countSql, _) = DynamicQueryBuilder.BuildAggregate(count, new SqliteDialect());
+
+        sumSql.Should().Contain("CAST(COALESCE(SUM(s.\"ScaledValue\"), 0) AS BIGINT) AS \"ScaledSum\"");
+        sumSql.Should().Contain("AS BIGINT) AS \"MissingScaled\"");
+        countSql.Should().Contain("CAST(0 AS BIGINT) AS \"ScaledSum\", CAST(0 AS BIGINT) AS \"MissingScaled\"");
+        foreach (var sql in new[] { sumSql, countSql }) sql.Should().Contain("r.\"DeleteFlag\" = 0");
+    }
+
+    [Fact]
+    public async Task Build_DateParametersAreDateTime2()
+    {
+        // Dapper 預設把 DateTime 設成 DbType.DateTime，Npgsql 會當 timestamptz 而拒收牆上時間；日期篩選的參數一律 DateTime2（設計 §5.5）
+        var filter = new ConditionGroup(true,
+        [
+            new FieldCondition(F(1, FieldType.Date), FilterOperator.WithinNextDays, [], 7),
+            new FieldCondition(F(2, FieldType.DateTime), FilterOperator.BeforeToday, [], null),
+            new FieldCondition(F(3, FieldType.Date), FilterOperator.Eq, [new IndexValue(0, null, null, new DateTime(2026, 11, 3), null)], null),
+        ]);
+        var (_, pageSql, parameters) = DynamicQueryBuilder.Build(Q(filter), new SqliteDialect());
+
+        await using var connection = new CapturingConnection();
+        await connection.OpenAsync();
+        await connection.ExecuteAsync(
+            """CREATE TABLE "Dynamic_Record" ("Id" INTEGER, "ModuleId" INTEGER, "DeleteFlag" INTEGER, "OwnerUserId" TEXT, "Title" TEXT)""");
+        await connection.ExecuteAsync(
+            """CREATE TABLE "Dynamic_RecordIndex" ("RecordId" INTEGER, "FieldId" INTEGER, "Seq" INTEGER, "TextValue" TEXT, "NumberValue" REAL, "DateValue" TEXT, "RefKey" TEXT)""");
+        connection.Captured = null;
+        await connection.QueryAsync(pageSql, parameters);
+
+        var sent = connection.Captured!.Parameters.Cast<SqliteParameter>().ToDictionary(p => p.ParameterName.TrimStart('@'));
+        foreach (var name in new[] { "v0_0", "v0_1", "v1_0", "v2_0" })
+        {
+            sent[name].Value.Should().BeOfType<DateTime>();
+            sent[name].DbType.Should().Be(DbType.DateTime2, name);
+        }
+    }
+
+    /// <summary>記下 Dapper 建的最後一個指令，用來檢查參數實際送出的 DbType。</summary>
+    private sealed class CapturingConnection() : SqliteConnection("Data Source=:memory:")
+    {
+        public SqliteCommand? Captured { get; set; }
+
+        public override SqliteCommand CreateCommand() => Captured = base.CreateCommand();
     }
 }

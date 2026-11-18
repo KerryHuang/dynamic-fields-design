@@ -11,7 +11,7 @@ namespace DynamicModules.Persistence;
 /// </summary>
 public sealed class WriteGate
 {
-    private static readonly System.Collections.Concurrent.ConcurrentDictionary<string, WriteGate> ByFile = new();
+    private static readonly System.Collections.Concurrent.ConcurrentDictionary<string, WriteGate> ByKey = new();
 
     private readonly object _sync = new();
     private readonly LinkedList<TaskCompletionSource<bool>> _waiters = new();
@@ -26,7 +26,17 @@ public sealed class WriteGate
         if (string.IsNullOrEmpty(source) || source == ":memory:" || source.StartsWith("file:")
             || builder.Mode == Microsoft.Data.Sqlite.SqliteOpenMode.Memory)
             return null;
-        return ByFile.GetOrAdd(Path.GetFullPath(source), _ => new WriteGate());
+        return ForKey(Path.GetFullPath(source));
+    }
+
+    /// <summary>
+    /// 以任意鍵取閘，同一個鍵同一個閘（PostgreSQL 以連線字串為鍵，PostgreSQL provider 設計 §5.6）。
+    /// SQLite 的 <see cref="For"/> 以資料庫檔案的絕對路徑為鍵，也經過這裡。
+    /// </summary>
+    public static WriteGate ForKey(string key)
+    {
+        ArgumentException.ThrowIfNullOrEmpty(key);
+        return ByKey.GetOrAdd(key, _ => new WriteGate());
     }
 
     /// <summary>CancelAfter 接受的最長時間（約 24.8 天）；更長的逾時夾到這個值。</summary>

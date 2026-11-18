@@ -1,6 +1,6 @@
 namespace DynamicModules.Persistence.Dynamic.Dialects;
 
-/// <summary>資料庫方言差異；目前只有 SQLite，併入 SQL Server 時再加實作。</summary>
+/// <summary>資料庫方言差異；目前只有 SQLite，PostgreSQL 版在 pg0b 加（PostgreSQL provider 設計 §5.5）。識別字由呼叫端加雙引號，兩邊共用。</summary>
 public interface ISqlDialect
 {
     /// <summary>回傳加上排序與分頁的 SQL；分頁參數固定叫 @offset、@limit。</summary>
@@ -8,6 +8,14 @@ public interface ISqlDialect
 
     /// <summary>跳脫 LIKE 萬用字元，須搭配 ESCAPE '\'。</summary>
     string EscapeLike(string value);
+
+    /// <summary>布林字面值（SQLite 存成 0／1，PostgreSQL 是 boolean）。</summary>
+    string Bool(bool value);
+
+    /// <summary>
+    /// 不分大小寫的 LIKE（只對 ASCII 字母），含 ESCAPE '\'；param 是已加上 @ 的參數名，值要先經 <see cref="EscapeLike"/>。
+    /// </summary>
+    string LikeIgnoreCase(string column, string param);
 
     /// <summary>區分大小寫的「包含」；與規則條件的記憶體求值（序數比較）一致。param 是已加上 @ 的參數名，不含萬用字元。</summary>
     string ContainsCaseSensitive(string column, string param);
