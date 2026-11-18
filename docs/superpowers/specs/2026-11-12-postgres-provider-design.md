@@ -1,7 +1,7 @@
 # PostgreSQL provider 與測試環境設計文件（段 pg0）
 
 > 2026-11-12｜平台共用能力（非應用程式）｜前置：[維運與觀測](2026-11-11-ops-observability-design.md)（O1 排程器與通知維護、§8、§10.7）、[MCP server](2026-11-11-mcp-server-design.md) §13.7、[事件與帳本](2026-11-08-events-ledger-design.md) §7、[儲存負載報告](2026-11-06-storage-load-report.md)（`WriteGate`）｜進度：[路線](../../roadmap.md) 的 pg0 列
-> 狀態：已核准，實作中（pg0a）。實作分 pg0a–pg0d（§9）。
+> 狀態：已核准，實作中（pg0a 已上線，pg0b 實作完成待合併）。實作分 pg0a–pg0d（§9）。
 > 標「（使用者裁決）」的是使用者已拍板的；標「（主控判斷）」的是主控代為決定、可以推翻的，彙整在 §14；只有使用者能答的列在 §13。現況核對基準是 `origin/main` `cef82aa0`；2026-11-12 依審查修訂，修訂時的程式對照基準是 `17d621fc`。
 
 ## 1. 目的與為什麼
@@ -382,6 +382,13 @@ O1 若因為 PostgreSQL 的行為需要改程式（違反「pg0 完成後不改�
 - 文件與規則：`.claude/rules/backend.md` 的 migration 條與「交易內接住非 `SaveChanges` 的資料庫錯誤後不再發 SQL」（§4）、AGENTS.md 架構地圖（Persistence 兩種 provider）、`CONTRIBUTING.md` 的設定說明。改 `.claude/` 後重產 `.agents/` 副本一起 commit。
 - 驗收：`MigrationConsistencyTests` 兩個 provider 都過；§8 第 5、6 項本機走查（手動起 PostgreSQL 容器）。
 - 前置：O1 的 o1b migration 已合併；pg0b 開發期間不和其他會加 migration 的工作並行。
+- **實作補記（2026-11-18）**：
+  - 交易外的 `ExecuteUpdate`／`ExecuteDelete` 逐處確認（§5.6）：只有啟動流程裡的 `SeedData.cs:32,35` 與 `IndexBackfillJob` 的 `ClearFieldIndexAsync`，都在啟動串行鎖內；其餘 repository 方法的呼叫端都是 `ITransactionalRequest`（含經 `IRecordWriteRequest` 繼承的）或在其 handler 內，`IdempotencyBehavior` 排在 `TransactionBehavior` 之後也在交易內。
+  - 池耗盡的例外形狀實測（§5.7）：Npgsql 8 是 `NpgsqlException`、`SqlState` 為 null、內層 `TimeoutException`，與設計的分類規則相符，不需要改用 Npgsql 型別（`PostgresPoolExhaustionTests`）。
+  - 設計沒列到、走查時發現的 SQLite 寫法：檢查條件 `CK_AppOrphan_One` 用布林相加，PostgreSQL 沒有 `boolean + boolean`。比照部分索引 filter 依名稱覆寫成 `num_nonnulls("FieldId", "OptionId", "BlockId") = 1`（可寫死清單第 6 項的延伸）。
+  - Npgsql 預設把 `JsonElement` 屬性一律改成 `jsonb`（`NpgsqlJsonElementHackConvention`），無視既有的值轉換；JSON 欄位維持 `text`（§5.4），所以 PostgreSQL 的慣例集拿掉這條慣例（`PostgresConventionSetBuilder`）。`PostgresModelTests` 檢查 JSON 轉換欄位是 `text`。
+  - SaveChanges 的閘門照 §5.6 在 `SavingChanges` 進閘（開連線之前），在儲存成功、失敗、取消、並行衝突四個結束事件放開。EF 的 `SavingChanges` 在 try 之外：排在它後面的 SaveChanges 攔截器若在 `SavingChanges` 丟例外，閘門放不掉，所以這個攔截器要排在其他 SaveChanges 攔截器之前（pg0c 疊測試守衛時注意順序）。
+  - 本機走查（§8 第 5、6 項）用 `postgres:16`：Demo 資料產生器整套在 PostgreSQL 跑完（1024 步）、27 張報表全走記憶體路徑；外部連線占住全庫鎖時寫入 3 秒後回 503 加 `Retry-After`，放開後成功、自動編號沒有跳號。
 
 **pg0c：PostgreSQL 測試環境與雙跑集**（約 M）
 
