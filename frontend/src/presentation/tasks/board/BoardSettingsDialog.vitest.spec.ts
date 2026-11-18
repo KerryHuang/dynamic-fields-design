@@ -228,6 +228,14 @@ describe('BoardSettingsDialog', () => {
     expect(w.emitted('apply')![0][0]).toMatchObject({ filters: { statuses: ['todo'], sources: ['rule'], keyword: '報價' }, sort: { key: 'dueDate', dir: 'desc' } });
   });
 
+  it('「顯示子任務」預設勾選；取消勾選套用後設定帶 showSubtasks:false', async () => {
+    const w = await mountDialog();
+    expect((q('settings-show-subtasks') as HTMLElement).getAttribute('aria-checked')).toBe('true');
+    await click('settings-show-subtasks');
+    await click('settings-apply');
+    expect(w.emitted('apply')![0][0]).toMatchObject({ showSubtasks: false });
+  });
+
   it('always offers the name field, even when the board cannot be saved', async () => {
     await mountDialog({ canSave: false, viewId: null });
     expect(q('settings-name')).not.toBeNull();

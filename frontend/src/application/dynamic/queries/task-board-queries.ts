@@ -3,6 +3,7 @@ import { computed, toValue, type MaybeRefOrGetter } from 'vue';
 import {
   moveCardLocally, removeCardLocally, restoreCardLocally, type BoardCard, type BoardColumn, type BoardGroupBy, type BoardSource, type TaskBoardConfig, type TaskBoardData, type TaskMoveResult, type TaskViewShareKind,
 } from 'src/domain/dynamic/task-board-types';
+import type { TaskCascade } from 'src/domain/dynamic/task-types';
 import { dynamicApi } from 'src/services/api/dynamic-api';
 import type { ApiError } from 'src/services/api/http';
 import { invalidateTasks } from './tasks-queries';
@@ -46,6 +47,8 @@ export interface MoveTaskVars {
   toColumn: string;
   /** 只有移到「之後」欄時帶。 */
   dueDate?: string;
+  /** 把有未完成子任務的父任務拖到完成欄、使用者選了連動方式後重送時帶（版本與第一次相同）。 */
+  cascade?: TaskCascade;
 }
 
 interface MoveContext { key: ReturnType<typeof boardKey>; original: BoardCard | undefined; fromKey: string | null; fromIndex: number }
@@ -63,6 +66,7 @@ export function useMoveTask(source: MaybeRefOrGetter<BoardSource>) {
     mutationKey: MOVE_KEY,
     mutationFn: (v) => dynamicApi.moveTask(v.card.id, {
       groupBy: v.groupBy, toColumn: v.toColumn, expectedVersion: v.card.version, ...(v.dueDate ? { dueDate: v.dueDate } : {}),
+      ...(v.cascade ? { cascade: v.cascade } : {}),
     }),
     onMutate: async (v) => {
       const key = boardKey(toValue(source));

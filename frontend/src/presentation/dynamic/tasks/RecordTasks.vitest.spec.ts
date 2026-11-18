@@ -13,6 +13,7 @@ import { taskWire, USERS } from './task-fixtures';
 
 let calls: Call[];
 let applyFails = false;
+let patchHandler: ((c: Call) => unknown) | null = null;
 
 async function mountBlock(props: { closed: boolean }, items: unknown[], canAdd = true, patchFails = false, manualRules: unknown[] = []) {
   const pinia = createPinia();
@@ -23,6 +24,7 @@ async function mountBlock(props: { closed: boolean }, items: unknown[], canAdd =
     if (c.url === '/users') return USERS;
     if (c.url === '/records/9/tasks' && c.method === 'post') return taskWire({ id: 50 });
     if (c.url === '/records/9/task-rules/k/apply') return applyFails ? new HttpFail(409, { message: '條件不符' }) : { items: [], canAdd, manualRules };
+    if (c.method === 'patch' && patchHandler) return patchHandler(c);
     if (c.method === 'patch') return patchFails ? new HttpFail(409, { message: '應用程式已關閉' }) : taskWire({ status: 'done' });
     return [];
   });
@@ -38,7 +40,7 @@ async function mountBlock(props: { closed: boolean }, items: unknown[], canAdd =
 }
 
 describe('RecordTasks', () => {
-  beforeEach(() => { document.body.innerHTML = ''; applyFails = false; });
+  beforeEach(() => { document.body.innerHTML = ''; applyFails = false; patchHandler = null; });
 
   it('未指派的任務顯示「未指派」，逾期的到期日有 text-negative', async () => {
     const w = await mountBlock({ closed: false }, [
@@ -48,6 +50,21 @@ describe('RecordTasks', () => {
     expect(w.get('[data-testid="task-row-1"]').text()).toContain('未指派');
     expect(w.get('[data-testid="task-due-2"]').classes()).toContain('text-negative');
     expect(w.get('[data-testid="task-due-1"]').classes()).not.toContain('text-negative');
+    w.unmount();
+  });
+
+  it('父任務列顯示子任務進度；勾選完成遇到 409 subtasksOpen 跳三選一，選一併完成帶 cascade 重送', async () => {
+    patchHandler = (c) => ((bodyOf(c) as { cascade?: string }).cascade ? taskWire({ status: 'done' }) : new HttpFail(409, { code: 'subtasksOpen', params: { count: 2 }, message: 'x' }));
+    const w = await mountBlock({ closed: false }, [taskWire({ level: 'parent', progress: { done: 1, cancelled: 0, total: 3 } })]);
+    expect(w.get('[data-testid="task-row-5"] [data-testid="subtask-progress-text"]').text()).toBe('1／3');
+    await w.get('[data-testid="task-check-5"]').trigger('click');
+    await flushPromises();
+    await new Promise((r) => setTimeout(r, 20));
+    expect(document.body.querySelector('[data-testid="subtasks-open-body"]')!.textContent).toContain('還有 2 個未完成的子任務');
+    document.body.querySelector<HTMLElement>('[data-testid="subtasks-open-complete"]')!.click();
+    await flushPromises();
+    const patches = calls.filter((c) => c.method === 'patch');
+    expect(patches.map((c) => bodyOf(c))).toEqual([{ status: 'done' }, { status: 'done', cascade: 'complete' }]);
     w.unmount();
   });
 

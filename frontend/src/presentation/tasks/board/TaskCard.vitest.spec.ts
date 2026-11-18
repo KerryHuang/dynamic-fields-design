@@ -127,4 +127,16 @@ describe('TaskCard', () => {
     await locked.get('[data-testid="board-card-1"]').trigger('pointerdown');
     expect(locked.emitted('dragStart')).toBeUndefined();
   });
+
+  it('子任務卡片上方顯示父任務標題；父任務卡片顯示進度，有取消時提示另有 N 個已取消', () => {
+    const child = mountCard('status', { level: 'child', parentTaskId: 9, parentTitle: '辦展覽' });
+    expect(child.get('[data-testid="board-card-parent"]').text()).toBe('父任務：辦展覽');
+    expect(child.find('[data-testid="subtask-progress"]').exists()).toBe(false);
+    expect(mountCard('status').find('[data-testid="board-card-parent"]').exists()).toBe(false);
+    const parent = mountCard('status', { level: 'parent', progress: { done: 2, cancelled: 1, total: 5 } });
+    expect(parent.get('[data-testid="subtask-progress-text"]').text()).toBe('2／4');
+    expect(parent.get('[data-testid="subtask-progress"]').attributes('aria-label')).toContain('另有 1 個已取消');
+    // 全部取消：不顯示（T20）
+    expect(mountCard('status', { level: 'parent', progress: { done: 0, cancelled: 5, total: 5 } }).find('[data-testid="subtask-progress"]').exists()).toBe(false);
+  });
 });

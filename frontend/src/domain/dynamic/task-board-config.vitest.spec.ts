@@ -9,6 +9,16 @@ describe('task-board-config', () => {
     expect(buildBoardConfig(formFromConfig(served))).toEqual(served);
   });
 
+  it('showSubtasks: 沒給等於開，只有關閉才寫進設定', () => {
+    const base = { version: 1, groupBy: 'status' as const, scope: 'assigned' as const, sort: { key: 'dueDate' as const, dir: 'asc' as const } };
+    expect(formFromConfig(base).showSubtasks).toBe(true);
+    expect(buildBoardConfig(formFromConfig(base))).toEqual(base);
+    expect(buildBoardConfig(formFromConfig({ ...base, showSubtasks: true }))).toEqual(base);
+    const off = { ...base, showSubtasks: false };
+    expect(formFromConfig(off).showSubtasks).toBe(false);
+    expect(buildBoardConfig(formFromConfig(off))).toEqual(off);
+  });
+
   it('builds filters only for what was set and drops empty groups', () => {
     const form = formFromConfig({ version: 1, groupBy: 'status', scope: 'visible' });
     expect(buildBoardConfig(form)).toEqual({ version: 1, groupBy: 'status', scope: 'visible', sort: { key: 'dueDate', dir: 'asc' } });

@@ -81,6 +81,15 @@ export function useCreateTask() {
   });
 }
 
+/** Adds a subtask under a parent; the parent's detail (list, progress, timeline) and every list refresh. */
+export function useCreateSubtask() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (i: { parentId: number; body: TaskInput }) => dynamicApi.createSubtask(i.parentId, i.body),
+    onSuccess: (_t, i) => invalidateTasks(qc, i.parentId),
+  });
+}
+
 export function useUpdateTask() {
   const qc = useQueryClient();
   return useMutation({
