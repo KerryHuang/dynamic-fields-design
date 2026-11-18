@@ -11,9 +11,10 @@ public record GetPrintTemplateDefinitionsRequest(string ModuleKey) : IRequest<Se
     public PermissionAction RequiredDesignerAction => PermissionAction.Read;
 }
 
+// 範本代碼只在模組內唯一，稽核目標帶模組：「模組代碼:範本代碼」
 public record CreatePrintTemplateRequest(string ModuleKey, PrintTemplateInput Input) : IRequest<ServiceResult>, ITransactionalRequest, IDesignerRequest, IMasterDesignRequest, IAuditedRequest
 {
-    public AuditAction Audit => AuditAction.For("printTemplate.create", AuditTargets.PrintTemplate, Input?.Key);
+    public AuditAction Audit => AuditAction.For("printTemplate.create", AuditTargets.PrintTemplate, $"{ModuleKey}:{Input?.Key}");
     public IReadOnlyList<MasterDesignTarget> MasterTargets => [new(ModuleKey: ModuleKey)];
     public PermissionAction RequiredDesignerAction => PermissionAction.Edit;
 }
@@ -21,14 +22,14 @@ public record CreatePrintTemplateRequest(string ModuleKey, PrintTemplateInput In
 /// <summary>更新時代碼不能改。</summary>
 public record UpdatePrintTemplateRequest(string ModuleKey, string Key, PrintTemplateInput Input) : IRequest<ServiceResult>, ITransactionalRequest, IDesignerRequest, IMasterDesignRequest, IAuditedRequest
 {
-    public AuditAction Audit => AuditAction.For("printTemplate.update", AuditTargets.PrintTemplate, Key);
+    public AuditAction Audit => AuditAction.For("printTemplate.update", AuditTargets.PrintTemplate, $"{ModuleKey}:{Key}");
     public IReadOnlyList<MasterDesignTarget> MasterTargets => [new(ModuleKey: ModuleKey)];
     public PermissionAction RequiredDesignerAction => PermissionAction.Edit;
 }
 
 public record DeletePrintTemplateRequest(string ModuleKey, string Key) : IRequest<ServiceResult>, ITransactionalRequest, IDesignerRequest, IMasterDesignRequest, IAuditedRequest
 {
-    public AuditAction Audit => AuditAction.For("printTemplate.delete", AuditTargets.PrintTemplate, Key);
+    public AuditAction Audit => AuditAction.For("printTemplate.delete", AuditTargets.PrintTemplate, $"{ModuleKey}:{Key}");
     public IReadOnlyList<MasterDesignTarget> MasterTargets => [new(ModuleKey: ModuleKey)];
     public PermissionAction RequiredDesignerAction => PermissionAction.Edit;
 }

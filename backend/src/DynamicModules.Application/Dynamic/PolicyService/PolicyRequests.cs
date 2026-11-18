@@ -26,7 +26,7 @@ public sealed record GetModulePoliciesRequest(string ModuleKey) : IRequest<Servi
 public sealed record UpdateModulePolicyRequest(string ModuleKey, string Code, JsonElement? Value)
     : IRequest<ServiceResult>, ITransactionalRequest, IDesignerRequest, IMasterDesignRequest, IAuditedRequest
 {
-    public AuditAction Audit => AuditAction.For("policy.moduleSet", AuditTargets.Policy, Code);
+    public AuditAction Audit => AuditAction.For("policy.moduleSet", AuditTargets.Policy, $"{ModuleKey}:{Code}");
     public IReadOnlyList<MasterDesignTarget> MasterTargets => [new(ModuleKey: ModuleKey)];
     public PermissionAction RequiredDesignerAction => PermissionAction.Edit;
 }

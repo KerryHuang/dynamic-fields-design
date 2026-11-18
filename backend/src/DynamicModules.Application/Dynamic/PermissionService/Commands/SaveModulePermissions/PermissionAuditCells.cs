@@ -9,7 +9,7 @@ namespace DynamicModules.Application.Dynamic.PermissionService.Commands.SaveModu
 /// </summary>
 public static class PermissionAuditCells
 {
-    /// <summary>摘要最多列的格子數（技術限制：摘要上限 16,000 字元，§17.9）；超過的只計入 <c>changeCount</c>。</summary>
+    /// <summary>摘要最多列的格子數（技術限制：摘要上限 16,000 字元，§17.9）；超過的只計入 <c>changeCount</c>，摘要另帶 <c>truncated</c>。</summary>
     public const int MaxCells = 200;
 
     public sealed record Cell(string Key, string? Before, string? After);

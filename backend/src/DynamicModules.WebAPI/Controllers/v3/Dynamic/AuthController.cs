@@ -28,7 +28,7 @@ public class AuthController(IMediator mediator, ClientIpResolver clientIp) : Con
 
     [HttpPost("demo-login")]
     public async Task<IActionResult> DemoLogin(DemoLoginBody body) =>
-        await SignInOnSuccess(await mediator.Send(new DemoLoginRequest(body.UserId ?? "")));
+        await SignInOnSuccess(await mediator.Send(new DemoLoginRequest(body.UserId ?? "", clientIp.Resolve(HttpContext))));
 
     [HttpPost("logout")]
     public async Task<IActionResult> Logout()

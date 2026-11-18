@@ -89,7 +89,11 @@ public static class MessageText
         // 甘特查詢（POST /tasks/gantt，gt1c）
         TaskGanttNotFound = nameof(TaskGanttNotFound), TaskGanttSourceBoth = nameof(TaskGanttSourceBoth),
         TaskGanttWindowRequired = nameof(TaskGanttWindowRequired), TaskGanttWindowInvalid = nameof(TaskGanttWindowInvalid),
-        TaskGanttWindowTooLong = nameof(TaskGanttWindowTooLong);
+        TaskGanttWindowTooLong = nameof(TaskGanttWindowTooLong),
+        // 稽核查詢（維運設計 §17.5）
+        AuditNotFound = nameof(AuditNotFound), AuditRangeReversed = nameof(AuditRangeReversed), AuditRangeTooLong = nameof(AuditRangeTooLong),
+        AuditDateTooEarly = nameof(AuditDateTooEarly), AuditCursorInvalid = nameof(AuditCursorInvalid), AuditFilterInvalid = nameof(AuditFilterInvalid),
+        AuditLimitOutOfRange = nameof(AuditLimitOutOfRange);
 
     private static readonly Dictionary<string, (string Zh, string En, string Th, string Vi)> Table = new()
     {
@@ -390,6 +394,15 @@ public static class MessageText
             "วันเริ่มของช่วงเวลาต้องไม่ช้ากว่าวันสิ้นสุด", "Ngày bắt đầu của khoảng thời gian không được sau ngày kết thúc"),
         [TaskGanttWindowTooLong] = ("時間範圍最多 {0} 天", "The time window can be at most {0} days",
             "ช่วงเวลายาวได้ไม่เกิน {0} วัน", "Khoảng thời gian tối đa {0} ngày"),
+        [AuditNotFound] = ("找不到稽核紀錄", "Audit record not found", "ไม่พบบันทึกการตรวจสอบ", "Không tìm thấy bản ghi kiểm toán"),
+        [AuditRangeReversed] = ("開始時間不能晚於結束時間", "The start time cannot be later than the end time",
+            "เวลาเริ่มต้องไม่ช้ากว่าเวลาสิ้นสุด", "Thời gian bắt đầu không được sau thời gian kết thúc"),
+        [AuditRangeTooLong] = ("查詢區間最長 {0} 天", "The range can be at most {0} days", "ช่วงที่ค้นหายาวได้ไม่เกิน {0} วัน", "Khoảng truy vấn tối đa {0} ngày"),
+        [AuditDateTooEarly] = ("日期不能早於 {0}", "Dates cannot be earlier than {0}", "วันที่ต้องไม่ก่อน {0}", "Ngày không được sớm hơn {0}"),
+        [AuditCursorInvalid] = ("分頁位置不正確", "The page position is invalid", "ตำแหน่งหน้าไม่ถูกต้อง", "Vị trí trang không hợp lệ"),
+        [AuditFilterInvalid] = ("篩選條件不正確", "The filter is invalid", "เงื่อนไขการกรองไม่ถูกต้อง", "Điều kiện lọc không hợp lệ"),
+        [AuditLimitOutOfRange] = ("每頁筆數要在 1 到 {0} 之間", "Page size must be between 1 and {0}",
+            "จำนวนรายการต่อหน้าต้องอยู่ระหว่าง 1 ถึง {0}", "Số bản ghi mỗi trang phải từ 1 đến {0}"),
     };
 
     /// <summary>無參數訊息的繁中原文 → 鍵；兩鍵同一句時建表就會丟例外。</summary>

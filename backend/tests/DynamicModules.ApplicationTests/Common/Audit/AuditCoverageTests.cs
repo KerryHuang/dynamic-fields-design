@@ -17,9 +17,12 @@ public class AuditCoverageTests
     /// <remarks>目前沒有例外：Demo 資料產生器（GenerateDemoDataRequest）不是管理或設計請求，內部步驟照常各記一列。</remarks>
     private static readonly Dictionary<Type, string> Exempt = [];
 
+    /// <summary>可建立的具體型別（含 struct record）。</summary>
+    private static IEnumerable<Type> Concrete() =>
+        typeof(ITransactionalRequest).Assembly.GetTypes().Where(t => t is { IsInterface: false, IsAbstract: false });
+
     private static IEnumerable<Type> RequestTypes() =>
-        typeof(ITransactionalRequest).Assembly.GetTypes()
-            .Where(t => t is { IsClass: true, IsAbstract: false } && typeof(ITransactionalRequest).IsAssignableFrom(t))
+        Concrete().Where(t => typeof(ITransactionalRequest).IsAssignableFrom(t))
             .Where(t => typeof(ISystemAdminRequest).IsAssignableFrom(t) || IsDesignerWrite(t));
 
     private static bool IsDesignerWrite(Type t) =>
@@ -41,14 +44,27 @@ public class AuditCoverageTests
     public void DeclaredActions_AreRegistered_AndTargetKindsAreKnown()
     {
         var targets = typeof(AuditTargets).GetFields().Select(f => (string)f.GetValue(null)!).ToHashSet();
-        var audited = typeof(ITransactionalRequest).Assembly.GetTypes()
-            .Where(t => t is { IsClass: true, IsAbstract: false } && typeof(IAuditedRequest).IsAssignableFrom(t));
+        var audited = Concrete().Where(t => typeof(IAuditedRequest).IsAssignableFrom(t)).ToList();
+        audited.Should().NotBeEmpty();
         foreach (var t in audited)
         {
             var action = ((IAuditedRequest)RuntimeHelpers.GetUninitializedObject(t)).Audit;
             AuditActions.Find(action.Code).Should().NotBeNull($"{t.Name} 的動作 {action.Code} 要登記在 AuditActions");
             if (action.TargetKind is not null) targets.Should().Contain(action.TargetKind, t.Name);
         }
+    }
+
+    /// <summary>
+    /// 反向：宣告稽核的請求一定要經過 AuditBehavior 會寫的路徑——交易型（同交易寫入）、回 <see cref="ServiceResult"/>
+    /// （behavior 只在成功時寫）。少了任一個，宣告了也不會寫。
+    /// </summary>
+    [Fact]
+    public void EveryAuditedRequest_IsTransactional_AndReturnsServiceResult()
+    {
+        var wrong = Concrete().Where(t => typeof(IAuditedRequest).IsAssignableFrom(t))
+            .Where(t => !typeof(ITransactionalRequest).IsAssignableFrom(t) || !typeof(MediatR.IRequest<ServiceResult>).IsAssignableFrom(t))
+            .Select(t => t.FullName).Order(StringComparer.Ordinal).ToList();
+        wrong.Should().BeEmpty("宣告稽核的請求要是 ITransactionalRequest 且是 IRequest<ServiceResult>；不符：" + string.Join("、", wrong));
     }
 
     [Fact]

@@ -1,15 +1,17 @@
 using DynamicModules.Application.Common;
+using DynamicModules.Application.Common.Audit;
 using DynamicModules.Application.Common.Security;
 using DynamicModules.Application.Common.Time;
 using DynamicModules.Application.Dynamic.TemplateService.Queries.GetTemplates;
 using DynamicModules.Domain.Entities.Dynamic;
 using DynamicModules.Domain.Repositories.Dynamic;
+using DynamicModules.Domain.ValueObjects;
 using MediatR;
 
 namespace DynamicModules.Application.Dynamic.TemplateService.Commands.ImportTemplate;
 
 public class ImportTemplateHandler(
-    TemplateCatalog catalog, IModuleTemplateRepository templates, IUnitOfWork uow, ICurrentUser user, IBusinessTime time)
+    TemplateCatalog catalog, IModuleTemplateRepository templates, IUnitOfWork uow, ICurrentUser user, IBusinessTime time, AuditContext audit)
     : IRequestHandler<ImportTemplateRequest, ServiceResult>
 {
     public async Task<ServiceResult> Handle(ImportTemplateRequest request, CancellationToken ct)
@@ -17,6 +19,7 @@ public class ImportTemplateHandler(
         var (package, _) = TemplateJson.Parse(request.Json);
         if (package is null)
             return ServiceResult.Invalid(new Dictionary<string, string[]> { ["template"] = ["範本不是有效的 JSON"] });
+        audit.Target(package.Key, package.Name.Resolve(I18nText.FallbackLocale));
 
         var errors = TemplateValidator.Validate(package);
         if (errors.Count > 0)

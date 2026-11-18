@@ -102,6 +102,49 @@ public class AuditApiTests
     }
 
     [Fact]
+    public async Task RejectedRequests_400And403_WriteNoAudit()
+    {
+        using var app = new TestApp();
+        var admin = app.AsUser();
+        var module = await CreateModule(admin);
+        var group = await SomeGroup(app);
+        var before = (await Rows(app)).Count;
+
+        (await app.AsUser("sales01").PutAsJsonAsync($"{Base}/modules/{module}/permissions", PermissionBody(group, Priv(read: true))))
+            .StatusCode.Should().Be(HttpStatusCode.Forbidden);
+        (await admin.PostAsJsonAsync($"{Base}/modules", new { key = "不合法 key", name = new Dictionary<string, string> { ["zh-TW"] = "x" } }))
+            .StatusCode.Should().Be(HttpStatusCode.BadRequest);
+        (await admin.PutAsJsonAsync($"{Base}/system/policies/ops.auditRetentionDays", new { value = 1 })).StatusCode.Should().Be(HttpStatusCode.BadRequest);
+        (await Rows(app)).Should().HaveCount(before);
+    }
+
+    [Fact]
+    public async Task A02_MoreThan200ChangedCells_ListsFirst200_CountsAll_MarksTruncated()
+    {
+        using var app = new TestApp();
+        var admin = app.AsUser();
+        var module = await CreateModule(admin);
+        var groups = new List<long>();
+        for (var i = 0; i < 30; i++)
+        {
+            var res = await admin.PostAsJsonAsync($"{Base}/admin/groups", new { name = $"稽核群組{i:D2}", locale = "zh-TW" });
+            res.StatusCode.Should().Be(HttpStatusCode.Created);
+            groups.Add((await JsonOf(res)).GetProperty("id").GetInt64());
+        }
+        var all = new { read = true, add = true, edit = true, delete = true, printExport = true, pricing = true, approve = true };
+        (await admin.PutAsJsonAsync($"{Base}/modules/{module}/permissions", new
+        {
+            groups = groups.Select(g => new { groupId = g, privileges = all, scope = (string?)null }).ToArray(),
+            users = Array.Empty<object>(), fields = Array.Empty<object>(), options = Array.Empty<object>(),
+        })).EnsureSuccessStatusCode();
+
+        using var doc = JsonDocument.Parse((await Rows(app, "permission.update")).Single().SummaryJson!);
+        doc.RootElement.GetProperty("changeCount").GetInt32().Should().BeGreaterThanOrEqualTo(210);
+        doc.RootElement.GetProperty("changes").GetArrayLength().Should().Be(200);
+        doc.RootElement.GetProperty("truncated").GetBoolean().Should().BeTrue();
+    }
+
+    [Fact]
     public async Task A02_WhenAuditWriteFails_PermissionIsNotChanged()
     {
         var failing = new AuditSwitch();
@@ -228,6 +271,54 @@ public class AuditApiTests
         (failed.ActorUserId, failed.TargetId, failed.ReasonCode).Should().Be(((string?)null, "admin91", "wrongPassword"));
     }
 
+    [Fact]
+    public async Task DemoLogin_FailuresAreThrottledLikePasswordLogin_ThrottledAttemptsWriteNoAudit()
+    {
+        using var app = new DemoSiteApp();
+        var c = app.CreateClient();
+        for (var i = 0; i < 30; i++)
+            (await c.PostAsJsonAsync($"{Auth}/demo-login", new { userId = $"ghost{i:D2}" })).StatusCode.Should().Be(HttpStatusCode.Unauthorized);
+        // 與密碼登入同一個來源節流：同一來源 15 分鐘 20 次失敗後擋下，擋下的不寫稽核
+        (await Rows(app, "login.failed")).Should().HaveCount(20);
+        (await Rows(app)).Should().NotContain(r => r.Action == "login.succeeded");
+    }
+
+    // ---- 稽核目標可辨識（審查 P2：匯入補目標、模組內代碼帶模組） ----
+
+    [Fact]
+    public async Task Targets_ImportsCarryParsedIdAndName_ModuleScopedKeysCarryTheModule()
+    {
+        using var app = new TestApp();
+        var admin = app.AsUser();
+        (await admin.PostAsync($"{Base}/apps/packages/import", new StringContent(Dynamic.AppTestPackages.Crm, System.Text.Encoding.UTF8, "application/json")))
+            .StatusCode.Should().Be(HttpStatusCode.Created);
+        var import = (await Rows(app, "app.import")).Should().ContainSingle().Subject;
+        (import.TargetKind, import.TargetId, import.TargetLabel).Should().Be(("app", "crm-lite", "客戶與聯絡人"));
+
+        (await admin.PostAsJsonAsync($"{Base}/templates/order/instantiate", new { })).StatusCode.Should().Be(HttpStatusCode.Created);
+        var exported = System.Text.Json.Nodes.JsonNode.Parse(await (await admin.GetAsync($"{Base}/modules/order/export-template")).Content.ReadAsStringAsync())!.AsObject();
+        exported["key"] = "order-audit";
+        (await admin.PostAsync($"{Base}/templates/import", new StringContent(exported.ToJsonString(), System.Text.Encoding.UTF8, "application/json")))
+            .StatusCode.Should().Be(HttpStatusCode.Created);
+        var template = (await Rows(app, "template.import")).Should().ContainSingle().Subject;
+        (template.TargetKind, template.TargetId).Should().Be(("template", "order-audit"));
+        template.TargetLabel.Should().NotBeNullOrEmpty();
+
+        var module = await CreateModule(admin);
+        var name = new Dictionary<string, string> { ["zh-TW"] = "報價單" };
+        (await admin.PostAsJsonAsync($"{Base}/modules/{module}/print-templates", new { key = "quote", name, body = "<p>a</p>", active = true }))
+            .EnsureSuccessStatusCode();
+        (await admin.PutAsJsonAsync($"{Base}/modules/{module}/print-templates/quote", new { key = "quote", name, body = "<p>b</p>", active = true }))
+            .EnsureSuccessStatusCode();
+        (await admin.DeleteAsync($"{Base}/modules/{module}/print-templates/quote")).EnsureSuccessStatusCode();
+        foreach (var action in new[] { "printTemplate.create", "printTemplate.update", "printTemplate.delete" })
+            (await Rows(app, action)).Should().ContainSingle().Which.TargetId.Should().Be($"{module}:quote");
+
+        (await admin.PutAsJsonAsync($"{Base}/modules/{module}/policies/task.remindOverdue", new { value = false })).StatusCode
+            .Should().Be(HttpStatusCode.OK);
+        (await Rows(app, "policy.moduleSet")).Should().ContainSingle().Which.TargetId.Should().Be($"{module}:task.remindOverdue");
+    }
+
     // ---- A06：變更前後值與遮蔽 ----
 
     [Fact]
@@ -335,10 +426,40 @@ public class AuditApiTests
     [InlineData("actionGroup=nope")]
     [InlineData("fromUtc=2026-11-10T00:00:00Z&toUtc=2026-11-01T00:00:00Z")]
     [InlineData("fromUtc=2024-01-01T00:00:00Z&toUtc=2026-11-01T00:00:00Z")]
+    [InlineData("toUtc=0001-01-01T00:00:00Z")]
+    [InlineData("toUtc=0001-01-05T00:00:00Z")]
+    [InlineData("fromUtc=0001-01-01T00:00:00Z&toUtc=0001-01-02T00:00:00Z")]
     public async Task A07_InvalidQuery_400(string query)
     {
         using var app = new TestApp();
         (await app.AsUser().GetAsync($"{Audit}?{query}")).StatusCode.Should().Be(HttpStatusCode.BadRequest);
+    }
+
+    [Fact]
+    public async Task A07_Messages_FollowXLocale()
+    {
+        using var app = new TestApp();
+        var c = app.AsUser();
+        async Task<JsonElement> Get(string url, string? locale, HttpStatusCode expected)
+        {
+            var req = new HttpRequestMessage(HttpMethod.Get, url);
+            if (locale is not null) req.Headers.Add("X-Locale", locale);
+            var res = await c.SendAsync(req);
+            res.StatusCode.Should().Be(expected);
+            return await JsonOf(res);
+        }
+
+        (await Get($"{Audit}/999999", "en-US", HttpStatusCode.NotFound)).GetProperty("message").GetString().Should().Be("Audit record not found");
+        (await Get($"{Audit}/999999", null, HttpStatusCode.NotFound)).GetProperty("message").GetString().Should().Be("找不到稽核紀錄");
+        var errors = (await Get($"{Audit}?limit=0&cursor=x&channel=Ui&toUtc=1960-01-01T00:00:00Z", "en-US", HttpStatusCode.BadRequest)).GetProperty("errors");
+        errors.GetProperty("limit")[0].GetString().Should().Be("Page size must be between 1 and 100");
+        errors.GetProperty("cursor")[0].GetString().Should().Be("The page position is invalid");
+        errors.GetProperty("channel")[0].GetString().Should().Be("The filter is invalid");
+        errors.GetProperty("toUtc")[0].GetString().Should().Be("Dates cannot be earlier than 1970-01-01");
+        (await Get($"{Audit}?fromUtc=2025-01-01T00:00:00Z&toUtc=2026-11-01T00:00:00Z", "en-US", HttpStatusCode.BadRequest))
+            .GetProperty("errors").GetProperty("toUtc")[0].GetString().Should().Be("The range can be at most 366 days");
+        (await Get($"{Audit}?fromUtc=2026-11-10T00:00:00Z&toUtc=2026-11-01T00:00:00Z", "en-US", HttpStatusCode.BadRequest))
+            .GetProperty("errors").GetProperty("fromUtc")[0].GetString().Should().Be("The start time cannot be later than the end time");
     }
 
     [Fact]
@@ -370,13 +491,14 @@ public class AuditApiTests
 
     // ---- A08：保留天數清理 ----
 
-    private sealed class CountingPurge(AuditLogRepositoryHolder holder) : IAuditLogRepository
+    private sealed class CountingPurge(AuditLogRepositoryHolder holder, int? failOnCall = null) : IAuditLogRepository
     {
         public void Add(AuditLogEntry entry) => holder.Inner.Add(entry);
         public Task<List<AuditLogEntry>> PageAsync(AuditLogQuery query, int take, CancellationToken ct) => holder.Inner.PageAsync(query, take, ct);
         public Task<AuditLogEntry?> GetAsync(long id, CancellationToken ct) => holder.Inner.GetAsync(id, ct);
         public async Task<int> PurgeBatchAsync(DateTime cutoffUtc, int batchSize, CancellationToken ct)
         {
+            if (holder.Batches.Count + 1 == failOnCall) throw new InvalidOperationException("第二批失敗（測試注入）");
             var n = await holder.Inner.PurgeBatchAsync(cutoffUtc, batchSize, ct);
             holder.Batches.Add(n);
             return n;
@@ -389,45 +511,81 @@ public class AuditApiTests
         public List<int> Batches => batches;
     }
 
+    private static TestApp UpkeepApp(List<int> batches, int? failOnCall = null) => new()
+    {
+        ExtraServices = s =>
+        {
+            s.RemoveAll<OpsUpkeepOptions>();
+            s.AddSingleton(new OpsUpkeepOptions { PurgeBatchSize = 3 });
+            s.AddScoped<DynamicModules.Persistence.Repositories.Dynamic.AuditLogRepository>();
+            s.RemoveAll<IAuditLogRepository>();
+            s.AddScoped<IAuditLogRepository>(sp => new CountingPurge(new AuditLogRepositoryHolder(
+                sp.GetRequiredService<DynamicModules.Persistence.Repositories.Dynamic.AuditLogRepository>(), batches), failOnCall));
+        },
+    };
+
+    private static async Task RunUpkeep(ManualClock clock, JobRunner runner)
+    {
+        clock.Advance(TimeSpan.FromMinutes(61));
+        await runner.TickAsync(CancellationToken.None);
+    }
+
+    private static async Task<JobRunner> UpkeepRunner(TestApp app, ManualClock clock)
+    {
+        var runner = Runner(app, clock, app.Services.GetServices<IScheduledJob>().Where(j => j.Key == "ops.upkeep"));
+        await runner.EnsureJobsAsync(CancellationToken.None);
+        return runner;
+    }
+
+    private static int Deleted(AuditLogEntry purge)
+    {
+        using var doc = JsonDocument.Parse(purge.SummaryJson!);
+        return doc.RootElement.GetProperty("deleted").GetProperty("auditLog").GetInt32();
+    }
+
     [Fact]
-    public async Task A08_Upkeep_PurgesExpiredRowsInBatches_KeepsNewer_WritesOneSummaryRow()
+    public async Task A08_Upkeep_PurgesExpiredRowsInBatches_KeepsNewer_EachBatchAuditedInItsOwnTransaction()
     {
         var batches = new List<int>();
-        using var app = new TestApp
-        {
-            ExtraServices = s =>
-            {
-                s.RemoveAll<OpsUpkeepOptions>();
-                s.AddSingleton(new OpsUpkeepOptions { PurgeBatchSize = 3 });
-                s.AddScoped<DynamicModules.Persistence.Repositories.Dynamic.AuditLogRepository>();
-                s.RemoveAll<IAuditLogRepository>();
-                s.AddScoped<IAuditLogRepository>(sp => new CountingPurge(new AuditLogRepositoryHolder(
-                    sp.GetRequiredService<DynamicModules.Persistence.Repositories.Dynamic.AuditLogRepository>(), batches)));
-            },
-        };
+        using var app = UpkeepApp(batches);
         var clock = new ManualClock(Start);
         var now = Start.UtcDateTime;
         await SeedAudit(app, 7, i => Fake(now.AddDays(-366).AddMinutes(-i), i));    // 超過出廠 365 天
         await SeedAudit(app, 4, i => Fake(now.AddDays(-364).AddMinutes(-i), i));    // 還在保留期
 
-        var runner = Runner(app, clock, app.Services.GetServices<IScheduledJob>().Where(j => j.Key == "ops.upkeep"));
-        await runner.EnsureJobsAsync(CancellationToken.None);
-        clock.Advance(TimeSpan.FromMinutes(61));
-        await runner.TickAsync(CancellationToken.None);
+        var runner = await UpkeepRunner(app, clock);
+        await RunUpkeep(clock, runner);
 
         (await Row(app, "ops.upkeep")).LastStatus.Should().Be(ScheduledJobStatus.Succeeded);
         batches.Should().Equal(3, 3, 1);
         var rows = await Rows(app);
         rows.Where(r => r.Action != "ops.retention.purge").Should().HaveCount(4).And.OnlyContain(r => r.OccurredUtc > now.AddDays(-365));
-        var purge = rows.Should().ContainSingle(r => r.Action == "ops.retention.purge").Subject;
-        (purge.ActorUserId, purge.ActorKind, purge.Channel, purge.TargetKind, purge.TargetId, purge.RequestId)
-            .Should().Be(((string?)null, AuditActorKind.System, AuditChannel.Job, "job", "ops.upkeep", (string?)null));
-        using var doc = JsonDocument.Parse(purge.SummaryJson!);
-        doc.RootElement.GetProperty("deleted").GetProperty("auditLog").GetInt32().Should().Be(7);
+        var purges = rows.Where(r => r.Action == "ops.retention.purge").ToList();
+        purges.Select(Deleted).Should().Equal(3, 3, 1);
+        purges.Should().OnlyContain(p => p.ActorUserId == null && p.ActorKind == AuditActorKind.System && p.Channel == AuditChannel.Job
+            && p.TargetKind == "job" && p.TargetId == "ops.upkeep" && p.RequestId == null);
 
         // 沒東西可刪時不再寫摘要列
-        clock.Advance(TimeSpan.FromMinutes(61));
-        await runner.TickAsync(CancellationToken.None);
-        (await Rows(app, "ops.retention.purge")).Should().ContainSingle();
+        await RunUpkeep(clock, runner);
+        (await Rows(app, "ops.retention.purge")).Should().HaveCount(3);
+    }
+
+    [Fact]
+    public async Task A08_SecondBatchFails_FirstBatchDeletionIsStillAudited()
+    {
+        var batches = new List<int>();
+        using var app = UpkeepApp(batches, failOnCall: 2);
+        var clock = new ManualClock(Start);
+        var now = Start.UtcDateTime;
+        await SeedAudit(app, 7, i => Fake(now.AddDays(-366).AddMinutes(-i), i));
+
+        var runner = await UpkeepRunner(app, clock);
+        await RunUpkeep(clock, runner);
+
+        (await Row(app, "ops.upkeep")).LastStatus.Should().NotBe(ScheduledJobStatus.Succeeded);
+        batches.Should().Equal(3);
+        var rows = await Rows(app);
+        rows.Count(r => r.Action != "ops.retention.purge").Should().Be(4, "第一批已提交");
+        rows.Where(r => r.Action == "ops.retention.purge").Select(Deleted).Should().Equal(3);
     }
 }

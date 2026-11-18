@@ -110,7 +110,6 @@ public class UpdateModulePolicyHandler(
         }
         await uow.CommitAsync(ct);
         reader.Invalidate();
-        audit.Detail("moduleKey", module.Key);
         audit.Describe(new { Value = old }, new { Value = existing?.Value });
         return ServiceResult.Success(PolicyJson.Module(def, await reader.ResolveAsync(def, module.Id, ct)));
     }

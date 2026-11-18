@@ -125,6 +125,7 @@ public class SaveModulePermissionsHandler(
         var cells = PermissionAuditCells.Diff(before, after);
         audit.Detail("changeCount", cells.Count);
         audit.Detail("changes", cells.Take(PermissionAuditCells.MaxCells).ToList());
+        if (cells.Count > PermissionAuditCells.MaxCells) audit.Detail("truncated", true);
         return ServiceResult.Success(after);
     }
 

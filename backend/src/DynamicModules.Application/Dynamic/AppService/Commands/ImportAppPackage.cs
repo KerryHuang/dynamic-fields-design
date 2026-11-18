@@ -11,6 +11,7 @@ using DynamicModules.Application.Dynamic.TemplateService;
 using DynamicModules.Domain.Entities.Dynamic;
 using DynamicModules.Domain.Policies;
 using DynamicModules.Domain.Repositories.Dynamic;
+using DynamicModules.Domain.ValueObjects;
 using MediatR;
 
 namespace DynamicModules.Application.Dynamic.AppService.Commands;
@@ -28,7 +29,7 @@ public record ImportAppPackageRequest(byte[] Content) : IRequest<ServiceResult>,
 /// </summary>
 public class ImportAppPackageHandler(
     AppCatalog catalog, AppPackageSource packages, IAppPackageRepository repository, IAppRepository apps,
-    IUnitOfWork uow, ICurrentUser user, IBusinessTime time, MasterMerger merger, AppExporter exporter, IPolicyReader policies)
+    IUnitOfWork uow, ICurrentUser user, IBusinessTime time, MasterMerger merger, AppExporter exporter, IPolicyReader policies, AuditContext audit)
     : IRequestHandler<ImportAppPackageRequest, ServiceResult>
 {
     public async Task<ServiceResult> Handle(ImportAppPackageRequest request, CancellationToken ct)
@@ -36,6 +37,7 @@ public class ImportAppPackageHandler(
         var parsed = AppJson.Parse(request.Content);
         var (package, readErrors) = await packages.ReadAsync(parsed, ct);
         if (package is null) return Invalid(readErrors);
+        audit.Target(package.Manifest.Id, package.Manifest.Name.Resolve(I18nText.FallbackLocale));
 
         // 已知的主檔（內建與匯入）：requires.apps 不得列主檔，引用的主檔欄位要找得到（§4.6）；不在的主檔留到開啟時回 masterNotAvailable
         var known = await packages.ListAsync(ct);

@@ -46,6 +46,9 @@ public sealed record AuditActionResponse(string Code, string Group, string Label
 public static class AuditQueryLimits
 {
     public const int DefaultDays = 7, MaxDays = 366, MaxLimit = 100;
+
+    /// <summary>查詢日期的下界：防止預設起日往前推 7 天時溢位，也沒有比這更早的稽核。</summary>
+    public static readonly DateTime MinUtc = new(1970, 1, 1, 0, 0, 0, DateTimeKind.Utc);
 }
 
 public class ListAuditHandler(IAuditLogRepository auditLog, IAccountRepository accounts, AuthSettings auth, TimeProvider time)
@@ -53,32 +56,40 @@ public class ListAuditHandler(IAuditLogRepository auditLog, IAccountRepository a
 {
     public async Task<ServiceResult> Handle(ListAuditRequest request, CancellationToken ct)
     {
-        var errors = new Dictionary<string, string[]>();
-        var to = request.ToUtc?.ToUniversalTime() ?? time.GetUtcNow().UtcDateTime;
-        var from = request.FromUtc?.ToUniversalTime() ?? to.AddDays(-AuditQueryLimits.DefaultDays);
-        if (from > to) errors["fromUtc"] = [OpsMessages.AuditRangeReversed];
-        else if (to - from > TimeSpan.FromDays(AuditQueryLimits.MaxDays)) errors["toUtc"] = [OpsMessages.AuditRangeTooLong(AuditQueryLimits.MaxDays)];
+        var errors = new Dictionary<string, MessageRef[]>();
+        var tooEarly = MessageRef.Of(MessageText.AuditDateTooEarly, AuditQueryLimits.MinUtc.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture));
+        var requestedFrom = request.FromUtc?.ToUniversalTime();
+        var requestedTo = request.ToUtc?.ToUniversalTime();
+        if (requestedFrom < AuditQueryLimits.MinUtc) errors["fromUtc"] = [tooEarly];
+        if (requestedTo < AuditQueryLimits.MinUtc) errors["toUtc"] = [tooEarly];
+        var to = requestedTo ?? time.GetUtcNow().UtcDateTime;
+        // 迄日太早時已記錯誤；起日改用下界，免得往前推 7 天溢位
+        var from = requestedFrom ?? (to < AuditQueryLimits.MinUtc.AddDays(AuditQueryLimits.DefaultDays) ? AuditQueryLimits.MinUtc : to.AddDays(-AuditQueryLimits.DefaultDays));
+        // 日期本身不合法時不再比區間
+        if (errors.Count == 0 && from > to) errors["fromUtc"] = [MessageRef.Of(MessageText.AuditRangeReversed)];
+        else if (errors.Count == 0 && to - from > TimeSpan.FromDays(AuditQueryLimits.MaxDays))
+            errors["toUtc"] = [MessageRef.Of(MessageText.AuditRangeTooLong, AuditQueryLimits.MaxDays)];
         var limit = request.Limit ?? AuditQueryLimits.MaxLimit;
-        if (limit is < 1 or > AuditQueryLimits.MaxLimit) errors["limit"] = [OpsMessages.AuditLimitOutOfRange(AuditQueryLimits.MaxLimit)];
+        if (limit is < 1 or > AuditQueryLimits.MaxLimit) errors["limit"] = [MessageRef.Of(MessageText.AuditLimitOutOfRange, AuditQueryLimits.MaxLimit)];
         long? before = null;
         if (request.Cursor is { } cursor)
         {
             if (long.TryParse(cursor, NumberStyles.None, CultureInfo.InvariantCulture, out var id) && id > 0) before = id;
-            else errors["cursor"] = [OpsMessages.AuditCursorInvalid];
+            else errors["cursor"] = [MessageRef.Of(MessageText.AuditCursorInvalid)];
         }
         AuditChannel? channel = null;
         if (request.Channel is { } c)
         {
             if (CamelEnum.TryParse<AuditChannel>(c, out var parsed)) channel = parsed;
-            else errors["channel"] = [OpsMessages.AuditFilterInvalid];
+            else errors["channel"] = [MessageRef.Of(MessageText.AuditFilterInvalid)];
         }
         AuditResult? result = null;
         if (request.Result is { } r)
         {
             if (CamelEnum.TryParse<AuditResult>(r, out var parsed)) result = parsed;
-            else errors["result"] = [OpsMessages.AuditFilterInvalid];
+            else errors["result"] = [MessageRef.Of(MessageText.AuditFilterInvalid)];
         }
-        if (request.ActionGroup is { } g && !AuditActions.Groups.Contains(g)) errors["actionGroup"] = [OpsMessages.AuditFilterInvalid];
+        if (request.ActionGroup is { } g && !AuditActions.Groups.Contains(g)) errors["actionGroup"] = [MessageRef.Of(MessageText.AuditFilterInvalid)];
         if (errors.Count > 0) return ServiceResult.Invalid(errors);
 
         // 動作與動作分組同時給時取交集
@@ -100,7 +111,7 @@ public class GetAuditHandler(IAuditLogRepository auditLog, IAccountRepository ac
 {
     public async Task<ServiceResult> Handle(GetAuditRequest request, CancellationToken ct)
     {
-        if (await auditLog.GetAsync(request.Id, ct) is not { } a) return ServiceResult.NotFound(OpsMessages.AuditNotFound);
+        if (await auditLog.GetAsync(request.Id, ct) is not { } a) return ServiceResult.NotFound(MessageRef.Of(MessageText.AuditNotFound));
         var names = a.ActorUserId is { } actor ? await accounts.GetDisplayNamesAsync([actor], ct) : [];
         var s = AuditResponses.Summary(a, names, auth.DemoLoginEnabled);
         JsonElement? summary = a.SummaryJson is { } json ? JsonDocument.Parse(json).RootElement.Clone() : null;
