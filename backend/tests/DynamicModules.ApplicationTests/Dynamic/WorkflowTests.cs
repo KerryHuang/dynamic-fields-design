@@ -30,7 +30,8 @@ public class WorkflowTests : DesignerTestBase
     {
         await NewModule("doc");
         var status = await MustAdd("doc", FieldType.Enum, label: "狀態");
-        long Opt(string label) => ((OptionResponse)Send(new AddOptionRequest(status.Id, Text(label), null)).GetAwaiter().GetResult().Data!).Id;
+        // Task.Run：PostgreSQL 是真的非同步 I/O，同步等待不能占著 xUnit 的同步內容，否則平行跑時整個測試行程卡死
+        long Opt(string label) => ((OptionResponse)Task.Run(() => Send(new AddOptionRequest(status.Id, Text(label), null))).GetAwaiter().GetResult().Data!).Id;
         var draft = Opt("草稿");
         var approved = Opt("已核准");
         var closed = Opt("已結案");
@@ -92,7 +93,7 @@ public class WorkflowTests : DesignerTestBase
         var w = await Build();
         var id = Db.Context.Set<Workflow>().AsNoTracking().Single().Id;
         await Db.Context.Database.ExecuteSqlRawAsync(
-            "UPDATE Dynamic_Workflow SET States = {0}, Transitions = {1} WHERE Id = {2}",
+            "UPDATE \"Dynamic_Workflow\" SET \"States\" = {0}, \"Transitions\" = {1} WHERE \"Id\" = {2}",
             $"[{{\"optionId\":{w.Draft},\"readOnly\":false}}]", $"[{{\"from\":{w.Draft},\"to\":{w.Approved},\"groupIds\":[]}}]", id);
 
         var wf = Db.Context.Set<Workflow>().AsNoTracking().Single(x => x.Id == id);

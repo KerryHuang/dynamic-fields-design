@@ -31,7 +31,8 @@ public class RacingFlowRepository : DispatchProxy
         if (targetMethod!.Name == nameof(IApprovalFlowRepository.TryReplaceDraftAsync) && BeforeReplace is { } hook)
         {
             BeforeReplace = null;
-            hook().GetAwaiter().GetResult();
+            // Task.Run：PostgreSQL 是真的非同步 I/O，同步等待不能占著 xUnit 的同步內容，否則平行跑時整個測試行程卡死
+            Task.Run(hook).GetAwaiter().GetResult();
         }
         try { return targetMethod.Invoke(Inner, args); }
         catch (TargetInvocationException e) { throw e.InnerException!; }

@@ -550,7 +550,8 @@ public class ApprovalAddSignTests : ApprovalTestBase
     private ApprovalInstanceView CurrentView(long id, string user)
     {
         As(user);
-        var res = Send(new GetRecordApprovalRequest(Inst(id).RecordId)).GetAwaiter().GetResult();
+        // Task.Run：PostgreSQL 是真的非同步 I/O，同步等待不能占著 xUnit 的同步內容，否則平行跑時整個測試行程卡死
+        var res = Task.Run(() => Send(new GetRecordApprovalRequest(Inst(id).RecordId))).GetAwaiter().GetResult();
         res.IsSuccess.Should().BeTrue(Dump(res));
         return ((RecordApprovalResponse)res.Data!).Current!;
     }

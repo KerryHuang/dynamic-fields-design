@@ -74,7 +74,9 @@ public class AppFormat7Tests : IDisposable
     {
         using var scope = _rig.App.Services.CreateScope();
         var moduleId = _rig.Db(db => db.Set<Module>().Single(m => m.Key == moduleKey).Id);
-        return scope.ServiceProvider.GetRequiredService<ITaskRuleRepository>().ListActiveByModuleAsync(moduleId, CancellationToken.None)
+        var repo = scope.ServiceProvider.GetRequiredService<ITaskRuleRepository>();
+        // Task.Run：PostgreSQL 是真的非同步 I/O，同步等待不能占著 xUnit 的同步內容，否則平行跑時整個測試行程卡死
+        return Task.Run(() => repo.ListActiveByModuleAsync(moduleId, CancellationToken.None))
             .GetAwaiter().GetResult().Select(r => r.Key).ToList();
     }
 

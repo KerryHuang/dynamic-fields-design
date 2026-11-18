@@ -184,7 +184,7 @@ public class ApprovalGraphConcurrencyTests : ApprovalTestBase
     /// <summary>注入一筆別人剛寫的 add-sign 歷程（加簽總數算歷程筆數，ExecuteUpdate 加不了列；用原生 SQL 而不是 Add，免得新列進了追蹤）。</summary>
     private Task InjectAddSignAction(long instanceId) =>
         Db.Context.Database.ExecuteSqlRawAsync(
-            "INSERT INTO Dynamic_ApprovalAction (InstanceId, Action, ActorUserId, CreatedTime, OperationId) VALUES ({0}, 'add-sign', 'emp9', '2026-11-04 09:00:00', 'other')",
+            "INSERT INTO \"Dynamic_ApprovalAction\" (\"InstanceId\", \"Action\", \"ActorUserId\", \"CreatedTime\", \"OperationId\") VALUES ({0}, 'add-sign', 'emp9', '2026-11-04 09:00:00', 'other')",
             instanceId);
 
     // ───────── 處理權：任務層不比對請求版本 ─────────

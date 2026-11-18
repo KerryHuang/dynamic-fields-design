@@ -103,7 +103,7 @@ public class ApprovalBackstopTests : ApprovalTestBase
     private Record LineOf(long poId)
     {
         var lineModule = Db.Context.Set<Module>().AsNoTracking().Single(m => m.Key == _r.Line).Id;
-        return Db.Context.Set<Record>().AsNoTracking().Where(x => x.ModuleId == lineModule).AsEnumerable()
+        return Db.Context.Set<Record>().AsNoTracking().Where(x => x.ModuleId == lineModule).ToList()   // 先取完再逐筆查：PostgreSQL 同一條連線不能同時開兩個讀取器
             .Single(x => Rec(x.Id).Values.TryGetValue($"f_{_r.LineHead}", out var h) && h is { } e && e.GetInt64() == poId);
     }
 

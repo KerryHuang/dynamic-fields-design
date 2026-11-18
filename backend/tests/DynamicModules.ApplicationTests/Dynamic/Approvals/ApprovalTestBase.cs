@@ -101,7 +101,8 @@ public abstract class ApprovalTestBase : EffectsTestBase, IAsyncLifetime
 
         await NewModule(p);
         var status = await MustAdd(p, FieldType.Enum, label: "狀態");
-        long Opt(string label) => ((OptionResponse)Send(new AddOptionRequest(status.Id, Text(label), null)).GetAwaiter().GetResult().Data!).Id;
+        // Task.Run：PostgreSQL 是真的非同步 I/O，同步等待不能占著 xUnit 的同步內容，否則平行跑時整個測試行程卡死
+        long Opt(string label) => ((OptionResponse)Task.Run(() => Send(new AddOptionRequest(status.Id, Text(label), null))).GetAwaiter().GetResult().Data!).Id;
         var draft = Opt("草稿");
         var confirmed = Opt("已確認");
         var cancelled = Opt("已取消");

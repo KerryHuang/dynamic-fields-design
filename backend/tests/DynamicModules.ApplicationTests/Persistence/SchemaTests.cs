@@ -299,10 +299,10 @@ public class JsonChangeTrackingTests
         });
         await db.Context.SaveChangesAsync();
 
-        var name = await db.Context.Database.SqlQueryRaw<string>("SELECT NameI18n AS Value FROM Dynamic_Module").SingleAsync();
+        var name = await db.Context.Database.SqlQueryRaw<string>("SELECT \"NameI18n\" AS \"Value\" FROM \"Dynamic_Module\"").SingleAsync();
         System.Text.Json.JsonSerializer.Deserialize<Dictionary<string, string>>(name)
             .Should().BeEquivalentTo(new Dictionary<string, string> { ["zh-TW"] = "訂單", ["en-US"] = "Order" });
-        (await db.Context.Database.SqlQueryRaw<string>("SELECT Config AS Value FROM Dynamic_Field").SingleAsync())
+        (await db.Context.Database.SqlQueryRaw<string>("SELECT \"Config\" AS \"Value\" FROM \"Dynamic_Field\"").SingleAsync())
             .Should().Contain("\"required\":true").And.Contain("\"maxLength\":5");
     }
 }

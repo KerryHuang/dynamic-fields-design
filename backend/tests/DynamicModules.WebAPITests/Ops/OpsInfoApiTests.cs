@@ -1,3 +1,4 @@
+using DynamicModules.TestSupport;
 using System.Net;
 using System.Text.Json;
 using DynamicModules.Domain.Data;
@@ -38,7 +39,7 @@ public class OpsInfoApiTests
         root.GetProperty("builtAt").GetString().Should().Be("dev");
         root.GetProperty("edition").GetString().Should().Be("OnPrem");
         root.GetProperty("instanceId").GetString().Should().NotBeNullOrEmpty();
-        root.GetProperty("database").GetString().Should().Be("sqlite");
+        root.GetProperty("database").GetString().Should().Be(TestDatabase.IsPostgres ? "postgres" : "sqlite");
         root.GetProperty("latestMigration").GetString().Should().MatchRegex(@"^\d{14}_\w+$");
         root.GetProperty("jobs").GetArrayLength().Should().Be(0);
     }

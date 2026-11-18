@@ -89,7 +89,7 @@ public class TaskCommentTests : TaskTestBase
         As("sales01");
         var tracked = (await Svc<DynamicModules.Domain.Repositories.Dynamic.ITaskRepository>().GetAsync(task.Id, default))!;
         await Db.Context.Database.ExecuteSqlRawAsync(
-            "INSERT INTO Dynamic_TaskParticipant (TaskId, UserId, Reason) VALUES ({0}, 'floor01', 'Mentioned')", task.Id);
+            "INSERT INTO \"Dynamic_TaskParticipant\" (\"TaskId\", \"UserId\", \"Reason\") VALUES ({0}, 'floor01', 'Mentioned')", task.Id);
 
         var writer = Svc<TaskWriter>();
         await writer.AddCommentAsync(tracked, "@{floor01} 看一下", new HashSet<string> { "floor01", "sales01" }, [], default);
