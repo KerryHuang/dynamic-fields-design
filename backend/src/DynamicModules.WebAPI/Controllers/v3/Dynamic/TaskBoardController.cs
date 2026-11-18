@@ -5,7 +5,7 @@ using Microsoft.AspNetCore.Mvc;
 
 namespace DynamicModules.WebAPI.Controllers.v3.Dynamic;
 
-/// <summary>看板欄查詢與移動、甘特圖改日期（看板設計 §12）。日期由伺服器算，不收瀏覽器的「今天」（T8）。</summary>
+/// <summary>看板欄查詢與移動、甘特查詢與改日期（看板設計 §12）。日期由伺服器算，不收瀏覽器的「今天」（T8）。</summary>
 [ApiController]
 [Route("api/v3/dynamic")]
 public class TaskBoardController(IMediator mediator) : ControllerBase
@@ -21,6 +21,9 @@ public class TaskBoardController(IMediator mediator) : ControllerBase
     /// <summary>兩個日期一律都送（null 代表清除），格式錯由模型繫結回 400。</summary>
     public sealed record ScheduleBody(DateOnly? StartDate, DateOnly? DueDate, string? ExpectedVersion);
 
+    /// <summary>viewId 與 config 二擇一；都沒帶是預設甘特圖。window 選填（含頭含尾，最多 366 天）。</summary>
+    public sealed record GanttBody(long? ViewId, JsonElement? Config, TaskGanttWindowInput? Window);
+
     [HttpPost("task-board/columns")]
     public async Task<IActionResult> Columns(ColumnsBody body) =>
         (await mediator.Send(new GetTaskBoardColumnsRequest(body.ViewId, body.Config))).ToActionResult(this);
@@ -33,6 +36,11 @@ public class TaskBoardController(IMediator mediator) : ControllerBase
     [HttpPost("tasks/{id:long}/move")]
     public async Task<IActionResult> Move(long id, MoveBody body) =>
         (await mediator.Send(new MoveTaskRequest(id, body.GroupBy, body.ToColumn, body.DueDate, body.ExpectedVersion, body.Cascade))).ToActionResult(this);
+
+    /// <summary>甘特查詢（看板設計 §11.5.2.5）：時間軸列、未排程、父任務標題與子任務跨度。</summary>
+    [HttpPost("tasks/gantt")]
+    public async Task<IActionResult> Gantt(GanttBody body) =>
+        (await mediator.Send(new GetTaskGanttRequest(body.ViewId, body.Config, body.Window))).ToActionResult(this);
 
     /// <summary>甘特圖改日期（看板設計 §11.5.2.6）。</summary>
     [HttpPost("tasks/{id:long}/schedule")]

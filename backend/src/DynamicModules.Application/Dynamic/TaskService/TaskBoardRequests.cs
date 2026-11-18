@@ -26,3 +26,12 @@ public sealed record MoveTaskRequest(long Id, string? GroupBy, string? ToColumn,
 /// </summary>
 public sealed record ScheduleTaskRequest(long Id, DateOnly? StartDate, DateOnly? DueDate, string? ExpectedVersion)
     : IRequest<ServiceResult>, ITransactionalRequest;
+
+/// <summary>甘特查詢的時間窗（含頭含尾）；請求裡兩個都要有，沒帶整個 window 時伺服器依刻度給預設。</summary>
+public sealed record TaskGanttWindowInput(DateOnly? From, DateOnly? To);
+
+/// <summary>
+/// 甘特查詢（看板設計 §11.5.2.5）：ViewId（看得到的存檔甘特圖）與 Config（未存的甘特設定）二擇一，都沒帶是預設甘特圖；
+/// Window 選填。成功時 Data 是 <see cref="TaskGanttResponse"/>。
+/// </summary>
+public sealed record GetTaskGanttRequest(long? ViewId, JsonElement? Config, TaskGanttWindowInput? Window) : IRequest<ServiceResult>;

@@ -150,6 +150,57 @@ export interface TaskScheduleResult {
   card: BoardCard;
 }
 
+/** 甘特查詢的時間窗（yyyy-MM-dd，含頭含尾，最多 366 天）。 */
+export interface TaskGanttWindow {
+  from: string;
+  to: string;
+}
+
+/** 甘特查詢的來源：存檔的甘特圖 id 與未存的設定二擇一，都沒給是預設甘特圖；window 不給時伺服器依刻度給預設（「今天」按鈕）。 */
+export interface GanttSource {
+  viewId?: number | null;
+  config?: TaskGanttConfig | null;
+  window?: TaskGanttWindow | null;
+}
+
+/**
+ * 時間軸列裡的子任務、其父任務不在 rows 時才列（只在依父子分組時）。visible=false：看不到父任務，只有標題；
+ * row 只在父任務看得到、符合範圍與篩選、只是不在時間窗內或未排程時才有。
+ */
+export interface GanttParent {
+  id: number;
+  title: string;
+  visible: boolean;
+  row: BoardCard | null;
+}
+
+/** 子任務跨度（不含已取消的子任務）。 */
+export interface GanttSpan {
+  parentId: number;
+  from: string;
+  to: string;
+}
+
+/** 甘特查詢回應（看板設計 §11.5.2.5）：rows 平鋪、分組由前端依 config.groupBy 做；today、weekStart 由伺服器給，前端不自己算。 */
+export interface TaskGanttData {
+  today: string;
+  /** 政策 calendar.weekStart，例如 monday。 */
+  weekStart: string;
+  window: TaskGanttWindow;
+  scopeAvailable: boolean;
+  config: TaskGanttConfig;
+  rows: BoardCard[];
+  /** 全部符合的列數；超過 500 時 truncated=true，rows 只有前 500 列。 */
+  total: number;
+  truncated: boolean;
+  parents: GanttParent[];
+  spans: GanttSpan[];
+  unscheduled: BoardCard[];
+  /** 超過 100 筆時 unscheduledTruncated=true。 */
+  unscheduledTotal: number;
+  unscheduledTruncated: boolean;
+}
+
 export interface TaskViewSummary {
   id: number;
   kind: TaskViewKind;

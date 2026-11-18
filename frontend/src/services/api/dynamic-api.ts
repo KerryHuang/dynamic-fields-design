@@ -21,15 +21,15 @@ import type {
 } from 'src/domain/dynamic/approval-types';
 import type { ApprovalDraftPreviewBody, ApprovalFlow, ApprovalFlowDraftInput, ApprovalFlowInput, ApprovalFlowPublishResult, ApprovalFlowValidation } from 'src/domain/dynamic/approval-flow-types';
 import type {
-  BoardColumnPage, BoardSource, TaskBoardConfig, TaskBoardData, TaskMoveBody, TaskMoveResult, TaskScheduleBody, TaskScheduleResult, TaskViewConfig,
-  TaskViewDetail, TaskViewKind, TaskViewList, TaskViewShareKind, TaskViewShareTargets,
+  BoardColumnPage, BoardSource, GanttSource, TaskBoardConfig, TaskBoardData, TaskGanttData, TaskMoveBody, TaskMoveResult, TaskScheduleBody,
+  TaskScheduleResult, TaskViewConfig, TaskViewDetail, TaskViewKind, TaskViewList, TaskViewShareKind, TaskViewShareTargets,
 } from 'src/domain/dynamic/task-board-types';
 import type { TaskRule, TaskRuleInput } from 'src/domain/dynamic/task-rule-draft';
 import type { EffectivePolicies, ModulePolicy, PolicyValue, SystemPolicy } from 'src/domain/dynamic/policy-types';
 import { handleAuthFailure, http, toApiError } from './http';
 import {
-  normalizeBoard, normalizeBoardPage, normalizeMoveResult, normalizeScheduleResult, normalizeShareTargets, normalizeViewDetail, normalizeViewList,
-  normalizeNotificationList, normalizeRecordTasks, normalizeTaskCapabilities, normalizeTaskComment, normalizeTaskDetail, normalizeTaskPage,
+  normalizeBoard, normalizeBoardPage, normalizeGantt, normalizeMoveResult, normalizeScheduleResult, normalizeShareTargets, normalizeViewDetail,
+  normalizeViewList, normalizeNotificationList, normalizeRecordTasks, normalizeTaskCapabilities, normalizeTaskComment, normalizeTaskDetail, normalizeTaskPage,
   normalizeTaskRule, normalizeTaskUpdate,
 } from './task-normalize';
 
@@ -581,6 +581,10 @@ export const dynamicApi = {
     http.post<BoardColumnPage>(`/task-board/columns/${encodeURIComponent(column)}/page`, { ...boardSourceBody(source), offset }).then(data).then(normalizeBoardPage),
   moveTask: (id: number, body: TaskMoveBody) =>
     http.post<TaskMoveResult>(`/tasks/${id}/move`, body).then(data).then(normalizeMoveResult),
+  /** 甘特查詢（看板設計 §11.5.2.5）：甘特 id 是看板、已刪除或不再分享時 404。上一段／下一段把回應的 window 平移後送出。 */
+  getGantt: (source: GanttSource = {}) =>
+    http.post<TaskGanttData>('/tasks/gantt', { viewId: source.viewId ?? null, config: source.config ?? null, window: source.window ?? null })
+      .then(data).then(normalizeGantt),
   /** 甘特圖改日期（看板設計 §11.5.2.6）：兩個日期一律都送，版本不符 409 stale。 */
   scheduleTask: (id: number, body: TaskScheduleBody) =>
     http.post<TaskScheduleResult>(`/tasks/${id}/schedule`, body).then(data).then(normalizeScheduleResult),

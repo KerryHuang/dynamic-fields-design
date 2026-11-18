@@ -85,7 +85,11 @@ public static class MessageText
         TaskGanttScopeInvalid = nameof(TaskGanttScopeInvalid), TaskGanttScaleInvalid = nameof(TaskGanttScaleInvalid),
         TaskGanttStatusesInvalid = nameof(TaskGanttStatusesInvalid), TaskGanttSourcesInvalid = nameof(TaskGanttSourcesInvalid),
         TaskGanttPeopleBlank = nameof(TaskGanttPeopleBlank), TaskGanttNoDueRange = nameof(TaskGanttNoDueRange),
-        TaskGanttKeywordTooLong = nameof(TaskGanttKeywordTooLong);
+        TaskGanttKeywordTooLong = nameof(TaskGanttKeywordTooLong),
+        // 甘特查詢（POST /tasks/gantt，gt1c）
+        TaskGanttNotFound = nameof(TaskGanttNotFound), TaskGanttSourceBoth = nameof(TaskGanttSourceBoth),
+        TaskGanttWindowRequired = nameof(TaskGanttWindowRequired), TaskGanttWindowInvalid = nameof(TaskGanttWindowInvalid),
+        TaskGanttWindowTooLong = nameof(TaskGanttWindowTooLong);
 
     private static readonly Dictionary<string, (string Zh, string En, string Th, string Vi)> Table = new()
     {
@@ -376,6 +380,16 @@ public static class MessageText
             "แผนภูมิแกนต์ใช้ช่วงเวลา ไม่ใช้ช่วงกำหนดส่ง", "Biểu đồ Gantt dùng khoảng thời gian, không dùng khoảng hạn"),
         [TaskGanttKeywordTooLong] = ("甘特圖的關鍵字最多 {0} 字", "Gantt chart keyword can be at most {0} characters",
             "คำค้นของแผนภูมิแกนต์ยาวได้ไม่เกิน {0} ตัวอักษร", "Từ khóa của biểu đồ Gantt tối đa {0} ký tự"),
+        [TaskGanttNotFound] = ("這個甘特圖已刪除或不再分享給你", "This Gantt chart was deleted or is no longer shared with you",
+            "แผนภูมิแกนต์นี้ถูกลบแล้วหรือไม่ได้แชร์กับคุณอีกต่อไป", "Biểu đồ Gantt này đã bị xóa hoặc không còn được chia sẻ với bạn"),
+        [TaskGanttSourceBoth] = ("只能帶甘特圖 Id 或甘特圖設定其中一個", "Send either a Gantt chart Id or Gantt chart settings, not both",
+            "ส่งได้เพียง Id ของแผนภูมิแกนต์หรือการตั้งค่าแผนภูมิแกนต์อย่างใดอย่างหนึ่ง", "Chỉ gửi Id biểu đồ Gantt hoặc cài đặt biểu đồ Gantt, không gửi cả hai"),
+        [TaskGanttWindowRequired] = ("時間範圍的開始與結束都必填", "The time window needs both a start and an end",
+            "ช่วงเวลาต้องระบุทั้งวันเริ่มและวันสิ้นสุด", "Khoảng thời gian phải có cả ngày bắt đầu và ngày kết thúc"),
+        [TaskGanttWindowInvalid] = ("時間範圍的開始不能晚於結束", "The start of the time window cannot be later than the end",
+            "วันเริ่มของช่วงเวลาต้องไม่ช้ากว่าวันสิ้นสุด", "Ngày bắt đầu của khoảng thời gian không được sau ngày kết thúc"),
+        [TaskGanttWindowTooLong] = ("時間範圍最多 {0} 天", "The time window can be at most {0} days",
+            "ช่วงเวลายาวได้ไม่เกิน {0} วัน", "Khoảng thời gian tối đa {0} ngày"),
     };
 
     /// <summary>無參數訊息的繁中原文 → 鍵；兩鍵同一句時建表就會丟例外。</summary>

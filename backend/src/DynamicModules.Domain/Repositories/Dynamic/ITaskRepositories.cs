@@ -52,6 +52,21 @@ public interface ITaskRepository
     Task<Dictionary<string, int>> CountBoardColumnsAsync(TaskBoardQuery q, IReadOnlyCollection<string> columns, CancellationToken ct);
     /// <summary>某一欄的一頁任務（不追蹤，含參與者）；排序照設定，「完成」欄固定完成時間新到舊，最後依 Id。</summary>
     Task<List<TaskItem>> QueryBoardColumnAsync(TaskBoardQuery q, string column, int offset, int take, CancellationToken ct);
+    /// <summary>
+    /// 甘特圖時間軸列（看板設計 §11.5.2.5、§11.5.3）：<see cref="TaskBoardQuery"/> 的可見條件＋範圍＋篩選（不讀 GroupBy、SortKey），
+    /// 且 DueDate 不為 null、[StartDate ?? DueDate, DueDate] 與 [from, to]（含頭含尾）相交。不追蹤、含參與者；
+    /// 依 StartDate ?? DueDate、DueDate、Id 遞增，最多 take 筆；Total 是全部符合的筆數。
+    /// </summary>
+    Task<(List<TaskItem> Items, int Total)> QueryGanttAsync(TaskBoardQuery q, DateOnly from, DateOnly to, int take, CancellationToken ct);
+    /// <summary>甘特圖未排程：條件同上但只取 DueDate 為 null（不看時間窗）；依 CreatedTime、Id 遞增，最多 take 筆。</summary>
+    Task<(List<TaskItem> Items, int Total)> QueryUnscheduledAsync(TaskBoardQuery q, int take, CancellationToken ct);
+    /// <summary>ids 裡符合 <see cref="TaskBoardQuery"/> 可見條件＋範圍＋篩選的 Id（甘特圖判斷父任務是否被篩選擋掉）。</summary>
+    Task<HashSet<long>> ListMatchingIdsAsync(TaskBoardQuery q, IReadOnlyCollection<long> ids, CancellationToken ct);
+    /// <summary>
+    /// 子任務跨度（GT-T15）：一次 GROUP BY 父任務，排除已取消、兩個日期都沒有的子任務；區間是
+    /// MIN(StartDate ?? DueDate) 到 MAX(DueDate ?? StartDate)。沒有可算子任務的父任務不在結果裡。不看操作者的可見條件，呼叫端只能傳看得到的父任務。
+    /// </summary>
+    Task<Dictionary<long, (DateOnly From, DateOnly To)>> SubtaskSpanAsync(IReadOnlyCollection<long> parentIds, CancellationToken ct);
     /// <summary>人寫的、未撤回的留言數；沒有留言的任務不在結果裡。</summary>
     Task<Dictionary<long, int>> CountCommentsAsync(IReadOnlyCollection<long> taskIds, CancellationToken ct);
     /// <summary>規則已刪除時回 null。</summary>

@@ -4,8 +4,8 @@ import type {
 } from 'src/domain/dynamic/task-types';
 import type { TaskRule } from 'src/domain/dynamic/task-rule-draft';
 import type {
-  BoardCard, BoardColumn, BoardColumnPage, TaskBoardConfig, TaskBoardData, TaskMoveResult, TaskScheduleResult, TaskViewConfig, TaskViewDetail,
-  TaskViewList, TaskViewShare, TaskViewShareTargets, TaskViewSummary,
+  BoardCard, BoardColumn, BoardColumnPage, GanttParent, GanttSpan, TaskBoardConfig, TaskBoardData, TaskGanttConfig, TaskGanttData, TaskMoveResult,
+  TaskScheduleResult, TaskViewConfig, TaskViewDetail, TaskViewList, TaskViewShare, TaskViewShareTargets, TaskViewSummary,
 } from 'src/domain/dynamic/task-board-types';
 
 /** The server leaves out every property whose value is null; the types promise `null`, so put it back. */
@@ -216,6 +216,36 @@ export const normalizeViewList = (l: { mine?: Wire<TaskViewSummary>[] | null; sh
 const normalizeShare = (s: Wire<TaskViewShare>): TaskViewShare => ({
   kind: s.kind ?? 'user', id: s.id ?? '', displayName: s.displayName ?? null, nameI18n: s.nameI18n ?? null, inactive: !!s.inactive,
 });
+
+type WireGantt = Wire<Omit<TaskGanttData, 'rows' | 'unscheduled' | 'parents' | 'spans' | 'window' | 'config'>> & {
+  rows?: Wire<BoardCard>[] | null;
+  unscheduled?: Wire<BoardCard>[] | null;
+  parents?: (Wire<Omit<GanttParent, 'row'>> & { row?: Wire<BoardCard> | null })[] | null;
+  spans?: Wire<GanttSpan>[] | null;
+  window?: { from?: string | null; to?: string | null } | null;
+  config?: TaskGanttConfig;
+};
+
+export function normalizeGantt(g: WireGantt): TaskGanttData {
+  return {
+    today: g.today ?? '',
+    weekStart: g.weekStart ?? 'monday',
+    window: { from: g.window?.from ?? '', to: g.window?.to ?? '' },
+    scopeAvailable: g.scopeAvailable !== false,
+    // 伺服器一定會帶實際採用的設定（存檔、未存、預設三種都一樣），這裡不補預設值
+    config: g.config as TaskGanttConfig,
+    rows: (g.rows ?? []).map(normalizeBoardCard),
+    total: g.total ?? 0,
+    truncated: !!g.truncated,
+    parents: (g.parents ?? []).map((p) => ({
+      id: p.id as number, title: p.title ?? '', visible: !!p.visible, row: p.row ? normalizeBoardCard(p.row) : null,
+    })),
+    spans: (g.spans ?? []).map((s) => ({ parentId: s.parentId as number, from: s.from ?? '', to: s.to ?? '' })),
+    unscheduled: (g.unscheduled ?? []).map(normalizeBoardCard),
+    unscheduledTotal: g.unscheduledTotal ?? 0,
+    unscheduledTruncated: !!g.unscheduledTruncated,
+  };
+}
 
 export function normalizeScheduleResult(r: { card?: Wire<BoardCard> | null }): TaskScheduleResult {
   return { card: normalizeBoardCard(r.card ?? {}) };

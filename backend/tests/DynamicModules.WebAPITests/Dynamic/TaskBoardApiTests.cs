@@ -216,4 +216,44 @@ public class TaskBoardApiTests : IDisposable
         events.Count(e => e == "startChanged").Should().Be(1);
         events.Count(e => e == "dueChanged").Should().Be(1);
     }
+
+    [Fact]
+    [Trait("Category", "Postgres")]
+    public async Task Gantt_Http_RoundTrip_WindowErrors_BoardId404()
+    {
+        var sales = _app.AsUser("sales01");
+        var task = await Ok(await sales.PostAsJsonAsync($"{Base}/tasks",
+            new { title = "佈置展場", assigneeUserId = "sales01", startDate = "2026-11-21", dueDate = "2026-11-28" }), HttpStatusCode.Created);
+        await Ok(await sales.PostAsJsonAsync($"{Base}/tasks", new { title = "還沒排", assigneeUserId = "sales01" }), HttpStatusCode.Created);
+        const string flat = """{"version":1,"groupBy":"none","scope":"assigned","scale":"week"}""";
+
+        var g = await Ok(await sales.PostAsync($"{Base}/tasks/gantt", Json("""{"config":""" + flat + ""","window":{"from":"2026-11-16","to":"2026-11-29"}}""")));
+        g.GetProperty("window").GetProperty("from").GetString().Should().Be("2026-11-16");
+        g.GetProperty("weekStart").GetString().Should().Be("monday");
+        g.GetProperty("today").GetString().Should().NotBeNullOrEmpty();
+        var row = g.GetProperty("rows").EnumerateArray().Single();
+        row.GetProperty("id").GetInt64().Should().Be(task.GetProperty("id").GetInt64());
+        row.GetProperty("startDate").GetString().Should().Be("2026-11-21");
+        g.GetProperty("total").GetInt32().Should().Be(1);
+        g.GetProperty("truncated").GetBoolean().Should().BeFalse();
+        g.GetProperty("parents").GetArrayLength().Should().Be(0);
+        g.GetProperty("spans").GetArrayLength().Should().Be(0);
+        g.GetProperty("unscheduled").EnumerateArray().Single().GetProperty("title").GetString().Should().Be("還沒排");
+        g.GetProperty("unscheduledTotal").GetInt32().Should().Be(1);
+        g.GetProperty("config").GetProperty("scale").GetString().Should().Be("week");
+        (await Ok(await sales.PostAsync($"{Base}/tasks/gantt", Json("{}")))).GetProperty("config").GetProperty("groupBy").GetString().Should().Be("parent");
+
+        (await sales.PostAsync($"{Base}/tasks/gantt", Json("""{"window":{"from":"2026/11/16","to":"2026-11-29"}}""")))
+            .StatusCode.Should().Be(HttpStatusCode.BadRequest);
+        var en = new HttpRequestMessage(HttpMethod.Post, $"{Base}/tasks/gantt") { Content = Json("""{"window":{"from":"2026-01-01","to":"2027-01-02"}}""") };
+        en.Headers.Add("X-Locale", "en-US");
+        var tooLong = await sales.SendAsync(en);
+        tooLong.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+        (await tooLong.Content.ReadAsStringAsync()).Should().Contain("window").And.Contain("The time window can be at most 366 days");
+
+        var board = await Ok(await sales.PostAsync($"{Base}/task-views", Json($$"""{"kind":"board","name":"看板","config":{{StatusBoard}}}""")), HttpStatusCode.Created);
+        var notFound = await sales.PostAsync($"{Base}/tasks/gantt", Json($$"""{"viewId":{{board.GetProperty("id").GetInt64()}}}"""));
+        notFound.StatusCode.Should().Be(HttpStatusCode.NotFound);
+        (await notFound.Content.ReadAsStringAsync()).Should().Contain("這個甘特圖已刪除或不再分享給你");
+    }
 }

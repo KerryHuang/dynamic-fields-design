@@ -33,3 +33,23 @@ public sealed record TaskMoveResponse(bool Visible, TaskCardResponse? Card, stri
 
 /// <summary>改日期不改參與者、記錄、負責人，可見性不變，所以只回卡片（沒有 visible、undoToken；§11.5.2.6）。</summary>
 public sealed record TaskScheduleResponse(TaskCardResponse Card);
+
+public sealed record TaskGanttWindow(DateOnly From, DateOnly To);
+
+/// <summary>
+/// 時間軸列裡的子任務、其父任務不在 Rows 時才列（只在依父子分組時）。Visible=false：操作者看不到父任務，只有標題（U13）；
+/// Row 只在父任務看得到、而且符合範圍與篩選（只是不在時間窗內或未排程）時才有（GT-Q2）。
+/// </summary>
+public sealed record TaskGanttParent(long Id, string Title, bool Visible, TaskCardResponse? Row);
+
+/// <summary>子任務跨度（GT-T15）：最早的起點到最晚的終點，不含已取消的子任務。</summary>
+public sealed record TaskGanttSpan(long ParentId, DateOnly From, DateOnly To);
+
+/// <summary>
+/// 甘特查詢回應（看板設計 §11.5.2.5）。Today、WeekStart（政策 calendar.weekStart，如 monday）由伺服器給；Window 是實際查詢的時間窗；
+/// Config 是實際採用的甘特設定（正規化後）。Rows 依開始日（沒有用到期日）、到期日、Id 排序，最多 500 列；Unscheduled 是沒有到期日的任務，最多 100 筆。
+/// Total、UnscheduledTotal 是全部符合的筆數。Parents、Spans 只在依父子分組時有內容，分組由前端做（GT-T10）。
+/// </summary>
+public sealed record TaskGanttResponse(DateOnly Today, string WeekStart, TaskGanttWindow Window, bool ScopeAvailable, JsonElement Config,
+    IReadOnlyList<TaskCardResponse> Rows, int Total, bool Truncated, IReadOnlyList<TaskGanttParent> Parents, IReadOnlyList<TaskGanttSpan> Spans,
+    IReadOnlyList<TaskCardResponse> Unscheduled, int UnscheduledTotal, bool UnscheduledTruncated);

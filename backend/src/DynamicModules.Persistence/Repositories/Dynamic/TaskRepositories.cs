@@ -244,6 +244,43 @@ public class TaskRepository(DynamicDbContext db) : ITaskRepository
         return ordered.ThenBy(t => t.Id).Include(t => t.Participants).Skip(offset).Take(take).ToListAsync(ct);
     }
 
+    public async Task<(List<TaskItem> Items, int Total)> QueryGanttAsync(TaskBoardQuery q, DateOnly from, DateOnly to, int take, CancellationToken ct)
+    {
+        var query = BoardBase(q).Where(t => t.DueDate != null && t.DueDate >= from && (t.StartDate ?? t.DueDate) <= to);
+        var total = await query.CountAsync(ct);
+        var items = await query.OrderBy(t => t.StartDate ?? t.DueDate).ThenBy(t => t.DueDate).ThenBy(t => t.Id)
+            .Include(t => t.Participants).Take(take).ToListAsync(ct);
+        return (items, total);
+    }
+
+    public async Task<(List<TaskItem> Items, int Total)> QueryUnscheduledAsync(TaskBoardQuery q, int take, CancellationToken ct)
+    {
+        var query = BoardBase(q).Where(t => t.DueDate == null);
+        var total = await query.CountAsync(ct);
+        var items = await query.OrderBy(t => t.CreatedTime).ThenBy(t => t.Id).Include(t => t.Participants).Take(take).ToListAsync(ct);
+        return (items, total);
+    }
+
+    public async Task<HashSet<long>> ListMatchingIdsAsync(TaskBoardQuery q, IReadOnlyCollection<long> ids, CancellationToken ct)
+    {
+        var list = ids.Distinct().ToArray();
+        if (list.Length == 0) return [];
+        return (await BoardBase(q).Where(t => list.Contains(t.Id)).Select(t => t.Id).ToListAsync(ct)).ToHashSet();
+    }
+
+    public async Task<Dictionary<long, (DateOnly From, DateOnly To)>> SubtaskSpanAsync(IReadOnlyCollection<long> parentIds, CancellationToken ct)
+    {
+        var ids = parentIds.Distinct().ToArray();
+        if (ids.Length == 0) return [];
+        var rows = await db.Set<TaskItem>().AsNoTracking()
+            .Where(t => t.ParentTaskId != null && ids.Contains(t.ParentTaskId.Value) && t.Status != TaskItemStatus.Cancelled
+                && (t.StartDate != null || t.DueDate != null))
+            .GroupBy(t => t.ParentTaskId!.Value)
+            .Select(g => new { Parent = g.Key, From = g.Min(t => t.StartDate ?? t.DueDate), To = g.Max(t => t.DueDate ?? t.StartDate) })
+            .ToListAsync(ct);
+        return rows.ToDictionary(r => r.Parent, r => (r.From!.Value, r.To!.Value));
+    }
+
     public async Task<Dictionary<long, int>> CountCommentsAsync(IReadOnlyCollection<long> taskIds, CancellationToken ct)
     {
         var ids = taskIds.Distinct().ToArray();

@@ -233,4 +233,31 @@ describe('dynamicApi tasks', () => {
     expect(r.card).toMatchObject({ id: 5, startDate: '2026-11-21', version: 'v2', parentTaskId: null });
     expect(Object.keys(r)).toEqual(['card']);
   });
+
+  it('gantt posts the source and window, and fills what the server omits', async () => {
+    const seen = stub({
+      today: '2026-11-18', weekStart: 'monday', window: { from: '2026-11-16', to: '2027-02-14' }, scopeAvailable: true,
+      config: { version: 1, groupBy: 'parent', scope: 'assigned', scale: 'week' },
+      rows: [{ id: 7, title: 'C', status: 'todo', startDate: '2026-11-17', dueDate: '2026-11-20', parentTaskId: 5, parentTitle: 'P', version: 'v' }],
+      total: 1,
+      parents: [{ id: 5, title: 'P', visible: false }, { id: 6, title: 'Q', visible: true, row: { id: 6, title: 'Q', status: 'todo', version: 'w' } }],
+      spans: [{ parentId: 5, from: '2026-11-17', to: '2026-11-20' }],
+      unscheduled: [{ id: 9, title: 'U', status: 'todo', version: 'u' }],
+      unscheduledTotal: 1,
+    });
+    const g = await dynamicApi.getGantt({ viewId: 12, window: { from: '2026-11-16', to: '2027-02-14' } });
+    expect(seen).toMatchObject({ method: 'post', url: '/api/v3/dynamic/tasks/gantt' });
+    expect(JSON.parse(seen.body as string)).toEqual({ viewId: 12, config: null, window: { from: '2026-11-16', to: '2027-02-14' } });
+    expect(g).toMatchObject({ today: '2026-11-18', weekStart: 'monday', truncated: false, unscheduledTruncated: false, total: 1 });
+    expect(g.rows[0]).toMatchObject({ id: 7, startDate: '2026-11-17', parentTaskId: 5, record: null });
+    expect(g.parents[0]).toEqual({ id: 5, title: 'P', visible: false, row: null });
+    expect(g.parents[1].row).toMatchObject({ id: 6, dueDate: null, startDate: null });
+    expect(g.spans).toEqual([{ parentId: 5, from: '2026-11-17', to: '2026-11-20' }]);
+    expect(g.unscheduled[0]).toMatchObject({ id: 9, dueDate: null });
+
+    const empty = stub({ config: { version: 1, groupBy: 'none', scope: 'visible', scale: 'day' } });
+    const e = await dynamicApi.getGantt();
+    expect(JSON.parse(empty.body as string)).toEqual({ viewId: null, config: null, window: null });
+    expect(e).toMatchObject({ rows: [], parents: [], spans: [], unscheduled: [], total: 0, scopeAvailable: true });
+  });
 });
