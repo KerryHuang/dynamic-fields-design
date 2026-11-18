@@ -430,7 +430,9 @@ annotations 只是提示。規範明說 client 不該信任它，所以產品端
 
 ### 8.1 稽核寫入點（對齊維運設計 §5.6）
 
-- 用 O2 建的全平台共用稽核表，mcp1 只加寫入點，不另開表（維運設計 §5.6）。欄位名稱、型別、索引與寫入介面（`IAuditLog`、`AuditOrigin`、`AuditActions`）已在維運設計 §17.2.1、§17.4 定案；mcp1 在 `/mcp` 開 `AuditOrigin` 的 `mcp` 範圍，並把 `mcp.<工具>` 登記進 `AuditActions`。
+- 用 O2 建的全平台共用稽核表，mcp1 只加寫入點，不另開表（維運設計 §5.6）。欄位名稱、型別、索引與寫入介面（`IAuditLog`、`AuditEntry`、`AuditOrigin`、`AuditActions`）已在維運設計 §17.2.1、§17.4 定案：
+  - mcp1 在 `/mcp` 驗完權杖後開 `AuditOrigin` 的 `mcp` 範圍，帶權杖 id 與行為者種類（人員或維運服務帳號），`IAuditLog` 從這裡補，工具不自己填；並把 `mcp.<工具>` 登記進 `AuditActions`。
+  - 參數雜湊、回傳筆數、確認 id 與確認結果是 `AuditEntry` 的選填欄位，對應稽核表的獨立欄位；其餘（參數摘要、前 20 個記錄 id、client 名稱與版本、耗時、operation id、轉送點工作編號）放結構化摘要。
 - **唯讀呼叫也逐筆記**（主控判斷 U10）。理由：AI 讀了哪些資料，正是事後最想查的事。量的估算見本節最後。
 - 每筆 MCP 呼叫寫進稽核表的內容（欄位命名由 O2 定；維運設計 §5.6 已採用：行為者種類、參數雜湊、回傳筆數是獨立欄位，其餘放結構化摘要，O2 一次建好，mcp1 不加 migration）：
 
@@ -449,8 +451,9 @@ annotations 只是提示。規範明說 client 不該信任它，所以產品端
 | 關聯 | request id、operation id（可串到事件事實與記錄歷程）、來源 IP、client 自報的名稱與版本（不可信）、耗時 |
 
 - **寫不進稽核就不回資料**（fail closed，寫死）：
-  - 唯讀工具：先寫稽核再回結果，寫失敗就回錯誤。
-  - 寫入工具：成功時稽核與業務寫入在同一個交易，透過既有的 `IWriteStage` 機制寫入；業務失敗時另寫一筆失敗稽核。
+  - 唯讀工具：先用 `IAuditLog.WriteNowAsync` 寫稽核再回結果；它在寫不進去時丟 `AuditWriteException`，工具就回錯誤、不回資料。不用 `TryWriteNowAsync`（那是登入用的、失敗只記 log）。
+  - 寫入工具：成功時稽核與業務寫入在同一個交易，透過既有的 `IWriteStage` 機制以 `IAuditLog.Add` 寫入；業務失敗時交易已回滾，另以 `WriteNowAsync` 寫一筆失敗稽核（寫不進去只能記 Error log，業務本來就沒寫成）。
+  - `WriteNowAsync` 只能在交易外呼叫（維運設計 §17.2.1）：工具 handler 若是交易型請求，唯讀工具的稽核要在 handler 回傳之後、回應送出之前由 `/mcp` 的管線寫。
 - 權杖明文、確認碼明文、密碼一律不進稽核與 log（寫死）。
 - 保留天數沿用 `ops.auditRetentionDays`（O2，出廠 365 天），由 O1 的排程器清理。MCP 不另設保留政策。
 - **量的估算**：10 個人每人每天 300 次呼叫，一年約 110 萬列；每列平均約 500 bytes，一年約 0.5GB。PostgreSQL 沒問題；SQLite 研發與 Demo 量遠低於此。保留天數是政策，可調。
