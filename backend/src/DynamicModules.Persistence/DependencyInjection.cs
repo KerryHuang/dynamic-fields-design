@@ -70,6 +70,7 @@ public static class DependencyInjection
         services.AddScoped<ITaskRepository, TaskRepository>();
         services.AddScoped<ITaskRuleRepository, TaskRuleRepository>();
         services.AddScoped<ITaskViewRepository, TaskViewRepository>();
+        services.AddScoped<IScheduledJobRepository, ScheduledJobRepository>();
         services.AddScoped<INotificationRepository, NotificationRepository>();
         services.AddScoped<IOrganizationRepository, OrganizationRepository>();
         services.AddScoped<IApprovalFlowRepository, ApprovalFlowRepository>();
