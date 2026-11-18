@@ -286,7 +286,7 @@ const shortDate = (iso: string) => formatGanttDate(iso, locale.value, { month: '
   padding: 0 8px;
   border-right: 1px solid var(--t-border);
 }
-.gantt-left.is-child { padding-left: 36px; }
+.gantt-left.is-child { padding-left: 56px; }
 .gantt-toggle-space { flex: 0 0 24px; }
 .gantt-group { background: var(--t-selected-bg); }
 .gantt-title {
