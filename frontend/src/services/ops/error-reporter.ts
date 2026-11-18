@@ -1,0 +1,141 @@
+import { currentLocale } from 'src/i18n/translate';
+import { clientVersion } from './build-info';
+import { recentFailedRequestId } from './last-failure';
+
+/** 前端錯誤回報（設計 docs/superpowers/specs/2026-11-11-ops-observability-design.md §10.3）。 */
+export type ClientErrorKind = 'vue' | 'window' | 'promise' | 'chunk';
+
+/**
+ * 技術限制（設計 §12）：訊息 500 字、stack 4000 字（與後端截斷一致）、同指紋 5 分鐘一次、每分頁每分鐘 10 則；
+ * maxBytes 是序列化後的 UTF-8 位元組上限，比後端 8KB 留 512 位元組餘裕（O1 計畫 Task 16）。
+ */
+export const LIMITS = { messageMax: 500, stackMax: 4000, dedupeMs: 300_000, perMinute: 10, maxBytes: 7680 } as const;
+
+/** 瀏覽器雜訊：訊息以這些字開頭就不回報。技術限制（O1 計畫判斷 J24）。 */
+export const IGNORED_MESSAGES = ['ResizeObserver loop'] as const;
+
+export const CLIENT_ERRORS_URL = '/api/v3/dynamic/ops/client-errors';
+
+export interface ClientErrorReport {
+  kind: ClientErrorKind;
+  name: string;
+  message: string;
+  stack: string;
+  route: string | null;
+  moduleKey: string | null;
+  version: string;
+  locale: string;
+  browser: string;
+  occurredAt: string;
+  lastRequestId?: string;
+}
+
+export interface RouteLike {
+  matched: { path: string }[];
+  params: Record<string, unknown>;
+}
+
+function parts(error: unknown): { name: string; message: string; stack: string } {
+  if (error instanceof Error) return { name: error.name, message: error.message, stack: error.stack ?? '' };
+  if (typeof error === 'string') return { name: '', message: error, stack: '' };
+  let message: string;
+  try { message = JSON.stringify(error) ?? String(error); } catch { message = String(error); }
+  return { name: '', message, stack: '' };
+}
+
+/** 瀏覽器家族加主版本，例如 Chrome 131；不送完整 User-Agent。 */
+export function browserFamily(ua: string = typeof navigator === 'undefined' ? '' : navigator.userAgent): string {
+  const rules: [string, RegExp][] = [
+    ['Edge', /Edg(?:e|A|iOS)?\/(\d+)/], ['Opera', /OPR\/(\d+)/], ['Samsung Internet', /SamsungBrowser\/(\d+)/],
+    ['Firefox', /(?:Firefox|FxiOS)\/(\d+)/], ['Chrome', /(?:Chrome|CriOS)\/(\d+)/], ['Safari', /Version\/(\d+)[^ ]* (?:Mobile\/\S+ )?Safari\//],
+  ];
+  for (const [name, re] of rules) {
+    const m = re.exec(ua);
+    if (m) return `${name} ${m[1]}`;
+  }
+  return 'Other';
+}
+
+const encoder = new TextEncoder();
+const bytes = (r: ClientErrorReport) => encoder.encode(JSON.stringify(r)).length;
+
+export function buildReport(kind: ClientErrorKind, error: unknown, route: RouteLike | null | undefined, now: number): ClientErrorReport {
+  const p = parts(error);
+  const moduleKey = route?.params.moduleKey;
+  const lastRequestId = recentFailedRequestId(now);
+  const report: ClientErrorReport = {
+    kind,
+    name: p.name,
+    message: p.message.slice(0, LIMITS.messageMax),
+    stack: p.stack.slice(0, LIMITS.stackMax),
+    // 只送路由樣板（/dynamic/:moduleKey/:id），不送 fullPath：不含記錄 id 與查詢字串
+    route: route?.matched.at(-1)?.path ?? null,
+    moduleKey: typeof moduleKey === 'string' ? moduleKey : null,
+    version: clientVersion(),
+    locale: currentLocale(),
+    browser: browserFamily(),
+    occurredAt: new Date(now).toISOString(),
+    ...(lastRequestId ? { lastRequestId } : {}),
+  };
+  // 中文一字 3 位元組：超過上限先砍 stack，砍完仍超過再縮訊息
+  while (bytes(report) > LIMITS.maxBytes && report.stack) report.stack = report.stack.slice(0, Math.floor(report.stack.length / 2));
+  while (bytes(report) > LIMITS.maxBytes && report.message) report.message = report.message.slice(0, Math.floor(report.message.length / 2));
+  return report;
+}
+
+const CHUNK_MESSAGES = ['Failed to fetch dynamically imported module', 'Importing a module script failed', 'error loading dynamically imported module'];
+
+/** 動態載入的程式塊載入失敗（部署新版後舊頁面常見）。 */
+export function isChunkLoadError(error: unknown): boolean {
+  const { name, message } = parts(error);
+  return name === 'ChunkLoadError' || CHUNK_MESSAGES.some((m) => message.includes(m));
+}
+
+/** http.ts 的 ApiError：API 失敗後端已有 log，不當前端錯誤回報（O1 計畫判斷 J24）。 */
+export function isApiError(reason: unknown): boolean {
+  return typeof reason === 'object' && reason !== null && !(reason instanceof Error) && typeof (reason as { status?: unknown }).status === 'number';
+}
+
+export function shouldReport(kind: ClientErrorKind, error: unknown): boolean {
+  if ((kind === 'vue' || kind === 'promise') && isApiError(error)) return false;
+  const { message } = parts(error);
+  return !IGNORED_MESSAGES.some((m) => message.startsWith(m));
+}
+
+/** 不經 axios（不走攔截器、不記失敗 request id）；任何失敗都丟掉，不重試、不再回報。 */
+export async function sendReport(r: ClientErrorReport): Promise<void> {
+  try {
+    await fetch(CLIENT_ERRORS_URL, {
+      method: 'POST', keepalive: true, credentials: 'same-origin',
+      headers: { 'Content-Type': 'application/json', 'X-Locale': currentLocale() },
+      body: JSON.stringify(r),
+    });
+  } catch { /* 丟掉 */ }
+}
+
+/** 本機去重鍵：與後端指紋同樣看種類、名稱、訊息與呼叫框；這裡只取第一個框，夠分開不同錯誤即可。 */
+const dedupeKey = (r: ClientErrorReport) =>
+  [r.kind, r.name, r.message.slice(0, 200), r.stack.split('\n').find((l) => /:\d+:\d+/.test(l))?.trim() ?? '', r.route ?? ''].join('|');
+
+export function createReporter(deps: { send: (r: ClientErrorReport) => Promise<void>; now: () => number }) {
+  const lastSent = new Map<string, number>();
+  let recent: number[] = [];
+  return {
+    report(kind: ClientErrorKind, error: unknown, route?: RouteLike | null): void {
+      try {
+        if (!shouldReport(kind, error)) return;
+        const now = deps.now();
+        const r = buildReport(kind, error, route, now);
+        const key = dedupeKey(r);
+        const prev = lastSent.get(key);
+        if (prev !== undefined && now - prev < LIMITS.dedupeMs) return;
+        recent = recent.filter((t) => now - t < 60_000);
+        if (recent.length >= LIMITS.perMinute) return;
+        for (const [k, t] of lastSent) if (now - t >= LIMITS.dedupeMs) lastSent.delete(k);
+        lastSent.set(key, now);
+        recent.push(now);
+        deps.send(r).catch(() => { /* 丟掉 */ });
+      } catch { /* 回報本身出錯也不再回報，避免迴圈 */ }
+    },
+  };
+}
