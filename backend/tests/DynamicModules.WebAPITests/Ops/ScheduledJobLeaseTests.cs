@@ -11,13 +11,14 @@ using Microsoft.Extensions.DependencyInjection.Extensions;
 
 namespace DynamicModules.WebAPITests.Ops;
 
-/// <summary>檔案型 SQLite 的測試主機（每個 scope 一個真的 DbContext），排程相關測試共用。</summary>
+/// <summary>檔案型 SQLite 的測試主機（每個 scope 一個真的 DbContext），排程相關測試共用；PostgreSQL 模式本來就是真的多連線。</summary>
 public sealed class FileDatabaseApp : TestApp
 {
     public FileDatabaseApp() : base(fileDatabase: true) { }
 }
 
-/// <summary>排程工作表的補列與租約（維運設計 §10.2.8、§10.4）：全部是條件式更新，同一工作同一時間只有一個持有者。</summary>
+/// <summary>排程工作表的補列與租約（維運設計 §10.2.8、§10.4）：全部是條件式更新，同一工作同一時間只有一個持有者。雙跑集（PostgreSQL provider 設計 §6.4）。</summary>
+[Trait("Category", "Postgres")]
 public class ScheduledJobLeaseTests(FileDatabaseApp app) : IClassFixture<FileDatabaseApp>
 {
     private static readonly DateTime Now = new(2026, 11, 4, 1, 0, 0, DateTimeKind.Utc);

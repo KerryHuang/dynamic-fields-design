@@ -14,6 +14,7 @@ namespace DynamicModules.WebAPITests.Dynamic;
 /// 簽核執行期經 HTTP（簽核設計 §8.4、§15；計畫 Review Focus 5）：檔案型 SQLite，送出、同意、撤回真正同時到達時只有一個成功；
 /// 冪等重送回放；簽核狀態、簽核中心端點。
 /// </summary>
+[Trait("Category", "Postgres")]
 public class ApprovalApiTests : IDisposable
 {
     private readonly TestApp _app;

@@ -8,7 +8,9 @@ namespace DynamicModules.WebAPITests;
 /// <summary>
 /// 事件與檢查經 HTTP 的端到端行為（檔案型 SQLite、真正的 WriteGate 與 BEGIN IMMEDIATE）：系統身分、重送冪等、併發下的餘額。
 /// 情境：單據建立 → 每張產生一筆 −3 的異動；異動的同品項加總不得為負。
+/// 雙跑集（PostgreSQL provider 設計 §6.4），含跨記錄檢查加總溢位的案例（§4）。
 /// </summary>
+[Trait("Category", "Postgres")]
 public class EffectsRuntimeApiTests : IClassFixture<TestApp>
 {
     private readonly TestApp _app;
@@ -92,6 +94,47 @@ public class EffectsRuntimeApiTests : IClassFixture<TestApp>
         };
         if (key is not null) req.Headers.Add("Idempotency-Key", key);
         return req;
+    }
+
+    /// <summary>
+    /// 跨記錄檢查的加總超出 64 位元整數（PostgreSQL provider 設計 §4）：回 409「加總超出可計算範圍」而不是 500，整筆新增回滾。
+    /// PostgreSQL 上溢位（SQLSTATE 22003）會讓整個交易失效，之後再發 SQL 就是 25P02；這裡確認接住後沒有再發 SQL（否則會變 500），
+    /// 而且同一個主機接著的寫入照常成功。
+    /// </summary>
+    [Fact]
+    public async Task Cross_record_check_sum_overflow_returns_409_and_rolls_back()
+    {
+        var module = await CreateModule(_admin);
+        var item = await AddField(_admin, module, "text", new { isFilterable = true });
+        var amount = await AddField(_admin, module, "decimal", new { scale = 2, isFilterable = true });
+        await Activate(_admin, module);
+        var title = await TitleKey(_admin, module);
+        var check = await _admin.PostAsJsonAsync($"{Base}/checks", new
+        {
+            key = "ck-" + Guid.NewGuid().ToString("N")[..8], name = Name("cap"), moduleKey = module, active = true,
+            definition = new
+            {
+                groupBy = new[] { item.Id }, function = "sum", fieldId = amount.Id,
+                assert = new { op = "gte", limit = new { @const = 0 } },
+                message = new Dictionary<string, string> { ["zh-TW"] = "不得為負", ["en-US"] = "Must not be negative" }
+            }
+        });
+        check.StatusCode.Should().Be(HttpStatusCode.Created, await check.Content.ReadAsStringAsync());
+        // 9e16 × 10^2 = 9e18，一筆放得下（long 上限約 9.22e18），兩筆的加總溢位
+        const decimal huge = 90_000_000_000_000_000m;
+        Task<HttpResponseMessage> Add(string group, decimal value) => _admin.PostAsJsonAsync($"{Base}/modules/{module}/records",
+            new { values = new Dictionary<string, object> { [title] = "x", [item.Key] = group, [amount.Key] = value } });
+
+        var first = await Add("A", huge);
+        first.StatusCode.Should().Be(HttpStatusCode.Created, await first.Content.ReadAsStringAsync());
+
+        var overflow = await Add("A", huge);
+        overflow.StatusCode.Should().Be(HttpStatusCode.Conflict, await overflow.Content.ReadAsStringAsync());
+        (await overflow.Content.ReadAsStringAsync()).Should().Contain(DynamicModules.Application.Dynamic.CheckService.CheckEvaluator.Overflow);
+
+        (await CountAsync(module)).Should().Be(1, "溢位的那筆整筆回滾");
+        var after = await Add("B", 1);
+        after.StatusCode.Should().Be(HttpStatusCode.Created, await after.Content.ReadAsStringAsync());
     }
 
     [Fact]

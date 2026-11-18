@@ -11,6 +11,7 @@ using Microsoft.Data.Sqlite;
 
 namespace DynamicModules.ApplicationTests.Persistence;
 
+[Trait("Category", "Postgres")]
 public class DynamicQueryBuilderTests
 {
     private static readonly DateOnly Today = new(2026, 11, 3);

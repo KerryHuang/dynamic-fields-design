@@ -1,6 +1,9 @@
 using System.Net;
 using System.Net.Http.Json;
+using DynamicModules.Persistence.Postgres;
+using DynamicModules.TestSupport;
 using FluentAssertions;
+using Npgsql;
 using Xunit.Abstractions;
 using static DynamicModules.WebAPITests.Dynamic.ApiTestKit;
 
@@ -9,7 +12,9 @@ namespace DynamicModules.WebAPITests.Dynamic;
 /// <summary>
 /// 真正併發的寫入：檔案型 SQLite（與正式站相同的鎖行為），多個請求同時新增與修改不同記錄。
 /// 寫入彼此序列化，但不得有任何請求因為「database is locked」回 500；等不到鎖時只能回可重試的 503 或 409。
+/// 雙跑集（PostgreSQL provider 設計 §6.4）：PostgreSQL 上是真的多連線，經閘門與全庫 advisory lock 序列化。
 /// </summary>
+[Trait("Category", "Postgres")]
 public class ConcurrentWriteApiTests : IDisposable
 {
     private readonly TestApp _app;
@@ -104,6 +109,37 @@ public class ConcurrentWriteApiTests : IDisposable
             rollback.ExecuteNonQuery();
             other.Dispose();
         }
+
+        blocked.StatusCode.Should().Be(HttpStatusCode.ServiceUnavailable);
+        blocked.Headers.RetryAfter.Should().NotBeNull();
+        (await sales.PostAsJsonAsync($"{Base}/modules/{module}/records", body)).StatusCode.Should().Be(HttpStatusCode.Created);
+    }
+
+    /// <summary>
+    /// PostgreSQL 版的忙碌測試（PostgreSQL provider 設計 §6.4）：外部連線先取同一把全庫 advisory lock（不經測試主機的閘門，等同另一個實例），
+    /// <c>Database:LockTimeoutSeconds</c> 設 1 秒：寫入等不到鎖時回 503 加 Retry-After，鎖放開後同一個請求可以成功。
+    /// </summary>
+    [PostgresFact]
+    public async Task Postgres_WhenAnotherInstanceHoldsTheWriteLock_Returns503WithRetryAfter()
+    {
+        using var app = new TestApp();
+        app.Settings["Logging:LogLevel:Default"] = "Warning";
+        app.Settings["Database:LockTimeoutSeconds"] = "1";
+        var admin = app.AsUser();
+        var module = await CreateModule(admin);
+        await Activate(admin, module);
+        app.GrantBusinessGroups(module);
+        var title = await TitleKey(admin, module);
+        var sales = app.AsUser("sales01");
+        var body = new { values = new Dictionary<string, object> { [title] = "t" } };
+
+        // session 層級的鎖，連線不進池：Dispose 時一定放開
+        var other = new NpgsqlConnection(new NpgsqlConnectionStringBuilder(app.ConnectionString) { Pooling = false }.ConnectionString);
+        await other.OpenAsync();
+        await using (var take = new NpgsqlCommand($"SELECT pg_advisory_lock({PostgresLockKeys.Write})", other)) await take.ExecuteNonQueryAsync();
+        HttpResponseMessage blocked;
+        try { blocked = await sales.PostAsJsonAsync($"{Base}/modules/{module}/records", body); }
+        finally { await other.DisposeAsync(); }
 
         blocked.StatusCode.Should().Be(HttpStatusCode.ServiceUnavailable);
         blocked.Headers.RetryAfter.Should().NotBeNull();

@@ -8,6 +8,7 @@ using Microsoft.EntityFrameworkCore.Migrations;
 namespace DynamicModules.ApplicationTests.Persistence;
 
 /// <summary>migration SharedMasters（共用主檔設計 §8）：新表的鍵、篩選式唯一索引、檢查約束與 cascade。</summary>
+[Trait("Category", "Postgres")]
 public class SharedMasterSchemaTests
 {
     [Trait("Category", "SqliteOnly")]
@@ -150,7 +151,7 @@ public class SharedMasterSchemaTests
         db.Context.Set<FieldGrant>().Add(new FieldGrant { SourceKind = GrantSource.App, AppId = app.Id, FieldId = module.Blocks[0].Fields[0].Id, GroupId = group.Id });
         await db.Context.SaveChangesAsync();
 
-        await db.Context.Database.ExecuteSqlRawAsync("DELETE FROM Dynamic_PermissionGroup WHERE Id = {0}", group.Id);
+        await db.Context.Database.ExecuteSqlRawAsync("DELETE FROM \"Dynamic_PermissionGroup\" WHERE \"Id\" = {0}", group.Id);
 
         (await db.Context.Set<AppGrant>().CountAsync()).Should().Be(0);
         (await db.Context.Set<ModuleActionScope>().CountAsync()).Should().Be(0);
@@ -166,9 +167,9 @@ public class SharedMasterSchemaTests
         db.Context.Set<AppMasterUse>().Add(new AppMasterUse { AppId = user.Id, MasterAppId = master.Id });
         await db.Context.SaveChangesAsync();
 
-        await FluentActions.Awaiting(() => db.Context.Database.ExecuteSqlRawAsync("DELETE FROM Dynamic_App WHERE Id = {0}", master.Id))
+        await FluentActions.Awaiting(() => db.Context.Database.ExecuteSqlRawAsync("DELETE FROM \"Dynamic_App\" WHERE \"Id\" = {0}", master.Id))
             .Should().ThrowAsync<Exception>();
-        await db.Context.Database.ExecuteSqlRawAsync("DELETE FROM Dynamic_App WHERE Id = {0}", user.Id);
+        await db.Context.Database.ExecuteSqlRawAsync("DELETE FROM \"Dynamic_App\" WHERE \"Id\" = {0}", user.Id);
         (await db.Context.Set<AppMasterUse>().CountAsync()).Should().Be(0);
         (await db.Context.Set<App>().AsNoTracking().SingleAsync(a => a.Key == "partner")).Kind.Should().Be(AppKind.Master);
     }

@@ -10,6 +10,7 @@ namespace DynamicModules.WebAPITests.Dynamic;
 /// <summary>
 /// 進銷存的併發與重送（檔案型 SQLite：真正的 WriteGate 與 BEGIN IMMEDIATE）。全部透過內建套件的宣告達成，沒有專用程式。
 /// </summary>
+[Trait("Category", "Postgres")]
 public class InventoryConcurrencyTests : IDisposable
 {
     private readonly TestApp _app = new(fileDatabase: true);

@@ -6,6 +6,7 @@ using static DynamicModules.WebAPITests.Dynamic.ApiTestKit;
 
 namespace DynamicModules.WebAPITests.Dynamic;
 
+[Trait("Category", "Postgres")]
 public class ViewsApiTests(TestApp app) : IClassFixture<TestApp>
 {
     private static readonly Dictionary<string, string> Name = new() { ["zh-TW"] = "我的檢視" };

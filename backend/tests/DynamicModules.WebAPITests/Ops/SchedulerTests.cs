@@ -16,18 +16,23 @@ namespace DynamicModules.WebAPITests.Ops;
 /// <summary>
 /// 背景排程器（維運設計 §10.2.8）：同一到期工作只跑一次、持有者當掉後租約過期由別人接手、失敗計數、逾時、關閉、租約遺失、續租暫時失敗。
 /// 用手動時鐘（計時器也跟著它）與手動 tick，不靠真實等待。
+/// 雙跑集（PostgreSQL provider 設計 §6.4、§7）；PostgreSQL 上另由 <see cref="SchedulerNoLockTests"/> 在無鎖模式整組重跑。
 /// </summary>
-public sealed class SchedulerTests : IDisposable
+[Trait("Category", "Postgres")]
+public class SchedulerTests : IDisposable
 {
     private static readonly PolicyDefinition Interval = PolicyCatalog.NotificationReminderScanMinutes;
     private const int IntervalMinutes = 60;
 
-    private readonly FileDatabaseApp _app = new();
+    private readonly FileDatabaseApp _app;
     private readonly RenewSpy _spy = new();
     private readonly ManualClock _clock = new(Start);
 
-    public SchedulerTests()
+    public SchedulerTests() : this(new FileDatabaseApp()) { }
+
+    protected SchedulerTests(FileDatabaseApp app)
     {
+        _app = app;
         _app.ExtraServices = s => s.AddSingleton<IPipelineBehavior<RenewJobLeaseRequest, ServiceResult>>(_spy);
     }
 
@@ -308,3 +313,10 @@ public sealed class SchedulerTests : IDisposable
         await service.StopAsync(CancellationToken.None);
     }
 }
+
+/// <summary>
+/// 無鎖模式（PostgreSQL provider 設計 §5.6、§7，主控判斷 T4）：閘門與全庫鎖都換成不做事的版本，兩個排程器實例才是真的同時，
+/// 證明「只跑一次」「租約過期才接手」靠的是條件式更新本身、不是被序列化蓋掉。SQLite 沒有無鎖模式，這組在 SQLite 上等同重跑一次。
+/// </summary>
+[Trait("Category", "Postgres")]
+public sealed class SchedulerNoLockTests() : SchedulerTests(new FileDatabaseApp { WithoutWriteSerialization = true });

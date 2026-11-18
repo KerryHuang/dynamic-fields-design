@@ -9,6 +9,7 @@ using Microsoft.Extensions.Diagnostics.HealthChecks;
 
 namespace DynamicModules.WebAPITests;
 
+[Trait("Category", "Postgres")]
 public class HealthTests
 {
     private sealed class FakeCheck(Func<CancellationToken, Task<HealthCheckResult>> run) : IHealthCheck

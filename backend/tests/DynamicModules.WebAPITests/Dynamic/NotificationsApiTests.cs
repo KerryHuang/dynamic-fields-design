@@ -5,6 +5,7 @@ using static DynamicModules.WebAPITests.Dynamic.ApiTestKit;
 
 namespace DynamicModules.WebAPITests.Dynamic;
 
+[Trait("Category", "Postgres")]
 public class NotificationsApiTests : IDisposable
 {
     private readonly TestApp _app = new();

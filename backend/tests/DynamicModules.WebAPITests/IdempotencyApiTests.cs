@@ -6,6 +6,7 @@ using static DynamicModules.WebAPITests.Dynamic.ApiTestKit;
 namespace DynamicModules.WebAPITests;
 
 /// <summary>Idempotency-Key 標頭經 HTTP（設計 §3.1、§3.2）：重送回放、內容不同 422、格式錯誤 400、沒帶不影響。</summary>
+[Trait("Category", "Postgres")]
 public class IdempotencyApiTests : IClassFixture<TestApp>
 {
     private readonly TestApp _app;

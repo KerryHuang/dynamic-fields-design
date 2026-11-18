@@ -9,6 +9,7 @@ namespace DynamicModules.WebAPITests.Dynamic;
 /// <summary>
 /// 任務規則經過 HTTP：檔案型 SQLite（與正式站相同的鎖行為）下同時送出的寫入只觸發一次；X-Locale 決定規則任務的標題語系。
 /// </summary>
+[Trait("Category", "Postgres")]
 public class TaskRuleConcurrencyTests : IDisposable
 {
     private readonly TestApp _app;

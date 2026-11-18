@@ -12,6 +12,7 @@ namespace DynamicModules.ApplicationTests.Persistence;
 /// 在 SaveChanges 的 try 之外，這兩處丟例外時 EF 不發任何結束事件；閘門仍要放開，否則同行程後續寫入全部等到逾時。
 /// 例外發生在開連線之前，不需要 PostgreSQL 伺服器：連線字串指向不存在的主機，只當閘門的鍵。
 /// </summary>
+[Trait("Category", "Postgres")]
 public class PostgresSaveChangesGateTests
 {
     private readonly string _connectionString = $"Host=127.0.0.1;Port=1;Database=gate_{Guid.NewGuid():N}";

@@ -5,6 +5,7 @@ using static DynamicModules.WebAPITests.Dynamic.ApiTestKit;
 
 namespace DynamicModules.WebAPITests.Dynamic;
 
+[Trait("Category", "Postgres")]
 public class AutoNumberApiTests : IClassFixture<TestApp>
 {
     private readonly HttpClient _sales;

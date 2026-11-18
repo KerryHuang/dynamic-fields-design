@@ -17,6 +17,7 @@ using Microsoft.Extensions.Logging;
 
 namespace DynamicModules.WebAPITests;
 
+[Trait("Category", "Postgres")]
 public class AuthApiTests
 {
     private const string Auth = "/api/v3/dynamic/auth";

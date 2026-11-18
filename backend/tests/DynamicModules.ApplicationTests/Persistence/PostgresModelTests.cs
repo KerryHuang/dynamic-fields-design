@@ -10,6 +10,7 @@ namespace DynamicModules.ApplicationTests.Persistence;
 /// PostgreSQL 模型的對應規則（PostgreSQL provider 設計 §5.4）：用 design-time factory 的模型檢查，不需要 PostgreSQL 伺服器。
 /// 新程式要存 UTC 就得把屬性名稱取成 …Utc，否則這裡失敗。
 /// </summary>
+[Trait("Category", "Postgres")]
 public class PostgresModelTests
 {
     private static readonly IModel Model = BuildModel();

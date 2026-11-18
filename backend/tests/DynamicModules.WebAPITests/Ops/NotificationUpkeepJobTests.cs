@@ -14,15 +14,20 @@ namespace DynamicModules.WebAPITests.Ops;
 /// <summary>
 /// 背景排程的通知維護（維運設計 §10.2.9）：不打開鈴鐺也收到提醒、同一天不重複、與讀通知的惰性路徑先後或並行都不重複、
 /// 清舊通知、跳過停用帳號、一人失敗其他人照常、用營業日、逾期不疊加未讀。
+/// 雙跑集（PostgreSQL provider 設計 §6.4、§7）；PostgreSQL 上另由 <see cref="NotificationUpkeepJobNoLockTests"/> 在無鎖模式整組重跑。
 /// </summary>
-public sealed class NotificationUpkeepJobTests : IDisposable
+[Trait("Category", "Postgres")]
+public class NotificationUpkeepJobTests : IDisposable
 {
-    private readonly FileDatabaseApp _app = new();
+    private readonly FileDatabaseApp _app;
     private readonly ManualClock _clock = new(Start);
     private ThrowingForUser? _throwing;
 
-    public NotificationUpkeepJobTests()
+    public NotificationUpkeepJobTests() : this(new FileDatabaseApp()) { }
+
+    protected NotificationUpkeepJobTests(FileDatabaseApp app)
     {
+        _app = app;
         _app.Clock.Fixed = new DateTime(2026, 11, 4, 9, 0, 0);
     }
 
@@ -301,3 +306,10 @@ public sealed class NotificationUpkeepJobTests : IDisposable
         public Task AddDueAsync(string user, DateOnly today, CancellationToken ct) => Task.CompletedTask;
     }
 }
+
+/// <summary>
+/// 無鎖模式（PostgreSQL provider 設計 §5.6、§7）：惰性路徑與排程器並行時不重複，靠的是任務列上的條件式更新
+/// （LastDueSoonNotified、LastOverdueNotified），不是全庫鎖。SQLite 沒有無鎖模式，這組在 SQLite 上等同重跑一次。
+/// </summary>
+[Trait("Category", "Postgres")]
+public sealed class NotificationUpkeepJobNoLockTests() : NotificationUpkeepJobTests(new FileDatabaseApp { WithoutWriteSerialization = true });

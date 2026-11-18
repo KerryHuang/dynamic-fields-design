@@ -8,6 +8,7 @@ using Record = DynamicModules.Domain.Entities.Dynamic.Record;
 
 namespace DynamicModules.ApplicationTests.Persistence;
 
+[Trait("Category", "Postgres")]
 public class SeedDataTests
 {
     private static async Task<Module> AddModuleAsync(DynamicDbContext db, string key, string code, ModuleStatus status)

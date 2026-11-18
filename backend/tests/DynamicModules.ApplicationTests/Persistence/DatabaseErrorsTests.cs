@@ -8,6 +8,7 @@ using Microsoft.EntityFrameworkCore;
 namespace DynamicModules.ApplicationTests.Persistence;
 
 /// <summary>錯誤分類（PostgreSQL provider 設計 §5.7）：SQLite 看錯誤碼，PostgreSQL 看 SQLSTATE；會沿著 InnerException 往內找。</summary>
+[Trait("Category", "Postgres")]
 public class DatabaseErrorsTests
 {
     private static readonly IDatabaseErrors Errors = DatabaseErrors.Instance;

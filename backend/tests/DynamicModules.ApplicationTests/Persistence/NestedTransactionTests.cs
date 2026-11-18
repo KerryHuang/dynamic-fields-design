@@ -5,13 +5,14 @@ using Microsoft.EntityFrameworkCore;
 
 namespace DynamicModules.ApplicationTests.Persistence;
 
+[Trait("Category", "Postgres")]
 public class NestedTransactionTests
 {
     [Fact]
     public async Task Nested_InnerHandleIsNoop_OuterRollbackUndoesAll()
     {
         await using var db = await TestDb.CreateAsync();
-        var manager = new EfTransactionManager(db.Context);
+        var manager = TestDb.NewTransactionManager(db.Context);
 
         await using (var outer = await manager.BeginAsync(default))
         {

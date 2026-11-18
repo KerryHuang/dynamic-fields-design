@@ -9,6 +9,7 @@ using static DynamicModules.WebAPITests.Dynamic.ApiTestKit;
 
 namespace DynamicModules.WebAPITests.Dynamic;
 
+[Trait("Category", "Postgres")]
 public class RecordsApiTests : IClassFixture<TestApp>
 {
     private readonly HttpClient _sales;

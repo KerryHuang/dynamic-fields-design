@@ -8,6 +8,7 @@ using Microsoft.Extensions.DependencyInjection;
 namespace DynamicModules.WebAPITests.Dynamic;
 
 /// <summary>整合設計 §12.1 #1：外層交易內的 savepoint 能隔離一段寫入，回滾不影響之前已儲存的內容。</summary>
+[Trait("Category", "Postgres")]
 public class SavepointFeasibilityTests : IDisposable
 {
     private readonly TestApp _app = new(fileDatabase: true);

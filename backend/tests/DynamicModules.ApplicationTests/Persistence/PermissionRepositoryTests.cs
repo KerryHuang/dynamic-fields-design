@@ -6,6 +6,7 @@ using FluentAssertions;
 
 namespace DynamicModules.ApplicationTests.Persistence;
 
+[Trait("Category", "Postgres")]
 public class PermissionRepositoryTests
 {
     private static readonly DateTime Now = new(2026, 11, 3, 9, 0, 0);
