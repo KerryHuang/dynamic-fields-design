@@ -67,7 +67,7 @@ public sealed class DemoDataApiTests(DemoDataApiTests.DemoGeneratedFixture gen) 
             var first = await Admin.PostAsync(Generate, null);
             FirstPostStatus = first.StatusCode;
             FirstPostBody = await JsonOf(first);
-            await App.Gate.Entered.Task.WaitAsync(TimeSpan.FromSeconds(30));
+            await WaitGateAsync("關卡一（GenerateDemoDataRequest）", App.Gate, TimeSpan.FromSeconds(30));
 
             var second = await Admin.PostAsync(Generate, null);
             SecondPostStatus = second.StatusCode;
@@ -75,13 +75,29 @@ public sealed class DemoDataApiTests(DemoDataApiTests.DemoGeneratedFixture gen) 
             StatusWhileRunning = await JsonOf(await Admin.GetAsync(Status));
 
             App.Gate.Release.SetResult();
-            await App.Gate2.Entered.Task.WaitAsync(TimeSpan.FromSeconds(60));
+            await WaitGateAsync("關卡二（ActingScope.Now 已覆寫的第一步）", App.Gate2, TimeSpan.FromSeconds(60));
             Inside = App.Gate2.Seen;
             Probe = await JsonOf(await App.AsUser("guest01").GetAsync(DemoApp.ProbePath));
             ProbeAt = DateTime.Now;
 
             App.Gate2.Release.SetResult();
             Final = await PollUntilDone(Admin);
+        }
+
+        /// <summary>等關卡進入；背景產生已不是 running（提早失敗或完成）就立刻報錯，訊息帶關卡名、首次 POST 與 runner 狀態快照。</summary>
+        private async Task WaitGateAsync(string name, DemoGate gate, TimeSpan timeout)
+        {
+            var deadline = DateTime.UtcNow + timeout;
+            while (true)
+            {
+                if (await Task.WhenAny(gate.Entered.Task, Task.Delay(200)) == gate.Entered.Task) return;
+                var snapshot = await JsonOf(await Admin.GetAsync(Status));
+                var state = snapshot.TryGetProperty("state", out var st) ? st.GetString() : null;
+                if (state != "running" || DateTime.UtcNow > deadline)
+                    throw new InvalidOperationException(
+                        $"等不到{name}（{(state != "running" ? "背景產生已不是 running" : $"逾時 {timeout.TotalSeconds:0} 秒")}）。" +
+                        $"首次 POST：{FirstPostStatus} {FirstPostBody}；runner 狀態：{snapshot}");
+            }
         }
 
         public Task DisposeAsync()
@@ -135,6 +151,7 @@ public sealed class DemoDataApiTests(DemoDataApiTests.DemoGeneratedFixture gen) 
     [Fact]
     public async Task Generate_AfterGenerated_409WithConflicts()
     {
+        gen.FirstPostStatus.Should().Be(HttpStatusCode.OK);
         gen.Final.GetProperty("state").GetString().Should().Be("generated");
 
         var res = await gen.Admin.PostAsync(Generate, null);
@@ -207,6 +224,7 @@ public sealed class DemoDataApiTests(DemoDataApiTests.DemoGeneratedFixture gen) 
     [Fact]
     public async Task WhileGenerating_OtherRequest_SeesOwnIdentityAndRealTime()
     {
+        gen.FirstPostStatus.Should().Be(HttpStatusCode.OK);
         var inside = gen.Inside; // 產生中（關卡二）錄下的背景流程所見
         inside.UserId.Should().NotBeNullOrEmpty();
         inside.Now!.Value.Should().BeBefore(DateTime.Today);
