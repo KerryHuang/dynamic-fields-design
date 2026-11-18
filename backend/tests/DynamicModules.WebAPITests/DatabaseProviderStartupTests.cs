@@ -4,20 +4,34 @@ using Microsoft.Extensions.DependencyInjection;
 
 namespace DynamicModules.WebAPITests;
 
-/// <summary>啟動時的 Database:Provider 檢查與 DataProtection:KeysDirectory（PostgreSQL provider 設計 §5.1、§5.8）。</summary>
+/// <summary>
+/// 啟動時的 Database:Provider 檢查與 DataProtection:KeysDirectory（PostgreSQL provider 設計 §5.1、§5.8）。
+/// PostgreSQL 真的啟動（建表、目標資料庫不存在時拒絕、兩個實例同時啟動）要有伺服器，pg0c 的測試環境前以本機走查驗證。
+/// </summary>
 public class DatabaseProviderStartupTests
 {
-    [Theory]
-    [InlineData("Postgres", "*尚未提供*")]
-    [InlineData("SqlServer", "*SqlServer*")]
-    public void UnsupportedProvider_RefusesToStart(string provider, string message)
+    [Fact]
+    public void UnsupportedProvider_RefusesToStart()
     {
         using var app = new TestApp(seedDemoPeople: false);
-        app.Settings["Database:Provider"] = provider;
+        app.Settings["Database:Provider"] = "SqlServer";
 
         var act = () => app.CreateClient();
 
-        act.Should().Throw<InvalidOperationException>().WithMessage(message);
+        act.Should().Throw<InvalidOperationException>().WithMessage("*SqlServer*");
+    }
+
+    [Fact]
+    public void Postgres_WithSqlOnlyReports_RefusesToStart()
+    {
+        // 報表 SQL 路徑在 pg1 才支援 PostgreSQL（設計 §5.9）；在連資料庫之前就拒絕
+        using var app = new TestApp(seedDemoPeople: false);
+        app.Settings["Database:Provider"] = "Postgres";
+        app.Settings["Reports:Engine"] = "SqlOnly";
+
+        var act = () => app.CreateClient();
+
+        act.Should().Throw<InvalidOperationException>().WithMessage("*SqlOnly*");
     }
 
     [Fact]

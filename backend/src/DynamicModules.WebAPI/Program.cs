@@ -14,6 +14,7 @@ using DynamicModules.Domain.Data;
 using DynamicModules.Domain.Entities.Dynamic;
 using DynamicModules.Persistence;
 using DynamicModules.Persistence.Files;
+using DynamicModules.Persistence.Postgres;
 using DynamicModules.Persistence.Seed;
 using DynamicModules.WebAPI.Attachments;
 using DynamicModules.WebAPI.Demo;
@@ -27,14 +28,26 @@ using Microsoft.EntityFrameworkCore;
 
 var builder = WebApplication.CreateBuilder(args);
 
-// 資料庫種類由 Database:Provider 決定（預設 Sqlite）；PostgreSQL provider 在 pg0b 才提供，現在設了就拒絕啟動
+// 資料庫種類由 Database:Provider 決定（預設 Sqlite，PostgreSQL provider 設計 §5.1）；只在設定有效時才往下
 var databaseProvider = DatabaseProviders.Read(builder.Configuration);
-if (databaseProvider != DatabaseProvider.Sqlite)
-    throw new InvalidOperationException($"{DatabaseProviders.SettingKey}={databaseProvider} 尚未提供（PostgreSQL provider 在 pg0b 加入），目前只能用 Sqlite");
-// 相對路徑一律以 content root 解析成絕對路徑，建目錄與開檔用同一個位置。
-var dynamicConnection = SqliteConnectionStrings.ResolveDataSource(
-    builder.Configuration.GetConnectionString("Dynamic")!, builder.Environment.ContentRootPath);
-builder.Configuration["ConnectionStrings:Dynamic"] = dynamicConnection;
+var startupWarnings = new List<string>();
+string dynamicConnection;
+if (databaseProvider == DatabaseProvider.Sqlite)
+{
+    // 相對路徑一律以 content root 解析成絕對路徑，建目錄與開檔用同一個位置。
+    dynamicConnection = SqliteConnectionStrings.ResolveDataSource(
+        builder.Configuration.GetConnectionString("Dynamic")!, builder.Environment.ContentRootPath);
+    builder.Configuration["ConnectionStrings:Dynamic"] = dynamicConnection;
+    if (!string.IsNullOrWhiteSpace(builder.Configuration[PostgresWriteSettings.LockTimeoutKey]))
+        startupWarnings.Add($"{PostgresWriteSettings.LockTimeoutKey} 只在 Database:Provider=Postgres 時生效，SQLite 等鎖的上限看連線字串的 Default Timeout");
+}
+else
+{
+    dynamicConnection = builder.Configuration.GetConnectionString("Dynamic") is { Length: > 0 } pg
+        ? pg : throw new InvalidOperationException("Database:Provider=Postgres 需要設定 ConnectionStrings:Dynamic");
+    if (!string.IsNullOrWhiteSpace(builder.Configuration["Sqlite:MmapSizeMb"]))
+        startupWarnings.Add("Sqlite:MmapSizeMb 只在 Database:Provider=Sqlite 時生效，PostgreSQL 不套用");
+}
 // 資料庫檔案所在目錄（SQLite 檔案型才有；記憶體資料庫是 null）：建目錄、預設金鑰目錄與附件目錄都依它
 var databaseDirectory = DatabaseProviders.FileDirectory(databaseProvider, dynamicConnection);
 // 雲端主機（如 Render）用 PORT 指定埠並要求聽所有介面；本機開發維持 127.0.0.1:5180。
@@ -42,15 +55,22 @@ var port = Environment.GetEnvironmentVariable("PORT");
 builder.WebHost.UseUrls(port is null ? "http://127.0.0.1:5180" : $"http://0.0.0.0:{port}");
 builder.Services.Configure<RouteOptions>(o => o.LowercaseUrls = true);
 builder.Services.AddApplication();
+var reportEngine = builder.Configuration.GetValue("Reports:Engine", ReportEngineMode.Auto);
+// PostgreSQL 的報表 SQL 路徑在 pg1 才改寫：pg1 前一律走記憶體路徑，明確要求 SqlOnly 就拒絕啟動（設計 §5.9，可寫死清單第 7 項）
+if (databaseProvider == DatabaseProvider.Postgres)
+    reportEngine = reportEngine == ReportEngineMode.SqlOnly
+        ? throw new InvalidOperationException("Database:Provider=Postgres 時報表還不支援 Reports:Engine=SqlOnly（PostgreSQL 的報表 SQL 路徑在 pg1 提供），請改成 Auto 或 MemoryOnly")
+        : ReportEngineMode.MemoryOnly;
 builder.Services.AddSingleton(new ReportOptions
 {
     MaxRows = builder.Configuration.GetValue("Reports:MaxRows", 50_000),
     MaxLoadRows = builder.Configuration.GetValue("Reports:MaxLoadRows", 200_000),
-    Engine = builder.Configuration.GetValue("Reports:Engine", ReportEngineMode.Auto),
+    Engine = reportEngine,
     SqlTimeoutSeconds = builder.Configuration.GetValue("Reports:SqlTimeoutSeconds", 30.0),
 });
 builder.Services.AddHttpContextAccessor();
-builder.Services.AddSqliteDatabase(builder.Configuration);
+if (databaseProvider == DatabaseProvider.Postgres) builder.Services.AddPostgresDatabase(builder.Configuration);
+else builder.Services.AddSqliteDatabase(builder.Configuration);
 builder.Services.AddScoped<ICurrentUser, ClaimsCurrentUser>();
 builder.Services.AddScoped<DynamicModules.Application.Common.ICurrentLocale, HeaderCurrentLocale>();
 builder.Services.AddSingleton<IPasswordService, PasswordService>();
@@ -69,6 +89,8 @@ var (attachmentSettings, policyDefaults, attachmentWarnings) = AttachmentSetting
 builder.Services.AddSingleton(attachmentSettings);
 builder.Services.AddSingleton(policyDefaults);
 builder.Services.AddSingleton<IAttachmentStore>(new LocalAttachmentStore(attachmentSettings.Root));
+if (databaseProvider == DatabaseProvider.Postgres && string.IsNullOrWhiteSpace(builder.Configuration["Attachments:Root"]))
+    startupWarnings.Add($"Database:Provider=Postgres 沒有設定 Attachments:Root，附件暫存在 {attachmentSettings.Root}，重開機可能遺失；正式環境請設定");
 // 鎖定判斷用真實時間；IBusinessTime 會被 ActingScope 覆寫，不能用
 builder.Services.AddSingleton(TimeProvider.System);
 builder.Services.AddSingleton<IBusinessTime, TaipeiBusinessTime>();
@@ -102,6 +124,8 @@ var keysDirectory = builder.Configuration["DataProtection:KeysDirectory"] is { L
     : databaseDirectory is null ? null : Path.Combine(databaseDirectory, "keys");
 if (keysDirectory is not null)
     builder.Services.AddDataProtection().PersistKeysToFileSystem(new DirectoryInfo(keysDirectory));
+else if (databaseProvider == DatabaseProvider.Postgres)
+    startupWarnings.Add("Database:Provider=Postgres 沒有設定 DataProtection:KeysDirectory，登入金鑰不落地，站台重開後要重新登入；正式環境請設定");
 builder.Services.AddControllers().AddJsonOptions(o =>
 {
     o.JsonSerializerOptions.PropertyNamingPolicy = JsonNamingPolicy.CamelCase;
@@ -126,7 +150,7 @@ builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
 
 var app = builder.Build();
-foreach (var warning in attachmentWarnings) app.Logger.LogWarning("{Warning}", warning);
+foreach (var warning in attachmentWarnings.Concat(startupWarnings)) app.Logger.LogWarning("{Warning}", warning);
 
 // 內建範本有錯就拒絕啟動（spec §13.1）：在碰資料庫之前先解析 singleton
 app.Services.GetRequiredService<TemplateCatalog>();
@@ -184,6 +208,8 @@ static async Task InitializeDatabaseAsync(WebApplication app, string? databaseDi
 {
     if (databaseDirectory is not null) Directory.CreateDirectory(databaseDirectory);
 
+    // 多個實例同時啟動時整段初始化依序執行（PostgreSQL 用 advisory lock；SQLite 不做事，設計 §5.8）
+    await using var startupLock = await app.Services.GetRequiredService<IDatabaseStartupLock>().AcquireAsync(CancellationToken.None);
     using var scope = app.Services.CreateScope();
     var db = scope.ServiceProvider.GetRequiredService<DynamicDbContext>();
     await db.Database.MigrateAsync();
