@@ -417,6 +417,72 @@ describe('TaskBoard moving', () => {
     w.unmount();
   });
 
+  it('取消欄的確認框寫出子任務數（有子任務的父任務）', async () => {
+    const parent = cardWire({ id: 1, level: 'parent', progress: { done: 1, cancelled: 0, total: 3 } });
+    const wire = boardWire({ columns: [columnWire({ key: 'todo', total: 1, cards: [parent] }), columnWire({ key: 'cancelled', total: 0, cards: [] })] });
+    const { w } = await mountBoard(wire, 1126, null, movedCard({ status: 'cancelled' }));
+    const d = await dragTo(w, 1, 'cancelled');
+    await d.drop();
+    await settle();
+    expect(document.body.querySelector('[data-testid="move-confirm-body"]')!.textContent).toContain('這個任務有 3 個子任務，未完成的會一併取消');
+    document.body.querySelector<HTMLElement>('[data-testid="move-confirm-cancel"]')!.click();
+    await settle();
+    w.unmount();
+  });
+
+  it('父任務拖到完成欄遇到 409 subtasksOpen：三選一，選一併完成就用同一版本帶 cascade 重送', async () => {
+    const parent = cardWire({ id: 1, level: 'parent', progress: { done: 0, cancelled: 0, total: 2 } });
+    const wire = boardWire({ columns: [columnWire({ key: 'todo', total: 1, cards: [parent] }), columnWire({ key: 'done', total: 0, cards: [] })] });
+    const { w } = await mountBoard(wire, 1126);
+    calls = mockHttp((c) => {
+      if (c.url === '/task-board/columns') return wire;
+      if (/\/move$/.test(c.url)) return (bodyOf(c) as { cascade?: string }).cascade ? movedCard({ status: 'done', progress: { done: 2, cancelled: 0, total: 2 } }) : new HttpFail(409, { code: 'subtasksOpen', params: { count: 2 }, message: '還有 2 個未完成的子任務' });
+      return null;
+    });
+    const d = await dragTo(w, 1, 'done');
+    await d.drop();
+    await settle();
+    expect(moveCalls()).toHaveLength(1);
+    expect(bodyOf(moveCalls()[0])).not.toHaveProperty('cascade');
+    // 卡片還原回原欄，沒有錯誤通知，跳出三選一
+    expect(ids(w, 'todo')).toEqual([1]);
+    expect(toasts().some((t) => t.includes('還有 2 個未完成'))).toBe(false);
+    const dialog = document.body.querySelector('[data-testid="subtasks-open"]')!;
+    expect(dialog.textContent).toContain('還有 2 個未完成的子任務');
+    document.body.querySelector<HTMLElement>('[data-testid="subtasks-open-complete"]')!.click();
+    await settle();
+    expect(moveCalls()).toHaveLength(2);
+    expect(bodyOf(moveCalls()[1])).toMatchObject({ toColumn: 'done', cascade: 'complete', expectedVersion: '20261101020000000' });
+    w.unmount();
+  });
+
+  it('三選一按「取消操作」不重送', async () => {
+    const parent = cardWire({ id: 1, level: 'parent', progress: { done: 0, cancelled: 0, total: 2 } });
+    const wire = boardWire({ columns: [columnWire({ key: 'todo', total: 1, cards: [parent] }), columnWire({ key: 'done', total: 0, cards: [] })] });
+    const { w } = await mountBoard(wire, 1126);
+    calls = mockHttp((c) => (c.url === '/task-board/columns' ? wire : /\/move$/.test(c.url) ? new HttpFail(409, { code: 'subtasksOpen', params: { count: 2 } }) : null));
+    const d = await dragTo(w, 1, 'done');
+    await d.drop();
+    await settle();
+    document.body.querySelector<HTMLElement>('[data-testid="subtasks-open-abort"]')!.click();
+    await settle();
+    expect(moveCalls()).toHaveLength(1);
+    expect(ids(w, 'todo')).toEqual([1]);
+    w.unmount();
+  });
+
+  it('重開子任務遇到 409 parentCancelled 顯示父任務已取消的訊息', async () => {
+    const child = cardWire({ id: 1, status: 'cancelled', level: 'child', parentTaskId: 9, parentTitle: '辦活動' });
+    const wire = boardWire({ columns: [columnWire({ key: 'todo', total: 0, cards: [] }), columnWire({ key: 'cancelled', total: 1, cards: [child] })] });
+    const { w } = await mountBoard(wire, 1126);
+    calls = mockHttp((c) => (c.url === '/task-board/columns' ? wire : /\/move$/.test(c.url) ? new HttpFail(409, { code: 'parentCancelled', message: 'x' }) : null));
+    const d = await dragTo(w, 1, 'todo');
+    await d.drop();
+    await settle();
+    expect(toasts().some((t) => t.includes('父任務已取消，請先恢復父任務'))).toBe(true);
+    w.unmount();
+  });
+
   function dueWire(cardOverrides: Record<string, unknown>) {
     const wire = dueBoardWire() as { columns: { key: string; cards: unknown[]; total: number }[] };
     const today = wire.columns.find((c) => c.key === 'today')!;

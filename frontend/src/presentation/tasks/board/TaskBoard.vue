@@ -7,7 +7,9 @@ import {
   BOARD_COLUMN_GAP, columnsPerScreen, gridTrackCount, moveBlockKey, moveFlowOf, moveTargets, visibleRange,
   type BoardCard, type BoardColumn, type BoardSource, type ColumnDrop, type MoveFlow, type TaskBoardData,
 } from 'src/domain/dynamic/task-board-types';
+import SubtasksOpenDialog from 'src/presentation/dynamic/tasks/SubtasksOpenDialog.vue';
 import { useMovedOutNotice } from 'src/presentation/dynamic/tasks/use-moved-out-notice';
+import { isParentCancelled, subtasksOpenCount, type TaskCascade } from 'src/domain/dynamic/task-types';
 import type { ApiError } from 'src/services/api/http';
 import BoardColumnPager from './BoardColumnPager.vue';
 import DuePickDialog from './DuePickDialog.vue';
@@ -81,6 +83,7 @@ async function announce(text: string) {
 /** 失敗訊息一律由介面語言決定，不顯示伺服器的中文字串；失敗後看板會重抓，禁止狀態很快就會正確，所以只說通用原因。 */
 function failureMessage(e: unknown): string {
   const err = e as ApiError;
+  if (isParentCancelled(err)) return t('tasks.subtask.parentCancelled');
   if (err.status === 409) return err.code === 'stale' ? t('taskBoard.stale') : t('taskBoard.drop.frozen');
   if (err.status === 404) return t('tasks.notFound');
   if (err.status === 400 && err.errors?.dueDate) return t('taskBoard.duePick.invalid', { date: props.board.weekEnd });
@@ -136,12 +139,12 @@ watch(() => props.board, async () => {
 });
 onBeforeUnmount(() => clearTimeout(followTimer));
 
-async function doMove(card: BoardCard, to: BoardColumn, dueDate?: string, focus: FocusPlan | null = null) {
+async function doMove(card: BoardCard, to: BoardColumn, dueDate?: string, focus: FocusPlan | null = null, cascade?: TaskCascade) {
   if (moving.has(card.id)) return;
   followPlan = null;
   moving.add(card.id);
   try {
-    const run = move.mutateAsync({ card, groupBy: groupBy.value, toColumn: to.key, dueDate });
+    const run = move.mutateAsync({ card, groupBy: groupBy.value, toColumn: to.key, dueDate, cascade });
     if (focus) void restoreFocus(focus);
     const result = await run;
     if (!result.visible) {
@@ -150,7 +153,14 @@ async function doMove(card: BoardCard, to: BoardColumn, dueDate?: string, focus:
     } else void announce(t('taskBoard.moved', { column: columnLabel(to) }));
   } catch (e) {
     liveText.value = '';
-    $q.notify({ type: 'negative', message: failureMessage(e), position: 'bottom' });
+    const open = subtasksOpenCount(e);
+    if (open !== null && !cascade) {
+      // 還有未完成的子任務：卡片已被還原，問使用者怎麼處理；選了之後用同一張卡（同一版本）重送
+      cascadeFor.value = { card, to, focus, count: open };
+      cascadeOpen.value = true;
+    } else {
+      $q.notify({ type: 'negative', message: failureMessage(e), position: 'bottom' });
+    }
   } finally {
     moving.delete(card.id);
     if (focus) {
@@ -163,10 +173,24 @@ async function doMove(card: BoardCard, to: BoardColumn, dueDate?: string, focus:
 // 確認框與日期選擇框的資料另外留著，不跟著開關清掉：按「確定」時 v-close-popup 與 confirm 事件誰先跑都不影響
 const confirmOpen = ref(false);
 const confirmFor = ref<{ card: BoardCard; to: BoardColumn; flow: MoveFlow; focus: FocusPlan | null } | null>(null);
+// 父任務拖到完成欄、後端回 409 subtasksOpen 時的三選一（一併完成、一併取消、取消操作）
+const cascadeOpen = ref(false);
+const cascadeFor = ref<{ card: BoardCard; to: BoardColumn; focus: FocusPlan | null; count: number } | null>(null);
+function onCascade(c: TaskCascade) {
+  const f = cascadeFor.value;
+  cascadeOpen.value = false;
+  if (f) void doMove(f.card, f.to, undefined, f.focus, c);
+}
 const dueOpen = ref(false);
 const dueFor = ref<{ card: BoardCard; to: BoardColumn; focus: FocusPlan | null } | null>(null);
 const confirmTitle = computed(() => (confirmFor.value?.flow === 'confirmCancel' ? t('taskBoard.confirm.cancelTitle') : t('taskBoard.confirm.clearDueTitle')));
-const confirmBody = computed(() => (confirmFor.value?.flow === 'confirmCancel' ? t('taskBoard.confirm.cancelBody') : t('taskBoard.confirm.clearDueBody')));
+const confirmBody = computed(() => {
+  const f = confirmFor.value;
+  if (f?.flow !== 'confirmCancel') return t('taskBoard.confirm.clearDueBody');
+  // 有子任務的父任務：寫出子任務數，未完成的會一併取消
+  const n = f.card.progress?.total ?? 0;
+  return n > 0 ? t('taskBoard.confirm.cancelWithSubtasks', { n }) : t('taskBoard.confirm.cancelBody');
+});
 
 function requestMove(card: BoardCard, columnKey: string, via: 'drag' | 'menu' = 'drag') {
   if (moving.has(card.id)) return;
@@ -241,6 +265,7 @@ const overKey = computed(() => drag.state.value?.overKey ?? null);
     </div>
     <div class="board-live" role="status" aria-live="polite" aria-atomic="true" data-testid="board-live">{{ liveText }}</div>
     <MoveConfirmDialog v-model="confirmOpen" :title="confirmTitle" :body="confirmBody" @confirm="onConfirm" />
+    <SubtasksOpenDialog v-model="cascadeOpen" :count="cascadeFor?.count ?? 0" @choose="onCascade" />
     <DuePickDialog v-model="dueOpen" :week-end="board.weekEnd" :default-date="board.laterDefault" @confirm="onDuePicked" />
   </div>
 </template>

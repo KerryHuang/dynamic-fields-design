@@ -50,6 +50,8 @@ export interface BoardForm {
   autoAppend: boolean;
   sortKey: BoardSortKey;
   sortDir: 'asc' | 'desc';
+  /** 子任務自己是一張卡（預設開）；關閉時只列父任務與獨立任務。 */
+  showSubtasks: boolean;
 }
 
 /** 沒明確設定時「含未指派」的預設：沒列負責人就是全部（含未指派），列了負責人就只看那些人。 */
@@ -85,6 +87,7 @@ export function formFromConfig(config: TaskBoardConfig): BoardForm {
     autoAppend: c.autoAppendAssignees ?? true,
     sortKey: config.sort?.key ?? 'dueDate',
     sortDir: config.sort?.dir ?? 'asc',
+    showSubtasks: config.showSubtasks ?? true,
   };
 }
 
@@ -131,6 +134,8 @@ export function buildBoardConfig(form: BoardForm): TaskBoardConfig {
     ...(Object.keys(filters).length ? { filters } : {}),
     ...(Object.keys(columns).length ? { columns } : {}),
     sort: { key: form.sortKey, dir: form.sortDir },
+    // 沒給等於開；只有關閉才寫進設定，舊設定與預設看板的形狀不變（不升 version，設計 §6.1）
+    ...(form.showSubtasks ? {} : { showSubtasks: false }),
   };
 }
 

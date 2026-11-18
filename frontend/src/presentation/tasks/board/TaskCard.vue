@@ -3,6 +3,7 @@ import { computed } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { cardMoveBlock, type BoardCard, type BoardColumn, type BoardGroupBy } from 'src/domain/dynamic/task-board-types';
 import { taskStatusColor } from 'src/domain/dynamic/task-types';
+import SubtaskProgress from 'src/presentation/dynamic/tasks/SubtaskProgress.vue';
 import MoveToMenu from './MoveToMenu.vue';
 
 /**
@@ -41,6 +42,10 @@ const dueClass = computed(() => (props.card.overdue ? 'text-negative' : props.ca
     class="board-card q-pa-sm rounded-borders" :class="{ 'is-locked': !movable, 'is-dragging': dragging }" :data-testid="`board-card-${card.id}`"
     @pointerdown="onPointerDown"
   >
+    <!-- 子任務卡片：上方顯示父任務標題（只看得到子任務的人也看得到，U13）；放在開啟按鈕之前，與「移到…」的絕對定位不衝突 -->
+    <div v-if="card.level === 'child' && card.parentTitle" class="text-caption text-muted ellipsis" :class="{ 'board-card-head': movable }" data-testid="board-card-parent">
+      {{ t('tasks.subtask.parent') }}{{ t('tasks.colon') }}{{ card.parentTitle }}
+    </div>
     <div class="text-body2" :class="{ 'board-card-head': movable }">
       <!-- 原生按鈕負責開啟；::after 撐滿整張卡，滑鼠點卡片任何地方都開。之後「移到…」是同層的另一個按鈕，不會巢狀在按鈕裡 -->
       <button type="button" class="board-card-open" :data-testid="`board-card-open-${card.id}`" @click="emit('open', card.id)">
@@ -50,6 +55,7 @@ const dueClass = computed(() => (props.card.overdue ? 'text-negative' : props.ca
     <!-- 放在開啟按鈕之後，Tab 順序才是先卡片、再「移到…」；按鈕是絕對定位，畫面位置不受影響 -->
     <MoveToMenu v-if="movable" :card="card" :columns="columns" :group-by="groupBy" :label-of="labelOf" :phone="phone" @move="emit('move', card, $event)" />
     <div v-if="recordLabel" class="text-caption text-muted ellipsis" data-testid="board-card-record">{{ recordLabel }}</div>
+    <SubtaskProgress v-if="card.progress" :progress="card.progress" class="q-mt-xs text-caption" />
     <div class="row items-center q-gutter-x-sm q-mt-xs text-caption">
       <span v-if="card.dueDate" :class="dueClass" data-testid="board-card-due">
         <q-icon v-if="card.overdue || card.dueToday" name="schedule" size="14px" class="q-mr-xs" />{{ card.dueDate }}

@@ -169,6 +169,7 @@ function saveAs() {
               :model-value="form.creatorUserIds" :label="t('taskBoard.settings.creators')" :options="userOptions" multiple
               data-testid="settings-filter-creators" @update:model-value="(v) => (form.creatorUserIds = (v as string[] | null) ?? [])"
             />
+            <q-checkbox v-model="form.showSubtasks" dense :label="t('taskBoard.settings.showSubtasks')" data-testid="settings-show-subtasks" />
             <div>
               <div class="text-caption text-muted">{{ t('taskBoard.settings.sources') }}</div>
               <div class="row q-gutter-x-md">

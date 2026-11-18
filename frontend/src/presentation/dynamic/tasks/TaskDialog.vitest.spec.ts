@@ -24,6 +24,8 @@ interface Opts {
   withdrawFail?: HttpFail;
   locale?: 'zh-TW' | 'en-US';
   patchReply?: unknown;
+  onPatch?: (c: Call) => unknown;
+  subtaskReply?: unknown;
 }
 // The toast itself is covered in use-moved-out-notice.vitest.spec.ts; here only the hand-off matters.
 const showNotice = vi.hoisted(() => vi.fn());
@@ -39,6 +41,8 @@ async function mountDialog(o: Opts = {}) {
     if (c.url === '/tasks/5/comments' && c.method === 'get') return o.comments ?? [];
     if (c.url === '/tasks/5/comments' && c.method === 'post') return o.commentFail ?? commentWire();
     if (/\/withdraw$/.test(c.url)) return o.withdrawFail ?? commentWire({ withdrawn: true });
+    if (c.url === '/tasks/5/subtasks' && c.method === 'post') return o.subtaskReply ?? taskDetailWire({ id: 50 });
+    if (c.url === '/tasks/5' && c.method === 'patch' && o.onPatch) return o.onPatch(c);
     if (c.url === '/tasks/5' && c.method === 'patch') return o.patchReply ?? taskDetailWire(o.task);
     if (c.url === '/users') return USERS;
     if (c.url === '/users/mention-candidates') return o.candidates ?? [USERS[1]];
@@ -523,5 +527,156 @@ describe('TaskDialog', () => {
       expect(showNotice).toHaveBeenCalledWith(5, 'tok-1');
       w.unmount();
     });
+  });
+});
+
+describe('TaskDialog subtasks', () => {
+  beforeEach(() => { document.body.innerHTML = ''; });
+  afterEach(() => { document.body.innerHTML = ''; });
+  const sub = (id: number, o: Record<string, unknown> = {}) => ({ ...taskDetailWire({ id, title: `子${id}`, level: 'child', parentTaskId: 5, parentTitle: '辦活動' }), ...o });
+  const parent = (o: Record<string, unknown> = {}) => ({
+    level: 'parent', canAddSubtask: true, progress: { done: 1, cancelled: 1, total: 4 },
+    subtasks: [sub(11, { status: 'done' }), sub(12), sub(13, { status: 'cancelled' }), sub(14, { assigneeUserId: null, assigneeName: null })], ...o,
+  });
+  const q = (id: string) => body().querySelector<HTMLElement>(`[data-testid="${id}"]`);
+  const click = async (id: string) => { q(id)!.click(); await flushPromises(); await new Promise((r) => setTimeout(r, 20)); await flushPromises(); };
+  const statusSelect = (w: Awaited<ReturnType<typeof mountDialog>>) => w.findAllComponents(GenericSelect).find((c) => c.props('label') === '狀態')!;
+
+  it('父任務顯示子任務清單與「完成／（總數－取消）」進度；有取消時有提示文字', async () => {
+    const w = await mountDialog({ task: parent() });
+    expect(q('subtask-list')!.querySelectorAll('[data-testid^="subtask-row-"]')).toHaveLength(4);
+    expect(q('subtask-progress-text')!.textContent).toBe('1／3');
+    expect(q('subtask-progress')!.getAttribute('aria-label')).toContain('另有 1 個已取消');
+    w.unmount();
+  });
+
+  it('點子任務列開那個子任務（update:taskId）', async () => {
+    const w = await mountDialog({ task: parent() });
+    await click('subtask-row-12');
+    expect(w.emitted('update:taskId')?.at(-1)).toEqual([12]);
+    w.unmount();
+  });
+
+  it('全部取消時不顯示進度（T20），沒有子任務也沒有進度但仍可新增', async () => {
+    let w = await mountDialog({ task: parent({ progress: { done: 0, cancelled: 4, total: 4 } }) });
+    expect(q('subtask-progress')).toBeNull();
+    w.unmount();
+    w = await mountDialog({ task: { level: 'standalone', canAddSubtask: true, progress: null, subtasks: [] } });
+    expect(q('subtask-progress')).toBeNull();
+    expect(q('subtask-empty')).not.toBeNull();
+    expect(q('subtask-add')).not.toBeNull();
+    w.unmount();
+  });
+
+  it('不能新增子任務、也沒有子任務的獨立任務不顯示子任務區塊；子任務自己也不顯示', async () => {
+    let w = await mountDialog({ task: { level: 'standalone', canAddSubtask: false, subtasks: [] } });
+    expect(q('subtask-section')).toBeNull();
+    w.unmount();
+    w = await mountDialog({ task: sub(5) });
+    expect(q('subtask-section')).toBeNull();
+    w.unmount();
+  });
+
+  it('新增子任務：負責人預填父任務負責人、到期日空，只送標題、負責人、到期日', async () => {
+    const w = await mountDialog({ task: parent() });
+    await click('subtask-add');
+    const select = w.findAllComponents(GenericSelect).filter((c) => c.props('label') === '負責人').at(-1)!;
+    expect(select.props('modelValue')).toBe('sales01');
+    const input = q('subtask-form-title') as unknown as HTMLInputElement;
+    input.value = '訂場地';
+    input.dispatchEvent(new Event('input'));
+    await flushPromises();
+    await click('subtask-form-submit');
+    const post = calls.find((c) => c.url === '/tasks/5/subtasks');
+    expect(bodyOf(post)).toEqual({ title: '訂場地', assigneeUserId: 'sales01', dueDate: null });
+    w.unmount();
+  });
+
+  it('父任務負責人已停用時預填空白；沒標題不送出', async () => {
+    const w = await mountDialog({ task: parent({ assigneeActive: false }) });
+    await click('subtask-add');
+    const select = w.findAllComponents(GenericSelect).filter((c) => c.props('label') === '負責人').at(-1)!;
+    expect(select.props('modelValue')).toBeNull();
+    await click('subtask-form-submit');
+    expect(calls.some((c) => c.url === '/tasks/5/subtasks')).toBe(false);
+    expect(q('subtask-form')!.textContent).toContain('請輸入標題');
+    w.unmount();
+  });
+
+  it('新增被後端擋下（上限 400）時顯示訊息、表單留著', async () => {
+    const w = await mountDialog({ task: parent(), subtaskReply: new HttpFail(400, { errors: { subtasks: ['一個任務最多 2 個子任務'] } }) });
+    await click('subtask-add');
+    const input = q('subtask-form-title') as unknown as HTMLInputElement;
+    input.value = 'x';
+    input.dispatchEvent(new Event('input'));
+    await flushPromises();
+    await click('subtask-form-submit');
+    expect(q('subtask-form-error')!.textContent).toContain('一個任務最多 2 個子任務');
+    w.unmount();
+  });
+
+  it('子任務上方顯示父任務標題：看得到父任務可點開，看不到只是文字（U13）', async () => {
+    let w = await mountDialog({ task: sub(5, { parentVisible: true }) });
+    expect(q('task-parent')!.textContent).toContain('父任務：辦活動');
+    await click('task-parent-open');
+    expect(w.emitted('update:taskId')?.at(-1)).toEqual([5]);
+    w.unmount();
+    w = await mountDialog({ task: sub(5, { parentVisible: false }) });
+    expect(q('task-parent')!.textContent).toContain('辦活動');
+    expect(q('task-parent-open')).toBeNull();
+    w.unmount();
+  });
+
+  it('改完成遇到 409 subtasksOpen：跳三選一，選一併取消就帶 cascade:cancel 重送', async () => {
+    const w = await mountDialog({
+      task: parent(),
+      onPatch: (c) => ((bodyOf(c) as { cascade?: string }).cascade ? taskDetailWire({ status: 'done' }) : new HttpFail(409, { code: 'subtasksOpen', params: { count: 2 }, message: '還有 2 個未完成的子任務' })),
+    });
+    statusSelect(w).vm.$emit('update:modelValue', 'done');
+    await flushPromises();
+    await click('task-save');
+    expect(q('subtasks-open-body')!.textContent).toContain('還有 2 個未完成的子任務');
+    expect(q('task-error')).toBeNull();
+    await click('subtasks-open-cancel');
+    const patches = calls.filter((c) => c.method === 'patch');
+    expect(patches).toHaveLength(2);
+    expect(bodyOf(patches[0])).toEqual({ status: 'done' });
+    expect(bodyOf(patches[1])).toEqual({ status: 'done', cascade: 'cancel' });
+    expect(q('subtasks-open')).toBeNull();
+    w.unmount();
+  });
+
+  it('三選一按「取消操作」不重送，任務維持原樣', async () => {
+    const w = await mountDialog({ task: parent(), onPatch: () => new HttpFail(409, { code: 'subtasksOpen', params: { count: 2 } }) });
+    statusSelect(w).vm.$emit('update:modelValue', 'done');
+    await flushPromises();
+    await click('task-save');
+    await click('subtasks-open-abort');
+    expect(calls.filter((c) => c.method === 'patch')).toHaveLength(1);
+    expect(q('subtasks-open')).toBeNull();
+    w.unmount();
+  });
+
+  it('子任務重開遇到 409 parentCancelled 顯示父任務已取消的訊息', async () => {
+    const w = await mountDialog({
+      task: sub(5, { status: 'cancelled', parentVisible: true }),
+      onPatch: () => new HttpFail(409, { code: 'parentCancelled', message: 'server text' }),
+    });
+    statusSelect(w).vm.$emit('update:modelValue', 'todo');
+    await flushPromises();
+    await click('task-save');
+    expect(q('task-error')!.textContent).toBe('父任務已取消，請先恢復父任務');
+    w.unmount();
+  });
+
+  it('刪除父任務的確認框寫出子任務數（取 progress.total）；沒有子任務用原本文字', async () => {
+    let w = await mountDialog({ task: parent() });
+    await click('task-delete');
+    expect(q('task-delete-text')!.textContent).toContain('這個任務有 4 個子任務');
+    w.unmount();
+    w = await mountDialog();
+    await click('task-delete');
+    expect(q('task-delete-text')!.textContent).toBe('確定要刪除這個任務嗎？');
+    w.unmount();
   });
 });

@@ -22,6 +22,28 @@ export interface TaskProgress {
   total: number;
 }
 
+/** Progress as shown to people: done / (total − cancelled). Null when nothing is left to count (no subtasks, or all cancelled; T20). */
+export function progressView(p: TaskProgress | null | undefined): { done: number; denominator: number; ratio: number; cancelled: number } | null {
+  if (!p) return null;
+  const denominator = p.total - p.cancelled;
+  if (denominator <= 0) return null;
+  return { done: p.done, denominator, ratio: Math.min(1, p.done / denominator), cancelled: p.cancelled };
+}
+
+/** 409 `subtasksOpen`: marking the parent done needs a choice for its open subtasks. Returns how many are open, else null. */
+export function subtasksOpenCount(e: unknown): number | null {
+  const err = e as { status?: number; code?: string; params?: { count?: unknown } } | null;
+  if (err?.status !== 409 || err.code !== 'subtasksOpen') return null;
+  const n = Number(err.params?.count);
+  return Number.isFinite(n) ? n : 0;
+}
+
+/** 409 `parentCancelled`: a subtask cannot be reopened while its parent is cancelled. */
+export const isParentCancelled = (e: unknown): boolean => {
+  const err = e as { status?: number; code?: string } | null;
+  return err?.status === 409 && err.code === 'parentCancelled';
+};
+
 export interface TaskSummary {
   id: number;
   title: string;

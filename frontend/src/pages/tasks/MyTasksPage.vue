@@ -13,6 +13,7 @@ import BoardPicker from 'src/presentation/tasks/board/BoardPicker.vue';
 import BoardSettingsDialog from 'src/presentation/tasks/board/BoardSettingsDialog.vue';
 import TaskBoard from 'src/presentation/tasks/board/TaskBoard.vue';
 import TaskViewShareDialog from 'src/presentation/tasks/board/TaskViewShareDialog.vue';
+import SubtaskProgress from 'src/presentation/dynamic/tasks/SubtaskProgress.vue';
 import TaskDialog from 'src/presentation/dynamic/tasks/TaskDialog.vue';
 import TaskFormDialog from 'src/presentation/dynamic/tasks/TaskFormDialog.vue';
 import { useIdentityStore } from 'src/stores/use-identity-store';
@@ -192,11 +193,15 @@ const boardFailed = computed(() => !!boardQuery.error.value && !boardQuery.data.
           @click="setOpen(task.id)"
         >
           <q-item-section>
+            <q-item-label v-if="task.level === 'child' && task.parentTitle" caption class="ellipsis" :data-testid="`my-task-parent-${task.id}`">{{ t('tasks.subtask.parent') }}{{ t('tasks.colon') }}{{ task.parentTitle }}</q-item-label>
             <q-item-label :class="{ 'text-strike text-muted': task.status === 'done' || task.status === 'cancelled' }" style="overflow-wrap: anywhere">
               <span :data-testid="`my-task-open-${task.id}`" @click.stop="setOpen(task.id)">{{ task.title }}</span>
             </q-item-label>
             <q-item-label caption style="overflow-wrap: anywhere">
               <template v-if="task.record">{{ task.record.accessible ? (task.record.title || t('tasks.recordFallback', { id: task.record.recordId })) : t('tasks.recordNoAccess') }}</template>
+            </q-item-label>
+            <q-item-label v-if="task.progress" caption>
+              <SubtaskProgress :progress="task.progress" />
             </q-item-label>
             <q-item-label caption class="row items-center q-gutter-x-sm">
               <span :data-testid="`my-task-assignee-${task.id}`">{{ task.assigneeName ?? (task.assigneeUserId || t('tasks.unassigned')) }}</span>

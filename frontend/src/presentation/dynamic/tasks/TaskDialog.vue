@@ -6,9 +6,11 @@ import { useUsers } from 'src/application/dynamic/queries/permissions-queries';
 import { useDeleteTask, useTask, useTaskComments, useUpdateTask } from 'src/application/dynamic/queries/tasks-queries';
 import DateSelect from 'src/components/framework/DateSelect.vue';
 import GenericSelect from 'src/components/framework/GenericSelect.vue';
-import { isTaskHidden, type TaskPatch, type TaskStatus } from 'src/domain/dynamic/task-types';
+import { isParentCancelled, isTaskHidden, subtasksOpenCount, type TaskCascade, type TaskPatch, type TaskStatus } from 'src/domain/dynamic/task-types';
 import type { ApiError } from 'src/services/api/http';
 import MentionInput from './MentionInput.vue';
+import SubtaskSection from './SubtaskSection.vue';
+import SubtasksOpenDialog from './SubtasksOpenDialog.vue';
 import TaskTimeline from './TaskTimeline.vue';
 import { useMovedOutNotice } from './use-moved-out-notice';
 
@@ -29,6 +31,9 @@ const missing = computed(() => !!task.error.value && !data.value);
 const draft = ref({ title: '', description: '', assignee: null as string | null, dueDate: null as string | null, status: 'todo' as TaskStatus });
 const error = ref('');
 const confirming = ref(false);
+// 父任務改完成、還有未完成子任務：後端回 409 subtasksOpen，三選一後帶 cascade 重送
+const openCount = ref(0);
+const openChoice = ref(false);
 
 watch(data, (d) => {
   if (!d) return;
@@ -61,20 +66,33 @@ const readonly = computed(() => !data.value?.canEdit);
 /** The assignee stays open to a manager of a subordinate's task (canReassign) even when the rest is read-only. */
 const assigneeReadonly = computed(() => !data.value?.canEdit && !data.value?.canReassign);
 
-async function save() {
+function failureText(e: unknown): string {
+  const err = e as ApiError;
+  if (isParentCancelled(err)) return t('tasks.subtask.parentCancelled');
+  return (err.errors ? Object.values(err.errors).flat().join(t('common.listSeparator')) : err.message) || t('tasks.saveFailed');
+}
+
+async function save(cascade?: TaskCascade) {
   if (!dirty.value || !draft.value.title.trim()) return;
   error.value = '';
   try {
     const id = props.taskId!;
-    const result = await update.mutateAsync({ id, patch: patch.value });
+    const result = await update.mutateAsync({ id, patch: cascade ? { ...patch.value, cascade } : patch.value });
+    openChoice.value = false;
     // The writer lost sight of the task (a manager handed it outside their scope): close and offer the undo
     if (isTaskHidden(result)) {
       emit('update:taskId', null);
       movedOut.show(result.id, result.undoToken);
     }
   } catch (e) {
-    const err = e as ApiError;
-    error.value = (err.errors ? Object.values(err.errors).flat().join(t('common.listSeparator')) : err.message) || t('tasks.saveFailed');
+    const count = subtasksOpenCount(e);
+    if (count !== null && !cascade) {
+      openCount.value = count;
+      openChoice.value = true;
+      return;
+    }
+    openChoice.value = false;
+    error.value = failureText(e);
   }
 }
 
@@ -125,6 +143,11 @@ function goRecord() {
           <div v-if="data.fromRule" class="text-caption text-muted q-mb-xs">{{ t('tasks.fromRule') }}</div>
           <div v-if="data.ruleDeleted" class="text-caption text-warning q-mb-xs" data-testid="task-rule-deleted">{{ t('tasks.ruleDeleted') }}</div>
           <div class="q-gutter-y-sm">
+            <div v-if="data.level === 'child' && data.parentTitle" class="text-caption text-muted" style="overflow-wrap: anywhere" data-testid="task-parent">
+              <span>{{ t('tasks.subtask.parent') }}{{ t('tasks.colon') }}</span>
+              <a v-if="data.parentVisible && data.parentTaskId" href="#" data-testid="task-parent-open" @click.prevent="emit('update:taskId', data.parentTaskId)">{{ data.parentTitle }}</a>
+              <span v-else>{{ data.parentTitle }}</span>
+            </div>
             <q-input v-model="draft.title" :label="t('tasks.fields.title')" maxlength="200" outlined dense :readonly="readonly" data-testid="task-title" />
             <div v-if="data.supervised" class="text-caption text-muted" data-testid="task-supervisor-hint">{{ t('tasks.supervisorHint') }}</div>
             <q-input v-model="draft.description" :label="t('tasks.fields.description')" type="textarea" autogrow maxlength="4000" outlined dense :readonly="readonly" data-testid="task-description" />
@@ -148,6 +171,10 @@ function goRecord() {
             <div v-if="data.createdByName" class="text-caption text-muted">{{ t('tasks.createdBy') }}{{ t('tasks.colon') }}{{ data.createdByName }}</div>
             <div v-if="error" class="text-negative text-caption" data-testid="task-error">{{ error }}</div>
           </div>
+          <template v-if="data.level !== 'child' && (data.level === 'parent' || data.canAddSubtask)">
+            <q-separator class="q-my-md" />
+            <SubtaskSection :task="data" @open="(id) => emit('update:taskId', id)" />
+          </template>
           <q-separator class="q-my-md" />
           <div class="text-subtitle2">{{ t('tasks.comment') }}</div>
           <TaskTimeline :task-id="data.id" :comments="comments.data.value ?? []" :readonly="!data.canComment" />
@@ -158,18 +185,19 @@ function goRecord() {
           <q-btn v-if="data.canDelete" flat color="negative" no-caps :label="t('tasks.delete')" data-testid="task-delete" @click="confirming = true" />
           <q-space />
           <q-btn flat no-caps :label="t('tasks.close')" v-close-popup />
-          <q-btn v-if="data.canEdit || data.canReassign" color="primary" no-caps :label="t('tasks.save')" :disable="!dirty" :loading="update.isPending.value" data-testid="task-save" @click="save" />
+          <q-btn v-if="data.canEdit || data.canReassign" color="primary" no-caps :label="t('tasks.save')" :disable="!dirty" :loading="update.isPending.value" data-testid="task-save" @click="save()" />
         </q-card-actions>
       </template>
       <q-dialog v-model="confirming">
         <q-card>
-          <q-card-section>{{ t('tasks.confirmDelete') }}</q-card-section>
+          <q-card-section style="overflow-wrap: anywhere" data-testid="task-delete-text">{{ data?.progress?.total ? t('tasks.subtask.confirmDelete', { n: data.progress.total }) : t('tasks.confirmDelete') }}</q-card-section>
           <q-card-actions align="right">
             <q-btn flat :label="t('tasks.cancel')" v-close-popup />
             <q-btn color="negative" :label="t('tasks.delete')" :loading="del.isPending.value" data-testid="task-delete-confirm" @click="remove" />
           </q-card-actions>
         </q-card>
       </q-dialog>
+      <SubtasksOpenDialog v-model="openChoice" :count="openCount" :busy="update.isPending.value" @choose="(c) => save(c)" />
     </q-card>
   </q-dialog>
 </template>

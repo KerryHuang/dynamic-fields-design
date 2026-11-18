@@ -4,9 +4,11 @@ import { useQuasar } from 'quasar';
 import { useI18n } from 'vue-i18n';
 import { resolveI18n } from 'src/domain/dynamic/i18n-text';
 import { useApplyTaskRule, useRecordTasks, useUpdateTask } from 'src/application/dynamic/queries/tasks-queries';
-import { taskStatusColor, type ManualRule, type TaskSummary } from 'src/domain/dynamic/task-types';
+import { subtasksOpenCount, taskStatusColor, type ManualRule, type TaskCascade, type TaskSummary } from 'src/domain/dynamic/task-types';
 import type { ApiError } from 'src/services/api/http';
 import { useIdentityStore } from 'src/stores/use-identity-store';
+import SubtaskProgress from './SubtaskProgress.vue';
+import SubtasksOpenDialog from './SubtasksOpenDialog.vue';
 import TaskDialog from './TaskDialog.vue';
 import TaskFormDialog from './TaskFormDialog.vue';
 
@@ -27,11 +29,28 @@ const adding = ref(false);
 
 const locked = (task: TaskSummary) => props.closed || !task.canEdit;
 // Unticking a finished task reopens it as "to do"; ticking finishes it.
-const toggle = (task: TaskSummary, done: boolean) =>
+// A parent with open subtasks answers 409 subtasksOpen: ask what to do with them, then send again with `cascade`.
+const pendingDone = ref<{ id: number; count: number } | null>(null);
+const choiceOpen = ref(false);
+const sendStatus = (id: number, done: boolean, cascade?: TaskCascade) =>
   update.mutate(
-    { id: task.id, patch: { status: done ? 'done' : 'todo' } },
-    { onError: (e) => $q.notify({ type: 'negative', message: (e as unknown as ApiError).message || t('tasks.saveFailed') }) },
+    { id, patch: { status: done ? 'done' : 'todo', ...(cascade ? { cascade } : {}) } },
+    {
+      onSuccess: () => { choiceOpen.value = false; },
+      onError: (e) => {
+        const count = subtasksOpenCount(e);
+        if (count !== null && !cascade) {
+          pendingDone.value = { id, count };
+          choiceOpen.value = true;
+          return;
+        }
+        choiceOpen.value = false;
+        $q.notify({ type: 'negative', message: (e as unknown as ApiError).message || t('tasks.saveFailed') });
+      },
+    },
   );
+const toggle = (task: TaskSummary, done: boolean) => sendStatus(task.id, done);
+const chooseCascade = (c: TaskCascade) => { if (pendingDone.value) sendStatus(pendingDone.value.id, true, c); };
 
 // once: "applied" is final. everyTime never counts as applied; it waits until the previous round is done.
 const applyState = (r: ManualRule) => (r.repeat === 'once' ? (r.applied ? t('tasks.applied') : '') : (r.previousOpen ? t('tasks.previousRoundOpen') : ''));
@@ -70,6 +89,9 @@ const applyRule = (r: ManualRule) =>
         </q-item-section>
         <q-item-section class="cursor-pointer" @click="openId = task.id">
           <q-item-label :class="{ 'text-strike text-muted': task.status === 'done' || task.status === 'cancelled' }" style="overflow-wrap: anywhere">{{ task.title }}</q-item-label>
+          <q-item-label v-if="task.progress" caption>
+            <SubtaskProgress :progress="task.progress" />
+          </q-item-label>
           <q-item-label caption class="row items-center q-gutter-x-sm">
             <span :data-testid="`task-assignee-${task.id}`">{{ task.assigneeName ?? (task.assigneeUserId || t('tasks.unassigned')) }}</span>
             <span v-if="task.dueDate" :class="{ 'text-negative': task.overdue }" :data-testid="`task-due-${task.id}`">{{ task.dueDate }}</span>
@@ -79,6 +101,7 @@ const applyRule = (r: ManualRule) =>
       </q-item>
     </q-list>
     <TaskFormDialog v-model="adding" :record-id="recordId" :default-assignee="identity.userId" />
+    <SubtasksOpenDialog v-model="choiceOpen" :count="pendingDone?.count ?? 0" :busy="update.isPending.value" @choose="chooseCascade" />
     <TaskDialog :task-id="openId" @update:task-id="openId = $event" />
   </q-card>
 </template>
