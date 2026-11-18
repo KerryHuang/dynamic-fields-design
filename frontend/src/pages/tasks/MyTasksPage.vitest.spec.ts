@@ -12,6 +12,7 @@ import { commentWire, taskDetailWire, taskWire, USERS } from 'src/presentation/d
 import { useIdentityStore } from 'src/stores/use-identity-store';
 import { bodyOf, HttpFail, mockHttp, type Call } from 'src/test-utils/mock-http';
 import DateSelect from 'src/components/framework/DateSelect.vue';
+import { ganttWire } from 'src/presentation/tasks/gantt/gantt-fixtures';
 import MyTasksPage from './MyTasksPage.vue';
 
 let calls: Call[];
@@ -36,6 +37,7 @@ async function mountPage(url: string, opts: { detailFails?: boolean; empty?: boo
       if (viewId === 8) base.columns = base.columns.map((col) => (col.key === 'overdue' ? { ...col, total: 1, cards: [cardWire({ id: 31, title: '逾期的報價', overdue: true })] } : col));
       return { ...base, config: cfg, ...(opts.noScope ? { scopeAvailable: false } : {}) };
     }
+    if (c.url === '/tasks/gantt') return ganttWire();
     if (c.url === '/task-views' && c.method === 'get') return { mine: [viewSummaryWire({ id: 5, name: '我的到期' })], shared: [viewSummaryWire({ id: 8, name: '業務部任務', isOwner: false, ownerUserId: 'manager01', ownerName: '業務主管', shareCount: 1 })] };
     if (c.url === '/task-views' && c.method === 'post') return viewDetailWire({ id: 11, name: (bodyOf(c) as { name: string }).name, config: (bodyOf(c) as { config: unknown }).config });
     if (c.url === '/task-views/5' && c.method === 'get') return viewDetailWire({ rowVersion: detailVersion });
@@ -257,6 +259,50 @@ describe('MyTasksPage', () => {
     expect(w.find('[data-testid="task-board"]').exists()).toBe(false);
     expect(w.find('[data-testid="tab-assigned"]').exists()).toBe(true);
     w.unmount();
+  });
+
+  it('G49 three views: choosing the Gantt chart puts view=gantt in the url, opens the default Gantt chart and stops the list query', async () => {
+    const { w, router } = await mountPage('/tasks?view=board&board=5');
+    expect(w.findAll('[data-testid^="view-"]').filter((e) => /^view-(list|board|gantt)$/.test(e.attributes('data-testid')!)).map((e) => e.text())).toEqual(['清單', '看板', '甘特圖']);
+    const listCallsBefore = listCalls().length;
+    await w.get('[data-testid="view-gantt"]').trigger('click');
+    await flushPromises();
+    expect(router.currentRoute.value.query).toMatchObject({ view: 'gantt' });
+    expect(router.currentRoute.value.query.board).toBeUndefined();
+    const ganttCalls = calls.filter((c) => c.url === '/tasks/gantt');
+    expect(bodyOf(ganttCalls.at(-1))).toEqual({ viewId: null, config: null, window: null });
+    expect(w.find('[data-testid="gantt-chart"]').exists()).toBe(true);
+    expect(w.find('[data-testid="task-board"]').exists()).toBe(false);
+    expect(w.find('[data-testid="board-picker"]').exists()).toBe(false);
+    expect(listCalls()).toHaveLength(listCallsBefore);
+    await w.get('[data-testid="gantt-bar-5"]').trigger('click');
+    await flushPromises();
+    expect(router.currentRoute.value.query).toMatchObject({ view: 'gantt', open: '5' });
+    w.unmount();
+  });
+
+  it('G49 reloading /tasks?view=gantt stays on the Gantt chart', async () => {
+    const { w } = await mountPage('/tasks?view=gantt');
+    expect(w.find('[data-testid="gantt-chart"]').exists()).toBe(true);
+    expect(w.find('[data-testid="tab-assigned"]').exists()).toBe(false);
+    expect(listCalls()).toHaveLength(0);
+    w.unmount();
+  });
+
+  it('on a narrow screen the Gantt view explains itself and offers the list', async () => {
+    quasar.Screen.lt.md = true;
+    try {
+      const { w, router } = await mountPage('/tasks?view=gantt');
+      expect(w.find('[data-testid="gantt-narrow"]').exists()).toBe(true);
+      expect(calls.filter((c) => c.url === '/tasks/gantt')).toHaveLength(0);
+      await w.get('[data-testid="gantt-use-list"]').trigger('click');
+      await flushPromises();
+      expect(router.currentRoute.value.query.view).toBeUndefined();
+      expect(w.find('[data-testid="tab-assigned"]').exists()).toBe(true);
+      w.unmount();
+    } finally {
+      quasar.Screen.lt.md = false;
+    }
   });
 
   it('a board id in the url loads that board, shows its name and is remembered; switching to the board again reopens it', async () => {

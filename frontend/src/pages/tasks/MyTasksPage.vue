@@ -12,6 +12,7 @@ import type { ApiError } from 'src/services/api/http';
 import BoardPicker from 'src/presentation/tasks/board/BoardPicker.vue';
 import BoardSettingsDialog from 'src/presentation/tasks/board/BoardSettingsDialog.vue';
 import TaskBoard from 'src/presentation/tasks/board/TaskBoard.vue';
+import TaskGantt from 'src/presentation/tasks/gantt/TaskGantt.vue';
 import TaskViewShareDialog from 'src/presentation/tasks/board/TaskViewShareDialog.vue';
 import SubtaskProgress from 'src/presentation/dynamic/tasks/SubtaskProgress.vue';
 import TaskDialog from 'src/presentation/dynamic/tasks/TaskDialog.vue';
@@ -41,10 +42,10 @@ const filter = computed(() => pick(route.query.filter, FILTERS, 'open'));
 const openId = computed(() => (/^\d+$/.test(String(route.query.open ?? '')) ? Number(route.query.open) : null));
 const page = ref(1);
 
-type ViewMode = 'list' | 'board';
-const mode = computed<ViewMode>(() => (route.query.view === 'board' ? 'board' : 'list'));
+type ViewMode = 'list' | 'board' | 'gantt';
+const mode = computed<ViewMode>(() => (route.query.view === 'board' || route.query.view === 'gantt' ? route.query.view : 'list'));
 const isBoard = computed(() => mode.value === 'board');
-const viewOptions = computed(() => (['list', 'board'] as const).map((v) => ({ value: v, label: t(`taskBoard.view.${v}`), attrs: { 'data-testid': `view-${v}` } })));
+const viewOptions = computed(() => (['list', 'board', 'gantt'] as const).map((v) => ({ value: v, label: t(`taskBoard.view.${v}`), attrs: { 'data-testid': `view-${v}` } })));
 // board=<id>: a whole number; no board means the default board, which the server defines. Anything else counts as unreadable (D6).
 const boardParam = computed(() => (route.query.board === undefined ? null : String(route.query.board)));
 const boardId = computed(() => (boardParam.value !== null && /^[1-9]\d*$/.test(boardParam.value) ? Number(boardParam.value) : null));
@@ -70,7 +71,7 @@ const boardName = computed(() => {
 });
 const boardGone = ref(false);
 
-const query = useMyTasks(tab, filter, page, () => !isBoard.value);
+const query = useMyTasks(tab, filter, page, () => mode.value === 'list');
 const items = computed(() => query.data.value?.items ?? []);
 const pageCount = computed(() => Math.max(1, Math.ceil((query.data.value?.totalCount ?? 0) / SIZE)));
 const filterOptions = computed(() => FILTERS.map((f) => ({ value: f, label: t(`tasks.filters.${f}`) })));
@@ -88,6 +89,8 @@ function setView(v: ViewMode) {
   boardGone.value = false;
   draft.value = null;
   if (v === 'list') return go({ view: undefined, board: undefined });
+  // gt2a 只有預設甘特圖（存檔甘特圖與 gantt=<id> 隨 gt2c）
+  if (v === 'gantt') return go({ view: 'gantt', board: undefined });
   const last = readLastTaskBoard(identity.userId);
   go({ view: 'board', board: last === null ? undefined : String(last) });
 }
@@ -179,6 +182,7 @@ const boardFailed = computed(() => !!boardQuery.error.value && !boardQuery.data.
       <q-linear-progress v-else-if="boardQuery.isLoading.value" indeterminate class="q-my-sm" data-testid="board-loading" />
       <TaskBoard v-if="boardQuery.data.value" :board="boardQuery.data.value" :source="boardSource" @open="setOpen" />
     </template>
+    <TaskGantt v-else-if="mode === 'gantt'" @open="setOpen" @list="setView('list')" />
     <template v-else>
       <q-tabs :model-value="tab" dense align="left" narrow-indicator class="text-primary" @update:model-value="(v) => setTab(v as TaskListTab)">
         <q-tab v-for="x in tabs" :key="x" :name="x" no-caps :label="t(`tasks.tabs.${x}`)" :data-testid="`tab-${x}`" />

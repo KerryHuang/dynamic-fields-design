@@ -1,7 +1,7 @@
-import { useMutation, useQuery, useQueryClient } from '@tanstack/vue-query';
+import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/vue-query';
 import { computed, toValue, type MaybeRefOrGetter } from 'vue';
 import {
-  moveCardLocally, removeCardLocally, restoreCardLocally, type BoardCard, type BoardColumn, type BoardGroupBy, type BoardSource, type TaskBoardConfig, type TaskBoardData, type TaskMoveResult, type TaskViewShareKind,
+  moveCardLocally, removeCardLocally, restoreCardLocally, type BoardCard, type BoardColumn, type BoardGroupBy, type BoardSource, type GanttSource, type TaskBoardConfig, type TaskBoardData, type TaskMoveResult, type TaskViewShareKind,
 } from 'src/domain/dynamic/task-board-types';
 import type { TaskCascade } from 'src/domain/dynamic/task-types';
 import { dynamicApi } from 'src/services/api/dynamic-api';
@@ -17,6 +17,19 @@ export function useBoardColumns(source: MaybeRefOrGetter<BoardSource>, enabled: 
     queryKey: computed(() => boardKey(toValue(source))),
     queryFn: () => dynamicApi.getBoardColumns(toValue(source)),
     enabled: computed(() => toValue(enabled)),
+  });
+}
+
+/** 甘特查詢（看板設計 §11.5.2.5）；鍵在 `['task-board']` 底下，任務有任何變動跟著重抓。平移時保留上一段的畫面，直到新的一段回來。 */
+export function useGantt(source: MaybeRefOrGetter<GanttSource>, enabled: MaybeRefOrGetter<boolean> = true) {
+  return useQuery({
+    queryKey: computed(() => {
+      const s = toValue(source);
+      return ['task-board', 'gantt', s.viewId ?? null, s.config ?? null, s.window ?? null] as const;
+    }),
+    queryFn: () => dynamicApi.getGantt(toValue(source)),
+    enabled: computed(() => toValue(enabled)),
+    placeholderData: keepPreviousData,
   });
 }
 
