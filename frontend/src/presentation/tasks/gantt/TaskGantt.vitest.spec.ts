@@ -1,29 +1,77 @@
 import { QueryClient, VueQueryPlugin } from '@tanstack/vue-query';
-import { flushPromises, mount } from '@vue/test-utils';
+import { flushPromises, mount, type VueWrapper } from '@vue/test-utils';
 import * as quasar from 'quasar';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createI18n } from 'vue-i18n';
 import enUS from 'src/i18n/en-US.json';
 import zhTW from 'src/i18n/zh-TW.json';
+import DateSelect from 'src/components/framework/DateSelect.vue';
 import { bodyOf, HttpFail, mockHttp, type Call } from 'src/test-utils/mock-http';
 import { cardWire } from '../board/board-fixtures';
 import { ganttWire } from './gantt-fixtures';
+import GanttDateDialog from './GanttDateDialog.vue';
 import TaskGantt from './TaskGantt.vue';
 
 let calls: Call[];
 const ganttCalls = () => calls.filter((c) => c.url === '/tasks/gantt');
 const lastBody = () => bodyOf(ganttCalls().at(-1)) as { viewId: number | null; config: Record<string, unknown> | null; window: { from: string; to: string } | null };
 
-async function mountGantt(reply: (body: ReturnType<typeof lastBody>) => unknown = () => ganttWire(), locale = 'zh-TW') {
-  calls = mockHttp((c) => (c.url === '/tasks/gantt' ? reply(bodyOf(c) as ReturnType<typeof lastBody>) : []));
+type ScheduleBody = { startDate: string | null; dueDate: string | null; expectedVersion: string };
+async function mountGantt(
+  reply: (body: ReturnType<typeof lastBody>) => unknown = () => ganttWire(), locale = 'zh-TW',
+  schedule: (id: number, body: ScheduleBody) => unknown = () => new HttpFail(500, {}),
+) {
+  calls = mockHttp((c) => {
+    if (c.url === '/tasks/gantt') return reply(bodyOf(c) as ReturnType<typeof lastBody>);
+    const m = /^\/tasks\/(\d+)\/schedule$/.exec(c.url);
+    if (m) return schedule(Number(m[1]), bodyOf(c) as ScheduleBody);
+    return [];
+  });
   const i18n = createI18n({ legacy: false, locale, messages: { 'zh-TW': zhTW, 'en-US': enUS } });
   const w = mount(TaskGantt, {
     attachTo: document.body,
-    global: { plugins: [[quasar.Quasar, { components: quasar, directives: quasar }], i18n, [VueQueryPlugin, { queryClient: new QueryClient({ defaultOptions: { queries: { retry: false, refetchOnWindowFocus: false } } }) }]] },
+    global: { plugins: [[quasar.Quasar, { components: quasar, directives: quasar, plugins: { Notify: quasar.Notify } }], i18n, [VueQueryPlugin, { queryClient: new QueryClient({ defaultOptions: { queries: { retry: false, refetchOnWindowFocus: false } } }) }]] },
   });
   await flushPromises();
   return w;
 }
+
+/** 會記住改過的日期的假伺服器：schedule 改了哪一個任務，之後的甘特查詢就照新日期回（沒有到期日的在未排程）。 */
+function statefulServer() {
+  const base = ganttWire();
+  const all = new Map<number, Record<string, unknown>>([...base.rows, ...base.unscheduled].map((r) => [r.id, r]));
+  const gantt = () => {
+    const list = [...all.values()];
+    const rows = list.filter((r) => r.dueDate);
+    const unscheduled = list.filter((r) => !r.dueDate);
+    return { ...base, rows, unscheduled, total: rows.length, unscheduledTotal: unscheduled.length };
+  };
+  const schedule = (id: number, b: ScheduleBody) => {
+    const card = { ...all.get(id)!, startDate: b.startDate ?? undefined, dueDate: b.dueDate ?? undefined, version: 'v2' };
+    all.set(id, card);
+    return { card };
+  };
+  return { gantt, schedule };
+}
+const scheduleCalls = () => calls.filter((c) => /\/schedule$/.test(c.url));
+const dialogOpen = (w: VueWrapper) => w.findComponent(GanttDateDialog).props('modelValue');
+const dialogText = () => document.querySelector('[data-testid="gantt-dates"]')?.textContent ?? '';
+const dateInputs = (w: VueWrapper) => w.findComponent(GanttDateDialog).findAllComponents(DateSelect);
+async function setDates(w: VueWrapper, start: string | null, due: string | null) {
+  const [s, d] = dateInputs(w);
+  s.vm.$emit('update:modelValue', start);
+  d.vm.$emit('update:modelValue', due);
+  await flushPromises();
+}
+const saveButton = () => document.querySelector<HTMLButtonElement>('[data-testid="gantt-dates-save"]')!;
+async function save() {
+  saveButton().click();
+  await flushPromises();
+  await new Promise((r) => setTimeout(r));
+  await flushPromises();
+}
+const notifySpy = (w: VueWrapper) => vi.spyOn(w.vm.$q, 'notify').mockImplementation(() => () => {});
+const notified = (spy: ReturnType<typeof notifySpy>) => spy.mock.calls.map((c) => (c[0] as { message: string }).message);
 const pctOf = (el: { attributes: (n: string) => string | undefined }, prop: 'left' | 'width') => Number(new RegExp(`${prop}: ([\\d.]+)%`).exec(el.attributes('style') ?? '')?.[1]);
 
 /** 依刻度回對應的預設時間窗，像伺服器一樣。 */
@@ -35,7 +83,7 @@ function serverLike(body: ReturnType<typeof lastBody>) {
 
 describe('TaskGantt', () => {
   beforeEach(() => { document.body.innerHTML = ''; });
-  afterEach(() => { quasar.Screen.lt.md = false; quasar.Screen.lt.sm = false; vi.unstubAllGlobals(); document.body.innerHTML = ''; });
+  afterEach(() => { quasar.Screen.lt.md = false; quasar.Screen.lt.sm = false; vi.unstubAllGlobals(); vi.restoreAllMocks(); document.body.innerHTML = ''; });
 
   it('opens the default Gantt chart: no view id, no config, no window', async () => {
     const w = await mountGantt();
@@ -204,21 +252,178 @@ describe('TaskGantt', () => {
     expect(w.find('[data-testid="gantt-bar-5"]').exists()).toBe(true);
   });
 
-  it('tablet and phone widths (below 1024) show the notice instead of the chart and send no query', async () => {
+  it('G58 tablet (below 1024): left column 200px; clicking a bar opens the dates dialog, saving sends schedule with the version and the bar moves', async () => {
     quasar.Screen.lt.md = true;
-    const w = await mountGantt();
-    expect(w.get('[data-testid="gantt-narrow"]').text()).toContain('甘特圖請用較寬的螢幕，或改用清單檢視');
-    expect(w.find('[data-testid="gantt-chart"]').exists()).toBe(false);
-    expect(ganttCalls()).toHaveLength(0);
-    await w.get('[data-testid="gantt-use-list"]').trigger('click');
-    expect(w.emitted('list')).toHaveLength(1);
+    const srv = statefulServer();
+    const w = await mountGantt(srv.gantt, 'zh-TW', srv.schedule);
+    expect(w.get('[data-testid="gantt-chart"]').attributes('style')).toContain('--gantt-left: 200px');
+    await w.get('[data-testid="gantt-bar-7"]').trigger('click');
+    await flushPromises();
+    expect(w.emitted('open')).toBeUndefined();
+    expect(dialogOpen(w)).toBe(true);
+    expect(document.querySelector('[data-testid="gantt-dates-task"]')!.textContent).toContain('整理邀請客戶名單');
+    expect(dateInputs(w).map((d) => d.props('modelValue'))).toEqual(['2026-11-21', '2026-12-02']);
+    await setDates(w, '2026-11-30', '2026-12-10');
+    await save();
+    expect(scheduleCalls().map((c) => c.url)).toEqual(['/tasks/7/schedule']);
+    expect(bodyOf(scheduleCalls()[0])).toEqual({ startDate: '2026-11-30', dueDate: '2026-12-10', expectedVersion: '20261101020000000' });
+    expect(pctOf(w.get('[data-testid="gantt-bar-7"]'), 'left')).toBeCloseTo((14 / 91) * 100, 3);
+    expect(pctOf(w.get('[data-testid="gantt-bar-7"]'), 'width')).toBeCloseTo((11 / 91) * 100, 3);
+    expect(dialogOpen(w)).toBe(false);
   });
 
-  it('a touch screen counts as a tablet at any width', async () => {
+  it('G58 a touch screen counts as a tablet at any width', async () => {
     vi.stubGlobal('matchMedia', (q: string) => ({ matches: q === '(pointer: coarse)', addEventListener() {}, removeEventListener() {} }));
     const w = await mountGantt();
-    expect(w.find('[data-testid="gantt-narrow"]').exists()).toBe(true);
-    expect(ganttCalls()).toHaveLength(0);
+    expect(w.get('[data-testid="gantt-chart"]').attributes('style')).toContain('--gantt-left: 200px');
+    await w.get('[data-testid="gantt-milestone-8"]').trigger('click');
+    await flushPromises();
+    expect(w.emitted('open')).toBeUndefined();
+    expect(dialogOpen(w)).toBe(true);
+  });
+
+  it('G58 a stale version (409) tells the user, closes the dialog, puts the bar back and reloads the chart', async () => {
+    quasar.Screen.lt.md = true;
+    const w = await mountGantt(() => ganttWire(), 'zh-TW', () => new HttpFail(409, { code: 'stale', message: 'SERVER-TEXT' }));
+    const spy = notifySpy(w);
+    const before = ganttCalls().length;
+    await w.get('[data-testid="gantt-bar-7"]').trigger('click');
+    await flushPromises();
+    await setDates(w, '2026-11-30', '2026-12-10');
+    await save();
+    expect(notified(spy)).toEqual(['任務已被別人修改，已重新整理']);
+    expect(ganttCalls().length).toBeGreaterThan(before);
+    expect(pctOf(w.get('[data-testid="gantt-bar-7"]'), 'left')).toBeCloseTo((5 / 91) * 100, 3);
+    expect(dialogOpen(w)).toBe(false);
+  });
+
+  it('G58 tasks whose dates cannot be changed (no permission, frozen) have no edit or schedule button and their bar opens the task', async () => {
+    quasar.Screen.lt.md = true;
+    const rows = [
+      cardWire({ id: 31, title: '部屬的任務', startDate: '2026-11-17', dueDate: '2026-11-20', canEdit: false }),
+      cardWire({ id: 32, title: '凍結的任務', startDate: '2026-11-17', dueDate: '2026-11-20', frozen: true }),
+    ];
+    const w = await mountGantt(() => ganttWire({ rows, spans: [], total: 2, unscheduled: [cardWire({ id: 33, dueDate: undefined, canEdit: false })], unscheduledTotal: 1 }));
+    expect(w.find('[data-testid="gantt-edit-31"]').exists()).toBe(false);
+    expect(w.find('[data-testid="gantt-edit-32"]').exists()).toBe(false);
+    expect(w.find('[data-testid="gantt-schedule-33"]').exists()).toBe(false);
+    await w.get('[data-testid="gantt-bar-31"]').trigger('click');
+    await w.get('[data-testid="gantt-bar-32"]').trigger('click');
+    expect(w.emitted('open')).toEqual([[31], [32]]);
+    expect(dialogOpen(w)).toBe(false);
+  });
+
+  it('G58 the dialog blocks a start after the due date at once and puts a server 400 under the field without closing', async () => {
+    const w = await mountGantt(() => ganttWire(), 'zh-TW', () => new HttpFail(400, { errors: { startDate: ['SERVER'] } }));
+    const spy = notifySpy(w);
+    await w.get('[data-testid="gantt-edit-7"]').trigger('click');
+    await flushPromises();
+    await setDates(w, '2026-12-05', '2026-12-02');
+    expect(dialogText()).toContain('開始日不能晚於到期日');
+    expect(saveButton().classList.contains('disabled')).toBe(true);
+    await save();
+    expect(scheduleCalls()).toHaveLength(0);
+    await setDates(w, '2026-11-25', '2026-12-02');
+    expect(dialogText()).not.toContain('開始日不能晚於到期日');
+    await save();
+    expect(scheduleCalls()).toHaveLength(1);
+    expect(dialogText()).toContain('開始日不能晚於到期日');
+    expect(dialogText()).not.toContain('SERVER');
+    expect(notified(spy)).toEqual([]);
+    expect(dialogOpen(w)).toBe(true);
+  });
+
+  it('G58 clearing both dates moves the task to Unscheduled', async () => {
+    const srv = statefulServer();
+    const w = await mountGantt(srv.gantt, 'zh-TW', srv.schedule);
+    await w.get('[data-testid="gantt-edit-8"]').trigger('click');
+    await flushPromises();
+    await setDates(w, null, null);
+    await save();
+    expect(bodyOf(scheduleCalls()[0])).toEqual({ startDate: null, dueDate: null, expectedVersion: '20261101020000000' });
+    expect(w.find('[data-testid="gantt-milestone-8"]').exists()).toBe(false);
+    expect(w.find('[data-testid="gantt-unscheduled-8"]').exists()).toBe(true);
+  });
+
+  it('G60 every row has a Tab-reachable edit-dates button and unscheduled rows a schedule button; on a desktop the bar still opens the task', async () => {
+    const srv = statefulServer();
+    const w = await mountGantt(srv.gantt, 'zh-TW', srv.schedule);
+    for (const id of [5, 6, 7, 8, 9]) {
+      const edit = w.get(`[data-testid="gantt-edit-${id}"]`);
+      expect(edit.element.tagName).toBe('BUTTON');
+      expect(edit.attributes('tabindex')).not.toBe('-1');
+    }
+    expect(w.get('[data-testid="gantt-edit-7"]').attributes('aria-label')).toBe('編輯「整理邀請客戶名單」的日期');
+    expect(w.get('[data-testid="gantt-chart"]').attributes('style')).toContain('--gantt-left: 280px');
+    await w.get('[data-testid="gantt-bar-7"]').trigger('click');
+    expect(w.emitted('open')).toEqual([[7]]);
+    expect(dialogOpen(w)).toBe(false);
+    // Enter on a native button is a click
+    await w.get('[data-testid="gantt-edit-7"]').trigger('click');
+    await flushPromises();
+    expect(dialogOpen(w)).toBe(true);
+    w.findComponent(GanttDateDialog).vm.$emit('update:modelValue', false);
+    await flushPromises();
+
+    const sched = w.get('[data-testid="gantt-schedule-21"]');
+    expect(sched.element.tagName).toBe('BUTTON');
+    expect(sched.attributes('aria-label')).toBe('排程「想想看」');
+    await sched.trigger('click');
+    await flushPromises();
+    expect(w.emitted('open')).toEqual([[7]]);
+    expect(dateInputs(w).map((d) => d.props('modelValue'))).toEqual([null, null]);
+    await setDates(w, '2026-11-25', '2026-11-25');
+    await save();
+    expect(bodyOf(scheduleCalls()[0])).toEqual({ startDate: '2026-11-25', dueDate: '2026-11-25', expectedVersion: '20261101020000000' });
+    expect(w.find('[data-testid="gantt-unscheduled-21"]').exists()).toBe(false);
+    expect(w.find('[data-testid="gantt-bar-21"]').exists()).toBe(true);
+  });
+
+  it('G59 phone: no timeline; four weeks from this week; a task over three weeks only in its start week; an earlier start goes to the first week', async () => {
+    quasar.Screen.lt.sm = true;
+    quasar.Screen.lt.md = true;
+    const rows = [
+      cardWire({ id: 5, title: '規劃活動內容', status: 'inProgress', startDate: '2026-11-16', dueDate: '2026-12-01', level: 'parent', progress: { done: 1, cancelled: 0, total: 3 } }),
+      cardWire({ id: 7, title: '整理邀請客戶名單', startDate: '2026-11-23', dueDate: '2026-12-09', level: 'child', parentTaskId: 5, parentTitle: '規劃活動內容' }),
+      cardWire({ id: 8, title: '寄合約', dueDate: '2026-12-01' }),
+      cardWire({ id: 9, title: '回覆報價', startDate: '2026-11-10', dueDate: '2026-11-17', overdue: true }),
+    ];
+    const w = await mountGantt((b) => ganttWire({ rows, spans: [], total: 4, window: b.window ?? { from: '2026-11-16', to: '2027-02-14' } }));
+    expect(bodyOf(ganttCalls()[0])).toEqual({ viewId: null, config: null, window: null });
+    expect(lastBody().window).toEqual({ from: '2026-11-16', to: '2026-12-13' });
+    expect(w.find('[data-testid="gantt-chart"]').exists()).toBe(false);
+    expect(w.find('[data-testid="gantt-scale"]').exists()).toBe(false);
+    expect(w.findAll('[data-testid="gantt-week-title"]').map((e) => e.text())).toEqual(['11/16 – 11/22', '11/23 – 11/29', '11/30 – 12/6', '12/7 – 12/13']);
+    const weekIds = (from: string) => w.get(`[data-testid="gantt-week-${from}"]`).findAll('[data-testid^="gantt-week-item-"]').map((e) => e.attributes('data-testid'));
+    expect(weekIds('2026-11-16')).toEqual(['gantt-week-item-5', 'gantt-week-item-9']);
+    expect(weekIds('2026-11-23')).toEqual(['gantt-week-item-7']);
+    expect(weekIds('2026-11-30')).toEqual(['gantt-week-item-8']);
+    expect(w.get('[data-testid="gantt-week-2026-12-07"]').find('[data-testid="gantt-week-empty"]').exists()).toBe(true);
+    expect(w.findAll('[data-testid="gantt-week-item-7"]')).toHaveLength(1);
+    expect(w.get('[data-testid="gantt-week-parent-7"]').text()).toContain('規劃活動內容');
+    expect(w.get('[data-testid="gantt-week-dates-7"]').text()).toContain('11/23 → 12/9');
+    expect(w.get('[data-testid="gantt-week-dates-8"]').text()).toContain('◆ 12/1');
+    expect(w.get('[data-testid="gantt-week-dates-9"]').classes()).toContain('text-negative');
+    expect(w.get('[data-testid="gantt-week-item-5"]').find('[data-testid="subtask-progress-text"]').exists()).toBe(true);
+    expect(w.find('[data-testid^="gantt-edit-"]').exists()).toBe(false);
+
+    await w.get('[data-testid="gantt-week-item-7"]').trigger('click');
+    expect(w.emitted('open')).toEqual([[7]]);
+
+    await w.get('[data-testid="gantt-next"]').trigger('click');
+    await flushPromises();
+    expect(lastBody().window).toEqual({ from: '2026-12-14', to: '2027-01-10' });
+    expect(w.findAll('[data-testid="gantt-week-title"]')[0].text()).toBe('12/14 – 12/20');
+    await w.get('[data-testid="gantt-prev"]').trigger('click');
+    await flushPromises();
+    expect(lastBody().window).toEqual({ from: '2026-11-16', to: '2026-12-13' });
+
+    const unscheduled = w.get('[data-testid="gantt-unscheduled"]');
+    expect(unscheduled.text()).toContain('未排程（2）');
+    await unscheduled.get('.q-item').trigger('click');
+    await flushPromises();
+    await w.get('[data-testid="gantt-unscheduled-20"]').trigger('click');
+    expect(w.emitted('open')).toEqual([[7], [20]]);
   });
 
   it('G61 the scale labels follow the interface language', async () => {

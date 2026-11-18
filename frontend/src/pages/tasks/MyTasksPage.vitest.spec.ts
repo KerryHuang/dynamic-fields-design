@@ -289,16 +289,15 @@ describe('MyTasksPage', () => {
     w.unmount();
   });
 
-  it('on a narrow screen the Gantt view explains itself and offers the list', async () => {
+  it('G58 on a tablet the Gantt view shows the timeline and a bar opens the dates dialog instead of the task', async () => {
     quasar.Screen.lt.md = true;
     try {
       const { w, router } = await mountPage('/tasks?view=gantt');
-      expect(w.find('[data-testid="gantt-narrow"]').exists()).toBe(true);
-      expect(calls.filter((c) => c.url === '/tasks/gantt')).toHaveLength(0);
-      await w.get('[data-testid="gantt-use-list"]').trigger('click');
+      expect(w.find('[data-testid="gantt-chart"]').exists()).toBe(true);
+      await w.get('[data-testid="gantt-bar-5"]').trigger('click');
       await flushPromises();
-      expect(router.currentRoute.value.query.view).toBeUndefined();
-      expect(w.find('[data-testid="tab-assigned"]').exists()).toBe(true);
+      expect(router.currentRoute.value.query.open).toBeUndefined();
+      expect(document.querySelector('[data-testid="gantt-dates"]')).not.toBeNull();
       w.unmount();
     } finally {
       quasar.Screen.lt.md = false;

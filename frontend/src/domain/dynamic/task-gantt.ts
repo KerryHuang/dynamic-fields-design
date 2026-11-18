@@ -243,3 +243,82 @@ export function ganttLines(data: TaskGanttData, groupBy: GanttGroupBy, collapsed
   if (groupBy === 'assignee') return byAssignee(data.rows, compare);
   return data.rows.map((r) => taskLine(r, 0));
 }
+
+// ---- 平板、手機與改日期（gt2b1，§11.5.4.2、11.5.4.7、11.5.4.9） ----
+
+/** 平板（600–1023 或觸控）的左欄寬；手機一次 4 週（技術限制，GT-T18）。 */
+export const GANTT_LEFT_WIDTH_TABLET = 200;
+export const GANTT_PHONE_WEEKS = 4;
+
+/** 能不能改這個任務的日期：照卡片上的權限欄位（凍結、只有主管身分、沒有權限都不行），與後端 ScheduleTaskHandler 相同。 */
+export const canSchedule = (card: BoardCard): boolean => card.canEdit && !card.frozen;
+
+/** 手機的時間窗：從今天所在週的週起始日起 4 週。 */
+export function phoneWindow(today: string, weekStart: string): TaskGanttWindow {
+  const from = startOfWeek(today, weekStart);
+  return { from, to: addDays(from, GANTT_PHONE_WEEKS * 7 - 1) };
+}
+/** 手機的上一段／下一段：±4 週。 */
+export function shiftPhoneWindow(w: TaskGanttWindow, dir: 1 | -1): TaskGanttWindow {
+  const step = dir * GANTT_PHONE_WEEKS * 7;
+  return { from: addDays(w.from, step), to: addDays(w.to, step) };
+}
+
+export interface GanttWeek {
+  from: string;
+  to: string;
+  cards: BoardCard[];
+}
+
+/**
+ * 手機依週分組：時間窗從週起始日起每 7 天一週（全部週都列，空的也列）。跨好幾週的任務只出現在開始那週，
+ * 開始日早於時間窗時放第一週（GT-Q3）；只有到期日的用到期日。週內照伺服器順序。
+ */
+export function ganttWeeks(rows: readonly BoardCard[], w: TaskGanttWindow): GanttWeek[] {
+  const from = dayNumber(w.from);
+  const count = Math.max(1, Math.ceil(windowDays(w) / 7));
+  const weeks: GanttWeek[] = Array.from({ length: count }, (_, i) => {
+    const start = addDays(w.from, i * 7);
+    const end = addDays(start, 6);
+    return { from: start, to: end < w.to ? end : w.to, cards: [] };
+  });
+  for (const r of rows) {
+    const day = r.startDate ?? r.dueDate;
+    if (!day) continue;
+    const i = Math.min(count - 1, Math.max(0, Math.floor((dayNumber(day) - from) / 7)));
+    weeks[i].cards.push(r);
+  }
+  return weeks;
+}
+
+/**
+ * 在畫面上先改好一個任務的日期（日期對話框與 gt2b2 拖拉共用）：在時間軸列裡就地改；清掉到期日就移到「未排程」最前面，
+ * 未排程的有了到期日就移到時間軸最後面（確切位置等重新查詢）。找不到就原樣回傳。
+ */
+export function scheduleCardLocally(data: TaskGanttData, id: number, startDate: string | null, dueDate: string | null): TaskGanttData {
+  const patch = (c: BoardCard): BoardCard => ({ ...c, startDate, dueDate });
+  const inRows = data.rows.find((c) => c.id === id);
+  const inUnscheduled = data.unscheduled.find((c) => c.id === id);
+  const parents = data.parents.map((p) => (p.row?.id === id ? { ...p, row: patch(p.row) } : p));
+  if (inRows) {
+    if (dueDate) return { ...data, parents, rows: data.rows.map((c) => (c.id === id ? patch(c) : c)) };
+    return { ...data, parents, rows: data.rows.filter((c) => c.id !== id), unscheduled: [patch(inRows), ...data.unscheduled], unscheduledTotal: data.unscheduledTotal + 1 };
+  }
+  if (inUnscheduled) {
+    if (!dueDate) return { ...data, parents, unscheduled: data.unscheduled.map((c) => (c.id === id ? patch(c) : c)) };
+    return {
+      ...data, parents, rows: [...data.rows, patch(inUnscheduled)], unscheduled: data.unscheduled.filter((c) => c.id !== id),
+      unscheduledTotal: Math.max(0, data.unscheduledTotal - 1),
+    };
+  }
+  return { ...data, parents };
+}
+
+/** 伺服器回來的卡片取代畫面上的那一張（時間軸列、未排程、時間窗外的父任務列）。 */
+export function replaceCardLocally(data: TaskGanttData, card: BoardCard): TaskGanttData {
+  const swap = (c: BoardCard) => (c.id === card.id ? card : c);
+  return {
+    ...data, rows: data.rows.map(swap), unscheduled: data.unscheduled.map(swap),
+    parents: data.parents.map((p) => (p.row?.id === card.id ? { ...p, row: card } : p)),
+  };
+}

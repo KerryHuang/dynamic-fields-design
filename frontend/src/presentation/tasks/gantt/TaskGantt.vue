@@ -3,20 +3,22 @@ import { useQuasar } from 'quasar';
 import { computed, onBeforeUnmount, ref, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { useGantt } from 'src/application/dynamic/queries/task-board-queries';
-import type { BoardCard, GanttSource, TaskGanttConfig, TaskGanttWindow } from 'src/domain/dynamic/task-board-types';
+import type { BoardCard, GanttSource, TaskGanttConfig, TaskGanttData, TaskGanttWindow } from 'src/domain/dynamic/task-board-types';
 import {
-  barGeometry, formatGanttDate, ganttLines, GANTT_LEFT_WIDTH, minorTicks, monthTicks, shiftWindow, spanGeometry, todayPosition, windowFor,
-  type GanttLine, type GanttScale,
+  barGeometry, canSchedule, formatGanttDate, ganttLines, ganttWeeks, GANTT_LEFT_WIDTH, GANTT_LEFT_WIDTH_TABLET, minorTicks, monthTicks, phoneWindow,
+  shiftPhoneWindow, shiftWindow, spanGeometry, todayPosition, windowFor, type GanttLine, type GanttScale,
 } from 'src/domain/dynamic/task-gantt';
 import { progressView, taskStatusColor } from 'src/domain/dynamic/task-types';
 import SubtaskProgress from 'src/presentation/dynamic/tasks/SubtaskProgress.vue';
+import GanttDateDialog from './GanttDateDialog.vue';
+import { useGanttSchedule } from './use-gantt-schedule';
 
 /**
- * 甘特圖（看板設計 §11.5.4，gt2a 唯讀）：預設甘特圖、刻度與平移、三種分組、子任務跨度、今天線、未排程。
+ * 甘特圖（看板設計 §11.5.4）：預設甘特圖、刻度與平移、三種分組、子任務跨度、今天線、未排程（gt2a）；
+ * 平板時間軸、手機依週分組清單、日期對話框與「編輯日期」「排程」鈕（gt2b1）。拖拉隨 gt2b2。
  * 時間軸用 CSS grid 與百分比定位自畫（GT-T21），寬度填滿容器、不橫向捲動；用 Quasar 視窗斷點判斷寬度（GT-T17）。
- * 平板（< 1024 或觸控）與手機（< 600）在 gt2a 只顯示說明（§11.5.8 拆分備案），日期對話框與手機週清單隨 gt2b。
  */
-const emit = defineEmits<{ open: [id: number]; list: [] }>();
+const emit = defineEmits<{ open: [id: number] }>();
 const { t, locale } = useI18n();
 const $q = useQuasar();
 
@@ -26,24 +28,66 @@ const coarse = ref(!!coarseQuery?.matches);
 const onPointerChange = () => { coarse.value = !!coarseQuery?.matches; };
 coarseQuery?.addEventListener?.('change', onPointerChange);
 onBeforeUnmount(() => coarseQuery?.removeEventListener?.('change', onPointerChange));
-const wide = computed(() => !$q.screen.lt.md && !coarse.value);
+// 手機 < 600 是週清單；600–1023 或觸控是平板（左欄 200px、點長條開日期對話框）；其餘是桌機筆電
+const mode = computed<'phone' | 'tablet' | 'desktop'>(() => ($q.screen.lt.sm ? 'phone' : $q.screen.lt.md || coarse.value ? 'tablet' : 'desktop'));
 
 // 刻度與時間窗由使用者在畫面上切換；沒切過就照伺服器（預設甘特圖的刻度、伺服器算的預設時間窗）。
 // 換了刻度後「今天」要用新刻度的預設時間窗，所以把刻度放進設定一起送（只改刻度，其餘是伺服器回的設定）。
 const scale = ref<GanttScale | null>(null);
 const win = ref<TaskGanttWindow | null>(null);
 const base = ref<TaskGanttConfig | null>(null);
-const source = computed<GanttSource>(() => ({
-  viewId: null,
-  config: scale.value && base.value && scale.value !== base.value.scale ? { ...base.value, scale: scale.value } : null,
-  window: win.value,
-}));
-const query = useGantt(source, wide);
+// 手機固定 4 週：第一次先照預設查（要伺服器的今天與週起始日），拿到後改查從本週起的 4 週
+const phoneWin = ref<TaskGanttWindow | null>(null);
+const source = computed<GanttSource>(() => (mode.value === 'phone'
+  ? { viewId: null, config: null, window: phoneWin.value }
+  : {
+    viewId: null,
+    config: scale.value && base.value && scale.value !== base.value.scale ? { ...base.value, scale: scale.value } : null,
+    window: win.value,
+  }));
+const query = useGantt(source);
 const data = computed(() => query.data.value ?? null);
 watch(data, (d) => { if (d && !base.value) base.value = d.config; }, { immediate: true });
 const shownScale = computed<GanttScale>(() => scale.value ?? data.value?.config.scale ?? 'week');
 // 上一段還沒換成新的一段前不能再平移（平移以畫面上的時間窗為起點）
 const busy = computed(() => query.isPlaceholderData.value);
+
+// ---- 手機週清單（§11.5.4.7） ----
+const phoneData = ref<TaskGanttData | null>(null);
+watch([data, mode], ([d, m]) => {
+  if (m !== 'phone' || !d) return;
+  if (!phoneWin.value) phoneWin.value = phoneWindow(d.today, d.weekStart);
+  else if (d.window.from === phoneWin.value.from && d.window.to === phoneWin.value.to) phoneData.value = d;
+}, { immediate: true });
+const phoneBusy = computed(() => !!phoneData.value && !!phoneWin.value && phoneData.value.window.from !== phoneWin.value.from);
+const weeks = computed(() => (phoneData.value ? ganttWeeks(phoneData.value.rows, phoneData.value.window) : []));
+function shiftPhone(dir: 1 | -1) {
+  if (phoneData.value) phoneWin.value = shiftPhoneWindow(phoneData.value.window, dir);
+}
+function phoneToday() {
+  const d = phoneData.value;
+  if (!d) return;
+  const w = phoneWindow(d.today, d.weekStart);
+  if (w.from === d.window.from) void query.refetch();
+  else phoneWin.value = w;
+}
+const phoneRange = computed(() => (phoneData.value ? `${fullDate(phoneData.value.window.from)} – ${fullDate(phoneData.value.window.to)}` : ''));
+const phoneDates = (c: BoardCard) => (c.startDate && c.dueDate ? `${shortDate(c.startDate)} → ${shortDate(c.dueDate)}` : c.dueDate ? `◆ ${shortDate(c.dueDate)}` : '');
+
+// ---- 改日期（§11.5.4.9）：平板點長條、任何寬度的「編輯日期」、未排程的「排程」 ----
+const scheduler = useGanttSchedule(source);
+const datesOpen = ref(false);
+const datesCard = ref<BoardCard | null>(null);
+function openDates(c: BoardCard) {
+  datesCard.value = c;
+  datesOpen.value = true;
+}
+// 平板不能拖，點長條改開日期對話框；不能改日期的任務照常開任務詳細（§11.5.4.8 不能改的列）
+function onBar(c: BoardCard) {
+  if (mode.value === 'tablet' && canSchedule(c)) openDates(c);
+  else emit('open', c.id);
+}
+const leftWidth = computed(() => (mode.value === 'tablet' ? GANTT_LEFT_WIDTH_TABLET : GANTT_LEFT_WIDTH));
 
 function shift(dir: 1 | -1) {
   if (data.value) win.value = shiftWindow(data.value.window, shownScale.value, dir);
@@ -114,10 +158,70 @@ const shortDate = (iso: string) => formatGanttDate(iso, locale.value, { month: '
 
 <template>
   <div class="task-gantt" role="region" :aria-label="t('taskGantt.region')" data-testid="gantt">
-    <q-banner v-if="!wide" dense rounded class="bg-info-soft" role="status" data-testid="gantt-narrow">
-      {{ t('taskGantt.narrow') }}
-      <template #action><q-btn flat dense no-caps color="primary" :label="t('taskGantt.useList')" data-testid="gantt-use-list" @click="emit('list')" /></template>
-    </q-banner>
+    <!-- 手機：不畫時間軸，依週分組的清單；點一列開任務詳細（§11.5.4.7） -->
+    <template v-if="mode === 'phone'">
+      <div class="row items-center no-wrap q-mb-sm" style="gap: 4px">
+        <q-btn flat dense round icon="chevron_left" :disable="!phoneData || phoneBusy" :aria-label="t('taskGantt.prev')" data-testid="gantt-prev" @click="shiftPhone(-1)" />
+        <q-btn flat dense no-caps :disable="!phoneData || phoneBusy" :label="t('taskGantt.today')" data-testid="gantt-today" @click="phoneToday" />
+        <q-btn flat dense round icon="chevron_right" :disable="!phoneData || phoneBusy" :aria-label="t('taskGantt.next')" data-testid="gantt-next" @click="shiftPhone(1)" />
+        <span class="text-body2 ellipsis" aria-live="polite" data-testid="gantt-range">{{ phoneRange }}</span>
+      </div>
+      <div v-if="query.error.value && !phoneData" class="text-negative q-py-sm" data-testid="gantt-load-failed">
+        {{ t('taskGantt.loadFailed') }}
+        <q-btn flat dense no-caps color="primary" :label="t('taskBoard.retry')" data-testid="gantt-retry" @click="query.refetch()" />
+      </div>
+      <q-linear-progress v-else-if="!phoneData" indeterminate class="q-my-sm" data-testid="gantt-loading" />
+      <template v-if="phoneData">
+        <q-banner v-if="!phoneData.scopeAvailable" dense rounded class="bg-info-soft q-mb-sm" role="status" data-testid="gantt-scope-unavailable">
+          {{ t('taskGantt.scopeUnavailable') }}
+        </q-banner>
+        <q-banner v-if="phoneData.truncated" dense rounded class="bg-info-soft q-mb-sm" role="status" data-testid="gantt-truncated">
+          {{ t('taskGantt.truncated', { shown: phoneData.rows.length, total: phoneData.total }) }}
+        </q-banner>
+        <div class="gantt-weeks" :class="{ 'is-busy': phoneBusy }" :aria-busy="phoneBusy" data-testid="gantt-weeks">
+          <section v-for="wk in weeks" :key="wk.from" class="q-mb-md" :aria-label="`${shortDate(wk.from)} – ${shortDate(wk.to)}`" :data-testid="`gantt-week-${wk.from}`">
+            <div class="text-subtitle2 q-mb-xs" data-testid="gantt-week-title">{{ shortDate(wk.from) }} – {{ shortDate(wk.to) }}</div>
+            <div v-if="!wk.cards.length" class="text-caption text-muted q-px-sm" data-testid="gantt-week-empty">{{ t('taskGantt.weekEmpty') }}</div>
+            <q-list v-else dense bordered separator class="rounded-borders">
+              <q-item v-for="c in wk.cards" :key="c.id" clickable :data-testid="`gantt-week-item-${c.id}`" @click="emit('open', c.id)">
+                <q-item-section>
+                  <q-item-label v-if="c.level === 'child' && c.parentTitle" caption class="ellipsis" :data-testid="`gantt-week-parent-${c.id}`">
+                    {{ t('tasks.subtask.parent') }}{{ t('tasks.colon') }}{{ c.parentTitle }}
+                  </q-item-label>
+                  <q-item-label class="gantt-two-lines" :class="{ 'text-strike text-muted': closed(c) }">{{ c.title }}</q-item-label>
+                  <q-item-label caption class="row items-center q-gutter-x-sm">
+                    <span :class="{ 'text-negative': c.overdue && !closed(c) }" :data-testid="`gantt-week-dates-${c.id}`">
+                      <span aria-hidden="true">{{ phoneDates(c) }}</span><span class="sr-only">{{ dates(c) }}</span>
+                    </span>
+                    <q-badge outline :color="taskStatusColor(c.status)" :label="t(`tasks.status.${c.status}`)" />
+                    <SubtaskProgress v-if="c.progress" :progress="c.progress" :bar="false" />
+                  </q-item-label>
+                </q-item-section>
+              </q-item>
+            </q-list>
+          </section>
+        </div>
+        <q-expansion-item
+          v-if="phoneData.unscheduledTotal > 0" dense dense-toggle switch-toggle-side :label="t('taskGantt.unscheduled', { n: phoneData.unscheduledTotal })"
+          header-class="text-subtitle2" data-testid="gantt-unscheduled"
+        >
+          <q-list dense bordered separator class="rounded-borders">
+            <q-item v-for="c in phoneData.unscheduled" :key="c.id" clickable :data-testid="`gantt-unscheduled-${c.id}`" @click="emit('open', c.id)">
+              <q-item-section>
+                <q-item-label class="gantt-two-lines" :class="{ 'text-strike text-muted': closed(c) }">{{ c.title }}</q-item-label>
+                <q-item-label caption class="row items-center q-gutter-x-sm">
+                  <span v-if="c.startDate">{{ t('taskGantt.startOnly', { date: shortDate(c.startDate) }) }}</span>
+                  <q-badge outline :color="taskStatusColor(c.status)" :label="t(`tasks.status.${c.status}`)" />
+                </q-item-label>
+              </q-item-section>
+            </q-item>
+          </q-list>
+          <div v-if="phoneData.unscheduledTruncated" class="text-caption text-muted q-mt-xs" role="status" data-testid="gantt-unscheduled-more">
+            {{ t('taskGantt.unscheduledMore', { n: phoneData.unscheduledTotal - phoneData.unscheduled.length }) }}
+          </div>
+        </q-expansion-item>
+      </template>
+    </template>
     <template v-else>
       <div class="row items-center q-mb-sm" style="gap: 8px">
         <q-btn-toggle
@@ -143,7 +247,7 @@ const shortDate = (iso: string) => formatGanttDate(iso, locale.value, { month: '
         <q-banner v-if="data.truncated" dense rounded class="bg-info-soft q-mb-sm" role="status" data-testid="gantt-truncated">
           {{ t('taskGantt.truncated', { shown: data.rows.length, total: data.total }) }}
         </q-banner>
-        <div class="gantt" :class="{ 'is-busy': busy }" :aria-busy="busy" :style="{ '--gantt-left': `${GANTT_LEFT_WIDTH}px` }" data-testid="gantt-chart">
+        <div class="gantt" :aria-busy="busy" :class="{ 'is-busy': busy, 'is-tablet': mode === 'tablet' }" :style="{ '--gantt-left': `${leftWidth}px` }" data-testid="gantt-chart">
           <div class="gantt-row gantt-head" :class="`is-${shownScale}`">
             <div class="gantt-left text-caption text-muted">{{ t('taskGantt.taskColumn') }}</div>
             <div class="gantt-axis" aria-hidden="true">
@@ -199,6 +303,11 @@ const shortDate = (iso: string) => formatGanttDate(iso, locale.value, { month: '
                       <q-badge outline :color="taskStatusColor(line.card.status)" :label="t(`tasks.status.${line.card.status}`)" :data-testid="`gantt-status-${line.card.id}`" />
                       <SubtaskProgress v-if="line.card.progress" :progress="line.card.progress" :bar="false" class="text-caption" />
                     </div>
+                    <!-- 鍵盤與不拖拉時改日期的路徑（§11.5.4.9，比照看板 D2「移到…」）；不能改日期的列不顯示 -->
+                    <q-btn
+                      v-if="canSchedule(line.card)" flat dense round size="sm" icon="edit_calendar" class="gantt-edit"
+                      :aria-label="t('taskGantt.editDates', { title: line.card.title })" :data-testid="`gantt-edit-${line.card.id}`" @click="openDates(line.card)"
+                    />
                   </template>
                 </div>
                 <div class="gantt-track">
@@ -209,7 +318,7 @@ const shortDate = (iso: string) => formatGanttDate(iso, locale.value, { month: '
                   <template v-if="line.kind === 'task' && geometry(line.card)">
                     <button
                       v-if="geometry(line.card)!.outside" type="button" class="gantt-outside" :class="[`is-${geometry(line.card)!.outside}`, barClass(line.card)]"
-                      :aria-label="barLabel(line.card)" :data-testid="`gantt-outside-${line.card.id}`" @click="emit('open', line.card.id)"
+                      :aria-label="barLabel(line.card)" :data-testid="`gantt-outside-${line.card.id}`" @click="onBar(line.card)"
                     >
                       <q-icon :name="geometry(line.card)!.outside === 'before' ? 'chevron_left' : 'chevron_right'" size="16px" />
                       <q-tooltip>{{ line.card.title }}<br>{{ dates(line.card) }}</q-tooltip>
@@ -217,7 +326,7 @@ const shortDate = (iso: string) => formatGanttDate(iso, locale.value, { month: '
                     <button
                       v-else-if="geometry(line.card)!.kind === 'bar'" type="button" class="gantt-bar" :class="barClass(line.card)"
                       :style="{ left: pct(geometry(line.card)!.left), width: pct(geometry(line.card)!.width) }"
-                      :aria-label="barLabel(line.card)" :data-testid="`gantt-bar-${line.card.id}`" @click="emit('open', line.card.id)"
+                      :aria-label="barLabel(line.card)" :data-testid="`gantt-bar-${line.card.id}`" @click="onBar(line.card)"
                     >
                       <q-icon v-if="geometry(line.card)!.clippedStart" name="chevron_left" size="14px" class="gantt-clip is-start" data-testid="gantt-clip-start" />
                       <q-icon v-if="geometry(line.card)!.clippedEnd" name="chevron_right" size="14px" class="gantt-clip is-end" data-testid="gantt-clip-end" />
@@ -230,7 +339,7 @@ const shortDate = (iso: string) => formatGanttDate(iso, locale.value, { month: '
                     </button>
                     <button
                       v-else type="button" class="gantt-milestone" :class="barClass(line.card)" :style="{ left: pct(geometry(line.card)!.left + geometry(line.card)!.width / 2) }"
-                      :aria-label="barLabel(line.card)" :data-testid="`gantt-milestone-${line.card.id}`" @click="emit('open', line.card.id)"
+                      :aria-label="barLabel(line.card)" :data-testid="`gantt-milestone-${line.card.id}`" @click="onBar(line.card)"
                     >
                       <q-tooltip>
                         <div class="text-weight-medium">{{ line.card.title }}</div>
@@ -256,6 +365,12 @@ const shortDate = (iso: string) => formatGanttDate(iso, locale.value, { month: '
                   <q-badge outline :color="taskStatusColor(c.status)" :label="t(`tasks.status.${c.status}`)" />
                 </q-item-label>
               </q-item-section>
+              <q-item-section v-if="canSchedule(c)" side>
+                <q-btn
+                  flat dense no-caps color="primary" :label="t('taskGantt.schedule.button')" :aria-label="t('taskGantt.schedule.buttonLabel', { title: c.title })"
+                  :data-testid="`gantt-schedule-${c.id}`" @click.stop="openDates(c)"
+                />
+              </q-item-section>
             </q-item>
           </q-list>
           <div v-if="data.unscheduledTruncated" class="text-caption text-muted q-mt-xs" role="status" data-testid="gantt-unscheduled-more">
@@ -264,6 +379,7 @@ const shortDate = (iso: string) => formatGanttDate(iso, locale.value, { month: '
         </section>
       </template>
     </template>
+    <GanttDateDialog v-model="datesOpen" :card="datesCard" :save="scheduler.schedule" />
   </div>
 </template>
 
@@ -291,6 +407,16 @@ const shortDate = (iso: string) => formatGanttDate(iso, locale.value, { month: '
   border-right: 1px solid var(--t-border);
 }
 .gantt-left.is-child { padding-left: 56px; }
+.gantt.is-tablet .gantt-left.is-child { padding-left: 32px; }
+.gantt-edit { flex: 0 0 auto; }
+.gantt-weeks.is-busy { opacity: 0.6; }
+.gantt-two-lines {
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  overflow-wrap: anywhere;
+}
 .gantt-toggle-space { flex: 0 0 24px; }
 .gantt-group { background: var(--t-selected-bg); }
 .gantt-title {

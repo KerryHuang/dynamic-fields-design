@@ -1,8 +1,10 @@
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/vue-query';
 import { computed, toValue, type MaybeRefOrGetter } from 'vue';
 import {
-  moveCardLocally, removeCardLocally, restoreCardLocally, type BoardCard, type BoardColumn, type BoardGroupBy, type BoardSource, type GanttSource, type TaskBoardConfig, type TaskBoardData, type TaskMoveResult, type TaskViewShareKind,
+  moveCardLocally, removeCardLocally, restoreCardLocally, type BoardCard, type BoardColumn, type BoardGroupBy, type BoardSource, type GanttSource, type TaskBoardConfig, type TaskBoardData, type TaskGanttData, type TaskMoveResult,
+  type TaskScheduleResult, type TaskViewShareKind,
 } from 'src/domain/dynamic/task-board-types';
+import { replaceCardLocally, scheduleCardLocally } from 'src/domain/dynamic/task-gantt';
 import type { TaskCascade } from 'src/domain/dynamic/task-types';
 import { dynamicApi } from 'src/services/api/dynamic-api';
 import type { ApiError } from 'src/services/api/http';
@@ -20,13 +22,12 @@ export function useBoardColumns(source: MaybeRefOrGetter<BoardSource>, enabled: 
   });
 }
 
+export const ganttKey = (s: GanttSource) => ['task-board', 'gantt', s.viewId ?? null, s.config ?? null, s.window ?? null] as const;
+
 /** 甘特查詢（看板設計 §11.5.2.5）；鍵在 `['task-board']` 底下，任務有任何變動跟著重抓。平移時保留上一段的畫面，直到新的一段回來。 */
 export function useGantt(source: MaybeRefOrGetter<GanttSource>, enabled: MaybeRefOrGetter<boolean> = true) {
   return useQuery({
-    queryKey: computed(() => {
-      const s = toValue(source);
-      return ['task-board', 'gantt', s.viewId ?? null, s.config ?? null, s.window ?? null] as const;
-    }),
+    queryKey: computed(() => ganttKey(toValue(source))),
     queryFn: () => dynamicApi.getGantt(toValue(source)),
     enabled: computed(() => toValue(enabled)),
     placeholderData: keepPreviousData,
@@ -107,6 +108,49 @@ export function useMoveTask(source: MaybeRefOrGetter<BoardSource>) {
     onSettled: (result, error, v) => {
       // 自己還算在進行中的數量裡；只有最後一個結束的移動才重抓看板
       const last = qc.isMutating({ mutationKey: MOVE_KEY }) <= 1;
+      if (error) {
+        if (last) void qc.invalidateQueries({ queryKey: ['task-board'] });
+      } else {
+        void invalidateTasks(qc, v.card.id, { board: last });
+      }
+    },
+  });
+}
+
+export interface ScheduleTaskVars {
+  card: BoardCard;
+  startDate: string | null;
+  dueDate: string | null;
+}
+
+interface ScheduleContext { key: ReturnType<typeof ganttKey>; original: BoardCard }
+
+const SCHEDULE_KEY = ['task-board', 'schedule'] as const;
+
+/**
+ * 甘特圖改日期（日期對話框、gt2b2 拖拉共用；看板設計 §11.5.4.8–11.5.4.9）：兩個日期一律都送、帶卡片的版本（GT-T7）。
+ * onMutate 先在畫面上改好；成功用伺服器回的卡片取代（換成新版本），失敗把這一張改回原本的日期。
+ * 快取鍵在 mutate 當下固定；結束後重新查詢（子任務跨度要重算），同 useMoveTask 等最後一個進行中的請求結束才重抓。
+ */
+export function useScheduleTask(source: MaybeRefOrGetter<GanttSource>) {
+  const qc = useQueryClient();
+  return useMutation<TaskScheduleResult, unknown, ScheduleTaskVars, ScheduleContext>({
+    mutationKey: SCHEDULE_KEY,
+    mutationFn: (v) => dynamicApi.scheduleTask(v.card.id, { startDate: v.startDate, dueDate: v.dueDate, expectedVersion: v.card.version }),
+    onMutate: async (v) => {
+      const key = ganttKey(toValue(source));
+      await qc.cancelQueries({ queryKey: key });
+      qc.setQueryData<TaskGanttData>(key, (d) => d && scheduleCardLocally(d, v.card.id, v.startDate, v.dueDate));
+      return { key, original: v.card };
+    },
+    onSuccess: (result, _v, ctx) => {
+      qc.setQueryData<TaskGanttData>(ctx.key, (d) => d && replaceCardLocally(d, result.card));
+    },
+    onError: (_e, _v, ctx) => {
+      if (ctx) qc.setQueryData<TaskGanttData>(ctx.key, (d) => d && replaceCardLocally(scheduleCardLocally(d, ctx.original.id, ctx.original.startDate, ctx.original.dueDate), ctx.original));
+    },
+    onSettled: (_r, error, v) => {
+      const last = qc.isMutating({ mutationKey: SCHEDULE_KEY }) <= 1;
       if (error) {
         if (last) void qc.invalidateQueries({ queryKey: ['task-board'] });
       } else {

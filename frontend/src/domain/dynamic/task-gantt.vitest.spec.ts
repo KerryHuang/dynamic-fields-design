@@ -3,7 +3,8 @@ import { normalizeGantt } from 'src/services/api/task-normalize';
 import { cardWire } from 'src/presentation/tasks/board/board-fixtures';
 import { ganttWire } from 'src/presentation/tasks/gantt/gantt-fixtures';
 import {
-  addMonths, barGeometry, formatGanttDate, ganttLines, minorTicks, monthTicks, shiftWindow, spanGeometry, startOfWeek, todayPosition, windowDays, windowFor,
+  addMonths, barGeometry, canSchedule, formatGanttDate, ganttLines, ganttWeeks, minorTicks, monthTicks, phoneWindow, replaceCardLocally, scheduleCardLocally,
+  shiftPhoneWindow, shiftWindow, spanGeometry, startOfWeek, todayPosition, windowDays, windowFor,
 } from './task-gantt';
 
 const data = (o: Record<string, unknown> = {}) => normalizeGantt(ganttWire(o) as never);
@@ -117,5 +118,62 @@ describe('甘特圖分組', () => {
 
   it('不分組是平鋪', () => {
     expect(keys({}, 'none')).toEqual(['t5', 't6', 't7', 't8', 't9']);
+  });
+});
+
+describe('甘特圖手機週清單與改日期（gt2b1）', () => {
+  it('手機時間窗從本週起 4 週，上一段／下一段 ±4 週', () => {
+    expect(phoneWindow('2026-11-18', 'monday')).toEqual({ from: '2026-11-16', to: '2026-12-13' });
+    expect(phoneWindow('2026-11-18', 'sunday')).toEqual({ from: '2026-11-15', to: '2026-12-12' });
+    expect(shiftPhoneWindow({ from: '2026-11-16', to: '2026-12-13' }, 1)).toEqual({ from: '2026-12-14', to: '2027-01-10' });
+    expect(shiftPhoneWindow({ from: '2026-11-16', to: '2026-12-13' }, -1)).toEqual({ from: '2026-10-19', to: '2026-11-15' });
+  });
+
+  it('GT-Q3 跨週任務只放開始那週；開始日早於時間窗放第一週；只有到期日用到期日；空的週也列', () => {
+    const rows = data({
+      rows: [
+        cardWire({ id: 1, startDate: '2026-11-23', dueDate: '2026-12-09' }),
+        cardWire({ id: 2, startDate: '2026-11-01', dueDate: '2026-11-17' }),
+        cardWire({ id: 3, dueDate: '2026-11-30' }),
+      ],
+    }).rows;
+    const weeks = ganttWeeks(rows, { from: '2026-11-16', to: '2026-12-13' });
+    expect(weeks.map((w) => [w.from, w.to, w.cards.map((c) => c.id)])).toEqual([
+      ['2026-11-16', '2026-11-22', [2]],
+      ['2026-11-23', '2026-11-29', [1]],
+      ['2026-11-30', '2026-12-06', [3]],
+      ['2026-12-07', '2026-12-13', []],
+    ]);
+  });
+
+  it('能不能改日期照卡片的權限欄位：凍結或不能編輯都不行', () => {
+    const [a] = data({ rows: [cardWire({ id: 1 })] }).rows;
+    expect(canSchedule(a)).toBe(true);
+    expect(canSchedule({ ...a, canEdit: false })).toBe(false);
+    expect(canSchedule({ ...a, frozen: true })).toBe(false);
+  });
+
+  it('先在畫面上改日期：列裡就地改；清掉到期日移到未排程；未排程有了到期日移到時間軸', () => {
+    const d = data();
+    const moved = scheduleCardLocally(d, 7, '2026-11-30', '2026-12-10');
+    expect(moved.rows.find((c) => c.id === 7)).toMatchObject({ startDate: '2026-11-30', dueDate: '2026-12-10' });
+    expect(moved.rows.map((c) => c.id)).toEqual(d.rows.map((c) => c.id));
+    const cleared = scheduleCardLocally(d, 8, null, null);
+    expect(cleared.rows.some((c) => c.id === 8)).toBe(false);
+    expect(cleared.unscheduled[0]).toMatchObject({ id: 8, dueDate: null });
+    expect(cleared.unscheduledTotal).toBe(3);
+    const placed = scheduleCardLocally(d, 21, '2026-11-25', '2026-11-25');
+    expect(placed.rows.at(-1)).toMatchObject({ id: 21, dueDate: '2026-11-25' });
+    expect(placed.unscheduled.some((c) => c.id === 21)).toBe(false);
+    expect(placed.unscheduledTotal).toBe(1);
+    expect(scheduleCardLocally(d, 999, null, null).rows).toEqual(d.rows);
+  });
+
+  it('伺服器回的卡片取代畫面上的那一張（含時間窗外的父任務列）', () => {
+    const d = data({ parents: [{ id: 50, title: 'p', visible: true, row: cardWire({ id: 50, dueDate: '2026-10-01' }) }] });
+    const card = { ...d.parents[0].row!, version: 'v2' };
+    expect(replaceCardLocally(d, card).parents[0].row?.version).toBe('v2');
+    const row = { ...d.rows[0], version: 'v3' };
+    expect(replaceCardLocally(d, row).rows[0].version).toBe('v3');
   });
 });

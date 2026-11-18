@@ -182,7 +182,7 @@ const boardFailed = computed(() => !!boardQuery.error.value && !boardQuery.data.
       <q-linear-progress v-else-if="boardQuery.isLoading.value" indeterminate class="q-my-sm" data-testid="board-loading" />
       <TaskBoard v-if="boardQuery.data.value" :board="boardQuery.data.value" :source="boardSource" @open="setOpen" />
     </template>
-    <TaskGantt v-else-if="mode === 'gantt'" @open="setOpen" @list="setView('list')" />
+    <TaskGantt v-else-if="mode === 'gantt'" @open="setOpen" />
     <template v-else>
       <q-tabs :model-value="tab" dense align="left" narrow-indicator class="text-primary" @update:model-value="(v) => setTab(v as TaskListTab)">
         <q-tab v-for="x in tabs" :key="x" :name="x" no-caps :label="t(`tasks.tabs.${x}`)" :data-testid="`tab-${x}`" />
