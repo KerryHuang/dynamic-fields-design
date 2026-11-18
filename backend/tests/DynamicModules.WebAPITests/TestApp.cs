@@ -1,3 +1,4 @@
+using System.Globalization;
 using Microsoft.AspNetCore.Builder;
 using DynamicModules.Domain.Entities.Dynamic;
 using DynamicModules.Domain.Data;
@@ -155,7 +156,13 @@ public class TestApp : WebApplicationFactory<Program>
     protected override void ConfigureWebHost(IWebHostBuilder builder)
     {
         builder.UseSetting("ConnectionStrings:Dynamic", _connectionString);
-        if (TestDatabase.IsPostgres) builder.UseSetting("Database:Provider", "Postgres");
+        if (TestDatabase.IsPostgres)
+        {
+            builder.UseSetting("Database:Provider", "Postgres");
+            // 全套在 PostgreSQL 上平行跑時，測試容器是所有測試主機共用的瓶頸，開應用程式這類長交易會讓同庫排隊的寫入等超過正式預設的 30 秒；
+            // 測試只驗正確性，等鎖上限放寬（要測忙碌的案例在下面的 Settings 自己設回小值）
+            builder.UseSetting("Database:LockTimeoutSeconds", PostgresLockTimeoutSeconds.ToString(CultureInfo.InvariantCulture));
+        }
         builder.UseSetting("Attachments:Root", AttachmentRoot);
         // 背景排程器預設不跑：否則每個測試主機一啟動就補通知，改到既有測試的通知筆數；排程測試自己建 JobRunner 呼叫 TickAsync
         builder.UseSetting("Ops:Scheduler:Enabled", "false");
@@ -227,6 +234,15 @@ public class TestApp : WebApplicationFactory<Program>
             DemoPeople.EnsureAsync(scope.ServiceProvider.GetRequiredService<DynamicDbContext>()).GetAwaiter().GetResult();
         }
         return host;
+    }
+
+    /// <summary>PostgreSQL 模式的等鎖上限與用戶端逾時（秒）：全套平行跑時單一請求可能排隊很久，不讓 HttpClient 預設的 100 秒先斷掉。</summary>
+    private const int PostgresLockTimeoutSeconds = 300;
+
+    protected override void ConfigureClient(HttpClient client)
+    {
+        base.ConfigureClient(client);
+        if (TestDatabase.IsPostgres) client.Timeout = TimeSpan.FromSeconds(PostgresLockTimeoutSeconds + 60);
     }
 
     /// <summary>預設以 admin 身分；傳 null 則完全不帶 X-User。</summary>
