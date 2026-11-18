@@ -53,7 +53,7 @@ public class ModuleTaskToggleTests : DesignerTestBase
         // 直接以 false 新增模組（INSERT）：EF 只在 INSERT 看 sentinel，sentinel 是 false 時會把 false 當「沒設」改用資料庫預設的 true。
         // 守的是模型的 sentinel 必須是 true（ModuleConfiguration 明寫 HasSentinel(true)；改成 HasSentinel(false) 這個測試就紅）
         var m = new Module { Key = "tg-off", ProgramCode = "DYN99999", NameI18n = new([KeyValuePair.Create("zh-TW", "關閉")]), TasksEnabled = false };
-        m.StampCreated("admin", DateTime.UtcNow);
+        m.StampCreated("admin", new DateTime(2026, 11, 4, 9, 0, 0));
         Db.Context.Add(m);
         await Db.Context.SaveChangesAsync();
         Db.Context.ChangeTracker.Clear();

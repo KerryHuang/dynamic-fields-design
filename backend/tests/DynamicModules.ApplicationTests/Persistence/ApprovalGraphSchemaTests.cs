@@ -79,7 +79,7 @@ public class ApprovalGraphSchemaTests
         db.Context.Set<ApprovalInstance>().Add(new ApprovalInstance
         {
             RecordId = 1, ModuleId = 1, FlowSetSnapshot = [], FromOptionId = 1, ToOptionId = 2, InitiatorUserId = "u",
-            TitleSnapshot = "t", RowVersion = "x", OperationId = "op", SubmittedTime = DateTime.UtcNow
+            TitleSnapshot = "t", RowVersion = "x", OperationId = "op", SubmittedTime = new DateTime(2026, 11, 4, 9, 0, 0)
         });
         await db.Context.Database.ExecuteSqlRawAsync("PRAGMA foreign_keys = OFF");
         await db.Context.SaveChangesAsync();

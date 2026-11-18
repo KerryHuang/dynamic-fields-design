@@ -96,7 +96,7 @@ public class TaskReportsApiTests : IDisposable
             db.Set<TaskRule>().Add(new TaskRule
             {
                 Key = "api-secret-rule", NameI18n = new([KeyValuePair.Create("zh-TW", "機密規則")]), ModuleId = moduleId,
-                CreatedUserId = "admin", CreatedTime = DateTime.UtcNow
+                CreatedUserId = "admin", CreatedTime = new DateTime(2026, 11, 4, 9, 0, 0)
             });
             await db.SaveChangesAsync();
         }

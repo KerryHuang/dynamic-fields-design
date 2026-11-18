@@ -165,8 +165,23 @@ public class TestApp : WebApplicationFactory<Program>
             s.RemoveAll<IBusinessTime>();
             // RemoveAll 也拿掉了 Program 註冊的 Acting 裝飾器，這裡補回去
             s.AddSingleton<IBusinessTime>(new ActingBusinessTime(Clock));
+            AddWriteGuard(s);
             ExtraServices?.Invoke(s);
         });
+    }
+
+    /// <summary>
+    /// 在 Program 註冊的 DbContext 選項上疊加測試期寫入守衛（PostgreSQL provider 設計 §5.4）。
+    /// EF Core 8 沒有事後追加選項的 API，只能把既有的選項註冊包一層，原本的設定（連線字串、mmap 攔截器）照舊。
+    /// </summary>
+    private static void AddWriteGuard(IServiceCollection services)
+    {
+        var original = services.Single(d => d.ServiceType == typeof(DbContextOptions<DynamicDbContext>));
+        services.Remove(original);
+        services.Add(new ServiceDescriptor(typeof(DbContextOptions<DynamicDbContext>), sp =>
+            new DbContextOptionsBuilder<DynamicDbContext>((DbContextOptions<DynamicDbContext>)original.ImplementationFactory!(sp))
+                .AddInterceptors(WriteGuardInterceptor.Instance)
+                .Options, original.Lifetime));
     }
 
     protected override IHost CreateHost(IHostBuilder builder)
@@ -220,10 +235,11 @@ public class TestApp : WebApplicationFactory<Program>
     }
 }
 
+/// <summary>業務時間的假時鐘；Now 一律 Kind=Unspecified，與正式的 TaipeiBusinessTime 相同（PostgreSQL 的 timestamp 欄位不收 Kind=Utc）。</summary>
 public sealed class FakeBusinessTime : IBusinessTime
 {
     public DateTime? Fixed { get; set; }
-    public DateTime Now => Fixed ?? DateTime.Now;
+    public DateTime Now => DateTime.SpecifyKind(Fixed ?? DateTime.Now, DateTimeKind.Unspecified);
     public DateOnly Today => DateOnly.FromDateTime(Now);
 }
 

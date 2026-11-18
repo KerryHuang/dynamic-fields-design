@@ -14,7 +14,7 @@ public abstract class TaskTestBase : DesignerTestBase
 {
     protected sealed record Target(string Key, long ModuleId, long TitleFieldId, long UserFieldId, long DateFieldId, long SalesGroupId);
 
-    protected static readonly DateTime SeedTime = new(2026, 11, 4, 1, 0, 0, DateTimeKind.Utc);
+    protected static readonly DateTime SeedTime = new(2026, 11, 4, 1, 0, 0);
 
     protected async Task<Target> BuildTarget(string key = "tk")
     {

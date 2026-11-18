@@ -150,7 +150,7 @@ public class TasksApiTests : IDisposable
     private async Task SeedOrganization()
     {
         using var scope = _app.Services.CreateScope();
-        await DemoPeople.EnsureOrganizationAsync(scope.ServiceProvider.GetRequiredService<DynamicDbContext>(), DateTime.UtcNow);
+        await DemoPeople.EnsureOrganizationAsync(scope.ServiceProvider.GetRequiredService<DynamicDbContext>(), new DateTime(2026, 11, 4, 9, 0, 0));
     }
 
     [Fact]

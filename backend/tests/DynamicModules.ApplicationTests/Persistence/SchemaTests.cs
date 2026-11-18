@@ -219,7 +219,7 @@ public class SchemaTests
         RecordId = 1,
         RuleOccurrence = occurrence,
         RuleTaskCode = "a",
-        CreatedTime = new DateTime(2026, 11, 4, 1, 0, 0, DateTimeKind.Utc)
+        CreatedTime = new DateTime(2026, 11, 4, 1, 0, 0)
     };
 
     [Fact]

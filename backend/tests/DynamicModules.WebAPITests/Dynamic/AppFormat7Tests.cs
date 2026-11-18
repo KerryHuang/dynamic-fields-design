@@ -252,7 +252,7 @@ public class AppFormat7Tests : IDisposable
         var recordId = (await JsonOf(created)).GetProperty("id").GetInt64();
         LeadRuleTaskCount().Should().Be(1, "開啟中建立記錄，規則產生任務");
         var ruleId = _rig.Db(db => db.Set<TaskRule>().Single(r => r.Key == PartnerRule).Id);
-        _rig.Db(db => { db.Set<TaskItem>().Add(new TaskItem { Title = "已產生的任務", RuleId = ruleId, RuleTaskCode = "visit", CreatedTime = DateTime.UtcNow }); });
+        _rig.Db(db => { db.Set<TaskItem>().Add(new TaskItem { Title = "已產生的任務", RuleId = ruleId, RuleTaskCode = "visit", CreatedTime = new DateTime(2026, 11, 4, 9, 0, 0) }); });
         ActiveRuleKeys(PartnerKey).Should().Equal(PartnerRule);
         ActiveRuleKeys(LeadKey).Should().Equal(LeadRule);
 

@@ -217,7 +217,7 @@ public class ApprovalFlowsApiTests
             db.Add(new ApprovalFlow
             {
                 Key = "draft-only", NameI18n = new([KeyValuePair.Create("zh-TW", "只有草稿")]), ModuleId = moduleId, ToOptionId = s.Done, Priority = 9,
-                Active = false, DraftJson = """{"rev":"seed-rev","definition":{"shape":"graph"},"layout":null}""", CreatedUserId = "admin", CreatedTime = DateTime.UtcNow
+                Active = false, DraftJson = """{"rev":"seed-rev","definition":{"shape":"graph"},"layout":null}""", CreatedUserId = "admin", CreatedTime = new DateTime(2026, 11, 4, 9, 0, 0)
             });
             db.SaveChanges();
         }
@@ -467,13 +467,13 @@ public class ApprovalFlowsApiTests
             var flow = new ApprovalFlow
             {
                 Key = "legacy-graph", NameI18n = new([KeyValuePair.Create("zh-TW", "既有流程圖")]), ModuleId = moduleId, ToOptionId = s.Done, Priority = 9,
-                Active = true, CreatedUserId = "admin", CreatedTime = DateTime.UtcNow
+                Active = true, CreatedUserId = "admin", CreatedTime = new DateTime(2026, 11, 4, 9, 0, 0)
             };
             db.Add(flow);
             db.SaveChanges();
             var version = new ApprovalFlowVersion
             {
-                FlowId = flow.Id, Version = 1, CreatedBy = "admin", CreatedTime = DateTime.UtcNow,
+                FlowId = flow.Id, Version = 1, CreatedBy = "admin", CreatedTime = new DateTime(2026, 11, 4, 9, 0, 0),
                 Definition = new DynamicModules.Domain.Approvals.ApprovalDefinition("graph", null, null, null, [])
             };
             db.Add(version);

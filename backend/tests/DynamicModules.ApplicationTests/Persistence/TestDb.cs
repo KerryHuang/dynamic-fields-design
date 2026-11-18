@@ -28,7 +28,7 @@ public sealed class TestDb : IAsyncDisposable
         if (migrate) MigratedDatabaseTemplate.RestoreInto(db._connection);
         db.Context = new DynamicDbContext(new DbContextOptionsBuilder<DynamicDbContext>()
             .UseSqlite(db._connection, b => b.MigrationsAssembly("DynamicModules.Persistence"))
-            .AddInterceptors(db.Counter)
+            .AddInterceptors(db.Counter, WriteGuardInterceptor.Instance)
             .Options);
         if (migrate) await db.Context.Database.MigrateAsync();
         return db;
