@@ -26,7 +26,6 @@ using MediatR;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Record = DynamicModules.Domain.Entities.Dynamic.Record;
-using DynamicModules.Persistence.Dynamic.Dialects;
 
 namespace DynamicModules.ApplicationTests.Dynamic;
 
@@ -52,10 +51,9 @@ public class ReferenceReadTests : IAsyncLifetime
         var services = new ServiceCollection();
         services.AddApplication();
         services.AddPersistenceRepositories();
-        services.AddSingleton<ISqlDialect, SqliteDialect>();
+        TestDb.AddProviderServices(services);
         services.AddTestEntities();
         services.AddScoped(_ => _db.Context);
-        services.AddScoped<ITransactionManager, EfTransactionManager>();
         services.AddScoped<IWorkSavepoints, EfWorkSavepoints>();
         services.AddSingleton<ICurrentUser>(_user);
         services.AddSingleton<IBusinessTime, FakeTime>();

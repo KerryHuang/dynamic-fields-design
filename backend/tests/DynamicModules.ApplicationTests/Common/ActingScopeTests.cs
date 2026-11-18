@@ -22,7 +22,6 @@ using FluentAssertions;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
-using DynamicModules.Persistence.Dynamic.Dialects;
 
 namespace DynamicModules.ApplicationTests.Common;
 
@@ -177,9 +176,8 @@ public class ActingScopeTests
         var services = new ServiceCollection();
         services.AddApplication();
         services.AddPersistenceRepositories();
-        services.AddSingleton<ISqlDialect, SqliteDialect>();
+        TestDb.AddProviderServices(services);
         services.AddScoped(_ => db.Context);
-        services.AddScoped<ITransactionManager, EfTransactionManager>();
         services.AddScoped<IWorkSavepoints, EfWorkSavepoints>();
         services.AddSingleton<ICurrentUser>(new FakeUser());
         services.AddSingleton<IBusinessTime, FakeTime>();

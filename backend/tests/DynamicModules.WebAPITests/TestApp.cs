@@ -9,6 +9,7 @@ using DynamicModules.Application.Common.Time;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.Data.Sqlite;
+using DynamicModules.Persistence.Postgres;
 using DynamicModules.Persistence.Seed;
 using DynamicModules.TestSupport;
 using Microsoft.Extensions.DependencyInjection;
@@ -17,10 +18,16 @@ using Microsoft.Extensions.Hosting;
 
 namespace DynamicModules.WebAPITests;
 
-/// <summary>共用 SQLite in-memory 的測試主機；靠一條保持開啟的連線維持資料庫存活。</summary>
+/// <summary>
+/// 測試主機。預設共用 SQLite in-memory，靠一條保持開啟的連線維持資料庫存活；<c>FORMWRIGHT_TEST_DB=postgres</c> 時改用
+/// PostgreSQL 測試伺服器上從樣板複製的一個資料庫（PostgreSQL provider 設計 §6.2、§6.3），<c>Database:Provider=Postgres</c>，
+/// 走 Program 的正式註冊（AddPostgresDatabase），Dispose 時刪掉資料庫。
+/// </summary>
 public class TestApp : WebApplicationFactory<Program>
 {
-    private readonly SqliteConnection _keepAlive;
+    private readonly SqliteConnection? _keepAlive;
+    /// <summary>PostgreSQL 模式下由這個主機建立、Dispose 時要刪掉的資料庫；接別人的庫（sharedConnectionString）時是 false。</summary>
+    private readonly bool _ownsPostgresDatabase;
     private readonly string _connectionString;
     private readonly string? _databaseFile;
 
@@ -37,10 +44,18 @@ public class TestApp : WebApplicationFactory<Program>
     // internal：xUnit 的 class fixture 只認 public 建構函式，不會拿它去解析參數
     /// <param name="seedDemoPeople">host 建好後補上示範人員（sales01 等）；Demo 產生器的測試要設 false，否則會衝突。</param>
     /// <param name="realAuth">true 走真實 cookie 登入；false 以 X-User 標頭驗證（TestAuthHandler），並解除 admin 的強制改密碼。</param>
-    /// <param name="fileDatabase">改用暫存檔 SQLite（Dispose 時刪除）。共用快取的 in-memory 資料庫在寫入交易進行中會讓其他連線讀同一張表時噴 table is locked，檔案模式才是正式站的行為。</param>
-    /// <param name="sharedConnectionString">接上另一個 TestApp 的 in-memory 資料庫（對方必須還活著），用來測「重新啟動」時的行為。</param>
+    /// <param name="fileDatabase">改用暫存檔 SQLite（Dispose 時刪除）。共用快取的 in-memory 資料庫在寫入交易進行中會讓其他連線讀同一張表時噴 table is locked，檔案模式才是正式站的行為。PostgreSQL 模式本來就是真的多連線，忽略這個參數。</param>
+    /// <param name="sharedConnectionString">接上另一個 TestApp 的資料庫（對方必須還活著），用來測「重新啟動」時的行為。</param>
     internal TestApp(bool seedDemoPeople = true, bool realAuth = false, bool fileDatabase = false, string? sharedConnectionString = null)
     {
+        _seedDemoPeople = seedDemoPeople;
+        _realAuth = realAuth;
+        if (TestDatabase.IsPostgres)
+        {
+            _ownsPostgresDatabase = sharedConnectionString is null;
+            _connectionString = sharedConnectionString ?? PostgresTestServer.CreateDatabase();
+            return;
+        }
         if (sharedConnectionString is not null) _connectionString = sharedConnectionString;
         else if (fileDatabase)
         {
@@ -48,8 +63,6 @@ public class TestApp : WebApplicationFactory<Program>
             _connectionString = $"Data Source={_databaseFile}";
         }
         else _connectionString = $"Data Source=file:test{Guid.NewGuid():N}?mode=memory&cache=shared";
-        _seedDemoPeople = seedDemoPeople;
-        _realAuth = realAuth;
         _keepAlive = new SqliteConnection(_connectionString);
         _keepAlive.Open();
         // 從已 migrate 的範本整份複製（host 啟動時的 MigrateAsync 只剩檢查歷程）；接別人的庫時對方已經有資料，不覆蓋
@@ -133,9 +146,16 @@ public class TestApp : WebApplicationFactory<Program>
     /// <summary>在 <c>ConfigureServices</c> 末尾執行的服務替換（要在第一次用到 host 之前設定；例如把簽核擋門換成開啟版）。預設 null，既有測試不受影響。</summary>
     internal Action<IServiceCollection>? ExtraServices { get; set; }
 
+    /// <summary>
+    /// PostgreSQL 的「無鎖模式」（PostgreSQL provider 設計 §5.6、§7，主控判斷 T4）：把寫入設定換成 <see cref="PostgresWriteSettings.Unserialized"/>，
+    /// 閘門與全庫鎖都不做事，同一行程的兩個排程器實例才是真的同時。要在第一次用到 host 之前設定；SQLite 模式沒有作用。
+    /// </summary>
+    internal bool WithoutWriteSerialization { get; init; }
+
     protected override void ConfigureWebHost(IWebHostBuilder builder)
     {
         builder.UseSetting("ConnectionStrings:Dynamic", _connectionString);
+        if (TestDatabase.IsPostgres) builder.UseSetting("Database:Provider", "Postgres");
         builder.UseSetting("Attachments:Root", AttachmentRoot);
         // 背景排程器預設不跑：否則每個測試主機一啟動就補通知，改到既有測試的通知筆數；排程測試自己建 JobRunner 呼叫 TickAsync
         builder.UseSetting("Ops:Scheduler:Enabled", "false");
@@ -167,6 +187,11 @@ public class TestApp : WebApplicationFactory<Program>
             s.RemoveAll<IBusinessTime>();
             // RemoveAll 也拿掉了 Program 註冊的 Acting 裝飾器，這裡補回去
             s.AddSingleton<IBusinessTime>(new ActingBusinessTime(Clock));
+            if (TestDatabase.IsPostgres && WithoutWriteSerialization)
+            {
+                s.RemoveAll<PostgresWriteSettings>();
+                s.AddSingleton(PostgresWriteSettings.Unserialized());
+            }
             AddWriteGuard(s);
             ExtraServices?.Invoke(s);
         });
@@ -186,7 +211,14 @@ public class TestApp : WebApplicationFactory<Program>
                 .Options, original.Lifetime));
     }
 
-    protected override IHost CreateHost(IHostBuilder builder)
+    /// <remarks>
+    /// PostgreSQL 模式整段在執行緒池上跑：主機啟動（hosted service）與下面的種子是同步等非同步，Npgsql 是真的非同步 I/O，
+    /// 續傳若回到 xUnit 的同步內容（執行緒數有限、平行的測試類別都在同步等），會整個卡死。SQLite 的非同步實際上同步完成，維持原樣。
+    /// </remarks>
+    protected override IHost CreateHost(IHostBuilder builder) =>
+        TestDatabase.IsPostgres ? Task.Run(() => CreateHostCore(builder)).GetAwaiter().GetResult() : CreateHostCore(builder);
+
+    private IHost CreateHostCore(IHostBuilder builder)
     {
         var host = base.CreateHost(builder);
         if (_seedDemoPeople)
@@ -228,7 +260,8 @@ public class TestApp : WebApplicationFactory<Program>
     {
         base.Dispose(disposing);
         if (!disposing) return;
-        _keepAlive.Dispose();
+        _keepAlive?.Dispose();
+        if (_ownsPostgresDatabase) PostgresTestServer.DropDatabase(_connectionString);
         if (Directory.Exists(AttachmentRoot)) Directory.Delete(AttachmentRoot, recursive: true);
         if (_databaseFile is null) return;
         SqliteConnection.ClearAllPools();

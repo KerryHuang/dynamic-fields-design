@@ -11,7 +11,6 @@ using DynamicModules.Persistence.Files;
 using DynamicModules.Persistence.Seed;
 using MediatR;
 using Microsoft.Extensions.DependencyInjection;
-using DynamicModules.Persistence.Dynamic.Dialects;
 
 namespace DynamicModules.ApplicationTests.Dynamic.Demo;
 
@@ -54,10 +53,9 @@ public sealed class DemoTestHost : IAsyncDisposable
         var services = new ServiceCollection();
         services.AddApplication();
         services.AddPersistenceRepositories();
-        services.AddSingleton<ISqlDialect, SqliteDialect>();
+        TestDb.AddProviderServices(services);
         services.AddTestEntities();
         services.AddScoped(_ => host._db.Context);
-        services.AddScoped<ITransactionManager, EfTransactionManager>();
         services.AddScoped<IWorkSavepoints, EfWorkSavepoints>();
         services.AddSingleton<ICurrentUser>(host.User);
         services.AddSingleton<IBusinessTime>(new FakeTime(today ?? Today));

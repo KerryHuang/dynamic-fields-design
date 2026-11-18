@@ -14,6 +14,7 @@
     <PackageReference Include="FluentAssertions" Version="7.0.0" />
     <PackageReference Include="Microsoft.AspNetCore.Mvc.Testing" Version="8.0.11" />
     <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.8.0" />
+    <PackageReference Include="Testcontainers.PostgreSql" Version="4.17.0" />
     <PackageReference Include="xunit" Version="2.5.3" />
     <PackageReference Include="xunit.runner.visualstudio" Version="2.5.3" />
   </ItemGroup>
@@ -38,6 +39,8 @@
     <Compile Include="..\Fixtures\MigratedDatabaseTemplate.cs" Link="TestSupport\MigratedDatabaseTemplate.cs" />
     <!-- 測試期寫入守衛（字串長度、DateTime Kind；PostgreSQL provider 設計 §5.4）：TestDb 與 TestApp 的 DbContext 都掛 -->
     <Compile Include="..\Fixtures\WriteGuardInterceptor.cs" Link="TestSupport\WriteGuardInterceptor.cs" />
+    <!-- 測試資料庫切換（FORMWRIGHT_TEST_DB=postgres）、PostgreSQL 測試容器與樣板資料庫（PostgreSQL provider 設計 §6） -->
+    <Compile Include="..\Fixtures\TestDatabase.cs" Link="TestSupport\TestDatabase.cs" />
   </ItemGroup>
 
 </Project>
