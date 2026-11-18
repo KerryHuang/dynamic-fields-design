@@ -25,8 +25,8 @@ public class TaskReportFieldsTests
         var m = Build();
         m.Id.Should().Be(0);
         m.Key.Should().BeEmpty();
-        Fields(m).Select(f => f.Id).Should().BeEquivalentTo(Enumerable.Range(1, 15).Select(i => (long)-i));
-        F.Selectable(ReportDatasets.Tasks).Should().BeEquivalentTo(Enumerable.Range(1, 15).Select(i => (long)-i));
+        Fields(m).Select(f => f.Id).Should().BeEquivalentTo(Enumerable.Range(1, 16).Select(i => (long)-i));
+        F.Selectable(ReportDatasets.Tasks).Should().BeEquivalentTo(Enumerable.Range(1, 16).Select(i => (long)-i));
         Of(m, F.Title).Type.Should().Be(FieldType.Textarea);
         Of(m, F.Overdue).Type.Should().Be(FieldType.Boolean);
         Of(m, F.Assignee).Type.Should().Be(FieldType.User);

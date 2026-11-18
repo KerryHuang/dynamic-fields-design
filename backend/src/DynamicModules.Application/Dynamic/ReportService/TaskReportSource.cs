@@ -9,7 +9,7 @@ using DynamicModules.Domain.Repositories.Dynamic;
 namespace DynamicModules.Application.Dynamic.ReportService;
 
 /// <summary>一個任務列：任務本身、觀看者看不看得到它的記錄（與看板卡片同一個判斷）、負責人目前的部門。</summary>
-public sealed record TaskReportItem(TaskItem Task, bool RecordAccessible, long? AssigneeDepartmentId);
+public sealed record TaskReportItem(TaskItem Task, bool RecordAccessible, long? AssigneeDepartmentId, bool HasSubtasks);
 
 /// <summary>
 /// 任務資料來源（看板設計 §7.5）：欄位目錄（虛擬模組，選項只列觀看者可讀的模組與其規則）與任務列。
@@ -67,6 +67,8 @@ public sealed class TaskReportSource(ITaskRepository tasks, ITaskRuleRepository 
         if (items.Count == 0) return ([], overLimit);
         var perms = await access.EvaluateManyAsync(items, ct);
         var departments = items.Any(t => t.AssigneeUserId is not null) ? await org.ListUserDepartmentsAsync(ct) : [];
+        // 一次批次查哪些父任務有子任務（任何狀態），層級不隨觀看者變；子任務本身不必查
+        var parents = await tasks.SubtaskProgressAsync(items.Where(t => t.ParentTaskId is null).Select(t => t.Id).ToList(), ct);
         var result = new List<TaskReportItem>(items.Count);
         for (var i = 0; i < items.Count; i++)
         {
@@ -74,7 +76,7 @@ public sealed class TaskReportSource(ITaskRepository tasks, ITaskRuleRepository 
             if (!perms[i].CanSee) continue;
             var t = items[i];
             result.Add(new TaskReportItem(t, perms[i].Record?.Accessible == true,
-                t.AssigneeUserId is { } a && departments.TryGetValue(a, out var dept) ? dept : null));
+                t.AssigneeUserId is { } a && departments.TryGetValue(a, out var dept) ? dept : null, parents.ContainsKey(t.Id)));
         }
         return (result, overLimit);
     }

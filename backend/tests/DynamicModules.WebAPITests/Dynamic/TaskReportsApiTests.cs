@@ -68,13 +68,13 @@ public class TaskReportsApiTests : IDisposable
             .Should().Equal(("tasks", "任務"), ("taskEvents", "任務事件（建立或完成）"));
 
         var tasks = (await JsonOf(await admin.GetAsync($"{Reports}/datasets/tasks/catalog"))).GetProperty("fields").EnumerateArray().ToList();
-        tasks.Select(f => f.GetProperty("id").GetInt64()).Should().Equal(Enumerable.Range(1, 15).Select(i => (long)-i));
+        tasks.Select(f => f.GetProperty("id").GetInt64()).Should().Equal(Enumerable.Range(1, 16).Select(i => (long)-i));
         tasks[0].GetProperty("canGroup").GetBoolean().Should().BeFalse("標題不能分組（T12）");
         tasks[1].GetProperty("options").EnumerateArray().Select(o => o.GetProperty("label").GetString()).Should().Equal("待辦", "進行中", "已完成", "已取消");
 
         var events = (await JsonOf(await admin.GetAsync($"{Reports}/datasets/taskEvents/catalog"))).GetProperty("fields").EnumerateArray()
             .Select(f => f.GetProperty("id").GetInt64()).ToList();
-        events.Should().Equal(-2, -3, -4, -5, -9, -10, -11, -18, -19);
+        events.Should().Equal(-2, -3, -4, -5, -9, -10, -11, -16, -18, -19);
         events.Should().NotContain(-12).And.NotContain(-1, "標題只在下鑽固定欄出現");
 
         (await admin.GetAsync($"{Reports}/datasets/foo/catalog")).StatusCode.Should().Be(HttpStatusCode.NotFound);

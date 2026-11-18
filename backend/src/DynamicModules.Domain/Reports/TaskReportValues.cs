@@ -13,6 +13,14 @@ public static class TaskReportValues
         : t.RecordId is not null ? TaskReportFields.SourceRecord
         : TaskReportFields.SourcePersonal;
 
+    /// <summary>層級選項 Id；與 DTO 的 level 同一個定義（<see cref="Tasks.TaskLevel.Of"/>）。</summary>
+    public static long LevelOf(TaskItem t, bool hasChildren) => Tasks.TaskLevel.Of(t.ParentTaskId, hasChildren) switch
+    {
+        Tasks.TaskLevel.Child => TaskReportFields.LevelChild,
+        Tasks.TaskLevel.Parent => TaskReportFields.LevelParent,
+        _ => TaskReportFields.LevelStandalone,
+    };
+
     public static bool IsOverdue(TaskItem t, DateOnly basis) => t.IsOpen && t.DueDate is { } due && due < basis;
 
     /// <summary>完成狀況；完成但沒有完成時間（舊資料）回 null。</summary>
