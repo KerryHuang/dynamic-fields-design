@@ -122,12 +122,13 @@ public class TaskViewTests : TaskViewTestBase
     }
 
     [Fact]
-    public async Task Kind_Gantt_400_ForNow()
+    public async Task Kind_Unknown_400()
     {
-        var r = await SendAs("manager01", new CreateTaskViewRequest("gantt", "甘特", J(StatusConfig)));
+        var r = await SendAs("manager01", new CreateTaskViewRequest("list", "清單", J(StatusConfig)));
 
         r.Errors.Should().ContainKey("kind");
-        (await SendAs("manager01", new GetTaskViewsRequest("gantt"))).Errors.Should().ContainKey("kind");
+        r.Errors["kind"].Should().Equal("檢視種類必須是 board 或 gantt");
+        (await SendAs("manager01", new GetTaskViewsRequest("list"))).Errors.Should().ContainKey("kind");
         (await Db.Context.Set<TaskView>().AsNoTracking().CountAsync()).Should().Be(0);
     }
 

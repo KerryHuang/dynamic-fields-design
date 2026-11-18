@@ -74,7 +74,18 @@ public static class MessageText
         TaskRuleNotApplicable = nameof(TaskRuleNotApplicable), TaskRuleNotFound = nameof(TaskRuleNotFound),
         TasksDisabled = nameof(TasksDisabled),
         // 任務欄位
-        TaskStartAfterDue = nameof(TaskStartAfterDue);
+        TaskStartAfterDue = nameof(TaskStartAfterDue),
+        // 任務檢視（甘特圖用另一組字；看板既有的字仍是 TaskViewMessages 的字面值，GT-T9）
+        TaskViewKindInvalid = nameof(TaskViewKindInvalid), TaskGanttNameRequired = nameof(TaskGanttNameRequired),
+        TaskGanttNameTooLong = nameof(TaskGanttNameTooLong), TaskGanttTooManyShares = nameof(TaskGanttTooManyShares),
+        TaskGanttConfigNotObject = nameof(TaskGanttConfigNotObject),
+        // 甘特設定的驗證錯誤（鍵同 Domain 的 TaskGanttConfigErrors）
+        TaskGanttConfigFormat = nameof(TaskGanttConfigFormat), TaskGanttConfigRequired = nameof(TaskGanttConfigRequired),
+        TaskGanttConfigVersion = nameof(TaskGanttConfigVersion), TaskGanttGroupByInvalid = nameof(TaskGanttGroupByInvalid),
+        TaskGanttScopeInvalid = nameof(TaskGanttScopeInvalid), TaskGanttScaleInvalid = nameof(TaskGanttScaleInvalid),
+        TaskGanttStatusesInvalid = nameof(TaskGanttStatusesInvalid), TaskGanttSourcesInvalid = nameof(TaskGanttSourcesInvalid),
+        TaskGanttPeopleBlank = nameof(TaskGanttPeopleBlank), TaskGanttNoDueRange = nameof(TaskGanttNoDueRange),
+        TaskGanttKeywordTooLong = nameof(TaskGanttKeywordTooLong);
 
     private static readonly Dictionary<string, (string Zh, string En, string Th, string Vi)> Table = new()
     {
@@ -333,6 +344,38 @@ public static class MessageText
             "โมดูลนี้ปิดการใช้งานงานอยู่", "Mô-đun này đang tắt tính năng công việc"),
         [TaskStartAfterDue] = ("開始日不能晚於到期日", "Start date cannot be later than the due date",
             "วันเริ่มต้องไม่ช้ากว่ากำหนดส่ง", "Ngày bắt đầu không được sau hạn"),
+        [TaskViewKindInvalid] = ("檢視種類必須是 board 或 gantt", "View kind must be board or gantt",
+            "ประเภทมุมมองต้องเป็น board หรือ gantt", "Loại chế độ xem phải là board hoặc gantt"),
+        [TaskGanttNameRequired] = ("甘特圖名稱必填", "Gantt chart name is required", "ต้องระบุชื่อแผนภูมิแกนต์", "Tên biểu đồ Gantt là bắt buộc"),
+        [TaskGanttNameTooLong] = ("甘特圖名稱最多 {0} 字", "Gantt chart name can be at most {0} characters",
+            "ชื่อแผนภูมิแกนต์ยาวได้ไม่เกิน {0} ตัวอักษร", "Tên biểu đồ Gantt tối đa {0} ký tự"),
+        [TaskGanttTooManyShares] = ("每個甘特圖最多分享給 {0} 個對象", "A Gantt chart can be shared with at most {0} recipients",
+            "แชร์แผนภูมิแกนต์ได้ไม่เกิน {0} ผู้รับ", "Mỗi biểu đồ Gantt chỉ chia sẻ được tối đa {0} đối tượng"),
+        [TaskGanttConfigNotObject] = ("甘特圖設定必須是物件", "Gantt chart settings must be an object",
+            "การตั้งค่าแผนภูมิแกนต์ต้องเป็นออบเจ็กต์", "Cài đặt biểu đồ Gantt phải là một đối tượng"),
+        [TaskGanttConfigFormat] = ("甘特圖設定有不認得的屬性或格式不正確（{0}）", "Gantt chart settings have an unknown property or invalid format ({0})",
+            "การตั้งค่าแผนภูมิแกนต์มีคุณสมบัติที่ไม่รู้จักหรือรูปแบบไม่ถูกต้อง ({0})", "Cài đặt biểu đồ Gantt có thuộc tính không xác định hoặc sai định dạng ({0})"),
+        [TaskGanttConfigRequired] = ("甘特圖設定必填", "Gantt chart settings are required", "ต้องระบุการตั้งค่าแผนภูมิแกนต์", "Cài đặt biểu đồ Gantt là bắt buộc"),
+        [TaskGanttConfigVersion] = ("甘特圖設定版本必須是 {0}", "Gantt chart settings version must be {0}",
+            "เวอร์ชันการตั้งค่าแผนภูมิแกนต์ต้องเป็น {0}", "Phiên bản cài đặt biểu đồ Gantt phải là {0}"),
+        [TaskGanttGroupByInvalid] = ("甘特圖分組依據必須是 none、parent 或 assignee", "Gantt chart grouping must be none, parent, or assignee",
+            "การจัดกลุ่มแผนภูมิแกนต์ต้องเป็น none, parent หรือ assignee", "Cách nhóm biểu đồ Gantt phải là none, parent hoặc assignee"),
+        [TaskGanttScopeInvalid] = ("甘特圖範圍必須是 assigned、involved、subordinates 或 visible",
+            "Gantt chart scope must be assigned, involved, subordinates, or visible",
+            "ขอบเขตแผนภูมิแกนต์ต้องเป็น assigned, involved, subordinates หรือ visible",
+            "Phạm vi biểu đồ Gantt phải là assigned, involved, subordinates hoặc visible"),
+        [TaskGanttScaleInvalid] = ("甘特圖刻度必須是 day、week 或 month", "Gantt chart scale must be day, week, or month",
+            "มาตราส่วนแผนภูมิแกนต์ต้องเป็น day, week หรือ month", "Thang thời gian biểu đồ Gantt phải là day, week hoặc month"),
+        [TaskGanttStatusesInvalid] = ("甘特圖的狀態篩選不正確", "Gantt chart status filter is invalid",
+            "ตัวกรองสถานะของแผนภูมิแกนต์ไม่ถูกต้อง", "Bộ lọc trạng thái của biểu đồ Gantt không hợp lệ"),
+        [TaskGanttSourcesInvalid] = ("甘特圖的來源篩選不正確", "Gantt chart source filter is invalid",
+            "ตัวกรองแหล่งที่มาของแผนภูมิแกนต์ไม่ถูกต้อง", "Bộ lọc nguồn của biểu đồ Gantt không hợp lệ"),
+        [TaskGanttPeopleBlank] = ("甘特圖的人員篩選不能有空白", "Gantt chart people filters cannot contain blanks",
+            "ตัวกรองบุคคลของแผนภูมิแกนต์ต้องไม่มีค่าว่าง", "Bộ lọc người của biểu đồ Gantt không được có giá trị trống"),
+        [TaskGanttNoDueRange] = ("甘特圖用時間範圍，不用到期日區間", "Gantt charts use a time window, not a due date range",
+            "แผนภูมิแกนต์ใช้ช่วงเวลา ไม่ใช้ช่วงกำหนดส่ง", "Biểu đồ Gantt dùng khoảng thời gian, không dùng khoảng hạn"),
+        [TaskGanttKeywordTooLong] = ("甘特圖的關鍵字最多 {0} 字", "Gantt chart keyword can be at most {0} characters",
+            "คำค้นของแผนภูมิแกนต์ยาวได้ไม่เกิน {0} ตัวอักษร", "Từ khóa của biểu đồ Gantt tối đa {0} ký tự"),
     };
 
     /// <summary>無參數訊息的繁中原文 → 鍵；兩鍵同一句時建表就會丟例外。</summary>

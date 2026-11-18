@@ -3,7 +3,6 @@ using System.Text.Json;
 using DynamicModules.Application.Common.Security;
 using DynamicModules.Domain.Entities.Dynamic;
 using DynamicModules.Domain.Repositories.Dynamic;
-using DynamicModules.Domain.Tasks;
 
 namespace DynamicModules.Application.Dynamic.TaskViewService;
 
@@ -53,7 +52,7 @@ public sealed class TaskViewAccess(ITaskViewRepository views, IPermissionReposit
         var owner = users.GetValueOrDefault(v.OwnerUserId);
         var isOwner = v.OwnerUserId == viewer.UserId;
         IReadOnlyList<TaskViewShareResponse> shares = isOwner || viewer.IsAdmin ? await SharesAsync(v, users, ct) : [];
-        var config = JsonDocument.Parse(TaskBoardConfig.Read(v.ConfigJson).Serialize()).RootElement.Clone();
+        var config = JsonDocument.Parse(TaskViewRules.ReadConfig(v)).RootElement.Clone();
         return new TaskViewDetail(v.Id, v.Kind, v.Name, v.OwnerUserId, owner?.DisplayName, owner is { IsActive: true }, isOwner,
             isOwner, CanDelete(v, viewer), config, shares, v.RowVersion);
     }

@@ -4,10 +4,10 @@ using MediatR;
 
 namespace DynamicModules.Application.Dynamic.TaskViewService;
 
-/// <summary>Kind 這一段只收 board（甘特圖在 gt1 開放）。成功時 Data 是 <see cref="TaskViewListResponse"/>。</summary>
+/// <summary>Kind 收 board、gantt，其他 400。成功時 Data 是 <see cref="TaskViewListResponse"/>。</summary>
 public sealed record GetTaskViewsRequest(string? Kind) : IRequest<ServiceResult>;
 
-/// <summary>Config 是 <see cref="Domain.Tasks.TaskBoardConfig"/> 的 JSON；沒給時存預設看板的設定。</summary>
+/// <summary>Kind 決定 Config 的格式（board：<see cref="Domain.Tasks.TaskBoardConfig"/>；gantt：<see cref="Domain.Tasks.TaskGanttConfig"/>）；沒給時存該種的預設。</summary>
 public sealed record CreateTaskViewRequest(string? Kind, string? Name, JsonElement? Config) : IRequest<ServiceResult>, ITransactionalRequest;
 
 public sealed record GetTaskViewRequest(long Id) : IRequest<ServiceResult>;

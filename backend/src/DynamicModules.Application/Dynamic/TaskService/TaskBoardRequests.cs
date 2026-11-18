@@ -19,3 +19,10 @@ public sealed record GetTaskBoardColumnPageRequest(string Column, long? ViewId, 
 /// </summary>
 public sealed record MoveTaskRequest(long Id, string? GroupBy, string? ToColumn, DateOnly? DueDate, string? ExpectedVersion, string? Cascade = null)
     : IRequest<ServiceResult>, ITransactionalRequest;
+
+/// <summary>
+/// 甘特圖拖拉與日期對話框改日期（看板設計 §11.5.2.6，GT-T7）：兩個日期一律都送，null 代表清除；ExpectedVersion 是卡片的 version，不符 409。
+/// 成功時 Data 是 <see cref="TaskScheduleResponse"/>。
+/// </summary>
+public sealed record ScheduleTaskRequest(long Id, DateOnly? StartDate, DateOnly? DueDate, string? ExpectedVersion)
+    : IRequest<ServiceResult>, ITransactionalRequest;

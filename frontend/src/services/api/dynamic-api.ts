@@ -21,14 +21,14 @@ import type {
 } from 'src/domain/dynamic/approval-types';
 import type { ApprovalDraftPreviewBody, ApprovalFlow, ApprovalFlowDraftInput, ApprovalFlowInput, ApprovalFlowPublishResult, ApprovalFlowValidation } from 'src/domain/dynamic/approval-flow-types';
 import type {
-  BoardColumnPage, BoardSource, TaskBoardConfig, TaskBoardData, TaskMoveBody, TaskMoveResult, TaskViewDetail, TaskViewList, TaskViewShareKind,
-  TaskViewShareTargets,
+  BoardColumnPage, BoardSource, TaskBoardConfig, TaskBoardData, TaskMoveBody, TaskMoveResult, TaskScheduleBody, TaskScheduleResult, TaskViewConfig,
+  TaskViewDetail, TaskViewKind, TaskViewList, TaskViewShareKind, TaskViewShareTargets,
 } from 'src/domain/dynamic/task-board-types';
 import type { TaskRule, TaskRuleInput } from 'src/domain/dynamic/task-rule-draft';
 import type { EffectivePolicies, ModulePolicy, PolicyValue, SystemPolicy } from 'src/domain/dynamic/policy-types';
 import { handleAuthFailure, http, toApiError } from './http';
 import {
-  normalizeBoard, normalizeBoardPage, normalizeMoveResult, normalizeShareTargets, normalizeViewDetail, normalizeViewList,
+  normalizeBoard, normalizeBoardPage, normalizeMoveResult, normalizeScheduleResult, normalizeShareTargets, normalizeViewDetail, normalizeViewList,
   normalizeNotificationList, normalizeRecordTasks, normalizeTaskCapabilities, normalizeTaskComment, normalizeTaskDetail, normalizeTaskPage,
   normalizeTaskRule, normalizeTaskUpdate,
 } from './task-normalize';
@@ -581,18 +581,25 @@ export const dynamicApi = {
     http.post<BoardColumnPage>(`/task-board/columns/${encodeURIComponent(column)}/page`, { ...boardSourceBody(source), offset }).then(data).then(normalizeBoardPage),
   moveTask: (id: number, body: TaskMoveBody) =>
     http.post<TaskMoveResult>(`/tasks/${id}/move`, body).then(data).then(normalizeMoveResult),
-  getTaskViews: (kind = 'board') => http.get<TaskViewList>('/task-views', { params: { kind } }).then(data).then(normalizeViewList),
-  getTaskView: (id: number) => http.get<TaskViewDetail>(`/task-views/${id}`).then(data).then(normalizeViewDetail),
-  createTaskView: (body: { kind?: string; name: string; config?: TaskBoardConfig }) =>
-    http.post<TaskViewDetail>('/task-views', body).then(data).then(normalizeViewDetail),
-  /** `rowVersion` is the version read with the board; a stale one comes back as 409 (code stale). */
-  updateTaskView: (id: number, body: { name?: string; config?: TaskBoardConfig; rowVersion: string }) =>
-    http.put<TaskViewDetail>(`/task-views/${id}`, body).then(data).then(normalizeViewDetail),
+  /** 甘特圖改日期（看板設計 §11.5.2.6）：兩個日期一律都送，版本不符 409 stale。 */
+  scheduleTask: (id: number, body: TaskScheduleBody) =>
+    http.post<TaskScheduleResult>(`/tasks/${id}/schedule`, body).then(data).then(normalizeScheduleResult),
+  getTaskViews: (kind: TaskViewKind = 'board') => http.get<TaskViewList>('/task-views', { params: { kind } }).then(data).then(normalizeViewList),
+  /** 種類照存檔的資料列；甘特檢視請帶型別參數 TaskGanttConfig。 */
+  getTaskView: <C extends TaskViewConfig = TaskBoardConfig>(id: number) =>
+    http.get<TaskViewDetail<C>>(`/task-views/${id}`).then(data).then((v) => normalizeViewDetail<C>(v)),
+  /** 沒給 config 時伺服器存該種的預設（看板：預設看板；甘特：預設甘特圖）。 */
+  createTaskView: <C extends TaskViewConfig = TaskBoardConfig>(body: { kind?: TaskViewKind; name: string; config?: C }) =>
+    http.post<TaskViewDetail<C>>('/task-views', body).then(data).then((v) => normalizeViewDetail<C>(v)),
+  /** `rowVersion` is the version read with the board; a stale one comes back as 409 (code stale). The kind cannot change. */
+  updateTaskView: <C extends TaskViewConfig = TaskBoardConfig>(id: number, body: { name?: string; config?: C; rowVersion: string }) =>
+    http.put<TaskViewDetail<C>>(`/task-views/${id}`, body).then(data).then((v) => normalizeViewDetail<C>(v)),
   deleteTaskView: (id: number) => http.delete(`/task-views/${id}`).then(data),
-  copyTaskView: (id: number) => http.post<TaskViewDetail>(`/task-views/${id}/copy`).then(data).then(normalizeViewDetail),
+  copyTaskView: <C extends TaskViewConfig = TaskBoardConfig>(id: number) =>
+    http.post<TaskViewDetail<C>>(`/task-views/${id}/copy`).then(data).then((v) => normalizeViewDetail<C>(v)),
   /** Replaces the whole share list. */
-  setTaskViewShares: (id: number, shares: { kind: TaskViewShareKind; id: string }[]) =>
-    http.put<TaskViewDetail>(`/task-views/${id}/shares`, shares).then(data).then(normalizeViewDetail),
+  setTaskViewShares: <C extends TaskViewConfig = TaskBoardConfig>(id: number, shares: { kind: TaskViewShareKind; id: string }[]) =>
+    http.put<TaskViewDetail<C>>(`/task-views/${id}/shares`, shares).then(data).then((v) => normalizeViewDetail<C>(v)),
   getTaskViewShareTargets: () => http.get<TaskViewShareTargets>('/task-views/share-targets').then(data).then(normalizeShareTargets),
   getRecordTasks: (recordId: number) => http.get<RecordTasks>(`/records/${recordId}/tasks`).then(data).then(normalizeRecordTasks),
   createRecordTask: (recordId: number, body: TaskInput) =>

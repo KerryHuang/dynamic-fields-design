@@ -5,7 +5,7 @@ using Microsoft.AspNetCore.Mvc;
 
 namespace DynamicModules.WebAPI.Controllers.v3.Dynamic;
 
-/// <summary>看板欄查詢與移動（看板設計 §12）。日期由伺服器算，不收瀏覽器的「今天」（T8）。</summary>
+/// <summary>看板欄查詢與移動、甘特圖改日期（看板設計 §12）。日期由伺服器算，不收瀏覽器的「今天」（T8）。</summary>
 [ApiController]
 [Route("api/v3/dynamic")]
 public class TaskBoardController(IMediator mediator) : ControllerBase
@@ -17,6 +17,9 @@ public class TaskBoardController(IMediator mediator) : ControllerBase
 
     /// <summary>Cascade（complete、cancel）只在依狀態分欄時有作用：父任務拖到完成、還有未完成的子任務時一併完成或取消。</summary>
     public sealed record MoveBody(string? GroupBy, string? ToColumn, DateOnly? DueDate, string? ExpectedVersion, string? Cascade = null);
+
+    /// <summary>兩個日期一律都送（null 代表清除），格式錯由模型繫結回 400。</summary>
+    public sealed record ScheduleBody(DateOnly? StartDate, DateOnly? DueDate, string? ExpectedVersion);
 
     [HttpPost("task-board/columns")]
     public async Task<IActionResult> Columns(ColumnsBody body) =>
@@ -30,4 +33,9 @@ public class TaskBoardController(IMediator mediator) : ControllerBase
     [HttpPost("tasks/{id:long}/move")]
     public async Task<IActionResult> Move(long id, MoveBody body) =>
         (await mediator.Send(new MoveTaskRequest(id, body.GroupBy, body.ToColumn, body.DueDate, body.ExpectedVersion, body.Cascade))).ToActionResult(this);
+
+    /// <summary>甘特圖改日期（看板設計 §11.5.2.6）。</summary>
+    [HttpPost("tasks/{id:long}/schedule")]
+    public async Task<IActionResult> Schedule(long id, ScheduleBody body) =>
+        (await mediator.Send(new ScheduleTaskRequest(id, body.StartDate, body.DueDate, body.ExpectedVersion))).ToActionResult(this);
 }

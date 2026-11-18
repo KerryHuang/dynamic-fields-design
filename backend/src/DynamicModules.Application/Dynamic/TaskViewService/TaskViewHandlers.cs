@@ -9,24 +9,24 @@ using MediatR;
 
 namespace DynamicModules.Application.Dynamic.TaskViewService;
 
-/// <summary>看板存檔的輸入檢查。名稱長度、分享數量是技術限制（可寫死清單）。</summary>
+/// <summary>任務檢視（看板、甘特圖）存檔的輸入檢查。名稱長度、分享數量是技術限制（可寫死清單）。</summary>
 public static class TaskViewRules
 {
     public const int MaxName = 100;
     public const int MaxShares = 200;
 
     public static ServiceResult? KindError(string? kind) =>
-        kind == TaskViewKinds.Board ? null : ServiceResult.Invalid(new Dictionary<string, string[]> { ["kind"] = [TaskViewMessages.KindInvalid] });
+        kind is TaskViewKinds.Board or TaskViewKinds.Gantt ? null : ServiceResult.Invalid("kind", MessageRef.Of(MessageText.TaskViewKindInvalid));
 
-    public static (string? Name, ServiceResult? Error) Name(string? name)
+    public static (string? Name, ServiceResult? Error) Name(string? name, string kind = TaskViewKinds.Board)
     {
         var trimmed = name?.Trim();
-        if (string.IsNullOrEmpty(trimmed)) return (null, Bad("name", TaskViewMessages.NameRequired));
-        if (trimmed.Length > MaxName) return (null, Bad("name", TaskViewMessages.NameTooLong(MaxName)));
+        if (string.IsNullOrEmpty(trimmed)) return (null, ServiceResult.Invalid("name", TaskViewMessages.NameRequiredOf(kind)));
+        if (trimmed.Length > MaxName) return (null, ServiceResult.Invalid("name", TaskViewMessages.NameTooLongOf(kind, MaxName)));
         return (trimmed, null);
     }
 
-    /// <summary>沒給設定時用 fallback（新增時是預設看板）；給了就嚴格驗證，錯了回 400（鍵 config）。</summary>
+    /// <summary>看板設定：沒給時用 fallback（新增時是預設看板）；給了就嚴格驗證，錯了回 400（鍵 config）。</summary>
     public static (TaskBoardConfig? Config, ServiceResult? Error) Config(JsonElement? json, TaskBoardConfig? fallback)
     {
         if (json is not { } el || el.ValueKind is JsonValueKind.Null or JsonValueKind.Undefined)
@@ -35,6 +35,33 @@ public static class TaskViewRules
         var (config, errors) = TaskBoardConfig.Parse(el.GetRawText());
         return config is null ? (null, ServiceResult.Invalid(new Dictionary<string, string[]> { ["config"] = errors.ToArray() })) : (config, null);
     }
+
+    /// <summary>甘特設定：規則同 <see cref="Config"/>，錯誤文字走 MessageText（GT-T8）。</summary>
+    public static (TaskGanttConfig? Config, ServiceResult? Error) GanttConfig(JsonElement? json, TaskGanttConfig fallback)
+    {
+        if (json is not { } el || el.ValueKind is JsonValueKind.Null or JsonValueKind.Undefined) return (fallback, null);
+        if (el.ValueKind != JsonValueKind.Object) return (null, ServiceResult.Invalid("config", MessageRef.Of(MessageText.TaskGanttConfigNotObject)));
+        var (config, errors) = TaskGanttConfig.Parse(el.GetRawText());
+        return config is null
+            ? (null, ServiceResult.Invalid(new Dictionary<string, MessageRef[]> { ["config"] = errors.Select(e => MessageRef.Of(e.Key, e.Args)).ToArray() }))
+            : (config, null);
+    }
+
+    /// <summary>依種類解析要存的設定；沒給設定時存 current（修改時是現有設定，新增時 null＝該種的預設）。</summary>
+    public static (string? ConfigJson, ServiceResult? Error) ConfigJson(string kind, JsonElement? json, string? current)
+    {
+        if (kind == TaskViewKinds.Gantt)
+        {
+            var (gantt, ganttError) = GanttConfig(json, current is null ? TaskGanttConfig.Default : TaskGanttConfig.Read(current));
+            return (gantt?.Serialize(), ganttError);
+        }
+        var (board, boardError) = Config(json, current is null ? TaskBoardConfig.Default : TaskBoardConfig.Read(current));
+        return (board?.Serialize(), boardError);
+    }
+
+    /// <summary>依資料列的種類寬鬆讀取、正規化後的設定 JSON（詳細、另存用）。</summary>
+    public static string ReadConfig(TaskView v) =>
+        v.Kind == TaskViewKinds.Gantt ? TaskGanttConfig.Read(v.ConfigJson).Serialize() : TaskBoardConfig.Read(v.ConfigJson).Serialize();
 
     /// <summary>名稱加「（副本）」；超過上限時截短原名稱，保留後綴（不切斷代理字元對）。</summary>
     public static string CopyName(string name)
@@ -70,15 +97,16 @@ public class CreateTaskViewHandler(ITaskViewRepository views, TaskViewAccess acc
     public async Task<ServiceResult> Handle(CreateTaskViewRequest request, CancellationToken ct)
     {
         if (TaskViewRules.KindError(request.Kind) is { } badKind) return badKind;
-        var (name, badName) = TaskViewRules.Name(request.Name);
+        var kind = request.Kind!;
+        var (name, badName) = TaskViewRules.Name(request.Name, kind);
         if (badName is not null) return badName;
-        var (config, badConfig) = TaskViewRules.Config(request.Config, TaskBoardConfig.Default);
+        var (config, badConfig) = TaskViewRules.ConfigJson(kind, request.Config, null);
         if (badConfig is not null) return badConfig;
 
         var viewer = await access.ViewerAsync(ct);
         var view = new TaskView
         {
-            Kind = TaskViewKinds.Board, OwnerUserId = viewer.UserId, Name = name!, ConfigJson = config!.Serialize(),
+            Kind = kind, OwnerUserId = viewer.UserId, Name = name!, ConfigJson = config!,
             RowVersion = Guid.NewGuid().ToString()
         };
         view.StampCreated(viewer.UserId, time.Now);
@@ -97,7 +125,7 @@ public class GetTaskViewHandler(TaskViewAccess access) : IRequestHandler<GetTask
     }
 }
 
-/// <summary>只有建立者能改（系統管理員也不能改別人的，§6.2）。</summary>
+/// <summary>只有建立者能改（系統管理員也不能改別人的，§6.2）；不能改種類。</summary>
 public class UpdateTaskViewHandler(TaskViewAccess access, IUnitOfWork uow, IBusinessTime time) : IRequestHandler<UpdateTaskViewRequest, ServiceResult>
 {
     public async Task<ServiceResult> Handle(UpdateTaskViewRequest request, CancellationToken ct)
@@ -106,13 +134,14 @@ public class UpdateTaskViewHandler(TaskViewAccess access, IUnitOfWork uow, IBusi
         if (view is null) return ServiceResult.NotFound(TaskViewMessages.NotFound);
         if (view.OwnerUserId != viewer.UserId) return ServiceResult.Forbidden();
         if (view.RowVersion != request.RowVersion) return ServiceResult.Stale();
-        var (name, badName) = TaskViewRules.Name(request.Name);
+        // 種類不能改：依資料列的 Kind 驗證設定（GT-T9）
+        var (name, badName) = TaskViewRules.Name(request.Name, view.Kind);
         if (badName is not null) return badName;
-        var (config, badConfig) = TaskViewRules.Config(request.Config, TaskBoardConfig.Read(view.ConfigJson));
+        var (config, badConfig) = TaskViewRules.ConfigJson(view.Kind, request.Config, view.ConfigJson);
         if (badConfig is not null) return badConfig;
 
         view.Name = name!;
-        view.ConfigJson = config!.Serialize();
+        view.ConfigJson = config!;
         view.RowVersion = Guid.NewGuid().ToString();
         view.StampModified(viewer.UserId, time.Now);
         await uow.CommitAsync(ct);
@@ -144,7 +173,7 @@ public class CopyTaskViewHandler(ITaskViewRepository views, TaskViewAccess acces
         var copy = new TaskView
         {
             Kind = source.Kind, OwnerUserId = viewer.UserId, Name = TaskViewRules.CopyName(source.Name),
-            ConfigJson = TaskBoardConfig.Read(source.ConfigJson).Serialize(), RowVersion = Guid.NewGuid().ToString()
+            ConfigJson = TaskViewRules.ReadConfig(source), RowVersion = Guid.NewGuid().ToString()
         };
         copy.StampCreated(viewer.UserId, time.Now);
         views.Add(copy);
@@ -166,7 +195,7 @@ public class SetTaskViewSharesHandler(TaskViewAccess access, IPermissionReposito
         // JSON 陣列可以含 null 元素，不能直接解參照
         if (request.Shares.Any(s => s is null)) return TaskViewRules.Bad("shares", TaskViewMessages.ShareKindInvalid);
         var targets = request.Shares.Select(s => (Kind: s.Kind?.Trim() ?? "", Id: s.Id?.Trim() ?? "")).Distinct().ToList();
-        if (targets.Count > TaskViewRules.MaxShares) return TaskViewRules.Bad("shares", TaskViewMessages.TooManyShares(TaskViewRules.MaxShares));
+        if (targets.Count > TaskViewRules.MaxShares) return ServiceResult.Invalid("shares", TaskViewMessages.TooManySharesOf(view.Kind, TaskViewRules.MaxShares));
         if (targets.Any(t => t.Kind is not (TaskViewShareKinds.User or TaskViewShareKinds.Group or TaskViewShareKinds.Department) || t.Id.Length == 0))
             return TaskViewRules.Bad("shares", TaskViewMessages.ShareKindInvalid);
         var users = (await permissions.ListUsersAsync(ct)).Select(u => u.UserId).ToHashSet();

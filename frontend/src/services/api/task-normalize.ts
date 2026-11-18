@@ -4,8 +4,8 @@ import type {
 } from 'src/domain/dynamic/task-types';
 import type { TaskRule } from 'src/domain/dynamic/task-rule-draft';
 import type {
-  BoardCard, BoardColumn, BoardColumnPage, TaskBoardConfig, TaskBoardData, TaskMoveResult, TaskViewDetail, TaskViewList, TaskViewShare,
-  TaskViewShareTargets, TaskViewSummary,
+  BoardCard, BoardColumn, BoardColumnPage, TaskBoardConfig, TaskBoardData, TaskMoveResult, TaskScheduleResult, TaskViewConfig, TaskViewDetail,
+  TaskViewList, TaskViewShare, TaskViewShareTargets, TaskViewSummary,
 } from 'src/domain/dynamic/task-board-types';
 
 /** The server leaves out every property whose value is null; the types promise `null`, so put it back. */
@@ -217,11 +217,17 @@ const normalizeShare = (s: Wire<TaskViewShare>): TaskViewShare => ({
   kind: s.kind ?? 'user', id: s.id ?? '', displayName: s.displayName ?? null, nameI18n: s.nameI18n ?? null, inactive: !!s.inactive,
 });
 
-export function normalizeViewDetail(v: Wire<Omit<TaskViewDetail, 'shares' | 'config'>> & { config?: TaskBoardConfig; shares?: Wire<TaskViewShare>[] | null }): TaskViewDetail {
+export function normalizeScheduleResult(r: { card?: Wire<BoardCard> | null }): TaskScheduleResult {
+  return { card: normalizeBoardCard(r.card ?? {}) };
+}
+
+export function normalizeViewDetail<C extends TaskViewConfig = TaskBoardConfig>(
+  v: Wire<Omit<TaskViewDetail<C>, 'shares' | 'config'>> & { config?: C; shares?: Wire<TaskViewShare>[] | null },
+): TaskViewDetail<C> {
   return {
     id: v.id as number, kind: v.kind ?? 'board', name: v.name ?? '', ownerUserId: v.ownerUserId ?? '', ownerName: v.ownerName ?? null,
     ownerActive: !!v.ownerActive, isOwner: !!v.isOwner, canEdit: !!v.canEdit, canDelete: !!v.canDelete,
-    config: v.config as TaskBoardConfig, shares: (v.shares ?? []).map(normalizeShare), rowVersion: v.rowVersion ?? '',
+    config: v.config as C, shares: (v.shares ?? []).map(normalizeShare), rowVersion: v.rowVersion ?? '',
   };
 }
 

@@ -123,9 +123,36 @@ export interface TaskBoardConfig {
   showSubtasks?: boolean;
 }
 
+/** 甘特設定（伺服器 TaskGanttConfig，看板設計 §11.5.2.7）：篩選同看板但沒有 dueRange（甘特圖用時間範圍）；排序固定、收合狀態不存。 */
+export interface TaskGanttConfig {
+  version: number;
+  groupBy: 'none' | 'parent' | 'assignee';
+  scope: TaskBoardConfig['scope'];
+  filters?: Omit<NonNullable<TaskBoardConfig['filters']>, 'dueRange'>;
+  scale: 'day' | 'week' | 'month';
+  /** 沒給等於 true。 */
+  showSubtasks?: boolean;
+}
+
+/** 存檔檢視的種類；設定格式隨種類（board：TaskBoardConfig；gantt：TaskGanttConfig），建立後不能改。 */
+export type TaskViewKind = 'board' | 'gantt';
+export type TaskViewConfig = TaskBoardConfig | TaskGanttConfig;
+
+/** 甘特圖改日期：兩個日期一律都送（null＝清除），版本同移動。 */
+export interface TaskScheduleBody {
+  startDate: string | null;
+  dueDate: string | null;
+  expectedVersion: string;
+}
+
+/** 改日期不影響可見性，所以只回卡片（沒有 visible、undoToken）。 */
+export interface TaskScheduleResult {
+  card: BoardCard;
+}
+
 export interface TaskViewSummary {
   id: number;
-  kind: string;
+  kind: TaskViewKind;
   name: string;
   ownerUserId: string;
   ownerName: string | null;
@@ -150,9 +177,9 @@ export interface TaskViewShare {
   inactive: boolean;
 }
 
-export interface TaskViewDetail {
+export interface TaskViewDetail<C extends TaskViewConfig = TaskBoardConfig> {
   id: number;
-  kind: string;
+  kind: TaskViewKind;
   name: string;
   ownerUserId: string;
   ownerName: string | null;
@@ -160,7 +187,7 @@ export interface TaskViewDetail {
   isOwner: boolean;
   canEdit: boolean;
   canDelete: boolean;
-  config: TaskBoardConfig;
+  config: C;
   shares: TaskViewShare[];
   rowVersion: string;
 }

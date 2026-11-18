@@ -139,4 +139,74 @@ public class TaskBoardApiTests : IDisposable
         var after = await Ok(await sales.GetAsync($"{Base}/tasks/{id}"));
         after.GetProperty("status").GetString().Should().Be(winner.GetProperty("card").GetProperty("status").GetString());
     }
+
+    [Fact]
+    [Trait("Category", "Postgres")]
+    public async Task GanttView_Http_KindAndMismatch404()
+    {
+        var sales = _app.AsUser("sales01");
+
+        var gantt = await Ok(await sales.PostAsync($"{Base}/task-views", Json("""{"kind":"gantt","name":"展覽"}""")), HttpStatusCode.Created);
+        gantt.GetProperty("kind").GetString().Should().Be("gantt");
+        gantt.GetProperty("config").GetProperty("scale").GetString().Should().Be("week");
+        var id = gantt.GetProperty("id").GetInt64();
+        var bad = await sales.PostAsync($"{Base}/task-views", Json("""{"kind":"gantt","name":"x","config":{"version":1,"groupBy":"parent","scope":"assigned","scale":"year"}}"""));
+        bad.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+        var en = new HttpRequestMessage(HttpMethod.Post, $"{Base}/task-views")
+        { Content = Json("""{"kind":"gantt","name":" "}""") };
+        en.Headers.Add("X-Locale", "en-US");
+        (await (await sales.SendAsync(en)).Content.ReadAsStringAsync()).Should().Contain("Gantt chart name is required");
+
+        (await Ok(await sales.GetAsync($"{Base}/task-views?kind=gantt"))).GetProperty("mine").GetArrayLength().Should().Be(1);
+        (await Ok(await sales.GetAsync($"{Base}/task-views"))).GetProperty("mine").GetArrayLength().Should().Be(0);
+        (await sales.GetAsync($"{Base}/task-views?kind=list")).StatusCode.Should().Be(HttpStatusCode.BadRequest);
+        (await sales.PostAsync($"{Base}/task-board/columns", Json($$"""{"viewId":{{id}}}"""))).StatusCode.Should().Be(HttpStatusCode.NotFound);
+        (await sales.PostAsync($"{Base}/task-board/columns/todo/page", Json($$"""{"viewId":{{id}},"offset":0}"""))).StatusCode.Should().Be(HttpStatusCode.NotFound);
+    }
+
+    [Fact]
+    [Trait("Category", "Postgres")]
+    public async Task Schedule_Http_RoundTrip_BadDate400()
+    {
+        var sales = _app.AsUser("sales01");
+        var task = await Ok(await sales.PostAsJsonAsync($"{Base}/tasks", new { title = "佈置展場", assigneeUserId = "sales01" }), HttpStatusCode.Created);
+        var id = task.GetProperty("id").GetInt64();
+        var version = task.GetProperty("version").GetString();
+
+        (await sales.PostAsync($"{Base}/tasks/{id}/schedule", Json($$"""{"startDate":"2026/11/21","dueDate":null,"expectedVersion":"{{version}}"}""")))
+            .StatusCode.Should().Be(HttpStatusCode.BadRequest);
+        var ok = await Ok(await sales.PostAsJsonAsync($"{Base}/tasks/{id}/schedule",
+            new { startDate = "2026-11-21", dueDate = "2026-11-28", expectedVersion = version }));
+        var card = ok.GetProperty("card");
+        card.GetProperty("startDate").GetString().Should().Be("2026-11-21");
+        card.GetProperty("dueDate").GetString().Should().Be("2026-11-28");
+        ok.TryGetProperty("visible", out _).Should().BeFalse();
+        var contradiction = await sales.PostAsJsonAsync($"{Base}/tasks/{id}/schedule",
+            new { startDate = "2026-11-29", dueDate = "2026-11-28", expectedVersion = card.GetProperty("version").GetString() });
+        contradiction.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+        (await contradiction.Content.ReadAsStringAsync()).Should().Contain("startDate");
+    }
+
+    [Fact]
+    [Trait("Category", "Postgres")]
+    public async Task ScheduleAndSchedule_Concurrent_OneWins_NoDuplicateEntries()
+    {
+        var sales = _app.AsUser("sales01");
+        var other = _app.AsUser("sales01");
+        var task = await Ok(await sales.PostAsJsonAsync($"{Base}/tasks", new { title = "回覆樣品問題", assigneeUserId = "sales01" }), HttpStatusCode.Created);
+        var id = task.GetProperty("id").GetInt64();
+        var version = task.GetProperty("version").GetString();
+
+        var results = await Task.WhenAll(
+            sales.PostAsJsonAsync($"{Base}/tasks/{id}/schedule", new { startDate = "2026-11-21", dueDate = "2026-11-28", expectedVersion = version }),
+            other.PostAsJsonAsync($"{Base}/tasks/{id}/schedule", new { startDate = "2026-12-01", dueDate = "2026-12-05", expectedVersion = version }));
+
+        results.Select(m => m.StatusCode).Should().BeEquivalentTo([HttpStatusCode.OK, HttpStatusCode.Conflict]);
+        (await JsonOf(results.Single(m => m.StatusCode == HttpStatusCode.Conflict))).GetProperty("code").GetString().Should().Be("stale");
+        var winner = (await JsonOf(results.Single(m => m.StatusCode == HttpStatusCode.OK))).GetProperty("card");
+        var after = await Ok(await sales.GetAsync($"{Base}/tasks/{id}"));
+        after.GetProperty("startDate").GetString().Should().Be(winner.GetProperty("startDate").GetString());
+        var comments = await Ok(await sales.GetAsync($"{Base}/tasks/{id}/comments"));
+        comments.ToString().Split("startChanged").Length.Should().Be(2, "只有贏的那個請求寫了一筆 startChanged");
+    }
 }

@@ -52,11 +52,11 @@ export const nineStatusLikeColumns = () => Array.from({ length: 9 }, (_, i) => c
 
 /** 存檔看板的詳細資料與摘要，伺服器回應的形狀。 */
 export const viewDetailWire = (o: Record<string, unknown> = {}) => ({
-  id: 5, kind: 'board', name: '我的到期', ownerUserId: 'sales01', ownerName: '業務一', ownerActive: true, isOwner: true, canEdit: true, canDelete: true,
+  id: 5, kind: 'board' as const, name: '我的到期', ownerUserId: 'sales01', ownerName: '業務一', ownerActive: true, isOwner: true, canEdit: true, canDelete: true,
   config: configWire(), shares: [], rowVersion: 'v1', ...o,
 });
 export const viewSummaryWire = (o: Record<string, unknown> = {}) => ({
-  id: 5, kind: 'board', name: '我的到期', ownerUserId: 'sales01', ownerName: '業務一', ownerActive: true, isOwner: true, shareCount: 0, modifiedTime: '2026-11-16T09:00:00', ...o,
+  id: 5, kind: 'board' as const, name: '我的到期', ownerUserId: 'sales01', ownerName: '業務一', ownerActive: true, isOwner: true, shareCount: 0, modifiedTime: '2026-11-16T09:00:00', ...o,
 });
 export const shareTargetsWire = () => ({
   users: [{ id: 'sales02', name: '業務二' }, { id: 'sales03', name: '業務三' }],

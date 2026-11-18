@@ -1,8 +1,8 @@
 namespace DynamicModules.Domain.Entities.Dynamic;
 
 /// <summary>
-/// 存起來的任務檢視（核心資料表 Dynamic_TaskView）：看板，之後的甘特圖共用同一張表（看板設計 §6.1）。
-/// ConfigJson 的格式見 <see cref="Tasks.TaskBoardConfig"/>；分享只決定看不看得到設定，不授予任務權限（§6.2）。
+/// 存起來的任務檢視（核心資料表 Dynamic_TaskView）：看板與甘特圖共用同一張表（看板設計 §6.1、§11.5.2.7）。
+/// ConfigJson 的格式隨 Kind：看板見 <see cref="Tasks.TaskBoardConfig"/>、甘特圖見 <see cref="Tasks.TaskGanttConfig"/>；分享只決定看不看得到設定，不授予任務權限（§6.2）。
 /// </summary>
 public class TaskView : AuditableEntity
 {

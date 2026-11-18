@@ -30,3 +30,6 @@ public sealed record TaskBoardPageResponse(string Key, int Total, IReadOnlyList<
 
 /// <summary>Visible=false：移動後操作者看不到了，不回卡片；改負責人造成的才附一次性的復原憑證（J10）。</summary>
 public sealed record TaskMoveResponse(bool Visible, TaskCardResponse? Card, string? UndoToken);
+
+/// <summary>改日期不改參與者、記錄、負責人，可見性不變，所以只回卡片（沒有 visible、undoToken；§11.5.2.6）。</summary>
+public sealed record TaskScheduleResponse(TaskCardResponse Card);

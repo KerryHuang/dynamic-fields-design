@@ -26,7 +26,7 @@ public sealed class TaskBoardService(ITaskRepository tasks, TaskAccess access, T
 
     public sealed record Context(TaskBoardConfig Config, TaskBoardQuery Query, bool ScopeAvailable);
 
-    /// <summary>ViewId 要看得到（看不到 404）；Config 嚴格驗證（400）；兩者都帶 400；都沒帶是預設看板。</summary>
+    /// <summary>ViewId 要看得到、而且是看板（否則 404）；Config 嚴格驗證（400）；兩者都帶 400；都沒帶是預設看板。</summary>
     public async Task<(TaskBoardConfig? Config, ServiceResult? Error)> ResolveAsync(long? viewId, JsonElement? config, CancellationToken ct)
     {
         var hasConfig = config is { ValueKind: not (JsonValueKind.Null or JsonValueKind.Undefined) };
@@ -34,7 +34,10 @@ public sealed class TaskBoardService(ITaskRepository tasks, TaskAccess access, T
         if (viewId is { } id)
         {
             var (view, _) = await views.FindAsync(id, ct);
-            return view is null ? (null, ServiceResult.NotFound(TaskViewMessages.NotFound)) : (TaskBoardConfig.Read(view.ConfigJson), null);
+            // 甘特檢視的 Id 一律 404（不把甘特設定寬鬆讀成預設看板；看板設計 §11.5.9 第 2 條）
+            return view is null || view.Kind != TaskViewKinds.Board
+                ? (null, ServiceResult.NotFound(TaskViewMessages.NotFound))
+                : (TaskBoardConfig.Read(view.ConfigJson), null);
         }
         return TaskViewRules.Config(config, TaskBoardConfig.Default);
     }
@@ -301,4 +304,38 @@ public class MoveTaskHandler(ITaskRepository tasks, TaskAccess access, TaskSuppo
         DueTargetError.LaterNotAfterWeekEnd => TaskViewRules.Bad("dueDate", TaskMessages.LaterNotAfterWeekEnd),
         _ => TaskViewRules.Bad("toColumn", TaskMessages.BadColumn),
     };
+}
+
+/// <summary>
+/// 甘特圖改日期（看板設計 §11.5.2.6，GT-T7）：檢查順序照 <see cref="MoveTaskHandler"/>——看不到 404、凍結 409、缺版本 400、版本不符 409 stale、
+/// 不能編輯 403（主管身分同 PATCH 回「只能改負責人」）、開始日晚於到期日 400、兩個值都沒變不寫入；認領版本後走 <see cref="TaskWriter.ApplyAsync"/>
+/// （系統記錄、規則任務的 DueOverridden 與 PATCH 相同；兩個日期都送，所以不會觸發「開始日跟著到期日」）。
+/// </summary>
+public class ScheduleTaskHandler(ITaskRepository tasks, TaskAccess access, TaskWriter writer, TaskBoardService board, IBusinessTime time)
+    : IRequestHandler<ScheduleTaskRequest, ServiceResult>
+{
+    public async Task<ServiceResult> Handle(ScheduleTaskRequest request, CancellationToken ct)
+    {
+        var task = await tasks.GetAsync(request.Id, ct);
+        if (task is null) return ServiceResult.NotFound(TaskMessages.NotFound);
+        var p = await access.EvaluateAsync(task, ct);
+        if (!p.CanSee) return ServiceResult.NotFound(TaskMessages.NotFound);
+        if (p.Frozen) return ServiceResult.Conflict(ModuleGate.ClosedMessage);
+        if (string.IsNullOrEmpty(request.ExpectedVersion)) return TaskViewRules.Bad("expectedVersion", TaskMessages.ExpectedVersionRequired);
+        if (request.ExpectedVersion != TaskVersion.Of(task)) return ServiceResult.Conflict(MessageRef.Literal(TaskMessages.Stale), "stale");
+        if (!p.CanEdit)
+            return p.CanReassign ? ServiceResult.Forbidden(MessageRef.Literal(TaskMessages.SupervisorOnlyAssignee)) : ServiceResult.Forbidden();
+        if (TaskEditParser.StartAfterDue(request.StartDate, request.DueDate))
+            return ServiceResult.Invalid("startDate", MessageRef.Of(MessageText.TaskStartAfterDue));
+
+        if (request.StartDate != task.StartDate || request.DueDate != task.DueDate)
+        {
+            if (!await tasks.TryClaimVersionAsync(task, ct)) return ServiceResult.Conflict(MessageRef.Literal(TaskMessages.Stale), "stale");
+            var edit = new TaskEdit(null, false, null, false, null, true, request.DueDate, null, SetStartDate: true, StartDate: request.StartDate);
+            if (await writer.ApplyAsync(task, edit, ct) is { } refused) return refused;
+            await writer.FlushAsync(ct);
+        }
+        var cards = await board.CardsAsync([task], time.Today, await board.UsersAsync(ct), ct);
+        return ServiceResult.Success(new TaskScheduleResponse(cards[task.Id]));
+    }
 }

@@ -2,6 +2,7 @@ import { createPinia, setActivePinia } from 'pinia';
 import { beforeEach, describe, expect, it } from 'vitest';
 import { dynamicApi } from './dynamic-api';
 import { http } from './http';
+import type { TaskGanttConfig } from 'src/domain/dynamic/task-board-types';
 
 interface Seen { method?: string; url?: string; body?: unknown; headers?: Record<string, unknown> }
 
@@ -215,5 +216,21 @@ describe('dynamicApi tasks', () => {
     expect(JSON.parse(detail.body as string)).toEqual([{ kind: 'department', id: '3' }]);
     stub({});
     expect(await dynamicApi.getTaskViewShareTargets()).toEqual({ users: [], departments: [], groups: [] });
+  });
+
+  it('gantt views pass the kind; schedule posts both dates and the version and returns only the card', async () => {
+    const list = stub({ mine: [{ id: 3, kind: 'gantt', name: 'G', isOwner: true }] });
+    expect((await dynamicApi.getTaskViews('gantt')).mine[0].kind).toBe('gantt');
+    expect(list.url).toBe('/api/v3/dynamic/task-views?kind=gantt');
+    const created = stub({ id: 3, kind: 'gantt', name: 'G', config: { version: 1, groupBy: 'parent', scope: 'assigned', scale: 'week' }, rowVersion: 'r1' });
+    const g = await dynamicApi.createTaskView<TaskGanttConfig>({ kind: 'gantt', name: 'G' });
+    expect(JSON.parse(created.body as string)).toEqual({ kind: 'gantt', name: 'G' });
+    expect(g.config.scale).toBe('week');
+    const schedule = stub({ card: { id: 5, title: 'T', status: 'todo', startDate: '2026-11-21', dueDate: '2026-11-28', version: 'v2' } });
+    const r = await dynamicApi.scheduleTask(5, { startDate: '2026-11-21', dueDate: null, expectedVersion: 'v1' });
+    expect(schedule).toMatchObject({ method: 'post', url: '/api/v3/dynamic/tasks/5/schedule' });
+    expect(JSON.parse(schedule.body as string)).toEqual({ startDate: '2026-11-21', dueDate: null, expectedVersion: 'v1' });
+    expect(r.card).toMatchObject({ id: 5, startDate: '2026-11-21', version: 'v2', parentTaskId: null });
+    expect(Object.keys(r)).toEqual(['card']);
   });
 });

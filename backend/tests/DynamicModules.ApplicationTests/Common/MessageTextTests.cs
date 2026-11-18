@@ -3,6 +3,7 @@ using System.Text.RegularExpressions;
 using FluentAssertions;
 using DynamicModules.Application.Common;
 using DynamicModules.Domain.FieldTypes;
+using DynamicModules.Domain.Tasks;
 
 namespace DynamicModules.ApplicationTests.Common;
 
@@ -69,5 +70,14 @@ public class MessageTextTests
         var missing = typeof(FieldErrors).GetFields(BindingFlags.Public | BindingFlags.Static)
             .Select(f => (string)f.GetRawConstantValue()!).Where(k => !keys.Contains(k)).ToList();
         missing.Should().BeEmpty("Domain 只帶鍵，沒有文字的鍵在執行時會 KeyNotFoundException");
+    }
+
+    [Fact]
+    public void EveryGanttConfigError_HasAMessage()
+    {
+        var keys = Entries().Select(e => e.Key).ToHashSet();
+        var missing = typeof(TaskGanttConfigErrors).GetFields(BindingFlags.Public | BindingFlags.Static)
+            .Select(f => (string)f.GetRawConstantValue()!).Where(k => !keys.Contains(k)).ToList();
+        missing.Should().BeEmpty("甘特設定錯誤只帶鍵，沒有文字的鍵在執行時會 KeyNotFoundException");
     }
 }
