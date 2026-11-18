@@ -35,9 +35,20 @@ const confirming = ref(false);
 const openCount = ref(0);
 const openChoice = ref(false);
 
-watch(data, (d) => {
+const draftOf = (d: NonNullable<typeof data.value>) => ({ title: d.title, description: d.description ?? '', assignee: d.assigneeUserId, dueDate: d.dueDate, status: d.status });
+// 同一個任務重抓（例如新增子任務後）只同步沒被使用者改過的欄位，改到一半的內容不能被蓋掉；換成別的任務才整份重新初始化
+watch(data, (d, prev) => {
   if (!d) return;
-  draft.value = { title: d.title, description: d.description ?? '', assignee: d.assigneeUserId, dueDate: d.dueDate, status: d.status };
+  const next = draftOf(d);
+  if (!prev || prev.id !== d.id) {
+    draft.value = next;
+    return;
+  }
+  const before = draftOf(prev);
+  const cur = draft.value as Record<string, unknown>;
+  for (const k of Object.keys(next) as (keyof typeof next)[]) {
+    if (cur[k] === before[k]) cur[k] = next[k];
+  }
 }, { immediate: true });
 
 const userOptions = computed(() => (users.data.value ?? []).map((u) => ({ value: u.userId, label: u.displayName })));

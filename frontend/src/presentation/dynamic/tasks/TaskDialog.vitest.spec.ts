@@ -679,4 +679,38 @@ describe('TaskDialog subtasks', () => {
     expect(q('task-delete-text')!.textContent).toBe('確定要刪除這個任務嗎？');
     w.unmount();
   });
+
+  it('有未存修改時新增子任務，重抓詳細不會蓋掉改到一半的標題', async () => {
+    // 每次讀取回不同的版本，重抓才會得到新資料物件
+    let n = 0;
+    const w = await mountDialog({ task: { ...parent(), get version() { return `v${n++}`; } } });
+    const titleInput = () => body().querySelector<HTMLInputElement>('input[data-testid="task-title"]')!;
+    titleInput().value = '改到一半的標題';
+    titleInput().dispatchEvent(new Event('input'));
+    await flushPromises();
+    await click('subtask-add');
+    const input = q('subtask-form-title') as unknown as HTMLInputElement;
+    input.value = '新子任務';
+    input.dispatchEvent(new Event('input'));
+    await flushPromises();
+    await click('subtask-form-submit');
+    expect(calls.filter((c) => c.url === '/tasks/5' && c.method === 'get').length).toBeGreaterThan(1);
+    expect(titleInput().value).toBe('改到一半的標題');
+    w.unmount();
+  });
+
+  it('連按 Enter 只送出一次新增子任務', async () => {
+    const w = await mountDialog({ task: parent() });
+    await click('subtask-add');
+    const input = q('subtask-form-title') as unknown as HTMLInputElement;
+    input.value = '訂場地';
+    input.dispatchEvent(new Event('input'));
+    await flushPromises();
+    input.dispatchEvent(new KeyboardEvent('keyup', { key: 'Enter' }));
+    input.dispatchEvent(new KeyboardEvent('keyup', { key: 'Enter' }));
+    await flushPromises();
+    await new Promise((r) => setTimeout(r, 20));
+    expect(calls.filter((c) => c.url === '/tasks/5/subtasks')).toHaveLength(1);
+    w.unmount();
+  });
 });

@@ -68,6 +68,20 @@ describe('RecordTasks', () => {
     w.unmount();
   });
 
+  it('三選一按「取消操作」不重送', async () => {
+    patchHandler = () => new HttpFail(409, { code: 'subtasksOpen', params: { count: 2 }, message: 'x' });
+    const w = await mountBlock({ closed: false }, [taskWire({ level: 'parent', progress: { done: 1, cancelled: 0, total: 3 } })]);
+    await w.get('[data-testid="task-check-5"]').trigger('click');
+    await flushPromises();
+    await new Promise((r) => setTimeout(r, 20));
+    document.body.querySelector<HTMLElement>('[data-testid="subtasks-open-abort"]')!.click();
+    await flushPromises();
+    await new Promise((r) => setTimeout(r, 20));
+    expect(calls.filter((c) => c.method === 'patch')).toHaveLength(1);
+    expect(document.body.querySelector('[data-testid="subtasks-open"]')).toBeNull();
+    w.unmount();
+  });
+
   it('勾選完成送 PATCH /tasks/5 {status:"done"}', async () => {
     const w = await mountBlock({ closed: false }, [taskWire()]);
     await w.get('[data-testid="task-check-5"]').trigger('click');

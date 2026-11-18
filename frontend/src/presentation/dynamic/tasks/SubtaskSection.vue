@@ -39,11 +39,15 @@ function startAdding() {
   adding.value = true;
 }
 
+let submitting = false;
 async function submit() {
+  // 連按 Enter 或連點按鈕：上一次還沒回來就不再送（isPending 要等下一個 tick 才反映）
+  if (submitting) return;
   const text = title.value.trim();
   titleError.value = text ? '' : t('tasks.titleRequired');
   if (!text) return;
   error.value = '';
+  submitting = true;
   try {
     await create.mutateAsync({ parentId: props.task.id, body: { title: text, assigneeUserId: assignee.value, dueDate: dueDate.value } });
     // 連續新增：留著表單與負責人，只清標題與到期日
@@ -52,6 +56,8 @@ async function submit() {
   } catch (e) {
     const err = e as ApiError;
     error.value = (err.errors ? Object.values(err.errors).flat().join(t('common.listSeparator')) : err.message) || t('tasks.saveFailed');
+  } finally {
+    submitting = false;
   }
 }
 
