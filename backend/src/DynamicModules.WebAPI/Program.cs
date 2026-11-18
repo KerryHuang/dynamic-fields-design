@@ -60,6 +60,9 @@ builder.Services.AddSingleton<ClientErrorThrottle>();
 // 維運資訊：這個程序的身分與建置／部署資訊
 builder.Services.AddSingleton<DynamicModules.Application.Dynamic.OpsService.IOpsEnvironment, OpsEnvironment>();
 builder.Services.AddSingleton(sp => DynamicModules.Application.Dynamic.OpsService.OpsInstance.Create(sp.GetRequiredService<TimeProvider>()));
+// 背景排程器：工作登記在 AddApplication；Ops:Scheduler:Enabled=false 時不跑（多實例只讓其中一台跑、除錯用）
+builder.Services.AddSingleton<DynamicModules.Application.Dynamic.OpsService.Scheduling.JobRunner>();
+builder.Services.AddHostedService<SchedulerHostedService>();
 builder.Services.AddSingleton(new AuthSettings(builder.Configuration.GetValue<bool>("Demo:LoginEnabled")));
 // 附件：預設放在資料庫旁的 attachments 目錄（記憶體資料庫則放暫存目錄）。Demo 登入開啟時預設不開放上傳，可用 Attachments:UploadEnabled 明確覆寫。
 var (attachmentSettings, policyDefaults, attachmentWarnings) = AttachmentSettingsFactory.Create(builder.Configuration, databaseDirectory);
