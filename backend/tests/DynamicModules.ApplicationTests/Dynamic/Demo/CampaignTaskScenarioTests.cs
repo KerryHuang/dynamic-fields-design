@@ -13,7 +13,28 @@ public class CampaignTaskScenarioTests(DemoGeneratedFixture fx)
         fx.Generated();
         var nameKey = await fx.Key("crm-campaign", "名稱");
         var record = (await fx.Records("crm-campaign")).Single(r => DemoGeneratedFixture.Text(r, nameKey) == campaignName);
-        return await fx.Host.Db.Context.Set<TaskItem>().AsNoTracking().Where(t => t.RecordId == record.Id).OrderBy(t => t.Id).ToListAsync();
+        return await fx.Host.Db.Context.Set<TaskItem>().AsNoTracking().Where(t => t.RecordId == record.Id && t.ParentTaskId == null).OrderBy(t => t.Id).ToListAsync();
+    }
+
+    [Fact]
+    public async Task SpringExpo_PlanTask_HasFourSubtasks_WithProgressAndParentFollowing()
+    {
+        fx.Generated();
+        var nameKey = await fx.Key("crm-campaign", "名稱");
+        var record = (await fx.Records("crm-campaign")).Single(r => DemoGeneratedFixture.Text(r, nameKey) == "春季工具機展");
+        var all = await fx.Host.Db.Context.Set<TaskItem>().AsNoTracking().Where(t => t.RecordId == record.Id).OrderBy(t => t.Id).ToListAsync();
+        var plan = all.Single(t => t.RuleTaskCode == "plan");
+        var subs = all.Where(t => t.ParentTaskId == plan.Id).OrderBy(t => t.Id).ToList();
+
+        subs.Select(t => (t.Title, t.Status, t.AssigneeUserId, t.CreatedBy)).Should().Equal(
+            ("確認展位與預算", TaskItemStatus.Done, "sales01", "sales01"),
+            ("整理邀請客戶名單", TaskItemStatus.InProgress, "sales01", "sales01"),
+            ("準備展示樣品清單", TaskItemStatus.Todo, "sales01", "sales01"),
+            ("訂購展示傳單", TaskItemStatus.Cancelled, "sales01", "sales01"));
+        // 第一個子任務開工時，待辦的父任務由連動改成進行中；其他兩個規則任務不受影響
+        plan.Status.Should().Be(TaskItemStatus.InProgress);
+        all.Where(t => t.ParentTaskId == null && t.Id != plan.Id).Should().OnlyContain(t => t.Status == TaskItemStatus.Todo);
+        subs.Should().OnlyContain(t => t.RecordId == record.Id && t.ModuleId == plan.ModuleId);
     }
 
     private Task<List<Notification>> NotificationsOf(string userId) =>
@@ -28,7 +49,10 @@ public class CampaignTaskScenarioTests(DemoGeneratedFixture fx)
             ("plan", "規劃活動內容", new DateOnly(2026, 12, 1), "sales01"),
             ("setup", "展場佈置", new DateOnly(2027, 1, 31), "sales02"),
             ("feedback", "活動回饋", new DateOnly(2027, 2, 15), "sales03"));
-        tasks.Should().OnlyContain(t => t.Status == TaskItemStatus.Todo && t.CreatedBy == null);
+        tasks.Should().OnlyContain(t => t.CreatedBy == null);
+        // 「規劃活動內容」底下有子任務、第一個已開工，父任務由連動改成進行中；其餘維持待辦
+        tasks.Single(t => t.RuleTaskCode == "plan").Status.Should().Be(TaskItemStatus.InProgress);
+        tasks.Where(t => t.RuleTaskCode != "plan").Should().OnlyContain(t => t.Status == TaskItemStatus.Todo);
     }
 
     [Fact]

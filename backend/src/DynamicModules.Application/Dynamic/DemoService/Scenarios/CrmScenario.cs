@@ -1,4 +1,5 @@
 using System.Globalization;
+using System.Text.Json;
 using DynamicModules.Application.Dynamic.ConversionService.Commands.ConvertRecord;
 using DynamicModules.Application.Dynamic.ConversionService.Data;
 using DynamicModules.Application.Dynamic.RecordService.Commands.CreateRecord;
@@ -170,6 +171,29 @@ public sealed class CrmScenario : IDemoScenario
         plan.Run(plan.At(today.AddDays(-2)), "sales02", "展場佈置 留言", (ctx, ct) => Comment(ctx, expo, "展場佈置", "@{sales01} 攤位尺寸要再確認", ct));
         plan.Run(plan.At(today.AddDays(-1)), "sales03", "活動回饋 留言", (ctx, ct) => Comment(ctx, expo, "活動回饋", "@{sales02} 回饋表單我先擬", ct));
 
+        // ---- 子任務（看板設計 §10）：「規劃活動內容」底下四個子任務，讓進度「1／3」與「另有 1 個已取消」、父任務自動進行中都看得到 ----
+        // 全部由 sales01（父任務的負責人）新增與處理，不產生指派通知；父任務還是待辦，第一個子任務開工時才由連動改成進行中。
+        var subtaskAt = plan.At(today.AddDays(-2));
+        var subtaskIds = new List<long>();
+        (string Title, int DueDays)[] subtasks = [("確認展位與預算", 7), ("整理邀請客戶名單", 14), ("準備展示樣品清單", 21), ("訂購展示傳單", 21)];
+        plan.Run(subtaskAt, "sales01", "行銷活動 春季工具機展 加子任務", async (ctx, ct) =>
+        {
+            var parent = await FindTask(ctx, expo, "規劃活動內容", ct);
+            if (parent.Failed is not null) return parent.Failed;
+            foreach (var (title, dueDays) in subtasks)
+            {
+                var r = await ctx.Sender.Send(new CreateSubtaskRequest(parent.Task!.Id, new TaskInput(title, null, "sales01", today.AddDays(dueDays))), ct);
+                if (!r.IsCreated) return r;
+                subtaskIds.Add(((TaskDetailResponse)r.Data!).Id);
+            }
+            return ServiceResult.Success();
+        });
+        var doneAt = plan.At(today.AddDays(-1), subtaskAt);
+        plan.Run(doneAt, "sales01", "子任務 確認展位與預算 開工", (ctx, ct) => SetSubtaskStatus(ctx, subtaskIds, 0, "inProgress", ct));
+        plan.Run(doneAt.AddMinutes(5), "sales01", "子任務 確認展位與預算 完成", (ctx, ct) => SetSubtaskStatus(ctx, subtaskIds, 0, "done", ct));
+        plan.Run(doneAt.AddMinutes(10), "sales01", "子任務 整理邀請客戶名單 進行中", (ctx, ct) => SetSubtaskStatus(ctx, subtaskIds, 1, "inProgress", ct));
+        plan.Run(doneAt.AddMinutes(15), "sales01", "子任務 訂購展示傳單 取消", (ctx, ct) => SetSubtaskStatus(ctx, subtaskIds, 3, "cancelled", ct));
+
         // ---- 報價單 ----
         // Status: draft | pending | rejected | approved；Orders：每張報價單轉出的訂單（每張訂單列出各明細列要轉的數量，0 表示不轉）
         var quoteSpecs = new (string Status, int[][] Orders, string? OrderEnd)[]
@@ -291,6 +315,22 @@ public sealed class CrmScenario : IDemoScenario
         if (task is null) return ServiceResult.Invalid(new Dictionary<string, string[]> { ["task"] = [$"記錄上沒有任務「{taskTitle}」"] });
         return await ctx.Sender.Send(new AddTaskCommentRequest(task.Id, body, []), ct);
     }
+
+    /// <summary>在記錄上標題為 taskTitle 的頂層任務（記錄頁只列頂層）。</summary>
+    private static async Task<(TaskSummaryResponse? Task, ServiceResult? Failed)> FindTask(DemoContext ctx, DemoRecord record, string taskTitle, CancellationToken ct)
+    {
+        var listed = await ctx.Sender.Send(new GetRecordTasksRequest(record.Id), ct);
+        if (!listed.IsSuccess) return (null, listed);
+        var task = ((RecordTasksResponse)listed.Data!).Items.FirstOrDefault(t => t.Title == taskTitle);
+        return task is null
+            ? (null, ServiceResult.Invalid(new Dictionary<string, string[]> { ["task"] = [$"記錄上沒有任務「{taskTitle}」"] }))
+            : (task, null);
+    }
+
+    private static Task<ServiceResult> SetSubtaskStatus(DemoContext ctx, List<long> ids, int index, string status, CancellationToken ct) =>
+        ids.Count > index
+            ? ctx.Sender.Send(new UpdateTaskRequest(ids[index], JsonSerializer.SerializeToElement(new { status })), ct)
+            : Task.FromResult(ServiceResult.Invalid(new Dictionary<string, string[]> { ["task"] = [$"還沒有第 {index + 1} 個子任務"] }));
 
     private static CreateRecordRequest Create(DemoContext ctx, string module, params (string Code, object? Value)[] items) =>
         new(ctx.Crm!.Ids.ModuleKeys[module], ctx.Crm.Values(module, items));
