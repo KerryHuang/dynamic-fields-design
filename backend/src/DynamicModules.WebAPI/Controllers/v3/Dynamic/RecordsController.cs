@@ -25,9 +25,12 @@ public class RecordsController(IMediator mediator) : ControllerBase
     public async Task<IActionResult> Paged(
         string key, [FromQuery] int currentPage = 1, [FromQuery] int pagesSize = 10, [FromQuery] string? filter = null,
         [FromQuery(Name = "sortBy")] string[]? sortBy = null, [FromQuery(Name = "sortOrder")] string[]? sortOrder = null,
-        [FromQuery] string? q = null, [FromQuery] string? approval = null) =>
+        [FromQuery] string? q = null) =>
         (await mediator.Send(new GetPagedRecordsRequest(
-            key, currentPage, pagesSize, filter, sortBy ?? [], sortOrder ?? [], q, approval))).ToActionResult(this);
+            key, currentPage, pagesSize, filter, sortBy ?? [], sortOrder ?? [], q, RawApproval()))).ToActionResult(this);
+
+    /// <summary>approval 取原始查詢值：預設 binder 會把純空白（%20、%09）轉成 null 而繞過驗證（簽核設計 §13.4.1）；只有空字串與不帶才是不篩選。</summary>
+    private string? RawApproval() => Request.Query.TryGetValue("approval", out var v) ? v.ToString() : null;
 
     [HttpGet("modules/{key}/records/light")]
     public async Task<IActionResult> Light(string key, [FromQuery] string? keyword = null, [FromQuery] int page = 1, [FromQuery] int size = 20) =>

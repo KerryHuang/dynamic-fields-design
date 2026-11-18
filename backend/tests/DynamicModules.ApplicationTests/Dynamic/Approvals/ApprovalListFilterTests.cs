@@ -12,6 +12,7 @@ using DynamicModules.Domain.Approvals;
 using DynamicModules.Domain.Entities.Dynamic;
 using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
+using Record = DynamicModules.Domain.Entities.Dynamic.Record;
 
 namespace DynamicModules.ApplicationTests.Dynamic.Approvals;
 
@@ -106,7 +107,7 @@ public class ApprovalListFilterTests : ApprovalTestBase
     }
 
     [Fact]
-    public async Task None_WithKeywordSortAndPaging_TotalCountMatches()
+    public async Task None_WithKeywordAndPaging_TotalCountMatches()
     {
         var a = await Arrange();
         var first = await List("fin1", "none", q: "單", page: 1, size: 3);
@@ -120,7 +121,7 @@ public class ApprovalListFilterTests : ApprovalTestBase
         (await List("fin1", "pending", q: "草稿")).TotalCount.Should().Be(0);   // 關鍵字與簽核條件是交集
         Ids(await List("fin1", "pending", q: "簽核中")).Should().BeEquivalentTo([a.P1, a.P5]);
 
-        // 依標題排序是模組自己的欄位；沒有排序時依 Id 遞減，兩者都不被篩選改變
+        // 沒有排序時依 Id 遞減，篩選不改變排序
         Ids(await List("fin1", "pending")).Should().Equal(a.P5, a.P1);
     }
 
@@ -139,6 +140,54 @@ public class ApprovalListFilterTests : ApprovalTestBase
         none.TotalCount.Should().Be(1);
 
         (await List("emp1", "pending")).TotalCount.Should().Be(0);   // 沒有任何自己的單
+    }
+
+    [Fact]
+    public async Task GroupScope_FilterNarrowsWithinGroupMates()
+    {
+        var a = await Arrange();
+        await SetEveryone(a.R.Module, DataScope.Group, export: true);
+        // buyer1 離開 everyone：buyer2 的群組同儕只剩其他人，P1（buyer1 的簽核中單據）不在範圍內
+        var everyone = Db.Context.Set<PermissionGroup>().AsNoTracking().Single(g => g.Key == "everyone").Id;
+        await Db.Context.Set<UserGroupMapping>().Where(m => m.GroupId == everyone && m.UserId == "buyer1").ExecuteDeleteAsync();
+
+        var pending = await List("buyer2", "pending");
+        Ids(pending).Should().Equal(a.P5);
+        pending.TotalCount.Should().Be(1);
+        Ids(await List("buyer2", "none")).Should().BeEquivalentTo([a.P6]);
+    }
+
+    [Fact]
+    public async Task OwnScope_ExportCarriesFilterWithinScope()
+    {
+        var a = await Arrange();
+        await SetEveryone(a.R.Module, DataScope.Own, export: true);
+        var pending = await ExportTitles("buyer2", "pending");
+        pending.Should().ContainSingle().Which.Should().Contain("單-5");
+        var none = await ExportTitles("buyer2", "none");
+        none.Should().ContainSingle().Which.Should().Contain("單-6");
+    }
+
+    [Theory]
+    [InlineData(ApprovalInstanceStatus.Rejected)]
+    [InlineData(ApprovalInstanceStatus.Cancelled)]
+    [InlineData(ApprovalInstanceStatus.Rerouted)]
+    public async Task EndedInstance_CountsAsNotInApproval(string ended)
+    {
+        var a = await Arrange();
+        await Db.Context.Set<ApprovalInstance>().Where(i => i.RecordId == a.P1).ExecuteUpdateAsync(u => u.SetProperty(i => i.Status, ended));
+        Ids(await List("fin1", "pending")).Should().Equal(a.P5);
+        Ids(await List("fin1", "none")).Should().Contain(a.P1);
+    }
+
+    [Fact]
+    public async Task SoftDeletedRecord_NeverListedByEitherValue()
+    {
+        var a = await Arrange();
+        await Db.Context.Set<Record>().Where(r => r.Id == a.P5 || r.Id == a.P6).ExecuteUpdateAsync(u => u.SetProperty(r => r.DeleteFlag, true));
+        Ids(await List("fin1", "pending")).Should().Equal(a.P1);
+        Ids(await List("fin1", "none")).Should().NotContain([a.P5, a.P6]);
+        (await List("fin1", "none")).TotalCount.Should().Be(3);
     }
 
     [Fact]

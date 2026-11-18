@@ -193,6 +193,10 @@ function setSort(v: ViewSort[]) { sort.value = v; page.value = 1; }
 function setQ(v: string | number | null) { q.value = v == null ? '' : String(v); page.value = 1; }
 const approvalOptions = computed(() => (['all', 'pending', 'none'] as const).map((value) => ({ value, label: t(`dynamic.approvalFilter.${value}`) })));
 function setApproval(v: 'all' | ApprovalListFilter) { approval.value = v === 'all' ? undefined : v; page.value = 1; }
+// 切換列隨 schema 消失（最後一條需簽核轉移被關掉）時，看不到也解不掉的條件要一起清掉，清單與匯出才不會帶著它
+watch(() => !!schema.value?.approvalEnabled, (enabled) => {
+  if (!enabled && approval.value) { approval.value = undefined; page.value = 1; }
+});
 
 const createView = useCreateView();
 const updateView = useUpdateView();

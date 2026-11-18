@@ -388,6 +388,23 @@ describe('ListPage', () => {
       expect(toggle(w).props('modelValue')).toBe('pending');
     });
 
+    it('clears the condition when a schema refetch turns approvalEnabled off (list and export stop carrying it)', async () => {
+      schemaPatch = { approvalEnabled: true };
+      const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+      const w = await mountPage([], qc);
+      w.findComponent(quasar.QTable).vm.$emit('update:pagination', { page: 3, rowsPerPage: 20 });
+      toggle(w).vm.$emit('update:modelValue', 'pending');
+      await flushPromises();
+      expect(lastCall().approval).toBe('pending');
+      schemaPatch = { approvalEnabled: false };
+      await qc.invalidateQueries();
+      await flushPromises();
+      expect(w.find('[data-testid="approval-filter"]').exists()).toBe(false);
+      expect(lastCall().approval).toBeUndefined();
+      expect(lastCall().currentPage).toBe(1);
+      expect(w.findComponent(ExportMenu).props('query').approval).toBeUndefined();
+    });
+
     it('applying a saved view does not touch the switch (views never store it)', async () => {
       schemaPatch = { approvalEnabled: true };
       const w = await mountPage([view({ id: 5, columns: [2] })]);

@@ -142,6 +142,19 @@ public class InventoryApprovalTests : IDisposable
         bad.StatusCode.Should().Be(HttpStatusCode.BadRequest);
         (await bad.Content.ReadAsStringAsync()).Should().Contain("approval");
 
+        // 純空白不是「不帶」：預設 binder 會把它轉成 null，控制器取原始值，才會和其他非法值一樣回 400；空字串與不帶才是不篩選
+        foreach (var blank in new[] { "%20", "%09", "%20%20" })
+        {
+            foreach (var url in new[] { $"{Base}/modules/{po}/records/paged?approval={blank}", $"{Base}/modules/{po}/export?format=csv&approval={blank}" })
+            {
+                var res = await _admin.GetAsync(url);
+                res.StatusCode.Should().Be(HttpStatusCode.BadRequest, url);
+                (await JsonOf(res)).GetProperty("errors").TryGetProperty("approval", out _).Should().BeTrue(url);
+            }
+        }
+        (await Paged("?approval=")).GetProperty("totalCount").GetInt32().Should().Be(2);
+        (await _admin.GetAsync($"{Base}/modules/{po}/export?format=csv&approval=")).StatusCode.Should().Be(HttpStatusCode.OK);
+
         var csv = await _admin.GetAsync($"{Base}/modules/{po}/export?format=csv&approval=pending");
         csv.StatusCode.Should().Be(HttpStatusCode.OK);
         (await csv.Content.ReadAsStringAsync()).Split("\r\n", StringSplitOptions.RemoveEmptyEntries).Should().HaveCount(2, "標題列加一筆");
