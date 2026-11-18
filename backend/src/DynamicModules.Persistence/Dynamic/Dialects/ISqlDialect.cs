@@ -1,6 +1,6 @@
 namespace DynamicModules.Persistence.Dynamic.Dialects;
 
-/// <summary>資料庫方言差異；目前只有 SQLite，PostgreSQL 版在 pg0b 加（PostgreSQL provider 設計 §5.5）。識別字由呼叫端加雙引號，兩邊共用。</summary>
+/// <summary>資料庫方言差異：SQLite 與 PostgreSQL 各一份（PostgreSQL provider 設計 §5.5）。識別字由呼叫端加雙引號，兩邊共用。</summary>
 public interface ISqlDialect
 {
     /// <summary>回傳加上排序與分頁的 SQL；分頁參數固定叫 @offset、@limit。</summary>

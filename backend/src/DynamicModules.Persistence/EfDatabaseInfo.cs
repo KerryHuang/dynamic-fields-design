@@ -9,6 +9,7 @@ public sealed class EfDatabaseInfo(DynamicDbContext db) : IDatabaseInfo
     public string Provider => (db.Database.ProviderName ?? "unknown").Split('.').Last().ToLowerInvariant() switch
     {
         "sqlite" => "sqlite",
+        "postgresql" => "postgres",   // 與 Database:Provider 的值一致
         var other => other,
     };
 

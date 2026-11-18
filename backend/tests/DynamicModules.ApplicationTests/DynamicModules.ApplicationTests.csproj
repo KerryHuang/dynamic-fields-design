@@ -28,6 +28,7 @@
   <ItemGroup>
     <ProjectReference Include="..\..\src\DynamicModules.Application\DynamicModules.Application.csproj" />
     <ProjectReference Include="..\..\src\DynamicModules.Persistence\DynamicModules.Persistence.csproj" />
+    <ProjectReference Include="..\..\src\DynamicModules.Persistence.Postgres\DynamicModules.Persistence.Postgres.csproj" />
   </ItemGroup>
 
   <ItemGroup>
