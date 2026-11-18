@@ -1,6 +1,6 @@
 import type {
-  ManualRule, NotificationItem, NotificationList, RecordTasks, TaskCapabilities, TaskComment, TaskDetail, TaskPage, TaskRecordRef, TaskSummary,
-  TaskUpdateResult,
+  ManualRule, NotificationItem, NotificationList, RecordTasks, TaskCapabilities, TaskComment, TaskDetail, TaskLevel, TaskPage, TaskProgress,
+  TaskRecordRef, TaskSummary, TaskUpdateResult,
 } from 'src/domain/dynamic/task-types';
 import type { TaskRule } from 'src/domain/dynamic/task-rule-draft';
 import type {
@@ -35,8 +35,20 @@ export function normalizeTaskSummary(t: Wire<TaskSummary>): TaskSummary {
     canReassign: !!t.canReassign,
     supervised: !!t.supervised,
     version: t.version ?? '',
+    ...normalizeHierarchy(t),
   };
 }
+
+const normalizeProgress = (p: Wire<TaskProgress> | null | undefined): TaskProgress | null =>
+  (p ? { done: p.done ?? 0, cancelled: p.cancelled ?? 0, total: p.total ?? 0 } : null);
+
+/** Replies from before subtasks existed have none of these: treat them as standalone tasks. */
+const normalizeHierarchy = (t: { parentTaskId?: number | null; parentTitle?: string | null; level?: TaskLevel | null; progress?: Wire<TaskProgress> | null }) => ({
+  parentTaskId: t.parentTaskId ?? null,
+  parentTitle: t.parentTitle ?? null,
+  level: t.level ?? 'standalone',
+  progress: normalizeProgress(t.progress),
+});
 
 export function normalizeTaskDetail(t: Wire<TaskDetail>): TaskDetail {
   return {
@@ -51,6 +63,9 @@ export function normalizeTaskDetail(t: Wire<TaskDetail>): TaskDetail {
     canComment: !!t.canComment,
     canDelete: !!t.canDelete,
     frozen: !!t.frozen,
+    parentVisible: !!t.parentVisible,
+    subtasks: ((t.subtasks ?? []) as Wire<TaskSummary>[]).map(normalizeTaskSummary),
+    canAddSubtask: !!t.canAddSubtask,
   };
 }
 
@@ -140,6 +155,7 @@ export function normalizeBoardCard(c: Wire<BoardCard>): BoardCard {
     version: c.version ?? '',
     canEdit: !!c.canEdit,
     canReassign: !!c.canReassign,
+    ...normalizeHierarchy(c),
   };
 }
 

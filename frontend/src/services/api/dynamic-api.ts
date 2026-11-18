@@ -564,6 +564,9 @@ export const dynamicApi = {
   markAllNotificationsRead: () => http.post('/notifications/read-all').then(data),
   getTask: (id: number) => http.get<TaskDetail>(`/tasks/${id}`).then(data).then(normalizeTaskDetail),
   createTask: (body: TaskInput) => http.post<TaskDetail>('/tasks', body).then(data).then(normalizeTaskDetail),
+  /** Adds a subtask under `parentId` (record and module come from the parent); the reply is the new subtask. */
+  createSubtask: (parentId: number, body: TaskInput) =>
+    http.post<TaskDetail>(`/tasks/${parentId}/subtasks`, body).then(data).then(normalizeTaskDetail),
   /** A property left out stays as it is; an explicit null clears it, so the patch is sent as given. The reply is `visible: false` when the writer lost sight of the task. */
   updateTask: (id: number, patch: TaskPatch) => http.patch<TaskDetail>(`/tasks/${id}`, patch).then(data).then(normalizeTaskUpdate),
   getTaskCapabilities: () => http.get<TaskCapabilities>('/tasks/capabilities').then(data).then(normalizeTaskCapabilities),

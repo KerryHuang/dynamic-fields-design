@@ -12,6 +12,16 @@ export interface TaskRecordRef {
   deleted: boolean;
 }
 
+/** standalone: no parent and no subtasks; parent: has at least one subtask (any status); child: has a parent (one level only). */
+export type TaskLevel = 'standalone' | 'parent' | 'child';
+
+/** Raw subtask counts; total includes cancelled. The UI shows done / (total − cancelled) and hides the bar when that is 0. */
+export interface TaskProgress {
+  done: number;
+  cancelled: number;
+  total: number;
+}
+
 export interface TaskSummary {
   id: number;
   title: string;
@@ -30,6 +40,12 @@ export interface TaskSummary {
   supervised: boolean;
   /** Task version string (yyyyMMddHHmmssfff, UTC); changes on every write. */
   version: string;
+  parentTaskId: number | null;
+  /** Shown above a subtask even to someone who cannot open the parent. */
+  parentTitle: string | null;
+  level: TaskLevel;
+  /** Parents only; null when there are no subtasks. */
+  progress: TaskProgress | null;
 }
 
 export interface TaskDetail extends TaskSummary {
@@ -43,6 +59,12 @@ export interface TaskDetail extends TaskSummary {
   canComment: boolean;
   canDelete: boolean;
   frozen: boolean;
+  /** The viewer can open the parent task (otherwise its title is plain text). */
+  parentVisible: boolean;
+  /** All subtasks of a parent, oldest first; empty for other tasks. */
+  subtasks: TaskSummary[];
+  /** Edit right, not a subtask, still open, not frozen, tasks on for the module; the per-task limit is reported by the server. */
+  canAddSubtask: boolean;
 }
 
 export interface ManualRule {
@@ -84,7 +106,7 @@ export interface TaskComment {
   body: string | null;
   withdrawn: boolean;
   systemEvent: string | null;
-  systemData: { from?: unknown; to?: unknown } | null;
+  systemData: { from?: unknown; to?: unknown; subtaskId?: unknown; subtaskTitle?: unknown } | null;
   createdTime: string;
   mentions: MentionRef[];
   attachments: TaskAttachment[];

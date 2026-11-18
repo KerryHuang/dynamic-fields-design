@@ -30,6 +30,43 @@ describe('dynamicApi tasks', () => {
     });
   });
 
+  it('treats a reply without subtask fields as a standalone task (C44)', async () => {
+    stub({ id: 1, title: 'T', status: 'todo' });
+    const t = await dynamicApi.getTask(1);
+    expect(t).toMatchObject({
+      parentTaskId: null, parentTitle: null, parentVisible: false, level: 'standalone', progress: null, subtasks: [], canAddSubtask: false,
+    });
+  });
+
+  it('normalizes the subtask fields of a parent and of its subtasks', async () => {
+    stub({
+      id: 1, title: '辦行銷活動', status: 'inProgress', level: 'parent', canAddSubtask: true,
+      progress: { done: 2, cancelled: 1, total: 5 },
+      subtasks: [{ id: 2, title: '訂場地', status: 'done', parentTaskId: 1, parentTitle: '辦行銷活動', level: 'child' }],
+    });
+    const t = await dynamicApi.getTask(1);
+    expect(t.progress).toEqual({ done: 2, cancelled: 1, total: 5 });
+    expect(t.canAddSubtask).toBe(true);
+    expect(t.subtasks).toHaveLength(1);
+    expect(t.subtasks[0]).toMatchObject({ id: 2, parentTaskId: 1, parentTitle: '辦行銷活動', level: 'child', progress: null, assigneeUserId: null });
+  });
+
+  it('posts a subtask under its parent', async () => {
+    const seen = stub({ id: 7, title: '訂場地', status: 'todo', parentTaskId: 3, parentTitle: 'P', parentVisible: true, level: 'child' });
+    const t = await dynamicApi.createSubtask(3, { title: '訂場地', assigneeUserId: 'sales01' });
+    expect(seen.method).toBe('post');
+    expect(seen.url).toBe('/api/v3/dynamic/tasks/3/subtasks');
+    expect(JSON.parse(seen.body as string)).toEqual({ title: '訂場地', assigneeUserId: 'sales01' });
+    expect(t).toMatchObject({ id: 7, parentTaskId: 3, parentVisible: true, level: 'child' });
+  });
+
+  it('normalizes the subtask fields of a board card', async () => {
+    stub({ today: '2026-11-04', columns: [{ key: 'todo', cards: [{ id: 4, title: 'C', status: 'todo', parentTaskId: 3, parentTitle: 'P', level: 'child' }, { id: 3, title: 'P', status: 'todo' }] }], config: { version: 1, groupBy: 'status', scope: 'assigned' } });
+    const b = await dynamicApi.getBoardColumns({});
+    expect(b.columns[0].cards[0]).toMatchObject({ parentTaskId: 3, parentTitle: 'P', level: 'child', progress: null });
+    expect(b.columns[0].cards[1]).toMatchObject({ parentTaskId: null, parentTitle: null, level: 'standalone', progress: null });
+  });
+
   it('normalizes the record ref and the list page', async () => {
     stub({ items: [{ id: 2, title: 'A', status: 'todo', record: { accessible: false, deleted: false } }], totalCount: 1, currentPage: 1, pagesSize: 20 });
     const page = await dynamicApi.getMyTasks('mentioned', 'overdue', 3);

@@ -34,6 +34,7 @@ function systemText(c: TaskComment) {
   if (ev === 'assigneeChanged') return t('tasks.system.assigneeChanged', { from: nameOf(from), to: nameOf(to) });
   if (ev === 'dueChanged') return t('tasks.system.dueChanged', { from: due(from), to: due(to) });
   if (ev === 'statusChanged') return t('tasks.system.statusChanged', { from: status(from), to: status(to) });
+  if (ev === 'subtaskAdded' || ev === 'subtaskDeleted') return t(`tasks.system.${ev}`, { title: String(c.systemData?.subtaskTitle ?? '') });
   return ev ? t(`tasks.system.${ev}`) : '';
 }
 

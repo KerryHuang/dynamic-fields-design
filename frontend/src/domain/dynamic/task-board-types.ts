@@ -1,6 +1,6 @@
 import type { ReportDateRange } from './report-types';
 import type { I18nText } from './types';
-import type { TaskRecordRef, TaskStatus } from './task-types';
+import type { TaskLevel, TaskProgress, TaskRecordRef, TaskStatus } from './task-types';
 
 /** 看板分欄依據；欄查詢的回應帶著採用的設定（TaskBoardData.config）。 */
 export type BoardGroupBy = 'status' | 'assignee' | 'dueBucket';
@@ -32,6 +32,10 @@ export interface BoardCard {
   version: string;
   canEdit: boolean;
   canReassign: boolean;
+  parentTaskId: number | null;
+  parentTitle: string | null;
+  level: TaskLevel;
+  progress: TaskProgress | null;
 }
 
 export interface BoardColumn {
@@ -111,6 +115,8 @@ export interface TaskBoardConfig {
   };
   columns?: { order?: string[]; hidden?: string[]; assignees?: string[]; autoAppendAssignees?: boolean };
   sort?: { key: 'dueDate' | 'createdTime' | 'title'; dir: 'asc' | 'desc' };
+  /** Left out means true: subtasks are their own cards. false lists only parents and standalone tasks. */
+  showSubtasks?: boolean;
 }
 
 export interface TaskViewSummary {

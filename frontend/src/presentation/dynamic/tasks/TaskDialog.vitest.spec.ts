@@ -109,6 +109,18 @@ describe('TaskDialog', () => {
     w.unmount();
   });
 
+  it('系統記錄 subtaskAdded／subtaskDeleted 顯示子任務標題（C44）', async () => {
+    const w = await mountDialog({
+      comments: [
+        commentWire({ id: 3, kind: 'system', body: '', systemEvent: 'subtaskAdded', systemData: { subtaskId: 8, subtaskTitle: '訂場地' } }),
+        commentWire({ id: 4, kind: 'system', body: '', systemEvent: 'subtaskDeleted', systemData: { subtaskId: 9, subtaskTitle: '印海報' } }),
+      ],
+    });
+    expect(body().querySelector('[data-testid="comment-3"]')!.textContent).toContain('新增了子任務「訂場地」');
+    expect(body().querySelector('[data-testid="comment-4"]')!.textContent).toContain('刪除了子任務「印海報」');
+    w.unmount();
+  });
+
   it('留言內容的 @{id} 顯示成名稱，已停用者加「（已停用）」，不認得的照原文', async () => {
     const w = await mountDialog({
       comments: [commentWire({
