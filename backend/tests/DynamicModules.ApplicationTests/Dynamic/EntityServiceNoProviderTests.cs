@@ -11,6 +11,7 @@ using DynamicModules.Persistence.Seed;
 using FluentAssertions;
 using MediatR;
 using Microsoft.Extensions.DependencyInjection;
+using DynamicModules.Persistence.Dynamic.Dialects;
 
 namespace DynamicModules.ApplicationTests.Dynamic;
 
@@ -35,6 +36,7 @@ public class EntityServiceNoProviderTests : IAsyncLifetime
         var services = new ServiceCollection();
         services.AddApplication();
         services.AddPersistenceRepositories();
+        services.AddSingleton<ISqlDialect, SqliteDialect>();
         services.AddScoped(_ => _db.Context);
         services.AddScoped<ITransactionManager, EfTransactionManager>();
         services.AddScoped<IWorkSavepoints, EfWorkSavepoints>();

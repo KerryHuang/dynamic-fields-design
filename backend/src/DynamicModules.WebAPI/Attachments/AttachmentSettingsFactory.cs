@@ -1,7 +1,6 @@
 using DynamicModules.Application.Dynamic.AttachmentService;
 using DynamicModules.Application.Dynamic.PolicyService;
 using DynamicModules.Domain.Policies;
-using Microsoft.Data.Sqlite;
 
 namespace DynamicModules.WebAPI.Attachments;
 
@@ -13,13 +12,12 @@ namespace DynamicModules.WebAPI.Attachments;
 public static class AttachmentSettingsFactory
 {
     public static (AttachmentSettings Settings, PolicyEnvironmentDefaults Defaults, IReadOnlyList<string> Warnings) Create(
-        IConfiguration config, string dynamicConnection)
+        IConfiguration config, string? databaseDirectory)
     {
         var section = config.GetSection("Attachments");
         var configured = section["Root"];
-        var dataSource = new SqliteConnectionStringBuilder(dynamicConnection).DataSource;
         var root = !string.IsNullOrWhiteSpace(configured) ? Path.GetFullPath(configured)
-            : Path.IsPathRooted(dataSource) ? Path.Combine(Path.GetDirectoryName(dataSource)!, "attachments")
+            : databaseDirectory is not null ? Path.Combine(databaseDirectory, "attachments")
             : Path.Combine(Path.GetTempPath(), "formwright-attachments");
 
         var demo = config.GetValue<bool>("Demo:LoginEnabled");

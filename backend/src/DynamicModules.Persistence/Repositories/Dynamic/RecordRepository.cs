@@ -1,4 +1,5 @@
 using Dapper;
+using DynamicModules.Application.Common;
 using DynamicModules.Domain.Data;
 using DynamicModules.Domain.Entities.Dynamic;
 using DynamicModules.Domain.Repositories.Dynamic;
@@ -9,7 +10,7 @@ using Microsoft.EntityFrameworkCore.Storage;
 
 namespace DynamicModules.Persistence.Repositories.Dynamic;
 
-public class RecordRepository(DynamicDbContext db, ISqlDialect dialect) : IRecordRepository
+public class RecordRepository(DynamicDbContext db, ISqlDialect dialect, IDatabaseErrors errors) : IRecordRepository
 {
     public Task<Record?> GetAsync(long id, CancellationToken ct) =>
         db.Set<Record>().FirstOrDefaultAsync(r => r.Id == id && !r.DeleteFlag, ct);
@@ -196,7 +197,7 @@ public class RecordRepository(DynamicDbContext db, ISqlDialect dialect) : IRecor
             var row = await connection.QuerySingleAsync<AggregateRow>(new CommandDefinition(sql, parameters, transaction, cancellationToken: ct));
             return new AggregateResult(row.Count, row.ScaledSum, row.MissingScaled);
         }
-        catch (Microsoft.Data.Sqlite.SqliteException e) when (e.Message.Contains("integer overflow", StringComparison.OrdinalIgnoreCase))
+        catch (System.Data.Common.DbException e) when (errors.IsNumericOverflow(e))
         {
             throw new AggregateOverflowException(e);
         }

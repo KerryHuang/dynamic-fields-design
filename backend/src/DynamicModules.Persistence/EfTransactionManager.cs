@@ -66,13 +66,8 @@ public class EfTransactionManager(DynamicDbContext db) : ITransactionManager
     }
 }
 
-/// <summary>SQLite 的「資料庫忙碌」錯誤碼：SQLITE_BUSY（5）、SQLITE_LOCKED（6）。</summary>
+/// <summary>「資料庫忙碌」的判斷，委派給集中的錯誤分類（<see cref="DatabaseErrors.IsBusyOrConflict"/>）。</summary>
 public static class DatabaseBusy
 {
-    public static bool Is(Exception ex)
-    {
-        for (var e = ex; e is not null; e = e.InnerException)
-            if (e is SqliteException { SqliteErrorCode: 5 or 6 } || e is DatabaseBusyException) return true;
-        return false;
-    }
+    public static bool Is(Exception ex) => DatabaseErrors.Instance.IsBusyOrConflict(ex);
 }

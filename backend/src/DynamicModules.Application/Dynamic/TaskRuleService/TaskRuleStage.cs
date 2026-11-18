@@ -21,7 +21,7 @@ namespace DynamicModules.Application.Dynamic.TaskRuleService;
 public class TaskRuleStage(
     IWriteJournal journal, ITaskRuleRepository rules, IModuleRepository modules, IRecordRepository records,
     IAppRepository apps, IPermissionRepository permissions, ITaskRepository tasks, TaskRuleApplier applier, TaskWriter writer,
-    FieldTypeRegistry registry, IBusinessTime time) : IWriteStage
+    FieldTypeRegistry registry, IBusinessTime time, IDatabaseErrors errors) : IWriteStage
 {
     public int Order => 12;
 
@@ -100,17 +100,11 @@ public class TaskRuleStage(
         {
             await writer.FlushAsync(ct);
         }
-        catch (DbUpdateException e) when (TaskRuleConflicts.IsUnique(e))
+        catch (DbUpdateException e) when (errors.IsUniqueViolation(e))
         {
+            // TaskRuleRun 主鍵或任務 (RuleId, RecordId, RuleOccurrence, RuleTaskCode) 唯一索引衝突：另一個請求已經套用
             return ServiceResult.Conflict(MessageRef.Of(MessageText.TaskRuleAlreadyRun));
         }
         return null;
     }
-}
-
-internal static class TaskRuleConflicts
-{
-    /// <summary>TaskRuleRun 主鍵或任務 (RuleId, RecordId, RuleOccurrence, RuleTaskCode) 唯一索引衝突：另一個請求已經套用（同 EffectApplier 的判斷）。</summary>
-    public static bool IsUnique(DbUpdateException e) =>
-        e.InnerException?.Message.Contains("UNIQUE", StringComparison.OrdinalIgnoreCase) == true;
 }

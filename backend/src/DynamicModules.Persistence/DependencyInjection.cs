@@ -15,7 +15,11 @@ namespace DynamicModules.Persistence;
 
 public static class DependencyInjection
 {
-    public static IServiceCollection AddPersistence(this IServiceCollection services, IConfiguration configuration)
+    /// <summary>
+    /// SQLite 專屬的註冊（DbContext 選項、方言、交易管理）加上 provider 無關的 repository；
+    /// <c>Program.cs</c> 依 <c>Database:Provider</c> 選這個或 PostgreSQL 版（PostgreSQL provider 設計 §5.2）。
+    /// </summary>
+    public static IServiceCollection AddSqliteDatabase(this IServiceCollection services, IConfiguration configuration)
     {
         // Sqlite:MmapSizeMb（MB，預設 0＝關閉）：每條連線的記憶體對映大小，只在 SQLite 時套用，見 README 的設定說明
         var mmapBytes = long.TryParse(configuration["Sqlite:MmapSizeMb"], out var mmapMb) ? mmapMb * 1024 * 1024 : 0;
@@ -26,15 +30,17 @@ public static class DependencyInjection
                 b => b.MigrationsAssembly(typeof(DependencyInjection).Assembly.FullName));
             if (mmapBytes > 0) o.AddInterceptors(new SqliteMmapInterceptor(mmapBytes));
         });
+        services.AddSingleton<ISqlDialect, SqliteDialect>();
         services.AddScoped<ITransactionManager, EfTransactionManager>();
         services.AddScoped<IWorkSavepoints, EfWorkSavepoints>();
         services.AddScoped<Application.Dynamic.OpsService.IDatabaseInfo, EfDatabaseInfo>();
         return services.AddPersistenceRepositories();
     }
 
+    /// <summary>provider 無關的部分；<see cref="ISqlDialect"/>、DbContext、交易管理由 provider 專屬的註冊（或測試）提供。</summary>
     public static IServiceCollection AddPersistenceRepositories(this IServiceCollection services)
     {
-        services.AddSingleton<ISqlDialect, SqliteDialect>();
+        services.AddSingleton<IDatabaseErrors, DatabaseErrors>();
         services.AddScoped<IModuleRepository, ModuleRepository>();
         services.AddScoped<IProgramRepository, ProgramRepository>();
         services.AddScoped<IListViewRepository, ListViewRepository>();
