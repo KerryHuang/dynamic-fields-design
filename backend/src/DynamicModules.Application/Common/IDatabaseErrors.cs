@@ -17,4 +17,15 @@ public interface IDatabaseErrors
 
     /// <summary>查詢被中斷（逾時或取消）。</summary>
     bool IsQueryCanceled(Exception exception);
+
+    /// <summary>資料庫唯讀（維運設計 §17.2.9：API 回 503 <c>databaseUnwritable</c>）。</summary>
+    bool IsReadOnly(Exception exception);
+
+    /// <summary>資料庫空間滿（同上，<c>databaseUnwritable</c>）。</summary>
+    bool IsStorageFull(Exception exception);
+
+    /// <summary>
+    /// 連不上資料庫（API 回 503 <c>databaseUnavailable</c>）。取不到連線池的連線已歸 <see cref="IsBusyOrConflict"/>，這裡不重複算。
+    /// </summary>
+    bool IsUnavailable(Exception exception);
 }

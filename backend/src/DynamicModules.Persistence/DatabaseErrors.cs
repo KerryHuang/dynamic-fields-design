@@ -1,4 +1,5 @@
 using System.Data.Common;
+using System.Net.Sockets;
 using DynamicModules.Application.Common;
 using Microsoft.Data.Sqlite;
 
@@ -14,12 +15,20 @@ public sealed class DatabaseErrors : IDatabaseErrors
     public static readonly DatabaseErrors Instance = new();
 
     // SQLite 主錯誤碼與擴充錯誤碼
-    private const int SqliteBusy = 5, SqliteLocked = 6, SqliteInterrupt = 9, SqliteConstraint = 19;
+    private const int SqliteBusy = 5, SqliteLocked = 6, SqliteReadOnly = 8, SqliteInterrupt = 9, SqliteIoErr = 10, SqliteFull = 13,
+        SqliteCantOpen = 14, SqliteConstraint = 19;
     // 三者的訊息都是 "UNIQUE constraint failed"（與改寫前比對訊息的判斷等價）；ROWID 是沒有 INTEGER PRIMARY KEY 的表 rowid 撞號
     private const int SqliteConstraintPrimaryKey = 1555, SqliteConstraintUnique = 2067, SqliteConstraintRowId = 2579;
 
     // PostgreSQL SQLSTATE
-    private const string PgUniqueViolation = "23505", PgNumericOverflow = "22003", PgQueryCanceled = "57014";
+    private const string PgUniqueViolation = "23505", PgNumericOverflow = "22003", PgQueryCanceled = "57014",
+        PgReadOnlyTransaction = "25006", PgDiskFull = "53100";
+    private static readonly HashSet<string> PgUnavailable =
+    [
+        "57P01",   // admin_shutdown
+        "57P02",   // crash_shutdown
+        "57P03",   // cannot_connect_now（還沒能接受連線）
+    ];
     private static readonly HashSet<string> PgBusyOrConflict =
     [
         "40001",   // serialization_failure
@@ -59,6 +68,38 @@ public sealed class DatabaseErrors : IDatabaseErrors
         DbException d => d.SqlState == PgQueryCanceled,
         _ => false,
     });
+
+    public bool IsReadOnly(Exception exception) => Any(exception, e => e switch
+    {
+        SqliteException s => s.SqliteErrorCode == SqliteReadOnly,
+        DbException d => d.SqlState == PgReadOnlyTransaction,
+        _ => false,
+    });
+
+    public bool IsStorageFull(Exception exception) => Any(exception, e => e switch
+    {
+        SqliteException s => s.SqliteErrorCode == SqliteFull,
+        DbException d => d.SqlState == PgDiskFull,
+        _ => false,
+    });
+
+    public bool IsUnavailable(Exception exception) => Any(exception, e => e switch
+    {
+        SqliteException s => s.SqliteErrorCode is SqliteCantOpen or SqliteIoErr,
+        // 類別 08（connection exception）與伺服器關閉中、還沒能接受連線（維運設計 §17.2.9）
+        DbException { SqlState: { } state } => state.StartsWith("08", StringComparison.Ordinal) || PgUnavailable.Contains(state),
+        // Npgsql 在 socket 斷線、連不到主機時丟不帶 SQLSTATE 的例外，內層是 SocketException 或 IOException；
+        // 連線池耗盡（內層 TimeoutException）已歸忙碌，不在這裡（⚠️ 真的斷線時的例外形狀待 o2b 實測，設計 §17.10.6）
+        DbException { SqlState: null } d => HasInner(d, x => x is SocketException or IOException),
+        _ => false,
+    });
+
+    private static bool HasInner(Exception exception, Func<Exception, bool> match)
+    {
+        for (var e = exception.InnerException; e is not null; e = e.InnerException)
+            if (match(e)) return true;
+        return false;
+    }
 
     private static bool Any(Exception exception, Func<Exception, bool> match)
     {

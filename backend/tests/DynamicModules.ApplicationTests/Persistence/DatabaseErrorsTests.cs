@@ -1,4 +1,5 @@
 using System.Data.Common;
+using System.Net.Sockets;
 using DynamicModules.Application.Common;
 using DynamicModules.Persistence;
 using FluentAssertions;
@@ -97,6 +98,65 @@ public class DatabaseErrorsTests
     {
         Errors.IsQueryCanceled(new SqliteException("interrupted", 9)).Should().BeTrue();
         Errors.IsQueryCanceled(new SqliteException("x", 5)).Should().BeFalse();
+    }
+
+    // ---- C11（維運設計 §17.8）：唯讀、空間滿、連不上三個分類 ----
+
+    public enum Kind { ReadOnly, Full, Unavailable, Busy, None }
+
+    private static Kind Classify(Exception e)
+    {
+        var hits = new List<Kind>();
+        if (Errors.IsReadOnly(e)) hits.Add(Kind.ReadOnly);
+        if (Errors.IsStorageFull(e)) hits.Add(Kind.Full);
+        if (Errors.IsUnavailable(e)) hits.Add(Kind.Unavailable);
+        if (Errors.IsBusyOrConflict(e)) hits.Add(Kind.Busy);
+        hits.Should().HaveCountLessThanOrEqualTo(1, "一個例外只歸一類");
+        return hits.SingleOrDefault(Kind.None);
+    }
+
+    [Theory]
+    [InlineData(8, Kind.ReadOnly)]      // SQLITE_READONLY
+    [InlineData(13, Kind.Full)]         // SQLITE_FULL
+    [InlineData(14, Kind.Unavailable)]  // SQLITE_CANTOPEN
+    [InlineData(10, Kind.Unavailable)]  // SQLITE_IOERR
+    [InlineData(5, Kind.Busy)]
+    [InlineData(19, Kind.None)]
+    public void Sqlite_ReadOnlyFullUnavailable(int code, Kind expected)
+    {
+        Classify(new SqliteException("x", code)).Should().Be(expected);
+        Classify(Wrapped(new SqliteException("x", code))).Should().Be(expected);
+    }
+
+    [Theory]
+    [InlineData("25006", Kind.ReadOnly)]    // read_only_sql_transaction
+    [InlineData("53100", Kind.Full)]        // disk_full
+    [InlineData("08006", Kind.Unavailable)] // connection_failure
+    [InlineData("08001", Kind.Unavailable)]
+    [InlineData("57P01", Kind.Unavailable)] // admin_shutdown
+    [InlineData("57P02", Kind.Unavailable)]
+    [InlineData("57P03", Kind.Unavailable)] // cannot_connect_now
+    [InlineData("57014", Kind.None)]        // 查詢中斷不是連不上
+    [InlineData("40001", Kind.Busy)]
+    [InlineData("23505", Kind.None)]
+    public void Postgres_ReadOnlyFullUnavailable(string state, Kind expected)
+    {
+        Classify(new FakePgException(state)).Should().Be(expected);
+        Classify(Wrapped(new FakePgException(state))).Should().Be(expected);
+    }
+
+    [Fact]
+    public void Postgres_SocketFailureWithoutSqlStateIsUnavailable_PoolExhaustionStaysBusy()
+    {
+        // 真的 Npgsql 型別：不帶 SQLSTATE、內層是 SocketException（斷線、連不到主機）
+        Classify(new Npgsql.NpgsqlException("連不到主機", new SocketException((int)SocketError.ConnectionRefused))).Should().Be(Kind.Unavailable);
+        Classify(new Npgsql.NpgsqlException("讀取中斷", new IOException("x", new SocketException()))).Should().Be(Kind.Unavailable);
+        Classify(Wrapped(new Npgsql.NpgsqlException("x", new SocketException()))).Should().Be(Kind.Unavailable);
+        // 連線池耗盡：不帶 SQLSTATE、內層 TimeoutException，仍是忙碌、不是連不上
+        Classify(new Npgsql.NpgsqlException("池滿", new TimeoutException())).Should().Be(Kind.Busy);
+        Classify(new FakePgException(null)).Should().Be(Kind.None);
+        Classify(new Npgsql.PostgresException("x", "ERROR", "ERROR", "25006")).Should().Be(Kind.ReadOnly);
+        Classify(new Npgsql.PostgresException("x", "FATAL", "FATAL", "57P01")).Should().Be(Kind.Unavailable);
     }
 
     // ---- 真的 SQLite 丟出的例外：確認錯誤碼與擴充碼的假設 ----
