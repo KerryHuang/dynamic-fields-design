@@ -35,6 +35,28 @@ describe('use-card-drag', () => {
     stop();
   });
 
+  it('the drop uses where the pointer is released, not the last move (no move in between, or the page scrolled)', () => {
+    const { drag, dropped, stop } = setup({ hitTest: (x) => (x < 100 ? 'todo' : x < 200 ? 'done' : null) });
+    drag.start(down('mouse', 10, 10), 7);
+    fire('pointermove', 30, 10);
+    expect(drag.state.value?.overKey).toBe('todo');
+    fire('pointerup', 150, 10);
+    expect(dropped).toEqual([[7, 'done']]);
+    drag.start(down('mouse', 10, 10), 8);
+    fire('pointermove', 30, 10);
+    fire('pointerup', 300, 10);
+    expect(dropped).toEqual([[7, 'done']]);
+    stop();
+  });
+
+  it('start tells whether it took the press: a second pointer while tracking is refused', () => {
+    const { drag, stop } = setup();
+    expect(drag.start(down('mouse', 10, 10), 7)).toBe(true);
+    expect(drag.start({ ...down('pen', 50, 50), pointerId: 2 } as PointerEvent, 8)).toBe(false);
+    expect(drag.start({ ...down('mouse', 10, 10), isPrimary: false } as PointerEvent, 9)).toBe(false);
+    stop();
+  });
+
   it('a press that never moves past the threshold is a plain click and drops nothing', () => {
     const { drag, dropped, stop } = setup({ hitTest: () => 'done' });
     drag.start(down('mouse', 10, 10), 7);

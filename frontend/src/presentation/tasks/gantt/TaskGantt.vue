@@ -121,7 +121,7 @@ function hitTest(x: number, y: number): string | null {
   }
   return pointerDay(x);
 }
-const drag = useCardDrag({ enabled: canDrag, hitTest, onDrop: (_id, day) => { void drop(day); } });
+const drag = useCardDrag({ enabled: canDrag, hitTest, onDrop: (id, day) => { void drop(id, day); } });
 function nextDates(src: DragSource, day: string) {
   const delta = src.originDay ? dayNumber(day) - dayNumber(src.originDay) : 0;
   return draggedDates(src.part, src.card.startDate, src.card.dueDate, delta, day);
@@ -132,8 +132,8 @@ function onDragStart(e: PointerEvent, card: BoardCard, part: GanttDragPart) {
   const handle = (e.target as Element | null)?.closest?.('[data-drag-part]')?.getAttribute('data-drag-part') as GanttDragPart | null | undefined;
   const originDay = pointerDay(e.clientX);
   if (part !== 'unscheduled' && !originDay) return;
-  dragSource.value = { card, part: part === 'bar' && handle ? handle : part, originDay };
-  drag.start(e, card.id);
+  // useCardDrag 接受了才換來源（hitTest 在之後的 pointermove 才用到它）：第二支指標按在別的任務上會被拒絕，不能蓋掉正在拖的那一個
+  if (drag.start(e, card.id)) dragSource.value = { card, part: part === 'bar' && handle ? handle : part, originDay };
 }
 const dragPreview = computed(() => {
   const st = drag.state.value;
@@ -141,10 +141,10 @@ const dragPreview = computed(() => {
   if (!st || !src || st.cardId !== src.card.id || st.overKey === null) return null;
   return { id: src.card.id, ...nextDates(src, st.overKey) };
 });
-async function drop(day: string) {
+async function drop(id: number, day: string) {
   const src = dragSource.value;
   dragSource.value = null;
-  if (!src) return;
+  if (!src || src.card.id !== id) return;
   const next = nextDates(src, day);
   if (next.startDate === src.card.startDate && next.dueDate === src.card.dueDate) return;
   const outcome = await scheduler.schedule(src.card, next.startDate, next.dueDate);

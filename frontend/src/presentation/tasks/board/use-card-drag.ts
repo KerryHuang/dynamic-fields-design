@@ -54,15 +54,16 @@ export function useCardDrag(options: DragOptions) {
     }, { immediate: true, flush: 'post' });
   }
 
-  function start(e: PointerEvent, cardId: number) {
+  /** 回傳這次按下有沒有被接受（開始追蹤）；被拒絕時呼叫端不要改自己的拖拉狀態（例如第二支指標按在別張卡片上）。 */
+  function start(e: PointerEvent, cardId: number): boolean {
     // 只有主要指標能開始；已經在追蹤時，其他指標一律忽略（同一個指標重新按下，代表上一次的放開沒收到，換成新的）
-    if (!e.isPrimary || (teardown && e.pointerId !== trackedId)) return;
+    if (!e.isPrimary || (teardown && e.pointerId !== trackedId)) return false;
     abort();
     const pointerId = e.pointerId;
     trackedId = pointerId;
     const pointerType = e.pointerType || 'mouse';
     const mode = dragModeOf(toValue(options.enabled), pointerType);
-    if (mode === 'off' || (pointerType === 'mouse' && e.button !== 0)) return;
+    if (mode === 'off' || (pointerType === 'mouse' && e.button !== 0)) return false;
 
     const origin = { x: e.clientX, y: e.clientY };
     let dragging = false;
@@ -95,7 +96,12 @@ export function useCardDrag(options: DragOptions) {
       if (!state.value) return;
       state.value = { ...state.value, x: last.x, y: last.y, overKey: hitTest(last.x, last.y) };
     };
-    const onUp = (ev: PointerEvent) => { if (ev.pointerId === pointerId) finish(true); };
+    // 放開的位置可能和最後一次 pointermove 不同（沒有中間的 move、或拖動中捲動了頁面）：用放開當下的座標重新判斷落點
+    const onUp = (ev: PointerEvent) => {
+      if (ev.pointerId !== pointerId) return;
+      if (dragging && !cancelled && state.value) state.value = { ...state.value, x: ev.clientX, y: ev.clientY, overKey: hitTest(ev.clientX, ev.clientY) };
+      finish(true);
+    };
     const onCancel = (ev: PointerEvent) => { if (ev.pointerId === pointerId) finish(false); };
     const onBlur = () => finish(false);
     const onKey = (ev: KeyboardEvent) => {
@@ -135,6 +141,7 @@ export function useCardDrag(options: DragOptions) {
       window.addEventListener('contextmenu', swallowContextMenu, true);
       timer = setTimeout(begin, LONG_PRESS_MS);
     }
+    return true;
   }
 
   function abort() {

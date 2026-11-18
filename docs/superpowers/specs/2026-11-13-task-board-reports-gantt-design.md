@@ -1129,6 +1129,7 @@ st1 唯一看得到的變化：政策設定頁依 `PolicyCatalog.All` 多出 A35
 - ★ 提示格式：「11/24（週二） → 12/5（週六）・12 天」，一天的是「12/2（週三）・1 天」，菱形是「到期日 11/25（週三）」；星期用 `Intl` 的短名稱（zh-TW 是「週二」，設計例子寫「（三）」）。
 - ★ 放開後日期沒變（同一天放下）不送請求。拖拉的 400 沒有欄位可掛，訊息改用通知（`startDate` 的 400 用介面語言的「開始日不能晚於到期日」），長條放回原位；409、403、404 照 gt2b1 通知。
 - 把手是長條按鈕裡的 `span`（有 `aria-label`「拖拉改開始日」「拖拉改到期日」、不可聚焦），不改 Tab 順序；鍵盤路徑仍是「編輯日期」。
+- 審查修正：第二支指標（例如滑鼠拖 A 時觸控筆按 B）被 `useCardDrag.start` 拒絕時不換拖拉來源（`start` 改回傳是否接受），放下時再核對任務 Id；放開時用 pointerup 當下的座標重新判斷落點，不沿用最後一次 pointermove（放開位置不同、或拖動中捲動讓時間軸離開指標時，未排程的列不排程）——改在共用的 `useCardDrag`，看板一併適用。
 - 測試：G63–G71 在 `TaskGantt.vitest.spec.ts` 的「TaskGantt drag (gt2b2)」（用假的 `getBoundingClientRect` 指定時間軸位置），`dayAtX`、`draggedDates` 在 `task-gantt.vitest.spec.ts`。
 
 #### 11.5.5 驗收案例

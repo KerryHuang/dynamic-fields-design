@@ -532,12 +532,17 @@ describe('TaskGantt drag (gt2b2)', () => {
     };
   }
   const tip = () => document.querySelector('[data-testid="gantt-drag-tip-text"]')?.textContent ?? null;
+  // 時間軸寬與本體的上緣可在測試中改（非整數的每日寬度、捲動頁面）
+  let axisWidth = 910;
+  let bodyTop = 44;
 
   beforeEach(() => {
     document.body.innerHTML = '';
+    axisWidth = 910;
+    bodyTop = 44;
     vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockImplementation(function (this: HTMLElement) {
-      if (this.dataset.testid === 'gantt-axis') return rect(300, 0, 910, 44);
-      if (this.dataset.testid === 'gantt-body') return rect(0, 44, 1210, 400);
+      if (this.dataset.testid === 'gantt-axis') return rect(300, bodyTop - 44, axisWidth, 44);
+      if (this.dataset.testid === 'gantt-body') return rect(0, bodyTop, 1210, 400);
       return rect(0, 0, 0, 0);
     });
   });
@@ -757,5 +762,73 @@ describe('TaskGantt drag (gt2b2)', () => {
     expect(handle.tagName).toBe('SPAN');
     expect(handle.hasAttribute('tabindex')).toBe(false);
     expect(w.find('[data-testid="gantt-edit-7"]').exists()).toBe(true);
+  });
+
+  it('a second pointer pressing another task while one is dragged changes nothing: releasing the first saves only the first', async () => {
+    const w = await mountGantt(() => ganttWire(), 'zh-TW', (id, b) => ({ card: cardWire({ id, ...b }) }));
+    fire('pointerdown', xOf('2026-11-25'), 100, el(w, 'gantt-bar-7'));
+    fire('pointermove', xOf('2026-11-28'), 100);
+    await flushPromises();
+    // 觸控筆在別的任務上按下：useCardDrag 拒絕，來源仍是任務 7
+    fire('pointerdown', xOf('2026-11-20'), 130, el(w, 'gantt-milestone-8'), { pointerType: 'pen', pointerId: 2 });
+    fire('pointerup', xOf('2026-12-10'), 130, window, { pointerType: 'pen', pointerId: 2 });
+    await flushPromises();
+    expect(scheduleCalls()).toHaveLength(0);
+    expect(tip()).toBe('11/24（週二） → 12/5（週六）・12 天');
+    fire('pointerup', xOf('2026-11-28'), 100);
+    await flushPromises();
+    await new Promise((r) => setTimeout(r));
+    await flushPromises();
+    expect(scheduleCalls().map((c) => c.url)).toEqual(['/tasks/7/schedule']);
+    expect(bodyOf(scheduleCalls()[0])).toMatchObject({ startDate: '2026-11-24', dueDate: '2026-12-05' });
+  });
+
+  it('the release point decides the day even when it differs from the last move', async () => {
+    const w = await mountGantt(() => ganttWire(), 'zh-TW', (id, b) => ({ card: cardWire({ id, ...b }) }));
+    const up = await dragOn(w, 'gantt-bar-7', '2026-11-25', '2026-11-28');
+    await up('2026-11-30');
+    expect(bodyOf(scheduleCalls()[0])).toMatchObject({ startDate: '2026-11-26', dueDate: '2026-12-07' });
+  });
+
+  it('an unscheduled task over the timeline is not scheduled if the page scrolled the timeline away before the release', async () => {
+    const w = await mountGantt(() => ganttWire(), 'zh-TW', (id, b) => ({ card: cardWire({ id, ...b }) }));
+    const up = await dragOn(w, 'gantt-unscheduled-21', '2026-11-20', '2026-11-25', 200);
+    expect(tip()).toBe('11/25（週三）・1 天');
+    // 滾輪捲動：時間軸往上移出指標所在位置，沒有新的 pointermove
+    bodyTop = -600;
+    await up('2026-11-25', 200);
+    expect(scheduleCalls()).toHaveLength(0);
+  });
+
+  it('with a non-integer day width the day on either side of a grid line is exact (day and month scales)', async () => {
+    axisWidth = 880;
+    const w = await mountGantt(serverLike, 'zh-TW', (id, b) => ({ card: cardWire({ id, ...b }) }));
+    // 日刻度 14 天：一天 62.857…px；格線 k 在 300 + k × 880 / 14
+    await w.get('[data-testid="gantt-scale-day"]').trigger('click');
+    await flushPromises();
+    const line = (k: number, days: number) => 300 + (k * 880) / days;
+    const dragX = async (testid: string, fromX: number, toX: number) => {
+      fire('pointerdown', fromX, 100, el(w, testid));
+      fire('pointermove', toX, 100);
+      await flushPromises();
+      fire('pointerup', toX, 100);
+      await flushPromises();
+      await new Promise((r) => setTimeout(r));
+      await flushPromises();
+    };
+    // 從 11/21（第 5 格）中間拖到格線 8 左側 0.5px（第 7 格＝11/23）→ +2；右側 0.5px（第 8 格＝11/24）→ +3
+    const mid5 = line(5, 14) + 30;
+    await dragX('gantt-bar-7', mid5, line(8, 14) - 0.5);
+    expect(bodyOf(scheduleCalls().at(-1))).toMatchObject({ startDate: '2026-11-23', dueDate: '2026-12-04' });
+    await dragX('gantt-milestone-8', line(4, 14) + 30, line(8, 14) + 0.5);
+    expect(bodyOf(scheduleCalls().at(-1))).toMatchObject({ dueDate: '2026-11-24' });
+    // 月刻度 181 天（11/01–04/30）：一天約 4.86px；11/20 是第 19 格
+    await w.get('[data-testid="gantt-scale-month"]').trigger('click');
+    await flushPromises();
+    const n = scheduleCalls().length;
+    await dragX('gantt-milestone-8', line(19, 181) + 2, line(30, 181) - 0.5);
+    expect(bodyOf(scheduleCalls()[n])).toMatchObject({ dueDate: '2026-11-30' });
+    await dragX('gantt-milestone-8', line(19, 181) + 2, line(30, 181) + 0.5);
+    expect(bodyOf(scheduleCalls()[n + 1])).toMatchObject({ dueDate: '2026-12-01' });
   });
 });
