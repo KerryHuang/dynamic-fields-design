@@ -6,7 +6,7 @@ import { clearLastTaskBoard, readLastTaskBoard, writeLastTaskBoard } from 'src/a
 import { useMe } from 'src/application/dynamic/queries/permissions-queries';
 import { useBoardColumns, useTaskView, useTaskViews } from 'src/application/dynamic/queries/task-board-queries';
 import { useMyTasks, useTaskCapabilities } from 'src/application/dynamic/queries/tasks-queries';
-import type { BoardSource, TaskBoardConfig, TaskViewDetail } from 'src/domain/dynamic/task-board-types';
+import type { BoardSource, TaskBoardConfig, TaskGanttConfig, TaskViewConfig, TaskViewDetail, TaskViewKind } from 'src/domain/dynamic/task-board-types';
 import { taskStatusColor, type TaskListFilter, type TaskListTab } from 'src/domain/dynamic/task-types';
 import type { ApiError } from 'src/services/api/http';
 import BoardPicker from 'src/presentation/tasks/board/BoardPicker.vue';
@@ -14,6 +14,7 @@ import BoardSettingsDialog from 'src/presentation/tasks/board/BoardSettingsDialo
 import TaskBoard from 'src/presentation/tasks/board/TaskBoard.vue';
 import TaskGantt from 'src/presentation/tasks/gantt/TaskGantt.vue';
 import TaskViewShareDialog from 'src/presentation/tasks/board/TaskViewShareDialog.vue';
+import { useViewText } from 'src/presentation/tasks/board/view-text';
 import SubtaskProgress from 'src/presentation/dynamic/tasks/SubtaskProgress.vue';
 import TaskDialog from 'src/presentation/dynamic/tasks/TaskDialog.vue';
 import TaskFormDialog from 'src/presentation/dynamic/tasks/TaskFormDialog.vue';
@@ -45,29 +46,40 @@ const page = ref(1);
 type ViewMode = 'list' | 'board' | 'gantt';
 const mode = computed<ViewMode>(() => (route.query.view === 'board' || route.query.view === 'gantt' ? route.query.view : 'list'));
 const isBoard = computed(() => mode.value === 'board');
+const isGantt = computed(() => mode.value === 'gantt');
+// 看板與甘特圖共用存檔檢視的選擇器、設定、分享與 D6／D7（§11.5.4.1）：網址 board=<id> 或 gantt=<id>，「上次打開」各記各的
+const hasViews = computed(() => isBoard.value || isGantt.value);
+const viewKind = computed<TaskViewKind>(() => (isGantt.value ? 'gantt' : 'board'));
+const vt = useViewText(viewKind);
 const viewOptions = computed(() => (['list', 'board', 'gantt'] as const).map((v) => ({ value: v, label: t(`taskBoard.view.${v}`), attrs: { 'data-testid': `view-${v}` } })));
-// board=<id>: a whole number; no board means the default board, which the server defines. Anything else counts as unreadable (D6).
-const boardParam = computed(() => (route.query.board === undefined ? null : String(route.query.board)));
-const boardId = computed(() => (boardParam.value !== null && /^[1-9]\d*$/.test(boardParam.value) ? Number(boardParam.value) : null));
+// board=<id>／gantt=<id>: a whole number; none means the default board or Gantt chart, which the server defines. Anything else counts as unreadable (D6).
+const viewParam = computed(() => {
+  const v = hasViews.value ? route.query[viewKind.value] : undefined;
+  return v === undefined ? null : String(v);
+});
+const boardId = computed(() => (viewParam.value !== null && /^[1-9]\d*$/.test(viewParam.value) ? Number(viewParam.value) : null));
 // 「套用」的設定只影響這個畫面（D4）：有未儲存的設定時改用設定查詢，網址仍帶原看板，重新整理就回到存好的版本。
-const draft = ref<TaskBoardConfig | null>(null);
-const boardSource = computed<BoardSource>(() => (draft.value ? { config: draft.value } : { viewId: boardId.value }));
+const draft = ref<TaskViewConfig | null>(null);
+const boardSource = computed<BoardSource>(() => (draft.value ? { config: draft.value as TaskBoardConfig } : { viewId: boardId.value }));
 const boardQuery = useBoardColumns(boardSource, isBoard);
-const views = useTaskViews(isBoard);
+const views = useTaskViews(viewKind, hasViews);
 const me = useMe();
 const isAdmin = computed(() => !!me.data.value?.isSystemAdmin);
-// 預設看板沒有存檔，設定的起點用欄查詢回應帶的設定（伺服器決定預設值，前端不另存一份）；存檔的看板讀自己的詳細資料（要 rowVersion 與權限）
-const detail = useTaskView(boardId, isBoard);
-// 詳細資料端點不分種類：board= 帶到甘特檢視的 Id 時不能把甘特設定交給看板元件，當成找不到（同欄查詢的 404，D6）
-const boardDetail = computed(() => (detail.data.value?.kind === 'board' ? detail.data.value : null));
-const savedConfig = computed<TaskBoardConfig | null>(() => (boardId.value === null ? boardQuery.data.value?.config ?? null : boardDetail.value?.config ?? null));
+// 預設看板沒有存檔，設定的起點用欄查詢回應帶的設定（伺服器決定預設值，前端不另存一份）；存檔的看板讀自己的詳細資料（要 rowVersion 與權限）。
+// 預設甘特圖同理，用甘特查詢第一次回來的設定（TaskGantt 的 loaded）。
+const detail = useTaskView(boardId, hasViews);
+// 詳細資料端點不分種類：board= 帶到甘特檢視的 Id（或反過來）時不能把別種設定交給元件，當成找不到（D6）
+const boardDetail = computed(() => (detail.data.value?.kind === viewKind.value ? (detail.data.value as TaskViewDetail<TaskViewConfig>) : null));
+const ganttDefault = ref<TaskGanttConfig | null>(null);
+const defaultConfig = computed<TaskViewConfig | null>(() => (isGantt.value ? ganttDefault.value : boardQuery.data.value?.config ?? null));
+const savedConfig = computed<TaskViewConfig | null>(() => (boardId.value === null ? defaultConfig.value : boardDetail.value?.config ?? null));
 const config = computed(() => draft.value ?? savedConfig.value);
 const canSave = computed(() => boardId.value !== null && !!boardDetail.value?.canEdit);
 const canShare = computed(() => boardId.value !== null && !!boardDetail.value?.isOwner);
 const boardName = computed(() => {
-  if (boardId.value === null) return t('taskBoard.defaultName');
+  if (boardId.value === null) return vt('defaultName');
   const all = [...(views.data.value?.mine ?? []), ...(views.data.value?.shared ?? [])];
-  return boardDetail.value?.name ?? all.find((v) => v.id === boardId.value && v.kind === 'board')?.name ?? '';
+  return boardDetail.value?.name ?? all.find((v) => v.id === boardId.value && v.kind === viewKind.value)?.name ?? '';
 });
 const boardGone = ref(false);
 
@@ -88,35 +100,34 @@ const setOpen = (id: number | null) => go({ open: id === null ? undefined : Stri
 function setView(v: ViewMode) {
   boardGone.value = false;
   draft.value = null;
-  if (v === 'list') return go({ view: undefined, board: undefined });
-  // gt2a 只有預設甘特圖（存檔甘特圖與 gantt=<id> 隨 gt2c）
-  if (v === 'gantt') return go({ view: 'gantt', board: undefined });
-  const last = readLastTaskBoard(identity.userId);
-  go({ view: 'board', board: last === null ? undefined : String(last) });
+  if (v === 'list') return go({ view: undefined, board: undefined, gantt: undefined });
+  const last = readLastTaskBoard(identity.userId, v);
+  const other = v === 'board' ? 'gantt' : 'board';
+  go({ view: v, [v]: last === null ? undefined : String(last), [other]: undefined });
 }
 
 // D6: a board that is gone or no longer shared (404/403), or a board id that makes no sense, falls back to the default board
 // with a notice. The remembered "last board" goes too when it is the board that failed, so the next visit does not hit it again;
 // a malformed link says nothing about the remembered board, so that one stays.
 function fallbackToDefault({ forget }: { forget: boolean }) {
-  if (forget) clearLastTaskBoard(identity.userId);
+  if (forget) clearLastTaskBoard(identity.userId, viewKind.value);
   boardGone.value = true;
   draft.value = null;
-  go({ board: undefined });
+  go({ [viewKind.value]: undefined });
 }
 
 // 選看板：預設看板清掉網址的 board 與「上次的看板」記憶；其他看板的記憶由載入成功時寫入。換看板就丟掉未儲存的設定。
 function selectBoard(id: number | null) {
   boardGone.value = false;
   draft.value = null;
-  if (id === null) clearLastTaskBoard(identity.userId);
-  go({ board: id === null ? undefined : String(id) });
+  if (id === null) clearLastTaskBoard(identity.userId, viewKind.value);
+  go({ [viewKind.value]: id === null ? undefined : String(id) });
 }
 function onBoardDeleted(id: number) {
-  if (readLastTaskBoard(identity.userId) === id) clearLastTaskBoard(identity.userId);
+  if (readLastTaskBoard(identity.userId, viewKind.value) === id) clearLastTaskBoard(identity.userId, viewKind.value);
   if (id === boardId.value) selectBoard(null);
 }
-const onSavedAsNew = (d: TaskViewDetail) => selectBoard(d.id);
+const onSavedAsNew = (d: { id: number }) => selectBoard(d.id);
 function onSaved() { draft.value = null; }
 const settingsOpen = ref(false);
 const picker = ref<InstanceType<typeof BoardPicker> | null>(null);
@@ -124,19 +135,25 @@ const shareOpen = ref(false);
 const shareId = ref<number | null>(null);
 function openShare(id: number) { shareId.value = id; shareOpen.value = true; }
 // 未儲存的設定屬於它當下的看板：網址的看板一變就丟掉（各入口也會自己清，這裡擋住以後新增的路徑，例如通知連結帶 board）
-watch(boardId, () => { draft.value = null; });
-watch(() => [isBoard.value, boardParam.value, boardId.value] as const, ([board, param, id]) => {
-  if (board && param !== null && id === null) fallbackToDefault({ forget: false });
+watch([boardId, viewKind], () => { draft.value = null; });
+watch(() => [hasViews.value, viewParam.value, boardId.value] as const, ([on, param, id]) => {
+  if (on && param !== null && id === null) fallbackToDefault({ forget: false });
 }, { immediate: true });
 watch(() => detail.data.value, (d) => {
-  if (isBoard.value && d && d.id === boardId.value && d.kind !== 'board') fallbackToDefault({ forget: true });
+  if (hasViews.value && d && d.id === boardId.value && d.kind !== viewKind.value) fallbackToDefault({ forget: true });
 }, { immediate: true });
 watch(() => boardQuery.error.value, (e) => {
   if (isBoard.value && boardId.value !== null && [403, 404].includes((e as ApiError | null)?.status ?? 0)) fallbackToDefault({ forget: true });
 }, { immediate: true });
 watch(() => [boardId.value, boardQuery.isSuccess.value] as const, ([id, ok]) => {
-  if (id !== null && ok) writeLastTaskBoard(identity.userId, id);
+  if (isBoard.value && id !== null && ok) writeLastTaskBoard(identity.userId, id);
 }, { immediate: true });
+// 甘特圖：查詢第一次成功回來時記住（同看板「載入成功才寫」）；預設甘特圖的設定也從這裡拿
+function onGanttLoaded(c: TaskGanttConfig) {
+  if (boardId.value === null && draft.value === null) ganttDefault.value = c;
+  if (boardId.value !== null) writeLastTaskBoard(identity.userId, boardId.value, 'gantt');
+}
+const onGanttNotFound = () => { if (isGantt.value && boardId.value !== null) fallbackToDefault({ forget: true }); };
 // 未儲存的設定本身無效（例如「近 N 天」的 N 不合格）時，欄查詢回 400，重試一定失敗：改提示設定無效，並給「捨棄未儲存的設定」
 const draftInvalid = computed(() => draft.value !== null && !boardQuery.data.value && (boardQuery.error.value as unknown as ApiError | null)?.status === 400);
 const boardFailed = computed(() => !!boardQuery.error.value && !boardQuery.data.value && !draftInvalid.value
@@ -154,20 +171,22 @@ const boardFailed = computed(() => !!boardQuery.error.value && !boardQuery.data.
       <q-space />
       <q-btn color="primary" no-caps icon="add" :label="t('tasks.add')" data-testid="my-task-add" @click="adding = true" />
     </div>
-    <template v-if="isBoard">
+    <template v-if="hasViews">
       <q-banner v-if="boardGone" dense rounded class="bg-info-soft q-mb-sm" role="status" data-testid="board-gone-notice">
-        {{ t('taskBoard.gone') }}
+        {{ vt('gone') }}
         <template #action><q-btn flat dense no-caps :label="t('tasks.close')" data-testid="board-gone-close" @click="boardGone = false" /></template>
       </q-banner>
       <div class="row items-center q-mb-sm" style="gap: 8px">
         <BoardPicker
-          ref="picker" :views="views.data.value" :failed="views.isError.value" :current-id="boardId" :current-name="boardName" :unsaved="draft !== null"
+          ref="picker" :kind="viewKind" :views="views.data.value" :failed="views.isError.value" :current-id="boardId" :current-name="boardName" :unsaved="draft !== null"
           :is-admin="isAdmin" :has-subordinates="hasSubordinates" :config="config"
           @select="selectBoard" @share="openShare" @deleted="onBoardDeleted" @created="onSavedAsNew" @retry="views.refetch()"
         />
-        <q-btn flat dense no-caps icon="tune" :label="t('taskBoard.settingsButton')" :disable="!config" data-testid="board-settings" @click="settingsOpen = true" />
+        <q-btn flat dense no-caps icon="tune" :label="vt('settingsButton')" :disable="!config" data-testid="board-settings" @click="settingsOpen = true" />
         <q-btn v-if="canShare" flat dense no-caps icon="share" :label="t('taskBoard.shareButton')" data-testid="board-share" @click="openShare(boardId!)" />
       </div>
+    </template>
+    <template v-if="isBoard">
       <q-banner v-if="boardQuery.data.value && !boardQuery.data.value.scopeAvailable" dense rounded class="bg-info-soft q-mb-sm" role="status" data-testid="scope-unavailable-notice">
         {{ t('taskBoard.scopeUnavailable') }}
       </q-banner>
@@ -182,7 +201,9 @@ const boardFailed = computed(() => !!boardQuery.error.value && !boardQuery.data.
       <q-linear-progress v-else-if="boardQuery.isLoading.value" indeterminate class="q-my-sm" data-testid="board-loading" />
       <TaskBoard v-if="boardQuery.data.value" :board="boardQuery.data.value" :source="boardSource" @open="setOpen" />
     </template>
-    <TaskGantt v-else-if="mode === 'gantt'" @open="setOpen" />
+    <TaskGantt
+      v-else-if="isGantt" :view-id="boardId" :draft="(draft as TaskGanttConfig | null)" @open="setOpen" @loaded="onGanttLoaded" @not-found="onGanttNotFound"
+    />
     <template v-else>
       <q-tabs :model-value="tab" dense align="left" narrow-indicator class="text-primary" @update:model-value="(v) => setTab(v as TaskListTab)">
         <q-tab v-for="x in tabs" :key="x" :name="x" no-caps :label="t(`tasks.tabs.${x}`)" :data-testid="`tab-${x}`" />
@@ -225,10 +246,10 @@ const boardFailed = computed(() => !!boardQuery.error.value && !boardQuery.data.
       </div>
     </template>
     <BoardSettingsDialog
-      v-if="config" v-model="settingsOpen" :config="config" :name="boardId === null ? '' : boardName" :view-id="canSave ? boardId : null" :row-version="boardDetail?.rowVersion ?? ''"
-      :can-save="canSave" :has-subordinates="hasSubordinates" @apply="(c) => (draft = c)" @saved="onSaved" @saved-as-new="onSavedAsNew"
+      v-if="config && hasViews" :key="viewKind" :kind="viewKind" v-model="settingsOpen" :config="config" :name="boardId === null ? '' : boardName" :view-id="canSave ? boardId : null" :row-version="boardDetail?.rowVersion ?? ''"
+      :can-save="canSave" :has-subordinates="hasSubordinates" @apply="(c: TaskViewConfig) => (draft = c)" @saved="onSaved" @saved-as-new="onSavedAsNew"
     />
-    <TaskViewShareDialog :view-id="shareId" :open="shareOpen" @close="shareOpen = false" @hidden="picker?.focusButton()" />
+    <TaskViewShareDialog :kind="viewKind" :view-id="shareId" :open="shareOpen" @close="shareOpen = false" @hidden="picker?.focusButton()" />
     <TaskFormDialog v-model="adding" :default-assignee="identity.userId" />
     <TaskDialog :task-id="openId" @update:task-id="setOpen" />
   </q-page>
