@@ -1,6 +1,6 @@
 import type { ReportDateRange } from './report-types';
 import type { I18nText } from './types';
-import type { TaskLevel, TaskProgress, TaskRecordRef, TaskStatus } from './task-types';
+import type { TaskCascade, TaskLevel, TaskProgress, TaskRecordRef, TaskStatus } from './task-types';
 
 /** 看板分欄依據；欄查詢的回應帶著採用的設定（TaskBoardData.config）。 */
 export type BoardGroupBy = 'status' | 'assignee' | 'dueBucket';
@@ -90,6 +90,8 @@ export interface TaskMoveBody {
   /** 只有移到「之後」欄時帶。 */
   dueDate?: string;
   expectedVersion: string;
+  /** 只在依狀態分欄、把有未完成子任務的父任務拖到完成時有作用；重送時用同一個版本。 */
+  cascade?: TaskCascade;
 }
 
 /** 移動回應：visible=false 代表移動後操作者看不到這張任務了（不回卡片，改負責人時附復原憑證）。 */

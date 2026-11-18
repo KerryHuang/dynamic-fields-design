@@ -100,6 +100,15 @@ describe('dynamicApi tasks', () => {
     expect(JSON.parse(String(seen.body))).toEqual({ dueDate: null });
   });
 
+  it('sends the subtask cascade in a PATCH and in a board move', async () => {
+    const patch = stub({ id: 1, title: 'P', status: 'done' });
+    await dynamicApi.updateTask(1, { status: 'done', cascade: 'complete' });
+    expect(JSON.parse(String(patch.body))).toEqual({ status: 'done', cascade: 'complete' });
+    const move = stub({ visible: true, card: { id: 1, title: 'P', status: 'done' } });
+    await dynamicApi.moveTask(1, { groupBy: 'status', toColumn: 'done', expectedVersion: 'v1', cascade: 'cancel' });
+    expect(JSON.parse(String(move.body))).toEqual({ groupBy: 'status', toColumn: 'done', expectedVersion: 'v1', cascade: 'cancel' });
+  });
+
   it('sends the mention keyword as `keyword`', async () => {
     const seen = stub([]);
     await dynamicApi.getMentionCandidates('業');

@@ -106,12 +106,18 @@ export interface TaskComment {
   body: string | null;
   withdrawn: boolean;
   systemEvent: string | null;
-  systemData: { from?: unknown; to?: unknown; subtaskId?: unknown; subtaskTitle?: unknown } | null;
+  systemData: { from?: unknown; to?: unknown; subtaskId?: unknown; subtaskTitle?: unknown; parentId?: unknown; parentTitle?: unknown } | null;
   createdTime: string;
   mentions: MentionRef[];
   attachments: TaskAttachment[];
   canWithdraw: boolean;
 }
+
+/**
+ * How a parent's open subtasks follow when the parent is marked done: all done or all cancelled.
+ * Without it the server answers 409 (code `subtasksOpen`, params `{ count }`) and writes nothing.
+ */
+export type TaskCascade = 'complete' | 'cancel';
 
 export type TaskPatch = {
   title?: string;
@@ -119,6 +125,8 @@ export type TaskPatch = {
   assigneeUserId?: string | null;
   dueDate?: string | null;
   status?: TaskStatus;
+  /** Only used when a parent with open subtasks is marked done; ignored otherwise. */
+  cascade?: TaskCascade;
 };
 
 /** PATCH reply when the writer can no longer see the task (a manager moved it out of scope): no task content, only a one-shot undo token. */
@@ -161,7 +169,7 @@ export const taskStatusColor = (s: TaskStatus): string => (s === 'done' ? 'posit
 
 /** Kinds the server writes today (NotificationKinds); an unknown kind still renders, with its title only. */
 export const NOTIFICATION_KINDS = [
-  'taskAssigned', 'taskMentioned', 'taskCommented', 'taskDueSoon', 'taskOverdue', 'taskCompleted', 'taskCancelled',
+  'taskAssigned', 'taskMentioned', 'taskCommented', 'taskDueSoon', 'taskOverdue', 'taskCompleted', 'taskCancelled', 'taskSubtasksDone',
   'approvalPending', 'approvalTransferred', 'approvalAddSigned', 'approvalRejected', 'approvalReturned', 'approvalApproved',
   'approvalWithdrawn', 'approvalCancelled', 'approvalReassignedAway', 'approvalRerouted', 'approvalOverdue', 'approvalAdminAlert',
 ] as const;

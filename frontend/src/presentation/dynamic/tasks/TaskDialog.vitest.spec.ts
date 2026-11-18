@@ -121,6 +121,20 @@ describe('TaskDialog', () => {
     w.unmount();
   });
 
+  it('系統記錄 bySubtask／byParent／subtasksAllDone 顯示狀態與標題（C44）', async () => {
+    const w = await mountDialog({
+      comments: [
+        commentWire({ id: 5, kind: 'system', body: '', systemEvent: 'bySubtask', systemData: { from: 'todo', to: 'inProgress', subtaskId: 8, subtaskTitle: '訂場地' } }),
+        commentWire({ id: 6, kind: 'system', body: '', systemEvent: 'byParent', systemData: { from: 'inProgress', to: 'cancelled', parentId: 1, parentTitle: '辦活動' } }),
+        commentWire({ id: 7, kind: 'system', body: '', systemEvent: 'subtasksAllDone', systemData: { subtaskId: 9, subtaskTitle: '印海報' } }),
+      ],
+    });
+    expect(body().querySelector('[data-testid="comment-5"]')!.textContent).toContain('因子任務「訂場地」變更，狀態從「待辦」改為「進行中」');
+    expect(body().querySelector('[data-testid="comment-6"]')!.textContent).toContain('因父任務「辦活動」變更，狀態從「進行中」改為「已取消」');
+    expect(body().querySelector('[data-testid="comment-7"]')!.textContent).toContain('子任務都已完成或取消，最後一個是「印海報」');
+    w.unmount();
+  });
+
   it('留言內容的 @{id} 顯示成名稱，已停用者加「（已停用）」，不認得的照原文', async () => {
     const w = await mountDialog({
       comments: [commentWire({
