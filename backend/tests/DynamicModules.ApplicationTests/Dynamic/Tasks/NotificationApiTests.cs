@@ -1,6 +1,7 @@
 using DynamicModules.Application.Common.Time;
 using DynamicModules.Application.Dynamic.NotificationService;
 using DynamicModules.Application.Dynamic.PolicyService;
+using DynamicModules.Application.Dynamic.TaskService;
 using DynamicModules.Domain.Entities.Dynamic;
 using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
@@ -8,7 +9,7 @@ using Microsoft.Extensions.DependencyInjection;
 
 namespace DynamicModules.ApplicationTests.Dynamic.Tasks;
 
-/// <summary>通知清單：讀取時補到期／逾期提醒（一天最多一則）、清掉 90 天前的、標為已讀（設計 §6.2、§6.3）。</summary>
+/// <summary>通知清單：讀取時補到期提醒（即將到期每任務一次、逾期一天最多一則且不疊加未讀）、清掉 90 天前的、標為已讀（設計 §6.2、§6.3）。</summary>
 public class NotificationApiTests : TaskTestBase
 {
     private sealed class Clock : IBusinessTime
@@ -72,7 +73,7 @@ public class NotificationApiTests : TaskTestBase
     }
 
     [Fact]
-    public async Task LeadDays_ModuleOverride_RemindsThatManyDaysBefore()
+    public async Task LeadDays_ModuleOverride_RemindsAnyDayWithinWindow()
     {
         var t = await BuildTarget();
         As("admin");
@@ -84,7 +85,7 @@ public class NotificationApiTests : TaskTestBase
         var list = await Get("sales01");
 
         list.Items.Where(i => i.Kind == NotificationKinds.TaskDueSoon).Select(i => i.Title)
-            .Should().BeEquivalentTo(["三天後", "明天（無模組）"]);
+            .Should().BeEquivalentTo(["三天後", "明天（該模組）", "明天（無模組）"], "到期前 N 天內的任何一天都補（使用者 2026-11-12 裁決）");
     }
 
     [Fact]
@@ -111,28 +112,175 @@ public class NotificationApiTests : TaskTestBase
         await SeedTask(title: "無模組逾期（開）", assignee: "sales01", due: D(11, 2));
         var repo = Svc<DynamicModules.Domain.Repositories.Dynamic.ITaskRepository>();
 
-        var filter = new DynamicModules.Domain.Repositories.Dynamic.ReminderFilter([D(11, 7)], [], OverdueWithoutModule: true);
-        var due = await repo.ListReminderDueAsync("sales01", D(11, 4), filter, track: false, CancellationToken.None);
-        due.Select(x => x.Title).Should().Equal("對的日期", "無模組逾期（開）");
+        var filter = new DynamicModules.Domain.Repositories.Dynamic.ReminderFilter(D(11, 5), [], OverdueWithoutModule: true);
+        var due = await repo.ListReminderDueAsync("sales01", D(11, 4), filter, CancellationToken.None);
+        due.Select(x => x.Title).Should().Equal("錯的日期", "無模組逾期（開）");   // 「對的日期」11/7 超過 DueSoonUntil
 
-        var off = new DynamicModules.Domain.Repositories.Dynamic.ReminderFilter([], [], OverdueWithoutModule: false);
+        var off = new DynamicModules.Domain.Repositories.Dynamic.ReminderFilter(null, [], OverdueWithoutModule: false);
         (await repo.AnyReminderDueAsync("sales01", D(11, 4), off, CancellationToken.None)).Should().BeFalse();
         (await repo.ListReminderModuleIdsAsync("sales01", D(11, 4), 30, CancellationToken.None))
             .Should().BeEquivalentTo(new long?[] { null, t.ModuleId });
     }
 
     [Fact]
-    public async Task Overdue_NextDay_RemindsAgain()
+    public async Task Overdue_NextDay_UnreadExists_NotAddedAgain()
     {
-        await SeedTask(title: "已逾期", assignee: "sales01", due: D(11, 3));
+        var late = await SeedTask(title: "已逾期", assignee: "sales01", due: D(11, 3));
         await SeedTask(title: "明天交", assignee: "sales01", due: D(11, 5));
         await Get("sales01");
 
         _clock.Now = new DateTime(2026, 11, 5, 8, 0, 0);
         var list = await Get("sales01");
 
-        Count(list, NotificationKinds.TaskOverdue).Should().Be(2, "逾期的任務隔天再提醒一次");
-        Count(list, NotificationKinds.TaskDueSoon).Should().Be(1, "今天到期的不算明天到期，也還沒逾期");
+        Count(list, NotificationKinds.TaskOverdue).Should().Be(1, "上一則逾期通知還沒讀，不疊加（O1 計畫裁決 B1）");
+        (await Load(late.Id)).LastOverdueNotified.Should().Be(D(11, 5), "今天的提醒由那則未讀的代表，戳記照蓋");
+        Count(list, NotificationKinds.TaskDueSoon).Should().Be(1, "11/5 到期的任務在 11/4 已補過，同一任務只補一次");
+    }
+
+    [Fact]
+    public async Task Overdue_UnreadSuppresses_ReadThenNextDayRemindsAgain()
+    {
+        await SeedTask(title: "已逾期", assignee: "sales01", due: D(11, 3));
+        Count(await Get("sales01"), NotificationKinds.TaskOverdue).Should().Be(1);
+
+        _clock.Now = new DateTime(2026, 11, 5, 9, 0, 0);
+        Count(await Get("sales01"), NotificationKinds.TaskOverdue).Should().Be(1, "沒讀不疊加");
+        As("sales01");
+        (await Send(new MarkAllNotificationsReadRequest())).IsSuccess.Should().BeTrue();
+        Count(await Get("sales01"), NotificationKinds.TaskOverdue).Should().Be(1, "今天的戳記已蓋，同一天讀完不再補");
+
+        _clock.Now = new DateTime(2026, 11, 6, 9, 0, 0);
+        Count(await Get("sales01"), NotificationKinds.TaskOverdue).Should().Be(2, "讀過之後隔天再補");
+    }
+
+    [Fact]
+    public async Task Overdue_ReadSameDay_NotAgainSameDay()
+    {
+        await SeedTask(title: "已逾期", assignee: "sales01", due: D(11, 3));
+        Count(await Get("sales01"), NotificationKinds.TaskOverdue).Should().Be(1);
+        As("sales01");
+        (await Send(new MarkAllNotificationsReadRequest())).IsSuccess.Should().BeTrue();
+
+        Count(await Get("sales01"), NotificationKinds.TaskOverdue).Should().Be(1, "一天最多一則");
+    }
+
+    [Fact]
+    public async Task DueSoon_OnlyOncePerTask_AcrossDays()
+    {
+        var t = await BuildTarget();
+        As("admin");
+        (await Send(new UpdateModulePolicyRequest(t.Key, "task.reminderLeadDays", J("3")))).IsSuccess.Should().BeTrue();
+        await SeedTask(title: "三天後", assignee: "sales01", due: D(11, 7), moduleId: t.ModuleId);
+        Count(await Get("sales01"), NotificationKinds.TaskDueSoon).Should().Be(1);
+
+        _clock.Now = new DateTime(2026, 11, 5, 9, 0, 0);
+        await Get("sales01");
+        _clock.Now = new DateTime(2026, 11, 6, 9, 0, 0);
+        Count(await Get("sales01"), NotificationKinds.TaskDueSoon).Should().Be(1, "同一任務只補一次");
+    }
+
+    [Fact]
+    public async Task DueSoon_TaskCreatedInsideWindow_RemindedOnce()
+    {
+        await Get("sales01");
+        await SeedTask(title: "臨時交辦", assignee: "sales01", due: D(11, 5), created: new DateTime(2026, 11, 4, 10, 0, 0));
+
+        await Get("sales01");
+        Count(await Get("sales01"), NotificationKinds.TaskDueSoon).Should().Be(1, "已在範圍內才建立的任務也補一次");
+    }
+
+    [Fact]
+    public async Task DueSoon_LegacyStampFromOldRule_NotRemindedAgain()
+    {
+        var task = await SeedTask(title: "明天交", assignee: "sales01", due: D(11, 5));
+        await Db.Context.Set<TaskItem>().Where(x => x.Id == task.Id)
+            .ExecuteUpdateAsync(x => x.SetProperty(t => t.LastDueSoonNotified, D(11, 3)));
+
+        Count(await Get("sales01"), NotificationKinds.TaskDueSoon).Should().Be(0, "上線前已被舊規則提醒過的任務，上線後不再補");
+    }
+
+    [Fact]
+    public async Task TryMarkDueSoon_SecondCall_False()
+    {
+        var task = await SeedTask(title: "明天交", assignee: "sales01", due: D(11, 5));
+        var repo = Svc<DynamicModules.Domain.Repositories.Dynamic.ITaskRepository>();
+
+        (await repo.TryMarkDueSoonNotifiedAsync(task.Id, D(11, 4), CancellationToken.None)).Should().BeTrue();
+        (await repo.TryMarkDueSoonNotifiedAsync(task.Id, D(11, 5), CancellationToken.None)).Should().BeFalse();
+        (await Load(task.Id)).LastDueSoonNotified.Should().Be(D(11, 4));
+    }
+
+    [Fact]
+    public async Task TryMarkOverdue_SameDayTwice_SecondFalse_NextDayTrue()
+    {
+        var task = await SeedTask(title: "已逾期", assignee: "sales01", due: D(11, 3));
+        var repo = Svc<DynamicModules.Domain.Repositories.Dynamic.ITaskRepository>();
+
+        (await repo.TryMarkOverdueNotifiedAsync(task.Id, D(11, 4), CancellationToken.None)).Should().BeTrue();
+        (await repo.TryMarkOverdueNotifiedAsync(task.Id, D(11, 4), CancellationToken.None)).Should().BeFalse();
+        (await repo.TryMarkOverdueNotifiedAsync(task.Id, D(11, 5), CancellationToken.None)).Should().BeTrue();
+    }
+
+    [Fact]
+    public async Task DueSoon_ResetAfterDueDateChanged()
+    {
+        var task = await SeedTask(title: "明天交", assignee: "sales01", due: D(11, 5));
+        Count(await Get("sales01"), NotificationKinds.TaskDueSoon).Should().Be(1);
+
+        As("admin");
+        (await Send(new UpdateTaskRequest(task.Id, J("""{"dueDate":"2026-11-20"}""")))).IsSuccess.Should().BeTrue();
+        (await Load(task.Id)).LastDueSoonNotified.Should().BeNull("改到期日後重新計（O1 計畫裁決 D2）");
+
+        _clock.Now = new DateTime(2026, 11, 19, 9, 0, 0);
+        Count(await Get("sales01"), NotificationKinds.TaskDueSoon).Should().Be(2);
+    }
+
+    [Fact]
+    public async Task Reminders_ResetAfterAssigneeChanged()
+    {
+        var task = await SeedTask(title: "明天交", assignee: "sales01", due: D(11, 5));
+        Count(await Get("sales01"), NotificationKinds.TaskDueSoon).Should().Be(1);
+
+        As("admin");
+        (await Send(new UpdateTaskRequest(task.Id, J("""{"assigneeUserId":"sales02"}""")))).IsSuccess.Should().BeTrue();
+        var moved = await Load(task.Id);
+        moved.LastDueSoonNotified.Should().BeNull("換負責人後重新計（D2）");
+        moved.LastOverdueNotified.Should().BeNull();
+
+        Count(await Get("sales02"), NotificationKinds.TaskDueSoon).Should().Be(1, "新負責人也會收到");
+    }
+
+    [Fact]
+    public async Task ResetReminderStamps_NullToNull_StillWritesNull()
+    {
+        var task = await SeedTask(title: "明天交", assignee: "sales01", due: D(11, 10));
+        var repo = Svc<DynamicModules.Domain.Repositories.Dynamic.ITaskRepository>();
+        var tracked = await Db.Context.Set<TaskItem>().SingleAsync(t => t.Id == task.Id);
+        // 載入之後、存檔之前，另一個請求蓋了戳記（ExecuteUpdate 不更新已追蹤的實體，這裡的 tracked 仍是 null）
+        await Db.Context.Set<TaskItem>().Where(t => t.Id == task.Id)
+            .ExecuteUpdateAsync(x => x.SetProperty(t => t.LastDueSoonNotified, D(11, 4)));
+
+        tracked.DueDate = D(11, 20);
+        repo.ResetReminderStamps(tracked, overdueToo: false);
+        await Db.Context.SaveChangesAsync();
+
+        (await Load(task.Id)).LastDueSoonNotified.Should().BeNull("null 設回 null 也要寫進 UPDATE");
+    }
+
+    [Fact]
+    public async Task DueSoon_ReopenedSameDueDate_NotRemindedAgain()
+    {
+        var task = await SeedTask(title: "明天交", assignee: "sales01", due: D(11, 5));
+        Count(await Get("sales01"), NotificationKinds.TaskDueSoon).Should().Be(1);
+
+        As("admin");
+        (await Send(new UpdateTaskRequest(task.Id, J("""{"status":"done"}""")))).IsSuccess.Should().BeTrue();
+        (await Send(new UpdateTaskRequest(task.Id, J("""{"status":"todo"}""")))).IsSuccess.Should().BeTrue();
+        (await Load(task.Id)).LastDueSoonNotified.Should().Be(D(11, 4), "完成後重開、到期日沒改，不重新計（O1 計畫裁決 B3）");
+
+        Count(await Get("sales01"), NotificationKinds.TaskDueSoon).Should().Be(1);
+        _clock.Now = new DateTime(2026, 11, 5, 9, 0, 0);
+        Count(await Get("sales01"), NotificationKinds.TaskDueSoon).Should().Be(1);
     }
 
     [Fact]
@@ -144,7 +292,8 @@ public class NotificationApiTests : TaskTestBase
 
         var list = await Get("sales01");
 
-        list.Items.Select(i => (i.Kind, i.Title)).Should().Equal((NotificationKinds.TaskDueSoon, "明天交"));
+        list.Items.Select(i => (i.Kind, i.Title)).Should().BeEquivalentTo(
+            [(NotificationKinds.TaskDueSoon, "明天交"), (NotificationKinds.TaskDueSoon, "今天交")], "範圍含到期當天（O1 計畫裁決 D1）");
     }
 
     [Fact]
