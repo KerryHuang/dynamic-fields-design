@@ -21,6 +21,26 @@ start.cmd
 - **登入**：全新資料庫只有 `admin`。`start.command` 以 Development 環境啟動，`admin` 的初始密碼是 `admin1234`，第一次登入要改密碼。其他使用者與群組由 `admin` 在「系統管理」建立。
 - **重設資料**：停止服務後刪除 `backend/data/poc.db`（旁邊的 `keys` 目錄是登入金鑰，可一併刪除），下次啟動會重建，只剩 `admin`。
 
+### 改用 PostgreSQL 跑
+
+預設是 SQLite；正式版是 PostgreSQL（16 以上）。本機用 Docker 起一個，資料庫要先建好（用 `POSTGRES_DB`），系統不會代建：
+
+```bash
+docker run --rm -d --name formwright-pg -p 55432:5432 -e POSTGRES_PASSWORD=<密碼> -e POSTGRES_DB=formwright postgres:16
+cd backend/src/DynamicModules.WebAPI
+Database__Provider=Postgres \
+ConnectionStrings__Dynamic="Host=127.0.0.1;Port=55432;Database=formwright;Username=postgres;Password=<密碼>" \
+dotnet run
+```
+
+- `Database:Provider`：`Sqlite`（預設）或 `Postgres`，其他值拒絕啟動；不從連線字串猜。
+- `Database:LockTimeoutSeconds`（預設 30，只在 PostgreSQL 生效）：寫入在程序內排隊、再取全庫 advisory lock，兩段各自以它為上限，逾時回 503。
+- `DataProtection:KeysDirectory`、`Attachments:Root`：PostgreSQL 沒有資料庫檔案可以放在旁邊，沒設時金鑰不落地、附件放暫存目錄，啟動時記 Warning。
+- 報表在 PostgreSQL 一律走記憶體路徑（SQL 路徑在 pg1 才改寫），`Reports:Engine=SqlOnly` 會拒絕啟動。
+- 多個實例可以同時啟動：初始化（migration、種子）用 advisory lock 依序執行。
+- 部署時建議在資料庫或角色層級設 `idle_in_transaction_session_timeout`（例如 60 秒），應用程式卡在交易中間時鎖不會一直不放。
+- 改 schema 要兩種資料庫各產一個同名 migration：`scripts/db/add-migration.sh <名稱>`（Windows：`scripts\db\add-migration.cmd <名稱>`），再跑 `MigrationConsistencyTests`。
+
 ## 測試
 
 ```bash
@@ -36,7 +56,7 @@ cd frontend && bunx vitest run && bunx vue-tsc --noEmit    # 前端：單元測�
 
 | 路徑 | 內容 |
 |---|---|
-| `backend/src` | .NET 8：`Domain`（欄位型別、公式、規則引擎）、`Application`（MediatR handler、權限）、`Persistence`（EF Core + SQLite、migration、種子資料）、`WebAPI` |
+| `backend/src` | .NET 8：`Domain`（欄位型別、公式、規則引擎）、`Application`（MediatR handler、權限）、`Persistence`（EF Core、SQLite 與 PostgreSQL 共用的 repository、SQLite migration、種子資料）、`Persistence.Postgres`（PostgreSQL provider 與它的 migration）、`WebAPI` |
 | `backend/tests` | xUnit：Domain、Application、WebAPI，以及各階段的驗收情境 |
 | `frontend/src` | Vue 3 + Quasar：`domain`（型別、規則引擎）、`application`（查詢）、`presentation`（動態表單、列表、設計器）、`pages` |
 | `shared` | 前後端共用的運算子表與規則案例 |

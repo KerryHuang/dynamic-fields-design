@@ -395,7 +395,7 @@ public interface IEffectHandler
 3. 只靠 `WriteGate`（行程內佇列）**不夠**：它對檔案型資料庫每個檔案一個閘，但（a）多行程共用同一個檔案時閘不互通（負載報告 §4.3.1 明說「寫入鎖本身仍由 SQLite 保證，所以多行程仍然正確，只是不保證公平」），（b）記憶體資料庫沒有閘（`WriteGate.For` 回 null）。若把正確性押在 `WriteGate` 上，這兩種情況會靜默失效。這份設計**不依賴** `WriteGate` 做互斥，也**不修改**它。
 4. 「寫入交易內重新查詢是否必要」：必要，但已經是現狀。檢查在交易內、寫入之後求值，查詢與寫入同連線同交易（`RecordRepository` 已用 `db.Database.CurrentTransaction`）。**不可以**把檢查搬到交易之外或用交易開始前載入的快取值。測試：直接以 `Task.WhenAll` 對同一本帳併發寫入（§14.3）。
 5. 事件與串聯寫入都在同一個交易內，所以鎖持有時間變長：持鎖時間約等於一次使用者寫入加上每個效果寫入加上每組檢查的聚合查詢。吞吐上限仍是 1 除以持鎖時間；§15 的壓測要量這個數字。`WriteGate` 的排隊上限（連線字串的 `Default Timeout`，預設 30 秒）夠用的條件是：排隊人數乘以持鎖時間小於 30 秒；20 人同時、每筆 10 ms 的量級是 200 ms，餘裕很大。
-6. **換資料庫時的可攜性。** 在 SQL Server 或 PostgreSQL 的讀已提交隔離下沒有「開始就持有全庫寫入鎖」，兩個交易會各自通過檢查（寫入偏斜）。屆時的做法：求值前對該組取一個鎖列——`Dynamic_CheckLock(CheckKey, GroupHash)`，以 `UPDATE … SET Counter = Counter + 1` 或 `SELECT … FOR UPDATE` 把同一組的檢查序列化。這份設計把求值前的動作抽成 `ICheckSerializer`，SQLite 的實作是不做事（已被寫入鎖序列化）；其他資料庫的實作**這次不做**，因為路線文件已決定先留 SQLite。
+6. **換資料庫時的可攜性。** 在 SQL Server 或 PostgreSQL 的讀已提交隔離下沒有「開始就持有全庫寫入鎖」，兩個交易會各自通過檢查（寫入偏斜）。屆時的做法：求值前對該組取一個鎖列——`Dynamic_CheckLock(CheckKey, GroupHash)`，以 `UPDATE … SET Counter = Counter + 1` 或 `SELECT … FOR UPDATE` 把同一組的檢查序列化。這份設計把求值前的動作抽成 `ICheckSerializer`，SQLite 的實作是不做事（已被寫入鎖序列化）；其他資料庫的實作**這次不做**，因為路線文件已決定先留 SQLite。（2026-11-18 補記，pg0b：`ICheckSerializer` 在程式裡並未實作；PostgreSQL 上目前以全庫 advisory lock 維持「開始就持有全庫寫入鎖」的前提，見 [PostgreSQL provider 設計](2026-11-12-postgres-provider-design.md) §5.6，拿掉全庫鎖之前要先補上，列在該節的清單。）
 
 ## 8. 權限總表
 

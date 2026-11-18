@@ -31,8 +31,9 @@ Formwright 的 Demo 站與容器部署做法。本機開發與測試見 [CONTRIB
 | `Ops__TrustIncomingTraceParent` | 預設 `false`：忽略外來的 `traceparent`，request id 由伺服器產生；放在自家反向代理後面、要串接上游 trace 時才設 `true` |
 | `Ops__Scheduler__Enabled` | 背景排程器（通知維護等），預設 `true`；設 `false` 整個不跑。多實例時同一工作靠資料表租約只跑一份，也可以只讓其中一台開著；實例之間的時鐘誤差由 5 分鐘租約吸收，主機請開 NTP 校時 |
 | `Sqlite__MmapSizeMb` | SQLite 每條連線的記憶體對映大小，單位 MB，預設 `0`（關閉）；也可寫在 `appsettings.json` 的 `Sqlite:MmapSizeMb` |
-| `Database__Provider` | 資料庫種類，預設 `Sqlite`；目前只支援 `Sqlite`，設成 `Postgres` 或其他值會拒絕啟動（PostgreSQL 尚未提供） |
-| `DataProtection__KeysDirectory` | 登入 cookie 加密金鑰的存放目錄（相對路徑以站台目錄解析）；沒設就放在資料庫檔案旁的 `keys`，記憶體資料庫則不落地（重啟後要重新登入） |
+| `Database__Provider` | 資料庫種類：`Sqlite`（預設）或 `Postgres`，其他值拒絕啟動。`Postgres` 時 `ConnectionStrings__Dynamic` 是 Npgsql 連線字串，目標資料庫要先建好（不存在就拒絕啟動，系統不代建）；報表一律走記憶體路徑，`Reports__Engine=SqlOnly` 會拒絕啟動 |
+| `Database__LockTimeoutSeconds` | 只在 `Postgres` 生效：寫入排隊與全庫寫入鎖各自的等待上限（秒），預設 `30`，逾時回 503；`0` 是不設上限 |
+| `DataProtection__KeysDirectory` | 登入 cookie 加密金鑰的存放目錄（相對路徑以站台目錄解析）；沒設就放在資料庫檔案旁的 `keys`，記憶體資料庫與 PostgreSQL 則不落地（重啟後要重新登入，PostgreSQL 會記 Warning） |
 
 `Auth__InitialAdminPassword` 只在資料庫還沒有可用的管理員時有效，之後改它不會覆寫既有密碼。`Auth__ResetAdminPassword` 至少 8 碼，會重設 `admin` 的密碼、啟用、解鎖、要求改密碼並讓所有 session 失效；救回後要把它移除，否則每次重啟都會再重設。`Demo__LoginEnabled` 絕不能在正式站開啟，它不驗密碼。Swagger 只在 Development 環境開放。
 
