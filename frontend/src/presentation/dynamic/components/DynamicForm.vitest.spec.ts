@@ -269,7 +269,8 @@ describe('DynamicForm', () => {
       await flushPromises();
       // CI 機器慢時表單第一次渲染會超過 waitFor 預設的 1 秒，放寬等待上限。
       await vi.waitFor(() => expect(w.find('[data-testid="record-error"]').text()).toContain('此記錄目前不可修改'), { timeout: 5000 });
-    });
+      // 測試本身的上限要大於上面 waitFor 的 5 秒，否則 CI 慢時整個測試先逾時（2026-11-18 兩次）。
+    }, 15000);
 
     it('a hidden field whose value changed is still submitted (decision 8)', async () => {
       const s = rulesSchema([rule({ kind: 'visibility', targets: ['field:2'], condition: { field: 1, op: 'ne', value: 'hideme' } })]);
