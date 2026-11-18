@@ -19,8 +19,10 @@ public static class BusinessClock
         // AssumeUniversal 讓解析不經過主機時區；Kind 只用來分辨字串有沒有帶偏移
         if (!DateTimeOffset.TryParse(s, CultureInfo.InvariantCulture, DateTimeStyles.AssumeUniversal, out var dto)
             || !DateTime.TryParse(s, CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind, out var parsed)) return false;
+        if (parsed.Kind == DateTimeKind.Unspecified) { at = dto.DateTime; return true; }
+        // 只有帶偏移的值要換成台北時間，換算後超出 DateTime 上限就視為格式錯誤
         if (dto.UtcDateTime > DateTime.MaxValue - Offset) return false;
-        at = parsed.Kind == DateTimeKind.Unspecified ? dto.DateTime : dto.ToOffset(Offset).DateTime;
+        at = dto.ToOffset(Offset).DateTime;
         return true;
     }
 }

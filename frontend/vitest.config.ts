@@ -5,5 +5,5 @@ import { defineConfig } from 'vitest/config';
 export default defineConfig({
   plugins: [vue()],
   resolve: { alias: { '#q-app': '@quasar/app-vite', quasar: 'quasar/dist/quasar.client.js', src: fileURLToPath(new URL('./src', import.meta.url)) } },
-  test: { environment: 'jsdom', include: ['src/**/*.vitest.spec.ts'], setupFiles: ['./vitest.setup.ts'] },
+  test: { environment: 'jsdom', include: ['src/**/*.vitest.spec.ts'] },
 });
