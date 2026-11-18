@@ -71,7 +71,7 @@ public class PermissionRepositoryTests
     [Fact]
     public async Task LoadInputs_FiltersToModuleAndUserGroups()
     {
-        await using var t = await SqliteTestDb.CreateAsync();
+        await using var t = await TestDb.CreateAsync();
         var (a, _, g1, _, g3) = await SeedAsync(t.Context);
 
         var inputs = await new PermissionRepository(t.Context).LoadInputsAsync("me", a, CancellationToken.None);
@@ -89,7 +89,7 @@ public class PermissionRepositoryTests
     [Fact]
     public async Task LoadInputs_UnknownUser_ReturnsNull()
     {
-        await using var t = await SqliteTestDb.CreateAsync();
+        await using var t = await TestDb.CreateAsync();
         var (a, _, _, _, _) = await SeedAsync(t.Context);
 
         (await new PermissionRepository(t.Context).LoadInputsAsync("nobody", a, CancellationToken.None)).Should().BeNull();
@@ -98,7 +98,7 @@ public class PermissionRepositoryTests
     [Fact]
     public async Task LoadProgramInputs_LoadsOnlyThatProgram()
     {
-        await using var t = await SqliteTestDb.CreateAsync();
+        await using var t = await TestDb.CreateAsync();
         await SeedAsync(t.Context);
         var repo = new PermissionRepository(t.Context);
 

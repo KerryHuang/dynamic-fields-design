@@ -31,7 +31,7 @@ public class RecordReferenceWriteTests : IAsyncLifetime
 {
     private const string NotFound = "參照的資料不存在或無權選取";
 
-    private SqliteTestDb _db = null!;
+    private TestDb _db = null!;
     private ServiceProvider _sp = null!;
     private readonly FakeUser _user = new();
 
@@ -45,7 +45,7 @@ public class RecordReferenceWriteTests : IAsyncLifetime
 
     public async Task InitializeAsync()
     {
-        _db = await SqliteTestDb.CreateAsync();
+        _db = await TestDb.CreateAsync();
         await SeedData.EnsureSeededAsync(_db.Context);
         await DemoPeople.EnsureAsync(_db.Context);
         var services = new ServiceCollection();

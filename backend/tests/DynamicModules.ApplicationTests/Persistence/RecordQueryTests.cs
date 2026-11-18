@@ -30,7 +30,7 @@ public class RecordQueryTests : IAsyncLifetime
 {
     private static readonly DateOnly Today = new(2026, 11, 3);
 
-    private SqliteTestDb _db = null!;
+    private TestDb _db = null!;
     private ServiceProvider _sp = null!;
     private ModuleDetailResponse _m = null!;
     private string _nameKey = "";
@@ -45,7 +45,7 @@ public class RecordQueryTests : IAsyncLifetime
 
     public async Task InitializeAsync()
     {
-        _db = await SqliteTestDb.CreateAsync();
+        _db = await TestDb.CreateAsync();
         await SeedData.EnsureSeededAsync(_db.Context);
         await DemoPeople.EnsureAsync(_db.Context);
         var services = new ServiceCollection();
@@ -385,8 +385,9 @@ public class RecordQueryTests : IAsyncLifetime
         await Send(new ActivateModuleRequest("order"));
         await Create("A", (date.Key, "2026-11-03"));
 
-        var stored = await new Microsoft.Data.Sqlite.SqliteCommand(
-            "SELECT DateValue FROM Dynamic_RecordIndex", _db.Connection).ExecuteScalarAsync();
+        await using var cmd = _db.Connection.CreateCommand();
+        cmd.CommandText = "SELECT DateValue FROM Dynamic_RecordIndex";
+        var stored = await cmd.ExecuteScalarAsync();
 
         stored.Should().Be("2026-11-03 00:00:00");
         (await Match($$"""{"field":{{date.Id}},"op":"eq","value":"2026-11-03"}""")).Should().Equal("A");

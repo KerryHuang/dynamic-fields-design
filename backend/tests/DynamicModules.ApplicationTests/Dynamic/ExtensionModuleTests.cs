@@ -37,7 +37,7 @@ namespace DynamicModules.ApplicationTests.Dynamic;
 
 public class ExtensionModuleTests : IAsyncLifetime
 {
-    private SqliteTestDb _db = null!;
+    private TestDb _db = null!;
     private ServiceProvider _sp = null!;
     private readonly FakeUser _user = new();
 
@@ -51,7 +51,7 @@ public class ExtensionModuleTests : IAsyncLifetime
 
     public async Task InitializeAsync()
     {
-        _db = await SqliteTestDb.CreateAsync();
+        _db = await TestDb.CreateAsync();
         await SeedData.EnsureSeededAsync(_db.Context);
         await DemoPeople.EnsureAsync(_db.Context);
         var services = new ServiceCollection();

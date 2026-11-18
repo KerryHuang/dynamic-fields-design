@@ -10,7 +10,7 @@ public class EfTransactionManagerTests
     [Fact]
     public async Task Commit_Persists_And_Rollback_Discards()
     {
-        await using var db = await SqliteTestDb.CreateAsync();
+        await using var db = await TestDb.CreateAsync();
         var manager = new EfTransactionManager(db.Context);
 
         await using (var tx = await manager.BeginAsync(default))

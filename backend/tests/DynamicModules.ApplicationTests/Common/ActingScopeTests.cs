@@ -171,7 +171,7 @@ public class ActingScopeTests
     [Fact]
     public async Task CreateRecord_InScope_UsesActingUserAndSimulatedTime()
     {
-        await using var db = await SqliteTestDb.CreateAsync();
+        await using var db = await TestDb.CreateAsync();
         await SeedData.EnsureSeededAsync(db.Context);
         await DemoPeople.EnsureAsync(db.Context);
         var services = new ServiceCollection();

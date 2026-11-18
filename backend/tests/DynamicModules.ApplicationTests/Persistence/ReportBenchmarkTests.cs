@@ -49,7 +49,7 @@ public class ReportBenchmarkTests(ITestOutputHelper output)
     [Fact]
     public async Task Run_10k_Main_30k_Child_GroupAndDedupe_Under1s()
     {
-        await using var db = await SqliteTestDb.CreateAsync();
+        await using var db = await TestDb.CreateAsync();
         await SeedData.EnsureSeededAsync(db.Context);
         await DemoPeople.EnsureAsync(db.Context);
         var services = new ServiceCollection();

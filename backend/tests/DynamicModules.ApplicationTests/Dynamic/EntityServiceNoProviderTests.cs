@@ -18,7 +18,7 @@ namespace DynamicModules.ApplicationTests.Dynamic;
 /// <summary>產品 DI（AddApplication、AddPersistenceRepositories）本身不註冊任何參照提供者；不加測試實體時，既有實體清單是空的。</summary>
 public class EntityServiceNoProviderTests : IAsyncLifetime
 {
-    private SqliteTestDb _db = null!;
+    private TestDb _db = null!;
     private ServiceProvider _sp = null!;
 
     private sealed class FakeUser : ICurrentUser { public string UserId => "admin"; }
@@ -31,7 +31,7 @@ public class EntityServiceNoProviderTests : IAsyncLifetime
 
     public async Task InitializeAsync()
     {
-        _db = await SqliteTestDb.CreateAsync();
+        _db = await TestDb.CreateAsync();
         await SeedData.EnsureSeededAsync(_db.Context);
         var services = new ServiceCollection();
         services.AddApplication();

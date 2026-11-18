@@ -28,7 +28,7 @@ public class SeedDataTests
     [Fact]
     public async Task FreshDatabase_HasOnlyAdmin()
     {
-        await using var db = await SqliteTestDb.CreateAsync();
+        await using var db = await TestDb.CreateAsync();
 
         await SeedData.EnsureSeededAsync(db.Context);
 
@@ -42,7 +42,7 @@ public class SeedDataTests
     public async Task Model_HasNoMockMoldTable()
     {
         // s2d-0：模具歸 MES 自己的模組，核心不再有模擬實體 design.mold 與它的表
-        await using var db = await SqliteTestDb.CreateAsync();
+        await using var db = await TestDb.CreateAsync();
 
         db.Context.Model.GetEntityTypes().Select(t => t.GetTableName()).Should().NotContain("Mock_Mold");
     }
@@ -50,7 +50,7 @@ public class SeedDataTests
     [Fact]
     public async Task Reseed_DoesNotRestoreRemovedMembers()
     {
-        await using var db = await SqliteTestDb.CreateAsync();
+        await using var db = await TestDb.CreateAsync();
         await SeedData.EnsureSeededAsync(db.Context);
         await DemoPeople.EnsureAsync(db.Context);
         await db.Context.Set<UserGroupMapping>().Where(m => m.UserId == "sales01").ExecuteDeleteAsync();
@@ -63,7 +63,7 @@ public class SeedDataTests
     [Fact]
     public async Task Reseed_DoesNotForceAdminFlag()
     {
-        await using var db = await SqliteTestDb.CreateAsync();
+        await using var db = await TestDb.CreateAsync();
         await SeedData.EnsureSeededAsync(db.Context);
         db.Context.Set<AppUser>().Add(new AppUser { UserId = "boss", DisplayName = "boss", IsSystemAdmin = true });
         (await db.Context.Set<AppUser>().SingleAsync(u => u.UserId == "admin")).IsSystemAdmin = false;
@@ -77,7 +77,7 @@ public class SeedDataTests
     [Fact]
     public async Task DemoPeople_CreatesGroupsMembersCustomers()
     {
-        await using var db = await SqliteTestDb.CreateAsync();
+        await using var db = await TestDb.CreateAsync();
         await SeedData.EnsureSeededAsync(db.Context);
 
         await DemoPeople.EnsureAsync(db.Context);
@@ -105,7 +105,7 @@ public class SeedDataTests
     [Fact]
     public async Task DemoPeople_DoesNotOverwriteExisting()
     {
-        await using var db = await SqliteTestDb.CreateAsync();
+        await using var db = await TestDb.CreateAsync();
         db.Context.Set<AppUser>().Add(new AppUser { UserId = "qa01", DisplayName = "自訂" });
         await db.Context.SaveChangesAsync();
 
@@ -117,7 +117,7 @@ public class SeedDataTests
     [Fact]
     public async Task Seed_IsIdempotent()
     {
-        await using var db = await SqliteTestDb.CreateAsync();
+        await using var db = await TestDb.CreateAsync();
         await AddModuleAsync(db.Context, "order", "DYN00001", ModuleStatus.Active);
 
         await SeedData.EnsureSeededAsync(db.Context);
@@ -130,7 +130,7 @@ public class SeedDataTests
     [Fact]
     public async Task Seed_ReassignsUnknownOwnersToAdmin()
     {
-        await using var db = await SqliteTestDb.CreateAsync();
+        await using var db = await TestDb.CreateAsync();
         var module = await AddModuleAsync(db.Context, "order", "DYN00001", ModuleStatus.Active);
         await DemoPeople.EnsureAsync(db.Context);
         db.Context.Set<Record>().AddRange(
@@ -146,7 +146,7 @@ public class SeedDataTests
     [Fact]
     public async Task Seed_ReassignsAnonymousPersonalViewsToAdmin_SharedUntouched()
     {
-        await using var db = await SqliteTestDb.CreateAsync();
+        await using var db = await TestDb.CreateAsync();
         var module = await AddModuleAsync(db.Context, "order", "DYN00001", ModuleStatus.Active);
         db.Context.Set<ListView>().AddRange(
             NewView(module.Id, "anonymous"), NewView(module.Id, "sales01"), NewView(module.Id, null));
@@ -175,7 +175,7 @@ public class SeedDataTests
     [Fact]
     public async Task Seed_SyncsProgramActiveWithModuleStatus()
     {
-        await using var db = await SqliteTestDb.CreateAsync();
+        await using var db = await TestDb.CreateAsync();
         await AddModuleAsync(db.Context, "a", "DYN00001", ModuleStatus.Active);
         await AddModuleAsync(db.Context, "b", "DYN00002", ModuleStatus.Draft);
         await AddModuleAsync(db.Context, "c", "DYN00003", ModuleStatus.Inactive);

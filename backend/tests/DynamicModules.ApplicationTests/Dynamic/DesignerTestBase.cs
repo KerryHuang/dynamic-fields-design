@@ -29,7 +29,7 @@ namespace DynamicModules.ApplicationTests.Dynamic;
 /// <summary>設計器驗證測試共用：SQLite、MediatR、建模組與欄位的小工具。</summary>
 public abstract class DesignerTestBase : IAsyncLifetime
 {
-    protected SqliteTestDb Db = null!;
+    protected TestDb Db = null!;
     private ServiceProvider _sp = null!;
 
     private sealed class FakeUser : ICurrentUser { public string UserId { get; set; } = "admin"; }
@@ -59,7 +59,7 @@ public abstract class DesignerTestBase : IAsyncLifetime
 
     public virtual async Task InitializeAsync()
     {
-        Db = await SqliteTestDb.CreateAsync();
+        Db = await TestDb.CreateAsync();
         await SeedData.EnsureSeededAsync(Db.Context);
         await DemoPeople.EnsureAsync(Db.Context);
         var services = new ServiceCollection();
