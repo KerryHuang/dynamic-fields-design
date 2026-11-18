@@ -14,7 +14,7 @@ public class TaskPurgeTests : DesignerTestBase
         await CreateRecord("projects");
         var module = await Db.Context.Set<Module>().AsNoTracking().SingleAsync(m => m.Key == "projects");
         var record = await Db.Context.Set<DynamicModules.Domain.Entities.Dynamic.Record>().AsNoTracking().SingleAsync(r => r.ModuleId == module.Id);
-        var now = new DateTime(2026, 11, 4, 1, 0, 0, DateTimeKind.Utc);
+        var now = new DateTime(2026, 11, 4, 1, 0, 0);
         var task = new TaskItem
         {
             Title = "準備資料", ModuleId = module.Id, RecordId = record.Id, CreatedBy = "admin", CreatedTime = now,
@@ -89,7 +89,7 @@ public class TaskPurgeTests : DesignerTestBase
         var gone = modules.Single(m => m.Key == "projects");
         var kept = modules.Single(m => m.Key == "others");
         var records = await Db.Context.Set<DynamicModules.Domain.Entities.Dynamic.Record>().AsNoTracking().ToListAsync();
-        var now = new DateTime(2026, 11, 4, 1, 0, 0, DateTimeKind.Utc);
+        var now = new DateTime(2026, 11, 4, 1, 0, 0);
 
         TaskItem NewTask(string title, Module? m) => new()
         {
