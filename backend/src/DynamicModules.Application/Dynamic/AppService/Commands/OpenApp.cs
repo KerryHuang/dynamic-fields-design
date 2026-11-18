@@ -1,4 +1,5 @@
 using DynamicModules.Application.Common;
+using DynamicModules.Application.Common.Audit;
 using DynamicModules.Application.Common.Security;
 using DynamicModules.Application.Common.Time;
 using DynamicModules.Application.Dynamic.AccountService.Commands.CreateGroup;
@@ -18,8 +19,9 @@ namespace DynamicModules.Application.Dynamic.AppService.Commands;
 
 /// <summary>開啟、關閉、重新開啟、刪除都要設計器對應動作軸加系統管理員：開啟會替群組授權，不該再放大「設計器權限能替自己提權」的風險。</summary>
 public record OpenAppRequest(string PackageId, OpenAppBody Body)
-    : IRequest<ServiceResult>, ITransactionalRequest, IDesignerRequest, ISystemAdminRequest
+    : IRequest<ServiceResult>, ITransactionalRequest, IDesignerRequest, ISystemAdminRequest, IAuditedRequest
 {
+    public AuditAction Audit => AuditAction.For("app.open", AuditTargets.App, PackageId);
     public PermissionAction RequiredDesignerAction => PermissionAction.Add;
 }
 

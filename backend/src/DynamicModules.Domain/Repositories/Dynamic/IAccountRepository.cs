@@ -23,8 +23,8 @@ public interface IAccountRepository
     /// <summary>啟用中的系統管理員人數；在交易內呼叫，判斷「最後一位」才不會被並行請求繞過。</summary>
     Task<int> CountActiveAdminsAsync(CancellationToken ct);
 
-    /// <summary>把使用者的群組成員關係整組換成 groupIds；寫入由 IUnitOfWork 提交。</summary>
-    Task SetMembershipsAsync(string userId, IReadOnlyCollection<long> groupIds, CancellationToken ct);
+    /// <summary>把使用者的群組成員關係整組換成 groupIds，回傳原本的群組 id（稽核差異用）；寫入由 IUnitOfWork 提交。</summary>
+    Task<List<long>> SetMembershipsAsync(string userId, IReadOnlyCollection<long> groupIds, CancellationToken ct);
 
     /// <summary>groupIds 全部都是存在的群組。</summary>
     Task<bool> GroupsExistAsync(IReadOnlyCollection<long> groupIds, CancellationToken ct);
@@ -40,8 +40,11 @@ public interface IAccountRepository
     /// <summary>userIds 全部都是存在的使用者。</summary>
     Task<bool> UsersExistAsync(IReadOnlyCollection<string> userIds, CancellationToken ct);
 
-    /// <summary>把群組的成員整組換成 userIds；寫入由 IUnitOfWork 提交。</summary>
-    Task SetGroupMembersAsync(long groupId, IReadOnlyCollection<string> userIds, CancellationToken ct);
+    /// <summary>使用者 id → 顯示名；不存在的 id 不在結果裡。</summary>
+    Task<Dictionary<string, string>> GetDisplayNamesAsync(IReadOnlyCollection<string> userIds, CancellationToken ct);
+
+    /// <summary>把群組的成員整組換成 userIds，回傳原本的成員（稽核差異用）；寫入由 IUnitOfWork 提交。</summary>
+    Task<List<string>> SetGroupMembersAsync(long groupId, IReadOnlyCollection<string> userIds, CancellationToken ct);
 
     /// <summary>刪除群組前的影響統計；名稱以 I18nText.FallbackLocale 解析。</summary>
     Task<GroupImpact> GetGroupImpactAsync(long groupId, CancellationToken ct);

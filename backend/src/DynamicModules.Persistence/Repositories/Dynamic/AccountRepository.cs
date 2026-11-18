@@ -31,11 +31,13 @@ public class AccountRepository(DynamicDbContext db) : IAccountRepository
     public Task<int> CountActiveAdminsAsync(CancellationToken ct) =>
         db.Set<AppUser>().CountAsync(u => u.IsActive && u.IsSystemAdmin, ct);
 
-    public async Task SetMembershipsAsync(string userId, IReadOnlyCollection<long> groupIds, CancellationToken ct)
+    public async Task<List<long>> SetMembershipsAsync(string userId, IReadOnlyCollection<long> groupIds, CancellationToken ct)
     {
         var set = db.Set<UserGroupMapping>();
-        set.RemoveRange(await set.Where(m => m.UserId == userId).ToListAsync(ct));
+        var old = await set.Where(m => m.UserId == userId).ToListAsync(ct);
+        set.RemoveRange(old);
         set.AddRange(groupIds.Distinct().Select(id => new UserGroupMapping { GroupId = id, UserId = userId }));
+        return [.. old.Select(m => m.GroupId).Distinct().Order()];
     }
 
     public async Task<bool> GroupsExistAsync(IReadOnlyCollection<long> groupIds, CancellationToken ct)
@@ -58,17 +60,27 @@ public class AccountRepository(DynamicDbContext db) : IAccountRepository
             && string.Equals(n.Trim(), name.Trim(), StringComparison.OrdinalIgnoreCase));
     }
 
+    public async Task<Dictionary<string, string>> GetDisplayNamesAsync(IReadOnlyCollection<string> userIds, CancellationToken ct)
+    {
+        if (userIds.Count == 0) return [];
+        var distinct = userIds.Distinct().ToList();
+        return await db.Set<AppUser>().AsNoTracking().Where(u => distinct.Contains(u.UserId))
+            .ToDictionaryAsync(u => u.UserId, u => u.DisplayName, ct);
+    }
+
     public async Task<bool> UsersExistAsync(IReadOnlyCollection<string> userIds, CancellationToken ct)
     {
         var distinct = userIds.Distinct().ToList();
         return await db.Set<AppUser>().CountAsync(u => distinct.Contains(u.UserId), ct) == distinct.Count;
     }
 
-    public async Task SetGroupMembersAsync(long groupId, IReadOnlyCollection<string> userIds, CancellationToken ct)
+    public async Task<List<string>> SetGroupMembersAsync(long groupId, IReadOnlyCollection<string> userIds, CancellationToken ct)
     {
         var set = db.Set<UserGroupMapping>();
-        set.RemoveRange(await set.Where(m => m.GroupId == groupId).ToListAsync(ct));
+        var old = await set.Where(m => m.GroupId == groupId).ToListAsync(ct);
+        set.RemoveRange(old);
         set.AddRange(userIds.Distinct().Select(id => new UserGroupMapping { GroupId = groupId, UserId = id }));
+        return [.. old.Select(m => m.UserId).Distinct().Order(StringComparer.Ordinal)];
     }
 
     public async Task<GroupImpact> GetGroupImpactAsync(long groupId, CancellationToken ct)

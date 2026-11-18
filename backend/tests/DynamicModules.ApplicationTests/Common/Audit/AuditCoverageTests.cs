@@ -1,0 +1,66 @@
+using System.Runtime.CompilerServices;
+using DynamicModules.Application.Common;
+using DynamicModules.Application.Common.Audit;
+using DynamicModules.Application.Common.Security;
+using DynamicModules.Domain.Entities.Dynamic;
+using FluentAssertions;
+
+namespace DynamicModules.ApplicationTests.Common.Audit;
+
+/// <summary>
+/// A05（維運設計 §17.8）：所有交易型、而且是系統管理或設計器寫入的請求都要有稽核宣告；例外列在白名單並寫理由。
+/// 宣告的動作代碼要登記在 <see cref="AuditActions"/>，目標種類要是 <see cref="AuditTargets"/> 之一。
+/// </summary>
+public class AuditCoverageTests
+{
+    /// <summary>不寫稽核的交易型管理或設計請求（型別 → 理由）。新請求忘了宣告就在這裡失敗。</summary>
+    /// <remarks>目前沒有例外：Demo 資料產生器（GenerateDemoDataRequest）不是管理或設計請求，內部步驟照常各記一列。</remarks>
+    private static readonly Dictionary<Type, string> Exempt = [];
+
+    private static IEnumerable<Type> RequestTypes() =>
+        typeof(ITransactionalRequest).Assembly.GetTypes()
+            .Where(t => t is { IsClass: true, IsAbstract: false } && typeof(ITransactionalRequest).IsAssignableFrom(t))
+            .Where(t => typeof(ISystemAdminRequest).IsAssignableFrom(t) || IsDesignerWrite(t));
+
+    private static bool IsDesignerWrite(Type t) =>
+        typeof(IDesignerRequest).IsAssignableFrom(t)
+        && ((IDesignerRequest)RuntimeHelpers.GetUninitializedObject(t)).RequiredDesignerAction != PermissionAction.Read;
+
+    [Fact]
+    public void EveryAdminOrDesignerWrite_IsAudited_OrExemptWithReason()
+    {
+        var missing = RequestTypes()
+            .Where(t => !typeof(IAuditedRequest).IsAssignableFrom(t) && !Exempt.ContainsKey(t))
+            .Select(t => t.FullName).OrderBy(n => n).ToList();
+        missing.Should().BeEmpty("每個管理與設計類寫入都要實作 IAuditedRequest，或列進白名單並寫理由；缺：" + string.Join("、", missing));
+        Exempt.Values.Where(string.IsNullOrWhiteSpace).Should().BeEmpty("白名單每一項都要寫理由");
+        Exempt.Keys.Where(t => !RequestTypes().Contains(t)).Should().BeEmpty("白名單只放還存在、而且在檢查範圍內的請求");
+    }
+
+    [Fact]
+    public void DeclaredActions_AreRegistered_AndTargetKindsAreKnown()
+    {
+        var targets = typeof(AuditTargets).GetFields().Select(f => (string)f.GetValue(null)!).ToHashSet();
+        var audited = typeof(ITransactionalRequest).Assembly.GetTypes()
+            .Where(t => t is { IsClass: true, IsAbstract: false } && typeof(IAuditedRequest).IsAssignableFrom(t));
+        foreach (var t in audited)
+        {
+            var action = ((IAuditedRequest)RuntimeHelpers.GetUninitializedObject(t)).Audit;
+            AuditActions.Find(action.Code).Should().NotBeNull($"{t.Name} 的動作 {action.Code} 要登記在 AuditActions");
+            if (action.TargetKind is not null) targets.Should().Contain(action.TargetKind, t.Name);
+        }
+    }
+
+    [Fact]
+    public void Catalog_CodesUniqueAndCamelCase_GroupsKnown_FloorIsHighRisk()
+    {
+        AuditActions.All.Select(e => e.Code).Should().OnlyHaveUniqueItems();
+        AuditActions.All.Should().OnlyContain(e => AuditActions.Groups.Contains(e.Group));
+        AuditActions.All.Should().OnlyContain(e => System.Text.RegularExpressions.Regex.IsMatch(e.Code, "^[a-z][A-Za-z]*(\\.[a-z][A-Za-z]*)+$"), "代碼是 <分組或對象>.<動詞>、camelCase");
+        // C7 地板：改權限、套用或刪除應用程式套件、刪模組或欄位；另加授予或拿掉系統管理員（使用者建立與修改）
+        foreach (var code in new[] { "permission.update", "app.open", "app.import", "app.delete", "module.delete", "field.delete", "user.create", "user.update" })
+            AuditActions.Find(code)!.Risk.Should().Be(AuditRiskLevel.HighRisk, code);
+        AuditActions.CodesOf(AuditActions.Group).Should().Contain("group.setMembers").And.NotContain("user.update");
+        AuditActions.CodesOf("nope").Should().BeEmpty();
+    }
+}

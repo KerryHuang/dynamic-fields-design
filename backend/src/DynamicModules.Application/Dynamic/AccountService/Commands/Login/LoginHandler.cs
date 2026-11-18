@@ -1,5 +1,8 @@
 using DynamicModules.Application.Common;
+using DynamicModules.Application.Common.Audit;
+using DynamicModules.Application.Common.Observability;
 using DynamicModules.Application.Common.Security;
+using DynamicModules.Domain.Entities.Dynamic;
 using DynamicModules.Application.Dynamic.AccountService.Data;
 using DynamicModules.Domain.Repositories.Dynamic;
 using MediatR;
@@ -8,9 +11,13 @@ using Microsoft.Extensions.Logging;
 namespace DynamicModules.Application.Dynamic.AccountService.Commands.Login;
 
 public class LoginHandler(
-    IAccountRepository accounts, IPasswordService passwords, IUnitOfWork uow, TimeProvider time, LoginThrottle throttle, ILogger<LoginHandler> logger)
+    IAccountRepository accounts, IPasswordService passwords, IUnitOfWork uow, TimeProvider time, LoginThrottle throttle, IAuditLog audit,
+    ILogger<LoginHandler> logger)
     : IRequestHandler<LoginRequest, ServiceResult>
 {
+    /// <summary>一次登入嘗試的結果與稽核內容；<see cref="Throttled"/> 的不逐筆寫稽核（O2-T3）。</summary>
+    private sealed record Outcome(ServiceResult Result, string? UserId, string? Reason, bool Throttled = false);
+
     // 同一帳號的登入序列化：失敗計數是「讀、驗 PBKDF2、寫」，並行猜測會互相覆蓋而超過 5 次。
     // 只在單一站台實例內有效（假設只有一個程序服務這個資料庫；多實例要改用資料庫層的原子更新）。
     private static readonly SemaphoreSlim[] Locks = Enumerable.Range(0, 64).Select(_ => new SemaphoreSlim(1, 1)).ToArray();
@@ -19,6 +26,27 @@ public class LoginHandler(
     private static string? _dummyHash;
 
     public async Task<ServiceResult> Handle(LoginRequest request, CancellationToken ct)
+    {
+        // 登入的稽核身分情境：不從請求帶的舊 cookie 取行為者（維運設計 §17.2.1）
+        using var signIn = AuditOrigin.BeginSignIn();
+        var outcome = await AttemptAsync(request, ct);
+        if (outcome.Throttled)
+        {
+            OpsMetrics.LoginThrottled.Add(1);
+            return outcome.Result;
+        }
+        // 寫不進稽核不擋登入（§5.6）：TryWriteNowAsync 只記 Error log
+        await audit.TryWriteNowAsync(outcome.Result.Data is AuthUserResponse ok
+            ? new AuditEntry("login.succeeded", AuditResult.Success, AuditTargets.User, ok.UserId, ok.DisplayName,
+                Summary: Method, ActorOverride: new ActorOverride(ok.UserId))
+            : new AuditEntry("login.failed", AuditResult.Denied, outcome.UserId is null ? null : AuditTargets.User, outcome.UserId,
+                ReasonCode: outcome.Reason, Summary: Method), ct);
+        return outcome.Result;
+    }
+
+    private static readonly string? Method = new AuditSummary().Add("method", "password").ToJson();
+
+    private async Task<Outcome> AttemptAsync(LoginRequest request, CancellationToken ct)
     {
         var userId = (request.UserId ?? "").Trim().ToLowerInvariant();
         var gate = Locks[StripeOf(userId)];
@@ -29,8 +57,8 @@ public class LoginHandler(
             // 超長輸入不進限流表（避免匿名者灌爆記憶體）；截斷不影響比對，反正帳號也不會存在
             var key = userId.Length > 128 ? userId[..128] : userId;
             if (!throttle.TryBegin(key, ip))
-                return Fail(null, "來源或帳號嘗試過於頻繁", request.Password ?? "");
-            ServiceResult result;
+                return Fail(null, "來源或帳號嘗試過於頻繁", null, request.Password ?? "") with { Throttled = true };
+            Outcome result;
             try
             {
                 result = await LoginAsync(userId, request.Password ?? "", ct);
@@ -40,7 +68,7 @@ public class LoginHandler(
                 throttle.Release(key, ip); // 例外不算失敗，歸還名額
                 throw;
             }
-            throttle.Complete(key, ip, result.Data is AuthUserResponse);
+            throttle.Complete(key, ip, result.Result.Data is AuthUserResponse);
             return result;
         }
         finally
@@ -49,15 +77,15 @@ public class LoginHandler(
         }
     }
 
-    private async Task<ServiceResult> LoginAsync(string userId, string password, CancellationToken ct)
+    private async Task<Outcome> LoginAsync(string userId, string password, CancellationToken ct)
     {
         var user = await accounts.GetTrackedAsync(userId, ct);
-        if (user is null) return Fail(null, "帳號不存在", password);
-        if (!user.IsActive) return Fail(user.UserId, "帳號已停用", password);
+        if (user is null) return Fail(null, "帳號不存在", "unknownAccount", password);
+        if (!user.IsActive) return Fail(user.UserId, "帳號已停用", "inactive", password);
 
         var now = time.GetUtcNow();
-        if (user.LockedUntil is { } until && until > now) return Fail(user.UserId, "帳號鎖定中", password);
-        if (user.PasswordHash is null) return Fail(user.UserId, "帳號尚未設定密碼", password);
+        if (user.LockedUntil is { } until && until > now) return Fail(user.UserId, "帳號鎖定中", "locked", password);
+        if (user.PasswordHash is null) return Fail(user.UserId, "帳號尚未設定密碼", "noPassword", password);
 
         // 鎖定已到期：先歸零，之後輸錯一次不該立刻再鎖
         var lockExpired = user.LockedUntil is not null;
@@ -71,7 +99,7 @@ public class LoginHandler(
         {
             // 失敗次數改由 LoginThrottle 依來源計算，不再寫入帳號（否則匿名者能鎖住任何人）
             if (lockExpired) await uow.CommitAsync(ct);
-            return Fail(user.UserId, "密碼錯誤");
+            return Fail(user.UserId, "密碼錯誤", "wrongPassword");
         }
 
         // 平常登入不寫資料庫（Demo 產生器的寫入交易會鎖表）；有失敗紀錄時才歸零並寫入
@@ -81,7 +109,7 @@ public class LoginHandler(
             await uow.CommitAsync(ct);
         }
         logger.LogInformation("帳號 {UserId} 登入成功", user.UserId);
-        return ServiceResult.Success(new AuthUserResponse(user.UserId, user.DisplayName, user.MustChangePassword, user.SecurityStamp));
+        return new Outcome(ServiceResult.Success(new AuthUserResponse(user.UserId, user.DisplayName, user.MustChangePassword, user.SecurityStamp)), user.UserId, null);
     }
 
     private static int StripeOf(string userId)
@@ -92,12 +120,13 @@ public class LoginHandler(
     }
 
     /// <param name="storedUserId">資料庫裡查到的帳號；帳號不存在時為 null，此時絕不記錄輸入（匿名輸入可能是誤打的密碼、超長或含換行的字串）。</param>
-    private ServiceResult Fail(string? storedUserId, string reason, string? passwordToBurn = null)
+    /// <param name="reasonCode">稽核的原因代碼（維運設計 §17.4 <c>ReasonCode</c>）。</param>
+    private Outcome Fail(string? storedUserId, string reason, string? reasonCode, string? passwordToBurn = null)
     {
         if (passwordToBurn is not null)
             passwords.Verify(_dummyHash ??= passwords.Hash("dummy-password-for-timing"), passwordToBurn);
         if (storedUserId is null) logger.LogWarning("登入失敗：{Reason}（帳號不存在，不記錄輸入）", reason);
         else logger.LogWarning("帳號 {UserId} 登入失敗：{Reason}", storedUserId, reason);
-        return ServiceResult.Unauthorized(MessageRef.Of(MessageText.LoginFailed));
+        return new Outcome(ServiceResult.Unauthorized(MessageRef.Of(MessageText.LoginFailed)), storedUserId, reasonCode);
     }
 }

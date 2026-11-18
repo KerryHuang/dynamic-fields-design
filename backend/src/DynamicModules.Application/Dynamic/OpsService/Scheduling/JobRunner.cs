@@ -1,4 +1,5 @@
 using DynamicModules.Application.Common;
+using DynamicModules.Application.Common.Audit;
 using DynamicModules.Application.Common.Observability;
 using DynamicModules.Application.Dynamic.PolicyService;
 using DynamicModules.Domain.Entities.Dynamic;
@@ -109,6 +110,8 @@ public sealed class JobRunner(
         try
         {
             await using var scope = scopes.CreateAsyncScope();
+            // 工作裡的稽核記來源管道 job、行為者「系統」（維運設計 §17.2.1、B3）
+            using var origin = AuditOrigin.Begin(AuditChannel.Job);
             outcome = await job.RunAsync(new JobRunContext(scope.ServiceProvider, job.Key, instance.InstanceId, time), work.Token);
         }
         catch (JobLeaseLostException e)

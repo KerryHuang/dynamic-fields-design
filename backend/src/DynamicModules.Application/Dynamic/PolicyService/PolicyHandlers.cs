@@ -1,5 +1,6 @@
 using System.Text.Json;
 using DynamicModules.Application.Common;
+using DynamicModules.Application.Common.Audit;
 using DynamicModules.Application.Common.Security;
 using DynamicModules.Application.Common.Time;
 using DynamicModules.Domain.Entities.Dynamic;
@@ -24,18 +25,23 @@ public class GetSystemPoliciesHandler(IPolicyReader reader) : IRequestHandler<Ge
 }
 
 public class UpdateSystemPolicyHandler(
-    ISystemSettingRepository settings, IPolicyReader reader, IUnitOfWork uow, IAccountRepository accounts, IPermissionRepository permissions)
+    ISystemSettingRepository settings, IPolicyReader reader, IUnitOfWork uow, IAccountRepository accounts, IPermissionRepository permissions,
+    AuditContext audit)
     : IRequestHandler<UpdateSystemPolicyRequest, ServiceResult>
 {
     public async Task<ServiceResult> Handle(UpdateSystemPolicyRequest request, CancellationToken ct)
     {
         if (PolicyCatalog.Find(request.Code) is not { } def) return ServiceResult.NotFound(PolicyMessages.NotFound);
+        // 稽核的舊值與新值：null＝出廠值（維運設計 §17.2.1）
+        var old = await settings.GetValueAsync(def.SettingKey, ct);
+        string? canonicalValue = null;
         if (request.Value is { ValueKind: not (JsonValueKind.Null or JsonValueKind.Undefined) } value)
         {
             if (PolicyJson.FromJson(def, value) is not { } canonical) return PolicyValueInvalid(def, value);
             if (await RecipientCheck.MissingAsync(def, canonical, accounts, permissions, ct) is { Count: > 0 } missing)
                 return ServiceResult.Invalid(new Dictionary<string, string[]> { ["value"] = [PolicyMessages.RecipientsMissing(missing)] });
             await settings.SetAsync(def.SettingKey, canonical, ct);
+            canonicalValue = canonical;
         }
         else
         {
@@ -43,6 +49,7 @@ public class UpdateSystemPolicyHandler(
         }
         await uow.CommitAsync(ct);
         reader.Invalidate();
+        audit.Describe(new { Value = old }, new { Value = canonicalValue });
         return ServiceResult.Success(PolicyJson.System(def, await reader.ResolveAsync(def, null, ct)));
     }
 
@@ -69,7 +76,7 @@ public class GetModulePoliciesHandler(IModuleRepository modules, IPolicyReader r
 
 public class UpdateModulePolicyHandler(
     IModuleRepository modules, IModulePolicyRepository overrides, IPolicyReader reader, IUnitOfWork uow, ICurrentUser user, IBusinessTime time,
-    IAccountRepository accounts, IPermissionRepository permissions)
+    IAccountRepository accounts, IPermissionRepository permissions, AuditContext audit)
     : IRequestHandler<UpdateModulePolicyRequest, ServiceResult>
 {
     public async Task<ServiceResult> Handle(UpdateModulePolicyRequest request, CancellationToken ct)
@@ -81,6 +88,7 @@ public class UpdateModulePolicyHandler(
             return ServiceResult.Invalid(new Dictionary<string, string[]> { ["code"] = [PolicyMessages.SystemOnly] });
 
         var existing = await overrides.GetTrackedAsync(module.Id, def.Code, ct);
+        var old = existing?.Value;
         if (request.Value is { ValueKind: not (JsonValueKind.Null or JsonValueKind.Undefined) } value)
         {
             if (PolicyJson.FromJson(def, value) is not { } canonical) return UpdateSystemPolicyHandler.PolicyValueInvalid(def, value);
@@ -98,9 +106,12 @@ public class UpdateModulePolicyHandler(
         else if (existing is not null)
         {
             overrides.Remove(existing);
+            existing = null;
         }
         await uow.CommitAsync(ct);
         reader.Invalidate();
+        audit.Detail("moduleKey", module.Key);
+        audit.Describe(new { Value = old }, new { Value = existing?.Value });
         return ServiceResult.Success(PolicyJson.Module(def, await reader.ResolveAsync(def, module.Id, ct)));
     }
 }

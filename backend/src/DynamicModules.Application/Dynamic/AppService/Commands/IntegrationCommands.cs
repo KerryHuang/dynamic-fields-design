@@ -1,4 +1,5 @@
 using DynamicModules.Application.Common;
+using DynamicModules.Application.Common.Audit;
 using DynamicModules.Application.Common.Security;
 using DynamicModules.Application.Dynamic.AppService.Data;
 using DynamicModules.Application.Dynamic.AppService.Integrations;
@@ -9,15 +10,17 @@ namespace DynamicModules.Application.Dynamic.AppService.Commands;
 
 /// <summary>重試安裝或恢復整合：缺的補建、相同的沿用、定義被改過的標 Blocked（不覆寫）。可重複呼叫，結果相同。</summary>
 public record RetryIntegrationRequest(string AppKey, string Code)
-    : IRequest<ServiceResult>, ITransactionalRequest, IDesignerRequest, ISystemAdminRequest
+    : IRequest<ServiceResult>, ITransactionalRequest, IDesignerRequest, ISystemAdminRequest, IAuditedRequest
 {
+    public AuditAction Audit => AuditAction.For("app.integrationRetry", AuditTargets.Integration, $"{AppKey}:{Code}");
     public PermissionAction RequiredDesignerAction => PermissionAction.Edit;
 }
 
 /// <summary>啟用或停用整合（只改狀態，不改定義）。</summary>
 public record SetIntegrationEnabledRequest(string AppKey, string Code, bool Enabled)
-    : IRequest<ServiceResult>, ITransactionalRequest, IDesignerRequest, ISystemAdminRequest
+    : IRequest<ServiceResult>, ITransactionalRequest, IDesignerRequest, ISystemAdminRequest, IAuditedRequest
 {
+    public AuditAction Audit => AuditAction.For(Enabled ? "app.integrationEnable" : "app.integrationDisable", AuditTargets.Integration, $"{AppKey}:{Code}");
     public PermissionAction RequiredDesignerAction => PermissionAction.Edit;
 }
 

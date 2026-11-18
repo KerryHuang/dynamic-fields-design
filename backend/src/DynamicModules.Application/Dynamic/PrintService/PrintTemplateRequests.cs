@@ -1,4 +1,5 @@
 using DynamicModules.Application.Common;
+using DynamicModules.Application.Common.Audit;
 using DynamicModules.Application.Common.Security;
 using MediatR;
 
@@ -10,21 +11,24 @@ public record GetPrintTemplateDefinitionsRequest(string ModuleKey) : IRequest<Se
     public PermissionAction RequiredDesignerAction => PermissionAction.Read;
 }
 
-public record CreatePrintTemplateRequest(string ModuleKey, PrintTemplateInput Input) : IRequest<ServiceResult>, ITransactionalRequest, IDesignerRequest, IMasterDesignRequest
+public record CreatePrintTemplateRequest(string ModuleKey, PrintTemplateInput Input) : IRequest<ServiceResult>, ITransactionalRequest, IDesignerRequest, IMasterDesignRequest, IAuditedRequest
 {
+    public AuditAction Audit => AuditAction.For("printTemplate.create", AuditTargets.PrintTemplate, Input?.Key);
     public IReadOnlyList<MasterDesignTarget> MasterTargets => [new(ModuleKey: ModuleKey)];
     public PermissionAction RequiredDesignerAction => PermissionAction.Edit;
 }
 
 /// <summary>更新時代碼不能改。</summary>
-public record UpdatePrintTemplateRequest(string ModuleKey, string Key, PrintTemplateInput Input) : IRequest<ServiceResult>, ITransactionalRequest, IDesignerRequest, IMasterDesignRequest
+public record UpdatePrintTemplateRequest(string ModuleKey, string Key, PrintTemplateInput Input) : IRequest<ServiceResult>, ITransactionalRequest, IDesignerRequest, IMasterDesignRequest, IAuditedRequest
 {
+    public AuditAction Audit => AuditAction.For("printTemplate.update", AuditTargets.PrintTemplate, Key);
     public IReadOnlyList<MasterDesignTarget> MasterTargets => [new(ModuleKey: ModuleKey)];
     public PermissionAction RequiredDesignerAction => PermissionAction.Edit;
 }
 
-public record DeletePrintTemplateRequest(string ModuleKey, string Key) : IRequest<ServiceResult>, ITransactionalRequest, IDesignerRequest, IMasterDesignRequest
+public record DeletePrintTemplateRequest(string ModuleKey, string Key) : IRequest<ServiceResult>, ITransactionalRequest, IDesignerRequest, IMasterDesignRequest, IAuditedRequest
 {
+    public AuditAction Audit => AuditAction.For("printTemplate.delete", AuditTargets.PrintTemplate, Key);
     public IReadOnlyList<MasterDesignTarget> MasterTargets => [new(ModuleKey: ModuleKey)];
     public PermissionAction RequiredDesignerAction => PermissionAction.Edit;
 }

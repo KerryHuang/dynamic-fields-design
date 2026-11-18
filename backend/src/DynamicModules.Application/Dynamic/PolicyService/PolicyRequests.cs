@@ -1,5 +1,6 @@
 using System.Text.Json;
 using DynamicModules.Application.Common;
+using DynamicModules.Application.Common.Audit;
 using DynamicModules.Application.Common.Security;
 using MediatR;
 
@@ -10,7 +11,10 @@ public sealed record GetSystemPoliciesRequest : IRequest<ServiceResult>, ISystem
 
 /// <summary>設全系統值；Value 為 null 表示回到出廠值。</summary>
 public sealed record UpdateSystemPolicyRequest(string Code, JsonElement? Value)
-    : IRequest<ServiceResult>, ITransactionalRequest, ISystemAdminRequest;
+    : IRequest<ServiceResult>, ITransactionalRequest, ISystemAdminRequest, IAuditedRequest
+{
+    public AuditAction Audit => AuditAction.For("policy.set", AuditTargets.Policy, Code);
+}
 
 /// <summary>可模組覆寫的政策：全系統值與覆寫值。</summary>
 public sealed record GetModulePoliciesRequest(string ModuleKey) : IRequest<ServiceResult>, IDesignerRequest
@@ -20,8 +24,9 @@ public sealed record GetModulePoliciesRequest(string ModuleKey) : IRequest<Servi
 
 /// <summary>設模組覆寫值；Value 為 null 表示取消覆寫。共用主檔模組另要系統管理員（比照其他設計器寫入）。</summary>
 public sealed record UpdateModulePolicyRequest(string ModuleKey, string Code, JsonElement? Value)
-    : IRequest<ServiceResult>, ITransactionalRequest, IDesignerRequest, IMasterDesignRequest
+    : IRequest<ServiceResult>, ITransactionalRequest, IDesignerRequest, IMasterDesignRequest, IAuditedRequest
 {
+    public AuditAction Audit => AuditAction.For("policy.moduleSet", AuditTargets.Policy, Code);
     public IReadOnlyList<MasterDesignTarget> MasterTargets => [new(ModuleKey: ModuleKey)];
     public PermissionAction RequiredDesignerAction => PermissionAction.Edit;
 }

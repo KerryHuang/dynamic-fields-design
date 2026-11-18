@@ -1,10 +1,11 @@
 using DynamicModules.Application.Common;
+using DynamicModules.Application.Common.Audit;
 using DynamicModules.Domain.Repositories.Dynamic;
 using MediatR;
 
 namespace DynamicModules.Application.Dynamic.AccountService.Commands.SetGroupMembers;
 
-public class SetGroupMembersHandler(IAccountRepository accounts, IUnitOfWork uow) : IRequestHandler<SetGroupMembersRequest, ServiceResult>
+public class SetGroupMembersHandler(IAccountRepository accounts, IUnitOfWork uow, AuditContext audit) : IRequestHandler<SetGroupMembersRequest, ServiceResult>
 {
     public async Task<ServiceResult> Handle(SetGroupMembersRequest request, CancellationToken ct)
     {
@@ -12,8 +13,9 @@ public class SetGroupMembersHandler(IAccountRepository accounts, IUnitOfWork uow
         if (!await accounts.UsersExistAsync(request.UserIds, ct))
             return ServiceResult.Invalid("userIds", MessageRef.Of(MessageText.UserNotFound));
 
-        await accounts.SetGroupMembersAsync(request.GroupId, request.UserIds, ct);
+        var oldMembers = await accounts.SetGroupMembersAsync(request.GroupId, request.UserIds, ct);
         await uow.CommitAsync(ct);
+        audit.Describe(new { UserIds = oldMembers }, new { UserIds = request.UserIds.Distinct().Order(StringComparer.Ordinal).ToList() });
         return ServiceResult.Success();
     }
 }

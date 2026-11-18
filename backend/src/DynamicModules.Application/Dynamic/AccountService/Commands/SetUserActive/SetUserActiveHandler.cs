@@ -1,4 +1,5 @@
 using DynamicModules.Application.Common;
+using DynamicModules.Application.Common.Audit;
 using DynamicModules.Application.Common.Security;
 using DynamicModules.Domain.Repositories.Dynamic;
 using MediatR;
@@ -7,7 +8,7 @@ using Microsoft.Extensions.Logging;
 namespace DynamicModules.Application.Dynamic.AccountService.Commands.SetUserActive;
 
 public class SetUserActiveHandler(
-    ICurrentUser current, IAccountRepository accounts, IUnitOfWork uow, ILogger<SetUserActiveHandler> logger)
+    ICurrentUser current, IAccountRepository accounts, IUnitOfWork uow, AuditContext audit, ILogger<SetUserActiveHandler> logger)
     : IRequestHandler<SetUserActiveRequest, ServiceResult>
 {
     public async Task<ServiceResult> Handle(SetUserActiveRequest request, CancellationToken ct)
@@ -24,8 +25,11 @@ public class SetUserActiveHandler(
             user.SecurityStamp = Guid.NewGuid().ToString("N");
         }
 
+        var wasActive = user.IsActive;
         user.IsActive = request.IsActive;
         await uow.CommitAsync(ct);
+        audit.Target(label: user.DisplayName);
+        audit.Describe(new { IsActive = wasActive }, new { request.IsActive });
         logger.LogInformation("管理員 {Admin} 將帳號 {UserId} 設為{State}", current.UserId, user.UserId, request.IsActive ? "啟用" : "停用");
         return ServiceResult.Success();
     }

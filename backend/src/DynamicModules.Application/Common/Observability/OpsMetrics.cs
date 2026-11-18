@@ -17,6 +17,9 @@ public static class OpsMetrics
 
     public static readonly Histogram<double> JobDurationMs = Meter.CreateHistogram<double>("formwright.job.duration", unit: "ms");
 
+    /// <summary>被 LoginThrottle 擋下的登入嘗試；不逐筆寫稽核（O2-T3：匿名者能觸發的寫入要有上限）。</summary>
+    public static readonly Counter<long> LoginThrottled = Meter.CreateCounter<long>("formwright.login.throttled");
+
     public static readonly Counter<long> ClientErrors = Meter.CreateCounter<long>("formwright.client_errors");
 
     /// <summary>未處理例外且能歸屬到某條規則的次數；tag <c>ruleKind</c>。</summary>

@@ -1,6 +1,7 @@
 using System.Text;
 using System.Text.Json;
 using DynamicModules.Application.Common;
+using DynamicModules.Application.Common.Audit;
 using DynamicModules.Application.Common.Security;
 using DynamicModules.Application.Common.Time;
 using DynamicModules.Application.Dynamic.AppService.Data;
@@ -15,8 +16,9 @@ using MediatR;
 namespace DynamicModules.Application.Dynamic.AppService.Commands;
 
 /// <summary>Content 是套件檔的位元組（v1 範本檔或 v2 套件檔）。</summary>
-public record ImportAppPackageRequest(byte[] Content) : IRequest<ServiceResult>, ITransactionalRequest, IDesignerRequest, ISystemAdminRequest
+public record ImportAppPackageRequest(byte[] Content) : IRequest<ServiceResult>, ITransactionalRequest, IDesignerRequest, ISystemAdminRequest, IAuditedRequest
 {
+    public AuditAction Audit => AuditAction.For("app.import", AuditTargets.App, null);
     public PermissionAction RequiredDesignerAction => PermissionAction.Add;
 }
 

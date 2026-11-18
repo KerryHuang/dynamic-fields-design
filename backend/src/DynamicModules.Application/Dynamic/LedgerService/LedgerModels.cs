@@ -1,4 +1,5 @@
 using DynamicModules.Application.Common;
+using DynamicModules.Application.Common.Audit;
 using DynamicModules.Application.Common.Security;
 using MediatR;
 
@@ -8,14 +9,16 @@ public record LedgerInput(long ReversalFieldId, List<long> Negate, List<List<lon
 
 public record LedgerResponse(string ModuleKey, long ReversalFieldId, List<long> Negate, List<List<long>> Swap, int RecordCount);
 
-public record SaveLedgerRequest(string ModuleKey, LedgerInput Input) : IRequest<ServiceResult>, ITransactionalRequest, IDesignerRequest, IMasterDesignRequest
+public record SaveLedgerRequest(string ModuleKey, LedgerInput Input) : IRequest<ServiceResult>, ITransactionalRequest, IDesignerRequest, IMasterDesignRequest, IAuditedRequest
 {
+    public AuditAction Audit => AuditAction.For("ledger.save", AuditTargets.Module, ModuleKey);
     public IReadOnlyList<MasterDesignTarget> MasterTargets => [new(ModuleKey: ModuleKey)];
     public PermissionAction RequiredDesignerAction => PermissionAction.Edit;
 }
 
-public record DeleteLedgerRequest(string ModuleKey) : IRequest<ServiceResult>, ITransactionalRequest, IDesignerRequest, IMasterDesignRequest
+public record DeleteLedgerRequest(string ModuleKey) : IRequest<ServiceResult>, ITransactionalRequest, IDesignerRequest, IMasterDesignRequest, IAuditedRequest
 {
+    public AuditAction Audit => AuditAction.For("ledger.delete", AuditTargets.Module, ModuleKey);
     public IReadOnlyList<MasterDesignTarget> MasterTargets => [new(ModuleKey: ModuleKey)];
     public PermissionAction RequiredDesignerAction => PermissionAction.Edit;
 }

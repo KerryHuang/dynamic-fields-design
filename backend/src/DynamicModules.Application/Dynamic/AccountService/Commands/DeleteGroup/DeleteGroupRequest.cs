@@ -1,7 +1,11 @@
 using DynamicModules.Application.Common;
+using DynamicModules.Application.Common.Audit;
 using DynamicModules.Application.Common.Security;
 using MediatR;
 
 namespace DynamicModules.Application.Dynamic.AccountService.Commands.DeleteGroup;
 
-public record DeleteGroupRequest(long GroupId) : IRequest<ServiceResult>, ITransactionalRequest, ISystemAdminRequest;
+public record DeleteGroupRequest(long GroupId) : IRequest<ServiceResult>, ITransactionalRequest, ISystemAdminRequest, IAuditedRequest
+{
+    public AuditAction Audit => AuditAction.For("group.delete", AuditTargets.Group, GroupId);
+}

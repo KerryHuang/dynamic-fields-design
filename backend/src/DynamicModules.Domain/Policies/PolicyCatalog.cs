@@ -104,6 +104,14 @@ public static class PolicyCatalog
     public static readonly PolicyDefinition OpsClientErrorCollection =
         new("ops.clientErrorCollection", "ops", PolicyKind.Boolean, PolicyScope.System, "true");
 
+    /// <summary>O2：維運的自動結案、重複提醒、各表依保留天數清理的間隔（分鐘；維運設計 §17.6.1）。改值從下一次排程開始生效。</summary>
+    public static readonly PolicyDefinition OpsUpkeepMinutes =
+        new("ops.upkeepMinutes", "ops", PolicyKind.Integer, PolicyScope.System, "60", 5, 1440, Unit: "minutes");
+
+    /// <summary>O2：稽核紀錄保留天數；超過的由 <c>ops.upkeep</c> 分批清除（維運設計 §17.6.1）。</summary>
+    public static readonly PolicyDefinition OpsAuditRetentionDays =
+        new("ops.auditRetentionDays", "ops", PolicyKind.Integer, PolicyScope.System, "365", 90, 3650, Unit: "days");
+
     /// <summary>A3：一個簽核流程的關卡數。</summary>
     public static readonly PolicyDefinition ApprovalMaxStages =
         new("approval.maxStages", "approval", PolicyKind.Integer, PolicyScope.Module, "10", 1, 20, Unit: "count");
@@ -164,7 +172,7 @@ public static class PolicyCatalog
          TaskSupervisorScope, TaskSupervisorScopeRecursive, TaskMaxSubtasksPerTask,
          NotificationRetentionDays, NotificationReminderScanMinutes, CalendarWeekStart,
          AttachmentMaxFileBytes, AttachmentMaxFilesPerField, AttachmentAllowedExtensions, AttachmentMaxFilesPerComment,
-         OpsSlowRequestMs, OpsClientErrorCollection,
+         OpsSlowRequestMs, OpsClientErrorCollection, OpsUpkeepMinutes, OpsAuditRetentionDays,
          ApprovalMaxStages, ApprovalMaxBranches, ApprovalMaxApprovers, ApprovalMaxDueHours, ApprovalMaxCommentLength, ApprovalMaxManagerLevel,
          ApprovalAllowSelfApproval, ApprovalAdminBypassTransitionGroups, ApprovalMaxAddSignUsers, ApprovalMaxAddSignStages,
          ApprovalOverdueReminderHours, ApprovalDefaultFallbackApprovers, ApprovalAlertRecipients];

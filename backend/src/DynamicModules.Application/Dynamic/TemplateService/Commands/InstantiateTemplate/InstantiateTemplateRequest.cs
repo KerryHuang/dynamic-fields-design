@@ -1,4 +1,5 @@
 using DynamicModules.Application.Common;
+using DynamicModules.Application.Common.Audit;
 using DynamicModules.Application.Common.Security;
 using DynamicModules.Domain.ValueObjects;
 using MediatR;
@@ -7,8 +8,9 @@ namespace DynamicModules.Application.Dynamic.TemplateService.Commands.Instantiat
 
 /// <summary>Modules 只需列要改的模組；ExcludeFields 是 &lt;模組代號&gt;.&lt;欄位代號&gt;。兩個清單為 null 時視為空清單。</summary>
 public record InstantiateTemplateRequest(string TemplateKey, List<InstantiateModuleInput> Modules, List<string> ExcludeFields)
-    : IRequest<ServiceResult>, ITransactionalRequest, IDesignerRequest
+    : IRequest<ServiceResult>, ITransactionalRequest, IDesignerRequest, IAuditedRequest
 {
+    public AuditAction Audit => AuditAction.For("template.instantiate", AuditTargets.Template, TemplateKey);
     public List<InstantiateModuleInput> Modules { get; init; } = Modules ?? [];
     public List<string> ExcludeFields { get; init; } = ExcludeFields ?? [];
 

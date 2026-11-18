@@ -1,12 +1,14 @@
 using DynamicModules.Application.Common;
+using DynamicModules.Application.Common.Audit;
 using DynamicModules.Application.Common.Security;
 using DynamicModules.Domain.Repositories.Dynamic;
 using MediatR;
 
 namespace DynamicModules.Application.Dynamic.ConversionService.Commands.DeleteConversion;
 
-public record DeleteConversionRequest(string Key) : IRequest<ServiceResult>, ITransactionalRequest, IDesignerRequest, IMasterDesignRequest
+public record DeleteConversionRequest(string Key) : IRequest<ServiceResult>, ITransactionalRequest, IDesignerRequest, IMasterDesignRequest, IAuditedRequest
 {
+    public AuditAction Audit => AuditAction.For("conversion.delete", AuditTargets.Conversion, Key);
     public IReadOnlyList<MasterDesignTarget> MasterTargets => [new(ConversionKey: Key)];
     public PermissionAction RequiredDesignerAction => PermissionAction.Edit;
 }

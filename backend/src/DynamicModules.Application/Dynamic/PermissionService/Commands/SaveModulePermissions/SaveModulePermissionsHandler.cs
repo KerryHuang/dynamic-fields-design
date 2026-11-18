@@ -1,4 +1,5 @@
 using DynamicModules.Application.Common;
+using DynamicModules.Application.Common.Audit;
 using DynamicModules.Application.Dynamic.PermissionService.Data;
 using DynamicModules.Domain.Entities.Dynamic;
 using DynamicModules.Domain.Repositories.Dynamic;
@@ -9,7 +10,7 @@ namespace DynamicModules.Application.Dynamic.PermissionService.Commands.SaveModu
 
 public class SaveModulePermissionsHandler(
     IModuleRepository modules, IPermissionRepository permissions, IUnitOfWork uow, EventService.EventHiddenGuard hiddenGuard,
-    AppService.SharedMasters.MasterGrants masterGrants, ISharedMasterRepository shared)
+    AppService.SharedMasters.MasterGrants masterGrants, ISharedMasterRepository shared, AuditContext audit)
     : IRequestHandler<SaveModulePermissionsRequest, ServiceResult>
 {
     public async Task<ServiceResult> Handle(SaveModulePermissionsRequest request, CancellationToken ct)
@@ -92,6 +93,7 @@ public class SaveModulePermissionsHandler(
         if (await hiddenGuard.FindViolationAsync(module, hiding, ct) is { } violation)
             return ServiceResult.Invalid(new Dictionary<string, string[]> { ["fields"] = [violation] });
 
+        var before = await ResponseAsync(module, allGroups, ct);
         var rows = new ModulePermissionRows(
             body.Groups.Where(g => !g.Privileges.IsEmpty).Select(g => Fill(new GroupProgramPrivilege { GroupId = g.GroupId }, module, g.Privileges)).ToList(),
             body.Users.Where(u => !u.Privileges.IsEmpty).Select(u => Fill(new UserProgramPrivilege { UserId = u.UserId }, module, u.Privileges)).ToList(),
@@ -109,12 +111,21 @@ public class SaveModulePermissionsHandler(
             await uow.CommitAsync(ct);
             await masterGrants.RecalcAsync(module.Id, null, ct);
             await uow.CommitAsync(ct);
-            return ServiceResult.Success(await ResponseAsync(module, allGroups, ct));
+            return Saved(before, await ResponseAsync(module, allGroups, ct));
         }
 
         await permissions.ReplaceModuleRowsAsync(module, rows, ct);
         await uow.CommitAsync(ct);
-        return ServiceResult.Success(await ResponseAsync(module, allGroups, ct));
+        return Saved(before, await ResponseAsync(module, allGroups, ct));
+    }
+
+    /// <summary>稽核只記變動的格子（維運設計 §17.2.1）。</summary>
+    private ServiceResult Saved(ModulePermissionsResponse before, ModulePermissionsResponse after)
+    {
+        var cells = PermissionAuditCells.Diff(before, after);
+        audit.Detail("changeCount", cells.Count);
+        audit.Detail("changes", cells.Take(PermissionAuditCells.MaxCells).ToList());
+        return ServiceResult.Success(after);
     }
 
     private async Task<ModulePermissionsResponse> ResponseAsync(Module module, List<PermissionGroup> allGroups, CancellationToken ct)

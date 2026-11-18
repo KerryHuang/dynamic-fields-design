@@ -1,4 +1,5 @@
 using DynamicModules.Application.Common;
+using DynamicModules.Application.Common.Audit;
 using DynamicModules.Application.Common.Security;
 using DynamicModules.Domain.Entities.Dynamic;
 using DynamicModules.Domain.ValueObjects;
@@ -16,21 +17,24 @@ public static class CheckMapping
         new(c.Key, c.NameI18n, moduleKey, c.Active, c.Definition, notices ?? []);
 }
 
-public record CreateCheckRequest(CheckInput Input) : IRequest<ServiceResult>, ITransactionalRequest, IDesignerRequest, IMasterDesignRequest
+public record CreateCheckRequest(CheckInput Input) : IRequest<ServiceResult>, ITransactionalRequest, IDesignerRequest, IMasterDesignRequest, IAuditedRequest
 {
+    public AuditAction Audit => AuditAction.For("check.create", AuditTargets.Check, Input?.Key);
     public IReadOnlyList<MasterDesignTarget> MasterTargets => [new(ModuleKey: Input.ModuleKey)];
     public PermissionAction RequiredDesignerAction => PermissionAction.Edit;
 }
 
 /// <summary>更新時代碼與模組不能改。</summary>
-public record UpdateCheckRequest(string Key, CheckInput Input) : IRequest<ServiceResult>, ITransactionalRequest, IDesignerRequest, IMasterDesignRequest
+public record UpdateCheckRequest(string Key, CheckInput Input) : IRequest<ServiceResult>, ITransactionalRequest, IDesignerRequest, IMasterDesignRequest, IAuditedRequest
 {
+    public AuditAction Audit => AuditAction.For("check.update", AuditTargets.Check, Key);
     public IReadOnlyList<MasterDesignTarget> MasterTargets => [new(CheckKey: Key), new(ModuleKey: Input.ModuleKey)];
     public PermissionAction RequiredDesignerAction => PermissionAction.Edit;
 }
 
-public record DeleteCheckRequest(string Key) : IRequest<ServiceResult>, ITransactionalRequest, IDesignerRequest, IMasterDesignRequest
+public record DeleteCheckRequest(string Key) : IRequest<ServiceResult>, ITransactionalRequest, IDesignerRequest, IMasterDesignRequest, IAuditedRequest
 {
+    public AuditAction Audit => AuditAction.For("check.delete", AuditTargets.Check, Key);
     public IReadOnlyList<MasterDesignTarget> MasterTargets => [new(CheckKey: Key)];
     public PermissionAction RequiredDesignerAction => PermissionAction.Edit;
 }

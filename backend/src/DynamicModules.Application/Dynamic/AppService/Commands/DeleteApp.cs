@@ -1,4 +1,5 @@
 using DynamicModules.Application.Common;
+using DynamicModules.Application.Common.Audit;
 using DynamicModules.Application.Common.Security;
 using DynamicModules.Application.Dynamic.AppService.Data;
 using DynamicModules.Application.Dynamic.DeleteService;
@@ -12,8 +13,9 @@ namespace DynamicModules.Application.Dynamic.AppService.Commands;
 
 /// <summary>Purged 是呼叫端看到的「將清除的軟刪除記錄筆數」（全部成員模組合計），與交易內重算的結果不符就拒絕。</summary>
 public record DeleteAppRequest(string Key, int? Purged)
-    : IRequest<ServiceResult>, ITransactionalRequest, IDesignerRequest, ISystemAdminRequest
+    : IRequest<ServiceResult>, ITransactionalRequest, IDesignerRequest, ISystemAdminRequest, IAuditedRequest
 {
+    public AuditAction Audit => AuditAction.For("app.delete", AuditTargets.App, Key);
     public PermissionAction RequiredDesignerAction => PermissionAction.Delete;
 }
 

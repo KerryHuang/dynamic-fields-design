@@ -1,4 +1,5 @@
 using DynamicModules.Application.Common;
+using DynamicModules.Application.Common.Audit;
 using DynamicModules.Application.Common.Security;
 using DynamicModules.Application.Dynamic.AccountService.Data;
 using DynamicModules.Domain.Entities.Dynamic;
@@ -7,7 +8,7 @@ using MediatR;
 
 namespace DynamicModules.Application.Dynamic.AccountService.Commands.CreateUser;
 
-public class CreateUserHandler(IAccountRepository accounts, IPasswordService passwords, IUnitOfWork uow)
+public class CreateUserHandler(IAccountRepository accounts, IPasswordService passwords, IUnitOfWork uow, AuditContext audit)
     : IRequestHandler<CreateUserRequest, ServiceResult>
 {
     public async Task<ServiceResult> Handle(CreateUserRequest request, CancellationToken ct)
@@ -25,6 +26,8 @@ public class CreateUserHandler(IAccountRepository accounts, IPasswordService pas
         });
         await accounts.SetMembershipsAsync(id, groupIds, ct);
         await uow.CommitAsync(ct);
+        audit.Target(id);
+        audit.Describe(null, new { DisplayName = request.DisplayName.Trim(), GroupIds = groupIds.Distinct().Order().ToList(), request.IsSystemAdmin, IsActive = true });
         return ServiceResult.Created(new AdminUserResponse(
             id, request.DisplayName.Trim(), true, request.IsSystemAdmin, false, false, groupIds.Distinct().Order().ToList()));
     }

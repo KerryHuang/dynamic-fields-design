@@ -1,4 +1,5 @@
 using DynamicModules.Application.Common;
+using DynamicModules.Application.Common.Audit;
 using DynamicModules.Application.Common.Security;
 using MediatR;
 
@@ -11,23 +12,26 @@ public record GetTaskRulesRequest(string ModuleKey) : IRequest<ServiceResult>, I
 
 /// <summary>AppId 由套件開啟時帶入（t4b）；設計器端點不帶。</summary>
 public record CreateTaskRuleRequest(string ModuleKey, TaskRuleInput Input, long? AppId = null)
-    : IRequest<ServiceResult>, ITransactionalRequest, IDesignerRequest, IMasterDesignRequest
+    : IRequest<ServiceResult>, ITransactionalRequest, IDesignerRequest, IMasterDesignRequest, IAuditedRequest
 {
+    public AuditAction Audit => AuditAction.For("taskRule.create", AuditTargets.TaskRule, Input?.Key);
     public IReadOnlyList<MasterDesignTarget> MasterTargets => [new(ModuleKey: ModuleKey)];
     public PermissionAction RequiredDesignerAction => PermissionAction.Edit;
 }
 
 /// <summary>規則代碼不能改；規則必須屬於 ModuleKey 這個模組，否則 404。</summary>
 public record UpdateTaskRuleRequest(string ModuleKey, string Key, TaskRuleInput Input)
-    : IRequest<ServiceResult>, ITransactionalRequest, IDesignerRequest, IMasterDesignRequest
+    : IRequest<ServiceResult>, ITransactionalRequest, IDesignerRequest, IMasterDesignRequest, IAuditedRequest
 {
+    public AuditAction Audit => AuditAction.For("taskRule.update", AuditTargets.TaskRule, Key);
     public IReadOnlyList<MasterDesignTarget> MasterTargets => [new(ModuleKey: ModuleKey)];
     public PermissionAction RequiredDesignerAction => PermissionAction.Edit;
 }
 
 public record DeleteTaskRuleRequest(string ModuleKey, string Key)
-    : IRequest<ServiceResult>, ITransactionalRequest, IDesignerRequest, IMasterDesignRequest
+    : IRequest<ServiceResult>, ITransactionalRequest, IDesignerRequest, IMasterDesignRequest, IAuditedRequest
 {
+    public AuditAction Audit => AuditAction.For("taskRule.delete", AuditTargets.TaskRule, Key);
     public IReadOnlyList<MasterDesignTarget> MasterTargets => [new(ModuleKey: ModuleKey)];
     public PermissionAction RequiredDesignerAction => PermissionAction.Edit;
 }

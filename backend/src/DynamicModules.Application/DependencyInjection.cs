@@ -21,6 +21,8 @@ public static class DependencyInjection
             cfg.AddOpenBehavior(typeof(ValidationBehavior<,>));
             cfg.AddOpenBehavior(typeof(ApprovalAlertBehavior<,>));
             cfg.AddOpenBehavior(typeof(TransactionBehavior<,>));
+            // 在交易之內、冪等之外：稽核和業務寫入同交易（維運設計 §17.2.1）
+            cfg.AddOpenBehavior(typeof(AuditBehavior<,>));
             // 在交易之內：寫入鎖已持有，冪等查詢與寫入、事件與驗證才在同一把鎖之下（設計 §2）
             cfg.AddOpenBehavior(typeof(IdempotencyBehavior<,>));
             cfg.AddOpenBehavior(typeof(RecordEffectsBehavior<,>));
@@ -30,6 +32,13 @@ public static class DependencyInjection
         services.AddScoped<Common.IWriteJournal, Common.WriteJournal>();
         services.AddScoped<Common.AfterCommitActions>();
         services.AddScoped<Common.IOperationContext, Common.OperationContext>();
+        // 稽核寫入要時鐘與 log；WebAPI 另有註冊（後註冊者優先），自己組 DI 的測試沿用系統時鐘
+        services.TryAddSingleton(TimeProvider.System);
+        services.AddLogging();
+        services.AddScoped<Common.Audit.AuditContext>();
+        services.AddScoped<Common.Audit.IAuditLog, Common.Audit.AuditLog>();
+        // WebAPI 另註冊讀請求來源 IP 的實作（後註冊者優先）
+        services.TryAddScoped<Common.Audit.IRequestOrigin, Common.Audit.NoRequestOrigin>();
         // WebAPI 另註冊讀 X-Locale 的實作（後註冊者優先）；沒有請求的環境（Application 測試）用繁中
         services.TryAddScoped<Common.ICurrentLocale, Common.FallbackCurrentLocale>();
         services.AddScoped<ISystemIdentity, SystemIdentity>();
@@ -133,6 +142,8 @@ public static class DependencyInjection
         services.AddScoped<Dynamic.NotificationService.NotificationUpkeepProbe>();
         // 背景排程的工作（JobRunner 依代碼排序依序跑）
         services.AddSingleton<Dynamic.OpsService.Scheduling.IScheduledJob, Dynamic.NotificationService.NotificationUpkeepJob>();
+        services.AddSingleton<Dynamic.OpsService.Scheduling.IScheduledJob, Dynamic.OpsService.OpsUpkeepJob>();
+        services.TryAddSingleton<Dynamic.OpsService.OpsUpkeepOptions>();
         services.AddScoped<Dynamic.NotificationService.INotificationReminderSource, Dynamic.ApprovalService.ApprovalReminderSource>();
         services.AddScoped<Dynamic.TaskRuleService.TaskRuleValidator>();
         services.AddScoped<Dynamic.TaskRuleService.TaskRuleEditor>();
