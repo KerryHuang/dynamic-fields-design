@@ -2,7 +2,7 @@ import { QueryClient, VueQueryPlugin } from '@tanstack/vue-query';
 import { flushPromises, mount } from '@vue/test-utils';
 import { createPinia } from 'pinia';
 import * as quasar from 'quasar';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createI18n } from 'vue-i18n';
 import type { ApproverSource, ApproverSourceKind } from 'src/domain/dynamic/approval-flow-types';
 import type { DesignerField, ModuleDetail } from 'src/domain/dynamic/types';
@@ -24,6 +24,9 @@ const mod: ModuleDetail = {
 };
 
 interface Opts { fallback?: boolean; allowed?: ApproverSourceKind[]; limits?: ApproverLimits; saved?: ApproverSource | null; users?: 'pending' | 'ok'; groups?: 'ok' | 'fail' }
+// 每個測試結束都卸載還掛著的元件：QSelect 在 unmount 時會清掉 filter／input 的計時器，
+// 否則它們可能拖到 jsdom 拆除後才觸發（CI 偶發 window is not defined）
+const mounted: { unmount: () => void; exists: () => boolean }[] = [];
 async function mountEditor(modelValue: ApproverSource, o: Opts = {}) {
   if (o.users === 'pending') api.getUsers.mockReturnValue(new Promise(() => {}));
   else api.getUsers.mockResolvedValue([{ userId: 'u1', displayName: '王小明' }] as never);
@@ -36,6 +39,10 @@ async function mountEditor(modelValue: ApproverSource, o: Opts = {}) {
     global: { plugins: [[quasar.Quasar, { components: quasar, directives: quasar }], createPinia(), i18n,
       [VueQueryPlugin, { queryClient: new QueryClient({ defaultOptions: { queries: { retry: false } } }) }]] },
   });
+  const unmount = w.unmount.bind(w);
+  let gone = false;
+  w.unmount = () => { gone = true; unmount(); };
+  mounted.push({ unmount: w.unmount, exists: () => !gone });
   await flushPromises();
   return w;
 }
@@ -45,6 +52,7 @@ const select = (w: Awaited<ReturnType<typeof mountEditor>>, i: number) => w.find
 
 describe('ApproverSourceEditor', () => {
   beforeEach(() => { vi.clearAllMocks(); document.body.innerHTML = ''; });
+  afterEach(() => { for (const m of mounted.splice(0)) if (m.exists()) m.unmount(); });
 
   it("switching source resets params to that source's defaults", async () => {
     const w = await mountEditor({ source: 'users', userIds: ['u1'] });
