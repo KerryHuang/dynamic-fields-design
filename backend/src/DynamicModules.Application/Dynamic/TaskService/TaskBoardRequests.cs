@@ -15,7 +15,7 @@ public sealed record GetTaskBoardColumnPageRequest(string Column, long? ViewId, 
 
 /// <summary>
 /// 拖到某欄：伺服器依欄算新值（看板設計 §5.3），ExpectedVersion 是卡片載入時的 version，不符 409。DueDate 只用於「之後」欄。
-/// 成功時 Data 是 <see cref="TaskMoveResponse"/>。
+/// Cascade（complete、cancel）同 PATCH，只在依狀態分欄時有作用。成功時 Data 是 <see cref="TaskMoveResponse"/>。
 /// </summary>
-public sealed record MoveTaskRequest(long Id, string? GroupBy, string? ToColumn, DateOnly? DueDate, string? ExpectedVersion)
+public sealed record MoveTaskRequest(long Id, string? GroupBy, string? ToColumn, DateOnly? DueDate, string? ExpectedVersion, string? Cascade = null)
     : IRequest<ServiceResult>, ITransactionalRequest;

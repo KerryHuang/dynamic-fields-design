@@ -9,7 +9,7 @@ namespace DynamicModules.Application.Dynamic.NotificationService;
 
 /// <summary>
 /// 任務事件寫站內通知（設計 §6.1）。一律不通知這次操作的人自己（自己指派給自己、自己 @ 自己、自己留言、自己完成）。
-/// 指派、提到的收件人固定；留言、完成、取消的收件角色由政策 task.notify.* 決定（依任務所屬模組），
+/// 指派、提到的收件人固定；留言、完成、取消、子任務全部收尾的收件角色由政策 task.notify.* 決定（依任務所屬模組），
 /// 留言再扣掉這則留言已 @ 到的人（他們已收到「提到你」）。系統建立的任務沒有建立者。
 /// </summary>
 public sealed class TaskNotificationWriter(INotificationRepository notifications, IBusinessTime time, IPolicyReader policies) : ITaskNotifier
@@ -37,6 +37,7 @@ public sealed class TaskNotificationWriter(INotificationRepository notifications
         {
             TaskChangeKind.Commented => PolicyCatalog.TaskNotifyCommented,
             TaskChangeKind.Completed => PolicyCatalog.TaskNotifyCompleted,
+            TaskChangeKind.SubtasksDone => PolicyCatalog.TaskNotifySubtasksDone,
             _ => PolicyCatalog.TaskNotifyCancelled,
         };
         var roles = await policies.ListAsync(def, c.Task.ModuleId, ct);
@@ -53,6 +54,7 @@ public sealed class TaskNotificationWriter(INotificationRepository notifications
         TaskChangeKind.Mentioned => NotificationKinds.TaskMentioned,
         TaskChangeKind.Commented => NotificationKinds.TaskCommented,
         TaskChangeKind.Completed => NotificationKinds.TaskCompleted,
+        TaskChangeKind.SubtasksDone => NotificationKinds.TaskSubtasksDone,
         _ => NotificationKinds.TaskCancelled,
     };
 }

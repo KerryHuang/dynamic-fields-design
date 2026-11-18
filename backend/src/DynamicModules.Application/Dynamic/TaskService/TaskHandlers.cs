@@ -167,7 +167,7 @@ public class UpdateTaskHandler(ITaskRepository tasks, TaskSupport support, TaskW
             && !await support.IsActiveUserAsync(assignee, ct))
             return ServiceResult.Invalid(new Dictionary<string, string[]> { ["assigneeUserId"] = [TaskMessages.AssigneeInvalid] });
         var from = task.AssigneeUserId;
-        await writer.ApplyAsync(task, edit, ct);
+        if (await writer.ApplyAsync(task, edit, ct) is { } refused) return refused;
         await writer.FlushAsync(ct);
         var after = await access.EvaluateAsync(task, ct);
         // 寫入後這位操作者看不到了（主管把任務派到範圍外）：不回任務內容，只給一次性的復原憑證
@@ -197,6 +197,7 @@ public class UndoReassignHandler(ITaskRepository tasks, TaskSupport support, Tas
         if (task.AssigneeUserId != ticket.ToUserId || TaskVersion.Of(task) != ticket.Version) return invalid;
         if (ticket.FromUserId is { } from && !await support.IsActiveUserAsync(from, ct)) return invalid;
 
+        // 只改負責人，不會被連動規則擋下
         await writer.ApplyAsync(task, new TaskEdit(null, false, null, true, ticket.FromUserId, false, null, null), ct);
         await writer.FlushAsync(ct);
         var p = await access.EvaluateAsync(task, ct);

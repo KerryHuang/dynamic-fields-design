@@ -54,12 +54,12 @@ public sealed class TaskRuleApplier(ITaskRuleRepository rules, ITaskRepository t
                     Create(rule, def, module, recordId, occurrence, recordTitle, after, activeUsers);
                     continue;
                 }
-                writer.RestoreByRule(task);
+                await writer.RestoreByRuleAsync(task, ct);
                 restored = true;
             }
             else if (was && !now && task is { IsOpen: true })
             {
-                writer.CancelBySystem(task, TaskSystemEvents.ConditionUnmet);
+                await writer.CancelBySystemAsync(task, TaskSystemEvents.ConditionUnmet, ct);
             }
 
             if (task is not { IsOpen: true }) continue;

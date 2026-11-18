@@ -6,7 +6,8 @@ namespace DynamicModules.Application.Dynamic.TaskService;
 
 /// <summary>
 /// PATCH 主體解析：沒送的欄位（Undefined）不改，送 null 代表清除。status 用 camelCase 字串，dueDate 用 yyyy-MM-dd。
-/// 錯誤鍵是小寫開頭的欄位名。負責人是否為啟用中的使用者由呼叫端檢查。
+/// 錯誤鍵是小寫開頭的欄位名。負責人是否為啟用中的使用者由呼叫端檢查。cascade 只在父任務改成完成、還有未完成的子任務時有作用，
+/// 其他情況由寫入端忽略（ST-T4）。
 /// </summary>
 public static class TaskEditParser
 {
@@ -62,9 +63,23 @@ public static class TaskEditParser
             else errors["status"] = [TaskMessages.BadStatus];
         }
 
+        TaskCascade? cascade = null;
+        if (Get(patch, "cascade") is { } c)
+        {
+            if (c.ValueKind == JsonValueKind.String && TryParseCascade(c.GetString(), out var parsed)) cascade = parsed;
+            else if (c.ValueKind != JsonValueKind.Null) errors["cascade"] = [TaskMessages.BadCascade];
+        }
+
         return errors.Count > 0
             ? (null, errors)
-            : (new TaskEdit(title, setDescription, description, setAssignee, assignee, setDue, due, status), errors);
+            : (new TaskEdit(title, setDescription, description, setAssignee, assignee, setDue, due, status, cascade), errors);
+    }
+
+    /// <summary>連動方式（看板設計 §10.7.2）：只認 complete、cancel，其他（含空字串）都是錯；沒帶由呼叫端自己判斷。</summary>
+    public static bool TryParseCascade(string? s, out TaskCascade cascade)
+    {
+        cascade = s == "cancel" ? TaskCascade.Cancel : TaskCascade.Complete;
+        return s is "complete" or "cancel";
     }
 
     /// <summary>null 代表標題合法；傳入的標題應已去頭尾空白。</summary>

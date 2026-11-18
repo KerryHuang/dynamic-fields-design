@@ -40,6 +40,10 @@ public static class PolicyCatalog
     public static readonly PolicyDefinition TaskNotifyCancelled =
         new("task.notify.cancelled", "notification", PolicyKind.RoleSet, PolicyScope.Module, "creator", Options: NotifyRoles);
 
+    /// <summary>A40：子任務全部收尾時通知父任務的誰（看板設計 §10.7.2，ST-Q6 出廠只通知負責人）。</summary>
+    public static readonly PolicyDefinition TaskNotifySubtasksDone =
+        new("task.notify.subtasksDone", "notification", PolicyKind.RoleSet, PolicyScope.Module, "assignee", Options: NotifyRoles);
+
     /// <summary>A33：部門主管可看與重派部屬的任務（看板設計 §4）。</summary>
     public static readonly PolicyDefinition TaskSupervisorScope =
         new("task.supervisorScope", "task", PolicyKind.Boolean, PolicyScope.System, "true");
@@ -152,7 +156,7 @@ public static class PolicyCatalog
 
     public static IReadOnlyList<PolicyDefinition> All { get; } =
         [TaskMaxRulesPerModule, TaskMaxTasksPerRule, TaskMaxRulesPerPackage,
-         TaskReminderLeadDays, TaskRemindOverdue, TaskNotifyCommented, TaskNotifyCompleted, TaskNotifyCancelled,
+         TaskReminderLeadDays, TaskRemindOverdue, TaskNotifyCommented, TaskNotifyCompleted, TaskNotifyCancelled, TaskNotifySubtasksDone,
          TaskSupervisorScope, TaskSupervisorScopeRecursive, TaskMaxSubtasksPerTask,
          NotificationRetentionDays, CalendarWeekStart,
          AttachmentMaxFileBytes, AttachmentMaxFilesPerField, AttachmentAllowedExtensions, AttachmentMaxFilesPerComment,

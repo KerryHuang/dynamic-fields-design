@@ -210,6 +210,7 @@ public class GetTaskBoardColumnPageHandler(ITaskRepository tasks, TaskBoardServi
 /// <summary>
 /// 看板移動（看板設計 §5.2–§5.6）：值一律走 <see cref="TaskWriter.ApplyAsync"/>（覆寫旗標、系統記錄、通知與 PATCH 相同，T7）；
 /// 版本不符 409、看不到 404、凍結 409；狀態與到期要能編輯，負責人另外允許部屬任務的主管；同欄不改值。
+/// Cascade 只在依狀態分欄時有作用（父任務拖到完成、還有未完成的子任務），其他分欄忽略。
 /// 寫入後看不到了（主管派到範圍外）時不回卡片，只給復原憑證（kb1）。
 /// </summary>
 public class MoveTaskHandler(ITaskRepository tasks, TaskAccess access, TaskSupport support, TaskWriter writer, TaskBoardService board,
@@ -232,7 +233,13 @@ public class MoveTaskHandler(ITaskRepository tasks, TaskAccess access, TaskSuppo
             case TaskBoardConfig.ByStatus:
                 if (!p.CanEdit) return ServiceResult.Forbidden();
                 if (!TaskBoardConfig.TryParseStatus(to, out var status)) return TaskViewRules.Bad("toColumn", TaskMessages.BadColumn);
-                edit = status == task.Status ? null : new TaskEdit(null, false, null, false, null, false, null, status);
+                TaskCascade? cascade = null;
+                if (request.Cascade is not null)
+                {
+                    if (!TaskEditParser.TryParseCascade(request.Cascade, out var how)) return TaskViewRules.Bad("cascade", TaskMessages.BadCascade);
+                    cascade = how;
+                }
+                edit = status == task.Status ? null : new TaskEdit(null, false, null, false, null, false, null, status, cascade);
                 break;
             case TaskBoardConfig.ByDueBucket:
                 if (!p.CanEdit) return ServiceResult.Forbidden();
@@ -269,7 +276,8 @@ public class MoveTaskHandler(ITaskRepository tasks, TaskAccess access, TaskSuppo
         {
             // 版本比對與寫入要原子：另一個請求在上面的讀取後已改過這一列時，認領失敗，整筆交易回滾（沒有事件、通知、旗標）
             if (!await tasks.TryClaimVersionAsync(task, ct)) return ServiceResult.Conflict(MessageRef.Literal(TaskMessages.Stale), "stale");
-            await writer.ApplyAsync(task, edit, ct);
+            // 子任務未完成（subtasksOpen）等連動檢查在版本檢查之後；回 409 時整筆回滾，重送用同一個版本（看板設計 §10.7.2）
+            if (await writer.ApplyAsync(task, edit, ct) is { } refused) return refused;
             await writer.FlushAsync(ct);
         }
         var after = edit is null ? p : await access.EvaluateAsync(task, ct);

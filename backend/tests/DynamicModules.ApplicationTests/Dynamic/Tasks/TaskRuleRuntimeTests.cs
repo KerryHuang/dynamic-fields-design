@@ -41,7 +41,13 @@ public class TaskRuleRuntimeTests : TaskTestBase
 
     private readonly SwitchableLocale _locale = new();
 
-    protected override void ConfigureServices(IServiceCollection services) => services.AddSingleton<ICurrentLocale>(_locale);
+    private readonly FailingTaskNotifier.Switch _fail = new();
+
+    protected override void ConfigureServices(IServiceCollection services)
+    {
+        services.AddSingleton<ICurrentLocale>(_locale);
+        FailingTaskNotifier.Register(services, _fail);
+    }
 
     protected sealed record Rig(
         string Key, long Title, long Kind, long Exhibition, long Seminar, long Start, long End,
@@ -290,6 +296,67 @@ public class TaskRuleRuntimeTests : TaskTestBase
         manual.CancelledByRule.Should().BeFalse();
         (await Tasks(a)).Should().HaveCount(3);
         Code(await Tasks(b), "setup").Status.Should().Be(TaskItemStatus.Done);
+    }
+
+    /// <summary>規則任務 setup（展覽才有）底下加一個人建的子任務，並改成進行中。</summary>
+    private async Task<(long Record, long Parent, long Child)> RuleParentWithChild(Rig r)
+    {
+        await CreateRule(r, RuleInput("cp-tasks", OnCreate, CampaignTasks(r)));
+        var rec = await NewRecord(r, Campaign(r, r.Exhibition));
+        var parent = Code(await Tasks(rec), "setup").Id;
+        var created = await Run(new CreateSubtaskRequest(parent, new TaskInput("訂場地", null, "sales01", null)));
+        created.IsCreated.Should().BeTrue(Dump(created));
+        var child = ((TaskDetailResponse)created.Data!).Id;
+        await Patch(child, """{"status":"inProgress"}""");
+        return (rec, parent, child);
+    }
+
+    [Fact]
+    public async Task C29_RuleCancelsParent_CancelsChildWithFlag_RuleRestoreRestoresChild()
+    {
+        var r = await BuildRig();
+        var (rec, parentId, childId) = await RuleParentWithChild(r);
+
+        await Change(rec, Vals((r.Kind, Opt(r.Seminar))));
+        var tasks = await Tasks(rec);
+        var parent = tasks.Single(t => t.Id == parentId);
+        parent.Status.Should().Be(TaskItemStatus.Cancelled);
+        parent.CancelledByRule.Should().BeTrue();
+        var child = tasks.Single(t => t.Id == childId);
+        child.Status.Should().Be(TaskItemStatus.Cancelled);
+        child.CancelledByParent.Should().BeTrue();
+        child.CancelledByRule.Should().BeFalse();
+        (await Events(childId)).Last().Should().Be(TaskSystemEvents.ByParent);
+
+        await Change(rec, Vals((r.Kind, Opt(r.Exhibition))));
+        tasks = await Tasks(rec);
+        tasks.Single(t => t.Id == parentId).Status.Should().Be(TaskItemStatus.Todo);
+        child = tasks.Single(t => t.Id == childId);
+        child.Status.Should().Be(TaskItemStatus.Todo, "恢復後是待辦，不是原本的進行中");
+        child.CancelledByParent.Should().BeFalse();
+        (await Events(childId)).Last().Should().Be(TaskSystemEvents.ByParent);
+    }
+
+    [Fact]
+    public async Task C34_FailureMidRuleCascade_RollsBackRecordWriteAndTasks()
+    {
+        var r = await BuildRig();
+        var (rec, parentId, childId) = await RuleParentWithChild(r);
+        var version = await RowVersion(rec);
+        var notifications = await Db.Context.Set<Notification>().AsNoTracking().CountAsync();
+        _fail.FailWhen = c => c.Task.Id == childId;
+
+        var act = () => Run(new UpdateRecordRequest(rec, Vals((r.Kind, Opt(r.Seminar))), version));
+
+        await act.Should().ThrowAsync<InvalidOperationException>();
+        _fail.FailWhen = null;
+        (await RowVersion(rec)).Should().Be(version, "記錄寫入一起回滾");
+        var tasks = await Tasks(rec);
+        tasks.Single(t => t.Id == parentId).Status.Should().Be(TaskItemStatus.InProgress, "子任務開工時已帶動成進行中");
+        var child = tasks.Single(t => t.Id == childId);
+        child.Status.Should().Be(TaskItemStatus.InProgress);
+        child.CancelledByParent.Should().BeFalse();
+        (await Db.Context.Set<Notification>().AsNoTracking().CountAsync()).Should().Be(notifications);
     }
 
     // ───────── 觸發方式 ─────────

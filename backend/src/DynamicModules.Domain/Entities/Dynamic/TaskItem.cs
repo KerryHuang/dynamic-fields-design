@@ -102,4 +102,10 @@ public static class TaskSystemEvents
     public const string SubtaskAdded = "subtaskAdded";
     /// <summary>寫在父任務：刪除了子任務（SystemData 帶 subtaskId、subtaskTitle）。</summary>
     public const string SubtaskDeleted = "subtaskDeleted";
+    /// <summary>寫在父任務、作者 null：子任務的狀態帶動父任務改狀態（SystemData 帶 from、to、subtaskId、subtaskTitle；看板設計 §10.7.4）。</summary>
+    public const string BySubtask = "bySubtask";
+    /// <summary>寫在父任務、作者 null：子任務全部收尾（SystemData 帶最後收尾的 subtaskId、subtaskTitle）。</summary>
+    public const string SubtasksAllDone = "subtasksAllDone";
+    /// <summary>寫在子任務：父任務的狀態帶動子任務改狀態（SystemData 帶 from、to、parentId、parentTitle）；作者是 null 或選連動方式的操作者。</summary>
+    public const string ByParent = "byParent";
 }

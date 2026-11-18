@@ -31,4 +31,7 @@ public static class TaskMessages
     public const string SubtaskOneLevel = "子任務不能再有子任務";
     public const string SubtaskParentClosed = "已完成或已取消的任務不能新增子任務";
     public static string TooManySubtasks(int max) => $"一個任務最多 {max} 個子任務";
+    public static string SubtasksOpen(int count) => $"還有 {count} 個未完成的子任務";
+    public const string BadCascade = "連動方式必須是 complete 或 cancel";
+    public const string ParentCancelledReopen = "父任務已取消，請先恢復父任務";
 }

@@ -28,7 +28,7 @@ public sealed class TaskRecordStage(IWriteJournal journal, ITaskRepository tasks
             var entry = byRecord[recordId];
             if (entry.AfterDeleted)
             {
-                if (!entry.BeforeDeleted) writer.CancelBySystem(task, TaskSystemEvents.RecordDeleted);
+                if (!entry.BeforeDeleted) await writer.CancelBySystemAsync(task, TaskSystemEvents.RecordDeleted, ct);
                 continue;
             }
             if (!titles.TryGetValue(recordId, out var title))

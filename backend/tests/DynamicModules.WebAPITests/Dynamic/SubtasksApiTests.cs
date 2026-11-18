@@ -73,7 +73,9 @@ public class SubtasksApiTests : IDisposable
         blank.StatusCode.Should().Be(HttpStatusCode.BadRequest);
         (await JsonOf(blank)).GetProperty("errors").TryGetProperty("title", out _).Should().BeTrue();
 
-        (await sales.PatchAsync($"{Base}/tasks/{parentId}", Body("""{"status":"done"}"""))).StatusCode.Should().Be(HttpStatusCode.OK);
+        // st1b 起父任務改完成時有未完成的子任務要帶 cascade
+        (await sales.PatchAsync($"{Base}/tasks/{parentId}", Body("""{"status":"done","cascade":"complete"}"""))).StatusCode
+            .Should().Be(HttpStatusCode.OK);
         var closed = await sales.PostAsJsonAsync($"{Base}/tasks/{parentId}/subtasks", new { title = "x" });
         closed.StatusCode.Should().Be(HttpStatusCode.Conflict);
         var closedBody = await JsonOf(closed);
@@ -87,6 +89,42 @@ public class SubtasksApiTests : IDisposable
         var notEditor = await floor.PostAsJsonAsync($"{Base}/tasks/{otherParent}/subtasks", new { title = "x" });
         notEditor.StatusCode.Should().Be(HttpStatusCode.Forbidden);
         (await JsonOf(notEditor)).GetProperty("message").GetString().Should().Be("要能修改這個任務才能新增子任務");
+    }
+
+    [Fact]
+    public async Task Cascade_PatchAndMove_409SubtasksOpenWithCount_ThenComplete()
+    {
+        var sales = _app.AsUser("sales01");
+        var parentId = await IdOf(await sales.PostAsJsonAsync($"{Base}/tasks", new { title = "辦行銷活動", assigneeUserId = "sales01" }));
+        var childId = await IdOf(await sales.PostAsJsonAsync($"{Base}/tasks/{parentId}/subtasks", new { title = "訂場地" }));
+        await sales.PostAsJsonAsync($"{Base}/tasks/{parentId}/subtasks", new { title = "印海報" });
+
+        var open = await sales.PatchAsync($"{Base}/tasks/{parentId}", Body("""{"status":"done"}"""));
+        open.StatusCode.Should().Be(HttpStatusCode.Conflict);
+        var openBody = await JsonOf(open);
+        openBody.GetProperty("code").GetString().Should().Be("subtasksOpen");
+        openBody.GetProperty("params").GetProperty("count").GetInt32().Should().Be(2);
+        openBody.GetProperty("message").GetString().Should().Be("還有 2 個未完成的子任務");
+
+        var bad = await sales.PatchAsync($"{Base}/tasks/{parentId}", Body("""{"status":"done","cascade":"later"}"""));
+        bad.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+        (await JsonOf(bad)).GetProperty("errors").GetProperty("cascade")[0].GetString().Should().Be("連動方式必須是 complete 或 cancel");
+
+        var version = (await JsonOf(await sales.GetAsync($"{Base}/tasks/{parentId}"))).GetProperty("version").GetString();
+        var move = new { groupBy = "status", toColumn = "done", expectedVersion = version };
+        (await sales.PostAsJsonAsync($"{Base}/tasks/{parentId}/move", move)).StatusCode.Should().Be(HttpStatusCode.Conflict);
+        var moved = await sales.PostAsJsonAsync($"{Base}/tasks/{parentId}/move",
+            new { groupBy = "status", toColumn = "done", expectedVersion = version, cascade = "complete" });
+        moved.StatusCode.Should().Be(HttpStatusCode.OK);
+        (await JsonOf(moved)).GetProperty("card").GetProperty("progress").GetProperty("done").GetInt32().Should().Be(2);
+
+        // 父任務已完成，子任務重開把父任務帶回進行中；父任務取消後重開子任務 409
+        (await sales.PatchAsync($"{Base}/tasks/{childId}", Body("""{"status":"todo"}"""))).StatusCode.Should().Be(HttpStatusCode.OK);
+        (await JsonOf(await sales.GetAsync($"{Base}/tasks/{parentId}"))).GetProperty("status").GetString().Should().Be("inProgress");
+        (await sales.PatchAsync($"{Base}/tasks/{parentId}", Body("""{"status":"cancelled"}"""))).StatusCode.Should().Be(HttpStatusCode.OK);
+        var reopen = await sales.PatchAsync($"{Base}/tasks/{childId}", Body("""{"status":"todo"}"""));
+        reopen.StatusCode.Should().Be(HttpStatusCode.Conflict);
+        (await JsonOf(reopen)).GetProperty("message").GetString().Should().Be("父任務已取消，請先恢復父任務");
     }
 
     [Fact]

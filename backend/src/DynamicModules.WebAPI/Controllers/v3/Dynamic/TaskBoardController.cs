@@ -15,7 +15,8 @@ public class TaskBoardController(IMediator mediator) : ControllerBase
 
     public sealed record PageBody(long? ViewId, JsonElement? Config, int Offset);
 
-    public sealed record MoveBody(string? GroupBy, string? ToColumn, DateOnly? DueDate, string? ExpectedVersion);
+    /// <summary>Cascade（complete、cancel）只在依狀態分欄時有作用：父任務拖到完成、還有未完成的子任務時一併完成或取消。</summary>
+    public sealed record MoveBody(string? GroupBy, string? ToColumn, DateOnly? DueDate, string? ExpectedVersion, string? Cascade = null);
 
     [HttpPost("task-board/columns")]
     public async Task<IActionResult> Columns(ColumnsBody body) =>
@@ -28,5 +29,5 @@ public class TaskBoardController(IMediator mediator) : ControllerBase
 
     [HttpPost("tasks/{id:long}/move")]
     public async Task<IActionResult> Move(long id, MoveBody body) =>
-        (await mediator.Send(new MoveTaskRequest(id, body.GroupBy, body.ToColumn, body.DueDate, body.ExpectedVersion))).ToActionResult(this);
+        (await mediator.Send(new MoveTaskRequest(id, body.GroupBy, body.ToColumn, body.DueDate, body.ExpectedVersion, body.Cascade))).ToActionResult(this);
 }

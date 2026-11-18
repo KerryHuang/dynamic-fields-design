@@ -25,6 +25,7 @@ public static class NotificationKinds
     public const string TaskOverdue = "taskOverdue";
     public const string TaskCompleted = "taskCompleted";
     public const string TaskCancelled = "taskCancelled";
+    public const string TaskSubtasksDone = "taskSubtasksDone";
     public const string ApprovalPending = "approvalPending";
     public const string ApprovalTransferred = "approvalTransferred";
     public const string ApprovalAddSigned = "approvalAddSigned";
