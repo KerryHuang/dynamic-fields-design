@@ -59,6 +59,7 @@ public class SchemaTests
     }
 
     [Fact]
+    [Trait("Category", "SqliteOnly")]
     public async Task Schema_HasPermissionTables()
     {
         await using var db = await TestDb.CreateAsync();
