@@ -2,7 +2,8 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { http } from 'src/services/api/http';
 import { buildInfo, clientVersion } from './build-info';
 import {
-  CLIENT_ERRORS_URL, LIMITS, browserFamily, buildReport, createReporter, isApiError, isChunkLoadError, sendReport, shouldReport,
+  CLIENT_ERRORS_URL, FIELD_MAX, LIMITS, browserFamily, buildReport, clientFrames, createReporter, isApiError, isChunkLoadError, normalizeMessage,
+  sendReport, shouldReport,
   type ClientErrorReport,
 } from './error-reporter';
 import { recordFailedRequest } from './last-failure';
@@ -33,9 +34,41 @@ describe('buildReport', () => {
     expect(r.browser).toBe(browserFamily());
   });
 
-  it('沒有路由（啟動早期）時 route、moduleKey 為 null；非 Error 也能送', () => {
+  it('沒有路由（啟動早期）時 route、moduleKey 為 null；字串 rejection 照送', () => {
     expect(buildReport('promise', 'boom', null, NOW)).toMatchObject({ name: '', message: 'boom', stack: '', route: null, moduleKey: null });
-    expect(buildReport('promise', { a: 1 }, null, NOW).message).toBe('{"a":1}');
+  });
+
+  it('非 Error 物件不序列化內容，只送固定技術訊息（含敏感欄位的物件不外送）', () => {
+    const secret = { token: 'fwp_secret123', recordId: 4242, url: 'https://x/dynamic/orders/4242?q=pw' };
+    const r = buildReport('promise', secret, null, NOW);
+    expect(r.message).toBe('非 Error 物件：Object');
+    const json = JSON.stringify(r);
+    for (const leak of ['fwp_secret123', '4242', 'q=pw']) expect(json).not.toContain(leak);
+    class Weird { secret = 'x1y2'; }
+    expect(buildReport('promise', new Weird(), null, NOW).message).toBe('非 Error 物件：Weird');
+    expect(buildReport('promise', Object.create(null), null, NOW).message).toBe('非 Error 物件：Object');
+    expect(buildReport('promise', 42, null, NOW).message).toBe('非 Error 物件：number');
+  });
+
+  it('超長 metadata 套後端欄位上限，最終 UTF-8 JSON 不超過上限', () => {
+    const e = Object.assign(new Error('m'), { name: 'N'.repeat(5000) });
+    const longRoute = { matched: [{ path: '/' + 'r'.repeat(5000) }], params: { moduleKey: 'k'.repeat(5000) } };
+    const r = buildReport('vue', e, longRoute, NOW);
+    expect(r.name).toHaveLength(FIELD_MAX.name);
+    expect(r.route).toHaveLength(FIELD_MAX.route);
+    expect(r.moduleKey).toHaveLength(FIELD_MAX.moduleKey);
+    expect(r.version.length).toBeLessThanOrEqual(FIELD_MAX.version);
+    expect(r.locale.length).toBeLessThanOrEqual(FIELD_MAX.locale);
+    expect(r.browser.length).toBeLessThanOrEqual(FIELD_MAX.browser);
+    expect(new TextEncoder().encode(JSON.stringify(r)).length).toBeLessThanOrEqual(LIMITS.maxBytes);
+  });
+
+  it('JSON 跳脫（大量引號與控制字元）後仍不超過上限', () => {
+    const e = new Error('"\u0001'.repeat(250));
+    e.stack = '\u0000"\\'.repeat(1400);
+    const r = buildReport('vue', e, route, NOW);
+    expect(new TextEncoder().encode(JSON.stringify(r)).length).toBeLessThanOrEqual(LIMITS.maxBytes);
+    expect(r.message.length).toBeGreaterThan(0);
   });
 
   it('buildReport_includesRecentFailedRequestIdWithin30s', () => {
@@ -77,6 +110,7 @@ describe('判斷', () => {
     expect(isChunkLoadError(new TypeError('Importing a module script failed.'))).toBe(true);
     expect(isChunkLoadError(new TypeError('error loading dynamically imported module: https://x/a.js'))).toBe(true);
     expect(isChunkLoadError(Object.assign(new Error('x'), { name: 'ChunkLoadError' }))).toBe(true);
+    expect(isChunkLoadError(new Error('Unable to preload CSS for /assets/ListPage-abc12345.css'))).toBe(true);
     expect(isChunkLoadError(new Error('x is undefined'))).toBe(false);
   });
 
@@ -100,24 +134,48 @@ describe('判斷', () => {
 });
 
 describe('createReporter', () => {
-  it('report_sameFingerprintWithin5Min_sentOnce', () => {
+  it('report_sameFingerprintWithin5Min_sentOnce（邊界：299_999 不送、300_000 送）', () => {
     const send = vi.fn(async () => {});
     const { reporter, advance } = reporterWith(send);
-    const e = new Error('same');
-    for (let i = 0; i < 3; i++) reporter.report('window', e, route);
+    for (let i = 0; i < 3; i++) reporter.report('window', new Error('same'), route);
     expect(send).toHaveBeenCalledTimes(1);
-    advance(LIMITS.dedupeMs + 1);
-    reporter.report('window', e, route);
+    advance(LIMITS.dedupeMs - 1);
+    reporter.report('window', new Error('same'), route);
+    expect(send).toHaveBeenCalledTimes(1);
+    advance(1);
+    reporter.report('window', new Error('same'), route);
     expect(send).toHaveBeenCalledTimes(2);
+  });
+
+  it('只差數字、id、引號字串或行列號的同一錯誤算同一指紋', () => {
+    const send = vi.fn(async () => {});
+    const { reporter } = reporterWith(send);
+    const at = (msg: string, line: number, hash: string) => Object.assign(new Error(msg), {
+      stack: `Error: ${msg}\n    at loadRow (https://x/assets/ListPage-${hash}.js:${line}:17)\n    at https://x/assets/index-${hash}.js:3:9`,
+    });
+    reporter.report('window', at('row 12 of "a@b.com" 0123abcd99 missing', 10, 'AbCd1234'), route);
+    reporter.report('window', at('row 873 of "z@y.org" ffee0011aa missing', 99, 'ZzYy9876'), route);
+    expect(send).toHaveBeenCalledTimes(1);
+    reporter.report('window', at('row 1 other', 10, 'AbCd1234'), route);
+    expect(send).toHaveBeenCalledTimes(2);
+  });
+
+  it('同一個錯誤物件從兩個入口進來只回報一次', () => {
+    const send = vi.fn(async () => {});
+    const { reporter, advance } = reporterWith(send);
+    const e = new Error('Unable to preload CSS for /assets/x.css');
+    reporter.report('chunk', e, route);
+    advance(LIMITS.dedupeMs);
+    reporter.report('chunk', e, route);
+    expect(send).toHaveBeenCalledTimes(1);
   });
 
   it('不同種類或不同路由不算同一個', () => {
     const send = vi.fn(async () => {});
     const { reporter } = reporterWith(send);
-    const e = new Error('same');
-    reporter.report('window', e, route);
-    reporter.report('promise', e, route);
-    reporter.report('window', e, { matched: [{ path: '/tasks' }], params: {} });
+    reporter.report('window', new Error('same'), route);
+    reporter.report('promise', new Error('same'), route);
+    reporter.report('window', new Error('same'), { matched: [{ path: '/tasks' }], params: {} });
     expect(send).toHaveBeenCalledTimes(3);
   });
 
@@ -126,7 +184,10 @@ describe('createReporter', () => {
     const { reporter, advance } = reporterWith(send);
     for (let i = 0; i < 12; i++) reporter.report('window', new Error(`e${'x'.repeat(i)}`), route);
     expect(send).toHaveBeenCalledTimes(LIMITS.perMinute);
-    advance(60_001);
+    advance(59_999);
+    reporter.report('window', new Error('still capped'), route);
+    expect(send).toHaveBeenCalledTimes(LIMITS.perMinute);
+    advance(1);
     reporter.report('window', new Error('later'), route);
     expect(send).toHaveBeenCalledTimes(LIMITS.perMinute + 1);
   });
@@ -165,5 +226,21 @@ describe('sendReport', () => {
   it('fetch 失敗時吞掉，不丟例外', async () => {
     vi.stubGlobal('fetch', vi.fn(async () => { throw new TypeError('Failed to fetch'); }));
     await expect(sendReport(buildReport('window', new Error('x'), route, NOW))).resolves.toBeUndefined();
+  });
+});
+
+describe('與後端指紋相同的正規化', () => {
+  it('normalizeMessage 對照後端 ErrorFingerprint.NormalizeMessage', () => {
+    expect(normalizeMessage(`id 42 user 'bob' mail a.b@c.io guid 0f8fad5b-d9cb-469f-a165-70867728950e hex deadbeef01`))
+      .toBe('id {n} user {s} mail {email} guid {guid} hex {hex}');
+    expect(normalizeMessage('x'.repeat(300))).toHaveLength(200);
+  });
+
+  it('clientFrames 取三個框、去掉行列號與 Vite 雜湊', () => {
+    const stack = [
+      'TypeError: x', '    at loadRow (https://x/assets/ListPage-AbCd1234.js:10:5)', '    at https://x/assets/index-Zz_y-987.js?v=1:3:9',
+      'save@https://x/assets/FormPage-Qw3r5t6y.js:1:2', '    at fourth (https://x/a.js:1:1)',
+    ].join('\n');
+    expect(clientFrames(stack)).toEqual(['loadRow@ListPage.js', '?@index.js', 'save@FormPage.js']);
   });
 });

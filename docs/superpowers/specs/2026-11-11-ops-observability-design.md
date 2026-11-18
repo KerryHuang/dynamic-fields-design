@@ -569,6 +569,7 @@ O1 就實作，log 與 O2 事件表共用同一套（主控判斷 T4）。指紋
   - 回報的 `version` 是前端版本號，有 commit 時接前 12 碼（`dev+0123456789ab`），Render 沒給 `APP_VERSION` 也分得出是哪一版；沒注入時就是 `dev`。瀏覽器只送家族與主版本（`Chrome 131`），不送完整 User-Agent。
   - 版本注入用 Quasar `build.defineEnv`（程式讀 `import.meta.env.APP_VERSION`）；O1 計畫 J25 寫的 `build.env` 在 app-vite 3 已改成 .env 檔的設定，不能用。
   - API 失敗（`ApiError`）以 `vue`、`promise` 進來時不回報（J24）；`router.onError` 收到的非程式塊錯誤歸 `vue`。程式塊錯誤不管從哪個入口進來都歸 `chunk`，另接 Vite 的 `vite:preloadError`；更新提示整個分頁只顯示一次，按「重新整理」重新載入。
+  - 〔o1c 審查修正〕非 Error 的 rejection 物件不序列化內容，只送「非 Error 物件：<建構子名或 typeof>」（字串照送）；其他欄位先套後端上限（`name`／`moduleKey` 100、`route`／`browser` 200、`version` 50、`locale` 20）再量 7680 位元組；本機去重鍵改與伺服器前端指紋同組成（同一套訊息正規化、三個框去行列號與雜湊）；`Unable to preload CSS for` 也算程式塊錯誤，同一個錯誤物件從兩個入口進來只回報一次（WeakSet）。
   - source map：`build.sourcemap = 'hidden'`；兩個 Dockerfile 在前端階段把 `*.map` 移到 `/app/sourcemaps`，`wwwroot` 不留，所以 `UseStaticFiles` 送不出去（J26）。
 
 ### 10.4 資料表
