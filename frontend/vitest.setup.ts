@@ -1,6 +1,10 @@
 import { enableAutoUnmount } from '@vue/test-utils';
-import { afterEach } from 'vitest';
+import { afterAll, afterEach } from 'vitest';
 
-// 每個測試結束就卸載掛載的元件：Quasar 的 Screen 等插件在元件存活時會排計時器，
-// 若拖到該檔 jsdom 拆除後才觸發，會丟 "window is not defined" 讓整批測試算失敗（CI 偶發）。
+// 每個測試結束就卸載掛載的元件，不讓上一個測試的元件留到下一個。
 enableAutoUnmount(afterEach);
+
+// Quasar 的 Screen 插件在 window 上掛 resize 監聽（卸載元件也不會移除），收到 resize 後延遲 16ms 才更新尺寸。
+// 測試檔若在這 16ms 內結束，計時器會在 jsdom 拆除後觸發，丟 "window is not defined" 讓整批算失敗（CI 偶發）。
+// 每個檔案結束前多等一下，讓已排的更新在 window 還在時跑完。
+afterAll(() => new Promise((resolve) => setTimeout(resolve, 50)));
