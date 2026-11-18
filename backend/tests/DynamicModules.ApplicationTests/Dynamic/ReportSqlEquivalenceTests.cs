@@ -10,6 +10,7 @@ using DynamicModules.Persistence.Dynamic.Dialects;
 using DynamicModules.Persistence.Dynamic.Query;
 using DynamicModules.Persistence.Repositories.Dynamic;
 using Dapper;
+using DynamicModules.TestSupport;
 using DynamicModules.Domain.Repositories.Dynamic;
 using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
@@ -396,6 +397,40 @@ public class ReportSqlEquivalenceTests : ReportTestBase
         ok.State.Should().Be("ok");
         ok.Engine.Should().Be("sql");
         ok.Total!["n"].Should().Be(200_001m);
+    }
+
+    /// <summary>
+    /// 用戶端 Command Timeout（連線字串，Npgsql 預設 30 秒）比報表上限短時，仍由 statement_timeout 決定：回「執行逾時」而不是忙碌（503）。
+    /// 另一條連線鎖住索引表，報表的 Dapper 查詢在快照內等鎖，等到 statement_timeout 由伺服器以 57014 中止（PostgreSQL provider 設計 §5.9）。
+    /// </summary>
+    [PostgresFact]
+    public async Task ShortClientTimeout_ReportStillEndsWithSqlTimeout_NotBusy()
+    {
+        await Prepare();
+        await Seed("order", "admin", (Amount, 1m), (Note, "甲"));
+        var options = Svc<ReportOptions>();
+        options.Engine = ReportEngineMode.Auto;
+        options.SqlTimeoutSeconds = 2;
+        Db.Context.Database.SetConnectionString(
+            new Npgsql.NpgsqlConnectionStringBuilder(Db.PostgresConnectionString) { CommandTimeout = 1 }.ConnectionString);
+        var aggregate = Def(groups: [G(MainF(Note))], measures: [M("n", "countMain")]);
+
+        await using (var locker = new Npgsql.NpgsqlConnection(Db.PostgresConnectionString))
+        {
+            await locker.OpenAsync();
+            await using var hold = await locker.BeginTransactionAsync();
+            await locker.ExecuteAsync("LOCK TABLE \"Dynamic_RecordIndex\" IN ACCESS EXCLUSIVE MODE", transaction: hold);
+
+            var timedOut = await Run(aggregate);
+            timedOut.State.Should().Be("tooMany");
+            timedOut.Message.Should().Be("報表執行逾時，請加上條件縮小範圍");
+            timedOut.Engine.Should().Be("sql");
+        }
+
+        // 鎖放開後同一個 context 照常跑完
+        var ok = await Run(aggregate);
+        ok.State.Should().Be("ok");
+        ok.Total!["n"].Should().Be(1m);
     }
 
     private async Task<FieldConfig> CurrentConfig(string module, long fieldId) =>

@@ -14,6 +14,8 @@ namespace DynamicModules.Persistence.Dynamic.Query;
 /// 交易怎麼開、時間上限怎麼執行是 provider 專屬（<see cref="SqliteReportSqlSnapshot"/>；PostgreSQL 版在 Persistence.Postgres，
 /// PostgreSQL provider 設計 §5.9）：逾時要以 <see cref="Application.Common.IDatabaseErrors.IsQueryCanceled"/> 認得的例外結束，
 /// <c>ct</c> 取消時照常丟 <see cref="OperationCanceledException"/>。
+/// body 裡用 Dapper 下的命令要帶 <c>db.Database.GetCommandTimeout()</c> 當 commandTimeout：實作可以在快照範圍內調整它
+/// （PostgreSQL 版放寬到比 statement_timeout 長；SQLite 版不動，未設定時是 null，Dapper 照舊用連線預設）。
 /// </summary>
 public interface IReportSqlSnapshot
 {
@@ -39,7 +41,7 @@ public static class ReportSqlSnapshot
         foreach (var check in checks)
         {
             var probe = ReportQueryBuilder.Probe(check, scope, dialect);
-            if (await connection.ExecuteScalarAsync<long?>(new CommandDefinition(probe.Sql, probe.Parameters, tx, cancellationToken: ct)) is not null)
+            if (await connection.ExecuteScalarAsync<long?>(new CommandDefinition(probe.Sql, probe.Parameters, tx, db.Database.GetCommandTimeout(), cancellationToken: ct)) is not null)
                 return check.Kind == ReportSqlCheckKind.Number ? $"scaledUnavailable:{check.FieldId}" : $"textTruncated:{check.FieldId}";
         }
         return null;

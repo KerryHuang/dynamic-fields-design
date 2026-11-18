@@ -8,6 +8,7 @@ using DynamicModules.Domain.Reports;
 using DynamicModules.Domain.Repositories.Dynamic;
 using DynamicModules.Persistence.Dynamic.Dialects;
 using DynamicModules.Persistence.Dynamic.Query;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 
 namespace DynamicModules.Persistence.Repositories.Dynamic;
@@ -19,6 +20,9 @@ public class ReportQueryRepository(
     private static readonly int[] Caps = [1_000, 100_000];
 
     private TimeSpan Timeout => TimeSpan.FromSeconds(options.SqlTimeoutSeconds);
+
+    /// <summary>快照內 Dapper 命令的用戶端逾時：讀快照設定的 EF 值（<see cref="IReportSqlSnapshot"/> 的約定）。</summary>
+    private int? CommandTimeout => db.Database.GetCommandTimeout();
 
     /// <summary>
     /// 在讀取快照裡先重驗與探測，再跑 body（<see cref="IReportSqlSnapshot"/>）。
@@ -53,14 +57,14 @@ public class ReportQueryRepository(
         ReportSqlRow? total = null;
         var reason = await RunInSnapshotAsync(q.Stamps, q.Checks, q.Main, async (connection, tx) =>
         {
-            var driver = await ChooseDriverAsync(connection, tx, q.Filters, ct);
+            var driver = await ChooseDriverAsync(connection, tx, q.Filters, ct, CommandTimeout);
             if (q.Groups.Count > 0)
             {
                 var built = ReportQueryBuilder.Aggregate(q, driver, total: false, dialect);
-                groups = await ReadAsync(connection, tx, built, q, hasKeys: true, ct);
+                groups = await ReadAsync(connection, tx, built, q, hasKeys: true, CommandTimeout, ct);
             }
             var totalSql = ReportQueryBuilder.Aggregate(q, driver, total: true, dialect);
-            total = (await ReadAsync(connection, tx, totalSql, q, hasKeys: false, ct)).Single();
+            total = (await ReadAsync(connection, tx, totalSql, q, hasKeys: false, CommandTimeout, ct)).Single();
         }, ct);
         return reason is null ? new ReportSqlOutcome(null, groups, total) : ReportSqlOutcome.Fallback(reason);
     }
@@ -71,19 +75,21 @@ public class ReportQueryRepository(
         IReadOnlyList<DynamicModules.Domain.Entities.Dynamic.Record> mains = [], kids = [];
         var reason = await RunInSnapshotAsync(n.Stamps, n.Checks, main, async (connection, tx) =>
         {
-            var driver = await ChooseDriverAsync(connection, tx, n.Filters, ct);
+            var driver = await ChooseDriverAsync(connection, tx, n.Filters, ct, CommandTimeout);
             var built = ReportQueryBuilder.Narrow(main, n.Filters, driver, limit, dialect);
-            mains = (await connection.QueryAsync<DynamicModules.Domain.Entities.Dynamic.Record>(new CommandDefinition(built.Sql, built.Parameters, tx, cancellationToken: ct))).ToList();
+            mains = (await connection.QueryAsync<DynamicModules.Domain.Entities.Dynamic.Record>(new CommandDefinition(built.Sql, built.Parameters, tx, CommandTimeout, cancellationToken: ct))).ToList();
             if (child is null) return;
             var childBuilt = ReportQueryBuilder.NarrowChildren(main, n.Filters, driver, limit, child, linkFieldId, dialect);
-            kids = (await connection.QueryAsync<DynamicModules.Domain.Entities.Dynamic.Record>(new CommandDefinition(childBuilt.Sql, childBuilt.Parameters, tx, cancellationToken: ct))).ToList();
+            kids = (await connection.QueryAsync<DynamicModules.Domain.Entities.Dynamic.Record>(new CommandDefinition(childBuilt.Sql, childBuilt.Parameters, tx, CommandTimeout, cancellationToken: ct))).ToList();
         }, ct);
         return reason is null ? new ReportNarrowedRecords(null, mains, kids) : ReportNarrowedRecords.Fallback(reason);
     }
 
     /// <summary>依估計的命中筆數挑驅動條件（設計 §5.2）：封頂的索引區間計數，全碰頂再放大一次；沒有候選回 null（掃模組）。</summary>
+    /// <param name="commandTimeout">Dapper 命令的用戶端逾時（秒）；null 用連線預設。</param>
     public static async Task<ReportSqlCondition?> ChooseDriverAsync(
-        System.Data.Common.DbConnection connection, System.Data.Common.DbTransaction tx, IReadOnlyList<ReportSqlCondition> filters, CancellationToken ct)
+        System.Data.Common.DbConnection connection, System.Data.Common.DbTransaction tx, IReadOnlyList<ReportSqlCondition> filters, CancellationToken ct,
+        int? commandTimeout = null)
     {
         var candidates = filters.Where(ReportQueryBuilder.CanDrive).OrderBy(c => c.Field.Kind == ReportSqlKind.Date ? 0 : 1).ToList();
         if (candidates.Count == 0) return null;
@@ -95,7 +101,7 @@ public class ReportQueryRepository(
             for (var i = 0; i < candidates.Count; i++)
             {
                 var built = ReportQueryBuilder.CappedCount(candidates[i], cap);
-                counts[i] = await connection.ExecuteScalarAsync<int>(new CommandDefinition(built.Sql, built.Parameters, tx, cancellationToken: ct));
+                counts[i] = await connection.ExecuteScalarAsync<int>(new CommandDefinition(built.Sql, built.Parameters, tx, commandTimeout, cancellationToken: ct));
             }
             if (counts.Any(c => c < cap)) break;
         }
@@ -104,10 +110,10 @@ public class ReportQueryRepository(
 
     private static async Task<IReadOnlyList<ReportSqlRow>> ReadAsync(
         System.Data.Common.DbConnection connection, System.Data.Common.DbTransaction tx, ReportQueryBuilder.Built built,
-        ReportSqlQuery q, bool hasKeys, CancellationToken ct)
+        ReportSqlQuery q, bool hasKeys, int? commandTimeout, CancellationToken ct)
     {
         var rows = new List<ReportSqlRow>();
-        await using var reader = await connection.ExecuteReaderAsync(new CommandDefinition(built.Sql, built.Parameters, tx, cancellationToken: ct));
+        await using var reader = await connection.ExecuteReaderAsync(new CommandDefinition(built.Sql, built.Parameters, tx, commandTimeout, cancellationToken: ct));
         while (await reader.ReadAsync(ct))
         {
             var i = 0;
