@@ -14,7 +14,9 @@ GitHub Actions（`.github/workflows/gate.yml`）：先跑外洩掃描（三項 0
 ## 單元流程（使用者 2026-11-17 裁決，加速）
 - 設計夠細（寫到欄位、算法、測試重點）的段：不另寫實作計畫、不審計畫；整段派一個實作 subagent 讀設計、在分支上列簡短待辦後直接做到底。設計不夠細才照舊寫計畫。
 - 每段只做一次程式碼審查（整段完成後讀整份 diff）、修一輪、跑一次 CI 就合併；權限或安全類的段審出 🔴 時，修完再審一次。
-- 審查者只讀 diff，不跑測試；測試交給 CI。
+- 審查者從 diff 出發，可讀必要的上下文（呼叫端、權限守衛、既有測試），不跑測試；測試交給 CI。
+- 審查結論的必修門檻：安全、權限、資料錯誤與公開契約（API、DTO、設定鍵、migration）的問題一律列必修；其餘列建議。
+- 審查 prompt 要附上該段已拍板的例外（使用者裁決過的行為），避免審查者用總原則推翻（2026-11-17 st1a 審查誤判 U13）。
 - 實作者本機只跑自己新增或修改的測試類別加 build；「既有功能沒被改壞」的安全網測試交給 CI。
 - 前端改動另加跑全域守衛 spec（`src/css/themes/` 的寫死顏色、`locales` 鍵一致）——2026-11-18 kr2 漏跑，CI 才擋下。
 - 效能類工作本機只驗正確性，快慢一律推分支交 CI 量；機器同時有別條線跑重測試時本機數字不可信（2026-11-18 測試加速在本機量測耗掉數小時）。
@@ -35,7 +37,7 @@ GitHub Actions（`.github/workflows/gate.yml`）：先跑外洩掃描（三項 0
 可以自己合併：
 
 1. `git merge-base --is-ancestor origin/main HEAD` 成立就 `git push origin HEAD:main`，用 fast-forward。
-2. 不成立就先 rebase 到 origin/main，再重跑閘門。
+2. 不成立就先 rebase 到 origin/main；rebase 帶進的 `backend/`、`frontend/`、`shared/`、Dockerfile 或 workflow 有變才重跑閘門，只差文件就沿用原結果（與 `formwright-ship` 一致）。
 
 不用 merge commit、不 force push。只改 `docs/`、`.claude/`、`.plugharbor/`、`scripts/` 的 push 不會部署。
 
@@ -53,7 +55,11 @@ main push 會自動部署 Demo（Render），但只在 `backend/`、`frontend/`�
   - `innerOverflow` 列出表格等容器自己的橫捲，逐項判斷是不是刻意的：寬報表可以，一般列表在手機不行。
 - 做完清掉 emulate，導回 about:blank。
 
+## 空檔來源
+`docs/todo.md` 的「近期可開工」區（欄位照 workspace unattended 的 speed-rules）；做完一項就從同檔「其他」補一項。
+
 ## 不並行的工作
+- 獨占資源：本機 Demo 埠（9180）、瀏覽器（chrome-devtools）、本機 Demo DB；同時只給一條線用，另一條線要走查就等前一條收掉。
 - 共用檔：i18n 語系檔（`frontend/src/i18n/*.json`）、前端路由與選單、後端 DI 註冊、DbContext 與 EF migration、`backend/apps/*.app.json`。單元計畫要列出會碰到哪幾個；兩條平行線碰到同一個就照順序做，不並行實作。
 - 平行線（另一個 worktree）只能做和進行中單元沒有共用檔的工作，例如簽核 a3 進行中時做任務看板 kb；兩條線的重測試錯開，不同時跑（使用者 2026-11-14 裁決）。
 - 兩件會加 EF migration 的實作：model snapshot 會衝突。

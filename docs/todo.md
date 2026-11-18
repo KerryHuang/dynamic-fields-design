@@ -2,19 +2,26 @@
 
 跨 session、又不屬於任何功能的雜事。一行一項、動詞開頭，冒號後寫脈絡；做完就刪（紀錄留在 git 歷史）。發現其實是功能，就移到 [功能清單](feature.md)。
 
+## 近期可開工
+
+自動駕駛等 CI、部署、審查時的空檔候選：依賴已滿足、範圍小、可隨時暫停。每項寫目標與驗收｜依賴｜基準 SHA｜預計路徑｜資源｜可暫停點｜狀態｜owner；做完刪掉，從下方「其他」挑新的補上。
+
+- 修正略過標記檢查註解引用的設計章節（a5d 複審 N5）：註解 §6.3 改 §6.1，build 過即可｜依賴：無｜基準 3c024feb｜backend/src（略過標記檢查處）｜CPU 輕｜任一 commit 後｜可開工｜未指派
+- 讓極端日期（如 9999 年）存檔回欄位錯誤而不是 500（tz1 審查 S4）：DateTimeHandler.Normalize 換時區超出範圍時回欄位錯誤，加一個單元測試紅轉綠｜依賴：無｜基準 3c024feb｜backend/src（DateTimeHandler）、backend/tests 對應測試｜本機單一測試類別｜測試寫完或修完｜可開工｜未指派
+- 檢查 xUnit 測試是否還有依賴牆鐘短上限的寫法：唯讀盤點，結果列回本檔｜依賴：無｜基準 3c024feb｜唯讀 backend/tests｜不吃 CPU｜任何時候｜可開工｜未指派
+
+## 其他
+
 - 建 Playwright 主線 e2e 測試：簽核前端 a4b 完成後做，5–8 條（登入、建記錄、送簽、同意、任務留言），放進 gate 防回歸（2026-11-11 使用者裁決）
 - 補事件設計器「轉回草稿前改鎖定欄位」的提示：a2d1 修正後的新問題 1，屬事件設計器，不在簽核設計器範圍
 - 補收件人名稱解析的後端測試（a2d7 N-M3）：政策收件人引用已停用或不存在帳號時的行為，a4a 前端部分已隨收件人 chip 修正補上
 - 加收件人政策 0 項或 20 項以上的提示（a2d7 N-M4）：不影響簽核設計器畫面，之後在政策設定頁處理
 - 讓簽核試算的發起人下拉可搜尋（a4a5 審查 S5）：現在列出全部使用者，人多時在手機上要捲很長；照記錄下拉加 use-input 與本地篩選
 - 讓營運時區可設定（目前寫死 Asia/Taipei）：tz1 只統一了「無偏移＝台北牆上時間」的解析；BusinessClock.Offset、TaipeiBusinessTime，以及 Normalize、匯入（FieldImportParser.cs:99）、報表過濾（ReportRules.cs:239）補上的 "+08:00" 字面值仍寫死
-- 讓極端日期（如 9999 年）存檔回欄位錯誤而不是 500：DateTimeHandler.Normalize 對 9999-12-31T20:00:00Z 這類值換到 +08:00 會超出範圍而丟例外（tz1 審查 S4）
 - 補擋「改關卡代碼或分兩次改來源」清掉候選略過標記的路徑（a5d 複審 N4）：目前只比對上一版同代碼關卡；屬防誤操作，不是安全漏洞
-- 修正略過標記檢查註解引用的設計章節（a5d 複審 N5）：規則在簽核設計 §6.1，註解寫成 §6.3
 - 改善切換來源類型後才出現的後端錯誤文案（a5d 複審 N6）：使用者看不出是略過標記規則擋下
 - 讓簽核臨時讀取時參照欄位能顯示（a4b 既有）：manager01 臨時讀取採購單時「品項」顯示「無權限檢視」
 - 查簽核臨時讀取時 schema 先回 403 再重抓成功（a4b 既有）：畫面最終正常，但多一次失敗請求
-- 檢查 xUnit 測試是否還有依賴牆鐘短上限的寫法：CachedSystemPolicyTests 曾因工作執行緒被佔滿而 CI 失敗兩次（ef66fda7 已修該筆）
 - 補 MessageText 四語（任務看板 kb1 審查 N1）：a3 合併後把 SupervisorOnlyAssignee（主管只能改負責人的 403 訊息）、UndoInvalid（復原憑證無效）加進 MessageText 表；kb 段不能碰與 a3 共用的 MessageText.cs
 - 修 WriteGateTests.Waiters_AreServedInArrivalOrder 的不穩定：已兩次在 CI 偶發失敗
 - 修 vitest 在 jsdom 拆除後 Quasar 計時器觸發的「window is not defined」：ApproverSourceEditor spec，fg1a CI 因此重跑過一次
