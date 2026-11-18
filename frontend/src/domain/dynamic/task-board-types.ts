@@ -166,6 +166,7 @@ export interface GanttSource {
 /**
  * 時間軸列裡的子任務、其父任務不在 rows 時才列（只在依父子分組時）。visible=false：看不到父任務，只有標題；
  * row 只在父任務看得到、符合範圍與篩選、只是不在時間窗內或未排程時才有。
+ * 因超過 500 列上限被截掉（沒進 rows）的父任務也走同一條路：看得到又符合就帶 row，看不到就是 visible=false、row=null。
  */
 export interface GanttParent {
   id: number;
@@ -174,7 +175,10 @@ export interface GanttParent {
   row: BoardCard | null;
 }
 
-/** 子任務跨度（不含已取消的子任務）。 */
+/**
+ * 子任務跨度（不含已取消的子任務）。看得到的父任務用全部子任務算（含因截斷沒進 rows 的）；
+ * 看不到的父任務只用這次回應 rows 裡的子任務算，因截斷沒進 rows 的子任務不計。
+ */
 export interface GanttSpan {
   parentId: number;
   from: string;
@@ -190,7 +194,7 @@ export interface TaskGanttData {
   scopeAvailable: boolean;
   config: TaskGanttConfig;
   rows: BoardCard[];
-  /** 全部符合的列數；超過 500 時 truncated=true，rows 只有前 500 列。 */
+  /** 全部符合的列數；超過 500 時 truncated=true，rows 只有前 500 列（被截掉的任務不在 rows，也不會單獨出現在別處）。 */
   total: number;
   truncated: boolean;
   parents: GanttParent[];

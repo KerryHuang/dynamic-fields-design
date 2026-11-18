@@ -221,6 +221,7 @@ public class TaskBoardApiTests : IDisposable
     [Trait("Category", "Postgres")]
     public async Task Gantt_Http_RoundTrip_WindowErrors_BoardId404()
     {
+        _app.Clock.Fixed = new DateTime(2026, 11, 18, 9, 0, 0); // 星期三；A7 出廠為星期一，本週起始日 11/16
         var sales = _app.AsUser("sales01");
         var task = await Ok(await sales.PostAsJsonAsync($"{Base}/tasks",
             new { title = "佈置展場", assigneeUserId = "sales01", startDate = "2026-11-21", dueDate = "2026-11-28" }), HttpStatusCode.Created);
@@ -230,7 +231,8 @@ public class TaskBoardApiTests : IDisposable
         var g = await Ok(await sales.PostAsync($"{Base}/tasks/gantt", Json("""{"config":""" + flat + ""","window":{"from":"2026-11-16","to":"2026-11-29"}}""")));
         g.GetProperty("window").GetProperty("from").GetString().Should().Be("2026-11-16");
         g.GetProperty("weekStart").GetString().Should().Be("monday");
-        g.GetProperty("today").GetString().Should().NotBeNullOrEmpty();
+        g.GetProperty("window").GetProperty("to").GetString().Should().Be("2026-11-29");
+        g.GetProperty("today").GetString().Should().Be("2026-11-18");
         var row = g.GetProperty("rows").EnumerateArray().Single();
         row.GetProperty("id").GetInt64().Should().Be(task.GetProperty("id").GetInt64());
         row.GetProperty("startDate").GetString().Should().Be("2026-11-21");
@@ -241,7 +243,11 @@ public class TaskBoardApiTests : IDisposable
         g.GetProperty("unscheduled").EnumerateArray().Single().GetProperty("title").GetString().Should().Be("還沒排");
         g.GetProperty("unscheduledTotal").GetInt32().Should().Be(1);
         g.GetProperty("config").GetProperty("scale").GetString().Should().Be("week");
-        (await Ok(await sales.PostAsync($"{Base}/tasks/gantt", Json("{}")))).GetProperty("config").GetProperty("groupBy").GetString().Should().Be("parent");
+        var defaults = await Ok(await sales.PostAsync($"{Base}/tasks/gantt", Json("{}")));
+        defaults.GetProperty("config").GetProperty("groupBy").GetString().Should().Be("parent");
+        defaults.GetProperty("today").GetString().Should().Be("2026-11-18");
+        defaults.GetProperty("window").GetProperty("from").GetString().Should().Be("2026-11-16");
+        defaults.GetProperty("window").GetProperty("to").GetString().Should().Be("2027-02-14", "預設週刻度 13 週");
 
         (await sales.PostAsync($"{Base}/tasks/gantt", Json("""{"window":{"from":"2026/11/16","to":"2026-11-29"}}""")))
             .StatusCode.Should().Be(HttpStatusCode.BadRequest);

@@ -302,6 +302,53 @@ public class TaskGanttQueryTests : TaskBoardTestBase
         g.UnscheduledTruncated.Should().BeTrue();
     }
 
+    /// <summary>
+    /// 父子分組遇到 500 列上限：排在 500 名之後、看得到又符合篩選的父任務仍出現在 parents 且帶 row；
+    /// 子任務被截掉時，看得到的父任務跨度仍用資料庫全部子任務算（含被截掉的）。
+    /// </summary>
+    [Fact]
+    public async Task G43_ParentGrouping_ParentRankedBeyondCap_StillHasRow()
+    {
+        var p = await SeedTask("排在 500 名後的父任務", createdBy: "sales01", assignee: "sales01", due: N(25));
+        var inRows = await SeedChild(p, "在列裡的子任務", assignee: "sales01", due: N(16));
+        var cut = await SeedChild(p, "被截掉的子任務", assignee: "sales01", due: N(28));
+        var fillers = Enumerable.Range(0, GetTaskGanttHandler.MaxRows - 1).Select(i => NewTask($"填充 {i:000}", N(17))).ToList();
+        await AddAll(fillers);
+
+        var g = await Gantt("sales01", Config("parent"), window: W(N(16), N(29)));
+
+        g.Rows.Should().HaveCount(GetTaskGanttHandler.MaxRows);
+        g.Total.Should().Be(GetTaskGanttHandler.MaxRows + 2);
+        g.Truncated.Should().BeTrue();
+        g.Rows[0].Id.Should().Be(inRows.Id);
+        g.Rows.Should().NotContain(r => r.Id == p.Id || r.Id == cut.Id, "父任務與被截掉的子任務都排在 500 名之後");
+        var parent = g.Parents.Should().ContainSingle().Subject;
+        parent.Id.Should().Be(p.Id);
+        parent.Visible.Should().BeTrue();
+        parent.Row!.Id.Should().Be(p.Id);
+        g.Spans.Should().Equal(new TaskGanttSpan(p.Id, N(16), N(28))); // 看得到的父任務跨度含被截掉的子任務
+    }
+
+    /// <summary>父任務看不到：超過上限時 row 仍是 null、只有標題，跨度只用留在 rows 裡的子任務（被截掉的子任務日期不外洩）。</summary>
+    [Fact]
+    public async Task G43_ParentGrouping_InvisibleParent_RowNull_SpanExcludesCutChildren()
+    {
+        var p = await SeedTask("看不到的父任務", createdBy: "sales01", assignee: "sales01", due: N(25));
+        var inRows = await SeedChild(p, "留在列裡", assignee: "sales02", due: N(16));
+        var cut = await SeedChild(p, "被截掉的子任務", assignee: "sales02", due: N(28));
+        var fillers = Enumerable.Range(0, GetTaskGanttHandler.MaxRows - 1).Select(i => NewTask($"填充 {i:000}", N(17), "sales02")).ToList();
+        await AddAll(fillers);
+
+        var g = await Gantt("sales02", Config("parent", "involved"), window: W(N(16), N(29)));
+
+        g.Truncated.Should().BeTrue();
+        g.Rows.Should().HaveCount(GetTaskGanttHandler.MaxRows);
+        g.Rows.Should().Contain(r => r.Id == inRows.Id).And.NotContain(r => r.Id == cut.Id);
+        g.Parents.Should().Equal(new TaskGanttParent(p.Id, "看不到的父任務", false, null));
+        g.Spans.Should().Equal(new TaskGanttSpan(p.Id, N(16), N(16)));
+        WireText(g).Should().NotContain("2026-11-28");
+    }
+
     [Fact]
     public async Task G44_QueryCount_DoesNotGrowWithRows()
     {
@@ -403,11 +450,11 @@ public class TaskGanttQueryTests : TaskBoardTestBase
         g.Unscheduled.Select(u => u.Id).Should().Equal(task.Id);
     }
 
-    private static TaskItem NewTask(string title, DateOnly? due)
+    private static TaskItem NewTask(string title, DateOnly? due, string user = "sales01")
     {
-        var t = new TaskItem { Title = title, CreatedBy = "sales01", AssigneeUserId = "sales01", DueDate = due, CreatedTime = SeedTime };
-        t.Participants.Add(new TaskParticipant { UserId = "sales01", Reason = TaskParticipantReason.Creator });
-        t.Participants.Add(new TaskParticipant { UserId = "sales01", Reason = TaskParticipantReason.Assignee });
+        var t = new TaskItem { Title = title, CreatedBy = user, AssigneeUserId = user, DueDate = due, CreatedTime = SeedTime };
+        t.Participants.Add(new TaskParticipant { UserId = user, Reason = TaskParticipantReason.Creator });
+        t.Participants.Add(new TaskParticipant { UserId = user, Reason = TaskParticipantReason.Assignee });
         return t;
     }
 
