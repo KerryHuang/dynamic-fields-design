@@ -786,10 +786,17 @@ public class TaskReportRunnerTests : TaskTestBase
     public async Task C43_Level_ChildStaysChild_WhenViewerCannotSeeParent_AndParentStaysParent()
     {
         var p = await SeedTask("父", createdBy: "admin", assignee: "sales01");
-        await SeedChildOf(p, "子", "sales02");
+        var child = await SeedChildOf(p, "子", "sales02");
 
-        var asSales02 = await Run(TaskDef([M("n", "countMain")], [G(F.Level)]), "sales02");
-        asSales02.Groups!.Should().ContainSingle().Which.GroupLabels[0].Should().Be("子任務");
+        var def = TaskDef([M("n", "countMain")], [G(F.Level)]);
+        var asSales02 = await Run(def, "sales02");
+        var childGroup = asSales02.Groups!.Should().ContainSingle().Which;
+        childGroup.GroupLabels[0].Should().Be("子任務");
+        childGroup.Values["n"].Should().Be(1, "看不到的父任務不會混進子任務組");
+        asSales02.Total!["n"].Should().Be(1);
+        var drill = await Drill(def, "sales02", Opt(F.LevelChild));
+        drill.State.Should().Be("ok", drill.Message);
+        drill.TaskIds.Should().Equal(child.Id);
         var asSales01 = await Run(TaskDef([M("n", "countMain")], [G(F.Level)]), "sales01");
         Group(asSales01, "父任務").Values["n"].Should().Be(1);
     }
