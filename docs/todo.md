@@ -24,7 +24,6 @@
 - 查簽核臨時讀取時 schema 先回 403 再重抓成功（a4b 既有）：畫面最終正常，但多一次失敗請求
 - 補 MessageText 四語（任務看板 kb1 審查 N1）：a3 合併後把 SupervisorOnlyAssignee（主管只能改負責人的 403 訊息）、UndoInvalid（復原憑證無效）加進 MessageText 表；kb 段不能碰與 a3 共用的 MessageText.cs
 - 修 WriteGateTests.Waiters_AreServedInArrivalOrder 的不穩定：已兩次在 CI 偶發失敗
-- 修 vitest 在 jsdom 拆除後 Quasar 計時器觸發的「window is not defined」：ApproverSourceEditor spec，fg1a CI 因此重跑過一次
 - 查其他端點以 403／404 區別洩漏記錄是否存在：history、upload、update、delete、print、關聯分頁、沖銷、關閉模組（schema 臨時讀取已改一律 403）
 - 替「我已處理」查詢加 (ActorUserId, TaskId) 索引：目前缺索引，資料量大時會慢
 - 補直接請求被隱藏負責人欄的負面測試（任務看板 kb2 審查 S2）
@@ -52,7 +51,6 @@
 - 驗 render.yaml 的 buildFilter：第一次只改文件的 push 到 main 後，確認 Render 沒有重新部署
 - 前端改動的驗收一律跑完整 `bun run test`（約 2 分鐘）：fg3c 只跑篩選範圍，漏掉 no-hardcoded-colors 守門，CI 才擋下
 - 讓 DemoDataApiTests 只做一次完整產生：需要完整產生結果的唯讀案例（輪詢到完成、已產生再產生 409 等）共用一份 fixture；並發與身分隔離案例照舊獨立產生（使用者 2026-11-18 同意，接受案例間連帶紅的代價）。原註：單一類別要 12 分以上且只能序列跑，是 CI 最慢的一份（WebAPITests 1/4 約 14.7 分）
-- 查前端 vitest 偶發的 unhandled error（Quasar timer）：測試全過但 vitest 以 exit 1 結束，CI 需重跑
 - 啟用 Demo 流程圖範例流程並實際送簽展示（使用者 11-16 裁決）：「採購單（流程圖範例）」改啟用；它目前優先序 0、未稅小計 ≥ 10000，啟用後會攔下 1 萬以上所有採購單，要重排 InventoryScenario 既有送簽情境（大額／一萬以上兩條流程的 Demo 單據），並加幾張走並行分支的送簽單讓進度圖看得到並行
 - 實機看設計頁試算時，有警告的線是否保持警告色（只改了 CSS，未實機驗）
 - 處理專案設定啟用但沒安裝的 dotnet-test plugin：每次 `claude -p` 開頭都印一行警告；裝上或從 .claude/settings.json 拿掉（lifecycle 3.0.0 試用，2026-11-15）
