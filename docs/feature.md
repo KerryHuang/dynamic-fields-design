@@ -90,7 +90,7 @@
 
 完成 1／共 9。設計見 ops-observability；順序見 [roadmap](roadmap.md)：p1 → o1a → 簽核 a2d1 → a4b → a6 → a2d2–a2d7 → a4a → ci1 → tz1 → a5 → a3 → fg1–fg6 → kb、kr → st → gt → o1b、o1c → un1 → pg0 → O2 → p2、p3 → mcp1 → O3–O6（簽核提前為使用者 11-12 裁決；p2、p3 位置與 O3–O6 的先後使用者 11-12 確認）。設計的 C1–C7 已由使用者 2026-11-12 全部裁決（ops-observability §16）。
 
-- [ ] 🚧 維運地基（段 O1） — 部分：已有 o1a（request id、結構化 log、health live／ready、版本端點、前端錯誤收件端點），缺 o1b 排程器與提醒新規則、o1c 前端錯誤回報；結構化 log 與 request id、health live／ready、版本端點、前端錯誤收集、背景排程器（任務提醒不再依賴使用者上線）；「即將到期」提醒改為到期前 N 天內任一天打開通知或排程器跑到就補一次、同一任務只補一次（使用者 11-12 裁決）
+- [ ] 🚧 維運地基（段 O1） — 部分：已有 o1a（request id、結構化 log、health live／ready、版本端點、前端錯誤收件端點）、o1b（背景排程器與資料表租約、通知維護工作、提醒新規則），缺 o1c 前端錯誤回報；結構化 log 與 request id、health live／ready、版本端點、前端錯誤收集、背景排程器（任務提醒不再依賴使用者上線）；「即將到期」提醒改為到期前 N 天內任一天打開通知或排程器跑到就補一次、同一任務只補一次（使用者 11-12 裁決）
 - [x] PostgreSQL provider 抽象（段 pg0a） — 依 `Database:Provider` 選 SQLite／PostgreSQL，SQLite 行為不變、不加 migration；設計見 [PostgreSQL provider](superpowers/specs/2026-11-12-postgres-provider-design.md)
 - [ ] 📋 PostgreSQL provider 抽象與測試環境（段 pg0） — 正式版資料庫是 PostgreSQL（使用者 11-11 說明）；provider 抽象＋可在 PostgreSQL 跑的測試環境，之後的功能兩種資料庫都驗；驗收含 O1 排程器與通知維護在 PostgreSQL 上通過；設計見 [PostgreSQL provider](superpowers/specs/2026-11-12-postgres-provider-design.md)（pg0b–pg0d；pg0a 另列） ⛔ 等：O1
 - [ ] 📋 報表 SQL 路徑 PostgreSQL 改寫（段 pg1） — pg0 期間 PostgreSQL 上報表走記憶體路徑；排在簽核 a6 之後、O2 之前（使用者 11-12 裁決） ⛔ 等：pg0

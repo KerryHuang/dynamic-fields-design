@@ -532,6 +532,13 @@ O1 就實作，log 與 O2 事件表共用同一套（主控判斷 T4）。指紋
 - 單次執行有寫死的最長時間（§12），超過就取消並記失敗。
 - 部署設定 `Ops:Scheduler:Enabled`（預設開）可整個關掉，給「多實例只讓其中一台跑」或除錯用。這是部署設定，不是業務政策。
 - 程式關閉時停止領新工作，等待執行中的工作在 graceful shutdown 時間內結束。
+- 〔o1b 實作補記，O1 計畫判斷 J16–J19〕
+  - 搶租約的條件另加「已到期」：`WHERE JobKey=? AND NextDueUtc <= 現在 AND (租約持有者 IS NULL OR 租約到期 < 現在)`（偏離上面原寫法）。沒有這一條時，慢一步讀到「到期」的實例會在別人跑完、清掉租約後再搶到一次而重跑。
+  - 補列、搶租約、續租、寫結果都是交易型請求（經 `WriteGate`），各開一個短 DI scope；工作本身另開一個 scope。續租在自己的 scope 與交易，不巢狀在工作的交易裡。
+  - 續租：不是持有者就中止工作、不寫結果（別人已接手，不能蓋掉新持有者的列），記 `leaseLost`；資料庫暫時失敗只記 Warning、下一週期再試，不判工作失敗，連續失敗到租約剩不到一個續租週期才判租約遺失。
+  - 結果：逾時記 `Failed`（`LastError`＝`timeout`）；程式關閉記 `Cancelled`，不累加連續失敗，下次預定時間＝結束時間（下一個 tick 任何實例都可接）；`PartiallyFailed` 也累加連續失敗。
+  - 核心 `JobRunner` 在 Application，`SchedulerHostedService` 在 WebAPI；啟動先補工作列，再等一個檢查週期才跑第一次（不和冷啟動的第一位訪客搶資源）。計時器（續租、逾時、檢查週期）都走 `TimeProvider`，測試用手動時鐘快轉，不真的等待。
+  - 撞鍵與忙碌的判斷沿用 pg0a 已集中的 `IDatabaseErrors`（`IsUniqueViolation`、`IsBusyOrConflict`），不另建 O1 計畫寫的 `IDbErrorClassifier`。
 
 #### 10.2.9 第一個工作：通知維護（`notification.upkeep`）
 
@@ -540,6 +547,7 @@ O1 就實作，log 與 O2 事件表共用同一套（主控判斷 T4）。指紋
 - 每位使用者各自一個交易、各自一個 `ActingScope`（B3）；一位失敗記 log 後繼續下一位，最後整體結果記為「部分失敗」。
 - **即將到期提醒的新規則**（使用者 2026-11-12 裁決，取代現行的「到期日是明天才提醒」）：任務在到期前 `N` 天內（N＝政策 A6「到期前幾天提醒」，出廠 1）的任何一天，只要使用者打開通知或排程器跑到，就補一次；同一任務的即將到期提醒只補一次（以 `LastDueSoonNotified` 非空為準，不再是一天一則）。逾期提醒維持現行（到期日早於今天，一天最多一則）。新規則在 o1b 與排程器一起改，惰性路徑與排程路徑共用同一個判斷。任務設計 §6.2 與政策設定 A6 同步改寫。
 - 保留惰性觸發（主控判斷 U4）：兩條路徑都冪等，排程器停了提醒也不會完全消失。
+- 〔o1b 實作補記〕O1 計畫的使用者裁決（2026-11-12）一併實作：即將到期的範圍含到期當天（D1）；改到期日清掉即將到期戳記、換負責人兩個戳記都清（D2，重新計）；完成或取消後重開、到期日沒改不重新計（B3）；逾期提醒在同一任務還有未讀的逾期通知時只蓋今天的戳記、不新增（B1）。工作呼叫的是同一個 `EnsureNotificationUpkeepRequest`，所以簽核逾期提醒（`ApprovalReminderSource`，本來就是條件式認領）也一起改由排程補。唯讀判斷抽成 `NotificationUpkeepProbe`，兩條路徑共用；全部使用者都失敗時記 `Failed`，部分失敗記 `PartiallyFailed`，`LastError` 是「失敗數／總數 位使用者失敗」。
 - 去重要能承受兩條路徑同時跑：現在靠任務列上的 `LastDueSoonNotified`、`LastOverdueNotified` 日期戳。SQLite 經 `WriteGate` 序列化不會重複；PostgreSQL 在 pg0 也有程序內排隊與全庫 advisory lock，但去重不能依賴它們（多實例時程序內排隊不互通，全庫鎖將來也可能拿掉），沒有序列化時兩個交易可能同時讀到舊值而各寫一則。所以 o1b 要把「寫日期戳」改成條件式更新（只在日期戳不是今天時更新，影響列數為 1 才新增通知），兩種資料庫都成立（§10.7）。
 - 使用者看得到的變化：即將到期的提醒在進入到期前 N 天的範圍後一小時內就出現在鈴鐺未讀數，不必先打開鈴鐺；中途才被指派或才建立的任務也會補一次。手冊任務章節要同步（提醒說明改成「到期前 N 天內補一次」）。
 
@@ -573,6 +581,7 @@ O1 只加一張表，一個 migration（o1b）。命名沿用既有 `Dynamic_` �
 - 只存目前狀態，不存每次執行歷程，所以沒有保留天數問題；歷程看 log 與 O2 的事件。
 - 啟動補列（主控判斷 B7）：多實例在 PostgreSQL 上同時啟動會撞主鍵。做法是「插入，撞唯一鍵就略過」，撞鍵的判斷經 §10.7 的集中衝突判斷函式，不綁 `SqliteException`。
 - 時間欄位一律存 UTC（§10.7）。
+- 〔o1b 實作補記〕migration `20261118041712_OpsScheduledJob`（EF 產生、未手改、無部分索引）。`JobKey`、`LeaseOwner` 長度 100，`LastStatus` 存字串（長度 20）；四個時間欄位名稱都以 `Utc` 結尾，讀回時以 value converter 標成 `Kind=Utc`（SQLite 存文字不帶 Kind）。
 
 ### 10.5 API
 
@@ -610,7 +619,7 @@ O1 排在 pg0 之前，所以合併當下還不能在 PostgreSQL 上跑；但 O1
 
 - 不寫任何資料庫專屬 SQL；租約、條件式更新都用 EF 的 `ExecuteUpdate`。
 - ops 相關的時間一律 UTC。Npgsql 對應 `timestamptz` 時要求 `DateTime.Kind=Utc`，混用本地時間會在執行期丟例外；業務時間仍照現有 `IBusinessTime`（牆上時間在 pg0 對應 `timestamp without time zone`，與 ops 的 UTC 欄位分開）。
-- 例外判斷不綁 `SqliteException`：排程器遇到資料庫忙碌或交易衝突時，透過 pg0 的重試對應判斷（SQLite 的 BUSY／LOCKED、PostgreSQL 的 40001／40P01），O1 先集中在一個判斷函式，pg0 補 PostgreSQL 分支。
+- 例外判斷不綁 `SqliteException`：排程器遇到資料庫忙碌或交易衝突時，透過 pg0 的重試對應判斷（SQLite 的 BUSY／LOCKED、PostgreSQL 的 40001／40P01），O1 先集中在一個判斷函式，pg0 補 PostgreSQL 分支。〔o1b 實作補記〕pg0a 已先做好集中判斷 `IDatabaseErrors`（含 PostgreSQL 的 SQLSTATE），排程器與補列直接用它。
 - 計數與次數用整數欄位、不用 `double`。
 - 字串主鍵不依賴大小寫不敏感比對（SQLite 預設與 PostgreSQL 不同），工作代碼一律小寫。
 - 並行假設以 PostgreSQL 為準：不能靠序列化保證正確，所有「先讀再寫」的去重都改成條件式更新（§10.2.9）。pg0 在 PostgreSQL 上仍啟用 `WriteGate` 做程序內排隊（避免等鎖請求佔滿連線池），另加全庫 advisory lock（[pg0 設計](2026-11-12-postgres-provider-design.md) §5.6、T18）；兩者都不是正確性的依據：多實例時程序內排隊不互通，全庫鎖將來可能拿掉，pg0 用「無鎖模式」測試驗證 O1 本身正確。
@@ -639,6 +648,7 @@ O1 排在 pg0 之前，所以合併當下還不能在 PostgreSQL 上跑；但 O1
   - 持有者當掉（不續租）後，租約過期由另一實例接手。
   - 工作丟例外：LastStatus＝Failed、ConsecutiveFailures 加一，其他工作照常。
   - 通知維護：有任務在到期前 N 天內（含剛指派、剛建立）的使用者，不呼叫取得通知 API 也收到提醒，且同一任務只收一次；超過保留天數的通知被清；同一天跑兩次不重複；排程與惰性觸發同一天各跑一次也不重複。
+  - 〔o1b 實作補記，O1 計畫判斷 J20〕以上四條寫在 WebAPITests（`TestApp(fileDatabase: true)`，每個 scope 一個真的 DbContext）：`Ops.SchedulerTests`、`Ops.ScheduledJobLeaseTests`、`Ops.NotificationUpkeepJobTests`；提醒規則本身在 ApplicationTests 的 `NotificationApiTests`。
 
 **前端自動測試**（vitest）
 
@@ -714,7 +724,7 @@ O1 的三項見 §10.6。以下是 O2–O6 的建議登記（代碼與出廠值�
 **技術限制**
 
 - ready 檢查的資料庫逾時 2 秒（讀不到資料庫時也要能回答，不能放在資料庫裡的政策）。
-- 排程器檢查週期 30 秒、租約 5 分鐘、續租每 1 分鐘、單次執行最長 10 分鐘。
+- 排程器檢查週期 30 秒、租約 5 分鐘、續租每 1 分鐘、單次執行最長 10 分鐘。排程器啟動後先等一個檢查週期才跑第一次（O1 計畫判斷 J19，`SchedulerLimits`）。
 - 前端錯誤收件：body 8KB、訊息 500 字、stack 4000 字；每來源 IP 每分鐘 30 則、全站每分鐘 600 則（雲端版同一出口 IP 共用額度，錯誤數可能被低估；O2 聚合時把 429 次數也計成 metric，審查 U3）。
 - 伺服器端指紋只取呼叫框名稱以 `DynamicModules.`（`ErrorFingerprint.ProductPrefix`）開頭的框；ops info 的機器名截斷 80 字元（`OpsInstance`）。
 - 前端錯誤收件的其他欄位上限：`name`／`moduleKey` 100、`route`／`browser` 200、`version` 50、`locale` 20，`lastRequestId` 32 個十六進位字元（O1 計畫判斷 J13）。

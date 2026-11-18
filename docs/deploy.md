@@ -29,6 +29,7 @@ Formwright 的 Demo 站與容器部署做法。本機開發與測試見 [CONTRIB
 | `Attachments__MaxBytes`、`Attachments__MaxFilesPerField`、`Attachments__AllowedExtensions__0`… | 附件政策在這個環境的出廠值，見下方「附件設定與政策出廠值」 |
 | `Ops__Edition` | 版別，`Cloud` 或 `OnPrem`（其他值記 Warning 並當 `OnPrem`）；顯示在系統管理員的 ops info |
 | `Ops__TrustIncomingTraceParent` | 預設 `false`：忽略外來的 `traceparent`，request id 由伺服器產生；放在自家反向代理後面、要串接上游 trace 時才設 `true` |
+| `Ops__Scheduler__Enabled` | 背景排程器（通知維護等），預設 `true`；設 `false` 整個不跑。多實例時同一工作靠資料表租約只跑一份，也可以只讓其中一台開著；實例之間的時鐘誤差由 5 分鐘租約吸收，主機請開 NTP 校時 |
 | `Sqlite__MmapSizeMb` | SQLite 每條連線的記憶體對映大小，單位 MB，預設 `0`（關閉）；也可寫在 `appsettings.json` 的 `Sqlite:MmapSizeMb` |
 | `Database__Provider` | 資料庫種類，預設 `Sqlite`；目前只支援 `Sqlite`，設成 `Postgres` 或其他值會拒絕啟動（PostgreSQL 尚未提供） |
 | `DataProtection__KeysDirectory` | 登入 cookie 加密金鑰的存放目錄（相對路徑以站台目錄解析）；沒設就放在資料庫檔案旁的 `keys`，記憶體資料庫則不落地（重啟後要重新登入） |
