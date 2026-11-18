@@ -212,10 +212,10 @@ public class ExtensionModuleTests : IAsyncLifetime
 
     [Trait("Category", "SqliteOnly")]
     [Fact]
-    public async Task CreateRecord_Extension_NonUniqueSaveFailure_StillHostConflict()
+    public async Task CreateRecord_Extension_NonUniqueSaveFailure_IsNotHostConflict()
     {
-        // 現行行為（pg0a 保留）：有 hostKey 時儲存丟出的任何 DbUpdateException 都回擴充資料衝突，不只唯一鍵；
-        // 這裡用觸發器丟 SQLITE_CONSTRAINT_TRIGGER（不是唯一鍵）。縮小捕捉範圍排在 pg0b
+        // 只有唯一鍵衝突才是擴充資料衝突（PostgreSQL provider 設計 §4、§9 pg0b）；其他儲存失敗照原樣丟出（API 回 500），
+        // 不再誤報成 409。這裡用觸發器丟 SQLITE_CONSTRAINT_TRIGGER（同是 SQLITE_CONSTRAINT，但不是唯一鍵）
         var note = await NewExt("ext13");
         await using (var cmd = _db.Connection.CreateCommand())
         {
@@ -226,10 +226,9 @@ public class ExtensionModuleTests : IAsyncLifetime
             await cmd.ExecuteNonQueryAsync();
         }
 
-        var r = await CreateExtRec("ext13", note, "E-0001");
+        var act = () => CreateExtRec("ext13", note, "E-0001");
 
-        r.IsConflict.Should().BeTrue();
-        r.Message.Should().Be("這筆既有資料已經有擴充資料");
+        await act.Should().ThrowAsync<DbUpdateException>();
     }
 
     [Fact]

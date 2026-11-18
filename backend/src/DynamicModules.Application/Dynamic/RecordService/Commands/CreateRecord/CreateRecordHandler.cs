@@ -13,7 +13,8 @@ namespace DynamicModules.Application.Dynamic.RecordService.Commands.CreateRecord
 
 public class CreateRecordHandler(
     IModuleRepository modules, IRecordRepository records, IUnitOfWork uow, IDynamicAccessGuard guard, ReferenceResolver resolver,
-    ReferenceProviderRegistry providers, DetailWriter details, DetailReader detailReader, RollupRecalc rollups, RecordCreator creator)
+    ReferenceProviderRegistry providers, DetailWriter details, DetailReader detailReader, RollupRecalc rollups, RecordCreator creator,
+    IDatabaseErrors databaseErrors)
     : IRequestHandler<CreateRecordRequest, ServiceResult>
 {
     public async Task<ServiceResult> Handle(CreateRecordRequest request, CancellationToken ct)
@@ -50,10 +51,9 @@ public class CreateRecordHandler(
         {
             await uow.CommitAsync(ct);
         }
-        catch (DbUpdateException) when (hostKey is not null)
+        catch (DbUpdateException ex) when (hostKey is not null && databaseErrors.IsUniqueViolation(ex))
         {
-            // 查重與寫入之間被別人搶先：唯一索引兜底。
-            // 目前任何儲存失敗都當成衝突（SQLite 行為不變）；只接唯一鍵（IDatabaseErrors.IsUniqueViolation）排在 pg0b
+            // 查重與寫入之間被別人搶先：唯一索引兜底。只接唯一鍵衝突；死結、忙碌照忙碌（503）處理，其他儲存失敗照 500
             return HostConflict;
         }
         if (plan.Sets.Any(x => x.Changes.Count > 0))
