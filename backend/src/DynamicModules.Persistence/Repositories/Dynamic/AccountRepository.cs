@@ -22,6 +22,9 @@ public class AccountRepository(DynamicDbContext db) : IAccountRepository
     public Task<bool> UserExistsAsync(string userId, CancellationToken ct) =>
         db.Set<AppUser>().AnyAsync(u => u.UserId == userId, ct);
 
+    public async Task<IReadOnlyList<string>> ListActiveUserIdsAsync(CancellationToken ct) =>
+        await db.Set<AppUser>().AsNoTracking().Where(u => u.IsActive).OrderBy(u => u.UserId).Select(u => u.UserId).ToListAsync(ct);
+
     public Task<int> CountActiveAdminsAsync(CancellationToken ct) =>
         db.Set<AppUser>().CountAsync(u => u.IsActive && u.IsSystemAdmin, ct);
 

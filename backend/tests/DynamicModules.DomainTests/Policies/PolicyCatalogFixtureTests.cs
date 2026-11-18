@@ -55,6 +55,10 @@ public class PolicyCatalogFixtureTests
         PolicyCatalog.TaskSupervisorScopeRecursive.Scope.Should().Be(PolicyScope.System);
         PolicyCatalog.NotificationRetentionDays.Factory.Should().Be("90");
         PolicyCatalog.NotificationRetentionDays.Scope.Should().Be(PolicyScope.System);
+        PolicyCatalog.NotificationReminderScanMinutes.Factory.Should().Be("60");
+        PolicyCatalog.NotificationReminderScanMinutes.Min.Should().Be(5);
+        PolicyCatalog.NotificationReminderScanMinutes.Max.Should().Be(1440);
+        PolicyCatalog.NotificationReminderScanMinutes.Scope.Should().Be(PolicyScope.System);
         PolicyCatalog.CalendarWeekStart.Factory.Should().Be("monday");
         PolicyCatalog.CalendarWeekStart.Scope.Should().Be(PolicyScope.System);
         PolicyCatalog.AttachmentMaxFileBytes.Factory.Should().Be("10485760");

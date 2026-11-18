@@ -48,7 +48,7 @@ public class OpsInfoApiTests
     {
         using var app = new FileDatabaseApp();
         var clock = new ManualClock(SchedulerTestKit.Start);
-        var runner = SchedulerTestKit.Runner(app, clock, [new CountingJob("test.counting", DynamicModules.Domain.Policies.PolicyCatalog.NotificationRetentionDays)]);
+        var runner = SchedulerTestKit.Runner(app, clock, [new CountingJob("test.counting", DynamicModules.Domain.Policies.PolicyCatalog.NotificationReminderScanMinutes)]);
         await runner.EnsureJobsAsync(CancellationToken.None);
         await runner.TickAsync(CancellationToken.None);
 
