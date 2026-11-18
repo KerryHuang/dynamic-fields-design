@@ -1,6 +1,6 @@
 # Formwright ERP 功能總清單
 
-依據 origin/main a053a30b，2026-11-11。總計：完成 136／共 245（另有 18 項決定不做）；進行中 3、已規劃 88、構想 18；待確認 0 項。更新於 2026-11-19。
+依據 origin/main a053a30b，2026-11-11。總計：完成 137／共 245（另有 18 項決定不做）；進行中 4、已規劃 86、構想 18；待確認 0 項。更新於 2026-11-19。
 
 範圍只含 Formwright ERP 的功能（核心平台與各應用程式）；產品內建的維運能力（觀測、事件中心、告警、廠商維運中心與維運 agent）也是產品功能，列在「核心平台：維運與監控」；不含部署流程與開發流程。`[x]` 已完成、`[ ] 🚧` 進行中、`[ ] 📋` 已規劃（有設計或已排進 roadmap 工作段）、`[ ] 💡` 構想（只討論過，還沒設計）、`[-]` 決定不做。部分完成的項目算未完成，說明寫「部分：已有 X，缺 Y」。
 
@@ -88,13 +88,13 @@
 
 ## 核心平台：維運與監控
 
-完成 3／共 9。設計見 ops-observability；順序見 [roadmap](roadmap.md)：p1 → o1a → 簽核 a2d1 → a4b → a6 → a2d2–a2d7 → a4a → ci1 → tz1 → a5 → a3 → fg1–fg6 → kb、kr → st → gt → o1b、o1c → un1 → pg0 → pg1 → O2 → p2、p3 → mcp1 → O3–O6（簽核提前為使用者 11-12 裁決；p2、p3 位置與 O3–O6 的先後使用者 11-12 確認）。設計的 C1–C7 已由使用者 2026-11-12 全部裁決（ops-observability §16）。
+完成 4／共 9。設計見 ops-observability；順序見 [roadmap](roadmap.md)：p1 → o1a → 簽核 a2d1 → a4b → a6 → a2d2–a2d7 → a4a → ci1 → tz1 → a5 → a3 → fg1–fg6 → kb、kr → st → gt → o1b、o1c → un1 → pg0 → pg1 → O2 → p2、p3 → mcp1 → O3–O6（簽核提前為使用者 11-12 裁決；p2、p3 位置與 O3–O6 的先後使用者 11-12 確認）。設計的 C1–C7 已由使用者 2026-11-12 全部裁決（ops-observability §16）。
 
 - [x] 維運地基（段 O1） — o1a（request id、結構化 log、health live／ready、版本端點、前端錯誤收件端點）、o1b（背景排程器與資料表租約、通知維護工作、提醒新規則），o1c（前端錯誤回報、錯誤提示附錯誤代碼、前端版本注入）都已上線；結構化 log 與 request id、health live／ready、版本端點、前端錯誤收集、背景排程器（任務提醒不再依賴使用者上線）；「即將到期」提醒改為到期前 N 天內任一天打開通知或排程器跑到就補一次、同一任務只補一次（使用者 11-12 裁決）
 - [x] PostgreSQL provider 抽象（段 pg0a） — 依 `Database:Provider` 選 SQLite／PostgreSQL，SQLite 行為不變、不加 migration；設計見 [PostgreSQL provider](superpowers/specs/2026-11-12-postgres-provider-design.md)
 - [x] PostgreSQL provider 抽象與測試環境（段 pg0） — 正式版資料庫是 PostgreSQL（使用者 11-11 說明）；provider 抽象＋可在 PostgreSQL 跑的測試環境，之後的功能兩種資料庫都驗；驗收含 O1 排程器與通知維護在 PostgreSQL 上通過；設計見 [PostgreSQL provider](superpowers/specs/2026-11-12-postgres-provider-design.md)（pg0b–pg0d；pg0a 另列）
-- [ ] 📋 報表 SQL 路徑 PostgreSQL 改寫（段 pg1） — pg0 期間 PostgreSQL 上報表走記憶體路徑；排在簽核 a6 之後、O2 之前（使用者 11-12 裁決）
-- [ ] 📋 事件中心（段 O2） — 健康檢查規則與紀錄、維運事件、稽核表（與 MCP 共用）、站內與 SMTP 告警、監控頁、客戶規則失控自動暫停與一鍵恢復 ⛔ 等：pg1
+- [x] 報表 SQL 路徑 PostgreSQL 改寫（段 pg1） — pg0 期間 PostgreSQL 上報表走記憶體路徑；排在簽核 a6 之後、O2 之前（使用者 11-12 裁決）
+- [ ] 🚧 事件中心（段 O2） — 健康檢查規則與紀錄、維運事件、稽核表（與 MCP 共用）、站內與 SMTP 告警、監控頁、客戶規則失控自動暫停與一鍵恢復
 - [ ] 📋 廠商維運中心與外部探測（段 O3） — 獨立於產品的 Cloudflare Workers＋D1；雲端版全量事件與每分鐘探測，地端版選擇加入的匿名錯誤回報與新版本通知
 - [ ] 📋 維運 agent 唯讀診斷（段 O4） — L1；Mac 開機領工、claude -p 唯讀診斷，經維運中心轉送呼叫產品 MCP 唯讀工具 ⛔ 等：O3、mcp1a
 - [ ] 📋 維運 agent 修正 PR（段 O5） — L3；agent 開 PR、CI gate、使用者核准合併，日後可依告警類型放行自動合併；需先建 CI ⛔ 等：O4
