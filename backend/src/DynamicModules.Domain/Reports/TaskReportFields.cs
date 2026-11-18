@@ -5,7 +5,7 @@ using ModuleEntity = DynamicModules.Domain.Entities.Dynamic.Module;
 namespace DynamicModules.Domain.Reports;
 
 /// <summary>
-/// 任務資料來源的欄位目錄（看板設計 §7.3）。欄位代碼是固定負數，不與動態欄位撞號（-16 層級、-17 開始日保留給 st1、gt1）；
+/// 任務資料來源的欄位目錄（看板設計 §7.3）。欄位代碼是固定負數，不與動態欄位撞號（-17 開始日保留給 gt1）；
 /// <see cref="Build"/> 產生不入庫的虛擬模組，讓報表既有的驗證、條件正規化、標籤、排序、遮蔽不必分支。
 /// 選項 Id 存進報表定義的條件值（opt_{id}），固定選項的 Id 不能改。
 /// </summary>
@@ -13,16 +13,17 @@ public static class TaskReportFields
 {
     public const long Title = -1, Status = -2, Assignee = -3, AssigneeDepartment = -4, Creator = -5, DueDate = -6,
         CreatedTime = -7, CompletedTime = -8, Source = -9, Module = -10, Rule = -11, Overdue = -12, Completion = -13,
-        CompletionDays = -14, DelayDays = -15, EventKind = -18, EventDate = -19;
+        CompletionDays = -14, DelayDays = -15, Level = -16, EventKind = -18, EventDate = -19;
 
     public const long SourcePersonal = 1, SourceRecord = 2, SourceRule = 3;
     public const long CompletionOnTime = 1, CompletionLate = 2, CompletionNoDue = 3, CompletionNotDone = 4;
+    public const long LevelStandalone = 1, LevelParent = 2, LevelChild = 3;
     public const long EventCreated = 1, EventCompleted = 2;
 
     public static long StatusOption(TaskItemStatus s) => (long)s + 1;
 
-    private static readonly HashSet<long> TaskCodes = [.. Enumerable.Range(1, 15).Select(i => (long)-i)];
-    private static readonly HashSet<long> EventCodes = [EventKind, EventDate, Status, Assignee, AssigneeDepartment, Creator, Source, Module, Rule];
+    private static readonly HashSet<long> TaskCodes = [.. Enumerable.Range(1, 16).Select(i => (long)-i)];
+    private static readonly HashSet<long> EventCodes = [EventKind, EventDate, Level, Status, Assignee, AssigneeDepartment, Creator, Source, Module, Rule];
     private static readonly long[] TaskDrill = [Title, Status, Assignee, DueDate, CompletedTime, Module];
     private static readonly long[] EventDrill = [EventKind, EventDate, Title, Status, Assignee, Module];
 
@@ -67,6 +68,7 @@ public static class TaskReportFields
         [Completion] = (FieldType.Enum, "completion", T("完成狀況", "Completion", "สถานะการเสร็จ", "Tình trạng hoàn thành")),
         [CompletionDays] = (FieldType.Integer, "completionDays", T("完成天數", "Days to complete", "จำนวนวันที่ใช้", "Số ngày hoàn thành")),
         [DelayDays] = (FieldType.Integer, "delayDays", T("延遲天數", "Days late", "จำนวนวันที่ล่าช้า", "Số ngày trễ")),
+        [Level] = (FieldType.Enum, "level", T("層級", "Level", "ระดับ", "Cấp")),
         [EventKind] = (FieldType.Enum, "eventKind", T("事件種類", "Event type", "ประเภทเหตุการณ์", "Loại sự kiện")),
         [EventDate] = (FieldType.DateTime, "eventDate", T("事件日期", "Event date", "วันที่ของเหตุการณ์", "Ngày sự kiện")),
     };
@@ -93,6 +95,13 @@ public static class TaskReportFields
         (CompletionLate, T("逾期完成", "Completed late", "เสร็จล่าช้า", "Hoàn thành trễ hạn")),
         (CompletionNoDue, T("無到期日完成", "Completed, no due date", "เสร็จโดยไม่มีวันครบกำหนด", "Hoàn thành, không có hạn")),
         (CompletionNotDone, T("未完成", "Not completed", "ยังไม่เสร็จ", "Chưa hoàn thành")),
+    ];
+
+    private static readonly (long Id, I18nText Label)[] LevelOptions =
+    [
+        (LevelStandalone, T("獨立任務", "Standalone task", "งานเดี่ยว", "Công việc độc lập")),
+        (LevelParent, T("父任務", "Parent task", "งานหลัก", "Công việc cha")),
+        (LevelChild, T("子任務", "Subtask", "งานย่อย", "Công việc con")),
     ];
 
     private static readonly (long Id, I18nText Label)[] EventOptions =
@@ -126,6 +135,7 @@ public static class TaskReportFields
                     Status => Fixed(StatusOptions),
                     Source => Fixed(SourceOptions),
                     Completion => Fixed(CompletionOptions),
+                    Level => Fixed(LevelOptions),
                     EventKind => Fixed(EventOptions),
                     AssigneeDepartment => [.. departments.OrderBy(d => d.SortOrder).ThenBy(d => d.Id)
                         .Select((d, n) => new FieldOption { Id = d.Id, LabelI18n = d.NameI18n, Sequence = n, Active = d.Active })],

@@ -745,4 +745,52 @@ public class TaskReportRunnerTests : TaskTestBase
         admin.Groups!.Should().HaveCount(2);
         (await CardAs("sales01")).Groups!.Should().ContainSingle().Which.Values["n"].Should().Be(1);
     }
+
+    private async Task<TaskItem> SeedChildOf(TaskItem parent, string title, string? assignee, TaskItemStatus status = TaskItemStatus.Todo)
+    {
+        var child = await SeedTask(title, createdBy: "admin", assignee: assignee, status: status);
+        await Db.Context.Set<TaskItem>().Where(x => x.Id == child.Id).ExecuteUpdateAsync(u => u.SetProperty(x => x.ParentTaskId, parent.Id));
+        return child;
+    }
+
+    [Fact]
+    public async Task C43_Level_GroupsStandaloneParentChild_AndFiltersEvents()
+    {
+        await SeedTask("獨立", createdBy: "admin", assignee: "sales01");
+        var p = await SeedTask("父", createdBy: "admin", assignee: "sales01");
+        await SeedChildOf(p, "子一", "sales01");
+        await SeedChildOf(p, "子二已取消", "sales01", TaskItemStatus.Cancelled);
+        var p2 = await SeedTask("父二", createdBy: "admin", assignee: "sales01");
+        var only = await SeedChildOf(p2, "唯一的子", "sales01");
+
+        var r = await Run(TaskDef([M("n", "countMain")], [G(F.Level)]));
+        r.State.Should().Be("ok", r.Message);
+        Group(r, "獨立任務").Values["n"].Should().Be(1);
+        Group(r, "父任務").Values["n"].Should().Be(2);
+        Group(r, "子任務").Values["n"].Should().Be(3);
+
+        // 子任務全刪後父任務回到獨立任務
+        await Db.Context.Set<TaskItem>().Where(x => x.Id == only.Id).ExecuteDeleteAsync();
+        Db.Context.ChangeTracker.Clear();
+        r = await Run(TaskDef([M("n", "countMain")], [G(F.Level)]));
+        Group(r, "獨立任務").Values["n"].Should().Be(2);
+        Group(r, "父任務").Values["n"].Should().Be(1);
+
+        // taskEvents 也能用 -16 篩：子任務 2 筆各一個建立事件
+        var ev = await Run(TaskDef([M("n", "countMain")], filters: [Fl(F.Level, "eq", Opt(F.LevelChild))], dataset: ReportDatasets.TaskEvents));
+        ev.State.Should().Be("ok", ev.Message);
+        ev.Total!["n"].Should().Be(2);
+    }
+
+    [Fact]
+    public async Task C43_Level_ChildStaysChild_WhenViewerCannotSeeParent_AndParentStaysParent()
+    {
+        var p = await SeedTask("父", createdBy: "admin", assignee: "sales01");
+        await SeedChildOf(p, "子", "sales02");
+
+        var asSales02 = await Run(TaskDef([M("n", "countMain")], [G(F.Level)]), "sales02");
+        asSales02.Groups!.Should().ContainSingle().Which.GroupLabels[0].Should().Be("子任務");
+        var asSales01 = await Run(TaskDef([M("n", "countMain")], [G(F.Level)]), "sales01");
+        Group(asSales01, "父任務").Values["n"].Should().Be(1);
+    }
 }
