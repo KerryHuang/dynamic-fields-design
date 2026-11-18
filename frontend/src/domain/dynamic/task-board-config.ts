@@ -1,5 +1,6 @@
 import type { ReportDateRange } from './report-types';
-import type { BoardGroupBy, TaskBoardConfig } from './task-board-types';
+import type { BoardGroupBy, TaskBoardConfig, TaskGanttConfig } from './task-board-types';
+import type { GanttGroupBy, GanttScale } from './task-gantt';
 import type { TaskStatus } from './task-types';
 
 /**
@@ -156,7 +157,34 @@ export function moveInList<T>(list: readonly T[], item: T, delta: -1 | 1): T[] {
   return next;
 }
 
-/** 另存為新看板時的設定：沒有部屬的人不能存「部屬的任務」範圍，改成「指派給我」（D7）；其餘照抄。 */
-export function saveAsConfig(config: TaskBoardConfig, hasSubordinates: boolean): TaskBoardConfig {
+/** 另存為新看板（或甘特圖）時的設定：沒有部屬的人不能存「部屬的任務」範圍，改成「指派給我」（D7）；其餘照抄。 */
+export function saveAsConfig<C extends { scope: BoardScope }>(config: C, hasSubordinates: boolean): C {
   return !hasSubordinates && config.scope === 'subordinates' ? { ...config, scope: 'assigned' } : config;
+}
+
+// ---- 甘特設定（看板設計 §11.5.2.7）：範圍、篩選、顯示子任務與看板共用同一個表單，分組與刻度另外放 ----
+
+export const GANTT_GROUPS: GanttGroupBy[] = ['parent', 'assignee', 'none'];
+export const GANTT_SCALES: GanttScale[] = ['day', 'week', 'month'];
+
+/** 甘特設定 → 共用表單（看板專屬的欄、排序、到期日區間用不到，停在預設值）。 */
+export function ganttFormFromConfig(config: TaskGanttConfig): BoardForm {
+  return formFromConfig({
+    version: 1, groupBy: 'status', scope: config.scope,
+    ...(config.filters ? { filters: config.filters } : {}),
+    ...(config.showSubtasks === false ? { showSubtasks: false } : {}),
+  });
+}
+
+/** 共用表單＋分組＋刻度 → 甘特設定：篩選的省略規則同看板，不帶到期日區間（甘特圖用時間範圍，帶了伺服器回 400）。 */
+export function buildGanttConfig(form: BoardForm, groupBy: GanttGroupBy, scale: GanttScale): TaskGanttConfig {
+  const { filters, showSubtasks } = buildBoardConfig({ ...form, dueRange: null });
+  return {
+    version: 1,
+    groupBy,
+    scope: form.scope,
+    ...(filters ? { filters } : {}),
+    scale,
+    ...(showSubtasks === false ? { showSubtasks: false } : {}),
+  };
 }

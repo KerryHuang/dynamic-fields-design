@@ -1,8 +1,8 @@
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/vue-query';
 import { computed, toValue, type MaybeRefOrGetter } from 'vue';
 import {
-  moveCardLocally, removeCardLocally, restoreCardLocally, type BoardCard, type BoardColumn, type BoardGroupBy, type BoardSource, type GanttSource, type TaskBoardConfig, type TaskBoardData, type TaskGanttData, type TaskMoveResult,
-  type TaskScheduleResult, type TaskViewShareKind,
+  moveCardLocally, removeCardLocally, restoreCardLocally, type BoardCard, type BoardColumn, type BoardGroupBy, type BoardSource, type GanttSource, type TaskBoardData, type TaskGanttData, type TaskMoveResult,
+  type TaskScheduleResult, type TaskViewConfig, type TaskViewKind, type TaskViewShareKind,
 } from 'src/domain/dynamic/task-board-types';
 import { replaceCardLocally, scheduleCardLocally } from 'src/domain/dynamic/task-gantt';
 import type { TaskCascade } from 'src/domain/dynamic/task-types';
@@ -169,9 +169,13 @@ export function useFetchGanttToday() {
   return () => qc.fetchQuery({ queryKey: ganttKey(source), queryFn: () => dynamicApi.getGantt(source), staleTime: 0 });
 }
 
-/** 我的看板與分享給我的看板（選擇器用）。 */
-export function useTaskViews(enabled: MaybeRefOrGetter<boolean> = true) {
-  return useQuery({ queryKey: ['task-views', 'board'], queryFn: () => dynamicApi.getTaskViews('board'), enabled: computed(() => toValue(enabled)) });
+/** 我的與分享給我的看板（或甘特圖，依 kind；選擇器用）。 */
+export function useTaskViews(kind: MaybeRefOrGetter<TaskViewKind>, enabled: MaybeRefOrGetter<boolean> = true) {
+  return useQuery({
+    queryKey: computed(() => ['task-views', toValue(kind)]),
+    queryFn: () => dynamicApi.getTaskViews(toValue(kind)),
+    enabled: computed(() => toValue(enabled)),
+  });
 }
 
 /** 一個存檔看板的設定、權限與（擁有者／管理員才有的）分享對象。 */
@@ -188,11 +192,11 @@ export function useTaskViewShareTargets(enabled: MaybeRefOrGetter<boolean> = tru
   return useQuery({ queryKey: ['task-view-share-targets'], queryFn: () => dynamicApi.getTaskViewShareTargets(), enabled: computed(() => toValue(enabled)) });
 }
 
-/** 另存為新看板；清單失效，由呼叫端決定要不要切過去。 */
+/** 另存為新看板（或甘特圖，kind 沒給是看板）；清單失效，由呼叫端決定要不要切過去。 */
 export function useCreateTaskView() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (v: { name: string; config: TaskBoardConfig }) => dynamicApi.createTaskView({ kind: 'board', ...v }),
+    mutationFn: (v: { kind?: TaskViewKind; name: string; config: TaskViewConfig }) => dynamicApi.createTaskView<TaskViewConfig>({ ...v, kind: v.kind ?? 'board' }),
     onSuccess: (detail) => {
       qc.setQueryData(['task-view', detail.id], detail);
       return qc.invalidateQueries({ queryKey: ['task-views'] });
@@ -218,8 +222,8 @@ function refreshStaleView(qc: ReturnType<typeof useQueryClient>, id: number, e: 
 export function useUpdateTaskView() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (v: { id: number; name: string; config: TaskBoardConfig; rowVersion: string }) =>
-      dynamicApi.updateTaskView(v.id, { name: v.name, config: v.config, rowVersion: v.rowVersion }),
+    mutationFn: (v: { id: number; name: string; config: TaskViewConfig; rowVersion: string }) =>
+      dynamicApi.updateTaskView<TaskViewConfig>(v.id, { name: v.name, config: v.config, rowVersion: v.rowVersion }),
     onSuccess: (detail) => {
       qc.setQueryData(['task-view', detail.id], detail);
       void qc.invalidateQueries({ queryKey: ['task-board'] });
@@ -236,6 +240,7 @@ export function useDeleteTaskView() {
     onSuccess: (_r, id) => {
       qc.removeQueries({ queryKey: ['task-view', id] });
       qc.removeQueries({ queryKey: ['task-board', 'columns', id] });
+      qc.removeQueries({ queryKey: ['task-board', 'gantt', id] });
       return qc.invalidateQueries({ queryKey: ['task-views'] });
     },
     // 已被別人刪掉：清單重抓（呼叫端把它當成已刪除）

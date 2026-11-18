@@ -273,7 +273,7 @@ describe('MyTasksPage', () => {
     expect(bodyOf(ganttCalls.at(-1))).toEqual({ viewId: null, config: null, window: null });
     expect(w.find('[data-testid="gantt-chart"]').exists()).toBe(true);
     expect(w.find('[data-testid="task-board"]').exists()).toBe(false);
-    expect(w.find('[data-testid="board-picker"]').exists()).toBe(false);
+    expect(pickerText(w)).toBe('預設甘特圖');
     expect(listCalls()).toHaveLength(listCallsBefore);
     await w.get('[data-testid="gantt-bar-5"]').trigger('click');
     await flushPromises();

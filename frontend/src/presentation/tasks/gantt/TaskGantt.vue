@@ -4,6 +4,7 @@ import { computed, onBeforeUnmount, ref, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { useFetchGanttToday, useGantt } from 'src/application/dynamic/queries/task-board-queries';
 import type { BoardCard, GanttSource, TaskGanttConfig, TaskGanttData, TaskGanttWindow } from 'src/domain/dynamic/task-board-types';
+import type { ApiError } from 'src/services/api/http';
 import {
   barGeometry, canSchedule, dayAtX, dayNumber, draggedDates, formatGanttDate, ganttLines, ganttWeeks, GANTT_LEFT_WIDTH, GANTT_LEFT_WIDTH_TABLET, minorTicks,
   monthTicks, phoneWindow, shiftPhoneWindow, shiftWindow, spanGeometry, todayPosition, windowDays, windowFor, type GanttDragPart, type GanttLine, type GanttScale,
@@ -18,8 +19,11 @@ import { useGanttSchedule } from './use-gantt-schedule';
  * 甘特圖（看板設計 §11.5.4）：預設甘特圖、刻度與平移、三種分組、子任務跨度、今天線、未排程（gt2a）；
  * 平板時間軸、手機依週分組清單、日期對話框與「編輯日期」「排程」鈕（gt2b1）；桌機筆電拖拉改日期（gt2b2）。
  * 時間軸用 CSS grid 與百分比定位自畫（GT-T21），寬度填滿容器、不橫向捲動；用 Quasar 視窗斷點判斷寬度（GT-T17）。
+ * 存檔甘特圖（gt2c）：顯示哪一個由頁面給（viewId，或「套用」後未儲存的 draft，都沒有是預設甘特圖）；換了就回到它的預設刻度與時間窗。
+ * 讀到第一份資料時送出 loaded（伺服器採用的設定），存檔甘特圖讀不到（404／403）時送出 notFound，由頁面走 D6。
  */
-const emit = defineEmits<{ open: [id: number] }>();
+const props = withDefaults(defineProps<{ viewId?: number | null; draft?: TaskGanttConfig | null }>(), { viewId: null, draft: null });
+const emit = defineEmits<{ open: [id: number]; loaded: [config: TaskGanttConfig]; notFound: [] }>();
 const { t, locale } = useI18n();
 const $q = useQuasar();
 
@@ -39,16 +43,29 @@ const win = ref<TaskGanttWindow | null>(null);
 const base = ref<TaskGanttConfig | null>(null);
 // 手機固定 4 週：第一次先照預設查（要伺服器的今天與週起始日），拿到後改查從本週起的 4 週
 const phoneWin = ref<TaskGanttWindow | null>(null);
+// 甘特圖 Id 與設定二擇一：換了刻度要送設定時（只改刻度的伺服器設定），就不再帶 Id
+const viewSource = (config: TaskGanttConfig | null) => {
+  const c = config ?? props.draft;
+  return { viewId: c ? null : props.viewId, config: c };
+};
 const source = computed<GanttSource>(() => (mode.value === 'phone'
-  ? { viewId: null, config: null, window: phoneWin.value }
+  ? { ...viewSource(null), window: phoneWin.value }
   : {
-    viewId: null,
-    config: scale.value && base.value && scale.value !== base.value.scale ? { ...base.value, scale: scale.value } : null,
+    ...viewSource(scale.value && base.value && scale.value !== base.value.scale ? { ...base.value, scale: scale.value } : null),
     window: win.value,
   }));
 const query = useGantt(source);
 const data = computed(() => query.data.value ?? null);
-watch(data, (d) => { if (d && !base.value) base.value = d.config; }, { immediate: true });
+// 換甘特圖（或套用新設定）：回到它的預設刻度與時間窗；上一個甘特圖的資料（保留中的畫面）不能當成新的起點
+watch(() => [props.viewId, props.draft] as const, () => { scale.value = null; win.value = null; base.value = null; });
+watch(data, (d) => {
+  if (!d || base.value || query.isPlaceholderData.value) return;
+  base.value = d.config;
+  emit('loaded', d.config);
+}, { immediate: true });
+watch(() => query.error.value, (e) => {
+  if (props.viewId !== null && [403, 404].includes((e as ApiError | null)?.status ?? 0)) emit('notFound');
+}, { immediate: true });
 const shownScale = computed<GanttScale>(() => scale.value ?? data.value?.config.scale ?? 'week');
 // 上一段還沒換成新的一段前不能再平移（平移以畫面上的時間窗為起點）
 const busy = computed(() => query.isPlaceholderData.value);
