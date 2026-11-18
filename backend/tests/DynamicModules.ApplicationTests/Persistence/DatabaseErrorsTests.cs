@@ -65,6 +65,8 @@ public class DatabaseErrorsTests
     [Theory]
     [InlineData(19, 2067, true)]    // SQLITE_CONSTRAINT_UNIQUE
     [InlineData(19, 1555, true)]    // SQLITE_CONSTRAINT_PRIMARYKEY
+    [InlineData(19, 2579, true)]    // SQLITE_CONSTRAINT_ROWID
+    [InlineData(19, 1811, false)]   // SQLITE_CONSTRAINT_TRIGGER
     [InlineData(19, 787, false)]    // SQLITE_CONSTRAINT_FOREIGNKEY
     [InlineData(19, 1299, false)]   // SQLITE_CONSTRAINT_NOTNULL
     public void Sqlite_UniqueViolationByExtendedCode(int code, int extended, bool expected) =>
@@ -118,10 +120,16 @@ public class DatabaseErrorsTests
     {
         var unique = await Raise("CREATE TABLE t (k TEXT UNIQUE); INSERT INTO t VALUES ('a');", "INSERT INTO t VALUES ('a')");
         var primary = await Raise("CREATE TABLE t (id INTEGER, b INTEGER, PRIMARY KEY (id, b)); INSERT INTO t VALUES (1, 1);", "INSERT INTO t VALUES (1, 1)");
+        var rowId = await Raise("CREATE TABLE t (k TEXT); INSERT INTO t (rowid, k) VALUES (1, 'a');", "INSERT INTO t (rowid, k) VALUES (1, 'b')");
+        var integerKey = await Raise("CREATE TABLE t (id INTEGER PRIMARY KEY); INSERT INTO t VALUES (1);", "INSERT INTO t VALUES (1)");
         var notNull = await Raise("CREATE TABLE t (k TEXT NOT NULL);", "INSERT INTO t VALUES (NULL)");
 
-        Errors.IsUniqueViolation(Wrapped(unique)).Should().BeTrue();
-        Errors.IsUniqueViolation(Wrapped(primary)).Should().BeTrue();
+        // 改寫前以訊息含 UNIQUE 判斷；凡是那樣判成唯一鍵衝突的，錯誤碼判斷也要一致
+        foreach (var ex in new[] { unique, primary, rowId, integerKey })
+        {
+            ex.Message.Should().Contain("UNIQUE");
+            Errors.IsUniqueViolation(Wrapped(ex)).Should().BeTrue(ex.Message);
+        }
         Errors.IsUniqueViolation(Wrapped(notNull)).Should().BeFalse();
     }
 

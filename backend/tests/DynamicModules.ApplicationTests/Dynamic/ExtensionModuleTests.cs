@@ -211,6 +211,27 @@ public class ExtensionModuleTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task CreateRecord_Extension_NonUniqueSaveFailure_StillHostConflict()
+    {
+        // 現行行為（pg0a 保留）：有 hostKey 時儲存丟出的任何 DbUpdateException 都回擴充資料衝突，不只唯一鍵；
+        // 這裡用觸發器丟 SQLITE_CONSTRAINT_TRIGGER（不是唯一鍵）。縮小捕捉範圍排在 pg0b
+        var note = await NewExt("ext13");
+        await using (var cmd = _db.Connection.CreateCommand())
+        {
+            cmd.CommandText = """
+                CREATE TRIGGER "fail_host_insert" BEFORE INSERT ON "Dynamic_Record" WHEN NEW."HostKey" IS NOT NULL
+                BEGIN SELECT RAISE(ABORT, 'boom'); END
+                """;
+            await cmd.ExecuteNonQueryAsync();
+        }
+
+        var r = await CreateExtRec("ext13", note, "E-0001");
+
+        r.IsConflict.Should().BeTrue();
+        r.Message.Should().Be("這筆既有資料已經有擴充資料");
+    }
+
+    [Fact]
     public async Task CreateRecord_Extension_AfterDelete_Allowed()
     {
         var note = await NewExt("ext12");
