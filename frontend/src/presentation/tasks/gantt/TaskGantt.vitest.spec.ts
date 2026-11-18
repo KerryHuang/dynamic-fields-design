@@ -9,7 +9,8 @@ import DateSelect from 'src/components/framework/DateSelect.vue';
 import { dynamicApi } from 'src/services/api/dynamic-api';
 import { bodyOf, HttpFail, mockHttp, type Call } from 'src/test-utils/mock-http';
 import { cardWire } from '../board/board-fixtures';
-import { ganttWire } from './gantt-fixtures';
+import { ganttConfigWire, ganttWire } from './gantt-fixtures';
+import type { TaskGanttConfig } from 'src/domain/dynamic/task-board-types';
 import GanttDateDialog from './GanttDateDialog.vue';
 import TaskGantt from './TaskGantt.vue';
 
@@ -21,6 +22,7 @@ type ScheduleBody = { startDate: string | null; dueDate: string | null; expected
 async function mountGantt(
   reply: (body: ReturnType<typeof lastBody>) => unknown = () => ganttWire(), locale = 'zh-TW',
   schedule: (id: number, body: ScheduleBody) => unknown = () => new HttpFail(500, {}),
+  props: Record<string, unknown> = {},
 ) {
   calls = mockHttp((c) => {
     if (c.url === '/tasks/gantt') return reply(bodyOf(c) as ReturnType<typeof lastBody>);
@@ -30,6 +32,7 @@ async function mountGantt(
   });
   const i18n = createI18n({ legacy: false, locale, messages: { 'zh-TW': zhTW, 'en-US': enUS } });
   const w = mount(TaskGantt, {
+    props,
     attachTo: document.body,
     global: { plugins: [[quasar.Quasar, { components: quasar, directives: quasar, plugins: { Notify: quasar.Notify } }], i18n, [VueQueryPlugin, { queryClient: new QueryClient({ defaultOptions: { queries: { retry: false, refetchOnWindowFocus: false } } }) }]] },
   });
@@ -830,5 +833,56 @@ describe('TaskGantt drag (gt2b2)', () => {
     expect(bodyOf(scheduleCalls()[n])).toMatchObject({ dueDate: '2026-11-30' });
     await dragX('gantt-milestone-8', line(19, 181) + 2, line(30, 181) + 0.5);
     expect(bodyOf(scheduleCalls()[n + 1])).toMatchObject({ dueDate: '2026-12-01' });
+  });
+});
+
+describe('TaskGantt saved Gantt charts (gt2c)', () => {
+  beforeEach(() => { document.body.innerHTML = ''; });
+  afterEach(() => { document.body.innerHTML = ''; });
+  // 存檔甘特圖 12、13 各有自己的設定；99 讀不到
+  const saved = (body: ReturnType<typeof lastBody>) => {
+    if (body.viewId === 99) return new HttpFail(404, { message: '這個甘特圖已刪除或不再分享給你' });
+    if (body.viewId === 12) return serverLike({ ...body, config: ganttConfigWire({ groupBy: 'none', scale: 'month' }) });
+    if (body.viewId === 13) return serverLike({ ...body, config: ganttConfigWire({ groupBy: 'assignee', scale: 'day' }) });
+    return serverLike(body);
+  };
+
+  it('G72 queries the saved Gantt chart by id, starts at its default scale, and reports the config it got', async () => {
+    const w = await mountGantt(saved, 'zh-TW', undefined, { viewId: 12 });
+    expect(lastBody()).toEqual({ viewId: 12, config: null, window: null });
+    expect(w.get('[data-testid="gantt-scale-month"]').attributes('aria-pressed')).toBe('true');
+    expect(w.emitted('loaded')![0][0]).toMatchObject({ groupBy: 'none', scale: 'month' });
+    // 換刻度要送設定：甘特圖 Id 與設定只能帶一個（GT-T12、§11.5.2.5）
+    await w.get('[data-testid="gantt-scale-week"]').trigger('click');
+    await flushPromises();
+    expect(lastBody()).toMatchObject({ viewId: null, config: { groupBy: 'none', scale: 'week' } });
+    w.unmount();
+  });
+
+  it('G72 switching to another Gantt chart, or applying an unsaved config, goes back to its own scale and default window', async () => {
+    const w = await mountGantt(saved, 'zh-TW', undefined, { viewId: 12 });
+    await w.get('[data-testid="gantt-next"]').trigger('click');
+    await flushPromises();
+    expect(lastBody().window).not.toBeNull();
+    await w.setProps({ viewId: 13 });
+    await flushPromises();
+    expect(lastBody()).toEqual({ viewId: 13, config: null, window: null });
+    expect(w.get('[data-testid="gantt-scale-day"]').attributes('aria-pressed')).toBe('true');
+    expect(w.emitted('loaded')).toHaveLength(2);
+    const draft = ganttConfigWire({ groupBy: 'parent', scale: 'week', scope: 'involved' }) as unknown as TaskGanttConfig;
+    await w.setProps({ draft });
+    await flushPromises();
+    expect(lastBody()).toEqual({ viewId: null, config: draft, window: null });
+    expect(w.get('[data-testid="gantt-scale-week"]').attributes('aria-pressed')).toBe('true');
+    w.unmount();
+  });
+
+  it('G75 a saved Gantt chart that is gone reports notFound; the default one never does', async () => {
+    const w = await mountGantt(saved, 'zh-TW', undefined, { viewId: 99 });
+    expect(w.emitted('notFound')).toHaveLength(1);
+    w.unmount();
+    const d = await mountGantt(() => new HttpFail(404, {}));
+    expect(d.emitted('notFound')).toBeUndefined();
+    d.unmount();
   });
 });

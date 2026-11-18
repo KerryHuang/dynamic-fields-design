@@ -12,17 +12,17 @@ import { commentWire, taskDetailWire, taskWire, USERS } from 'src/presentation/d
 import { useIdentityStore } from 'src/stores/use-identity-store';
 import { bodyOf, HttpFail, mockHttp, type Call } from 'src/test-utils/mock-http';
 import DateSelect from 'src/components/framework/DateSelect.vue';
-import { ganttWire } from 'src/presentation/tasks/gantt/gantt-fixtures';
+import { ganttConfigWire, ganttWire } from 'src/presentation/tasks/gantt/gantt-fixtures';
 import MyTasksPage from './MyTasksPage.vue';
 
 let calls: Call[];
 
-async function mountPage(url: string, opts: { detailFails?: boolean; empty?: boolean; subordinates?: boolean; goneBoards?: number[]; defaultBoardFails?: boolean; admin?: boolean; noScope?: boolean; defaultConfig?: Record<string, unknown>; putConflict?: boolean; ganttViews?: number[] } = {}) {
+async function mountPage(url: string, opts: { detailFails?: boolean; empty?: boolean; subordinates?: boolean; goneBoards?: number[]; defaultBoardFails?: boolean; admin?: boolean; noScope?: boolean; defaultConfig?: Record<string, unknown>; putConflict?: boolean; ganttViews?: number[]; goneGantts?: number[]; user?: string } = {}) {
   let detailVersion = 'v1';
   let conflicted = false;
   const pinia = createPinia();
   setActivePinia(pinia);
-  useIdentityStore().setSession('sales01');
+  useIdentityStore().setSession(opts.user ?? 'sales01');
   calls = mockHttp((c) => {
     if (c.url === '/tasks' && c.method === 'get') return opts.empty ? { items: [], totalCount: 0, currentPage: 1, pagesSize: 20 } : { items: [taskWire({ id: 1 }), taskWire({ id: 2, title: '寄合約' })], totalCount: 2, currentPage: 1, pagesSize: 20 };
     if (c.url === '/task-board/columns') {
@@ -37,9 +37,20 @@ async function mountPage(url: string, opts: { detailFails?: boolean; empty?: boo
       if (viewId === 8) base.columns = base.columns.map((col) => (col.key === 'overdue' ? { ...col, total: 1, cards: [cardWire({ id: 31, title: '逾期的報價', overdue: true })] } : col));
       return { ...base, config: cfg, ...(opts.noScope ? { scopeAvailable: false } : {}) };
     }
-    if (c.url === '/tasks/gantt') return ganttWire();
+    if (c.url === '/tasks/gantt') {
+      // 甘特查詢：存檔甘特圖讀不到 404；未存的設定原樣回；部屬範圍的列是部屬的任務（只有主管身分，canEdit=false，G68）
+      const b = bodyOf(c) as { viewId: number | null; config: Record<string, unknown> | null };
+      if (b.viewId !== null && (opts.goneGantts?.includes(b.viewId) || !opts.ganttViews?.includes(b.viewId))) return new HttpFail(404, { message: '這個甘特圖已刪除或不再分享給你' });
+      const cfg = b.config ?? (b.viewId !== null ? ganttConfigWire({ groupBy: 'none', scale: 'month' }) : ganttConfigWire());
+      const base = ganttWire({ config: cfg, ...(opts.noScope ? { scopeAvailable: false, rows: [], total: 0, spans: [], unscheduled: [], unscheduledTotal: 0 } : {}) });
+      if (cfg.scope === 'subordinates' && !opts.noScope) base.rows = [cardWire({ id: 41, title: '部屬的任務', startDate: '2026-11-17', dueDate: '2026-11-20', canEdit: false, assigneeUserId: 'sales02' })];
+      return base;
+    }
+    if (c.url === '/task-views' && c.method === 'get' && c.params?.kind === 'gantt') {
+      return { mine: [viewSummaryWire({ id: 12, kind: 'gantt', name: '展覽' })], shared: [viewSummaryWire({ id: 13, kind: 'gantt', name: '業務部甘特', isOwner: false, ownerUserId: 'manager01', ownerName: '業務主管', shareCount: 1 })] };
+    }
     if (c.url === '/task-views' && c.method === 'get') return { mine: [viewSummaryWire({ id: 5, name: '我的到期' })], shared: [viewSummaryWire({ id: 8, name: '業務部任務', isOwner: false, ownerUserId: 'manager01', ownerName: '業務主管', shareCount: 1 })] };
-    if (c.url === '/task-views' && c.method === 'post') return viewDetailWire({ id: 11, name: (bodyOf(c) as { name: string }).name, config: (bodyOf(c) as { config: unknown }).config });
+    if (c.url === '/task-views' && c.method === 'post' && (bodyOf(c) as { kind: string }).kind !== 'gantt') return viewDetailWire({ id: 11, name: (bodyOf(c) as { name: string }).name, config: (bodyOf(c) as { config: unknown }).config });
     if (c.url === '/task-views/5' && c.method === 'get') return viewDetailWire({ rowVersion: detailVersion });
     if (c.url === '/task-views/5' && c.method === 'put') {
       // 第一次儲存撞 409，之後重抓看板就是別人改過的新版本（v2）
@@ -49,7 +60,12 @@ async function mountPage(url: string, opts: { detailFails?: boolean; empty?: boo
     // 甘特檢視：詳細資料端點不分種類照回（欄查詢在這裡照常回，模擬它比詳細資料慢、404 還沒到）
     const ganttId = opts.ganttViews?.find((id) => c.url === `/task-views/${id}`);
     if (ganttId !== undefined && c.method === 'get') {
-      return viewDetailWire({ id: ganttId, kind: 'gantt', name: '展覽', config: { version: 1, groupBy: 'parent', scope: 'assigned', scale: 'week' } });
+      const shared = ganttId === 13 ? { name: '業務部甘特', isOwner: false, canEdit: false, canDelete: false, ownerUserId: 'manager01', ownerName: '業務主管' } : { name: '展覽' };
+      return viewDetailWire({ id: ganttId, kind: 'gantt', ...shared, config: ganttConfigWire({ groupBy: 'none', scale: 'month' }) });
+    }
+    if (ganttId !== undefined && c.method === 'put') return viewDetailWire({ id: ganttId, kind: 'gantt', ...(bodyOf(c) as object), rowVersion: 'v3' });
+    if (c.url === '/task-views' && c.method === 'post' && (bodyOf(c) as { kind: string }).kind === 'gantt') {
+      return viewDetailWire({ id: 14, kind: 'gantt', name: (bodyOf(c) as { name: string }).name, config: (bodyOf(c) as { config: unknown }).config });
     }
     if (c.url === '/task-views/8' && c.method === 'get') return viewDetailWire({ id: 8, name: '業務部任務', isOwner: false, canEdit: false, canDelete: false, config: configWire({ groupBy: 'dueBucket', scope: 'visible' }) });
     if (/^\/task-views\/\d+$/.test(c.url) && c.method === 'delete') return {};
@@ -605,6 +621,160 @@ describe('MyTasksPage', () => {
       await router.push('/tasks?view=board&board=8');
       await flushPromises();
       expect(pickerText(w)).toBe('業務部任務');
+    });
+  });
+  describe('saved Gantt charts (gt2c)', () => {
+    const ganttBodies = () => calls.filter((c) => c.url === '/tasks/gantt').map((c) => bodyOf(c) as { viewId: number | null; config: Record<string, unknown> | null; window: unknown });
+    const body = (id: string) => document.body.querySelector<HTMLElement>(`[data-testid="${id}"]`);
+    const click = async (id: string) => { body(id)!.click(); await flushPromises(); await new Promise((r) => setTimeout(r, 20)); await flushPromises(); };
+
+    it('G72 gantt=<id> loads that Gantt chart, shows its name and its default scale, and is remembered apart from the board', async () => {
+      localStorage.setItem('taskBoard.last.sales01', '5');
+      const { w, router } = await mountPage('/tasks?view=gantt&gantt=12', { ganttViews: [12] });
+      expect(ganttBodies().at(-1)).toEqual({ viewId: 12, config: null, window: null });
+      expect(pickerText(w)).toBe('展覽');
+      expect(w.get('[data-testid="gantt-scale-month"]').attributes('aria-pressed')).toBe('true');
+      expect(localStorage.getItem('taskGantt.last.sales01')).toBe('12');
+      expect(localStorage.getItem('taskBoard.last.sales01')).toBe('5');
+      await w.get('[data-testid="view-board"]').trigger('click');
+      await flushPromises();
+      expect(router.currentRoute.value.query).toMatchObject({ view: 'board', board: '5' });
+      expect(router.currentRoute.value.query.gantt).toBeUndefined();
+      await w.get('[data-testid="view-gantt"]').trigger('click');
+      await flushPromises();
+      expect(router.currentRoute.value.query).toMatchObject({ view: 'gantt', gantt: '12' });
+      expect(router.currentRoute.value.query.board).toBeUndefined();
+      w.unmount();
+    });
+
+    it('G72 the Gantt picker lists Gantt views only; picking one puts gantt=<id> in the url, the default clears it and the memory', async () => {
+      const { w, router } = await mountPage('/tasks?view=gantt', { ganttViews: [12, 13] });
+      expect(calls.some((c) => c.url === '/task-views' && c.params?.kind === 'gantt')).toBe(true);
+      expect(pickerText(w)).toBe('預設甘特圖');
+      await click('board-picker');
+      expect(body('picker-item-12')!.textContent).toContain('展覽');
+      expect(body('picker-item-13')!.textContent).toContain('業務主管 建立');
+      expect(body('picker-item-5')).toBeNull();
+      await click('picker-item-13');
+      expect(router.currentRoute.value.query.gantt).toBe('13');
+      expect(ganttBodies().at(-1)).toMatchObject({ viewId: 13, config: null });
+      expect(localStorage.getItem('taskGantt.last.sales01')).toBe('13');
+      await click('board-picker');
+      await click('picker-item-default');
+      expect(router.currentRoute.value.query.gantt).toBeUndefined();
+      expect(localStorage.getItem('taskGantt.last.sales01')).toBeNull();
+      expect(ganttBodies().at(-1)).toMatchObject({ viewId: null, config: null });
+      w.unmount();
+    });
+
+    it('G73 apply on the default Gantt chart queries by the unsaved config and marks it unsaved; the default has no save', async () => {
+      const { w } = await mountPage('/tasks?view=gantt');
+      await click('board-settings');
+      expect(body('settings-save')).toBeNull();
+      expect(body('settings-gantt-group-parent')!.getAttribute('aria-checked')).toBe('true');
+      await click('settings-gantt-group-assignee');
+      await click('settings-apply');
+      expect(ganttBodies().at(-1)).toMatchObject({ viewId: null, config: { groupBy: 'assignee', scale: 'week' } });
+      expect(w.find('[data-testid="board-unsaved"]').exists()).toBe(true);
+      expect(calls.some((c) => c.method === 'put' || (c.method === 'post' && c.url === '/task-views'))).toBe(false);
+      w.unmount();
+    });
+
+    it('G73 saving your own Gantt chart writes it back; a shared one offers only apply and save-as (G74)', async () => {
+      const { w, router } = await mountPage('/tasks?view=gantt&gantt=12', { ganttViews: [12, 13, 14] });
+      await click('board-settings');
+      await click('settings-gantt-group-parent');
+      await click('settings-save');
+      const put = calls.find((c) => c.method === 'put' && c.url === '/task-views/12')!;
+      expect(bodyOf(put)).toMatchObject({ name: '展覽', rowVersion: 'v1', config: { groupBy: 'parent', scale: 'month' } });
+      expect(w.find('[data-testid="board-share"]').exists()).toBe(true);
+      await router.replace({ query: { view: 'gantt', gantt: '13' } });
+      await flushPromises();
+      await new Promise((r) => setTimeout(r, 20));
+      await flushPromises();
+      expect(w.find('[data-testid="board-share"]').exists()).toBe(false);
+      await click('board-settings');
+      expect(body('settings-save')).toBeNull();
+      expect(body('settings-save-as')).not.toBeNull();
+      await click('settings-save-as');
+      expect(bodyOf(calls.find((c) => c.method === 'post' && c.url === '/task-views'))).toMatchObject({ kind: 'gantt', name: '業務部甘特' });
+      expect(router.currentRoute.value.query.gantt).toBe('14');
+      expect(ganttBodies().at(-1)).toMatchObject({ viewId: 14, config: null });
+      w.unmount();
+    });
+
+    it('G74 the share button on your own Gantt chart opens the share dialog in Gantt words', async () => {
+      const { w } = await mountPage('/tasks?view=gantt&gantt=12', { ganttViews: [12] });
+      await w.get('[data-testid="board-share"]').trigger('click');
+      await flushPromises();
+      expect(body('task-share')!.textContent).toContain('分享甘特圖');
+      w.unmount();
+    });
+
+    it('G75 a Gantt chart that is gone falls back to the default Gantt chart with a notice and forgets it', async () => {
+      localStorage.setItem('taskGantt.last.sales01', '7');
+      localStorage.setItem('taskBoard.last.sales01', '5');
+      const { w, router } = await mountPage('/tasks?view=gantt&gantt=7', { goneGantts: [7] });
+      await flushPromises();
+      expect(router.currentRoute.value.query.gantt).toBeUndefined();
+      expect(router.currentRoute.value.query.view).toBe('gantt');
+      expect(w.get('[data-testid="board-gone-notice"]').text()).toContain('這個甘特圖已刪除或不再分享給你');
+      expect(localStorage.getItem('taskGantt.last.sales01')).toBeNull();
+      expect(localStorage.getItem('taskBoard.last.sales01')).toBe('5');
+      expect(ganttBodies().at(-1)).toEqual({ viewId: null, config: null, window: null });
+      expect(w.find('[data-testid="gantt-chart"]').exists()).toBe(true);
+      w.unmount();
+    });
+
+    it('G75 a remembered Gantt chart that is gone is dropped when switching to the Gantt view', async () => {
+      localStorage.setItem('taskGantt.last.sales01', '7');
+      const { w, router } = await mountPage('/tasks', { goneGantts: [7] });
+      await w.get('[data-testid="view-gantt"]').trigger('click');
+      await flushPromises();
+      await new Promise((r) => setTimeout(r, 20));
+      await flushPromises();
+      expect(router.currentRoute.value.query.gantt).toBeUndefined();
+      expect(w.find('[data-testid="board-gone-notice"]').exists()).toBe(true);
+      expect(localStorage.getItem('taskGantt.last.sales01')).toBeNull();
+      w.unmount();
+    });
+
+    it('G75 a board id in gantt= (its detail is a board) and a malformed id fall back to the default Gantt chart', async () => {
+      const { w, router } = await mountPage('/tasks?view=gantt&gantt=5', { ganttViews: [12] });
+      await flushPromises();
+      expect(router.currentRoute.value.query.gantt).toBeUndefined();
+      expect(w.find('[data-testid="board-gone-notice"]').exists()).toBe(true);
+      w.unmount();
+      localStorage.setItem('taskGantt.last.sales01', '12');
+      const second = await mountPage('/tasks?view=gantt&gantt=abc');
+      expect(second.router.currentRoute.value.query.gantt).toBeUndefined();
+      expect(second.w.find('[data-testid="board-gone-notice"]').exists()).toBe(true);
+      expect(localStorage.getItem('taskGantt.last.sales01')).toBe('12');
+      second.w.unmount();
+    });
+
+    it('G76 a subordinates Gantt chart opened by someone without subordinates opens with 0 rows and says why (D7)', async () => {
+      const { w } = await mountPage('/tasks?view=gantt', { noScope: true });
+      expect(w.find('[data-testid="gantt-scope-unavailable"]').text()).toContain('這個甘特圖的範圍是「部屬的任務」，你目前沒有部屬');
+      expect(w.find('[data-testid="gantt-chart"]').exists()).toBe(true);
+      expect(w.find('[data-testid="gantt-empty"]').exists()).toBe(true);
+      w.unmount();
+    });
+
+    it('G68 a manager who picks the subordinates scope sees the subordinates\' bars locked: no handles, not-allowed, nothing sent', async () => {
+      const { w } = await mountPage('/tasks?view=gantt', { subordinates: true, user: 'manager01' });
+      await click('board-settings');
+      await click('settings-scope-subordinates');
+      await click('settings-apply');
+      expect(ganttBodies().at(-1)).toMatchObject({ viewId: null, config: { scope: 'subordinates' } });
+      const bar = w.get('[data-testid="gantt-bar-41"]');
+      expect(bar.classes()).toContain('is-locked');
+      expect(w.find('[data-testid="gantt-handle-start-41"]').exists()).toBe(false);
+      expect(w.find('[data-testid="gantt-handle-due-41"]').exists()).toBe(false);
+      await bar.trigger('click');
+      await flushPromises();
+      expect(calls.some((c) => /\/schedule$/.test(c.url))).toBe(false);
+      w.unmount();
     });
   });
 });

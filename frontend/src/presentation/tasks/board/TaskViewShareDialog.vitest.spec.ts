@@ -14,7 +14,7 @@ let mounted: ReturnType<typeof mount> | undefined;
 let client: QueryClient;
 const q = (id: string) => document.body.querySelector<HTMLElement>(`[data-testid="${id}"]`);
 
-async function mountDialog(detail: Record<string, unknown> = {}, opts: { targetsFail?: boolean; putFails?: boolean; put404?: boolean; cached?: Record<string, unknown> } = {}) {
+async function mountDialog(detail: Record<string, unknown> = {}, opts: { targetsFail?: boolean; putFails?: boolean; put404?: boolean; cached?: Record<string, unknown>; kind?: 'board' | 'gantt' } = {}) {
   calls = mockHttp((c) => {
     if (c.url === '/task-views/share-targets') return opts.targetsFail ? new HttpFail(500, {}) : shareTargetsWire();
     if (c.url === '/task-views/5' && c.method === 'get') return viewDetailWire(detail);
@@ -25,7 +25,7 @@ async function mountDialog(detail: Record<string, unknown> = {}, opts: { targets
   if (opts.cached) queryClient.setQueryData(['task-view', 5], normalizeViewDetail(viewDetailWire(opts.cached) as never));
   client = queryClient;
   mounted = mount(TaskViewShareDialog, {
-    props: { viewId: 5, open: true },
+    props: { viewId: 5, open: true, ...(opts.kind ? { kind: opts.kind } : {}) },
     attachTo: document.body,
     global: { plugins: [[quasar.Quasar, { components: quasar, directives: quasar, plugins: { Notify: quasar.Notify } }], createI18n({ legacy: false, locale: 'zh-TW', messages: { 'zh-TW': zhTW } }),
       [VueQueryPlugin, { queryClient }]] },
@@ -113,5 +113,14 @@ describe('TaskViewShareDialog', () => {
     await mountDialog({}, { targetsFail: true });
     expect(q('task-share-load-error')).not.toBeNull();
     expect((q('task-share-save') as HTMLButtonElement).disabled).toBe(true);
+  });
+
+  it('G74 sharing a Gantt chart uses the same dialog in Gantt words and replaces the shares', async () => {
+    await mountDialog({ kind: 'gantt', name: '展覽' }, { kind: 'gantt' });
+    expect(q('task-share')!.textContent).toContain('分享甘特圖');
+    expect(q('task-share')!.textContent).toContain('分享只讓對方看得到甘特圖設定，任務權限不變');
+    await click('task-share-user-sales02');
+    await click('task-share-save');
+    expect(bodyOf(puts()[0])).toEqual([{ kind: 'user', id: 'sales02' }]);
   });
 });
