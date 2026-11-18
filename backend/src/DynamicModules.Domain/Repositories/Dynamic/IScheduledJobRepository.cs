@@ -18,6 +18,10 @@ public interface IScheduledJobRepository
     /// 條件含「到期」：慢一步讀到「到期」的實例，在別人跑完、清掉租約後不會再搶到一次而重跑。
     /// </summary>
     Task<bool> TryAcquireAsync(string jobKey, string owner, DateTime nowUtc, DateTime leaseUntilUtc, CancellationToken ct);
+    /// <summary>
+    /// 寫入交易內確認 owner 仍持有、而且租約還沒過期（nowUtc 之前）；用條件式更新（值不變），PostgreSQL 上順便鎖住工作列到交易結束。
+    /// </summary>
+    Task<bool> HoldsLeaseAsync(string jobKey, string owner, DateTime nowUtc, CancellationToken ct);
     /// <summary>仍是 owner 持有才延長租約。</summary>
     Task<bool> RenewAsync(string jobKey, string owner, DateTime leaseUntilUtc, CancellationToken ct);
     /// <summary>

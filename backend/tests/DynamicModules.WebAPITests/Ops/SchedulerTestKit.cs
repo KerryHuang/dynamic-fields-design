@@ -4,6 +4,7 @@ using DynamicModules.Application.Dynamic.OpsService.Scheduling;
 using DynamicModules.Domain.Data;
 using DynamicModules.Domain.Entities.Dynamic;
 using DynamicModules.Domain.Policies;
+using FluentAssertions;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
@@ -27,9 +28,13 @@ internal static class SchedulerTestKit
         while (!condition()) await Task.Delay(5);
     }));
 
-    public static JobRunner Runner(TestApp app, TimeProvider clock, IEnumerable<IScheduledJob> jobs, SchedulerLimits? limits = null) =>
+    public static JobRunner Runner(TestApp app, TimeProvider clock, IEnumerable<IScheduledJob> jobs, SchedulerLimits? limits = null,
+        Action? renewRound = null) =>
         new(app.Services.GetRequiredService<IServiceScopeFactory>(), jobs, clock, OpsInstance.Create(clock),
-            app.Services.GetRequiredService<IDatabaseErrors>(), app.Services.GetRequiredService<ILogger<JobRunner>>(), limits);
+            app.Services.GetRequiredService<IDatabaseErrors>(), app.Services.GetRequiredService<ILogger<JobRunner>>(), limits)
+        {
+            RenewRoundCompleted = renewRound,
+        };
 
     public static async Task<ScheduledJob> Row(TestApp app, string key)
     {
@@ -71,7 +76,7 @@ internal sealed class CountingJob(string key, PolicyDefinition interval) : ISche
     public Func<CancellationToken, Task<JobOutcome>>? Body { get; set; }
     public TaskCompletionSource Started { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
 
-    public async Task<JobOutcome> RunAsync(IServiceProvider services, CancellationToken ct)
+    public async Task<JobOutcome> RunAsync(JobRunContext context, CancellationToken ct)
     {
         Interlocked.Increment(ref _runs);
         Started.TrySetResult();
@@ -86,24 +91,38 @@ internal sealed class CountingJob(string key, PolicyDefinition interval) : ISche
     }
 }
 
-/// <summary>攔續租：每次續租結束放一個訊號；可設定前幾次丟資料庫忙碌（模擬長交易占住寫入鎖）。</summary>
+/// <summary>
+/// 攔續租：可設定前幾次丟資料庫忙碌（模擬長交易占住寫入鎖），或讓續租卡住不回（不丟錯，只有停止續租時才放開）。
+/// </summary>
 internal sealed class RenewSpy : IPipelineBehavior<RenewJobLeaseRequest, ServiceResult>
 {
     private int _calls;
 
     public int FailFirst { get; set; }
-    public SemaphoreSlim Done { get; } = new(0);
+    public bool Hang { get; set; }
+    public int Calls => Volatile.Read(ref _calls);
+
+    /// <summary>卡住的那次續租已經送出。</summary>
+    public TaskCompletionSource Hanging { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
 
     public async Task<ServiceResult> Handle(RenewJobLeaseRequest request, RequestHandlerDelegate<ServiceResult> next, CancellationToken ct)
     {
-        try
+        if (Interlocked.Increment(ref _calls) <= FailFirst) throw new DatabaseBusyException(DatabaseBusyException.DefaultMessage);
+        if (Hang)
         {
-            if (Interlocked.Increment(ref _calls) <= FailFirst) throw new DatabaseBusyException(DatabaseBusyException.DefaultMessage);
-            return await next();
+            Hanging.TrySetResult();
+            await Task.Delay(Timeout.Infinite, ct);
         }
-        finally
-        {
-            Done.Release();
-        }
+        return await next();
     }
+}
+
+/// <summary>續租迴圈每處理完一輪放一個訊號（JobRunner.RenewRoundCompleted），測試等它再往下推時鐘。</summary>
+internal sealed class RenewRounds
+{
+    private readonly SemaphoreSlim _done = new(0);
+
+    public void Completed() => _done.Release();
+
+    public async Task Next() => (await SchedulerTestKit.Within(_done.WaitAsync(Timeout.InfiniteTimeSpan))).Should().BeTrue();
 }

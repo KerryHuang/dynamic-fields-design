@@ -535,7 +535,9 @@ O1 就實作，log 與 O2 事件表共用同一套（主控判斷 T4）。指紋
 - 〔o1b 實作補記，O1 計畫判斷 J16–J19〕
   - 搶租約的條件另加「已到期」：`WHERE JobKey=? AND NextDueUtc <= 現在 AND (租約持有者 IS NULL OR 租約到期 < 現在)`（偏離上面原寫法）。沒有這一條時，慢一步讀到「到期」的實例會在別人跑完、清掉租約後再搶到一次而重跑。
   - 補列、搶租約、續租、寫結果都是交易型請求（經 `WriteGate`），各開一個短 DI scope；工作本身另開一個 scope。續租在自己的 scope 與交易，不巢狀在工作的交易裡。
-  - 續租：不是持有者就中止工作、不寫結果（別人已接手，不能蓋掉新持有者的列），記 `leaseLost`；資料庫暫時失敗只記 Warning、下一週期再試，不判工作失敗，連續失敗到租約剩不到一個續租週期才判租約遺失。
+  - 續租：不是持有者就中止工作、不寫結果（別人已接手，不能蓋掉新持有者的列），記 `leaseLost`；資料庫暫時失敗只記 Warning、下一週期再試，不判工作失敗。
+  - 〔o1b 審查修正〕租約截止：工作的取消來源多一個「租約截止」計時器（走 `TimeProvider`），時間是租約到期前一個續租週期，只有續租成功才往後延；續租失敗或卡住不回都不會延，到了就中止工作、記 `leaseLost`、不寫結果。取代原本「續租失敗後才檢查剩餘時間」（續租卡住不回時永遠檢查不到，租約過期被別人接手時這裡還在跑）。`Renew` 必須小於 `Lease`。
+  - 〔o1b 審查修正〕寫入的租約檢查：工作拿到 `JobRunContext`，寫入交易帶 `JobLeaseFence`，交易一開始先用條件式更新確認「持有者是我、租約還沒過期」（PostgreSQL 上順便鎖住工作列到交易結束，接手者的搶租約要等它提交），不成立就回 Conflict（代碼 `jobLeaseLost`）、交易回滾，工作丟 `JobLeaseLostException` 中止，結果記 `leaseLost`。寫結果本來就是 `WHERE 持有者=我`，接手者搶租約會改掉持有者，兩者互斥。
   - 結果：逾時記 `Failed`（`LastError`＝`timeout`）；程式關閉記 `Cancelled`，不累加連續失敗，下次預定時間＝結束時間（下一個 tick 任何實例都可接）；`PartiallyFailed` 也累加連續失敗。
   - 核心 `JobRunner` 在 Application，`SchedulerHostedService` 在 WebAPI；啟動先補工作列，再等一個檢查週期才跑第一次（不和冷啟動的第一位訪客搶資源）。計時器（續租、逾時、檢查週期）都走 `TimeProvider`，測試用手動時鐘快轉，不真的等待。
   - 撞鍵與忙碌的判斷沿用 pg0a 已集中的 `IDatabaseErrors`（`IsUniqueViolation`、`IsBusyOrConflict`），不另建 O1 計畫寫的 `IDbErrorClassifier`。
@@ -547,8 +549,9 @@ O1 就實作，log 與 O2 事件表共用同一套（主控判斷 T4）。指紋
 - 每位使用者各自一個交易、各自一個 `ActingScope`（B3）；一位失敗記 log 後繼續下一位，最後整體結果記為「部分失敗」。
 - **即將到期提醒的新規則**（使用者 2026-11-12 裁決，取代現行的「到期日是明天才提醒」）：任務在到期前 `N` 天內（N＝政策 A6「到期前幾天提醒」，出廠 1）的任何一天，只要使用者打開通知或排程器跑到，就補一次；同一任務的即將到期提醒只補一次（以 `LastDueSoonNotified` 非空為準，不再是一天一則）。逾期提醒維持現行（到期日早於今天，一天最多一則）。新規則在 o1b 與排程器一起改，惰性路徑與排程路徑共用同一個判斷。任務設計 §6.2 與政策設定 A6 同步改寫。
 - 保留惰性觸發（主控判斷 U4）：兩條路徑都冪等，排程器停了提醒也不會完全消失。
-- 〔o1b 實作補記〕O1 計畫的使用者裁決（2026-11-12）一併實作：即將到期的範圍含到期當天（D1）；改到期日清掉即將到期戳記、換負責人兩個戳記都清（D2，重新計）；完成或取消後重開、到期日沒改不重新計（B3）；逾期提醒在同一任務還有未讀的逾期通知時只蓋今天的戳記、不新增（B1）。工作呼叫的是同一個 `EnsureNotificationUpkeepRequest`，所以簽核逾期提醒（`ApprovalReminderSource`，本來就是條件式認領）也一起改由排程補。唯讀判斷抽成 `NotificationUpkeepProbe`，兩條路徑共用；全部使用者都失敗時記 `Failed`，部分失敗記 `PartiallyFailed`，`LastError` 是「失敗數／總數 位使用者失敗」。
+- 〔o1b 實作補記〕O1 計畫的使用者裁決（2026-11-12）一併實作：即將到期的範圍含到期當天（D1）；改到期日清掉即將到期戳記、換負責人兩個戳記都清（D2，重新計）；完成或取消後重開、到期日沒改不重新計（B3）；逾期提醒在同一任務還有未讀的逾期通知時只蓋今天的戳記、不新增（B1）。工作呼叫的是同一個 `EnsureNotificationUpkeepRequest`，所以簽核逾期提醒（`ApprovalReminderSource`，本來就是條件式認領）也一起改由排程補。唯讀判斷抽成 `NotificationUpkeepProbe`，兩條路徑共用；〔o1b 審查修正〕啟用名單只在整批開始時讀一次，所以每位使用者的交易內（租約檢查之後）再確認一次帳號仍啟用，途中被停用的跳過（不補、不蓋戳記、不清通知）；全部使用者都失敗時記 `Failed`，部分失敗記 `PartiallyFailed`，`LastError` 是「失敗數／總數 位使用者失敗」。
 - 去重要能承受兩條路徑同時跑：現在靠任務列上的 `LastDueSoonNotified`、`LastOverdueNotified` 日期戳。SQLite 經 `WriteGate` 序列化不會重複；PostgreSQL 在 pg0 也有程序內排隊與全庫 advisory lock，但去重不能依賴它們（多實例時程序內排隊不互通，全庫鎖將來也可能拿掉），沒有序列化時兩個交易可能同時讀到舊值而各寫一則。所以 o1b 要把「寫日期戳」改成條件式更新（只在日期戳不是今天時更新，影響列數為 1 才新增通知），兩種資料庫都成立（§10.7）。
+  - 〔o1b 審查修正〕認領條件另加「負責人、到期日、狀態和判斷時讀到的一樣」：沒有序列化時，提醒讀到負責人 A 之後，並行的編輯改派給 B 並清掉戳記，只比對戳記的話仍會認領成功、通知 A、卻用掉 B 的唯一提醒；改期移出窗口、完成任務同理。不一樣就不認領、不發，留給下一輪用新的那一版重新判斷；通知只發給認領成功那一版的負責人。
 - 使用者看得到的變化：即將到期的提醒在進入到期前 N 天的範圍後一小時內就出現在鈴鐺未讀數，不必先打開鈴鐺；中途才被指派或才建立的任務也會補一次。手冊任務章節要同步（提醒說明改成「到期前 N 天內補一次」）。
 
 ### 10.3 前端
@@ -648,7 +651,7 @@ O1 排在 pg0 之前，所以合併當下還不能在 PostgreSQL 上跑；但 O1
   - 持有者當掉（不續租）後，租約過期由另一實例接手。
   - 工作丟例外：LastStatus＝Failed、ConsecutiveFailures 加一，其他工作照常。
   - 通知維護：有任務在到期前 N 天內（含剛指派、剛建立）的使用者，不呼叫取得通知 API 也收到提醒，且同一任務只收一次；超過保留天數的通知被清；同一天跑兩次不重複；排程與惰性觸發同一天各跑一次也不重複。
-  - 〔o1b 實作補記，O1 計畫判斷 J20〕以上四條寫在 WebAPITests（`TestApp(fileDatabase: true)`，每個 scope 一個真的 DbContext）：`Ops.SchedulerTests`、`Ops.ScheduledJobLeaseTests`、`Ops.NotificationUpkeepJobTests`；提醒規則本身在 ApplicationTests 的 `NotificationApiTests`。
+  - 〔o1b 實作補記，O1 計畫判斷 J20〕以上四條寫在 WebAPITests（`TestApp(fileDatabase: true)`，每個 scope 一個真的 DbContext）：`Ops.SchedulerTests`、`Ops.ScheduledJobLeaseTests`、`Ops.NotificationUpkeepJobTests`；提醒規則本身在 ApplicationTests 的 `NotificationApiTests`。〔o1b 審查修正〕另補：續租卡住不回超過租期時舊持有者先被中止、別人等租約過期才接手、只完成一次（`SchedulerTests`）；做到一半租約被拿走就不再寫、途中被停用的帳號跳過（`NotificationUpkeepJobTests`）；讀取後才改派、改期、完成時不認領（`NotificationApiTests`、`ReminderClaimRaceTests`，用攔截點在讀取與認領之間插入改派模擬）。
 
 **前端自動測試**（vitest）
 

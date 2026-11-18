@@ -1,6 +1,7 @@
 using DynamicModules.Application.Common;
 using DynamicModules.Application.Common.Security;
 using DynamicModules.Application.Common.Time;
+using DynamicModules.Application.Dynamic.OpsService.Scheduling;
 using DynamicModules.Domain.Repositories.Dynamic;
 using MediatR;
 using Microsoft.Extensions.Logging;
@@ -36,12 +37,18 @@ public class GetNotificationsHandler(
 
 public class EnsureNotificationUpkeepHandler(
     IEnumerable<INotificationReminderSource> sources, INotificationRepository notifications, ICurrentUser user, IBusinessTime time, IUnitOfWork uow,
-    NotificationUpkeepProbe probe)
+    NotificationUpkeepProbe probe, IScheduledJobRepository jobs, IAccountRepository accounts)
     : IRequestHandler<EnsureNotificationUpkeepRequest, ServiceResult>
 {
     public async Task<ServiceResult> Handle(EnsureNotificationUpkeepRequest request, CancellationToken ct)
     {
         var userId = user.UserId;
+        if (request.Fence is { } fence)
+        {
+            // 排程路徑：租約失效就整筆不寫（別的實例可能已接手）；整批開始後才被停用的帳號跳過
+            if (!await jobs.HoldsLeaseAsync(fence.JobKey, fence.Owner, fence.NowUtc, ct)) return ServiceResult.Conflict(null, JobLeaseFence.LostCode);
+            if (!await accounts.IsActiveAsync(userId, ct)) return ServiceResult.Success();
+        }
         foreach (var source in sources) await source.AddDueAsync(userId, time.Today, ct);
         await uow.CommitAsync(ct);
         var cutoff = await probe.CutoffAsync(ct);

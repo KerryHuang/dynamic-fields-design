@@ -37,10 +37,11 @@ public sealed class SchedulerTests : IDisposable
 
     private int RenewFailures() => JobLogs(_app).Count(r => r.Level == LogLevel.Warning && r.Message.Contains("續租失敗"));
 
-    private async Task<(JobRunner Runner, CountingJob Job)> Single(string key = "test.counting", SchedulerLimits? limits = null)
+    private async Task<(JobRunner Runner, CountingJob Job)> Single(string key = "test.counting", SchedulerLimits? limits = null,
+        Action? renewRound = null)
     {
         var job = new CountingJob(key, Interval);
-        var runner = Runner(_app, _clock, [job], limits);
+        var runner = Runner(_app, _clock, [job], limits, renewRound);
         await runner.EnsureJobsAsync(CancellationToken.None);
         return (runner, job);
     }
@@ -116,7 +117,8 @@ public sealed class SchedulerTests : IDisposable
     [Fact]
     public async Task Timeout_Failed()
     {
-        var limits = SchedulerLimits.Default with { Renew = TimeSpan.FromHours(1), MaxRun = TimeSpan.FromMinutes(10) };
+        // 續租與租約都拉長到逾時之後，只看逾時本身
+        var limits = SchedulerLimits.Default with { Lease = TimeSpan.FromHours(2), Renew = TimeSpan.FromHours(1), MaxRun = TimeSpan.FromMinutes(10) };
         var (runner, job) = await Single(limits: limits);
         job.Body = CountingJob.UntilCancelled;
 
@@ -174,19 +176,20 @@ public sealed class SchedulerTests : IDisposable
     [Fact]
     public async Task RenewTransientFailure_WorkCompletes_LeaseKept()
     {
-        _spy.FailFirst = 3;
-        var (runner, job) = await Single();
+        _spy.FailFirst = 2;
+        var rounds = new RenewRounds();
+        var (runner, job) = await Single(renewRound: rounds.Completed);
         var release = new TaskCompletionSource<JobOutcome>(TaskCreationOptions.RunContinuationsAsynchronously);
         job.Body = _ => release.Task;
 
         var tick = runner.TickAsync(CancellationToken.None);
         await Within(job.Started.Task);
-        for (var i = 0; i < 3; i++)
+        // 租約 5 分、續租每 1 分：前兩次失敗，截止仍是第 4 分；第 3 分續租成功把截止延到第 7 分，之後每分往後延
+        for (var i = 0; i < 6; i++)
         {
             _clock.Advance(TimeSpan.FromMinutes(1));
-            (await Within(_spy.Done.WaitAsync(Timeout.InfiniteTimeSpan))).Should().BeTrue();
-            var expected = i + 1;
-            await Until(() => RenewFailures() >= expected);   // 續租迴圈處理完這次失敗，才往下推時鐘
+            await rounds.Next();   // 這一輪判斷完（成功已延後截止、失敗已記 log）才往下推時鐘
+            tick.IsCompleted.Should().BeFalse($"第 {i + 1} 輪後租約仍有效");
         }
         var other = Runner(_app, _clock, [job]);
         await other.TickAsync(CancellationToken.None);
@@ -196,7 +199,7 @@ public sealed class SchedulerTests : IDisposable
         await Within(tick);
 
         (await Row(_app, job.Key)).LastStatus.Should().Be(ScheduledJobStatus.Succeeded);
-        RenewFailures().Should().Be(3);
+        RenewFailures().Should().Be(2);
         JobLogs(_app).Should().NotContain(r => r.Level >= LogLevel.Error);
     }
 
@@ -204,24 +207,75 @@ public sealed class SchedulerTests : IDisposable
     public async Task RenewFailsUntilLeaseNearlyExpired_CancelledAsLeaseLost()
     {
         _spy.FailFirst = int.MaxValue;
-        var (runner, job) = await Single();
+        var rounds = new RenewRounds();
+        var (runner, job) = await Single(renewRound: rounds.Completed);
         job.Body = CountingJob.UntilCancelled;
 
         var tick = runner.TickAsync(CancellationToken.None);
         await Within(job.Started.Task);
-        // 租約 5 分、續租每 1 分：第 5 次失敗時剩不到一個續租週期，主動判成租約遺失
-        for (var i = 0; i < 5; i++)
+        // 租約 5 分、續租每 1 分、一直續不上：截止在租約到期前一個續租週期（第 4 分）
+        for (var i = 0; i < 3; i++)
         {
-            tick.IsCompleted.Should().BeFalse($"第 {i} 次續租前租約還夠");
             _clock.Advance(TimeSpan.FromMinutes(1));
-            (await Within(_spy.Done.WaitAsync(Timeout.InfiniteTimeSpan))).Should().BeTrue();
-            var expected = i + 1;
-            await Until(() => RenewFailures() >= expected);   // 續租迴圈處理完這次失敗，才往下推時鐘
+            await rounds.Next();
+            tick.IsCompleted.Should().BeFalse($"第 {i + 1} 分租約還夠");
         }
+        _clock.Advance(TimeSpan.FromMinutes(1));
         await Within(tick);
 
         JobLogs(_app).Should().Contain(r => r.EventId.Id == JobRunner.JobFinished.Id && (string?)r.Values["Result"] == "leaseLost");
         (await Row(_app, job.Key)).LastStatus.Should().BeNull();
+    }
+
+    /// <summary>
+    /// 續租卡住不回（不丟錯）超過租期（審查 P1）：舊持有者在租約到期前被租約截止中止，別的實例等租約過期才接手，
+    /// 兩邊不會同時在跑，工作也只完成一次。
+    /// </summary>
+    [Fact]
+    public async Task RenewHangs_PastLease_HolderCancelledBeforeOtherTakesOver_RunsOnce()
+    {
+        _spy.Hang = true;
+        var (a, job) = await Single();
+        var running = 0;
+        var overlapped = false;
+        var completed = 0;
+        job.Body = async ct =>
+        {
+            overlapped |= Interlocked.Increment(ref running) > 1;
+            try
+            {
+                if (job.Runs == 1) await Task.Delay(Timeout.Infinite, ct);   // A：一直做到被取消
+                Interlocked.Increment(ref completed);
+                return new JobOutcome(ScheduledJobStatus.Succeeded);
+            }
+            finally
+            {
+                Interlocked.Decrement(ref running);
+            }
+        };
+
+        var tickA = a.TickAsync(CancellationToken.None);
+        await Within(job.Started.Task);
+        _clock.Advance(TimeSpan.FromMinutes(1));
+        await Within(_spy.Hanging.Task);   // 第一次續租卡住，不會再延後截止
+        _clock.Advance(TimeSpan.FromMinutes(3));
+        await Within(tickA);   // 第 4 分：租約截止，A 中止
+
+        JobLogs(_app).Should().Contain(r => r.EventId.Id == JobRunner.JobFinished.Id && (string?)r.Values["Result"] == "leaseLost");
+        var b = Runner(_app, _clock, [job]);
+        await b.TickAsync(CancellationToken.None);
+        job.Runs.Should().Be(1, "A 的租約到第 5 分才過期，B 還搶不到");
+
+        _spy.Hang = false;
+        _clock.Advance(TimeSpan.FromMinutes(1) + TimeSpan.FromSeconds(1));
+        await Within(b.TickAsync(CancellationToken.None));
+
+        job.Runs.Should().Be(2);
+        completed.Should().Be(1, "只有 B 做完");
+        overlapped.Should().BeFalse("A 停下來之後 B 才開始");
+        var row = await Row(_app, job.Key);
+        row.LastStatus.Should().Be(ScheduledJobStatus.Succeeded);
+        row.LeaseOwner.Should().BeNull();
     }
 
     [Fact]

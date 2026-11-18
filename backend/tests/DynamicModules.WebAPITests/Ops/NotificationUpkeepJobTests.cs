@@ -169,6 +169,62 @@ public sealed class NotificationUpkeepJobTests : IDisposable
         (await Notifications("sales02")).Should().BeEmpty();
     }
 
+    /// <summary>整批開始後才被停用（審查 P2）：輪到他時交易內重新確認，不補提醒、不蓋戳記、不清通知。</summary>
+    [Fact]
+    public async Task UpkeepJob_UserDeactivatedMidBatch_Skipped()
+    {
+        _app.ExtraServices = s => s.AddSingleton<INotificationReminderSource>(new HookForUser("sales01", async () =>
+        {
+            await using var scope = _app.Services.CreateAsyncScope();
+            await scope.ServiceProvider.GetRequiredService<DynamicDbContext>().Set<AppUser>().Where(u => u.UserId == "sales02")
+                .ExecuteUpdateAsync(x => x.SetProperty(u => u.IsActive, false));
+        }));
+        var taskId = await SeedTask("明天交", "sales02", D(11, 5));
+        await SeedOld("sales02");
+        var runner = await Ready();
+
+        await runner.TickAsync(CancellationToken.None);
+
+        (await Notifications("sales02")).Should().ContainSingle(n => n.TitleSnapshot == "舊的", "沒補提醒、也沒清舊通知");
+        await using var check = _app.Services.CreateAsyncScope();
+        (await check.ServiceProvider.GetRequiredService<DynamicDbContext>().Set<TaskItem>().AsNoTracking().SingleAsync(t => t.Id == taskId))
+            .LastDueSoonNotified.Should().BeNull("沒有蓋戳記，重新啟用後還會補");
+        (await Row(_app, "notification.upkeep")).LastStatus.Should().Be(ScheduledJobStatus.Succeeded);
+    }
+
+    /// <summary>做到一半（判斷完 sales01 之後）租約被別的實例拿走（審查 P1）：之後每位使用者的交易都先確認租約，失效就不寫，這次執行不寫結果。</summary>
+    [Fact]
+    public async Task UpkeepJob_LeaseTakenMidBatch_StopsWriting()
+    {
+        _app.ExtraServices = s => s.AddSingleton<INotificationReminderSource>(new HookForUser("sales01", () =>
+            Update(_app, "notification.upkeep", j => { j.LeaseOwner = "other"; j.LeaseUntilUtc = _clock.GetUtcNow().UtcDateTime.AddMinutes(5); })));
+        var taskId = await SeedTask("明天交", "sales02", D(11, 5));
+        var runner = await Ready();
+
+        await runner.TickAsync(CancellationToken.None);
+
+        (await Notifications("sales02")).Should().BeEmpty("租約失效後的交易整筆回滾");
+        await using (var check = _app.Services.CreateAsyncScope())
+            (await check.ServiceProvider.GetRequiredService<DynamicDbContext>().Set<TaskItem>().AsNoTracking().SingleAsync(t => t.Id == taskId))
+                .LastDueSoonNotified.Should().BeNull();
+        var row = await Row(_app, "notification.upkeep");
+        row.LeaseOwner.Should().Be("other");
+        row.LastStatus.Should().BeNull();
+        JobLogs(_app).Should().Contain(r => r.EventId.Id == JobRunner.JobFinished.Id && (string?)r.Values["Result"] == "leaseLost");
+    }
+
+    private async Task SeedOld(string userId)
+    {
+        await using var scope = _app.Services.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<DynamicDbContext>();
+        db.Add(new Notification
+        {
+            UserId = userId, Kind = NotificationKinds.TaskAssigned, TitleSnapshot = "舊的", Link = "/tasks?open=1", SourceType = "task",
+            SourceId = 1, CreatedTime = new DateTime(2026, 8, 5, 9, 0, 0)   // 91 天前
+        });
+        await db.SaveChangesAsync();
+    }
+
     [Fact]
     public async Task UpkeepJob_OneUserFails_OthersContinue_PartiallyFailed()
     {
@@ -229,5 +285,19 @@ public sealed class NotificationUpkeepJobTests : IDisposable
 
         public Task AddDueAsync(string user, DateOnly today, CancellationToken ct) =>
             ActingScope.UserId == userId ? throw new InvalidOperationException("提醒來源壞了") : Task.CompletedTask;
+    }
+
+    /// <summary>輪到指定使用者做判斷時（交易外）先跑一段交錯動作，只跑一次；自己從不需要補。</summary>
+    private sealed class HookForUser(string userId, Func<Task> hook) : INotificationReminderSource
+    {
+        private int _done;
+
+        public async Task<bool> AnyDueAsync(string user, DateOnly today, CancellationToken ct)
+        {
+            if (user == userId && Interlocked.Exchange(ref _done, 1) == 0) await hook();
+            return false;
+        }
+
+        public Task AddDueAsync(string user, DateOnly today, CancellationToken ct) => Task.CompletedTask;
     }
 }

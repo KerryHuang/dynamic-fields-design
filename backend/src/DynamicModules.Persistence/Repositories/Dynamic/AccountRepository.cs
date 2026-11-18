@@ -22,6 +22,9 @@ public class AccountRepository(DynamicDbContext db) : IAccountRepository
     public Task<bool> UserExistsAsync(string userId, CancellationToken ct) =>
         db.Set<AppUser>().AnyAsync(u => u.UserId == userId, ct);
 
+    public Task<bool> IsActiveAsync(string userId, CancellationToken ct) =>
+        db.Set<AppUser>().AsNoTracking().AnyAsync(u => u.UserId == userId && u.IsActive, ct);
+
     public async Task<IReadOnlyList<string>> ListActiveUserIdsAsync(CancellationToken ct) =>
         await db.Set<AppUser>().AsNoTracking().Where(u => u.IsActive).OrderBy(u => u.UserId).Select(u => u.UserId).ToListAsync(ct);
 

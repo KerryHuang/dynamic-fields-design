@@ -23,6 +23,10 @@ public class ScheduledJobRepository(DynamicDbContext db) : IScheduledJobReposito
                 .SetProperty(j => j.LeaseUntilUtc, leaseUntilUtc)
                 .SetProperty(j => j.LastStartedUtc, nowUtc), ct) == 1;
 
+    public async Task<bool> HoldsLeaseAsync(string jobKey, string owner, DateTime nowUtc, CancellationToken ct) =>
+        await db.Set<ScheduledJob>().Where(j => j.JobKey == jobKey && j.LeaseOwner == owner && j.LeaseUntilUtc > nowUtc)
+            .ExecuteUpdateAsync(s => s.SetProperty(j => j.LeaseUntilUtc, j => j.LeaseUntilUtc), ct) == 1;
+
     public async Task<bool> RenewAsync(string jobKey, string owner, DateTime leaseUntilUtc, CancellationToken ct) =>
         await db.Set<ScheduledJob>().Where(j => j.JobKey == jobKey && j.LeaseOwner == owner)
             .ExecuteUpdateAsync(s => s.SetProperty(j => j.LeaseUntilUtc, leaseUntilUtc), ct) == 1;

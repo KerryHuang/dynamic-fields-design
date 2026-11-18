@@ -21,6 +21,9 @@ public sealed class JobRunner(
     public static readonly EventId JobFinished = new(5200, "JobFinished");
 
     private readonly SchedulerLimits _limits = limits ?? SchedulerLimits.Default;
+
+    /// <summary>每一輪續租處理完（成功已延後截止、失敗已記 log、遺失已中止）時呼叫；給測試當同步屏障，正式環境不設。</summary>
+    public Action? RenewRoundCompleted { get; init; }
     private readonly IReadOnlyList<IScheduledJob> _jobs = [.. jobs.OrderBy(j => j.Key, StringComparer.Ordinal)];
 
     private enum StopReason { None, Shutdown, Timeout, LeaseLost }
@@ -89,18 +92,31 @@ public sealed class JobRunner(
         void Stop(StopReason why) => Interlocked.CompareExchange(ref reason, (int)why, (int)StopReason.None);
 
         using var timeout = new CancellationTokenSource(_limits.MaxRun, time);
-        using var work = CancellationTokenSource.CreateLinkedTokenSource(ct, timeout.Token);
+        // 租約截止：租約到期前一個續租週期就中止工作，只有續租成功才往後延（續租卡住不回也一樣會到期），
+        // 免得租約過期、別的實例接手時這裡還在跑
+        using var leaseDeadline = new CancellationTokenSource(DeadlineDelay(leaseUntil), time);
+        using var work = CancellationTokenSource.CreateLinkedTokenSource(ct, timeout.Token, leaseDeadline.Token);
         using var shutdownHook = ct.Register(() => Stop(StopReason.Shutdown));
         using var timeoutHook = timeout.Token.Register(() => Stop(StopReason.Timeout));
+        using var deadlineHook = leaseDeadline.Token.Register(() => Stop(StopReason.LeaseLost));
         using var renewStop = new CancellationTokenSource();
-        var renewal = RenewLoopAsync(job.Key, leaseUntil, () => { Stop(StopReason.LeaseLost); work.Cancel(); }, renewStop.Token);
+        var renewal = RenewLoopAsync(job.Key,
+            renewedUntil => leaseDeadline.CancelAfter(DeadlineDelay(renewedUntil)),
+            () => { Stop(StopReason.LeaseLost); work.Cancel(); }, renewStop.Token);
 
         JobOutcome outcome;
         Exception? failure = null;
         try
         {
             await using var scope = scopes.CreateAsyncScope();
-            outcome = await job.RunAsync(scope.ServiceProvider, work.Token);
+            outcome = await job.RunAsync(new JobRunContext(scope.ServiceProvider, job.Key, instance.InstanceId, time), work.Token);
+        }
+        catch (JobLeaseLostException e)
+        {
+            // 工作的寫入交易發現租約已失效（已回滾）
+            Stop(StopReason.LeaseLost);
+            outcome = new JobOutcome(ScheduledJobStatus.Cancelled);
+            failure = e;
         }
         catch (Exception e) when (work.IsCancellationRequested)
         {
@@ -163,11 +179,18 @@ public sealed class JobRunner(
             "排程工作 {JobKey} 結束 {Result} {DurationMs} {JobError}", job.Key, result, duration, outcome.Error);
     }
 
+    /// <summary>租約截止＝租約到期前一個續租週期；已經過了就立刻截止。</summary>
+    private TimeSpan DeadlineDelay(DateTime leaseUntil)
+    {
+        var delay = leaseUntil - _limits.Renew - UtcNow;
+        return delay > TimeSpan.Zero ? delay : TimeSpan.Zero;
+    }
+
     /// <summary>
-    /// 每個續租週期續租一次。不是持有者 → 租約遺失、中止工作。資料庫暫時失敗只記 Warning、下一週期再試（不判工作失敗）；
-    /// 連續失敗到租約剩不到一個續租週期才判租約遺失，免得過期後被別的實例接手而重跑（O1 計畫判斷 J19）。
+    /// 每個續租週期續租一次，成功就把租約截止往後延。不是持有者 → 租約遺失、中止工作。資料庫暫時失敗只記 Warning、下一週期再試
+    /// （不判工作失敗）；一直續不上（失敗或卡住不回）時由租約截止中止工作（O1 計畫判斷 J19；審查 P1）。
     /// </summary>
-    private async Task RenewLoopAsync(string key, DateTime leaseUntil, Action onLost, CancellationToken stop)
+    private async Task RenewLoopAsync(string key, Action<DateTime> onRenewed, Action onLost, CancellationToken stop)
     {
         try
         {
@@ -180,7 +203,7 @@ public sealed class JobRunner(
                     var renewed = await SendAsync(new RenewJobLeaseRequest(key, instance.InstanceId, now + _limits.Lease), stop);
                     if (renewed.Data is true)
                     {
-                        leaseUntil = now + _limits.Lease;
+                        onRenewed(now + _limits.Lease);
                         continue;
                     }
                     logger.LogWarning("排程工作 {JobKey} 續租時已不是持有者", key);
@@ -190,16 +213,16 @@ public sealed class JobRunner(
                 catch (Exception e) when (!stop.IsCancellationRequested)
                 {
                     LogDatabaseFailure(e, "排程工作 {JobKey} 續租失敗", key);
-                    if (leaseUntil - UtcNow < _limits.Renew)
-                    {
-                        onLost();
-                        return;
-                    }
+                }
+                finally
+                {
+                    RenewRoundCompleted?.Invoke();
                 }
             }
         }
-        catch (OperationCanceledException) when (stop.IsCancellationRequested)
+        catch (Exception) when (stop.IsCancellationRequested)
         {
+            // 停止續租時還在路上的那次續租：不論怎麼結束都不算數
         }
     }
 

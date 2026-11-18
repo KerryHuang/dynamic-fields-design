@@ -157,6 +157,21 @@ public class ScheduledJobLeaseTests(FileDatabaseApp app) : IClassFixture<FileDat
     }
 
     [Fact]
+    public async Task HoldsLease_OwnerBeforeExpiry_True_ExpiredOrOther_False()
+    {
+        var key = Key();
+        await Send(new EnsureScheduledJobRequest(key, Now));
+        (await SendBool(new AcquireJobLeaseRequest(key, "me", Now, Now.AddMinutes(5)))).Should().BeTrue();
+
+        await using var scope = app.Services.CreateAsyncScope();
+        var repo = scope.ServiceProvider.GetRequiredService<IScheduledJobRepository>();
+        (await repo.HoldsLeaseAsync(key, "me", Now.AddMinutes(4), CancellationToken.None)).Should().BeTrue();
+        (await repo.HoldsLeaseAsync(key, "me", Now.AddMinutes(5), CancellationToken.None)).Should().BeFalse("租約已到期");
+        (await repo.HoldsLeaseAsync(key, "other", Now, CancellationToken.None)).Should().BeFalse();
+        (await Row(key))!.LeaseUntilUtc.Should().Be(Now.AddMinutes(5), "檢查不改租約");
+    }
+
+    [Fact]
     public async Task Finish_ByNonOwner_False_RowUnchanged()
     {
         var key = Key();
@@ -235,6 +250,7 @@ public class ScheduledJobLeaseTests(FileDatabaseApp app) : IClassFixture<FileDat
         public void Add(ScheduledJob job) => inner.Add(job);
         public Task<bool> TryAcquireAsync(string jobKey, string owner, DateTime nowUtc, DateTime leaseUntilUtc, CancellationToken ct) =>
             inner.TryAcquireAsync(jobKey, owner, nowUtc, leaseUntilUtc, ct);
+        public Task<bool> HoldsLeaseAsync(string jobKey, string owner, DateTime nowUtc, CancellationToken ct) => inner.HoldsLeaseAsync(jobKey, owner, nowUtc, ct);
         public Task<bool> RenewAsync(string jobKey, string owner, DateTime leaseUntilUtc, CancellationToken ct) => inner.RenewAsync(jobKey, owner, leaseUntilUtc, ct);
         public Task<bool> FinishAsync(string jobKey, string owner, JobRunResult result, CancellationToken ct) => inner.FinishAsync(jobKey, owner, result, ct);
     }
