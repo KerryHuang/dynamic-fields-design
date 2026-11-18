@@ -2,13 +2,14 @@ import { QueryClient, VueQueryPlugin } from '@tanstack/vue-query';
 import { flushPromises, mount } from '@vue/test-utils';
 import { describe, expect, it, vi } from 'vitest';
 import { defineComponent, ref } from 'vue';
-import type { BoardColumnPage, BoardSource, TaskBoardData } from 'src/domain/dynamic/task-board-types';
+import type { BoardColumnPage, BoardSource, GanttSource, TaskBoardData, TaskGanttData } from 'src/domain/dynamic/task-board-types';
 import { boardWire, cardWire, columnWire } from 'src/presentation/tasks/board/board-fixtures';
 import { dynamicApi } from 'src/services/api/dynamic-api';
-import { normalizeBoard, normalizeBoardPage } from 'src/services/api/task-normalize';
-import { boardKey, useLoadMoreColumn, useMoveTask } from './task-board-queries';
+import { ganttWire } from 'src/presentation/tasks/gantt/gantt-fixtures';
+import { normalizeBoard, normalizeBoardPage, normalizeGantt } from 'src/services/api/task-normalize';
+import { boardKey, ganttKey, useGantt, useLoadMoreColumn, useMoveTask, useScheduleTask } from './task-board-queries';
 
-vi.mock('src/services/api/dynamic-api', () => ({ dynamicApi: { getBoardColumnPage: vi.fn(), moveTask: vi.fn() } }));
+vi.mock('src/services/api/dynamic-api', () => ({ dynamicApi: { getBoardColumnPage: vi.fn(), moveTask: vi.fn(), getGantt: vi.fn(), scheduleTask: vi.fn() } }));
 const api = vi.mocked(dynamicApi);
 
 const board = (cardId: number) => normalizeBoard(boardWire({ columns: [columnWire({ key: 'todo', total: 60, hasMore: true, cards: [cardWire({ id: cardId })] })] }) as never);
@@ -160,3 +161,45 @@ describe('useMoveTask', () => {
   });
 });
 
+
+describe('useScheduleTask', () => {
+  const winA = { from: '2026-11-16', to: '2027-02-14' };
+  const winB = { from: '2027-02-15', to: '2027-05-16' };
+  const ganttWith = (window: typeof winA, due: string) =>
+    normalizeGantt(ganttWire({ window, rows: [cardWire({ id: 7, startDate: '2026-11-21', dueDate: due })], spans: [], total: 1 }) as never);
+
+  it('a gantt query sent before the write finished is cancelled, and the refetch goes out after the write', async () => {
+    const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    const source = ref<GanttSource>({ viewId: null, config: null, window: winA });
+    // 每次甘特查詢都由測試決定何時回、回什麼
+    const pending: { window: unknown; answer: (d: TaskGanttData) => void }[] = [];
+    api.getGantt.mockImplementation(((s: GanttSource) => new Promise<TaskGanttData>((r) => { pending.push({ window: s.window, answer: r }); })) as never);
+    let schedule!: ReturnType<typeof useScheduleTask>;
+    let gantt!: ReturnType<typeof useGantt>;
+    mount(defineComponent({ setup() { gantt = useGantt(source); schedule = useScheduleTask(source); return () => null; } }), { global: { plugins: [[VueQueryPlugin, { queryClient: qc }]] } });
+    await flushPromises();
+    pending.shift()!.answer(ganttWith(winA, '2026-12-02'));
+    await flushPromises();
+
+    let written!: (r: unknown) => void;
+    api.scheduleTask.mockReturnValue(new Promise((r) => { written = r; }) as never);
+    const done = schedule.mutateAsync({ card: gantt.data.value!.rows[0], startDate: '2026-11-21', dueDate: '2026-12-20' });
+    await flushPromises();
+    // 寫入還沒完成時換到沒快取的時間窗：這個請求讀到的是舊日期
+    source.value = { viewId: null, config: null, window: winB };
+    await flushPromises();
+    const early = pending.shift()!;
+    expect(early.window).toEqual(winB);
+    written({ card: normalizeGantt(ganttWire({ rows: [cardWire({ id: 7, startDate: '2026-11-21', dueDate: '2026-12-20', version: 'v2' })] }) as never).rows[0] });
+    await done;
+    await flushPromises();
+    // 先前的請求回舊日期也不會留在畫面上：它已被取消，寫入後另發一次
+    early.answer(ganttWith(winB, '2026-12-02'));
+    await flushPromises();
+    expect(pending.map((p) => p.window)).toEqual([winB]);
+    pending.shift()!.answer(ganttWith(winB, '2026-12-20'));
+    await flushPromises();
+    expect(qc.getQueryData<TaskGanttData>(ganttKey(source.value))!.rows[0].dueDate).toBe('2026-12-20');
+    expect(gantt.data.value!.rows[0].dueDate).toBe('2026-12-20');
+  });
+});

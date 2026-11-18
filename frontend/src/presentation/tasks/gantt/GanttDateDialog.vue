@@ -22,8 +22,12 @@ const start = ref<string | null>(null);
 const due = ref<string | null>(null);
 const server = ref<ScheduleFieldErrors>({});
 const saving = ref(false);
+// 每次開啟一個序號：儲存 A 時按 Esc 再開 B，A 的回應回來不能關掉 B、也不能把 A 的 400 掛到 B
+let session = 0;
 watch(() => props.modelValue, (open) => {
   if (!open || !props.card) return;
+  session += 1;
+  saving.value = false;
   start.value = props.card.startDate;
   due.value = props.card.dueDate;
   server.value = {};
@@ -43,16 +47,18 @@ const canSave = computed(() => changed.value && !startError.value && !dueError.v
 async function submit() {
   const card = props.card;
   if (!card || !canSave.value) return;
+  const mine = session;
   saving.value = true;
   try {
     const outcome = await props.save(card, start.value, due.value);
+    if (mine !== session) return;
     if (outcome && !outcome.ok && outcome.fields) {
       server.value = outcome.fields;
       return;
     }
     emit('update:modelValue', false);
   } finally {
-    saving.value = false;
+    if (mine === session) saving.value = false;
   }
 }
 </script>

@@ -2,7 +2,7 @@
 import { useQuasar } from 'quasar';
 import { computed, onBeforeUnmount, ref, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
-import { useGantt } from 'src/application/dynamic/queries/task-board-queries';
+import { useFetchGanttToday, useGantt } from 'src/application/dynamic/queries/task-board-queries';
 import type { BoardCard, GanttSource, TaskGanttConfig, TaskGanttData, TaskGanttWindow } from 'src/domain/dynamic/task-board-types';
 import {
   barGeometry, canSchedule, formatGanttDate, ganttLines, ganttWeeks, GANTT_LEFT_WIDTH, GANTT_LEFT_WIDTH_TABLET, minorTicks, monthTicks, phoneWindow,
@@ -59,17 +59,29 @@ watch([data, mode], ([d, m]) => {
   if (!phoneWin.value) phoneWin.value = phoneWindow(d.today, d.weekStart);
   else if (d.window.from === phoneWin.value.from && d.window.to === phoneWin.value.to) phoneData.value = d;
 }, { immediate: true });
-const phoneBusy = computed(() => !!phoneData.value && !!phoneWin.value && phoneData.value.window.from !== phoneWin.value.from);
+// 忙碌看實際請求：新的一段還在查（畫面保留上一段）或「今天」正在問伺服器；請求失敗就不算忙，導覽鈕與重試都可按
+const todayPending = ref(false);
+const phoneBusy = computed(() => !!phoneData.value && (query.isPlaceholderData.value || todayPending.value));
 const weeks = computed(() => (phoneData.value ? ganttWeeks(phoneData.value.rows, phoneData.value.window) : []));
 function shiftPhone(dir: 1 | -1) {
   if (phoneData.value) phoneWin.value = shiftPhoneWindow(phoneData.value.window, dir);
 }
-function phoneToday() {
+// 跨過午夜（甚至跨週）後畫面上的 today 已舊：先照預設重查一次拿最新的今天與週起始日，再算本週起的 4 週
+const fetchToday = useFetchGanttToday();
+async function phoneToday() {
   const d = phoneData.value;
-  if (!d) return;
-  const w = phoneWindow(d.today, d.weekStart);
-  if (w.from === d.window.from) void query.refetch();
-  else phoneWin.value = w;
+  if (!d || todayPending.value) return;
+  todayPending.value = true;
+  try {
+    const fresh = await fetchToday();
+    const w = phoneWindow(fresh.today, fresh.weekStart);
+    if (w.from === d.window.from && w.to === d.window.to) await query.refetch();
+    else phoneWin.value = w;
+  } catch {
+    // 失敗時留在原本那 4 週；錯誤不另提示，再按一次即可
+  } finally {
+    todayPending.value = false;
+  }
 }
 const phoneRange = computed(() => (phoneData.value ? `${fullDate(phoneData.value.window.from)} – ${fullDate(phoneData.value.window.to)}` : ''));
 const phoneDates = (c: BoardCard) => (c.startDate && c.dueDate ? `${shortDate(c.startDate)} → ${shortDate(c.dueDate)}` : c.dueDate ? `◆ ${shortDate(c.dueDate)}` : '');
@@ -166,7 +178,7 @@ const shortDate = (iso: string) => formatGanttDate(iso, locale.value, { month: '
         <q-btn flat dense round icon="chevron_right" :disable="!phoneData || phoneBusy" :aria-label="t('taskGantt.next')" data-testid="gantt-next" @click="shiftPhone(1)" />
         <span class="text-body2 ellipsis" aria-live="polite" data-testid="gantt-range">{{ phoneRange }}</span>
       </div>
-      <div v-if="query.error.value && !phoneData" class="text-negative q-py-sm" data-testid="gantt-load-failed">
+      <div v-if="query.error.value" class="text-negative q-py-sm" data-testid="gantt-load-failed">
         {{ t('taskGantt.loadFailed') }}
         <q-btn flat dense no-caps color="primary" :label="t('taskBoard.retry')" data-testid="gantt-retry" @click="query.refetch()" />
       </div>

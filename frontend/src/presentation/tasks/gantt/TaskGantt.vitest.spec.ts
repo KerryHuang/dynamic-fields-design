@@ -6,6 +6,7 @@ import { createI18n } from 'vue-i18n';
 import enUS from 'src/i18n/en-US.json';
 import zhTW from 'src/i18n/zh-TW.json';
 import DateSelect from 'src/components/framework/DateSelect.vue';
+import { dynamicApi } from 'src/services/api/dynamic-api';
 import { bodyOf, HttpFail, mockHttp, type Call } from 'src/test-utils/mock-http';
 import { cardWire } from '../board/board-fixtures';
 import { ganttWire } from './gantt-fixtures';
@@ -424,6 +425,72 @@ describe('TaskGantt', () => {
     await flushPromises();
     await w.get('[data-testid="gantt-unscheduled-20"]').trigger('click');
     expect(w.emitted('open')).toEqual([[7], [20]]);
+  });
+
+  it('G59 phone: pressing today after midnight into a new week asks the server for today first, then loads that week', async () => {
+    quasar.Screen.lt.sm = true;
+    quasar.Screen.lt.md = true;
+    let today = '2026-11-22';
+    const w = await mountGantt((b) => ganttWire({ today, window: b.window ?? { from: '2026-11-16', to: '2027-02-14' } }));
+    expect(lastBody().window).toEqual({ from: '2026-11-16', to: '2026-12-13' });
+    today = '2026-11-23';
+    await w.get('[data-testid="gantt-today"]').trigger('click');
+    await flushPromises();
+    expect(bodyOf(ganttCalls().at(-2))).toEqual({ viewId: null, config: null, window: null });
+    expect(lastBody().window).toEqual({ from: '2026-11-23', to: '2026-12-20' });
+    expect(w.findAll('[data-testid="gantt-week-title"]')[0].text()).toBe('11/23 – 11/29');
+    // 同一週再按：照樣問一次今天，再重抓同一段
+    const before = ganttCalls().length;
+    await w.get('[data-testid="gantt-today"]').trigger('click');
+    await flushPromises();
+    expect(ganttCalls().length).toBe(before + 2);
+    expect(lastBody().window).toEqual({ from: '2026-11-23', to: '2026-12-20' });
+  });
+
+  it('G59 phone: a failed next period keeps the old weeks, shows retry and leaves the navigation usable', async () => {
+    quasar.Screen.lt.sm = true;
+    quasar.Screen.lt.md = true;
+    let fail = false;
+    const w = await mountGantt((b) => (fail ? new HttpFail(500, {}) : ganttWire({ window: b.window ?? { from: '2026-11-16', to: '2027-02-14' } })));
+    fail = true;
+    await w.get('[data-testid="gantt-next"]').trigger('click');
+    await flushPromises();
+    expect(w.find('[data-testid="gantt-load-failed"]').exists()).toBe(true);
+    expect(w.findAll('[data-testid="gantt-week-title"]')[0].text()).toBe('11/16 – 11/22');
+    expect(w.get('[data-testid="gantt-next"]').classes()).not.toContain('disabled');
+    expect(w.get('[data-testid="gantt-prev"]').classes()).not.toContain('disabled');
+    fail = false;
+    await w.get('[data-testid="gantt-retry"]').trigger('click');
+    await flushPromises();
+    expect(w.find('[data-testid="gantt-load-failed"]').exists()).toBe(false);
+    expect(w.findAll('[data-testid="gantt-week-title"]')[0].text()).toBe('12/14 – 12/20');
+  });
+
+  it('G58 an answer for a dialog that was closed does not close or mark the next one', async () => {
+    const fails: ((e: unknown) => void)[] = [];
+    const w = await mountGantt();
+    vi.spyOn(dynamicApi, 'scheduleTask').mockImplementation(() => new Promise((_ok, no) => { fails.push(no); }));
+    const spy = notifySpy(w);
+    await w.get('[data-testid="gantt-edit-7"]').trigger('click');
+    await flushPromises();
+    await setDates(w, '2026-11-25', '2026-12-02');
+    saveButton().click();
+    await flushPromises();
+    // Esc 關掉 A，再開 B
+    w.findComponent(GanttDateDialog).vm.$emit('update:modelValue', false);
+    await flushPromises();
+    await w.get('[data-testid="gantt-edit-8"]').trigger('click');
+    await flushPromises();
+    expect(dialogOpen(w)).toBe(true);
+    expect(saveButton().classList.contains('disabled')).toBe(true);
+    fails[0]({ status: 400, errors: { startDate: ['SERVER'] } });
+    await flushPromises();
+    expect(dialogOpen(w)).toBe(true);
+    expect(dialogText()).not.toContain('開始日不能晚於到期日');
+    expect(dateInputs(w).map((d) => d.props('modelValue'))).toEqual([null, '2026-11-20']);
+    await setDates(w, '2026-11-18', '2026-11-20');
+    expect(saveButton().classList.contains('disabled')).toBe(false);
+    expect(notified(spy)).toEqual([]);
   });
 
   it('G61 the scale labels follow the interface language', async () => {

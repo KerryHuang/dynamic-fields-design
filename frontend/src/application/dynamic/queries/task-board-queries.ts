@@ -149,8 +149,10 @@ export function useScheduleTask(source: MaybeRefOrGetter<GanttSource>) {
     onError: (_e, _v, ctx) => {
       if (ctx) qc.setQueryData<TaskGanttData>(ctx.key, (d) => d && replaceCardLocally(scheduleCardLocally(d, ctx.original.id, ctx.original.startDate, ctx.original.dueDate), ctx.original));
     },
-    onSettled: (_r, error, v) => {
+    onSettled: async (_r, error, v) => {
       const last = qc.isMutating({ mutationKey: SCHEDULE_KEY }) <= 1;
+      // 寫入前就發出的甘特查詢（換時間窗、轉向）拿的是舊日期；invalidate 會沿用那個進行中的請求，所以先取消，重抓才會在寫入後發出
+      if (last) await qc.cancelQueries({ queryKey: ['task-board', 'gantt'] });
       if (error) {
         if (last) void qc.invalidateQueries({ queryKey: ['task-board'] });
       } else {
@@ -158,6 +160,13 @@ export function useScheduleTask(source: MaybeRefOrGetter<GanttSource>) {
       }
     },
   });
+}
+
+/** 重新查一次預設甘特圖（不帶時間窗），拿伺服器最新的今天與週起始日；手機「今天」跨過午夜後要靠它算本週。 */
+export function useFetchGanttToday() {
+  const qc = useQueryClient();
+  const source: GanttSource = { viewId: null, config: null, window: null };
+  return () => qc.fetchQuery({ queryKey: ganttKey(source), queryFn: () => dynamicApi.getGantt(source), staleTime: 0 });
 }
 
 /** 我的看板與分享給我的看板（選擇器用）。 */
