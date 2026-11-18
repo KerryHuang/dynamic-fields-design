@@ -7,7 +7,7 @@ namespace DynamicModules.Persistence.Postgres;
 /// <summary>
 /// PostgreSQL 的模型調整（PostgreSQL provider 設計 §5.4、§14 T8）：先套用既有的全部 <c>IEntityTypeConfiguration</c>，
 /// 再改 PostgreSQL 需要的部分；<c>Domain/Data/Configurations/</c> 不動，SQLite 的模型與 migration 不受影響。
-/// 規則是可寫死的技術限制（設計 §11 第 4–6 項）。
+/// 規則是可寫死的技術限制（設計 §11 第 4–6 項；檢查條件的覆寫比照第 6 項）。
 /// </summary>
 public sealed class PostgresModelCustomizer(ModelCustomizerDependencies dependencies) : RelationalModelCustomizer(dependencies)
 {
@@ -23,6 +23,15 @@ public sealed class PostgresModelCustomizer(ModelCustomizerDependencies dependen
         ["IX_Dynamic_RecordIndex_NoScaled"] = "\"ScaledValue\" IS NULL AND \"NumberValue\" IS NOT NULL",
     };
 
+    /// <summary>
+    /// SQLite 寫法在 PostgreSQL 無效的檢查條件（布林相加），依名稱覆寫；PostgreSQL 的 boolean 不能相加，改用 num_nonnulls 計數。
+    /// 找不到就丟例外。
+    /// </summary>
+    public static readonly IReadOnlyDictionary<string, string> CheckConstraintOverrides = new Dictionary<string, string>
+    {
+        ["CK_AppOrphan_One"] = "num_nonnulls(\"FieldId\", \"OptionId\", \"BlockId\") = 1",
+    };
+
     public override void Customize(ModelBuilder modelBuilder, DbContext context)
     {
         base.Customize(modelBuilder, context);
@@ -31,6 +40,7 @@ public sealed class PostgresModelCustomizer(ModelCustomizerDependencies dependen
             foreach (var property in entity.GetProperties()) Adjust(property);
         }
         ApplyFilterOverrides(modelBuilder.Model);
+        ApplyCheckConstraintOverrides(modelBuilder.Model);
     }
 
     private static void Adjust(IMutableProperty property)
@@ -65,6 +75,17 @@ public sealed class PostgresModelCustomizer(ModelCustomizerDependencies dependen
             var index = indexes.SingleOrDefault(i => i.GetDatabaseName() == name)
                 ?? throw new InvalidOperationException($"PostgreSQL 模型調整找不到索引 {name}；改了 SQLite 的索引設定時要一起改這份覆寫清單");
             index.SetFilter(filter);
+        }
+    }
+
+    private static void ApplyCheckConstraintOverrides(IMutableModel model)
+    {
+        foreach (var (name, sql) in CheckConstraintOverrides)
+        {
+            var entity = model.GetEntityTypes().SingleOrDefault(e => e.FindCheckConstraint(name) is not null)
+                ?? throw new InvalidOperationException($"PostgreSQL 模型調整找不到檢查條件 {name}；改了 SQLite 的檢查條件時要一起改這份覆寫清單");
+            entity.RemoveCheckConstraint(name);
+            entity.AddCheckConstraint(name, sql);
         }
     }
 }

@@ -12,7 +12,7 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace DynamicModules.Persistence.Postgres.Migrations
 {
     [DbContext(typeof(DynamicDbContext))]
-    [Migration("20261118141659_InitialCreate")]
+    [Migration("20261118142235_InitialCreate")]
     partial class InitialCreate
     {
         /// <inheritdoc />
@@ -353,7 +353,7 @@ namespace DynamicModules.Persistence.Postgres.Migrations
 
                     b.ToTable("Dynamic_AppOrphan", null, t =>
                         {
-                            t.HasCheckConstraint("CK_AppOrphan_One", "(\"FieldId\" IS NOT NULL) + (\"OptionId\" IS NOT NULL) + (\"BlockId\" IS NOT NULL) = 1");
+                            t.HasCheckConstraint("CK_AppOrphan_One", "num_nonnulls(\"FieldId\", \"OptionId\", \"BlockId\") = 1");
                         });
                 });
 

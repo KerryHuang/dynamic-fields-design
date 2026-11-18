@@ -350,7 +350,7 @@ namespace DynamicModules.Persistence.Postgres.Migrations
 
                     b.ToTable("Dynamic_AppOrphan", null, t =>
                         {
-                            t.HasCheckConstraint("CK_AppOrphan_One", "(\"FieldId\" IS NOT NULL) + (\"OptionId\" IS NOT NULL) + (\"BlockId\" IS NOT NULL) = 1");
+                            t.HasCheckConstraint("CK_AppOrphan_One", "num_nonnulls(\"FieldId\", \"OptionId\", \"BlockId\") = 1");
                         });
                 });
 

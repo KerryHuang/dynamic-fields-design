@@ -1651,7 +1651,7 @@ namespace DynamicModules.Persistence.Postgres.Migrations
                 constraints: table =>
                 {
                     table.PrimaryKey("PK_Dynamic_AppOrphan", x => x.Id);
-                    table.CheckConstraint("CK_AppOrphan_One", "(\"FieldId\" IS NOT NULL) + (\"OptionId\" IS NOT NULL) + (\"BlockId\" IS NOT NULL) = 1");
+                    table.CheckConstraint("CK_AppOrphan_One", "num_nonnulls(\"FieldId\", \"OptionId\", \"BlockId\") = 1");
                     table.ForeignKey(
                         name: "FK_Dynamic_AppOrphan_Dynamic_Block_BlockId",
                         column: x => x.BlockId,

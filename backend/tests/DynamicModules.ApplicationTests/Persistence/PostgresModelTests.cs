@@ -68,4 +68,11 @@ public class PostgresModelTests
             .ToDictionary(i => i.GetDatabaseName()!, i => i.GetFilter());
         foreach (var (name, filter) in PostgresModelCustomizer.FilterOverrides) filters[name].Should().Be(filter);
     }
+
+    [Fact]
+    public void CheckConstraints_AreOverridden()
+    {
+        var checks = Model.GetEntityTypes().SelectMany(e => e.GetCheckConstraints()).ToDictionary(c => c.ModelName, c => c.Sql);
+        foreach (var (name, sql) in PostgresModelCustomizer.CheckConstraintOverrides) checks[name].Should().Be(sql);
+    }
 }
