@@ -91,7 +91,7 @@
 - 新增部署設定 `Database:Provider`，值為 `Sqlite`（預設）或 `Postgres`；其他值拒絕啟動。連線字串沿用 `ConnectionStrings:Dynamic`。不從連線字串的格式猜 provider（主控判斷 T1）。
 - SQLite 專屬設定 `Sqlite:MmapSizeMb` 只在 `Sqlite` 時讀；`Postgres` 時設了就記一行 Warning。
 - 新增 PostgreSQL 專屬部署設定 `Database:LockTimeoutSeconds`（預設 30，對齊 SQLite 連線字串 `Default Timeout` 的預設值），用在 §5.6 的閘門排隊與寫入鎖。這是部署設定，不是業務政策。
-- `Database:Provider=Postgres` 且 `Reports:Engine=SqlOnly` 時拒絕啟動（§5.9）。
+- `Database:Provider=Postgres` 且 `Reports:Engine=SqlOnly` 時拒絕啟動（§5.9）。pg1 拿掉這條，`Reports:Engine` 在兩種資料庫行為相同。
 - O1 的 ops info「資料庫種類」從同一個設定讀。
 
 ### 5.2 專案結構與 DI
@@ -164,7 +164,7 @@ SQLite 不改，是因為 SQLite 只在查詢條件能推出索引條件時才�
   - `Paginate`：`LIMIT @limit OFFSET @offset`，與 SQLite 相同。
   - `EscapeLike`：與 SQLite 相同（PostgreSQL 預設跳脫字元也是反斜線，`standard_conforming_strings` 開啟時 `ESCAPE '\'` 合法）。
   - `ContainsCaseSensitive`：`strpos({column}, {param}) > 0`；`StartsWithCaseSensitive`：`left({column}, length({param})) = {param}`。搭配欄位的 `"C"` collation，結果與 SQLite 的 `instr`／`substr` 一致。
-  - `DateBucket`：pg1 才用到；pg0 先丟 `NotSupportedException`，避免誤用。
+  - `DateBucket`：pg1 才用到；pg0 先丟 `NotSupportedException`，避免誤用。pg1 改成 `to_char`（§9 pg1 實作補記）。
 - **聚合結果的型別**：`BuildAggregate` 的 `SUM(...)` 與常數 `0` 包成 `CAST(... AS BIGINT)`，兩種資料庫都回 64 位元整數。PostgreSQL 的 `SUM` 超出 `bigint` 時丟 SQLSTATE `22003`，對應到既有的 `AggregateOverflowException`（§5.7），取代現在比對 `"integer overflow"` 訊息的寫法。SQLite 的 `CAST(SUM(x) AS BIGINT)` 溢位行為不變（`SUM` 本身先丟例外）。
 - **Dapper 的 `DateTime` 參數要明確指定 `DbType.DateTime2`**：日期篩選的參數是 `DateOnly.ToDateTime(...)`，`Kind=Unspecified`（`DynamicQueryBuilder.cs:164-169`，另有 `AddValue` 的 `DateValue`，`:184`）。Dapper 會把 `DateTime` 參數先設成 `DbType.DateTime`，而 Npgsql 6 之後 `DbType.DateTime` 對應 `timestamptz`、`DbType.DateTime2` 才對應 `timestamp`，所以 `Kind=Unspecified` 的值很可能在寫參數時就丟例外（⚠️ Npgsql 8＋Dapper 2.1.35 的實際行為未實測）。做法：這幾處改成 `DynamicParameters.Add(name, value, DbType.DateTime2)`，兩種資料庫共用（Microsoft.Data.Sqlite 對兩種 DbType 都寫成相同的文字格式，SQLite 的既有測試驗證不變）。不用 `SqlMapper.AddTypeMap(typeof(DateTime), DbType.DateTime2)`：那是全域靜態設定，測試行程裡兩種 provider 同時存在時會互相影響（主控判斷 T19）。pg0a 先寫雙跑測試涵蓋 `WithinNextDays`、`BeforeToday` 與日期欄位的 Eq 篩選，pg0c 起在 PostgreSQL 上跑。
 - 列舉欄位排序的 `o.Id = s.NumberValue`（`DynamicQueryBuilder.cs:65`）在 PostgreSQL 是 `bigint` 比 `double precision`：結果正確，但 `Id` 那一側被轉型，用不到主鍵索引。`Dynamic_FieldOption` 是小表，影響小；加 `CAST` 會改到 SQLite 的 SQL（反目標），pg0 不改，pg1 量到慢再處理。
@@ -185,7 +185,7 @@ SQLite 不改，是因為 SQLite 只在查詢條件能推出索引條件時才�
     - `ITransactionalRequest` 的交易：經上面的 `ITransactionManager`，先排隊再開交易、取鎖。
     - `SaveChanges` 自己開的交易：PostgreSQL 上把 `Database.AutoTransactionBehavior` 設成 `Always`（用 `SaveChanges` 攔截器在 `SavingChanges` 設定），連只發一個指令的 `SaveChanges` 也開交易、取鎖。EF 7 起只發一個指令時預設不開交易，不設的話這類寫入可以插進持鎖交易的兩個陳述式之間，與 SQLite 不等價。這類交易同樣要先過閘門：同一個攔截器在沒有外層交易時於 `SavingChanges` 進閘，整次 SaveChanges 結束時由 `DynamicDbContext` 覆寫的 SaveChanges 在 finally 放開（不靠 `SavedChanges`／`SaveChangesFailed`，理由見 §9 pg0b 實作補記）。
     - 交易外的 `ExecuteUpdate`／`ExecuteDelete` 是自動提交的單一陳述式，不排隊也不取鎖。核對 `17d621fc`：`SeedData.cs:32,35` 在啟動流程（§5.8 的啟動鎖內）；`IndexBackfillJob` 在啟動時先 `ClearFieldIndexAsync`（交易外），之後每 1000 筆一個短交易；其餘在 repository 裡，抽查的通知與冪等呼叫端都是 `ITransactionalRequest`，在交易內（審查也抽查到同樣結果）。pg0b 逐處確認；之後新增的交易外寫入要在交付說明列出。
-    - 唯讀查詢不取鎖（MVCC）。攔截器預留跳過的判斷點：pg1 的報表快照（`REPEATABLE READ READ ONLY` 交易）若經 EF 開交易，不能被序列化；判斷方式在 pg1 定。
+    - 唯讀查詢不取鎖（MVCC）。攔截器預留跳過的判斷點：pg1 的報表快照（`REPEATABLE READ READ ONLY` 交易）若經 EF 開交易，不能被序列化；判斷方式在 pg1 定。**pg1 定案**：快照不經 EF 開交易，直接在 `DbConnection` 上開再 `UseTransaction` 交給 EF；EF 對外來交易只發 `TransactionUsed`，攔截器只在 `TransactionStarted` 取鎖，所以不必加旗標（§9 pg1 實作補記）。
   - **攔截器的實作要求**：
     - 同步與非同步兩條路徑都實作（`TransactionStarted`、`TransactionStartedAsync`；`SavingChanges`、`SavingChangesAsync`）。測試裡有同步的 `db.SaveChanges()`（例如 `TestApp.cs:180`）；同步路徑等閘門時同步等待即可，產品程式都走非同步。
     - 取鎖失敗時 EF 還沒把交易設成 `CurrentTransaction`，直接拋例外會留下一個開著、沒人管的 `DbTransaction`。攔截器要自己 Rollback、Dispose，再拋 `DatabaseBusyException`。
@@ -244,6 +244,7 @@ SQLite 不改，是因為 SQLite 只在查詢條件能推出索引條件時才�
 
 - `Database:Provider=Postgres` 時，報表引擎強制為 `MemoryOnly`（既有選項，`ReportOptions.Engine`）；設定成 `SqlOnly` 則拒絕啟動。記憶體路徑只用 EF 的 LINQ 讀資料，兩種資料庫通用；縮小載入（`LoadNarrowed`）在 `MemoryOnly` 時本來就不走（`ReportRunner.cs:207`）。
 - 影響：PostgreSQL 上報表與儀表板卡片結果正確，資料量大時比 SQLite 的資料庫端聚合慢，`Reports:MaxLoadRows`（預設 20 萬筆）照樣把關。
+- **pg1 已完成**（2026-11-19）：上面兩點的強制 MemoryOnly 與拒絕啟動拿掉，兩種資料庫行為一致；做法與實測見 §9 pg1 實作補記。
 - **pg1（建議排在簽核 a6 之後、會計 s3b 之前）**做完整改寫：`ReportQueryBuilder` 識別字加引號與布林走 dialect；`INDEXED BY` 改成 dialect 的索引提示（SQLite 保留、PostgreSQL 回空字串）；`PostgresDialect.DateBucket`（`to_char` 搭配 ISO 週 `IYYY`／`IW`）；讀取快照改成 provider 專屬實作（PostgreSQL 用 `REPEATABLE READ READ ONLY` 交易加 `SET LOCAL statement_timeout`，逾時是 SQLSTATE `57014`，`CancellationToken` 可直接中斷）；`ReportQueryRepository` 的 `SqliteException` 判斷改用 §5.7；`ReportSqlEquivalenceTests` 加進雙跑集。pg1 的段位要使用者排（§13 的說明）。
 
 ## 6. 測試環境
@@ -273,9 +274,9 @@ SQLite 不改，是因為 SQLite 只在查詢條件能推出索引條件時才�
 - 用 xUnit trait 分三類：
   - `Category=Postgres`：**雙跑集**，gate 在 SQLite 全套之外，另在 PostgreSQL 上跑這一組。
   - `Category=SqliteOnly`：只在 SQLite 有意義的測試，在 PostgreSQL 跑全套時排除。
-  - `Category=PgDeferred`：已知要等 pg1 才會在 PostgreSQL 過的測試（報表 SQL 路徑），必須寫原因；pg1 完成後全部拿掉。
+  - `Category=PgDeferred`：已知要等 pg1 才會在 PostgreSQL 過的測試（報表 SQL 路徑），必須寫原因；pg1 完成後全部拿掉。**pg1 已拿掉**：三個類別改標 `Category=Postgres`，分類本身與 gate、CI、`docs/ai/testing.md` 的 filter 一併移除。
 - 既有的 `Category!=Benchmark` 預設排除維持；命令列 filter 會覆蓋 csproj 的預設，所以 PostgreSQL 的 filter 要自己再排除 Benchmark。
-- 一個雙跑類別裡可以有個別案例標 `SqliteOnly` 或 `PgDeferred`（例如 `ConcurrentWriteApiTests` 的檔案型資料庫外部占鎖案例），所以 gate 的 PostgreSQL filter 也要排除這兩類，不能只寫 `Category=Postgres`。
+- 一個雙跑類別裡可以有個別案例標 `SqliteOnly` 或 `PgDeferred`（例如 `ConcurrentWriteApiTests` 的檔案型資料庫外部占鎖案例），所以 gate 的 PostgreSQL filter 也要排除這兩類，不能只寫 `Category=Postgres`。（pg1 起只剩 `SqliteOnly`。）
 
 ### 6.4 哪些測試兩種都跑、哪些只跑一種
 
@@ -304,8 +305,8 @@ SQLite 不改，是因為 SQLite 只在查詢條件能推出索引條件時才�
 - `scripts/unattended/gate.sh` 在三個後端專案之後、前端之前，加兩步：
 
   ```bash
-  FORMWRIGHT_TEST_DB=postgres dotnet test tests/DynamicModules.ApplicationTests --filter "Category=Postgres&Category!=SqliteOnly&Category!=PgDeferred&Category!=Benchmark"
-  FORMWRIGHT_TEST_DB=postgres dotnet test tests/DynamicModules.WebAPITests --filter "Category=Postgres&Category!=SqliteOnly&Category!=PgDeferred&Category!=Benchmark"
+  FORMWRIGHT_TEST_DB=postgres dotnet test tests/DynamicModules.ApplicationTests --filter "Category=Postgres&Category!=SqliteOnly&Category!=Benchmark"
+  FORMWRIGHT_TEST_DB=postgres dotnet test tests/DynamicModules.WebAPITests --filter "Category=Postgres&Category!=SqliteOnly&Category!=Benchmark"
   ```
 
   每步一樣印 `exit=` 與秒數；gate 照舊依序跑，不和其他測試並行。
@@ -321,8 +322,8 @@ SQLite 不改，是因為 SQLite 只在查詢條件能推出索引條件時才�
 ### 6.6 全套 PostgreSQL 試跑（不進 gate）
 
 ```bash
-FORMWRIGHT_TEST_DB=postgres dotnet test tests/DynamicModules.ApplicationTests --filter "Category!=SqliteOnly&Category!=PgDeferred&Category!=Benchmark"
-FORMWRIGHT_TEST_DB=postgres dotnet test tests/DynamicModules.WebAPITests --filter "Category!=SqliteOnly&Category!=PgDeferred&Category!=Benchmark"
+FORMWRIGHT_TEST_DB=postgres dotnet test tests/DynamicModules.ApplicationTests --filter "Category!=SqliteOnly&Category!=Benchmark"
+FORMWRIGHT_TEST_DB=postgres dotnet test tests/DynamicModules.WebAPITests --filter "Category!=SqliteOnly&Category!=Benchmark"
 ```
 
 - pg0d 至少完整跑過一次並全數通過；之後在動到 Persistence、migration、交易或上線前手動跑。
@@ -423,6 +424,26 @@ O1 若因為 PostgreSQL 的行為需要改程式（違反「pg0 完成後不改�
   - 預期中的可空欄位排序、長度守衛抓到的超長寫入、產品程式的同連線兩個讀取器，這一輪都沒有出現。沒有逐處盤點每個 LINQ `OrderBy`，只代表現有測試沒有踩到；看過的 `TaskRepositories` 已有 `x == null` 前置排序。新程式照 `.claude/rules/backend.md` 的規則明寫 NULL 位置。
   - `TestDb.CreateAsync(restore:)` 的 Demo 快照：PostgreSQL 模式改成產生一次後複製成來源庫，每份 `CREATE DATABASE … TEMPLATE` 複製（`PostgresTestServer.CloneDatabaseAsync`、`TestDb.CreateAsync(postgresSource:)`），Demo 類測試照常在 PostgreSQL 跑，不標 `SqliteOnly`。
 
+**pg1：報表 SQL 路徑的 PostgreSQL 改寫**（使用者 2026-11-12 裁決排在簽核 a6 之後、O2 之前；範圍見 §5.9）
+
+- **實作補記（2026-11-19）**：
+  - `ReportQueryBuilder`：識別字一律加雙引號，`DeleteFlag`、`TextTruncated` 的布林走 `ISqlDialect.Bool`，兩種資料庫共用同一份 SQL。`ISqlDialect` 新增 `IndexHint`（SQLite 回 ` INDEXED BY <索引>`，PostgreSQL 回空字串）與 `OrderedJoin`。後者是設計沒列到的：驅動條件那段寫的是 `CROSS JOIN … ON`（SQLite 靠它固定連接順序，左邊是驅動），PostgreSQL 的 `CROSS JOIN` 不能帶 `ON`，所以 SQLite 回 `CROSS JOIN`、PostgreSQL 回 `JOIN`。另外兩處也是走查才發現：封頂計數的 FROM 子查詢補別名（PostgreSQL 16 之前必填），日期參數明確指定 `DbType.DateTime2`（理由同 §5.5 的 `DynamicQueryBuilder`）。
+  - SQLite 的 SQL 只多了引號、子查詢別名與參數的 DbType，結果與執行計畫不變：SQLite 上報表類別全過，含 `ReportSqlEquivalenceTests` 用 `EXPLAIN QUERY PLAN` 驗計畫形狀的案例（`SqliteOnly`）。
+  - `PostgresDialect.DateBucket`：`to_char`，日 `YYYY-MM-DD`、週 `IYYY-"W"IW`、月 `YYYY-MM`、季 `YYYY-"Q"Q`、年 `YYYY`；欄位 NULL 時回 NULL，和 SQLite 版一樣由呼叫端 `COALESCE`。分桶字串和 SQLite 逐字相同，由 `ReportRunnerSqlTests` 的分桶案例與 `ReportSqlEquivalenceTests` 在 PostgreSQL 上把關。
+  - 聚合的 `SUM(bigint)` 在 PostgreSQL 回 `numeric`，Npgsql 8 的 `GetInt64` 讀得出來，SQL 不加 `CAST`（加了會改到 SQLite 的 SQL）。
+  - **讀取快照改成 provider 專屬**：介面 `IReportSqlSnapshot`（Persistence），各 provider 的 DI 註冊自己的實作。重驗欄位設定與資料狀態探測兩邊共用（`ReportSqlSnapshot.VerifyAsync`）。
+    - SQLite 版 `SqliteReportSqlSnapshot`：原本的延遲交易加 progress handler；`INDEXED BY` 指定的索引不存在時退回記憶體路徑的處理一起搬進來，`ReportQueryRepository` 不再引用 `SqliteException`。
+    - PostgreSQL 版 `PostgresReportSqlSnapshot`（Persistence.Postgres）：開 `REPEATABLE READ` 交易，第一個陳述式是 `SET TRANSACTION READ ONLY; SET LOCAL statement_timeout = <毫秒>`（至少 1 毫秒，0 在 PostgreSQL 是不設上限），之後第一個查詢固定快照；不提交，結束時回滾。
+    - `ReportQueryRepository` 的逾時判斷改用 `IDatabaseErrors.IsQueryCanceled`（SQLite 9、PostgreSQL 57014），回既有的「報表執行逾時」；請求本身取消時照常丟 `OperationCanceledException`（Npgsql 收到取消會直接中斷執行中的陳述式）。
+  - **時間上限的差異**（技術決定）：PostgreSQL 的 `statement_timeout` 每個陳述式各自計時，SQLite 的 progress handler 是整段計時。一次快照的陳述式是重驗 1 個、探測每個欄位 1 個、挑驅動的封頂計數最多「候選數 ×2」、聚合或縮小 1–2 個；時間幾乎都花在聚合那一個，最壞是上限的幾倍。要整段計時得另加計時取消（`CancelAfter`）並分辨「逾時」與「請求取消」，這次不做，`ReportOptions.SqlTimeoutSeconds` 的說明與 `CONTRIBUTING.md` 寫明差異。
+  - **寫入閘門跳過的判斷方式**（§5.6 留給 pg1 定）：不加旗標，靠交易怎麼開來分。快照直接在 `DbConnection` 上 `BeginTransaction`，再 `UseTransaction` 交給 EF；EF 對外來交易只發 `TransactionUsed`，`PostgresWriteLockInterceptor` 只在 `TransactionStarted` 取鎖，所以快照不取全庫鎖；快照裡沒有 SaveChanges，SaveChanges 閘門也不排隊；不經 `PostgresTransactionManager`，程序內的 `WriteGate` 也不經過。攔截器的註解寫明「不要覆寫 `TransactionUsed`」。`PostgresReportSqlSnapshotTests` 在閘門被占、另一條連線占著全庫鎖時跑快照，要在等鎖上限（1 秒）內完成；把快照暫時改成經 EF 開交易，這個測試就以 `DatabaseBusyException` 失敗（實測過，測試抓得到）。
+  - **已有外層交易時**沿用它（與 SQLite 相同），外加一個 savepoint 設 `statement_timeout`，結束時回滾到 savepoint 再釋放：快照裡沒有寫入，回滾不丟資料；逾時（57014）不會讓外層交易變成 aborted，`SET LOCAL` 也不會留給外層後面的陳述式。隔離層級沿用外層的 Read Committed，沒有單一快照保證；目前沒有在寫入交易裡跑報表的呼叫端。
+  - 拿掉 `Program.cs` 的「PostgreSQL 時報表強制 MemoryOnly、設 SqlOnly 拒絕啟動」與對應的啟動測試；`Reports:Engine` 在兩種資料庫都預設 Auto。可寫死清單第 7 項不再適用。
+  - 測試：三個 `PgDeferred` 類別改標 `Category=Postgres` 進雙跑集；`ReportSqlEquivalenceTests` 複製記錄的 raw SQL 識別字加引號；`MissingIndex_FallsBackToMemory_InsteadOfFailing_AndLogsAWarning` 改標 `SqliteOnly`（驗的是 SQLite 的 `INDEXED BY`，PostgreSQL 沒有索引提示，少了索引照樣走 SQL）。`ScopeCheckingReportQueries` 的 SQL 文字檢查跟著改（加引號的識別字、`Bool(false)`、`to_char` 的格式字串列入允許的常數）。`PgDeferred` 再無使用者，從 `gate.sh`、`gate.yml`、`docs/ai/testing.md` 的 filter 與說明拿掉；三個類別只有標 `Postgres`，CI 的 SQLite job 不帶 filter，不會漏跑也不會重複。新增 `PostgresReportSqlSnapshotTests`（5 個，只在 PostgreSQL 跑）：隔離層級、唯讀與 `statement_timeout`；逾時是 57014 且連線可再用；取消直接中斷；不經閘門與全庫鎖；外層交易裡逾時不弄壞外層、設定還原。
+  - 改寫後第一次在 PostgreSQL 跑三個類別就全過：216 個，41 秒（pg0d 排除的 217 個少了改標 `SqliteOnly` 的 1 個）。
+  - 本機驗證（2026-11-19，macOS、Docker Desktop）：ApplicationTests 的報表相關類別（`FullyQualifiedName~Report`，加上 `PostgresReportSqlSnapshotTests`、`PostgresWriteLockTests`、`DatabaseErrorsTests`、`DynamicQueryBuilderTests`，排除 Benchmark）SQLite 570 個通過、9 個略過（只在 PostgreSQL 跑的 `[PostgresFact]`），PostgreSQL 575 個通過；WebAPITests 的報表、儀表板與 `DatabaseProviderStartupTests` SQLite 207 個、PostgreSQL 206 個通過（少的是 `SqliteOnly` 的 1 個）；三個報表 SQL 類別在 PostgreSQL 另以 `TZ=UTC` 跑一次也全過。完整套件與 gate 交 CI。
+  - §5.5 提到的 `o.Id = s.NumberValue` 型別轉換在 `DynamicQueryBuilder`，不在報表路徑，這段沒量也沒改。
+
 pg0a 與 pg0b 改同一批 Persistence 檔，依序做；pg0c 依賴 pg0b；pg0d 依賴 pg0c。只有 pg0b 加 migration（只有 PostgreSQL 的 baseline，SQLite 沒有新 migration）。
 
 ## 10. 開關組合與負責者
@@ -430,7 +451,7 @@ pg0a 與 pg0b 改同一批 Persistence 檔，依序做；pg0c 依賴 pg0b；pg0d
 | Provider | 寫入序列化 | 報表引擎 | 金鑰目錄 |
 |---|---|---|---|
 | Sqlite（預設） | `WriteGate`＋`BEGIN IMMEDIATE` | 照 `Reports:Engine`（預設 Auto） | `KeysDirectory`，否則資料庫檔旁 `keys`；記憶體資料庫不落地 |
-| Postgres | `WriteGate` 程序內排隊＋全庫 advisory lock，兩段逾時都是 `Database:LockTimeoutSeconds` | 強制 MemoryOnly（pg1 前）；設 SqlOnly 拒絕啟動 | `KeysDirectory`，否則不落地＋Warning |
+| Postgres | `WriteGate` 程序內排隊＋全庫 advisory lock，兩段逾時都是 `Database:LockTimeoutSeconds` | 照 `Reports:Engine`（預設 Auto），與 SQLite 相同（pg1 起；pg1 前強制 MemoryOnly、設 SqlOnly 拒絕啟動） | `KeysDirectory`，否則不落地＋Warning |
 
 - 選 provider、填連線字串與目錄是部署者（地端是客戶 IT，雲端是廠商）的事；都不是系統管理員在畫面上能改的業務政策。
 - `Sqlite:MmapSizeMb` 只在 Sqlite 生效；`Database:LockTimeoutSeconds` 只在 Postgres 生效；設在另一種 provider 上記 Warning。
@@ -445,7 +466,7 @@ pg0a 與 pg0b 改同一批 Persistence 檔，依序做；pg0c 依賴 pg0b；pg0d
 4. DateTime 的欄位型別規則：名稱以 `Utc` 結尾才是 `timestamptz`（§5.4）。
 5. PostgreSQL 字串欄位一律 `text` 與 `COLLATE "C"`（§5.4；collation 依 §13 U2）。
 6. 三個 PostgreSQL 部分索引 filter 的文字（§5.4）。
-7. PostgreSQL 上報表強制 `MemoryOnly`，直到 pg1。
+7. PostgreSQL 上報表強制 `MemoryOnly`，直到 pg1。（pg1 已拿掉，這項不再寫死。）
 8. 測試用的 PostgreSQL 映像版本（`postgres:16-alpine`）、容器 `max_connections`，以及只用在測試容器的 `fsync=off`、`synchronous_commit=off`、`full_page_writes=off`。
 9. gate 的 PostgreSQL 時間預算 10 分鐘（開發流程規則，不是產品行為）。
 10. PostgreSQL 上 `AutoTransactionBehavior=Always`（§5.6），以及目標資料庫必須事先存在、不讓 `Migrate` 代建（§5.8）。

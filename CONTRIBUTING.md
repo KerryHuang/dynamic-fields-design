@@ -36,7 +36,7 @@ dotnet run
 - `Database:Provider`：`Sqlite`（預設）或 `Postgres`，其他值拒絕啟動；不從連線字串猜。
 - `Database:LockTimeoutSeconds`（預設 30，只在 PostgreSQL 生效）：寫入在程序內排隊、再取全庫 advisory lock，兩段各自以它為上限，逾時回 503。
 - `DataProtection:KeysDirectory`、`Attachments:Root`：PostgreSQL 沒有資料庫檔案可以放在旁邊，沒設時金鑰不落地、附件放暫存目錄，啟動時記 Warning。
-- 報表在 PostgreSQL 一律走記憶體路徑（SQL 路徑在 pg1 才改寫），`Reports:Engine=SqlOnly` 會拒絕啟動。
+- 報表在兩種資料庫行為相同：能在資料庫端聚合就走 SQL 路徑，`Reports:Engine`、`Reports:SqlTimeoutSeconds` 照常適用（PostgreSQL 的時間上限是每個陳述式各自計時）。
 - 多個實例可以同時啟動：初始化（migration、種子）用 advisory lock 依序執行。
 - 部署時建議在資料庫或角色層級設 `idle_in_transaction_session_timeout`（例如 60 秒），應用程式卡在交易中間時鎖不會一直不放。
 - 改 schema 要兩種資料庫各產一個同名 migration：`scripts/db/add-migration.sh <名稱>`（Windows：`scripts\db\add-migration.cmd <名稱>`），再跑 `MigrationConsistencyTests`。
