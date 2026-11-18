@@ -17,6 +17,155 @@ namespace DynamicModules.Persistence.Migrations
 #pragma warning disable 612, 618
             modelBuilder.HasAnnotation("ProductVersion", "8.0.11");
 
+            modelBuilder.Entity("DynamicModules.Domain.Entities.Dynamic.AlertChannel", b =>
+                {
+                    b.Property<string>("Kind")
+                        .HasMaxLength(20)
+                        .HasColumnType("TEXT");
+
+                    b.Property<int>("ConsecutiveFailures")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<bool>("Enabled")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("FromAddress")
+                        .HasMaxLength(255)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("FromName")
+                        .HasMaxLength(100)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Host")
+                        .HasMaxLength(255)
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTime?>("LastClaimUtc")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("LastError")
+                        .HasMaxLength(500)
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTime?>("LastFailureUtc")
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTime?>("LastSuccessUtc")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("MailLocale")
+                        .HasMaxLength(10)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("ModifiedUserId")
+                        .HasMaxLength(50)
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTime?>("ModifiedUtc")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("PasswordProtected")
+                        .HasColumnType("TEXT");
+
+                    b.Property<int>("Port")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("Security")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("ToAddresses")
+                        .HasMaxLength(2000)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("UserName")
+                        .HasMaxLength(255)
+                        .HasColumnType("TEXT");
+
+                    b.HasKey("Kind");
+
+                    b.ToTable("Dynamic_AlertChannel", (string)null);
+                });
+
+            modelBuilder.Entity("DynamicModules.Domain.Entities.Dynamic.AlertOutbox", b =>
+                {
+                    b.Property<long>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int>("Attempts")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("Body")
+                        .IsRequired()
+                        .HasMaxLength(4000)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Channel")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("ClaimedBy")
+                        .HasMaxLength(100)
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTime?>("ClaimedUntilUtc")
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTime>("CreatedUtc")
+                        .HasColumnType("TEXT");
+
+                    b.Property<long?>("DigestOutboxId")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<long?>("IncidentId")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("LastError")
+                        .HasMaxLength(500)
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTime>("NextAttemptUtc")
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTime?>("SentUtc")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Subject")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Transition")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("TransitionId")
+                        .HasMaxLength(32)
+                        .HasColumnType("TEXT");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CreatedUtc");
+
+                    b.HasIndex("DigestOutboxId");
+
+                    b.HasIndex("SentUtc");
+
+                    b.HasIndex("Status", "NextAttemptUtc");
+
+                    b.ToTable("Dynamic_AlertOutbox", (string)null);
+                });
+
             modelBuilder.Entity("DynamicModules.Domain.Entities.Dynamic.App", b =>
                 {
                     b.Property<long>("Id")
@@ -872,6 +1021,104 @@ namespace DynamicModules.Persistence.Migrations
                     b.ToTable("Dynamic_ApprovalTask", (string)null);
                 });
 
+            modelBuilder.Entity("DynamicModules.Domain.Entities.Dynamic.AuditLogEntry", b =>
+                {
+                    b.Property<long>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("Action")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("ActorKind")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("ActorUserId")
+                        .HasMaxLength(50)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("ArgumentsHash")
+                        .HasMaxLength(64)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Channel")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("ClientIp")
+                        .HasMaxLength(45)
+                        .HasColumnType("TEXT");
+
+                    b.Property<long?>("ConfirmationId")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("ConfirmationOutcome")
+                        .HasMaxLength(20)
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTime>("OccurredUtc")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("ReasonCode")
+                        .HasMaxLength(50)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("RequestId")
+                        .HasMaxLength(32)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Result")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("TEXT");
+
+                    b.Property<int?>("ResultCount")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("RiskLevel")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("SummaryJson")
+                        .HasMaxLength(16000)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("TargetId")
+                        .HasMaxLength(100)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("TargetKind")
+                        .HasMaxLength(30)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("TargetLabel")
+                        .HasMaxLength(200)
+                        .HasColumnType("TEXT");
+
+                    b.Property<long?>("TokenId")
+                        .HasColumnType("INTEGER");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("OccurredUtc");
+
+                    b.HasIndex("Action", "OccurredUtc");
+
+                    b.HasIndex("ActorUserId", "OccurredUtc");
+
+                    b.HasIndex("TokenId", "OccurredUtc");
+
+                    b.HasIndex("TargetKind", "TargetId", "OccurredUtc");
+
+                    b.ToTable("Dynamic_AuditLog", (string)null);
+                });
+
             modelBuilder.Entity("DynamicModules.Domain.Entities.Dynamic.Block", b =>
                 {
                     b.Property<long>("Id")
@@ -1394,6 +1641,112 @@ namespace DynamicModules.Persistence.Migrations
                     b.ToTable("Dynamic_GroupProgramPrivilege", (string)null);
                 });
 
+            modelBuilder.Entity("DynamicModules.Domain.Entities.Dynamic.HealthCheck", b =>
+                {
+                    b.Property<string>("Code")
+                        .HasMaxLength(50)
+                        .HasColumnType("TEXT");
+
+                    b.Property<long?>("CriticalThreshold")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<bool?>("Enabled")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int?>("IntervalMinutes")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<DateTime?>("LastAggregatedUtc")
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTime?>("LastCheckedUtc")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("LastMessageCode")
+                        .HasMaxLength(50)
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTime?>("LastProbeUtc")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("LastStatus")
+                        .HasMaxLength(20)
+                        .HasColumnType("TEXT");
+
+                    b.Property<long?>("LastValue")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("ModifiedUserId")
+                        .HasMaxLength(50)
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTime?>("ModifiedUtc")
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTime>("NextDueUtc")
+                        .HasColumnType("TEXT");
+
+                    b.Property<long?>("WarnThreshold")
+                        .HasColumnType("INTEGER");
+
+                    b.HasKey("Code");
+
+                    b.ToTable("Dynamic_HealthCheck", (string)null);
+                });
+
+            modelBuilder.Entity("DynamicModules.Domain.Entities.Dynamic.HealthCheckResult", b =>
+                {
+                    b.Property<long>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("INTEGER");
+
+                    b.Property<DateTime>("CheckedUtc")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Code")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("TEXT");
+
+                    b.Property<int>("DurationMs")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("InstanceId")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("MessageCode")
+                        .HasMaxLength(50)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("TransitionId")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("TEXT");
+
+                    b.Property<long?>("Value")
+                        .HasColumnType("INTEGER");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CheckedUtc");
+
+                    b.HasIndex("TransitionId")
+                        .IsUnique();
+
+                    b.HasIndex("Code", "CheckedUtc");
+
+                    b.HasIndex("Code", "InstanceId", "CheckedUtc");
+
+                    b.ToTable("Dynamic_HealthCheckResult", (string)null);
+                });
+
             modelBuilder.Entity("DynamicModules.Domain.Entities.Dynamic.LedgerReversal", b =>
                 {
                     b.Property<long>("OriginalRecordId")
@@ -1903,6 +2256,193 @@ namespace DynamicModules.Persistence.Migrations
                     b.ToTable("Dynamic_Operation", (string)null);
                 });
 
+            modelBuilder.Entity("DynamicModules.Domain.Entities.Dynamic.OpsIncident", b =>
+                {
+                    b.Property<long>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("AcknowledgedBy")
+                        .HasMaxLength(50)
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTime?>("AcknowledgedUtc")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Category")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Code")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Fingerprint")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("TEXT");
+
+                    b.Property<int>("FingerprintVersion")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<DateTime>("FirstSeenUtc")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("FirstVersion")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTime?>("LastNotifiedUtc")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("LastRequestId")
+                        .HasMaxLength(32)
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTime>("LastSeenUtc")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("LastVersion")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("ModuleKey")
+                        .HasMaxLength(100)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("NormalizedMessage")
+                        .HasMaxLength(200)
+                        .HasColumnType("TEXT");
+
+                    b.Property<long>("OccurrenceCount")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<bool>("Regression")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int>("ReopenCount")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("ResolvedBy")
+                        .HasMaxLength(50)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("ResolvedReason")
+                        .HasMaxLength(20)
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTime?>("ResolvedUtc")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Route")
+                        .HasMaxLength(200)
+                        .HasColumnType("TEXT");
+
+                    b.Property<long?>("RuleId")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("RuleKind")
+                        .HasMaxLength(20)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Severity")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Source")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("TitleKey")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("TitleParamsJson")
+                        .HasMaxLength(2000)
+                        .HasColumnType("TEXT");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("Fingerprint")
+                        .IsUnique();
+
+                    b.HasIndex("ResolvedUtc");
+
+                    b.HasIndex("Status", "LastSeenUtc");
+
+                    b.HasIndex("Status", "Severity", "LastSeenUtc");
+
+                    b.ToTable("Dynamic_OpsIncident", (string)null);
+                });
+
+            modelBuilder.Entity("DynamicModules.Domain.Entities.Dynamic.OpsIncidentSample", b =>
+                {
+                    b.Property<long>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("INTEGER");
+
+                    b.Property<long?>("AuditLogId")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("Browser")
+                        .HasMaxLength(200)
+                        .HasColumnType("TEXT");
+
+                    b.Property<long>("IncidentId")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("Locale")
+                        .HasMaxLength(20)
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTime>("OccurredUtc")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("RawMessage")
+                        .HasMaxLength(500)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("RawStack")
+                        .HasMaxLength(4000)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("RequestId")
+                        .HasMaxLength(32)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Route")
+                        .HasMaxLength(200)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("UserId")
+                        .HasMaxLength(50)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Version")
+                        .HasMaxLength(50)
+                        .HasColumnType("TEXT");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("OccurredUtc");
+
+                    b.HasIndex("IncidentId", "OccurredUtc");
+
+                    b.ToTable("Dynamic_OpsIncidentSample", (string)null);
+                });
+
             modelBuilder.Entity("DynamicModules.Domain.Entities.Dynamic.PermissionGroup", b =>
                 {
                     b.Property<long>("Id")
@@ -2248,6 +2788,86 @@ namespace DynamicModules.Persistence.Migrations
                     b.HasIndex("ModuleId", "Sequence");
 
                     b.ToTable("Dynamic_Rule", (string)null);
+                });
+
+            modelBuilder.Entity("DynamicModules.Domain.Entities.Dynamic.RuleFailure", b =>
+                {
+                    b.Property<long>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("INTEGER");
+
+                    b.Property<DateTime>("FailedUtc")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("RequestId")
+                        .HasMaxLength(32)
+                        .HasColumnType("TEXT");
+
+                    b.Property<long>("RuleId")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("RuleKind")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("TEXT");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("FailedUtc");
+
+                    b.HasIndex("RuleKind", "RuleId", "FailedUtc");
+
+                    b.ToTable("Dynamic_RuleFailure", (string)null);
+                });
+
+            modelBuilder.Entity("DynamicModules.Domain.Entities.Dynamic.RuleHealth", b =>
+                {
+                    b.Property<string>("RuleKind")
+                        .HasMaxLength(20)
+                        .HasColumnType("TEXT");
+
+                    b.Property<long>("RuleId")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int>("ConsecutiveFailures")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("LastErrorCode")
+                        .HasMaxLength(100)
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTime?>("LastFailureUtc")
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTime?>("LastPausedUtc")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("LastRequestId")
+                        .HasMaxLength(32)
+                        .HasColumnType("TEXT");
+
+                    b.Property<int>("PauseCount")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<DateTime?>("PausedUtc")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("ResumedBy")
+                        .HasMaxLength(50)
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTime?>("ResumedUtc")
+                        .HasColumnType("TEXT");
+
+                    b.Property<int>("SkippedWhilePaused")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<DateTime?>("StreakResetUtc")
+                        .HasColumnType("TEXT");
+
+                    b.HasKey("RuleKind", "RuleId");
+
+                    b.ToTable("Dynamic_RuleHealth", (string)null);
                 });
 
             modelBuilder.Entity("DynamicModules.Domain.Entities.Dynamic.ScheduledJob", b =>
@@ -3171,6 +3791,15 @@ namespace DynamicModules.Persistence.Migrations
                     b.HasOne("DynamicModules.Domain.Entities.Dynamic.Module", null)
                         .WithMany()
                         .HasForeignKey("ModuleId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("DynamicModules.Domain.Entities.Dynamic.OpsIncidentSample", b =>
+                {
+                    b.HasOne("DynamicModules.Domain.Entities.Dynamic.OpsIncident", null)
+                        .WithMany()
+                        .HasForeignKey("IncidentId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
                 });

@@ -8,10 +8,11 @@ namespace DynamicModules.Domain.Data.Configurations;
 /// <summary>排程工作表（維運設計 §10.4）：主鍵是工作代碼；讀回的時間一律標成 Kind=Utc（SQLite 存文字不帶 Kind）。</summary>
 public class ScheduledJobConfiguration : IEntityTypeConfiguration<ScheduledJob>
 {
-    private static readonly ValueConverter<DateTime, DateTime> Utc =
+    /// <summary>維運表（<c>OpsConfigurations</c>）共用同一組轉換。</summary>
+    internal static readonly ValueConverter<DateTime, DateTime> Utc =
         new(v => v, v => DateTime.SpecifyKind(v, DateTimeKind.Utc));
 
-    private static readonly ValueConverter<DateTime?, DateTime?> UtcNullable =
+    internal static readonly ValueConverter<DateTime?, DateTime?> UtcNullable =
         new(v => v, v => v.HasValue ? DateTime.SpecifyKind(v.Value, DateTimeKind.Utc) : v);
 
     public void Configure(EntityTypeBuilder<ScheduledJob> b)

@@ -22,6 +22,176 @@ namespace DynamicModules.Persistence.Postgres.Migrations
 
             NpgsqlModelBuilderExtensions.UseIdentityByDefaultColumns(modelBuilder);
 
+            modelBuilder.Entity("DynamicModules.Domain.Entities.Dynamic.AlertChannel", b =>
+                {
+                    b.Property<string>("Kind")
+                        .HasMaxLength(20)
+                        .HasColumnType("text")
+                        .UseCollation("C");
+
+                    b.Property<int>("ConsecutiveFailures")
+                        .HasColumnType("integer");
+
+                    b.Property<bool>("Enabled")
+                        .HasColumnType("boolean");
+
+                    b.Property<string>("FromAddress")
+                        .HasMaxLength(255)
+                        .HasColumnType("text")
+                        .UseCollation("C");
+
+                    b.Property<string>("FromName")
+                        .HasMaxLength(100)
+                        .HasColumnType("text")
+                        .UseCollation("C");
+
+                    b.Property<string>("Host")
+                        .HasMaxLength(255)
+                        .HasColumnType("text")
+                        .UseCollation("C");
+
+                    b.Property<DateTime?>("LastClaimUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("LastError")
+                        .HasMaxLength(500)
+                        .HasColumnType("text")
+                        .UseCollation("C");
+
+                    b.Property<DateTime?>("LastFailureUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTime?>("LastSuccessUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("MailLocale")
+                        .HasMaxLength(10)
+                        .HasColumnType("text")
+                        .UseCollation("C");
+
+                    b.Property<string>("ModifiedUserId")
+                        .HasMaxLength(50)
+                        .HasColumnType("text")
+                        .UseCollation("C");
+
+                    b.Property<DateTime?>("ModifiedUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("PasswordProtected")
+                        .HasColumnType("text")
+                        .UseCollation("C");
+
+                    b.Property<int>("Port")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("Security")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("text")
+                        .UseCollation("C");
+
+                    b.Property<string>("ToAddresses")
+                        .HasMaxLength(2000)
+                        .HasColumnType("text")
+                        .UseCollation("C");
+
+                    b.Property<string>("UserName")
+                        .HasMaxLength(255)
+                        .HasColumnType("text")
+                        .UseCollation("C");
+
+                    b.HasKey("Kind");
+
+                    b.ToTable("Dynamic_AlertChannel", (string)null);
+                });
+
+            modelBuilder.Entity("DynamicModules.Domain.Entities.Dynamic.AlertOutbox", b =>
+                {
+                    b.Property<long>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<long>("Id"));
+
+                    b.Property<int>("Attempts")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("Body")
+                        .IsRequired()
+                        .HasMaxLength(4000)
+                        .HasColumnType("text")
+                        .UseCollation("C");
+
+                    b.Property<string>("Channel")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("text")
+                        .UseCollation("C");
+
+                    b.Property<string>("ClaimedBy")
+                        .HasMaxLength(100)
+                        .HasColumnType("text")
+                        .UseCollation("C");
+
+                    b.Property<DateTime?>("ClaimedUntilUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTime>("CreatedUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<long?>("DigestOutboxId")
+                        .HasColumnType("bigint");
+
+                    b.Property<long?>("IncidentId")
+                        .HasColumnType("bigint");
+
+                    b.Property<string>("LastError")
+                        .HasMaxLength(500)
+                        .HasColumnType("text")
+                        .UseCollation("C");
+
+                    b.Property<DateTime>("NextAttemptUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTime?>("SentUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("text")
+                        .UseCollation("C");
+
+                    b.Property<string>("Subject")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("text")
+                        .UseCollation("C");
+
+                    b.Property<string>("Transition")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("text")
+                        .UseCollation("C");
+
+                    b.Property<string>("TransitionId")
+                        .HasMaxLength(32)
+                        .HasColumnType("text")
+                        .UseCollation("C");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CreatedUtc");
+
+                    b.HasIndex("DigestOutboxId");
+
+                    b.HasIndex("SentUtc");
+
+                    b.HasIndex("Status", "NextAttemptUtc");
+
+                    b.ToTable("Dynamic_AlertOutbox", (string)null);
+                });
+
             modelBuilder.Entity("DynamicModules.Domain.Entities.Dynamic.App", b =>
                 {
                     b.Property<long>("Id")
@@ -978,6 +1148,121 @@ namespace DynamicModules.Persistence.Postgres.Migrations
                     b.ToTable("Dynamic_ApprovalTask", (string)null);
                 });
 
+            modelBuilder.Entity("DynamicModules.Domain.Entities.Dynamic.AuditLogEntry", b =>
+                {
+                    b.Property<long>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<long>("Id"));
+
+                    b.Property<string>("Action")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("text")
+                        .UseCollation("C");
+
+                    b.Property<string>("ActorKind")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("text")
+                        .UseCollation("C");
+
+                    b.Property<string>("ActorUserId")
+                        .HasMaxLength(50)
+                        .HasColumnType("text")
+                        .UseCollation("C");
+
+                    b.Property<string>("ArgumentsHash")
+                        .HasMaxLength(64)
+                        .HasColumnType("text")
+                        .UseCollation("C");
+
+                    b.Property<string>("Channel")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("text")
+                        .UseCollation("C");
+
+                    b.Property<string>("ClientIp")
+                        .HasMaxLength(45)
+                        .HasColumnType("text")
+                        .UseCollation("C");
+
+                    b.Property<long?>("ConfirmationId")
+                        .HasColumnType("bigint");
+
+                    b.Property<string>("ConfirmationOutcome")
+                        .HasMaxLength(20)
+                        .HasColumnType("text")
+                        .UseCollation("C");
+
+                    b.Property<DateTime>("OccurredUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("ReasonCode")
+                        .HasMaxLength(50)
+                        .HasColumnType("text")
+                        .UseCollation("C");
+
+                    b.Property<string>("RequestId")
+                        .HasMaxLength(32)
+                        .HasColumnType("text")
+                        .UseCollation("C");
+
+                    b.Property<string>("Result")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("text")
+                        .UseCollation("C");
+
+                    b.Property<int?>("ResultCount")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("RiskLevel")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("text")
+                        .UseCollation("C");
+
+                    b.Property<string>("SummaryJson")
+                        .HasMaxLength(16000)
+                        .HasColumnType("text")
+                        .UseCollation("C");
+
+                    b.Property<string>("TargetId")
+                        .HasMaxLength(100)
+                        .HasColumnType("text")
+                        .UseCollation("C");
+
+                    b.Property<string>("TargetKind")
+                        .HasMaxLength(30)
+                        .HasColumnType("text")
+                        .UseCollation("C");
+
+                    b.Property<string>("TargetLabel")
+                        .HasMaxLength(200)
+                        .HasColumnType("text")
+                        .UseCollation("C");
+
+                    b.Property<long?>("TokenId")
+                        .HasColumnType("bigint");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("OccurredUtc");
+
+                    b.HasIndex("Action", "OccurredUtc");
+
+                    b.HasIndex("ActorUserId", "OccurredUtc");
+
+                    b.HasIndex("TokenId", "OccurredUtc");
+
+                    b.HasIndex("TargetKind", "TargetId", "OccurredUtc");
+
+                    b.ToTable("Dynamic_AuditLog", (string)null);
+                });
+
             modelBuilder.Entity("DynamicModules.Domain.Entities.Dynamic.Block", b =>
                 {
                     b.Property<long>("Id")
@@ -1553,6 +1838,123 @@ namespace DynamicModules.Persistence.Postgres.Migrations
                     b.HasKey("GroupId", "ProgramCode");
 
                     b.ToTable("Dynamic_GroupProgramPrivilege", (string)null);
+                });
+
+            modelBuilder.Entity("DynamicModules.Domain.Entities.Dynamic.HealthCheck", b =>
+                {
+                    b.Property<string>("Code")
+                        .HasMaxLength(50)
+                        .HasColumnType("text")
+                        .UseCollation("C");
+
+                    b.Property<long?>("CriticalThreshold")
+                        .HasColumnType("bigint");
+
+                    b.Property<bool?>("Enabled")
+                        .HasColumnType("boolean");
+
+                    b.Property<int?>("IntervalMinutes")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime?>("LastAggregatedUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTime?>("LastCheckedUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("LastMessageCode")
+                        .HasMaxLength(50)
+                        .HasColumnType("text")
+                        .UseCollation("C");
+
+                    b.Property<DateTime?>("LastProbeUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("LastStatus")
+                        .HasMaxLength(20)
+                        .HasColumnType("text")
+                        .UseCollation("C");
+
+                    b.Property<long?>("LastValue")
+                        .HasColumnType("bigint");
+
+                    b.Property<string>("ModifiedUserId")
+                        .HasMaxLength(50)
+                        .HasColumnType("text")
+                        .UseCollation("C");
+
+                    b.Property<DateTime?>("ModifiedUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTime>("NextDueUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<long?>("WarnThreshold")
+                        .HasColumnType("bigint");
+
+                    b.HasKey("Code");
+
+                    b.ToTable("Dynamic_HealthCheck", (string)null);
+                });
+
+            modelBuilder.Entity("DynamicModules.Domain.Entities.Dynamic.HealthCheckResult", b =>
+                {
+                    b.Property<long>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<long>("Id"));
+
+                    b.Property<DateTime>("CheckedUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Code")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("text")
+                        .UseCollation("C");
+
+                    b.Property<int>("DurationMs")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("InstanceId")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("text")
+                        .UseCollation("C");
+
+                    b.Property<string>("MessageCode")
+                        .HasMaxLength(50)
+                        .HasColumnType("text")
+                        .UseCollation("C");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("text")
+                        .UseCollation("C");
+
+                    b.Property<string>("TransitionId")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("text")
+                        .UseCollation("C");
+
+                    b.Property<long?>("Value")
+                        .HasColumnType("bigint");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CheckedUtc");
+
+                    b.HasIndex("TransitionId")
+                        .IsUnique();
+
+                    b.HasIndex("Code", "CheckedUtc");
+
+                    b.HasIndex("Code", "InstanceId", "CheckedUtc");
+
+                    b.ToTable("Dynamic_HealthCheckResult", (string)null);
                 });
 
             modelBuilder.Entity("DynamicModules.Domain.Entities.Dynamic.LedgerReversal", b =>
@@ -2131,6 +2533,223 @@ namespace DynamicModules.Persistence.Postgres.Migrations
                     b.ToTable("Dynamic_Operation", (string)null);
                 });
 
+            modelBuilder.Entity("DynamicModules.Domain.Entities.Dynamic.OpsIncident", b =>
+                {
+                    b.Property<long>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<long>("Id"));
+
+                    b.Property<string>("AcknowledgedBy")
+                        .HasMaxLength(50)
+                        .HasColumnType("text")
+                        .UseCollation("C");
+
+                    b.Property<DateTime?>("AcknowledgedUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Category")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("text")
+                        .UseCollation("C");
+
+                    b.Property<string>("Code")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("text")
+                        .UseCollation("C");
+
+                    b.Property<string>("Fingerprint")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("text")
+                        .UseCollation("C");
+
+                    b.Property<int>("FingerprintVersion")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime>("FirstSeenUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("FirstVersion")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("text")
+                        .UseCollation("C");
+
+                    b.Property<DateTime?>("LastNotifiedUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("LastRequestId")
+                        .HasMaxLength(32)
+                        .HasColumnType("text")
+                        .UseCollation("C");
+
+                    b.Property<DateTime>("LastSeenUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("LastVersion")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("text")
+                        .UseCollation("C");
+
+                    b.Property<string>("ModuleKey")
+                        .HasMaxLength(100)
+                        .HasColumnType("text")
+                        .UseCollation("C");
+
+                    b.Property<string>("NormalizedMessage")
+                        .HasMaxLength(200)
+                        .HasColumnType("text")
+                        .UseCollation("C");
+
+                    b.Property<long>("OccurrenceCount")
+                        .HasColumnType("bigint");
+
+                    b.Property<bool>("Regression")
+                        .HasColumnType("boolean");
+
+                    b.Property<int>("ReopenCount")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("ResolvedBy")
+                        .HasMaxLength(50)
+                        .HasColumnType("text")
+                        .UseCollation("C");
+
+                    b.Property<string>("ResolvedReason")
+                        .HasMaxLength(20)
+                        .HasColumnType("text")
+                        .UseCollation("C");
+
+                    b.Property<DateTime?>("ResolvedUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Route")
+                        .HasMaxLength(200)
+                        .HasColumnType("text")
+                        .UseCollation("C");
+
+                    b.Property<long?>("RuleId")
+                        .HasColumnType("bigint");
+
+                    b.Property<string>("RuleKind")
+                        .HasMaxLength(20)
+                        .HasColumnType("text")
+                        .UseCollation("C");
+
+                    b.Property<string>("Severity")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("text")
+                        .UseCollation("C");
+
+                    b.Property<string>("Source")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("text")
+                        .UseCollation("C");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("text")
+                        .UseCollation("C");
+
+                    b.Property<string>("TitleKey")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("text")
+                        .UseCollation("C");
+
+                    b.Property<string>("TitleParamsJson")
+                        .HasMaxLength(2000)
+                        .HasColumnType("text")
+                        .UseCollation("C");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("Fingerprint")
+                        .IsUnique();
+
+                    b.HasIndex("ResolvedUtc");
+
+                    b.HasIndex("Status", "LastSeenUtc");
+
+                    b.HasIndex("Status", "Severity", "LastSeenUtc");
+
+                    b.ToTable("Dynamic_OpsIncident", (string)null);
+                });
+
+            modelBuilder.Entity("DynamicModules.Domain.Entities.Dynamic.OpsIncidentSample", b =>
+                {
+                    b.Property<long>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<long>("Id"));
+
+                    b.Property<long?>("AuditLogId")
+                        .HasColumnType("bigint");
+
+                    b.Property<string>("Browser")
+                        .HasMaxLength(200)
+                        .HasColumnType("text")
+                        .UseCollation("C");
+
+                    b.Property<long>("IncidentId")
+                        .HasColumnType("bigint");
+
+                    b.Property<string>("Locale")
+                        .HasMaxLength(20)
+                        .HasColumnType("text")
+                        .UseCollation("C");
+
+                    b.Property<DateTime>("OccurredUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("RawMessage")
+                        .HasMaxLength(500)
+                        .HasColumnType("text")
+                        .UseCollation("C");
+
+                    b.Property<string>("RawStack")
+                        .HasMaxLength(4000)
+                        .HasColumnType("text")
+                        .UseCollation("C");
+
+                    b.Property<string>("RequestId")
+                        .HasMaxLength(32)
+                        .HasColumnType("text")
+                        .UseCollation("C");
+
+                    b.Property<string>("Route")
+                        .HasMaxLength(200)
+                        .HasColumnType("text")
+                        .UseCollation("C");
+
+                    b.Property<string>("UserId")
+                        .HasMaxLength(50)
+                        .HasColumnType("text")
+                        .UseCollation("C");
+
+                    b.Property<string>("Version")
+                        .HasMaxLength(50)
+                        .HasColumnType("text")
+                        .UseCollation("C");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("OccurredUtc");
+
+                    b.HasIndex("IncidentId", "OccurredUtc");
+
+                    b.ToTable("Dynamic_OpsIncidentSample", (string)null);
+                });
+
             modelBuilder.Entity("DynamicModules.Domain.Entities.Dynamic.PermissionGroup", b =>
                 {
                     b.Property<long>("Id")
@@ -2521,6 +3140,94 @@ namespace DynamicModules.Persistence.Postgres.Migrations
                     b.HasIndex("ModuleId", "Sequence");
 
                     b.ToTable("Dynamic_Rule", (string)null);
+                });
+
+            modelBuilder.Entity("DynamicModules.Domain.Entities.Dynamic.RuleFailure", b =>
+                {
+                    b.Property<long>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<long>("Id"));
+
+                    b.Property<DateTime>("FailedUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("RequestId")
+                        .HasMaxLength(32)
+                        .HasColumnType("text")
+                        .UseCollation("C");
+
+                    b.Property<long>("RuleId")
+                        .HasColumnType("bigint");
+
+                    b.Property<string>("RuleKind")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("text")
+                        .UseCollation("C");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("FailedUtc");
+
+                    b.HasIndex("RuleKind", "RuleId", "FailedUtc");
+
+                    b.ToTable("Dynamic_RuleFailure", (string)null);
+                });
+
+            modelBuilder.Entity("DynamicModules.Domain.Entities.Dynamic.RuleHealth", b =>
+                {
+                    b.Property<string>("RuleKind")
+                        .HasMaxLength(20)
+                        .HasColumnType("text")
+                        .UseCollation("C");
+
+                    b.Property<long>("RuleId")
+                        .HasColumnType("bigint");
+
+                    b.Property<int>("ConsecutiveFailures")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("LastErrorCode")
+                        .HasMaxLength(100)
+                        .HasColumnType("text")
+                        .UseCollation("C");
+
+                    b.Property<DateTime?>("LastFailureUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTime?>("LastPausedUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("LastRequestId")
+                        .HasMaxLength(32)
+                        .HasColumnType("text")
+                        .UseCollation("C");
+
+                    b.Property<int>("PauseCount")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime?>("PausedUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("ResumedBy")
+                        .HasMaxLength(50)
+                        .HasColumnType("text")
+                        .UseCollation("C");
+
+                    b.Property<DateTime?>("ResumedUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int>("SkippedWhilePaused")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime?>("StreakResetUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("RuleKind", "RuleId");
+
+                    b.ToTable("Dynamic_RuleHealth", (string)null);
                 });
 
             modelBuilder.Entity("DynamicModules.Domain.Entities.Dynamic.ScheduledJob", b =>
@@ -3512,6 +4219,15 @@ namespace DynamicModules.Persistence.Postgres.Migrations
                     b.HasOne("DynamicModules.Domain.Entities.Dynamic.Module", null)
                         .WithMany()
                         .HasForeignKey("ModuleId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("DynamicModules.Domain.Entities.Dynamic.OpsIncidentSample", b =>
+                {
+                    b.HasOne("DynamicModules.Domain.Entities.Dynamic.OpsIncident", null)
+                        .WithMany()
+                        .HasForeignKey("IncidentId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
                 });
