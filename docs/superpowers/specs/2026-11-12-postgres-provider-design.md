@@ -198,6 +198,7 @@ SQLite 不改，是因為 SQLite 只在查詢條件能推出索引條件時才�
   - **只有 advisory lock、不排隊**（初稿做法）：見上面「為什麼兩層都要」。退而求其次只把池耗盡歸類成 503，尖峰時讀取仍會失敗。
 - **代價**：
   - 寫入吞吐上限是「1 除以持鎖時間」，而 PostgreSQL 的持鎖時間會比 SQLite 長得多。SQLite 每個陳述式在行程內、微秒級；PostgreSQL 每個陳述式一次網路往返，EF 在使用者交易內每次 `SaveChanges` 還多發 SAVEPOINT／RELEASE。新增一筆記錄要跑索引、彙總、事件、檢查，可能幾十到上百個往返，持鎖時間可能從毫秒級拉到 100 ms 以上，吞吐上限明顯低於 SQLite。pg0c 用 `ConcurrentWriteApiTests` 或基準測試量一次單筆新增的持鎖時間，寫回這一段；對 50 人以下、每客戶一套資料庫夠不夠，以量到的數字判斷，不夠就提前做下面的清單。
+    - **pg0c 實測（2026-11-18，`WriteLockHoldBenchmarkTests`，Category=Benchmark）**：一個有 5 個可篩選欄位的模組，經 API 依序新增 40 筆，量每個寫入交易從開始（已取得全庫鎖）到提交的時間。PostgreSQL（macOS 的 Docker Desktop、`postgres:16-alpine` 測試容器）中位數 10.7 ms、P90 13.2 ms、最大 17.6 ms，每筆請求平均 12.4 ms；同一測試在檔案型 SQLite 是中位數 3.5 ms、P90 6.2 ms。換算寫入吞吐上限約每秒 90 筆（SQLite 約 280 筆），對 50 人以下、每客戶一套資料庫夠用，下面的清單維持「量到不夠才做」。注意：測試容器關了 `fsync`／`synchronous_commit`，正式環境提交時多一次落盤（鎖在提交完成才放開），持鎖時間會再長幾 ms；這個模組沒有事件與跨記錄檢查，重的模組要另量。
   - 長交易（匯入、開應用程式、刪模組、儲存檢查回填、`GenerateDemoDataRequest`）會擋住所有寫入，和現在一樣；O1 的排程工作因此可能等滿逾時（§7）。讀取不受影響（MVCC）。
   - 部署建議設 `idle_in_transaction_session_timeout`（例如 60 秒，資料庫或角色層級）當保險：應用程式卡在交易中間時，鎖不會一直不放。這是部署設定，交給部署段，寫進 `CONTRIBUTING.md` 的 PostgreSQL 說明。
 - **O1 的並行測試在 PostgreSQL 跑兩種模式**（主控判斷 T4）：一般模式（閘門＋全庫鎖），以及測試主機把閘門與寫入鎖都換成不做事的版本。只關 advisory lock 不夠：同一個測試行程裡的兩個排程器實例用同一個連線字串，會被同一個閘門序列化。第二種模式證明條件式更新本身就能防重複，不是被序列化蓋掉（維運設計 §10.7「並行假設以 PostgreSQL 為準，不能靠序列化保證正確」）。關鎖只能在測試裡用 DI 替換，沒有部署設定可以關。
@@ -313,6 +314,8 @@ SQLite 不改，是因為 SQLite 只在查詢條件能推出索引條件時才�
   - 到 PostgreSQL 步驟前再確認一次，這時才等最多 60 秒，還是不行就依 §13 U1 的裁決處理（gate 失敗）。
   - 確認可用後先 `docker pull postgres:16-alpine`，單獨計時、不算進下面的預算（已快取時幾秒內結束；第一次約下載 100MB）。
 - **時間預算**：PostgreSQL 兩步合計不超過 10 分鐘（gate 從 30–45 分鐘變成 40–55 分鐘以內，主控判斷 T14）。粗估：容器與樣板約 10–20 秒；ApplicationTests 雙跑集約 150 個測試，每個複製資料庫約 0.1–0.3 秒；WebAPITests 雙跑集約 15 個類別、每類別一個測試主機。初稿漏算的大頭是每個陳述式的往返：WebAPI 測試每個請求幾十到上百個陳述式，macOS 的 Docker VM 上每次往返約 0.2–0.5 ms；並行類測試還會被全庫鎖序列化。加上 §6.1 的測試容器參數，10 分鐘大概可行，沒有把握（⚠️ 未實測）。pg0c 合併前實測並把數字寫回這一節；超過 10 分鐘就先縮 WebAPITests 的清單（保留並行與 O1 相關的類別），不放寬預算。
+- **pg0c 實測（2026-11-18，macOS、Docker Desktop，gate 的兩個 PostgreSQL 步驟）**：`docker pull`（已快取）8 秒不計；ApplicationTests 雙跑集 190 個測試 23 秒（測試本身 17 秒）、WebAPITests 雙跑集 306 個測試 132 秒（測試本身 1 分 59 秒），合計 155 秒，約預算的四分之一。雙跑集比 §6.4 的清單大：其他段已把簽核、附件、任務看板、甘特等類別標成 `Category=Postgres`，一併在內。
+- **樣板複製的 `STRATEGY` 實測**：樣板（套完 PostgreSQL migration）約 11 MB；測試容器參數下連續建 30 個資料庫，`WAL_LOG` 每個約 13 ms、`FILE_COPY` 每個約 12 ms，差在誤差內，遠低於初稿估的 0.1–0.3 秒。留預設的 `WAL_LOG`：`FILE_COPY` 前後各強制一次 checkpoint，平行建庫時會互相等。
 - `docs/ai/testing.md` 補 PostgreSQL 的跑法、窄範圍指令範例與異常判讀（容器起不來、連線數用完、樣板被占用）。
 
 ### 6.6 全套 PostgreSQL 試跑（不進 gate）
@@ -396,6 +399,14 @@ O1 若因為 PostgreSQL 的行為需要改程式（違反「pg0 完成後不改�
 - 雙跑集標記（§6.4）、`PostgresWriteLockTests`、PostgreSQL 版忙碌測試、跨記錄檢查溢位測試、O1 的兩種模式案例與續租測試（§7）。
 - `gate.sh` 加 PostgreSQL 步驟、提早啟動 Docker 與 `docker pull`、`docs/ai/testing.md`。
 - 驗收：§8 第 1、3 項；實測時間寫回 §6.5，單筆新增的持鎖時間寫回 §5.6。
+- **實作補記（2026-11-18）**：
+  - `[PostgresFact]` 保留（不換成別的機制），移到共用的 `tests/Fixtures/TestDatabase.cs`，條件改成 `FORMWRIGHT_TEST_DB=postgres` 才跑；`FORMWRIGHT_TEST_PG` 只決定伺服器從哪來（設了就不起容器）。理由：只在 PostgreSQL 有意義的案例在 SQLite 跑時要略過（§6.4），用同一個開關最直接。
+  - 無鎖模式的替換點是 `PostgresWriteSettings.Unserialized()`：閘門與全庫鎖都不做事，`AutoTransactionBehavior=Always` 照舊。`AddPostgresDatabase` 的 DbContext 選項改從 DI 取這個單例，測試（`TestApp.WithoutWriteSerialization`）替換它即可；`From(configuration)` 一律回序列化的版本，沒有部署設定能關。
+  - O1 的測試在 WebAPITests（`Ops.SchedulerTests`、`Ops.ScheduledJobLeaseTests`、`Ops.NotificationUpkeepJobTests`），不是 §7、§8 第 3 項寫的 ApplicationTests；§8 第 3 項的指令改在 WebAPITests 跑。兩種鎖模式用繼承：`SchedulerNoLockTests`、`NotificationUpkeepJobNoLockTests` 整組重跑原類別；§7 的四個案例（兩實例搶同一工作含同時補列、持有者不續租由別人接手、通知兩條路徑並行）都在其中。SQLite 沒有無鎖模式，這兩組在 SQLite 上等同重跑一次（約 2 秒）。續租遇長交易的案例是 `SchedulerWriteLockTests`（只在 PostgreSQL）。O1 程式不需要為 PostgreSQL 改。
+  - 自己組 DI 的 ApplicationTests 原本直接註冊 `SqliteDialect`／`EfTransactionManager`，改成 `TestDb.AddProviderServices(services)`，PostgreSQL 模式註冊 `PostgresDialect`／`PostgresTransactionManager`（23 個檔，SQLite 行為不變）。
+  - 跑起來才發現的測試基礎問題：`TestApp` 的建構與主機建立同步等非同步（建資料庫、hosted service、種子），Npgsql 是真的非同步 I/O，續傳回到 xUnit 的同步內容時，平行的測試類別把它的執行緒都占著同步等，整個測試行程卡死。PostgreSQL 模式改在執行緒池上跑這幾段；SQLite 的非同步實際上同步完成，維持原樣。
+  - 測試寫法的修正只有一處：`SharedMasterSchemaTests` 的 raw SQL 識別字沒加引號（PostgreSQL 折成小寫，`42P01`）。
+  - CI：設計寫的「repo 沒有 CI」（§2、T17）已過時，`.github/workflows/gate.yml` 是 GitHub Actions。後端 matrix 加兩個 job（ApplicationTests、WebAPITests 的 PostgreSQL 雙跑集），用 runner 內建的 Docker 起測試容器，與其他 job 平行，不加長 CI 的總時間。
 
 **pg0d：全套 PostgreSQL 試跑與修正**（範圍要跑了才知道）
 
