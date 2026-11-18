@@ -75,6 +75,7 @@ public class ConcurrentWriteApiTests : IDisposable
     /// 鎖被別的行程（這裡用一條外部連線代替）占住、等不到時：回可重試的 503 並帶 Retry-After，不是 500；
     /// 鎖放開後同一個請求可以成功。
     /// </summary>
+    [Trait("Category", "SqliteOnly")]
     [Fact]
     public async Task WhenTheWriteLockCannotBeObtained_Returns503WithRetryAfter()
     {

@@ -11,6 +11,7 @@ namespace DynamicModules.ApplicationTests.Persistence;
 
 public class SchemaTests
 {
+    [Trait("Category", "SqliteOnly")]
     [Fact]
     public async Task Migrate_CreatesAllDynamicTables()
     {
@@ -37,6 +38,7 @@ public class SchemaTests
         (await db.Context.Set<NumberSequence>().SingleAsync()).Period.Should().Be("p1234567890");
     }
 
+    [Trait("Category", "SqliteOnly")]
     [Fact]
     public async Task Schema_HasRecordIndexTableAndIndexes()
     {
@@ -84,6 +86,7 @@ public class SchemaTests
         userCols.Should().Contain("IsSystemAdmin");
     }
 
+    [Trait("Category", "SqliteOnly")]
     [Fact]
     public async Task Schema_HasTaskTables()
     {
@@ -131,6 +134,7 @@ public class SchemaTests
         (await db.Context.Set<TaskItem>().CountAsync()).Should().Be(2);
     }
 
+    [Trait("Category", "SqliteOnly")]
     [Fact]
     public async Task Schema_HasOrganizationTables()
     {
@@ -159,6 +163,7 @@ public class SchemaTests
         await act.Should().ThrowAsync<DbUpdateException>();
     }
 
+    [Trait("Category", "SqliteOnly")]
     [Fact]
     public async Task Schema_HasApprovalTables()
     {

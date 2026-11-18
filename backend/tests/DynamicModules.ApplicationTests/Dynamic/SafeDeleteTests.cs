@@ -734,6 +734,7 @@ public class SafeDeleteTests : DesignerTestBase
 
     // ───────────── 交易 ─────────────
 
+    [Trait("Category", "SqliteOnly")]
     [Fact]
     public async Task Module_FailureAtLastStep_RollsBackEveryPurge()
     {
@@ -761,6 +762,7 @@ public class SafeDeleteTests : DesignerTestBase
         (await Ctx.Set<DynamicProgram>().CountAsync()).Should().Be(program);
     }
 
+    [Trait("Category", "SqliteOnly")]
     [Fact]
     public async Task Field_FailureAtLastStep_RollsBackPurgeAndValueRewrite()
     {

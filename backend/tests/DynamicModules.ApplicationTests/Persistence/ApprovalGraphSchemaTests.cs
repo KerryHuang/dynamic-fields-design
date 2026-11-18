@@ -7,6 +7,7 @@ using Microsoft.EntityFrameworkCore.Migrations;
 namespace DynamicModules.ApplicationTests.Persistence;
 
 /// <summary>migration ApprovalGraph（流程圖設計 §7.6）：新欄位全部可為空、既有資料升級後原樣保留。</summary>
+[Trait("Category", "SqliteOnly")]
 public class ApprovalGraphSchemaTests
 {
     [Fact]

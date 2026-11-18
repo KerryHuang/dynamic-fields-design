@@ -4,6 +4,7 @@ using Microsoft.Data.Sqlite;
 namespace DynamicModules.WebAPITests;
 
 /// <summary>檔案模式的測試資料庫要和正式站一樣是 WAL；rollback journal 下長交易會擋住其他連線的讀取（見 TestApp.UseWal）。</summary>
+[Trait("Category", "SqliteOnly")]
 public class FileDatabaseModeTests
 {
     [Fact]

@@ -693,6 +693,7 @@ public class ReportSqlEquivalenceTests : ReportTestBase
 
     // ---- 計畫形狀（設計 §5.2）：驅動條件依估計命中筆數挑，Dynamic_Record 只能用主鍵查，不能整表掃描 ----
 
+    [Trait("Category", "SqliteOnly")]
     [Fact]
     public async Task Plan_SelectiveConditionDrives_AndRecordTableIsNeverScanned()
     {
@@ -724,6 +725,7 @@ public class ReportSqlEquivalenceTests : ReportTestBase
         plan.Should().Contain(d => d.StartsWith("SEARCH i0 USING INDEX sqlite_autoindex"), string.Join(" | ", plan));
     }
 
+    [Trait("Category", "SqliteOnly")]
     [Theory]
     [InlineData(ReportSqlCheckKind.Number, "IX_Dynamic_RecordIndex_NoScaled")]
     [InlineData(ReportSqlCheckKind.Text, "IX_Dynamic_RecordIndex_Truncated")]

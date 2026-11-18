@@ -378,6 +378,7 @@ public class RecordQueryTests : IAsyncLifetime
         items.Select(r => r.Id).Should().Equal(keep);
     }
 
+    [Trait("Category", "SqliteOnly")]
     [Fact]
     public async Task Query_DateParameterMatchesEfStoredFormat()
     {
