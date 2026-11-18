@@ -1042,7 +1042,7 @@ O1 本身不依賴任何一題。
 
 ## 17. O2 細部設計
 
-> 2026-11-19｜核對基準 `origin/main` `772e7a54`（O1、pg0 已上線）｜狀態：草稿，主控撰寫，同日依設計審查的必修 10 條與建議清單修訂（修改處見 §17.10.4）；待使用者確認 §17.10 的使用者行為類。
+> 2026-11-19｜核對基準 `origin/main` `772e7a54`（O1、pg0 已上線）｜狀態：草稿，主控撰寫，同日依設計審查的必修 10 條與建議清單修訂，再依第二輪審查的必修 6 條與建議修訂（修改處都見 §17.10.4）；待使用者確認 §17.10 的使用者行為類。
 > 照 §10 的章節與粒度寫。本節沒寫到的總體規則以 §4–§9、§11、§12 為準；本節與前文不一致處以本節為準，已同步改的前文段落列在 §17.10.4。
 > 標「O2-U?」的是使用者行為類主控判斷、「O2-T?」的是技術類主控判斷，彙整在 §17.10。
 
@@ -1070,7 +1070,7 @@ O2 做六件事：
 | 業務 email（任務、簽核；U9）、使用者帳號的 Email 欄位（O2-U1） | 不排；要做時另開功能 |
 | 稽核匯出、稽核頁看「讀取」紀錄 | 💡 |
 | 備份本身（§15 第 2 條）；O2 只登記 `backup.freshness` 並回「未設定」（B20） | 路線階段 5 |
-| 規則暫停期間略過的記錄補產任務（O2-U7） | 💡 |
+| 規則暫停期間略過的記錄補產任務（O2-U7b；選自動補產時改在 o2d 做，不改表） | 💡 |
 
 **子單元切分**（實作者內部的 commit 切法；整段 O2 仍是一次交付、一次合併；主控判斷 O2-T1）：
 
@@ -1082,7 +1082,8 @@ O2 做六件事：
 | o2d 自動暫停 | 失敗計數、暫停與恢復、`ruleEditor` 動態收件人、事件與檢查的已知錯誤碼、開發環境故障注入、規則 API 帶暫停狀態 | o2a、o2b | 無 |
 | o2e 前端 | 監控頁、稽核頁、通道設定、任務規則分頁的暫停標示與恢復、鈴鐺新種類、政策編輯器的 `ruleEditor` 選項、四語、四種寬度 | API 形狀定了就能開工（o2b）；走查等 o2c、o2d | 無 |
 
-- 只有 o2a 加 migration，所以後面的子單元**不能再改表**；九張表的欄位要在 o2a 一次定案（§17.4），計畫審查時逐欄確認。O2-U14 若選「通道設定加信件語系」，`Dynamic_AlertChannel` 要多一欄，必須在 o2a 開工前答。
+- 只有 o2a 加 migration，所以後面的子單元**不能再改表**；九張表的欄位要在 o2a 一次定案（§17.4），計畫審查時逐欄確認。第二輪審查補的欄位也在 o2a 一起建：健康結果的去重鍵 `Dynamic_HealthCheckResult.TransitionId`（唯一）、檢查列的鎖欄 `Dynamic_HealthCheck.LastAggregatedUtc`、通道列的鎖欄 `Dynamic_AlertChannel.LastClaimUtc` 與信件語系 `MailLocale`（O2-U14 推薦）。
+- o2a 開工前必答的只有會改表的 O2-U1、O2-U14（§17.10.5）；O2-U7b 的自動補產有不改表的做法，o2d 開工前答即可。
 - o2c 與 o2d 都改 DI 註冊、`PolicyCatalog` 與四語檔，依序做，不平行。
 
 ### 17.2 後端
@@ -1095,11 +1096,13 @@ O2 做六件事：
   - `Add(AuditEntry)`：只把列加進 DbContext 的追蹤，跟著呼叫端下一次 `SaveChanges` 寫進**同一個交易**；寫不進去整筆失敗。給 `AuditBehavior`、`IWriteStage`、自動暫停用。
   - `WriteNowAsync(AuditEntry)`：另開 DI scope 與交易立刻寫，**寫不進去丟 `AuditWriteException`**，呼叫端看得到失敗。給 MCP 的 fail closed 用（唯讀工具先寫稽核再回資料；寫入工具業務失敗時另寫一筆失敗稽核；MCP 設計 §8.1、T14）。
   - `TryWriteNowAsync(AuditEntry)`：同上，但失敗只記 Error log、回 `false`。給登入用（寫不進不擋登入，§5.6）。
-  - 後兩個只能在交易外呼叫：`ITransactionManager.IsActive` 為真時丟 `InvalidOperationException`（PostgreSQL 上同一請求另開寫入交易會等自己外層的閘門與鎖，pg0 §15 第 10 條）。
+  - 後兩個只能在交易外呼叫：`ITransactionManager.IsActive` 為真時丟 `InvalidOperationException`（PostgreSQL 上同一請求另開寫入交易會等自己外層的閘門與鎖，pg0 §15 第 10 條）。檢查放在方法的**第一步、建立新 DI scope 之前**，讀的是呼叫端 scope 的 `ITransactionManager`；新 scope 裡的交易管理器一定是「沒有交易」，在那裡才檢查永遠不會擋下。`TryWriteNowAsync` 的這個例外也照樣丟出、不吞成 `false`（這是呼叫端的程式錯誤，不是寫不進去）。
 - `AuditEntry` 是值物件，呼叫端填的欄位（與 §17.4 `Dynamic_AuditLog` 一一對應）：
   - 必填：動作代碼、結果（`success`、`denied`、`invalid`、`failed`）。
   - 選填：目標（種類、id、顯示名快照）、原因代碼、摘要（結構化物件，由 `AuditSummary` 組成）、參數雜湊、回傳筆數、確認 id 與確認結果（`preview`、`confirmed`、`expired`、`mismatch`）。後四項 O2 不用，mcp1 填。
-  - 行為者覆寫 `ActorOverride(userId, kind)`：只有環境裡**沒有身分**時才能給（例如登入成功時 cookie 還沒建立，`ICurrentUser` 是匿名，由 `LoginHandler` 指定剛登入的使用者）；環境已有身分還給覆寫就丟 `InvalidOperationException`，避免冒用。
+  - 行為者覆寫 `ActorOverride(userId, kind)`：一般呼叫只有環境裡**沒有身分**時才能給；環境已有身分還給覆寫就丟 `InvalidOperationException`，避免冒用。唯一的例外是登入的稽核身分情境（見下一條）。
+  - **登入的稽核身分情境**：登入端點本身不清除既有身分。`SessionMiddleware` 對 `auth/login`、`auth/demo-login` 直接放行、不比對資料庫，`ctx.User` 仍是 cookie 驗證中介層從請求 cookie 解出的身分（可能是另一個帳號、或已停用、已重設密碼而失效的舊 cookie），`ClaimsCurrentUser` 照樣讀得到它；新 cookie 要等 handler 回來、`AuthController.SignInOnSuccess` 才寫。所以「登入時環境是匿名」不成立。做法：新增 AsyncLocal 的 `AuditOrigin.BeginSignIn()`，只有 `LoginHandler`、`DemoLoginHandler` 開（架構測試限定呼叫者只有這兩個）。範圍內 `IAuditLog` **不從 `ICurrentUser` 取行為者**，一律當成沒有身分：成功時必須給 `ActorOverride`（剛登入的帳號），失敗時行為者 null；範圍外的守衛不變。請求帶的舊 cookie 不進稽核的行為者欄，也不另記（舊 cookie 可能是失效的，記成行為者會誤導）。
+  - 範圍內允許覆寫，不等於任何程式都能冒用：`BeginSignIn` 只放在兩個登入 handler 裡，覆寫的使用者 id 只能來自 handler 剛驗證通過的帳號；其他寫入點在範圍外，守衛照舊。
   - 行為者、行為者種類、來源管道、權杖 id、request id、來源 IP 其餘一律由 `IAuditLog` 從環境補，呼叫端不填。
 - 環境來源：
   - 行為者：`ICurrentUser`（`ActingScope` 內是被代為執行的使用者）；排程工作與沒有身分的寫入記行為者種類「系統」、行為者 null（B3）。
@@ -1114,7 +1117,7 @@ O2 做六件事：
 - 新增 `AuditBehavior`，註冊在 `TransactionBehavior` 之內、`IdempotencyBehavior` 之外。請求是 `IAuditedRequest` 且結果成功時，組好 `AuditEntry` 呼叫 `IAuditLog.Add`，再 `SaveChanges` 一次（交易還沒提交，所以和業務寫入同交易）。稽核寫不進去就整筆失敗（§5.6）。
 - 新舊值由 handler 補：handler 在 scoped 的 `AuditContext` 呼叫 `Describe(before, after)`；沒補的只記請求層的摘要（目標與參數代碼，不含值）。一定要補差異的：權限、群組成員、使用者（顯示名、群組、系統管理員旗標、啟用）、政策（舊值、新值）、健康檢查門檻、告警通道（密碼只記「已變更」）。設計類（模組、欄位、規則、事件、檢查、任務規則、流程、簽核流程、列印範本、轉單、分錄、應用程式套件）只記目標與變更種類，不存整份定義的差異（量大；記錄歷程與套件本身是另一份來源）。
 - 不經 `AuditBehavior` 的寫入點：
-  - **登入**（`LoginHandler`、`DemoLoginHandler`）：登入成功、失敗都用 `TryWriteNowAsync`，寫不進去不擋登入（§5.6）。成功時以 `ActorOverride` 記剛登入的使用者（行為者與目標都是他）；失敗時行為者 null，帳號存在就記為目標，不存在只記原因 `unknownAccount`、不記輸入的帳號字串（沿用 `LoginHandler` 的規則）。被 `LoginThrottle` 擋下的嘗試不逐筆記，只累加指標 `formwright.login.throttled`（O2-T3）。
+  - **登入**（`LoginHandler`、`DemoLoginHandler`）：登入成功、失敗都用 `TryWriteNowAsync`，寫不進去不擋登入（§5.6）。整個 handler 包在 `AuditOrigin.BeginSignIn()` 裡（見上）。成功時以 `ActorOverride` 記剛登入的使用者（行為者與目標都是他），不論請求帶的是誰的 cookie、有效或失效；失敗時行為者 null（帶著別人的有效 cookie 輸錯密碼也一樣），帳號存在就記為目標，不存在只記原因 `unknownAccount`、不記輸入的帳號字串（沿用 `LoginHandler` 的規則）。被 `LoginThrottle` 擋下的嘗試不逐筆記，只累加指標 `formwright.login.throttled`（O2-T3）。
   - **自動暫停**：寫在暫停那一個獨立交易裡（§17.2.7）。
   - **保留天數清理**：每次 `ops.upkeep` 清完寫一列 `ops.retention.purge`，摘要帶各表刪除筆數。
 - **只記成功**的畫面操作；被權限擋下（403）、驗證失敗（400）的畫面操作不記，看 log（O2-U9）。結果欄的「被拒」「驗證錯誤」「失敗」給登入失敗與 mcp1 用。
@@ -1223,6 +1226,7 @@ O2 做六件事：
 - WebAPI 的 `IncidentInboxFlusher`（`BackgroundService`）每 5 秒把累積的訊號交給 `IncidentRecorder`，每個指紋一個交易型請求（經 `WriteGate`）。
 - 寫不進去（資料庫忙碌、唯讀、斷線）就留在收件匣下一輪再試；收件匣最多 1000 個指紋，滿了丟最舊的並累加指標 `formwright.incident.dropped`（技術限制）。程式關閉時最後再送一次，送不出去就丟（log 裡仍有每一則 Error 或 Warning）。
 - 多實例：每個實例各自的收件匣各自寫，計數用 `次數 = 次數 + n` 的條件式更新累加，彼此不會蓋掉。
+- 提交結果不明（提交後連線才斷、程式收到例外）時，這批訊號留在收件匣重送，次數會多算一次。收件匣的次數本來就是概數（當掉時最多丟 5 秒，O2-T5），新開事件的通知只在「同指紋沒有列」時發、重送不會再發，所以不另做持久化去重；健康檢查的補寫會改變事件狀態與通知，另有去重鍵（§17.2.4）。
 - 前端錯誤收件的 429 次數另計指標 `formwright.client_errors.throttled`（§12 審查 U3）。
 
 規則失敗、健康檢查、安全、通道失敗的頻率低，直接同步呼叫 `IncidentRecorder`。
@@ -1259,17 +1263,24 @@ O2 做六件事：
 - 每個檢查在目錄裡登記**彙總範圍**：看門狗型（`database.writable`、`storage.diskFree`、`scheduler.jobs`）是 `instance`，各實例的連線、磁碟可能不同；排程型是 `global`，同一時間只有一份在跑。
 - `instance`：檢查的整體狀態＝**仍在回報的實例**裡最糟的那個。「仍在回報」＝最近三個檢查間隔內有結果列；超過的視為已下線，退出彙總（技術限制，§17.9：只決定下線實例何時退出，在線實例的告警不受影響，檢查間隔本身可調）。所以單一實例回 `ok` 不會結掉別台的異常；全部在線實例都正常才結案。
 - `global`：整體狀態＝最新一筆結果。
+- 上面的「最新」「在線」都是**截至某個檢查時間**算的（第 2 步的 R），不是寫入當下；補寫歷史結果時用那筆的時間，所以晚到的舊結果算出的是當時的狀態，不會混進之後的結果（見下面第 2 步）。
 - 事件標題參數帶異常實例數；事件詳細與監控頁列出各實例最新的狀態、數值與時間（從 `Dynamic_HealthCheckResult` 讀，`(Code, CheckedUtc)` 索引）。
 
 **結果怎麼變成事件**：
 
-1. 檢查跑完，先更新記憶體的 `HealthStatusBoard`（singleton，本實例每個檢查的最新狀態、數值、訊息代碼、時間）。
-2. 再開一個交易：**第一句**是對 `Dynamic_HealthCheck` 該列的條件式更新（`LastCheckedUtc`），取得該列的列鎖，讓同一檢查的多個實例在 PostgreSQL 上依序彙總、讀得到彼此已提交的結果；接著寫 `Dynamic_HealthCheckResult` 一列、依上面的規則算出整體狀態、把整體狀態寫回 `Dynamic_HealthCheck` 的最新狀態欄位與下次時間，同一交易裡呼叫 `IncidentRecorder`：整體 `warning`／`critical`／`error` 開或更新事件，整體 `ok` 結案。指紋＝`infra`＋檢查代碼。
-3. 第 2 步寫不進去時，把這次結果放進記憶體的**待補寫佇列** `PendingIncidentWrites`，狀態板照常更新：
-   - 每一筆帶穩定識別碼 `TransitionId`（GUID，產生時決定）、檢查代碼、狀態、數值、訊息代碼、檢查時間、實例 id。
-   - 同一檢查**狀態沒變**的連續結果只更新最後一筆的數值與時間，**狀態有變**才新增一筆；所以「警告→嚴重→正常」會留三筆，不會壓成一筆正常。
+1. 檢查跑完，產生這筆結果的穩定識別碼 `TransitionId`（GUID 的 32 字十六進位；之後重試、補寫、直送都用同一個），先更新記憶體的 `HealthStatusBoard`（singleton，本實例每個檢查的最新狀態、數值、訊息代碼、時間）。
+2. 再開一個交易（彙總交易），依序：
+   - **鎖**：第一句是對 `Dynamic_HealthCheck` 該列的條件式更新 `LastAggregatedUtc = 現在`（只當鎖用，不是狀態），取得該列的列鎖，讓同一檢查的多個實例在 PostgreSQL 上依序彙總、讀得到彼此已提交的結果。
+   - **去重**（持久化的處理標記）：查 `Dynamic_HealthCheckResult` 有沒有這個 `TransitionId`（唯一索引，§17.4）。有就表示這筆已經完整處理過：結果列、事件轉換、站內通知、寄送佇列都是同一交易寫的，有結果列就代表其他也都在；這次什麼都不寫、直接提交，並從佇列移除。新增結果列時萬一撞唯一鍵（`IsUniqueViolation`，另一台或上一輪剛寫入）同樣當成已處理。所以「提交成功但回應斷線」後重播，不會多一筆結果、多算次數或多發通知。
+   - **歷史結果**：結果列一律新增，不論比現有結果新或舊。
+   - **彙總**：以這筆的檢查時間 R 為基準，只看 `CheckedUtc <= R` 的結果：`instance` 範圍取各實例截至 R 的最新一筆，R 往前三個檢查間隔內有結果的實例才算在線；`global` 範圍取截至 R 的最新一筆。算出「R 時的整體狀態」。
+   - **目前投影**（`Dynamic_HealthCheck` 的 `LastCheckedUtc`、`LastStatus`、`LastValue`、`LastMessageCode`，總覽與狀態卡讀這些）：只有 R 不早於投影現有的 `LastCheckedUtc`（或還沒有值）時，才以 R 時的整體狀態覆寫、`LastCheckedUtc = R`；R 較早就是歷史，投影不動，所以晚到的舊結果不會讓總覽退回過去的狀態。`NextDueUtc` 只由排程型檢查的正常執行推進（取較晚者），補寫不動它。
+   - **事件**：同一交易呼叫 `IncidentRecorder`，以 R 時的整體狀態開、更新或結案（`warning`／`critical`／`error` 開或更新，`ok` 結案），轉換時間用 R。事件已有比 R 更晚的轉換（`LastSeenUtc` 或 `ResolvedUtc` 較晚，例如別台實例已寫入較新的結果）時，只寫結果列、不改事件，避免把歷史當成新的回歸。指紋＝`infra`＋檢查代碼。
+3. 第 2 步寫不進去、或提交結果不明（提交時丟例外）時，把這次結果放進記憶體的**待補寫佇列** `PendingIncidentWrites`，狀態板照常更新：
+   - 每一筆帶第 1 步的 `TransitionId`、檢查代碼、狀態、數值、訊息代碼、檢查時間、實例 id。
+   - 同一檢查**狀態沒變**的連續結果只更新最後一筆的數值與時間，**狀態有變**才新增一筆；所以「警告→嚴重→正常」會留三筆，不會壓成一筆正常。已經嘗試寫過一次的那一筆不再合併（它可能其實已提交，重播會被去重略過，合併進去的新數值會跟著被略過），之後同狀態的結果另開一筆。
    - 上限 500 筆（技術限制），滿了丟最舊的一筆、累加指標 `formwright.incident.pendingDropped`，監控頁的頁首提示帶遺失筆數。
-   - 補寫：資料庫恢復可寫後，依檢查時間先後**逐筆**走第 2 步（每筆一個交易，彙總以該筆的檢查時間為基準），提交後才從佇列移除；中途失敗就停在那一筆，下一輪從那一筆接著補。所以結果列、事件的開啟、升級、結案依原本順序補齊。事件的轉換時間用該筆的檢查時間；事件已有比該筆更晚的轉換（`LastSeenUtc` 或 `ResolvedUtc` 較晚，例如別台實例已寫入較新的結果）時，該筆只補結果列、不改事件，避免把歷史當成新的回歸。
+   - 補寫：資料庫恢復可寫後，依檢查時間先後**逐筆**走第 2 步（每筆一個交易；去重、彙總基準、投影與事件的規則都照第 2 步），提交後才從佇列移除；中途失敗或提交結果不明就停在那一筆，下一輪從那一筆接著補（已提交的會被去重略過）。所以結果列、事件的開啟、升級、結案依原本順序補齊，總覽只在補到比現有投影新的那幾筆時才跟著變。
    - 告警信走直送（§17.2.6）；補寫產生寄送佇列列時，以 `TransitionId` 對照直送紀錄，避免重寄。
 4. 手動「立即檢查」：管理員在監控頁按，API 同步跑該檢查（最長 60 秒）並回結果；同一檢查 60 秒內只能按一次（技術限制）。
 
@@ -1310,25 +1321,37 @@ O2 做六件事：
 
 **寄送**（O2-T9、O2-T11）：
 
-- 事件轉換時在同一個交易寫一列 `Dynamic_AlertOutbox`（`pending`），主旨與內文在這時以固定語系組好存成文字快照（O2-U14），之後不再依事件現況改寫。
+- 事件轉換時在同一個交易寫一列 `Dynamic_AlertOutbox`（`pending`），主旨與內文在這時以通道設定的信件語系 `MailLocale` 組好存成文字快照（O2-U14），之後不再依事件現況、也不依之後改過的語系改寫。
 - `ops.monitor` 每輪先送佇列，每封信分三步，**寄 SMTP 的那一步不在任何交易裡**（不准持全庫寫入鎖等網路）：
-  1. **領取**（短交易、帶 `JobLeaseFence`）：`UPDATE ... SET Status = 'sending', ClaimedBy = 實例 id＋本輪執行 id, ClaimedUntilUtc = 現在＋2 分鐘, Attempts = Attempts + 1 WHERE Id = ? AND ((Status = 'pending' AND NextAttemptUtc <= 現在) OR (Status = 'sending' AND ClaimedUntilUtc < 現在))`；影響 0 列就是別人領走了，跳過。依建立順序一次領一封。
+  1. **領取**（短交易、帶 `JobLeaseFence`），一個交易依序：
+     - 第一句 `UPDATE Dynamic_AlertChannel SET LastClaimUtc = 現在 WHERE Kind = 'smtp'`，取得通道列的列鎖：同一通道的領取、額度計算、摘要化（見下）都在這把鎖後面依序執行，PostgreSQL 無鎖模式下也一樣。
+     - 額度：同一交易數最近 60 分鐘內 `SentUtc` 的 `sent`，加上目前全部 `sending`（含領取已過期、還沒被重領的）；摘要信不算。
+     - 未達 `ops.alertEmailMaxPerHour`，或這列是摘要信、或是要重領的過期 `sending` 列（已算在額度裡）：`UPDATE ... SET Status = 'sending', ClaimedBy = 實例 id＋本輪執行 id, ClaimedUntilUtc = 現在＋2 分鐘, Attempts = Attempts + 1 WHERE Id = ? AND ((Status = 'pending' AND NextAttemptUtc <= 現在) OR (Status = 'sending' AND ClaimedUntilUtc < 現在))`；影響 0 列就是別人領走了，跳過。依建立順序一次領一封。
+     - 已達上限：不領取，同一交易做摘要化（見「節流」）。
+     - 額度數到的和領取寫下的在同一把列鎖內，兩個寄送者不會都看到「還差一封」而一起領走，超額寄送不會發生。
   2. **寄送**（交易外）：MailKit 寄出，逾時 30 秒。
   3. **記結果**（短交易）：`UPDATE ... WHERE Id = ? AND ClaimedBy = 我`，成功記 `sent`、`SentUtc`；失敗依下一條記 `pending` 與 `NextAttemptUtc`，或 `failed`；同時清 `ClaimedBy`、`ClaimedUntilUtc`。影響 0 列表示領取已過期、被別人接手，只記 Warning（這封可能重複寄出）。
-- 程式在第 2、3 步之間當掉，列停在 `sending`，2 分鐘後領取過期，下一輪重領重寄。所以寄送語意是**至少一次**：SMTP 已收下但結果沒記到時會重複寄一封；不會漏寄（寫死，§17.9）。
+- 程式在第 2、3 步之間當掉，列停在 `sending`，2 分鐘後領取過期，下一輪重領重寄。所以**還在重試中的佇列列**是至少一次交付：SMTP 已收下但結果沒記到時會重複寄一封；列還在佇列、還沒用完重試前不會漏寄（寫死，§17.9）。「至少一次」只限這個範圍，下列情況**不寄或不保證寄到**：
+  - 重試耗盡：第 5 次仍失敗標 `failed`，不再寄；改由 `channel.smtp` 事件在站內告知（見下一條）。
+  - 略過：通道停用或沒設定標 `skipped`；補寫時已過時的開啟、升級信標 `skipped`（見下面「資料庫寫不進時的直送」最後一條）。
+  - 併入摘要：`digested` 的列不單獨寄，只在摘要信列一行或算進「另有 M 則」；摘要信本身照一般信的規則重試。
+  - 記憶體遺失：直送佇列與待補寫佇列只在記憶體，程式重啟或佇列滿（直送 20 封、待補寫 500 筆）就丟掉；待補寫的轉換被丟掉時，對應的佇列列也不會產生（監控頁頁首顯示 `pendingDropped`）。
+  - 收件端：SMTP 伺服器收下之後的轉寄、退信、垃圾信匣不在產品內。
 - 重試：失敗後 1、5、15、60 分鐘再試，最多 5 次（技術限制）；第 5 次仍失敗標「失敗」，開或更新 `channel.smtp` 事件（站內通知管理員）。之後任何一封寄成功就把該事件結案（`recovered`）。
-- 節流：最近 60 分鐘 `sent` 加 `sending` 的數量達 `ops.alertEmailMaxPerHour`（出廠 20）就不再逐封寄，把剩下到期的列標成 `digested`。
+- 節流：領取時數到的額度（見上）達 `ops.alertEmailMaxPerHour`（出廠 20）就不再逐封寄，改做**摘要化**，和額度計算在同一個交易、同一把通道列鎖之後：`UPDATE Dynamic_AlertOutbox SET Status = 'digested' WHERE Channel = 'smtp' AND Status = 'pending' AND ClaimedBy IS NULL AND NextAttemptUtc <= 現在 AND Transition <> 'digest'`。只動**未領取的 `pending`**：別的寄送者已領走（`sending`）的列不會被摘要化，正在寄的信不會同時出現在摘要裡；重試中而還沒到期的列下一輪再判斷。
 - 摘要信：
-  - 每個整點後的第一輪，若上一個整點小時內有 `digested` 而還沒掛到摘要的列，就新增一列 `Transition = digest` 的佇列列，把那些列的 `DigestOutboxId` 設成它（同一交易）。一個小時一封，摘要信本身不受每小時上限限制。
-  - 內容：「過去一小時另有 N 則告警」，依嚴重度再依時間排列，每則列事件編號、類別與標題（代碼＋參數組成），最多列 50 則，其餘寫「另有 M 則，請看監控頁」。
+  - 每個整點後的第一輪（同樣先取通道列鎖），若這個整點之後還沒有摘要信、而有 `digested` 且 `DigestOutboxId` 為空的列，就新增一列 `Transition = digest` 的佇列列，並以 `UPDATE ... SET DigestOutboxId = 新列 WHERE Status = 'digested' AND DigestOutboxId IS NULL` 把那些列掛上去，內容依掛上的列組成，三件事同一交易。有列鎖，兩台不會各開一封；一個小時一封，摘要信本身不受每小時上限限制。
+  - 內容：「過去一小時另有 N 則告警」，依嚴重度再依時間排列，每則一行：事件編號、類別與標題（代碼＋參數組成）。
+  - **長度預算**（`Body` 上限 4000 字）：開頭一段最多 200 字、結尾「另有 M 則，請看監控頁」預留 200 字；每則一行最多 70 字，標題超過就截斷加「…」。依序加入，最多 50 則，下一行會讓內文超過 4000 − 200 字就停；M＝掛上的總數－已列出的則數，M 為 0 時不寫結尾。50 × 70 加頭尾約 3900 字，正常情況列滿 50 則；預算規則是保險（例如語系換成字比較長的翻譯）。主旨固定格式「[Formwright] 過去一小時另有 N 則告警」，不會超過 200 字。
+  - 一般信同理：主旨超過 200 字時截斷標題並加「…」；內文的標題最多 500 字，其餘欄位都是短欄位，總長不會超過 4000 字（組字後仍超過就截斷並在結尾加「…（內容過長，請看監控頁）」）。
   - 重試、領取、失敗與一般信相同。
   - 清理：`digested` 的列要等它的摘要信已是 `sent`、`failed` 或 `skipped` 才依保留天數清；摘要信還沒寄完時來源列不清（§17.2.8）。
-- 信件內容：主旨「[Formwright][嚴重] <標題>（#事件編號）」；內文：類別、處理者、次數、首次與最近時間、版本、事件連結。標題只用標題代碼與白名單參數（§17.2.2），不放 `NormalizedMessage`、原始訊息、stack、記錄值（C2 的精神：信也是送出產品之外）。連結的網址用部署設定 `Ops:PublicUrl`，沒設就不放連結。語系先固定繁中，p3 有系統預設語系後改用它（O2-U14）。
+- 信件內容：主旨「[Formwright][嚴重] <標題>（#事件編號）」；內文：類別、處理者、次數、首次與最近時間、版本、事件連結。標題只用標題代碼與白名單參數（§17.2.2），不放 `NormalizedMessage`、原始訊息、stack、記錄值（C2 的精神：信也是送出產品之外）。連結的網址用部署設定 `Ops:PublicUrl`，沒設就不放連結。語系用通道設定的 `MailLocale`（`zh-TW`、`en-US`、`th`、`vi` 之一）；沒設＝出廠，O2 的出廠是繁中，p3 有系統預設語系後出廠改成跟系統預設語系（O2-U14）。改語系只影響之後寫入佇列的信。
 - 通道停用（`Enabled` 為否）或沒設定：佇列照寫、標「略過」，監控頁的通道區塊顯示「未設定，告警只在站內」。
 
 **測試信**：
 
-- `POST .../channels/smtp/test`：不經佇列、立刻用**已儲存**的設定寄一封到清單上的全部收件人（不能臨時填地址，避免被當成寄信工具；O2-U1），30 秒逾時。
+- `POST .../channels/smtp/test`：不經佇列、立刻用**已儲存**的設定寄一封到清單上的全部收件人（不能臨時填地址，避免被當成寄信工具；O2-U1），30 秒逾時；內容用通道的信件語系，讓管理員確認收件人看得懂。
 - 成功回寄到哪些地址；失敗回 422 與失敗階段（連線、TLS、認證、寄送）和伺服器回應碼，不回例外全文。
 - 同一管理員 30 秒內只能寄一次（技術限制）；寫稽核 `ops.channel.test`。
 
@@ -1336,7 +1359,7 @@ O2 做六件事：
 
 - 佇列寫不進去時（看門狗偵測到唯讀、空間滿、連不上），改走記憶體直送佇列：上限 20 封（技術限制）、同一個 `TransitionId` 只寄一次、照樣重試（1、5、15、60 分鐘、最多 5 次）與每小時上限（以本實例記憶體計數，超過的不寄、只記 Warning）。
 - **執行者是看門狗**，不是 `ops.monitor`：資料庫不可寫時排程器搶不到租約（租約本身是 `UPDATE`），`ops.monitor` 根本不會跑。看門狗除了檢查迴圈，另有一條寄送迴圈（同一個 hosted service 的第二個背景迴圈），每 60 秒送直送佇列裡到期的信，交易外、單封逾時 30 秒，寄送卡住不會拖住檢查。多實例時每個實例各自直送自己偵測到的轉換，同一故障可能每台各寄一封（已知限制，§17.9）。
-- 通道設定讀不到時用記憶體裡最後一次成功讀到的設定（密碼仍是加密字串，寄送時才解）；啟動後從沒讀到過就寄不出去，只剩 log 與 `/api/health/ready`。
+- 通道設定讀不到時用記憶體裡最後一次成功讀到的設定（密碼仍是加密字串，寄送時才解；信件語系也用那份設定的）；啟動後從沒讀到過就寄不出去，只剩 log 與 `/api/health/ready`。
 - 資料庫恢復可寫後，`PendingIncidentWrites` 補寫時會再產生佇列列：直送已寄出的 `TransitionId` 直接記成 `sentDirect`（留紀錄、不再寄）；還沒寄出的照常記 `pending`；但同一檢查在補寫佇列後面已經結案的，前面的開啟、升級信已經過時，記 `skipped`（站內通知照補，§17.2.5）。直送紀錄只在本實例記憶體，所以這個比對只對本實例直送的轉換有效（已知限制）。
 
 #### 17.2.7 規則失控自動暫停
@@ -1353,20 +1376,26 @@ O2 做六件事：
 
 - `TaskRuleStage`（交易內）每次處理一個模組，先一次查出這些規則在 `Dynamic_RuleHealth` 的列（通常是空的）：
   - 已暫停的規則略過不跑，並把 `SkippedWhilePaused` 加一（條件式更新，跟業務寫入同交易）。
-  - 有連續失敗紀錄、這次跑成功的規則，把計數歸零並記 `StreakResetUtc = 現在`（條件式更新 `WHERE ConsecutiveFailures > 0`，同交易；業務交易後來回滾時歸零也一起回滾，下次成功再歸零）。`Dynamic_RuleFailure` 的舊列不在這裡刪，由下一次失敗時清（見下），成功的路徑只多一句條件式更新。
+  - 這次跑成功、而且需要留下 reset 的規則（條件見下面「順序與 reset 協定」），記 `StreakResetUtc = 評估時間`（同交易；業務交易後來回滾時一起回滾，下次成功再記）。`Dynamic_RuleFailure` 的舊列不在這裡刪，由下一次失敗時清（見下），成功的路徑最多多一句寫入。
 - `ManualTaskRules`（手動套用）照同樣規則：已暫停的不出現在「套用任務範本」清單；套用失敗也要加上 `RuleFailureTag.Mark`（現在沒有）。
 - 失敗計數在新的 `RuleFailureBehavior`：註冊在 `ValidationBehavior` 之後、`ApprovalAlertBehavior` 之前（兩者都在交易之外）。
   - 只處理最外層請求（`ITransactionManager.IsActive` 為真表示巢狀，跳過，比照 `ApprovalAlertBehavior`）。
   - 例外帶有 `taskRule` 標記、**而且歸屬於規則本身**時：另開 DI scope，送交易型請求 `RecordRuleFailureRequest(kind, ruleId, errorCode, fingerprint, requestId)`，然後**原樣丟出原例外**；這筆寫入失敗只記 Error log，不改變回給使用者的錯誤（§5.4）。
-  - **不歸屬規則的例外不計數**：`RuleFailureTag.Mark` 會標記穿過規則迴圈的**任何**例外，包含取消與資料庫故障，這些不是規則失控，計進去會讓一次資料庫唯讀把所有任務規則都暫停。`RuleFailureClassifier.IsAttributable(e)`（Application，一處）排除：`OperationCanceledException`（含 `TaskCanceledException`）、`DbUpdateConcurrencyException`、`FrozenFieldException`、`IDatabaseErrors` 判為忙碌或衝突、查詢中斷、唯讀、空間滿、連不上、唯一鍵衝突的例外。原則是「只計會變成 500 的例外」，所以排除清單與 WebAPI 例外處理器鏈（`ConcurrencyExceptionHandler`、`FrozenFieldExceptionHandler`、`DatabaseBusyExceptionHandler`、`DatabaseUnwritableExceptionHandler`）一致，反射測試比對兩邊（E13）。被排除的例外照原路徑回應、記 log，不碰 `Dynamic_RuleHealth`。
+  - **不歸屬規則的例外不計數**：`RuleFailureTag.Mark` 會標記穿過規則迴圈的**任何**例外，包含取消與資料庫故障，這些不是規則失控，計進去會讓一次資料庫唯讀把所有任務規則都暫停。`RuleFailureClassifier.IsAttributable(e)`（Application，一處）排除：`OperationCanceledException`（含 `TaskCanceledException`）、`DbUpdateConcurrencyException`、`FrozenFieldException`、`IDatabaseErrors` 判為忙碌或衝突、查詢中斷、唯讀、空間滿、連不上、唯一鍵衝突的例外。原則是「只計規則本身的錯」：被 WebAPI 例外處理器鏈（`ConcurrencyExceptionHandler`、`FrozenFieldExceptionHandler`、`DatabaseBusyExceptionHandler`、`DatabaseUnwritableExceptionHandler`）轉成 409、503 的一律不計；少數仍回 500 的基礎設施或並行例外（非用戶端中斷的取消、查詢中斷、唯一鍵衝突）也不計。判準以 §17.8 的 **E13 例外矩陣**為準：每列寫明例外、回應碼與歸屬，測試把每列的真實例外丟進 WebAPI 測試主機的處理器鏈，同時斷言回應碼與 `IsAttributable` 的結果。只比對兩邊的型別清單不夠：處理器內部還有條件（例如 `UnhandledExceptionHandler` 只在 `RequestAborted` 時才把取消當成用戶端中斷、其他取消照樣 500；`DatabaseBusyExceptionHandler` 經 `DatabaseBusy.Is` 委派給 `IsBusyOrConflict`，日後任一邊改寫就可能分歧），矩陣逐列驗才抓得到兩邊判斷不一致。被排除的例外照原路徑回應、記 log，不碰 `Dynamic_RuleHealth`。
   - 結果是失敗、而 `RuleFailureNote` 有已知錯誤碼時：開或更新客戶設定事件（§17.2.2），不計數、不暫停。
 - 時間窗的語意（O2-U12，照 C3 字面）：**滑動窗口**。每次失敗時往回看 `ops.rulePauseWindowMinutes`，這段時間內、最近一次成功之後的失敗達 `ops.rulePauseConsecutiveFailures` 次就暫停。例：門檻 5 次、窗口 60 分鐘，在第 0、59、61、62、63、64 分鐘各失敗一次、中間沒有成功，第 64 分鐘那次往回 60 分鐘有 59、61、62、63、64 五次，暫停（初稿的「從第一次失敗起算、過窗口就重來」在這裡不會暫停，等於限縮了 C3，已改掉）。
-- `RecordRuleFailureRequest` 的寫法（一個交易，兩種資料庫同一份，PostgreSQL 上並行也正確）：
-  1. `UPDATE Dynamic_RuleHealth SET ConsecutiveFailures = ConsecutiveFailures + 1, LastFailureUtc = 現在, LastErrorCode = ?, LastRequestId = ? WHERE 主鍵`；影響 0 列就新增一列（計數 1），撞主鍵（別人剛新增）就重做第 1 步。這一句放在最前面，是為了先取得該規則那一列的列鎖：同一規則的並行失敗在 PostgreSQL 上會在這裡排隊，後到的交易讀得到先到者已提交的失敗列。
-  2. 新增一列 `Dynamic_RuleFailure(RuleKind, RuleId, FailedUtc = 現在, RequestId)`。
-  3. 清掉這條規則已經不會再用到的失敗列：`FailedUtc < 現在 − 窗口`，或 `FailedUtc <= StreakResetUtc`（最近一次成功之前）。
-  4. 計數：這條規則 `FailedUtc >= 現在 − 窗口` 且晚於 `StreakResetUtc` 的列數。
-  5. 列數達門檻：`UPDATE ... SET PausedUtc = 現在, LastPausedUtc = 現在, PauseCount = PauseCount + 1, SkippedWhilePaused = 0 WHERE 主鍵 AND PausedUtc IS NULL`；影響 1 列的那個交易就是「這次觸發暫停」的人，在同一交易寫暫停事件、站內通知、寄送佇列、稽核 `taskRule.autoPause`（行為者種類「系統」）。
+- **順序與 reset 協定**（失敗在業務交易回滾之後才另開交易補記，中間可能夾著同一規則的成功，所以不能拿補記的時間排順序）：
+  - **順序依據＝規則的評估時間**：`TaskRuleStage` 每評估一條規則前取一次 `TimeProvider.GetUtcNow()`（UTC，不是 `IBusinessTime` 的牆上時間）。失敗時 `RuleFailureTag.Mark` 多寫一個 `formwright.ruleEvaluatedUtc` 到例外的 `Data`，`RecordRuleFailureRequest` 用它當 `FailedUtc`，**不用補記當下的時間**；成功時用它當 `StreakResetUtc`。兩者比的是同一種時間，同一時間點的失敗算在 reset 之前（`FailedUtc <= StreakResetUtc` 不算）。
+  - **在途失敗**：本實例的 singleton `RuleFailureInFlight` 記「已失敗、還沒補記」的規則與評估時間。`TaskRuleStage` 的 catch（業務交易回滾之前）登記，`RuleFailureBehavior` 補記完成或判定不歸屬時移除（`finally`）；沒被移除的 5 分鐘後過期（技術限制，§17.9）。只在記憶體，不寫資料庫。
+  - **成功要不要寫 reset**：(a) 有健康列且 `ConsecutiveFailures > 0`；或 (b) `RuleFailureInFlight` 有這條規則、評估時間早於這次成功的失敗。符合 (a) 或 (b) 才寫，其他成功不碰資料庫，成功的路徑仍然通常是零寫入。
+  - **reset 的寫法**：有列時 `UPDATE ... SET StreakResetUtc = 評估時間, ConsecutiveFailures = CASE WHEN LastFailureUtc IS NULL OR LastFailureUtc <= 評估時間 THEN 0 ELSE ConsecutiveFailures END WHERE 主鍵 AND (StreakResetUtc IS NULL OR StreakResetUtc < 評估時間)`，只往後推、不倒退；**還沒有列（首次建列）**而符合 (b) 時新增一列（計數 0、`StreakResetUtc = 評估時間`），撞主鍵就改走上面的 `UPDATE`。所以規則第一次失敗的補記還沒到、中間先來一次成功，那次成功也會留下 reset，晚到的失敗不會算進新的一串。
+  - 跨實例：失敗在 A 台、成功在 B 台，B 看不到 A 的在途失敗；只有成功剛好落在 A 的「回滾到補記提交」之間（通常 1 秒內，最長是寫入閘門的排隊上限）而且規則原本沒有連續失敗時，會多算一次失敗。已知限制（§17.9），最多讓暫停提早一次失敗發生。
+- `RecordRuleFailureRequest` 的寫法（一個交易，兩種資料庫同一份，PostgreSQL 上並行也正確；下面的 F 是這次失敗的評估時間）：
+  1. `UPDATE Dynamic_RuleHealth SET ConsecutiveFailures = ConsecutiveFailures + (CASE WHEN StreakResetUtc IS NULL OR F > StreakResetUtc THEN 1 ELSE 0 END), LastFailureUtc = 較晚者(LastFailureUtc, F), LastErrorCode = ?, LastRequestId = ? WHERE 主鍵`；影響 0 列就新增一列（計數 1、`LastFailureUtc = F`），撞主鍵（別人剛新增）就重做第 1 步。這一句放在最前面，是為了先取得該規則那一列的列鎖：同一規則的並行失敗與成功的 reset 在 PostgreSQL 上會在這裡排隊，後到的交易讀得到先到者已提交的失敗列與 `StreakResetUtc`。`LastErrorCode`、`LastRequestId` 只在 F 是目前最晚的失敗時才換。
+  2. F 晚於 `StreakResetUtc`（或它是 null）才新增一列 `Dynamic_RuleFailure(RuleKind, RuleId, FailedUtc = F, RequestId)`；F 不晚於它，表示這次失敗發生在一次已記下的成功之前，只更新第 1 步的欄位、不進窗口計數，到此結束。
+  3. 清掉這條規則已經不會再用到的失敗列：`FailedUtc < F − 窗口`，或 `FailedUtc <= StreakResetUtc`（最近一次成功之前）。
+  4. 計數：這條規則 `F − 窗口 <= FailedUtc <= F` 且晚於 `StreakResetUtc` 的列數。
+  5. 列數達門檻：`UPDATE ... SET PausedUtc = 現在, LastPausedUtc = 現在, PauseCount = PauseCount + 1, SkippedWhilePaused = 0 WHERE 主鍵 AND PausedUtc IS NULL`（暫停時間用補記當下，那是暫停真正生效的時間）；影響 1 列的那個交易就是「這次觸發暫停」的人，在同一交易寫暫停事件、站內通知、寄送佇列、稽核 `taskRule.autoPause`（行為者種類「系統」）。
 - `ConsecutiveFailures` 是「最近一次成功之後的失敗總數」（不看窗口），只給畫面顯示；暫停與否只看第 4 步的窗口內列數。
 
 **暫停與恢復的行為**：
@@ -1376,7 +1405,7 @@ O2 做六件事：
   - 權限＝能編輯這條規則的人（設計器編輯權＋共用主檔設計權，與 `UpdateTaskRuleRequest` 相同；O2-U6）。
   - 恢復＝清 `PausedUtc`、記 `ResumedUtc`、計數歸零（`SkippedWhilePaused` 與 `LastPausedUtc` 留到下次暫停，數字也寫進稽核摘要），暫停事件結案（`ruleResumed`），寫稽核 `taskRule.resume`。
   - 恢復也刪掉這條規則的 `Dynamic_RuleFailure` 列，並記 `StreakResetUtc = 現在`，暫停前的失敗不會留到恢復後再算。
-  - 恢復後規則立即對下一次存檔生效。暫停期間存過的記錄**不自動補產任務**（O2-U7），各觸發方式恢復後的效果不同（觸發判斷見 `TaskRuleEvaluator.Triggers`）：
+  - 恢復後規則立即對下一次存檔生效。暫停期間存過的記錄**不自動補產任務**（O2-U7b），各觸發方式恢復後的效果不同（觸發判斷見 `TaskRuleEvaluator.Triggers`）：
 
 | 觸發方式 | 暫停期間發生的事 | 恢復後 | 要補怎麼補 |
 |---|---|---|---|
@@ -1391,11 +1420,11 @@ O2 做六件事：
 - 刪除規則：同交易刪掉它的 `Dynamic_RuleHealth` 列，暫停事件結案（`ruleDeleted`）。
 - 套件匯出不帶暫停狀態；應用程式關閉再開啟不影響暫停狀態。
 
-**使用者看到什麼**（O2-U7）：
+**使用者看到什麼**（O2-U7a）：
 
 | 誰 | 看到 |
 |---|---|
-| 存檔的一般使用者 | 失敗那幾次：原本的「系統發生錯誤」加錯誤代碼（O1）。暫停後：存檔成功，沒有任何提示（O2-U7） |
+| 存檔的一般使用者 | 失敗那幾次：原本的「系統發生錯誤」加錯誤代碼（O1）。暫停後：存檔成功，沒有任何提示（O2-U7a） |
 | 規則最後修改者＋系統管理員（出廠收件人） | 暫停當下一則站內通知 `opsRulePaused`；嚴重事件沒人確認時每 `ops.incidentRenotifyHours` 再提醒 |
 | 系統管理員 | 監控頁兩件事件：例外本身（產品缺陷）與暫停（客戶設定）；告警信只寄前者（客戶設定類出廠不寄信） |
 | 設計者 | 任務規則分頁的標籤與「恢復」按鈕 |
@@ -1472,7 +1501,7 @@ O2 做六件事：
 1. **總覽**：最上面一列狀態卡：整體（取最糟的檢查）、資料庫可寫、未結事件（嚴重／警告數）、告警通道狀態、版本與版別、資料庫種類。下面是「需要處理」清單（未結且嚴重或警告的前 10 件，連到事件詳細）與排程器表（讀 ops info 的 jobs）。狀態板有只在記憶體的內容時顯示頁首提示（§17.2.9），有待補寫遺失時一併顯示筆數。API 回 503 `databaseUnavailable` 時整頁顯示「資料庫目前無法連線，監控頁暫時不能用；請看伺服器 log 或告警信」。
 2. **事件**：篩選（狀態、類別、嚴重度）＋清單；每列：嚴重度圖示、標題、類別與處理者、回歸標記、次數、最近時間、動作（確認、結案；不能手動結案的不出現按鈕）。點開是詳細：全部欄位、狀態歷程（從稽核讀這件事件的確認與結案）、樣本（原文與 stack 用等寬字型、可捲動，預設摺疊）。
 3. **健康檢查**：每個檢查一張卡：狀態、數值（依單位格式化，萬分比顯示成百分比）、上次與下次時間、「立即檢查」；彙總範圍是 `instance` 的另列各實例的最新狀態（只有一個實例時不列）；展開看趨勢（最近 24 小時／7 天的數值折線，用既有 echarts，比照 `ReportChart.vue` 的載入方式）與設定（開關、間隔、警告、嚴重；顯示出廠值與允許範圍，留空＝出廠值）。
-4. **告警通道**：SMTP 表單（啟用、主機、埠、加密方式、帳號、密碼〔顯示「已設定」，留空不變，另有「清除」〕、寄件地址與名稱、收件信箱清單）＋「寄測試信」＋最近狀態（最近成功、最近失敗與原因、連續失敗次數）。Demo 站整頁唯讀並說明原因。
+4. **告警通道**：SMTP 表單（啟用、主機、埠、加密方式、帳號、密碼〔顯示「已設定」，留空不變，另有「清除」〕、寄件地址與名稱、收件信箱清單、信件語系〔四語下拉，留空＝出廠，顯示出廠是哪一種〕）＋「寄測試信」＋最近狀態（最近成功、最近失敗與原因、連續失敗次數）。Demo 站整頁唯讀並說明原因。
 
 **稽核頁** `/system/audit`：篩選列（時間區間、行為者、動作分組或動作、來源管道、結果）＋清單（時間、行為者、動作標籤、目標、結果、來源管道）；點開是詳細抽屜：全部欄位與摘要（差異以「欄位：舊值 → 新值」列出，其餘結構化摘要縮排顯示）。無限捲動（keyset）。
 
@@ -1594,8 +1623,9 @@ O2 做六件事：
 | ModifiedUserId | string(50)，可空 | |
 | ModifiedUtc | DateTime，可空 | |
 | LastProbeUtc | DateTime，可空 | 只有 `database.writable` 用（寫入探測寫這欄） |
-| LastCheckedUtc | DateTime，可空 | 彙總交易的第一句更新它，取得列鎖（§17.2.4） |
-| LastStatus | string(20)，可空 | 整體狀態（多實例彙總後，§17.2.4）；`LastValue`、`LastMessageCode` 取最糟那個實例的 |
+| LastAggregatedUtc | DateTime，可空 | 彙總交易的第一句更新它，取得列鎖（§17.2.4）；只當鎖用，不顯示 |
+| LastCheckedUtc | DateTime，可空 | 目前投影的基準時間：投影來自哪個檢查時間的整體狀態；只往後推，補寫較舊的結果不動它（§17.2.4 第 2 步） |
+| LastStatus | string(20)，可空 | 目前投影的整體狀態（多實例彙總後，§17.2.4）；`LastValue`、`LastMessageCode` 取最糟那個實例的 |
 | LastValue | long，可空 | |
 | LastMessageCode | string(50)，可空 | |
 | NextDueUtc | DateTime | 排程型檢查的下次時間（看門狗型只在記憶體排程，這欄僅供顯示） |
@@ -1612,8 +1642,9 @@ O2 做六件事：
 | MessageCode | string(50)，可空 | |
 | DurationMs | int | |
 | InstanceId | string(100) | 哪個實例跑的 |
+| TransitionId | string(32) | 檢查跑完時產生的穩定識別碼（§17.2.4 第 1 步）；彙總交易的持久化處理標記，有這一列就代表同交易的事件轉換、通知、寄送佇列都已寫入 |
 
-- 索引：`(Code, CheckedUtc)`（趨勢）；`CheckedUtc`（清理）。
+- 索引：`TransitionId` **唯一**（補寫重播的去重；每列都有值，不是可空欄位上的唯一索引）；`(Code, CheckedUtc)`（趨勢與「截至 R 的最新一筆」）；`(Code, InstanceId, CheckedUtc)`（各實例截至 R 的最新一筆）；`CheckedUtc`（清理）。
 - 量：七個檢查依出廠間隔一天約 2,000 列（`database.writable` 每分鐘佔大半），30 天約 6 萬列。
 - 保留：`ops.healthResultRetentionDays`（出廠 30）。
 
@@ -1624,8 +1655,8 @@ O2 做六件事：
 | RuleKind | string(20) | 主鍵之一；O2 只有 `taskRule` |
 | RuleId | long | 主鍵之一；不設外鍵（日後的規則種類在不同表），刪規則時由 handler 一起刪 |
 | ConsecutiveFailures | int | 最近一次成功之後的失敗總數（只顯示用，暫停看 `Dynamic_RuleFailure`） |
-| StreakResetUtc | DateTime，可空 | 最近一次成功或恢復的時間；早於它的失敗不算 |
-| LastFailureUtc | DateTime，可空 | |
+| StreakResetUtc | DateTime，可空 | 最近一次成功的**評估時間**或恢復的時間；不晚於它的失敗不算；只往後推（§17.2.7 順序與 reset 協定） |
+| LastFailureUtc | DateTime，可空 | 已補記的失敗裡最晚的評估時間 |
 | LastErrorCode | string(100)，可空 | 例外型別短名或錯誤碼（不存訊息文字，§17.2.7） |
 | LastRequestId | string(32)，可空 | |
 | PausedUtc | DateTime，可空 | 非空＝系統暫停中 |
@@ -1642,7 +1673,7 @@ O2 做六件事：
 | Id | long，自動編號主鍵 | |
 | RuleKind | string(20) | |
 | RuleId | long | 不設外鍵（同 `Dynamic_RuleHealth`） |
-| FailedUtc | DateTime | |
+| FailedUtc | DateTime | 失敗的規則**評估時間**，不是補記時間（§17.2.7） |
 | RequestId | string(32)，可空 | |
 
 - 索引：`(RuleKind, RuleId, FailedUtc)`（計數與清理）；`FailedUtc`（`ops.upkeep` 清殘留）。
@@ -1662,6 +1693,8 @@ O2 做六件事：
 | FromAddress | string(255)，可空 | |
 | FromName | string(100)，可空 | |
 | ToAddresses | string(2000)，可空 | 逗號分隔、1–20 個、應用層驗格式 |
+| MailLocale | string(10)，可空 | 告警信、摘要信、測試信的語系：`zh-TW`、`en-US`、`th`、`vi`；null＝出廠（O2 是繁中，p3 後跟系統預設語系；O2-U14） |
+| LastClaimUtc | DateTime，可空 | 寄送佇列領取與摘要化交易的第一句更新它，取得通道列鎖（§17.2.6）；只當鎖用 |
 | LastSuccessUtc、LastFailureUtc | DateTime，可空 | |
 | LastError | string(500)，可空 | 階段＋伺服器回應碼，不含例外全文 |
 | ConsecutiveFailures | int | |
@@ -1676,9 +1709,9 @@ O2 做六件事：
 | Channel | string(20) | `smtp` |
 | IncidentId | long，可空 | 摘要信為 null；不設外鍵（事件清掉後佇列列仍可留到自己的保留天數） |
 | Transition | string(20) | `opened`、`regressed`、`escalated`、`renotify`、`occurred`（安全類每次異動）、`digest` |
-| TransitionId | string(32)，可空 | 補寫健康檢查轉換時帶的穩定識別碼（§17.2.4），用來對照直送紀錄；其他為 null |
-| Subject | string(200) | 寫入時以固定語系組好的快照 |
-| Body | string(4000) | 同上 |
+| TransitionId | string(32)，可空 | 健康檢查轉換的穩定識別碼（＝`Dynamic_HealthCheckResult.TransitionId`，§17.2.4），用來對照直送紀錄；其他來源為 null。去重靠結果表的唯一索引（同交易），這欄不設唯一 |
+| Subject | string(200) | 寫入時以通道的信件語系組好的快照（O2-U14） |
+| Body | string(4000) | 同上；長度預算與截斷見 §17.2.6 |
 | CreatedUtc | DateTime | |
 | NextAttemptUtc | DateTime | |
 | Attempts | int | 每次領取加一 |
@@ -1788,12 +1821,13 @@ SmtpChannel {
   enabled: boolean; host?: string; port: number; security: 'none'|'startTls'|'sslOnConnect';
   userName?: string; hasPassword: boolean; passwordUnreadable: boolean;
   fromAddress?: string; fromName?: string; toAddresses: string[];
+  mailLocale: Setting<string>;      // 'zh-TW'|'en-US'|'th'|'vi'；isFactory＝沒設（O2-U14）
   lastSuccessUtc?: string; lastFailureUtc?: string; lastError?: string; consecutiveFailures: number;
   editable: boolean;                 // Demo 站為 false
 }
 // PUT system/ops/channels/smtp；password：省略＝不變、""＝清除、其他＝新密碼
 { enabled: boolean; host: string; port: number; security: string; userName?: string; password?: string;
-  fromAddress: string; fromName?: string; toAddresses: string[] }
+  fromAddress: string; fromName?: string; toAddresses: string[]; mailLocale?: string|null /* null＝出廠，省略＝不變 */ }
 // POST system/ops/channels/smtp/test → { sentTo: string[] }
 // GET system/ops/audit?fromUtc&toUtc&actorUserId&action&actionGroup&channel&result&targetKind&targetId&cursor&limit(≤100)
 { items: AuditSummary[]; nextCursor?: string }
@@ -1820,7 +1854,7 @@ failureStreak?: { consecutiveFailures: number; lastFailureUtc: string } | null; 
 
 | HTTP | 代碼 | 時機 |
 |---|---|---|
-| 400 | （欄位驗證） | 間隔或門檻超出範圍、門檻先後不合理、Email 格式、收件信箱 0 或超過 20 個、埠不在 1–65535、時間區間超過 366 天、`limit` 超出 |
+| 400 | （欄位驗證） | 間隔或門檻超出範圍、門檻先後不合理、Email 格式、收件信箱 0 或超過 20 個、埠不在 1–65535、時間區間超過 366 天、`limit` 超出、信件語系不是四語之一 |
 | 400 | `smtpPlaintextAuth` | 加密方式是 `none` 卻填了帳號或密碼（§17.2.6） |
 | 403 | — | 非管理員；Demo 站改通道或寄測試信 |
 | 404 | — | 檢查代碼、事件、稽核列、規則不存在 |
@@ -1889,16 +1923,17 @@ O2 在 pg0 之後，合併前兩種資料庫都要驗（使用者裁決 §3 第 
   - 事件的新增或更新：先條件式更新（`WHERE Fingerprint = ? AND Status = ?`），影響 0 列再新增；新增撞唯一鍵（`IDatabaseErrors.IsUniqueViolation`）就重來，最多三次。撞鍵是 `SaveChanges` 的錯誤，有 savepoint 保護，交易還能用（pg0 §4）；`ExecuteUpdate` 的錯誤不能在交易內接住後繼續（backend 規則），所以順序是「先 `ExecuteUpdate`、後 `SaveChanges` 新增」。
   - 計數一律 `SET x = x + n`，不讀出來加完再寫回。
   - 規則失敗計數、暫停的條件式更新見 §17.2.7：第一句先更新 `Dynamic_RuleHealth` 那一列取得列鎖，同一規則的並行失敗在 Read Committed 下依序執行、後到者讀得到先到者的失敗列；暫停的 `WHERE PausedUtc IS NULL` 保證兩個並行失敗同時達門檻時只有一個交易影響 1 列，只開一次暫停事件。
-  - 健康檢查的多實例彙總同理：第一句先更新 `Dynamic_HealthCheck` 那一列（§17.2.4）。
+  - 規則失敗與成功的先後以規則的評估時間為準，不以補記時間；成功的 reset 只往後推（`StreakResetUtc < 評估時間` 才更新），首次建列撞主鍵改走更新（§17.2.7 順序與 reset 協定）。
+  - 健康檢查的多實例彙總同理：第一句先更新 `Dynamic_HealthCheck` 那一列的 `LastAggregatedUtc`（§17.2.4）。去重先查 `TransitionId`、新增撞唯一鍵也當已處理（撞鍵是 `SaveChanges` 的錯誤，savepoint 保護）；目前投影的更新帶 `WHERE LastCheckedUtc IS NULL OR LastCheckedUtc <= R`，晚到的舊結果不會倒退投影。
   - 確認與結案用 `expectedStatus` 的條件式更新，影響 0 列回 409。
-  - 寄送佇列：領取、寄送、記結果三步（§17.2.6）。領取是條件式更新把 `Status` 改成 `sending` 並寫 `ClaimedBy` 與期限，影響 0 列就是別人領走；記結果以 `ClaimedBy = 我` 為條件。`ops.monitor` 的租約讓同一時間通常只有一個實例在送，但正確性不靠租約：租約交接的邊界、領取過期後的重領，都由這兩個條件式更新擋住重複領取；寄 SMTP 時不在交易裡，不持全庫寫入鎖。
+  - 寄送佇列：領取、寄送、記結果三步（§17.2.6）。領取交易的第一句先更新 `Dynamic_AlertChannel` 那一列（`LastClaimUtc`）取得通道列鎖，額度計算、領取、摘要化、摘要信掛列都在這把鎖後面，同一通道的寄送者在 Read Committed 下依序執行，不會一起看到「還差一封」而超額；摘要化只動 `Status = 'pending' AND ClaimedBy IS NULL` 的列，不會把別人正在寄的信併進摘要。領取是條件式更新把 `Status` 改成 `sending` 並寫 `ClaimedBy` 與期限，影響 0 列就是別人領走；記結果以 `ClaimedBy = 我` 為條件。`ops.monitor` 的租約讓同一時間通常只有一個實例在送，但正確性不靠租約：租約交接的邊界、領取過期後的重領，都由這兩個條件式更新擋住重複領取；寄 SMTP 時不在交易裡，不持全庫寫入鎖。
   - 這些並行案例的自動測試除了一般的 PostgreSQL 雙跑，另在 pg0 的無鎖模式（`PostgresWriteSettings.Unserialized`，閘門與全庫 advisory lock 都不做事）再跑一次，避免全庫鎖把並行問題蓋掉（§17.8 標「無鎖」的案例）。
 - **交易外的 `ExecuteUpdate`／`ExecuteDelete`**：O2 沒有。清理、計數、狀態更新全部在交易型請求內（經全庫寫入鎖）。唯一的例外是看門狗的寫入探測本身：它也是交易型請求，探測失敗時那個交易直接回滾。
 - **provider 專屬的地方**（交付說明要列出）：`database.integrity` 的 `PRAGMA quick_check`、`PRAGMA foreign_key_check` 與 `database.walSize` 的 WAL 檔路徑，放在 `Persistence` 的 `SqliteDatabaseHealthProbe`；PostgreSQL 的實作 `PostgresDatabaseHealthProbe` 放在 `Persistence.Postgres`（O2 只回「不適用」與產品層檢查）。Application 只看 `IDatabaseHealthProbe` 介面。
 - **錯誤分類**：唯讀、空間滿走 `IDatabaseErrors`（§17.2.9），不 catch `SqliteException`、不比對訊息。
 - **字串比對**：動作代碼、檢查代碼、指紋一律區分大小寫的等值比對（`COLLATE "C"`）；動作分組用 `IN` 展開，不用 `LIKE`（SQLite 的 `LIKE` 對 ASCII 不分大小寫，與 PostgreSQL 不同）。
 - **大數值**：`long` 在兩邊都是 64 位元整數；萬分比、位元組都放得下。
-- **唯讀的重現方式**（測試與驗收）：PostgreSQL 用 `ALTER DATABASE <db> SET default_transaction_read_only = on` 再清連線池，新連線一律 `25006`；SQLite 檔案權限改唯讀對已開啟的連線無效，驗收時連線字串加 `Pooling=False` 再改權限（⚠️ 未實測，o2b 第一步驗證；§17.10.5）。
+- **唯讀的重現方式**（測試與驗收）：PostgreSQL 用 `ALTER DATABASE <db> SET default_transaction_read_only = on` 再清連線池，新連線一律 `25006`；SQLite 檔案權限改唯讀對已開啟的連線無效，驗收時連線字串加 `Pooling=False` 再改權限（⚠️ 未實測，o2b 第一步驗證；§17.10.6）。
 
 ### 17.8 測試與驗收
 
@@ -1916,8 +1951,9 @@ O2 在 pg0 之後，合併前兩種資料庫都要驗（使用者裁決 §3 第 
 | A06 | 改政策、重設密碼 | 讀稽核摘要 | 政策有舊值與新值；重設密碼的摘要沒有密碼；摘要裡任何 `fwp_`、`fwc_` 開頭的值都是 `***` | — |
 | A07 | 400 列稽核、時間分散 | 依動作分組、行為者、時間區間分頁查詢 | 結果與篩選一致、keyset 不重不漏；非管理員 403；Demo 登入開啟時回應沒有 `clientIp` | ✓ |
 | A08 | 稽核列超過保留天數 | 跑 `ops.upkeep` | 超過的被刪、未超過的留著、多一列 `ops.retention.purge`；分批時每批一個交易 | ✓ |
-| A09 | 讓稽核寫入失敗 | 呼叫 `WriteNowAsync`；在交易型請求裡呼叫 `WriteNowAsync`、`TryWriteNowAsync` | 前者丟 `AuditWriteException`（MCP fail closed 用得到的失敗）；交易內呼叫一律丟 `InvalidOperationException` | ✓ |
-| A10 | 已登入的管理員 | 寫一筆帶 `ActorOverride` 的稽核 | 丟 `InvalidOperationException`，沒有寫入 | — |
+| A09 | 讓稽核寫入失敗 | 呼叫 `WriteNowAsync`；在交易型請求裡呼叫 `WriteNowAsync`、`TryWriteNowAsync` | 前者丟 `AuditWriteException`（MCP fail closed 用得到的失敗）；交易內呼叫一律丟 `InvalidOperationException`（`TryWriteNowAsync` 也丟、不回 `false`），而且沒有建立新的 DI scope（以計數的 scope factory 驗：守衛在建 scope 之前） | ✓ |
+| A10 | 已登入的管理員 | 在 `AuditOrigin.BeginSignIn` 範圍外寫一筆帶 `ActorOverride` 的稽核 | 丟 `InvalidOperationException`，沒有寫入；架構測試：`BeginSignIn` 的呼叫者只有 `LoginHandler`、`DemoLoginHandler` | — |
+| A11 | 帳號 `sales01`、`admin01`；瀏覽器分別帶：`sales01` 的有效 cookie、`sales01` 已重設密碼而失效的 cookie、已停用帳號的 cookie | 各用 `admin01` 正確密碼登入（切換帳號）；帶 `sales01` 有效 cookie 用 `admin01` 錯密碼登入 | 三次成功列的行為者與目標都是 `admin01`、不是 cookie 裡的帳號，也沒有因環境已有身分而丟例外；失敗列行為者 null、目標 `admin01`、原因 `wrongPassword`；登入回應照常寫入新 cookie | — |
 | B01 | 兩個實例的收件匣 | 同一指紋各送 3 次、各自 flush | 一列事件、次數 6、狀態開啟；站內通知只發一次 | ✓ 無鎖 |
 | B02 | 一件已結案事件 | 同指紋再出現 | 同一列重開、`Regression` 真、`ReopenCount` 1、再通知 | ✓ |
 | B03 | 兩個管理員 | 同時確認同一件事件 | 一個成功、一個 409 `incidentStateChanged` | ✓ 無鎖 |
@@ -1934,6 +1970,8 @@ O2 在 pg0 之後，合併前兩種資料庫都要驗（使用者裁決 §3 第 
 | C11 | 以建構的例外驗 `IDatabaseErrors` | `SqliteException` 錯誤碼 8、13、14；`PostgresException` SQLSTATE `25006`、`53100`、`08006`、`57P01`；不帶 SQLSTATE、內層是 `SocketException` 的 `NpgsqlException`；連線池耗盡（內層 `TimeoutException`） | 依序是唯讀、空間滿、連不上；池耗盡仍是忙碌、不是連不上 | ✓ |
 | C12 | 讓存檔的 `SaveChanges` 丟「空間滿」；讓 `SessionMiddleware` 讀帳號時丟「連不上」 | 一般使用者存檔；管理員開監控頁 | 前者 503 `databaseUnwritable` 加 `Retry-After`；後者 503 `databaseUnavailable`；兩者都沒有新增產品缺陷事件 | — |
 | C13 | 排程器關閉（`Ops:Scheduler:Enabled` 否）、SMTP 換成假寄送器、寫入探測回「空間滿」 | 看門狗跑一輪；恢復後補寫 | 不經 `ops.monitor` 就寄出一封直送信、同一 `TransitionId` 只寄一次；補寫後對應的佇列列是 `sentDirect`，沒有第二封 | — |
+| C14 | 讓彙總交易在**提交成功之後**丟例外（交易攔截器在 commit 完成後拋），一筆 `storage.diskFree` 的嚴重結果因此進待補寫佇列 | 看門狗下一輪補寫；再讓同一筆在補寫時又提交後丟一次，再補一輪 | 結果列只有一列（`TransitionId` 唯一）、事件次數只加一次、站內通知與寄送佇列各一則；補寫的交易沒有新增任何列就提交並移除佇列項目 | ✓ |
+| C15 | 兩個實例（A、B）的磁碟檢查；B 已寫入 10:03 的 `ok`（總覽 `ok`、`LastCheckedUtc` 10:03），A 在 10:01 的 `critical` 還在待補寫 | A 補寫 10:01；接著 A 寫入 10:04 的 `critical` | 補寫 10:01 後：結果表多一列 10:01，總覽仍是 `ok`、`LastCheckedUtc` 仍是 10:03，事件不重開（已在 10:03 之後結案）；10:04 寫入後：總覽 `critical`、事件以回歸重開、轉換時間 10:04；兩台的補寫與寫入並行時結果一樣 | ✓ 無鎖 |
 | C03 | 資料庫唯讀 | 一般使用者存檔 | 503 `databaseUnwritable` 加 `Retry-After`，沒有新增產品缺陷事件 | ✓ |
 | C04 | 磁碟探測換成假的 `IDiskSpace`（剩 15%、5%） | 看門狗兩輪 | 先開警告、再升嚴重（狀態退回開啟、再通知）；回到 30% 時結案 | — |
 | C05 | 一個工作連續失敗 3 次；另一個工作的下次預定時間落後四個間隔 | `scheduler.jobs` | 前者警告；後者嚴重 | — |
@@ -1950,6 +1988,9 @@ O2 在 pg0 之後，合併前兩種資料庫都要驗（使用者裁決 §3 第 
 | D08 | 一列待寄 | 兩個寄送者同時領取；讓領取者在寄出後、記結果前「當掉」，快轉 2 分鐘 | 同時領取只有一個成功；過期後被重領、`Attempts` 加一、再寄一次（至少一次）；原領取者再記結果影響 0 列、只記 Warning | ✓ 無鎖 |
 | D09 | 每小時上限 3、一次開 5 件事件 | 跨整點跑 `ops.monitor`；讓摘要信第一次寄送失敗；跑 `ops.upkeep` 並快轉超過保留天數 | 摘要信一列、2 列 `digested` 的 `DigestOutboxId` 指向它；摘要信還在重試時來源列不被清；摘要信寄出後才清 | ✓ |
 | D10 | 存 SMTP 設定 | 加密方式 `none` 加帳號密碼；`startTls` 對一台不支援 STARTTLS 的假伺服器寄測試信 | 前者 400 `smtpPlaintextAuth`；後者 422、`stage` 為 `tls`，沒有退回明文 | — |
+| D11 | 每小時上限 3、最近一小時已寄 2 封、佇列另有 4 列到期的 `pending` | 兩個寄送者同時跑領取；另一組：寄送者 X 已把 R1 領成 `sending` 時，寄送者 Y 達上限而摘要化 | 第一組只有一封被領走（額度在通道列鎖內數，不會兩個都看到「還差一封」）、其餘 3 列 `digested`；第二組 R1 仍是 `sending` 而不是 `digested`、寄出後是 `sent`，摘要信不列 R1；任何時刻一小時內 `sent`＋`sending` 不超過 3 | ✓ 無鎖 |
+| D12 | 一小時內 60 列 `digested`，其中一半的標題參數組出來超過 70 字 | 整點後跑 `ops.monitor` | 一封摘要信：最多 50 行、每行不超過 70 字（超過的以「…」結尾）、`Body` 不超過 4000 字；結尾「另有 M 則」的 M＝60－已列出的行數；60 列的 `DigestOutboxId` 都指向它 | — |
+| D13 | 通道 `MailLocale` 設 `en-US` | 開一件基礎設施事件；把語系改成 `vi` 後再開一件；清成 null 再開一件；寄測試信 | 第一封英文、第二封越南文、第三封繁中（O2 出廠），語系改了之後第一封的快照不變；測試信是當時的通道語系 | — |
 | E01 | 一條注入失敗的任務規則、門檻 5 | 存檔 5 次 | 前 4 次 500、計數 1–4；第 5 次後暫停、暫停事件嚴重、出廠收件人（最後修改者＋管理員）各一則 `opsRulePaused`、稽核 `taskRule.autoPause` | ✓ |
 | E02 | 接續 E01 | 再存檔 | 成功、沒產生任務、`SkippedWhilePaused` 加一；手動套用清單沒有這條規則 | ✓ |
 | E03 | 失敗 3 次後成功 1 次，再失敗 4 次 | — | 不暫停（中間有成功，計數重來） | ✓ |
@@ -1965,9 +2006,34 @@ O2 在 pg0 之後，合併前兩種資料庫都要驗（使用者裁決 §3 第 
 | E10 | 事件串聯過深 | 存檔 | 409 照舊；開一件客戶設定事件（錯誤碼 `event.tooDeep`），不計數、不暫停 | — |
 | E11 | 收件人政策設成只有 `ruleEditor`，而最後修改者已停用 | 觸發暫停 | 改送全部系統管理員、記 Warning | — |
 | E12 | 外層請求巢狀呼叫內層、內層丟例外 | — | 只在最外層記一次失敗 | — |
-| E13 | 讓任務規則丟出：資料庫忙碌、唯讀、空間滿、連不上、`OperationCanceledException`、`DbUpdateConcurrencyException`、`FrozenFieldException`；另一條丟 `InvalidOperationException` | 各存檔 5 次 | 前七種都不寫 `Dynamic_RuleHealth`、不暫停，回應照原本的處理器（503、409…）；最後一種計數並暫停。反射測試：`RuleFailureClassifier` 排除的種類與 WebAPI 例外處理器鏈處理的種類一致 | ✓ |
+| E13 | 下方「E13 例外矩陣」的每一列，由任務規則丟出 | 每列各存檔 5 次 | 每列的回應碼與矩陣一致；標「不計」的不寫 `Dynamic_RuleHealth`、不暫停；標「計」的計數並在第 5 次暫停；同一列另直接呼叫 `RuleFailureClassifier.IsAttributable`，結果與矩陣一致 | ✓ |
 | E14 | 門檻 5、已因 5 次失敗暫停 | 恢復後 1 分鐘內失敗 1 次；再失敗 4 次 | 第一次不暫停（恢復時已刪掉暫停前的失敗列、更新 `StreakResetUtc`）；第五次才再暫停、事件標回歸 | — |
+| E15 | 門檻 5、已記 4 次失敗；故障注入改成可逐次控制 | 請求 P 的規則評估在 t5 失敗、業務回滾後先暫停在補記之前；請求 Q 在 t6 評估同一規則成功並提交；放行 P 補記；之後再失敗 4 次、第 5 次 | Q 留下 `StreakResetUtc = t6`、`ConsecutiveFailures` 歸 0；P 的 `FailedUtc` 是 t5（不是補記時間），不新增 `Dynamic_RuleFailure`、計數仍 0；之後第 4 次不暫停，第 5 次才暫停 | ✓ 無鎖 |
+| E16 | 一條從沒失敗過的規則（沒有健康列） | 同 E15 的時序：P 在 t1 失敗、Q 在 t2 成功並提交、P 才補記；之後再失敗 4 次 | Q 因有在途失敗而新增一列（計數 0、`StreakResetUtc = t2`）；P 補記後計數仍 0；再失敗 4 次不暫停。對照組：沒有在途失敗時，成功不新增健康列 | — |
 | F01 | `ops.upkeep` 清理 | 健康紀錄、樣本、已結事件、佇列分別超過天數；一條規則只失敗過 2 次、之後 1 天沒再失敗 | 各自被清；未結事件與其樣本不受事件天數影響；`pending`、`sending` 的佇列列不清；那條規則殘留的 `Dynamic_RuleFailure` 被清 | ✓ |
+
+**E13 例外矩陣**（`RuleFailureClassifier` 與例外處理器鏈的對照；每列用真的例外型別建構，經 WebAPI 測試主機的處理器鏈）：
+
+| 例外 | 回應 | 歸屬 |
+|---|---|---|
+| SQLite `SQLITE_BUSY` 5、`SQLITE_LOCKED` 6；`DatabaseBusyException`（寫入閘門排隊逾時） | 503 `Retry-After` | 不計 |
+| PostgreSQL `40001`、`40P01`、`55P03`；連線池耗盡（無 SQLSTATE、內層 `TimeoutException`） | 503 `Retry-After` | 不計 |
+| 唯讀：SQLite 8、PostgreSQL `25006` | 503 `databaseUnwritable` | 不計 |
+| 空間滿：SQLite 13、PostgreSQL `53100` | 503 `databaseUnwritable` | 不計 |
+| 連不上：SQLite 14、10；PostgreSQL `08006`、`57P01`；無 SQLSTATE、內層 `SocketException` | 503 `databaseUnavailable` | 不計 |
+| `DbUpdateConcurrencyException` | 409 | 不計 |
+| `FrozenFieldException` | 409 | 不計 |
+| `OperationCanceledException`、`TaskCanceledException`，用戶端已中斷 | 不回應（連線已斷） | 不計 |
+| 同上，用戶端沒中斷（內部逾時取消） | 500 | 不計 |
+| 查詢中斷：SQLite `SQLITE_INTERRUPT` 9、PostgreSQL `57014` | 500 | 不計 |
+| 唯一鍵衝突：SQLite 19 的 unique／primary key、PostgreSQL `23505` | 500 | 不計 |
+| 上面任一種被包在 `DbUpdateException` 或其他例外的 `InnerException` 裡 | 同內層 | 同內層 |
+| `InvalidOperationException`、`NullReferenceException`、`InjectedFaultException` | 500 | 計 |
+| 數值溢位（`IsNumericOverflow`） | 500 | 計 |
+
+- 「不計」而回 500 的三列是刻意的：取消與查詢中斷是逾時或關機，唯一鍵衝突是並行寫入撞在一起，都不是規則寫錯；它們照樣開產品缺陷事件（`server` 來源），只是不累加暫停計數。
+- 數值溢位歸規則本身（規則算出超界的值）；計畫階段核對既有寫入流程有沒有先轉成 400，有的話這列改成「400、不計」。
+- 新增例外處理器或改 `IDatabaseErrors` 的分類時，必須同時在這張矩陣加列，測試才會涵蓋（計畫與審查清單各寫一行）。
 
 **前端自動測試**（vitest）
 
@@ -1991,7 +2057,7 @@ O2 在 pg0 之後，合併前兩種資料庫都要驗（使用者裁決 §3 第 
 | M06 | 稽核：改權限與登入失敗 | 改一個模組的權限；另一個瀏覽器用錯密碼登入 | 稽核頁各一列，詳細看得到權限差異與失敗原因 |
 | M07 | 四種寬度 | 390、820、1366、1920 走查監控頁四個分頁、稽核頁、任務規則分頁的暫停標示 | 不橫捲；表格在手機變卡片；詳細在手機是全螢幕 |
 
-**PostgreSQL**：上表雙跑欄 ✓ 的在 gate 的 PostgreSQL 步驟跑；手動驗收 M02、M04、M05 在 PostgreSQL 再走一次（`FORMWRIGHT_TEST_DB` 不適用於本機站台，照 pg0 §8 第 5 項手動起容器）。O2 新增的雙跑類別預估 9–12 個，另有 6 個並行案例在無鎖模式再跑，gate 的 PostgreSQL 步驟增加約 45–90 秒（pg0c 實測一個 WebAPI 類別約 0.4 秒／測試；⚠️ 未實測）。
+**PostgreSQL**：上表雙跑欄 ✓ 的在 gate 的 PostgreSQL 步驟跑；手動驗收 M02、M04、M05 在 PostgreSQL 再走一次（`FORMWRIGHT_TEST_DB` 不適用於本機站台，照 pg0 §8 第 5 項手動起容器）。O2 新增的雙跑類別預估 9–12 個，另有 8 個並行案例（B01、B03、C10、C15、D08、D11、E05、E15）在無鎖模式再跑，gate 的 PostgreSQL 步驟增加約 50–100 秒（pg0c 實測一個 WebAPI 類別約 0.4 秒／測試；⚠️ 未實測）。
 
 **手冊**：新增「維運監控」「稽核紀錄」「告警通道」三節；任務規則章節補「連續失敗會自動暫停、怎麼恢復、暫停期間不補產任務」；常見問題補「資料庫目前無法寫入」。
 
@@ -2005,7 +2071,10 @@ O2 在 pg0 之後，合併前兩種資料庫都要驗（使用者裁決 §3 第 
 - 只計歸屬規則本身的例外：取消、並行衝突、凍結欄位、資料庫忙碌／唯讀／空間滿／連不上不計（`RuleFailureClassifier`，與例外處理器鏈一致）。
 - 暫停只清 `PausedUtc`，不動 `Active`。
 - 事件轉換、站內通知、寄送佇列在同一個交易。
-- 寄 SMTP 不在任何交易裡；寄送是至少一次（可能重複、不會漏寄）。
+- 寄 SMTP 不在任何交易裡；還在重試中的佇列列是至少一次交付（可能重複）；重試耗盡、略過、併入摘要、記憶體遺失不在此限（§17.2.6）。
+- 健康檢查結果以 `TransitionId` 唯一鍵去重，結果列、事件轉換、通知、寄送佇列同一交易；補寫的舊結果只進歷史，不倒退目前投影。
+- 規則失敗與成功以評估時間排序，不以補記時間；成功的 reset 只往後推；有在途失敗時成功一定留下 reset（含首次建列）。
+- 寄送額度、領取、摘要化在同一把通道列鎖內依序執行；摘要化只動未領取的 `pending`。
 - 多實例的看門狗型檢查以在線實例中最糟者為整體狀態，單一實例正常不能結案。
 - 待補寫的健康檢查結果依原本順序逐筆補寫，不合併成最後一筆。
 
@@ -2019,7 +2088,8 @@ O2 在 pg0 之後，合併前兩種資料庫都要驗（使用者裁決 §3 第 
 - 告警信、站內通知（以及 O3 的事件推送）只放標題代碼與白名單參數，不放正規化訊息、原始訊息、stack、記錄值；正規化訊息另經遮蔽，只在監控頁顯示。
 - SMTP：信任邊界是系統管理員，產品不限制目的位址；憑證一律驗證、不提供略過；STARTTLS 失敗不退回明文；加密方式 `none` 時不准填帳號密碼；錯誤只回階段與 SMTP 回應碼。
 - 資料庫連不上時，需要登入的 API（含監控頁）一律 503，不開免驗證的診斷入口。
-- 稽核的 `ActorOverride` 只在環境沒有身分時可用。
+- 稽核的 `ActorOverride` 只在環境沒有身分時可用；唯一例外是兩個登入 handler 的 `AuditOrigin.BeginSignIn` 範圍，行為者只來自 handler 剛驗證的帳號，不從請求帶的 cookie 取。
+- `WriteNowAsync`、`TryWriteNowAsync` 在建立新 scope 前檢查呼叫端交易，交易內呼叫一律丟例外。
 - 故障注入只在 `Development` 環境生效。
 - `database.writable` 不能關。
 - 通道失敗事件不寄信（防迴圈）。
@@ -2035,15 +2105,19 @@ O2 在 pg0 之後，合併前兩種資料庫都要驗（使用者裁決 §3 第 
 - 告警信重試 1、5、15、60 分鐘、最多 5 次（寄送機制的參數，只決定通道失敗事件最晚約 81 分鐘後開啟，不改變哪些事件要告警）；寄送領取期限 2 分鐘；測試信與單封寄送逾時 30 秒、測試信同一管理員 30 秒一次；摘要信最多列 50 則；直送佇列最多 20 封（記憶體上限，資料庫壞時通常只有一兩個檢查在變）。
 - 初稿列在這裡的「寫入探測連續 3 次忙碌」「`security.loginFailures` 窗口 15 分鐘」「排程落後三個間隔」會改變告警結果，已改成可設定（`database.writable` 的警告門檻、`ops.loginFailureWindowMinutes`、`ops.schedulerLagIntervals`，§17.6）。
 - 清理每批 5000 列。
+- 規則的在途失敗紀錄 5 分鐘過期（只防補記沒跑完時殘留；正常幾秒內就移除）。
+- 摘要信每行 70 字、開頭與結尾各預留 200 字、最多 50 則；一般信內文的標題 500 字、主旨 200 字（`Body` 4000 字的預算，§17.2.6）。
 - 健康檢查的門檻、間隔的上下限（§17.6.2）。
 - 已知限制：狀態板、收件匣、待補寫佇列、直送佇列、直送去重都只在單一實例記憶體；多實例時監控頁只看得到自己那台的記憶體狀態，同一故障每台各直送一封（雲端版每客戶一套單一實例時沒有影響；§15 第 8 條同一類）。
 - 已知限制：資料庫連不上且啟動後從沒讀到通道設定時，告警信寄不出去。
+- 已知限制：規則的在途失敗只在本實例記憶體；失敗與成功分在兩台、成功剛好落在失敗的補記空檔時，會多算一次失敗（§17.2.7）。
+- 已知限制：收件匣 flush 提交結果不明而重送時，事件次數多算一次（不影響通知，§17.2.3）。
 
 ### 17.10 主控判斷（待使用者確認）
 
 #### 17.10.1 使用者行為類
 
-每條：決定、理由、選錯的代價，最後一行是可以不看設計直接回答的題目（推薦答案放第一個）。依設計審查：U3、U4、U5、U7、U9、U10、U11 的題目已改寫，U6 補共用主檔權限、U7 與 U11 的決定本身已更正；U12–U14 由技術類 T14、T20、T22 改列（會影響使用者）。
+每條：決定、理由、選錯的代價，最後一行是可以不看設計直接回答的題目（推薦答案放第一個）。依設計審查：U3、U4、U5、U7、U9、U10、U11 的題目已改寫，U6 補共用主檔權限、U7 與 U11 的決定本身已更正；U12–U14 由技術類 T14、T20、T22 改列（會影響使用者）。依第二輪審查：U4、U7 拆成可獨立作答的小題（U4a–U4c、U7a–U7b）；U12 改成依 C3 裁決的說明、不再表決；U14 改推薦「通道設定加信件語系」並寫進設計；U2、U5、U10、U13 的題目或理由修正。
 
 **O2-U1 告警信寄到通道設定裡的一組信箱，不是寄給使用者**
 
@@ -2055,9 +2129,9 @@ O2 在 pg0 之後，合併前兩種資料庫都要驗（使用者裁決 §3 第 
 **O2-U2 出廠只寄基礎設施、安全、產品缺陷三類，客戶設定類只發站內**
 
 - 決定：`ops.alertEmailCategories` 出廠 `infra,security,defect`，最低嚴重度「警告」。
-- 理由：客戶設定類（規則失敗、暫停）的處理者是設計者，站內通知已送到最後修改者；寄到 IT 信箱多半沒人能處理。
-- 選錯代價：改政策即可。
-- 題目：任務規則「出貨後建立追蹤任務」因連續出錯被自動暫停；暫停期間出貨單照常存檔，但都不會產生追蹤任務，直到有人修好規則按「恢復」。除了站內通知最後修改它的設計者與系統管理員，要不要也寄信到 IT 共用信箱？(1) 不寄，只站內；IT 多半不會改規則，設計者登入就看得到（推薦）(2) 也寄信，讓不常登入的人也知道任務正在漏產。
+- 理由：客戶設定類（規則失敗、暫停）的處理者是設計者，站內通知已送到最後修改者；寄到 IT 信箱多半沒人能處理。站內通知要收件人登入才看得到，不保證及時；任務漏產需要及時發現的客戶，系統管理員隨時可在政策頁把「哪些類別的事件寄告警信」（`ops.alertEmailCategories`）加上「客戶設定」，不必等新版本。
+- 選錯代價：改政策即可，當下生效。
+- 題目：任務規則「出貨後建立追蹤任務」因連續出錯被自動暫停；暫停期間出貨單照常存檔，但都不會產生追蹤任務，直到有人修好規則按「恢復」。除了站內通知最後修改它的設計者與系統管理員，要不要也寄信到 IT 共用信箱？(1) 出廠不寄，只站內；IT 多半不會改規則。需要及時知道的客戶，系統管理員可在政策頁把「客戶設定」勾進寄信類別，之後這類事件也寄信（推薦）(2) 出廠就寄信，讓不常登入的人也知道任務正在漏產。
 
 **O2-U3 監控頁、事件、樣本、稽核只給系統管理員；設計者只在規則頁看到暫停狀態**
 
@@ -2066,18 +2140,20 @@ O2 在 pg0 之後，合併前兩種資料庫都要驗（使用者裁決 §3 第 
 - 選錯代價：之後要開給設計者，要加「只看自己模組的事件」的篩選與權限，約一個小段。
 - 題目：系統裡有兩個維運畫面：「維運監控」列出所有錯誤事件，點開看得到錯誤原文與程式 stack（可能夾帶別人記錄裡的客戶名稱）；「稽核紀錄」列出誰在何時改了權限、誰登入失敗、從哪個 IP。設計者小王（不是系統管理員）負責的任務規則被自動暫停了。這兩個畫面與錯誤原文要開放給誰？(1) 兩個畫面只給系統管理員；小王只在自己的規則頁看到「已暫停、錯誤代碼 NullReferenceException、10:32 暫停、略過 3 次存檔」，看不到錯誤原文（推薦）(2) 小王也能開維運監控，但只看得到自己模組的事件，錯誤原文照樣看得到；稽核仍只給系統管理員 (3) 所有設計者都能看兩個畫面。
 
-**O2-U4 事件狀態：開啟→確認→結案；部分事件不能手動結案；不能刪除**
+**O2-U4 事件狀態：開啟→確認→結案；部分事件不能手動結案；不能刪除（三個小題 U4a–U4c）**
 
 - 決定：見 §17.2.2 狀態機。健康檢查、通道失敗、規則暫停三類只能由系統自己結案；嚴重度升級時已確認的退回「開啟」並再通知；事件不能刪，只隨保留天數清除。
 - 理由：檢查還沒恢復就手動結案，下一分鐘會以「回歸」重開，製造假回歸；升級代表情況變糟，認領的人要再被叫一次；事件是稽核的一部分，刪掉就查不到。
 - 選錯代價：允許手動結案只是拿掉一個檢查；允許刪除要另加稽核與權限；升級不再通知只改一個條件。
-- 題目：維運事件的處理規則有三點，以「磁碟剩餘空間不足」為例：① 這類由系統持續偵測的事件（磁碟、資料庫、寄信失敗、規則暫停）只能等系統偵測到恢復才自動結案，管理員不能手動按「結案」；② 所有事件都不能刪除，只隨保留天數（出廠 180 天）清掉；③ IT 按了「確認」之後，磁碟從剩 15% 掉到剩 5%，事件會退回「開啟」並再通知一次。要怎麼定？(1) 三點都照做（推薦）(2) 改 ①：允許手動結案（但下一輪檢查仍不足時會重新打開並標「回歸」）(3) 改 ②：允許系統管理員刪除事件 (4) 改 ③：確認之後只更新數字、不再通知。
+- U4a 題目：維運監控裡有一類事件是系統持續偵測的（磁碟剩餘空間、資料庫能不能寫、告警信寄不出去、任務規則被自動暫停）。以「磁碟剩餘空間不足」為例，系統管理員能不能自己按「結案」？(1) 不能，只能等系統偵測到恢復後自動結案，畫面上不出現結案按鈕（推薦）(2) 能；但下一輪檢查（出廠 5 分鐘一次）若空間仍不足，事件會重新打開並標「回歸」。
+- U4b 題目：維運監控裡的事件（例如「伺服器錯誤」「磁碟剩餘空間不足」）能不能刪除？(1) 不能刪；已結案的事件保留 180 天（可在政策頁調整）後自動清掉，這段期間都查得到（推薦）(2) 系統管理員可以刪除事件，刪除這個動作本身記一筆稽核。
+- U4c 題目：「磁碟剩餘空間不足」事件已有 IT 按了「確認」（表示有人在處理），之後磁碟從剩 15% 再掉到剩 5%，嚴重度由「警告」升為「嚴重」。要不要再通知一次？(1) 要：事件退回「開啟」並再通知一次，因為情況變糟了（推薦）(2) 不要：只更新數字與嚴重度，維持「已確認」、不再通知。
 
 **O2-U5 前端錯誤只記錄不通知，伺服器 500 通知管理員**
 
 - 決定：前端錯誤事件嚴重度「資訊」，只出現在監控頁；伺服器 500 是「警告」，新開時通知 `ops.alertRecipients` 並寄信。
 - 理由：前端錯誤常來自瀏覽器外掛與網路，量大雜訊多；500 幾乎都是真的產品問題。
-- 選錯代價：要通知前端錯誤只改一個出廠嚴重度。前端無法可靠分辨哪個錯誤擋住了操作；擋住存檔的多半伴隨伺服器 500，那一件會通知；要分辨「擋住操作」得另做前端埋點（💡）。
+- 選錯代價：要通知前端錯誤只改一個出廠嚴重度。前端無法可靠分辨哪個錯誤擋住了操作，純前端的錯誤（例如表單打不開）不會有對應的伺服器事件，只能靠監控頁的次數與影響頁面發現；要分辨「擋住操作」得另做前端埋點（💡）。
 - 題目：使用者瀏覽器裡發生的 JavaScript 錯誤，有的看不出影響，有的會擋住操作（例如按「存檔」沒反應、表單打不開）；系統分辨不出是哪一種，而且不少來自瀏覽器外掛或網路不穩。若同時有伺服器錯誤（例如存檔時伺服器出錯），那一件會照常通知。這類前端錯誤要不要通知管理員？(1) 不通知也不寄信，只記在維運監控的事件清單，同一個錯誤反覆出現會累加次數與影響的頁面（推薦）(2) 每個新出現的前端錯誤都發站內通知並寄信。
 
 **O2-U6 能編輯規則的人就能按「恢復」**
@@ -2087,12 +2163,18 @@ O2 在 pg0 之後，合併前兩種資料庫都要驗（使用者裁決 §3 第 
 - 選錯代價：改成只限管理員只換一個權限宣告。
 - 題目：設計者小王修好了被暫停的規則，誰可以按「恢復」？(1) 能修改這條規則的人，例如小王自己（他有這個模組的設計編輯權；規則若掛在「客戶」這類共用主檔上，還要有共用主檔的設計權，跟修改規則的權限一樣）（推薦）(2) 只有系統管理員。
 
-**O2-U7 暫停期間不補產任務；存檔的人看不到提示**
+**O2-U7 暫停期間不補產任務；存檔的人看不到提示（兩個小題 U7a、U7b）**
 
 - 決定：暫停期間存檔照常成功、不產生任務、存檔的人看不到任何提示；規則頁顯示暫停起訖與「暫停期間略過 N 次存檔」，恢復時不自動補產。要補時由設計者照觸發方式手動補（§17.2.7 的表）：新增時觸發的規則，用建立時間篩出那段期間的記錄，在記錄的任務區手動新增任務；「條件成立時」與「欄位變成某值」的規則，恢復後那些記錄不會自己再觸發，要手動新增任務、或讓條件先變回不成立再成立；手動套用的規則恢復後直接套用即可。
 - 理由：補產要重算每筆記錄在當時的條件，`once` 規則還要判斷是否已觸發過，複雜而且可能產出過時的任務；存檔的一般使用者不擁有規則、也修不了，提示只會造成困擾。
-- 選錯代價：要補產時另做「對暫停期間存過的記錄重跑」的動作（💡，約一個小段）；要提示存檔者時在存檔回應加一個旗標、前端顯示一行提示（小）。
-- 題目：規則「新客戶建立後指派業務回訪」因連續出錯被自動暫停了 2 小時，期間業務新增了 8 筆客戶，存檔都成功，只是沒有產生回訪任務。規則修好按「恢復」之後，這條規則不會再替那 8 筆產生任務（它只在新增那一刻觸發）。兩件事一起定：暫停期間存檔的業務要不要看到提示？恢復時那 8 筆怎麼辦？(1) 存檔的業務看不到提示；恢復時不自動補，規則頁顯示「暫停 10:00–12:00、略過 8 次存檔」，設計者依建立時間篩出那 8 筆，在記錄的任務區手動新增回訪任務（推薦）(2) 不自動補，但暫停期間每次存檔都提示存檔的人「規則『新客戶回訪』已暫停，這次沒有產生任務」(3) 恢復時自動替那 8 筆補產回訪任務。
+- 選錯代價：要提示存檔者時在存檔回應加一個旗標、前端顯示一行提示（小，不改表）；要自動補產照下面的不改表做法（約一個小段，o2d 與 o2e 各一部分）。兩題都不改表，o2d 開工前答即可。
+- **自動補產的不改表做法**（U7b 選 (2) 時照這個做）：
+  - 動作：恢復確認框多一個「恢復並補產」；恢復與補產是兩個交易型請求，補產分批（每批 500 筆記錄，技術限制），每批寫一筆稽核 `taskRule.backfill`（補了幾筆、略過幾筆）。
+  - 對象：用 `Dynamic_RuleHealth` 已有的暫停起點（`LastPausedUtc`）與恢復時間，換成牆上時間後比記錄的 `CreatedTime`、`ModifiedTime`：`onCreate` 取暫停期間建立的記錄；`onUpdateMatch`、`onFieldBecomes` 取暫停期間修改過的記錄；`manual` 不補（直接套用即可）。
+  - 判斷：用**補產當下**的記錄值與修好後的規則條件判斷是否成立，再排除這條規則對這筆記錄已有觸發紀錄（`Dynamic_TaskRuleRun`）的；`everyTime` 規則另排除還有未完成任務的。產生走既有的 `TaskRuleApplier.GenerateAsync`，產出的任務掛規則，和正常觸發的一樣。
+  - 為什麼不用改表：對象從記錄既有的時間欄位推得，條件用現況，不需要另存「略過了哪些記錄、當時的條件」。代價是語意是「依現況補」而不是「重播當時」：暫停期間符合、之後又不符合的記錄不會補；`onUpdateMatch`、`onFieldBecomes` 分不出當時是不是「由不符合變符合」，暫停期間只改了備註、但本來就符合且從沒觸發過的記錄也會補。確認框與手冊寫明這兩點。
+- U7a 題目：任務規則「新客戶建立後指派業務回訪」因連續出錯被系統自動暫停了 2 小時。暫停期間業務新增客戶，存檔都成功，只是不會產生回訪任務。存檔的業務要不要看到提示？(1) 不提示：存檔照常成功、看不到任何訊息；暫停狀態與「略過 8 次存檔」只顯示在設計者的規則頁（推薦）(2) 提示：暫停期間每次存檔都顯示一行「規則『新客戶回訪』已暫停，這次沒有產生任務」。
+- U7b 題目：任務規則「新客戶建立後指派業務回訪」因連續出錯被系統自動暫停了 2 小時，期間業務新增了 8 筆客戶，都沒有產生回訪任務。設計者修好規則按「恢復」之後，這條規則不會再替那 8 筆產生任務（它只在新增那一刻觸發）。那 8 筆怎麼辦？(1) 不自動補：規則頁顯示「暫停 10:00–12:00、略過 8 次存檔」，設計者依建立時間篩出那 8 筆，在記錄的任務區手動新增回訪任務（推薦）(2) 恢復時可以選「恢復並補產」：系統找出暫停期間新增或修改過的記錄，依現在的資料與修好的規則判斷，替還沒有任務的記錄補產；暫停期間符合、現在已不符合的記錄不會補。
 
 **O2-U8 資料庫唯讀時，存檔看到「資料庫目前無法寫入」而不是「系統發生錯誤」**
 
@@ -2113,7 +2195,7 @@ O2 在 pg0 之後，合併前兩種資料庫都要驗（使用者裁決 §3 第 
 - 決定：開 Demo 登入時，告警通道整頁唯讀、測試信回 403，稽核頁與稽核 API 不顯示來源 IP（正式環境照常顯示給系統管理員）。
 - 理由：Demo 站人人是管理員；能設 SMTP 主機就能讓伺服器替他連任意位址或寄信；訪客彼此看得到 IP 是個資外洩。
 - 選錯代價：Demo 上看不到告警通道怎麼用，靠手冊截圖。
-- 題目：公開 Demo 站上每位訪客登入後都是系統管理員，彼此看得到對方的操作紀錄。兩件事：(a) 訪客能不能自己填 SMTP 主機並寄測試信？(b) 稽核紀錄要不要顯示其他訪客的來源 IP？(1) 都不行：Demo 站的告警通道頁唯讀、測試信停用；稽核紀錄不顯示 IP（推薦）(2) 允許設定 SMTP 與寄測試信，方便展示；稽核仍不顯示 IP (3) 照正式環境，兩者都開放。
+- 題目：公開 Demo 站上每位訪客登入後都是系統管理員，彼此看得到對方的操作紀錄。兩件事：(a) 訪客能不能自己填 SMTP 主機並寄測試信？(b) 稽核紀錄要不要顯示其他訪客的來源 IP？(1) 都不行：Demo 站的告警通道頁唯讀、測試信停用；稽核紀錄不顯示 IP（推薦）(2) 同 (1)，但告警通道頁改成顯示一份示範用的假設定（主機、信箱都是範例，存不了、也不能寄），讓訪客看得到欄位長什麼樣。讓訪客自己填 SMTP 主機不列為選項：那等於讓任何人借伺服器連任意位址或寄信，是安全邊界（§17.9），不是展示取捨。
 
 **O2-U11 系統管理員權限異動開安全事件並寄信**
 
@@ -2122,26 +2204,26 @@ O2 在 pg0 之後，合併前兩種資料庫都要驗（使用者裁決 §3 第 
 - 選錯代價：嫌吵可把安全類從 Email 類別政策拿掉，或改成只記稽核；改回「只通知第一次」只改一個條件。
 - 題目：管理員 A 週一把業務 B 設成系統管理員，IT 收到通知後按了「確認」；週三 A 又把 C 設成系統管理員。每一次異動都要通知全部系統管理員並寄信到 IT 信箱嗎？(1) 每次都通知與寄信（寄信每小時有上限，超過會併成一封摘要），通知點進去看得到是誰把誰設成管理員；監控頁合成一件「系統管理員權限異動」事件、累加次數（推薦）(2) 只有第一次通知，之後只累加次數，直到這件事件結案後再出現才通知 (3) 不通知，只記在稽核。
 
-**O2-U12 規則失控的時間窗用滑動窗口（照 C3 字面；原技術類 O2-T14）**
+**O2-U12 規則失控的時間窗用滑動窗口（依 C3 裁決，不需表決；原技術類 O2-T14）**
 
 - 決定：每次失敗時往回看 `ops.rulePauseWindowMinutes`（出廠 60 分鐘），這段時間內、最近一次成功之後的失敗達 `ops.rulePauseConsecutiveFailures`（出廠 5 次）就暫停（§17.2.7）。
 - 理由：C3 使用者裁決的字面是「60 分鐘內連續 5 次」，任何 60 分鐘內連續失敗 5 次都要暫停。初稿為了少一個表，改成「從第一次失敗起算、過了窗口就重來」，會漏掉跨過窗口邊界的密集失敗，等於限縮了裁決；審查指出後改回。代價是多一張只存失敗時間的小表（`Dynamic_RuleFailure`）。
-- 選錯代價：選固定起點會讓密集失敗多卡使用者幾次存檔、晚一點暫停，而且違反 C3；要改回只是換計數寫法，表可以留著。
-- 題目：規則「出貨後建立追蹤任務」的門檻是「60 分鐘內連續失敗 5 次（中間沒有成功）就自動暫停」。它在 10:00 失敗一次，之後 10:59、11:01、11:02、11:03、11:04 各失敗一次，中間都沒成功過。11:04 那一次要不要暫停？(1) 要：往回看 60 分鐘（10:04–11:04）已有 5 次失敗（推薦，照 2026-11-12 的裁決字面）(2) 不要：從 10:00 那次開始算，到 11:00 還不到 5 次就從 11:01 重算，11:04 才第 4 次。
+- 狀態：依 C3 使用者裁決（2026-11-12）照做，**不是待答題**；固定起點的寫法違反裁決，不列為選項。列在這裡只因為它會影響使用者，給使用者看懂門檻怎麼算。
+- 說明例：規則「出貨後建立追蹤任務」的門檻是「60 分鐘內連續失敗 5 次（中間沒有成功）就自動暫停」。它在 10:00 失敗一次，之後 10:59、11:01、11:02、11:03、11:04 各失敗一次，中間都沒成功過。11:04 那一次往回看 60 分鐘（10:04–11:04）已有 5 次失敗，所以暫停。
 
 **O2-U13 O2 先做的資料庫健康檢查，其餘延到 O4（原技術類 O2-T20）**
 
 - 決定：O2 做資料庫可不可寫、磁碟剩餘、排程器卡住、SQLite 的 WAL 檔大小、每日快速完整性檢查（SQLite `quick_check`、`foreign_key_check`，兩種資料庫的共用主檔檢查）、登入失敗次數、備份新鮮度（回「未設定」）；延到 O4 的是 PostgreSQL 的連線數與鎖等待、慢查詢、`amcheck` 索引檢查，與 SQLite 的每週完整檢查、慢查詢計時（§17.1、§8）。
 - 理由：O2 先做驗收要的；延後的幾項是 O4 的 L1 診斷要讀的統計，隨 mcpO1 一起做最省；PostgreSQL 的慢查詢與 `amcheck` 要客戶啟用擴充套件，地端安裝文件也要同時寫。
 - 選錯代價：O2 期間 PostgreSQL 的連線快用完、鎖等太久、查詢變慢時，監控頁不會提示，只能等使用者反應變慢或 503；要提前做連線數與鎖等待約半個小段（不需擴充套件），全部提前約一個小段。
-- 題目：O2 上線後，監控頁會檢查資料庫能不能寫、磁碟剩多少、排程器有沒有卡住、資料有沒有損壞、登入失敗次數。另外幾項要等到下一段 O4（廠商遠端診斷）才做：PostgreSQL 連線數快用完（例如上限 100、已用 95）、查詢在等鎖、慢查詢排行、索引損壞檢查。O2 期間發生這些狀況，監控頁不會提示。這樣分可以嗎？(1) 照這樣分，延後的隨 O4 一起做（推薦）(2) 連線數與鎖等待也在 O2 做，慢查詢與索引檢查仍延到 O4 (3) 全部在 O2 做。
+- 題目：O2 上線後，監控頁會檢查資料庫能不能寫、磁碟剩多少、排程器有沒有卡住、登入失敗次數，以及資料完整性：SQLite 檢查資料庫檔本身有沒有損壞；PostgreSQL 在 O2 只檢查產品層的資料（例如共用主檔的關聯是否一致），不檢查資料庫檔案與索引本身有沒有損壞。另外幾項要等到下一段 O4（廠商遠端診斷）才做：PostgreSQL 連線數快用完（例如上限 100、已用 95）、查詢在等鎖、慢查詢排行、PostgreSQL 的索引損壞檢查。O2 期間發生這些狀況，監控頁不會提示。這樣分可以嗎？(1) 照這樣分，延後的隨 O4 一起做（推薦）(2) 連線數與鎖等待也在 O2 做，慢查詢與索引檢查仍延到 O4 (3) 全部在 O2 做。
 
-**O2-U14 告警信 O2 先固定繁體中文（原技術類 O2-T22 的信件部分）**
+**O2-U14 告警信的語系由通道設定決定（原技術類 O2-T22 的信件部分）**
 
-- 決定：告警信與摘要信的主旨與內文在寫入寄送佇列時以繁中組好；p3 有「系統預設語系」後改用它。畫面與站內通知照使用者語系組字，不受影響（標題存代碼＋參數，§17.2.5）。
-- 理由：p3 在 O2 之後，O2 沒有系統層的語系可用；信件是寄給共用信箱，不是寄給特定使用者，沒有「收件人語系」可用。
-- 選錯代價：使用越南文、英文的客戶 IT 在 p3 前收到繁中信；選「通道設定加信件語系」要在 o2a 多一欄（必須在 o2a 開工前答），p3 後又多一個要跟系統預設語系對齊的設定。
-- 題目：資料庫掛了，系統寄告警信到客戶 IT 的共用信箱。目前系統還沒有「系統預設語系」這個設定（排在 O2 之後的 p3 才做），信件不是寄給特定使用者，無從知道收件人用什麼語言。例如客戶 IT 是越南籍、介面用越南文。O2 的告警信用什麼語言？(1) 先固定繁體中文，p3 上線後改用系統預設語系（推薦）(2) 四種語言（繁中、英、泰、越）並列在同一封信 (3) O2 就在告警通道設定加一個「信件語系」欄位。
+- 決定：告警通道設定加一欄「信件語系」`MailLocale`（四語之一；留空＝出廠，O2 是繁中，p3 有「系統預設語系」後改成跟它）。告警信、摘要信、測試信寫入佇列或寄出時以這個語系組好（§17.2.6、§17.4）。畫面與站內通知照使用者語系組字，不受影響（標題存代碼＋參數，§17.2.5）。
+- 理由：信件寄給共用信箱，沒有「收件人語系」可用；p3 在 O2 之後，O2 也沒有系統層的語系。客戶 IT 不一定讀繁中（越南、泰國、英語系客戶），固定繁中等於 p3 前這些客戶的告警看不懂、告警失效。多一欄的成本小（o2a 一欄、通道表單一個下拉）；p3 後留空的自動跟系統預設語系，不必再設。
+- 選錯代價：改選固定繁中，o2a 少一欄、非繁中客戶 p3 前收看不懂的信；改選四語並列，信很長、摘要信的長度預算要減半。本推薦已寫進設計，改選其他兩項會拿掉 o2a 的一欄，必須在 o2a 開工前答。
+- 題目：資料庫掛了，系統寄告警信到客戶 IT 的共用信箱。目前系統還沒有「系統預設語系」這個設定（排在 O2 之後的 p3 才做），信件不是寄給特定使用者，無從知道收件人用什麼語言。例如客戶 IT 是越南籍、介面用越南文。O2 的告警信用什麼語言？(1) 告警通道設定加一個「信件語系」，由客戶的系統管理員選（例如選越南文）；沒選就先用繁體中文，p3 上線後改跟系統預設語系（推薦）(2) 先固定繁體中文，p3 上線後改用系統預設語系 (3) 四種語言（繁中、英、泰、越）並列在同一封信。
 
 #### 17.10.2 技術類（主控裁決）
 
@@ -2171,10 +2253,13 @@ O2 在 pg0 之後，合併前兩種資料庫都要驗（使用者裁決 §3 第 
 | O2-T22 | 事件與站內通知的標題存代碼＋白名單參數（事件 `TitleKey`＋`TitleParamsJson`；通知 `DataJson`，`TitleSnapshot` 只當退路），畫面與鈴鐺依語系組字；告警信寫入佇列時組成文字快照（語系改列行為類 O2-U14） | 一個契約；信件寄出時事件可能已變或被清，快照才穩定 | §17.2.2、§17.2.5、§17.2.6 |
 | O2-T23 | 監控頁的記憶體狀態只代表本實例 | 雲端版單一實例；多實例時另議 | §17.9 |
 | O2-T24 | 來源管道、權杖 id、行為者種類用 AsyncLocal 的 `AuditOrigin`，比照 `ActingScope` | 不必每個 handler 傳參數；mcp1 只在 `/mcp` 開一個範圍 | §17.2.1 |
-| O2-T25 | 稽核寫入分 `Add`（同交易）、`WriteNowAsync`（交易外、失敗丟例外）、`TryWriteNowAsync`（交易外、失敗只記 log）；`AuditEntry` 含參數雜湊、回傳筆數、確認 id 與結果；`ActorOverride` 只在沒有身分時可用 | 三種失敗語意各有呼叫者（業務、MCP fail closed、登入），一個吞錯的方法滿足不了 MCP；登入成功時 cookie 還沒建立；代價是多兩個方法與一個守衛 | §17.2.1、MCP §8.1 |
+| O2-T25 | 稽核寫入分 `Add`（同交易）、`WriteNowAsync`（交易外、失敗丟例外）、`TryWriteNowAsync`（交易外、失敗只記 log）；`AuditEntry` 含參數雜湊、回傳筆數、確認 id 與結果；`ActorOverride` 只在沒有身分時可用 | 三種失敗語意各有呼叫者（業務、MCP fail closed、登入），一個吞錯的方法滿足不了 MCP；登入時請求可能帶著別的帳號或已失效的 cookie，所以登入另開 `AuditOrigin.BeginSignIn` 範圍、只限兩個登入 handler；交易守衛在建 scope 前檢查；代價是多兩個方法、一個範圍與一個守衛 | §17.2.1、MCP §8.1 |
 | O2-T26 | 看門狗型檢查依實例彙總：在線實例最糟者為整體狀態，三個間隔沒回報的實例退出彙總；彙總交易先更新檢查列取得列鎖 | 各實例磁碟與連線不同，健康實例的 `ok` 不能結掉別台的故障；不另開表，從結果表讀；代價是每次結果多一次小查詢 | §17.2.4、§17.7 |
 | O2-T27 | 外送內容（站內通知、信、O3 推送）只用標題代碼＋白名單參數，正規化訊息另經 `SensitiveTextMask`、只在監控頁 | 正規化不等於遮蔽，未加引號的姓名、業務文字會留下；代價是標題比較制式 | §17.2.2 |
 | O2-T28 | SMTP 不限目的位址（信任邊界是系統管理員）、憑證必驗、STARTTLS 不退回明文、無加密時不准帳密 | 內網 SMTP 要能用；限制位址擋不住已是最高權限的管理員；代價是自簽憑證的客戶要裝 CA | §17.2.6 |
+| O2-T29 | 健康結果每筆帶 `TransitionId`，結果表唯一索引當持久化處理標記，與事件轉換、通知、佇列同交易；歷史結果與目前投影分開，彙總以該筆檢查時間為基準 | 提交結果不明時重播不重複；晚到的舊結果不倒退總覽；代價是結果表多一欄一個唯一索引、檢查列多一個鎖欄 | §17.2.4、§17.4、§17.7 |
+| O2-T30 | 規則失敗與成功以評估時間排序；成功只在有連續失敗或本實例有在途失敗時寫 reset，且只往後推、必要時首次建列 | 失敗在回滾後才補記，用補記時間會把成功前的失敗算進新一串；代價是一個記憶體登記表，跨實例的空檔仍可能多算一次（已知限制） | §17.2.7、§17.4 |
+| O2-T31 | 寄送額度、領取、摘要化、摘要信掛列都在通道列鎖（`LastClaimUtc`）之後；摘要化只動未領取的 `pending` | 無鎖模式下也不超額、不把正在寄的信併進摘要；代價是同一通道的領取依序執行（量很小） | §17.2.6、§17.7 |
 
 #### 17.10.3 待決衝突
 
@@ -2218,11 +2303,32 @@ O2 在 pg0 之後，合併前兩種資料庫都要驗（使用者裁決 §3 第 
 | 建議 | 通知標題契約與摘要信 | §17.2.5、§17.2.6 摘要信、§17.2.8 清理、O2-T22、§17.8 D09 |
 | 建議 | T14／T20／T22 改列行為類 | O2-U12–U14 |
 
+**2026-11-19 依第二輪設計審查修訂**（必修 6 條與建議；逐條位置）：
+
+| # | 問題 | 改在哪 |
+|---|---|---|
+| R2-1 | 補寫沒有持久化去重 | §17.2.4 第 1–3 步（`TransitionId` 第 1 步產生、彙總交易的去重、已嘗試的項目不再合併）、§17.2.3（收件匣不另做去重的理由）、§17.4 `Dynamic_HealthCheckResult.TransitionId` 唯一、`Dynamic_AlertOutbox.TransitionId` 說明、§17.7、O2-T29、§17.8 C14、§17.9 |
+| R2-2 | 歷史補寫覆蓋健康總覽 | §17.2.4「多實例的彙總」與第 2 步（歷史結果、截至 R 的彙總、目前投影只往後推）、§17.4 `Dynamic_HealthCheck` 的 `LastAggregatedUtc`／`LastCheckedUtc`、索引 `(Code, InstanceId, CheckedUtc)`、§17.7、O2-T29、§17.8 C15、§17.9 |
+| R2-3 | 失敗與成功的順序、reset 協定 | §17.2.7 計數（成功的 reset 條件）、「順序與 reset 協定」、`RecordRuleFailureRequest` 第 1–5 步、§17.4 `Dynamic_RuleHealth`／`Dynamic_RuleFailure` 欄位說明、§17.7、O2-T30、§17.8 E15／E16、§17.9（在途失敗過期、跨實例已知限制） |
+| R2-4 | 摘要化沒有原子條件 | §17.2.6 領取（通道列鎖、額度與領取同交易）、節流（只動未領取的 `pending`）、摘要信掛列、§17.4 `Dynamic_AlertChannel.LastClaimUtc`、§17.7、O2-T31、§17.8 D11、§17.9 |
+| R2-5 | 登入的 `ActorOverride` 假設不成立 | §17.2.1 `ActorOverride`、登入的稽核身分情境（`AuditOrigin.BeginSignIn`）、登入寫入點、O2-T25、§17.8 A10／A11、§17.9 安全 |
+| R2-6 | 裁決與開工門檻不一致 | O2-U12 改成依 C3 的說明、§17.10.5 改寫（刪「無」）、O2-U7b 寫出不改表的自動補產做法、§17.1 o2a 範圍（新增欄位）、O2-U14 推薦寫進設計 |
+| 守衛 | 稽核交易內呼叫守衛的位置 | §17.2.1（建 scope 前檢查、`TryWriteNowAsync` 也丟）、§17.8 A09、§17.9 |
+| U 意見 | U2、U4、U5、U7、U10、U12、U13、U14 | O2-U2（強調政策可開 Email）、U4a–U4c、U5（刪無證據理由）、U7a–U7b、U10（不把任意 SMTP 當選項）、U12、U13（PostgreSQL 只做產品層）、U14（推薦改通道語系；§17.2.6、§17.3、§17.4 `MailLocale`、§17.5、§17.8 D13） |
+| 建議 | 摘要信與 `Body` 的長度預算 | §17.2.6 摘要信長度預算與一般信截斷、§17.4 `Body` 說明、§17.8 D12、§17.9 技術限制 |
+| 建議 | E13 改例外矩陣 | §17.2.7 `RuleFailureClassifier` 的判準、§17.8 E13 與「E13 例外矩陣」 |
+| 建議 | 「至少一次」的範圍 | §17.2.6 寄送（限定為重試中的佇列列，列出重試耗盡、略過、併入摘要、記憶體遺失、收件端）、§17.9 資料完整性 |
+
 #### 17.10.5 需要使用者先定
 
-無。最接近的是 O2-U1（告警信收件人）：若答案是「寄給個人」，會牽動使用者帳號加 Email 欄位，等於開了業務 email 的入口（U9），但仍可在 O2 內加一個小段完成，不改產品定位，所以照推薦寫進設計。
+**o2a 開工前必答**（非推薦選項會改表，o2a 之後不能再改表）：
 
-會改表、必須在 o2a 開工前答的：O2-U1（選寄給個人要改 `AppUser`）、O2-U14（選「通道設定加信件語系」要改 `Dynamic_AlertChannel`）。其餘行為類的非推薦選項都不改表，可在對應子單元開工前答。
+- O2-U1：選「寄給個人」要替 `AppUser` 加 Email 欄位，牽動使用者管理與匯入，也等於開了業務 email 的入口（U9）；仍可在 O2 內加一個小段完成。
+- O2-U14：推薦的「通道設定加信件語系」已寫進設計；改選固定繁中或四語並列要拿掉 `Dynamic_AlertChannel.MailLocale`。
+
+**對應子單元開工前答**（任何選項都不改表）：O2-U2、U3、U4a–U4c、U5、U6、U7a、U7b、U8、U9、U10、U11、U13。O2-U7b 的自動補產有不改表的做法（O2-U7），o2d 開工前答即可。O2-U12 依 C3 裁決，不需回答。
+
+第二輪審查新增的去重與鎖欄位（`Dynamic_HealthCheckResult.TransitionId`、`Dynamic_HealthCheck.LastAggregatedUtc`、`Dynamic_AlertChannel.LastClaimUtc`）是技術類（O2-T29、O2-T31），不需使用者回答，但必須在 o2a 一起建（§17.1）。
 
 #### 17.10.6 未驗證
 
@@ -2234,6 +2340,9 @@ O2 在 pg0 之後，合併前兩種資料庫都要驗（使用者裁決 §3 第 
 - ⚠️ MailKit 的版本與 .NET 8 相容、授權仍是 MIT（o2c 計畫時查 NuGet 與官方 repo 並鎖版本）。
 - ⚠️ `DriveInfo` 在 macOS 磁碟映像、Linux loop device、Docker overlay 回報的剩餘空間是否就是附件目錄實際可用的空間（o2b 實測）。
 - ⚠️ `PRAGMA quick_check` 在大資料庫的耗時（60 秒逾時夠不夠）；Demo 資料量下實測一次。
-- ⚠️ gate 的 PostgreSQL 步驟增加的時間（§17.8 粗估 30–60 秒）。
+- ⚠️ gate 的 PostgreSQL 步驟增加的時間（§17.8 粗估 50–100 秒）。
 - ⚠️ Render 免費方案擋 SMTP 埠（U1 已列未查證）：對 O2 沒影響，Demo 站本來就停用通道設定。
-- 本節的檔案與行號（`EventStage.cs:67-68`、`CheckEvaluator.cs:40`、`EffectApplier.cs`、`TaskRuleStage.cs`、`ManualTaskRules.cs`、`LoginHandler.cs`、`UpdateSiteThemeHandler.cs`）是 2026-11-19 讀 `772e7a54` 的結果，計畫階段再核對一次。
+- ⚠️ EF Core 在 SQLite 與 PostgreSQL 上把 `ExecuteUpdate` 裡的「取較晚者」（`LastFailureUtc`、`StreakResetUtc`）與 `CASE` 翻成可用的 SQL（SQLite 的 `max()`、PostgreSQL 的 `GREATEST`），以及 SQLite 上 `DateTime` 存成 TEXT 時比較大小的結果正確（o2a 寫 `Dynamic_RuleHealth` repository 時先試）。
+- ⚠️ 「提交成功後丟例外」的測試注入方式（`DbTransactionInterceptor.TransactionCommitted` 拋例外）在兩種 provider 都會讓呼叫端收到例外、而資料已提交（C14；o2b 先試）。
+- ⚠️ 數值溢位在既有寫入流程是否已轉成 400（E13 矩陣最後一列；o2d 計畫時核對）。
+- 本節的檔案與行號（`EventStage.cs:67-68`、`CheckEvaluator.cs:40`、`EffectApplier.cs`、`TaskRuleStage.cs`、`ManualTaskRules.cs`、`LoginHandler.cs`、`UpdateSiteThemeHandler.cs`、`SessionMiddleware.cs`、`ClaimsCurrentUser.cs`、`AuthController.cs`、`DatabaseErrors.cs`、`Errors/*ExceptionHandler.cs`）是 2026-11-19 讀 `772e7a54`（第二輪讀 `fd71171a`）的結果，計畫階段再核對一次。
