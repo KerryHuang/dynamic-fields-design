@@ -19,5 +19,5 @@ dotnet tool run dotnet-ef migrations add "$name" \
 dotnet tool run dotnet-ef migrations add "$name" \
   --project src/DynamicModules.Persistence.Postgres --startup-project src/DynamicModules.Persistence.Postgres --output-dir Migrations
 
-echo "已產生 SQLite 與 PostgreSQL 的 migration「$name」；請跑："
+echo "已產生 SQLite 與 PostgreSQL 的 migration「${name}」；請跑："
 echo "  dotnet test tests/DynamicModules.ApplicationTests --filter \"FullyQualifiedName~MigrationConsistencyTests\""
