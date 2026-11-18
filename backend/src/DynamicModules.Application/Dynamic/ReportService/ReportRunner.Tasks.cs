@@ -139,6 +139,7 @@ public partial class ReportRunner
             F.Completion => TaskReportValues.CompletionOf(t) is { } c ? Opt(c) : EmptyCell,
             F.CompletionDays => Number(TaskReportValues.CompletionDays(t)),
             F.DelayDays => Number(TaskReportValues.DelayDays(t, basis)),
+            F.Level => Opt(TaskReportValues.LevelOf(t, item.HasSubtasks)),
             F.EventKind => ev is null ? EmptyCell : Opt(ev.Kind),
             F.EventDate => ev is null ? EmptyCell : new TimedCell(ev.At),
             _ => EmptyCell,

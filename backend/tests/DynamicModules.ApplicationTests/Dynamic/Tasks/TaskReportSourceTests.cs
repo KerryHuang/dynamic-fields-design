@@ -341,7 +341,7 @@ public class TaskReportSourceTests : TaskTestBase
             TaskDef(dataset: ReportDatasets.TaskEvents, columns: [T(F.Title)]),
             TaskDef(groups: [new ReportGroup(T(F.Title), null)]),
             TaskDef(measures: [new ReportMeasure("m1", "countChild", null, null)]),
-            TaskDef(columns: [T(-16)]),
+            TaskDef(columns: [T(-17)]),
             TaskDef(columns: [T(99)]),
         };
         foreach (var d in bad)
