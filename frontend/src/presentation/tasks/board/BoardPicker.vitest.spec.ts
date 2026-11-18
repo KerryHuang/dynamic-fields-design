@@ -3,10 +3,11 @@ import { flushPromises, mount } from '@vue/test-utils';
 import * as quasar from 'quasar';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { createI18n } from 'vue-i18n';
-import type { TaskBoardConfig, TaskViewList } from 'src/domain/dynamic/task-board-types';
+import type { TaskBoardConfig, TaskViewConfig, TaskViewKind, TaskViewList } from 'src/domain/dynamic/task-board-types';
 import zhTW from 'src/i18n/zh-TW.json';
 import { normalizeViewList } from 'src/services/api/task-normalize';
 import { bodyOf, HttpFail, mockHttp, type Call } from 'src/test-utils/mock-http';
+import { ganttConfigWire } from '../gantt/gantt-fixtures';
 import { configWire, viewDetailWire, viewSummaryWire } from './board-fixtures';
 import BoardPicker from './BoardPicker.vue';
 
@@ -19,7 +20,7 @@ const views = (): TaskViewList => normalizeViewList({
 });
 const config = configWire({ groupBy: 'dueBucket' }) as unknown as TaskBoardConfig;
 
-async function mountPicker(o: Partial<{ deleteFails: number; isAdmin: boolean; hasSubordinates: boolean; currentId: number | null; currentName: string; unsaved: boolean; config: TaskBoardConfig }> = {}) {
+async function mountPicker(o: Partial<{ deleteFails: number; isAdmin: boolean; hasSubordinates: boolean; currentId: number | null; currentName: string; unsaved: boolean; config: TaskViewConfig; kind: TaskViewKind; views: TaskViewList }> = {}) {
   calls = mockHttp((c) => {
     if (c.method === 'delete' && o.deleteFails) return new HttpFail(o.deleteFails, { message: '伺服器訊息' });
     if (c.url === '/task-views' && c.method === 'post') return viewDetailWire({ id: 11, name: (bodyOf(c) as { name: string }).name });
@@ -181,5 +182,26 @@ describe('BoardPicker', () => {
     await new Promise((r) => setTimeout(r, 600));
     await flushPromises();
     expect(document.activeElement).toBe(q('board-picker'));
+  });
+
+  it('G72 the Gantt chart picker lists the default, mine, shared and save-as-new in Gantt words, and save-as creates a Gantt view', async () => {
+    const gantt = ganttConfigWire() as unknown as TaskViewConfig;
+    const list = normalizeViewList({ mine: [viewSummaryWire({ id: 12, kind: 'gantt', name: '展覽' })], shared: [viewSummaryWire({ id: 13, kind: 'gantt', name: '業務部甘特', isOwner: false, ownerName: '業務主管', shareCount: 1 })] });
+    await mountPicker({ kind: 'gantt', views: list, config: gantt, currentName: '預設甘特圖' });
+    const text = (id: string) => q(id)!.textContent ?? '';
+    expect(text('picker-item-default')).toContain('預設甘特圖');
+    expect(text('picker-group-mine')).toContain('我的甘特圖');
+    expect(text('picker-item-13')).toContain('業務主管 建立');
+    expect(text('picker-save-as')).toContain('另存為新甘特圖');
+    expect(q('picker-share-12')!.getAttribute('aria-label')).toBe('分享甘特圖「展覽」');
+    q('picker-save-as')!.click();
+    await flushPromises();
+    const input = q('picker-name') as HTMLInputElement;
+    input.value = '我的甘特';
+    input.dispatchEvent(new Event('input'));
+    await flushPromises();
+    q('picker-name-ok')!.click();
+    await flushPromises();
+    expect(bodyOf(calls.find((c) => c.method === 'post' && c.url === '/task-views'))).toEqual({ kind: 'gantt', name: '我的甘特', config: gantt });
   });
 });

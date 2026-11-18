@@ -3,10 +3,11 @@ import { flushPromises, mount } from '@vue/test-utils';
 import * as quasar from 'quasar';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createI18n } from 'vue-i18n';
-import type { TaskBoardConfig } from 'src/domain/dynamic/task-board-types';
+import type { TaskBoardConfig, TaskGanttConfig, TaskViewConfig, TaskViewKind } from 'src/domain/dynamic/task-board-types';
 import zhTW from 'src/i18n/zh-TW.json';
 import { USERS } from 'src/presentation/dynamic/tasks/task-fixtures';
 import { bodyOf, HttpFail, mockHttp, type Call } from 'src/test-utils/mock-http';
+import { ganttConfigWire } from '../gantt/gantt-fixtures';
 import { configWire, viewDetailWire } from './board-fixtures';
 import BoardSettingsDialog from './BoardSettingsDialog.vue';
 
@@ -16,7 +17,7 @@ const q = (id: string) => document.body.querySelector<HTMLElement>(`[data-testid
 const click = async (id: string) => { q(id)!.click(); await flushPromises(); };
 const config = (o: Record<string, unknown> = {}) => configWire(o) as unknown as TaskBoardConfig;
 
-async function mountDialog(o: Partial<{ config: TaskBoardConfig; canSave: boolean; hasSubordinates: boolean; viewId: number | null; saveFails: number }> = {}) {
+async function mountDialog(o: Partial<{ kind: TaskViewKind; name: string; config: TaskViewConfig; canSave: boolean; hasSubordinates: boolean; viewId: number | null; saveFails: number }> = {}) {
   calls = mockHttp((c) => {
     if (c.url === '/users') return USERS;
     if (c.url === '/task-views/5' && c.method === 'put') return o.saveFails ? new HttpFail(o.saveFails, { message: '伺服器訊息', code: 'stale' }) : viewDetailWire({ ...(bodyOf(c) as object), rowVersion: 'v2' });
@@ -251,5 +252,82 @@ describe('BoardSettingsDialog', () => {
     await resizeTo(1366);
     await mountDialog();
     expect(document.body.querySelector('.q-dialog__inner--maximized')).toBeNull();
+  });
+
+  describe('Gantt chart (kind=gantt, gt2c)', () => {
+    const gantt = (o: Record<string, unknown> = {}) => ganttConfigWire(o) as unknown as TaskGanttConfig;
+    const mountGantt = (o: Partial<{ config: TaskViewConfig; canSave: boolean; hasSubordinates: boolean; viewId: number | null }> = {}) =>
+      mountDialog({ kind: 'gantt', config: gantt(), name: '展覽', ...o });
+
+    it('G73 offers group-by, scope, filters without a due range, show subtasks and the default scale; no columns or sort', async () => {
+      await mountGantt();
+      expect(q('board-settings')!.textContent).toContain('甘特圖設定');
+      for (const g of ['parent', 'assignee', 'none']) expect(q(`settings-gantt-group-${g}`)).not.toBeNull();
+      expect(q('settings-gantt-group-parent')!.getAttribute('aria-checked')).toBe('true');
+      expect(q('settings-group-status')).toBeNull();
+      for (const s of ['day', 'week', 'month']) expect(q(`settings-scale-${s}`)).not.toBeNull();
+      expect(q('settings-scale-week')!.getAttribute('aria-checked')).toBe('true');
+      expect(q('settings-scope-assigned')).not.toBeNull();
+      expect(q('settings-status-todo')).not.toBeNull();
+      expect(q('settings-keyword')).not.toBeNull();
+      expect(q('settings-show-subtasks')).not.toBeNull();
+      expect(q('settings-due-range')).toBeNull();
+      expect(q('settings-col-row-todo')).toBeNull();
+      expect(q('settings-sort-key')).toBeNull();
+    });
+
+    it('G73 apply emits a Gantt config with the chosen group-by and scale, and writes nothing', async () => {
+      const w = await mountGantt();
+      await click('settings-gantt-group-assignee');
+      await click('settings-scale-month');
+      await click('settings-status-done');
+      await click('settings-apply');
+      expect(w.emitted('apply')![0][0]).toEqual({ version: 1, groupBy: 'assignee', scope: 'assigned', filters: { statuses: ['todo', 'inProgress'] }, scale: 'month' });
+      expect(writes()).toHaveLength(0);
+    });
+
+    it('G73 save writes the Gantt config back with the rowVersion (D4)', async () => {
+      const w = await mountGantt();
+      await click('settings-gantt-group-none');
+      await click('settings-save');
+      const put = writes().find((c) => c.method === 'put')!;
+      expect(bodyOf(put)).toEqual({ name: '展覽', rowVersion: 'v1', config: { version: 1, groupBy: 'none', scope: 'assigned', filters: { statuses: ['todo', 'inProgress', 'done'] }, scale: 'week' } });
+      expect(w.emitted('saved')).toHaveLength(1);
+    });
+
+    it('G73 the default Gantt chart and shared ones only apply or save as new; save-as creates a Gantt view', async () => {
+      const w = await mountGantt({ canSave: false, viewId: null });
+      expect(q('settings-save')).toBeNull();
+      expect(q('settings-readonly-note')!.textContent).toContain('預設甘特圖或別人分享的甘特圖');
+      expect(q('settings-save-as')!.textContent).toContain('另存為新甘特圖');
+      const input = q('settings-name') as HTMLInputElement;
+      input.value = '我的甘特';
+      input.dispatchEvent(new Event('input'));
+      await flushPromises();
+      await click('settings-save-as');
+      expect(bodyOf(writes().find((c) => c.method === 'post'))).toMatchObject({ kind: 'gantt', name: '我的甘特', config: { groupBy: 'parent', scale: 'week' } });
+      expect(w.emitted('savedAsNew')).toHaveLength(1);
+    });
+
+    it('D7 a subordinates Gantt chart without subordinates keeps the scope on apply; only save-as changes it to assigned', async () => {
+      const w = await mountGantt({ hasSubordinates: false, config: gantt({ scope: 'subordinates' }) });
+      expect(q('settings-scope-note')!.textContent).toContain('另存為新甘特圖時會改成「指派給我」');
+      await click('settings-apply');
+      expect((w.emitted('apply')![0][0] as TaskGanttConfig).scope).toBe('subordinates');
+      mounted!.unmount();
+      document.body.innerHTML = '';
+      await mountGantt({ hasSubordinates: false, config: gantt({ scope: 'subordinates' }) });
+      await click('settings-save-as');
+      expect(bodyOf(writes().find((c) => c.method === 'post'))).toMatchObject({ kind: 'gantt', config: { scope: 'assigned' } });
+    });
+
+    it('G77 the Gantt settings are maximized on a phone and never scroll sideways', async () => {
+      window.innerWidth = 390;
+      window.dispatchEvent(new Event('resize'));
+      await new Promise((r) => setTimeout(r, 150));
+      await mountGantt();
+      expect(document.body.querySelector('.q-dialog__inner--maximized')).not.toBeNull();
+      expect(q('settings-body')!.style.overflowX).toBe('hidden');
+    });
   });
 });

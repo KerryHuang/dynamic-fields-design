@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
-  buildBoardConfig, changeGroupBy, formFromConfig, MAX_RANGE_N, moveInList, rangeNInvalid, saveAsConfig, scopeOptions, setFilterAssignees,
+  buildBoardConfig, buildGanttConfig, changeGroupBy, ganttFormFromConfig, formFromConfig, MAX_RANGE_N, moveInList, rangeNInvalid, saveAsConfig, scopeOptions, setFilterAssignees,
 } from './task-board-config';
 
 describe('task-board-config', () => {
@@ -95,5 +95,23 @@ describe('task-board-config', () => {
     const base = { version: 1, groupBy: 'assignee' as const, scope: 'subordinates' as const, columns: { assignees: ['a'] } };
     expect(saveAsConfig(base, false)).toEqual({ ...base, scope: 'assigned' });
     expect(saveAsConfig(base, true)).toBe(base);
+  });
+
+  it('round-trips a Gantt config the server sent (G73), without a due range or board-only parts', () => {
+    const served = {
+      version: 1, groupBy: 'assignee' as const, scope: 'involved' as const,
+      filters: { statuses: ['todo' as const, 'inProgress' as const], assigneeUserIds: ['sales02'], includeUnassigned: true, keyword: '展' }, scale: 'month' as const, showSubtasks: false,
+    };
+    const form = ganttFormFromConfig(served);
+    expect(buildGanttConfig(form, served.groupBy, served.scale)).toEqual(served);
+    expect(buildGanttConfig(ganttFormFromConfig({ version: 1, groupBy: 'parent', scope: 'assigned', scale: 'week' }), 'none', 'day'))
+      .toEqual({ version: 1, groupBy: 'none', scope: 'assigned', scale: 'day' });
+    // 共用表單就算帶著到期日區間也不送（伺服器對甘特設定的 dueRange 回 400）
+    expect(buildGanttConfig({ ...form, dueRange: { kind: 'thisWeek', n: null } }, 'parent', 'week').filters).not.toHaveProperty('dueRange');
+  });
+
+  it('save-as of a Gantt config without subordinates swaps the scope too (D7)', () => {
+    const g = { version: 1, groupBy: 'parent' as const, scope: 'subordinates' as const, scale: 'week' as const };
+    expect(saveAsConfig(g, false)).toEqual({ ...g, scope: 'assigned' });
   });
 });
