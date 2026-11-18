@@ -3,7 +3,7 @@ import { normalizeGantt } from 'src/services/api/task-normalize';
 import { cardWire } from 'src/presentation/tasks/board/board-fixtures';
 import { ganttWire } from 'src/presentation/tasks/gantt/gantt-fixtures';
 import {
-  addMonths, barGeometry, canSchedule, formatGanttDate, ganttLines, ganttWeeks, minorTicks, monthTicks, phoneWindow, replaceCardLocally, scheduleCardLocally,
+  addMonths, barGeometry, canSchedule, dayAtX, draggedDates, formatGanttDate, ganttLines, ganttWeeks, minorTicks, monthTicks, phoneWindow, replaceCardLocally, scheduleCardLocally,
   shiftPhoneWindow, shiftWindow, spanGeometry, startOfWeek, todayPosition, windowDays, windowFor,
 } from './task-gantt';
 
@@ -175,5 +175,38 @@ describe('甘特圖手機週清單與改日期（gt2b1）', () => {
     expect(replaceCardLocally(d, card).parents[0].row?.version).toBe('v2');
     const row = { ...d.rows[0], version: 'v3' };
     expect(replaceCardLocally(d, row).rows[0].version).toBe('v3');
+  });
+});
+
+describe('甘特圖拖拉（gt2b2）', () => {
+  const week = { from: '2026-11-16', to: '2027-02-14' };
+  it('dayAtX maps the pointer to a day of the window and clamps outside the axis', () => {
+    const axis = { left: 300, width: 910 };
+    expect(dayAtX(300, axis, week)).toBe('2026-11-16');
+    expect(dayAtX(309.9, axis, week)).toBe('2026-11-16');
+    expect(dayAtX(345, axis, week)).toBe('2026-11-20');
+    expect(dayAtX(1209, axis, week)).toBe('2027-02-14');
+    expect(dayAtX(0, axis, week)).toBe('2026-11-16');
+    expect(dayAtX(5000, axis, week)).toBe('2027-02-14');
+    expect(dayAtX(345, { left: 0, width: 0 }, week)).toBeNull();
+  });
+
+  it('dayAtX on the month scale uses the real number of days', () => {
+    const month = { from: '2026-11-01', to: '2027-04-30' }; // 181 天
+    expect(windowDays(month)).toBe(181);
+    // 一天 1px：第 30 天是 11/30、第 31 天是 12/01
+    expect(dayAtX(29.5, { left: 0, width: 181 }, month)).toBe('2026-11-30');
+    expect(dayAtX(30.5, { left: 0, width: 181 }, month)).toBe('2026-12-01');
+  });
+
+  it('draggedDates moves both for the bar, one edge for the handles (clamped at the other end), the due date for a milestone', () => {
+    expect(draggedDates('bar', '2026-11-21', '2026-12-02', 3, '')).toEqual({ startDate: '2026-11-24', dueDate: '2026-12-05' });
+    expect(draggedDates('bar', '2026-11-21', '2026-12-02', -30, '')).toEqual({ startDate: '2026-10-22', dueDate: '2026-11-02' });
+    expect(draggedDates('start', '2026-11-21', '2026-12-02', 2, '')).toEqual({ startDate: '2026-11-23', dueDate: '2026-12-02' });
+    expect(draggedDates('start', '2026-11-21', '2026-12-02', 20, '')).toEqual({ startDate: '2026-12-02', dueDate: '2026-12-02' });
+    expect(draggedDates('due', '2026-11-21', '2026-12-02', -2, '')).toEqual({ startDate: '2026-11-21', dueDate: '2026-11-30' });
+    expect(draggedDates('due', '2026-11-21', '2026-12-02', -20, '')).toEqual({ startDate: '2026-11-21', dueDate: '2026-11-21' });
+    expect(draggedDates('milestone', null, '2026-11-20', 5, '')).toEqual({ startDate: null, dueDate: '2026-11-25' });
+    expect(draggedDates('unscheduled', '2026-11-20', null, 0, '2026-11-25')).toEqual({ startDate: '2026-11-25', dueDate: '2026-11-25' });
   });
 });

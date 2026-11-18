@@ -503,3 +503,259 @@ describe('TaskGantt', () => {
     expect(w.get('[data-testid="gantt-range"]').text()).toBe('11/16/2026 – 11/29/2026');
   });
 });
+
+/**
+ * 拖拉（gt2b2）：jsdom 沒有版面，時間軸的位置用假的 getBoundingClientRect 指定——時間軸左緣 300px、寬 910px，
+ * 週刻度 91 天＝一天 10px；時間軸本體（列的區域）上下是 44–444px，未排程區在它下面。
+ */
+describe('TaskGantt drag (gt2b2)', () => {
+  const rect = (left: number, top: number, width: number, height: number) =>
+    ({ left, top, width, height, right: left + width, bottom: top + height, x: left, y: top, toJSON() {} }) as DOMRect;
+  /** 某一天那一格中間的 x。 */
+  const xOf = (iso: string) => 300 + Math.round((Date.parse(iso) - Date.parse('2026-11-16')) / 86_400_000) * 10 + 5;
+  const fire = (type: string, x: number, y: number, on: EventTarget = window, extra: Record<string, unknown> = {}) => {
+    const e = new MouseEvent(type, { clientX: x, clientY: y, buttons: 1, bubbles: true, cancelable: true });
+    Object.assign(e, { pointerType: 'mouse', pointerId: 1, isPrimary: true }, extra);
+    on.dispatchEvent(e);
+  };
+  const el = (w: VueWrapper, testid: string) => w.get(`[data-testid="${testid}"]`).element;
+  /** 在 testid 那個元素上按下（x 是哪一天），移到另一天；回傳放開的函式。 */
+  async function dragOn(w: VueWrapper, testid: string, from: string, to: string, y = 100, extra: Record<string, unknown> = {}) {
+    fire('pointerdown', xOf(from), y, el(w, testid), extra);
+    fire('pointermove', xOf(to), y, window, extra);
+    await flushPromises();
+    return async (at = to, atY = y) => {
+      fire('pointerup', xOf(at), atY, window, extra);
+      await flushPromises();
+      await new Promise((r) => setTimeout(r));
+      await flushPromises();
+    };
+  }
+  const tip = () => document.querySelector('[data-testid="gantt-drag-tip-text"]')?.textContent ?? null;
+
+  beforeEach(() => {
+    document.body.innerHTML = '';
+    vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockImplementation(function (this: HTMLElement) {
+      if (this.dataset.testid === 'gantt-axis') return rect(300, 0, 910, 44);
+      if (this.dataset.testid === 'gantt-body') return rect(0, 44, 1210, 400);
+      return rect(0, 0, 0, 0);
+    });
+  });
+  afterEach(() => { quasar.Screen.lt.md = false; quasar.Screen.lt.sm = false; vi.unstubAllGlobals(); vi.restoreAllMocks(); document.body.innerHTML = ''; });
+
+  it('G63 dragging the whole bar 3 days right shows the new range, sends both dates +3 with the version, and the bar stays there', async () => {
+    const srv = statefulServer();
+    const w = await mountGantt(srv.gantt, 'zh-TW', srv.schedule);
+    expect(w.get('[data-testid="gantt-bar-7"]').classes()).toContain('is-draggable');
+    const before = ganttCalls().length;
+    const up = await dragOn(w, 'gantt-bar-7', '2026-11-25', '2026-11-28');
+    expect(tip()).toBe('11/24（週二） → 12/5（週六）・12 天');
+    // 拖拉中長條已畫在新位置
+    expect(pctOf(w.get('[data-testid="gantt-bar-7"]'), 'left')).toBeCloseTo((8 / 91) * 100, 3);
+    expect(scheduleCalls()).toHaveLength(0);
+    await up();
+    expect(tip()).toBeNull();
+    expect(scheduleCalls().map((c) => c.url)).toEqual(['/tasks/7/schedule']);
+    expect(bodyOf(scheduleCalls()[0])).toEqual({ startDate: '2026-11-24', dueDate: '2026-12-05', expectedVersion: '20261101020000000' });
+    expect(pctOf(w.get('[data-testid="gantt-bar-7"]'), 'left')).toBeCloseTo((8 / 91) * 100, 3);
+    expect(pctOf(w.get('[data-testid="gantt-bar-7"]'), 'width')).toBeCloseTo((12 / 91) * 100, 3);
+    // 跨度要重算：重新查詢甘特圖
+    expect(ganttCalls().length).toBeGreaterThan(before);
+    expect(w.emitted('open')).toBeUndefined();
+  });
+
+  it('G63 the tip follows the interface language; a drop on the same day sends nothing; dragging past the window edge stops at its last day', async () => {
+    const w = await mountGantt(() => ganttWire(), 'en-US', (_id, b) => ({ card: cardWire({ id: 7, ...b }) }));
+    let up = await dragOn(w, 'gantt-bar-7', '2026-11-25', '2026-11-28');
+    expect(tip()).toBe('Tue 11/24 → Sat 12/5 · 12 days');
+    fire('pointermove', xOf('2026-11-25') + 3, 100);
+    await flushPromises();
+    await up('2026-11-25');
+    expect(scheduleCalls()).toHaveLength(0);
+    up = await dragOn(w, 'gantt-bar-7', '2026-11-25', '2026-11-25');
+    fire('pointermove', 5000, 100);
+    await up('2027-02-14');
+    // 指標停在時間窗最後一天（2/14）：往右移了 81 天
+    expect(bodyOf(scheduleCalls()[0])).toMatchObject({ startDate: '2027-02-10', dueDate: '2027-02-21' });
+  });
+
+  it('G64 the left edge changes only the start and stops at the due date; the right edge changes only the due date', async () => {
+    const w = await mountGantt(() => ganttWire(), 'zh-TW', (id, b) => ({ card: cardWire({ id, ...b }) }));
+    expect(w.get('[data-testid="gantt-handle-start-7"]').attributes('aria-label')).toBe('拖拉改開始日');
+    expect(w.get('[data-testid="gantt-handle-due-7"]').attributes('aria-label')).toBe('拖拉改到期日');
+    let up = await dragOn(w, 'gantt-handle-start-7', '2026-11-21', '2026-11-23');
+    expect(tip()).toBe('11/23（週一） → 12/2（週三）・10 天');
+    fire('pointermove', xOf('2026-12-20'), 100);
+    await flushPromises();
+    expect(tip()).toBe('12/2（週三）・1 天');
+    await up('2026-12-20');
+    expect(bodyOf(scheduleCalls()[0])).toMatchObject({ startDate: '2026-12-02', dueDate: '2026-12-02' });
+    up = await dragOn(w, 'gantt-handle-due-5', '2026-12-01', '2026-11-29');
+    await up();
+    expect(bodyOf(scheduleCalls()[1])).toMatchObject({ startDate: '2026-11-16', dueDate: '2026-11-29' });
+    // 開始日早於時間窗（被截掉）的長條沒有左緣把手，整條仍可拖
+    expect(w.find('[data-testid="gantt-handle-start-9"]').exists()).toBe(false);
+    expect(w.find('[data-testid="gantt-handle-due-9"]').exists()).toBe(true);
+  });
+
+  it('G65 dragging a milestone changes only its due date', async () => {
+    const w = await mountGantt(() => ganttWire(), 'zh-TW', (id, b) => ({ card: cardWire({ id, ...b }) }));
+    const up = await dragOn(w, 'gantt-milestone-8', '2026-11-20', '2026-11-25');
+    expect(tip()).toBe('到期日 11/25（週三）');
+    await up();
+    expect(bodyOf(scheduleCalls()[0])).toEqual({ startDate: null, dueDate: '2026-11-25', expectedVersion: '20261101020000000' });
+  });
+
+  it('G66 an unscheduled task dropped on 11/25 gets both dates on that day and moves onto the timeline; dropped elsewhere nothing is sent', async () => {
+    const srv = statefulServer();
+    const w = await mountGantt(srv.gantt, 'zh-TW', srv.schedule);
+    expect(w.get('[data-testid="gantt-grip-21"]').attributes('aria-label')).toBe('拖到時間軸上排程');
+    // 放在時間軸外（未排程區）：不排程
+    let up = await dragOn(w, 'gantt-unscheduled-21', '2026-11-20', '2026-11-25', 600);
+    expect(document.querySelector('[data-testid="gantt-drag-tip"]')!.textContent).toContain('想想看');
+    expect(tip()).toBeNull();
+    await up();
+    expect(scheduleCalls()).toHaveLength(0);
+    up = await dragOn(w, 'gantt-unscheduled-21', '2026-11-18', '2026-11-25', 600);
+    fire('pointermove', xOf('2026-11-25'), 200);
+    await flushPromises();
+    expect(tip()).toBe('11/25（週三）・1 天');
+    await up('2026-11-25', 200);
+    expect(bodyOf(scheduleCalls()[0])).toEqual({ startDate: '2026-11-25', dueDate: '2026-11-25', expectedVersion: '20261101020000000' });
+    expect(w.find('[data-testid="gantt-unscheduled-21"]').exists()).toBe(false);
+    expect(pctOf(w.get('[data-testid="gantt-bar-21"]'), 'left')).toBeCloseTo((9 / 91) * 100, 3);
+    expect(w.emitted('open')).toBeUndefined();
+  });
+
+  it('G67 Esc in the middle of a drag puts the bar back and sends nothing; so does pointercancel', async () => {
+    const w = await mountGantt();
+    const up = await dragOn(w, 'gantt-bar-7', '2026-11-25', '2026-11-30');
+    expect(pctOf(w.get('[data-testid="gantt-bar-7"]'), 'left')).toBeCloseTo((10 / 91) * 100, 3);
+    window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }));
+    await flushPromises();
+    expect(pctOf(w.get('[data-testid="gantt-bar-7"]'), 'left')).toBeCloseTo((5 / 91) * 100, 3);
+    expect(tip()).toBeNull();
+    await up();
+    await dragOn(w, 'gantt-bar-7', '2026-11-25', '2026-11-30');
+    fire('pointercancel', xOf('2026-11-30'), 100);
+    await flushPromises();
+    expect(pctOf(w.get('[data-testid="gantt-bar-7"]'), 'left')).toBeCloseTo((5 / 91) * 100, 3);
+    expect(scheduleCalls()).toHaveLength(0);
+  });
+
+  it('G68 tasks whose dates cannot be changed (a manager looking at a subordinate, frozen) have no handles, show not-allowed and send nothing; clicking opens them', async () => {
+    const rows = [
+      cardWire({ id: 31, title: '部屬的任務', startDate: '2026-11-17', dueDate: '2026-11-20', canEdit: false }),
+      cardWire({ id: 32, title: '凍結的任務', startDate: '2026-11-17', dueDate: '2026-11-20', frozen: true }),
+      cardWire({ id: 34, title: '部屬的里程碑', dueDate: '2026-11-20', canEdit: false }),
+    ];
+    const w = await mountGantt(() => ganttWire({ rows, spans: [], total: 3, unscheduled: [cardWire({ id: 33, dueDate: undefined, canEdit: false })], unscheduledTotal: 1 }));
+    for (const id of [31, 32]) {
+      expect(w.find(`[data-testid="gantt-handle-start-${id}"]`).exists()).toBe(false);
+      expect(w.find(`[data-testid="gantt-handle-due-${id}"]`).exists()).toBe(false);
+      expect(w.get(`[data-testid="gantt-bar-${id}"]`).classes()).toContain('is-locked');
+    }
+    expect(w.get('[data-testid="gantt-milestone-34"]').classes()).toContain('is-locked');
+    expect(w.find('[data-testid="gantt-grip-33"]').exists()).toBe(false);
+    for (const [testid, day] of [['gantt-bar-31', '2026-11-18'], ['gantt-bar-32', '2026-11-18'], ['gantt-milestone-34', '2026-11-20'], ['gantt-unscheduled-33', '2026-11-20']]) {
+      const up = await dragOn(w, testid, day, '2026-11-27');
+      expect(document.querySelector('[data-testid="gantt-drag-tip"]')).toBeNull();
+      await up();
+    }
+    expect(scheduleCalls()).toHaveLength(0);
+    await w.get('[data-testid="gantt-bar-31"]').trigger('click');
+    expect(w.emitted('open')).toEqual([[31]]);
+  });
+
+  it('G69 a stale version (409) puts the bar back, tells the user and reloads the chart', async () => {
+    const w = await mountGantt(() => ganttWire(), 'zh-TW', () => new HttpFail(409, { code: 'stale', message: 'SERVER-TEXT' }));
+    const spy = notifySpy(w);
+    const before = ganttCalls().length;
+    const up = await dragOn(w, 'gantt-bar-7', '2026-11-25', '2026-11-28');
+    await up();
+    expect(scheduleCalls()).toHaveLength(1);
+    expect(notified(spy)).toEqual(['任務已被別人修改，已重新整理']);
+    expect(pctOf(w.get('[data-testid="gantt-bar-7"]'), 'left')).toBeCloseTo((5 / 91) * 100, 3);
+    expect(ganttCalls().length).toBeGreaterThan(before);
+  });
+
+  it('a 400 puts the bar back and shows the message as a notification (no field to put it under)', async () => {
+    const w = await mountGantt(() => ganttWire(), 'zh-TW', () => new HttpFail(400, { errors: { startDate: ['SERVER'] } }));
+    const spy = notifySpy(w);
+    const up = await dragOn(w, 'gantt-bar-7', '2026-11-25', '2026-11-28');
+    await up();
+    expect(notified(spy)).toEqual(['開始日不能晚於到期日']);
+    expect(pctOf(w.get('[data-testid="gantt-bar-7"]'), 'left')).toBeCloseTo((5 / 91) * 100, 3);
+  });
+
+  it('G70 while the request for a bar is unanswered, dragging it again sends no second request', async () => {
+    const w = await mountGantt();
+    const api = vi.spyOn(dynamicApi, 'scheduleTask').mockImplementation(() => new Promise(() => {}));
+    let up = await dragOn(w, 'gantt-bar-7', '2026-11-25', '2026-11-28');
+    await up();
+    expect(api).toHaveBeenCalledTimes(1);
+    up = await dragOn(w, 'gantt-bar-7', '2026-11-28', '2026-12-01');
+    expect(document.querySelector('[data-testid="gantt-drag-tip"]')).toBeNull();
+    await up();
+    expect(api).toHaveBeenCalledTimes(1);
+    // 別的任務照常可拖
+    up = await dragOn(w, 'gantt-milestone-8', '2026-11-20', '2026-11-22');
+    await up();
+    expect(api).toHaveBeenCalledTimes(2);
+  });
+
+  it('a bar that was just dragged does not open the task when the pointer is released', async () => {
+    const w = await mountGantt(() => ganttWire(), 'zh-TW', (id, b) => ({ card: cardWire({ id, ...b }) }));
+    fire('pointerdown', xOf('2026-11-25'), 100, el(w, 'gantt-bar-7'));
+    fire('pointermove', xOf('2026-11-28'), 100);
+    await flushPromises();
+    fire('pointerup', xOf('2026-11-28'), 100);
+    el(w, 'gantt-bar-7').dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
+    await flushPromises();
+    expect(w.emitted('open')).toBeUndefined();
+  });
+
+  it('G71 a touch laptop at 1366 does not drag; clicking the bar opens the dates dialog', async () => {
+    vi.stubGlobal('matchMedia', (q: string) => ({ matches: q === '(pointer: coarse)', addEventListener() {}, removeEventListener() {} }));
+    const w = await mountGantt();
+    expect(w.find('[data-testid="gantt-handle-start-7"]').exists()).toBe(false);
+    expect(w.find('[data-testid="gantt-grip-21"]').exists()).toBe(false);
+    expect(w.get('[data-testid="gantt-bar-7"]').classes()).not.toContain('is-draggable');
+    const up = await dragOn(w, 'gantt-bar-7', '2026-11-25', '2026-11-28');
+    expect(document.querySelector('[data-testid="gantt-drag-tip"]')).toBeNull();
+    await up();
+    expect(scheduleCalls()).toHaveLength(0);
+    await w.get('[data-testid="gantt-bar-7"]').trigger('click');
+    await flushPromises();
+    expect(dialogOpen(w)).toBe(true);
+  });
+
+  it('a finger on a desktop whose main pointer is a mouse does not drag either', async () => {
+    const w = await mountGantt();
+    const up = await dragOn(w, 'gantt-bar-7', '2026-11-25', '2026-11-28', 100, { pointerType: 'touch' });
+    // 看板的觸控是長按才拖；甘特圖觸控一律不拖，長按也不會
+    await new Promise((r) => setTimeout(r, 450));
+    expect(document.querySelector('[data-testid="gantt-drag-tip"]')).toBeNull();
+    await up();
+    expect(scheduleCalls()).toHaveLength(0);
+  });
+
+  it('the tablet has no handles and does not drag', async () => {
+    quasar.Screen.lt.md = true;
+    const w = await mountGantt();
+    expect(w.find('[data-testid="gantt-handle-start-7"]').exists()).toBe(false);
+    expect(w.find('[data-testid="gantt-grip-21"]').exists()).toBe(false);
+    const up = await dragOn(w, 'gantt-bar-7', '2026-11-25', '2026-11-28');
+    expect(document.querySelector('[data-testid="gantt-drag-tip"]')).toBeNull();
+    await up();
+    expect(scheduleCalls()).toHaveLength(0);
+  });
+
+  it('handles are not in the Tab order (the keyboard path is the edit-dates button)', async () => {
+    const w = await mountGantt();
+    const handle = el(w, 'gantt-handle-start-7') as HTMLElement;
+    expect(handle.tagName).toBe('SPAN');
+    expect(handle.hasAttribute('tabindex')).toBe(false);
+    expect(w.find('[data-testid="gantt-edit-7"]').exists()).toBe(true);
+  });
+});

@@ -322,3 +322,34 @@ export function replaceCardLocally(data: TaskGanttData, card: BoardCard): TaskGa
     parents: data.parents.map((p) => (p.row?.id === card.id ? { ...p, row: card } : p)),
   };
 }
+
+// ---- 拖拉（gt2b2，§11.5.4.8） ----
+
+/** 拖的是哪一部分：整條、左緣（開始日）、右緣（到期日）、菱形（到期日）、未排程的列（放下那天）。 */
+export type GanttDragPart = 'bar' | 'start' | 'due' | 'milestone' | 'unscheduled';
+
+/**
+ * 指標的 x 座標落在時間窗的哪一天：一天＝時間軸寬 ÷ 時間窗天數（月刻度照實際天數）。
+ * 拖出時間軸左右兩側時夾在時間窗的第一天、最後一天；時間軸沒有寬度（還沒排版）時回 null。
+ */
+export function dayAtX(x: number, axis: { left: number; width: number }, w: TaskGanttWindow): string | null {
+  if (!(axis.width > 0)) return null;
+  const days = windowDays(w);
+  const i = Math.floor(((x - axis.left) / axis.width) * days);
+  return addDays(w.from, Math.min(days - 1, Math.max(0, i)));
+}
+
+/**
+ * 拖了 delta 天之後的新日期：整條兩個日期同移；左緣只改開始日、拖過右緣夾在到期日；右緣只改到期日、拖過左緣夾在開始日；
+ * 菱形只改到期日；未排程的列兩個日期都設成放下那天（day）。
+ */
+export function draggedDates(
+  part: GanttDragPart, startDate: string | null, dueDate: string | null, delta: number, day: string,
+): { startDate: string | null; dueDate: string | null } {
+  if (part === 'unscheduled' || !dueDate) return { startDate: day, dueDate: day };
+  const start = startDate ?? dueDate;
+  if (part === 'bar') return { startDate: startDate && addDays(startDate, delta), dueDate: addDays(dueDate, delta) };
+  if (part === 'start') return { startDate: isoOfDay(Math.min(dayNumber(start) + delta, dayNumber(dueDate))), dueDate };
+  if (part === 'due') return { startDate, dueDate: isoOfDay(Math.max(dayNumber(dueDate) + delta, dayNumber(start))) };
+  return { startDate, dueDate: addDays(dueDate, delta) };
+}

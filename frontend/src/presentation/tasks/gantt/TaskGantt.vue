@@ -5,17 +5,18 @@ import { useI18n } from 'vue-i18n';
 import { useFetchGanttToday, useGantt } from 'src/application/dynamic/queries/task-board-queries';
 import type { BoardCard, GanttSource, TaskGanttConfig, TaskGanttData, TaskGanttWindow } from 'src/domain/dynamic/task-board-types';
 import {
-  barGeometry, canSchedule, formatGanttDate, ganttLines, ganttWeeks, GANTT_LEFT_WIDTH, GANTT_LEFT_WIDTH_TABLET, minorTicks, monthTicks, phoneWindow,
-  shiftPhoneWindow, shiftWindow, spanGeometry, todayPosition, windowFor, type GanttLine, type GanttScale,
+  barGeometry, canSchedule, dayAtX, dayNumber, draggedDates, formatGanttDate, ganttLines, ganttWeeks, GANTT_LEFT_WIDTH, GANTT_LEFT_WIDTH_TABLET, minorTicks,
+  monthTicks, phoneWindow, shiftPhoneWindow, shiftWindow, spanGeometry, todayPosition, windowDays, windowFor, type GanttDragPart, type GanttLine, type GanttScale,
 } from 'src/domain/dynamic/task-gantt';
 import { progressView, taskStatusColor } from 'src/domain/dynamic/task-types';
 import SubtaskProgress from 'src/presentation/dynamic/tasks/SubtaskProgress.vue';
+import { useCardDrag } from '../board/use-card-drag';
 import GanttDateDialog from './GanttDateDialog.vue';
 import { useGanttSchedule } from './use-gantt-schedule';
 
 /**
  * 甘特圖（看板設計 §11.5.4）：預設甘特圖、刻度與平移、三種分組、子任務跨度、今天線、未排程（gt2a）；
- * 平板時間軸、手機依週分組清單、日期對話框與「編輯日期」「排程」鈕（gt2b1）。拖拉隨 gt2b2。
+ * 平板時間軸、手機依週分組清單、日期對話框與「編輯日期」「排程」鈕（gt2b1）；桌機筆電拖拉改日期（gt2b2）。
  * 時間軸用 CSS grid 與百分比定位自畫（GT-T21），寬度填滿容器、不橫向捲動；用 Quasar 視窗斷點判斷寬度（GT-T17）。
  */
 const emit = defineEmits<{ open: [id: number] }>();
@@ -99,6 +100,76 @@ function onBar(c: BoardCard) {
   if (mode.value === 'tablet' && canSchedule(c)) openDates(c);
   else emit('open', c.id);
 }
+
+// ---- 拖拉（§11.5.4.8）：只有桌機筆電、用滑鼠或觸控筆；觸控一律不拖（GT-T17）。沿用看板的拖拉（門檻、Esc、pointercancel、拖完吞掉 click），
+// 「欄鍵」換成指標底下那一天（yyyy-MM-dd），放開時照拖的部分算新日期，走與日期對話框同一個 schedule 流程。
+const axisEl = ref<HTMLElement | null>(null);
+const bodyEl = ref<HTMLElement | null>(null);
+interface DragSource { card: BoardCard; part: GanttDragPart; originDay: string | null }
+const dragSource = ref<DragSource | null>(null);
+const canDrag = computed(() => mode.value === 'desktop' && !busy.value);
+const draggable = (c: BoardCard) => mode.value === 'desktop' && canSchedule(c);
+function pointerDay(x: number): string | null {
+  return axisEl.value && data.value ? dayAtX(x, axisEl.value.getBoundingClientRect(), data.value.window) : null;
+}
+// 長條拖出時間軸左右時夾在時間窗的第一天、最後一天；上下拖不換組（只看 x）。未排程的列要放在時間軸上才算數，放在別處不排程。
+function hitTest(x: number, y: number): string | null {
+  if (dragSource.value?.part === 'unscheduled') {
+    const body = bodyEl.value?.getBoundingClientRect();
+    const axis = axisEl.value?.getBoundingClientRect();
+    if (!body || !axis || y < body.top || y > body.bottom || x < axis.left || x > axis.right) return null;
+  }
+  return pointerDay(x);
+}
+const drag = useCardDrag({ enabled: canDrag, hitTest, onDrop: (_id, day) => { void drop(day); } });
+function nextDates(src: DragSource, day: string) {
+  const delta = src.originDay ? dayNumber(day) - dayNumber(src.originDay) : 0;
+  return draggedDates(src.part, src.card.startDate, src.card.dueDate, delta, day);
+}
+function onDragStart(e: PointerEvent, card: BoardCard, part: GanttDragPart) {
+  // 同一個任務的請求還沒回來前不能再拖（同看板）；整條與兩緣看按下的位置
+  if (!canDrag.value || !canSchedule(card) || e.pointerType === 'touch' || scheduler.isPending(card.id)) return;
+  const handle = (e.target as Element | null)?.closest?.('[data-drag-part]')?.getAttribute('data-drag-part') as GanttDragPart | null | undefined;
+  const originDay = pointerDay(e.clientX);
+  if (part !== 'unscheduled' && !originDay) return;
+  dragSource.value = { card, part: part === 'bar' && handle ? handle : part, originDay };
+  drag.start(e, card.id);
+}
+const dragPreview = computed(() => {
+  const st = drag.state.value;
+  const src = dragSource.value;
+  if (!st || !src || st.cardId !== src.card.id || st.overKey === null) return null;
+  return { id: src.card.id, ...nextDates(src, st.overKey) };
+});
+async function drop(day: string) {
+  const src = dragSource.value;
+  dragSource.value = null;
+  if (!src) return;
+  const next = nextDates(src, day);
+  if (next.startDate === src.card.startDate && next.dueDate === src.card.dueDate) return;
+  const outcome = await scheduler.schedule(src.card, next.startDate, next.dueDate);
+  // 拖拉沒有欄位可掛：400 的訊息改用通知（其他失敗 useGanttSchedule 已經通知過），長條由 useScheduleTask 放回原位
+  const field = outcome && !outcome.ok && outcome.fields ? outcome.fields.startDate ?? outcome.fields.dueDate : null;
+  if (field) $q.notify({ type: 'negative', message: field, position: 'bottom' });
+}
+const dayLabel = (iso: string) => t('taskGantt.drag.day', {
+  date: formatGanttDate(iso, locale.value, { month: 'numeric', day: 'numeric' }), weekday: formatGanttDate(iso, locale.value, { weekday: 'short' }),
+});
+const dragTip = computed(() => {
+  const st = drag.state.value;
+  const src = dragSource.value;
+  if (!st || !src) return null;
+  const p = dragPreview.value;
+  let text = '';
+  if (p?.startDate && p.dueDate) {
+    const n = windowDays({ from: p.startDate, to: p.dueDate });
+    text = n === 1 ? t('taskGantt.drag.oneDay', { date: dayLabel(p.dueDate) }) : t('taskGantt.drag.range', { from: dayLabel(p.startDate), to: dayLabel(p.dueDate), n });
+  } else if (p?.dueDate) text = t('taskGantt.dueOnly', { date: dayLabel(p.dueDate) });
+  return { x: st.x, y: st.y, title: src.part === 'unscheduled' ? src.card.title : '', text };
+});
+const dragClass = (c: BoardCard) => (mode.value !== 'desktop' ? {} : {
+  'is-draggable': canSchedule(c), 'is-locked': !canSchedule(c), 'is-dragging': dragPreview.value?.id === c.id,
+});
 const leftWidth = computed(() => (mode.value === 'tablet' ? GANTT_LEFT_WIDTH_TABLET : GANTT_LEFT_WIDTH));
 
 function shift(dir: 1 | -1) {
@@ -162,14 +233,19 @@ const progressText = (c: BoardCard) => {
 };
 const barClass = (c: BoardCard) => ({ 'is-overdue': c.overdue && !closed(c), 'is-closed': closed(c) });
 const spanLabel = (l: { span: { from: string; to: string } | null }) => (l.span ? t('taskGantt.span', { from: fullDate(l.span.from), to: fullDate(l.span.to) }) : '');
-const geometry = (c: BoardCard) => barGeometry(c.startDate, c.dueDate, windowOf.value);
+// 拖拉中的那一條畫在新位置；Esc 或放開後回到快取裡的日期（樂觀更新、失敗放回由 useScheduleTask 處理）
+const geometry = (c: BoardCard) => {
+  const p = dragPreview.value;
+  const d = p && p.id === c.id ? p : c;
+  return barGeometry(d.startDate, d.dueDate, windowOf.value);
+};
 const spanOf = (l: { span: { parentId: number; from: string; to: string } | null }) => spanGeometry(l.span, windowOf.value);
 const unscheduledMore = computed(() => (data.value ? data.value.unscheduledTotal - data.value.unscheduled.length : 0));
 const shortDate = (iso: string) => formatGanttDate(iso, locale.value, { month: 'numeric', day: 'numeric' });
 </script>
 
 <template>
-  <div class="task-gantt" role="region" :aria-label="t('taskGantt.region')" data-testid="gantt">
+  <div class="task-gantt" :class="dragSource && drag.state.value ? `is-dragging is-dragging-${dragSource.part}` : ''" role="region" :aria-label="t('taskGantt.region')" data-testid="gantt">
     <!-- 手機：不畫時間軸，依週分組的清單；點一列開任務詳細（§11.5.4.7） -->
     <template v-if="mode === 'phone'">
       <div class="row items-center no-wrap q-mb-sm" style="gap: 4px">
@@ -262,7 +338,7 @@ const shortDate = (iso: string) => formatGanttDate(iso, locale.value, { month: '
         <div class="gantt" :aria-busy="busy" :class="{ 'is-busy': busy, 'is-tablet': mode === 'tablet' }" :style="{ '--gantt-left': `${leftWidth}px` }" data-testid="gantt-chart">
           <div class="gantt-row gantt-head" :class="`is-${shownScale}`">
             <div class="gantt-left text-caption text-muted">{{ t('taskGantt.taskColumn') }}</div>
-            <div class="gantt-axis" aria-hidden="true">
+            <div ref="axisEl" class="gantt-axis" aria-hidden="true" data-testid="gantt-axis">
               <div class="gantt-axis-row">
                 <span v-for="m in majors" :key="m.date" class="gantt-tick" :style="{ left: pct(m.left), width: pct(m.width) }" data-testid="gantt-major">{{ m.label }}</span>
               </div>
@@ -272,7 +348,7 @@ const shortDate = (iso: string) => formatGanttDate(iso, locale.value, { month: '
               <span v-if="today !== null" class="gantt-today-label text-caption" :style="{ left: pct(today) }" data-testid="gantt-today-label">{{ t('taskGantt.todayLine') }}</span>
             </div>
           </div>
-          <div class="gantt-body">
+          <div ref="bodyEl" class="gantt-body" data-testid="gantt-body">
             <div class="gantt-overlay" aria-hidden="true">
               <span v-for="(x, i) in gridlines" :key="i" class="gantt-gridline" :style="{ left: pct(x) }" />
               <span v-if="today !== null" class="gantt-today-line" :style="{ left: pct(today) }" data-testid="gantt-today-line" />
@@ -336,10 +412,21 @@ const shortDate = (iso: string) => formatGanttDate(iso, locale.value, { month: '
                       <q-tooltip>{{ line.card.title }}<br>{{ dates(line.card) }}</q-tooltip>
                     </button>
                     <button
-                      v-else-if="geometry(line.card)!.kind === 'bar'" type="button" class="gantt-bar" :class="barClass(line.card)"
+                      v-else-if="geometry(line.card)!.kind === 'bar'" type="button" class="gantt-bar" :class="[barClass(line.card), dragClass(line.card)]"
                       :style="{ left: pct(geometry(line.card)!.left), width: pct(geometry(line.card)!.width) }"
-                      :aria-label="barLabel(line.card)" :data-testid="`gantt-bar-${line.card.id}`" @click="onBar(line.card)"
+                      :aria-label="barLabel(line.card)" :data-testid="`gantt-bar-${line.card.id}`" @pointerdown="onDragStart($event, line.card, 'bar')" @click="onBar(line.card)"
                     >
+                      <!-- 兩緣的拖拉把手（不能 Tab 到，鍵盤改用「編輯日期」）；那一側被時間窗截掉時看不到實際日期，不給把手，整條仍可拖 -->
+                      <template v-if="draggable(line.card)">
+                        <span
+                          v-if="!geometry(line.card)!.clippedStart" class="gantt-handle is-start" data-drag-part="start" :aria-label="t('taskGantt.drag.startHandle')"
+                          :data-testid="`gantt-handle-start-${line.card.id}`"
+                        />
+                        <span
+                          v-if="!geometry(line.card)!.clippedEnd" class="gantt-handle is-end" data-drag-part="due" :aria-label="t('taskGantt.drag.dueHandle')"
+                          :data-testid="`gantt-handle-due-${line.card.id}`"
+                        />
+                      </template>
                       <q-icon v-if="geometry(line.card)!.clippedStart" name="chevron_left" size="14px" class="gantt-clip is-start" data-testid="gantt-clip-start" />
                       <q-icon v-if="geometry(line.card)!.clippedEnd" name="chevron_right" size="14px" class="gantt-clip is-end" data-testid="gantt-clip-end" />
                       <q-tooltip>
@@ -350,8 +437,9 @@ const shortDate = (iso: string) => formatGanttDate(iso, locale.value, { month: '
                       </q-tooltip>
                     </button>
                     <button
-                      v-else type="button" class="gantt-milestone" :class="barClass(line.card)" :style="{ left: pct(geometry(line.card)!.left + geometry(line.card)!.width / 2) }"
-                      :aria-label="barLabel(line.card)" :data-testid="`gantt-milestone-${line.card.id}`" @click="onBar(line.card)"
+                      v-else type="button" class="gantt-milestone" :class="[barClass(line.card), dragClass(line.card)]"
+                      :style="{ left: pct(geometry(line.card)!.left + geometry(line.card)!.width / 2) }"
+                      :aria-label="barLabel(line.card)" :data-testid="`gantt-milestone-${line.card.id}`" @pointerdown="onDragStart($event, line.card, 'milestone')" @click="onBar(line.card)"
                     >
                       <q-tooltip>
                         <div class="text-weight-medium">{{ line.card.title }}</div>
@@ -368,7 +456,14 @@ const shortDate = (iso: string) => formatGanttDate(iso, locale.value, { month: '
         <section v-if="data.unscheduledTotal > 0" class="q-mt-md" :aria-label="t('taskGantt.unscheduled', { n: data.unscheduledTotal })" data-testid="gantt-unscheduled">
           <div class="text-subtitle2 q-mb-xs" data-testid="gantt-unscheduled-title">{{ t('taskGantt.unscheduled', { n: data.unscheduledTotal }) }}</div>
           <q-list dense bordered separator class="rounded-borders">
-            <q-item v-for="c in data.unscheduled" :key="c.id" clickable :data-testid="`gantt-unscheduled-${c.id}`" @click="emit('open', c.id)">
+            <q-item
+              v-for="c in data.unscheduled" :key="c.id" clickable :class="dragClass(c)" :data-testid="`gantt-unscheduled-${c.id}`"
+              @pointerdown="(e: PointerEvent) => { if (!(e.target as Element | null)?.closest?.('.gantt-schedule-btn')) onDragStart(e, c, 'unscheduled'); }" @click="emit('open', c.id)"
+            >
+              <!-- 拖拉把手：把這一列拖到時間軸上某一天，開始日與到期日都設成那天（§11.5.4.6） -->
+              <q-item-section v-if="draggable(c)" side class="gantt-grip">
+                <span class="row items-center" role="img" :aria-label="t('taskGantt.drag.unscheduledHandle')" :data-testid="`gantt-grip-${c.id}`"><q-icon name="drag_indicator" size="18px" /></span>
+              </q-item-section>
               <q-item-section>
                 <q-item-label class="gantt-unscheduled-title" :class="{ 'text-strike text-muted': closed(c) }">{{ c.title }}</q-item-label>
                 <q-item-label caption class="row items-center q-gutter-x-sm">
@@ -379,7 +474,7 @@ const shortDate = (iso: string) => formatGanttDate(iso, locale.value, { month: '
               </q-item-section>
               <q-item-section v-if="canSchedule(c)" side>
                 <q-btn
-                  flat dense no-caps color="primary" :label="t('taskGantt.schedule.button')" :aria-label="t('taskGantt.schedule.buttonLabel', { title: c.title })"
+                  flat dense no-caps color="primary" class="gantt-schedule-btn" :label="t('taskGantt.schedule.button')" :aria-label="t('taskGantt.schedule.buttonLabel', { title: c.title })"
                   :data-testid="`gantt-schedule-${c.id}`" @click.stop="openDates(c)"
                 />
               </q-item-section>
@@ -391,6 +486,14 @@ const shortDate = (iso: string) => formatGanttDate(iso, locale.value, { month: '
         </section>
       </template>
     </template>
+    <!-- 拖拉中在指標旁顯示新日期（§11.5.4.8）；未排程的列另顯示標題 -->
+    <div
+      v-if="dragTip" class="gantt-drag-tip rounded-borders text-caption" :style="{ left: `${dragTip.x + 12}px`, top: `${dragTip.y + 12}px` }" aria-hidden="true"
+      data-testid="gantt-drag-tip"
+    >
+      <div v-if="dragTip.title" class="text-weight-medium ellipsis">{{ dragTip.title }}</div>
+      <div v-if="dragTip.text" data-testid="gantt-drag-tip-text">{{ dragTip.text }}</div>
+    </div>
     <GanttDateDialog v-model="datesOpen" :card="datesCard" :save="scheduler.schedule" />
   </div>
 </template>
@@ -547,6 +650,35 @@ const shortDate = (iso: string) => formatGanttDate(iso, locale.value, { month: '
   -webkit-box-orient: vertical;
   overflow: hidden;
   overflow-wrap: anywhere;
+}
+.gantt-handle {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 6px;
+  max-width: 30%;
+  cursor: ew-resize;
+}
+.gantt-handle.is-start { left: 0; }
+.gantt-handle.is-end { right: 0; }
+.gantt-bar.is-draggable, .gantt-milestone.is-draggable { cursor: grab; touch-action: none; }
+.gantt-bar.is-dragging, .gantt-milestone.is-dragging { outline: 2px solid var(--t-text); outline-offset: 1px; z-index: 3; }
+/* 不能改日期：沒有把手，按下時游標顯示禁止（平常仍可點開任務詳細，同看板） */
+.is-locked:active { cursor: not-allowed; }
+.gantt-grip { padding-right: 4px; color: var(--t-muted); cursor: grab; }
+.task-gantt.is-dragging { user-select: none; }
+.task-gantt.is-dragging, .task-gantt.is-dragging * { cursor: grabbing; }
+.task-gantt.is-dragging-start, .task-gantt.is-dragging-start *, .task-gantt.is-dragging-due, .task-gantt.is-dragging-due * { cursor: ew-resize; }
+.gantt-drag-tip {
+  position: fixed;
+  z-index: 6000;
+  max-width: 260px;
+  padding: 4px 8px;
+  border: 1px solid var(--t-primary);
+  background: var(--t-panel);
+  color: var(--t-text);
+  white-space: nowrap;
+  pointer-events: none;
 }
 .sr-only {
   position: absolute;
