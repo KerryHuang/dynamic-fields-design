@@ -137,6 +137,8 @@ public class TestApp : WebApplicationFactory<Program>
     {
         builder.UseSetting("ConnectionStrings:Dynamic", _connectionString);
         builder.UseSetting("Attachments:Root", AttachmentRoot);
+        // 背景排程器預設不跑：否則每個測試主機一啟動就補通知，改到既有測試的通知筆數；排程測試自己建 JobRunner 呼叫 TickAsync
+        builder.UseSetting("Ops:Scheduler:Enabled", "false");
         foreach (var (key, value) in Settings) builder.UseSetting(key, value);
         // 空字串覆蓋 appsettings.Development.json 的開發用密碼，代表「沒設」
         builder.UseSetting("Auth:InitialAdminPassword", InitialAdminPassword ?? "");

@@ -44,6 +44,24 @@ public class OpsInfoApiTests
     }
 
     [Fact]
+    public async Task Info_Admin_ListsJobs()
+    {
+        using var app = new FileDatabaseApp();
+        var clock = new ManualClock(SchedulerTestKit.Start);
+        var runner = SchedulerTestKit.Runner(app, clock, [new CountingJob("test.counting", DynamicModules.Domain.Policies.PolicyCatalog.NotificationRetentionDays)]);
+        await runner.EnsureJobsAsync(CancellationToken.None);
+        await runner.TickAsync(CancellationToken.None);
+
+        var root = JsonDocument.Parse(await (await app.AsUser().GetAsync(Url)).Content.ReadAsStringAsync()).RootElement;
+        var job = root.GetProperty("jobs").EnumerateArray().Single();
+        job.GetProperty("jobKey").GetString().Should().Be("test.counting");
+        job.GetProperty("lastStatus").GetString().Should().Be("Succeeded");
+        job.GetProperty("consecutiveFailures").GetInt32().Should().Be(0);
+        job.TryGetProperty("leaseOwner", out _).Should().BeFalse("跑完已清租約（null 不輸出）");
+        job.GetProperty("nextDueUtc").GetDateTime().Should().BeAfter(SchedulerTestKit.Start.UtcDateTime);
+    }
+
+    [Fact]
     public async Task Info_DeactivatedAdmin_401()
     {
         using var app = new TestApp();

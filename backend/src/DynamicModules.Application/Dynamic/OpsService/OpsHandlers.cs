@@ -11,7 +11,8 @@ using Microsoft.Extensions.Logging;
 
 namespace DynamicModules.Application.Dynamic.OpsService;
 
-public class GetOpsInfoHandler(IOpsEnvironment env, OpsInstance instance, IDatabaseInfo database, ISystemSettingRepository settings)
+public class GetOpsInfoHandler(
+    IOpsEnvironment env, OpsInstance instance, IDatabaseInfo database, ISystemSettingRepository settings, IScheduledJobRepository jobs)
     : IRequestHandler<GetOpsInfoRequest, ServiceResult>
 {
     public async Task<ServiceResult> Handle(GetOpsInfoRequest request, CancellationToken ct) =>
@@ -19,7 +20,8 @@ public class GetOpsInfoHandler(IOpsEnvironment env, OpsInstance instance, IDatab
             env.Version, env.Commit, env.BuiltAt, env.Edition, instance.StartedAtUtc, instance.InstanceId,
             database.Provider, await database.LatestMigrationAsync(ct),
             await settings.GetValueAsync(SystemSetting.IndexBackfillVersion, ct),
-            Jobs: []));   // 排程工作狀態由 o1b 填
+            Jobs: (await jobs.ListAsync(ct)).Select(j => new ScheduledJobInfo(
+                j.JobKey, j.LastStartedUtc, j.LastFinishedUtc, j.LastStatus?.ToString(), j.ConsecutiveFailures, j.NextDueUtc, j.LeaseOwner)).ToList()));
 }
 
 public partial class ReportClientErrorHandler(CachedSystemPolicy policy, ILogger<ReportClientErrorHandler> logger)
