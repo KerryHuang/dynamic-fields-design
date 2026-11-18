@@ -28,7 +28,7 @@
 - 報表 SQL 路徑的 PostgreSQL 改寫（識別字、`INDEXED BY`、日期分桶、讀取快照與逾時）：移到簽核之後的 pg1（§5.9）。pg0 在 PostgreSQL 上報表一律走記憶體路徑，結果正確、資料量大時較慢。
 - 正式部署：PostgreSQL 版的 Dockerfile、部署設定檔、備份、連線池調校、金鑰與附件目錄的強制檢查。第一個客戶上線前另排。
 - CI：repo 目前沒有 CI（沒有 `.github/workflows`），PostgreSQL 測試只在本機跑；CI gate 是 O5 的範圍。
-- Demo 站改用 PostgreSQL（§13 U4）。
+- Demo 站改用 PostgreSQL（§13 U4；2026-11-18 改判為 pg0 之後另排改接 Neon）。
 - 拿掉 PostgreSQL 的全庫寫入鎖、改成細粒度鎖（§5.6 列出到時要補的清單）。
 
 **反目標**
@@ -469,6 +469,7 @@ pg0a 與 pg0b 改同一批 Persistence 檔，依序做；pg0c 依賴 pg0b；pg0d
 **U4 Demo 站要不要改用 PostgreSQL**
 
 - **使用者裁決（2026-11-12）：維持 SQLite。**
+- **使用者改判（2026-11-18）：pg0 做完後，Demo 站改接 Neon 免費層的 PostgreSQL，Demo 不再用 SQLite；產品、本機一鍵試用（`start.command`、`start.cmd`）仍支援 SQLite，之後的功能照舊兩種資料庫都驗。** 選 Neon 的理由：免費層不到期、閒置 5 分鐘休眠且查詢時約幾百毫秒喚醒，與 Render 免費 web service 的休眠相配；Render 免費 PostgreSQL 30 天到期（再 14 天刪除），Supabase 免費專案一週低活動就暫停、要手動恢復（額度以 2026-11-18 各家官網為準，接之前再查一次）。改接本身另排工作單元，不在 pg0 範圍內。
 
 - 推薦：**維持 SQLite**，pg0 不動 Demo 站。
 - 另一個選擇：Demo 改接免費的 PostgreSQL 託管（Render、Neon、Supabase 的免費層）。
