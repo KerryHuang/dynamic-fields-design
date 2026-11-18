@@ -45,7 +45,8 @@ else
 {
     dynamicConnection = builder.Configuration.GetConnectionString("Dynamic") is { Length: > 0 } pg
         ? pg : throw new InvalidOperationException("Database:Provider=Postgres 需要設定 ConnectionStrings:Dynamic");
-    if (!string.IsNullOrWhiteSpace(builder.Configuration["Sqlite:MmapSizeMb"]))
+    // appsettings.json 出廠就有 Sqlite:MmapSizeMb=0（關閉），只有真的開了才提醒
+    if (long.TryParse(builder.Configuration["Sqlite:MmapSizeMb"], out var mmapMb) && mmapMb > 0)
         startupWarnings.Add("Sqlite:MmapSizeMb 只在 Database:Provider=Sqlite 時生效，PostgreSQL 不套用");
 }
 // 資料庫檔案所在目錄（SQLite 檔案型才有；記憶體資料庫是 null）：建目錄、預設金鑰目錄與附件目錄都依它

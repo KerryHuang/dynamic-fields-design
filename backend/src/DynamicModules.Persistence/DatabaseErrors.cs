@@ -39,7 +39,7 @@ public sealed class DatabaseErrors : IDatabaseErrors
     {
         DatabaseBusyException => true,
         SqliteException s => s.SqliteErrorCode is SqliteBusy or SqliteLocked,
-        // 取不到連線池的連線時 Npgsql 的例外不帶 SQLSTATE、內層是 TimeoutException（設計 §5.7，形狀待 pg0b 實測）
+        // 取不到連線池的連線時 Npgsql 的例外不帶 SQLSTATE、內層是 TimeoutException（設計 §5.7；Npgsql 8 實測見 PostgresPoolExhaustionTests）
         DbException { SqlState: null, InnerException: TimeoutException } => true,
         DbException d => d.SqlState is { } state && PgBusyOrConflict.Contains(state),
         _ => false,
