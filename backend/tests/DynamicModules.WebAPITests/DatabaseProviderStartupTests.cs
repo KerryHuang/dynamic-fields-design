@@ -34,7 +34,9 @@ public class DatabaseProviderStartupTests
         act.Should().Throw<InvalidOperationException>().WithMessage("*SqlOnly*");
     }
 
+    // SqliteOnly：驗的是明寫 Provider=Sqlite 時照舊啟動；PostgreSQL 模式的測試主機給的是 PostgreSQL 連線字串，配 Sqlite provider 沒有意義
     [Fact]
+    [Trait("Category", "SqliteOnly")]
     public void ExplicitSqlite_StartsAsBefore()
     {
         using var app = new TestApp(seedDemoPeople: false);

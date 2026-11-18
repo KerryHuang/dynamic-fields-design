@@ -22,6 +22,8 @@ namespace DynamicModules.ApplicationTests.Dynamic;
 /// 設計 §7：SQL 聚合與記憶體路徑的結果必須相同。同一份資料用兩種引擎各跑一次，逐項比對（數字用 decimal 數值相等，不比文字）。
 /// 記錄直接寫進資料表，所以這裡自己補建索引；欄位全部勾成可篩選，SQL 路徑才有索引可用。
 /// </summary>
+// PgDeferred：報表 SQL 聚合路徑（ReportQueryBuilder、日期分桶）要等 pg1 才支援 PostgreSQL；pg0 在 PostgreSQL 上報表強制走記憶體路徑（PostgreSQL provider 設計 §5.9）
+[Trait("Category", "PgDeferred")]
 public class ReportSqlEquivalenceTests : ReportTestBase
 {
     private sealed record LogEntry(LogLevel Level, string Message);
