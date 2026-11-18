@@ -16,14 +16,14 @@ namespace DynamicModules.Application.Dynamic.TaskService;
 public sealed class TaskSupport(ITaskRepository tasks, IPermissionRepository permissions, IBusinessTime time, TaskAccess access,
     TaskRuleService.ManualTaskRules manualRules)
 {
-    public async Task<Dictionary<string, string[]>> ValidateInputAsync(TaskInput input, CancellationToken ct)
+    public async Task<Dictionary<string, MessageRef[]>> ValidateInputAsync(TaskInput input, CancellationToken ct)
     {
-        var errors = new Dictionary<string, string[]>();
-        if (TaskEditParser.TitleError(input.Title?.Trim()) is { } title) errors["title"] = [title];
-        if (input.Description is { Length: > TaskEditParser.DescriptionMax }) errors["description"] = [TaskMessages.DescriptionTooLong];
+        var errors = new Dictionary<string, MessageRef[]>();
+        if (TaskEditParser.TitleError(input.Title?.Trim()) is { } title) errors["title"] = [MessageRef.Literal(title)];
+        if (input.Description is { Length: > TaskEditParser.DescriptionMax }) errors["description"] = [MessageRef.Literal(TaskMessages.DescriptionTooLong)];
         var assignee = TaskEditParser.NullIfBlank(input.AssigneeUserId);
-        if (assignee is not null && !await IsActiveUserAsync(assignee, ct)) errors["assigneeUserId"] = [TaskMessages.AssigneeInvalid];
-        if (TaskEditParser.StartAfterDue(input.StartDate, input.DueDate)) errors["startDate"] = [TaskMessages.StartAfterDue];
+        if (assignee is not null && !await IsActiveUserAsync(assignee, ct)) errors["assigneeUserId"] = [MessageRef.Literal(TaskMessages.AssigneeInvalid)];
+        if (TaskEditParser.StartAfterDue(input.StartDate, input.DueDate)) errors["startDate"] = [MessageRef.Of(MessageText.TaskStartAfterDue)];
         return errors;
     }
 

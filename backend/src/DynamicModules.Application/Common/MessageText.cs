@@ -72,7 +72,9 @@ public static class MessageText
         // 任務規則的執行與手動套用
         TaskRuleAlreadyRun = nameof(TaskRuleAlreadyRun), TaskRuleApplied = nameof(TaskRuleApplied), TaskRulePreviousOpen = nameof(TaskRulePreviousOpen),
         TaskRuleNotApplicable = nameof(TaskRuleNotApplicable), TaskRuleNotFound = nameof(TaskRuleNotFound),
-        TasksDisabled = nameof(TasksDisabled);
+        TasksDisabled = nameof(TasksDisabled),
+        // 任務欄位
+        TaskStartAfterDue = nameof(TaskStartAfterDue);
 
     private static readonly Dictionary<string, (string Zh, string En, string Th, string Vi)> Table = new()
     {
@@ -329,6 +331,8 @@ public static class MessageText
         [TaskRuleNotFound] = ("找不到任務規則", "Task rule not found", "ไม่พบกฎงาน", "Không tìm thấy quy tắc công việc"),
         [TasksDisabled] = ("這個模組未啟用任務", "Tasks are turned off for this module",
             "โมดูลนี้ปิดการใช้งานงานอยู่", "Mô-đun này đang tắt tính năng công việc"),
+        [TaskStartAfterDue] = ("開始日不能晚於到期日", "Start date cannot be later than the due date",
+            "วันเริ่มต้องไม่ช้ากว่ากำหนดส่ง", "Ngày bắt đầu không được sau hạn"),
     };
 
     /// <summary>無參數訊息的繁中原文 → 鍵；兩鍵同一句時建表就會丟例外。</summary>

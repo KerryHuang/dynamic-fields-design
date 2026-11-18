@@ -40,6 +40,34 @@ public class TasksApiTests : IDisposable
         after.GetProperty("assigneeUserId").GetString().Should().Be("sales01");
     }
 
+    private Task<HttpResponseMessage> SendIn(string? locale, HttpMethod method, string url, string json)
+    {
+        var req = new HttpRequestMessage(method, url) { Content = Body(json) };
+        if (locale is not null) req.Headers.Add("X-Locale", locale);
+        return _admin.SendAsync(req);
+    }
+
+    private static async Task<string?> StartError(HttpResponseMessage res)
+    {
+        res.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+        return (await JsonOf(res)).GetProperty("errors").GetProperty("startDate")[0].GetString();
+    }
+
+    [Theory]
+    [InlineData(null, "開始日不能晚於到期日")]
+    [InlineData("en-US", "Start date cannot be later than the due date")]
+    [InlineData("th", "วันเริ่มต้องไม่ช้ากว่ากำหนดส่ง")]
+    [InlineData("vi", "Ngày bắt đầu không được sau hạn")]
+    public async Task TasksApi_StartAfterDue_MessageFollowsLocale_OnCreateAndPatch(string? locale, string expected)
+    {
+        (await StartError(await SendIn(locale, HttpMethod.Post, $"{Base}/tasks",
+            """{"title":"佈置展場","startDate":"2026-11-26","dueDate":"2026-11-25"}"""))).Should().Be(expected);
+        var id = (await JsonOf(await _admin.PostAsJsonAsync($"{Base}/tasks", new { title = "佈置展場", dueDate = "2026-11-25" })))
+            .GetProperty("id").GetInt64();
+        (await StartError(await SendIn(locale, HttpMethod.Patch, $"{Base}/tasks/{id}", """{"startDate":"2026-11-27"}""")))
+            .Should().Be(expected);
+    }
+
     [Fact]
     public async Task TasksApi_InvisibleTask_404_SameMessage()
     {

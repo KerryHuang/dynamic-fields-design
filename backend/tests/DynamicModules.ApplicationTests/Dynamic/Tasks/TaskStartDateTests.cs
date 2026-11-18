@@ -48,16 +48,16 @@ public class TaskStartDateTests : TaskTestBase
     public async Task G2_Create_StartAfterDue_400_NothingCreated_AllThreeApis()
     {
         var before = await TaskCount();
-        Err(await Create(D(26), D(25)), "startDate").Should().Be(TaskMessages.StartAfterDue);
+        Err(await Create(D(26), D(25)), "startDate").Should().Be("開始日不能晚於到期日");
 
         var t = await BuildTarget();
         var rec = await NewRecord(t, "admin");
         Err(await Send(new CreateRecordTaskRequest(rec, new TaskInput("x", null, null, D(25), D(26)))), "startDate")
-            .Should().Be(TaskMessages.StartAfterDue);
+            .Should().Be("開始日不能晚於到期日");
 
         var parent = await MustCreate(null, null);
         Err(await Send(new CreateSubtaskRequest(parent.Id, new TaskInput("x", null, null, D(25), D(26)))), "startDate")
-            .Should().Be(TaskMessages.StartAfterDue);
+            .Should().Be("開始日不能晚於到期日");
 
         (await TaskCount()).Should().Be(before + 1, "只有用來當父任務的那一筆");
         (await Entries(parent.Id)).Select(c => c.SystemEvent).Should().NotContain(TaskSystemEvents.SubtaskAdded);
@@ -118,7 +118,7 @@ public class TaskStartDateTests : TaskTestBase
         var created = await MustCreate(D(20), D(25));
         var before = (await Entries(created.Id)).Count;
 
-        Err(await Patch(created.Id, """{"startDate":"2026-11-27"}"""), "startDate").Should().Be(TaskMessages.StartAfterDue);
+        Err(await Patch(created.Id, """{"startDate":"2026-11-27"}"""), "startDate").Should().Be("開始日不能晚於到期日");
 
         var after = await Load(created.Id);
         after.StartDate.Should().Be(D(20));
@@ -132,7 +132,7 @@ public class TaskStartDateTests : TaskTestBase
         var created = await MustCreate(D(20), D(25));
 
         Err(await Patch(created.Id, """{"startDate":"2026-11-27","dueDate":"2026-11-26","title":"新標題"}"""), "startDate")
-            .Should().Be(TaskMessages.StartAfterDue);
+            .Should().Be("開始日不能晚於到期日");
 
         var after = await Load(created.Id);
         (after.StartDate, after.DueDate, after.Title).Should().Be((D(20), D(25), "準備展場"));

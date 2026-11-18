@@ -825,6 +825,7 @@ st1 唯一看得到的變化：政策設定頁依 `PolicyCatalog.All` 多出 A35
 - ★ 任務詳細只改到期日、早於開始日時不擋，到期日欄下先提示「儲存後開始日會一併改為 {date}」（新鍵 `tasks.startFollows`）；前端即時錯誤只在開始日也要送出時判斷。
 - ★ 看板 U12 提示的日期照卡片既有寫法用 yyyy-MM-dd（「開始日已一併改為 2026-11-18」，鍵 `taskBoard.startFollowed`），不用 11/18。
 - 語系檔以 repo 現有為準：zh-TW、en-US、vi、th。
+- 「開始日不能晚於到期日」放在 `MessageText.TaskStartAfterDue`（四語，依 X-Locale 回），不在 `TaskMessages`（§11.5.2.8 原寫 `TaskMessages.StartAfterDue`；審查後改）；建立的欄位錯誤因此改成 `MessageRef[]`。
 
 ##### 11.5.2.5 `POST /tasks/gantt`
 

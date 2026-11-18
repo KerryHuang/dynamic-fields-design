@@ -520,21 +520,25 @@ describe('TaskBoard moving', () => {
     const later = wire.columns.find((c) => c.key === 'later')!;
     later.cards = [cardWire({ id: 1, dueDate: '2026-11-25', startDate: '2026-11-20' })];
     later.total = 1;
-    const hint = () => toasts().filter((t) => t.includes('開始日已一併改為 2026-11-18')).length;
+    const followed = (n: { mock: { calls: unknown[][] } }) => n.mock.calls.map((c) => (c[0] as { message?: string }).message ?? '')
+      .filter((m) => m.startsWith('開始日已一併改為'));
     let { w } = await mountBoard(wire as unknown as Record<string, unknown>, 1680, null, movedCard({ dueDate: '2026-11-18', startDate: '2026-11-18' }));
-    const before = hint();
+    let notify = vi.spyOn(w.findComponent(TaskBoard).vm.$q, 'notify');
     let d = await dragTo(w, 1, 'today');
     await d.drop();
     await settle();
-    expect(hint()).toBe(before + 1);
+    expect(followed(notify)).toEqual(['開始日已一併改為 2026-11-18']);
+    notify.mockRestore();
     w.unmount();
 
     ({ w } = await mountBoard(wire as unknown as Record<string, unknown>, 1680, null, movedCard({ dueDate: '2026-11-22', startDate: '2026-11-20' })));
-    const all = toasts().length;
+    notify = vi.spyOn(w.findComponent(TaskBoard).vm.$q, 'notify');
     d = await dragTo(w, 1, 'thisWeek');
     await d.drop();
     await settle();
-    expect(toasts().length).toBe(all);
+    expect(moveCalls().length).toBeGreaterThan(0);
+    expect(followed(notify)).toEqual([]);
+    notify.mockRestore();
     w.unmount();
   });
 

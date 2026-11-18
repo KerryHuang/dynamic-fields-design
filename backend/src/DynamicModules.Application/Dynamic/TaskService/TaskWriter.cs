@@ -66,7 +66,7 @@ public sealed class TaskWriter(ICurrentUser user, IBusinessTime time, ITaskRepos
         var actor = user.UserId;
         var dueAfter = edit.SetDueDate ? edit.DueDate : task.DueDate;
         if (edit.SetStartDate && TaskEditParser.StartAfterDue(edit.StartDate, dueAfter))
-            return ServiceResult.Invalid("startDate", MessageRef.Literal(TaskMessages.StartAfterDue));
+            return ServiceResult.Invalid("startDate", MessageRef.Of(MessageText.TaskStartAfterDue));
         TaskItem? parent = null;
         List<TaskItem> children = [];
         if (edit.Status is { } target && target != task.Status)
