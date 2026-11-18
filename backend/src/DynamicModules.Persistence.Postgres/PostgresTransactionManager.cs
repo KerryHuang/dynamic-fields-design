@@ -17,7 +17,10 @@ public class PostgresTransactionManager(DynamicDbContext db, PostgresWriteSettin
     {
         if (db.Database.CurrentTransaction is not null) return NoopHandle.Instance;
 
-        var permit = await WriteGate.ForKey(PostgresSaveChangesGateInterceptor.GateKey(db)).EnterAsync(settings.LockTimeout, ct);
+        // 無鎖模式（只在測試，PostgresWriteSettings.Unserialized）不排隊
+        var permit = settings.Serialized
+            ? await WriteGate.ForKey(PostgresSaveChangesGateInterceptor.GateKey(db)).EnterAsync(settings.LockTimeout, ct)
+            : NoPermit.Instance;
         try
         {
             return new Handle(await db.Database.BeginTransactionAsync(ct), permit);
@@ -52,6 +55,12 @@ public class PostgresTransactionManager(DynamicDbContext db, PostgresWriteSettin
             try { await tx.DisposeAsync(); }
             finally { permit.Dispose(); }
         }
+    }
+
+    private sealed class NoPermit : IDisposable
+    {
+        public static readonly NoPermit Instance = new();
+        public void Dispose() { }
     }
 
     private sealed class NoopHandle : ITransactionScopeHandle

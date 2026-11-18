@@ -18,7 +18,8 @@ public static class DependencyInjection
             ?? throw new InvalidOperationException("Database:Provider=Postgres 需要設定 ConnectionStrings:Dynamic");
         var settings = PostgresWriteSettings.From(configuration);
         services.AddSingleton(settings);
-        services.AddDbContext<DynamicDbContext>(o => PostgresDatabase.Configure(o, connectionString, settings));
+        // 設定從 DI 取：測試的無鎖模式替換這個單例（PostgresWriteSettings.Unserialized）
+        services.AddDbContext<DynamicDbContext>((sp, o) => PostgresDatabase.Configure(o, connectionString, sp.GetRequiredService<PostgresWriteSettings>()));
         services.AddSingleton<ISqlDialect, PostgresDialect>();
         services.AddScoped<ITransactionManager, PostgresTransactionManager>();
         services.AddScoped<IWorkSavepoints, EfWorkSavepoints>();

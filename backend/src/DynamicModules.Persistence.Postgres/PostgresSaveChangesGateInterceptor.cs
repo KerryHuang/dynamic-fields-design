@@ -34,12 +34,12 @@ public sealed class PostgresSaveChangesGateInterceptor(PostgresWriteSettings set
         return result;
     }
 
-    /// <summary>設定 Always；需要自己排隊（沒有外層交易）時回 context。</summary>
-    private static DynamicDbContext? Prepare(DbContext? context)
+    /// <summary>設定 Always；需要自己排隊（沒有外層交易、不是無鎖模式）時回 context。</summary>
+    private DynamicDbContext? Prepare(DbContext? context)
     {
         if (context is null) return null;
         context.Database.AutoTransactionBehavior = AutoTransactionBehavior.Always;
-        if (context.Database.CurrentTransaction is not null) return null;
+        if (context.Database.CurrentTransaction is not null || !settings.Serialized) return null;
         return context as DynamicDbContext
             ?? throw new InvalidOperationException($"PostgreSQL 的 SaveChanges 閘門只支援 {nameof(DynamicDbContext)}（要靠它的 SaveChanges 放開閘門）");
     }

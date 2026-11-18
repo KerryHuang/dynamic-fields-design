@@ -25,6 +25,7 @@ public sealed class PostgresWriteLockInterceptor(PostgresWriteSettings settings)
 
     public override DbTransaction TransactionStarted(DbConnection connection, TransactionEndEventData eventData, DbTransaction result)
     {
+        if (!settings.Serialized) return result;
         try
         {
             using var command = Command(connection, result);
@@ -42,6 +43,7 @@ public sealed class PostgresWriteLockInterceptor(PostgresWriteSettings settings)
     public override async ValueTask<DbTransaction> TransactionStartedAsync(
         DbConnection connection, TransactionEndEventData eventData, DbTransaction result, CancellationToken cancellationToken = default)
     {
+        if (!settings.Serialized) return result;
         try
         {
             await using var command = Command(connection, result);
