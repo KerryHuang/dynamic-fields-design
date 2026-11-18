@@ -563,6 +563,13 @@ O1 就實作，log 與 O2 事件表共用同一套（主控判斷 T4）。指紋
 - 用 `fetch` 加 `keepalive` 送，不經 axios 攔截器；送失敗就丟掉，不重試、不再回報，避免回報自己的錯誤形成迴圈。
 - production build 產生 source map 但不對外提供（`hidden`），保留在建置產物供 O4 agent 還原呼叫框（主控判斷 T9）。
 - `http.ts` 從回應讀 `X-Request-Id`；5xx 與網路錯誤的錯誤提示加一行「錯誤代碼：」加 request id 前 8 碼，客戶回報問題時可以附上（主控判斷 U10）。四語文案；四種寬度不橫捲。
+- 〔o1c 實作補記〕
+  - 錯誤代碼接在訊息同一行尾端「…（錯誤代碼：ab12cd34）」，只在 `toApiError` 一處組好（使用者 2026-11-12 裁決 B2，O1 計畫判斷 J23），所以不是獨立一行。request id 取 `X-Request-Id` 標頭，沒有標頭退回主體的 `traceId`，只認 32 個小寫十六進位字元。5xx 沒有 `message`（代理回的 HTML 502）時先退回四語「系統發生錯誤，請稍後再試」。網路錯誤沒有回應、拿不到 request id，所以不顯示錯誤代碼。少數提示不看 `err.message`、固定顯示自己的文案（例如儀表板「儲存失敗」、外觀「儲存失敗」），這幾處不會出現錯誤代碼。
+  - 「最近失敗的 API」指任何帶 request id 的失敗回應（4xx 也算），由 axios 攔截器記下；30 秒內才附進回報（`last-failure.ts` 的 `RECENT_MS`）。
+  - 回報的 `version` 是前端版本號，有 commit 時接前 12 碼（`dev+0123456789ab`），Render 沒給 `APP_VERSION` 也分得出是哪一版；沒注入時就是 `dev`。瀏覽器只送家族與主版本（`Chrome 131`），不送完整 User-Agent。
+  - 版本注入用 Quasar `build.defineEnv`（程式讀 `import.meta.env.APP_VERSION`）；O1 計畫 J25 寫的 `build.env` 在 app-vite 3 已改成 .env 檔的設定，不能用。
+  - API 失敗（`ApiError`）以 `vue`、`promise` 進來時不回報（J24）；`router.onError` 收到的非程式塊錯誤歸 `vue`。程式塊錯誤不管從哪個入口進來都歸 `chunk`，另接 Vite 的 `vite:preloadError`；更新提示整個分頁只顯示一次，按「重新整理」重新載入。
+  - source map：`build.sourcemap = 'hidden'`；兩個 Dockerfile 在前端階段把 `*.map` 移到 `/app/sourcemaps`，`wwwroot` 不留，所以 `UseStaticFiles` 送不出去（J26）。
 
 ### 10.4 資料表
 
@@ -732,7 +739,7 @@ O1 的三項見 §10.6。以下是 O2–O6 的建議登記（代碼與出廠值�
 - 伺服器端指紋只取呼叫框名稱以 `DynamicModules.`（`ErrorFingerprint.ProductPrefix`）開頭的框；ops info 的機器名截斷 80 字元（`OpsInstance`）。
 - 前端錯誤收件的其他欄位上限：`name`／`moduleKey` 100、`route`／`browser` 200、`version` 50、`locale` 20，`lastRequestId` 32 個十六進位字元（O1 計畫判斷 J13）。
 - 請求路徑政策讀取失敗時快取 10 秒、讀值逾時 2 秒（O1 計畫判斷 J12）。
-- 前端本機：同指紋 5 分鐘一次、每分頁每分鐘 10 則。
+- 前端本機：同指紋 5 分鐘一次、每分頁每分鐘 10 則；最近失敗的 request id 30 秒內才帶；回報序列化後上限 7680 位元組（比伺服器 8KB 留餘裕，超過先縮 stack 再縮訊息）；忽略以 `ResizeObserver loop` 開頭的瀏覽器雜訊（〔o1c 實作補記〕O1 計畫 Task 16、J24）。
 - 指紋長度 16 個十六進位字元、正規化訊息 200 字、取三個呼叫框。
 - `LastError` 截斷 1000 字。
 - 前端錯誤限流與登入限流只在單一實例記憶體（多實例時的已知限制）。
@@ -823,6 +830,7 @@ O1 的三項見 §10.6。以下是 O2–O6 的建議登記（代碼與出廠值�
 **U10 錯誤提示顯示錯誤代碼**
 
 - 決定：5xx 與網路錯誤的提示多一行「錯誤代碼：」加 request id 前 8 碼。
+- 〔o1c 實作補記〕使用者 2026-11-12 裁決 B2：改成接在同一行尾端「（錯誤代碼：xxxxxxxx）」；網路錯誤沒有回應、沒有 request id，不顯示代碼（§10.3）。
 - 理由：客戶打電話或寫信回報時，廠商與客戶 IT 能直接在 log 找到那一次請求；地端關掉回報時這是唯一的對照線索。
 - 選錯代價：畫面多一行字；不要的話拿掉即可，request id 仍在回應標頭裡。
 
