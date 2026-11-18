@@ -124,4 +124,26 @@ public class WriteGateTests
         holder.Dispose();
         using var granted = await waiter.WaitAsync(Patient);
     }
+
+    [Fact]
+    public void ForKey_SameKeySameGate_DifferentKeysIndependent()
+    {
+        // PostgreSQL 以連線字串為鍵取閘（PostgreSQL provider 設計 §5.6）
+        var key = $"Host=pg;Database=fw_{Guid.NewGuid():N}";
+        WriteGate.ForKey(key).Should().BeSameAs(WriteGate.ForKey(key));
+        WriteGate.ForKey(key).Should().NotBeSameAs(WriteGate.ForKey(key + "_other"));
+
+        var act = () => WriteGate.ForKey("");
+        act.Should().Throw<ArgumentException>();
+    }
+
+    [Fact]
+    public void For_FileDatabaseUsesTheAbsolutePathAsKey_MemoryHasNoGate()
+    {
+        var file = Path.Combine(Path.GetTempPath(), $"dm-gate-{Guid.NewGuid():N}.db");
+        WriteGate.For($"Data Source={file}").Should().BeSameAs(WriteGate.ForKey(Path.GetFullPath(file)));
+        WriteGate.For("Data Source=:memory:").Should().BeNull();
+        WriteGate.For("Data Source=file:x?mode=memory&cache=shared").Should().BeNull();
+        WriteGate.For(null).Should().BeNull();
+    }
 }
