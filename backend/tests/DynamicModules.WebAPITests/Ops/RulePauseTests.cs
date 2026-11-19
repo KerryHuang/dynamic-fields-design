@@ -585,7 +585,19 @@ public class RulePauseTests
         b.Tick(10);
         await b.FailCreatesAsync(2);
         a.Tick(20);
-        await Task.WhenAll(a.FailCreatesAsync(1), b.FailCreatesAsync(1));
+        // 兩台各一筆失敗、都停在補記之前（讀健康列時都還沒暫停），再同時放行：兩台的補記並行、只暫停一次。
+        // 不直接 WhenAll 兩個請求：b 的請求晚到、a 的補記已先暫停時，b 讀到暫停就略過（201），那是正確行為，結果卻看排程（CI 曾紅）
+        a.Gate.Close();
+        b.Gate.Close();
+        a.Tick();
+        var first = a.PostRecordAsync();
+        await a.Gate.WaitArrivalAsync();
+        b.Tick();
+        var second = b.PostRecordAsync();
+        await b.Gate.WaitArrivalAsync();
+        a.Gate.Open();
+        b.Gate.Open();
+        (await Task.WhenAll(first, second)).Select(r => r.StatusCode).Should().AllBeEquivalentTo(HttpStatusCode.InternalServerError);
 
         var h = (await a.HealthAsync(id))!;
         h.PausedUtc.Should().NotBeNull();
