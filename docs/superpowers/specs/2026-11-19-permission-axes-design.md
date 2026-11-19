@@ -1,7 +1,7 @@
 # 設計與授權分成兩條權限軸 設計文件（段 權限軸）
 
 > 2026-11-19｜平台共用能力（非應用程式）｜前置：[核心設計](2026-11-03-dynamic-modules-design.md) §15「上線前必做：拆開設計與授權」、[共用主檔](2026-11-10-shared-master-design.md) §6、[維運與觀測](2026-11-11-ops-observability-design.md) §17（稽核表、安全事件）｜相關：[MCP server](2026-11-11-mcp-server-design.md)（mcp1a／mcp1b「不提供給 AI」旗標、mcp3 設計器工具）、[應用程式套件](2026-11-06-app-package-design.md)（pkg1 套件更新）
-> 狀態：主控撰寫（2026-11-19），這次只寫設計、不改程式；同日依審查修正 10 條必修與 3 條建議（§24）。路線位置照使用者 2026-11-19 裁決：O2 之後、p2 之前，分權限軸-a（後端）、權限軸-b（畫面）兩個子單元（§19）。
+> 狀態：主控撰寫（2026-11-19），這次只寫設計、不改程式；同日依審查修正 10 條必修與 3 條建議，再依第二輪短核對修正 4 條（§24）。路線位置照使用者 2026-11-19 裁決：O2 之後、p2 之前，分權限軸-a（後端）、權限軸-b（畫面）兩個子單元（§19）。
 > 標記：「（使用者裁決）」是使用者已拍板的；「（顧問裁決，待使用者確認）」是 2026-11-19 顧問分流 B 區照推薦採用的；「（主控裁決，待使用者確認）」是本設計延伸或推翻顧問與分流結論的行為類決定；「（T#）」是技術類決定，主控可推翻。全部彙整在 §20，待使用者確認的總表在 §20.6。
 
 ## 1. 目的與為什麼
@@ -20,7 +20,7 @@
 **目標**
 
 1. 新系統權限「權限設定」，與設計器分開授予；系統管理員自動擁有兩者（§5）。
-2. 所有寫入授權資料的路徑改要求「權限設定」，fail closed；新寫入路徑忘了宣告時執行期丟例外、測試失敗（§7.4）。
+2. 所有寫入授權資料的路徑改要求「權限設定」，fail closed；新寫入路徑忘了宣告時，追蹤式寫入在執行期丟例外，批次與原生 SQL 寫入讓清單測試失敗（§7.4）。
 3. 系統管理員能在群組頁、使用者頁授予這兩個系統權限（今天沒有任何畫面能授予設計器權限）。
 4. 授予或收回這兩個權限記稽核、發安全事件，比照 `admin.changed`（§9）。
 5. 升級時沒有人失去改權限的能力；多出或收緊的能力逐條列出，不做無條件的「能力一樣」宣稱（§6.3）。
@@ -114,7 +114,7 @@
 
 **步驟**（`PermissionAxesImport.RunAsync`，在 `SeedData` 內、MigrateAsync 之後執行）：
 
-1. 開一個交易（PostgreSQL 的全庫寫入鎖 `PostgresWriteLockInterceptor` 讓多個實例同時啟動時依序進來；SQLite 是單一檔案寫鎖），開 `Seed` 寫入許可（§7.4）。
+1. 開一個交易（PostgreSQL 的全庫寫入鎖 `PostgresWriteLockInterceptor` 讓多個實例同時啟動時依序進來；SQLite 是單一檔案寫鎖）；步驟 2–5 在 `AuthorizationWriteScope.RunAsync(Seed, …)` 內執行，含存檔（§7.4）。步驟 3、4 用追蹤式寫入（先查出再 `RemoveRange`／`AddRange`），每一列照樣經攔截器檢查。
 2. 讀 `Dynamic_SystemSetting` 的 `permissionAxes.importedOn`；有就結束（重跑、回滾後重新升級都不重做）。
 3. 刪除全部 `ProgramCode = 'SYS00001'` 的群組與個人授權列。舊版不認這個代碼，存在的列沒有意義；不清的話，`CanEdit = false` 的殘列會擋住第 4 步的插入（K1 破功），`CanEdit = true` 的殘列會讓本來不能改權限的人取得權限設定（K2 破功）。
 4. 對每一列 `ProgramCode = 'DYN00000' AND CanEdit = true` 的群組列、個人列，插入 `(GroupId 或 UserId, 'SYS00001', CanEdit = true, 其餘 false)`。
@@ -135,9 +135,9 @@
 ### 7.1 新介面與 behavior（權限軸-a）
 
 - `IPermissionAdminRequest`（空介面，`Common/Security/`）：送出的人必須有權限設定。
-- `PermissionAdminBehavior<TReq,TRes>`：照 `DesignerAccessBehavior` 的寫法——不是這個介面就放行；回傳型別不是 `ServiceResult` 就丟 `InvalidOperationException`（fail closed）；`PermissionAdminGate.CheckAsync` 不是 `Allowed` 就回對應的 403（§10）。通過後開 `Authorized` 寫入許可（§7.4），包住 `next()`；請求同時是 `ISystemAdminRequest` 時許可帶 `SystemAdminVerified`（`SystemAdminBehavior` 在前面已通過）。管線放在 `SystemAdminBehavior` 之後、`MasterDesignerBehavior` 之前（T4）：同時宣告系統管理員的請求先被「不是系統管理員」擋下，錯誤訊息才不會誤導成「去要權限設定」。
+- `PermissionAdminBehavior<TReq,TRes>`：照 `DesignerAccessBehavior` 的寫法——不是這個介面就放行；回傳型別不是 `ServiceResult` 就丟 `InvalidOperationException`（fail closed）；`PermissionAdminGate.CheckAsync` 不是 `Allowed` 就回對應的 403（§10）。通過後以 `PermissionAdminGate.RunAsync` 在 `Authorized` 寫入許可內執行 `next()`（§7.4；`TransactionBehavior` 在 `next()` 裡，存檔與提交都在許可內）；請求同時是 `ISystemAdminRequest` 時許可帶 `SystemAdminVerified`（`SystemAdminBehavior` 在前面已通過）。管線放在 `SystemAdminBehavior` 之後、`MasterDesignerBehavior` 之前（T4）：同時宣告系統管理員的請求先被「不是系統管理員」擋下，錯誤訊息才不會誤導成「去要權限設定」。
 - `IDynamicAccessGuard` 加 `Task<bool> IsPermissionAdminAsync(CancellationToken)`：判斷順序固定為「使用者不存在 → false；已停用 → false；系統管理員 → true；否則 `PermissionResolver.ResolveProgram(SYS00001, inputs).Contains(Edit)`」（T5，fail closed）。`DesignerActionsAsync` 改成同樣的順序（停用回空集合，含停用的管理員），有權限設定時把 `Read` 併進回傳集合（M1）。
-- 條件式檢查用 `PermissionAdminGate`（Application 服務）：`CheckAsync` 回 `Allowed`／`NotPermissionAdmin`／`McpChannel`；`BeginAsync` 在 `Allowed` 時開 `Authorized` 許可、否則回 null。給「只有某些請求內容才算授權」的 handler 呼叫（§7.3）；不在 handler 各自讀權限表（T6）。
+- 條件式檢查用 `PermissionAdminGate`（Application 服務）：`CheckAsync` 回 `Allowed`／`NotPermissionAdmin`／`McpChannel`，只做判斷、不開許可；`RunAsync(body)` 先檢查，不是 `Allowed` 就回對應的 403，是就在 `Authorized` 許可內執行 `body`（`body` 要包含守衛寫入與它的存檔，§7.4）。給「只有某些請求內容才算授權」的 handler 呼叫（§7.3）；不在 handler 各自讀權限表（T6）。許可只能以 callback 形式開，沒有「先拿許可、再自己寫」的用法。
 - **通道**：mcp1a 加入「請求通道」後，gate 在通道是 MCP 時一律回 `McpChannel`（M8，§14）；`PermissionAdminBehavior` 也經 gate，所以同一條規則。權限軸-a 時還沒有通道概念，`McpChannel` 分支與 PAX-22 留給 mcp1a。
 
 ### 7.2 受影響 API 守衛清單
@@ -148,7 +148,7 @@
 | `GetModulePermissionsRequest` | `GET modules/{key}/permissions` | 設計器讀取 | 不變（權限設定隱含讀取） |
 | `GetGroupsRequest`、`GetUsersRequest` | `GET groups`、`GET users` | 設計器讀取 | 不變 |
 | `StartDemoDataRequest` | `POST demo-data/generate` | 設計器新增（修改在 handler） | 再加權限設定 |
-| `GenerateDemoDataRequest` | 背景執行，無端點 | 無 | 加權限設定（背景以 admin 送，通過） |
+| `GenerateDemoDataRequest` | 背景執行，無端點 | 無 | 加系統管理員＋權限設定（背景以 admin 送，通過；示範帳號的成員寫入要 `SystemAdminVerified`，T13） |
 | `InstantiateTemplateRequest` | `POST templates/{key}/instantiate` | 設計器新增（巢狀請求要修改） | 不變；權限步驟改走 gate（§7.3） |
 | `OpenAppRequest`、`ReopenAppRequest`、`CloseAppRequest`、`DeleteAppRequest` | `apps/...` | 設計器動作＋系統管理員 | 再加權限設定 |
 | `SetGroupMembersRequest`、`CreateUserRequest`、`UpdateUserRequest`、`DeleteGroupRequest` | `admin/groups/...`、`admin/users/...` | 系統管理員 | 再加權限設定 |
@@ -159,7 +159,7 @@
 
 表外說明：
 
-- 宣告 `IPermissionAdminRequest` 的正式請求共 13 個（表中「再加」與「新」的列）。只要求系統管理員的那些，對管理員來說宣告是冗餘的（管理員自動有），刻意宣告有三個作用：「寫授權資料的請求都宣告」這條規則沒有例外；寫入邊界的 `Authorized` 許可只由這個 behavior 開（§7.4）；MCP 通道經同一個 gate 一律拒絕（M8）。哪天權限軸-2 改成管理員不自動擁有，這些請求不必再回頭找（T7）。
+- 宣告 `IPermissionAdminRequest` 的正式請求共 13 個（表中「再加」與「新」的列）。只要求系統管理員的那些，對管理員來說宣告是冗餘的（管理員自動有），刻意宣告有三個作用：「寫授權資料的請求都宣告」這條規則沒有例外；寫入邊界的 `Authorized` 許可只由 `PermissionAdminGate` 開，behavior 也經它（§7.4）；MCP 通道經同一個 gate 一律拒絕（M8）。哪天權限軸-2 改成管理員不自動擁有，這些請求不必再回頭找（T7）。
 - `SetUserActive`、`ResetPassword`、部門指派、`RetryIntegrationRequest`、`SetIntegrationEnabledRequest`、`ImportAppPackageRequest` 不寫授權資料，不宣告。
 - 仍歸「設計」、不改守衛的（使用者裁決）：簽核流程（`ApprovalFlowRequests.cs` 的建立、修改、草稿、發布、試算）、狀態機（`SaveWorkflowRequest`，含轉移的群組限制）、共用檢視（清單頁「共用」切換，設計器修改）、任務規則、跨記錄檢查、轉換、列印範本、分錄、欄位與參照帶值、帶表頭的值、公式、彙總。
 - 其餘 50 多個 `IDesignerRequest` 不動。
@@ -168,40 +168,56 @@
 
 **從範本建立**（主控裁決 M3，待使用者確認；推翻分流 D4 對範本的部分「要求兩軸都有」）：從範本建立實際要設計器新增＋修改——依範本內容，巢狀請求會用到 `UpdateBlock`、`UpdateField`、`ReorderFields`、`UpdateModule`、`SaveRules`、`SetFieldStatus`，都宣告設計器修改。`TemplateInstantiator` 第 10 步在 `app is null`（從範本建立，不是開啟套件）且 `PermissionAdminGate.CheckAsync` 不是 `Allowed` 時，整步略過，在回應既有的 `warnings` 加一則「你沒有『權限設定』權限，已略過範本的權限建議；請洽權限設定者到權限分頁授權」，不送 `SaveModulePermissionsRequest`。理由：範本主要是給設計者用的，內建範本幾乎都帶群組權限建議；D4 的做法會讓沒有權限設定的設計者完全用不了範本，而略過權限只是回到「新模組預設沒人有權限」（顧問裁決權限軸-5），沒有開洞。開啟套件（`app` 不為 null）不略過：照常送出，沒有權限設定就 403、整批回滾（fail closed；實際上開啟要系統管理員，不會發生）。
 
-**產生 Demo 資料**（主控裁決 M4，待使用者確認）：`StartDemoDataRequest`、`GenerateDemoDataRequest` 都宣告 `IPermissionAdminRequest`。檢查發生在 `StartDemoDataHandler` 之前（behavior），也就在 `runner.TryStart()` 切到背景、`ActingScope.Begin("admin")` 之前；背景的 `GenerateDemoDataRequest` 以 admin 身分送，自己的 behavior 通過並開寫入許可（背景工作 `SuppressFlow`，帶不到前台的許可）。它以管理員身分開套件、寫欄位權限與選項範圍，等於批次授權；Demo 站訪客以 admin 登入，不受影響。
+**產生 Demo 資料**（主控裁決 M4，待使用者確認）：`StartDemoDataRequest`、`GenerateDemoDataRequest` 都宣告 `IPermissionAdminRequest`。檢查發生在 `StartDemoDataHandler` 之前（behavior），也就在 `runner.TryStart()` 切到背景、`ActingScope.Begin("admin")` 之前；背景的 `GenerateDemoDataRequest` 以 admin 身分送，自己的 behavior 通過並開寫入許可（背景工作 `SuppressFlow`，帶不到前台的許可）；它另宣告 `ISystemAdminRequest`，許可才帶 `SystemAdminVerified`，`DemoPeople` 寫示範帳號的群組成員才不會被擋（T13）。它以管理員身分開套件、寫欄位權限與選項範圍，等於批次授權；Demo 站訪客以 admin 登入，不受影響。
 
 **連動事件「允許複製被隱藏的值」**（主控裁決 M5，待使用者確認）：`CreateEventRequest`、`UpdateEventRequest` 的內容只要有任一個對應 `allowHiddenSource = true`，handler 在任何驗證之前先問 `PermissionAdminGate.CheckAsync`，`NotPermissionAdmin` 回 403 `eventHiddenSourceNeedsPermissionAdmin`、`McpChannel` 回 403 `mcpPermissionAdminDenied`，不寫入。理由：這個旗標字面上就是「允許把某些群組看不到的值複製到別的模組」，連動事件又以系統身分執行（`SystemIdentity`，不看任何人的權限），性質和「不提供給 AI」旗標一樣是放寬可見性的授權決定。判斷只看請求內容、不比對既有定義（T8）：已勾旗標的事件，沒有權限設定的設計者連改其他地方也會被擋，訊息說明原因；fail closed，比「只擋新勾」少一次讀庫和一種繞法（先取消再重勾）。`allowHiddenSource` 存在事件定義的 JSON 裡，寫入邊界看不到（§7.4），所以這條只靠 gate 與 PAX-13 固定。
 
 **M5 擴大：一般隱藏欄位也納入公式依賴閉包**（主控裁決，待使用者確認）：今天 `EventValidator.HiddenAsync` 只對「限定可見的貢獻欄位」做公式閉包，對一般 `Hidden` 欄位沒有。設計者建立公式 F1 = `{薪資} * 1`（薪資對某群組隱藏），事件從 F1 複製，就不必勾旗標。改成：`Hidden` 欄位與限定可見欄位合併後一起逐層做閉包（`FormulaGraph.EvaluationOrder`），引用它們的公式（含公式引用公式）都算隱藏來源。`UpdateFieldHandler` 改公式時已經比對 `HiddenAsync` 前後差異擋下「公式改了之後變成看得到隱藏值」，會自動跟著新規則。效果見 §6.3 S1、PAX-13b。
 
-**「不提供給 AI」欄位旗標**（使用者裁決歸授權；旗標本身在 mcp1a 後端、mcp1b 畫面才出現）：契約寫在這裡，由 mcp1a 照做——`AddFieldRequest` 帶 true、`UpdateFieldRequest` 的值和現存值不同，都要 `PermissionAdminGate.BeginAsync` 回許可，否則 403 `permissionAdminRequired`（MCP 通道 `mcpPermissionAdminDenied`）；寫入邊界把這個欄位的變動列為守衛（§7.4）。套件與範本帶的旗標照開啟／從範本建立的規則（開啟要管理員；從範本建立沒有權限設定時旗標一律寫 false 並加一則 warnings，和 M3 同精神）。
+**「不提供給 AI」欄位旗標**（使用者裁決歸授權；旗標本身在 mcp1a 後端、mcp1b 畫面才出現）：契約寫在這裡，由 mcp1a 照做——`AddFieldRequest` 帶 true、`UpdateFieldRequest` 的值和現存值不同，都要把欄位的修改與存檔包進 `PermissionAdminGate.RunAsync`，沒有權限設定就 403 `permissionAdminRequired`（MCP 通道 `mcpPermissionAdminDenied`）；寫入邊界把這個欄位的變動列為守衛（§7.4）。套件與範本帶的旗標照開啟／從範本建立的規則（開啟要管理員；從範本建立沒有權限設定時旗標一律寫 false 並加一則 warnings，和 M3 同精神）。
 
 **帶表頭的值依呼叫端可見性**（主控裁決 M6，待使用者確認；修核心設計 §15 第 55 條）：見 §12.2。
 
 ### 7.4 授權寫入邊界與回歸防線
 
-反射列出「宣告了 `IPermissionAdminRequest` 的型別」只能發現宣告數量改變，抓不到「新 handler 忘了宣告、直接寫表」。所以防線放在所有寫入都必經的資料庫寫入邊界，再用清單測試管住「誰能開門」（T9，取代初稿的反射清單方案；不採 Roslyn 分析：要另寫並維護分析器規則，而且看不到執行期才決定的寫入）。
+反射列出「宣告了 `IPermissionAdminRequest` 的型別」只能發現宣告數量改變，抓不到「新 handler 忘了宣告、直接寫表」。所以防線放在資料寫入本身：**追蹤式寫入**（`Add`／`Remove`／改屬性後 `SaveChanges`）一律經 SaveChanges 攔截器逐列檢查；**批次寫入**（`ExecuteDelete*`／`ExecuteUpdate*`）只准走四個登記的批次入口，入口在執行期檢查許可與參數；其他地方的批次寫入與任何對守衛表的原生 SQL 由清單測試禁止（T9；不採 Roslyn 分析：要另寫並維護分析器規則）。第二輪核對後拿掉了指令層的 SQL 文字比對（取捨見本節末）。
 
-**守衛表**（Domain 常數 `AuthorizationTables`）：`Dynamic_GroupProgramPrivilege`、`Dynamic_UserProgramPrivilege`、`Dynamic_FieldPermission`、`Dynamic_ModuleDataScope`、`Dynamic_FieldOptionScope`、`Dynamic_FieldGrant`、`Dynamic_AppGrant`、`Dynamic_ModuleActionScope`、`Dynamic_UserGroupMapping`；另加 `Dynamic_Field` 的兩個欄：`VisibilityRestricted` 由 true 改 false（放寬可見性；今天沒有任何程式這樣改）、`ExcludeFromAi` 的任何變動（mcp1a 起）。不列：`Dynamic_PermissionGroup`（群組本身沒有權限內容）、報表分享、儀表板指派、任務檢視分享（共用檢視，使用者裁決歸設計）。
+**守衛表**（Domain 常數 `AuthorizationTables`）：`Dynamic_GroupProgramPrivilege`、`Dynamic_UserProgramPrivilege`、`Dynamic_FieldPermission`、`Dynamic_ModuleDataScope`、`Dynamic_FieldOptionScope`、`Dynamic_FieldGrant`、`Dynamic_AppGrant`、`Dynamic_ModuleActionScope`、`Dynamic_UserGroupMapping`；另加 `Dynamic_Field` 的兩個守衛欄：`VisibilityRestricted` 改成 false（放寬可見性；今天沒有任何程式這樣改）、`ExcludeFromAi` 的任何寫入（mcp1a 起，含新增時為 true）。不列：`Dynamic_PermissionGroup`（群組本身沒有權限內容）、報表分享、儀表板指派、任務檢視分享（共用檢視，使用者裁決歸設計）。
 
-**寫入許可**（Domain 的 `AuthorizationWriteScope`，`AsyncLocal`，可巢狀，`Dispose` 還原外層）：寫守衛表時，目前的非同步流程上必須有許可，否則丟 `InvalidOperationException`、交易回滾（fail closed）。許可沿 `await` 往內傳，巢狀 mediator 請求沿用外層許可；`ExecutionContext.SuppressFlow` 起的背景工作帶不到，要自己的請求開。
+**寫入許可**（Domain 的 `AuthorizationWriteScope`）：許可是一個物件，掛在 `AsyncLocal` 上，**只能用 `AuthorizationWriteScope.RunAsync(permit, body)` 開**——同一個 async 方法裡設定、`await body()`、`finally` 還原外層並把許可標為已關閉。沒有回傳許可給呼叫端的 API（不提供 `BeginAsync` 或 `using` 形式），所以不會出現「在 async helper 裡設定 `AsyncLocal`、回到呼叫端已經不在」的誤擋。規則：
 
-| 種類 | 誰開 | 准許 |
+- 守衛寫入的存檔（`SaveChanges`）必須發生在 `body` 內；`body` 結束時 ChangeTracker 還有未存的守衛變更就丟 `InvalidOperationException`，訊息寫「守衛變更要在許可內存檔」（不然會在之後的存檔才被擋，原因難查）。
+- 巢狀時只看最內層許可（內層一定比外層窄：例如 `Authorized` 內開 `Cleanup`）。許可沿 `await` 往內傳，巢狀 mediator 請求沿用外層許可。
+- 已關閉的許可一律無效：被 `Task.Run` 或未等待的工作帶走的副本，在 `body` 結束後寫入會被擋。`ExecutionContext.SuppressFlow` 起的背景工作帶不到許可，要自己的請求開。
+
+| 種類 | 唯一開的位置 | 追蹤式寫入准許 | 批次入口准許 |
+|---|---|---|---|
+| Authorized | `PermissionAdminGate.RunAsync`（behavior 與條件式都經它） | 守衛表全部（列層規則見下） | `ReplaceModuleRowsAsync`、`ReplaceActionScopesAsync` |
+| Derived（欄位、應用程式、群組集合） | `MasterDesigner.BindFieldAsync` | 只准新增 `FieldGrant`，`SourceKind = App` 且欄位、應用程式、群組都在許可參數內 | 無 |
+| Cleanup（模組或欄位集合） | `DeletionRepository.RunCleanupAsync` | 只准刪除屬於目標的列 | `PurgeModuleAsync`、`PurgeFieldsAsync`，目標要在許可參數內 |
+| Seed | `SeedData`（含 `PermissionAxesImport`） | 全部 | 全部 |
+| Test | 測試專案的 `RunForTestsAsync` | 全部 | 全部 |
+
+- 列層規則：寫 `ProgramCode ∈ SystemProgramCodes.All` 的列、寫 `Dynamic_UserGroupMapping`，許可上要有 `SystemAdminVerified`（只有同時宣告 `ISystemAdminRequest` 的請求經 gate 開的許可才有；Seed、Test 視為有）。權限設定者的請求沒有這個標記，就算哪天 `SaveModulePermissions` 被改壞、寫到系統代碼列，也會丟例外。
+- `Cleanup` 由 `RunCleanupAsync(目標, body)` 開：`FieldPurge.RemoveAsync`、`ModuleRemover.RemoveAsync` 把整段清除包進去；`body` 結束後在同一交易內查目標欄位或模組已不存在，還在就丟例外、整筆回滾。這保證「刪掉的授權列一定隨上層一起消失」：只刪 `FieldPermission`、不刪欄位，會讓原本被隱藏的群組看得到，所以不能只看「是不是刪除」。目標模組涵蓋它的全部欄位、選項與 program 代碼。
+- `DemoPeople`（產生 Demo 資料時加示範帳號與成員）不自己開許可，沿用背景 `GenerateDemoDataRequest` 的 `Authorized`；成員寫入要 `SystemAdminVerified`，所以該請求另宣告 `ISystemAdminRequest`（T13，背景以 admin 送，通過）。
+
+**批次入口**（`ExecuteDeleteAsync`、`ExecuteUpdateAsync` 對守衛表只准出現在這四個方法；方法第一個寫入之前呼叫 `AuthorizationWriteScope.Demand(入口, 目標)`，不符就丟例外）：
+
+| 入口 | 刪除範圍（由參數固定） | 另外檢查 |
 |---|---|---|
-| Authorized | `PermissionAdminBehavior` 通過後；`PermissionAdminGate.BeginAsync` | 守衛表全部 |
-| Derived | `MasterDesigner.BindFieldAsync` | 只准新增 `SourceKind = App` 的 `FieldGrant` |
-| Cleanup | `DeletionRepository.PurgeModuleAsync`、`PurgeFieldsAsync` | 只准刪除 |
-| Seed | `SeedData`（含 `PermissionAxesImport`）、`DemoPeople` | 守衛表全部 |
-| Migration | `Program.cs` 包住 `MigrateAsync` | 全部 |
-| Test | 測試專案的 fixture helper | 全部 |
+| `PermissionRepository.ReplaceModuleRowsAsync(module, rows)` | 該模組 program 代碼的群組與個人列、該模組的資料範圍、欄位權限、選項範圍 | `module.ProgramCode ∈ SystemProgramCodes.All` 一律拒絕，不看許可 |
+| `SharedMasterRepository.ReplaceActionScopesAsync(moduleId, rows)` | 該模組的動作範圍 | — |
+| `DeletionRepository.PurgeModuleAsync(module)` | 該模組全部授權列與 program 列 | 模組是 Cleanup 目標 |
+| `DeletionRepository.PurgeFieldsAsync(fields)` | 這些欄位的欄位權限與選項範圍 | 欄位都在 Cleanup 目標內 |
 
-列層規則兩條：寫 `ProgramCode ∈ SystemProgramCodes.All` 的列、寫 `Dynamic_UserGroupMapping`，許可上要有 `SystemAdminVerified`（只有同時宣告 `ISystemAdminRequest` 的請求開的許可才有，Seed、Migration、Test 視為有）。權限設定者送的請求沒有這個標記，就算哪天 `SaveModulePermissions` 被改壞、寫到系統代碼列，也會丟例外——這是「權限設定者不能授予系統權限」的第二道。`ReplaceModuleRowsAsync` 收到 `ProgramCode ∈ SystemProgramCodes.All` 的模組直接丟例外（第三道，模組不會有這種代碼）。
+批次刪除之後的新列都用 `AddRange` 追蹤寫入，所以每一列照樣經攔截器的列層檢查。`Dynamic_Field` 的兩個守衛欄不准批次寫入（`ExecuteUpdate*`），只能經追蹤式寫入改；欄位定義本身整列刪除不放寬可見性，不在此限。
 
-**兩個 interceptor**（Persistence，SQLite 與 PostgreSQL 都註冊，照既有 `SqliteMmapInterceptor`、`PostgresWriteLockInterceptor` 的掛法）：
+**`AuthorizationSaveChangesInterceptor`**（Persistence，`SaveChangesInterceptor`，SQLite 與 PostgreSQL 都註冊，照既有 `SqliteMmapInterceptor`、`PostgresWriteLockInterceptor` 的掛法）：`SavingChanges` 先呼叫 `ChangeTracker.DetectChanges()`（EF 在攔截器之後才偵測變更，不先做會漏掉只改屬性、沒標記的變更），再逐筆看守衛型別的 Added／Modified／Deleted，照上表與列層規則判斷。`Field` 的守衛欄看「屬性被標為已修改且新值是放寬的值」（`VisibilityRestricted` 為 false；`ExcludeFromAi` 任何值；新增時 `ExcludeFromAi` 為 true），不靠原值，離線實體 `Update` 的原值不可信時一樣擋（寧可誤擋）。
 
-- `AuthorizationSaveChangesInterceptor`（`SaveChangesInterceptor`）：`SavingChanges` 時逐筆看 ChangeTracker 裡守衛型別的 Added／Modified／Deleted，與 `Field` 的兩個守衛欄，照上表與列層規則判斷。
-- `AuthorizationCommandInterceptor`（`DbCommandInterceptor`）：看送出的 SQL，`INSERT INTO`／`UPDATE`／`DELETE FROM` 後接守衛表名（加或不加雙引號）就要有許可，`Cleanup` 只准 `DELETE`。這一層抓 `ExecuteDeleteAsync`、`ExecuteUpdateAsync`、原生 SQL；它看不到列內容，所以另由清單測試限制誰能對守衛表下批次指令。
-- 資料庫外鍵的 cascade（刪欄位連帶 `FieldGrant`；刪群組、模組、應用程式連帶 `AppGrant`、`ModuleActionScope`、`FieldGrant`）不經 EF 指令、兩層都看不到。它們屬刪除清理：上層列已刪除，消失的列不會放寬任何人對仍存在資料的可見性。
+**EF migration**：`MigrateAsync` 不經 `SaveChanges`，攔截器不涉入，不需要許可。migration 只用 EF 產生（`.claude/rules/backend.md`），清單測試另禁止 migration 檔對守衛表寫資料；PAX-01b 以兩個 provider 跑「上一版 schema 加資料 → 新版啟動」的升級冒煙。
+
+**資料庫外鍵的 cascade**（刪欄位連帶 `FieldGrant`；刪群組、模組、應用程式連帶 `AppGrant`、`ModuleActionScope`、`FieldGrant`）不經 EF 指令，也不經攔截器。它們屬刪除清理：上層列已刪除，消失的列不會放寬任何人對仍存在資料的可見性。
 
 **寫入路徑分類**（對照全部 controller，2026-11-19 以 856364f5 逐一查 `ReplaceModuleRowsAsync`、`ISharedMasterRepository` 的寫入方法、`ExecuteDeleteAsync`、`new 守衛型別` 的呼叫端）：
 
@@ -210,12 +226,12 @@
 | `PUT modules/{key}/permissions`（Permissions） | `ReplaceModuleRowsAsync`；`MasterGrants.SaveAsync`、`SaveFieldGrantsAsync` | 授權修改 | 權限設定＋主檔守衛 |
 | `POST templates/{key}/instantiate`（Templates） | 第 10 步巢狀 `SaveModulePermissionsRequest` | 授權修改 | gate；巢狀請求自己的 behavior |
 | `POST apps/packages/{id}/open`、`POST apps/{key}/close`、`/reopen`、`DELETE apps/{key}`（Apps） | `AppOpener`（`AddFieldGrant`、`ReplaceModuleRowsAsync`）、`MasterGrants.GrantAsync`、`RecalcAsync`、`MasterLifecycle.RecomputeAsync`、`DeleteApp` 的清除 | 授權修改 | 系統管理員＋權限設定 |
-| `POST demo-data/generate`（DemoData） | 背景 `GenerateDemoDataRequest` → `DemoStructure` → `AppOpener` | 授權修改 | Start、Generate 都宣告權限設定 |
+| `POST demo-data/generate`（DemoData） | 背景 `GenerateDemoDataRequest` → `DemoStructure` → `AppOpener`、`DemoPeople` | 授權修改、成員 | Start、Generate 都宣告權限設定；Generate 另宣告系統管理員 |
 | `PUT admin/groups/{id}/system-privileges`、`PUT admin/users/{id}/system-privileges`（新） | 系統代碼列 | 系統權限 | 系統管理員＋權限設定，列層要 `SystemAdminVerified` |
 | `PUT admin/groups/{id}/members`、`POST admin/users`、`PUT admin/users/{id}`（AdminGroups、AdminUsers） | `SetGroupMembersAsync`、`SetMembershipsAsync` | 成員 | 同上 |
 | `DELETE admin/groups/{id}`（AdminGroups） | `DeleteGroupAsync`（成員與五種授權列） | 授權修改 | 同上 |
 | `POST modules/{key}/fields`（Fields，貢獻者區塊裡） | `MasterDesigner.BindFieldAsync` → `AddFieldGrant` | 受保護的衍生寫入 | 主檔守衛（系統管理員）＋ Derived |
-| `DELETE modules/{key}`、`DELETE fields/{id}`、`DELETE blocks/{id}`（Deletion） | `PurgeModuleAsync`、`PurgeFieldsAsync` | 刪除清理 | 設計器刪除＋ Cleanup |
+| `DELETE modules/{key}`、`DELETE fields/{id}`、`DELETE blocks/{id}`（Deletion） | `ModuleRemover`、`FieldPurge` 經 `RunCleanupAsync` → `PurgeModuleAsync`、`PurgeFieldsAsync` | 刪除清理 | 設計器刪除＋ Cleanup（結束時驗目標已刪） |
 
 表外說明：
 
@@ -223,15 +239,27 @@
 - 刪除清理只刪「隨上層一起消失」的列：被刪欄位的欄位權限、被刪選項的選項範圍、被刪模組的全部授權列與 program 列。
 - 無關（不寫守衛表）：AdminDashboards、ApprovalFlows、Approvals、Attachments、Auth、Checks、Conversions、Dashboards、Departments、Entities、Events（`allowHiddenSource` 在 JSON 定義裡，走 gate，§7.3）、ImportExport、Ledger、Modules、Notifications、Ops、Policies、PrintTemplates、Records、Relations、Reports、Rules、Schema、TaskBoard、TaskRules、Tasks、TaskViews、Theme、Views、Workflow；Apps 的匯入、預覽、整合、匯出；Templates 的匯入、匯出；Permissions 的三支 GET；AdminUsers 的重設密碼、停用、啟用、部門。`ApprovalReadGrant` 只在記憶體組臨時權限輸入，不寫庫。
 
-**清單測試**（`AuthorizationWriteInventoryTests`，PAX-23）：
+**清單測試**（`AuthorizationWriteInventoryTests`，PAX-23；原始碼掃描照既有 `NoBusinessWordsTests` 的寫法掃 `backend/src/**/*.cs`）：
 
 1. 反射：實作 `IPermissionAdminRequest` 的正式型別恰為 §7.2 的 13 個。
-2. 原始碼掃描（`backend/src/**/*.cs` 文字比對）：`AuthorizationWriteScope.Begin*` 的呼叫位置恰為上表登記的檔案與種類；`BeginForTests` 不得出現在 `src`。新增開許可的地方要改清單並在測試註解寫理由。
-3. 原始碼掃描：對守衛型別的 `Set<T>()` 下 `ExecuteDeleteAsync`／`ExecuteUpdateAsync`／`FromSql*`／`ExecuteSql*` 的位置，恰為 `PermissionRepository.ReplaceModuleRowsAsync`、`SharedMasterRepository.ReplaceActionScopesAsync`、`DeletionRepository.PurgeModuleAsync`、`PurgeFieldsAsync`。
-4. 模型掃描：`DynamicDbContext` 模型裡表名含 `Privilege`、`Permission`、`Scope`、`Grant`、`GroupMapping` 的實體，必須在守衛表或排除清單（`Dynamic_PermissionGroup`）裡；新增授權表忘了登記就失敗。
-5. 守衛表常數裡的每一張表都存在於模型（防改名後漏守）。
+2. 開許可的位置：`AuthorizationWriteScope.RunAsync` 的呼叫恰為上表四處（gate、`BindFieldAsync`、`RunCleanupAsync`、`SeedData`），種類相符；`RunForTestsAsync` 不得出現在 `src`。新增要改清單並在測試註解寫理由。
+3. 守衛實體的取得點：`Set<守衛型別>` 只准出現在登記檔案（`PermissionRepository`、`SharedMasterRepository`、`AccountRepository`、`DeletionRepository`、`DemoPeople`、`PermissionAxesImport`）；`src` 不得有型別參數不具體的 `Set<T>()`、`Set(typeof…)`。
+4. 模型掃描：沒有任何 navigation 指向守衛型別（否則別的實體能經導覽屬性查出守衛列再批次刪）。加上 3，`Set<守衛型別>` 就是在 EF 裡取得守衛列的唯一途徑。
+5. 批次指令：登記檔案內的 `ExecuteDelete*`／`ExecuteUpdate*` 只准在四個批次入口方法內（以方法簽章切段比對），且入口方法在第一個寫入前呼叫 `Demand`；`src` 中呼叫 `ExecuteUpdate*` 的方法內不得出現 `VisibilityRestricted`、`ExcludeFromAi`（`SetProperty` 的 lambda 與字串屬性名都含這兩個識別字，經 `Module` 的導覽屬性取得欄位也一樣抓得到）。
+6. 原生 SQL：EF 的 `ExecuteSql*`／`FromSql*`／`SqlQuery*`、Dapper、`CreateCommand` 的使用檔案恰為登記清單（現有：記錄與報表查詢、報表快照、SQLite 健康檢查與 mmap、PostgreSQL 寫入鎖與啟動鎖，實作時照掃描結果登記並逐檔確認不寫守衛表）；`src` 除 `Domain/Data/Configurations/` 外，任何字串常值不得含守衛表名或 `Dynamic_Field`（含加引號、加 schema 的寫法）。
+7. migration 檔不得有對守衛表或 `Dynamic_Field` 的 `Sql`、`InsertData`、`UpdateData`、`DeleteData`。
+8. 分層：Application 不得引用 `DbContext`；WebAPI 只准登記的 `Program.cs`、`SessionMiddleware`、`AdminBootstrap`，且這三個檔案不得出現守衛型別。
+9. 模型裡表名含 `Privilege`、`Permission`、`Scope`、`Grant`、`GroupMapping` 的實體必須在守衛表或排除清單（`Dynamic_PermissionGroup`）裡；守衛表常數裡的每一張表都存在於模型（防改名後漏守）。
+10. 掃描器自測：3、5、6、7 的比對函式對測試專案內的違規樣本各回報一筆——對 `UserGroupMapping` 下 `ExecuteDeleteAsync`、經 `Set<Module>()` 的導覽屬性取得欄位再 `ExecuteUpdateAsync` 改 `VisibilityRestricted`、`"DELETE FROM public.\"Dynamic_FieldPermission\""`、`WITH x AS (…) DELETE FROM "Dynamic_FieldGrant"`、兩個陳述式串在一起、未登記檔案用 Dapper `ExecuteAsync`、經變數或屬性取得 `Set<FieldGrant>()` 再批次刪、migration 的 `UpdateData`。
 
-**負向案例**（測試專案內的測試用請求與 handler，不進正式組件）：見 PAX-23a–g。
+**涵蓋範圍與取捨**（不宣稱更多）：
+
+- 執行期 fail closed 的是**追蹤式寫入**（攔截器逐列）與**四個批次入口**（`Demand` 查許可與參數）。
+- 其餘批次與原生 SQL 寫入是**開發期** fail closed：程式裡沒有不經 3、4、6 的方式取得守衛表，出現就讓清單測試失敗、CI 擋下合併；執行期不另檢查。直接 ADO.NET 或 Dapper 不在攔截器範圍內，靠 6 禁止。
+- 掃不到的：登記的原生 SQL 檔案裡在執行期拼出守衛表名的 SQL、反射。登記時逐檔審查，現有登記檔案只動記錄表、報表、PRAGMA 與鎖。程式外直接連資料庫的寫入不在本設計範圍。
+- 拿掉指令層 SQL 文字比對（`DbCommandInterceptor`）：要 fail closed 就得拒絕所有無法分類的寫入，而 EF 自己的存檔批次（多陳述式、`RETURNING`、`MERGE`）也會落入無法分類，等於要另寫 SQL 解析器；它又看不到列內容，擋得下的只有「有沒有許可」，列層規則終究要靠窄入口。留著只會給「執行期全涵蓋」的錯覺，又多一個會誤擋 migration 的地方。
+
+**負向案例**（測試專案內的測試用請求與 handler，不進正式組件）：見 PAX-23a–k。
 
 ## 8. API
 
@@ -466,11 +494,12 @@
 | 小周 zhou | 已停用、session 仍有效 | — | G-both |
 | 老林 lin | 系統管理員、已停用 | — | G-both |
 
-模組（皆 Active）：A 一般模組（欄位：單價 Currency、薪資 Decimal 對 G-design 設 Hidden、F1 公式 `{薪資} * 1`、F2 公式 `{F1} + 0`）；M 一般模組；T 事件目標模組（小數欄位 N）；H 表頭與 D 明細（H.薪資對 G-design Hidden、H.單價 Currency、H.F1 `{薪資} * 1`；D.X、D.Y、D.Z 帶表頭的值分別指向 H.薪資、H.單價、H.F1）；S 共用主檔成員模組；範本 `t-perm`（測試範本：一個模組、群組權限建議指向 G-design、含一個 `UpdateField` 步驟）。
+模組（皆 Active）：A 一般模組（欄位：單價 Currency、薪資 Decimal 對 G-design 設 Hidden、F1 公式 `{薪資} * 1`、F2 公式 `{F1} + 0`）；M 一般模組；T 事件目標模組（小數欄位 N、金額欄位 P，Currency）；H 表頭與 D 明細（H.薪資對 G-design Hidden、H.單價 Currency、H.F1 `{薪資} * 1`；D.X、D.Y、D.Z 帶表頭的值分別指向 H.薪資、H.單價、H.F1）；S 共用主檔成員模組；範本 `t-perm`（測試範本：一個模組、群組權限建議指向 G-design、含一個 `UpdateField` 步驟）。
 
 **資料與升級帶入**
 
 - **PAX-01**【雙跑】全新資料庫啟動後 `Dynamic_Program` 有 `SYS00001` 且 `Active = true`；重啟一次仍是 true；`permissionAxes.importedOn` 存在、沒有任何 `SYS00001` 授權列。
+- **PAX-01b**【雙跑】升級冒煙：以上一個已發布版本的最後一個 migration 建庫、置入 PAX-02 的資料，照 `Program.cs` 的順序執行 `MigrateAsync` 與 `SeedData.EnsureSeededAsync`：兩個 provider 都啟動成功、沒有寫入許可例外；守衛表除了 `SYS00001` 帶入列以外逐列不變。
 - **PAX-02**【雙跑】升級帶入：用不跑 `SeedData` 的專用 fixture 建到最新 schema（本段沒有 schema 變更，等同上一版）後置入資料：G1（`DYN00000` 讀＋改）、G2（只讀）、G3（只改、沒有讀）、G5（沒有 `DYN00000`，但有既存 `SYS00001` `CanEdit = true`）、G6（`DYN00000` 改，且有既存 `SYS00001` `CanEdit = false`）；u1 個人 `DYN00000` 改；u2 個人只新增；u4 在 G2 與 G7（新增）且個人讀取（合併後沒有改）；u5 已停用、個人 `DYN00000` 改；u8 在 G2 與 G1（多群組合併有改）；業務模組列若干。執行 `SeedData.EnsureSeededAsync`：G1、G3、G6、u1、u5 恰有一列 `SYS00001`（`CanEdit` true、其餘 false），G2、G5、G7、u2、u4 沒有；`DYN00000` 列與業務模組列逐列不變；標記存在。
 - **PAX-02b**【雙跑】回滾與重新升級：接 PAX-02，以 API 收回 G1 的權限設定、授予 G2 權限設定；模擬回滾（不經新程式，直接把 `SYS00001` program 列設成 `Active = false`，照舊版 SeedData 的效果）；再執行 `EnsureSeededAsync` 兩次：G1 仍沒有、G2 仍有（不復活、不丟失），program 列回到 `Active = true`。另刪掉標記列再執行一次：照當時的設計器修改權重算（G1 恢復、G2 消失），證明強制重帶的說明正確。
 - **PAX-02c**【雙跑】多實例：兩個 DbContext 同時對同一個未帶入的庫執行 `PermissionAxesImport.RunAsync`：兩個都成功結束、授權列恰為一份、沒有主鍵衝突。
@@ -491,7 +520,7 @@
 - **PAX-11** 小王（設計器讀＋新增＋修改＋刪除、沒有權限設定）`POST templates/t-perm/instantiate` → 201，模組建立、`Dynamic_GroupProgramPrivilege` 沒有新模組的列，回應 warnings 含略過權限的提示，稽核 `template.instantiate` 的 `permissionsSkipped` 為 true；小陳同一請求 → 201，權限建議照常套用、沒有略過的 warnings。只有設計器新增的使用者 → 403（巢狀 `UpdateField` 要修改，整批回滾；確認 M3 不宣稱「只有新增就能建」）。
 - **PAX-12** 小王 `POST demo-data/generate` → 403 `permissionAdminRequired`，執行器狀態沒有變成 Running；小陳 → 200、狀態 running；直接以小王身分送 `GenerateDemoDataRequest` → 403、沒有任何寫入。
 - **PAX-13** 事件旗標：小王 `POST events`（某個對應 `allowHiddenSource = true`）→ 403 `eventHiddenSourceNeedsPermissionAdmin`、事件不存在；小王改成 false 且來源欄位沒被隱藏 → 201；小陳勾旗標 → 201；小李勾旗標 → 403、沒有 `code`（沒有設計器修改，gate 不取代設計器守衛）；admin 先建一個勾旗標的事件，小王 `PUT events/{key}` 只改名稱（旗標仍在）→ 403 `eventHiddenSourceNeedsPermissionAdmin`；小陳同樣修改 → 200。
-- **PAX-13b** 公式閉包（M5 擴大）：小陳（有權限設定）在旗標為 false 時建立事件，來源是 A：對應 `from` F2 → T.N → 400，錯誤鍵 `…set[0].allowHiddenSource`；對應公式 `{F1} * 1` → 400；對應 `from` 單價（Currency，未設隱藏）→ T 的金額欄位 201（L4 路徑二，固定已知限制）；把旗標改成 true → 201。`HiddenAsync(A)` 回傳集合含薪資、F1、F2。另：小陳把 A 的公式 F3 由 `{單價}` 改成 `{F1}`，而已有事件從 F3 複製且旗標為 false → `PUT fields/{F3}` 400（既有 `UpdateFieldHandler` 比對接上新規則）。
+- **PAX-13b** 公式閉包（M5 擴大）：小陳（有權限設定）在旗標為 false 時建立事件，來源是 A：對應 `from` F2 → T.N → 400，錯誤鍵 `…set[0].allowHiddenSource`；對應公式 `{F1} * 1` → 400；對應 `from` 單價（Currency，未設隱藏）→ T.P 201（L4 路徑二，固定已知限制）；把旗標改成 true → 201。`HiddenAsync(A)` 回傳集合含薪資、F1、F2。另：小陳把 A 的公式 F3 由 `{單價}` 改成 `{F1}`，而已有事件從 F3 複製且旗標為 false → `PUT fields/{F3}` 400（既有 `UpdateFieldHandler` 比對接上新規則）。
 - **PAX-14** 帶表頭的值（M6）：小王以 API 修改既有 H 記錄、新增一列 D 並省略 X、Y、Z → 該列 X、Y、Z 都是空值；admin 做同樣操作 → X、Y、Z 等於表頭的薪資、單價、F1。小王新增表頭（`POST`）時同樣檢查一次。H 既有明細列的 X 值在小王修改表頭後不變。另以 `DetailWriter` 單元測試傳入 `HiddenFieldIds` 含某限定可見欄位的表頭權限，確認被過濾；並確認傳入的是表頭權限而非明細權限（明細權限沒有隱藏任何欄位時，結果仍是空值）。
 
 **跨模組與共用主檔**
@@ -523,14 +552,18 @@
   - 巢狀：從範本建立 `t-perm` → 201、權限建議略過、warnings 有提示；開啟套件（內含巢狀權限存檔）→ 403、整批回滾。
   - 同一位 admin 經畫面通道送同樣請求 → 200／201。
 - **PAX-23** `AuthorizationWriteInventoryTests`：§7.4 清單測試 1–5 全過。
-  - **PAX-23a** 刻意漏宣告：測試用 `ForgotToDeclareRequest`（只宣告 `IDesignerRequest`）的 handler 呼叫 `ReplaceModuleRowsAsync` → `InvalidOperationException`，權限表逐列不變。
-  - **PAX-23b** 刻意漏宣告批次：測試用 handler 直接對 `FieldPermission` 下 `ExecuteDeleteAsync` → 例外、列不變。
-  - **PAX-23c** `Cleanup` 許可下新增 `FieldPermission` → 例外。
-  - **PAX-23d** `Derived` 許可下新增 `SourceKind = Manual` 的 `FieldGrant` → 例外。
-  - **PAX-23e** 小李（`Authorized`、沒有 `SystemAdminVerified`）的請求內寫 `SYS00001` 列、寫成員表 → 例外。
-  - **PAX-23f** 沒有許可時把欄位的 `VisibilityRestricted` 由 true 改 false → 例外。
+  - **PAX-23a** 刻意漏宣告：測試用 `ForgotToDeclareRequest`（只宣告 `IDesignerRequest`）的 handler 呼叫 `ReplaceModuleRowsAsync` → `InvalidOperationException`（`Demand` 沒有許可），權限表逐列不變。
+  - **PAX-23b** 刻意漏宣告的追蹤式寫入：同一個 handler 以追蹤式寫入新增一列 `FieldPermission` 後存檔 → 例外、列不變。
+  - **PAX-23c** `Cleanup` 許可下新增 `FieldPermission`、刪除不屬於目標欄位的 `FieldPermission` → 例外；`RunCleanupAsync` 的 `body` 只呼叫 `PurgeFieldsAsync`、沒刪欄位本身 → 結束時例外、整筆回滾，欄位權限列還在。
+  - **PAX-23d** `Derived` 許可下：新增 `SourceKind = Manual` 的 `FieldGrant`、新增群組不在許可參數內的 `FieldGrant` → 例外；呼叫任一批次入口（例如 `ReplaceActionScopesAsync`）→ 例外（Derived 不准批次）。
+  - **PAX-23e** 小李（`Authorized`、沒有 `SystemAdminVerified`）的請求內：追蹤式寫 `SYS00001` 列、寫成員表 → 例外；以 `ProgramCode = SYS00001` 的測試模組呼叫 `ReplaceModuleRowsAsync` → 例外（批次入口拒絕系統代碼，就算持有 `Authorized`、甚至 `SystemAdminVerified` 也一樣）。
+  - **PAX-23f** 沒有許可時把欄位的 `VisibilityRestricted` 由 true 改 false 後存檔 → 例外；以離線實體 `Update` 一個 `VisibilityRestricted = false` 的欄位 → 例外（不靠原值）。
   - **PAX-23g** 在 `ExecutionContext.SuppressFlow` 的背景工作內、沒有自己的許可時寫守衛表 → 例外（前台許可不會被帶進背景）。
-- **PAX-24** 既有測試回歸：設計器相關的既有測試裡「設計器修改能存權限」的案例改成「要權限設定」；直接寫授權表的 fixture 改用 `BeginForTests`；其他設計器行為的測試不改即通過（全套 SQLite＋雙跑集）。
+  - **PAX-23h** 合法的條件式寫入：測試用請求在 handler 內以 `PermissionAdminGate.RunAsync` 包住「改守衛欄＋存檔」，小陳送 → 成功、值已寫入；小王送 → 403 `permissionAdminRequired`、沒有寫入。
+  - **PAX-23i** 離開許可後：`RunAsync` 的 `body` 只改守衛列、不存檔 → `body` 結束時例外，訊息說明要在許可內存檔；`body` 內以 `Task.Run` 起、未等待的工作在 `body` 結束後才寫守衛表 → 例外（許可已關閉）。
+  - **PAX-23j** 清單測試的掃描器自測（§7.4 清單測試 10）：每個違規樣本各回報一筆，移除樣本後回報為零。
+  - **PAX-23k**【雙跑】PAX-23b、23c、23e、23f 在 PostgreSQL 再跑一次：攔截器與批次入口在兩個 provider 行為相同。
+- **PAX-24** 既有測試回歸：設計器相關的既有測試裡「設計器修改能存權限」的案例改成「要權限設定」；直接寫授權表的 fixture 改用 `RunForTestsAsync`；其他設計器行為的測試不改即通過（全套 SQLite＋雙跑集）。
 - **PAX-25**【雙跑】resolver 與持有者查詢整合：`IsPermissionAdminAsync`、`DesignerActionsAsync`、`SystemPrivilegeHolders.SnapshotAsync` 在兩種資料庫對 fixture 全員回相同結果（群組與個人合併、M1、停用、管理員排除）。
 
 **畫面（權限軸-b，Vitest＋本機走查）**
@@ -549,7 +582,7 @@
 
 ### 權限軸-a 後端
 
-- 範圍：`SystemProgramCodes`；SeedData 與 `PermissionAxesImport`（沒有 EF migration）；`IPermissionAdminRequest`、`PermissionAdminBehavior`、`PermissionAdminGate`、guard 兩個方法、隱含讀取與停用順序；`AuthorizationTables`、`AuthorizationWriteScope`、兩個 interceptor（兩個 provider 都註冊）與 `Program.cs` 的 Migration 許可；§7.2 的 13 個宣告；M3 範本略過、M4 Demo、M5 事件旗標與公式閉包、M6 帶表頭的值；`ServiceResult.Forbidden(message, code)`；兩支系統權限 API 與管理清單、群組影響的系統權限欄位；`GetMe` 的 `permissionAdmin`；稽核代碼、`SystemPrivilegeHolders`、`privilege.changed` 與四語標題與信件文案；`MessageText` 三個新鍵（`McpPermissionAdminDenied` 先放鍵，mcp1a 才用到）；PAX-01–21b、23–25；核心設計 §15 第 55 條與「上線前必做」兩處的回寫（§21）。
+- 範圍：`SystemProgramCodes`；SeedData 與 `PermissionAxesImport`（沒有 EF migration）；`IPermissionAdminRequest`、`PermissionAdminBehavior`、`PermissionAdminGate`、guard 兩個方法、隱含讀取與停用順序；`AuthorizationTables`、`AuthorizationWriteScope`（`RunAsync`、`Demand`）、`AuthorizationSaveChangesInterceptor`（兩個 provider 都註冊）、四個批次入口的 `Demand`、`RunCleanupAsync` 與 `FieldPurge`、`ModuleRemover` 的包裝；§7.2 的 13 個宣告；M3 範本略過、M4 Demo、M5 事件旗標與公式閉包、M6 帶表頭的值；`ServiceResult.Forbidden(message, code)`；兩支系統權限 API 與管理清單、群組影響的系統權限欄位；`GetMe` 的 `permissionAdmin`；稽核代碼、`SystemPrivilegeHolders`、`privilege.changed` 與四語標題與信件文案；`MessageText` 三個新鍵（`McpPermissionAdminDenied` 先放鍵，mcp1a 才用到）；PAX-01–21b（含 01b）、23–25（含 23a–k）；核心設計 §15 第 55 條與「上線前必做」兩處的回寫（§21）。
 - 相依：O2 收完（`SecurityIncidents`、`AuditBehavior` 已在 o2a–o2b；等 o2e 合併再開工，避免和它同時改 `IncidentTitles`、四語檔）。
 - 規模估計：後端約 25–30 個檔案（寫入邊界與既有 fixture 改用測試許可是主要增量），沒有 migration；無前端改動（`GetMe` 多一個欄位，前端型別在 -b 補，舊前端忽略未知欄位）。
 
@@ -601,7 +634,8 @@
 - **T6** 條件式檢查集中在 `PermissionAdminGate`，三種結果。
 - **T7** 開關應用程式、成員與帳號管理、系統權限 API 冗餘宣告 `IPermissionAdminRequest`（延伸分流 D4 對套件的部分）。
 - **T8** 事件旗標只看請求內容、不比對既有定義。
-- **T9** 守衛防線放在資料庫寫入邊界（兩個 interceptor＋寫入許可＋清單測試），不用反射清單、不用 Roslyn 分析（§7.4）。
+- **T9** 守衛防線：追蹤式寫入由 SaveChanges 攔截器逐列檢查；批次寫入只准四個批次入口，入口以 `Demand` 檢查許可與參數；其他批次與原生 SQL 寫入由清單測試禁止；許可只能以 callback（`RunAsync`）開。不做指令層 SQL 文字比對、不用反射清單、不用 Roslyn 分析（§7.4）。
+- **T13** `GenerateDemoDataRequest` 另宣告 `ISystemAdminRequest`，`DemoPeople` 不自己開許可（§7.3、§7.4）。
 - **T10** 403 的機器代碼用 `ServiceResult.Forbidden(message, code)` 輸出，camelCase。
 - **T11** 系統權限 API 的 body 用 `bool?`，缺鍵回 400，不靠繫結預設值。
 - **T12** 升級帶入用啟動時的冪等匯入，不用 EF migration（§6.3）。
@@ -639,15 +673,15 @@
 5. 空系統：通過。沒裝任何應用程式時系統管理員自動擁有兩者，群組頁、使用者頁照常能授予；全新安裝的帶入是空操作。
 6. 套件只用定義組成：通過。套件帶的權限建議仍是資料，開啟時走同一支權限存檔請求。
 7. ERP 對照：通過，見 §17。
-8. fail closed、驗證不只在前端、沒有執行期 DDL：修正後通過。behavior 對錯誤回傳型別丟例外；停用者為 false 且先於管理員捷徑；寫入邊界讓漏宣告的寫入丟例外；MCP 預設拒絕；所有限制都在後端；沒有 migration、沒有 DDL。
+8. fail closed、驗證不只在前端、沒有執行期 DDL：修正後通過。behavior 對錯誤回傳型別丟例外；停用者為 false 且先於管理員捷徑；漏宣告的追蹤式寫入在執行期丟例外、批次與原生 SQL 寫入由清單測試擋下（開發期，§7.4 寫明涵蓋範圍）；MCP 預設拒絕；所有限制都在後端；沒有 migration、沒有 DDL。
 9. 不限產業：通過。取捨理由是公司規模（權限管理的人少），不依產業。
 
 ## 23. 不確定、留給實作者
 
-- `AuthorizationCommandInterceptor` 以 SQL 文字比對表名：兩個 provider 產出的 `INSERT`／`UPDATE`／`DELETE` 形狀要先印出來確認（EF 批次 `MERGE` 或 `RETURNING` 不影響開頭的動詞，但要驗）。比對失敗時寧可誤擋（fail closed），測試會抓到。
-- 既有 fixture 直接寫授權表的筆數未盤點；改用 `BeginForTests` 的工作量可能比估計大，PAX-24 以全套綠燈為準。
-- `SeedData`、`DemoPeople` 之外是否還有啟動程式寫守衛表，以清單測試 2 的掃描結果為準，有就登記為 Seed。
-- EF 執行 migration 的指令是否經 `DbCommandInterceptor` 未驗證；`Program.cs` 一律以 Migration 許可包住，兩種情況都安全。
+- 攔截器的時機：EF 呼叫 `SavingChanges` 攔截器時還沒做 `DetectChanges`（`DynamicDbContext` 的註解與此一致），所以攔截器自己先呼叫；兩個 provider 由 PAX-23f、23k 實測固定。
+- 既有 fixture 直接寫授權表的筆數未盤點；改用 `RunForTestsAsync` 的工作量可能比估計大，PAX-24 以全套綠燈為準。
+- `SeedData` 之外是否還有啟動程式寫守衛表、原生 SQL 的登記檔案有哪些，以清單測試 2、3、6 的掃描結果為準；啟動程式有就登記為 Seed，原生 SQL 檔案逐檔確認不寫守衛表再登記。
+- 清單測試 5 以方法簽章切段比對；多載、local function、expression-bodied 成員的切法由實作者定，切不準時寧可把整個檔案算違規。
 - `SystemPrivilegeHolders.SnapshotAsync` 要一次查出全部持有者（不要逐人呼叫 `LoadProgramInputsAsync`），也不要在列舉查詢結果時再發查詢（Npgsql 限制）。
 - `TemplateInstantiator` 的 warnings 目前是繁中字面字串（例如「群組『X』不存在」）；新增的那則照同樣寫法，四語化不在本段。
 - 事件編輯前端（`event-draft.ts` 一帶）停用旗標的位置，實作者照現有畫面決定；只要求「沒有權限設定時不能勾、已勾的不能存」。
@@ -660,7 +694,7 @@
 
 **必修**
 
-1. 反射清單抓不到漏宣告 → 改成資料庫寫入邊界：守衛表、寫入許可、兩個 interceptor，加清單測試管住開許可的位置與批次指令（§7.4，T9；PAX-23、PAX-23a–g）。
+1. 反射清單抓不到漏宣告 → 改成資料寫入邊界：守衛表、寫入許可、攔截器，加清單測試管住開許可的位置與批次指令（§7.4，T9；PAX-23、PAX-23a–g；第二輪收斂成攔截器＋批次入口，見下）。
 2. 寫入路徑清單不完整、「沒有例外」不成立 → 對照全部 controller 分成授權修改、系統權限、成員、受保護的衍生寫入、刪除清理、無關，各自的守衛；`BindFieldAsync`、刪除清理、刪群組、成員表、`GenerateDemoDataRequest` 補進來（§4、§7.2、§7.4；PAX-12、PAX-23d、PAX-23e）。
 3. M5 經公式繞過旗標 → 一般隱藏欄位納入公式依賴閉包（逐層），預設封住，L4 改寫（§7.3、§12.3、§13 L4；PAX-13b）。
 4. 「每個人能力完全不變」不成立 → 改成能力契約：保留 K1–K5、新增 N1–N2、收緊 S1–S4，補修改無讀取、多群組與個人合併、停用帳號、既存 `SYS00001` 列（首次帶入前清掉）的案例（§6.3、§13 L7、M2；PAX-02、PAX-03）。
@@ -676,3 +710,12 @@
 - M6 指定傳入表頭有效權限、不用明細的 `perms`，補金額遮罩、衍生公式、限定可見欄位、既有明細不改寫（§12.2；PAX-14）。
 - 刪除群組提示改成「此群組提供的系統權限會移除…成員若另有來源仍保留」（§11；PAX-32）。
 - PAX-06 補停用管理員、停用但仍持有兩軸授權，確認停用判斷在管理員捷徑之前（§7.1、T5；PAX-06）。
+
+**第二輪短核對（2026-11-19）**
+
+短核對全文在本機 `.tmp/plans/20261119-perm-axes/verify.md`（基準 8c616a03）。
+
+1. 🔴 SQL 文字比對不能宣稱 fail closed、`Dynamic_Field` 守衛欄可被批次更新繞過 → 拿掉指令層 SQL 比對；批次寫入只准四個批次入口，其他批次與原生 SQL（含 ADO.NET、Dapper）由清單測試禁止，守衛欄禁止 `ExecuteUpdate`，涵蓋範圍明寫執行期與開發期之分（§7.4、§23、T9；PAX-23f、23j）。
+2. 🔴 指令層看不到列內容、Derived 缺批次限制、raw SQL 管不住 → 列內容一律在追蹤式寫入時逐列檢查；批次入口以 `Demand` 檢查許可與參數、拒絕系統代碼，Derived 不准批次；Cleanup 結束時驗目標已刪；模型禁止指向守衛型別的 navigation，`Set<守衛型別>` 限登記檔案（§7.4；PAX-23a–e、23k）。
+3. `BeginAsync` 與 `AsyncLocal` 生命週期 → 許可只能以 `RunAsync(permit, body)` 開，`body` 內必須存檔、結束時關閉許可；拿掉 `BeginAsync`；`DemoPeople` 不自己開許可，`GenerateDemoDataRequest` 另宣告系統管理員（§7.1、§7.3、§7.4、§6.3、T13；PAX-23h、23i）。
+4. PAX-13b 的 T 金額欄位不在 fixture → fixture 的 T 加金額欄位 P（§18；PAX-13b）。另：EF migration 不經 SaveChanges，不需要 Migration 許可，改由清單測試禁止 migration 對守衛表寫資料，並補雙 provider 升級冒煙（§7.4；PAX-01b）。
