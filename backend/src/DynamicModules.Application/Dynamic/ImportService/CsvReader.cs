@@ -10,9 +10,8 @@ public sealed record CsvReadResult(string? Error, IReadOnlyList<string> Header, 
 /// <summary>CSV 讀取（CsvWriter 的反向）：嚴格 UTF-8、略過 BOM 與空白列、RFC 4180 引號。</summary>
 public static class CsvReader
 {
-    public const int MaxRows = 1000;
-
-    public static CsvReadResult Read(byte[] content)
+    /// <param name="maxRows">資料列上限（不含表頭），由呼叫端傳政策 import.maxRows 的生效值。</param>
+    public static CsvReadResult Read(byte[] content, int maxRows)
     {
         string text;
         try
@@ -75,7 +74,7 @@ public static class CsvReader
         if (field.Length > 0 || cells.Count > 0 || afterQuote) EndRow();
 
         if (rows.Count == 0 || rows[0].Line != 1) return Fail("檔案沒有表頭");
-        if (rows.Count - 1 > MaxRows) return Fail("一次最多匯入 1000 筆");
+        if (rows.Count - 1 > maxRows) return Fail(ImportMessages.TooManyRows(maxRows));
         return new CsvReadResult(null, rows[0].Cells, rows.Skip(1).ToList());
     }
 
