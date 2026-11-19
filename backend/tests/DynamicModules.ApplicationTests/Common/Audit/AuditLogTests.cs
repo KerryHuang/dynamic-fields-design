@@ -162,25 +162,22 @@ public class AuditLogTests : IAsyncLifetime
     }
 
     [Fact]
-    public async Task ActorOverride_WithoutIdentity_AndInsideSignIn_IgnoresCookieIdentity()
+    public async Task ActorOverride_WithoutIdentity_Allowed_SignInScopeClosedToOtherCallers()
     {
         var (log, _, _, scope) = NewLog(_sp);
         using (scope)
         {
             // 沒有身分：可以覆寫
             await log.WriteNowAsync(Entry(new ActorOverride("sales01")), CancellationToken.None);
-            // 登入範圍內：環境有身分（舊 cookie）也不取，覆寫照用；沒覆寫就是 null
+            // 登入範圍內（環境有身分也不取）只有兩個登入 handler 開得了，由 WebAPITests 的 A11 經真的登入驗證；這裡只驗測試碼開不了
             _user.UserId = "admin";
-            using (AuditOrigin.BeginSignIn())
-            {
-                await log.WriteNowAsync(Entry(new ActorOverride("sales02")), CancellationToken.None);
-                await log.WriteNowAsync(Entry(), CancellationToken.None);
-            }
+            FluentActions.Invoking(AuditOrigin.BeginSignIn).Should().Throw<InvalidOperationException>();
+            AuditOrigin.InSignIn.Should().BeFalse();
             // 範圍外、有身分：記環境的身分
             await log.WriteNowAsync(Entry(), CancellationToken.None);
         }
         (await Rows()).Select(r => (r.ActorUserId, r.ActorKind)).Should().Equal(
-            ("sales01", AuditActorKind.User), ("sales02", AuditActorKind.User), (null, AuditActorKind.System), ("admin", AuditActorKind.User));
+            ("sales01", AuditActorKind.User), ("admin", AuditActorKind.User));
     }
 
     [Fact]

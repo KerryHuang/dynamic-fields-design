@@ -2088,7 +2088,8 @@ O2 在 pg0 之後，合併前兩種資料庫都要驗（使用者裁決 §3 第 
 - 告警信、站內通知（以及 O3 的事件推送）只放標題代碼與白名單參數，不放正規化訊息、原始訊息、stack、記錄值；正規化訊息另經遮蔽，只在監控頁顯示。
 - SMTP：信任邊界是系統管理員，產品不限制目的位址；憑證一律驗證、不提供略過；STARTTLS 失敗不退回明文；加密方式 `none` 時不准填帳號密碼；錯誤只回階段與 SMTP 回應碼。
 - 資料庫連不上時，需要登入的 API（含監控頁）一律 503，不開免驗證的診斷入口。
-- 稽核的 `ActorOverride` 只在環境沒有身分時可用；唯一例外是兩個登入 handler 的 `AuditOrigin.BeginSignIn` 範圍，行為者只來自 handler 剛驗證的帳號，不從請求帶的 cookie 取。
+- 稽核的 `ActorOverride` 只在環境沒有身分時可用；唯一例外是兩個登入 handler 的 `AuditOrigin.BeginSignIn` 範圍，行為者只來自 handler 剛驗證的帳號，不從請求帶的 cookie 取。`BeginSignIn` 執行期驗直接呼叫者，其他呼叫者（含反射）一律丟例外。
+- Demo 一鍵登入每來源 15 分鐘 30 次總嘗試量（成功也算），在查資料庫、寫稽核之前；與 `LoginThrottle` 其他門檻同屬登入防濫用守衛（§17.11）。
 - `WriteNowAsync`、`TryWriteNowAsync` 在建立新 scope 前檢查呼叫端交易，交易內呼叫一律丟例外。
 - 故障注入只在 `Development` 環境生效。
 - `database.writable` 不能關。
@@ -2362,9 +2363,15 @@ O2 在 pg0 之後，合併前兩種資料庫都要驗（使用者裁決 §3 第 
 - 寫入點：`IAuditedRequest`（73 個請求，宣告動作代碼與目標；`AuditActions` 共 77 個代碼：管理與設計 74、登入 2、清理 1）由 `AuditBehavior` 在交易內、handler 成功後寫一列，與變更同交易提交；稽核寫不進去整筆回滾（A02）。登入（`LoginHandler`、`DemoLoginHandler`）與排程工作不經 behavior，用 `IAuditLog.TryWriteNowAsync`／`Add`。
 - **偏離 1：巢狀的稽核請求只記最外層。** 開應用程式、整併主檔、整合重整這類流程會在一個請求裡再送幾十個設計請求；`AuditContext.Depth` 讓只有最外層寫一列（例如只記 `app.open`，不另記內層每個 `field.add`）。Demo 資料產生器本身不是稽核請求，所以它送的每個設計請求各記一列（Demo 資料的稽核時間本來就是模擬的）。
 - **偏離 2：權限變更的摘要只放有變的格子，最多 200 格**，另帶 `changeCount`，超過 200 格時加 `truncated: true`（`PermissionAuditCells`）。格子的鍵是 `group:{id}.{動作}`、`group:{id}.scope`、`user:{id}.{動作}`、`field:{欄位}/group:{群組}`、`option:{id}`、`fieldGrant:{id}`。
-- **偏離 3：新建類的目標用請求帶的 key 或名稱**（建模組用 `Input.Key`，建群組、儀表板用名稱當 `TargetLabel`）；需要新產生的 id 時由 handler 呼叫 `AuditContext.Target(id)` 補上（建使用者）。兩種匯入（應用程式套件、範本）在解析成功後補套件或範本的代碼與繁中名稱。只在模組內唯一的代碼，目標帶模組：列印範本是 `模組代碼:範本代碼`，模組政策是 `模組代碼:政策代碼`（整合同理是 `應用程式:整合代碼`）；事件、檢查、轉單、任務規則、簽核流程的代碼全域唯一，直接用代碼。
-- 登入失敗的 `ReasonCode`：`unknownAccount`、`inactive`、`locked`、`noPassword`、`wrongPassword`；Demo 登入另有 `notDemoAccount`。帳號不存在時目標留空，不記輸入的帳號字串（A03）。被節流擋下的嘗試不寫稽核，只加計數器 `formwright.login.throttled`。Demo 一鍵登入與密碼登入共用同一個 `LoginThrottle`（同一組門檻與計數），公開 Demo 站的匿名者不能靠不存在的帳號無限新增稽核列；門檻是既有的安全守衛常數，沒有進 PolicyCatalog。登入失敗與沒有身分的寫入記 `ActorKind = system`、`ActorUserId = null`。
+- **偏離 3：新建類的目標用請求帶的 key 或名稱**（建模組用 `Input.Key`，建群組、儀表板用名稱當 `TargetLabel`）；需要新產生的 id 時由 handler 呼叫 `AuditContext.Target(id)` 補上（建使用者）。兩種匯入（應用程式套件、範本）在驗證通過後補套件或範本的代碼與繁中名稱（複審修正：原本在驗證前補，本文缺名稱時 `Name` 為 null，400 變成 500；範本 `{}`、套件 v1 `{"formatVersion":1}` 兩個負例都回 400、不留稽核）。只在模組內唯一的代碼，目標帶模組：列印範本是 `模組代碼:範本代碼`，模組政策是 `模組代碼:政策代碼`（整合同理是 `應用程式:整合代碼`）；事件、檢查、轉單、任務規則、簽核流程的代碼全域唯一，直接用代碼。
+- 登入失敗的 `ReasonCode`：`unknownAccount`、`inactive`、`locked`、`noPassword`、`wrongPassword`；Demo 登入另有 `notDemoAccount`。帳號不存在時目標留空，不記輸入的帳號字串（A03）。被節流擋下的嘗試不寫稽核，只加計數器 `formwright.login.throttled`。Demo 一鍵登入與密碼登入共用同一個 `LoginThrottle`（同一組門檻與計數），公開 Demo 站的匿名者不能靠不存在的帳號無限新增稽核列；門檻是既有的安全守衛常數，沒有進 PolicyCatalog。
+- **複審修正：Demo 登入另有每來源總嘗試量。** 只限失敗擋不住「逐次登入公開帳號」——Demo 成功不需要秘密，每次都新增一列 `login.succeeded`。`LoginThrottle.TryDemoAttempt` 在查資料庫、寫稽核之前，對同一來源 15 分鐘內放行的 Demo 登入計數（成功、失敗都算），滿 30 次就回既有的登入失敗訊息、只加 `formwright.login.throttled`、不寫稽核；密碼登入不走這道。門檻寫死、列進 §17.9：它和 `LoginThrottle` 其他門檻一樣是防匿名者灌寫入的守衛，只在公開 Demo 站有作用，不是客戶要依業務調的政策；放進 PolicyCatalog 反而讓守衛能被調鬆。30 次對單一訪客切換示範帳號綽綽有餘；同一 NAT 後面多人同時試用會互相擋（與既有 IP 門檻同一類限制）。
+- 登入失敗與沒有身分的寫入記 `ActorKind = system`、`ActorUserId = null`。
 - 行為者覆寫（`ActorOverride`）只在 `AuditOrigin.BeginSignIn()` 範圍內允許；範圍內不取環境身分（舊 cookie），範圍外有身分又覆寫就丟 `InvalidOperationException`。`BeginSignIn` 的呼叫者只有兩個登入 handler，由 `AuditArchitectureTests`（WebAPITests）掃五個產品組件的 IL 把關：`call`、`callvirt`、`newobj`、`ldftn`、`ldvirtftn` 都算，方法群組轉委派也抓得到，狀態機與 lambda 類別歸到最外層型別，白名單是型別全名；測試組件裡放了三個故意違規的替身，證明掃描器抓得到（A10）。
+- **複審修正：反射繞得過 IL 掃描，改由 `BeginSignIn` 執行期驗呼叫者。** `BeginSignIn` 標 `NoInlining`，用 `new StackFrame(1)` 取直接呼叫者，歸到最外層型別後必須是 Application 組件裡的 `LoginHandler` 或 `DemoLoginHandler`（名單是常值，沒有可被反射改掉的欄位），否則丟 `InvalidOperationException`。正式環境也開：一次登入多一個堆疊框架（微秒級），相對 PBKDF2 可忽略。Debug 與 Release 組態都跑過。
+  - 擋得住：`MethodInfo.Invoke`（直接呼叫者是反射框架）、`CreateDelegate` 或方法群組轉成委派再呼叫（呼叫者是轉手的型別）、其他組件裡同名的型別、測試碼直接呼叫。測試替身 `SneakyReflection` 以拼接字串反射呼叫，IL 掃描看不到它，執行期檢查擋下（`AuditArchitectureTests`）。
+  - 擋不住：反射直接改 `AuditOrigin` 的私有 `AsyncLocal`／`Frame`（不經 `BeginSignIn`）；兩個 handler 自己呼叫的輔助方法以尾呼叫轉進 `BeginSignIn`（堆疊上看起來是 handler 本身）。兩者都要改到產品程式碼，由審查把關；IL 掃描仍保留，抓一般的直接引用。
+  - ApplicationTests 的 `AuditLogTests` 因此開不了登入範圍，改成驗證測試碼呼叫會丟例外；範圍內不取 cookie 身分的行為由 WebAPITests 的 A11 經真的登入驗證。
 - `WriteNowAsync`／`TryWriteNowAsync` 在交易內一律丟 `InvalidOperationException`，守衛在建立新 scope 之前（A09，以計數的 scope factory 驗證）。
 - 遮蔽：鍵名剛好是 `password`、`token`、`secret`（不分大小寫）的值，與 `fwp_`、`fwc_` 開頭的字串值都換成 `***`。超過 16000 字元時只留有變的鍵並標 `truncated`，仍超過就從最大的項目開始丟。
 - 覆蓋率：`AuditCoverageTests` 用反射找出所有交易型請求中屬於 `ISystemAdminRequest`、或 `IDesignerRequest` 且需要的設計權限不是唯讀的，每個都要實作 `IAuditedRequest`，例外清單目前是空的；反向也檢查：實作 `IAuditedRequest` 的（含 struct）都要是交易型、回 `ServiceResult`（A05）。巢狀成功、內層失敗、外層失敗、外層不是稽核請求四種情況由 `AuditBehaviorTests` 驗證；400、403 不留稽核。

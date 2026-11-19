@@ -283,6 +283,35 @@ public class AuditApiTests
         (await Rows(app)).Should().NotContain(r => r.Action == "login.succeeded");
     }
 
+    [Fact]
+    public async Task DemoLogin_SuccessesCountTowardsPerSourceTotal_AuditStopsGrowing()
+    {
+        // 審查 P1：Demo 登入不需要秘密，成功也要計入同一來源的總嘗試量，否則匿名者逐次登入公開帳號就能無限寫稽核
+        using var app = new DemoSiteApp();
+        var c = app.CreateClient();
+        for (var i = 0; i < 30; i++)
+            (await c.PostAsJsonAsync($"{Auth}/demo-login", new { userId = "admin" })).StatusCode.Should().Be(HttpStatusCode.OK);
+        for (var i = 0; i < 5; i++)
+            (await c.PostAsJsonAsync($"{Auth}/demo-login", new { userId = "admin" })).StatusCode.Should().Be(HttpStatusCode.Unauthorized);
+        (await Rows(app, "login.succeeded")).Should().HaveCount(30);
+        (await Rows(app, "login.failed")).Should().BeEmpty("被總量擋下的嘗試不寫稽核");
+    }
+
+    // ---- 匯入缺名稱：驗證先於補稽核目標（審查 P2：曾因 Name 為 null 變 500） ----
+
+    [Fact]
+    public async Task Imports_MissingName_400_WriteNoAudit()
+    {
+        using var app = new TestApp();
+        var admin = app.AsUser();
+        var before = (await Rows(app)).Count;
+        (await admin.PostAsync($"{Base}/templates/import", new StringContent("{}", System.Text.Encoding.UTF8, "application/json")))
+            .StatusCode.Should().Be(HttpStatusCode.BadRequest);
+        (await admin.PostAsync($"{Base}/apps/packages/import", new StringContent("""{"formatVersion":1}""", System.Text.Encoding.UTF8, "application/json")))
+            .StatusCode.Should().Be(HttpStatusCode.BadRequest);
+        (await Rows(app)).Should().HaveCount(before);
+    }
+
     // ---- 稽核目標可辨識（審查 P2：匯入補目標、模組內代碼帶模組） ----
 
     [Fact]

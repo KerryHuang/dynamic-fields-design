@@ -51,4 +51,15 @@ public class LoginThrottleTests
 
         for (var i = 0; i < 5; i++) throttle.TryBegin("alice", "198.51.100.7").Should().BeTrue();
     }
+
+    [Fact]
+    public void TryDemoAttempt_CountsEveryAdmittedAttemptPerSource_SuccessIncluded()
+    {
+        var throttle = new LoginThrottle(TimeProvider.System);
+        for (var i = 0; i < 30; i++) throttle.TryDemoAttempt("203.0.113.9").Should().BeTrue();
+
+        throttle.TryDemoAttempt("203.0.113.9").Should().BeFalse("Demo 不需要秘密，成功也計入總量");
+        throttle.TryDemoAttempt("198.51.100.7").Should().BeTrue("只限該來源");
+        throttle.TryBegin("alice", "203.0.113.9").Should().BeTrue("密碼登入不受 Demo 總量影響");
+    }
 }

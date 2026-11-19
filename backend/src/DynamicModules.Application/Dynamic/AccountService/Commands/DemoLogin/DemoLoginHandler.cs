@@ -13,7 +13,8 @@ namespace DynamicModules.Application.Dynamic.AccountService.Commands.DemoLogin;
 /// <summary>
 /// Demo 站一鍵登入：不驗密碼、不看鎖定。只收啟用中的示範帳號與 admin。
 /// 平常不寫資料庫（Demo 產生器的寫入交易會鎖表，第一位訪客喚醒站台時不能被擋住）。
-/// 失敗與密碼登入共用 <see cref="LoginThrottle"/>：公開站台的匿名者不能靠不存在的帳號無限新增稽核列；被擋下的只加計數器、不寫稽核。
+/// 失敗與密碼登入共用 <see cref="LoginThrottle"/>：公開站台的匿名者不能靠不存在的帳號無限新增稽核列；
+/// 另在查資料庫前限制每來源總嘗試量（成功也算，<see cref="LoginThrottle.TryDemoAttempt"/>），逐次登入公開帳號也灌不了。被擋下的只加計數器、不寫稽核。
 /// </summary>
 public class DemoLoginHandler(
     AuthSettings settings, IAccountRepository accounts, IUnitOfWork uow, LoginThrottle throttle, IAuditLog audit, ILogger<DemoLoginHandler> logger)
@@ -30,7 +31,7 @@ public class DemoLoginHandler(
         var userId = (request.UserId ?? "").Trim().ToLowerInvariant();
         var ip = string.IsNullOrEmpty(request.ClientIp) ? "unknown" : request.ClientIp;
         var key = userId.Length > 128 ? userId[..128] : userId;
-        if (!throttle.TryBegin(key, ip))
+        if (!throttle.TryDemoAttempt(ip) || !throttle.TryBegin(key, ip))
         {
             OpsMetrics.LoginThrottled.Add(1);
             logger.LogWarning("一鍵登入失敗：來源或帳號嘗試過於頻繁");

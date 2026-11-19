@@ -37,7 +37,6 @@ public class ImportAppPackageHandler(
         var parsed = AppJson.Parse(request.Content);
         var (package, readErrors) = await packages.ReadAsync(parsed, ct);
         if (package is null) return Invalid(readErrors);
-        audit.Target(package.Manifest.Id, package.Manifest.Name.Resolve(I18nText.FallbackLocale));
 
         // 已知的主檔（內建與匯入）：requires.apps 不得列主檔，引用的主檔欄位要找得到（§4.6）；不在的主檔留到開啟時回 masterNotAvailable
         var known = await packages.ListAsync(ct);
@@ -45,6 +44,8 @@ public class ImportAppPackageHandler(
             .GroupBy(k => k.Package.Manifest.Id).ToDictionary(g => g.Key, g => g.First().Package);
         var validation = AppPackageValidator.Validate(package, masters);
         if (validation.Errors.Count > 0) return Invalid(validation.Errors);
+        // 驗證過才補稽核目標：缺名稱的本文（例如 v1 的 {"formatVersion":1}）要回 400，不能在這裡遇到 null
+        audit.Target(package.Manifest.Id, package.Manifest.Name.Resolve(I18nText.FallbackLocale));
         var limitErrors = AppPackageValidator.TaskRuleLimitErrors(package,
             await policies.IntAsync(PolicyCatalog.TaskMaxRulesPerPackage, null, ct), await policies.IntAsync(PolicyCatalog.TaskMaxTasksPerRule, null, ct));
         if (package.ApprovalFlows.Count > 0)

@@ -99,6 +99,30 @@ public class AuditArchitectureTests
         Callers(typeof(AuditArchitectureTests).Assembly).Should().Equal(
             typeof(SneakyAsync).FullName, typeof(SneakyDirect).FullName, typeof(SneakyGroup).FullName);
     }
+
+    [Fact]
+    public async Task Runtime_RejectsEveryCallerButTheTwoHandlers_IncludingReflectionTheScannerCannotSee()
+    {
+        // 審查 P2：反射呼叫不留 IL 引用（上一個測試的掃描器看不到 SneakyReflection），由 BeginSignIn 的執行期呼叫者檢查擋下
+        Callers(typeof(AuditArchitectureTests).Assembly).Should().NotContain(typeof(SneakyReflection).FullName);
+        FluentActions.Invoking(SneakyReflection.Run).Should().Throw<TargetInvocationException>()
+            .WithInnerException<InvalidOperationException>();
+        FluentActions.Invoking(SneakyReflection.ViaDelegate).Should().Throw<InvalidOperationException>();
+        FluentActions.Invoking(SneakyDirect.Run).Should().Throw<InvalidOperationException>();
+        FluentActions.Invoking(() => SneakyGroup.Run()()).Should().Throw<InvalidOperationException>();
+        await FluentActions.Awaiting(SneakyAsync.Run).Should().ThrowAsync<InvalidOperationException>();
+        AuditOrigin.InSignIn.Should().BeFalse("被擋下時沒有留下範圍");
+    }
+}
+
+/// <summary>以字串組出方法名再反射呼叫：IL 裡沒有 BeginSignIn 的方法參考、也沒有完整的字串常值。</summary>
+internal static class SneakyReflection
+{
+    private static MethodInfo Method => typeof(AuditOrigin).GetMethod("Begin" + "SignIn")!;
+
+    public static object? Run() => Method.Invoke(null, null);
+
+    public static IDisposable ViaDelegate() => Method.CreateDelegate<Func<IDisposable>>()();
 }
 
 internal static class SneakyAsync

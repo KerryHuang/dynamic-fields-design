@@ -4,10 +4,11 @@ namespace DynamicModules.Application.Common.Security;
 /// 登入失敗限流（記憶體內，假設單一站台實例）。取代「同帳號輸錯 5 次就鎖帳號」：外人猜錯密碼只會擋到自己的來源 IP，不會讓合法使用者進不來。
 /// 三層：帳號＋IP 15 分鐘內失敗 5 次擋該組合；單一 IP 15 分鐘內失敗 20 次擋該 IP（防一個 IP 掃很多帳號）；
 /// 單一帳號 1 小時內失敗 50 次（換 IP 猜的情況）則每 10 秒只放行一次嘗試——只變慢，不鎖死。
+/// Demo 一鍵登入另有每來源總量 <see cref="TryDemoAttempt"/>（成功也算）。
 /// </summary>
 public sealed class LoginThrottle(TimeProvider time)
 {
-    private const int PairMax = 5, IpMax = 20, AccountMax = 50;
+    private const int PairMax = 5, IpMax = 20, AccountMax = 50, DemoIpMax = 30;
     private static readonly TimeSpan ShortWindow = TimeSpan.FromMinutes(15), AccountWindow = TimeSpan.FromHours(1), SlowInterval = TimeSpan.FromSeconds(10);
 
     private readonly object _gate = new();
@@ -35,6 +36,24 @@ public sealed class LoginThrottle(TimeProvider time)
                 _lastAttempt[userId] = now;
             }
             foreach (var key in Keys(userId, ip)) _inFlight[key] = _inFlight.GetValueOrDefault(key) + 1;
+            return true;
+        }
+    }
+
+    /// <summary>
+    /// Demo 一鍵登入的每來源總嘗試量：15 分鐘內 30 次，成功也計入（Demo 不需要秘密就能成功，只限失敗擋不住匿名者灌稽核，審查 P1）。
+    /// 放行時就記一次；計數與失敗共用清理（<c>d|</c> 開頭，15 分鐘窗口）。密碼登入不走這裡。
+    /// </summary>
+    public bool TryDemoAttempt(string ip)
+    {
+        var now = time.GetUtcNow();
+        lock (_gate)
+        {
+            Prune(now);
+            var key = "d|" + ip;
+            if (Count(key, now - ShortWindow) >= DemoIpMax) return false;
+            if (!_failures.TryGetValue(key, out var list)) _failures[key] = list = [];
+            list.Add(now);
             return true;
         }
     }
