@@ -46,7 +46,7 @@ GitHub Actions（`.github/workflows/gate.yml`）：先跑外洩掃描（三項 0
 
 不用 merge commit、不 force push。
 
-收尾清理：分支改動確認已完整進 main（祖先關係，或 rebase 後比對 patch 相同）就刪遠端分支，不先問；沒進 main 的保留（使用者 2026-11-18 裁決）。只改 `docs/`、`.claude/`、`.plugharbor/`、`scripts/` 的 push 不會部署。
+收尾清理：分支改動確認已完整進 main（祖先關係，或 rebase 後比對 patch 相同）才算可刪；沒進 main 的保留（使用者 2026-11-18 裁決）。遠端分支不自己刪（auto mode 權限檢查會擋 `git push origin --delete`），在回來報告列一行 `git push origin --delete <分支…>` 給使用者自己跑（使用者 2026-11-19 裁決）。只改 `docs/`、`.claude/`、`.plugharbor/`、`scripts/` 的 push 不會部署。
 
 ## 部署
 main push 會自動部署 Demo（Render），但只在 `backend/`、`frontend/`、`shared/` 或 `Dockerfile.demo` 有變更時才觸發（`render.yaml` 的 `buildFilter`）；只改 docs、`.claude/` 等的 push 不會部署，不必等。
