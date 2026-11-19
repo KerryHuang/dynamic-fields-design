@@ -1,6 +1,9 @@
 using System.Net;
 using System.Net.Http.Json;
+using DynamicModules.Domain.Data;
+using DynamicModules.Domain.Entities.Dynamic;
 using FluentAssertions;
+using Microsoft.Extensions.DependencyInjection;
 using static DynamicModules.WebAPITests.Dynamic.ApiTestKit;
 
 namespace DynamicModules.WebAPITests.Dynamic;
@@ -45,5 +48,37 @@ public class NotificationsApiTests : IDisposable
         (await admin.DeleteAsync($"{Base}/tasks/{taskId}")).StatusCode.Should().Be(HttpStatusCode.OK);
         var after = await JsonOf(await sales.GetAsync($"{Base}/notifications"));
         after.GetProperty("items").EnumerateArray().Select(i => i.GetProperty("title").GetString()).Should().Equal("第二件");
+    }
+
+    /// <summary>維運兩個種類帶標題代碼與參數給鈴鐺組字（維運設計 §17.2.5）；其他種類不輸出 DataJson。</summary>
+    [Fact]
+    public async Task OpsKinds_ExposeTitleKeyAndParams_OtherKindsDoNot()
+    {
+        await using (var scope = _app.Services.CreateAsyncScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<DynamicDbContext>();
+            db.Set<Notification>().AddRange(
+                new Notification
+                {
+                    UserId = "sales01", Kind = NotificationKinds.OpsRulePaused, TitleSnapshot = "任務規則「r1」連續失敗 5 次，已自動暫停",
+                    Link = "/system/dynamic-modules/crm?tab=taskRules&rule=r1",
+                    DataJson = """{"titleKey":"ops.title.rulePaused","params":{"ruleKey":"r1","failures":5},"incidentId":7}""",
+                    CreatedTime = DateTime.Now,
+                },
+                new Notification
+                {
+                    UserId = "sales01", Kind = NotificationKinds.TaskAssigned, TitleSnapshot = "寄送合約", Link = "/tasks?open=1",
+                    DataJson = """{"titleKey":"x"}""", CreatedTime = DateTime.Now.AddMinutes(-1),
+                });
+            await db.SaveChangesAsync();
+        }
+
+        var items = (await JsonOf(await _app.AsUser("sales01").GetAsync($"{Base}/notifications"))).GetProperty("items");
+        var ops = items.EnumerateArray().Single(i => i.GetProperty("kind").GetString() == "opsRulePaused");
+        ops.GetProperty("titleKey").GetString().Should().Be("ops.title.rulePaused");
+        ops.GetProperty("titleParams").GetProperty("ruleKey").GetString().Should().Be("r1");
+        ops.GetProperty("titleParams").GetProperty("failures").GetInt64().Should().Be(5);
+        var task = items.EnumerateArray().Single(i => i.GetProperty("kind").GetString() == "taskAssigned");
+        task.TryGetProperty("titleKey", out var k).Should().BeFalse(k.ToString());
     }
 }
