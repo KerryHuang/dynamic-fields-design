@@ -39,25 +39,33 @@ const passwordHint = computed(() => {
   return m.value?.hasPassword ? t('ops.mail.passwordSet') : t('ops.mail.passwordNone');
 });
 
-/** 組 PUT 主體：密碼留空不送鍵、按了清除送 ""、有填送新值。 */
-function body(): MailSettingsInput {
+/** 組 PUT 主體（不含密碼）。 */
+function body(): Omit<MailSettingsInput, 'password'> {
   const d = draft.value;
-  const b: MailSettingsInput = {
+  return {
     host: d.host.trim(), port: Number(d.port), security: d.security, fromAddress: d.fromAddress.trim(),
     ...(d.userName.trim() ? { userName: d.userName.trim() } : {}), ...(d.fromName.trim() ? { fromName: d.fromName.trim() } : {}),
   };
-  if (password.value) b.password = password.value;
-  else if (clearPassword.value) b.password = '';
-  return b;
+}
+
+/** 密碼另外併進請求（不進共用快取）：留空不送鍵、按了清除送 ""、有填送新值。 */
+function secret(): Pick<MailSettingsInput, 'password'> {
+  if (password.value) return { password: password.value };
+  return clearPassword.value ? { password: '' } : {};
 }
 
 const errors = ref<Record<string, string[]>>({});
 const err = (k: string) => (errors.value[k] ?? []).join('；');
-const save = useSaveMailSettings();
+const save = useSaveMailSettings(secret);
 function submit() {
   errors.value = {};
   save.mutate(body(), {
-    onSuccess: () => $q.notify({ type: 'positive', message: t('ops.saved') }),
+    // 只換密碼時 GET 回來的 metadata 不變，watch(m) 不會觸發，所以這裡明確清空
+    onSuccess: () => {
+      password.value = '';
+      clearPassword.value = false;
+      $q.notify({ type: 'positive', message: t('ops.saved') });
+    },
     onError: (e) => {
       const x = e as unknown as ApiError;
       errors.value = x.errors ?? {};

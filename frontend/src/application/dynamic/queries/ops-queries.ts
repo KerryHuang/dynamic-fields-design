@@ -65,8 +65,12 @@ export const useSaveSmtpChannel = () => useOpsMutation((b: SmtpChannelInput) => 
 export const useTestSmtpChannel = () => useOpsMutation(() => dynamicApi.testSmtpChannel(), ['ops-channel', 'ops-overview']);
 
 export const useMailSettings = () => useQuery({ queryKey: ['mail-settings'], queryFn: dynamicApi.getMailSettings });
-export const useSaveMailSettings = () =>
-  useOpsMutation((b: MailSettingsInput) => dynamicApi.saveMailSettings(b), ['mail-settings', 'ops-channel', 'ops-overview']);
+/**
+ * 密碼不進 mutation variables：variables 與結果留在共用的 mutation cache（成功、失敗都留，頁面還在就不回收），明文會一直留著。
+ * 呼叫端傳讀密碼欄的函式，送出當下才併進請求主體。
+ */
+export const useSaveMailSettings = (secret: () => Pick<MailSettingsInput, 'password'>) =>
+  useOpsMutation((b: Omit<MailSettingsInput, 'password'>) => dynamicApi.saveMailSettings({ ...b, ...secret() }), ['mail-settings', 'ops-channel', 'ops-overview']);
 export const useTestMailSettings = () => useOpsMutation(() => dynamicApi.testMailSettings(), []);
 
 export function useAudit(filter: MaybeRefOrGetter<AuditFilter>) {
