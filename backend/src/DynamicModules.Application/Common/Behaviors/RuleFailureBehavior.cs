@@ -15,7 +15,7 @@ namespace DynamicModules.Application.Common.Behaviors;
 /// （外層已開交易表示巢狀，比照 <see cref="ApprovalAlertBehavior{TReq,TRes}"/>）。
 /// <list type="bullet">
 /// <item>例外帶任務規則標記、而且 <see cref="RuleFailureClassifier"/> 判為歸屬規則本身：另開 DI scope 送 <see cref="RecordRuleFailureRequest"/>
-/// （業務交易已回滾），然後原樣丟出原例外；補記失敗只記 Error log，不改變回給使用者的錯誤。不論歸屬與否都移除在途登記。</item>
+/// （業務交易已回滾），然後原樣丟出原例外；補記失敗只記 Error log，不改變回給使用者的錯誤。補記過的在途登記標上完成序號，不歸屬的直接移除。</item>
 /// <item>結果是失敗、而 <see cref="RuleFailureNote"/> 有已知錯誤碼：同樣另開 scope 開或更新客戶設定事件，不計數、不暫停。</item>
 /// </list>
 /// 這兩種寫入的行為者都是「系統」（使用者只是剛好觸發了規則；稽核 <c>taskRule.autoPause</c> 行為者種類記系統）。
@@ -51,15 +51,24 @@ public class RuleFailureBehavior<TReq, TRes>(
         var (kind, id) = RuleFailureTag.Read(e);
         if (kind != RuleFailureTag.TaskRule || id is not { } ruleId || !FirstTime(e)) return;
         var evaluated = RuleFailureTag.ReadEvaluatedUtc(e);
+        var sent = false;
         try
         {
             if (evaluated is { } at && classifier.IsAttributable(e))
+            {
+                sent = true;
                 await SendAsync(new RecordRuleFailureRequest(kind, ruleId, IncidentTitles.ShortName(e.GetType().Name), at, RequestId()),
                     $"任務規則 {ruleId} 的失敗計數", ct);
+            }
         }
         finally
         {
-            if (evaluated is { } at) inFlight.Remove(ruleId, at);
+            // 補記過的標完成序號（之前讀健康列的成功仍看得到它，§17.14 審查修正 1），沒補記的直接移除
+            if (evaluated is { } at)
+            {
+                if (sent) inFlight.Complete(ruleId, at);
+                else inFlight.Remove(ruleId, at);
+            }
         }
     }
 

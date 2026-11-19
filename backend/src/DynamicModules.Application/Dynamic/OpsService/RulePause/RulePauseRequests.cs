@@ -20,7 +20,7 @@ public sealed record RecordRuleFailureRequest(string RuleKind, long RuleId, stri
 /// 一個交易、兩種資料庫同一份（§17.2.7 第 1–5 步、§17.7）：第一句是健康列的條件式更新（取得列鎖，同一規則的並行失敗與 reset 在 PostgreSQL 上排隊），
 /// 沒有列才新增、撞主鍵重做；失敗不晚於 <c>StreakResetUtc</c> 的不進窗口；清掉窗口外與最近一次成功之前的失敗列；窗口內列數達門檻時
 /// 以 <c>WHERE PausedUtc IS NULL</c> 暫停，影響 1 列的交易在同一交易寫暫停事件、站內通知、寄送佇列與稽核 <c>taskRule.autoPause</c>。
-/// 規則已被刪除時什麼都不寫。
+/// 最前面先鎖規則列再確認規則存在（與刪除互斥）；規則已被刪除時什麼都不寫。
 /// </summary>
 public class RecordRuleFailureHandler(
     IRuleHealthRepository health, ITaskRuleRepository rules, IModuleRepository modules, IPolicyReader policies, RuleIncidents incidents,
@@ -28,7 +28,9 @@ public class RecordRuleFailureHandler(
 {
     public async Task<ServiceResult> Handle(RecordRuleFailureRequest r, CancellationToken ct)
     {
-        if (r.RuleKind != RuleFailureTag.TaskRule || await rules.GetByIdAsync(r.RuleId, ct) is not { } rule) return ServiceResult.Success(false);
+        // 0. 先鎖規則列（與刪規則的三條路徑同一把，§17.14 審查修正 2）再確認存在：已刪或刪除先提交就什麼都不寫
+        if (r.RuleKind != RuleFailureTag.TaskRule || await rules.LockAsync([r.RuleId], ct) == 0
+            || await rules.GetByIdAsync(r.RuleId, ct) is not { } rule) return ServiceResult.Success(false);
         var failed = StorageTime.ToMicroseconds(r.FailedUtc);
         var code = Cut(r.ErrorCode, 100)!;
         var requestId = Cut(r.RequestId, 32);

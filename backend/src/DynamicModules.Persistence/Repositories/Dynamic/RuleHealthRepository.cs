@@ -34,10 +34,22 @@ public class RuleHealthRepository(DynamicDbContext db) : IRuleHealthRepository
 
     public void Detach(RuleHealth row) => db.Entry(row).State = EntityState.Detached;
 
-    public Task<int> ResetStreakAsync(string ruleKind, long ruleId, DateTime evaluatedUtc, CancellationToken ct) =>
-        One(ruleKind, ruleId).Where(h => h.StreakResetUtc == null || h.StreakResetUtc < evaluatedUtc).ExecuteUpdateAsync(s => s
-            .SetProperty(h => h.ConsecutiveFailures, h => h.LastFailureUtc == null || h.LastFailureUtc <= evaluatedUtc ? 0 : h.ConsecutiveFailures)
-            .SetProperty(h => h.StreakResetUtc, evaluatedUtc), ct);
+    /// <summary>
+    /// 兩句（§17.14 審查修正 1）：第一句推 <c>StreakResetUtc</c>（取得列鎖，與補記第一句同一把）；第二句另起一句重數計數＝晚於評估時間、已記下的失敗列數。
+    /// 分兩句是因為 PostgreSQL 的 UPDATE 等到列鎖之後只重讀目標列，同一句裡的子查詢仍用等鎖之前的快照，會漏數剛提交的那筆補記的失敗列；
+    /// 第二句在 Read Committed 下取新快照，看得到所有在這把鎖之前提交的補記，之後的補記要等這個交易結束才會加一。
+    /// 晚於評估時間的失敗都有失敗列（新增條件是晚於當時的 <c>StreakResetUtc</c>，而它早於這次評估時間）；只有成功晚了整個窗口才寫 reset 時，
+    /// 窗口外的那幾筆已被清掉而少數（只影響畫面上的連續失敗數，暫停只看窗口內列數）。
+    /// </summary>
+    public async Task<int> ResetStreakAsync(string ruleKind, long ruleId, DateTime evaluatedUtc, CancellationToken ct)
+    {
+        var moved = await One(ruleKind, ruleId).Where(h => h.StreakResetUtc == null || h.StreakResetUtc < evaluatedUtc)
+            .ExecuteUpdateAsync(s => s.SetProperty(h => h.StreakResetUtc, evaluatedUtc), ct);
+        if (moved == 0) return 0;
+        await One(ruleKind, ruleId).ExecuteUpdateAsync(s => s.SetProperty(h => h.ConsecutiveFailures,
+            h => Failures.Count(f => f.RuleKind == h.RuleKind && f.RuleId == h.RuleId && f.FailedUtc > evaluatedUtc)), ct);
+        return moved;
+    }
 
     public void AddFailure(RuleFailure failure) => db.Set<RuleFailure>().Add(failure);
 

@@ -16,8 +16,16 @@ public sealed class TaskRuleHealthGate(
 {
     private const string Kind = RuleFailureTag.TaskRule;
 
-    public async Task<Dictionary<long, RuleHealth>> LoadAsync(IReadOnlyCollection<long> ruleIds, CancellationToken ct) =>
-        (await health.ListAsync(Kind, ruleIds, ct)).ToDictionary(h => h.RuleId);
+    /// <summary>每條規則讀健康列之前的在途完成序號（<see cref="RuleFailureInFlight.Snapshot"/>）；沒讀過的當 0（最保守）。</summary>
+    private readonly Dictionary<long, long> _loadedAt = [];
+
+    public async Task<Dictionary<long, RuleHealth>> LoadAsync(IReadOnlyCollection<long> ruleIds, CancellationToken ct)
+    {
+        // 先取快照再讀：快照之後才補記完的失敗可能不在讀到的列裡，成功時仍當成在途（§17.14 審查修正 1）
+        var seq = inFlight.Snapshot();
+        foreach (var id in ruleIds) _loadedAt[id] = seq;
+        return (await health.ListAsync(Kind, ruleIds, ct)).ToDictionary(h => h.RuleId);
+    }
 
     public static bool IsPaused(IReadOnlyDictionary<long, RuleHealth> rows, long ruleId) =>
         rows.TryGetValue(ruleId, out var row) && row.PausedUtc is not null;
@@ -34,14 +42,15 @@ public sealed class TaskRuleHealthGate(
     public Task SkipAsync(long ruleId, CancellationToken ct) => health.AddSkippedAsync(Kind, ruleId, 1, ct);
 
     /// <summary>
-    /// 成功的 reset：(a) 有健康列且連續失敗大於 0；或 (b) 本實例有這條規則、評估時間更早的在途失敗。還沒有列而符合 (b) 時新增一列
-    /// （計數 0、<c>StreakResetUtc</c>＝評估時間），撞主鍵改走更新。呼叫端要在規則的例外篩選之外呼叫（這裡的資料庫錯誤不是規則失敗）。
+    /// 成功的 reset：(a) 讀到的健康列連續失敗大於 0；或 (b) 本實例有這條規則、評估時間更早，而且還沒補記完、或在讀健康列之後才補記完的失敗
+    /// （讀到的列看不到它）。還沒有列而符合 (b) 時新增一列（計數 0、<c>StreakResetUtc</c>＝評估時間），撞主鍵改走更新。
+    /// 呼叫端要在規則的例外篩選之外呼叫（這裡的資料庫錯誤不是規則失敗）。
     /// </summary>
     public async Task OnSuccessAsync(IDictionary<long, RuleHealth> rows, long ruleId, DateTime evaluatedUtc, CancellationToken ct)
     {
         rows.TryGetValue(ruleId, out var row);
         var streak = row is { ConsecutiveFailures: > 0 };
-        if (!streak && !inFlight.HasEarlier(ruleId, evaluatedUtc)) return;
+        if (!streak && !inFlight.HasEarlier(ruleId, evaluatedUtc, _loadedAt.GetValueOrDefault(ruleId))) return;
         if (row is not null || await health.ResetStreakAsync(Kind, ruleId, evaluatedUtc, ct) > 0)
         {
             if (row is not null) await health.ResetStreakAsync(Kind, ruleId, evaluatedUtc, ct);

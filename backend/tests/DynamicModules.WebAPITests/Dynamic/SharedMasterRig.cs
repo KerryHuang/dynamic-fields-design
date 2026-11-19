@@ -25,9 +25,12 @@ internal sealed class SharedMasterRig : IDisposable
         ["crmx"] = ("sales", "sales"), ["stk"] = ("clerk", "warehouse"), ["mx"] = ("floor", "floor")
     };
 
-    public SharedMasterRig(bool fileDatabase = false)
+    public SharedMasterRig(bool fileDatabase = false) : this(fileDatabase ? new TestApp(fileDatabase: true) : new TestApp()) { }
+
+    /// <summary>用自己組好的測試主機（例如加攔截器、無鎖模式）。</summary>
+    public SharedMasterRig(TestApp app)
     {
-        App = fileDatabase ? new TestApp(fileDatabase: true) : new TestApp();
+        App = app;
         Admin = App.AsUser();
     }
 

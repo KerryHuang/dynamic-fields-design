@@ -27,7 +27,7 @@ public interface IRuleHealthRepository
 
     /// <summary>
     /// 成功的 reset（§17.2.7 順序與 reset 協定）：只往後推（<c>StreakResetUtc IS NULL OR StreakResetUtc &lt; 評估時間</c>），
-    /// 不晚於評估時間的失敗計數歸零。回傳影響列數。
+    /// 計數改成晚於評估時間、已記下的失敗列數（排除成功之前的、保留成功之後先補記的；§17.14 審查修正 1）。回傳影響列數。
     /// </summary>
     Task<int> ResetStreakAsync(string ruleKind, long ruleId, DateTime evaluatedUtc, CancellationToken ct);
 
