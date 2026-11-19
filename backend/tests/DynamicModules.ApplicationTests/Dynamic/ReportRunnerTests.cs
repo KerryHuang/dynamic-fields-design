@@ -229,6 +229,20 @@ public abstract class ReportTestBase : DesignerTestBase
 public class ReportRunnerTests : ReportTestBase
 {
     [Fact]
+    public void CapDetail_UsesGivenLimit()
+    {
+        var rows = Enumerable.Range(0, 1500).Select(i => (IReadOnlyList<object?>)[i]).ToList();
+        var r = new ReportResult("ok", null, "", [], null, null, rows, false, new DateOnly(2026, 11, 20), null);
+
+        var capped = ReportRules.CapDetail(r, 1000);
+        capped.DetailRows.Should().HaveCount(1000);
+        capped.DetailTruncated.Should().BeTrue();
+        var wide = ReportRules.CapDetail(r, 2000);
+        wide.DetailRows.Should().HaveCount(1500);
+        wide.DetailTruncated.Should().BeFalse();
+    }
+
+    [Fact]
     public async Task Run_MergedOrderShipment_DedupesAmount()
     {
         await Arrange();

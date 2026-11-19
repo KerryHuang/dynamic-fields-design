@@ -10,7 +10,8 @@ using MediatR;
 
 namespace DynamicModules.Application.Dynamic.DashboardService.Commands.SaveDashboardLayout;
 
-public class SaveDashboardLayoutHandler(IDashboardRepository dashboards, IUnitOfWork uow, IBusinessTime time, DashboardAccess access, ReportAccess reportAccess)
+public class SaveDashboardLayoutHandler(IDashboardRepository dashboards, IUnitOfWork uow, IBusinessTime time, DashboardAccess access, ReportAccess reportAccess,
+    ReportLimitReader limitReader)
     : IRequestHandler<SaveDashboardLayoutRequest, ServiceResult>
 {
     public async Task<ServiceResult> Handle(SaveDashboardLayoutRequest request, CancellationToken ct)
@@ -19,7 +20,7 @@ public class SaveDashboardLayoutHandler(IDashboardRepository dashboards, IUnitOf
         var scope = await access.FindAsync(request.Id, viewer, ct);
         if (scope is null) return ServiceResult.NotFound(DashboardRules.NotFound);
 
-        var errors = DashboardRules.CheckLayout(request.Layout);
+        var errors = DashboardRules.CheckLayout(request.Layout, await limitReader.GetAsync(ct), await limitReader.MaxCardsAsync(ct), scope.EffectiveLayout.Cards.Count);
         if (!scope.IsAssigned && request.Name is not null && ReportRules.CheckName(request.Name) is { } nameError) errors.Add(nameError);
         if (errors.Count == 0)
         {

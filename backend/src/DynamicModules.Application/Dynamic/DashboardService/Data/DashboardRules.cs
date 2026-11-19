@@ -1,3 +1,4 @@
+using DynamicModules.Application.Dynamic.ReportService;
 using DynamicModules.Application.Dynamic.ReportService.Data;
 using DynamicModules.Domain.Reports;
 
@@ -7,14 +8,16 @@ namespace DynamicModules.Application.Dynamic.DashboardService.Data;
 public static class DashboardRules
 {
     public const string NotFound = "儀表板不存在", BadVersion = "版本不正確，請重新載入後再改";
-    public const int Columns = 12, MaxCards = 40, MaxHeight = 40, MaxTitleLength = 100;
+    /// <summary>技術限制（設計 §10）；卡片數是政策 A24（dashboard.maxCards），由呼叫端傳入。</summary>
+    public const int Columns = 12, MaxHeight = 40, MaxTitleLength = 100;
 
     private static readonly string[] Vizs = ["table", "indicator", "line", "bar", "donut"];
 
-    public static List<string> CheckLayout(DashboardLayout layout)
+    /// <param name="existingCount">更新既有版面時是原本的卡片數：調低上限後只擋這次比原本多的存檔（§3.5）；新增與預覽傳 0。</param>
+    public static List<string> CheckLayout(DashboardLayout layout, ReportLimits limits, int maxCards, int existingCount = 0)
     {
         var errors = new List<string>();
-        if (layout.Cards.Count > MaxCards) errors.Add($"卡片最多 {MaxCards} 張");
+        if (layout.Cards.Count > maxCards && layout.Cards.Count > existingCount) errors.Add($"卡片最多 {maxCards} 張");
         if (layout.Cards.Any(c => c is null))
         {
             errors.Add("卡片不可為空");
@@ -27,15 +30,15 @@ public static class DashboardRules
             if (!Vizs.Contains(c.Viz)) errors.Add("圖表種類不合法");
             if (c.X < 0 || c.Y < 0 || c.W < 1 || c.H < 1 || c.X + c.W > Columns || c.H > MaxHeight) errors.Add("卡片位置或大小不合法");
             if (c.Title is { Length: > MaxTitleLength }) errors.Add($"卡片標題最多 {MaxTitleLength} 個字");
-            CheckOptions(c, errors);
+            CheckOptions(c, limits, errors);
         }
         return errors.Distinct().ToList();
     }
 
-    private static void CheckOptions(DashboardCard c, List<string> errors)
+    private static void CheckOptions(DashboardCard c, ReportLimits limits, List<string> errors)
     {
         var o = c.Options;
-        if (ReportRules.CheckRange(o.Range) is { } rangeError) errors.Add(rangeError);
+        if (ReportRules.CheckRange(o.Range, limits.MaxRangeDays) is { } rangeError) errors.Add(rangeError);
         if (o.TopN is { } n && (n < 1 || n > 100)) errors.Add("前 N 名的 N 必須介於 1 到 100");
         if (o.ComparePeriods is { } p && (p < 1 || p > 12)) errors.Add("期間比較的期數必須介於 1 到 12");
         if (o.Cumulative && c.Viz != "bar") errors.Add("累計占比只限長條圖");

@@ -21,7 +21,7 @@ const result = computed(() => drill.data.value);
         <q-inner-loading :showing="drill.isFetching.value" />
         <div v-if="drill.isError.value" class="text-negative" data-testid="drill-error">{{ t('reports.loadFailed') }}</div>
         <template v-else-if="result">
-          <div v-if="result.truncated" class="text-warning q-mb-sm" data-testid="drill-truncated">{{ t('reports.drillTruncated') }}</div>
+          <div v-if="result.truncated" class="text-warning q-mb-sm" data-testid="drill-truncated">{{ t('reports.drillTruncated', { n: result.detailRows?.length ?? 0 }) }}</div>
           <ReportResultView :result="result" viz="table" :openable-tasks="openableTasks" @open-task="emit('openTask', $event)" />
         </template>
       </q-card-section>

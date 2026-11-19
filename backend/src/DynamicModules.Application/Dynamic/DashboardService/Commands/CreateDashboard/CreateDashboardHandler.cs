@@ -11,13 +11,14 @@ using MediatR;
 namespace DynamicModules.Application.Dynamic.DashboardService.Commands.CreateDashboard;
 
 /// <summary>建立自己的儀表板（不限張數；不能指派、不能分享）。</summary>
-public class CreateDashboardHandler(IDashboardRepository dashboards, IUnitOfWork uow, IBusinessTime time, DashboardAccess access, ReportAccess reportAccess)
+public class CreateDashboardHandler(IDashboardRepository dashboards, IUnitOfWork uow, IBusinessTime time, DashboardAccess access, ReportAccess reportAccess,
+    ReportLimitReader limitReader)
     : IRequestHandler<CreateDashboardRequest, ServiceResult>
 {
     public async Task<ServiceResult> Handle(CreateDashboardRequest request, CancellationToken ct)
     {
         var viewer = await reportAccess.ViewerAsync(ct);
-        var errors = DashboardRules.CheckLayout(request.Layout);
+        var errors = DashboardRules.CheckLayout(request.Layout, await limitReader.GetAsync(ct), await limitReader.MaxCardsAsync(ct));
         if (ReportRules.CheckName(request.Name) is { } nameError) errors.Add(nameError);
         if (errors.Count == 0 && await access.CheckReportsAsync(request.Layout, [], viewer, ct) is { } reportError) errors.Add(reportError);
         if (errors.Count > 0) return ServiceResult.Invalid(ReportRules.ToErrors("layout", errors));

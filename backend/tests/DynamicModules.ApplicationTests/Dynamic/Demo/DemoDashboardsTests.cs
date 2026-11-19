@@ -1,8 +1,10 @@
 using DynamicModules.Application.Dynamic.DashboardService.Data;
 using DynamicModules.Application.Dynamic.DashboardService.Queries.RunCard;
 using DynamicModules.Application.Dynamic.DemoService;
+using DynamicModules.Application.Dynamic.ReportService;
 using DynamicModules.Application.Dynamic.ReportService.Data;
 using DynamicModules.Domain.Entities.Dynamic;
+using DynamicModules.Domain.Policies;
 using DynamicModules.Domain.Reports;
 using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
@@ -13,6 +15,9 @@ namespace DynamicModules.ApplicationTests.Dynamic.Demo;
 [Collection(DemoGeneratedCollection.Name)]
 public class DemoDashboardsTests(DemoGeneratedFixture fx)
 {
+    private static readonly ReportLimits Factory = new(int.Parse(PolicyCatalog.ReportDrillLimit.Factory),
+        int.Parse(PolicyCatalog.ReportDetailLimit.Factory), int.Parse(PolicyCatalog.ReportMaxRangeDays.Factory));
+
     /// <summary>各指派版主要對象的帳號（示範人員清單的成員）。</summary>
     private static readonly Dictionary<string, string> Owners = new()
     {
@@ -41,7 +46,7 @@ public class DemoDashboardsTests(DemoGeneratedFixture fx)
             dashboard.Assignments.Select(a => groups[a.GroupId]).Should().BeEquivalentTo(spec.GroupKeys, spec.Name);
             var layout = DashboardLayout.Parse(dashboard.LayoutJson);
             layout.Cards.Should().HaveCountGreaterThanOrEqualTo(spec.Name == DemoDashboards.Crm ? 2 : 4, spec.Name);
-            DashboardRules.CheckLayout(layout).Should().BeEmpty(spec.Name);
+            DashboardRules.CheckLayout(layout, Factory, int.Parse(PolicyCatalog.DashboardMaxCards.Factory)).Should().BeEmpty(spec.Name);
             layout.Cards.Select(c => c.ReportId).Should().OnlyContain(id => reports.ContainsValue(id));
         }
         // 業務主管、設備（保養）、品保各一張

@@ -36,9 +36,15 @@ describe('DrillDialog', () => {
     api.drillReport.mockResolvedValue(RESULT);
     await open(['a']);
     expect(api.drillReport).toHaveBeenCalledWith(3, ['a'], null, 'zh-TW', { range: null, departmentIds: [], includeSubDepartments: true });
-    expect(q('drill-truncated')!.textContent).toContain('500');
+    expect(q('drill-truncated')!.textContent).toContain('明細太多，只顯示前 1 列');
     expect(q('report-detail-table')!.textContent).toContain('SO-1');
     expect(q('deduped-note')).not.toBeNull();
+  });
+
+  it('截斷訊息帶實際列數', async () => {
+    api.drillReport.mockResolvedValue({ ...RESULT, detailRows: [['SO-1'], ['SO-2'], ['SO-3']] });
+    await open(['a']);
+    expect(q('drill-truncated')!.textContent).toContain('明細太多，只顯示前 3 列');
   });
 
   it('does not truncate-warn when the result is complete, and does not query while closed', async () => {
