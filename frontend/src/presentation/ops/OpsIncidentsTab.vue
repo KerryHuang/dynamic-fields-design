@@ -104,7 +104,8 @@ const actionsOf = (i: IncidentSummary) => [
       </div>
     </div>
 
-    <q-banner v-if="query.isError.value" dense class="bg-negative-soft q-mb-sm" data-testid="incident-load-failed">{{ t('ops.loadFailed') }}</q-banner>
+    <!-- 清單空時由表格的 no-data 顯示「載入失敗」；已有資料（例如載入更多失敗）才另出橫幅，避免同一句出現兩次 -->
+    <q-banner v-if="query.isError.value && rows.length" dense class="bg-negative-soft q-mb-sm" data-testid="incident-load-failed">{{ t('ops.loadFailed') }}</q-banner>
     <q-table
       flat bordered row-key="id" :rows="rows" :columns="columns" :visible-columns="visibleColumns" :loading="query.isFetching.value"
       :rows-per-page-options="[0]" hide-pagination :no-data-label="query.isError.value ? t('ops.loadFailed') : t('ops.incidents.empty')"
