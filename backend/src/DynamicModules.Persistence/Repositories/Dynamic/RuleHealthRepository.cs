@@ -1,3 +1,4 @@
+using System.Linq.Expressions;
 using DynamicModules.Domain.Data;
 using DynamicModules.Domain.Entities.Dynamic;
 using DynamicModules.Domain.Repositories.Dynamic;
@@ -14,17 +15,18 @@ public class RuleHealthRepository(DynamicDbContext db) : IRuleHealthRepository
     private IQueryable<RuleHealth> Rows => db.Set<RuleHealth>();
     private IQueryable<RuleFailure> Failures => db.Set<RuleFailure>();
 
-    private IQueryable<RuleHealth> One(string kind, long id) => Rows.Where(h => h.RuleKind == kind && h.RuleId == id);
+    /// <summary>一條規則的健康列；寫成條件、由呼叫端接在 <see cref="Rows"/> 後面（授權寫入邊界清單測試 5：批次指令的接收者要追得到 Set）。</summary>
+    private static Expression<Func<RuleHealth, bool>> One(string kind, long id) => h => h.RuleKind == kind && h.RuleId == id;
 
     public Task<List<RuleHealth>> ListAsync(string ruleKind, IReadOnlyCollection<long> ruleIds, CancellationToken ct) =>
         ruleIds.Count == 0
             ? Task.FromResult(new List<RuleHealth>())
             : Rows.AsNoTracking().Where(h => h.RuleKind == ruleKind && ruleIds.Contains(h.RuleId)).ToListAsync(ct);
 
-    public Task<RuleHealth?> GetAsync(string ruleKind, long ruleId, CancellationToken ct) => One(ruleKind, ruleId).AsNoTracking().FirstOrDefaultAsync(ct);
+    public Task<RuleHealth?> GetAsync(string ruleKind, long ruleId, CancellationToken ct) => Rows.Where(One(ruleKind, ruleId)).AsNoTracking().FirstOrDefaultAsync(ct);
 
     public Task<int> BumpFailureAsync(string ruleKind, long ruleId, DateTime failedUtc, string errorCode, string? requestId, CancellationToken ct) =>
-        One(ruleKind, ruleId).ExecuteUpdateAsync(s => s
+        Rows.Where(One(ruleKind, ruleId)).ExecuteUpdateAsync(s => s
             .SetProperty(h => h.ConsecutiveFailures, h => h.ConsecutiveFailures + (h.StreakResetUtc == null || failedUtc > h.StreakResetUtc ? 1 : 0))
             .SetProperty(h => h.LastErrorCode, h => h.LastFailureUtc == null || h.LastFailureUtc <= failedUtc ? errorCode : h.LastErrorCode)
             .SetProperty(h => h.LastRequestId, h => h.LastFailureUtc == null || h.LastFailureUtc <= failedUtc ? requestId : h.LastRequestId)
@@ -43,10 +45,10 @@ public class RuleHealthRepository(DynamicDbContext db) : IRuleHealthRepository
     /// </summary>
     public async Task<int> ResetStreakAsync(string ruleKind, long ruleId, DateTime evaluatedUtc, CancellationToken ct)
     {
-        var moved = await One(ruleKind, ruleId).Where(h => h.StreakResetUtc == null || h.StreakResetUtc < evaluatedUtc)
+        var moved = await Rows.Where(One(ruleKind, ruleId)).Where(h => h.StreakResetUtc == null || h.StreakResetUtc < evaluatedUtc)
             .ExecuteUpdateAsync(s => s.SetProperty(h => h.StreakResetUtc, evaluatedUtc), ct);
         if (moved == 0) return 0;
-        await One(ruleKind, ruleId).ExecuteUpdateAsync(s => s.SetProperty(h => h.ConsecutiveFailures,
+        await Rows.Where(One(ruleKind, ruleId)).ExecuteUpdateAsync(s => s.SetProperty(h => h.ConsecutiveFailures,
             h => Failures.Count(f => f.RuleKind == h.RuleKind && f.RuleId == h.RuleId && f.FailedUtc > evaluatedUtc)), ct);
         return moved;
     }
@@ -64,19 +66,19 @@ public class RuleHealthRepository(DynamicDbContext db) : IRuleHealthRepository
             .CountAsync(ct);
 
     public async Task<bool> TryPauseAsync(string ruleKind, long ruleId, DateTime pausedUtc, CancellationToken ct) =>
-        await One(ruleKind, ruleId).Where(h => h.PausedUtc == null).ExecuteUpdateAsync(s => s
+        await Rows.Where(One(ruleKind, ruleId)).Where(h => h.PausedUtc == null).ExecuteUpdateAsync(s => s
             .SetProperty(h => h.PausedUtc, pausedUtc)
             .SetProperty(h => h.LastPausedUtc, pausedUtc)
             .SetProperty(h => h.PauseCount, h => h.PauseCount + 1)
             .SetProperty(h => h.SkippedWhilePaused, 0), ct) == 1;
 
     public Task AddSkippedAsync(string ruleKind, long ruleId, int count, CancellationToken ct) =>
-        One(ruleKind, ruleId).Where(h => h.PausedUtc != null)
+        Rows.Where(One(ruleKind, ruleId)).Where(h => h.PausedUtc != null)
             .ExecuteUpdateAsync(s => s.SetProperty(h => h.SkippedWhilePaused, h => h.SkippedWhilePaused + count), ct);
 
     public async Task<bool> TryResumeAsync(string ruleKind, long ruleId, DateTime resumedUtc, string resumedBy, CancellationToken ct)
     {
-        var resumed = await One(ruleKind, ruleId).Where(h => h.PausedUtc != null).ExecuteUpdateAsync(s => s
+        var resumed = await Rows.Where(One(ruleKind, ruleId)).Where(h => h.PausedUtc != null).ExecuteUpdateAsync(s => s
             .SetProperty(h => h.PausedUtc, (DateTime?)null)
             .SetProperty(h => h.ResumedUtc, resumedUtc)
             .SetProperty(h => h.ResumedBy, resumedBy)
