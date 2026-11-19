@@ -183,12 +183,42 @@ public sealed partial class TemplateExportTests : IDisposable
         foreach (var b in node["modules"]!.AsArray()[0]!["blocks"]!.AsArray()) b!.AsObject().Remove("columns");
         var (stripped, error) = TemplateJson.Parse(node.ToJsonString());
         error.Should().BeNull();
-        stripped!.Modules[0].Blocks.Should().OnlyContain(b => b.Columns == 4);
+        stripped!.Modules[0].Blocks.Should().OnlyContain(b => b.Columns == null);
 
         _app.Extra.Add(stripped with { Key = "nocol" });
         await Instantiate("nocol", ("plain", "plain2"));
         var (applied, _) = await ExportPackage("plain2");
         applied.Modules[0].Blocks.Select(b => b.Columns).Should().Equal(4, 4);
+    }
+
+    private async Task SetSystemPolicy(string code, int? value) =>
+        (await _admin.PutAsJsonAsync($"{Base}/system/policies/{code}", new { value })).StatusCode.Should().Be(HttpStatusCode.OK);
+
+    /// <summary>政策 A25：套件寫的欄數超過 form.maxColumns 時夾到上限、不報錯；沒寫欄數時用新區塊的欄數（form.defaultColumns）。</summary>
+    [Fact]
+    public async Task Instantiate_PackageColumnsAboveMax_Clamped()
+    {
+        var (block, _) = await NewModule("wide", "寬", "名稱");
+        (await _admin.PostAsJsonAsync($"{Base}/modules/wide/blocks", new { label = Zh("第二區") })).StatusCode.Should().Be(HttpStatusCode.Created);
+        var (exported, json) = await ExportPackage("wide");
+        exported.Modules[0].Blocks.Select(b => b.Columns).Should().Equal(4, 4);
+
+        await SetSystemPolicy("form.maxColumns", 2);
+        _app.Extra.Add(exported with { Key = "wide4" });
+        await Instantiate("wide4", ("wide", "wide2"));
+        var (clamped, _) = await ExportPackage("wide2");
+        clamped.Modules[0].Blocks.Select(b => b.Columns).Should().Equal(2, 2);
+
+        await SetSystemPolicy("form.maxColumns", null);
+        await SetSystemPolicy("form.defaultColumns", 3);
+        var node = System.Text.Json.Nodes.JsonNode.Parse(json)!;
+        foreach (var b in node["modules"]!.AsArray()[0]!["blocks"]!.AsArray()) b!.AsObject().Remove("columns");
+        var (stripped, error) = TemplateJson.Parse(node.ToJsonString());
+        error.Should().BeNull();
+        _app.Extra.Add(stripped! with { Key = "widenocol" });
+        await Instantiate("widenocol", ("wide", "wide3"));
+        var (defaulted, _) = await ExportPackage("wide3");
+        defaulted.Modules[0].Blocks.Select(b => b.Columns).Should().Equal(3, 3);
     }
 
     [Fact]

@@ -6,6 +6,7 @@ import { useI18n } from 'vue-i18n';
 import { useRoute, useRouter } from 'vue-router';
 import { useDesignerMutation, useModuleDetail } from 'src/application/dynamic/queries/modules-queries';
 import { useMe } from 'src/application/dynamic/queries/permissions-queries';
+import { useEffectivePolicies } from 'src/application/dynamic/queries/policies-queries';
 import { useEntities } from 'src/application/dynamic/queries/relation-queries';
 import { compactI18n, resolveI18n } from 'src/domain/dynamic/i18n-text';
 import type { DeleteTargetRef, DesignerBlock, DesignerField, I18nText } from 'src/domain/dynamic/types';
@@ -124,6 +125,14 @@ const block = computed(() => mod.value?.blocks.find((b) => b.id === selectedBloc
 const blockDialog = ref(false);
 const blockForm = ref<{ id?: number; label: I18nText; collapsed: boolean; columns: number }>({ label: {}, collapsed: false, columns: 4 });
 const blockError = ref<ApiError | null>(null);
+// 欄數選項到 max(上限 form.maxColumns, 區塊現值)：調低上限後既有區塊仍看得到現值並能改小；生效值未回來時只列到現值。
+// 新增區塊不送欄數（後端依政策決定），columns 的 4 只是新增模式的佔位
+const policies = useEffectivePolicies(moduleKey);
+const columnOptions = computed(() => {
+  const max = policies.data.value?.values['form.maxColumns'] as number | undefined;
+  const n = Math.max(max ?? 0, blockForm.value.columns);
+  return Array.from({ length: n }, (_, i) => ({ label: String(i + 1), value: i + 1 }));
+});
 const blockInput = ref<{ validate(): Promise<boolean> } | null>(null);
 const addBlock = mutation((label: I18nText) => dynamicApi.addBlock(moduleKey.value, label));
 const updateBlock = mutation((v: { id: number; label: I18nText; collapsed: boolean; columns: number }) =>
@@ -440,7 +449,7 @@ function saveSection() {
               <div class="text-caption text-muted">{{ t('designer.columns') }}</div>
               <q-btn-toggle
                 v-model="blockForm.columns" data-testid="block-columns" no-caps unelevated toggle-color="primary"
-                :options="[1, 2, 3, 4].map((n) => ({ label: String(n), value: n }))"
+                :options="columnOptions"
               />
             </div>
           </q-card-section>
