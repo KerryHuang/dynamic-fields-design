@@ -1,3 +1,4 @@
+using System.Text.Json.Serialization;
 using DynamicModules.Domain.Authorization;
 using DynamicModules.Domain.Entities.Dynamic;
 
@@ -9,6 +10,8 @@ public sealed record DesignerFlags(bool Read, bool Add, bool Edit, bool Delete)
     public static readonly DesignerFlags None = new(false, false, false, false);
     public static readonly DesignerFlags All = new(true, true, true, true);
 
+    /// <summary>計算屬性，不進 API 與稽核的 JSON（回應要和請求同形，§8）。</summary>
+    [JsonIgnore]
     public bool Any => Read || Add || Edit || Delete;
 
     /// <summary>固定依讀取、新增、修改、刪除的順序（安全事件明細用）。</summary>
@@ -24,6 +27,7 @@ public sealed record SystemPrivilegesDto(DesignerFlags Designer, bool Permission
     public static readonly SystemPrivilegesDto None = new(DesignerFlags.None, false);
     public static readonly SystemPrivilegesDto All = new(DesignerFlags.All, true);
 
+    [JsonIgnore]
     public bool Any => Designer.Any || PermissionAdmin;
 }
 

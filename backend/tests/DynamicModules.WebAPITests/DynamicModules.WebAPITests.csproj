@@ -44,6 +44,8 @@
     <!-- 測試資料庫切換（FORMWRIGHT_TEST_DB=postgres）、PostgreSQL 測試容器與樣板資料庫（PostgreSQL provider 設計 §6） -->
     <Compile Include="..\Fixtures\TestDatabase.cs" Link="TestSupport\TestDatabase.cs" />
     <Compile Include="..\Fixtures\TestPermits.cs" Link="TestSupport\TestPermits.cs" />
+    <!-- 權限軸升級帶入的資料（PAX-01b、02、02b、02c、03），兩個測試專案共用 -->
+    <Compile Include="..\Fixtures\PermissionAxesUpgradeData.cs" Link="TestSupport\PermissionAxesUpgradeData.cs" />
   </ItemGroup>
 
 </Project>
