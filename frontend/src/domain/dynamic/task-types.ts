@@ -202,6 +202,7 @@ export const NOTIFICATION_KINDS = [
   'taskAssigned', 'taskMentioned', 'taskCommented', 'taskDueSoon', 'taskOverdue', 'taskCompleted', 'taskCancelled', 'taskSubtasksDone',
   'approvalPending', 'approvalTransferred', 'approvalAddSigned', 'approvalRejected', 'approvalReturned', 'approvalApproved',
   'approvalWithdrawn', 'approvalCancelled', 'approvalReassignedAway', 'approvalRerouted', 'approvalOverdue', 'approvalAdminAlert',
+  'opsIncident', 'opsRulePaused',
 ] as const;
 
 export interface NotificationItem {
@@ -213,6 +214,9 @@ export interface NotificationItem {
   link: string;
   read: boolean;
   createdTime: string;
+  /** 維運兩個種類：標題代碼＋白名單參數，鈴鐺依語系組字（維運設計 §17.2.5）；沒有時用 title（繁中快照）。 */
+  titleKey?: string;
+  titleParams?: Record<string, string | number>;
 }
 
 export interface NotificationList {

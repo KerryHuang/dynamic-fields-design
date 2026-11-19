@@ -40,8 +40,9 @@ import {
 } from 'src/application/dynamic/queries/notifications-queries';
 import { NOTIFICATION_KINDS, type NotificationItem } from 'src/domain/dynamic/task-types';
 import { safeRedirect } from 'src/router/auth-guard';
+import { incidentTitle } from 'src/domain/ops/ops-format';
 
-const { t } = useI18n();
+const { t, te } = useI18n();
 const router = useRouter();
 const { data } = useNotifications();
 const markRead = useMarkNotificationRead();
@@ -50,10 +51,14 @@ const markAll = useMarkAllNotificationsRead();
 const items = computed(() => data.value?.items ?? []);
 const unread = computed(() => data.value?.unreadCount ?? 0);
 
-/** "Kind label + task title"; a kind this build does not know shows the title alone. */
+/**
+ * "Kind label + title"; a kind this build does not know shows the title alone. Ops kinds compose the title from titleKey＋params in the
+ * current locale (維運設計 §17.2.5) and fall back to the zh-TW snapshot when the server sent no titleKey.
+ */
 function label(n: NotificationItem) {
   const known = (NOTIFICATION_KINDS as readonly string[]).includes(n.kind);
-  return known ? `${t(`notifications.kind.${n.kind}`)} ${n.title}` : n.title;
+  const title = n.titleKey ? incidentTitle(t, te, n.titleKey, n.titleParams) : n.title;
+  return known ? `${t(`notifications.kind.${n.kind}`)} ${title}` : title;
 }
 
 const timeText = (n: NotificationItem) => (n.createdTime ? date.formatDate(new Date(n.createdTime), 'YYYY-MM-DD HH:mm') : '');

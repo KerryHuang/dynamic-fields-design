@@ -28,3 +28,12 @@ export function useDeleteTaskRule(moduleKey: MaybeRefOrGetter<string>) {
     onSuccess: () => qc.invalidateQueries({ queryKey: ['task-rules', toValue(moduleKey)] }),
   });
 }
+
+/** 恢復被系統自動暫停的規則（維運設計 §17.2.7）；回應是更新後的規則（autoPause 為 null、帶 lastPause）。 */
+export function useResumeTaskRule(moduleKey: MaybeRefOrGetter<string>) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (ruleKey: string) => dynamicApi.resumeTaskRule(toValue(moduleKey), ruleKey),
+    onSettled: () => qc.invalidateQueries({ queryKey: ['task-rules', toValue(moduleKey)] }),
+  });
+}

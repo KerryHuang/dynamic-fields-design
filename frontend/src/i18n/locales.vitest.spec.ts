@@ -31,6 +31,7 @@ describe('四語系訊息檔', () => {
     'dynamic.export.csv', 'dynamic.export.excel', 'designer.types.email', 'designer.types.url', 'designer.programCode',
     'designer.locales.en-US', 'groups.blockingItem', 'reports.designer.rangeN', 'common.listSeparator', 'policies.recipients.userLabel',
     'tasks.colon', 'tasks.none', 'approval.panel.targets', 'approval.designer.trial.stageError', 'approval.graph.detailTitle', // punctuation, placeholders only, same as English by design
+    'ops.stage.tls', 'ops.titles.routeSuffix', 'ops.unit.count', 'audit.channel.mcp', 'audit.groups.mcp', // 協定名、純佔位符
   ]);
   it.each([['th', th], ['vi', vi]])('%s 的文案不得直接放英文（縮寫與格式名除外）', (_name, msgs) => {
     const same = Object.entries(leaves(msgs)).filter(([k, v]) => v === en[k] && !UNTRANSLATED_OK.has(k)).map(([k]) => k);

@@ -11,7 +11,12 @@ export interface PolicyMeta {
   min?: number;
   max?: number;
   options?: string[];
+  /** 收件人政策另外允許的動態項目（例：`ruleEditor`＝該規則的最後修改者；維運設計 §17.2.5）。 */
+  dynamicRecipients?: string[];
 }
+
+/** 動態收件人項目的四語標籤鍵（`policies.recipients.dynamic.<項目>`）。 */
+export const dynamicRecipientKey = (item: string) => `policies.recipients.dynamic.${item}`;
 
 /** 全系統政策；伺服器省略 null 屬性，所以 `value` 缺席＝沒設（用出廠值）。 */
 export interface SystemPolicy extends PolicyMeta {
@@ -59,7 +64,8 @@ export function policyValueText(meta: PolicyMeta, v: PolicyValue, t: Translate, 
     }
     case 'codeList': return joinList(v as string[]);
     // 名稱還沒載入（names 為 undefined）時顯示原始項目，不誤報找不到
-    case 'recipients': return joinList((v as string[]).map((i) => (names ? names.get(i) ?? t('policies.recipients.missing') : i)));
+    case 'recipients': return joinList((v as string[]).map((i) => (meta.dynamicRecipients?.includes(i) ? t(dynamicRecipientKey(i))
+      : names ? names.get(i) ?? t('policies.recipients.missing') : i)));
     default:
       return meta.unit === 'bytes' ? `${v} (${t('policies.bytesHint', { size: formatBytes(Number(v)) })})` : String(v);
   }

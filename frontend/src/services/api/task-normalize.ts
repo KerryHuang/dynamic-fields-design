@@ -123,6 +123,7 @@ export function normalizeNotificationList(l: unknown): NotificationList {
   return {
     items: items.map((n) => ({
       id: n.id as number, kind: n.kind ?? '', title: n.title ?? '', link: n.link ?? '', read: !!n.read, createdTime: n.createdTime ?? '',
+      ...(n.titleKey ? { titleKey: n.titleKey, titleParams: n.titleParams ?? {} } : {}),
     })),
     unreadCount: typeof raw.unreadCount === 'number' ? raw.unreadCount : 0,
   };
@@ -134,6 +135,7 @@ export function normalizeTaskRule(r: Wire<TaskRule>): TaskRule {
     repeat: r.repeat ?? 'once', trigger: r.trigger ?? { on: 'manual' }, when: r.when ?? null,
     tasks: (r.tasks ?? []).map((t) => ({ ...t, description: t.description ?? null, dueFieldId: t.dueFieldId ?? null, when: t.when ?? null })),
     warnings: r.warnings ?? [],
+    autoPause: r.autoPause ?? null, lastPause: r.lastPause ?? null, failureStreak: r.failureStreak ?? null,
   };
 }
 

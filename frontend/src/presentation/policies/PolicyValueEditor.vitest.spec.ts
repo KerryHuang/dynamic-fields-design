@@ -102,6 +102,20 @@ describe('PolicyValueEditor', () => {
       expect(document.body.textContent).not.toContain('找不到或已停用');
     });
 
+    it('有動態收件者（該規則的最後修改者）時另列勾選框，勾選加入、取消移除，固定收件者不受影響', async () => {
+      make({ ...meta, dynamicRecipients: ['ruleEditor'] }, ['admins'], options, true);
+      const box = document.body.querySelector('[data-testid="policy-dynamic-ruleEditor"]') as HTMLElement;
+      expect(box.textContent).toContain('該規則的最後修改者');
+      expect(document.body.textContent).not.toContain('找不到或已停用');
+      box.click();
+      await flushPromises();
+      expect(lastEmit()).toEqual(['ruleEditor', 'admins']);
+      await w!.setProps({ modelValue: ['ruleEditor', 'admins'] });
+      (document.body.querySelector('[data-testid="policy-dynamic-ruleEditor"]') as HTMLElement).click();
+      await flushPromises();
+      expect(lastEmit()).toEqual(['admins']);
+    });
+
     it('editor shows missing after ready for an unknown item', () => {
       make(meta, ['user:gone'], options, true);
       expect(document.body.textContent).toContain('找不到或已停用');

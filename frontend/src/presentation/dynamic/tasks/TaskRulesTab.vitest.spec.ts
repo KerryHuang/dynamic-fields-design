@@ -32,7 +32,7 @@ const ruleWire = (o: Record<string, unknown> = {}) => ({
 let calls: Call[];
 let w: VueWrapper;
 
-async function mountTab(opts: { module?: ModuleDetail; canEdit?: boolean; rules?: unknown[]; saveFails?: boolean; maxRules?: number; maxTasks?: number; effectiveHangs?: boolean } = {}) {
+async function mountTab(opts: { module?: ModuleDetail; canEdit?: boolean; rules?: unknown[]; saveFails?: boolean; maxRules?: number; maxTasks?: number; effectiveHangs?: boolean; resumeFails?: HttpFail; focusRule?: string } = {}) {
   const pinia = createPinia();
   setActivePinia(pinia);
   useIdentityStore().setSession('admin');
@@ -40,13 +40,14 @@ async function mountTab(opts: { module?: ModuleDetail; canEdit?: boolean; rules?
   calls = mockHttp((c) => {
     if (c.url === '/me') return { userId: 'admin', displayName: 'A', isSystemAdmin: false, mustChangePassword: false, groups: [], designer: { read: true, add: true, edit: canEdit, delete: false }, theme: FACTORY_ME_THEME };
     if (c.url === '/modules/m1/task-rules' && c.method === 'get') return rules;
+    if (c.url.endsWith('/resume')) return opts.resumeFails ?? ruleWire();
     if (c.url === '/policies/effective') return opts.effectiveHangs ? new HttpFail(500, {}) : { moduleKey: 'm1', values: { 'task.maxRulesPerModule': opts.maxRules ?? 20, 'task.maxTasksPerRule': opts.maxTasks ?? 20 } };
     if (opts.saveFails && c.method !== 'get') return new HttpFail(400, { errors: { 'tasks[0].assigneeFieldId': ['負責人必須是這個模組的人員欄位'] } });
     return ruleWire();
   });
   const i18n = createI18n({ legacy: false, locale: 'zh-TW', messages: { 'zh-TW': zhTW } });
   w = mount(TaskRulesTab, {
-    props: { module: opts.module ?? mod() },
+    props: { module: opts.module ?? mod(), focusRule: opts.focusRule ?? null },
     attachTo: document.body,
     global: { plugins: [[quasar.Quasar, { components: quasar, directives: quasar, plugins: { Notify: quasar.Notify } }], pinia, i18n, [VueQueryPlugin, { queryClient: new QueryClient({ defaultOptions: { queries: { retry: false } } }) }]] },
   });
@@ -281,6 +282,88 @@ describe('TaskRulesTab', () => {
     q<HTMLElement>('[data-testid="task-rule-delete-confirm"]').click();
     await flushPromises();
     expect(calls.find((c) => c.method === 'delete')?.url).toBe('/modules/m1/task-rules/follow');
+    w.unmount();
+  });
+});
+
+describe('TaskRulesTab 自動暫停', () => {
+  beforeEach(() => { Element.prototype.scrollIntoView = () => {}; });
+  const paused = (o: Record<string, unknown> = {}) => ruleWire({
+    trigger: { on: 'onCreate' },
+    autoPause: { pausedUtc: '2026-11-19T01:00:00Z', consecutiveFailures: 5, lastErrorCode: 'effect.targetUnavailable', lastRequestId: '0123456789abcdef', skippedWhilePaused: 3, pauseCount: 1 },
+    ...o,
+  });
+
+  it('暫停中顯示紅色標籤，點開看暫停資訊（請求代碼只列前 8 碼，不列錯誤訊息）', async () => {
+    await mountTab({ rules: [paused()] });
+    expect(q('[data-testid="task-rule-paused-follow"]').textContent).toContain('已自動暫停');
+    expect(body().querySelector('[data-testid="task-rule-pause-info-follow"]')).toBeNull();
+    q<HTMLElement>('[data-testid="task-rule-paused-follow"]').click();
+    await flushPromises();
+    const info = q('[data-testid="task-rule-pause-info-follow"]').textContent!;
+    expect(info).toContain('連續失敗：5 次');
+    expect(info).toContain('effect.targetUnavailable');
+    expect(info).toContain('01234567');
+    expect(info).not.toContain('89abcdef');
+    expect(info).toContain('暫停期間略過 3 次存檔');
+    w.unmount();
+  });
+
+  it('通知連結帶 focusRule 時直接展開那條規則的暫停資訊', async () => {
+    await mountTab({ rules: [paused()], focusRule: 'follow' });
+    expect(body().querySelector('[data-testid="task-rule-pause-info-follow"]')).not.toBeNull();
+    w.unmount();
+  });
+
+  it('能編輯規則才有「恢復」；沒有編輯權只看得到標籤', async () => {
+    await mountTab({ rules: [paused()], canEdit: false });
+    expect(body().querySelector('[data-testid="task-rule-paused-follow"]')).not.toBeNull();
+    expect(body().querySelector('[data-testid="task-rule-resume-follow"]')).toBeNull();
+    w.unmount();
+  });
+
+  it('恢復前確認：寫明略過的存檔不補產任務與這個觸發方式的補救方式，確認後送 resume', async () => {
+    await mountTab({ rules: [paused()] });
+    q<HTMLElement>('[data-testid="task-rule-resume-follow"]').click();
+    await flushPromises();
+    const dlg = q('[data-testid="task-rule-resume-dialog"]').textContent!;
+    expect(dlg).toContain('暫停期間略過的 3 次存檔不會補產任務');
+    expect(q('[data-testid="task-rule-resume-remedy"]').textContent).toContain('只在新增記錄時觸發');
+    expect(calls.some((c) => c.url.endsWith('/resume'))).toBe(false);
+    q<HTMLElement>('[data-testid="task-rule-resume-confirm"]').click();
+    await flushPromises();
+    expect(calls.find((c) => c.url.endsWith('/resume'))?.url).toBe('/modules/m1/task-rules/follow/resume');
+    w.unmount();
+  });
+
+  it('手動規則的確認框寫不用補、不提手動任務不掛規則', async () => {
+    await mountTab({ rules: [paused({ trigger: { on: 'manual' } })] });
+    q<HTMLElement>('[data-testid="task-rule-resume-follow"]').click();
+    await flushPromises();
+    expect(q('[data-testid="task-rule-resume-remedy"]').textContent).toContain('不用補');
+    expect(q('[data-testid="task-rule-resume-dialog"]').textContent).not.toContain('手動新增的任務不掛規則');
+    w.unmount();
+  });
+
+  it('恢復後顯示上次暫停的起訖與略過次數；仍在連續失敗時顯示失敗次數', async () => {
+    await mountTab({ rules: [ruleWire({
+      lastPause: { pausedUtc: '2026-11-19T01:00:00Z', resumedUtc: '2026-11-19T03:00:00Z', skippedWhilePaused: 3 },
+      failureStreak: { consecutiveFailures: 2, lastFailureUtc: '2026-11-19T04:00:00Z' },
+    })] });
+    expect(q('[data-testid="task-rule-last-pause-follow"]').textContent).toContain('略過 3 次存檔');
+    expect(q('[data-testid="task-rule-streak-follow"]').textContent).toContain('最近連續失敗 2 次');
+    expect(body().querySelector('[data-testid="task-rule-paused-follow"]')).toBeNull();
+    w.unmount();
+  });
+
+  it('規則已不在暫停（409 ruleNotPaused）時關掉確認框並重新整理清單', async () => {
+    await mountTab({ rules: [paused()], resumeFails: new HttpFail(409, { code: 'ruleNotPaused', message: '規則目前沒有暫停' }) });
+    q<HTMLElement>('[data-testid="task-rule-resume-follow"]').click();
+    await flushPromises();
+    q<HTMLElement>('[data-testid="task-rule-resume-confirm"]').click();
+    await flushPromises();
+    expect(body().querySelector('[data-testid="task-rule-resume-dialog"]')).toBeNull();
+    expect(calls.filter((c) => c.url === '/modules/m1/task-rules' && c.method === 'get').length).toBeGreaterThan(1);
     w.unmount();
   });
 });
