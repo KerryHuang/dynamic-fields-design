@@ -200,7 +200,8 @@ public sealed class DownloadAttachmentHandler(
     }
 }
 
-public sealed class SweepAttachmentsHandler(IModuleRepository modules, IRecordRepository records, ITaskRepository tasks, IAttachmentStore store)
+public sealed class SweepAttachmentsHandler(
+    IModuleRepository modules, IRecordRepository records, ITaskRepository tasks, IAttachmentStore store, IPolicyReader policies)
     : IRequestHandler<SweepAttachmentsRequest, ServiceResult>
 {
     public async Task<ServiceResult> Handle(SweepAttachmentsRequest request, CancellationToken ct)
@@ -221,7 +222,9 @@ public sealed class SweepAttachmentsHandler(IModuleRepository modules, IRecordRe
             }
         }
 
-        var cutoff = DateTime.UtcNow - request.Grace;
+        // 沒帶寬限時用政策 A27；明確傳值（含 0）照參數
+        var grace = request.Grace ?? TimeSpan.FromMinutes(await policies.IntAsync(PolicyCatalog.MaintenanceOrphanSweepGraceMinutes, null, ct));
+        var cutoff = DateTime.UtcNow - grace;
         int deleted = 0, kept = 0;
         foreach (var file in store.List())
         {

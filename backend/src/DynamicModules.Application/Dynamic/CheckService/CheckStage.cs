@@ -2,8 +2,10 @@ using DynamicModules.Application.Common.Behaviors;
 using DynamicModules.Application.Common.Observability;
 using DynamicModules.Application.Common;
 using DynamicModules.Application.Dynamic.OpsService.RulePause;
+using DynamicModules.Application.Dynamic.PolicyService;
 using DynamicModules.Application.Dynamic.RecordService;
 using DynamicModules.Domain.Entities.Dynamic;
+using DynamicModules.Domain.Policies;
 using DynamicModules.Domain.Repositories.Dynamic;
 
 namespace DynamicModules.Application.Dynamic.CheckService;
@@ -14,10 +16,10 @@ namespace DynamicModules.Application.Dynamic.CheckService;
 /// 這裡只負責「在同一個交易、寫完之後」求值。
 /// </summary>
 public class CheckStage(
-    IWriteJournal journal, IModuleRepository modules, ICheckRepository checks, IUnitOfWork uow, CheckEvaluator evaluator, RuleFailureNote notes)
+    IWriteJournal journal, IModuleRepository modules, ICheckRepository checks, IUnitOfWork uow, CheckEvaluator evaluator, RuleFailureNote notes,
+    IPolicyReader policies)
     : IWriteStage
 {
-    public const int MaxGroups = 500;
     public const string TooBig = "數值太大，無法精確加總（此欄位被跨記錄驗證引用）";
 
     public int Order => 10;
@@ -71,8 +73,9 @@ public class CheckStage(
                             && evaluator.GroupOf(prepared!, RecordValueProcessor.Parse(entry.BeforeValues)) is { } before
                             && !afterIds.Contains(before.Id))
                             groups.TryAdd(before.Id + "\u0000" + LimitKey(prepared!.Check.Definition.Assert.Limit, before), before);
-                    if ((groupCount += groups.Count) > MaxGroups)
-                        return ServiceResult.Conflict($"這次請求牽涉的檢查組數超過 {MaxGroups}，請分批處理");
+                    var maxGroups = await policies.IntAsync(PolicyCatalog.CheckMaxGroupsPerWrite, null, ct);   // 同一個請求有快取
+                    if ((groupCount += groups.Count) > maxGroups)
+                        return ServiceResult.Conflict(CheckMessages.TooManyGroups(maxGroups));
 
                     foreach (var group in groups.Values)
                     {
