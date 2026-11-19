@@ -1386,8 +1386,8 @@ O2 做六件事：
 - 時間窗的語意（O2-U12，照 C3 字面）：**滑動窗口**。每次失敗時往回看 `ops.rulePauseWindowMinutes`，這段時間內、最近一次成功之後的失敗達 `ops.rulePauseConsecutiveFailures` 次就暫停。例：門檻 5 次、窗口 60 分鐘，在第 0、59、61、62、63、64 分鐘各失敗一次、中間沒有成功，第 64 分鐘那次往回 60 分鐘有 59、61、62、63、64 五次，暫停（初稿的「從第一次失敗起算、過窗口就重來」在這裡不會暫停，等於限縮了 C3，已改掉）。
 - **順序與 reset 協定**（失敗在業務交易回滾之後才另開交易補記，中間可能夾著同一規則的成功，所以不能拿補記的時間排順序）：
   - **順序依據＝規則的評估時間**：`TaskRuleStage` 每評估一條規則前取一次 `TimeProvider.GetUtcNow()`（UTC，不是 `IBusinessTime` 的牆上時間）。失敗時 `RuleFailureTag.Mark` 多寫一個 `formwright.ruleEvaluatedUtc` 到例外的 `Data`，`RecordRuleFailureRequest` 用它當 `FailedUtc`，**不用補記當下的時間**；成功時用它當 `StreakResetUtc`。兩者比的是同一種時間，同一時間點的失敗算在 reset 之前（`FailedUtc <= StreakResetUtc` 不算）。
-  - **在途失敗**：本實例的 singleton `RuleFailureInFlight` 記「已失敗、還沒補記」的規則與評估時間。`TaskRuleStage` 的 catch（業務交易回滾之前）登記，`RuleFailureBehavior` 補記完成或判定不歸屬時移除（`finally`）；沒被移除的 5 分鐘後過期（技術限制，§17.9）。只在記憶體，不寫資料庫。
-  - **成功要不要寫 reset**：(a) 有健康列且 `ConsecutiveFailures > 0`；或 (b) `RuleFailureInFlight` 有這條規則、評估時間早於這次成功的失敗。符合 (a) 或 (b) 才寫，其他成功不碰資料庫，成功的路徑仍然通常是零寫入。
+  - **在途失敗**：本實例的 singleton `RuleFailureInFlight` 記「已失敗、還沒補記」的規則與評估時間。`TaskRuleStage` 的 catch（業務交易回滾之前）登記，`RuleFailureBehavior` 補記完成或判定不歸屬時移除（`finally`）；沒被移除的 5 分鐘後過期（技術限制，§17.9）。只在記憶體，不寫資料庫。〔o2d 審查修正〕補記過的不移除，改標遞增的完成序號、留到過期；判定不歸屬的才移除（§17.14 審查修正 1a）。
+  - **成功要不要寫 reset**：(a) 有健康列且 `ConsecutiveFailures > 0`；或 (b) `RuleFailureInFlight` 有這條規則、評估時間早於這次成功的失敗。符合 (a) 或 (b) 才寫，其他成功不碰資料庫，成功的路徑仍然通常是零寫入。〔o2d 審查修正〕(b) 含「讀健康列之後才補記完」的失敗（讀列前取完成序號快照比較）；reset 的計數改成晚於評估時間、已記下的失敗列數，分兩句寫（§17.14 審查修正 1b）。
   - **reset 的寫法**：有列時 `UPDATE ... SET StreakResetUtc = 評估時間, ConsecutiveFailures = CASE WHEN LastFailureUtc IS NULL OR LastFailureUtc <= 評估時間 THEN 0 ELSE ConsecutiveFailures END WHERE 主鍵 AND (StreakResetUtc IS NULL OR StreakResetUtc < 評估時間)`，只往後推、不倒退；**還沒有列（首次建列）**而符合 (b) 時新增一列（計數 0、`StreakResetUtc = 評估時間`），撞主鍵就改走上面的 `UPDATE`。所以規則第一次失敗的補記還沒到、中間先來一次成功，那次成功也會留下 reset，晚到的失敗不會算進新的一串。
   - 跨實例：失敗在 A 台、成功在 B 台，B 看不到 A 的在途失敗；只有成功剛好落在 A 的「回滾到補記提交」之間（通常 1 秒內，最長是寫入閘門的排隊上限）而且規則原本沒有連續失敗時，會多算一次失敗。已知限制（§17.9），最多讓暫停提早一次失敗發生。
 - `RecordRuleFailureRequest` 的寫法（一個交易，兩種資料庫同一份，PostgreSQL 上並行也正確；下面的 F 是這次失敗的評估時間）：
@@ -1417,7 +1417,7 @@ O2 做六件事：
 
   - 手動補建的任務不帶規則，日後若那筆記錄又由不符合變符合、規則照常觸發，會再產生一份規則任務（不會被當成已套用）；恢復確認框與手冊寫明這點。
   - 恢復後若問題還在，失敗從 0 重新累積，達門檻再暫停一次，暫停事件以「回歸」重開。
-- 刪除規則：同交易刪掉它的 `Dynamic_RuleHealth` 列，暫停事件結案（`ruleDeleted`）。
+- 刪除規則：同交易刪掉它的 `Dynamic_RuleHealth` 列，暫停事件結案（`ruleDeleted`）。〔o2d 審查修正〕刪除的三條路徑與失敗補記都先以條件式更新鎖住規則列，再確認存在與寫入（§17.14 審查修正 2）。
 - 套件匯出不帶暫停狀態；應用程式關閉再開啟不影響暫停狀態。
 
 **使用者看到什麼**（O2-U7a）：
@@ -2553,7 +2553,7 @@ O2 在 pg0 之後，合併前兩種資料庫都要驗（使用者裁決 §3 第 
 - **偏離 4：窗口的終點是已記下的最晚失敗**，不是這次補記的失敗：補記可能晚於評估順序（E05 兩筆補記並行、較晚的那筆先提交），以這次為終點時，較早那筆的窗口不含較晚那筆，兩邊都只數到門檻減一而漏掉暫停（E05 先照字面實作時失敗）。清理也以同一個起點。
 - **偏離 5：例外分類沿內層找型別**：`OperationCanceledException`、`DbUpdateConcurrencyException`、`FrozenFieldException` 被包在別的例外裡時，處理器鏈只看最外層（回 500），分類仍判不計。矩陣「同內層」對資料庫類成立（處理器與分類都沿內層找），對這三個型別是「回應 500、不計」，E13 多一列「wrapped concurrency」記下這個差異。
 - **偏離 6：`SkippedWhilePaused` 每個寫入日誌項目加一**（同一請求寫多筆記錄就加多次）；在業務交易內，請求失敗就跟著回滾。
-- **偏離 7：已刪除的規則不補記**：補記時規則已不存在（刪除與補記交錯）就什麼都不寫，不會留下孤兒健康列。刪規則（單條、刪模組、刪應用程式三條路徑）同交易刪健康列與失敗列、以 `ruleDeleted` 結案暫停事件（`RulePauseCleanup`）。
+- **偏離 7：已刪除的規則不補記**：補記時規則已不存在（刪除與補記交錯）就什麼都不寫，不會留下孤兒健康列（並行保證見下面審查修正 2）。刪規則（單條、刪模組、刪應用程式三條路徑）同交易刪健康列與失敗列、以 `ruleDeleted` 結案暫停事件（`RulePauseCleanup`）。
 - **偏離 8：同一個例外只補記一次**：外層不是交易型請求時內層交易型請求也算最外層，例外會穿過兩層 `RuleFailureBehavior`（E12）；以例外的 `Data` 標記去重。
 - **偏離 9：在途失敗的 reset 新增健康列時會先刷一次業務變更**（`SaveChanges`，撞主鍵改走更新）：只在「沒有健康列、但本實例有更早的在途失敗」時發生，平常的成功不碰資料庫。
 - **偏離 10：暫停時間用補記當下**（`PausedUtc`），失敗與 reset 用評估時間；暫停事件的 `OccurredUtc` 同暫停時間。
@@ -2572,3 +2572,21 @@ O2 在 pg0 之後，合併前兩種資料庫都要驗（使用者裁決 §3 第 
 
 - 新增的測試類別（`RulePauseTests`、`RulePauseMatrixTests`，共 67 例，含 E13 的 39 列）：SQLite 67 過（約 10 秒，連跑 4 次穩定）、PostgreSQL 67 過（18 秒）。E05 照設計字面實作時兩種寫入模式都失敗（漏掉暫停），改成偏離 4 後通過。
 - 受影響的既有測試：DomainTests SQLite 1447 過。ApplicationTests（刪除、文件流程、政策、任務規則、事件、檢查、維運相關，500 例）SQLite 500 過；PostgreSQL 498 過、2 失敗，失敗的兩例是 `SqliteOnly`（SQLite 觸發器語法，本機篩選沒排除這個分類）。WebAPITests（`Ops` 全部、政策、任務規則、事件、檢查、刪除、路由等，484 例）SQLite 483 過 1 略過、PostgreSQL 484 過。前端 `locales`、`policy-i18n` 兩支 vitest 24 過。完整套件交 CI。
+
+**審查修正**（2026-11-19；審查的兩項必修與 CI 分片失敗。交錯測試在 `Ops.RulePauseInterleavingTests`，類別帶 `Category=Postgres` 雙跑）
+
+- **1a 成功 reset 漏寫**：Q 先讀健康列（沒有列），P 評估較早、失敗、補記完並移出在途，Q 才成功；快取與在途都是空的而略過 reset，之後四次失敗連 P 算成五次而誤停。修法：在途登記補記完不移除，改標遞增的完成序號（`RuleFailureInFlight.Complete`）；`TaskRuleHealthGate.LoadAsync` 讀列前取快照，`HasEarlier` 也算「快照之後才補記完」的失敗；判定不歸屬的照舊直接移除。測試 `R1a_FailureWrittenBackAfterSuccessLoadedHealth_SuccessStillResets`（兩種資料庫先紅後綠）。
+- **1b reset 的計數**：舊失敗、成功 S、較晚的失敗 F 先補記、S 才 reset 時，計數留著舊值（應只剩 F）。修法：`ResetStreakAsync` 分兩句，第一句推 `StreakResetUtc`（取得列鎖，與補記第一句同一把），第二句另起一句把計數設成晚於評估時間的失敗列數。不能併成一句：PostgreSQL 的 UPDATE 等到列鎖後只重讀目標列，同一句的子查詢仍用等鎖之前的快照，會漏數剛提交的那筆失敗列（併成一句時下面第二個測試在 PostgreSQL 紅，計數 0）。測試 `R1b_LaterFailureWrittenBackBeforeEarlierSuccessReset_CountKeepsOnlyLaterFailures`（兩種資料庫先紅後綠）、`R1b_ResetWaitingOnWriteBackRowLock_CountsItsFailureRow`（`PostgresFact`、無鎖模式）。
+- **2 刪除與補記交錯重建孤兒列**：補記讀到規則之後，刪除交易清掉健康列與失敗列、刪規則並提交，補記接著新增健康列與失敗列（兩表無外鍵）。修法：新增 `ITaskRuleRepository.LockAsync`（條件式更新、值不變；PostgreSQL 取列鎖、SQLite 取寫入鎖）；補記第一句先鎖規則列，影響 0 列（已刪）就什麼都不寫；`RulePauseCleanup.RulesDeletedAsync`（刪規則、刪模組、刪應用程式三條路徑共用）刪健康列前先鎖同一批規則列。補記先拿到鎖時，刪除等它提交後才刪、看得到它寫的列；刪除先拿到鎖時，補記等刪除提交後發現規則已不在。測試 `R2_DeleteWhileWriteBackHeld_LeavesNoOrphanRows`（刪規則、刪模組 × 有鎖、無鎖）、`R2_DeleteAppWhileWriteBackHeld_LeavesNoOrphanRows`（成員模組上的與掛在共用主檔上的規則）；PostgreSQL 無鎖模式三條路徑都先紅後綠，SQLite 與有鎖模式下寫入閘門本來就讓刪除排在補記之後（修前修後都綠）。
+- **3 CI 分片計數不符**（run 44513505121，`backend (WebAPITests 3/4)` 多 37 筆）：不是類別名前綴重疊，是 E13 矩陣的 Theory 帶 `Func<Exception>` 參數、不能序列化，`--list-tests` 只列一筆、執行卻跑 38 列。修法：Theory 只帶列名，例外、回應碼、是否計數改查表；腳本不改。`DRY_RUN=1` 四片 289＋496＋452＋325＝1562＝清單總數，E13 列出 38 筆，類別全名之間沒有前綴重疊。
+- **建議：八個已知錯誤碼**：`RulePauseTests.KnownErrorCode_OpensConfigIncident_NotifiesRuleEditor_NoCount` 逐碼送 `RecordRuleConfigIssuesRequest`，驗事件（警告、標題鍵、再發生累加）、最後修改者收到一則通知、不寫健康列。產生處只有 `event.tooDeep` 端到端（E10）：八個代碼都在回傳處記進同一個 `RuleFailureNote`、走同一條補記路徑，其餘七個各要造出串聯迴圈、條件解析失敗、目標停用、明細缺漏、列數超限、處理器缺失、未知種類的設定，成本高，多驗的只有回傳處那一行。
+- **建議：重複提醒與改過規則的 `ruleEditor`**：`RulePauseTests.Renotify_PausedIncident_GoesToCurrentRuleEditor`：暫停後由另一位設計者改規則，超過 `ops.incidentRenotifyHours` 跑 `ops.upkeep`，再提醒的 `opsRulePaused` 給新的最後修改者與系統管理員、不給原本的修改者。刪模組、刪應用程式的清理由 R2 涵蓋（刪除前規則已有健康列與失敗列，刪除後都清掉）。
+- 已知限制（新增）：
+  - ⚠️ 失敗在成功評估之後才登記在途（失敗那次評估跑得較久，成功那次已經查完在途）時仍會多算一次，與跨實例的限制同性質，最多讓暫停提早一次失敗。
+  - ⚠️ 成功還沒提交、較晚的失敗補記就數到門檻時會暫停（例如四次舊失敗、S、F），S 之後提交的 reset 不解除暫停。只在沒有寫入閘門時可能：有閘門時 F 的業務交易排在 S 提交之後。
+  - 補記完的在途登記留到 5 分鐘過期：這段時間內，讀列早於補記完成的成功會多寫一次 reset（沒有健康列時新增一列、計數 0）；讀列晚於補記完成的成功不受影響。
+  - 刪除路徑與補記各多一句鎖規則列的 UPDATE。刪模組、刪應用程式在鎖規則之前已寫過別的表，補記在暫停那一步要寫事件與通知，理論上可能互等；PostgreSQL 偵測到死結會回滾其中一方（補記寫不進只記 Error log、漏記那次失敗；刪除回 503，可重試）。
+
+**審查修正的驗證（本機）**
+
+- `Ops.RulePause*` 三個類別：SQLite 84 過 1 略過（`PostgresFact`）、PostgreSQL 85 過。受影響範圍（`Ops.RulePause*`、任務規則、刪除、共用主檔、應用程式任務開關、格式 8）WebAPITests SQLite 293 過 1 略過、PostgreSQL 294 過；ApplicationTests 全套 SQLite 3632 過 14 略過 1 失敗（`ReportBenchmarkTests` 的 1 秒門檻，跟著全套跑時逾時、單獨重跑通過，與本修正無關）、PostgreSQL（排除 `SqliteOnly`、`Benchmark`）3610 過。完整套件交 CI。
