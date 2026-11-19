@@ -140,6 +140,19 @@ public static class PolicyCatalog
     public static readonly PolicyDefinition OpsAlertRecipients =
         new("ops.alertRecipients", "ops", PolicyKind.Recipients, PolicyScope.System, "admins", 1, 20);
 
+    /// <summary>O2：哪些類別的維運事件寄告警信（維運設計 §17.2.6、O2-U2）；出廠不寄客戶設定類（只站內，給設計者）。可為空（一律不寄信）。</summary>
+    public static readonly PolicyDefinition OpsAlertEmailCategories =
+        new("ops.alertEmailCategories", "ops", PolicyKind.RoleSet, PolicyScope.System, "infra,security,defect",
+            Options: ["infra", "security", "defect", "config"]);
+
+    /// <summary>O2：寄告警信的最低嚴重度。</summary>
+    public static readonly PolicyDefinition OpsAlertEmailMinSeverity =
+        new("ops.alertEmailMinSeverity", "ops", PolicyKind.Choice, PolicyScope.System, "warning", Options: ["warning", "critical"]);
+
+    /// <summary>O2：每小時最多寄幾封告警信，超過的併進下一個整點的摘要信（摘要信本身不受限）。</summary>
+    public static readonly PolicyDefinition OpsAlertEmailMaxPerHour =
+        new("ops.alertEmailMaxPerHour", "ops", PolicyKind.Integer, PolicyScope.System, "20", 1, 200, Unit: "count");
+
     /// <summary>O2：<c>security.loginFailures</c> 往回數幾分鐘的登入失敗。</summary>
     public static readonly PolicyDefinition OpsLoginFailureWindowMinutes =
         new("ops.loginFailureWindowMinutes", "ops", PolicyKind.Integer, PolicyScope.System, "15", 5, 1440, Unit: "minutes");
@@ -210,7 +223,8 @@ public static class PolicyCatalog
          AttachmentMaxFileBytes, AttachmentMaxFilesPerField, AttachmentAllowedExtensions, AttachmentMaxFilesPerComment,
          OpsSlowRequestMs, OpsClientErrorCollection, OpsUpkeepMinutes, OpsAuditRetentionDays,
          OpsMonitorScanMinutes, OpsHealthResultRetentionDays, OpsIncidentRetentionDays, OpsIncidentSampleRetentionDays,
-         OpsIncidentRenotifyHours, OpsIncidentAutoResolveHours, OpsAlertRecipients, OpsLoginFailureWindowMinutes, OpsSchedulerLagIntervals,
+         OpsIncidentRenotifyHours, OpsIncidentAutoResolveHours, OpsAlertRecipients, OpsAlertEmailCategories, OpsAlertEmailMinSeverity, OpsAlertEmailMaxPerHour,
+         OpsLoginFailureWindowMinutes, OpsSchedulerLagIntervals,
          ApprovalMaxStages, ApprovalMaxBranches, ApprovalMaxApprovers, ApprovalMaxDueHours, ApprovalMaxCommentLength, ApprovalMaxManagerLevel,
          ApprovalAllowSelfApproval, ApprovalAdminBypassTransitionGroups, ApprovalMaxAddSignUsers, ApprovalMaxAddSignStages,
          ApprovalOverdueReminderHours, ApprovalDefaultFallbackApprovers, ApprovalAlertRecipients];
