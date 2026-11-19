@@ -26,6 +26,7 @@ public sealed class SqliteReportSqlSnapshot(ILogger<SqliteReportSqlSnapshot> log
         var connection = (SqliteConnection)db.Database.GetDbConnection();
         await db.Database.OpenConnectionAsync(ct);
         SqliteTransaction? own = null;
+        IDbContextTransaction? handle = null;
         var clock = System.Diagnostics.Stopwatch.StartNew();
         SQLitePCL.raw.sqlite3_progress_handler(connection.Handle, ProgressInstructions,
             _ => clock.Elapsed > timeout || ct.IsCancellationRequested ? 1 : 0, null);
@@ -36,7 +37,7 @@ public sealed class SqliteReportSqlSnapshot(ILogger<SqliteReportSqlSnapshot> log
             {
                 own = connection.BeginTransaction(deferred: true);
                 tx = own;
-                await db.Database.UseTransactionAsync(own, ct);
+                handle = await db.Database.UseTransactionAsync(own, ct);
             }
             return await body(connection, tx);
         }
@@ -53,7 +54,8 @@ public sealed class SqliteReportSqlSnapshot(ILogger<SqliteReportSqlSnapshot> log
             SQLitePCL.raw.sqlite3_progress_handler(connection.Handle, 0, null, null);
             if (own is not null)
             {
-                await db.Database.UseTransactionAsync(null, ct);
+                // 交易包裝 Dispose 時解除關聯並平衡 UseTransaction 加的連線開啟計數；先於 own 釋放
+                if (handle is not null) await handle.DisposeAsync();
                 await own.DisposeAsync();
             }
             await db.Database.CloseConnectionAsync();
