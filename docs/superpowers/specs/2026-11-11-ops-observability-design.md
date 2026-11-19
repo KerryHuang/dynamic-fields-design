@@ -1515,7 +1515,7 @@ O2 做六件事：
 
 **其他畫面**：
 
-- 任務規則分頁（`TaskRulesTab.vue`）：暫停的規則列顯示紅色標籤「已自動暫停」與「恢復」（沒有編輯權時只有標籤）；點標籤展開暫停資訊（§17.2.7）。恢復前確認框寫明「暫停期間略過的 N 次存檔不會補產任務」，並依這條規則的觸發方式帶一句補救方式（§17.2.7 的表；`manual` 不需要補）。恢復後規則列顯示「上次暫停」一行。
+- 任務規則分頁（`TaskRulesTab.vue`）：暫停的規則列顯示紅色標籤「已自動暫停」與「恢復」（沒有編輯權時只有標籤、沒有「恢復」）；點標籤展開暫停資訊（§17.2.7），沒有編輯權也能展開（唯讀資訊，後端本來就讓有讀權的人取得），通知連結帶 `rule=` 時同樣直接展開。恢復前確認框寫明「暫停期間略過的 N 次存檔不會補產任務」，並依這條規則的觸發方式帶一句補救方式（§17.2.7 的表；`manual` 不需要補）。恢復後規則列顯示「上次暫停」一行。
 - 通知鈴鐺：`opsIncident`、`opsRulePaused` 兩個種類的四語標籤與圖示；標題由 `DataJson` 的 `titleKey`＋`params` 依語系組字（§17.2.5）。
 - 政策頁：新的維運政策出現在「維運」分類；收件人編輯器（`PolicyValueEditor.vue`）在政策允許時多一個「該規則的最後修改者」勾選。
 - 文案全部四語，進 `src/i18n/*.json`；檢查名稱、訊息代碼、動作標籤、處理者標示都是鍵，不在前端寫中文常數。前端不留任何門檻或上限的常數，全部從 API 取（鐵則 2）。
@@ -2634,21 +2634,21 @@ O2 在 pg0 之後，合併前兩種資料庫都要驗（使用者裁決 §3 第 
 
 - **偏離 1：寄信設定的測試信寄到寄件地址本身**，語系用這次請求的語系（沒帶時繁中）。帳號沒有 Email 欄位、也不讓人臨時填地址（O2-U1 的精神）。
 - **偏離 2：兩種測試信共用一個節流**：同一管理員合計 30 秒一封。兩者打同一台 SMTP，分開節流就能輪流打兩支 API 繞過。
-- **偏離 3：Demo 站的 `storage.diskFree` 一律顯示停用**（`enabled.value`、`factory` 都是 false）；PUT 照「不適用的檢查」存得進去但不會跑，畫面上沒有設定區與立即檢查。
-- **偏離 4：寄信設定未完成的 409 沿用代碼 `smtpNotConfigured`**，訊息換成「寄信設定還沒設定好（主機或寄件地址沒填，或密碼需要重填）」。通道 PUT 不再收連線欄位，多送的會被忽略。
+- **偏離 3：Demo 站的 `storage.diskFree` 一律顯示停用**（`enabled.value`、`factory` 都是 false）；畫面上沒有設定區與立即檢查。**PUT 可存但不執行**：API 照「不適用的檢查」接受這項的設定 PUT 並存進資料庫（不回錯誤），但 Demo 站的看門狗不跑它、立即檢查回 409，所以存了也不會生效（`DemoSiteHealthTests` 有斷言）。這是 Demo 排除裁決之外多出來的行為。
+- **偏離 4：寄信設定未完成的 409 沿用代碼 `smtpNotConfigured`**，訊息換成「寄信設定還沒設定好（主機或寄件地址沒填，或密碼需要重填）」。**通道 API 契約改變**：`PUT system/ops/channels/smtp` 不再收連線欄位（主機、埠、加密方式、帳號、密碼、寄件地址與名稱），舊呼叫端多送的這些鍵一律忽略、不回 400，也不會改到寄信設定；GET 也不再回這些欄位，改回 `mailConfigured`。repo 內的呼叫端已改；外部呼叫端（若有）要改打 `system/mail-settings`，相容性未驗證。
 - **偏離 5：通知鈴鐺沒有逐種圖示**：鈴鐺清單本來就沒有每種通知的圖示（簽核也沒有），只加四語標籤；`opsRulePaused` 的標籤也用「維運事件：」，因為標題本身已經寫「…已自動暫停」，再加「規則已自動暫停：」會重複。
 - **偏離 6：稽核詳細**：1920（`xl`）與清單並排；其他寬度用對話框（手機全螢幕、平板與筆電從右側滑出）。來源管道欄在平板與並排時隱藏。事件清單用「載入更多」按鈕，稽核清單捲到底自動載入（§17.3 只寫了稽核無限捲動）。
 - **偏離 7：文案不寫伺服器的天數與筆數上限**：稽核篩選說明寫「沒填日期時只查最近幾天的紀錄」、狀態歷程截斷寫「只列最近的一部分」，不在前端重複後端的 7 天、366 天、100 筆（鐵則 2）；健康檢查的範圍與出廠值都從 API 取。趨勢圖的「最近 24 小時／7 天」是畫面的兩個檢視，不是政策。
 - **偏離 8：恢復確認框多一句**「手動新增的任務不掛規則；之後那筆記錄若又觸發這條規則，會再產生一份規則任務」（非手動規則才顯示），避免設計者以為手動補的任務會被規則認得。暫停資訊的最近錯誤代碼以 `ops.ruleError.*` 顯示白話，沒登記的代碼顯示原碼。
-- **偏離 9：健康檢查設定的「啟用」與出廠值相同時送 null**（回到出廠），和數字欄留空送 null 一致，日後出廠值改了跟著變。
+- **偏離 9：健康檢查設定的「啟用」記住是否跟隨出廠值**（審查修正 5 改寫）：載入時照 API 的 `isFactory`；動了開關就送明確值（即使和出廠值相同也保留這個意圖），只改間隔或門檻時照原狀送（跟隨出廠送 null、明確值送原值）；要改回跟隨出廠值按開關旁的「改回出廠值」，之後送 null，日後出廠值改了跟著變。開關旁顯示「跟隨出廠值（出廠：啟用）」或「自訂（出廠：啟用）」。原做法（與出廠相同就送 null）會在只改間隔時把明確的 override 清成 null，已撤回。
 
 技術類：
 
 - **偏離 10：通知 API 多回 `titleKey`、`titleParams`**（只有 `opsIncident`、`opsRulePaused` 兩種，從 `DataJson` 解析；其他種類不變），鈴鐺才能依目前語系組標題，沒有時用存檔時的 `title`。
-- **偏離 11：migration 手動調整順序**：EF 把通道表的 DropColumn 排在 CreateTable 前面，改成建表 → `migrationBuilder.Sql` 搬資料（`INSERT … SELECT … WHERE "Kind" = 'smtp'`，兩種資料庫同一句）→ 拿掉通道欄位；Down 只還原 schema，不把資料搬回通道表。寄信設定主鍵是字串 `Kind`（固定 `default`），沿用通道以種類當主鍵的寫法。
+- **偏離 11：migration 手動調整順序**：EF 把通道表的 DropColumn 排在 CreateTable 前面，改成建表 → `migrationBuilder.Sql` 搬資料（`INSERT … SELECT … WHERE "Kind" = 'smtp'`，兩種資料庫同一句）→ 拿掉通道欄位。Down（審查修正 2）：補回通道欄位（預設值改成舊模型的出廠值 587、`startTls`，不用 EF 產生的 0 與空字串）→ `UPDATE` 把寄信設定那一列搬回通道列（同一句）→ 最後刪表；寄信設定有、通道列沒有時舊結構沒地方放，連線隨表刪除（只影響降版）。寄信設定主鍵是字串 `Kind`（固定 `default`），沿用通道以種類當主鍵的寫法。
 - **偏離 12：直送佇列的設定快取**仍是一份合成的 `SmtpSettings`：寄信設定、通道、寄信政策同一輪都讀到才整份替換，任一讀不到沿用上一份。
 - **偏離 13：`OpsMonitorReader.Applicable` 拆成兩個判斷**：資料庫種類不支援的檢查照舊不列；Demo 站排除的檢查照列、`applicable: false`。
-- **偏離 14：前端細節**：監控查詢沿用全域「不重試」，503 立刻顯示整頁提示；排程器回的狀態是 PascalCase（`Succeeded`），前端轉成小寫開頭再查標籤。
+- **偏離 14：前端細節**：監控查詢沿用全域「不重試」，503 立刻顯示整頁提示（含分頁裡的子查詢，審查修正 3）；排程器回的狀態是 PascalCase（`Succeeded`），前端轉成小寫開頭再查標籤。
 
 **已知限制**
 
@@ -2671,3 +2671,12 @@ O2 在 pg0 之後，合併前兩種資料庫都要驗（使用者裁決 §3 第 
 
 - 前端：vitest 228 檔 3466 例全過（含 `src/css/themes/` 寫死顏色、四語鍵與佔位符、`policy-i18n` 守門）；`vue-tsc` 無錯；`quasar build` 成功。
 - 後端：通知 API 測試 SQLite、PostgreSQL 各 2 例過；寄信設定與 Demo `diskFree` 相關（ApplicationTests 11 例、WebAPITests `Ops` 加 `EndpointRoutesTests` 288 例）SQLite 286 過 2 略過、PostgreSQL 288 過。完整後端套件交 CI。
+
+**審查修正**（2026-11-19，審查全文在主 repo `.tmp/plans/20261119-o2e/review.md`；每條先寫會失敗的測試再修）
+
+- 修正 1：SMTP 明文密碼留在 Tanstack mutation variables（共用快取，成功失敗都留），只換密碼時密碼欄也不清空 → 密碼不進 variables，`useSaveMailSettings` 收讀密碼欄的函式、送出當下才併進請求主體；成功時明確清空密碼與清除旗標。測試：`MailSettingsPage.vitest.spec.ts` 的「審查修正 1」三例（成功／失敗後查詢與 mutation 快取不含明文、清除旗標復原）。
+- 修正 2：migration `SharedMailSettings` 的 Down 留下 `Security=""`、`Port=0`，舊模型讀取即拋例外、再 Up 又搬入非法值 → Down 改成補欄位（舊模型出廠值）→ 反向搬回 → 刪表（偏離 11）。這是 EF 產生檔的第二段手寫（第一段是 Up 的搬資料），`.claude/rules/backend.md` 的「不手改」對資料搬移做不到，沿用 Up 的做法並在檔內註明。測試：`MailSettingsMigrationTests.UpDownUp_ConnectionMovedBackToChannel_OldModelReadable_ThenMovedAgain`、`Down_ChannelWithoutMailSettings_OldModelDefaults_ThenUpAgainReadable`（雙跑集）。
+- 修正 3：監控頁查詢失敗被當成空資料、子查詢的 503 要等總覽輪詢 → 事件清單、趨勢、總覽失敗時顯示「載入失敗」；任何分頁查詢遇到 503 `databaseUnavailable` 立刻整頁提示，總覽之後再成功一次才解除。測試：`OpsPage.vitest.spec.ts` 的「審查修正 3」三例、`HealthCheckCard.vitest.spec.ts`「趨勢查詢失敗顯示載入失敗」。
+- 修正 4：稽核日期範圍以本地 0 點加固定 24 小時算日末，夏令時間切換日漏查或多查一小時 → 改成本地日曆的隔天 0 點減 1 ms（`ops-format` 的 `localDayStartUtc`、`localDayEndUtc`）。測試：`ops-format.vitest.spec.ts` 的 DST 前進、退回與無 DST 三例（切 `process.env.TZ`）。
+- 修正 5：健康檢查「啟用」只改間隔也可能把明確 override 清成 null → 偏離 9 改寫。測試：`HealthCheckCard.vitest.spec.ts` 的「審查修正 5」兩例。
+- 建議（成本低，一併做）：稽核詳細補 MCP 權杖、參數雜湊、確認結果與確認 id（`AuditPage.vitest.spec.ts`「MCP 呼叫的詳細」）；任務規則分頁的唯讀者可展開暫停資訊、不能恢復，§17.3 寫清楚並補點擊與通知連結的測試（`TaskRulesTab.vitest.spec.ts`）；偏離 3、4 補契約說明。
