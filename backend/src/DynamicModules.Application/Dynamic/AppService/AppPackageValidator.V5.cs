@@ -144,7 +144,9 @@ public static partial class AppPackageValidator
         }
 
         // 沖銷的 ofEvent 必須是同一個整合或套件內的事件
-        var allEventCodes = p.Events.Select(e => e.Code).Concat(p.Integrations.SelectMany(g => g.Events.Select(e => e.Code))).ToHashSet();
+        // null 的整合與事件上面已報錯，這裡略過（否則丟例外變 500）
+        var allEventCodes = p.Events.Select(e => e.Code)
+            .Concat(p.Integrations.Where(g => g is not null).SelectMany(g => g.Events.Where(e => e is not null).Select(e => e.Code))).ToHashSet();
         foreach (var g in p.Integrations.Where(g => g is not null))
             foreach (var e in g.Events.Where(e => e is not null))
                 foreach (var fx in e.Effects.Where(x => x is { Kind: "reverse" }))

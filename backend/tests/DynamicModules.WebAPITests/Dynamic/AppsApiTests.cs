@@ -131,6 +131,26 @@ public class AppsApiTests : IDisposable
     }
 
     [Fact]
+    public async Task Import_IntegrationsContainNull_400()
+    {
+        const string json = """
+            {
+              "format": "formwright-app", "formatVersion": 5,
+              "manifest": { "id": "null-int", "version": "1.0.0", "name": { "zh-TW": "空整合" } },
+              "modules": [ { "code": "doc", "key": "ni-doc", "name": { "zh-TW": "單據" }, "kind": "standalone", "titleField": "name",
+                "blocks": [ { "code": "main", "label": { "zh-TW": "基本" }, "collapsed": false, "fields": [
+                  { "code": "name", "type": "text", "label": { "zh-TW": "名稱" }, "config": { "required": true } } ] } ] } ],
+              "integrations": [ null ]
+            }
+            """;
+
+        var res = await Import(json);
+
+        res.StatusCode.Should().Be(HttpStatusCode.BadRequest, await res.Content.ReadAsStringAsync());
+        (await res.Content.ReadAsStringAsync()).Should().Contain("integrations[0]: 不能是 null");
+    }
+
+    [Fact]
     public async Task Import_RejectsBadAndDuplicatePackages_AndCyclesInRequires()
     {
         (await Import("{ not json")).StatusCode.Should().Be(HttpStatusCode.BadRequest);

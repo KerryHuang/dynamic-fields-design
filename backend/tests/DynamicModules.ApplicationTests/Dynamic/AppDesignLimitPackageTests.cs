@@ -80,8 +80,8 @@ public class AppDesignLimitPackageTests
     {
         var p = Over(kind);
         AppPackageValidator.DesignLimitErrors(p, Factory).Should().Contain(expected);
-        // 數量檢查不在靜態層（內建套件啟動時不讀政策）；null 整合在引用層會丟例外（既有問題，另案），這裡只驗結構層以外的種類
-        if (kind != "integrations") AppPackageValidator.Validate(p).Errors.Should().NotContain(expected);
+        // 數量檢查不在靜態層（內建套件啟動時不讀政策）
+        AppPackageValidator.Validate(p).Errors.Should().NotContain(expected);
     }
 
     [Fact]
