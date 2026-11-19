@@ -196,7 +196,7 @@ public sealed class SystemPrivilegesApiTests : IAsyncLifetime
         me.GetProperty("designer").GetProperty("edit").GetBoolean().Should().BeTrue();
         me.GetProperty("permissionAdmin").GetBoolean().Should().BeTrue();
 
-        (await _admin.PutAsJsonAsync($"{Base}/admin/users/nobody/system-privileges", Grant)).StatusCode.Should().Be(HttpStatusCode.NotFound);
+        (await _admin.PutAsJsonAsync($"{Base}/admin/users/no-such-user/system-privileges", Grant)).StatusCode.Should().Be(HttpStatusCode.NotFound);
     }
 
     [Fact]
