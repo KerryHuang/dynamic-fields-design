@@ -2336,10 +2336,10 @@ O2 在 pg0 之後，合併前兩種資料庫都要驗（使用者裁決 §3 第 
 
 - ⚠️ SQLite 資料庫檔改成唯讀後，WAL 模式下能不能繼續讀（`-shm` 要可寫；讀不到時唯讀期間監控頁也打不開，§17.2.9 的「唯讀時監控頁可用」要改寫）；o2b 與下一條一起實測。（o2b 已實測，見 §17.12）
 - ⚠️ `IsUnavailable` 的對照：SQLite 的 `SQLITE_IOERR` 在磁碟滿時會不會先於 `SQLITE_FULL` 出現；Npgsql 在 socket 斷線、主機拒絕連線時丟的例外是否都不帶 SQLSTATE（o2a 以 C11 的建構例外先寫，o2b 用真的斷線各試一次）。（o2b 已實測，見 §17.12）
-- ⚠️ MailKit 強制 STARTTLS 的選項（`SecureSocketOptions.StartTls`）在伺服器不支援時是否一定丟例外、不退回明文（o2c 對 Mailpit 關掉 STARTTLS 實測，D10）。
+- ⚠️ MailKit 強制 STARTTLS 的選項（`SecureSocketOptions.StartTls`）在伺服器不支援時是否一定丟例外、不退回明文（o2c 對 Mailpit 關掉 STARTTLS 實測，D10）。（o2c 已實測，見 §17.13）
 - ⚠️ SQLite 唯讀的重現：`Pooling=False` 加改檔案權限，新連線是否一律 `SQLITE_READONLY`、站台在唯讀資料庫上能否繼續回應讀取（o2b 第一步實測，不成立就改用 DI 換寫入探測的連線做手動驗收）。（o2b 已實測，見 §17.12）
 - ⚠️ PostgreSQL `default_transaction_read_only` 的測試寫法：設定後清 Npgsql 連線池，新連線是否立即生效、測試結束如何還原樣板資料庫（o2b 實測）。（o2b 已實測，見 §17.12）
-- ⚠️ MailKit 的版本與 .NET 8 相容、授權仍是 MIT（o2c 計畫時查 NuGet 與官方 repo 並鎖版本）。
+- ⚠️ MailKit 的版本與 .NET 8 相容、授權仍是 MIT（o2c 計畫時查 NuGet 與官方 repo 並鎖版本）。（o2c 已實測，見 §17.13）
 - ⚠️ `DriveInfo` 在 macOS 磁碟映像、Linux loop device、Docker overlay 回報的剩餘空間是否就是附件目錄實際可用的空間（o2b 實測）。（o2b 已實測，見 §17.12）
 - ⚠️ `PRAGMA quick_check` 在大資料庫的耗時（60 秒逾時夠不夠）；Demo 資料量下實測一次。
 - ⚠️ gate 的 PostgreSQL 步驟增加的時間（§17.8 粗估 50–100 秒）。
@@ -2452,3 +2452,45 @@ O2 在 pg0 之後，合併前兩種資料庫都要驗（使用者裁決 §3 第 
 - 建議 1、2：看門狗與立即檢查重疊時較早開始、較晚完成的結果蓋掉狀態板；立即檢查不知道背景正在跑。→ 狀態板依 `CheckedUtc` 只收較新的；執行器記每個檢查的執行中次數，立即檢查（`TryRunNowAsync`）在背景或另一個立即檢查跑同一項時回 `healthCheckBusy`。測試：`HealthCheckTests.C17_OverlappingRuns_RunNowBusy_LaterStartedResultKeptOnBoard`。
 - 建議 3：事件詳細的歷程最多 100 筆沒有截斷提示。→ `IncidentDetail` 加 `historyTruncated`（§17.5 已同步，公開契約新增欄位）。測試：`IncidentTests.B12_IncidentDetail_HistoryOverMax_Truncated`。
 - 建議 4：已知限制的「最多一個間隔」改為限定在後續檢查正常執行且寫入成功時（上方已知限制已改）。
+
+### 17.13 o2c 實作補記（2026-11-19）
+
+範圍照 §17.1 o2c：SMTP 通道設定與密碼加密、寄送佇列（領取 → 交易外寄 → 記結果）、重試與節流、摘要信、通道失敗事件、資料庫寫不進時的直送、通道 API 與測試信、`ops.upkeep` 的佇列清理。自動暫停、故障注入、`ruleEditor`（o2d），前端頁面（o2e）不在這一段；前端只補了三項新政策的四語名稱。沒有新增 migration，`Dynamic_AlertChannel`、`Dynamic_AlertOutbox` 照 §17.4 用、沒有不夠的欄位。
+
+**§17.10.6 實測結果**（2026-11-19，macOS、MailKit 4.18.2）
+
+- MailKit 強制 STARTTLS（`SecureSocketOptions.StartTls`）對不支援 STARTTLS 的伺服器：`ConnectAsync` 在 EHLO 之後直接丟 `NotSupportedException`，之後沒有送出 `AUTH`、`MAIL`、`RCPT`（伺服器端只收到 `EHLO`），不退回明文；寄送器把連線階段的這個例外歸 `tls`。沒有用 Mailpit，改用測試內的假 SMTP 伺服器（`NoStartTlsSmtpServer`，只聽本機埠、EHLO 不列 STARTTLS），D10 自動跑。另一個測試讓同一台假伺服器當 `none` 的內網 relay，確認 MailKit 真的送出 `MAIL FROM`、兩個 `RCPT TO` 與信件內容、沒有 `AUTH`。
+- MailKit 版本與授權：鎖 4.18.2（MIT），有 `net8.0` 目標；相依 MimeKit 4.18.2（MIT）、BouncyCastle.Cryptography 2.7.0（MIT）、System.Formats.Asn1 與 System.Security.Cryptography.Pkcs 10.0.13（MIT，`net8.0` 可用）。5.0.0 太新沒有採用。
+- 連線被拒（本機沒人聽的埠）：`ConnectAsync` 丟 `SocketException`，歸 `connect`；422 回應只有 `code`、`message`、`params.stage`／`serverCode`，不含例外訊息與主機位址（D07，真的 MailKit）。
+
+**偏離設計之處**
+
+- **偏離 1：摘要信的時機**：每個整點後的第一輪，若這個整點之後還沒有摘要信、而有「整點前建立且還沒掛上摘要信」的 `digested` 列，就新增一封摘要信並把那些列掛上（同一把通道列鎖、同一交易）。整點後才被摘要化的列等下一個整點。摘要信不佔每小時額度；額度滿時只領摘要信。
+- **偏離 2：寫入後才停用或清掉通道設定**：領取時發現通道不能寄，把還沒寄的 `pending` 全部改成 `skipped`（§17.2.6 只寫了寫入時標 `skipped`）。
+- **偏離 3：密碼解不開（金鑰不見）時寄送**：不重試，直接標 `failed`，並以階段 `config` 開或更新通道失敗事件（§17.2.6 的階段只有 `connect`、`tls`、`auth`、`send`；解不開不是 SMTP 的錯，重試也解不開）。測試信在這個情況回 409 `smtpNotConfigured`（照 §17.5）；直送信只記 Error log、丟掉那封。
+- **偏離 4：直送信的主旨沒有事件編號**（資料庫寫不進時還沒有事件），內文註明「由看門狗直接寄出」，連結（有設 `Ops:PublicUrl` 時）指向 `/system/ops?tab=health`。
+- **偏離 5：直送的判斷**用本實例狀態板上一筆的狀態：從正常（rank 0）變異常是開啟、警告變嚴重是升級；其他轉換（含結案後再發生）不直送，等補寫後由佇列寄。直送佇列用自己快取的通道設定與寄信政策，每輪寄送前重讀、讀不到沿用上一份，啟動時政策是出廠值、通道設定從缺（§17.9 已知限制）。超過每小時上限的直送信丟掉並記 Warning；佇列滿（20 封）丟最舊的；同一檢查回到正常時撤掉它還沒寄出的信。已直送的識別碼保留 500 筆（與待補寫佇列同一個上限）。
+- **偏離 6：補寫信是否過時**由執行器在補寫時判斷：同一檢查在待補寫佇列後面已經有「正常」，這筆的開啟或升級列記 `skipped`；直送已寄出的優先記 `sentDirect`。寫成 `pending` 或 `skipped` 的，提交後從直送佇列撤回，不會兩邊都寄。
+- **偏離 7：領取與記結果的租約檢查可省略**：`ClaimAlertRequest` 的租約條件可為 null，測試直接模擬兩個寄送者（D08、D11）；正確性靠條件式更新與通道列鎖，不靠租約（§17.7）。`ClaimedBy` 是「實例 id：本輪隨機 8 碼」（最長 100）。同一輪連續 3 次被別人領走就停，下一輪再來。
+- **偏離 8：`ops.monitor` 寄送失敗不擋健康檢查**：寄送者丟租約以外的例外時記 Warning、本輪記部分失敗，接著照跑健康檢查。
+- **偏離 9：寄送成功時一律嘗試把通道失敗事件結案**（沒有未結的就沒動作），所以每封成功多一次查詢。
+- **偏離 10：測試信不是交易型請求**（寄 SMTP 不能在交易裡），稽核 `ops.channel.test` 在交易外直接寫：成功 `success`、失敗 `failed` 並以階段為 `reasonCode`，摘要記收件人數與回應碼；寫不進只記 log。順序：Demo 403 → 設定不完整（含密碼解不開）409 → 30 秒內重複 409 → 寄送 → 失敗 422。30 秒的節流只在本實例記憶體、以管理員為單位。
+- **偏離 11：PUT 通道設定的驗證**：主機、寄件地址、收件信箱只在 `enabled` 為真時必填（停用時可以存不完整的設定，讓「先停用再慢慢填」可行）；格式、長度與「最多 20 個」不論啟用與否都驗。§17.5 錯誤表寫「收件信箱 0 個」是 400，實作只在啟用時才算。`none` 加帳號或（新填或保留中的）密碼回 400，回應多一個 `code: "smtpPlaintextAuth"`（`ServiceResult.Invalid` 加了帶代碼的多載，400 回應在有代碼時多一個 `code` 鍵；其他 400 不變）。稽核 `ops.channel.update` 的差異只記 `hasPassword`，換密碼時另記 `passwordChanged`，不記內容。
+- **偏離 12：信件時間一律以 UTC 顯示**（`yyyy-MM-dd HH:mm:ss UTC`），不依通道語系換時區。
+- **偏離 13：寄送佇列的清理天數**沿用 `ops.healthResultRetentionDays`（出廠 30 天），清理摘要鍵 `alertOutbox`；可清的是 `sent`、`sentDirect`、`failed`、`skipped`，以及已掛上摘要信、而摘要信已經不在 `pending`／`sending` 的 `digested`（D09）。
+- **偏離 14：總覽的告警通道區塊**：`configured` 是主機、寄件地址、收件信箱都有（不看啟用），`enabled` 照通道列。
+- **偏離 15：安全類事件同一件的後續異動**（B08 第二次給權）在佇列記 `occurred`；事件轉換對應：開啟 → `opened`、結案後再發生 → `regressed`、升級 → `escalated`、upkeep 重複提醒 → `renotify`。
+
+**可寫死清單補充**（§17.9 已列的不再重複）：收件信箱最多 20 個；欄位長度照 §17.4（主機與地址 255、寄件名稱 100、收件信箱合計 2000）；已直送識別碼保留 500 筆；寄送者同一輪連續被別人領走 3 次就停。
+
+**已知限制**
+
+- ⚠️ Linux 上 STARTTLS 與憑證驗證的行為沒有另外實測（MailKit 跨平台，預期相同）。
+
+**驗證（本機）**
+
+- 新增測試類別 `AlertChannelTests` 19 例（D01–D13、C13、通道停用與未設定、PUT 驗證、MailKit 對假 relay 實寄；標 `Category=Postgres`，D08、D11 另含無鎖模式）；`HealthCheckTests` 的 C01（直送佇列一封）、C09（`sentDirect`／`skipped` 與不重寄）與 `IncidentTests` 的 B08（兩列佇列 `opened`、`occurred`）、B09（佇列與寄出的主旨、內文不含敏感字）補上 o2c 的一半。
+- WebAPITests（`Ops` 命名空間全部＋`AdminUsersApiTests`、`EndpointRoutesTests`、`ConcurrencyExceptionTests`、`SecurityTests`、`HealthTests`）：SQLite 222 過 1 略過（19 秒）、PostgreSQL 223 過（24 秒）。
+- ApplicationTests（`Common` 全部含稽核覆蓋與訊息、`DatabaseErrorsTests`、`OpsSchemaTests`、政策、通知）：SQLite 231 過（3 秒）、PostgreSQL 231 過（6 秒）；DomainTests（含 `PolicyCatalogFixtureTests`）1446 過。
+- 全套 SQLite 跑過一次（ApplicationTests 3630 過 14 略過；WebAPITests 1467 過 2 略過、2 失敗）：失敗的 `MesFlowTests.OverdueWorkOrderReport_…` 與 `AppCombinationTests.ClosingInventory_LeavesMesWritable` 各跑了近 2 分鐘（與 ApplicationTests 並行、機器滿載），單獨重跑 2 例都過（1 秒），與 o2c 無關。
+- 前端：`locales`、`policy-i18n`、`policy-types`、`no-hardcoded-colors` 51 過，`vue-tsc` 與 `quasar build` 過。
