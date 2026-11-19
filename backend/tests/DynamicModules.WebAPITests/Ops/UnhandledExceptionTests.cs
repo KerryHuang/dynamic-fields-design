@@ -145,9 +145,10 @@ public class UnhandledExceptionTests
         {
             if (inst.Meter.Name == "Formwright" && inst.Name == "formwright.rule.failures") l.EnableMeasurementEvents(inst);
         };
+        // 計量是全域的：同時跑的 o2d 測試會記 taskRule 的失敗，這裡只收本類別用的 check
         listener.SetMeasurementEventCallback<long>((_, _, t, _) =>
         {
-            foreach (var kv in t) if (kv.Key == "ruleKind") lock (tags) tags.Add((string)kv.Value!);
+            foreach (var kv in t) if (kv.Key == "ruleKind" && kv.Value is "check") lock (tags) tags.Add("check");
         });
         listener.Start();
         return (listener, tags);
