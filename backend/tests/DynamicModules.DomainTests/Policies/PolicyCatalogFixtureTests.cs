@@ -77,6 +77,26 @@ public class PolicyCatalogFixtureTests
         PolicyCatalog.OpsSlowRequestMs.Scope.Should().Be(PolicyScope.System);
         PolicyCatalog.OpsClientErrorCollection.Factory.Should().Be("true");
         PolicyCatalog.OpsClientErrorCollection.Scope.Should().Be(PolicyScope.System);
+        // p2a：設計上限（A16）、新模組名稱欄位（A19）、表單欄數（A25）
+        PolicyCatalog.DesignMaxWorkflowStates.Factory.Should().Be("30");
+        PolicyCatalog.DesignMaxWorkflowTransitions.Factory.Should().Be("200");
+        PolicyCatalog.DesignMaxRulesPerModule.Factory.Should().Be("100");
+        PolicyCatalog.DesignMaxGroupsPerPackage.Factory.Should().Be("20");
+        PolicyCatalog.DesignMaxModulesPerPackage.Factory.Should().Be("30");
+        PolicyCatalog.DesignMaxFieldsPerModule.Factory.Should().Be("300");
+        PolicyCatalog.DesignMaxOptionsPerField.Factory.Should().Be("200");
+        PolicyCatalog.DesignMaxViewsPerModule.Factory.Should().Be("20");
+        PolicyCatalog.DesignMaxIntegrationsPerPackage.Factory.Should().Be("20");
+        PolicyCatalog.ModuleCreateTitleField.Factory.Should().Be("true");
+        PolicyCatalog.FormDefaultColumns.Factory.Should().Be("4");
+        PolicyCatalog.FormDefaultColumns.Scope.Should().Be(PolicyScope.Module);
+        PolicyCatalog.FormDefaultColumns.Target.Should().Be(PolicyModuleTarget.Any);
+        PolicyCatalog.FormMaxColumns.Factory.Should().Be("4");
+        PolicyCatalog.FormMaxColumns.Scope.Should().Be(PolicyScope.System);
+        // 前端 form-layout.ts 的 fieldColClass 斷點只排到 4 欄，兩邊一起改
+        PolicyCatalog.FormMaxColumns.Max.Should().Be(4);
+        PolicyCatalog.All.Where(d => d.Code.StartsWith("design.", StringComparison.Ordinal) || d.Code == "module.createTitleField")
+            .Should().OnlyContain(d => d.Scope == PolicyScope.System && d.Category == "design");
         PolicyCatalog.WeekStartOf("sunday").Should().Be(DayOfWeek.Sunday);
         PolicyCatalog.WeekStartOf("monday").Should().Be(DayOfWeek.Monday);
     }

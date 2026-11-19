@@ -7,6 +7,7 @@ public static class PolicyMessages
     public const string NotFound = "找不到政策";
     public const string ModuleNotFound = "找不到模組";
     public const string SystemOnly = "這個政策只能在系統設定改，不能由模組覆寫";
+    public const string NotForThisModule = "這個政策不適用於這種模組";
 
     /// <summary>白名單含寫死黑名單項目（網頁、腳本、可執行類）時，列出被拒的項目。</summary>
     public static string Forbidden(IEnumerable<string> rejected) =>

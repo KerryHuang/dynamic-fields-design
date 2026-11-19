@@ -50,12 +50,12 @@ describe('ModuleEditorPage', () => {
     vi.stubGlobal('ResizeObserver', class { observe() {} unobserve() {} disconnect() {} });
   });
 
-  it('明細模組沒有政策分頁，一般模組有', async () => {
+  it('明細模組也有政策分頁（明細列上限、表單欄數要在明細模組上覆寫）', async () => {
     const w = await mountPage();
     expect(w.find('[data-testid="tab-policies"]').exists()).toBe(true);
     w.unmount();
     const w2 = await mountPage({ ...detail, detailOf: 'parent' });
-    expect(w2.find('[data-testid="tab-policies"]').exists()).toBe(false);
+    expect(w2.find('[data-testid="tab-policies"]').exists()).toBe(true);
     w2.unmount();
   });
 

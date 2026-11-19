@@ -209,6 +209,51 @@ public class PolicyApiTests : IDisposable
         list.EnumerateArray().Select(e => e.GetProperty("code").GetString()).Should().NotContain("task.maxRulesPerPackage");
     }
 
+    /// <summary>真的明細模組：子模組有 Relation = Detail 的參照欄位指向表頭（不是只設前端的 detailOf）。</summary>
+    private static async Task<(string Parent, string Child)> DetailModules(HttpClient admin)
+    {
+        var parent = await CreateModule(admin);
+        var child = await CreateModule(admin);
+        await AddField(admin, child, "reference", new { refTarget = new { kind = "module", key = parent }, relation = "detail" });
+        return (parent, child);
+    }
+
+    private static async Task<List<string>> ModuleCodes(HttpClient c, string key)
+    {
+        var res = await c.GetAsync($"{Base}/modules/{key}/policies");
+        res.StatusCode.Should().Be(HttpStatusCode.OK, await res.Content.ReadAsStringAsync());
+        return (await JsonOf(res)).EnumerateArray().Select(e => e.GetProperty("code").GetString()!).ToList();
+    }
+
+    [Fact]
+    [Trait("Category", "Postgres")]
+    public async Task Module_Get_DetailModule_ListsOnlyApplicable()
+    {
+        var admin = _app.AsUser();
+        var (parent, child) = await DetailModules(admin);
+
+        var detailCodes = await ModuleCodes(admin, child);
+        detailCodes.Should().Contain("form.defaultColumns").And.NotContain(Rules);
+        var mainCodes = await ModuleCodes(admin, parent);
+        mainCodes.Should().Contain("form.defaultColumns").And.Contain(Rules);
+    }
+
+    [Fact]
+    [Trait("Category", "Postgres")]
+    public async Task Module_Put_TargetMismatch_400()
+    {
+        var admin = _app.AsUser();
+        var (parent, child) = await DetailModules(admin);
+
+        var res = await PutModule(admin, child, Rules, new { value = 3 });
+        res.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+        (await FirstError(res, "code")).Should().Be("這個政策不適用於這種模組");
+        Db(db => db.Set<ModulePolicy>().Count()).Should().Be(0);
+
+        (await PutModule(admin, parent, Rules, new { value = 3 })).StatusCode.Should().Be(HttpStatusCode.OK);
+        (await PutModule(admin, child, "form.defaultColumns", new { value = 2 })).StatusCode.Should().Be(HttpStatusCode.OK);
+    }
+
     [Fact]
     public async Task Effective_AnyLoggedInUser()
     {
