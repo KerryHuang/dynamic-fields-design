@@ -117,9 +117,14 @@ public class DeletionRepository(DynamicDbContext db) : IDeletionRepository
         return found.Values.OrderBy(r => r.Id).ToList();
     }
 
-    public async Task PurgeModuleAsync(Module module, CancellationToken ct)
+    public async Task PurgeModuleAsync(long moduleId, CancellationToken ct)
     {
-        AuthorizationWriteScope.Demand(AuthorizationBatchEntry.PurgeModule, moduleIds: [module.Id]);
+        // program 代碼與欄位都依模組 ID 從資料庫推導，不採信呼叫端傳入的物件；系統代碼一律拒絕（權限軸設計 §7.4、§25 審查修正）
+        var module = await db.Set<Module>().AsNoTracking().Where(m => m.Id == moduleId).Select(m => new { m.Id, m.ProgramCode }).SingleOrDefaultAsync(ct)
+            ?? throw new InvalidOperationException($"要清除的模組 {moduleId} 不存在");
+        if (SystemProgramCodes.All.Contains(module.ProgramCode))
+            throw new InvalidOperationException($"系統權限代碼 {module.ProgramCode} 不能經模組清除刪除");
+        AuthorizationWriteScope.Demand(AuthorizationBatchEntry.PurgeModule, moduleIds: [module.Id], programCodes: [module.ProgramCode]);
         var recordIds = db.Set<Record>().Where(r => r.ModuleId == module.Id).Select(r => r.Id);
         // 任務對模組的外鍵是 Restrict，留言、參與者、附件的 Cascade 不靠 SQLite 外鍵設定：依序明確刪除（檔案由 ModuleRemover 刪）
         var taskIds = db.Set<TaskItem>().Where(t => t.ModuleId == module.Id).Select(t => t.Id);
@@ -150,22 +155,23 @@ public class DeletionRepository(DynamicDbContext db) : IDeletionRepository
         await db.Set<Record>().Where(r => r.ModuleId == module.Id).ExecuteDeleteAsync(ct);
         await db.Set<NumberSequence>().Where(n => n.ModuleId == module.Id).ExecuteDeleteAsync(ct);
         await db.Set<ModuleDataScope>().Where(s => s.ModuleId == module.Id).ExecuteDeleteAsync(ct);
-        await PurgeFieldsAsync(module.Blocks.SelectMany(b => b.Fields).ToList(), ct);
+        await PurgeFieldsAsync(await db.Set<Field>().AsNoTracking().Where(f => f.ModuleId == module.Id).Select(f => f.Id).ToListAsync(ct), ct);
         await db.Set<GroupProgramPrivilege>().Where(p => p.ProgramCode == module.ProgramCode).ExecuteDeleteAsync(ct);
         await db.Set<UserProgramPrivilege>().Where(p => p.ProgramCode == module.ProgramCode).ExecuteDeleteAsync(ct);
         await db.Set<DynamicProgram>().Where(p => p.ProgramCode == module.ProgramCode).ExecuteDeleteAsync(ct);
     }
 
-    public async Task PurgeFieldsAsync(IReadOnlyCollection<Field> fields, CancellationToken ct)
+    public async Task PurgeFieldsAsync(IReadOnlyCollection<long> fieldIds, CancellationToken ct)
     {
-        var fieldIds = fields.Select(f => f.Id).ToList();
-        var optionIds = fields.SelectMany(f => f.Options).Select(o => o.Id).ToList();
-        AuthorizationWriteScope.Demand(AuthorizationBatchEntry.PurgeFields, fieldIds: fieldIds);
-        await db.Set<RecordHistory>().Where(h => h.FieldId != null && fieldIds.Contains(h.FieldId.Value)).ExecuteDeleteAsync(ct);
-        await db.Set<RecordIndex>().Where(i => fieldIds.Contains(i.FieldId)).ExecuteDeleteAsync(ct);
-        await db.Set<FieldPermission>().Where(p => fieldIds.Contains(p.FieldId)).ExecuteDeleteAsync(ct);
+        var ids = fieldIds.ToList();
+        // 選項依欄位 ID 從資料庫推導，不採信呼叫端（權限軸設計 §7.4、§25 審查修正）
+        var optionIds = await db.Set<FieldOption>().AsNoTracking().Where(o => ids.Contains(o.FieldId)).Select(o => o.Id).ToListAsync(ct);
+        AuthorizationWriteScope.Demand(AuthorizationBatchEntry.PurgeFields, fieldIds: ids, optionIds: optionIds);
+        await db.Set<RecordHistory>().Where(h => h.FieldId != null && ids.Contains(h.FieldId.Value)).ExecuteDeleteAsync(ct);
+        await db.Set<RecordIndex>().Where(i => ids.Contains(i.FieldId)).ExecuteDeleteAsync(ct);
+        await db.Set<FieldPermission>().Where(p => ids.Contains(p.FieldId)).ExecuteDeleteAsync(ct);
         await db.Set<FieldOptionScope>().Where(s => optionIds.Contains(s.OptionId)).ExecuteDeleteAsync(ct);
-        await db.Set<NumberSequence>().Where(n => fieldIds.Contains(n.FieldId)).ExecuteDeleteAsync(ct);
+        await db.Set<NumberSequence>().Where(n => ids.Contains(n.FieldId)).ExecuteDeleteAsync(ct);
     }
 
     public async Task RunCleanupAsync(CleanupTarget target, Func<Task> body, CancellationToken ct)

@@ -38,10 +38,10 @@ public interface IDeletionRepository
     /// <summary>ValuesJson 含任一欄位鍵的記錄（含軟刪除，追蹤中，供改寫）。</summary>
     Task<List<Record>> ListRecordsWithKeysAsync(long moduleId, IReadOnlyCollection<string> fieldKeys, CancellationToken ct);
 
-    /// <summary>永久清除模組的記錄、索引、歷程，以及不隨模組級聯刪除的權限與流水號等設定列。</summary>
-    Task PurgeModuleAsync(Module module, CancellationToken ct);
-    /// <summary>永久清除欄位的索引、歷程，以及欄位權限、選項範圍與流水號列。</summary>
-    Task PurgeFieldsAsync(IReadOnlyCollection<Field> fields, CancellationToken ct);
+    /// <summary>永久清除模組的記錄、索引、歷程，以及不隨模組級聯刪除的權限與流水號等設定列；program 代碼與欄位由資料庫依 ID 推導。</summary>
+    Task PurgeModuleAsync(long moduleId, CancellationToken ct);
+    /// <summary>永久清除欄位的索引、歷程，以及欄位權限、選項範圍與流水號列；選項由資料庫依 ID 推導。</summary>
+    Task PurgeFieldsAsync(IReadOnlyCollection<long> fieldIds, CancellationToken ct);
 
     /// <summary>
     /// 在清除許可內執行 <paramref name="body"/>（權限軸設計 §7.4 Cleanup）：只准刪除屬於目標模組（含它的欄位、選項、program 代碼）或目標欄位的授權列，

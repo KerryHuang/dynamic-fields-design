@@ -1,4 +1,6 @@
+using DynamicModules.Domain.Authorization;
 using DynamicModules.Domain.Entities.Dynamic;
+using DynamicModules.TestSupport;
 using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
 
@@ -37,6 +39,55 @@ public sealed class AuthorizationWriteBoundaryTests : AuthorizationBoundaryTestB
         (await GuardRowsAsync()).Should().Equal(before);
         (await Db.Context.Set<FieldPermission>().AsNoTracking().CountAsync(p => p.FieldId == Target)).Should().Be(1);
     }
+
+    [Fact]
+    public async Task CleanupPurgeModule_IgnoresCallerProgramCode_SystemRowsSurvive()
+    {
+        var systemRows = await SystemCodeRowsAsync();
+        systemRows.Should().NotBeEmpty();
+        await Send(new ForgedPurgeRequest(ModuleId, Target, Other, ForgedPurgeMode.ModuleWithSystemCode));
+        Db.Context.ChangeTracker.Clear();
+        (await Db.Context.Set<Module>().AsNoTracking().AnyAsync(m => m.Id == ModuleId)).Should().BeFalse("目標模組確實刪除");
+        (await SystemCodeRowsAsync()).Should().Equal(systemRows);
+    }
+
+    [Fact]
+    public async Task CleanupPurgeFields_IgnoresCallerOptions_OtherFieldOptionScopesSurvive()
+    {
+        var db = Db.Context;
+        var (optionA, optionB) = (new FieldOption { FieldId = Target, Sequence = 1, Active = true }, new FieldOption { FieldId = Other, Sequence = 1, Active = true });
+        db.Set<FieldOption>().AddRange(optionA, optionB);
+        await db.SaveChangesAsync();
+        db.Set<FieldOptionScope>().AddRange(new FieldOptionScope { OptionId = optionA.Id, GroupId = GroupX }, new FieldOptionScope { OptionId = optionB.Id, GroupId = GroupX });
+        await db.SaveForTestsAsync();
+        db.ChangeTracker.Clear();
+
+        await Send(new ForgedPurgeRequest(ModuleId, Target, Other, ForgedPurgeMode.FieldWithOtherOptions));
+        db.ChangeTracker.Clear();
+        (await db.Set<Field>().AsNoTracking().AnyAsync(f => f.Id == Target)).Should().BeFalse("目標欄位確實刪除");
+        (await db.Set<FieldOptionScope>().AsNoTracking().AnyAsync(s => s.OptionId == optionB.Id)).Should().BeTrue("旁邊欄位的選項限制不受影響");
+        (await db.Set<FieldOptionScope>().AsNoTracking().AnyAsync(s => s.OptionId == optionA.Id)).Should().BeFalse("目標欄位的選項限制隨欄位清掉");
+    }
+
+    [Fact]
+    public async Task CleanupPurgeModule_ModuleCarryingSystemCode_IsRejected_RowsUnchanged()
+    {
+        // 資料庫裡的模組 program 代碼若是系統代碼（只可能是資料毀損），清除一律拒絕、整筆回滾
+        var module = await Db.Context.Set<Module>().SingleAsync(m => m.Id == ModuleId);
+        module.ProgramCode = SystemProgramCodes.PermissionAdmin;
+        await Db.Context.SaveForTestsAsync();
+        Db.Context.ChangeTracker.Clear();
+        var before = await GuardRowsAsync();
+
+        var act = () => Send(new ForgedPurgeRequest(ModuleId, Target, Other, ForgedPurgeMode.ModuleWithSystemCode));
+        await act.Should().ThrowAsync<InvalidOperationException>().WithMessage("*系統權限代碼*不能經模組清除刪除*");
+        Db.Context.ChangeTracker.Clear();
+        (await GuardRowsAsync()).Should().Equal(before);
+        (await Db.Context.Set<Module>().AsNoTracking().AnyAsync(m => m.Id == ModuleId)).Should().BeTrue();
+    }
+
+    private async Task<List<string>> SystemCodeRowsAsync() =>
+        (await GuardRowsAsync()).Where(r => r.Contains(SystemProgramCodes.PermissionAdmin) || r.Contains(SystemProgramCodes.Designer)).ToList();
 
     [Theory]
     [InlineData(AdminProbeMode.SystemCodeRow, "*系統權限代碼的授權列只准在系統管理員請求內寫*")]
