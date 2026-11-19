@@ -11,7 +11,8 @@ namespace DynamicModules.Application.Dynamic.AppService;
 // 這裡只檢查夥伴符號的前綴（應用程式 id 在 with、模組在該夥伴的 modules）；欄位層級在安裝時解析。
 public static partial class AppPackageValidator
 {
-    public const int MaxIntegrations = 20, MaxPartners = 5, MaxIntegrationFields = 20;
+    // 技術限制，見設計 §10；整合數是政策 A16（DesignLimitErrors）
+    public const int MaxPartners = 5, MaxIntegrationFields = 20;
 
     private static readonly HashSet<FieldType> IntegrationFieldTypes =
         [FieldType.Text, FieldType.Integer, FieldType.Decimal, FieldType.Date, FieldType.Reference];
@@ -32,7 +33,6 @@ public static partial class AppPackageValidator
     private static void IntegrationStructure(AppPackageData p, List<string> errors)
     {
         if (p.Integrations.Count > 0 && p.FormatVersion < 5) errors.Add("integrations: formatVersion 5 才支援 integrations");
-        if (p.Integrations.Count > MaxIntegrations) errors.Add($"integrations: 最多 {MaxIntegrations} 個");
     }
 
     private static void V5References(AppPackageData p, Dictionary<string, TemplateField> fields, MasterScope scope, List<string> errors)

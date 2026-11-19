@@ -11,7 +11,7 @@ import RulesTab from './RulesTab.vue';
 import { FACTORY_ME_THEME } from 'src/domain/theme/theme-fixtures';
 
 vi.mock('src/services/api/dynamic-api', () => ({
-  dynamicApi: { getRules: vi.fn(), putRules: vi.fn(), getMe: vi.fn() },
+  dynamicApi: { getRules: vi.fn(), putRules: vi.fn(), getMe: vi.fn(), getEffectivePolicies: vi.fn() },
 }));
 const api = vi.mocked(dynamicApi);
 
@@ -31,9 +31,11 @@ const me = (edit: boolean): Me => ({
   userId: 'a', displayName: 'A', isSystemAdmin: false, mustChangePassword: false, groups: [], designer: { read: true, add: true, edit, delete: false }, permissionAdmin: false, theme: FACTORY_ME_THEME,
 });
 
-function mountTab(canEdit = true) {
+function mountTab(canEdit = true, maxRules: number | 'pending' = 100) {
   api.getRules.mockResolvedValue(JSON.parse(JSON.stringify(rules)));
   api.getMe.mockResolvedValue(me(canEdit));
+  if (maxRules === 'pending') api.getEffectivePolicies.mockReturnValue(new Promise(() => {}));
+  else api.getEffectivePolicies.mockResolvedValue({ moduleKey: 'a', values: { 'design.maxRulesPerModule': maxRules } });
   const i18n = createI18n({ legacy: false, locale: 'zh-TW', messages: { 'zh-TW': zhTW } });
   return mount(RulesTab, {
     props: { module: mod },
@@ -128,5 +130,26 @@ describe('RulesTab', () => {
     await id(w, 'rule-row-0').trigger('click');
     await flushPromises();
     expect(document.body.querySelector('[data-testid="rule-save"]')).not.toBeNull();
+  });
+
+  it('上限依生效值：已有 2 條、上限 2 時新增鈕停用並提示', async () => {
+    const w = mountTab(true, 2);
+    await flushPromises();
+    expect(api.getEffectivePolicies).toHaveBeenCalledWith('a');
+    expect(id(w, 'add-rule').attributes('disabled')).toBeDefined();
+    (w.findComponent(quasar.QTooltip).vm as unknown as { show: () => void }).show();
+    await flushPromises();
+    expect(document.body.textContent).toContain('每個模組最多 2 條規則');
+    w.unmount();
+    const ok = mountTab(true, 3);
+    await flushPromises();
+    expect(id(ok, 'add-rule').attributes('disabled')).toBeUndefined();
+  });
+
+  it('生效值還沒回來時新增鈕停用', async () => {
+    const w = mountTab(true, 'pending');
+    await flushPromises();
+    expect(id(w, 'rule-row-0').exists()).toBe(true);
+    expect(id(w, 'add-rule').attributes('disabled')).toBeDefined();
   });
 });

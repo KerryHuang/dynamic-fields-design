@@ -378,4 +378,34 @@ public class AppFormat7Tests : IDisposable
         ShouldHaveRolledBack();
         _rig.Db(db => db.Set<TaskRule>().Any(r => r.Key == PartnerRule)).Should().BeFalse();
     }
+
+    // ---- 政策 A16（設計上限）在匯入、開啟時的檢查 ----
+
+    [Fact]
+    public async Task Import_OverModuleLimit_400()
+    {
+        foreach (var json in SharedMasterPackages.Masters) await _rig.ImportAsync(json);
+        await SetSystemPolicyAsync("design.maxModulesPerPackage", 1);
+
+        var res = await ImportRawAsync(Crm7());
+        res.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+        (await res.Content.ReadAsStringAsync()).Should().Contain("modules: 最多 1 個");
+
+        await SetSystemPolicyAsync("design.maxModulesPerPackage", null);
+        await _rig.ImportAsync(Crm7());
+    }
+
+    [Fact]
+    public async Task Open_LimitLoweredAfterImport_Rejected()
+    {
+        foreach (var json in SharedMasterPackages.Masters) await _rig.ImportAsync(json);
+        await _rig.ImportAsync(Crm7());
+        await SetSystemPolicyAsync("design.maxFieldsPerModule", 1);
+
+        var res = await _rig.OpenAsync("crmx");
+        var body = await res.Content.ReadAsStringAsync();
+        ((int)res.StatusCode).Should().BeInRange(400, 499, body);
+        body.Should().Contain("欄位最多 1 個");
+        ShouldHaveRolledBack();
+    }
 }

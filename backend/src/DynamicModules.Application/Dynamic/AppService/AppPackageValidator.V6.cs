@@ -13,6 +13,7 @@ namespace DynamicModules.Application.Dynamic.AppService;
 // 要有主檔套件的定義，呼叫端給了 masters 才檢查（目錄層與匯入），開啟時的實際資料由開啟流程再解析一次。
 public static partial class AppPackageValidator
 {
+    // 技術限制，見設計 §10
     public const int MaxMasters = 5, MaxContributions = 20, MaxContributionFields = 50;
     public const string MasterModuleKeyPrefix = "master-";
 
@@ -114,7 +115,6 @@ public static partial class AppPackageValidator
                 if (f is null) { errors.Add($"{at}.fields: 不能有 null"); continue; }
                 var fat = $"{at}.fields[{f.Code}]";
                 CheckText(f.Label, $"{fat}.label", errors);
-                if (f.Options.Count > MaxOptionsPerField) errors.Add($"{fat}: 選項最多 {MaxOptionsPerField} 個");
                 if (f.Options.Any(o => o is null)) errors.Add($"{fat}.options: 不能有 null");
                 foreach (var o in f.Options.Where(o => o is not null)) CheckText(o.Label, $"{fat}.options.{o.Code}", errors);
                 CheckConfigKeys($"{at}.fields", f, p.FormatVersion, errors);

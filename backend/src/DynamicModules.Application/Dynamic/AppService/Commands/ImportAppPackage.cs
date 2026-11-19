@@ -6,10 +6,8 @@ using DynamicModules.Application.Common.Security;
 using DynamicModules.Application.Common.Time;
 using DynamicModules.Application.Dynamic.AppService.Data;
 using DynamicModules.Application.Dynamic.AppService.SharedMasters;
-using DynamicModules.Application.Dynamic.PolicyService;
 using DynamicModules.Application.Dynamic.TemplateService;
 using DynamicModules.Domain.Entities.Dynamic;
-using DynamicModules.Domain.Policies;
 using DynamicModules.Domain.Repositories.Dynamic;
 using DynamicModules.Domain.ValueObjects;
 using MediatR;
@@ -29,7 +27,7 @@ public record ImportAppPackageRequest(byte[] Content) : IRequest<ServiceResult>,
 /// </summary>
 public class ImportAppPackageHandler(
     AppCatalog catalog, AppPackageSource packages, IAppPackageRepository repository, IAppRepository apps,
-    IUnitOfWork uow, ICurrentUser user, IBusinessTime time, MasterMerger merger, AppExporter exporter, IPolicyReader policies, AuditContext audit)
+    IUnitOfWork uow, ICurrentUser user, IBusinessTime time, MasterMerger merger, AppExporter exporter, PackageLimitReader limits, AuditContext audit)
     : IRequestHandler<ImportAppPackageRequest, ServiceResult>
 {
     public async Task<ServiceResult> Handle(ImportAppPackageRequest request, CancellationToken ct)
@@ -46,10 +44,7 @@ public class ImportAppPackageHandler(
         if (validation.Errors.Count > 0) return Invalid(validation.Errors);
         // 驗證過才補稽核目標：缺名稱的本文（例如 v1 的 {"formatVersion":1}）要回 400，不能在這裡遇到 null
         audit.Target(package.Manifest.Id, package.Manifest.Name.Resolve(I18nText.FallbackLocale));
-        var limitErrors = AppPackageValidator.TaskRuleLimitErrors(package,
-            await policies.IntAsync(PolicyCatalog.TaskMaxRulesPerPackage, null, ct), await policies.IntAsync(PolicyCatalog.TaskMaxTasksPerRule, null, ct));
-        if (package.ApprovalFlows.Count > 0)
-            limitErrors = [.. limitErrors, .. AppPackageValidator.ApprovalLimitErrors(package, await AppOpenPlanner.SystemApprovalLimitsAsync(policies, ct))];
+        var limitErrors = await limits.ErrorsAsync(package, ct);
         if (limitErrors.Count > 0) return Invalid(limitErrors);
 
         var id = package.Manifest.Id;
@@ -96,6 +91,7 @@ public class ImportAppPackageHandler(
         var others = masters.Where(m => m.Key != merged.Manifest.Id).ToDictionary(m => m.Key, m => m.Value);
         var validation = AppPackageValidator.Validate(merged, others);
         if (validation.Errors.Count > 0) return Invalid(validation.Errors.Select(e => $"合併後的定義：{e}"));
+        if (await limits.ErrorsAsync(merged, ct) is { Count: > 0 } limitErrors) return Invalid(limitErrors.Select(e => $"合併後的定義：{e}"));
 
         var app = await apps.GetByKeyAsync(merged.Manifest.Id, ct);
         if (app is not null)
