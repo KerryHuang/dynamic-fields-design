@@ -26,7 +26,7 @@ const incident = (o: Partial<IncidentSummary> = {}): IncidentSummary => ({
   lastSeenUtc: '2026-11-19T01:00:00Z', firstVersion: '1.0.0', lastVersion: '1.0.0', regression: false, reopenCount: 0, handler: 'designer', manualResolvable: false, ...o,
 });
 
-interface Opts { overviewFails?: HttpFail; overview?: OpsOverview; pages?: { items: IncidentSummary[]; nextCursor?: string }[]; channel?: Record<string, unknown>; ackFails?: boolean }
+interface Opts { incidentsFail?: HttpFail; overviewFails?: HttpFail; overview?: OpsOverview; pages?: { items: IncidentSummary[]; nextCursor?: string }[]; channel?: Record<string, unknown>; ackFails?: boolean }
 
 async function mountPage(url: string, opts: Opts = {}) {
   window.innerWidth = 1366;
@@ -36,7 +36,7 @@ async function mountPage(url: string, opts: Opts = {}) {
   const pages = opts.pages ?? [{ items: [incident()] }];
   calls = mockHttp((c) => {
     if (c.url === '/system/ops/overview') return opts.overviewFails ?? opts.overview ?? overview();
-    if (c.url === '/system/ops/incidents') return pages[c.params?.cursor ? Number(c.params.cursor) : 0];
+    if (c.url === '/system/ops/incidents') return opts.incidentsFail ?? pages[c.params?.cursor ? Number(c.params.cursor) : 0];
     if (c.url === '/system/ops/incidents/7/acknowledge') return opts.ackFails ? new HttpFail(409, { code: 'incidentStateChanged' }) : incident({ status: 'acknowledged' });
     if (c.url === '/system/ops/channels/smtp') return opts.channel ?? { enabled: false, toAddresses: [], mailLocale: { value: null, factory: 'zh-TW', options: ['zh-TW', 'en-US'] }, consecutiveFailures: 0, editable: true, mailConfigured: true };
     return [];
@@ -59,6 +59,27 @@ const q = (id: string) => document.querySelector(`[data-testid="${id}"]`) as HTM
 describe('OpsPage', () => {
   it('資料庫連不上（503 databaseUnavailable）整頁改成提示、不顯示分頁', async () => {
     const { w } = await mountPage('/system/ops', { overviewFails: new HttpFail(503, { code: 'databaseUnavailable' }) });
+    expect(q('ops-unavailable')?.textContent).toContain('資料庫目前無法連線');
+    expect(q('ops-tabs')).toBeNull();
+    w.unmount();
+  });
+
+  it('審查修正 3：overview 失敗（500）總覽分頁顯示載入失敗，不是空白', async () => {
+    const { w } = await mountPage('/system/ops', { overviewFails: new HttpFail(500, { message: 'boom' }) });
+    expect(q('ops-overview-failed')).not.toBeNull();
+    w.unmount();
+  });
+
+  it('審查修正 3：overview 成功、事件查詢失敗（500）顯示載入失敗，不顯示「沒有符合的事件」', async () => {
+    const { w } = await mountPage('/system/ops?tab=incidents', { incidentsFail: new HttpFail(500, { message: 'boom' }) });
+    expect(q('ops-tabs')).not.toBeNull();
+    expect(q('incident-load-failed')).not.toBeNull();
+    expect(q('incident-table')!.textContent).not.toContain('沒有符合的事件');
+    w.unmount();
+  });
+
+  it('審查修正 3：overview 成功、事件查詢回 503 databaseUnavailable，立即改成整頁提示', async () => {
+    const { w } = await mountPage('/system/ops?tab=incidents', { incidentsFail: new HttpFail(503, { code: 'databaseUnavailable' }) });
     expect(q('ops-unavailable')?.textContent).toContain('資料庫目前無法連線');
     expect(q('ops-tabs')).toBeNull();
     w.unmount();

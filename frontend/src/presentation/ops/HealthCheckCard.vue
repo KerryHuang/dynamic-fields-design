@@ -39,12 +39,13 @@ const range = ref<24 | 168>(24);
 const results = useHealthResults(() => props.check.code, range, () => expanded.value && tab.value === 'trend' && props.check.applicable);
 const points = computed(() => (results.data.value?.items ?? []).map((p) => ({ time: new Date(p.checkedUtc).getTime(), value: p.value ?? null })));
 
-// 設定草稿：數字欄用字串保留使用者正在打的內容，空白＝出廠值
-const draft = ref({ enabled: true, interval: '', warn: '', critical: '' });
+// 設定草稿：數字欄用字串保留使用者正在打的內容，空白＝出廠值。
+// 「啟用」另記是否跟隨出廠值：載入時照 API 的 isFactory；動了開關就是明確值，按「改回出廠值」才跟隨（審查修正 5，§17.15 偏離 9）
+const draft = ref({ enabled: true, enabledFactory: true, interval: '', warn: '', critical: '' });
 const fromSetting = (x?: Setting<number>) => (x && !x.isFactory ? String(x.value) : '');
 function reset() {
   draft.value = {
-    enabled: props.check.enabled.value, interval: fromSetting(props.check.intervalMinutes), warn: fromSetting(props.check.warn),
+    enabled: props.check.enabled.value, enabledFactory: props.check.enabled.isFactory, interval: fromSetting(props.check.intervalMinutes), warn: fromSetting(props.check.warn),
     critical: fromSetting(props.check.critical),
   };
 }
@@ -55,8 +56,8 @@ const errors = ref<Record<string, string[]>>({});
 const update = useUpdateHealthCheck();
 function save() {
   const body: HealthCheckUpdate = { intervalMinutes: num(draft.value.interval) };
-  // 和出廠值相同就送 null（回到出廠），日後出廠值改了跟著變
-  if (props.check.canDisable) body.enabled = draft.value.enabled === props.check.enabled.factory ? null : draft.value.enabled;
+  // 跟隨出廠值送 null（日後出廠值改了跟著變），否則送明確值——即使和出廠值相同也保留這個意圖
+  if (props.check.canDisable) body.enabled = draft.value.enabledFactory ? null : draft.value.enabled;
   if (props.check.warn) body.warn = num(draft.value.warn);
   if (props.check.critical) body.critical = num(draft.value.critical);
   errors.value = {};
@@ -70,6 +71,15 @@ function save() {
   });
 }
 const err = (k: string) => (errors.value[k] ?? []).join('；');
+function setEnabled(v: boolean) {
+  draft.value.enabled = v;
+  draft.value.enabledFactory = false;
+}
+function followFactory() {
+  draft.value.enabled = props.check.enabled.factory;
+  draft.value.enabledFactory = true;
+}
+const onOff = (v: boolean) => t(v ? 'ops.health.on' : 'ops.health.off');
 const factoryHint = (x: Setting<number> | undefined, value: string) => {
   if (!x) return '';
   const base = t('ops.health.factoryRange', { factory: fmt(x.factory), min: fmt(x.min ?? 0), max: fmt(x.max ?? 0) });
@@ -119,12 +129,24 @@ const intervalHint = computed(() => {
           v-model="range" dense no-caps unelevated toggle-color="primary" class="q-mb-sm"
           :options="[{ value: 24, label: t('ops.health.last24h') }, { value: 168, label: t('ops.health.last7d') }]"
         />
-        <div v-if="!points.length" class="text-muted">{{ results.isFetching.value ? t('designer.loading') : t('ops.health.noData') }}</div>
+        <div v-if="results.isError.value" class="text-negative" :data-testid="`health-trend-failed-${check.code}`">{{ t('ops.loadFailed') }}</div>
+        <div v-else-if="!points.length" class="text-muted">{{ results.isFetching.value ? t('designer.loading') : t('ops.health.noData') }}</div>
         <HealthTrendChart v-else :points="points" :format="fmt" :label="checkName(t, te, check.code)" />
         <div v-if="results.data.value?.truncated" class="text-caption text-muted">{{ t('ops.health.truncated') }}</div>
       </div>
       <div v-else class="q-pa-sm column no-wrap q-gutter-y-sm">
-        <q-toggle v-if="check.canDisable" v-model="draft.enabled" :label="t('ops.health.enabled')" :data-testid="`health-enabled-${check.code}`" />
+        <div v-if="check.canDisable" class="row items-center q-gutter-x-sm">
+          <q-toggle
+            :model-value="draft.enabled" :label="t('ops.health.enabled')" :data-testid="`health-enabled-${check.code}`" @update:model-value="setEnabled"
+          />
+          <span class="text-caption text-muted" :data-testid="`health-enabled-source-${check.code}`">
+            {{ t(draft.enabledFactory ? 'ops.health.enabledFactory' : 'ops.health.enabledCustom', { state: onOff(check.enabled.factory) }) }}
+          </span>
+          <q-btn
+            v-if="!draft.enabledFactory" flat dense no-caps color="primary" :label="t('ops.health.followFactory')"
+            :data-testid="`health-follow-factory-${check.code}`" @click="followFactory"
+          />
+        </div>
         <q-input
           v-model="draft.interval" type="number" dense outlined :label="t('ops.health.interval')" :placeholder="String(check.intervalMinutes.factory)"
           :hint="intervalHint" :error="!!err('intervalMinutes')" :error-message="err('intervalMinutes')" :data-testid="`health-interval-${check.code}`"

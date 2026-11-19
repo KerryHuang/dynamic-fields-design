@@ -5,7 +5,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { createI18n } from 'vue-i18n';
 import type { HealthCheckConfig } from 'src/domain/ops/ops-types';
 import zhTW from 'src/i18n/zh-TW.json';
-import { bodyOf, mockHttp, type Call } from 'src/test-utils/mock-http';
+import { bodyOf, HttpFail, mockHttp, type Call } from 'src/test-utils/mock-http';
 import HealthCheckCard from './HealthCheckCard.vue';
 
 vi.stubGlobal('ResizeObserver', class { observe() {} unobserve() {} disconnect() {} });
@@ -22,8 +22,8 @@ const check = (o: Partial<HealthCheckConfig> = {}): HealthCheckConfig => ({
   ...o,
 });
 
-async function make(c: HealthCheckConfig) {
-  calls = mockHttp((call) => (call.method === 'put' ? c : { items: [] }));
+async function make(c: HealthCheckConfig, resultsFail?: HttpFail) {
+  calls = mockHttp((call) => (call.method === 'put' ? c : resultsFail ?? { items: [] }));
   const i18n = createI18n({ legacy: false, locale: 'zh-TW', messages: { 'zh-TW': zhTW } });
   w = mount(HealthCheckCard, {
     attachTo: document.body,
@@ -65,6 +65,49 @@ describe('HealthCheckCard', () => {
     q('health-save-storage.diskFree')!.click();
     await flushPromises();
     expect(bodyOf(calls.find((c) => c.method === 'put'))).toMatchObject({ warn: 2000 });
+  });
+
+  it('審查修正 3：趨勢查詢失敗顯示載入失敗，不當成「沒有資料」', async () => {
+    await make(check(), new HttpFail(500, { message: 'boom' }));
+    (q('health-expand-storage.diskFree')!.querySelector('.q-item') as HTMLElement).click();
+    await flushPromises();
+    expect(q('health-trend-failed-storage.diskFree')).not.toBeNull();
+    expect(q('health-expand-storage.diskFree')!.textContent).not.toContain('這段期間沒有資料');
+  });
+
+  it('審查修正 5：明確設成和出廠相同的「啟用」，只改間隔時照樣送 true（不清成跟隨出廠）', async () => {
+    await make(check({ enabled: { value: true, factory: true, isFactory: false } }));
+    await openSettings();
+    const iv = q('health-interval-storage.diskFree')!;
+    const el = (iv.tagName === 'INPUT' ? iv : iv.querySelector('input')) as HTMLInputElement;
+    el.value = '10';
+    el.dispatchEvent(new Event('input'));
+    await flushPromises();
+    q('health-save-storage.diskFree')!.click();
+    await flushPromises();
+    expect(bodyOf(calls.find((c) => c.method === 'put'))).toMatchObject({ intervalMinutes: 10, enabled: true });
+    expect(q('health-enabled-source-storage.diskFree')!.textContent).toContain('自訂');
+  });
+
+  it('審查修正 5：切換開關後送明確值；按「改回出廠值」才送 null', async () => {
+    await make(check());
+    await openSettings();
+    expect(q('health-enabled-source-storage.diskFree')!.textContent).toContain('跟隨出廠值');
+    expect(q('health-follow-factory-storage.diskFree')).toBeNull();
+    q('health-enabled-storage.diskFree')!.click();
+    await flushPromises();
+    q('health-enabled-storage.diskFree')!.click();
+    await flushPromises();
+    q('health-save-storage.diskFree')!.click();
+    await flushPromises();
+    expect(bodyOf(calls.filter((c) => c.method === 'put').at(-1))).toMatchObject({ enabled: true });
+
+    q('health-follow-factory-storage.diskFree')!.click();
+    await flushPromises();
+    expect(q('health-enabled-source-storage.diskFree')!.textContent).toContain('跟隨出廠值');
+    q('health-save-storage.diskFree')!.click();
+    await flushPromises();
+    expect(bodyOf(calls.filter((c) => c.method === 'put').at(-1))).toMatchObject({ enabled: null });
   });
 
   it('Demo 站的磁碟檢查顯示「不適用（Demo 站）」，沒有立即檢查與設定', async () => {

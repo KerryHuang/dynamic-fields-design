@@ -104,9 +104,11 @@ const actionsOf = (i: IncidentSummary) => [
       </div>
     </div>
 
+    <q-banner v-if="query.isError.value" dense class="bg-negative-soft q-mb-sm" data-testid="incident-load-failed">{{ t('ops.loadFailed') }}</q-banner>
     <q-table
       flat bordered row-key="id" :rows="rows" :columns="columns" :visible-columns="visibleColumns" :loading="query.isFetching.value"
-      :rows-per-page-options="[0]" hide-pagination :no-data-label="t('ops.incidents.empty')" :grid="$q.screen.lt.sm" data-testid="incident-table"
+      :rows-per-page-options="[0]" hide-pagination :no-data-label="query.isError.value ? t('ops.loadFailed') : t('ops.incidents.empty')"
+      :grid="$q.screen.lt.sm" data-testid="incident-table"
     >
       <template #body="{ row, cols }">
         <q-tr class="row-clickable" tabindex="0" :data-testid="`incident-row-${row.id}`" @click="emit('openIncident', row.id)" @keydown.enter.self.prevent="emit('openIncident', row.id)">
