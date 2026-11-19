@@ -71,6 +71,8 @@ public class AuthorizationWriteScannerSelfTests
         { "migration 的 Sql 串接變數", 1, "Sql 要是不含插值的字串常值" },
         { "migration 的 Sql 串接常值拆開表名", 1, "Sql 寫 Dynamic_FieldPermission" },
         { "migration 直接加 SqlOperation", 1, "SqlOperation" },
+        { "migration 的 DeleteData 表名用 \\u 跳脫", 1, "反斜線跳脫" },
+        { "migration 的 Sql 用 \\u、\\x 跳脫", 2, "反斜線跳脫" },
         { "另加：未登記的開許可位置", 1, "未登記的開許可位置" },
         { "另加：src 使用測試許可", 1, "不得使用測試許可" },
         { "另加：型別參數不具體的 Set<T>()", 1, "Set<T> 的型別參數不是具體" },
@@ -284,6 +286,31 @@ public class AuthorizationWriteScannerSelfTests
                     protected override void Up(MigrationBuilder migrationBuilder)
                     {
                         migrationBuilder.Operations.Add(new SqlOperation { Sql = Names.Wipe });
+                    }
+                }
+                """"),
+        ],
+        "migration 的 DeleteData 表名用 \\u 跳脫" =>
+        [
+            Cs("DynamicModules.Persistence/Migrations/20261120000000_DropRows.cs", """"
+                public partial class DropRows : Migration
+                {
+                    protected override void Up(MigrationBuilder migrationBuilder)
+                    {
+                        migrationBuilder.DeleteData(table: "Dynamic_\u0046ieldPermission", keyColumn: "FieldId", keyValue: 1L);
+                    }
+                }
+                """"),
+        ],
+        "migration 的 Sql 用 \\u、\\x 跳脫" =>
+        [
+            Cs("DynamicModules.Persistence/Migrations/20261120000000_DropRows.cs", """"
+                public partial class DropRows : Migration
+                {
+                    protected override void Up(MigrationBuilder migrationBuilder)
+                    {
+                        migrationBuilder.Sql("DELETE FROM \"Dynamic_\u0046ieldPermission\"");
+                        migrationBuilder.Sql("DELETE FROM \"Dynamic_" + "\x46ieldGrant\"");
                     }
                 }
                 """"),
