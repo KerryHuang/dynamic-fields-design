@@ -6,7 +6,7 @@ import { formatTime, incidentTitle, labelOr, SEVERITY_ICON, statusLook } from 's
 import type { OpsOverview, ScheduledJobInfo } from 'src/domain/ops/ops-types';
 
 // 總覽（維運設計 §17.3 第 1 項）：狀態卡一列、需要處理清單（伺服器給的前 10 件）、排程器表
-const props = defineProps<{ overview: OpsOverview | undefined; loading: boolean }>();
+const props = defineProps<{ overview: OpsOverview | undefined; loading: boolean; failed?: boolean }>();
 const emit = defineEmits<{ openIncident: [id: number] }>();
 const { t, te } = useI18n();
 
@@ -52,7 +52,8 @@ const jobColumns = computed<QTableColumn<ScheduledJobInfo>[]>(() => [
 </script>
 
 <template>
-  <div v-if="!overview" class="text-muted">{{ loading ? t('designer.loading') : '' }}</div>
+  <div v-if="!overview && failed" class="text-negative" data-testid="ops-overview-failed">{{ t('ops.loadFailed') }}</div>
+  <div v-else-if="!overview" class="text-muted">{{ loading ? t('designer.loading') : '' }}</div>
   <div v-else>
     <div class="row q-col-gutter-sm q-mb-md" data-testid="ops-cards">
       <div v-for="c in cards" :key="c.key" class="col-12 col-sm-6 col-md-4 col-xl-2">
