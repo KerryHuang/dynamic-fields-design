@@ -35,15 +35,26 @@ function openIncident(id: number | null) {
 const err = computed(() => overview.error.value as ApiError | null);
 const forbidden = computed(() => isForbidden(err.value));
 const dbDown = (e: unknown) => (e as ApiError | null)?.status === 503 && (e as ApiError).code === 'databaseUnavailable';
-// 分頁裡的查詢（事件、健康檢查、趨勢、通道）先遇到 503 也立刻整頁提示，不等下一次總覽輪詢；
-// 總覽之後再成功一次（資料時間晚於那次失敗）才解除（審查修正 3）
-const subDownAt = ref(0);
+// 分頁裡的查詢（事件、健康檢查、趨勢、通道）先遇到 503 也立刻整頁提示，不等下一次總覽輪詢（審查修正 3）。
+// 解除條件是「失敗之後才開始」的總覽請求成功；用事件序號比先後，不用時間戳（同一毫秒、或初次載入時總覽先發後到都會誤判）
+let seq = 0;
+let overviewFetchSeq = 0;
+let subDownSeq = 0;
+const subDown = ref(false);
 const stop = useQueryClient().getQueryCache().subscribe((ev) => {
-  if (ev.type === 'updated' && ev.action.type === 'error' && ev.query.queryKey[0] !== 'ops-overview' && dbDown(ev.action.error)) subDownAt.value = Date.now();
+  if (ev.type !== 'updated') return;
+  seq += 1;
+  const isOverview = ev.query.queryKey[0] === 'ops-overview';
+  if (isOverview && ev.action.type === 'fetch') overviewFetchSeq = seq;
+  else if (isOverview && ev.action.type === 'success' && overviewFetchSeq > subDownSeq) subDown.value = false;
+  else if (!isOverview && ev.action.type === 'error' && dbDown(ev.action.error)) {
+    subDown.value = true;
+    subDownSeq = seq;
+  }
 });
 onBeforeUnmount(stop);
 /** 資料庫連不上：所有需登入的 API 都回 503，整頁改成提示（§17.2.9）。 */
-const unavailable = computed(() => dbDown(err.value) || subDownAt.value > overview.dataUpdatedAt.value);
+const unavailable = computed(() => dbDown(err.value) || subDown.value);
 </script>
 
 <template>

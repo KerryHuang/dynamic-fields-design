@@ -2679,4 +2679,6 @@ O2 在 pg0 之後，合併前兩種資料庫都要驗（使用者裁決 §3 第 
 - 修正 3：監控頁查詢失敗被當成空資料、子查詢的 503 要等總覽輪詢 → 事件清單、趨勢、總覽失敗時顯示「載入失敗」；任何分頁查詢遇到 503 `databaseUnavailable` 立刻整頁提示，總覽之後再成功一次才解除。測試：`OpsPage.vitest.spec.ts` 的「審查修正 3」三例、`HealthCheckCard.vitest.spec.ts`「趨勢查詢失敗顯示載入失敗」。
 - 修正 4：稽核日期範圍以本地 0 點加固定 24 小時算日末，夏令時間切換日漏查或多查一小時 → 改成本地日曆的隔天 0 點減 1 ms（`ops-format` 的 `localDayStartUtc`、`localDayEndUtc`）。測試：`ops-format.vitest.spec.ts` 的 DST 前進、退回與無 DST 三例（切 `process.env.TZ`）。
 - 修正 5：健康檢查「啟用」只改間隔也可能把明確 override 清成 null → 偏離 9 改寫。測試：`HealthCheckCard.vitest.spec.ts` 的「審查修正 5」兩例。
+- 短核對修正 1：MutationCache 保存 mutationFn，閉包仍連到密碼欄，失敗後離頁要等 GC → 頁面 `onBeforeUnmount` 清空密碼與清除旗標，之後讀密碼的函式一律回空（留著的 mutation 再執行也不帶密碼、不送清除）；失敗時密碼留在當前輸入欄供重送。測試：`MailSettingsPage.vitest.spec.ts` 的「短核對修正 1」兩例。
+- 短核對修正 2：子查詢 503 的整頁提示原本以毫秒時間戳和 `dataUpdatedAt` 比先後，同一毫秒時不出現 → 改成故障旗標加查詢快取的事件序號：子查詢 503 立旗標，只有「失敗之後才開始」的總覽請求成功才解除。測試：`OpsPage.vitest.spec.ts`「同一毫秒時整頁提示照樣出現」（固定 `Date.now`）、「在總覽下一次讀取成功後解除」。
 - 建議（成本低，一併做）：稽核詳細補 MCP 權杖、參數雜湊、確認結果與確認 id（`AuditPage.vitest.spec.ts`「MCP 呼叫的詳細」）；任務規則分頁的唯讀者可展開暫停資訊、不能恢復，§17.3 寫清楚並補點擊與通知連結的測試（`TaskRulesTab.vitest.spec.ts`）；偏離 3、4 補契約說明。

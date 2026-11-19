@@ -13,6 +13,7 @@ import { bodyOf, HttpFail, mockHttp, type Call } from 'src/test-utils/mock-http'
 import OpsPage from './OpsPage.vue';
 
 let calls: Call[];
+let qc: QueryClient;
 vi.stubGlobal('ResizeObserver', class { observe() {} unobserve() {} disconnect() {} });
 
 const overview = (o: Partial<OpsOverview> = {}): OpsOverview => ({
@@ -43,11 +44,12 @@ async function mountPage(url: string, opts: Opts = {}) {
   });
   const router = createRouter({ history: createMemoryHistory(), routes: [{ path: '/system/ops', component: OpsPage }, { path: '/:p(.*)*', component: { render: () => null } }] });
   await router.push(url);
+  qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   const i18n = createI18n({ legacy: false, locale: 'zh-TW', messages: { 'zh-TW': zhTW } });
   const Host = { render: () => h(quasar.QLayout, null, () => h(quasar.QPageContainer, null, () => h(OpsPage))) };
   const w = mount(Host, {
     attachTo: document.body,
-    global: { plugins: [[quasar.Quasar, { components: quasar, directives: quasar, plugins: { Notify: quasar.Notify } }], pinia, router, i18n, [VueQueryPlugin, { queryClient: new QueryClient({ defaultOptions: { queries: { retry: false } } }) }]] },
+    global: { plugins: [[quasar.Quasar, { components: quasar, directives: quasar, plugins: { Notify: quasar.Notify } }], pinia, router, i18n, [VueQueryPlugin, { queryClient: qc }]] },
   });
   window.dispatchEvent(new Event('resize'));
   await new Promise((r) => setTimeout(r, 150));
@@ -82,6 +84,30 @@ describe('OpsPage', () => {
     const { w } = await mountPage('/system/ops?tab=incidents', { incidentsFail: new HttpFail(503, { code: 'databaseUnavailable' }) });
     expect(q('ops-unavailable')?.textContent).toContain('資料庫目前無法連線');
     expect(q('ops-tabs')).toBeNull();
+    w.unmount();
+  });
+
+  it('審查修正 3：總覽成功與子查詢 503 落在同一毫秒時，整頁提示照樣出現', async () => {
+    const now = vi.spyOn(Date, 'now').mockReturnValue(Date.UTC(2026, 10, 19, 3, 0, 0));
+    try {
+      const { w } = await mountPage('/system/ops?tab=incidents', { incidentsFail: new HttpFail(503, { code: 'databaseUnavailable' }) });
+      expect(q('ops-unavailable')).not.toBeNull();
+      w.unmount();
+    } finally {
+      now.mockRestore();
+    }
+  });
+
+  it('審查修正 3：子查詢 503 觸發的整頁提示，在總覽下一次讀取成功後解除', async () => {
+    const opts: Opts = { incidentsFail: new HttpFail(503, { code: 'databaseUnavailable' }) };
+    const { w } = await mountPage('/system/ops?tab=incidents', opts);
+    expect(q('ops-unavailable')).not.toBeNull();
+    opts.incidentsFail = undefined; // 資料庫恢復
+    await qc.refetchQueries({ queryKey: ['ops-overview'] });
+    await flushPromises();
+    expect(q('ops-unavailable')).toBeNull();
+    expect(q('ops-tabs')).not.toBeNull();
+    expect(q('incident-row-7')).not.toBeNull();
     w.unmount();
   });
 

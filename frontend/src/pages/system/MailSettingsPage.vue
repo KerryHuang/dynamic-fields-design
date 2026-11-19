@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { useQuasar } from 'quasar';
-import { computed, ref, watch } from 'vue';
+import { computed, onBeforeUnmount, ref, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { useMailSettings, useSaveMailSettings, useTestMailSettings } from 'src/application/dynamic/queries/ops-queries';
 import ForbiddenNotice from 'src/components/framework/ForbiddenNotice.vue';
@@ -48,11 +48,19 @@ function body(): Omit<MailSettingsInput, 'password'> {
   };
 }
 
-/** 密碼另外併進請求（不進共用快取）：留空不送鍵、按了清除送 ""、有填送新值。 */
+/** 密碼另外併進請求（不進共用快取）：留空不送鍵、按了清除送 ""、有填送新值。離頁後一律不帶（MutationCache 留著 mutationFn 與這個閉包）。 */
+let disposed = false;
 function secret(): Pick<MailSettingsInput, 'password'> {
+  if (disposed) return {};
   if (password.value) return { password: password.value };
   return clearPassword.value ? { password: '' } : {};
 }
+
+onBeforeUnmount(() => {
+  disposed = true;
+  password.value = '';
+  clearPassword.value = false;
+});
 
 const errors = ref<Record<string, string[]>>({});
 const err = (k: string) => (errors.value[k] ?? []).join('；');
