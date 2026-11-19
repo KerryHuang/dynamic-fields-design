@@ -21,5 +21,12 @@ public static class TestPermits
         AuthorizationWriteScope.RunAsync(AuthorizationPermit.ForTests(),
             () => AuthorizationSaveChangesInterceptor.HasPendingGuardChanges(db), () => db.SaveChangesAsync(ct));
 
-    public static int SaveForTests(this DbContext db) => SaveForTestsAsync(db).GetAwaiter().GetResult();
+    /// <summary>
+    /// 同步版：body 用同步的 SaveChanges，RunAsync 同步完成，GetResult 不會真的等待。
+    /// 不能改成等 SaveChangesAsync：xUnit 的同步內容只有 CPU 數條執行緒，在上面同步等非同步工作，CPU 少時（CI 2 核）會死鎖。
+    /// </summary>
+    public static int SaveForTests(this DbContext db) =>
+        AuthorizationWriteScope.RunAsync(AuthorizationPermit.ForTests(),
+            () => AuthorizationSaveChangesInterceptor.HasPendingGuardChanges(db), () => Task.FromResult(db.SaveChanges()))
+            .GetAwaiter().GetResult();
 }
