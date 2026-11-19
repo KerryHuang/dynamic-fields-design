@@ -120,6 +120,7 @@ public static class DependencyInjection
         services.AddScoped<Dynamic.AppService.AppDependencyChecker>();
         services.AddScoped<Dynamic.AppService.AppOpenPlanner>();
         services.AddScoped<Dynamic.AppService.PackageLimitReader>();
+        services.AddScoped<Dynamic.FieldService.BlockColumns>();
         services.AddScoped<Dynamic.AppService.AppResponseBuilder>();
         services.AddScoped<Dynamic.AppService.AppFlowInstaller>();
         services.AddScoped<Dynamic.AppService.Commands.AppOpener>();

@@ -1,6 +1,7 @@
 using DynamicModules.Application.Common;
 using DynamicModules.Application.Common.Security;
 using DynamicModules.Application.Common.Time;
+using DynamicModules.Application.Dynamic.FieldService;
 using DynamicModules.Application.Dynamic.ModuleService.Data;
 using DynamicModules.Application.Dynamic.References;
 using DynamicModules.Domain.Entities.Dynamic;
@@ -12,7 +13,8 @@ namespace DynamicModules.Application.Dynamic.ModuleService.Commands.CreateModule
 
 public class CreateModuleHandler(
     IModuleRepository modules, IProgramRepository programs, IUnitOfWork uow,
-    ICurrentUser user, IBusinessTime time, ReferenceProviderRegistry providers) : IRequestHandler<CreateModuleRequest, ServiceResult>
+    ICurrentUser user, IBusinessTime time, ReferenceProviderRegistry providers, BlockColumns blockColumns)
+    : IRequestHandler<CreateModuleRequest, ServiceResult>
 {
     public async Task<ServiceResult> Handle(CreateModuleRequest request, CancellationToken ct)
     {
@@ -41,7 +43,8 @@ public class CreateModuleHandler(
         {
             LabelI18n = Text("基本資料", "General"),
             Sequence = 1,
-            Columns = Block.DefaultColumns
+            // 模組還沒有 Id，也不可能已有覆寫：取全系統值
+            Columns = await blockColumns.ForNewBlockAsync(null, ct)
         };
         block.StampCreated(user.UserId, now);
         var module = new Module

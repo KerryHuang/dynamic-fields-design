@@ -4,6 +4,7 @@ using DynamicModules.Application.Dynamic.ModuleService.Data;
 using DynamicModules.Application.Dynamic.TemplateService.Data;
 using DynamicModules.Domain.Entities.Dynamic;
 using DynamicModules.Domain.Modules;
+using DynamicModules.Domain.Policies;
 using DynamicModules.Domain.ValueObjects;
 using static DynamicModules.Application.Dynamic.TemplateService.TemplateGraph;
 
@@ -91,7 +92,9 @@ public static partial class TemplateValidator
             if (!Code().IsMatch(b.Code ?? "")) errors.Add($"{mc}: 區塊代號 {b.Code} 格式錯誤");
             else if (!blockCodes.Add(b.Code!)) errors.Add($"{mc}: 區塊代號重複 {b.Code}");
             if (!HasZhTw(b.Label)) errors.Add($"{mc}: 區塊 {b.Code} 的名稱必須有繁體中文");
-            if (b.Columns is < 1 or > Block.MaxColumns) errors.Add($"{mc}: 區塊 {b.Code} 的每列欄數必須是 1 到 {Block.MaxColumns}");
+            // 技術範圍（null 合法：開啟時用新區塊的欄數）；生效的上限在開啟時夾
+            if (b.Columns is { } cols && (cols < 1 || cols > PolicyCatalog.FormMaxColumns.Max))
+                errors.Add($"{mc}: 區塊 {b.Code} 的每列欄數必須是 1 到 {PolicyCatalog.FormMaxColumns.Max}");
 
             foreach (var f in b.Fields)
             {

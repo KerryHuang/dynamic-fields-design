@@ -16,6 +16,8 @@ namespace DynamicModules.Application.Dynamic.FieldService.Data;
 public static class FieldRules
 {
     public const string MaxLengthError = "長度上限只適用文字欄位，文字欄位最多 4000";
+    /// <summary>區塊每列欄數超過政策 form.maxColumns 的生效值。</summary>
+    public static string TooManyColumns(int max) => $"每列欄數最多 {max}";
     public const string FilterError = "此欄位型別不支援篩選";
     public const string SortError = "此欄位型別不支援排序";
     public const string ComputedError = "系統計算欄位不能設定必填、預設值、唯讀或長度";

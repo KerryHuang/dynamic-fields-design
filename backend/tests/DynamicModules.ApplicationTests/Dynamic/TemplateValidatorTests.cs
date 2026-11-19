@@ -101,12 +101,14 @@ public class TemplateValidatorTests
         TemplateCatalog.Load(TemplateCatalog.DefaultDirectory).BuiltIns.Select(t => t.Key)
             .Should().Equal("mold-care", "order", "quality", "repair");
 
+    /// <summary>缺漏時為 null（開啟時用新區塊的欄數，政策 form.defaultColumns），驗證不報錯。</summary>
     [Fact]
-    public void BlockColumns_MissingMeansFour()
+    public void BlockColumns_MissingIsNull_Valid()
     {
         var (package, error) = TemplateJson.Parse(Base().ToJsonString());
         error.Should().BeNull();
-        package!.Modules[0].Blocks[0].Columns.Should().Be(4);
+        package!.Modules[0].Blocks[0].Columns.Should().BeNull();
+        Validate(Base()).Should().BeEmpty();
     }
 
     [Fact]
