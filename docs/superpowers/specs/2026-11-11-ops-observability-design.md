@@ -1454,7 +1454,7 @@ O2 做六件事：
 |---|---|---|
 | 唯讀 `IsReadOnly` | `SQLITE_READONLY` 8 | `25006`（read_only_sql_transaction） |
 | 空間滿 `IsStorageFull` | `SQLITE_FULL` 13 | `53100`（disk_full） |
-| 連不上 `IsUnavailable` | `SQLITE_CANTOPEN` 14、`SQLITE_IOERR` 10 | 類別 `08`（connection exception）、`57P01`–`57P03`（伺服器關閉中或還沒能接受連線）；不帶 SQLSTATE 的 `NpgsqlException`（socket 斷線、連不到主機），但連線池耗盡已歸忙碌（pg0 §5.7），不重複算 |
+| 連不上 `IsUnavailable` | `SQLITE_CANTOPEN` 14、`SQLITE_IOERR` 10 | 類別 `08`（connection exception）、`57P01`–`57P03`（伺服器關閉中或還沒能接受連線）；不帶 SQLSTATE 的 `NpgsqlException`（socket 斷線、連不到主機），但連線池耗盡已歸忙碌（pg0 §5.7），不重複算；主機名稱解析失敗由連線邊界包成 `DatabaseUnavailableException`（§17.12） |
 
 - 一般請求遇到這三類：新增 `DatabaseUnwritableExceptionHandler`（排在 `DatabaseBusyExceptionHandler` 之後、`UnhandledExceptionHandler` 之前），回 503 加 `Retry-After: 60`；唯讀與空間滿的代碼是 `databaseUnwritable`、訊息四語「資料庫目前無法寫入，請聯絡系統管理員」，連不上是 `databaseUnavailable`、訊息「資料庫目前無法連線，請聯絡系統管理員」（O2-U8）；記 Warning、不算 500、不開產品缺陷事件（同一個原因已由 `database.writable` 開了一件）。`SessionMiddleware` 讀帳號時丟的同類例外也走這個處理器。
 - 這段期間（唯讀或空間滿）：
@@ -1812,7 +1812,8 @@ IncidentDetail extends IncidentSummary {
              rawMessage?: string; rawStack?: string; browser?: string; locale?: string;
              auditLogId?: number }[];   // security 的樣本只有行為者與稽核列
   instances?: HealthCheckState['instances'];   // health 來源
-  history: AuditSummary[];           // 這件事件的確認與結案
+  history: AuditSummary[];           // 這件事件的確認與結案，新的在前，最多 100 筆
+  historyTruncated: boolean;         // 超過 100 筆（完整的到稽核頁查；§17.12 審查修正）
 }
 // POST .../acknowledge  { expectedStatus: 'open' }              → IncidentSummary
 // POST .../resolve      { expectedStatus: 'open'|'acknowledged'; note?: string /* ≤500，進稽核摘要 */ } → IncidentSummary
@@ -2407,7 +2408,7 @@ O2 在 pg0 之後，合併前兩種資料庫都要驗（使用者裁決 §3 第 
 
 - SQLite 唯讀重現（`Pooling=False`、WAL、資料庫檔 `chmod 444`）：新連線寫入一律錯誤碼 8（擴充碼 8），`SaveChanges` 包成 `DbUpdateException`；讀照常成功。例外：資料庫檔唯讀、`-wal`／`-shm` 不存在、所在目錄也唯讀（555）時，連 SELECT 都丟 8（擴充碼 1544 `SQLITE_READONLY_DIRECTORY`）。chmod 之前就開著的連線仍寫得進去，所以開連線池時改權限重現不了；`Mode=ReadOnly` 的連線寫入同樣是 8。結論：§17.2.9「唯讀時監控頁讀得到」成立，只有上述目錄也唯讀的組合例外（已在 §17.2.9 加主控文字）。
 - PostgreSQL `ALTER DATABASE … SET default_transaction_read_only = on`：已在池裡的連線不受影響；`NpgsqlConnection.ClearAllPools()` 後新連線寫入得到 `25006`。`ExecuteUpdate` 直接丟 `PostgresException`，`SaveChanges` 是 `DbUpdateException` 包著它。還原要連到 `postgres` 資料庫下 `ALTER DATABASE … RESET`（或 SET 與 ALTER 分兩個命令），再清一次池。
-- 真斷線的例外形狀（PostgreSQL）：拒絕連線是 `NpgsqlException`（無 SQLSTATE）內層 `SocketException`，經 EF 執行策略再包一層 `InvalidOperationException`（"transient"）；`docker stop` 與 `pg_terminate_backend` 是 `57P01`；`docker kill` 是 `NpgsqlException` 內層 `EndOfStreamException`（`IOException` 的子類）；**主機名稱解析失敗時 Npgsql 不包裝、直接丟裸的 `SocketException`（`HostNotFound`）**——原本的 `IsUnavailable` 抓不到，已補（只認 `HostNotFound`、`TryAgain`、`NoData`，其他 socket 錯誤不歸資料庫）。密碼錯 `28P01`、資料庫不存在 `3D000` 不歸連不上（是設定錯，照未處理例外開缺陷事件）。
+- 真斷線的例外形狀（PostgreSQL）：拒絕連線是 `NpgsqlException`（無 SQLSTATE）內層 `SocketException`，經 EF 執行策略再包一層 `InvalidOperationException`（"transient"）；`docker stop` 與 `pg_terminate_backend` 是 `57P01`；`docker kill` 是 `NpgsqlException` 內層 `EndOfStreamException`（`IOException` 的子類）；**主機名稱解析失敗時 Npgsql 不包裝、直接丟裸的 `SocketException`（`HostNotFound`）**——原本的 `IsUnavailable` 抓不到，已補：由 PostgreSQL 連線邊界（EF 連線攔截器）包成 `DatabaseUnavailableException` 再歸連不上，只認 `HostNotFound`、`TryAgain`、`NoData`；分類器不接受裸 `SocketException`（審查修正 1）。密碼錯 `28P01`、資料庫不存在 `3D000` 不歸連不上（是設定錯，照未處理例外開缺陷事件）。
 - 真的 SQLite 失敗：資料庫檔或目錄不存在是 14；連線開著時目錄被刪是 10（擴充碼 1802）。都在 `IsUnavailable` 內。
 - `DriveInfo(目錄)`（macOS）：回報目錄所在的那顆磁碟（以 `hdiutil` 掛一個磁碟映像、目錄放在裡面，數字與 `df` 一致）；路徑必須存在，否則丟 `DriveNotFoundException`（`DriveInfoDiskSpace` 對不存在的目錄回 null、該目錄不列入）。Linux loop device 與 Docker overlay 沒有實測（⚠️ 未驗證）。
 - 提交後丟例外的注入（`DbTransactionInterceptor.TransactionCommitted(Async)` 拋例外）：兩個 provider 都讓呼叫端收到原例外、資料已提交；之後 Dispose 與重用 DbContext 都正常。C14 用這個寫法。
@@ -2420,17 +2421,17 @@ O2 在 pg0 之後，合併前兩種資料庫都要驗（使用者裁決 §3 第 
 - **偏離 4：事件的 `Code`**：未處理例外是例外型別短名（`InvalidOperationException`），前端錯誤是 `kind:name`（`vue:TypeError`），健康檢查是檢查代碼，安全是 `admin.changed`；§17.4 只寫了「錯誤碼」。
 - **偏離 5：系統管理員異動的標題參數只有 `change`（`granted`／`revoked`）**，沒有次數與帳號：次數看事件的 `OccurrenceCount`，誰給了誰看樣本連到的稽核列（§17.2.2「不存在事件列上」）。
 - **偏離 6：處理者標示**（`handler`）：客戶設定 `designer`、基礎設施 `it`（Cloud 版別 `vendor`）、安全 `admin`、產品缺陷 `contactVendor`（O2 還沒有回報管道）。
-- **偏離 7：事件詳細的狀態歷程**取稽核中目標是這件事件（`incident`）的列，最多 100 筆，沒有另存歷程表。
+- **偏離 7：事件詳細的狀態歷程**取稽核中目標是這件事件（`incident`）的列，最多 100 筆（超過時 `historyTruncated` 為真），沒有另存歷程表。
 - **偏離 8：PUT 健康檢查**以 JSON 是否有該鍵區分「不變」與「回出廠值（null）」；型別不對回 400。門檻先後用套用後的生效值判斷（只改一邊也會檢查另一邊的出廠值）。
 - **偏離 9：事件清單的 `status`** 可用逗號給多個（`open,acknowledged`）。
 - **偏離 10：`ops.upkeep` 的順序**是自動結案 → 嚴重事件重複提醒 → 稽核、健康紀錄、樣本、已結事件清理；每輪重複提醒最多處理一批（5000 件）。清理摘要的鍵是 `auditLog`、`healthResult`、`incidentSample`、`incident`，o2a 的 `{"deleted":{"auditLog":n}}` 不變。
-- **偏離 11：看門狗與收件匣共用部署設定 `Ops:Watchdog:Enabled`**（預設 true）；測試主機關掉，測試直接呼叫 `OpsWatchdog.TickAsync`、`IncidentInboxDrain.FlushAsync`。看門狗每 60 秒一輪，收件匣每 5 秒 flush、關機時最後 flush 一次（技術限制）。
+- **偏離 11：部署設定 `Ops:Watchdog:Enabled`**（預設 true）只停看門狗，收件匣的 flush 不受影響（審查修正 3）；測試主機關掉看門狗、並拿掉收件匣的 hosted service（`TestApp`），測試直接呼叫 `OpsWatchdog.TickAsync`、`IncidentInboxDrain.FlushAsync`。看門狗每 60 秒一輪，收件匣每 5 秒 flush、關機時最後 flush 一次（技術限制）。
 - **偏離 12：客戶設定類事件的收件人**在 o2d 前用 `ops.alertRecipients`（`ops.configIssueRecipients` 與 `ruleEditor` 隨 o2d）；總覽的告警通道區塊在 o2c 前一律「未設定」。
 - o2c 的部分沒有做：C01、C09 的直送與佇列狀態、C13 整條、B08 的寄送佇列列、B09 的信件主旨與內文。對應測試只驗站內通知與事件那一半。
 
 **已知限制**
 
-- ⚠️ 兩個實例的彙總交易並行、且較晚檢查時間的那筆先提交時（C10 的「A 異常、B 正常同時寫入」），較早那筆提交後目前投影不會被更新（投影只往後推），事件仍正確開啟；投影要等下一筆結果才追上（最多一個檢查間隔）。C10 對這一步只驗事件狀態。
+- ⚠️ 兩個實例的彙總交易並行、且較晚檢查時間的那筆先提交時（C10 的「A 異常、B 正常同時寫入」），較早那筆提交後目前投影不會被更新（投影只往後推），事件仍正確開啟；投影要等下一筆結果才追上（後續檢查正常執行且寫入成功時，最多落後一個檢查間隔；資料庫寫不進去或檢查停掉時會更久）。C10 對這一步只驗事件狀態。
 - `PRAGMA quick_check` 在大資料庫的耗時沒有實測（Demo 資料量下 C08 的完整性檢查在測試內完成，沒有個別計時）。
 
 **驗證（本機）**
@@ -2439,3 +2440,15 @@ O2 在 pg0 之後，合併前兩種資料庫都要驗（使用者裁決 §3 第 
 - WebAPITests（`Ops` 命名空間全部＋`AdminUsersApiTests`、`EndpointRoutesTests`、`ConcurrencyExceptionTests`、`SecurityTests`、`HealthTests`）：SQLite 197 過 1 略過（23 秒）、PostgreSQL 198 過（25 秒）。
 - ApplicationTests（稽核、`DatabaseErrors`、政策、訊息、架構、DI、通知）：SQLite 276 過（1 分 30 秒）、PostgreSQL 276 過（2 分 3 秒）；DomainTests 1446 過。
 - 前端：`locales`、`policy-i18n`、`policy-types` 29 過，`no-hardcoded-colors` 22 過，`vue-tsc` 與 `quasar build` 過。
+
+**審查修正**（2026-11-19，codex 跨家族審查後；每條先寫會失敗的測試看它紅，再修到綠）
+
+- 修正 1：裸 `SocketException`（`HostNotFound`）沿整條內層例外都被當成資料庫連不上，外部服務的 DNS 失敗也回 503、不開缺陷事件。→ 新增 `DatabaseUnavailableException`（Application.Common）與 `PostgresConnectionFailureInterceptor`（EF 開連線失敗且是名稱解析錯誤時包成前者，掛在 `PostgresDatabase.Configure`），分類器改認前者、不再接受裸 `SocketException`。測試：`DatabaseErrorsTests.Postgres_SocketFailureWithoutSqlStateIsUnavailable_PoolExhaustionStaysBusy`（反例）、`Postgres_DatabaseHostNotFound_ThroughEf_IsUnavailable`（真 Npgsql＋EF 連 `.invalid` 主機，拿掉攔截器即紅）、`DatabaseUnwritableTests.NonDatabaseDnsFailure_Is500_OpensDefectIncident`。
+- 修正 2：反序提交時 `LastSeenUtc` 保持較新的值，`LastVersion`、`LastRequestId`、標題參數卻被較舊的訊號蓋掉（更新、升級重開、回歸三條路徑）。→ 三個欄位與 `LastSeenUtc` 用同一個時間條件（`LastSeenUtc > 訊號時間` 就保留原值），次數照加。測試：`IncidentTests.B10_OlderSignalCommittedLater_KeepsLatestVersionRequestIdAndTitle`（雙跑）。
+- 修正 3：`Ops:Watchdog:Enabled=false` 連帶停掉收件匣 flush，500／前端錯誤堆在記憶體直到滿或關機遺失。→ `IncidentInboxFlusher` 不看這個開關；`TestApp` 改為移除它的 hosted service。測試：`IncidentTests.B11_WatchdogDisabled_InboxStillFlushedPeriodicallyAndOnStop`。
+- 修正 4：`DatabaseUnwritableTests` 缺 `Category=Postgres`，CI 的 PostgreSQL job 漏跑 `53100`／Npgsql 分支。→ 補標記，PostgreSQL 實跑 C12 過（503、`Retry-After: 60`、不開缺陷事件）。
+- 修正 5：F01 的「保留未結事件」用 200 天前的 server 事件，upkeep 先把它自動結案，斷言只驗 Id 在 → 假綠。→ 改用健康檢查類事件（不自動結案）並斷言仍為 `open`；已結事件清理照舊驗。測試：`IncidentTests.F01_Upkeep_PurgesResolvedIncidentsSamplesAndHealthResults_KeepsOpen`（先加 `open` 斷言於原 server 事件即紅）。
+- 修正 6：CI run 44467123758 的 C15（PostgreSQL）時間末位差 1 tick：PostgreSQL `timestamp` 只到微秒。產品程式碼中 SQL 內的先後比較兩邊都由 Npgsql 截到微秒，一致；但記憶體與讀回值比較的兩處會誤判同一筆——`OpsMonitorReader` 拿狀態板的檢查時間比投影（寫入成功後仍判成「記憶體較新」，總覽 `fromMemory` 一直為真），`IncidentRecorder` 拿訊號時間比 `LastSeenUtc`／`ResolvedUtc`。→ 新增 `StorageTime.ToMicroseconds`，執行器產生檢查時間、記錄器收到訊號時先截到微秒；C15 直接送觀測值，測試的時間也先截。測試：`HealthCheckTests.C16_SubMicrosecondCheckTime_PersistedResultNotTreatedAsNewerThanProjection`（PostgreSQL 必紅）、C15 雙模式。
+- 建議 1、2：看門狗與立即檢查重疊時較早開始、較晚完成的結果蓋掉狀態板；立即檢查不知道背景正在跑。→ 狀態板依 `CheckedUtc` 只收較新的；執行器記每個檢查的執行中次數，立即檢查（`TryRunNowAsync`）在背景或另一個立即檢查跑同一項時回 `healthCheckBusy`。測試：`HealthCheckTests.C17_OverlappingRuns_RunNowBusy_LaterStartedResultKeptOnBoard`。
+- 建議 3：事件詳細的歷程最多 100 筆沒有截斷提示。→ `IncidentDetail` 加 `historyTruncated`（§17.5 已同步，公開契約新增欄位）。測試：`IncidentTests.B12_IncidentDetail_HistoryOverMax_Truncated`。
+- 建議 4：已知限制的「最多一個間隔」改為限定在後續檢查正常執行且寫入成功時（上方已知限制已改）。
