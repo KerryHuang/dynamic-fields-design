@@ -29,61 +29,68 @@ public class RulePauseMatrixTests
     private static FrozenFieldException Frozen() =>
         new(new Field { Id = 1, Key = "f_1" }, new FieldLock("approval", new DynamicModules.Domain.ValueObjects.I18nText([new("zh-TW", "核准")])));
 
-    /// <summary>列：名稱、例外、回應碼（null＝回應不驗）、是否計數。</summary>
-    public static TheoryData<string, Func<Exception>, HttpStatusCode?, bool> Rows()
+    /// <summary>
+    /// 列：名稱 → 例外、回應碼（null＝回應不驗）、是否計數。Theory 只帶名稱（可序列化），每列在 <c>--list-tests</c> 各自列出；
+    /// 帶 <c>Func</c> 的列不能序列化，清單只列成一筆、執行卻跑全部，CI 分片的計數會對不上（scripts/ci/shard-tests.sh）。
+    /// </summary>
+    private static readonly Dictionary<string, (Func<Exception> Make, HttpStatusCode? Status, bool Counts)> Table = new()
     {
-        var rows = new TheoryData<string, Func<Exception>, HttpStatusCode?, bool>
-        {
-            { "sqlite busy 5", () => Sqlite(5), HttpStatusCode.ServiceUnavailable, false },
-            { "sqlite locked 6", () => Sqlite(6), HttpStatusCode.ServiceUnavailable, false },
-            { "DatabaseBusyException", () => new DatabaseBusyException("排隊逾時"), HttpStatusCode.ServiceUnavailable, false },
-            { "pg 40001", () => Pg("40001"), HttpStatusCode.ServiceUnavailable, false },
-            { "pg 40P01", () => Pg("40P01"), HttpStatusCode.ServiceUnavailable, false },
-            { "pg 55P03", () => Pg("55P03"), HttpStatusCode.ServiceUnavailable, false },
-            { "pg pool exhausted", () => new Npgsql.NpgsqlException("pool", new TimeoutException()), HttpStatusCode.ServiceUnavailable, false },
-            { "sqlite readonly 8", () => Sqlite(8), HttpStatusCode.ServiceUnavailable, false },
-            { "pg 25006", () => Pg("25006"), HttpStatusCode.ServiceUnavailable, false },
-            { "sqlite full 13", () => Sqlite(13), HttpStatusCode.ServiceUnavailable, false },
-            { "pg 53100", () => Pg("53100"), HttpStatusCode.ServiceUnavailable, false },
-            { "sqlite cantopen 14", () => Sqlite(14), HttpStatusCode.ServiceUnavailable, false },
-            { "sqlite ioerr 10", () => Sqlite(10), HttpStatusCode.ServiceUnavailable, false },
-            { "pg 08006", () => Pg("08006"), HttpStatusCode.ServiceUnavailable, false },
-            { "pg 57P01", () => Pg("57P01"), HttpStatusCode.ServiceUnavailable, false },
-            { "pg socket", () => new Npgsql.NpgsqlException("socket", new SocketException()), HttpStatusCode.ServiceUnavailable, false },
-            { "concurrency", () => new DbUpdateConcurrencyException("stale"), HttpStatusCode.Conflict, false },
-            { "frozen field", Frozen, HttpStatusCode.Conflict, false },
-            { "canceled, client aborted", () => new OperationCanceledException(), null, false },
-            { "canceled, not aborted", () => new OperationCanceledException(), HttpStatusCode.InternalServerError, false },
-            { "task canceled, not aborted", () => new TaskCanceledException(), HttpStatusCode.InternalServerError, false },
-            { "sqlite interrupt 9", () => Sqlite(9), HttpStatusCode.InternalServerError, false },
-            { "pg 57014", () => Pg("57014"), HttpStatusCode.InternalServerError, false },
-            { "sqlite unique 19/2067", () => Sqlite(19, 2067), HttpStatusCode.InternalServerError, false },
-            { "sqlite primary key 19/1555", () => Sqlite(19, 1555), HttpStatusCode.InternalServerError, false },
-            { "pg 23505", () => Pg("23505"), HttpStatusCode.InternalServerError, false },
-            // 同內層：資料庫類包在 DbUpdateException 裡，處理器與分類都看得到內層
-            { "wrapped sqlite busy", () => new DbUpdateException("save", Sqlite(5)), HttpStatusCode.ServiceUnavailable, false },
-            { "wrapped pg 25006", () => new DbUpdateException("save", Pg("25006")), HttpStatusCode.ServiceUnavailable, false },
-            { "wrapped pg 08006", () => new DbUpdateException("save", Pg("08006")), HttpStatusCode.ServiceUnavailable, false },
-            { "wrapped pg 57014", () => new InvalidOperationException("outer", Pg("57014")), HttpStatusCode.InternalServerError, false },
-            { "wrapped pg 23505", () => new DbUpdateException("save", Pg("23505")), HttpStatusCode.InternalServerError, false },
-            { "wrapped canceled", () => new InvalidOperationException("outer", new OperationCanceledException()), HttpStatusCode.InternalServerError, false },
-            // 型別類的包在別的例外裡：處理器只看最外層（500），分類沿內層找（不計）——偏離「同內層」，見 §17.14
-            { "wrapped concurrency", () => new InvalidOperationException("outer", new DbUpdateConcurrencyException("stale")),
-                HttpStatusCode.InternalServerError, false },
-            { "InvalidOperationException", () => new InvalidOperationException("boom"), HttpStatusCode.InternalServerError, true },
-            { "NullReferenceException", () => new NullReferenceException(), HttpStatusCode.InternalServerError, true },
-            { "InjectedFaultException", () => new InjectedFaultException(Rule), HttpStatusCode.InternalServerError, true },
-            // 數值溢位：任務規則的路徑沒有轉成 400／409，照 500、計（§17.14）
-            { "pg 22003 overflow", () => Pg("22003"), HttpStatusCode.InternalServerError, true },
-            { "sqlite integer overflow", () => new SqliteException("integer overflow", 1), HttpStatusCode.InternalServerError, true },
-        };
+        ["sqlite busy 5"] = (() => Sqlite(5), HttpStatusCode.ServiceUnavailable, false),
+        ["sqlite locked 6"] = (() => Sqlite(6), HttpStatusCode.ServiceUnavailable, false),
+        ["DatabaseBusyException"] = (() => new DatabaseBusyException("排隊逾時"), HttpStatusCode.ServiceUnavailable, false),
+        ["pg 40001"] = (() => Pg("40001"), HttpStatusCode.ServiceUnavailable, false),
+        ["pg 40P01"] = (() => Pg("40P01"), HttpStatusCode.ServiceUnavailable, false),
+        ["pg 55P03"] = (() => Pg("55P03"), HttpStatusCode.ServiceUnavailable, false),
+        ["pg pool exhausted"] = (() => new Npgsql.NpgsqlException("pool", new TimeoutException()), HttpStatusCode.ServiceUnavailable, false),
+        ["sqlite readonly 8"] = (() => Sqlite(8), HttpStatusCode.ServiceUnavailable, false),
+        ["pg 25006"] = (() => Pg("25006"), HttpStatusCode.ServiceUnavailable, false),
+        ["sqlite full 13"] = (() => Sqlite(13), HttpStatusCode.ServiceUnavailable, false),
+        ["pg 53100"] = (() => Pg("53100"), HttpStatusCode.ServiceUnavailable, false),
+        ["sqlite cantopen 14"] = (() => Sqlite(14), HttpStatusCode.ServiceUnavailable, false),
+        ["sqlite ioerr 10"] = (() => Sqlite(10), HttpStatusCode.ServiceUnavailable, false),
+        ["pg 08006"] = (() => Pg("08006"), HttpStatusCode.ServiceUnavailable, false),
+        ["pg 57P01"] = (() => Pg("57P01"), HttpStatusCode.ServiceUnavailable, false),
+        ["pg socket"] = (() => new Npgsql.NpgsqlException("socket", new SocketException()), HttpStatusCode.ServiceUnavailable, false),
+        ["concurrency"] = (() => new DbUpdateConcurrencyException("stale"), HttpStatusCode.Conflict, false),
+        ["frozen field"] = (() => Frozen(), HttpStatusCode.Conflict, false),
+        ["canceled, client aborted"] = (() => new OperationCanceledException(), null, false),
+        ["canceled, not aborted"] = (() => new OperationCanceledException(), HttpStatusCode.InternalServerError, false),
+        ["task canceled, not aborted"] = (() => new TaskCanceledException(), HttpStatusCode.InternalServerError, false),
+        ["sqlite interrupt 9"] = (() => Sqlite(9), HttpStatusCode.InternalServerError, false),
+        ["pg 57014"] = (() => Pg("57014"), HttpStatusCode.InternalServerError, false),
+        ["sqlite unique 19/2067"] = (() => Sqlite(19, 2067), HttpStatusCode.InternalServerError, false),
+        ["sqlite primary key 19/1555"] = (() => Sqlite(19, 1555), HttpStatusCode.InternalServerError, false),
+        ["pg 23505"] = (() => Pg("23505"), HttpStatusCode.InternalServerError, false),
+        // 同內層：資料庫類包在 DbUpdateException 裡，處理器與分類都看得到內層
+        ["wrapped sqlite busy"] = (() => new DbUpdateException("save", Sqlite(5)), HttpStatusCode.ServiceUnavailable, false),
+        ["wrapped pg 25006"] = (() => new DbUpdateException("save", Pg("25006")), HttpStatusCode.ServiceUnavailable, false),
+        ["wrapped pg 08006"] = (() => new DbUpdateException("save", Pg("08006")), HttpStatusCode.ServiceUnavailable, false),
+        ["wrapped pg 57014"] = (() => new InvalidOperationException("outer", Pg("57014")), HttpStatusCode.InternalServerError, false),
+        ["wrapped pg 23505"] = (() => new DbUpdateException("save", Pg("23505")), HttpStatusCode.InternalServerError, false),
+        ["wrapped canceled"] = (() => new InvalidOperationException("outer", new OperationCanceledException()), HttpStatusCode.InternalServerError, false),
+        // 型別類的包在別的例外裡：處理器只看最外層（500），分類沿內層找（不計）——偏離「同內層」，見 §17.14
+        ["wrapped concurrency"] = (() => new InvalidOperationException("outer", new DbUpdateConcurrencyException("stale")),
+            HttpStatusCode.InternalServerError, false),
+        ["InvalidOperationException"] = (() => new InvalidOperationException("boom"), HttpStatusCode.InternalServerError, true),
+        ["NullReferenceException"] = (() => new NullReferenceException(), HttpStatusCode.InternalServerError, true),
+        ["InjectedFaultException"] = (() => new InjectedFaultException(Rule), HttpStatusCode.InternalServerError, true),
+        // 數值溢位：任務規則的路徑沒有轉成 400／409，照 500、計（§17.14）
+        ["pg 22003 overflow"] = (() => Pg("22003"), HttpStatusCode.InternalServerError, true),
+        ["sqlite integer overflow"] = (() => new SqliteException("integer overflow", 1), HttpStatusCode.InternalServerError, true),
+    };
+
+    public static TheoryData<string> Rows()
+    {
+        var rows = new TheoryData<string>();
+        foreach (var name in Table.Keys) rows.Add(name);
         return rows;
     }
 
     [Theory]
     [MemberData(nameof(Rows))]
-    public async Task E13_Row(string row, Func<Exception> make, HttpStatusCode? status, bool counts)
+    public async Task E13_Row(string row)
     {
+        var (make, status, counts) = Table[row];
         using var rig = new RulePauseRig();
         await rig.BuildAsync();
         var id = await rig.CreateRuleAsync(Rule);
