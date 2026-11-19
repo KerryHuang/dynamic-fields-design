@@ -20,6 +20,9 @@ public interface IDynamicAccessGuard
     /// </summary>
     Task<AccessResult> AuthorizeDetailAsync(Module parent, Module child, PermissionAction action, CancellationToken ct);
 
-    /// <summary>目前使用者在設計器（DYN00000）擁有的動作；使用者不存在回空集合。</summary>
+    /// <summary>目前使用者在設計器（DYN00000）擁有的有效動作；使用者不存在或已停用（含停用的系統管理員）回空集合，有權限設定時含讀取。</summary>
     Task<IReadOnlySet<PermissionAction>> DesignerActionsAsync(CancellationToken ct);
+
+    /// <summary>目前使用者有沒有「權限設定」（SYS00001 的 CanEdit）：不存在、已停用 → false；啟用的系統管理員 → true（權限軸設計 T5）。</summary>
+    Task<bool> IsPermissionAdminAsync(CancellationToken ct);
 }

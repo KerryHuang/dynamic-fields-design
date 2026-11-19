@@ -61,7 +61,7 @@ public class UpdateRecordHandler(
         WorkflowEnforcer.SeedMissingState(module, previous, input, systemKeys);
         // 簽核鎖定中的記錄（寫入前與寫入後都在鎖定狀態）：鎖定的計算欄位保留舊值（設計 §9.3，第一道）
         var (keepComputed, keepDetailRows) = await KeptComputedAsync(module, previous, input, ct);
-        var plan = await details.PrepareAsync(module, record, PermissionAction.Edit, request.Details, ct,
+        var plan = await details.PrepareAsync(module, record, PermissionAction.Edit, request.Details, perms, ct,
             () => Task.FromResult<IReadOnlyDictionary<string, JsonElement?>>(RecordValueProcessor.Process(
                 module, input, previous, userIds, registry, perms, new RuleContext(time.Today, locale.Locale), validRefKeys, systemKeys: systemKeys,
                 keepComputed: keepComputed).values), keepDetailRows);

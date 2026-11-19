@@ -5,7 +5,7 @@ using MediatR;
 
 namespace DynamicModules.Application.Dynamic.AccountService.Commands.SetGroupMembers;
 
-public record SetGroupMembersRequest(long GroupId, List<string> UserIds) : IRequest<ServiceResult>, ITransactionalRequest, ISystemAdminRequest, IAuditedRequest
+public record SetGroupMembersRequest(long GroupId, List<string> UserIds) : IRequest<ServiceResult>, ITransactionalRequest, ISystemAdminRequest, IPermissionAdminRequest, IAuditedRequest
 {
     public AuditAction Audit => AuditAction.For("group.setMembers", AuditTargets.Group, GroupId);
 }

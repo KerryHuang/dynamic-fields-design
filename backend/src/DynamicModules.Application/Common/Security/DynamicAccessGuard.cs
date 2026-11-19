@@ -1,3 +1,4 @@
+using DynamicModules.Domain.Authorization;
 using DynamicModules.Domain.Entities.Dynamic;
 using DynamicModules.Domain.Repositories.Dynamic;
 
@@ -8,8 +9,6 @@ public class DynamicAccessGuard(
     FieldLocks locks)
     : IDynamicAccessGuard
 {
-    public const string DesignerProgramCode = "DYN00000";
-
     /// <summary>事件效果的系統身分：所有動作、不限資料範圍、沒有隱藏或唯讀欄位（設計 §4.2）。</summary>
     private static readonly EffectivePermissions SystemPermissions = new(
         Enum.GetValues<PermissionAction>().ToHashSet(), DataScope.All, null,
@@ -70,10 +69,25 @@ public class DynamicAccessGuard(
         return hidden;
     }
 
+    /// <summary>
+    /// 判斷順序固定為「不存在 → 停用 → 系統管理員 → 授權列」（權限軸設計 T5，fail closed）：停用的系統管理員也是空集合。
+    /// 有權限設定時併入讀取（M1）。
+    /// </summary>
     public async Task<IReadOnlySet<PermissionAction>> DesignerActionsAsync(CancellationToken ct)
     {
-        var inputs = await permissions.LoadProgramInputsAsync(user.UserId, DesignerProgramCode, ct);
-        return inputs is null ? new HashSet<PermissionAction>() : PermissionResolver.ResolveProgram(DesignerProgramCode, inputs);
+        var inputs = await permissions.LoadProgramInputsAsync(user.UserId, SystemProgramCodes.Designer, ct);
+        if (inputs is not { User.IsActive: true }) return new HashSet<PermissionAction>();
+        var actions = PermissionResolver.ResolveProgram(SystemProgramCodes.Designer, inputs).ToHashSet();
+        if (!actions.Contains(PermissionAction.Read) && await IsPermissionAdminAsync(ct)) actions.Add(PermissionAction.Read);
+        return actions;
+    }
+
+    public async Task<bool> IsPermissionAdminAsync(CancellationToken ct)
+    {
+        var inputs = await permissions.LoadProgramInputsAsync(user.UserId, SystemProgramCodes.PermissionAdmin, ct);
+        if (inputs is not { User.IsActive: true }) return false;
+        return inputs.User.IsSystemAdmin
+               || PermissionResolver.ResolveProgram(SystemProgramCodes.PermissionAdmin, inputs).Contains(PermissionAction.Edit);
     }
 
     private static AccessResult Deny() => new(null, ServiceResult.Forbidden());

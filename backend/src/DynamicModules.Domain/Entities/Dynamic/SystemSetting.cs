@@ -11,6 +11,8 @@ public class SystemSetting
     /// 由回填與版本列一起寫入；整理好資料後刪掉這一列並重跑回填（刪掉版本列）才會解除。
     /// </summary>
     public const string IndexBackfillGaps = "index.backfillGaps";
+    /// <summary>升級帶入權限設定（權限軸設計 §6.3）已做過的時間（UTC，ISO 8601）；有這一列就不再帶入，刪掉才會照當時的設計器修改權重算。</summary>
+    public const string PermissionAxesImportedOn = "permissionAxes.importedOn";
     public const string ThemeDefaultMode = "theme.defaultMode";
     public const string ThemeDefaultStyle = "theme.defaultStyle";
 

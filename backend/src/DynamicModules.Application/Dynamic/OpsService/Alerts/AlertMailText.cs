@@ -24,7 +24,8 @@ public static class AlertMailText
         TitleServer = nameof(TitleServer), TitleClient = nameof(TitleClient), TitleRouteSuffix = nameof(TitleRouteSuffix),
         TitleAdminGranted = nameof(TitleAdminGranted), TitleAdminRevoked = nameof(TitleAdminRevoked), TitleHealth = nameof(TitleHealth),
         TitleChannel = nameof(TitleChannel), TitleChannelCode = nameof(TitleChannelCode),
-        TitleConfig = nameof(TitleConfig), TitleRulePaused = nameof(TitleRulePaused);
+        TitleConfig = nameof(TitleConfig), TitleRulePaused = nameof(TitleRulePaused),
+        TitlePrivilegeGranted = nameof(TitlePrivilegeGranted), TitlePrivilegeRevoked = nameof(TitlePrivilegeRevoked);
 
     private static readonly Dictionary<string, (string Zh, string En, string Th, string Vi)> Table = new()
     {
@@ -70,6 +71,10 @@ public static class AlertMailText
             "Thay đổi quyền quản trị hệ thống: cấp quyền"),
         [TitleAdminRevoked] = ("系統管理員權限異動：拿掉", "System administrator rights changed: revoked", "สิทธิ์ผู้ดูแลระบบเปลี่ยน: ถอนสิทธิ์",
             "Thay đổi quyền quản trị hệ thống: thu hồi quyền"),
+        [TitlePrivilegeGranted] = ("有人取得設計器或權限設定權限", "Someone gained designer or permission settings rights",
+            "มีผู้ได้รับสิทธิ์ตัวออกแบบหรือการตั้งค่าสิทธิ์", "Có người được cấp quyền trình thiết kế hoặc cài đặt quyền"),
+        [TitlePrivilegeRevoked] = ("有人的設計器或權限設定權限被收回", "Someone's designer or permission settings rights were revoked",
+            "มีผู้ถูกถอนสิทธิ์ตัวออกแบบหรือการตั้งค่าสิทธิ์", "Quyền trình thiết kế hoặc cài đặt quyền của một người đã bị thu hồi"),
         [TitleHealth] = ("健康檢查「{0}」{1}", "Health check \"{0}\": {1}", "การตรวจสุขภาพ \"{0}\": {1}", "Kiểm tra sức khỏe \"{0}\": {1}"),
         [TitleChannel] = ("告警信寄不出去（{0}）", "Alert emails cannot be sent ({0})", "ส่งอีเมลแจ้งเตือนไม่ได้ ({0})", "Không gửi được email cảnh báo ({0})"),
         [TitleChannelCode] = ("，伺服器回應 {0}", ", server replied {0}", ", เซิร์ฟเวอร์ตอบ {0}", ", máy chủ trả lời {0}"),

@@ -1,4 +1,5 @@
 using System.Text.Json;
+using DynamicModules.Domain.Authorization;
 using DynamicModules.Domain.Data;
 using DynamicModules.Domain.Entities.Dynamic;
 using DynamicModules.Domain.Repositories.Dynamic;
@@ -118,6 +119,7 @@ public class DeletionRepository(DynamicDbContext db) : IDeletionRepository
 
     public async Task PurgeModuleAsync(Module module, CancellationToken ct)
     {
+        AuthorizationWriteScope.Demand(AuthorizationBatchEntry.PurgeModule, moduleIds: [module.Id]);
         var recordIds = db.Set<Record>().Where(r => r.ModuleId == module.Id).Select(r => r.Id);
         // 任務對模組的外鍵是 Restrict，留言、參與者、附件的 Cascade 不靠 SQLite 外鍵設定：依序明確刪除（檔案由 ModuleRemover 刪）
         var taskIds = db.Set<TaskItem>().Where(t => t.ModuleId == module.Id).Select(t => t.Id);
@@ -158,10 +160,31 @@ public class DeletionRepository(DynamicDbContext db) : IDeletionRepository
     {
         var fieldIds = fields.Select(f => f.Id).ToList();
         var optionIds = fields.SelectMany(f => f.Options).Select(o => o.Id).ToList();
+        AuthorizationWriteScope.Demand(AuthorizationBatchEntry.PurgeFields, fieldIds: fieldIds);
         await db.Set<RecordHistory>().Where(h => h.FieldId != null && fieldIds.Contains(h.FieldId.Value)).ExecuteDeleteAsync(ct);
         await db.Set<RecordIndex>().Where(i => fieldIds.Contains(i.FieldId)).ExecuteDeleteAsync(ct);
         await db.Set<FieldPermission>().Where(p => fieldIds.Contains(p.FieldId)).ExecuteDeleteAsync(ct);
         await db.Set<FieldOptionScope>().Where(s => optionIds.Contains(s.OptionId)).ExecuteDeleteAsync(ct);
         await db.Set<NumberSequence>().Where(n => fieldIds.Contains(n.FieldId)).ExecuteDeleteAsync(ct);
+    }
+
+    public async Task RunCleanupAsync(CleanupTarget target, Func<Task> body, CancellationToken ct)
+    {
+        List<long> moduleIds = target.ModuleId is { } m ? [m] : [];
+        var programCodes = await db.Set<Module>().AsNoTracking().Where(x => moduleIds.Contains(x.Id)).Select(x => x.ProgramCode).ToListAsync(ct);
+        var targetFields = target.FieldIds.ToList();
+        var fieldIds = await db.Set<Field>().AsNoTracking()
+            .Where(f => moduleIds.Contains(f.ModuleId) || targetFields.Contains(f.Id)).Select(f => f.Id).ToListAsync(ct);
+        var optionIds = await db.Set<FieldOption>().AsNoTracking().Where(o => fieldIds.Contains(o.FieldId)).Select(o => o.Id).ToListAsync(ct);
+
+        await AuthorizationWriteScope.RunAsync(
+            AuthorizationPermit.Cleanup(moduleIds, programCodes, fieldIds.Concat(targetFields), optionIds),
+            () => AuthorizationSaveChangesInterceptor.HasPendingGuardChanges(db), body);
+
+        // 刪掉的授權列一定隨上層一起消失：只刪 FieldPermission、不刪欄位，會讓原本被隱藏的群組看得到
+        if (moduleIds.Count > 0 && await db.Set<Module>().AsNoTracking().AnyAsync(x => moduleIds.Contains(x.Id), ct))
+            throw new InvalidOperationException("清除許可結束時目標模組仍存在，已回滾");
+        if (targetFields.Count > 0 && await db.Set<Field>().AsNoTracking().AnyAsync(f => targetFields.Contains(f.Id), ct))
+            throw new InvalidOperationException("清除許可結束時目標欄位仍存在，已回滾");
     }
 }

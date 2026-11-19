@@ -7,6 +7,10 @@ public class DynamicDbContext(DbContextOptions<DynamicDbContext> options) : DbCo
 {
     private IDisposable? _heldUntilSaveEnds;
 
+    /// <summary>授權寫入邊界（權限軸設計 §7.4）掛在每一個 context 上，不靠各 provider 或測試記得註冊。</summary>
+    protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder) =>
+        optionsBuilder.AddInterceptors(AuthorizationSaveChangesInterceptor.Instance);
+
     protected override void OnModelCreating(ModelBuilder modelBuilder) =>
         modelBuilder.ApplyConfigurationsFromAssembly(typeof(DynamicDbContext).Assembly);
 

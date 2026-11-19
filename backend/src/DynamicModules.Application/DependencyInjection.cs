@@ -17,6 +17,8 @@ public static class DependencyInjection
             cfg.RegisterServicesFromAssembly(assembly);
             cfg.AddOpenBehavior(typeof(DesignerAccessBehavior<,>));
             cfg.AddOpenBehavior(typeof(SystemAdminBehavior<,>));
+            // 在系統管理員之後：同時宣告兩者的請求先被「不是系統管理員」擋下，訊息才不會誤導成去要權限設定（T4）
+            cfg.AddOpenBehavior(typeof(PermissionAdminBehavior<,>));
             cfg.AddOpenBehavior(typeof(MasterDesignerBehavior<,>));
             cfg.AddOpenBehavior(typeof(ValidationBehavior<,>));
             cfg.AddOpenBehavior(typeof(RuleFailureBehavior<,>));
@@ -49,6 +51,8 @@ public static class DependencyInjection
         services.TryAddSingleton(Dynamic.PolicyService.PolicyEnvironmentDefaults.Empty);
         services.AddScoped<FieldLocks>();
         services.AddScoped<IDynamicAccessGuard, DynamicAccessGuard>();
+        services.AddScoped<PermissionAdminGate>();
+        services.AddScoped<Dynamic.AccountService.SystemPrivileges.SystemPrivilegeHolders>();
         services.AddScoped<Dynamic.SchemaService.Queries.GetModuleSchema.ModuleSchemaBuilder>();
         services.AddScoped<Dynamic.References.ReferenceValidator>();
         services.AddScoped<Dynamic.References.ReferenceResolver>();

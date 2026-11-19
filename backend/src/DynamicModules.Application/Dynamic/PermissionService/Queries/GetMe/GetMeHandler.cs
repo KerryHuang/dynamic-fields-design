@@ -26,6 +26,8 @@ public class GetMeHandler(
             actions.Contains(PermissionAction.Read), actions.Contains(PermissionAction.Add),
             actions.Contains(PermissionAction.Edit), actions.Contains(PermissionAction.Delete));
         return ServiceResult.Success(new MeResponse(user.UserId, user.DisplayName, user.IsSystemAdmin, user.MustChangePassword, groups, designer, user.IsDemoAccount,
-            ThemeResolver.ForUser(user, await ThemeResolver.ReadDefaultsAsync(settings, ct), auth.DemoLoginEnabled)));
+            ThemeResolver.ForUser(user, await ThemeResolver.ReadDefaultsAsync(settings, ct), auth.DemoLoginEnabled),
+            // 有效結果（權限軸設計 §8）：管理員自動有、群組與個人合併、停用為 false
+            await guard.IsPermissionAdminAsync(ct)));
     }
 }

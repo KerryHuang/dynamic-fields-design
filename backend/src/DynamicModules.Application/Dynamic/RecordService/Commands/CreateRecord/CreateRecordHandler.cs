@@ -39,7 +39,7 @@ public class CreateRecordHandler(
         }
 
         // 決策 4：先處理明細列並算出彙總，表頭的公式與規則才看得到新值；全部錯誤收齊後才取號、寫入
-        var plan = await details.PrepareAsync(module, null, PermissionAction.Add, request.Details, ct,
+        var plan = await details.PrepareAsync(module, null, PermissionAction.Add, request.Details, perms, ct,
             async () => (await creator.ValidateAsync(module, perms, request.Values, null, ct, request.SystemKeys)).Values);
         if (plan.Failure is { } failure) return failure;
         // 決策 7：明細彙總已依這次的列算好；其他彙總（一般參照）新記錄還沒有子記錄，由 RecordCreator 取空集合的值

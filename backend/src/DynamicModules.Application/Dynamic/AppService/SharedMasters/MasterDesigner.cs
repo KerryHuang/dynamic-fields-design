@@ -14,7 +14,8 @@ namespace DynamicModules.Application.Dynamic.AppService.SharedMasters;
 /// 貢獻者已關閉時不能在它的區塊新增欄位或選項（§7 生命週期鎖）。不是主檔模組時什麼都不做。
 /// </summary>
 public sealed class MasterDesigner(
-    IAppRepository apps, ISharedMasterRepository shared, IModuleRepository modules, MasterLifecycle lifecycle, IUnitOfWork uow)
+    IAppRepository apps, ISharedMasterRepository shared, IModuleRepository modules, MasterLifecycle lifecycle, IUnitOfWork uow,
+    Domain.Authorization.IAuthorizationChangeProbe authorizationChanges)
 {
     public const string OrphanBlockMessage = "這個區塊屬於已刪除的應用程式，不能新增或拖入欄位；請改加在主檔的基本區塊";
     public const string OrphanFieldMessage = "這個欄位屬於已刪除的應用程式，不能加選項或移到別的區塊；請改加在主檔的基本區塊";
@@ -126,9 +127,16 @@ public sealed class MasterDesigner(
             apps.AddBindings([new AppField { AppId = appId, Name = name, FieldId = field.Id }], [], []);
             field.VisibilityRestricted = true;
             var groups = (await shared.ListGrantsAsync(module.Id, ct))
-                .Where(g => g.SourceKind == GrantSource.App && g.AppId == appId).Select(g => g.GroupId).Distinct();
-            foreach (var group in groups)
-                shared.AddFieldGrant(new FieldGrant { SourceKind = GrantSource.App, FieldId = field.Id, GroupId = group, AppId = appId });
+                .Where(g => g.SourceKind == GrantSource.App && g.AppId == appId).Select(g => g.GroupId).Distinct().ToList();
+            // 受保護的衍生寫入（權限軸設計 §7.4 Derived）：只准替這個欄位、這個貢獻者、已有權限來源的群組寫 App 來源可見列
+            await Domain.Authorization.AuthorizationWriteScope.RunAsync(
+                Domain.Authorization.AuthorizationPermit.Derived(field.Id, appId, groups), authorizationChanges.HasPendingGuardChanges,
+                async () =>
+                {
+                    foreach (var group in groups)
+                        shared.AddFieldGrant(new FieldGrant { SourceKind = GrantSource.App, FieldId = field.Id, GroupId = group, AppId = appId });
+                    await uow.CommitAsync(ct);
+                });
         }
         else
         {

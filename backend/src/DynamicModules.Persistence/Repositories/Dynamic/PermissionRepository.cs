@@ -1,3 +1,4 @@
+using DynamicModules.Domain.Authorization;
 using DynamicModules.Domain.Data;
 using DynamicModules.Domain.Entities.Dynamic;
 using DynamicModules.Domain.Repositories.Dynamic;
@@ -66,6 +67,10 @@ public class PermissionRepository(DynamicDbContext db) : IPermissionRepository
 
     public async Task ReplaceModuleRowsAsync(Module module, ModulePermissionRows rows, CancellationToken ct)
     {
+        // 授權寫入邊界的批次入口（權限軸設計 §7.4）：系統代碼一律拒絕、不看許可；其餘要 Authorized（或 Seed、Test）
+        if (SystemProgramCodes.All.Contains(module.ProgramCode))
+            throw new InvalidOperationException($"系統權限代碼 {module.ProgramCode} 不能經模組權限存檔寫入");
+        AuthorizationWriteScope.Demand(AuthorizationBatchEntry.ReplaceModuleRows);
         var fieldIds = db.Set<Field>().Where(f => f.ModuleId == module.Id).Select(f => f.Id);
         var optionIds = db.Set<FieldOption>().Where(o => fieldIds.Contains(o.FieldId)).Select(o => o.Id);
         await db.Set<GroupProgramPrivilege>().Where(p => p.ProgramCode == module.ProgramCode).ExecuteDeleteAsync(ct);
@@ -85,6 +90,43 @@ public class PermissionRepository(DynamicDbContext db) : IPermissionRepository
         db.Set<ModuleDataScope>().AddRange(rows.Scopes);
         db.Set<FieldPermission>().AddRange(rows.FieldPermissions);
         db.Set<FieldOptionScope>().AddRange(rows.OptionScopes);
+    }
+
+    public async Task<SystemPrivilegeRows> LoadSystemPrivilegeRowsAsync(CancellationToken ct)
+    {
+        var codes = SystemProgramCodes.All.ToList();
+        return new SystemPrivilegeRows(
+            await db.Set<GroupProgramPrivilege>().AsNoTracking().Where(p => codes.Contains(p.ProgramCode)).ToListAsync(ct),
+            await db.Set<UserProgramPrivilege>().AsNoTracking().Where(p => codes.Contains(p.ProgramCode)).ToListAsync(ct));
+    }
+
+    public async Task ReplaceSystemRowsAsync(long? groupId, string? userId, IReadOnlyList<ProgramPrivilege> desired, CancellationToken ct)
+    {
+        if (desired.Any(d => !SystemProgramCodes.All.Contains(d.ProgramCode)))
+            throw new InvalidOperationException("系統權限存檔只能寫系統代碼");
+        var codes = SystemProgramCodes.All.ToList();
+        List<ProgramPrivilege> existing = groupId is { } g
+            ? [.. await db.Set<GroupProgramPrivilege>().Where(p => p.GroupId == g && codes.Contains(p.ProgramCode)).ToListAsync(ct)]
+            : [.. await db.Set<UserProgramPrivilege>().Where(p => p.UserId == userId && codes.Contains(p.ProgramCode)).ToListAsync(ct)];
+        foreach (var code in codes)
+        {
+            var have = existing.FirstOrDefault(p => p.ProgramCode == code);
+            var want = desired.FirstOrDefault(p => p.ProgramCode == code);
+            if (want is null)
+            {
+                if (have is not null) db.Remove(have);
+                continue;
+            }
+            if (have is null)
+            {
+                have = groupId is { } id
+                    ? new GroupProgramPrivilege { GroupId = id, ProgramCode = code }
+                    : new UserProgramPrivilege { UserId = userId!, ProgramCode = code };
+                db.Add((object)have);
+            }
+            (have.CanRead, have.CanAdd, have.CanEdit, have.CanDelete) = (want.CanRead, want.CanAdd, want.CanEdit, want.CanDelete);
+            (have.CanPrint, have.CanAmt, have.CanApprove) = (false, false, false);
+        }
     }
 
     private async Task<(AppUser? User, List<long> GroupIds, List<GroupProgramPrivilege> Privileges, UserProgramPrivilege? Personal)>

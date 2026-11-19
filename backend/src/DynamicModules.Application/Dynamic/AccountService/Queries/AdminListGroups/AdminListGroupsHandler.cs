@@ -11,7 +11,9 @@ public class AdminListGroupsHandler(IPermissionRepository permissions) : IReques
     {
         var members = (await permissions.ListMembershipsAsync(ct)).GroupBy(m => m.GroupId)
             .ToDictionary(g => g.Key, g => g.Select(m => m.UserId).Order().ToList());
+        var system = (await permissions.LoadSystemPrivilegeRowsAsync(ct)).Groups;
         return ServiceResult.Success((await permissions.ListGroupsAsync(ct))
-            .Select(g => new AdminGroupResponse(g.Id, g.Key, g.NameI18n, members.GetValueOrDefault(g.Id, []))).ToList());
+            .Select(g => new AdminGroupResponse(g.Id, g.Key, g.NameI18n, members.GetValueOrDefault(g.Id, []),
+                Common.Security.SystemPrivilegeRules.Direct(system.Where(r => r.GroupId == g.Id)))).ToList());
     }
 }

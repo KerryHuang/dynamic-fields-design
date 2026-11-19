@@ -1,3 +1,4 @@
+using DynamicModules.Domain.Authorization;
 using DynamicModules.Domain.Data;
 using DynamicModules.Domain.Entities.Dynamic;
 using DynamicModules.Domain.ValueObjects;
@@ -17,13 +18,25 @@ public static class SeedData
             else admin.IsSystemAdmin = true;
         }
 
-        if (!await db.Set<DynamicProgram>().AnyAsync(p => p.ProgramCode == "DYN00000", ct))
+        if (!await db.Set<DynamicProgram>().AnyAsync(p => p.ProgramCode == SystemProgramCodes.Designer, ct))
             db.Set<DynamicProgram>().Add(new DynamicProgram
             {
-                ProgramCode = "DYN00000",
+                ProgramCode = SystemProgramCodes.Designer,
                 NameI18n = new I18nText([KeyValuePair.Create("zh-TW", "動態模組設計")]),
                 Active = true
             });
+        // 權限設定（權限軸設計 §6.1）：系統代碼不看 Active，但狀態錯就是錯，下面的同步排除它；舊版退回時被設成 false，這裡改回
+        var permissionAdmin = await db.Set<DynamicProgram>().FirstOrDefaultAsync(p => p.ProgramCode == SystemProgramCodes.PermissionAdmin, ct);
+        if (permissionAdmin is null)
+            db.Set<DynamicProgram>().Add(new DynamicProgram
+            {
+                ProgramCode = SystemProgramCodes.PermissionAdmin,
+                NameI18n = new I18nText([
+                    KeyValuePair.Create("zh-TW", "權限設定"), KeyValuePair.Create("en-US", "Permission settings"),
+                    KeyValuePair.Create("th", "การตั้งค่าสิทธิ์"), KeyValuePair.Create("vi", "Cài đặt quyền")]),
+                Active = true
+            });
+        else permissionAdmin.Active = true;
 
         await db.SaveChangesAsync(ct);
 
@@ -35,10 +48,15 @@ public static class SeedData
             .ExecuteUpdateAsync(s => s.SetProperty(v => v.OwnerUserId, "admin"), ct);
 
         var modules = await db.Set<Module>().Select(m => new { m.ProgramCode, m.Status }).ToListAsync(ct);
-        var programs = await db.Set<DynamicProgram>().Where(p => p.ProgramCode != "DYN00000").ToListAsync(ct);
+        var systemCodes = SystemProgramCodes.All.ToList();
+        var programs = await db.Set<DynamicProgram>().Where(p => !systemCodes.Contains(p.ProgramCode)).ToListAsync(ct);
         foreach (var program in programs)
             program.Active = modules.Any(m => m.ProgramCode == program.ProgramCode && m.Status is ModuleStatus.Active or ModuleStatus.Closed);
 
         await db.SaveChangesAsync(ct);
+
+        // 升級帶入：既有設計器修改權持有者拿到權限設定（§6.3）；寫入許可只在這裡開（Seed）
+        await AuthorizationWriteScope.RunAsync(AuthorizationPermit.Seed(), () => AuthorizationSaveChangesInterceptor.HasPendingGuardChanges(db),
+            () => PermissionAxesImport.RunAsync(db, ct));
     }
 }

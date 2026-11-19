@@ -108,12 +108,27 @@ public static class MessageText
         SmtpPlaintextAuth = nameof(SmtpPlaintextAuth), SmtpRecipientsCount = nameof(SmtpRecipientsCount), SmtpNotConfigured = nameof(SmtpNotConfigured),
         SmtpTestTooSoon = nameof(SmtpTestTooSoon), SmtpTestFailed = nameof(SmtpTestFailed),
         // 寄信設定（帳號信與告警信共用的 SMTP 連線）
-        MailNotConfigured = nameof(MailNotConfigured);
+        MailNotConfigured = nameof(MailNotConfigured),
+        PermissionAdminRequired = nameof(PermissionAdminRequired),
+        EventHiddenSourceNeedsPermissionAdmin = nameof(EventHiddenSourceNeedsPermissionAdmin),
+        McpPermissionAdminDenied = nameof(McpPermissionAdminDenied);
 
     private static readonly Dictionary<string, (string Zh, string En, string Th, string Vi)> Table = new()
     {
         [Forbidden] = ("沒有權限執行此操作", "You do not have permission to perform this action",
             "คุณไม่มีสิทธิ์ดำเนินการนี้", "Bạn không có quyền thực hiện thao tác này"),
+        [PermissionAdminRequired] = ("修改權限需要「權限設定」權限，請洽系統管理員",
+            "Changing permissions requires the \"Permission settings\" right. Please contact your system administrator",
+            "การแก้ไขสิทธิ์ต้องมีสิทธิ์ \"การตั้งค่าสิทธิ์\" โปรดติดต่อผู้ดูแลระบบ",
+            "Thay đổi quyền cần quyền \"Cài đặt quyền\", vui lòng liên hệ quản trị viên hệ thống"),
+        [EventHiddenSourceNeedsPermissionAdmin] = ("允許複製被隱藏的值需要「權限設定」權限，請洽系統管理員",
+            "Allowing hidden values to be copied requires the \"Permission settings\" right. Please contact your system administrator",
+            "การอนุญาตให้คัดลอกค่าที่ถูกซ่อนต้องมีสิทธิ์ \"การตั้งค่าสิทธิ์\" โปรดติดต่อผู้ดูแลระบบ",
+            "Cho phép sao chép giá trị bị ẩn cần quyền \"Cài đặt quyền\", vui lòng liên hệ quản trị viên hệ thống"),
+        [McpPermissionAdminDenied] = ("AI 連線不能修改權限或帳號，請到系統畫面操作",
+            "AI connections cannot change permissions or accounts. Please use the system screens instead",
+            "การเชื่อมต่อ AI ไม่สามารถแก้ไขสิทธิ์หรือบัญชีได้ โปรดดำเนินการผ่านหน้าจอของระบบ",
+            "Kết nối AI không thể thay đổi quyền hoặc tài khoản, vui lòng thao tác trên màn hình hệ thống"),
         [DatabaseBusy] = ("系統忙碌中，請稍後再試", "The system is busy. Please try again later",
             "ระบบไม่ว่าง โปรดลองอีกครั้งในภายหลัง", "Hệ thống đang bận, vui lòng thử lại sau"),
         [ServerError] = ("系統發生錯誤，請稍後再試", "Something went wrong. Please try again later",

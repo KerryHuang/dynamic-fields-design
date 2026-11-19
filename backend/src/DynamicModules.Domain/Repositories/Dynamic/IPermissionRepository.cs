@@ -23,4 +23,16 @@ public interface IPermissionRepository
 
     /// <summary>刪除該模組的全部權限列再寫入新列；需在交易內呼叫，寫入由 IUnitOfWork 提交。</summary>
     Task ReplaceModuleRowsAsync(Module module, ModulePermissionRows rows, CancellationToken ct);
+
+    /// <summary>全部系統代碼（設計器、權限設定）的群組列與個人列，不追蹤、已具體化（權限軸設計 §8、§9）。</summary>
+    Task<SystemPrivilegeRows> LoadSystemPrivilegeRowsAsync(CancellationToken ct);
+
+    /// <summary>
+    /// 把一個群組（<paramref name="groupId"/>）或一位使用者（<paramref name="userId"/>）的系統代碼列整份換成 <paramref name="desired"/>
+    /// （只含要保留的列；沒列到的系統代碼就刪除）。追蹤式寫入，存檔由呼叫端在寫入許可內做。
+    /// </summary>
+    Task ReplaceSystemRowsAsync(long? groupId, string? userId, IReadOnlyList<ProgramPrivilege> desired, CancellationToken ct);
 }
+
+/// <summary>系統代碼的授權列。</summary>
+public sealed record SystemPrivilegeRows(List<GroupProgramPrivilege> Groups, List<UserProgramPrivilege> Users);

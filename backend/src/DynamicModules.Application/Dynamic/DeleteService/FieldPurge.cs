@@ -11,6 +11,11 @@ internal static class FieldPurge
 {
     public static async Task RemoveAsync(
         Module module, IReadOnlyCollection<long> fieldIds, IReadOnlyCollection<long> blockIds, IDeletionRepository deletion,
+        IUnitOfWork uow, ICurrentUser user, IBusinessTime time, CancellationToken ct) =>
+        await deletion.RunCleanupAsync(CleanupTarget.Fields(fieldIds), () => PurgeAsync(module, fieldIds, blockIds, deletion, uow, user, time, ct), ct);
+
+    private static async Task PurgeAsync(
+        Module module, IReadOnlyCollection<long> fieldIds, IReadOnlyCollection<long> blockIds, IDeletionRepository deletion,
         IUnitOfWork uow, ICurrentUser user, IBusinessTime time, CancellationToken ct)
     {
         var fields = module.Blocks.SelectMany(b => b.Fields).Where(f => fieldIds.Contains(f.Id)).ToList();

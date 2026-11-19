@@ -16,6 +16,9 @@ public sealed class AuditContext
     /// <summary>這次變更授予（true）或拿掉（false）系統管理員；非 null 時開安全事件（維運設計 §17.2.2、O2-U11）。</summary>
     public bool? AdminChanged { get; private set; }
 
+    /// <summary>這次變更讓有人取得（true）或只有收回（false）設計器或權限設定；非 null 時開 privilege.changed（權限軸設計 §9）。</summary>
+    public bool? PrivilegeChanged { get; private set; }
+
     private bool Outermost => Depth <= 1;
 
     /// <summary>補目標：建立後才知道 id 的、或要記顯示名快照的。</summary>
@@ -44,9 +47,16 @@ public sealed class AuditContext
         if (Outermost) AdminChanged = granted;
     }
 
+    /// <summary>handler 比對持有者快照後標記；<see cref="Behaviors.AuditBehavior{TReq,TRes}"/> 寫完稽核列後在同一交易開安全事件。</summary>
+    public void MarkPrivilegeChanged(bool granted)
+    {
+        if (Outermost) PrivilegeChanged = granted;
+    }
+
     internal void Reset()
     {
         AdminChanged = null;
+        PrivilegeChanged = null;
         TargetId = null;
         TargetLabel = null;
         Summary = null;

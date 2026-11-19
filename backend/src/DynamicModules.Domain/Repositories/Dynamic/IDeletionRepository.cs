@@ -42,4 +42,17 @@ public interface IDeletionRepository
     Task PurgeModuleAsync(Module module, CancellationToken ct);
     /// <summary>永久清除欄位的索引、歷程，以及欄位權限、選項範圍與流水號列。</summary>
     Task PurgeFieldsAsync(IReadOnlyCollection<Field> fields, CancellationToken ct);
+
+    /// <summary>
+    /// 在清除許可內執行 <paramref name="body"/>（權限軸設計 §7.4 Cleanup）：只准刪除屬於目標模組（含它的欄位、選項、program 代碼）或目標欄位的授權列，
+    /// body 要包含清除與移除定義的存檔。結束後在同一交易內確認目標已不存在，還在就丟例外、整筆回滾。
+    /// </summary>
+    Task RunCleanupAsync(CleanupTarget target, Func<Task> body, CancellationToken ct);
+}
+
+/// <summary>清除的目標：整個模組，或一組欄位。</summary>
+public sealed record CleanupTarget(long? ModuleId, IReadOnlyCollection<long> FieldIds)
+{
+    public static CleanupTarget Module(long moduleId) => new(moduleId, []);
+    public static CleanupTarget Fields(IReadOnlyCollection<long> fieldIds) => new(null, fieldIds);
 }

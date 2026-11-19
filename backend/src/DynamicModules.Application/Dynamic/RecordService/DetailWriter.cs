@@ -48,10 +48,14 @@ public class DetailWriter(
     /// <param name="parentRecord">null 表示新增表頭（沒有既有列）。</param>
     /// <param name="headerValues">算出表頭這次存檔後的值（ParentDefault 用）；只在新增的列需要時才呼叫，最多一次。</param>
     /// <param name="action">新增表頭用 Add、編輯表頭用 Edit；明細列的權限沿用表頭的這個動作。</param>
+    /// <param name="headerPermissions">
+    /// 呼叫端對<b>表頭</b>的有效權限（新增用 Add、修改用 Edit 那次授權的結果）：帶表頭的值只取呼叫端看得到的表頭欄位，
+    /// 看不到的明細欄位得到空值（權限軸設計 M6）。不能拿迴圈裡的明細權限代替。
+    /// </param>
     /// <param name="keepComputedRows">表頭在簽核鎖定、而且明細列一起鎖（設計 §9.3）：既有列的公式與彙總欄位保留舊值，不隨目前公式重算。</param>
     public async Task<DetailPlan> PrepareAsync(
         Module parent, Record? parentRecord, PermissionAction action,
-        IReadOnlyDictionary<string, List<DetailRowInput>>? details, CancellationToken ct,
+        IReadOnlyDictionary<string, List<DetailRowInput>>? details, EffectivePermissions headerPermissions, CancellationToken ct,
         Func<Task<IReadOnlyDictionary<string, JsonElement?>>>? headerValues = null, bool keepComputedRows = false)
     {
         var plan = new DetailPlan();
@@ -65,7 +69,8 @@ public class DetailWriter(
         async Task<IReadOnlyDictionary<string, JsonElement?>> HeaderOnceAsync()
         {
             if (header is not null) return header;
-            var active = parent.Blocks.SelectMany(b => b.Fields).Where(f => f.Status == FieldStatus.Active).Select(f => f.Key).ToHashSet();
+            var active = parent.Blocks.SelectMany(b => b.Fields).Where(f => f.Status == FieldStatus.Active && headerPermissions.CanSee(f))
+                .Select(f => f.Key).ToHashSet();
             return header = (await headerValues!()).Where(kv => active.Contains(kv.Key)).ToDictionary(kv => kv.Key, kv => kv.Value);
         }
         foreach (var child in children)

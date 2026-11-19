@@ -63,6 +63,10 @@ public sealed class ServiceResult
     /// <summary>403 並說明原因（例如「你以主管身分只能改負責人」）。</summary>
     public static ServiceResult Forbidden(MessageRef message) => new() { IsForbidden = true, MessageSource = message };
 
+    /// <summary>403 並帶機器代碼（例如 <c>permissionAdminRequired</c>，權限軸設計 §10）：回應多一個 <c>code</c>。</summary>
+    public static ServiceResult Forbidden(MessageRef message, string code) =>
+        new() { IsForbidden = true, MessageSource = message, Code = code };
+
     public static ServiceResult Unauthorized(MessageRef? message) => new() { IsUnauthorized = true, MessageSource = message };
 
     public static ServiceResult Invalid(IDictionary<string, string[]> errors) =>

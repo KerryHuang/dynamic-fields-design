@@ -35,8 +35,12 @@ namespace DynamicModules.Application.Dynamic.TemplateService;
 /// </summary>
 public sealed class TemplateInstantiator(
     ISender sender, IModuleRepository modules, IPermissionRepository permissions, IListViewRepository views,
-    IUnitOfWork uow, FieldTypeRegistry registry, ICurrentUser user, IBusinessTime time)
+    IUnitOfWork uow, FieldTypeRegistry registry, ICurrentUser user, IBusinessTime time,
+    Common.Security.PermissionAdminGate permissionAdmin, Common.Audit.AuditContext audit)
 {
+    /// <summary>從範本建立而沒有權限設定時的提示（權限軸設計 M3）；照其他 warnings 寫繁中字面值，四語化不在這段。</summary>
+    internal const string PermissionsSkippedWarning = "你沒有「權限設定」權限，已略過範本的權限建議；請洽權限設定者到權限分頁授權";
+
     private const string ExcludeKey = "excludeFields";
 
     /// <param name="app">應用程式開啟時的額外輸入：群組對應、跨應用程式的模組對應、欄位例外與選項範圍；單模組範本傳 null。</param>
@@ -231,6 +235,35 @@ public sealed class TemplateInstantiator(
         // 10. 權限建議（目標庫沒有的群組略過並警告）。應用程式開啟時群組由 app.GroupIds 解析（代號 → 群組 id），
         //     並一起帶入欄位例外與選項範圍；SaveModulePermissions 是整份取代，所以每個模組只呼叫一次
         var warnings = new List<string>();
+        // 從範本建立（不是開啟套件）而沒有權限設定：整步略過、加一則提示，新模組回到預設沒人有權限（權限軸設計 M3）。
+        // 開啟套件不略過：照常送出，沒有權限設定就 403、整批回滾（fail closed）
+        if (app is null && p.Modules.Any(m => m.Permissions.Count > 0)
+            && await permissionAdmin.CheckAsync(ct) != Common.Security.PermissionAdminCheck.Allowed)
+        {
+            warnings.Add(PermissionsSkippedWarning);
+            audit.Detail("permissionsSkipped", true);
+        }
+        else if ((failed = await ApplyPermissionsAsync(p, app, map, warnings, ct)) is not null) return failed;
+
+        // 11. 套件標「"active": false」的欄位（共用主檔 §4.1）：建好之後停用，跟客戶在設計器停用一樣
+        var inactive = p.Modules.SelectMany(m => m.Blocks.SelectMany(b => kept[m.Code][b.Code])
+                .Where(f => f.Active == false).Select(f => TemplateGraph.Qualify(m.Code, f.Code)))
+            .Concat(contributions.SelectMany(c => c.Fields.Where(f => f.Active == false && !c.ReattachFields.ContainsKey(f.Code))
+                .Select(f => TemplateGraph.Qualify(c.Prefix, f.Code))));
+        foreach (var name in inactive)
+        {
+            var r = await sender.Send(new SetFieldStatusRequest(map.Fields[name], FieldStatus.Inactive), ct);
+            if ((failed = Fail(r, name, $"{name}.")) is not null) return failed;
+        }
+
+        return ServiceResult.Created(new InstantiateTemplateResponse(
+            p.Modules.Select(m => new InstantiatedModule(m.Code, map.Key(m.Code), map.Modules[m.Code].Id)).ToList(), warnings,
+            new TemplateIdMap(map.Fields, map.FieldKeys, map.Options, map.Blocks, map.Modules.ToDictionary(x => x.Key, x => x.Value.Key))));
+    }
+
+    private async Task<ServiceResult?> ApplyPermissionsAsync(
+        TemplatePackage p, AppInstantiation? app, IdMap map, List<string> warnings, CancellationToken ct)
+    {
         var groupIds = app is null
             ? (await permissions.ListGroupsAsync(ct)).ToDictionary(g => g.Key, g => g.Id)
             : app.GroupIds;
@@ -262,23 +295,9 @@ public sealed class TemplateInstantiator(
             if (groups.Count == 0 && fieldAccess.Count == 0 && optionScopes.Count == 0) continue;
             var r = await sender.Send(new SaveModulePermissionsRequest(map.Key(m.Code),
                 new ModulePermissionsDto(groups, [], fieldAccess, optionScopes)), ct);
-            if ((failed = Fail(r, m.Code, $"{m.Code}.")) is not null) return failed;
+            if (Fail(r, m.Code, $"{m.Code}.") is { } failed) return failed;
         }
-
-        // 11. 套件標「"active": false」的欄位（共用主檔 §4.1）：建好之後停用，跟客戶在設計器停用一樣
-        var inactive = p.Modules.SelectMany(m => m.Blocks.SelectMany(b => kept[m.Code][b.Code])
-                .Where(f => f.Active == false).Select(f => TemplateGraph.Qualify(m.Code, f.Code)))
-            .Concat(contributions.SelectMany(c => c.Fields.Where(f => f.Active == false && !c.ReattachFields.ContainsKey(f.Code))
-                .Select(f => TemplateGraph.Qualify(c.Prefix, f.Code))));
-        foreach (var name in inactive)
-        {
-            var r = await sender.Send(new SetFieldStatusRequest(map.Fields[name], FieldStatus.Inactive), ct);
-            if ((failed = Fail(r, name, $"{name}.")) is not null) return failed;
-        }
-
-        return ServiceResult.Created(new InstantiateTemplateResponse(
-            p.Modules.Select(m => new InstantiatedModule(m.Code, map.Key(m.Code), map.Modules[m.Code].Id)).ToList(), warnings,
-            new TemplateIdMap(map.Fields, map.FieldKeys, map.Options, map.Blocks, map.Modules.ToDictionary(x => x.Key, x => x.Value.Key))));
+        return null;
     }
 
     /// <summary>

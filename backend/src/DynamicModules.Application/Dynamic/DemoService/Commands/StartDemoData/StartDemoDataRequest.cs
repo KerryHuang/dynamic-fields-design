@@ -4,8 +4,8 @@ using MediatR;
 
 namespace DynamicModules.Application.Dynamic.DemoService.Commands.StartDemoData;
 
-/// <summary>在背景開始產生 Demo 資料；需要設計器的 Add 與 Edit（Edit 由 handler 另外檢查）。</summary>
-public record StartDemoDataRequest : IRequest<ServiceResult>, IDesignerRequest
+/// <summary>在背景開始產生 Demo 資料；需要設計器的 Add 與 Edit（Edit 由 handler 另外檢查），再加權限設定（權限軸設計 M4，在切到背景之前擋）。</summary>
+public record StartDemoDataRequest : IRequest<ServiceResult>, IDesignerRequest, IPermissionAdminRequest
 {
     public PermissionAction RequiredDesignerAction => PermissionAction.Add;
 }
