@@ -102,7 +102,10 @@ public static class MessageText
         HealthCheckBusy = nameof(HealthCheckBusy), HealthCheckNotApplicable = nameof(HealthCheckNotApplicable),
         HealthCheckOutOfRange = nameof(HealthCheckOutOfRange), HealthCheckThresholdOrder = nameof(HealthCheckThresholdOrder),
         HealthCheckCannotDisable = nameof(HealthCheckCannotDisable), HealthCheckNoThreshold = nameof(HealthCheckNoThreshold),
-        OpsExpectedStatusInvalid = nameof(OpsExpectedStatusInvalid), OpsNoteTooLong = nameof(OpsNoteTooLong);
+        OpsExpectedStatusInvalid = nameof(OpsExpectedStatusInvalid), OpsNoteTooLong = nameof(OpsNoteTooLong),
+        // 告警通道（維運設計 §17.5）
+        SmtpPlaintextAuth = nameof(SmtpPlaintextAuth), SmtpRecipientsCount = nameof(SmtpRecipientsCount), SmtpNotConfigured = nameof(SmtpNotConfigured),
+        SmtpTestTooSoon = nameof(SmtpTestTooSoon), SmtpTestFailed = nameof(SmtpTestFailed);
 
     private static readonly Dictionary<string, (string Zh, string En, string Th, string Vi)> Table = new()
     {
@@ -433,6 +436,18 @@ public static class MessageText
         [HealthCheckNoThreshold] = ("這個檢查沒有這個門檻", "This check has no such threshold", "การตรวจนี้ไม่มีเกณฑ์นี้", "Kiểm tra này không có ngưỡng này"),
         [OpsExpectedStatusInvalid] = ("目前狀態只能是 {0}", "The expected status can only be {0}", "สถานะที่คาดไว้ต้องเป็น {0} เท่านั้น", "Trạng thái dự kiến chỉ có thể là {0}"),
         [OpsNoteTooLong] = ("備註最多 {0} 字", "The note can be at most {0} characters", "หมายเหตุยาวได้ไม่เกิน {0} ตัวอักษร", "Ghi chú tối đa {0} ký tự"),
+        [SmtpPlaintextAuth] = ("加密方式是「無」時不能填帳號或密碼（不准明文傳密碼）", "Sign-in name and password are not allowed when encryption is \"none\" (passwords must not be sent in plain text)",
+            "เมื่อการเข้ารหัสเป็น \"ไม่มี\" จะกรอกชื่อผู้ใช้หรือรหัสผ่านไม่ได้ (ห้ามส่งรหัสผ่านแบบข้อความธรรมดา)",
+            "Khi mã hóa là \"không\" thì không được nhập tài khoản hoặc mật khẩu (không được gửi mật khẩu dạng văn bản thuần)"),
+        [SmtpRecipientsCount] = ("收件信箱要有 {0} 到 {1} 個", "There must be {0} to {1} recipient addresses", "ต้องมีที่อยู่ผู้รับ {0} ถึง {1} รายการ",
+            "Phải có từ {0} đến {1} địa chỉ người nhận"),
+        [SmtpNotConfigured] = ("告警通道還沒設定好（主機、寄件地址或收件信箱沒填，或密碼需要重填）",
+            "The alert channel is not set up yet (host, sender address or recipients are missing, or the password needs to be re-entered)",
+            "ช่องทางแจ้งเตือนยังตั้งค่าไม่ครบ (ไม่ได้กรอกโฮสต์ ที่อยู่ผู้ส่ง หรือที่อยู่ผู้รับ หรือต้องกรอกรหัสผ่านใหม่)",
+            "Kênh cảnh báo chưa được thiết lập xong (thiếu máy chủ, địa chỉ người gửi hoặc người nhận, hoặc cần nhập lại mật khẩu)"),
+        [SmtpTestTooSoon] = ("測試信剛寄過，請 {0} 秒後再試", "A test email was just sent. Try again in {0} seconds",
+            "เพิ่งส่งอีเมลทดสอบไป โปรดลองใหม่ใน {0} วินาที", "Vừa gửi email thử, vui lòng thử lại sau {0} giây"),
+        [SmtpTestFailed] = ("測試信寄不出去", "The test email could not be sent", "ส่งอีเมลทดสอบไม่ได้", "Không gửi được email thử"),
     };
 
     /// <summary>無參數訊息的繁中原文 → 鍵；兩鍵同一句時建表就會丟例外。</summary>

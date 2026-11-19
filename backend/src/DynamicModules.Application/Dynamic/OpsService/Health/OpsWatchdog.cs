@@ -1,4 +1,5 @@
 using DynamicModules.Application.Common;
+using DynamicModules.Application.Dynamic.OpsService.Alerts;
 using DynamicModules.Application.Dynamic.OpsService.Scheduling;
 using DynamicModules.Application.Dynamic.PolicyService;
 using DynamicModules.Domain.Entities.Dynamic;
@@ -14,8 +15,10 @@ namespace DynamicModules.Application.Dynamic.OpsService.Health;
 /// 看門狗（維運設計 §17.2.4、O2-T6）：每個實例各一個，不經排程器租約。每輪跑執行者是看門狗、且到期的檢查，最後補寫待補寫佇列。
 /// 理由：資料庫唯讀或連不上時排程器連租約都搶不到（搶租約本身是 UPDATE），看門狗只依賴「讀」，結果先放記憶體。
 /// 檢查設定讀資料庫，失敗時用上一次讀到的值，從沒讀到過就用出廠值。WebAPI 的 OpsWatchdogHostedService 每 60 秒呼叫一次。
+/// 另有一條寄送迴圈（<see cref="SendDirectAsync"/>，同一個 hosted service 的第二個背景迴圈）：資料庫寫不進時的直送信（§17.2.6），
+/// 寄送卡住不會拖住檢查。
 /// </summary>
-public sealed class OpsWatchdog(HealthCheckEngine engine, IServiceScopeFactory scopes, TimeProvider time, ILogger<OpsWatchdog> logger)
+public sealed class OpsWatchdog(HealthCheckEngine engine, DirectAlertQueue direct, IServiceScopeFactory scopes, TimeProvider time, ILogger<OpsWatchdog> logger)
 {
     /// <summary>輪詢頻率（技術限制，§17.9；每個檢查的間隔另外可調）。</summary>
     public static readonly TimeSpan Tick = TimeSpan.FromSeconds(60);
@@ -41,6 +44,9 @@ public sealed class OpsWatchdog(HealthCheckEngine engine, IServiceScopeFactory s
         await engine.FlushAsync(ct);
     }
 
+    /// <summary>寄送迴圈的一輪：送直送佇列裡到期的信（交易外、單封逾時 30 秒）。</summary>
+    public Task SendDirectAsync(CancellationToken ct) => direct.SendDueAsync(ct);
+
     private async Task<IReadOnlyDictionary<string, HealthCheck>> LoadRowsAsync(CancellationToken ct)
     {
         try
@@ -63,10 +69,10 @@ public sealed class OpsWatchdog(HealthCheckEngine engine, IServiceScopeFactory s
 }
 
 /// <summary>
-/// <c>ops.monitor</c> 排程工作（§17.2.8）：跑執行者是排程、且到期的檢查（多實例時只跑一份）；告警信佇列由 o2c 接在前面。
-/// 不適用於這個資料庫種類的檢查（PostgreSQL 的 WAL 檔大小）不跑。
+/// <c>ops.monitor</c> 排程工作（§17.2.8）：先送告警寄送佇列（§17.2.6），再跑執行者是排程、且到期的檢查（多實例時只跑一份）。
+/// 寄送失敗（租約之外的例外）只記 Warning、本輪記部分失敗，不擋後面的檢查。不適用於這個資料庫種類的檢查（PostgreSQL 的 WAL 檔大小）不跑。
 /// </summary>
-public sealed class OpsMonitorJob(HealthCheckEngine engine) : IScheduledJob
+public sealed class OpsMonitorJob(HealthCheckEngine engine, AlertDispatcher dispatcher, ILogger<OpsMonitorJob> logger) : IScheduledJob
 {
     public string Key => "ops.monitor";
 
@@ -75,11 +81,20 @@ public sealed class OpsMonitorJob(HealthCheckEngine engine) : IScheduledJob
     public async Task<JobOutcome> RunAsync(JobRunContext context, CancellationToken ct)
     {
         var sender = context.Services.GetRequiredService<ISender>();
+        var failed = 0;
+        try
+        {
+            await dispatcher.RunAsync(sender, context.Fence, ct);
+        }
+        catch (Exception e) when (e is not (JobLeaseLostException or OperationCanceledException))
+        {
+            logger.LogWarning(e, "告警寄送佇列這一輪送不完，下一輪再送");
+            failed++;
+        }
         var now = context.Fence().NowUtc;
         await sender.Send(new EnsureHealthChecksRequest(now), ct);
         var rows = (await context.Services.GetRequiredService<IHealthCheckRepository>().ListAsync(ct)).ToDictionary(r => r.Code, StringComparer.Ordinal);
         var fileDb = context.Services.GetRequiredService<IDatabaseHealthProbe>().SupportsFileChecks;
-        var failed = 0;
         foreach (var def in HealthCheckCatalog.All.Where(d => d.Runner == HealthRunner.Scheduler && (fileDb || !d.RequiresFileDatabase)))
         {
             ct.ThrowIfCancellationRequested();
@@ -90,6 +105,6 @@ public sealed class OpsMonitorJob(HealthCheckEngine engine) : IScheduledJob
             if (o.Status == HealthStatus.Error) failed++;
         }
         return new JobOutcome(failed == 0 ? ScheduledJobStatus.Succeeded : ScheduledJobStatus.PartiallyFailed,
-            failed == 0 ? null : $"{failed} 個健康檢查本身失敗");
+            failed == 0 ? null : $"{failed} 項失敗（告警寄送或健康檢查本身）");
     }
 }

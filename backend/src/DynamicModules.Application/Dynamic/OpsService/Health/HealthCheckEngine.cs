@@ -1,6 +1,7 @@
 using System.Collections.Concurrent;
 using System.Diagnostics;
 using DynamicModules.Application.Common.Observability;
+using DynamicModules.Application.Dynamic.OpsService.Alerts;
 using DynamicModules.Domain.Entities.Dynamic;
 using MediatR;
 using Microsoft.Extensions.DependencyInjection;
@@ -13,12 +14,16 @@ public sealed record HealthObservation(
     string Code, string TransitionId, DateTime CheckedUtc, HealthStatus Status, long? Value, string? MessageCode, int DurationMs, string InstanceId);
 
 /// <summary>待補寫佇列的一筆（只在記憶體）。</summary>
-internal sealed class PendingHealthWrite(HealthObservation observation, DateTime? nextDueUtc)
+internal sealed class PendingHealthWrite(HealthObservation observation, DateTime? nextDueUtc, HealthStatus? previous)
 {
     public HealthObservation Observation { get; set; } = observation;
     public DateTime? NextDueUtc { get; set; } = nextDueUtc;
+    /// <summary>本實例上一筆結果的狀態（直送判斷新開或升級用）。</summary>
+    public HealthStatus? Previous { get; } = previous;
     /// <summary>嘗試寫過一次的不再合併（它可能其實已提交，§17.2.4 第 3 步）。</summary>
     public bool Attempted { get; set; }
+    /// <summary>已交給直送佇列判斷過（寫不進資料庫時只判斷一次）。</summary>
+    public bool DirectConsidered { get; set; }
 }
 
 /// <summary>
@@ -26,9 +31,11 @@ internal sealed class PendingHealthWrite(HealthObservation observation, DateTime
 /// 跑一個檢查（最長 60 秒）→ 更新記憶體的狀態板 → 放進待補寫佇列 → 依檢查時間先後逐筆走彙總交易。
 /// 寫不進去或提交結果不明就停在那一筆，下一輪從那一筆接著補（已提交的會被去重略過）。
 /// 佇列同一檢查狀態沒變的連續結果只更新最後一筆，狀態有變才新增；上限 500 筆，滿了丟最舊的。
+/// 寫不進去的結果交給直送佇列（§17.2.6：開啟、升級改由看門狗直接寄信）；補寫時帶「同一檢查後面已經結案」給佇列列判斷過時。
 /// </summary>
 public sealed class HealthCheckEngine(
-    IServiceScopeFactory scopes, IEnumerable<IHealthProbe> probes, TimeProvider time, OpsInstance instance, ILogger<HealthCheckEngine> logger)
+    IServiceScopeFactory scopes, IEnumerable<IHealthProbe> probes, TimeProvider time, OpsInstance instance, DirectAlertQueue direct,
+    ILogger<HealthCheckEngine> logger)
 {
     /// <summary>待補寫佇列上限（技術限制，§17.9）。</summary>
     public const int MaxPending = 500;
@@ -83,8 +90,8 @@ public sealed class HealthCheckEngine(
     {
         try
         {
-            var observation = await ProbeAsync(def, settings, ct);
-            Enqueue(observation, nextDueUtc);
+            var (observation, previous) = await ProbeAsync(def, settings, ct);
+            Enqueue(observation, nextDueUtc, previous);
             await FlushAsync(ct);
             return observation;
         }
@@ -95,7 +102,7 @@ public sealed class HealthCheckEngine(
         }
     }
 
-    private async Task<HealthObservation> ProbeAsync(HealthCheckDefinition def, EffectiveHealthSettings settings, CancellationToken ct)
+    private async Task<(HealthObservation Observation, HealthStatus? Previous)> ProbeAsync(HealthCheckDefinition def, EffectiveHealthSettings settings, CancellationToken ct)
     {
         var started = time.GetTimestamp();
         // 截到資料庫的精度：狀態板與寫入後讀回的投影要能比出「同一筆」（OpsMonitorReader 依此判斷記憶體是否比較新）
@@ -119,12 +126,13 @@ public sealed class HealthCheckEngine(
         var duration = (int)Math.Min(int.MaxValue, time.GetElapsedTime(started).TotalMilliseconds);
         var observation = new HealthObservation(def.Code, Guid.NewGuid().ToString("N"), now, result.Status, result.Value, result.MessageCode,
             duration, instance.InstanceId);
+        var previous = _board.TryGetValue(def.Code, out var before) ? before.Status : (HealthStatus?)null;
         // 重疊的兩次檢查（看門狗與立即檢查）較早開始、較晚完成的不蓋掉較新的結果
         _board.AddOrUpdate(def.Code, observation, (_, current) => current.CheckedUtc > observation.CheckedUtc ? current : observation);
-        return observation;
+        return (observation, previous);
     }
 
-    private void Enqueue(HealthObservation o, DateTime? nextDueUtc)
+    private void Enqueue(HealthObservation o, DateTime? nextDueUtc, HealthStatus? previous)
     {
         lock (_sync)
         {
@@ -136,7 +144,7 @@ public sealed class HealthCheckEngine(
                 last.NextDueUtc = nextDueUtc ?? last.NextDueUtc;
                 return;
             }
-            _pending.Add(new PendingHealthWrite(o, nextDueUtc));
+            _pending.Add(new PendingHealthWrite(o, nextDueUtc, previous));
             if (_pending.Count > MaxPending)
             {
                 _pending.RemoveAt(0);
@@ -144,6 +152,18 @@ public sealed class HealthCheckEngine(
                 OpsMetrics.PendingDropped.Add(1);
             }
         }
+    }
+
+    /// <summary>寫不進資料庫的結果依序交給直送佇列判斷（每筆只判斷一次）。</summary>
+    private void ConsiderDirect()
+    {
+        List<PendingHealthWrite> fresh;
+        lock (_sync)
+        {
+            fresh = [.. _pending.Where(p => !p.DirectConsidered)];
+            foreach (var p in fresh) p.DirectConsidered = true;
+        }
+        foreach (var p in fresh) direct.Consider(p.Observation, p.Previous);
     }
 
     /// <summary>依順序逐筆補寫；回傳這次寫入的筆數。</summary>
@@ -156,23 +176,27 @@ public sealed class HealthCheckEngine(
             while (true)
             {
                 PendingHealthWrite? next;
+                bool superseded;
                 lock (_sync)
                 {
                     next = _pending.FirstOrDefault();
                     if (next is not null) next.Attempted = true;
+                    // 同一檢查在佇列後面已經回到正常：這筆的開啟、升級信已經過時（§17.2.6）
+                    superseded = next is not null && _pending.Skip(1).Any(p => p.Observation.Code == next.Observation.Code && p.Observation.Status == HealthStatus.Ok);
                 }
                 if (next is null) return written;
                 try
                 {
                     await using var scope = scopes.CreateAsyncScope();
                     var result = await scope.ServiceProvider.GetRequiredService<ISender>()
-                        .Send(new RecordHealthResultRequest(next.Observation, next.NextDueUtc), ct);
+                        .Send(new RecordHealthResultRequest(next.Observation, next.NextDueUtc, superseded), ct);
                     if (!result.IsSuccess) throw new InvalidOperationException(result.Message ?? result.Code);
                 }
                 catch (Exception e) when (!ct.IsCancellationRequested)
                 {
                     logger.LogWarning(e, "健康檢查結果寫不進資料庫，留在待補寫佇列（{Count} 筆）：{Code} {TransitionId}",
                         PendingCount, next.Observation.Code, next.Observation.TransitionId);
+                    ConsiderDirect();
                     return written;
                 }
                 lock (_sync) _pending.Remove(next);

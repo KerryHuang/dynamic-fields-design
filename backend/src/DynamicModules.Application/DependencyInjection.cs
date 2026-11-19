@@ -164,6 +164,12 @@ public static class DependencyInjection
         services.AddSingleton<Dynamic.OpsService.Health.IHealthProbe, Dynamic.OpsService.Health.BackupFreshnessProbe>();
         services.AddSingleton<Dynamic.OpsService.Health.IHealthProbe, Dynamic.OpsService.Health.LoginFailuresProbe>();
         services.TryAddSingleton(Dynamic.OpsService.Health.OpsStoragePaths.None);
+        // 告警通道（維運設計 §17.2.6）：寄送佇列在資料庫、直送佇列只在本實例記憶體；SMTP 寄送與密碼加密由 WebAPI 註冊
+        services.AddScoped<Dynamic.OpsService.Alerts.AlertOutboxWriter>();
+        services.AddSingleton<Dynamic.OpsService.Alerts.DirectAlertQueue>();
+        services.AddSingleton<Dynamic.OpsService.Alerts.AlertDispatcher>();
+        services.AddSingleton<Dynamic.OpsService.Alerts.SmtpTestGate>();
+        services.TryAddSingleton(Dynamic.OpsService.Alerts.AlertMailOptions.None);
         services.AddScoped<Dynamic.NotificationService.INotificationReminderSource, Dynamic.ApprovalService.ApprovalReminderSource>();
         services.AddScoped<Dynamic.TaskRuleService.TaskRuleValidator>();
         services.AddScoped<Dynamic.TaskRuleService.TaskRuleEditor>();

@@ -1,18 +1,18 @@
 using System.Globalization;
 using System.Text.Json;
 using System.Text.RegularExpressions;
-using DynamicModules.Application.Dynamic.OpsService.Health;
+using DynamicModules.Application.Dynamic.OpsService.Alerts;
 
 namespace DynamicModules.Application.Dynamic.OpsService.Incidents;
 
 /// <summary>
 /// 事件標題的唯一組字處（維運設計 §17.2.2、O2-T22）：各來源只接受白名單參數，值只能是代碼、數字或路由樣板（<c>{id}</c> 形式），
-/// 不接受任意字串。畫面與鈴鐺依語系組字；這裡另組一份繁中文字，只給站內通知的 <c>TitleSnapshot</c> 當退路。
+/// 不接受任意字串。畫面與鈴鐺依語系組字；這裡另組文字給站內通知的 <c>TitleSnapshot</c>（繁中，只當退路）與告警信（通道的信件語系，O2-U14）。
 /// </summary>
 public static partial class IncidentTitles
 {
     public const string ServerError = "ops.title.serverError", ClientError = "ops.title.clientError",
-        AdminChanged = "ops.title.adminChanged", HealthPrefix = "ops.title.health.";
+        AdminChanged = "ops.title.adminChanged", HealthPrefix = "ops.title.health.", ChannelFailed = "ops.title.channelFailed";
 
     /// <summary>JavaScript 內建錯誤名稱；其他一律換成 <c>Error</c>（§17.2.2 標題表）。</summary>
     private static readonly HashSet<string> JsErrorNames = new(StringComparer.Ordinal)
@@ -30,6 +30,10 @@ public static partial class IncidentTitles
 
     public static IReadOnlyDictionary<string, object> Admin(bool granted) => Params(("change", granted ? "granted" : "revoked"));
 
+    /// <summary>通道失敗（§17.2.2 標題表）：失敗階段與 SMTP 回應碼。</summary>
+    public static IReadOnlyDictionary<string, object> Channel(string stage, int? serverCode) =>
+        Params(("stage", Code(stage)), ("serverCode", serverCode is { } c ? (long)c : null));
+
     public static string? ToJson(IReadOnlyDictionary<string, object>? p) => p is null or { Count: 0 } ? null : JsonSerializer.Serialize(p);
 
     /// <summary>讀回存在事件列上的參數（數字回 long，其他回字串）。</summary>
@@ -44,23 +48,27 @@ public static partial class IncidentTitles
     /// <summary>繁中標題（通知 TitleSnapshot 的退路，截斷 200 字）。</summary>
     public static string ZhTw(string titleKey, IReadOnlyDictionary<string, object>? p)
     {
-        string P(string k) => p is not null && p.TryGetValue(k, out var v) ? Convert.ToString(v, CultureInfo.InvariantCulture) ?? "" : "";
-        var text = titleKey switch
-        {
-            ServerError => $"伺服器錯誤：{P("exceptionType")}" + (P("route") is { Length: > 0 } r ? $"（{r}）" : ""),
-            ClientError => $"前端錯誤：{P("errorName")}" + (P("route") is { Length: > 0 } r ? $"（{r}）" : ""),
-            AdminChanged => P("change") == "granted" ? "系統管理員權限異動：授予" : "系統管理員權限異動：拿掉",
-            _ when titleKey.StartsWith(HealthPrefix, StringComparison.Ordinal) =>
-                $"健康檢查「{HealthCheckCatalog.Find(titleKey[HealthPrefix.Length..])?.ZhName ?? titleKey[HealthPrefix.Length..]}」{StatusZh(P("status"))}",
-            _ => titleKey,
-        };
+        var text = Text(AlertMailText.FactoryLocale, titleKey, p);
         return text.Length <= 200 ? text : text[..200];
     }
 
-    private static string StatusZh(string status) => status switch
+    /// <summary>依語系組標題（不截斷；呼叫端各自有長度預算）。沒登記的標題代碼回代碼本身。</summary>
+    public static string Text(string locale, string titleKey, IReadOnlyDictionary<string, object>? p)
     {
-        "warning" => "警告", "critical" => "嚴重", "error" => "檢查本身失敗", "ok" => "正常", _ => status,
-    };
+        string P(string k) => p is not null && p.TryGetValue(k, out var v) ? Convert.ToString(v, CultureInfo.InvariantCulture) ?? "" : "";
+        string Route() => P("route") is { Length: > 0 } r ? AlertMailText.Get(locale, AlertMailText.TitleRouteSuffix, r) : "";
+        return titleKey switch
+        {
+            ServerError => AlertMailText.Get(locale, AlertMailText.TitleServer, P("exceptionType")) + Route(),
+            ClientError => AlertMailText.Get(locale, AlertMailText.TitleClient, P("errorName")) + Route(),
+            AdminChanged => AlertMailText.Get(locale, P("change") == "granted" ? AlertMailText.TitleAdminGranted : AlertMailText.TitleAdminRevoked),
+            ChannelFailed => AlertMailText.Get(locale, AlertMailText.TitleChannel, AlertMailText.Label(locale, "stage." + P("stage"))
+                + (P("serverCode") is { Length: > 0 } c ? AlertMailText.Get(locale, AlertMailText.TitleChannelCode, c) : "")),
+            _ when titleKey.StartsWith(HealthPrefix, StringComparison.Ordinal) => AlertMailText.Get(locale, AlertMailText.TitleHealth,
+                AlertMailText.CheckName(locale, titleKey[HealthPrefix.Length..]), AlertMailText.Label(locale, "status." + P("status"))),
+            _ => titleKey,
+        };
+    }
 
     private static IReadOnlyDictionary<string, object> Params(params (string Key, object? Value)[] items) =>
         items.Where(i => i.Value is not null and not "").ToDictionary(i => i.Key, i => i.Value!, StringComparer.Ordinal);

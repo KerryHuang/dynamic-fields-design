@@ -1,4 +1,5 @@
 using DynamicModules.Application.Dynamic.OpsService;
+using DynamicModules.Application.Dynamic.OpsService.Alerts;
 using DynamicModules.Application.Dynamic.OpsService.Audit;
 using DynamicModules.Application.Dynamic.OpsService.Monitor;
 using System.Text.Json;
@@ -74,6 +75,40 @@ public class OpsController(IMediator mediator) : ControllerBase
         (await mediator.Send(new ResolveIncidentRequest(id, body.ExpectedStatus, body.Note))).ToActionResult(this);
 
     public sealed record IncidentStateBody(string? ExpectedStatus, string? Note);
+
+    /// <summary>SMTP 告警通道設定（維運設計 §17.5）：密碼不回傳，只回 hasPassword／passwordUnreadable。</summary>
+    [HttpGet("system/ops/channels/smtp")]
+    public async Task<IActionResult> SmtpChannel() => (await mediator.Send(new GetSmtpChannelRequest())).ToActionResult(this);
+
+    /// <summary>存 SMTP 設定：password 省略或 null＝不變、""＝清除；mailLocale 省略＝不變、null＝回出廠。Demo 站 403。</summary>
+    [HttpPut("system/ops/channels/smtp")]
+    public async Task<IActionResult> UpdateSmtpChannel([FromBody] JsonElement body)
+    {
+        if (body.ValueKind != JsonValueKind.Object) return BadRequest();
+        SmtpChannelBody? b;
+        try
+        {
+            b = body.Deserialize<SmtpChannelBody>(JsonBody);
+        }
+        catch (JsonException)
+        {
+            throw new BadHttpRequestException("SMTP 設定的欄位型別不對");
+        }
+        if (b is null) return BadRequest();
+        var localeSet = body.TryGetProperty("mailLocale", out var locale);
+        if (localeSet && locale.ValueKind is not (JsonValueKind.Null or JsonValueKind.String)) throw new BadHttpRequestException("欄位 mailLocale 的型別不對");
+        return (await mediator.Send(new UpdateSmtpChannelRequest(b.Enabled, b.Host, b.Port, b.Security, b.UserName, b.Password, b.FromAddress,
+            b.FromName, b.ToAddresses, localeSet, localeSet && locale.ValueKind == JsonValueKind.String ? locale.GetString() : null))).ToActionResult(this);
+    }
+
+    /// <summary>用已儲存的設定寄測試信到全部收件信箱（不能臨時填地址）；失敗 422 帶 stage 與 serverCode。Demo 站 403。</summary>
+    [HttpPost("system/ops/channels/smtp/test")]
+    public async Task<IActionResult> TestSmtpChannel() => (await mediator.Send(new SendSmtpTestRequest())).ToActionResult(this);
+
+    public sealed record SmtpChannelBody(bool Enabled, string? Host, int Port, string? Security, string? UserName, string? Password,
+        string? FromAddress, string? FromName, IReadOnlyList<string>? ToAddresses);
+
+    private static readonly JsonSerializerOptions JsonBody = new(JsonSerializerDefaults.Web);
 
     /// <summary>JSON 欄位的三態：沒有這個鍵＝不變；值是 null＝回出廠值；型別不對當成不合法的值（交給 400）。</summary>
     private static Optional<T> Field<T>(JsonElement body, string name, Func<JsonElement, T> read) where T : struct

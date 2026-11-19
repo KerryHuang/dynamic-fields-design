@@ -72,11 +72,13 @@ public sealed class OpsMonitorReader(
         i.Regression, i.ReopenCount, i.AcknowledgedBy, i.AcknowledgedUtc, i.ResolvedBy, i.ResolvedUtc,
         i.ResolvedReason is { } r ? Camel(r) : null, Handler(i), ManualResolvable(i));
 
-    /// <summary>處理者標示（§17.2.2）：O2 還沒有任何東西送出，產品缺陷不能寫「已回報」。</summary>
-    private string Handler(OpsIncident i) => i.Category switch
+    private string Handler(OpsIncident i) => HandlerOf(i.Category, env.Edition);
+
+    /// <summary>處理者標示（§17.2.2；監控頁與告警信共用）：O2 還沒有任何東西送出，產品缺陷不能寫「已回報」。</summary>
+    public static string HandlerOf(IncidentCategory category, string edition) => category switch
     {
         IncidentCategory.Config => "designer",
-        IncidentCategory.Infra => env.Edition == "Cloud" ? "vendor" : "it",
+        IncidentCategory.Infra => edition == "Cloud" ? "vendor" : "it",
         IncidentCategory.Security => "admin",
         _ => "contactVendor",
     };
@@ -97,8 +99,8 @@ public sealed class OpsMonitorReader(
 }
 
 public sealed class GetOpsOverviewHandler(
-    OpsMonitorReader reader, IOpsIncidentRepository incidents, IScheduledJobRepository jobs, HealthCheckEngine engine, IOpsEnvironment env,
-    IDatabaseInfo database) : IRequestHandler<GetOpsOverviewRequest, ServiceResult>
+    OpsMonitorReader reader, IOpsIncidentRepository incidents, IScheduledJobRepository jobs, IAlertChannelRepository channels, HealthCheckEngine engine,
+    IOpsEnvironment env, IDatabaseInfo database) : IRequestHandler<GetOpsOverviewRequest, ServiceResult>
 {
     public async Task<ServiceResult> Handle(GetOpsOverviewRequest request, CancellationToken ct)
     {
@@ -117,10 +119,12 @@ public sealed class GetOpsOverviewHandler(
             .Take(OpsMonitorReader.NeedsAttentionMax).Select(reader.Summary).ToList();
         var jobInfos = (await jobs.ListAsync(ct)).Select(j => new ScheduledJobInfo(
             j.JobKey, j.LastStartedUtc, j.LastFinishedUtc, j.LastStatus?.ToString(), j.ConsecutiveFailures, j.NextDueUtc, j.LeaseOwner)).ToList();
+        // 通道區塊：沒設定或停用時畫面顯示「未設定，告警只在站內」（§17.2.6）
+        var channel = await channels.GetAsync(AlertChannel.Smtp, ct);
         return ServiceResult.Success(new OpsOverview(
             overall, engine.PendingCount > 0, engine.PendingCount, engine.PendingDropped, states, counts, attention, jobInfos,
-            // 告警通道由 o2c 接上；o2b 一律「未設定，告警只在站內」
-            new ChannelOverview("smtp", false, false, null, null, 0),
+            new ChannelOverview(AlertChannel.Smtp, Alerts.SmtpSettings.From(channel, requireEnabled: false) is not null, channel?.Enabled ?? false,
+                channel?.LastSuccessUtc, channel?.LastFailureUtc, channel?.ConsecutiveFailures ?? 0),
             env.Version, env.Commit, env.Edition, database.Provider));
     }
 }

@@ -1,4 +1,5 @@
 using DynamicModules.Application.Common;
+using DynamicModules.Application.Dynamic.OpsService.Alerts;
 using DynamicModules.Domain.Entities.Dynamic;
 using DynamicModules.Domain.Ops;
 using DynamicModules.Domain.Repositories.Dynamic;
@@ -11,10 +12,11 @@ namespace DynamicModules.Application.Dynamic.OpsService.Incidents;
 /// 同指紋沒有列→新增「開啟」；有列且未結→次數＋n、嚴重度依規則升降；有列且已結→重開並標回歸。
 /// 全部是條件式更新（<c>WHERE Status = 讀到的狀態</c>），影響 0 列或新增撞唯一鍵就重讀再判斷，最多三次（§17.7）；
 /// 順序是「先 ExecuteUpdate、後 SaveChanges 新增」，撞鍵是 SaveChanges 的錯誤、有 savepoint 保護。
-/// 通知與事件同一交易，交易失敗兩者都不會出現。
+/// 通知、寄送佇列與事件同一交易，交易失敗三者都不會出現（不會有「信寄了、事件沒寫」）。
 /// </summary>
 public sealed class IncidentRecorder(
-    IOpsIncidentRepository incidents, OpsNotifier notifier, IUnitOfWork uow, IDatabaseErrors errors, TimeProvider time, ILogger<IncidentRecorder> logger)
+    IOpsIncidentRepository incidents, OpsNotifier notifier, AlertOutboxWriter alerts, IUnitOfWork uow, IDatabaseErrors errors, TimeProvider time,
+    ILogger<IncidentRecorder> logger)
 {
     /// <summary>條件式更新的重試次數（技術限制，§17.9）。</summary>
     public const int MaxAttempts = 3;
@@ -81,6 +83,8 @@ public sealed class IncidentRecorder(
             {
                 await notifier.NotifyAsync(id, s.TitleKey, s.TitleParams, s.Link, ct);
                 await incidents.MarkNotifiedAsync(id, time.GetUtcNow().UtcDateTime, ct);
+                // 告警信觸發的轉換和站內通知相同（§17.2.6「寄哪些」）
+                await alerts.EnqueueAsync(id, MailTransition(s, transition), s.Backfill, ct);
                 await uow.CommitAsync(ct);
             }
             return (transition, id);
@@ -96,6 +100,16 @@ public sealed class IncidentRecorder(
         if (s.Source == IncidentSource.Security) return t is IncidentTransition.Opened or IncidentTransition.Regressed or IncidentTransition.Updated;
         return t is IncidentTransition.Opened or IncidentTransition.Regressed or IncidentTransition.Escalated;
     }
+
+    /// <summary>佇列列的轉換：安全類同一件事件的後續異動記 <c>occurred</c>（O2-U11）。</summary>
+    private static AlertTransition MailTransition(IncidentSignal s, IncidentTransition t) => t switch
+    {
+        IncidentTransition.Opened => AlertTransition.Opened,
+        IncidentTransition.Regressed => AlertTransition.Regressed,
+        IncidentTransition.Escalated => AlertTransition.Escalated,
+        _ when s.Source == IncidentSource.Security => AlertTransition.Occurred,
+        _ => throw new InvalidOperationException($"轉換 {t} 不發通知"),
+    };
 
     private static OpsIncident New(IncidentSignal s) => new()
     {

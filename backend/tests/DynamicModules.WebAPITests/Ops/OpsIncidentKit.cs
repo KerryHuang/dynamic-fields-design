@@ -1,6 +1,7 @@
 using System.Data.Common;
 using DynamicModules.Application.Common;
 using DynamicModules.Application.Dynamic.OpsService;
+using DynamicModules.Application.Dynamic.OpsService.Alerts;
 using DynamicModules.Application.Dynamic.OpsService.Health;
 using DynamicModules.Application.Dynamic.OpsService.Incidents;
 using DynamicModules.Domain.Data;
@@ -91,7 +92,7 @@ internal static class OpsIncidentKit
     /// <summary>第二個（或指定的）實例的執行器：同一個資料庫、自己的狀態板與待補寫佇列。</summary>
     public static HealthCheckEngine Engine(TestApp app, params IHealthProbe[] probes) =>
         new(app.Services.GetRequiredService<IServiceScopeFactory>(), probes, app.Time, OpsInstance.Create(app.Time),
-            app.Services.GetRequiredService<ILogger<HealthCheckEngine>>());
+            app.Services.GetRequiredService<DirectAlertQueue>(), app.Services.GetRequiredService<ILogger<HealthCheckEngine>>());
 
     public static (IncidentInbox Inbox, IncidentInboxDrain Drain) Inbox(TestApp app)
     {

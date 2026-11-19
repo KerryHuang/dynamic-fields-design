@@ -83,6 +83,10 @@ builder.Services.AddHostedService<SchedulerHostedService>();
 builder.Services.AddHostedService<OpsWatchdogHostedService>();
 builder.Services.AddHostedService<IncidentInboxFlusher>();
 builder.Services.AddSingleton<DynamicModules.Application.Dynamic.OpsService.Health.IDiskSpace, DriveInfoDiskSpace>();
+// 告警通道（維運設計 §17.2.6）：MailKit 寄 SMTP、Data Protection 加密密碼；Ops:PublicUrl 是信件內事件連結的網址前綴（沒設就不放連結）
+builder.Services.AddSingleton<DynamicModules.Application.Dynamic.OpsService.Alerts.IAlertMailSender, MailKitAlertMailSender>();
+builder.Services.AddSingleton<DynamicModules.Application.Dynamic.OpsService.Alerts.IAlertSecretProtector, DataProtectionAlertSecretProtector>();
+builder.Services.AddSingleton(new DynamicModules.Application.Dynamic.OpsService.Alerts.AlertMailOptions(builder.Configuration["Ops:PublicUrl"]));
 builder.Services.AddSingleton(new AuthSettings(builder.Configuration.GetValue<bool>("Demo:LoginEnabled")));
 // 附件：預設放在資料庫旁的 attachments 目錄（記憶體資料庫則放暫存目錄）。Demo 登入開啟時預設不開放上傳，可用 Attachments:UploadEnabled 明確覆寫。
 var (attachmentSettings, policyDefaults, attachmentWarnings) = AttachmentSettingsFactory.Create(builder.Configuration, databaseDirectory);

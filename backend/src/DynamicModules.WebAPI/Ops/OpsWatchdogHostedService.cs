@@ -6,6 +6,7 @@ namespace DynamicModules.WebAPI.Ops;
 /// <summary>
 /// 看門狗的迴圈（維運設計 §17.2.4）：每個實例都跑、不經排程器，所以 <c>Ops:Scheduler:Enabled</c> 關掉時照跑（C07）。
 /// 部署設定 <c>Ops:Watchdog:Enabled</c> 為 false 時整個不跑（測試主機關掉，改直接呼叫 <see cref="OpsWatchdog.TickAsync"/>）。
+/// 第二個迴圈寄直送信（§17.2.6，同樣每 60 秒）：和檢查分開跑，SMTP 卡住（最長 30 秒一封）不拖住檢查。
 /// </summary>
 public sealed class OpsWatchdogHostedService(OpsWatchdog watchdog, IConfiguration configuration, TimeProvider time, ILogger<OpsWatchdogHostedService> logger)
     : BackgroundService
@@ -19,6 +20,12 @@ public sealed class OpsWatchdogHostedService(OpsWatchdog watchdog, IConfiguratio
             logger.LogInformation("看門狗已由 {Setting} 關閉", EnabledKey);
             return;
         }
+        await Task.WhenAll(LoopAsync(watchdog.TickAsync, "看門狗這一輪失敗", stoppingToken),
+            LoopAsync(watchdog.SendDirectAsync, "直送信這一輪失敗", stoppingToken));
+    }
+
+    private async Task LoopAsync(Func<CancellationToken, Task> round, string failure, CancellationToken stoppingToken)
+    {
         using var timer = new PeriodicTimer(OpsWatchdog.Tick, time);
         try
         {
@@ -26,11 +33,11 @@ public sealed class OpsWatchdogHostedService(OpsWatchdog watchdog, IConfiguratio
             {
                 try
                 {
-                    await watchdog.TickAsync(stoppingToken);
+                    await round(stoppingToken);
                 }
                 catch (Exception e) when (!stoppingToken.IsCancellationRequested)
                 {
-                    logger.LogError(e, "看門狗這一輪失敗");
+                    logger.LogError(e, "{Failure}", failure);
                 }
             } while (await timer.WaitForNextTickAsync(stoppingToken));
         }

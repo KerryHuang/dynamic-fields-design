@@ -54,6 +54,10 @@ public sealed class ServiceResult
 
     public static ServiceResult Unprocessable(MessageRef? message) => new() { IsUnprocessable = true, MessageSource = message };
 
+    /// <summary>422 並帶代碼與參數（例如測試信寄不出去的階段與回應碼）。</summary>
+    public static ServiceResult Unprocessable(MessageRef? message, string code, object? @params = null) =>
+        new() { IsUnprocessable = true, MessageSource = message, Code = code, Params = @params };
+
     public static ServiceResult Forbidden() => new() { IsForbidden = true, MessageSource = MessageRef.Of(MessageText.Forbidden) };
 
     /// <summary>403 並說明原因（例如「你以主管身分只能改負責人」）。</summary>
@@ -69,4 +73,8 @@ public sealed class ServiceResult
 
     public static ServiceResult Invalid(string key, MessageRef message) =>
         new() { ErrorRefs = new Dictionary<string, MessageRef[]> { [key] = [message] } };
+
+    /// <summary>400 並帶代碼（例如 <c>smtpPlaintextAuth</c>）：回應多一個 <c>code</c>，欄位錯誤照常。</summary>
+    public static ServiceResult Invalid(string key, MessageRef message, string code) =>
+        new() { ErrorRefs = new Dictionary<string, MessageRef[]> { [key] = [message] }, Code = code };
 }

@@ -1,3 +1,4 @@
+using DynamicModules.Application.Dynamic.OpsService.Alerts;
 using DynamicModules.Domain.Entities.Dynamic;
 
 namespace DynamicModules.Application.Dynamic.OpsService.Incidents;
@@ -33,6 +34,8 @@ public sealed record IncidentSignal
     public bool Recovered { get; init; }
     /// <summary>通知連結另指（安全類指向那一筆稽核）；null 用事件詳細。</summary>
     public string? Link { get; init; }
+    /// <summary>健康檢查的轉換識別碼與補寫資訊：寄送佇列列對照直送紀錄（§17.2.6）；其他來源為 null。</summary>
+    public AlertBackfill? Backfill { get; init; }
 }
 
 /// <summary>一次訊號造成的轉換（決定要不要通知，§17.2.2「轉換與通知」）。</summary>

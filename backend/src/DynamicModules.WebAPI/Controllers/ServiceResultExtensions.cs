@@ -18,7 +18,9 @@ public static class ServiceResultExtensions
         if (r.IsNotFound) return c.NotFound(Body(r, locale));
         if (r.IsConflict) return c.Conflict(Body(r, locale));
         if (!r.IsSuccess)
-            return c.BadRequest(new { traceId = c.HttpContext.TraceIdentifier, errors = r.ErrorsIn(locale) });
+            return c.BadRequest(r.Code is null
+                ? new { traceId = c.HttpContext.TraceIdentifier, errors = r.ErrorsIn(locale) }
+                : (object)new { traceId = c.HttpContext.TraceIdentifier, code = r.Code, errors = r.ErrorsIn(locale) });
         if (r.IsCreated)
             return createdAtAction is null
                 ? c.StatusCode(StatusCodes.Status201Created, r.Data)

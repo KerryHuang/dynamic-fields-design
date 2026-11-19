@@ -1,5 +1,6 @@
 using DynamicModules.Application.Common;
 using DynamicModules.Application.Common.Audit;
+using DynamicModules.Application.Dynamic.OpsService.Alerts;
 using DynamicModules.Application.Dynamic.OpsService.Scheduling;
 using DynamicModules.Application.Dynamic.OpsService.Incidents;
 using DynamicModules.Application.Dynamic.PolicyService;
@@ -15,7 +16,7 @@ namespace DynamicModules.Application.Dynamic.OpsService;
 /// 維運的維護工作 <c>ops.upkeep</c>（維運設計 §17.2.8）：自動結案（<c>expired</c>）、嚴重事件重複提醒、各表依保留天數清理。
 /// 清理分批：每批最多 <see cref="OpsUpkeepOptions.PurgeBatchSize"/> 列、各自一個交易（帶租約檢查），在交易型請求內做，
 /// PostgreSQL 上也經過全庫寫入鎖。每批有刪到列時在同一交易寫一列 <c>ops.retention.purge</c> 稽核，摘要帶該批各表刪除筆數。
-/// 告警寄送佇列（o2c）與規則失敗殘留列（o2d）的清理由後續子單元加。
+/// 規則失敗殘留列（o2d）的清理由後續子單元加。
 /// </summary>
 public sealed class OpsUpkeepJob(OpsUpkeepOptions options) : IScheduledJob
 {
@@ -47,8 +48,10 @@ public sealed class OpsUpkeepJob(OpsUpkeepOptions options) : IScheduledJob
         }
 
         await PurgeAsync(context, sender, OpsPurgeTarget.AuditLog, now.AddDays(-await policy.IntAsync(PolicyCatalog.OpsAuditRetentionDays, ct)), ct);
-        await PurgeAsync(context, sender, OpsPurgeTarget.HealthResult,
-            now.AddDays(-await policy.IntAsync(PolicyCatalog.OpsHealthResultRetentionDays, ct)), ct);
+        // 健康檢查紀錄與已寄完的告警寄送紀錄共用一個天數（§17.4、§17.2.8）
+        var healthCutoff = now.AddDays(-await policy.IntAsync(PolicyCatalog.OpsHealthResultRetentionDays, ct));
+        await PurgeAsync(context, sender, OpsPurgeTarget.HealthResult, healthCutoff, ct);
+        await PurgeAsync(context, sender, OpsPurgeTarget.AlertOutbox, healthCutoff, ct);
         await PurgeAsync(context, sender, OpsPurgeTarget.IncidentSample,
             now.AddDays(-await policy.IntAsync(PolicyCatalog.OpsIncidentSampleRetentionDays, ct)), ct);
         await PurgeAsync(context, sender, OpsPurgeTarget.Incident, now.AddDays(-await policy.IntAsync(PolicyCatalog.OpsIncidentRetentionDays, ct)), ct);
@@ -80,7 +83,7 @@ public sealed class OpsUpkeepOptions
 }
 
 /// <summary>保留天數清理的對象；摘要的鍵（<c>deleted.auditLog</c>…）與列舉名稱的 camelCase 相同。</summary>
-public enum OpsPurgeTarget { AuditLog, HealthResult, Incident, IncidentSample }
+public enum OpsPurgeTarget { AuditLog, HealthResult, Incident, IncidentSample, AlertOutbox }
 
 /// <summary>
 /// 刪掉一批超過保留天數的列，有刪到時同一交易寫一列 <c>ops.retention.purge</c>（維運設計 §17.2.1「不經 AuditBehavior 的寫入點」）；
@@ -91,7 +94,7 @@ public sealed record PurgeOpsBatchRequest(JobLeaseFence Fence, OpsPurgeTarget Ta
 
 public class PurgeOpsBatchHandler(
     IScheduledJobRepository jobs, IAuditLogRepository auditLog, IHealthCheckRepository checks, IOpsIncidentRepository incidents,
-    IAuditLog audit, IUnitOfWork uow) : IRequestHandler<PurgeOpsBatchRequest, ServiceResult>
+    IAlertOutboxRepository outbox, IAuditLog audit, IUnitOfWork uow) : IRequestHandler<PurgeOpsBatchRequest, ServiceResult>
 {
     public async Task<ServiceResult> Handle(PurgeOpsBatchRequest request, CancellationToken ct)
     {
@@ -103,6 +106,7 @@ public class PurgeOpsBatchHandler(
             OpsPurgeTarget.HealthResult => await checks.PurgeResultsBatchAsync(request.CutoffUtc, request.BatchSize, ct),
             OpsPurgeTarget.Incident => await incidents.PurgeResolvedBatchAsync(request.CutoffUtc, request.BatchSize, ct),
             OpsPurgeTarget.IncidentSample => await incidents.PurgeSamplesBatchAsync(request.CutoffUtc, request.BatchSize, ct),
+            OpsPurgeTarget.AlertOutbox => await outbox.PurgeBatchAsync(request.CutoffUtc, request.BatchSize, ct),
             _ => throw new ArgumentOutOfRangeException(nameof(request)),
         };
         if (deleted > 0)
@@ -137,7 +141,8 @@ public class ExpireIncidentsBatchHandler(IScheduledJobRepository jobs, IOpsIncid
 /// <summary>嚴重事件的重複提醒：條件式更新搶到（影響 1 列）才發通知，兩台不會各發一次。</summary>
 public sealed record RenotifyIncidentRequest(JobLeaseFence Fence, long IncidentId, DateTime CutoffUtc) : IRequest<ServiceResult>, ITransactionalRequest;
 
-public class RenotifyIncidentHandler(IScheduledJobRepository jobs, IOpsIncidentRepository incidents, OpsNotifier notifier, IUnitOfWork uow)
+public class RenotifyIncidentHandler(
+    IScheduledJobRepository jobs, IOpsIncidentRepository incidents, OpsNotifier notifier, AlertOutboxWriter alerts, IUnitOfWork uow)
     : IRequestHandler<RenotifyIncidentRequest, ServiceResult>
 {
     public async Task<ServiceResult> Handle(RenotifyIncidentRequest request, CancellationToken ct)
@@ -147,6 +152,7 @@ public class RenotifyIncidentHandler(IScheduledJobRepository jobs, IOpsIncidentR
         if (!await incidents.TryClaimRenotifyAsync(request.IncidentId, request.CutoffUtc, fence.NowUtc, ct)) return ServiceResult.Success(false);
         var i = (await incidents.GetAsync(request.IncidentId, ct))!;
         await notifier.NotifyAsync(i.Id, i.TitleKey, IncidentTitles.FromJson(i.TitleParamsJson), null, ct);
+        await alerts.EnqueueAsync(i.Id, AlertTransition.Renotify, null, ct);
         await uow.CommitAsync(ct);
         return ServiceResult.Success(true);
     }

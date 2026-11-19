@@ -78,6 +78,8 @@ public static class DependencyInjection
         services.AddScoped<IAuditLogRepository, AuditLogRepository>();
         services.AddScoped<IOpsIncidentRepository, OpsIncidentRepository>();
         services.AddScoped<IHealthCheckRepository, HealthCheckRepository>();
+        services.AddScoped<IAlertChannelRepository, AlertChannelRepository>();
+        services.AddScoped<IAlertOutboxRepository, AlertOutboxRepository>();
         services.AddScoped<INotificationRepository, NotificationRepository>();
         services.AddScoped<IOrganizationRepository, OrganizationRepository>();
         services.AddScoped<IApprovalFlowRepository, ApprovalFlowRepository>();

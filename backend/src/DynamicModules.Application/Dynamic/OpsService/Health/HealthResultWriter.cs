@@ -1,4 +1,5 @@
 using DynamicModules.Application.Common;
+using DynamicModules.Application.Dynamic.OpsService.Alerts;
 using DynamicModules.Application.Dynamic.OpsService.Incidents;
 using DynamicModules.Domain.Entities.Dynamic;
 using DynamicModules.Domain.Ops;
@@ -9,9 +10,11 @@ namespace DynamicModules.Application.Dynamic.OpsService.Health;
 
 /// <summary>
 /// 彙總交易（維運設計 §17.2.4 第 2 步）：鎖檢查列 → 以 <c>TransitionId</c> 去重 → 新增歷史結果 → 以這筆的檢查時間 R 彙總
-/// → 只往後推的目前投影 → 同一交易開、更新或結案事件。結果列、事件轉換、站內通知同一交易，有結果列就代表其他也都在。
+/// → 只往後推的目前投影 → 同一交易開、更新或結案事件。結果列、事件轉換、站內通知、寄送佇列同一交易，有結果列就代表其他也都在。
+/// <paramref name="Superseded"/>：補寫時同一檢查在待補寫佇列後面已經回到正常，這筆的開啟、升級信已經過時（§17.2.6）。
 /// </summary>
-public sealed record RecordHealthResultRequest(HealthObservation Observation, DateTime? NextDueUtc) : IRequest<ServiceResult>, ITransactionalRequest;
+public sealed record RecordHealthResultRequest(HealthObservation Observation, DateTime? NextDueUtc, bool Superseded = false)
+    : IRequest<ServiceResult>, ITransactionalRequest;
 
 public sealed class RecordHealthResultHandler(
     IHealthCheckRepository checks, IncidentRecorder recorder, IOpsEnvironment env, IUnitOfWork uow, IDatabaseErrors errors, TimeProvider time)
@@ -51,7 +54,8 @@ public sealed class RecordHealthResultHandler(
             await checks.UpdateProjectionAsync(o.Code, o.CheckedUtc, overall, value, message, ct);
         if (request.NextDueUtc is { } next) await checks.AdvanceNextDueAsync(o.Code, next, ct);
 
-        if (Signal(def, settings, o, overall, value, abnormal) is { } signal) await recorder.RecordAsync(signal, ct);
+        if (Signal(def, settings, o, overall, value, abnormal) is { } signal)
+            await recorder.RecordAsync(signal with { Backfill = new AlertBackfill(o.TransitionId, request.Superseded) }, ct);
         await uow.CommitAsync(ct);
         return ServiceResult.Success(true);
     }
