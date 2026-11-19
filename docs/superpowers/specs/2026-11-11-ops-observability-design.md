@@ -1458,7 +1458,7 @@ O2 做六件事：
 
 - 一般請求遇到這三類：新增 `DatabaseUnwritableExceptionHandler`（排在 `DatabaseBusyExceptionHandler` 之後、`UnhandledExceptionHandler` 之前），回 503 加 `Retry-After: 60`；唯讀與空間滿的代碼是 `databaseUnwritable`、訊息四語「資料庫目前無法寫入，請聯絡系統管理員」，連不上是 `databaseUnavailable`、訊息「資料庫目前無法連線，請聯絡系統管理員」（O2-U8）；記 Warning、不算 500、不開產品缺陷事件（同一個原因已由 `database.writable` 開了一件）。`SessionMiddleware` 讀帳號時丟的同類例外也走這個處理器。
 - 這段期間（唯讀或空間滿）：
-  - 監控頁讀得到：`SessionMiddleware` 讀帳號、`SystemAdminBehavior` 讀管理員旗標、監控 API 本身都只讀，讀不受影響（SQLite 唯讀檔在 WAL 模式下能不能讀，見 §17.10.6）。狀態板顯示 `database.writable` 嚴重，頁首提示「以下部分狀態只存在本實例記憶體，尚未寫入資料庫」。
+  - 監控頁讀得到：`SessionMiddleware` 讀帳號、`SystemAdminBehavior` 讀管理員旗標、監控 API 本身都只讀，讀不受影響。（主控文字，o2b 實測後補：SQLite 唯讀檔在 WAL 模式下仍可讀，只有「資料庫檔唯讀、`-wal`／`-shm` 不存在、所在目錄也唯讀」時連 SELECT 都失敗（錯誤碼 8、擴充碼 1544），監控頁跟著 503；見 §17.12。）狀態板顯示 `database.writable` 嚴重，頁首提示「以下部分狀態只存在本實例記憶體，尚未寫入資料庫」。
   - 站內通知寫不進去；告警信走直送（§17.2.6）。
   - 登入成功仍可登入，稽核寫不進只記 Error log（§5.6）；管理類變更整筆失敗（503）。
 - 恢復可寫後：看門狗下一輪探測成功，先依序補寫 `PendingIncidentWrites`（結果列、事件轉換、站內通知；§17.2.4 第 3 步），最後一筆就是這次探測成功，`database.writable` 隨之結案；收件匣累積的訊號跟著寫入。
@@ -1963,7 +1963,7 @@ O2 在 pg0 之後，合併前兩種資料庫都要驗（使用者裁決 §3 第 
 | B07 | 每件事件已有 20 筆樣本 | 再來一筆 | 仍是 20 筆、最舊的被刪 | ✓ |
 | B08 | 管理員 A | 把 B 設成系統管理員；按「確認」；再把 C 設成系統管理員 | 一件安全事件、次數 2；兩次各一組站內通知與一列寄送佇列（第二次在確認之後仍通知）；兩筆樣本的 `AuditLogId` 各指到對應的 `user.update` 稽核列，稽核差異看得到給了誰 | ✓ |
 | B09 | 一個 API 丟例外，訊息是 `客戶 王小明 token=abc123 fwp_0123456789abcdef 無法出貨` | 等收件匣 flush、開事件並寄信（假寄送器） | 樣本保有原文；事件的 `NormalizedMessage` 沒有 `abc123`、`fwp_0123`；站內通知的 `TitleSnapshot`、`DataJson` 與佇列的 `Subject`、`Body` 完全不含 `王小明`、`abc123`、`fwp_`、`無法出貨` | — |
-| C01 | 寫入探測換成唯讀資料庫（SQLite：DI 換成 `Mode=ReadOnly` 的連線；PostgreSQL：`default_transaction_read_only`） | 看門狗跑一輪 | 狀態板 `database.writable` 嚴重、訊息代碼 `readOnly`；事件放進待寫；直送佇列有一封 | ✓ |
+| C01 | 資料庫唯讀（主控文字，o2b 改：測試用連線攔截器在每次開連線時切換，SQLite `PRAGMA query_only`、PostgreSQL `SET SESSION CHARACTERISTICS AS TRANSACTION READ ONLY`，得到真的錯誤碼 8／`25006`；見 §17.12） | 看門狗跑一輪 | 狀態板 `database.writable` 嚴重、訊息代碼 `readOnly`；事件放進待寫；直送佇列有一封 | ✓ |
 | C02 | 接著把資料庫改回可寫 | 看門狗再跑一輪 | 待寫的事件與站內通知補寫、`database.writable` 結案原因 `recovered` | ✓ |
 | C09 | 資料庫不可寫期間，磁碟探測依序回 15%、5%、30%（警告→嚴重→正常） | 恢復可寫、看門狗補寫 | 待補寫佇列有三筆；補寫後結果列三筆依時間排列、事件依序開啟→升級→結案；開啟與升級各補一則站內通知；直送已寄的那封佇列列是 `sentDirect`，沒直送的過時信是 `skipped` | ✓ |
 | C10 | 兩個實例 id（A、B）的磁碟探測 | A 回 5%、B 回 30%；B 再回 30%；A 回 30%；A 再回 5% 後停止回報三個間隔、B 回 30% | A 異常時事件開啟嚴重，B 的正常不結案；A 正常後結案；A 停止回報後退出彙總，B 正常即結案；兩個實例的彙總交易並行時結果一致 | ✓ 無鎖 |
@@ -2333,18 +2333,18 @@ O2 在 pg0 之後，合併前兩種資料庫都要驗（使用者裁決 §3 第 
 
 #### 17.10.6 未驗證
 
-- ⚠️ SQLite 資料庫檔改成唯讀後，WAL 模式下能不能繼續讀（`-shm` 要可寫；讀不到時唯讀期間監控頁也打不開，§17.2.9 的「唯讀時監控頁可用」要改寫）；o2b 與下一條一起實測。
-- ⚠️ `IsUnavailable` 的對照：SQLite 的 `SQLITE_IOERR` 在磁碟滿時會不會先於 `SQLITE_FULL` 出現；Npgsql 在 socket 斷線、主機拒絕連線時丟的例外是否都不帶 SQLSTATE（o2a 以 C11 的建構例外先寫，o2b 用真的斷線各試一次）。
+- ⚠️ SQLite 資料庫檔改成唯讀後，WAL 模式下能不能繼續讀（`-shm` 要可寫；讀不到時唯讀期間監控頁也打不開，§17.2.9 的「唯讀時監控頁可用」要改寫）；o2b 與下一條一起實測。（o2b 已實測，見 §17.12）
+- ⚠️ `IsUnavailable` 的對照：SQLite 的 `SQLITE_IOERR` 在磁碟滿時會不會先於 `SQLITE_FULL` 出現；Npgsql 在 socket 斷線、主機拒絕連線時丟的例外是否都不帶 SQLSTATE（o2a 以 C11 的建構例外先寫，o2b 用真的斷線各試一次）。（o2b 已實測，見 §17.12）
 - ⚠️ MailKit 強制 STARTTLS 的選項（`SecureSocketOptions.StartTls`）在伺服器不支援時是否一定丟例外、不退回明文（o2c 對 Mailpit 關掉 STARTTLS 實測，D10）。
-- ⚠️ SQLite 唯讀的重現：`Pooling=False` 加改檔案權限，新連線是否一律 `SQLITE_READONLY`、站台在唯讀資料庫上能否繼續回應讀取（o2b 第一步實測，不成立就改用 DI 換寫入探測的連線做手動驗收）。
-- ⚠️ PostgreSQL `default_transaction_read_only` 的測試寫法：設定後清 Npgsql 連線池，新連線是否立即生效、測試結束如何還原樣板資料庫（o2b 實測）。
+- ⚠️ SQLite 唯讀的重現：`Pooling=False` 加改檔案權限，新連線是否一律 `SQLITE_READONLY`、站台在唯讀資料庫上能否繼續回應讀取（o2b 第一步實測，不成立就改用 DI 換寫入探測的連線做手動驗收）。（o2b 已實測，見 §17.12）
+- ⚠️ PostgreSQL `default_transaction_read_only` 的測試寫法：設定後清 Npgsql 連線池，新連線是否立即生效、測試結束如何還原樣板資料庫（o2b 實測）。（o2b 已實測，見 §17.12）
 - ⚠️ MailKit 的版本與 .NET 8 相容、授權仍是 MIT（o2c 計畫時查 NuGet 與官方 repo 並鎖版本）。
-- ⚠️ `DriveInfo` 在 macOS 磁碟映像、Linux loop device、Docker overlay 回報的剩餘空間是否就是附件目錄實際可用的空間（o2b 實測）。
+- ⚠️ `DriveInfo` 在 macOS 磁碟映像、Linux loop device、Docker overlay 回報的剩餘空間是否就是附件目錄實際可用的空間（o2b 實測）。（o2b 已實測，見 §17.12）
 - ⚠️ `PRAGMA quick_check` 在大資料庫的耗時（60 秒逾時夠不夠）；Demo 資料量下實測一次。
 - ⚠️ gate 的 PostgreSQL 步驟增加的時間（§17.8 粗估 50–100 秒）。
 - ⚠️ Render 免費方案擋 SMTP 埠（U1 已列未查證）：對 O2 沒影響，Demo 站本來就停用通道設定。
 - ⚠️ EF Core 在 SQLite 與 PostgreSQL 上把 `ExecuteUpdate` 裡的「取較晚者」（`LastFailureUtc`、`StreakResetUtc`）與 `CASE` 翻成可用的 SQL（SQLite 的 `max()`、PostgreSQL 的 `GREATEST`），以及 SQLite 上 `DateTime` 存成 TEXT 時比較大小的結果正確（o2a 寫 `Dynamic_RuleHealth` repository 時先試）。
-- ⚠️ 「提交成功後丟例外」的測試注入方式（`DbTransactionInterceptor.TransactionCommitted` 拋例外）在兩種 provider 都會讓呼叫端收到例外、而資料已提交（C14；o2b 先試）。
+- ⚠️ 「提交成功後丟例外」的測試注入方式（`DbTransactionInterceptor.TransactionCommitted` 拋例外）在兩種 provider 都會讓呼叫端收到例外、而資料已提交（C14；o2b 先試）。（o2b 已實測，見 §17.12）
 - ⚠️ 數值溢位在既有寫入流程是否已轉成 400（E13 矩陣最後一列；o2d 計畫時核對）。
 - 本節的檔案與行號（`EventStage.cs:67-68`、`CheckEvaluator.cs:40`、`EffectApplier.cs`、`TaskRuleStage.cs`、`ManualTaskRules.cs`、`LoginHandler.cs`、`UpdateSiteThemeHandler.cs`、`SessionMiddleware.cs`、`ClaimsCurrentUser.cs`、`AuthController.cs`、`DatabaseErrors.cs`、`Errors/*ExceptionHandler.cs`）是 2026-11-19 讀 `772e7a54`（第二輪讀 `fd71171a`）的結果，計畫階段再核對一次。
 
@@ -2398,3 +2398,44 @@ O2 在 pg0 之後，合併前兩種資料庫都要驗（使用者裁決 §3 第 
 - 只跑受影響的類別，每種資料庫各一次（全套交 CI）。第一輪（審查前）：ApplicationTests SQLite 103、PostgreSQL 103 過；WebAPITests SQLite 359 過 1 略過（4 分 23 秒）、PostgreSQL 360 過（6 分 53 秒）。
 - 審查修正後（第二輪，範圍多了 `AuditBehaviorTests`、`MessageTextTests`、`LoginThrottleTests`、列印範本、範本匯入、語系）：ApplicationTests SQLite 115 過、PostgreSQL 115 過；WebAPITests SQLite 431 過 1 略過（4 分 29 秒）、PostgreSQL 432 過（8 分 2 秒）。
 - DomainTests 的政策類別 68 過；前端 `policy-i18n` 與語系檔 41 過，`vue-tsc` 型別檢查過。
+
+### 17.12 o2b 實作補記（2026-11-19）
+
+範圍照 §17.1 o2b：健康檢查目錄與看門狗、`ops.monitor`、事件記錄器與收件匣、500／前端錯誤／系統管理員異動接事件、站內通知、唯讀／空間滿／連不上的 503、監控與事件 API、`ops.upkeep` 的事件與健康紀錄清理。SMTP、寄送佇列與直送（o2c），自動暫停、故障注入、`ruleEditor`（o2d），前端頁面（o2e）不在這一段。沒有新增 migration，九張表照 §17.4 用、沒有不夠的欄位。
+
+**§17.10.6 實測結果**（2026-11-19，macOS、SQLite 3（Microsoft.Data.Sqlite 8）、PostgreSQL 16-alpine 容器）
+
+- SQLite 唯讀重現（`Pooling=False`、WAL、資料庫檔 `chmod 444`）：新連線寫入一律錯誤碼 8（擴充碼 8），`SaveChanges` 包成 `DbUpdateException`；讀照常成功。例外：資料庫檔唯讀、`-wal`／`-shm` 不存在、所在目錄也唯讀（555）時，連 SELECT 都丟 8（擴充碼 1544 `SQLITE_READONLY_DIRECTORY`）。chmod 之前就開著的連線仍寫得進去，所以開連線池時改權限重現不了；`Mode=ReadOnly` 的連線寫入同樣是 8。結論：§17.2.9「唯讀時監控頁讀得到」成立，只有上述目錄也唯讀的組合例外（已在 §17.2.9 加主控文字）。
+- PostgreSQL `ALTER DATABASE … SET default_transaction_read_only = on`：已在池裡的連線不受影響；`NpgsqlConnection.ClearAllPools()` 後新連線寫入得到 `25006`。`ExecuteUpdate` 直接丟 `PostgresException`，`SaveChanges` 是 `DbUpdateException` 包著它。還原要連到 `postgres` 資料庫下 `ALTER DATABASE … RESET`（或 SET 與 ALTER 分兩個命令），再清一次池。
+- 真斷線的例外形狀（PostgreSQL）：拒絕連線是 `NpgsqlException`（無 SQLSTATE）內層 `SocketException`，經 EF 執行策略再包一層 `InvalidOperationException`（"transient"）；`docker stop` 與 `pg_terminate_backend` 是 `57P01`；`docker kill` 是 `NpgsqlException` 內層 `EndOfStreamException`（`IOException` 的子類）；**主機名稱解析失敗時 Npgsql 不包裝、直接丟裸的 `SocketException`（`HostNotFound`）**——原本的 `IsUnavailable` 抓不到，已補（只認 `HostNotFound`、`TryAgain`、`NoData`，其他 socket 錯誤不歸資料庫）。密碼錯 `28P01`、資料庫不存在 `3D000` 不歸連不上（是設定錯，照未處理例外開缺陷事件）。
+- 真的 SQLite 失敗：資料庫檔或目錄不存在是 14；連線開著時目錄被刪是 10（擴充碼 1802）。都在 `IsUnavailable` 內。
+- `DriveInfo(目錄)`（macOS）：回報目錄所在的那顆磁碟（以 `hdiutil` 掛一個磁碟映像、目錄放在裡面，數字與 `df` 一致）；路徑必須存在，否則丟 `DriveNotFoundException`（`DriveInfoDiskSpace` 對不存在的目錄回 null、該目錄不列入）。Linux loop device 與 Docker overlay 沒有實測（⚠️ 未驗證）。
+- 提交後丟例外的注入（`DbTransactionInterceptor.TransactionCommitted(Async)` 拋例外）：兩個 provider 都讓呼叫端收到原例外、資料已提交；之後 Dispose 與重用 DbContext 都正常。C14 用這個寫法。
+
+**偏離設計之處**
+
+- **偏離 1：自動測試的唯讀不用「DI 換 `Mode=ReadOnly` 連線」**，改用測試專用的連線攔截器（`ReadOnlySwitch`）：每次開連線時下 SQLite `PRAGMA query_only = 1／0`、PostgreSQL `SET SESSION CHARACTERISTICS AS TRANSACTION READ ONLY／READ WRITE`。理由：換連線字串只影響寫入探測，業務請求、補寫交易仍寫得進去，測不到「整個資料庫唯讀」；攔截器在連線池下每次開啟都切換，不殘留狀態，錯誤碼也是真的（8、`25006`）。C01 前置已改主控文字。手動驗收照上面 chmod（SQLite，需 `Pooling=False` 或重啟站台）與 `ALTER DATABASE`＋清池（PostgreSQL）。
+- **偏離 2：`scheduler.jobs` 的工作清單在執行時從 scope 取**，不在建構時注入：`ops.monitor` 本身是工作、又依賴健康檢查執行器，建構注入會形成 DI 循環。
+- **偏離 3：「立即檢查」在檢查列還沒補齊時**（站台剛啟動、看門狗第一輪還沒跑完）結果留在待補寫佇列，下一輪補齊列後寫入；回應照樣是本次結果（`fromMemory`）。看門狗啟動時第一輪就補列，正常操作碰不到。
+- **偏離 4：事件的 `Code`**：未處理例外是例外型別短名（`InvalidOperationException`），前端錯誤是 `kind:name`（`vue:TypeError`），健康檢查是檢查代碼，安全是 `admin.changed`；§17.4 只寫了「錯誤碼」。
+- **偏離 5：系統管理員異動的標題參數只有 `change`（`granted`／`revoked`）**，沒有次數與帳號：次數看事件的 `OccurrenceCount`，誰給了誰看樣本連到的稽核列（§17.2.2「不存在事件列上」）。
+- **偏離 6：處理者標示**（`handler`）：客戶設定 `designer`、基礎設施 `it`（Cloud 版別 `vendor`）、安全 `admin`、產品缺陷 `contactVendor`（O2 還沒有回報管道）。
+- **偏離 7：事件詳細的狀態歷程**取稽核中目標是這件事件（`incident`）的列，最多 100 筆，沒有另存歷程表。
+- **偏離 8：PUT 健康檢查**以 JSON 是否有該鍵區分「不變」與「回出廠值（null）」；型別不對回 400。門檻先後用套用後的生效值判斷（只改一邊也會檢查另一邊的出廠值）。
+- **偏離 9：事件清單的 `status`** 可用逗號給多個（`open,acknowledged`）。
+- **偏離 10：`ops.upkeep` 的順序**是自動結案 → 嚴重事件重複提醒 → 稽核、健康紀錄、樣本、已結事件清理；每輪重複提醒最多處理一批（5000 件）。清理摘要的鍵是 `auditLog`、`healthResult`、`incidentSample`、`incident`，o2a 的 `{"deleted":{"auditLog":n}}` 不變。
+- **偏離 11：看門狗與收件匣共用部署設定 `Ops:Watchdog:Enabled`**（預設 true）；測試主機關掉，測試直接呼叫 `OpsWatchdog.TickAsync`、`IncidentInboxDrain.FlushAsync`。看門狗每 60 秒一輪，收件匣每 5 秒 flush、關機時最後 flush 一次（技術限制）。
+- **偏離 12：客戶設定類事件的收件人**在 o2d 前用 `ops.alertRecipients`（`ops.configIssueRecipients` 與 `ruleEditor` 隨 o2d）；總覽的告警通道區塊在 o2c 前一律「未設定」。
+- o2c 的部分沒有做：C01、C09 的直送與佇列狀態、C13 整條、B08 的寄送佇列列、B09 的信件主旨與內文。對應測試只驗站內通知與事件那一半。
+
+**已知限制**
+
+- ⚠️ 兩個實例的彙總交易並行、且較晚檢查時間的那筆先提交時（C10 的「A 異常、B 正常同時寫入」），較早那筆提交後目前投影不會被更新（投影只往後推），事件仍正確開啟；投影要等下一筆結果才追上（最多一個檢查間隔）。C10 對這一步只驗事件狀態。
+- `PRAGMA quick_check` 在大資料庫的耗時沒有實測（Demo 資料量下 C08 的完整性檢查在測試內完成，沒有個別計時）。
+
+**驗證（本機）**
+
+- 新增測試類別：`IncidentTests` 13 例、`HealthCheckTests` 14 例（都標 `Category=Postgres`，B01、B03、C10、C15 另含無鎖模式）、`DatabaseUnwritableTests` 1 例；`DatabaseErrorsTests` 補真斷線形狀。
+- WebAPITests（`Ops` 命名空間全部＋`AdminUsersApiTests`、`EndpointRoutesTests`、`ConcurrencyExceptionTests`、`SecurityTests`、`HealthTests`）：SQLite 197 過 1 略過（23 秒）、PostgreSQL 198 過（25 秒）。
+- ApplicationTests（稽核、`DatabaseErrors`、政策、訊息、架構、DI、通知）：SQLite 276 過（1 分 30 秒）、PostgreSQL 276 過（2 分 3 秒）；DomainTests 1446 過。
+- 前端：`locales`、`policy-i18n`、`policy-types` 29 過，`no-hardcoded-colors` 22 過，`vue-tsc` 與 `quasar build` 過。
