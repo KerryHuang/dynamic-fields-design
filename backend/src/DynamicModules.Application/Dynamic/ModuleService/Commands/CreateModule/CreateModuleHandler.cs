@@ -2,9 +2,11 @@ using DynamicModules.Application.Common;
 using DynamicModules.Application.Common.Security;
 using DynamicModules.Application.Common.Time;
 using DynamicModules.Application.Dynamic.FieldService;
+using DynamicModules.Application.Dynamic.PolicyService;
 using DynamicModules.Application.Dynamic.ModuleService.Data;
 using DynamicModules.Application.Dynamic.References;
 using DynamicModules.Domain.Entities.Dynamic;
+using DynamicModules.Domain.Policies;
 using DynamicModules.Domain.Repositories.Dynamic;
 using DynamicModules.Domain.ValueObjects;
 using MediatR;
@@ -13,7 +15,7 @@ namespace DynamicModules.Application.Dynamic.ModuleService.Commands.CreateModule
 
 public class CreateModuleHandler(
     IModuleRepository modules, IProgramRepository programs, IUnitOfWork uow,
-    ICurrentUser user, IBusinessTime time, ReferenceProviderRegistry providers, BlockColumns blockColumns)
+    ICurrentUser user, IBusinessTime time, ReferenceProviderRegistry providers, BlockColumns blockColumns, IPolicyReader policies)
     : IRequestHandler<CreateModuleRequest, ServiceResult>
 {
     public async Task<ServiceResult> Handle(CreateModuleRequest request, CancellationToken ct)
@@ -63,7 +65,9 @@ public class CreateModuleHandler(
         module.StampCreated(user.UserId, now);
         modules.Add(module);
         await uow.CommitAsync(ct);
-        if (isExtension || !request.CreateTitleField) return ServiceResult.Created(module.ToResponse());
+        // 「基本資料」區塊一律建立（模組至少要有一個區塊）；「名稱」欄位依政策 A19
+        if (isExtension || !(request.CreateTitleField ?? await policies.BoolAsync(PolicyCatalog.ModuleCreateTitleField, null, ct)))
+            return ServiceResult.Created(module.ToResponse());
 
         // Field.Key = f_<Id> 需先有 Id；(ModuleId, Key) 唯一，所以先以空 Key 插入再回填。
         var field = new Field
