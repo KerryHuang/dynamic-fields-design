@@ -3,11 +3,13 @@ using DynamicModules.Application.Common;
 using DynamicModules.Application.Common.Security;
 using DynamicModules.Application.Dynamic.FieldService.Data;
 using DynamicModules.Application.Dynamic.ImportService.Data;
+using DynamicModules.Application.Dynamic.PolicyService;
 using DynamicModules.Application.Dynamic.RecordService;
 using DynamicModules.Application.Dynamic.RecordService.Data;
 using DynamicModules.Application.Dynamic.References;
 using DynamicModules.Domain.Entities.Dynamic;
 using DynamicModules.Domain.Modules;
+using DynamicModules.Domain.Policies;
 using DynamicModules.Domain.Repositories.Dynamic;
 using DynamicModules.Domain.ValueObjects;
 
@@ -23,9 +25,8 @@ public sealed record ImportPlan(Module Module, List<ImportColumn> Columns, List<
 /// </summary>
 public class ImportPlanner(
     IModuleRepository modules, IRecordRepository records, IPermissionRepository permissions, IDynamicAccessGuard guard,
-    ReferenceProviderRegistry providers, RecordCreator creator)
+    ReferenceProviderRegistry providers, RecordCreator creator, IPolicyReader policies)
 {
-    public const int MaxBytes = 1024 * 1024;
     public const string FileKey = "file";
     public const string ComputedColumn = "系統計算的欄位";
     public const string ReadOnlyColumn = "唯讀欄位";
@@ -44,8 +45,9 @@ public class ImportPlanner(
         if (access.Permissions is not { } perms) return (null, access.Denied);
         if (module.Kind == ModuleKind.Extension) return FileError("擴充模組不支援匯入");
         if (content.Length == 0) return FileError("請選擇檔案");
-        if (content.Length > MaxBytes) return FileError("檔案不能超過 1 MB");
-        var csv = CsvReader.Read(content);
+        var maxBytes = await policies.IntAsync(PolicyCatalog.ImportMaxFileBytes, null, ct);
+        if (content.Length > maxBytes) return FileError(ImportMessages.FileTooLarge(maxBytes));
+        var csv = CsvReader.Read(content, await policies.IntAsync(PolicyCatalog.ImportMaxRows, null, ct));
         if (csv.Error is { } error) return FileError(error);
 
         // 只比對讀者看得到的啟用欄位：隱藏欄位當作不存在，不洩漏

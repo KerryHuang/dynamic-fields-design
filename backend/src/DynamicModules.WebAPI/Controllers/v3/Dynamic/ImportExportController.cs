@@ -24,12 +24,11 @@ public class ImportExportController(IMediator mediator) : ControllerBase
     }
 
     /// <summary>
-    /// 匯入 CSV（決策 6）：commit=false 預覽、true 確認寫入。1 MB 上限由 handler 檢查並回欄位錯誤；
-    /// 這裡把請求上限放寬到 2 MB，讓略超過 1 MB 的檔案也能拿到「檔案不能超過 1 MB」而不是框架的 413。
+    /// 匯入 CSV（決策 6）：commit=false 預覽、true 確認寫入。檔案大小上限（政策 import.maxFileBytes）由 handler 檢查並回欄位錯誤；
+    /// 請求上限＝兩倍檔案上限＋multipart 開銷（<see cref="ImportBodyLimitFilter"/>），讓略超過的檔案拿到欄位錯誤而不是 413。
     /// </summary>
     [HttpPost("modules/{key}/import")]
-    [RequestSizeLimit(2 * 1024 * 1024)]
-    [RequestFormLimits(MultipartBodyLengthLimit = 2 * 1024 * 1024)]
+    [TypeFilter(typeof(ImportBodyLimitFilter))]
     public async Task<IActionResult> Import(string key, IFormFile? file, [FromQuery] bool commit = false)
     {
         byte[] content = [];

@@ -209,7 +209,7 @@ public class Phase7AcceptanceTests : IClassFixture<TestApp>
         export.StatusCode.Should().Be(HttpStatusCode.OK);
         var bytes = await export.Content.ReadAsByteArrayAsync();
         bytes.Take(3).Should().Equal(0xEF, 0xBB, 0xBF);
-        var csv = CsvReader.Read(bytes);
+        var csv = CsvReader.Read(bytes, 1000);
         csv.Error.Should().BeNull();
         csv.Header.Should().Contain(["訂單編號", "客戶", "訂單日期", "狀態", "未稅合計"]);
         csv.Rows.Should().HaveCount(1);
