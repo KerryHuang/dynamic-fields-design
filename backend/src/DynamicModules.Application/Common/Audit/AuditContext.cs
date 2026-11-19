@@ -13,6 +13,9 @@ public sealed class AuditContext
     public string? TargetLabel { get; private set; }
     public AuditSummary? Summary { get; private set; }
 
+    /// <summary>這次變更授予（true）或拿掉（false）系統管理員；非 null 時開安全事件（維運設計 §17.2.2、O2-U11）。</summary>
+    public bool? AdminChanged { get; private set; }
+
     private bool Outermost => Depth <= 1;
 
     /// <summary>補目標：建立後才知道 id 的、或要記顯示名快照的。</summary>
@@ -35,8 +38,15 @@ public sealed class AuditContext
         if (Outermost) (Summary ??= new AuditSummary()).Add(key, value);
     }
 
+    /// <summary>handler 標記系統管理員旗標有變；<see cref="Behaviors.AuditBehavior{TReq,TRes}"/> 寫完稽核列後在同一交易開安全事件。</summary>
+    public void MarkAdminChanged(bool granted)
+    {
+        if (Outermost) AdminChanged = granted;
+    }
+
     internal void Reset()
     {
+        AdminChanged = null;
         TargetId = null;
         TargetLabel = null;
         Summary = null;

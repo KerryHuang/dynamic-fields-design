@@ -23,6 +23,7 @@ public class UpdateUserHandler(IAccountRepository accounts, IUnitOfWork uow, Aud
         user.IsSystemAdmin = request.IsSystemAdmin;
         var oldGroups = await accounts.SetMembershipsAsync(user.UserId, groupIds, ct);
         await uow.CommitAsync(ct);
+        if (before.IsSystemAdmin != user.IsSystemAdmin) audit.MarkAdminChanged(user.IsSystemAdmin);
         audit.Describe(new { before.DisplayName, GroupIds = oldGroups, before.IsSystemAdmin },
             new { user.DisplayName, GroupIds = groupIds.Distinct().Order().ToList(), user.IsSystemAdmin });
         return ServiceResult.Success(new AdminUserResponse(

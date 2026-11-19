@@ -79,6 +79,10 @@ builder.Services.AddSingleton(sp => DynamicModules.Application.Dynamic.OpsServic
 // 背景排程器：工作登記在 AddApplication；Ops:Scheduler:Enabled=false 時不跑（多實例只讓其中一台跑、除錯用）
 builder.Services.AddSingleton<DynamicModules.Application.Dynamic.OpsService.Scheduling.JobRunner>();
 builder.Services.AddHostedService<SchedulerHostedService>();
+// 看門狗與事件收件匣（維運設計 §17.2.3、§17.2.4）：每個實例都跑；Ops:Watchdog:Enabled=false 時不跑（測試主機）
+builder.Services.AddHostedService<OpsWatchdogHostedService>();
+builder.Services.AddHostedService<IncidentInboxFlusher>();
+builder.Services.AddSingleton<DynamicModules.Application.Dynamic.OpsService.Health.IDiskSpace, DriveInfoDiskSpace>();
 builder.Services.AddSingleton(new AuthSettings(builder.Configuration.GetValue<bool>("Demo:LoginEnabled")));
 // 附件：預設放在資料庫旁的 attachments 目錄（記憶體資料庫則放暫存目錄）。Demo 登入開啟時預設不開放上傳，可用 Attachments:UploadEnabled 明確覆寫。
 var (attachmentSettings, policyDefaults, attachmentWarnings) = AttachmentSettingsFactory.Create(builder.Configuration, databaseDirectory);
@@ -122,6 +126,9 @@ if (keysDirectory is not null)
     builder.Services.AddDataProtection().PersistKeysToFileSystem(new DirectoryInfo(keysDirectory));
 else if (databaseProvider == DatabaseProvider.Postgres)
     startupWarnings.Add("Database:Provider=Postgres 沒有設定 DataProtection:KeysDirectory，登入金鑰不落地，站台重開後要重新登入；正式環境請設定");
+// storage.diskFree 要量的本機目錄：資料庫檔目錄、附件根目錄、金鑰目錄（PostgreSQL 沒有資料庫檔目錄；§17.2.4）
+builder.Services.AddSingleton(new DynamicModules.Application.Dynamic.OpsService.Health.OpsStoragePaths(
+    new[] { databaseDirectory, attachmentSettings.Root, keysDirectory }.OfType<string>().Distinct(StringComparer.Ordinal).ToList()));
 builder.Services.AddControllers().AddJsonOptions(o =>
 {
     o.JsonSerializerOptions.PropertyNamingPolicy = JsonNamingPolicy.CamelCase;
@@ -133,6 +140,7 @@ builder.Services.AddControllers().AddJsonOptions(o =>
 builder.Services.AddExceptionHandler<DynamicModules.WebAPI.Errors.ConcurrencyExceptionHandler>();
 builder.Services.AddExceptionHandler<DynamicModules.WebAPI.Errors.FrozenFieldExceptionHandler>();
 builder.Services.AddExceptionHandler<DynamicModules.WebAPI.Errors.DatabaseBusyExceptionHandler>();
+builder.Services.AddExceptionHandler<DynamicModules.WebAPI.Errors.DatabaseUnwritableExceptionHandler>();
 // 最後一道：必須註冊在其他 handler 之後（依註冊順序執行）
 builder.Services.AddExceptionHandler<DynamicModules.WebAPI.Errors.UnhandledExceptionHandler>();
 // 所有 ProblemDetails 的 traceId 與 X-Request-Id 一致（框架預設用 Activity.Id，格式不同）

@@ -59,6 +59,7 @@ public class AuditApiTests
         public Task<List<AuditLogEntry>> PageAsync(AuditLogQuery query, int take, CancellationToken ct) => throw new NotSupportedException();
         public Task<AuditLogEntry?> GetAsync(long id, CancellationToken ct) => throw new NotSupportedException();
         public Task<int> PurgeBatchAsync(DateTime cutoffUtc, int batchSize, CancellationToken ct) => throw new NotSupportedException();
+        public Task<int> CountSinceAsync(string action, DateTime sinceUtc, CancellationToken ct) => throw new NotSupportedException();
     }
 
     private static object Priv(bool read = false, bool edit = false) =>
@@ -178,10 +179,10 @@ public class AuditApiTests
 
         private sealed class Switchable(AuditLog inner, AuditSwitch owner) : IAuditLog
         {
-            public void Add(AuditEntry entry)
+            public AuditLogEntry Add(AuditEntry entry)
             {
                 if (owner.On) throw new InvalidOperationException("稽核寫不進去（測試注入）");
-                inner.Add(entry);
+                return inner.Add(entry);
             }
 
             public Task WriteNowAsync(AuditEntry entry, CancellationToken ct) =>
@@ -525,6 +526,7 @@ public class AuditApiTests
         public void Add(AuditLogEntry entry) => holder.Inner.Add(entry);
         public Task<List<AuditLogEntry>> PageAsync(AuditLogQuery query, int take, CancellationToken ct) => holder.Inner.PageAsync(query, take, ct);
         public Task<AuditLogEntry?> GetAsync(long id, CancellationToken ct) => holder.Inner.GetAsync(id, ct);
+        public Task<int> CountSinceAsync(string action, DateTime sinceUtc, CancellationToken ct) => holder.Inner.CountSinceAsync(action, sinceUtc, ct);
         public async Task<int> PurgeBatchAsync(DateTime cutoffUtc, int batchSize, CancellationToken ct)
         {
             if (holder.Batches.Count + 1 == failOnCall) throw new InvalidOperationException("第二批失敗（測試注入）");

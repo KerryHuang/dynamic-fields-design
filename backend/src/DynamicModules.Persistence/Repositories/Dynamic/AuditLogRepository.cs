@@ -34,4 +34,7 @@ public class AuditLogRepository(DynamicDbContext db) : IAuditLogRepository
         if (upper is not { } max) return 0;
         return await db.Set<AuditLogEntry>().Where(a => a.OccurredUtc < cutoffUtc && a.Id <= max).ExecuteDeleteAsync(ct);
     }
+
+    public Task<int> CountSinceAsync(string action, DateTime sinceUtc, CancellationToken ct) =>
+        db.Set<AuditLogEntry>().CountAsync(a => a.Action == action && a.OccurredUtc >= sinceUtc, ct);
 }

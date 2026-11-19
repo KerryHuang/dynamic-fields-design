@@ -23,6 +23,7 @@ public static class DependencyInjection
         services.AddDbContext<DynamicDbContext>((sp, o) => PostgresDatabase.Configure(o, connectionString, sp.GetRequiredService<PostgresWriteSettings>()));
         services.AddSingleton<ISqlDialect, PostgresDialect>();
         services.AddSingleton<IReportSqlSnapshot, PostgresReportSqlSnapshot>();
+        services.AddScoped<Application.Dynamic.OpsService.Health.IDatabaseHealthProbe, PostgresDatabaseHealthProbe>();
         services.AddScoped<ITransactionManager, PostgresTransactionManager>();
         services.AddScoped<IWorkSavepoints, EfWorkSavepoints>();
         services.AddScoped<Application.Dynamic.OpsService.IDatabaseInfo, EfDatabaseInfo>();

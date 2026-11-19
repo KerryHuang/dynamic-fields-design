@@ -13,6 +13,7 @@ public sealed class ClientErrorGuardFilter(ClientErrorThrottle throttle, ClientI
         var http = context.HttpContext;
         if (!throttle.TryAcquire(clientIp.Resolve(http) ?? "unknown"))
         {
+            DynamicModules.Application.Common.Observability.OpsMetrics.ClientErrorsThrottled.Add(1);
             context.Result = new StatusCodeResult(StatusCodes.Status429TooManyRequests);
             return Task.CompletedTask;
         }

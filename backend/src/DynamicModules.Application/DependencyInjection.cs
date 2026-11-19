@@ -144,6 +144,26 @@ public static class DependencyInjection
         services.AddSingleton<Dynamic.OpsService.Scheduling.IScheduledJob, Dynamic.NotificationService.NotificationUpkeepJob>();
         services.AddSingleton<Dynamic.OpsService.Scheduling.IScheduledJob, Dynamic.OpsService.OpsUpkeepJob>();
         services.TryAddSingleton<Dynamic.OpsService.OpsUpkeepOptions>();
+        // 維運事件與健康檢查（維運設計 §17.2.2–§17.2.4）：收件匣、狀態板、待補寫佇列都只在本實例記憶體
+        services.AddSingleton<Dynamic.OpsService.Scheduling.IScheduledJob, Dynamic.OpsService.Health.OpsMonitorJob>();
+        services.AddSingleton<Dynamic.OpsService.Incidents.IncidentInbox>();
+        services.AddSingleton<Dynamic.OpsService.Incidents.IIncidentInbox>(sp => sp.GetRequiredService<Dynamic.OpsService.Incidents.IncidentInbox>());
+        services.AddSingleton<Dynamic.OpsService.Incidents.IncidentInboxDrain>();
+        services.AddScoped<Dynamic.OpsService.Incidents.IncidentRecorder>();
+        services.AddScoped<Dynamic.OpsService.Incidents.OpsNotifier>();
+        services.AddScoped<Dynamic.OpsService.Incidents.SecurityIncidents>();
+        services.AddSingleton<Dynamic.OpsService.Health.HealthCheckEngine>();
+        services.AddSingleton<Dynamic.OpsService.Health.OpsWatchdog>();
+        services.AddSingleton<Dynamic.OpsService.Monitor.HealthRunGate>();
+        services.AddScoped<Dynamic.OpsService.Monitor.OpsMonitorReader>();
+        services.AddSingleton<Dynamic.OpsService.Health.IHealthProbe, Dynamic.OpsService.Health.DatabaseWritableProbe>();
+        services.AddSingleton<Dynamic.OpsService.Health.IHealthProbe, Dynamic.OpsService.Health.DiskFreeProbe>();
+        services.AddSingleton<Dynamic.OpsService.Health.IHealthProbe, Dynamic.OpsService.Health.SchedulerJobsProbe>();
+        services.AddSingleton<Dynamic.OpsService.Health.IHealthProbe, Dynamic.OpsService.Health.WalSizeProbe>();
+        services.AddSingleton<Dynamic.OpsService.Health.IHealthProbe, Dynamic.OpsService.Health.IntegrityProbe>();
+        services.AddSingleton<Dynamic.OpsService.Health.IHealthProbe, Dynamic.OpsService.Health.BackupFreshnessProbe>();
+        services.AddSingleton<Dynamic.OpsService.Health.IHealthProbe, Dynamic.OpsService.Health.LoginFailuresProbe>();
+        services.TryAddSingleton(Dynamic.OpsService.Health.OpsStoragePaths.None);
         services.AddScoped<Dynamic.NotificationService.INotificationReminderSource, Dynamic.ApprovalService.ApprovalReminderSource>();
         services.AddScoped<Dynamic.TaskRuleService.TaskRuleValidator>();
         services.AddScoped<Dynamic.TaskRuleService.TaskRuleEditor>();

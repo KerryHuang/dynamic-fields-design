@@ -112,6 +112,42 @@ public static class PolicyCatalog
     public static readonly PolicyDefinition OpsAuditRetentionDays =
         new("ops.auditRetentionDays", "ops", PolicyKind.Integer, PolicyScope.System, "365", 90, 3650, Unit: "days");
 
+    /// <summary>O2：送告警信、跑排程型健康檢查的 <c>ops.monitor</c> 間隔（分鐘；維運設計 §17.6.1）。</summary>
+    public static readonly PolicyDefinition OpsMonitorScanMinutes =
+        new("ops.monitorScanMinutes", "ops", PolicyKind.Integer, PolicyScope.System, "1", 1, 60, Unit: "minutes");
+
+    /// <summary>O2：健康檢查與告警寄送紀錄保留天數。</summary>
+    public static readonly PolicyDefinition OpsHealthResultRetentionDays =
+        new("ops.healthResultRetentionDays", "ops", PolicyKind.Integer, PolicyScope.System, "30", 7, 365, Unit: "days");
+
+    /// <summary>O2：已結案維運事件保留天數（從結案時間起算）。</summary>
+    public static readonly PolicyDefinition OpsIncidentRetentionDays =
+        new("ops.incidentRetentionDays", "ops", PolicyKind.Integer, PolicyScope.System, "180", 30, 1095, Unit: "days");
+
+    /// <summary>O2：事件原始樣本（伺服器例外與前端錯誤原文）保留天數。</summary>
+    public static readonly PolicyDefinition OpsIncidentSampleRetentionDays =
+        new("ops.incidentSampleRetentionDays", "ops", PolicyKind.Integer, PolicyScope.System, "14", 1, 90, Unit: "days");
+
+    /// <summary>O2：嚴重事件沒人確認時的重複提醒間隔（時）。</summary>
+    public static readonly PolicyDefinition OpsIncidentRenotifyHours =
+        new("ops.incidentRenotifyHours", "ops", PolicyKind.Integer, PolicyScope.System, "24", 1, 168, Unit: "hours");
+
+    /// <summary>O2：產品缺陷、客戶設定錯誤碼、安全事件多久沒再出現就自動結案（時）。</summary>
+    public static readonly PolicyDefinition OpsIncidentAutoResolveHours =
+        new("ops.incidentAutoResolveHours", "ops", PolicyKind.Integer, PolicyScope.System, "72", 1, 720, Unit: "hours");
+
+    /// <summary>O2：基礎設施、產品缺陷、安全事件的站內通知對象（解析為空時改送全部系統管理員）。</summary>
+    public static readonly PolicyDefinition OpsAlertRecipients =
+        new("ops.alertRecipients", "ops", PolicyKind.Recipients, PolicyScope.System, "admins", 1, 20);
+
+    /// <summary>O2：<c>security.loginFailures</c> 往回數幾分鐘的登入失敗。</summary>
+    public static readonly PolicyDefinition OpsLoginFailureWindowMinutes =
+        new("ops.loginFailureWindowMinutes", "ops", PolicyKind.Integer, PolicyScope.System, "15", 5, 1440, Unit: "minutes");
+
+    /// <summary>O2：排程工作的下次預定時間落後幾個間隔，<c>scheduler.jobs</c> 直接判嚴重。</summary>
+    public static readonly PolicyDefinition OpsSchedulerLagIntervals =
+        new("ops.schedulerLagIntervals", "ops", PolicyKind.Integer, PolicyScope.System, "3", 2, 100, Unit: "count");
+
     /// <summary>A3：一個簽核流程的關卡數。</summary>
     public static readonly PolicyDefinition ApprovalMaxStages =
         new("approval.maxStages", "approval", PolicyKind.Integer, PolicyScope.Module, "10", 1, 20, Unit: "count");
@@ -173,6 +209,8 @@ public static class PolicyCatalog
          NotificationRetentionDays, NotificationReminderScanMinutes, CalendarWeekStart,
          AttachmentMaxFileBytes, AttachmentMaxFilesPerField, AttachmentAllowedExtensions, AttachmentMaxFilesPerComment,
          OpsSlowRequestMs, OpsClientErrorCollection, OpsUpkeepMinutes, OpsAuditRetentionDays,
+         OpsMonitorScanMinutes, OpsHealthResultRetentionDays, OpsIncidentRetentionDays, OpsIncidentSampleRetentionDays,
+         OpsIncidentRenotifyHours, OpsIncidentAutoResolveHours, OpsAlertRecipients, OpsLoginFailureWindowMinutes, OpsSchedulerLagIntervals,
          ApprovalMaxStages, ApprovalMaxBranches, ApprovalMaxApprovers, ApprovalMaxDueHours, ApprovalMaxCommentLength, ApprovalMaxManagerLevel,
          ApprovalAllowSelfApproval, ApprovalAdminBypassTransitionGroups, ApprovalMaxAddSignUsers, ApprovalMaxAddSignStages,
          ApprovalOverdueReminderHours, ApprovalDefaultFallbackApprovers, ApprovalAlertRecipients];

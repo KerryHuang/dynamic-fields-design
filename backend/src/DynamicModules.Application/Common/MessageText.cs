@@ -93,7 +93,16 @@ public static class MessageText
         // 稽核查詢（維運設計 §17.5）
         AuditNotFound = nameof(AuditNotFound), AuditRangeReversed = nameof(AuditRangeReversed), AuditRangeTooLong = nameof(AuditRangeTooLong),
         AuditDateTooEarly = nameof(AuditDateTooEarly), AuditCursorInvalid = nameof(AuditCursorInvalid), AuditFilterInvalid = nameof(AuditFilterInvalid),
-        AuditLimitOutOfRange = nameof(AuditLimitOutOfRange);
+        AuditLimitOutOfRange = nameof(AuditLimitOutOfRange),
+        // 資料庫寫不進、連不上（維運設計 §17.2.9、O2-U8）
+        DatabaseUnwritable = nameof(DatabaseUnwritable), DatabaseUnavailable = nameof(DatabaseUnavailable),
+        // 維運監控（維運設計 §17.5）
+        IncidentNotFound = nameof(IncidentNotFound), IncidentStateChanged = nameof(IncidentStateChanged),
+        IncidentManagedBySource = nameof(IncidentManagedBySource), HealthCheckNotFound = nameof(HealthCheckNotFound),
+        HealthCheckBusy = nameof(HealthCheckBusy), HealthCheckNotApplicable = nameof(HealthCheckNotApplicable),
+        HealthCheckOutOfRange = nameof(HealthCheckOutOfRange), HealthCheckThresholdOrder = nameof(HealthCheckThresholdOrder),
+        HealthCheckCannotDisable = nameof(HealthCheckCannotDisable), HealthCheckNoThreshold = nameof(HealthCheckNoThreshold),
+        OpsExpectedStatusInvalid = nameof(OpsExpectedStatusInvalid), OpsNoteTooLong = nameof(OpsNoteTooLong);
 
     private static readonly Dictionary<string, (string Zh, string En, string Th, string Vi)> Table = new()
     {
@@ -403,6 +412,27 @@ public static class MessageText
         [AuditFilterInvalid] = ("篩選條件不正確", "The filter is invalid", "เงื่อนไขการกรองไม่ถูกต้อง", "Điều kiện lọc không hợp lệ"),
         [AuditLimitOutOfRange] = ("每頁筆數要在 1 到 {0} 之間", "Page size must be between 1 and {0}",
             "จำนวนรายการต่อหน้าต้องอยู่ระหว่าง 1 ถึง {0}", "Số bản ghi mỗi trang phải từ 1 đến {0}"),
+        [DatabaseUnwritable] = ("資料庫目前無法寫入，請聯絡系統管理員", "The database cannot be written to right now. Please contact your system administrator",
+            "ขณะนี้ไม่สามารถเขียนฐานข้อมูลได้ โปรดติดต่อผู้ดูแลระบบ", "Hiện không thể ghi vào cơ sở dữ liệu, vui lòng liên hệ quản trị viên hệ thống"),
+        [DatabaseUnavailable] = ("資料庫目前無法連線，請聯絡系統管理員", "The database cannot be reached right now. Please contact your system administrator",
+            "ขณะนี้ไม่สามารถเชื่อมต่อฐานข้อมูลได้ โปรดติดต่อผู้ดูแลระบบ", "Hiện không thể kết nối cơ sở dữ liệu, vui lòng liên hệ quản trị viên hệ thống"),
+        [IncidentNotFound] = ("找不到維運事件", "Ops incident not found", "ไม่พบเหตุการณ์ด้านระบบ", "Không tìm thấy sự cố vận hành"),
+        [IncidentStateChanged] = ("事件的狀態已經被別人改了，請重新整理", "Someone else has already changed this incident. Please refresh",
+            "สถานะของเหตุการณ์นี้ถูกผู้อื่นเปลี่ยนแล้ว โปรดรีเฟรช", "Trạng thái sự cố đã được người khác thay đổi, vui lòng tải lại"),
+        [IncidentManagedBySource] = ("這類事件由系統偵測到恢復後自動結案，不能手動結案", "This kind of incident is resolved automatically when the system detects recovery; it cannot be resolved manually",
+            "เหตุการณ์ประเภทนี้จะปิดอัตโนมัติเมื่อระบบตรวจพบว่ากลับเป็นปกติ ไม่สามารถปิดเองได้", "Loại sự cố này được tự động đóng khi hệ thống phát hiện đã phục hồi, không thể đóng thủ công"),
+        [HealthCheckNotFound] = ("找不到健康檢查", "Health check not found", "ไม่พบการตรวจสุขภาพ", "Không tìm thấy kiểm tra sức khỏe"),
+        [HealthCheckBusy] = ("這個檢查正在執行或剛執行過，請 {0} 秒後再試", "This check is running or has just run. Try again in {0} seconds",
+            "การตรวจนี้กำลังทำงานหรือเพิ่งทำงาน โปรดลองใหม่ใน {0} วินาที", "Kiểm tra này đang chạy hoặc vừa chạy, vui lòng thử lại sau {0} giây"),
+        [HealthCheckNotApplicable] = ("這個檢查不適用於目前的資料庫", "This check does not apply to the current database",
+            "การตรวจนี้ใช้ไม่ได้กับฐานข้อมูลปัจจุบัน", "Kiểm tra này không áp dụng cho cơ sở dữ liệu hiện tại"),
+        [HealthCheckOutOfRange] = ("要在 {0} 到 {1} 之間", "Must be between {0} and {1}", "ต้องอยู่ระหว่าง {0} ถึง {1}", "Phải từ {0} đến {1}"),
+        [HealthCheckThresholdOrder] = ("警告門檻與嚴重門檻的先後不合理", "The warning and critical thresholds are in the wrong order",
+            "ลำดับเกณฑ์เตือนและเกณฑ์ร้ายแรงไม่สมเหตุสมผล", "Thứ tự ngưỡng cảnh báo và ngưỡng nghiêm trọng không hợp lý"),
+        [HealthCheckCannotDisable] = ("這個檢查不能關閉", "This check cannot be turned off", "ไม่สามารถปิดการตรวจนี้ได้", "Không thể tắt kiểm tra này"),
+        [HealthCheckNoThreshold] = ("這個檢查沒有這個門檻", "This check has no such threshold", "การตรวจนี้ไม่มีเกณฑ์นี้", "Kiểm tra này không có ngưỡng này"),
+        [OpsExpectedStatusInvalid] = ("目前狀態只能是 {0}", "The expected status can only be {0}", "สถานะที่คาดไว้ต้องเป็น {0} เท่านั้น", "Trạng thái dự kiến chỉ có thể là {0}"),
+        [OpsNoteTooLong] = ("備註最多 {0} 字", "The note can be at most {0} characters", "หมายเหตุยาวได้ไม่เกิน {0} ตัวอักษร", "Ghi chú tối đa {0} ký tự"),
     };
 
     /// <summary>無參數訊息的繁中原文 → 鍵；兩鍵同一句時建表就會丟例外。</summary>

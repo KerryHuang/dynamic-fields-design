@@ -33,6 +33,7 @@ public static class DependencyInjection
         });
         services.AddSingleton<ISqlDialect, SqliteDialect>();
         services.AddSingleton<IReportSqlSnapshot, SqliteReportSqlSnapshot>();
+        services.AddScoped<Application.Dynamic.OpsService.Health.IDatabaseHealthProbe, SqliteDatabaseHealthProbe>();
         services.AddScoped<ITransactionManager, EfTransactionManager>();
         services.AddScoped<IWorkSavepoints, EfWorkSavepoints>();
         services.AddScoped<Application.Dynamic.OpsService.IDatabaseInfo, EfDatabaseInfo>();
@@ -75,6 +76,8 @@ public static class DependencyInjection
         services.AddScoped<ITaskViewRepository, TaskViewRepository>();
         services.AddScoped<IScheduledJobRepository, ScheduledJobRepository>();
         services.AddScoped<IAuditLogRepository, AuditLogRepository>();
+        services.AddScoped<IOpsIncidentRepository, OpsIncidentRepository>();
+        services.AddScoped<IHealthCheckRepository, HealthCheckRepository>();
         services.AddScoped<INotificationRepository, NotificationRepository>();
         services.AddScoped<IOrganizationRepository, OrganizationRepository>();
         services.AddScoped<IApprovalFlowRepository, ApprovalFlowRepository>();

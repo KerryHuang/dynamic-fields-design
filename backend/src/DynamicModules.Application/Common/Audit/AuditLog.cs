@@ -14,8 +14,8 @@ namespace DynamicModules.Application.Common.Audit;
 /// </summary>
 public interface IAuditLog
 {
-    /// <summary>加進 DbContext 的追蹤，跟著呼叫端下一次 SaveChanges 寫進同一個交易；寫不進去整筆失敗。</summary>
-    void Add(AuditEntry entry);
+    /// <summary>加進 DbContext 的追蹤，跟著呼叫端下一次 SaveChanges 寫進同一個交易；寫不進去整筆失敗。回傳追蹤中的列（存檔後才有 Id）。</summary>
+    AuditLogEntry Add(AuditEntry entry);
 
     /// <summary>另開 DI scope 立刻寫；寫不進去丟 <see cref="AuditWriteException"/>。交易內呼叫丟 <see cref="InvalidOperationException"/>。</summary>
     Task WriteNowAsync(AuditEntry entry, CancellationToken ct);
@@ -28,7 +28,12 @@ public sealed class AuditLog(
     IAuditLogRepository repository, ICurrentUser currentUser, IRequestOrigin origin, TimeProvider time,
     ITransactionManager transactions, IServiceScopeFactory scopes, ILogger<AuditLog> logger) : IAuditLog
 {
-    public void Add(AuditEntry entry) => repository.Add(Build(entry));
+    public AuditLogEntry Add(AuditEntry entry)
+    {
+        var row = Build(entry);
+        repository.Add(row);
+        return row;
+    }
 
     public async Task WriteNowAsync(AuditEntry entry, CancellationToken ct)
     {

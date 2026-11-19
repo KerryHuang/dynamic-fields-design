@@ -18,6 +18,8 @@ public interface IAuditLogRepository
 
     /// <summary>刪掉最舊的一批（最多 <paramref name="batchSize"/> 列）早於 <paramref name="cutoffUtc"/> 的列，回傳刪除筆數；要在交易型請求內呼叫。</summary>
     Task<int> PurgeBatchAsync(DateTime cutoffUtc, int batchSize, CancellationToken ct);
+    /// <summary>某個動作在 sinceUtc（含）之後的列數（<c>security.loginFailures</c>，維運設計 §17.2.4）。</summary>
+    Task<int> CountSinceAsync(string action, DateTime sinceUtc, CancellationToken ct);
 }
 
 /// <summary>稽核查詢條件；時間範圍兩端都含（預設迄時是「現在」，剛寫的列要查得到）。動作分組由呼叫端展開成 <see cref="Actions"/>（不用 LIKE 前綴，O2-T18）。</summary>

@@ -2,6 +2,7 @@ using System.Text.RegularExpressions;
 using DynamicModules.Application.Common;
 using DynamicModules.Application.Common.Observability;
 using DynamicModules.Application.Dynamic.PolicyService;
+using DynamicModules.Application.Dynamic.OpsService.Incidents;
 using DynamicModules.Domain.Ops;
 using DynamicModules.Domain.Policies;
 using DynamicModules.Domain.Entities.Dynamic;
@@ -24,7 +25,8 @@ public class GetOpsInfoHandler(
                 j.JobKey, j.LastStartedUtc, j.LastFinishedUtc, j.LastStatus?.ToString(), j.ConsecutiveFailures, j.NextDueUtc, j.LeaseOwner)).ToList()));
 }
 
-public partial class ReportClientErrorHandler(CachedSystemPolicy policy, ILogger<ReportClientErrorHandler> logger)
+public partial class ReportClientErrorHandler(
+    CachedSystemPolicy policy, IIncidentInbox inbox, IOpsEnvironment env, TimeProvider time, ILogger<ReportClientErrorHandler> logger)
     : IRequestHandler<ReportClientErrorRequest, ServiceResult>
 {
     public static readonly EventId ClientError = new(5001, "ClientError");
@@ -53,6 +55,19 @@ public partial class ReportClientErrorHandler(CachedSystemPolicy policy, ILogger
             Cut(r.Locale, ClientErrorLimits.LocaleMax), Cut(r.Browser, ClientErrorLimits.BrowserMax),
             lastRequestId, request.UserId, message, stack);
         OpsMetrics.ClientErrors.Add(1);
+        // 事件（維運設計 §17.2.2）：產品缺陷、資訊級（O2-U5，不通知）；只放進記憶體收件匣，不在請求裡寫資料庫
+        var moduleKey = Cut(r.ModuleKey, ClientErrorLimits.ModuleKeyMax);
+        var now = time.GetUtcNow().UtcDateTime;
+        inbox.Post(new IncidentSignal
+        {
+            Fingerprint = fingerprint, Source = IncidentSource.Client, Category = IncidentCategory.Defect, Severity = IncidentSeverity.Info,
+            Code = Cut($"{r.Kind}:{name ?? "Error"}", 100)!, TitleKey = IncidentTitles.ClientError, TitleParams = IncidentTitles.Client(name, route, moduleKey),
+            NormalizedMessage = SensitiveTextMask.Apply(ErrorFingerprint.NormalizeMessage(SensitiveTextMask.Apply(message))),
+            ModuleKey = moduleKey, Route = IncidentTitles.RouteTemplate(route), OccurredUtc = now, Version = Cut(r.Version, ClientErrorLimits.VersionMax) ?? env.Version,
+            RequestId = lastRequestId,
+            Sample = new IncidentSampleData(now, lastRequestId, request.UserId, Cut(r.Version, ClientErrorLimits.VersionMax), route,
+                RawMessage: message, RawStack: stack, Browser: Cut(r.Browser, ClientErrorLimits.BrowserMax), Locale: Cut(r.Locale, ClientErrorLimits.LocaleMax)),
+        });
         return ServiceResult.Success();
     }
 

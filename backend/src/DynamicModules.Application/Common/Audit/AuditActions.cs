@@ -110,6 +110,9 @@ public static class AuditActions
         new("app.integrationRetry", App, W),
         // 維運
         new("ops.retention.purge", Ops, W),
+        new("healthCheck.update", Ops, W),
+        new("incident.acknowledge", Ops, W),
+        new("incident.resolve", Ops, W),
     ];
 
     private static readonly Dictionary<string, Entry> ByCode = All.ToDictionary(e => e.Code, StringComparer.Ordinal);

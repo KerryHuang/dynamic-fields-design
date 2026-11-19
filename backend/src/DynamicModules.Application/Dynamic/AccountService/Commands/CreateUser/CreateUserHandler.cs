@@ -27,6 +27,7 @@ public class CreateUserHandler(IAccountRepository accounts, IPasswordService pas
         await accounts.SetMembershipsAsync(id, groupIds, ct);
         await uow.CommitAsync(ct);
         audit.Target(id);
+        if (request.IsSystemAdmin) audit.MarkAdminChanged(true);
         audit.Describe(null, new { DisplayName = request.DisplayName.Trim(), GroupIds = groupIds.Distinct().Order().ToList(), request.IsSystemAdmin, IsActive = true });
         return ServiceResult.Created(new AdminUserResponse(
             id, request.DisplayName.Trim(), true, request.IsSystemAdmin, false, false, groupIds.Distinct().Order().ToList()));

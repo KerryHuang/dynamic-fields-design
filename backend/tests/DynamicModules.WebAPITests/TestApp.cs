@@ -166,6 +166,8 @@ public class TestApp : WebApplicationFactory<Program>
         builder.UseSetting("Attachments:Root", AttachmentRoot);
         // 背景排程器預設不跑：否則每個測試主機一啟動就補通知，改到既有測試的通知筆數；排程測試自己建 JobRunner 呼叫 TickAsync
         builder.UseSetting("Ops:Scheduler:Enabled", "false");
+        // 看門狗與事件收件匣的背景迴圈同理不跑；維運測試直接呼叫 OpsWatchdog.TickAsync、IncidentInboxDrain.FlushAsync
+        builder.UseSetting("Ops:Watchdog:Enabled", "false");
         foreach (var (key, value) in Settings) builder.UseSetting(key, value);
         // 空字串覆蓋 appsettings.Development.json 的開發用密碼，代表「沒設」
         builder.UseSetting("Auth:InitialAdminPassword", InitialAdminPassword ?? "");

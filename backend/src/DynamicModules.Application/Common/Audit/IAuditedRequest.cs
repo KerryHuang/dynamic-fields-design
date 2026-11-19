@@ -31,5 +31,5 @@ public static class AuditTargets
         Policy = "policy", Job = "job", App = "app", Rule = "rule", Event = "event", Check = "check", Ledger = "ledger",
         TaskRule = "taskRule", Workflow = "workflow", ApprovalFlow = "approvalFlow", PrintTemplate = "printTemplate",
         Conversion = "conversion", Dashboard = "dashboard", Department = "department", Template = "template", Theme = "theme",
-        Integration = "integration";
+        Integration = "integration", HealthCheck = "healthCheck", Incident = "incident";
 }

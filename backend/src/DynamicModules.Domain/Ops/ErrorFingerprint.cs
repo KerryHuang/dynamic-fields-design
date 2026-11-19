@@ -84,6 +84,13 @@ public static partial class ErrorFingerprint
         Hash(["client", kind, name ?? "", NormalizeMessage(message),
             string.Join("|", frames.Take(FrameCount)), routeTemplate ?? ""]);
 
+    /// <summary>基礎設施類（健康檢查、通道）與安全類事件的指紋：種類＋代碼（維運設計 §17.2.2）。</summary>
+    public static string ForInfra(string kind, string code) => Hash([kind, code]);
+
+    /// <summary>客戶設定類事件的指紋：ruleKind、moduleKey、ruleId、錯誤碼（維運設計 §17.2.2）。</summary>
+    public static string ForConfig(string ruleKind, string? moduleKey, long? ruleId, string errorCode) =>
+        Hash(["config", ruleKind, moduleKey ?? "", ruleId?.ToString(System.Globalization.CultureInfo.InvariantCulture) ?? "", errorCode]);
+
     private static string Hash(string[] parts)
     {
         var bytes = SHA256.HashData(Encoding.UTF8.GetBytes(string.Join("\n", parts)));

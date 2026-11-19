@@ -89,8 +89,10 @@ public sealed class DatabaseErrors : IDatabaseErrors
         // 類別 08（connection exception）與伺服器關閉中、還沒能接受連線（維運設計 §17.2.9）
         DbException { SqlState: { } state } => state.StartsWith("08", StringComparison.Ordinal) || PgUnavailable.Contains(state),
         // Npgsql 在 socket 斷線、連不到主機時丟不帶 SQLSTATE 的例外，內層是 SocketException 或 IOException；
-        // 連線池耗盡（內層 TimeoutException）已歸忙碌，不在這裡（⚠️ 真的斷線時的例外形狀待 o2b 實測，設計 §17.10.6）
+        // 連線池耗盡（內層 TimeoutException）已歸忙碌，不在這裡（o2b 實測：拒絕連線、硬殺後讀串流都落在這條，設計 §17.12）
         DbException { SqlState: null } d => HasInner(d, x => x is SocketException or IOException),
+        // o2b 實測：資料庫主機名解析失敗時 Npgsql 不包裝，直接丟 SocketException；只認名稱解析類的錯誤碼，其他 socket 錯誤不歸資料庫
+        SocketException { SocketErrorCode: SocketError.HostNotFound or SocketError.TryAgain or SocketError.NoData } => true,
         _ => false,
     });
 

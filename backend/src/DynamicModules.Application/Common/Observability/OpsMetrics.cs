@@ -24,4 +24,13 @@ public static class OpsMetrics
 
     /// <summary>未處理例外且能歸屬到某條規則的次數；tag <c>ruleKind</c>。</summary>
     public static readonly Counter<long> RuleFailures = Meter.CreateCounter<long>("formwright.rule.failures");
+
+    /// <summary>收件匣滿了丟掉的指紋（維運設計 §17.2.3）。</summary>
+    public static readonly Counter<long> IncidentsDropped = Meter.CreateCounter<long>("formwright.incident.dropped");
+
+    /// <summary>健康檢查待補寫佇列滿了丟掉的筆數（§17.2.4 第 3 步）。</summary>
+    public static readonly Counter<long> PendingDropped = Meter.CreateCounter<long>("formwright.incident.pendingDropped");
+
+    /// <summary>前端錯誤收件被限流（429）的次數（§17.2.3）。</summary>
+    public static readonly Counter<long> ClientErrorsThrottled = Meter.CreateCounter<long>("formwright.client_errors.throttled");
 }
