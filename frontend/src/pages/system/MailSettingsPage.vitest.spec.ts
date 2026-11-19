@@ -12,32 +12,46 @@ import { bodyOf, HttpFail, mockHttp, type Call } from 'src/test-utils/mock-http'
 import MailSettingsPage from './MailSettingsPage.vue';
 
 let calls: Call[];
+let qc: QueryClient;
 vi.stubGlobal('ResizeObserver', class { observe() {} unobserve() {} disconnect() {} });
 const settings = (o: Partial<MailSettings> = {}): MailSettings => ({
   host: 'smtp.example.com', port: 587, security: 'startTls', userName: 'ops', hasPassword: true, passwordUnreadable: false,
   fromAddress: 'ops@example.com', configured: true, editable: true, ...o,
 });
 
-async function mountPage(s: MailSettings, testFails?: HttpFail) {
+async function mountPage(s: MailSettings, testFails?: HttpFail, saveFails?: HttpFail) {
   const pinia = createPinia();
   setActivePinia(pinia);
   useIdentityStore().setSession('admin');
   calls = mockHttp((c) => {
     if (c.url === '/system/mail-settings' && c.method === 'get') return s;
     if (c.url === '/system/mail-settings/test') return testFails ?? { sentTo: ['ops@example.com'] };
+    if (c.url === '/system/mail-settings' && c.method === 'put') return saveFails ?? s;
     return {};
   });
+  qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   const i18n = createI18n({ legacy: false, locale: 'zh-TW', messages: { 'zh-TW': zhTW } });
   const Host = { render: () => h(quasar.QLayout, null, () => h(quasar.QPageContainer, null, () => h(MailSettingsPage))) };
   const w = mount(Host, {
     attachTo: document.body,
-    global: { plugins: [[quasar.Quasar, { components: quasar, directives: quasar, plugins: { Notify: quasar.Notify } }], pinia, i18n, [VueQueryPlugin, { queryClient: new QueryClient({ defaultOptions: { queries: { retry: false } } }) }]] },
+    global: { plugins: [[quasar.Quasar, { components: quasar, directives: quasar, plugins: { Notify: quasar.Notify } }], pinia, i18n, [VueQueryPlugin, { queryClient: qc }]] },
   });
   await flushPromises();
   return w;
 }
 const q = (id: string) => document.querySelector(`[data-testid="${id}"]`) as HTMLElement | null;
 const input = (id: string) => (q(id)?.querySelector('input') ?? q(id)) as HTMLInputElement;
+async function typePassword(v: string) {
+  const el = input('mail-password');
+  el.value = v;
+  el.dispatchEvent(new Event('input'));
+  await flushPromises();
+}
+/** 共用快取（查詢與 mutation，含 variables、結果與錯誤）序列化後的全文。 */
+const cacheText = () => JSON.stringify([
+  qc.getQueryCache().getAll().map((x) => x.state),
+  qc.getMutationCache().getAll().map((x) => ({ ...x.state, options: x.options.mutationKey })),
+]);
 async function save() {
   q('mail-save')!.click();
   await flushPromises();
@@ -61,6 +75,33 @@ describe('MailSettingsPage', () => {
     el.dispatchEvent(new Event('input'));
     await flushPromises();
     expect((await save()).password).toBe('n3w');
+    w.unmount();
+  });
+
+  it('審查修正 1：只換密碼成功後，共用快取不含明文、密碼欄清空（GET 回來的 metadata 不變也一樣）', async () => {
+    const w = await mountPage(settings());
+    await typePassword('s3cret-n3w');
+    expect((await save()).password).toBe('s3cret-n3w');
+    expect(cacheText()).not.toContain('s3cret-n3w');
+    expect(input('mail-password').value).toBe('');
+    w.unmount();
+  });
+
+  it('審查修正 1：儲存失敗後共用快取也不含明文（密碼留在輸入欄，可修正後重送）', async () => {
+    const w = await mountPage(settings(), undefined, new HttpFail(500, { message: 'boom' }));
+    await typePassword('s3cret-fail');
+    expect((await save()).password).toBe('s3cret-fail');
+    expect(cacheText()).not.toContain('s3cret-fail');
+    expect(input('mail-password').value).toBe('s3cret-fail');
+    w.unmount();
+  });
+
+  it('審查修正 1：清除密碼儲存成功後清除旗標復原（不再顯示「儲存後會清除」）', async () => {
+    const w = await mountPage(settings());
+    q('mail-clear-password')!.click();
+    await flushPromises();
+    expect((await save()).password).toBe('');
+    expect(q('mail-password')!.closest('.q-field')!.textContent).not.toContain('儲存後會清除密碼');
     w.unmount();
   });
 
