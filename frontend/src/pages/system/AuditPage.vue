@@ -7,7 +7,7 @@ import { useAudit, useAuditActions } from 'src/application/dynamic/queries/ops-q
 import { useUsers } from 'src/application/dynamic/queries/permissions-queries';
 import DateSelect from 'src/components/framework/DateSelect.vue';
 import ForbiddenNotice from 'src/components/framework/ForbiddenNotice.vue';
-import { formatTime, labelOr } from 'src/domain/ops/ops-format';
+import { formatTime, labelOr, localDayEndUtc, localDayStartUtc } from 'src/domain/ops/ops-format';
 import type { AuditFilter, AuditSummary } from 'src/domain/ops/ops-types';
 import AuditDetailPanel from 'src/presentation/ops/AuditDetailPanel.vue';
 import { isForbidden, type ApiError } from 'src/services/api/http';
@@ -38,17 +38,13 @@ const actorOptions = computed(() => (users.data.value ?? []).map((u) => ({ value
 const channelOptions = computed(() => CHANNELS.map((c) => ({ value: c, label: t(`audit.channel.${c}`) })));
 const resultOptions = computed(() => RESULTS.map((r) => ({ value: r, label: t(`audit.result.${r}`) })));
 
-/** 日期（本地 YYYY-MM-DD）→ UTC ISO：起日取當天 0 點、迄日取隔天 0 點前一毫秒。 */
-const dayStart = (d: string) => new Date(`${d}T00:00:00`).toISOString();
-const dayEnd = (d: string) => new Date(new Date(`${d}T00:00:00`).getTime() + 86_400_000 - 1).toISOString();
-
 /** 篩選組成的 query（空值不送；目標篩選來自網址）。 */
 const filter = computed<AuditFilter>(() => {
   const f = form.value;
   const a = f.action;
   return {
-    ...(f.from ? { fromUtc: dayStart(f.from) } : {}),
-    ...(f.to ? { toUtc: dayEnd(f.to) } : {}),
+    ...(f.from ? { fromUtc: localDayStartUtc(f.from) } : {}),
+    ...(f.to ? { toUtc: localDayEndUtc(f.to) } : {}),
     ...(f.actor ? { actorUserId: f.actor } : {}),
     ...(a?.startsWith('group:') ? { actionGroup: a.slice(6) } : a ? { action: a } : {}),
     ...(f.channel ? { channel: f.channel } : {}),
