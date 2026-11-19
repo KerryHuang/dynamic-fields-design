@@ -7,11 +7,11 @@
 自動駕駛等 CI、部署、審查時的空檔候選：依賴已滿足、範圍小、可隨時暫停。每項寫目標與驗收｜依賴｜基準 SHA｜預計路徑｜資源｜可暫停點｜狀態｜owner；做完刪掉，從下方「其他」挑新的補上。
 
 - 修正略過標記檢查註解引用的設計章節（a5d 複審 N5）：註解 §6.3 改 §6.1，build 過即可｜依賴：無｜基準 3c024feb｜backend/src（略過標記檢查處）｜CPU 輕｜任一 commit 後｜可開工｜未指派
-- 把 .tmp/ 加進 .gitignore（lifecycle 3.0.0 試用 S5、S7）：使用者層規則把計畫與暫存放 .tmp/，需先 ignore；驗收 `git status` 不再出現 `?? .tmp/`｜依賴：無｜基準 64dfc23c｜.gitignore｜CPU 無｜任何時候｜可開工｜未指派
 - 持續追蹤 vitest 在 jsdom 拆除後 Quasar 計時器觸發「window is not defined」：本機無法重現，根因未證實；已做局部修正（ApproverSourceEditor spec 每個測試後卸載元件，QSelect 卸載時清 filter／input 計時器），曾試全域包裝 setTimeout 但可能吞掉真實錯誤已撤。CI 再出現時看是哪個 spec、哪個計時器；其他用 QSelect use-input 的 spec 尚未處理
 - 檢查 xUnit 測試是否還有依賴牆鐘短上限的寫法：唯讀盤點，結果列回本檔｜依賴：無｜基準 3c024feb｜唯讀 backend/tests｜不吃 CPU｜任何時候｜可開工｜未指派
 - SQLite 報表快照的 EF 交易包裝也改成 dispose `UseTransactionAsync` 回傳的 handle（pg1 審查修正只修了 PostgreSQL 版；in-memory 連線常開，目前無害）：驗收 SQLite `FullyQualifiedName~Report` 全過、快照後連線開啟計數平衡｜依賴：無｜基準 92af014a｜backend/src/DynamicModules.Persistence/Dynamic/Query/SqliteReportSqlSnapshot.cs｜CPU 中｜任一 commit 後｜可開工｜未指派
 - 登入稽核改用登入專用 API 明確傳入行為者，取代 `AuditOrigin.BeginSignIn` 的呼叫堆疊檢查（o2a 複審建議：目前正確，但依賴呼叫端是 async 狀態機，抽 helper 或換 runtime 時要重核對）：驗收 A04、A11、架構測試全過、BeginSignIn 移除｜依賴：無｜基準 7748ed07｜backend/src/DynamicModules.Application/Common/Audit、Login／DemoLogin handler｜CPU 中｜任一 commit 後｜可開工｜未指派
+- 補收件人名稱解析的後端測試（a2d7 N-M3）：政策收件人引用已停用或不存在帳號時的行為，a4a 前端部分已隨收件人 chip 修正補上；驗收新測試兩種資料庫皆過｜依賴：無｜基準 1dda986c｜backend/tests（收件人解析）｜CPU 中｜任一 commit 後｜可開工｜未指派
 
 ## 其他
 
@@ -20,7 +20,6 @@
 - 查 WebAPI 測試偶發 ObjectDisposedException（SQLitePCL.sqlite3 handle 已釋放）：2026-11-18 run 44234545443 的 TaskCommentAttachmentsApiTests.ClosedModule_StillDownloads 開連線時失敗、rerun 即過；疑與共用 DB 範本（0823c4ac）或 DemoDataApiTests 類別 fixture（7553f9b6）的釋放順序有關，再出現時記 run id
 - 建 Playwright 主線 e2e 測試：簽核前端 a4b 完成後做，5–8 條（登入、建記錄、送簽、同意、任務留言），放進 gate 防回歸（2026-11-11 使用者裁決）
 - 補事件設計器「轉回草稿前改鎖定欄位」的提示：a2d1 修正後的新問題 1，屬事件設計器，不在簽核設計器範圍
-- 補收件人名稱解析的後端測試（a2d7 N-M3）：政策收件人引用已停用或不存在帳號時的行為，a4a 前端部分已隨收件人 chip 修正補上
 - 加收件人政策 0 項或 20 項以上的提示（a2d7 N-M4）：不影響簽核設計器畫面，之後在政策設定頁處理
 - 讓簽核試算的發起人下拉可搜尋（a4a5 審查 S5）：現在列出全部使用者，人多時在手機上要捲很長；照記錄下拉加 use-input 與本地篩選
 - 讓營運時區可設定（目前寫死 Asia/Taipei）：tz1 只統一了「無偏移＝台北牆上時間」的解析；BusinessClock.Offset、TaipeiBusinessTime，以及 Normalize、匯入（FieldImportParser.cs:99）、報表過濾（ReportRules.cs:239）補上的 "+08:00" 字面值仍寫死

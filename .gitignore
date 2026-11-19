@@ -23,3 +23,6 @@ video/**/node_modules/
 video/**/server.log
 video/.data/
 video/**/.tts-cache/
+
+# 本機計畫與暫存（使用者層規則放 .tmp/）
+.tmp/
