@@ -12,6 +12,10 @@ namespace DynamicModules.Application.Dynamic.AppService;
 
 public record AppValidation(IReadOnlyList<string> Errors, IReadOnlyList<string> Warnings);
 
+/// <summary>設計上限（政策 A16）的全系統生效值；<see cref="MaxModules"/> 也管 workflows 數。</summary>
+public sealed record DesignLimits(int MaxGroups, int MaxModules, int MaxFieldsPerModule, int MaxOptionsPerField,
+    int MaxRulesPerModule, int MaxViewsPerModule, int MaxIntegrations);
+
 /// <summary>
 /// v2 套件的結構層與引用層（純函式，啟動、匯入、開啟共用）。前一層有錯就不跑下一層。
 /// 模組內部的檢查（代號、公式、彙總、規則、循環）交給既有的 TemplateValidator，經 AppPackageAdapter 轉接。
@@ -19,9 +23,9 @@ public record AppValidation(IReadOnlyList<string> Errors, IReadOnlyList<string> 
 /// </summary>
 public static partial class AppPackageValidator
 {
-    public const int MaxGroups = 20, MaxModules = 30, MaxFieldsPerModule = 300, MaxOptionsPerField = 200;
+    // 技術限制，見設計 §10（保護套件解析）；群組、模組、欄位、選項、規則、檢視、整合數是政策 A16，由 DesignLimitErrors 檢查
     public const int MaxConversions = 50, MaxReports = 50, MaxPrintTemplates = 100;
-    public const int MaxRulesPerModule = 100, MaxViewsPerModule = 20, MaxAccessEntries = 2000;
+    public const int MaxAccessEntries = 2000;
 
     [GeneratedRegex("^[a-z][a-zA-Z0-9_]{0,39}$")]
     private static partial Regex Code();
@@ -56,6 +60,36 @@ public static partial class AppPackageValidator
         return new AppValidation(errors, warnings);
     }
 
+    /// <summary>
+    /// 設計上限（政策 A16）的套件數量檢查：上限由呼叫端從政策讀出後傳入（靜態的 Validate 在啟動時也會跑，那時不能讀資料庫），
+    /// 匯入、開啟、主檔合併共用，同 TaskRuleLimitErrors。null 項略過，結構層已報錯。
+    /// </summary>
+    public static IReadOnlyList<string> DesignLimitErrors(AppPackageData p, DesignLimits l)
+    {
+        var errors = new List<string>();
+        if (p.Groups.Count > l.MaxGroups) errors.Add($"groups: 最多 {l.MaxGroups} 個");
+        if (p.Modules.Count > l.MaxModules) errors.Add($"modules: 最多 {l.MaxModules} 個");
+        if (p.Workflows.Count > l.MaxModules) errors.Add($"workflows: 最多 {l.MaxModules} 個");
+        if (p.Integrations.Count > l.MaxIntegrations) errors.Add($"integrations: 最多 {l.MaxIntegrations} 個");
+        foreach (var mod in p.Modules.Where(x => x is not null))
+        {
+            var at = mod.Code ?? "?";
+            var fields = mod.Blocks.Where(b => b is not null).SelectMany(b => b.Fields).Where(f => f is not null).ToList();
+            if (fields.Count > l.MaxFieldsPerModule) errors.Add($"{at}: 欄位最多 {l.MaxFieldsPerModule} 個");
+            if (mod.Rules.Count > l.MaxRulesPerModule) errors.Add($"{at}: 規則最多 {l.MaxRulesPerModule} 條");
+            if (mod.Views.Count > l.MaxViewsPerModule) errors.Add($"{at}: 檢視最多 {l.MaxViewsPerModule} 個");
+            foreach (var f in fields.Where(f => f.Options.Count > l.MaxOptionsPerField))
+                errors.Add($"{at}.{f.Code}: 選項最多 {l.MaxOptionsPerField} 個");
+        }
+        for (var i = 0; i < p.Contributions.Count; i++)
+        {
+            if (p.Contributions[i] is not { } c) continue;
+            foreach (var f in c.Fields.Where(f => f is not null && f.Options.Count > l.MaxOptionsPerField))
+                errors.Add($"contributions[{i}].fields[{f.Code}]: 選項最多 {l.MaxOptionsPerField} 個");
+        }
+        return errors;
+    }
+
     // ---- 結構層 ----
 
     private static List<string> Structure(AppPackageData p)
@@ -85,7 +119,6 @@ public static partial class AppPackageValidator
         Format8Structure(p, errors);
         if (p.Events.Count > MaxEvents) errors.Add($"events: 最多 {MaxEvents} 個");
         if (p.Checks.Count > MaxChecks) errors.Add($"checks: 最多 {MaxChecks} 個");
-        if (p.Workflows.Count > MaxModules) errors.Add($"workflows: 最多 {MaxModules} 個");
         if (p.Conversions.Count > MaxConversions) errors.Add($"conversions: 最多 {MaxConversions} 個");
         if (p.Reports.Count > MaxReports) errors.Add($"reports: 最多 {MaxReports} 個");
         if (p.PrintTemplates.Count > MaxPrintTemplates) errors.Add($"printTemplates: 最多 {MaxPrintTemplates} 個");
@@ -108,7 +141,6 @@ public static partial class AppPackageValidator
             if (r is not null && r.Id == m.Id) errors.Add($"manifest.requires.apps[{i}]: 不能依賴自己");
         }
 
-        if (p.Groups.Count > MaxGroups) errors.Add($"groups: 最多 {MaxGroups} 個");
         for (var i = 0; i < p.Groups.Count; i++)
         {
             var g = p.Groups[i];
@@ -118,7 +150,6 @@ public static partial class AppPackageValidator
         }
 
         if (p.Modules.Count == 0) errors.Add("modules: 至少要有一個模組");
-        if (p.Modules.Count > MaxModules) errors.Add($"modules: 最多 {MaxModules} 個");
         if (p.FieldAccess.Count > MaxAccessEntries) errors.Add($"fieldAccess: 最多 {MaxAccessEntries} 筆");
         if (p.OptionScopes.Count > MaxAccessEntries) errors.Add($"optionScopes: 最多 {MaxAccessEntries} 筆");
 
@@ -127,14 +158,10 @@ public static partial class AppPackageValidator
             var at = mod.Code ?? "?";
             CheckText(mod.Name, $"{at}.name", errors);
             var fields = mod.Blocks.Where(b => b is not null).SelectMany(b => b.Fields).Where(f => f is not null).ToList();
-            if (fields.Count > MaxFieldsPerModule) errors.Add($"{at}: 欄位最多 {MaxFieldsPerModule} 個");
-            if (mod.Rules.Count > MaxRulesPerModule) errors.Add($"{at}: 規則最多 {MaxRulesPerModule} 條");
-            if (mod.Views.Count > MaxViewsPerModule) errors.Add($"{at}: 檢視最多 {MaxViewsPerModule} 個");
             foreach (var b in mod.Blocks.Where(b => b is not null)) CheckText(b.Label, $"{at}.blocks.{b.Code}.label", errors);
             foreach (var f in fields)
             {
                 CheckText(f.Label, $"{at}.{f.Code}.label", errors);
-                if (f.Options.Count > MaxOptionsPerField) errors.Add($"{at}.{f.Code}: 選項最多 {MaxOptionsPerField} 個");
                 foreach (var o in f.Options.Where(o => o is not null)) CheckText(o.Label, $"{at}.{f.Code}.options.{o.Code}", errors);
                 CheckConfigKeys(at, f, p.FormatVersion, errors);
             }

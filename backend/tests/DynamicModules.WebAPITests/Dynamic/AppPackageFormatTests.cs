@@ -120,13 +120,16 @@ public class AppPackageFormatTests
         Check(json).Errors.Should().ContainSingle().Which.Should().Contain("fr");
     }
 
+    /// <summary>模組數是政策 A16（design.maxModulesPerPackage），靜態層不再檢查；匯入與開啟時由 DesignLimitErrors 帶入生效值（這裡用出廠值 30）。</summary>
     [Fact]
     public void Structure_TooManyModules_IsRejected()
     {
         var module = """{ "code": "m{0}", "key": "m-{0}x", "name": { "zh-TW": "m" }, "kind": "standalone", "titleField": "t", "blocks": [ { "code": "b", "label": { "zh-TW": "b" }, "collapsed": false, "columns": 2, "fields": [ { "code": "t", "type": "text", "label": { "zh-TW": "t" }, "config": {} } ] } ] }""";
         var modules = string.Join(",", Enumerable.Range(0, 31).Select(i => module.Replace("{0}", $"{i}")));
         var json = $$"""{ "format": "formwright-app", "formatVersion": 2, "manifest": { "id": "many", "version": "1.0.0", "name": { "zh-TW": "多" } }, "modules": [ {{modules}} ] }""";
-        Check(json).Errors.Should().Contain(e => e.StartsWith("modules:") && e.Contains("30"));
+        Check(json).Errors.Should().NotContain(e => e.StartsWith("modules:") && e.Contains("30"));
+        AppPackageValidator.DesignLimitErrors(AppJson.Parse(json).V2!, new DesignLimits(20, 30, 300, 200, 100, 20, 20))
+            .Should().Contain(e => e.StartsWith("modules:") && e.Contains("30"));
     }
 
     // ---- 引用層 ----

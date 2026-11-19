@@ -3,10 +3,12 @@ using DynamicModules.Application.Common.Security;
 using DynamicModules.Application.Common.Time;
 using DynamicModules.Application.Dynamic.ApprovalService;
 using DynamicModules.Application.Dynamic.FieldService.Data;
+using DynamicModules.Application.Dynamic.PolicyService;
 using DynamicModules.Application.Dynamic.WorkflowService.Data;
 using DynamicModules.Domain.Approvals;
 using DynamicModules.Domain.Entities.Dynamic;
 using DynamicModules.Domain.Modules;
+using DynamicModules.Domain.Policies;
 using DynamicModules.Domain.Repositories.Dynamic;
 using MediatR;
 
@@ -15,12 +17,9 @@ namespace DynamicModules.Application.Dynamic.WorkflowService.Commands.SaveWorkfl
 public class SaveWorkflowHandler(
     IModuleRepository modules, IPermissionRepository permissions, IUnitOfWork uow, ICurrentUser user, IBusinessTime time,
     IApprovalFlowRepository flows, IEventRepository events, WorkflowApprovals approvals, PendingApprovalGuard pending,
-    LockedDataGuard lockedData)
+    LockedDataGuard lockedData, IPolicyReader policies)
     : IRequestHandler<SaveWorkflowRequest, ServiceResult>
 {
-    public const int MaxStates = 30;
-    public const int MaxTransitions = 200;
-
     public async Task<ServiceResult> Handle(SaveWorkflowRequest request, CancellationToken ct)
     {
         var module = await modules.GetByKeyAsync(request.ModuleKey, includeChildren: true, ct);
@@ -42,18 +41,24 @@ public class SaveWorkflowHandler(
         var optionIds = status?.Options.Where(o => o.Active).Select(o => o.Id).ToHashSet() ?? [];
         var states = input.States ?? [];
         var transitions = input.Transitions ?? [];
-        if (states.Count is 0 or > MaxStates || states.Select(s => s.OptionId).Distinct().Count() != states.Count
+        // 數量上限（A16）：調低後既有流程照常可改，只有這次比原本多才擋（政策設計 §3.5）
+        var maxStates = await policies.IntAsync(PolicyCatalog.DesignMaxWorkflowStates, null, ct);
+        var maxTransitions = await policies.IntAsync(PolicyCatalog.DesignMaxWorkflowTransitions, null, ct);
+        var oldStates = module.Workflow?.States.Count ?? 0;
+        var oldTransitions = module.Workflow?.Transitions.Count ?? 0;
+        if (states.Count == 0 || (states.Count > maxStates && states.Count > oldStates)
+            || states.Select(s => s.OptionId).Distinct().Count() != states.Count
             || states.Any(s => !optionIds.Contains(s.OptionId)))
-            Err("states", $"狀態必須是狀態欄位啟用中的選項，不重複，1 到 {MaxStates} 個");
+            Err("states", WorkflowMessages.States(maxStates));
         var stateIds = states.Select(s => s.OptionId).ToHashSet();
         if (!stateIds.Contains(input.InitialOptionId)) Err("initialOptionId", "起始狀態必須是狀態清單內的狀態");
 
         var groupIds = (await permissions.ListGroupsAsync(ct)).Select(g => g.Id).ToHashSet();
-        if (transitions.Count > MaxTransitions
+        if ((transitions.Count > maxTransitions && transitions.Count > oldTransitions)
             || transitions.Any(t => t.From == t.To || !stateIds.Contains(t.From) || !stateIds.Contains(t.To))
             || transitions.Select(t => (t.From, t.To)).Distinct().Count() != transitions.Count
             || transitions.Any(t => t.GroupIds is null || t.GroupIds.Any(g => !groupIds.Contains(g))))
-            Err("transitions", "轉移的兩端必須是不同的狀態、不重複，群組必須存在");
+            Err("transitions", WorkflowMessages.Transitions);
         if (errors.Count > 0) return ServiceResult.Invalid(errors);
 
         var candidate = new Workflow

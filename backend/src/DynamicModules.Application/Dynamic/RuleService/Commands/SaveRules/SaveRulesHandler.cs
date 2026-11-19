@@ -2,10 +2,12 @@ using DynamicModules.Application.Common;
 using DynamicModules.Application.Common.Security;
 using DynamicModules.Application.Common.Time;
 using DynamicModules.Application.Dynamic.FieldService.Data;
+using DynamicModules.Application.Dynamic.PolicyService;
 using DynamicModules.Application.Dynamic.RuleService.Data;
 using DynamicModules.Domain.Conditions;
 using DynamicModules.Domain.Entities.Dynamic;
 using DynamicModules.Domain.FieldTypes;
+using DynamicModules.Domain.Policies;
 using DynamicModules.Domain.Repositories.Dynamic;
 using DynamicModules.Domain.Rules;
 using MediatR;
@@ -13,10 +15,9 @@ using MediatR;
 namespace DynamicModules.Application.Dynamic.RuleService.Commands.SaveRules;
 
 public class SaveRulesHandler(IModuleRepository modules, IUnitOfWork uow, FieldTypeRegistry registry,
-    ICurrentUser user, IBusinessTime time)
+    ICurrentUser user, IBusinessTime time, IPolicyReader policies)
     : IRequestHandler<SaveRulesRequest, ServiceResult>
 {
-    private const int MaxRules = 100;
     private const string BadTargets = "規則目標不正確";
 
     public async Task<ServiceResult> Handle(SaveRulesRequest request, CancellationToken ct)
@@ -25,7 +26,9 @@ public class SaveRulesHandler(IModuleRepository modules, IUnitOfWork uow, FieldT
         if (module is null) return ServiceResult.NotFound(MessageRef.Of(MessageText.ModuleNotFound));
 
         var input = request.Rules;
-        if (input.Count > MaxRules) return FieldRules.Invalid("rules", "規則最多 100 條");
+        // 數量上限（A16）：調低後既有規則照常可改，只有這次比原本多才擋（政策設計 §3.5）
+        var max = await policies.IntAsync(PolicyCatalog.DesignMaxRulesPerModule, null, ct);
+        if (input.Count > max && input.Count > module.Rules.Count) return FieldRules.Invalid("rules", RuleMessages.TooManyRules(max));
 
         var userIds = await modules.ListUserIdsAsync(ct);
         var errors = new Dictionary<string, string[]>();
