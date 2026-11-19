@@ -2535,3 +2535,40 @@ O2 在 pg0 之後，合併前兩種資料庫都要驗（使用者裁決 §3 第 
 - 新增與修改的測試類別（`AlertChannelTests`、`HealthCheckTests`，共 47 例）：SQLite 47 過（7 秒）、PostgreSQL 47 過（10 秒）。必修 1–4 的測試在修正前先跑過、全部失敗（9 例：雙寄或寄出撤回的信、500、摘要信提早寄出），修正後通過。
 - WebAPITests（`Ops` 命名空間全部＋`AdminUsersApiTests`、`EndpointRoutesTests`、`ConcurrencyExceptionTests`、`SecurityTests`、`HealthTests`）：SQLite 234 過 1 略過（24 秒）、PostgreSQL 235 過（36 秒）。ApplicationTests（`Common`、`DatabaseErrorsTests`、`OpsSchemaTests`）：SQLite、PostgreSQL 各 146 過。完整套件交 CI。
 
+
+### 17.14 o2d 實作補記（2026-11-19）
+
+範圍照 §17.1 o2d：已知規則錯誤碼與客戶設定事件、任務規則的失敗計數與自動暫停、恢復與權限、`ruleEditor` 收件人、故障注入、API（恢復、規則清單的暫停欄位）、`ops.upkeep` 清規則失敗列、手冊的後端行為段落。前端頁面（o2e）不在這一段；前端只補了三項新政策的四語名稱。沒有新增 migration，`Dynamic_RuleHealth`、`Dynamic_RuleFailure` 照 §17.4 用、沒有不夠的欄位。
+
+**§17.10.6 結果**
+
+- `ExecuteUpdate` 的 `CASE` 與「取較晚者」：沒有用 `max()`／`GREATEST`，「取較晚者」與條件加一都寫成條件運算式（如 `h.LastFailureUtc == null || h.LastFailureUtc < failed ? failed : h.LastFailureUtc`），EF 翻成 `CASE WHEN`；兩種資料庫上 E01–E16 都照預期計數、reset 與暫停，代表翻譯可用（沒有另外比對產生的 SQL 文字）。SET 右邊讀的是更新前的值，所以同一句裡 `ConsecutiveFailures`、`LastErrorCode`、`LastRequestId` 的條件看到的都是舊的 `LastFailureUtc`、`StreakResetUtc`。SQLite 的 `DateTime` 存 TEXT，比較靠字串順序，E04、E15、E16 以分鐘、秒級的先後驗證過（與 o2b 依賴的行為相同）。
+- 數值溢位：既有寫入流程只有跨記錄驗證（`RecordRepository.AggregateAsync` → `AggregateOverflowException` → 檢查回 409）會轉換，任務規則的路徑沒有轉換，E13 矩陣最後一列維持「500、計」。
+
+**偏離設計之處**
+
+- **偏離 1：`RuleFailureNote.Add` 多帶模組代碼、規則代碼、最後修改者**（§17.2.2 寫 `Add(kind, ruleId, code)`）：客戶設定事件的指紋要模組代碼、標題要規則代碼、收件人要 `ruleEditor`，在回傳處就有，不必事後再查。
+- **偏離 2：檢查的 `check.conditionInvalid` 在 `CheckStage` 記**，不在 `CheckEvaluator.PrepareAsync`：設計器的試算也走 `PrepareAsync`，在那裡記會讓試算開事件。效果的六個代碼在 `EffectApplier` 的回傳處補，`Wrap` 只保留這八個已知代碼（其他 409 的代碼不變），由 `EventStage` 統一記進 `RuleFailureNote`。
+- **偏離 3：`RecordRuleFailureRequest` 沒有 `fingerprint` 參數**（§17.2.7 有）：健康列沒有放指紋的欄位，暫停事件的指紋在暫停那一步才用 `ErrorFingerprint.ForConfig` 算。
+- **偏離 4：窗口的終點是已記下的最晚失敗**，不是這次補記的失敗：補記可能晚於評估順序（E05 兩筆補記並行、較晚的那筆先提交），以這次為終點時，較早那筆的窗口不含較晚那筆，兩邊都只數到門檻減一而漏掉暫停（E05 先照字面實作時失敗）。清理也以同一個起點。
+- **偏離 5：例外分類沿內層找型別**：`OperationCanceledException`、`DbUpdateConcurrencyException`、`FrozenFieldException` 被包在別的例外裡時，處理器鏈只看最外層（回 500），分類仍判不計。矩陣「同內層」對資料庫類成立（處理器與分類都沿內層找），對這三個型別是「回應 500、不計」，E13 多一列「wrapped concurrency」記下這個差異。
+- **偏離 6：`SkippedWhilePaused` 每個寫入日誌項目加一**（同一請求寫多筆記錄就加多次）；在業務交易內，請求失敗就跟著回滾。
+- **偏離 7：已刪除的規則不補記**：補記時規則已不存在（刪除與補記交錯）就什麼都不寫，不會留下孤兒健康列。刪規則（單條、刪模組、刪應用程式三條路徑）同交易刪健康列與失敗列、以 `ruleDeleted` 結案暫停事件（`RulePauseCleanup`）。
+- **偏離 8：同一個例外只補記一次**：外層不是交易型請求時內層交易型請求也算最外層，例外會穿過兩層 `RuleFailureBehavior`（E12）；以例外的 `Data` 標記去重。
+- **偏離 9：在途失敗的 reset 新增健康列時會先刷一次業務變更**（`SaveChanges`，撞主鍵改走更新）：只在「沒有健康列、但本實例有更早的在途失敗」時發生，平常的成功不碰資料庫。
+- **偏離 10：暫停時間用補記當下**（`PausedUtc`），失敗與 reset 用評估時間；暫停事件的 `OccurredUtc` 同暫停時間。
+- **偏離 11：改規則（PUT）的回應也帶暫停欄位**（§17.5 只寫 GET 與恢復），前端存檔後換掉清單那一列時不會掉暫停狀態。改規則不解除暫停。
+- **偏離 12：暫停事件的重複提醒**（`RenotifyIncidentHandler`）照事件類別選收件人政策、`ruleEditor` 取規則目前的最後修改者，通知種類與連結沿用 `opsRulePaused`、設計頁；其他類別照舊。
+- **偏離 13：`ops.upkeep` 清規則失敗列的天數**用 `ops.rulePauseWindowMinutes` 的上限（1440 分鐘），不讀目前值：調大窗口時不會先被清掉。摘要鍵 `ruleFailure`。
+
+**已知限制**
+
+- ⚠️ 補記寫不進（E09）時那次失敗就漏掉，只留 Error log；E 系列「回滾後下一次失敗補齊」的測試驗的是這個語意，沒有重試。
+- ⚠️ 在途失敗只在本實例記憶體（§17.9），跨實例的成功看不到別台的在途失敗；兩個實例的測試驗的是「失敗累加、只暫停一次、恢復只成功一次」。
+- 「用戶端已中斷的取消」在測試主機測不到回應碼（連線已斷），E13 那一列只驗歸屬。
+- 成功 reset 新增健康列撞主鍵的分支（別的請求剛好同時新增）沒有自動測試；PostgreSQL 上靠 EF 在既有交易裡 `SaveChanges` 的自動 savepoint，撞鍵後交易仍可用（與 `IncidentRecorder` 同一寫法）。
+
+**驗證（本機）**
+
+- 新增的測試類別（`RulePauseTests`、`RulePauseMatrixTests`，共 67 例，含 E13 的 39 列）：SQLite 67 過（約 10 秒，連跑 4 次穩定）、PostgreSQL 67 過（18 秒）。E05 照設計字面實作時兩種寫入模式都失敗（漏掉暫停），改成偏離 4 後通過。
+- 受影響的既有測試：DomainTests SQLite 1447 過。ApplicationTests（刪除、文件流程、政策、任務規則、事件、檢查、維運相關，500 例）SQLite 500 過；PostgreSQL 498 過、2 失敗，失敗的兩例是 `SqliteOnly`（SQLite 觸發器語法，本機篩選沒排除這個分類）。WebAPITests（`Ops` 全部、政策、任務規則、事件、檢查、刪除、路由等，484 例）SQLite 483 過 1 略過、PostgreSQL 484 過。前端 `locales`、`policy-i18n` 兩支 vitest 24 過。完整套件交 CI。
