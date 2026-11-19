@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/vue-query';
-import type { AdminUserCreate, AdminUserUpdate } from 'src/domain/dynamic/types';
+import type { AdminUserCreate, AdminUserUpdate, SystemPrivileges } from 'src/domain/dynamic/types';
 import { toValue, type MaybeRef } from 'vue';
 import { dynamicApi } from 'src/services/api/dynamic-api';
 import { SECRET_MUTATION, useSecretMutation } from './secret-mutation';
@@ -26,6 +26,9 @@ export const useUpdateUser = () => useAdminMutation((v: { id: string; body: Admi
 export const useResetPassword = () =>
   useSecretMutation((take: (v: { id: string }) => string) =>
     useAdminMutation((v: { id: string }) => dynamicApi.resetUserPassword(v.id, take(v)), undefined, SECRET_MUTATION));
+/** 系統權限改了誰有設計器與權限設定：['me'] 涵蓋管理員改自己，群組清單不受影響但使用者的有效結果會變。 */
+export const useSetUserSystemPrivileges = () =>
+  useAdminMutation((v: { id: string; body: SystemPrivileges }) => dynamicApi.setUserSystemPrivileges(v.id, v.body));
 export const useSetUserActive = () => useAdminMutation((v: { id: string; active: boolean }) => dynamicApi.setUserActive(v.id, v.active));
 
 export function useAdminGroups() {
@@ -49,4 +52,7 @@ export const useRenameGroup = () =>
   useAdminMutation((v: { id: number; name: string; locale: string }) => dynamicApi.renameGroup(v.id, { name: v.name, locale: v.locale }), GROUP_KEYS);
 export const useSetGroupMembers = () =>
   useAdminMutation((v: { id: number; userIds: string[] }) => dynamicApi.setGroupMembers(v.id, { userIds: v.userIds }), GROUP_KEYS);
+/** 群組的系統權限會改變成員的有效結果（使用者清單）與自己的 me。 */
+export const useSetGroupSystemPrivileges = () =>
+  useAdminMutation((v: { id: number; body: SystemPrivileges }) => dynamicApi.setGroupSystemPrivileges(v.id, v.body), [...GROUP_KEYS, 'me']);
 export const useDeleteGroup = () => useAdminMutation((id: number) => dynamicApi.deleteGroup(id), GROUP_KEYS);

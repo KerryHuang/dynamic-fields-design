@@ -18,8 +18,8 @@ const status = (s: Partial<DemoDataStatus>): DemoDataStatus => ({ state: 'notGen
 
 let mounted: ReturnType<typeof mount> | undefined;
 
-async function mountPage(s: DemoDataStatus, add = true, edit = true) {
-  api.getMe.mockResolvedValue({ designer: { read: true, add, edit, delete: true } } as never);
+async function mountPage(s: DemoDataStatus, add = true, edit = true, permissionAdmin = true) {
+  api.getMe.mockResolvedValue({ designer: { read: true, add, edit, delete: true }, permissionAdmin } as never);
   api.getDemoDataStatus.mockResolvedValue(s);
   const i18n = createI18n({ legacy: false, locale: 'zh-TW', messages: { 'zh-TW': zhTW } });
   const Host = { render: () => h(quasar.QLayout, null, () => h(quasar.QPageContainer, null, () => h(DemoDataPage))) };
@@ -112,5 +112,17 @@ describe('DemoDataPage', () => {
     await mountPage(status({}), add, edit);
     expect(text('demo-state')).toBe('尚未產生');
     expect(q('demo-generate')!.disabled).toBe(true);
+    expect(text('demo-needs-permission')).toBe(zhTW.demoData.needsPermission);
+  });
+
+  it('PAX-35 沒有權限設定時產生鈕停用並說明原因；有就不顯示說明', async () => {
+    await mountPage(status({}), true, true, false);
+    expect(q('demo-generate')!.disabled).toBe(true);
+    expect(text('demo-needs-permission')).toBe('產生 Demo 資料需要設計器的新增與修改，以及「權限設定」權限，請洽系統管理員');
+    mounted!.unmount();
+    document.body.innerHTML = '';
+    await mountPage(status({}));
+    expect(q('demo-generate')!.disabled).toBe(false);
+    expect(q('demo-needs-permission')).toBeNull();
   });
 });

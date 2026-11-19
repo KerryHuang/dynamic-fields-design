@@ -57,4 +57,10 @@ describe('systemLinks', () => {
     expect(systemLinks(me(false, true)).map((l) => l.to)).toEqual(['/system/dynamic-modules', '/system/conversions', '/system/demo-data']);
     expect(systemLinks(me(true, true))).toHaveLength(13);
   });
+  it('PAX-36 只有權限設定的帳號（GET me 的設計器只有隱含讀取）：有動態模組設計，沒有使用者、群組、應用程式', () => {
+    const permOnly = { isSystemAdmin: false, designer: { read: true, add: false, edit: false, delete: false }, permissionAdmin: true } as never;
+    const links = systemLinks(permOnly).map((l) => l.testid);
+    expect(links).toContain('designer-menu');
+    for (const id of ['users-menu', 'groups-menu', 'apps-menu']) expect(links).not.toContain(id);
+  });
 });

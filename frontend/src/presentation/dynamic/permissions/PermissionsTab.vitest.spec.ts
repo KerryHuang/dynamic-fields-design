@@ -24,15 +24,17 @@ const permsFor = (scope: 'own' | null): ModulePermissions => ({
   fields: [{ fieldId: 9, groupId: 1, access: 'hidden' }],
   options: [{ optionId: 4, groupIds: [1] }],
 });
-const me = (edit: boolean): Me => ({
-  userId: 'a', displayName: 'A', isSystemAdmin: false, mustChangePassword: false, groups: [], designer: { read: true, add: true, edit, delete: false }, theme: FACTORY_ME_THEME,
+/** 設計器動作一律有修改：唯讀只看「權限設定」（權限軸設計 §11）。 */
+const me = (permissionAdmin: boolean, over: Partial<Me> = {}): Me => ({
+  userId: 'a', displayName: 'A', isSystemAdmin: false, mustChangePassword: false, groups: [], designer: { read: true, add: true, edit: true, delete: false },
+  permissionAdmin, theme: FACTORY_ME_THEME, ...over,
 });
 
-function mountTab(canEdit = true, perms?: ModulePermissions, extraProps: Record<string, unknown> = {}) {
+function mountTab(canEdit = true, perms?: ModulePermissions, extraProps: Record<string, unknown> = {}, meOver: Partial<Me> = {}) {
   api.getModulePermissions.mockImplementation(async (k) => perms ?? permsFor(k === 'a' ? null : 'own'));
   api.getGroups.mockResolvedValue([{ id: 1, key: 'sales', name: { 'zh-TW': '業務' }, members: [] }]);
   api.getUsers.mockResolvedValue([]);
-  api.getMe.mockResolvedValue(me(canEdit));
+  api.getMe.mockResolvedValue(me(canEdit, meOver));
   const i18n = createI18n({ legacy: false, locale: 'zh-TW', messages: { 'zh-TW': zhTW } });
   return mount(PermissionsTab, {
     props: { moduleKey: 'a', ...extraProps },
@@ -96,10 +98,44 @@ describe('PermissionsTab', () => {
     expect(w.find('[data-testid^="fp-error-"]').exists()).toBe(false);
   });
 
-  it('disables save without designer.edit', async () => {
+  it('PAX-30 沒有權限設定（即使有設計器修改）：所有輸入與存檔鈕停用、顯示唯讀說明', async () => {
     const w = mountTab(false);
     await flushPromises();
-    expect(w.findComponent(quasar.QBtn).props('disable')).toBe(true);
+    expect(w.find('[data-testid="permissions-readonly"]').text()).toBe('你可以查看權限設定，修改需要『權限設定』權限，請洽系統管理員');
+    const inputs = [...w.findAllComponents(quasar.QCheckbox as never), ...w.findAllComponents(quasar.QSelect as never), ...w.findAllComponents(quasar.QBtn as never)];
+    expect(inputs.length).toBeGreaterThan(3);
+    for (const c of inputs) expect((c as unknown as { props(k: string): unknown }).props('disable')).toBe(true);
+  });
+
+  it('PAX-30 有權限設定：可編可存，不顯示唯讀說明', async () => {
+    const w = mountTab(true);
+    await flushPromises();
+    expect(w.find('[data-testid="permissions-readonly"]').exists()).toBe(false);
+    expect(w.find('[data-testid="save-permissions"]').attributes('disabled')).toBeUndefined();
+  });
+
+  it('PAX-30 共用主檔模組：不是系統管理員時唯讀並顯示主檔說明；系統管理員可編', async () => {
+    const master = { ...permsFor(null), sharedMaster: true };
+    let w = mountTab(true, master);
+    await flushPromises();
+    expect(w.find('[data-testid="permissions-master-readonly"]').text()).toBe('共用主檔的權限只有系統管理員能改');
+    expect(w.find('[data-testid="save-permissions"]').attributes('disabled')).toBeDefined();
+    w.unmount();
+    w = mountTab(true, master, {}, { isSystemAdmin: true });
+    await flushPromises();
+    expect(w.find('[data-testid="permissions-master-readonly"]').exists()).toBe(false);
+    expect(w.find('[data-testid="save-permissions"]').attributes('disabled')).toBeUndefined();
+  });
+
+  it('PAX-36 只有權限設定（設計器只有隱含讀取）也能存權限', async () => {
+    const w = mountTab(true, undefined, {}, { designer: { read: true, add: false, edit: false, delete: false } });
+    await flushPromises();
+    api.saveModulePermissions.mockResolvedValue(permsFor(null));
+    await w.find('[data-testid="g-1-edit"]').trigger('click');
+    await w.find('[data-testid="save-permissions"]').trigger('click');
+    await flushPromises();
+    expect(api.saveModulePermissions).toHaveBeenCalledTimes(1);
+    expect(api.saveModulePermissions.mock.calls[0]![1].groups[0]!.privileges.edit).toBe(true);
   });
 
   it('drops the previous module draft when moduleKey changes', async () => {

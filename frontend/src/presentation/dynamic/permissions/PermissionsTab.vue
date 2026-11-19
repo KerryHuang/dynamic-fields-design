@@ -30,7 +30,9 @@ watch(() => permsQuery.data.value, (d) => {
   errors.value = {};
 }, { immediate: true });
 
-const readonly = computed(() => !me.data.value?.designer.edit);
+// 改權限要「權限設定」（不是設計器修改）；共用主檔模組另外只有系統管理員能改（後端同樣擋）
+const masterLocked = computed(() => !!draft.value?.sharedMaster && !me.data.value?.isSystemAdmin);
+const readonly = computed(() => !me.data.value?.permissionAdmin || masterLocked.value);
 // Error keys index into the array that was sent; any edit reshuffles rows, so marks must not outlive it.
 const draftModel = computed({
   get: () => draft.value!,
@@ -59,6 +61,12 @@ function submit() {
   <div v-if="permsQuery.isError.value" class="text-negative">{{ t('dynamic.loadFailed') }}</div>
   <div v-else-if="!ready" class="text-muted">{{ t('designer.loading') }}</div>
   <div v-else>
+    <div v-if="!me.data.value!.permissionAdmin" class="text-body2 text-warning q-mb-sm" data-testid="permissions-readonly">
+      {{ t('designer.permissions.readonlyHint') }}
+    </div>
+    <div v-else-if="masterLocked" class="text-body2 text-warning q-mb-sm" data-testid="permissions-master-readonly">
+      {{ t('designer.permissions.masterReadonly') }}
+    </div>
     <div v-if="detailOf" class="text-body2 text-muted" data-testid="detail-inherited">{{ t('designer.permissions.detailInherited') }}</div>
     <PrivilegeEditor v-else v-model="draftModel" :groups="groups.data.value!" :users="users.data.value!" :readonly="readonly" :errors="errors" />
     <FieldPermissionEditor

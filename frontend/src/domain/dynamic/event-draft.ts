@@ -104,6 +104,10 @@ function buildSet(s: SetDraft, header: boolean): EventSetItem {
   return { to: s.to!, const: s.value, allowHiddenSource: false };
 }
 
+/** 有任一對應勾了「允許複製被隱藏的值」（含原樣送回的自訂效果）：存檔要「權限設定」。 */
+export const usesAllowHiddenSource = (d: EventDraft): boolean =>
+  d.effects.some((e) => (e.custom ? e.custom.set ?? [] : e.set).some((s) => s.allowHiddenSource));
+
 /** The effect to send, or undefined while a required pick is missing. */
 function buildEffect(e: EffectDraft): EventEffect | undefined {
   if (e.custom) return clone(e.custom);

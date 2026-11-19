@@ -25,6 +25,8 @@ const props = defineProps<{
   hiddenLine: Set<number>;
   error?: string;
   disabled?: boolean;
+  /** 沒有「權限設定」：不能勾「允許複製被隱藏的值」（後端同樣擋）。 */
+  consentLocked?: boolean;
 }>();
 const emit = defineEmits<{ 'update:modelValue': [row: SetDraft]; remove: [] }>();
 const { t, locale } = useI18n();
@@ -152,10 +154,11 @@ const setNumber = (v: string | number | null) => change({ value: v === '' || v =
 
     <div v-if="needsConsent" class="q-mt-sm" :data-testid="id('consent')">
       <q-checkbox
-        :model-value="row.allowHiddenSource" dense :label="t('events.allowHidden')" :disable="disabled" :data-testid="id('allow-hidden')"
+        :model-value="row.allowHiddenSource" dense :label="t('events.allowHidden')" :disable="disabled || consentLocked" :data-testid="id('allow-hidden')"
         @update:model-value="(v: boolean) => emit('update:modelValue', { ...row, allowHiddenSource: v })"
       />
       <div class="text-caption text-muted">{{ t('events.allowHiddenHint') }}</div>
+      <div v-if="consentLocked" class="text-caption text-warning" :data-testid="id('consent-locked')">{{ t('events.allowHiddenLocked') }}</div>
     </div>
 
     <div v-if="error" class="text-negative text-caption q-mt-xs" :data-testid="id('error')">{{ error }}</div>

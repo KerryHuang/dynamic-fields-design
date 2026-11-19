@@ -1,6 +1,6 @@
 import type {
   AdminGroup, AdminUser, AttachmentSettings, PrintTemplateDefinition, PrintTemplateOption, UploadedAttachment, DeleteCheck, DeleteTargetRef, AdminUserCreate, AdminUserUpdate, AuthOptions, AuthUser, ConditionNode, ConvertBody, Conversion, DesignerField, DetailRowPayload, DynamicRecord, EntitySummary, FieldConfig, FieldType, Group, GroupImpact, I18nText, LightPage, ListView, Me, MenuItem, ModuleDetail, ModulePermissions, ModuleSchema, RecordConversion,
-  ImportPreview, ImportResult, PagedResponse, RecordHistoryEntry, RelatedTab, Rule, RollupSource, User, ViewSort, Workflow, WorkflowResponse,
+  ImportPreview, ImportResult, PagedResponse, RecordHistoryEntry, RelatedTab, Rule, RollupSource, SystemPrivileges, User, ViewSort, Workflow, WorkflowResponse,
 } from 'src/domain/dynamic/types';
 import type {
   AdminDashboardDetail, AdminDashboardItem, CardResult, DashboardCard, DashboardDetail, DashboardLayout, DashboardList,
@@ -264,6 +264,8 @@ export const dynamicApi = {
   getAdminUsers: () => http.get<AdminUser[]>('/admin/users').then(data),
   createUser: (body: AdminUserCreate) => http.post('/admin/users', body).then(data),
   updateUser: (id: string, body: AdminUserUpdate) => http.put(`/admin/users/${encodeURIComponent(id)}`, body).then(data),
+  setUserSystemPrivileges: (id: string, body: SystemPrivileges) =>
+    http.put<SystemPrivileges>(`/admin/users/${encodeURIComponent(id)}/system-privileges`, body).then(data),
   resetUserPassword: (id: string, password: string) =>
     http.post(`/admin/users/${encodeURIComponent(id)}/reset-password`, { password }).then(data),
   setUserActive: (id: string, active: boolean) =>
@@ -272,6 +274,8 @@ export const dynamicApi = {
   createGroup: (body: { name: string; locale: string }) => http.post<AdminGroup>('/admin/groups', body).then(data),
   renameGroup: (id: number, body: { name: string; locale: string }) => http.put<AdminGroup>(`/admin/groups/${id}`, body).then(data),
   setGroupMembers: (id: number, body: { userIds: string[] }) => http.put(`/admin/groups/${id}/members`, body).then(data),
+  setGroupSystemPrivileges: (id: number, body: SystemPrivileges) =>
+    http.put<SystemPrivileges>(`/admin/groups/${id}/system-privileges`, body).then(data),
   getGroupImpact: (id: number) => http.get<GroupImpact>(`/admin/groups/${id}/impact`).then(data),
   deleteGroup: (id: number) => http.delete(`/admin/groups/${id}`).then(data),
   getDepartments: () => http.get<Department[]>('/departments').then(data).then((list) => list.map(withNulls)),

@@ -2,14 +2,18 @@
 import { useQuasar, type QTableColumn } from 'quasar';
 import { computed, ref } from 'vue';
 import { useI18n } from 'vue-i18n';
-import { useAdminUsers, useCreateUser, useResetPassword, useSetUserActive, useUpdateUser } from 'src/application/dynamic/queries/admin-queries';
+import {
+  useAdminUsers, useCreateUser, useResetPassword, useSetUserActive, useSetUserSystemPrivileges, useUpdateUser,
+} from 'src/application/dynamic/queries/admin-queries';
 import { useDepartments, useSetUserDepartment } from 'src/application/dynamic/queries/organization-queries';
 import { useGroups } from 'src/application/dynamic/queries/permissions-queries';
 import ForbiddenNotice from 'src/components/framework/ForbiddenNotice.vue';
 import { resolveI18n } from 'src/domain/dynamic/i18n-text';
 import { departmentPath } from 'src/domain/dynamic/organization';
-import type { AdminUser } from 'src/domain/dynamic/types';
+import { copySystemPrivileges, noSystemPrivileges, sameSystemPrivileges, systemPrivilegeTags } from 'src/domain/dynamic/system-privileges';
+import type { AdminUser, SystemPrivileges } from 'src/domain/dynamic/types';
 import { leftoverMessages, notifyApiError } from 'src/presentation/dynamic/designer/api-error';
+import SystemPrivilegesEditor from 'src/presentation/dynamic/permissions/SystemPrivilegesEditor.vue';
 import DepartmentSelect from 'src/presentation/organization/DepartmentSelect.vue';
 import { isForbidden, type ApiError } from 'src/services/api/http';
 import { useIdentityStore } from 'src/stores/use-identity-store';
@@ -39,8 +43,11 @@ const columns = computed<QTableColumn<AdminUser>[]>(() => [
   { name: 'department', label: t('users.department'), align: 'left', field: (u) => deptPath(u.departmentId) },
   { name: 'status', label: t('users.status'), align: 'left', field: (u) => statusLabel(u) },
   { name: 'admin', label: t('users.systemAdmin'), align: 'left', field: (u) => (u.isSystemAdmin ? t('users.systemAdmin') : '') },
+  // 有效結果（含群組、系統管理員自動擁有）；儲存格與卡片都畫成小標籤
+  { name: 'systemPrivileges', label: t('systemPrivileges.title'), align: 'left', field: (u) => joinList(sysTags(u)) },
   { name: 'actions', label: '', align: 'right', field: 'userId' },
 ]);
+const sysTags = (u: AdminUser) => systemPrivilegeTags(u.effectiveSystemPrivileges).map((k) => t(`systemPrivileges.${k}`));
 const statusLabel = (u: AdminUser) => {
   if (!u.isActive) return t('users.inactive');
   return u.isLocked ? t('users.locked') : t('users.active');
@@ -54,11 +61,16 @@ const editingId = ref<string | null>(null);
 const form = ref({ userId: '', displayName: '', password: '', groupIds: [] as number[], isSystemAdmin: false, departmentId: null as number | null });
 /** Department before editing: the department endpoint is only called when it changed. */
 const originalDepartment = ref<number | null>(null);
+/** 個人直接設定（不含經群組取得的）；和載入時相同就不送。 */
+const privileges = ref<SystemPrivileges>(noSystemPrivileges());
+const originalPrivileges = ref<SystemPrivileges>(noSystemPrivileges());
+const editingUser = computed(() => (users.data.value ?? []).find((u) => u.userId === editingId.value));
 const error = ref('');
 const create = useCreateUser();
 const update = useUpdateUser();
 const setDepartment = useSetUserDepartment();
-const saving = computed(() => create.isPending.value || update.isPending.value || setDepartment.isPending.value);
+const setPrivileges = useSetUserSystemPrivileges();
+const saving = computed(() => create.isPending.value || update.isPending.value || setDepartment.isPending.value || setPrivileges.isPending.value);
 
 function openCreate() {
   editingId.value = null;
@@ -74,6 +86,8 @@ function openEdit(u: AdminUser) {
     departmentId: u.departmentId ?? null,
   };
   originalDepartment.value = u.departmentId ?? null;
+  privileges.value = copySystemPrivileges(u.systemPrivileges);
+  originalPrivileges.value = copySystemPrivileges(u.systemPrivileges);
   error.value = '';
   dialog.value = true;
 }
@@ -82,12 +96,23 @@ function save() {
   const { userId, displayName, password, groupIds, isSystemAdmin, departmentId } = form.value;
   const showError = (e: unknown) => { error.value = joinList(leftoverMessages(e as ApiError, [])) || t('users.saveFailed'); };
   const done = () => { dialog.value = false; $q.notify({ type: 'positive', message: t('users.saved') }); };
+  // 系統權限是最後一個呼叫（只在編輯時有）；失敗時帳號資料已存，提示只有系統權限沒存
+  const sent = copySystemPrivileges(privileges.value);
+  const savePrivileges = () => {
+    if (!editingId.value || sameSystemPrivileges(sent, originalPrivileges.value)) { done(); return; }
+    setPrivileges.mutate({ id: userId, body: sent }, {
+      onSuccess: () => { originalPrivileges.value = sent; done(); },
+      onError: (e) => {
+        error.value = t('systemPrivileges.partialSaved', { reason: joinList(leftoverMessages(e as unknown as ApiError, [])) || t('users.saveFailed') });
+      },
+    });
+  };
   // The account is saved first; its department is a separate call, so a department error leaves the dialog open
   const handlers = {
     onSuccess: () => {
-      if (departmentId === originalDepartment.value) { done(); return; }
+      if (departmentId === originalDepartment.value) { savePrivileges(); return; }
       setDepartment.mutate({ userId, departmentId }, {
-        onSuccess: done,
+        onSuccess: () => { originalDepartment.value = departmentId; savePrivileges(); },
         onError: (e) => { if (!editingId.value) editingId.value = userId; showError(e); },
       });
     },
@@ -160,6 +185,9 @@ function runSetActive(u: AdminUser, active: boolean) {
                   :disable="row.userId === identity.userId" :data-testid="`user-toggle-${row.userId}`" @click="toggle(row)"
                 />
               </q-td>
+              <q-td v-else-if="c.name === 'systemPrivileges'" :align="c.align" :data-testid="`user-sp-${row.userId}`">
+                <q-badge v-for="tag in sysTags(row)" :key="tag" outline color="primary" class="q-mr-xs" :label="tag" />
+              </q-td>
               <q-td v-else :align="c.align">{{ c.value }}</q-td>
             </template>
           </q-tr>
@@ -174,7 +202,10 @@ function runSetActive(u: AdminUser, active: boolean) {
                 <q-item v-for="c in cols.filter((x: { name: string; value: unknown }) => x.name !== 'actions' && x.value)" :key="c.name">
                   <q-item-section>
                     <q-item-label caption>{{ c.label }}</q-item-label>
-                    <q-item-label style="overflow-wrap: anywhere">{{ c.value }}</q-item-label>
+                    <q-item-label v-if="c.name === 'systemPrivileges'" :data-testid="`user-sp-${row.userId}`">
+                      <q-badge v-for="tag in sysTags(row)" :key="tag" outline color="primary" class="q-mr-xs" :label="tag" />
+                    </q-item-label>
+                    <q-item-label v-else style="overflow-wrap: anywhere">{{ c.value }}</q-item-label>
                   </q-item-section>
                 </q-item>
               </q-list>
@@ -214,6 +245,11 @@ function runSetActive(u: AdminUser, active: boolean) {
             </div>
             <div class="col-12 col-sm-6 self-center">
               <q-toggle v-model="form.isSystemAdmin" :label="t('users.systemAdmin')" data-testid="user-admin" />
+            </div>
+            <div v-if="editingId" class="col-12">
+              <SystemPrivilegesEditor
+                v-model="privileges" :sources="editingUser?.systemPrivilegeSources" :system-admin="form.isSystemAdmin"
+              />
             </div>
             <div v-if="error" class="col-12 text-negative" data-testid="user-error">{{ error }}</div>
           </q-card-section>

@@ -4,11 +4,12 @@ import { computed, reactive, ref, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { useEvents, useHiddenFieldIds, useSaveEventMutation } from 'src/application/dynamic/queries/events-queries';
 import { useModules } from 'src/application/dynamic/queries/modules-queries';
+import { useMe } from 'src/application/dynamic/queries/permissions-queries';
 import { useWorkflowQuery } from 'src/application/dynamic/queries/workflow-queries';
 import SelectNoOption from 'src/components/framework/SelectNoOption.vue';
 import { useSelectFilter } from 'src/components/framework/useSelectFilter';
 import {
-  buildEvent, draftFromEvent, emptyEffect, emptyEventDraft, groupEventErrors, MAX_EFFECTS, nextEffectCode, setIsComplete,
+  buildEvent, draftFromEvent, emptyEffect, emptyEventDraft, groupEventErrors, MAX_EFFECTS, nextEffectCode, setIsComplete, usesAllowHiddenSource,
   type EffectDraft, type EventDraft,
 } from 'src/domain/dynamic/event-draft';
 import type { EventTriggerOn, ModuleEvent } from 'src/domain/dynamic/events-ledger';
@@ -46,6 +47,10 @@ const modules = useModules();
 const events = useEvents(sourceKey);
 const workflow = useWorkflowQuery(sourceKey);
 const hiddenHeader = useHiddenFieldIds(sourceKey);
+const me = useMe();
+// 沒有「權限設定」不能勾旗標；已勾的事件（別人勾的）不能存（後端同樣擋）
+const consentLocked = computed(() => !me.data.value?.permissionAdmin);
+const blockedByConsent = computed(() => consentLocked.value && usesAllowHiddenSource(form));
 
 // ---- trigger ----
 const hasWorkflow = computed(() => !!workflow.data.value);
@@ -161,7 +166,7 @@ const joined = (lines: string[]) => joinList(lines) || undefined;
       <div v-if="!form.effects.length" class="text-muted">{{ t('events.noEffects') }}</div>
       <EventEffectEditor
         v-for="(effect, i) in form.effects" :key="i" :model-value="effect" :index="i" :source-module="module" :modules="modules.data.value ?? []"
-        :events="savedEvents" :hidden-header="hiddenHeader" :errors="errors.effects.get(i)"
+        :events="savedEvents" :hidden-header="hiddenHeader" :errors="errors.effects.get(i)" :consent-locked="consentLocked"
         @update:model-value="(e) => setEffect(i, e)" @remove="removeEffect(i)"
       />
     </div>
@@ -170,10 +175,11 @@ const joined = (lines: string[]) => joinList(lines) || undefined;
       <div v-for="line in errors.general" :key="line">{{ line }}</div>
     </div>
     <div v-if="incomplete" class="text-warning" data-testid="event-incomplete">{{ t('events.setIncomplete') }}</div>
+    <div v-if="blockedByConsent" class="text-warning" data-testid="event-consent-blocked">{{ t('events.allowHiddenBlocksSave') }}</div>
 
     <template #actions>
       <q-btn flat :label="t('designer.close')" data-testid="event-cancel" @click="emit('update:modelValue', false)" />
-      <q-btn color="primary" :label="t('designer.save')" :disable="!body" :loading="save.isPending.value" data-testid="event-save" @click="submit" />
+      <q-btn color="primary" :label="t('designer.save')" :disable="!body || blockedByConsent" :loading="save.isPending.value" data-testid="event-save" @click="submit" />
     </template>
   </DesignerDialog>
 </template>

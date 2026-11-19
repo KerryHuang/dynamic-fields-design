@@ -58,7 +58,7 @@ let mounted: ReturnType<typeof mount> | undefined;
 let router: ReturnType<typeof createRouter>;
 
 async function mountPage(detail: ReportDetail, isSystemAdmin = false) {
-  api.getMe.mockResolvedValue({ userId: 'u', displayName: 'u', isSystemAdmin, mustChangePassword: false, groups: [], designer: { read: false, add: false, edit: false, delete: false }, theme: FACTORY_ME_THEME });
+  api.getMe.mockResolvedValue({ userId: 'u', displayName: 'u', isSystemAdmin, mustChangePassword: false, groups: [], designer: { read: false, add: false, edit: false, delete: false }, permissionAdmin: false, theme: FACTORY_ME_THEME });
   api.getReport.mockResolvedValue(detail);
   api.getReportCatalog.mockResolvedValue(CATALOG);
   api.getReportDatasetCatalog.mockResolvedValue(CATALOG);
@@ -164,7 +164,7 @@ describe('ReportViewPage', () => {
   });
 
   it('a failed run shows a retry, not a number', async () => {
-    api.getMe.mockResolvedValue({ userId: 'u', displayName: 'u', isSystemAdmin: false, mustChangePassword: false, groups: [], designer: { read: false, add: false, edit: false, delete: false }, theme: FACTORY_ME_THEME });
+    api.getMe.mockResolvedValue({ userId: 'u', displayName: 'u', isSystemAdmin: false, mustChangePassword: false, groups: [], designer: { read: false, add: false, edit: false, delete: false }, permissionAdmin: false, theme: FACTORY_ME_THEME });
     api.getReport.mockResolvedValue(DETAIL(true));
     api.runReport.mockRejectedValue({ status: 500 });
     router = createRouter({ history: createMemoryHistory(), routes: [{ path: '/reports/:id(\\d+)', component: ReportViewPage }] });

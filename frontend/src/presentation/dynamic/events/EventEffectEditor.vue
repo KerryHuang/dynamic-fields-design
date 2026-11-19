@@ -29,6 +29,8 @@ const props = defineProps<{
   hiddenHeader: Set<number>;
   errors?: EffectErrors;
   disabled?: boolean;
+  /** 沒有「權限設定」：對應不能勾「允許複製被隱藏的值」。 */
+  consentLocked?: boolean;
 }>();
 const emit = defineEmits<{ 'update:modelValue': [effect: EffectDraft]; remove: [] }>();
 const { t, locale } = useI18n();
@@ -167,7 +169,7 @@ const argsText = computed(() => (e.value.custom?.args === undefined ? '' : JSON.
         <EventSetRow
           v-for="(row, i) in e.set" :key="i" :model-value="row" :id-prefix="`set-${index}-${i}`" :kind="e.kind as 'create' | 'update'"
           :to-options="toOptions" :target-field="targetFieldOf(row.to)" :header-options="headerOptions" :line-options="lineOptions"
-          :has-line="e.kind === 'create' && !!e.each" :hidden-header="hiddenHeader" :hidden-line="hiddenLine" :disabled="disabled"
+          :has-line="e.kind === 'create' && !!e.each" :hidden-header="hiddenHeader" :hidden-line="hiddenLine" :disabled="disabled" :consent-locked="consentLocked"
           :error="setError(i)" @update:model-value="(r) => setRow(i, r)" @remove="removeRow(i)"
         />
       </div>

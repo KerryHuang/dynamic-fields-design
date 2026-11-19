@@ -25,7 +25,7 @@ const theme = (over: Partial<MeTheme> = {}): MeTheme => ({
 });
 const me = (t: MeTheme = theme()): Me => ({
   userId: 'u1', displayName: 'U', mustChangePassword: false, isSystemAdmin: false, groups: [],
-  designer: { read: false, add: false, edit: false, delete: false }, theme: t,
+  designer: { read: false, add: false, edit: false, delete: false }, permissionAdmin: false, theme: t,
 });
 
 function deferred<T>() {

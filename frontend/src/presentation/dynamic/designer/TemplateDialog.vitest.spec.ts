@@ -1,5 +1,6 @@
 import { QueryClient, VueQueryPlugin } from '@tanstack/vue-query';
 import { flushPromises, mount } from '@vue/test-utils';
+import { createPinia } from 'pinia';
 import * as quasar from 'quasar';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { createI18n } from 'vue-i18n';
@@ -8,7 +9,7 @@ import zhTW from 'src/i18n/zh-TW.json';
 import { dynamicApi, type TemplateSummary } from 'src/services/api/dynamic-api';
 import TemplateDialog from './TemplateDialog.vue';
 
-vi.mock('src/services/api/dynamic-api', () => ({ dynamicApi: { getTemplates: vi.fn(), instantiateTemplate: vi.fn() } }));
+vi.mock('src/services/api/dynamic-api', () => ({ dynamicApi: { getTemplates: vi.fn(), instantiateTemplate: vi.fn(), getMe: vi.fn() } }));
 const api = vi.mocked(dynamicApi);
 
 const f = (code: string, extra: object = {}) => ({ code, label: { 'zh-TW': code }, type: 'text', locked: false, dependsOn: [], ...extra });
@@ -23,14 +24,15 @@ const templates: TemplateSummary[] = [{
 }, { key: 'other', name: { 'zh-TW': '其他' }, source: 'imported', modules: [] }];
 
 let router: ReturnType<typeof createRouter>;
-async function mountDialog() {
+async function mountDialog(permissionAdmin = true) {
   api.getTemplates.mockResolvedValue(templates);
+  api.getMe.mockResolvedValue({ designer: { read: true, add: true, edit: true, delete: true }, permissionAdmin } as never);
   router = createRouter({ history: createMemoryHistory(), routes: [{ path: '/', component: { render: () => null } }, { path: '/system/dynamic-modules/:k', component: { render: () => null } }] });
   await router.push('/');
   const i18n = createI18n({ legacy: false, locale: 'zh-TW', messages: { 'zh-TW': zhTW } });
   const w = mount(TemplateDialog, {
     props: { modelValue: true }, attachTo: document.body,
-    global: { plugins: [[quasar.Quasar, { components: quasar, plugins: { Notify: quasar.Notify } }], router, i18n,
+    global: { plugins: [[quasar.Quasar, { components: quasar, plugins: { Notify: quasar.Notify } }], router, i18n, createPinia(),
       [VueQueryPlugin, { queryClient: new QueryClient({ defaultOptions: { queries: { retry: false } } }) }]] },
   });
   await flushPromises();
@@ -78,6 +80,22 @@ describe('TemplateDialog', () => {
     });
     expect(notify).toHaveBeenCalledWith(expect.objectContaining({ type: 'warning', message: '群組「x」不存在，已略過它的權限建議' }));
     expect(router.currentRoute.value.path).toBe('/system/dynamic-modules/order');
+    w.unmount();
+  });
+
+  it('PAX-35 沒有權限設定時顯示「權限建議會略過」，有就不顯示；成功後照常顯示 warnings', async () => {
+    let w = await mountDialog(true);
+    expect(q('template-permissions-skipped')).toBeNull();
+    w.unmount();
+    document.body.innerHTML = '';
+    w = await mountDialog(false);
+    expect(q('template-permissions-skipped')!.textContent!.trim()).toBe('範本的權限建議會略過，建好後請權限設定者到權限分頁授權');
+    await click('template-sales');
+    expect(q('template-permissions-skipped')).not.toBeNull();
+    api.instantiateTemplate.mockResolvedValue({ modules: [{ code: 'order', key: 'order', id: 1 }], warnings: ['沒有權限設定，已略過範本的權限建議'] });
+    const notify = vi.spyOn(quasar.Notify, 'create');
+    await click('template-create');
+    expect(notify).toHaveBeenCalledWith(expect.objectContaining({ type: 'warning', message: '沒有權限設定，已略過範本的權限建議' }));
     w.unmount();
   });
 

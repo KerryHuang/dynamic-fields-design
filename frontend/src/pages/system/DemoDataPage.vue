@@ -16,8 +16,8 @@ const me = useMe();
 
 const data = computed(() => status.data.value);
 const forbidden = computed(() => isForbidden(status.error.value));
-// 產生要重播設計器的新增與修改指令，缺任一項都會 403
-const canGenerate = computed(() => !!me.data.value?.designer.add && !!me.data.value?.designer.edit);
+// 產生要重播設計器的新增與修改指令，並寫入權限（要「權限設定」），缺任一項都會 403
+const canGenerate = computed(() => !!me.data.value?.designer.add && !!me.data.value?.designer.edit && !!me.data.value?.permissionAdmin);
 const running = computed(() => data.value?.state === 'running');
 const disabled = computed(() =>
   !canGenerate.value || !data.value || ['running', 'generated', 'conflict'].includes(data.value.state));
@@ -56,6 +56,9 @@ const start = () => generate.mutate(undefined, {
           </ul>
           <div class="text-caption" data-testid="demo-conflict-hint">{{ t('demoData.conflictHint') }}</div>
         </template>
+      </div>
+      <div v-if="me.data.value && !canGenerate" class="text-warning q-mb-sm" data-testid="demo-needs-permission">
+        {{ t('demoData.needsPermission') }}
       </div>
       <q-btn
         color="primary" icon="auto_awesome" :label="t('demoData.generate')"

@@ -8,6 +8,7 @@ import { createI18n } from 'vue-i18n';
 import zhTW from 'src/i18n/zh-TW.json';
 import type { Department } from 'src/domain/dynamic/organization';
 import type { AdminUser } from 'src/domain/dynamic/types';
+import { noSystemPrivileges } from 'src/domain/dynamic/system-privileges';
 import { dynamicApi } from 'src/services/api/dynamic-api';
 import OrganizationPage from './OrganizationPage.vue';
 
@@ -31,6 +32,7 @@ const DEPARTMENTS = [
 ];
 const user = (userId: string, isActive = true): AdminUser => ({
   userId, displayName: `名-${userId}`, isActive, isSystemAdmin: false, isDemoAccount: false, isLocked: false, groupIds: [],
+  systemPrivileges: noSystemPrivileges(), effectiveSystemPrivileges: noSystemPrivileges(), systemPrivilegeSources: [],
 });
 
 let mounted: ReturnType<typeof mount> | undefined;

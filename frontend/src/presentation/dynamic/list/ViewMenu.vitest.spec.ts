@@ -13,7 +13,7 @@ import { FACTORY_ME_THEME } from 'src/domain/theme/theme-fixtures';
 
 vi.mock('src/services/api/dynamic-api', () => ({ dynamicApi: { getMe: vi.fn() } }));
 const designer = (edit: boolean) => ({
-  userId: 'u', displayName: 'U', isSystemAdmin: false, mustChangePassword: false, groups: [], designer: { read: true, add: edit, edit, delete: edit }, theme: FACTORY_ME_THEME,
+  userId: 'u', displayName: 'U', isSystemAdmin: false, mustChangePassword: false, groups: [], designer: { read: true, add: edit, edit, delete: edit }, permissionAdmin: false, theme: FACTORY_ME_THEME,
 });
 let canEditDesigner = true;
 

@@ -3,6 +3,7 @@ import { Notify } from 'quasar';
 import { computed, ref, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { useRouter } from 'vue-router';
+import { useMe } from 'src/application/dynamic/queries/permissions-queries';
 import { useInstantiateTemplate, useTemplates } from 'src/application/dynamic/queries/templates-queries';
 import { resolveI18n } from 'src/domain/dynamic/i18n-text';
 import type { I18nText } from 'src/domain/dynamic/types';
@@ -17,6 +18,9 @@ const { t, locale } = useI18n();
 const router = useRouter();
 const templates = useTemplates();
 const instantiate = useInstantiateTemplate();
+const me = useMe();
+// 沒有「權限設定」時後端照建、略過範本的權限建議，成功後的 warnings 會再說一次
+const skipsPermissions = computed(() => me.data.value !== undefined && !me.data.value.permissionAdmin);
 
 const picked = ref<TemplateSummary | null>(null);
 const forms = ref<Record<string, { key: string; name: I18nText }>>({});
@@ -69,9 +73,12 @@ function submit() {
 
 <template>
   <q-dialog v-model="open" persistent>
-    <q-card style="min-width: 560px; max-width: 90vw">
+    <q-card style="width: 560px; max-width: 90vw">
       <q-card-section class="text-h6">
         {{ picked ? resolveI18n(picked.name, locale) : t('designer.template.choose') }}
+      </q-card-section>
+      <q-card-section v-if="skipsPermissions" class="text-warning q-pb-none" data-testid="template-permissions-skipped">
+        {{ t('designer.template.permissionsSkipped') }}
       </q-card-section>
       <q-card-section v-if="messages.length" class="text-negative" data-testid="template-error">
         <div v-for="m in messages" :key="m">{{ m }}</div>

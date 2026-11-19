@@ -13,7 +13,7 @@ import EventEditorDialog from './EventEditorDialog.vue';
 
 vi.mock('src/services/api/dynamic-api', () => ({
   dynamicApi: {
-    createEvent: vi.fn(), updateEvent: vi.fn(), getModule: vi.fn(), getModules: vi.fn(), getEvents: vi.fn(), getWorkflow: vi.fn(), getModulePermissions: vi.fn(),
+    createEvent: vi.fn(), updateEvent: vi.fn(), getModule: vi.fn(), getModules: vi.fn(), getEvents: vi.fn(), getWorkflow: vi.fn(), getModulePermissions: vi.fn(), getMe: vi.fn(),
   },
 }));
 const api = vi.mocked(dynamicApi);
@@ -50,7 +50,8 @@ const created: ModuleEvent = {
 };
 
 const mounted: { unmount: () => void }[] = [];
-async function open(event?: ModuleEvent, opts: { workflow?: boolean; hidden?: number[] } = {}) {
+async function open(event?: ModuleEvent, opts: { workflow?: boolean; hidden?: number[]; permissionAdmin?: boolean } = {}) {
+  api.getMe.mockResolvedValue({ designer: { read: true, add: true, edit: true, delete: true }, permissionAdmin: opts.permissionAdmin ?? true } as never);
   api.getModules.mockResolvedValue([summary('ship'), summary('ship-line', { detailOf: 'ship' }), summary('stock-move'), summary('balance')]);
   api.getModule.mockImplementation(async (k: string) => details[k]!);
   api.getEvents.mockResolvedValue(event ? [event] : []);
@@ -179,6 +180,36 @@ describe('EventEditorDialog', () => {
     saveBtn().click();
     await flushPromises();
     expect(api.createEvent.mock.calls[0]![0].definition.effects[0]!.set).toEqual([{ to: 72, from: { side: 'header', fieldId: 22 }, allowHiddenSource: true }]);
+  });
+
+  it('PAX-34 沒有權限設定時「允許複製被隱藏的值」停用並說明原因', async () => {
+    const w = await open(undefined, { hidden: [22], permissionAdmin: false });
+    await type('[data-testid="event-key"] input', 'e1');
+    await type('[data-testid="event-name"] [data-testid="i18n-zh-TW"] input', 'x');
+    await click('event-add-effect');
+    await emit(w, 'effect-0-target', 'stock-move');
+    await click('effect-0-set-add');
+    await emit(w, 'set-0-0-to', 72);
+    await emit(w, 'set-0-0-field', 22);
+    expect($('set-0-0-allow-hidden')!.getAttribute('aria-disabled')).toBe('true');
+    expect($('set-0-0-consent-locked')!.textContent).toBe('允許複製被隱藏的值需要「權限設定」權限，請洽系統管理員');
+    // 旗標沒勾：存檔本身不受影響（後端照舊會因來源被隱藏而拒絕）
+    expect($('event-consent-blocked')).toBeNull();
+  });
+
+  it('PAX-34 載入已勾旗標的事件：沒有權限設定時存檔鈕停用並說明；有權限設定照常可存', async () => {
+    const flagged: ModuleEvent = { ...created, definition: { ...created.definition, effects: [
+      { code: 'post', kind: 'create', targetModuleKey: 'stock-move', set: [{ to: 72, from: { side: 'header', fieldId: 22 }, allowHiddenSource: true }] },
+    ] } };
+    await open(flagged, { hidden: [22], permissionAdmin: false });
+    expect(saveBtn().disabled).toBe(true);
+    expect($('event-consent-blocked')!.textContent).toContain('存檔需要「權限設定」權限');
+    for (const w of mounted.splice(0)) w.unmount();
+    document.querySelectorAll('.q-dialog').forEach((el) => el.remove());
+    await open(flagged, { hidden: [22] });
+    expect(saveBtn().disabled).toBe(false);
+    expect($('event-consent-blocked')).toBeNull();
+    expect($('set-0-0-allow-hidden')!.getAttribute('aria-disabled')).not.toBe('true');
   });
 
   it('shows server messages on the effect and mapping they belong to, and the rest below', async () => {

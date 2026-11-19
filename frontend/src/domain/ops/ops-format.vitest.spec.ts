@@ -19,6 +19,8 @@ describe('incidentTitle', () => {
     expect(incidentTitle(t, te, 'ops.title.config.event.tooDeep', { ruleKey: 'e1' })).toBe('規則「e1」設定有問題：連動事件串聯過深');
     expect(incidentTitle(t, te, 'ops.title.channelFailed', { stage: 'auth', serverCode: 535 })).toBe('告警信寄不出去（認證），伺服器回應 535');
     expect(incidentTitle(t, te, 'ops.title.adminChanged', { change: 'granted' })).toBe('系統管理員權限異動：授予');
+    expect(incidentTitle(t, te, 'ops.title.privilegeChanged', { change: 'granted' })).toBe('有人取得設計器或權限設定權限');
+    expect(incidentTitle(t, te, 'ops.title.privilegeChanged', { change: 'revoked' })).toBe('有人的設計器或權限設定權限被收回');
   });
   it('換語系就換文字；沒登記的代碼回代碼本身', () => {
     const en = i18n('en-US');

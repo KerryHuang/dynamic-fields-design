@@ -342,11 +342,23 @@ export interface AdminUser {
   groupIds: number[];
   /** Absent when the user has no department (the server omits nulls). */
   departmentId?: number | null;
+  /** 個人直接設定：編輯對話框只載入與存回它（權限軸設計 §8）。 */
+  systemPrivileges: SystemPrivileges;
+  /** 有效結果（和 GET me 同一套算法），唯讀，清單標籤用它。 */
+  effectiveSystemPrivileges: SystemPrivileges;
+  /** 提供系統權限的群組；系統管理員另有一筆 `systemAdmin`。個人那份不重複列。 */
+  systemPrivilegeSources: SystemPrivilegeSource[];
 }
+export interface DesignerFlags { read: boolean; add: boolean; edit: boolean; delete: boolean }
+/** 設計器四個動作與權限設定；直接設定或有效結果都用這個形狀，欄位名稱區分。 */
+export interface SystemPrivileges { designer: DesignerFlags; permissionAdmin: boolean }
+export type SystemPrivilegeSource =
+  | { kind: 'group'; groupId: number; groupName: string; designer: DesignerFlags; permissionAdmin: boolean }
+  | { kind: 'systemAdmin' };
 export interface AdminUserUpdate { displayName: string; groupIds: number[]; isSystemAdmin: boolean }
 export interface AdminUserCreate extends AdminUserUpdate { userId: string; password: string }
 
-export interface AdminGroup { id: number; key: string; nameI18n: I18nText; memberUserIds: string[] }
+export interface AdminGroup { id: number; key: string; nameI18n: I18nText; memberUserIds: string[]; systemPrivileges: SystemPrivileges }
 export interface BlockingOption { module: string; field: string; option: string }
 export interface GroupImpact {
   memberCount: number;
@@ -358,6 +370,8 @@ export interface GroupImpact {
   reports: string[];
   /** 指派給這個群組的儀表板名稱（刪除群組會一併移除指派）。 */
   dashboards: string[];
+  /** 這個群組的系統權限直接設定（刪除時一併移除）。 */
+  systemPrivileges: SystemPrivileges;
 }
 
 export interface Me {
@@ -368,7 +382,10 @@ export interface Me {
   /** Demo accounts have no password, so changing it always fails. */
   isDemoAccount?: boolean;
   groups: { id: number; key: string; name: I18nText }[];
-  designer: { read: boolean; add: boolean; edit: boolean; delete: boolean };
+  /** 有效結果：系統管理員自動擁有、群組與個人合併、權限設定隱含讀取、停用為 false。 */
+  designer: DesignerFlags;
+  /** 有效的「權限設定」：能改模組權限（權限軸設計 §8）。 */
+  permissionAdmin: boolean;
   theme: MeTheme;
 }
 

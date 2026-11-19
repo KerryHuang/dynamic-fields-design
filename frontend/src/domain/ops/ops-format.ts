@@ -18,6 +18,7 @@ export function incidentTitle(t: Translate, te: Exists, titleKey: string, params
   if (titleKey === 'ops.title.serverError') return t('ops.titles.server', { name: str(params, 'exceptionType') }) + route;
   if (titleKey === 'ops.title.clientError') return t('ops.titles.client', { name: str(params, 'errorName') }) + route;
   if (titleKey === 'ops.title.adminChanged') return t(str(params, 'change') === 'granted' ? 'ops.titles.adminGranted' : 'ops.titles.adminRevoked');
+  if (titleKey === 'ops.title.privilegeChanged') return t(str(params, 'change') === 'granted' ? 'ops.titles.privilegeGranted' : 'ops.titles.privilegeRevoked');
   if (titleKey === 'ops.title.channelFailed') {
     const stage = str(params, 'stage');
     const code = str(params, 'serverCode');

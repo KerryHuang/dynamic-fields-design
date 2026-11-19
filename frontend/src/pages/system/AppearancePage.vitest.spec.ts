@@ -20,7 +20,7 @@ let mounted: ReturnType<typeof mount> | undefined;
 async function mountPage(over: { isSystemAdmin?: boolean; theme?: Partial<MeTheme> } = {}) {
   api.getMe.mockResolvedValue({
     userId: 'admin', displayName: 'A', mustChangePassword: false, isSystemAdmin: over.isSystemAdmin ?? true, groups: [],
-    designer: { read: true, add: true, edit: true, delete: true }, theme: { ...SITE, ...over.theme },
+    designer: { read: true, add: true, edit: true, delete: true }, permissionAdmin: true, theme: { ...SITE, ...over.theme },
   });
   const i18n = createI18n({ legacy: false, locale: 'zh-TW', messages: { 'zh-TW': zhTW } });
   const Host = { render: () => h(quasar.QLayout, null, () => h(quasar.QPageContainer, null, () => h(AppearancePage))) };
