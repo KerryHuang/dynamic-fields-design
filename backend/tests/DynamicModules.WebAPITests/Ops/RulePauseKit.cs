@@ -227,6 +227,22 @@ internal sealed class RulePauseRig : IDisposable
     public Task<List<Notification>> PauseNotificationsAsync() =>
         Db(db => db.Set<Notification>().AsNoTracking().Where(n => n.Kind == NotificationKinds.OpsRulePaused).OrderBy(n => n.Id).ToListAsync());
 
+    public Task<List<Notification>> NotificationsForAsync(string userId) =>
+        Db(db => db.Set<Notification>().AsNoTracking().Where(n => n.UserId == userId).OrderBy(n => n.Id).ToListAsync());
+
+    /// <summary>
+    /// 以別的使用者（要先 <see cref="GrantDesigner"/>）改規則：內容照 <see cref="CreateRuleAsync"/> 的預設，只改名稱，最後修改者換成那個人。
+    /// </summary>
+    public async Task UpdateRuleAsAsync(HttpClient client, string key)
+    {
+        var res = await client.PutAsJsonAsync($"{Base}/modules/{Module}/task-rules/{key}", new
+        {
+            key, name = new Dictionary<string, string> { ["zh-TW"] = key + " 改" }, active = true, repeat = "once", trigger = new { on = "onCreate" },
+            tasks = new[] { new { code = "a", title = new Dictionary<string, string> { ["zh-TW"] = "跟進" }, assigneeFieldId = Owner.Id, dueOffsetDays = 0 } },
+        });
+        res.StatusCode.Should().Be(HttpStatusCode.OK, await res.Content.ReadAsStringAsync());
+    }
+
     public Task<List<AuditLogEntry>> AuditAsync(string action) =>
         Db(db => db.Set<AuditLogEntry>().AsNoTracking().Where(a => a.Action == action).OrderBy(a => a.Id).ToListAsync());
 

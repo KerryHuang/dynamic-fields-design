@@ -2,6 +2,7 @@ using System.Net;
 using System.Net.Http.Json;
 using DynamicModules.Application.Common;
 using DynamicModules.Application.Common.Observability;
+using DynamicModules.Application.Dynamic.OpsService.Incidents;
 using DynamicModules.Application.Dynamic.OpsService.RulePause;
 using DynamicModules.Application.Dynamic.OpsService.Scheduling;
 using DynamicModules.Domain.Data;
@@ -632,6 +633,68 @@ public class RulePauseTests
         (await rig.HealthAsync(id)).Should().BeNull();
         (await rig.FailuresAsync(id)).Should().BeEmpty();
         (await rig.IncidentsAsync(RuleErrorCodes.AutoPaused)).Single().ResolvedReason.Should().Be(IncidentResolvedReason.RuleDeleted);
+    }
+
+    public static TheoryData<string> KnownCodes()
+    {
+        var codes = new TheoryData<string>();
+        foreach (var code in RuleErrorCodes.All) codes.Add(code);
+        return codes;
+    }
+
+    /// <summary>
+    /// 八個已知錯誤碼各自的客戶設定事件（§17.2.2；審查建議）：開事件（警告、標題鍵、再發生累加）、通知最後修改者、不計數不暫停。
+    /// 產生處（事件、檢查、效果的回傳）只以 <c>event.tooDeep</c> 端到端驗（E10）；八個代碼經同一條 <c>RuleFailureNote</c> → 補記路徑，這裡逐碼驗後半段。
+    /// </summary>
+    [Theory]
+    [MemberData(nameof(KnownCodes))]
+    public async Task KnownErrorCode_OpensConfigIncident_NotifiesRuleEditor_NoCount(string code)
+    {
+        using var rig = new RulePauseRig();
+        await rig.BuildAsync();
+        var taskRuleId = await rig.CreateRuleAsync(Rule);
+        var kind = code.StartsWith("check.", StringComparison.Ordinal) ? RuleFailureTag.Check : RuleFailureTag.Event;
+        var note = new RuleFailureNoteEntry(kind, 4242, code, rig.Module, "r-known", RulePauseRig.Designer);
+        await rig.SendAsync(new RecordRuleConfigIssuesRequest([note], null));
+        rig.Tick();
+        await rig.SendAsync(new RecordRuleConfigIssuesRequest([note], null));
+
+        var incident = (await rig.IncidentsAsync(code)).Should().ContainSingle().Subject;
+        (incident.Source, incident.Category, incident.Severity, incident.RuleKind, incident.RuleId, incident.TitleKey, incident.OccurrenceCount).Should()
+            .Be((IncidentSource.Config, IncidentCategory.Config, IncidentSeverity.Warning, kind, (long?)4242, IncidentTitles.ConfigPrefix + code, 2));
+        (await rig.NotificationsForAsync(RulePauseRig.Designer)).Should().ContainSingle("最後修改者收到一則，再發生不重發");
+        (await rig.HealthAsync(taskRuleId)).Should().BeNull();
+        await using var scope = rig.App.Services.CreateAsyncScope();
+        (await scope.ServiceProvider.GetRequiredService<DynamicDbContext>().Set<RuleHealth>().CountAsync()).Should().Be(0, "已知錯誤碼不計數、不暫停");
+    }
+
+    /// <summary>
+    /// 暫停事件的重複提醒（偏離 12；審查建議）：暫停後規則被別人改過，超過 <c>ops.incidentRenotifyHours</c> 沒人確認時，
+    /// <c>ops.upkeep</c> 再提醒一次，<c>ruleEditor</c> 取規則目前的最後修改者（不是暫停當下的），通知種類仍是 <c>opsRulePaused</c>。
+    /// </summary>
+    [Fact]
+    public async Task Renotify_PausedIncident_GoesToCurrentRuleEditor()
+    {
+        var (rig, _) = await Paused();
+        using var owned = rig;
+        const string other = "sales01";
+        (await rig.AdminsAsync()).Should().NotContain(other);
+        (await rig.PauseNotificationsAsync()).Should().Contain(n => n.UserId == RulePauseRig.Designer);
+        rig.GrantDesigner(other, edit: true);
+        await rig.UpdateRuleAsAsync(rig.App.AsUser(other), Rule);
+        var before = (await rig.PauseNotificationsAsync()).Count;
+
+        rig.App.Time.Advance(TimeSpan.FromHours(25));
+        var clock = new ManualClock(rig.App.Time.GetUtcNow());
+        var runner = Runner(rig.App, clock, rig.App.Services.GetServices<IScheduledJob>().Where(j => j.Key == "ops.upkeep"));
+        await runner.EnsureJobsAsync(CancellationToken.None);
+        clock.Advance(TimeSpan.FromMinutes(61));
+        await runner.TickAsync(CancellationToken.None);
+
+        (await Row(rig.App, "ops.upkeep")).LastStatus.Should().Be(ScheduledJobStatus.Succeeded);
+        var renotified = (await rig.PauseNotificationsAsync()).Skip(before).ToList();
+        renotified.Select(n => n.UserId).Should().Contain(other).And.NotContain(RulePauseRig.Designer, "改過規則的人才是現在的 ruleEditor");
+        renotified.Select(n => n.UserId).Should().Contain(await rig.AdminsAsync());
     }
 
     [Fact]
