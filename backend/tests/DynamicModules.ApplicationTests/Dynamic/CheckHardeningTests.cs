@@ -1,11 +1,13 @@
 using System.Text.Json;
 using DynamicModules.Application.Common;
 using DynamicModules.Application.Dynamic.CheckService;
+using DynamicModules.Application.Dynamic.PolicyService;
 using DynamicModules.Application.Dynamic.RecordService;
 using DynamicModules.Application.Dynamic.RecordService.Commands.CreateRecord;
 using DynamicModules.Application.Dynamic.RecordService.Commands.UpdateRecord;
 using DynamicModules.Application.Dynamic.RecordService.Data;
 using DynamicModules.Domain.Entities.Dynamic;
+using DynamicModules.Domain.Policies;
 using DynamicModules.Domain.ValueObjects;
 using FluentAssertions;
 using MediatR;
@@ -144,5 +146,33 @@ public class CheckHardeningTests : EffectsTestBase
         // 真正的 fieldRef 仍然被擋
         var real = J($$$"""{"all":[{"field":{{{s.MoveQty}}},"op":"gt","value":{"fieldRef":{{{s.MoveQty}}}}}]}""");
         (await SaveCheck(s, "chr-real", SumGte0([], s.MoveQty, real))).IsInvalid.Should().BeTrue();
+    }
+
+    [Fact]
+    [Trait("Category", "Postgres")]
+    public async Task Backfill_RecordPolicy()
+    {
+        await NewModule("chb");
+        var item = await MustAdd("chb", FieldType.Text, label: "品項");     // 不可篩選：儲存檢查時要回填
+        var qty = await MustAdd("chb", FieldType.Decimal, label: "數量");
+        await Send(new DynamicModules.Application.Dynamic.ModuleService.Commands.ActivateModule.ActivateModuleRequest("chb"));
+        var moduleId = Db.Context.Set<Module>().AsNoTracking().Single(m => m.Key == "chb").Id;
+        // 技術下限 1000：直接寫 1001 筆空記錄，不走建檔流程
+        Db.Context.Set<DynamicModules.Domain.Entities.Dynamic.Record>().AddRange(Enumerable.Range(0, 1001).Select(_ =>
+        {
+            var rec = new DynamicModules.Domain.Entities.Dynamic.Record { ModuleId = moduleId, OwnerUserId = "admin", RowVersion = Guid.NewGuid().ToString() };
+            rec.StampCreated("admin", new DateTime(2026, 11, 3, 9, 0, 0));
+            return rec;
+        }));
+        await Db.Context.SaveChangesAsync();
+        Db.Context.ChangeTracker.Clear();
+        (await Send(new UpdateSystemPolicyRequest(PolicyCatalog.CheckMaxBackfillRecords.Code, JsonSerializer.SerializeToElement(1000))))
+            .IsSuccess.Should().BeTrue();
+
+        var def = new CheckDefinition([item.Id], "sum", qty.Id, null, new CheckAssert("lte", new CheckLimit(10, null, null)), Text("太多"));
+        var r = await Run(new CreateCheckRequest(new CheckInput("chb-cap", Text("cap"), "chb", true, def)));
+
+        r.IsConflict.Should().BeTrue(r.Message + string.Join(";", r.Errors.Select(e => e.Key + e.Value[0])));
+        r.Message.Should().Be("這個模組有 1001 筆記錄，超過 1000 筆，一次回填索引會長時間占住寫入鎖；請在低峰時段分次處理");
     }
 }

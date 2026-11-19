@@ -26,8 +26,8 @@ public sealed record DownloadAttachmentRequest(long RecordId, long FieldId, stri
 /// <summary>下載結果。Stream 由呼叫端（控制器）負責釋放。</summary>
 public sealed record AttachmentDownload(Stream Content, string Name, long Size);
 
-/// <summary>清掉沒有任何記錄（含軟刪除）參照、且超過寬限時間的檔案。系統管理員專用。</summary>
-public sealed record SweepAttachmentsRequest(TimeSpan Grace) : IRequest<ServiceResult>, ISystemAdminRequest;
+/// <summary>清掉沒有任何記錄（含軟刪除）參照、且超過寬限時間的檔案。系統管理員專用。寬限為 null 時用政策 A27。</summary>
+public sealed record SweepAttachmentsRequest(TimeSpan? Grace) : IRequest<ServiceResult>, ISystemAdminRequest;
 
 public sealed record SweepAttachmentsResult(int Deleted, int Kept);
 

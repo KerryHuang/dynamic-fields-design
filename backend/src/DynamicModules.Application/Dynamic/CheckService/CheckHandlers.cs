@@ -1,7 +1,9 @@
 using DynamicModules.Application.Common;
 using DynamicModules.Application.Common.Security;
 using DynamicModules.Application.Common.Time;
+using DynamicModules.Application.Dynamic.PolicyService;
 using DynamicModules.Domain.Entities.Dynamic;
+using DynamicModules.Domain.Policies;
 using DynamicModules.Domain.Repositories.Dynamic;
 using MediatR;
 
@@ -89,11 +91,10 @@ public class GetChecksHandler(ICheckRepository checks, IModuleRepository modules
     }
 }
 
-public class ScanCheckHandler(ICheckRepository checks, IModuleRepository modules, IRecordRepository records, CheckEvaluator evaluator)
+public class ScanCheckHandler(
+    ICheckRepository checks, IModuleRepository modules, IRecordRepository records, CheckEvaluator evaluator, IPolicyReader policies)
     : IRequestHandler<ScanCheckRequest, ServiceResult>
 {
-    public const int MaxViolations = 50;
-    public const int MaxGroups = 20_000;
 
     public async Task<ServiceResult> Handle(ScanCheckRequest request, CancellationToken ct)
     {
@@ -103,6 +104,8 @@ public class ScanCheckHandler(ICheckRepository checks, IModuleRepository modules
         var (prepared, failure) = await evaluator.PrepareAsync(module, check, ct);
         if (failure is not null) return failure;
 
+        var maxViolations = await policies.IntAsync(PolicyCatalog.CheckScanMaxViolations, null, ct);
+        var maxGroups = await policies.IntAsync(PolicyCatalog.CheckScanMaxGroups, null, ct);
         var seen = new HashSet<string>();
         var violations = new List<CheckViolation>();
         long after = 0;
@@ -116,7 +119,7 @@ public class ScanCheckHandler(ICheckRepository checks, IModuleRepository modules
                 var outcome = await evaluator.EvaluateAsync(prepared!, group, ct);
                 if (outcome.Failure is not null) return outcome.Failure;
                 if (outcome.Violation is not null) violations.Add(new CheckViolation(outcome.Value, outcome.Limit, outcome.Violation));
-                if (violations.Count >= MaxViolations || seen.Count >= MaxGroups)
+                if (violations.Count >= maxViolations || seen.Count >= maxGroups)
                     return ServiceResult.Success(new CheckScanResponse(violations, Truncated: true));
             }
             records.ReleaseTracked(batch);
