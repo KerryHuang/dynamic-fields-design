@@ -5,8 +5,8 @@ using Microsoft.EntityFrameworkCore;
 namespace DynamicModules.ApplicationTests.Persistence;
 
 /// <summary>
-/// A01（維運設計 §17.8）：O2 的九張表套 migration 後存在，欄位（可空與長度）、唯一索引與 §17.4 逐欄一致。
-/// o2b–o2e 不能再改表，所以這裡把 §17.4 寫成表、模型一變就失敗。兩種資料庫都跑（PostgreSQL 的建表由樣板資料庫套 migration）。
+/// A01（維運設計 §17.8）：O2 的九張表與核心寄信設定套 migration 後存在，欄位（可空與長度）、唯一索引與 §17.4 逐欄一致。
+/// 這裡把 §17.4 寫成表、模型一變就失敗（o2e 依使用者 2026-11-19 裁決把告警通道的 SMTP 連線抽到 <c>Dynamic_MailSettings</c>）。兩種資料庫都跑（PostgreSQL 的建表由樣板資料庫套 migration）。
 /// </summary>
 [Trait("Category", "Postgres")]
 public class OpsSchemaTests
@@ -63,10 +63,16 @@ public class OpsSchemaTests
         ],
         ["Dynamic_AlertChannel"] =
         [
-            ("Kind", false, 20), ("Enabled", false, null), ("Host", true, 255), ("Port", false, null), ("Security", false, 20),
-            ("UserName", true, 255), ("PasswordProtected", true, null), ("FromAddress", true, 255), ("FromName", true, 100),
+            ("Kind", false, 20), ("Enabled", false, null),
             ("ToAddresses", true, 2000), ("MailLocale", true, 10), ("LastClaimUtc", true, null), ("LastSuccessUtc", true, null),
             ("LastFailureUtc", true, null), ("LastError", true, 500), ("ConsecutiveFailures", false, null), ("ModifiedUserId", true, 50),
+            ("ModifiedUtc", true, null),
+        ],
+        // 2026-11-19 裁決：SMTP 連線從告警通道抽到核心寄信設定（帳號信共用），長度沿用原欄位
+        ["Dynamic_MailSettings"] =
+        [
+            ("Kind", false, 20), ("Host", true, 255), ("Port", false, null), ("Security", false, 20), ("UserName", true, 255),
+            ("PasswordProtected", true, null), ("FromAddress", true, 255), ("FromName", true, 100), ("ModifiedUserId", true, 50),
             ("ModifiedUtc", true, null),
         ],
         ["Dynamic_AlertOutbox"] =
@@ -79,7 +85,7 @@ public class OpsSchemaTests
     };
 
     [Fact]
-    public async Task NineTables_ExistAfterMigration_AndColumnsMatchDesign()
+    public async Task OpsTables_ExistAfterMigration_AndColumnsMatchDesign()
     {
         await using var db = await TestDb.CreateAsync();
         foreach (var (table, columns) in Expected)
@@ -112,7 +118,7 @@ public class OpsSchemaTests
         // 樣本對事件刪除串聯；其他表不設外鍵
         context.Model.FindEntityType(typeof(OpsIncidentSample))!.GetForeignKeys().Should().ContainSingle()
             .Which.DeleteBehavior.Should().Be(DeleteBehavior.Cascade);
-        foreach (var t in new[] { typeof(AuditLogEntry), typeof(RuleHealth), typeof(RuleFailure), typeof(AlertOutbox), typeof(HealthCheckResult) })
+        foreach (var t in new[] { typeof(AuditLogEntry), typeof(RuleHealth), typeof(RuleFailure), typeof(AlertOutbox), typeof(HealthCheckResult), typeof(MailSettings) })
             context.Model.FindEntityType(t)!.GetForeignKeys().Should().BeEmpty(t.Name);
     }
 

@@ -27,7 +27,7 @@ public readonly record struct DirectReservation(DirectHandoff Kind, DateTime? Se
 /// 資料庫寫不進時的直送佇列（維運設計 §17.2.6、O2-T8；singleton，只在本實例記憶體）：健康檢查結果寫不進資料庫時，
 /// 開啟與升級的轉換改由看門狗的寄送迴圈直接寄（不經 <c>ops.monitor</c>：資料庫不可寫時排程器搶不到租約）。
 /// 同一個 <c>TransitionId</c> 只寄一次；重試 1、5、15、60 分鐘、最多 5 次；每小時上限以本實例記憶體計數，超過的不寄、只記 Warning。
-/// 通道設定與寄信政策讀不到時用最後一次成功讀到的（密碼仍是加密字串，寄送時才解；信件語系也用那份）；啟動後從沒讀到過就寄不出去；
+/// 寄信設定、通道設定與寄信政策讀不到時用最後一次成功讀到的（寄信設定與通道合成一份快取，一起換）（密碼仍是加密字串，寄送時才解；信件語系也用那份）；啟動後從沒讀到過就寄不出去；
 /// 成功讀到通道停用或設定不完整時，還沒開始寄的信丟掉（同佇列 <c>pending → skipped</c>）。
 /// <para>
 /// 和補寫的交接以 <c>TransitionId</c> 為單位（§17.13 審查修正）：補寫在交易內呼叫 <see cref="Reserve"/>，還沒開始寄的保留下來、不再開始寄；
@@ -352,13 +352,15 @@ public sealed class DirectAlertQueue(
         try
         {
             await using var scope = scopes.CreateAsyncScope();
+            // 寄信設定與通道兩者都讀到才換掉快取（合成的寄送設定就是兩者的快照）；任一個讀不到就整份沿用上一次
+            var mail = await scope.ServiceProvider.GetRequiredService<IMailSettingsRepository>().GetAsync(ct);
             var channel = await scope.ServiceProvider.GetRequiredService<IAlertChannelRepository>().GetAsync(AlertChannel.Smtp, ct);
             var policy = await AlertEmailPolicy.ReadAsync(scope.ServiceProvider.GetRequiredService<IPolicyReader>(), ct);
             lock (_sync)
             {
-                _settings = SmtpSettings.From(channel);
+                _settings = SmtpSettings.From(mail, channel);
                 _policy = policy;
-                // 確定讀到通道停用或設定不完整：還沒開始寄的丟掉（同佇列 pending → skipped）；交接中、在途的照交接處理
+                // 確定讀到通道停用或設定（寄信設定或收件人）不完整：還沒開始寄的丟掉（同佇列 pending → skipped）；交接中、在途的照交接處理
                 if (_settings is null && _items.RemoveAll(i => i.ReservedUtc is null && !i.Sending) is var dropped and > 0)
                     logger.LogInformation("告警通道停用或設定不完整，丟掉 {Count} 封還沒寄的直送信", dropped);
             }

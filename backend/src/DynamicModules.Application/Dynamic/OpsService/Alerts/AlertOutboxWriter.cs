@@ -39,7 +39,7 @@ public sealed record AlertBackfill(string TransitionId, bool Superseded);
 /// SMTP 在途的記成由直送領著的 <c>sending</c>（寄完由直送記結果）；其餘照寫（已過時的 <c>skipped</c>、否則 <c>pending</c>），直送不再寄。提交後確認交接。
 /// </summary>
 public sealed class AlertOutboxWriter(
-    IAlertChannelRepository channels, IAlertOutboxRepository outbox, IOpsIncidentRepository incidents, IPolicyReader policies,
+    IAlertChannelRepository channels, IMailSettingsRepository mailSettings, IAlertOutboxRepository outbox, IOpsIncidentRepository incidents, IPolicyReader policies,
     DirectAlertQueue direct, AfterCommitActions afterCommit, IOpsEnvironment env, AlertMailOptions options, TimeProvider time)
 {
     /// <summary>回傳這列的狀態；沒寫回 null。</summary>
@@ -54,7 +54,7 @@ public sealed class AlertOutboxWriter(
         {
             Channel = AlertChannel.Smtp, IncidentId = incident.Id, Transition = transition, TransitionId = backfill?.TransitionId,
             Subject = mail.Subject, Body = mail.Body, CreatedUtc = now, NextAttemptUtc = now,
-            Status = SmtpSettings.From(channel) is null || backfill is { Superseded: true } ? AlertOutboxStatus.Skipped : AlertOutboxStatus.Pending,
+            Status = SmtpSettings.From(await mailSettings.GetAsync(ct), channel) is null || backfill is { Superseded: true } ? AlertOutboxStatus.Skipped : AlertOutboxStatus.Pending,
         };
         if (backfill is not null)
         {

@@ -24,8 +24,8 @@ public sealed record AlertClaimResult(AlertClaim? Claim, bool Lost = false);
 public sealed record ClaimAlertRequest(JobLeaseFence? Fence, string ClaimedBy) : IRequest<ServiceResult>, ITransactionalRequest;
 
 public sealed class ClaimAlertHandler(
-    IScheduledJobRepository jobs, IAlertChannelRepository channels, IAlertOutboxRepository outbox, IOpsIncidentRepository incidents,
-    IPolicyReader policies, IUnitOfWork uow, TimeProvider time) : IRequestHandler<ClaimAlertRequest, ServiceResult>
+    IScheduledJobRepository jobs, IAlertChannelRepository channels, IMailSettingsRepository mailSettings, IAlertOutboxRepository outbox,
+    IOpsIncidentRepository incidents, IPolicyReader policies, IUnitOfWork uow, TimeProvider time) : IRequestHandler<ClaimAlertRequest, ServiceResult>
 {
     public async Task<ServiceResult> Handle(ClaimAlertRequest r, CancellationToken ct)
     {
@@ -34,9 +34,9 @@ public sealed class ClaimAlertHandler(
         var now = time.GetUtcNow().UtcDateTime;
         // 第一句：通道列鎖。沒有通道列＝從沒設定過，佇列列寫入時都已標 skipped
         if (!await channels.LockAsync(AlertChannel.Smtp, now, ct)) return ServiceResult.Success(new AlertClaimResult(null));
-        if (SmtpSettings.From(await channels.GetAsync(AlertChannel.Smtp, ct)) is not { } settings)
+        if (SmtpSettings.From(await mailSettings.GetAsync(ct), await channels.GetAsync(AlertChannel.Smtp, ct)) is not { } settings)
         {
-            // 寫入後才被停用或清掉設定：還沒寄的一律略過
+            // 寫入後才被停用或清掉設定（通道或寄信設定）：還沒寄的一律略過
             await outbox.SkipPendingAsync(AlertChannel.Smtp, ct);
             return ServiceResult.Success(new AlertClaimResult(null));
         }
@@ -192,7 +192,7 @@ public sealed class AlertDispatcher(IAlertMailSender mailer, IAlertSecretProtect
         string? password = null;
         if (claim.Settings.PasswordProtected is { } protectedText && (password = protector.TryUnprotect(protectedText)) is null)
         {
-            logger.LogError("告警信 {OutboxId} 寄不出去：SMTP 密碼解不開（金鑰可能不見了），請到告警通道重填", claim.Id);
+            logger.LogError("告警信 {OutboxId} 寄不出去：SMTP 密碼解不開（金鑰可能不見了），請到寄信設定重填", claim.Id);
             return (new MailSendResult(false, ConfigStage), true);
         }
         try

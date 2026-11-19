@@ -118,6 +118,8 @@ public static class AuditActions
         new("incident.resolve", Ops, W),
         new("ops.channel.update", Ops, W),
         new("ops.channel.test", Ops, W),
+        new("mailSettings.update", Ops, W),
+        new("mailSettings.test", Ops, W),
     ];
 
     private static readonly Dictionary<string, Entry> ByCode = All.ToDictionary(e => e.Code, StringComparer.Ordinal);

@@ -93,6 +93,13 @@ public static class AlertMailComposer
         return new AlertMail(AlertMailText.Get(locale, AlertMailText.TestSubject), AlertMailText.Get(locale, AlertMailText.TestBody));
     }
 
+    /// <summary>寄信設定的測試信（寄到寄件地址本身）。</summary>
+    public static AlertMail MailTest(string? locale)
+    {
+        var l = AlertMailText.Locale(locale);
+        return new AlertMail(AlertMailText.Get(l, AlertMailText.MailTestSubject), AlertMailText.Get(l, AlertMailText.MailTestBody));
+    }
+
     /// <summary>摘要信一行：事件編號、嚴重度、類別與標題，超過 70 字截斷加「…」。</summary>
     private static string Line(DigestItem item, string locale)
     {

@@ -1,6 +1,6 @@
 namespace DynamicModules.Domain.Entities.Dynamic;
 
-/// <summary>SMTP 的加密方式（維運設計 §17.2.6）。</summary>
+/// <summary>SMTP 的加密方式（維運設計 §17.2.6）；寄信設定（<see cref="MailSettings"/>）用。</summary>
 public enum AlertSecurity { None, StartTls, SslOnConnect }
 
 /// <summary>寄送佇列列的來源轉換；<c>Occurred</c> 是安全類每次異動，<c>Digest</c> 是摘要信。</summary>
@@ -10,6 +10,7 @@ public enum AlertOutboxStatus { Pending, Sending, Sent, SentDirect, Failed, Skip
 
 /// <summary>
 /// 告警通道設定（維運設計 §17.4 <c>Dynamic_AlertChannel</c>）：主鍵是通道種類，O2 只有 <see cref="Smtp"/>。
+/// SMTP 連線與寄件人在核心寄信設定（<see cref="MailSettings"/>，帳號信共用）；這裡只管告警自己的：
 /// 告警信寄到 <see cref="ToAddresses"/>（O2-U1）；信件語系 <see cref="MailLocale"/>，null＝出廠（O2-U14）。
 /// </summary>
 public class AlertChannel
@@ -18,14 +19,6 @@ public class AlertChannel
 
     public string Kind { get; set; } = Smtp;
     public bool Enabled { get; set; }
-    public string? Host { get; set; }
-    public int Port { get; set; } = 587;
-    public AlertSecurity Security { get; set; } = AlertSecurity.StartTls;
-    public string? UserName { get; set; }
-    /// <summary>Data Protection 加密後的字串（O2-T10），API 不回明文。</summary>
-    public string? PasswordProtected { get; set; }
-    public string? FromAddress { get; set; }
-    public string? FromName { get; set; }
     /// <summary>逗號分隔、1–20 個、應用層驗格式。</summary>
     public string? ToAddresses { get; set; }
     /// <summary><c>zh-TW</c>、<c>en-US</c>、<c>th</c>、<c>vi</c>；null＝出廠。</summary>

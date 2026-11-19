@@ -99,8 +99,8 @@ public sealed class OpsMonitorReader(
 }
 
 public sealed class GetOpsOverviewHandler(
-    OpsMonitorReader reader, IOpsIncidentRepository incidents, IScheduledJobRepository jobs, IAlertChannelRepository channels, HealthCheckEngine engine,
-    IOpsEnvironment env, IDatabaseInfo database) : IRequestHandler<GetOpsOverviewRequest, ServiceResult>
+    OpsMonitorReader reader, IOpsIncidentRepository incidents, IScheduledJobRepository jobs, IAlertChannelRepository channels, IMailSettingsRepository mailSettings,
+    HealthCheckEngine engine, IOpsEnvironment env, IDatabaseInfo database) : IRequestHandler<GetOpsOverviewRequest, ServiceResult>
 {
     public async Task<ServiceResult> Handle(GetOpsOverviewRequest request, CancellationToken ct)
     {
@@ -119,11 +119,11 @@ public sealed class GetOpsOverviewHandler(
             .Take(OpsMonitorReader.NeedsAttentionMax).Select(reader.Summary).ToList();
         var jobInfos = (await jobs.ListAsync(ct)).Select(j => new ScheduledJobInfo(
             j.JobKey, j.LastStartedUtc, j.LastFinishedUtc, j.LastStatus?.ToString(), j.ConsecutiveFailures, j.NextDueUtc, j.LeaseOwner)).ToList();
-        // 通道區塊：沒設定或停用時畫面顯示「未設定，告警只在站內」（§17.2.6）
+        // 通道區塊：沒設定或停用時畫面顯示「未設定，告警只在站內」（§17.2.6）；設定好＝寄信設定好且通道有收件人
         var channel = await channels.GetAsync(AlertChannel.Smtp, ct);
         return ServiceResult.Success(new OpsOverview(
             overall, engine.PendingCount > 0, engine.PendingCount, engine.PendingDropped, states, counts, attention, jobInfos,
-            new ChannelOverview(AlertChannel.Smtp, Alerts.SmtpSettings.From(channel, requireEnabled: false) is not null, channel?.Enabled ?? false,
+            new ChannelOverview(AlertChannel.Smtp, Alerts.SmtpSettings.From(await mailSettings.GetAsync(ct), channel, requireEnabled: false) is not null, channel?.Enabled ?? false,
                 channel?.LastSuccessUtc, channel?.LastFailureUtc, channel?.ConsecutiveFailures ?? 0),
             env.Version, env.Commit, env.Edition, database.Provider));
     }
