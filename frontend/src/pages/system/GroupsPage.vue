@@ -56,7 +56,9 @@ const memberOptions = computed(() => {
   const inGroup = new Set(editing.value?.memberUserIds ?? []);
   return (users.data.value ?? []).filter((u) => u.isActive || inGroup.has(u.userId));
 });
+// 儲存進行中不能關對話框或改開別的群組：晚到的回應會把已存快照記到錯的群組
 function openEditor(g?: AdminGroup) {
+  if (saving.value) return;
   editing.value = g ?? null;
   name.value = g ? nameOf(g) : '';
   savedName.value = name.value;
@@ -185,7 +187,7 @@ function confirmDelete() {
         </template>
       </q-table>
 
-      <q-dialog v-model="dialog">
+      <q-dialog v-model="dialog" :persistent="saving">
         <q-card style="width: 640px; max-width: 95vw">
           <q-card-section class="text-h6">{{ editing ? t('groups.edit') : t('groups.create') }}</q-card-section>
           <q-card-section class="row q-col-gutter-md">
@@ -209,7 +211,7 @@ function confirmDelete() {
             <div v-if="formError" class="col-12 text-negative" data-testid="group-error">{{ formError }}</div>
           </q-card-section>
           <q-card-actions align="right">
-            <q-btn flat :label="t('groups.cancel')" data-testid="group-cancel" @click="dialog = false" />
+            <q-btn flat :label="t('groups.cancel')" :disable="saving" data-testid="group-cancel" @click="dialog = false" />
             <q-btn color="primary" :label="t('groups.save')" :loading="saving" data-testid="group-save" @click="save" />
           </q-card-actions>
         </q-card>

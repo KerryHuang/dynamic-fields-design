@@ -577,6 +577,26 @@ describe('UsersPage', () => {
       expect(invalidate.mock.calls.map(([f]) => (f as { queryKey: unknown[] }).queryKey)).toEqual(expect.arrayContaining([['admin-users'], ['me']]));
     });
 
+    it('PAX-31 儲存進行中按取消、改開別人都無效，晚到的成功不會把快照記到別人身上', async () => {
+      let finish!: (u: AdminUser) => void;
+      api.updateUser.mockReturnValueOnce(new Promise((r) => { finish = r; }));
+      api.setUserSystemPrivileges.mockRejectedValueOnce({ status: 500, message: '伺服器錯誤' });
+      const w = await mountPage(LIST);
+      await click('user-row-wang');
+      await click('sp-permission-admin');
+      await click('user-save');
+      await click('user-cancel');
+      q('user-row-sales01')?.click();
+      await flushPromises();
+      expect(q('user-id')!.value).toBe('wang');
+      finish(wang);
+      await flushPromises();
+      const vm = w.findComponent(UsersPage).vm as unknown as { editingId: string; savedMain: { displayName: string } | null };
+      expect(vm.editingId).toBe('wang');
+      expect(vm.savedMain?.displayName).toBe('名-wang');
+      expect(q('user-error')!.textContent).toBe('名稱與成員已儲存，系統權限未儲存：伺服器錯誤');
+    });
+
     it('新增使用者沒有系統權限區塊', async () => {
       await mountPage(LIST);
       await click('user-create');

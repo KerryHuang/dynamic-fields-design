@@ -318,6 +318,27 @@ describe('GroupsPage', () => {
       expect(q('group-name')).toBeNull();
     });
 
+    it('PAX-32 儲存進行中按取消、改開別的群組都無效，晚到的成功不會把成員快照記到別的群組', async () => {
+      let finish!: () => void;
+      api.setGroupMembers.mockReturnValueOnce(new Promise((r) => { finish = () => r(undefined as never); }));
+      api.setGroupSystemPrivileges.mockRejectedValueOnce({ status: 500, message: '伺服器錯誤' });
+      const w = await mountPage('zh-TW', WITH_IT);
+      await click('group-row-3');
+      await click('member-b02');
+      await click('sp-designer-add');
+      await click('group-save');
+      await click('group-cancel');
+      q('group-row-1')?.click();
+      await flushPromises();
+      expect(q('group-name')!.value).toBe('IT');
+      finish();
+      await flushPromises();
+      const vm = w.findComponent(GroupsPage).vm as unknown as { editing: AdminGroup | null; savedMembers: string[] };
+      expect(vm.editing?.id).toBe(3);
+      expect(vm.savedMembers).toEqual(['a01', 'b02']);
+      expect(q('group-error')!.textContent).toBe('名稱與成員已儲存，系統權限未儲存：伺服器錯誤');
+    });
+
     it('PAX-32 系統權限存檔成功後讓 me、群組清單失效', async () => {
       api.setGroupSystemPrivileges.mockResolvedValue(sp({ read: true, add: true, edit: true }, true));
       await mountPage('zh-TW', WITH_IT);

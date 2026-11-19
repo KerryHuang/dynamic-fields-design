@@ -75,6 +75,7 @@ const setPrivileges = useSetUserSystemPrivileges();
 const saving = computed(() => create.isPending.value || update.isPending.value || setDepartment.isPending.value || setPrivileges.isPending.value);
 
 function openCreate() {
+  if (saving.value) return;
   editingId.value = null;
   form.value = { userId: '', displayName: '', password: '', groupIds: [], isSystemAdmin: false, departmentId: null };
   originalDepartment.value = null;
@@ -84,7 +85,9 @@ function openCreate() {
   error.value = '';
   dialog.value = true;
 }
+// 儲存進行中不能關對話框或改開別人：晚到的回應會把已存快照記到錯的對象
 function openEdit(u: AdminUser) {
+  if (saving.value) return;
   editingId.value = u.userId;
   form.value = {
     userId: u.userId, displayName: u.displayName, password: '', groupIds: [...u.groupIds], isSystemAdmin: u.isSystemAdmin,
@@ -238,7 +241,7 @@ function runSetActive(u: AdminUser, active: boolean) {
         </template>
       </q-table>
 
-      <q-dialog v-model="dialog" @hide="form.password = ''">
+      <q-dialog v-model="dialog" :persistent="saving" @hide="form.password = ''">
         <q-card style="width: 640px; max-width: 95vw">
           <q-card-section class="text-h6">{{ editingId ? t('users.edit') : t('users.create') }}</q-card-section>
           <q-card-section class="row q-col-gutter-md">
@@ -271,7 +274,7 @@ function runSetActive(u: AdminUser, active: boolean) {
             <div v-if="error" class="col-12 text-negative" data-testid="user-error">{{ error }}</div>
           </q-card-section>
           <q-card-actions align="right">
-            <q-btn flat :label="t('users.cancel')" data-testid="user-cancel" @click="dialog = false" />
+            <q-btn flat :label="t('users.cancel')" :disable="saving" data-testid="user-cancel" @click="dialog = false" />
             <q-btn color="primary" :label="t('users.save')" :loading="saving" data-testid="user-save" @click="save" />
           </q-card-actions>
         </q-card>
