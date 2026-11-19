@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { onBeforeUnmount, ref } from 'vue';
+import { ref } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { useRouter } from 'vue-router';
 import { useChangePassword, useLogout } from 'src/application/dynamic/queries/auth-queries';
@@ -11,6 +11,7 @@ import { joinList } from 'src/i18n/translate';
 const { t } = useI18n();
 const router = useRouter();
 const identity = useIdentityStore();
+const change = useChangePassword();
 const logoutMutation = useLogout();
 
 const MIN_LENGTH = 8;
@@ -18,21 +19,12 @@ const oldPassword = ref('');
 const newPassword = ref('');
 const confirm = ref('');
 const error = ref('');
-// 新舊密碼送出當下才併進請求（不進共用快取）；離頁後清空，留在 MutationCache 的閉包也讀不到。
-let disposed = false;
-const change = useChangePassword(() => (disposed ? { oldPassword: '', newPassword: '' } : { oldPassword: oldPassword.value, newPassword: newPassword.value }));
-onBeforeUnmount(() => {
-  disposed = true;
-  oldPassword.value = '';
-  newPassword.value = '';
-  confirm.value = '';
-});
 
 const submit = () => {
   error.value = '';
   if (newPassword.value.length < MIN_LENGTH) { error.value = t('auth.passwordTooShort'); return; }
   if (newPassword.value !== confirm.value) { error.value = t('auth.passwordMismatch'); return; }
-  change.mutate(undefined, {
+  change.send({}, { oldPassword: oldPassword.value, newPassword: newPassword.value }, {
     onSuccess: () => { void router.replace('/'); },
     onError: (e) => { error.value = joinList(leftoverMessages(e as unknown as ApiError, [])) || t('auth.changeFailed'); },
   });

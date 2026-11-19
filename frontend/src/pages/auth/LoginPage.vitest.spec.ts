@@ -1,4 +1,4 @@
-import { QueryClient, VueQueryPlugin } from '@tanstack/vue-query';
+import { onlineManager, QueryClient, VueQueryPlugin } from '@tanstack/vue-query';
 import { flushPromises, mount } from '@vue/test-utils';
 import { createPinia, setActivePinia } from 'pinia';
 import * as quasar from 'quasar';
@@ -60,7 +60,7 @@ async function rerunLeftover(qc: QueryClient) {
   const m = qc.getMutationCache().getAll().at(-1)!;
   mounted!.unmount();
   mounted = undefined;
-  await (m.options.mutationFn as (v: unknown) => Promise<unknown>)(m.state.variables).catch(() => undefined);
+  await Promise.resolve(m.state.variables).then(m.options.mutationFn as (v: unknown) => Promise<unknown>).catch(() => undefined);
 }
 
 const off = { demoLoginEnabled: false, demoGenerating: false, demoAccounts: [] };
@@ -161,11 +161,16 @@ describe('LoginPage', () => {
     expect(q('locale-open')).not.toBeNull();
   });
   describe('密碼不留在共用快取', () => {
-    it('登入成功後共用快取不含明文密碼', async () => {
+    it('登入請求進行中與成功後，共用快取都不含明文密碼', async () => {
       const { queryClient } = await mountPage(off);
-      api.login.mockResolvedValue({ userId: 'admin', displayName: 'A', mustChangePassword: false });
+      let resolve!: (u: never) => void;
+      api.login.mockReturnValue(new Promise((r) => { resolve = r; }));
       await submit('Admin', 's3cret-ok');
       expect(api.login).toHaveBeenCalledWith({ userId: 'Admin', password: 's3cret-ok' });
+      // 成功時 useStartSession 會 qc.clear()，所以要在請求進行中查
+      expect(cacheText(queryClient)).not.toContain('s3cret-ok');
+      resolve({ userId: 'admin', displayName: 'A', mustChangePassword: false } as never);
+      await flushPromises();
       expect(cacheText(queryClient)).not.toContain('s3cret-ok');
     });
 
@@ -183,8 +188,36 @@ describe('LoginPage', () => {
       api.login.mockRejectedValue({ status: 401, message: 'x' });
       await submit('Admin', 's3cret-left');
       await rerunLeftover(queryClient);
-      expect(api.login).toHaveBeenCalledTimes(2);
-      expect(JSON.stringify(api.login.mock.calls.at(-1))).not.toContain('s3cret-left');
+      // 綁在當次提交的密碼已取用；再執行就中止，不改送空密碼
+      expect(api.login).toHaveBeenCalledTimes(1);
+    });
+
+    it('離線時送出不排隊，送的是當次的帳密；之後改欄位、恢復連線也不補送', async () => {
+      await mountPage(off);
+      api.login.mockRejectedValue({ status: 0, code: 'network', message: 'x' });
+      onlineManager.setOnline(false);
+      try {
+        await submit('Admin', 's3cret-first');
+        await fill('login-user', 'Other');
+        await fill('login-password', 's3cret-second');
+        onlineManager.setOnline(true);
+        await flushPromises();
+        expect(api.login.mock.calls).toEqual([[{ userId: 'Admin', password: 's3cret-first' }]]);
+      } finally { onlineManager.setOnline(true); }
+    });
+
+    it('離線送出後離頁，恢復連線也不再送出', async () => {
+      await mountPage(off);
+      api.login.mockRejectedValue({ status: 0, code: 'network', message: 'x' });
+      onlineManager.setOnline(false);
+      try {
+        await submit('Admin', 's3cret-gone');
+        mounted!.unmount();
+        mounted = undefined;
+        onlineManager.setOnline(true);
+        await flushPromises();
+        expect(api.login).toHaveBeenCalledTimes(1);
+      } finally { onlineManager.setOnline(true); }
     });
   });
 });

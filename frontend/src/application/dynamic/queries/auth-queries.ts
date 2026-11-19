@@ -2,6 +2,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/vue-query';
 import type { AuthUser } from 'src/domain/dynamic/types';
 import { dynamicApi } from 'src/services/api/dynamic-api';
 import { useIdentityStore } from 'src/stores/use-identity-store';
+import { SECRET_MUTATION, useSecretMutation } from './secret-mutation';
 
 /** Polls while the server is generating demo accounts so they appear without a reload. */
 export function useAuthOptions() {
@@ -26,10 +27,11 @@ function useStartSession() {
   };
 }
 
-/** 密碼由頁面在送出當下提供，不進 mutation variables（MutationCache 保留 variables 與 mutationFn 閉包）。 */
-export function useLogin(secret: () => { password: string }) {
+/** 密碼用 send 綁定當次提交，不進 mutation variables（見 useSecretMutation）。 */
+export function useLogin() {
   const start = useStartSession();
-  return useMutation({ mutationFn: (body: { userId: string }) => dynamicApi.login({ ...body, ...secret() }), onSuccess: start });
+  return useSecretMutation((take: (b: { userId: string }) => { password: string }) =>
+    useMutation({ ...SECRET_MUTATION, mutationFn: (b: { userId: string }) => dynamicApi.login({ ...b, ...take(b) }), onSuccess: start }));
 }
 
 export function useDemoLogin() {
@@ -53,11 +55,13 @@ export function useLogout() {
   });
 }
 
-/** 同 useLogin：新舊密碼送出當下才向頁面取，不進 mutation variables。 */
-export function useChangePassword(secret: () => { oldPassword: string; newPassword: string }) {
+/** 同 useLogin：新舊密碼用 send 綁定當次提交（variables 傳新建的 {}）。 */
+export function useChangePassword() {
   const identity = useIdentityStore();
-  return useMutation({
-    mutationFn: () => dynamicApi.changePassword(secret()),
-    onSuccess: (u) => identity.setSession(u.userId, u.mustChangePassword),
-  });
+  return useSecretMutation((take: (v: object) => { oldPassword: string; newPassword: string }) =>
+    useMutation({
+      ...SECRET_MUTATION,
+      mutationFn: (v: object) => dynamicApi.changePassword(take(v)),
+      onSuccess: (u) => identity.setSession(u.userId, u.mustChangePassword),
+    }));
 }

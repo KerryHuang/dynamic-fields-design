@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { useQuasar } from 'quasar';
-import { computed, onBeforeUnmount, ref, watch } from 'vue';
+import { computed, ref, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { useMailSettings, useSaveMailSettings, useTestMailSettings } from 'src/application/dynamic/queries/ops-queries';
 import ForbiddenNotice from 'src/components/framework/ForbiddenNotice.vue';
@@ -48,26 +48,18 @@ function body(): Omit<MailSettingsInput, 'password'> {
   };
 }
 
-/** 密碼另外併進請求（不進共用快取）：留空不送鍵、按了清除送 ""、有填送新值。離頁後一律不帶（MutationCache 留著 mutationFn 與這個閉包）。 */
-let disposed = false;
+/** 密碼另外併進請求（不進共用快取）：留空不送鍵、按了清除送 ""、有填送新值。 */
 function secret(): Pick<MailSettingsInput, 'password'> {
-  if (disposed) return {};
   if (password.value) return { password: password.value };
   return clearPassword.value ? { password: '' } : {};
 }
 
-onBeforeUnmount(() => {
-  disposed = true;
-  password.value = '';
-  clearPassword.value = false;
-});
-
 const errors = ref<Record<string, string[]>>({});
 const err = (k: string) => (errors.value[k] ?? []).join('；');
-const save = useSaveMailSettings(secret);
+const save = useSaveMailSettings();
 function submit() {
   errors.value = {};
-  save.mutate(body(), {
+  save.send(body(), secret(), {
     // 只換密碼時 GET 回來的 metadata 不變，watch(m) 不會觸發，所以這裡明確清空
     onSuccess: () => {
       password.value = '';

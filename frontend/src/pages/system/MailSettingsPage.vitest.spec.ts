@@ -1,4 +1,4 @@
-import { QueryClient, VueQueryPlugin } from '@tanstack/vue-query';
+import { onlineManager, QueryClient, VueQueryPlugin } from '@tanstack/vue-query';
 import { flushPromises, mount } from '@vue/test-utils';
 import { createPinia, setActivePinia } from 'pinia';
 import * as quasar from 'quasar';
@@ -102,9 +102,9 @@ describe('MailSettingsPage', () => {
     expect((await save()).password).toBe('s3cret-left');
     const m = qc.getMutationCache().getAll().at(-1)!;
     w.unmount();
-    await (m.options.mutationFn as (v: unknown) => Promise<unknown>)(m.state.variables).catch(() => undefined);
-    const last = bodyOf(calls.filter((c) => c.url === '/system/mail-settings' && c.method === 'put').at(-1)) as Record<string, unknown>;
-    expect(last).not.toHaveProperty('password');
+    await Promise.resolve(m.state.variables).then(m.options.mutationFn as (v: unknown) => Promise<unknown>).catch(() => undefined);
+    // 綁在當次提交的密碼已取用；再執行就中止，不改送不帶密碼的版本
+    expect(calls.filter((c) => c.url === '/system/mail-settings' && c.method === 'put')).toHaveLength(1);
   });
 
   it('短核對修正 1：按了清除密碼後離頁，留著的 mutation 再執行也不會送清除', async () => {
@@ -114,9 +114,37 @@ describe('MailSettingsPage', () => {
     expect((await save()).password).toBe('');
     const m = qc.getMutationCache().getAll().at(-1)!;
     w.unmount();
-    await (m.options.mutationFn as (v: unknown) => Promise<unknown>)(m.state.variables).catch(() => undefined);
-    const last = bodyOf(calls.filter((c) => c.url === '/system/mail-settings' && c.method === 'put').at(-1)) as Record<string, unknown>;
-    expect(last).not.toHaveProperty('password');
+    await Promise.resolve(m.state.variables).then(m.options.mutationFn as (v: unknown) => Promise<unknown>).catch(() => undefined);
+    // 綁在當次提交的密碼已取用；再執行就中止，不改送不帶密碼的版本
+    expect(calls.filter((c) => c.url === '/system/mail-settings' && c.method === 'put')).toHaveLength(1);
+  });
+
+  it('審查修正 2：離線時送出不排隊，送的是當次的密碼；之後改欄位、恢復連線也不會補送別的值', async () => {
+    const w = await mountPage(settings(), undefined, new HttpFail(500, { message: 'boom' }));
+    onlineManager.setOnline(false);
+    try {
+      await typePassword('s3cret-first');
+      expect((await save()).password).toBe('s3cret-first');
+      await typePassword('s3cret-second');
+      onlineManager.setOnline(true);
+      await flushPromises();
+      const puts = calls.filter((c) => c.url === '/system/mail-settings' && c.method === 'put');
+      expect(puts).toHaveLength(1);
+    } finally { onlineManager.setOnline(true); }
+    w.unmount();
+  });
+
+  it('審查修正 2：離線送出後離頁，恢復連線也不再送出', async () => {
+    const w = await mountPage(settings(), undefined, new HttpFail(500, { message: 'boom' }));
+    onlineManager.setOnline(false);
+    try {
+      await typePassword('s3cret-gone');
+      await save();
+      w.unmount();
+      onlineManager.setOnline(true);
+      await flushPromises();
+      expect(calls.filter((c) => c.url === '/system/mail-settings' && c.method === 'put')).toHaveLength(1);
+    } finally { onlineManager.setOnline(true); }
   });
 
   it('審查修正 1：清除密碼儲存成功後清除旗標復原（不再顯示「儲存後會清除」）', async () => {

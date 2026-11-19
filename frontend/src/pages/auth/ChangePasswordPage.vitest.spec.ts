@@ -1,4 +1,4 @@
-import { QueryClient, VueQueryPlugin } from '@tanstack/vue-query';
+import { onlineManager, QueryClient, VueQueryPlugin } from '@tanstack/vue-query';
 import { flushPromises, mount } from '@vue/test-utils';
 import { createPinia, setActivePinia } from 'pinia';
 import * as quasar from 'quasar';
@@ -142,9 +142,37 @@ describe('ChangePasswordPage', () => {
       const m = queryClient.getMutationCache().getAll().at(-1)!;
       mounted!.unmount();
       mounted = undefined;
-      await (m.options.mutationFn as (v: unknown) => Promise<unknown>)(m.state.variables).catch(() => undefined);
-      expect(api.changePassword).toHaveBeenCalledTimes(2);
-      expect(JSON.stringify(api.changePassword.mock.calls.at(-1))).not.toContain('s3cret');
+      await Promise.resolve(m.state.variables).then(m.options.mutationFn as (v: unknown) => Promise<unknown>).catch(() => undefined);
+      // 綁在當次提交的密碼已取用；再執行就中止，不改送空密碼
+      expect(api.changePassword).toHaveBeenCalledTimes(1);
+    });
+
+    it('離線時送出不排隊，送的是當次的新舊密碼；之後改欄位、恢復連線也不補送', async () => {
+      await mountPage();
+      api.changePassword.mockRejectedValue({ status: 0, code: 'network', message: 'x' });
+      onlineManager.setOnline(false);
+      try {
+        await submit('s3cret-old', 's3cret-new-1', 's3cret-new-1');
+        await fill('cp-old', 's3cret-other');
+        await fill('cp-new', 's3cret-new-2');
+        onlineManager.setOnline(true);
+        await flushPromises();
+        expect(api.changePassword.mock.calls).toEqual([[{ oldPassword: 's3cret-old', newPassword: 's3cret-new-1' }]]);
+      } finally { onlineManager.setOnline(true); }
+    });
+
+    it('離線送出後離頁，恢復連線也不再送出', async () => {
+      await mountPage();
+      api.changePassword.mockRejectedValue({ status: 0, code: 'network', message: 'x' });
+      onlineManager.setOnline(false);
+      try {
+        await submit('s3cret-old', 's3cret-new-1', 's3cret-new-1');
+        mounted!.unmount();
+        mounted = undefined;
+        onlineManager.setOnline(true);
+        await flushPromises();
+        expect(api.changePassword).toHaveBeenCalledTimes(1);
+      } finally { onlineManager.setOnline(true); }
     });
   });
 });

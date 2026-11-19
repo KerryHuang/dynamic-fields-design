@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { useQuasar, type QTableColumn } from 'quasar';
-import { computed, onBeforeUnmount, ref } from 'vue';
+import { computed, ref } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { useAdminUsers, useCreateUser, useResetPassword, useSetUserActive, useUpdateUser } from 'src/application/dynamic/queries/admin-queries';
 import { useDepartments, useSetUserDepartment } from 'src/application/dynamic/queries/organization-queries';
@@ -55,9 +55,7 @@ const form = ref({ userId: '', displayName: '', password: '', groupIds: [] as nu
 /** Department before editing: the department endpoint is only called when it changed. */
 const originalDepartment = ref<number | null>(null);
 const error = ref('');
-// 密碼送出當下才併進請求（不進共用快取）；離頁後清空，留在 MutationCache 的閉包也讀不到。
-let disposed = false;
-const create = useCreateUser(() => ({ password: disposed ? '' : form.value.password }));
+const create = useCreateUser();
 const update = useUpdateUser();
 const setDepartment = useSetUserDepartment();
 const saving = computed(() => create.isPending.value || update.isPending.value || setDepartment.isPending.value);
@@ -81,7 +79,7 @@ function openEdit(u: AdminUser) {
 }
 function save() {
   error.value = '';
-  const { userId, displayName, groupIds, isSystemAdmin, departmentId } = form.value;
+  const { userId, displayName, password, groupIds, isSystemAdmin, departmentId } = form.value;
   const showError = (e: unknown) => { error.value = joinList(leftoverMessages(e as ApiError, [])) || t('users.saveFailed'); };
   const done = () => { dialog.value = false; $q.notify({ type: 'positive', message: t('users.saved') }); };
   // The account is saved first; its department is a separate call, so a department error leaves the dialog open
@@ -96,18 +94,13 @@ function save() {
     onError: showError,
   };
   if (editingId.value) update.mutate({ id: editingId.value, body: { displayName, groupIds, isSystemAdmin } }, handlers);
-  else create.mutate({ userId, displayName, groupIds, isSystemAdmin }, handlers);
+  else create.send({ userId, displayName, groupIds, isSystemAdmin }, { password }, handlers);
 }
 
 const resetTarget = ref<string | null>(null);
 const resetPassword = ref('');
 const resetError = ref('');
-const reset = useResetPassword(() => (disposed ? '' : resetPassword.value));
-onBeforeUnmount(() => {
-  disposed = true;
-  form.value.password = '';
-  resetPassword.value = '';
-});
+const reset = useResetPassword();
 function openReset(u: AdminUser) {
   resetTarget.value = u.userId;
   resetPassword.value = '';
@@ -115,7 +108,7 @@ function openReset(u: AdminUser) {
 }
 function submitReset() {
   if (resetPassword.value.length < MIN_PASSWORD) { resetError.value = t('users.passwordTooShort'); return; }
-  reset.mutate(resetTarget.value!, {
+  reset.send({ id: resetTarget.value! }, resetPassword.value, {
     onSuccess: () => { resetTarget.value = null; $q.notify({ type: 'positive', message: t('users.passwordReset') }); },
     onError: (e) => { resetError.value = joinList(leftoverMessages(e as unknown as ApiError, [])) || t('users.saveFailed'); },
   });

@@ -4,6 +4,7 @@ import type {
   AuditFilter, HealthCheckUpdate, IncidentFilter, MailSettingsInput, SmtpChannelInput,
 } from 'src/domain/ops/ops-types';
 import { dynamicApi } from 'src/services/api/dynamic-api';
+import { SECRET_MUTATION, useSecretMutation } from './secret-mutation';
 
 // 維運監控、稽核、寄信設定（維運設計 §17.3、§17.5）。監控資料會變，所以不設長 staleTime；
 // 重試沿用全域設定（不重試），503 databaseUnavailable 立刻顯示整頁提示。
@@ -28,9 +29,10 @@ export function useHealthResults(code: MaybeRefOrGetter<string>, hours: MaybeRef
   });
 }
 
-function useOpsMutation<V, R>(fn: (v: V) => Promise<R>, keys = OPS_KEYS) {
+function useOpsMutation<V, R>(fn: (v: V) => Promise<R>, keys = OPS_KEYS, extra: Partial<typeof SECRET_MUTATION> = {}) {
   const qc = useQueryClient();
   return useMutation({
+    ...extra,
     mutationFn: fn,
     onSettled: () => Promise.all(keys.map((k) => qc.invalidateQueries({ queryKey: [k] }))),
   });
@@ -67,10 +69,11 @@ export const useTestSmtpChannel = () => useOpsMutation(() => dynamicApi.testSmtp
 export const useMailSettings = () => useQuery({ queryKey: ['mail-settings'], queryFn: dynamicApi.getMailSettings });
 /**
  * 密碼不進 mutation variables：variables 與結果留在共用的 mutation cache（成功、失敗都留，頁面還在就不回收），明文會一直留著。
- * 呼叫端傳讀密碼欄的函式，送出當下才併進請求主體。
+ * 呼叫端用 send 把當次要送的密碼鍵綁在這次提交（見 useSecretMutation）。
  */
-export const useSaveMailSettings = (secret: () => Pick<MailSettingsInput, 'password'>) =>
-  useOpsMutation((b: Omit<MailSettingsInput, 'password'>) => dynamicApi.saveMailSettings({ ...b, ...secret() }), ['mail-settings', 'ops-channel', 'ops-overview']);
+export const useSaveMailSettings = () =>
+  useSecretMutation((take: (b: Omit<MailSettingsInput, 'password'>) => Pick<MailSettingsInput, 'password'>) =>
+    useOpsMutation((b: Omit<MailSettingsInput, 'password'>) => dynamicApi.saveMailSettings({ ...b, ...take(b) }), ['mail-settings', 'ops-channel', 'ops-overview'], SECRET_MUTATION));
 export const useTestMailSettings = () => useOpsMutation(() => dynamicApi.testMailSettings(), []);
 
 export function useAudit(filter: MaybeRefOrGetter<AuditFilter>) {

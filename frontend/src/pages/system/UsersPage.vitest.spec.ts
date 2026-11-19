@@ -1,4 +1,4 @@
-import { QueryClient, VueQueryPlugin } from '@tanstack/vue-query';
+import { onlineManager, QueryClient, VueQueryPlugin } from '@tanstack/vue-query';
 import { flushPromises, mount } from '@vue/test-utils';
 import { createPinia, setActivePinia } from 'pinia';
 import * as quasar from 'quasar';
@@ -88,7 +88,7 @@ async function rerunLeftover() {
   const m = queryClient.getMutationCache().getAll().at(-1)!;
   mounted!.unmount();
   mounted = undefined;
-  await (m.options.mutationFn as (v: unknown) => Promise<unknown>)(m.state.variables).catch(() => undefined);
+  await Promise.resolve(m.state.variables).then(m.options.mutationFn as (v: unknown) => Promise<unknown>).catch(() => undefined);
 }
 
 describe('UsersPage', () => {
@@ -338,14 +338,17 @@ describe('UsersPage', () => {
     });
   });
   describe('passwords stay out of the shared cache', () => {
-    async function openReset(pw: string) {
+    /** offline：頁面載入後才斷線（查詢在離線時不會載入）。 */
+    async function openReset(pw: string, offline = false) {
       await mountPage();
+      if (offline) onlineManager.setOnline(false);
       await click('user-reset-sales01');
       await fill('user-reset-password', pw);
       await click('user-reset-submit');
     }
-    async function createWith(pw: string) {
+    async function createWith(pw: string, offline = false) {
       await mountPage();
+      if (offline) onlineManager.setOnline(false);
       await click('user-create');
       await fill('user-id', 'new01');
       await fill('user-name', '新人');
@@ -370,8 +373,33 @@ describe('UsersPage', () => {
       api.resetUserPassword.mockRejectedValue({ status: 500, message: 'boom' });
       await openReset('s3cret-left-1');
       await rerunLeftover();
-      expect(api.resetUserPassword).toHaveBeenCalledTimes(2);
-      expect(JSON.stringify(api.resetUserPassword.mock.calls.at(-1))).not.toContain('s3cret-left-1');
+      // 綁在當次提交的密碼已取用；再執行就中止，不改送空密碼
+      expect(api.resetUserPassword).toHaveBeenCalledTimes(1);
+    });
+
+    it('離線時重設不排隊：送出 A 後關對話框、改開 B 輸入密碼，恢復連線也不會把 B 的密碼送給 A', async () => {
+      api.resetUserPassword.mockRejectedValue({ status: 0, code: 'network', message: 'x' });
+      try {
+        await openReset('s3cret-for-a', true);
+        await click('user-reset-cancel');
+        await click('user-reset-old01');
+        await fill('user-reset-password', 's3cret-for-b');
+        onlineManager.setOnline(true);
+        await flushPromises();
+        expect(api.resetUserPassword.mock.calls).toEqual([['sales01', 's3cret-for-a']]);
+      } finally { onlineManager.setOnline(true); }
+    });
+
+    it('離線重設送出後離頁，恢復連線也不再送出', async () => {
+      api.resetUserPassword.mockRejectedValue({ status: 0, code: 'network', message: 'x' });
+      try {
+        await openReset('s3cret-gone-1', true);
+        mounted!.unmount();
+        mounted = undefined;
+        onlineManager.setOnline(true);
+        await flushPromises();
+        expect(api.resetUserPassword).toHaveBeenCalledTimes(1);
+      } finally { onlineManager.setOnline(true); }
     });
 
     it('建立帳號成功與失敗後，共用快取都不含初始密碼明文', async () => {
@@ -391,8 +419,18 @@ describe('UsersPage', () => {
       api.createUser.mockRejectedValue({ status: 409, message: '帳號已存在' });
       await createWith('s3cret-left-2');
       await rerunLeftover();
-      expect(api.createUser).toHaveBeenCalledTimes(2);
-      expect(JSON.stringify(api.createUser.mock.calls.at(-1))).not.toContain('s3cret-left-2');
+      expect(api.createUser).toHaveBeenCalledTimes(1);
+    });
+
+    it('離線時建立帳號不排隊：送的是當次的初始密碼，之後改欄位、恢復連線也不補送', async () => {
+      api.createUser.mockRejectedValue({ status: 0, code: 'network', message: 'x' });
+      try {
+        await createWith('s3cret-first-2', true);
+        await fill('user-password', 's3cret-second-2');
+        onlineManager.setOnline(true);
+        await flushPromises();
+        expect(api.createUser.mock.calls).toEqual([[expect.objectContaining({ userId: 'new01', password: 's3cret-first-2' })]]);
+      } finally { onlineManager.setOnline(true); }
     });
   });
 });

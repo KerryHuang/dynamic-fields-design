@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { onBeforeUnmount, ref } from 'vue';
+import { ref } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { useRoute, useRouter } from 'vue-router';
 import { useAuthOptions, useDemoLogin, useLogin } from 'src/application/dynamic/queries/auth-queries';
@@ -12,17 +12,11 @@ const { t } = useI18n();
 const route = useRoute();
 const router = useRouter();
 const options = useAuthOptions();
+const login = useLogin();
 const demoLogin = useDemoLogin();
 
 const userId = ref('');
 const password = ref('');
-// 密碼送出當下才併進請求（不進共用快取）；離頁後清空，留在 MutationCache 的閉包也讀不到。
-let disposed = false;
-const login = useLogin(() => ({ password: disposed ? '' : password.value }));
-onBeforeUnmount(() => {
-  disposed = true;
-  password.value = '';
-});
 const error = ref('');
 
 const done = (u: AuthUser) => {
@@ -38,7 +32,7 @@ const fail = (e: unknown) => {
 
 const submit = () => {
   error.value = '';
-  login.mutate({ userId: userId.value }, { onSuccess: done, onError: fail });
+  login.send({ userId: userId.value }, { password: password.value }, { onSuccess: done, onError: fail });
 };
 const pickDemo = (id: string) => {
   error.value = '';
