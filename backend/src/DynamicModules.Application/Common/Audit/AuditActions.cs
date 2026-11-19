@@ -77,6 +77,9 @@ public static class AuditActions
         new("taskRule.create", Design, W),
         new("taskRule.update", Design, W),
         new("taskRule.delete", Design, W),
+        // 規則自動暫停與恢復（維運設計 §17.2.7）：暫停由系統寫在補記失敗的交易裡，恢復經 AuditBehavior
+        new("taskRule.autoPause", Design, W),
+        new("taskRule.resume", Design, W),
         new("approvalFlow.create", Design, W),
         new("approvalFlow.update", Design, W),
         new("approvalFlow.delete", Design, W),

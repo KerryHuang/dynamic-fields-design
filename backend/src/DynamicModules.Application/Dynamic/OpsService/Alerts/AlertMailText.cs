@@ -22,7 +22,8 @@ public static class AlertMailText
         // 事件標題（§17.2.2 標題表；組字只在 IncidentTitles）
         TitleServer = nameof(TitleServer), TitleClient = nameof(TitleClient), TitleRouteSuffix = nameof(TitleRouteSuffix),
         TitleAdminGranted = nameof(TitleAdminGranted), TitleAdminRevoked = nameof(TitleAdminRevoked), TitleHealth = nameof(TitleHealth),
-        TitleChannel = nameof(TitleChannel), TitleChannelCode = nameof(TitleChannelCode);
+        TitleChannel = nameof(TitleChannel), TitleChannelCode = nameof(TitleChannelCode),
+        TitleConfig = nameof(TitleConfig), TitleRulePaused = nameof(TitleRulePaused);
 
     private static readonly Dictionary<string, (string Zh, string En, string Th, string Vi)> Table = new()
     {
@@ -65,6 +66,10 @@ public static class AlertMailText
         [TitleHealth] = ("健康檢查「{0}」{1}", "Health check \"{0}\": {1}", "การตรวจสุขภาพ \"{0}\": {1}", "Kiểm tra sức khỏe \"{0}\": {1}"),
         [TitleChannel] = ("告警信寄不出去（{0}）", "Alert emails cannot be sent ({0})", "ส่งอีเมลแจ้งเตือนไม่ได้ ({0})", "Không gửi được email cảnh báo ({0})"),
         [TitleChannelCode] = ("，伺服器回應 {0}", ", server replied {0}", ", เซิร์ฟเวอร์ตอบ {0}", ", máy chủ trả lời {0}"),
+        [TitleConfig] = ("規則「{0}」設定有問題：{1}", "Rule \"{0}\" has a setup problem: {1}", "กฎ \"{0}\" มีปัญหาการตั้งค่า: {1}",
+            "Quy tắc \"{0}\" có vấn đề cấu hình: {1}"),
+        [TitleRulePaused] = ("任務規則「{0}」連續失敗 {1} 次，已自動暫停", "Task rule \"{0}\" failed {1} times in a row and was paused automatically",
+            "กฎงาน \"{0}\" ล้มเหลวติดกัน {1} ครั้ง และถูกหยุดอัตโนมัติ", "Quy tắc công việc \"{0}\" lỗi liên tiếp {1} lần và đã tự động tạm dừng"),
     };
 
     /// <summary>代碼值的四語名稱：嚴重度、類別、處理者、轉換、健康狀態、寄送階段。</summary>
@@ -96,6 +101,16 @@ public static class AlertMailText
         ["stage.tls"] = ("TLS", "TLS", "TLS", "TLS"),
         ["stage.auth"] = ("認證", "authentication", "การยืนยันตัวตน", "xác thực"),
         ["stage.send"] = ("寄送", "sending", "การส่ง", "gửi"),
+        ["ruleError.event.tooDeep"] = ("連動事件串聯過深", "chained events go too deep", "เหตุการณ์ต่อเนื่องซ้อนลึกเกินไป", "chuỗi sự kiện liên động quá sâu"),
+        ["ruleError.event.loop"] = ("連動事件形成循環", "chained events form a loop", "เหตุการณ์ต่อเนื่องวนเป็นลูป", "chuỗi sự kiện liên động tạo thành vòng lặp"),
+        ["ruleError.check.conditionInvalid"] = ("檢查條件已不可用", "the check condition is no longer valid", "เงื่อนไขการตรวจสอบใช้ไม่ได้แล้ว",
+            "điều kiện kiểm tra không còn dùng được"),
+        ["ruleError.effect.targetUnavailable"] = ("效果的目標模組未啟用或已關閉", "the effect's target module is not active or is closed",
+            "โมดูลเป้าหมายของผลลัพธ์ไม่ได้เปิดใช้หรือถูกปิด", "mô-đun đích của hiệu ứng chưa bật hoặc đã đóng"),
+        ["ruleError.effect.missingDetail"] = ("找不到明細模組", "the detail module cannot be found", "ไม่พบโมดูลรายละเอียด", "không tìm thấy mô-đun chi tiết"),
+        ["ruleError.effect.tooManyRows"] = ("明細列超過上限", "too many detail rows", "แถวรายละเอียดเกินขีดจำกัด", "số dòng chi tiết vượt giới hạn"),
+        ["ruleError.effect.handlerMissing"] = ("找不到外掛處理器", "the plug-in handler cannot be found", "ไม่พบตัวจัดการปลั๊กอิน", "không tìm thấy trình xử lý plug-in"),
+        ["ruleError.effect.unknownKind"] = ("未知的效果種類", "unknown effect kind", "ประเภทผลลัพธ์ที่ไม่รู้จัก", "loại hiệu ứng không xác định"),
         ["stage.config"] = ("設定不完整，請重填密碼", "settings incomplete; re-enter the password", "การตั้งค่าไม่ครบ โปรดกรอกรหัสผ่านใหม่",
             "cài đặt chưa đầy đủ, vui lòng nhập lại mật khẩu"),
     };

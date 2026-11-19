@@ -136,6 +136,19 @@ public static class PolicyCatalog
     public static readonly PolicyDefinition OpsIncidentAutoResolveHours =
         new("ops.incidentAutoResolveHours", "ops", PolicyKind.Integer, PolicyScope.System, "72", 1, 720, Unit: "hours");
 
+    /// <summary>O2：任務規則在時間窗內連續失敗幾次就自動暫停（維運設計 §17.2.7、C3）。改值從下一次失敗起用新值往回數。</summary>
+    public static readonly PolicyDefinition OpsRulePauseConsecutiveFailures =
+        new("ops.rulePauseConsecutiveFailures", "ops", PolicyKind.Integer, PolicyScope.System, "5", 3, 1000, Unit: "count");
+
+    /// <summary>O2：連續失敗的計算時間窗（分鐘；滑動窗口，O2-U12）。上限 1440 也是 <c>ops.upkeep</c> 清殘留失敗列的界線。</summary>
+    public static readonly PolicyDefinition OpsRulePauseWindowMinutes =
+        new("ops.rulePauseWindowMinutes", "ops", PolicyKind.Integer, PolicyScope.System, "60", 1, 1440, Unit: "minutes");
+
+    /// <summary>O2：客戶設定類事件與規則自動暫停的站內通知對象（B14）；另允許 <c>ruleEditor</c>（該規則的最後修改者）。解析為空時改送全部系統管理員。</summary>
+    public static readonly PolicyDefinition OpsConfigIssueRecipients =
+        new("ops.configIssueRecipients", "ops", PolicyKind.Recipients, PolicyScope.System, "ruleEditor,admins", 1, 20,
+            DynamicRecipients: [PolicyDefinition.RuleEditor]);
+
     /// <summary>O2：基礎設施、產品缺陷、安全事件的站內通知對象（解析為空時改送全部系統管理員）。</summary>
     public static readonly PolicyDefinition OpsAlertRecipients =
         new("ops.alertRecipients", "ops", PolicyKind.Recipients, PolicyScope.System, "admins", 1, 20);
@@ -223,7 +236,8 @@ public static class PolicyCatalog
          AttachmentMaxFileBytes, AttachmentMaxFilesPerField, AttachmentAllowedExtensions, AttachmentMaxFilesPerComment,
          OpsSlowRequestMs, OpsClientErrorCollection, OpsUpkeepMinutes, OpsAuditRetentionDays,
          OpsMonitorScanMinutes, OpsHealthResultRetentionDays, OpsIncidentRetentionDays, OpsIncidentSampleRetentionDays,
-         OpsIncidentRenotifyHours, OpsIncidentAutoResolveHours, OpsAlertRecipients, OpsAlertEmailCategories, OpsAlertEmailMinSeverity, OpsAlertEmailMaxPerHour,
+         OpsIncidentRenotifyHours, OpsIncidentAutoResolveHours, OpsRulePauseConsecutiveFailures, OpsRulePauseWindowMinutes,
+         OpsConfigIssueRecipients, OpsAlertRecipients, OpsAlertEmailCategories, OpsAlertEmailMinSeverity, OpsAlertEmailMaxPerHour,
          OpsLoginFailureWindowMinutes, OpsSchedulerLagIntervals,
          ApprovalMaxStages, ApprovalMaxBranches, ApprovalMaxApprovers, ApprovalMaxDueHours, ApprovalMaxCommentLength, ApprovalMaxManagerLevel,
          ApprovalAllowSelfApproval, ApprovalAdminBypassTransitionGroups, ApprovalMaxAddSignUsers, ApprovalMaxAddSignStages,

@@ -12,12 +12,14 @@ namespace DynamicModules.Application.Dynamic.DeleteService;
 public class ModuleRemover(
     IModuleRepository modules, IRecordRepository records, IDeletionRepository deletion, IConversionRepository conversions,
     IEventRepository events, ICheckRepository checks, ILedgerRepository ledgers, ITaskRepository tasks, IAttachmentStore store,
-    AfterCommitActions afterCommit, IUnitOfWork uow)
+    AfterCommitActions afterCommit, IUnitOfWork uow, ITaskRuleRepository taskRules, OpsService.RulePause.RulePauseCleanup rulePause)
 {
     public async Task RemoveAsync(long moduleId, CancellationToken ct)
     {
         var module = (await modules.GetByIdAsync(moduleId, includeChildren: true, ct))!;
         var taskFiles = await tasks.ListAttachmentKeysByModuleAsync(moduleId, ct);
+        // 規則的健康列沒有外鍵，在規則隨模組清除之前一起刪，暫停事件結案（維運設計 §17.2.7）
+        await rulePause.RulesDeletedAsync((await taskRules.ListByModuleAsync(moduleId, ct)).Select(r => r.Id).ToList(), ct);
         await deletion.PurgeModuleAsync(module, ct);
         // 轉換定義對來源、目標模組的外鍵是 Restrict；走到這裡代表盤點已確認沒有應用程式外的引用，定義一起移除
         foreach (var c in await conversions.ListTouchingAsync(moduleId, ct))

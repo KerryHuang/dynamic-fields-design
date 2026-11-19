@@ -129,6 +129,13 @@ public class OpsIncidentRepository(DynamicDbContext db) : IOpsIncidentRepository
     public Task<List<OpsIncident>> ListUnresolvedAsync(CancellationToken ct) =>
         Incidents.AsNoTracking().Where(i => i.Status != IncidentStatus.Resolved).OrderBy(i => i.Id).ToListAsync(ct);
 
+    public Task<List<OpsIncident>> ListUnresolvedByRuleAsync(string ruleKind, IReadOnlyCollection<long> ruleIds, string code, CancellationToken ct) =>
+        ruleIds.Count == 0
+            ? Task.FromResult(new List<OpsIncident>())
+            : Incidents.AsNoTracking()
+                .Where(i => i.Status != IncidentStatus.Resolved && i.RuleKind == ruleKind && i.RuleId != null && ruleIds.Contains(i.RuleId.Value) && i.Code == code)
+                .OrderBy(i => i.Id).ToListAsync(ct);
+
     public async Task<int> PurgeResolvedBatchAsync(DateTime cutoffUtc, int batchSize, CancellationToken ct)
     {
         var upper = await Incidents.Where(i => i.Status == IncidentStatus.Resolved && i.ResolvedUtc < cutoffUtc)

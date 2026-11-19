@@ -34,6 +34,10 @@ public sealed record IncidentSignal
     public bool Recovered { get; init; }
     /// <summary>通知連結另指（安全類指向那一筆稽核）；null 用事件詳細。</summary>
     public string? Link { get; init; }
+    /// <summary>客戶設定類：規則的最後修改者（沒有就建立者），收件人政策的 <c>ruleEditor</c> 解析成他（§17.2.5）。</summary>
+    public string? RuleEditor { get; init; }
+    /// <summary>站內通知的種類；null＝<c>opsIncident</c>。規則自動暫停用 <c>opsRulePaused</c>（§17.2.5）。</summary>
+    public string? NotificationKind { get; init; }
     /// <summary>健康檢查的轉換識別碼與補寫資訊：寄送佇列列對照直送紀錄（§17.2.6）；其他來源為 null。</summary>
     public AlertBackfill? Backfill { get; init; }
 }

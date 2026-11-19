@@ -1,5 +1,8 @@
 using System.Text.Json;
 using DynamicModules.Application.Common;
+using DynamicModules.Application.Common.Audit;
+using DynamicModules.Application.Common.Observability;
+using DynamicModules.Application.Dynamic.OpsService.RulePause;
 using DynamicModules.Application.Common.Security;
 using DynamicModules.Application.Common.Time;
 using DynamicModules.Domain.Entities.Dynamic;
@@ -55,7 +58,7 @@ public sealed class TaskRuleEditor(IAppRepository apps)
         module.Blocks.SelectMany(b => b.Fields).Select(f => f.Id).ToHashSet();
 }
 
-public class GetTaskRulesHandler(IModuleRepository modules, ITaskRuleRepository rules, TaskRuleEditor editor)
+public class GetTaskRulesHandler(IModuleRepository modules, ITaskRuleRepository rules, TaskRuleEditor editor, IRuleHealthRepository health)
     : IRequestHandler<GetTaskRulesRequest, ServiceResult>
 {
     public async Task<ServiceResult> Handle(GetTaskRulesRequest request, CancellationToken ct)
@@ -64,8 +67,10 @@ public class GetTaskRulesHandler(IModuleRepository modules, ITaskRuleRepository 
         if (module is null) return ServiceResult.NotFound(TaskRuleMessages.ModuleNotFound);
         var fieldIds = TaskRuleEditor.FieldIds(module);
         var items = new List<TaskRuleResponse>();
-        foreach (var r in await rules.ListByModuleAsync(module.Id, ct))
-            items.Add(r.ToResponse(module.Key, await editor.AppKeyAsync(r.AppId, ct), fieldIds));
+        var list = await rules.ListByModuleAsync(module.Id, ct);
+        var rows = (await health.ListAsync(RuleFailureTag.TaskRule, list.Select(r => r.Id).ToList(), ct)).ToDictionary(h => h.RuleId);
+        foreach (var r in list)
+            items.Add(r.ToResponse(module.Key, await editor.AppKeyAsync(r.AppId, ct), fieldIds).WithHealth(rows.GetValueOrDefault(r.Id)));
         return ServiceResult.Success((IReadOnlyList<TaskRuleResponse>)items);
     }
 }
@@ -95,7 +100,7 @@ public class CreateTaskRuleHandler(
 
 public class UpdateTaskRuleHandler(
     IModuleRepository modules, ITaskRuleRepository rules, TaskRuleValidator validator, TaskRuleEditor editor,
-    IUnitOfWork uow, ICurrentUser user, IBusinessTime time)
+    IUnitOfWork uow, ICurrentUser user, IBusinessTime time, IRuleHealthRepository health)
     : IRequestHandler<UpdateTaskRuleRequest, ServiceResult>
 {
     public async Task<ServiceResult> Handle(UpdateTaskRuleRequest request, CancellationToken ct)
@@ -112,11 +117,13 @@ public class UpdateTaskRuleHandler(
         TaskRuleEditor.Apply(rule, input);
         rule.StampModified(user.UserId, time.Now);
         await uow.CommitAsync(ct);
-        return ServiceResult.Success(rule.ToResponse(module.Key, await editor.AppKeyAsync(rule.AppId, ct), TaskRuleEditor.FieldIds(module)));
+        // 改規則不會解除暫停（要按恢復，§17.2.7）；回應照清單帶暫停狀態
+        return ServiceResult.Success(rule.ToResponse(module.Key, await editor.AppKeyAsync(rule.AppId, ct), TaskRuleEditor.FieldIds(module))
+            .WithHealth(await health.GetAsync(RuleFailureTag.TaskRule, rule.Id, ct)));
     }
 }
 
-public class DeleteTaskRuleHandler(IModuleRepository modules, ITaskRuleRepository rules, IUnitOfWork uow)
+public class DeleteTaskRuleHandler(IModuleRepository modules, ITaskRuleRepository rules, IUnitOfWork uow, RulePauseCleanup rulePause)
     : IRequestHandler<DeleteTaskRuleRequest, ServiceResult>
 {
     public async Task<ServiceResult> Handle(DeleteTaskRuleRequest request, CancellationToken ct)
@@ -125,8 +132,39 @@ public class DeleteTaskRuleHandler(IModuleRepository modules, ITaskRuleRepositor
         if (module is null) return ServiceResult.NotFound(TaskRuleMessages.ModuleNotFound);
         var rule = await rules.GetByKeyAsync(request.Key, ct);
         if (rule is null || rule.ModuleId != module.Id) return ServiceResult.NotFound(TaskRuleMessages.RuleNotFound);
+        // 健康列沒有外鍵：同交易刪掉，暫停事件以 ruleDeleted 結案（維運設計 §17.2.7）
+        await rulePause.RulesDeletedAsync([rule.Id], ct);
         rules.Remove(rule);
         await uow.CommitAsync(ct);
         return ServiceResult.Success();
+    }
+}
+
+/// <summary>
+/// 恢復自動暫停的規則（維運設計 §17.2.7）：條件式更新（<c>WHERE PausedUtc IS NOT NULL</c>）清暫停、記恢復時間與人、計數歸零、
+/// <c>StreakResetUtc</c> 推到現在、刪掉失敗列；暫停事件以 <c>ruleResumed</c> 結案；稽核摘要帶略過次數與暫停起點。
+/// 兩人同時按，第二個回 409 <c>ruleNotPaused</c>。
+/// </summary>
+public class ResumeTaskRuleHandler(
+    IModuleRepository modules, ITaskRuleRepository rules, TaskRuleEditor editor, IRuleHealthRepository health, RulePauseCleanup incidents,
+    AuditContext audit, ICurrentUser user, TimeProvider clock)
+    : IRequestHandler<ResumeTaskRuleRequest, ServiceResult>
+{
+    public async Task<ServiceResult> Handle(ResumeTaskRuleRequest request, CancellationToken ct)
+    {
+        var module = await modules.GetByKeyAsync(request.ModuleKey, includeChildren: true, ct);
+        if (module is null) return ServiceResult.NotFound(TaskRuleMessages.ModuleNotFound);
+        var rule = await rules.GetByKeyAsync(request.Key, ct);
+        if (rule is null || rule.ModuleId != module.Id) return ServiceResult.NotFound(TaskRuleMessages.RuleNotFound);
+        var before = await health.GetAsync(RuleFailureTag.TaskRule, rule.Id, ct);
+        var now = StorageTime.ToMicroseconds(clock.GetUtcNow().UtcDateTime);
+        if (before?.PausedUtc is null || !await health.TryResumeAsync(RuleFailureTag.TaskRule, rule.Id, now, user.UserId, ct))
+            return ServiceResult.Conflict(MessageRef.Of(MessageText.TaskRuleNotPaused), "ruleNotPaused");
+        await incidents.ResolvePausedAsync([rule.Id], IncidentResolvedReason.RuleResumed, user.UserId, ct);
+        audit.Detail("pausedUtc", before.PausedUtc);
+        audit.Detail("skippedWhilePaused", before.SkippedWhilePaused);
+        audit.Detail("pauseCount", before.PauseCount);
+        return ServiceResult.Success(rule.ToResponse(module.Key, await editor.AppKeyAsync(rule.AppId, ct), TaskRuleEditor.FieldIds(module))
+            .WithHealth(await health.GetAsync(RuleFailureTag.TaskRule, rule.Id, ct)));
     }
 }

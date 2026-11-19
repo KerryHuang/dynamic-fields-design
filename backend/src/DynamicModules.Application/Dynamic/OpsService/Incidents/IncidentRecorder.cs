@@ -81,7 +81,7 @@ public sealed class IncidentRecorder(
             }
             if (ShouldNotify(s, transition))
             {
-                await notifier.NotifyAsync(id, s.TitleKey, s.TitleParams, s.Link, ct);
+                await notifier.NotifyAsync(id, s.TitleKey, s.TitleParams, s.Link, ct, s.Category, s.RuleEditor, s.NotificationKind);
                 await incidents.MarkNotifiedAsync(id, time.GetUtcNow().UtcDateTime, ct);
                 // 告警信觸發的轉換和站內通知相同（§17.2.6「寄哪些」）
                 await alerts.EnqueueAsync(id, MailTransition(s, transition), s.Backfill, ct);

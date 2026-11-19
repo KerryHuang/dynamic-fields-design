@@ -1,8 +1,9 @@
 using System.Text.Json;
-using DynamicModules.Application.Common;
 using DynamicModules.Application.Common.Behaviors;
 using DynamicModules.Application.Common.Observability;
 using DynamicModules.Application.Common.Time;
+using DynamicModules.Application.Common;
+using DynamicModules.Application.Dynamic.OpsService.RulePause;
 using DynamicModules.Application.Dynamic.RecordService;
 using DynamicModules.Domain.Conditions;
 using DynamicModules.Domain.Entities.Dynamic;
@@ -19,7 +20,7 @@ namespace DynamicModules.Application.Dynamic.EventService;
 /// </summary>
 public class EventStage(
     IWriteJournal journal, IEventRepository events, IModuleRepository modules, FieldTypeRegistry registry, IBusinessTime time,
-    EffectApplier applier, AppService.Integrations.IntegrationGuardStage integrationGuard) : IWriteStage
+    EffectApplier applier, AppService.Integrations.IntegrationGuardStage integrationGuard, RuleFailureNote notes) : IWriteStage
 {
     public const int MaxDepth = 5;
     public const string TooDeep = "連動事件串聯過深（上限 5 層）";
@@ -64,10 +65,11 @@ public class EventStage(
                         if (await WhenHoldsAsync(ev, module, after, ct) is false) continue;
                         if (ev.Definition.Effects.Count == 0) continue;
 
-                        if (round >= MaxDepth) return ServiceResult.Conflict(TooDeep);
-                        if (!visited.Add($"{ev.Key}|{entry.RecordId}|{ev.Definition.Trigger.On}")) return ServiceResult.Conflict(Loop);
+                        if (round >= MaxDepth) return Known(ev, module, ServiceResult.Conflict(TooDeep, RuleErrorCodes.EventTooDeep));
+                        if (!visited.Add($"{ev.Key}|{entry.RecordId}|{ev.Definition.Trigger.On}"))
+                            return Known(ev, module, ServiceResult.Conflict(Loop, RuleErrorCodes.EventLoop));
                         if (await applier.ApplyAsync(new EffectRun(ev, module, entry.RecordId, entry.OwnerUserId, after, round + 1), ct) is { } failure)
-                            return failure;
+                            return Known(ev, module, failure);
                     }
                     catch (Exception e) when (RuleFailureTag.Mark(e, RuleFailureTag.Event, ev.Id)) { throw; }
                 }
@@ -75,6 +77,14 @@ public class EventStage(
             round++;
         }
         return null;
+    }
+
+    /// <summary>已知錯誤碼記進 <see cref="RuleFailureNote"/>，請求失敗時在交易外開客戶設定事件（維運設計 §17.2.2、O2-T17）。</summary>
+    private ServiceResult Known(ModuleEvent ev, Module module, ServiceResult failure)
+    {
+        if (failure.Code is { } code && RuleErrorCodes.All.Contains(code))
+            notes.Add(RuleFailureTag.Event, ev.Id, code, module.Key, ev.Key, RuleIncidents.EditorOf(ev));
+        return failure;
     }
 
     internal static bool Triggers(
