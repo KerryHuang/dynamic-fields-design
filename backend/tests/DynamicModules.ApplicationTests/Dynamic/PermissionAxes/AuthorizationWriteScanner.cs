@@ -96,6 +96,16 @@ public static partial class AuthorizationWriteScanner
     [GeneratedRegex(@"\.\s*(Sql|InsertData|UpdateData|DeleteData)\s*\(")]
     private static partial Regex MigrationDataOp();
 
+    [GeneratedRegex(@"\b(Sql|InsertData|UpdateData|DeleteData)Operation\b")]
+    private static partial Regex MigrationDataOperationType();
+
+    /// <summary>去掉空白後只剩字串常值（一般、verbatim、原始字串；不含插值）與 <c>+</c>：內容已在 <see cref="Lexed.Code"/> 換成空白。</summary>
+    [GeneratedRegex(@"^@?""+(\+@?""+)*$")]
+    private static partial Regex LiteralOnly();
+
+    [GeneratedRegex(@"^\s*([A-Za-z_]\w*)\s*:(?!:)")]
+    private static partial Regex NamedArgument();
+
     [GeneratedRegex(@"\b\w*DbContext\b|\bDbSet\b")]
     private static partial Regex DbContextUse();
 
@@ -328,15 +338,46 @@ public static partial class AuthorizationWriteScanner
     private static void CheckMigrations(Lexed f, ScanResult result)
     {
         if (!IsMigration(f.Path) || f.Path.EndsWith(".Designer.cs", StringComparison.Ordinal) || f.Path.EndsWith("ModelSnapshot.cs", StringComparison.Ordinal)) return;
+        // migration 整檔不查表名字串（建表、索引都會寫到守衛表名），所以資料操作的目標表必須當場看得出來：
+        // 表名（Sql 是整句）要是不含插值的字串常值（可用 + 串接常值），無法判定就算違規（§25 審查修正）
+        if (MigrationDataOperationType().Match(f.Code) is { Success: true } direct)
+            result.Violations.Add($"{f.Path}: migration 不得直接建 {direct.Value}（看不出寫哪張表，寧可誤擋）");
         foreach (Match m in MigrationDataOp().Matches(f.Code))
         {
+            var op = m.Groups[1].Value;
             var open = m.Index + m.Length - 1;
-            var args = f.NoComments[open..f.MatchParen(open)];
-            if (GuardTableName().Match(args) is { Success: true } t)
-                result.Violations.Add($"{f.Path}: migration 不得以 {m.Groups[1].Value} 寫 {t.Value} 的資料");
-            else if (m.Groups[1].Value == "Sql" && !args.Contains('"'))
-                result.Violations.Add($"{f.Path}: migration 的 Sql 要是字串常值（看不出寫哪張表，寧可誤擋）");
+            var close = f.MatchParen(open) - 1;
+            var target = PickArgument(f, open + 1, close, op == "Sql" ? "sql" : "table");
+            var text = target is { } a ? f.LiteralText(a.Start, a.End) : null;
+            if (text is null)
+                result.Violations.Add(op == "Sql"
+                    ? $"{f.Path}: migration 的 Sql 要是不含插值的字串常值（看不出寫哪張表，寧可誤擋）"
+                    : $"{f.Path}: migration 的 {op} 的表名要是字串常值（看不出寫哪張表，寧可誤擋）");
+            else if ((GuardTableName().Match(text) is { Success: true } t ? t : GuardTableName().Match(f.NoComments[open..(close + 1)])) is { Success: true } hit)
+                result.Violations.Add($"{f.Path}: migration 不得以 {op} 寫 {hit.Value} 的資料");
         }
+    }
+
+    /// <summary>
+    /// 呼叫參數 [from, to) 裡的目標參數：有具名參數 <paramref name="name"/> 就取它（去掉 <c>name:</c>），否則取第一個位置參數；
+    /// 第一個參數是別的具名參數時回 null（看不出來）。
+    /// </summary>
+    private static (int Start, int End)? PickArgument(Lexed f, int from, int to, string name)
+    {
+        var args = new List<(int Start, int End)>();
+        var depth = 0;
+        var start = from;
+        for (var i = from; i < to; i++)
+        {
+            var c = f.Code[i];
+            if (c is '(' or '[' or '{') depth++;
+            else if (c is ')' or ']' or '}') depth--;
+            else if (c == ',' && depth == 0) { args.Add((start, i)); start = i + 1; }
+        }
+        args.Add((start, to));
+        foreach (var (s, e) in args)
+            if (NamedArgument().Match(f.Code[s..e]) is { Success: true } n && n.Groups[1].Value == name) return (s + n.Length, e);
+        return NamedArgument().IsMatch(f.Code[args[0].Start..args[0].End]) ? null : args[0];
     }
 
     // ── 清單測試 8：分層 ──────────────────────────────────────────────────────
@@ -379,6 +420,8 @@ public static partial class AuthorizationWriteScanner
         /// <summary>註解與字串／字元常值的內容換成空白（插值的程式碼保留），長度與原文相同。</summary>
         public string Code { get; }
         public List<string> Literals { get; } = [];
+        /// <summary>每個字串常值的起點（含 <c>$</c>、<c>@</c> 前綴）與內容，順序同 <see cref="Literals"/>。</summary>
+        private readonly List<(int Start, string Text)> _literalSpans = [];
         public List<Segment> Segments { get; } = [];
         public ScanRegistry Registry { get; private set; } = null!;
 
@@ -472,8 +515,8 @@ public static partial class AuthorizationWriteScanner
             var quotes = 0;
             while (At(k + quotes) == '"') quotes++;
             var text = new StringBuilder();
-            if (!verbatim && quotes >= 3) return RawString(k, quotes, dollars, text);
-            if (!verbatim && quotes == 2) { Literals.Add(""); return k + 2; }
+            if (!verbatim && quotes >= 3) return RawString(i, k, quotes, dollars, text);
+            if (!verbatim && quotes == 2) { AddLiteral(i, ""); return k + 2; }
 
             var j = k + 1;
             var pieceStart = j;
@@ -502,11 +545,25 @@ public static partial class AuthorizationWriteScanner
             }
             text.Append(_raw, pieceStart, Math.Max(0, Math.Min(j, _raw.Length) - pieceStart));
             Blank(_code, pieceStart, j);
-            Literals.Add(text.ToString());
+            AddLiteral(i, text.ToString());
             return Math.Min(j + 1, _raw.Length);
         }
 
-        private int RawString(int k, int quotes, int dollars, StringBuilder text)
+        private void AddLiteral(int start, string text)
+        {
+            Literals.Add(text);
+            _literalSpans.Add((start, text));
+        }
+
+        /// <summary>[start, end) 只由字串常值（不含插值）與 <c>+</c> 組成時回串接後的內容，否則 null。</summary>
+        public string? LiteralText(int start, int end)
+        {
+            var shape = string.Concat(Code[start..end].Where(c => !char.IsWhiteSpace(c)));
+            if (!LiteralOnly().IsMatch(shape)) return null;
+            return string.Concat(_literalSpans.Where(l => l.Start >= start && l.Start < end).Select(l => l.Text));
+        }
+
+        private int RawString(int start, int k, int quotes, int dollars, StringBuilder text)
         {
             var fence = new string('"', quotes);
             var j = k + quotes;
@@ -537,7 +594,7 @@ public static partial class AuthorizationWriteScanner
             }
             text.Append(_raw, pieceStart, Math.Min(j, _raw.Length) - pieceStart);
             Blank(_code, pieceStart, j);
-            Literals.Add(text.ToString());
+            AddLiteral(start, text.ToString());
             return Math.Min(j + quotes, _raw.Length);
         }
 

@@ -65,6 +65,12 @@ public class AuthorizationWriteScannerSelfTests
         { "接收者是方法參數 IQueryable<T>", 1, "（q）追不到" },
         { "未登記的方法對非守衛型別批次刪", 1, "未登記的批次方法 WipeAsync" },
         { "migration 的 UpdateData", 1, "UpdateData 寫 Dynamic_Field" },
+        { "migration 的 DeleteData 表名是變數", 1, "DeleteData 的表名要是字串常值" },
+        { "migration 的 InsertData 位置參數表名是變數", 1, "InsertData 的表名要是字串常值" },
+        { "migration 的 Sql 是插值字串", 1, "Sql 要是不含插值的字串常值" },
+        { "migration 的 Sql 串接變數", 1, "Sql 要是不含插值的字串常值" },
+        { "migration 的 Sql 串接常值拆開表名", 1, "Sql 寫 Dynamic_FieldPermission" },
+        { "migration 直接加 SqlOperation", 1, "SqlOperation" },
         { "另加：未登記的開許可位置", 1, "未登記的開許可位置" },
         { "另加：src 使用測試許可", 1, "不得使用測試許可" },
         { "另加：型別參數不具體的 Set<T>()", 1, "Set<T> 的型別參數不是具體" },
@@ -205,6 +211,83 @@ public class AuthorizationWriteScannerSelfTests
                 }
                 """"),
         ],
+        "migration 的 DeleteData 表名是變數" =>
+        [
+            Cs("DynamicModules.Persistence/Migrations/20261120000000_DropRows.cs", """"
+                public partial class DropRows : Migration
+                {
+                    private const string table = "Dynamic_FieldPermission";
+
+                    protected override void Up(MigrationBuilder migrationBuilder)
+                    {
+                        migrationBuilder.DeleteData(table: table, keyColumn: "FieldId", keyValue: 1L);
+                    }
+                }
+                """"),
+        ],
+        "migration 的 InsertData 位置參數表名是變數" =>
+        [
+            Cs("DynamicModules.Persistence.Postgres/Migrations/20261120000000_AddRows.cs", """"
+                public partial class AddRows : Migration
+                {
+                    protected override void Up(MigrationBuilder migrationBuilder)
+                    {
+                        var t = Tables.Grant;
+                        migrationBuilder.InsertData(t, new[] { "FieldId", "GroupId" }, new object[] { 1L, 2L });
+                    }
+                }
+                """"),
+        ],
+        "migration 的 Sql 是插值字串" =>
+        [
+            Cs("DynamicModules.Persistence/Migrations/20261120000000_DropRows.cs", """"
+                public partial class DropRows : Migration
+                {
+                    protected override void Up(MigrationBuilder migrationBuilder)
+                    {
+                        const string table = "Dynamic_FieldPermission";
+                        migrationBuilder.Sql($"DELETE FROM \"{table}\"");
+                    }
+                }
+                """"),
+        ],
+        "migration 的 Sql 串接變數" =>
+        [
+            Cs("DynamicModules.Persistence/Migrations/20261120000000_DropRows.cs", """"
+                public partial class DropRows : Migration
+                {
+                    protected override void Up(MigrationBuilder migrationBuilder)
+                    {
+                        var table = Names.Permission;
+                        migrationBuilder.Sql("DELETE FROM \"" + table + "\"");
+                    }
+                }
+                """"),
+        ],
+        "migration 的 Sql 串接常值拆開表名" =>
+        [
+            Cs("DynamicModules.Persistence/Migrations/20261120000000_DropRows.cs", """"
+                public partial class DropRows : Migration
+                {
+                    protected override void Up(MigrationBuilder migrationBuilder)
+                    {
+                        migrationBuilder.Sql("DELETE FROM \"Dynamic_" + "FieldPermission\"");
+                    }
+                }
+                """"),
+        ],
+        "migration 直接加 SqlOperation" =>
+        [
+            Cs("DynamicModules.Persistence/Migrations/20261120000000_DropRows.cs", """"
+                public partial class DropRows : Migration
+                {
+                    protected override void Up(MigrationBuilder migrationBuilder)
+                    {
+                        migrationBuilder.Operations.Add(new SqlOperation { Sql = Names.Wipe });
+                    }
+                }
+                """"),
+        ],
         "另加：未登記的開許可位置" =>
         [
             Cs("DynamicModules.Application/Dynamic/SampleService/Shortcut.cs", """"
@@ -283,6 +366,7 @@ public class AuthorizationWriteScannerSelfTests
         "SharedMasterConfigurations 的 ToTable(\"Dynamic_FieldGrant\")",
         "AuthorizationTables 的常數",
         "migration 的 CreateTable(name: \"Dynamic_FieldGrant\")",
+        "migration 對非守衛表的常值 Sql（含串接、verbatim、原始字串）與 InsertData／DeleteData",
         ".Designer.cs 與 ModelSnapshot 的 b.ToTable(\"Dynamic_FieldGrant\")",
         "登記的非守衛批次方法對 Set<Record>()（含子查詢）批次更新",
         "同檔案私有屬性 Incidents => db.Set<OpsIncident>() 再 ExecuteUpdateAsync",
@@ -326,6 +410,27 @@ public class AuthorizationWriteScannerSelfTests
                             columns: table => new { Id = table.Column<long>(type: "bigint", nullable: false) },
                             constraints: table => table.PrimaryKey("PK_Dynamic_FieldGrant", x => x.Id));
                         migrationBuilder.CreateIndex(name: "IX_Dynamic_FieldGrant_FieldId", table: "Dynamic_FieldGrant", column: "FieldId");
+                    }
+                }
+                """"),
+        ],
+        "migration 對非守衛表的常值 Sql（含串接、verbatim、原始字串）與 InsertData／DeleteData" =>
+        [
+            Cs("DynamicModules.Persistence/Migrations/20261120000000_MoveMail.cs", """"
+                public partial class MoveMail : Migration
+                {
+                    protected override void Up(MigrationBuilder migrationBuilder)
+                    {
+                        migrationBuilder.Sql(
+                            "INSERT INTO \"Dynamic_MailSettings\" (\"Kind\", \"Host\") " +
+                            "SELECT 'default', \"Host\" FROM \"Dynamic_AlertChannel\" WHERE \"Kind\" = 'smtp';");
+                        migrationBuilder.Sql(@"UPDATE ""Dynamic_Module"" SET ""Version"" = 1", suppressTransaction: true);
+                        migrationBuilder.Sql(sql: """
+                            DELETE FROM "Dynamic_AlertChannel" WHERE "Kind" = 'old';
+                            """);
+                        migrationBuilder.InsertData(table: "Dynamic_MailSettings", columns: new[] { "Kind", "Port" }, values: new object[] { "default", 587 });
+                        migrationBuilder.DeleteData("Dynamic_AlertChannel", "Kind", "smtp");
+                        migrationBuilder.UpdateData(keyColumn: "Kind", keyValue: "default", column: "Port", value: 25, table: "Dynamic_MailSettings");
                     }
                 }
                 """"),
