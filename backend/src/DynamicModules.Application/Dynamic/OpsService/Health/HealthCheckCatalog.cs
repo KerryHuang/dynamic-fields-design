@@ -16,7 +16,7 @@ public sealed record ThresholdRange(long Factory, long Min, long Max);
 public sealed record HealthCheckDefinition(
     string Code, string ZhName, HealthRunner Runner, HealthScope Scope, IncidentCategory Category, string Unit, HealthDirection Direction,
     bool CanDisable, int IntervalFactory, int IntervalMin, int IntervalMax, ThresholdRange? Warn, ThresholdRange? Critical,
-    bool RequiresFileDatabase = false)
+    bool RequiresFileDatabase = false, bool NotOnDemoSite = false)
 {
     public bool EnabledFactory => true;
 }
@@ -38,6 +38,9 @@ public static class HealthCheckCatalog
         DatabaseWalSize = "database.walSize", DatabaseIntegrity = "database.integrity", BackupFreshness = "backup.freshness",
         SecurityLoginFailures = "security.loginFailures";
 
+    /// <summary>Demo 站不適用的檢查，狀態的訊息代碼（前端顯示「不適用（Demo 站）」）。</summary>
+    public const string DemoSiteMessage = "demoSite";
+
     /// <summary>單一檢查最長執行時間（技術限制，§17.9）；逾時記 error。</summary>
     public static readonly TimeSpan RunTimeout = TimeSpan.FromSeconds(60);
 
@@ -51,7 +54,9 @@ public static class HealthCheckCatalog
         new(DatabaseWritable, "資料庫可寫", HealthRunner.Watchdog, HealthScope.Instance, IncidentCategory.Infra, "none", HealthDirection.PassFail,
             CanDisable: false, 1, 1, 60, Warn: new(3, 1, 60), Critical: null),
         new(StorageDiskFree, "磁碟剩餘空間", HealthRunner.Watchdog, HealthScope.Instance, IncidentCategory.Infra, "basisPoints", HealthDirection.LowerIsWorse,
-            CanDisable: true, 5, 1, 1440, Warn: new(2000, 100, 5000), Critical: new(1000, 50, 5000)),
+            CanDisable: true, 5, 1, 1440, Warn: new(2000, 100, 5000), Critical: new(1000, 50, 5000),
+            // Demo 站（Render 免費方案）跑在 Docker overlay 上，DriveInfo 量到的是主機共用的根磁碟、不是這個站的空間（使用者 2026-11-19 裁決）
+            NotOnDemoSite: true),
         new(SchedulerJobs, "排程器", HealthRunner.Watchdog, HealthScope.Instance, IncidentCategory.Defect, "count", HealthDirection.HigherIsWorse,
             CanDisable: true, 5, 1, 1440, Warn: new(3, 1, 100), Critical: new(10, 1, 1000)),
         new(DatabaseWalSize, "資料庫 WAL 檔大小", HealthRunner.Scheduler, HealthScope.Global, IncidentCategory.Infra, "bytes", HealthDirection.HigherIsWorse,

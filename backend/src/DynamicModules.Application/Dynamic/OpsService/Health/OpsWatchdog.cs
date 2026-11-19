@@ -1,4 +1,5 @@
 using DynamicModules.Application.Common;
+using DynamicModules.Application.Common.Security;
 using DynamicModules.Application.Dynamic.OpsService.Alerts;
 using DynamicModules.Application.Dynamic.OpsService.Scheduling;
 using DynamicModules.Application.Dynamic.PolicyService;
@@ -18,7 +19,8 @@ namespace DynamicModules.Application.Dynamic.OpsService.Health;
 /// 另有一條寄送迴圈（<see cref="SendDirectAsync"/>，同一個 hosted service 的第二個背景迴圈）：資料庫寫不進時的直送信（§17.2.6），
 /// 寄送卡住不會拖住檢查。
 /// </summary>
-public sealed class OpsWatchdog(HealthCheckEngine engine, DirectAlertQueue direct, IServiceScopeFactory scopes, TimeProvider time, ILogger<OpsWatchdog> logger)
+public sealed class OpsWatchdog(
+    HealthCheckEngine engine, DirectAlertQueue direct, IServiceScopeFactory scopes, AuthSettings auth, TimeProvider time, ILogger<OpsWatchdog> logger)
 {
     /// <summary>輪詢頻率（技術限制，§17.9；每個檢查的間隔另外可調）。</summary>
     public static readonly TimeSpan Tick = TimeSpan.FromSeconds(60);
@@ -30,7 +32,8 @@ public sealed class OpsWatchdog(HealthCheckEngine engine, DirectAlertQueue direc
     public async Task TickAsync(CancellationToken ct)
     {
         var rows = await LoadRowsAsync(ct);
-        foreach (var def in HealthCheckCatalog.All.Where(d => d.Runner == HealthRunner.Watchdog))
+        // Demo 站不適用的檢查（磁碟剩餘空間）不跑、不開事件
+        foreach (var def in HealthCheckCatalog.All.Where(d => d.Runner == HealthRunner.Watchdog && !(d.NotOnDemoSite && auth.DemoLoginEnabled)))
         {
             if (ct.IsCancellationRequested) return;
             var settings = EffectiveHealthSettings.Of(def, rows.GetValueOrDefault(def.Code));

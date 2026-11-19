@@ -21,11 +21,17 @@ public sealed record GetIncidentRequest(long Id) : IRequest<ServiceResult>, ISys
 /// <summary>監控頁的組裝（維運設計 §17.5）：目前投影讀資料庫，本實例記憶體裡較新的結果蓋上去並標 fromMemory。</summary>
 public sealed class OpsMonitorReader(
     IHealthCheckRepository checks, IOpsIncidentRepository incidents, IDatabaseHealthProbe dbProbe, HealthCheckEngine engine, IOpsEnvironment env,
-    TimeProvider time)
+    AuthSettings auth, TimeProvider time)
 {
     public const int NeedsAttentionMax = 10;
 
-    public bool Applicable(HealthCheckDefinition d) => !d.RequiresFileDatabase || dbProbe.SupportsFileChecks;
+    public bool Applicable(HealthCheckDefinition d) => SupportedByDatabase(d) && !DemoExcluded(d);
+
+    /// <summary>這個資料庫種類適不適用（PostgreSQL 的 WAL 檔大小不適用、畫面不列）。</summary>
+    public bool SupportedByDatabase(HealthCheckDefinition d) => !d.RequiresFileDatabase || dbProbe.SupportsFileChecks;
+
+    /// <summary>Demo 站（開 Demo 登入）不適用、出廠關閉：畫面照列、標「不適用（Demo 站）」。</summary>
+    public bool DemoExcluded(HealthCheckDefinition d) => d.NotOnDemoSite && auth.DemoLoginEnabled;
 
     public async Task<List<HealthCheckState>> StatesAsync(IReadOnlyList<OpsIncident>? unresolved, CancellationToken ct)
     {
@@ -45,7 +51,8 @@ public sealed class OpsMonitorReader(
             Scope: def.Scope == HealthScope.Instance ? "instance" : "global");
         var nextDue = def.Runner == HealthRunner.Scheduler ? row?.NextDueUtc : null;
         if (!Applicable(def))
-            return new(def.Code, common.Category, common.Runner, common.Scope, "notApplicable", null, def.Unit, null, null, null, false, null, null);
+            return new(def.Code, common.Category, common.Runner, common.Scope, "notApplicable", null, def.Unit,
+                DemoExcluded(def) ? HealthCheckCatalog.DemoSiteMessage : null, null, null, false, null, null);
 
         IReadOnlyList<HealthInstanceState>? instances = null;
         if (def.Scope == HealthScope.Instance && row is not null)
@@ -140,12 +147,14 @@ public sealed class ListHealthChecksHandler(OpsMonitorReader reader, IHealthChec
         foreach (var def in HealthCheckCatalog.All)
         {
             // 不適用於這個資料庫種類的檢查不列（§17.2.4 表：PostgreSQL 的 WAL 檔大小）
-            if (!reader.Applicable(def)) continue;
+            if (!reader.SupportedByDatabase(def)) continue;
             var row = rows.GetValueOrDefault(def.Code);
             var s = EffectiveHealthSettings.Of(def, row);
+            // Demo 站不適用的照列、applicable 為假，出廠關閉（存了開啟也不跑）
+            var demoExcluded = reader.DemoExcluded(def);
             list.Add(new HealthCheckConfig(def.Code, OpsMonitorReader.Camel(def.Category),
-                def.Runner == HealthRunner.Watchdog ? "watchdog" : "scheduler", def.Unit, OpsMonitorReader.Camel(def.Direction), true, def.CanDisable,
-                new Setting<bool>(s.Enabled, def.EnabledFactory, row?.Enabled is null),
+                def.Runner == HealthRunner.Watchdog ? "watchdog" : "scheduler", def.Unit, OpsMonitorReader.Camel(def.Direction), !demoExcluded, def.CanDisable,
+                demoExcluded ? new Setting<bool>(false, false, row?.Enabled is null) : new Setting<bool>(s.Enabled, def.EnabledFactory, row?.Enabled is null),
                 new Setting<int>(s.IntervalMinutes, def.IntervalFactory, row?.IntervalMinutes is null, def.IntervalMin, def.IntervalMax),
                 def.Warn is { } w ? new Setting<long>(s.Warn!.Value, w.Factory, row?.WarnThreshold is null, w.Min, w.Max) : null,
                 def.Critical is { } c ? new Setting<long>(s.Critical!.Value, c.Factory, row?.CriticalThreshold is null, c.Min, c.Max) : null,
