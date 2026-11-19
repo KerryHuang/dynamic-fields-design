@@ -3,6 +3,7 @@ using DynamicModules.Application.Common;
 using DynamicModules.Application.Dynamic.ModuleService.Commands.ActivateModule;
 using DynamicModules.Application.Dynamic.ModuleService.Data;
 using DynamicModules.Application.Dynamic.FieldService.Commands.AddOption;
+using DynamicModules.Application.Dynamic.PolicyService;
 using DynamicModules.Application.Dynamic.RecordService.Commands.CreateRecord;
 using DynamicModules.Application.Dynamic.RecordService.Commands.DeleteRecord;
 using DynamicModules.Application.Dynamic.RecordService.Commands.UpdateRecord;
@@ -11,6 +12,7 @@ using DynamicModules.Application.Dynamic.RecordService.Queries.GetRecord;
 using DynamicModules.Application.Dynamic.RuleService.Commands.SaveRules;
 using DynamicModules.Application.Dynamic.RuleService.Data;
 using DynamicModules.Domain.Entities.Dynamic;
+using DynamicModules.Domain.Policies;
 using DynamicModules.Domain.ValueObjects;
 using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
@@ -279,6 +281,50 @@ public class DetailSaveTests : DesignerTestBase
         Err(r, $"details.{s.Child}").Should().Be("明細最多 200 列");
         // 刪一列再加一列：存檔後仍是 200 列，可以存
         Ok(await Update(header, Rows(s, Remove(Lines(header, s)[0]), NewRow(s, 1, 1))));
+    }
+
+    // ---- 政策 A23：明細列上限（覆寫設在明細模組） ----
+
+    private async Task SetDetailRows(string? module, int? value)
+    {
+        var json = value is { } v ? JsonSerializer.SerializeToElement(v) : (JsonElement?)null;
+        var code = PolicyCatalog.RecordMaxDetailRows.Code;
+        var r = module is null
+            ? await Send(new UpdateSystemPolicyRequest(code, json))
+            : await Send(new UpdateModulePolicyRequest(module, code, json));
+        r.IsSuccess.Should().BeTrue(r.Message + string.Join(";", r.Errors.Select(e => e.Key + e.Value[0])));
+    }
+
+    [Fact]
+    [Trait("Category", "Postgres")]
+    public async Task DetailRows_UsesDetailModuleOverride()
+    {
+        var s = await Arrange();
+        await SetDetailRows(s.Child, 2);
+
+        Err(await Create(s, NewRow(s, 1, 1), NewRow(s, 1, 1), NewRow(s, 1, 1)), $"details.{s.Child}").Should().Be("明細最多 2 列");
+
+        // 全系統 1、明細模組覆寫 2：以明細模組的值為準
+        await SetDetailRows(null, 1);
+        await MustCreate(s, NewRow(s, 1, 1), NewRow(s, 1, 1));
+        Err(await Create(s, NewRow(s, 1, 1), NewRow(s, 1, 1), NewRow(s, 1, 1)), $"details.{s.Child}").Should().Be("明細最多 2 列");
+    }
+
+    [Fact]
+    [Trait("Category", "Postgres")]
+    public async Task DetailRows_LoweredLimit_EditHeaderAllowed_AddRowRejected()
+    {
+        var s = await Arrange();
+        var header = await MustCreate(s, NewRow(s, 1, 1), NewRow(s, 1, 1), NewRow(s, 1, 1));
+        await SetDetailRows(s.Child, 2);
+
+        header = Ok(await Update(header, null, Vals((s.ParentTitle, "改表頭"))));
+        header = Ok(await Update(header, Rows(s, Edit(Lines(header, s)[0], (s.Qty.Key, 5m)))));
+        Err(await Update(header, Rows(s, NewRow(s, 1, 1))), $"details.{s.Child}").Should().Be("明細最多 2 列");
+
+        header = Ok(await Update(header, Rows(s, Remove(Lines(header, s)[0]))));
+        Lines(header, s).Should().HaveCount(2);
+        Err(await Update(header, Rows(s, NewRow(s, 1, 1))), $"details.{s.Child}").Should().Be("明細最多 2 列");
     }
 
     // ---- 唯讀規則 ----
