@@ -4,10 +4,12 @@ using DynamicModules.Application.Common.Observability;
 using DynamicModules.Application.Common.Time;
 using DynamicModules.Application.Common;
 using DynamicModules.Application.Dynamic.OpsService.RulePause;
+using DynamicModules.Application.Dynamic.PolicyService;
 using DynamicModules.Application.Dynamic.RecordService;
 using DynamicModules.Domain.Conditions;
 using DynamicModules.Domain.Entities.Dynamic;
 using DynamicModules.Domain.FieldTypes;
+using DynamicModules.Domain.Policies;
 using DynamicModules.Domain.Repositories.Dynamic;
 using DynamicModules.Domain.Rules;
 
@@ -15,15 +17,14 @@ namespace DynamicModules.Application.Dynamic.EventService;
 
 /// <summary>
 /// 寫入後的事件階段（設計 §2 步驟 8、§4.5、§4.6）：依寫入日誌分輪處理。第 0 輪是 handler 結束時日誌裡的項目，
-/// 效果寫入的記錄是下一輪的輸入；輪數就是深度，上限 5。同一輪內同一筆記錄的多個項目合併，跨輪不合併。
+/// 效果寫入的記錄是下一輪的輸入；輪數就是深度，上限是政策 event.maxDepth（出廠 5）。同一輪內同一筆記錄的多個項目合併，跨輪不合併。
 /// 彙總重算寫入的父記錄（靜默）不觸發。
 /// </summary>
 public class EventStage(
     IWriteJournal journal, IEventRepository events, IModuleRepository modules, FieldTypeRegistry registry, IBusinessTime time,
-    EffectApplier applier, AppService.Integrations.IntegrationGuardStage integrationGuard, RuleFailureNote notes) : IWriteStage
+    EffectApplier applier, AppService.Integrations.IntegrationGuardStage integrationGuard, RuleFailureNote notes,
+    IPolicyReader policies) : IWriteStage
 {
-    public const int MaxDepth = 5;
-    public const string TooDeep = "連動事件串聯過深（上限 5 層）";
     public const string Loop = "連動事件形成循環";
 
     public int Order => 8;
@@ -35,6 +36,7 @@ public class EventStage(
         var visited = new HashSet<string>();
         var eventsByModule = new Dictionary<long, List<ModuleEvent>>();
         var modulesById = new Dictionary<long, Module?>();
+        var maxDepth = await policies.IntAsync(PolicyCatalog.EventMaxDepth, null, ct);
 
         while (journal.Entries.Count > cursor)
         {
@@ -65,7 +67,7 @@ public class EventStage(
                         if (await WhenHoldsAsync(ev, module, after, ct) is false) continue;
                         if (ev.Definition.Effects.Count == 0) continue;
 
-                        if (round >= MaxDepth) return Known(ev, module, ServiceResult.Conflict(TooDeep, RuleErrorCodes.EventTooDeep));
+                        if (round >= maxDepth) return Known(ev, module, ServiceResult.Conflict(EventMessages.TooDeep(maxDepth), RuleErrorCodes.EventTooDeep));
                         if (!visited.Add($"{ev.Key}|{entry.RecordId}|{ev.Definition.Trigger.On}"))
                             return Known(ev, module, ServiceResult.Conflict(Loop, RuleErrorCodes.EventLoop));
                         if (await applier.ApplyAsync(new EffectRun(ev, module, entry.RecordId, entry.OwnerUserId, after, round + 1), ct) is { } failure)

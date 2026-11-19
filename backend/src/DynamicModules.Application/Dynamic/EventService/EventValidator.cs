@@ -2,11 +2,13 @@ using System.Text.Json;
 using System.Text.RegularExpressions;
 using DynamicModules.Application.Common;
 using DynamicModules.Application.Dynamic.ApprovalService;
+using DynamicModules.Application.Dynamic.PolicyService;
 using DynamicModules.Domain.Conditions;
 using DynamicModules.Domain.Entities.Dynamic;
 using DynamicModules.Domain.FieldTypes;
 using DynamicModules.Domain.Formulas;
 using DynamicModules.Domain.Modules;
+using DynamicModules.Domain.Policies;
 using DynamicModules.Domain.Repositories.Dynamic;
 using DynamicModules.Application.Dynamic.FieldService.Data;
 using DynamicModules.Application.Dynamic.ModuleService.Data;
@@ -17,9 +19,10 @@ namespace DynamicModules.Application.Dynamic.EventService;
 /// <summary>事件定義的結構驗證（設計 §4.3）；錯誤鍵用 definition.* 路徑。</summary>
 public class EventValidator(
     IModuleRepository modules, IEventRepository events, ILedgerRepository ledgers, IPermissionRepository permissions,
-    IEffectHandlerRegistry handlers, FieldTypeRegistry registry)
+    IEffectHandlerRegistry handlers, FieldTypeRegistry registry, IPolicyReader policies)
 {
-    public const int MaxEffects = 10, MaxSets = 50, MaxEventsPerModule = 20;
+    /// <summary>每個效果的 set 對應數：技術限制（保護套件解析），維持寫死，見政策設計 §10。</summary>
+    public const int MaxSets = 50;
     public const string BadKey = "事件代碼只能用小寫英文、數字、連字號，2 到 40 字，英文開頭";
     private static readonly Regex CodePattern = new("^[a-z][a-z0-9-]{0,39}$");
 
@@ -48,9 +51,16 @@ public class EventValidator(
         CheckTrigger(source, def.Trigger, errors);
         await CheckWhenAsync(source, def.When, errors, ct);
 
-        if (def.Effects.Count is 0 or > MaxEffects) Err("definition.effects", $"效果至少 1 個、至多 {MaxEffects} 個");
+        // 政策 A22：編輯既有事件只在效果數比原本多時檢查（§3.5）；新增事件時才檢查事件數
+        var sameSource = await events.ListBySourceAsync(source.Id, ct);
+        var existing = sameSource.FirstOrDefault(e => e.Key == input.Key);
+        var maxEffects = await policies.IntAsync(PolicyCatalog.EventMaxEffects, null, ct);
+        var existingEffects = existing?.Definition.Effects.Count ?? 0;
+        if (def.Effects.Count == 0 || (def.Effects.Count > maxEffects && def.Effects.Count > existingEffects))
+            Err("definition.effects", EventMessages.TooManyEffects(maxEffects));
         var codes = new HashSet<string>();
-        for (var i = 0; i < def.Effects.Count && i < MaxEffects; i++)
+        // 截在 max(上限, 既有效果數)：每個效果都會查模組與欄位，超量請求不逐一跑（兩者都不超過技術上限）
+        for (var i = 0; i < def.Effects.Count && i < Math.Max(maxEffects, existingEffects); i++)
         {
             var fx = def.Effects[i];
             var path = $"definition.effects[{i}]";
@@ -59,10 +69,10 @@ public class EventValidator(
             await CheckEffectAsync(input, source, fx, path, errors, warnings, ct);
         }
 
-        if (errors.Count == 0)
+        if (errors.Count == 0 && existing is null)
         {
-            var count = (await events.ListBySourceAsync(source.Id, ct)).Count(e => e.Key != input.Key);
-            if (count >= MaxEventsPerModule) Err("sourceModuleKey", $"每個來源模組至多 {MaxEventsPerModule} 個事件");
+            var maxEvents = await policies.IntAsync(PolicyCatalog.EventMaxEventsPerModule, null, ct);
+            if (sameSource.Count >= maxEvents) Err("sourceModuleKey", EventMessages.TooManyEvents(maxEvents));
         }
         if (errors.Count == 0 && input.Active && await FindCycleAsync(input, source, ct) is { } cycle)
             Err("definition", $"連動事件形成循環：{string.Join(" → ", cycle)}");

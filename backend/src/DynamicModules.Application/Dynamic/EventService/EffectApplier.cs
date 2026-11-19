@@ -3,10 +3,12 @@ using System.Text.Json;
 using DynamicModules.Application.Common;
 using DynamicModules.Application.Dynamic.OpsService.RulePause;
 using DynamicModules.Application.Dynamic.LedgerService;
+using DynamicModules.Application.Dynamic.PolicyService;
 using DynamicModules.Application.Dynamic.RecordService;
 using DynamicModules.Application.Dynamic.RecordService.Commands.UpdateRecord;
 using DynamicModules.Domain.Entities.Dynamic;
 using DynamicModules.Domain.Formulas;
+using DynamicModules.Domain.Policies;
 using DynamicModules.Domain.Repositories.Dynamic;
 using Microsoft.EntityFrameworkCore;
 
@@ -21,9 +23,8 @@ public sealed record EffectRun(
 public class EffectApplier(
     IModuleRepository modules, IRecordRepository records, IEventFactRepository facts, ILedgerRepository ledgers,
     LedgerReverser reverser, IEffectHandlerRegistry handlers, EffectWriter writer, IOperationContext operation,
-    Common.Time.IBusinessTime time, IUnitOfWork uow, IDatabaseErrors errors)
+    Common.Time.IBusinessTime time, IUnitOfWork uow, IDatabaseErrors errors, IPolicyReader policies)
 {
-    public const int MaxEachRows = 200;
 
     public async Task<ServiceResult?> ApplyAsync(EffectRun run, CancellationToken ct)
     {
@@ -66,7 +67,8 @@ public class EffectApplier(
             var childModule = (await modules.GetByIdAsync(child.Id, includeChildren: true, ct))!;
             var rows = (await records.ListByRefAsync(parentField.Id, run.SourceRecordId.ToString(CultureInfo.InvariantCulture), ct))
                 .Where(r => !r.DeleteFlag).OrderBy(r => r.Id).ToList();
-            if (rows.Count > MaxEachRows) return ServiceResult.Conflict($"明細列超過 {MaxEachRows} 列，無法產生連動記錄", RuleErrorCodes.EffectTooManyRows);
+            var maxEachRows = await policies.IntAsync(PolicyCatalog.EventMaxEachRows, null, ct);
+            if (rows.Count > maxEachRows) return ServiceResult.Conflict(EventMessages.TooManyEachRows(maxEachRows), RuleErrorCodes.EffectTooManyRows);
             lines = rows.Select(r => (r.Id, (IReadOnlyDictionary<string, JsonElement?>?)RecordValueProcessor.Parse(r.ValuesJson), (Module?)childModule)).ToList();
         }
 

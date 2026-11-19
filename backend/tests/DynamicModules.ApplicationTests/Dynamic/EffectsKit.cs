@@ -3,9 +3,11 @@ using DynamicModules.Application.Dynamic.EventService;
 using DynamicModules.Application.Dynamic.FieldService.Commands.AddOption;
 using DynamicModules.Application.Dynamic.ModuleService.Data;
 using DynamicModules.Application.Dynamic.ModuleService.Commands.ActivateModule;
+using DynamicModules.Application.Dynamic.PolicyService;
 using DynamicModules.Application.Dynamic.WorkflowService.Commands.SaveWorkflow;
 using DynamicModules.Application.Dynamic.WorkflowService.Data;
 using DynamicModules.Domain.Entities.Dynamic;
+using DynamicModules.Domain.Policies;
 using DynamicModules.Domain.ValueObjects;
 using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
@@ -19,6 +21,11 @@ namespace DynamicModules.ApplicationTests.Dynamic;
 public abstract class EffectsTestBase : DesignerTestBase
 {
     protected static string K(long id) => $"f_{id}";
+
+    /// <summary>設全系統政策值（null＝恢復出廠值）。</summary>
+    protected async Task SetSystemPolicy(PolicyDefinition def, int? value) =>
+        (await Send(new UpdateSystemPolicyRequest(def.Code, value is { } v ? JsonSerializer.SerializeToElement(v) : null)))
+            .IsSuccess.Should().BeTrue();
     protected static string Opt(long id) => $"opt_{id}";
 
     protected sealed record Stock(

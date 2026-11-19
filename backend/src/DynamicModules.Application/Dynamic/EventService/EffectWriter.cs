@@ -3,19 +3,32 @@ using DynamicModules.Application.Common;
 using DynamicModules.Application.Common.Security;
 using DynamicModules.Application.Dynamic.RecordService.Commands.CreateRecord;
 using DynamicModules.Application.Dynamic.RecordService.Commands.UpdateRecord;
+using DynamicModules.Application.Dynamic.PolicyService;
 using DynamicModules.Application.Dynamic.RecordService.Data;
 using DynamicModules.Domain.Entities.Dynamic;
+using DynamicModules.Domain.Policies;
 using DynamicModules.Domain.Repositories.Dynamic;
 using MediatR;
 
 namespace DynamicModules.Application.Dynamic.EventService;
 
-/// <summary>一次請求內事件效果寫入的記錄數（設計 §4.6 總量上限）。每個請求一份；Demo 產生器在同一個範圍內連送多個請求，每步開始前歸零。</summary>
-public class EffectBudget
+/// <summary>
+/// 一次請求內事件效果寫入的記錄數（設計 §4.6 總量上限，政策 event.maxWritesPerRequest）。每個請求一份，第一次使用時讀上限；
+/// Demo 產生器在同一個範圍內連送多個請求，每步開始前歸零。
+/// </summary>
+public class EffectBudget(IPolicyReader policies)
 {
-    public const int Max = 500;
+    private int? _max;
     public int Written { get; private set; }
-    public bool TryUse() => ++Written <= Max;
+    /// <summary>已讀到的上限（還沒用過時為 null）。</summary>
+    public int? Max => _max;
+
+    public async Task<bool> TryUseAsync(CancellationToken ct)
+    {
+        _max ??= await policies.IntAsync(PolicyCatalog.EventMaxWritesPerRequest, null, ct);
+        return ++Written <= _max;
+    }
+
     public void Reset() => Written = 0;
 }
 
@@ -27,20 +40,18 @@ public class EffectWriter(
     IModuleRepository modules, IRecordRepository records, ISystemIdentity system, EffectBudget budget,
     IRequestHandler<CreateRecordRequest, ServiceResult> create, IRequestHandler<UpdateRecordRequest, ServiceResult> update)
 {
-    public const string TooMany = "連動事件寫入的記錄超過 500 筆，請縮小範圍";
-
     public async Task<ServiceResult> CreateAsync(
         string ownerUserId, string moduleKey, Dictionary<string, JsonElement?> values,
         Dictionary<string, List<DetailRowInput>>? details, CancellationToken ct)
     {
-        if (!budget.TryUse()) return ServiceResult.Conflict(TooMany);
+        if (!await budget.TryUseAsync(ct)) return ServiceResult.Conflict(EventMessages.TooManyWrites(budget.Max!.Value));
         using var _ = system.Enter(ownerUserId);
         return await create.Handle(new CreateRecordRequest(moduleKey, values, null, details, values.Keys.ToHashSet()), ct);
     }
 
     public async Task<ServiceResult> UpdateAsync(long recordId, Dictionary<string, JsonElement?> values, CancellationToken ct)
     {
-        if (!budget.TryUse()) return ServiceResult.Conflict(TooMany);
+        if (!await budget.TryUseAsync(ct)) return ServiceResult.Conflict(EventMessages.TooManyWrites(budget.Max!.Value));
         var record = await records.GetAsync(recordId, ct);
         if (record is null) return ServiceResult.Conflict("找不到要更新的目標記錄（可能已被刪除）");
         var module = await modules.GetByIdAsync(record.ModuleId, includeChildren: true, ct);

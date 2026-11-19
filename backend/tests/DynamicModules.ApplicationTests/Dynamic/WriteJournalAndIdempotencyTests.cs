@@ -50,15 +50,16 @@ public class WriteJournalAndIdempotencyTests : DesignerTestBase
     }
 
     [Fact]
-    public void EffectBudget_Reset_gives_the_full_allowance_again()
+    public async Task EffectBudget_Reset_gives_the_full_allowance_again()
     {
-        var budget = new DynamicModules.Application.Dynamic.EventService.EffectBudget();
-        for (var i = 0; i < DynamicModules.Application.Dynamic.EventService.EffectBudget.Max; i++) budget.TryUse().Should().BeTrue();
-        budget.TryUse().Should().BeFalse();
+        var budget = Svc<DynamicModules.Application.Dynamic.EventService.EffectBudget>();
+        var max = int.Parse(DynamicModules.Domain.Policies.PolicyCatalog.EventMaxWritesPerRequest.Factory);
+        for (var i = 0; i < max; i++) (await budget.TryUseAsync(default)).Should().BeTrue();
+        (await budget.TryUseAsync(default)).Should().BeFalse();
 
         budget.Reset();
 
-        budget.TryUse().Should().BeTrue();
+        (await budget.TryUseAsync(default)).Should().BeTrue();
     }
 
     [Fact]
