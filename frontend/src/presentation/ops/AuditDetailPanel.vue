@@ -29,6 +29,13 @@ const fields = computed(() => {
   if (x.requestId) rows.push(['requestId', t('audit.cols.requestId'), x.requestId]);
   if (x.clientIp) rows.push(['clientIp', t('audit.cols.clientIp'), x.clientIp]);
   if (x.resultCount !== undefined) rows.push(['resultCount', t('audit.cols.resultCount'), String(x.resultCount)]);
+  // MCP 呼叫才有（MCP 設計 §8.1）：權杖、參數雜湊、確認 id 與確認結果
+  if (x.tokenId !== undefined) rows.push(['tokenId', t('audit.cols.tokenId'), String(x.tokenId)]);
+  if (x.argumentsHash) rows.push(['argumentsHash', t('audit.cols.argumentsHash'), x.argumentsHash]);
+  if (x.confirmationOutcome || x.confirmationId !== undefined) {
+    const outcome = x.confirmationOutcome ? labelOr(t, te, `audit.confirmation.${x.confirmationOutcome}`, x.confirmationOutcome) : '—';
+    rows.push(['confirmation', t('audit.cols.confirmation'), x.confirmationId !== undefined ? `${outcome}（${x.confirmationId}）` : outcome]);
+  }
   return rows;
 });
 </script>

@@ -100,6 +100,21 @@ describe('AuditPage', () => {
     w.unmount();
   });
 
+  it('MCP 呼叫的詳細列出權杖、參數雜湊、確認 id 與確認結果；沒有的欄位不列', async () => {
+    const { w } = await mountPage('/system/audit?id=41', {
+      detail: detail({ channel: 'mcp', tokenId: 12, argumentsHash: 'sha256-abc', confirmationId: 88, confirmationOutcome: 'mismatch' }),
+    });
+    expect(q('audit-field-tokenId')?.textContent).toContain('12');
+    expect(q('audit-field-argumentsHash')?.textContent).toContain('sha256-abc');
+    expect(q('audit-field-confirmation')?.textContent).toContain('參數不符（88）');
+    w.unmount();
+    const again = await mountPage('/system/audit?id=41');
+    expect(q('audit-field-tokenId')).toBeNull();
+    expect(q('audit-field-argumentsHash')).toBeNull();
+    expect(q('audit-field-confirmation')).toBeNull();
+    again.w.unmount();
+  });
+
   it('沒有權限顯示無權限、不出清單', async () => {
     const { w } = await mountPage('/system/audit', { forbidden: true });
     expect(q('audit-table')).toBeNull();
