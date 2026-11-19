@@ -315,9 +315,20 @@ describe('TaskRulesTab 自動暫停', () => {
     w.unmount();
   });
 
-  it('能編輯規則才有「恢復」；沒有編輯權只看得到標籤', async () => {
+  it('能編輯規則才有「恢復」；沒有編輯權只有標籤，點標籤仍可展開唯讀的暫停資訊（§17.3）', async () => {
     await mountTab({ rules: [paused()], canEdit: false });
     expect(body().querySelector('[data-testid="task-rule-paused-follow"]')).not.toBeNull();
+    expect(body().querySelector('[data-testid="task-rule-resume-follow"]')).toBeNull();
+    q<HTMLElement>('[data-testid="task-rule-paused-follow"]').click();
+    await flushPromises();
+    expect(q('[data-testid="task-rule-pause-info-follow"]').textContent).toContain('略過 3 次存檔');
+    expect(body().querySelector('[data-testid="task-rule-resume-follow"]')).toBeNull();
+    w.unmount();
+  });
+
+  it('沒有編輯權的通知連結（focusRule）也直接展開暫停資訊，仍沒有恢復', async () => {
+    await mountTab({ rules: [paused()], canEdit: false, focusRule: 'follow' });
+    expect(body().querySelector('[data-testid="task-rule-pause-info-follow"]')).not.toBeNull();
     expect(body().querySelector('[data-testid="task-rule-resume-follow"]')).toBeNull();
     w.unmount();
   });
