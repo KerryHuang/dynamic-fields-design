@@ -190,7 +190,7 @@ public static class MessageText
         [UnknownDetail] = ("明細模組不存在或未啟用", "The detail module does not exist or is not enabled",
             "ไม่มีโมดูลรายละเอียดหรือยังไม่เปิดใช้งาน", "Mô-đun chi tiết không tồn tại hoặc chưa được kích hoạt"),
         [DetailRowNotFound] = ("明細不存在", "Detail row not found", "ไม่พบรายการรายละเอียด", "Không tìm thấy dòng chi tiết"),
-        [TooManyDetailRows] = ("明細最多 200 列", "At most 200 detail rows", "รายละเอียดได้ไม่เกิน 200 แถว", "Tối đa 200 dòng chi tiết"),
+        [TooManyDetailRows] = ("明細最多 {0} 列", "At most {0} detail rows", "รายละเอียดได้ไม่เกิน {0} แถว", "Tối đa {0} dòng chi tiết"),
         [WorkflowNotInitial] = ("新增時只能使用起始狀態", "Only the initial status can be used when creating", "ตอนสร้างใช้ได้เฉพาะสถานะเริ่มต้น", "Khi tạo mới chỉ được dùng trạng thái ban đầu"),
         [WorkflowNotAllowed] = ("不允許這個狀態轉移", "This status change is not allowed", "ไม่อนุญาตให้เปลี่ยนสถานะนี้", "Không cho phép chuyển trạng thái này"),
         [WorkflowNotPermitted] = ("你沒有權限執行這個狀態轉移", "You do not have permission to make this status change", "คุณไม่มีสิทธิ์เปลี่ยนสถานะนี้", "Bạn không có quyền chuyển trạng thái này"),
