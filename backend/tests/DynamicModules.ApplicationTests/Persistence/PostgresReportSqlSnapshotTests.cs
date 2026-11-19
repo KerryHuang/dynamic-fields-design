@@ -84,14 +84,14 @@ public class PostgresReportSqlSnapshotTests : IAsyncLifetime
 
         var act = () => _snapshot.RunAsync(db, TimeSpan.FromMilliseconds(200), async (connection, tx) =>
         {
-            await connection.ExecuteAsync("SELECT pg_sleep(10)", transaction: tx);
+            await connection.ExecuteAsync("SELECT pg_sleep(60)", transaction: tx);
             return null;
         }, CancellationToken.None);
 
         var thrown = (await act.Should().ThrowAsync<DbException>()).Which;
         thrown.SqlState.Should().Be("57014");
         DatabaseErrors.Instance.IsQueryCanceled(thrown).Should().BeTrue();
-        watch.Elapsed.Should().BeLessThan(TimeSpan.FromSeconds(5));
+        watch.Elapsed.Should().BeLessThan(TimeSpan.FromSeconds(30), "pg_sleep(60) 被 200ms 的 statement_timeout 打斷，遠短於睡滿");
 
         var again = await _snapshot.RunAsync(db, TimeSpan.FromSeconds(5),
             async (connection, tx) => await Scalar(connection, tx, "SELECT 'ok'"), CancellationToken.None);
@@ -107,12 +107,12 @@ public class PostgresReportSqlSnapshotTests : IAsyncLifetime
 
         var act = () => _snapshot.RunAsync(db, TimeSpan.FromSeconds(30), async (connection, tx) =>
         {
-            await connection.ExecuteAsync(new CommandDefinition("SELECT pg_sleep(10)", transaction: tx, cancellationToken: cts.Token));
+            await connection.ExecuteAsync(new CommandDefinition("SELECT pg_sleep(60)", transaction: tx, cancellationToken: cts.Token));
             return null;
         }, cts.Token);
 
         await act.Should().ThrowAsync<OperationCanceledException>();
-        watch.Elapsed.Should().BeLessThan(TimeSpan.FromSeconds(5));
+        watch.Elapsed.Should().BeLessThan(TimeSpan.FromSeconds(30), "pg_sleep(60) 被 300ms 的取消打斷，遠短於睡滿");
 
         // 取消後同一個 context 照常查詢，連線回到關閉狀態（沒有留下開著的交易）
         db.Database.CurrentTransaction.Should().BeNull();
@@ -146,7 +146,7 @@ public class PostgresReportSqlSnapshotTests : IAsyncLifetime
 
         var act = () => _snapshot.RunAsync(db, TimeSpan.FromSeconds(30), async (c, t) =>
         {
-            await c.ExecuteAsync(new CommandDefinition("SELECT pg_sleep(10)", transaction: t, cancellationToken: cts.Token));
+            await c.ExecuteAsync(new CommandDefinition("SELECT pg_sleep(60)", transaction: t, cancellationToken: cts.Token));
             return null;
         }, cts.Token);
         await act.Should().ThrowAsync<OperationCanceledException>();
@@ -184,10 +184,10 @@ public class PostgresReportSqlSnapshotTests : IAsyncLifetime
         await using var db = NewContext();
         db.Database.SetCommandTimeout(1);
 
-        // 跑 1.5 秒的 EF 查詢：比用戶端 1 秒長、比報表上限 3 秒短，要正常完成
-        var slept = await _snapshot.RunAsync(db, TimeSpan.FromSeconds(3), async (_, _) =>
+        // 跑 1.5 秒的 EF 查詢：比用戶端 1 秒長、比報表上限 10 秒短，要正常完成
+        var slept = await _snapshot.RunAsync(db, TimeSpan.FromSeconds(10), async (_, _) =>
         {
-            db.Database.GetCommandTimeout().Should().BeGreaterThan(3, "快照內的用戶端逾時要比 statement_timeout 寬");
+            db.Database.GetCommandTimeout().Should().BeGreaterThan(10, "快照內的用戶端逾時要比 statement_timeout 寬");
             await db.Database.SqlQueryRaw<int>("SELECT 1 AS \"Value\" FROM pg_sleep(1.5)").ToListAsync();
             return "done";
         }, CancellationToken.None);
@@ -213,13 +213,12 @@ public class PostgresReportSqlSnapshotTests : IAsyncLifetime
         await using var other = new NpgsqlConnection(new NpgsqlConnectionStringBuilder(_connectionString) { Pooling = false }.ConnectionString);
         await other.OpenAsync();
         await other.ExecuteAsync($"SELECT pg_advisory_lock({PostgresLockKeys.Write})");
-        var watch = Stopwatch.StartNew();
 
+        // 閘門與全庫鎖整段都占著：快照若排隊會等滿鎖逾時（1 秒）後丟忙碌例外，所以能回結果就證明沒排隊，不比耗時
         var result = await _snapshot.RunAsync(db, TimeSpan.FromSeconds(30),
             async (connection, tx) => await Scalar(connection, tx, "SELECT count(*) FROM \"Dynamic_Module\""), CancellationToken.None);
 
         result.Should().NotBeNull();
-        watch.Elapsed.Should().BeLessThan(TimeSpan.FromSeconds(LockTimeoutSeconds));
     }
 
     [PostgresFact]

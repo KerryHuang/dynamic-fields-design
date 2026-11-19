@@ -8,7 +8,6 @@
 
 - 修正略過標記檢查註解引用的設計章節（a5d 複審 N5）：註解 §6.3 改 §6.1，build 過即可｜依賴：無｜基準 3c024feb｜backend/src（略過標記檢查處）｜CPU 輕｜任一 commit 後｜可開工｜未指派
 - 持續追蹤 vitest 在 jsdom 拆除後 Quasar 計時器觸發「window is not defined」：本機無法重現，根因未證實；已做局部修正（ApproverSourceEditor spec 每個測試後卸載元件，QSelect 卸載時清 filter／input 計時器），曾試全域包裝 setTimeout 但可能吞掉真實錯誤已撤。CI 再出現時看是哪個 spec、哪個計時器；其他用 QSelect use-input 的 spec 尚未處理
-- 放寬 PostgreSQL 測試的牆鐘短上限（2026-11-19 唯讀盤點：26 處，高風險 5 處）：`PostgresReportSqlSnapshotTests` :222（`Elapsed < 1s` 改驗「鎖仍占住時快照已完成」或放寬 ≥10 秒）、:94 與 :115（`< 5s` 放寬 ≥30 秒，`pg_sleep(10)` 本身即上限）、:188-193（上限 3 秒含 1.5 秒 sleep，拉到 ≥10 秒）；`PostgresSaveChangesGateTests:48`（`EnterAsync(500ms)` 放寬 30 秒）。中風險另記：`WriteGateTests:32` 以 `Task.Delay(20)` 同步排隊、`PostgresWriteLockTests:139` 固定 1 秒取樣；驗收 `FORMWRIGHT_TEST_DB=postgres` 這三類全過｜依賴：無｜基準 e46ec77f｜backend/tests/ApplicationTests/Persistence｜CPU 中（PG）｜任一 commit 後｜可開工｜未指派
 - SQLite 報表快照的 EF 交易包裝也改成 dispose `UseTransactionAsync` 回傳的 handle（pg1 審查修正只修了 PostgreSQL 版；in-memory 連線常開，目前無害）：驗收 SQLite `FullyQualifiedName~Report` 全過、快照後連線開啟計數平衡｜依賴：無｜基準 92af014a｜backend/src/DynamicModules.Persistence/Dynamic/Query/SqliteReportSqlSnapshot.cs｜CPU 中｜任一 commit 後｜可開工｜未指派
 - 登入稽核改用登入專用 API 明確傳入行為者，取代 `AuditOrigin.BeginSignIn` 的呼叫堆疊檢查（o2a 複審建議：目前正確，但依賴呼叫端是 async 狀態機，抽 helper 或換 runtime 時要重核對）：驗收 A04、A11、架構測試全過、BeginSignIn 移除｜依賴：無｜基準 7748ed07｜backend/src/DynamicModules.Application/Common/Audit、Login／DemoLogin handler｜CPU 中｜任一 commit 後｜可開工｜未指派
 - 補收件人名稱解析的後端測試（a2d7 N-M3）：政策收件人引用已停用或不存在帳號時的行為，a4a 前端部分已隨收件人 chip 修正補上；驗收新測試兩種資料庫皆過｜依賴：無｜基準 1dda986c｜backend/tests（收件人解析）｜CPU 中｜任一 commit 後｜可開工｜未指派

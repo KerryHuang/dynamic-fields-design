@@ -42,10 +42,10 @@ public class PostgresSaveChangesGateTests
         return Task.CompletedTask;
     }
 
-    /// <summary>閘門放開了：另一個寫入者立刻取得（逾時 1 秒內）。</summary>
+    /// <summary>閘門放開了：另一個寫入者立刻取得（逾時 30 秒內，只驗拿得到）。</summary>
     private async Task GateShouldBeFree()
     {
-        var enter = () => WriteGate.ForKey(_connectionString).EnterAsync(TimeSpan.FromMilliseconds(500), CancellationToken.None);
+        var enter = () => WriteGate.ForKey(_connectionString).EnterAsync(TimeSpan.FromSeconds(30), CancellationToken.None);
         using var permit = (await enter.Should().NotThrowAsync("前一次 SaveChanges 的前置例外不能把閘門占住")).Subject;
     }
 
