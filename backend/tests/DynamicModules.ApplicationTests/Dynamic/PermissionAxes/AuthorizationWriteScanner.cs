@@ -349,7 +349,9 @@ public static partial class AuthorizationWriteScanner
             var close = f.MatchParen(open) - 1;
             var target = PickArgument(f, open + 1, close, op == "Sql" ? "sql" : "table");
             var text = target is { } a ? f.LiteralText(a.Start, a.End) : null;
-            if (text is null)
+            if (text is not null && f.HasEscape(target!.Value.Start, target.Value.End))
+                result.Violations.Add($"{f.Path}: migration 的 {op} 的{(op == "Sql" ? "" : "表名")}常值不得有 \\\" 以外的反斜線跳脫（不解碼，寧可誤擋）");
+            else if (text is null)
                 result.Violations.Add(op == "Sql"
                     ? $"{f.Path}: migration 的 Sql 要是不含插值的字串常值（看不出寫哪張表，寧可誤擋）"
                     : $"{f.Path}: migration 的 {op} 的表名要是字串常值（看不出寫哪張表，寧可誤擋）");
@@ -420,8 +422,8 @@ public static partial class AuthorizationWriteScanner
         /// <summary>註解與字串／字元常值的內容換成空白（插值的程式碼保留），長度與原文相同。</summary>
         public string Code { get; }
         public List<string> Literals { get; } = [];
-        /// <summary>每個字串常值的起點（含 <c>$</c>、<c>@</c> 前綴）與內容，順序同 <see cref="Literals"/>。</summary>
-        private readonly List<(int Start, string Text)> _literalSpans = [];
+        /// <summary>每個字串常值的起點（含 <c>$</c>、<c>@</c> 前綴）、內容（未解碼）、是否一般字串（非 verbatim、非原始字串），順序同 <see cref="Literals"/>。</summary>
+        private readonly List<(int Start, string Text, bool Regular)> _literalSpans = [];
         public List<Segment> Segments { get; } = [];
         public ScanRegistry Registry { get; private set; } = null!;
 
@@ -516,7 +518,7 @@ public static partial class AuthorizationWriteScanner
             while (At(k + quotes) == '"') quotes++;
             var text = new StringBuilder();
             if (!verbatim && quotes >= 3) return RawString(i, k, quotes, dollars, text);
-            if (!verbatim && quotes == 2) { AddLiteral(i, ""); return k + 2; }
+            if (!verbatim && quotes == 2) { AddLiteral(i, "", true); return k + 2; }
 
             var j = k + 1;
             var pieceStart = j;
@@ -545,15 +547,22 @@ public static partial class AuthorizationWriteScanner
             }
             text.Append(_raw, pieceStart, Math.Max(0, Math.Min(j, _raw.Length) - pieceStart));
             Blank(_code, pieceStart, j);
-            AddLiteral(i, text.ToString());
+            AddLiteral(i, text.ToString(), !verbatim);
             return Math.Min(j + 1, _raw.Length);
         }
 
-        private void AddLiteral(int start, string text)
+        private void AddLiteral(int start, string text, bool regular)
         {
             Literals.Add(text);
-            _literalSpans.Add((start, text));
+            _literalSpans.Add((start, text, regular));
         }
+
+        /// <summary>
+        /// [start, end) 內的一般字串有 <c>\"</c> 以外的反斜線跳脫（<c>\u</c>、<c>\x</c> 等可拼出識別字字元）。不寫解碼器，一律當看不出內容。
+        /// verbatim 只有 <c>""</c>、原始字串沒有跳脫，兩者都拼不出識別字字元，不用查。
+        /// </summary>
+        public bool HasEscape(int start, int end) =>
+            _literalSpans.Any(l => l.Regular && l.Start >= start && l.Start < end && Regex.IsMatch(l.Text, @"\\(?!"")"));
 
         /// <summary>[start, end) 只由字串常值（不含插值）與 <c>+</c> 組成時回串接後的內容，否則 null。</summary>
         public string? LiteralText(int start, int end)
@@ -594,7 +603,7 @@ public static partial class AuthorizationWriteScanner
             }
             text.Append(_raw, pieceStart, Math.Min(j, _raw.Length) - pieceStart);
             Blank(_code, pieceStart, j);
-            AddLiteral(start, text.ToString());
+            AddLiteral(start, text.ToString(), false);
             return Math.Min(j + quotes, _raw.Length);
         }
 

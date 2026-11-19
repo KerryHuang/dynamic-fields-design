@@ -769,4 +769,4 @@
 **審查修正（2026-11-20）**
 
 - Cleanup 批次入口只收 ID：`PurgeModuleAsync(moduleId)`、`PurgeFieldsAsync(fieldIds)` 的 program 代碼、欄位、選項都依已驗證的 ID 從資料庫推導，系統代碼一律拒絕，`Demand` 另核對推導出的 program 代碼與選項在許可參數內；修正前夾帶 `SYS00001` 或旁邊欄位的選項可越界刪（`AuthorizationWriteBoundaryTests` 的 `CleanupPurge*` 三條）。
-- 清單測試 7 不再只看參數原文：migration 的 `Sql` 要是不含插值的字串常值（只准以 `+` 串接常值），`InsertData`／`UpdateData`／`DeleteData` 的表名要是字串常值，串接後的內容不得含守衛表名，看不出來就判違規；直接建 `SqlOperation` 等操作物件也判違規。既有 migration 全部符合，沒有新增例外（掃描器自測補 6 個違規樣本、1 個合法樣本）。
+- 清單測試 7 不再只看參數原文：migration 的 `Sql` 要是不含插值的字串常值（只准以 `+` 串接常值），`InsertData`／`UpdateData`／`DeleteData` 的表名要是字串常值，串接後的內容不得含守衛表名，看不出來就判違規；直接建 `SqlOperation` 等操作物件也判違規；一般字串常值有 `\"` 以外的反斜線跳脫（`\u`、`\x` 可拼出守衛表名）直接判違規、不寫解碼器（verbatim 只有 `""`、原始字串沒有跳脫，拼不出識別字字元）。既有 migration 全部符合，沒有新增例外（掃描器自測補 8 個違規樣本、1 個合法樣本）。
