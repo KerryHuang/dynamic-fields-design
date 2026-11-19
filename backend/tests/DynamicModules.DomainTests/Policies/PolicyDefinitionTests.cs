@@ -241,5 +241,16 @@ public class PolicyDefinitionTests
     }
 
     [Fact]
+    public void Recipients_DynamicItem_OnlyWhereRegistered()
+    {
+        // ruleEditor 只在客戶設定類事件的收件人政策可用（維運設計 §17.2.5），大小寫照登記
+        PolicyCatalog.OpsConfigIssueRecipients.Normalize("ruleEditor, admins,ruleEditor").Should().Be("ruleEditor,admins");
+        PolicyCatalog.OpsConfigIssueRecipients.Factory.Should().Be("ruleEditor,admins");
+        PolicyCatalog.OpsConfigIssueRecipients.Normalize("ruleeditor").Should().BeNull();
+        PolicyCatalog.OpsAlertRecipients.Normalize("ruleEditor").Should().BeNull();
+        Recips().Normalize("ruleEditor").Should().BeNull();
+    }
+
+    [Fact]
     public void SettingKey_HasPolicyPrefix() => Int().SettingKey.Should().Be("policy.t.int");
 }
