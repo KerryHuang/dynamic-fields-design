@@ -14,6 +14,7 @@ using DynamicModules.Application.Dynamic.WorkflowService.Data;
 using DynamicModules.Application.Dynamic.FieldService.Commands.AddOption;
 using DynamicModules.Application.Dynamic.ModuleService.Data;
 using DynamicModules.Domain.Entities.Dynamic;
+using DynamicModules.Domain.Policies;
 using DynamicModules.Domain.ValueObjects;
 using FluentAssertions;
 using MediatR;
@@ -265,6 +266,66 @@ public class EventRuntimeTests : EffectsTestBase
         (await Send(new CreateRecordRequest(keys[0], Vals((titles[0], "\"x\""))))).IsCreated.Should().BeTrue();
         foreach (var k in keys.Take(6)) CountOf(k).Should().Be(1);
         CountOf(keys[6]).Should().Be(0);
+    }
+
+    // ---- 政策 A22：串聯層數、單次寫入筆數、逐列筆數 ----
+
+    [Fact]
+    public async Task Depth_UsesPolicy()
+    {
+        var keys = new List<string>();
+        var titles = new List<long>();
+        for (var i = 0; i < 3; i++)
+        {
+            var k = $"evdp-{i}";
+            await NewModule(k);
+            await Send(new DynamicModules.Application.Dynamic.ModuleService.Commands.ActivateModule.ActivateModuleRequest(k));
+            keys.Add(k);
+            titles.Add((await Detail(k)).TitleFieldId!.Value);
+        }
+        for (var i = 0; i < 2; i++)
+            (await Send(new CreateEventRequest(Event($"evdp-e{i}", keys[i], new EventTrigger("create", null, null, null),
+                Create("next", keys[i + 1], null, Const(titles[i + 1], "\"x\"")))))).IsCreated.Should().BeTrue();
+        await SetSystemPolicy(PolicyCatalog.EventMaxDepth, 1);
+
+        var tooDeep = await Run(new CreateRecordRequest(keys[0], Vals((titles[0], "\"x\""))));
+        tooDeep.IsConflict.Should().BeTrue();
+        tooDeep.Message.Should().Be("連動事件串聯過深（上限 1 層）");
+        foreach (var k in keys) CountOf(k).Should().Be(0);
+
+        await SetSystemPolicy(PolicyCatalog.EventMaxDepth, null);
+        (await Run(new CreateRecordRequest(keys[0], Vals((titles[0], "\"x\""))))).IsCreated.Should().BeTrue();
+        foreach (var k in keys) CountOf(k).Should().Be(1);
+    }
+
+    [Fact]
+    public async Task WriteBudget_UsesPolicy()
+    {
+        var s = await BuildStock("evwb");
+        await PostEvent(s);
+        var doc = await NewDoc(s, ("A", "1"), ("B", "2"));
+        await SetSystemPolicy(PolicyCatalog.EventMaxWritesPerRequest, 1);
+
+        var r = await Transition(s, doc, s.DocDone);
+
+        r.IsConflict.Should().BeTrue();
+        r.Message.Should().Contain("連動事件寫入的記錄超過 1 筆");
+        CountOf(s.Move).Should().Be(0);
+    }
+
+    [Fact]
+    public async Task EachRows_UsesPolicy()
+    {
+        var s = await BuildStock("ever");
+        await PostEvent(s);
+        var doc = await NewDoc(s, ("A", "1"), ("B", "2"), ("C", "3"));
+        await SetSystemPolicy(PolicyCatalog.EventMaxEachRows, 2);
+
+        var r = await Transition(s, doc, s.DocDone);
+
+        r.IsConflict.Should().BeTrue();
+        r.Message.Should().Contain("明細列超過 2 列");
+        CountOf(s.Move).Should().Be(0);
     }
 
     // ---- 擴充點 ----

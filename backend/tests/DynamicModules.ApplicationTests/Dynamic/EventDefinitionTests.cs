@@ -2,6 +2,7 @@ using DynamicModules.Application.Dynamic.EventService;
 using DynamicModules.Application.Dynamic.PermissionService.Commands.SaveModulePermissions;
 using DynamicModules.Application.Dynamic.PermissionService.Data;
 using DynamicModules.Domain.Entities.Dynamic;
+using DynamicModules.Domain.Policies;
 using FluentAssertions;
 
 namespace DynamicModules.ApplicationTests.Dynamic;
@@ -28,6 +29,60 @@ public class EventDefinitionTests : EffectsTestBase
         var r = await Send(new CreateEventRequest(Event("evl-touch", l.Req, OnTransition(l.ReqApproved),
             UpdateVia("touch", l.Balance, l.ReqBalance, Const(l.BalLast, "\"today\"")))));
         r.IsCreated.Should().BeTrue(string.Join(";", r.Errors.Select(e => e.Key + e.Value[0])));
+    }
+
+    // ---- 政策 A22：效果數與每來源模組事件數；調低後編輯既有事件只在數量增加時檢查 ----
+
+    private static EventEffect[] Touches(Leave l, int count) =>
+        Enumerable.Range(0, count).Select(i => UpdateVia($"touch-{i}", l.Balance, l.ReqBalance, Const(l.BalLast, "\"today\""))).ToArray();
+
+    [Fact]
+    public async Task Effects_UsesPolicy_AndEditWithoutIncreaseAllowed()
+    {
+        var l = await BuildLeave("evp");
+        var three = Event("evp-touch", l.Req, OnTransition(l.ReqApproved), Touches(l, 3));
+        (await Send(new CreateEventRequest(three))).IsCreated.Should().BeTrue();
+        await SetSystemPolicy(PolicyCatalog.EventMaxEffects, 2);
+
+        var fresh = await Send(new CreateEventRequest(three with { Key = "evp-other" }));
+        fresh.IsInvalid.Should().BeTrue();
+        fresh.Errors["definition.effects"][0].Should().Be("效果至少 1 個、至多 2 個");
+
+        var renamed = await Send(new UpdateEventRequest("evp-touch", three with { Name = Text("改名") }));
+        renamed.IsSuccess.Should().BeTrue(string.Join(";", renamed.Errors.Select(e => e.Key + e.Value[0])));
+        var more = await Send(new UpdateEventRequest("evp-touch", Event("evp-touch", l.Req, OnTransition(l.ReqApproved), Touches(l, 4))));
+        more.IsInvalid.Should().BeTrue();
+        more.Errors["definition.effects"][0].Should().Be("效果至少 1 個、至多 2 個");
+    }
+
+    [Fact]
+    public async Task Effects_HugeRequest_ChecksAtMostCap()
+    {
+        var l = await BuildLeave("evh");
+        var effects = Enumerable.Range(0, 1000).Select(i => Create($"e{i}", "no-such-module", null, Const(l.BalLast, "\"today\""))).ToArray();
+
+        var r = await Send(new CreateEventRequest(Event("evh-many", l.Req, OnTransition(l.ReqApproved), effects)));
+
+        r.IsInvalid.Should().BeTrue();
+        r.Errors["definition.effects"][0].Should().Be("效果至少 1 個、至多 10 個");
+        var indexed = r.Errors.Keys.Where(k => k.StartsWith("definition.effects[", StringComparison.Ordinal)).ToList();
+        indexed.Should().NotBeEmpty();
+        indexed.Select(k => int.Parse(k["definition.effects[".Length..k.IndexOf(']')])).Should().OnlyContain(i => i >= 0 && i <= 9);
+    }
+
+    [Fact]
+    public async Task EventsPerModule_LoweredLimit_UpdateAllowed()
+    {
+        var l = await BuildLeave("eve");
+        for (var i = 0; i < 3; i++)
+            (await Send(new CreateEventRequest(Event($"eve-{i}", l.Req, OnTransition(l.ReqApproved), Touches(l, 1))))).IsCreated.Should().BeTrue();
+        await SetSystemPolicy(PolicyCatalog.EventMaxEventsPerModule, 2);
+
+        var updated = await Send(new UpdateEventRequest("eve-1", Event("eve-1", l.Req, OnTransition(l.ReqApproved), Touches(l, 2))));
+        updated.IsSuccess.Should().BeTrue(string.Join(";", updated.Errors.Select(e => e.Key + e.Value[0])));
+        var fourth = await Send(new CreateEventRequest(Event("eve-3", l.Req, OnTransition(l.ReqApproved), Touches(l, 1))));
+        fourth.IsInvalid.Should().BeTrue();
+        fourth.Errors["sourceModuleKey"][0].Should().Be("每個來源模組至多 2 個事件");
     }
 
     [Fact]

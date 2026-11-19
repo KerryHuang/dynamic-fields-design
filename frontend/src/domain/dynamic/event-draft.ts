@@ -40,8 +40,6 @@ export interface EventDraft {
   effects: EffectDraft[];
 }
 
-export const MAX_EFFECTS = 10;
-
 export const emptySet = (): SetDraft => ({
   to: null, source: 'from', side: 'header', fieldId: null, expr: '', value: null, allowHiddenSource: false,
 });

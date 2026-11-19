@@ -13,7 +13,7 @@ import EventEditorDialog from './EventEditorDialog.vue';
 
 vi.mock('src/services/api/dynamic-api', () => ({
   dynamicApi: {
-    createEvent: vi.fn(), updateEvent: vi.fn(), getModule: vi.fn(), getModules: vi.fn(), getEvents: vi.fn(), getWorkflow: vi.fn(), getModulePermissions: vi.fn(), getMe: vi.fn(),
+    createEvent: vi.fn(), updateEvent: vi.fn(), getModule: vi.fn(), getModules: vi.fn(), getEvents: vi.fn(), getWorkflow: vi.fn(), getModulePermissions: vi.fn(), getMe: vi.fn(), getEffectivePolicies: vi.fn(),
   },
 }));
 const api = vi.mocked(dynamicApi);
@@ -50,7 +50,8 @@ const created: ModuleEvent = {
 };
 
 const mounted: { unmount: () => void }[] = [];
-async function open(event?: ModuleEvent, opts: { workflow?: boolean; hidden?: number[]; permissionAdmin?: boolean } = {}) {
+async function open(event?: ModuleEvent, opts: { workflow?: boolean; hidden?: number[]; permissionAdmin?: boolean; maxEffects?: number } = {}) {
+  api.getEffectivePolicies.mockResolvedValue({ moduleKey: null, values: { 'event.maxEffects': opts.maxEffects ?? 10 } } as never);
   api.getMe.mockResolvedValue({ designer: { read: true, add: true, edit: true, delete: true }, permissionAdmin: opts.permissionAdmin ?? true } as never);
   api.getModules.mockResolvedValue([summary('ship'), summary('ship-line', { detailOf: 'ship' }), summary('stock-move'), summary('balance')]);
   api.getModule.mockImplementation(async (k: string) => details[k]!);
@@ -263,5 +264,18 @@ describe('EventEditorDialog', () => {
     };
     await open(many);
     expect(($('event-add-effect') as HTMLButtonElement).disabled).toBe(true);
+  });
+
+  it('效果數上限依生效值', async () => {
+    const two: ModuleEvent = {
+      ...created, definition: { trigger: { on: 'create' }, effects: Array.from({ length: 2 }, (_, i) => ({ code: `e${i}`, kind: 'custom' as const, handler: 'h' })) },
+    };
+    await open(two, { maxEffects: 2 });
+    expect(api.getEffectivePolicies).toHaveBeenCalledWith(null);
+    expect(($('event-add-effect') as HTMLButtonElement).disabled).toBe(true);
+    expect(document.body.textContent).toContain('最多 2 個');
+    for (const w of mounted.splice(0)) w.unmount();
+    await open(two, { maxEffects: 3 });
+    expect(($('event-add-effect') as HTMLButtonElement).disabled).toBe(false);
   });
 });
