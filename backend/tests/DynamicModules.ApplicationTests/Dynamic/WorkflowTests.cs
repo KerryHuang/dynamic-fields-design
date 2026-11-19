@@ -18,6 +18,7 @@ using DynamicModules.Domain.Entities.Dynamic;
 using DynamicModules.Domain.ValueObjects;
 using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
+using DynamicModules.TestSupport;
 
 namespace DynamicModules.ApplicationTests.Dynamic;
 
@@ -44,7 +45,7 @@ public class WorkflowTests : DesignerTestBase
             {
                 GroupId = g, ProgramCode = (await Detail("doc")).ProgramCode, CanRead = true, CanAdd = true, CanEdit = true, CanDelete = true
             });
-        await Db.Context.SaveChangesAsync();
+        await Db.Context.SaveForTestsAsync();
         var w = new World(status.Id, note.Id, draft, approved, closed, sales, manager, (await Detail("doc")).TitleFieldId!.Value);
         if (save) (await Send(new SaveWorkflowRequest("doc", Input(w)))).IsSuccess.Should().BeTrue();
         return w;

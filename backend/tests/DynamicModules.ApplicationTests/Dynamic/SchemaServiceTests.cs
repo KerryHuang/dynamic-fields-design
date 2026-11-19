@@ -48,7 +48,7 @@ public class SchemaServiceTests : IAsyncLifetime
     {
         _db = await TestDb.CreateAsync();
         await SeedData.EnsureSeededAsync(_db.Context);
-        await DemoPeople.EnsureAsync(_db.Context);
+        await TestPermits.RunForTestsAsync(() => DemoPeople.EnsureAsync(_db.Context));
         var services = new ServiceCollection();
         services.AddApplication();
         services.AddPersistenceRepositories();
@@ -248,7 +248,7 @@ public class SchemaServiceTests : IAsyncLifetime
         {
             GroupId = sales.Id, ProgramCode = m.ProgramCode, CanRead = read, CanAdd = add, CanDelete = delete, CanAmt = pricing
         });
-        await _db.Context.SaveChangesAsync();
+        await _db.Context.SaveForTestsAsync();
         return (m, sales);
     }
 
@@ -278,7 +278,7 @@ public class SchemaServiceTests : IAsyncLifetime
         _db.Context.Set<FieldPermission>().AddRange(
             new FieldPermission { FieldId = hidden.Id, GroupId = sales.Id, Access = FieldAccess.Hidden },
             new FieldPermission { FieldId = ro.Id, GroupId = sales.Id, Access = FieldAccess.ReadOnly });
-        await _db.Context.SaveChangesAsync();
+        await _db.Context.SaveForTestsAsync();
 
         _user.UserId = "sales01";
         var fields = (await Schema()).Blocks.Single().Fields;
@@ -302,7 +302,7 @@ public class SchemaServiceTests : IAsyncLifetime
         var (_, sales) = await Grant();
         var floor = await _db.Context.Set<PermissionGroup>().SingleAsync(g => g.Key == "floor");
         _db.Context.Set<FieldOptionScope>().Add(new FieldOptionScope { OptionId = restricted.Id, GroupId = floor.Id });
-        await _db.Context.SaveChangesAsync();
+        await _db.Context.SaveForTestsAsync();
 
         _user.UserId = "sales01";
         var options = (await Schema()).Blocks.Single().Fields.Single(x => x.Id == f.Id).Options;
@@ -351,7 +351,7 @@ public class SchemaServiceTests : IAsyncLifetime
         (await Schema()).PermHash.Should().NotBe(before);
 
         _db.Context.Set<GroupProgramPrivilege>().Single(p => p.GroupId == sales.Id && p.ProgramCode == m.ProgramCode).CanEdit = true;
-        await _db.Context.SaveChangesAsync();
+        await _db.Context.SaveForTestsAsync();
         _user.UserId = "sales01";
         (await Schema()).PermHash.Should().NotBe(before);
     }
@@ -366,7 +366,7 @@ public class SchemaServiceTests : IAsyncLifetime
         var code = (await Detail("readable")).ProgramCode;
         var sales = await _db.Context.Set<PermissionGroup>().SingleAsync(g => g.Key == "sales");
         _db.Context.Set<GroupProgramPrivilege>().Add(new GroupProgramPrivilege { GroupId = sales.Id, ProgramCode = code, CanRead = true });
-        await _db.Context.SaveChangesAsync();
+        await _db.Context.SaveForTestsAsync();
 
         _user.UserId = "sales01";
         (await Send(new GetMenuRequest())).Select(i => i.Key).Should().Equal("readable");
@@ -383,7 +383,7 @@ public class SchemaServiceTests : IAsyncLifetime
         await Send(new ActivateModuleRequest("order"));
         var (_, sales) = await Grant();
         _db.Context.Set<FieldPermission>().Add(new FieldPermission { FieldId = m.TitleFieldId!.Value, GroupId = sales.Id, Access = FieldAccess.Hidden });
-        await _db.Context.SaveChangesAsync();
+        await _db.Context.SaveForTestsAsync();
         var titleKey = m.Blocks[0].Fields.Single(f => f.Id == m.TitleFieldId).Key;
 
         _user.UserId = "sales01";
@@ -449,7 +449,7 @@ public class SchemaServiceTests : IAsyncLifetime
         await Send(new ActivateModuleRequest("order"));
         var (_, sales) = await Grant();
         _db.Context.Set<FieldPermission>().Add(new FieldPermission { FieldId = hidden.Id, GroupId = sales.Id, Access = FieldAccess.Hidden });
-        await _db.Context.SaveChangesAsync();
+        await _db.Context.SaveForTestsAsync();
 
         _user.UserId = "admin"; // 設計器 Read：系統管理員
         var preview = await Preview();

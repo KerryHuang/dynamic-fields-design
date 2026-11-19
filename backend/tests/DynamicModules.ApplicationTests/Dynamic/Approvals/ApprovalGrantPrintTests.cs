@@ -8,6 +8,7 @@ using DynamicModules.Application.Dynamic.RecordService.Data;
 using DynamicModules.Domain.Entities.Dynamic;
 using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
+using DynamicModules.TestSupport;
 
 namespace DynamicModules.ApplicationTests.Dynamic.Approvals;
 
@@ -34,17 +35,17 @@ public class ApprovalGrantPrintTests : ApprovalTestBase
 
         var buyers = new PermissionGroup { Key = "buyers", NameI18n = Text("buyers") };
         Db.Context.Add(buyers);
-        await Db.Context.SaveChangesAsync();
+        await Db.Context.SaveForTestsAsync();
         _buyers = buyers.Id;
         Db.Context.Add(new UserGroupMapping { GroupId = buyers.Id, UserId = "buyer1" });
-        await Db.Context.SaveChangesAsync();
+        await Db.Context.SaveForTestsAsync();
         var body = $"<h1>{{{{_title}}}}</h1><p>備註：{{{{f_{_r.Memo}}}}}</p><p>金額：{{{{f_{_amount}}}}}</p>" +
             $"<table><tbody>{{{{#each {_r.Line}}}}}<tr><td>數量{{{{f_{_r.LineQty}}}}}</td><td>單價{{{{f_{_r.LinePrice}}}}}</td></tr>{{{{/each}}}}</tbody></table>";
         var moduleId = Db.Context.Set<Module>().AsNoTracking().Single(m => m.Key == _r.Module).Id;
         Db.Context.AddRange(
             new PrintTemplate { ModuleId = moduleId, Key = Sheet, NameI18n = Text("採購單"), Body = body, Active = true },
             new PrintTemplate { ModuleId = moduleId, Key = Draft, NameI18n = Text("草稿範本"), Body = "<p>x</p>", Active = false });
-        await Db.Context.SaveChangesAsync();
+        await Db.Context.SaveForTestsAsync();
         Db.Context.ChangeTracker.Clear();
 
         As("admin");
@@ -223,7 +224,7 @@ public class ApprovalGrantPrintTests : ApprovalTestBase
         await Rig();
         var moduleId = Db.Context.Set<Module>().AsNoTracking().Single(m => m.Key == _r.Module).Id;
         Db.Context.Add(new PrintTemplate { ModuleId = moduleId, Key = "po-sup", NameI18n = Text("供應商"), Body = $"<p>供應商：{{{{f_{_r.Supplier}}}}}</p>", Active = true });
-        await Db.Context.SaveChangesAsync();
+        await Db.Context.SaveForTestsAsync();
         Db.Context.ChangeTracker.Clear();
         As("admin");
         var titleField = (await Detail(_r.Vendor)).TitleFieldId!.Value;

@@ -13,6 +13,7 @@ using DynamicModules.Domain.ValueObjects;
 using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
 using Record = DynamicModules.Domain.Entities.Dynamic.Record;
+using DynamicModules.TestSupport;
 
 namespace DynamicModules.ApplicationTests.Dynamic;
 
@@ -262,7 +263,7 @@ public class RollupRecalcTests : DesignerTestBase
             });
             Db.Context.Set<ModuleDataScope>().Add(new ModuleDataScope { ModuleId = m.Id, GroupId = floor.Id, Scope = scope });
         }
-        await Db.Context.SaveChangesAsync();
+        await Db.Context.SaveForTestsAsync();
         var a = await NewReq(s);
         await NewRec(s, a.Id, 1m, "admin 的紀錄");
 
@@ -331,7 +332,7 @@ public class RollupRecalcTests : DesignerTestBase
         // 故意把存好的筆數改錯：只有真的重算才會被修正，藉此觀察有沒有觸發重算
         var tracked = await Db.Context.Set<Record>().SingleAsync(r => r.Id == a.Id);
         tracked.ValuesJson = tracked.ValuesJson.Replace($"\"{s.Count.Key}\":1", $"\"{s.Count.Key}\":99");
-        await Db.Context.SaveChangesAsync();
+        await Db.Context.SaveForTestsAsync();
         (await Num(a.Id, s.Count)).Should().Be(99m);
 
         Ok2(await Send(new UpdateFieldRequest(s.Count.Id, s.Count.Type, Text("筆數（改名）"), s.Count.Config, s.Count.BlockId)));

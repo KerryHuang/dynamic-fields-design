@@ -4,6 +4,7 @@ using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Migrations;
+using DynamicModules.TestSupport;
 
 namespace DynamicModules.ApplicationTests.Persistence;
 
@@ -65,12 +66,12 @@ public class SharedMasterSchemaTests
         orphans.Add(new AppOrphan { FormerAppKey = "crm", Kind = OrphanKind.Field, Name = "partner/partner.vip", FieldId = field.Id });
         orphans.Add(new AppOrphan { FormerAppKey = "crm", Kind = OrphanKind.Option, Name = "partner/partner.vip", OptionId = option.Id });
         orphans.Add(new AppOrphan { FormerAppKey = "crm", Kind = OrphanKind.Block, Name = "partner/partner.vip", BlockId = module.Blocks[0].Id });
-        await db.Context.SaveChangesAsync();
+        await db.Context.SaveForTestsAsync();
         (await orphans.CountAsync()).Should().Be(3);
 
         db.Context.ChangeTracker.Clear();
         orphans.Add(new AppOrphan { FormerAppKey = "crm", Kind = OrphanKind.Field, Name = "partner/partner.vip", FieldId = field.Id });
-        await FluentActions.Awaiting(() => db.Context.SaveChangesAsync()).Should().ThrowAsync<DbUpdateException>();
+        await FluentActions.Awaiting(() => db.Context.SaveForTestsAsync()).Should().ThrowAsync<DbUpdateException>();
     }
 
     [Theory]
@@ -87,7 +88,7 @@ public class SharedMasterSchemaTests
             FieldId = withField ? field.Id : null, OptionId = withOption ? field.Options[0].Id : null,
             BlockId = withBlock ? module.Blocks[0].Id : null
         });
-        await FluentActions.Awaiting(() => db.Context.SaveChangesAsync()).Should().ThrowAsync<DbUpdateException>();
+        await FluentActions.Awaiting(() => db.Context.SaveForTestsAsync()).Should().ThrowAsync<DbUpdateException>();
     }
 
     [Fact]
@@ -104,13 +105,13 @@ public class SharedMasterSchemaTests
         };
 
         grants.AddRange(Grant(GrantSource.App, app.Id), Grant(GrantSource.Manual, null));
-        await db.Context.SaveChangesAsync();
+        await db.Context.SaveForTestsAsync();
 
         foreach (var bad in new[] { Grant(GrantSource.Manual, null), Grant(GrantSource.App, app.Id), Grant(GrantSource.Manual, app.Id), Grant(GrantSource.App, null) })
         {
             db.Context.ChangeTracker.Clear();
             grants.Add(bad);
-            await FluentActions.Awaiting(() => db.Context.SaveChangesAsync()).Should().ThrowAsync<DbUpdateException>($"{bad.SourceKind}/{bad.AppId}");
+            await FluentActions.Awaiting(() => db.Context.SaveForTestsAsync()).Should().ThrowAsync<DbUpdateException>($"{bad.SourceKind}/{bad.AppId}");
         }
     }
 
@@ -126,13 +127,13 @@ public class SharedMasterSchemaTests
         FieldGrant Grant(GrantSource source, long? appId) => new() { SourceKind = source, AppId = appId, FieldId = field.Id, GroupId = group.Id };
 
         grants.AddRange(Grant(GrantSource.App, app.Id), Grant(GrantSource.Manual, null));
-        await db.Context.SaveChangesAsync();
+        await db.Context.SaveForTestsAsync();
 
         foreach (var bad in new[] { Grant(GrantSource.Manual, null), Grant(GrantSource.App, app.Id), Grant(GrantSource.Manual, app.Id) })
         {
             db.Context.ChangeTracker.Clear();
             grants.Add(bad);
-            await FluentActions.Awaiting(() => db.Context.SaveChangesAsync()).Should().ThrowAsync<DbUpdateException>($"{bad.SourceKind}/{bad.AppId}");
+            await FluentActions.Awaiting(() => db.Context.SaveForTestsAsync()).Should().ThrowAsync<DbUpdateException>($"{bad.SourceKind}/{bad.AppId}");
         }
     }
 
@@ -149,7 +150,7 @@ public class SharedMasterSchemaTests
         });
         db.Context.Set<ModuleActionScope>().Add(new ModuleActionScope { ModuleId = module.Id, GroupId = group.Id, Action = PermissionAction.Read, Scope = DataScope.All });
         db.Context.Set<FieldGrant>().Add(new FieldGrant { SourceKind = GrantSource.App, AppId = app.Id, FieldId = module.Blocks[0].Fields[0].Id, GroupId = group.Id });
-        await db.Context.SaveChangesAsync();
+        await db.Context.SaveForTestsAsync();
 
         await db.Context.Database.ExecuteSqlRawAsync("DELETE FROM \"Dynamic_PermissionGroup\" WHERE \"Id\" = {0}", group.Id);
 
@@ -165,7 +166,7 @@ public class SharedMasterSchemaTests
         var user = await AddAppAsync(db, "crm");
         var master = await AddAppAsync(db, "partner", AppKind.Master);
         db.Context.Set<AppMasterUse>().Add(new AppMasterUse { AppId = user.Id, MasterAppId = master.Id });
-        await db.Context.SaveChangesAsync();
+        await db.Context.SaveForTestsAsync();
 
         await FluentActions.Awaiting(() => db.Context.Database.ExecuteSqlRawAsync("DELETE FROM \"Dynamic_App\" WHERE \"Id\" = {0}", master.Id))
             .Should().ThrowAsync<Exception>();
@@ -184,14 +185,14 @@ public class SharedMasterSchemaTests
         db.Context.Set<DynamicProgram>().Add(new DynamicProgram { ProgramCode = "DYN00001" });
         var module = new Module { Key = "partner", ProgramCode = "DYN00001", NameI18n = Text("往來對象"), Blocks = [new Block()] };
         db.Context.Set<Module>().Add(module);
-        await db.Context.SaveChangesAsync();
+        await db.Context.SaveForTestsAsync();
         var field = new Field
         {
             ModuleId = module.Id, BlockId = module.Blocks[0].Id, Key = "f_1", Type = FieldType.Enum, LabelI18n = Text("等級"),
             Options = [new FieldOption { LabelI18n = Text("VIP"), Active = true }]
         };
         module.Blocks[0].Fields.Add(field);
-        await db.Context.SaveChangesAsync();
+        await db.Context.SaveForTestsAsync();
         return module;
     }
 
@@ -199,7 +200,7 @@ public class SharedMasterSchemaTests
     {
         var app = new App { Key = key, Kind = kind, NameI18n = Text(key), PackageVersion = "1.0.0", FormatVersion = 6, Source = "builtIn", RowVersion = "x" };
         db.Context.Set<App>().Add(app);
-        await db.Context.SaveChangesAsync();
+        await db.Context.SaveForTestsAsync();
         return app;
     }
 
@@ -207,7 +208,7 @@ public class SharedMasterSchemaTests
     {
         var group = new PermissionGroup { Key = key, NameI18n = Text(key) };
         db.Context.Set<PermissionGroup>().Add(group);
-        await db.Context.SaveChangesAsync();
+        await db.Context.SaveForTestsAsync();
         return group;
     }
 }

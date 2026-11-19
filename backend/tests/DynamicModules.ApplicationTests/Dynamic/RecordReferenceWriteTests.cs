@@ -46,7 +46,7 @@ public class RecordReferenceWriteTests : IAsyncLifetime
     {
         _db = await TestDb.CreateAsync();
         await SeedData.EnsureSeededAsync(_db.Context);
-        await DemoPeople.EnsureAsync(_db.Context);
+        await TestPermits.RunForTestsAsync(() => DemoPeople.EnsureAsync(_db.Context));
         var services = new ServiceCollection();
         services.AddApplication();
         services.AddPersistenceRepositories();
@@ -105,7 +105,7 @@ public class RecordReferenceWriteTests : IAsyncLifetime
             GroupId = sales.Id, ProgramCode = m.ProgramCode!, CanRead = read, CanAdd = true, CanEdit = true, CanDelete = true, CanAmt = true
         });
         db.Set<ModuleDataScope>().Add(new ModuleDataScope { ModuleId = (await Detail(m.Key)).Id, GroupId = sales.Id, Scope = scope });
-        await db.SaveChangesAsync();
+        await db.SaveForTestsAsync();
     }
 
     private async Task<DynamicRecordResponse> Rec(string user, Mod m, string title)

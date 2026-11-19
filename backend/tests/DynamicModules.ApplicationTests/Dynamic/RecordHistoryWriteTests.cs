@@ -11,6 +11,7 @@ using DynamicModules.Domain.ValueObjects;
 using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
 using Record = DynamicModules.Domain.Entities.Dynamic.Record;
+using DynamicModules.TestSupport;
 
 namespace DynamicModules.ApplicationTests.Dynamic;
 
@@ -154,7 +155,7 @@ public class RecordHistoryWriteTests : DesignerTestBase
             GroupId = sales.Id, ProgramCode = (await Detail("target")).ProgramCode,
             CanRead = true, CanAdd = true, CanEdit = true, CanDelete = true
         });
-        await Db.Context.SaveChangesAsync();
+        await Db.Context.SaveForTestsAsync();
 
         var (targetTitle, sourceTitle) = (await TitleKey("target"), await TitleKey("source"));
 

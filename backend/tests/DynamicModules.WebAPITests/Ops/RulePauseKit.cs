@@ -13,6 +13,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using static DynamicModules.WebAPITests.Dynamic.ApiTestKit;
+using DynamicModules.TestSupport;
 
 namespace DynamicModules.WebAPITests.Ops;
 
@@ -149,7 +150,7 @@ internal sealed class RulePauseRig : IDisposable
         row.CanAdd = edit;
         row.CanEdit = edit;
         row.CanDelete = edit;
-        db.SaveChanges();
+        db.SaveForTests();
     }
 
     /// <summary>由設計者 planner01 建規則（最後修改者＝planner01）；回傳規則 id。</summary>

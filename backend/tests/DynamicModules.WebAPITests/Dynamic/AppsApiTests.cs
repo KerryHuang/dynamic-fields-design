@@ -8,6 +8,7 @@ using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using static DynamicModules.WebAPITests.Dynamic.ApiTestKit;
+using DynamicModules.TestSupport;
 
 namespace DynamicModules.WebAPITests.Dynamic;
 
@@ -115,7 +116,7 @@ public class AppsApiTests : IDisposable
         await ImportOk(AppTestPackages.Procure);
         await OpenOk("procure-lite");
         // 有設計器讀取、不是系統管理員
-        Db(db => { db.Set<UserProgramPrivilege>().Add(new UserProgramPrivilege { UserId = "planner01", ProgramCode = "DYN00000", CanRead = true }); db.SaveChanges(); return 0; });
+        Db(db => { db.Set<UserProgramPrivilege>().Add(new UserProgramPrivilege { UserId = "planner01", ProgramCode = "DYN00000", CanRead = true }); db.SaveForTests(); return 0; });
         var planner = _app.AsUser("planner01");
 
         (await planner.GetAsync(Apps)).StatusCode.Should().Be(HttpStatusCode.Forbidden);
@@ -312,7 +313,7 @@ public class AppsApiTests : IDisposable
         {
             var db = scope.ServiceProvider.GetRequiredService<DynamicDbContext>();
             db.Set<AppModule>().Remove(db.Set<AppModule>().Single(m => m.Code == "customer"));
-            db.SaveChanges();
+            db.SaveForTests();
         }
         (await Reason()).Should().Be("moduleMissing");
     }

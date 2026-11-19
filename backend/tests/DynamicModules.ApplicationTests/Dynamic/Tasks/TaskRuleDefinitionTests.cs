@@ -16,6 +16,7 @@ using DynamicModules.Domain.ValueObjects;
 using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using DynamicModules.TestSupport;
 
 namespace DynamicModules.ApplicationTests.Dynamic.Tasks;
 
@@ -407,10 +408,10 @@ public class TaskRuleDefinitionTests : TaskTestBase
         var plain = await BuildRig("tr-plain");
         var app = new App { Key = "master-x", Kind = AppKind.Master, Status = AppStatus.Open, Source = "builtIn", RowVersion = "x" };
         Db.Context.Add(app);
-        await Db.Context.SaveChangesAsync();
+        await Db.Context.SaveForTestsAsync();
         Db.Context.Add(new AppModule { AppId = app.Id, Code = "m", ModuleId = r.ModuleId });
         Db.Context.Add(new UserProgramPrivilege { UserId = "sales01", ProgramCode = "DYN00000", CanRead = true, CanAdd = true, CanEdit = true, CanDelete = true });
-        await Db.Context.SaveChangesAsync();
+        await Db.Context.SaveForTestsAsync();
         Db.Context.ChangeTracker.Clear();
 
         As("sales01");
@@ -501,7 +502,7 @@ public class TaskRuleDefinitionTests : TaskTestBase
         var other = await BuildRig("tr2");
         await Create(other, Rule("rule-b", steps: [Step(other)]));
         Db.Context.Add(new TaskRuleRun { RuleId = (await Db.Context.Set<TaskRule>().AsNoTracking().SingleAsync(x => x.Key == "rule-a")).Id, RecordId = 1, Occurrence = 1, CreatedTime = SeedTime });
-        await Db.Context.SaveChangesAsync();
+        await Db.Context.SaveForTestsAsync();
         (await Send(new DeactivateModuleRequest(r.Key))).IsSuccess.Should().BeTrue();
         Db.Context.ChangeTracker.Clear();   // 正式環境每個請求一個新的 DbContext，不會帶著建立規則時追蹤的實體
 
@@ -524,7 +525,7 @@ public class TaskRuleDefinitionTests : TaskTestBase
         var deletion = Svc<IDeletionRepository>();
 
         var count = await deletion.DeactivateTaskRulesReferencingAsync(r.ModuleId, new HashSet<long> { r.DateTimeField }, CancellationToken.None);
-        await Db.Context.SaveChangesAsync();
+        await Db.Context.SaveForTestsAsync();
 
         count.Should().Be(1, "只算原本啟用、被停用的");
         Db.Context.ChangeTracker.Clear();

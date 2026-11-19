@@ -20,6 +20,7 @@ using DynamicModules.Domain.ValueObjects;
 using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
 using Record = DynamicModules.Domain.Entities.Dynamic.Record;
+using DynamicModules.TestSupport;
 
 namespace DynamicModules.ApplicationTests.Dynamic;
 
@@ -67,7 +68,7 @@ public class ImportTests : DesignerTestBase
             GroupId = await SalesGroupId(), ProgramCode = m.ProgramCode,
             CanRead = read, CanAdd = add, CanEdit = true, CanDelete = true, CanPrint = true, CanAmt = true
         });
-        await Db.Context.SaveChangesAsync();
+        await Db.Context.SaveForTestsAsync();
     }
 
     private async Task<FieldResponse> AddBilingual(string module, FieldType type, string zh, string en, FieldConfig? config = null)
@@ -361,7 +362,7 @@ public class ImportTests : DesignerTestBase
         var who = await MustAdd("memo", FieldType.User, label: "負責人");
         (await Send(new ActivateModuleRequest("memo"))).IsSuccess.Should().BeTrue();
         Db.Context.Set<AppUser>().Add(new AppUser { UserId = "sales09", DisplayName = "業務一" });
-        await Db.Context.SaveChangesAsync();
+        await Db.Context.SaveForTestsAsync();
         var title = await TitleKey("memo");
 
         var p = await Preview("memo", Csv($"{title},負責人", "a,業務一", "b,sales01", "c,業務二"));
@@ -377,7 +378,7 @@ public class ImportTests : DesignerTestBase
         var who = await MustAdd("memo", FieldType.User, label: "負責人");
         (await Send(new ActivateModuleRequest("memo"))).IsSuccess.Should().BeTrue();
         (await Db.Context.Set<AppUser>().SingleAsync(u => u.UserId == "sales02")).IsActive = false;
-        await Db.Context.SaveChangesAsync();
+        await Db.Context.SaveForTestsAsync();
         var title = await TitleKey("memo");
 
         var p = await Preview("memo", Csv($"{title},負責人", "a,sales02", "b,業務二", "c,sales01"));

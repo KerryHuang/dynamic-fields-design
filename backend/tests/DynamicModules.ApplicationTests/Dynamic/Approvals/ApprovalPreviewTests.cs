@@ -6,6 +6,7 @@ using DynamicModules.Domain.Entities.Dynamic;
 using DynamicModules.Domain.Policies;
 using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
+using DynamicModules.TestSupport;
 
 namespace DynamicModules.ApplicationTests.Dynamic.Approvals;
 
@@ -228,7 +229,7 @@ public class ApprovalPreviewTests : ApprovalTestBase
         As("buyer1");
         var po = await NewPo(r, price: 5000);
         Db.Context.Add(new UserProgramPrivilege { UserId = "fin1", ProgramCode = "DYN00000", CanRead = true });
-        await Db.Context.SaveChangesAsync();
+        await Db.Context.SaveForTestsAsync();
         await Db.Context.Set<UserGroupMapping>().Where(m => m.UserId == "fin1" && m.GroupId == EveryoneGroup()).ExecuteDeleteAsync();
         Db.Context.ChangeTracker.Clear();
         As("fin1");
@@ -391,7 +392,7 @@ public class ApprovalPreviewTests : ApprovalTestBase
     {
         var g = new PermissionGroup { Key = "nobody", NameI18n = Text("nobody") };
         Db.Context.Add(g);
-        await Db.Context.SaveChangesAsync();
+        await Db.Context.SaveForTestsAsync();
         Db.Context.ChangeTracker.Clear();
         return g.Id;
     }
@@ -415,7 +416,7 @@ public class ApprovalPreviewTests : ApprovalTestBase
     {
         var r = await BuildPurchase();
         Db.Context.Add(new ModulePolicy { ModuleId = r.ModuleId, Code = PolicyCatalog.ApprovalMaxApprovers.Code, Value = "1", ModifiedUserId = "admin" });
-        await Db.Context.SaveChangesAsync();
+        await Db.Context.SaveForTestsAsync();
         Db.Context.ChangeTracker.Clear();
 
         var p = await MustDraftPreview(r, Draft("po-new", r.Confirmed, Def(null, Stage("fin", Group(FinanceGroup)))));

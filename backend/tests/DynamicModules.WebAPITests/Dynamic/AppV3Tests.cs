@@ -9,6 +9,7 @@ using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using static DynamicModules.WebAPITests.Dynamic.ApiTestKit;
+using DynamicModules.TestSupport;
 
 namespace DynamicModules.WebAPITests.Dynamic;
 
@@ -448,7 +449,7 @@ public class AppV3Tests : IDisposable
             node["filters"] = System.Text.Json.Nodes.JsonNode.Parse(
                 $$"""[ { "field": { "source": "main", "fieldId": {{customerField}}, "viaFieldId": null }, "op": "eq", "value": 123 } ]""");
             report.DefinitionJson = node.ToJsonString();
-            db.SaveChanges();
+            db.SaveForTests();
             return 0;
         });
 
@@ -517,7 +518,7 @@ public class AppV3Tests : IDisposable
         var node = System.Text.Json.Nodes.JsonNode.Parse(report.DefinitionJson)!;
         node["filters"] = System.Text.Json.Nodes.JsonNode.Parse(filtersJson);
         report.DefinitionJson = node.ToJsonString();
-        db.SaveChanges();
+        db.SaveForTests();
         return 0;
     });
 
@@ -603,7 +604,7 @@ public class AppV3Tests : IDisposable
         Db(db =>
         {
             db.Set<FieldOptionScope>().Add(new FieldOptionScope { OptionId = option, GroupId = 987_654 });
-            db.SaveChanges();
+            db.SaveForTests();
             return 0;
         });
 

@@ -7,6 +7,7 @@ using DynamicModules.Domain.Approvals;
 using DynamicModules.Domain.Entities.Dynamic;
 using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
+using DynamicModules.TestSupport;
 
 namespace DynamicModules.ApplicationTests.Dynamic.Approvals;
 
@@ -129,9 +130,9 @@ public class ApprovalGrantSchemaTests : ApprovalTestBase
         var po = await Rig();
         var group = new PermissionGroup { Key = "hide-memo", NameI18n = Text("hide-memo") };
         Db.Context.Add(group);
-        await Db.Context.SaveChangesAsync();
+        await Db.Context.SaveForTestsAsync();
         Db.Context.Add(new UserGroupMapping { GroupId = group.Id, UserId = "buyer2" });
-        await Db.Context.SaveChangesAsync();
+        await Db.Context.SaveForTestsAsync();
         Db.Context.ChangeTracker.Clear();
         As("admin");
         await HideFor(_r.Module, _r.Memo, group.Id);

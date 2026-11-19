@@ -5,6 +5,7 @@ using DynamicModules.Domain.Entities.Dynamic;
 using FluentAssertions;
 using Microsoft.Extensions.DependencyInjection;
 using static DynamicModules.WebAPITests.Dynamic.ApiTestKit;
+using DynamicModules.TestSupport;
 
 namespace DynamicModules.WebAPITests.Dynamic;
 
@@ -219,7 +220,7 @@ public class ApprovalFlowsApiTests
                 Key = "draft-only", NameI18n = new([KeyValuePair.Create("zh-TW", "只有草稿")]), ModuleId = moduleId, ToOptionId = s.Done, Priority = 9,
                 Active = false, DraftJson = """{"rev":"seed-rev","definition":{"shape":"graph"},"layout":null}""", CreatedUserId = "admin", CreatedTime = new DateTime(2026, 11, 4, 9, 0, 0)
             });
-            db.SaveChanges();
+            db.SaveForTests();
         }
 
         var one = await JsonOf(await c.GetAsync($"{Flows}/draft-only"));
@@ -470,16 +471,16 @@ public class ApprovalFlowsApiTests
                 Active = true, CreatedUserId = "admin", CreatedTime = new DateTime(2026, 11, 4, 9, 0, 0)
             };
             db.Add(flow);
-            db.SaveChanges();
+            db.SaveForTests();
             var version = new ApprovalFlowVersion
             {
                 FlowId = flow.Id, Version = 1, CreatedBy = "admin", CreatedTime = new DateTime(2026, 11, 4, 9, 0, 0),
                 Definition = new DynamicModules.Domain.Approvals.ApprovalDefinition("graph", null, null, null, [])
             };
             db.Add(version);
-            db.SaveChanges();
+            db.SaveForTests();
             flow.CurrentVersionId = version.Id;
-            db.SaveChanges();
+            db.SaveForTests();
         }
 
         object Body(bool active, string name) => new
@@ -695,7 +696,7 @@ public class ApprovalFlowsApiTests
         {
             var db = scope.ServiceProvider.GetRequiredService<DynamicDbContext>();
             db.Add(new UserProgramPrivilege { UserId = "sales01", ProgramCode = "DYN00000", CanRead = true });
-            db.SaveChanges();
+            db.SaveForTests();
         }
         var reader = app.AsUser("sales01");
 

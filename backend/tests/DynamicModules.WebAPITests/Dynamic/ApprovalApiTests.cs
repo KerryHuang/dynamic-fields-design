@@ -7,6 +7,7 @@ using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using static DynamicModules.WebAPITests.Dynamic.ApiTestKit;
+using DynamicModules.TestSupport;
 
 namespace DynamicModules.WebAPITests.Dynamic;
 
@@ -524,7 +525,7 @@ public class ApprovalApiTests : IDisposable
         var db = scope.ServiceProvider.GetRequiredService<DynamicDbContext>();
         var code = db.Set<Module>().Single(m => m.Key == moduleKey).ProgramCode;
         db.Set<GroupProgramPrivilege>().RemoveRange(db.Set<GroupProgramPrivilege>().Where(g => g.ProgramCode == code));
-        db.SaveChanges();
+        db.SaveForTests();
     }
 
     [Fact]

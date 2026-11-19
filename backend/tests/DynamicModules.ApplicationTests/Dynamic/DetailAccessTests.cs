@@ -30,6 +30,7 @@ using DynamicModules.Domain.Repositories.Dynamic;
 using DynamicModules.Domain.ValueObjects;
 using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
+using DynamicModules.TestSupport;
 
 namespace DynamicModules.ApplicationTests.Dynamic;
 
@@ -64,7 +65,7 @@ public class DetailAccessTests : DesignerTestBase
             GroupId = sales.Id, ProgramCode = (await Detail(parent)).ProgramCode,
             CanRead = true, CanAdd = add, CanEdit = true, CanDelete = true, CanAmt = pricing
         });
-        await Db.Context.SaveChangesAsync();
+        await Db.Context.SaveForTestsAsync();
         return new S(parent, child, detailField, qty, price, total, tax, sales.Id);
     }
 
@@ -77,7 +78,7 @@ public class DetailAccessTests : DesignerTestBase
         };
         row.StampCreated(owner, new DateTime(2026, 11, 4));
         Db.Context.Add(row);
-        await Db.Context.SaveChangesAsync();
+        await Db.Context.SaveForTestsAsync();
         return row;
     }
 
@@ -346,7 +347,7 @@ public class DetailAccessTests : DesignerTestBase
 
         var pricing = Db.Context.Set<GroupProgramPrivilege>().Single(p => p.GroupId == s.SalesGroupId);
         pricing.CanAmt = true;
-        await Db.Context.SaveChangesAsync();
+        await Db.Context.SaveForTestsAsync();
         (await Schema(s.Parent)).Blocks.SelectMany(b => b.Fields).Select(f => f.Key).Should().Contain([sum.Key, plusOne.Key, count.Key]);
     }
 
@@ -392,7 +393,7 @@ public class DetailAccessTests : DesignerTestBase
         var parent = (await modules.GetByKeyAsync(s.Parent, true, default))!;
         var child = (await modules.GetByKeyAsync(s.Child, true, default))!;
         (await Db.Context.Set<DynamicProgram>().SingleAsync(p => p.ProgramCode == parent.ProgramCode)).Active = false;
-        await Db.Context.SaveChangesAsync();
+        await Db.Context.SaveForTestsAsync();
         As("sales01");
 
         (await Svc<IDynamicAccessGuard>().AuthorizeDetailAsync(parent, child, PermissionAction.Read, default))
@@ -454,7 +455,7 @@ public class DetailAccessTests : DesignerTestBase
         };
         view.StampCreated("admin", new DateTime(2026, 11, 4));
         Db.Context.Add(view);
-        await Db.Context.SaveChangesAsync();
+        await Db.Context.SaveForTestsAsync();
 
         var upd = await Send(new UpdateViewRequest(view.Id, Text("w"), [s.Qty.Id], null, [], false));
         upd.IsNotFound.Should().BeTrue();

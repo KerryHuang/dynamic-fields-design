@@ -6,6 +6,7 @@ using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using static DynamicModules.ApplicationTests.Dynamic.Approvals.ApprovalGraphTestKit;
+using DynamicModules.TestSupport;
 
 namespace DynamicModules.ApplicationTests.Dynamic.Approvals;
 
@@ -272,7 +273,7 @@ public class ApprovalFlowPublishTests : ApprovalTestBase
         var r = await Rig();
         await SeedGraphFlow(r, "po-g", r.Confirmed, 1, Linear());
         Db.Context.Add(new UserProgramPrivilege { UserId = "emp1", ProgramCode = "DYN00000", CanRead = true });
-        await Db.Context.SaveChangesAsync();
+        await Db.Context.SaveForTestsAsync();
         As("emp1");
 
         (await Send(new PublishApprovalFlowRequest("po-g", Input("po-g", r.Confirmed, 1, Linear("fin2"))))).IsForbidden.Should().BeTrue();

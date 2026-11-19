@@ -18,6 +18,7 @@ using DynamicModules.Domain.ValueObjects;
 using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
 using Record = DynamicModules.Domain.Entities.Dynamic.Record;
+using DynamicModules.TestSupport;
 
 namespace DynamicModules.ApplicationTests.Dynamic.Approvals;
 
@@ -49,7 +50,7 @@ public abstract class ApprovalTestBase : EffectsTestBase, IAsyncLifetime
         };
         var created = groups.Keys.ToDictionary(k => k, k => new PermissionGroup { Key = k, NameI18n = Text(k) });
         Db.Context.AddRange(created.Values);
-        await Db.Context.SaveChangesAsync();
+        await Db.Context.SaveForTestsAsync();
         foreach (var (k, members) in groups)
             foreach (var m in members) Db.Context.Add(new UserGroupMapping { GroupId = created[k].Id, UserId = m });
 
@@ -57,22 +58,22 @@ public abstract class ApprovalTestBase : EffectsTestBase, IAsyncLifetime
             new() { Code = code, NameI18n = Text(code), ParentId = parent, ManagerUserId = manager, CreatedUserId = "admin", CreatedTime = SeedTime };
         var hq = Dept("hq", null, "gm");
         Db.Context.Add(hq);
-        await Db.Context.SaveChangesAsync();
+        await Db.Context.SaveForTestsAsync();
         var sales = Dept("sales", hq.Id, "mgrA");
         var purchasing = Dept("purchasing", hq.Id, null);
         var finance = Dept("finance", hq.Id, "fin2");
         Db.Context.AddRange(sales, purchasing, finance);
-        await Db.Context.SaveChangesAsync();
+        await Db.Context.SaveForTestsAsync();
         var sales1 = Dept("sales-1", sales.Id, "lead1");
         Db.Context.Add(sales1);
-        await Db.Context.SaveChangesAsync();
+        await Db.Context.SaveForTestsAsync();
         foreach (var (u, d) in new[]
                  {
                      ("gm", hq), ("mgrA", sales), ("emp1", sales), ("emp2", sales), ("lead1", sales1), ("emp3", sales1),
                      ("buyer1", purchasing), ("buyer2", purchasing), ("fin1", finance), ("fin2", finance)
                  })
             Db.Context.Add(new UserDepartment { UserId = u, DepartmentId = d.Id });
-        await Db.Context.SaveChangesAsync();
+        await Db.Context.SaveForTestsAsync();
         Db.Context.ChangeTracker.Clear();
         (FinanceGroup, PurchaseLeadGroup, BoardGroup) = (created["finance"].Id, created["purchase-lead"].Id, created["board"].Id);
     }
@@ -192,12 +193,12 @@ public abstract class ApprovalTestBase : EffectsTestBase, IAsyncLifetime
             CreatedUserId = "admin", CreatedTime = SeedTime
         };
         Db.Context.Add(flow);
-        await Db.Context.SaveChangesAsync();
+        await Db.Context.SaveForTestsAsync();
         var version = new ApprovalFlowVersion { FlowId = flow.Id, Version = 1, Definition = d, CreatedBy = "admin", CreatedTime = SeedTime };
         Db.Context.Add(version);
-        await Db.Context.SaveChangesAsync();
+        await Db.Context.SaveForTestsAsync();
         flow.CurrentVersionId = version.Id;
-        await Db.Context.SaveChangesAsync();
+        await Db.Context.SaveForTestsAsync();
         Db.Context.ChangeTracker.Clear();
         return flow;
     }
@@ -219,7 +220,7 @@ public abstract class ApprovalTestBase : EffectsTestBase, IAsyncLifetime
             CreatedUserId = "admin", CreatedTime = SeedTime
         };
         Db.Context.Add(flow);
-        await Db.Context.SaveChangesAsync();
+        await Db.Context.SaveForTestsAsync();
         Db.Context.ChangeTracker.Clear();
         return flow;
     }
@@ -236,9 +237,9 @@ public abstract class ApprovalTestBase : EffectsTestBase, IAsyncLifetime
         {
             group = new PermissionGroup { Key = "everyone", NameI18n = Text("everyone") };
             Db.Context.Add(group);
-            await Db.Context.SaveChangesAsync();
+            await Db.Context.SaveForTestsAsync();
             foreach (var u in OrgUsers) Db.Context.Add(new UserGroupMapping { GroupId = group.Id, UserId = u });
-            await Db.Context.SaveChangesAsync();
+            await Db.Context.SaveForTestsAsync();
             Db.Context.ChangeTracker.Clear();
         }
         foreach (var m in modules)
@@ -377,9 +378,9 @@ public abstract class ApprovalTestBase : EffectsTestBase, IAsyncLifetime
             SubmittedTime = SeedTime, RowVersion = Guid.NewGuid().ToString(), OperationId = Guid.NewGuid().ToString("N")
         };
         Db.Context.Add(inst);
-        await Db.Context.SaveChangesAsync();
+        await Db.Context.SaveForTestsAsync();
         Db.Context.Add(new ApprovalInstanceFlow { InstanceId = inst.Id, FlowId = flow.Id, FlowVersionId = vid });
-        await Db.Context.SaveChangesAsync();
+        await Db.Context.SaveForTestsAsync();
         Db.Context.ChangeTracker.Clear();
         return inst;
     }

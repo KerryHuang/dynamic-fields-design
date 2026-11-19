@@ -5,6 +5,7 @@ using DynamicModules.Domain.Entities.Dynamic;
 using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
 using static DynamicModules.ApplicationTests.Dynamic.Approvals.ApprovalGraphTestKit;
+using DynamicModules.TestSupport;
 
 namespace DynamicModules.ApplicationTests.Dynamic.Approvals;
 
@@ -299,7 +300,7 @@ public class ApprovalFlowValidateTests : ApprovalTestBase
     {
         var r = await Rig();
         Db.Context.Add(new UserProgramPrivilege { UserId = "emp1", ProgramCode = "DYN00000", CanRead = true });
-        await Db.Context.SaveChangesAsync();
+        await Db.Context.SaveForTestsAsync();
         As("emp1");
 
         var res = await Send(new ValidateApprovalFlowRequest(r.Module, null, Draft("po-g", r.Confirmed, 1, Linear(1))));

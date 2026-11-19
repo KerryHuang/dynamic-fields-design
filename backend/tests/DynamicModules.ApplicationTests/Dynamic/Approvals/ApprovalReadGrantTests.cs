@@ -13,6 +13,7 @@ using DynamicModules.Domain.Approvals;
 using DynamicModules.Domain.Entities.Dynamic;
 using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
+using DynamicModules.TestSupport;
 
 namespace DynamicModules.ApplicationTests.Dynamic.Approvals;
 
@@ -46,9 +47,9 @@ public class ApprovalReadGrantTests : ApprovalTestBase
         {
             group = new PermissionGroup { Key = "buyers", NameI18n = Text("buyers") };
             Db.Context.Add(group);
-            await Db.Context.SaveChangesAsync();
+            await Db.Context.SaveForTestsAsync();
             Db.Context.AddRange(new UserGroupMapping { GroupId = group.Id, UserId = "buyer1" }, new UserGroupMapping { GroupId = group.Id, UserId = "buyer2" });
-            await Db.Context.SaveChangesAsync();
+            await Db.Context.SaveForTestsAsync();
             Db.Context.ChangeTracker.Clear();
         }
         As("admin");
@@ -152,7 +153,7 @@ public class ApprovalReadGrantTests : ApprovalTestBase
         var (po, _) = await Pending();
         var code = Db.Context.Set<Module>().AsNoTracking().Single(m => m.Key == _r.Module).ProgramCode;
         (await Db.Context.Set<DynamicProgram>().SingleAsync(p => p.ProgramCode == code)).Active = false;
-        await Db.Context.SaveChangesAsync();
+        await Db.Context.SaveForTestsAsync();
         Db.Context.ChangeTracker.Clear();
         (await Get("fin1", po)).IsSuccess.Should().BeFalse();
     }

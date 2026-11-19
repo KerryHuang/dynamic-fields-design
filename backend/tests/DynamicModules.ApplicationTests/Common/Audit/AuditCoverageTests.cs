@@ -14,8 +14,12 @@ namespace DynamicModules.ApplicationTests.Common.Audit;
 public class AuditCoverageTests
 {
     /// <summary>不寫稽核的交易型管理或設計請求（型別 → 理由）。新請求忘了宣告就在這裡失敗。</summary>
-    /// <remarks>目前沒有例外：Demo 資料產生器（GenerateDemoDataRequest）不是管理或設計請求，內部步驟照常各記一列。</remarks>
-    private static readonly Dictionary<Type, string> Exempt = [];
+    private static readonly Dictionary<Type, string> Exempt = new()
+    {
+        // 權限軸設計 §7.3、T13：背景產生器另宣告系統管理員只為了讓寫入許可帶 SystemAdminVerified（示範帳號的成員寫入），不是管理請求；內部步驟照常各記一列
+        [typeof(DynamicModules.Application.Dynamic.DemoService.Commands.GenerateDemoData.GenerateDemoDataRequest)] =
+            "Demo 資料產生器：內部的開套件、建模組等步驟各自寫稽核，整批不另記一列",
+    };
 
     /// <summary>可建立的具體型別（含 struct record）。</summary>
     private static IEnumerable<Type> Concrete() =>

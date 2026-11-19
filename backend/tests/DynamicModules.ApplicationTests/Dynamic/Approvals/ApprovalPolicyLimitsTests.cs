@@ -7,6 +7,7 @@ using DynamicModules.Domain.Repositories.Dynamic;
 using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using DynamicModules.TestSupport;
 
 namespace DynamicModules.ApplicationTests.Dynamic.Approvals;
 
@@ -23,20 +24,20 @@ public class ApprovalPolicyLimitsTests : ApprovalTestBase
     private async Task SetSystem(PolicyDefinition def, string value)
     {
         await Svc<ISystemSettingRepository>().SetAsync(def.SettingKey, value, default);
-        await Db.Context.SaveChangesAsync();
+        await Db.Context.SaveForTestsAsync();
     }
 
     private async Task SetOverride(PurchaseRig r, PolicyDefinition def, string value)
     {
         Db.Context.Add(new ModulePolicy { ModuleId = r.ModuleId, Code = def.Code, Value = value, ModifiedUserId = "admin" });
-        await Db.Context.SaveChangesAsync();
+        await Db.Context.SaveForTestsAsync();
         Db.Context.ChangeTracker.Clear();
     }
 
     private async Task AddUsers(int n)
     {
         for (var i = 1; i <= n; i++) Db.Context.Add(new AppUser { UserId = $"u{i:00}", DisplayName = $"u{i:00}" });
-        await Db.Context.SaveChangesAsync();
+        await Db.Context.SaveForTestsAsync();
         Db.Context.ChangeTracker.Clear();
     }
 
@@ -324,7 +325,7 @@ public class ApprovalPolicyLimitsTests : ApprovalTestBase
         Db.Context.Add(new AppUser { UserId = "sysadm", DisplayName = "sysadm", IsSystemAdmin = true });
         var disabled = await Db.Context.Set<AppUser>().FirstAsync(u => u.UserId == "u15");
         disabled.IsActive = false;
-        await Db.Context.SaveChangesAsync();
+        await Db.Context.SaveForTestsAsync();
         Db.Context.ChangeTracker.Clear();
         var def = Def(null, Stage("fix", Users(UserIds(15))));   // 固定 15 人（含已停用的 u15）
         var r = await WithFlow(groupFallback ? def with { FallbackApprovers = Group(FinanceGroup) } : def);
@@ -345,7 +346,7 @@ public class ApprovalPolicyLimitsTests : ApprovalTestBase
         res.IsSuccess.Should().BeTrue(Dump(res));
         var id = ((SubmitApprovalResponse)res.Data!).InstanceId!.Value;
         (await Db.Context.Set<AppUser>().FirstAsync(u => u.UserId == "u20")).IsActive = false;
-        await Db.Context.SaveChangesAsync();
+        await Db.Context.SaveForTestsAsync();
         Db.Context.ChangeTracker.Clear();
 
         As("buyer2");
@@ -360,7 +361,7 @@ public class ApprovalPolicyLimitsTests : ApprovalTestBase
     {
         await AddUsers(50);
         (await Db.Context.Set<AppUser>().FirstAsync(u => u.UserId == "u50")).IsActive = false;
-        await Db.Context.SaveChangesAsync();
+        await Db.Context.SaveForTestsAsync();
         Db.Context.ChangeTracker.Clear();
         var r = await WithFlow(Def(null, Stage("fix", Users(UserIds(50)))) with { FallbackApprovers = Users("fin1", "fin2") });
         var res = await SubmitSmall(r);   // 49 + 2 = 51，整關合計超過技術上限 50
@@ -374,7 +375,7 @@ public class ApprovalPolicyLimitsTests : ApprovalTestBase
         await AddUsers(15);
         var r = await WithFlow(Def(null, Stage("board", Group(BoardGroup))) with { FallbackApprovers = Users(UserIds(15)) });
         Db.Context.RemoveRange(Db.Context.Set<UserGroupMapping>().Where(m => m.GroupId == BoardGroup));   // 群組成員全部調走
-        await Db.Context.SaveChangesAsync();
+        await Db.Context.SaveForTestsAsync();
         Db.Context.ChangeTracker.Clear();
         await SetOverride(r, PolicyCatalog.ApprovalMaxApprovers, "10");
         var res = await SubmitSmall(r);
@@ -414,9 +415,9 @@ public class ApprovalPolicyLimitsTests : ApprovalTestBase
         await AddUsers(51);
         var big = new PermissionGroup { Key = "big15", NameI18n = Text("big15") };
         Db.Context.Add(big);
-        await Db.Context.SaveChangesAsync();
+        await Db.Context.SaveForTestsAsync();
         foreach (var u in UserIds(15)) Db.Context.Add(new UserGroupMapping { GroupId = big.Id, UserId = u });
-        await Db.Context.SaveChangesAsync();
+        await Db.Context.SaveForTestsAsync();
         Db.Context.ChangeTracker.Clear();
         var r = await WithFlow(Def(null, Stage("fix", Users(UserIds(1)))));
         await SetOverride(r, PolicyCatalog.ApprovalMaxApprovers, "10");

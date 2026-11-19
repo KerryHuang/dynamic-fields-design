@@ -17,6 +17,7 @@ using FluentAssertions;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 using Record = DynamicModules.Domain.Entities.Dynamic.Record;
+using DynamicModules.TestSupport;
 
 namespace DynamicModules.ApplicationTests.Dynamic;
 
@@ -54,14 +55,14 @@ public class ConversionHardeningTests : ConversionTestBase
             {
                 GroupId = sales, ProgramCode = (await Detail(m)).ProgramCode, CanRead = true, CanAdd = add, CanAmt = true
             });
-        await Db.Context.SaveChangesAsync();
+        await Db.Context.SaveForTestsAsync();
     }
 
     private async Task Restrict(long fieldId, FieldAccess access)
     {
         var sales = Db.Context.Set<PermissionGroup>().Single(g => g.Key == "sales").Id;
         Db.Context.Set<FieldPermission>().Add(new FieldPermission { FieldId = fieldId, GroupId = sales, Access = access });
-        await Db.Context.SaveChangesAsync();
+        await Db.Context.SaveForTestsAsync();
     }
 
     // ───────── 1. 複製不能繞過目標欄位的寫入權限 ─────────

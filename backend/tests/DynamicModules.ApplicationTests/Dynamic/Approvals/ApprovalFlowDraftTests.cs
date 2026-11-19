@@ -6,6 +6,7 @@ using DynamicModules.Domain.Repositories.Dynamic;
 using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
 using static DynamicModules.ApplicationTests.Dynamic.Approvals.ApprovalGraphTestKit;
+using DynamicModules.TestSupport;
 
 namespace DynamicModules.ApplicationTests.Dynamic.Approvals;
 
@@ -210,7 +211,7 @@ public class ApprovalFlowDraftTests : ApprovalTestBase
         (await Send(new SaveApprovalFlowDraftRequest("po-g", Input("po-g", r.Confirmed, 1, Linear("fin2"), baseVersionId: v1)))).IsSuccess.Should().BeTrue();
         var v2 = new ApprovalFlowVersion { FlowId = flow.Id, Version = 2, Definition = Linear("emp1"), CreatedBy = "admin", CreatedTime = SeedTime };
         Db.Context.Add(v2);
-        await Db.Context.SaveChangesAsync();
+        await Db.Context.SaveForTestsAsync();
         await Db.Context.Set<ApprovalFlow>().Where(f => f.Id == flow.Id).ExecuteUpdateAsync(s => s.SetProperty(f => f.CurrentVersionId, v2.Id));
         var rev = Flow("po-g").DraftJson;
 
@@ -535,7 +536,7 @@ public class ApprovalFlowDraftTests : ApprovalTestBase
         var r = await Rig();
         await SeedGraphFlow(r, "po-g", r.Confirmed, 1, Linear());
         Db.Context.Add(new UserProgramPrivilege { UserId = "emp1", ProgramCode = "DYN00000", CanRead = true });
-        await Db.Context.SaveChangesAsync();
+        await Db.Context.SaveForTestsAsync();
         As("emp1");
 
         (await Send(new SaveApprovalFlowDraftRequest("po-g", Input("po-g", r.Confirmed, 1, Linear("fin2"))))).IsForbidden.Should().BeTrue();

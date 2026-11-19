@@ -6,6 +6,7 @@ using DynamicModules.Application.Dynamic.RecordService.Queries.GetRecord;
 using DynamicModules.Domain.Entities.Dynamic;
 using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
+using DynamicModules.TestSupport;
 
 namespace DynamicModules.ApplicationTests.Dynamic.Approvals;
 
@@ -50,9 +51,9 @@ public class ApprovalManagerActionTests : ApprovalTestBase
         var everyone = Db.Context.Set<PermissionGroup>().AsNoTracking().Single(g => g.Key == "everyone");
         var group = new PermissionGroup { Key = $"approvers-{user}", NameI18n = Text(user) };
         Db.Context.Add(group);
-        await Db.Context.SaveChangesAsync();
+        await Db.Context.SaveForTestsAsync();
         Db.Context.Add(new UserGroupMapping { GroupId = group.Id, UserId = user });
-        await Db.Context.SaveChangesAsync();
+        await Db.Context.SaveForTestsAsync();
         Db.Context.ChangeTracker.Clear();
         As("admin");
         var res = await Send(new SaveModulePermissionsRequest(module, new ModulePermissionsDto(
@@ -144,7 +145,7 @@ public class ApprovalManagerActionTests : ApprovalTestBase
         asGm.IsForbidden.Should().BeTrue(Dump(asGm));   // 任務負責人沒有 Approve 軸
         // 有 Approve，但資料範圍只含自己的記錄（這筆是 buyer1 的）；不在 everyone 群組，否則 All 範圍會被其他群組帶進來
         Db.Context.Add(new AppUser { UserId = "scoped", DisplayName = "scoped" });
-        await Db.Context.SaveChangesAsync();
+        await Db.Context.SaveForTestsAsync();
         Db.Context.ChangeTracker.Clear();
         await GrantApprove(r.Module, "scoped", DataScope.Own);
         var res = await Cancel(id, "scoped");
@@ -215,7 +216,7 @@ public class ApprovalManagerActionTests : ApprovalTestBase
     {
         var (_, id) = await Stage1();
         Db.Context.Add(new ApprovalStageRun { InstanceId = id, Seq = 99, StageCode = null, Status = ApprovalStageStatus.Queued, AddedByUserId = "gm", AddSignUserIds = ["fin1"] });
-        await Db.Context.SaveChangesAsync();
+        await Db.Context.SaveForTestsAsync();
         Db.Context.ChangeTracker.Clear();
 
         (await Cancel(id, "admin")).IsSuccess.Should().BeTrue();

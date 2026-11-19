@@ -60,7 +60,7 @@ public abstract class DesignerTestBase : IAsyncLifetime
     {
         Db = await TestDb.CreateAsync();
         await SeedData.EnsureSeededAsync(Db.Context);
-        await DemoPeople.EnsureAsync(Db.Context);
+        await TestPermits.RunForTestsAsync(() => DemoPeople.EnsureAsync(Db.Context));
         var services = new ServiceCollection();
         services.AddApplication();
         services.AddPersistenceRepositories();

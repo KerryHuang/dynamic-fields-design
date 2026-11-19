@@ -25,6 +25,7 @@ using FluentAssertions;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using DynamicModules.TestSupport;
 
 namespace DynamicModules.ApplicationTests.Dynamic;
 
@@ -46,7 +47,7 @@ public class ViewServiceTests : IAsyncLifetime
     {
         _db = await TestDb.CreateAsync();
         await SeedData.EnsureSeededAsync(_db.Context);
-        await DemoPeople.EnsureAsync(_db.Context);
+        await TestPermits.RunForTestsAsync(() => DemoPeople.EnsureAsync(_db.Context));
         var services = new ServiceCollection();
         services.AddApplication();
         services.AddPersistenceRepositories();
@@ -106,7 +107,7 @@ public class ViewServiceTests : IAsyncLifetime
         {
             GroupId = sales.Id, ProgramCode = programCode, CanRead = true, CanAdd = true, CanEdit = edit, CanAmt = pricing
         });
-        await _db.Context.SaveChangesAsync();
+        await _db.Context.SaveForTestsAsync();
     }
 
     private async Task<ViewResponse> Create(
@@ -429,7 +430,7 @@ public class ViewServiceTests : IAsyncLifetime
         };
         shared.StampCreated("admin", new DateTime(2026, 11, 3));
         _db.Context.Set<ListView>().Add(shared);
-        await _db.Context.SaveChangesAsync();
+        await _db.Context.SaveForTestsAsync();
 
         (await Send(new UpdateViewRequest(shared.Id, Text("改"), [title], null, [], false))).IsForbidden.Should().BeTrue();
         (await Send(new DeleteViewRequest(shared.Id))).IsForbidden.Should().BeTrue();
