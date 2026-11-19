@@ -38,6 +38,8 @@ public interface IOpsIncidentRepository
 
     Task<List<OpsIncident>> PageAsync(OpsIncidentQuery query, int take, CancellationToken ct);
     Task<List<OpsIncident>> ListUnresolvedAsync(CancellationToken ct);
+    /// <summary>這些規則未結、代碼為 code 的事件（規則暫停事件在恢復或刪規則時結案，§17.2.7）。</summary>
+    Task<List<OpsIncident>> ListUnresolvedByRuleAsync(string ruleKind, IReadOnlyCollection<long> ruleIds, string code, CancellationToken ct);
 
     /// <summary>刪一批結案早於 cutoff 的事件（樣本隨外鍵串聯刪除）。</summary>
     Task<int> PurgeResolvedBatchAsync(DateTime cutoffUtc, int batchSize, CancellationToken ct);

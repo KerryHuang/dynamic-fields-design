@@ -36,5 +36,17 @@ public record DeleteTaskRuleRequest(string ModuleKey, string Key)
     public PermissionAction RequiredDesignerAction => PermissionAction.Edit;
 }
 
+/// <summary>
+/// 恢復被系統自動暫停的規則（維運設計 §17.2.7、O2-U6）：權限與改規則相同（設計器編輯權＋共用主檔設計權）。
+/// 沒有暫停回 409 <c>ruleNotPaused</c>；成功回該規則（<c>autoPause</c> 為 null、帶 <c>lastPause</c>）。暫停期間略過的記錄不補產任務（O2-U7b）。
+/// </summary>
+public record ResumeTaskRuleRequest(string ModuleKey, string Key)
+    : IRequest<ServiceResult>, ITransactionalRequest, IDesignerRequest, IMasterDesignRequest, IAuditedRequest
+{
+    public AuditAction Audit => AuditAction.For("taskRule.resume", AuditTargets.TaskRule, Key);
+    public IReadOnlyList<MasterDesignTarget> MasterTargets => [new(ModuleKey: ModuleKey)];
+    public PermissionAction RequiredDesignerAction => PermissionAction.Edit;
+}
+
 /// <summary>記錄詳細頁的「套用任務範本」：只收啟用中、應用程式開啟中的 manual 規則。成功時 Data 是 <see cref="TaskService.RecordTasksResponse"/>。</summary>
 public sealed record ApplyTaskRuleRequest(long RecordId, string RuleKey) : IRequest<ServiceResult>, ITransactionalRequest;

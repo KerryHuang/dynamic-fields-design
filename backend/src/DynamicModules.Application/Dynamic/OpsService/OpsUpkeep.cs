@@ -55,6 +55,8 @@ public sealed class OpsUpkeepJob(OpsUpkeepOptions options) : IScheduledJob
         await PurgeAsync(context, sender, OpsPurgeTarget.IncidentSample,
             now.AddDays(-await policy.IntAsync(PolicyCatalog.OpsIncidentSampleRetentionDays, ct)), ct);
         await PurgeAsync(context, sender, OpsPurgeTarget.Incident, now.AddDays(-await policy.IntAsync(PolicyCatalog.OpsIncidentRetentionDays, ct)), ct);
+        // 規則失敗列只在滑動窗口內有用；用窗口的上限算，設定調大時不會先被清掉（維運設計 §17.2.7、§17.4）
+        await PurgeAsync(context, sender, OpsPurgeTarget.RuleFailure, now.AddMinutes(-PolicyCatalog.OpsRulePauseWindowMinutes.Max), ct);
         return new JobOutcome(ScheduledJobStatus.Succeeded);
     }
 
@@ -83,7 +85,7 @@ public sealed class OpsUpkeepOptions
 }
 
 /// <summary>保留天數清理的對象；摘要的鍵（<c>deleted.auditLog</c>…）與列舉名稱的 camelCase 相同。</summary>
-public enum OpsPurgeTarget { AuditLog, HealthResult, Incident, IncidentSample, AlertOutbox }
+public enum OpsPurgeTarget { AuditLog, HealthResult, Incident, IncidentSample, AlertOutbox, RuleFailure }
 
 /// <summary>
 /// 刪掉一批超過保留天數的列，有刪到時同一交易寫一列 <c>ops.retention.purge</c>（維運設計 §17.2.1「不經 AuditBehavior 的寫入點」）；
@@ -94,7 +96,8 @@ public sealed record PurgeOpsBatchRequest(JobLeaseFence Fence, OpsPurgeTarget Ta
 
 public class PurgeOpsBatchHandler(
     IScheduledJobRepository jobs, IAuditLogRepository auditLog, IHealthCheckRepository checks, IOpsIncidentRepository incidents,
-    IAlertOutboxRepository outbox, IAuditLog audit, IUnitOfWork uow) : IRequestHandler<PurgeOpsBatchRequest, ServiceResult>
+    IAlertOutboxRepository outbox, IRuleHealthRepository ruleHealth, IAuditLog audit, IUnitOfWork uow)
+    : IRequestHandler<PurgeOpsBatchRequest, ServiceResult>
 {
     public async Task<ServiceResult> Handle(PurgeOpsBatchRequest request, CancellationToken ct)
     {
@@ -107,6 +110,7 @@ public class PurgeOpsBatchHandler(
             OpsPurgeTarget.Incident => await incidents.PurgeResolvedBatchAsync(request.CutoffUtc, request.BatchSize, ct),
             OpsPurgeTarget.IncidentSample => await incidents.PurgeSamplesBatchAsync(request.CutoffUtc, request.BatchSize, ct),
             OpsPurgeTarget.AlertOutbox => await outbox.PurgeBatchAsync(request.CutoffUtc, request.BatchSize, ct),
+            OpsPurgeTarget.RuleFailure => await ruleHealth.PurgeFailuresBatchAsync(request.CutoffUtc, request.BatchSize, ct),
             _ => throw new ArgumentOutOfRangeException(nameof(request)),
         };
         if (deleted > 0)
@@ -128,7 +132,7 @@ public class ExpireIncidentsBatchHandler(IScheduledJobRepository jobs, IOpsIncid
 {
     private static readonly IncidentSource[] Sources = [IncidentSource.Server, IncidentSource.Client, IncidentSource.Config, IncidentSource.Security];
     /// <summary>暫停事件只在恢復或刪規則時結案（o2d 的錯誤碼）。</summary>
-    private static readonly string[] Excluded = ["autoPaused"];
+    private static readonly string[] Excluded = [RulePause.RuleErrorCodes.AutoPaused];
 
     public async Task<ServiceResult> Handle(ExpireIncidentsBatchRequest request, CancellationToken ct)
     {
@@ -138,12 +142,15 @@ public class ExpireIncidentsBatchHandler(IScheduledJobRepository jobs, IOpsIncid
     }
 }
 
-/// <summary>嚴重事件的重複提醒：條件式更新搶到（影響 1 列）才發通知，兩台不會各發一次。</summary>
+/// <summary>
+/// 嚴重事件的重複提醒：條件式更新搶到（影響 1 列）才發通知，兩台不會各發一次。收件人照事件類別（客戶設定類走 <c>ops.configIssueRecipients</c>，
+/// 任務規則的 <c>ruleEditor</c> 取規則目前的最後修改者）；規則暫停事件沿用暫停通知的種類與連結。
+/// </summary>
 public sealed record RenotifyIncidentRequest(JobLeaseFence Fence, long IncidentId, DateTime CutoffUtc) : IRequest<ServiceResult>, ITransactionalRequest;
 
 public class RenotifyIncidentHandler(
-    IScheduledJobRepository jobs, IOpsIncidentRepository incidents, OpsNotifier notifier, AlertOutboxWriter alerts, IUnitOfWork uow)
-    : IRequestHandler<RenotifyIncidentRequest, ServiceResult>
+    IScheduledJobRepository jobs, IOpsIncidentRepository incidents, OpsNotifier notifier, AlertOutboxWriter alerts, IUnitOfWork uow,
+    ITaskRuleRepository taskRules) : IRequestHandler<RenotifyIncidentRequest, ServiceResult>
 {
     public async Task<ServiceResult> Handle(RenotifyIncidentRequest request, CancellationToken ct)
     {
@@ -151,7 +158,10 @@ public class RenotifyIncidentHandler(
         if (!await jobs.HoldsLeaseAsync(fence.JobKey, fence.Owner, fence.NowUtc, ct)) return ServiceResult.Conflict(null, JobLeaseFence.LostCode);
         if (!await incidents.TryClaimRenotifyAsync(request.IncidentId, request.CutoffUtc, fence.NowUtc, ct)) return ServiceResult.Success(false);
         var i = (await incidents.GetAsync(request.IncidentId, ct))!;
-        await notifier.NotifyAsync(i.Id, i.TitleKey, IncidentTitles.FromJson(i.TitleParamsJson), null, ct);
+        var rule = i is { RuleKind: Common.Observability.RuleFailureTag.TaskRule, RuleId: { } ruleId } ? await taskRules.GetByIdAsync(ruleId, ct) : null;
+        var paused = i.Code == RulePause.RuleErrorCodes.AutoPaused && rule is not null && i.ModuleKey is not null;
+        await notifier.NotifyAsync(i.Id, i.TitleKey, IncidentTitles.FromJson(i.TitleParamsJson), paused ? RulePause.RuleIncidents.RuleLink(i.ModuleKey!, rule!.Key) : null,
+            ct, i.Category, rule is null ? null : RulePause.RuleIncidents.EditorOf(rule), paused ? NotificationKinds.OpsRulePaused : null);
         await alerts.EnqueueAsync(i.Id, AlertTransition.Renotify, null, ct);
         await uow.CommitAsync(ct);
         return ServiceResult.Success(true);

@@ -8,9 +8,10 @@ namespace DynamicModules.Application.Common.Observability;
 public static class RuleFailureTag
 {
     public const string Event = "event", Check = "check", TaskRule = "taskRule";
-    private const string KindKey = "formwright.ruleKind", IdKey = "formwright.ruleId";
+    private const string KindKey = "formwright.ruleKind", IdKey = "formwright.ruleId", EvaluatedKey = "formwright.ruleEvaluatedUtc";
 
-    public static bool Mark(Exception e, string ruleKind, long ruleId)
+    /// <param name="evaluatedUtc">規則的評估時間（任務規則的失敗計數以它排先後，不用補記時間；維運設計 §17.2.7）。</param>
+    public static bool Mark(Exception e, string ruleKind, long ruleId, DateTime? evaluatedUtc = null)
     {
         try
         {
@@ -18,6 +19,7 @@ public static class RuleFailureTag
             {
                 e.Data[KindKey] = ruleKind;
                 e.Data[IdKey] = ruleId;
+                if (evaluatedUtc is { } at) e.Data[EvaluatedKey] = at;
             }
         }
         catch (Exception)
@@ -33,5 +35,13 @@ public static class RuleFailureTag
         for (var cur = e; cur is not null; cur = cur.InnerException)
             if (cur.Data[KindKey] is string kind) return (kind, cur.Data[IdKey] as long?);
         return (null, null);
+    }
+
+    /// <summary>讀標記的評估時間（與 <see cref="Read"/> 同一個例外）；沒有回 null。</summary>
+    public static DateTime? ReadEvaluatedUtc(Exception e)
+    {
+        for (var cur = e; cur is not null; cur = cur.InnerException)
+            if (cur.Data[KindKey] is string) return cur.Data[EvaluatedKey] as DateTime?;
+        return null;
     }
 }

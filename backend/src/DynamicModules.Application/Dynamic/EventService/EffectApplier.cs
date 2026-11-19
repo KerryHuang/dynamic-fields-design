@@ -1,6 +1,7 @@
 using System.Globalization;
 using System.Text.Json;
 using DynamicModules.Application.Common;
+using DynamicModules.Application.Dynamic.OpsService.RulePause;
 using DynamicModules.Application.Dynamic.LedgerService;
 using DynamicModules.Application.Dynamic.RecordService;
 using DynamicModules.Application.Dynamic.RecordService.Commands.UpdateRecord;
@@ -34,7 +35,7 @@ public class EffectApplier(
                 "update" => await UpdateAsync(run, fx, ct),
                 "reverse" => await ReverseAsync(run, fx, ct),
                 "custom" => await CustomAsync(run, fx, ct),
-                _ => ServiceResult.Conflict($"未知的效果種類 {fx.Kind}")
+                _ => ServiceResult.Conflict($"未知的效果種類 {fx.Kind}", RuleErrorCodes.EffectUnknownKind)
             };
             if (failure is not null) return Wrap(run, fx, failure);
         }
@@ -47,7 +48,7 @@ public class EffectApplier(
         var message = $"連動事件「{run.Event.Key}」的效果「{fx.Code}」失敗：{reason}";
         return inner.IsInvalid
             ? ServiceResult.Invalid(new Dictionary<string, string[]> { [RecordValueProcessor.RecordErrorKey] = [message] })
-            : ServiceResult.Conflict(message);
+            : ServiceResult.Conflict(message, inner.Code is { } code && RuleErrorCodes.All.Contains(code) ? code : null);
     }
 
     // ---- create ----
@@ -55,17 +56,17 @@ public class EffectApplier(
     private async Task<ServiceResult?> CreateAsync(EffectRun run, EventEffect fx, CancellationToken ct)
     {
         var target = await modules.GetByKeyAsync(fx.TargetModuleKey!, includeChildren: true, ct);
-        if (target is null || !target.IsWritable()) return ServiceResult.Conflict($"目標模組「{fx.TargetModuleKey}」未啟用或已關閉");
+        if (target is null || !target.IsWritable()) return ServiceResult.Conflict($"目標模組「{fx.TargetModuleKey}」未啟用或已關閉", RuleErrorCodes.EffectTargetUnavailable);
 
         var lines = new List<(long ItemKey, IReadOnlyDictionary<string, JsonElement?>? Values, Module? Module)> { (0, null, null) };
         if (!string.IsNullOrEmpty(fx.Each))
         {
             var (child, parentField) = (await modules.ListDetailModulesAsync(run.SourceModule.Key, ct)).FirstOrDefault(d => d.Child.Key == fx.Each);
-            if (child is null) return ServiceResult.Conflict($"來源沒有明細模組「{fx.Each}」");
+            if (child is null) return ServiceResult.Conflict($"來源沒有明細模組「{fx.Each}」", RuleErrorCodes.EffectMissingDetail);
             var childModule = (await modules.GetByIdAsync(child.Id, includeChildren: true, ct))!;
             var rows = (await records.ListByRefAsync(parentField.Id, run.SourceRecordId.ToString(CultureInfo.InvariantCulture), ct))
                 .Where(r => !r.DeleteFlag).OrderBy(r => r.Id).ToList();
-            if (rows.Count > MaxEachRows) return ServiceResult.Conflict($"明細列超過 {MaxEachRows} 列，無法產生連動記錄");
+            if (rows.Count > MaxEachRows) return ServiceResult.Conflict($"明細列超過 {MaxEachRows} 列，無法產生連動記錄", RuleErrorCodes.EffectTooManyRows);
             lines = rows.Select(r => (r.Id, (IReadOnlyDictionary<string, JsonElement?>?)RecordValueProcessor.Parse(r.ValuesJson), (Module?)childModule)).ToList();
         }
 
@@ -122,7 +123,7 @@ public class EffectApplier(
         if (!long.TryParse(idText, NumberStyles.Integer, CultureInfo.InvariantCulture, out var targetId)) return null;
 
         var target = await modules.GetByKeyAsync(fx.TargetModuleKey!, includeChildren: true, ct);
-        if (target is null || !target.IsWritable()) return ServiceResult.Conflict($"目標模組「{fx.TargetModuleKey}」未啟用或已關閉");
+        if (target is null || !target.IsWritable()) return ServiceResult.Conflict($"目標模組「{fx.TargetModuleKey}」未啟用或已關閉", RuleErrorCodes.EffectTargetUnavailable);
         var (values, error) = BuildValues(run, fx, target, null, null);
         if (error is not null) return ServiceResult.Conflict(error);
         return await writer.UpdateAsync(targetId, values, ct) is { IsSuccess: false } failed ? failed : null;
@@ -133,7 +134,7 @@ public class EffectApplier(
     private async Task<ServiceResult?> ReverseAsync(EffectRun run, EventEffect fx, CancellationToken ct)
     {
         var target = await modules.GetByKeyAsync(fx.TargetModuleKey!, includeChildren: true, ct);
-        if (target is null || !target.IsWritable()) return ServiceResult.Conflict($"目標模組「{fx.TargetModuleKey}」未啟用或已關閉");
+        if (target is null || !target.IsWritable()) return ServiceResult.Conflict($"目標模組「{fx.TargetModuleKey}」未啟用或已關閉", RuleErrorCodes.EffectTargetUnavailable);
         var ledger = await ledgers.GetByModuleAsync(target.Id, ct);
         if (ledger is null) return ServiceResult.Conflict($"模組「{target.Key}」不是分錄，無法沖銷");
 
@@ -161,7 +162,7 @@ public class EffectApplier(
     private async Task<ServiceResult?> CustomAsync(EffectRun run, EventEffect fx, CancellationToken ct)
     {
         var handler = handlers.Find(fx.Handler);
-        if (handler is null) return ServiceResult.Conflict($"找不到外掛處理器「{fx.Handler}」");
+        if (handler is null) return ServiceResult.Conflict($"找不到外掛處理器「{fx.Handler}」", RuleErrorCodes.EffectHandlerMissing);
         var context = new EffectContext(run.SourceModule.Key, run.SourceRecordId, run.Source, fx.Args, operation.OperationId, run.Depth,
             writer.Restrict(handler.DeclareWrites(fx.Args), run.OwnerUserId));
         var result = await handler.ApplyAsync(context, ct);

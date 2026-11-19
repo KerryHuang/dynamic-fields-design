@@ -12,7 +12,8 @@ namespace DynamicModules.Application.Dynamic.OpsService.Incidents;
 public static partial class IncidentTitles
 {
     public const string ServerError = "ops.title.serverError", ClientError = "ops.title.clientError",
-        AdminChanged = "ops.title.adminChanged", HealthPrefix = "ops.title.health.", ChannelFailed = "ops.title.channelFailed";
+        AdminChanged = "ops.title.adminChanged", HealthPrefix = "ops.title.health.", ChannelFailed = "ops.title.channelFailed",
+        ConfigPrefix = "ops.title.config.", RulePaused = "ops.title.rulePaused";
 
     /// <summary>JavaScript 內建錯誤名稱；其他一律換成 <c>Error</c>（§17.2.2 標題表）。</summary>
     private static readonly HashSet<string> JsErrorNames = new(StringComparer.Ordinal)
@@ -33,6 +34,16 @@ public static partial class IncidentTitles
     /// <summary>通道失敗（§17.2.2 標題表）：失敗階段與 SMTP 回應碼。</summary>
     public static IReadOnlyDictionary<string, object> Channel(string stage, int? serverCode) =>
         Params(("stage", Code(stage)), ("serverCode", serverCode is { } c ? (long)c : null));
+
+    /// <summary>客戶設定類（§17.2.2 標題表）：規則種類、規則代碼、模組代碼、錯誤碼。</summary>
+    public static IReadOnlyDictionary<string, object> Config(string ruleKind, string? ruleKey, string? moduleKey, string errorCode) =>
+        Params(("ruleKind", Code(ruleKind)), ("ruleKey", Code(ruleKey)), ("moduleKey", Code(moduleKey)), ("errorCode", Code(errorCode)));
+
+    /// <summary>規則自動暫停：另帶門檻與窗口內的失敗次數。</summary>
+    public static IReadOnlyDictionary<string, object> Paused(string ruleKind, string? ruleKey, string? moduleKey, string? lastErrorCode, int threshold,
+        int failures) =>
+        Params(("ruleKind", Code(ruleKind)), ("ruleKey", Code(ruleKey)), ("moduleKey", Code(moduleKey)), ("errorCode", Code(lastErrorCode)),
+            ("threshold", (long)threshold), ("failures", (long)failures));
 
     public static string? ToJson(IReadOnlyDictionary<string, object>? p) => p is null or { Count: 0 } ? null : JsonSerializer.Serialize(p);
 
@@ -64,6 +75,9 @@ public static partial class IncidentTitles
             AdminChanged => AlertMailText.Get(locale, P("change") == "granted" ? AlertMailText.TitleAdminGranted : AlertMailText.TitleAdminRevoked),
             ChannelFailed => AlertMailText.Get(locale, AlertMailText.TitleChannel, AlertMailText.Label(locale, "stage." + P("stage"))
                 + (P("serverCode") is { Length: > 0 } c ? AlertMailText.Get(locale, AlertMailText.TitleChannelCode, c) : "")),
+            RulePaused => AlertMailText.Get(locale, AlertMailText.TitleRulePaused, P("ruleKey"), P("failures")),
+            _ when titleKey.StartsWith(ConfigPrefix, StringComparison.Ordinal) => AlertMailText.Get(locale, AlertMailText.TitleConfig, P("ruleKey"),
+                AlertMailText.Label(locale, "ruleError." + titleKey[ConfigPrefix.Length..])),
             _ when titleKey.StartsWith(HealthPrefix, StringComparison.Ordinal) => AlertMailText.Get(locale, AlertMailText.TitleHealth,
                 AlertMailText.CheckName(locale, titleKey[HealthPrefix.Length..]), AlertMailText.Label(locale, "status." + P("status"))),
             _ => titleKey,

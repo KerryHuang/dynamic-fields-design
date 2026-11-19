@@ -15,6 +15,8 @@ public enum PolicyKind { Integer, Boolean, Choice, RoleSet, CodeList, Recipients
 /// RoleSet 依選項順序、逗號分隔、可為空字串；CodeList 小寫、去前導點、去重保留首次順序、逗號分隔。
 /// Recipients 是 <c>admins</c>、<c>group:&lt;id&gt;</c>、<c>user:&lt;userId&gt;</c> 的組合（逗號分隔、去重保留首次順序、項數 Min 到 Max），只檢查語法，存在與否由 Application 驗。
 /// <see cref="Forbidden"/> 是 CodeList 的寫死黑名單（安全檢查）：含黑名單項目的值一律不合法。
+/// <see cref="DynamicRecipients"/> 是 Recipients 另外允許的動態項目（維運設計 §17.2.5、O2-T15；例如 <c>ruleEditor</c>＝該規則的最後修改者），
+/// 沒列的政策收到這些項目一律不合法。
 /// </summary>
 public sealed partial record PolicyDefinition(
     string Code,
@@ -26,8 +28,12 @@ public sealed partial record PolicyDefinition(
     int Max = 0,
     IReadOnlyList<string>? Options = null,
     string? Unit = null,
-    IReadOnlyList<string>? Forbidden = null)
+    IReadOnlyList<string>? Forbidden = null,
+    IReadOnlyList<string>? DynamicRecipients = null)
 {
+    /// <summary>收件人政策的動態項目：該規則的最後修改者（沒有就建立者；停用的略過）。</summary>
+    public const string RuleEditor = "ruleEditor";
+
     public string SettingKey => $"policy.{Code}";
 
     /// <summary>合法就回標準字串，否則 null。</summary>
@@ -60,7 +66,7 @@ public sealed partial record PolicyDefinition(
             }
             case PolicyKind.Recipients:
             {
-                var items = Split(raw).Select(RecipientItem).ToList();
+                var items = Split(raw).Select(i => DynamicRecipients is not null && DynamicRecipients.Contains(i, StringComparer.Ordinal) ? i : RecipientItem(i)).ToList();
                 if (items.Any(i => i is null)) return null;
                 var distinct = items.Select(i => i!).Distinct(StringComparer.Ordinal).ToList();
                 return distinct.Count >= Min && distinct.Count <= Max ? string.Join(",", distinct) : null;

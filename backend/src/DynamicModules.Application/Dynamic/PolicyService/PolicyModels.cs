@@ -4,10 +4,13 @@ using DynamicModules.Domain.Policies;
 
 namespace DynamicModules.Application.Dynamic.PolicyService;
 
-/// <summary>系統政策一列。Value 沒設時為 null（序列化時省略）；Min／Max 只在 Integer、CodeList，Options 只在 Choice、RoleSet。</summary>
+/// <summary>
+/// 系統政策一列。Value 沒設時為 null（序列化時省略）；Min／Max 只在 Integer、CodeList，Options 只在 Choice、RoleSet；
+/// DynamicRecipients 只在允許動態收件人的政策（<c>ops.configIssueRecipients</c> 的 <c>ruleEditor</c>，維運設計 §17.2.5）。
+/// </summary>
 public sealed record SystemPolicyResponse(
     string Code, string Category, PolicyKind Kind, PolicyScope Scope, string? Unit, int? Min, int? Max, IReadOnlyList<string>? Options,
-    JsonElement Factory, JsonElement? Value, JsonElement Effective);
+    JsonElement Factory, JsonElement? Value, JsonElement Effective, IReadOnlyList<string>? DynamicRecipients = null);
 
 /// <summary>模組政策一列。SystemValue 是全系統生效值（全系統值或出廠值）；Override 沒設時為 null。</summary>
 public sealed record ModulePolicyResponse(
@@ -56,7 +59,7 @@ public static class PolicyJson
     public static SystemPolicyResponse System(PolicyDefinition def, PolicyResolution r) => new(
         def.Code, def.Category, def.Kind, def.Scope, def.Unit,
         HasRange(def) ? def.Min : null, HasRange(def) ? def.Max : null, HasOptions(def) ? def.Options : null,
-        ToJson(def, r.Factory), r.System is null ? null : ToJson(def, r.System), ToJson(def, r.System ?? r.Factory));
+        ToJson(def, r.Factory), r.System is null ? null : ToJson(def, r.System), ToJson(def, r.System ?? r.Factory), def.DynamicRecipients);
 
     public static ModulePolicyResponse Module(PolicyDefinition def, PolicyResolution r) => new(
         def.Code, def.Category, def.Kind, def.Unit,

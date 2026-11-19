@@ -24,4 +24,9 @@ public class TaskRulesController(IMediator mediator) : ControllerBase
     [HttpDelete("modules/{key}/task-rules/{ruleKey}")]
     public async Task<IActionResult> Delete(string key, string ruleKey) =>
         (await mediator.Send(new DeleteTaskRuleRequest(key, ruleKey))).ToActionResult(this);
+
+    /// <summary>恢復被系統自動暫停的規則（維運設計 §17.5）；沒有暫停回 409 ruleNotPaused。</summary>
+    [HttpPost("modules/{key}/task-rules/{ruleKey}/resume")]
+    public async Task<IActionResult> Resume(string key, string ruleKey) =>
+        (await mediator.Send(new ResumeTaskRuleRequest(key, ruleKey))).ToActionResult(this);
 }
