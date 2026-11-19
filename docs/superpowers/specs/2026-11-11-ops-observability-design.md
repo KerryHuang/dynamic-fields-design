@@ -1360,7 +1360,7 @@ O2 做六件事：
 - 佇列寫不進去時（看門狗偵測到唯讀、空間滿、連不上），改走記憶體直送佇列：上限 20 封（技術限制）、同一個 `TransitionId` 只寄一次、照樣重試（1、5、15、60 分鐘、最多 5 次）與每小時上限（以本實例記憶體計數，超過的不寄、只記 Warning）。
 - **執行者是看門狗**，不是 `ops.monitor`：資料庫不可寫時排程器搶不到租約（租約本身是 `UPDATE`），`ops.monitor` 根本不會跑。看門狗除了檢查迴圈，另有一條寄送迴圈（同一個 hosted service 的第二個背景迴圈），每 60 秒送直送佇列裡到期的信，交易外、單封逾時 30 秒，寄送卡住不會拖住檢查。多實例時每個實例各自直送自己偵測到的轉換，同一故障可能每台各寄一封（已知限制，§17.9）。
 - 通道設定讀不到時用記憶體裡最後一次成功讀到的設定（密碼仍是加密字串，寄送時才解；信件語系也用那份設定的）；啟動後從沒讀到過就寄不出去，只剩 log 與 `/api/health/ready`。
-- 資料庫恢復可寫後，`PendingIncidentWrites` 補寫時會再產生佇列列：直送已寄出的 `TransitionId` 直接記成 `sentDirect`（留紀錄、不再寄）；還沒寄出的照常記 `pending`；但同一檢查在補寫佇列後面已經結案的，前面的開啟、升級信已經過時，記 `skipped`（站內通知照補，§17.2.5）。直送紀錄只在本實例記憶體，所以這個比對只對本實例直送的轉換有效（已知限制）。
+- 資料庫恢復可寫後，`PendingIncidentWrites` 補寫時會再產生佇列列：直送已寄出的 `TransitionId` 直接記成 `sentDirect`（留紀錄、不再寄）；還沒寄出的照常記 `pending`，直送不再寄；SMTP 正在寄的記成由直送領著的 `sending`，寄完由直送記 `sentDirect`（失敗交回 `pending`）；但同一檢查在補寫佇列後面已經結案的，前面的開啟、升級信已經過時，記 `skipped`（站內通知照補，§17.2.5）。直送紀錄只在本實例記憶體，所以這個比對只對本實例直送的轉換有效（已知限制）。
 
 #### 17.2.7 規則失控自動暫停
 
@@ -1826,7 +1826,7 @@ SmtpChannel {
   lastSuccessUtc?: string; lastFailureUtc?: string; lastError?: string; consecutiveFailures: number;
   editable: boolean;                 // Demo 站為 false
 }
-// PUT system/ops/channels/smtp；password：省略＝不變、""＝清除、其他＝新密碼
+// PUT system/ops/channels/smtp；password：省略或 null＝不變、""＝清除、其他＝新密碼
 { enabled: boolean; host: string; port: number; security: string; userName?: string; password?: string;
   fromAddress: string; fromName?: string; toAddresses: string[]; mailLocale?: string|null /* null＝出廠，省略＝不變 */ }
 // POST system/ops/channels/smtp/test → { sentTo: string[] }
@@ -1971,7 +1971,7 @@ O2 在 pg0 之後，合併前兩種資料庫都要驗（使用者裁決 §3 第 
 | C11 | 以建構的例外驗 `IDatabaseErrors` | `SqliteException` 錯誤碼 8、13、14；`PostgresException` SQLSTATE `25006`、`53100`、`08006`、`57P01`；不帶 SQLSTATE、內層是 `SocketException` 的 `NpgsqlException`；連線池耗盡（內層 `TimeoutException`） | 依序是唯讀、空間滿、連不上；池耗盡仍是忙碌、不是連不上 | ✓ |
 | C12 | 讓存檔的 `SaveChanges` 丟「空間滿」；讓 `SessionMiddleware` 讀帳號時丟「連不上」 | 一般使用者存檔；管理員開監控頁 | 前者 503 `databaseUnwritable` 加 `Retry-After`；後者 503 `databaseUnavailable`；兩者都沒有新增產品缺陷事件 | — |
 | C13 | 排程器關閉（`Ops:Scheduler:Enabled` 否）、SMTP 換成假寄送器、寫入探測回「空間滿」 | 看門狗跑一輪；恢復後補寫 | 不經 `ops.monitor` 就寄出一封直送信、同一 `TransitionId` 只寄一次；補寫後對應的佇列列是 `sentDirect`，沒有第二封 | — |
-| C14 | 讓彙總交易在**提交成功之後**丟例外（交易攔截器在 commit 完成後拋），一筆 `storage.diskFree` 的嚴重結果因此進待補寫佇列 | 看門狗下一輪補寫；再讓同一筆在補寫時又提交後丟一次，再補一輪 | 結果列只有一列（`TransitionId` 唯一）、事件次數只加一次、站內通知與寄送佇列各一則；補寫的交易沒有新增任何列就提交並移除佇列項目 | ✓ |
+| C14 | 讓彙總交易在**提交成功之後**丟例外（交易攔截器在 commit 完成後拋），一筆 `storage.diskFree` 的嚴重結果因此進待補寫佇列 | 看門狗下一輪補寫；再讓同一筆在補寫時又提交後丟一次，再補一輪 | 結果列只有一列（`TransitionId` 唯一）、事件次數只加一次、站內通知與寄送佇列各一則；補寫的交易沒有新增任何列就提交並移除佇列項目。SMTP 已設定的變體（o2c 審查修正）：執行器把這筆交給了直送，佇列寄送者與直送都實際跑（誰先跑、或直送時資料庫讀不到），總寄送剛好一次 | ✓ |
 | C15 | 兩個實例（A、B）的磁碟檢查；B 已寫入 10:03 的 `ok`（總覽 `ok`、`LastCheckedUtc` 10:03），A 在 10:01 的 `critical` 還在待補寫 | A 補寫 10:01；接著 A 寫入 10:04 的 `critical` | 補寫 10:01 後：結果表多一列 10:01，總覽仍是 `ok`、`LastCheckedUtc` 仍是 10:03，事件不重開（已在 10:03 之後結案）；10:04 寫入後：總覽 `critical`、事件以回歸重開、轉換時間 10:04；兩台的補寫與寫入並行時結果一樣 | ✓ 無鎖 |
 | C03 | 資料庫唯讀 | 一般使用者存檔 | 503 `databaseUnwritable` 加 `Retry-After`，沒有新增產品缺陷事件 | ✓ |
 | C04 | 磁碟探測換成假的 `IDiskSpace`（剩 15%、5%） | 看門狗兩輪 | 先開警告、再升嚴重（狀態退回開啟、再通知）；回到 30% 時結案 | — |
@@ -1983,7 +1983,7 @@ O2 在 pg0 之後，合併前兩種資料庫都要驗（使用者裁決 §3 第 
 | D02 | 假寄送器一律失敗 | 跑五次重試（快轉時鐘） | 間隔 1、5、15、60 分；第 5 次後標失敗、開 `channel.smtp` 事件、這件事件沒有進佇列；之後一封成功就結案 | ✓ |
 | D03 | 每小時上限 3 | 一次開 5 件事件 | 寄 3 封，2 列併入摘要；下一個小時一封摘要信列出那 2 件 | ✓ |
 | D04 | 客戶設定類事件 | 出廠政策 | 只有站內通知，不進佇列 | — |
-| D05 | 存 SMTP 設定 | 讀資料表與 GET | 密碼欄位是加密字串；GET 只回 `hasPassword`；換一套 Data Protection 金鑰後 GET 回 `passwordUnreadable` | — |
+| D05 | 存 SMTP 設定 | 讀資料表與 GET；再以省略 `password`、`password: ""` 各存一次 | 密碼欄位是加密字串；GET 只回 `hasPassword`；換一套 Data Protection 金鑰後 GET 回 `passwordUnreadable`；省略（或 null）密碼不變、`""` 清除（§17.5） | — |
 | D06 | Demo 登入開啟 | PUT 通道、寄測試信 | 403 | — |
 | D07 | 假寄送器在連線階段失敗 | 寄測試信 | 422 `smtpTestFailed`、`stage` 為 `connect`、回應不含例外全文；30 秒內再寄 409 `smtpTestTooSoon` | — |
 | D08 | 一列待寄 | 兩個寄送者同時領取；讓領取者在寄出後、記結果前「當掉」，快轉 2 分鐘 | 同時領取只有一個成功；過期後被重領、`Attempts` 加一、再寄一次（至少一次）；原領取者再記結果影響 0 列、只記 Warning | ✓ 無鎖 |
@@ -2465,12 +2465,12 @@ O2 在 pg0 之後，合併前兩種資料庫都要驗（使用者裁決 §3 第 
 
 **偏離設計之處**
 
-- **偏離 1：摘要信的時機**：每個整點後的第一輪，若這個整點之後還沒有摘要信、而有「整點前建立且還沒掛上摘要信」的 `digested` 列，就新增一封摘要信並把那些列掛上（同一把通道列鎖、同一交易）。整點後才被摘要化的列等下一個整點。摘要信不佔每小時額度；額度滿時只領摘要信。
+- **偏離 1：摘要信的時機**：每個整點後的第一輪，若這個整點之後還沒有摘要信、而有「整點前被摘要化且還沒掛上摘要信」的 `digested` 列，就新增一封摘要信並把那些列掛上（同一把通道列鎖、同一交易）。整點後才被摘要化的列（不論何時建立）等下一個整點。摘要化時間記在 `NextAttemptUtc`（`digested` 不再領取，這個欄位不再有其他用途；不加欄位，審查修正）。摘要信不佔每小時額度；額度滿時只領摘要信。
 - **偏離 2：寫入後才停用或清掉通道設定**：領取時發現通道不能寄，把還沒寄的 `pending` 全部改成 `skipped`（§17.2.6 只寫了寫入時標 `skipped`）。
 - **偏離 3：密碼解不開（金鑰不見）時寄送**：不重試，直接標 `failed`，並以階段 `config` 開或更新通道失敗事件（§17.2.6 的階段只有 `connect`、`tls`、`auth`、`send`；解不開不是 SMTP 的錯，重試也解不開）。測試信在這個情況回 409 `smtpNotConfigured`（照 §17.5）；直送信只記 Error log、丟掉那封。
 - **偏離 4：直送信的主旨沒有事件編號**（資料庫寫不進時還沒有事件），內文註明「由看門狗直接寄出」，連結（有設 `Ops:PublicUrl` 時）指向 `/system/ops?tab=health`。
 - **偏離 5：直送的判斷**用本實例狀態板上一筆的狀態：從正常（rank 0）變異常是開啟、警告變嚴重是升級；其他轉換（含結案後再發生）不直送，等補寫後由佇列寄。直送佇列用自己快取的通道設定與寄信政策，每輪寄送前重讀、讀不到沿用上一份，啟動時政策是出廠值、通道設定從缺（§17.9 已知限制）。超過每小時上限的直送信丟掉並記 Warning；佇列滿（20 封）丟最舊的；同一檢查回到正常時撤掉它還沒寄出的信。已直送的識別碼保留 500 筆（與待補寫佇列同一個上限）。
-- **偏離 6：補寫信是否過時**由執行器在補寫時判斷：同一檢查在待補寫佇列後面已經有「正常」，這筆的開啟或升級列記 `skipped`；直送已寄出的優先記 `sentDirect`。寫成 `pending` 或 `skipped` 的，提交後從直送佇列撤回，不會兩邊都寄。
+- **偏離 6：補寫信是否過時**由執行器在補寫時判斷：同一檢查在待補寫佇列後面已經有「正常」，這筆的開啟或升級列記 `skipped`；直送已寄出的優先記 `sentDirect`。和直送的交接照「審查修正」的協定，不會兩邊都寄。
 - **偏離 7：領取與記結果的租約檢查可省略**：`ClaimAlertRequest` 的租約條件可為 null，測試直接模擬兩個寄送者（D08、D11）；正確性靠條件式更新與通道列鎖，不靠租約（§17.7）。`ClaimedBy` 是「實例 id：本輪隨機 8 碼」（最長 100）。同一輪連續 3 次被別人領走就停，下一輪再來。
 - **偏離 8：`ops.monitor` 寄送失敗不擋健康檢查**：寄送者丟租約以外的例外時記 Warning、本輪記部分失敗，接著照跑健康檢查。
 - **偏離 9：寄送成功時一律嘗試把通道失敗事件結案**（沒有未結的就沒動作），所以每封成功多一次查詢。
@@ -2481,7 +2481,7 @@ O2 在 pg0 之後，合併前兩種資料庫都要驗（使用者裁決 §3 第 
 - **偏離 14：總覽的告警通道區塊**：`configured` 是主機、寄件地址、收件信箱都有（不看啟用），`enabled` 照通道列。
 - **偏離 15：安全類事件同一件的後續異動**（B08 第二次給權）在佇列記 `occurred`；事件轉換對應：開啟 → `opened`、結案後再發生 → `regressed`、升級 → `escalated`、upkeep 重複提醒 → `renotify`。
 
-**可寫死清單補充**（§17.9 已列的不再重複）：收件信箱最多 20 個；欄位長度照 §17.4（主機與地址 255、寄件名稱 100、收件信箱合計 2000）；已直送識別碼保留 500 筆；寄送者同一輪連續被別人領走 3 次就停。
+**可寫死清單補充**（§17.9 已列的不再重複）：收件信箱最多 20 個；欄位長度照 §17.4（主機與地址 255、寄件名稱 100、收件信箱合計 2000）；已直送識別碼保留 500 筆；寄送者同一輪連續被別人領走 3 次就停；直送交接的寬限 2 分鐘（＝領取期限）、直送領著佇列列的期限 15 分鐘（審查修正）。
 
 **已知限制**
 
@@ -2494,3 +2494,43 @@ O2 在 pg0 之後，合併前兩種資料庫都要驗（使用者裁決 §3 第 
 - ApplicationTests（`Common` 全部含稽核覆蓋與訊息、`DatabaseErrorsTests`、`OpsSchemaTests`、政策、通知）：SQLite 231 過（3 秒）、PostgreSQL 231 過（6 秒）；DomainTests（含 `PolicyCatalogFixtureTests`）1446 過。
 - 全套 SQLite 跑過一次（ApplicationTests 3630 過 14 略過；WebAPITests 1467 過 2 略過、2 失敗）：失敗的 `MesFlowTests.OverdueWorkOrderReport_…` 與 `AppCombinationTests.ClosingInventory_LeavesMesWritable` 各跑了近 2 分鐘（與 ApplicationTests 並行、機器滿載），單獨重跑 2 例都過（1 秒），與 o2c 無關。
 - 前端：`locales`、`policy-i18n`、`policy-types`、`no-hardcoded-colors` 51 過，`vue-tsc` 與 `quasar build` 過。
+
+#### 審查修正（2026-11-19，codex 跨家族審查）
+
+**直送與補寫的交接協定**（必修 1、2 共用）：以 `TransitionId` 為單位，直送佇列每封信有「待寄／寄送中（SMTP 在途）／交接中／已寄」幾種狀態，寄 SMTP 時不持任何資料庫交易。
+
+- 補寫在交易內向直送保留這個轉換（`DirectAlertQueue.Reserve`）：已寄的記 `sentDirect`；待寄的改成交接中、直送不再開始寄，佇列列照寫 `pending`（或過時的 `skipped`）；寄送中的，佇列列寫成由直送領著的 `sending`（`ClaimedBy = direct:<TransitionId>`、期限 15 分鐘），寄完由直送以短交易記 `sentDirect`，失敗交回保留時判定的狀態（`pending` 就由佇列重試）。
+- 提交後確認交接（after-commit）；提交結果不明時交接中的信先不寄，等去重返回時確認，或過了 2 分鐘寬限查結果列：有就交出，沒有（交易沒提交）就收回照寄。
+- 直送每次開始寄之前先批次查這些 `TransitionId` 的結果列是否已在資料庫（提交成功但回傳失敗時，事件與佇列列也已在同一交易提交），在的就不寄、交給佇列；查不到（資料庫讀不到）就照寄。
+- 去重返回（`ResultExistsAsync` 為真）時核對佇列列：直送已寄出的，還在 `pending` 的列記 `sentDirect`；寄送中的，還在 `pending` 的列改由直送領著；待寄的不再寄。
+- 每封寄出前在鎖內確認它還在佇列、沒有交接中，快照之後被撤回的不寄；「回到正常」撤回時在途的寄完就丟、失敗不重試。
+
+**修正清單**
+
+- 必修 1：直送從快照寄出已交給佇列或已撤回的信、在途信被佇列再寄一次 → 上述交接協定；測試 `AlertChannelTests.DirectHandoff_BackfillWhileSmtpInFlight_InFlightRowSentDirect_QueuedOneLeftToOutbox_EachSentOnce`、`DirectWithdraw_BackToNormalWhileSendingAnother_WithdrawnNotSent`（可阻塞的假寄送器控制在途時點），回滾保護 `DirectHandoff_BackfillRolledBack_DirectResumesAfterGrace_SentOnce`。
+- 必修 2：提交成功但回傳失敗後，直送與佇列各寄一次、去重返回不交接 → 直送寄前查結果列、去重返回核對佇列列；測試 `HealthCheckTests.C14b_CommitThenThrow_SmtpConfigured_BothSendersRun_SentExactlyOnce`（佇列先跑、直送先跑、直送時資料庫讀不到三種順序）。
+- 必修 3：`toAddresses` 含 null 元素時 `Trim()` 丟例外回 500 → 正規化前擋下，回 `toAddresses` 的 400 欄位錯誤（`EmailFormat`）；測試 `AlertChannelTests.UpdateValidation_NullRecipient_400ToAddresses`（啟用、停用）。
+- 必修 4：摘要信用 `CreatedUtc` 判斷，整點前建立、整點後才摘要化的列下一次領取就寄出 → 摘要化時把時間記進 `NextAttemptUtc`、以它判斷（偏離 1 已改寫；政策說明「下一個整點併成一封摘要信」不變，現在與程式一致）；測試 `AlertChannelTests.D03b_CreatedBeforeHour_DigestedAfterHour_WaitsForNextHour`。
+- 不修（主控裁決）：密碼省略或 null＝保留、`""`＝清除，照 §17.5 與 D05（§17.5 補「或 null」、D05 表補這兩步，與 D05 測試一致）。
+- 建議（直送停用語意）：直送成功讀到通道停用或設定不完整時，還沒開始寄的信丟掉（同 `pending → skipped`），交接中、在途的照交接處理；讀設定失敗仍沿用快取。測試 `DirectQueue_ChannelDisabledRead_PendingDropped_NotSentAfterReEnable`。
+- 建議（安全測試）：收件、寄件地址帶 CRLF 回 400；寄件名稱與主旨帶 CRLF 時真的 MailKit 寄到本機假 relay，標頭沒有注入的 `Bcc:`／`X-Injected:`、`RCPT TO` 只有設定的收件人（MimeKit 編碼）；`sslOnConnect` 連自簽憑證的本機伺服器歸 `tls`（另以接受任何憑證的用戶端對照，確認伺服器確實出示了憑證）。測試 `MailKitSender_CrlfInRecipientFromNameSubject_RejectedOrEncoded_NoHeaderInjection`、`MailKitSender_UntrustedCertificate_422StageTls`。
+- 建議（`ClosedPort()` 競態）：D07 改連測試持有埠的本機假伺服器 `LocalTcpServer.Resetting()`（收下連線就以 RST 中斷），仍歸 `connect`；`ClosedPort()` 移除。
+
+**SMTP 密碼與 Data Protection 金鑰**（建議，只寫清楚、沒改部署設定）
+
+- 金鑰位置照 `Program.cs`：有設 `DataProtection:KeysDirectory` 就落地到那個目錄；沒設而資料庫是 SQLite 檔案時放在資料庫檔旁的 `keys`；PostgreSQL 或記憶體資料庫沒設就不落地（每次啟動新金鑰，PostgreSQL 啟動時記 Warning）。沒有呼叫 `SetApplicationName`，應用程式區分用 ASP.NET Core 預設（content root 路徑）；金鑰檔沒有另外加密，靠目錄權限保護。
+- 重啟：SQLite 檔案或有設 `KeysDirectory` 時解得開；PostgreSQL 沒設時重啟後解不開。重建（重新部署容器）：`KeysDirectory` 要在持久磁碟上，否則同樣解不開。多實例：要共用同一個 key ring（共享目錄）而且應用程式名稱一致；目前沒設應用程式名稱，各實例的 content root 路徑不同就互相解不開。正式部署需要：持久（多實例時共享）的 `DataProtection__KeysDirectory`；多實例另需固定應用程式名稱（程式還沒做，列為後續）。登入 cookie 用同一套金鑰，症狀相同。Render Demo 沒有持久磁碟，但 Demo 擋下通道設定（403），不受影響。
+- 解不開時：GET 回 `passwordUnreadable: true`；佇列寄送標 `failed`、以階段 `config` 開通道失敗事件，標題「告警信寄不出去（設定不完整，請重填密碼）」（四語都有「重填密碼」）；測試信 409 `smtpNotConfigured`「…或密碼需要重填」；直送只記 Error log「SMTP 密碼解不開（金鑰可能不見了），請重填」並丟掉那封。提示已足夠讓管理員知道要重新輸入密碼，沒有改文字。
+
+**已知限制（審查修正後仍在）**
+
+- ⚠️ 提交結果不明、而直送寄前資料庫又讀不到時，直送只能先寄；之後若 `ops.monitor` 比看門狗的去重核對先跑，佇列會再寄一次（需要兩種故障同時發生）。
+- ⚠️ 直送領著的佇列列 15 分鐘內沒交出（例如寄完就當機），佇列接手後會再寄一次；與一般領取過期的重寄語意相同。
+- 佇列列依 `TransitionId` 查詢沒有索引（不加 migration）；只在補寫去重返回與直送交接時查，佇列列有保留天數，量小。
+- ⚠️ 多實例與重建後解密 SMTP 密碼沒有實測（上面的結論來自程式與 ASP.NET Core 的預設行為）。
+
+**驗證（本機，審查修正）**
+
+- 新增與修改的測試類別（`AlertChannelTests`、`HealthCheckTests`，共 47 例）：SQLite 47 過（7 秒）、PostgreSQL 47 過（10 秒）。必修 1–4 的測試在修正前先跑過、全部失敗（9 例：雙寄或寄出撤回的信、500、摘要信提早寄出），修正後通過。
+- WebAPITests（`Ops` 命名空間全部＋`AdminUsersApiTests`、`EndpointRoutesTests`、`ConcurrencyExceptionTests`、`SecurityTests`、`HealthTests`）：SQLite 234 過 1 略過（24 秒）、PostgreSQL 235 過（36 秒）。ApplicationTests（`Common`、`DatabaseErrorsTests`、`OpsSchemaTests`）：SQLite、PostgreSQL 各 146 過。完整套件交 CI。
+
