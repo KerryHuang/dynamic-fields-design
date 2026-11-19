@@ -1,3 +1,4 @@
+using System.Linq.Expressions;
 using DynamicModules.Domain.Data;
 using DynamicModules.Domain.Entities.Dynamic;
 using DynamicModules.Domain.Repositories.Dynamic;
@@ -353,23 +354,24 @@ public class TaskRepository(DynamicDbContext db) : ITaskRepository
         ReminderDue(userId, today, filter).AsNoTracking().OrderBy(t => t.Id).ToListAsync(ct);
 
     public async Task<bool> TryMarkDueSoonNotifiedAsync(TaskItem read, DateOnly today, CancellationToken ct) =>
-        await SameVersion(read).Where(t => t.LastDueSoonNotified == null)
+        await db.Set<TaskItem>().Where(SameVersion(read)).Where(t => t.LastDueSoonNotified == null)
             .ExecuteUpdateAsync(s => s.SetProperty(t => t.LastDueSoonNotified, today), ct) == 1;
 
     public async Task<bool> TryMarkOverdueNotifiedAsync(TaskItem read, DateOnly today, CancellationToken ct) =>
-        await SameVersion(read).Where(t => t.LastOverdueNotified == null || t.LastOverdueNotified != today)
+        await db.Set<TaskItem>().Where(SameVersion(read)).Where(t => t.LastOverdueNotified == null || t.LastOverdueNotified != today)
             .ExecuteUpdateAsync(s => s.SetProperty(t => t.LastOverdueNotified, today), ct) == 1;
 
     /// <summary>
     /// 提醒判斷時讀到的那一版：負責人、到期日、狀態都沒變。沒有序列化時（PostgreSQL），並行的改派、改期、完成先提交就認領不到；
     /// 還沒提交時，這裡的 UPDATE 等它的列鎖，提交後重新比對條件同樣落空。
     /// </summary>
-    private IQueryable<TaskItem> SameVersion(TaskItem read)
+    /// <remarks>寫成條件、由呼叫端接在 <c>Set&lt;TaskItem&gt;()</c> 後面（授權寫入邊界清單測試 5：批次指令的接收者要追得到 Set）。</remarks>
+    private static Expression<Func<TaskItem, bool>> SameVersion(TaskItem read)
     {
         var assignee = read.AssigneeUserId;
         var due = read.DueDate;
         var status = read.Status;
-        return db.Set<TaskItem>().Where(t => t.Id == read.Id && t.AssigneeUserId == assignee && t.DueDate == due && t.Status == status);
+        return t => t.Id == read.Id && t.AssigneeUserId == assignee && t.DueDate == due && t.Status == status;
     }
 
     public void ResetReminderStamps(TaskItem task, bool overdueToo)
