@@ -43,7 +43,8 @@ const cards = computed(() => {
 
 const jobColumns = computed<QTableColumn<ScheduledJobInfo>[]>(() => [
   { name: 'jobKey', label: t('ops.jobs.job'), align: 'left', field: (j) => labelOr(t, te, `ops.jobs.names.${j.jobKey}`, j.jobKey) },
-  { name: 'lastStatus', label: t('ops.jobs.lastStatus'), align: 'left', field: (j) => (j.lastStatus ? labelOr(t, te, `ops.jobs.status.${j.lastStatus}`, j.lastStatus) : '—') },
+  // 排程器的狀態是 PascalCase（Succeeded、PartiallyFailed），鍵用小寫開頭
+  { name: 'lastStatus', label: t('ops.jobs.lastStatus'), align: 'left', field: (j) => (j.lastStatus ? labelOr(t, te, `ops.jobs.status.${j.lastStatus.charAt(0).toLowerCase()}${j.lastStatus.slice(1)}`, j.lastStatus) : '—') },
   { name: 'lastFinished', label: t('ops.jobs.lastFinished'), align: 'left', field: (j) => formatTime(j.lastFinishedUtc) },
   { name: 'failures', label: t('ops.jobs.failures'), align: 'right', field: 'consecutiveFailures' },
   { name: 'nextDue', label: t('ops.jobs.nextDue'), align: 'left', field: (j) => formatTime(j.nextDueUtc) },

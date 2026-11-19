@@ -22,7 +22,7 @@ function option() {
     grid: { containLabel: true, top: 16, right: 12, bottom: 8, left: 8 },
     xAxis: { type: 'time' },
     yAxis: { type: 'value', scale: true, axisLabel: { formatter: (v: number) => props.format(v) } },
-    series: [{ name: props.label, type: 'line', showSymbol: false, data: props.points.map((p) => [p.time, p.value]) }],
+    series: [{ name: props.label, type: 'line', showSymbol: props.points.length < 30, data: props.points.map((p) => [p.time, p.value]) }],
   };
 }
 function render() {
