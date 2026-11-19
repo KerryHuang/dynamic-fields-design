@@ -51,15 +51,16 @@
 | pg0a | PostgreSQL provider 抽象：依 `Database:Provider` 選資料庫，SQLite 行為不變、不加 migration | 已上線（2026-11-18；前半 a0bf0749：設定與 DI、錯誤分類、dialect、WriteGate.ForKey；後半 16266e57：TestDb 改名、SqliteOnly 標記、MigrationConsistency、字串長度與 Kind 守衛） | [PostgreSQL provider](superpowers/specs/2026-11-12-postgres-provider-design.md) |
 | pg0 | （pg0b–pg0d）PostgreSQL provider 與 migration＋可在 PostgreSQL 跑的測試環境；驗收要含 O1 的排程器（兩實例搶同一工作）與通知維護（兩條路徑並行不重複）在 PostgreSQL 上通過（WebAPITests 的 `Ops.SchedulerTests`、`Ops.ScheduledJobLeaseTests`、`Ops.NotificationUpkeepJobTests`，不在 ApplicationTests；「無鎖模式」的替換點由 pg0 在 `TestApp` 加）；`OpsScheduledJob` 只有 SQLite 一份，PostgreSQL 那份隨 pg0；pg0a 另列；pg0 做完後另排 Demo 站改接 Neon PostgreSQL（使用者 2026-11-18 改判 U4，產品仍支援 SQLite） | 已上線（2026-11-19，af820397）：pg0b（2026-11-18，3d3e3c1d；`Persistence.Postgres`、baseline `InitialCreate`、WriteGate＋全庫 advisory lock、啟動串行鎖、報表強制 MemoryOnly、擴充資料衝突只接唯一鍵；本機 postgres:16 走查 §8 第 5、6 項）；pg0c（2026-11-18，a80b8852；Testcontainers 測試環境、`FORMWRIGHT_TEST_DB=postgres` 切換、雙跑集、O1 排程器與通知維護在 PostgreSQL 上通過、CI 加 PostgreSQL job）；pg0d（全套在 PostgreSQL 上 0 失敗：ApplicationTests 3313、WebAPITests 1383；產品程式未改；報表 SQL 路徑 3 類標 PgDeferred 等 pg1） | [PostgreSQL provider](superpowers/specs/2026-11-12-postgres-provider-design.md) |
 | a4c | 清單頁系統篩選「簽核中」（記錄清單查詢加簽核實例子查詢）；要在兩種資料庫一次驗證，等 pg0（使用者 11-12 裁決 U2） | 已上線（2026-11-19，3c5ef44d；`approval=pending|none` 參數、schema `approvalEnabled`、清單頁「全部／簽核中／未在簽核」切換列、匯出帶條件；設計 §13.4.1；兩種資料庫驗證） | [簽核流程](superpowers/specs/2026-11-10-approval-workflow-design.md) §13.4 |
-| 權限軸 | 設計與授權分成兩條權限軸（開工前再寫設計） | 未開始 | — |
+| 權限軸 | 設計與授權分成兩條權限軸（開工前再寫設計；使用者 11-19 裁決排在 O2 之後、p2 之前；授權範圍＝模組權限分頁四塊、共用主檔貢獻欄位開放、開啟套件的群組對應、「不提供給 AI」旗標，簽核人與狀態轉移群組、共用檢視仍歸設計，自授簽核讀取與彙總路徑寫手冊已知限制） | 未開始 | — |
 | pg1 | 報表資料庫端聚合 SQL 路徑的 PostgreSQL 改寫（pg0 期間 PostgreSQL 上報表強制走記憶體路徑） | 已上線（2026-11-19，92af014a；識別字引號、索引提示與 `OrderedJoin` 走 dialect、`PostgresDialect.DateBucket`、PostgreSQL 唯讀快照（REPEATABLE READ READ ONLY＋`statement_timeout`，不經寫入閘門）、拿掉強制 MemoryOnly 與 `PgDeferred`；報表 SQL 三類進雙跑集） | [PostgreSQL provider](superpowers/specs/2026-11-12-postgres-provider-design.md) |
-| O2 | 事件中心：健康檢查、維運事件、稽核表（與 MCP 共用）、告警通道、監控頁、規則失控自動暫停 | 進行中：細部設計 §17 已定稿（2026-11-19，14cec776，兩輪審查）；實作分 o2a–o2e 各自交付；o2a 已上線（2026-11-19，7748ed07；維運九張表與 `OpsEventCenter` migration、`IDatabaseErrors` 唯讀／空間滿／連不上、稽核寫入（73 個請求）與保留清理、稽核查詢 API、Demo 登入每來源總量）；o2b 已上線（2026-11-19，93d70d10；七個健康檢查與看門狗、`ops.monitor`、維運事件記錄器與收件匣、500 與前端錯誤接事件、站內通知、唯讀／空間滿回 503、監控 API）；o2c 已上線（2026-11-19，7fd188b9；SMTP 告警通道設定與加密、MailKit 寄送、測試信、寄送佇列與重試、每小時節流與摘要信、通道失敗事件、資料庫寫不進時看門狗直送與交接）；o2d 未開始 | [維運與觀測](superpowers/specs/2026-11-11-ops-observability-design.md) §9 |
+| O2 | 事件中心：健康檢查、維運事件、稽核表（與 MCP 共用）、告警通道、監控頁、規則失控自動暫停 | 進行中：細部設計 §17 已定稿（2026-11-19，14cec776，兩輪審查）；實作分 o2a–o2e 各自交付；o2a 已上線（2026-11-19，7748ed07；維運九張表與 `OpsEventCenter` migration、`IDatabaseErrors` 唯讀／空間滿／連不上、稽核寫入（73 個請求）與保留清理、稽核查詢 API、Demo 登入每來源總量）；o2b 已上線（2026-11-19，93d70d10；七個健康檢查與看門狗、`ops.monitor`、維運事件記錄器與收件匣、500 與前端錯誤接事件、站內通知、唯讀／空間滿回 503、監控 API）；o2c 已上線（2026-11-19，7fd188b9；SMTP 告警通道設定與加密、MailKit 寄送、測試信、寄送佇列與重試、每小時節流與摘要信、通道失敗事件、資料庫寫不進時看門狗直送與交接）；o2d 已上線（2026-11-19，a858e208） | [維運與觀測](superpowers/specs/2026-11-11-ops-observability-design.md) §9 |
 | p2、p3 | 設計與處理上限；地區與組織政策 | 未開始 | [政策設定](superpowers/specs/2026-11-11-policy-settings-design.md) §9、§3.7 |
 | i3 | 多語系：名稱欄位多語（儀表板、報表名稱），套件格式隨升版；與 i4f 的套件升版併成一次 | 未開始 | — |
 | i4 | 語系包與自訂語系（可新增語系、JSON 語系包匯入匯出、內建語系可覆寫、設計資料 Excel 翻譯），切 i4a–i4f（i4d 分 i4d1、i4d2）；段內順序 i4a → i4b／i4c → i3 → i4d1 → i4d2 → i4e、i4f | 未開始 | [語系包與自訂語系](superpowers/specs/2026-11-17-language-packs-design.md) §20 |
 | mcp1a | MCP 後端地基：權杖、範圍、工具分級與確認碼、稽核寫入點、速率限制、12 個唯讀工具；權杖與確認碼的 repository 測試在 PostgreSQL 與 SQLite 各跑一次 | 未開始 | [MCP server](superpowers/specs/2026-11-11-mcp-server-design.md) §12 |
 | mcp1b | MCP 畫面：個人「AI 存取權杖」頁、管理員「AI 連線」頁、設計器欄位旗標、手冊 | 未開始 | [MCP server](superpowers/specs/2026-11-11-mcp-server-design.md) §12 |
 | O3 | 廠商維運中心（Cloudflare Workers＋D1）、外部探測、匿名回報與新版本通知、告警推播 | 未開始 | [維運與觀測](superpowers/specs/2026-11-11-ops-observability-design.md) §9 |
+| bk1 | 產品內備份：排程備份、存放位置（雲端版用隔離、只寫不刪的儲存空間）、O2「備份新鮮度」檢查接上真實時間；還原留在階段 5（使用者 11-19 裁決；開工前先寫設計） | 未開始（設計待寫） | [維運與觀測](superpowers/specs/2026-11-11-ops-observability-design.md) |
 | pkg1 | 套件更新入口：把新版內建應用程式套到客戶已開啟的應用程式（先寫設計；第一個客戶上線前必須有結論；方向為升級預覽與逐項套用，使用者 11-17 裁決） | 未開始（設計待寫） | — |
 | au1 | 帳號安全：核心寄信能力（SMTP 設定與寄信佇列）、寄信重設密碼、雙因素登入 TOTP（使用者 11-17 裁決，雲端版對外開放前必須有；開工前先寫設計） | 未開始（設計待寫） | [ERP 路線](superpowers/specs/2026-11-06-erp-roadmap-design.md) 2026-11-17 一節 |
 | O4、mcpO1 | agent L1 唯讀診斷；產品端維運唯讀工具與維運服務帳號 | 未開始 | [維運與觀測](superpowers/specs/2026-11-11-ops-observability-design.md) §9、[MCP server](superpowers/specs/2026-11-11-mcp-server-design.md) §12 |
@@ -118,10 +119,11 @@ HRM（階段 4）與階段 5 先用佔位列排序，開工前再切成正式工
 
 設計：[政策設定](superpowers/specs/2026-11-11-policy-settings-design.md)、[維運、觀測與告警派工 agent](superpowers/specs/2026-11-11-ops-observability-design.md)、[MCP server](superpowers/specs/2026-11-11-mcp-server-design.md)。這幾段插在上面第 1 項「任務管理與簽核」的簽核主線中間。
 
-順序：**p1 → o1a → 簽核 a2d1 → a4b → a6 → a2d2–a2d7 → a4a → ci1 → tz1 → a5 → a3 → fg1–fg6 → kb1–kb3、kr1–kr3 → st1、st2 → gt1、gt2 → o1b、o1c → un1 → pg0 → pg1 → O2 → p2、p3 → i3、i4 → mcp1（mcp1a → mcp1b）→ O3 → pkg1 → au1 → O4–O6**，MCP 後續段 mcp2a → mcp2b → mcp3 → mcp4 依進度與 O4–O6 穿插。
+順序：**p1 → o1a → 簽核 a2d1 → a4b → a6 → a2d2–a2d7 → a4a → ci1 → tz1 → a5 → a3 → fg1–fg6 → kb1–kb3、kr1–kr3 → st1、st2 → gt1、gt2 → o1b、o1c → un1 → pg0 → pg1 → O2 → 權限軸 → p2、p3 → i3、i4 → mcp1（mcp1a → mcp1b）→ O3 → bk1 → pkg1 → au1 → O4–O6**，MCP 後續段 mcp2a → mcp2b → mcp3 → mcp4 依進度與 O4–O6 穿插。
 
 - 使用者裁決（2026-11-11）：p1 → O1 → pg0 → a2d–a6 → O2 → mcp1 → O3…；O1 在 p1 之後、a2d 之前；O2 以後視情況穿插；pg0 在 O1 之後，之後的功能兩種資料庫都驗，其餘 PostgreSQL 改寫排在簽核之後；MCP 地基 mcp1 在簽核與 O2 之後，業務寫入、設計器工具、OAuth 後續分段，維運 O4、O6 直接用 MCP 工具；列表的使用者欄位顯示姓名用小段穿插。
 - 使用者確認（2026-11-12）：p2、p3 排在 O2 之後、mcp1a 之前；O3 → O4 → O5 → O6 的先後；mcp1 之後是 mcp1a → mcp1b → mcp2a → mcp2b → mcp3 → mcp4，mcpO1 隨 O4、mcpO2 隨 O6，mcp4 可視雲端版第一個客戶的需求提前。
+- 使用者裁決（2026-11-19）：權限軸排在 O2 之後、p2 之前；產品內備份（bk1）插在 O3 之後、O4 之前，還原留在階段 5，因為 O4–O6 的 agent 處置以隔離備份為護欄。
 - 使用者裁決（2026-11-17）：可自行新增語系與匯入語系包，併入 i4（內建四語介面文字可覆寫；設計見[語系包與自訂語系](superpowers/specs/2026-11-17-language-packs-design.md)）；順序不變。
 - 使用者排定（2026-11-12）：翻譯匯出、匯入（i4）排在 p3 之後，與 i3 一起；套件更新入口（pkg1）排在 O3 之後，先寫設計；應用程式匯出畫面併入階段 5。
 - 使用者裁決（2026-11-12）：為了 Demo CRM 設計案，簽核主線提前到 o1a 之後、pg0 之前；簽核先只驗 SQLite，pg0 後補驗
