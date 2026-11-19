@@ -8,11 +8,13 @@ using MediatR;
 namespace DynamicModules.Application.Dynamic.EventService;
 
 public class CreateEventHandler(
-    IEventRepository events, IModuleRepository modules, EventValidator validator, IUnitOfWork uow, ICurrentUser user, IBusinessTime time)
+    IEventRepository events, IModuleRepository modules, EventValidator validator, IUnitOfWork uow, ICurrentUser user, IBusinessTime time,
+    PermissionAdminGate permissionAdmin)
     : IRequestHandler<CreateEventRequest, ServiceResult>
 {
     public async Task<ServiceResult> Handle(CreateEventRequest request, CancellationToken ct)
     {
+        if (await HiddenSourceGate.RejectAsync(request.Input, permissionAdmin, ct) is { } denied) return denied;
         var input = request.Input;
         var (invalid, warnings) = await validator.ValidateCoreAsync(input, ct);
         if (invalid is not null) return invalid;
@@ -31,11 +33,13 @@ public class CreateEventHandler(
 }
 
 public class UpdateEventHandler(
-    IEventRepository events, IModuleRepository modules, EventValidator validator, IUnitOfWork uow, ICurrentUser user, IBusinessTime time)
+    IEventRepository events, IModuleRepository modules, EventValidator validator, IUnitOfWork uow, ICurrentUser user, IBusinessTime time,
+    PermissionAdminGate permissionAdmin)
     : IRequestHandler<UpdateEventRequest, ServiceResult>
 {
     public async Task<ServiceResult> Handle(UpdateEventRequest request, CancellationToken ct)
     {
+        if (await HiddenSourceGate.RejectAsync(request.Input, permissionAdmin, ct) is { } denied) return denied;
         var e = await events.GetByKeyAsync(request.Key, ct);
         if (e is null) return ServiceResult.NotFound(MessageRef.Of(MessageText.EventNotFound));
         var input = request.Input;
@@ -92,5 +96,21 @@ public class GetEventsHandler(IEventRepository events, IModuleRepository modules
             if (await modules.GetByIdAsync(id, includeChildren: false, ct) is { } m) keys[id] = m.Key;
         var items = list.Select(e => e.ToResponse(keys.GetValueOrDefault(e.SourceModuleId, ""))).ToList();
         return ServiceResult.Success(request.Key is not null ? items[0] : (IReadOnlyList<EventResponse>)items);
+    }
+}
+
+/// <summary>
+/// 「允許複製被隱藏的值」歸授權（權限軸設計 M5、T8）：內容只要有任一個對應勾了，就在任何驗證之前要權限設定；
+/// 只看請求內容、不比對既有定義，已勾旗標的事件連改其他地方也會被擋。旗標存在 JSON 定義裡，寫入邊界看不到，只靠這裡。
+/// </summary>
+internal static class HiddenSourceGate
+{
+    public static async Task<ServiceResult?> RejectAsync(EventInput? input, PermissionAdminGate gate, CancellationToken ct)
+    {
+        if (input?.Definition?.Effects?.Any(fx => fx?.Set?.Any(s => s is { AllowHiddenSource: true }) == true) != true) return null;
+        var check = await gate.CheckAsync(ct);
+        return check == PermissionAdminCheck.Allowed
+            ? null
+            : PermissionAdminGate.Denied(check, MessageText.EventHiddenSourceNeedsPermissionAdmin, "eventHiddenSourceNeedsPermissionAdmin");
     }
 }

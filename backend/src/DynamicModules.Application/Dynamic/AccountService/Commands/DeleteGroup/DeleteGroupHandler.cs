@@ -1,3 +1,4 @@
+using DynamicModules.Application.Dynamic.AccountService.SystemPrivileges;
 using DynamicModules.Application.Common;
 using DynamicModules.Application.Dynamic.PolicyService;
 using DynamicModules.Domain.Policies;
@@ -6,7 +7,7 @@ using MediatR;
 
 namespace DynamicModules.Application.Dynamic.AccountService.Commands.DeleteGroup;
 
-public class DeleteGroupHandler(IAccountRepository accounts, IApprovalFlowRepository approvalFlows, ISystemSettingRepository settings, IModulePolicyRepository modulePolicies, IModuleRepository modules, IUnitOfWork uow) : IRequestHandler<DeleteGroupRequest, ServiceResult>
+public class DeleteGroupHandler(IAccountRepository accounts, IApprovalFlowRepository approvalFlows, ISystemSettingRepository settings, IModulePolicyRepository modulePolicies, IModuleRepository modules, IUnitOfWork uow, SystemPrivilegeHolders holders) : IRequestHandler<DeleteGroupRequest, ServiceResult>
 {
     public async Task<ServiceResult> Handle(DeleteGroupRequest request, CancellationToken ct)
     {
@@ -37,8 +38,10 @@ public class DeleteGroupHandler(IAccountRepository accounts, IApprovalFlowReposi
         }
         if (referenced.Count > 0) return ServiceResult.Conflict(PolicyMessages.GroupUsedByPolicies(referenced.Distinct()));
 
+        var holdersBefore = await holders.SnapshotAsync(ct);
         await accounts.DeleteGroupAsync(group, ct);
         await uow.CommitAsync(ct);
+        holders.Report(holdersBefore, await holders.SnapshotAsync(ct));
         return ServiceResult.Success();
     }
 }

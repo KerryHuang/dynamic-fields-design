@@ -5,6 +5,7 @@ using DynamicModules.Application.Dynamic.AccountService.Commands.SetUserActive;
 using DynamicModules.Application.Dynamic.AccountService.Commands.UpdateUser;
 using DynamicModules.Application.Dynamic.AccountService.Queries.AdminListUsers;
 using DynamicModules.Application.Dynamic.OrganizationService;
+using DynamicModules.Application.Dynamic.AccountService.SystemPrivileges;
 using MediatR;
 using Microsoft.AspNetCore.Mvc;
 
@@ -40,6 +41,16 @@ public class AdminUsersController(IMediator mediator) : ControllerBase
         if (body.IsSystemAdmin is null) missing["isSystemAdmin"] = ["必填"];
         if (missing.Count > 0) return ServiceResult.Invalid(missing).ToActionResult(this);
         return (await mediator.Send(new UpdateUserRequest(id, body.DisplayName ?? "", body.GroupIds!, body.IsSystemAdmin!.Value))).ToActionResult(this);
+    }
+
+    /// <summary>整份取代使用者個人的系統權限直接設定（權限軸設計 §8）。</summary>
+    [HttpPut("{id}/system-privileges")]
+    public async Task<IActionResult> SetSystemPrivileges(string id, SystemPrivilegesBody body)
+    {
+        var (dto, invalid) = body.Parse();
+        return invalid is not null
+            ? invalid.ToActionResult(this)
+            : (await mediator.Send(new UpdateUserSystemPrivilegesRequest(id, dto!))).ToActionResult(this);
     }
 
     [HttpPost("{id}/reset-password")]

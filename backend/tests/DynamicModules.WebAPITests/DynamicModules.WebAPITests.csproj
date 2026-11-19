@@ -43,6 +43,7 @@
     <Compile Include="..\Fixtures\WriteGuardInterceptor.cs" Link="TestSupport\WriteGuardInterceptor.cs" />
     <!-- 測試資料庫切換（FORMWRIGHT_TEST_DB=postgres）、PostgreSQL 測試容器與樣板資料庫（PostgreSQL provider 設計 §6） -->
     <Compile Include="..\Fixtures\TestDatabase.cs" Link="TestSupport\TestDatabase.cs" />
+    <Compile Include="..\Fixtures\TestPermits.cs" Link="TestSupport\TestPermits.cs" />
   </ItemGroup>
 
 </Project>

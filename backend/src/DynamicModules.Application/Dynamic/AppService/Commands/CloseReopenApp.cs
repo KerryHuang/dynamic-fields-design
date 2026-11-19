@@ -13,7 +13,7 @@ using MediatR;
 namespace DynamicModules.Application.Dynamic.AppService.Commands;
 
 public record CloseAppRequest(string Key, bool Cascade)
-    : IRequest<ServiceResult>, ITransactionalRequest, IDesignerRequest, ISystemAdminRequest, IAuditedRequest
+    : IRequest<ServiceResult>, ITransactionalRequest, IDesignerRequest, ISystemAdminRequest, IPermissionAdminRequest, IAuditedRequest
 {
     public AuditAction Audit => AuditAction.For("app.close", AuditTargets.App, Key);
     public PermissionAction RequiredDesignerAction => PermissionAction.Edit;
@@ -68,7 +68,7 @@ public class CloseAppHandler(
 }
 
 public record ReopenAppRequest(string Key)
-    : IRequest<ServiceResult>, ITransactionalRequest, IDesignerRequest, ISystemAdminRequest, IAuditedRequest
+    : IRequest<ServiceResult>, ITransactionalRequest, IDesignerRequest, ISystemAdminRequest, IPermissionAdminRequest, IAuditedRequest
 {
     public AuditAction Audit => AuditAction.For("app.reopen", AuditTargets.App, Key);
     public PermissionAction RequiredDesignerAction => PermissionAction.Edit;

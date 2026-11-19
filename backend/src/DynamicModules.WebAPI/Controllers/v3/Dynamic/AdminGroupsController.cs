@@ -5,6 +5,7 @@ using DynamicModules.Application.Dynamic.AccountService.Commands.RenameGroup;
 using DynamicModules.Application.Dynamic.AccountService.Commands.SetGroupMembers;
 using DynamicModules.Application.Dynamic.AccountService.Queries.AdminListGroups;
 using DynamicModules.Application.Dynamic.AccountService.Queries.GetGroupImpact;
+using DynamicModules.Application.Dynamic.AccountService.SystemPrivileges;
 using MediatR;
 using Microsoft.AspNetCore.Mvc;
 
@@ -35,6 +36,16 @@ public class AdminGroupsController(IMediator mediator) : ControllerBase
         body.UserIds is null
             ? ServiceResult.Invalid(new Dictionary<string, string[]> { ["userIds"] = ["必填"] }).ToActionResult(this)
             : (await mediator.Send(new SetGroupMembersRequest(id, body.UserIds))).ToActionResult(this);
+
+    /// <summary>整份取代群組的系統權限直接設定（權限軸設計 §8）。</summary>
+    [HttpPut("{id:long}/system-privileges")]
+    public async Task<IActionResult> SetSystemPrivileges(long id, SystemPrivilegesBody body)
+    {
+        var (dto, invalid) = body.Parse();
+        return invalid is not null
+            ? invalid.ToActionResult(this)
+            : (await mediator.Send(new UpdateGroupSystemPrivilegesRequest(id, dto!))).ToActionResult(this);
+    }
 
     [HttpGet("{id:long}/impact")]
     public async Task<IActionResult> Impact(long id) => (await mediator.Send(new GetGroupImpactRequest(id))).ToActionResult(this);

@@ -14,7 +14,11 @@ public class ModuleRemover(
     IEventRepository events, ICheckRepository checks, ILedgerRepository ledgers, ITaskRepository tasks, IAttachmentStore store,
     AfterCommitActions afterCommit, IUnitOfWork uow, ITaskRuleRepository taskRules, OpsService.RulePause.RulePauseCleanup rulePause)
 {
-    public async Task RemoveAsync(long moduleId, CancellationToken ct)
+    /// <summary>清除與移除包在清除許可內（權限軸設計 §7.4）；結束後由 repository 確認模組已不存在。</summary>
+    public Task RemoveAsync(long moduleId, CancellationToken ct) =>
+        deletion.RunCleanupAsync(CleanupTarget.Module(moduleId), () => RemoveInCleanupAsync(moduleId, ct), ct);
+
+    private async Task RemoveInCleanupAsync(long moduleId, CancellationToken ct)
     {
         var module = (await modules.GetByIdAsync(moduleId, includeChildren: true, ct))!;
         var taskFiles = await tasks.ListAttachmentKeysByModuleAsync(moduleId, ct);

@@ -34,6 +34,8 @@ public class AuditBehavior<TReq, TRes>(AuditContext context, IAuditLog audit, IU
             // 系統管理員異動：稽核列有 Id 之後同一交易開安全事件，樣本只存這筆稽核的 Id 與行為者（§17.2.2）
             if (context.AdminChanged is { } granted)
                 await services.GetRequiredService<SecurityIncidents>().AdminChangedAsync(row, granted, ct);
+            if (context.PrivilegeChanged is { } gained)
+                await services.GetRequiredService<SecurityIncidents>().PrivilegeChangedAsync(row, gained, ct);
             return response;
         }
         finally

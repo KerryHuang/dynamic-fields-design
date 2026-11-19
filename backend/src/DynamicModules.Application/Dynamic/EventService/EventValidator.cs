@@ -260,12 +260,13 @@ public class EventValidator(
     /// </summary>
     public async Task<HashSet<long>> HiddenAsync(Module m, CancellationToken ct)
     {
+        // 被任一群組設成隱藏的欄位與限定可見的貢獻欄位合併後一起逐層做公式閉包（權限軸設計 M5 擴大）：
+        // 引用它們的公式（含公式引用公式）都算隱藏來源，不能經公式繞過「允許複製被隱藏的值」
         var hidden = (await permissions.LoadModuleRowsAsync(m, ct)).FieldPermissions.Where(p => p.Access == FieldAccess.Hidden).Select(p => p.FieldId).ToHashSet();
-        var restricted = m.Blocks.SelectMany(b => b.Fields).Where(f => f.VisibilityRestricted).Select(f => f.Id).ToHashSet();
-        if (restricted.Count == 0) return hidden;
+        hidden.UnionWith(m.Blocks.SelectMany(b => b.Fields).Where(f => f.VisibilityRestricted).Select(f => f.Id));
+        if (hidden.Count == 0) return hidden;
         foreach (var f in FormulaGraph.EvaluationOrder(m))
-            if (FormulaGraph.RefsOf(f).Overlaps(restricted)) restricted.Add(f.Id);
-        hidden.UnionWith(restricted);
+            if (FormulaGraph.RefsOf(f).Overlaps(hidden)) hidden.Add(f.Id);
         return hidden;
     }
 

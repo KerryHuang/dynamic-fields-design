@@ -55,7 +55,8 @@ public record DesignerActionsResponse(bool Read, bool Add, bool Edit, bool Delet
 
 public record MeResponse(
     string UserId, string DisplayName, bool IsSystemAdmin, bool MustChangePassword,
-    List<GroupBriefResponse> Groups, DesignerActionsResponse Designer, bool IsDemoAccount, MeThemeResponse Theme);
+    List<GroupBriefResponse> Groups, DesignerActionsResponse Designer, bool IsDemoAccount, MeThemeResponse Theme,
+    bool PermissionAdmin = false);
 
 public static class PermissionMapping
 {

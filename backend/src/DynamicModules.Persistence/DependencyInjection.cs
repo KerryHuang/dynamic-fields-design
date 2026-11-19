@@ -90,6 +90,7 @@ public static class DependencyInjection
         services.AddScoped<ReferenceProviderRegistry>();
         services.AddScoped<IDemoPeople, DemoPeopleSeeder>();
         services.AddScoped<IUnitOfWork, UnitOfWork>();
+        services.AddScoped<Domain.Authorization.IAuthorizationChangeProbe, AuthorizationChangeProbe>();
         return services;
     }
 }

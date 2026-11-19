@@ -1,3 +1,4 @@
+using DynamicModules.Domain.Authorization;
 using DynamicModules.Domain.Data;
 using DynamicModules.Domain.Entities.Dynamic;
 using DynamicModules.Domain.Repositories.Dynamic;
@@ -21,6 +22,7 @@ public class SharedMasterRepository(DynamicDbContext db) : ISharedMasterReposito
 
     public async Task ReplaceActionScopesAsync(long moduleId, IReadOnlyList<ModuleActionScope> rows, CancellationToken ct)
     {
+        AuthorizationWriteScope.Demand(AuthorizationBatchEntry.ReplaceActionScopes);
         await db.Set<ModuleActionScope>().Where(s => s.ModuleId == moduleId).ExecuteDeleteAsync(ct);
         // ExecuteDelete 不經變更追蹤：先前追蹤中的同鍵列要放掉，否則新列會撞鍵
         foreach (var entry in db.ChangeTracker.Entries<ModuleActionScope>().Where(e => e.Entity.ModuleId == moduleId).ToList())

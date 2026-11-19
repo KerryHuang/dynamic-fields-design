@@ -5,7 +5,7 @@ using MediatR;
 
 namespace DynamicModules.Application.Dynamic.AccountService.Commands.DeleteGroup;
 
-public record DeleteGroupRequest(long GroupId) : IRequest<ServiceResult>, ITransactionalRequest, ISystemAdminRequest, IAuditedRequest
+public record DeleteGroupRequest(long GroupId) : IRequest<ServiceResult>, ITransactionalRequest, ISystemAdminRequest, IPermissionAdminRequest, IAuditedRequest
 {
     public AuditAction Audit => AuditAction.For("group.delete", AuditTargets.Group, GroupId);
 }
