@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   buildEvent, draftFromEvent, emptyEffect, emptyEventDraft, emptySet, formulaFieldIds, groupEventErrors, hiddenFieldIds, nextEffectCode,
-  setIsComplete, usesHiddenSource,
+  setIsComplete, usesAllowHiddenSource, usesHiddenSource,
 } from './event-draft';
 import type { ModuleEvent } from './events-ledger';
 
@@ -102,6 +102,36 @@ describe('hidden source fields', () => {
     expect(usesHiddenSource({ ...emptySet(), source: 'from', fieldId: 40 }, hidden)).toBe(false);
     expect(usesHiddenSource({ ...emptySet(), source: 'formula', expr: '-{41}' }, hidden)).toBe(true);
     expect(usesHiddenSource({ ...emptySet(), source: 'const', value: 1 }, hidden)).toBe(false);
+  });
+});
+
+describe('usesAllowHiddenSource（看實際送出的 payload）', () => {
+  const withEffects = (effects: ModuleEvent['definition']['effects']): ModuleEvent =>
+    ({ ...shipEvent, definition: { ...shipEvent.definition, effects } });
+  const payload = (e: ModuleEvent) => buildEvent(draftFromEvent(e), 'ship');
+
+  it('送出的對應真的帶旗標時為 true（含原樣送回的自訂效果）', () => {
+    expect(usesAllowHiddenSource(payload(shipEvent))).toBe(true);
+    expect(usesAllowHiddenSource(payload(withEffects([
+      { code: 'ext', kind: 'custom', handler: 'notify', set: [{ to: 1, const: 1, allowHiddenSource: true }] },
+    ])))).toBe(true);
+  });
+
+  it('常值對應帶旗標：送出時清成 false，不算', () => {
+    expect(usesAllowHiddenSource(payload(withEffects([
+      { code: 'post', kind: 'create', targetModuleKey: 'stock-move', set: [{ to: 74, const: 'opt_55', allowHiddenSource: true }] },
+    ])))).toBe(false);
+  });
+
+  it('沖銷效果附帶 set：送出時不帶 set，不算', () => {
+    expect(usesAllowHiddenSource(payload(withEffects([
+      { code: 'undo', kind: 'reverse', targetModuleKey: 'stock-move', ofEvent: 'ship-post', ofEffect: 'post',
+        set: [{ to: 71, from: { side: 'line', fieldId: 41 }, allowHiddenSource: true }] },
+    ])))).toBe(false);
+  });
+
+  it('還組不出 payload 時為 false（存檔鈕另由缺欄位停用）', () => {
+    expect(usesAllowHiddenSource(undefined)).toBe(false);
   });
 });
 

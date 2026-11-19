@@ -59,6 +59,8 @@ const notifyFail = (e: unknown) => notifyApiError((o) => $q.notify(o), e as ApiE
 const dialog = ref(false);
 const editingId = ref<string | null>(null);
 const form = ref({ userId: '', displayName: '', password: '', groupIds: [] as number[], isSystemAdmin: false, departmentId: null as number | null });
+/** 已存進後端的帳號資料：系統權限失敗重試時，和它相同就不重送帳號（不多一筆 user.update 稽核）。 */
+const savedMain = ref<{ displayName: string; groupIds: number[]; isSystemAdmin: boolean } | null>(null);
 /** Department before editing: the department endpoint is only called when it changed. */
 const originalDepartment = ref<number | null>(null);
 /** 個人直接設定（不含經群組取得的）；和載入時相同就不送。 */
@@ -76,6 +78,9 @@ function openCreate() {
   editingId.value = null;
   form.value = { userId: '', displayName: '', password: '', groupIds: [], isSystemAdmin: false, departmentId: null };
   originalDepartment.value = null;
+  savedMain.value = null;
+  privileges.value = noSystemPrivileges();
+  originalPrivileges.value = noSystemPrivileges();
   error.value = '';
   dialog.value = true;
 }
@@ -86,6 +91,7 @@ function openEdit(u: AdminUser) {
     departmentId: u.departmentId ?? null,
   };
   originalDepartment.value = u.departmentId ?? null;
+  savedMain.value = null;
   privileges.value = copySystemPrivileges(u.systemPrivileges);
   originalPrivileges.value = copySystemPrivileges(u.systemPrivileges);
   error.value = '';
@@ -98,6 +104,12 @@ function save() {
   const done = () => { dialog.value = false; $q.notify({ type: 'positive', message: t('users.saved') }); };
   // 系統權限是最後一個呼叫（只在編輯時有）；失敗時帳號資料已存，提示只有系統權限沒存
   const sent = copySystemPrivileges(privileges.value);
+  // 改自己：取消系統管理員後就沒有權限存系統權限，第二個請求必定 403；送出前攔下，請使用者分兩次存
+  const privilegesChanged = !!editingId.value && !sameSystemPrivileges(sent, originalPrivileges.value);
+  if (editingId.value === identity.userId && editingUser.value?.isSystemAdmin && !isSystemAdmin && privilegesChanged) {
+    error.value = t('systemPrivileges.selfDemoteConflict');
+    return;
+  }
   const savePrivileges = () => {
     if (!editingId.value || sameSystemPrivileges(sent, originalPrivileges.value)) { done(); return; }
     setPrivileges.mutate({ id: userId, body: sent }, {
@@ -118,8 +130,13 @@ function save() {
     },
     onError: showError,
   };
-  if (editingId.value) update.mutate({ id: editingId.value, body: { displayName, groupIds, isSystemAdmin } }, handlers);
-  else create.send({ userId, displayName, groupIds, isSystemAdmin }, { password }, handlers);
+  if (!editingId.value) { create.send({ userId, displayName, groupIds, isSystemAdmin }, { password }, handlers); return; }
+  const saved = savedMain.value;
+  const mainUnchanged = !!saved && saved.displayName === displayName && saved.isSystemAdmin === isSystemAdmin
+    && saved.groupIds.length === groupIds.length && saved.groupIds.every((id, i) => id === groupIds[i]);
+  if (mainUnchanged) { handlers.onSuccess(); return; }
+  const main = { displayName, groupIds: [...groupIds], isSystemAdmin };
+  update.mutate({ id: editingId.value, body: main }, { onSuccess: () => { savedMain.value = main; handlers.onSuccess(); }, onError: showError });
 }
 
 const resetTarget = ref<string | null>(null);

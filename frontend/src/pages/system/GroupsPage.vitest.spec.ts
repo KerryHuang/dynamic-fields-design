@@ -298,6 +298,38 @@ describe('GroupsPage', () => {
       expect(api.setGroupSystemPrivileges).toHaveBeenLastCalledWith(3, sp({ read: true, add: true, edit: true }, true));
     });
 
+    it('PAX-32 同時改名稱、成員、系統權限，系統權限第一次失敗後重試：名稱與成員各只送一次', async () => {
+      api.renameGroup.mockResolvedValue(IT);
+      api.setGroupMembers.mockResolvedValue(undefined as never);
+      api.setGroupSystemPrivileges.mockRejectedValueOnce({ status: 500, message: '伺服器錯誤' })
+        .mockResolvedValueOnce(sp({ read: true, add: true, edit: true }, true));
+      await mountPage('zh-TW', WITH_IT);
+      await click('group-row-3');
+      await fill('group-name', 'IT 部');
+      await click('member-b02');
+      await click('sp-designer-add');
+      await click('group-save');
+      expect(q('group-error')!.textContent).toBe('名稱與成員已儲存，系統權限未儲存：伺服器錯誤');
+      await click('group-save');
+      expect(api.renameGroup).toHaveBeenCalledTimes(1);
+      expect(api.setGroupMembers).toHaveBeenCalledTimes(1);
+      expect(api.setGroupMembers).toHaveBeenCalledWith(3, { userIds: ['a01', 'b02'] });
+      expect(api.setGroupSystemPrivileges).toHaveBeenCalledTimes(2);
+      expect(q('group-name')).toBeNull();
+    });
+
+    it('PAX-32 系統權限存檔成功後讓 me、群組清單失效', async () => {
+      api.setGroupSystemPrivileges.mockResolvedValue(sp({ read: true, add: true, edit: true }, true));
+      await mountPage('zh-TW', WITH_IT);
+      const invalidate = vi.spyOn(QueryClient.prototype, 'invalidateQueries');
+      await click('group-row-3');
+      await click('sp-designer-add');
+      await click('group-save');
+      expect(api.setGroupSystemPrivileges).toHaveBeenCalledTimes(1);
+      expect(invalidate.mock.calls.map(([f]) => (f as { queryKey: unknown[] }).queryKey)).toEqual(expect.arrayContaining([['admin-groups'], ['me']]));
+      invalidate.mockRestore();
+    });
+
     it('PAX-32 刪除對話框在群組持有系統權限時列出會移除的系統權限；沒有就不列', async () => {
       api.getGroupImpact.mockResolvedValue({ ...IMPACT, systemPrivileges: sp({ read: true, edit: true }, true) });
       await mountPage('zh-TW', WITH_IT);

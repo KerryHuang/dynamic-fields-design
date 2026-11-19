@@ -212,6 +212,24 @@ describe('EventEditorDialog', () => {
     expect($('set-0-0-allow-hidden')!.getAttribute('aria-disabled')).not.toBe('true');
   });
 
+  it.each([
+    ['常值對應帶著旗標（送出時清成 false）', { code: 'post', kind: 'create' as const, targetModuleKey: 'stock-move', set: [{ to: 72, const: 5, allowHiddenSource: true }] }],
+    ['沖銷效果附帶勾了旗標的 set（送出時不帶 set）', {
+      code: 'undo', kind: 'reverse' as const, targetModuleKey: 'stock-move', ofEvent: 'ship-post', ofEffect: 'post',
+      set: [{ to: 72, from: { side: 'header' as const, fieldId: 22 }, allowHiddenSource: true }],
+    }],
+  ])('PAX-34 回歸：%s，沒有權限設定也照常可存', async (_label, effect) => {
+    const ev: ModuleEvent = { ...created, definition: { ...created.definition, effects: [effect] } };
+    api.updateEvent.mockResolvedValue(ev);
+    await open(ev, { hidden: [22], permissionAdmin: false });
+    expect($('event-consent-blocked')).toBeNull();
+    expect(saveBtn().disabled).toBe(false);
+    saveBtn().click();
+    await flushPromises();
+    const sent = api.updateEvent.mock.calls[0]!.at(-1) as ModuleEvent;
+    expect(JSON.stringify(sent.definition.effects)).not.toContain('"allowHiddenSource":true');
+  });
+
   it('shows server messages on the effect and mapping they belong to, and the rest below', async () => {
     api.updateEvent.mockRejectedValue({
       status: 400, errors: {

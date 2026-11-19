@@ -41,6 +41,8 @@ const name = ref('');
 // 已存進後端的名稱：改名成功後更新，成員失敗重試時不再重送改名
 const savedName = ref('');
 const selected = ref<string[]>([]);
+// 已存進後端的成員：成員成功、系統權限失敗重試時不再重送成員
+const savedMembers = ref<string[]>([]);
 const formError = ref('');
 const privileges = ref<SystemPrivileges>(noSystemPrivileges());
 /** 已存進後端的系統權限：和它相同就不送，系統權限失敗重試時也以它比較。 */
@@ -59,6 +61,7 @@ function openEditor(g?: AdminGroup) {
   name.value = g ? nameOf(g) : '';
   savedName.value = name.value;
   selected.value = g ? [...g.memberUserIds] : [];
+  savedMembers.value = [...selected.value];
   privileges.value = copySystemPrivileges(g?.systemPrivileges);
   savedPrivileges.value = copySystemPrivileges(g?.systemPrivileges);
   formError.value = '';
@@ -81,9 +84,11 @@ function save() {
   };
   // 名稱先存；成員是另一個呼叫，名稱出錯時對話框保持開啟
   const saveMembers = () => {
-    const unchanged = selected.value.length === g.memberUserIds.length && selected.value.every((id) => g.memberUserIds.includes(id));
+    const saved = savedMembers.value;
+    const unchanged = selected.value.length === saved.length && selected.value.every((id) => saved.includes(id));
     if (unchanged) { savePrivileges(); return; }
-    setMembers.mutate({ id: g.id, userIds: selected.value }, { onSuccess: savePrivileges, onError: fail });
+    const members = [...selected.value];
+    setMembers.mutate({ id: g.id, userIds: members }, { onSuccess: () => { savedMembers.value = members; savePrivileges(); }, onError: fail });
   };
   if (name.value === savedName.value) saveMembers();
   else {

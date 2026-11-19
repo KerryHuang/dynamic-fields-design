@@ -104,9 +104,6 @@ function buildSet(s: SetDraft, header: boolean): EventSetItem {
   return { to: s.to!, const: s.value, allowHiddenSource: false };
 }
 
-/** 有任一對應勾了「允許複製被隱藏的值」（含原樣送回的自訂效果）：存檔要「權限設定」。 */
-export const usesAllowHiddenSource = (d: EventDraft): boolean =>
-  d.effects.some((e) => (e.custom ? e.custom.set ?? [] : e.set).some((s) => s.allowHiddenSource));
 
 /** The effect to send, or undefined while a required pick is missing. */
 function buildEffect(e: EffectDraft): EventEffect | undefined {
@@ -138,6 +135,13 @@ export function buildEvent(d: EventDraft, sourceModuleKey: string): ModuleEvent 
     definition: { trigger, ...(when && { when }), effects: effects as EventEffect[] },
   };
 }
+
+/**
+ * 實際要送出的 payload（buildEvent 的結果）有任一對應帶「允許複製被隱藏的值」（含原樣送回的自訂效果）：存檔要「權限設定」。
+ * 看 payload 不看草稿：常值對應的旗標、沖銷效果附帶的 set 送出時都不帶旗標，不該擋。
+ */
+export const usesAllowHiddenSource = (body: ModuleEvent | undefined): boolean =>
+  !!body?.definition.effects.some((e) => (e.set ?? []).some((s) => s.allowHiddenSource));
 
 // ---- hidden source fields ----
 

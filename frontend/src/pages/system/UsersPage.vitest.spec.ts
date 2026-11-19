@@ -509,6 +509,74 @@ describe('UsersPage', () => {
       expect(q('user-save')).not.toBeNull();
     });
 
+    it('PAX-31 系統權限失敗後重試：主資料沒再改就只重送系統權限，不重送帳號（不多一筆 user.update 稽核）', async () => {
+      api.updateUser.mockResolvedValue(wang);
+      api.setUserSystemPrivileges.mockRejectedValueOnce({ status: 500, message: '伺服器錯誤' }).mockResolvedValueOnce(sp({ add: true }, true));
+      await mountPage(LIST);
+      await click('user-row-wang');
+      await click('sp-permission-admin');
+      await click('user-save');
+      expect(q('user-error')!.textContent).toBe('名稱與成員已儲存，系統權限未儲存：伺服器錯誤');
+      await click('user-save');
+      expect(api.updateUser).toHaveBeenCalledTimes(1);
+      expect(api.setUserSystemPrivileges).toHaveBeenCalledTimes(2);
+      expect(api.setUserSystemPrivileges).toHaveBeenLastCalledWith('wang', sp({ add: true }, true));
+      expect(q('user-save')).toBeNull();
+    });
+
+    it('PAX-31 系統權限失敗後又改了名稱再存：帳號重送新名稱', async () => {
+      api.updateUser.mockResolvedValue(wang);
+      api.setUserSystemPrivileges.mockRejectedValueOnce({ status: 500, message: '伺服器錯誤' }).mockResolvedValueOnce(sp({ add: true }, true));
+      await mountPage(LIST);
+      await click('user-row-wang');
+      await click('sp-permission-admin');
+      await click('user-save');
+      await fill('user-name', '王小明');
+      await click('user-save');
+      expect(api.updateUser).toHaveBeenCalledTimes(2);
+      expect(api.updateUser).toHaveBeenLastCalledWith('wang', { displayName: '王小明', groupIds: [1], isSystemAdmin: false });
+      expect(api.setUserSystemPrivileges).toHaveBeenCalledTimes(2);
+    });
+
+    it('PAX-31 管理員編輯自己：同時取消系統管理員並改系統權限，送出前攔下、不送任何請求', async () => {
+      await mountPage(LIST);
+      await click('user-row-admin');
+      await click('user-admin');
+      await click('sp-designer-read');
+      await click('user-save');
+      expect(q('user-error')!.textContent).toBe(zhTW.systemPrivileges.selfDemoteConflict);
+      expect(api.updateUser).not.toHaveBeenCalled();
+      expect(api.setUserSystemPrivileges).not.toHaveBeenCalled();
+      expect(q('user-save')).not.toBeNull();
+    });
+
+    it('PAX-31 編輯別人時取消系統管理員並改系統權限照常送出（先帳號、後系統權限）', async () => {
+      api.updateUser.mockResolvedValue(boss);
+      api.setUserSystemPrivileges.mockResolvedValue(sp({ read: true }));
+      await mountPage(LIST);
+      await click('user-row-boss');
+      await click('user-admin');
+      await click('sp-designer-read');
+      await click('user-save');
+      expect(api.updateUser).toHaveBeenCalledWith('boss', { displayName: '名-boss', groupIds: [], isSystemAdmin: false });
+      expect(api.setUserSystemPrivileges).toHaveBeenCalledWith('boss', sp({ read: true }));
+      expect(api.updateUser.mock.invocationCallOrder[0]).toBeLessThan(api.setUserSystemPrivileges.mock.invocationCallOrder[0]!);
+    });
+
+    it('PAX-31 系統權限存檔成功後讓 me、使用者清單失效', async () => {
+      api.updateUser.mockResolvedValue(wang);
+      api.setUserSystemPrivileges.mockRejectedValueOnce({ status: 500, message: '伺服器錯誤' }).mockResolvedValueOnce(sp({ add: true }, true));
+      await mountPage(LIST);
+      await click('user-row-wang');
+      await click('sp-permission-admin');
+      await click('user-save');
+      // 重試只送系統權限，這時的失效全來自系統權限的 mutation
+      const invalidate = vi.spyOn(queryClient, 'invalidateQueries');
+      await click('user-save');
+      expect(api.updateUser).toHaveBeenCalledTimes(1);
+      expect(invalidate.mock.calls.map(([f]) => (f as { queryKey: unknown[] }).queryKey)).toEqual(expect.arrayContaining([['admin-users'], ['me']]));
+    });
+
     it('新增使用者沒有系統權限區塊', async () => {
       await mountPage(LIST);
       await click('user-create');

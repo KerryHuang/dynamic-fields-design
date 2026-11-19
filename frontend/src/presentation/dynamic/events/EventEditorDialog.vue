@@ -50,7 +50,6 @@ const hiddenHeader = useHiddenFieldIds(sourceKey);
 const me = useMe();
 // 沒有「權限設定」不能勾旗標；已勾的事件（別人勾的）不能存（後端同樣擋）
 const consentLocked = computed(() => !me.data.value?.permissionAdmin);
-const blockedByConsent = computed(() => consentLocked.value && usesAllowHiddenSource(form));
 
 // ---- trigger ----
 const hasWorkflow = computed(() => !!workflow.data.value);
@@ -81,6 +80,8 @@ const savedEvents = computed(() => events.data.value ?? []);
 // ---- save ----
 const save = useSaveEventMutation();
 const body = computed(() => buildEvent(form, props.module.key));
+// 看實際送出的 payload：常值旗標、沖銷附帶的 set 送出時不帶旗標，不擋
+const blockedByConsent = computed(() => consentLocked.value && usesAllowHiddenSource(body.value));
 const incomplete = computed(() => form.effects.some((e) => !e.custom && e.set.some((s) => !setIsComplete(s))));
 async function submit() {
   if (!(await nameInput.value?.validate()) || !body.value) return;
