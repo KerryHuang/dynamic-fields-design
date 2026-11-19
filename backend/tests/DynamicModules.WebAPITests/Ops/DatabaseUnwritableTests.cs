@@ -16,6 +16,7 @@ using static DynamicModules.WebAPITests.Ops.OpsIncidentKit;
 namespace DynamicModules.WebAPITests.Ops;
 
 /// <summary>空間滿與連不上回 503（維運設計 §17.2.9、§17.8 C12）；例外用各 provider 真的型別建構。</summary>
+[Trait("Category", "Postgres")]
 public class DatabaseUnwritableTests
 {
     /// <summary>存檔時丟指定的例外（一次）。</summary>
@@ -76,5 +77,16 @@ public class DatabaseUnwritableTests
         app.Logs.Records.Should().Contain(r => r.EventId.Id == 5003).And.NotContain(r => r.EventId.Id == 5000, "不算 500");
         await app.Services.GetRequiredService<IncidentInboxDrain>().FlushAsync(CancellationToken.None);
         (await Incidents(app)).Should().BeEmpty("同一原因由 database.writable 開事件，不開產品缺陷");
+    }
+
+    [Fact]
+    public async Task NonDatabaseDnsFailure_Is500_OpensDefectIncident()
+    {
+        using var app = new OpsTestApp();
+        var res = await app.AsUser().GetAsync("/api/v3/dynamic/test-ops/throw-dns");
+        res.StatusCode.Should().Be(HttpStatusCode.InternalServerError, "外部服務的 DNS 失敗不是資料庫連不上");
+        app.Logs.Records.Should().Contain(r => r.EventId.Id == 5000).And.NotContain(r => r.EventId.Id == 5003);
+        await app.Services.GetRequiredService<IncidentInboxDrain>().FlushAsync(CancellationToken.None);
+        (await Incidents(app)).Should().ContainSingle().Which.Code.Should().Be(nameof(SocketException));
     }
 }

@@ -208,7 +208,7 @@ public class IncidentTests
         var incident = (await Incidents(app)).Should().ContainSingle().Subject;
         incident.Category.Should().Be(IncidentCategory.Security);
         incident.Fingerprint.Should().Be(ErrorFingerprint.ForInfra("security", SecurityIncidents.AdminChangedCode));
-        (await app.AsUser().PostAsJsonAsync($"{Base}/incidents/{incident.Id}/acknowledge", new { expectedStatus = "open" })).EnsureSuccessStatusCode();
+        (await app.AsUser().PostAsJsonAsync($"{Base}/incidents/{incident.Id}/acknowledge", new { expectedStatus = "open", note = "x" })).EnsureSuccessStatusCode();
         await Grant("sales02");
 
         incident = (await Incidents(app)).Should().ContainSingle().Subject;
@@ -266,7 +266,7 @@ public class IncidentTests
         (await app.AsUser().GetAsync($"{Base}/incidents?status=bogus")).StatusCode.Should().Be(HttpStatusCode.BadRequest);
 
         var id = ids[0];
-        (await app.AsUser().PostAsJsonAsync($"{Base}/incidents/{id}/acknowledge", new { expectedStatus = "open" })).EnsureSuccessStatusCode();
+        (await app.AsUser().PostAsJsonAsync($"{Base}/incidents/{id}/acknowledge", new { expectedStatus = "open", note = "x" })).EnsureSuccessStatusCode();
         (await app.AsUser().PostAsJsonAsync($"{Base}/incidents/{id}/resolve", new { expectedStatus = "acknowledged", note = "處理完" }))
             .EnsureSuccessStatusCode();
         var detail = await app.AsUser().GetFromJsonAsync<JsonElement>($"{Base}/incidents/{id}");
@@ -280,6 +280,95 @@ public class IncidentTests
             .StatusCode.Should().Be(HttpStatusCode.Conflict);
     }
 
+    /// <summary>
+    /// 多實例反序提交（審查修正）：10:02 的訊號先寫入、10:01 的晚到。最近時間維持 10:02，最近版本、request id、標題參數也要是 10:02 那筆的；
+    /// 次數照樣累加。已結案後晚到的舊訊號重開（回歸）也一樣。
+    /// </summary>
+    [Fact]
+    public async Task B10_OlderSignalCommittedLater_KeepsLatestVersionRequestIdAndTitle()
+    {
+        using var app = new TestApp();
+        var t = app.Time.GetUtcNow().UtcDateTime;
+        IncidentSignal At(int minute, string tag) => Defect("fp-b10", t.AddMinutes(minute)) with
+        {
+            Version = $"v{tag}", RequestId = $"r{tag}",
+            TitleParams = IncidentTitles.Server("System.InvalidOperationException", tag == "2" ? "/api/newer" : "/api/older", null),
+        };
+        async Task ShouldBeLatest(long count)
+        {
+            var row = await Incident(app, "fp-b10");
+            row.OccurrenceCount.Should().Be(count);
+            row.LastSeenUtc.Should().BeCloseTo(t.AddMinutes(2), TimeSpan.FromMilliseconds(1));
+            row.LastVersion.Should().Be("v2");
+            row.LastRequestId.Should().Be("r2");
+            row.TitleParamsJson.Should().Contain("/api/newer").And.NotContain("/api/older");
+        }
+
+        await Record(app, At(2, "2"));
+        (await Record(app, At(1, "1"))).Transition.Should().Be(IncidentTransition.Updated);
+        await ShouldBeLatest(2);
+
+        var id = (await Incident(app, "fp-b10")).Id;
+        (await app.AsUser().PostAsJsonAsync($"{Base}/incidents/{id}/resolve", new { expectedStatus = "open", note = "x" })).EnsureSuccessStatusCode();
+        (await Record(app, At(1, "1"))).Transition.Should().Be(IncidentTransition.Regressed);
+        await ShouldBeLatest(3);
+    }
+
+    /// <summary>事件詳細的狀態歷程最多 100 筆，超過時標示截斷（審查建議，§17.5 <c>historyTruncated</c>）。</summary>
+    [Fact]
+    public async Task B12_IncidentDetail_HistoryOverMax_Truncated()
+    {
+        using var app = new TestApp();
+        var id = (await Record(app, Defect("fp-b12", app.Time.GetUtcNow().UtcDateTime))).IncidentId!.Value;
+        async Task<JsonElement> Detail() => await app.AsUser().GetFromJsonAsync<JsonElement>($"{Base}/incidents/{id}");
+        (await Detail()).GetProperty("historyTruncated").GetBoolean().Should().BeFalse();
+
+        await using (var scope = app.Services.CreateAsyncScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<DynamicDbContext>();
+            for (var i = 0; i <= IncidentDetailMax; i++)
+                db.Set<AuditLogEntry>().Add(new AuditLogEntry
+                {
+                    OccurredUtc = app.Time.GetUtcNow().UtcDateTime, ActorUserId = "admin", ActorKind = AuditActorKind.User, Channel = AuditChannel.Ui,
+                    Action = "incident.acknowledge", RiskLevel = AuditRiskLevel.Write, TargetKind = "incident", TargetId = id.ToString(),
+                    Result = AuditResult.Success,
+                });
+            await db.SaveChangesAsync();
+        }
+        var detail = await Detail();
+        detail.GetProperty("history").GetArrayLength().Should().Be(IncidentDetailMax);
+        detail.GetProperty("historyTruncated").GetBoolean().Should().BeTrue();
+    }
+
+    private const int IncidentDetailMax = Application.Dynamic.OpsService.Monitor.IncidentDetail.HistoryMax;
+
+    /// <summary>
+    /// 收件匣的定時 flush 不受看門狗開關影響（審查修正，§17.2.8、§17.2.11：<c>Ops:Watchdog:Enabled</c> 只停看門狗）：
+    /// 測試主機的 <c>Ops:Watchdog:Enabled</c> 是 false，背景 flush 仍每 5 秒把事件寫進資料庫，關機時最後再 flush 一次。
+    /// </summary>
+    [Fact]
+    public async Task B11_WatchdogDisabled_InboxStillFlushedPeriodicallyAndOnStop()
+    {
+        using var app = new TestApp();
+        var (inbox, drain) = Inbox(app);
+        var clock = new ManualClock(app.Time.GetUtcNow());
+        var flusher = new DynamicModules.WebAPI.Ops.IncidentInboxFlusher(drain, clock,
+            Microsoft.Extensions.Logging.Abstractions.NullLogger<DynamicModules.WebAPI.Ops.IncidentInboxFlusher>.Instance);
+        await flusher.StartAsync(CancellationToken.None);
+        var now = app.Time.GetUtcNow().UtcDateTime;
+
+        inbox.Post(Defect("fp-b11-tick", now));
+        clock.Advance(DynamicModules.WebAPI.Ops.IncidentInboxFlusher.Interval);
+        await Within(Task.Run(async () =>
+        {
+            while ((await Incidents(app)).Count == 0) await Task.Delay(20);
+        }));
+
+        inbox.Post(Defect("fp-b11-stop", now));
+        await flusher.StopAsync(CancellationToken.None);
+        (await Incidents(app)).Select(i => i.Fingerprint).Should().BeEquivalentTo("fp-b11-tick", "fp-b11-stop");
+    }
+
     [Fact]
     public async Task F01_Upkeep_PurgesResolvedIncidentsSamplesAndHealthResults_KeepsOpen()
     {
@@ -290,8 +379,12 @@ public class IncidentTests
         var oldResolved = (await Record(app, Defect("fp-old-resolved", old,
             sample: new IncidentSampleData(old, "r1", null, "test", null, RawMessage: "m")))).IncidentId!.Value;
         await Record(app, Defect("fp-old-resolved", old) with { Recovered = true });
+        // 未結事件用健康檢查類：不會被 72 小時自動結案（§17.2.2），才驗得到「未結的不受事件保留天數影響」
         var oldOpen = (await Record(app, Defect("fp-old-open", old, IncidentSeverity.Critical,
-            new IncidentSampleData(old, "r2", null, "test", null, RawMessage: "m")))).IncidentId!.Value;
+            new IncidentSampleData(old, "r2", null, "test", null, RawMessage: "m")) with
+        {
+            Source = IncidentSource.Health, Category = IncidentCategory.Infra, Code = Application.Dynamic.OpsService.Health.HealthCheckCatalog.StorageDiskFree,
+        })).IncidentId!.Value;
         await EnsureChecks(app);
         await Send(app, new Application.Dynamic.OpsService.Health.RecordHealthResultRequest(
             Observation("database.integrity", old, HealthStatus.Ok, 0, "A"), null));
@@ -307,7 +400,7 @@ public class IncidentTests
         (await Row(app, "ops.upkeep")).LastStatus.Should().Be(ScheduledJobStatus.Succeeded);
         var left = await Incidents(app);
         left.Select(i => i.Id).Should().NotContain(oldResolved);
-        left.Should().Contain(i => i.Id == oldOpen, "未結事件不受事件保留天數影響");
+        left.Should().Contain(i => i.Id == oldOpen && i.Status == IncidentStatus.Open, "未結事件不受事件保留天數影響");
         (await Samples(app, oldOpen)).Should().BeEmpty();
         (await Results(app, "database.integrity")).Should().ContainSingle().Which.CheckedUtc.Should().BeAfter(Start.UtcDateTime.AddDays(-1));
 

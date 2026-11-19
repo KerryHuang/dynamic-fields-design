@@ -26,6 +26,10 @@ public class OpsTestController(ILogger<OpsTestController> logger) : ControllerBa
     [HttpGet("throw")]
     public IActionResult Throw([FromQuery] string message) => throw new InvalidOperationException(message);
 
+    /// <summary>非資料庫的外部連線主機名稱解析失敗（裸 SocketException，不能被當成資料庫連不上）。</summary>
+    [HttpGet("throw-dns")]
+    public IActionResult ThrowDns() => throw new System.Net.Sockets.SocketException((int)System.Net.Sockets.SocketError.HostNotFound);
+
     [HttpGet("bad-request")]
     public IActionResult Bad() => throw new Microsoft.AspNetCore.Http.BadHttpRequestException("x", 413);
 }

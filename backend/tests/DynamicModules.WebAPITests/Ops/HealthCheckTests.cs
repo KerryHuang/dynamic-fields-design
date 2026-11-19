@@ -327,7 +327,8 @@ public class HealthCheckTests
     {
         using var app = App(new FakeDiskSpace(), noLock: concurrent);
         await EnsureChecks(app);
-        var t = app.Time.GetUtcNow().UtcDateTime.AddHours(-1);
+        // 直接送觀測值、不經執行器：檢查時間由測試給，先截到資料庫的精度（PostgreSQL 只到微秒，CI run 44467123758）
+        var t = Application.Common.StorageTime.ToMicroseconds(app.Time.GetUtcNow().UtcDateTime.AddHours(-1));
         Task Write(string instance, int minute, HealthStatus status) =>
             Send(app, new RecordHealthResultRequest(Observation(Disk, t.AddMinutes(minute), status, status == HealthStatus.Ok ? 3000 : 500, instance), null));
 
@@ -355,6 +356,71 @@ public class HealthCheckTests
         incident.Regression.Should().BeTrue();
         incident.LastSeenUtc.Should().Be(t.AddMinutes(4));
         (await Results(app, Disk)).Should().HaveCount(4);
+    }
+
+    /// <summary>
+    /// 時間精度（審查修正，CI run 44467123758）：PostgreSQL 的 timestamp 只到微秒，.NET 的 DateTime 是 100 奈秒。
+    /// 檢查時間帶著微秒以下的位數時，寫入成功後狀態板的同一筆結果不能被當成「比資料庫新」（否則總覽一直顯示只在記憶體）。
+    /// </summary>
+    [Fact]
+    public async Task C16_SubMicrosecondCheckTime_PersistedResultNotTreatedAsNewerThanProjection()
+    {
+        using var app = App(new FakeDiskSpace());
+        // 讓「現在」的 tick 落在微秒的中間（末位 5），PostgreSQL 存回來會少這 5 個 tick
+        app.Time.Advance(TimeSpan.FromTicks(15 - app.Time.GetUtcNow().Ticks % 10));
+        await Tick(app);
+        Engine(app).PendingCount.Should().Be(0);
+
+        var stored = (await Check(app, Disk)).LastCheckedUtc!.Value;
+        Engine(app).Board[Disk].CheckedUtc.Should().Be(stored, "狀態板與資料庫的檢查時間是同一個值");
+        var overview = await app.AsUser().GetFromJsonAsync<JsonElement>($"{Base}/overview");
+        overview.GetProperty("checks").EnumerateArray().Single(c => c.GetProperty("code").GetString() == Disk)
+            .GetProperty("fromMemory").GetBoolean().Should().BeFalse("這筆已寫進資料庫");
+    }
+
+    /// <summary>第一次呼叫卡住直到 <see cref="Release"/>（回嚴重），之後的呼叫立刻回正常。</summary>
+    private sealed class HeldProbe(string code) : IHealthProbe
+    {
+        public readonly TaskCompletionSource Entered = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        public readonly TaskCompletionSource Release = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        private int _calls;
+
+        public string Code => code;
+
+        public async Task<ProbeResult> RunAsync(HealthProbeContext context, CancellationToken ct)
+        {
+            if (Interlocked.Increment(ref _calls) > 1) return new ProbeResult(HealthStatus.Ok, 3000);
+            Entered.TrySetResult();
+            await Release.Task.WaitAsync(ct);
+            return new ProbeResult(HealthStatus.Critical, 500);
+        }
+    }
+
+    /// <summary>
+    /// 重疊的檢查（審查建議）：背景正在跑時立即檢查回 busy（共用執行中狀態）；較早開始、較晚完成的結果不蓋掉狀態板上較新的結果。
+    /// </summary>
+    [Fact]
+    public async Task C17_OverlappingRuns_RunNowBusy_LaterStartedResultKeptOnBoard()
+    {
+        using var app = App(new FakeDiskSpace());
+        await EnsureChecks(app);
+        var probe = new HeldProbe(Disk);
+        var engine = OpsIncidentKit.Engine(app, probe);
+        var def = HealthCheckCatalog.Find(Disk)!;
+        var settings = EffectiveHealthSettings.Of(def, await Check(app, Disk));
+
+        var slow = engine.RunAsync(def, settings, null, CancellationToken.None);
+        await Within(probe.Entered.Task);
+        (await engine.TryRunNowAsync(def, settings, CancellationToken.None)).Should().BeNull("背景正在跑同一個檢查");
+
+        app.Time.Advance(TimeSpan.FromMinutes(1));
+        var later = await Within(engine.RunAsync(def, settings, null, CancellationToken.None));
+        probe.Release.SetResult();
+        var earlier = await Within(slow);
+
+        earlier.CheckedUtc.Should().BeBefore(later.CheckedUtc);
+        engine.Board[Disk].TransitionId.Should().Be(later.TransitionId, "較早開始的結果晚完成，不蓋掉較新的");
+        (await engine.TryRunNowAsync(def, settings, CancellationToken.None)).Should().NotBeNull("都跑完了");
     }
 
     [Fact]

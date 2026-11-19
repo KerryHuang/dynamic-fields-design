@@ -106,7 +106,9 @@ public sealed class RunHealthCheckHandler(
         if (!gate.TryEnter(def.Code))
             return ServiceResult.Conflict(MessageRef.Of(MessageText.HealthCheckBusy, (int)HealthRunGate.MinGap.TotalSeconds), "healthCheckBusy");
         var row = (await checks.ListAsync(ct)).FirstOrDefault(c => c.Code == def.Code);
-        await engine.RunAsync(def, EffectiveHealthSettings.Of(def, row), null, ct);
+        // 背景（看門狗、ops.monitor）正在跑同一個檢查：同樣回 busy，不重疊執行
+        if (await engine.TryRunNowAsync(def, EffectiveHealthSettings.Of(def, row), ct) is null)
+            return ServiceResult.Conflict(MessageRef.Of(MessageText.HealthCheckBusy, (int)HealthRunGate.MinGap.TotalSeconds), "healthCheckBusy");
         row = (await checks.ListAsync(ct)).FirstOrDefault(c => c.Code == def.Code);
         return ServiceResult.Success(await reader.StateAsync(def, row, await incidents.ListUnresolvedAsync(ct), ct));
     }

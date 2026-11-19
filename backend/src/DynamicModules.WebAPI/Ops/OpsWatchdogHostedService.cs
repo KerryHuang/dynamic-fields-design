@@ -42,9 +42,10 @@ public sealed class OpsWatchdogHostedService(OpsWatchdog watchdog, IConfiguratio
 
 /// <summary>
 /// 事件收件匣的定時 flush（維運設計 §17.2.3）：每 5 秒一次，關機時最後再 flush 一次（graceful shutdown 時間內）。
-/// 和看門狗同一個開關：<c>Ops:Watchdog:Enabled</c> 為 false 時不跑，測試直接呼叫 <see cref="IncidentInboxDrain.FlushAsync"/>。
+/// 不受 <c>Ops:Watchdog:Enabled</c> 影響（§17.2.8、§17.2.11 的看門狗開關只停看門狗；審查修正）：500 與前端錯誤一定會被寫進資料庫。
+/// 測試主機把這個 hosted service 拿掉（TestApp），測試直接呼叫 <see cref="IncidentInboxDrain.FlushAsync"/>。
 /// </summary>
-public sealed class IncidentInboxFlusher(IncidentInboxDrain drain, IConfiguration configuration, TimeProvider time, ILogger<IncidentInboxFlusher> logger)
+public sealed class IncidentInboxFlusher(IncidentInboxDrain drain, TimeProvider time, ILogger<IncidentInboxFlusher> logger)
     : BackgroundService
 {
     /// <summary>flush 頻率（技術限制，§17.9）。</summary>
@@ -52,7 +53,6 @@ public sealed class IncidentInboxFlusher(IncidentInboxDrain drain, IConfiguratio
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
-        if (!configuration.GetValue(OpsWatchdogHostedService.EnabledKey, true)) return;
         using var timer = new PeriodicTimer(Interval, time);
         try
         {
@@ -67,7 +67,7 @@ public sealed class IncidentInboxFlusher(IncidentInboxDrain drain, IConfiguratio
     public override async Task StopAsync(CancellationToken cancellationToken)
     {
         await base.StopAsync(cancellationToken);
-        if (configuration.GetValue(OpsWatchdogHostedService.EnabledKey, true)) await FlushQuietlyAsync(cancellationToken);
+        await FlushQuietlyAsync(cancellationToken);
     }
 
     private async Task FlushQuietlyAsync(CancellationToken ct)

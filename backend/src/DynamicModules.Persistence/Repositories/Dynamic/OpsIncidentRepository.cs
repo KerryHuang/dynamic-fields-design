@@ -21,25 +21,27 @@ public class OpsIncidentRepository(DynamicDbContext db) : IOpsIncidentRepository
     public async Task<bool> TryBumpAsync(long id, IncidentStatus expected, IncidentBump b, bool reopen, CancellationToken ct)
     {
         var q = Incidents.Where(i => i.Id == id && i.Status == expected);
+        // 「最近」欄位（版本、request id、標題參數）與 LastSeenUtc 用同一個時間條件：晚到的舊訊號只加次數（§17.12 審查修正）。
+        // SET 右邊讀的都是更新前的值，所以條件裡的 LastSeenUtc 是舊值
         // 升級退回開啟時清掉確認（§17.2.2）；分兩句寫，不在 SET 裡用條件運算式包轉換過的列舉
         return reopen
             ? await q.ExecuteUpdateAsync(s => s
                 .SetProperty(i => i.OccurrenceCount, i => i.OccurrenceCount + b.Count)
                 .SetProperty(i => i.LastSeenUtc, i => i.LastSeenUtc > b.SeenUtc ? i.LastSeenUtc : b.SeenUtc)
-                .SetProperty(i => i.LastVersion, b.Version)
-                .SetProperty(i => i.LastRequestId, i => b.RequestId ?? i.LastRequestId)
+                .SetProperty(i => i.LastVersion, i => i.LastSeenUtc > b.SeenUtc ? i.LastVersion : b.Version)
+                .SetProperty(i => i.LastRequestId, i => i.LastSeenUtc > b.SeenUtc ? i.LastRequestId : b.RequestId ?? i.LastRequestId)
                 .SetProperty(i => i.Severity, b.Severity)
-                .SetProperty(i => i.TitleParamsJson, i => b.TitleParamsJson ?? i.TitleParamsJson)
+                .SetProperty(i => i.TitleParamsJson, i => i.LastSeenUtc > b.SeenUtc ? i.TitleParamsJson : b.TitleParamsJson ?? i.TitleParamsJson)
                 .SetProperty(i => i.Status, IncidentStatus.Open)
                 .SetProperty(i => i.AcknowledgedBy, (string?)null)
                 .SetProperty(i => i.AcknowledgedUtc, (DateTime?)null), ct) == 1
             : await q.ExecuteUpdateAsync(s => s
                 .SetProperty(i => i.OccurrenceCount, i => i.OccurrenceCount + b.Count)
                 .SetProperty(i => i.LastSeenUtc, i => i.LastSeenUtc > b.SeenUtc ? i.LastSeenUtc : b.SeenUtc)
-                .SetProperty(i => i.LastVersion, b.Version)
-                .SetProperty(i => i.LastRequestId, i => b.RequestId ?? i.LastRequestId)
+                .SetProperty(i => i.LastVersion, i => i.LastSeenUtc > b.SeenUtc ? i.LastVersion : b.Version)
+                .SetProperty(i => i.LastRequestId, i => i.LastSeenUtc > b.SeenUtc ? i.LastRequestId : b.RequestId ?? i.LastRequestId)
                 .SetProperty(i => i.Severity, b.Severity)
-                .SetProperty(i => i.TitleParamsJson, i => b.TitleParamsJson ?? i.TitleParamsJson), ct) == 1;
+                .SetProperty(i => i.TitleParamsJson, i => i.LastSeenUtc > b.SeenUtc ? i.TitleParamsJson : b.TitleParamsJson ?? i.TitleParamsJson), ct) == 1;
     }
 
     public async Task<bool> TryRegressAsync(long id, IncidentBump b, CancellationToken ct) =>
@@ -49,10 +51,10 @@ public class OpsIncidentRepository(DynamicDbContext db) : IOpsIncidentRepository
             .SetProperty(i => i.ReopenCount, i => i.ReopenCount + 1)
             .SetProperty(i => i.OccurrenceCount, i => i.OccurrenceCount + b.Count)
             .SetProperty(i => i.LastSeenUtc, i => i.LastSeenUtc > b.SeenUtc ? i.LastSeenUtc : b.SeenUtc)
-            .SetProperty(i => i.LastVersion, b.Version)
-            .SetProperty(i => i.LastRequestId, i => b.RequestId ?? i.LastRequestId)
+            .SetProperty(i => i.LastVersion, i => i.LastSeenUtc > b.SeenUtc ? i.LastVersion : b.Version)
+            .SetProperty(i => i.LastRequestId, i => i.LastSeenUtc > b.SeenUtc ? i.LastRequestId : b.RequestId ?? i.LastRequestId)
             .SetProperty(i => i.Severity, b.Severity)
-            .SetProperty(i => i.TitleParamsJson, i => b.TitleParamsJson ?? i.TitleParamsJson)
+            .SetProperty(i => i.TitleParamsJson, i => i.LastSeenUtc > b.SeenUtc ? i.TitleParamsJson : b.TitleParamsJson ?? i.TitleParamsJson)
             .SetProperty(i => i.AcknowledgedBy, (string?)null)
             .SetProperty(i => i.AcknowledgedUtc, (DateTime?)null)
             .SetProperty(i => i.ResolvedBy, (string?)null)

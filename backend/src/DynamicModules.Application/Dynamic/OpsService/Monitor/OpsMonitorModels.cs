@@ -35,18 +35,23 @@ public sealed record IncidentSampleDto(
 public sealed record IncidentDetail : IncidentSummary
 {
     public IncidentDetail(IncidentSummary summary, string? normalizedMessage, IReadOnlyList<IncidentSampleDto> samples,
-        IReadOnlyList<HealthInstanceState>? instances, IReadOnlyList<AuditSummaryResponse> history) : base(summary)
+        IReadOnlyList<HealthInstanceState>? instances, IReadOnlyList<AuditSummaryResponse> history, bool historyTruncated) : base(summary)
     {
         NormalizedMessage = normalizedMessage;
         Samples = samples;
         Instances = instances;
         History = history;
+        HistoryTruncated = historyTruncated;
     }
+
+    /// <summary>歷程最多帶幾筆（技術限制，§17.9）；超過時 <see cref="HistoryTruncated"/> 為真，完整的到稽核頁查。</summary>
+    public const int HistoryMax = 100;
 
     public string? NormalizedMessage { get; init; }
     public IReadOnlyList<IncidentSampleDto> Samples { get; init; }
     public IReadOnlyList<HealthInstanceState>? Instances { get; init; }
     public IReadOnlyList<AuditSummaryResponse> History { get; init; }
+    public bool HistoryTruncated { get; init; }
 }
 
 public sealed record IncidentListResponse(IReadOnlyList<IncidentSummary> Items, string? NextCursor);

@@ -15,7 +15,7 @@ public static class PostgresDatabase
         builder.UseNpgsql(connectionString, b => b.MigrationsAssembly(typeof(PostgresDatabase).Assembly.FullName));
         builder.ReplaceService<IModelCustomizer, PostgresModelCustomizer>();
         builder.ReplaceService<Microsoft.EntityFrameworkCore.Metadata.Conventions.Infrastructure.IProviderConventionSetBuilder, PostgresConventionSetBuilder>();
-        builder.AddInterceptors(settings.SaveChangesGate, settings.WriteLock);
+        builder.AddInterceptors(settings.SaveChangesGate, settings.WriteLock, PostgresConnectionFailureInterceptor.Instance);
         return builder;
     }
 }

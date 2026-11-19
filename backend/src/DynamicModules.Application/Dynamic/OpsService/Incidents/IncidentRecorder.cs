@@ -21,6 +21,8 @@ public sealed class IncidentRecorder(
 
     public async Task<(IncidentTransition Transition, long? IncidentId)> RecordAsync(IncidentSignal s, CancellationToken ct)
     {
+        // 截到資料庫的精度：下面拿它和讀回的 LastSeenUtc、ResolvedUtc 比先後（§17.12 審查修正）
+        s = s with { OccurredUtc = StorageTime.ToMicroseconds(s.OccurredUtc) };
         for (var attempt = 1; attempt <= MaxAttempts; attempt++)
         {
             var row = await incidents.FindByFingerprintAsync(s.Fingerprint, ct);

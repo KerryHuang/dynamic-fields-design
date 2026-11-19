@@ -37,6 +37,8 @@ public sealed class HealthCheckEngine(
     private readonly ConcurrentDictionary<string, HealthObservation> _board = new(StringComparer.Ordinal);
     private readonly ConcurrentDictionary<string, long> _counters = new(StringComparer.Ordinal);
     private readonly List<PendingHealthWrite> _pending = [];
+    /// <summary>每個檢查目前在跑的次數（看門狗、<c>ops.monitor</c>、立即檢查共用；鎖 <see cref="_sync"/>）。</summary>
+    private readonly Dictionary<string, int> _running = new(StringComparer.Ordinal);
     private readonly object _sync = new();
     private readonly SemaphoreSlim _flush = new(1, 1);
     private long _dropped;
@@ -62,16 +64,42 @@ public sealed class HealthCheckEngine(
     /// <summary>跑一個檢查並寫入（寫不進去留在佇列）；nextDueUtc 只有排程型的正常執行才給。</summary>
     public async Task<HealthObservation> RunAsync(HealthCheckDefinition def, EffectiveHealthSettings settings, DateTime? nextDueUtc, CancellationToken ct)
     {
-        var observation = await ProbeAsync(def, settings, ct);
-        Enqueue(observation, nextDueUtc);
-        await FlushAsync(ct);
-        return observation;
+        lock (_sync) _running[def.Code] = _running.GetValueOrDefault(def.Code) + 1;
+        return await RunEnteredAsync(def, settings, nextDueUtc, ct);
+    }
+
+    /// <summary>立即檢查：這個檢查正在跑（背景或另一個立即檢查）就不跑、回 null（呼叫端回 <c>healthCheckBusy</c>）。</summary>
+    public async Task<HealthObservation?> TryRunNowAsync(HealthCheckDefinition def, EffectiveHealthSettings settings, CancellationToken ct)
+    {
+        lock (_sync)
+        {
+            if (_running.GetValueOrDefault(def.Code) > 0) return null;
+            _running[def.Code] = 1;
+        }
+        return await RunEnteredAsync(def, settings, null, ct);
+    }
+
+    private async Task<HealthObservation> RunEnteredAsync(HealthCheckDefinition def, EffectiveHealthSettings settings, DateTime? nextDueUtc, CancellationToken ct)
+    {
+        try
+        {
+            var observation = await ProbeAsync(def, settings, ct);
+            Enqueue(observation, nextDueUtc);
+            await FlushAsync(ct);
+            return observation;
+        }
+        finally
+        {
+            lock (_sync)
+                if (--_running[def.Code] == 0) _running.Remove(def.Code);
+        }
     }
 
     private async Task<HealthObservation> ProbeAsync(HealthCheckDefinition def, EffectiveHealthSettings settings, CancellationToken ct)
     {
         var started = time.GetTimestamp();
-        var now = time.GetUtcNow().UtcDateTime;
+        // 截到資料庫的精度：狀態板與寫入後讀回的投影要能比出「同一筆」（OpsMonitorReader 依此判斷記憶體是否比較新）
+        var now = Common.StorageTime.ToMicroseconds(time.GetUtcNow().UtcDateTime);
         ProbeResult result;
         try
         {
@@ -91,7 +119,8 @@ public sealed class HealthCheckEngine(
         var duration = (int)Math.Min(int.MaxValue, time.GetElapsedTime(started).TotalMilliseconds);
         var observation = new HealthObservation(def.Code, Guid.NewGuid().ToString("N"), now, result.Status, result.Value, result.MessageCode,
             duration, instance.InstanceId);
-        _board[def.Code] = observation;
+        // 重疊的兩次檢查（看門狗與立即檢查）較早開始、較晚完成的不蓋掉較新的結果
+        _board.AddOrUpdate(def.Code, observation, (_, current) => current.CheckedUtc > observation.CheckedUtc ? current : observation);
         return observation;
     }
 

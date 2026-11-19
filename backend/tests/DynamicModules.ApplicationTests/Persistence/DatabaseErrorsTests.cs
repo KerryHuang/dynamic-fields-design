@@ -156,14 +156,36 @@ public class DatabaseErrorsTests
         Classify(new Npgsql.NpgsqlException("讀取中斷", new EndOfStreamException())).Should().Be(Kind.Unavailable);
         Classify(new InvalidOperationException("transient", new Npgsql.NpgsqlException(null, new SocketException((int)SocketError.ConnectionRefused))))
             .Should().Be(Kind.Unavailable);
-        // 主機名解析失敗：Npgsql 直接丟裸的 SocketException；其他 socket 錯誤（不是連資料庫）不歸資料庫
-        Classify(new SocketException((int)SocketError.HostNotFound)).Should().Be(Kind.Unavailable);
+        // 裸的 SocketException 看不出是不是連資料庫（外部服務的 DNS 失敗也長這樣），一律不歸資料庫；
+        // 資料庫主機名解析失敗由 PostgreSQL 連線邊界包成 DatabaseUnavailableException（見下一個測試）
+        Classify(new SocketException((int)SocketError.HostNotFound)).Should().Be(Kind.None, "非資料庫的 DNS 失敗照一般 500");
+        Classify(new InvalidOperationException("x", new SocketException((int)SocketError.HostNotFound))).Should().Be(Kind.None);
         Classify(new SocketException((int)SocketError.ConnectionReset)).Should().Be(Kind.None);
+        Classify(new DatabaseUnavailableException("無法解析資料庫主機名稱", new SocketException((int)SocketError.HostNotFound)))
+            .Should().Be(Kind.Unavailable);
         // 連線池耗盡：不帶 SQLSTATE、內層 TimeoutException，仍是忙碌、不是連不上
         Classify(new Npgsql.NpgsqlException("池滿", new TimeoutException())).Should().Be(Kind.Busy);
         Classify(new FakePgException(null)).Should().Be(Kind.None);
         Classify(new Npgsql.PostgresException("x", "ERROR", "ERROR", "25006")).Should().Be(Kind.ReadOnly);
         Classify(new Npgsql.PostgresException("x", "FATAL", "FATAL", "57P01")).Should().Be(Kind.Unavailable);
+    }
+
+    /// <summary>
+    /// 真的 Npgsql＋EF：資料庫主機名稱解析失敗時 Npgsql 丟裸的 SocketException，PostgreSQL 的連線邊界（DbContext 選項）把它包成可辨識的
+    /// 資料庫連線例外，才歸連不上（設計 §17.12 審查修正）。不需要真的 PostgreSQL 伺服器，SQLite 模式也跑。
+    /// </summary>
+    [Fact]
+    public async Task Postgres_DatabaseHostNotFound_ThroughEf_IsUnavailable()
+    {
+        var options = new DbContextOptionsBuilder<DynamicModules.Domain.Data.DynamicDbContext>();
+        DynamicModules.Persistence.Postgres.PostgresDatabase.Configure(options,
+            "Host=fw-o2b-no-such-host.invalid;Database=x;Username=x;Password=x;Timeout=5", DynamicModules.Persistence.Postgres.PostgresWriteSettings.Unserialized());
+        await using var db = new DynamicModules.Domain.Data.DynamicDbContext(options.Options);
+
+        var act = () => db.Database.ExecuteSqlRawAsync("SELECT 1");
+
+        var thrown = (await act.Should().ThrowAsync<Exception>()).Which;
+        Classify(thrown).Should().Be(Kind.Unavailable, thrown.ToString());
     }
 
     // ---- 真的 SQLite 丟出的例外：確認錯誤碼與擴充碼的假設 ----

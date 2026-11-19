@@ -226,11 +226,13 @@ public sealed class GetIncidentHandler(
             var row = (await checks.ListAsync(ct)).FirstOrDefault(c => c.Code == def.Code);
             instances = (await reader.StateAsync(def, row, [i], ct)).Instances;
         }
-        // 狀態歷程：這件事件的確認與結案（從稽核讀；時間不限，只看這個目標）
-        var history = (await auditLog.PageAsync(new AuditLogQuery(DateTime.UnixEpoch, new DateTime(9999, 1, 1, 0, 0, 0, DateTimeKind.Utc), TargetKind: AuditTargets.Incident,
-                TargetId: i.Id.ToString(CultureInfo.InvariantCulture)), 100, ct))
+        // 狀態歷程：這件事件的確認與結案（從稽核讀；時間不限，只看這個目標）；多讀一筆判斷有沒有截斷，完整的到稽核頁查
+        var entries = await auditLog.PageAsync(new AuditLogQuery(DateTime.UnixEpoch, new DateTime(9999, 1, 1, 0, 0, 0, DateTimeKind.Utc), TargetKind: AuditTargets.Incident,
+                TargetId: i.Id.ToString(CultureInfo.InvariantCulture)), IncidentDetail.HistoryMax + 1, ct);
+        var history = entries.Take(IncidentDetail.HistoryMax)
             .Select(a => new AuditSummaryResponse(a.Id, a.OccurredUtc, a.ActorUserId, null, a.ActorKind, a.Channel, a.TokenId, a.Action, a.RiskLevel,
                 a.TargetKind, a.TargetId, a.TargetLabel, a.Result, a.ReasonCode, a.RequestId, null)).ToList();
-        return ServiceResult.Success(new IncidentDetail(reader.Summary(i), i.NormalizedMessage, samples, instances, history));
+        return ServiceResult.Success(new IncidentDetail(reader.Summary(i), i.NormalizedMessage, samples, instances, history,
+            entries.Count > IncidentDetail.HistoryMax));
     }
 }

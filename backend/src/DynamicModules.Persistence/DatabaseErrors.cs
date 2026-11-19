@@ -91,8 +91,9 @@ public sealed class DatabaseErrors : IDatabaseErrors
         // Npgsql 在 socket 斷線、連不到主機時丟不帶 SQLSTATE 的例外，內層是 SocketException 或 IOException；
         // 連線池耗盡（內層 TimeoutException）已歸忙碌，不在這裡（o2b 實測：拒絕連線、硬殺後讀串流都落在這條，設計 §17.12）
         DbException { SqlState: null } d => HasInner(d, x => x is SocketException or IOException),
-        // o2b 實測：資料庫主機名解析失敗時 Npgsql 不包裝，直接丟 SocketException；只認名稱解析類的錯誤碼，其他 socket 錯誤不歸資料庫
-        SocketException { SocketErrorCode: SocketError.HostNotFound or SocketError.TryAgain or SocketError.NoData } => true,
+        // 資料庫主機名解析失敗：Npgsql 丟裸的 SocketException，看不出是不是資料庫，由 PostgreSQL 連線邊界包成這個型別（§17.12 審查修正）；
+        // 裸的 SocketException 一律不歸資料庫（外部服務的 DNS 失敗照一般 500）
+        DatabaseUnavailableException => true,
         _ => false,
     });
 

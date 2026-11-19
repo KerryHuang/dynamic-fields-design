@@ -79,7 +79,7 @@ builder.Services.AddSingleton(sp => DynamicModules.Application.Dynamic.OpsServic
 // 背景排程器：工作登記在 AddApplication；Ops:Scheduler:Enabled=false 時不跑（多實例只讓其中一台跑、除錯用）
 builder.Services.AddSingleton<DynamicModules.Application.Dynamic.OpsService.Scheduling.JobRunner>();
 builder.Services.AddHostedService<SchedulerHostedService>();
-// 看門狗與事件收件匣（維運設計 §17.2.3、§17.2.4）：每個實例都跑；Ops:Watchdog:Enabled=false 時不跑（測試主機）
+// 看門狗與事件收件匣（維運設計 §17.2.3、§17.2.4）：每個實例都跑；Ops:Watchdog:Enabled=false 只停看門狗，收件匣照常 flush
 builder.Services.AddHostedService<OpsWatchdogHostedService>();
 builder.Services.AddHostedService<IncidentInboxFlusher>();
 builder.Services.AddSingleton<DynamicModules.Application.Dynamic.OpsService.Health.IDiskSpace, DriveInfoDiskSpace>();
