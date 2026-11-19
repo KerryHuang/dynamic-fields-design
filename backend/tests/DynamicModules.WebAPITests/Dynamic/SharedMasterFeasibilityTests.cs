@@ -14,6 +14,7 @@ using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using static DynamicModules.WebAPITests.Dynamic.ApiTestKit;
+using DynamicModules.TestSupport;
 
 namespace DynamicModules.WebAPITests.Dynamic;
 
@@ -247,22 +248,26 @@ public class SharedMasterFeasibilityTests : IDisposable
         before.OptionScopes.Should().NotBeEmpty("crm-lite 有 optionScopes");
         var extraGroup = Db(db => db.Set<PermissionGroup>().First(g => !before.GroupPrivileges.Select(p => p.GroupId).Contains(g.Id)).Id);
 
-        await using (var tx = await sp.GetRequiredService<ITransactionManager>().BeginAsync(default))
+        // 權限軸設計 §7.4：直接呼叫批次入口要寫入許可，測試用 Test 許可包住整段寫入與提交
+        await TestPermits.RunForTestsAsync(async () =>
         {
-            var rows = await permissions.LoadModuleRowsAsync(module, default);
-            var merged = rows.GroupPrivileges.Select(Copy).ToList();
-            merged.Add(new GroupProgramPrivilege { GroupId = extraGroup, ProgramCode = module.ProgramCode, CanRead = true });
-            await permissions.ReplaceModuleRowsAsync(module, rows with
+            await using (var tx = await sp.GetRequiredService<ITransactionManager>().BeginAsync(default))
             {
-                GroupPrivileges = merged,
-                Scopes = [.. rows.Scopes.Select(s => new ModuleDataScope { ModuleId = s.ModuleId, GroupId = s.GroupId, Scope = s.Scope }),
-                          new ModuleDataScope { ModuleId = module.Id, GroupId = extraGroup, Scope = DataScope.Own }],
-                UserPrivileges = [], FieldPermissions = rows.FieldPermissions.Select(f => new FieldPermission { FieldId = f.FieldId, GroupId = f.GroupId, Access = f.Access }).ToList(),
-                OptionScopes = rows.OptionScopes.Select(o => new FieldOptionScope { OptionId = o.OptionId, GroupId = o.GroupId }).ToList()
-            }, default);
-            await sp.GetRequiredService<IUnitOfWork>().CommitAsync(default);
-            await tx.CommitAsync(default);
-        }
+                var rows = await permissions.LoadModuleRowsAsync(module, default);
+                var merged = rows.GroupPrivileges.Select(Copy).ToList();
+                merged.Add(new GroupProgramPrivilege { GroupId = extraGroup, ProgramCode = module.ProgramCode, CanRead = true });
+                await permissions.ReplaceModuleRowsAsync(module, rows with
+                {
+                    GroupPrivileges = merged,
+                    Scopes = [.. rows.Scopes.Select(s => new ModuleDataScope { ModuleId = s.ModuleId, GroupId = s.GroupId, Scope = s.Scope }),
+                              new ModuleDataScope { ModuleId = module.Id, GroupId = extraGroup, Scope = DataScope.Own }],
+                    UserPrivileges = [], FieldPermissions = rows.FieldPermissions.Select(f => new FieldPermission { FieldId = f.FieldId, GroupId = f.GroupId, Access = f.Access }).ToList(),
+                    OptionScopes = rows.OptionScopes.Select(o => new FieldOptionScope { OptionId = o.OptionId, GroupId = o.GroupId }).ToList()
+                }, default);
+                await sp.GetRequiredService<IUnitOfWork>().CommitAsync(default);
+                await tx.CommitAsync(default);
+            }
+        });
 
         using var verify = _app.Services.CreateScope();
         var after = await verify.ServiceProvider.GetRequiredService<IPermissionRepository>().LoadModuleRowsAsync(module, default);

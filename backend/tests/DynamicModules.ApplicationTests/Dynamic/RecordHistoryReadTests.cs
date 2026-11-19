@@ -12,6 +12,7 @@ using DynamicModules.Domain.ValueObjects;
 using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
 using Record = DynamicModules.Domain.Entities.Dynamic.Record;
+using DynamicModules.TestSupport;
 
 namespace DynamicModules.ApplicationTests.Dynamic;
 
@@ -62,7 +63,7 @@ public class RecordHistoryReadTests : DesignerTestBase
             CanRead = true, CanAdd = true, CanEdit = true, CanDelete = true, CanAmt = pricing
         });
         if (scope is { } s) Db.Context.Set<ModuleDataScope>().Add(new ModuleDataScope { ModuleId = m.Id, GroupId = sales, Scope = s });
-        await Db.Context.SaveChangesAsync();
+        await Db.Context.SaveForTestsAsync();
     }
 
     private sealed record Order(string TitleKey, string LineTitleKey, FieldResponse Amount, FieldResponse Qty, FieldResponse Price);
@@ -161,7 +162,7 @@ public class RecordHistoryReadTests : DesignerTestBase
         (await Send(new ActivateModuleRequest("memo"))).IsSuccess.Should().BeTrue();
         await Grant("memo");
         Db.Context.Set<FieldPermission>().Add(new FieldPermission { FieldId = note.Id, GroupId = await SalesGroupId(), Access = FieldAccess.Hidden });
-        await Db.Context.SaveChangesAsync();
+        await Db.Context.SaveForTestsAsync();
         var title = await TitleKey("memo");
         var rec = Ok(await Send(new CreateRecordRequest("memo", Vals((title, "a"), (note.Key, "x")))));
         await Save(rec.Id, Vals((title, "b"), (note.Key, "y")));

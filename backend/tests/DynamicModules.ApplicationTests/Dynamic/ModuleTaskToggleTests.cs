@@ -6,6 +6,7 @@ using DynamicModules.Domain.Data;
 using DynamicModules.Domain.Entities.Dynamic;
 using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
+using DynamicModules.TestSupport;
 
 namespace DynamicModules.ApplicationTests.Dynamic;
 
@@ -55,7 +56,7 @@ public class ModuleTaskToggleTests : DesignerTestBase
         var m = new Module { Key = "tg-off", ProgramCode = "DYN99999", NameI18n = new([KeyValuePair.Create("zh-TW", "關閉")]), TasksEnabled = false };
         m.StampCreated("admin", new DateTime(2026, 11, 4, 9, 0, 0));
         Db.Context.Add(m);
-        await Db.Context.SaveChangesAsync();
+        await Db.Context.SaveForTestsAsync();
         Db.Context.ChangeTracker.Clear();
 
         (await Fresh("tg-off")).TasksEnabled.Should().BeFalse("sentinel 是 true，false 才會寫進 INSERT，不被資料庫預設值翻回 true");
@@ -107,10 +108,10 @@ public class ModuleTaskToggleTests : DesignerTestBase
         var m = await Detail("tg");
         var app = new App { Key = "master-x", Kind = AppKind.Master, Status = AppStatus.Open, Source = "builtIn", RowVersion = "x" };
         Db.Context.Add(app);
-        await Db.Context.SaveChangesAsync();
+        await Db.Context.SaveForTestsAsync();
         Db.Context.Add(new AppModule { AppId = app.Id, Code = "m", ModuleId = m.Id });
         Db.Context.Add(new UserProgramPrivilege { UserId = "sales01", ProgramCode = "DYN00000", CanRead = true, CanAdd = true, CanEdit = true, CanDelete = true });
-        await Db.Context.SaveChangesAsync();
+        await Db.Context.SaveForTestsAsync();
         Db.Context.ChangeTracker.Clear();
 
         As("sales01");

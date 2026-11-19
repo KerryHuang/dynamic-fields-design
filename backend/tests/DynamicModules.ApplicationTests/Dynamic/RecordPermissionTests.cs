@@ -25,6 +25,7 @@ using FluentAssertions;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using DynamicModules.TestSupport;
 
 namespace DynamicModules.ApplicationTests.Dynamic;
 
@@ -46,7 +47,7 @@ public class RecordPermissionTests : IAsyncLifetime
     {
         _db = await TestDb.CreateAsync();
         await SeedData.EnsureSeededAsync(_db.Context);
-        await DemoPeople.EnsureAsync(_db.Context);
+        await TestPermits.RunForTestsAsync(() => DemoPeople.EnsureAsync(_db.Context));
         var services = new ServiceCollection();
         services.AddApplication();
         services.AddPersistenceRepositories();
@@ -93,7 +94,7 @@ public class RecordPermissionTests : IAsyncLifetime
             GroupId = sales.Id, ProgramCode = m.ProgramCode, CanRead = read, CanAdd = true, CanEdit = true, CanDelete = true, CanAmt = pricing
         });
         db.Set<ModuleDataScope>().Add(new ModuleDataScope { ModuleId = m.Id, GroupId = sales.Id, Scope = scope });
-        await db.SaveChangesAsync();
+        await db.SaveForTestsAsync();
         return new Setup(nameKey, price, memo, m.Id, m.ProgramCode, block);
     }
 
@@ -141,7 +142,7 @@ public class RecordPermissionTests : IAsyncLifetime
         {
             GroupId = floor.Id, ProgramCode = s.ProgramCode, CanRead = true, CanAdd = true
         });
-        await _db.Context.SaveChangesAsync();
+        await _db.Context.SaveForTestsAsync();
         await Rec("floor01", s, "f1");
 
         var page = Page(await List("sales01"));
@@ -203,7 +204,7 @@ public class RecordPermissionTests : IAsyncLifetime
         await Rec("sales01", s, "a1");
         var sales = await _db.Context.Set<PermissionGroup>().SingleAsync(g => g.Key == "sales");
         _db.Context.Set<FieldPermission>().Add(new FieldPermission { FieldId = s.Memo.Id, GroupId = sales.Id, Access = FieldAccess.Hidden });
-        await _db.Context.SaveChangesAsync();
+        await _db.Context.SaveForTestsAsync();
 
         var values = Page(await List("sales01")).Items.Single().Values;
 
@@ -221,7 +222,7 @@ public class RecordPermissionTests : IAsyncLifetime
         var sales = await _db.Context.Set<PermissionGroup>().SingleAsync(g => g.Key == "sales");
         var titleId = (await _db.Context.Set<Field>().SingleAsync(f => f.ModuleId == s.ModuleId && f.Key == s.NameKey)).Id;
         _db.Context.Set<FieldPermission>().Add(new FieldPermission { FieldId = titleId, GroupId = sales.Id, Access = FieldAccess.Hidden });
-        await _db.Context.SaveChangesAsync();
+        await _db.Context.SaveForTestsAsync();
 
         _user.UserId = "sales01";
         var r = await Send(new GetPagedRecordsRequest("order", 1, 50, null, [], [], "alpha"));
@@ -263,7 +264,7 @@ public class RecordPermissionTests : IAsyncLifetime
     {
         var sales = await _db.Context.Set<PermissionGroup>().SingleAsync(g => g.Key == "sales");
         change(await _db.Context.Set<GroupProgramPrivilege>().SingleAsync(p => p.GroupId == sales.Id && p.ProgramCode == s.ProgramCode));
-        await _db.Context.SaveChangesAsync();
+        await _db.Context.SaveForTestsAsync();
     }
 
     private async Task<DynamicRecordResponse> Make(string user, Setup s, Dictionary<string, JsonElement?> values)
@@ -340,7 +341,7 @@ public class RecordPermissionTests : IAsyncLifetime
         var rec = await Make("admin", s, Vals((s.NameKey, "x"), (s.Price.Key, 100)));
         var sales = await _db.Context.Set<PermissionGroup>().SingleAsync(g => g.Key == "sales");
         _db.Context.Set<FieldPermission>().Add(new FieldPermission { FieldId = s.Price.Id, GroupId = sales.Id, Access = FieldAccess.ReadOnly });
-        await _db.Context.SaveChangesAsync();
+        await _db.Context.SaveForTestsAsync();
 
         _user.UserId = "sales01";
         var r = await Send(new UpdateRecordRequest(rec.Id, Vals((s.NameKey, "x2"), (s.Price.Key, 999)), rec.RowVersion));
@@ -376,7 +377,7 @@ public class RecordPermissionTests : IAsyncLifetime
         var opt = (OptionResponse)(await Send(new AddOptionRequest(en.Id, Text("主管專用"), null))).Data!;
         var floor = await _db.Context.Set<PermissionGroup>().SingleAsync(g => g.Key == "floor");
         _db.Context.Set<FieldOptionScope>().Add(new FieldOptionScope { OptionId = opt.Id, GroupId = floor.Id });
-        await _db.Context.SaveChangesAsync();
+        await _db.Context.SaveForTestsAsync();
         return (en, opt);
     }
 
@@ -412,7 +413,7 @@ public class RecordPermissionTests : IAsyncLifetime
         var sales = await _db.Context.Set<PermissionGroup>().SingleAsync(g => g.Key == "sales");
         var fp = new FieldPermission { FieldId = fieldId, GroupId = sales.Id, Access = access };
         _db.Context.Set<FieldPermission>().Add(fp);
-        await _db.Context.SaveChangesAsync();
+        await _db.Context.SaveForTestsAsync();
         return fp;
     }
 
@@ -438,7 +439,7 @@ public class RecordPermissionTests : IAsyncLifetime
         // 以資料庫直接清空，模擬舊資料沒有該必填值
         var row = await _db.Context.Set<DynamicModules.Domain.Entities.Dynamic.Record>().SingleAsync(r => r.Id == rec.Id);
         row.ValuesJson = JsonSerializer.Serialize(new Dictionary<string, object?> { [s.NameKey] = "x" });
-        await _db.Context.SaveChangesAsync();
+        await _db.Context.SaveForTestsAsync();
 
         _user.UserId = "sales01";
         var r = await Send(new UpdateRecordRequest(rec.Id, Vals((s.NameKey, "x2")), rec.RowVersion));
@@ -470,7 +471,7 @@ public class RecordPermissionTests : IAsyncLifetime
         var opt = (OptionResponse)(await Send(new AddOptionRequest(en.Id, Text("主管專用"), null))).Data!;
         var floor = await _db.Context.Set<PermissionGroup>().SingleAsync(g => g.Key == "floor");
         _db.Context.Set<FieldOptionScope>().Add(new FieldOptionScope { OptionId = opt.Id, GroupId = floor.Id });
-        await _db.Context.SaveChangesAsync();
+        await _db.Context.SaveForTestsAsync();
         return (en, opt);
     }
 
@@ -508,7 +509,7 @@ public class RecordPermissionTests : IAsyncLifetime
         await SetPriv(s, p => p.CanDelete = false);
         var rec = await Make("sales01", s, Vals((s.NameKey, "x")));
         _db.Context.Set<UserProgramPrivilege>().Add(new UserProgramPrivilege { UserId = "sales01", ProgramCode = s.ProgramCode, CanDelete = true });
-        await _db.Context.SaveChangesAsync();
+        await _db.Context.SaveForTestsAsync();
 
         _user.UserId = "sales01";
         (await Send(new DeleteRecordRequest(rec.Id, rec.RowVersion))).IsSuccess.Should().BeTrue();

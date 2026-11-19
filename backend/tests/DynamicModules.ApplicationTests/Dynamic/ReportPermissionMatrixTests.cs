@@ -7,6 +7,7 @@ using DynamicModules.Domain.Entities.Dynamic;
 using DynamicModules.Domain.Reports;
 using DynamicModules.Domain.ValueObjects;
 using FluentAssertions;
+using DynamicModules.TestSupport;
 
 namespace DynamicModules.ApplicationTests.Dynamic;
 
@@ -232,7 +233,7 @@ public class ReportPermissionMatrixTests : ReportTestBase
     private async Task HideForSales(FieldResponse f)
     {
         Db.Context.Set<FieldPermission>().Add(new FieldPermission { FieldId = f.Id, GroupId = SalesGroupId, Access = FieldAccess.Hidden });
-        await Db.Context.SaveChangesAsync();
+        await Db.Context.SaveForTestsAsync();
     }
 
     [Fact]
@@ -258,7 +259,7 @@ public class ReportPermissionMatrixTests : ReportTestBase
         var orderId = (await Detail("order")).Id;
         var scope = Db.Context.Set<ModuleDataScope>().Single(x => x.ModuleId == orderId && x.GroupId == SalesGroupId);
         scope.Scope = DataScope.Group;
-        await Db.Context.SaveChangesAsync();
+        await Db.Context.SaveForTestsAsync();
         await Insert("order", "sales01", (Amount, 100m));
         await Insert("order", "sales02", (Amount, 900m));
         await Insert("order", "manager01", (Amount, 5000m));

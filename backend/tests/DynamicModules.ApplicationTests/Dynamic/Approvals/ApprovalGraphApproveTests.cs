@@ -11,6 +11,7 @@ using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using static DynamicModules.ApplicationTests.Dynamic.Approvals.ApprovalGraphTestKit;
+using DynamicModules.TestSupport;
 
 namespace DynamicModules.ApplicationTests.Dynamic.Approvals;
 
@@ -234,9 +235,9 @@ public class ApprovalGraphApproveTests : ApprovalTestBase
         var r = await RigWith(x => SeedGraphFlow(x, "po-g", x.Confirmed, 1, ForkJoin(ApprovalModes.Any)), grantEveryone: false);
         var buyers = new PermissionGroup { Key = "buyers", NameI18n = Text("buyers") };
         Db.Context.Add(buyers);
-        await Db.Context.SaveChangesAsync();
+        await Db.Context.SaveForTestsAsync();
         Db.Context.AddRange(new UserGroupMapping { GroupId = buyers.Id, UserId = "buyer1" }, new UserGroupMapping { GroupId = buyers.Id, UserId = "buyer2" });
-        await Db.Context.SaveChangesAsync();
+        await Db.Context.SaveForTestsAsync();
         Db.Context.ChangeTracker.Clear();
         As("admin");
         (await Send(new SaveModulePermissionsRequest(r.Module, new ModulePermissionsDto(
@@ -568,7 +569,7 @@ public class ApprovalGraphApproveTests : ApprovalTestBase
         var graphFlow = await SeedGraphFlow(r, "po-g", r.Confirmed, 99, Linear2());   // 真的流程列，重來建出的實例才有外鍵可指
         var inst = Db.Context.Set<ApprovalInstance>().Single(i => i.Id == id);
         inst.FlowSetSnapshot = [new FlowSnapshotEntry(graphFlow.Id, graphFlow.CurrentVersionId!.Value, 0, true, Text("po-g"), Linear2()), .. inst.FlowSetSnapshot];
-        await Db.Context.SaveChangesAsync();
+        await Db.Context.SaveForTestsAsync();
         Db.Context.ChangeTracker.Clear();
         var task = TasksOf(id).Single(t => t.Status == ApprovalTaskStatus.Open);
         As(task.AssigneeUserId);
@@ -597,7 +598,7 @@ public class ApprovalGraphApproveTests : ApprovalTestBase
         var graphFlow = await SeedGraphFlow(r, "po-g", r.Confirmed, 99, broken);
         var inst = Db.Context.Set<ApprovalInstance>().Single(i => i.Id == id);
         inst.FlowSetSnapshot = [new FlowSnapshotEntry(graphFlow.Id, graphFlow.CurrentVersionId!.Value, 0, true, Text("po-g"), broken), .. inst.FlowSetSnapshot];
-        await Db.Context.SaveChangesAsync();
+        await Db.Context.SaveForTestsAsync();
         Db.Context.ChangeTracker.Clear();
         var task = TasksOf(id).Single(t => t.Status == ApprovalTaskStatus.Open);
         var before = (Inst(id).RowVersion, ActionsOf(id).Count);
@@ -628,7 +629,7 @@ public class ApprovalGraphApproveTests : ApprovalTestBase
         var broken = G([Start(), Condition("c"), Approval("a", Users("fin1")), End()],
             [E("e0", "start", "c"), E("ca", "c", "a", Cond(r.Total, "gte", 1), order: 1), E("cb", "c", "end", Cond(r.Total, "gte", 2), order: 2), E("ae", "a", "end")]);
         inst.FlowSetSnapshot = [new FlowSnapshotEntry(9998, 9998, 0, true, Text("po-x"), Def(null, Stage("lead", Group(PurchaseLeadGroup)))), good with { Definition = broken }];
-        await Db.Context.SaveChangesAsync();
+        await Db.Context.SaveForTestsAsync();
         Db.Context.ChangeTracker.Clear();
         var before = (Inst(id).RowVersion, ActionsOf(id).Count);
 

@@ -32,10 +32,13 @@ public static class AuditActions
         new("user.update", User, H),
         new("user.setActive", User, W),
         new("user.resetPassword", User, W),
+        // 授予或收回設計器與權限設定（權限軸設計 §9）：等同改權限，標高風險
+        new("user.systemPrivileges", User, H),
         new("group.create", Group, W),
         new("group.rename", Group, W),
         new("group.delete", Group, W),
         new("group.setMembers", Group, W),
+        new("group.systemPrivileges", Group, H),
         // 權限
         new("permission.update", Permission, H),
         // 政策

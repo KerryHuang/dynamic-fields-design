@@ -29,6 +29,7 @@ using FluentAssertions;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using DynamicModules.TestSupport;
 
 namespace DynamicModules.ApplicationTests.Dynamic;
 
@@ -50,7 +51,7 @@ public class RelationServiceTests : IAsyncLifetime
     {
         _db = await TestDb.CreateAsync();
         await SeedData.EnsureSeededAsync(_db.Context);
-        await DemoPeople.EnsureAsync(_db.Context);
+        await TestPermits.RunForTestsAsync(() => DemoPeople.EnsureAsync(_db.Context));
         var services = new ServiceCollection();
         services.AddApplication();
         services.AddPersistenceRepositories();
@@ -108,7 +109,7 @@ public class RelationServiceTests : IAsyncLifetime
             GroupId = sales.Id, ProgramCode = m.ProgramCode!, CanRead = read, CanAdd = true, CanEdit = true, CanDelete = true, CanAmt = true
         });
         db.Set<ModuleDataScope>().Add(new ModuleDataScope { ModuleId = (await Detail(m.Key)).Id, GroupId = sales.Id, Scope = scope });
-        await db.SaveChangesAsync();
+        await db.SaveForTestsAsync();
     }
 
     private async Task<DynamicRecordResponse> Rec(string user, Mod m, string title)
@@ -136,7 +137,7 @@ public class RelationServiceTests : IAsyncLifetime
     {
         var g = await _db.Context.Set<PermissionGroup>().SingleAsync(x => x.Key == group);
         _db.Context.Set<FieldPermission>().Add(new FieldPermission { FieldId = fieldId, GroupId = g.Id, Access = FieldAccess.Hidden });
-        await _db.Context.SaveChangesAsync();
+        await _db.Context.SaveForTestsAsync();
     }
 
     private async Task<DynamicRecordResponse> Get(string user, long id)
@@ -198,7 +199,7 @@ public class RelationServiceTests : IAsyncLifetime
         var rec = await Rec("admin", target, "申請一");
         var g = await _db.Context.Set<PermissionGroup>().SingleAsync(x => x.Key == "sales");
         _db.Context.Set<FieldPermission>().Add(new FieldPermission { FieldId = a.RefFieldId, GroupId = g.Id, Access = FieldAccess.ReadOnly });
-        await _db.Context.SaveChangesAsync();
+        await _db.Context.SaveForTestsAsync();
 
         (await Tabs("sales01", rec.Id)).Single().CanAdd.Should().BeFalse();
     }
@@ -237,7 +238,7 @@ public class RelationServiceTests : IAsyncLifetime
         _db.Context.Set<GroupProgramPrivilege>().Add(new GroupProgramPrivilege
             { GroupId = g.Id, ProgramCode = a.ProgramCode!, CanRead = true });
         _db.Context.Set<ModuleDataScope>().Add(new ModuleDataScope { ModuleId = (await Detail("app")).Id, GroupId = g.Id, Scope = DataScope.All });
-        await _db.Context.SaveChangesAsync();
+        await _db.Context.SaveForTestsAsync();
         var rec = await Rec("admin", target, "申請一");
         (await Tabs("floor01", rec.Id)).Should().ContainSingle();
         await Hide(a.RefFieldId, "floor");

@@ -2,6 +2,7 @@ using DynamicModules.Application.Dynamic.TaskService;
 using DynamicModules.Domain.Entities.Dynamic;
 using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
+using DynamicModules.TestSupport;
 
 namespace DynamicModules.ApplicationTests.Dynamic.Tasks;
 
@@ -105,7 +106,7 @@ public class TaskAccessTests : TaskTestBase
         var rec = await NewRecord(t, "sales01");
         var task = await SeedTask(createdBy: "admin", target: t, recordId: rec);
         Db.Context.Add(new FieldPermission { FieldId = t.TitleFieldId, GroupId = t.SalesGroupId, Access = FieldAccess.Hidden });
-        await Db.Context.SaveChangesAsync();
+        await Db.Context.SaveForTestsAsync();
 
         var p = await Eval("sales01", task.Id);
 
@@ -143,7 +144,7 @@ public class TaskAccessTests : TaskTestBase
         outside.CanSee.Should().BeFalse();
         outside.Record.Should().Be(new TaskRecordRef(false, null, null, null, false));
         Db.Context.Add(new FieldPermission { FieldId = t.TitleFieldId, GroupId = t.SalesGroupId, Access = FieldAccess.Hidden });
-        await Db.Context.SaveChangesAsync();
+        await Db.Context.SaveForTestsAsync();
         Db.Context.ChangeTracker.Clear();
         (await Eval("sales01", task.Id)).Record.Should().Be(new TaskRecordRef(true, t.Key, rec, null, true));
     }
@@ -162,7 +163,7 @@ public class TaskAccessTests : TaskTestBase
             CreatedUserId = "admin", CreatedTime = SeedTime
         };
         Db.Context.Add(row);
-        await Db.Context.SaveChangesAsync();
+        await Db.Context.SaveForTestsAsync();
         Db.Context.ChangeTracker.Clear();
         var task = await SeedTask(createdBy: "sales01", target: t with { ModuleId = line.Id }, recordId: row.Id);
 

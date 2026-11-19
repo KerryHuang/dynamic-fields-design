@@ -22,6 +22,7 @@ using FluentAssertions;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using DynamicModules.TestSupport;
 
 namespace DynamicModules.ApplicationTests.Common;
 
@@ -172,7 +173,7 @@ public class ActingScopeTests
     {
         await using var db = await TestDb.CreateAsync();
         await SeedData.EnsureSeededAsync(db.Context);
-        await DemoPeople.EnsureAsync(db.Context);
+        await TestPermits.RunForTestsAsync(() => DemoPeople.EnsureAsync(db.Context));
         var services = new ServiceCollection();
         services.AddApplication();
         services.AddPersistenceRepositories();

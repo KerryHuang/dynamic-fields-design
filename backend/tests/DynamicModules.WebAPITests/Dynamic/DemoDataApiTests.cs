@@ -16,6 +16,7 @@ using Microsoft.AspNetCore.Http;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using static DynamicModules.WebAPITests.Dynamic.ApiTestKit;
+using DynamicModules.TestSupport;
 
 namespace DynamicModules.WebAPITests.Dynamic;
 
@@ -176,7 +177,7 @@ public sealed class DemoDataApiTests(DemoDataApiTests.DemoGeneratedFixture gen) 
             {
                 UserId = "adder01", ProgramCode = "DYN00000", CanRead = true, CanAdd = true
             });
-            db.SaveChanges();
+            db.SaveForTests();
         }
         var addOnly = app.AsUser("adder01");
         (await addOnly.GetAsync(Status)).StatusCode.Should().Be(HttpStatusCode.OK);
@@ -275,7 +276,7 @@ public sealed class DemoDataApiTests(DemoDataApiTests.DemoGeneratedFixture gen) 
             using var scope = Services.CreateScope();
             var db = scope.ServiceProvider.GetRequiredService<DynamicDbContext>();
             foreach (var id in ids) db.Set<AppUser>().Add(new AppUser { UserId = id, DisplayName = id });
-            db.SaveChanges();
+            db.SaveForTests();
         }
 
         public bool SeedOnStartup { get; init; }

@@ -5,6 +5,7 @@ using DynamicModules.Persistence.Seed;
 using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
 using Record = DynamicModules.Domain.Entities.Dynamic.Record;
+using DynamicModules.TestSupport;
 
 namespace DynamicModules.ApplicationTests.Persistence;
 
@@ -53,7 +54,7 @@ public class SeedDataTests
     {
         await using var db = await TestDb.CreateAsync();
         await SeedData.EnsureSeededAsync(db.Context);
-        await DemoPeople.EnsureAsync(db.Context);
+        await TestPermits.RunForTestsAsync(() => DemoPeople.EnsureAsync(db.Context));
         await db.Context.Set<UserGroupMapping>().Where(m => m.UserId == "sales01").ExecuteDeleteAsync();
 
         await SeedData.EnsureSeededAsync(db.Context);
@@ -81,8 +82,8 @@ public class SeedDataTests
         await using var db = await TestDb.CreateAsync();
         await SeedData.EnsureSeededAsync(db.Context);
 
-        await DemoPeople.EnsureAsync(db.Context);
-        await DemoPeople.EnsureAsync(db.Context);
+        await TestPermits.RunForTestsAsync(() => DemoPeople.EnsureAsync(db.Context));
+        await TestPermits.RunForTestsAsync(() => DemoPeople.EnsureAsync(db.Context));
 
         var groups = await db.Context.Set<PermissionGroup>().AsNoTracking().ToListAsync();
         groups.Select(g => g.Key).Should().BeEquivalentTo("mis", "sales", "sales-manager", "floor", "maint", "qa", "planner", "purchasing", "warehouse", "ops-manager", "inv-viewer", "design");
@@ -110,7 +111,7 @@ public class SeedDataTests
         db.Context.Set<AppUser>().Add(new AppUser { UserId = "qa01", DisplayName = "自訂" });
         await db.Context.SaveChangesAsync();
 
-        await DemoPeople.EnsureAsync(db.Context);
+        await TestPermits.RunForTestsAsync(() => DemoPeople.EnsureAsync(db.Context));
 
         (await db.Context.Set<AppUser>().AsNoTracking().SingleAsync(u => u.UserId == "qa01")).DisplayName.Should().Be("自訂");
     }
@@ -133,7 +134,7 @@ public class SeedDataTests
     {
         await using var db = await TestDb.CreateAsync();
         var module = await AddModuleAsync(db.Context, "order", "DYN00001", ModuleStatus.Active);
-        await DemoPeople.EnsureAsync(db.Context);
+        await TestPermits.RunForTestsAsync(() => DemoPeople.EnsureAsync(db.Context));
         db.Context.Set<Record>().AddRange(
             NewRecord(module.Id, "anonymous"), NewRecord(module.Id, "sales01"));
         await db.Context.SaveChangesAsync();

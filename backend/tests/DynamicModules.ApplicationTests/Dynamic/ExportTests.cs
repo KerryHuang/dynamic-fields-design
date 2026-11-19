@@ -13,6 +13,7 @@ using DynamicModules.Domain.Entities.Dynamic;
 using DynamicModules.Domain.ValueObjects;
 using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
+using DynamicModules.TestSupport;
 
 namespace DynamicModules.ApplicationTests.Dynamic;
 
@@ -66,7 +67,7 @@ public class ExportTests : DesignerTestBase
             CanRead = true, CanAdd = true, CanEdit = true, CanDelete = true, CanPrint = print, CanAmt = pricing
         });
         if (scope is { } s) Db.Context.Set<ModuleDataScope>().Add(new ModuleDataScope { ModuleId = m.Id, GroupId = sales, Scope = s });
-        await Db.Context.SaveChangesAsync();
+        await Db.Context.SaveForTestsAsync();
     }
 
     private async Task<ExportFile> Export(string module, string format = "csv", string? filter = null,

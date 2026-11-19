@@ -3,6 +3,7 @@ using DynamicModules.Domain.Entities.Dynamic;
 using DynamicModules.Domain.ValueObjects;
 using DynamicModules.Persistence.Repositories.Dynamic;
 using FluentAssertions;
+using DynamicModules.TestSupport;
 
 namespace DynamicModules.ApplicationTests.Persistence;
 
@@ -39,10 +40,10 @@ public class PermissionRepositoryTests
         db.Set<AppUser>().AddRange(new AppUser { UserId = "me" }, new AppUser { UserId = "mate" }, new AppUser { UserId = "stranger" });
         db.Set<Module>().AddRange(a, b);
         db.Set<PermissionGroup>().AddRange(g1, g2, g3);
-        await db.SaveChangesAsync();
+        await db.SaveForTestsAsync();
         var fa = NewField(a); var fb = NewField(b);
         db.Set<Field>().AddRange(fa, fb);
-        await db.SaveChangesAsync();
+        await db.SaveForTestsAsync();
 
         db.Set<UserGroupMapping>().AddRange(
             new UserGroupMapping { GroupId = g1.Id, UserId = "me" }, new UserGroupMapping { GroupId = g1.Id, UserId = "mate" },
@@ -65,7 +66,7 @@ public class PermissionRepositoryTests
         db.Set<FieldOptionScope>().AddRange(
             new FieldOptionScope { OptionId = fa.Options[0].Id, GroupId = g3.Id },
             new FieldOptionScope { OptionId = fb.Options[0].Id, GroupId = g1.Id });
-        await db.SaveChangesAsync();
+        await db.SaveForTestsAsync();
         return (a, b, g1, g2, g3);
     }
 

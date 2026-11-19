@@ -16,6 +16,7 @@ using DynamicModules.Persistence.Repositories.Dynamic;
 using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using DynamicModules.TestSupport;
 
 namespace DynamicModules.ApplicationTests.Dynamic;
 
@@ -157,7 +158,7 @@ public abstract class ReportTestBase : DesignerTestBase
             ctx.Set<FieldPermission>().Add(new FieldPermission { FieldId = f.Id, GroupId = _salesGroup, Access = FieldAccess.Hidden });
         foreach (var f in new[] { CustomerSecret, ShipSecret })
             ctx.Set<FieldPermission>().Add(new FieldPermission { FieldId = f.Id, GroupId = _salesGroup, Access = FieldAccess.Hidden });
-        await ctx.SaveChangesAsync();
+        await ctx.SaveForTestsAsync();
     }
 
     protected async Task Grant(long groupId, string module, DataScope scope, bool read, bool pricing)
@@ -168,7 +169,7 @@ public abstract class ReportTestBase : DesignerTestBase
             GroupId = groupId, ProgramCode = m.ProgramCode, CanRead = read, CanAmt = pricing
         });
         Db.Context.Set<ModuleDataScope>().Add(new ModuleDataScope { ModuleId = m.Id, GroupId = groupId, Scope = scope });
-        await Db.Context.SaveChangesAsync();
+        await Db.Context.SaveForTestsAsync();
     }
 
     protected long SalesGroupId => _salesGroup;
@@ -191,7 +192,7 @@ public abstract class ReportTestBase : DesignerTestBase
         };
         row.StampCreated(owner, new DateTime(2026, 11, 4));
         Db.Context.Add(row);
-        await Db.Context.SaveChangesAsync();
+        await Db.Context.SaveForTestsAsync();
         if (FieldsFilterable)
         {
             // 直接寫表不經 CreateRecordHandler，索引要自己補，SQL 路徑才看得到這筆
@@ -199,7 +200,7 @@ public abstract class ReportTestBase : DesignerTestBase
             var rows = RecordIndexer.Build(withFields, RecordValueProcessor.Parse(json), Svc<FieldTypeRegistry>());
             foreach (var index in rows) index.RecordId = row.Id;
             Db.Context.AddRange(rows);
-            await Db.Context.SaveChangesAsync();
+            await Db.Context.SaveForTestsAsync();
         }
         return row.Id;
     }
@@ -208,7 +209,7 @@ public abstract class ReportTestBase : DesignerTestBase
     {
         var row = await Db.Context.Set<DynamicModules.Domain.Entities.Dynamic.Record>().SingleAsync(r => r.Id == id);
         row.DeleteFlag = true;
-        await Db.Context.SaveChangesAsync();
+        await Db.Context.SaveForTestsAsync();
     }
 
     /// <summary>Task 2 的數字：訂單 A 金額 100、3 筆出貨（1,2,3）；訂單 B 金額 50、無出貨。回傳 A、B 的 Id。</summary>

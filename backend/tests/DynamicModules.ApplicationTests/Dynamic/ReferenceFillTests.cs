@@ -7,6 +7,7 @@ using DynamicModules.Application.Dynamic.RecordService.Data;
 using DynamicModules.Domain.Entities.Dynamic;
 using DynamicModules.Domain.ValueObjects;
 using FluentAssertions;
+using DynamicModules.TestSupport;
 
 namespace DynamicModules.ApplicationTests.Dynamic;
 
@@ -288,7 +289,7 @@ public class ReferenceFillTests : DesignerTestBase
                 GroupId = sales.Id, ProgramCode = code, CanRead = true, CanAdd = true, CanEdit = true, CanAmt = false
             });
         }
-        await db.SaveChangesAsync();
+        await db.SaveForTestsAsync();
 
         As("sales01");
         var rec = await NewDst(w, src);
@@ -315,7 +316,7 @@ public class ReferenceFillTests : DesignerTestBase
             });
             db.Set<ModuleDataScope>().Add(new ModuleDataScope { ModuleId = m.Id, GroupId = sales.Id, Scope = DataScope.Own });
         }
-        await db.SaveChangesAsync();
+        await db.SaveForTestsAsync();
 
         As("sales01");
         var r = await Send(new CreateRecordRequest("dst", new Dictionary<string, JsonElement?> { [K(w.RefId)] = J(src.ToString()) }));

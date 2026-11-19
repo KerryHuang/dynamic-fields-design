@@ -6,6 +6,7 @@ using System.Text.Json;
 using FluentAssertions;
 using Microsoft.Extensions.DependencyInjection;
 using static DynamicModules.WebAPITests.Dynamic.ApiTestKit;
+using DynamicModules.TestSupport;
 
 namespace DynamicModules.WebAPITests.Dynamic;
 
@@ -508,7 +509,7 @@ public class TitleTemplateApiTests(TestApp app) : IClassFixture<TestApp>
         var sales = db.Set<DynamicModules.Domain.Entities.Dynamic.PermissionGroup>().Single(g => g.Key == "sales");
         db.Set<DynamicModules.Domain.Entities.Dynamic.FieldPermission>().Add(
             new DynamicModules.Domain.Entities.Dynamic.FieldPermission { FieldId = fieldId, GroupId = sales.Id, Access = DynamicModules.Domain.Entities.Dynamic.FieldAccess.Hidden });
-        db.SaveChanges();
+        db.SaveForTests();
     }
 
     private const string Package = """

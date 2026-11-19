@@ -6,6 +6,7 @@ using DynamicModules.Domain.Entities.Dynamic;
 using FluentAssertions;
 using Microsoft.Extensions.DependencyInjection;
 using static DynamicModules.WebAPITests.Dynamic.ApiTestKit;
+using DynamicModules.TestSupport;
 
 namespace DynamicModules.WebAPITests.Dynamic;
 
@@ -37,7 +38,7 @@ public class PolicyApiTests : IDisposable
         row.CanAdd = edit;
         row.CanEdit = edit;
         row.CanDelete = edit;
-        db.SaveChanges();
+        db.SaveForTests();
     }
 
     private static JsonElement Item(JsonElement list, string code) =>

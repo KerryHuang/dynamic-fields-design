@@ -47,7 +47,7 @@ public class ReferenceReadTests : IAsyncLifetime
     {
         _db = await TestDb.CreateAsync();
         await SeedData.EnsureSeededAsync(_db.Context);
-        await DemoPeople.EnsureAsync(_db.Context);
+        await TestPermits.RunForTestsAsync(() => DemoPeople.EnsureAsync(_db.Context));
         var services = new ServiceCollection();
         services.AddApplication();
         services.AddPersistenceRepositories();
@@ -106,7 +106,7 @@ public class ReferenceReadTests : IAsyncLifetime
             GroupId = sales.Id, ProgramCode = m.ProgramCode!, CanRead = read, CanAdd = true, CanEdit = true, CanDelete = true, CanAmt = true
         });
         db.Set<ModuleDataScope>().Add(new ModuleDataScope { ModuleId = (await Detail(m.Key)).Id, GroupId = sales.Id, Scope = scope });
-        await db.SaveChangesAsync();
+        await db.SaveForTestsAsync();
     }
 
     private async Task<DynamicRecordResponse> Rec(string user, Mod m, string title)
@@ -136,7 +136,7 @@ public class ReferenceReadTests : IAsyncLifetime
     {
         var g = await _db.Context.Set<PermissionGroup>().SingleAsync(x => x.Key == group);
         _db.Context.Set<FieldPermission>().Add(new FieldPermission { FieldId = fieldId, GroupId = g.Id, Access = FieldAccess.Hidden });
-        await _db.Context.SaveChangesAsync();
+        await _db.Context.SaveForTestsAsync();
     }
 
     private async Task<DynamicRecordResponse> Get(string user, long id)
@@ -172,7 +172,7 @@ public class ReferenceReadTests : IAsyncLifetime
         var id = await SourceRec(source, "訂單", c.Id);
         // 預設 Restrict 會擋刪除（Task 6），這裡直接在 DB 軟刪目標模擬資料已刪
         (await _db.Context.Set<Record>().SingleAsync(r => r.Id == c.Id)).DeleteFlag = true;
-        await _db.Context.SaveChangesAsync();
+        await _db.Context.SaveForTestsAsync();
 
         var info = (await Get("admin", id)).References[source.RefKey];
 

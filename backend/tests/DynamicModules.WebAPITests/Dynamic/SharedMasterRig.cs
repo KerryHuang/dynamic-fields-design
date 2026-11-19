@@ -8,6 +8,7 @@ using DynamicModules.Domain.Entities.Dynamic;
 using FluentAssertions;
 using Microsoft.Extensions.DependencyInjection;
 using static DynamicModules.WebAPITests.Dynamic.ApiTestKit;
+using DynamicModules.TestSupport;
 
 namespace DynamicModules.WebAPITests.Dynamic;
 
@@ -116,7 +117,7 @@ internal sealed class SharedMasterRig : IDisposable
         using var scope = App.Services.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<DynamicDbContext>();
         action(db);
-        db.SaveChanges();
+        db.SaveForTests();
     }
 
     /// <summary>不變式（使用者閉包）與「權限列＝重算結果」都要成立。</summary>

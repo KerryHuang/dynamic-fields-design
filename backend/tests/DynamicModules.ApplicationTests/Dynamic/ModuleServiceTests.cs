@@ -20,6 +20,8 @@ using FluentAssertions;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using DynamicModules.TestSupport;
+using DynamicModules.Domain.Authorization;
 
 namespace DynamicModules.ApplicationTests.Dynamic;
 
@@ -40,7 +42,7 @@ public class ModuleServiceTests : IAsyncLifetime
     {
         _db = await TestDb.CreateAsync();
         await SeedData.EnsureSeededAsync(_db.Context);
-        await DemoPeople.EnsureAsync(_db.Context);
+        await TestPermits.RunForTestsAsync(() => DemoPeople.EnsureAsync(_db.Context));
         var services = new ServiceCollection();
         services.AddApplication();
         services.AddPersistenceRepositories();
@@ -78,7 +80,8 @@ public class ModuleServiceTests : IAsyncLifetime
         ((ModuleResponse)r1.Data!).ProgramCode.Should().Be("DYN00001");
         ((ModuleResponse)r2.Data!).ProgramCode.Should().Be("DYN00002");
         var programs = await _db.Context.Set<DynamicProgram>().AsNoTracking()
-            .Where(p => p.ProgramCode != "DYN00000").OrderBy(p => p.ProgramCode).ToListAsync();
+            // 權限軸設計 §6.2：種子多一列權限設定 SYS00001，系統代碼都不是模組的 program
+            .Where(p => p.ProgramCode != SystemProgramCodes.Designer && p.ProgramCode != SystemProgramCodes.PermissionAdmin).OrderBy(p => p.ProgramCode).ToListAsync();
         programs.Select(p => p.ProgramCode).Should().Equal("DYN00001", "DYN00002");
         programs.Should().OnlyContain(p => p.IsBeta);
         programs[0].NameI18n.Values["zh-TW"].Should().Be("訂單");
@@ -315,7 +318,7 @@ public class ModuleServiceTests : IAsyncLifetime
     {
         var (m, title) = await CreateWithTitle();
         if (kind == "type") title.Type = FieldType.Integer; else title.Status = FieldStatus.Inactive;
-        await _db.Context.SaveChangesAsync();
+        await _db.Context.SaveForTestsAsync();
 
         var result = await Send(new UpdateModuleRequest("order", Name(), null, null, title.Id));
 
@@ -328,7 +331,7 @@ public class ModuleServiceTests : IAsyncLifetime
         var (_, title) = await CreateWithTitle();
         title.Type = FieldType.AutoNumber;
         title.Config = title.Config with { Format = "NO-{000}" };
-        await _db.Context.SaveChangesAsync();
+        await _db.Context.SaveForTestsAsync();
 
         var result = await Send(new UpdateModuleRequest("order", Name(), null, null, title.Id));
 
@@ -340,7 +343,7 @@ public class ModuleServiceTests : IAsyncLifetime
     {
         var (_, title) = await CreateWithTitle();
         title.Type = FieldType.Integer;
-        await _db.Context.SaveChangesAsync();
+        await _db.Context.SaveForTestsAsync();
 
         var result = await Send(new UpdateModuleRequest("order", Name(), null, null, title.Id));
 
@@ -355,7 +358,7 @@ public class ModuleServiceTests : IAsyncLifetime
         var other = (FieldResponse)(await Send(new AddFieldRequest("order", block, FieldType.Text, Name("備註"), new FieldConfig()))).Data!;
         var sales = await _db.Context.Set<PermissionGroup>().SingleAsync(g => g.Key == "sales");
         _db.Context.Set<FieldPermission>().Add(new FieldPermission { FieldId = other.Id, GroupId = sales.Id, Access = FieldAccess.Hidden });
-        await _db.Context.SaveChangesAsync();
+        await _db.Context.SaveForTestsAsync();
 
         var result = await Send(new UpdateModuleRequest("order", Name(), null, null, other.Id));
 
@@ -381,7 +384,7 @@ public class ModuleServiceTests : IAsyncLifetime
     {
         var (_, title) = await CreateWithTitle();
         if (kind == "type") title.Type = FieldType.Integer; else title.Status = FieldStatus.Inactive;
-        await _db.Context.SaveChangesAsync();
+        await _db.Context.SaveForTestsAsync();
 
         var result = await Send(new ActivateModuleRequest("order"));
 

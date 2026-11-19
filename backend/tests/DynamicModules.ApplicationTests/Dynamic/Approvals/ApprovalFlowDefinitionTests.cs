@@ -4,6 +4,7 @@ using DynamicModules.Domain.Approvals;
 using DynamicModules.Domain.Entities.Dynamic;
 using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
+using DynamicModules.TestSupport;
 
 namespace DynamicModules.ApplicationTests.Dynamic.Approvals;
 
@@ -235,14 +236,14 @@ public class ApprovalFlowDefinitionTests : ApprovalTestBase
         var r = await BuildPurchase();
         var memo = Db.Context.Set<Field>().Single(f => f.Id == r.Memo);
         memo.VisibilityRestricted = true;
-        await Db.Context.SaveChangesAsync();
+        await Db.Context.SaveForTestsAsync();
         Db.Context.ChangeTracker.Clear();
         var d = Def(null, Stage("fin", Group(FinanceGroup), editable: [r.Memo]));
         (await Send(new CreateApprovalFlowRequest(r.Module, Input("po-v", r.Confirmed, 1, d))))
             .Errors["definition.stages[0].editableFields"].Should().Equal(ApprovalMessages.EditableFieldHidden);
 
         Db.Context.Add(new FieldGrant { SourceKind = GrantSource.Manual, FieldId = r.Memo, GroupId = FinanceGroup });
-        await Db.Context.SaveChangesAsync();
+        await Db.Context.SaveForTestsAsync();
         Db.Context.ChangeTracker.Clear();
         await Create(r, Input("po-v", r.Confirmed, 1, d));
     }

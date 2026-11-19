@@ -15,6 +15,7 @@ using DynamicModules.Domain.ValueObjects;
 using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
 using Record = DynamicModules.Domain.Entities.Dynamic.Record;
+using DynamicModules.TestSupport;
 
 namespace DynamicModules.ApplicationTests.Dynamic;
 
@@ -52,7 +53,7 @@ public class DetailSaveTests : DesignerTestBase
             GroupId = sales.Id, ProgramCode = (await Detail(parent)).ProgramCode,
             CanRead = true, CanAdd = true, CanEdit = edit, CanDelete = true, CanAmt = pricing
         });
-        await Db.Context.SaveChangesAsync();
+        await Db.Context.SaveForTestsAsync();
         return new S(parent, child, $"f_{(await Detail(parent)).TitleFieldId}", $"f_{(await Detail(child)).TitleFieldId}",
             parentField, qty, price, amount, lineNo, orderNo, total, count, tax);
     }

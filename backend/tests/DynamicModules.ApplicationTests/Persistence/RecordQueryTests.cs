@@ -22,6 +22,7 @@ using FluentAssertions;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using DynamicModules.TestSupport;
 
 namespace DynamicModules.ApplicationTests.Persistence;
 
@@ -47,7 +48,7 @@ public class RecordQueryTests : IAsyncLifetime
     {
         _db = await TestDb.CreateAsync();
         await SeedData.EnsureSeededAsync(_db.Context);
-        await DemoPeople.EnsureAsync(_db.Context);
+        await TestPermits.RunForTestsAsync(() => DemoPeople.EnsureAsync(_db.Context));
         var services = new ServiceCollection();
         services.AddApplication();
         services.AddPersistenceRepositories();

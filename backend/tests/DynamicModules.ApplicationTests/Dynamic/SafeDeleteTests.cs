@@ -19,6 +19,7 @@ using DynamicModules.Domain.ValueObjects;
 using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
 using Record = DynamicModules.Domain.Entities.Dynamic.Record;
+using DynamicModules.TestSupport;
 
 namespace DynamicModules.ApplicationTests.Dynamic;
 
@@ -120,7 +121,7 @@ public class SafeDeleteTests : DesignerTestBase
         Ctx.Set<ModuleDataScope>().Add(new ModuleDataScope { ModuleId = moduleId, GroupId = group.Id, Scope = DataScope.All });
         Ctx.Set<FieldPermission>().Add(new FieldPermission { FieldId = name.Id, GroupId = group.Id, Access = FieldAccess.Hidden });
         Ctx.Set<ListView>().Add(new ListView { ModuleId = moduleId, NameI18n = Text("v"), Columns = [name.Id], Sort = [] });
-        await Ctx.SaveChangesAsync();
+        await Ctx.SaveForTestsAsync();
         (await Ctx.Set<RecordHistory>().CountAsync()).Should().BeGreaterThan(0);
         (await Ctx.Set<RecordIndex>().CountAsync()).Should().BeGreaterThan(0);
         (await Ctx.Set<NumberSequence>().CountAsync()).Should().BeGreaterThan(0);
@@ -243,7 +244,7 @@ public class SafeDeleteTests : DesignerTestBase
         var def = new ReportDefinition(1, "cust", null, [], [], [], [], null, null, [], "table");
         var report = new Report { OwnerUserId = "admin", Name = "客戶報表", DefinitionJson = ReportDefinition.Serialize(def), RowVersion = "x" };
         Ctx.Set<Report>().Add(report);
-        await Ctx.SaveChangesAsync();
+        await Ctx.SaveForTestsAsync();
 
         var r = await Send(new DeleteModuleRequest("cust", 0));
 
@@ -261,7 +262,7 @@ public class SafeDeleteTests : DesignerTestBase
         await MustAdd("cust", FieldType.Reference, RefTo("cust"), "上層");
         var m = await Detail("cust");
         Ctx.Set<ListView>().Add(new ListView { ModuleId = await ModuleId("cust"), NameI18n = Text("v"), Columns = [m.TitleFieldId!.Value], Sort = [] });
-        await Ctx.SaveChangesAsync();
+        await Ctx.SaveForTestsAsync();
 
         (await Send(new DeleteModuleRequest("cust", 0))).IsSuccess.Should().BeTrue();
     }
@@ -343,7 +344,7 @@ public class SafeDeleteTests : DesignerTestBase
         await Deactivate(name.Id);
         var group = await Ctx.Set<PermissionGroup>().FirstAsync();
         Ctx.Set<FieldPermission>().Add(new FieldPermission { FieldId = name.Id, GroupId = group.Id, Access = FieldAccess.Hidden });
-        await Ctx.SaveChangesAsync();
+        await Ctx.SaveForTestsAsync();
         (await Ctx.Set<RecordIndex>().CountAsync(i => i.FieldId == name.Id)).Should().BeGreaterThan(0);
         (await Ctx.Set<RecordHistory>().CountAsync(h => h.FieldId == name.Id)).Should().BeGreaterThan(0);
 
@@ -419,7 +420,7 @@ public class SafeDeleteTests : DesignerTestBase
             Condition = J($"{{\"field\":{name.Id},\"op\":\"eq\",\"value\":\"x\"}}"), Targets = [$"field:{note.Id}"], Active = false
         };
         Ctx.Set<Rule>().Add(rule);
-        await Ctx.SaveChangesAsync();
+        await Ctx.SaveForTestsAsync();
         await Deactivate(name.Id);
         await Deactivate(note.Id);
 
@@ -438,7 +439,7 @@ public class SafeDeleteTests : DesignerTestBase
             Sort = [new ViewSort(note.Id, "asc")]
         };
         Ctx.Set<ListView>().Add(view);
-        await Ctx.SaveChangesAsync();
+        await Ctx.SaveForTestsAsync();
         await Deactivate(name.Id);
         await Deactivate(note.Id);
 
@@ -453,7 +454,7 @@ public class SafeDeleteTests : DesignerTestBase
         var def = new ReportDefinition(1, "cust", null, [new ReportFieldRef("main", name.Id, null)], [], [], [], null, null, [], "table");
         var report = new Report { OwnerUserId = "admin", Name = "客戶清單", DefinitionJson = ReportDefinition.Serialize(def), RowVersion = "x" };
         Ctx.Set<Report>().Add(report);
-        await Ctx.SaveChangesAsync();
+        await Ctx.SaveForTestsAsync();
         await Deactivate(name.Id);
 
         Blocker(await Send(new DeleteFieldRequest(name.Id, 0)), "report").Id.Should().Be(report.Id);
@@ -468,7 +469,7 @@ public class SafeDeleteTests : DesignerTestBase
             [new ReportSort($"main:{name.Id}:", true)], "table");
         var report = new Report { OwnerUserId = "admin", Name = "依名稱排序", DefinitionJson = ReportDefinition.Serialize(def), RowVersion = "x" };
         Ctx.Set<Report>().Add(report);
-        await Ctx.SaveChangesAsync();
+        await Ctx.SaveForTestsAsync();
         await Deactivate(name.Id);
 
         var r = await Send(new DeleteFieldRequest(name.Id, 0));
@@ -485,7 +486,7 @@ public class SafeDeleteTests : DesignerTestBase
         var def = new ReportDefinition(1, "cust", null, [], [], [new ReportMeasure("n", "countMain", null, null)], [], null, null,
             [new ReportSort("n", true)], "table");
         Ctx.Set<Report>().Add(new Report { OwnerUserId = "admin", Name = "依筆數排序", DefinitionJson = ReportDefinition.Serialize(def), RowVersion = "x" });
-        await Ctx.SaveChangesAsync();
+        await Ctx.SaveForTestsAsync();
         await Deactivate(name.Id);
 
         (await Send(new DeleteFieldRequest(name.Id, 0))).IsSuccess.Should().BeTrue();
@@ -500,7 +501,7 @@ public class SafeDeleteTests : DesignerTestBase
         var (name, _) = await CustWithFields();
         var dashboard = new Dashboard { OwnerUserId = null, Name = "營運總覽", LayoutJson = LayoutSortedBy($"main:{name.Id}:") };
         Ctx.Set<Dashboard>().Add(dashboard);
-        await Ctx.SaveChangesAsync();
+        await Ctx.SaveForTestsAsync();
         await Deactivate(name.Id);
 
         var r = await Send(new DeleteFieldRequest(name.Id, 0));
@@ -517,7 +518,7 @@ public class SafeDeleteTests : DesignerTestBase
         var (name, _) = await CustWithFields();
         var dashboard = new Dashboard { OwnerUserId = "sales01", Name = "我的看板", LayoutJson = LayoutSortedBy($"child:5:{name.Id}") };
         Ctx.Set<Dashboard>().Add(dashboard);
-        await Ctx.SaveChangesAsync();
+        await Ctx.SaveForTestsAsync();
         await Deactivate(name.Id);
 
         Blocker(await Send(new DeleteFieldRequest(name.Id, 0)), "dashboard").Id.Should().Be(dashboard.Id);
@@ -529,10 +530,10 @@ public class SafeDeleteTests : DesignerTestBase
         var (name, _) = await CustWithFields();
         var assigned = new Dashboard { OwnerUserId = null, Name = "營運總覽", LayoutJson = LayoutSortedBy(null) };
         Ctx.Set<Dashboard>().Add(assigned);
-        await Ctx.SaveChangesAsync();
+        await Ctx.SaveForTestsAsync();
         Ctx.Set<DashboardPersonalVersion>().Add(new DashboardPersonalVersion
             { DashboardId = assigned.Id, UserId = "sales01", LayoutJson = LayoutSortedBy($"main:{name.Id}:"), BaseVersion = 1 });
-        await Ctx.SaveChangesAsync();
+        await Ctx.SaveForTestsAsync();
         await Deactivate(name.Id);
 
         var r = await Send(new DeleteFieldRequest(name.Id, 0));
@@ -547,7 +548,7 @@ public class SafeDeleteTests : DesignerTestBase
     {
         var (name, _) = await CustWithFields();
         Ctx.Set<Dashboard>().Add(new Dashboard { OwnerUserId = null, Name = "壞掉的版面", LayoutJson = "{ not json" });
-        await Ctx.SaveChangesAsync();
+        await Ctx.SaveForTestsAsync();
         await Deactivate(name.Id);
 
         Blocker(await Send(new DeleteFieldRequest(name.Id, 0)), "dashboard");
@@ -559,7 +560,7 @@ public class SafeDeleteTests : DesignerTestBase
         await NewModule("cust");
         var name = await MustAdd("cust", FieldType.Text, new FieldConfig { IsFilterable = true }, "名稱");
         Ctx.Set<Dashboard>().Add(new Dashboard { OwnerUserId = null, Name = "營運總覽", LayoutJson = LayoutSortedBy($"main:{name.Id}:") });
-        await Ctx.SaveChangesAsync();
+        await Ctx.SaveForTestsAsync();
 
         var r = await Send(new DeleteModuleRequest("cust", 0));
 
@@ -684,7 +685,7 @@ public class SafeDeleteTests : DesignerTestBase
             Condition = J($"{{\"field\":{m.TitleFieldId},\"op\":\"eq\",\"value\":\"x\"}}"), Targets = [$"block:{blockId}"]
         };
         Ctx.Set<Rule>().Add(rule);
-        await Ctx.SaveChangesAsync();
+        await Ctx.SaveForTestsAsync();
 
         Blocker(await Send(new DeleteBlockRequest(blockId, 0)), "rule").Id.Should().Be(rule.Id);
     }
@@ -696,7 +697,7 @@ public class SafeDeleteTests : DesignerTestBase
         var sales = await Ctx.Set<PermissionGroup>().SingleAsync(g => g.Key == "sales");
         Ctx.Set<GroupProgramPrivilege>().Add(new GroupProgramPrivilege
             { GroupId = sales.Id, ProgramCode = "DYN00000", CanRead = true, CanEdit = edit, CanDelete = delete });
-        await Ctx.SaveChangesAsync();
+        await Ctx.SaveForTestsAsync();
     }
 
     [Theory]

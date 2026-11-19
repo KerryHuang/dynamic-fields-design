@@ -12,6 +12,7 @@ using DynamicModules.Application.Dynamic.RecordService.Data;
 using DynamicModules.Domain.Entities.Dynamic;
 using DynamicModules.Domain.ValueObjects;
 using FluentAssertions;
+using DynamicModules.TestSupport;
 
 namespace DynamicModules.ApplicationTests.Dynamic;
 
@@ -340,7 +341,7 @@ public class ConversionTests : ConversionTestBase
             {
                 GroupId = sales, ProgramCode = (await Detail(m)).ProgramCode, CanRead = true
             });
-        await Db.Context.SaveChangesAsync();
+        await Db.Context.SaveForTestsAsync();
         As("sales01");
         var r = await Convert(c, src, "a-to", (lines[0], 1));
         r.IsForbidden.Should().BeTrue();

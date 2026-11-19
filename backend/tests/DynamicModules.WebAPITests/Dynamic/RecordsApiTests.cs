@@ -6,6 +6,7 @@ using DynamicModules.Domain.Entities.Dynamic;
 using FluentAssertions;
 using Microsoft.Extensions.DependencyInjection;
 using static DynamicModules.WebAPITests.Dynamic.ApiTestKit;
+using DynamicModules.TestSupport;
 
 namespace DynamicModules.WebAPITests.Dynamic;
 
@@ -208,7 +209,7 @@ public class RecordsApiTests : IClassFixture<TestApp>
         using var scope = _app.Services.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<DynamicDbContext>();
         act(db);
-        db.SaveChanges();
+        db.SaveForTests();
     }
 
     [Fact]

@@ -11,6 +11,7 @@ using DynamicModules.Domain.ValueObjects;
 using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
 using static DynamicModules.ApplicationTests.Dynamic.Approvals.ApprovalGraphTestKit;
+using DynamicModules.TestSupport;
 
 namespace DynamicModules.ApplicationTests.Dynamic.Approvals;
 
@@ -187,9 +188,9 @@ public class ApprovalGraphSummaryTests : ApprovalTestBase
         As("admin");
         var group = new PermissionGroup { Key = "reader-approver", NameI18n = Text("reader-approver") };
         Db.Context.Add(group);
-        await Db.Context.SaveChangesAsync();
+        await Db.Context.SaveForTestsAsync();
         Db.Context.Add(new UserGroupMapping { GroupId = group.Id, UserId = "fin1" });
-        await Db.Context.SaveChangesAsync();
+        await Db.Context.SaveForTestsAsync();
         Db.Context.ChangeTracker.Clear();
         // 全員的群組權限整批換掉：只剩 fin1 所在群組的 Read 加 Approve
         var save = await Send(new SaveModulePermissionsRequest(r.Module, new ModulePermissionsDto(

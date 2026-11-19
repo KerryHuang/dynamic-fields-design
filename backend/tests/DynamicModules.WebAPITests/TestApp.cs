@@ -238,7 +238,9 @@ public class TestApp : WebApplicationFactory<Program>
         if (_seedDemoPeople)
         {
             using var scope = host.Services.CreateScope();
-            DemoPeople.EnsureAsync(scope.ServiceProvider.GetRequiredService<DynamicDbContext>()).GetAwaiter().GetResult();
+            // 示範人員含群組成員（守衛表），在測試許可內寫（權限軸設計 §7.4）
+            TestPermits.RunForTestsAsync(() => DemoPeople.EnsureAsync(scope.ServiceProvider.GetRequiredService<DynamicDbContext>()))
+                .GetAwaiter().GetResult();
         }
         return host;
     }
@@ -276,7 +278,7 @@ public class TestApp : WebApplicationFactory<Program>
                 CanDelete = true, CanPrint = true, CanAmt = true
             });
         }
-        db.SaveChanges();
+        db.SaveForTests();
     }
 
     protected override void Dispose(bool disposing)

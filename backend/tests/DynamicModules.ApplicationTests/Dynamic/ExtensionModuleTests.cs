@@ -52,7 +52,7 @@ public class ExtensionModuleTests : IAsyncLifetime
     {
         _db = await TestDb.CreateAsync();
         await SeedData.EnsureSeededAsync(_db.Context);
-        await DemoPeople.EnsureAsync(_db.Context);
+        await TestPermits.RunForTestsAsync(() => DemoPeople.EnsureAsync(_db.Context));
         var services = new ServiceCollection();
         services.AddApplication();
         services.AddPersistenceRepositories();
@@ -269,7 +269,7 @@ public class ExtensionModuleTests : IAsyncLifetime
             GroupId = sales.Id, ProgramCode = module.ProgramCode, CanRead = true, CanAdd = true, CanEdit = true, CanDelete = true, CanAmt = true
         });
         db.Set<ModuleDataScope>().Add(new ModuleDataScope { ModuleId = module.Id, GroupId = sales.Id, Scope = DataScope.Own });
-        await db.SaveChangesAsync();
+        await db.SaveForTestsAsync();
         _user.UserId = "sales01";
         (await Send(new GetRecordByHostRequest("ext15", "E-0004"))).IsNotFound.Should().BeTrue();
     }

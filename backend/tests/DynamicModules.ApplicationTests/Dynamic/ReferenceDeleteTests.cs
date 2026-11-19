@@ -25,6 +25,7 @@ using MediatR;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Record = DynamicModules.Domain.Entities.Dynamic.Record;
+using DynamicModules.TestSupport;
 
 namespace DynamicModules.ApplicationTests.Dynamic;
 
@@ -49,7 +50,7 @@ public class ReferenceDeleteTests : IAsyncLifetime
     {
         _db = await TestDb.CreateAsync();
         await SeedData.EnsureSeededAsync(_db.Context);
-        await DemoPeople.EnsureAsync(_db.Context);
+        await TestPermits.RunForTestsAsync(() => DemoPeople.EnsureAsync(_db.Context));
         var services = new ServiceCollection();
         services.AddApplication();
         services.AddPersistenceRepositories();
@@ -130,7 +131,7 @@ public class ReferenceDeleteTests : IAsyncLifetime
             GroupId = sales.Id, ProgramCode = m.ProgramCode, CanRead = read, CanAdd = true, CanEdit = true, CanDelete = delete, CanAmt = true
         });
         db.Set<ModuleDataScope>().Add(new ModuleDataScope { ModuleId = (await Detail(m.Key)).Id, GroupId = sales.Id, Scope = scope });
-        await db.SaveChangesAsync();
+        await db.SaveForTestsAsync();
     }
 
     private static JsonElement Body(ServiceResult r) =>
