@@ -11,6 +11,7 @@
 - 持續追蹤 vitest 在 jsdom 拆除後 Quasar 計時器觸發「window is not defined」：本機無法重現，根因未證實；已做局部修正（ApproverSourceEditor spec 每個測試後卸載元件，QSelect 卸載時清 filter／input 計時器），曾試全域包裝 setTimeout 但可能吞掉真實錯誤已撤。CI 再出現時看是哪個 spec、哪個計時器；其他用 QSelect use-input 的 spec 尚未處理
 - 檢查 xUnit 測試是否還有依賴牆鐘短上限的寫法：唯讀盤點，結果列回本檔｜依賴：無｜基準 3c024feb｜唯讀 backend/tests｜不吃 CPU｜任何時候｜可開工｜未指派
 - SQLite 報表快照的 EF 交易包裝也改成 dispose `UseTransactionAsync` 回傳的 handle（pg1 審查修正只修了 PostgreSQL 版；in-memory 連線常開，目前無害）：驗收 SQLite `FullyQualifiedName~Report` 全過、快照後連線開啟計數平衡｜依賴：無｜基準 92af014a｜backend/src/DynamicModules.Persistence/Dynamic/Query/SqliteReportSqlSnapshot.cs｜CPU 中｜任一 commit 後｜可開工｜未指派
+- 登入稽核改用登入專用 API 明確傳入行為者，取代 `AuditOrigin.BeginSignIn` 的呼叫堆疊檢查（o2a 複審建議：目前正確，但依賴呼叫端是 async 狀態機，抽 helper 或換 runtime 時要重核對）：驗收 A04、A11、架構測試全過、BeginSignIn 移除｜依賴：無｜基準 7748ed07｜backend/src/DynamicModules.Application/Common/Audit、Login／DemoLogin handler｜CPU 中｜任一 commit 後｜可開工｜未指派
 
 ## 其他
 
